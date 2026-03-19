@@ -153,6 +153,31 @@ func TestOnPromptRenderedPublishesHookEvent(t *testing.T) {
 	require.Equal(t, "west", rendered.Scope.Labels["region"])
 }
 
+func TestOnPromptRenderedWithoutHookContextDoesNotPanicOrPublish(t *testing.T) {
+	t.Parallel()
+
+	rt := newFromOptions(Options{})
+
+	published := false
+	sub, err := rt.Bus.Register(hooks.SubscriberFunc(func(ctx context.Context, evt hooks.Event) error {
+		if _, ok := evt.(*hooks.PromptRenderedEvent); ok {
+			published = true
+		}
+		return nil
+	}))
+	require.NoError(t, err)
+	t.Cleanup(func() {
+		_ = sub.Close()
+	})
+
+	rt.onPromptRendered(context.Background(), prompt.RenderEvent{
+		PromptID: "example.agent.system",
+		Version:  "v2",
+	})
+
+	require.False(t, published)
+}
+
 func testPromptRenderContext() context.Context {
 	return withPromptRenderHookContext(context.Background(), PromptRenderHookContext{
 		RunID:     "run_1",

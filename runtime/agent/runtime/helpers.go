@@ -462,11 +462,14 @@ func (r *Runtime) publishHook(ctx context.Context, evt hooks.Event, turnID strin
 func (r *Runtime) onPromptRendered(ctx context.Context, event prompt.RenderEvent) {
 	meta, ok := promptRenderHookContextFromContext(ctx)
 	if !ok {
-		panic(fmt.Sprintf(
-			"runtime: prompt_rendered missing hook context (prompt_id=%s version=%s)",
-			event.PromptID,
-			event.Version,
-		))
+		r.logWarn(
+			ctx,
+			"prompt_rendered hook skipped: missing hook context",
+			fmt.Errorf("runtime: prompt_rendered missing hook context"),
+			"prompt_id", event.PromptID,
+			"version", event.Version,
+		)
+		return
 	}
 	hookEvent := hooks.NewPromptRenderedEvent(
 		meta.RunID,
@@ -477,13 +480,14 @@ func (r *Runtime) onPromptRendered(ctx context.Context, event prompt.RenderEvent
 		event.Scope,
 	)
 	if err := r.publishHookErr(ctx, hookEvent, meta.TurnID); err != nil {
-		panic(fmt.Errorf(
-			"runtime: prompt_rendered hook publish failed (run_id=%s prompt_id=%s version=%s): %w",
-			meta.RunID,
-			event.PromptID,
-			event.Version,
+		r.logWarn(
+			ctx,
+			"prompt_rendered hook publish failed",
 			err,
-		))
+			"run_id", meta.RunID,
+			"prompt_id", event.PromptID,
+			"version", event.Version,
+		)
 	}
 }
 
@@ -538,7 +542,8 @@ func capFailures(results []*planner.ToolResult) int {
 				planner.RetryReasonRateLimited:
 				// Count towards the consecutive-failure cap.
 			default:
-				panic(fmt.Sprintf("runtime: unknown retry reason %q", h.Reason))
+				// Unknown retry reasons degrade conservatively to a counted failure
+				// instead of crashing turn processing.
 			}
 		}
 		count++

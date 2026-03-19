@@ -54,7 +54,11 @@ func toolResultOmission(preview string, bounds *agent.Bounds) (map[string]any, e
 		content["preview"] = preview
 	}
 	if bounds != nil {
-		boundsValue, err := decodeToolResultJSONValue(mustMarshalToolResultJSON(bounds))
+		rawBounds, err := marshalToolResultJSON(bounds)
+		if err != nil {
+			return nil, err
+		}
+		boundsValue, err := decodeToolResultJSONValue(rawBounds)
 		if err != nil {
 			return nil, err
 		}
@@ -80,12 +84,12 @@ func hasNonNullToolResultJSON(raw rawjson.Message) bool {
 	return len(trimmed) > 0 && !bytes.Equal(trimmed, []byte("null"))
 }
 
-// mustMarshalToolResultJSON encodes transcript-side metadata into canonical JSON
-// for reuse by the semantic JSON decoder above.
-func mustMarshalToolResultJSON(value any) json.RawMessage {
+// marshalToolResultJSON encodes transcript-side metadata into canonical JSON for
+// reuse by the semantic JSON decoder above.
+func marshalToolResultJSON(value any) (json.RawMessage, error) {
 	raw, err := json.Marshal(value)
 	if err != nil {
-		panic(fmt.Sprintf("transcript: encode tool_result JSON value: %v", err))
+		return nil, fmt.Errorf("transcript: encode tool_result JSON value: %w", err)
 	}
-	return raw
+	return raw, nil
 }

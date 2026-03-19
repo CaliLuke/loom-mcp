@@ -494,225 +494,27 @@ func (c *Client) effectiveTemperature(requested float32) float32 {
 }
 
 func encodeMessages(ctx context.Context, msgs []*model.Message, nameMap map[string]string, cacheAfterSystem bool, logger telemetry.Logger) ([]brtypes.Message, []brtypes.SystemContentBlock, error) {
-	// toolUseIDMap tracks a per-request mapping from canonical tool_use IDs used
-	// in transcripts (which may be long or contain slashes) to provider-safe
-	// IDs that conform to Bedrock constraints ([a-zA-Z0-9_-]+, <=64 chars). The
-	// mapping is local to this encode pass; it is not persisted or surfaced to
-	// callers. This ensures we never send internal correlation IDs (for example,
-	// long RunID-based strings) as Bedrock toolUseId values.
-	toolUseIDMap := make(map[string]string)
-	nextToolUseID := 0
-
-	// docNameMap ensures provider-safe document names are stable and unique
-	// within a single request. Bedrock enforces strict filename rules for
-	// document blocks; we sanitize user-provided names and suffix duplicates.
-	docNameMap := make(map[string]string)
-	usedDocNames := make(map[string]struct{})
-	nextDocNameID := 0
-
+	state := newMessageEncodeState(ctx, nameMap, logger)
 	conversation := make([]brtypes.Message, 0, len(msgs))
 	system := make([]brtypes.SystemContentBlock, 0, len(msgs))
 	for _, m := range msgs {
-		// Build content blocks from parts
 		if m.Role == "system" {
-			for _, p := range m.Parts {
-				switch v := p.(type) {
-				case model.TextPart:
-					if v.Text != "" {
-						system = append(system, &brtypes.SystemContentBlockMemberText{Value: v.Text})
-					}
-				case model.CacheCheckpointPart:
-					system = append(system, &brtypes.SystemContentBlockMemberCachePoint{
-						Value: brtypes.CachePointBlock{Type: brtypes.CachePointTypeDefault},
-					})
-				case model.DocumentPart:
-					return nil, nil, errors.New("bedrock: document parts are not supported in system messages")
-				}
+			blocks, err := state.encodeSystemParts(m.Parts)
+			if err != nil {
+				return nil, nil, err
 			}
+			system = append(system, blocks...)
 			continue
 		}
-		blocks := make([]brtypes.ContentBlock, 0, 1+len(m.Parts))
-		for _, part := range m.Parts {
-			switch v := part.(type) {
-			case model.ThinkingPart:
-				// Encode only provider-valid variants.
-				if v.Signature != "" && v.Text != "" {
-					blocks = append(blocks, &brtypes.ContentBlockMemberReasoningContent{
-						Value: &brtypes.ReasoningContentBlockMemberReasoningText{
-							Value: brtypes.ReasoningTextBlock{
-								Text:      aws.String(v.Text),
-								Signature: aws.String(v.Signature),
-							},
-						},
-					})
-					break
-				}
-				if len(v.Redacted) > 0 {
-					blocks = append(blocks, &brtypes.ContentBlockMemberReasoningContent{
-						Value: &brtypes.ReasoningContentBlockMemberRedactedContent{
-							Value: v.Redacted,
-						},
-					})
-					break
-				}
-			case model.TextPart:
-				if v.Text != "" {
-					blocks = append(blocks, &brtypes.ContentBlockMemberText{Value: v.Text})
-				}
-			case model.ImagePart:
-				// Bedrock supports image blocks only for user messages (Claude multimodal).
-				if m.Role != model.ConversationRoleUser {
-					return nil, nil, fmt.Errorf(
-						"bedrock: image parts are only supported in user messages (role=%s)",
-						m.Role,
-					)
-				}
-				var format brtypes.ImageFormat
-				switch v.Format {
-				case model.ImageFormatPNG:
-					format = brtypes.ImageFormatPng
-				case model.ImageFormatJPEG:
-					format = brtypes.ImageFormatJpeg
-				case model.ImageFormatGIF:
-					format = brtypes.ImageFormatGif
-				case model.ImageFormatWEBP:
-					format = brtypes.ImageFormatWebp
-				default:
-					return nil, nil, fmt.Errorf("bedrock: unsupported image format %q", v.Format)
-				}
-				blocks = append(blocks, &brtypes.ContentBlockMemberImage{
-					Value: brtypes.ImageBlock{
-						Format: format,
-						Source: &brtypes.ImageSourceMemberBytes{Value: v.Bytes},
-					},
-				})
-			case model.DocumentPart:
-				// Bedrock supports document blocks for user messages.
-				if m.Role != model.ConversationRoleUser {
-					return nil, nil, fmt.Errorf(
-						"bedrock: document parts are only supported in user messages (role=%s)",
-						m.Role,
-					)
-				}
-				if v.Name == "" {
-					return nil, nil, errors.New("bedrock: document part requires Name")
-				}
-				var source brtypes.DocumentSource
-				isS3Source := false
-				switch {
-				case len(v.Bytes) > 0:
-					source = &brtypes.DocumentSourceMemberBytes{Value: v.Bytes}
-				case len(v.Chunks) > 0:
-					chunks := make([]brtypes.DocumentContentBlock, 0, len(v.Chunks))
-					for i, chunk := range v.Chunks {
-						if chunk == "" {
-							return nil, nil, fmt.Errorf("bedrock: document part requires non-empty Chunks[%d]", i)
-						}
-						chunks = append(chunks, &brtypes.DocumentContentBlockMemberText{Value: chunk})
-					}
-					source = &brtypes.DocumentSourceMemberContent{Value: chunks}
-				case v.URI != "":
-					isS3Source = true
-					if !strings.HasPrefix(v.URI, "s3://") {
-						return nil, nil, fmt.Errorf("bedrock: document URI scheme not supported: %q", v.URI)
-					}
-					s3 := brtypes.S3Location{
-						Uri: aws.String(v.URI),
-					}
-					source = &brtypes.DocumentSourceMemberS3Location{Value: s3}
-				case v.Text != "":
-					source = &brtypes.DocumentSourceMemberText{Value: v.Text}
-				default:
-					return nil, nil, errors.New("bedrock: document part requires one of Bytes, Text, Chunks, or URI")
-				}
-				doc := brtypes.DocumentBlock{
-					Name:   aws.String(docNameFor(v.Name, docNameMap, usedDocNames, &nextDocNameID)),
-					Source: source,
-				}
-				if v.Format != "" {
-					doc.Format = brtypes.DocumentFormat(v.Format)
-				}
-				// Bedrock disallows S3Location as a source when citations are enabled.
-				// When the caller requests citations, we honor it only for inline sources.
-				if v.Cite && !isS3Source {
-					doc.Citations = &brtypes.CitationsConfig{Enabled: aws.Bool(true)}
-				}
-				if v.Context != "" {
-					doc.Context = aws.String(v.Context)
-				}
-				blocks = append(blocks, &brtypes.ContentBlockMemberDocument{Value: doc})
-			case model.ToolUsePart:
-				// Encode assistant-declared tool_use with optional ID and JSON input.
-				tb := brtypes.ToolUseBlock{}
-				if v.Name != "" {
-					// Contract: providers may require that every tool referenced in prior
-					// tool_use history appears in the current request tool list. When we
-					// encounter a tool_use that is not present in the current tool
-					// configuration (typically due to prior unknown-tool recovery), rewrite
-					// it to the runtime-owned tool_unavailable tool and embed the original
-					// name + payload inside its input.
-					if sanitized, ok := nameMap[v.Name]; ok && sanitized != "" {
-						tb.Name = aws.String(sanitized)
-					} else {
-						unavailable := tools.ToolUnavailable.String()
-						sanitized, ok := nameMap[unavailable]
-						if !ok || sanitized == "" {
-							return nil, nil, fmt.Errorf(
-								"bedrock: tool_use in messages references %q which is not in the current tool configuration and tool_unavailable is not available",
-								v.Name,
-							)
-						}
-						tb.Name = aws.String(sanitized)
-						tb.Input = toDocument(ctx, map[string]any{
-							"requested_tool":    v.Name,
-							"requested_payload": v.Input,
-						}, logger)
-					}
-				}
-				if v.ID != "" {
-					if id := toolUseIDFor(v.ID, toolUseIDMap, &nextToolUseID); id != "" {
-						tb.ToolUseId = aws.String(id)
-					}
-				}
-				if tb.Input == nil {
-					tb.Input = toDocument(ctx, v.Input, logger)
-				}
-				blocks = append(blocks, &brtypes.ContentBlockMemberToolUse{Value: tb})
-			case model.ToolResultPart:
-				// Bedrock expects tool_result blocks in user messages, correlated to a prior tool_use.
-				// Encode content as text when Content is a string; otherwise as a JSON document.
-				tr := brtypes.ToolResultBlock{}
-				if id := toolUseIDFor(v.ToolUseID, toolUseIDMap, &nextToolUseID); id != "" {
-					tr.ToolUseId = aws.String(id)
-				}
-				if s, ok := v.Content.(string); ok {
-					tr.Content = []brtypes.ToolResultContentBlock{
-						&brtypes.ToolResultContentBlockMemberText{Value: s},
-					}
-				} else {
-					doc := toDocument(ctx, v.Content, logger)
-					tr.Content = []brtypes.ToolResultContentBlock{
-						&brtypes.ToolResultContentBlockMemberJson{Value: doc},
-					}
-				}
-				blocks = append(blocks, &brtypes.ContentBlockMemberToolResult{Value: tr})
-			case model.CacheCheckpointPart:
-				blocks = append(blocks, &brtypes.ContentBlockMemberCachePoint{
-					Value: brtypes.CachePointBlock{Type: brtypes.CachePointTypeDefault},
-				})
-			}
+		blocks, err := state.encodeMessageParts(m.Role, m.Parts)
+		if err != nil {
+			return nil, nil, err
 		}
 		if len(blocks) == 0 {
 			continue
 		}
-		var brrole brtypes.ConversationRole
-		if m.Role == "user" {
-			brrole = brtypes.ConversationRoleUser
-		} else {
-			brrole = brtypes.ConversationRoleAssistant
-		}
 		conversation = append(conversation, brtypes.Message{
-			Role:    brrole,
+			Role:    conversationRole(m.Role),
 			Content: blocks,
 		})
 	}
@@ -741,38 +543,9 @@ func encodeTools(
 		}
 		return nil, nil, nil, fmt.Errorf("bedrock: tool choice is set but no tools are defined")
 	}
-	toolList := make([]brtypes.Tool, 0, len(defs))
-	// canonToSan maps canonical IDs (toolset.tool) to provider-visible sanitized names.
-	canonToSan := make(map[string]string, len(defs))
-	// sanToCanon is the reverse map used to translate provider names back to canonical IDs.
-	sanToCanon := make(map[string]string, len(defs))
-	for _, def := range defs {
-		if def == nil {
-			continue
-		}
-		canonical := def.Name
-		if canonical == "" {
-			continue
-		}
-		sanitized := SanitizeToolName(canonical)
-		if prev, ok := sanToCanon[sanitized]; ok && prev != canonical {
-			return nil, nil, nil, fmt.Errorf(
-				"bedrock: tool name %q sanitizes to %q which collides with %q",
-				canonical, sanitized, prev,
-			)
-		}
-		sanToCanon[sanitized] = canonical
-		canonToSan[canonical] = sanitized
-		if def.Description == "" {
-			return nil, nil, nil, fmt.Errorf("bedrock: tool %q is missing description", canonical)
-		}
-		schemaDoc := toDocument(ctx, def.InputSchema, logger)
-		spec := brtypes.ToolSpecification{
-			Name:        aws.String(sanitized),
-			Description: aws.String(def.Description),
-			InputSchema: &brtypes.ToolInputSchemaMemberJson{Value: schemaDoc},
-		}
-		toolList = append(toolList, &brtypes.ToolMemberToolSpec{Value: spec})
+	toolList, canonToSan, sanToCanon, err := buildToolSpecifications(ctx, defs, logger)
+	if err != nil {
+		return nil, nil, nil, err
 	}
 	if len(toolList) == 0 {
 		if choice == nil || choice.Mode == model.ToolChoiceModeNone {
@@ -780,54 +553,14 @@ func encodeTools(
 		}
 		return nil, nil, nil, fmt.Errorf("bedrock: tool choice is set but no tools are defined")
 	}
-	// Policy-driven: append a cache checkpoint after tools when requested.
-	// Note: Only Claude models support tool-level cache checkpoints; Nova does not.
 	if cacheAfterTools {
-		toolList = append(toolList, &brtypes.ToolMemberCachePoint{
-			Value: brtypes.CachePointBlock{Type: brtypes.CachePointTypeDefault},
-		})
+		toolList = appendToolCacheCheckpoint(toolList)
 	}
-
-	if choice == nil {
-		return &brtypes.ToolConfiguration{Tools: toolList}, canonToSan, sanToCanon, nil
+	cfg, err := buildToolConfiguration(choice, defs, toolList, sanToCanon)
+	if err != nil {
+		return nil, nil, nil, err
 	}
-
-	cfg := brtypes.ToolConfiguration{
-		Tools: toolList,
-	}
-
-	switch choice.Mode {
-	case "", model.ToolChoiceModeAuto:
-		// Auto is the provider default; omit ToolChoice to preserve existing
-		// behavior.
-	case model.ToolChoiceModeNone:
-		// Preserve tool configuration so Bedrock can interpret existing
-		// tool_use and tool_result content blocks in the transcript, but do
-		// not force additional tool calls. Callers rely on prompts and
-		// higher-level contracts to prevent new tool invocations.
-	case model.ToolChoiceModeAny:
-		cfg.ToolChoice = &brtypes.ToolChoiceMemberAny{
-			Value: brtypes.AnyToolChoice{},
-		}
-	case model.ToolChoiceModeTool:
-		if choice.Name == "" {
-			return nil, nil, nil, fmt.Errorf("bedrock: tool choice mode %q requires a tool name", choice.Mode)
-		}
-		if !hasToolDefinition(defs, choice.Name) {
-			return nil, nil, nil, fmt.Errorf("bedrock: tool choice name %q does not match any tool", choice.Name)
-		}
-		sanitized := SanitizeToolName(choice.Name)
-		if canonical, ok := sanToCanon[sanitized]; !ok || canonical != choice.Name {
-			return nil, nil, nil, fmt.Errorf("bedrock: tool choice name %q does not match any tool", choice.Name)
-		}
-		cfg.ToolChoice = &brtypes.ToolChoiceMemberTool{
-			Value: brtypes.SpecificToolChoice{Name: aws.String(sanitized)},
-		}
-	default:
-		return nil, nil, nil, fmt.Errorf("bedrock: unsupported tool choice mode %q", choice.Mode)
-	}
-
-	return &cfg, canonToSan, sanToCanon, nil
+	return cfg, canonToSan, sanToCanon, nil
 }
 
 // sanitizeDocumentName maps an arbitrary user-provided document name (typically a

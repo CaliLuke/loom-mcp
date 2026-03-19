@@ -225,8 +225,8 @@ func ValidateBedrock(messages []*model.Message, thinkingEnabled bool) error {
 
 // BuildMessagesFromEvents reconstructs provider-ready messages from durable
 // memory events by replaying them through a Ledger. It returns messages in the
-// canonical provider order (assistant thinking → text → tool_use; user tool_result).
-func BuildMessagesFromEvents(events []memory.Event) []*model.Message {
+// canonical provider order (assistant thinking -> text -> tool_use; user tool_result).
+func BuildMessagesFromEvents(events []memory.Event) ([]*model.Message, error) {
 	l := NewLedger()
 	var pendingResults []ToolResultSpec
 	var toolOrder []string
@@ -235,7 +235,7 @@ func BuildMessagesFromEvents(events []memory.Event) []*model.Message {
 		case memory.EventAssistantMessage:
 			data, err := memory.DecodeAssistantMessageData(e)
 			if err != nil {
-				panic(fmt.Sprintf("transcript: decode %s event: %v", e.Type, err))
+				return nil, fmt.Errorf("transcript: decode %s event: %w", e.Type, err)
 			}
 			if data.Message != "" {
 				l.AppendText(data.Message)
@@ -243,22 +243,22 @@ func BuildMessagesFromEvents(events []memory.Event) []*model.Message {
 		case memory.EventToolCall:
 			data, err := memory.DecodeToolCallData(e)
 			if err != nil {
-				panic(fmt.Sprintf("transcript: decode %s event: %v", e.Type, err))
+				return nil, fmt.Errorf("transcript: decode %s event: %w", e.Type, err)
 			}
 			payload, err := data.Input()
 			if err != nil {
-				panic(fmt.Sprintf("transcript: decode tool_call %q payload: %v", data.ToolCallID, err))
+				return nil, fmt.Errorf("transcript: decode tool_call %q payload: %w", data.ToolCallID, err)
 			}
 			l.DeclareToolUse(data.ToolCallID, string(data.ToolName), payload)
 			toolOrder = append(toolOrder, data.ToolCallID)
 		case memory.EventToolResult:
 			data, err := memory.DecodeToolResultData(e)
 			if err != nil {
-				panic(fmt.Sprintf("transcript: decode %s event: %v", e.Type, err))
+				return nil, fmt.Errorf("transcript: decode %s event: %w", e.Type, err)
 			}
 			content, err := ProjectToolResultContent(data.ResultJSON, data.Bounds, data.Preview, data.ErrorMessage)
 			if err != nil {
-				panic(fmt.Sprintf("transcript: reconstruct tool_result %q: %v", data.ToolCallID, err))
+				return nil, fmt.Errorf("transcript: reconstruct tool_result %q: %w", data.ToolCallID, err)
 			}
 			pendingResults = append(pendingResults, ToolResultSpec{
 				ToolUseID: data.ToolCallID,
@@ -272,7 +272,7 @@ func BuildMessagesFromEvents(events []memory.Event) []*model.Message {
 		case memory.EventThinking:
 			data, err := memory.DecodeThinkingData(e)
 			if err != nil {
-				panic(fmt.Sprintf("transcript: decode %s event: %v", e.Type, err))
+				return nil, fmt.Errorf("transcript: decode %s event: %w", e.Type, err)
 			}
 			l.AppendThinking(ThinkingPart{
 				Text:      data.Text,
@@ -311,7 +311,7 @@ func BuildMessagesFromEvents(events []memory.Event) []*model.Message {
 		}
 		l.AppendUserToolResults(ordered)
 	}
-	return l.BuildMessages()
+	return l.BuildMessages(), nil
 }
 
 // UnmarshalJSON customizes Message decoding so that Parts (which contain

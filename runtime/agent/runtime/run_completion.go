@@ -6,6 +6,7 @@ package runtime
 import (
 	"context"
 	"errors"
+	"fmt"
 	"sync"
 	"time"
 
@@ -200,7 +201,7 @@ func (r *Runtime) runHasTerminalSnapshot(ctx context.Context, runID string) (boo
 	case run.StatusPending, run.StatusRunning, run.StatusPaused:
 		return false, nil
 	}
-	panic("runtime: unsupported run snapshot status for terminal detection: " + string(snapshot.Status))
+	return false, fmt.Errorf("runtime: unsupported run snapshot status for terminal detection: %s", snapshot.Status)
 }
 
 // synthesizeTerminalRunCompletion publishes a canonical RunCompleted event using
@@ -211,7 +212,14 @@ func (r *Runtime) synthesizeTerminalRunCompletion(ctx context.Context, runID str
 	if err != nil {
 		return err
 	}
-	publicStatus := terminalRunStatusForEngineStatus(status)
+	publicStatus, err := terminalRunStatusForEngineStatus(status)
+	if err != nil {
+		return err
+	}
+	terminalErr, err := terminalRunErrorForStatus(status)
+	if err != nil {
+		return err
+	}
 	return r.publishHookErr(
 		ctx,
 		hooks.NewRunCompletedEvent(
@@ -220,7 +228,7 @@ func (r *Runtime) synthesizeTerminalRunCompletion(ctx context.Context, runID str
 			sessionID,
 			publicStatus,
 			terminalRunPhaseForStatus(publicStatus),
-			terminalRunErrorForStatus(status),
+			terminalErr,
 		),
 		turnID,
 	)
@@ -311,37 +319,37 @@ func terminalRunStatusForError(err error) string {
 	}
 }
 
-func terminalRunStatusForEngineStatus(status engine.RunStatus) string {
+func terminalRunStatusForEngineStatus(status engine.RunStatus) (string, error) {
 	switch status {
 	case engine.RunStatusCompleted:
-		return runStatusSuccess
+		return runStatusSuccess, nil
 	case engine.RunStatusTimedOut:
-		return runStatusFailed
+		return runStatusFailed, nil
 	case engine.RunStatusFailed:
-		return runStatusFailed
+		return runStatusFailed, nil
 	case engine.RunStatusCanceled:
-		return runStatusCanceled
+		return runStatusCanceled, nil
 	case engine.RunStatusPending, engine.RunStatusRunning, engine.RunStatusPaused:
-		panic("runtime: non-terminal engine run status cannot map to terminal repair: " + string(status))
+		return "", fmt.Errorf("runtime: non-terminal engine run status cannot map to terminal repair: %s", status)
 	default:
-		panic("runtime: unexpected engine run status for terminal repair: " + string(status))
+		return "", fmt.Errorf("runtime: unexpected engine run status for terminal repair: %s", status)
 	}
 }
 
-func terminalRunErrorForStatus(status engine.RunStatus) error {
+func terminalRunErrorForStatus(status engine.RunStatus) (error, error) {
 	switch status {
 	case engine.RunStatusCompleted:
-		return nil
+		return nil, nil
 	case engine.RunStatusTimedOut:
-		return context.DeadlineExceeded
+		return context.DeadlineExceeded, nil
 	case engine.RunStatusFailed:
-		return errors.New("workflow failed before runtime emitted RunCompleted")
+		return errors.New("workflow failed before runtime emitted RunCompleted"), nil
 	case engine.RunStatusCanceled:
-		return context.Canceled
+		return context.Canceled, nil
 	case engine.RunStatusPending, engine.RunStatusRunning, engine.RunStatusPaused:
-		panic("runtime: non-terminal engine run status cannot map to terminal error: " + string(status))
+		return nil, fmt.Errorf("runtime: non-terminal engine run status cannot map to terminal error: %s", status)
 	default:
-		panic("runtime: unexpected engine run status for terminal error mapping: " + string(status))
+		return nil, fmt.Errorf("runtime: unexpected engine run status for terminal error mapping: %s", status)
 	}
 }
 

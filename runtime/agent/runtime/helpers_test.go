@@ -63,6 +63,19 @@ func TestCapFailures_SkipsToolUnavailable(t *testing.T) {
 			}},
 			want: 1,
 		},
+		{
+			name: "unknown_retry_reason_counts_without_panic",
+			results: []*planner.ToolResult{{
+				Name:       tools.Ident("svc.data.discover"),
+				ToolCallID: "tc4",
+				Error:      planner.NewToolError("future retry reason"),
+				RetryHint: &planner.RetryHint{
+					Reason: planner.RetryReason("future_reason"),
+					Tool:   tools.Ident("svc.data.discover"),
+				},
+			}},
+			want: 1,
+		},
 	}
 
 	for _, tt := range tests {

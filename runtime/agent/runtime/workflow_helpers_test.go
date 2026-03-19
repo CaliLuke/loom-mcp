@@ -155,7 +155,7 @@ func TestAppendUserToolResults_MatchesReplayProjection(t *testing.T) {
 			if tc.tr.Error != nil {
 				errorMessage = tc.tr.Error.Error()
 			}
-			replayed := transcript.BuildMessagesFromEvents([]memory.Event{
+			replayed, err := transcript.BuildMessagesFromEvents([]memory.Event{
 				memory.NewEvent(time.Now(), memory.AssistantMessageData{
 					Message: "calling tool",
 				}, nil),
@@ -173,6 +173,7 @@ func TestAppendUserToolResults_MatchesReplayProjection(t *testing.T) {
 					ErrorMessage: errorMessage,
 				}, nil),
 			})
+			require.NoError(t, err)
 			require.Len(t, replayed, 2)
 
 			replayPart, ok := replayed[1].Parts[0].(model.ToolResultPart)

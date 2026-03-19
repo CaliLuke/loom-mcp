@@ -139,12 +139,16 @@ var (
 	codegenOnce sync.Once
 	codegenErr  error
 
-	// Pre-compiled binary state: compile once, run many instances.
-	buildOnce     sync.Once
-	buildErr      error
-	serverBinPath string
-	serverBinMu   sync.Mutex
+	// Pre-compiled binary state keyed by command directory so cloned SDK fixtures
+	// do not accidentally reuse a binary built from a different example root.
+	serverBinMu    sync.Mutex
+	serverBinCache = map[string]serverBinaryBuild{}
 )
+
+type serverBinaryBuild struct {
+	path string
+	err  error
+}
 
 // LoadScenarios loads scenarios from a YAML file path.
 func LoadScenarios(path string) ([]Scenario, error) {
@@ -410,6 +414,21 @@ import (
 	goahttp "goa.design/goa/v3/http"
 )
 
+type sdkAssistantService struct {
+	assistant.Service
+}
+
+func (s sdkAssistantService) SystemInfo(ctx context.Context) (*assistant.SystemInfoResult, error) {
+	name := "assistant-itest"
+	version := "1.0.0"
+	return &assistant.SystemInfoResult{Name: &name, Version: &version}, nil
+}
+
+func (s sdkAssistantService) AnalyzeSentiment(ctx context.Context, p *assistant.AnalyzeSentimentPayload) (*assistant.AnalyzeSentimentResult, error) {
+	sentiment := "positive"
+	return &assistant.AnalyzeSentimentResult{Sentiment: &sentiment}, nil
+}
+
 // handleHTTPServer starts configures and starts a HTTP server on the given
 // URL. It shuts down the server if any error is received in the error channel.
 func handleHTTPServer(ctx context.Context, u *url.URL, assistantSvc assistant.Service, _ *mcpassistant.Endpoints, _ mcpassistant.Service, wg *sync.WaitGroup, errc chan error, dbg bool) {
@@ -419,7 +438,7 @@ func handleHTTPServer(ctx context.Context, u *url.URL, assistantSvc assistant.Se
 		debug.MountDebugLogEnabler(debug.Adapt(mux))
 	}
 
-	sdkServer, err := mcpassistant.NewSDKServer(assistantSvc, &mcpassistant.SDKServerOptions{
+	sdkServer, err := mcpassistant.NewSDKServer(sdkAssistantService{Service: assistantSvc}, &mcpassistant.SDKServerOptions{
 		RequestContext: func(reqCtx context.Context, r *http.Request) context.Context {
 			if r == nil {
 				return reqCtx
@@ -471,12 +490,19 @@ func handleHTTPServer(ctx context.Context, u *url.URL, assistantSvc assistant.Se
 	}()
 }
 `
-	httpPath := filepath.Join(exampleRoot, "cmd", "orchestrator", "http.go")
+	cmdDir, err := findServerCmdDir(exampleRoot)
+	if err != nil {
+		return fmt.Errorf("resolve SDK fixture command dir: %w", err)
+	}
+	if err := os.MkdirAll(cmdDir, 0o755); err != nil {
+		return fmt.Errorf("create SDK fixture command dir: %w", err)
+	}
+	httpPath := filepath.Join(cmdDir, "http.go")
 	if err := os.WriteFile(httpPath, []byte(httpContent), 0o644); err != nil {
 		return fmt.Errorf("write SDK fixture http.go: %w", err)
 	}
 
-	mainPath := filepath.Join(exampleRoot, "cmd", "orchestrator", "main.go")
+	mainPath := filepath.Join(cmdDir, "main.go")
 	mainData, err := os.ReadFile(mainPath)
 	if err != nil {
 		return fmt.Errorf("read SDK fixture main.go: %w", err)
@@ -648,54 +674,48 @@ func buildServerBinary(exampleRoot string) (string, error) {
 	serverBinMu.Lock()
 	defer serverBinMu.Unlock()
 
-	buildOnce.Do(func() {
-		cmdPath, err := findServerCmdDir(exampleRoot)
-		if err != nil {
-			buildErr = err
-			return
-		}
-		// Create a temp file for the binary
-		tmpFile, err := os.CreateTemp("", "mcp-test-server-*")
-		if err != nil {
-			buildErr = fmt.Errorf("create temp file for binary: %w", err)
-			return
-		}
-		binPath := filepath.Clean(tmpFile.Name())
-		if err := tmpFile.Close(); err != nil {
-			buildErr = fmt.Errorf("close temp file for binary: %w", err)
-			return
-		}
+	cmdPath, err := findServerCmdDir(exampleRoot)
+	if err != nil {
+		return "", err
+	}
+	if cached, ok := serverBinCache[cmdPath]; ok {
+		return cached.path, cached.err
+	}
 
-		// Build the server binary
-		//nolint:gosec // launching 'go build' test server is expected
-		buildCmd := exec.CommandContext(
-			context.Background(),
-			"go",
-			"build",
-			"-o",
-			binPath,
-			".",
-		)
-		buildCmd.Dir = cmdPath
-		out, err := buildCmd.CombinedOutput()
-		if err != nil {
-			buildErr = fmt.Errorf("go build failed in %s: %w\n%s", cmdPath, err, string(out))
-			// #nosec G703 -- binPath is a temp file path from os.CreateTemp.
-			if rerr := os.Remove(binPath); rerr != nil {
-				buildErr = errors.Join(buildErr, fmt.Errorf("remove temp binary failed: %w", rerr))
-			}
-			return
-		}
-		// Verify binary exists
-		// #nosec G703 -- binPath is a temp file path from os.CreateTemp.
-		if _, err := os.Stat(binPath); err != nil {
-			buildErr = fmt.Errorf("binary not found after build: %w", err)
-			return
-		}
-		serverBinPath = binPath
-	})
+	tmpFile, err := os.CreateTemp("", "mcp-test-server-*")
+	if err != nil {
+		return "", fmt.Errorf("create temp file for binary: %w", err)
+	}
+	binPath := filepath.Clean(tmpFile.Name())
+	if err := tmpFile.Close(); err != nil {
+		return "", fmt.Errorf("close temp file for binary: %w", err)
+	}
 
-	return serverBinPath, buildErr
+	buildCmd := exec.CommandContext(
+		context.Background(),
+		"go",
+		"build",
+		"-o",
+		binPath,
+		".",
+	)
+	buildCmd.Dir = cmdPath
+	out, err := buildCmd.CombinedOutput()
+	if err != nil {
+		buildErr := fmt.Errorf("go build failed in %s: %w\n%s", cmdPath, err, string(out))
+		if rerr := os.Remove(binPath); rerr != nil {
+			buildErr = errors.Join(buildErr, fmt.Errorf("remove temp binary failed: %w", rerr))
+		}
+		serverBinCache[cmdPath] = serverBinaryBuild{err: buildErr}
+		return "", buildErr
+	}
+	if _, err := os.Stat(binPath); err != nil {
+		buildErr := fmt.Errorf("binary not found after build: %w", err)
+		serverBinCache[cmdPath] = serverBinaryBuild{err: buildErr}
+		return "", buildErr
+	}
+	serverBinCache[cmdPath] = serverBinaryBuild{path: binPath}
+	return binPath, nil
 }
 
 // startServer starts the test server.

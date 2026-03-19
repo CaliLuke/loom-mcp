@@ -102,7 +102,10 @@ func TestBuildMessagesFromEvents_ParentToolOnly(t *testing.T) {
 		}, nil),
 	}
 
-	msgs := BuildMessagesFromEvents(events)
+	msgs, err := BuildMessagesFromEvents(events)
+	if err != nil {
+		t.Fatalf("BuildMessagesFromEvents error: %v", err)
+	}
 	if len(msgs) != 2 {
 		t.Fatalf("expected 2 messages, got %d", len(msgs))
 	}
@@ -251,7 +254,10 @@ func TestBuildMessagesFromEvents_ToolErrorIncludesErrorContent(t *testing.T) {
 		}, nil),
 	}
 
-	msgs := BuildMessagesFromEvents(events)
+	msgs, err := BuildMessagesFromEvents(events)
+	if err != nil {
+		t.Fatalf("BuildMessagesFromEvents error: %v", err)
+	}
 	if len(msgs) != 2 {
 		t.Fatalf("expected 2 messages, got %d", len(msgs))
 	}
@@ -297,7 +303,10 @@ func TestBuildMessagesFromEvents_AcceptsLegacyToolCallPayloadShape(t *testing.T)
 		}, nil),
 	}
 
-	msgs := BuildMessagesFromEvents(events)
+	msgs, err := BuildMessagesFromEvents(events)
+	if err != nil {
+		t.Fatalf("BuildMessagesFromEvents error: %v", err)
+	}
 	if len(msgs) != 2 {
 		t.Fatalf("expected 2 messages, got %d", len(msgs))
 	}
@@ -332,7 +341,10 @@ func TestBuildMessagesFromEvents_AcceptsLegacyThinkingBytes(t *testing.T) {
 		}, nil),
 	}
 
-	msgs := BuildMessagesFromEvents(events)
+	msgs, err := BuildMessagesFromEvents(events)
+	if err != nil {
+		t.Fatalf("BuildMessagesFromEvents error: %v", err)
+	}
 	if len(msgs) != 1 {
 		t.Fatalf("expected 1 message, got %d", len(msgs))
 	}
@@ -345,5 +357,30 @@ func TestBuildMessagesFromEvents_AcceptsLegacyThinkingBytes(t *testing.T) {
 	}
 	if !reflect.DeepEqual(part.Redacted, []byte("opaque")) {
 		t.Fatalf("redacted mismatch:\n got: %#v\nwant: %#v", part.Redacted, []byte("opaque"))
+	}
+}
+
+func TestBuildMessagesFromEvents_ReturnsDecodeError(t *testing.T) {
+	events := []memory.Event{
+		{
+			Type:      memory.EventToolCall,
+			Timestamp: time.Now(),
+			Data: map[string]any{
+				"tool_call_id": "tc-1",
+				"tool_name":    "svc.tool",
+				"payload":      "{not-json",
+			},
+		},
+	}
+
+	msgs, err := BuildMessagesFromEvents(events)
+	if err == nil {
+		t.Fatal("expected error")
+	}
+	if msgs != nil {
+		t.Fatalf("expected nil messages, got %#v", msgs)
+	}
+	if !contains(err.Error(), `decode tool_call "tc-1" payload`) {
+		t.Fatalf("unexpected error: %v", err)
 	}
 }
