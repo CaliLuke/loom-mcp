@@ -23,6 +23,17 @@ var {{ .Register.HelperName }}ToolSpecs = []tools.ToolSpec{
 		Service:     {{ printf "%q" $.Register.ServiceName }},
 		Toolset:     {{ printf "%q" $.Register.SuiteQualifiedName }},
 		Description: {{ printf "%q" .Description }},
+		{{- if .Meta }}
+		Meta: map[string][]string{
+			{{- range .Meta }}
+			{{ printf "%q" .Key }}: []string{
+				{{- range .Values }}
+				{{ printf "%q" . }},
+				{{- end }}
+			},
+			{{- end }}
+		},
+		{{- end }}
 		Payload: tools.TypeSpec{
 			Name:   {{ printf "%q" .PayloadType }},
 			Schema: []byte({{ printf "%q" .InputSchema }}),
