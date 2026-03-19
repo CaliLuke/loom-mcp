@@ -23,7 +23,7 @@ require (
 	go.temporal.io/sdk v1.40.0
 	go.temporal.io/sdk/contrib/opentelemetry v0.7.0
 	goa.design/clue v1.2.4
-	goa.design/goa/v3 v3.25.4-0.20260223180114-8f7035a38f5d
+	goa.design/goa/v3 v3.25.4-0.20260319161141-ef5591beaeb7
 	goa.design/pulse v1.6.0
 	golang.org/x/time v0.14.0
 	google.golang.org/grpc v1.79.1
@@ -31,7 +31,7 @@ require (
 	gopkg.in/yaml.v3 v3.0.1
 )
 
-replace goa.design/goa/v3 => github.com/CaliLuke/goa/v3 v3.25.4-0.20260318235755-f885f5eaa0e5
+replace goa.design/goa/v3 => /Users/luca/code/goa-light
 
 require (
 	dario.cat/mergo v1.0.2 // indirect

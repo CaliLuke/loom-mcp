@@ -22,8 +22,18 @@ func ConversationHistoryAssistantPath() string {
 	return "/rpc"
 }
 
+// FigmaDesignSystemAssistantPath returns the URL path to the assistant service figma_design_system HTTP endpoint.
+func FigmaDesignSystemAssistantPath() string {
+	return "/rpc"
+}
+
 // GeneratePromptsAssistantPath returns the URL path to the assistant service generate_prompts HTTP endpoint.
 func GeneratePromptsAssistantPath() string {
+	return "/rpc"
+}
+
+// BuildFigmaImplementationPromptAssistantPath returns the URL path to the assistant service build_figma_implementation_prompt HTTP endpoint.
+func BuildFigmaImplementationPromptAssistantPath() string {
 	return "/rpc"
 }
 
@@ -64,5 +74,10 @@ func ProcessBatchAssistantPath() string {
 
 // MultiContentAssistantPath returns the URL path to the assistant service multi_content HTTP endpoint.
 func MultiContentAssistantPath() string {
+	return "/rpc"
+}
+
+// GenerateDpiSpecAssistantPath returns the URL path to the assistant service generate_dpi_spec HTTP endpoint.
+func GenerateDpiSpecAssistantPath() string {
 	return "/rpc"
 }

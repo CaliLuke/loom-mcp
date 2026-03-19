@@ -64,8 +64,12 @@ func doJSONRPC(scheme, host string, timeout int, debug bool) (goa.Endpoint, any,
 			return e.SystemInfo, payload, nil
 		case "conversation-history":
 			return e.ConversationHistory, payload, nil
+		case "figma-design-system":
+			return e.FigmaDesignSystem, payload, nil
 		case "generate-prompts":
 			return e.GeneratePrompts, payload, nil
+		case "build-figma-implementation-prompt":
+			return e.BuildFigmaImplementationPrompt, payload, nil
 		case "send-notification":
 			return e.SendNotification, payload, nil
 		case "analyze-sentiment":
@@ -82,6 +86,8 @@ func doJSONRPC(scheme, host string, timeout int, debug bool) (goa.Endpoint, any,
 			return e.ProcessBatch, payload, nil
 		case "multi-content":
 			return e.MultiContent, payload, nil
+		case "generate-dpi-spec":
+			return e.GenerateDpiSpec, payload, nil
 		}
 		return endpoint, payload, nil
 	}

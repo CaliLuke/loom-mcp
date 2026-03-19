@@ -72,6 +72,12 @@ func (s *mcpAssistantSSEStream) initSSEHeaders() {
 	})
 }
 
+// open commits and flushes the SSE headers before the first application event
+func (s *mcpAssistantSSEStream) open() error {
+	s.initSSEHeaders()
+	return http.NewResponseController(s.w).Flush()
+}
+
 // sendSSEEvent sends a single SSE event by creating an encoder that writes to the event writer
 func (s *mcpAssistantSSEStream) sendSSEEvent(eventType string, v any) error {
 	s.initSSEHeaders()
@@ -126,7 +132,7 @@ func (s *mcpAssistantSSEStream) Send(ctx context.Context, event mcpassistant.Eve
 				"method":  "tools/call",
 				"params":  body,
 			}
-			eventType = "notification"
+			eventType = "message"
 		}
 
 		return s.sendSSEEvent(eventType, message)
@@ -157,7 +163,7 @@ func (s *mcpAssistantSSEStream) Send(ctx context.Context, event mcpassistant.Eve
 				"method":  "events/stream",
 				"params":  body,
 			}
-			eventType = "notification"
+			eventType = "message"
 		}
 
 		return s.sendSSEEvent(eventType, message)

@@ -117,6 +117,7 @@ func NewMCPAdapter(service assistant.Service, promptProvider PromptProvider, opt
 			"documents":            "doc://list",
 			"system_info":          "system://info",
 			"conversation_history": "conversation://history",
+			"figma_design_system":  "figma://design-system/mobile-checkout",
 		}
 		seen := map[string]struct{}{}
 		for _, n := range opts.AllowedResourceNames {
@@ -161,6 +162,7 @@ func NewMCPAdapter(service assistant.Service, promptProvider PromptProvider, opt
 		"documents":            "doc://list",
 		"system_info":          "system://info",
 		"conversation_history": "conversation://history",
+		"figma_design_system":  "figma://design-system/mobile-checkout",
 	}
 	return &MCPAdapter{
 		service:             service,
@@ -657,6 +659,11 @@ func (a *MCPAdapter) ToolsList(ctx context.Context, p *ToolsListPayload) (res *T
 			Description: stringPtr("Return multiple content items"),
 			InputSchema: json.RawMessage([]byte("{\"type\":\"object\",\"required\":[\"count\"],\"properties\":{\"count\":{\"type\":\"integer\",\"description\":\"Number of content items to return\"}},\"additionalProperties\":false}")),
 		},
+		{
+			Name:        "generate_dpi_spec",
+			Description: stringPtr("Generate a deterministic design implementation plan from fake Figma data"),
+			InputSchema: json.RawMessage([]byte("{\"type\":\"object\",\"required\":[\"screen_title\",\"platform\",\"density\",\"primary_cta\",\"sections\"],\"properties\":{\"density\":{\"type\":\"string\",\"description\":\"Layout density\",\"enum\":[\"compact\",\"comfortable\"]},\"include_dev_notes\":{\"type\":\"boolean\",\"description\":\"Whether to include implementation notes\"},\"platform\":{\"type\":\"string\",\"description\":\"Target platform\",\"enum\":[\"ios\",\"web\"]},\"primary_cta\":{\"type\":\"string\",\"description\":\"Primary call to action\"},\"screen_title\":{\"type\":\"string\",\"description\":\"Name of the frame or screen\"},\"sections\":{\"type\":\"array\",\"description\":\"Ordered screen sections\",\"items\":{\"type\":\"string\"}}},\"additionalProperties\":false}")),
+		},
 	}
 	res = &ToolsListResult{Tools: tools}
 	a.log(ctx, "response", map[string]any{"method": "tools/list"})
@@ -930,6 +937,58 @@ func (a *MCPAdapter) toolsCallHandler(ctx context.Context, p *ToolsCallPayload, 
 		}
 		a.log(ctx, "response", map[string]any{"method": "tools/call", "name": p.Name})
 		return false, stream.SendAndClose(ctx, final)
+	case "generate_dpi_spec":
+		var payload *assistant.GenerateDpiSpecPayload
+		fields, ferr := topLevelJSONFieldSet(p.Arguments)
+		if ferr != nil {
+			return false, goa.PermanentError("invalid_params", "%s", ferr.Error())
+		}
+		rawFields, err := decodeMCPPayloadFields(p.Arguments)
+		if err != nil {
+			return false, goa.PermanentError("invalid_params", "%s", err.Error())
+		}
+		_ = fields
+		_ = rawFields
+		if err := decodeMCPPayloadStrict(p.Arguments, &payload); err != nil {
+			return false, goa.PermanentError("invalid_params", "%s", err.Error())
+		}
+		{
+			if err := validateMCPPayloadRequired(rawFields, "screen_title"); err != nil {
+				return false, err
+			}
+			if err := validateMCPPayloadRequired(rawFields, "platform"); err != nil {
+				return false, err
+			}
+			if err := validateMCPPayloadRequired(rawFields, "density"); err != nil {
+				return false, err
+			}
+			if err := validateMCPPayloadRequired(rawFields, "primary_cta"); err != nil {
+				return false, err
+			}
+		}
+		{
+			if err := validateMCPPayloadEnum(rawFields, "density", "compact", "comfortable"); err != nil {
+				return false, err
+			}
+			if err := validateMCPPayloadEnum(rawFields, "platform", "ios", "web"); err != nil {
+				return false, err
+			}
+		}
+		result, err := a.service.GenerateDpiSpec(ctx, payload)
+		if err != nil {
+			return true, a.sendToolError(ctx, stream, p.Name, err)
+		}
+		s, serr := mcpruntime.EncodeJSONToString(ctx, goahttp.ResponseEncoder, result)
+		if serr != nil {
+			return false, serr
+		}
+		final := &ToolsCallResult{
+			Content: []*ContentItem{
+				buildContentItem(a, s),
+			},
+		}
+		a.log(ctx, "response", map[string]any{"method": "tools/call", "name": p.Name})
+		return false, stream.SendAndClose(ctx, final)
 	default:
 		return false, goa.PermanentError("method_not_found", "Unknown tool: %s", p.Name)
 	}
@@ -946,6 +1005,7 @@ func (a *MCPAdapter) ResourcesList(ctx context.Context, p *ResourcesListPayload)
 		{URI: "doc://list", Name: stringPtr("documents"), Description: stringPtr("List available documents"), MimeType: stringPtr("application/json")},
 		{URI: "system://info", Name: stringPtr("system_info"), Description: stringPtr("Return system info"), MimeType: stringPtr("application/json")},
 		{URI: "conversation://history", Name: stringPtr("conversation_history"), Description: stringPtr("Return conversation history with optional query params"), MimeType: stringPtr("application/json")},
+		{URI: "figma://design-system/mobile-checkout", Name: stringPtr("figma_design_system"), Description: stringPtr("Return a fake Figma design system summary for implementation validation"), MimeType: stringPtr("application/json")},
 	}
 	res := &ResourcesListResult{Resources: resources}
 	a.log(ctx, "response", map[string]any{"method": "resources/list"})
@@ -1006,6 +1066,21 @@ func (a *MCPAdapter) ResourcesRead(ctx context.Context, p *ResourcesReadPayload)
 			return nil, goa.PermanentError("invalid_params", "%s", err.Error())
 		}
 		result, err := a.service.ConversationHistory(ctx, payload)
+		if err != nil {
+			return nil, a.mapError(err)
+		}
+		s, serr := mcpruntime.EncodeJSONToString(ctx, goahttp.ResponseEncoder, result)
+		if serr != nil {
+			return nil, goa.PermanentError("invalid_params", "%s", serr.Error())
+		}
+		res := &ResourcesReadResult{Contents: []*ResourceContent{{URI: baseURI, MimeType: stringPtr("application/json"), Text: &s}}}
+		a.log(ctx, "response", map[string]any{"method": "resources/read", "uri": baseURI})
+		return res, nil
+	case "figma://design-system/mobile-checkout":
+		if err := a.assertResourceURIAllowed(ctx, p.URI); err != nil {
+			return nil, goa.PermanentError("invalid_params", "%s", err.Error())
+		}
+		result, err := a.service.FigmaDesignSystem(ctx)
 		if err != nil {
 			return nil, a.mapError(err)
 		}
@@ -1116,6 +1191,17 @@ func (a *MCPAdapter) PromptsList(ctx context.Context, p *PromptsListPayload) (*P
 			{Name: "task", Description: stringPtr("Task type"), Required: true},
 		}},
 
+		{Name: "figma_implementation_prompt", Description: stringPtr("Generate implementation instructions from a DPI spec"), Arguments: []*PromptArgument{
+
+			{Name: "screen_title", Description: stringPtr("Title of the screen being implemented"), Required: true},
+
+			{Name: "framework", Description: stringPtr("Target UI framework"), Required: true},
+
+			{Name: "design_tokens_uri", Description: stringPtr("Resource URI for the design system"), Required: true},
+
+			{Name: "dpi_json", Description: stringPtr("Serialized DPI spec JSON"), Required: true},
+		}},
+
 		{Name: "code_review", Description: stringPtr("Simple code review prompt")},
 	}
 	res := &PromptsListResult{Prompts: prompts}
@@ -1186,6 +1272,43 @@ func (a *MCPAdapter) PromptsGet(ctx context.Context, p *PromptsGetPayload) (*Pro
 			return nil, goa.PermanentError("invalid_params", "No prompt provider configured for dynamic prompts")
 		}
 		res, err := a.promptProvider.GetContextualPromptsPrompt(ctx, p.Arguments)
+		if err != nil {
+			return nil, a.mapError(err)
+		}
+		a.log(ctx, "response", map[string]any{"method": "prompts/get", "name": p.Name})
+		return res, nil
+
+	case "figma_implementation_prompt":
+		{
+
+			var args map[string]any
+			if len(p.Arguments) > 0 {
+				if err := json.Unmarshal(p.Arguments, &args); err != nil {
+					return nil, goa.PermanentError("invalid_params", "%s", err.Error())
+				}
+			}
+
+			if _, ok := args["screen_title"]; !ok {
+				return nil, goa.PermanentError("invalid_params", "Missing required argument: screen_title")
+			}
+
+			if _, ok := args["framework"]; !ok {
+				return nil, goa.PermanentError("invalid_params", "Missing required argument: framework")
+			}
+
+			if _, ok := args["design_tokens_uri"]; !ok {
+				return nil, goa.PermanentError("invalid_params", "Missing required argument: design_tokens_uri")
+			}
+
+			if _, ok := args["dpi_json"]; !ok {
+				return nil, goa.PermanentError("invalid_params", "Missing required argument: dpi_json")
+			}
+
+		}
+		if a.promptProvider == nil {
+			return nil, goa.PermanentError("invalid_params", "No prompt provider configured for dynamic prompts")
+		}
+		res, err := a.promptProvider.GetFigmaImplementationPromptPrompt(ctx, p.Arguments)
 		if err != nil {
 			return nil, a.mapError(err)
 		}

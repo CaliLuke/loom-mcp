@@ -15,35 +15,41 @@ import (
 
 // Client is the "assistant" service client.
 type Client struct {
-	ListDocumentsEndpoint       goa.Endpoint
-	SystemInfoEndpoint          goa.Endpoint
-	ConversationHistoryEndpoint goa.Endpoint
-	GeneratePromptsEndpoint     goa.Endpoint
-	SendNotificationEndpoint    goa.Endpoint
-	AnalyzeSentimentEndpoint    goa.Endpoint
-	ExtractKeywordsEndpoint     goa.Endpoint
-	SummarizeTextEndpoint       goa.Endpoint
-	SearchEndpoint              goa.Endpoint
-	ExecuteCodeEndpoint         goa.Endpoint
-	ProcessBatchEndpoint        goa.Endpoint
-	MultiContentEndpoint        goa.Endpoint
+	ListDocumentsEndpoint                  goa.Endpoint
+	SystemInfoEndpoint                     goa.Endpoint
+	ConversationHistoryEndpoint            goa.Endpoint
+	FigmaDesignSystemEndpoint              goa.Endpoint
+	GeneratePromptsEndpoint                goa.Endpoint
+	BuildFigmaImplementationPromptEndpoint goa.Endpoint
+	SendNotificationEndpoint               goa.Endpoint
+	AnalyzeSentimentEndpoint               goa.Endpoint
+	ExtractKeywordsEndpoint                goa.Endpoint
+	SummarizeTextEndpoint                  goa.Endpoint
+	SearchEndpoint                         goa.Endpoint
+	ExecuteCodeEndpoint                    goa.Endpoint
+	ProcessBatchEndpoint                   goa.Endpoint
+	MultiContentEndpoint                   goa.Endpoint
+	GenerateDpiSpecEndpoint                goa.Endpoint
 }
 
 // NewClient initializes a "assistant" service client given the endpoints.
-func NewClient(listDocuments, systemInfo, conversationHistory, generatePrompts, sendNotification, analyzeSentiment, extractKeywords, summarizeText, search, executeCode, processBatch, multiContent goa.Endpoint) *Client {
+func NewClient(listDocuments, systemInfo, conversationHistory, figmaDesignSystem, generatePrompts, buildFigmaImplementationPrompt, sendNotification, analyzeSentiment, extractKeywords, summarizeText, search, executeCode, processBatch, multiContent, generateDpiSpec goa.Endpoint) *Client {
 	return &Client{
-		ListDocumentsEndpoint:       listDocuments,
-		SystemInfoEndpoint:          systemInfo,
-		ConversationHistoryEndpoint: conversationHistory,
-		GeneratePromptsEndpoint:     generatePrompts,
-		SendNotificationEndpoint:    sendNotification,
-		AnalyzeSentimentEndpoint:    analyzeSentiment,
-		ExtractKeywordsEndpoint:     extractKeywords,
-		SummarizeTextEndpoint:       summarizeText,
-		SearchEndpoint:              search,
-		ExecuteCodeEndpoint:         executeCode,
-		ProcessBatchEndpoint:        processBatch,
-		MultiContentEndpoint:        multiContent,
+		ListDocumentsEndpoint:                  listDocuments,
+		SystemInfoEndpoint:                     systemInfo,
+		ConversationHistoryEndpoint:            conversationHistory,
+		FigmaDesignSystemEndpoint:              figmaDesignSystem,
+		GeneratePromptsEndpoint:                generatePrompts,
+		BuildFigmaImplementationPromptEndpoint: buildFigmaImplementationPrompt,
+		SendNotificationEndpoint:               sendNotification,
+		AnalyzeSentimentEndpoint:               analyzeSentiment,
+		ExtractKeywordsEndpoint:                extractKeywords,
+		SummarizeTextEndpoint:                  summarizeText,
+		SearchEndpoint:                         search,
+		ExecuteCodeEndpoint:                    executeCode,
+		ProcessBatchEndpoint:                   processBatch,
+		MultiContentEndpoint:                   multiContent,
+		GenerateDpiSpecEndpoint:                generateDpiSpec,
 	}
 }
 
@@ -78,11 +84,33 @@ func (c *Client) ConversationHistory(ctx context.Context, p *ConversationHistory
 	return ires.(*ConversationHistoryResult), nil
 }
 
+// FigmaDesignSystem calls the "figma_design_system" endpoint of the
+// "assistant" service.
+func (c *Client) FigmaDesignSystem(ctx context.Context) (res *DesignSystem, err error) {
+	var ires any
+	ires, err = c.FigmaDesignSystemEndpoint(ctx, nil)
+	if err != nil {
+		return
+	}
+	return ires.(*DesignSystem), nil
+}
+
 // GeneratePrompts calls the "generate_prompts" endpoint of the "assistant"
 // service.
 func (c *Client) GeneratePrompts(ctx context.Context, p *GeneratePromptsPayload) (res *PromptTemplates, err error) {
 	var ires any
 	ires, err = c.GeneratePromptsEndpoint(ctx, p)
+	if err != nil {
+		return
+	}
+	return ires.(*PromptTemplates), nil
+}
+
+// BuildFigmaImplementationPrompt calls the "build_figma_implementation_prompt"
+// endpoint of the "assistant" service.
+func (c *Client) BuildFigmaImplementationPrompt(ctx context.Context, p *BuildFigmaImplementationPromptPayload) (res *PromptTemplates, err error) {
+	var ires any
+	ires, err = c.BuildFigmaImplementationPromptEndpoint(ctx, p)
 	if err != nil {
 		return
 	}
@@ -166,4 +194,15 @@ func (c *Client) MultiContent(ctx context.Context, p *MultiContentPayload) (res 
 		return
 	}
 	return ires.(*MultiContentResult), nil
+}
+
+// GenerateDpiSpec calls the "generate_dpi_spec" endpoint of the "assistant"
+// service.
+func (c *Client) GenerateDpiSpec(ctx context.Context, p *GenerateDpiSpecPayload) (res *DPISpec, err error) {
+	var ires any
+	ires, err = c.GenerateDpiSpecEndpoint(ctx, p)
+	if err != nil {
+		return
+	}
+	return ires.(*DPISpec), nil
 }

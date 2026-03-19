@@ -125,6 +125,29 @@ func (c *Client) ConversationHistory() goa.Endpoint {
 	}
 }
 
+// FigmaDesignSystem returns an endpoint that makes JSON-RPC requests to the
+// assistant service figma_design_system method.
+func (c *Client) FigmaDesignSystem() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeFigmaDesignSystemRequest(c.encoder)
+		decodeResponse = DecodeFigmaDesignSystemResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildFigmaDesignSystemRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		if err := encodeRequest(req, v); err != nil {
+			return nil, err
+		}
+		resp, err := c.Doer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("assistant", "figma_design_system", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
 // GeneratePrompts returns an endpoint that makes JSON-RPC requests to the
 // assistant service generate_prompts method.
 func (c *Client) GeneratePrompts() goa.Endpoint {
@@ -143,6 +166,29 @@ func (c *Client) GeneratePrompts() goa.Endpoint {
 		resp, err := c.Doer.Do(req)
 		if err != nil {
 			return nil, goahttp.ErrRequestError("assistant", "generate_prompts", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// BuildFigmaImplementationPrompt returns an endpoint that makes JSON-RPC
+// requests to the assistant service build_figma_implementation_prompt method.
+func (c *Client) BuildFigmaImplementationPrompt() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeBuildFigmaImplementationPromptRequest(c.encoder)
+		decodeResponse = DecodeBuildFigmaImplementationPromptResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildBuildFigmaImplementationPromptRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		if err := encodeRequest(req, v); err != nil {
+			return nil, err
+		}
+		resp, err := c.Doer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("assistant", "build_figma_implementation_prompt", err)
 		}
 		return decodeResponse(resp)
 	}
@@ -327,6 +373,29 @@ func (c *Client) MultiContent() goa.Endpoint {
 		resp, err := c.Doer.Do(req)
 		if err != nil {
 			return nil, goahttp.ErrRequestError("assistant", "multi_content", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// GenerateDpiSpec returns an endpoint that makes JSON-RPC requests to the
+// assistant service generate_dpi_spec method.
+func (c *Client) GenerateDpiSpec() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeGenerateDpiSpecRequest(c.encoder)
+		decodeResponse = DecodeGenerateDpiSpecResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildGenerateDpiSpecRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		if err := encodeRequest(req, v); err != nil {
+			return nil, err
+		}
+		resp, err := c.Doer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("assistant", "generate_dpi_spec", err)
 		}
 		return decodeResponse(resp)
 	}

@@ -19,4 +19,6 @@ type PromptProvider interface {
 	GetCodeReviewPrompt(arguments json.RawMessage) (*PromptsGetResult, error)
 	// GetContextualPromptsPrompt returns the dynamic content for the contextual_prompts prompt
 	GetContextualPromptsPrompt(ctx context.Context, arguments json.RawMessage) (*PromptsGetResult, error)
+	// GetFigmaImplementationPromptPrompt returns the dynamic content for the figma_implementation_prompt prompt
+	GetFigmaImplementationPromptPrompt(ctx context.Context, arguments json.RawMessage) (*PromptsGetResult, error)
 }

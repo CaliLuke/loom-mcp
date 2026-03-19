@@ -15,35 +15,41 @@ import (
 
 // Endpoints wraps the "assistant" service endpoints.
 type Endpoints struct {
-	ListDocuments       goa.Endpoint
-	SystemInfo          goa.Endpoint
-	ConversationHistory goa.Endpoint
-	GeneratePrompts     goa.Endpoint
-	SendNotification    goa.Endpoint
-	AnalyzeSentiment    goa.Endpoint
-	ExtractKeywords     goa.Endpoint
-	SummarizeText       goa.Endpoint
-	Search              goa.Endpoint
-	ExecuteCode         goa.Endpoint
-	ProcessBatch        goa.Endpoint
-	MultiContent        goa.Endpoint
+	ListDocuments                  goa.Endpoint
+	SystemInfo                     goa.Endpoint
+	ConversationHistory            goa.Endpoint
+	FigmaDesignSystem              goa.Endpoint
+	GeneratePrompts                goa.Endpoint
+	BuildFigmaImplementationPrompt goa.Endpoint
+	SendNotification               goa.Endpoint
+	AnalyzeSentiment               goa.Endpoint
+	ExtractKeywords                goa.Endpoint
+	SummarizeText                  goa.Endpoint
+	Search                         goa.Endpoint
+	ExecuteCode                    goa.Endpoint
+	ProcessBatch                   goa.Endpoint
+	MultiContent                   goa.Endpoint
+	GenerateDpiSpec                goa.Endpoint
 }
 
 // NewEndpoints wraps the methods of the "assistant" service with endpoints.
 func NewEndpoints(s Service) *Endpoints {
 	return &Endpoints{
-		ListDocuments:       NewListDocumentsEndpoint(s),
-		SystemInfo:          NewSystemInfoEndpoint(s),
-		ConversationHistory: NewConversationHistoryEndpoint(s),
-		GeneratePrompts:     NewGeneratePromptsEndpoint(s),
-		SendNotification:    NewSendNotificationEndpoint(s),
-		AnalyzeSentiment:    NewAnalyzeSentimentEndpoint(s),
-		ExtractKeywords:     NewExtractKeywordsEndpoint(s),
-		SummarizeText:       NewSummarizeTextEndpoint(s),
-		Search:              NewSearchEndpoint(s),
-		ExecuteCode:         NewExecuteCodeEndpoint(s),
-		ProcessBatch:        NewProcessBatchEndpoint(s),
-		MultiContent:        NewMultiContentEndpoint(s),
+		ListDocuments:                  NewListDocumentsEndpoint(s),
+		SystemInfo:                     NewSystemInfoEndpoint(s),
+		ConversationHistory:            NewConversationHistoryEndpoint(s),
+		FigmaDesignSystem:              NewFigmaDesignSystemEndpoint(s),
+		GeneratePrompts:                NewGeneratePromptsEndpoint(s),
+		BuildFigmaImplementationPrompt: NewBuildFigmaImplementationPromptEndpoint(s),
+		SendNotification:               NewSendNotificationEndpoint(s),
+		AnalyzeSentiment:               NewAnalyzeSentimentEndpoint(s),
+		ExtractKeywords:                NewExtractKeywordsEndpoint(s),
+		SummarizeText:                  NewSummarizeTextEndpoint(s),
+		Search:                         NewSearchEndpoint(s),
+		ExecuteCode:                    NewExecuteCodeEndpoint(s),
+		ProcessBatch:                   NewProcessBatchEndpoint(s),
+		MultiContent:                   NewMultiContentEndpoint(s),
+		GenerateDpiSpec:                NewGenerateDpiSpecEndpoint(s),
 	}
 }
 
@@ -52,7 +58,9 @@ func (e *Endpoints) Use(m func(goa.Endpoint) goa.Endpoint) {
 	e.ListDocuments = m(e.ListDocuments)
 	e.SystemInfo = m(e.SystemInfo)
 	e.ConversationHistory = m(e.ConversationHistory)
+	e.FigmaDesignSystem = m(e.FigmaDesignSystem)
 	e.GeneratePrompts = m(e.GeneratePrompts)
+	e.BuildFigmaImplementationPrompt = m(e.BuildFigmaImplementationPrompt)
 	e.SendNotification = m(e.SendNotification)
 	e.AnalyzeSentiment = m(e.AnalyzeSentiment)
 	e.ExtractKeywords = m(e.ExtractKeywords)
@@ -61,6 +69,7 @@ func (e *Endpoints) Use(m func(goa.Endpoint) goa.Endpoint) {
 	e.ExecuteCode = m(e.ExecuteCode)
 	e.ProcessBatch = m(e.ProcessBatch)
 	e.MultiContent = m(e.MultiContent)
+	e.GenerateDpiSpec = m(e.GenerateDpiSpec)
 }
 
 // NewListDocumentsEndpoint returns an endpoint function that calls the method
@@ -88,12 +97,29 @@ func NewConversationHistoryEndpoint(s Service) goa.Endpoint {
 	}
 }
 
+// NewFigmaDesignSystemEndpoint returns an endpoint function that calls the
+// method "figma_design_system" of service "assistant".
+func NewFigmaDesignSystemEndpoint(s Service) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		return s.FigmaDesignSystem(ctx)
+	}
+}
+
 // NewGeneratePromptsEndpoint returns an endpoint function that calls the
 // method "generate_prompts" of service "assistant".
 func NewGeneratePromptsEndpoint(s Service) goa.Endpoint {
 	return func(ctx context.Context, req any) (any, error) {
 		p := req.(*GeneratePromptsPayload)
 		return s.GeneratePrompts(ctx, p)
+	}
+}
+
+// NewBuildFigmaImplementationPromptEndpoint returns an endpoint function that
+// calls the method "build_figma_implementation_prompt" of service "assistant".
+func NewBuildFigmaImplementationPromptEndpoint(s Service) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*BuildFigmaImplementationPromptPayload)
+		return s.BuildFigmaImplementationPrompt(ctx, p)
 	}
 }
 
@@ -166,5 +192,14 @@ func NewMultiContentEndpoint(s Service) goa.Endpoint {
 	return func(ctx context.Context, req any) (any, error) {
 		p := req.(*MultiContentPayload)
 		return s.MultiContent(ctx, p)
+	}
+}
+
+// NewGenerateDpiSpecEndpoint returns an endpoint function that calls the
+// method "generate_dpi_spec" of service "assistant".
+func NewGenerateDpiSpecEndpoint(s Service) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*GenerateDpiSpecPayload)
+		return s.GenerateDpiSpec(ctx, p)
 	}
 }

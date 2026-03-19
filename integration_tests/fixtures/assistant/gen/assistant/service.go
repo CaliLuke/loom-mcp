@@ -19,8 +19,12 @@ type Service interface {
 	SystemInfo(context.Context) (res *SystemInfoResult, err error)
 	// Return conversation history with optional query params
 	ConversationHistory(context.Context, *ConversationHistoryPayload) (res *ConversationHistoryResult, err error)
+	// Return a fake Figma design system summary for implementation validation
+	FigmaDesignSystem(context.Context) (res *DesignSystem, err error)
 	// Generate context-aware prompts
 	GeneratePrompts(context.Context, *GeneratePromptsPayload) (res *PromptTemplates, err error)
+	// Build a Figma-style implementation handoff prompt from a generated DPI spec
+	BuildFigmaImplementationPrompt(context.Context, *BuildFigmaImplementationPromptPayload) (res *PromptTemplates, err error)
 	// Send status notification to client
 	SendNotification(context.Context, *SendNotificationPayload) (err error)
 	// Analyze sentiment of text
@@ -37,6 +41,9 @@ type Service interface {
 	ProcessBatch(context.Context, *ProcessBatchPayload) (res *ProcessBatchResult, err error)
 	// Return multiple content items
 	MultiContent(context.Context, *MultiContentPayload) (res *MultiContentResult, err error)
+	// Generate a deterministic implementation-ready DPI spec from a fake Figma
+	// frame
+	GenerateDpiSpec(context.Context, *GenerateDpiSpecPayload) (res *DPISpec, err error)
 }
 
 // APIName is the name of the API as defined in the design.
@@ -53,7 +60,7 @@ const ServiceName = "assistant"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [12]string{"list_documents", "system_info", "conversation_history", "generate_prompts", "send_notification", "analyze_sentiment", "extract_keywords", "summarize_text", "search", "execute_code", "process_batch", "multi_content"}
+var MethodNames = [15]string{"list_documents", "system_info", "conversation_history", "figma_design_system", "generate_prompts", "build_figma_implementation_prompt", "send_notification", "analyze_sentiment", "extract_keywords", "summarize_text", "search", "execute_code", "process_batch", "multi_content", "generate_dpi_spec"}
 
 // AnalyzeSentimentPayload is the payload type of the assistant service
 // analyze_sentiment method.
@@ -67,6 +74,19 @@ type AnalyzeSentimentPayload struct {
 type AnalyzeSentimentResult struct {
 	// Detected sentiment
 	Sentiment *string `json:"sentiment,omitempty"`
+}
+
+// BuildFigmaImplementationPromptPayload is the payload type of the assistant
+// service build_figma_implementation_prompt method.
+type BuildFigmaImplementationPromptPayload struct {
+	// Title of the screen being implemented
+	ScreenTitle string `json:"screen_title"`
+	// Target UI framework
+	Framework string `json:"framework"`
+	// Resource URI for the design system
+	DesignTokensURI string `json:"design_tokens_uri"`
+	// Serialized DPI spec JSON
+	DpiJSON string `json:"dpi_json"`
 }
 
 // ConversationHistoryPayload is the payload type of the assistant service
@@ -85,6 +105,71 @@ type ConversationHistoryPayload struct {
 type ConversationHistoryResult struct {
 	// History items
 	Items []string `json:"items,omitempty"`
+}
+
+type DPICallToAction struct {
+	// CTA label
+	Label string `json:"label"`
+	// CTA visual style
+	Style string `json:"style"`
+}
+
+type DPISection struct {
+	// Section name
+	Name string `json:"name"`
+	// Primary UI component
+	Component string `json:"component"`
+	// Implementation notes for this section
+	Notes []string `json:"notes"`
+}
+
+// DPISpec is the result type of the assistant service generate_dpi_spec method.
+type DPISpec struct {
+	// Screen title
+	ScreenTitle string `json:"screen_title"`
+	// Target platform
+	Platform string `json:"platform"`
+	// Layout density
+	Density string `json:"density"`
+	// Viewport dimensions
+	Viewport *DPIViewport `json:"viewport"`
+	// Ordered screen sections
+	Sections []*DPISection `json:"sections"`
+	// Primary CTA
+	PrimaryCta *DPICallToAction `json:"primary_cta"`
+	// Design system resource URI
+	DesignTokensURI string `json:"design_tokens_uri"`
+	// Development handoff notes
+	DevNotes []string `json:"dev_notes"`
+}
+
+type DPIViewport struct {
+	// Viewport width
+	Width int `json:"width"`
+	// Viewport height
+	Height int `json:"height"`
+}
+
+// DesignSystem is the result type of the assistant service figma_design_system
+// method.
+type DesignSystem struct {
+	// Design system name
+	Name string `json:"name"`
+	// Design system version
+	Version string `json:"version"`
+	// Platform the tokens target
+	Platform string `json:"platform"`
+	// Grouped token information
+	Tokens *DesignTokenGroup `json:"tokens"`
+}
+
+type DesignTokenGroup struct {
+	// Color tokens
+	Colors []string `json:"colors"`
+	// Spacing tokens
+	Spacing []string `json:"spacing"`
+	// Typography tokens
+	Typography []string `json:"typography"`
 }
 
 // Documents is the result type of the assistant service list_documents method.
@@ -121,6 +206,23 @@ type ExtractKeywordsPayload struct {
 type ExtractKeywordsResult struct {
 	// Extracted keywords
 	Keywords []string `json:"keywords,omitempty"`
+}
+
+// GenerateDpiSpecPayload is the payload type of the assistant service
+// generate_dpi_spec method.
+type GenerateDpiSpecPayload struct {
+	// Name of the frame or screen
+	ScreenTitle string `json:"screen_title"`
+	// Target platform
+	Platform string `json:"platform"`
+	// Layout density
+	Density string `json:"density"`
+	// Primary call to action
+	PrimaryCta string `json:"primary_cta"`
+	// Ordered screen sections
+	Sections []string `json:"sections"`
+	// Whether to include implementation notes
+	IncludeDevNotes *bool `json:"include_dev_notes,omitempty"`
 }
 
 // GeneratePromptsPayload is the payload type of the assistant service

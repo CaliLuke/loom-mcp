@@ -162,6 +162,58 @@ func (s *ToolsCallClientStream) Recv(ctx context.Context) (*mcpassistant.ToolsCa
 			}
 			return zero, fmt.Errorf("unexpected error response")
 
+		case "", "message":
+			var envelope map[string]json.RawMessage
+			if err := json.Unmarshal(data, &envelope); err != nil {
+				return zero, fmt.Errorf("failed to parse message event: %w", err)
+			}
+
+			if _, ok := envelope["method"]; ok {
+				// Parse generic JSON-RPC notification carried on the default/message SSE event.
+				var notification struct {
+					JSONRPC string          `json:"jsonrpc"`
+					Method  string          `json:"method"`
+					Params  json.RawMessage `json:"params"`
+				}
+				if err := json.Unmarshal(data, &notification); err != nil {
+					return zero, fmt.Errorf("failed to parse notification: %w", err)
+				}
+				if notification.JSONRPC != "2.0" {
+					return zero, fmt.Errorf("invalid JSON-RPC version: %s", notification.JSONRPC)
+				}
+				if notification.Method != "tools/call" {
+					continue
+				}
+				result, err := s.decodeResult(notification.Params)
+				if err != nil {
+					return zero, fmt.Errorf("failed to decode result: %w", err)
+				}
+				return result, nil
+			}
+
+			// Parse generic JSON-RPC response or error carried on the default/message SSE event.
+			var response jsonrpc.Response
+			if err := json.Unmarshal(data, &response); err != nil {
+				return zero, fmt.Errorf("failed to parse response: %w", err)
+			}
+			if response.Error != nil {
+				s.closed = true
+				return zero, fmt.Errorf("JSON-RPC error %d: %s", response.Error.Code, response.Error.Message)
+			}
+			if response.Result == nil {
+				return zero, fmt.Errorf("missing result in response")
+			}
+			resultBytes, err := json.Marshal(response.Result)
+			if err != nil {
+				return zero, fmt.Errorf("failed to marshal result: %w", err)
+			}
+			result, err := s.decodeResult(json.RawMessage(resultBytes))
+			if err != nil {
+				return zero, fmt.Errorf("failed to decode final result: %w", err)
+			}
+			s.closed = true
+			return result, nil
+
 		default:
 			// Ignore unknown event types
 			continue
@@ -199,7 +251,9 @@ func (s *ToolsCallClientStream) Close() error {
 		}
 	}
 	return nil
-} // EventsStreamClientStream implements the
+}
+
+// EventsStreamClientStream implements the
 // mcpassistant.EventsStreamClientStream interface using Server-Sent Events.
 type EventsStreamClientStream struct {
 	resp    *http.Response                       // HTTP response object
@@ -337,6 +391,58 @@ func (s *EventsStreamClientStream) Recv(ctx context.Context) (*mcpassistant.Even
 				return zero, fmt.Errorf("JSON-RPC error %d: %s", response.Error.Code, response.Error.Message)
 			}
 			return zero, fmt.Errorf("unexpected error response")
+
+		case "", "message":
+			var envelope map[string]json.RawMessage
+			if err := json.Unmarshal(data, &envelope); err != nil {
+				return zero, fmt.Errorf("failed to parse message event: %w", err)
+			}
+
+			if _, ok := envelope["method"]; ok {
+				// Parse generic JSON-RPC notification carried on the default/message SSE event.
+				var notification struct {
+					JSONRPC string          `json:"jsonrpc"`
+					Method  string          `json:"method"`
+					Params  json.RawMessage `json:"params"`
+				}
+				if err := json.Unmarshal(data, &notification); err != nil {
+					return zero, fmt.Errorf("failed to parse notification: %w", err)
+				}
+				if notification.JSONRPC != "2.0" {
+					return zero, fmt.Errorf("invalid JSON-RPC version: %s", notification.JSONRPC)
+				}
+				if notification.Method != "events/stream" {
+					continue
+				}
+				result, err := s.decodeResult(notification.Params)
+				if err != nil {
+					return zero, fmt.Errorf("failed to decode result: %w", err)
+				}
+				return result, nil
+			}
+
+			// Parse generic JSON-RPC response or error carried on the default/message SSE event.
+			var response jsonrpc.Response
+			if err := json.Unmarshal(data, &response); err != nil {
+				return zero, fmt.Errorf("failed to parse response: %w", err)
+			}
+			if response.Error != nil {
+				s.closed = true
+				return zero, fmt.Errorf("JSON-RPC error %d: %s", response.Error.Code, response.Error.Message)
+			}
+			if response.Result == nil {
+				return zero, fmt.Errorf("missing result in response")
+			}
+			resultBytes, err := json.Marshal(response.Result)
+			if err != nil {
+				return zero, fmt.Errorf("failed to marshal result: %w", err)
+			}
+			result, err := s.decodeResult(json.RawMessage(resultBytes))
+			if err != nil {
+				return zero, fmt.Errorf("failed to decode final result: %w", err)
+			}
+			s.closed = true
+			return result, nil
 
 		default:
 			// Ignore unknown event types

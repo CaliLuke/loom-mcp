@@ -1,5 +1,3 @@
-github.com/CaliLuke/goa/v3 v3.25.4-0.20260318235755-f885f5eaa0e5 h1:jNFNoqYbmdEpczdNie29H88XaS643ED4XH77J/M39eM=
-github.com/CaliLuke/goa/v3 v3.25.4-0.20260318235755-f885f5eaa0e5/go.mod h1:hSVUU5uFdpBE15san0CwhU210dIMOkB/QOpbG7cQTKs=
 github.com/aws/aws-sdk-go-v2 v1.41.1 h1:ABlyEARCDLN034NhxlRUSZr4l71mh+T5KAeGh6cerhU=
 github.com/aws/aws-sdk-go-v2 v1.41.1/go.mod h1:MayyLB8y+buD9hZqkCW3kX1AKq07Y5pXxtgB+rRFhz0=
 github.com/aws/aws-sdk-go-v2/aws/protocol/eventstream v1.7.4 h1:489krEF9xIGkOaaX3CE/Be2uWjiXrkCH6gUX+bZA/BU=

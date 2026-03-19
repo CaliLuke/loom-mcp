@@ -516,12 +516,20 @@ func (s *Server) handleSSE(w http.ResponseWriter, r *http.Request) {
 
 	// Validate JSON-RPC request
 	if req.JSONRPC != "2.0" {
+		if req.ID == nil || req.ID == "" {
+			w.WriteHeader(http.StatusNoContent)
+			return
+		}
 		stream := &mcpAssistantSSEStream{w: w, r: r, encoder: s.encoder, decoder: s.decoder}
 		_ = stream.sendError(ctx, req.ID, jsonrpc.InvalidRequest, "Invalid request", nil)
 		return
 	}
 
 	if req.Method == "" {
+		if req.ID == nil || req.ID == "" {
+			w.WriteHeader(http.StatusNoContent)
+			return
+		}
 		stream := &mcpAssistantSSEStream{w: w, r: r, encoder: s.encoder, decoder: s.decoder}
 		_ = stream.sendError(ctx, req.ID, jsonrpc.InvalidRequest, "Invalid request", nil)
 		return
@@ -535,6 +543,10 @@ func (s *Server) handleSSE(w http.ResponseWriter, r *http.Request) {
 	case "events/stream":
 		handler = s.EventsStream
 	default:
+		if req.ID == nil || req.ID == "" {
+			w.WriteHeader(http.StatusNoContent)
+			return
+		}
 		stream := &mcpAssistantSSEStream{w: w, r: r, encoder: s.encoder, decoder: s.decoder}
 		_ = stream.sendError(ctx, req.ID, jsonrpc.MethodNotFound, "Method not found", nil)
 		return
@@ -549,7 +561,9 @@ func (s *Server) handleSSE(w http.ResponseWriter, r *http.Request) {
 	// For notifications (requests without ID) that don't stream, return 204 No Content
 	switch req.Method {
 	}
-} // Mount configures the mux to serve the JSON-RPC mcp_assistant service methods.
+}
+
+// Mount configures the mux to serve the JSON-RPC mcp_assistant service methods.
 func Mount(mux goahttp.Muxer, h *Server) {
 	// Mixed transports: mount unified handler that negotiates HTTP vs SSE by Accept header.
 	//
@@ -833,6 +847,9 @@ func NewToolsCallHandler(
 			r:         r,
 			encoder:   encoder,
 			requestID: req.ID,
+		}
+		if err := strm.open(); err != nil {
+			return err
 		}
 		decodeParams := DecodeToolsCallRequest(mux, decoder)
 		params, err := decodeParams(r, req)
@@ -1416,6 +1433,9 @@ func NewEventsStreamHandler(
 			r:         r,
 			encoder:   encoder,
 			requestID: req.ID,
+		}
+		if err := strm.open(); err != nil {
+			return err
 		}
 		v := &mcpassistant.EventsStreamEndpointInput{
 			Stream: strm,

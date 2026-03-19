@@ -45,6 +45,10 @@ Within each section, place main logic first and helpers last.
 - Run `goa example <module-import-path>/design` only when new scaffold files are intentionally desired.
 - User-facing DSL, runtime, or codegen changes must also update the goa.design docs under `content/en/docs/2-goa-ai/`.
 - Keep repo-local skills current with the product. Update the skill files directly rather than adding sidecar delta documents.
+- When bumping the forked `goa.design/goa/v3` replace, do not assume `main` or the default branch. This repo is currently tracking the fork branch `openapi-3.1`. Resolve the freshest relevant fork commit from actual refs and timestamps, then pin that exact pseudo-version in `go.mod`.
+- Use local Goa checkout mode for iterative development and the pinned remote fork for CI. The standard toggle is `make goa-local` for local iteration and `make goa-remote` before CI-facing verification or commits. `make goa-status` shows the current mode.
+- The canonical local core checkout for this repo is `/Users/luca/code/goa-light`. If local mode points somewhere else, treat that as drift and correct it before interpreting test results.
+- Do not compensate in `goa-ai` for upstream `goa-light` or fork regressions. Bump, verify, and if the new upstream commit breaks this repo, stop and return concrete upstream tickets instead of shipping local workarounds.
 
 ## Testing
 
@@ -56,6 +60,12 @@ Within each section, place main logic first and helpers last.
   2. fix issues
   3. `make test`
   4. `make itest` when integration behavior changed
+- For the MCP fixture and integration harness, verify in this order:
+  0. Choose Goa source intentionally: `make goa-local` for iterative local feedback, `make goa-remote` for CI/parity checks
+  1. `go test -C integration_tests/fixtures/assistant ./...`
+  2. `go test ./integration_tests/framework -count=1`
+  3. `go test ./...`
+- If a new `goa` fork bump breaks only integration semantics, do not patch around it in `goa-ai`; capture the failing scenarios and return upstream tickets with exact scenario file references.
 
 ## Safety
 

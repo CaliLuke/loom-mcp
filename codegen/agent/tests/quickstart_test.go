@@ -5,6 +5,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"runtime"
 	"strings"
 	"testing"
@@ -47,18 +48,8 @@ func TestQuickstartGeneratesAndRuns(t *testing.T) {
 	// be generated and run from the repo tree. Once copied into a temp dir, that
 	// relative path no longer points at the repo root. Rewrite it to an absolute
 	// replace so `goa gen` and `go mod tidy` can resolve the local goa-ai module.
-	{
-		modPath := filepath.Join(quickstartDir, "go.mod")
-		//nolint:gosec // Test helper reads a trusted fixture file.
-		raw, err := os.ReadFile(modPath)
-		if err != nil {
-			t.Fatalf("read quickstart go.mod: %v", err)
-		}
-		updated := strings.ReplaceAll(string(raw), "replace goa.design/goa-ai => ..", "replace goa.design/goa-ai => "+repoRoot)
-		//nolint:gosec // Test helper rewrites a trusted copied fixture file inside t.TempDir().
-		if err := os.WriteFile(modPath, []byte(updated), 0o600); err != nil {
-			t.Fatalf("write quickstart go.mod: %v", err)
-		}
+	if err := rewriteQuickstartGoMod(repoRoot, quickstartDir); err != nil {
+		t.Fatalf("rewrite quickstart go.mod: %v", err)
 	}
 
 	// Ensure we have a clean state (remove generated files that aren't committed)
@@ -200,4 +191,33 @@ func copyDir(src, dst string) error {
 		//nolint:gosec // Test helper copies trusted fixture files into a temp workspace.
 		return os.WriteFile(target, data, info.Mode())
 	})
+}
+
+func rewriteQuickstartGoMod(repoRoot string, quickstartDir string) error {
+	modPath := filepath.Join(quickstartDir, "go.mod")
+	//nolint:gosec // Test helper reads a trusted fixture file.
+	raw, err := os.ReadFile(modPath)
+	if err != nil {
+		return err
+	}
+	updated := strings.ReplaceAll(string(raw), "replace goa.design/goa-ai => ..", "replace goa.design/goa-ai => "+repoRoot)
+
+	rootModPath := filepath.Join(repoRoot, "go.mod")
+	//nolint:gosec // Test helper reads the local repo module file.
+	rootRaw, err := os.ReadFile(rootModPath)
+	if err != nil {
+		return err
+	}
+	rootReplacePattern := regexp.MustCompile(`(?m)^replace goa\.design/goa/v3 => .+$`)
+	rootReplace := rootReplacePattern.FindString(string(rootRaw))
+	if rootReplace != "" {
+		if rootReplacePattern.MatchString(updated) {
+			updated = rootReplacePattern.ReplaceAllString(updated, rootReplace)
+		} else {
+			updated = strings.TrimRight(updated, "\n") + "\n" + rootReplace + "\n"
+		}
+	}
+
+	//nolint:gosec // Test helper rewrites a trusted copied fixture file inside t.TempDir().
+	return os.WriteFile(modPath, []byte(updated), 0o600)
 }

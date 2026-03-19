@@ -398,6 +398,36 @@ func NewEndpoints(
 		decode := assistantjsonrpcc.DecodeMultiContentResponse(dec, false)
 		return decodeOriginalJSONRPCResult(enc, req3, toolResp.Result, decode)
 	}
+	// Tool: generate_dpi_spec -> GenerateDpiSpec
+	e.GenerateDpiSpec = func(ctx context.Context, v any) (any, error) {
+		// Encode original payload to raw JSON using Goa encoder (no JSON-RPC envelope)
+		var payload any
+		payload = v.(*assistant.GenerateDpiSpecPayload)
+		args, err := encodeOriginalPayload(ctx, enc, payload)
+		if err != nil {
+			return nil, err
+		}
+
+		toolResp, err := mcpCaller.CallTool(ctx, mcpruntime.CallRequest{
+			Tool:    "generate_dpi_spec",
+			Payload: args,
+		})
+		if err != nil {
+			prompt := retry.BuildRepairPrompt("tools/call:generate_dpi_spec", err.Error(), "{\"density\":\"comfortable\",\"include_dev_notes\":false,\"platform\":\"web\",\"primary_cta\":\"abc123\",\"screen_title\":\"abc123\",\"sections\":[\"abc123\"]}", "{\"type\":\"object\",\"required\":[\"screen_title\",\"platform\",\"density\",\"primary_cta\",\"sections\"],\"properties\":{\"density\":{\"type\":\"string\",\"description\":\"Layout density\",\"enum\":[\"compact\",\"comfortable\"]},\"include_dev_notes\":{\"type\":\"boolean\",\"description\":\"Whether to include implementation notes\"},\"platform\":{\"type\":\"string\",\"description\":\"Target platform\",\"enum\":[\"ios\",\"web\"]},\"primary_cta\":{\"type\":\"string\",\"description\":\"Primary call to action\"},\"screen_title\":{\"type\":\"string\",\"description\":\"Name of the frame or screen\"},\"sections\":{\"type\":\"array\",\"description\":\"Ordered screen sections\",\"items\":{\"type\":\"string\"}}},\"additionalProperties\":false}")
+			return nil, &retry.RetryableError{Prompt: prompt, Cause: err}
+		}
+		if len(toolResp.Result) == 0 {
+			prompt := retry.BuildRepairPrompt("tools/call:generate_dpi_spec", "empty MCP tool response", "{\"density\":\"comfortable\",\"include_dev_notes\":false,\"platform\":\"web\",\"primary_cta\":\"abc123\",\"screen_title\":\"abc123\",\"sections\":[\"abc123\"]}", "{\"type\":\"object\",\"required\":[\"screen_title\",\"platform\",\"density\",\"primary_cta\",\"sections\"],\"properties\":{\"density\":{\"type\":\"string\",\"description\":\"Layout density\",\"enum\":[\"compact\",\"comfortable\"]},\"include_dev_notes\":{\"type\":\"boolean\",\"description\":\"Whether to include implementation notes\"},\"platform\":{\"type\":\"string\",\"description\":\"Target platform\",\"enum\":[\"ios\",\"web\"]},\"primary_cta\":{\"type\":\"string\",\"description\":\"Primary call to action\"},\"screen_title\":{\"type\":\"string\",\"description\":\"Name of the frame or screen\"},\"sections\":{\"type\":\"array\",\"description\":\"Ordered screen sections\",\"items\":{\"type\":\"string\"}}},\"additionalProperties\":false}")
+			return nil, &retry.RetryableError{Prompt: prompt, Cause: fmt.Errorf("empty MCP tool response for generate_dpi_spec")}
+		}
+		// Build JSON-RPC response envelope and decode using Goa-generated decoder
+		req3, err := origC.BuildGenerateDpiSpecRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		decode := assistantjsonrpcc.DecodeGenerateDpiSpecResponse(dec, false)
+		return decodeOriginalJSONRPCResult(enc, req3, toolResp.Result, decode)
+	}
 	// Resource: doc://list -> ListDocuments
 	e.ListDocuments = func(ctx context.Context, v any) (any, error) {
 		// Forward original payload parameters via URI query string when applicable
@@ -474,6 +504,26 @@ func NewEndpoints(
 		decode := assistantjsonrpcc.DecodeConversationHistoryResponse(dec, false)
 		return decodeOriginalJSONRPCResult(enc, req3, []byte(*rr.Contents[0].Text), decode)
 	}
+	// Resource: figma://design-system/mobile-checkout -> FigmaDesignSystem
+	e.FigmaDesignSystem = func(ctx context.Context, v any) (any, error) {
+		// Forward original payload parameters via URI query string when applicable
+		uri := "figma://design-system/mobile-checkout"
+		ires, err := mcpC.ResourcesRead()(ctx, &mcpAssistant.ResourcesReadPayload{URI: uri})
+		if err != nil {
+			return nil, err
+		}
+		rr := ires.(*mcpAssistant.ResourcesReadResult)
+		if rr == nil || rr.Contents == nil || len(rr.Contents) == 0 || rr.Contents[0] == nil || rr.Contents[0].Text == nil {
+			return nil, fmt.Errorf("empty MCP resource response for figma://design-system/mobile-checkout")
+		}
+		// Build JSON-RPC response envelope and decode using Goa-generated decoder
+		req3, err := origC.BuildFigmaDesignSystemRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		decode := assistantjsonrpcc.DecodeFigmaDesignSystemResponse(dec, false)
+		return decodeOriginalJSONRPCResult(enc, req3, []byte(*rr.Contents[0].Text), decode)
+	}
 	// Dynamic Prompt: contextual_prompts -> GeneratePrompts
 	e.GeneratePrompts = func(ctx context.Context, v any) (any, error) {
 		var payload any
@@ -498,6 +548,32 @@ func NewEndpoints(
 			return nil, err
 		}
 		decode := assistantjsonrpcc.DecodeGeneratePromptsResponse(dec, false)
+		return decodeOriginalJSONRPCResult(enc, req3, []byte(*r.Messages[0].Content.Text), decode)
+	}
+	// Dynamic Prompt: figma_implementation_prompt -> BuildFigmaImplementationPrompt
+	e.BuildFigmaImplementationPrompt = func(ctx context.Context, v any) (any, error) {
+		var payload any
+		payload = v.(*assistant.BuildFigmaImplementationPromptPayload)
+		args, err := encodeOriginalPayload(ctx, enc, payload)
+		if err != nil {
+			return nil, err
+		}
+		ires, err := mcpC.PromptsGet()(ctx, &mcpAssistant.PromptsGetPayload{Name: "figma_implementation_prompt", Arguments: args})
+		if err != nil {
+			prompt := retry.BuildRepairPrompt("prompts/get:figma_implementation_prompt", err.Error(), "{\"design_tokens_uri\":\"abc123\",\"dpi_json\":\"abc123\",\"framework\":\"swiftui\",\"screen_title\":\"abc123\"}", "")
+			return nil, &retry.RetryableError{Prompt: prompt, Cause: err}
+		}
+		r := ires.(*mcpAssistant.PromptsGetResult)
+		if r == nil || r.Messages == nil || len(r.Messages) == 0 || r.Messages[0] == nil || r.Messages[0].Content == nil || r.Messages[0].Content.Text == nil {
+			prompt := retry.BuildRepairPrompt("prompts/get:figma_implementation_prompt", "empty MCP prompt response", "{\"design_tokens_uri\":\"abc123\",\"dpi_json\":\"abc123\",\"framework\":\"swiftui\",\"screen_title\":\"abc123\"}", "")
+			return nil, &retry.RetryableError{Prompt: prompt, Cause: fmt.Errorf("empty MCP prompt response for figma_implementation_prompt")}
+		}
+		// Build JSON-RPC response envelope and decode using Goa-generated decoder
+		req3, err := origC.BuildBuildFigmaImplementationPromptRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		decode := assistantjsonrpcc.DecodeBuildFigmaImplementationPromptResponse(dec, false)
 		return decodeOriginalJSONRPCResult(enc, req3, []byte(*r.Messages[0].Content.Text), decode)
 	}
 	// Notification: status_update -> SendNotification
@@ -530,7 +606,9 @@ func NewClient(
 		e.ListDocuments,
 		e.SystemInfo,
 		e.ConversationHistory,
+		e.FigmaDesignSystem,
 		e.GeneratePrompts,
+		e.BuildFigmaImplementationPrompt,
 		e.SendNotification,
 		e.AnalyzeSentiment,
 		e.ExtractKeywords,
@@ -539,5 +617,6 @@ func NewClient(
 		e.ExecuteCode,
 		e.ProcessBatch,
 		e.MultiContent,
+		e.GenerateDpiSpec,
 	)
 }

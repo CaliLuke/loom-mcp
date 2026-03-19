@@ -325,6 +325,50 @@ var AssistantAssistantMcpToolsetToolSpecs = []tools.ToolSpec{
 			},
 		},
 	},
+	{
+		Name:        "generate_dpi_spec",
+		Service:     "assistant",
+		Toolset:     "assistant.assistant-mcp",
+		Description: "Generate a deterministic design implementation plan from fake Figma data",
+		Payload: tools.TypeSpec{
+			Name:   "*assistant.GenerateDpiSpecPayload",
+			Schema: []byte("{\"type\":\"object\",\"required\":[\"screen_title\",\"platform\",\"density\",\"primary_cta\",\"sections\"],\"properties\":{\"density\":{\"type\":\"string\",\"description\":\"Layout density\",\"enum\":[\"compact\",\"comfortable\"]},\"include_dev_notes\":{\"type\":\"boolean\",\"description\":\"Whether to include implementation notes\"},\"platform\":{\"type\":\"string\",\"description\":\"Target platform\",\"enum\":[\"ios\",\"web\"]},\"primary_cta\":{\"type\":\"string\",\"description\":\"Primary call to action\"},\"screen_title\":{\"type\":\"string\",\"description\":\"Name of the frame or screen\"},\"sections\":{\"type\":\"array\",\"description\":\"Ordered screen sections\",\"items\":{\"type\":\"string\"}}},\"additionalProperties\":false}"),
+			Codec: tools.JSONCodec[any]{
+				ToJSON: func(v any) ([]byte, error) {
+					return json.Marshal(v)
+				},
+				FromJSON: func(data []byte) (any, error) {
+					if len(data) == 0 {
+						return nil, nil
+					}
+					var out any
+					if err := json.Unmarshal(data, &out); err != nil {
+						return nil, err
+					}
+					return out, nil
+				},
+			},
+		},
+		Result: tools.TypeSpec{
+			Name:   "*assistant.DPISpec",
+			Schema: nil,
+			Codec: tools.JSONCodec[any]{
+				ToJSON: func(v any) ([]byte, error) {
+					return json.Marshal(v)
+				},
+				FromJSON: func(data []byte) (any, error) {
+					if len(data) == 0 {
+						return nil, nil
+					}
+					var out any
+					if err := json.Unmarshal(data, &out); err != nil {
+						return nil, err
+					}
+					return out, nil
+				},
+			},
+		},
+	},
 }
 
 // RegisterAssistantAssistantMcpToolset registers the assistant-mcp toolset with the runtime.
@@ -454,6 +498,9 @@ func AssistantAssistantMcpToolsetRetryHint(toolName tools.Ident, err error) *pla
 			case "multi_content":
 				schemaJSON = "{\"type\":\"object\",\"required\":[\"count\"],\"properties\":{\"count\":{\"type\":\"integer\",\"description\":\"Number of content items to return\"}},\"additionalProperties\":false}"
 				example = "{\"count\":1}"
+			case "generate_dpi_spec":
+				schemaJSON = "{\"type\":\"object\",\"required\":[\"screen_title\",\"platform\",\"density\",\"primary_cta\",\"sections\"],\"properties\":{\"density\":{\"type\":\"string\",\"description\":\"Layout density\",\"enum\":[\"compact\",\"comfortable\"]},\"include_dev_notes\":{\"type\":\"boolean\",\"description\":\"Whether to include implementation notes\"},\"platform\":{\"type\":\"string\",\"description\":\"Target platform\",\"enum\":[\"ios\",\"web\"]},\"primary_cta\":{\"type\":\"string\",\"description\":\"Primary call to action\"},\"screen_title\":{\"type\":\"string\",\"description\":\"Name of the frame or screen\"},\"sections\":{\"type\":\"array\",\"description\":\"Ordered screen sections\",\"items\":{\"type\":\"string\"}}},\"additionalProperties\":false}"
+				example = "{\"density\":\"comfortable\",\"include_dev_notes\":false,\"platform\":\"web\",\"primary_cta\":\"abc123\",\"screen_title\":\"abc123\",\"sections\":[\"abc123\"]}"
 			}
 			prompt := retry.BuildRepairPrompt("tools/call:"+key, rpcErr.Message, example, schemaJSON)
 			return &planner.RetryHint{

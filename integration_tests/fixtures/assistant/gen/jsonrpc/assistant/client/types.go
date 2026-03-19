@@ -32,6 +32,19 @@ type GeneratePromptsRequestBody struct {
 	Task string `form:"task" json:"task" xml:"task"`
 }
 
+// BuildFigmaImplementationPromptRequestBody is the type of the "assistant"
+// service "build_figma_implementation_prompt" endpoint HTTP request body.
+type BuildFigmaImplementationPromptRequestBody struct {
+	// Title of the screen being implemented
+	ScreenTitle string `form:"screen_title" json:"screen_title" xml:"screen_title"`
+	// Target UI framework
+	Framework string `form:"framework" json:"framework" xml:"framework"`
+	// Resource URI for the design system
+	DesignTokensURI string `form:"design_tokens_uri" json:"design_tokens_uri" xml:"design_tokens_uri"`
+	// Serialized DPI spec JSON
+	DpiJSON string `form:"dpi_json" json:"dpi_json" xml:"dpi_json"`
+}
+
 // SendNotificationRequestBody is the type of the "assistant" service
 // "send_notification" endpoint HTTP request body.
 type SendNotificationRequestBody struct {
@@ -104,6 +117,23 @@ type MultiContentRequestBody struct {
 	Count int `form:"count" json:"count" xml:"count"`
 }
 
+// GenerateDpiSpecRequestBody is the type of the "assistant" service
+// "generate_dpi_spec" endpoint HTTP request body.
+type GenerateDpiSpecRequestBody struct {
+	// Name of the frame or screen
+	ScreenTitle string `form:"screen_title" json:"screen_title" xml:"screen_title"`
+	// Target platform
+	Platform string `form:"platform" json:"platform" xml:"platform"`
+	// Layout density
+	Density string `form:"density" json:"density" xml:"density"`
+	// Primary call to action
+	PrimaryCta string `form:"primary_cta" json:"primary_cta" xml:"primary_cta"`
+	// Ordered screen sections
+	Sections []string `form:"sections" json:"sections" xml:"sections"`
+	// Whether to include implementation notes
+	IncludeDevNotes *bool `form:"include_dev_notes,omitempty" json:"include_dev_notes,omitempty" xml:"include_dev_notes,omitempty"`
+}
+
 // ListDocumentsResponseBody is the type of the "assistant" service
 // "list_documents" endpoint HTTP response body.
 type ListDocumentsResponseBody struct {
@@ -127,9 +157,29 @@ type ConversationHistoryResponseBody struct {
 	Items []string `form:"items,omitempty" json:"items,omitempty" xml:"items,omitempty"`
 }
 
+// FigmaDesignSystemResponseBody is the type of the "assistant" service
+// "figma_design_system" endpoint HTTP response body.
+type FigmaDesignSystemResponseBody struct {
+	// Design system name
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// Design system version
+	Version *string `form:"version,omitempty" json:"version,omitempty" xml:"version,omitempty"`
+	// Platform the tokens target
+	Platform *string `form:"platform,omitempty" json:"platform,omitempty" xml:"platform,omitempty"`
+	// Grouped token information
+	Tokens *DesignTokenGroupResponseBody `form:"tokens,omitempty" json:"tokens,omitempty" xml:"tokens,omitempty"`
+}
+
 // GeneratePromptsResponseBody is the type of the "assistant" service
 // "generate_prompts" endpoint HTTP response body.
 type GeneratePromptsResponseBody struct {
+	// Templates
+	Templates []string `form:"templates,omitempty" json:"templates,omitempty" xml:"templates,omitempty"`
+}
+
+// BuildFigmaImplementationPromptResponseBody is the type of the "assistant"
+// service "build_figma_implementation_prompt" endpoint HTTP response body.
+type BuildFigmaImplementationPromptResponseBody struct {
 	// Templates
 	Templates []string `form:"templates,omitempty" json:"templates,omitempty" xml:"templates,omitempty"`
 }
@@ -183,6 +233,63 @@ type MultiContentResponseBody struct {
 	Result *string `form:"result,omitempty" json:"result,omitempty" xml:"result,omitempty"`
 }
 
+// GenerateDpiSpecResponseBody is the type of the "assistant" service
+// "generate_dpi_spec" endpoint HTTP response body.
+type GenerateDpiSpecResponseBody struct {
+	// Screen title
+	ScreenTitle *string `form:"screen_title,omitempty" json:"screen_title,omitempty" xml:"screen_title,omitempty"`
+	// Target platform
+	Platform *string `form:"platform,omitempty" json:"platform,omitempty" xml:"platform,omitempty"`
+	// Layout density
+	Density *string `form:"density,omitempty" json:"density,omitempty" xml:"density,omitempty"`
+	// Viewport dimensions
+	Viewport *DPIViewportResponseBody `form:"viewport,omitempty" json:"viewport,omitempty" xml:"viewport,omitempty"`
+	// Ordered screen sections
+	Sections []*DPISectionResponseBody `form:"sections,omitempty" json:"sections,omitempty" xml:"sections,omitempty"`
+	// Primary CTA
+	PrimaryCta *DPICallToActionResponseBody `form:"primary_cta,omitempty" json:"primary_cta,omitempty" xml:"primary_cta,omitempty"`
+	// Design system resource URI
+	DesignTokensURI *string `form:"design_tokens_uri,omitempty" json:"design_tokens_uri,omitempty" xml:"design_tokens_uri,omitempty"`
+	// Development handoff notes
+	DevNotes []string `form:"dev_notes,omitempty" json:"dev_notes,omitempty" xml:"dev_notes,omitempty"`
+}
+
+// DesignTokenGroupResponseBody is used to define fields on response body types.
+type DesignTokenGroupResponseBody struct {
+	// Color tokens
+	Colors []string `form:"colors,omitempty" json:"colors,omitempty" xml:"colors,omitempty"`
+	// Spacing tokens
+	Spacing []string `form:"spacing,omitempty" json:"spacing,omitempty" xml:"spacing,omitempty"`
+	// Typography tokens
+	Typography []string `form:"typography,omitempty" json:"typography,omitempty" xml:"typography,omitempty"`
+}
+
+// DPIViewportResponseBody is used to define fields on response body types.
+type DPIViewportResponseBody struct {
+	// Viewport width
+	Width *int `form:"width,omitempty" json:"width,omitempty" xml:"width,omitempty"`
+	// Viewport height
+	Height *int `form:"height,omitempty" json:"height,omitempty" xml:"height,omitempty"`
+}
+
+// DPISectionResponseBody is used to define fields on response body types.
+type DPISectionResponseBody struct {
+	// Section name
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// Primary UI component
+	Component *string `form:"component,omitempty" json:"component,omitempty" xml:"component,omitempty"`
+	// Implementation notes for this section
+	Notes []string `form:"notes,omitempty" json:"notes,omitempty" xml:"notes,omitempty"`
+}
+
+// DPICallToActionResponseBody is used to define fields on response body types.
+type DPICallToActionResponseBody struct {
+	// CTA label
+	Label *string `form:"label,omitempty" json:"label,omitempty" xml:"label,omitempty"`
+	// CTA visual style
+	Style *string `form:"style,omitempty" json:"style,omitempty" xml:"style,omitempty"`
+}
+
 // NewConversationHistoryRequestBody builds the HTTP request body from the
 // payload of the "conversation_history" endpoint of the "assistant" service.
 func NewConversationHistoryRequestBody(p *assistant.ConversationHistoryPayload) *ConversationHistoryRequestBody {
@@ -205,6 +312,19 @@ func NewGeneratePromptsRequestBody(p *assistant.GeneratePromptsPayload) *Generat
 	body := &GeneratePromptsRequestBody{
 		Context: p.Context,
 		Task:    p.Task,
+	}
+	return body
+}
+
+// NewBuildFigmaImplementationPromptRequestBody builds the HTTP request body
+// from the payload of the "build_figma_implementation_prompt" endpoint of the
+// "assistant" service.
+func NewBuildFigmaImplementationPromptRequestBody(p *assistant.BuildFigmaImplementationPromptPayload) *BuildFigmaImplementationPromptRequestBody {
+	body := &BuildFigmaImplementationPromptRequestBody{
+		ScreenTitle:     p.ScreenTitle,
+		Framework:       p.Framework,
+		DesignTokensURI: p.DesignTokensURI,
+		DpiJSON:         p.DpiJSON,
 	}
 	return body
 }
@@ -296,6 +416,27 @@ func NewMultiContentRequestBody(p *assistant.MultiContentPayload) *MultiContentR
 	return body
 }
 
+// NewGenerateDpiSpecRequestBody builds the HTTP request body from the payload
+// of the "generate_dpi_spec" endpoint of the "assistant" service.
+func NewGenerateDpiSpecRequestBody(p *assistant.GenerateDpiSpecPayload) *GenerateDpiSpecRequestBody {
+	body := &GenerateDpiSpecRequestBody{
+		ScreenTitle:     p.ScreenTitle,
+		Platform:        p.Platform,
+		Density:         p.Density,
+		PrimaryCta:      p.PrimaryCta,
+		IncludeDevNotes: p.IncludeDevNotes,
+	}
+	if p.Sections != nil {
+		body.Sections = make([]string, len(p.Sections))
+		for i, val := range p.Sections {
+			body.Sections[i] = val
+		}
+	} else {
+		body.Sections = []string{}
+	}
+	return body
+}
+
 // NewListDocumentsDocumentsOK builds a "assistant" service "list_documents"
 // endpoint result from a HTTP "OK" response.
 func NewListDocumentsDocumentsOK(body *ListDocumentsResponseBody) *assistant.Documents {
@@ -333,9 +474,35 @@ func NewConversationHistoryResultOK(body *ConversationHistoryResponseBody) *assi
 	return v
 }
 
+// NewFigmaDesignSystemDesignSystemOK builds a "assistant" service
+// "figma_design_system" endpoint result from a HTTP "OK" response.
+func NewFigmaDesignSystemDesignSystemOK(body *FigmaDesignSystemResponseBody) *assistant.DesignSystem {
+	v := &assistant.DesignSystem{
+		Name:     *body.Name,
+		Version:  *body.Version,
+		Platform: *body.Platform,
+	}
+	v.Tokens = unmarshalDesignTokenGroupResponseBodyToAssistantDesignTokenGroup(body.Tokens)
+
+	return v
+}
+
 // NewGeneratePromptsPromptTemplatesOK builds a "assistant" service
 // "generate_prompts" endpoint result from a HTTP "OK" response.
 func NewGeneratePromptsPromptTemplatesOK(body *GeneratePromptsResponseBody) *assistant.PromptTemplates {
+	v := &assistant.PromptTemplates{}
+	v.Templates = make([]string, len(body.Templates))
+	for i, val := range body.Templates {
+		v.Templates[i] = val
+	}
+
+	return v
+}
+
+// NewBuildFigmaImplementationPromptPromptTemplatesOK builds a "assistant"
+// service "build_figma_implementation_prompt" endpoint result from a HTTP "OK"
+// response.
+func NewBuildFigmaImplementationPromptPromptTemplatesOK(body *BuildFigmaImplementationPromptResponseBody) *assistant.PromptTemplates {
 	v := &assistant.PromptTemplates{}
 	v.Templates = make([]string, len(body.Templates))
 	for i, val := range body.Templates {
@@ -423,6 +590,33 @@ func NewMultiContentResultOK(body *MultiContentResponseBody) *assistant.MultiCon
 	return v
 }
 
+// NewGenerateDpiSpecDPISpecOK builds a "assistant" service "generate_dpi_spec"
+// endpoint result from a HTTP "OK" response.
+func NewGenerateDpiSpecDPISpecOK(body *GenerateDpiSpecResponseBody) *assistant.DPISpec {
+	v := &assistant.DPISpec{
+		ScreenTitle:     *body.ScreenTitle,
+		Platform:        *body.Platform,
+		Density:         *body.Density,
+		DesignTokensURI: *body.DesignTokensURI,
+	}
+	v.Viewport = unmarshalDPIViewportResponseBodyToAssistantDPIViewport(body.Viewport)
+	v.Sections = make([]*assistant.DPISection, len(body.Sections))
+	for i, val := range body.Sections {
+		if val == nil {
+			v.Sections[i] = nil
+			continue
+		}
+		v.Sections[i] = unmarshalDPISectionResponseBodyToAssistantDPISection(val)
+	}
+	v.PrimaryCta = unmarshalDPICallToActionResponseBodyToAssistantDPICallToAction(body.PrimaryCta)
+	v.DevNotes = make([]string, len(body.DevNotes))
+	for i, val := range body.DevNotes {
+		v.DevNotes[i] = val
+	}
+
+	return v
+}
+
 // ValidateListDocumentsResponseBody runs the validations defined on
 // list_documents_response_body
 func ValidateListDocumentsResponseBody(body *ListDocumentsResponseBody) (err error) {
@@ -432,11 +626,144 @@ func ValidateListDocumentsResponseBody(body *ListDocumentsResponseBody) (err err
 	return
 }
 
+// ValidateFigmaDesignSystemResponseBody runs the validations defined on
+// figma_design_system_response_body
+func ValidateFigmaDesignSystemResponseBody(body *FigmaDesignSystemResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.Version == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("version", "body"))
+	}
+	if body.Platform == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("platform", "body"))
+	}
+	if body.Tokens == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("tokens", "body"))
+	}
+	if body.Tokens != nil {
+		if err2 := ValidateDesignTokenGroupResponseBody(body.Tokens); err2 != nil {
+			err = goa.MergeErrors(err, err2)
+		}
+	}
+	return
+}
+
 // ValidateGeneratePromptsResponseBody runs the validations defined on
 // generate_prompts_response_body
 func ValidateGeneratePromptsResponseBody(body *GeneratePromptsResponseBody) (err error) {
 	if body.Templates == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("templates", "body"))
+	}
+	return
+}
+
+// ValidateBuildFigmaImplementationPromptResponseBody runs the validations
+// defined on build_figma_implementation_prompt_response_body
+func ValidateBuildFigmaImplementationPromptResponseBody(body *BuildFigmaImplementationPromptResponseBody) (err error) {
+	if body.Templates == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("templates", "body"))
+	}
+	return
+}
+
+// ValidateGenerateDpiSpecResponseBody runs the validations defined on
+// generate_dpi_spec_response_body
+func ValidateGenerateDpiSpecResponseBody(body *GenerateDpiSpecResponseBody) (err error) {
+	if body.ScreenTitle == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("screen_title", "body"))
+	}
+	if body.Platform == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("platform", "body"))
+	}
+	if body.Density == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("density", "body"))
+	}
+	if body.Viewport == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("viewport", "body"))
+	}
+	if body.Sections == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("sections", "body"))
+	}
+	if body.PrimaryCta == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("primary_cta", "body"))
+	}
+	if body.DesignTokensURI == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("design_tokens_uri", "body"))
+	}
+	if body.DevNotes == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("dev_notes", "body"))
+	}
+	if body.Viewport != nil {
+		if err2 := ValidateDPIViewportResponseBody(body.Viewport); err2 != nil {
+			err = goa.MergeErrors(err, err2)
+		}
+	}
+	for _, e := range body.Sections {
+		if e != nil {
+			if err2 := ValidateDPISectionResponseBody(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
+	}
+	if body.PrimaryCta != nil {
+		if err2 := ValidateDPICallToActionResponseBody(body.PrimaryCta); err2 != nil {
+			err = goa.MergeErrors(err, err2)
+		}
+	}
+	return
+}
+
+// ValidateDesignTokenGroupResponseBody runs the validations defined on
+// DesignTokenGroupResponseBody
+func ValidateDesignTokenGroupResponseBody(body *DesignTokenGroupResponseBody) (err error) {
+	if body.Colors == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("colors", "body"))
+	}
+	if body.Spacing == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("spacing", "body"))
+	}
+	if body.Typography == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("typography", "body"))
+	}
+	return
+}
+
+// ValidateDPIViewportResponseBody runs the validations defined on
+// DPIViewportResponseBody
+func ValidateDPIViewportResponseBody(body *DPIViewportResponseBody) (err error) {
+	if body.Width == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("width", "body"))
+	}
+	if body.Height == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("height", "body"))
+	}
+	return
+}
+
+// ValidateDPISectionResponseBody runs the validations defined on
+// DPISectionResponseBody
+func ValidateDPISectionResponseBody(body *DPISectionResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.Component == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("component", "body"))
+	}
+	if body.Notes == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("notes", "body"))
+	}
+	return
+}
+
+// ValidateDPICallToActionResponseBody runs the validations defined on
+// DPICallToActionResponseBody
+func ValidateDPICallToActionResponseBody(body *DPICallToActionResponseBody) (err error) {
+	if body.Label == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("label", "body"))
+	}
+	if body.Style == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("style", "body"))
 	}
 	return
 }

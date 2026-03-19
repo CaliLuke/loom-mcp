@@ -33,8 +33,13 @@ type Server struct {
 	SystemInfo func(context.Context, *http.Request, *jsonrpc.RawRequest, http.ResponseWriter) error
 	// ConversationHistory is the handler for the conversation_history method.
 	ConversationHistory func(context.Context, *http.Request, *jsonrpc.RawRequest, http.ResponseWriter) error
+	// FigmaDesignSystem is the handler for the figma_design_system method.
+	FigmaDesignSystem func(context.Context, *http.Request, *jsonrpc.RawRequest, http.ResponseWriter) error
 	// GeneratePrompts is the handler for the generate_prompts method.
 	GeneratePrompts func(context.Context, *http.Request, *jsonrpc.RawRequest, http.ResponseWriter) error
+	// BuildFigmaImplementationPrompt is the handler for the
+	// build_figma_implementation_prompt method.
+	BuildFigmaImplementationPrompt func(context.Context, *http.Request, *jsonrpc.RawRequest, http.ResponseWriter) error
 	// SendNotification is the handler for the send_notification method.
 	SendNotification func(context.Context, *http.Request, *jsonrpc.RawRequest, http.ResponseWriter) error
 	// AnalyzeSentiment is the handler for the analyze_sentiment method.
@@ -51,6 +56,8 @@ type Server struct {
 	ProcessBatch func(context.Context, *http.Request, *jsonrpc.RawRequest, http.ResponseWriter) error
 	// MultiContent is the handler for the multi_content method.
 	MultiContent func(context.Context, *http.Request, *jsonrpc.RawRequest, http.ResponseWriter) error
+	// GenerateDpiSpec is the handler for the generate_dpi_spec method.
+	GenerateDpiSpec func(context.Context, *http.Request, *jsonrpc.RawRequest, http.ResponseWriter) error
 
 	decoder    func(*http.Request) goahttp.Decoder
 	encoder    func(context.Context, http.ResponseWriter) goahttp.Encoder
@@ -71,7 +78,9 @@ func New(
 			"list_documents",
 			"system_info",
 			"conversation_history",
+			"figma_design_system",
 			"generate_prompts",
+			"build_figma_implementation_prompt",
 			"send_notification",
 			"analyze_sentiment",
 			"extract_keywords",
@@ -80,22 +89,26 @@ func New(
 			"execute_code",
 			"process_batch",
 			"multi_content",
+			"generate_dpi_spec",
 		},
-		ListDocuments:       NewListDocumentsHandler(endpoints.ListDocuments, mux, decoder, encoder, errhandler),
-		SystemInfo:          NewSystemInfoHandler(endpoints.SystemInfo, mux, decoder, encoder, errhandler),
-		ConversationHistory: NewConversationHistoryHandler(endpoints.ConversationHistory, mux, decoder, encoder, errhandler),
-		GeneratePrompts:     NewGeneratePromptsHandler(endpoints.GeneratePrompts, mux, decoder, encoder, errhandler),
-		SendNotification:    NewSendNotificationHandler(endpoints.SendNotification, mux, decoder, encoder, errhandler),
-		AnalyzeSentiment:    NewAnalyzeSentimentHandler(endpoints.AnalyzeSentiment, mux, decoder, encoder, errhandler),
-		ExtractKeywords:     NewExtractKeywordsHandler(endpoints.ExtractKeywords, mux, decoder, encoder, errhandler),
-		SummarizeText:       NewSummarizeTextHandler(endpoints.SummarizeText, mux, decoder, encoder, errhandler),
-		Search:              NewSearchHandler(endpoints.Search, mux, decoder, encoder, errhandler),
-		ExecuteCode:         NewExecuteCodeHandler(endpoints.ExecuteCode, mux, decoder, encoder, errhandler),
-		ProcessBatch:        NewProcessBatchHandler(endpoints.ProcessBatch, mux, decoder, encoder, errhandler),
-		MultiContent:        NewMultiContentHandler(endpoints.MultiContent, mux, decoder, encoder, errhandler),
-		decoder:             decoder,
-		encoder:             encoder,
-		errhandler:          errhandler,
+		ListDocuments:                  NewListDocumentsHandler(endpoints.ListDocuments, mux, decoder, encoder, errhandler),
+		SystemInfo:                     NewSystemInfoHandler(endpoints.SystemInfo, mux, decoder, encoder, errhandler),
+		ConversationHistory:            NewConversationHistoryHandler(endpoints.ConversationHistory, mux, decoder, encoder, errhandler),
+		FigmaDesignSystem:              NewFigmaDesignSystemHandler(endpoints.FigmaDesignSystem, mux, decoder, encoder, errhandler),
+		GeneratePrompts:                NewGeneratePromptsHandler(endpoints.GeneratePrompts, mux, decoder, encoder, errhandler),
+		BuildFigmaImplementationPrompt: NewBuildFigmaImplementationPromptHandler(endpoints.BuildFigmaImplementationPrompt, mux, decoder, encoder, errhandler),
+		SendNotification:               NewSendNotificationHandler(endpoints.SendNotification, mux, decoder, encoder, errhandler),
+		AnalyzeSentiment:               NewAnalyzeSentimentHandler(endpoints.AnalyzeSentiment, mux, decoder, encoder, errhandler),
+		ExtractKeywords:                NewExtractKeywordsHandler(endpoints.ExtractKeywords, mux, decoder, encoder, errhandler),
+		SummarizeText:                  NewSummarizeTextHandler(endpoints.SummarizeText, mux, decoder, encoder, errhandler),
+		Search:                         NewSearchHandler(endpoints.Search, mux, decoder, encoder, errhandler),
+		ExecuteCode:                    NewExecuteCodeHandler(endpoints.ExecuteCode, mux, decoder, encoder, errhandler),
+		ProcessBatch:                   NewProcessBatchHandler(endpoints.ProcessBatch, mux, decoder, encoder, errhandler),
+		MultiContent:                   NewMultiContentHandler(endpoints.MultiContent, mux, decoder, encoder, errhandler),
+		GenerateDpiSpec:                NewGenerateDpiSpecHandler(endpoints.GenerateDpiSpec, mux, decoder, encoder, errhandler),
+		decoder:                        decoder,
+		encoder:                        encoder,
+		errhandler:                     errhandler,
 	}
 	// Default HTTP handler per transport kind
 	// Plain HTTP JSON-RPC
@@ -216,9 +229,17 @@ func (s *Server) processRequest(ctx context.Context, r *http.Request, req *jsonr
 		if err := s.ConversationHistory(ctx, r, req, w); err != nil {
 			s.errhandler(ctx, w, fmt.Errorf("handler error for %s: %w", "conversation_history", err))
 		}
+	case "figma_design_system":
+		if err := s.FigmaDesignSystem(ctx, r, req, w); err != nil {
+			s.errhandler(ctx, w, fmt.Errorf("handler error for %s: %w", "figma_design_system", err))
+		}
 	case "generate_prompts":
 		if err := s.GeneratePrompts(ctx, r, req, w); err != nil {
 			s.errhandler(ctx, w, fmt.Errorf("handler error for %s: %w", "generate_prompts", err))
+		}
+	case "build_figma_implementation_prompt":
+		if err := s.BuildFigmaImplementationPrompt(ctx, r, req, w); err != nil {
+			s.errhandler(ctx, w, fmt.Errorf("handler error for %s: %w", "build_figma_implementation_prompt", err))
 		}
 	case "send_notification":
 		if err := s.SendNotification(ctx, r, req, w); err != nil {
@@ -251,6 +272,10 @@ func (s *Server) processRequest(ctx context.Context, r *http.Request, req *jsonr
 	case "multi_content":
 		if err := s.MultiContent(ctx, r, req, w); err != nil {
 			s.errhandler(ctx, w, fmt.Errorf("handler error for %s: %w", "multi_content", err))
+		}
+	case "generate_dpi_spec":
+		if err := s.GenerateDpiSpec(ctx, r, req, w); err != nil {
+			s.errhandler(ctx, w, fmt.Errorf("handler error for %s: %w", "generate_dpi_spec", err))
 		}
 	default:
 		s.encodeJSONRPCError(ctx, w, req, jsonrpc.MethodNotFound, "Method not found", nil)
@@ -505,6 +530,69 @@ func NewConversationHistoryHandler(
 	}
 }
 
+// NewFigmaDesignSystemHandler creates a JSON-RPC handler which calls the
+// "assistant" service "figma_design_system" endpoint.
+func NewFigmaDesignSystemHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+) func(context.Context, *http.Request, *jsonrpc.RawRequest, http.ResponseWriter) error {
+	return func(ctx context.Context, r *http.Request, req *jsonrpc.RawRequest, w http.ResponseWriter) error {
+		ctx = context.WithValue(ctx, goa.MethodKey, "figma_design_system")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "assistant")
+		res, err := endpoint(ctx, nil)
+		if err != nil {
+			// Only send error response if request has ID (not nil or empty string)
+			if req.ID != nil && req.ID != "" {
+				var en goa.GoaErrorNamer
+				if !errors.As(err, &en) {
+					encodeJSONRPCError(ctx, w, req, jsonrpc.InternalError, goa.ErrorSafeMessage(err), jsonrpc.NewErrorData(err), encoder, errhandler)
+					return nil
+				}
+				switch en.GoaErrorName() {
+				case "invalid_params":
+					encodeJSONRPCError(ctx, w, req, jsonrpc.InvalidParams, goa.ErrorSafeMessage(err), jsonrpc.NewErrorData(err), encoder, errhandler)
+				case "method_not_found":
+					encodeJSONRPCError(ctx, w, req, jsonrpc.MethodNotFound, goa.ErrorSafeMessage(err), jsonrpc.NewErrorData(err), encoder, errhandler)
+				default:
+					code := jsonrpc.InternalError
+					if _, ok := err.(*goa.ServiceError); ok {
+						code = jsonrpc.InvalidParams
+					}
+					encodeJSONRPCError(ctx, w, req, code, goa.ErrorSafeMessage(err), jsonrpc.NewErrorData(err), encoder, errhandler)
+				}
+			} else {
+				// No ID means notification - just log error
+				errhandler(ctx, w, fmt.Errorf("endpoint error: %w", err))
+			}
+			return nil
+		}
+
+		// For methods with no result, check if this is a notification
+
+		// For methods with results, determine the ID to use for the response
+		var id any
+		// No ID field in result - use request ID
+		id = req.ID
+
+		if id == nil || id == "" {
+			// Notification - no response
+			return nil
+		}
+
+		// Send response with the result
+		// Convert result to response body with proper JSON tags
+		body := NewFigmaDesignSystemResponseBody(res.(*assistant.DesignSystem))
+		response := jsonrpc.MakeSuccessResponse(id, body)
+		if err := encoder(ctx, w).Encode(response); err != nil {
+			errhandler(ctx, w, fmt.Errorf("failed to encode JSON-RPC response: %w", err))
+		}
+		return nil
+	}
+}
+
 // NewGeneratePromptsHandler creates a JSON-RPC handler which calls the
 // "assistant" service "generate_prompts" endpoint.
 func NewGeneratePromptsHandler(
@@ -576,6 +664,85 @@ func NewGeneratePromptsHandler(
 		// Send response with the result
 		// Convert result to response body with proper JSON tags
 		body := NewGeneratePromptsResponseBody(res.(*assistant.PromptTemplates))
+		response := jsonrpc.MakeSuccessResponse(id, body)
+		if err := encoder(ctx, w).Encode(response); err != nil {
+			errhandler(ctx, w, fmt.Errorf("failed to encode JSON-RPC response: %w", err))
+		}
+		return nil
+	}
+}
+
+// NewBuildFigmaImplementationPromptHandler creates a JSON-RPC handler which
+// calls the "assistant" service "build_figma_implementation_prompt" endpoint.
+func NewBuildFigmaImplementationPromptHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+) func(context.Context, *http.Request, *jsonrpc.RawRequest, http.ResponseWriter) error {
+	decodeParams := DecodeBuildFigmaImplementationPromptRequest(mux, decoder)
+	return func(ctx context.Context, r *http.Request, req *jsonrpc.RawRequest, w http.ResponseWriter) error {
+		ctx = context.WithValue(ctx, goa.MethodKey, "build_figma_implementation_prompt")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "assistant")
+		params, err := decodeParams(r, req)
+		if err != nil {
+			// Only send error response if request has ID (not nil or empty string)
+			if req.ID != nil && req.ID != "" {
+				code := jsonrpc.InternalError
+				if _, ok := err.(*goa.ServiceError); ok {
+					code = jsonrpc.InvalidParams
+				}
+				encodeJSONRPCError(ctx, w, req, code, goa.ErrorSafeMessage(err), jsonrpc.NewErrorData(err), encoder, errhandler)
+			} else {
+				// No ID means notification - just log error
+				errhandler(ctx, w, fmt.Errorf("failed to decode parameters: %w", err))
+			}
+			return nil
+		}
+		res, err := endpoint(ctx, params)
+		if err != nil {
+			// Only send error response if request has ID (not nil or empty string)
+			if req.ID != nil && req.ID != "" {
+				var en goa.GoaErrorNamer
+				if !errors.As(err, &en) {
+					encodeJSONRPCError(ctx, w, req, jsonrpc.InternalError, goa.ErrorSafeMessage(err), jsonrpc.NewErrorData(err), encoder, errhandler)
+					return nil
+				}
+				switch en.GoaErrorName() {
+				case "invalid_params":
+					encodeJSONRPCError(ctx, w, req, jsonrpc.InvalidParams, goa.ErrorSafeMessage(err), jsonrpc.NewErrorData(err), encoder, errhandler)
+				case "method_not_found":
+					encodeJSONRPCError(ctx, w, req, jsonrpc.MethodNotFound, goa.ErrorSafeMessage(err), jsonrpc.NewErrorData(err), encoder, errhandler)
+				default:
+					code := jsonrpc.InternalError
+					if _, ok := err.(*goa.ServiceError); ok {
+						code = jsonrpc.InvalidParams
+					}
+					encodeJSONRPCError(ctx, w, req, code, goa.ErrorSafeMessage(err), jsonrpc.NewErrorData(err), encoder, errhandler)
+				}
+			} else {
+				// No ID means notification - just log error
+				errhandler(ctx, w, fmt.Errorf("endpoint error: %w", err))
+			}
+			return nil
+		}
+
+		// For methods with no result, check if this is a notification
+
+		// For methods with results, determine the ID to use for the response
+		var id any
+		// No ID field in result - use request ID
+		id = req.ID
+
+		if id == nil || id == "" {
+			// Notification - no response
+			return nil
+		}
+
+		// Send response with the result
+		// Convert result to response body with proper JSON tags
+		body := NewBuildFigmaImplementationPromptResponseBody(res.(*assistant.PromptTemplates))
 		response := jsonrpc.MakeSuccessResponse(id, body)
 		if err := encoder(ctx, w).Encode(response); err != nil {
 			errhandler(ctx, w, fmt.Errorf("failed to encode JSON-RPC response: %w", err))
@@ -1199,6 +1366,85 @@ func NewMultiContentHandler(
 		// Send response with the result
 		// Convert result to response body with proper JSON tags
 		body := NewMultiContentResponseBody(res.(*assistant.MultiContentResult))
+		response := jsonrpc.MakeSuccessResponse(id, body)
+		if err := encoder(ctx, w).Encode(response); err != nil {
+			errhandler(ctx, w, fmt.Errorf("failed to encode JSON-RPC response: %w", err))
+		}
+		return nil
+	}
+}
+
+// NewGenerateDpiSpecHandler creates a JSON-RPC handler which calls the
+// "assistant" service "generate_dpi_spec" endpoint.
+func NewGenerateDpiSpecHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+) func(context.Context, *http.Request, *jsonrpc.RawRequest, http.ResponseWriter) error {
+	decodeParams := DecodeGenerateDpiSpecRequest(mux, decoder)
+	return func(ctx context.Context, r *http.Request, req *jsonrpc.RawRequest, w http.ResponseWriter) error {
+		ctx = context.WithValue(ctx, goa.MethodKey, "generate_dpi_spec")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "assistant")
+		params, err := decodeParams(r, req)
+		if err != nil {
+			// Only send error response if request has ID (not nil or empty string)
+			if req.ID != nil && req.ID != "" {
+				code := jsonrpc.InternalError
+				if _, ok := err.(*goa.ServiceError); ok {
+					code = jsonrpc.InvalidParams
+				}
+				encodeJSONRPCError(ctx, w, req, code, goa.ErrorSafeMessage(err), jsonrpc.NewErrorData(err), encoder, errhandler)
+			} else {
+				// No ID means notification - just log error
+				errhandler(ctx, w, fmt.Errorf("failed to decode parameters: %w", err))
+			}
+			return nil
+		}
+		res, err := endpoint(ctx, params)
+		if err != nil {
+			// Only send error response if request has ID (not nil or empty string)
+			if req.ID != nil && req.ID != "" {
+				var en goa.GoaErrorNamer
+				if !errors.As(err, &en) {
+					encodeJSONRPCError(ctx, w, req, jsonrpc.InternalError, goa.ErrorSafeMessage(err), jsonrpc.NewErrorData(err), encoder, errhandler)
+					return nil
+				}
+				switch en.GoaErrorName() {
+				case "invalid_params":
+					encodeJSONRPCError(ctx, w, req, jsonrpc.InvalidParams, goa.ErrorSafeMessage(err), jsonrpc.NewErrorData(err), encoder, errhandler)
+				case "method_not_found":
+					encodeJSONRPCError(ctx, w, req, jsonrpc.MethodNotFound, goa.ErrorSafeMessage(err), jsonrpc.NewErrorData(err), encoder, errhandler)
+				default:
+					code := jsonrpc.InternalError
+					if _, ok := err.(*goa.ServiceError); ok {
+						code = jsonrpc.InvalidParams
+					}
+					encodeJSONRPCError(ctx, w, req, code, goa.ErrorSafeMessage(err), jsonrpc.NewErrorData(err), encoder, errhandler)
+				}
+			} else {
+				// No ID means notification - just log error
+				errhandler(ctx, w, fmt.Errorf("endpoint error: %w", err))
+			}
+			return nil
+		}
+
+		// For methods with no result, check if this is a notification
+
+		// For methods with results, determine the ID to use for the response
+		var id any
+		// No ID field in result - use request ID
+		id = req.ID
+
+		if id == nil || id == "" {
+			// Notification - no response
+			return nil
+		}
+
+		// Send response with the result
+		// Convert result to response body with proper JSON tags
+		body := NewGenerateDpiSpecResponseBody(res.(*assistant.DPISpec))
 		response := jsonrpc.MakeSuccessResponse(id, body)
 		if err := encoder(ctx, w).Encode(response); err != nil {
 			errhandler(ctx, w, fmt.Errorf("failed to encode JSON-RPC response: %w", err))

@@ -115,6 +115,7 @@ func TestGeneratedJSONRPCServerEventsStreamPublishesNotifications(t *testing.T) 
 	req.Header.Set(mcpruntime.HeaderKeySessionID, sessionID)
 
 	resultCh := make(chan string, 1)
+	readyCh := make(chan struct{})
 	go func() {
 		resp, err := server.Client().Do(req)
 		if err != nil {
@@ -126,8 +127,17 @@ func TestGeneratedJSONRPCServerEventsStreamPublishesNotifications(t *testing.T) 
 			resultCh <- fmt.Sprintf("STATUS: %d", resp.StatusCode)
 			return
 		}
+		close(readyCh)
 		resultCh <- readSSEData(resp.Body)
 	}()
+
+	select {
+	case <-readyCh:
+	case data := <-resultCh:
+		t.Fatalf("stream did not become ready: %s", data)
+	case <-ctx.Done():
+		t.Fatal("timed out waiting for event stream to connect")
+	}
 
 	message := "status from generated sdk server"
 	notifyReq := map[string]any{
@@ -151,6 +161,79 @@ func TestGeneratedJSONRPCServerEventsStreamPublishesNotifications(t *testing.T) 
 	case <-ctx.Done():
 		t.Fatal("timed out waiting for events/stream notification")
 	}
+}
+
+func TestGeneratedSDKServerClosedLoopFigmaFlow(t *testing.T) {
+	t.Parallel()
+
+	_, sdkHTTPServer := newGeneratedSDKServer(t)
+	defer sdkHTTPServer.Close()
+
+	session := connectSDKSessionToServer(t, sdkHTTPServer.URL+"/rpc", map[string]string{
+		"x-mcp-allow-names": "figma_design_system",
+	})
+	defer func() {
+		require.NoError(t, session.Close())
+	}()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	toolResult, err := session.CallTool(ctx, &sdkmcp.CallToolParams{
+		Name: "generate_dpi_spec",
+		Arguments: map[string]any{
+			"screen_title":      "Checkout",
+			"platform":          "ios",
+			"density":           "comfortable",
+			"primary_cta":       "Pay now",
+			"sections":          []string{"hero", "summary", "payment_form", "trust_bar"},
+			"include_dev_notes": true,
+		},
+	})
+	require.NoError(t, err)
+	require.Len(t, toolResult.Content, 1)
+
+	textContent, ok := toolResult.Content[0].(*sdkmcp.TextContent)
+	require.True(t, ok)
+
+	var spec assistant.DPISpec
+	require.NoError(t, json.Unmarshal([]byte(textContent.Text), &spec))
+	assert.Equal(t, "Checkout", spec.ScreenTitle)
+	assert.Equal(t, "ios", spec.Platform)
+	assert.Equal(t, 390, spec.Viewport.Width)
+	if assert.Len(t, spec.Sections, 4) {
+		assert.Equal(t, "HeroCard", spec.Sections[0].Component)
+	}
+	assert.Equal(t, "figma://design-system/mobile-checkout", spec.DesignTokensURI)
+
+	resource, err := session.ReadResource(ctx, &sdkmcp.ReadResourceParams{
+		URI: "figma://design-system/mobile-checkout",
+	})
+	require.NoError(t, err)
+	require.Len(t, resource.Contents, 1)
+
+	var designSystem assistant.DesignSystem
+	require.NoError(t, json.Unmarshal([]byte(resource.Contents[0].Text), &designSystem))
+	assert.Equal(t, "Mobile Commerce System", designSystem.Name)
+	assert.Equal(t, "2026.03", designSystem.Version)
+	assert.Contains(t, designSystem.Tokens.Colors, "accent.brand=#1ABCFE")
+
+	promptResult, err := session.GetPrompt(ctx, &sdkmcp.GetPromptParams{
+		Name: "figma_implementation_prompt",
+		Arguments: map[string]string{
+			"screen_title":      spec.ScreenTitle,
+			"framework":         "react",
+			"design_tokens_uri": spec.DesignTokensURI,
+			"dpi_json":          textContent.Text,
+		},
+	})
+	require.NoError(t, err)
+	require.NotEmpty(t, promptResult.Messages)
+	require.Equal(t, "Figma implementation handoff", promptResult.Description)
+	assert.Contains(t, promptResult.Messages[0].Content.(*sdkmcp.TextContent).Text, "Checkout")
+	assert.Contains(t, promptResult.Messages[0].Content.(*sdkmcp.TextContent).Text, "react")
+	assert.Contains(t, promptResult.Messages[0].Content.(*sdkmcp.TextContent).Text, "figma://design-system/mobile-checkout")
+	assert.Contains(t, promptResult.Messages[0].Content.(*sdkmcp.TextContent).Text, "Pay now")
 }
 
 func initializeJSONRPCSession(ctx context.Context, rawURL string) (string, error) {

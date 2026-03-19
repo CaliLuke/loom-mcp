@@ -65,6 +65,23 @@ func (s *toolsCallServerStreamEventWriter) finish() {
 	}
 }
 
+// initSSEHeaders initializes the SSE response headers.
+func (s *ToolsCallServerStream) initSSEHeaders() {
+	s.once.Do(func() {
+		s.w.Header().Set("Content-Type", "text/event-stream")
+		s.w.Header().Set("Cache-Control", "no-cache")
+		s.w.Header().Set("Connection", "keep-alive")
+		s.w.Header().Set("X-Accel-Buffering", "no")
+		s.w.WriteHeader(http.StatusOK)
+	})
+}
+
+// open commits and flushes the SSE headers before the first application event.
+func (s *ToolsCallServerStream) open() error {
+	s.initSSEHeaders()
+	return http.NewResponseController(s.w).Flush()
+}
+
 // Send sends a JSON-RPC notification to the client.
 // Notifications do not expect a response from the client.
 func (s *ToolsCallServerStream) Send(ctx context.Context, event mcpassistant.ToolsCallEvent) error {
@@ -91,7 +108,7 @@ func (s *ToolsCallServerStream) Send(ctx context.Context, event mcpassistant.Too
 		"params":  body,
 	}
 
-	return s.sendSSEEvent("notification", message)
+	return s.sendSSEEvent("message", message)
 }
 
 // SendAndClose sends a final JSON-RPC response to the client and closes the
@@ -151,13 +168,7 @@ func (s *ToolsCallServerStream) sendError(ctx context.Context, id any, code json
 // the event writer
 func (s *ToolsCallServerStream) sendSSEEvent(eventType string, v any) error {
 	// Ensure headers are sent once
-	s.once.Do(func() {
-		s.w.Header().Set("Content-Type", "text/event-stream")
-		s.w.Header().Set("Cache-Control", "no-cache")
-		s.w.Header().Set("Connection", "keep-alive")
-		s.w.Header().Set("X-Accel-Buffering", "no")
-		s.w.WriteHeader(http.StatusOK)
-	})
+	s.initSSEHeaders()
 
 	// Create SSE event writer that wraps the response writer
 	ew := &toolsCallServerStreamEventWriter{w: s.w, eventType: eventType}
@@ -219,6 +230,23 @@ func (s *eventsStreamServerStreamEventWriter) finish() {
 	}
 }
 
+// initSSEHeaders initializes the SSE response headers.
+func (s *EventsStreamServerStream) initSSEHeaders() {
+	s.once.Do(func() {
+		s.w.Header().Set("Content-Type", "text/event-stream")
+		s.w.Header().Set("Cache-Control", "no-cache")
+		s.w.Header().Set("Connection", "keep-alive")
+		s.w.Header().Set("X-Accel-Buffering", "no")
+		s.w.WriteHeader(http.StatusOK)
+	})
+}
+
+// open commits and flushes the SSE headers before the first application event.
+func (s *EventsStreamServerStream) open() error {
+	s.initSSEHeaders()
+	return http.NewResponseController(s.w).Flush()
+}
+
 // Send sends a JSON-RPC notification to the client.
 // Notifications do not expect a response from the client.
 func (s *EventsStreamServerStream) Send(ctx context.Context, event mcpassistant.EventsStreamEvent) error {
@@ -245,7 +273,7 @@ func (s *EventsStreamServerStream) Send(ctx context.Context, event mcpassistant.
 		"params":  body,
 	}
 
-	return s.sendSSEEvent("notification", message)
+	return s.sendSSEEvent("message", message)
 }
 
 // SendAndClose sends a final JSON-RPC response to the client and closes the
@@ -305,13 +333,7 @@ func (s *EventsStreamServerStream) sendError(ctx context.Context, id any, code j
 // the event writer
 func (s *EventsStreamServerStream) sendSSEEvent(eventType string, v any) error {
 	// Ensure headers are sent once
-	s.once.Do(func() {
-		s.w.Header().Set("Content-Type", "text/event-stream")
-		s.w.Header().Set("Cache-Control", "no-cache")
-		s.w.Header().Set("Connection", "keep-alive")
-		s.w.Header().Set("X-Accel-Buffering", "no")
-		s.w.WriteHeader(http.StatusOK)
-	})
+	s.initSSEHeaders()
 
 	// Create SSE event writer that wraps the response writer
 	ew := &eventsStreamServerStreamEventWriter{w: s.w, eventType: eventType}

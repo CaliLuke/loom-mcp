@@ -4,7 +4,7 @@ go 1.25.5
 
 require (
 	goa.design/goa-ai v0.42.0
-	goa.design/goa/v3 v3.24.2-0.20260124022324-8881ba2227c3
+	goa.design/goa/v3 v3.25.3
 )
 
 require (

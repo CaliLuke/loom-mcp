@@ -245,6 +245,11 @@ func registerSDKTools(server *mcpsdk.Server, adapter *MCPAdapter, requestContext
 		Description: "Return multiple content items",
 		InputSchema: sdkToolInputSchema("{\"type\":\"object\",\"required\":[\"count\"],\"properties\":{\"count\":{\"type\":\"integer\",\"description\":\"Number of content items to return\"}},\"additionalProperties\":false}"),
 	}, adapter.sdkToolHandler(requestContext))
+	server.AddTool(&mcpsdk.Tool{
+		Name:        "generate_dpi_spec",
+		Description: "Generate a deterministic design implementation plan from fake Figma data",
+		InputSchema: sdkToolInputSchema("{\"type\":\"object\",\"required\":[\"screen_title\",\"platform\",\"density\",\"primary_cta\",\"sections\"],\"properties\":{\"density\":{\"type\":\"string\",\"description\":\"Layout density\",\"enum\":[\"compact\",\"comfortable\"]},\"include_dev_notes\":{\"type\":\"boolean\",\"description\":\"Whether to include implementation notes\"},\"platform\":{\"type\":\"string\",\"description\":\"Target platform\",\"enum\":[\"ios\",\"web\"]},\"primary_cta\":{\"type\":\"string\",\"description\":\"Primary call to action\"},\"screen_title\":{\"type\":\"string\",\"description\":\"Name of the frame or screen\"},\"sections\":{\"type\":\"array\",\"description\":\"Ordered screen sections\",\"items\":{\"type\":\"string\"}}},\"additionalProperties\":false}"),
+	}, adapter.sdkToolHandler(requestContext))
 	return nil
 }
 func registerSDKResources(server *mcpsdk.Server, adapter *MCPAdapter, requestContext func(context.Context, *http.Request) context.Context) error {
@@ -266,6 +271,12 @@ func registerSDKResources(server *mcpsdk.Server, adapter *MCPAdapter, requestCon
 		Description: "Return conversation history with optional query params",
 		MIMEType:    "application/json",
 	}, adapter.sdkResourceHandler(requestContext))
+	server.AddResource(&mcpsdk.Resource{
+		Name:        "figma_design_system",
+		URI:         "figma://design-system/mobile-checkout",
+		Description: "Return a fake Figma design system summary for implementation validation",
+		MIMEType:    "application/json",
+	}, adapter.sdkResourceHandler(requestContext))
 	return nil
 }
 func registerSDKPrompts(server *mcpsdk.Server, adapter *MCPAdapter, requestContext func(context.Context, *http.Request) context.Context) error {
@@ -285,6 +296,32 @@ func registerSDKPrompts(server *mcpsdk.Server, adapter *MCPAdapter, requestConte
 			{
 				Name:        "task",
 				Description: "Task type",
+				Required:    true,
+			},
+		},
+	}, adapter.sdkPromptHandler(requestContext))
+	server.AddPrompt(&mcpsdk.Prompt{
+		Name:        "figma_implementation_prompt",
+		Description: "Generate implementation instructions from a DPI spec",
+		Arguments: []*mcpsdk.PromptArgument{
+			{
+				Name:        "screen_title",
+				Description: "Title of the screen being implemented",
+				Required:    true,
+			},
+			{
+				Name:        "framework",
+				Description: "Target UI framework",
+				Required:    true,
+			},
+			{
+				Name:        "design_tokens_uri",
+				Description: "Resource URI for the design system",
+				Required:    true,
+			},
+			{
+				Name:        "dpi_json",
+				Description: "Serialized DPI spec JSON",
 				Required:    true,
 			},
 		},

@@ -23,7 +23,7 @@ import (
 //	command (subcommand1|subcommand2|...)
 func UsageCommands() []string {
 	return []string{
-		"assistant (list-documents|system-info|conversation-history|generate-prompts|send-notification|analyze-sentiment|extract-keywords|summarize-text|search|execute-code|process-batch|multi-content)",
+		"assistant (list-documents|system-info|conversation-history|figma-design-system|generate-prompts|build-figma-implementation-prompt|send-notification|analyze-sentiment|extract-keywords|summarize-text|search|execute-code|process-batch|multi-content|generate-dpi-spec)",
 	}
 }
 
@@ -52,8 +52,13 @@ func ParseEndpoint(
 		assistantConversationHistoryFlags    = flag.NewFlagSet("conversation-history", flag.ExitOnError)
 		assistantConversationHistoryBodyFlag = assistantConversationHistoryFlags.String("body", "REQUIRED", "")
 
+		assistantFigmaDesignSystemFlags = flag.NewFlagSet("figma-design-system", flag.ExitOnError)
+
 		assistantGeneratePromptsFlags    = flag.NewFlagSet("generate-prompts", flag.ExitOnError)
 		assistantGeneratePromptsBodyFlag = assistantGeneratePromptsFlags.String("body", "REQUIRED", "")
+
+		assistantBuildFigmaImplementationPromptFlags    = flag.NewFlagSet("build-figma-implementation-prompt", flag.ExitOnError)
+		assistantBuildFigmaImplementationPromptBodyFlag = assistantBuildFigmaImplementationPromptFlags.String("body", "REQUIRED", "")
 
 		assistantSendNotificationFlags    = flag.NewFlagSet("send-notification", flag.ExitOnError)
 		assistantSendNotificationBodyFlag = assistantSendNotificationFlags.String("body", "REQUIRED", "")
@@ -78,12 +83,17 @@ func ParseEndpoint(
 
 		assistantMultiContentFlags    = flag.NewFlagSet("multi-content", flag.ExitOnError)
 		assistantMultiContentBodyFlag = assistantMultiContentFlags.String("body", "REQUIRED", "")
+
+		assistantGenerateDpiSpecFlags    = flag.NewFlagSet("generate-dpi-spec", flag.ExitOnError)
+		assistantGenerateDpiSpecBodyFlag = assistantGenerateDpiSpecFlags.String("body", "REQUIRED", "")
 	)
 	assistantFlags.Usage = assistantUsage
 	assistantListDocumentsFlags.Usage = assistantListDocumentsUsage
 	assistantSystemInfoFlags.Usage = assistantSystemInfoUsage
 	assistantConversationHistoryFlags.Usage = assistantConversationHistoryUsage
+	assistantFigmaDesignSystemFlags.Usage = assistantFigmaDesignSystemUsage
 	assistantGeneratePromptsFlags.Usage = assistantGeneratePromptsUsage
+	assistantBuildFigmaImplementationPromptFlags.Usage = assistantBuildFigmaImplementationPromptUsage
 	assistantSendNotificationFlags.Usage = assistantSendNotificationUsage
 	assistantAnalyzeSentimentFlags.Usage = assistantAnalyzeSentimentUsage
 	assistantExtractKeywordsFlags.Usage = assistantExtractKeywordsUsage
@@ -92,6 +102,7 @@ func ParseEndpoint(
 	assistantExecuteCodeFlags.Usage = assistantExecuteCodeUsage
 	assistantProcessBatchFlags.Usage = assistantProcessBatchUsage
 	assistantMultiContentFlags.Usage = assistantMultiContentUsage
+	assistantGenerateDpiSpecFlags.Usage = assistantGenerateDpiSpecUsage
 
 	if err := flag.CommandLine.Parse(os.Args[1:]); err != nil {
 		return nil, nil, err
@@ -136,8 +147,14 @@ func ParseEndpoint(
 			case "conversation-history":
 				epf = assistantConversationHistoryFlags
 
+			case "figma-design-system":
+				epf = assistantFigmaDesignSystemFlags
+
 			case "generate-prompts":
 				epf = assistantGeneratePromptsFlags
+
+			case "build-figma-implementation-prompt":
+				epf = assistantBuildFigmaImplementationPromptFlags
 
 			case "send-notification":
 				epf = assistantSendNotificationFlags
@@ -162,6 +179,9 @@ func ParseEndpoint(
 
 			case "multi-content":
 				epf = assistantMultiContentFlags
+
+			case "generate-dpi-spec":
+				epf = assistantGenerateDpiSpecFlags
 
 			}
 
@@ -195,9 +215,14 @@ func ParseEndpoint(
 			case "conversation-history":
 				endpoint = c.ConversationHistory()
 				data, err = assistantc.BuildConversationHistoryPayload(*assistantConversationHistoryBodyFlag)
+			case "figma-design-system":
+				endpoint = c.FigmaDesignSystem()
 			case "generate-prompts":
 				endpoint = c.GeneratePrompts()
 				data, err = assistantc.BuildGeneratePromptsPayload(*assistantGeneratePromptsBodyFlag)
+			case "build-figma-implementation-prompt":
+				endpoint = c.BuildFigmaImplementationPrompt()
+				data, err = assistantc.BuildBuildFigmaImplementationPromptPayload(*assistantBuildFigmaImplementationPromptBodyFlag)
 			case "send-notification":
 				endpoint = c.SendNotification()
 				data, err = assistantc.BuildSendNotificationPayload(*assistantSendNotificationBodyFlag)
@@ -222,6 +247,9 @@ func ParseEndpoint(
 			case "multi-content":
 				endpoint = c.MultiContent()
 				data, err = assistantc.BuildMultiContentPayload(*assistantMultiContentBodyFlag)
+			case "generate-dpi-spec":
+				endpoint = c.GenerateDpiSpec()
+				data, err = assistantc.BuildGenerateDpiSpecPayload(*assistantGenerateDpiSpecBodyFlag)
 			}
 		}
 	}
@@ -241,7 +269,9 @@ func assistantUsage() {
 	fmt.Fprintln(os.Stderr, `    list-documents: List available documents`)
 	fmt.Fprintln(os.Stderr, `    system-info: Return system info`)
 	fmt.Fprintln(os.Stderr, `    conversation-history: Return conversation history with optional query params`)
+	fmt.Fprintln(os.Stderr, `    figma-design-system: Return a fake Figma design system summary for implementation validation`)
 	fmt.Fprintln(os.Stderr, `    generate-prompts: Generate context-aware prompts`)
+	fmt.Fprintln(os.Stderr, `    build-figma-implementation-prompt: Build a Figma-style implementation handoff prompt from a generated DPI spec`)
 	fmt.Fprintln(os.Stderr, `    send-notification: Send status notification to client`)
 	fmt.Fprintln(os.Stderr, `    analyze-sentiment: Analyze sentiment of text`)
 	fmt.Fprintln(os.Stderr, `    extract-keywords: Extract keywords from text`)
@@ -250,6 +280,7 @@ func assistantUsage() {
 	fmt.Fprintln(os.Stderr, `    execute-code: Execute code`)
 	fmt.Fprintln(os.Stderr, `    process-batch: Process batch of items`)
 	fmt.Fprintln(os.Stderr, `    multi-content: Return multiple content items`)
+	fmt.Fprintln(os.Stderr, `    generate-dpi-spec: Generate a deterministic implementation-ready DPI spec from a fake Figma frame`)
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Additional help:")
 	fmt.Fprintf(os.Stderr, "    %s assistant COMMAND --help\n", os.Args[0])
@@ -301,7 +332,23 @@ func assistantConversationHistoryUsage() {
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "assistant conversation-history --body '{\n      \"flag\": false,\n      \"limit\": 8372618831375077109,\n      \"nums\": [\n         0.45836776042528327,\n         0.7913317254485643,\n         0.6089201072180833\n      ]\n   }'")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "assistant conversation-history --body '{\n      \"flag\": true,\n      \"limit\": 2181734835457565341,\n      \"nums\": [\n         0.012946015553952153,\n         0.6069391561265004\n      ]\n   }'")
+}
+
+func assistantFigmaDesignSystemUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] assistant figma-design-system", os.Args[0])
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Return a fake Figma design system summary for implementation validation`)
+
+	// Flags list
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "assistant figma-design-system")
 }
 
 func assistantGeneratePromptsUsage() {
@@ -319,7 +366,25 @@ func assistantGeneratePromptsUsage() {
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "assistant generate-prompts --body '{\n      \"context\": \"Ut quod error perspiciatis voluptatibus sunt quia.\",\n      \"task\": \"Laudantium odit quibusdam aliquid at sit.\"\n   }'")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "assistant generate-prompts --body '{\n      \"context\": \"Voluptas itaque architecto veniam.\",\n      \"task\": \"Vero qui expedita voluptatem rerum.\"\n   }'")
+}
+
+func assistantBuildFigmaImplementationPromptUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] assistant build-figma-implementation-prompt", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Build a Figma-style implementation handoff prompt from a generated DPI spec`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "assistant build-figma-implementation-prompt --body '{\n      \"design_tokens_uri\": \"Quia culpa doloribus et labore rerum tenetur.\",\n      \"dpi_json\": \"Iure a iste exercitationem tempore.\",\n      \"framework\": \"react\",\n      \"screen_title\": \"Quis molestiae perspiciatis laborum omnis quos voluptatem.\"\n   }'")
 }
 
 func assistantSendNotificationUsage() {
@@ -337,7 +402,7 @@ func assistantSendNotificationUsage() {
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "assistant send-notification --body '{\n      \"data\": \"Eaque provident odio natus repudiandae assumenda.\",\n      \"message\": \"Ullam at.\",\n      \"type\": \"Soluta eum non.\"\n   }'")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "assistant send-notification --body '{\n      \"data\": \"Excepturi voluptatem accusamus quibusdam suscipit.\",\n      \"message\": \"Et quia explicabo qui voluptatibus corporis laboriosam.\",\n      \"type\": \"Repellendus sit qui beatae voluptatem recusandae magnam.\"\n   }'")
 }
 
 func assistantAnalyzeSentimentUsage() {
@@ -355,7 +420,7 @@ func assistantAnalyzeSentimentUsage() {
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "assistant analyze-sentiment --body '{\n      \"text\": \"Placeat ea aut reiciendis rerum.\"\n   }'")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "assistant analyze-sentiment --body '{\n      \"text\": \"Error sapiente voluptatem.\"\n   }'")
 }
 
 func assistantExtractKeywordsUsage() {
@@ -373,7 +438,7 @@ func assistantExtractKeywordsUsage() {
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "assistant extract-keywords --body '{\n      \"text\": \"Sequi aut adipisci voluptatem modi numquam.\"\n   }'")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "assistant extract-keywords --body '{\n      \"text\": \"Ea adipisci illum blanditiis commodi impedit doloribus.\"\n   }'")
 }
 
 func assistantSummarizeTextUsage() {
@@ -391,7 +456,7 @@ func assistantSummarizeTextUsage() {
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "assistant summarize-text --body '{\n      \"text\": \"Voluptas illo ea aut enim ea.\"\n   }'")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "assistant summarize-text --body '{\n      \"text\": \"Consequatur optio illum quidem autem deleniti voluptates.\"\n   }'")
 }
 
 func assistantSearchUsage() {
@@ -409,7 +474,7 @@ func assistantSearchUsage() {
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "assistant search --body '{\n      \"limit\": 9200926646358933367,\n      \"query\": \"Magnam beatae nulla tempora quas.\"\n   }'")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "assistant search --body '{\n      \"limit\": 7397838945742369899,\n      \"query\": \"Sint quibusdam in delectus ipsum dolorem adipisci.\"\n   }'")
 }
 
 func assistantExecuteCodeUsage() {
@@ -427,7 +492,7 @@ func assistantExecuteCodeUsage() {
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "assistant execute-code --body '{\n      \"code\": \"Libero corrupti velit et.\",\n      \"language\": \"python\"\n   }'")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "assistant execute-code --body '{\n      \"code\": \"Magni saepe eveniet rerum non qui magnam.\",\n      \"language\": \"javascript\"\n   }'")
 }
 
 func assistantProcessBatchUsage() {
@@ -445,7 +510,7 @@ func assistantProcessBatchUsage() {
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "assistant process-batch --body '{\n      \"blob\": \"Distinctio quasi aliquid.\",\n      \"format\": \"uri\",\n      \"items\": [\n         \"Molestiae ea cumque et aut quasi iusto.\",\n         \"Ducimus voluptas ut a architecto voluptatum in.\",\n         \"Tempore est id porro.\"\n      ],\n      \"mimeType\": \"Cum est harum velit.\",\n      \"uri\": \"Commodi nam placeat quas qui ipsa tempore.\"\n   }'")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "assistant process-batch --body '{\n      \"blob\": \"Nihil saepe quia magnam eos accusamus sed.\",\n      \"format\": \"blob\",\n      \"items\": [\n         \"Aspernatur sequi minus.\",\n         \"Officia quia pariatur doloribus quis qui.\",\n         \"Atque aut quae sed.\",\n         \"Voluptatum aut quae expedita delectus vero.\"\n      ],\n      \"mimeType\": \"Temporibus et.\",\n      \"uri\": \"Optio soluta numquam nostrum est et ipsa.\"\n   }'")
 }
 
 func assistantMultiContentUsage() {
@@ -463,5 +528,23 @@ func assistantMultiContentUsage() {
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "assistant multi-content --body '{\n      \"count\": 1455928707308686199\n   }'")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "assistant multi-content --body '{\n      \"count\": 2619130649781045908\n   }'")
+}
+
+func assistantGenerateDpiSpecUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] assistant generate-dpi-spec", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Generate a deterministic implementation-ready DPI spec from a fake Figma frame`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "assistant generate-dpi-spec --body '{\n      \"density\": \"compact\",\n      \"include_dev_notes\": true,\n      \"platform\": \"ios\",\n      \"primary_cta\": \"Itaque omnis iure dolore consectetur.\",\n      \"screen_title\": \"Sed expedita vitae quia.\",\n      \"sections\": [\n         \"Eum molestias omnis error sequi et sint.\",\n         \"Culpa neque.\"\n      ]\n   }'")
 }

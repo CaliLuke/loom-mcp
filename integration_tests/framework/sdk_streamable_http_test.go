@@ -69,11 +69,11 @@ func TestGeneratedServerSDKInitializeAndListCatalog(t *testing.T) {
 
 	resources, err := session.ListResources(ctx, &mcp.ListResourcesParams{})
 	require.NoError(t, err)
-	require.Len(t, resources.Resources, 3)
+	require.Len(t, resources.Resources, 4)
 
 	prompts, err := session.ListPrompts(ctx, &mcp.ListPromptsParams{})
 	require.NoError(t, err)
-	require.Len(t, prompts.Prompts, 2)
+	require.Len(t, prompts.Prompts, 3)
 }
 
 func TestGeneratedServerSDKCallToolWorks(t *testing.T) {
@@ -138,11 +138,82 @@ func TestGeneratedServerSDKReadResourceAndGetPrompt(t *testing.T) {
 	})
 	require.NoError(t, err)
 	require.NotEmpty(t, staticPrompt.Messages)
-	assert.Equal(t, "Simple code review prompt", staticPrompt.Description)
+	assert.Equal(t, "Code review guidance", staticPrompt.Description)
 
 	prompts, err := session.ListPrompts(ctx, &mcp.ListPromptsParams{})
 	require.NoError(t, err)
-	require.Len(t, prompts.Prompts, 2)
+	require.Len(t, prompts.Prompts, 3)
+}
+
+func TestGeneratedServerSDKClosedLoopFigmaFlow(t *testing.T) {
+	t.Parallel()
+
+	session := newIntegrationSDKSession(t, "itest-figma-loop")
+	defer func() {
+		require.NoError(t, session.Close())
+	}()
+
+	ctx, cancel := sdkTestContext(t)
+	defer cancel()
+
+	toolResult, err := session.CallTool(ctx, &mcp.CallToolParams{
+		Name: "generate_dpi_spec",
+		Arguments: map[string]any{
+			"screen_title":      "Checkout",
+			"platform":          "ios",
+			"density":           "comfortable",
+			"primary_cta":       "Pay now",
+			"sections":          []string{"hero", "summary", "payment_form", "trust_bar"},
+			"include_dev_notes": true,
+		},
+	})
+	require.NoError(t, err)
+	require.Len(t, toolResult.Content, 1)
+
+	firstText, ok := toolResult.Content[0].(*mcp.TextContent)
+	require.True(t, ok)
+
+	var spec struct {
+		ScreenTitle     string `json:"screen_title"`
+		Platform        string `json:"platform"`
+		DesignTokensURI string `json:"design_tokens_uri"`
+		Sections        []struct {
+			Component string `json:"component"`
+		} `json:"sections"`
+		PrimaryCTA struct {
+			Label string `json:"label"`
+		} `json:"primary_cta"`
+	}
+	require.NoError(t, json.Unmarshal([]byte(firstText.Text), &spec))
+	assert.Equal(t, "Checkout", spec.ScreenTitle)
+	assert.Equal(t, "ios", spec.Platform)
+	assert.Equal(t, "figma://design-system/mobile-checkout", spec.DesignTokensURI)
+	if assert.Len(t, spec.Sections, 4) {
+		assert.Equal(t, "HeroCard", spec.Sections[0].Component)
+	}
+	assert.Equal(t, "Pay now", spec.PrimaryCTA.Label)
+
+	resource, err := session.ReadResource(ctx, &mcp.ReadResourceParams{
+		URI: "figma://design-system/mobile-checkout",
+	})
+	require.NoError(t, err)
+	require.Len(t, resource.Contents, 1)
+	assert.Equal(t, "figma://design-system/mobile-checkout", resource.Contents[0].URI)
+	assert.Contains(t, resource.Contents[0].Text, `"name":"Mobile Commerce System"`)
+	assert.Contains(t, resource.Contents[0].Text, `"accent.brand=#1ABCFE"`)
+
+	promptResult, err := session.GetPrompt(ctx, &mcp.GetPromptParams{
+		Name: "figma_implementation_prompt",
+		Arguments: map[string]string{
+			"screen_title":      spec.ScreenTitle,
+			"framework":         "react",
+			"design_tokens_uri": spec.DesignTokensURI,
+			"dpi_json":          firstText.Text,
+		},
+	})
+	require.NoError(t, err)
+	require.Equal(t, "Figma implementation handoff", promptResult.Description)
+	require.NotEmpty(t, promptResult.Messages)
 }
 
 func newIntegrationSDKSession(t *testing.T, clientName string) *mcp.ClientSession {
@@ -177,7 +248,7 @@ func connectSDKSession(t *testing.T, endpoint string, clientName string) *mcp.Cl
 			Transport: headerRoundTripper{
 				base: http.DefaultTransport,
 				headers: map[string]string{
-					"x-mcp-allow-names": "documents,system_info,conversation_history",
+					"x-mcp-allow-names": "documents,system_info,conversation_history,figma_design_system",
 				},
 			},
 		},

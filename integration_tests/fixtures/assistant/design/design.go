@@ -60,6 +60,13 @@ var _ = Service("assistant", func() {
 		JSONRPC(func() {})
 	})
 
+	Method("figma_design_system", func() {
+		Description("Return a fake Figma design system summary for implementation validation")
+		Result(DesignSystem)
+		Resource("figma_design_system", "figma://design-system/mobile-checkout", "application/json")
+		JSONRPC(func() {})
+	})
+
 	// Static prompt for tests
 	StaticPrompt("code_review", "Simple code review prompt", "system", "Review the provided code and suggest improvements.")
 
@@ -72,6 +79,20 @@ var _ = Service("assistant", func() {
 		})
 		Result(PromptTemplates)
 		DynamicPrompt("contextual_prompts", "Generate prompts based on context")
+		JSONRPC(func() {})
+	})
+
+	Method("build_figma_implementation_prompt", func() {
+		Description("Build a Figma-style implementation handoff prompt from a generated DPI spec")
+		Payload(func() {
+			Attribute("screen_title", String, "Title of the screen being implemented")
+			Attribute("framework", String, "Target UI framework", func() { Enum("react", "swiftui", "jetpack-compose") })
+			Attribute("design_tokens_uri", String, "Resource URI for the design system")
+			Attribute("dpi_json", String, "Serialized DPI spec JSON")
+			Required("screen_title", "framework", "design_tokens_uri", "dpi_json")
+		})
+		Result(PromptTemplates)
+		DynamicPrompt("figma_implementation_prompt", "Generate implementation instructions from a DPI spec")
 		JSONRPC(func() {})
 	})
 
@@ -173,6 +194,22 @@ var _ = Service("assistant", func() {
 		Tool("multi_content", "Return multiple content items")
 		JSONRPC(func() {})
 	})
+
+	Method("generate_dpi_spec", func() {
+		Description("Generate a deterministic implementation-ready DPI spec from a fake Figma frame")
+		Payload(func() {
+			Attribute("screen_title", String, "Name of the frame or screen")
+			Attribute("platform", String, "Target platform", func() { Enum("ios", "web") })
+			Attribute("density", String, "Layout density", func() { Enum("compact", "comfortable") })
+			Attribute("primary_cta", String, "Primary call to action")
+			Attribute("sections", ArrayOf(String), "Ordered screen sections")
+			Attribute("include_dev_notes", Boolean, "Whether to include implementation notes")
+			Required("screen_title", "platform", "density", "primary_cta", "sections")
+		})
+		Result(DPISpec)
+		Tool("generate_dpi_spec", "Generate a deterministic design implementation plan from fake Figma data")
+		JSONRPC(func() {})
+	})
 })
 
 // ---- Shared Types (subset sufficient for integration tests) ----
@@ -185,4 +222,50 @@ var Documents = Type("Documents", func() {
 var PromptTemplates = Type("PromptTemplates", func() {
 	Attribute("templates", ArrayOf(String), "Templates")
 	Required("templates")
+})
+
+var DesignTokenGroup = Type("DesignTokenGroup", func() {
+	Attribute("colors", ArrayOf(String), "Color tokens")
+	Attribute("spacing", ArrayOf(String), "Spacing tokens")
+	Attribute("typography", ArrayOf(String), "Typography tokens")
+	Required("colors", "spacing", "typography")
+})
+
+var DesignSystem = Type("DesignSystem", func() {
+	Attribute("name", String, "Design system name")
+	Attribute("version", String, "Design system version")
+	Attribute("platform", String, "Platform the tokens target")
+	Attribute("tokens", DesignTokenGroup, "Grouped token information")
+	Required("name", "version", "platform", "tokens")
+})
+
+var DPIViewport = Type("DPIViewport", func() {
+	Attribute("width", Int, "Viewport width")
+	Attribute("height", Int, "Viewport height")
+	Required("width", "height")
+})
+
+var DPISection = Type("DPISection", func() {
+	Attribute("name", String, "Section name")
+	Attribute("component", String, "Primary UI component")
+	Attribute("notes", ArrayOf(String), "Implementation notes for this section")
+	Required("name", "component", "notes")
+})
+
+var DPICallToAction = Type("DPICallToAction", func() {
+	Attribute("label", String, "CTA label")
+	Attribute("style", String, "CTA visual style")
+	Required("label", "style")
+})
+
+var DPISpec = Type("DPISpec", func() {
+	Attribute("screen_title", String, "Screen title")
+	Attribute("platform", String, "Target platform")
+	Attribute("density", String, "Layout density")
+	Attribute("viewport", DPIViewport, "Viewport dimensions")
+	Attribute("sections", ArrayOf(DPISection), "Ordered screen sections")
+	Attribute("primary_cta", DPICallToAction, "Primary CTA")
+	Attribute("design_tokens_uri", String, "Design system resource URI")
+	Attribute("dev_notes", ArrayOf(String), "Development handoff notes")
+	Required("screen_title", "platform", "density", "viewport", "sections", "primary_cta", "design_tokens_uri", "dev_notes")
 })

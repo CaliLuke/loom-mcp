@@ -148,6 +148,34 @@ func (promptProvider) GetCodeReviewPrompt(arguments json.RawMessage) (*mcpassist
 	}, nil
 }
 
+func (promptProvider) GetFigmaImplementationPromptPrompt(ctx context.Context, arguments json.RawMessage) (*mcpassistant.PromptsGetResult, error) {
+	var payload struct {
+		ScreenTitle     string `json:"screen_title"`
+		Framework       string `json:"framework"`
+		DesignTokensURI string `json:"design_tokens_uri"`
+		DPIJSON         string `json:"dpi_json"`
+	}
+	if len(arguments) > 0 {
+		if err := json.Unmarshal(arguments, &payload); err != nil {
+			return nil, err
+		}
+	}
+	var spec assistant.DPISpec
+	if payload.DPIJSON != "" {
+		_ = json.Unmarshal([]byte(payload.DPIJSON), &spec)
+	}
+	screenTitle := payload.ScreenTitle
+	if screenTitle == "" {
+		screenTitle = spec.ScreenTitle
+	}
+	return &mcpassistant.PromptsGetResult{
+		Description: strPtr("Figma implementation handoff"),
+		Messages: []*mcpassistant.PromptMessage{
+			{Role: "system", Content: &mcpassistant.MessageContent{Type: "text", Text: strPtr(FixtureImplementationPrompt(screenTitle, payload.Framework, payload.DesignTokensURI, &spec))}},
+		},
+	}, nil
+}
+
 func strPtr(s string) *string { return &s }
 
 func textContent(text string) *mcpassistant.ContentItem {

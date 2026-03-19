@@ -83,6 +83,18 @@ func DecodeConversationHistoryRequest(mux goahttp.Muxer, decoder func(*http.Requ
 	}
 }
 
+// EncodeFigmaDesignSystemResponse returns an encoder for responses returned by
+// the assistant figma_design_system endpoint.
+func EncodeFigmaDesignSystemResponse(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder) func(context.Context, http.ResponseWriter, any) error {
+	return func(ctx context.Context, w http.ResponseWriter, v any) error {
+		res, _ := v.(*assistant.DesignSystem)
+		enc := encoder(ctx, w)
+		body := NewFigmaDesignSystemResponseBody(res)
+		w.WriteHeader(http.StatusOK)
+		return enc.Encode(body)
+	}
+}
+
 // EncodeGeneratePromptsResponse returns an encoder for responses returned by
 // the assistant generate_prompts endpoint.
 func EncodeGeneratePromptsResponse(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder) func(context.Context, http.ResponseWriter, any) error {
@@ -121,6 +133,50 @@ func DecodeGeneratePromptsRequest(mux goahttp.Muxer, decoder func(*http.Request)
 			return payload, err
 		}
 		payload = NewGeneratePromptsPayload(&body)
+
+		return payload, nil
+	}
+}
+
+// EncodeBuildFigmaImplementationPromptResponse returns an encoder for
+// responses returned by the assistant build_figma_implementation_prompt
+// endpoint.
+func EncodeBuildFigmaImplementationPromptResponse(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder) func(context.Context, http.ResponseWriter, any) error {
+	return func(ctx context.Context, w http.ResponseWriter, v any) error {
+		res, _ := v.(*assistant.PromptTemplates)
+		enc := encoder(ctx, w)
+		body := NewBuildFigmaImplementationPromptResponseBody(res)
+		w.WriteHeader(http.StatusOK)
+		return enc.Encode(body)
+	}
+}
+
+// DecodeBuildFigmaImplementationPromptRequest returns a decoder for requests
+// sent to the assistant build_figma_implementation_prompt endpoint.
+func DecodeBuildFigmaImplementationPromptRequest(mux goahttp.Muxer, decoder func(*http.Request) goahttp.Decoder) func(*http.Request, *jsonrpc.RawRequest) (*assistant.BuildFigmaImplementationPromptPayload, error) {
+	return func(r *http.Request, req *jsonrpc.RawRequest) (*assistant.BuildFigmaImplementationPromptPayload, error) {
+		r.Body = io.NopCloser(bytes.NewReader(req.Params))
+		var payload *assistant.BuildFigmaImplementationPromptPayload
+		var (
+			body BuildFigmaImplementationPromptRequestBody
+			err  error
+		)
+		err = decoder(r).Decode(&body)
+		if err != nil {
+			if errors.Is(err, io.EOF) {
+				return payload, goa.MissingPayloadError()
+			}
+			var gerr *goa.ServiceError
+			if errors.As(err, &gerr) {
+				return payload, gerr
+			}
+			return payload, goa.DecodePayloadError(err.Error())
+		}
+		err = ValidateBuildFigmaImplementationPromptRequestBody(&body)
+		if err != nil {
+			return payload, err
+		}
+		payload = NewBuildFigmaImplementationPromptPayload(&body)
 
 		return payload, nil
 	}
@@ -465,4 +521,122 @@ func DecodeMultiContentRequest(mux goahttp.Muxer, decoder func(*http.Request) go
 
 		return payload, nil
 	}
+}
+
+// EncodeGenerateDpiSpecResponse returns an encoder for responses returned by
+// the assistant generate_dpi_spec endpoint.
+func EncodeGenerateDpiSpecResponse(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder) func(context.Context, http.ResponseWriter, any) error {
+	return func(ctx context.Context, w http.ResponseWriter, v any) error {
+		res, _ := v.(*assistant.DPISpec)
+		enc := encoder(ctx, w)
+		body := NewGenerateDpiSpecResponseBody(res)
+		w.WriteHeader(http.StatusOK)
+		return enc.Encode(body)
+	}
+}
+
+// DecodeGenerateDpiSpecRequest returns a decoder for requests sent to the
+// assistant generate_dpi_spec endpoint.
+func DecodeGenerateDpiSpecRequest(mux goahttp.Muxer, decoder func(*http.Request) goahttp.Decoder) func(*http.Request, *jsonrpc.RawRequest) (*assistant.GenerateDpiSpecPayload, error) {
+	return func(r *http.Request, req *jsonrpc.RawRequest) (*assistant.GenerateDpiSpecPayload, error) {
+		r.Body = io.NopCloser(bytes.NewReader(req.Params))
+		var payload *assistant.GenerateDpiSpecPayload
+		var (
+			body GenerateDpiSpecRequestBody
+			err  error
+		)
+		err = decoder(r).Decode(&body)
+		if err != nil {
+			if errors.Is(err, io.EOF) {
+				return payload, goa.MissingPayloadError()
+			}
+			var gerr *goa.ServiceError
+			if errors.As(err, &gerr) {
+				return payload, gerr
+			}
+			return payload, goa.DecodePayloadError(err.Error())
+		}
+		err = ValidateGenerateDpiSpecRequestBody(&body)
+		if err != nil {
+			return payload, err
+		}
+		payload = NewGenerateDpiSpecPayload(&body)
+
+		return payload, nil
+	}
+}
+
+// marshalAssistantDesignTokenGroupToDesignTokenGroupResponseBody builds a
+// value of type *DesignTokenGroupResponseBody from a value of type
+// *assistant.DesignTokenGroup.
+func marshalAssistantDesignTokenGroupToDesignTokenGroupResponseBody(v *assistant.DesignTokenGroup) *DesignTokenGroupResponseBody {
+	res := &DesignTokenGroupResponseBody{}
+	if v.Colors != nil {
+		res.Colors = make([]string, len(v.Colors))
+		for i, val := range v.Colors {
+			res.Colors[i] = val
+		}
+	} else {
+		res.Colors = []string{}
+	}
+	if v.Spacing != nil {
+		res.Spacing = make([]string, len(v.Spacing))
+		for i, val := range v.Spacing {
+			res.Spacing[i] = val
+		}
+	} else {
+		res.Spacing = []string{}
+	}
+	if v.Typography != nil {
+		res.Typography = make([]string, len(v.Typography))
+		for i, val := range v.Typography {
+			res.Typography[i] = val
+		}
+	} else {
+		res.Typography = []string{}
+	}
+
+	return res
+}
+
+// marshalAssistantDPIViewportToDPIViewportResponseBody builds a value of type
+// *DPIViewportResponseBody from a value of type *assistant.DPIViewport.
+func marshalAssistantDPIViewportToDPIViewportResponseBody(v *assistant.DPIViewport) *DPIViewportResponseBody {
+	res := &DPIViewportResponseBody{
+		Width:  v.Width,
+		Height: v.Height,
+	}
+
+	return res
+}
+
+// marshalAssistantDPISectionToDPISectionResponseBody builds a value of type
+// *DPISectionResponseBody from a value of type *assistant.DPISection.
+func marshalAssistantDPISectionToDPISectionResponseBody(v *assistant.DPISection) *DPISectionResponseBody {
+	res := &DPISectionResponseBody{
+		Name:      v.Name,
+		Component: v.Component,
+	}
+	if v.Notes != nil {
+		res.Notes = make([]string, len(v.Notes))
+		for i, val := range v.Notes {
+			res.Notes[i] = val
+		}
+	} else {
+		res.Notes = []string{}
+	}
+
+	return res
+}
+
+// marshalAssistantDPICallToActionToDPICallToActionResponseBody builds a value
+// of type *DPICallToActionResponseBody from a value of type
+// *assistant.DPICallToAction.
+func marshalAssistantDPICallToActionToDPICallToActionResponseBody(v *assistant.DPICallToAction) *DPICallToActionResponseBody {
+	res := &DPICallToActionResponseBody{
+		Label: v.Label,
+		Style: v.Style,
+	}
+
+	return res
 }

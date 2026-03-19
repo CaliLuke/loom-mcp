@@ -402,11 +402,13 @@ func applySDKServerFixturePatch(exampleRoot string) error {
 
 import (
 	"context"
+	"encoding/json"
 	"net/http"
 	"net/url"
 	"sync"
 	"time"
 
+	assistantapi "example.com/assistant"
 	assistant "example.com/assistant/gen/assistant"
 	mcpassistant "example.com/assistant/gen/mcp_assistant"
 	"goa.design/clue/debug"
@@ -429,6 +431,64 @@ func (s sdkAssistantService) AnalyzeSentiment(ctx context.Context, p *assistant.
 	return &assistant.AnalyzeSentimentResult{Sentiment: &sentiment}, nil
 }
 
+func (s sdkAssistantService) FigmaDesignSystem(ctx context.Context) (*assistant.DesignSystem, error) {
+	return assistantapi.FixtureDesignSystem(), nil
+}
+
+func (s sdkAssistantService) GenerateDpiSpec(ctx context.Context, p *assistant.GenerateDpiSpecPayload) (*assistant.DPISpec, error) {
+	return assistantapi.FixtureDPISpec(p), nil
+}
+
+type sdkPromptProvider struct{}
+
+func (sdkPromptProvider) GetCodeReviewPrompt(arguments json.RawMessage) (*mcpassistant.PromptsGetResult, error) {
+	description := "Code review guidance"
+	text := "Review the provided code and suggest improvements."
+	return &mcpassistant.PromptsGetResult{
+		Description: &description,
+		Messages: []*mcpassistant.PromptMessage{
+			{Role: "system", Content: &mcpassistant.MessageContent{Type: "text", Text: &text}},
+		},
+	}, nil
+}
+
+func (sdkPromptProvider) GetContextualPromptsPrompt(ctx context.Context, arguments json.RawMessage) (*mcpassistant.PromptsGetResult, error) {
+	text := "Dynamic contextual prompts"
+	return &mcpassistant.PromptsGetResult{
+		Messages: []*mcpassistant.PromptMessage{
+			{Role: "system", Content: &mcpassistant.MessageContent{Type: "text", Text: &text}},
+		},
+	}, nil
+}
+
+func (sdkPromptProvider) GetFigmaImplementationPromptPrompt(ctx context.Context, arguments json.RawMessage) (*mcpassistant.PromptsGetResult, error) {
+	var payload map[string]any
+	if len(arguments) > 0 {
+		if err := json.Unmarshal(arguments, &payload); err != nil {
+			return nil, err
+		}
+	}
+
+	screenTitle, _ := payload["screen_title"].(string)
+	framework, _ := payload["framework"].(string)
+	designTokensURI, _ := payload["design_tokens_uri"].(string)
+	dpiJSON, _ := payload["dpi_json"].(string)
+
+	var spec assistant.DPISpec
+	if dpiJSON != "" {
+		_ = json.Unmarshal([]byte(dpiJSON), &spec)
+	}
+
+	description := "Figma implementation handoff"
+	text := assistantapi.FixtureImplementationPrompt(screenTitle, framework, designTokensURI, &spec)
+	return &mcpassistant.PromptsGetResult{
+		Description: &description,
+		Messages: []*mcpassistant.PromptMessage{
+			{Role: "system", Content: &mcpassistant.MessageContent{Type: "text", Text: &text}},
+		},
+	}, nil
+}
+
 // handleHTTPServer starts configures and starts a HTTP server on the given
 // URL. It shuts down the server if any error is received in the error channel.
 func handleHTTPServer(ctx context.Context, u *url.URL, assistantSvc assistant.Service, _ *mcpassistant.Endpoints, _ mcpassistant.Service, wg *sync.WaitGroup, errc chan error, dbg bool) {
@@ -439,6 +499,7 @@ func handleHTTPServer(ctx context.Context, u *url.URL, assistantSvc assistant.Se
 	}
 
 	sdkServer, err := mcpassistant.NewSDKServer(sdkAssistantService{Service: assistantSvc}, &mcpassistant.SDKServerOptions{
+		PromptProvider: sdkPromptProvider{},
 		RequestContext: func(reqCtx context.Context, r *http.Request) context.Context {
 			if r == nil {
 				return reqCtx
@@ -748,8 +809,11 @@ func (r *Runner) startServer(t *testing.T) error {
 	if exampleRoot == "" {
 		return fmt.Errorf("could not locate example root")
 	}
+	workingRoot := exampleRoot
 	if r.skipGeneration {
+		codegenMu.Lock()
 		clonedRoot, err := cloneExampleRoot(exampleRoot)
+		codegenMu.Unlock()
 		if err != nil {
 			return err
 		}
@@ -758,17 +822,26 @@ func (r *Runner) startServer(t *testing.T) error {
 			return err
 		}
 		t.Cleanup(func() { _ = os.RemoveAll(clonedRoot) })
-		exampleRoot = clonedRoot
+		workingRoot = clonedRoot
 	}
-	// Regenerate example code once for the entire test process
+	// Never mutate the shared fixture root in place. Full-repo test runs execute
+	// package test binaries in parallel, so generated examples must be prepared in
+	// isolated temp clones.
 	if !r.skipGeneration && !strings.EqualFold(os.Getenv("TEST_SKIP_GENERATION"), "true") {
-		codegenOnce.Do(func() { codegenErr = regenerateExample(t, exampleRoot) })
-		if codegenErr != nil {
-			return codegenErr
+		codegenMu.Lock()
+		clonedRoot, err := cloneExampleRoot(exampleRoot)
+		codegenMu.Unlock()
+		if err != nil {
+			return err
 		}
+		t.Cleanup(func() { _ = os.RemoveAll(clonedRoot) })
+		if err := regenerateExample(t, clonedRoot); err != nil {
+			return err
+		}
+		workingRoot = clonedRoot
 	}
 	// Build server binary once, then start instances from the compiled binary
-	binPath, err := buildServerBinary(exampleRoot)
+	binPath, err := buildServerBinary(workingRoot)
 	if err != nil {
 		return err
 	}

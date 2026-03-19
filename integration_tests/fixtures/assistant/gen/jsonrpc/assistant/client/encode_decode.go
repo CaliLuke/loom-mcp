@@ -238,6 +238,73 @@ func DecodeConversationHistoryResponse(decoder func(*http.Response) goahttp.Deco
 	}
 }
 
+// BuildFigmaDesignSystemRequest instantiates a HTTP request object with method
+// and path set to call the "assistant" service "figma_design_system" endpoint
+func (c *Client) BuildFigmaDesignSystemRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: FigmaDesignSystemAssistantPath()}
+	req, err := http.NewRequest("POST", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("assistant", "figma_design_system", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// DecodeFigmaDesignSystemResponse returns a decoder for responses returned by
+// the assistant service figma_design_system JSON-RPC method. restoreBody
+// controls whether the response body should be restored after having been read.
+func DecodeFigmaDesignSystemResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		}
+		defer resp.Body.Close()
+
+		if resp.StatusCode != http.StatusOK {
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("assistant", "figma_design_system", resp.StatusCode, string(body))
+		}
+
+		var jresp jsonrpc.RawResponse
+		if err := decoder(resp).Decode(&jresp); err != nil {
+			return nil, goahttp.ErrDecodingError("assistant", "figma_design_system", err)
+		}
+
+		if jresp.Error != nil {
+			switch jresp.Error.Code {
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("assistant", "figma_design_system", resp.StatusCode, string(body))
+			}
+		}
+		resp.Body = io.NopCloser(bytes.NewBuffer(jresp.Result))
+		var (
+			body FigmaDesignSystemResponseBody
+			err  error
+		)
+		err = decoder(resp).Decode(&body)
+		if err != nil {
+			return nil, goahttp.ErrDecodingError("assistant", "figma_design_system", err)
+		}
+		err = ValidateFigmaDesignSystemResponseBody(&body)
+		if err != nil {
+			return nil, goahttp.ErrValidationError("assistant", "figma_design_system", err)
+		}
+		res := NewFigmaDesignSystemDesignSystemOK(&body)
+		return res, nil
+	}
+}
+
 // BuildGeneratePromptsRequest instantiates a HTTP request object with method
 // and path set to call the "assistant" service "generate_prompts" endpoint
 func (c *Client) BuildGeneratePromptsRequest(ctx context.Context, v any) (*http.Request, error) {
@@ -325,6 +392,99 @@ func DecodeGeneratePromptsResponse(decoder func(*http.Response) goahttp.Decoder,
 			return nil, goahttp.ErrValidationError("assistant", "generate_prompts", err)
 		}
 		res := NewGeneratePromptsPromptTemplatesOK(&body)
+		return res, nil
+	}
+}
+
+// BuildBuildFigmaImplementationPromptRequest instantiates a HTTP request
+// object with method and path set to call the "assistant" service
+// "build_figma_implementation_prompt" endpoint
+func (c *Client) BuildBuildFigmaImplementationPromptRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: BuildFigmaImplementationPromptAssistantPath()}
+	req, err := http.NewRequest("POST", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("assistant", "build_figma_implementation_prompt", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeBuildFigmaImplementationPromptRequest returns an encoder for requests
+// sent to the assistant build_figma_implementation_prompt server.
+func EncodeBuildFigmaImplementationPromptRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*assistant.BuildFigmaImplementationPromptPayload)
+		if !ok {
+			return goahttp.ErrInvalidType("assistant", "build_figma_implementation_prompt", "*assistant.BuildFigmaImplementationPromptPayload", v)
+		}
+		b := NewBuildFigmaImplementationPromptRequestBody(p)
+		body := &jsonrpc.Request{
+			JSONRPC: "2.0",
+			Method:  "build_figma_implementation_prompt",
+			Params:  b,
+		}
+		// No ID field in payload - always send as a request with generated ID
+		id := uuid.New().String()
+		body.ID = id
+		if err := encoder(req).Encode(&body); err != nil {
+			return goahttp.ErrEncodingError("assistant", "build_figma_implementation_prompt", err)
+		}
+		return nil
+	}
+}
+
+// DecodeBuildFigmaImplementationPromptResponse returns a decoder for responses
+// returned by the assistant service build_figma_implementation_prompt JSON-RPC
+// method. restoreBody controls whether the response body should be restored
+// after having been read.
+func DecodeBuildFigmaImplementationPromptResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		}
+		defer resp.Body.Close()
+
+		if resp.StatusCode != http.StatusOK {
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("assistant", "build_figma_implementation_prompt", resp.StatusCode, string(body))
+		}
+
+		var jresp jsonrpc.RawResponse
+		if err := decoder(resp).Decode(&jresp); err != nil {
+			return nil, goahttp.ErrDecodingError("assistant", "build_figma_implementation_prompt", err)
+		}
+
+		if jresp.Error != nil {
+			switch jresp.Error.Code {
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("assistant", "build_figma_implementation_prompt", resp.StatusCode, string(body))
+			}
+		}
+		resp.Body = io.NopCloser(bytes.NewBuffer(jresp.Result))
+		var (
+			body BuildFigmaImplementationPromptResponseBody
+			err  error
+		)
+		err = decoder(resp).Decode(&body)
+		if err != nil {
+			return nil, goahttp.ErrDecodingError("assistant", "build_figma_implementation_prompt", err)
+		}
+		err = ValidateBuildFigmaImplementationPromptResponseBody(&body)
+		if err != nil {
+			return nil, goahttp.ErrValidationError("assistant", "build_figma_implementation_prompt", err)
+		}
+		res := NewBuildFigmaImplementationPromptPromptTemplatesOK(&body)
 		return res, nil
 	}
 }
@@ -1016,6 +1176,168 @@ func DecodeMultiContentResponse(decoder func(*http.Response) goahttp.Decoder, re
 	}
 }
 
+// BuildGenerateDpiSpecRequest instantiates a HTTP request object with method
+// and path set to call the "assistant" service "generate_dpi_spec" endpoint
+func (c *Client) BuildGenerateDpiSpecRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: GenerateDpiSpecAssistantPath()}
+	req, err := http.NewRequest("POST", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("assistant", "generate_dpi_spec", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeGenerateDpiSpecRequest returns an encoder for requests sent to the
+// assistant generate_dpi_spec server.
+func EncodeGenerateDpiSpecRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*assistant.GenerateDpiSpecPayload)
+		if !ok {
+			return goahttp.ErrInvalidType("assistant", "generate_dpi_spec", "*assistant.GenerateDpiSpecPayload", v)
+		}
+		b := NewGenerateDpiSpecRequestBody(p)
+		body := &jsonrpc.Request{
+			JSONRPC: "2.0",
+			Method:  "generate_dpi_spec",
+			Params:  b,
+		}
+		// No ID field in payload - always send as a request with generated ID
+		id := uuid.New().String()
+		body.ID = id
+		if err := encoder(req).Encode(&body); err != nil {
+			return goahttp.ErrEncodingError("assistant", "generate_dpi_spec", err)
+		}
+		return nil
+	}
+}
+
+// DecodeGenerateDpiSpecResponse returns a decoder for responses returned by
+// the assistant service generate_dpi_spec JSON-RPC method. restoreBody
+// controls whether the response body should be restored after having been read.
+func DecodeGenerateDpiSpecResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		}
+		defer resp.Body.Close()
+
+		if resp.StatusCode != http.StatusOK {
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("assistant", "generate_dpi_spec", resp.StatusCode, string(body))
+		}
+
+		var jresp jsonrpc.RawResponse
+		if err := decoder(resp).Decode(&jresp); err != nil {
+			return nil, goahttp.ErrDecodingError("assistant", "generate_dpi_spec", err)
+		}
+
+		if jresp.Error != nil {
+			switch jresp.Error.Code {
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("assistant", "generate_dpi_spec", resp.StatusCode, string(body))
+			}
+		}
+		resp.Body = io.NopCloser(bytes.NewBuffer(jresp.Result))
+		var (
+			body GenerateDpiSpecResponseBody
+			err  error
+		)
+		err = decoder(resp).Decode(&body)
+		if err != nil {
+			return nil, goahttp.ErrDecodingError("assistant", "generate_dpi_spec", err)
+		}
+		err = ValidateGenerateDpiSpecResponseBody(&body)
+		if err != nil {
+			return nil, goahttp.ErrValidationError("assistant", "generate_dpi_spec", err)
+		}
+		res := NewGenerateDpiSpecDPISpecOK(&body)
+		return res, nil
+	}
+}
+
+// unmarshalDesignTokenGroupResponseBodyToAssistantDesignTokenGroup builds a
+// value of type *assistant.DesignTokenGroup from a value of type
+// *DesignTokenGroupResponseBody.
+func unmarshalDesignTokenGroupResponseBodyToAssistantDesignTokenGroup(v *DesignTokenGroupResponseBody) *assistant.DesignTokenGroup {
+	if v == nil {
+		return nil
+	}
+	res := &assistant.DesignTokenGroup{}
+	res.Colors = make([]string, len(v.Colors))
+	for i, val := range v.Colors {
+		res.Colors[i] = val
+	}
+	res.Spacing = make([]string, len(v.Spacing))
+	for i, val := range v.Spacing {
+		res.Spacing[i] = val
+	}
+	res.Typography = make([]string, len(v.Typography))
+	for i, val := range v.Typography {
+		res.Typography[i] = val
+	}
+
+	return res
+}
+
+// unmarshalDPIViewportResponseBodyToAssistantDPIViewport builds a value of
+// type *assistant.DPIViewport from a value of type *DPIViewportResponseBody.
+func unmarshalDPIViewportResponseBodyToAssistantDPIViewport(v *DPIViewportResponseBody) *assistant.DPIViewport {
+	if v == nil {
+		return nil
+	}
+	res := &assistant.DPIViewport{
+		Width:  *v.Width,
+		Height: *v.Height,
+	}
+
+	return res
+}
+
+// unmarshalDPISectionResponseBodyToAssistantDPISection builds a value of type
+// *assistant.DPISection from a value of type *DPISectionResponseBody.
+func unmarshalDPISectionResponseBodyToAssistantDPISection(v *DPISectionResponseBody) *assistant.DPISection {
+	if v == nil {
+		return nil
+	}
+	res := &assistant.DPISection{
+		Name:      *v.Name,
+		Component: *v.Component,
+	}
+	res.Notes = make([]string, len(v.Notes))
+	for i, val := range v.Notes {
+		res.Notes[i] = val
+	}
+
+	return res
+}
+
+// unmarshalDPICallToActionResponseBodyToAssistantDPICallToAction builds a
+// value of type *assistant.DPICallToAction from a value of type
+// *DPICallToActionResponseBody.
+func unmarshalDPICallToActionResponseBodyToAssistantDPICallToAction(v *DPICallToActionResponseBody) *assistant.DPICallToAction {
+	if v == nil {
+		return nil
+	}
+	res := &assistant.DPICallToAction{
+		Label: *v.Label,
+		Style: *v.Style,
+	}
+
+	return res
+}
+
 // EncodeListDocumentsRequest returns an encoder for requests sent to the
 // assistant service list_documents JSON-RPC method.
 func EncodeListDocumentsRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
@@ -1047,6 +1369,23 @@ func EncodeSystemInfoRequest(encoder func(*http.Request) goahttp.Encoder) func(*
 		}
 		if err := encoder(req).Encode(body); err != nil {
 			return goahttp.ErrEncodingError("assistant", "system_info", err)
+		}
+		return nil
+	}
+} // EncodeFigmaDesignSystemRequest returns an encoder for requests sent to the
+// assistant service figma_design_system JSON-RPC method.
+func EncodeFigmaDesignSystemRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		// For JSON-RPC methods without payloads, we still need to send the method envelope
+		// Generate a unique ID for the request
+		id := uuid.New().String()
+		body := &jsonrpc.Request{
+			JSONRPC: "2.0",
+			Method:  "figma_design_system",
+			ID:      id,
+		}
+		if err := encoder(req).Encode(body); err != nil {
+			return goahttp.ErrEncodingError("assistant", "figma_design_system", err)
 		}
 		return nil
 	}
