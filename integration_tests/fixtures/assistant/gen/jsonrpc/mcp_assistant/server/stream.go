@@ -38,33 +38,6 @@ type ToolsCallServerStream struct {
 	mu sync.Mutex
 }
 
-// sseEventWriter wraps http.ResponseWriter to format output as SSE events.
-type toolsCallServerStreamEventWriter struct {
-	w         http.ResponseWriter
-	eventType string
-	started   bool
-}
-
-func (s *toolsCallServerStreamEventWriter) Header() http.Header        { return s.w.Header() }
-func (s *toolsCallServerStreamEventWriter) WriteHeader(statusCode int) { s.w.WriteHeader(statusCode) }
-func (s *toolsCallServerStreamEventWriter) Write(data []byte) (int, error) {
-	if !s.started {
-		s.started = true
-		if s.eventType != "" {
-			fmt.Fprintf(s.w, "event: %s\n", s.eventType)
-		}
-		s.w.Write([]byte("data: "))
-	}
-	return s.w.Write(data)
-}
-
-func (s *toolsCallServerStreamEventWriter) finish() {
-	if s.started {
-		s.w.Write([]byte("\n\n"))
-		http.NewResponseController(s.w).Flush()
-	}
-}
-
 // initSSEHeaders initializes the SSE response headers.
 func (s *ToolsCallServerStream) initSSEHeaders() {
 	s.once.Do(func() {
@@ -161,25 +134,16 @@ func (s *ToolsCallServerStream) SendError(ctx context.Context, id string, err er
 // sendError sends a JSON-RPC error response via SSE.
 func (s *ToolsCallServerStream) sendError(ctx context.Context, id any, code jsonrpc.Code, message string, data any) error {
 	response := jsonrpc.MakeErrorResponse(id, code, message, data)
-	return s.sendSSEEvent("error", response)
+	return s.sendSSEEvent("message", response)
 }
 
-// sendSSEEvent sends a single SSE event by creating an encoder that writes to
-// the event writer
+// sendSSEEvent sends a single SSE event.
 func (s *ToolsCallServerStream) sendSSEEvent(eventType string, v any) error {
-	// Ensure headers are sent once
 	s.initSSEHeaders()
-
-	// Create SSE event writer that wraps the response writer
-	ew := &toolsCallServerStreamEventWriter{w: s.w, eventType: eventType}
-
-	// Create encoder with the event writer and encode the value
-	err := s.encoder(context.Background(), ew).Encode(v)
-
-	// Finish the SSE event (adds newlines and flushes)
-	ew.finish()
-
-	return err
+	if err := goahttp.WriteJSONSSEEvent(s.w, goahttp.SSEMessage{Type: eventType}, v); err != nil {
+		return err
+	}
+	return http.NewResponseController(s.w).Flush()
 }
 
 // EventsStreamServerStream implements the
@@ -199,35 +163,6 @@ type EventsStreamServerStream struct {
 	closed bool
 	// mu protects the closed flag
 	mu sync.Mutex
-}
-
-// sseEventWriter wraps http.ResponseWriter to format output as SSE events.
-type eventsStreamServerStreamEventWriter struct {
-	w         http.ResponseWriter
-	eventType string
-	started   bool
-}
-
-func (s *eventsStreamServerStreamEventWriter) Header() http.Header { return s.w.Header() }
-func (s *eventsStreamServerStreamEventWriter) WriteHeader(statusCode int) {
-	s.w.WriteHeader(statusCode)
-}
-func (s *eventsStreamServerStreamEventWriter) Write(data []byte) (int, error) {
-	if !s.started {
-		s.started = true
-		if s.eventType != "" {
-			fmt.Fprintf(s.w, "event: %s\n", s.eventType)
-		}
-		s.w.Write([]byte("data: "))
-	}
-	return s.w.Write(data)
-}
-
-func (s *eventsStreamServerStreamEventWriter) finish() {
-	if s.started {
-		s.w.Write([]byte("\n\n"))
-		http.NewResponseController(s.w).Flush()
-	}
 }
 
 // initSSEHeaders initializes the SSE response headers.
@@ -326,23 +261,14 @@ func (s *EventsStreamServerStream) SendError(ctx context.Context, id string, err
 // sendError sends a JSON-RPC error response via SSE.
 func (s *EventsStreamServerStream) sendError(ctx context.Context, id any, code jsonrpc.Code, message string, data any) error {
 	response := jsonrpc.MakeErrorResponse(id, code, message, data)
-	return s.sendSSEEvent("error", response)
+	return s.sendSSEEvent("message", response)
 }
 
-// sendSSEEvent sends a single SSE event by creating an encoder that writes to
-// the event writer
+// sendSSEEvent sends a single SSE event.
 func (s *EventsStreamServerStream) sendSSEEvent(eventType string, v any) error {
-	// Ensure headers are sent once
 	s.initSSEHeaders()
-
-	// Create SSE event writer that wraps the response writer
-	ew := &eventsStreamServerStreamEventWriter{w: s.w, eventType: eventType}
-
-	// Create encoder with the event writer and encode the value
-	err := s.encoder(context.Background(), ew).Encode(v)
-
-	// Finish the SSE event (adds newlines and flushes)
-	ew.finish()
-
-	return err
+	if err := goahttp.WriteJSONSSEEvent(s.w, goahttp.SSEMessage{Type: eventType}, v); err != nil {
+		return err
+	}
+	return http.NewResponseController(s.w).Flush()
 }

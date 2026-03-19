@@ -33,45 +33,29 @@ type ToolsCallClientStream struct {
 	lock    sync.Mutex                           // Mutex to protect state
 }
 
-// parseSSEEvent parses a single SSE event from the stream
-func (s *ToolsCallClientStream) parseSSEEvent() (eventType string, data []byte, err error) {
-	var event strings.Builder
-	var dataLines []string
+// readSSEEvent reads a single SSE event from the stream.
+func (s *ToolsCallClientStream) readSSEEvent() ([]byte, error) {
+	var event bytes.Buffer
 
 	for {
 		line, err := s.reader.ReadString('\n')
 		if err != nil {
-			if err == io.EOF && len(dataLines) > 0 {
-				// Process final event
-				break
+			if err == io.EOF && event.Len() > 0 {
+				return event.Bytes(), nil
 			}
-			return "", nil, err
+			return nil, err
 		}
 
-		line = strings.TrimSuffix(line, "\n")
-		line = strings.TrimSuffix(line, "\r")
+		event.WriteString(line)
 
+		line = strings.TrimRight(line, "\r\n")
 		if line == "" {
-			// Empty line marks end of event
-			if len(dataLines) > 0 {
-				break
+			if event.Len() > 0 {
+				return event.Bytes(), nil
 			}
 			continue
 		}
-
-		if strings.HasPrefix(line, "event:") {
-			event.WriteString(strings.TrimSpace(line[6:]))
-		} else if strings.HasPrefix(line, "data:") {
-			dataLines = append(dataLines, strings.TrimSpace(line[5:]))
-		}
-		// Ignore other fields like id:, retry:
 	}
-
-	if len(dataLines) > 0 {
-		data = []byte(strings.Join(dataLines, "\n"))
-	}
-
-	return event.String(), data, nil
 }
 
 // Recv reads instances of "ToolsCallResult" from the stream.
@@ -86,11 +70,19 @@ func (s *ToolsCallClientStream) Recv(ctx context.Context) (*mcpassistant.ToolsCa
 	}
 
 	for {
-		eventType, data, err := s.parseSSEEvent()
+		rawEvent, err := s.readSSEEvent()
 		if err != nil {
 			s.closed = true
 			return zero, err
 		}
+
+		parsedEvent, err := goahttp.ParseSSEEvent(rawEvent)
+		if err != nil {
+			s.closed = true
+			return zero, err
+		}
+
+		eventType, data := parsedEvent.Type, []byte(parsedEvent.Data)
 
 		switch eventType {
 		case "notification":
@@ -263,45 +255,29 @@ type EventsStreamClientStream struct {
 	lock    sync.Mutex                           // Mutex to protect state
 }
 
-// parseSSEEvent parses a single SSE event from the stream
-func (s *EventsStreamClientStream) parseSSEEvent() (eventType string, data []byte, err error) {
-	var event strings.Builder
-	var dataLines []string
+// readSSEEvent reads a single SSE event from the stream.
+func (s *EventsStreamClientStream) readSSEEvent() ([]byte, error) {
+	var event bytes.Buffer
 
 	for {
 		line, err := s.reader.ReadString('\n')
 		if err != nil {
-			if err == io.EOF && len(dataLines) > 0 {
-				// Process final event
-				break
+			if err == io.EOF && event.Len() > 0 {
+				return event.Bytes(), nil
 			}
-			return "", nil, err
+			return nil, err
 		}
 
-		line = strings.TrimSuffix(line, "\n")
-		line = strings.TrimSuffix(line, "\r")
+		event.WriteString(line)
 
+		line = strings.TrimRight(line, "\r\n")
 		if line == "" {
-			// Empty line marks end of event
-			if len(dataLines) > 0 {
-				break
+			if event.Len() > 0 {
+				return event.Bytes(), nil
 			}
 			continue
 		}
-
-		if strings.HasPrefix(line, "event:") {
-			event.WriteString(strings.TrimSpace(line[6:]))
-		} else if strings.HasPrefix(line, "data:") {
-			dataLines = append(dataLines, strings.TrimSpace(line[5:]))
-		}
-		// Ignore other fields like id:, retry:
 	}
-
-	if len(dataLines) > 0 {
-		data = []byte(strings.Join(dataLines, "\n"))
-	}
-
-	return event.String(), data, nil
 }
 
 // Recv reads instances of "EventsStreamResult" from the stream.
@@ -316,11 +292,19 @@ func (s *EventsStreamClientStream) Recv(ctx context.Context) (*mcpassistant.Even
 	}
 
 	for {
-		eventType, data, err := s.parseSSEEvent()
+		rawEvent, err := s.readSSEEvent()
 		if err != nil {
 			s.closed = true
 			return zero, err
 		}
+
+		parsedEvent, err := goahttp.ParseSSEEvent(rawEvent)
+		if err != nil {
+			s.closed = true
+			return zero, err
+		}
+
+		eventType, data := parsedEvent.Type, []byte(parsedEvent.Data)
 
 		switch eventType {
 		case "notification":
