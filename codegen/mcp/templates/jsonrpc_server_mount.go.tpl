@@ -7,6 +7,8 @@ func {{ .MountServer }}(mux goahttp.Muxer, h *{{ .ServerStruct }}) {
 	// implementation can enforce per-request allow/deny lists.
 	{{- range (index .Endpoints 0).Routes }}
 	mux.Handle("{{ .Verb }}", "{{ .Path }}", withMCPPolicyHeaders(h.ServeHTTP))
+	mux.Handle("GET", "{{ .Path }}", withMCPPolicyHeaders(h.ServeHTTP))
+	mux.Handle("DELETE", "{{ .Path }}", withMCPPolicyHeaders(h.ServeHTTP))
 	{{- end }}
 {{- else if .HasSSE }}
 	// SSE only: mount SSE handler and propagate MCP policy headers via context.
@@ -49,8 +51,11 @@ func withMCPPolicyHeaders(next http.HandlerFunc) http.HandlerFunc {
 		if deny := r.Header.Get("x-mcp-deny-names"); deny != "" {
 			ctx = context.WithValue(ctx, "mcp_deny_names", deny)
 		}
+		if sessionID := r.Header.Get(mcpruntime.HeaderKeySessionID); sessionID != "" {
+			ctx = mcpruntime.WithSessionID(ctx, sessionID)
+		}
+		ctx = mcpruntime.WithResponseWriter(ctx, w)
 		next(w, r.WithContext(ctx))
 	}
 }
-
 
