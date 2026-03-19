@@ -461,30 +461,12 @@ func attachRunLink(result *planner.ToolResult, handle *run.Handle) {
 func (r *Runtime) buildAgentChildRequest(ctx context.Context, cfg *AgentToolConfig, call *planner.ToolRequest, messages []*model.Message, parentRun *run.Context) ([]*model.Message, run.Context, error) {
 	var zeroCtx run.Context
 
-	// Decode payload for prompt/template rendering. Prefer tool codecs when
-	// specs are registered. Agent-as-tool payloads must be validated at the
-	// parent boundary; do not fall back to untyped JSON decoding.
-	var promptPayload any
-	if len(call.Payload) > 0 {
-		if _, ok := r.ToolSpec(call.Name); !ok {
-			return nil, zeroCtx, fmt.Errorf(
-				"agent tool %s requires a registered ToolSpec for payload decoding (missing specs/codecs)",
-				call.Name,
-			)
-		}
-		val, err := r.unmarshalToolValue(ctx, call.Name, call.Payload.RawMessage(), true)
-		if err != nil {
-			return nil, zeroCtx, fmt.Errorf("decode agent tool payload for %s: %w", call.Name, err)
-		}
-		promptPayload = val
+	promptPayload, err := r.decodeAgentToolPromptPayload(ctx, *call)
+	if err != nil {
+		return nil, zeroCtx, err
 	}
 	if cfg.PreChildValidator != nil {
-		if err := cfg.PreChildValidator(ctx, &AgentToolValidationInput{
-			Call:      call,
-			Payload:   promptPayload,
-			Messages:  messages,
-			ParentRun: parentRun,
-		}); err != nil {
+		if err := cfg.PreChildValidator(ctx, buildAgentToolValidationInput(call, promptPayload, messages, parentRun)); err != nil {
 			return nil, zeroCtx, err
 		}
 	}
@@ -497,34 +479,9 @@ func (r *Runtime) buildAgentChildRequest(ctx context.Context, cfg *AgentToolConf
 		}
 	}
 
-	// Build per-tool user message using prompt specs first, then template, then
-	// text, then prompt builder.
-	var userContent string
-	if promptID, ok := cfg.PromptSpecs[call.Name]; ok {
-		rendered, err := r.renderAgentToolPrompt(ctx, promptID, call, promptPayload)
-		if err != nil {
-			return nil, zeroCtx, fmt.Errorf("render prompt for %s: %w", call.Name, err)
-		}
-		userContent = rendered
-	} else if tmpl := cfg.Templates[call.Name]; tmpl != nil {
-		var b strings.Builder
-		if err := tmpl.Execute(&b, promptPayload); err != nil {
-			return nil, zeroCtx, fmt.Errorf("render tool template for %s: %w", call.Name, err)
-		}
-		userContent = b.String()
-	} else if txt, ok := cfg.Texts[call.Name]; ok {
-		userContent = txt
-	} else if cfg.Prompt != nil {
-		userContent = cfg.Prompt(call.Name, promptPayload)
-	} else if len(call.Payload) > 0 {
-		// Default: build a deterministic user message from the canonical payload.
-		//
-		// Contract:
-		//   - call.Payload is canonical JSON at this boundary (validated by tool codecs).
-		//   - Use the raw JSON bytes verbatim, preserving exact schema keys and shape.
-		//   - Consumer code that wants a natural-language projection for string payloads
-		//     must configure it explicitly via PromptSpecs/Templates/Texts/Prompt.
-		userContent = string(call.Payload.RawMessage())
+	userContent, err := r.renderAgentToolUserContent(ctx, cfg, call, promptPayload)
+	if err != nil {
+		return nil, zeroCtx, err
 	}
 	if m := newTextAgentMessage(model.ConversationRoleUser, userContent); m != nil {
 		childMessages = append(childMessages, m)
@@ -533,7 +490,72 @@ func (r *Runtime) buildAgentChildRequest(ctx context.Context, cfg *AgentToolConf
 		childMessages = append(childMessages, &model.Message{Role: model.ConversationRoleUser})
 	}
 
-	// Build nested run context from explicit ToolRequest fields.
+	nestedRunCtx := buildNestedAgentRunContext(*call)
+
+	return childMessages, nestedRunCtx, nil
+}
+
+func (r *Runtime) decodeAgentToolPromptPayload(ctx context.Context, call planner.ToolRequest) (any, error) {
+	if len(call.Payload) == 0 {
+		return nil, nil
+	}
+	if _, ok := r.ToolSpec(call.Name); !ok {
+		return nil, fmt.Errorf(
+			"agent tool %s requires a registered ToolSpec for payload decoding (missing specs/codecs)",
+			call.Name,
+		)
+	}
+	val, err := r.unmarshalToolValue(ctx, call.Name, call.Payload.RawMessage(), true)
+	if err != nil {
+		return nil, fmt.Errorf("decode agent tool payload for %s: %w", call.Name, err)
+	}
+	return val, nil
+}
+
+func buildAgentToolValidationInput(call *planner.ToolRequest, promptPayload any, messages []*model.Message, parentRun *run.Context) *AgentToolValidationInput {
+	return &AgentToolValidationInput{
+		Call:      call,
+		Payload:   promptPayload,
+		Messages:  messages,
+		ParentRun: parentRun,
+	}
+}
+
+func (r *Runtime) renderAgentToolUserContent(ctx context.Context, cfg *AgentToolConfig, call *planner.ToolRequest, promptPayload any) (string, error) {
+	if promptID, ok := cfg.PromptSpecs[call.Name]; ok {
+		rendered, err := r.renderAgentToolPrompt(ctx, promptID, call, promptPayload)
+		if err != nil {
+			return "", fmt.Errorf("render prompt for %s: %w", call.Name, err)
+		}
+		return rendered, nil
+	}
+	if tmpl := cfg.Templates[call.Name]; tmpl != nil {
+		var b strings.Builder
+		if err := tmpl.Execute(&b, promptPayload); err != nil {
+			return "", fmt.Errorf("render tool template for %s: %w", call.Name, err)
+		}
+		return b.String(), nil
+	}
+	if txt, ok := cfg.Texts[call.Name]; ok {
+		return txt, nil
+	}
+	if cfg.Prompt != nil {
+		return cfg.Prompt(call.Name, promptPayload), nil
+	}
+	if len(call.Payload) > 0 {
+		// Default: build a deterministic user message from the canonical payload.
+		//
+		// Contract:
+		//   - call.Payload is canonical JSON at this boundary (validated by tool codecs).
+		//   - Use the raw JSON bytes verbatim, preserving exact schema keys and shape.
+		//   - Consumer code that wants a natural-language projection for string payloads
+		//     must configure it explicitly via PromptSpecs/Templates/Texts/Prompt.
+		return string(call.Payload.RawMessage()), nil
+	}
+	return "", nil
+}
+
+func buildNestedAgentRunContext(call planner.ToolRequest) run.Context {
 	nestedRunCtx := run.Context{
 		Tool:             call.Name,
 		RunID:            NestedRunIDForToolCall(call.RunID, call.Name, call.ToolCallID),
@@ -554,8 +576,7 @@ func (r *Runtime) buildAgentChildRequest(ctx context.Context, cfg *AgentToolConf
 	if len(call.Payload) > 0 {
 		nestedRunCtx.ToolArgs = append(rawjson.Message(nil), call.Payload...)
 	}
-
-	return childMessages, nestedRunCtx, nil
+	return nestedRunCtx
 }
 
 // renderAgentToolPrompt resolves and renders a configured prompt spec for one tool call.

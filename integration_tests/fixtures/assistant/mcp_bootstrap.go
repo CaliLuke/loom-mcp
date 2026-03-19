@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 
+	assistant "example.com/assistant/gen/assistant"
 	mcpassistant "example.com/assistant/gen/mcp_assistant"
 	mcpruntime "goa.design/goa-ai/runtime/mcp"
 )
@@ -26,6 +27,28 @@ type mcpShim struct {
 
 // ToolsCall delegates to the adapter.
 func (s *mcpShim) ToolsCall(ctx context.Context, p *mcpassistant.ToolsCallPayload, stream mcpassistant.ToolsCallServerStream) (*mcpassistant.ToolsCallResult, error) {
+	if p != nil && p.Name == "multi_content" {
+		var payload assistant.MultiContentPayload
+		if len(p.Arguments) > 0 {
+			if err := json.Unmarshal(p.Arguments, &payload); err != nil {
+				return nil, err
+			}
+		}
+		switch payload.Count {
+		case 2:
+			if err := stream.Send(ctx, &mcpassistant.ToolsCallResult{Content: []*mcpassistant.ContentItem{textContent("{\"result\":\"hello ")}}); err != nil {
+				return nil, err
+			}
+			return nil, stream.SendAndClose(ctx, &mcpassistant.ToolsCallResult{Content: []*mcpassistant.ContentItem{textContent("world!\"}")}})
+		case 3:
+			if err := stream.Send(ctx, &mcpassistant.ToolsCallResult{Content: []*mcpassistant.ContentItem{imageContent("ZmFrZS1pbWFnZQ==", "image/png")}}); err != nil {
+				return nil, err
+			}
+			return nil, stream.SendAndClose(ctx, &mcpassistant.ToolsCallResult{Content: []*mcpassistant.ContentItem{textContent("{\"result\":\"hello world from later text\"}")}})
+		case 4:
+			return nil, stream.SendAndClose(ctx, &mcpassistant.ToolsCallResult{Content: []*mcpassistant.ContentItem{imageContent("ZmFrZS1pbWFnZQ==", "image/png")}})
+		}
+	}
 	err := s.MCPAdapter.ToolsCall(ctx, p, stream)
 	return nil, err
 }
@@ -126,3 +149,18 @@ func (promptProvider) GetCodeReviewPrompt(arguments json.RawMessage) (*mcpassist
 }
 
 func strPtr(s string) *string { return &s }
+
+func textContent(text string) *mcpassistant.ContentItem {
+	return &mcpassistant.ContentItem{
+		Type: "text",
+		Text: strPtr(text),
+	}
+}
+
+func imageContent(data string, mimeType string) *mcpassistant.ContentItem {
+	return &mcpassistant.ContentItem{
+		Type:     "image",
+		Data:     strPtr(data),
+		MimeType: strPtr(mimeType),
+	}
+}

@@ -822,6 +822,17 @@ func newAgentData(
 	agentExpr *agentsExpr.AgentExpr,
 	servicesData *service.ServicesData,
 ) *AgentData {
+	agent := newBaseAgentData(genpkg, svc, agentExpr)
+	agent.Runtime = buildAgentRuntimeData(agent)
+	agent.RunPolicy = newRunPolicyData(agentExpr.RunPolicy)
+	applyAgentRunPolicy(&agent.Runtime, agent.RunPolicy)
+	populateAgentToolsets(agent, agentExpr, servicesData)
+	populateAgentToolCollections(agent)
+	populateAgentMethods(agent)
+	return agent
+}
+
+func newBaseAgentData(genpkg string, svc *service.Data, agentExpr *agentsExpr.AgentExpr) *AgentData {
 	goName := codegen.Goify(agentExpr.Name, true)
 	configType := goName + "AgentConfig"
 	structName := goName + "Agent"
@@ -835,7 +846,7 @@ func newAgentData(
 	workflowName := naming.Identifier(svc.Name, agentExpr.Name, "workflow")
 	workflowQueue := naming.QueueName(svc.PathName, agentSlug, "workflow")
 
-	agent := &AgentData{
+	return &AgentData{
 		Genpkg:                genpkg,
 		Name:                  agentExpr.Name,
 		Description:           agentExpr.Description,
@@ -858,112 +869,83 @@ func newAgentData(
 		ToolSpecsImportPath: path.Join(agentImport, "specs"),
 		ToolSpecsDir:        filepath.Join(agentDir, "specs"),
 	}
+}
 
-	agent.Runtime = RuntimeData{
+func buildAgentRuntimeData(agent *AgentData) RuntimeData {
+	runtimeData := RuntimeData{
 		Workflow: WorkflowArtifact{
-			FuncName:      workflowFunc,
-			DefinitionVar: workflowVar,
-			Name:          workflowName,
-			Queue:         workflowQueue,
+			FuncName:      agent.WorkflowFunc,
+			DefinitionVar: agent.WorkflowDefinitionVar,
+			Name:          agent.WorkflowName,
+			Queue:         agent.WorkflowQueue,
 		},
 	}
-	// Register default activities (plan/resume) scoped to the workflow queue.
-	agent.Runtime.Activities = append(agent.Runtime.Activities,
-		newActivity(agent, ActivityKindPlan, "Plan", workflowQueue),
-		newActivity(agent, ActivityKindResume, "Resume", workflowQueue),
-		newActivity(agent, ActivityKindExecuteTool, "ExecuteTool", ""),
-	)
-	for i := range agent.Runtime.Activities {
-		act := agent.Runtime.Activities[i]
-		switch act.Kind {
-		case ActivityKindExecuteTool:
-			if agent.Runtime.ExecuteTool == nil {
-				agent.Runtime.ExecuteTool = &agent.Runtime.Activities[i]
-			}
-		case ActivityKindPlan:
-			if agent.Runtime.PlanActivity == nil {
-				agent.Runtime.PlanActivity = &agent.Runtime.Activities[i]
-			}
-		case ActivityKindResume:
-			if agent.Runtime.ResumeActivity == nil {
-				agent.Runtime.ResumeActivity = &agent.Runtime.Activities[i]
-			}
-		}
-	}
+	runtimeData.Activities = buildAgentActivities(agent)
+	assignRuntimeActivityRoles(&runtimeData)
+	return runtimeData
+}
 
-	agent.RunPolicy = newRunPolicyData(agentExpr.RunPolicy)
-	// Apply DSL timing overrides to activity artifacts when provided.
-	if agent.RunPolicy.PlanTimeout > 0 {
-		if agent.Runtime.PlanActivity != nil {
-			agent.Runtime.PlanActivity.StartToCloseTimeout = agent.RunPolicy.PlanTimeout
+func buildAgentActivities(agent *AgentData) []ActivityArtifact {
+	return []ActivityArtifact{
+		newActivity(agent, ActivityKindPlan, "Plan", agent.WorkflowQueue),
+		newActivity(agent, ActivityKindResume, "Resume", agent.WorkflowQueue),
+		newActivity(agent, ActivityKindExecuteTool, "ExecuteTool", ""),
+	}
+}
+
+func assignRuntimeActivityRoles(runtimeData *RuntimeData) {
+	for i := range runtimeData.Activities {
+		assignRuntimeActivityRole(runtimeData, i)
+	}
+}
+
+func assignRuntimeActivityRole(runtimeData *RuntimeData, idx int) {
+	switch runtimeData.Activities[idx].Kind {
+	case ActivityKindExecuteTool:
+		if runtimeData.ExecuteTool == nil {
+			runtimeData.ExecuteTool = &runtimeData.Activities[idx]
 		}
-		if agent.Runtime.ResumeActivity != nil {
-			agent.Runtime.ResumeActivity.StartToCloseTimeout = agent.RunPolicy.PlanTimeout
+	case ActivityKindPlan:
+		if runtimeData.PlanActivity == nil {
+			runtimeData.PlanActivity = &runtimeData.Activities[idx]
+		}
+	case ActivityKindResume:
+		if runtimeData.ResumeActivity == nil {
+			runtimeData.ResumeActivity = &runtimeData.Activities[idx]
 		}
 	}
-	if agent.RunPolicy.ToolTimeout > 0 {
-		if agent.Runtime.ExecuteTool != nil {
-			agent.Runtime.ExecuteTool.StartToCloseTimeout = agent.RunPolicy.ToolTimeout
+}
+
+func applyAgentRunPolicy(runtimeData *RuntimeData, policy RunPolicyData) {
+	if policy.PlanTimeout > 0 {
+		if runtimeData.PlanActivity != nil {
+			runtimeData.PlanActivity.StartToCloseTimeout = policy.PlanTimeout
+		}
+		if runtimeData.ResumeActivity != nil {
+			runtimeData.ResumeActivity.StartToCloseTimeout = policy.PlanTimeout
 		}
 	}
+	if policy.ToolTimeout > 0 {
+		if runtimeData.ExecuteTool != nil {
+			runtimeData.ExecuteTool.StartToCloseTimeout = policy.ToolTimeout
+		}
+	}
+}
+
+func populateAgentToolsets(agent *AgentData, agentExpr *agentsExpr.AgentExpr, servicesData *service.ServicesData) {
 	agent.UsedToolsets = collectToolsets(agent, agentExpr.Used, ToolsetKindUsed, servicesData)
 	agent.ExportedToolsets = collectToolsets(agent, agentExpr.Exported, ToolsetKindExported, servicesData)
 	agent.AllToolsets = append([]*ToolsetData{}, agent.UsedToolsets...)
 	agent.AllToolsets = append(agent.AllToolsets, agent.ExportedToolsets...)
+}
 
-	// Compute method-backed toolsets for convenience in templates.
-	for _, ts := range agent.AllToolsets {
-		has := false
-		for _, t := range ts.Tools {
-			if t.IsMethodBacked {
-				has = true
-				break
-			}
-		}
-		if has {
-			agent.MethodBackedToolsets = append(agent.MethodBackedToolsets, ts)
-		}
-	}
+func populateAgentToolCollections(agent *AgentData) {
+	populateMethodBackedToolsets(agent)
+	populateFlattenedAgentTools(agent)
+	populateExternalToolsetMetadata(agent)
+}
 
-	for _, ts := range agent.AllToolsets {
-		agent.Tools = append(agent.Tools, ts.Tools...)
-	}
-	slices.SortFunc(agent.Tools, func(a, b *ToolData) int {
-		return strings.Compare(a.QualifiedName, b.QualifiedName)
-	})
-
-	if len(agent.AllToolsets) > 0 {
-		mcpMap := make(map[string]*MCPToolsetMeta)
-		regMap := make(map[string]*RegistryToolsetMeta)
-		for _, ts := range agent.AllToolsets {
-			if ts.MCP != nil {
-				if _, ok := mcpMap[ts.MCP.QualifiedName]; !ok {
-					mcpMap[ts.MCP.QualifiedName] = ts.MCP
-				}
-			}
-			if ts.Registry != nil {
-				if _, ok := regMap[ts.Registry.QualifiedName]; !ok {
-					regMap[ts.Registry.QualifiedName] = ts.Registry
-				}
-			}
-		}
-		for _, meta := range mcpMap {
-			agent.MCPToolsets = append(agent.MCPToolsets, meta)
-		}
-		slices.SortFunc(agent.MCPToolsets, func(a, b *MCPToolsetMeta) int {
-			return strings.Compare(a.QualifiedName, b.QualifiedName)
-		})
-		for _, meta := range regMap {
-			agent.RegistryToolsets = append(agent.RegistryToolsets, meta)
-		}
-		slices.SortFunc(agent.RegistryToolsets, func(a, b *RegistryToolsetMeta) int {
-			return strings.Compare(a.QualifiedName, b.QualifiedName)
-		})
-	}
-
-	// Populate methods from exported tools. Each exported tool becomes a method
-	// entry keyed by its tool name. Passthrough metadata, when present, marks
-	// deterministic forwarding to a Goa service method.
+func populateAgentMethods(agent *AgentData) {
 	for _, ts := range agent.ExportedToolsets {
 		for _, t := range ts.Tools {
 			md := &MethodData{
@@ -978,8 +960,83 @@ func newAgentData(
 			agent.Methods = append(agent.Methods, md)
 		}
 	}
+}
 
-	return agent
+func toolsetHasMethodBackedTools(ts *ToolsetData) bool {
+	for _, t := range ts.Tools {
+		if t.IsMethodBacked {
+			return true
+		}
+	}
+	return false
+}
+
+func populateMethodBackedToolsets(agent *AgentData) {
+	for _, ts := range agent.AllToolsets {
+		if toolsetHasMethodBackedTools(ts) {
+			agent.MethodBackedToolsets = append(agent.MethodBackedToolsets, ts)
+		}
+	}
+}
+
+func populateFlattenedAgentTools(agent *AgentData) {
+	for _, ts := range agent.AllToolsets {
+		agent.Tools = append(agent.Tools, ts.Tools...)
+	}
+	slices.SortFunc(agent.Tools, func(a, b *ToolData) int {
+		return strings.Compare(a.QualifiedName, b.QualifiedName)
+	})
+}
+
+func populateExternalToolsetMetadata(agent *AgentData) {
+	agent.MCPToolsets = collectAgentMCPToolsets(agent.AllToolsets)
+	agent.RegistryToolsets = collectAgentRegistryToolsets(agent.AllToolsets)
+}
+
+func collectAgentMCPToolsets(toolsets []*ToolsetData) []*MCPToolsetMeta {
+	if len(toolsets) == 0 {
+		return nil
+	}
+	metaMap := make(map[string]*MCPToolsetMeta)
+	for _, ts := range toolsets {
+		if ts.MCP == nil {
+			continue
+		}
+		if _, ok := metaMap[ts.MCP.QualifiedName]; !ok {
+			metaMap[ts.MCP.QualifiedName] = ts.MCP
+		}
+	}
+	metas := make([]*MCPToolsetMeta, 0, len(metaMap))
+	for _, meta := range metaMap {
+		metas = append(metas, meta)
+	}
+	slices.SortFunc(metas, func(a, b *MCPToolsetMeta) int {
+		return strings.Compare(a.QualifiedName, b.QualifiedName)
+	})
+	return metas
+}
+
+func collectAgentRegistryToolsets(toolsets []*ToolsetData) []*RegistryToolsetMeta {
+	if len(toolsets) == 0 {
+		return nil
+	}
+	metaMap := make(map[string]*RegistryToolsetMeta)
+	for _, ts := range toolsets {
+		if ts.Registry == nil {
+			continue
+		}
+		if _, ok := metaMap[ts.Registry.QualifiedName]; !ok {
+			metaMap[ts.Registry.QualifiedName] = ts.Registry
+		}
+	}
+	metas := make([]*RegistryToolsetMeta, 0, len(metaMap))
+	for _, meta := range metaMap {
+		metas = append(metas, meta)
+	}
+	slices.SortFunc(metas, func(a, b *RegistryToolsetMeta) int {
+		return strings.Compare(a.QualifiedName, b.QualifiedName)
+	})
+	return metas
 }
 
 // Naming helpers moved to codegen/naming.

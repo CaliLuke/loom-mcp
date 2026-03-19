@@ -265,16 +265,8 @@ func (e *toolBatchExec) dispatchToolCalls(wfCtx engine.WorkflowContext, calls []
 
 		spec, hasSpec := e.r.toolSpec(call.Name)
 		if !hasSpec {
-			if err := e.publishToolCallScheduled(ctx, call, ""); err != nil {
+			if err := e.dispatchUnknownToolCall(ctx, b, call); err != nil {
 				return nil, err
-			}
-			tr, err := e.synthesizeUnknownToolResult(ctx, call, 0)
-			if err != nil {
-				return nil, err
-			}
-			b.inlineByID[call.ToolCallID] = tr
-			if e.parentTracker != nil {
-				b.discoveredIDs = append(b.discoveredIDs, call.ToolCallID)
 			}
 			continue
 		}
@@ -290,141 +282,186 @@ func (e *toolBatchExec) dispatchToolCalls(wfCtx engine.WorkflowContext, calls []
 			return nil, err
 		}
 
-		// Inline toolsets execute within the workflow loop.
 		if hasTS && ts.Inline {
-			raw := call.Payload
-			if ts.PayloadAdapter != nil && len(raw) > 0 {
-				meta := ToolCallMeta{
-					RunID:            call.RunID,
-					SessionID:        call.SessionID,
-					TurnID:           call.TurnID,
-					ToolCallID:       call.ToolCallID,
-					ParentToolCallID: call.ParentToolCallID,
-				}
-				if adapted, err := ts.PayloadAdapter(ctx, meta, call.Name, raw.RawMessage()); err == nil && len(adapted) > 0 {
-					raw = rawjson.Message(adapted)
-				} else if err != nil {
-					return nil, fmt.Errorf("inline payload adapter failed for %s: %w", call.Name, err)
-				}
+			call, err := e.adaptInlinePayload(ctx, call, ts)
+			if err != nil {
+				return nil, err
 			}
-			if len(raw) > 0 {
-				call.Payload = raw
-				b.calls[i].Payload = raw
-			}
-
-			// Agent-as-tool: start child workflows concurrently and fan in results later.
 			if spec.IsAgentTool {
-				messages, nestedRunCtx, err := e.r.buildAgentChildRequest(ctx, ts.AgentTool, &call, e.messages, e.runCtx)
-				if err != nil {
-					tr, err := e.r.agentToolRequestFailureResult(call, err)
-					if err != nil {
-						return nil, err
-					}
-					if err := e.publishToolResultReceived(ctx, call, tr, nil, 0); err != nil {
-						return nil, err
-					}
-					b.inlineByID[call.ToolCallID] = tr
-					if e.parentTracker != nil {
-						b.discoveredIDs = append(b.discoveredIDs, call.ToolCallID)
-					}
-					continue
-				}
-				if err := e.r.publishHook(wfCtx.Context(), hooks.NewChildRunLinkedEvent(call.RunID, call.AgentID, call.SessionID, call.Name, call.ToolCallID, nestedRunCtx.RunID, ts.AgentTool.AgentID), ""); err != nil {
+				b.calls[i] = call
+				if err := e.dispatchInlineAgentToolCall(wfCtx, b, call, ts); err != nil {
 					return nil, err
-				}
-				route := ts.AgentTool.Route
-				if route.ID == "" || route.WorkflowName == "" || route.DefaultTaskQueue == "" {
-					return nil, fmt.Errorf("agent tool route is incomplete for %s", call.Name)
-				}
-				input := RunInput{
-					AgentID:          route.ID,
-					RunID:            nestedRunCtx.RunID,
-					SessionID:        nestedRunCtx.SessionID,
-					TurnID:           nestedRunCtx.TurnID,
-					ParentToolCallID: nestedRunCtx.ParentToolCallID,
-					ParentRunID:      nestedRunCtx.ParentRunID,
-					ParentAgentID:    nestedRunCtx.ParentAgentID,
-					Tool:             nestedRunCtx.Tool,
-					ToolArgs:         nestedRunCtx.ToolArgs,
-					Labels:           nestedRunCtx.Labels,
-					Messages:         messages,
-				}
-				handle, err := wfCtx.StartChildWorkflow(wfCtx.Context(), engine.ChildWorkflowRequest{ID: input.RunID, Workflow: route.WorkflowName, TaskQueue: route.DefaultTaskQueue, Input: &input})
-				if err != nil {
-					return nil, fmt.Errorf("failed to start agent child workflow for %s: %w", call.Name, err)
-				}
-				b.childFutures = append(b.childFutures, agentChildFutureInfo{
-					handle:    handle,
-					call:      call,
-					cfg:       ts.AgentTool,
-					nestedRun: nestedRunCtx,
-					startTime: wfCtx.Now(),
-				})
-				if e.parentTracker != nil {
-					b.discoveredIDs = append(b.discoveredIDs, call.ToolCallID)
 				}
 				continue
 			}
-
-			start := wfCtx.Now()
-			ctxInline := engine.WithWorkflowContext(ctx, wfCtx)
-			result, err := ts.Execute(ctxInline, &call)
-			if err != nil {
-				return nil, fmt.Errorf("inline tool %q failed: %w", call.Name, err)
-			}
-			if result == nil {
-				return nil, fmt.Errorf("inline tool %q returned nil result", call.Name)
-			}
-			duration := wfCtx.Now().Sub(start)
-			resultJSON, err := e.r.materializeToolResult(ctx, call, result)
-			if err != nil {
+			b.calls[i] = call
+			if err := e.dispatchInlineToolCall(wfCtx, b, call, ts); err != nil {
 				return nil, err
-			}
-			if err := e.publishToolResultReceived(ctx, call, result, resultJSON, duration); err != nil {
-				return nil, err
-			}
-			b.inlineByID[call.ToolCallID] = result
-			if e.parentTracker != nil {
-				b.discoveredIDs = append(b.discoveredIDs, call.ToolCallID)
 			}
 			continue
 		}
 
-		// Activity path (service-backed tools).
-		toolInput := ToolInput{
-			AgentID:          e.agentID,
-			RunID:            e.runID,
-			ToolsetName:      spec.Toolset,
-			ToolName:         call.Name,
-			ToolCallID:       call.ToolCallID,
-			Payload:          call.Payload,
-			SessionID:        call.SessionID,
-			TurnID:           call.TurnID,
-			ParentToolCallID: call.ParentToolCallID,
-		}
-		callOpts := computeToolActivityOptions(wfCtx, e.toolActOptions, e.finishBy)
-		if callOpts.Queue == "" && hasTS && !ts.Inline && ts.TaskQueue != "" {
-			callOpts.Queue = ts.TaskQueue
-		}
-		future, err := wfCtx.ExecuteToolActivityAsync(ctx, engine.ToolActivityCall{
-			Name:    e.activityName,
-			Input:   &toolInput,
-			Options: callOpts,
-		})
-		if err != nil {
-			return nil, fmt.Errorf("failed to schedule tool %q: %w", call.Name, err)
-		}
-		b.futures = append(b.futures, futureInfo{
-			future:    future,
-			call:      call,
-			startTime: wfCtx.Now(),
-		})
-		if e.parentTracker != nil {
-			b.discoveredIDs = append(b.discoveredIDs, call.ToolCallID)
+		if err := e.dispatchActivityToolCall(ctx, wfCtx, b, call, spec, hasTS, ts); err != nil {
+			return nil, err
 		}
 	}
 
 	return b, nil
+}
+
+func (e *toolBatchExec) dispatchUnknownToolCall(ctx context.Context, b *toolCallBatch, call planner.ToolRequest) error {
+	if err := e.publishToolCallScheduled(ctx, call, ""); err != nil {
+		return err
+	}
+	tr, err := e.synthesizeUnknownToolResult(ctx, call, 0)
+	if err != nil {
+		return err
+	}
+	b.inlineByID[call.ToolCallID] = tr
+	e.recordDiscoveredToolCall(b, call.ToolCallID)
+	return nil
+}
+
+func (e *toolBatchExec) adaptInlinePayload(ctx context.Context, call planner.ToolRequest, ts ToolsetRegistration) (planner.ToolRequest, error) {
+	raw := call.Payload
+	if ts.PayloadAdapter == nil || len(raw) == 0 {
+		return call, nil
+	}
+	meta := ToolCallMeta{
+		RunID:            call.RunID,
+		SessionID:        call.SessionID,
+		TurnID:           call.TurnID,
+		ToolCallID:       call.ToolCallID,
+		ParentToolCallID: call.ParentToolCallID,
+	}
+	adapted, err := ts.PayloadAdapter(ctx, meta, call.Name, raw.RawMessage())
+	if err != nil {
+		return call, fmt.Errorf("inline payload adapter failed for %s: %w", call.Name, err)
+	}
+	if len(adapted) == 0 {
+		return call, nil
+	}
+	call.Payload = rawjson.Message(adapted)
+	return call, nil
+}
+
+func (e *toolBatchExec) dispatchInlineToolCall(wfCtx engine.WorkflowContext, b *toolCallBatch, call planner.ToolRequest, ts ToolsetRegistration) error {
+	start := wfCtx.Now()
+	ctx := wfCtx.Context()
+	ctxInline := engine.WithWorkflowContext(ctx, wfCtx)
+	result, err := ts.Execute(ctxInline, &call)
+	if err != nil {
+		return fmt.Errorf("inline tool %q failed: %w", call.Name, err)
+	}
+	if result == nil {
+		return fmt.Errorf("inline tool %q returned nil result", call.Name)
+	}
+	duration := wfCtx.Now().Sub(start)
+	resultJSON, err := e.r.materializeToolResult(ctx, call, result)
+	if err != nil {
+		return err
+	}
+	if err := e.publishToolResultReceived(ctx, call, result, resultJSON, duration); err != nil {
+		return err
+	}
+	b.inlineByID[call.ToolCallID] = result
+	e.recordDiscoveredToolCall(b, call.ToolCallID)
+	return nil
+}
+
+func (e *toolBatchExec) dispatchInlineAgentToolCall(wfCtx engine.WorkflowContext, b *toolCallBatch, call planner.ToolRequest, ts ToolsetRegistration) error {
+	ctx := wfCtx.Context()
+	messages, nestedRunCtx, err := e.r.buildAgentChildRequest(ctx, ts.AgentTool, &call, e.messages, e.runCtx)
+	if err != nil {
+		tr, resultErr := e.r.agentToolRequestFailureResult(call, err)
+		if resultErr != nil {
+			return resultErr
+		}
+		if err := e.publishToolResultReceived(ctx, call, tr, nil, 0); err != nil {
+			return err
+		}
+		b.inlineByID[call.ToolCallID] = tr
+		e.recordDiscoveredToolCall(b, call.ToolCallID)
+		return nil
+	}
+	if err := e.r.publishHook(ctx, hooks.NewChildRunLinkedEvent(call.RunID, call.AgentID, call.SessionID, call.Name, call.ToolCallID, nestedRunCtx.RunID, ts.AgentTool.AgentID), ""); err != nil {
+		return err
+	}
+	route := ts.AgentTool.Route
+	if route.ID == "" || route.WorkflowName == "" || route.DefaultTaskQueue == "" {
+		return fmt.Errorf("agent tool route is incomplete for %s", call.Name)
+	}
+	input := RunInput{
+		AgentID:          route.ID,
+		RunID:            nestedRunCtx.RunID,
+		SessionID:        nestedRunCtx.SessionID,
+		TurnID:           nestedRunCtx.TurnID,
+		ParentToolCallID: nestedRunCtx.ParentToolCallID,
+		ParentRunID:      nestedRunCtx.ParentRunID,
+		ParentAgentID:    nestedRunCtx.ParentAgentID,
+		Tool:             nestedRunCtx.Tool,
+		ToolArgs:         nestedRunCtx.ToolArgs,
+		Labels:           nestedRunCtx.Labels,
+		Messages:         messages,
+	}
+	handle, err := wfCtx.StartChildWorkflow(ctx, engine.ChildWorkflowRequest{
+		ID:        input.RunID,
+		Workflow:  route.WorkflowName,
+		TaskQueue: route.DefaultTaskQueue,
+		Input:     &input,
+	})
+	if err != nil {
+		return fmt.Errorf("failed to start agent child workflow for %s: %w", call.Name, err)
+	}
+	b.childFutures = append(b.childFutures, agentChildFutureInfo{
+		handle:    handle,
+		call:      call,
+		cfg:       ts.AgentTool,
+		nestedRun: nestedRunCtx,
+		startTime: wfCtx.Now(),
+	})
+	e.recordDiscoveredToolCall(b, call.ToolCallID)
+	return nil
+}
+
+func (e *toolBatchExec) dispatchActivityToolCall(ctx context.Context, wfCtx engine.WorkflowContext, b *toolCallBatch, call planner.ToolRequest, spec tools.ToolSpec, hasTS bool, ts ToolsetRegistration) error {
+	toolInput := ToolInput{
+		AgentID:          e.agentID,
+		RunID:            e.runID,
+		ToolsetName:      spec.Toolset,
+		ToolName:         call.Name,
+		ToolCallID:       call.ToolCallID,
+		Payload:          call.Payload,
+		SessionID:        call.SessionID,
+		TurnID:           call.TurnID,
+		ParentToolCallID: call.ParentToolCallID,
+	}
+	callOpts := computeToolActivityOptions(wfCtx, e.toolActOptions, e.finishBy)
+	if callOpts.Queue == "" && hasTS && !ts.Inline && ts.TaskQueue != "" {
+		callOpts.Queue = ts.TaskQueue
+	}
+	future, err := wfCtx.ExecuteToolActivityAsync(ctx, engine.ToolActivityCall{
+		Name:    e.activityName,
+		Input:   &toolInput,
+		Options: callOpts,
+	})
+	if err != nil {
+		return fmt.Errorf("failed to schedule tool %q: %w", call.Name, err)
+	}
+	b.futures = append(b.futures, futureInfo{
+		future:    future,
+		call:      call,
+		startTime: wfCtx.Now(),
+	})
+	e.recordDiscoveredToolCall(b, call.ToolCallID)
+	return nil
+}
+
+func (e *toolBatchExec) recordDiscoveredToolCall(b *toolCallBatch, toolCallID string) {
+	if e.parentTracker == nil {
+		return
+	}
+	b.discoveredIDs = append(b.discoveredIDs, toolCallID)
 }
 
 func (e *toolBatchExec) maybePublishChildTrackerUpdate(ctx context.Context, discoveredIDs []string) error {
@@ -440,6 +477,65 @@ func (e *toolBatchExec) maybePublishChildTrackerUpdate(ctx context.Context, disc
 	}
 	e.parentTracker.markUpdated()
 	return nil
+}
+
+func (e *toolBatchExec) synthesizeTimedOutActivityResults(wfCtx engine.WorkflowContext, activityByID map[string]*planner.ToolResult, pending []futureInfo, cancelMsg string) error {
+	for _, info := range pending {
+		if info.call.ToolCallID == "" {
+			continue
+		}
+		if _, ok := activityByID[info.call.ToolCallID]; ok {
+			continue
+		}
+		tr, err := e.synthesizeTimeoutToolResult(wfCtx, info.call, info.startTime, cancelMsg)
+		if err != nil {
+			return err
+		}
+		activityByID[info.call.ToolCallID] = tr
+	}
+	return nil
+}
+
+func (e *toolBatchExec) synthesizeTimedOutChildResults(wfCtx engine.WorkflowContext, inlineByID map[string]*planner.ToolResult, pending []agentChildFutureInfo, cancelMsg string) error {
+	for _, info := range pending {
+		if info.call.ToolCallID == "" {
+			continue
+		}
+		if _, ok := inlineByID[info.call.ToolCallID]; ok {
+			continue
+		}
+		tr, err := e.synthesizeTimeoutToolResult(wfCtx, info.call, info.startTime, cancelMsg)
+		if err != nil {
+			return err
+		}
+		inlineByID[info.call.ToolCallID] = tr
+	}
+	return nil
+}
+
+func (e *toolBatchExec) synthesizeTimeoutToolResult(wfCtx engine.WorkflowContext, call planner.ToolRequest, startTime time.Time, cancelMsg string) (*planner.ToolResult, error) {
+	ctx := wfCtx.Context()
+	toolErr := planner.NewToolError(cancelMsg)
+	tr := &planner.ToolResult{
+		Name:       call.Name,
+		ToolCallID: call.ToolCallID,
+		Error:      toolErr,
+	}
+	duration := wfCtx.Now().Sub(startTime)
+	if _, ok := e.r.toolSpec(call.Name); ok {
+		resultJSON, err := e.r.materializeToolResult(ctx, call, tr)
+		if err != nil {
+			return nil, err
+		}
+		if err := e.publishToolResultReceived(ctx, call, tr, resultJSON, duration); err != nil {
+			return nil, err
+		}
+		return tr, nil
+	}
+	if err := e.publishToolResultReceived(ctx, call, tr, nil, duration); err != nil {
+		return nil, err
+	}
+	return tr, nil
 }
 
 func (e *toolBatchExec) collectActivityResultsAsComplete(wfCtx engine.WorkflowContext, futures []futureInfo, finalizeTimer engine.Future[time.Time]) (map[string]*planner.ToolResult, []futureInfo, bool, error) {
@@ -772,66 +868,11 @@ func (r *Runtime) executeToolCalls(wfCtx engine.WorkflowContext, activityName st
 
 		// Synthesize tool results for in-flight activities/children so the planner sees a
 		// complete tool_use → tool_result handshake even when we stop waiting to finalize.
-		for _, info := range pendingActs {
-			if info.call.ToolCallID == "" {
-				continue
-			}
-			if _, ok := activityByID[info.call.ToolCallID]; ok {
-				continue
-			}
-			toolErr := planner.NewToolError(cancelMsg)
-			tr := &planner.ToolResult{
-				Name:       info.call.Name,
-				ToolCallID: info.call.ToolCallID,
-				Error:      toolErr,
-			}
-			if _, ok := r.toolSpec(info.call.Name); ok {
-				resultJSON, err := r.materializeToolResult(ctx, info.call, tr)
-				if err != nil {
-					return nil, false, err
-				}
-				duration := wfCtx.Now().Sub(info.startTime)
-				if err := exec.publishToolResultReceived(ctx, info.call, tr, resultJSON, duration); err != nil {
-					return nil, false, err
-				}
-			} else {
-				duration := wfCtx.Now().Sub(info.startTime)
-				if err := exec.publishToolResultReceived(ctx, info.call, tr, nil, duration); err != nil {
-					return nil, false, err
-				}
-			}
-			activityByID[info.call.ToolCallID] = tr
+		if err := exec.synthesizeTimedOutActivityResults(wfCtx, activityByID, pendingActs, cancelMsg); err != nil {
+			return nil, false, err
 		}
-
-		for _, info := range pendingChildren {
-			if info.call.ToolCallID == "" {
-				continue
-			}
-			if _, ok := batch.inlineByID[info.call.ToolCallID]; ok {
-				continue
-			}
-			toolErr := planner.NewToolError(cancelMsg)
-			tr := &planner.ToolResult{
-				Name:       info.call.Name,
-				ToolCallID: info.call.ToolCallID,
-				Error:      toolErr,
-			}
-			if _, ok := r.toolSpec(info.call.Name); ok {
-				resultJSON, err := r.materializeToolResult(ctx, info.call, tr)
-				if err != nil {
-					return nil, false, err
-				}
-				duration := wfCtx.Now().Sub(info.startTime)
-				if err := exec.publishToolResultReceived(ctx, info.call, tr, resultJSON, duration); err != nil {
-					return nil, false, err
-				}
-			} else {
-				duration := wfCtx.Now().Sub(info.startTime)
-				if err := exec.publishToolResultReceived(ctx, info.call, tr, nil, duration); err != nil {
-					return nil, false, err
-				}
-			}
-			batch.inlineByID[info.call.ToolCallID] = tr
+		if err := exec.synthesizeTimedOutChildResults(wfCtx, batch.inlineByID, pendingChildren, cancelMsg); err != nil {
+			return nil, false, err
 		}
 	}
 

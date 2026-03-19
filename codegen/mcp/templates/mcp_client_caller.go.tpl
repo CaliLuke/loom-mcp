@@ -36,7 +36,7 @@ func (c Caller) CallTool(ctx context.Context, req mcpruntime.CallRequest) (mcpru
 	if !ok {
 		return mcpruntime.CallResponse{}, errors.New("invalid tools/call stream type")
 	}
-	var last *mcppkg.ToolsCallResult
+	var merged *mcppkg.ToolsCallResult
 	for {
 		ev, recvErr := clientStream.Recv(ctx)
 		if recvErr == io.EOF {
@@ -45,13 +45,22 @@ func (c Caller) CallTool(ctx context.Context, req mcpruntime.CallRequest) (mcpru
 		if recvErr != nil {
 			return mcpruntime.CallResponse{}, recvErr
 		}
-		last = ev
+		if ev == nil {
+			continue
+		}
+		if merged == nil {
+			merged = &mcppkg.ToolsCallResult{}
+		}
+		merged.Content = append(merged.Content, ev.Content...)
+		if ev.IsError != nil {
+			merged.IsError = ev.IsError
+		}
 	}
-	if last == nil || len(last.Content) == 0 {
+	if merged == nil || len(merged.Content) == 0 {
 		return mcpruntime.CallResponse{}, errors.New("empty MCP response")
 	}
 
-	return normalizeToolResult(last)
+	return normalizeToolResult(merged)
 }
 
 func normalizeToolResult(last *mcppkg.ToolsCallResult) (mcpruntime.CallResponse, error) {

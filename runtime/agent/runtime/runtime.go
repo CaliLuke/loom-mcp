@@ -971,10 +971,7 @@ func WithQueue(name string) WorkerOption {
 // Seal is idempotent. It also marks the runtime registration as closed so later
 // RegisterAgent/RegisterToolset calls fail fast.
 func (r *Runtime) Seal(ctx context.Context) error {
-	r.mu.Lock()
-	alreadyClosed := r.registrationClosed
-	r.registrationClosed = true
-	r.mu.Unlock()
+	alreadyClosed := r.closeRegistration()
 	if alreadyClosed {
 		return nil
 	}
@@ -991,12 +988,63 @@ func (r *Runtime) Seal(ctx context.Context) error {
 // All agents must be registered before workflows can be started. Generated code
 // calls this during initialization.
 func (r *Runtime) RegisterAgent(ctx context.Context, reg AgentRegistration) error {
+	if err := r.ensureRegistrationOpen(); err != nil {
+		return err
+	}
+	if err := r.validateAgentRegistration(reg); err != nil {
+		return err
+	}
+	if err := r.ensureHookActivityRegistered(ctx); err != nil {
+		return err
+	}
+	reg = r.applyAgentWorkerQueueOverrides(reg)
+	reg = applyAgentActivityDefaults(reg)
+	if err := r.registerAgentWithEngine(ctx, reg); err != nil {
+		return err
+	}
+	return r.storeRegisteredAgent(reg)
+}
+
+func (r *Runtime) ensureHookActivityRegistered(ctx context.Context) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if r.hookActivityRegistered {
+		return nil
+	}
+	opts := r.hookActivityRegistrationOptions()
+	if err := r.Engine.RegisterHookActivity(ctx, hookActivityName, opts, r.hookActivity); err != nil {
+		return err
+	}
+	r.hookActivityRegistered = true
+	return nil
+}
+
+// RegisterToolset registers a toolset outside of agent registration. Useful for
+// feature modules that expose shared toolsets. Returns an error if required fields
+// (Name, Execute) are missing.
+func (r *Runtime) RegisterToolset(ts ToolsetRegistration) error {
+	if err := r.ensureRegistrationOpen(); err != nil {
+		return err
+	}
+	if err := validateToolsetRegistration(ts); err != nil {
+		return err
+	}
+	if err := validateAgentToolsetSpecs(ts); err != nil {
+		return err
+	}
+	return r.storeRegisteredToolset(ts)
+}
+
+func (r *Runtime) ensureRegistrationOpen() error {
 	r.mu.RLock()
+	defer r.mu.RUnlock()
 	if r.registrationClosed {
-		r.mu.RUnlock()
 		return ErrRegistrationClosed
 	}
-	r.mu.RUnlock()
+	return nil
+}
+
+func (r *Runtime) validateAgentRegistration(reg AgentRegistration) error {
 	if reg.ID == "" {
 		return fmt.Errorf("%w: missing agent ID", ErrInvalidConfig)
 	}
@@ -1018,22 +1066,22 @@ func (r *Runtime) RegisterAgent(ctx context.Context, reg AgentRegistration) erro
 	if r.Engine == nil {
 		return ErrEngineNotConfigured
 	}
-	if err := r.ensureHookActivityRegistered(ctx); err != nil {
-		return err
-	}
+	return nil
+}
 
-	// Apply per-agent worker overrides before engine registration.
-	if cfg, ok := r.workers[reg.ID]; ok {
-		if q := cfg.Queue; q != "" {
-			reg.Workflow.TaskQueue = q
-			reg.PlanActivityOptions.Queue = q
-			reg.ResumeActivityOptions.Queue = q
-			reg.ExecuteToolActivityOptions.Queue = q
-		}
+func (r *Runtime) applyAgentWorkerQueueOverrides(reg AgentRegistration) AgentRegistration {
+	cfg, ok := r.workers[reg.ID]
+	if !ok || cfg.Queue == "" {
+		return reg
 	}
+	reg.Workflow.TaskQueue = cfg.Queue
+	reg.PlanActivityOptions.Queue = cfg.Queue
+	reg.ResumeActivityOptions.Queue = cfg.Queue
+	reg.ExecuteToolActivityOptions.Queue = cfg.Queue
+	return reg
+}
 
-	// Apply runtime-owned attempt defaults after queue rebasing. Engine-specific
-	// queue-wait and liveness mechanics are derived inside the engine adapter.
+func applyAgentActivityDefaults(reg AgentRegistration) AgentRegistration {
 	if reg.PlanActivityOptions.StartToCloseTimeout == 0 {
 		reg.PlanActivityOptions.StartToCloseTimeout = defaultPlanActivityTimeout
 	}
@@ -1043,117 +1091,115 @@ func (r *Runtime) RegisterAgent(ctx context.Context, reg AgentRegistration) erro
 	if reg.ExecuteToolActivityOptions.StartToCloseTimeout == 0 {
 		reg.ExecuteToolActivityOptions.StartToCloseTimeout = defaultExecuteToolActivityTimeout
 	}
+	return reg
+}
 
-	// Register untyped workflow; Temporal adapter wraps with workflow.Context and
-	// we coerce input to *RunInput inside WorkflowHandler. This preserves engine
-	// boundaries and avoids leaking Temporal types here.
+func (r *Runtime) registerAgentWithEngine(ctx context.Context, reg AgentRegistration) error {
 	if err := r.Engine.RegisterWorkflow(ctx, reg.Workflow); err != nil {
 		return err
 	}
-	// Register typed activities for planner (start/resume) and execute_tool.
+	if err := r.registerAgentActivities(ctx, reg); err != nil {
+		return err
+	}
+	return nil
+}
+
+func (r *Runtime) registerAgentActivities(ctx context.Context, reg AgentRegistration) error {
 	if reg.PlanActivityName != "" {
-		if err := r.Engine.RegisterPlannerActivity(ctx,
-			reg.PlanActivityName,
-			reg.PlanActivityOptions,
-			r.PlanStartActivity); err != nil {
+		if err := r.Engine.RegisterPlannerActivity(ctx, reg.PlanActivityName, reg.PlanActivityOptions, r.PlanStartActivity); err != nil {
 			return err
 		}
 	}
 	if reg.ResumeActivityName != "" {
-		if err := r.Engine.RegisterPlannerActivity(ctx,
-			reg.ResumeActivityName,
-			reg.ResumeActivityOptions,
-			r.PlanResumeActivity,
-		); err != nil {
+		if err := r.Engine.RegisterPlannerActivity(ctx, reg.ResumeActivityName, reg.ResumeActivityOptions, r.PlanResumeActivity); err != nil {
 			return err
 		}
 	}
 	if reg.ExecuteToolActivity != "" {
-		if err := r.Engine.RegisterExecuteToolActivity(ctx,
-			reg.ExecuteToolActivity,
-			reg.ExecuteToolActivityOptions,
-			r.ExecuteToolActivity,
-		); err != nil {
+		if err := r.Engine.RegisterExecuteToolActivity(ctx, reg.ExecuteToolActivity, reg.ExecuteToolActivityOptions, r.ExecuteToolActivity); err != nil {
 			return err
 		}
 	}
+	return nil
+}
 
+func (r *Runtime) storeRegisteredAgent(reg AgentRegistration) error {
+	toolsetErr := validateRegisteredAgentToolsets(reg.Toolsets)
+	if toolsetErr != nil {
+		return toolsetErr
+	}
 	r.mu.Lock()
+	defer r.mu.Unlock()
 	r.agents[reg.ID] = reg
 	r.addToolSpecsLocked(reg.Specs)
 	if len(reg.Specs) > 0 {
-		// store a shallow copy to avoid external mutation
-		cp := make([]tools.ToolSpec, len(reg.Specs))
-		copy(cp, reg.Specs)
-		r.agentToolSpecs[reg.ID] = cp
+		r.agentToolSpecs[reg.ID] = cloneToolSpecs(reg.Specs)
 	}
 	for _, ts := range reg.Toolsets {
-		if err := validateAgentToolsetSpecs(ts); err != nil {
-			r.mu.Unlock()
-			return err
-		}
 		r.addToolsetLocked(ts)
 	}
-	r.mu.Unlock()
-
 	return nil
 }
 
-func (r *Runtime) ensureHookActivityRegistered(ctx context.Context) error {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	if r.hookActivityRegistered {
-		return nil
+func validateRegisteredAgentToolsets(toolsets []ToolsetRegistration) error {
+	for _, ts := range toolsets {
+		if err := validateAgentToolsetSpecs(ts); err != nil {
+			return err
+		}
 	}
-	timeout := defaultHookActivityTimeout
-	if r.hookActivityTimeout > 0 {
-		timeout = r.hookActivityTimeout
-	}
-	opts := engine.ActivityOptions{
-		StartToCloseTimeout: timeout,
-		RetryPolicy:         defaultRetriedActivityPolicy(),
-	}
-	if opts.StartToCloseTimeout == 0 {
-		opts.StartToCloseTimeout = timeout
-	}
-	if err := r.Engine.RegisterHookActivity(ctx, hookActivityName, opts, r.hookActivity); err != nil {
-		return err
-	}
-	r.hookActivityRegistered = true
 	return nil
 }
 
-// RegisterToolset registers a toolset outside of agent registration. Useful for
-// feature modules that expose shared toolsets. Returns an error if required fields
-// (Name, Execute) are missing.
-func (r *Runtime) RegisterToolset(ts ToolsetRegistration) error {
-	r.mu.RLock()
-	if r.registrationClosed {
-		r.mu.RUnlock()
-		return ErrRegistrationClosed
-	}
-	r.mu.RUnlock()
+func validateToolsetRegistration(ts ToolsetRegistration) error {
 	if ts.Name == "" {
 		return errors.New("toolset name is required")
 	}
 	if ts.Execute == nil {
 		return errors.New("toolset execute function is required")
 	}
-	if err := validateAgentToolsetSpecs(ts); err != nil {
-		return err
-	}
+	return nil
+}
+
+func (r *Runtime) storeRegisteredToolset(ts ToolsetRegistration) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	r.addToolsetLocked(ts)
+	registerToolsetHints(ts)
+	return nil
+}
 
-	// Install optional hint templates into the global registry for sinks.
+func (r *Runtime) closeRegistration() bool {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	alreadyClosed := r.registrationClosed
+	r.registrationClosed = true
+	return alreadyClosed
+}
+
+func (r *Runtime) hookActivityRegistrationOptions() engine.ActivityOptions {
+	timeout := defaultHookActivityTimeout
+	if r.hookActivityTimeout > 0 {
+		timeout = r.hookActivityTimeout
+	}
+	return engine.ActivityOptions{
+		StartToCloseTimeout: timeout,
+		RetryPolicy:         defaultRetriedActivityPolicy(),
+	}
+}
+
+func cloneToolSpecs(specs []tools.ToolSpec) []tools.ToolSpec {
+	cp := make([]tools.ToolSpec, len(specs))
+	copy(cp, specs)
+	return cp
+}
+
+func registerToolsetHints(ts ToolsetRegistration) {
 	if len(ts.CallHints) > 0 {
 		rthints.RegisterCallHints(ts.CallHints)
 	}
 	if len(ts.ResultHints) > 0 {
 		rthints.RegisterResultHints(ts.ResultHints)
 	}
-	return nil
 }
 
 func validateAgentToolsetSpecs(ts ToolsetRegistration) error {

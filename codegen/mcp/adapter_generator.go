@@ -241,7 +241,15 @@ func (g *adapterGenerator) buildAdapterData() (*AdapterData, error) {
 	if err != nil {
 		return nil, err
 	}
-	data := &AdapterData{
+	data := g.newAdapterData(tools, resources)
+	g.populateAdapterDataCollections(data)
+	g.populateAdapterDataFlags(data)
+	g.populateAdapterHelperData(data)
+	return data, nil
+}
+
+func (g *adapterGenerator) newAdapterData(tools []*ToolAdapter, resources []*ResourceAdapter) *AdapterData {
+	return &AdapterData{
 		ServiceName:         g.originalService.Name,
 		ServiceGoName:       codegen.Goify(g.originalService.Name, true),
 		MCPServiceName:      g.originalService.Name,
@@ -254,36 +262,27 @@ func (g *adapterGenerator) buildAdapterData() (*AdapterData, error) {
 		ImportPath:          g.genpkg,
 		Tools:               tools,
 		Resources:           resources,
-		DynamicPrompts:      g.buildDynamicPromptAdapters(),
-		Notifications:       g.buildNotificationAdapters(),
-		Subscriptions:       g.buildSubscriptionAdapters(),
 	}
+}
 
-	// Streaming: tools/call uses SSE. For non-streaming tools the adapter sends
-	// a single final event via SendAndClose; clients consistently use SSE.
-	data.ToolsCallStreaming = true
-
-	// Static prompts are handled directly in the adapter
+func (g *adapterGenerator) populateAdapterDataCollections(data *AdapterData) {
+	data.DynamicPrompts = g.buildDynamicPromptAdapters()
+	data.Notifications = g.buildNotificationAdapters()
+	data.Subscriptions = g.buildSubscriptionAdapters()
 	data.StaticPrompts = g.buildStaticPrompts()
+}
 
-	// Derive watchable resources presence
-	for _, r := range data.Resources {
-		if r.Watchable {
-			data.HasWatchableResources = true
-			break
-		}
-	}
-	data.NeedsMCPClient = len(data.Tools) > 0 ||
-		len(data.Resources) > 0 ||
-		len(data.DynamicPrompts) > 0 ||
-		len(data.Notifications) > 0
+func (g *adapterGenerator) populateAdapterDataFlags(data *AdapterData) {
+	data.ToolsCallStreaming = true
+	data.HasWatchableResources = hasWatchableResources(data.Resources)
+	data.NeedsMCPClient = adapterDataNeedsMCPClient(data)
 	data.NeedsOriginalClient = len(data.DynamicPrompts) > 0 || adapterDataNeedsOriginalClient(data.Tools, data.Resources)
 	data.NeedsQueryFormatting = adapterDataNeedsQueryFormatting(data.Resources)
+}
 
+func (g *adapterGenerator) populateAdapterHelperData(data *AdapterData) {
 	data.Register = g.buildRegisterData(data)
 	data.ClientCaller = g.buildClientCallerData(data, g.genpkg)
-
-	return data, nil
 }
 
 func (g *adapterGenerator) buildRegisterData(data *AdapterData) *RegisterData {
@@ -359,6 +358,22 @@ func adapterDataNeedsOriginalClient(tools []*ToolAdapter, resources []*ResourceA
 	return false
 }
 
+func adapterDataNeedsMCPClient(data *AdapterData) bool {
+	return len(data.Tools) > 0 ||
+		len(data.Resources) > 0 ||
+		len(data.DynamicPrompts) > 0 ||
+		len(data.Notifications) > 0
+}
+
+func hasWatchableResources(resources []*ResourceAdapter) bool {
+	for _, resource := range resources {
+		if resource.Watchable {
+			return true
+		}
+	}
+	return false
+}
+
 // adapterDataNeedsQueryFormatting reports whether resource query emission needs
 // strconv-based formatting for non-string primitive query values.
 func adapterDataNeedsQueryFormatting(resources []*ResourceAdapter) bool {
@@ -377,56 +392,70 @@ func (g *adapterGenerator) buildToolAdapters() ([]*ToolAdapter, error) {
 	adapters := make([]*ToolAdapter, 0, len(g.mcp.Tools))
 
 	for _, tool := range g.mcp.Tools {
-		// Check if payload is Empty type (added by Goa during Finalize)
-		hasRealPayload := tool.Method.Payload != nil && tool.Method.Payload.Type != expr.Empty
-
-		adapter := &ToolAdapter{
-			Name:               tool.Name,
-			Description:        tool.Description,
-			OriginalMethodName: codegen.Goify(tool.Method.Name, true),
-			Meta:               mcpAnnotationEntries(g.originalMethodMeta(tool.Method.Name)),
-			AnnotationsJSON:    mcpAnnotationJSON(g.originalMethodMeta(tool.Method.Name)),
-			HasPayload:         hasRealPayload,
-			HasResult:          tool.Method.Result != nil,
-			IsStreaming:        tool.Method.Stream == expr.ServerStreamKind,
+		adapter, err := g.buildToolAdapter(tool)
+		if err != nil {
+			return nil, err
 		}
-
-		// Set streaming interface and event types for server-streaming methods
-		if adapter.IsStreaming {
-			adapter.StreamInterface = codegen.Goify(tool.Method.Name, true) + "ServerStream"
-			adapter.StreamEventType = codegen.Goify(tool.Method.Name, true) + "Event"
-		}
-
-		// Set payload type reference only for real payloads
-		if hasRealPayload {
-			adapter.PayloadType = g.getTypeReference(tool.Method.Payload)
-			// Generate a minimal JSON Schema for MCP tools/list
-			schema, err := shared.ToJSONSchema(tool.Method.Payload)
-			if err != nil {
-				return nil, fmt.Errorf("build schema for tool %q: %w", tool.Name, err)
-			}
-			adapter.InputSchema = schema
-			// Collect simple validations for adapter-side checks
-			req, enums, enumPtr, defaults := g.collectTopLevelValidations(tool.Method.Payload)
-			adapter.RequiredFields = req
-			adapter.EnumFields = enums
-			adapter.EnumFieldsPtr = enumPtr
-			adapter.DefaultFields = defaults
-			// Produce a minimal valid example JSON for arguments
-			adapter.ExampleArguments = g.buildExampleJSON(tool.Method.Payload)
-		} else {
-			adapter.ExampleArguments = "{}"
-		}
-
-		// Set result type reference
-		if tool.Method.Result != nil {
-			adapter.ResultType = g.getTypeReference(tool.Method.Result)
-		}
-
 		adapters = append(adapters, adapter)
 	}
 
 	return adapters, nil
+}
+
+func (g *adapterGenerator) buildToolAdapter(tool *mcpexpr.ToolExpr) (*ToolAdapter, error) {
+	meta := g.originalMethodMeta(tool.Method.Name)
+	adapter := &ToolAdapter{
+		Name:               tool.Name,
+		Description:        tool.Description,
+		OriginalMethodName: codegen.Goify(tool.Method.Name, true),
+		Meta:               mcpAnnotationEntries(meta),
+		AnnotationsJSON:    mcpAnnotationJSON(meta),
+		HasPayload:         hasNonEmptyPayload(tool.Method.Payload),
+		HasResult:          tool.Method.Result != nil,
+		IsStreaming:        tool.Method.Stream == expr.ServerStreamKind,
+	}
+	g.populateToolStreamingData(adapter, tool)
+	if err := g.populateToolPayloadData(adapter, tool); err != nil {
+		return nil, err
+	}
+	g.populateToolResultData(adapter, tool)
+	return adapter, nil
+}
+
+func (g *adapterGenerator) populateToolStreamingData(adapter *ToolAdapter, tool *mcpexpr.ToolExpr) {
+	if !adapter.IsStreaming {
+		return
+	}
+	adapter.StreamInterface = codegen.Goify(tool.Method.Name, true) + "ServerStream"
+	adapter.StreamEventType = codegen.Goify(tool.Method.Name, true) + "Event"
+}
+
+func (g *adapterGenerator) populateToolPayloadData(adapter *ToolAdapter, tool *mcpexpr.ToolExpr) error {
+	if !adapter.HasPayload {
+		adapter.ExampleArguments = "{}"
+		return nil
+	}
+	payload := tool.Method.Payload
+	adapter.PayloadType = g.getTypeReference(payload)
+	schema, err := shared.ToJSONSchema(payload)
+	if err != nil {
+		return fmt.Errorf("build schema for tool %q: %w", tool.Name, err)
+	}
+	adapter.InputSchema = schema
+	req, enums, enumPtr, defaults := g.collectTopLevelValidations(payload)
+	adapter.RequiredFields = req
+	adapter.EnumFields = enums
+	adapter.EnumFieldsPtr = enumPtr
+	adapter.DefaultFields = defaults
+	adapter.ExampleArguments = g.buildExampleJSON(payload)
+	return nil
+}
+
+func (g *adapterGenerator) populateToolResultData(adapter *ToolAdapter, tool *mcpexpr.ToolExpr) {
+	if tool.Method.Result == nil {
+		return
+	}
+	adapter.ResultType = g.getTypeReference(tool.Method.Result)
 }
 
 func mcpAnnotationJSON(meta expr.MetaExpr) string {
@@ -513,27 +542,7 @@ func (g *adapterGenerator) collectTopLevelValidations(
 	enums := map[string][]string{}
 	enumPtr := map[string]bool{}
 	defaults := []DefaultField{}
-	// Build a quick map of attribute by name
-	fields := map[string]*expr.AttributeExpr{}
-	for _, nat := range *obj {
-		fields[nat.Name] = nat.Attribute
-		if nat.Attribute.DefaultValue != nil {
-			if def, ok := topLevelDefaultField(nat.Name, nat.Attribute); ok {
-				defaults = append(defaults, def)
-			}
-		}
-		// enum capture: stringify values to support string and numeric enums
-		if nat.Attribute.Validation == nil || len(nat.Attribute.Validation.Values) == 0 {
-			continue
-		}
-		vals := []string{}
-		for _, v := range nat.Attribute.Validation.Values {
-			vals = append(vals, fmt.Sprint(v))
-		}
-		if len(vals) > 0 {
-			enums[nat.Name] = vals
-		}
-	}
+	fields, enums, defaults := collectTopLevelValidationFields(obj)
 	if attr.Validation != nil && len(attr.Validation.Required) > 0 {
 		for _, name := range attr.Validation.Required {
 			if fa, ok := fields[name]; ok {
@@ -557,6 +566,38 @@ func (g *adapterGenerator) collectTopLevelValidations(
 		enumPtr[n] = !isReq && !hasDefault
 	}
 	return req, enums, enumPtr, defaults
+}
+
+func collectTopLevelValidationFields(obj *expr.Object) (map[string]*expr.AttributeExpr, map[string][]string, []DefaultField) {
+	fields := map[string]*expr.AttributeExpr{}
+	enums := map[string][]string{}
+	defaults := []DefaultField{}
+	for _, nat := range *obj {
+		fields[nat.Name] = nat.Attribute
+		if nat.Attribute.DefaultValue != nil {
+			if def, ok := topLevelDefaultField(nat.Name, nat.Attribute); ok {
+				defaults = append(defaults, def)
+			}
+		}
+		if vals := collectEnumValues(nat.Attribute); len(vals) > 0 {
+			enums[nat.Name] = vals
+		}
+	}
+	return fields, enums, defaults
+}
+
+func collectEnumValues(attr *expr.AttributeExpr) []string {
+	if attr == nil || attr.Validation == nil || len(attr.Validation.Values) == 0 {
+		return nil
+	}
+	vals := make([]string, 0, len(attr.Validation.Values))
+	for _, v := range attr.Validation.Values {
+		vals = append(vals, fmt.Sprint(v))
+	}
+	if len(vals) == 0 {
+		return nil
+	}
+	return vals
 }
 
 func topLevelDefaultField(name string, attr *expr.AttributeExpr) (DefaultField, bool) {
@@ -593,58 +634,79 @@ func (g *adapterGenerator) buildResourceAdapters() ([]*ResourceAdapter, error) {
 	adapters := make([]*ResourceAdapter, 0, len(g.mcp.Resources))
 
 	for _, resource := range g.mcp.Resources {
-		// Check if payload is Empty type (added by Goa during Finalize)
-		hasRealPayload := resource.Method.Payload != nil && resource.Method.Payload.Type != expr.Empty
-
-		adapter := &ResourceAdapter{
-			Name:               resource.Name,
-			Description:        resource.Description,
-			URI:                resource.URI,
-			MimeType:           resource.MimeType,
-			OriginalMethodName: codegen.Goify(resource.Method.Name, true),
-			HasPayload:         hasRealPayload,
-			HasResult:          resource.Method.Result != nil,
-			Watchable:          resource.Watchable,
+		adapter, err := g.buildResourceAdapter(resource)
+		if err != nil {
+			return nil, err
 		}
-
-		// Set payload type reference only for real payloads
-		if hasRealPayload {
-			adapter.PayloadType = g.getTypeReference(resource.Method.Payload)
-			queryFields, err := buildResourceQueryFields(resource.Method.Payload)
-			if err != nil {
-				return nil, fmt.Errorf("build resource query fields for %q: %w", resource.Method.Name, err)
-			}
-			adapter.QueryFields = queryFields
-		}
-
-		// Set result type reference
-		if resource.Method.Result != nil {
-			adapter.ResultType = g.getTypeReference(resource.Method.Result)
-		}
-
 		adapters = append(adapters, adapter)
 	}
 
 	return adapters, nil
 }
 
+func (g *adapterGenerator) buildResourceAdapter(resource *mcpexpr.ResourceExpr) (*ResourceAdapter, error) {
+	adapter := &ResourceAdapter{
+		Name:               resource.Name,
+		Description:        resource.Description,
+		URI:                resource.URI,
+		MimeType:           resource.MimeType,
+		OriginalMethodName: codegen.Goify(resource.Method.Name, true),
+		HasPayload:         hasNonEmptyPayload(resource.Method.Payload),
+		HasResult:          resource.Method.Result != nil,
+		Watchable:          resource.Watchable,
+	}
+	if err := g.populateResourcePayloadData(adapter, resource); err != nil {
+		return nil, err
+	}
+	g.populateResourceResultData(adapter, resource)
+	return adapter, nil
+}
+
+func (g *adapterGenerator) populateResourcePayloadData(adapter *ResourceAdapter, resource *mcpexpr.ResourceExpr) error {
+	if !adapter.HasPayload {
+		return nil
+	}
+	adapter.PayloadType = g.getTypeReference(resource.Method.Payload)
+	queryFields, err := buildResourceQueryFields(resource.Method.Payload)
+	if err != nil {
+		return fmt.Errorf("build resource query fields for %q: %w", resource.Method.Name, err)
+	}
+	adapter.QueryFields = queryFields
+	return nil
+}
+
+func (g *adapterGenerator) populateResourceResultData(adapter *ResourceAdapter, resource *mcpexpr.ResourceExpr) {
+	if resource.Method.Result == nil {
+		return
+	}
+	adapter.ResultType = g.getTypeReference(resource.Method.Result)
+}
+
 // buildResourceQueryFields computes the statically known resource query plan so
 // the template can emit direct query assembly without rediscovering payload
 // structure at runtime.
 func buildResourceQueryFields(payload *expr.AttributeExpr) ([]*ResourceQueryField, error) {
-	definitions := make(map[string]resourceQueryFieldDefinition)
-	collectResourceQueryFields(payload, payload, definitions, make(map[string]struct{}))
+	definitions := collectResourceQueryFieldDefinitions(payload)
 	if len(definitions) == 0 {
 		return nil, fmt.Errorf(
 			"payload must define at least one top-level primitive or array-of-primitive query field",
 		)
 	}
+	return resourceQueryFieldPlan(definitions)
+}
+
+func collectResourceQueryFieldDefinitions(payload *expr.AttributeExpr) map[string]resourceQueryFieldDefinition {
+	definitions := make(map[string]resourceQueryFieldDefinition)
+	collectResourceQueryFields(payload, payload, definitions, make(map[string]struct{}))
+	return definitions
+}
+
+func resourceQueryFieldPlan(definitions map[string]resourceQueryFieldDefinition) ([]*ResourceQueryField, error) {
 	names := make([]string, 0, len(definitions))
 	for name := range definitions {
 		names = append(names, name)
 	}
 	sort.Strings(names)
-
 	fields := make([]*ResourceQueryField, 0, len(names))
 	for _, name := range names {
 		field, err := newResourceQueryField(name, definitions[name])
@@ -741,6 +803,10 @@ func attributeDataType(dt expr.DataType) *expr.AttributeExpr {
 		return userType.Attribute()
 	}
 	return &expr.AttributeExpr{Type: dt}
+}
+
+func hasNonEmptyPayload(attr *expr.AttributeExpr) bool {
+	return attr != nil && attr.Type != expr.Empty
 }
 
 // resourceQueryFormatKind classifies one supported scalar query value so the
