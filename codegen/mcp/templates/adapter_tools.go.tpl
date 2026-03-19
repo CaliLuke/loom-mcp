@@ -83,10 +83,13 @@ func (a *MCPAdapter) ToolsCall(ctx context.Context, p *ToolsCallPayload, stream 
     {{- range .Tools }}
     case {{ quote .Name }}:
         {{- if .HasPayload }}
+        {{- if or .DefaultFields .RequiredFields }}
         fields, ferr := topLevelJSONFieldSet(p.Arguments)
         if ferr != nil {
             return goa.PermanentError("invalid_params", "%s", ferr.Error())
         }
+        _ = fields
+        {{- end }}
         req := &http.Request{ Header: http.Header{"Content-Type": []string{"application/json"}}, Body: io.NopCloser(bytes.NewReader(p.Arguments)) }
         {{- if .IsStreaming }}
         var payload {{ .PayloadType }}
