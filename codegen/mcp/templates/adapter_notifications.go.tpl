@@ -1,7 +1,7 @@
 {{ comment "Notifications and events stream" }}
 
 func (a *MCPAdapter) NotifyStatusUpdate(ctx context.Context, n *mcpruntime.Notification) error {
-    if !a.isInitialized() {
+    if !a.isInitialized(ctx) {
         return goa.PermanentError("invalid_params", "Not initialized")
     }
     if n == nil || n.Type == "" {
@@ -21,7 +21,7 @@ func (a *MCPAdapter) NotifyStatusUpdate(ctx context.Context, n *mcpruntime.Notif
 }
 
 func (a *MCPAdapter) EventsStream(ctx context.Context, stream EventsStreamServerStream) error {
-    if !a.isInitialized() {
+    if !a.isInitialized(ctx) {
         return goa.PermanentError("internal_error", "Not initialized")
     }
     sub, err := a.broadcaster.Subscribe(ctx)
@@ -48,5 +48,4 @@ func (a *MCPAdapter) EventsStream(ctx context.Context, stream EventsStreamServer
         }
     }
 }
-
 

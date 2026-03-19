@@ -2,7 +2,7 @@
 {{ comment "Resources handling" }}
 
 func (a *MCPAdapter) ResourcesList(ctx context.Context, p *ResourcesListPayload) (*ResourcesListResult, error) {
-    if !a.isInitialized() {
+    if !a.isInitialized(ctx) {
         return nil, goa.PermanentError("invalid_params", "Not initialized")
     }
     a.log(ctx, "request", map[string]any{"method": "resources/list"})
@@ -17,7 +17,7 @@ func (a *MCPAdapter) ResourcesList(ctx context.Context, p *ResourcesListPayload)
 }
 
 func (a *MCPAdapter) ResourcesRead(ctx context.Context, p *ResourcesReadPayload) (*ResourcesReadResult, error) {
-    if !a.isInitialized() {
+    if !a.isInitialized(ctx) {
         return nil, goa.PermanentError("invalid_params", "Not initialized")
     }
     a.log(ctx, "request", map[string]any{"method": "resources/read", "uri": p.URI})
@@ -127,7 +127,7 @@ func (a *MCPAdapter) assertResourceURIAllowed(ctx context.Context, pURI string) 
 }
 
 func (a *MCPAdapter) ResourcesSubscribe(ctx context.Context, p *ResourcesSubscribePayload) error {
-    if !a.isInitialized() {
+    if !a.isInitialized(ctx) {
         return goa.PermanentError("invalid_params", "Not initialized")
     }
     switch p.URI {
@@ -145,7 +145,7 @@ func (a *MCPAdapter) ResourcesSubscribe(ctx context.Context, p *ResourcesSubscri
 }
 
 func (a *MCPAdapter) ResourcesUnsubscribe(ctx context.Context, p *ResourcesUnsubscribePayload) error {
-    if !a.isInitialized() {
+    if !a.isInitialized(ctx) {
         return goa.PermanentError("invalid_params", "Not initialized")
     }
     switch p.URI {

@@ -2,7 +2,7 @@
 {{ comment "Prompts handling" }}
 
 func (a *MCPAdapter) PromptsList(ctx context.Context, p *PromptsListPayload) (*PromptsListResult, error) {
-    if !a.isInitialized() {
+    if !a.isInitialized(ctx) {
         return nil, goa.PermanentError("invalid_params", "Not initialized")
     }
     a.log(ctx, "request", map[string]any{"method": "prompts/list"})
@@ -24,7 +24,7 @@ func (a *MCPAdapter) PromptsList(ctx context.Context, p *PromptsListPayload) (*P
 }
 
 func (a *MCPAdapter) PromptsGet(ctx context.Context, p *PromptsGetPayload) (*PromptsGetResult, error) {
-    if !a.isInitialized() {
+    if !a.isInitialized(ctx) {
         return nil, goa.PermanentError("invalid_params", "Not initialized")
     }
     if p == nil || p.Name == "" {
@@ -102,5 +102,4 @@ func (a *MCPAdapter) PromptsGet(ctx context.Context, p *PromptsGetPayload) (*Pro
     return nil, goa.PermanentError("method_not_found", "Unknown prompt: %s", p.Name)
 }
 {{- end }}
-
 

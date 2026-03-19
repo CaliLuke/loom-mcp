@@ -2,7 +2,7 @@
 {{ comment "General subscriptions handling" }}
 
 func (a *MCPAdapter) Subscribe(ctx context.Context, p *SubscribePayload) (*SubscribeResult, error) {
-    if !a.isInitialized() {
+    if !a.isInitialized(ctx) {
         return nil, goa.PermanentError("invalid_params", "Not initialized")
     }
     a.log(ctx, "request", map[string]any{"method": "subscribe"})
@@ -12,7 +12,7 @@ func (a *MCPAdapter) Subscribe(ctx context.Context, p *SubscribePayload) (*Subsc
 }
 
 func (a *MCPAdapter) Unsubscribe(ctx context.Context, p *UnsubscribePayload) (*UnsubscribeResult, error) {
-    if !a.isInitialized() {
+    if !a.isInitialized(ctx) {
         return nil, goa.PermanentError("invalid_params", "Not initialized")
     }
     a.log(ctx, "request", map[string]any{"method": "unsubscribe"})
@@ -21,6 +21,5 @@ func (a *MCPAdapter) Unsubscribe(ctx context.Context, p *UnsubscribePayload) (*U
     return res, nil
 }
 {{- end }}
-
 
 
