@@ -135,9 +135,23 @@ func applyMCPPolicyHeadersToJSONRPCMount(files []*codegen.File) {
 			if s == nil {
 				continue
 			}
+			switch s.Name {
+			case "jsonrpc-server-struct":
+				s.Source = mcpTemplates.Read("jsonrpc_server_struct")
+			case "jsonrpc-server-init":
+				s.Source = mcpTemplates.Read("jsonrpc_server_init")
+			case "jsonrpc-server-handler":
+				s.Source = mcpTemplates.Read("jsonrpc_server_handler")
+			case "jsonrpc-mixed-server-handler":
+				s.Source = mcpTemplates.Read("jsonrpc_mixed_server_handler")
+			}
 			if s.Name == "jsonrpc-server-mount" {
 				s.Source = mcpTemplates.Read("jsonrpc_server_mount")
 			}
+		}
+		if len(f.SectionTemplates) > 0 && f.SectionTemplates[0] != nil {
+			codegen.AddImport(f.SectionTemplates[0], &codegen.ImportSpec{Path: "encoding/json"})
+			codegen.AddImport(f.SectionTemplates[0], &codegen.ImportSpec{Path: "goa.design/goa-ai/runtime/mcp", Name: "mcpruntime"})
 		}
 	}
 }
@@ -156,6 +170,7 @@ func generateMCPTransport(genpkg string, svc *expr.ServiceExpr, data *AdapterDat
 		{Path: "bytes"},
 		{Path: "context"},
 		{Path: "encoding/json"},
+		{Path: "errors"},
 		{Path: "fmt"},
 		{Path: "io"},
 		{Path: "net/http"},
@@ -164,6 +179,12 @@ func generateMCPTransport(genpkg string, svc *expr.ServiceExpr, data *AdapterDat
 		{Path: "strconv"},
 		{Path: "strings"},
 		{Path: "sync"},
+		{Path: "time"},
+		{Path: "go.opentelemetry.io/otel"},
+		{Path: "go.opentelemetry.io/otel/attribute"},
+		{Path: "go.opentelemetry.io/otel/codes"},
+		{Path: "go.opentelemetry.io/otel/metric"},
+		{Path: "go.opentelemetry.io/otel/trace"},
 		{Path: genpkg + "/" + svcName, Name: svcName},
 		{Path: "goa.design/goa-ai/runtime/mcp", Name: "mcpruntime"},
 		{Path: "goa.design/goa/v3/http", Name: "goahttp"},
@@ -299,6 +320,35 @@ func generateMCPTransport(genpkg string, svc *expr.ServiceExpr, data *AdapterDat
 			{
 				Name:   "mcp-protocol-version",
 				Source: fmt.Sprintf("const DefaultProtocolVersion = %q\n", pv),
+			},
+		},
+	})
+
+	sdkServerPath := filepath.Join(codegen.Gendir, "mcp_"+svcName, "sdk_server.go")
+	sdkServerImports := []*codegen.ImportSpec{
+		{Path: "context"},
+		{Path: "encoding/base64"},
+		{Path: "encoding/json"},
+		{Path: "fmt"},
+		{Path: "net/http"},
+		{Path: "net/url"},
+		{Path: "time"},
+		{Path: genpkg + "/" + svcName, Name: svcName},
+		{Path: "github.com/modelcontextprotocol/go-sdk/mcp", Name: "mcpsdk"},
+		{Path: "goa.design/goa-ai/runtime/mcp", Name: "mcpruntime"},
+	}
+	files = append(files, &codegen.File{
+		Path: sdkServerPath,
+		SectionTemplates: []*codegen.SectionTemplate{
+			codegen.Header(fmt.Sprintf("SDK-backed MCP server for %s service", svc.Name), pkgName, sdkServerImports),
+			{
+				Name:   "mcp-sdk-server",
+				Source: mcpTemplates.Read("sdk_server"),
+				Data:   data,
+				FuncMap: map[string]any{
+					"goify": func(s string) string { return codegen.Goify(s, true) },
+					"quote": func(s string) string { return fmt.Sprintf("%q", s) },
+				},
 			},
 		},
 	})

@@ -223,6 +223,10 @@ func (b *mcpExprBuilder) buildToolInfoType() *expr.AttributeExpr {
 				Type:        expr.Any,
 				Description: "JSON Schema for tool input",
 			}},
+			{Name: "annotations", Attribute: &expr.AttributeExpr{
+				Type:        expr.Any,
+				Description: "Optional MCP tool annotations such as readOnlyHint, openWorldHint, or destructiveHint.",
+			}},
 		},
 		Validation: &expr.ValidationExpr{
 			Required: []string{"name"},

@@ -14,6 +14,12 @@ import (
 )
 
 type (
+	// AnnotationMetaEntry stores one generated tool annotation entry.
+	AnnotationMetaEntry struct {
+		Key    string
+		Values []string
+	}
+
 	// AdapterData holds the data for generating the adapter
 	AdapterData struct {
 		ServiceName         string
@@ -64,6 +70,7 @@ type (
 		ID            string
 		QualifiedName string
 		Description   string
+		Meta          []AnnotationMetaEntry
 		PayloadType   string
 		ResultType    string
 		InputSchema   string
@@ -75,6 +82,8 @@ type (
 		Name               string
 		Description        string
 		OriginalMethodName string
+		Meta               []AnnotationMetaEntry
+		AnnotationsJSON    string
 		HasPayload         bool
 		HasResult          bool
 		PayloadType        string
@@ -313,6 +322,7 @@ func (g *adapterGenerator) buildRegisterData(data *AdapterData) *RegisterData {
 			ID:            tool.Name,
 			QualifiedName: fmt.Sprintf("%s.%s.%s", reg.ServiceName, reg.SuiteName, tool.Name),
 			Description:   tool.Description,
+			Meta:          tool.Meta,
 			PayloadType:   payloadType,
 			ResultType:    resultType,
 			InputSchema:   schema,
@@ -374,6 +384,8 @@ func (g *adapterGenerator) buildToolAdapters() ([]*ToolAdapter, error) {
 			Name:               tool.Name,
 			Description:        tool.Description,
 			OriginalMethodName: codegen.Goify(tool.Method.Name, true),
+			Meta:               mcpAnnotationEntries(g.originalMethodMeta(tool.Method.Name)),
+			AnnotationsJSON:    mcpAnnotationJSON(g.originalMethodMeta(tool.Method.Name)),
 			HasPayload:         hasRealPayload,
 			HasResult:          tool.Method.Result != nil,
 			IsStreaming:        tool.Method.Stream == expr.ServerStreamKind,
@@ -415,6 +427,71 @@ func (g *adapterGenerator) buildToolAdapters() ([]*ToolAdapter, error) {
 	}
 
 	return adapters, nil
+}
+
+func mcpAnnotationJSON(meta expr.MetaExpr) string {
+	entries := mcpAnnotationEntries(meta)
+	if len(entries) == 0 {
+		return ""
+	}
+	normalized := make(map[string]any, len(entries))
+	for _, entry := range entries {
+		switch strings.ToLower(entry.Values[0]) {
+		case "true":
+			normalized[entry.Key] = true
+		case "false":
+			normalized[entry.Key] = false
+		default:
+			normalized[entry.Key] = entry.Values[0]
+		}
+	}
+	if len(normalized) == 0 {
+		return ""
+	}
+	data, err := json.Marshal(normalized)
+	if err != nil {
+		return ""
+	}
+	return string(data)
+}
+
+// mcpAnnotationEntries extracts MCP annotations from original method metadata.
+func mcpAnnotationEntries(meta expr.MetaExpr) []AnnotationMetaEntry {
+	if len(meta) == 0 {
+		return nil
+	}
+	keys := []string{
+		"readOnlyHint",
+		"openWorldHint",
+		"destructiveHint",
+	}
+	entries := make([]AnnotationMetaEntry, 0, len(keys))
+	for _, key := range keys {
+		values := meta["mcp:annotation:"+key]
+		if len(values) == 0 {
+			values = meta[key]
+		}
+		if len(values) == 0 {
+			continue
+		}
+		entries = append(entries, AnnotationMetaEntry{
+			Key:    key,
+			Values: append([]string(nil), values...),
+		})
+	}
+	if len(entries) == 0 {
+		return nil
+	}
+	return entries
+}
+
+func (g *adapterGenerator) originalMethodMeta(name string) expr.MetaExpr {
+	for _, method := range g.originalService.Methods {
+		if method.Name == name {
+			return method.Meta
+		}
+	}
+	return nil
 }
 
 // collectTopLevelValidations extracts required fields and enum values for a top-level object payload
