@@ -180,6 +180,8 @@ func (a *MCPAdapter) toolsCallHandler(ctx context.Context, p *ToolsCallPayload, 
         if err != nil {
             return false, goa.PermanentError("invalid_params", "%s", err.Error())
         }
+        _ = fields
+        _ = rawFields
         {{- end }}
         if err := decodeMCPPayloadStrict(p.Arguments, &payload); err != nil {
             return false, goa.PermanentError("invalid_params", "%s", err.Error())
@@ -233,6 +235,8 @@ func (a *MCPAdapter) toolsCallHandler(ctx context.Context, p *ToolsCallPayload, 
         if err != nil {
             return false, goa.PermanentError("invalid_params", "%s", err.Error())
         }
+        _ = fields
+        _ = rawFields
         {{- end }}
         if err := decodeMCPPayloadStrict(p.Arguments, &payload); err != nil {
             return false, goa.PermanentError("invalid_params", "%s", err.Error())
