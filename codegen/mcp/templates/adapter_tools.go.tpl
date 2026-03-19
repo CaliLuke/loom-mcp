@@ -1,6 +1,21 @@
 {{- if .Tools }}
 {{ comment "Tools handling" }}
 
+func topLevelJSONFieldSet(raw json.RawMessage) (map[string]struct{}, error) {
+    fields := make(map[string]struct{})
+    if len(bytes.TrimSpace(raw)) == 0 {
+        return fields, nil
+    }
+    var payload map[string]json.RawMessage
+    if err := json.Unmarshal(raw, &payload); err != nil {
+        return nil, err
+    }
+    for name := range payload {
+        fields[name] = struct{}{}
+    }
+    return fields, nil
+}
+
 func (a *MCPAdapter) ToolsList(ctx context.Context, p *ToolsListPayload) (*ToolsListResult, error) {
     if !a.isInitialized() {
         return nil, goa.PermanentError("invalid_params", "Not initialized")
@@ -68,16 +83,29 @@ func (a *MCPAdapter) ToolsCall(ctx context.Context, p *ToolsCallPayload, stream 
     {{- range .Tools }}
     case {{ quote .Name }}:
         {{- if .HasPayload }}
+        fields, ferr := topLevelJSONFieldSet(p.Arguments)
+        if ferr != nil {
+            return goa.PermanentError("invalid_params", "%s", ferr.Error())
+        }
         req := &http.Request{ Header: http.Header{"Content-Type": []string{"application/json"}}, Body: io.NopCloser(bytes.NewReader(p.Arguments)) }
         {{- if .IsStreaming }}
         var payload {{ .PayloadType }}
         if err := goahttp.RequestDecoder(req).Decode(&payload); err != nil {
             return goa.PermanentError("invalid_params", "%s", err.Error())
         }
+        {{- if .DefaultFields }}
+        {
+            {{- range .DefaultFields }}
+            if _, ok := fields[{{ printf "%q" .Name }}]; !ok {
+                payload.{{ .GoName }} = {{ .Literal }}
+            }
+            {{- end }}
+        }
+        {{- end }}
         {{- if .RequiredFields }}
         {
             {{- range .RequiredFields }}
-            if payload.{{ goify . }} == "" {
+            if _, ok := fields[{{ printf "%q" . }}]; !ok {
                 return goa.PermanentError("invalid_params", "Missing required field: {{ . }}")
             }
             {{- end }}
@@ -118,10 +146,19 @@ func (a *MCPAdapter) ToolsCall(ctx context.Context, p *ToolsCallPayload, stream 
         if err := goahttp.RequestDecoder(req).Decode(&payload); err != nil {
             return goa.PermanentError("invalid_params", "%s", err.Error())
         }
+        {{- if .DefaultFields }}
+        {
+            {{- range .DefaultFields }}
+            if _, ok := fields[{{ printf "%q" .Name }}]; !ok {
+                payload.{{ .GoName }} = {{ .Literal }}
+            }
+            {{- end }}
+        }
+        {{- end }}
         {{- if .RequiredFields }}
         {
             {{- range .RequiredFields }}
-            if payload.{{ goify . }} == "" {
+            if _, ok := fields[{{ printf "%q" . }}]; !ok {
                 return goa.PermanentError("invalid_params", "Missing required field: {{ . }}")
             }
             {{- end }}

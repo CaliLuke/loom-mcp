@@ -190,6 +190,62 @@ func TestGenerateMCPClientAdapter_RendersOriginalClientForDynamicPrompts(t *test
 	require.Contains(t, rendered, "origC.BuildGeneratePromptRequest")
 }
 
+func TestBuildAdapterData_DefaultedEnumFieldsStayScalarAndReapplyDefaults(t *testing.T) {
+	restore := resetMCPCodegenState(t)
+	defer restore()
+
+	svc, methods := testService("assistant", "get_workflow")
+	methods["get_workflow"].Payload = &expr.AttributeExpr{
+		Type: &expr.Object{
+			{
+				Name: "workflow_id",
+				Attribute: &expr.AttributeExpr{
+					Type:         expr.String,
+					DefaultValue: "prd-generation",
+					Validation: &expr.ValidationExpr{
+						Values: []any{"prd-generation", "technical-design"},
+					},
+				},
+			},
+		},
+	}
+
+	mcp := &mcpexpr.MCPExpr{
+		Name:    "assistant-mcp",
+		Version: "1.0.0",
+		Tools: []*mcpexpr.ToolExpr{
+			{Name: "get_workflow", Method: methods["get_workflow"]},
+		},
+	}
+	data, err := newAdapterGenerator(
+		"example.com/assistant/gen",
+		svc,
+		mcp,
+		newMCPExprBuilder(svc, mcp, nil).BuildServiceMapping(),
+	).buildAdapterData()
+
+	require.NoError(t, err)
+	require.Len(t, data.Tools, 1)
+	require.False(t, data.Tools[0].EnumFieldsPtr["workflow_id"])
+	require.Len(t, data.Tools[0].DefaultFields, 1)
+
+	files := generateMCPTransport("example.com/assistant/gen", svc, data)
+	var adapterFile *gcodegen.File
+	for _, file := range files {
+		if filepath.ToSlash(file.Path) == "gen/mcp_assistant/adapter_server.go" {
+			adapterFile = file
+			break
+		}
+	}
+	require.NotNil(t, adapterFile)
+	rendered := renderGeneratedFile(t, adapterFile)
+	require.Contains(t, rendered, "fields, ferr := topLevelJSONFieldSet(p.Arguments)")
+	require.Contains(t, rendered, `if _, ok := fields["workflow_id"]; !ok {`)
+	require.Contains(t, rendered, `payload.WorkflowID = "prd-generation"`)
+	require.NotContains(t, rendered, "payload.WorkflowID != nil")
+	require.NotContains(t, rendered, "*payload.WorkflowID")
+}
+
 func TestGenerateMCPClientAdapter_SpecializesResourceQueryConstruction(t *testing.T) {
 	restore := resetMCPCodegenState(t)
 	defer restore()

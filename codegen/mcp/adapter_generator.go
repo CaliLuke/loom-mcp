@@ -87,8 +87,17 @@ type (
 		RequiredFields []string
 		EnumFields     map[string][]string
 		EnumFieldsPtr  map[string]bool
+		DefaultFields  []DefaultField
 		// ExampleArguments contains a minimal valid JSON for tool arguments
 		ExampleArguments string
+	}
+
+	// DefaultField describes a top-level payload field default assignment.
+	DefaultField struct {
+		Name    string
+		GoName  string
+		Literal string
+		Kind    string
 	}
 
 	// ResourceAdapter represents a resource adapter
@@ -386,10 +395,11 @@ func (g *adapterGenerator) buildToolAdapters() ([]*ToolAdapter, error) {
 			}
 			adapter.InputSchema = schema
 			// Collect simple validations for adapter-side checks
-			req, enums, enumPtr := g.collectTopLevelValidations(tool.Method.Payload)
+			req, enums, enumPtr, defaults := g.collectTopLevelValidations(tool.Method.Payload)
 			adapter.RequiredFields = req
 			adapter.EnumFields = enums
 			adapter.EnumFieldsPtr = enumPtr
+			adapter.DefaultFields = defaults
 			// Produce a minimal valid example JSON for arguments
 			adapter.ExampleArguments = g.buildExampleJSON(tool.Method.Payload)
 		} else {
@@ -410,9 +420,9 @@ func (g *adapterGenerator) buildToolAdapters() ([]*ToolAdapter, error) {
 // collectTopLevelValidations extracts required fields and enum values for a top-level object payload
 func (g *adapterGenerator) collectTopLevelValidations(
 	attr *expr.AttributeExpr,
-) ([]string, map[string][]string, map[string]bool) {
+) ([]string, map[string][]string, map[string]bool, []DefaultField) {
 	if attr == nil || attr.Type == nil || attr.Type == expr.Empty {
-		return nil, nil, nil
+		return nil, nil, nil, nil
 	}
 	// Unwrap user type
 	if ut, ok := attr.Type.(expr.UserType); ok {
@@ -420,15 +430,21 @@ func (g *adapterGenerator) collectTopLevelValidations(
 	}
 	obj, ok := attr.Type.(*expr.Object)
 	if !ok {
-		return nil, nil, nil
+		return nil, nil, nil, nil
 	}
 	req := []string{}
 	enums := map[string][]string{}
 	enumPtr := map[string]bool{}
+	defaults := []DefaultField{}
 	// Build a quick map of attribute by name
 	fields := map[string]*expr.AttributeExpr{}
 	for _, nat := range *obj {
 		fields[nat.Name] = nat.Attribute
+		if nat.Attribute.DefaultValue != nil {
+			if def, ok := topLevelDefaultField(nat.Name, nat.Attribute); ok {
+				defaults = append(defaults, def)
+			}
+		}
 		// enum capture: stringify values to support string and numeric enums
 		if nat.Attribute.Validation == nil || len(nat.Attribute.Validation.Values) == 0 {
 			continue
@@ -460,9 +476,39 @@ func (g *adapterGenerator) collectTopLevelValidations(
 	}
 	for n := range enums {
 		_, isReq := reqSet[n]
-		enumPtr[n] = !isReq
+		hasDefault := fields[n] != nil && fields[n].DefaultValue != nil
+		enumPtr[n] = !isReq && !hasDefault
 	}
-	return req, enums, enumPtr
+	return req, enums, enumPtr, defaults
+}
+
+func topLevelDefaultField(name string, attr *expr.AttributeExpr) (DefaultField, bool) {
+	if attr == nil || attr.Type == nil || attr.DefaultValue == nil {
+		return DefaultField{}, false
+	}
+	goName := codegen.Goify(name, true)
+	actual := attr.Type
+	if ut, ok := actual.(expr.UserType); ok {
+		actual = ut.Attribute().Type
+	}
+	switch actual {
+	case expr.String:
+		def, ok := attr.DefaultValue.(string)
+		if !ok {
+			return DefaultField{}, false
+		}
+		return DefaultField{Name: name, GoName: goName, Literal: fmt.Sprintf("%q", def), Kind: "string"}, true
+	case expr.Boolean:
+		def, ok := attr.DefaultValue.(bool)
+		if !ok {
+			return DefaultField{}, false
+		}
+		return DefaultField{Name: name, GoName: goName, Literal: fmt.Sprintf("%t", def), Kind: "bool"}, true
+	case expr.Int, expr.Int32, expr.Int64, expr.UInt, expr.UInt32, expr.UInt64:
+		return DefaultField{Name: name, GoName: goName, Literal: fmt.Sprintf("%v", attr.DefaultValue), Kind: "int"}, true
+	default:
+		return DefaultField{}, false
+	}
 }
 
 // buildResourceAdapters creates adapter data for resources.
