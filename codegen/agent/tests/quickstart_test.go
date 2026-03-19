@@ -11,6 +11,8 @@ import (
 	"testing"
 )
 
+var goaCoreReplacePattern = regexp.MustCompile(`(?m)^replace goa\.design/goa/v3 => .+$`)
+
 // TestQuickstartGeneratesAndRuns verifies that the quickstart example:
 // 1. Successfully generates code with `goa gen`
 // 2. Successfully generates example with `goa example`
@@ -23,9 +25,7 @@ func TestQuickstartGeneratesAndRuns(t *testing.T) {
 		t.Skip("skipping quickstart integration test in short mode")
 	}
 
-	// Get the quickstart directory path (relative to repo root)
-	_, thisFile, _, _ := runtime.Caller(0)
-	repoRoot := filepath.Join(filepath.Dir(thisFile), "..", "..", "..")
+	repoRoot := testRepoRoot()
 	quickstartSrcDir := filepath.Join(repoRoot, "quickstart")
 
 	// Check required preconditions
@@ -75,65 +75,35 @@ func TestQuickstartGeneratesAndRuns(t *testing.T) {
 	// compiles the design package via `go list`, which fails when the module has
 	// pending sum updates.
 	t.Run("go_mod_tidy_pre", func(t *testing.T) {
-		cmd := exec.CommandContext(ctx, "go", "mod", "tidy")
-		cmd.Dir = quickstartDir
-		out, err := cmd.CombinedOutput()
-		if err != nil {
-			t.Fatalf("go mod tidy failed: %v\nOutput:\n%s", err, out)
-		}
+		runCommand(t, ctx, quickstartDir, "go", "mod", "tidy")
 	})
 
 	// Step 1: Run goa gen
 	t.Run("goa_gen", func(t *testing.T) {
-		cmd := exec.CommandContext(ctx, "goa", "gen", "example.com/quickstart/design")
-		cmd.Dir = quickstartDir
-		out, err := cmd.CombinedOutput()
-		if err != nil {
-			t.Fatalf("goa gen failed: %v\nOutput:\n%s", err, out)
-		}
+		out := runCommand(t, ctx, quickstartDir, "goa", "gen", "example.com/quickstart/design")
 		t.Logf("goa gen output:\n%s", out)
 	})
 
 	// Step 2: Run goa example
 	t.Run("goa_example", func(t *testing.T) {
-		cmd := exec.CommandContext(ctx, "goa", "example", "example.com/quickstart/design")
-		cmd.Dir = quickstartDir
-		out, err := cmd.CombinedOutput()
-		if err != nil {
-			t.Fatalf("goa example failed: %v\nOutput:\n%s", err, out)
-		}
+		out := runCommand(t, ctx, quickstartDir, "goa", "example", "example.com/quickstart/design")
 		t.Logf("goa example output:\n%s", out)
 	})
 
 	// Step 2b: Ensure module sums include dependencies pulled in by generated code.
 	// This is required when tests run with module updates disabled (e.g. GOFLAGS=-mod=readonly).
 	t.Run("go_mod_tidy", func(t *testing.T) {
-		cmd := exec.CommandContext(ctx, "go", "mod", "tidy")
-		cmd.Dir = quickstartDir
-		out, err := cmd.CombinedOutput()
-		if err != nil {
-			t.Fatalf("go mod tidy failed: %v\nOutput:\n%s", err, out)
-		}
+		runCommand(t, ctx, quickstartDir, "go", "mod", "tidy")
 	})
 
 	// Step 3: Verify compilation
 	t.Run("go_build", func(t *testing.T) {
-		cmd := exec.CommandContext(ctx, "go", "build", "./cmd/...")
-		cmd.Dir = quickstartDir
-		out, err := cmd.CombinedOutput()
-		if err != nil {
-			t.Fatalf("go build failed: %v\nOutput:\n%s", err, out)
-		}
+		runCommand(t, ctx, quickstartDir, "go", "build", "./cmd/...")
 	})
 
 	// Step 4: Run the example and verify output
 	t.Run("run_example", func(t *testing.T) {
-		cmd := exec.CommandContext(ctx, "go", "run", "./cmd/orchestrator")
-		cmd.Dir = quickstartDir
-		out, err := cmd.CombinedOutput()
-		if err != nil {
-			t.Fatalf("go run failed: %v\nOutput:\n%s", err, out)
-		}
+		out := runCommand(t, ctx, quickstartDir, "go", "run", "./cmd/orchestrator")
 
 		// Verify expected output
 		output := string(out)
@@ -149,12 +119,16 @@ func TestQuickstartGeneratesAndRuns(t *testing.T) {
 
 // TestQuickstartDesignExists verifies the design file is present and parseable.
 func TestQuickstartDesignExists(t *testing.T) {
-	_, thisFile, _, _ := runtime.Caller(0)
-	repoRoot := filepath.Join(filepath.Dir(thisFile), "..", "..", "..")
+	repoRoot := testRepoRoot()
 	designPath := filepath.Join(repoRoot, "quickstart", "design", "design.go")
 	if _, err := os.Stat(designPath); os.IsNotExist(err) {
 		t.Fatalf("design file not found at %s", designPath)
 	}
+}
+
+func testRepoRoot() string {
+	_, thisFile, _, _ := runtime.Caller(0)
+	return filepath.Join(filepath.Dir(thisFile), "..", "..", "..")
 }
 
 func copyDir(src, dst string) error {
@@ -208,11 +182,10 @@ func rewriteQuickstartGoMod(repoRoot string, quickstartDir string) error {
 	if err != nil {
 		return err
 	}
-	rootReplacePattern := regexp.MustCompile(`(?m)^replace goa\.design/goa/v3 => .+$`)
-	rootReplace := rootReplacePattern.FindString(string(rootRaw))
+	rootReplace := goaCoreReplacePattern.FindString(string(rootRaw))
 	if rootReplace != "" {
-		if rootReplacePattern.MatchString(updated) {
-			updated = rootReplacePattern.ReplaceAllString(updated, rootReplace)
+		if goaCoreReplacePattern.MatchString(updated) {
+			updated = goaCoreReplacePattern.ReplaceAllString(updated, rootReplace)
 		} else {
 			updated = strings.TrimRight(updated, "\n") + "\n" + rootReplace + "\n"
 		}
@@ -220,4 +193,16 @@ func rewriteQuickstartGoMod(repoRoot string, quickstartDir string) error {
 
 	//nolint:gosec // Test helper rewrites a trusted copied fixture file inside t.TempDir().
 	return os.WriteFile(modPath, []byte(updated), 0o600)
+}
+
+func runCommand(t *testing.T, ctx context.Context, dir string, name string, args ...string) []byte {
+	t.Helper()
+
+	cmd := exec.CommandContext(ctx, name, args...)
+	cmd.Dir = dir
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		t.Fatalf("%s failed: %v\nOutput:\n%s", strings.Join(append([]string{name}, args...), " "), err, out)
+	}
+	return out
 }

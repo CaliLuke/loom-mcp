@@ -9,7 +9,7 @@ PROTOC := $(shell command -v protoc 2>/dev/null)
 PROTOC_GEN_GO := protoc-gen-go
 PROTOC_GEN_GO_GRPC := protoc-gen-go-grpc
 
-.PHONY: all build lint test itest ci tools ensure-golangci ensure-protoc-plugins protoc-check run-example example-gen goa-local goa-remote goa-status
+.PHONY: all build lint test itest ci tools ensure-golangci ensure-protoc-plugins protoc-check run-example example-gen goa-local goa-remote goa-status verify-mcp-local regen-assistant-fixture
 
 all: build lint test
 
@@ -76,3 +76,10 @@ goa-remote:
 
 goa-status:
 	bash ./scripts/goa_core_mode.sh status
+
+verify-mcp-local:
+	go test -C ./integration_tests/fixtures/assistant ./... -count=1
+	go test ./integration_tests/framework -count=1
+
+regen-assistant-fixture:
+	cd ./integration_tests/fixtures/assistant && goa gen example.com/assistant/design
