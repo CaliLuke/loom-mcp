@@ -12,11 +12,11 @@ type (
 	// SetStepStatusPayload defines the JSON payload for the progress.set_step_status tool.
 	SetStepStatusPayload = struct {
 		// Step identifier.
-		StepID string
+		StepID string `json:"step_id"`
 		// New step status.
-		Status types.Status
+		Status types.Status `json:"status"`
 		// Optional note about progress.
-		Note *string
+		Note *string `json:"note,omitempty"`
 	}
 	// SetStepStatusResult defines the JSON result for the progress.set_step_status tool.
 	SetStepStatusResult = struct{}

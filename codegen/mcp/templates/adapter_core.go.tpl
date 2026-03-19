@@ -443,15 +443,12 @@ func (a *MCPAdapter) Initialize(ctx context.Context, p *InitializePayload) (res 
     }
 
     a.mu.Lock()
-    if requestSessionID == "" {
+    if sessionID == "" {
         if a.initialized {
             a.mu.Unlock()
             return nil, goa.PermanentError("invalid_params", "Already initialized")
         }
         a.initialized = true
-        if sessionID != "" {
-            a.initializedSessions[sessionID] = struct{}{}
-        }
     } else {
         if _, ok := a.initializedSessions[sessionID]; ok {
             a.mu.Unlock()

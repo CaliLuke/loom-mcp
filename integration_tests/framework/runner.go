@@ -26,6 +26,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	mcpruntime "goa.design/goa-ai/runtime/mcp"
 	"gopkg.in/yaml.v3"
 )
 
@@ -35,9 +36,11 @@ const (
 
 // Runner runs scenarios against the generated example server.
 type Runner struct {
-	server  *exec.Cmd
-	baseURL *url.URL
-	client  *http.Client
+	server         *exec.Cmd
+	baseURL        *url.URL
+	client         *http.Client
+	sessionID      string
+	skipGeneration bool
 
 	stdoutTail *ringBuffer
 	stderrTail *ringBuffer
@@ -346,6 +349,150 @@ func findExampleRoot() string {
 	return ""
 }
 
+func cloneExampleRoot(exampleRoot string) (string, error) {
+	tmpBase := filepath.Join(filepath.Dir(filepath.Dir(exampleRoot)), ".tmp")
+	if err := os.MkdirAll(tmpBase, 0o755); err != nil {
+		return "", fmt.Errorf("create temp example base: %w", err)
+	}
+	tmpRoot, err := os.MkdirTemp(tmpBase, "goa-ai-example-*")
+	if err != nil {
+		return "", fmt.Errorf("create temp example root: %w", err)
+	}
+	walkErr := filepath.WalkDir(exampleRoot, func(path string, d fs.DirEntry, walkErr error) error {
+		if walkErr != nil {
+			return walkErr
+		}
+		rel, err := filepath.Rel(exampleRoot, path)
+		if err != nil {
+			return err
+		}
+		if rel == "." {
+			return nil
+		}
+		target := filepath.Join(tmpRoot, rel)
+		info, err := d.Info()
+		if err != nil {
+			return err
+		}
+		if d.IsDir() {
+			return os.MkdirAll(target, info.Mode())
+		}
+		data, err := os.ReadFile(path)
+		if err != nil {
+			return err
+		}
+		if err := os.MkdirAll(filepath.Dir(target), 0o755); err != nil {
+			return err
+		}
+		return os.WriteFile(target, data, info.Mode())
+	})
+	if walkErr != nil {
+		_ = os.RemoveAll(tmpRoot)
+		return "", fmt.Errorf("clone example root: %w", walkErr)
+	}
+	return tmpRoot, nil
+}
+
+func applySDKServerFixturePatch(exampleRoot string) error {
+	const httpContent = `package main
+
+import (
+	"context"
+	"net/http"
+	"net/url"
+	"sync"
+	"time"
+
+	assistant "example.com/assistant/gen/assistant"
+	mcpassistant "example.com/assistant/gen/mcp_assistant"
+	"goa.design/clue/debug"
+	"goa.design/clue/log"
+	goahttp "goa.design/goa/v3/http"
+)
+
+// handleHTTPServer starts configures and starts a HTTP server on the given
+// URL. It shuts down the server if any error is received in the error channel.
+func handleHTTPServer(ctx context.Context, u *url.URL, assistantSvc assistant.Service, _ *mcpassistant.Endpoints, _ mcpassistant.Service, wg *sync.WaitGroup, errc chan error, dbg bool) {
+	mux := goahttp.NewMuxer()
+	if dbg {
+		debug.MountPprofHandlers(debug.Adapt(mux))
+		debug.MountDebugLogEnabler(debug.Adapt(mux))
+	}
+
+	sdkServer, err := mcpassistant.NewSDKServer(assistantSvc, &mcpassistant.SDKServerOptions{
+		RequestContext: func(reqCtx context.Context, r *http.Request) context.Context {
+			if r == nil {
+				return reqCtx
+			}
+			if allow := r.Header.Get("x-mcp-allow-names"); allow != "" {
+				reqCtx = context.WithValue(reqCtx, "mcp_allow_names", allow)
+			}
+			if deny := r.Header.Get("x-mcp-deny-names"); deny != "" {
+				reqCtx = context.WithValue(reqCtx, "mcp_deny_names", deny)
+			}
+			return reqCtx
+		},
+	})
+	if err != nil {
+		errc <- err
+		return
+	}
+
+	mux.Handle("POST", "/rpc", sdkServer.Handler.ServeHTTP)
+	mux.Handle("GET", "/rpc", sdkServer.Handler.ServeHTTP)
+	mux.Handle("DELETE", "/rpc", sdkServer.Handler.ServeHTTP)
+
+	var handler http.Handler = mux
+	if dbg {
+		handler = debug.HTTP()(handler)
+	}
+	handler = log.HTTP(ctx)(handler)
+
+	srv := &http.Server{Addr: u.Host, Handler: handler, ReadHeaderTimeout: time.Second * 60}
+	log.Printf(ctx, "SDK-backed MCP server mounted on /rpc")
+
+	(*wg).Add(1)
+	go func() {
+		defer (*wg).Done()
+		go func() {
+			log.Printf(ctx, "HTTP server listening on %q", u.Host)
+			errc <- srv.ListenAndServe()
+		}()
+
+		<-ctx.Done()
+		log.Printf(ctx, "shutting down HTTP server at %q", u.Host)
+
+		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		defer cancel()
+
+		if err := srv.Shutdown(ctx); err != nil {
+			log.Printf(ctx, "failed to shutdown: %v", err)
+		}
+	}()
+}
+`
+	httpPath := filepath.Join(exampleRoot, "cmd", "orchestrator", "http.go")
+	if err := os.WriteFile(httpPath, []byte(httpContent), 0o644); err != nil {
+		return fmt.Errorf("write SDK fixture http.go: %w", err)
+	}
+
+	mainPath := filepath.Join(exampleRoot, "cmd", "orchestrator", "main.go")
+	mainData, err := os.ReadFile(mainPath)
+	if err != nil {
+		return fmt.Errorf("read SDK fixture main.go: %w", err)
+	}
+	oldCall := "handleHTTPServer(ctx, u, mcpAssistantEndpoints, mcpAssistantSvc, &wg, errc, *dbgF)"
+	newCall := "handleHTTPServer(ctx, u, assistantSvc, mcpAssistantEndpoints, mcpAssistantSvc, &wg, errc, *dbgF)"
+	if !bytes.Contains(mainData, []byte(oldCall)) {
+		return fmt.Errorf("SDK fixture main.go missing expected call site")
+	}
+	mainData = bytes.Replace(mainData, []byte(oldCall), []byte(newCall), 1)
+	if err := os.WriteFile(mainPath, mainData, 0o644); err != nil {
+		return fmt.Errorf("write SDK fixture main.go: %w", err)
+	}
+	return nil
+}
+
 // findServerCmdDir finds the server command directory.
 func findServerCmdDir(exampleRoot string) (string, error) {
 	cmdRoot := filepath.Join(exampleRoot, "cmd")
@@ -581,8 +728,20 @@ func (r *Runner) startServer(t *testing.T) error {
 	if exampleRoot == "" {
 		return fmt.Errorf("could not locate example root")
 	}
+	if r.skipGeneration {
+		clonedRoot, err := cloneExampleRoot(exampleRoot)
+		if err != nil {
+			return err
+		}
+		if err := applySDKServerFixturePatch(clonedRoot); err != nil {
+			_ = os.RemoveAll(clonedRoot)
+			return err
+		}
+		t.Cleanup(func() { _ = os.RemoveAll(clonedRoot) })
+		exampleRoot = clonedRoot
+	}
 	// Regenerate example code once for the entire test process
-	if !strings.EqualFold(os.Getenv("TEST_SKIP_GENERATION"), "true") {
+	if !r.skipGeneration && !strings.EqualFold(os.Getenv("TEST_SKIP_GENERATION"), "true") {
 		codegenOnce.Do(func() { codegenErr = regenerateExample(t, exampleRoot) })
 		if codegenErr != nil {
 			return codegenErr
@@ -925,6 +1084,9 @@ func (r *Runner) executeJSONRPC(
 	}
 	body, _ := json.Marshal(reqObj)
 	req, _ := http.NewRequestWithContext(context.Background(), http.MethodPost, r.baseURL.String()+"/rpc", bytes.NewReader(body))
+	if r.sessionID != "" {
+		req.Header.Set(mcpruntime.HeaderKeySessionID, r.sessionID)
+	}
 	for k, v := range headers {
 		// Special-case env vars to allow tests to set process env for the example server
 		if strings.HasPrefix(k, "MCP_") {
@@ -942,6 +1104,7 @@ func (r *Runner) executeJSONRPC(
 		return nil, nil, err
 	}
 	defer func() { _ = resp.Body.Close() }()
+	r.captureSessionID(resp)
 	raw, _ := io.ReadAll(resp.Body)
 	if len(raw) == 0 {
 		return nil, raw, nil
@@ -974,6 +1137,9 @@ func (r *Runner) executeSSE(
 	reqObj := map[string]any{"jsonrpc": "2.0", "id": 1, "method": method, "params": input}
 	body, _ := json.Marshal(reqObj)
 	req, _ := http.NewRequestWithContext(context.Background(), http.MethodPost, r.baseURL.String()+"/rpc", bytes.NewReader(body))
+	if r.sessionID != "" {
+		req.Header.Set(mcpruntime.HeaderKeySessionID, r.sessionID)
+	}
 	for k, v := range headers {
 		req.Header.Set(k, v)
 	}
@@ -986,6 +1152,7 @@ func (r *Runner) executeSSE(
 		return nil, err
 	}
 	defer func() { _ = resp.Body.Close() }()
+	r.captureSessionID(resp)
 
 	// Treat non-2xx as error, return body for diagnostics
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
@@ -1056,4 +1223,13 @@ func (r *Runner) executeSSE(
 		return events, fmt.Errorf("MCP error %v: %s", lastErrCode, lastErrMsg)
 	}
 	return events, nil
+}
+
+func (r *Runner) captureSessionID(resp *http.Response) {
+	if r == nil || resp == nil {
+		return
+	}
+	if sessionID := resp.Header.Get(mcpruntime.HeaderKeySessionID); sessionID != "" {
+		r.sessionID = sessionID
+	}
 }

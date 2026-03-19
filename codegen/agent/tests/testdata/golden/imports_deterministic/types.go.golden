@@ -12,11 +12,11 @@ type (
 	// StorePayload defines the JSON payload for the docs.store tool.
 	StorePayload = struct {
 		// Identifier
-		ID string
+		ID string `json:"id"`
 	}
 	// StoreResult defines the JSON result for the docs.store tool.
 	StoreResult = struct {
 		// Identifier
-		ID string
+		ID string `json:"id"`
 	}
 )

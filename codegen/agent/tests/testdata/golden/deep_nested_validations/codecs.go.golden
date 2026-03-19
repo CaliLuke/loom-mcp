@@ -265,6 +265,9 @@ func UnmarshalValidateResult(data []byte) (*ValidateResult, error) {
 
 // Helper transform functions
 func decodeToolhttpLevel2TransportToLevel2(v *toolhttp.Level2Transport) *Level2 {
+	if v == nil {
+		return nil
+	}
 	res := &Level2{
 		Mid: *v.Mid,
 	}
@@ -273,6 +276,9 @@ func decodeToolhttpLevel2TransportToLevel2(v *toolhttp.Level2Transport) *Level2 
 	return res
 }
 func decodeToolhttpLevel3TransportToLevel3(v *toolhttp.Level3Transport) *Level3 {
+	if v == nil {
+		return nil
+	}
 	res := &Level3{
 		Leaf: *v.Leaf,
 	}

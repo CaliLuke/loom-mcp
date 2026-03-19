@@ -43,6 +43,93 @@ func decodeOriginalJSONRPCResult(
 }
 {{- end }}
 
+type sessionAwareDoer struct {
+    base        goahttp.Doer
+    bootstrap   func(context.Context) error
+    initMu      sync.Mutex
+    sessionMu   sync.Mutex
+    sessionID   string
+    initialized bool
+}
+
+func (d *sessionAwareDoer) Do(req *http.Request) (*http.Response, error) {
+    if d == nil || d.base == nil {
+        return nil, fmt.Errorf("mcp adapter doer is not configured")
+    }
+    method, err := jsonRPCMethod(req)
+    if err != nil {
+        return nil, err
+    }
+    if method != "" && method != "initialize" {
+        if err := d.ensureInitialized(req.Context()); err != nil {
+            return nil, err
+        }
+        if sessionID := d.currentSessionID(); sessionID != "" {
+            req.Header.Set(mcpruntime.HeaderKeySessionID, sessionID)
+        }
+    }
+    resp, err := d.base.Do(req)
+    if err != nil {
+        return nil, err
+    }
+    d.captureSessionID(resp)
+    return resp, nil
+}
+
+func (d *sessionAwareDoer) ensureInitialized(ctx context.Context) error {
+    d.initMu.Lock()
+    defer d.initMu.Unlock()
+    if d.initialized || d.currentSessionID() != "" {
+        return nil
+    }
+    if d.bootstrap == nil {
+        return fmt.Errorf("mcp adapter bootstrap is not configured")
+    }
+    if err := d.bootstrap(ctx); err != nil {
+        return err
+    }
+    d.initialized = true
+    return nil
+}
+
+func (d *sessionAwareDoer) currentSessionID() string {
+    d.sessionMu.Lock()
+    defer d.sessionMu.Unlock()
+    return d.sessionID
+}
+
+func (d *sessionAwareDoer) captureSessionID(resp *http.Response) {
+    if d == nil || resp == nil {
+        return
+    }
+    if sessionID := resp.Header.Get(mcpruntime.HeaderKeySessionID); sessionID != "" {
+        d.sessionMu.Lock()
+        d.sessionID = sessionID
+        d.sessionMu.Unlock()
+    }
+}
+
+func jsonRPCMethod(req *http.Request) (string, error) {
+    if req == nil || req.Body == nil {
+        return "", nil
+    }
+    body, err := io.ReadAll(req.Body)
+    if err != nil {
+        return "", err
+    }
+    req.Body = io.NopCloser(bytes.NewReader(body))
+    if len(body) == 0 {
+        return "", nil
+    }
+    var envelope struct {
+        Method string `json:"method"`
+    }
+    if err := stdjson.Unmarshal(body, &envelope); err != nil {
+        return "", nil
+    }
+    return envelope.Method, nil
+}
+
 // NewEndpoints creates endpoints that expose the original service API while
 // invoking the MCP transport under the hood for mapped methods.
 // NewEndpoints creates an Endpoints set that routes mapped methods through
@@ -56,8 +143,19 @@ func NewEndpoints(
     restore bool,
 ) *{{ .ServicePkg }}.Endpoints {
     // Transport clients
+    sessionDoer := &sessionAwareDoer{base: doer}
     {{- if .NeedsMCPClient }}
-    mcpC := {{ .MCPJSONRPCCAlias }}.NewClient(scheme, host, doer, enc, dec, restore)
+    mcpC := {{ .MCPJSONRPCCAlias }}.NewClient(scheme, host, sessionDoer, enc, dec, restore)
+    sessionDoer.bootstrap = func(ctx context.Context) error {
+        _, err := mcpC.Initialize()(ctx, &{{ .MCPPkgAlias }}.InitializePayload{
+            ProtocolVersion: "2025-06-18",
+            ClientInfo: &{{ .MCPPkgAlias }}.ClientInfo{
+                Name: "goa-ai-adapter",
+                Version: "dev",
+            },
+        })
+        return err
+    }
     {{- end }}
     {{- if .Tools }}
     mcpCaller := {{ .MCPJSONRPCCAlias }}.NewCaller(mcpC, "")

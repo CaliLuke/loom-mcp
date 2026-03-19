@@ -264,6 +264,9 @@ func UnmarshalUpsertResult(data []byte) (*UpsertResult, error) {
 
 // Helper transform functions
 func decodeToolhttpProfileTransportToProfile(v *toolhttp.ProfileTransport) *Profile {
+	if v == nil {
+		return nil
+	}
 	res := &Profile{
 		ID:   *v.ID,
 		Name: v.Name,
@@ -273,6 +276,9 @@ func decodeToolhttpProfileTransportToProfile(v *toolhttp.ProfileTransport) *Prof
 	return res
 }
 func decodeToolhttpAddressTransportToAddress(v *toolhttp.AddressTransport) *Address {
+	if v == nil {
+		return nil
+	}
 	res := &Address{
 		Street: *v.Street,
 		City:   *v.City,

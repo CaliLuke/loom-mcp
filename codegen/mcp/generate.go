@@ -446,10 +446,12 @@ func generateMCPClientAdapter(genpkg string, svc *expr.ServiceExpr, data *Adapte
 	imports := []*codegen.ImportSpec{
 		{Path: "bytes"},
 		{Path: "context"},
+		{Path: "encoding/json", Name: "stdjson"},
 		{Path: "fmt"},
 		{Path: "io"},
 		{Path: "net/url"},
 		{Path: "net/http"},
+		{Path: "sync"},
 		{Path: "goa.design/goa-ai/runtime/mcp", Name: "mcpruntime"},
 		{Path: "goa.design/goa/v3/http", Name: "goahttp"},
 		{Path: "goa.design/goa/v3/jsonrpc", Name: "jsonrpc"},
