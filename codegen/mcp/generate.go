@@ -91,8 +91,8 @@ func generateMCPServiceCode(genpkg string, root *expr.RootExpr, mcpService *expr
 	userTypePkgs := make(map[string][]string)
 	serviceFiles := service.Files(genpkg, mcpService, servicesData, userTypePkgs)
 	for _, f := range serviceFiles {
-		if strings.HasSuffix(filepath.ToSlash(f.Path), "/service.go") && len(f.SectionTemplates) > 0 {
-			service.AddServiceDataMetaTypeImports(f.SectionTemplates[0], mcpService, servicesData.Get(mcpService.Name))
+		if strings.HasSuffix(filepath.ToSlash(f.Path), "/service.go") {
+			service.AddServiceDataMetaTypeImports(f.HeaderTemplate(), mcpService, servicesData.Get(mcpService.Name))
 		}
 	}
 	files = append(files, serviceFiles...)
@@ -131,8 +131,9 @@ func applyMCPPolicyHeadersToJSONRPCMount(files []*codegen.File) {
 		if filepath.Base(filepath.Dir(filepath.ToSlash(f.Path))) != "server" || filepath.Base(f.Path) != "server.go" {
 			continue
 		}
-		for _, s := range f.SectionTemplates {
-			if s == nil {
+		for _, sec := range f.AllSections() {
+			s, ok := sec.(*codegen.SectionTemplate)
+			if !ok || s == nil {
 				continue
 			}
 			switch s.Name {
@@ -149,9 +150,9 @@ func applyMCPPolicyHeadersToJSONRPCMount(files []*codegen.File) {
 				s.Source = mcpTemplates.Read("jsonrpc_server_mount")
 			}
 		}
-		if len(f.SectionTemplates) > 0 && f.SectionTemplates[0] != nil {
-			codegen.AddImport(f.SectionTemplates[0], &codegen.ImportSpec{Path: "encoding/json"})
-			codegen.AddImport(f.SectionTemplates[0], &codegen.ImportSpec{Path: "goa.design/goa-ai/runtime/mcp", Name: "mcpruntime"})
+		if header := f.HeaderTemplate(); header != nil {
+			codegen.AddImport(header, &codegen.ImportSpec{Path: "encoding/json"})
+			codegen.AddImport(header, &codegen.ImportSpec{Path: "goa.design/goa-ai/runtime/mcp", Name: "mcpruntime"})
 		}
 	}
 }

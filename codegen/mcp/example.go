@@ -225,7 +225,7 @@ func patchCLIForServer(dir string, svr *expr.ServerExpr, mcpServices []*expr.Ser
 		return files
 	}
 
-	codegen.AddImport(header,
+	addHeaderImports(header,
 		&codegen.ImportSpec{Path: "fmt"},
 		&codegen.ImportSpec{Path: "os"},
 		&codegen.ImportSpec{Path: "strings"},
@@ -262,8 +262,12 @@ func generateExampleAdapterStubs(mcpServices []*expr.ServiceExpr, files []*codeg
 		if f == nil {
 			// As a fallback, scan for any file declaring NewMcp<Service>()
 			for _, cf := range files {
-				for _, s := range cf.SectionTemplates {
-					if s.Name != headerSection && strings.Contains(s.Source, "func NewMcp"+svcGo+"()") {
+				for _, sec := range cf.AllSections() {
+					s, ok := sec.(*codegen.SectionTemplate)
+					if !ok || s.Name == headerSection {
+						continue
+					}
+					if strings.Contains(s.Source, "func NewMcp"+svcGo+"()") {
 						f = cf
 						break
 					}
@@ -299,7 +303,7 @@ func generateExampleAdapterStubs(mcpServices []*expr.ServiceExpr, files []*codeg
 			// Derive base module from any CLI header if available
 			base := deriveBaseModuleFromFiles(files)
 			if base != "" {
-				codegen.AddImport(header, &codegen.ImportSpec{Path: base + "/gen/mcp_" + svcSnake, Name: codegen.Goify("mcp_"+svcSnake, false)})
+				addHeaderImports(header, &codegen.ImportSpec{Path: base + "/gen/mcp_" + svcSnake, Name: codegen.Goify("mcp_"+svcSnake, false)})
 				mcpAlias = codegen.Goify("mcp_"+svcSnake, false)
 			}
 		}
@@ -318,7 +322,9 @@ func generateExampleAdapterStubs(mcpServices []*expr.ServiceExpr, files []*codeg
 			"HasPrompts": hasPrompts,
 		})
 		// Replace file content except header with our body
-		f.SectionTemplates = []*codegen.SectionTemplate{header, {Name: exampleMCPStubSection, Source: body}}
+		stub := &codegen.SectionTemplate{Name: exampleMCPStubSection, Source: body}
+		f.Sections = []codegen.Section{header, stub}
+		f.SectionTemplates = []*codegen.SectionTemplate{header, stub}
 	}
 	return files
 }
@@ -344,8 +350,9 @@ func deriveBaseModuleFromFiles(files []*codegen.File) string {
 
 // findSection returns the first section with the given name in file f.
 func findSection(f *codegen.File, name string) *codegen.SectionTemplate {
-	for _, s := range f.SectionTemplates {
-		if s.Name == name {
+	for _, sec := range f.AllSections() {
+		s, ok := sec.(*codegen.SectionTemplate)
+		if ok && s.Name == name {
 			return s
 		}
 	}
@@ -358,17 +365,23 @@ func deriveBaseModuleFromHeader(header *codegen.SectionTemplate) string {
 	if header == nil || header.Data == nil {
 		return ""
 	}
-	data, ok := header.Data.(map[string]any)
-	if !ok {
-		return ""
-	}
-	imv, ok := data["Imports"]
-	if !ok {
-		return ""
-	}
-	specs, ok := imv.([]*codegen.ImportSpec)
-	if !ok {
-		return ""
+	var specs []*codegen.ImportSpec
+	if data := codegen.HeaderSectionData(header); data != nil {
+		specs = data.Imports
+	} else {
+		raw, ok := header.Data.(map[string]any)
+		if !ok {
+			return ""
+		}
+		imv, ok := raw["Imports"]
+		if !ok {
+			return ""
+		}
+		var okSpecs bool
+		specs, okSpecs = imv.([]*codegen.ImportSpec)
+		if !okSpecs {
+			return ""
+		}
 	}
 	for _, spec := range specs {
 		idx := strings.Index(spec.Path, "/gen/jsonrpc/cli/")
@@ -398,8 +411,9 @@ func stringInList(list []string, name string) bool {
 }
 
 func findSectionByName(f *codegen.File, name string) *codegen.SectionTemplate {
-	for _, s := range f.SectionTemplates {
-		if s.Name == name {
+	for _, sec := range f.AllSections() {
+		s, ok := sec.(*codegen.SectionTemplate)
+		if ok && s.Name == name {
 			return s
 		}
 	}
@@ -419,7 +433,7 @@ func buildCLIServiceData(
 		svcSnake := codegen.SnakeCase(svc.Name)
 		alias := codegen.Goify("mcp_"+svcSnake, false) + "adapter"
 		path := baseModule + "/gen/mcp_" + svcSnake + "/adapter/client"
-		codegen.AddImport(header, &codegen.ImportSpec{Path: path, Name: alias})
+		addHeaderImports(header, &codegen.ImportSpec{Path: path, Name: alias})
 
 		methods := make([]cliMethodTemplateData, 0, len(svc.Methods))
 		for _, m := range svc.Methods {
@@ -435,6 +449,23 @@ func buildCLIServiceData(
 		})
 	}
 	return data
+}
+
+func addHeaderImports(header *codegen.SectionTemplate, specs ...*codegen.ImportSpec) {
+	if header == nil || len(specs) == 0 {
+		return
+	}
+	if data := codegen.HeaderSectionData(header); data != nil {
+		data.Imports = append(data.Imports, specs...)
+		return
+	}
+	raw, ok := header.Data.(map[string]any)
+	if !ok {
+		return
+	}
+	if existing, ok := raw["Imports"].([]*codegen.ImportSpec); ok {
+		raw["Imports"] = append(existing, specs...)
+	}
 }
 
 func renderCLIDoJSONRPC(services []cliServiceTemplateData) string {
