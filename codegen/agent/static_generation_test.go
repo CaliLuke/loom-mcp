@@ -1,12 +1,12 @@
 package codegen_test
 
 import (
-	"bytes"
 	"path/filepath"
 	"testing"
 
 	"github.com/stretchr/testify/require"
 	codegen "goa.design/goa-ai/codegen/agent"
+	"goa.design/goa-ai/codegen/testhelpers"
 	. "goa.design/goa-ai/dsl"
 	agentsExpr "goa.design/goa-ai/expr/agent"
 	goadsl "goa.design/goa/v3/dsl"
@@ -53,11 +53,7 @@ func TestRegistryClientStaticURLPaths(t *testing.T) {
 	expectedPath := filepath.ToSlash("gen/static_url_test/registry/test_registry/client.go")
 	for _, f := range files {
 		if filepath.ToSlash(f.Path) == expectedPath {
-			var buf bytes.Buffer
-			for _, s := range f.SectionTemplates {
-				require.NoError(t, s.Write(&buf))
-			}
-			clientContent = buf.String()
+			clientContent = testhelpers.FileContent(t, files, expectedPath)
 			break
 		}
 	}
@@ -122,11 +118,7 @@ func TestRegistryClientStaticEndpoint(t *testing.T) {
 	expectedPath := filepath.ToSlash("gen/static_endpoint_test/registry/corp_registry/client.go")
 	for _, f := range files {
 		if filepath.ToSlash(f.Path) == expectedPath {
-			var buf bytes.Buffer
-			for _, s := range f.SectionTemplates {
-				require.NoError(t, s.Write(&buf))
-			}
-			clientContent = buf.String()
+			clientContent = testhelpers.FileContent(t, files, expectedPath)
 			break
 		}
 	}
@@ -183,11 +175,7 @@ func TestTypeSpecificValidatorsGenerated(t *testing.T) {
 	expectedPath := filepath.ToSlash("gen/validator_test/toolsets/query_tools/specs.go")
 	for _, f := range files {
 		if filepath.ToSlash(f.Path) == expectedPath {
-			var buf bytes.Buffer
-			for _, s := range f.SectionTemplates {
-				require.NoError(t, s.Write(&buf))
-			}
-			specsContent = buf.String()
+			specsContent = testhelpers.FileContent(t, files, expectedPath)
 			break
 		}
 	}

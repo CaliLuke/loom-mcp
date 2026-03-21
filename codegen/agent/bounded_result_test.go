@@ -1,13 +1,13 @@
 package codegen_test
 
 import (
-	"bytes"
 	"encoding/json"
 	"path/filepath"
 	"testing"
 
 	"github.com/stretchr/testify/require"
 	codegen "goa.design/goa-ai/codegen/agent"
+	"goa.design/goa-ai/codegen/testhelpers"
 	. "goa.design/goa-ai/dsl"
 	agentsExpr "goa.design/goa-ai/expr/agent"
 	goadsl "goa.design/goa/v3/dsl"
@@ -61,11 +61,7 @@ func TestBoundedResultProjectsBoundsIntoResultSchemaWithoutMutatingResultType(t 
 	expectedPath := filepath.ToSlash("gen/svc/toolsets/tools/types.go")
 	for _, f := range files {
 		if filepath.ToSlash(f.Path) == expectedPath {
-			var buf bytes.Buffer
-			for _, s := range f.SectionTemplates {
-				require.NoError(t, s.Write(&buf))
-			}
-			toolTypes = buf.String()
+			toolTypes = testhelpers.FileContent(t, files, expectedPath)
 			break
 		}
 	}
@@ -77,11 +73,7 @@ func TestBoundedResultProjectsBoundsIntoResultSchemaWithoutMutatingResultType(t 
 	schemasPath := filepath.ToSlash("gen/svc/agents/agent/specs/tool_schemas.json")
 	for _, f := range files {
 		if filepath.ToSlash(f.Path) == schemasPath {
-			var buf bytes.Buffer
-			for _, s := range f.SectionTemplates {
-				require.NoError(t, s.Write(&buf))
-			}
-			schemas = buf.String()
+			schemas = testhelpers.FileContent(t, files, schemasPath)
 			break
 		}
 	}
@@ -157,11 +149,7 @@ func TestBoundedResultGeneratesBoundsSpec(t *testing.T) {
 	expectedPath := filepath.ToSlash("gen/svc/toolsets/tools/specs.go")
 	for _, f := range files {
 		if filepath.ToSlash(f.Path) == expectedPath {
-			var buf bytes.Buffer
-			for _, s := range f.SectionTemplates {
-				require.NoError(t, s.Write(&buf))
-			}
-			specs = buf.String()
+			specs = testhelpers.FileContent(t, files, expectedPath)
 			break
 		}
 	}

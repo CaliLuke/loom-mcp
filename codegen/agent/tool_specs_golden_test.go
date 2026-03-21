@@ -1,13 +1,13 @@
 package codegen_test
 
 import (
-	"bytes"
 	"encoding/json"
 	"path/filepath"
 	"testing"
 
 	"github.com/stretchr/testify/require"
 	codegen "goa.design/goa-ai/codegen/agent"
+	"goa.design/goa-ai/codegen/testhelpers"
 	. "goa.design/goa-ai/dsl"
 	agentsExpr "goa.design/goa-ai/expr/agent"
 	goadsl "goa.design/goa/v3/dsl"
@@ -112,11 +112,7 @@ func TestToolSchemasJSONEmitted(t *testing.T) {
 	var payload string
 	for _, f := range files {
 		if filepath.ToSlash(f.Path) == filepath.ToSlash("gen/orchestrator/agents/chat/specs/tool_schemas.json") {
-			var buf bytes.Buffer
-			for _, s := range f.SectionTemplates {
-				require.NoError(t, s.Write(&buf))
-			}
-			payload = buf.String()
+			payload = testhelpers.FileContent(t, files, filepath.ToSlash("gen/orchestrator/agents/chat/specs/tool_schemas.json"))
 			break
 		}
 	}

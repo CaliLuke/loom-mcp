@@ -192,14 +192,12 @@ func MarshalEchoPayload(v *EchoPayload) ([]byte, error) {
 	case "number":
 		actual, _ := in.Value.AsNumber()
 		obj := toolhttp.ValueNumberTransport(actual)
-
 		u := out.Value
 		u.SetNumber((toolhttp.ValueNumberTransport)(obj))
 		out.Value = u
 	case "text":
 		actual, _ := in.Value.AsText()
 		obj := toolhttp.ValueTextTransport(actual)
-
 		u := out.Value
 		u.SetText((toolhttp.ValueTextTransport)(obj))
 		out.Value = u
@@ -231,14 +229,12 @@ func UnmarshalEchoPayload(data []byte) (*EchoPayload, error) {
 	case "number":
 		actual, _ := in.Value.AsNumber()
 		obj := ValueNumber(actual)
-
 		u := out.Value
 		u.SetNumber((ValueNumber)(obj))
 		out.Value = u
 	case "text":
 		actual, _ := in.Value.AsText()
 		obj := ValueText(actual)
-
 		u := out.Value
 		u.SetText((ValueText)(obj))
 		out.Value = u
@@ -261,14 +257,12 @@ func MarshalEchoResult(v *EchoResult) ([]byte, error) {
 	case "number":
 		actual, _ := in.Value.AsNumber()
 		obj := toolhttp.ValueNumberTransport(actual)
-
 		u := out.Value
 		u.SetNumber((toolhttp.ValueNumberTransport)(obj))
 		out.Value = u
 	case "text":
 		actual, _ := in.Value.AsText()
 		obj := toolhttp.ValueTextTransport(actual)
-
 		u := out.Value
 		u.SetText((toolhttp.ValueTextTransport)(obj))
 		out.Value = u
@@ -300,14 +294,12 @@ func UnmarshalEchoResult(data []byte) (*EchoResult, error) {
 	case "number":
 		actual, _ := in.Value.AsNumber()
 		obj := ValueNumber(actual)
-
 		u := out.Value
 		u.SetNumber((ValueNumber)(obj))
 		out.Value = u
 	case "text":
 		actual, _ := in.Value.AsText()
 		obj := ValueText(actual)
-
 		u := out.Value
 		u.SetText((ValueText)(obj))
 		out.Value = u

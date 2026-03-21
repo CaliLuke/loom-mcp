@@ -3,10 +3,8 @@ package testhelpers
 
 import (
 	"bytes"
-	"maps"
 	"path/filepath"
 	"testing"
-	"text/template"
 
 	"github.com/stretchr/testify/require"
 	codegen "goa.design/goa-ai/codegen/agent"
@@ -78,26 +76,9 @@ func FileContent(t *testing.T, files []*gcodegen.File, wantPath string) string {
 			continue
 		}
 		var buf bytes.Buffer
-		for _, s := range f.SectionTemplates {
-			// Render template sections into final code using optional FuncMap/Data
-			tmpl := template.New(s.Name)
-			// Provide default helper funcs used by shared templates (e.g., header)
-			fm := template.FuncMap{
-				"comment": gcodegen.Comment,
-				"commandLine": func() string {
-					return ""
-				},
-			}
-			if s.FuncMap != nil {
-				maps.Copy(fm, s.FuncMap)
-			}
-			tmpl = tmpl.Funcs(fm)
-			pt, err := tmpl.Parse(s.Source)
-			require.NoErrorf(t, err, "parse section %s", s.Name)
-			var sb bytes.Buffer
-			err = pt.Execute(&sb, s.Data)
-			require.NoErrorf(t, err, "execute section %s", s.Name)
-			buf.Write(sb.Bytes())
+		for _, s := range f.AllSections() {
+			err := s.Write(&buf)
+			require.NoErrorf(t, err, "render section %s", s.SectionName())
 		}
 		content := buf.String()
 		require.NotEmptyf(t, content, "empty content for %s", wantPath)
