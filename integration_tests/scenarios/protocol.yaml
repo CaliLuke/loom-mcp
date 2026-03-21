@@ -17,7 +17,7 @@ scenarios:
         stream_expect:
           min_events: 1
           events:
-            - event: error
+            - event: message
               data:
                 error: { code: -32602 }
 
@@ -37,7 +37,7 @@ scenarios:
         stream_expect:
           min_events: 1
           events:
-            - event: error
+            - event: message
               data:
                 error: { code: -32601 }
   - name: initialize_basic
