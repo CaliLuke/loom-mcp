@@ -5,3 +5,4 @@ agents/.DS_Store
 .kiro/
 quickstart/orchestrator
 /gen/
+integration_tests/.tmp/
