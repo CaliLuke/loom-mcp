@@ -3,7 +3,7 @@ module github.com/CaliLuke/loom-mcp
 go 1.26.0
 
 require (
-	github.com/CaliLuke/loom v1.0.3-0.20260322205324-2c95927b0f72
+	github.com/CaliLuke/loom v1.0.3
 	github.com/anthropics/anthropic-sdk-go v1.22.1
 	github.com/aws/aws-sdk-go-v2 v1.41.1
 	github.com/aws/aws-sdk-go-v2/service/bedrockruntime v1.49.0
