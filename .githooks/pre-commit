@@ -1,0 +1,27 @@
+#!/bin/sh
+
+set -eu
+
+repo_root=$(git rev-parse --show-toplevel)
+cd "$repo_root"
+
+staged_go_files=$(git diff --cached --name-only --diff-filter=ACMR | grep '\.go$' || true)
+if [ -z "$staged_go_files" ]; then
+	exit 0
+fi
+
+echo "pre-commit: formatting and linting staged Go changes"
+
+unformatted_files=$(gofmt -l $staged_go_files)
+if [ -n "$unformatted_files" ]; then
+	echo "The following files are not gofmt-formatted:"
+	echo "$unformatted_files"
+	echo "Run: gofmt -w $staged_go_files"
+	exit 1
+fi
+
+patch_file=$(mktemp "${TMPDIR:-/tmp}/goa-ai-precommit.XXXXXX.patch")
+trap 'rm -f "$patch_file"' EXIT INT TERM
+git diff --cached --binary >"$patch_file"
+
+make lint-pre-commit PATCH_FILE="$patch_file"

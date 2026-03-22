@@ -1,0 +1,81 @@
+version: "2"
+
+run:
+  timeout: 5m
+
+linters:
+  default: none
+  enable:
+    - bodyclose
+    - copyloopvar
+    - dupl
+    - durationcheck
+    - errcheck
+    - errorlint
+    - exhaustive
+    - goconst
+    - gocritic
+    - goprintffuncname
+    - gosec
+    - ineffassign
+    - makezero
+    - misspell
+    - nakedret
+    - nilerr
+    - noctx
+    - nolintlint
+    - prealloc
+    - sqlclosecheck
+    - staticcheck
+    - tagliatelle
+    - testifylint
+    - unconvert
+    - unparam
+    - unused
+    - whitespace
+    - cyclop
+    - gocognit
+    - maintidx
+    - nestif
+
+linters-settings:
+  cyclop:
+    max-complexity: 12
+    package-average: 8.0
+  gocognit:
+    min-complexity: 20
+  maintidx:
+    under: 20
+  nestif:
+    min-complexity: 4
+  tagliatelle:
+    case:
+      rules:
+        json: snake
+        yaml: snake
+  unparam:
+    check-exported: true
+  staticcheck:
+    checks:
+      - all
+      - "-ST1001"
+
+issues:
+  exclude-generated: strict
+
+  exclusions:
+    generated: strict
+    paths:
+      - design/*
+      - diagram/*
+      - gql/*
+      - mocks/*
+      - codegen/agents/tests/testscenarios/*
+    rules:
+      - path: _test\.go
+        linters:
+          - cyclop
+          - dupl
+          - gocognit
+          - maintidx
+          - nestif

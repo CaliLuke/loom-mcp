@@ -9,7 +9,7 @@ PROTOC := $(shell command -v protoc 2>/dev/null)
 PROTOC_GEN_GO := protoc-gen-go
 PROTOC_GEN_GO_GRPC := protoc-gen-go-grpc
 
-.PHONY: all build lint test itest ci tools ensure-golangci ensure-protoc-plugins protoc-check run-example example-gen goa-local goa-remote goa-status verify-mcp-local regen-assistant-fixture
+.PHONY: all build lint lint-pre-commit lint-install-hook test itest ci tools ensure-golangci ensure-protoc-plugins protoc-check run-example example-gen goa-local goa-remote goa-status verify-mcp-local regen-assistant-fixture
 
 all: build lint test
 
@@ -18,6 +18,18 @@ build: tools
 
 lint: tools
 	golangci-lint run --timeout=5m
+
+lint-pre-commit: tools
+	@if [ -z "$(PATCH_FILE)" ]; then \
+		echo "PATCH_FILE is required"; \
+		exit 1; \
+	fi
+	golangci-lint run --config .golangci.precommit.yml --new-from-patch "$(PATCH_FILE)" --whole-files --timeout=5m --allow-serial-runners
+
+lint-install-hook:
+	git config core.hooksPath .githooks
+	chmod +x .githooks/pre-commit
+	@echo "Installed repo hooks from .githooks"
 
 test: tools
 	$(GO) test -race -covermode=atomic -coverprofile=cover.out `$(GO) list ./... | grep -v '/integration_tests'`
