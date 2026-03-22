@@ -7,8 +7,12 @@ import (
 	"time"
 )
 
+const refreshedSchemaVersion = "2.0"
+
 // TestMemoryCacheGetSetDelete tests basic cache operations.
 // **Validates: Requirements 8.1**
+//
+//nolint:cyclop // The end-to-end cache CRUD assertions are clearer in one test.
 func TestMemoryCacheGetSetDelete(t *testing.T) {
 	ctx := context.Background()
 	cache := NewMemoryCache()
@@ -93,14 +97,10 @@ func TestMemoryCacheTTLExpiration(t *testing.T) {
 		t.Fatal("Get returned nil before TTL expiration")
 	}
 
-	// Wait for TTL to expire
-	time.Sleep(100 * time.Millisecond)
-
-	// Should be expired now
-	got, err = cache.Get(ctx, "expiring-key")
-	if err != nil {
-		t.Fatalf("Get after expiration failed: %v", err)
-	}
+	waitForCondition(t, func() bool {
+		got, err = cache.Get(ctx, "expiring-key")
+		return err == nil && got == nil
+	}, "expected cache entry to expire")
 	if got != nil {
 		t.Error("Get returned non-nil after TTL expiration")
 	}
@@ -261,7 +261,7 @@ func TestMemoryCacheBackgroundRefresh(t *testing.T) {
 		return &ToolsetSchema{
 			ID:      "refreshed-" + key,
 			Name:    "refreshed",
-			Version: "2.0",
+			Version: refreshedSchemaVersion,
 		}, nil
 	}
 
@@ -280,8 +280,15 @@ func TestMemoryCacheBackgroundRefresh(t *testing.T) {
 		t.Fatalf("Set failed: %v", err)
 	}
 
-	// Wait until we're within the refresh threshold (20% of TTL = 20ms from expiry)
-	time.Sleep(90 * time.Millisecond)
+	waitForCondition(t, func() bool {
+		cache.mu.RLock()
+		entry, ok := cache.entries["refresh-key"]
+		cache.mu.RUnlock()
+		if !ok {
+			return false
+		}
+		return time.Now().After(entry.expiresAt.Add(-entry.ttl / 5))
+	}, "expected refresh-key to enter refresh window")
 
 	// Trigger refresh by accessing the entry
 	_, _ = cache.Get(ctx, "refresh-key")
@@ -296,16 +303,16 @@ func TestMemoryCacheBackgroundRefresh(t *testing.T) {
 		t.Error("Refresh was not triggered within timeout")
 	}
 
-	// Give time for the refresh to update the cache
-	time.Sleep(50 * time.Millisecond)
-
-	// Verify the entry was refreshed
-	got, _ := cache.Get(ctx, "refresh-key")
+	var got *ToolsetSchema
+	waitForCondition(t, func() bool {
+		got, _ = cache.Get(ctx, "refresh-key")
+		return got != nil && got.Version == "2.0"
+	}, "expected refreshed cache entry")
 	if got == nil {
 		t.Fatal("Get returned nil after refresh")
 	}
-	if got.Version != "2.0" {
-		t.Errorf("Version after refresh: got %q, want %q", got.Version, "2.0")
+	if got.Version != refreshedSchemaVersion {
+		t.Errorf("Version after refresh: got %q, want %q", got.Version, refreshedSchemaVersion)
 	}
 }
 
@@ -337,17 +344,25 @@ func TestMemoryCacheRefreshCooldown(t *testing.T) {
 		t.Fatalf("Set failed: %v", err)
 	}
 
-	// Wait until within refresh threshold
-	time.Sleep(45 * time.Millisecond)
+	waitForCondition(t, func() bool {
+		cache.mu.RLock()
+		entry, ok := cache.entries["cooldown-key"]
+		cache.mu.RUnlock()
+		if !ok {
+			return false
+		}
+		return time.Now().After(entry.expiresAt.Add(-entry.ttl / 5))
+	}, "expected cooldown-key to enter refresh window")
 
 	// Multiple Gets should only trigger one refresh due to cooldown
 	for range 5 {
 		_, _ = cache.Get(ctx, "cooldown-key")
-		time.Sleep(10 * time.Millisecond)
 	}
-
-	// Wait for any pending refreshes
-	time.Sleep(100 * time.Millisecond)
+	waitForCondition(t, func() bool {
+		mu.Lock()
+		defer mu.Unlock()
+		return refreshCount >= 1
+	}, "expected refresh to be triggered")
 
 	mu.Lock()
 	count := refreshCount
@@ -380,13 +395,18 @@ func TestMemoryCacheRefreshNotStarted(t *testing.T) {
 		t.Fatalf("Set failed: %v", err)
 	}
 
-	// Wait until within refresh threshold
-	time.Sleep(45 * time.Millisecond)
+	waitForCondition(t, func() bool {
+		cache.mu.RLock()
+		entry, ok := cache.entries["no-refresh-key"]
+		cache.mu.RUnlock()
+		if !ok {
+			return false
+		}
+		return time.Now().After(entry.expiresAt.Add(-entry.ttl / 5))
+	}, "expected no-refresh-key to enter refresh window")
 
 	// Get should not trigger refresh since loop is not started
 	_, _ = cache.Get(ctx, "no-refresh-key")
-
-	time.Sleep(50 * time.Millisecond)
 
 	if refreshCalled {
 		t.Error("Refresh was called even though StartRefresh was not called")

@@ -1,10 +1,17 @@
 package framework
 
 import (
+	"context"
+	"net/http"
+	"net/http/httptest"
+	"net/url"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"testing"
+	"time"
 
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
@@ -33,4 +40,142 @@ func TestCleanGeneratedExampleArtifacts(t *testing.T) {
 	require.ErrorIs(t, statErr, os.ErrNotExist)
 	_, statErr = os.Stat(filepath.Join(root, "manual_test.go"))
 	require.NoError(t, statErr)
+}
+
+func TestRunnerStartServerExternalURL(t *testing.T) {
+	t.Setenv("TEST_SERVER_URL", "http://127.0.0.1:8080/rpc/?q=1#fragment")
+
+	runner := NewRunner()
+
+	err := runner.startServer(t)
+
+	require.NoError(t, err)
+	assert.True(t, runner.externalServer)
+	require.NotNil(t, runner.baseURL)
+	assert.Equal(t, "http://127.0.0.1:8080/rpc", runner.baseURL.String())
+	assert.Nil(t, runner.server)
+}
+
+func TestRunnerStartServerReadiesLocalServer(t *testing.T) {
+	if !SupportsServer() {
+		t.Skip("integration fixture server is not available")
+	}
+
+	runner := NewRunner()
+	runner.skipGeneration = true
+
+	err := runner.startServer(t)
+	t.Cleanup(runner.stopServer)
+
+	require.NoError(t, err)
+	assert.False(t, runner.externalServer)
+	require.NotNil(t, runner.baseURL)
+	require.NotNil(t, runner.server)
+	require.NotNil(t, runner.exitCh)
+	assert.NoError(t, runner.ping())
+}
+
+func TestRunnerStopServerAfterProcessStart(t *testing.T) {
+	cmd := exec.CommandContext(context.Background(), "sh", "-c", "sleep 30") // #nosec G204 -- controlled test subprocess
+	require.NoError(t, cmd.Start())
+
+	done := make(chan struct{})
+	runner := &Runner{
+		server: cmd,
+		exitCh: make(chan error, 1),
+	}
+	go func() {
+		runner.exitCh <- cmd.Wait()
+		close(done)
+	}()
+
+	runner.stopServer()
+
+	select {
+	case <-done:
+	case <-time.After(5 * time.Second):
+		t.Fatal("expected stopServer to stop the subprocess")
+	}
+}
+
+func TestRunnerPingTreatsHTTPResponseAsReady(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
+		assert.Equal(t, http.MethodPost, req.Method)
+		assert.Equal(t, "/rpc", req.URL.Path)
+		w.WriteHeader(http.StatusServiceUnavailable)
+	}))
+	t.Cleanup(server.Close)
+
+	runner := NewRunner()
+	runner.baseURL = mustParseURL(t, server.URL)
+
+	err := runner.ping()
+
+	require.NoError(t, err)
+}
+
+func TestFindServerCmdDirPrefersDirectoryWithHTTPGo(t *testing.T) {
+	root := t.TempDir()
+	firstCmdDir := filepath.Join(root, "cmd", "assistant")
+	secondCmdDir := filepath.Join(root, "cmd", "assistant-http")
+
+	require.NoError(t, os.MkdirAll(firstCmdDir, 0o750))
+	require.NoError(t, os.MkdirAll(secondCmdDir, 0o750))
+	require.NoError(t, os.WriteFile(filepath.Join(firstCmdDir, "main.go"), []byte("package main\n"), 0o600))
+	require.NoError(t, os.WriteFile(filepath.Join(secondCmdDir, "main.go"), []byte("package main\n"), 0o600))
+	require.NoError(t, os.WriteFile(filepath.Join(secondCmdDir, "http.go"), []byte("package main\n"), 0o600))
+
+	cmdDir, err := findServerCmdDir(root)
+
+	require.NoError(t, err)
+	assert.Equal(t, secondCmdDir, cmdDir)
+}
+
+func TestCloneExampleRootCopiesFiles(t *testing.T) {
+	root := t.TempDir()
+	nestedDir := filepath.Join(root, "cmd", "assistant")
+	require.NoError(t, os.MkdirAll(nestedDir, 0o750))
+	require.NoError(t, os.WriteFile(filepath.Join(root, "go.mod"), []byte("module example.com/assistant\n"), 0o600))
+	require.NoError(t, os.WriteFile(filepath.Join(nestedDir, "main.go"), []byte("package main\n"), 0o600))
+
+	clonedRoot, err := cloneExampleRoot(root)
+	t.Cleanup(func() { _ = os.RemoveAll(clonedRoot) })
+
+	require.NoError(t, err)
+	content, err := os.ReadFile(filepath.Join(clonedRoot, "cmd", "assistant", "main.go")) // #nosec G304 -- clonedRoot is created by the test
+	require.NoError(t, err)
+	assert.Equal(t, "package main\n", string(content))
+}
+
+func TestMergeStepHeadersOverlaysStepHeaders(t *testing.T) {
+	defaults := &Defaults{Headers: map[string]string{"Accept": "application/json", "X-Test": "default"}}
+	step := Step{Headers: map[string]string{"Accept": "text/event-stream"}}
+
+	headers := mergeStepHeaders(defaults, step)
+
+	assert.Equal(t, "text/event-stream", headers["Accept"])
+	assert.Equal(t, "default", headers["X-Test"])
+}
+
+func TestIsStreamingStepUsesAcceptHeaderOrExpectation(t *testing.T) {
+	assert.True(t, isStreamingStep(Step{}, map[string]string{"Accept": "text/event-stream"}))
+	assert.True(t, isStreamingStep(Step{StreamExpect: &StreamExpect{}}, map[string]string{}))
+	assert.False(t, isStreamingStep(Step{}, map[string]string{"Accept": "application/json"}))
+}
+
+func TestCliBodyArgsOnlyForBodySubcommands(t *testing.T) {
+	args := cliBodyArgs(map[string]any{"query": "hello"}, "search-knowledge")
+	empty := cliBodyArgs(map[string]any{"query": "hello"}, "list-documents")
+
+	require.Len(t, args, 2)
+	assert.Equal(t, "--body", args[0])
+	assert.Empty(t, empty)
+}
+
+func mustParseURL(t *testing.T, rawURL string) *url.URL {
+	t.Helper()
+
+	parsed, err := url.Parse(rawURL)
+	require.NoError(t, err)
+	return parsed
 }

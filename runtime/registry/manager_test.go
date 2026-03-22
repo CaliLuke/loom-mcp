@@ -73,6 +73,8 @@ func TestAddRegistry(t *testing.T) {
 
 // TestDiscoverToolset tests toolset discovery functionality.
 // **Validates: Requirements 2.1**
+//
+//nolint:cyclop // Table-style subtests are clearer than over-factoring test setup.
 func TestDiscoverToolset(t *testing.T) {
 	ctx := context.Background()
 
@@ -204,6 +206,8 @@ func TestDiscoverToolset(t *testing.T) {
 
 // TestSearch tests search functionality across registries.
 // **Validates: Requirements 4.1**
+//
+//nolint:cyclop // Table-style subtests are clearer than over-factoring test setup.
 func TestSearch(t *testing.T) {
 	ctx := context.Background()
 
@@ -346,10 +350,6 @@ func TestSyncLoop(t *testing.T) {
 		if err != nil {
 			t.Fatalf("StartSync failed: %v", err)
 		}
-
-		// Let sync run briefly
-		time.Sleep(50 * time.Millisecond)
-
 		m.StopSync()
 		// Test passes if no panic or deadlock
 	})
@@ -403,9 +403,11 @@ func TestSyncLoop(t *testing.T) {
 		if err != nil {
 			t.Fatalf("StartSync failed: %v", err)
 		}
-
-		// Wait for initial sync plus one interval
-		time.Sleep(120 * time.Millisecond)
+		waitForCondition(t, func() bool {
+			mu.Lock()
+			defer mu.Unlock()
+			return listCallCount >= 2
+		}, "expected sync loop to trigger at least twice")
 
 		m.StopSync()
 
@@ -442,8 +444,6 @@ func TestSyncLoop(t *testing.T) {
 		if err != nil {
 			t.Fatalf("StartSync failed: %v", err)
 		}
-
-		time.Sleep(50 * time.Millisecond)
 		m.StopSync()
 
 		mu.Lock()
@@ -490,14 +490,10 @@ func TestFederationFiltering(t *testing.T) {
 		if err != nil {
 			t.Fatalf("StartSync failed: %v", err)
 		}
-
-		time.Sleep(100 * time.Millisecond)
+		schema1 := waitForCacheEntry(t, cache, cacheKey("federated", "web-search"), true)
+		schema2 := waitForCacheEntry(t, cache, cacheKey("federated", "code-execution"), true)
+		schema3 := waitForCacheEntry(t, cache, cacheKey("federated", "experimental-feature"), false)
 		m.StopSync()
-
-		// Check that only matching toolsets were cached
-		schema1, _ := cache.Get(ctx, cacheKey("federated", "web-search"))
-		schema2, _ := cache.Get(ctx, cacheKey("federated", "code-execution"))
-		schema3, _ := cache.Get(ctx, cacheKey("federated", "experimental-feature"))
 
 		if schema1 == nil {
 			t.Error("web-search should be included")
@@ -538,12 +534,9 @@ func TestFederationFiltering(t *testing.T) {
 		if err != nil {
 			t.Fatalf("StartSync failed: %v", err)
 		}
-
-		time.Sleep(100 * time.Millisecond)
+		schema1 := waitForCacheEntry(t, cache, cacheKey("federated", "stable-tool"), true)
+		schema2 := waitForCacheEntry(t, cache, cacheKey("federated", "experimental/beta"), false)
 		m.StopSync()
-
-		schema1, _ := cache.Get(ctx, cacheKey("federated", "stable-tool"))
-		schema2, _ := cache.Get(ctx, cacheKey("federated", "experimental/beta"))
 
 		if schema1 == nil {
 			t.Error("stable-tool should be included")

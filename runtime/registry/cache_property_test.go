@@ -94,6 +94,8 @@ func TestCacheFallbackOnUnavailabilityProperty(t *testing.T) {
 // TestCacheFallbackPreservesAllFieldsProperty verifies that cache fallback preserves all schema fields.
 // **Feature: mcp-registry, Property 3: Cache Fallback on Unavailability**
 // **Validates: Requirements 1.4, 8.2**
+//
+//nolint:cyclop // Property assertions stay readable when the preserved-field checks remain together.
 func TestCacheFallbackPreservesAllFieldsProperty(t *testing.T) {
 	parameters := gopter.DefaultTestParameters()
 	parameters.MinSuccessfulTests = 100
@@ -207,8 +209,19 @@ func TestCacheExpirationAfterTTLProperty(t *testing.T) {
 				return false
 			}
 
-			// Wait for TTL to expire
-			time.Sleep(shortTTL + 20*time.Millisecond)
+			expired := false
+			deadline := time.Now().Add(shortTTL * 4)
+			for time.Now().Before(deadline) {
+				cached, cacheErr := cache.Get(ctx, cacheKey(tc.registryName, tc.toolsetName))
+				if cacheErr == nil && cached == nil {
+					expired = true
+					break
+				}
+				time.Sleep(testPollInterval)
+			}
+			if !expired {
+				return false
+			}
 
 			// Now fetch should fail since cache expired and registry unavailable
 			_, err = manager.DiscoverToolset(ctx, tc.registryName, tc.toolsetName)
