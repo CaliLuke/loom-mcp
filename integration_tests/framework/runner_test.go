@@ -2,6 +2,7 @@ package framework
 
 import (
 	"context"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -170,6 +171,43 @@ func TestCliBodyArgsOnlyForBodySubcommands(t *testing.T) {
 	require.Len(t, args, 2)
 	assert.Equal(t, "--body", args[0])
 	assert.Empty(t, empty)
+}
+
+func TestExecuteSSERecognizesJSONRPCErrorEnvelope(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
+		w.Header().Set("Content-Type", "text/event-stream")
+		_, _ = fmt.Fprint(w, "event: message\n")
+		_, _ = fmt.Fprint(w, "data: {\"jsonrpc\":\"2.0\",\"error\":{\"code\":-32601,\"message\":\"Unknown tool\"},\"id\":\"1\"}\n\n")
+	}))
+	t.Cleanup(server.Close)
+
+	runner := NewRunner()
+	runner.baseURL = mustParseURL(t, server.URL)
+
+	events, err := runner.executeSSE("tools/call", map[string]any{"name": "non_existent_tool"}, map[string]string{"Accept": "text/event-stream"}, nil)
+
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "-32601")
+	assert.Contains(t, err.Error(), "Unknown tool")
+	require.Len(t, events, 1)
+	assert.Equal(t, "message", events[0].Event)
+}
+
+func TestExecuteSSEReturnsErrorOnEmptyStream(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
+		w.Header().Set("Content-Type", "text/event-stream")
+		w.WriteHeader(http.StatusOK)
+	}))
+	t.Cleanup(server.Close)
+
+	runner := NewRunner()
+	runner.baseURL = mustParseURL(t, server.URL)
+
+	events, err := runner.executeSSE("tools/call", map[string]any{"name": "non_existent_tool"}, map[string]string{"Accept": "text/event-stream"}, nil)
+
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "empty SSE response")
+	assert.Nil(t, events)
 }
 
 func mustParseURL(t *testing.T, rawURL string) *url.URL {

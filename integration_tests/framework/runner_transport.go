@@ -203,14 +203,10 @@ func (r *Runner) executeSSE(
 		if line == "" {
 			if cur.Event != "" || len(cur.Data) > 0 {
 				events = append(events, cur)
-				if cur.Event == "error" {
+				if code, msg, ok := sseErrorEnvelope(cur); ok {
 					sawErrorEvent = true
-					if eobj, ok := cur.Data["error"].(map[string]any); ok {
-						lastErrCode = eobj["code"]
-						if msg, ok := eobj["message"].(string); ok {
-							lastErrMsg = msg
-						}
-					}
+					lastErrCode = code
+					lastErrMsg = msg
 				}
 				cur = sseEvent{}
 			}
@@ -236,7 +232,27 @@ func (r *Runner) executeSSE(
 	if spec == nil && sawErrorEvent {
 		return events, fmt.Errorf("MCP error %v: %s", lastErrCode, lastErrMsg)
 	}
+	if spec == nil && len(events) == 0 {
+		return nil, fmt.Errorf("empty SSE response")
+	}
 	return events, nil
+}
+
+func sseErrorEnvelope(ev sseEvent) (code any, message string, ok bool) {
+	if len(ev.Data) == 0 {
+		return nil, "", false
+	}
+	raw, ok := ev.Data["error"]
+	if !ok {
+		return nil, "", false
+	}
+	eobj, ok := raw.(map[string]any)
+	if !ok {
+		return nil, "", false
+	}
+	code = eobj["code"]
+	message, _ = eobj["message"].(string)
+	return code, message, true
 }
 
 func shouldAutoInitialize(pre *Pre) bool {
