@@ -89,7 +89,6 @@ func TestUpsertAndLoad(t *testing.T) {
 	require.Equal(t, []string{"run-2", "run-3"}, stored.ChildRunIDs)
 
 	run.Status = session.RunStatusCompleted
-	time.Sleep(10 * time.Millisecond)
 	err = client.UpsertRun(context.Background(), run)
 	require.NoError(t, err)
 	updated, err := client.LoadRun(context.Background(), "run-1")

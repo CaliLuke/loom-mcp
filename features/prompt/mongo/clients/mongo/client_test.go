@@ -129,11 +129,13 @@ func TestHistoryAndListNewestFirst(t *testing.T) {
 	t.Parallel()
 
 	client := mustNewTestClient()
+	fc := client.coll.(*fakeCollection)
 	ctx := context.Background()
 	id := prompt.Ident("example.agent.system")
 	require.NoError(t, client.Set(ctx, id, prompt.Scope{}, "first", nil))
-	time.Sleep(time.Millisecond)
+	fc.docs[0].CreatedAt = time.Unix(1, 0).UTC()
 	require.NoError(t, client.Set(ctx, id, prompt.Scope{}, "second", nil))
+	fc.docs[1].CreatedAt = time.Unix(2, 0).UTC()
 
 	history, err := client.History(ctx, id)
 	require.NoError(t, err)
