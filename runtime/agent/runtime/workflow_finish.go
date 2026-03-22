@@ -12,12 +12,12 @@ import (
 	"context"
 	"fmt"
 
-	"goa.design/goa-ai/runtime/agent/api"
-	"goa.design/goa-ai/runtime/agent/hooks"
-	"goa.design/goa-ai/runtime/agent/model"
-	"goa.design/goa-ai/runtime/agent/planner"
-	"goa.design/goa-ai/runtime/agent/rawjson"
-	"goa.design/goa-ai/runtime/agent/tools"
+	"github.com/CaliLuke/loom-mcp/runtime/agent/api"
+	"github.com/CaliLuke/loom-mcp/runtime/agent/hooks"
+	"github.com/CaliLuke/loom-mcp/runtime/agent/model"
+	"github.com/CaliLuke/loom-mcp/runtime/agent/planner"
+	"github.com/CaliLuke/loom-mcp/runtime/agent/rawjson"
+	"github.com/CaliLuke/loom-mcp/runtime/agent/tools"
 )
 
 // finishWithoutToolCalls finalizes a plan result when the planner returned no

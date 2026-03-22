@@ -11,11 +11,11 @@ import (
 
 	mcpAssistantjsonrpcc "example.com/assistant/gen/jsonrpc/mcp_assistant/client"
 	mcpassistant "example.com/assistant/gen/mcp_assistant"
+	mcpruntime "github.com/CaliLuke/loom-mcp/runtime/mcp"
+	goahttp "github.com/CaliLuke/loom/http"
+	"github.com/CaliLuke/loom/jsonrpc"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	mcpruntime "goa.design/goa-ai/runtime/mcp"
-	goahttp "goa.design/goa/v3/http"
-	"goa.design/goa/v3/jsonrpc"
 )
 
 func TestGeneratedNewCallerConcatenatesTextContent(t *testing.T) {
@@ -76,6 +76,24 @@ func TestGeneratedNewCallerFallsBackToStructuredContentWhenNoTextExists(t *testi
 	assert.Equal(t, "image", result["type"])
 	assert.Equal(t, "image/png", result["mimeType"])
 	assert.Equal(t, "ZmFrZS1pbWFnZQ==", result["data"])
+}
+
+func TestGeneratedNewCallerEmptyResponseIncludesToolContext(t *testing.T) {
+	t.Parallel()
+
+	server := newGeneratedCallerTestServer(t, map[string]any{
+		"content": []map[string]any{},
+	})
+	defer server.Close()
+
+	caller := newGeneratedCaller(t, server)
+	_, err := caller.CallTool(context.Background(), mcpruntime.CallRequest{
+		Tool:    "multi_content",
+		Payload: json.RawMessage(`{"count":0}`),
+	})
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), `suite "assistant-mcp"`)
+	assert.Contains(t, err.Error(), `tool "multi_content"`)
 }
 
 func newGeneratedCaller(t *testing.T, server *httptest.Server) mcpruntime.Caller {

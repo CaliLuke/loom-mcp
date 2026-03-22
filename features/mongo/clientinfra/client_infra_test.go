@@ -6,14 +6,15 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	mongodriver "go.mongodb.org/mongo-driver/mongo"
 )
 
 func TestValidateMongoOptions(t *testing.T) {
 	t.Parallel()
 
-	assert.EqualError(t, ValidateMongoOptions(nil, "db"), "mongo client is required")
-	assert.EqualError(t, ValidateMongoOptions(&mongodriver.Client{}, ""), "database name is required")
+	require.EqualError(t, ValidateMongoOptions(nil, "db"), "mongo client is required")
+	require.EqualError(t, ValidateMongoOptions(&mongodriver.Client{}, ""), "database name is required")
 }
 
 func TestResolveTimeout(t *testing.T) {
@@ -32,14 +33,15 @@ func TestEnsureIndexesUsesDeadlineContext(t *testing.T) {
 		return nil
 	})
 
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	assert.True(t, hasDeadline)
 }
 
 func TestWithTimeoutNormalizesNilContextWhenRequested(t *testing.T) {
 	t.Parallel()
 
-	ctx, cancel := WithTimeout(nil, time.Second, true)
+	var nilCtx context.Context
+	ctx, cancel := WithTimeout(nilCtx, time.Second, true)
 	defer cancel()
 
 	assert.NotNil(t, ctx)
@@ -50,7 +52,8 @@ func TestWithTimeoutNormalizesNilContextWhenRequested(t *testing.T) {
 func TestWithTimeoutPreservesNilContextBehaviorWhenNormalizationDisabled(t *testing.T) {
 	t.Parallel()
 
+	var nilCtx context.Context
 	assert.Panics(t, func() {
-		_, _ = WithTimeout(nil, time.Second, false)
+		_, _ = WithTimeout(nilCtx, time.Second, false)
 	})
 }

@@ -21,11 +21,11 @@ import (
 	smithy "github.com/aws/smithy-go"
 	smithyhttp "github.com/aws/smithy-go/transport/http"
 
-	"goa.design/goa-ai/runtime/agent/model"
-	"goa.design/goa-ai/runtime/agent/rawjson"
-	"goa.design/goa-ai/runtime/agent/telemetry"
-	"goa.design/goa-ai/runtime/agent/tools"
-	"goa.design/goa-ai/runtime/agent/transcript"
+	"github.com/CaliLuke/loom-mcp/runtime/agent/model"
+	"github.com/CaliLuke/loom-mcp/runtime/agent/rawjson"
+	"github.com/CaliLuke/loom-mcp/runtime/agent/telemetry"
+	"github.com/CaliLuke/loom-mcp/runtime/agent/tools"
+	"github.com/CaliLuke/loom-mcp/runtime/agent/transcript"
 )
 
 const (
@@ -94,7 +94,7 @@ type Client struct {
 }
 
 // ledgerSource provides provider-ready messages for a given run when available.
-// This interface is internal to the goa-ai bedrock client and implemented by the
+// This interface is internal to the loom-mcp bedrock client and implemented by the
 // runtime using engine-specific mechanisms (e.g., Temporal workflow queries).
 type ledgerSource interface {
 	Messages(ctx context.Context, runID string) ([]*model.Message, error)

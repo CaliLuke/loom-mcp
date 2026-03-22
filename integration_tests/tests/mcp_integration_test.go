@@ -4,8 +4,8 @@ import (
 	"os"
 	"testing"
 
+	"github.com/CaliLuke/loom-mcp/integration_tests/framework"
 	"github.com/stretchr/testify/require"
-	"goa.design/goa-ai/integration_tests/framework"
 )
 
 func requireServer(t *testing.T) {

@@ -7,7 +7,7 @@ import (
 	"testing"
 	"time"
 
-	"goa.design/goa-ai/runtime/agent/model"
+	"github.com/CaliLuke/loom-mcp/runtime/agent/model"
 	"goa.design/pulse/rmap"
 )
 

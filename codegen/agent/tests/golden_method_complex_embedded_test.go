@@ -3,7 +3,7 @@ package tests
 import (
 	"testing"
 
-	"goa.design/goa-ai/codegen/agent/tests/testscenarios"
+	"github.com/CaliLuke/loom-mcp/codegen/agent/tests/testscenarios"
 )
 
 // Method-bound tool with nested user types in both method and tool data.

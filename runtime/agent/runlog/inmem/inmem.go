@@ -11,7 +11,7 @@ import (
 	"strconv"
 	"sync"
 
-	"goa.design/goa-ai/runtime/agent/runlog"
+	"github.com/CaliLuke/loom-mcp/runtime/agent/runlog"
 )
 
 type (

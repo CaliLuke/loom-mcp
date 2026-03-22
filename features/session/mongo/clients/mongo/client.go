@@ -14,9 +14,9 @@ import (
 
 	"goa.design/clue/health"
 
-	clientinfra "goa.design/goa-ai/features/mongo/clientinfra"
-	"goa.design/goa-ai/runtime/agent/prompt"
-	"goa.design/goa-ai/runtime/agent/session"
+	clientinfra "github.com/CaliLuke/loom-mcp/features/mongo/clientinfra"
+	"github.com/CaliLuke/loom-mcp/runtime/agent/prompt"
+	"github.com/CaliLuke/loom-mcp/runtime/agent/session"
 )
 
 const (

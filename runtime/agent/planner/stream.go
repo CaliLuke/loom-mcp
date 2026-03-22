@@ -8,7 +8,7 @@ import (
 	"errors"
 	"io"
 
-	"goa.design/goa-ai/runtime/agent/model"
+	"github.com/CaliLuke/loom-mcp/runtime/agent/model"
 )
 
 // StreamSummary aggregates the outcome of a streaming LLM invocation. Planners

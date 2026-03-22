@@ -9,8 +9,8 @@ package scribe
 import (
 	"errors"
 	"fmt"
-	"goa.design/goa-ai/runtime/agent/planner"
-	mcpruntime "goa.design/goa-ai/runtime/mcp"
+	"github.com/CaliLuke/loom-mcp/runtime/agent/planner"
+	mcpruntime "github.com/CaliLuke/loom-mcp/runtime/mcp"
 )
 
 const (

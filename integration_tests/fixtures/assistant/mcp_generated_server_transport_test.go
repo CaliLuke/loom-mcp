@@ -6,9 +6,9 @@ import (
 	"testing"
 	"time"
 
+	mcpruntime "github.com/CaliLuke/loom-mcp/runtime/mcp"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	mcpruntime "goa.design/goa-ai/runtime/mcp"
 )
 
 func TestGeneratedJSONRPCServerEventsStreamPublishesNotifications(t *testing.T) {

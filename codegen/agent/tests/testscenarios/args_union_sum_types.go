@@ -1,8 +1,8 @@
 package testscenarios
 
 import (
-	. "goa.design/goa-ai/dsl"
-	. "goa.design/goa/v3/dsl"
+	. "github.com/CaliLuke/loom-mcp/dsl"
+	. "github.com/CaliLuke/loom/dsl"
 )
 
 // ArgsUnionSumTypes returns a DSL with union (OneOf) args and result.

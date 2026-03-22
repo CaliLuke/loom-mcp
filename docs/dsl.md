@@ -1,15 +1,17 @@
-# Goa Agent DSL Reference
+# loom-mcp DSL Reference
 
-This document explains how to author agents, toolsets, and runtime policies with the Goa‑AI DSL.
+This document explains how to author agents, toolsets, and runtime policies with the DSL used in
+this repository. The repo is now named `loom-mcp`, but the current Go import path for the DSL is
+still `github.com/CaliLuke/loom-mcp/dsl`.
 Use it alongside `docs/overview.md` and `docs/runtime.md` for the broader architecture and runtime
 details.
 
 ## Overview
 
-- **Import path:** `"goa.design/goa-ai/dsl"` (typically dot-imported alongside Goa's DSL).
+- **Import path:** `"github.com/CaliLuke/loom-mcp/dsl"` (typically dot-imported alongside Goa's DSL).
 - **Entry point:** Declare agents inside a regular Goa `Service` definition. The DSL augments Goa's
-  design tree and is processed during `goa gen`.
-- **Outcome:** `goa gen` produces agent packages (`gen/<service>/agents/<agent>`), tool
+  design tree and is processed during `loom gen`.
+- **Outcome:** `loom gen` produces agent packages (`gen/<service>/agents/<agent>`), tool
   codecs/specs, activity handlers, and registration helpers. A contextual `AGENTS_QUICKSTART.md` is
   written at the module root unless disabled via `DisableAgentDocs()`.
 
@@ -23,8 +25,8 @@ reuse Goa's type system (`Attribute`, `Field`, validations, examples, etc.).
 package design
 
 import (
-	. "goa.design/goa/v3/dsl"
-	. "goa.design/goa-ai/dsl"
+	. "github.com/CaliLuke/loom/dsl"
+	. "github.com/CaliLuke/loom-mcp/dsl"
 )
 
 var DocsToolset = Toolset("docs.search", func() {
@@ -75,7 +77,7 @@ var _ = Service("orchestrator", func() {
 })
 ```
 
-Running `goa gen example.com/assistant/design` produces:
+Running `loom gen example.com/assistant/design` produces:
 
 - `gen/orchestrator/agents/chat`: workflow + planner activities + agent registry.
 - `gen/orchestrator/agents/chat/specs`: payload/result structs, JSON codecs, tool schemas.
@@ -99,7 +101,7 @@ Use these constants anywhere you need to reference tools.
 
 ### Agent‑as‑Tool Composition (Child Workflows)
 
-When agent A "uses" a toolset exported by agent B, Goa‑AI wires composition automatically:
+When agent A "uses" a toolset exported by agent B, the framework wires composition automatically:
 
 - The exporter (agent B) package includes a generated `agenttools` package with typed tool IDs and
   `NewRegistration(rt, systemPrompt, ...runtime.AgentToolOption)` helpers.
@@ -116,7 +118,7 @@ different audiences and link child runs via run handles rather than flattening r
 
 ## Prompt Management in v1
 
-Goa-AI v1 does **not** define a mandatory prompt declaration DSL (`Prompt(...)`, `Prompts(...)`, etc.).
+Loom MCP v1 does **not** define a mandatory prompt declaration DSL (`Prompt(...)`, `Prompts(...)`, etc.).
 Prompt management is intentionally runtime-driven:
 
 - Register baseline prompt specs via `Runtime.PromptRegistry.Register(prompt.PromptSpec{...})`.
@@ -192,7 +194,7 @@ generator invariants.
 ### Bounded results (returned / total / truncated / refinement_hint)
 
 `BoundedResult` exists so tools can return a bounded view (caps, window clamping,
-downsampling, pagination) while Goa-AI exposes a single canonical bounds contract.
+downsampling, pagination) while Loom MCP exposes a single canonical bounds contract.
 The semantic tool result remains domain-specific; the runtime contract lives in
 `planner.ToolResult.Bounds`.
 
@@ -245,7 +247,7 @@ Contract:
 Some tools represent **irreversible** or **operator-sensitive** actions (writes, deletes, commands).
 Use `Confirmation` to declare that a tool must be approved out-of-band before execution.
 
-At code generation time, Goa-AI records the confirmation policy in the generated `tools.ToolSpec`.
+At code generation time, Loom MCP records the confirmation policy in the generated `tools.ToolSpec`.
 At runtime, the workflow emits a confirmation `AwaitConfirmation` request and only executes the tool
 after an explicit approval is provided.
 
@@ -270,7 +272,7 @@ Notes:
   expected payloads and flow.
 - Confirmation templates (`PromptTemplate` and `DeniedResultTemplate`) are Go `text/template` strings
   executed with `missingkey=error`. In addition to the standard template functions (e.g. `printf`),
-  Goa-AI provides:
+  Loom MCP provides:
   - `json v` → JSON encodes `v` (useful for optional pointer fields or embedding structured values).
   - `quote s` → returns a Go-escaped quoted string (like `fmt.Sprintf("%q", s)`).
 - Design-time confirmation is the **common case** (“this tool always needs approval”), but runtimes
@@ -828,10 +830,10 @@ Tool("list_devices", "List devices in scope", func() {
 ```
 
 Services and finalizers are responsible for trimming and populating
-`planner.ToolResult.Bounds`. Goa-AI then projects those bounds into the
+`planner.ToolResult.Bounds`. Loom MCP then projects those bounds into the
 model-visible result JSON using the canonical field names declared by
 `BoundedResult(...)`. Result-hint templates access the same runtime metadata via
-`.Bounds`; Goa-AI does not merge those fields into the semantic result value.
+`.Bounds`; Loom MCP does not merge those fields into the semantic result value.
 
 ### Tags
 
@@ -1180,7 +1182,7 @@ boundaries.
 
 ## Generated Artifacts
 
-For each service/agent combination, `goa gen` produces:
+For each service/agent combination, `loom gen` produces:
 
 ### Agent Package (`gen/<svc>/agents/<agent>/`)
 
@@ -1221,7 +1223,7 @@ Generated when an agent exports toolsets (agent-as-tool). Export packages provid
 
 ### MCP Packages
 
-When a service declares MCP (`MCP(...)`), `goa gen` emits JSON-RPC client/server code under
+When a service declares MCP (`MCP(...)`), `loom gen` emits JSON-RPC client/server code under
 `gen/jsonrpc/<service>/...` and runtime registration helpers in the service package.
 
 ---

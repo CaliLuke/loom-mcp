@@ -3,8 +3,8 @@ package tests
 import (
 	"testing"
 
+	"github.com/CaliLuke/loom-mcp/codegen/agent/tests/testscenarios"
 	"github.com/stretchr/testify/require"
-	"goa.design/goa-ai/codegen/agent/tests/testscenarios"
 )
 
 // RunPolicy emitted into registry registration.

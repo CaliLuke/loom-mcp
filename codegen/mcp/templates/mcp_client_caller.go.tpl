@@ -4,10 +4,11 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 
 	mcppkg "{{ .MCPImportPath }}"
-	mcpruntime "goa.design/goa-ai/runtime/mcp"
+	mcpruntime "github.com/CaliLuke/loom-mcp/runtime/mcp"
 )
 
 // Caller adapts the generated MCP JSON-RPC client to the runtime Caller interface.
@@ -16,7 +17,7 @@ type Caller struct {
 	client *Client
 }
 
-// NewCaller wraps the generated Client so it can register with the goa-ai runtime.
+// NewCaller wraps the generated Client so it can register with the loom-mcp runtime.
 func NewCaller(client *Client, suite string) mcpruntime.Caller {
 	return Caller{suite: suite, client: client}
 }
@@ -37,6 +38,7 @@ func (c Caller) CallTool(ctx context.Context, req mcpruntime.CallRequest) (mcpru
 		return mcpruntime.CallResponse{}, errors.New("invalid tools/call stream type")
 	}
 	var merged *mcppkg.ToolsCallResult
+	eventCount := 0
 	for {
 		ev, recvErr := clientStream.Recv(ctx)
 		if recvErr == io.EOF {
@@ -48,6 +50,7 @@ func (c Caller) CallTool(ctx context.Context, req mcpruntime.CallRequest) (mcpru
 		if ev == nil {
 			continue
 		}
+		eventCount++
 		if merged == nil {
 			merged = &mcppkg.ToolsCallResult{}
 		}
@@ -57,7 +60,7 @@ func (c Caller) CallTool(ctx context.Context, req mcpruntime.CallRequest) (mcpru
 		}
 	}
 	if merged == nil || len(merged.Content) == 0 {
-		return mcpruntime.CallResponse{}, errors.New("empty MCP response")
+		return mcpruntime.CallResponse{}, fmt.Errorf("empty MCP response for suite %q tool %q: stream ended after %d events with no content", c.suite, req.Tool, eventCount)
 	}
 
 	return normalizeToolResult(merged)

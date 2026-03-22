@@ -5,9 +5,9 @@ import (
 	"fmt"
 	"sort"
 
-	"goa.design/goa-ai/runtime/agent/hooks"
-	"goa.design/goa-ai/runtime/agent/run"
-	"goa.design/goa-ai/runtime/agent/runlog"
+	"github.com/CaliLuke/loom-mcp/runtime/agent/hooks"
+	"github.com/CaliLuke/loom-mcp/runtime/agent/run"
+	"github.com/CaliLuke/loom-mcp/runtime/agent/runlog"
 )
 
 // newRunSnapshot derives a compact run state snapshot by replaying canonical

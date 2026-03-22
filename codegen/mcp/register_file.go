@@ -3,7 +3,7 @@ package codegen
 import (
 	"path/filepath"
 
-	"goa.design/goa/v3/codegen"
+	"github.com/CaliLuke/loom/codegen"
 )
 
 func registerFile(data *AdapterData) *codegen.File {

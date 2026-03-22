@@ -5,7 +5,7 @@ import (
 	"errors"
 	"testing"
 
-	"goa.design/goa-ai/runtime/agent/model"
+	"github.com/CaliLuke/loom-mcp/runtime/agent/model"
 )
 
 type stubStreamer struct{ meta map[string]any }

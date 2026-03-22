@@ -3,7 +3,7 @@ package hooks
 // This file defines the user-facing error messages emitted by the runtime.
 //
 // Callers may override these variables at process startup (before the runtime
-// begins emitting events) to customize UX text without forking goa-ai.
+// begins emitting events) to customize UX text without forking loom-mcp.
 //
 // Contract:
 // - These messages are intended to be rendered directly in UIs.

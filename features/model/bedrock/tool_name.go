@@ -23,7 +23,7 @@ import (
 //   - The result is at most 64 bytes long. If the sanitized name exceeds the limit,
 //     it is truncated and a stable hash suffix is appended to preserve uniqueness.
 //
-// Note: Callers should treat the output as provider-visible. Internally, goa-ai
+// Note: Callers should treat the output as provider-visible. Internally, loom-mcp
 // continues to use canonical tool identifiers; the adapter translates tool_use names
 // back to canonical IDs using the per-request reverse map.
 func SanitizeToolName(in string) string {

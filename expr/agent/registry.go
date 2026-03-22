@@ -5,14 +5,14 @@ import (
 	"net/url"
 	"time"
 
-	"goa.design/goa/v3/eval"
-	goaexpr "goa.design/goa/v3/expr"
+	"github.com/CaliLuke/loom/eval"
+	goaexpr "github.com/CaliLuke/loom/expr"
 )
 
 type (
 	// RegistryExpr captures a registry source declaration from the agent DSL.
 	// It represents a centralized catalog of MCP servers, toolsets, and agents
-	// that can be discovered and consumed by goa-ai agents.
+	// that can be discovered and consumed by loom-mcp agents.
 	RegistryExpr struct {
 		eval.DSLFunc
 

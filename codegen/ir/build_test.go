@@ -4,11 +4,11 @@ import (
 	"encoding/json"
 	"testing"
 
+	ir "github.com/CaliLuke/loom-mcp/codegen/ir"
+	"github.com/CaliLuke/loom-mcp/codegen/testhelpers"
+	. "github.com/CaliLuke/loom-mcp/dsl"
+	. "github.com/CaliLuke/loom/dsl"
 	"github.com/stretchr/testify/require"
-	ir "goa.design/goa-ai/codegen/ir"
-	"goa.design/goa-ai/codegen/testhelpers"
-	. "goa.design/goa-ai/dsl"
-	. "goa.design/goa/v3/dsl"
 )
 
 func TestBuild_Deterministic(t *testing.T) {

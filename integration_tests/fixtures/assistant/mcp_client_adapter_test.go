@@ -11,10 +11,10 @@ import (
 
 	assistant "example.com/assistant/gen/assistant"
 	mcpAssistantadapter "example.com/assistant/gen/mcp_assistant/adapter/client"
+	goahttp "github.com/CaliLuke/loom/http"
+	"github.com/CaliLuke/loom/jsonrpc"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	goahttp "goa.design/goa/v3/http"
-	"goa.design/goa/v3/jsonrpc"
 )
 
 func TestMCPClientAdapterMultiContentConcatenatesToolContent(t *testing.T) {

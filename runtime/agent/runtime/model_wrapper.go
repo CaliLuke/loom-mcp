@@ -3,9 +3,9 @@ package runtime
 import (
 	"context"
 
-	"goa.design/goa-ai/runtime/agent/model"
-	"goa.design/goa-ai/runtime/agent/planner"
-	"goa.design/goa-ai/runtime/agent/tools"
+	"github.com/CaliLuke/loom-mcp/runtime/agent/model"
+	"github.com/CaliLuke/loom-mcp/runtime/agent/planner"
+	"github.com/CaliLuke/loom-mcp/runtime/agent/tools"
 )
 
 // This file implements a per-turn model.Client decorator that emits runtime

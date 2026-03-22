@@ -6,8 +6,8 @@ package planner
 import (
 	"context"
 
-	"goa.design/goa-ai/runtime/agent/model"
-	"goa.design/goa-ai/runtime/agent/tools"
+	"github.com/CaliLuke/loom-mcp/runtime/agent/model"
+	"github.com/CaliLuke/loom-mcp/runtime/agent/tools"
 )
 
 // NoopEvents returns a PlannerEvents implementation that discards all events.

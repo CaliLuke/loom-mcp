@@ -9,7 +9,7 @@ import (
 	brtypes "github.com/aws/aws-sdk-go-v2/service/bedrockruntime/types"
 	"github.com/stretchr/testify/require"
 
-	"goa.design/goa-ai/runtime/agent/model"
+	"github.com/CaliLuke/loom-mcp/runtime/agent/model"
 )
 
 func TestEncodeMessages_DocumentPartWithCitations(t *testing.T) {

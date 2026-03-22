@@ -6,8 +6,8 @@ import (
 	"sort"
 	"strings"
 
-	mcpexpr "goa.design/goa-ai/expr/mcp"
-	"goa.design/goa/v3/expr"
+	mcpexpr "github.com/CaliLuke/loom-mcp/expr/mcp"
+	"github.com/CaliLuke/loom/expr"
 )
 
 const missingJSONRPCRouteMessage = `service %q must declare JSONRPC(func(){ POST(...) }) with a service-level path`

@@ -10,7 +10,7 @@ import (
 	"go.temporal.io/sdk/worker"
 	"go.temporal.io/sdk/workflow"
 
-	"goa.design/goa-ai/runtime/temporaltrace"
+	"github.com/CaliLuke/loom-mcp/runtime/temporaltrace"
 )
 
 type instrumentation struct {

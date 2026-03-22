@@ -6,9 +6,9 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	"goa.design/goa-ai/features/policy/basic"
-	"goa.design/goa-ai/runtime/agent/policy"
-	"goa.design/goa-ai/runtime/agent/tools"
+	"github.com/CaliLuke/loom-mcp/features/policy/basic"
+	"github.com/CaliLuke/loom-mcp/runtime/agent/policy"
+	"github.com/CaliLuke/loom-mcp/runtime/agent/tools"
 )
 
 func TestEngineFiltersByTags(t *testing.T) {

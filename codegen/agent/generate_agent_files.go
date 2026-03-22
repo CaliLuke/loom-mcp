@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"path/filepath"
 
-	"goa.design/goa/v3/codegen"
+	"github.com/CaliLuke/loom/codegen"
 )
 
 // agentFiles collects all files generated for a single agent.
@@ -89,7 +89,7 @@ func agentSpecsJSONFile(agent *AgentData) *codegen.File {
 		// Schema generation failures indicate a broken design or codegen bug and
 		// must surface loudly so callers do not observe partial or drifting
 		// tool catalogues. Fail generation instead of silently omitting schemas.
-		panic(fmt.Errorf("goa-ai: tool schema generation failed for agent %q: %w", agent.Name, err))
+		panic(fmt.Errorf("loom-mcp: tool schema generation failed for agent %q: %w", agent.Name, err))
 	}
 	if data == nil {
 		return nil

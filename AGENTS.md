@@ -7,7 +7,7 @@
 - Fix root causes. Do not ship local workarounds.
 - Keep status updates short during multi-step work.
 - Prefer less code, strong contracts, and fail-fast behavior over defensive fallbacks.
-- When framework-specific Goa-AI guidance is needed, use the repo-local skill at `.agents/skills/goa-ai/SKILL.md` instead of expanding this file again.
+- When framework-specific `loom-mcp` guidance is needed, use the repo-local skill at `.agents/skills/loom-mcp/SKILL.md` instead of expanding this file again.
 
 ## Go Style
 
@@ -35,22 +35,22 @@ Order declarations as:
 
 Within each section, place main logic first and helpers last.
 
-## Goa-AI Repo Rules
+## loom-mcp Repo Rules
 
 - `design/*.go` is the source of truth.
 - Never edit generated `gen/` files by hand.
 - Put validations in the Goa DSL, not in service internals.
 - Use Goa import paths for generator commands, not filesystem paths.
-- After design changes, regenerate with `goa gen <module-import-path>/design`.
-- Run `goa example <module-import-path>/design` only when new scaffold files are intentionally desired.
-- User-facing DSL, runtime, or codegen changes must also update the goa.design docs under `content/en/docs/2-goa-ai/`.
+- After design changes, regenerate with `loom gen <module-import-path>/design`.
+- Run `loom example <module-import-path>/design` only when new scaffold files are intentionally desired.
+- User-facing DSL, runtime, or codegen changes must also update the repo docs under `docs/` and any corresponding external docs set that publishes this project.
 - Keep repo-local skills current with the product. Update the skill files directly rather than adding sidecar delta documents.
-- When bumping the forked `goa.design/goa/v3` replace, do not assume `main` or the default branch. This repo is currently tracking the fork branch `openapi-3.1`. Resolve the freshest relevant fork commit from actual refs and timestamps, then pin that exact pseudo-version in `go.mod`.
+- When bumping the forked `github.com/CaliLuke/loom` replace, do not assume `main` or the default branch. This repo is currently tracking the fork branch `openapi-3.1`. Resolve the freshest relevant fork commit from actual refs and timestamps, then pin that exact pseudo-version in `go.mod`.
 - Use local Goa checkout mode for iterative development and the pinned remote fork for CI. The standard toggle is `make goa-local` for local iteration and `make goa-remote` before CI-facing verification or commits. `make goa-status` shows the current mode.
 - After switching to local mode, use `make verify-mcp-local` for the default MCP fixture/framework verification ladder.
 - Use `make regen-assistant-fixture` when the assistant MCP fixture design changes so generated churn is intentional and reproducible.
-- The canonical local core checkout for this repo is `/Users/luca/code/goa-light`. If local mode points somewhere else, treat that as drift and correct it before interpreting test results.
-- Do not compensate in `goa-ai` for upstream `goa-light` or fork regressions. Bump, verify, and if the new upstream commit breaks this repo, stop and return concrete upstream tickets instead of shipping local workarounds.
+- The canonical local core checkout for this repo is `/Users/luca/code/loom-mono/loom`. If local mode points somewhere else, treat that as drift and correct it before interpreting test results.
+- Do not compensate in `loom-mcp` for upstream `loom` regressions. Bump, verify, and if the new upstream commit breaks this repo, stop and return concrete upstream tickets instead of shipping local workarounds.
 
 ## Testing
 
@@ -58,6 +58,7 @@ Within each section, place main logic first and helpers last.
 - Name tests `TestXxx`.
 - Prefer `testify/assert`; use `testify/require` only when the test cannot continue after a failure.
 - Treat pre-commit and commit-time hooks as mandatory. If a hook fails for any reason, fix the problem before committing; do not bypass the hook, do not use `--no-verify`, and do not classify the failure as unrelated debt to avoid fixing it.
+- When bumping frameworks or dependencies, or when doing refactors or general improvement work, run the full verification suite rather than only targeted package checks. At minimum this means `make lint`, `make test`, and `make itest` before calling the work done.
 - Normal verification flow:
   1. `make lint`
   2. fix issues
@@ -68,7 +69,7 @@ Within each section, place main logic first and helpers last.
   0.5. `make regen-assistant-fixture` when fixture DSL changes
   1. `make verify-mcp-local`
   3. `go test ./...`
-- If a new `goa` fork bump breaks only integration semantics, do not patch around it in `goa-ai`; capture the failing scenarios and return upstream tickets with exact scenario file references.
+- If a new `goa` fork bump breaks only integration semantics, do not patch around it in `loom-mcp`; capture the failing scenarios and return upstream tickets with exact scenario file references.
 
 ## Safety
 
@@ -82,5 +83,5 @@ Within each section, place main logic first and helpers last.
 
 ## Repo Skills
 
-- Use `.agents/skills/goa-ai/SKILL.md` for Goa-AI runtime, codegen, MCP, planner, and agent-as-tool guidance.
+- Use `.agents/skills/loom-mcp/SKILL.md` for `loom-mcp` runtime, codegen, MCP, planner, and agent-as-tool guidance.
 - Use `.agents/skills/mcp-tool-design/SKILL.md` when shaping MCP-facing tool contracts.

@@ -16,8 +16,8 @@ import (
 	"go.temporal.io/sdk/converter"
 	"google.golang.org/grpc"
 
-	"goa.design/goa-ai/runtime/agent/api"
-	"goa.design/goa-ai/runtime/agent/engine"
+	"github.com/CaliLuke/loom-mcp/runtime/agent/api"
+	"github.com/CaliLuke/loom-mcp/runtime/agent/engine"
 )
 
 // These tests lock the Temporal adapter contract around duplicate registration

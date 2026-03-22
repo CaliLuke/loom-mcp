@@ -5,14 +5,14 @@ import (
 	"testing"
 	"time"
 
-	agent "goa.design/goa-ai/runtime/agent"
-	"goa.design/goa-ai/runtime/agent/engine"
-	"goa.design/goa-ai/runtime/agent/hooks"
-	"goa.design/goa-ai/runtime/agent/planner"
-	"goa.design/goa-ai/runtime/agent/run"
-	runloginmem "goa.design/goa-ai/runtime/agent/runlog/inmem"
-	"goa.design/goa-ai/runtime/agent/telemetry"
-	"goa.design/goa-ai/runtime/agent/tools"
+	agent "github.com/CaliLuke/loom-mcp/runtime/agent"
+	"github.com/CaliLuke/loom-mcp/runtime/agent/engine"
+	"github.com/CaliLuke/loom-mcp/runtime/agent/hooks"
+	"github.com/CaliLuke/loom-mcp/runtime/agent/planner"
+	"github.com/CaliLuke/loom-mcp/runtime/agent/run"
+	runloginmem "github.com/CaliLuke/loom-mcp/runtime/agent/runlog/inmem"
+	"github.com/CaliLuke/loom-mcp/runtime/agent/telemetry"
+	"github.com/CaliLuke/loom-mcp/runtime/agent/tools"
 
 	"github.com/stretchr/testify/require"
 )

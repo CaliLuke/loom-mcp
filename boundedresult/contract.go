@@ -2,7 +2,7 @@
 // DSL validation, code generation, and runtime projection.
 //
 // Contract:
-//   - Canonical bounded fields are owned by Goa-AI, not by authored semantic tool
+//   - Canonical bounded fields are owned by loom-mcp, not by authored semantic tool
 //     result shapes.
 //   - returned/truncated are always required for bounded successful results.
 //   - total/refinement_hint/next_cursor are optional and emitted only when set.

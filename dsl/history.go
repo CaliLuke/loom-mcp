@@ -1,8 +1,8 @@
 package dsl
 
 import (
-	expragents "goa.design/goa-ai/expr/agent"
-	"goa.design/goa/v3/eval"
+	expragents "github.com/CaliLuke/loom-mcp/expr/agent"
+	"github.com/CaliLuke/loom/eval"
 )
 
 // History defines how the agent runtime manages conversation history before

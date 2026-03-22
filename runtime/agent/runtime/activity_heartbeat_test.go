@@ -6,8 +6,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/CaliLuke/loom-mcp/runtime/agent/engine"
 	"github.com/stretchr/testify/require"
-	"goa.design/goa-ai/runtime/agent/engine"
 )
 
 type heartbeatRecorder struct {

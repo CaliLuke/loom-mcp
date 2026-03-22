@@ -17,11 +17,11 @@ import (
 	"context"
 	"fmt"
 
-	"goa.design/goa-ai/runtime/agent"
-	"goa.design/goa-ai/runtime/agent/api"
-	"goa.design/goa-ai/runtime/agent/planner"
-	"goa.design/goa-ai/runtime/agent/rawjson"
-	"goa.design/goa-ai/runtime/agent/tools"
+	"github.com/CaliLuke/loom-mcp/runtime/agent"
+	"github.com/CaliLuke/loom-mcp/runtime/agent/api"
+	"github.com/CaliLuke/loom-mcp/runtime/agent/planner"
+	"github.com/CaliLuke/loom-mcp/runtime/agent/rawjson"
+	"github.com/CaliLuke/loom-mcp/runtime/agent/tools"
 )
 
 // materializeToolResult runs the registered typed result materializer, enforces

@@ -4,10 +4,10 @@ import (
 	"errors"
 	"testing"
 
+	"github.com/CaliLuke/loom-mcp/runtime/agent/engine"
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
 	workflowpb "go.temporal.io/api/workflow/v1"
-	"goa.design/goa-ai/runtime/agent/engine"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
 	"github.com/stretchr/testify/require"

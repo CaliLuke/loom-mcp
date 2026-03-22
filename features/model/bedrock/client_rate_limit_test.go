@@ -7,8 +7,8 @@ import (
 
 	"github.com/stretchr/testify/require"
 
+	"github.com/CaliLuke/loom-mcp/runtime/agent/model"
 	"github.com/aws/aws-sdk-go-v2/service/bedrockruntime"
-	"goa.design/goa-ai/runtime/agent/model"
 )
 
 type errorRuntimeClient struct {

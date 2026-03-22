@@ -5,7 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 
-	"goa.design/goa/v3/expr"
+	"github.com/CaliLuke/loom/expr"
 )
 
 // JSON Schema type constants.

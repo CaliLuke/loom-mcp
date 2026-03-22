@@ -1,7 +1,7 @@
 package codegen
 
 import (
-	goaexpr "goa.design/goa/v3/expr"
+	goaexpr "github.com/CaliLuke/loom/expr"
 )
 
 // ToolAttrAliasesMethod reports whether the tool attribute defines a user type

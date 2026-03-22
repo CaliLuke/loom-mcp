@@ -6,9 +6,9 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/CaliLuke/loom-mcp/runtime/agent/model"
+	"github.com/CaliLuke/loom-mcp/runtime/agent/tools"
 	brtypes "github.com/aws/aws-sdk-go-v2/service/bedrockruntime/types"
-	"goa.design/goa-ai/runtime/agent/model"
-	"goa.design/goa-ai/runtime/agent/tools"
 )
 
 // Ensures encodeMessages preserves transcript order and places reasoning before tool_use

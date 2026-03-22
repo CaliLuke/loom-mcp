@@ -4,9 +4,9 @@ import (
 	"context"
 	"testing"
 
+	"github.com/CaliLuke/loom-mcp/runtime/agent"
+	"github.com/CaliLuke/loom-mcp/runtime/agent/run"
 	"github.com/stretchr/testify/require"
-	"goa.design/goa-ai/runtime/agent"
-	"goa.design/goa-ai/runtime/agent/run"
 )
 
 func TestBusPublishFanOut(t *testing.T) {

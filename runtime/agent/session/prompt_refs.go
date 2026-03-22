@@ -5,7 +5,7 @@ import (
 	"errors"
 	"fmt"
 
-	"goa.design/goa-ai/runtime/agent/prompt"
+	"github.com/CaliLuke/loom-mcp/runtime/agent/prompt"
 )
 
 type promptRefKey struct {

@@ -1,4 +1,4 @@
-// Package runtime provides the goa-ai runtime implementation.
+// Package runtime provides the loom-mcp runtime implementation.
 //
 // This file contains agent-as-tool support: a toolset registration that executes a
 // nested agent run and adapts its canonical run output into a parent tool_result.

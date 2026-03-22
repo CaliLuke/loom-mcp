@@ -5,8 +5,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/CaliLuke/loom-mcp/runtime/agent/memory"
 	"github.com/stretchr/testify/require"
-	"goa.design/goa-ai/runtime/agent/memory"
 )
 
 func TestStoreAppendAndLoad(t *testing.T) {

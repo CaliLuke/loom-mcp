@@ -1,9 +1,9 @@
 package codegen
 
 import (
-	mcpexpr "goa.design/goa-ai/expr/mcp"
-	"goa.design/goa/v3/eval"
-	"goa.design/goa/v3/expr"
+	mcpexpr "github.com/CaliLuke/loom-mcp/expr/mcp"
+	"github.com/CaliLuke/loom/eval"
+	"github.com/CaliLuke/loom/expr"
 )
 
 // PrepareServices validates the full pure-MCP generation contract before

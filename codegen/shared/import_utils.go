@@ -5,8 +5,8 @@ import (
 	"sort"
 	"strings"
 
-	"goa.design/goa/v3/codegen"
-	"goa.design/goa/v3/expr"
+	"github.com/CaliLuke/loom/codegen"
+	"github.com/CaliLuke/loom/expr"
 )
 
 // JoinImportPath constructs a full import path by joining the generation package

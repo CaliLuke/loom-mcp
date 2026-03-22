@@ -9,8 +9,8 @@ import (
 	"context"
 	"time"
 
-	"goa.design/goa-ai/runtime/agent/run"
-	"goa.design/goa-ai/runtime/agent/tools"
+	"github.com/CaliLuke/loom-mcp/runtime/agent/run"
+	"github.com/CaliLuke/loom-mcp/runtime/agent/tools"
 )
 
 type (

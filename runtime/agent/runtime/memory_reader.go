@@ -3,7 +3,7 @@ package runtime
 import (
 	"context"
 
-	"goa.design/goa-ai/runtime/agent/memory"
+	"github.com/CaliLuke/loom-mcp/runtime/agent/memory"
 )
 
 // memoryReader returns a read-only view of the persisted memory for the given run.

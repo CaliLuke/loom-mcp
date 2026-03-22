@@ -4,8 +4,8 @@ import (
 	"fmt"
 	"sort"
 
-	"goa.design/goa/v3/codegen"
-	"goa.design/goa/v3/expr"
+	"github.com/CaliLuke/loom/codegen"
+	"github.com/CaliLuke/loom/expr"
 )
 
 // buildResourceQueryFields computes the statically known resource query plan so

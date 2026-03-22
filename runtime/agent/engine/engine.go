@@ -25,7 +25,7 @@
 //
 // # Available Implementations
 //
-// Two engine implementations ship with goa-ai:
+// Two engine implementations ship with loom-mcp:
 //
 //   - temporal: Production-grade durable execution backed by Temporal. Supports
 //     workflow replay, long-running execution, and distributed workers.
@@ -68,7 +68,7 @@ import (
 	"errors"
 	"time"
 
-	"goa.design/goa-ai/runtime/agent/api"
+	"github.com/CaliLuke/loom-mcp/runtime/agent/api"
 )
 
 // RunStatus represents the lifecycle state of a workflow execution.

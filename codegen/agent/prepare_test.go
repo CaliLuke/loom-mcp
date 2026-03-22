@@ -3,9 +3,9 @@ package codegen
 import (
 	"testing"
 
+	agentsExpr "github.com/CaliLuke/loom-mcp/expr/agent"
+	goaexpr "github.com/CaliLuke/loom/expr"
 	"github.com/stretchr/testify/require"
-	agentsExpr "goa.design/goa-ai/expr/agent"
-	goaexpr "goa.design/goa/v3/expr"
 )
 
 // Test that Prepare recursively marks user types referenced by tool args/return

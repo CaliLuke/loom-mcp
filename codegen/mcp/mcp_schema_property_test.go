@@ -5,12 +5,12 @@ import (
 	"reflect"
 	"testing"
 
+	"github.com/CaliLuke/loom-mcp/codegen/shared"
+	"github.com/CaliLuke/loom/expr"
 	"github.com/leanovate/gopter"
 	"github.com/leanovate/gopter/gen"
 	"github.com/leanovate/gopter/prop"
 	"github.com/stretchr/testify/require"
-	"goa.design/goa-ai/codegen/shared"
-	"goa.design/goa/v3/expr"
 )
 
 // TestToolSchemaRoundTripProperty verifies Property 1: Tool Schema Round-Trip Consistency.

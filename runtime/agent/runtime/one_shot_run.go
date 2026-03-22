@@ -7,9 +7,9 @@ import (
 	"errors"
 	"fmt"
 
-	agent "goa.design/goa-ai/runtime/agent"
-	"goa.design/goa-ai/runtime/agent/hooks"
-	"goa.design/goa-ai/runtime/agent/run"
+	agent "github.com/CaliLuke/loom-mcp/runtime/agent"
+	"github.com/CaliLuke/loom-mcp/runtime/agent/hooks"
+	"github.com/CaliLuke/loom-mcp/runtime/agent/run"
 )
 
 type (

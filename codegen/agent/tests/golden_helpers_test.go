@@ -6,9 +6,9 @@ import (
 	"path/filepath"
 	"testing"
 
-	"goa.design/goa-ai/codegen/testhelpers"
-	"goa.design/goa-ai/testutil"
-	gcodegen "goa.design/goa/v3/codegen"
+	"github.com/CaliLuke/loom-mcp/codegen/testhelpers"
+	"github.com/CaliLuke/loom-mcp/testutil"
+	gcodegen "github.com/CaliLuke/loom/codegen"
 )
 
 // buildAndGenerate executes the DSL, runs codegen and returns generated files.

@@ -9,8 +9,8 @@ import (
 
 	cli "example.com/assistant/gen/jsonrpc/cli/orchestrator"
 	mcpAssistantadapter "example.com/assistant/gen/mcp_assistant/adapter/client"
-	goahttp "goa.design/goa/v3/http"
-	goa "goa.design/goa/v3/pkg"
+	goahttp "github.com/CaliLuke/loom/http"
+	goa "github.com/CaliLuke/loom/pkg"
 )
 
 func doJSONRPC(scheme, host string, timeout int, debug bool) (goa.Endpoint, any, error) {

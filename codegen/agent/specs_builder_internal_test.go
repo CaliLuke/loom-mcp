@@ -5,13 +5,13 @@ import (
 	"strings"
 	"testing"
 
+	codegen "github.com/CaliLuke/loom-mcp/codegen/agent"
+	. "github.com/CaliLuke/loom-mcp/dsl"
+	agentsExpr "github.com/CaliLuke/loom-mcp/expr/agent"
+	goadsl "github.com/CaliLuke/loom/dsl"
+	"github.com/CaliLuke/loom/eval"
+	goaexpr "github.com/CaliLuke/loom/expr"
 	"github.com/stretchr/testify/require"
-	codegen "goa.design/goa-ai/codegen/agent"
-	. "goa.design/goa-ai/dsl"
-	agentsExpr "goa.design/goa-ai/expr/agent"
-	goadsl "goa.design/goa/v3/dsl"
-	"goa.design/goa/v3/eval"
-	goaexpr "goa.design/goa/v3/expr"
 )
 
 // This test lives in package codegen to access unexported helpers and
@@ -50,7 +50,7 @@ func TestBuildToolSpecsData_DeterministicRefs(t *testing.T) {
 	require.True(t, eval.Execute(design, nil), eval.Context.Error())
 	require.NoError(t, eval.RunDSL())
 
-	data, err := codegen.BuildDataForTest("goa.design/goa-ai", []eval.Root{goaexpr.Root, agentsExpr.Root})
+	data, err := codegen.BuildDataForTest("github.com/CaliLuke/loom-mcp", []eval.Root{goaexpr.Root, agentsExpr.Root})
 	require.NoError(t, err)
 	require.NotNil(t, data)
 	require.Len(t, data.Services, 1)
@@ -122,7 +122,7 @@ func TestBuildToolSpecsData_ExtendFieldsMaterialized(t *testing.T) {
 	require.True(t, eval.Execute(design, nil), eval.Context.Error())
 	require.NoError(t, eval.RunDSL())
 
-	data, err := codegen.BuildDataForTest("goa.design/goa-ai", []eval.Root{goaexpr.Root, agentsExpr.Root})
+	data, err := codegen.BuildDataForTest("github.com/CaliLuke/loom-mcp", []eval.Root{goaexpr.Root, agentsExpr.Root})
 	require.NoError(t, err)
 	require.NotNil(t, data)
 	require.Len(t, data.Services, 1)

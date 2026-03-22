@@ -5,9 +5,9 @@ import (
 	"errors"
 	"fmt"
 
-	"goa.design/goa-ai/runtime/agent/engine"
-	rthints "goa.design/goa-ai/runtime/agent/runtime/hints"
-	"goa.design/goa-ai/runtime/agent/tools"
+	"github.com/CaliLuke/loom-mcp/runtime/agent/engine"
+	rthints "github.com/CaliLuke/loom-mcp/runtime/agent/runtime/hints"
+	"github.com/CaliLuke/loom-mcp/runtime/agent/tools"
 )
 
 // Seal closes the registration phase and activates engines that stage worker handlers.

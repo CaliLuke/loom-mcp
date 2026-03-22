@@ -4,8 +4,8 @@ import (
 	"context"
 	"fmt"
 
-	"goa.design/goa-ai/runtime/agent/planner"
-	"goa.design/goa-ai/runtime/agent/tools"
+	"github.com/CaliLuke/loom-mcp/runtime/agent/planner"
+	"github.com/CaliLuke/loom-mcp/runtime/agent/tools"
 )
 
 type (

@@ -8,9 +8,9 @@ package runtime
 import (
 	"errors"
 
-	"goa.design/goa-ai/runtime/agent/engine"
-	"goa.design/goa-ai/runtime/agent/interrupt"
-	"goa.design/goa-ai/runtime/agent/planner"
+	"github.com/CaliLuke/loom-mcp/runtime/agent/engine"
+	"github.com/CaliLuke/loom-mcp/runtime/agent/interrupt"
+	"github.com/CaliLuke/loom-mcp/runtime/agent/planner"
 )
 
 // handleAwaitOnlyResult executes an await-only planner result (no tool calls).

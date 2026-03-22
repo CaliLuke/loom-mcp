@@ -9,17 +9,17 @@ import (
 	"sync"
 	"time"
 
-	agent "goa.design/goa-ai/runtime/agent"
-	"goa.design/goa-ai/runtime/agent/api"
-	"goa.design/goa-ai/runtime/agent/engine"
-	"goa.design/goa-ai/runtime/agent/hooks"
-	"goa.design/goa-ai/runtime/agent/model"
-	"goa.design/goa-ai/runtime/agent/planner"
-	"goa.design/goa-ai/runtime/agent/policy"
-	runloginmem "goa.design/goa-ai/runtime/agent/runlog/inmem"
-	sessioninmem "goa.design/goa-ai/runtime/agent/session/inmem"
-	"goa.design/goa-ai/runtime/agent/telemetry"
-	"goa.design/goa-ai/runtime/agent/tools"
+	agent "github.com/CaliLuke/loom-mcp/runtime/agent"
+	"github.com/CaliLuke/loom-mcp/runtime/agent/api"
+	"github.com/CaliLuke/loom-mcp/runtime/agent/engine"
+	"github.com/CaliLuke/loom-mcp/runtime/agent/hooks"
+	"github.com/CaliLuke/loom-mcp/runtime/agent/model"
+	"github.com/CaliLuke/loom-mcp/runtime/agent/planner"
+	"github.com/CaliLuke/loom-mcp/runtime/agent/policy"
+	runloginmem "github.com/CaliLuke/loom-mcp/runtime/agent/runlog/inmem"
+	sessioninmem "github.com/CaliLuke/loom-mcp/runtime/agent/session/inmem"
+	"github.com/CaliLuke/loom-mcp/runtime/agent/telemetry"
+	"github.com/CaliLuke/loom-mcp/runtime/agent/tools"
 )
 
 // testWorkflowContext is a lightweight engine.WorkflowContext implementation used by tests.

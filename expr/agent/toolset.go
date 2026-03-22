@@ -3,8 +3,8 @@ package agent
 import (
 	"fmt"
 
-	"goa.design/goa/v3/eval"
-	goaexpr "goa.design/goa/v3/expr"
+	"github.com/CaliLuke/loom/eval"
+	goaexpr "github.com/CaliLuke/loom/expr"
 )
 
 type (
@@ -55,7 +55,7 @@ type (
 // AddMeta adds metadata to the toolset expression.
 //
 // This method exists so Goa's standard Meta DSL helper can attach metadata to
-// goa-ai agent toolset expressions without goa-ai introducing a parallel Meta DSL.
+// loom-mcp agent toolset expressions without loom-mcp introducing a parallel Meta DSL.
 func (t *ToolsetExpr) AddMeta(name string, value ...string) {
 	if t.Meta == nil {
 		t.Meta = make(goaexpr.MetaExpr)
@@ -66,7 +66,7 @@ func (t *ToolsetExpr) AddMeta(name string, value ...string) {
 // DeleteMeta removes the metadata entry identified by name.
 //
 // This method exists so Goa's standard RemoveMeta DSL helper can remove metadata
-// from goa-ai agent toolset expressions.
+// from loom-mcp agent toolset expressions.
 func (t *ToolsetExpr) DeleteMeta(name string) {
 	delete(t.Meta, name)
 }

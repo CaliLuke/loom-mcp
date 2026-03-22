@@ -3,7 +3,7 @@ package tests
 import (
 	"testing"
 
-	"goa.design/goa-ai/codegen/agent/tests/testscenarios"
+	"github.com/CaliLuke/loom-mcp/codegen/agent/tests/testscenarios"
 )
 
 // Minimal tool specs for an agent with one toolset and one tool with simple args/return.

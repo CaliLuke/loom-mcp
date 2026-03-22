@@ -9,14 +9,14 @@ import (
 	"testing"
 	"time"
 
+	clientspulse "github.com/CaliLuke/loom-mcp/features/stream/pulse/clients/pulse"
+	mockpulse "github.com/CaliLuke/loom-mcp/features/stream/pulse/clients/pulse/mocks"
+	genregistry "github.com/CaliLuke/loom-mcp/registry/gen/registry"
+	"github.com/CaliLuke/loom-mcp/runtime/toolregistry"
 	"github.com/leanovate/gopter"
 	"github.com/leanovate/gopter/gen"
 	"github.com/leanovate/gopter/prop"
 	"github.com/stretchr/testify/require"
-	clientspulse "goa.design/goa-ai/features/stream/pulse/clients/pulse"
-	mockpulse "goa.design/goa-ai/features/stream/pulse/clients/pulse/mocks"
-	genregistry "goa.design/goa-ai/registry/gen/registry"
-	"goa.design/goa-ai/runtime/toolregistry"
 	"goa.design/pulse/pool"
 	"goa.design/pulse/rmap"
 )

@@ -5,7 +5,7 @@
 package reminder
 
 import (
-	"goa.design/goa-ai/runtime/agent/tools"
+	"github.com/CaliLuke/loom-mcp/runtime/agent/tools"
 )
 
 // Tier represents the priority tier for a reminder. Lower-valued tiers carry

@@ -13,8 +13,8 @@ import (
 	mongodriver "go.mongodb.org/mongo-driver/mongo"
 	"go.mongodb.org/mongo-driver/mongo/options"
 
-	"goa.design/goa-ai/runtime/agent/hooks"
-	"goa.design/goa-ai/runtime/agent/runlog"
+	"github.com/CaliLuke/loom-mcp/runtime/agent/hooks"
+	"github.com/CaliLuke/loom-mcp/runtime/agent/runlog"
 )
 
 func TestClientAppendAssignsID(t *testing.T) {
@@ -46,9 +46,10 @@ func TestClientWithTimeoutPreservesNilContextPanic(t *testing.T) {
 	t.Parallel()
 
 	c := &client{timeout: time.Second}
+	var nilCtx context.Context
 
 	assert.Panics(t, func() {
-		_, _ = c.withTimeout(nil)
+		_, _ = c.withTimeout(nilCtx)
 	})
 }
 

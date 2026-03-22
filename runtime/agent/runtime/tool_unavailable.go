@@ -12,13 +12,13 @@ import (
 	"encoding/json"
 	"fmt"
 
-	"goa.design/goa-ai/runtime/agent/model"
-	"goa.design/goa-ai/runtime/agent/planner"
-	"goa.design/goa-ai/runtime/agent/rawjson"
-	"goa.design/goa-ai/runtime/agent/tools"
+	"github.com/CaliLuke/loom-mcp/runtime/agent/model"
+	"github.com/CaliLuke/loom-mcp/runtime/agent/planner"
+	"github.com/CaliLuke/loom-mcp/runtime/agent/rawjson"
+	"github.com/CaliLuke/loom-mcp/runtime/agent/tools"
 )
 
-const toolUnavailableToolsetName = "goa-ai.runtime"
+const toolUnavailableToolsetName = "loom-mcp.runtime"
 
 type toolUnavailablePayload struct {
 	RequestedTool    string          `json:"requested_tool"`
@@ -49,7 +49,7 @@ func toolUnavailableToolDefinition() *model.ToolDefinition {
 func toolUnavailableToolsetRegistration() ToolsetRegistration {
 	spec := tools.ToolSpec{
 		Name:        tools.ToolUnavailable,
-		Service:     "goa-ai",
+		Service:     "loom-mcp",
 		Toolset:     toolUnavailableToolsetName,
 		Description: "Runtime-owned tool that represents unknown tool calls.",
 		Payload: tools.TypeSpec{
@@ -66,7 +66,7 @@ func toolUnavailableToolsetRegistration() ToolsetRegistration {
 	}
 	return ToolsetRegistration{
 		Name:        toolUnavailableToolsetName,
-		Description: "goa-ai runtime internal tools",
+		Description: "loom-mcp runtime internal tools",
 		Inline:      true,
 		Execute:     executeToolUnavailable,
 		Specs:       []tools.ToolSpec{spec},

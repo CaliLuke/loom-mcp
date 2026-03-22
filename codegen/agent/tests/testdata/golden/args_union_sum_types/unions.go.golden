@@ -9,7 +9,7 @@ package union
 import (
 	"encoding/json"
 	"fmt"
-	goa "goa.design/goa/v3/pkg"
+	goa "github.com/CaliLuke/loom/pkg"
 )
 
 // Value is a sum-type union.

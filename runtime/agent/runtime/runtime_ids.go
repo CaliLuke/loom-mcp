@@ -9,8 +9,8 @@ import (
 	"strconv"
 	"strings"
 
-	agent "goa.design/goa-ai/runtime/agent"
-	"goa.design/goa-ai/runtime/agent/tools"
+	agent "github.com/CaliLuke/loom-mcp/runtime/agent"
+	"github.com/CaliLuke/loom-mcp/runtime/agent/tools"
 )
 
 const unknownID = "unknown"

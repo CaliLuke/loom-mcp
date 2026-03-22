@@ -5,8 +5,8 @@
 package bridge
 
 import (
-	"goa.design/goa-ai/runtime/agent/hooks"
-	"goa.design/goa-ai/runtime/agent/stream"
+	"github.com/CaliLuke/loom-mcp/runtime/agent/hooks"
+	"github.com/CaliLuke/loom-mcp/runtime/agent/stream"
 )
 
 // NewSubscriber returns a hooks.Subscriber that forwards selected hook events

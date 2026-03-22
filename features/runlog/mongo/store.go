@@ -5,8 +5,8 @@ import (
 	"context"
 	"errors"
 
-	clientsmongo "goa.design/goa-ai/features/runlog/mongo/clients/mongo"
-	"goa.design/goa-ai/runtime/agent/runlog"
+	clientsmongo "github.com/CaliLuke/loom-mcp/features/runlog/mongo/clients/mongo"
+	"github.com/CaliLuke/loom-mcp/runtime/agent/runlog"
 )
 
 // Store implements runlog.Store by delegating to the Mongo client.

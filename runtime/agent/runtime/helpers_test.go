@@ -3,9 +3,9 @@ package runtime
 import (
 	"testing"
 
+	"github.com/CaliLuke/loom-mcp/runtime/agent/planner"
+	"github.com/CaliLuke/loom-mcp/runtime/agent/tools"
 	"github.com/stretchr/testify/require"
-	"goa.design/goa-ai/runtime/agent/planner"
-	"goa.design/goa-ai/runtime/agent/tools"
 )
 
 func TestGenerateDeterministicToolCallID_UniqueAcrossAttempts(t *testing.T) {

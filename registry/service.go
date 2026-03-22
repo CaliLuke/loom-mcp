@@ -13,11 +13,11 @@ import (
 	"fmt"
 	"time"
 
+	clientspulse "github.com/CaliLuke/loom-mcp/features/stream/pulse/clients/pulse"
+	genregistry "github.com/CaliLuke/loom-mcp/registry/gen/registry"
+	"github.com/CaliLuke/loom-mcp/runtime/agent/tools"
+	"github.com/CaliLuke/loom-mcp/runtime/toolregistry"
 	"github.com/google/uuid"
-	clientspulse "goa.design/goa-ai/features/stream/pulse/clients/pulse"
-	genregistry "goa.design/goa-ai/registry/gen/registry"
-	"goa.design/goa-ai/runtime/agent/tools"
-	"goa.design/goa-ai/runtime/toolregistry"
 	streamopts "goa.design/pulse/streaming/options"
 )
 

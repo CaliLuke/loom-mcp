@@ -3,10 +3,10 @@ package shared
 import (
 	"testing"
 
+	"github.com/CaliLuke/loom/expr"
 	"github.com/leanovate/gopter"
 	"github.com/leanovate/gopter/gen"
 	"github.com/leanovate/gopter/prop"
-	"goa.design/goa/v3/expr"
 )
 
 // testConfig implements ProtocolConfig for testing.

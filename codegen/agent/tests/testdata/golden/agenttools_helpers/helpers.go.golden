@@ -7,11 +7,11 @@
 package search
 
 import (
-	searchspecs "goa.design/goa-ai/alpha/agents/scribe/exports/search"
-	agent "goa.design/goa-ai/runtime/agent"
-	"goa.design/goa-ai/runtime/agent/planner"
-	runtime "goa.design/goa-ai/runtime/agent/runtime"
-	"goa.design/goa-ai/runtime/agent/tools"
+	searchspecs "github.com/CaliLuke/loom-mcp/alpha/agents/scribe/exports/search"
+	agent "github.com/CaliLuke/loom-mcp/runtime/agent"
+	"github.com/CaliLuke/loom-mcp/runtime/agent/planner"
+	runtime "github.com/CaliLuke/loom-mcp/runtime/agent/runtime"
+	"github.com/CaliLuke/loom-mcp/runtime/agent/tools"
 )
 
 // Name is the DSL-declared name for the exported toolset "search".

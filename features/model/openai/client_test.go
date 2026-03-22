@@ -8,9 +8,9 @@ import (
 	openai "github.com/sashabaranov/go-openai"
 	"github.com/stretchr/testify/require"
 
-	openaimodel "goa.design/goa-ai/features/model/openai"
-	"goa.design/goa-ai/runtime/agent/model"
-	"goa.design/goa-ai/runtime/agent/tools"
+	openaimodel "github.com/CaliLuke/loom-mcp/features/model/openai"
+	"github.com/CaliLuke/loom-mcp/runtime/agent/model"
+	"github.com/CaliLuke/loom-mcp/runtime/agent/tools"
 )
 
 func TestClientComplete(t *testing.T) {

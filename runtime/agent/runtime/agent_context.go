@@ -3,13 +3,13 @@ package runtime
 import (
 	"context"
 
-	agent "goa.design/goa-ai/runtime/agent"
-	"goa.design/goa-ai/runtime/agent/memory"
-	"goa.design/goa-ai/runtime/agent/model"
-	"goa.design/goa-ai/runtime/agent/planner"
-	"goa.design/goa-ai/runtime/agent/prompt"
-	"goa.design/goa-ai/runtime/agent/reminder"
-	"goa.design/goa-ai/runtime/agent/telemetry"
+	agent "github.com/CaliLuke/loom-mcp/runtime/agent"
+	"github.com/CaliLuke/loom-mcp/runtime/agent/memory"
+	"github.com/CaliLuke/loom-mcp/runtime/agent/model"
+	"github.com/CaliLuke/loom-mcp/runtime/agent/planner"
+	"github.com/CaliLuke/loom-mcp/runtime/agent/prompt"
+	"github.com/CaliLuke/loom-mcp/runtime/agent/reminder"
+	"github.com/CaliLuke/loom-mcp/runtime/agent/telemetry"
 )
 
 // agentContextOptions configures construction of a planner.PlannerContext.

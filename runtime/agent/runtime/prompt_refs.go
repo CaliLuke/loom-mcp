@@ -4,8 +4,8 @@ import (
 	"context"
 	"errors"
 
-	"goa.design/goa-ai/runtime/agent/prompt"
-	"goa.design/goa-ai/runtime/agent/session"
+	"github.com/CaliLuke/loom-mcp/runtime/agent/prompt"
+	"github.com/CaliLuke/loom-mcp/runtime/agent/session"
 )
 
 // ResolvePromptRefs returns prompt refs for the run and all linked child runs.

@@ -6,10 +6,10 @@ import (
 	"path"
 	"strings"
 
-	"goa.design/goa-ai/codegen/shared"
-	mcpexpr "goa.design/goa-ai/expr/mcp"
-	"goa.design/goa/v3/codegen"
-	"goa.design/goa/v3/expr"
+	"github.com/CaliLuke/loom-mcp/codegen/shared"
+	mcpexpr "github.com/CaliLuke/loom-mcp/expr/mcp"
+	"github.com/CaliLuke/loom/codegen"
+	"github.com/CaliLuke/loom/expr"
 )
 
 type (

@@ -155,6 +155,10 @@ func (r *Runner) prepareWorkingRoot(t *testing.T) (string, error) {
 	if err := regenerateExample(t, clonedRoot); err != nil {
 		return "", err
 	}
+	if err := restoreFixtureCommandTree(exampleRoot, clonedRoot); err != nil {
+		_ = os.RemoveAll(clonedRoot)
+		return "", err
+	}
 	return clonedRoot, nil
 }
 

@@ -4,10 +4,10 @@ import (
 	"encoding/json"
 	"fmt"
 
-	"goa.design/goa/v3/codegen"
-	"goa.design/goa/v3/codegen/service"
-	goaexpr "goa.design/goa/v3/expr"
-	"goa.design/goa/v3/http/codegen/openapi"
+	"github.com/CaliLuke/loom/codegen"
+	"github.com/CaliLuke/loom/codegen/service"
+	goaexpr "github.com/CaliLuke/loom/expr"
+	"github.com/CaliLuke/loom/http/codegen/openapi"
 )
 
 // buildFieldDescriptions collects dotted field-path descriptions from the provided

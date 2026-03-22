@@ -1,6 +1,6 @@
-// Package bootstrap wires the goa-ai runtime and registers generated agents.
+// Package bootstrap wires the loom-mcp runtime and registers generated agents.
 // This scaffold is application-owned: edit and maintain it; it is not re-generated
-// by `goa gen`. Use it from your cmd main or workers to initialize agents.
+// by `loom gen`. Use it from your cmd main or workers to initialize agents.
 
 // Define flags for MCP endpoints (if any). Pass values via your cmd main.
 {{- $hasMCP := false }}

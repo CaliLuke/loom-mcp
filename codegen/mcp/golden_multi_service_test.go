@@ -3,9 +3,9 @@ package codegen
 import (
 	"testing"
 
+	"github.com/CaliLuke/loom/codegen"
+	"github.com/CaliLuke/loom/expr"
 	"github.com/stretchr/testify/require"
-	"goa.design/goa/v3/codegen"
-	"goa.design/goa/v3/expr"
 )
 
 // Ensures CLI patching and adapter stub generation work for multiple MCP-enabled services.
@@ -79,11 +79,13 @@ func TestMultiService_GeneratesCLIAndStubs(t *testing.T) {
 
 	// Validate stubs were replaced with template section
 	var alphaHasStub, betaHasStub bool
+	//nolint:staticcheck // Tests still inspect the legacy section list while generators migrate to Section.
 	for _, s := range alphaStub.SectionTemplates {
 		if s.Name == exampleMCPStubSection && s.Source != "" {
 			alphaHasStub = true
 		}
 	}
+	//nolint:staticcheck // Tests still inspect the legacy section list while generators migrate to Section.
 	for _, s := range betaStub.SectionTemplates {
 		if s.Name == exampleMCPStubSection && s.Source != "" {
 			betaHasStub = true

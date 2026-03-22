@@ -17,10 +17,10 @@ import (
 
 	"goa.design/clue/health"
 
-	clientinfra "goa.design/goa-ai/features/mongo/clientinfra"
-	"goa.design/goa-ai/runtime/agent"
-	"goa.design/goa-ai/runtime/agent/hooks"
-	"goa.design/goa-ai/runtime/agent/runlog"
+	clientinfra "github.com/CaliLuke/loom-mcp/features/mongo/clientinfra"
+	"github.com/CaliLuke/loom-mcp/runtime/agent"
+	"github.com/CaliLuke/loom-mcp/runtime/agent/hooks"
+	"github.com/CaliLuke/loom-mcp/runtime/agent/runlog"
 )
 
 type (

@@ -1,10 +1,10 @@
 package dsl
 
 import (
-	"goa.design/goa/v3/eval"
+	"github.com/CaliLuke/loom/eval"
 
-	agentsexpr "goa.design/goa-ai/expr/agent"
-	runtimetools "goa.design/goa-ai/runtime/agent/tools"
+	agentsexpr "github.com/CaliLuke/loom-mcp/expr/agent"
+	runtimetools "github.com/CaliLuke/loom-mcp/runtime/agent/tools"
 )
 
 // Idempotent marks a tool as idempotent within a run transcript.

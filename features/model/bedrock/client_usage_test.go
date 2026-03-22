@@ -8,7 +8,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/bedrockruntime"
 	brtypes "github.com/aws/aws-sdk-go-v2/service/bedrockruntime/types"
 
-	"goa.design/goa-ai/runtime/agent/model"
+	"github.com/CaliLuke/loom-mcp/runtime/agent/model"
 )
 
 func TestTranslateResponse_UsageIncludesCacheTokens(t *testing.T) {

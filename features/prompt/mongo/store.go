@@ -5,8 +5,8 @@ import (
 	"context"
 	"errors"
 
-	clientsmongo "goa.design/goa-ai/features/prompt/mongo/clients/mongo"
-	"goa.design/goa-ai/runtime/agent/prompt"
+	clientsmongo "github.com/CaliLuke/loom-mcp/features/prompt/mongo/clients/mongo"
+	"github.com/CaliLuke/loom-mcp/runtime/agent/prompt"
 )
 
 type (

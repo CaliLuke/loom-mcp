@@ -12,8 +12,8 @@ import (
 	mongodriver "go.mongodb.org/mongo-driver/mongo"
 	"go.mongodb.org/mongo-driver/mongo/options"
 
-	"goa.design/goa-ai/runtime/agent/prompt"
-	"goa.design/goa-ai/runtime/agent/session"
+	"github.com/CaliLuke/loom-mcp/runtime/agent/prompt"
+	"github.com/CaliLuke/loom-mcp/runtime/agent/session"
 )
 
 func TestEnsureIndexes(t *testing.T) {

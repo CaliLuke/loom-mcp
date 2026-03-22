@@ -5,7 +5,7 @@ import (
 	"strings"
 	"testing"
 
-	"goa.design/goa-ai/codegen/agent/tests/testscenarios"
+	"github.com/CaliLuke/loom-mcp/codegen/agent/tests/testscenarios"
 )
 
 // Ensures internal adapter transforms qualify the top-level tool result initializer

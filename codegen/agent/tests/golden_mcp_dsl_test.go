@@ -3,9 +3,9 @@ package tests
 import (
 	"testing"
 
+	"github.com/CaliLuke/loom-mcp/codegen/agent/tests/testscenarios"
+	"github.com/CaliLuke/loom-mcp/testutil"
 	"github.com/stretchr/testify/require"
-	"goa.design/goa-ai/codegen/agent/tests/testscenarios"
-	"goa.design/goa-ai/testutil"
 )
 
 // MCP DSL should emit the same registry/config scaffolding as MCPToolset.

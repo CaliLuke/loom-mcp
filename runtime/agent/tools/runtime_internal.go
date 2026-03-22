@@ -1,6 +1,6 @@
 package tools
 
-// runtime_internal.go defines canonical tool identifiers reserved for the goa-ai
+// runtime_internal.go defines canonical tool identifiers reserved for the loom-mcp
 // runtime itself.
 //
 // Contract:

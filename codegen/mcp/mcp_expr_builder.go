@@ -3,10 +3,10 @@ package codegen
 import (
 	"fmt"
 
-	mcpexpr "goa.design/goa-ai/expr/mcp"
-	"goa.design/goa/v3/expr"
+	mcpexpr "github.com/CaliLuke/loom-mcp/expr/mcp"
+	"github.com/CaliLuke/loom/expr"
 
-	"goa.design/goa-ai/codegen/shared"
+	"github.com/CaliLuke/loom-mcp/codegen/shared"
 )
 
 // mcpExprBuilder builds Goa expressions for the MCP protocol service.

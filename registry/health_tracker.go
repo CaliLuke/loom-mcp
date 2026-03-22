@@ -15,9 +15,9 @@ import (
 	"sync"
 	"time"
 
+	"github.com/CaliLuke/loom-mcp/runtime/agent/telemetry"
+	"github.com/CaliLuke/loom-mcp/runtime/toolregistry"
 	"github.com/google/uuid"
-	"goa.design/goa-ai/runtime/agent/telemetry"
-	"goa.design/goa-ai/runtime/toolregistry"
 	"goa.design/pulse/pool"
 	"goa.design/pulse/rmap"
 )

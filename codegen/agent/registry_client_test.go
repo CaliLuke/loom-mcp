@@ -4,10 +4,10 @@ import (
 	"path/filepath"
 	"testing"
 
-	"goa.design/goa-ai/codegen/testhelpers"
-	. "goa.design/goa-ai/dsl"
-	"goa.design/goa-ai/testutil"
-	goadsl "goa.design/goa/v3/dsl"
+	"github.com/CaliLuke/loom-mcp/codegen/testhelpers"
+	. "github.com/CaliLuke/loom-mcp/dsl"
+	"github.com/CaliLuke/loom-mcp/testutil"
+	goadsl "github.com/CaliLuke/loom/dsl"
 )
 
 // TestRegistryClientGeneratesCorrectMethods verifies that the generated registry

@@ -6,14 +6,15 @@ import (
 	"sort"
 	"strings"
 
-	"goa.design/goa-ai/codegen/shared"
-	mcpexpr "goa.design/goa-ai/expr/mcp"
-	"goa.design/goa/v3/codegen"
-	"goa.design/goa/v3/codegen/service"
-	"goa.design/goa/v3/eval"
-	"goa.design/goa/v3/expr"
-	httpcodegen "goa.design/goa/v3/http/codegen"
-	jsonrpccodegen "goa.design/goa/v3/jsonrpc/codegen"
+	"github.com/CaliLuke/loom-mcp/codegen/shared"
+	mcpexpr "github.com/CaliLuke/loom-mcp/expr/mcp"
+	"github.com/CaliLuke/loom-mcp/internal/upstreampaths"
+	"github.com/CaliLuke/loom/codegen"
+	"github.com/CaliLuke/loom/codegen/service"
+	"github.com/CaliLuke/loom/eval"
+	"github.com/CaliLuke/loom/expr"
+	httpcodegen "github.com/CaliLuke/loom/http/codegen"
+	jsonrpccodegen "github.com/CaliLuke/loom/jsonrpc/codegen"
 )
 
 const headerSection = "source-header"
@@ -117,7 +118,7 @@ func generateMCPServiceCode(genpkg string, root *expr.RootExpr, mcpService *expr
 }
 
 // applyMCPPolicyHeadersToJSONRPCMount replaces the JSON-RPC server mount section
-// with a goa-ai-owned template that propagates MCP policy headers into the
+// with a loom-mcp-owned template that propagates MCP policy headers into the
 // request context.
 //
 // This avoids any string-based patching while ensuring header-driven allow/deny
@@ -131,31 +132,187 @@ func applyMCPPolicyHeadersToJSONRPCMount(files []*codegen.File) {
 		if filepath.Base(filepath.Dir(filepath.ToSlash(f.Path))) != "server" || filepath.Base(f.Path) != "server.go" {
 			continue
 		}
-		for _, sec := range f.AllSections() {
-			s, ok := sec.(*codegen.SectionTemplate)
-			if !ok || s == nil {
-				continue
+		sections := f.AllSections()
+		if len(sections) > 0 {
+			updated := make([]codegen.Section, 0, len(sections))
+			for _, sec := range sections {
+				updated = append(updated, replaceJSONRPCServerSection(sec))
 			}
-			switch s.Name {
-			case "jsonrpc-server-struct":
-				s.Source = mcpTemplates.Read("jsonrpc_server_struct")
-			case "jsonrpc-server-init":
-				s.Source = mcpTemplates.Read("jsonrpc_server_init")
-			case "jsonrpc-server-handler":
-				s.Source = mcpTemplates.Read("jsonrpc_server_handler")
-			case "jsonrpc-mixed-server-handler":
-				s.Source = mcpTemplates.Read("jsonrpc_mixed_server_handler")
-			}
-			if s.Name == "jsonrpc-server-mount" {
-				s.Source = mcpTemplates.Read("jsonrpc_server_mount")
-			}
+			f.SetSections(updated)
 		}
 		if header := f.HeaderTemplate(); header != nil {
 			codegen.AddImport(header, &codegen.ImportSpec{Path: "encoding/json"})
-			codegen.AddImport(header, &codegen.ImportSpec{Path: "goa.design/goa-ai/runtime/mcp", Name: "mcpruntime"})
+			codegen.AddImport(header, &codegen.ImportSpec{Path: "github.com/CaliLuke/loom-mcp/runtime/mcp", Name: "mcpruntime"})
 		}
 	}
 }
+
+func replaceJSONRPCServerSection(section codegen.Section) codegen.Section {
+	switch sec := section.(type) {
+	case *codegen.SectionTemplate:
+		if sec == nil {
+			return nil
+		}
+		if source, ok := mcpJSONRPCServerSectionSource(sec.Name); ok {
+			clone := *sec
+			clone.Source = source
+			return &clone
+		}
+		return sec
+	case *codegen.RawSection:
+		if sec == nil {
+			return nil
+		}
+		if sec.Name == "jsonrpc-server-mount" {
+			return codegen.NewRawSection(sec.Name, rewriteJSONRPCServerMountSource(sec.Source))
+		}
+		return sec
+	default:
+		return section
+	}
+}
+
+func mcpJSONRPCServerSectionSource(name string) (string, bool) {
+	switch name {
+	case "jsonrpc-server-struct":
+		return mcpTemplates.Read("jsonrpc_server_struct"), true
+	case "jsonrpc-server-init":
+		return mcpTemplates.Read("jsonrpc_server_init"), true
+	case "jsonrpc-server-handler":
+		return mcpTemplates.Read("jsonrpc_server_handler"), true
+	case "jsonrpc-mixed-server-handler":
+		return mcpTemplates.Read("jsonrpc_mixed_server_handler"), true
+	case "jsonrpc-server-mount":
+		return mcpTemplates.Read("jsonrpc_server_mount"), true
+	default:
+		return "", false
+	}
+}
+
+func rewriteJSONRPCServerMountSource(source string) string {
+	if source == "" {
+		return source
+	}
+
+	updated := source
+	updated = strings.ReplaceAll(updated, ", h.ServeHTTP)\n", ", withMCPPolicyHeaders(h.ServeHTTP))\n")
+	updated = strings.ReplaceAll(updated, ", h.handleSSE)\n", ", withMCPPolicyHeaders(h.handleSSE))\n")
+
+	if strings.Contains(updated, "Mixed transports:") {
+		updated = addMixedTransportSessionRoutes(updated)
+	}
+	if strings.Contains(updated, "func withMCPPolicyHeaders(") {
+		return updated
+	}
+	return strings.TrimRight(updated, "\n") + jsonrpcServerMountHelperSource
+}
+
+func addMixedTransportSessionRoutes(source string) string {
+	lines := strings.Split(source, "\n")
+	insertAt := -1
+	paths := make([]string, 0, 1)
+	seenPaths := make(map[string]struct{})
+	seenMethods := make(map[string]map[string]struct{})
+	inMount := false
+
+	for idx, line := range lines {
+		trimmed := strings.TrimSpace(line)
+		if strings.HasPrefix(trimmed, "func ") && strings.Contains(trimmed, "(mux goahttp.Muxer, h *") {
+			inMount = true
+			continue
+		}
+		if !inMount {
+			continue
+		}
+		if trimmed == "}" {
+			insertAt = idx
+			break
+		}
+		method, path, ok := parseMuxHandleCall(trimmed)
+		if !ok {
+			continue
+		}
+		if _, ok := seenPaths[path]; !ok {
+			seenPaths[path] = struct{}{}
+			paths = append(paths, path)
+		}
+		if seenMethods[path] == nil {
+			seenMethods[path] = make(map[string]struct{})
+		}
+		seenMethods[path][method] = struct{}{}
+	}
+	if insertAt == -1 {
+		return source
+	}
+
+	extra := make([]string, 0, len(paths)*2)
+	for _, path := range paths {
+		for _, method := range []string{"GET", "DELETE"} {
+			if _, ok := seenMethods[path][method]; ok {
+				continue
+			}
+			extra = append(extra, fmt.Sprintf("\tmux.Handle(%q, %q, withMCPPolicyHeaders(h.ServeHTTP))", method, path))
+		}
+	}
+	if len(extra) == 0 {
+		return source
+	}
+
+	updated := make([]string, 0, len(lines)+len(extra))
+	updated = append(updated, lines[:insertAt]...)
+	updated = append(updated, extra...)
+	updated = append(updated, lines[insertAt:]...)
+	return strings.Join(updated, "\n")
+}
+
+func parseMuxHandleCall(line string) (method, path string, ok bool) {
+	if !strings.HasPrefix(line, "mux.Handle(") {
+		return "", "", false
+	}
+	rest := strings.TrimPrefix(line, "mux.Handle(")
+	parts := strings.SplitN(rest, ",", 3)
+	if len(parts) != 3 {
+		return "", "", false
+	}
+	method = strings.Trim(parts[0], " \t\"")
+	path = strings.Trim(parts[1], " \t\"")
+	if method == "" || path == "" {
+		return "", "", false
+	}
+	return method, path, true
+}
+
+const jsonrpcServerMountHelperSource = `
+
+// withMCPPolicyHeaders propagates MCP policy header values into the request context.
+//
+// The MCP adapter enforces resource allow/deny policies based on context values:
+//   - "mcp_allow_names" (CSV list of resource names)
+//   - "mcp_deny_names"  (CSV list of resource names)
+//
+// This helper maps those values from the corresponding HTTP headers:
+//   - x-mcp-allow-names
+//   - x-mcp-deny-names
+//
+// It is installed by the JSON-RPC Mount functions so consumers do not need
+// to patch example servers or wire middleware manually.
+func withMCPPolicyHeaders(next http.HandlerFunc) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		ctx := r.Context()
+		if allow := r.Header.Get("x-mcp-allow-names"); allow != "" {
+			ctx = context.WithValue(ctx, "mcp_allow_names", allow)
+		}
+		if deny := r.Header.Get("x-mcp-deny-names"); deny != "" {
+			ctx = context.WithValue(ctx, "mcp_deny_names", deny)
+		}
+		if sessionID := r.Header.Get(mcpruntime.HeaderKeySessionID); sessionID != "" {
+			ctx = mcpruntime.WithSessionID(ctx, sessionID)
+		}
+		ctx = mcpruntime.WithResponseWriter(ctx, w)
+		next(w, r.WithContext(ctx))
+	}
+}
+`
 
 // generateMCPTransport generates adapter and prompt provider files that adapt
 // MCP protocol methods to the original service implementation.
@@ -187,9 +344,9 @@ func generateMCPTransport(genpkg string, svc *expr.ServiceExpr, data *AdapterDat
 		{Path: "go.opentelemetry.io/otel/metric"},
 		{Path: "go.opentelemetry.io/otel/trace"},
 		{Path: genpkg + "/" + svcName, Name: svcName},
-		{Path: "goa.design/goa-ai/runtime/mcp", Name: "mcpruntime"},
-		{Path: "goa.design/goa/v3/http", Name: "goahttp"},
-		{Path: "goa.design/goa/v3/pkg", Name: "goa"},
+		{Path: "github.com/CaliLuke/loom-mcp/runtime/mcp", Name: "mcpruntime"},
+		{Path: upstreampaths.LoomMCPHTTPImportPath, Name: "goahttp"},
+		{Path: upstreampaths.LoomPkgImportPath, Name: "goa"},
 	}
 	// Include external user type imports referenced by method payloads/results.
 	existing := make(map[string]struct{}, len(adapterImports))
@@ -336,7 +493,7 @@ func generateMCPTransport(genpkg string, svc *expr.ServiceExpr, data *AdapterDat
 		{Path: "time"},
 		{Path: genpkg + "/" + svcName, Name: svcName},
 		{Path: "github.com/modelcontextprotocol/go-sdk/mcp", Name: "mcpsdk"},
-		{Path: "goa.design/goa-ai/runtime/mcp", Name: "mcpruntime"},
+		{Path: "github.com/CaliLuke/loom-mcp/runtime/mcp", Name: "mcpruntime"},
 	}
 	files = append(files, &codegen.File{
 		Path: sdkServerPath,
@@ -453,10 +610,10 @@ func generateMCPClientAdapter(genpkg string, svc *expr.ServiceExpr, data *Adapte
 		{Path: "net/url"},
 		{Path: "net/http"},
 		{Path: "sync"},
-		{Path: "goa.design/goa-ai/runtime/mcp", Name: "mcpruntime"},
-		{Path: "goa.design/goa/v3/http", Name: "goahttp"},
-		{Path: "goa.design/goa/v3/jsonrpc", Name: "jsonrpc"},
-		{Path: "goa.design/goa-ai/runtime/mcp/retry", Name: "retry"},
+		{Path: "github.com/CaliLuke/loom-mcp/runtime/mcp", Name: "mcpruntime"},
+		{Path: upstreampaths.LoomMCPHTTPImportPath, Name: "goahttp"},
+		{Path: upstreampaths.LoomMCPJSONRPCImportPath, Name: "jsonrpc"},
+		{Path: "github.com/CaliLuke/loom-mcp/runtime/mcp/retry", Name: "retry"},
 		{Path: genpkg + "/" + svcName, Name: svcName},
 		{Path: genpkg + "/jsonrpc/" + svcName + "/client", Name: svcJSONRPCCAlias},
 		// Import the MCP service package for types since we're now in a subpackage

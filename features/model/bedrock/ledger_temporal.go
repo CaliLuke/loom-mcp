@@ -3,8 +3,8 @@ package bedrock
 import (
 	"context"
 
+	"github.com/CaliLuke/loom-mcp/runtime/agent/model"
 	"go.temporal.io/sdk/converter"
-	"goa.design/goa-ai/runtime/agent/model"
 )
 
 // WorkflowQuerier captures the only workflow-query capability the Bedrock

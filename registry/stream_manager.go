@@ -7,8 +7,8 @@ import (
 	"fmt"
 	"sync"
 
-	clientspulse "goa.design/goa-ai/features/stream/pulse/clients/pulse"
-	"goa.design/goa-ai/runtime/toolregistry"
+	clientspulse "github.com/CaliLuke/loom-mcp/features/stream/pulse/clients/pulse"
+	"github.com/CaliLuke/loom-mcp/runtime/toolregistry"
 
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
@@ -106,7 +106,7 @@ func (m *streamManager) PublishToolCall(ctx context.Context, toolset string, msg
 	}
 
 	if msg.Type == toolregistry.MessageTypeCall {
-		tracer := otel.Tracer("goa.design/goa-ai/registry")
+		tracer := otel.Tracer("github.com/CaliLuke/loom-mcp/registry")
 		var span trace.Span
 		ctx, span = tracer.Start(
 			ctx,

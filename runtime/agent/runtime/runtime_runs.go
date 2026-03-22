@@ -7,14 +7,14 @@ import (
 	"strings"
 	"time"
 
-	agent "goa.design/goa-ai/runtime/agent"
-	"goa.design/goa-ai/runtime/agent/engine"
-	"goa.design/goa-ai/runtime/agent/hooks"
-	"goa.design/goa-ai/runtime/agent/interrupt"
-	"goa.design/goa-ai/runtime/agent/model"
-	"goa.design/goa-ai/runtime/agent/run"
-	"goa.design/goa-ai/runtime/agent/runlog"
-	"goa.design/goa-ai/runtime/agent/session"
+	agent "github.com/CaliLuke/loom-mcp/runtime/agent"
+	"github.com/CaliLuke/loom-mcp/runtime/agent/engine"
+	"github.com/CaliLuke/loom-mcp/runtime/agent/hooks"
+	"github.com/CaliLuke/loom-mcp/runtime/agent/interrupt"
+	"github.com/CaliLuke/loom-mcp/runtime/agent/model"
+	"github.com/CaliLuke/loom-mcp/runtime/agent/run"
+	"github.com/CaliLuke/loom-mcp/runtime/agent/runlog"
+	"github.com/CaliLuke/loom-mcp/runtime/agent/session"
 )
 
 // agentByID returns the registered agent by ID if present. The boolean indicates

@@ -5,11 +5,11 @@ import (
 	"path/filepath"
 	"strings"
 
-	mcpexpr "goa.design/goa-ai/expr/mcp"
-	"goa.design/goa/v3/codegen"
-	"goa.design/goa/v3/codegen/example"
-	"goa.design/goa/v3/eval"
-	"goa.design/goa/v3/expr"
+	mcpexpr "github.com/CaliLuke/loom-mcp/expr/mcp"
+	"github.com/CaliLuke/loom/codegen"
+	"github.com/CaliLuke/loom/codegen/example"
+	"github.com/CaliLuke/loom/eval"
+	"github.com/CaliLuke/loom/expr"
 )
 
 // PrepareExample augments the original roots so the Goa example generator
@@ -324,6 +324,7 @@ func generateExampleAdapterStubs(mcpServices []*expr.ServiceExpr, files []*codeg
 		// Replace file content except header with our body
 		stub := &codegen.SectionTemplate{Name: exampleMCPStubSection, Source: body}
 		f.Sections = []codegen.Section{header, stub}
+		//nolint:staticcheck // Existing example files are still rewritten through the legacy SectionTemplates field.
 		f.SectionTemplates = []*codegen.SectionTemplate{header, stub}
 	}
 	return files

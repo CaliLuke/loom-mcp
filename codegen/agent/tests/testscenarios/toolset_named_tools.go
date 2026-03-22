@@ -1,8 +1,8 @@
 package testscenarios
 
 import (
-	. "goa.design/goa-ai/dsl"
-	. "goa.design/goa/v3/dsl"
+	. "github.com/CaliLuke/loom-mcp/dsl"
+	. "github.com/CaliLuke/loom/dsl"
 )
 
 // ToolsetNamedTools creates a scenario where the toolset is named "tools",
@@ -12,7 +12,7 @@ func ToolsetNamedTools() func() {
 		Service("alpha", func() {
 			Agent("helper", "Helper agent", func() {
 				// Toolset named "tools" - this should not conflict with
-				// goa.design/goa-ai/runtime/agent/tools import
+				// github.com/CaliLuke/loom-mcp/runtime/agent/tools import
 				Use("tools", func() {
 					Tool("do_something", "Does something", func() {
 						Args(func() {

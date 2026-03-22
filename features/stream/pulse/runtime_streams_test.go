@@ -9,7 +9,7 @@ import (
 	"goa.design/pulse/streaming"
 	streamopts "goa.design/pulse/streaming/options"
 
-	clientspulse "goa.design/goa-ai/features/stream/pulse/clients/pulse"
+	clientspulse "github.com/CaliLuke/loom-mcp/features/stream/pulse/clients/pulse"
 )
 
 func TestRuntimeStreamsSinkLifecycle(t *testing.T) {

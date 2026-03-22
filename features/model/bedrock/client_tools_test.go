@@ -7,8 +7,8 @@ import (
 
 	"github.com/stretchr/testify/require"
 
+	"github.com/CaliLuke/loom-mcp/runtime/agent/model"
 	brtypes "github.com/aws/aws-sdk-go-v2/service/bedrockruntime/types"
-	"goa.design/goa-ai/runtime/agent/model"
 )
 
 func TestEncodeTools_NoChoice(t *testing.T) {

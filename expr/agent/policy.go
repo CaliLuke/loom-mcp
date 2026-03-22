@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"time"
 
-	"goa.design/goa/v3/eval"
+	"github.com/CaliLuke/loom/eval"
 )
 
 type (

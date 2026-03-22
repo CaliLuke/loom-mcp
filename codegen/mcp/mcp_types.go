@@ -2,7 +2,7 @@
 package codegen
 
 import (
-	"goa.design/goa/v3/expr"
+	"github.com/CaliLuke/loom/expr"
 )
 
 // buildMCPTypes creates all MCP protocol type definitions

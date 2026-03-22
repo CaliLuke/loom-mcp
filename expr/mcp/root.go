@@ -4,8 +4,8 @@
 package mcp
 
 import (
-	"goa.design/goa/v3/eval"
-	"goa.design/goa/v3/expr"
+	"github.com/CaliLuke/loom/eval"
+	"github.com/CaliLuke/loom/expr"
 )
 
 // Root is the plugin root instance holding all MCP server configurations.
@@ -48,7 +48,7 @@ func (r *RootExpr) DependsOn() []eval.Root {
 // Packages returns the DSL packages that should be recognized for error
 // reporting.
 func (r *RootExpr) Packages() []string {
-	return []string{"goa.design/goa-ai/dsl"}
+	return []string{"github.com/CaliLuke/loom-mcp/dsl"}
 }
 
 // WalkSets exposes the nested expressions to the eval engine.

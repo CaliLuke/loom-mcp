@@ -6,13 +6,13 @@ import (
 	"errors"
 	"strings"
 
+	"github.com/CaliLuke/loom-mcp/runtime/agent/planner"
+	agentsruntime "github.com/CaliLuke/loom-mcp/runtime/agent/runtime"
+	"github.com/CaliLuke/loom-mcp/runtime/agent/telemetry"
+	"github.com/CaliLuke/loom-mcp/runtime/agent/tools"
+	mcpruntime "github.com/CaliLuke/loom-mcp/runtime/mcp"
+	"github.com/CaliLuke/loom-mcp/runtime/mcp/retry"
 	"github.com/modelcontextprotocol/go-sdk/jsonrpc"
-	"goa.design/goa-ai/runtime/agent/planner"
-	agentsruntime "goa.design/goa-ai/runtime/agent/runtime"
-	"goa.design/goa-ai/runtime/agent/telemetry"
-	"goa.design/goa-ai/runtime/agent/tools"
-	mcpruntime "goa.design/goa-ai/runtime/mcp"
-	"goa.design/goa-ai/runtime/mcp/retry"
 )
 
 // AssistantAssistantMcpToolsetToolSpecs contains the tool specifications for the assistant-mcp toolset.

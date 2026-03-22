@@ -7,14 +7,14 @@ import (
 	"fmt"
 	"time"
 
-	"goa.design/goa-ai/runtime/agent"
-	"goa.design/goa-ai/runtime/agent/hooks"
-	"goa.design/goa-ai/runtime/agent/model"
-	"goa.design/goa-ai/runtime/agent/planner"
-	"goa.design/goa-ai/runtime/agent/rawjson"
-	"goa.design/goa-ai/runtime/agent/run"
-	"goa.design/goa-ai/runtime/agent/telemetry"
-	"goa.design/goa-ai/runtime/agent/tools"
+	"github.com/CaliLuke/loom-mcp/runtime/agent"
+	"github.com/CaliLuke/loom-mcp/runtime/agent/hooks"
+	"github.com/CaliLuke/loom-mcp/runtime/agent/model"
+	"github.com/CaliLuke/loom-mcp/runtime/agent/planner"
+	"github.com/CaliLuke/loom-mcp/runtime/agent/rawjson"
+	"github.com/CaliLuke/loom-mcp/runtime/agent/run"
+	"github.com/CaliLuke/loom-mcp/runtime/agent/telemetry"
+	"github.com/CaliLuke/loom-mcp/runtime/agent/tools"
 )
 
 type (
@@ -527,19 +527,19 @@ type (
 
 const (
 	// SignalPause is the workflow signal name used to pause a run.
-	SignalPause = "goaai.runtime.pause"
+	SignalPause = "loom_mcp.runtime.pause"
 
 	// SignalResume is the workflow signal name used to resume a paused run.
-	SignalResume = "goaai.runtime.resume"
+	SignalResume = "loom_mcp.runtime.resume"
 
 	// SignalProvideClarification delivers a ClarificationAnswer to a waiting run.
-	SignalProvideClarification = "goaai.runtime.provide.clarification"
+	SignalProvideClarification = "loom_mcp.runtime.provide.clarification"
 
 	// SignalProvideToolResults delivers external tool results to a waiting run.
-	SignalProvideToolResults = "goaai.runtime.provide.toolresults"
+	SignalProvideToolResults = "loom_mcp.runtime.provide.toolresults"
 
 	// SignalProvideConfirmation delivers a ConfirmationDecision to a waiting run.
-	SignalProvideConfirmation = "goaai.runtime.provide.confirmation"
+	SignalProvideConfirmation = "loom_mcp.runtime.provide.confirmation"
 )
 
 // UnmarshalJSON handles decoding PlanActivityOutput so that Transcript entries are

@@ -5,9 +5,9 @@ import (
 	"sync"
 	"testing"
 
+	genregistry "github.com/CaliLuke/loom-mcp/registry/gen/registry"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	genregistry "goa.design/goa-ai/registry/gen/registry"
 )
 
 func TestToolsetCatalogSaveGetDelete(t *testing.T) {

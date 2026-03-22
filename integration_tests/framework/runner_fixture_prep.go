@@ -11,6 +11,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/CaliLuke/loom-mcp/internal/upstreampaths"
 )
 
 // findExampleRoot locates the example directory.
@@ -32,13 +34,13 @@ func findExampleRoot() string {
 	return ""
 }
 
-//nolint:cyclop,gosec // Test fixture cloning preserves fixture modes and copies a known tree.
+//nolint:gosec // Test fixture cloning preserves fixture modes and copies a known tree.
 func cloneExampleRoot(exampleRoot string) (string, error) {
 	tmpBase := filepath.Join(filepath.Dir(filepath.Dir(exampleRoot)), ".tmp")
 	if err := os.MkdirAll(tmpBase, 0o750); err != nil {
 		return "", fmt.Errorf("create temp example base: %w", err)
 	}
-	tmpRoot, err := os.MkdirTemp(tmpBase, "goa-ai-example-*")
+	tmpRoot, err := os.MkdirTemp(tmpBase, "loom-mcp-example-*")
 	if err != nil {
 		return "", fmt.Errorf("create temp example root: %w", err)
 	}
@@ -93,7 +95,7 @@ import (
 	mcpassistant "example.com/assistant/gen/mcp_assistant"
 	"goa.design/clue/debug"
 	"goa.design/clue/log"
-	goahttp "goa.design/goa/v3/http"
+	goahttp "github.com/CaliLuke/loom/http"
 )
 
 type sdkAssistantService struct {
@@ -169,16 +171,16 @@ func (sdkPromptProvider) GetFigmaImplementationPromptPrompt(ctx context.Context,
 	}, nil
 }
 
-// handleHTTPServer starts configures and starts a HTTP server on the given
+// handleHTTPServer configures and starts an SDK-backed HTTP server on the given
 // URL. It shuts down the server if any error is received in the error channel.
-func handleHTTPServer(ctx context.Context, u *url.URL, assistantSvc assistant.Service, _ *mcpassistant.Endpoints, _ mcpassistant.Service, wg *sync.WaitGroup, errc chan error, dbg bool) {
+func handleHTTPServer(ctx context.Context, u *url.URL, _ mcpassistant.Service, _ *mcpassistant.Endpoints, wg *sync.WaitGroup, errc chan error, dbg bool) {
 	mux := goahttp.NewMuxer()
 	if dbg {
 		debug.MountPprofHandlers(debug.Adapt(mux))
 		debug.MountDebugLogEnabler(debug.Adapt(mux))
 	}
 
-	sdkServer, err := mcpassistant.NewSDKServer(sdkAssistantService{Service: assistantSvc}, &mcpassistant.SDKServerOptions{
+	sdkServer, err := mcpassistant.NewSDKServer(sdkAssistantService{Service: assistantapi.NewAssistant()}, &mcpassistant.SDKServerOptions{
 		PromptProvider: sdkPromptProvider{},
 		RequestContext: func(reqCtx context.Context, r *http.Request) context.Context {
 			if r == nil {
@@ -231,6 +233,117 @@ func handleHTTPServer(ctx context.Context, u *url.URL, assistantSvc assistant.Se
 	}()
 }
 `
+	const mainContent = `package main
+
+import (
+	"context"
+	"flag"
+	"fmt"
+	"net"
+	"net/url"
+	"os"
+	"os/signal"
+	"sync"
+	"syscall"
+
+	assistantapi "example.com/assistant"
+	mcpassistant "example.com/assistant/gen/mcp_assistant"
+	"goa.design/clue/log"
+)
+
+func main() {
+	// Define command line flags, add any other flag required to configure the
+	// service.
+	var (
+		hostF     = flag.String("host", "dev", "Server host (valid values: dev)")
+		domainF   = flag.String("domain", "", "Host domain name (overrides host domain specified in service design)")
+		httpPortF = flag.String("http-port", "", "HTTP port (overrides host HTTP port specified in service design)")
+		secureF   = flag.Bool("secure", false, "Use secure scheme (https or grpcs)")
+		dbgF      = flag.Bool("debug", false, "Log request and response bodies")
+	)
+	flag.Parse()
+
+	// Setup logger. Replace logger with your own log package of choice.
+	format := log.FormatJSON
+	if log.IsTerminal() {
+		format = log.FormatTerminal
+	}
+	ctx := log.Context(context.Background(), log.WithFormat(format))
+	if *dbgF {
+		ctx = log.Context(ctx, log.WithDebug())
+		log.Debugf(ctx, "debug logs enabled")
+	}
+	log.Print(ctx, log.KV{K: "http-port", V: *httpPortF})
+
+	// Initialize the services.
+	var mcpAssistantSvc mcpassistant.Service
+	{
+		mcpAssistantSvc = assistantapi.NewMcpAssistant()
+	}
+
+	// Wrap the services in endpoints that can be invoked from other services
+	// potentially running in different processes.
+	var mcpAssistantEndpoints *mcpassistant.Endpoints
+	{
+		mcpAssistantEndpoints = mcpassistant.NewEndpoints(mcpAssistantSvc)
+	}
+
+	// Create channel used by both the signal handler and server goroutines
+	// to notify the main goroutine when to stop the server.
+	errc := make(chan error)
+
+	// Setup interrupt handler. This optional step configures the process so
+	// that SIGINT and SIGTERM signals cause the services to stop gracefully.
+	go func() {
+		c := make(chan os.Signal, 1)
+		signal.Notify(c, syscall.SIGINT, syscall.SIGTERM)
+		errc <- fmt.Errorf("%s", <-c)
+	}()
+
+	var wg sync.WaitGroup
+	ctx, cancel := context.WithCancel(ctx)
+
+	// Start the servers and send errors (if any) to the error channel.
+	switch *hostF {
+	case "dev":
+		{
+			addr := "http://localhost:8080"
+			u, err := url.Parse(addr)
+			if err != nil {
+				log.Fatalf(ctx, err, "invalid URL %#v\n", addr)
+			}
+			if *secureF {
+				u.Scheme = "https"
+			}
+			if *domainF != "" {
+				u.Host = *domainF
+			}
+			if *httpPortF != "" {
+				h, _, err := net.SplitHostPort(u.Host)
+				if err != nil {
+					log.Fatalf(ctx, err, "invalid URL %#v\n", u.Host)
+				}
+				u.Host = net.JoinHostPort(h, *httpPortF)
+			} else if u.Port() == "" {
+				u.Host = net.JoinHostPort(u.Host, "80")
+			}
+			handleHTTPServer(ctx, u, mcpAssistantSvc, mcpAssistantEndpoints, &wg, errc, *dbgF)
+		}
+
+	default:
+		log.Fatal(ctx, fmt.Errorf("invalid host argument: %q (valid hosts: dev)", *hostF))
+	}
+
+	// Wait for signal.
+	log.Printf(ctx, "exiting (%v)", <-errc)
+
+	// Send cancellation signal to the goroutines.
+	cancel()
+
+	wg.Wait()
+	log.Printf(ctx, "exited")
+}
+`
 	cmdDir, err := findServerCmdDir(exampleRoot)
 	if err != nil {
 		return fmt.Errorf("resolve SDK fixture command dir: %w", err)
@@ -242,19 +355,10 @@ func handleHTTPServer(ctx context.Context, u *url.URL, assistantSvc assistant.Se
 	if err := os.WriteFile(httpPath, []byte(httpContent), 0o600); err != nil {
 		return fmt.Errorf("write SDK fixture http.go: %w", err)
 	}
+	_ = os.Remove(filepath.Join(cmdDir, "jsonrpc.go"))
 
 	mainPath := filepath.Join(cmdDir, "main.go")
-	mainData, err := os.ReadFile(mainPath) // #nosec G304 -- mainPath is resolved under the trusted fixture command dir
-	if err != nil {
-		return fmt.Errorf("read SDK fixture main.go: %w", err)
-	}
-	oldCall := "handleHTTPServer(ctx, u, mcpAssistantEndpoints, mcpAssistantSvc, &wg, errc, *dbgF)"
-	newCall := "handleHTTPServer(ctx, u, assistantSvc, mcpAssistantEndpoints, mcpAssistantSvc, &wg, errc, *dbgF)"
-	if !bytes.Contains(mainData, []byte(oldCall)) {
-		return fmt.Errorf("SDK fixture main.go missing expected call site")
-	}
-	mainData = bytes.Replace(mainData, []byte(oldCall), []byte(newCall), 1)
-	if err := os.WriteFile(mainPath, mainData, 0o600); err != nil { // #nosec G306,G703 -- mainPath is resolved under the trusted fixture command dir
+	if err := os.WriteFile(mainPath, []byte(mainContent), 0o600); err != nil { // #nosec G306,G703 -- mainPath is resolved under the trusted fixture command dir
 		return fmt.Errorf("write SDK fixture main.go: %w", err)
 	}
 	return nil
@@ -315,12 +419,12 @@ func regenerateExample(t *testing.T, exampleRoot string) error {
 		"run",
 		"-C",
 		exampleRoot,
-		"goa.design/goa/v3/cmd/goa",
+		upstreampaths.LoomCLIPackage,
 		"gen",
 		"example.com/assistant/design",
 	) // #nosec G204
 	if out, err := genCmd.CombinedOutput(); err != nil {
-		return fmt.Errorf("goa gen failed: %w\n%s", err, string(out))
+		return fmt.Errorf("loom gen failed: %w\n%s", err, string(out))
 	}
 	_ = os.Remove(filepath.Join(exampleRoot, "assistant.go"))
 	_ = os.Remove(filepath.Join(exampleRoot, "streaming.go"))
@@ -333,18 +437,18 @@ func regenerateExample(t *testing.T, exampleRoot string) error {
 		"run",
 		"-C",
 		exampleRoot,
-		"goa.design/goa/v3/cmd/goa",
+		upstreampaths.LoomCLIPackage,
 		"example",
 		"example.com/assistant/design",
 	) // #nosec G204
 	if out, err := exCmd.CombinedOutput(); err != nil {
-		return fmt.Errorf("goa example failed: %w\n%s", err, string(out))
+		return fmt.Errorf("loom example failed: %w\n%s", err, string(out))
 	}
 	_ = os.Remove(filepath.Join(exampleRoot, "mcp_assistant.go"))
 	postTidy := exec.CommandContext(context.Background(), "go", "mod", "tidy")
 	postTidy.Dir = exampleRoot
 	if out, err := postTidy.CombinedOutput(); err != nil {
-		return fmt.Errorf("post goa example tidy failed: %w\n%s", err, string(out))
+		return fmt.Errorf("post loom example tidy failed: %w\n%s", err, string(out))
 	}
 	return nil
 }
@@ -388,6 +492,54 @@ func cleanGeneratedExampleArtifacts(exampleRoot string) error {
 		return fmt.Errorf("clean generated example artifacts: %w", err)
 	}
 	return nil
+}
+
+func restoreFixtureCommandTree(fixtureRoot string, exampleRoot string) error {
+	sourceRoot := filepath.Join(fixtureRoot, "cmd")
+	targetRoot := filepath.Join(exampleRoot, "cmd")
+	if err := os.RemoveAll(targetRoot); err != nil {
+		return fmt.Errorf("remove regenerated cmd directory: %w", err)
+	}
+	source, err := os.OpenRoot(sourceRoot)
+	if err != nil {
+		return fmt.Errorf("open fixture cmd root: %w", err)
+	}
+	defer func() {
+		_ = source.Close()
+	}()
+	targetFS, err := os.OpenRoot(exampleRoot)
+	if err != nil {
+		return fmt.Errorf("open example root: %w", err)
+	}
+	defer func() {
+		_ = targetFS.Close()
+	}()
+	return filepath.WalkDir(sourceRoot, func(path string, d fs.DirEntry, walkErr error) error {
+		if walkErr != nil {
+			return walkErr
+		}
+		rel, err := filepath.Rel(sourceRoot, path)
+		if err != nil {
+			return err
+		}
+		targetRel := filepath.Join("cmd", rel)
+		targetPath := filepath.Join(targetRoot, rel)
+		info, err := d.Info()
+		if err != nil {
+			return err
+		}
+		if d.IsDir() {
+			return os.MkdirAll(targetPath, info.Mode())
+		}
+		data, err := source.ReadFile(rel)
+		if err != nil {
+			return err
+		}
+		if err := targetFS.MkdirAll(filepath.Dir(targetRel), 0o750); err != nil {
+			return err
+		}
+		return targetFS.WriteFile(targetRel, data, info.Mode())
+	})
 }
 
 // buildServerBinary compiles the server binary once for fast parallel test starts.

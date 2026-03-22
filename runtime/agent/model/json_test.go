@@ -6,7 +6,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	"goa.design/goa-ai/runtime/agent/prompt"
+	"github.com/CaliLuke/loom-mcp/runtime/agent/prompt"
 )
 
 func TestPartMarshalJSONIncludesKind(t *testing.T) {

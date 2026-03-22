@@ -8,7 +8,7 @@ import (
 	"sync"
 	"time"
 
-	"goa.design/goa-ai/runtime/agent/engine"
+	"github.com/CaliLuke/loom-mcp/runtime/agent/engine"
 )
 
 const defaultActivityHeartbeatInterval = 5 * time.Second

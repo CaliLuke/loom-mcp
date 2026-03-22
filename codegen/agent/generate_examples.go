@@ -1,7 +1,7 @@
 // Package codegen keeps example-only scaffolding separate from the main agent
 // generator.
 //
-// This file owns the `goa example` path: it emits application-side bootstrap,
+// This file owns the `loom example` path: it emits application-side bootstrap,
 // planner, executor, and main wiring files that live outside `gen/`. The
 // helpers are idempotent over Goa's in-memory example file list so rerunning
 // generation updates scaffolded files without affecting the regular `gen`
@@ -13,8 +13,8 @@ import (
 	"path/filepath"
 	"strings"
 
-	"goa.design/goa/v3/codegen"
-	"goa.design/goa/v3/eval"
+	"github.com/CaliLuke/loom/codegen"
+	"github.com/CaliLuke/loom/eval"
 )
 
 // GenerateExample appends a service-local bootstrap helper and planner stub(s)
@@ -92,13 +92,13 @@ func emitInternalBootstrap(svc *ServiceAgentsData, moduleBase string) *codegen.F
 	}
 	imports := []*codegen.ImportSpec{
 		{Path: "context"},
-		{Path: "goa.design/goa-ai/runtime/agent/runtime", Name: "agentsruntime"},
+		{Path: "github.com/CaliLuke/loom-mcp/runtime/agent/runtime", Name: "agentsruntime"},
 	}
 	needsMCP := svc.HasMCP
 	if needsMCP {
 		imports = append(imports, &codegen.ImportSpec{Path: "fmt"})
 		imports = append(imports, &codegen.ImportSpec{Path: "flag"})
-		imports = append(imports, &codegen.ImportSpec{Name: "mcpruntime", Path: "goa.design/goa-ai/runtime/mcp"})
+		imports = append(imports, &codegen.ImportSpec{Name: "mcpruntime", Path: "github.com/CaliLuke/loom-mcp/runtime/mcp"})
 	}
 	// Import generated agent registration packages and per-agent planner packages.
 	type toolsetImport struct{ Alias, Path string }
@@ -154,8 +154,8 @@ func emitPlannerInternalStub(_ string, ag *AgentData) *codegen.File {
 	}
 	imports := []*codegen.ImportSpec{
 		{Path: "context"},
-		{Path: "goa.design/goa-ai/runtime/agent/model", Name: "model"},
-		{Path: "goa.design/goa-ai/runtime/agent/planner"},
+		{Path: "github.com/CaliLuke/loom-mcp/runtime/agent/model", Name: "model"},
+		{Path: "github.com/CaliLuke/loom-mcp/runtime/agent/planner"},
 	}
 	sections := []*codegen.SectionTemplate{
 		codegen.Header("Planner stub for "+ag.StructName, "planner", imports),
@@ -179,8 +179,8 @@ func emitExecutorInternalStub(ag *AgentData, ts *ToolsetData) *codegen.File {
 		codegen.SimpleImport("context"),
 		codegen.SimpleImport("errors"),
 		agentImport,
-		&codegen.ImportSpec{Path: "goa.design/goa-ai/runtime/agent/runtime"},
-		&codegen.ImportSpec{Path: "goa.design/goa-ai/runtime/agent/planner"},
+		&codegen.ImportSpec{Path: "github.com/CaliLuke/loom-mcp/runtime/agent/runtime"},
+		&codegen.ImportSpec{Path: "github.com/CaliLuke/loom-mcp/runtime/agent/planner"},
 	)
 	// Import specs package for typed payloads and transforms.
 	specsAlias := ts.SpecsPackageName + "specs"
@@ -272,7 +272,7 @@ func emitCmdMain(svc *ServiceAgentsData, moduleBase string, files []*codegen.Fil
 		{Path: "fmt"},
 		{Path: "log"},
 		{Path: filepath.ToSlash(filepath.Join(moduleBase, "internal", "agents", "bootstrap"))},
-		{Path: "goa.design/goa-ai/runtime/agent/model", Name: "model"},
+		{Path: "github.com/CaliLuke/loom-mcp/runtime/agent/model", Name: "model"},
 	}
 	for _, ag := range svc.Agents {
 		imports = append(imports, &codegen.ImportSpec{Path: ag.ImportPath, Name: ag.PackageName})
@@ -286,6 +286,7 @@ func emitCmdMain(svc *ServiceAgentsData, moduleBase string, files []*codegen.Fil
 	}
 
 	if file != nil {
+		//nolint:staticcheck // Existing example files are still rewritten through the legacy SectionTemplates field.
 		file.SectionTemplates = []*codegen.SectionTemplate{
 			codegen.Header("Example main for "+svc.Service.Name, "main", imports),
 			agentSection,

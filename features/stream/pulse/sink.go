@@ -11,9 +11,9 @@ import (
 	"fmt"
 	"time"
 
-	"goa.design/goa-ai/features/stream/pulse/clients/pulse"
-	"goa.design/goa-ai/runtime/agent/rawjson"
-	"goa.design/goa-ai/runtime/agent/stream"
+	"github.com/CaliLuke/loom-mcp/features/stream/pulse/clients/pulse"
+	"github.com/CaliLuke/loom-mcp/runtime/agent/rawjson"
+	"github.com/CaliLuke/loom-mcp/runtime/agent/stream"
 )
 
 type (

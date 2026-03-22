@@ -7,11 +7,11 @@ import (
 	"testing"
 	"time"
 
+	pulse "github.com/CaliLuke/loom-mcp/features/stream/pulse/clients/pulse"
+	mockpulse "github.com/CaliLuke/loom-mcp/features/stream/pulse/clients/pulse/mocks"
+	"github.com/CaliLuke/loom-mcp/runtime/agent/tools"
+	"github.com/CaliLuke/loom-mcp/runtime/toolregistry"
 	"github.com/stretchr/testify/require"
-	pulse "goa.design/goa-ai/features/stream/pulse/clients/pulse"
-	mockpulse "goa.design/goa-ai/features/stream/pulse/clients/pulse/mocks"
-	"goa.design/goa-ai/runtime/agent/tools"
-	"goa.design/goa-ai/runtime/toolregistry"
 	"goa.design/pulse/streaming"
 	streamopts "goa.design/pulse/streaming/options"
 

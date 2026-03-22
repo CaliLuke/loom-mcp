@@ -3,7 +3,7 @@ package codegen
 import (
 	"strings"
 
-	"goa.design/goa/v3/eval"
+	"github.com/CaliLuke/loom/eval"
 )
 
 // BuildDataForTest exposes buildGeneratorData to external tests.

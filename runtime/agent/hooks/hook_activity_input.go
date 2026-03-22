@@ -1,8 +1,8 @@
 package hooks
 
 import (
-	"goa.design/goa-ai/runtime/agent"
-	"goa.design/goa-ai/runtime/agent/rawjson"
+	"github.com/CaliLuke/loom-mcp/runtime/agent"
+	"github.com/CaliLuke/loom-mcp/runtime/agent/rawjson"
 )
 
 // ActivityInput describes a hook event emitted from workflow code and published by the

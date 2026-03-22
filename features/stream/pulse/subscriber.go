@@ -9,8 +9,8 @@ import (
 
 	streamopts "goa.design/pulse/streaming/options"
 
-	clientspulse "goa.design/goa-ai/features/stream/pulse/clients/pulse"
-	"goa.design/goa-ai/runtime/agent/stream"
+	clientspulse "github.com/CaliLuke/loom-mcp/features/stream/pulse/clients/pulse"
+	"github.com/CaliLuke/loom-mcp/runtime/agent/stream"
 )
 
 type (
@@ -22,7 +22,7 @@ type (
 	SubscriberOptions struct {
 		// Client is the Pulse client used to consume events. Required.
 		Client clientspulse.Client
-		// SinkName identifies the Pulse consumer group. Defaults to "goa_ai_subscriber".
+		// SinkName identifies the Pulse consumer group. Defaults to "loom_mcp_subscriber".
 		SinkName string
 		// Buffer specifies the event channel capacity. Defaults to 64.
 		Buffer int
@@ -64,7 +64,7 @@ func NewSubscriber(opts SubscriberOptions) (*Subscriber, error) {
 	}
 	name := opts.SinkName
 	if name == "" {
-		name = "goa_ai_subscriber"
+		name = "loom_mcp_subscriber"
 	}
 	buffer := opts.Buffer
 	if buffer <= 0 {

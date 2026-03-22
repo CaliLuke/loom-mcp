@@ -6,8 +6,9 @@ import (
 	"slices"
 	"strings"
 
-	"goa.design/goa-ai/codegen/shared"
-	"goa.design/goa/v3/codegen"
+	"github.com/CaliLuke/loom-mcp/codegen/shared"
+	"github.com/CaliLuke/loom-mcp/internal/upstreampaths"
+	"github.com/CaliLuke/loom/codegen"
 )
 
 type registryToolsetSpecsFileData struct {
@@ -141,7 +142,7 @@ func toolsetSpecsFiles(data *GeneratorData) []*codegen.File {
 			validateImports := []*codegen.ImportSpec{
 				codegen.SimpleImport("encoding/json"),
 				codegen.SimpleImport("fmt"),
-				codegen.GoaImport(""),
+				codegen.LoomImport(""),
 			}
 			validateImports = append(validateImports, timports...)
 			if specsData.needsUnicodeImport() {
@@ -162,7 +163,7 @@ func toolsetSpecsFiles(data *GeneratorData) []*codegen.File {
 				unionImports = append(unionImports,
 					codegen.SimpleImport("encoding/json"),
 					codegen.SimpleImport("fmt"),
-					codegen.GoaImport(""),
+					codegen.LoomImport(""),
 				)
 				unionImports = append(unionImports, timports...)
 				unionSections := []*codegen.SectionTemplate{
@@ -197,7 +198,7 @@ func toolsetSpecsFiles(data *GeneratorData) []*codegen.File {
 			unionImports = append(unionImports,
 				codegen.SimpleImport("encoding/json"),
 				codegen.SimpleImport("fmt"),
-				codegen.GoaImport(""),
+				codegen.LoomImport(""),
 			)
 			unionImports = append(unionImports, typeImports...)
 			unionSections := []*codegen.SectionTemplate{
@@ -237,8 +238,8 @@ func toolsetSpecsFiles(data *GeneratorData) []*codegen.File {
 			out = append(out, &codegen.File{Path: filepath.Join(ts.SpecsDir, "codecs.go"), SectionTemplates: codecsSections})
 			// specs.go
 			specImports := []*codegen.ImportSpec{
-				{Path: "goa.design/goa-ai/runtime/agent/policy"},
-				{Path: "goa.design/goa-ai/runtime/agent/tools"},
+				{Path: "github.com/CaliLuke/loom-mcp/runtime/agent/policy"},
+				{Path: "github.com/CaliLuke/loom-mcp/runtime/agent/tools"},
 			}
 			specSections := []*codegen.SectionTemplate{
 				codegen.Header(ts.Name+" tool specs", ts.SpecsPackageName, specImports),
@@ -286,12 +287,12 @@ func toolsetProviderFile(genpkg string, ts *ToolsetData) *codegen.File {
 		codegen.SimpleImport("context"),
 		codegen.SimpleImport("errors"),
 		codegen.SimpleImport("fmt"),
-		&codegen.ImportSpec{Path: "goa.design/goa-ai/runtime/toolregistry"},
-		&codegen.ImportSpec{Name: "goa", Path: "goa.design/goa/v3/pkg"},
+		&codegen.ImportSpec{Path: "github.com/CaliLuke/loom-mcp/runtime/toolregistry"},
+		&codegen.ImportSpec{Name: "goa", Path: upstreampaths.LoomPkgImportPath},
 		&codegen.ImportSpec{Name: ts.SourceService.PkgName, Path: serviceImportPath},
 	)
 	if hasBoundsProjection {
-		imports = append(imports, &codegen.ImportSpec{Path: "goa.design/goa-ai/runtime/agent"})
+		imports = append(imports, &codegen.ImportSpec{Path: "github.com/CaliLuke/loom-mcp/runtime/agent"})
 	}
 	sections := []*codegen.SectionTemplate{
 		codegen.Header(ts.Name+" tool provider", ts.SpecsPackageName, imports),
@@ -325,8 +326,8 @@ func toolsetRegistrySpecsFiles(ts *ToolsetData) []*codegen.File {
 		{Path: "sort"},
 		{Path: "strings"},
 		{Path: "sync"},
-		{Path: "goa.design/goa-ai/runtime/agent/policy"},
-		{Path: "goa.design/goa-ai/runtime/agent/tools"},
+		{Path: "github.com/CaliLuke/loom-mcp/runtime/agent/policy"},
+		{Path: "github.com/CaliLuke/loom-mcp/runtime/agent/tools"},
 	}
 	sections := []*codegen.SectionTemplate{
 		codegen.Header(ts.Name+" registry toolset specs", ts.SpecsPackageName, specImports),

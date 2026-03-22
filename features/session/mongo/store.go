@@ -5,8 +5,8 @@ import (
 	"errors"
 	"time"
 
-	"goa.design/goa-ai/features/session/mongo/clients/mongo"
-	"goa.design/goa-ai/runtime/agent/session"
+	"github.com/CaliLuke/loom-mcp/features/session/mongo/clients/mongo"
+	"github.com/CaliLuke/loom-mcp/runtime/agent/session"
 )
 
 // Store implements session.Store by delegating to the Mongo client.

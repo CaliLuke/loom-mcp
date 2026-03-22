@@ -4,8 +4,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/CaliLuke/loom-mcp/codegen/agent/tests/testscenarios"
 	"github.com/stretchr/testify/require"
-	"goa.design/goa-ai/codegen/agent/tests/testscenarios"
 )
 
 // TestToolsetNamedTools verifies that a toolset named "tools" doesn't conflict
@@ -19,7 +19,7 @@ func TestToolsetNamedTools(t *testing.T) {
 
 	// The generated code should compile - the toolset "tools" should be aliased
 	// to "toolsspecs" to avoid conflicting with the runtime tools import
-	require.Contains(t, specsContent, `tools "goa.design/goa-ai/runtime/agent/tools"`,
+	require.Contains(t, specsContent, `tools "github.com/CaliLuke/loom-mcp/runtime/agent/tools"`,
 		"runtime tools import should have explicit alias")
 
 	// The toolset import should be aliased to avoid conflict

@@ -12,7 +12,7 @@ import (
 	"go.temporal.io/sdk/worker"
 	"go.temporal.io/sdk/workflow"
 
-	"goa.design/goa-ai/runtime/agent/telemetry"
+	"github.com/CaliLuke/loom-mcp/runtime/agent/telemetry"
 )
 
 func (e *Engine) workerForQueue(queue string) *workerBundle {

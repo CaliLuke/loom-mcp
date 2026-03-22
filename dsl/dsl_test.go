@@ -4,12 +4,12 @@ import (
 	"testing"
 	"time"
 
+	. "github.com/CaliLuke/loom-mcp/dsl"
+	agentsexpr "github.com/CaliLuke/loom-mcp/expr/agent"
+	. "github.com/CaliLuke/loom/dsl"
+	"github.com/CaliLuke/loom/eval"
+	goaexpr "github.com/CaliLuke/loom/expr"
 	"github.com/stretchr/testify/require"
-	. "goa.design/goa-ai/dsl"
-	agentsexpr "goa.design/goa-ai/expr/agent"
-	. "goa.design/goa/v3/dsl"
-	"goa.design/goa/v3/eval"
-	goaexpr "goa.design/goa/v3/expr"
 )
 
 func TestAgentDSLExample(t *testing.T) {

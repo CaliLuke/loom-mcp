@@ -6,13 +6,13 @@ import (
 	"path/filepath"
 	"testing"
 
+	codegen "github.com/CaliLuke/loom-mcp/codegen/agent"
+	agentsExpr "github.com/CaliLuke/loom-mcp/expr/agent"
+	"github.com/CaliLuke/loom-mcp/testutil"
+	gcodegen "github.com/CaliLuke/loom/codegen"
+	"github.com/CaliLuke/loom/eval"
+	goaexpr "github.com/CaliLuke/loom/expr"
 	"github.com/stretchr/testify/require"
-	codegen "goa.design/goa-ai/codegen/agent"
-	agentsExpr "goa.design/goa-ai/expr/agent"
-	"goa.design/goa-ai/testutil"
-	gcodegen "goa.design/goa/v3/codegen"
-	"goa.design/goa/v3/eval"
-	goaexpr "goa.design/goa/v3/expr"
 )
 
 // SetupEvalRoots initializes and registers eval roots for testing.
@@ -34,7 +34,7 @@ func RunDesign(t *testing.T, design func()) (string, []eval.Root) {
 	ok := eval.Execute(design, nil)
 	require.True(t, ok, eval.Context.Error())
 	require.NoError(t, eval.RunDSL())
-	return "goa.design/goa-ai", []eval.Root{goaexpr.Root, agentsExpr.Root}
+	return "github.com/CaliLuke/loom-mcp", []eval.Root{goaexpr.Root, agentsExpr.Root}
 }
 
 // BuildAndGenerate executes the DSL, runs codegen and returns generated files.

@@ -7,9 +7,9 @@ import (
 	"slices"
 	"strings"
 
-	"goa.design/goa-ai/codegen/naming"
-	goacodegen "goa.design/goa/v3/codegen"
-	"goa.design/goa/v3/eval"
+	"github.com/CaliLuke/loom-mcp/codegen/naming"
+	goacodegen "github.com/CaliLuke/loom/codegen"
+	"github.com/CaliLuke/loom/eval"
 )
 
 // toolsetOwner describes the computed, toolset-owner-scoped output locations

@@ -12,8 +12,8 @@ import (
 	"strings"
 	"time"
 
-	"goa.design/goa-ai/runtime/agent/engine"
-	"goa.design/goa-ai/runtime/agent/session"
+	"github.com/CaliLuke/loom-mcp/runtime/agent/engine"
+	"github.com/CaliLuke/loom-mcp/runtime/agent/session"
 )
 
 // CreateSession creates (or returns) an active session with the given ID.

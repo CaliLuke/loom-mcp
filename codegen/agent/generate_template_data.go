@@ -1,8 +1,8 @@
 package codegen
 
 import (
-	"goa.design/goa/v3/codegen"
-	"goa.design/goa/v3/codegen/service"
+	"github.com/CaliLuke/loom/codegen"
+	"github.com/CaliLuke/loom/codegen/service"
 )
 
 type (

@@ -8,10 +8,10 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	clientspulse "goa.design/goa-ai/features/stream/pulse/clients/pulse"
-	mockpulse "goa.design/goa-ai/features/stream/pulse/clients/pulse/mocks"
-	"goa.design/goa-ai/runtime/agent/rawjson"
-	"goa.design/goa-ai/runtime/agent/stream"
+	clientspulse "github.com/CaliLuke/loom-mcp/features/stream/pulse/clients/pulse"
+	mockpulse "github.com/CaliLuke/loom-mcp/features/stream/pulse/clients/pulse/mocks"
+	"github.com/CaliLuke/loom-mcp/runtime/agent/rawjson"
+	"github.com/CaliLuke/loom-mcp/runtime/agent/stream"
 	streamopts "goa.design/pulse/streaming/options"
 )
 

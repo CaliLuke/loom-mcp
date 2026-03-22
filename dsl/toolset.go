@@ -1,10 +1,10 @@
 package dsl
 
 import (
-	"goa.design/goa/v3/eval"
-	goaexpr "goa.design/goa/v3/expr"
+	"github.com/CaliLuke/loom/eval"
+	goaexpr "github.com/CaliLuke/loom/expr"
 
-	agentsexpr "goa.design/goa-ai/expr/agent"
+	agentsexpr "github.com/CaliLuke/loom-mcp/expr/agent"
 )
 
 // Toolset defines a provider-owned group of related tools. Declare toolsets at
@@ -236,7 +236,7 @@ func instantiateToolset(value any, overlay func(), agent *agentsexpr.AgentExpr) 
 //
 // When to use AgentToolset vs Toolset:
 //   - Prefer Toolset(X) when you already have an expression handle (e.g., a
-//     top-level Toolset variable or an agent's exported Toolset). Goa-AI will
+//     top-level Toolset variable or an agent's exported Toolset). loom-mcp will
 //     infer a RemoteAgent provider automatically when exactly one agent in a
 //     different service Exports a toolset with the same name.
 //   - Use AgentToolset(service, agent, toolset) when you:

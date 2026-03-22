@@ -8,10 +8,10 @@ import (
 	"strconv"
 	"strings"
 
-	"goa.design/goa-ai/boundedresult"
-	"goa.design/goa-ai/codegen/shared"
-	"goa.design/goa/v3/codegen"
-	goaexpr "goa.design/goa/v3/expr"
+	"github.com/CaliLuke/loom-mcp/boundedresult"
+	"github.com/CaliLuke/loom-mcp/codegen/shared"
+	"github.com/CaliLuke/loom/codegen"
+	goaexpr "github.com/CaliLuke/loom/expr"
 )
 
 const jsonSchemaTypeObject = "object"
@@ -326,7 +326,7 @@ func goLiteralForAny(v any) string {
 	case bool:
 		// Keep primitive formatting aligned with Goa's codegen helpers which
 		// use fmt's Go-syntax formatting (%#v) when emitting literals (see
-		// goa.design/goa/v3/codegen/validation.go:toSlice).
+		// github.com/CaliLuke/loom/codegen/validation.go:toSlice).
 		return fmt.Sprintf("%#v", x)
 	case string:
 		return fmt.Sprintf("%#v", x)

@@ -3,8 +3,8 @@ package run
 import (
 	"time"
 
-	"goa.design/goa-ai/runtime/agent"
-	"goa.design/goa-ai/runtime/agent/tools"
+	"github.com/CaliLuke/loom-mcp/runtime/agent"
+	"github.com/CaliLuke/loom-mcp/runtime/agent/tools"
 )
 
 type (

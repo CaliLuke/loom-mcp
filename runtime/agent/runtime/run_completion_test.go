@@ -6,7 +6,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	"goa.design/goa-ai/runtime/agent/engine"
+	"github.com/CaliLuke/loom-mcp/runtime/agent/engine"
 )
 
 func TestTerminalRunStatusForEngineStatus(t *testing.T) {
@@ -67,7 +67,7 @@ func TestTerminalRunErrorForStatus(t *testing.T) {
 			got, err := terminalRunErrorForStatus(tt.status)
 			if tt.wantMappingErr != "" {
 				require.ErrorContains(t, err, tt.wantMappingErr)
-				require.Nil(t, got)
+				require.NoError(t, got)
 				return
 			}
 			require.NoError(t, err)

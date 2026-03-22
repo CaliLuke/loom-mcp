@@ -3,7 +3,7 @@ package reminder
 import (
 	"testing"
 
-	"goa.design/goa-ai/runtime/agent/model"
+	"github.com/CaliLuke/loom-mcp/runtime/agent/model"
 )
 
 func TestEngineAddAndSnapshot(t *testing.T) {

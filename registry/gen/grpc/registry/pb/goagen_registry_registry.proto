@@ -1,15 +1,15 @@
-// Code generated with goa v3.25.3, DO NOT EDIT.
+// Code generated with goa, DO NOT EDIT.
 //
 // registry protocol buffer definition
 //
 // Command:
-// $ goa gen goa.design/goa-ai/registry/design -o registry
+// $ loom gen github.com/CaliLuke/loom-mcp/registry/design -o registry
 
 syntax = "proto3";
 
-package goa_ai_registry;
+package loom_mcp_registry;
 
-option go_package = "/goa_ai_registrypb";
+option go_package = "/loom_mcp_registrypb";
 
 // Internal tool registry gateway for toolset discovery and tool invocation
 service Registry {

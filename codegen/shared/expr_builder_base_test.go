@@ -4,12 +4,12 @@ import (
 	"errors"
 	"testing"
 
+	"github.com/CaliLuke/loom/eval"
+	"github.com/CaliLuke/loom/expr"
 	"github.com/leanovate/gopter"
 	"github.com/leanovate/gopter/gen"
 	"github.com/leanovate/gopter/prop"
 	"github.com/stretchr/testify/require"
-	"goa.design/goa/v3/eval"
-	"goa.design/goa/v3/expr"
 )
 
 // TestNewProtocolExprBuilderBase verifies that a new builder is properly initialized.

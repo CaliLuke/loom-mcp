@@ -11,7 +11,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	registry "goa.design/goa-ai/runtime/registry"
+	registry "github.com/CaliLuke/loom-mcp/runtime/registry"
 	"io"
 	"net/http"
 	"net/url"

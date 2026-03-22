@@ -1,5 +1,5 @@
 // Package temporaltrace defines the OpenTelemetry tracing contract for Temporal
-// activity execution in goa-ai powered runtimes.
+// activity execution in loom-mcp powered runtimes.
 //
 // Contract:
 //   - Temporal activities execute in a distinct trace domain from synchronous
@@ -63,7 +63,7 @@ const (
 	// traceparent string for trace-linking.
 	HeaderTraceParent = "ck.traceparent"
 
-	instrumentationName = "goa.design/goa-ai/runtime/temporaltrace"
+	instrumentationName = "github.com/CaliLuke/loom-mcp/runtime/temporaltrace"
 )
 
 // WithOriginTraceParent returns a derived context carrying the origin

@@ -6,8 +6,8 @@ package agent
 import (
 	"fmt"
 
-	"goa.design/goa/v3/eval"
-	goaexpr "goa.design/goa/v3/expr"
+	"github.com/CaliLuke/loom/eval"
+	goaexpr "github.com/CaliLuke/loom/expr"
 )
 
 type (

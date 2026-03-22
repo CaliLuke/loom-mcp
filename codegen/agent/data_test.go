@@ -5,21 +5,21 @@ import (
 	"testing"
 	"time"
 
+	codegen "github.com/CaliLuke/loom-mcp/codegen/agent"
+	. "github.com/CaliLuke/loom-mcp/dsl"
+	agentsExpr "github.com/CaliLuke/loom-mcp/expr/agent"
+	mcpexpr "github.com/CaliLuke/loom-mcp/expr/mcp"
+	. "github.com/CaliLuke/loom/dsl"
+	"github.com/CaliLuke/loom/eval"
+	goaexpr "github.com/CaliLuke/loom/expr"
 	"github.com/stretchr/testify/require"
-	codegen "goa.design/goa-ai/codegen/agent"
-	. "goa.design/goa-ai/dsl"
-	agentsExpr "goa.design/goa-ai/expr/agent"
-	mcpexpr "goa.design/goa-ai/expr/mcp"
-	. "goa.design/goa/v3/dsl"
-	"goa.design/goa/v3/eval"
-	goaexpr "goa.design/goa/v3/expr"
 )
 
 const alphaServiceName = "alpha"
 
 func TestBuildGeneratorData(t *testing.T) {
 	roots := runAgentDesign(t)
-	data, err := codegen.BuildDataForTest("goa.design/goa-ai", roots)
+	data, err := codegen.BuildDataForTest("github.com/CaliLuke/loom-mcp", roots)
 	require.NoError(t, err)
 	require.NotNil(t, data)
 	require.Len(t, data.Services, 1)
@@ -102,7 +102,7 @@ func TestBuildGeneratorData(t *testing.T) {
 
 func TestGenerateProducesFiles(t *testing.T) {
 	roots := runAgentDesign(t)
-	files, err := codegen.Generate("goa.design/goa-ai", roots, nil)
+	files, err := codegen.Generate("github.com/CaliLuke/loom-mcp", roots, nil)
 	require.NoError(t, err)
 	require.NotEmpty(t, files)
 
@@ -120,7 +120,7 @@ func TestGenerateProducesFiles(t *testing.T) {
 
 func TestBuildGeneratorData_AliasedMCPToolsetUsesDefinitionNameForArtifacts(t *testing.T) {
 	roots := runAliasedMCPDesign(t)
-	data, err := codegen.BuildDataForTest("goa.design/goa-ai", roots)
+	data, err := codegen.BuildDataForTest("github.com/CaliLuke/loom-mcp", roots)
 	require.NoError(t, err)
 
 	var consumerAgent *codegen.AgentData
@@ -140,7 +140,7 @@ func TestBuildGeneratorData_AliasedMCPToolsetUsesDefinitionNameForArtifacts(t *t
 	require.Equal(t, "calc-remote", used.QualifiedName)
 	require.Equal(t, "calc_remote", used.PathName)
 	require.Equal(t, filepath.Join("gen", "calc", "toolsets", "calc_remote"), used.SpecsDir)
-	require.Equal(t, "goa.design/goa-ai/calc/toolsets/calc_remote", used.SpecsImportPath)
+	require.Equal(t, "github.com/CaliLuke/loom-mcp/calc/toolsets/calc_remote", used.SpecsImportPath)
 	require.Len(t, used.Tools, 1)
 	require.Equal(t, "add", used.Tools[0].Name)
 	require.Equal(t, "calc-remote.add", used.Tools[0].QualifiedName)
@@ -148,7 +148,7 @@ func TestBuildGeneratorData_AliasedMCPToolsetUsesDefinitionNameForArtifacts(t *t
 
 func TestBuildGeneratorData_AliasedMCPToolsetsUseDistinctConstNames(t *testing.T) {
 	roots := runDuplicateAliasedMCPDesign(t)
-	data, err := codegen.BuildDataForTest("goa.design/goa-ai", roots)
+	data, err := codegen.BuildDataForTest("github.com/CaliLuke/loom-mcp", roots)
 	require.NoError(t, err)
 
 	var consumerAgent *codegen.AgentData
@@ -167,7 +167,7 @@ func TestBuildGeneratorData_AliasedMCPToolsetsUseDistinctConstNames(t *testing.T
 
 func TestBuildGeneratorData_MCPToolsetConstNameDoesNotRepeatSuiteName(t *testing.T) {
 	roots := runDirectMCPUseDesign(t)
-	data, err := codegen.BuildDataForTest("goa.design/goa-ai", roots)
+	data, err := codegen.BuildDataForTest("github.com/CaliLuke/loom-mcp", roots)
 	require.NoError(t, err)
 
 	var consumerAgent *codegen.AgentData
@@ -186,7 +186,7 @@ func TestBuildGeneratorData_MCPToolsetConstNameDoesNotRepeatSuiteName(t *testing
 
 func TestBuildGeneratorData_MCPToolsetConstNamesStayDistinctAcrossProviderPartitions(t *testing.T) {
 	roots := runPartitionedMCPConstCollisionDesign(t)
-	data, err := codegen.BuildDataForTest("goa.design/goa-ai", roots)
+	data, err := codegen.BuildDataForTest("github.com/CaliLuke/loom-mcp", roots)
 	require.NoError(t, err)
 
 	var consumerAgent *codegen.AgentData

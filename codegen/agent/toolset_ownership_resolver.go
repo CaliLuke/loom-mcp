@@ -14,11 +14,11 @@ import (
 	"slices"
 	"strings"
 
-	"goa.design/goa-ai/codegen/naming"
-	agentsExpr "goa.design/goa-ai/expr/agent"
-	goacodegen "goa.design/goa/v3/codegen"
-	"goa.design/goa/v3/eval"
-	goaexpr "goa.design/goa/v3/expr"
+	"github.com/CaliLuke/loom-mcp/codegen/naming"
+	agentsExpr "github.com/CaliLuke/loom-mcp/expr/agent"
+	goacodegen "github.com/CaliLuke/loom/codegen"
+	"github.com/CaliLuke/loom/eval"
+	goaexpr "github.com/CaliLuke/loom/expr"
 )
 
 type (

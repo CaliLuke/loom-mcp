@@ -1,4 +1,4 @@
-// Package temporal contains the goa-ai Temporal engine adapter.
+// Package temporal contains the loom-mcp Temporal engine adapter.
 //
 // This file defines the Temporal-backed implementation of engine.WorkflowContext.
 // The runtime uses it to:
@@ -21,9 +21,9 @@ import (
 	"go.temporal.io/sdk/temporal"
 	"go.temporal.io/sdk/workflow"
 
-	"goa.design/goa-ai/runtime/agent/api"
-	"goa.design/goa-ai/runtime/agent/engine"
-	"goa.design/goa-ai/runtime/agent/telemetry"
+	"github.com/CaliLuke/loom-mcp/runtime/agent/api"
+	"github.com/CaliLuke/loom-mcp/runtime/agent/engine"
+	"github.com/CaliLuke/loom-mcp/runtime/agent/telemetry"
 )
 
 type (
@@ -78,9 +78,9 @@ const (
 )
 
 // NewWorkflowContext adapts a Temporal workflow.Context into the engine.WorkflowContext
-// used by the goa-ai runtime.
+// used by the loom-mcp runtime.
 //
-// This is intended for workflows that run in the same Temporal worker as the goa-ai
+// This is intended for workflows that run in the same Temporal worker as the loom-mcp
 // engine but are not started through it, and still need to call runtime helpers
 // (for example ExecuteAgentChildWithRoute).
 //

@@ -6,14 +6,14 @@ import (
 	"testing"
 	"time"
 
+	"github.com/CaliLuke/loom-mcp/runtime/agent"
+	"github.com/CaliLuke/loom-mcp/runtime/agent/memory"
+	"github.com/CaliLuke/loom-mcp/runtime/agent/model"
+	"github.com/CaliLuke/loom-mcp/runtime/agent/planner"
+	"github.com/CaliLuke/loom-mcp/runtime/agent/rawjson"
+	"github.com/CaliLuke/loom-mcp/runtime/agent/tools"
+	"github.com/CaliLuke/loom-mcp/runtime/agent/transcript"
 	"github.com/stretchr/testify/require"
-	"goa.design/goa-ai/runtime/agent"
-	"goa.design/goa-ai/runtime/agent/memory"
-	"goa.design/goa-ai/runtime/agent/model"
-	"goa.design/goa-ai/runtime/agent/planner"
-	"goa.design/goa-ai/runtime/agent/rawjson"
-	"goa.design/goa-ai/runtime/agent/tools"
-	"goa.design/goa-ai/runtime/agent/transcript"
 )
 
 func TestAppendUserToolResults_IncludesErrorInToolResultContent(t *testing.T) {

@@ -1,9 +1,8 @@
-# Goa-AI Runtime Reference
+# loom-mcp Runtime Reference
 
-The goa-ai runtime is the execution engine that turns your agent designs into running
-systems. It coordinates workflows, planners, tools, memory, streaming, and policies
-into a cohesive whole. This document explains how the runtime works, how to configure
-it, and how the generated code plugs in.
+The `loom-mcp` runtime is the execution engine that turns your agent designs into running
+systems. The repository name and Go module path are both `github.com/CaliLuke/loom-mcp`. This
+document uses `loom-mcp` for product discussion and the same path in code examples.
 
 ## When to Use This Guide
 
@@ -66,8 +65,8 @@ import (
     "fmt"
 
     chat "example.com/assistant/gen/orchestrator/agents/chat"
-    "goa.design/goa-ai/runtime/agent/model"
-    "goa.design/goa-ai/runtime/agent/runtime"
+    "github.com/CaliLuke/loom-mcp/runtime/agent/model"
+    "github.com/CaliLuke/loom-mcp/runtime/agent/runtime"
 )
 
 func main() {
@@ -190,9 +189,9 @@ The runtime always initializes `Runtime.PromptRegistry`. Prompt management has t
 
 ```go
 import (
-    promptmongo "goa.design/goa-ai/features/prompt/mongo"
-    clientmongo "goa.design/goa-ai/features/prompt/mongo/clients/mongo"
-    "goa.design/goa-ai/runtime/agent/prompt"
+    promptmongo "github.com/CaliLuke/loom-mcp/features/prompt/mongo"
+    clientmongo "github.com/CaliLuke/loom-mcp/features/prompt/mongo/clients/mongo"
+    "github.com/CaliLuke/loom-mcp/runtime/agent/prompt"
 )
 
 mongoClient, _ := clientmongo.New(clientmongo.Options{
@@ -539,7 +538,7 @@ rt.RegisterToolset(reg)
 
 ### Registry-Routed Provider Execution (Service-Side)
 
-Goa-AI supports cross-process tool invocation via the **Internal Tool Registry**. In this mode:
+Loom MCP supports cross-process tool invocation via the **Internal Tool Registry**. In this mode:
 
 - The registry validates payload JSON against the tool schema and publishes tool calls to a deterministic Pulse stream: `toolset:<toolsetID>:requests`
 - A **provider loop** runs inside the toolset-owning service process, subscribes to the toolset stream, executes the tool, and publishes the result to `result:<toolUseID>`
@@ -581,11 +580,11 @@ On the consumer side (an agent calling registry-routed toolsets), the runtime ne
 - calls the registry gateway to publish the tool request and get a `(tool_use_id, result_stream_id)`, then
 - subscribes to the per-call result stream and decodes the result using the compiled tool specs/codecs.
 
-Goa-AI provides a reusable executor implementation in `runtime/toolregistry/executor` that implements `runtime.ToolCallExecutor`:
+Loom MCP provides a reusable executor implementation in `runtime/toolregistry/executor` that implements `runtime.ToolCallExecutor`:
 
 ```go
 import (
-    toolregexec "goa.design/goa-ai/runtime/toolregistry/executor"
+    toolregexec "goa.design/loom-mcp/runtime/toolregistry/executor"
 )
 
 exec := toolregexec.New(registryClient, pulseClient, specs)
@@ -600,14 +599,14 @@ The registry wire protocol and deterministic stream IDs are defined in `runtime/
 
 ### Registry discovery & catalog sync (runtime/registry)
 
-If you need runtime discovery of toolsets and schemas (e.g., tool catalogs that change without a `goa gen`),
+If you need runtime discovery of toolsets and schemas (e.g., tool catalogs that change without a `loom gen`),
 use the client-side components in `runtime/registry`:
 
 - `GRPCClientAdapter`: wraps a generated gRPC registry client into a `RegistryClient` interface
 - `Manager`: multi-registry discovery with caching and periodic sync (`StartSync`/`StopSync`)
 - `SearchClient`: cross-registry search with semantic-first + keyword fallback when supported
 
-These are client-side helpers. The standalone registry service implementation lives under `goa-ai/registry`.
+These are client-side helpers. The standalone registry service implementation lives under `loom-mcp/registry`.
 
 **Inline tools** — Custom executor implementation:
 
@@ -895,7 +894,7 @@ structured Go error values.
 
 ### Tool Confirmation (Design-Time + Runtime Overrides)
 
-Goa-AI supports **runtime-enforced** confirmation gates for sensitive tools.
+Loom MCP supports **runtime-enforced** confirmation gates for sensitive tools.
 
 There are two ways to enable confirmation:
 
@@ -985,7 +984,7 @@ Notes:
 
 - Confirmation templates (`PromptTemplate` and `DeniedResultTemplate`) are Go `text/template` strings
   executed with `missingkey=error`. In addition to the standard template functions (e.g. `printf`),
-  Goa-AI provides:
+  Loom MCP provides:
   - `json v` → JSON encodes `v` (useful for optional pointer fields or embedding structured values).
   - `quote s` → returns a Go-escaped quoted string (like `fmt.Sprintf("%q", s)`).
 
@@ -1372,7 +1371,7 @@ resp, err := modelClient.Complete(ctx, &model.Request{
 Apply adaptive rate limiting:
 
 ```go
-import mdlmw "goa.design/goa-ai/features/model/middleware"
+import mdlmw "goa.design/loom-mcp/features/model/middleware"
 
 rl := mdlmw.NewAdaptiveRateLimiter(
     ctx,
@@ -1487,7 +1486,7 @@ type WorkflowContext interface {
 **Temporal worker** — Production-grade durable execution:
 
 ```go
-import temporal "goa.design/goa-ai/runtime/agent/engine/temporal"
+import temporal "goa.design/loom-mcp/runtime/agent/engine/temporal"
 
 eng, _ := temporal.NewWorker(temporal.Options{
     ClientOptions: &client.Options{
@@ -1533,7 +1532,7 @@ In this split:
 **In-memory** — Fast iteration, no durability:
 
 ```go
-import inmem "goa.design/goa-ai/runtime/agent/engine/inmem"
+import inmem "goa.design/loom-mcp/runtime/agent/engine/inmem"
 
 eng := inmem.New()
 ```
@@ -1603,7 +1602,7 @@ caller that can be reused across multiple tool invocations.
 Spawns an MCP server as a subprocess and communicates via stdin/stdout:
 
 ```go
-import "goa.design/goa-ai/runtime/mcp"
+import "goa.design/loom-mcp/runtime/mcp"
 
 caller, err := mcp.NewStdioCaller(mcp.StdioOptions{
     Command: "npx",
@@ -1698,7 +1697,7 @@ events for specific use cases.
 | `MetricsProfile()` | Telemetry and monitoring | `usage`, `workflow` only |
 
 ```go
-import "goa.design/goa-ai/runtime/agent/stream"
+import "goa.design/loom-mcp/runtime/agent/stream"
 
 // Get a profile
 profile := stream.AgentDebugProfile()
@@ -1715,7 +1714,7 @@ The `runtime/agent/toolerrors` package provides structured error types for tool 
 failures that integrate with the planner retry system.
 
 ```go
-import "goa.design/goa-ai/runtime/agent/toolerrors"
+import "goa.design/loom-mcp/runtime/agent/toolerrors"
 
 // Create a tool error with retry hint
 err := toolerrors.New(
@@ -1775,7 +1774,7 @@ The `features/model/middleware` package provides middleware for model clients.
 Apply adaptive rate limiting to handle provider throttling:
 
 ```go
-import mdlmw "goa.design/goa-ai/features/model/middleware"
+import mdlmw "goa.design/loom-mcp/features/model/middleware"
 
 rl := mdlmw.NewAdaptiveRateLimiter(
     ctx,
@@ -1798,7 +1797,7 @@ handles 429 (rate limited) errors with exponential backoff.
 
 ### Bootstrap Helper
 
-Generated `goa example` emits `cmd/<service>/agents_bootstrap.go`:
+Generated `loom example` emits `cmd/<service>/agents_bootstrap.go`:
 
 ```go
 // Bootstrap creates runtime with Temporal, stores, and registers agents
@@ -1812,7 +1811,7 @@ defer cleanup()
 ### Pulse Streaming
 
 ```go
-import pulsestream "goa.design/goa-ai/features/stream/pulse"
+import pulsestream "goa.design/loom-mcp/features/stream/pulse"
 
 streams, _ := pulsestream.NewRuntimeStreams(pulsestream.RuntimeStreamsOptions{
     Client: pulseClient,

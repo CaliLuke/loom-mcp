@@ -4,9 +4,9 @@ package runtime
 import (
 	"context"
 
-	"goa.design/goa-ai/runtime/agent"
-	"goa.design/goa-ai/runtime/agent/engine"
-	"goa.design/goa-ai/runtime/agent/model"
+	"github.com/CaliLuke/loom-mcp/runtime/agent"
+	"github.com/CaliLuke/loom-mcp/runtime/agent/engine"
+	"github.com/CaliLuke/loom-mcp/runtime/agent/model"
 )
 
 type (

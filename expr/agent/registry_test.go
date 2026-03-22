@@ -4,8 +4,8 @@ import (
 	"testing"
 	"time"
 
+	goaexpr "github.com/CaliLuke/loom/expr"
 	"github.com/stretchr/testify/require"
-	goaexpr "goa.design/goa/v3/expr"
 )
 
 func TestRegistryExpr_EvalName(t *testing.T) {

@@ -4,11 +4,11 @@ import (
 	"context"
 	"errors"
 
-	clientspulse "goa.design/goa-ai/features/stream/pulse/clients/pulse"
-	"goa.design/goa-ai/runtime/agent/stream"
+	clientspulse "github.com/CaliLuke/loom-mcp/features/stream/pulse/clients/pulse"
+	"github.com/CaliLuke/loom-mcp/runtime/agent/stream"
 )
 
-// RuntimeStreams wires a caller-provided Pulse client into goa-ai's runtime.
+// RuntimeStreams wires a caller-provided Pulse client into loom-mcp's runtime.
 // It owns a publishing sink (used by runtime.Options.Stream) and can spawn
 // subscribers that reuse the same client so services do not need to manage
 // multiple Pulse connections.

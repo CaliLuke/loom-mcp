@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"math"
@@ -14,8 +15,8 @@ import (
 	"strings"
 	"time"
 
-	"goa.design/goa/v3/codegen"
-	goahttp "goa.design/goa/v3/http"
+	"github.com/CaliLuke/loom/codegen"
+	goahttp "github.com/CaliLuke/loom/http"
 )
 
 type (
@@ -37,6 +38,8 @@ func EncodeJSONToString(
 	newEncoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
 	v any,
 ) (string, error) {
+	_ = ctx
+	_ = newEncoder
 	data, err := MarshalCanonicalJSON(v)
 	if err != nil {
 		return "", err
@@ -169,22 +172,6 @@ func looksFloat(s string) bool {
 	return strings.ContainsAny(s, ".eE")
 }
 
-type bufferResponseWriter struct {
-	headers http.Header
-	buf     bytes.Buffer
-}
-
-func (w *bufferResponseWriter) Header() http.Header {
-	if w.headers == nil {
-		w.headers = make(http.Header)
-	}
-	return w.headers
-}
-
-// WriteHeader is a no-op because only the body is captured for encoding.
-func (w *bufferResponseWriter) WriteHeader(statusCode int)  {}
-func (w *bufferResponseWriter) Write(p []byte) (int, error) { return w.buf.Write(p) }
-
 func normalizeJSONValue(v reflect.Value) (any, error) {
 	if !v.IsValid() {
 		return nil, nil
@@ -227,6 +214,11 @@ func normalizeJSONValue(v reflect.Value) (any, error) {
 		reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64,
 		reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64, reflect.Uintptr,
 		reflect.Float32, reflect.Float64:
+		return v.Interface(), nil
+	case reflect.Invalid:
+		return nil, nil
+	case reflect.Complex64, reflect.Complex128,
+		reflect.Chan, reflect.Func, reflect.Interface, reflect.Pointer, reflect.UnsafePointer:
 		return v.Interface(), nil
 	case reflect.Slice:
 		if v.Type().Elem().Kind() == reflect.Uint8 {
@@ -316,6 +308,8 @@ func assignCanonicalValue(raw any, dst reflect.Value) error {
 		}
 	}
 	switch dst.Kind() {
+	case reflect.Invalid:
+		return &json.UnmarshalTypeError{Value: jsonValueKind(raw), Type: dst.Type()}
 	case reflect.Interface:
 		dst.Set(reflect.ValueOf(raw))
 		return nil
@@ -445,6 +439,13 @@ func assignCanonicalValue(raw any, dst reflect.Value) error {
 		}
 		dst.SetFloat(f)
 		return nil
+	case reflect.Complex64, reflect.Complex128,
+		reflect.Chan, reflect.Func, reflect.Pointer, reflect.UnsafePointer:
+		data, err := json.Marshal(raw)
+		if err != nil {
+			return err
+		}
+		return json.Unmarshal(data, dst.Addr().Interface())
 	default:
 		data, err := json.Marshal(raw)
 		if err != nil {
@@ -455,7 +456,8 @@ func assignCanonicalValue(raw any, dst reflect.Value) error {
 }
 
 func wrapFieldError(name string, err error) error {
-	if ute, ok := err.(*json.UnmarshalTypeError); ok && ute.Field == "" {
+	var ute *json.UnmarshalTypeError
+	if errors.As(err, &ute) && ute.Field == "" {
 		clone := *ute
 		clone.Field = name
 		return &clone
@@ -464,7 +466,8 @@ func wrapFieldError(name string, err error) error {
 }
 
 func wrapIndexError(idx int, err error) error {
-	if ute, ok := err.(*json.UnmarshalTypeError); ok && ute.Field == "" {
+	var ute *json.UnmarshalTypeError
+	if errors.As(err, &ute) && ute.Field == "" {
 		clone := *ute
 		clone.Field = strconv.Itoa(idx)
 		return &clone
@@ -497,8 +500,8 @@ func jsonFieldName(field reflect.StructField) (name string, omitempty, explicit,
 
 func isJSONEmptyValue(v reflect.Value) bool {
 	switch v.Kind() {
-	case reflect.Array, reflect.Map, reflect.Slice, reflect.String:
-		return v.Len() == 0
+	case reflect.Invalid:
+		return true
 	case reflect.Bool:
 		return !v.Bool()
 	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
@@ -507,10 +510,22 @@ func isJSONEmptyValue(v reflect.Value) bool {
 		return v.Uint() == 0
 	case reflect.Float32, reflect.Float64:
 		return v.Float() == 0
-	case reflect.Interface, reflect.Pointer:
+	case reflect.Complex64, reflect.Complex128:
+		return v.Complex() == 0
+	case reflect.Array, reflect.String:
+		return v.Len() == 0
+	case reflect.Chan:
 		return v.IsNil()
+	case reflect.Func:
+		return v.IsNil()
+	case reflect.UnsafePointer:
+		return v.IsZero()
+	case reflect.Map, reflect.Slice:
+		return v.IsNil() || v.Len() == 0
 	case reflect.Struct:
 		return v.IsZero()
+	case reflect.Interface, reflect.Pointer:
+		return v.IsNil()
 	default:
 		return false
 	}
@@ -520,6 +535,14 @@ func isImplicitOmitNilField(v reflect.Value) bool {
 	switch v.Kind() {
 	case reflect.Interface, reflect.Map, reflect.Pointer, reflect.Slice:
 		return v.IsNil()
+	case reflect.Invalid,
+		reflect.Bool,
+		reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64,
+		reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64, reflect.Uintptr,
+		reflect.Float32, reflect.Float64,
+		reflect.Complex64, reflect.Complex128,
+		reflect.Array, reflect.Chan, reflect.Func, reflect.String, reflect.Struct, reflect.UnsafePointer:
+		return false
 	default:
 		return false
 	}

@@ -11,15 +11,18 @@ import (
 	"regexp"
 	"runtime"
 	"strings"
+	"sync"
 	"testing"
 	"time"
+
+	"github.com/CaliLuke/loom-mcp/internal/upstreampaths"
 )
 
 var goaCoreReplacePattern = regexp.MustCompile(`(?m)^replace goa\.design/goa/v3 => .+$`)
 
 // TestQuickstartGeneratesAndRuns verifies that the quickstart example:
-// 1. Successfully generates code with `goa gen`
-// 2. Successfully generates example with `goa example`
+// 1. Successfully generates code with `loom gen`
+// 2. Successfully generates example with `loom example`
 // 3. Compiles without errors
 // 4. Starts successfully or exits successfully as a one-shot example
 //
@@ -48,10 +51,10 @@ func TestQuickstartGeneratesAndRuns(t *testing.T) {
 		t.Fatalf("copy quickstart fixture: %v", err)
 	}
 
-	// The quickstart module uses a relative replace for goa-ai (=> ..) so it can
+	// The quickstart module uses a relative replace for loom-mcp (=> ..) so it can
 	// be generated and run from the repo tree. Once copied into a temp dir, that
 	// relative path no longer points at the repo root. Rewrite it to an absolute
-	// replace so `goa gen` and `go mod tidy` can resolve the local goa-ai module.
+	// replace so `loom gen` and `go mod tidy` can resolve the local loom-mcp module.
 	if err := rewriteQuickstartGoMod(repoRoot, quickstartDir); err != nil {
 		t.Fatalf("rewrite quickstart go.mod: %v", err)
 	}
@@ -75,34 +78,34 @@ func TestQuickstartGeneratesAndRuns(t *testing.T) {
 
 	ctx := context.Background()
 
-	// Step 0: Ensure the module graph is tidy before running goa. The goa CLI
+	// Step 0: Ensure the module graph is tidy before running loom. The loom CLI
 	// compiles the design package via `go list`, which fails when the module has
 	// pending sum updates.
 	t.Run("go_mod_tidy_pre", func(t *testing.T) {
-		runCommand(t, ctx, quickstartDir, "go", "mod", "tidy")
+		runCommand(t, ctx, quickstartDir, "mod", "tidy")
 	})
 
-	// Step 1: Run goa gen
+	// Step 1: Run loom gen
 	t.Run("goa_gen", func(t *testing.T) {
-		out := runCommand(t, ctx, quickstartDir, "goa", "gen", "example.com/quickstart/design")
-		t.Logf("goa gen output:\n%s", out)
+		out := runCommand(t, ctx, quickstartDir, "run", upstreampaths.LoomCLIPackage, "gen", "example.com/quickstart/design")
+		t.Logf("loom gen output:\n%s", out)
 	})
 
-	// Step 2: Run goa example
+	// Step 2: Run loom example
 	t.Run("goa_example", func(t *testing.T) {
-		out := runCommand(t, ctx, quickstartDir, "goa", "example", "example.com/quickstart/design")
-		t.Logf("goa example output:\n%s", out)
+		out := runCommand(t, ctx, quickstartDir, "run", upstreampaths.LoomCLIPackage, "example", "example.com/quickstart/design")
+		t.Logf("loom example output:\n%s", out)
 	})
 
 	// Step 2b: Ensure module sums include dependencies pulled in by generated code.
 	// This is required when tests run with module updates disabled (e.g. GOFLAGS=-mod=readonly).
 	t.Run("go_mod_tidy", func(t *testing.T) {
-		runCommand(t, ctx, quickstartDir, "go", "mod", "tidy")
+		runCommand(t, ctx, quickstartDir, "mod", "tidy")
 	})
 
 	// Step 3: Verify compilation
 	t.Run("go_build", func(t *testing.T) {
-		runCommand(t, ctx, quickstartDir, "go", "build", "./cmd/...")
+		runCommand(t, ctx, quickstartDir, "build", "./cmd/...")
 	})
 
 	// Step 4: Build and run the generated binary so the test exercises the
@@ -112,7 +115,7 @@ func TestQuickstartGeneratesAndRuns(t *testing.T) {
 	// stops it.
 	t.Run("run_example", func(t *testing.T) {
 		binaryPath := filepath.Join(t.TempDir(), "orchestrator")
-		runCommand(t, ctx, quickstartDir, "go", "build", "-o", binaryPath, "./cmd/orchestrator")
+		runCommand(t, ctx, quickstartDir, "build", "-o", binaryPath, "./cmd/orchestrator")
 		out := runStartableCommand(t, quickstartDir, binaryPath)
 		t.Logf("Example output:\n%s", out)
 	})
@@ -175,7 +178,7 @@ func rewriteQuickstartGoMod(repoRoot string, quickstartDir string) error {
 	if err != nil {
 		return err
 	}
-	updated := strings.ReplaceAll(string(raw), "replace goa.design/goa-ai => ..", "replace goa.design/goa-ai => "+repoRoot)
+	updated := strings.ReplaceAll(string(raw), "replace github.com/CaliLuke/loom-mcp => ..", "replace github.com/CaliLuke/loom-mcp => "+repoRoot)
 
 	rootModPath := filepath.Join(repoRoot, "go.mod")
 	//nolint:gosec // Test helper reads the local repo module file.
@@ -196,14 +199,15 @@ func rewriteQuickstartGoMod(repoRoot string, quickstartDir string) error {
 	return os.WriteFile(modPath, []byte(updated), 0o600)
 }
 
-func runCommand(t *testing.T, ctx context.Context, dir string, name string, args ...string) []byte {
+func runCommand(t *testing.T, ctx context.Context, dir string, args ...string) []byte {
 	t.Helper()
 
-	cmd := exec.CommandContext(ctx, name, args...)
+	//nolint:gosec // Test helper executes repo-controlled tooling commands.
+	cmd := exec.CommandContext(ctx, "go", args...)
 	cmd.Dir = dir
 	out, err := cmd.CombinedOutput()
 	if err != nil {
-		t.Fatalf("%s failed: %v\nOutput:\n%s", strings.Join(append([]string{name}, args...), " "), err, out)
+		t.Fatalf("%s failed: %v\nOutput:\n%s", strings.Join(append([]string{"go"}, args...), " "), err, out)
 	}
 	return out
 }
@@ -214,6 +218,7 @@ func runStartableCommand(t *testing.T, dir string, name string, args ...string) 
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
 
+	//nolint:gosec // Test helper executes a binary built in the temp fixture workspace.
 	cmd := exec.CommandContext(ctx, name, args...)
 	cmd.Dir = dir
 
@@ -230,13 +235,22 @@ func runStartableCommand(t *testing.T, dir string, name string, args ...string) 
 	}
 
 	var output bytes.Buffer
+	var outputMu sync.Mutex
 	copyDone := make(chan struct{}, 2)
 	go func() {
-		_, _ = io.Copy(&output, stdout)
+		var buf bytes.Buffer
+		_, _ = io.Copy(&buf, stdout)
+		outputMu.Lock()
+		output.Write(buf.Bytes())
+		outputMu.Unlock()
 		copyDone <- struct{}{}
 	}()
 	go func() {
-		_, _ = io.Copy(&output, stderr)
+		var buf bytes.Buffer
+		_, _ = io.Copy(&buf, stderr)
+		outputMu.Lock()
+		output.Write(buf.Bytes())
+		outputMu.Unlock()
 		copyDone <- struct{}{}
 	}()
 

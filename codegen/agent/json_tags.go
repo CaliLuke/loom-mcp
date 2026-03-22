@@ -3,7 +3,7 @@ package codegen
 import (
 	"strings"
 
-	goaexpr "goa.design/goa/v3/expr"
+	goaexpr "github.com/CaliLuke/loom/expr"
 )
 
 // cloneWithJSONTags returns a deep copy of the provided attribute where:

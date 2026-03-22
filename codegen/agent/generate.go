@@ -6,14 +6,14 @@ import (
 	"path/filepath"
 	"strings"
 
-	"goa.design/goa-ai/codegen/shared"
-	agentsExpr "goa.design/goa-ai/expr/agent"
-	"goa.design/goa/v3/codegen"
-	"goa.design/goa/v3/eval"
+	"github.com/CaliLuke/loom-mcp/codegen/shared"
+	agentsExpr "github.com/CaliLuke/loom-mcp/expr/agent"
+	"github.com/CaliLuke/loom/codegen"
+	"github.com/CaliLuke/loom/eval"
 )
 
 // Generate is the code generation entry point for the agents plugin. It is called
-// by the Goa code generation framework during the `goa gen` command execution.
+// by the Goa code generation framework during the `loom gen` command execution.
 //
 // The function scans the provided DSL roots for agent declarations, transforms them
 // into template-ready data structures, and generates all necessary Go files for each
@@ -95,8 +95,8 @@ func agentSpecsAggregatorFile(agent *AgentData) *codegen.File {
 	// Build import list: runtime + per-toolset packages
 	// Always alias runtime tools to avoid conflicts with toolsets named "tools"
 	imports := []*codegen.ImportSpec{
-		{Path: "goa.design/goa-ai/runtime/agent/policy"},
-		{Path: "goa.design/goa-ai/runtime/agent/tools", Name: "tools"},
+		{Path: "github.com/CaliLuke/loom-mcp/runtime/agent/policy"},
+		{Path: "github.com/CaliLuke/loom-mcp/runtime/agent/tools", Name: "tools"},
 	}
 	added := make(map[string]struct{})
 	toolsets := make([]*ToolsetData, 0, len(agent.AllToolsets))
@@ -134,10 +134,10 @@ func agentImplFile(agent *AgentData) *codegen.File {
 		{Path: "errors"},
 		{Path: "strings"},
 		{Path: "context"},
-		{Path: "goa.design/goa-ai/runtime/agent/engine"},
-		{Path: "goa.design/goa-ai/runtime/agent", Name: "agent"},
-		{Path: "goa.design/goa-ai/runtime/agent/runtime", Name: "runtime"},
-		{Path: "goa.design/goa-ai/runtime/agent/planner"},
+		{Path: "github.com/CaliLuke/loom-mcp/runtime/agent/engine"},
+		{Path: "github.com/CaliLuke/loom-mcp/runtime/agent", Name: "agent"},
+		{Path: "github.com/CaliLuke/loom-mcp/runtime/agent/runtime", Name: "runtime"},
+		{Path: "github.com/CaliLuke/loom-mcp/runtime/agent/planner"},
 	}
 	sections := []*codegen.SectionTemplate{
 		codegen.Header(agent.StructName+" implementation", agent.PackageName, imports),
@@ -153,13 +153,13 @@ func agentImplFile(agent *AgentData) *codegen.File {
 func agentConfigFile(agent *AgentData) *codegen.File {
 	imports := []*codegen.ImportSpec{
 		{Path: "errors"},
-		{Path: "goa.design/goa-ai/runtime/agent/planner"},
+		{Path: "github.com/CaliLuke/loom-mcp/runtime/agent/planner"},
 	}
 	// Import model client when a compress-history policy is configured so the
 	// generated config can reference model.Client in the HistoryModel field.
 	if agent.RunPolicy.History != nil && agent.RunPolicy.History.Mode == "compress" {
 		imports = append(imports,
-			&codegen.ImportSpec{Path: "goa.design/goa-ai/runtime/agent/model", Name: "model"},
+			&codegen.ImportSpec{Path: "github.com/CaliLuke/loom-mcp/runtime/agent/model", Name: "model"},
 		)
 	}
 	// Determine whether fmt is needed. The config Validate() uses fmt.Errorf for
@@ -168,7 +168,7 @@ func agentConfigFile(agent *AgentData) *codegen.File {
 	if len(agent.MCPToolsets) > 0 {
 		needsFmt = true
 		imports = append(imports,
-			&codegen.ImportSpec{Name: "mcpruntime", Path: "goa.design/goa-ai/runtime/mcp"},
+			&codegen.ImportSpec{Name: "mcpruntime", Path: "github.com/CaliLuke/loom-mcp/runtime/mcp"},
 		)
 	}
 	// Scan toolsets to see if any tool is method-backed; if so, fmt is also required.
@@ -218,9 +218,9 @@ func agentRegistryFile(agent *AgentData) *codegen.File {
 		{Path: "context"},
 		{Path: "errors"},
 		{Path: "fmt"},
-		{Path: "goa.design/goa-ai/runtime/agent/engine"},
-		{Path: "goa.design/goa-ai/runtime/agent/planner"},
-		{Path: "goa.design/goa-ai/runtime/agent/runtime", Name: "agentsruntime"},
+		{Path: "github.com/CaliLuke/loom-mcp/runtime/agent/engine"},
+		{Path: "github.com/CaliLuke/loom-mcp/runtime/agent/planner"},
+		{Path: "github.com/CaliLuke/loom-mcp/runtime/agent/runtime", Name: "agentsruntime"},
 	}
 	// fmt needed for error messages in registry (used in both MCP and Used toolsets paths)
 	hasExternal := false
@@ -266,8 +266,8 @@ func agentRegistryFile(agent *AgentData) *codegen.File {
 	}
 	if needsTools {
 		imports = append(imports,
-			&codegen.ImportSpec{Path: "goa.design/goa-ai/runtime/agent/tools"},
-			&codegen.ImportSpec{Path: "goa.design/goa-ai/runtime/agent/runtime/hints", Name: "hints"},
+			&codegen.ImportSpec{Path: "github.com/CaliLuke/loom-mcp/runtime/agent/tools"},
+			&codegen.ImportSpec{Path: "github.com/CaliLuke/loom-mcp/runtime/agent/runtime/hints", Name: "hints"},
 		)
 	}
 	usedAliases := make(map[string]struct{})
@@ -418,16 +418,16 @@ func agentToolsFiles(agent *AgentData) []*codegen.File {
 			Tools:       specs.tools,
 		}
 		imports := []*codegen.ImportSpec{
-			{Path: "goa.design/goa-ai/runtime/agent/runtime", Name: "runtime"},
-			{Path: "goa.design/goa-ai/runtime/agent", Name: "agent"},
-			{Path: "goa.design/goa-ai/runtime/agent/tools"},
-			{Path: "goa.design/goa-ai/runtime/agent/planner"},
+			{Path: "github.com/CaliLuke/loom-mcp/runtime/agent/runtime", Name: "runtime"},
+			{Path: "github.com/CaliLuke/loom-mcp/runtime/agent", Name: "agent"},
+			{Path: "github.com/CaliLuke/loom-mcp/runtime/agent/tools"},
+			{Path: "github.com/CaliLuke/loom-mcp/runtime/agent/planner"},
 			// Per-toolset specs package for typed payloads
 			{Path: ts.SpecsImportPath, Name: ts.SpecsPackageName + "specs"},
 		}
 		if toolsetHasHintTemplates(ts) {
 			imports = append(imports, &codegen.ImportSpec{
-				Path: "goa.design/goa-ai/runtime/agent/runtime/hints",
+				Path: "github.com/CaliLuke/loom-mcp/runtime/agent/runtime/hints",
 				Name: "hints",
 			})
 		}
@@ -470,7 +470,7 @@ func agentToolsConsumerFiles(agent *AgentData) []*codegen.File {
 			ProviderAlias: ts.AgentToolsPackage,
 		}
 		imports := []*codegen.ImportSpec{
-			{Path: "goa.design/goa-ai/runtime/agent/runtime", Name: "runtime"},
+			{Path: "github.com/CaliLuke/loom-mcp/runtime/agent/runtime", Name: "runtime"},
 			{Path: ts.AgentToolsImportPath, Name: ts.AgentToolsPackage},
 		}
 		sections := []*codegen.SectionTemplate{
@@ -514,10 +514,10 @@ func mcpExecutorFiles(agent *AgentData) []*codegen.File {
 			{Path: "context"},
 			{Path: "encoding/json"},
 			{Path: "strings"},
-			{Path: "goa.design/goa-ai/runtime/agent/planner"},
-			{Path: "goa.design/goa-ai/runtime/agent/runtime", Name: "runtime"},
-			{Path: "goa.design/goa-ai/runtime/agent/telemetry"},
-			{Path: "goa.design/goa-ai/runtime/mcp", Name: "mcpruntime"},
+			{Path: "github.com/CaliLuke/loom-mcp/runtime/agent/planner"},
+			{Path: "github.com/CaliLuke/loom-mcp/runtime/agent/runtime", Name: "runtime"},
+			{Path: "github.com/CaliLuke/loom-mcp/runtime/agent/telemetry"},
+			{Path: "github.com/CaliLuke/loom-mcp/runtime/mcp", Name: "mcpruntime"},
 			// Per-toolset specs package (codecs + schemas)
 			{Path: ts.SpecsImportPath, Name: ts.SpecsPackageName},
 		}
@@ -557,8 +557,8 @@ func usedToolsFiles(agent *AgentData) []*codegen.File {
 		}
 		data := agentToolsetFileData{PackageName: ts.PackageName, Toolset: ts, Tools: specs.tools}
 		imports := []*codegen.ImportSpec{
-			{Path: "goa.design/goa-ai/runtime/agent/tools"},
-			{Path: "goa.design/goa-ai/runtime/agent/planner"},
+			{Path: "github.com/CaliLuke/loom-mcp/runtime/agent/tools"},
+			{Path: "github.com/CaliLuke/loom-mcp/runtime/agent/planner"},
 			// Per-toolset specs package for typed payloads
 			{Path: ts.SpecsImportPath, Name: ts.SpecsPackageName + "specs"},
 		}
@@ -686,17 +686,17 @@ func serviceExecutorFiles(agent *AgentData) []*codegen.File {
 			{Path: "errors"},
 			{Path: "fmt"},
 			{Path: "strings"},
-			{Path: "goa.design/goa-ai/runtime/agent/planner"},
-			{Path: "goa.design/goa-ai/runtime/agent/runtime", Name: "runtime"},
-			{Path: "goa.design/goa-ai/runtime/agent/tools"},
-			{Path: "goa.design/goa-ai/runtime/toolregistry"},
+			{Path: "github.com/CaliLuke/loom-mcp/runtime/agent/planner"},
+			{Path: "github.com/CaliLuke/loom-mcp/runtime/agent/runtime", Name: "runtime"},
+			{Path: "github.com/CaliLuke/loom-mcp/runtime/agent/tools"},
+			{Path: "github.com/CaliLuke/loom-mcp/runtime/toolregistry"},
 			{Path: ts.SpecsImportPath, Name: specsAlias},
 		}
 		if needsAgentBounds {
-			imports = append(imports, &codegen.ImportSpec{Path: "goa.design/goa-ai/runtime/agent", Name: "agent"})
+			imports = append(imports, &codegen.ImportSpec{Path: "github.com/CaliLuke/loom-mcp/runtime/agent", Name: "agent"})
 		}
 		if needsRawJSON {
-			imports = append(imports, &codegen.ImportSpec{Path: "goa.design/goa-ai/runtime/agent/rawjson"})
+			imports = append(imports, &codegen.ImportSpec{Path: "github.com/CaliLuke/loom-mcp/runtime/agent/rawjson"})
 		}
 		if needsSharedTypes {
 			typesPath := filepath.ToSlash(filepath.Join(agent.Genpkg, "types"))

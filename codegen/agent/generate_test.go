@@ -4,8 +4,8 @@ import (
 	"path/filepath"
 	"testing"
 
+	agentsExpr "github.com/CaliLuke/loom-mcp/expr/agent"
 	"github.com/stretchr/testify/require"
-	agentsExpr "goa.design/goa-ai/expr/agent"
 )
 
 func TestMCPExecutorFiles_DeduplicatesSameOriginToolsets(t *testing.T) {

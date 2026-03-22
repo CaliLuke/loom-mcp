@@ -4,14 +4,14 @@ import (
 	"path/filepath"
 	"testing"
 
+	codegen "github.com/CaliLuke/loom-mcp/codegen/agent"
+	"github.com/CaliLuke/loom-mcp/codegen/testhelpers"
+	. "github.com/CaliLuke/loom-mcp/dsl"
+	agentsExpr "github.com/CaliLuke/loom-mcp/expr/agent"
+	goadsl "github.com/CaliLuke/loom/dsl"
+	"github.com/CaliLuke/loom/eval"
+	goaexpr "github.com/CaliLuke/loom/expr"
 	"github.com/stretchr/testify/require"
-	codegen "goa.design/goa-ai/codegen/agent"
-	"goa.design/goa-ai/codegen/testhelpers"
-	. "goa.design/goa-ai/dsl"
-	agentsExpr "goa.design/goa-ai/expr/agent"
-	goadsl "goa.design/goa/v3/dsl"
-	"goa.design/goa/v3/eval"
-	goaexpr "goa.design/goa/v3/expr"
 )
 
 // TestRegistryToolsetSpecsStructure verifies that registry-backed toolsets

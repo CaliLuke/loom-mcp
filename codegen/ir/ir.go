@@ -1,10 +1,10 @@
 package ir
 
-import "goa.design/goa/v3/codegen/service"
+import "github.com/CaliLuke/loom/codegen/service"
 
 type (
 	// Design is the deterministic, generator-facing intermediate representation of a
-	// Goa-AI agent/toolset design.
+	// loom-mcp agent/toolset design.
 	//
 	// Design is intended to be stable and ordered deterministically so generators
 	// can iterate it without relying on map iteration order.

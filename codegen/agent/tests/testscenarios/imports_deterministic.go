@@ -1,8 +1,8 @@
 package testscenarios
 
 import (
-	. "goa.design/goa-ai/dsl"
-	. "goa.design/goa/v3/dsl"
+	. "github.com/CaliLuke/loom-mcp/dsl"
+	. "github.com/CaliLuke/loom/dsl"
 )
 
 // ImportsDeterministic uses a user type with a custom package path to exercise alias stability.

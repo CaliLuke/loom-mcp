@@ -7,11 +7,11 @@ import (
 	"errors"
 	"time"
 
-	"goa.design/goa-ai/runtime/agent/hooks"
-	"goa.design/goa-ai/runtime/agent/prompt"
-	"goa.design/goa-ai/runtime/agent/runlog"
-	rthints "goa.design/goa-ai/runtime/agent/runtime/hints"
-	"goa.design/goa-ai/runtime/agent/session"
+	"github.com/CaliLuke/loom-mcp/runtime/agent/hooks"
+	"github.com/CaliLuke/loom-mcp/runtime/agent/prompt"
+	"github.com/CaliLuke/loom-mcp/runtime/agent/runlog"
+	rthints "github.com/CaliLuke/loom-mcp/runtime/agent/runtime/hints"
+	"github.com/CaliLuke/loom-mcp/runtime/agent/session"
 )
 
 // hookActivityName is the engine-registered activity that publishes hook events

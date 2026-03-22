@@ -3,10 +3,10 @@ package codegen
 import (
 	"testing"
 
+	agentsExpr "github.com/CaliLuke/loom-mcp/expr/agent"
+	"github.com/CaliLuke/loom/eval"
+	goaexpr "github.com/CaliLuke/loom/expr"
 	"github.com/stretchr/testify/require"
-	agentsExpr "goa.design/goa-ai/expr/agent"
-	"goa.design/goa/v3/eval"
-	goaexpr "goa.design/goa/v3/expr"
 )
 
 func TestBuildToolsetOwners_ServiceExportWins(t *testing.T) {

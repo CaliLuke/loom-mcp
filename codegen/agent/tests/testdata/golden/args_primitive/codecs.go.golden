@@ -10,8 +10,8 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	toolhttp "goa.design/goa-ai/alpha/toolsets/ops/http"
-	"goa.design/goa-ai/runtime/agent/tools"
+	toolhttp "github.com/CaliLuke/loom-mcp/alpha/toolsets/ops/http"
+	"github.com/CaliLuke/loom-mcp/runtime/agent/tools"
 	"strings"
 )
 

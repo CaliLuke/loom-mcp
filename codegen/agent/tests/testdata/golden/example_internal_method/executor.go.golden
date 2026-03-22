@@ -9,10 +9,10 @@ package profiles
 import (
 	"context"
 	"errors"
-	scribe "goa.design/goa-ai/alpha/agents/scribe"
-	profilesspecs "goa.design/goa-ai/alpha/toolsets/profiles"
-	"goa.design/goa-ai/runtime/agent/planner"
-	"goa.design/goa-ai/runtime/agent/runtime"
+	scribe "github.com/CaliLuke/loom-mcp/alpha/agents/scribe"
+	profilesspecs "github.com/CaliLuke/loom-mcp/alpha/toolsets/profiles"
+	"github.com/CaliLuke/loom-mcp/runtime/agent/planner"
+	"github.com/CaliLuke/loom-mcp/runtime/agent/runtime"
 )
 
 // profiles executor stub for ScribeAgent

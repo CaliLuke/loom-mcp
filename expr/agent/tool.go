@@ -3,10 +3,10 @@ package agent
 import (
 	"fmt"
 
-	"goa.design/goa-ai/boundedresult"
-	"goa.design/goa/v3/codegen"
-	"goa.design/goa/v3/eval"
-	goaexpr "goa.design/goa/v3/expr"
+	"github.com/CaliLuke/loom-mcp/boundedresult"
+	"github.com/CaliLuke/loom/codegen"
+	"github.com/CaliLuke/loom/eval"
+	goaexpr "github.com/CaliLuke/loom/expr"
 )
 
 type (
@@ -169,7 +169,7 @@ type (
 // AddMeta adds metadata to the tool expression.
 //
 // This method exists so Goa's standard Meta DSL helper can attach metadata to
-// goa-ai agent tool expressions without goa-ai introducing a parallel Meta DSL.
+// loom-mcp agent tool expressions without loom-mcp introducing a parallel Meta DSL.
 func (t *ToolExpr) AddMeta(name string, value ...string) {
 	if t.Meta == nil {
 		t.Meta = make(goaexpr.MetaExpr)
@@ -180,7 +180,7 @@ func (t *ToolExpr) AddMeta(name string, value ...string) {
 // DeleteMeta removes the metadata entry identified by name.
 //
 // This method exists so Goa's standard RemoveMeta DSL helper can remove metadata
-// from goa-ai agent tool expressions.
+// from loom-mcp agent tool expressions.
 func (t *ToolExpr) DeleteMeta(name string) {
 	delete(t.Meta, name)
 }
@@ -234,7 +234,7 @@ func (s *ServerDataExpr) EvalName() string {
 	return fmt.Sprintf("server data %q", s.Kind)
 }
 
-// SetDescription implements goa.design/goa/v3/expr.DescriptionHolder so the Goa
+// SetDescription implements github.com/CaliLuke/loom/expr.DescriptionHolder so the Goa
 // Description DSL helper can be used inside ServerData configuration blocks.
 func (s *ServerDataExpr) SetDescription(d string) {
 	s.Description = d

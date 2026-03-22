@@ -1,7 +1,7 @@
 package shared
 
 import (
-	"goa.design/goa/v3/expr"
+	"github.com/CaliLuke/loom/expr"
 )
 
 // BuildHTTPServiceBase creates the HTTP/JSON-RPC service expression with

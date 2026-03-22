@@ -4,7 +4,7 @@
 package design
 
 import (
-	. "goa.design/goa/v3/dsl"
+	. "github.com/CaliLuke/loom/dsl"
 )
 
 var _ = API("registry", func() {
@@ -37,7 +37,7 @@ var _ = Service("registry", func() {
 	// Set a non-generic protobuf package to avoid collisions when multiple Goa
 	// services named "registry" are linked into the same binary.
 	GRPC(func() {
-		Package("goa_ai_registry")
+		Package("loom_mcp_registry")
 	})
 
 	// ---- Provider Operations ----

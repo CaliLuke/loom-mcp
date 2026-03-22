@@ -4,9 +4,9 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/CaliLuke/loom-mcp/runtime/agent/planner"
+	"github.com/CaliLuke/loom-mcp/runtime/agent/tools"
 	"github.com/stretchr/testify/require"
-	"goa.design/goa-ai/runtime/agent/planner"
-	"goa.design/goa-ai/runtime/agent/tools"
 )
 
 // fakeValidationError mimics the generated ValidationError without importing the concrete type.

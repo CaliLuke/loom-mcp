@@ -1,9 +1,9 @@
 package dsl
 
 import (
-	"goa.design/goa/v3/eval"
+	"github.com/CaliLuke/loom/eval"
 
-	agentsexpr "goa.design/goa-ai/expr/agent"
+	agentsexpr "github.com/CaliLuke/loom-mcp/expr/agent"
 )
 
 // Cursor declares which optional String field on the tool payload carries the

@@ -6,7 +6,7 @@
 
 package progress
 
-import types "goa.design/goa-ai/gen/types"
+import types "github.com/CaliLuke/loom-mcp/gen/types"
 
 type (
 	// SetStepStatusPayload defines the JSON payload for the progress.set_step_status tool.

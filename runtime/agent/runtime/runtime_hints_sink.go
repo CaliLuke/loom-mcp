@@ -4,10 +4,10 @@ import (
 	"context"
 	"encoding/json"
 
-	"goa.design/goa-ai/runtime/agent/rawjson"
-	rthints "goa.design/goa-ai/runtime/agent/runtime/hints"
-	"goa.design/goa-ai/runtime/agent/stream"
-	"goa.design/goa-ai/runtime/agent/tools"
+	"github.com/CaliLuke/loom-mcp/runtime/agent/rawjson"
+	rthints "github.com/CaliLuke/loom-mcp/runtime/agent/runtime/hints"
+	"github.com/CaliLuke/loom-mcp/runtime/agent/stream"
+	"github.com/CaliLuke/loom-mcp/runtime/agent/tools"
 )
 
 // hintingSink decorates a stream.Sink by enriching tool start events with

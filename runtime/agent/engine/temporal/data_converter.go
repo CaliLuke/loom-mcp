@@ -4,22 +4,22 @@ import (
 	"encoding/json"
 	"fmt"
 
+	"github.com/CaliLuke/loom-mcp/runtime/agent"
+	"github.com/CaliLuke/loom-mcp/runtime/agent/api"
+	"github.com/CaliLuke/loom-mcp/runtime/agent/model"
+	"github.com/CaliLuke/loom-mcp/runtime/agent/planner"
+	"github.com/CaliLuke/loom-mcp/runtime/agent/run"
+	aitools "github.com/CaliLuke/loom-mcp/runtime/agent/tools"
 	commonpb "go.temporal.io/api/common/v1"
 	"go.temporal.io/sdk/converter"
-	"goa.design/goa-ai/runtime/agent"
-	"goa.design/goa-ai/runtime/agent/api"
-	"goa.design/goa-ai/runtime/agent/model"
-	"goa.design/goa-ai/runtime/agent/planner"
-	"goa.design/goa-ai/runtime/agent/run"
-	aitools "goa.design/goa-ai/runtime/agent/tools"
 )
 
 type (
-	// agentJSONPayloadConverter wraps Temporal's JSON payload converter for goa-ai
+	// agentJSONPayloadConverter wraps Temporal's JSON payload converter for loom-mcp
 	// workflow payloads.
 	//
 	// Temporal's default JSON converter decodes `any` fields as JSON-shaped values
-	// (map[string]any, []any, float64, ...). goa-ai forbids `any` across
+	// (map[string]any, []any, float64, ...). loom-mcp forbids `any` across
 	// workflow/activity/signal boundaries: tool results and artifacts must cross
 	// boundaries as canonical JSON bytes (`api.ToolEvent` / `api.ToolArtifact`).
 	//
@@ -39,7 +39,7 @@ type (
 	planActivityInputWire struct {
 		// NOTE: These fields intentionally do not use JSON tags.
 		//
-		// Temporal's default JSON payload converter marshals goa-ai runtime API types
+		// Temporal's default JSON payload converter marshals loom-mcp runtime API types
 		// (e.g. api.PlanActivityInput) using encoding/json defaults, which emit the
 		// Go field names ("AgentID", "RunID", ...). We must decode that payload
 		// verbatim to preserve correctness for existing workflow histories.
@@ -70,18 +70,18 @@ type (
 	}
 )
 
-// NewAgentDataConverter returns a Temporal data converter that enforces goa-ai
+// NewAgentDataConverter returns a Temporal data converter that enforces loom-mcp
 // workflow boundary contracts.
 //
 // Temporal's default JSON payload converter decodes `any` fields as JSON-shaped
-// values (map[string]any, []any, float64, ...). goa-ai forbids `any` across
+// values (map[string]any, []any, float64, ...). loom-mcp forbids `any` across
 // workflow/activity/signal boundaries: it must be represented as canonical JSON
 // bytes (json.RawMessage) and decoded back into typed Go values using the tool's
 // generated codecs at the execution boundary (activities), not inside workflow
 // serialization.
 //
 // This converter:
-//   - Provides stable encoding/decoding for goa-ai API envelopes.
+//   - Provides stable encoding/decoding for loom-mcp API envelopes.
 //   - Fails fast if planner.ToolResult crosses a Temporal boundary (use
 //     api.ToolEvent instead).
 //

@@ -3,7 +3,7 @@ package reminder
 import (
 	"strings"
 
-	"goa.design/goa-ai/runtime/agent/model"
+	"github.com/CaliLuke/loom-mcp/runtime/agent/model"
 )
 
 // InjectMessages returns a copy of messages with the provided reminders

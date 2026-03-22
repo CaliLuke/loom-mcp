@@ -4,11 +4,11 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/CaliLuke/loom/expr"
 	"github.com/leanovate/gopter"
 	"github.com/leanovate/gopter/gen"
 	"github.com/leanovate/gopter/prop"
 	"github.com/stretchr/testify/require"
-	"goa.design/goa/v3/expr"
 )
 
 // TestImportPathResolutionConsistency verifies Property 14: Import Path Resolution Consistency.
@@ -125,11 +125,11 @@ func TestGatherAttributeImports_UnionVariants(t *testing.T) {
 		},
 	}
 
-	imports := GatherAttributeImports("goa.design/goa-ai", att)
+	imports := GatherAttributeImports("github.com/CaliLuke/loom-mcp", att)
 
 	require.Len(t, imports, 1)
 	require.Equal(t, "types", imports[0].Name)
-	require.Equal(t, "goa.design/goa-ai/gen/types", imports[0].Path)
+	require.Equal(t, "github.com/CaliLuke/loom-mcp/gen/types", imports[0].Path)
 }
 
 // genValidGenPkg generates valid generation package paths.
@@ -137,7 +137,7 @@ func genValidGenPkg() gopter.Gen {
 	return gen.OneConstOf(
 		"example.com/myapp/gen",
 		"github.com/user/project/gen",
-		"goa.design/goa-ai/gen",
+		"github.com/CaliLuke/loom-mcp/gen",
 		"example.com/deep/nested/path/gen",
 	)
 }
@@ -147,7 +147,7 @@ func genValidBasePkg() gopter.Gen {
 	return gen.OneConstOf(
 		"example.com/myapp",
 		"github.com/user/project",
-		"goa.design/goa-ai",
+		"github.com/CaliLuke/loom-mcp",
 		"example.com/deep/nested/path",
 	)
 }

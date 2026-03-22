@@ -1,4 +1,4 @@
-// Package pulse provides a thin goa-ai specific wrapper around Pulse streams.
+// Package pulse provides a thin loom-mcp specific wrapper around Pulse streams.
 // It mirrors the layering used across existing deployments: callers build a
 // Redis client, pass it to New, and receive a typed interface that exposes only
 // the operations needed by the stream sink.
@@ -33,7 +33,7 @@ type (
 		OperationTimeout time.Duration
 	}
 
-	// Client exposes the subset of Pulse APIs required by the goa-ai stream sink.
+	// Client exposes the subset of Pulse APIs required by the loom-mcp stream sink.
 	// Implementations wrap goa.design/pulse streaming and provide type-safe access
 	// to stream operations.
 	Client interface {

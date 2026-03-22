@@ -10,9 +10,9 @@ import (
 	"sync"
 	"time"
 
-	pulseclients "goa.design/goa-ai/features/stream/pulse/clients/pulse"
-	"goa.design/goa-ai/runtime/agent/telemetry"
-	"goa.design/goa-ai/runtime/toolregistry"
+	pulseclients "github.com/CaliLuke/loom-mcp/features/stream/pulse/clients/pulse"
+	"github.com/CaliLuke/loom-mcp/runtime/agent/telemetry"
+	"github.com/CaliLuke/loom-mcp/runtime/toolregistry"
 	"goa.design/pulse/streaming"
 	streamopts "goa.design/pulse/streaming/options"
 

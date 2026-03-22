@@ -4,10 +4,10 @@ import (
 	"errors"
 	"testing"
 
+	"github.com/CaliLuke/loom-mcp/runtime/agent/model"
+	"github.com/CaliLuke/loom-mcp/runtime/agent/run"
 	"github.com/stretchr/testify/require"
 	"go.temporal.io/sdk/temporal"
-	"goa.design/goa-ai/runtime/agent/model"
-	"goa.design/goa-ai/runtime/agent/run"
 )
 
 func TestNewRunCompletedEventPreservesTemporalProviderErrorEnvelope(t *testing.T) {

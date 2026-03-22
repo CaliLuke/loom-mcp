@@ -4,8 +4,8 @@ import (
 	"encoding/json"
 	"testing"
 
-	"goa.design/goa-ai/runtime/agent/tools"
-	"goa.design/goa-ai/runtime/toolregistry"
+	"github.com/CaliLuke/loom-mcp/runtime/agent/tools"
+	"github.com/CaliLuke/loom-mcp/runtime/toolregistry"
 
 	"github.com/leanovate/gopter"
 	"github.com/leanovate/gopter/gen"

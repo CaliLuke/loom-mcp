@@ -3,7 +3,7 @@ package codegen
 import (
 	"strings"
 
-	goaexpr "goa.design/goa/v3/expr"
+	goaexpr "github.com/CaliLuke/loom/expr"
 )
 
 // stripStructPkgMeta returns a shallow copy of att with struct:pkg:* locator

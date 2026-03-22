@@ -7,12 +7,12 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/CaliLuke/loom-mcp/runtime/agent/telemetry"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/codes"
 	"go.opentelemetry.io/otel/propagation"
 	"go.opentelemetry.io/otel/trace"
-	"goa.design/goa-ai/runtime/agent/telemetry"
 )
 
 // OperationType identifies the type of registry operation for observability.

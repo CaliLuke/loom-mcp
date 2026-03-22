@@ -1,6 +1,6 @@
 package planner
 
-import toolerrors "goa.design/goa-ai/runtime/agent/toolerrors"
+import toolerrors "github.com/CaliLuke/loom-mcp/runtime/agent/toolerrors"
 
 // RetryReason categorizes the type of failure that triggered a retry hint.
 // Policy engines use this to make informed decisions about retry strategies

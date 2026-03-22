@@ -3,8 +3,8 @@ package tests
 import (
 	"testing"
 
-	"goa.design/goa-ai/codegen/agent/tests/testscenarios"
-	"goa.design/goa-ai/testutil"
+	"github.com/CaliLuke/loom-mcp/codegen/agent/tests/testscenarios"
+	"github.com/CaliLuke/loom-mcp/testutil"
 )
 
 // Verifies aggregated specs import and merge multiple per-toolset packages.

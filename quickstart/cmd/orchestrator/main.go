@@ -3,7 +3,7 @@
 // Example main for orchestrator
 //
 // Command:
-// $ goa example example.com/quickstart/design
+// $ loom example example.com/quickstart/design
 
 package main
 
@@ -14,7 +14,7 @@ import (
 
 	chat "example.com/quickstart/gen/orchestrator/agents/chat"
 	"example.com/quickstart/internal/agents/bootstrap"
-	model "goa.design/goa-ai/runtime/agent/model"
+	model "github.com/CaliLuke/loom-mcp/runtime/agent/model"
 )
 
 // This example main demonstrates running the agent using the generated bootstrap.

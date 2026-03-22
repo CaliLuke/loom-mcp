@@ -4,13 +4,13 @@ import (
 	"strings"
 	"testing"
 
+	codegen "github.com/CaliLuke/loom-mcp/codegen/agent"
+	. "github.com/CaliLuke/loom-mcp/dsl"
+	agentsExpr "github.com/CaliLuke/loom-mcp/expr/agent"
+	. "github.com/CaliLuke/loom/dsl"
+	"github.com/CaliLuke/loom/eval"
+	goaexpr "github.com/CaliLuke/loom/expr"
 	"github.com/stretchr/testify/require"
-	codegen "goa.design/goa-ai/codegen/agent"
-	. "goa.design/goa-ai/dsl"
-	agentsExpr "goa.design/goa-ai/expr/agent"
-	. "goa.design/goa/v3/dsl"
-	"goa.design/goa/v3/eval"
-	goaexpr "goa.design/goa/v3/expr"
 )
 
 // Ensures external MCP toolsets are materialized as self-contained types (no aliases).
@@ -37,7 +37,7 @@ func TestExternalMCPToolset_SelfContainedTypes(t *testing.T) {
 	require.True(t, eval.Execute(design, nil), eval.Context.Error())
 	require.NoError(t, eval.RunDSL())
 
-	data, err := codegen.BuildDataForTest("goa.design/goa-ai", []eval.Root{goaexpr.Root, agentsExpr.Root})
+	data, err := codegen.BuildDataForTest("github.com/CaliLuke/loom-mcp", []eval.Root{goaexpr.Root, agentsExpr.Root})
 	require.NoError(t, err)
 	require.NotNil(t, data)
 	svc := data.Services[0]

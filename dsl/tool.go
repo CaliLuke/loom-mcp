@@ -3,11 +3,11 @@ package dsl
 import (
 	"strings"
 
-	"goa.design/goa/v3/eval"
-	goaexpr "goa.design/goa/v3/expr"
+	"github.com/CaliLuke/loom/eval"
+	goaexpr "github.com/CaliLuke/loom/expr"
 
-	agentsexpr "goa.design/goa-ai/expr/agent"
-	mcpexpr "goa.design/goa-ai/expr/mcp"
+	agentsexpr "github.com/CaliLuke/loom-mcp/expr/agent"
+	mcpexpr "github.com/CaliLuke/loom-mcp/expr/mcp"
 )
 
 // Tool declares a tool for agents or MCP servers. It has two distinct use cases:
@@ -246,7 +246,7 @@ func Return(val any, args ...any) {
 //
 // Each ServerData entry has:
 //   - a Kind identifier used by consumers (UIs, sinks) to dispatch decoders, and
-//   - a schema type, which goa-ai uses to generate a JSON codec so values remain
+//   - a schema type, which loom-mcp uses to generate a JSON codec so values remain
 //     workflow-safe (canonical JSON bytes) and can be decoded reliably by tools,
 //     runtimes, and downstream consumers.
 //

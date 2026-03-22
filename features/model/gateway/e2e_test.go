@@ -6,8 +6,8 @@ import (
 	"sync/atomic"
 	"testing"
 
-	"goa.design/goa-ai/runtime/agent/model"
-	"goa.design/goa-ai/runtime/agent/rawjson"
+	"github.com/CaliLuke/loom-mcp/runtime/agent/model"
+	"github.com/CaliLuke/loom-mcp/runtime/agent/rawjson"
 )
 
 // --- Test helpers ---

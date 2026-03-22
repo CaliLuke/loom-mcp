@@ -5,8 +5,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/CaliLuke/loom-mcp/runtime/agent/runlog"
 	"github.com/stretchr/testify/require"
-	"goa.design/goa-ai/runtime/agent/runlog"
 )
 
 func TestStoreAppendAndList(t *testing.T) {

@@ -5,7 +5,7 @@ import (
 	"testing"
 	"text/template"
 
-	"goa.design/goa-ai/runtime/agent/tools"
+	"github.com/CaliLuke/loom-mcp/runtime/agent/tools"
 )
 
 func TestCompileHintTemplates_Since(t *testing.T) {

@@ -11,9 +11,9 @@ package runtime
 import (
 	"strings"
 
-	agent "goa.design/goa-ai/runtime/agent"
-	rthints "goa.design/goa-ai/runtime/agent/runtime/hints"
-	"goa.design/goa-ai/runtime/agent/tools"
+	agent "github.com/CaliLuke/loom-mcp/runtime/agent"
+	rthints "github.com/CaliLuke/loom-mcp/runtime/agent/runtime/hints"
+	"github.com/CaliLuke/loom-mcp/runtime/agent/tools"
 )
 
 type (

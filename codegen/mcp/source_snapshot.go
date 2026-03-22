@@ -3,8 +3,8 @@ package codegen
 import (
 	"sort"
 
-	"goa.design/goa/v3/eval"
-	"goa.design/goa/v3/expr"
+	"github.com/CaliLuke/loom/eval"
+	"github.com/CaliLuke/loom/expr"
 )
 
 type sourceSnapshot struct {

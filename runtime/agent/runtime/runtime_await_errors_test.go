@@ -5,10 +5,10 @@ import (
 	"errors"
 	"testing"
 
+	"github.com/CaliLuke/loom-mcp/runtime/agent/api"
+	"github.com/CaliLuke/loom-mcp/runtime/agent/engine"
+	engineinmem "github.com/CaliLuke/loom-mcp/runtime/agent/engine/inmem"
 	"github.com/stretchr/testify/require"
-	"goa.design/goa-ai/runtime/agent/api"
-	"goa.design/goa-ai/runtime/agent/engine"
-	engineinmem "goa.design/goa-ai/runtime/agent/engine/inmem"
 )
 
 type signalByIDEngine struct {

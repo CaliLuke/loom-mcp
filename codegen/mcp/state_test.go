@@ -5,11 +5,11 @@ import (
 	"strings"
 	"testing"
 
+	mcpexpr "github.com/CaliLuke/loom-mcp/expr/mcp"
+	gcodegen "github.com/CaliLuke/loom/codegen"
+	"github.com/CaliLuke/loom/eval"
+	"github.com/CaliLuke/loom/expr"
 	"github.com/stretchr/testify/require"
-	mcpexpr "goa.design/goa-ai/expr/mcp"
-	gcodegen "goa.design/goa/v3/codegen"
-	"goa.design/goa/v3/eval"
-	"goa.design/goa/v3/expr"
 )
 
 func TestGenerate_DoesNotReusePreviousPrepareRun(t *testing.T) {

@@ -8,13 +8,13 @@
 //   - Manager — coordinates multiple registry connections and tool discovery
 //
 // For the server-side registry implementation that runs as a standalone
-// service, see the registry package (goa.design/goa-ai/registry).
+// service, see the registry package (github.com/CaliLuke/loom-mcp/registry).
 package registry
 
 import (
 	"context"
 
-	registrypb "goa.design/goa-ai/registry/gen/grpc/registry/pb"
+	registrypb "github.com/CaliLuke/loom-mcp/registry/gen/grpc/registry/pb"
 )
 
 // GRPCClientAdapter wraps a generated gRPC registry client and implements

@@ -3,8 +3,8 @@ package tests
 import (
 	"testing"
 
-	. "goa.design/goa-ai/dsl"
-	. "goa.design/goa/v3/dsl"
+	. "github.com/CaliLuke/loom-mcp/dsl"
+	. "github.com/CaliLuke/loom/dsl"
 )
 
 // Ensures service-local user types use the same import alias as referenced by

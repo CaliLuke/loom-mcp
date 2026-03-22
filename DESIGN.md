@@ -1,4 +1,4 @@
-# Goa-AI: Design-First Agentic Systems
+# Loom MCP: Design-First Agentic Systems
 
 Build intelligent agents, MCP servers, and registry-integrated toolsets from your Goa designs. This plugin extends Goa with agent orchestration, MCP protocol support and centralized registries.
 
@@ -31,7 +31,7 @@ We compose on top of Goa—no forks, minimal templates, and predictable output.
 
 ## Unified Toolset Model
 
-Goa-AI provides a unified `Toolset` construct with configurable providers:
+Loom MCP provides a unified `Toolset` construct with configurable providers:
 
 ```go
 // Local toolset (inline schemas)
@@ -130,7 +130,7 @@ This split is intentional:
 - External MCP transports should use the SDK directly because transport/session semantics are protocol-level concerns.
 - Generated JSON-RPC clients should stay typed and Goa-native because they target Goa-generated MCP services, not arbitrary remote MCP transports.
 
-Both paths converge on the same runtime `Caller` contract and the same tool result normalization logic, so runtime-managed callers and generated callers expose identical multi-content behavior to the rest of goa-ai.
+Both paths converge on the same runtime `Caller` contract and the same tool result normalization logic, so runtime-managed callers and generated callers expose identical multi-content behavior to the rest of loom-mcp.
 
 ## Streaming
 
@@ -170,9 +170,9 @@ Tools are identified by canonical IDs in the format `<toolset>.<tool>` (dot-sepa
 
 ## Agents Quickstart & Example Scaffold
 
-A contextual quickstart file `AGENTS_QUICKSTART.md` is emitted at the module root on `goa gen`, summarizing what was generated and how to wire it. To opt out, invoke `DisableAgentDocs()` inside your API DSL.
+A contextual quickstart file `AGENTS_QUICKSTART.md` is emitted at the module root on `loom gen`, summarizing what was generated and how to wire it. To opt out, invoke `DisableAgentDocs()` inside your API DSL.
 
-The `goa example` phase generates application-owned scaffold under `internal/agents/`:
+The `loom example` phase generates application-owned scaffold under `internal/agents/`:
 
 - `internal/agents/bootstrap/bootstrap.go`: constructs a minimal runtime and registers generated agents
 - `internal/agents/<agent>/planner/planner.go`: planner stub implementing `PlanStart`/`PlanResume`

@@ -17,9 +17,9 @@ import (
 	"go.temporal.io/sdk/worker"
 	"go.temporal.io/sdk/workflow"
 
-	"goa.design/goa-ai/runtime/agent/api"
-	"goa.design/goa-ai/runtime/agent/engine"
-	"goa.design/goa-ai/runtime/agent/telemetry"
+	"github.com/CaliLuke/loom-mcp/runtime/agent/api"
+	"github.com/CaliLuke/loom-mcp/runtime/agent/engine"
+	"github.com/CaliLuke/loom-mcp/runtime/agent/telemetry"
 )
 
 // Options configures the Temporal engine adapter. Either a pre-configured Client
@@ -136,7 +136,7 @@ type InstrumentationOptions struct {
 	DisableMetrics bool
 
 	// TracerOptions is retained for source compatibility but is ignored by the
-	// engine's trace-domain implementation. Traces are emitted by goa-ai's own
+	// engine's trace-domain implementation. Traces are emitted by loom-mcp's own
 	// activity interceptors (new-root spans + OTel links).
 	TracerOptions temporalotel.TracerOptions
 

@@ -5,11 +5,11 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/CaliLuke/loom-mcp/runtime/agent/model"
+	"github.com/CaliLuke/loom-mcp/runtime/agent/planner"
+	"github.com/CaliLuke/loom-mcp/runtime/agent/tools"
+	"github.com/CaliLuke/loom-mcp/runtime/agent/transcript"
 	"github.com/stretchr/testify/require"
-	"goa.design/goa-ai/runtime/agent/model"
-	"goa.design/goa-ai/runtime/agent/planner"
-	"goa.design/goa-ai/runtime/agent/tools"
-	"goa.design/goa-ai/runtime/agent/transcript"
 )
 
 func TestEncodeToolEventsForPlanningOmitsServerDataAndLargeResults(t *testing.T) {

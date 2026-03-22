@@ -8,11 +8,11 @@ import (
 	"testing"
 	"time"
 
+	clientspulse "github.com/CaliLuke/loom-mcp/features/stream/pulse/clients/pulse"
+	"github.com/CaliLuke/loom-mcp/runtime/toolregistry"
 	"github.com/redis/go-redis/v9"
 	"github.com/testcontainers/testcontainers-go"
 	"github.com/testcontainers/testcontainers-go/wait"
-	clientspulse "goa.design/goa-ai/features/stream/pulse/clients/pulse"
-	"goa.design/goa-ai/runtime/toolregistry"
 	"goa.design/pulse/pool"
 	"goa.design/pulse/rmap"
 )

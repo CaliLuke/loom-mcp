@@ -6,12 +6,12 @@ import (
 	"testing"
 	"time"
 
+	"github.com/CaliLuke/loom-mcp/runtime/agent/engine"
+	engineinmem "github.com/CaliLuke/loom-mcp/runtime/agent/engine/inmem"
+	"github.com/CaliLuke/loom-mcp/runtime/agent/session"
+	sessioninmem "github.com/CaliLuke/loom-mcp/runtime/agent/session/inmem"
+	"github.com/CaliLuke/loom-mcp/runtime/agent/telemetry"
 	"github.com/stretchr/testify/require"
-	"goa.design/goa-ai/runtime/agent/engine"
-	engineinmem "goa.design/goa-ai/runtime/agent/engine/inmem"
-	"goa.design/goa-ai/runtime/agent/session"
-	sessioninmem "goa.design/goa-ai/runtime/agent/session/inmem"
-	"goa.design/goa-ai/runtime/agent/telemetry"
 )
 
 type recordingCancelerEngine struct {

@@ -1,6 +1,6 @@
 package agent
 
-import "goa.design/goa/v3/eval"
+import "github.com/CaliLuke/loom/eval"
 
 // FederationExpr captures federation configuration for importing servers
 // and agents from external registries.

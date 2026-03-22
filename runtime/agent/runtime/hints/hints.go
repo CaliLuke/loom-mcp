@@ -10,7 +10,7 @@ import (
 	"text/template"
 	"time"
 
-	"goa.design/goa-ai/runtime/agent/tools"
+	"github.com/CaliLuke/loom-mcp/runtime/agent/tools"
 )
 
 var (

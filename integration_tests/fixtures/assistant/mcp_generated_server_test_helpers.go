@@ -17,10 +17,10 @@ import (
 	mcpAssistantjsonrpcc "example.com/assistant/gen/jsonrpc/mcp_assistant/client"
 	mcpAssistantjssvr "example.com/assistant/gen/jsonrpc/mcp_assistant/server"
 	mcpassistant "example.com/assistant/gen/mcp_assistant"
+	mcpruntime "github.com/CaliLuke/loom-mcp/runtime/mcp"
+	goahttp "github.com/CaliLuke/loom/http"
 	sdkmcp "github.com/modelcontextprotocol/go-sdk/mcp"
 	"github.com/stretchr/testify/require"
-	mcpruntime "goa.design/goa-ai/runtime/mcp"
-	goahttp "goa.design/goa/v3/http"
 )
 
 type rawEventsStream struct {
@@ -144,7 +144,12 @@ func openRawEventsStream(t *testing.T, ctx context.Context, server *httptest.Ser
 func newGeneratedJSONRPCServer(t *testing.T) *httptest.Server {
 	t.Helper()
 
-	svc := NewMcpAssistant()
+	svc := NewMcpAssistantWithOptions(&mcpassistant.MCPAdapterOptions{
+		Logger: func(ctx context.Context, event string, details any) {
+			t.Helper()
+			t.Logf("generated-mcp-adapter event=%s details=%v session_id=%s", event, details, mcpruntime.SessionIDFromContext(ctx))
+		},
+	})
 	endpoints := mcpassistant.NewEndpoints(svc)
 	mux := goahttp.NewMuxer()
 	server := mcpAssistantjssvr.New(
@@ -152,7 +157,10 @@ func newGeneratedJSONRPCServer(t *testing.T) *httptest.Server {
 		mux,
 		goahttp.RequestDecoder,
 		goahttp.ResponseEncoder,
-		func(context.Context, http.ResponseWriter, error) {},
+		func(ctx context.Context, _ http.ResponseWriter, err error) {
+			t.Helper()
+			t.Logf("generated-jsonrpc-server err=%v session_id=%s", err, mcpruntime.SessionIDFromContext(ctx))
+		},
 	)
 	mcpAssistantjssvr.Mount(mux, server)
 	return httptest.NewServer(mux)

@@ -8,7 +8,7 @@ import (
 	"fmt"
 	"strings"
 
-	"goa.design/goa-ai/runtime/agent/model"
+	"github.com/CaliLuke/loom-mcp/runtime/agent/model"
 )
 
 type (
@@ -287,7 +287,7 @@ func Compress(triggerAt, keepRecent int, client model.Client, opts ...CompressOp
 				model.TextPart{Text: "[Conversation Summary]\n" + summaryText},
 			},
 			Meta: map[string]any{
-				"goa_ai_history": "summary",
+				"loom_mcp_history": "summary",
 			},
 		}
 

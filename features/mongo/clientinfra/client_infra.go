@@ -1,3 +1,4 @@
+// Package clientinfra provides shared Mongo client setup helpers.
 package clientinfra
 
 import (

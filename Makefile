@@ -1,7 +1,10 @@
-# Simple developer workflow for goa-ai
+# Simple developer workflow for loom-mcp
 
 GO ?= go
 HTTP_PORT ?= 8888
+LOOM_CORE_MODULE ?= github.com/CaliLuke/loom
+LOOM_MCP_MODULE ?= $(LOOM_CORE_MODULE)
+LOOM_CLI_PACKAGE ?= $(LOOM_CORE_MODULE)/cmd/loom
 
 GOPATH ?= $(shell go env GOPATH)
 GOLANGCI_LINT := $(shell command -v golangci-lint 2>/dev/null)
@@ -75,10 +78,10 @@ run-example:
 	cd example/complete && $(GO) run ./cmd/orchestrator --http-port $(HTTP_PORT)
 
 gen-example:
-	cd example/complete && goa gen example.com/assistant/design
+	cd example/complete && $(GO) run $(LOOM_CLI_PACKAGE) gen example.com/assistant/design
 
 gen-registry:
-	goa gen goa.design/goa-ai/registry/design -o registry
+	$(GO) run $(LOOM_CLI_PACKAGE) gen github.com/CaliLuke/loom-mcp/registry/design -o registry
 
 goa-local:
 	bash ./scripts/goa_core_mode.sh local
@@ -94,4 +97,4 @@ verify-mcp-local:
 	go test ./integration_tests/framework -count=1
 
 regen-assistant-fixture:
-	cd ./integration_tests/fixtures/assistant && goa gen example.com/assistant/design
+	cd ./integration_tests/fixtures/assistant && $(GO) run $(LOOM_CLI_PACKAGE) gen example.com/assistant/design

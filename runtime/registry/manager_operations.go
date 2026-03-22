@@ -4,8 +4,8 @@ import (
 	"context"
 	"time"
 
+	"github.com/CaliLuke/loom-mcp/runtime/agent/telemetry"
 	"go.opentelemetry.io/otel/attribute"
-	"goa.design/goa-ai/runtime/agent/telemetry"
 )
 
 type observedOperation struct {

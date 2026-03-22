@@ -1,2 +1,2 @@
-// Package bedrock wires AWS Bedrock model clients into goa-ai planners.
+// Package bedrock wires AWS Bedrock model clients into loom-mcp planners.
 package bedrock

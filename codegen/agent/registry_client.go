@@ -4,10 +4,10 @@ import (
 	"path/filepath"
 	"time"
 
-	"goa.design/goa-ai/codegen/shared"
-	agentsExpr "goa.design/goa-ai/expr/agent"
-	"goa.design/goa/v3/codegen"
-	goaexpr "goa.design/goa/v3/expr"
+	"github.com/CaliLuke/loom-mcp/codegen/shared"
+	agentsExpr "github.com/CaliLuke/loom-mcp/expr/agent"
+	"github.com/CaliLuke/loom/codegen"
+	goaexpr "github.com/CaliLuke/loom/expr"
 )
 
 type (
@@ -200,7 +200,7 @@ func registryClientFile(data *RegistryClientData) *codegen.File {
 		{Path: "net/http"},
 		{Path: "net/url"},
 		{Path: "time"},
-		{Path: "goa.design/goa-ai/runtime/registry", Name: "registry"},
+		{Path: "github.com/CaliLuke/loom-mcp/runtime/registry", Name: "registry"},
 	}
 
 	sections := []*codegen.SectionTemplate{

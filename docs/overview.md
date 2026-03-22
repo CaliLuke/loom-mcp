@@ -1,16 +1,16 @@
-# Goa‑AI: Design‑First Agentic Systems in Go
+# loom-mcp Overview
 
-Build intelligent, tool‑wielding agents with the confidence of strong types and the power of
-durable execution. Goa‑AI brings the design‑first philosophy you love from Goa to the world of AI
-agents—declare your agents, toolsets, and policies in a clean DSL, and let code generation handle
-the rest.
+`loom-mcp` is the design-first agent framework in this repository. The repo name and Go module
+path are both `github.com/CaliLuke/loom-mcp`, so this guide uses `loom-mcp` for the project name
+and the same path for Go imports.
 
-No more hand‑rolled JSON schemas. No more brittle tool wiring. No more wondering if your agent will
-survive a restart. Just elegant designs that compile into production‑grade systems.
+Build intelligent, tool-wielding agents with the confidence of strong types and the power of
+durable execution. Define agents, toolsets, MCP servers, and policies in Goa design files and let
+code generation handle the infrastructure.
 
-## Why Goa‑AI?
+## Why loom-mcp?
 
-| Challenge                            | How Goa‑AI Helps                                                    |
+| Challenge                            | How loom-mcp Helps                                                  |
 |--------------------------------------|---------------------------------------------------------------------|
 | **LLM workflows feel fragile**       | Type‑safe tool payloads with validations and examples—no ad‑hoc JSON guessing games |
 | **Long‑running agents crash**        | Durable orchestration with automatic retries, time budgets, and deterministic replay |
@@ -27,7 +27,7 @@ DSL → Codegen → Runtime → Engine + Features
 
 Think of it as a pipeline from intention to execution:
 
-1. **DSL** (`goa-ai/dsl`) — Express what you want: agents, tools, policies. Clean, declarative,
+1. **DSL** (`github.com/CaliLuke/loom-mcp/dsl`) — Express what you want: agents, tools, policies. Clean, declarative,
    version‑controlled.
 
 2. **Codegen** (`codegen/agent`, `codegen/mcp`) — Transform your design into typed Go packages:
@@ -129,11 +129,11 @@ Each entry contains the canonical tool ID with full JSON Schemas:
 ```
 
 Schemas derive from the same DSL as your generated specs and codecs. If schema generation fails,
-`goa gen` fails fast—no silent drift between runtime contracts and the JSON catalogue.
+`loom gen` fails fast—no silent drift between runtime contracts and the JSON catalogue.
 
 ### Bounded Tool Results and Bounds Metadata
 
-Some tools naturally return large lists, graphs, or time‑series windows. Goa‑AI lets you mark these
+Some tools naturally return large lists, graphs, or time-series windows. `loom-mcp` lets you mark these
 as **bounded views** so that services remain responsible for trimming while the runtime enforces and
 surfaces the contract:
 
@@ -174,7 +174,7 @@ treated as optional observer data.
 
 ### Tool Payload Defaults (Feature)
 
-Goa‑AI applies Goa‑style default semantics to **tool payloads**. Codecs decode into pointer‑field
+This repo applies Goa-style default semantics to **tool payloads**. Codecs decode into pointer-field
 JSON helper types (to distinguish missing vs zero) and then transform into the final payload type
 using `codegen.GoTransform`, which injects default values deterministically.
 
@@ -191,8 +191,8 @@ invariants generator maintainers must keep consistent.
 package design
 
 import (
-	. "goa.design/goa/v3/dsl"
-	. "goa.design/goa-ai/dsl"
+	. "github.com/CaliLuke/loom/dsl"
+	. "github.com/CaliLuke/loom-mcp/dsl"
 )
 
 var _ = API("orchestrator", func() {})
@@ -231,7 +231,7 @@ var _ = Service("orchestrator", func() {
 ### 2. Generate
 
 ```bash
-goa gen example.com/quickstart/design
+loom gen example.com/quickstart/design
 ```
 
 ### 3. Run (cmd/demo/main.go)
@@ -244,9 +244,9 @@ import (
 	"fmt"
 
 	chat "example.com/quickstart/gen/orchestrator/agents/chat"
-	"goa.design/goa-ai/runtime/agent/model"
-	"goa.design/goa-ai/runtime/agent/planner"
-	"goa.design/goa-ai/runtime/agent/runtime"
+	"goa.design/loom-mcp/runtime/agent/model"
+	"goa.design/loom-mcp/runtime/agent/planner"
+	"goa.design/loom-mcp/runtime/agent/runtime"
 )
 
 // A tiny planner: always replies, no tools (perfect for first run)
@@ -423,7 +423,7 @@ reconstruction.
 
 ## DSL Reference
 
-The DSL package (`goa-ai/dsl`) provides declarative functions for defining agents, toolsets,
+The DSL package (`loom-mcp/dsl`) provides declarative functions for defining agents, toolsets,
 policies, and MCP servers within Goa service designs.
 
 ### Agent Definition
@@ -853,7 +853,7 @@ processes to submit runs.
 **Compose with export/use** — Prefer agent‑as‑tool over brittle cross‑service contracts. Single
 history, unified debugging.
 
-**Regenerate often** — DSL change → `goa gen` → lint/test → run. Never edit `gen/` manually.
+**Regenerate often** — DSL change → `loom gen` → lint/test → run. Never edit `gen/` manually.
 
 ### Advertising Tools to Planners
 
@@ -1071,7 +1071,7 @@ rt := runtime.New(runtime.WithStream(sink))
 ### Manual Bridge (Direct Bus Access)
 
 ```go
-import "goa.design/goa-ai/runtime/agent/stream/bridge"
+import "goa.design/loom-mcp/runtime/agent/stream/bridge"
 
 sub, _ := bridge.Register(rt.Bus, sink)
 defer sub.Close()

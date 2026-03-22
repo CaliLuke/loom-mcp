@@ -10,7 +10,7 @@ import (
 	"errors"
 	"time"
 
-	"goa.design/goa-ai/runtime/agent/prompt"
+	"github.com/CaliLuke/loom-mcp/runtime/agent/prompt"
 )
 
 type (

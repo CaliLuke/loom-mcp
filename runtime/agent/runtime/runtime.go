@@ -1,4 +1,4 @@
-// Package runtime implements the core orchestration engine for goa-ai agents.
+// Package runtime implements the core orchestration engine for loom-mcp agents.
 // It coordinates workflow execution, planner invocations, tool scheduling, policy
 // enforcement, memory persistence, and event streaming. The Runtime instance serves
 // as the central registry for agents, toolsets, models, and manages their lifecycle
@@ -32,20 +32,20 @@ import (
 	"sync"
 	"time"
 
-	agent "goa.design/goa-ai/runtime/agent"
-	"goa.design/goa-ai/runtime/agent/engine"
-	"goa.design/goa-ai/runtime/agent/hooks"
-	"goa.design/goa-ai/runtime/agent/memory"
-	"goa.design/goa-ai/runtime/agent/model"
-	"goa.design/goa-ai/runtime/agent/planner"
-	"goa.design/goa-ai/runtime/agent/policy"
-	"goa.design/goa-ai/runtime/agent/prompt"
-	"goa.design/goa-ai/runtime/agent/reminder"
-	"goa.design/goa-ai/runtime/agent/runlog"
-	"goa.design/goa-ai/runtime/agent/session"
-	"goa.design/goa-ai/runtime/agent/stream"
-	"goa.design/goa-ai/runtime/agent/telemetry"
-	"goa.design/goa-ai/runtime/agent/tools"
+	agent "github.com/CaliLuke/loom-mcp/runtime/agent"
+	"github.com/CaliLuke/loom-mcp/runtime/agent/engine"
+	"github.com/CaliLuke/loom-mcp/runtime/agent/hooks"
+	"github.com/CaliLuke/loom-mcp/runtime/agent/memory"
+	"github.com/CaliLuke/loom-mcp/runtime/agent/model"
+	"github.com/CaliLuke/loom-mcp/runtime/agent/planner"
+	"github.com/CaliLuke/loom-mcp/runtime/agent/policy"
+	"github.com/CaliLuke/loom-mcp/runtime/agent/prompt"
+	"github.com/CaliLuke/loom-mcp/runtime/agent/reminder"
+	"github.com/CaliLuke/loom-mcp/runtime/agent/runlog"
+	"github.com/CaliLuke/loom-mcp/runtime/agent/session"
+	"github.com/CaliLuke/loom-mcp/runtime/agent/stream"
+	"github.com/CaliLuke/loom-mcp/runtime/agent/telemetry"
+	"github.com/CaliLuke/loom-mcp/runtime/agent/tools"
 
 	"text/template"
 )

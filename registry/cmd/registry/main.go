@@ -40,8 +40,8 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/CaliLuke/loom-mcp/registry"
 	"github.com/redis/go-redis/v9"
-	"goa.design/goa-ai/registry"
 )
 
 func main() {

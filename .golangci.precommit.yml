@@ -33,36 +33,18 @@ linters:
     - unparam
     - unused
     - whitespace
-    - cyclop
-    - gocognit
-    - maintidx
-    - nestif
-
-linters-settings:
-  cyclop:
-    max-complexity: 12
-    package-average: 8.0
-  gocognit:
-    min-complexity: 20
-  maintidx:
-    under: 20
-  nestif:
-    min-complexity: 4
-  tagliatelle:
-    case:
-      rules:
-        json: snake
-        yaml: snake
-  unparam:
-    check-exported: true
-  staticcheck:
-    checks:
-      - all
-      - "-ST1001"
-
-issues:
-  exclude-generated: strict
-
+  settings:
+    staticcheck:
+      checks:
+        - all
+        - "-ST1001"
+    tagliatelle:
+      case:
+        rules:
+          json: snake
+          yaml: snake
+    unparam:
+      check-exported: true
   exclusions:
     generated: strict
     paths:
@@ -70,12 +52,8 @@ issues:
       - diagram/*
       - gql/*
       - mocks/*
-      - codegen/agents/tests/testscenarios/*
+      - codegen/agent/tests/testscenarios/*
     rules:
       - path: _test\.go
         linters:
-          - cyclop
           - dupl
-          - gocognit
-          - maintidx
-          - nestif

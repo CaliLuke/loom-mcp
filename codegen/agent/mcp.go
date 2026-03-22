@@ -4,10 +4,10 @@ import (
 	"fmt"
 	"sort"
 
-	"goa.design/goa-ai/codegen/naming"
-	agentsExpr "goa.design/goa-ai/expr/agent"
-	mcpexpr "goa.design/goa-ai/expr/mcp"
-	goaexpr "goa.design/goa/v3/expr"
+	"github.com/CaliLuke/loom-mcp/codegen/naming"
+	agentsExpr "github.com/CaliLuke/loom-mcp/expr/agent"
+	mcpexpr "github.com/CaliLuke/loom-mcp/expr/mcp"
+	goaexpr "github.com/CaliLuke/loom/expr"
 )
 
 // populateMCPToolset discovers and populates tools for external MCP toolsets by

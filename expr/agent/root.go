@@ -4,9 +4,9 @@ import (
 	"fmt"
 	"sort"
 
-	"goa.design/goa-ai/codegen/naming"
-	"goa.design/goa/v3/eval"
-	goaexpr "goa.design/goa/v3/expr"
+	"github.com/CaliLuke/loom-mcp/codegen/naming"
+	"github.com/CaliLuke/loom/eval"
+	goaexpr "github.com/CaliLuke/loom/expr"
 )
 
 // RootExpr represents the top-level root for all agent and toolset
@@ -67,7 +67,7 @@ func (r *RootExpr) DependsOn() []eval.Root {
 
 // Packages returns packages considered for DSL error attribution.
 func (r *RootExpr) Packages() []string {
-	return []string{"goa.design/goa-ai/dsl"}
+	return []string{"github.com/CaliLuke/loom-mcp/dsl"}
 }
 
 // WalkSets exposes the nested expressions to the eval engine.

@@ -1,4 +1,4 @@
-// Package temporal implements the goa-ai workflow engine adapter backed by
+// Package temporal implements the loom-mcp workflow engine adapter backed by
 // Temporal (https://temporal.io). It satisfies the generic engine.Engine
 // interface, allowing generated code and the runtime to orchestrate durable
 // workflows without importing the Temporal SDK directly.
@@ -20,7 +20,7 @@
 //	    ClientOptions: &client.Options{
 //	        HostPort:  "temporal:7233",
 //	        Namespace: "default",
-//	        // Required: enforce goa-ai's workflow boundary contract.
+//	        // Required: enforce loom-mcp's workflow boundary contract.
 //	        // Tool results/artifacts cross boundaries as canonical JSON bytes (api.ToolEvent/api.ToolArtifact),
 //	        // and planner.ToolResult is rejected if it ever tries to cross a Temporal boundary.
 //	        // Pass the generated tool specs aggregate for the agent(s) hosted by this runtime.

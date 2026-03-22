@@ -3,10 +3,10 @@ package runtime
 import (
 	"encoding/json"
 
-	agent "goa.design/goa-ai/runtime/agent"
-	"goa.design/goa-ai/runtime/agent/engine"
-	"goa.design/goa-ai/runtime/agent/reminder"
-	"goa.design/goa-ai/runtime/agent/tools"
+	agent "github.com/CaliLuke/loom-mcp/runtime/agent"
+	"github.com/CaliLuke/loom-mcp/runtime/agent/engine"
+	"github.com/CaliLuke/loom-mcp/runtime/agent/reminder"
+	"github.com/CaliLuke/loom-mcp/runtime/agent/tools"
 )
 
 // addToolsetLocked registers a toolset and its specs without acquiring the lock.

@@ -6,9 +6,9 @@ import (
 	"testing"
 	"time"
 
+	"github.com/CaliLuke/loom-mcp/runtime/agent/telemetry"
 	"github.com/stretchr/testify/require"
 	"go.opentelemetry.io/otel/codes"
-	"goa.design/goa-ai/runtime/agent/telemetry"
 )
 
 func TestNoopLogger(_ *testing.T) {

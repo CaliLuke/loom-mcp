@@ -4,11 +4,11 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/CaliLuke/loom-mcp/codegen/agent/tests/testscenarios"
+	. "github.com/CaliLuke/loom-mcp/dsl"
+	"github.com/CaliLuke/loom-mcp/testutil"
+	goadsl "github.com/CaliLuke/loom/dsl"
 	"github.com/stretchr/testify/require"
-	"goa.design/goa-ai/codegen/agent/tests/testscenarios"
-	. "goa.design/goa-ai/dsl"
-	"goa.design/goa-ai/testutil"
-	goadsl "goa.design/goa/v3/dsl"
 )
 
 // Validates the Quickstart README via a golden for the stable header section

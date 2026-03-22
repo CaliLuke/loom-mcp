@@ -2,7 +2,7 @@
 // runtime-ready Go packages. The generator mirrors Goa's own pipeline:
 // evaluated roots are converted into template data, toolset ownership is
 // resolved directly from those roots inside this package, and the final files
-// are rendered through goa.design/goa/v3/codegen.Files.
+// are rendered through github.com/CaliLuke/loom/codegen.Files.
 //
 // Toolsets fall into two main categories and drive different generated helpers:
 //   - Service-backed toolsets (method-backed tools declared in Uses blocks) emit

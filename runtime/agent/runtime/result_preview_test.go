@@ -4,10 +4,10 @@ import (
 	"testing"
 	"text/template"
 
+	"github.com/CaliLuke/loom-mcp/runtime/agent"
+	rthints "github.com/CaliLuke/loom-mcp/runtime/agent/runtime/hints"
+	"github.com/CaliLuke/loom-mcp/runtime/agent/tools"
 	"github.com/stretchr/testify/require"
-	"goa.design/goa-ai/runtime/agent"
-	rthints "goa.design/goa-ai/runtime/agent/runtime/hints"
-	"goa.design/goa-ai/runtime/agent/tools"
 )
 
 func TestFormatResultPreviewUsesExplicitResultAndBoundsShape(t *testing.T) {

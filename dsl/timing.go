@@ -3,8 +3,8 @@ package dsl
 import (
 	"time"
 
-	agentsexpr "goa.design/goa-ai/expr/agent"
-	"goa.design/goa/v3/eval"
+	agentsexpr "github.com/CaliLuke/loom-mcp/expr/agent"
+	"github.com/CaliLuke/loom/eval"
 )
 
 // Timing groups timing configuration for an agent's run. Use Timing inside a

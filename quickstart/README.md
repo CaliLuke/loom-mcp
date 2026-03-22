@@ -5,7 +5,7 @@ Minimal, copy‑paste runnable example to go from zero → talking agent. Keep y
 ## Prerequisites
 
 - Go 1.24+
-- Goa v3 CLI (`go install goa.design/goa/v3/cmd/goa@latest`)
+- Goa v3 CLI (`go install github.com/CaliLuke/loom/cmd/loom@latest`)
 - Temporal dev server (for workflow execution)
   - Easiest: Docker one‑liner below, or use Temporalite
 
@@ -14,8 +14,8 @@ Minimal, copy‑paste runnable example to go from zero → talking agent. Keep y
 ```
 mkdir -p $GOPATH/src/example.com/quickstart && cd $_
 go mod init example.com/quickstart
-go get goa.design/goa/v3@latest
-go get goa.design/goa-ai@latest
+go get github.com/CaliLuke/loom@latest
+go get goa.design/loom-mcp@latest
 ```
 
 ## 2) Add a tiny design (design/design.go)
@@ -26,8 +26,8 @@ This declares one service (`orchestrator`) with a single agent (`chat`) and a ti
 package design
 
 import (
-    . "goa.design/goa/v3/dsl"
-    . "goa.design/goa-ai/dsl"
+    . "github.com/CaliLuke/loom/dsl"
+    . "goa.design/loom-mcp/dsl"
 )
 
 var _ = API("orchestrator", func() {})
@@ -63,8 +63,8 @@ var _ = Service("orchestrator", func() {
 ## 3) Generate code and example
 
 ```bash
-goa gen example.com/quickstart/design
-goa example example.com/quickstart/design
+loom gen example.com/quickstart/design
+loom example example.com/quickstart/design
 ```
 
 This creates:
@@ -101,7 +101,7 @@ Then modify the bootstrap to use the Temporal engine:
 
 ```go
 import (
-    "goa.design/goa-ai/runtime/agent/engine/temporal"
+    "goa.design/loom-mcp/runtime/agent/engine/temporal"
     "go.temporal.io/sdk/client"
 
     // Your generated tool specs aggregate.
@@ -113,7 +113,7 @@ eng, _ := temporal.NewWorker(temporal.Options{
     ClientOptions: &client.Options{
         HostPort:      "127.0.0.1:7233",
         Namespace:     "default",
-        // Required: enforce goa-ai's workflow boundary contract.
+        // Required: enforce loom-mcp's workflow boundary contract.
         // Tool results/artifacts cross boundaries as canonical JSON bytes (api.ToolEvent/api.ToolArtifact).
         DataConverter: temporal.NewAgentDataConverter(specs.Spec),
     },
@@ -149,7 +149,7 @@ func (p *examplePlanner) PlanStart(ctx context.Context, in *planner.PlanInput) (
 
 ## (Optional) HTTP / JSON‑RPC server
 
-`goa example` also generated an HTTP JSON‑RPC server under `cmd/orchestrator`.
+`loom example` also generated an HTTP JSON‑RPC server under `cmd/orchestrator`.
 
 - Start it: `go run ./cmd/orchestrator -debug`
 - It mounts the MCP‑compatible JSON‑RPC API on POST `/rpc`.
@@ -169,10 +169,10 @@ curl -s http://localhost:8080/rpc \
       }' | jq .
 ```
 
-Note: tool execution requires wiring executors. For a first run, the in‑process demo above is the simplest path. When you bind tools to service methods (`BindTo` in the design), `goa example` will scaffold executors you can fill in.
+Note: tool execution requires wiring executors. For a first run, the in‑process demo above is the simplest path. When you bind tools to service methods (`BindTo` in the design), `loom example` will scaffold executors you can fill in.
 
 ## Notes
 
-- Always change design in `design/*.go` then run `goa gen` (and `goa example` as needed). Never edit `gen/` by hand.
+- Always change design in `design/*.go` then run `loom gen` (and `loom example` as needed). Never edit `gen/` by hand.
 - Generated tool specs live under `gen/<svc>/agents/<agent>/specs/…` with typed codecs.
 - Policies and caps are enforced by the runtime during execution; keep planners small and declarative.

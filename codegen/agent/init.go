@@ -1,7 +1,7 @@
 package codegen
 
 import (
-	goacodegen "goa.design/goa/v3/codegen"
+	goacodegen "github.com/CaliLuke/loom/codegen"
 )
 
 // Register agent code generation plugins with Goa.

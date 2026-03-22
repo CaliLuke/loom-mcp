@@ -6,7 +6,7 @@ import (
 	"strings"
 	"text/template"
 
-	"goa.design/goa-ai/runtime/agent/planner"
+	"github.com/CaliLuke/loom-mcp/runtime/agent/planner"
 )
 
 var (

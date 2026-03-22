@@ -5,9 +5,9 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/CaliLuke/loom-mcp/codegen/agent/tests/testscenarios"
+	codegen "github.com/CaliLuke/loom/codegen"
 	"github.com/stretchr/testify/require"
-	"goa.design/goa-ai/codegen/agent/tests/testscenarios"
-	codegen "goa.design/goa/v3/codegen"
 )
 
 func TestGolden_ServerData_UsesGeneratedCodec(t *testing.T) {

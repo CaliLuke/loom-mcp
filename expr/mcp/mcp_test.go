@@ -3,8 +3,8 @@ package mcp
 import (
 	"testing"
 
+	"github.com/CaliLuke/loom/expr"
 	"github.com/stretchr/testify/require"
-	"goa.design/goa/v3/expr"
 )
 
 func TestMCPExpr_EvalName(t *testing.T) {

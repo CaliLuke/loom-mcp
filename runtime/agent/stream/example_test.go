@@ -4,11 +4,11 @@ import (
 	"context"
 	"fmt"
 
-	"goa.design/goa-ai/runtime/agent/hooks"
-	runloginmem "goa.design/goa-ai/runtime/agent/runlog/inmem"
-	agentsruntime "goa.design/goa-ai/runtime/agent/runtime"
-	"goa.design/goa-ai/runtime/agent/stream"
-	streambridge "goa.design/goa-ai/runtime/agent/stream/bridge"
+	"github.com/CaliLuke/loom-mcp/runtime/agent/hooks"
+	runloginmem "github.com/CaliLuke/loom-mcp/runtime/agent/runlog/inmem"
+	agentsruntime "github.com/CaliLuke/loom-mcp/runtime/agent/runtime"
+	"github.com/CaliLuke/loom-mcp/runtime/agent/stream"
+	streambridge "github.com/CaliLuke/loom-mcp/runtime/agent/stream/bridge"
 )
 
 // collectSink is a simple in-memory sink used in examples to capture events.

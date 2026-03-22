@@ -12,9 +12,9 @@ import (
 	"strings"
 	"time"
 
-	"goa.design/goa-ai/codegen/naming"
-	agentsExpr "goa.design/goa-ai/expr/agent"
-	"goa.design/goa-ai/runtime/agent/engine"
+	"github.com/CaliLuke/loom-mcp/codegen/naming"
+	agentsExpr "github.com/CaliLuke/loom-mcp/expr/agent"
+	"github.com/CaliLuke/loom-mcp/runtime/agent/engine"
 )
 
 // newRunPolicyData copies the evaluated DSL run policy into immutable template

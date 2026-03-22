@@ -1,5 +1,5 @@
 // Package openai provides a model.Client implementation backed by the OpenAI
-// Chat Completions API. It translates goa-ai requests into ChatCompletion
+// Chat Completions API. It translates loom-mcp requests into ChatCompletion
 // calls using github.com/sashabaranov/go-openai and maps responses back to the
 // generic planner structures.
 package openai
@@ -12,9 +12,9 @@ import (
 
 	openai "github.com/sashabaranov/go-openai"
 
-	"goa.design/goa-ai/runtime/agent/model"
-	"goa.design/goa-ai/runtime/agent/rawjson"
-	"goa.design/goa-ai/runtime/agent/tools"
+	"github.com/CaliLuke/loom-mcp/runtime/agent/model"
+	"github.com/CaliLuke/loom-mcp/runtime/agent/rawjson"
+	"github.com/CaliLuke/loom-mcp/runtime/agent/tools"
 )
 
 // ChatClient captures the subset of the go-openai client used by the adapter.

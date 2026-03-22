@@ -7,8 +7,8 @@ package basic
 import (
 	"context"
 
-	"goa.design/goa-ai/runtime/agent/policy"
-	"goa.design/goa-ai/runtime/agent/tools"
+	"github.com/CaliLuke/loom-mcp/runtime/agent/policy"
+	"github.com/CaliLuke/loom-mcp/runtime/agent/tools"
 )
 
 // Options configures the basic policy engine.

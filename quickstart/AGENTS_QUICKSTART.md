@@ -1,18 +1,18 @@
-# Welcome to Your Goa-AI Agents! 👋
+# Welcome to Your loom-mcp Agents! 👋
 
 This guide is your personal co-pilot, generated specifically to help you bring your new AI agents to life. We'll go from the code Goa just created to a running agent in a few simple steps.
 
 > **A Quick Note on This File:**
 >
 > - **Want to hide me?** No problem! Add `DisableAgentDocs()` to your `API` design and I won't be generated next time.
-> - **Safety First:** It's safe to delete this file. It will reappear, updated, after the next `goa gen`.
+> - **Safety First:** It's safe to delete this file. It will reappear, updated, after the next `loom gen`.
 > - **Golden Rule:** Never edit the `gen/` directory directly. Your design files are the source of truth!
 
 ---
 
 ## 1. Your Design, At a Glance ✨
 
-Here’s a map of what Goa-AI just built for you based on your `design/*.go` files.
+Here’s a map of what loom-mcp just built for you based on your `design/*.go` files.
 * **Service `orchestrator`:**
     * **Agent `chat`** (ID: `orchestrator.chat`):
         * **Mission:** *Friendly Q&A assistant*
@@ -35,8 +35,8 @@ The fastest way to run your agent is using the generated example scaffolding.
 
 ```bash
 # 1. Generate code and example files
-goa gen <module>/design
-goa example <module>/design
+loom gen <module>/design
+loom example <module>/design
 
 # 2. Run the generated example
 go run ./cmd/<service>/
@@ -58,10 +58,10 @@ import (
     "context"
     "fmt"
 
-    // The core Goa-AI runtime and planner interfaces
-    "goa.design/goa-ai/runtime/agent/runtime"
-    "goa.design/goa-ai/runtime/agent/model"
-    "goa.design/goa-ai/runtime/agent/planner"
+    // The core loom-mcp runtime and planner interfaces
+    "github.com/CaliLuke/loom-mcp/runtime/agent/runtime"
+    "github.com/CaliLuke/loom-mcp/runtime/agent/model"
+    "github.com/CaliLuke/loom-mcp/runtime/agent/planner"
 
     // === Your Generated Agent Packages ===
     // (Goa generated these based on your design)
@@ -222,7 +222,7 @@ Your agents can do useful work by calling other parts of your system. Here's how
 
 #### Local Service-Backed Tools (`BindTo`) — Executor-First
 
-When your tool maps to a service method (via `BindTo`), Goa-AI generates:
+When your tool maps to a service method (via `BindTo`), loom-mcp generates:
 - Typed tool specs/codecs under `gen/<svc>/agents/<agent>/specs/<toolset>/`
 - Transform helpers (when shapes are compatible): `transforms.go`
 - An application-owned executor stub under `internal/agents/<agent>/toolsets/<toolset>/execute.go`
@@ -251,8 +251,8 @@ package <toolset>
 
 import (
     "context"
-    "goa.design/goa-ai/runtime/agent/planner"
-    "goa.design/goa-ai/runtime/agent/runtime"
+    "github.com/CaliLuke/loom-mcp/runtime/agent/planner"
+    "github.com/CaliLuke/loom-mcp/runtime/agent/runtime"
     specs "<module>/gen/<svc>/agents/<agent>/specs/<toolset>"
 )
 
@@ -331,7 +331,7 @@ cfg := <agentpkg>.<AgentConfig>{
 
 ## 7. Agents Calling Agents (The `Exports` Keyword)
 
-When an agent `Exports` a toolset, other agents can call it. Goa-AI generates a special `agenttools` package to make this easy.
+When an agent `Exports` a toolset, other agents can call it. loom-mcp generates a special `agenttools` package to make this easy.
 
 ```go
 // In your main.go, register the exported toolset so others can find it.
@@ -359,7 +359,7 @@ if err := rt.RegisterToolset(reg); err != nil { panic(err) }
 * **Policies & Caps:** The `RunPolicy` in your design (max tool calls, time budgets) is automatically enforced by the runtime.
 * **Persistence & Observability:** The `runtime.New` function accepts `runtime.Options` to configure production-grade components like a Temporal engine, MongoDB for memory, and telemetry hooks.
 * **Temporal DataConverter (required):** When you use the Temporal engine, configure the Temporal client with `temporal.NewAgentDataConverter(...)` to enforce goa‑ai's boundary contract: tool results and artifacts cross workflow boundaries as canonical JSON bytes (`api.ToolEvent` / `api.ToolArtifact`), and `planner.ToolResult` is rejected if it ever tries to cross a Temporal boundary.
-* **Registries & Discovery:** When you declare registries and `FromRegistry(...)` toolsets in your DSL, Goa-AI generates typed registry HTTP clients under `gen/<svc>/registry/<name>/` plus per-toolset specs helpers (with `DiscoverAndPopulate`, `Specs`, and `RegistryToolsetID`) so you can discover tools at runtime and register executors using `runtime.ToolsetRegistration`.
+* **Registries & Discovery:** When you declare registries and `FromRegistry(...)` toolsets in your DSL, loom-mcp generates typed registry HTTP clients under `gen/<svc>/registry/<name>/` plus per-toolset specs helpers (with `DiscoverAndPopulate`, `Specs`, and `RegistryToolsetID`) so you can discover tools at runtime and register executors using `runtime.ToolsetRegistration`.
 
 ```go
 // Example of production-ready runtime options
@@ -374,7 +374,7 @@ Example: constructing a Temporal engine with the required DataConverter:
 
 ```go
 import (
-    "goa.design/goa-ai/runtime/agent/engine/temporal"
+    "github.com/CaliLuke/loom-mcp/runtime/agent/engine/temporal"
     "go.temporal.io/sdk/client"
 
     // Your generated tool specs aggregate.
@@ -382,11 +382,11 @@ import (
     specs "<module>/gen/<service>/agents/<agent>/specs"
 )
 
-eng, err := temporal.NewWorker(temporal.Options{
+eng, err := temporal.New(temporal.Options{
     ClientOptions: &client.Options{
         HostPort:      "127.0.0.1:7233",
         Namespace:     "default",
-        // Required: enforce goa-ai's workflow boundary contract.
+        // Required: enforce loom-mcp's workflow boundary contract.
         // Tool results/artifacts cross boundaries as canonical JSON bytes (api.ToolEvent/api.ToolArtifact).
         DataConverter: temporal.NewAgentDataConverter(specs.Spec),
     },
@@ -405,7 +405,7 @@ defer eng.Close()
 ## 9. 📜 The Golden Rules: Working with Codegen
 
 * ✍️ **Design First:** Always make changes in your `design/*.go` files.
-* 🔄 **Regenerate:** Run `goa gen <module>/design` to apply your changes.
+* 🔄 **Regenerate:** Run `loom gen <module>/design` to apply your changes.
 * 🚫 **Hands Off `gen/`:** Never edit the `gen/` directory by hand. Your changes will be overwritten!
 
 ---

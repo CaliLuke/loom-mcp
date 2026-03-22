@@ -6,7 +6,7 @@
 
 package lookup
 
-import svc "goa.design/goa-ai/gen/svc"
+import svc "github.com/CaliLuke/loom-mcp/gen/svc"
 
 // ToMethodPayload_ByID converts *ByIDPayload to *svc.DoPayload.
 func ToMethodPayload_ByID(in *ByIDPayload) *svc.DoPayload {

@@ -7,10 +7,10 @@ import (
 	"errors"
 	"strings"
 
-	"goa.design/goa-ai/runtime/agent"
-	goa "goa.design/goa/v3/pkg"
+	"github.com/CaliLuke/loom-mcp/runtime/agent"
+	goa "github.com/CaliLuke/loom/pkg"
 
-	"goa.design/goa-ai/runtime/agent/tools"
+	"github.com/CaliLuke/loom-mcp/runtime/agent/tools"
 )
 
 type (

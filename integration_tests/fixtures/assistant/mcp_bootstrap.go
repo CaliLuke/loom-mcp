@@ -6,7 +6,7 @@ import (
 
 	assistant "example.com/assistant/gen/assistant"
 	mcpassistant "example.com/assistant/gen/mcp_assistant"
-	mcpruntime "goa.design/goa-ai/runtime/mcp"
+	mcpruntime "github.com/CaliLuke/loom-mcp/runtime/mcp"
 )
 
 // NewMcpAssistant returns an MCP server implementation for the assistant
@@ -15,7 +15,14 @@ import (
 // are available during tests. It also shims a static prompt expected by
 // scenarios (e.g., "code_review").
 func NewMcpAssistant() mcpassistant.Service {
-	base := mcpassistant.NewMCPAdapter(NewAssistant(), promptProvider{}, nil)
+	return NewMcpAssistantWithOptions(nil)
+}
+
+// NewMcpAssistantWithOptions returns an MCP server implementation for the
+// assistant service used by the integration test fixture with caller-provided
+// adapter options for diagnostics or instrumentation.
+func NewMcpAssistantWithOptions(opts *mcpassistant.MCPAdapterOptions) mcpassistant.Service {
+	base := mcpassistant.NewMCPAdapter(NewAssistant(), promptProvider{}, opts)
 	return &mcpShim{MCPAdapter: base}
 }
 

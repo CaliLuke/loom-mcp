@@ -4,9 +4,9 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/CaliLuke/loom/codegen"
+	"github.com/CaliLuke/loom/expr"
 	"github.com/stretchr/testify/require"
-	"goa.design/goa/v3/codegen"
-	"goa.design/goa/v3/expr"
 )
 
 func TestPatchCLIForServer_UsesMCPAdapterClient(t *testing.T) {
@@ -73,6 +73,7 @@ func TestGenerateExampleAdapterStubs_ReplacesStub(t *testing.T) {
 	require.Len(t, files, 1)
 	// Body should now contain a call to NewMCPAdapter(NewOrchestrator())
 	found := false
+	//nolint:staticcheck // Tests still inspect the legacy section list while generators migrate to Section.
 	for _, s := range files[0].SectionTemplates {
 		if s.Name == "example-mcp-stub" && strings.Contains(s.Source, "NewMCPAdapter(NewOrchestrator()") {
 			found = true

@@ -6,8 +6,8 @@ import (
 	"io"
 	"sync"
 
-	"goa.design/goa-ai/runtime/agent/model"
-	"goa.design/goa-ai/runtime/agent/telemetry"
+	"github.com/CaliLuke/loom-mcp/runtime/agent/model"
+	"github.com/CaliLuke/loom-mcp/runtime/agent/telemetry"
 
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/codes"
@@ -183,12 +183,12 @@ func modelSpanAttrs(modelID string, req *model.Request) []attribute.KeyValue {
 		return nil
 	}
 	return []attribute.KeyValue{
-		attribute.String("goa_ai.model_id", modelID),
-		attribute.String("goa_ai.run_id", req.RunID),
-		attribute.String("goa_ai.model", req.Model),
-		attribute.String("goa_ai.model_class", string(req.ModelClass)),
-		attribute.Bool("goa_ai.stream", req.Stream),
-		attribute.Bool("goa_ai.thinking", req.Thinking != nil && req.Thinking.Enable),
-		attribute.Int("goa_ai.max_tokens", req.MaxTokens),
+		attribute.String("loom_mcp.model_id", modelID),
+		attribute.String("loom_mcp.run_id", req.RunID),
+		attribute.String("loom_mcp.model", req.Model),
+		attribute.String("loom_mcp.model_class", string(req.ModelClass)),
+		attribute.Bool("loom_mcp.stream", req.Stream),
+		attribute.Bool("loom_mcp.thinking", req.Thinking != nil && req.Thinking.Enable),
+		attribute.Int("loom_mcp.max_tokens", req.MaxTokens),
 	}
 }

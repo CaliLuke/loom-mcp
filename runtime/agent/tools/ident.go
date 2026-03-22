@@ -4,7 +4,7 @@ import "strings"
 
 // Ident is the strong type for globally unique tool identifiers. Tool IDs are
 // canonical strings of the form "toolset.tool" (e.g., "helpers.search",
-// "weather.get_forecast"). This format is consistent across all goa-ai surfaces:
+// "weather.get_forecast"). This format is consistent across all loom-mcp surfaces:
 // planners, hooks, streams, policies, and generated code.
 //
 // Using Ident instead of raw strings provides:

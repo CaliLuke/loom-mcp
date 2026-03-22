@@ -3,9 +3,9 @@ package codegen
 import (
 	"strings"
 
-	agentsExpr "goa.design/goa-ai/expr/agent"
-	goacodegen "goa.design/goa/v3/codegen"
-	goaexpr "goa.design/goa/v3/expr"
+	agentsExpr "github.com/CaliLuke/loom-mcp/expr/agent"
+	goacodegen "github.com/CaliLuke/loom/codegen"
+	goaexpr "github.com/CaliLuke/loom/expr"
 )
 
 // templateFuncMap returns the set of helper functions made available to the

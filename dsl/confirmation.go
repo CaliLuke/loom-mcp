@@ -1,9 +1,9 @@
 package dsl
 
 import (
-	"goa.design/goa/v3/eval"
+	"github.com/CaliLuke/loom/eval"
 
-	agentsexpr "goa.design/goa-ai/expr/agent"
+	agentsexpr "github.com/CaliLuke/loom-mcp/expr/agent"
 )
 
 // Confirmation declares that the current tool always requires explicit out-of-band

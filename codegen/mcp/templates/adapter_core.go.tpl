@@ -274,7 +274,7 @@ func defaultMCPAdapterTelemetryName(opts *MCPAdapterOptions) string {
     if opts != nil && opts.TelemetryName != "" {
         return opts.TelemetryName
     }
-    return "goa-ai/mcp/{{ .MCPPackage }}"
+    return "loom-mcp/mcp/{{ .MCPPackage }}"
 }
 
 func defaultMCPAdapterTracer(opts *MCPAdapterOptions, name string) trace.Tracer {
@@ -292,17 +292,17 @@ func defaultMCPAdapterMetrics(opts *MCPAdapterOptions, name string) (metric.Int6
         meter = otel.Meter(name)
     }
     callCounter, _ := meter.Int64Counter(
-        "goaai.mcp.calls",
+        "loom_mcp.mcp.calls",
         metric.WithUnit("{call}"),
         metric.WithDescription("Total MCP calls handled by the generated adapter."),
     )
     errorCounter, _ := meter.Int64Counter(
-        "goaai.mcp.errors",
+        "loom_mcp.mcp.errors",
         metric.WithUnit("{call}"),
         metric.WithDescription("Total MCP calls handled by the generated adapter that resulted in an error."),
     )
     durationHistogram, _ := meter.Float64Histogram(
-        "goaai.mcp.duration_ms",
+        "loom_mcp.mcp.duration_ms",
         metric.WithUnit("ms"),
         metric.WithDescription("Duration of MCP calls handled by the generated adapter in milliseconds."),
     )
@@ -430,13 +430,22 @@ func (a *MCPAdapter) Initialize(ctx context.Context, p *InitializePayload) (res 
     defer func() {
         a.finishTelemetry(ctx, span, start, attrs, err, false)
     }()
+    requestProtocol := ""
+    requestSessionID := mcpruntime.SessionIDFromContext(ctx)
+    if p != nil {
+        requestProtocol = p.ProtocolVersion
+    }
+    a.log(ctx, "request", map[string]any{
+        "method": "initialize",
+        "session_id": requestSessionID,
+        "protocol_version": requestProtocol,
+    })
     if p == nil || p.ProtocolVersion == "" {
         return nil, goa.PermanentError("invalid_params", "Missing protocolVersion")
     }
     if !a.supportsProtocolVersion(p.ProtocolVersion) {
         return nil, goa.PermanentError("invalid_params", "Unsupported protocol version")
     }
-    requestSessionID := mcpruntime.SessionIDFromContext(ctx)
     sessionID := requestSessionID
     if sessionID == "" && mcpruntime.ResponseWriterFromContext(ctx) != nil {
         sessionID = mcpruntime.EnsureSessionID(ctx)
@@ -446,13 +455,27 @@ func (a *MCPAdapter) Initialize(ctx context.Context, p *InitializePayload) (res 
     if sessionID == "" {
         if a.initialized {
             a.mu.Unlock()
-            return nil, goa.PermanentError("invalid_params", "Already initialized")
+            err = goa.PermanentError("invalid_params", "Already initialized")
+            a.log(ctx, "response", map[string]any{
+                "method": "initialize",
+                "session_id": sessionID,
+                "protocol_version": p.ProtocolVersion,
+                "error": err.Error(),
+            })
+            return nil, err
         }
         a.initialized = true
     } else {
         if _, ok := a.initializedSessions[sessionID]; ok {
             a.mu.Unlock()
-            return nil, goa.PermanentError("invalid_params", "Already initialized")
+            err = goa.PermanentError("invalid_params", "Already initialized")
+            a.log(ctx, "response", map[string]any{
+                "method": "initialize",
+                "session_id": sessionID,
+                "protocol_version": p.ProtocolVersion,
+                "error": err.Error(),
+            })
+            return nil, err
         }
         a.initializedSessions[sessionID] = struct{}{}
     }
@@ -474,11 +497,18 @@ func (a *MCPAdapter) Initialize(ctx context.Context, p *InitializePayload) (res 
     capabilities.Prompts = &PromptsCapability{}
     {{- end }}
 
-    return &InitializeResult{
+    res = &InitializeResult{
         ProtocolVersion: a.mcpProtocolVersion(),
         ServerInfo:      serverInfo,
         Capabilities:    capabilities,
-    }, nil
+    }
+    a.log(ctx, "response", map[string]any{
+        "method": "initialize",
+        "session_id": sessionID,
+        "protocol_version": res.ProtocolVersion,
+        "server_name": serverInfo.Name,
+    })
+    return res, nil
 }
 
 // Ping handles the MCP ping request.

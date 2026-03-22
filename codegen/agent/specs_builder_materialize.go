@@ -5,10 +5,10 @@ import (
 	"sort"
 	"strings"
 
-	"goa.design/goa-ai/codegen/shared"
-	"goa.design/goa/v3/codegen"
-	"goa.design/goa/v3/codegen/service"
-	goaexpr "goa.design/goa/v3/expr"
+	"github.com/CaliLuke/loom-mcp/codegen/shared"
+	"github.com/CaliLuke/loom/codegen"
+	"github.com/CaliLuke/loom/codegen/service"
+	goaexpr "github.com/CaliLuke/loom/expr"
 )
 
 // materialize computes the Go type definition (or alias), its fully-qualified

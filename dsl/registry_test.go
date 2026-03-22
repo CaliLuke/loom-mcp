@@ -4,11 +4,11 @@ import (
 	"testing"
 	"time"
 
+	. "github.com/CaliLuke/loom-mcp/dsl"
+	agentsexpr "github.com/CaliLuke/loom-mcp/expr/agent"
+	. "github.com/CaliLuke/loom/dsl"
+	goaexpr "github.com/CaliLuke/loom/expr"
 	"github.com/stretchr/testify/require"
-	. "goa.design/goa-ai/dsl"
-	agentsexpr "goa.design/goa-ai/expr/agent"
-	. "goa.design/goa/v3/dsl"
-	goaexpr "goa.design/goa/v3/expr"
 )
 
 // TestRegistrySecurityHolder verifies that RegistryExpr implements

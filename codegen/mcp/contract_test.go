@@ -8,11 +8,11 @@ import (
 	"testing"
 	"text/template"
 
+	mcpexpr "github.com/CaliLuke/loom-mcp/expr/mcp"
+	gcodegen "github.com/CaliLuke/loom/codegen"
+	"github.com/CaliLuke/loom/eval"
+	"github.com/CaliLuke/loom/expr"
 	"github.com/stretchr/testify/require"
-	mcpexpr "goa.design/goa-ai/expr/mcp"
-	gcodegen "goa.design/goa/v3/codegen"
-	"goa.design/goa/v3/eval"
-	"goa.design/goa/v3/expr"
 )
 
 func TestPrepareServices_RejectsUnmappedMCPMethods(t *testing.T) {
@@ -295,6 +295,37 @@ func TestGenerateMCPClientAdapter_SpecializesResourceQueryConstruction(t *testin
 	require.Contains(t, rendered, "for _, value := range payload.Tags {")
 	require.Contains(t, rendered, `query.Add("tags", value)`)
 	require.Contains(t, rendered, `query.Add("tenant", payload.Tenant)`)
+}
+
+func TestApplyMCPPolicyHeadersToJSONRPCMount_RewritesRawMountSection(t *testing.T) {
+	header := gcodegen.Header("JSON-RPC server", "server", nil)
+	file := &gcodegen.File{
+		Path: "gen/jsonrpc/assistant/server/server.go",
+		Sections: []gcodegen.Section{
+			header,
+			gcodegen.NewRawSection("jsonrpc-server-mount", `
+// MountAssistant configures the mux to serve the JSON-RPC assistant service methods.
+func MountAssistant(mux goahttp.Muxer, h *Server) {
+	// Mixed transports: mount unified handler that negotiates HTTP vs SSE by Accept header and JSON-RPC method
+	mux.Handle("POST", "/rpc", h.ServeHTTP)
+}
+
+// MountAssistant configures the mux to serve the JSON-RPC assistant service methods.
+func (s *Server) MountAssistant(mux goahttp.Muxer) {
+	MountAssistant(mux, s)
+}
+`),
+		},
+	}
+
+	applyMCPPolicyHeadersToJSONRPCMount([]*gcodegen.File{file})
+
+	rendered := renderGeneratedFile(t, file)
+	require.Contains(t, rendered, `mux.Handle("POST", "/rpc", withMCPPolicyHeaders(h.ServeHTTP))`)
+	require.Contains(t, rendered, `mux.Handle("GET", "/rpc", withMCPPolicyHeaders(h.ServeHTTP))`)
+	require.Contains(t, rendered, `mux.Handle("DELETE", "/rpc", withMCPPolicyHeaders(h.ServeHTTP))`)
+	require.Contains(t, rendered, "func withMCPPolicyHeaders(next http.HandlerFunc) http.HandlerFunc {")
+	require.Contains(t, rendered, `ctx = mcpruntime.WithResponseWriter(ctx, w)`)
 }
 
 func TestPrepareServices_RejectsNonPostJSONRPCPath(t *testing.T) {
@@ -829,23 +860,29 @@ func renderGeneratedFile(t *testing.T, file *gcodegen.File) string {
 	t.Helper()
 
 	var output bytes.Buffer
-	for _, section := range file.SectionTemplates {
-		tmpl := template.New(section.Name).Funcs(template.FuncMap{
-			"comment": gcodegen.Comment,
-			"commandLine": func() string {
-				return ""
-			},
-		})
-		if section.FuncMap != nil {
-			tmpl = tmpl.Funcs(section.FuncMap)
-		}
-		parsed, err := tmpl.Parse(section.Source)
-		require.NoError(t, err)
+	for _, section := range file.AllSections() {
+		switch sec := section.(type) {
+		case *gcodegen.SectionTemplate:
+			tmpl := template.New(sec.Name).Funcs(template.FuncMap{
+				"comment": gcodegen.Comment,
+				"commandLine": func() string {
+					return ""
+				},
+			})
+			if sec.FuncMap != nil {
+				tmpl = tmpl.Funcs(sec.FuncMap)
+			}
+			parsed, err := tmpl.Parse(sec.Source)
+			require.NoError(t, err)
 
-		var rendered bytes.Buffer
-		err = parsed.Execute(&rendered, section.Data)
-		require.NoError(t, err)
-		output.Write(rendered.Bytes())
+			var rendered bytes.Buffer
+			err = parsed.Execute(&rendered, sec.Data)
+			require.NoError(t, err)
+			output.Write(rendered.Bytes())
+		default:
+			err := section.Write(&output)
+			require.NoError(t, err, "render %s", section.SectionName())
+		}
 	}
 
 	require.NotEmpty(t, output.String(), filepath.ToSlash(file.Path))

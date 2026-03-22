@@ -150,7 +150,7 @@ func NewEndpoints(
         _, err := mcpC.Initialize()(ctx, &{{ .MCPPkgAlias }}.InitializePayload{
             ProtocolVersion: "2025-06-18",
             ClientInfo: &{{ .MCPPkgAlias }}.ClientInfo{
-                Name: "goa-ai-adapter",
+                Name: "loom-mcp-adapter",
                 Version: "dev",
             },
         })

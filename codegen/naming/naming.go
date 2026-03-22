@@ -4,7 +4,7 @@ import (
 	"strings"
 	"unicode"
 
-	"goa.design/goa/v3/codegen"
+	"github.com/CaliLuke/loom/codegen"
 )
 
 // SanitizeToken converts an arbitrary string into a filesystem-safe token.

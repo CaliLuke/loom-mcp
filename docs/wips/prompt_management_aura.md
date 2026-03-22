@@ -2,13 +2,13 @@
 
 ## 1. Executive Summary
 
-This document specifies all AURA-side changes required to adopt the goa-ai prompt
+This document specifies all AURA-side changes required to adopt the loom-mcp prompt
 management feature defined in `docs/wips/prompt_management.md`.
 
 The outcome is:
 
 - All AURA prompts become runtime-managed (identity + version + scope resolution).
-- Prompt content is dynamically overrideable (Mongo-backed store via goa-ai).
+- Prompt content is dynamically overrideable (Mongo-backed store via loom-mcp).
 - Prompt usage is observable for EVAL/RL loops.
 - Existing behavior remains functionally equivalent while removing ad hoc prompt
   ownership across services.
@@ -22,7 +22,7 @@ This is written so an agent with no context from prior conversations can execute
 ### 2.1 In Scope (AURA repo)
 
 - Prompt inventory codification (IDs + ownership).
-- Runtime wiring to `WithPromptStore(...)` in AURA services that host goa-ai runtime.
+- Runtime wiring to `WithPromptStore(...)` in AURA services that host loom-mcp runtime.
 - Prompt rendering migration in:
   - `services/chat-agent`
   - `services/atlas-data-agent`
@@ -33,13 +33,13 @@ This is written so an agent with no context from prior conversations can execute
 
 ### 2.2 Out of Scope (this document)
 
-- goa-ai implementation details (covered by `prompt_management.md`).
+- loom-mcp implementation details (covered by `prompt_management.md`).
 - prompt authoring UI.
 - optimizer orchestration (EVAL/RL runner implementation).
 
-### 2.3 Required goa-ai prereq
+### 2.3 Required loom-mcp prereq
 
-The following must already exist in goa-ai:
+The following must already exist in loom-mcp:
 
 - `runtime/agent/prompt/*`
 - `features/prompt/mongo/*`
@@ -161,7 +161,7 @@ the migration strategy for complete coverage.
 ```mermaid
 graph TD
     auraServices[AURA Service Bootstraps] --> runtimeNew[runtime.New WithPromptStore]
-    runtimeNew --> promptRegistry[goa-ai PromptRegistry]
+    runtimeNew --> promptRegistry[loom-mcp PromptRegistry]
     promptRegistry --> mongoOverrides[Mongo Prompt Overrides]
     promptRegistry --> baselineSpecs[AURA Registered PromptSpecs]
 
@@ -175,7 +175,7 @@ graph TD
     pulseStream --> evalPipeline[EVAL/RL analytics pipeline]
 ```
 
-Design rule: AURA owns prompt content and prompt IDs, goa-ai owns prompt runtime
+Design rule: AURA owns prompt content and prompt IDs, loom-mcp owns prompt runtime
 contracts and store mechanics.
 
 ---
@@ -251,7 +251,7 @@ Modify runtime-hosting services:
 
 Changes:
 
-1. Initialize goa-ai prompt Mongo store from existing `mongoClient` and
+1. Initialize loom-mcp prompt Mongo store from existing `mongoClient` and
    `constants.GoaAIRuntimeDB`.
 2. Pass `runtime.WithPromptStore(promptStore)` (or `airuntime.WithPromptStore`)
    into runtime options.
@@ -281,7 +281,7 @@ Target:
    - `aura.shared.preamble`
    - `aura.chat.system`
    - `aura.chat.brief_context`
-4. Ensure created `model.Request` includes prompt refs once goa-ai runtime path
+4. Ensure created `model.Request` includes prompt refs once loom-mcp runtime path
    supports it (for the planner-run path).
 
 Files to modify:
@@ -334,7 +334,7 @@ Current state:
 
 - `services/tasks-designer-agent/service.go` builds prompt strings directly from
   `RenderSystemPrompt(...)` and `RenderUserPrompt(...)`.
-- Service does not use goa-ai runtime (`model.Client` direct call).
+- Service does not use loom-mcp runtime (`model.Client` direct call).
 
 Target:
 
@@ -363,7 +363,7 @@ Current state:
 Target:
 
 1. Ensure generated confirmation prompts are assigned canonical prompt IDs and
-   resolved through goa-ai prompt registry/store.
+   resolved through loom-mcp prompt registry/store.
 2. Migrate ADA toolset registration in:
    - `services/chat-agent/toolsets/ada/register.go`
    to use `WithPromptSpec(...)` where applicable.

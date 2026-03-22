@@ -11,9 +11,9 @@ import (
 	"testing"
 	"time"
 
+	mcpruntime "github.com/CaliLuke/loom-mcp/runtime/mcp"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	mcpruntime "goa.design/goa-ai/runtime/mcp"
 	"gopkg.in/yaml.v3"
 )
 
@@ -45,8 +45,6 @@ type Scenario struct {
 }
 
 // Defaults apply to steps when not explicitly set in a step.
-//
-//nolint:tagliatelle // Scenario fixtures use stable snake_case keys.
 type Defaults struct {
 	Client     string            `yaml:"client"`      // e.g., "jsonrpc.mcp_assistant" (hint to pick generated client)
 	Headers    map[string]string `yaml:"headers"`     // default headers for all steps
@@ -54,15 +52,11 @@ type Defaults struct {
 }
 
 // Pre controls scenario-level behavior (e.g., auto-initialize handshake).
-//
-//nolint:tagliatelle // Scenario fixtures use stable snake_case keys.
 type Pre struct {
 	AutoInitialize *bool `yaml:"auto_initialize"` // default true
 }
 
 // Step defines a single operation invocation using a generated client.
-//
-//nolint:tagliatelle // Scenario fixtures use stable snake_case keys.
 type Step struct {
 	Name         string            `yaml:"name"`
 	Client       string            `yaml:"client"`       // overrides defaults.client
@@ -89,16 +83,12 @@ type Expect struct {
 }
 
 // ExpectRetry describes retry expectations for generated client mode
-//
-//nolint:tagliatelle // Scenario fixtures use stable snake_case keys.
 type ExpectRetry struct {
 	PromptContains string   `yaml:"prompt_contains"`
 	Contains       []string `yaml:"contains"`
 }
 
 // StreamExpect describes streaming expectations.
-//
-//nolint:tagliatelle // Scenario fixtures use stable snake_case keys.
 type StreamExpect struct {
 	MinEvents int              `yaml:"min_events"`
 	TimeoutMS int              `yaml:"timeout_ms"`

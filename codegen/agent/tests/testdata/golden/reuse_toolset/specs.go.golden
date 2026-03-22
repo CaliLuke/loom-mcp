@@ -7,9 +7,9 @@
 package specs
 
 import (
-	shared "goa.design/goa-ai/alpha/toolsets/shared"
-	"goa.design/goa-ai/runtime/agent/policy"
-	tools "goa.design/goa-ai/runtime/agent/tools"
+	shared "github.com/CaliLuke/loom-mcp/alpha/toolsets/shared"
+	"github.com/CaliLuke/loom-mcp/runtime/agent/policy"
+	tools "github.com/CaliLuke/loom-mcp/runtime/agent/tools"
 )
 
 var (

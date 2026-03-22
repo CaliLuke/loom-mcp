@@ -26,10 +26,10 @@ const (
 
 	// TagIdempotencyTranscript is the design-time tag emitted into ToolSpec.Tags
 	// when a tool is declared idempotent across a transcript.
-	TagIdempotencyTranscript = "goa-ai.idempotency=transcript"
+	TagIdempotencyTranscript = "loom-mcp.idempotency=transcript"
 )
 
-const idempotencyTagPrefix = "goa-ai.idempotency="
+const idempotencyTagPrefix = "loom-mcp.idempotency="
 
 // IdempotencyScopeFromTags returns the idempotency scope declared in tags.
 //

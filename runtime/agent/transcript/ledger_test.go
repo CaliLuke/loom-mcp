@@ -5,9 +5,9 @@ import (
 	"testing"
 	"time"
 
-	"goa.design/goa-ai/runtime/agent/memory"
-	"goa.design/goa-ai/runtime/agent/model"
-	"goa.design/goa-ai/runtime/agent/rawjson"
+	"github.com/CaliLuke/loom-mcp/runtime/agent/memory"
+	"github.com/CaliLuke/loom-mcp/runtime/agent/model"
+	"github.com/CaliLuke/loom-mcp/runtime/agent/rawjson"
 )
 
 func TestLedger_BuildAndValidate(t *testing.T) {

@@ -1,5 +1,5 @@
 // Package anthropic provides a model.Client implementation backed by the
-// Anthropic Claude Messages API. It translates goa-ai requests into
+// Anthropic Claude Messages API. It translates loom-mcp requests into
 // anthropic.Message calls using github.com/anthropics/anthropic-sdk-go and maps
 // responses (text, tools, thinking, usage) back into the generic planner
 // structures.
@@ -16,9 +16,9 @@ import (
 	"github.com/anthropics/anthropic-sdk-go/option"
 	"github.com/anthropics/anthropic-sdk-go/packages/ssestream"
 
-	"goa.design/goa-ai/runtime/agent/model"
-	"goa.design/goa-ai/runtime/agent/rawjson"
-	"goa.design/goa-ai/runtime/agent/tools"
+	"github.com/CaliLuke/loom-mcp/runtime/agent/model"
+	"github.com/CaliLuke/loom-mcp/runtime/agent/rawjson"
+	"github.com/CaliLuke/loom-mcp/runtime/agent/tools"
 )
 
 type (

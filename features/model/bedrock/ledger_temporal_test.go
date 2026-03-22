@@ -8,7 +8,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"go.temporal.io/sdk/converter"
 
-	"goa.design/goa-ai/runtime/agent/model"
+	"github.com/CaliLuke/loom-mcp/runtime/agent/model"
 )
 
 type fakeEncodedValue struct {

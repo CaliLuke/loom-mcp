@@ -10,8 +10,8 @@ import (
 	"fmt"
 	"strings"
 
+	genregistry "github.com/CaliLuke/loom-mcp/registry/gen/registry"
 	"github.com/google/uuid"
-	genregistry "goa.design/goa-ai/registry/gen/registry"
 )
 
 type (

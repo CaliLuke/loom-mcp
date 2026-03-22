@@ -5,7 +5,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 
-	"goa.design/goa/v3/expr"
+	"github.com/CaliLuke/loom/expr"
 )
 
 func TestCollectTopLevelValidations(t *testing.T) {

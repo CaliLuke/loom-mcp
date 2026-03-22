@@ -11,9 +11,9 @@ import (
 	"goa.design/pulse/streaming"
 	streamopts "goa.design/pulse/streaming/options"
 
-	clientspulse "goa.design/goa-ai/features/stream/pulse/clients/pulse"
-	mockpulse "goa.design/goa-ai/features/stream/pulse/clients/pulse/mocks"
-	"goa.design/goa-ai/runtime/agent/stream"
+	clientspulse "github.com/CaliLuke/loom-mcp/features/stream/pulse/clients/pulse"
+	mockpulse "github.com/CaliLuke/loom-mcp/features/stream/pulse/clients/pulse/mocks"
+	"github.com/CaliLuke/loom-mcp/runtime/agent/stream"
 )
 
 func TestSubscribeEmitsEvents(t *testing.T) {
@@ -35,7 +35,7 @@ func TestSubscribeEmitsEvents(t *testing.T) {
 		return streamMock, nil
 	})
 	streamMock.AddNewSink(func(ctx context.Context, name string, opts ...streamopts.Sink) (clientspulse.Sink, error) {
-		require.Equal(t, "goa_ai_subscriber", name)
+		require.Equal(t, "loom_mcp_subscriber", name)
 		return sinkMock, nil
 	})
 

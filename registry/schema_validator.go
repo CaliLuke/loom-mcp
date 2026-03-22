@@ -10,8 +10,8 @@ import (
 	"fmt"
 	"sync"
 
+	genregistry "github.com/CaliLuke/loom-mcp/registry/gen/registry"
 	"github.com/santhosh-tekuri/jsonschema/v6"
-	genregistry "goa.design/goa-ai/registry/gen/registry"
 )
 
 type (

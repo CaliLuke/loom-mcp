@@ -1,11 +1,11 @@
-// Package dsl provides the Goa-AI design-time DSL for declaring agents, toolsets,
+// Package dsl provides the loom-mcp design-time DSL for declaring agents, toolsets,
 // MCP servers, registries, and run policies. These functions augment Goa's standard
-// service DSL and drive the goa-ai code generators; they are not used at runtime.
+// service DSL and drive the loom-mcp code generators; they are not used at runtime.
 //
 // # Overview
 //
 // The DSL enables design-first development of LLM-based agents. You declare your
-// agent's capabilities, tools, and policies in Go code, then run `goa gen` to
+// agent's capabilities, tools, and policies in Go code, then run `loom gen` to
 // produce type-safe packages including:
 //
 //   - Agent packages with workflow definitions and planner activities
@@ -16,8 +16,8 @@
 // Import the DSL alongside Goa's standard DSL:
 //
 //	import (
-//	    . "goa.design/goa/v3/dsl"
-//	    . "goa.design/goa-ai/dsl"
+//	    . "github.com/CaliLuke/loom/dsl"
+//	    . "github.com/CaliLuke/loom-mcp/dsl"
 //	)
 //
 // # Mental Model
@@ -145,7 +145,7 @@
 //
 // # Generated Artifacts
 //
-// For each service with agents, `goa gen` produces:
+// For each service with agents, `loom gen` produces:
 //
 //   - gen/<service>/agents/<agent>/ - Agent package with workflow and activities
 //   - gen/<service>/agents/<agent>/specs/ - Tool specs, codecs, and JSON schemas

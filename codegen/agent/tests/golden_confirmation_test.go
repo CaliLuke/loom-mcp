@@ -4,8 +4,8 @@ import (
 	"path/filepath"
 	"testing"
 
-	"goa.design/goa-ai/codegen/agent/tests/testscenarios"
-	"goa.design/goa-ai/testutil"
+	"github.com/CaliLuke/loom-mcp/codegen/agent/tests/testscenarios"
+	"github.com/CaliLuke/loom-mcp/testutil"
 )
 
 func TestGolden_Confirmation(t *testing.T) {

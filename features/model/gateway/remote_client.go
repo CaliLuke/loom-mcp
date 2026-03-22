@@ -3,7 +3,7 @@ package gateway
 import (
 	"context"
 
-	"goa.design/goa-ai/runtime/agent/model"
+	"github.com/CaliLuke/loom-mcp/runtime/agent/model"
 )
 
 // RemoteClient implements model.Client using caller-supplied RPC functions

@@ -3,13 +3,13 @@ package dsl
 import (
 	"time"
 
-	agentsexpr "goa.design/goa-ai/expr/agent"
-	"goa.design/goa/v3/eval"
+	agentsexpr "github.com/CaliLuke/loom-mcp/expr/agent"
+	"github.com/CaliLuke/loom/eval"
 )
 
 // Registry declares a registry source for tool discovery. Registries are
 // centralized catalogs of MCP servers, toolsets, and agents that can be
-// discovered and consumed by goa-ai agents.
+// discovered and consumed by loom-mcp agents.
 //
 // Registry must appear at the top level of a design.
 //

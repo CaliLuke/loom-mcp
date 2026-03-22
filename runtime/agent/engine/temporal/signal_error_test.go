@@ -4,9 +4,9 @@ import (
 	"errors"
 	"testing"
 
+	"github.com/CaliLuke/loom-mcp/runtime/agent/engine"
 	"github.com/stretchr/testify/require"
 	"go.temporal.io/api/serviceerror"
-	"goa.design/goa-ai/runtime/agent/engine"
 )
 
 func TestMapSignalError(t *testing.T) {

@@ -27,6 +27,7 @@ func (s *{{ .ServerStruct }}) shouldHandleSSE(r *http.Request) bool {
 	}
 	body, err := io.ReadAll(r.Body)
 	if err != nil {
+		s.errhandler(r.Context(), &jsonrpcResponseCapture{}, fmt.Errorf("failed to inspect JSON-RPC request for SSE dispatch: %w", err))
 		return false
 	}
 	_ = r.Body.Close()
@@ -39,6 +40,7 @@ func (s *{{ .ServerStruct }}) shouldHandleSSE(r *http.Request) bool {
 
 	var req jsonrpc.RawRequest
 	if err := json.Unmarshal(trimmed, &req); err != nil {
+		s.errhandler(r.Context(), &jsonrpcResponseCapture{}, fmt.Errorf("failed to inspect JSON-RPC request for SSE dispatch: %w", err))
 		return false
 	}
 

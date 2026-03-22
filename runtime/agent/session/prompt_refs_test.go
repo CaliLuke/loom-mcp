@@ -7,9 +7,9 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	"goa.design/goa-ai/runtime/agent/prompt"
-	"goa.design/goa-ai/runtime/agent/session"
-	sessioninmem "goa.design/goa-ai/runtime/agent/session/inmem"
+	"github.com/CaliLuke/loom-mcp/runtime/agent/prompt"
+	"github.com/CaliLuke/loom-mcp/runtime/agent/session"
+	sessioninmem "github.com/CaliLuke/loom-mcp/runtime/agent/session/inmem"
 )
 
 func TestResolvePromptRefsIncludesChildRuns(t *testing.T) {

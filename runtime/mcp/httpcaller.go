@@ -10,7 +10,7 @@ import (
 )
 
 const (
-	defaultMCPClientName    = "goa-ai"
+	defaultMCPClientName    = "loom-mcp"
 	defaultMCPClientVersion = "dev"
 	defaultMCPHTTPTimeout   = 30 * time.Second
 )

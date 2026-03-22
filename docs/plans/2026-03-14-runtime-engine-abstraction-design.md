@@ -2,7 +2,7 @@
 
 ## Goal
 
-Keep the public Goa-AI runtime API engine-agnostic while still supporting fast
+Keep the public loom-mcp runtime API engine-agnostic while still supporting fast
 worker-failure detection and bounded queue wait when the Temporal engine is in
 use.
 
@@ -19,14 +19,14 @@ That split is correct inside the workflow engine, but exposing those knobs via
 Temporal-shaped. The leak is especially visible because the in-memory engine has
 no meaningful interpretation for queue-wait or heartbeat settings.
 
-Goa-AI should keep the author-facing and runtime-facing contract focused on
+loom-mcp should keep the author-facing and runtime-facing contract focused on
 agent semantics, not workflow backend mechanics.
 
 ## Decision
 
 ### 1. Keep semantic timing public
 
-The public Goa-AI contract remains:
+The public loom-mcp contract remains:
 
 - `RunPolicy.Timing` in the DSL
 - run-time semantic overrides such as `runtime.WithTiming(...)`
@@ -64,7 +64,7 @@ Those settings are meaningful only for Temporal, so they belong in
 
 ### 4. Keep the cooperative heartbeat loop runtime-owned
 
-Tool and planner implementations should continue to use Goa-AI’s runtime-owned
+Tool and planner implementations should continue to use loom-mcp’s runtime-owned
 heartbeat helper rather than Temporal APIs directly. The runtime heartbeat loop
 remains engine-neutral and only activates when the engine injects a non-zero
 liveness timeout into the activity context.
@@ -76,7 +76,7 @@ That preserves a clean layering:
 
 ## Resulting Contract
 
-### Public Goa-AI runtime contract
+### Public loom-mcp runtime contract
 
 - semantic budgets
 - queue placement

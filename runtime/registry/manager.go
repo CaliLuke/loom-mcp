@@ -8,7 +8,7 @@ import (
 	"sync"
 	"time"
 
-	"goa.design/goa-ai/runtime/agent/telemetry"
+	"github.com/CaliLuke/loom-mcp/runtime/agent/telemetry"
 )
 
 type (

@@ -6,11 +6,11 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	"goa.design/goa-ai/runtime/agent/hooks"
-	"goa.design/goa-ai/runtime/agent/prompt"
-	runloginmem "goa.design/goa-ai/runtime/agent/runlog/inmem"
-	"goa.design/goa-ai/runtime/agent/session"
-	sessioninmem "goa.design/goa-ai/runtime/agent/session/inmem"
+	"github.com/CaliLuke/loom-mcp/runtime/agent/hooks"
+	"github.com/CaliLuke/loom-mcp/runtime/agent/prompt"
+	runloginmem "github.com/CaliLuke/loom-mcp/runtime/agent/runlog/inmem"
+	"github.com/CaliLuke/loom-mcp/runtime/agent/session"
+	sessioninmem "github.com/CaliLuke/loom-mcp/runtime/agent/session/inmem"
 )
 
 func TestRunOneShotPersistsCanonicalRunlogWithoutSessionState(t *testing.T) {

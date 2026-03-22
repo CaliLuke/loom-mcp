@@ -3,8 +3,8 @@ package anthropic
 import (
 	"testing"
 
-	"goa.design/goa-ai/runtime/agent/model"
-	"goa.design/goa-ai/runtime/agent/tools"
+	"github.com/CaliLuke/loom-mcp/runtime/agent/model"
+	"github.com/CaliLuke/loom-mcp/runtime/agent/tools"
 )
 
 func TestEncodeMessages_RewritesUnknownToolUseToToolUnavailable(t *testing.T) {

@@ -15,11 +15,11 @@ import (
 	"slices"
 	"strings"
 
-	"goa.design/goa-ai/codegen/naming"
-	agentsExpr "goa.design/goa-ai/expr/agent"
-	"goa.design/goa/v3/codegen"
-	"goa.design/goa/v3/codegen/service"
-	goaexpr "goa.design/goa/v3/expr"
+	"github.com/CaliLuke/loom-mcp/codegen/naming"
+	agentsExpr "github.com/CaliLuke/loom-mcp/expr/agent"
+	"github.com/CaliLuke/loom/codegen"
+	"github.com/CaliLuke/loom/codegen/service"
+	goaexpr "github.com/CaliLuke/loom/expr"
 )
 
 // collectToolsets materializes one Used/Exported toolset group into sorted

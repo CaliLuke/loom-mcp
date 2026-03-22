@@ -12,9 +12,7 @@ import (
 	"syscall"
 
 	assistantapi "example.com/assistant"
-	assistant "example.com/assistant/gen/assistant"
 	mcpassistant "example.com/assistant/gen/mcp_assistant"
-	"goa.design/clue/debug"
 	"goa.design/clue/log"
 )
 
@@ -43,28 +41,16 @@ func main() {
 	log.Print(ctx, log.KV{K: "http-port", V: *httpPortF})
 
 	// Initialize the services.
-	var (
-		assistantSvc    assistant.Service
-		mcpAssistantSvc mcpassistant.Service
-	)
+	var mcpAssistantSvc mcpassistant.Service
 	{
-		assistantSvc = assistantapi.NewAssistant()
 		mcpAssistantSvc = assistantapi.NewMcpAssistant()
 	}
 
 	// Wrap the services in endpoints that can be invoked from other services
 	// potentially running in different processes.
-	var (
-		assistantEndpoints    *assistant.Endpoints
-		mcpAssistantEndpoints *mcpassistant.Endpoints
-	)
+	var mcpAssistantEndpoints *mcpassistant.Endpoints
 	{
-		assistantEndpoints = assistant.NewEndpoints(assistantSvc)
-		assistantEndpoints.Use(debug.LogPayloads())
-		assistantEndpoints.Use(log.Endpoint)
 		mcpAssistantEndpoints = mcpassistant.NewEndpoints(mcpAssistantSvc)
-		mcpAssistantEndpoints.Use(debug.LogPayloads())
-		mcpAssistantEndpoints.Use(log.Endpoint)
 	}
 
 	// Create channel used by both the signal handler and server goroutines
@@ -106,7 +92,7 @@ func main() {
 			} else if u.Port() == "" {
 				u.Host = net.JoinHostPort(u.Host, "80")
 			}
-			handleHTTPServer(ctx, u, mcpAssistantEndpoints, mcpAssistantSvc, &wg, errc, *dbgF)
+			handleHTTPServer(ctx, u, mcpAssistantSvc, mcpAssistantEndpoints, &wg, errc, *dbgF)
 		}
 
 	default:

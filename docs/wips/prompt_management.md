@@ -1,9 +1,9 @@
-# Prompt Management Feature for goa-ai
+# Prompt Management Feature for loom-mcp
 
 ## 1. Executive Summary
 
 This document specifies the full set of changes required to add first-class prompt
-management to goa-ai, including:
+management to loom-mcp, including:
 
 - Prompt identity and typed contracts in runtime packages.
 - Dynamic override resolution backed by MongoDB.
@@ -22,7 +22,7 @@ tests, sequencing, and independent parallel work streams.
 
 ## 2. Problem Statement
 
-Today, goa-ai has robust contracts for:
+Today, loom-mcp has robust contracts for:
 
 - Workflow execution (`runtime/agent/runtime`),
 - Planners (`runtime/agent/planner`),
@@ -543,11 +543,11 @@ Behavior:
 
 ---
 
-## 13. Work Stream 8: Documentation Updates (goa-ai + goa.design)
+## 13. Work Stream 8: Documentation Updates (loom-mcp + goa.design)
 
 Documentation updates are required deliverables, not follow-up polish.
 
-### 13.1 Update goa-ai internal docs
+### 13.1 Update loom-mcp internal docs
 
 Update the following files to reflect new prompt-management primitives and runtime
 integration points:
@@ -562,25 +562,25 @@ integration points:
   - Document current state (no mandatory agent prompt DSL in v1), and reference
     runtime-level prompt registration as the supported mechanism.
 
-### 13.2 Update goa.design docs (`content/en/docs/2-goa-ai/`)
+### 13.2 Update goa.design docs (`content/en/docs/2-loom-mcp/`)
 
 Update public docs to describe the new feature surface and operational model:
 
-- `content/en/docs/2-goa-ai/runtime.md`
+- `content/en/docs/2-loom-mcp/runtime.md`
   - Prompt runtime contracts (`PromptSpec`, store, registry, planner rendering).
-- `content/en/docs/2-goa-ai/production.md`
+- `content/en/docs/2-loom-mcp/production.md`
   - Mongo prompt store setup, operational guidance, rollout/override strategy.
-- `content/en/docs/2-goa-ai/registry.md`
+- `content/en/docs/2-loom-mcp/registry.md`
   - Clarify distinction between tool registry and prompt registry.
-- `content/en/docs/2-goa-ai/dsl-reference.md`
+- `content/en/docs/2-loom-mcp/dsl-reference.md`
   - Add reference note describing v1 prompt-management integration path.
-- `content/en/docs/2-goa-ai/quickstart.md`
+- `content/en/docs/2-loom-mcp/quickstart.md`
   - Add minimal setup snippet showing runtime prompt store wiring.
 
 ### 13.3 Localization follow-up
 
 If the docs workflow requires localization parity, mirror the key changes into the
-non-English `2-goa-ai` docs sets (or open explicit follow-up tasks when translation
+non-English `2-loom-mcp` docs sets (or open explicit follow-up tasks when translation
 is intentionally deferred).
 
 ---
@@ -614,11 +614,11 @@ is intentionally deferred).
 11. `docs/overview.md`
 12. `docs/runtime.md`
 13. `docs/dsl.md`
-14. `goa.design/content/en/docs/2-goa-ai/runtime.md`
-15. `goa.design/content/en/docs/2-goa-ai/production.md`
-16. `goa.design/content/en/docs/2-goa-ai/registry.md`
-17. `goa.design/content/en/docs/2-goa-ai/dsl-reference.md`
-18. `goa.design/content/en/docs/2-goa-ai/quickstart.md`
+14. `goa.design/content/en/docs/2-loom-mcp/runtime.md`
+15. `goa.design/content/en/docs/2-loom-mcp/production.md`
+16. `goa.design/content/en/docs/2-loom-mcp/registry.md`
+17. `goa.design/content/en/docs/2-loom-mcp/dsl-reference.md`
+18. `goa.design/content/en/docs/2-loom-mcp/quickstart.md`
 
 ---
 
@@ -709,7 +709,7 @@ Cases:
 ### Phase 4 (Documentation publication)
 
 - Implement work stream 8.
-- Publish goa-ai internal docs updates.
+- Publish loom-mcp internal docs updates.
 - Publish goa.design docs updates (and localization follow-ups as needed).
 
 ---
@@ -759,7 +759,7 @@ graph TD
 - Engineer B: WS4 (Mongo)
 - Engineer C: WS5 (Runtime/Planner + AgentTools)
 - Engineer D: WS6 + WS7 (Events + model request metadata)
-- Engineer E: WS8 (goa-ai + goa.design docs)
+- Engineer E: WS8 (loom-mcp + goa.design docs)
 
 ---
 
@@ -772,7 +772,7 @@ graph TD
 4. Prompt rendered events appear in hooks and stream with prompt ID/version.
 5. `model.Request` carries prompt refs end-to-end without breaking providers.
 6. Existing runtime behavior remains unchanged when prompt features are unused.
-7. goa-ai internal docs are updated for runtime usage and contracts.
+7. loom-mcp internal docs are updated for runtime usage and contracts.
 8. goa.design docs are updated for runtime, production, registry, and quickstart
    guidance (with localization plan documented).
 
@@ -789,7 +789,7 @@ graph TD
 
 ## 20. Implementation Notes for the Next Agent
 
-1. Preserve existing goa-ai style:
+1. Preserve existing loom-mcp style:
    - strong contracts, fail-fast errors, minimal fallback behavior.
 2. Match existing Mongo feature pattern exactly:
    - `features/<domain>/mongo/store.go` wrapper + `clients/mongo/client.go`.

@@ -10,11 +10,11 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	core "goa.design/goa-ai/alpha/agents/scribe/core"
-	core2 "goa.design/goa-ai/calc/toolsets/core"
-	"goa.design/goa-ai/runtime/agent/engine"
-	"goa.design/goa-ai/runtime/agent/planner"
-	agentsruntime "goa.design/goa-ai/runtime/agent/runtime"
+	core "github.com/CaliLuke/loom-mcp/alpha/agents/scribe/core"
+	core2 "github.com/CaliLuke/loom-mcp/calc/toolsets/core"
+	"github.com/CaliLuke/loom-mcp/runtime/agent/engine"
+	"github.com/CaliLuke/loom-mcp/runtime/agent/planner"
+	agentsruntime "github.com/CaliLuke/loom-mcp/runtime/agent/runtime"
 	"time"
 )
 

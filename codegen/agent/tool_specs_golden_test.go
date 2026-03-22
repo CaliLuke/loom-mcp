@@ -5,14 +5,14 @@ import (
 	"path/filepath"
 	"testing"
 
+	codegen "github.com/CaliLuke/loom-mcp/codegen/agent"
+	"github.com/CaliLuke/loom-mcp/codegen/testhelpers"
+	. "github.com/CaliLuke/loom-mcp/dsl"
+	agentsExpr "github.com/CaliLuke/loom-mcp/expr/agent"
+	goadsl "github.com/CaliLuke/loom/dsl"
+	"github.com/CaliLuke/loom/eval"
+	goaexpr "github.com/CaliLuke/loom/expr"
 	"github.com/stretchr/testify/require"
-	codegen "goa.design/goa-ai/codegen/agent"
-	"goa.design/goa-ai/codegen/testhelpers"
-	. "goa.design/goa-ai/dsl"
-	agentsExpr "goa.design/goa-ai/expr/agent"
-	goadsl "goa.design/goa/v3/dsl"
-	"goa.design/goa/v3/eval"
-	goaexpr "goa.design/goa/v3/expr"
 )
 
 // TestToolSpecsDeterministicTypeRefs verifies that tool_specs types use
@@ -52,12 +52,13 @@ func TestToolSpecsDeterministicTypeRefs(t *testing.T) {
 	require.True(t, eval.Execute(design, nil), eval.Context.Error())
 	require.NoError(t, eval.RunDSL())
 
-	files, err := codegen.Generate("goa.design/goa-ai", []eval.Root{goaexpr.Root, agentsExpr.Root}, nil)
+	files, err := codegen.Generate("github.com/CaliLuke/loom-mcp", []eval.Root{goaexpr.Root, agentsExpr.Root}, nil)
 	require.NoError(t, err)
 
 	var codecs string
 	for _, f := range files {
 		if filepath.ToSlash(f.Path) == filepath.ToSlash("gen/alpha/toolsets/summarize/codecs.go") {
+			//nolint:staticcheck // Tests still inspect the legacy section list while generators migrate to Section.
 			for _, s := range f.SectionTemplates {
 				codecs += s.Source
 			}
@@ -196,7 +197,7 @@ func TestServiceToolsetCrossServiceBindTo(t *testing.T) {
 	require.NoError(t, eval.RunDSL())
 
 	// Verify generator data marks SourceService correctly for cross-service binding.
-	data, err := codegen.BuildDataForTest("goa.design/goa-ai", []eval.Root{goaexpr.Root, agentsExpr.Root})
+	data, err := codegen.BuildDataForTest("github.com/CaliLuke/loom-mcp", []eval.Root{goaexpr.Root, agentsExpr.Root})
 	require.NoError(t, err)
 	require.NotNil(t, data)
 

@@ -1,11 +1,11 @@
 package codegen
 
 import (
-	"goa.design/goa/v3/eval"
-	goaexpr "goa.design/goa/v3/expr"
+	"github.com/CaliLuke/loom/eval"
+	goaexpr "github.com/CaliLuke/loom/expr"
 
-	agentsExpr "goa.design/goa-ai/expr/agent"
-	gcodegen "goa.design/goa/v3/codegen"
+	agentsExpr "github.com/CaliLuke/loom-mcp/expr/agent"
+	gcodegen "github.com/CaliLuke/loom/codegen"
 )
 
 // Prepare ensures that any external user types referenced by agent tool shapes

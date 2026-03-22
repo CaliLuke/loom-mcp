@@ -129,7 +129,7 @@ type (
 	}
 
 	// ConfirmationSpec declares the confirmation protocol for a tool.
-	// It is emitted by goa-ai codegen when a tool uses Confirmation in the DSL.
+	// It is emitted by loom-mcp codegen when a tool uses Confirmation in the DSL.
 	//
 	// Confirmation uses a runtime-owned confirmation transport (typically an
 	// ask_question-style external interaction) to obtain an approve/deny decision

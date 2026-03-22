@@ -6,10 +6,10 @@ import (
 	"path/filepath"
 	"slices"
 
-	"goa.design/goa-ai/codegen/naming"
-	"goa.design/goa-ai/codegen/shared"
-	"goa.design/goa/v3/codegen"
-	"goa.design/goa/v3/expr"
+	"github.com/CaliLuke/loom-mcp/codegen/naming"
+	"github.com/CaliLuke/loom-mcp/codegen/shared"
+	"github.com/CaliLuke/loom/codegen"
+	"github.com/CaliLuke/loom/expr"
 )
 
 // toolsetAdapterTransformsFile emits a `transforms.go` file in the toolset-owned

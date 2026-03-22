@@ -14,14 +14,14 @@ import (
 	"encoding/json"
 	"fmt"
 
-	"goa.design/goa-ai/boundedresult"
-	"goa.design/goa-ai/runtime/agent"
-	"goa.design/goa-ai/runtime/agent/rawjson"
-	"goa.design/goa-ai/runtime/agent/tools"
+	"github.com/CaliLuke/loom-mcp/boundedresult"
+	"github.com/CaliLuke/loom-mcp/runtime/agent"
+	"github.com/CaliLuke/loom-mcp/runtime/agent/rawjson"
+	"github.com/CaliLuke/loom-mcp/runtime/agent/tools"
 )
 
 // EncodeCanonicalToolResult encodes a typed tool result into the canonical JSON
-// contract exposed by Goa-AI.
+// contract exposed by loom-mcp.
 //
 // It uses the generated result codec from spec as the sole semantic encoder,
 // then overlays any runtime-owned bounded-result metadata from bounds. Callers

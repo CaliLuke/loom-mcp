@@ -3,11 +3,11 @@ package codegen
 import (
 	"testing"
 
+	agentsexpr "github.com/CaliLuke/loom-mcp/expr/agent"
+	"github.com/CaliLuke/loom-mcp/runtime/agent/tools"
 	"github.com/leanovate/gopter"
 	"github.com/leanovate/gopter/gen"
 	"github.com/leanovate/gopter/prop"
-	agentsexpr "goa.design/goa-ai/expr/agent"
-	"goa.design/goa-ai/runtime/agent/tools"
 )
 
 // TestProviderAgnosticSpecsGenerationProperty verifies Property 11: Provider-Agnostic Specs Generation.

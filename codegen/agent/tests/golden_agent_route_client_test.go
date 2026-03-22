@@ -3,7 +3,7 @@ package tests
 import (
 	"testing"
 
-	"goa.design/goa-ai/codegen/agent/tests/testscenarios"
+	"github.com/CaliLuke/loom-mcp/codegen/agent/tests/testscenarios"
 )
 
 // Verify that agent.go emits Route() and NewClient(rt) helpers for caller-only usage.

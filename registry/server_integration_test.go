@@ -7,11 +7,11 @@ import (
 	"testing"
 	"time"
 
-	grpcclient "goa.design/goa-ai/registry/gen/grpc/registry/client"
-	registrypb "goa.design/goa-ai/registry/gen/grpc/registry/pb"
-	grpcserver "goa.design/goa-ai/registry/gen/grpc/registry/server"
-	genregistry "goa.design/goa-ai/registry/gen/registry"
-	goa "goa.design/goa/v3/pkg"
+	grpcclient "github.com/CaliLuke/loom-mcp/registry/gen/grpc/registry/client"
+	registrypb "github.com/CaliLuke/loom-mcp/registry/gen/grpc/registry/pb"
+	grpcserver "github.com/CaliLuke/loom-mcp/registry/gen/grpc/registry/server"
+	genregistry "github.com/CaliLuke/loom-mcp/registry/gen/registry"
+	goa "github.com/CaliLuke/loom/pkg"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 )

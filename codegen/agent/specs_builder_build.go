@@ -6,10 +6,10 @@ import (
 	"sort"
 	"strings"
 
-	"goa.design/goa-ai/codegen/shared"
-	"goa.design/goa/v3/codegen"
-	"goa.design/goa/v3/codegen/service"
-	goaexpr "goa.design/goa/v3/expr"
+	"github.com/CaliLuke/loom-mcp/codegen/shared"
+	"github.com/CaliLuke/loom/codegen"
+	"github.com/CaliLuke/loom/codegen/service"
+	goaexpr "github.com/CaliLuke/loom/expr"
 )
 
 // buildToolSpecsData builds tool specs metadata for the given agent.
@@ -327,7 +327,7 @@ func (d *toolSpecsData) codecsImports() []*codegen.ImportSpec {
 		codegen.SimpleImport("encoding/json"),
 		codegen.SimpleImport("errors"),
 		codegen.SimpleImport("fmt"),
-		codegen.SimpleImport("goa.design/goa-ai/runtime/agent/tools"),
+		codegen.SimpleImport("github.com/CaliLuke/loom-mcp/runtime/agent/tools"),
 	}
 	if d.needsUnicodeImport() {
 		base = append(base, codegen.SimpleImport("unicode/utf8"))
@@ -372,7 +372,7 @@ func (d *toolSpecsData) codecsImports() []*codegen.ImportSpec {
 		}
 	}
 	if needsGoa {
-		base = append(base, codegen.GoaImport(""))
+		base = append(base, codegen.LoomImport(""))
 	}
 	// Keep strings import last to match golden expectations.
 	base = append(base, codegen.SimpleImport("strings"))

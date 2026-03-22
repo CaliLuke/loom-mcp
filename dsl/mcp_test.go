@@ -3,12 +3,12 @@ package dsl_test
 import (
 	"testing"
 
+	. "github.com/CaliLuke/loom-mcp/dsl"
+	mcpexpr "github.com/CaliLuke/loom-mcp/expr/mcp"
+	. "github.com/CaliLuke/loom/dsl"
+	"github.com/CaliLuke/loom/eval"
+	goaexpr "github.com/CaliLuke/loom/expr"
 	"github.com/stretchr/testify/require"
-	. "goa.design/goa-ai/dsl"
-	mcpexpr "goa.design/goa-ai/expr/mcp"
-	. "goa.design/goa/v3/dsl"
-	"goa.design/goa/v3/eval"
-	goaexpr "goa.design/goa/v3/expr"
 )
 
 func TestMCPBasicConfiguration(t *testing.T) {

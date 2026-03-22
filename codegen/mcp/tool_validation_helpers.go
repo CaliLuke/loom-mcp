@@ -3,8 +3,8 @@ package codegen
 import (
 	"fmt"
 
-	"goa.design/goa/v3/codegen"
-	"goa.design/goa/v3/expr"
+	"github.com/CaliLuke/loom/codegen"
+	"github.com/CaliLuke/loom/expr"
 )
 
 // collectTopLevelValidations extracts required fields and enum values for a top-level object payload.
@@ -20,9 +20,7 @@ func collectTopLevelValidations(attr *expr.AttributeExpr) ([]string, map[string]
 		return nil, nil, nil, nil
 	}
 	req := []string{}
-	enums := map[string][]string{}
 	enumPtr := map[string]bool{}
-	defaults := []DefaultField{}
 	fields, enums, defaults := collectTopLevelValidationFields(obj)
 	if attr.Validation != nil && len(attr.Validation.Required) > 0 {
 		for _, name := range attr.Validation.Required {
