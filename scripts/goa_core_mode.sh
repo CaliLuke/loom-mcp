@@ -4,7 +4,7 @@ set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 FIXTURE_DIR="${ROOT_DIR}/integration_tests/fixtures/assistant"
-REMOTE_VERSION="v3.25.4-0.20260319161141-ef5591beaeb7"
+REMOTE_VERSION="v3.25.4-0.20260322010145-60eb0338caae"
 LOCAL_GOA_DIR="${GOA_DIR:-/Users/luca/code/goa-light}"
 
 usage() {
