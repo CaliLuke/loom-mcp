@@ -57,6 +57,7 @@ Within each section, place main logic first and helpers last.
 - Write fast, deterministic, table-driven tests in `*_test.go`.
 - Name tests `TestXxx`.
 - Prefer `testify/assert`; use `testify/require` only when the test cannot continue after a failure.
+- Treat pre-commit and commit-time hooks as mandatory. If a hook fails for any reason, fix the problem before committing; do not bypass the hook, do not use `--no-verify`, and do not classify the failure as unrelated debt to avoid fixing it.
 - Normal verification flow:
   1. `make lint`
   2. fix issues
