@@ -42,6 +42,16 @@ func TestClientAppendAssignsID(t *testing.T) {
 	assert.Equal(t, oid.Hex(), e.ID)
 }
 
+func TestClientWithTimeoutPreservesNilContextPanic(t *testing.T) {
+	t.Parallel()
+
+	c := &client{timeout: time.Second}
+
+	assert.Panics(t, func() {
+		_, _ = c.withTimeout(nil)
+	})
+}
+
 func TestClientListNextCursor(t *testing.T) {
 	t.Parallel()
 

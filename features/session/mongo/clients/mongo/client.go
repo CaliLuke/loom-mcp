@@ -11,10 +11,10 @@ import (
 	"go.mongodb.org/mongo-driver/bson"
 	mongodriver "go.mongodb.org/mongo-driver/mongo"
 	"go.mongodb.org/mongo-driver/mongo/options"
-	"go.mongodb.org/mongo-driver/mongo/readpref"
 
 	"goa.design/clue/health"
 
+	clientinfra "goa.design/goa-ai/features/mongo/clientinfra"
 	"goa.design/goa-ai/runtime/agent/prompt"
 	"goa.design/goa-ai/runtime/agent/session"
 )
@@ -58,11 +58,8 @@ type client struct {
 
 // New returns a Client backed by MongoDB.
 func New(opts Options) (Client, error) {
-	if opts.Client == nil {
-		return nil, errors.New("mongo client is required")
-	}
-	if opts.Database == "" {
-		return nil, errors.New("database name is required")
+	if err := clientinfra.ValidateMongoOptions(opts.Client, opts.Database); err != nil {
+		return nil, err
 	}
 	sessionsCollection := opts.SessionsCollection
 	if sessionsCollection == "" {
@@ -72,17 +69,14 @@ func New(opts Options) (Client, error) {
 	if runsCollection == "" {
 		runsCollection = defaultRunsCollection
 	}
-	timeout := opts.Timeout
-	if timeout <= 0 {
-		timeout = defaultOpTimeout
-	}
+	timeout := clientinfra.ResolveTimeout(opts.Timeout, defaultOpTimeout)
 	sessColl := opts.Client.Database(opts.Database).Collection(sessionsCollection)
 	runColl := opts.Client.Database(opts.Database).Collection(runsCollection)
-	ctx, cancel := context.WithTimeout(context.Background(), timeout)
-	defer cancel()
 	sessWrapper := mongoCollection{coll: sessColl}
 	runWrapper := mongoCollection{coll: runColl}
-	if err := ensureIndexes(ctx, sessWrapper, runWrapper); err != nil {
+	if err := clientinfra.EnsureIndexes(timeout, func(ctx context.Context) error {
+		return ensureIndexes(ctx, sessWrapper, runWrapper)
+	}); err != nil {
 		return nil, err
 	}
 	return newClientWithCollections(opts.Client, sessWrapper, runWrapper, timeout)
@@ -93,10 +87,7 @@ func (c *client) Name() string {
 }
 
 func (c *client) Ping(ctx context.Context) error {
-	if ctx == nil {
-		ctx = context.Background()
-	}
-	return c.mongo.Ping(ctx, readpref.Primary())
+	return clientinfra.Ping(ctx, c.mongo, true)
 }
 
 func (c *client) CreateSession(ctx context.Context, sessionID string, createdAt time.Time) (session.Session, error) {
@@ -347,13 +338,7 @@ func (c *client) ListRunsBySession(ctx context.Context, sessionID string, status
 }
 
 func (c *client) withTimeout(ctx context.Context) (context.Context, context.CancelFunc) {
-	if ctx == nil {
-		ctx = context.Background()
-	}
-	if c.timeout <= 0 {
-		return ctx, func() {}
-	}
-	return context.WithTimeout(ctx, c.timeout)
+	return clientinfra.WithTimeout(ctx, c.timeout, true)
 }
 
 type runDocument struct {
@@ -508,9 +493,7 @@ func newClientWithCollections(mongoClient *mongodriver.Client, sessionsColl, run
 	if sessionsColl == nil || runsColl == nil {
 		return nil, errors.New("collections are required")
 	}
-	if timeout <= 0 {
-		timeout = defaultOpTimeout
-	}
+	timeout = clientinfra.ResolveTimeout(timeout, defaultOpTimeout)
 	return &client{
 		mongo:    mongoClient,
 		sessions: sessionsColl,

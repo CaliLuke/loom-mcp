@@ -12,10 +12,10 @@ import (
 	"go.mongodb.org/mongo-driver/bson"
 	mongodriver "go.mongodb.org/mongo-driver/mongo"
 	"go.mongodb.org/mongo-driver/mongo/options"
-	"go.mongodb.org/mongo-driver/mongo/readpref"
 
 	"goa.design/clue/health"
 
+	clientinfra "goa.design/goa-ai/features/mongo/clientinfra"
 	"goa.design/goa-ai/runtime/agent/prompt"
 )
 
@@ -64,26 +64,20 @@ const (
 
 // New returns a Client backed by the provided MongoDB client.
 func New(opts Options) (Client, error) {
-	if opts.Client == nil {
-		return nil, errors.New("mongo client is required")
-	}
-	if opts.Database == "" {
-		return nil, errors.New("database name is required")
+	if err := clientinfra.ValidateMongoOptions(opts.Client, opts.Database); err != nil {
+		return nil, err
 	}
 	collection := opts.Collection
 	if collection == "" {
 		collection = defaultCollection
 	}
-	timeout := opts.Timeout
-	if timeout <= 0 {
-		timeout = defaultTimeout
-	}
+	timeout := clientinfra.ResolveTimeout(opts.Timeout, defaultTimeout)
 
 	mcoll := opts.Client.Database(opts.Database).Collection(collection)
-	ctx, cancel := context.WithTimeout(context.Background(), timeout)
-	defer cancel()
 	wrapper := mongoCollection{coll: mcoll}
-	if err := ensureIndexes(ctx, wrapper); err != nil {
+	if err := clientinfra.EnsureIndexes(timeout, func(ctx context.Context) error {
+		return ensureIndexes(ctx, wrapper)
+	}); err != nil {
 		return nil, err
 	}
 	return newClientWithCollection(opts.Client, wrapper, timeout)
@@ -94,10 +88,7 @@ func (c *client) Name() string {
 }
 
 func (c *client) Ping(ctx context.Context) error {
-	if ctx == nil {
-		ctx = context.Background()
-	}
-	return c.mongo.Ping(ctx, readpref.Primary())
+	return clientinfra.Ping(ctx, c.mongo, true)
 }
 
 func (c *client) Resolve(ctx context.Context, promptID prompt.Ident, scope prompt.Scope) (*prompt.Override, error) {
@@ -194,13 +185,7 @@ func (c *client) List(ctx context.Context) ([]*prompt.Override, error) {
 }
 
 func (c *client) withTimeout(ctx context.Context) (context.Context, context.CancelFunc) {
-	if ctx == nil {
-		ctx = context.Background()
-	}
-	if c.timeout <= 0 {
-		return ctx, func() {}
-	}
-	return context.WithTimeout(ctx, c.timeout)
+	return clientinfra.WithTimeout(ctx, c.timeout, true)
 }
 
 func decodeOverrides(ctx context.Context, cur cursor) ([]*prompt.Override, error) {
@@ -271,9 +256,7 @@ func newClientWithCollection(mongoClient *mongodriver.Client, coll collection, t
 	if coll == nil {
 		return nil, errors.New("collection is required")
 	}
-	if timeout <= 0 {
-		timeout = defaultTimeout
-	}
+	timeout = clientinfra.ResolveTimeout(timeout, defaultTimeout)
 	return &client{
 		mongo:   mongoClient,
 		coll:    coll,
