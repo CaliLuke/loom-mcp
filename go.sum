@@ -45,8 +45,8 @@ github.com/Azure/go-ansiterm v0.0.0-20250102033503-faa5f7b0171c h1:udKWzYgxTojEK
 github.com/Azure/go-ansiterm v0.0.0-20250102033503-faa5f7b0171c/go.mod h1:xomTg63KZ2rFqZQzSB4Vz2SUXa1BpHTVz9L5PTmPC4E=
 github.com/BurntSushi/toml v0.3.1/go.mod h1:xHWCNGjB5oqiDr8zfno3MHue2Ht5sIBksp03qcyfWMU=
 github.com/BurntSushi/xgb v0.0.0-20160522181843-27f122750802/go.mod h1:IVnqGOEym/WlBOVXweHU+Q+/VP0lqqI8lqeDx9IjBqo=
-github.com/CaliLuke/loom v1.0.3-0.20260322205324-2c95927b0f72 h1:pWPHQ7zYvbvb1BRFofP5Hskeh0dJFTwbrbL3zFPGoY0=
-github.com/CaliLuke/loom v1.0.3-0.20260322205324-2c95927b0f72/go.mod h1:cRpzg/kSAYX8zE2Jw5FnQoVtOROcVnGqUZ2CQ6Bu3lI=
+github.com/CaliLuke/loom v1.0.3 h1:x5/SzoSqdQS3YQ3bCk93z8UanCei6KWyG9Hi9wUMaSA=
+github.com/CaliLuke/loom v1.0.3/go.mod h1:cRpzg/kSAYX8zE2Jw5FnQoVtOROcVnGqUZ2CQ6Bu3lI=
 github.com/Microsoft/go-winio v0.6.2 h1:F2VQgta7ecxGYO8k3ZZz3RS8fVIXVxONVUPlNERoyfY=
 github.com/Microsoft/go-winio v0.6.2/go.mod h1:yd8OoFMLzJbo9gZq8j5qaps8bJ9aShtEA8Ipt1oGCvU=
 github.com/anthropics/anthropic-sdk-go v1.22.1 h1:xbsc3vJKCX/ELDZSpTNfz9wCgrFsamwFewPb1iI0Xh0=
