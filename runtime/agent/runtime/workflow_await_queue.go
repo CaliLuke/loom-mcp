@@ -17,11 +17,9 @@ import (
 	"fmt"
 	"time"
 
-	"goa.design/goa-ai/runtime/agent/api"
 	"goa.design/goa-ai/runtime/agent/engine"
 	"goa.design/goa-ai/runtime/agent/hooks"
 	"goa.design/goa-ai/runtime/agent/interrupt"
-	"goa.design/goa-ai/runtime/agent/model"
 	"goa.design/goa-ai/runtime/agent/planner"
 	"goa.design/goa-ai/runtime/agent/rawjson"
 	"goa.design/goa-ai/runtime/agent/transcript"
@@ -47,33 +45,14 @@ func (r *Runtime) waitAwaitConfirmation(
 	if deadlines == nil {
 		return nil, nil, errors.New("missing run deadlines")
 	}
-	waitStartedAt := wfCtx.Now()
-	dec, err := ctrl.WaitProvideConfirmation(ctx, 0)
+	dec, err := waitForConfirmationDecision(ctx, wfCtx, ctrl, deadlines)
 	if err != nil {
 		return nil, nil, err
 	}
-	deadlines.pause(wfCtx.Now().Sub(waitStartedAt))
-	if dec == nil {
-		return nil, nil, errors.New("await_confirmation: received nil confirmation decision")
+	if err := validateConfirmationDecision(dec, it); err != nil {
+		return nil, nil, err
 	}
-	if dec.ID != "" && dec.ID != it.awaitID {
-		return nil, nil, fmt.Errorf("unexpected confirmation id %q (expected %q)", dec.ID, it.awaitID)
-	}
-	if dec.RequestedBy == "" {
-		return nil, nil, fmt.Errorf("confirmation decision missing requested_by for %q (%s)", it.call.Name, it.call.ToolCallID)
-	}
-
-	approved := dec.Approved
-	if err := r.publishHook(ctx, hooks.NewToolAuthorizationEvent(
-		base.RunContext.RunID,
-		input.AgentID,
-		base.RunContext.SessionID,
-		it.call.Name,
-		it.call.ToolCallID,
-		approved,
-		it.plan.Prompt,
-		dec.RequestedBy,
-	), turnID); err != nil {
+	if err := r.publishAuthorizationDecision(ctx, input, base, turnID, it, dec); err != nil {
 		return nil, nil, err
 	}
 
@@ -82,107 +61,10 @@ func (r *Runtime) waitAwaitConfirmation(
 	// outcome for the tool call they requested.
 	r.recordAssistantTurn(base, st.Transcript, []planner.ToolRequest{it.call}, st.Ledger)
 
-	if !approved {
-		deniedResult := it.plan.DeniedResult
-		if err := r.publishHook(
-			ctx,
-			hooks.NewToolCallScheduledEvent(
-				it.call.RunID,
-				it.call.AgentID,
-				it.call.SessionID,
-				it.call.Name,
-				it.call.ToolCallID,
-				it.call.Payload,
-				"",
-				it.call.ParentToolCallID,
-				expectedChildren,
-			),
-			turnID,
-		); err != nil {
-			return nil, nil, err
-		}
-		resultJSON, err := r.marshalToolValue(ctx, it.call.Name, deniedResult, nil)
-		if err != nil {
-			return nil, nil, fmt.Errorf("encode %s denied tool result for streaming: %w", it.call.Name, err)
-		}
-		if err := r.publishHook(
-			ctx,
-			hooks.NewToolResultReceivedEvent(
-				it.call.RunID,
-				it.call.AgentID,
-				it.call.SessionID,
-				it.call.Name,
-				it.call.ToolCallID,
-				it.call.ParentToolCallID,
-				deniedResult,
-				rawjson.Message(resultJSON),
-				nil,
-				formatResultPreview(it.call.Name, deniedResult, nil),
-				nil,
-				0,
-				nil,
-				nil,
-				nil,
-			),
-			turnID,
-		); err != nil {
-			return nil, nil, err
-		}
-
-		tr := &planner.ToolResult{
-			Name:       it.call.Name,
-			ToolCallID: it.call.ToolCallID,
-			Result:     deniedResult,
-			Error:      nil,
-		}
-		st.ToolEvents = append(st.ToolEvents, cloneToolResults([]*planner.ToolResult{tr})...)
-		if err := r.appendToolOutputs(ctx, st, []planner.ToolRequest{it.call}, []*planner.ToolResult{tr}); err != nil {
-			return nil, nil, err
-		}
-		if err := r.appendUserToolResults(base, []planner.ToolRequest{it.call}, []*planner.ToolResult{tr}, st.Ledger); err != nil {
-			return nil, nil, err
-		}
-		return []*planner.ToolResult{tr}, nil, nil
+	if !dec.Approved {
+		return r.handleDeniedConfirmation(ctx, base, st, turnID, expectedChildren, it)
 	}
-
-	// Approved: execute the tool call.
-	call := it.call
-	if call.ToolCallID == "" {
-		call.ToolCallID = generateDeterministicToolCallID(base.RunContext.RunID, call.TurnID, base.RunContext.Attempt, call.Name, 0)
-	}
-
-	grouped, timeouts := r.groupToolCallsByTimeout([]planner.ToolRequest{call}, input, toolOpts.StartToCloseTimeout)
-	finishBy := time.Time{}
-	if !deadlines.Hard.IsZero() {
-		finishBy = deadlines.Hard.Add(-deadlines.finalizeReserve())
-	}
-	vals, timedOut, err := r.executeGroupedToolCalls(
-		wfCtx,
-		reg,
-		input.AgentID,
-		base,
-		expectedChildren,
-		parentTracker,
-		finishBy,
-		grouped,
-		timeouts,
-		toolOpts,
-	)
-	if err != nil {
-		return nil, nil, err
-	}
-	st.ToolEvents = append(st.ToolEvents, cloneToolResults(vals)...)
-	if err := r.appendToolOutputs(ctx, st, []planner.ToolRequest{call}, vals); err != nil {
-		return nil, nil, err
-	}
-	if err := r.appendUserToolResults(base, []planner.ToolRequest{call}, vals, st.Ledger); err != nil {
-		return nil, nil, err
-	}
-	if timedOut {
-		out, err := r.finalizeWithPlanner(wfCtx, reg, input, base, st.ToolEvents, st.ToolOutputs, st.AggUsage, st.NextAttempt, turnID, planner.TerminationReasonTimeBudget, deadlines.Hard)
-		return nil, out, err
-	}
-	return vals, nil, nil
+	return r.executeConfirmedToolCall(ctx, wfCtx, reg, input, base, st, toolOpts, expectedChildren, parentTracker, turnID, deadlines, it)
 }
 
 func (r *Runtime) handleAwaitQueue(
@@ -203,21 +85,59 @@ func (r *Runtime) handleAwaitQueue(
 	priorToolResults []*planner.ToolResult,
 ) (*RunOutput, error) {
 	ctx := wfCtx.Context()
+	if err := validateAwaitQueueInputs(ctrl, deadlines, confirmations, items); err != nil {
+		return nil, err
+	}
+	if err := r.publishAwaitPrompts(ctx, input, base, st, turnID, confirmations, items); err != nil {
+		return nil, err
+	}
+	if err := r.publishAwaitPause(ctx, input, base, turnID); err != nil {
+		return nil, err
+	}
+	allToolResults, out, err := r.collectAwaitResults(ctx, wfCtx, reg, input, base, st, toolOpts, expectedChildren, parentTracker, turnID, ctrl, deadlines, confirmations, items, priorToolResults)
+	if err != nil {
+		return nil, err
+	}
+	if out != nil {
+		return out, nil
+	}
+	if out, err := r.handleAwaitPostProcessing(ctx, wfCtx, reg, input, base, st, resumeOpts, turnID, ctrl, deadlines, confirmations, items, allToolResults); err != nil {
+		return nil, err
+	} else if out != nil {
+		return out, nil
+	}
+	return nil, nil
+}
+
+func validateAwaitQueueInputs(ctrl *interrupt.Controller, deadlines *runDeadlines, confirmations []confirmationAwait, items []planner.AwaitItem) error {
 	if ctrl == nil {
-		return nil, errors.New("await not supported in inline runs")
+		return errors.New("await not supported in inline runs")
 	}
 	if deadlines == nil {
-		return nil, errors.New("missing run deadlines")
+		return errors.New("missing run deadlines")
 	}
 	if len(confirmations) == 0 && len(items) == 0 {
-		return nil, errors.New("await: empty await queue")
+		return errors.New("await: empty await queue")
 	}
+	return nil
+}
 
-	// Publish all await prompts up front so callers can render a wizard UX
-	// without waiting for intermediate round-trips.
+func (r *Runtime) publishAwaitPrompts(ctx context.Context, input *RunInput, base *planner.PlanInput, st *runLoopState, turnID string, confirmations []confirmationAwait, items []planner.AwaitItem) error {
+	if err := r.publishAwaitConfirmations(ctx, input, base, turnID, confirmations); err != nil {
+		return err
+	}
+	for i, it := range items {
+		if err := r.publishAwaitQueueItem(ctx, input, base, st, turnID, it, i); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (r *Runtime) publishAwaitConfirmations(ctx context.Context, input *RunInput, base *planner.PlanInput, turnID string, confirmations []confirmationAwait) error {
 	for i, it := range confirmations {
 		if it.plan == nil {
-			return nil, fmt.Errorf("await confirmation item %d missing plan", i)
+			return fmt.Errorf("await confirmation item %d missing plan", i)
 		}
 		title := it.plan.Title
 		if title == "" {
@@ -234,94 +154,83 @@ func (r *Runtime) handleAwaitQueue(
 			it.call.ToolCallID,
 			it.call.Payload,
 		), turnID); err != nil {
-			return nil, err
+			return err
 		}
 	}
-	for i, it := range items {
-		if err := r.publishAwaitQueueItem(ctx, input, base, st, turnID, it, i); err != nil {
-			return nil, err
-		}
-	}
+	return nil
+}
 
-	if err := r.publishHook(
+func (r *Runtime) publishAwaitPause(ctx context.Context, input *RunInput, base *planner.PlanInput, turnID string) error {
+	return r.publishHook(
 		ctx,
 		hooks.NewRunPausedEvent(base.RunContext.RunID, input.AgentID, base.RunContext.SessionID, awaitReasonQueue, "runtime", nil, nil),
 		turnID,
-	); err != nil {
-		return nil, err
-	}
-	// While awaiting external input we do not apply a timeout. The workflow should
-	// remain blocked until the operator (or an external system) responds.
-	waitTimeout := time.Duration(0)
+	)
+}
 
-	allToolResults := make([]*planner.ToolResult, 0, len(priorToolResults)+8)
-	allToolResults = append(allToolResults, priorToolResults...)
+func (r *Runtime) collectAwaitResults(ctx context.Context, wfCtx engine.WorkflowContext, reg AgentRegistration, input *RunInput, base *planner.PlanInput, st *runLoopState, toolOpts engine.ActivityOptions, expectedChildren int, parentTracker *childTracker, turnID string, ctrl *interrupt.Controller, deadlines *runDeadlines, confirmations []confirmationAwait, items []planner.AwaitItem, priorToolResults []*planner.ToolResult) ([]*planner.ToolResult, *RunOutput, error) {
+	waitTimeout := time.Duration(0)
+	allToolResults := append(make([]*planner.ToolResult, 0, len(priorToolResults)+8), priorToolResults...)
 
 	for _, it := range confirmations {
 		res, out, err := r.waitAwaitConfirmation(ctx, wfCtx, reg, input, base, st, toolOpts, expectedChildren, parentTracker, turnID, ctrl, deadlines, it)
 		if err != nil {
-			return nil, err
+			return nil, nil, err
 		}
 		if out != nil {
-			return out, nil
+			return nil, out, nil
 		}
-		if len(res) > 0 {
-			allToolResults = append(allToolResults, res...)
-		}
+		allToolResults = appendAwaitToolResults(allToolResults, res)
 	}
-
 	for _, it := range items {
-		waitStartedAt := wfCtx.Now()
-		res, err := r.waitAwaitQueueItem(ctx, ctrl, input, base, st, turnID, waitTimeout, it)
-		deadlines.pause(wfCtx.Now().Sub(waitStartedAt))
+		res, err := r.waitForAwaitItem(ctx, wfCtx, ctrl, input, base, st, turnID, waitTimeout, deadlines, it)
 		if err != nil {
-			return nil, err
+			return nil, nil, err
 		}
-		if len(res) > 0 {
-			allToolResults = append(allToolResults, res...)
-		}
+		allToolResults = appendAwaitToolResults(allToolResults, res)
 	}
+	return allToolResults, nil, nil
+}
 
-	if capFailures(allToolResults) > 0 {
-		st.Caps.RemainingConsecutiveFailedToolCalls = decrementCap(
-			st.Caps.RemainingConsecutiveFailedToolCalls,
-			capFailures(allToolResults),
-		)
-		if st.Caps.MaxConsecutiveFailedToolCalls > 0 && st.Caps.RemainingConsecutiveFailedToolCalls <= 0 {
-			out, err := r.finalizeWithPlanner(wfCtx, reg, input, base, st.ToolEvents, st.ToolOutputs, st.AggUsage, st.NextAttempt, turnID, planner.TerminationReasonFailureCap, deadlines.Hard)
-			return out, err
-		}
-	} else if st.Caps.MaxConsecutiveFailedToolCalls > 0 {
-		st.Caps.RemainingConsecutiveFailedToolCalls = st.Caps.MaxConsecutiveFailedToolCalls
+func (r *Runtime) waitForAwaitItem(ctx context.Context, wfCtx engine.WorkflowContext, ctrl *interrupt.Controller, input *RunInput, base *planner.PlanInput, st *runLoopState, turnID string, timeout time.Duration, deadlines *runDeadlines, it planner.AwaitItem) ([]*planner.ToolResult, error) {
+	waitStartedAt := wfCtx.Now()
+	res, err := r.waitAwaitQueueItem(ctx, ctrl, input, base, st, turnID, timeout, it)
+	deadlines.pause(wfCtx.Now().Sub(waitStartedAt))
+	return res, err
+}
+
+func appendAwaitToolResults(current []*planner.ToolResult, extra []*planner.ToolResult) []*planner.ToolResult {
+	if len(extra) == 0 {
+		return current
 	}
+	return append(current, extra...)
+}
 
-	if out, err := r.handleMissingFieldsPolicy(wfCtx, reg, input, base, allToolResults, st.ToolEvents, st.ToolOutputs, st.AggUsage, &st.NextAttempt, turnID, ctrl, deadlines); err != nil {
+func (r *Runtime) handleAwaitPostProcessing(ctx context.Context, wfCtx engine.WorkflowContext, reg AgentRegistration, input *RunInput, base *planner.PlanInput, st *runLoopState, resumeOpts engine.ActivityOptions, turnID string, ctrl *interrupt.Controller, deadlines *runDeadlines, confirmations []confirmationAwait, items []planner.AwaitItem, allToolResults []*planner.ToolResult) (*RunOutput, error) {
+	if out, err := r.applyAwaitFailurePolicy(wfCtx, reg, input, base, st, allToolResults, turnID, ctrl, deadlines); err != nil || out != nil {
+		return out, err
+	}
+	if out, err := r.finalizeProtectedAwaitRun(ctx, wfCtx, reg, input, base, st, turnID, deadlines, allToolResults); err != nil || out != nil {
+		return out, err
+	}
+	if err := r.publishAwaitResume(ctx, input, base, turnID, confirmations, items); err != nil {
 		return nil, err
-	} else if out != nil {
-		return out, nil
 	}
+	return r.resumeAfterAwait(wfCtx, reg, input, base, st, resumeOpts, deadlines)
+}
 
+func (r *Runtime) finalizeProtectedAwaitRun(ctx context.Context, wfCtx engine.WorkflowContext, reg AgentRegistration, input *RunInput, base *planner.PlanInput, st *runLoopState, turnID string, deadlines *runDeadlines, allToolResults []*planner.ToolResult) (*RunOutput, error) {
 	protected, err := r.hardProtectionIfNeeded(ctx, input.AgentID, base, allToolResults, turnID)
 	if err != nil {
 		return nil, err
 	}
-	if protected {
-		out, err := r.finalizeWithPlanner(wfCtx, reg, input, base, st.ToolEvents, st.ToolOutputs, st.AggUsage, st.NextAttempt, turnID, planner.TerminationReasonFailureCap, deadlines.Hard)
-		return out, err
+	if !protected {
+		return nil, nil
 	}
+	return r.finalizeWithPlanner(wfCtx, reg, input, base, st.ToolEvents, st.ToolOutputs, st.AggUsage, st.NextAttempt, turnID, planner.TerminationReasonFailureCap, deadlines.Hard)
+}
 
-	if err := r.publishHook(
-		ctx,
-		hooks.NewRunResumedEvent(base.RunContext.RunID, input.AgentID, base.RunContext.SessionID, "await_completed", "runtime", map[string]string{
-			"resumed_by":    "await_queue",
-			"confirmations": fmt.Sprintf("%d", len(confirmations)),
-			"items":         fmt.Sprintf("%d", len(items)),
-		}, 0),
-		turnID,
-	); err != nil {
-		return nil, err
-	}
-
+func (r *Runtime) resumeAfterAwait(wfCtx engine.WorkflowContext, reg AgentRegistration, input *RunInput, base *planner.PlanInput, st *runLoopState, resumeOpts engine.ActivityOptions, deadlines *runDeadlines) (*RunOutput, error) {
 	resumeReq, err := r.buildNextResumeRequest(input.AgentID, base, st.ToolOutputs, &st.NextAttempt)
 	if err != nil {
 		return nil, err
@@ -340,297 +249,180 @@ func (r *Runtime) handleAwaitQueue(
 	return nil, nil
 }
 
-func (r *Runtime) publishAwaitQueueItem(ctx context.Context, input *RunInput, base *planner.PlanInput, st *runLoopState, turnID string, it planner.AwaitItem, idx int) error {
-	if it.Kind == "" {
-		return fmt.Errorf("await item %d missing kind", idx)
+func (r *Runtime) applyAwaitFailurePolicy(wfCtx engine.WorkflowContext, reg AgentRegistration, input *RunInput, base *planner.PlanInput, st *runLoopState, allToolResults []*planner.ToolResult, turnID string, ctrl *interrupt.Controller, deadlines *runDeadlines) (*RunOutput, error) {
+	if out, err := r.applyAwaitFailureCap(wfCtx, reg, input, base, st, allToolResults, turnID, deadlines); err != nil || out != nil {
+		return out, err
 	}
-
-	switch it.Kind {
-	case planner.AwaitItemKindClarification:
-		c := it.Clarification
-		if c == nil {
-			return fmt.Errorf("await clarification item %d missing payload", idx)
-		}
-		return r.publishHook(ctx, hooks.NewAwaitClarificationEvent(
-			base.RunContext.RunID,
-			input.AgentID,
-			base.RunContext.SessionID,
-			c.ID,
-			c.Question,
-			c.MissingFields,
-			c.RestrictToTool,
-			c.ExampleInput,
-		), turnID)
-	case planner.AwaitItemKindQuestions:
-		q := it.Questions
-		if q == nil {
-			return fmt.Errorf("await questions item %d missing payload", idx)
-		}
-		qs := make([]hooks.AwaitQuestion, 0, len(q.Questions))
-		for _, qq := range q.Questions {
-			opts := make([]hooks.AwaitQuestionOption, 0, len(qq.Options))
-			for _, o := range qq.Options {
-				opts = append(opts, hooks.AwaitQuestionOption{ID: o.ID, Label: o.Label})
-			}
-			qs = append(qs, hooks.AwaitQuestion{
-				ID:            qq.ID,
-				Prompt:        qq.Prompt,
-				AllowMultiple: qq.AllowMultiple,
-				Options:       opts,
-			})
-		}
-		if err := r.publishHook(ctx, hooks.NewAwaitQuestionsEvent(
-			base.RunContext.RunID,
-			input.AgentID,
-			base.RunContext.SessionID,
-			q.ID,
-			q.ToolName,
-			q.ToolCallID,
-			q.Payload,
-			q.Title,
-			qs,
-		), turnID); err != nil {
-			return err
-		}
-		// Questions are modeled as a provider-native tool use. Record the
-		// assistant tool_use turn before waiting for out-of-band results.
-		r.recordAssistantTurn(base, st.Transcript, []planner.ToolRequest{{
-			Name:       q.ToolName,
-			ToolCallID: q.ToolCallID,
-			Payload:    q.Payload,
-		}}, st.Ledger)
-		if q.ToolCallID == "" {
-			return errors.New("await_questions: missing tool_call_id")
-		}
-		return r.publishHook(ctx, hooks.NewToolCallScheduledEvent(
-			base.RunContext.RunID,
-			input.AgentID,
-			base.RunContext.SessionID,
-			q.ToolName,
-			q.ToolCallID,
-			q.Payload,
-			"",
-			"",
-			0,
-		), turnID)
-	case planner.AwaitItemKindExternalTools:
-		e := it.ExternalTools
-		if e == nil {
-			return fmt.Errorf("await external_tools item %d missing payload", idx)
-		}
-		if len(e.Items) == 0 {
-			return errors.New("await_external_tools: no items in await")
-		}
-		items := make([]hooks.AwaitToolItem, 0, len(e.Items))
-		awaitCalls := make([]planner.ToolRequest, 0, len(e.Items))
-		for _, item := range e.Items {
-			items = append(items, hooks.AwaitToolItem{
-				ToolName:   item.Name,
-				ToolCallID: item.ToolCallID,
-				Payload:    item.Payload,
-			})
-			awaitCalls = append(awaitCalls, planner.ToolRequest{
-				Name:       item.Name,
-				ToolCallID: item.ToolCallID,
-				Payload:    item.Payload,
-			})
-		}
-		if err := r.publishHook(ctx, hooks.NewAwaitExternalToolsEvent(
-			base.RunContext.RunID,
-			input.AgentID,
-			base.RunContext.SessionID,
-			e.ID,
-			items,
-		), turnID); err != nil {
-			return err
-		}
-		// External tools are modeled as a provider-native tool use. Record the
-		// assistant tool_use turn before waiting for out-of-band results.
-		r.recordAssistantTurn(base, st.Transcript, awaitCalls, st.Ledger)
-		for _, call := range awaitCalls {
-			if call.ToolCallID == "" {
-				continue
-			}
-			if err := r.publishHook(ctx, hooks.NewToolCallScheduledEvent(
-				base.RunContext.RunID,
-				input.AgentID,
-				base.RunContext.SessionID,
-				call.Name,
-				call.ToolCallID,
-				call.Payload,
-				"",
-				"",
-				0,
-			), turnID); err != nil {
-				return err
-			}
-		}
-		return nil
-	default:
-		return fmt.Errorf("unknown await item kind %q", it.Kind)
-	}
+	return r.handleMissingFieldsPolicy(wfCtx, reg, input, base, allToolResults, st.ToolEvents, st.ToolOutputs, st.AggUsage, &st.NextAttempt, turnID, ctrl, deadlines)
 }
 
-func (r *Runtime) waitAwaitQueueItem(ctx context.Context, ctrl *interrupt.Controller, input *RunInput, base *planner.PlanInput, st *runLoopState, turnID string, timeout time.Duration, it planner.AwaitItem) ([]*planner.ToolResult, error) {
-	switch it.Kind {
-	case planner.AwaitItemKindClarification:
-		c := it.Clarification
-		if c == nil {
-			return nil, errors.New("await clarification missing payload")
-		}
-		ans, err := ctrl.WaitProvideClarification(ctx, timeout)
-		if err != nil {
-			return nil, err
-		}
-		if ans == nil {
-			return nil, errors.New("await clarification: nil answer")
-		}
-		if c.ID != "" && ans.ID != "" && ans.ID != c.ID {
-			return nil, errors.New("unexpected await ID for clarification")
-		}
-		if ans.Answer != "" {
-			base.Messages = append(base.Messages, &model.Message{
-				Role:  model.ConversationRoleUser,
-				Parts: []model.Part{model.TextPart{Text: ans.Answer}},
-			})
+func (r *Runtime) applyAwaitFailureCap(wfCtx engine.WorkflowContext, reg AgentRegistration, input *RunInput, base *planner.PlanInput, st *runLoopState, allToolResults []*planner.ToolResult, turnID string, deadlines *runDeadlines) (*RunOutput, error) {
+	failures := capFailures(allToolResults)
+	if failures == 0 {
+		if st.Caps.MaxConsecutiveFailedToolCalls > 0 {
+			st.Caps.RemainingConsecutiveFailedToolCalls = st.Caps.MaxConsecutiveFailedToolCalls
 		}
 		return nil, nil
-	case planner.AwaitItemKindQuestions:
-		q := it.Questions
-		if q == nil {
-			return nil, errors.New("await questions missing payload")
-		}
-		rs, err := ctrl.WaitProvideToolResults(ctx, timeout)
-		if err != nil {
-			return nil, err
-		}
-		if rs == nil {
-			return nil, errors.New("await questions: nil tool results set")
-		}
-		if q.ID != "" && rs.ID != "" && rs.ID != q.ID {
-			return nil, errors.New("unexpected await ID for questions")
-		}
-		expected := map[string]struct{}{q.ToolCallID: {}}
-		allowed := []planner.ToolRequest{
-			{
-				Name:       q.ToolName,
-				ToolCallID: q.ToolCallID,
-				Payload:    q.Payload,
-			},
-		}
-		return r.consumeProvidedToolResults(ctx, input, base, st, turnID, rs, allowed, expected)
-	case planner.AwaitItemKindExternalTools:
-		e := it.ExternalTools
-		if e == nil {
-			return nil, errors.New("await external_tools missing payload")
-		}
-		rs, err := ctrl.WaitProvideToolResults(ctx, timeout)
-		if err != nil {
-			return nil, err
-		}
-		if rs == nil {
-			return nil, errors.New("await external_tools: nil tool results set")
-		}
-		if e.ID != "" && rs.ID != "" && rs.ID != e.ID {
-			return nil, errors.New("unexpected await ID for external_tools")
-		}
-		expected := make(map[string]struct{}, len(e.Items))
-		allowed := make([]planner.ToolRequest, 0, len(e.Items))
-		for _, it := range e.Items {
-			if it.ToolCallID == "" {
-				return nil, fmt.Errorf("await_external_tools: missing tool_call_id for external tool %q", it.Name)
-			}
-			expected[it.ToolCallID] = struct{}{}
-			allowed = append(allowed, planner.ToolRequest{
-				Name:       it.Name,
-				ToolCallID: it.ToolCallID,
-				Payload:    it.Payload,
-			})
-		}
-		return r.consumeProvidedToolResults(ctx, input, base, st, turnID, rs, allowed, expected)
-	default:
-		return nil, fmt.Errorf("unknown await item kind %q", it.Kind)
 	}
+	st.Caps.RemainingConsecutiveFailedToolCalls = decrementCap(st.Caps.RemainingConsecutiveFailedToolCalls, failures)
+	if st.Caps.MaxConsecutiveFailedToolCalls == 0 || st.Caps.RemainingConsecutiveFailedToolCalls > 0 {
+		return nil, nil
+	}
+	return r.finalizeWithPlanner(wfCtx, reg, input, base, st.ToolEvents, st.ToolOutputs, st.AggUsage, st.NextAttempt, turnID, planner.TerminationReasonFailureCap, deadlines.Hard)
 }
 
-func (r *Runtime) consumeProvidedToolResults(ctx context.Context, input *RunInput, base *planner.PlanInput, st *runLoopState, turnID string, rs *api.ToolResultsSet, allowed []planner.ToolRequest, expected map[string]struct{}) ([]*planner.ToolResult, error) {
-	if rs == nil {
-		return nil, errors.New("await: nil tool results set")
-	}
-	if len(rs.Results) == 0 {
-		return nil, errors.New("await: no tool results provided")
-	}
+func (r *Runtime) publishAwaitResume(ctx context.Context, input *RunInput, base *planner.PlanInput, turnID string, confirmations []confirmationAwait, items []planner.AwaitItem) error {
+	return r.publishHook(
+		ctx,
+		hooks.NewRunResumedEvent(base.RunContext.RunID, input.AgentID, base.RunContext.SessionID, "await_completed", "runtime", map[string]string{
+			"resumed_by":    "await_queue",
+			"confirmations": fmt.Sprintf("%d", len(confirmations)),
+			"items":         fmt.Sprintf("%d", len(items)),
+		}, 0),
+		turnID,
+	)
+}
 
-	seen := make(map[string]struct{}, len(rs.Results))
-	providedByID := make(map[string]*api.ProvidedToolResult, len(rs.Results))
-	for _, item := range rs.Results {
-		if item == nil {
-			return nil, errors.New("await: nil tool result")
-		}
-		if item.ToolCallID == "" {
-			return nil, fmt.Errorf("await: result for tool %q missing tool_call_id", item.Name)
-		}
-		if expected != nil {
-			if _, ok := expected[item.ToolCallID]; !ok {
-				return nil, fmt.Errorf("await: unexpected tool result for tool_call_id %q", item.ToolCallID)
-			}
-		}
-		if _, dup := seen[item.ToolCallID]; dup {
-			return nil, fmt.Errorf("await: duplicate result for tool_call_id %q", item.ToolCallID)
-		}
-		seen[item.ToolCallID] = struct{}{}
-		providedByID[item.ToolCallID] = item
-	}
-	if expected != nil && len(seen) != len(expected) {
-		return nil, fmt.Errorf("await: tool result ids did not match awaited tool_use ids (awaited=%d, got=%d)", len(expected), len(seen))
-	}
-
-	decoded, resultJSONs, err := r.decodeProvidedToolResults(ctx, allowed, providedByID)
+func waitForConfirmationDecision(ctx context.Context, wfCtx engine.WorkflowContext, ctrl *interrupt.Controller, deadlines *runDeadlines) (interrupt.ConfirmationDecision, error) {
+	waitStartedAt := wfCtx.Now()
+	dec, err := ctrl.WaitProvideConfirmation(ctx, 0)
 	if err != nil {
 		return nil, err
 	}
+	deadlines.pause(wfCtx.Now().Sub(waitStartedAt))
+	return dec, nil
+}
 
-	// Record tool results in the run ledger and publish tool_result events for streaming.
-	st.ToolEvents = append(st.ToolEvents, cloneToolResults(decoded)...)
-	if err := r.appendToolOutputs(ctx, st, allowed, decoded); err != nil {
-		return nil, err
+func validateConfirmationDecision(dec interrupt.ConfirmationDecision, it confirmationAwait) error {
+	if dec == nil {
+		return errors.New("await_confirmation: received nil confirmation decision")
 	}
+	if dec.ID != "" && dec.ID != it.awaitID {
+		return fmt.Errorf("unexpected confirmation id %q (expected %q)", dec.ID, it.awaitID)
+	}
+	if dec.RequestedBy == "" {
+		return fmt.Errorf("confirmation decision missing requested_by for %q (%s)", it.call.Name, it.call.ToolCallID)
+	}
+	return nil
+}
 
-	if err := r.appendUserToolResults(base, allowed, decoded, st.Ledger); err != nil {
-		return nil, err
-	}
+func (r *Runtime) publishAuthorizationDecision(ctx context.Context, input *RunInput, base *planner.PlanInput, turnID string, it confirmationAwait, dec interrupt.ConfirmationDecision) error {
+	return r.publishHook(ctx, hooks.NewToolAuthorizationEvent(
+		base.RunContext.RunID,
+		input.AgentID,
+		base.RunContext.SessionID,
+		it.call.Name,
+		it.call.ToolCallID,
+		dec.Approved,
+		it.plan.Prompt,
+		dec.RequestedBy,
+	), turnID)
+}
 
-	for i, tr := range decoded {
-		if tr == nil {
-			continue
-		}
-		var resultJSON rawjson.Message
-		if i < len(resultJSONs) {
-			resultJSON = resultJSONs[i]
-		}
-		if err := r.publishHook(
-			ctx,
-			hooks.NewToolResultReceivedEvent(
-				base.RunContext.RunID,
-				input.AgentID,
-				base.RunContext.SessionID,
-				tr.Name,
-				tr.ToolCallID,
-				"",
-				tr.Result,
-				resultJSON,
-				tr.ServerData,
-				formatResultPreview(tr.Name, tr.Result, tr.Bounds),
-				tr.Bounds,
-				0,
-				nil,
-				tr.RetryHint,
-				tr.Error,
-			),
-			turnID,
-		); err != nil {
-			return nil, err
-		}
+func (r *Runtime) handleDeniedConfirmation(ctx context.Context, base *planner.PlanInput, st *runLoopState, turnID string, expectedChildren int, it confirmationAwait) ([]*planner.ToolResult, *RunOutput, error) {
+	deniedResult := it.plan.DeniedResult
+	if err := r.publishDeniedConfirmationEvents(ctx, turnID, expectedChildren, it, deniedResult); err != nil {
+		return nil, nil, err
 	}
-	return decoded, nil
+	tr := &planner.ToolResult{
+		Name:       it.call.Name,
+		ToolCallID: it.call.ToolCallID,
+		Result:     deniedResult,
+	}
+	if err := r.recordConfirmationToolResult(ctx, base, st, it.call, tr); err != nil {
+		return nil, nil, err
+	}
+	return []*planner.ToolResult{tr}, nil, nil
+}
+
+func (r *Runtime) publishDeniedConfirmationEvents(ctx context.Context, turnID string, expectedChildren int, it confirmationAwait, deniedResult any) error {
+	if err := r.publishHook(ctx, hooks.NewToolCallScheduledEvent(
+		it.call.RunID,
+		it.call.AgentID,
+		it.call.SessionID,
+		it.call.Name,
+		it.call.ToolCallID,
+		it.call.Payload,
+		"",
+		it.call.ParentToolCallID,
+		expectedChildren,
+	), turnID); err != nil {
+		return err
+	}
+	resultJSON, err := r.marshalToolValue(ctx, it.call.Name, deniedResult, nil)
+	if err != nil {
+		return fmt.Errorf("encode %s denied tool result for streaming: %w", it.call.Name, err)
+	}
+	return r.publishHook(ctx, hooks.NewToolResultReceivedEvent(
+		it.call.RunID,
+		it.call.AgentID,
+		it.call.SessionID,
+		it.call.Name,
+		it.call.ToolCallID,
+		it.call.ParentToolCallID,
+		deniedResult,
+		rawjson.Message(resultJSON),
+		nil,
+		formatResultPreview(it.call.Name, deniedResult, nil),
+		nil,
+		0,
+		nil,
+		nil,
+		nil,
+	), turnID)
+}
+
+func (r *Runtime) recordConfirmationToolResult(ctx context.Context, base *planner.PlanInput, st *runLoopState, call planner.ToolRequest, tr *planner.ToolResult) error {
+	st.ToolEvents = append(st.ToolEvents, cloneToolResults([]*planner.ToolResult{tr})...)
+	if err := r.appendToolOutputs(ctx, st, []planner.ToolRequest{call}, []*planner.ToolResult{tr}); err != nil {
+		return err
+	}
+	return r.appendUserToolResults(base, []planner.ToolRequest{call}, []*planner.ToolResult{tr}, st.Ledger)
+}
+
+func (r *Runtime) executeConfirmedToolCall(ctx context.Context, wfCtx engine.WorkflowContext, reg AgentRegistration, input *RunInput, base *planner.PlanInput, st *runLoopState, toolOpts engine.ActivityOptions, expectedChildren int, parentTracker *childTracker, turnID string, deadlines *runDeadlines, it confirmationAwait) ([]*planner.ToolResult, *RunOutput, error) {
+	call := it.call
+	if call.ToolCallID == "" {
+		call.ToolCallID = generateDeterministicToolCallID(base.RunContext.RunID, call.TurnID, base.RunContext.Attempt, call.Name, 0)
+	}
+	grouped, timeouts := r.groupToolCallsByTimeout([]planner.ToolRequest{call}, input, toolOpts.StartToCloseTimeout)
+	finishBy := confirmationFinishBy(deadlines)
+	vals, timedOut, err := r.executeGroupedToolCalls(
+		wfCtx,
+		reg,
+		input.AgentID,
+		base,
+		expectedChildren,
+		parentTracker,
+		finishBy,
+		grouped,
+		timeouts,
+		toolOpts,
+	)
+	if err != nil {
+		return nil, nil, err
+	}
+	if err := r.recordExecutedConfirmationResults(ctx, base, st, call, vals); err != nil {
+		return nil, nil, err
+	}
+	if timedOut {
+		out, err := r.finalizeWithPlanner(wfCtx, reg, input, base, st.ToolEvents, st.ToolOutputs, st.AggUsage, st.NextAttempt, turnID, planner.TerminationReasonTimeBudget, deadlines.Hard)
+		return nil, out, err
+	}
+	return vals, nil, nil
+}
+
+func confirmationFinishBy(deadlines *runDeadlines) time.Time {
+	if deadlines == nil || deadlines.Hard.IsZero() {
+		return time.Time{}
+	}
+	return deadlines.Hard.Add(-deadlines.finalizeReserve())
+}
+
+func (r *Runtime) recordExecutedConfirmationResults(ctx context.Context, base *planner.PlanInput, st *runLoopState, call planner.ToolRequest, vals []*planner.ToolResult) error {
+	st.ToolEvents = append(st.ToolEvents, cloneToolResults(vals)...)
+	if err := r.appendToolOutputs(ctx, st, []planner.ToolRequest{call}, vals); err != nil {
+		return err
+	}
+	return r.appendUserToolResults(base, []planner.ToolRequest{call}, vals, st.Ledger)
 }
