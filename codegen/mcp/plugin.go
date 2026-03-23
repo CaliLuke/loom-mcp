@@ -69,6 +69,10 @@ func synthesizePureMCPJSONRPCEndpoints(root *expr.RootExpr, svc *expr.ServiceExp
 		if _, ok := existing[method.Name]; ok {
 			continue
 		}
+		if method.Meta == nil {
+			method.Meta = expr.MetaExpr{}
+		}
+		method.Meta["jsonrpc"] = []string{}
 		jsonrpcSvc.HTTPEndpoints = append(jsonrpcSvc.HTTPEndpoints, &expr.HTTPEndpointExpr{
 			MethodExpr: method,
 			Service:    jsonrpcSvc,
@@ -100,5 +104,6 @@ func synthesizePureMCPJSONRPCEndpoints(root *expr.RootExpr, svc *expr.ServiceExp
 	jsonrpcSvc.Prepare()
 	for _, endpoint := range jsonrpcSvc.HTTPEndpoints {
 		endpoint.Prepare()
+		endpoint.Finalize()
 	}
 }

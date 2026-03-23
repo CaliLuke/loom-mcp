@@ -10,6 +10,7 @@ import (
 
 	mcpexpr "github.com/CaliLuke/loom-mcp/expr/mcp"
 	gcodegen "github.com/CaliLuke/loom/codegen"
+	generatorcodegen "github.com/CaliLuke/loom/codegen/generator"
 	"github.com/CaliLuke/loom/eval"
 	"github.com/CaliLuke/loom/expr"
 	"github.com/stretchr/testify/require"
@@ -107,8 +108,39 @@ func TestPrepareServices_SynthesizesJSONRPCEndpointsForPureMCPMethods(t *testing
 	require.Len(t, jsonrpcSvc.HTTPEndpoints, 1)
 	require.Equal(t, "ping", jsonrpcSvc.HTTPEndpoints[0].MethodExpr.Name)
 	require.NotNil(t, jsonrpcSvc.HTTPEndpoints[0].Meta["jsonrpc"])
+	require.NotNil(t, methods["ping"].Meta["jsonrpc"])
 	require.Len(t, jsonrpcSvc.HTTPEndpoints[0].Routes, 1)
 	require.Equal(t, "/rpc", jsonrpcSvc.HTTPEndpoints[0].Routes[0].Path)
+}
+
+func TestPrepareServices_AllowsGenericTransportGenerationForPureMCPMethodsWithoutMethodLevelJSONRPC(t *testing.T) {
+	restore := resetMCPCodegenState(t)
+	defer restore()
+
+	svc, methods := testService("demo", "ping")
+	root := testRootExpr([]*expr.ServiceExpr{svc}, []*expr.HTTPServiceExpr{
+		jsonrpcService(svc, "/rpc"),
+	})
+	mcpexpr.Root.RegisterMCP(svc, &mcpexpr.MCPExpr{
+		Name:    "demo",
+		Version: "0.1.0",
+		Tools: []*mcpexpr.ToolExpr{
+			{Name: "ping", Method: methods["ping"]},
+		},
+	})
+
+	err := PrepareServices("", []eval.Root{root})
+	require.NoError(t, err)
+	jsonrpcSvc := root.API.JSONRPC.Service("demo")
+	require.NotNil(t, jsonrpcSvc)
+	require.Len(t, jsonrpcSvc.HTTPEndpoints, 1)
+	require.NotEmpty(t, jsonrpcSvc.HTTPEndpoints[0].Responses)
+	require.NotNil(t, jsonrpcSvc.HTTPEndpoints[0].Responses[0].Body)
+
+	files, err := generatorcodegen.Transport("example.com/demo/gen", []eval.Root{root})
+
+	require.NoError(t, err)
+	require.NotEmpty(t, files)
 }
 
 func TestGenerateMCPClientAdapter_DoesNotRenderOriginalClientFallback(t *testing.T) {
@@ -888,6 +920,7 @@ func testRootExpr(services []*expr.ServiceExpr, jsonrpcServices []*expr.HTTPServ
 			JSONRPC: &expr.JSONRPCExpr{
 				HTTPExpr: expr.HTTPExpr{Services: jsonrpcServices},
 			},
+			GRPC:    &expr.GRPCExpr{},
 			Servers: servers,
 		},
 	}
