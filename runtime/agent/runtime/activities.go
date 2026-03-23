@@ -195,101 +195,13 @@ func (r *Runtime) ExecuteToolActivity(ctx context.Context, req *ToolInput) (*Too
 	stopHeartbeat := startActivityHeartbeat(ctx)
 	defer stopHeartbeat()
 
-	if req == nil {
-		return nil, errors.New("tool input is required")
+	reg, raw, meta, out, err := r.prepareToolActivity(ctx, req)
+	if err != nil {
+		return nil, err
 	}
-	if req.ToolName == "" {
-		return nil, errors.New("tool name is required")
+	if out != nil {
+		return out, nil
 	}
-	// Forbid agent-as-tool execution from activities. Agent-tools must execute inside
-	// the workflow thread so child workflows can be started legally.
-	if spec, ok := r.toolSpec(req.ToolName); ok && spec.IsAgentTool {
-		// When the provider agent attempts to execute its own agent-as-tool via
-		// ExecuteToolActivity, surface a precise error so callers fix the planner
-		// tool list instead of routing through activities.
-		if string(req.AgentID) == spec.AgentID {
-			return nil, fmt.Errorf(
-				"agent %q attempted to execute its own agent-as-tool %q via ExecuteToolActivity; "+
-					"agent-as-tools must run inline in workflow context and must not be exposed to the provider's planner tool list",
-				req.AgentID,
-				req.ToolName,
-			)
-		}
-		return nil, fmt.Errorf("agent-as-tool %q must run in workflow context", req.ToolName)
-	}
-	sName := req.ToolsetName
-	if sName == "" {
-		spec, ok := r.toolSpec(req.ToolName)
-		if !ok {
-			return nil, fmt.Errorf("unknown tool %q", req.ToolName)
-		}
-		sName = spec.Toolset
-	}
-	r.mu.RLock()
-	reg, ok := r.toolsets[sName]
-	r.mu.RUnlock()
-	if !ok {
-		return nil, fmt.Errorf("toolset %q is not registered", sName)
-	}
-
-	// Apply optional payload adapter before decoding. Payloads are canonical
-	// JSON (json.RawMessage) along the planner/runtime boundary; adapters may
-	// normalize them before validation or execution.
-	raw := req.Payload
-	meta := toolCallMeta(planner.ToolRequest{
-		RunID:            req.RunID,
-		SessionID:        req.SessionID,
-		TurnID:           req.TurnID,
-		ToolCallID:       req.ToolCallID,
-		ParentToolCallID: req.ParentToolCallID,
-	})
-	if reg.PayloadAdapter != nil && len(raw) > 0 {
-		if adapted, err := reg.PayloadAdapter(ctx, meta, req.ToolName, raw.RawMessage()); err == nil && len(adapted) > 0 {
-			raw = rawjson.Message(adapted)
-		} else if err != nil {
-			return &ToolOutput{Error: fmt.Sprintf("payload adapter failed: %v", err)}, nil
-		}
-	}
-
-	// For non DecodeInExecutor toolsets, validate payloads eagerly using the
-	// generated codecs so we can surface structured retry hints. Executors
-	// still receive the canonical JSON payload and may decode again as needed.
-	if !reg.DecodeInExecutor && len(raw) > 0 {
-		if _, decErr := r.unmarshalToolValue(ctx, req.ToolName, raw.RawMessage(), true); decErr != nil {
-			// Build structured retry hints using generated ValidationError when present.
-			if fields, question, reason, ok := buildRetryHintFromValidation(decErr, req.ToolName); ok {
-				return &ToolOutput{
-					Error: decErr.Error(),
-					RetryHint: &planner.RetryHint{
-						Reason:             reason,
-						Tool:               req.ToolName,
-						MissingFields:      fields,
-						ClarifyingQuestion: question,
-					},
-				}, nil
-			}
-			// Not a validation error: attempt to build a decode-oriented retry hint
-			// (for example, malformed or wrong-shape JSON) so planners can guide the
-			// caller toward a schema-compliant payload.
-			var specPtr *tools.ToolSpec
-			if spec, ok := r.toolSpec(req.ToolName); ok {
-				cp := spec
-				specPtr = &cp
-			}
-			if hint := buildRetryHintFromDecodeError(decErr, req.ToolName, specPtr); hint != nil {
-				return &ToolOutput{
-					Error:     decErr.Error(),
-					RetryHint: hint,
-				}, nil
-			}
-			// No structured hint available: return error only.
-			return &ToolOutput{Error: decErr.Error()}, nil
-		}
-	}
-
-	// Populate run context fields so tool implementations can access metadata.
-	// Agent-tools use these to construct nested contexts; regular tools use
-	// them for logging/telemetry. Payload is always canonical JSON.
 	call := planner.ToolRequest{
 		Name:             req.ToolName,
 		Payload:          raw,
@@ -318,19 +230,125 @@ func (r *Runtime) ExecuteToolActivity(ctx context.Context, req *ToolInput) (*Too
 	if err != nil {
 		return nil, err
 	}
-	out := &ToolOutput{
+	resultOut := &ToolOutput{
 		Payload:    resultJSON,
 		Bounds:     result.Bounds,
 		ServerData: result.ServerData,
 		Telemetry:  result.Telemetry,
 	}
 	if result.Error != nil {
-		out.Error = result.Error.Error()
+		resultOut.Error = result.Error.Error()
 	}
 	if result.RetryHint != nil {
-		out.RetryHint = result.RetryHint
+		resultOut.RetryHint = result.RetryHint
 	}
-	return out, nil
+	return resultOut, nil
+}
+
+func (r *Runtime) prepareToolActivity(ctx context.Context, req *ToolInput) (ToolsetRegistration, rawjson.Message, ToolCallMeta, *ToolOutput, error) {
+	if err := r.validateToolActivityRequest(req); err != nil {
+		return ToolsetRegistration{}, nil, ToolCallMeta{}, nil, err
+	}
+	reg, err := r.resolveToolsetRegistration(req)
+	if err != nil {
+		return ToolsetRegistration{}, nil, ToolCallMeta{}, nil, err
+	}
+	meta := toolCallMeta(planner.ToolRequest{
+		RunID:            req.RunID,
+		SessionID:        req.SessionID,
+		TurnID:           req.TurnID,
+		ToolCallID:       req.ToolCallID,
+		ParentToolCallID: req.ParentToolCallID,
+	})
+	raw, out := r.adaptAndValidateToolPayload(ctx, reg, req, meta)
+	return reg, raw, meta, out, nil
+}
+
+func (r *Runtime) validateToolActivityRequest(req *ToolInput) error {
+	if req == nil {
+		return errors.New("tool input is required")
+	}
+	if req.ToolName == "" {
+		return errors.New("tool name is required")
+	}
+	if spec, ok := r.toolSpec(req.ToolName); ok && spec.IsAgentTool {
+		if string(req.AgentID) == spec.AgentID {
+			return fmt.Errorf(
+				"agent %q attempted to execute its own agent-as-tool %q via ExecuteToolActivity; "+
+					"agent-as-tools must run inline in workflow context and must not be exposed to the provider's planner tool list",
+				req.AgentID,
+				req.ToolName,
+			)
+		}
+		return fmt.Errorf("agent-as-tool %q must run in workflow context", req.ToolName)
+	}
+	return nil
+}
+
+func (r *Runtime) resolveToolsetRegistration(req *ToolInput) (ToolsetRegistration, error) {
+	sName := req.ToolsetName
+	if sName == "" {
+		spec, ok := r.toolSpec(req.ToolName)
+		if !ok {
+			return ToolsetRegistration{}, fmt.Errorf("unknown tool %q", req.ToolName)
+		}
+		sName = spec.Toolset
+	}
+	r.mu.RLock()
+	reg, ok := r.toolsets[sName]
+	r.mu.RUnlock()
+	if !ok {
+		return ToolsetRegistration{}, fmt.Errorf("toolset %q is not registered", sName)
+	}
+	return reg, nil
+}
+
+func (r *Runtime) adaptAndValidateToolPayload(
+	ctx context.Context,
+	reg ToolsetRegistration,
+	req *ToolInput,
+	meta ToolCallMeta,
+) (rawjson.Message, *ToolOutput) {
+	raw := req.Payload
+	if reg.PayloadAdapter != nil && len(raw) > 0 {
+		adapted, err := reg.PayloadAdapter(ctx, meta, req.ToolName, raw.RawMessage())
+		if err != nil {
+			return nil, &ToolOutput{Error: fmt.Sprintf("payload adapter failed: %v", err)}
+		}
+		if len(adapted) > 0 {
+			raw = rawjson.Message(adapted)
+		}
+	}
+	if reg.DecodeInExecutor || len(raw) == 0 {
+		return raw, nil
+	}
+	if _, decErr := r.unmarshalToolValue(ctx, req.ToolName, raw.RawMessage(), true); decErr != nil {
+		return nil, r.toolDecodeErrorOutput(req.ToolName, decErr)
+	}
+	return raw, nil
+}
+
+func (r *Runtime) toolDecodeErrorOutput(toolName tools.Ident, decErr error) *ToolOutput {
+	if fields, question, reason, ok := buildRetryHintFromValidation(decErr, toolName); ok {
+		return &ToolOutput{
+			Error: decErr.Error(),
+			RetryHint: &planner.RetryHint{
+				Reason:             reason,
+				Tool:               toolName,
+				MissingFields:      fields,
+				ClarifyingQuestion: question,
+			},
+		}
+	}
+	var specPtr *tools.ToolSpec
+	if spec, ok := r.toolSpec(toolName); ok {
+		cp := spec
+		specPtr = &cp
+	}
+	if hint := buildRetryHintFromDecodeError(decErr, toolName, specPtr); hint != nil {
+		return &ToolOutput{Error: decErr.Error(), RetryHint: hint}
+	}
+	return &ToolOutput{Error: decErr.Error()}
 }
 
 // buildRetryHintFromValidation attempts to extract structured validation issues from

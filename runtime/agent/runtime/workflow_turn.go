@@ -13,6 +13,7 @@ package runtime
 //   Await.ExternalTools handshake (execute internal tools first, then pause).
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"time"
@@ -49,79 +50,13 @@ func (r *Runtime) handleToolTurn(
 	if deadlines == nil {
 		return nil, errors.New("missing run deadlines")
 	}
-
-	if st.Caps.RemainingToolCalls == 0 && st.Caps.MaxToolCalls > 0 {
-		out, err := r.finalizeWithPlanner(wfCtx, reg, input, base, st.ToolEvents, st.ToolOutputs, st.AggUsage, st.NextAttempt, turnID, planner.TerminationReasonToolCap, deadlines.Hard)
-		return out, err
-	}
-	if !deadlines.Budget.IsZero() && wfCtx.Now().After(deadlines.Budget) {
-		out, err := r.finalizeWithPlanner(wfCtx, reg, input, base, st.ToolEvents, st.ToolOutputs, st.AggUsage, st.NextAttempt, turnID, planner.TerminationReasonTimeBudget, deadlines.Hard)
+	if out, err := r.enforceToolTurnGuards(wfCtx, reg, input, base, st, turnID, deadlines); err != nil || out != nil {
 		return out, err
 	}
 
-	candidates := result.ToolCalls
-	r.logger.Info(ctx, "Workflow received tool calls from planner", "count", len(candidates))
-	candidates = r.applyPerRunOverrides(ctx, input, candidates)
-	var err error
-	candidates, err = r.rewriteUnknownToolCalls(candidates)
+	allowed, toExecute, confirmations, execCalls, err := r.prepareToolTurnCalls(ctx, input, base, st, turnID, parentTracker, ctrl)
 	if err != nil {
 		return nil, err
-	}
-	allowed, nextCaps, err := r.applyRuntimePolicy(ctx, base, input, candidates, st.Caps, turnID, result.RetryHint)
-	if err != nil {
-		return nil, err
-	}
-	st.Caps = nextCaps
-	if len(allowed) == 0 {
-		r.logger.Error(ctx, "ERROR - No tools allowed for execution after filtering", "candidates", len(result.ToolCalls))
-		return nil, errors.New("no tools allowed for execution")
-	}
-
-	r.logger.Info(ctx, "Executing allowed tool calls", "count", len(allowed))
-	if parentTracker != nil {
-		ids := collectToolCallIDs(allowed)
-		if len(ids) > 0 && parentTracker.registerDiscovered(ids) {
-			if base.RunContext.ParentRunID == "" || base.RunContext.ParentAgentID == "" {
-				return nil, fmt.Errorf("nested run is missing parent run context")
-			}
-			if err := r.publishHook(
-				ctx,
-				hooks.NewToolCallUpdatedEvent(
-					base.RunContext.ParentRunID,
-					base.RunContext.ParentAgentID,
-					base.RunContext.SessionID,
-					parentTracker.parentToolCallID,
-					parentTracker.currentTotal(),
-				),
-				turnID,
-			); err != nil {
-				return nil, err
-			}
-			parentTracker.markUpdated()
-		}
-	}
-
-	allowed = r.capAllowedCalls(allowed, input, st.Caps)
-	allowed = r.prepareAllowedCallsMetadata(input.AgentID, base, allowed, parentTracker)
-
-	toExecute, confirmations, err := r.splitConfirmationCalls(ctx, base, allowed)
-	if err != nil {
-		return nil, err
-	}
-	if len(confirmations) > 0 && ctrl == nil {
-		return nil, fmt.Errorf("confirmation required but interrupts are not available")
-	}
-	if len(toExecute) > 0 {
-		r.recordAssistantTurn(base, st.Transcript, toExecute, st.Ledger)
-	}
-
-	execCalls := make([]planner.ToolRequest, len(toExecute))
-	for i := range toExecute {
-		call := toExecute[i]
-		if call.ToolCallID == "" {
-			call.ToolCallID = generateDeterministicToolCallID(base.RunContext.RunID, call.TurnID, base.RunContext.Attempt, call.Name, i)
-		}
-		execCalls[i] = call
 	}
 
 	grouped, timeouts := r.groupToolCallsByTimeout(execCalls, input, toolOpts.StartToCloseTimeout)
@@ -153,60 +88,7 @@ func (r *Runtime) handleToolTurn(
 	if terminal {
 		return r.finishAfterTerminalToolCalls(ctx, input, base, st)
 	}
-
-	st.Caps.RemainingToolCalls = decrementCap(st.Caps.RemainingToolCalls, len(allowed))
-	if len(confirmations) > 0 || (result.Await != nil && len(result.Await.Items) > 0) {
-		items := []planner.AwaitItem(nil)
-		if result.Await != nil {
-			items = result.Await.Items
-		}
-		out, err := r.handleAwaitQueue(
-			wfCtx,
-			reg,
-			input,
-			base,
-			st,
-			resumeOpts,
-			toolOpts,
-			result.ExpectedChildren,
-			parentTracker,
-			ctrl,
-			deadlines,
-			turnID,
-			confirmations,
-			items,
-			lastToolResults,
-		)
-		if err != nil {
-			return nil, err
-		}
-		return out, nil
-	}
-	if capFailures(vals) > 0 {
-		st.Caps.RemainingConsecutiveFailedToolCalls = decrementCap(
-			st.Caps.RemainingConsecutiveFailedToolCalls,
-			capFailures(vals),
-		)
-		if st.Caps.MaxConsecutiveFailedToolCalls > 0 && st.Caps.RemainingConsecutiveFailedToolCalls <= 0 {
-			out, err := r.finalizeWithPlanner(wfCtx, reg, input, base, st.ToolEvents, st.ToolOutputs, st.AggUsage, st.NextAttempt, turnID, planner.TerminationReasonFailureCap, deadlines.Hard)
-			return out, err
-		}
-	} else if st.Caps.MaxConsecutiveFailedToolCalls > 0 {
-		st.Caps.RemainingConsecutiveFailedToolCalls = st.Caps.MaxConsecutiveFailedToolCalls
-	}
-
-	if out, err := r.handleMissingFieldsPolicy(wfCtx, reg, input, base, vals, st.ToolEvents, st.ToolOutputs, st.AggUsage, &st.NextAttempt, turnID, ctrl, deadlines); err != nil {
-		return nil, err
-	} else if out != nil {
-		return out, nil
-	}
-
-	protected, err := r.hardProtectionIfNeeded(ctx, input.AgentID, base, vals, turnID)
-	if err != nil {
-		return nil, err
-	}
-	if protected {
-		out, err := r.finalizeWithPlanner(wfCtx, reg, input, base, st.ToolEvents, st.ToolOutputs, st.AggUsage, st.NextAttempt, turnID, planner.TerminationReasonFailureCap, deadlines.Hard)
+	if out, err := r.handleToolTurnPostExecution(wfCtx, reg, input, base, st, resumeOpts, toolOpts, deadlines, turnID, parentTracker, ctrl, confirmations, lastToolResults, allowed, vals); err != nil || out != nil {
 		return out, err
 	}
 
@@ -225,6 +107,173 @@ func (r *Runtime) handleToolTurn(
 	st.Result = resOutput.Result
 	st.Transcript = resOutput.Transcript
 	st.Ledger = transcript.FromModelMessages(st.Transcript)
+	return nil, nil
+}
+
+func (r *Runtime) enforceToolTurnGuards(
+	wfCtx engine.WorkflowContext,
+	reg AgentRegistration,
+	input *RunInput,
+	base *planner.PlanInput,
+	st *runLoopState,
+	turnID string,
+	deadlines *runDeadlines,
+) (*RunOutput, error) {
+	if st.Caps.RemainingToolCalls == 0 && st.Caps.MaxToolCalls > 0 {
+		return r.finalizeWithPlanner(wfCtx, reg, input, base, st.ToolEvents, st.ToolOutputs, st.AggUsage, st.NextAttempt, turnID, planner.TerminationReasonToolCap, deadlines.Hard)
+	}
+	if !deadlines.Budget.IsZero() && wfCtx.Now().After(deadlines.Budget) {
+		return r.finalizeWithPlanner(wfCtx, reg, input, base, st.ToolEvents, st.ToolOutputs, st.AggUsage, st.NextAttempt, turnID, planner.TerminationReasonTimeBudget, deadlines.Hard)
+	}
+	return nil, nil
+}
+
+func (r *Runtime) prepareToolTurnCalls(
+	ctx context.Context,
+	input *RunInput,
+	base *planner.PlanInput,
+	st *runLoopState,
+	turnID string,
+	parentTracker *childTracker,
+	ctrl *interrupt.Controller,
+) ([]planner.ToolRequest, []planner.ToolRequest, []confirmationAwait, []planner.ToolRequest, error) {
+	candidates := st.Result.ToolCalls
+	r.logger.Info(ctx, "Workflow received tool calls from planner", "count", len(candidates))
+	candidates = r.applyPerRunOverrides(ctx, input, candidates)
+	rewritten, err := r.rewriteUnknownToolCalls(candidates)
+	if err != nil {
+		return nil, nil, nil, nil, err
+	}
+	allowed, nextCaps, err := r.applyRuntimePolicy(ctx, base, input, rewritten, st.Caps, turnID, st.Result.RetryHint)
+	if err != nil {
+		return nil, nil, nil, nil, err
+	}
+	st.Caps = nextCaps
+	if len(allowed) == 0 {
+		r.logger.Error(ctx, "ERROR - No tools allowed for execution after filtering", "candidates", len(st.Result.ToolCalls))
+		return nil, nil, nil, nil, errors.New("no tools allowed for execution")
+	}
+	r.logger.Info(ctx, "Executing allowed tool calls", "count", len(allowed))
+	if err := r.updateParentTracker(ctx, base, turnID, parentTracker, allowed); err != nil {
+		return nil, nil, nil, nil, err
+	}
+	allowed = r.capAllowedCalls(allowed, input, st.Caps)
+	allowed = r.prepareAllowedCallsMetadata(input.AgentID, base, allowed, parentTracker)
+	toExecute, confirmations, err := r.splitConfirmationCalls(ctx, base, allowed)
+	if err != nil {
+		return nil, nil, nil, nil, err
+	}
+	if len(confirmations) > 0 && ctrl == nil {
+		return nil, nil, nil, nil, fmt.Errorf("confirmation required but interrupts are not available")
+	}
+	if len(toExecute) > 0 {
+		r.recordAssistantTurn(base, st.Transcript, toExecute, st.Ledger)
+	}
+	return allowed, toExecute, confirmations, ensureToolCallIDs(base, toExecute), nil
+}
+
+func (r *Runtime) updateParentTracker(ctx context.Context, base *planner.PlanInput, turnID string, parentTracker *childTracker, allowed []planner.ToolRequest) error {
+	if parentTracker == nil {
+		return nil
+	}
+	ids := collectToolCallIDs(allowed)
+	if len(ids) == 0 || !parentTracker.registerDiscovered(ids) {
+		return nil
+	}
+	if base.RunContext.ParentRunID == "" || base.RunContext.ParentAgentID == "" {
+		return fmt.Errorf("nested run is missing parent run context")
+	}
+	if err := r.publishHook(
+		ctx,
+		hooks.NewToolCallUpdatedEvent(
+			base.RunContext.ParentRunID,
+			base.RunContext.ParentAgentID,
+			base.RunContext.SessionID,
+			parentTracker.parentToolCallID,
+			parentTracker.currentTotal(),
+		),
+		turnID,
+	); err != nil {
+		return err
+	}
+	parentTracker.markUpdated()
+	return nil
+}
+
+func ensureToolCallIDs(base *planner.PlanInput, calls []planner.ToolRequest) []planner.ToolRequest {
+	out := make([]planner.ToolRequest, len(calls))
+	for i := range calls {
+		call := calls[i]
+		if call.ToolCallID == "" {
+			call.ToolCallID = generateDeterministicToolCallID(base.RunContext.RunID, call.TurnID, base.RunContext.Attempt, call.Name, i)
+		}
+		out[i] = call
+	}
+	return out
+}
+
+func (r *Runtime) handleToolTurnPostExecution(
+	wfCtx engine.WorkflowContext,
+	reg AgentRegistration,
+	input *RunInput,
+	base *planner.PlanInput,
+	st *runLoopState,
+	resumeOpts engine.ActivityOptions,
+	toolOpts engine.ActivityOptions,
+	deadlines *runDeadlines,
+	turnID string,
+	parentTracker *childTracker,
+	ctrl *interrupt.Controller,
+	confirmations []confirmationAwait,
+	lastToolResults []*planner.ToolResult,
+	allowed []planner.ToolRequest,
+	vals []*planner.ToolResult,
+) (*RunOutput, error) {
+	st.Caps.RemainingToolCalls = decrementCap(st.Caps.RemainingToolCalls, len(allowed))
+	if len(confirmations) > 0 || (st.Result.Await != nil && len(st.Result.Await.Items) > 0) {
+		items := []planner.AwaitItem(nil)
+		if st.Result.Await != nil {
+			items = st.Result.Await.Items
+		}
+		return r.handleAwaitQueue(
+			wfCtx, reg, input, base, st, resumeOpts, toolOpts, st.Result.ExpectedChildren, parentTracker, ctrl, deadlines, turnID, confirmations, items, lastToolResults,
+		)
+	}
+	if out, err := r.applyFailureAndProtectionPolicy(wfCtx, reg, input, base, st, turnID, ctrl, deadlines, vals); err != nil || out != nil {
+		return out, err
+	}
+	return nil, nil
+}
+
+func (r *Runtime) applyFailureAndProtectionPolicy(
+	wfCtx engine.WorkflowContext,
+	reg AgentRegistration,
+	input *RunInput,
+	base *planner.PlanInput,
+	st *runLoopState,
+	turnID string,
+	ctrl *interrupt.Controller,
+	deadlines *runDeadlines,
+	vals []*planner.ToolResult,
+) (*RunOutput, error) {
+	if failures := capFailures(vals); failures > 0 {
+		st.Caps.RemainingConsecutiveFailedToolCalls = decrementCap(st.Caps.RemainingConsecutiveFailedToolCalls, failures)
+		if st.Caps.MaxConsecutiveFailedToolCalls > 0 && st.Caps.RemainingConsecutiveFailedToolCalls <= 0 {
+			return r.finalizeWithPlanner(wfCtx, reg, input, base, st.ToolEvents, st.ToolOutputs, st.AggUsage, st.NextAttempt, turnID, planner.TerminationReasonFailureCap, deadlines.Hard)
+		}
+	} else if st.Caps.MaxConsecutiveFailedToolCalls > 0 {
+		st.Caps.RemainingConsecutiveFailedToolCalls = st.Caps.MaxConsecutiveFailedToolCalls
+	}
+	if out, err := r.handleMissingFieldsPolicy(wfCtx, reg, input, base, vals, st.ToolEvents, st.ToolOutputs, st.AggUsage, &st.NextAttempt, turnID, ctrl, deadlines); err != nil || out != nil {
+		return out, err
+	}
+	protected, err := r.hardProtectionIfNeeded(wfCtx.Context(), input.AgentID, base, vals, turnID)
+	if err != nil {
+		return nil, err
+	}
+	if protected {
+		return r.finalizeWithPlanner(wfCtx, reg, input, base, st.ToolEvents, st.ToolOutputs, st.AggUsage, st.NextAttempt, turnID, planner.TerminationReasonFailureCap, deadlines.Hard)
+	}
 	return nil, nil
 }
 

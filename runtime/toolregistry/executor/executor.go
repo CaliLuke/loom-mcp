@@ -22,6 +22,7 @@ import (
 	"github.com/CaliLuke/loom-mcp/runtime/agent/telemetry"
 	"github.com/CaliLuke/loom-mcp/runtime/agent/tools"
 	"github.com/CaliLuke/loom-mcp/runtime/toolregistry"
+	"goa.design/pulse/streaming"
 	"goa.design/pulse/streaming/options"
 
 	"go.opentelemetry.io/otel/attribute"
@@ -137,36 +138,67 @@ func New(client Client, pulse pulsec.Client, specs SpecLookup, opts ...Option) *
 }
 
 func (e *Executor) Execute(ctx context.Context, meta *runtime.ToolCallMeta, call *planner.ToolRequest) (*planner.ToolResult, error) {
+	spec, toolsetID, result := e.prepareExecution(call, meta)
+	if result != nil {
+		return result, nil
+	}
+	ctx, span := e.startExecutionSpan(ctx, meta, call, toolsetID)
+	defer span.End()
+
+	toolUseID, err := e.callToolViaRegistry(ctx, meta, call, toolsetID)
+	if err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, "call tool via registry failed")
+		return &planner.ToolResult{Name: call.Name, Error: planner.ToolErrorFromError(err), ToolCallID: meta.ToolCallID}, nil
+	}
+	resultStreamID := toolregistry.ResultStreamID(toolUseID)
+	span.AddEvent(
+		"toolregistry.call_tool_ok",
+		"toolregistry.tool_use_id", toolUseID,
+		"toolregistry.result_stream_id", resultStreamID,
+	)
+
+	stream, sink, err := e.subscribeResultStream(ctx, span, meta, call, toolsetID, toolUseID, resultStreamID)
+	if err != nil {
+		return nil, err
+	}
+	defer sink.Close(ctx)
+	span.AddEvent("toolregistry.result_subscribed", "toolregistry.result_stream_id", resultStreamID)
+	return e.awaitToolResult(ctx, span, stream, sink, spec, meta, call, toolUseID, resultStreamID)
+}
+
+func (e *Executor) prepareExecution(call *planner.ToolRequest, meta *runtime.ToolCallMeta) (*tools.ToolSpec, string, *planner.ToolResult) {
 	if call == nil {
-		return &planner.ToolResult{Error: planner.NewToolError("tool request is nil")}, nil
+		return nil, "", &planner.ToolResult{Error: planner.NewToolError("tool request is nil")}
 	}
 	if meta == nil {
-		return &planner.ToolResult{Name: call.Name, Error: planner.NewToolError("tool call meta is nil")}, nil
+		return nil, "", &planner.ToolResult{Name: call.Name, Error: planner.NewToolError("tool call meta is nil")}
 	}
 	if e.client == nil {
-		return &planner.ToolResult{Name: call.Name, Error: planner.NewToolError("registry client is nil")}, nil
+		return nil, "", &planner.ToolResult{Name: call.Name, Error: planner.NewToolError("registry client is nil")}
 	}
 	if e.pulse == nil {
-		return &planner.ToolResult{Name: call.Name, Error: planner.NewToolError("pulse client is nil")}, nil
+		return nil, "", &planner.ToolResult{Name: call.Name, Error: planner.NewToolError("pulse client is nil")}
 	}
 	if e.specs == nil {
-		return &planner.ToolResult{Name: call.Name, Error: planner.NewToolError("tool specs lookup is nil")}, nil
+		return nil, "", &planner.ToolResult{Name: call.Name, Error: planner.NewToolError("tool specs lookup is nil")}
 	}
-
 	spec, ok := e.specs.Spec(call.Name)
 	if !ok {
-		return &planner.ToolResult{Name: call.Name, Error: planner.NewToolError(fmt.Sprintf("unknown tool %q", call.Name))}, nil
+		return nil, "", &planner.ToolResult{Name: call.Name, Error: planner.NewToolError(fmt.Sprintf("unknown tool %q", call.Name))}
 	}
-	toolsetID := spec.Toolset
-	if toolsetID == "" {
-		return &planner.ToolResult{Name: call.Name, Error: planner.NewToolError(fmt.Sprintf("tool %q missing toolset routing id", call.Name))}, nil
+	if spec.Toolset == "" {
+		return nil, "", &planner.ToolResult{Name: call.Name, Error: planner.NewToolError(fmt.Sprintf("tool %q missing toolset routing id", call.Name))}
 	}
+	return spec, spec.Toolset, nil
+}
 
+func (e *Executor) startExecutionSpan(ctx context.Context, meta *runtime.ToolCallMeta, call *planner.ToolRequest, toolsetID string) (context.Context, telemetry.Span) {
 	tracer := e.tracer
 	if tracer == nil {
 		tracer = telemetry.NewNoopTracer()
 	}
-	ctx, span := tracer.Start(
+	return tracer.Start(
 		ctx,
 		"toolregistry.execute",
 		trace.WithSpanKind(trace.SpanKindClient),
@@ -183,90 +215,110 @@ func (e *Executor) Execute(ctx context.Context, meta *runtime.ToolCallMeta, call
 			attribute.String("toolregistry.output_delta_key", e.outputDeltaKey),
 		),
 	)
-	defer span.End()
+}
 
-	tmeta := toolregistry.ToolCallMeta{
+func (e *Executor) callToolViaRegistry(ctx context.Context, meta *runtime.ToolCallMeta, call *planner.ToolRequest, toolsetID string) (string, error) {
+	return e.client.CallTool(ctx, toolsetID, call.Name, call.Payload, toolregistry.ToolCallMeta{
 		RunID:            meta.RunID,
 		SessionID:        meta.SessionID,
 		TurnID:           meta.TurnID,
 		ToolCallID:       meta.ToolCallID,
 		ParentToolCallID: meta.ParentToolCallID,
-	}
-	toolUseID, err := e.client.CallTool(ctx, toolsetID, call.Name, call.Payload, tmeta)
-	if err != nil {
-		span.RecordError(err)
-		span.SetStatus(codes.Error, "call tool via registry failed")
-		return &planner.ToolResult{Name: call.Name, Error: planner.ToolErrorFromError(err), ToolCallID: meta.ToolCallID}, nil
-	}
-	resultStreamID := toolregistry.ResultStreamID(toolUseID)
-	span.AddEvent(
-		"toolregistry.call_tool_ok",
-		"toolregistry.tool_use_id", toolUseID,
-		"toolregistry.result_stream_id", resultStreamID,
-	)
+	})
+}
 
+func (e *Executor) subscribeResultStream(
+	ctx context.Context,
+	span telemetry.Span,
+	meta *runtime.ToolCallMeta,
+	call *planner.ToolRequest,
+	toolsetID string,
+	toolUseID string,
+	resultStreamID string,
+) (pulsec.Stream, pulsec.Sink, error) {
 	stream, err := e.pulse.Stream(resultStreamID)
 	if err != nil {
 		span.RecordError(err)
 		span.SetStatus(codes.Error, "open tool result stream failed")
-		return nil, fmt.Errorf("open tool result stream %q: %w", resultStreamID, err)
+		return nil, nil, fmt.Errorf("open tool result stream %q: %w", resultStreamID, err)
 	}
-	// Result streams are per-tool-call and short-lived. Providers can publish the
-	// result very quickly after the registry returns from CallTool, so we must
-	// start at the oldest event to avoid missing an already-published result.
 	sink, err := stream.NewSink(ctx, e.sinkName, options.WithSinkStartAtOldest())
 	if err != nil {
-		diag := buildSinkFailureDiagnostics(ctx, err)
-		e.logger.Error(
-			ctx,
-			"toolregistry result stream sink create failed",
-			"component", "tool-registry-executor",
-			"toolset", toolsetID,
-			"tool", call.Name,
-			"tool_use_id", toolUseID,
-			"run_id", meta.RunID,
-			"session_id", meta.SessionID,
-			"turn_id", meta.TurnID,
-			"tool_call_id", meta.ToolCallID,
-			"result_stream_id", resultStreamID,
-			"sink", e.sinkName,
-			"host", diag.hostName,
-			"pod", diag.podName,
-			"node", diag.nodeName,
-			"ctx_has_deadline", diag.ctxHasDeadline,
-			"ctx_deadline_remaining_ms", diag.ctxDeadlineRemainingMs,
-			"net_timeout", diag.netTimeout,
-			"dns_error", diag.dnsError,
-			"dns_name", diag.dnsName,
-			"dns_server", diag.dnsServer,
-			"dns_timeout", diag.dnsIsTimeout,
-			"dns_temporary", diag.dnsIsTemporary,
-			"err", err,
-		)
-		span.AddEvent(
-			"toolregistry.result_sink_create_failed",
-			"toolregistry.result_stream_id", resultStreamID,
-			"toolregistry.sink", e.sinkName,
-			"toolregistry.error", err.Error(),
-			"toolregistry.host", diag.hostName,
-			"toolregistry.pod", diag.podName,
-			"toolregistry.node", diag.nodeName,
-			"toolregistry.ctx_has_deadline", diag.ctxHasDeadline,
-			"toolregistry.ctx_deadline_remaining_ms", diag.ctxDeadlineRemainingMs,
-			"toolregistry.net_timeout", diag.netTimeout,
-			"toolregistry.dns_error", diag.dnsError,
-			"toolregistry.dns_name", diag.dnsName,
-			"toolregistry.dns_server", diag.dnsServer,
-			"toolregistry.dns_timeout", diag.dnsIsTimeout,
-			"toolregistry.dns_temporary", diag.dnsIsTemporary,
-		)
-		span.RecordError(err)
-		span.SetStatus(codes.Error, "create sink for tool result stream failed")
-		return nil, fmt.Errorf("create sink %q for tool result stream %q: %w", e.sinkName, resultStreamID, err)
+		return nil, nil, e.handleSinkCreateFailure(ctx, span, meta, call, toolsetID, toolUseID, resultStreamID, err)
 	}
-	defer sink.Close(ctx)
-	span.AddEvent("toolregistry.result_subscribed", "toolregistry.result_stream_id", resultStreamID)
+	return stream, sink, nil
+}
 
+func (e *Executor) handleSinkCreateFailure(
+	ctx context.Context,
+	span telemetry.Span,
+	meta *runtime.ToolCallMeta,
+	call *planner.ToolRequest,
+	toolsetID string,
+	toolUseID string,
+	resultStreamID string,
+	err error,
+) error {
+	diag := buildSinkFailureDiagnostics(ctx, err)
+	e.logger.Error(
+		ctx,
+		"toolregistry result stream sink create failed",
+		"component", "tool-registry-executor",
+		"toolset", toolsetID,
+		"tool", call.Name,
+		"tool_use_id", toolUseID,
+		"run_id", meta.RunID,
+		"session_id", meta.SessionID,
+		"turn_id", meta.TurnID,
+		"tool_call_id", meta.ToolCallID,
+		"result_stream_id", resultStreamID,
+		"sink", e.sinkName,
+		"host", diag.hostName,
+		"pod", diag.podName,
+		"node", diag.nodeName,
+		"ctx_has_deadline", diag.ctxHasDeadline,
+		"ctx_deadline_remaining_ms", diag.ctxDeadlineRemainingMs,
+		"net_timeout", diag.netTimeout,
+		"dns_error", diag.dnsError,
+		"dns_name", diag.dnsName,
+		"dns_server", diag.dnsServer,
+		"dns_timeout", diag.dnsIsTimeout,
+		"dns_temporary", diag.dnsIsTemporary,
+		"err", err,
+	)
+	span.AddEvent(
+		"toolregistry.result_sink_create_failed",
+		"toolregistry.result_stream_id", resultStreamID,
+		"toolregistry.sink", e.sinkName,
+		"toolregistry.error", err.Error(),
+		"toolregistry.host", diag.hostName,
+		"toolregistry.pod", diag.podName,
+		"toolregistry.node", diag.nodeName,
+		"toolregistry.ctx_has_deadline", diag.ctxHasDeadline,
+		"toolregistry.ctx_deadline_remaining_ms", diag.ctxDeadlineRemainingMs,
+		"toolregistry.net_timeout", diag.netTimeout,
+		"toolregistry.dns_error", diag.dnsError,
+		"toolregistry.dns_name", diag.dnsName,
+		"toolregistry.dns_server", diag.dnsServer,
+		"toolregistry.dns_timeout", diag.dnsIsTimeout,
+		"toolregistry.dns_temporary", diag.dnsIsTemporary,
+	)
+	span.RecordError(err)
+	span.SetStatus(codes.Error, "create sink for tool result stream failed")
+	return fmt.Errorf("create sink %q for tool result stream %q: %w", e.sinkName, resultStreamID, err)
+}
+
+func (e *Executor) awaitToolResult(
+	ctx context.Context,
+	span telemetry.Span,
+	stream pulsec.Stream,
+	sink pulsec.Sink,
+	spec *tools.ToolSpec,
+	meta *runtime.ToolCallMeta,
+	call *planner.ToolRequest,
+	toolUseID string,
+	resultStreamID string,
+) (*planner.ToolResult, error) {
 	events := sink.Subscribe()
 	for {
 		select {
@@ -276,99 +328,146 @@ func (e *Executor) Execute(ctx context.Context, meta *runtime.ToolCallMeta, call
 			return nil, ctx.Err()
 		case ev, ok := <-events:
 			if !ok {
-				span.RecordError(fmt.Errorf("tool result stream subscription closed"))
+				err := fmt.Errorf("tool result stream subscription closed")
+				span.RecordError(err)
 				span.SetStatus(codes.Error, "tool result stream subscription closed")
-				return nil, fmt.Errorf("tool result stream subscription closed")
+				return nil, err
 			}
-			if ev.EventName == e.outputDeltaKey {
-				var msg toolregistry.ToolOutputDeltaMessage
-				if err := json.Unmarshal(ev.Payload, &msg); err != nil {
-					span.RecordError(err)
-					if ackErr := sink.Ack(ctx, ev); ackErr != nil {
-						return nil, fmt.Errorf("ack malformed tool output delta message: %w", ackErr)
-					}
-					continue
-				}
-				if msg.ToolUseID != toolUseID {
-					if err := sink.Ack(ctx, ev); err != nil {
-						return nil, fmt.Errorf("ack unrelated tool output delta message: %w", err)
-					}
-					continue
-				}
-				if err := sink.Ack(ctx, ev); err != nil {
-					span.RecordError(err)
-					span.SetStatus(codes.Error, "ack tool output delta message failed")
-					return nil, fmt.Errorf("ack tool output delta message: %w", err)
-				}
-
-				if e.streamSink != nil {
-					p := aistream.ToolOutputDeltaPayload{
-						ToolCallID:       meta.ToolCallID,
-						ParentToolCallID: meta.ParentToolCallID,
-						ToolName:         call.Name.String(),
-						Stream:           msg.Stream,
-						Delta:            msg.Delta,
-					}
-					ev := aistream.ToolOutputDelta{
-						Base: aistream.NewBase(aistream.EventToolOutputDelta, meta.RunID, meta.SessionID, p),
-						Data: p,
-					}
-					if err := e.streamSink.Send(ctx, ev); err != nil {
-						span.RecordError(err)
-						e.logger.Error(
-							ctx,
-							"publish tool output delta failed",
-							"component", "tool-registry-executor",
-							"tool_use_id", toolUseID,
-							"tool", call.Name,
-							"err", err,
-						)
-					}
-				}
-				continue
+			done, result, err := e.handleResultStreamEvent(ctx, span, stream, sink, spec, meta, call, toolUseID, resultStreamID, ev)
+			if err != nil || done {
+				return result, err
 			}
-			if ev.EventName != e.resultEventKey {
-				if err := sink.Ack(ctx, ev); err != nil {
-					span.RecordError(err)
-					span.SetStatus(codes.Error, "ack non-result event failed")
-					return nil, fmt.Errorf("ack tool result stream event: %w", err)
-				}
-				continue
-			}
-
-			var msg toolregistry.ToolResultMessage
-			if err := json.Unmarshal(ev.Payload, &msg); err != nil {
-				span.RecordError(err)
-				if ackErr := sink.Ack(ctx, ev); ackErr != nil {
-					return nil, fmt.Errorf("ack malformed tool result message: %w", ackErr)
-				}
-				continue
-			}
-			if msg.ToolUseID != toolUseID {
-				if err := sink.Ack(ctx, ev); err != nil {
-					return nil, fmt.Errorf("ack unrelated tool result message: %w", err)
-				}
-				continue
-			}
-			if err := sink.Ack(ctx, ev); err != nil {
-				span.RecordError(err)
-				span.SetStatus(codes.Error, "ack tool result message failed")
-				return nil, fmt.Errorf("ack tool result message: %w", err)
-			}
-			if destroyErr := stream.Destroy(ctx); destroyErr != nil {
-				span.RecordError(destroyErr)
-				span.SetStatus(codes.Error, "destroy tool result stream failed")
-				return nil, fmt.Errorf("destroy tool result stream %q: %w", resultStreamID, destroyErr)
-			}
-			span.AddEvent(
-				"toolregistry.result_received",
-				"toolregistry.tool_use_id", toolUseID,
-				"toolregistry.result_stream_id", resultStreamID,
-			)
-			span.SetStatus(codes.Ok, "ok")
-			return e.decodeToolResult(spec, call, meta.ToolCallID, msg), nil
 		}
 	}
+}
+
+func (e *Executor) handleResultStreamEvent(
+	ctx context.Context,
+	span telemetry.Span,
+	stream pulsec.Stream,
+	sink pulsec.Sink,
+	spec *tools.ToolSpec,
+	meta *runtime.ToolCallMeta,
+	call *planner.ToolRequest,
+	toolUseID string,
+	resultStreamID string,
+	ev *streaming.Event,
+) (bool, *planner.ToolResult, error) {
+	if ev.EventName == e.outputDeltaKey {
+		return e.handleOutputDeltaEvent(ctx, span, sink, meta, call, toolUseID, ev)
+	}
+	if ev.EventName != e.resultEventKey {
+		if err := ackToolEvent(ctx, sink, ev, "ack tool result stream event"); err != nil {
+			span.RecordError(err)
+			span.SetStatus(codes.Error, "ack non-result event failed")
+			return true, nil, err
+		}
+		return false, nil, nil
+	}
+	return e.handleResultEvent(ctx, span, stream, sink, spec, meta, call, toolUseID, resultStreamID, ev)
+}
+
+func (e *Executor) handleOutputDeltaEvent(
+	ctx context.Context,
+	span telemetry.Span,
+	sink pulsec.Sink,
+	meta *runtime.ToolCallMeta,
+	call *planner.ToolRequest,
+	toolUseID string,
+	ev *streaming.Event,
+) (bool, *planner.ToolResult, error) {
+	var msg toolregistry.ToolOutputDeltaMessage
+	if err := json.Unmarshal(ev.Payload, &msg); err != nil {
+		span.RecordError(err)
+		return false, nil, ackToolEvent(ctx, sink, ev, "ack malformed tool output delta message")
+	}
+	if msg.ToolUseID != toolUseID {
+		return false, nil, ackToolEvent(ctx, sink, ev, "ack unrelated tool output delta message")
+	}
+	if err := ackToolEvent(ctx, sink, ev, "ack tool output delta message"); err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, "ack tool output delta message failed")
+		return true, nil, err
+	}
+	e.forwardOutputDelta(ctx, span, meta, call, toolUseID, msg)
+	return false, nil, nil
+}
+
+func (e *Executor) forwardOutputDelta(
+	ctx context.Context,
+	span telemetry.Span,
+	meta *runtime.ToolCallMeta,
+	call *planner.ToolRequest,
+	toolUseID string,
+	msg toolregistry.ToolOutputDeltaMessage,
+) {
+	if e.streamSink == nil {
+		return
+	}
+	p := aistream.ToolOutputDeltaPayload{
+		ToolCallID:       meta.ToolCallID,
+		ParentToolCallID: meta.ParentToolCallID,
+		ToolName:         call.Name.String(),
+		Stream:           msg.Stream,
+		Delta:            msg.Delta,
+	}
+	event := aistream.ToolOutputDelta{
+		Base: aistream.NewBase(aistream.EventToolOutputDelta, meta.RunID, meta.SessionID, p),
+		Data: p,
+	}
+	if err := e.streamSink.Send(ctx, event); err != nil {
+		span.RecordError(err)
+		e.logger.Error(
+			ctx,
+			"publish tool output delta failed",
+			"component", "tool-registry-executor",
+			"tool_use_id", toolUseID,
+			"tool", call.Name,
+			"err", err,
+		)
+	}
+}
+
+func (e *Executor) handleResultEvent(
+	ctx context.Context,
+	span telemetry.Span,
+	stream pulsec.Stream,
+	sink pulsec.Sink,
+	spec *tools.ToolSpec,
+	meta *runtime.ToolCallMeta,
+	call *planner.ToolRequest,
+	toolUseID string,
+	resultStreamID string,
+	ev *streaming.Event,
+) (bool, *planner.ToolResult, error) {
+	var msg toolregistry.ToolResultMessage
+	if err := json.Unmarshal(ev.Payload, &msg); err != nil {
+		span.RecordError(err)
+		return false, nil, ackToolEvent(ctx, sink, ev, "ack malformed tool result message")
+	}
+	if msg.ToolUseID != toolUseID {
+		return false, nil, ackToolEvent(ctx, sink, ev, "ack unrelated tool result message")
+	}
+	if err := ackToolEvent(ctx, sink, ev, "ack tool result message"); err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, "ack tool result message failed")
+		return true, nil, err
+	}
+	e.destroyResultStreamBestEffort(ctx, stream, span, resultStreamID, toolUseID, call.Name)
+	span.AddEvent(
+		"toolregistry.result_received",
+		"toolregistry.tool_use_id", toolUseID,
+		"toolregistry.result_stream_id", resultStreamID,
+	)
+	span.SetStatus(codes.Ok, "ok")
+	return true, e.decodeToolResult(spec, call, meta.ToolCallID, msg), nil
+}
+
+func ackToolEvent(ctx context.Context, sink pulsec.Sink, ev *streaming.Event, msg string) error {
+	if err := sink.Ack(ctx, ev); err != nil {
+		return fmt.Errorf("%s: %w", msg, err)
+	}
+	return nil
 }
 
 func (e *Executor) decodeToolResult(spec *tools.ToolSpec, call *planner.ToolRequest, toolCallID string, msg toolregistry.ToolResultMessage) *planner.ToolResult {
@@ -403,6 +502,27 @@ func (e *Executor) decodeToolResult(spec *tools.ToolSpec, call *planner.ToolRequ
 		out.Result = res
 	}
 	return out
+}
+
+func (e *Executor) destroyResultStreamBestEffort(ctx context.Context, stream pulsec.Stream, span telemetry.Span, resultStreamID, toolUseID string, toolName tools.Ident) {
+	if err := stream.Destroy(ctx); err != nil {
+		span.RecordError(err)
+		span.AddEvent(
+			"toolregistry.result_stream_destroy_failed",
+			"toolregistry.tool_use_id", toolUseID,
+			"toolregistry.result_stream_id", resultStreamID,
+			"toolregistry.error", err.Error(),
+		)
+		e.logger.Warn(
+			ctx,
+			"toolregistry result stream destroy failed after result acknowledgment",
+			"component", "tool-registry-executor",
+			"tool_use_id", toolUseID,
+			"tool", toolName,
+			"result_stream_id", resultStreamID,
+			"err", err,
+		)
+	}
 }
 
 // cloneBounds copies wire-level bounds metadata into executor-owned memory so

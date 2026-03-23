@@ -126,6 +126,60 @@ func TestExecutorDerivesResultStreamIDFromToolUseID(t *testing.T) {
 	assert.Equal(t, tools.Ident("todos.update_todos"), res.Name)
 }
 
+func TestExecutorReturnsResultWhenStreamDestroyFails(t *testing.T) {
+	t.Parallel()
+
+	const (
+		toolUseID       = "tooluse-destroy-123"
+		resultEventName = toolregistry.ResultEventKey
+	)
+
+	specs := fakeSpecs{
+		spec: &tools.ToolSpec{
+			Name:    "todos.update_todos",
+			Toolset: "todos.todos",
+			Result:  tools.TypeSpec{},
+			Payload: tools.TypeSpec{},
+		},
+	}
+
+	stream := &fakeStream{
+		t:             t,
+		requiredStart: "0",
+		destroyErr:    assert.AnError,
+		events: []*streaming.Event{
+			{
+				ID:        "1-0",
+				EventName: resultEventName,
+				Payload: mustJSON(t, toolregistry.ToolResultMessage{
+					ToolUseID: toolUseID,
+					Result:    json.RawMessage(`{}`),
+				}),
+			},
+		},
+	}
+	pc := fakePulseClient{
+		streamID: toolregistry.ResultStreamID(toolUseID),
+		stream:   stream,
+	}
+
+	exec := New(fakeRegistryClient{
+		toolUseID: toolUseID,
+	}, pc, specs, WithResultEventKey(resultEventName))
+
+	res, err := exec.Execute(context.Background(), &agentsruntime.ToolCallMeta{
+		RunID:     "run",
+		SessionID: "sess",
+	}, &planner.ToolRequest{
+		Name:    "todos.update_todos",
+		Payload: []byte(`{}`),
+	})
+
+	require.NoError(t, err)
+	assert.NotNil(t, res)
+	assert.Equal(t, tools.Ident("todos.update_todos"), res.Name)
+}
+
 type captureSink struct {
 	events []aistream.Event
 }
@@ -332,6 +386,7 @@ func (c fakePulseClient) Close(ctx context.Context) error {
 type fakeStream struct {
 	t             *testing.T
 	requiredStart string
+	destroyErr    error
 	events        []*streaming.Event
 }
 
@@ -346,7 +401,7 @@ func (s *fakeStream) NewSink(ctx context.Context, name string, opts ...streamopt
 }
 
 func (s *fakeStream) Destroy(ctx context.Context) error {
-	return nil
+	return s.destroyErr
 }
 
 type fakeSink struct {

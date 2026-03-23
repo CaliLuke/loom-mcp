@@ -11,12 +11,15 @@ linters:
     - exhaustive
     - goconst
     - gocritic
+    - funlen
     - goprintffuncname
     - gosec
+    - gocognit
     - ineffassign
     - makezero
     - misspell
     - nakedret
+    - nestif
     - nilerr
     - noctx
     - nolintlint
@@ -30,6 +33,13 @@ linters:
     - unused
     - whitespace
   settings:
+    funlen:
+      lines: 100
+      statements: 60
+    gocognit:
+      min-complexity: 120
+    nestif:
+      min-complexity: 25
     tagliatelle:
       case:
         rules:
@@ -53,3 +63,18 @@ linters:
       - linters:
           - dupl
         path: _test\.go
+      - linters:
+          - funlen
+          - gocognit
+          - nestif
+        path: _test\.go
+      - linters:
+          - funlen
+          - gocognit
+          - nestif
+        path: ^codegen/
+      - linters:
+          - funlen
+          - gocognit
+          - nestif
+        path: ^integration_tests/

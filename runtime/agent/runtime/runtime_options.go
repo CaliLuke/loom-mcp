@@ -447,56 +447,11 @@ func (r *Runtime) registerSessionSubscriber(bus hooks.Bus) {
 
 func (r *Runtime) registerMemorySubscriber(bus hooks.Bus) {
 	memSub := hooks.SubscriberFunc(func(ctx context.Context, event hooks.Event) error {
-		var memEvent memory.Event
-		switch evt := event.(type) {
-		case *hooks.ToolCallScheduledEvent:
-			memEvent = memory.NewEvent(time.UnixMilli(evt.Timestamp()), memory.ToolCallData{
-				ToolCallID:            evt.ToolCallID,
-				ParentToolCallID:      evt.ParentToolCallID,
-				ToolName:              evt.ToolName,
-				PayloadJSON:           evt.Payload,
-				Queue:                 evt.Queue,
-				ExpectedChildrenTotal: evt.ExpectedChildrenTotal,
-			}, nil)
-			return r.Memory.AppendEvents(ctx, evt.AgentID(), evt.RunID(), memEvent)
-		case *hooks.ToolResultReceivedEvent:
-			errorMessage := ""
-			if evt.Error != nil {
-				errorMessage = evt.Error.Error()
-			}
-			memEvent = memory.NewEvent(time.UnixMilli(evt.Timestamp()), memory.ToolResultData{
-				ToolCallID:       evt.ToolCallID,
-				ParentToolCallID: evt.ParentToolCallID,
-				ToolName:         evt.ToolName,
-				ResultJSON:       evt.ResultJSON,
-				Preview:          evt.ResultPreview,
-				Bounds:           evt.Bounds,
-				Duration:         evt.Duration,
-				ErrorMessage:     errorMessage,
-			}, nil)
-			return r.Memory.AppendEvents(ctx, evt.AgentID(), evt.RunID(), memEvent)
-		case *hooks.AssistantMessageEvent:
-			memEvent = memory.NewEvent(time.UnixMilli(evt.Timestamp()), memory.AssistantMessageData{
-				Message:    evt.Message,
-				Structured: evt.Structured,
-			}, nil)
-			return r.Memory.AppendEvents(ctx, evt.AgentID(), evt.RunID(), memEvent)
-		case *hooks.ThinkingBlockEvent:
-			memEvent = memory.NewEvent(time.UnixMilli(evt.Timestamp()), memory.ThinkingData{
-				Text:         evt.Text,
-				Signature:    evt.Signature,
-				Redacted:     evt.Redacted,
-				ContentIndex: evt.ContentIndex,
-				Final:        evt.Final,
-			}, nil)
-			return r.Memory.AppendEvents(ctx, evt.AgentID(), evt.RunID(), memEvent)
-		case *hooks.PlannerNoteEvent:
-			memEvent = memory.NewEvent(time.UnixMilli(evt.Timestamp()), memory.PlannerNoteData{
-				Note: evt.Note,
-			}, evt.Labels)
-			return r.Memory.AppendEvents(ctx, evt.AgentID(), evt.RunID(), memEvent)
+		agentID, runID, memEvent, ok := projectMemoryEvent(event)
+		if !ok {
+			return nil
 		}
-		return nil
+		return r.Memory.AppendEvents(ctx, agentID, runID, memEvent)
 	})
 	if _, err := bus.Register(memSub); err != nil {
 		r.logger.Warn(context.Background(), "failed to register memory subscriber", "err", err)

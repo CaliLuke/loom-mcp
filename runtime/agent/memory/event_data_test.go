@@ -7,6 +7,7 @@ import (
 
 	"github.com/CaliLuke/loom-mcp/runtime/agent"
 	"github.com/CaliLuke/loom-mcp/runtime/agent/rawjson"
+	"github.com/CaliLuke/loom-mcp/runtime/agent/telemetry"
 	"github.com/CaliLuke/loom-mcp/runtime/agent/tools"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -49,6 +50,7 @@ func TestToolResultDataRoundTrip(t *testing.T) {
 		ParentToolCallID: "parent-1",
 		ToolName:         tools.Ident("svc.tool"),
 		ResultJSON:       rawjson.Message(`{"ok":true}`),
+		ServerData:       rawjson.Message(`[{"kind":"evidence"}]`),
 		Preview:          "1 row returned",
 		Bounds: &agent.Bounds{
 			Returned:       1,
@@ -57,7 +59,23 @@ func TestToolResultDataRoundTrip(t *testing.T) {
 			NextCursor:     &nextCursor,
 			RefinementHint: "add a tighter filter",
 		},
-		Duration:     2 * time.Second,
+		Duration: 2 * time.Second,
+		Telemetry: &telemetry.ToolTelemetry{
+			DurationMs: 2000,
+			TokensUsed: 42,
+			Model:      "gpt-test",
+			Extra:      map[string]any{"cache_hit": true},
+		},
+		RetryHint: &RetryHintData{
+			Reason:             "missing_fields",
+			Tool:               tools.Ident("svc.tool"),
+			RestrictToTool:     true,
+			MissingFields:      []string{"query"},
+			ExampleInput:       map[string]any{"query": "latest"},
+			PriorInput:         map[string]any{"query": ""},
+			ClarifyingQuestion: "What query should I use?",
+			Message:            "query is required",
+		},
 		ErrorMessage: "",
 	}
 
@@ -68,9 +86,24 @@ func TestToolResultDataRoundTrip(t *testing.T) {
 	assert.Equal(t, original.ParentToolCallID, decoded.ParentToolCallID)
 	assert.Equal(t, original.ToolName, decoded.ToolName)
 	assert.Equal(t, string(original.ResultJSON), string(decoded.ResultJSON))
+	assert.Equal(t, string(original.ServerData), string(decoded.ServerData))
 	assert.Equal(t, original.Preview, decoded.Preview)
 	assert.Equal(t, original.Duration, decoded.Duration)
 	assert.Equal(t, original.ErrorMessage, decoded.ErrorMessage)
+	require.NotNil(t, decoded.Telemetry)
+	assert.Equal(t, original.Telemetry.DurationMs, decoded.Telemetry.DurationMs)
+	assert.Equal(t, original.Telemetry.TokensUsed, decoded.Telemetry.TokensUsed)
+	assert.Equal(t, original.Telemetry.Model, decoded.Telemetry.Model)
+	assert.Equal(t, original.Telemetry.Extra, decoded.Telemetry.Extra)
+	require.NotNil(t, decoded.RetryHint)
+	assert.Equal(t, original.RetryHint.Reason, decoded.RetryHint.Reason)
+	assert.Equal(t, original.RetryHint.Tool, decoded.RetryHint.Tool)
+	assert.Equal(t, original.RetryHint.RestrictToTool, decoded.RetryHint.RestrictToTool)
+	assert.Equal(t, original.RetryHint.MissingFields, decoded.RetryHint.MissingFields)
+	assert.Equal(t, original.RetryHint.ExampleInput, decoded.RetryHint.ExampleInput)
+	assert.Equal(t, original.RetryHint.PriorInput, decoded.RetryHint.PriorInput)
+	assert.Equal(t, original.RetryHint.ClarifyingQuestion, decoded.RetryHint.ClarifyingQuestion)
+	assert.Equal(t, original.RetryHint.Message, decoded.RetryHint.Message)
 	require.NotNil(t, decoded.Bounds)
 	assert.Equal(t, original.Bounds.Returned, decoded.Bounds.Returned)
 	assert.Equal(t, *original.Bounds.Total, *decoded.Bounds.Total)
@@ -134,6 +167,7 @@ func TestEventDataCurrentFormatJSONRoundTrip(t *testing.T) {
 				ParentToolCallID: "parent-2",
 				ToolName:         tools.Ident("svc.tool"),
 				ResultJSON:       rawjson.Message(`{"ok":true}`),
+				ServerData:       rawjson.Message(`[{"kind":"evidence"}]`),
 				Preview:          "1 row returned",
 				Bounds: &agent.Bounds{
 					Returned:       1,
@@ -142,7 +176,18 @@ func TestEventDataCurrentFormatJSONRoundTrip(t *testing.T) {
 					NextCursor:     &nextCursor,
 					RefinementHint: "add a tighter filter",
 				},
-				Duration:     2 * time.Second,
+				Duration: 2 * time.Second,
+				Telemetry: &telemetry.ToolTelemetry{
+					DurationMs: 2000,
+					TokensUsed: 7,
+					Model:      "gpt-test",
+				},
+				RetryHint: &RetryHintData{
+					Reason:         "invalid_arguments",
+					Tool:           tools.Ident("svc.tool"),
+					MissingFields:  []string{"query"},
+					RestrictToTool: true,
+				},
 				ErrorMessage: "boom",
 			}, nil),
 			assert: func(t *testing.T, event Event) {
@@ -152,6 +197,7 @@ func TestEventDataCurrentFormatJSONRoundTrip(t *testing.T) {
 				assert.Equal(t, "parent-2", decoded.ParentToolCallID)
 				assert.Equal(t, tools.Ident("svc.tool"), decoded.ToolName)
 				assert.Equal(t, `{"ok":true}`, string(decoded.ResultJSON))
+				assert.JSONEq(t, `[{"kind":"evidence"}]`, string(decoded.ServerData))
 				assert.Equal(t, "1 row returned", decoded.Preview)
 				require.NotNil(t, decoded.Bounds)
 				assert.Equal(t, 1, decoded.Bounds.Returned)
@@ -160,6 +206,13 @@ func TestEventDataCurrentFormatJSONRoundTrip(t *testing.T) {
 				require.NotNil(t, decoded.Bounds.NextCursor)
 				assert.Equal(t, "next-page", *decoded.Bounds.NextCursor)
 				assert.Equal(t, 2*time.Second, decoded.Duration)
+				require.NotNil(t, decoded.Telemetry)
+				assert.Equal(t, int64(2000), decoded.Telemetry.DurationMs)
+				assert.Equal(t, 7, decoded.Telemetry.TokensUsed)
+				assert.Equal(t, "gpt-test", decoded.Telemetry.Model)
+				require.NotNil(t, decoded.RetryHint)
+				assert.Equal(t, "invalid_arguments", decoded.RetryHint.Reason)
+				assert.Equal(t, []string{"query"}, decoded.RetryHint.MissingFields)
 				assert.Equal(t, "boom", decoded.ErrorMessage)
 			},
 		},
@@ -233,4 +286,36 @@ func TestDecodeThinkingDataAcceptsLegacyRawBytes(t *testing.T) {
 	assert.Equal(t, []byte("opaque"), decoded.Redacted)
 	assert.Equal(t, 3, decoded.ContentIndex)
 	assert.True(t, decoded.Final)
+}
+
+func TestDecodeToolResultDataRejectsFractionalDuration(t *testing.T) {
+	event := Event{
+		Type:      EventToolResult,
+		Timestamp: time.Unix(90, 0),
+		Data: map[string]any{
+			"tool_call_id": "tr-1",
+			"tool_name":    "svc.tool",
+			"duration":     1.5,
+		},
+	}
+
+	_, err := DecodeToolResultData(event)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "must be an integer duration")
+}
+
+func TestDecodeToolCallDataRejectsFractionalExpectedChildrenTotal(t *testing.T) {
+	event := Event{
+		Type:      EventToolCall,
+		Timestamp: time.Unix(91, 0),
+		Data: map[string]any{
+			"tool_call_id":            "tc-1",
+			"tool_name":               "svc.tool",
+			"expected_children_total": 2.5,
+		},
+	}
+
+	_, err := DecodeToolCallData(event)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "must be an integer")
 }

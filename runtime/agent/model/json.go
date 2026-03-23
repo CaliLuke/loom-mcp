@@ -143,169 +143,17 @@ func encodeMessagePart(p Part) (any, error) {
 }
 
 func decodeMessagePart(raw json.RawMessage) (Part, error) {
-	var obj map[string]json.RawMessage
-	if err := json.Unmarshal(raw, &obj); err != nil {
-		var text string
-		if errText := json.Unmarshal(raw, &text); errText == nil {
-			return TextPart{Text: text}, nil
-		}
-		return nil, fmt.Errorf("decode part object: %w", err)
-	}
-	if len(obj) == 0 {
-		return nil, errors.New("empty part payload")
-	}
-
-	// Discriminator-based decoding when Kind is present (preferred).
-	if kindRaw, ok := obj["Kind"]; ok {
-		var kind string
-		if err := json.Unmarshal(kindRaw, &kind); err != nil {
-			return nil, fmt.Errorf("decode Kind: %w", err)
-		}
-		switch kind {
-		case "image":
-			var img ImagePart
-			if err := json.Unmarshal(raw, &img); err != nil {
-				return nil, fmt.Errorf("decode ImagePart: %w", err)
-			}
-			if img.Format == "" {
-				return nil, errors.New("ImagePart requires Format")
-			}
-			if len(img.Bytes) == 0 {
-				return nil, errors.New("ImagePart requires Bytes")
-			}
-			return img, nil
-		case "document":
-			var doc DocumentPart
-			if err := json.Unmarshal(raw, &doc); err != nil {
-				return nil, fmt.Errorf("decode DocumentPart: %w", err)
-			}
-			if doc.Name == "" {
-				return nil, errors.New("DocumentPart requires Name")
-			}
-			sourceCount := 0
-			if len(doc.Bytes) > 0 {
-				sourceCount++
-			}
-			if doc.Text != "" {
-				sourceCount++
-			}
-			if len(doc.Chunks) > 0 {
-				sourceCount++
-			}
-			if doc.URI != "" {
-				sourceCount++
-			}
-			if sourceCount != 1 {
-				return nil, errors.New("DocumentPart requires exactly one of Bytes, Text, Chunks, or URI")
-			}
-			for i, chunk := range doc.Chunks {
-				if chunk == "" {
-					return nil, fmt.Errorf("DocumentPart requires non-empty Chunks[%d]", i)
-				}
-			}
-			return doc, nil
-		case "thinking":
-			var thinking ThinkingPart
-			if err := json.Unmarshal(raw, &thinking); err != nil {
-				return nil, fmt.Errorf("decode ThinkingPart: %w", err)
-			}
-			return thinking, nil
-		case "citations":
-			var citations CitationsPart
-			if err := json.Unmarshal(raw, &citations); err != nil {
-				return nil, fmt.Errorf("decode CitationsPart: %w", err)
-			}
-			return citations, nil
-		case "tool_result":
-			var result ToolResultPart
-			if err := json.Unmarshal(raw, &result); err != nil {
-				return nil, fmt.Errorf("decode ToolResultPart: %w", err)
-			}
-			if result.ToolUseID == "" {
-				return nil, errors.New("ToolResultPart requires ToolUseID")
-			}
-			return result, nil
-		case "tool_use":
-			var use ToolUsePart
-			if err := json.Unmarshal(raw, &use); err != nil {
-				return nil, fmt.Errorf("decode ToolUsePart: %w", err)
-			}
-			if use.Name == "" {
-				return nil, errors.New("ToolUsePart requires Name")
-			}
-			if use.Input == nil {
-				if v, hasArgs := obj["Args"]; hasArgs {
-					var args any
-					if err := json.Unmarshal(v, &args); err != nil {
-						return nil, fmt.Errorf("decode ToolUsePart Args: %w", err)
-					}
-					use.Input = args
-				}
-			}
-			return use, nil
-		case "text":
-			var text TextPart
-			if err := json.Unmarshal(raw, &text); err != nil {
-				return nil, fmt.Errorf("decode TextPart: %w", err)
-			}
+	obj, err := decodePartObject(raw)
+	if err != nil {
+		if text, ok := decodeRawTextPart(raw); ok {
 			return text, nil
-		case "cache_checkpoint":
-			return CacheCheckpointPart{}, nil
-		default:
-			return nil, fmt.Errorf("unknown part kind %q", kind)
 		}
+		return nil, err
 	}
-
-	if hasAnyKey(obj, "Signature", "Redacted", "Index", "Final") {
-		var thinking ThinkingPart
-		if err := json.Unmarshal(raw, &thinking); err != nil {
-			return nil, fmt.Errorf("decode ThinkingPart: %w", err)
-		}
-		return thinking, nil
+	if kindRaw, ok := obj["Kind"]; ok {
+		return decodePartByKind(raw, obj, kindRaw)
 	}
-
-	if _, ok := obj["ToolUseID"]; ok {
-		var result ToolResultPart
-		if err := json.Unmarshal(raw, &result); err != nil {
-			return nil, fmt.Errorf("decode ToolResultPart: %w", err)
-		}
-		if result.ToolUseID == "" {
-			return nil, errors.New("ToolResultPart requires ToolUseID")
-		}
-		return result, nil
-	}
-
-	if _, ok := obj["Name"]; ok {
-		var use ToolUsePart
-		if err := json.Unmarshal(raw, &use); err != nil {
-			return nil, fmt.Errorf("decode ToolUsePart: %w", err)
-		}
-		if use.Name == "" {
-			return nil, errors.New("ToolUsePart requires Name")
-		}
-
-		if _, hasInput := obj["Input"]; !hasInput {
-			if v, hasArgs := obj["Args"]; hasArgs {
-				var args any
-				if err := json.Unmarshal(v, &args); err != nil {
-					return nil, fmt.Errorf("decode ToolUsePart Args: %w", err)
-				}
-				use.Input = args
-			}
-		}
-
-		return use, nil
-	}
-
-	if _, ok := obj["Text"]; ok {
-		var text TextPart
-		if err := json.Unmarshal(raw, &text); err != nil {
-			return nil, fmt.Errorf("decode TextPart: %w", err)
-		}
-		return text, nil
-	}
-
-	return nil, errors.New("unknown part shape")
+	return decodePartByShape(raw, obj)
 }
 
 func hasAnyKey(obj map[string]json.RawMessage, keys ...string) bool {
@@ -315,4 +163,188 @@ func hasAnyKey(obj map[string]json.RawMessage, keys ...string) bool {
 		}
 	}
 	return false
+}
+
+func decodePartObject(raw json.RawMessage) (map[string]json.RawMessage, error) {
+	var obj map[string]json.RawMessage
+	if err := json.Unmarshal(raw, &obj); err != nil {
+		return nil, fmt.Errorf("decode part object: %w", err)
+	}
+	if len(obj) == 0 {
+		return nil, errors.New("empty part payload")
+	}
+	return obj, nil
+}
+
+func decodeRawTextPart(raw json.RawMessage) (Part, bool) {
+	var text string
+	if err := json.Unmarshal(raw, &text); err != nil {
+		return nil, false
+	}
+	return TextPart{Text: text}, true
+}
+
+func decodePartByKind(raw json.RawMessage, obj map[string]json.RawMessage, kindRaw json.RawMessage) (Part, error) {
+	var kind string
+	if err := json.Unmarshal(kindRaw, &kind); err != nil {
+		return nil, fmt.Errorf("decode Kind: %w", err)
+	}
+	switch kind {
+	case "image":
+		return decodeImagePart(raw)
+	case "document":
+		return decodeDocumentPart(raw)
+	case "thinking":
+		return decodeThinkingPart(raw)
+	case "citations":
+		return decodeCitationsPart(raw)
+	case "tool_result":
+		return decodeToolResultPart(raw)
+	case "tool_use":
+		return decodeToolUsePart(raw, obj)
+	case "text":
+		return decodeTextPart(raw)
+	case "cache_checkpoint":
+		return CacheCheckpointPart{}, nil
+	default:
+		return nil, fmt.Errorf("unknown part kind %q", kind)
+	}
+}
+
+func decodePartByShape(raw json.RawMessage, obj map[string]json.RawMessage) (Part, error) {
+	switch {
+	case hasAnyKey(obj, "Signature", "Redacted", "Index", "Final"):
+		return decodeThinkingPart(raw)
+	case hasKey(obj, "ToolUseID"):
+		return decodeToolResultPart(raw)
+	case hasKey(obj, "Name"):
+		return decodeToolUsePart(raw, obj)
+	case hasKey(obj, "Text"):
+		return decodeTextPart(raw)
+	default:
+		return nil, errors.New("unknown part shape")
+	}
+}
+
+func decodeImagePart(raw json.RawMessage) (Part, error) {
+	var img ImagePart
+	if err := json.Unmarshal(raw, &img); err != nil {
+		return nil, fmt.Errorf("decode ImagePart: %w", err)
+	}
+	if img.Format == "" {
+		return nil, errors.New("ImagePart requires Format")
+	}
+	if len(img.Bytes) == 0 {
+		return nil, errors.New("ImagePart requires Bytes")
+	}
+	return img, nil
+}
+
+func decodeDocumentPart(raw json.RawMessage) (Part, error) {
+	var doc DocumentPart
+	if err := json.Unmarshal(raw, &doc); err != nil {
+		return nil, fmt.Errorf("decode DocumentPart: %w", err)
+	}
+	if doc.Name == "" {
+		return nil, errors.New("DocumentPart requires Name")
+	}
+	if err := validateDocumentSources(doc); err != nil {
+		return nil, err
+	}
+	return doc, nil
+}
+
+func validateDocumentSources(doc DocumentPart) error {
+	sourceCount := 0
+	if len(doc.Bytes) > 0 {
+		sourceCount++
+	}
+	if doc.Text != "" {
+		sourceCount++
+	}
+	if len(doc.Chunks) > 0 {
+		sourceCount++
+	}
+	if doc.URI != "" {
+		sourceCount++
+	}
+	if sourceCount != 1 {
+		return errors.New("DocumentPart requires exactly one of Bytes, Text, Chunks, or URI")
+	}
+	for i, chunk := range doc.Chunks {
+		if chunk == "" {
+			return fmt.Errorf("DocumentPart requires non-empty Chunks[%d]", i)
+		}
+	}
+	return nil
+}
+
+func decodeThinkingPart(raw json.RawMessage) (Part, error) {
+	var thinking ThinkingPart
+	if err := json.Unmarshal(raw, &thinking); err != nil {
+		return nil, fmt.Errorf("decode ThinkingPart: %w", err)
+	}
+	return thinking, nil
+}
+
+func decodeCitationsPart(raw json.RawMessage) (Part, error) {
+	var citations CitationsPart
+	if err := json.Unmarshal(raw, &citations); err != nil {
+		return nil, fmt.Errorf("decode CitationsPart: %w", err)
+	}
+	return citations, nil
+}
+
+func decodeToolResultPart(raw json.RawMessage) (Part, error) {
+	var result ToolResultPart
+	if err := json.Unmarshal(raw, &result); err != nil {
+		return nil, fmt.Errorf("decode ToolResultPart: %w", err)
+	}
+	if result.ToolUseID == "" {
+		return nil, errors.New("ToolResultPart requires ToolUseID")
+	}
+	return result, nil
+}
+
+func decodeToolUsePart(raw json.RawMessage, obj map[string]json.RawMessage) (Part, error) {
+	var use ToolUsePart
+	if err := json.Unmarshal(raw, &use); err != nil {
+		return nil, fmt.Errorf("decode ToolUsePart: %w", err)
+	}
+	if use.Name == "" {
+		return nil, errors.New("ToolUsePart requires Name")
+	}
+	if err := applyToolUseArgsFallback(obj, &use); err != nil {
+		return nil, err
+	}
+	return use, nil
+}
+
+func applyToolUseArgsFallback(obj map[string]json.RawMessage, use *ToolUsePart) error {
+	if use.Input != nil || hasKey(obj, "Input") {
+		return nil
+	}
+	v, hasArgs := obj["Args"]
+	if !hasArgs {
+		return nil
+	}
+	var args any
+	if err := json.Unmarshal(v, &args); err != nil {
+		return fmt.Errorf("decode ToolUsePart Args: %w", err)
+	}
+	use.Input = args
+	return nil
+}
+
+func decodeTextPart(raw json.RawMessage) (Part, error) {
+	var text TextPart
+	if err := json.Unmarshal(raw, &text); err != nil {
+		return nil, fmt.Errorf("decode TextPart: %w", err)
+	}
+	return text, nil
+}
+
+func hasKey(obj map[string]json.RawMessage, key string) bool {
+	_, ok := obj[key]
+	return ok
 }

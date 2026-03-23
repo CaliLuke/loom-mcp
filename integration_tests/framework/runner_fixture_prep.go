@@ -395,8 +395,6 @@ func findServerCmdDir(exampleRoot string) (string, error) {
 // regenerateExample regenerates the example code.
 func regenerateExample(t *testing.T, exampleRoot string) error {
 	t.Helper()
-	codegenMu.Lock()
-	defer codegenMu.Unlock()
 
 	root, err := os.OpenRoot(exampleRoot)
 	if err != nil {
@@ -451,6 +449,29 @@ func regenerateExample(t *testing.T, exampleRoot string) error {
 		return fmt.Errorf("post loom example tidy failed: %w\n%s", err, string(out))
 	}
 	return nil
+}
+
+func ensurePreparedExampleRoot(t *testing.T, exampleRoot string) (string, error) {
+	t.Helper()
+	codegenMu.Lock()
+	defer codegenMu.Unlock()
+	if cached, ok := preparedExampleCache[exampleRoot]; ok {
+		return cached.root, cached.err
+	}
+	preparedRoot, err := cloneExampleRoot(exampleRoot)
+	if err == nil {
+		err = regenerateExample(t, preparedRoot)
+	}
+	if err == nil {
+		err = restoreFixtureCommandTree(exampleRoot, preparedRoot)
+	}
+	if err != nil {
+		_ = os.RemoveAll(preparedRoot)
+		preparedExampleCache[exampleRoot] = preparedExample{err: err}
+		return "", err
+	}
+	preparedExampleCache[exampleRoot] = preparedExample{root: preparedRoot}
+	return preparedRoot, nil
 }
 
 // cleanGeneratedExampleArtifacts removes generated example artifacts that can interfere
@@ -551,7 +572,11 @@ func buildServerBinary(exampleRoot string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	if cached, ok := serverBinCache[cmdPath]; ok {
+	cacheKey, err := serverBinaryCacheKey(exampleRoot, cmdPath)
+	if err != nil {
+		return "", err
+	}
+	if cached, ok := serverBinCache[cacheKey]; ok {
 		return cached.path, cached.err
 	}
 
@@ -572,14 +597,22 @@ func buildServerBinary(exampleRoot string) (string, error) {
 		if removeErr := os.Remove(binPath); removeErr != nil {
 			buildErr = errors.Join(buildErr, fmt.Errorf("remove temp binary failed: %w", removeErr))
 		}
-		serverBinCache[cmdPath] = serverBinaryBuild{err: buildErr}
+		serverBinCache[cacheKey] = serverBinaryBuild{err: buildErr}
 		return "", buildErr
 	}
 	if _, err := os.Stat(binPath); err != nil {
 		buildErr := fmt.Errorf("binary not found after build: %w", err)
-		serverBinCache[cmdPath] = serverBinaryBuild{err: buildErr}
+		serverBinCache[cacheKey] = serverBinaryBuild{err: buildErr}
 		return "", buildErr
 	}
-	serverBinCache[cmdPath] = serverBinaryBuild{path: binPath}
+	serverBinCache[cacheKey] = serverBinaryBuild{path: binPath}
 	return binPath, nil
+}
+
+func serverBinaryCacheKey(exampleRoot, cmdPath string) (string, error) {
+	rel, err := filepath.Rel(exampleRoot, cmdPath)
+	if err != nil {
+		return "", fmt.Errorf("rel server cmd dir: %w", err)
+	}
+	return rel, nil
 }

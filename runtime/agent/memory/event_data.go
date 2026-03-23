@@ -9,10 +9,13 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
+	"maps"
+	"math"
 	"time"
 
 	"github.com/CaliLuke/loom-mcp/runtime/agent"
 	"github.com/CaliLuke/loom-mcp/runtime/agent/rawjson"
+	"github.com/CaliLuke/loom-mcp/runtime/agent/telemetry"
 	"github.com/CaliLuke/loom-mcp/runtime/agent/tools"
 )
 
@@ -69,14 +72,33 @@ type (
 		ToolName tools.Ident
 		// ResultJSON is the canonical JSON encoding of the successful result.
 		ResultJSON rawjson.Message
+		// ServerData carries server-only tool result data that must not be sent to models.
+		ServerData rawjson.Message
 		// Preview is the already-rendered user-facing result summary.
 		Preview string
 		// Bounds describes bounded-result metadata when present.
 		Bounds *agent.Bounds
 		// Duration is the wall-clock tool execution time.
 		Duration time.Duration
+		// Telemetry carries structured execution metrics when present.
+		Telemetry *telemetry.ToolTelemetry
+		// RetryHint carries structured repair guidance for failed tool calls.
+		RetryHint *RetryHintData
 		// ErrorMessage is the plain-text tool failure message.
 		ErrorMessage string
+	}
+
+	// RetryHintData stores the durable retry guidance associated with a tool result
+	// without importing planner types into the memory package.
+	RetryHintData struct {
+		Reason             string
+		Tool               tools.Ident
+		RestrictToTool     bool
+		MissingFields      []string
+		ExampleInput       map[string]any
+		PriorInput         map[string]any
+		ClarifyingQuestion string
+		Message            string
 	}
 
 	// PlannerNoteData stores planner-generated annotations.
@@ -110,9 +132,12 @@ const (
 	eventFieldQueue                 = "queue"
 	eventFieldExpectedChildrenTotal = "expected_children_total"
 	eventFieldResultJSON            = "result_json"
+	eventFieldServerData            = "server_data"
 	eventFieldPreview               = "preview"
 	eventFieldBounds                = "bounds"
 	eventFieldDuration              = "duration"
+	eventFieldTelemetry             = "telemetry"
+	eventFieldRetryHint             = "retry_hint"
 	eventFieldErrorMessage          = "error_message"
 	eventFieldNote                  = "note"
 	eventFieldText                  = "text"
@@ -349,6 +374,9 @@ func (d ToolResultData) ToMap() map[string]any {
 	if len(d.ResultJSON) > 0 {
 		m[eventFieldResultJSON] = string(d.ResultJSON)
 	}
+	if len(d.ServerData) > 0 {
+		m[eventFieldServerData] = string(d.ServerData)
+	}
 	if d.Preview != "" {
 		m[eventFieldPreview] = d.Preview
 	}
@@ -357,6 +385,12 @@ func (d ToolResultData) ToMap() map[string]any {
 	}
 	if d.Duration != 0 {
 		m[eventFieldDuration] = d.Duration
+	}
+	if d.Telemetry != nil {
+		m[eventFieldTelemetry] = cloneToolTelemetry(d.Telemetry)
+	}
+	if d.RetryHint != nil {
+		m[eventFieldRetryHint] = cloneRetryHint(d.RetryHint)
 	}
 	if d.ErrorMessage != "" {
 		m[eventFieldErrorMessage] = d.ErrorMessage
@@ -398,6 +432,10 @@ func (d *ToolResultData) FromMap(data any) error {
 	if err != nil {
 		return err
 	}
+	d.ServerData, err = optionalRawJSONField(EventToolResult, m, eventFieldServerData)
+	if err != nil {
+		return err
+	}
 	d.Preview, err = optionalStringField(EventToolResult, m, eventFieldPreview)
 	if err != nil {
 		return err
@@ -407,6 +445,14 @@ func (d *ToolResultData) FromMap(data any) error {
 		return err
 	}
 	d.Duration, err = optionalDurationField(EventToolResult, m, eventFieldDuration)
+	if err != nil {
+		return err
+	}
+	d.Telemetry, err = optionalTelemetryField(EventToolResult, m, eventFieldTelemetry)
+	if err != nil {
+		return err
+	}
+	d.RetryHint, err = optionalRetryHintField(EventToolResult, m, eventFieldRetryHint)
 	if err != nil {
 		return err
 	}
@@ -620,6 +666,9 @@ func optionalDurationField(eventType EventType, data map[string]any, key string)
 	case int64:
 		return time.Duration(typed), nil
 	case float64:
+		if math.Trunc(typed) != typed {
+			return 0, fmt.Errorf("memory: %s field %q must be an integer duration, got %v", eventType, key, typed)
+		}
 		return time.Duration(typed), nil
 	default:
 		return 0, fmt.Errorf("memory: %s field %q must be duration-compatible, got %T", eventType, key, value)
@@ -644,6 +693,9 @@ func optionalIntField(eventType EventType, data map[string]any, key string) (int
 	case int64:
 		return int(typed), nil
 	case float64:
+		if math.Trunc(typed) != typed {
+			return 0, fmt.Errorf("memory: %s field %q must be an integer, got %v", eventType, key, typed)
+		}
 		return int(typed), nil
 	default:
 		return 0, fmt.Errorf("memory: %s field %q must be int-compatible, got %T", eventType, key, value)
@@ -686,6 +738,46 @@ func optionalBytesField(eventType EventType, data map[string]any, key string) ([
 		return append([]byte(nil), typed...), nil
 	default:
 		return nil, fmt.Errorf("memory: %s field %q must be string, got %T", eventType, key, value)
+	}
+}
+
+func optionalTelemetryField(eventType EventType, data map[string]any, key string) (*telemetry.ToolTelemetry, error) {
+	value, ok := data[key]
+	if !ok || value == nil {
+		return nil, nil
+	}
+	switch typed := value.(type) {
+	case *telemetry.ToolTelemetry:
+		return cloneToolTelemetry(typed), nil
+	case telemetry.ToolTelemetry:
+		copied := typed
+		return cloneToolTelemetry(&copied), nil
+	default:
+		var out telemetry.ToolTelemetry
+		if err := decodeStructuredValue(value, &out); err != nil {
+			return nil, fmt.Errorf("memory: decode %s field %q: %w", eventType, key, err)
+		}
+		return cloneToolTelemetry(&out), nil
+	}
+}
+
+func optionalRetryHintField(eventType EventType, data map[string]any, key string) (*RetryHintData, error) {
+	value, ok := data[key]
+	if !ok || value == nil {
+		return nil, nil
+	}
+	switch typed := value.(type) {
+	case *RetryHintData:
+		return cloneRetryHint(typed), nil
+	case RetryHintData:
+		copied := typed
+		return cloneRetryHint(&copied), nil
+	default:
+		var out RetryHintData
+		if err := decodeStructuredValue(value, &out); err != nil {
+			return nil, fmt.Errorf("memory: decode %s field %q: %w", eventType, key, err)
+		}
+		return cloneRetryHint(&out), nil
 	}
 }
 
@@ -748,11 +840,34 @@ func cloneToolCallData(data ToolCallData) ToolCallData {
 
 func cloneToolResultData(data ToolResultData) ToolResultData {
 	data.ResultJSON = append(rawjson.Message(nil), data.ResultJSON...)
+	data.ServerData = append(rawjson.Message(nil), data.ServerData...)
 	data.Bounds = cloneBounds(data.Bounds)
+	data.Telemetry = cloneToolTelemetry(data.Telemetry)
+	data.RetryHint = cloneRetryHint(data.RetryHint)
 	return data
 }
 
 func cloneThinkingData(data ThinkingData) ThinkingData {
 	data.Redacted = append([]byte(nil), data.Redacted...)
 	return data
+}
+
+func cloneToolTelemetry(value *telemetry.ToolTelemetry) *telemetry.ToolTelemetry {
+	if value == nil {
+		return nil
+	}
+	cloned := *value
+	cloned.Extra = maps.Clone(value.Extra)
+	return &cloned
+}
+
+func cloneRetryHint(value *RetryHintData) *RetryHintData {
+	if value == nil {
+		return nil
+	}
+	cloned := *value
+	cloned.MissingFields = append([]string(nil), value.MissingFields...)
+	cloned.ExampleInput = maps.Clone(value.ExampleInput)
+	cloned.PriorInput = maps.Clone(value.PriorInput)
+	return &cloned
 }

@@ -126,89 +126,94 @@ func EncodeToHookInput(evt Event, turnID string) (*ActivityInput, error) {
 
 // DecodeFromHookInput reconstructs a hooks.Event from the serialized hook input.
 func DecodeFromHookInput(input *ActivityInput) (Event, error) {
-	var evt Event
+	evt, handled, err := decodeRunEvent(input)
+	if err != nil {
+		return nil, err
+	}
+	if !handled {
+		evt, handled, err = decodeAwaitEvent(input)
+	}
+	if err != nil {
+		return nil, err
+	}
+	if !handled {
+		evt, handled, err = decodeToolEvent(input)
+	}
+	if err != nil {
+		return nil, err
+	}
+	if !handled {
+		evt, handled, err = decodeAuxEvent(input)
+	}
+	if err != nil {
+		return nil, err
+	}
+	if !handled {
+		return nil, fmt.Errorf("unsupported hook event type %q", input.Type)
+	}
+	if input.TurnID != "" {
+		stampTurnID(evt, input.TurnID)
+	}
+	stampTimestamp(evt, input.TimestampMS)
+	stampEventKey(evt, input.EventKey)
+	return evt, nil
+}
+
+func decodeRunEvent(input *ActivityInput) (Event, bool, error) {
+	//nolint:exhaustive // Event groups are intentionally partitioned across helper switches.
 	switch input.Type {
 	case RunStarted:
 		var p RunStartedEvent
-		if err := json.Unmarshal(input.Payload, &p); err != nil {
-			return nil, fmt.Errorf("decode %s payload: %w", RunStarted, err)
+		if err := decodeHookPayload(input, &p); err != nil {
+			return nil, false, err
 		}
-		evt = NewRunStartedEvent(input.RunID, input.AgentID, p.RunContext, p.Input)
-
+		return NewRunStartedEvent(input.RunID, input.AgentID, p.RunContext, p.Input), true, nil
 	case RunPhaseChanged:
 		var p RunPhaseChangedEvent
-		if err := json.Unmarshal(input.Payload, &p); err != nil {
-			return nil, fmt.Errorf("decode %s payload: %w", RunPhaseChanged, err)
+		if err := decodeHookPayload(input, &p); err != nil {
+			return nil, false, err
 		}
-		evt = NewRunPhaseChangedEvent(input.RunID, input.AgentID, input.SessionID, p.Phase)
-
-	case PromptRendered:
-		var p PromptRenderedEvent
-		if err := json.Unmarshal(input.Payload, &p); err != nil {
-			return nil, fmt.Errorf("decode %s payload: %w", PromptRendered, err)
-		}
-		evt = NewPromptRenderedEvent(input.RunID, input.AgentID, input.SessionID, p.PromptID, p.Version, p.Scope)
-
+		return NewRunPhaseChangedEvent(input.RunID, input.AgentID, input.SessionID, p.Phase), true, nil
 	case RunPaused:
 		var p RunPausedEvent
-		if err := json.Unmarshal(input.Payload, &p); err != nil {
-			return nil, fmt.Errorf("decode %s payload: %w", RunPaused, err)
+		if err := decodeHookPayload(input, &p); err != nil {
+			return nil, false, err
 		}
-		evt = NewRunPausedEvent(input.RunID, input.AgentID, input.SessionID, p.Reason, p.RequestedBy, p.Labels, p.Metadata)
-
+		return NewRunPausedEvent(input.RunID, input.AgentID, input.SessionID, p.Reason, p.RequestedBy, p.Labels, p.Metadata), true, nil
 	case RunResumed:
 		var p RunResumedEvent
-		if err := json.Unmarshal(input.Payload, &p); err != nil {
-			return nil, fmt.Errorf("decode %s payload: %w", RunResumed, err)
+		if err := decodeHookPayload(input, &p); err != nil {
+			return nil, false, err
 		}
-		evt = NewRunResumedEvent(input.RunID, input.AgentID, input.SessionID, p.Notes, p.RequestedBy, p.Labels, p.MessageCount)
-
+		return NewRunResumedEvent(input.RunID, input.AgentID, input.SessionID, p.Notes, p.RequestedBy, p.Labels, p.MessageCount), true, nil
 	case RunCompleted:
 		var p runCompletedPayload
-		if err := json.Unmarshal(input.Payload, &p); err != nil {
-			return nil, fmt.Errorf("decode %s payload: %w", RunCompleted, err)
+		if err := decodeHookPayload(input, &p); err != nil {
+			return nil, false, err
 		}
-		var runErr error
-		if p.Error != "" {
-			runErr = errors.New(p.Error)
-		}
-		rc := NewRunCompletedEvent(input.RunID, input.AgentID, input.SessionID, p.Status, p.Phase, runErr)
-		rc.PublicError = p.PublicError
-		rc.ErrorProvider = p.ErrorProvider
-		rc.ErrorOperation = p.ErrorOperation
-		rc.ErrorKind = p.ErrorKind
-		rc.ErrorCode = p.ErrorCode
-		rc.HTTPStatus = p.HTTPStatus
-		rc.Retryable = p.Retryable
-		evt = rc
+		return newRunCompletedFromPayload(input, p), true, nil
+	default:
+		return nil, false, nil
+	}
+}
 
-	case ChildRunLinked:
-		var p ChildRunLinkedEvent
-		if err := json.Unmarshal(input.Payload, &p); err != nil {
-			return nil, fmt.Errorf("decode %s payload: %w", ChildRunLinked, err)
-		}
-		evt = NewChildRunLinkedEvent(input.RunID, input.AgentID, input.SessionID, p.ToolName, p.ToolCallID, p.ChildRunID, p.ChildAgentID)
-
-	case ToolCallArgsDelta:
-		var p ToolCallArgsDeltaEvent
-		if err := json.Unmarshal(input.Payload, &p); err != nil {
-			return nil, fmt.Errorf("decode %s payload: %w", ToolCallArgsDelta, err)
-		}
-		evt = NewToolCallArgsDeltaEvent(input.RunID, input.AgentID, input.SessionID, p.ToolCallID, p.ToolName, p.Delta)
-
+func decodeAwaitEvent(input *ActivityInput) (Event, bool, error) {
+	//nolint:exhaustive // Event groups are intentionally partitioned across helper switches.
+	switch input.Type {
+	case PromptRendered:
+		return nil, false, nil
 	case AwaitClarification:
 		var p AwaitClarificationEvent
-		if err := json.Unmarshal(input.Payload, &p); err != nil {
-			return nil, fmt.Errorf("decode %s payload: %w", AwaitClarification, err)
+		if err := decodeHookPayload(input, &p); err != nil {
+			return nil, false, err
 		}
-		evt = NewAwaitClarificationEvent(input.RunID, input.AgentID, input.SessionID, p.ID, p.Question, p.MissingFields, p.RestrictToTool, p.ExampleInput)
-
+		return NewAwaitClarificationEvent(input.RunID, input.AgentID, input.SessionID, p.ID, p.Question, p.MissingFields, p.RestrictToTool, p.ExampleInput), true, nil
 	case AwaitQuestions:
 		var p AwaitQuestionsEvent
-		if err := json.Unmarshal(input.Payload, &p); err != nil {
-			return nil, fmt.Errorf("decode %s payload: %w", AwaitQuestions, err)
+		if err := decodeHookPayload(input, &p); err != nil {
+			return nil, false, err
 		}
-		evt = NewAwaitQuestionsEvent(
+		return NewAwaitQuestionsEvent(
 			input.RunID,
 			input.AgentID,
 			input.SessionID,
@@ -218,79 +223,63 @@ func DecodeFromHookInput(input *ActivityInput) (Event, error) {
 			p.Payload,
 			p.Title,
 			p.Questions,
-		)
-
+		), true, nil
 	case AwaitConfirmation:
 		var p AwaitConfirmationEvent
-		if err := json.Unmarshal(input.Payload, &p); err != nil {
-			return nil, fmt.Errorf("decode %s payload: %w", AwaitConfirmation, err)
+		if err := decodeHookPayload(input, &p); err != nil {
+			return nil, false, err
 		}
-		evt = NewAwaitConfirmationEvent(input.RunID, input.AgentID, input.SessionID, p.ID, p.Title, p.Prompt, p.ToolName, p.ToolCallID, p.Payload)
-
+		return NewAwaitConfirmationEvent(input.RunID, input.AgentID, input.SessionID, p.ID, p.Title, p.Prompt, p.ToolName, p.ToolCallID, p.Payload), true, nil
 	case AwaitExternalTools:
 		var p AwaitExternalToolsEvent
-		if err := json.Unmarshal(input.Payload, &p); err != nil {
-			return nil, fmt.Errorf("decode %s payload: %w", AwaitExternalTools, err)
+		if err := decodeHookPayload(input, &p); err != nil {
+			return nil, false, err
 		}
-		evt = NewAwaitExternalToolsEvent(input.RunID, input.AgentID, input.SessionID, p.ID, p.Items)
-
+		return NewAwaitExternalToolsEvent(input.RunID, input.AgentID, input.SessionID, p.ID, p.Items), true, nil
 	case ToolAuthorization:
 		var p ToolAuthorizationEvent
-		if err := json.Unmarshal(input.Payload, &p); err != nil {
-			return nil, fmt.Errorf("decode %s payload: %w", ToolAuthorization, err)
+		if err := decodeHookPayload(input, &p); err != nil {
+			return nil, false, err
 		}
-		evt = NewToolAuthorizationEvent(input.RunID, input.AgentID, input.SessionID, p.ToolName, p.ToolCallID, p.Approved, p.Summary, p.ApprovedBy)
+		return NewToolAuthorizationEvent(input.RunID, input.AgentID, input.SessionID, p.ToolName, p.ToolCallID, p.Approved, p.Summary, p.ApprovedBy), true, nil
+	default:
+		return nil, false, nil
+	}
+}
 
-	case AssistantMessage:
-		var p AssistantMessageEvent
-		if err := json.Unmarshal(input.Payload, &p); err != nil {
-			return nil, fmt.Errorf("decode %s payload: %w", AssistantMessage, err)
+func decodeToolEvent(input *ActivityInput) (Event, bool, error) {
+	//nolint:exhaustive // Event groups are intentionally partitioned across helper switches.
+	switch input.Type {
+	case ChildRunLinked:
+		var p ChildRunLinkedEvent
+		if err := decodeHookPayload(input, &p); err != nil {
+			return nil, false, err
 		}
-		evt = NewAssistantMessageEvent(input.RunID, input.AgentID, input.SessionID, p.Message, p.Structured)
-
-	case PlannerNote:
-		var p PlannerNoteEvent
-		if err := json.Unmarshal(input.Payload, &p); err != nil {
-			return nil, fmt.Errorf("decode %s payload: %w", PlannerNote, err)
+		return NewChildRunLinkedEvent(input.RunID, input.AgentID, input.SessionID, p.ToolName, p.ToolCallID, p.ChildRunID, p.ChildAgentID), true, nil
+	case ToolCallArgsDelta:
+		var p ToolCallArgsDeltaEvent
+		if err := decodeHookPayload(input, &p); err != nil {
+			return nil, false, err
 		}
-		evt = NewPlannerNoteEvent(input.RunID, input.AgentID, input.SessionID, p.Note, p.Labels)
-
-	case ThinkingBlock:
-		var p ThinkingBlockEvent
-		if err := json.Unmarshal(input.Payload, &p); err != nil {
-			return nil, fmt.Errorf("decode %s payload: %w", ThinkingBlock, err)
-		}
-		evt = NewThinkingBlockEvent(
-			input.RunID,
-			input.AgentID,
-			input.SessionID,
-			p.Text,
-			p.Signature,
-			p.Redacted,
-			p.ContentIndex,
-			p.Final,
-		)
-
+		return NewToolCallArgsDeltaEvent(input.RunID, input.AgentID, input.SessionID, p.ToolCallID, p.ToolName, p.Delta), true, nil
 	case ToolCallScheduled:
 		var p ToolCallScheduledEvent
-		if err := json.Unmarshal(input.Payload, &p); err != nil {
-			return nil, fmt.Errorf("decode %s payload: %w", ToolCallScheduled, err)
+		if err := decodeHookPayload(input, &p); err != nil {
+			return nil, false, err
 		}
-		evt = NewToolCallScheduledEvent(input.RunID, input.AgentID, input.SessionID, p.ToolName, p.ToolCallID, p.Payload, p.Queue, p.ParentToolCallID, p.ExpectedChildrenTotal)
-
+		return NewToolCallScheduledEvent(input.RunID, input.AgentID, input.SessionID, p.ToolName, p.ToolCallID, p.Payload, p.Queue, p.ParentToolCallID, p.ExpectedChildrenTotal), true, nil
 	case ToolCallUpdated:
 		var p ToolCallUpdatedEvent
-		if err := json.Unmarshal(input.Payload, &p); err != nil {
-			return nil, fmt.Errorf("decode %s payload: %w", ToolCallUpdated, err)
+		if err := decodeHookPayload(input, &p); err != nil {
+			return nil, false, err
 		}
-		evt = NewToolCallUpdatedEvent(input.RunID, input.AgentID, input.SessionID, p.ToolCallID, p.ExpectedChildrenTotal)
-
+		return NewToolCallUpdatedEvent(input.RunID, input.AgentID, input.SessionID, p.ToolCallID, p.ExpectedChildrenTotal), true, nil
 	case ToolResultReceived:
 		var p toolResultReceivedPayload
-		if err := json.Unmarshal(input.Payload, &p); err != nil {
-			return nil, fmt.Errorf("decode %s payload: %w", ToolResultReceived, err)
+		if err := decodeHookPayload(input, &p); err != nil {
+			return nil, false, err
 		}
-		evt = NewToolResultReceivedEvent(
+		return NewToolResultReceivedEvent(
 			input.RunID,
 			input.AgentID,
 			input.SessionID,
@@ -306,53 +295,104 @@ func DecodeFromHookInput(input *ActivityInput) (Event, error) {
 			p.Telemetry,
 			p.RetryHint,
 			p.Error,
-		)
-
-	case PolicyDecision:
-		var p PolicyDecisionEvent
-		if err := json.Unmarshal(input.Payload, &p); err != nil {
-			return nil, fmt.Errorf("decode %s payload: %w", PolicyDecision, err)
-		}
-		evt = NewPolicyDecisionEvent(input.RunID, input.AgentID, input.SessionID, p.AllowedTools, p.Caps, p.Labels, p.Metadata)
-
+		), true, nil
 	case RetryHintIssued:
 		var p RetryHintIssuedEvent
-		if err := json.Unmarshal(input.Payload, &p); err != nil {
-			return nil, fmt.Errorf("decode %s payload: %w", RetryHintIssued, err)
+		if err := decodeHookPayload(input, &p); err != nil {
+			return nil, false, err
 		}
-		evt = NewRetryHintIssuedEvent(input.RunID, input.AgentID, input.SessionID, p.Reason, p.ToolName, p.Message)
+		return NewRetryHintIssuedEvent(input.RunID, input.AgentID, input.SessionID, p.Reason, p.ToolName, p.Message), true, nil
+	default:
+		return nil, false, nil
+	}
+}
 
+func decodeAuxEvent(input *ActivityInput) (Event, bool, error) {
+	//nolint:exhaustive // Event groups are intentionally partitioned across helper switches.
+	switch input.Type {
+	case PromptRendered:
+		var p PromptRenderedEvent
+		if err := decodeHookPayload(input, &p); err != nil {
+			return nil, false, err
+		}
+		return NewPromptRenderedEvent(input.RunID, input.AgentID, input.SessionID, p.PromptID, p.Version, p.Scope), true, nil
+	case AssistantMessage:
+		var p AssistantMessageEvent
+		if err := decodeHookPayload(input, &p); err != nil {
+			return nil, false, err
+		}
+		return NewAssistantMessageEvent(input.RunID, input.AgentID, input.SessionID, p.Message, p.Structured), true, nil
+	case PlannerNote:
+		var p PlannerNoteEvent
+		if err := decodeHookPayload(input, &p); err != nil {
+			return nil, false, err
+		}
+		return NewPlannerNoteEvent(input.RunID, input.AgentID, input.SessionID, p.Note, p.Labels), true, nil
+	case ThinkingBlock:
+		var p ThinkingBlockEvent
+		if err := decodeHookPayload(input, &p); err != nil {
+			return nil, false, err
+		}
+		return NewThinkingBlockEvent(
+			input.RunID,
+			input.AgentID,
+			input.SessionID,
+			p.Text,
+			p.Signature,
+			p.Redacted,
+			p.ContentIndex,
+			p.Final,
+		), true, nil
+	case PolicyDecision:
+		var p PolicyDecisionEvent
+		if err := decodeHookPayload(input, &p); err != nil {
+			return nil, false, err
+		}
+		return NewPolicyDecisionEvent(input.RunID, input.AgentID, input.SessionID, p.AllowedTools, p.Caps, p.Labels, p.Metadata), true, nil
 	case MemoryAppended:
 		var p MemoryAppendedEvent
-		if err := json.Unmarshal(input.Payload, &p); err != nil {
-			return nil, fmt.Errorf("decode %s payload: %w", MemoryAppended, err)
+		if err := decodeHookPayload(input, &p); err != nil {
+			return nil, false, err
 		}
-		evt = NewMemoryAppendedEvent(input.RunID, input.AgentID, input.SessionID, p.EventCount)
-
+		return NewMemoryAppendedEvent(input.RunID, input.AgentID, input.SessionID, p.EventCount), true, nil
 	case Usage:
 		var p UsageEvent
-		if err := json.Unmarshal(input.Payload, &p); err != nil {
-			return nil, fmt.Errorf("decode %s payload: %w", Usage, err)
+		if err := decodeHookPayload(input, &p); err != nil {
+			return nil, false, err
 		}
-		evt = NewUsageEvent(input.RunID, input.AgentID, input.SessionID, p.TokenUsage)
-
+		return NewUsageEvent(input.RunID, input.AgentID, input.SessionID, p.TokenUsage), true, nil
 	case HardProtectionTriggered:
 		var p HardProtectionEvent
-		if err := json.Unmarshal(input.Payload, &p); err != nil {
-			return nil, fmt.Errorf("decode %s payload: %w", HardProtectionTriggered, err)
+		if err := decodeHookPayload(input, &p); err != nil {
+			return nil, false, err
 		}
-		evt = NewHardProtectionEvent(input.RunID, input.AgentID, input.SessionID, p.Reason, p.ExecutedAgentTools, p.ChildrenTotal, p.ToolNames)
-
+		return NewHardProtectionEvent(input.RunID, input.AgentID, input.SessionID, p.Reason, p.ExecutedAgentTools, p.ChildrenTotal, p.ToolNames), true, nil
 	default:
-		return nil, fmt.Errorf("unsupported hook event type %q", input.Type)
+		return nil, false, nil
 	}
+}
 
-	if input.TurnID != "" {
-		stampTurnID(evt, input.TurnID)
+func newRunCompletedFromPayload(input *ActivityInput, p runCompletedPayload) Event {
+	var runErr error
+	if p.Error != "" {
+		runErr = errors.New(p.Error)
 	}
-	stampTimestamp(evt, input.TimestampMS)
-	stampEventKey(evt, input.EventKey)
-	return evt, nil
+	rc := NewRunCompletedEvent(input.RunID, input.AgentID, input.SessionID, p.Status, p.Phase, runErr)
+	rc.PublicError = p.PublicError
+	rc.ErrorProvider = p.ErrorProvider
+	rc.ErrorOperation = p.ErrorOperation
+	rc.ErrorKind = p.ErrorKind
+	rc.ErrorCode = p.ErrorCode
+	rc.HTTPStatus = p.HTTPStatus
+	rc.Retryable = p.Retryable
+	return rc
+}
+
+func decodeHookPayload(input *ActivityInput, payload any) error {
+	if err := json.Unmarshal(input.Payload, payload); err != nil {
+		return fmt.Errorf("decode %s payload: %w", input.Type, err)
+	}
+	return nil
 }
 
 func stampTurnID(evt Event, turnID string) {

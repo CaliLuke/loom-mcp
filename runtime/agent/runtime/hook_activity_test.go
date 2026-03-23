@@ -8,6 +8,9 @@ import (
 
 	"github.com/CaliLuke/loom-mcp/runtime/agent/engine"
 	"github.com/CaliLuke/loom-mcp/runtime/agent/hooks"
+	"github.com/CaliLuke/loom-mcp/runtime/agent/memory"
+	memoryinmem "github.com/CaliLuke/loom-mcp/runtime/agent/memory/inmem"
+	"github.com/CaliLuke/loom-mcp/runtime/agent/planner"
 	"github.com/CaliLuke/loom-mcp/runtime/agent/prompt"
 	"github.com/CaliLuke/loom-mcp/runtime/agent/rawjson"
 	"github.com/CaliLuke/loom-mcp/runtime/agent/runlog"
@@ -370,4 +373,85 @@ func TestHookActivityLinksChildRunsOnParentRunMeta(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, "svc.child", childRun.AgentID)
 	require.Equal(t, session.RunStatusPending, childRun.Status)
+}
+
+func TestHookActivityPersistsToolResultMetadataToMemory(t *testing.T) {
+	t.Parallel()
+
+	memStore := memoryinmem.New()
+	sessionStore := sessioninmem.New()
+	rt := newFromOptions(Options{
+		MemoryStore:   memStore,
+		SessionStore:  sessionStore,
+		RunEventStore: runloginmem.New(),
+	})
+
+	now := time.Now().UTC()
+	_, err := sessionStore.CreateSession(context.Background(), "sess-1", now)
+	require.NoError(t, err)
+	require.NoError(t, sessionStore.UpsertRun(context.Background(), session.RunMeta{
+		AgentID:   "svc.agent",
+		RunID:     "run-1",
+		SessionID: "sess-1",
+		Status:    session.RunStatusRunning,
+		StartedAt: now,
+		UpdatedAt: now,
+	}))
+
+	ev := hooks.NewToolResultReceivedEvent(
+		"run-1",
+		"svc.agent",
+		"sess-1",
+		tools.Ident("svc.tool"),
+		"tc-1",
+		"parent-1",
+		map[string]any{"ok": true},
+		rawjson.Message(`{"ok":true}`),
+		rawjson.Message(`[{"kind":"evidence"}]`),
+		"1 row returned",
+		nil,
+		2*time.Second,
+		&telemetry.ToolTelemetry{
+			DurationMs: 2000,
+			TokensUsed: 9,
+			Model:      "gpt-test",
+			Extra:      map[string]any{"cache_hit": true},
+		},
+		&planner.RetryHint{
+			Reason:             planner.RetryReasonMissingFields,
+			Tool:               tools.Ident("svc.tool"),
+			RestrictToTool:     true,
+			MissingFields:      []string{"query"},
+			ExampleInput:       map[string]any{"query": "latest"},
+			ClarifyingQuestion: "What query should I use?",
+			Message:            "query is required",
+		},
+		planner.NewToolError("boom"),
+	)
+	input, err := hooks.EncodeToHookInput(ev, "turn-1")
+	require.NoError(t, err)
+
+	require.NoError(t, rt.hookActivity(context.Background(), input))
+
+	snapshot, err := memStore.LoadRun(context.Background(), "svc.agent", "run-1")
+	require.NoError(t, err)
+	require.Len(t, snapshot.Events, 1)
+
+	data, err := memory.DecodeToolResultData(snapshot.Events[0])
+	require.NoError(t, err)
+	require.JSONEq(t, `{"ok":true}`, string(data.ResultJSON))
+	require.JSONEq(t, `[{"kind":"evidence"}]`, string(data.ServerData))
+	require.NotNil(t, data.Telemetry)
+	require.Equal(t, int64(2000), data.Telemetry.DurationMs)
+	require.Equal(t, 9, data.Telemetry.TokensUsed)
+	require.Equal(t, "gpt-test", data.Telemetry.Model)
+	require.Equal(t, map[string]any{"cache_hit": true}, data.Telemetry.Extra)
+	require.NotNil(t, data.RetryHint)
+	require.Equal(t, "missing_fields", data.RetryHint.Reason)
+	require.Equal(t, tools.Ident("svc.tool"), data.RetryHint.Tool)
+	require.Equal(t, []string{"query"}, data.RetryHint.MissingFields)
+	require.Equal(t, map[string]any{"query": "latest"}, data.RetryHint.ExampleInput)
+	require.Equal(t, "What query should I use?", data.RetryHint.ClarifyingQuestion)
+	require.Equal(t, "query is required", data.RetryHint.Message)
+	require.Equal(t, "boom", data.ErrorMessage)
 }

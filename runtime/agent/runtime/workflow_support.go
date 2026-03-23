@@ -40,73 +40,13 @@ func (r *Runtime) finalizeWithPlanner(
 		return nil, errors.New("base plan input is required")
 	}
 	ctx := wfCtx.Context()
-	// Transition to synthesizing phase while we obtain a final answer without
-	// scheduling additional tools.
-	if err := r.publishHook(
-		ctx,
-		hooks.NewRunPhaseChangedEvent(
-			base.RunContext.RunID,
-			input.AgentID,
-			base.RunContext.SessionID,
-			run.PhaseSynthesizing,
-		),
-		turnID,
-	); err != nil {
+	if err := r.publishFinalizingPhase(ctx, base, input, turnID); err != nil {
 		return nil, err
 	}
-	// Prepare a brief message to steer planners that incorporate system messages.
-	var hint string
-	switch reason {
-	case planner.TerminationReasonTimeBudget:
-		hint = "FINALIZE NOW: time budget reached.\n\n- Provide the best possible final answer using ONLY the information already available in the conversation and tool results.\n- Do NOT call any tools.\n- Do NOT say you will call tools or that you will \"try\" another approach.\n- If additional tool calls would be needed, explain what you would have retrieved and how it would change the answer, then provide the best provisional answer."
-	case planner.TerminationReasonToolCap:
-		hint = "FINALIZE NOW: tool budget exhausted.\n\n- Provide the best possible final answer using ONLY the information already available in the conversation and tool results.\n- Do NOT call any tools.\n- Do NOT say you will call tools.\n- If further tool calls would be needed, describe them briefly and provide the best provisional answer."
-	case planner.TerminationReasonFailureCap:
-		hint = "FINALIZE NOW: too many tool failures.\n\n- Provide the best possible final answer using ONLY the information already available in the conversation and tool results.\n- Do NOT call any tools.\n- Do NOT say you will call tools.\n- If tools failed due to invalid arguments, summarize the failure and provide a corrected plan/payload shape (without actually calling tools), then provide the best provisional answer."
-	default:
-		hint = "FINALIZE NOW.\n\n- Provide the best possible final answer using ONLY the information already available in the conversation and tool results.\n- Do NOT call any tools.\n- Do NOT say you will call tools.\n- If more work is needed, describe it succinctly and provide the best provisional answer."
-	}
-	messages := cloneMessages(base.Messages)
-	// When finalizing, ensure the message history ends in a valid state for the
-	// provider. If the last message was an assistant turn with tool_use (e.g.
-	// finalization happened while external results were still outstanding), append
-	// user message with error results for those tools before requesting the
-	// final tool-free response.
-	if len(messages) > 0 {
-		last := messages[len(messages)-1]
-		if last.Role == model.ConversationRoleAssistant {
-			var unanswered []model.ToolUsePart
-			for _, p := range last.Parts {
-				if tu, ok := p.(model.ToolUsePart); ok {
-					unanswered = append(unanswered, tu)
-				}
-			}
-			if len(unanswered) > 0 {
-				parts := make([]model.Part, 0, len(unanswered))
-				for _, tu := range unanswered {
-					parts = append(parts, model.ToolResultPart{
-						ToolUseID: tu.ID,
-						Content:   "Finalized before a tool result was provided for this request.",
-						IsError:   true,
-					})
-				}
-				messages = append(messages, &model.Message{
-					Role:  model.ConversationRoleUser,
-					Parts: parts,
-				})
-			}
-		}
-	}
-
-	if hint != "" {
-		messages = append(messages, &model.Message{
-			Role:  model.ConversationRoleSystem,
-			Parts: []model.Part{model.TextPart{Text: hint}},
-		})
-	}
+	hint := finalizationHint(reason)
+	messages := prepareFinalizationMessages(base.Messages, hint)
 	resumeCtx := base.RunContext
 	resumeCtx.Attempt = nextAttempt
-	// Signal zero remaining duration for any prompt engineering that uses MaxDuration.
 	resumeCtx.MaxDuration = "0s"
 	encodedToolOutputs, err := encodePlannerToolOutputs(allToolOutputs)
 	if err != nil {
@@ -123,53 +63,10 @@ func (r *Runtime) finalizeWithPlanner(
 	if err := enforcePlanActivityInputBudget(req); err != nil {
 		return nil, err
 	}
-	// Emit a pause/resume pair to indicate a finalization turn began.
-	if err := r.publishHook(
-		ctx,
-		hooks.NewRunPausedEvent(
-			base.RunContext.RunID,
-			input.AgentID,
-			base.RunContext.SessionID,
-			"finalize",
-			"runtime",
-			map[string]string{"reason": string(reason)},
-			nil,
-		),
-		turnID,
-	); err != nil {
+	if err := r.publishFinalizeTransition(ctx, base, input, turnID, reason); err != nil {
 		return nil, err
 	}
-	if err := r.publishHook(
-		ctx,
-		hooks.NewRunResumedEvent(
-			base.RunContext.RunID,
-			input.AgentID,
-			base.RunContext.SessionID,
-			"finalize",
-			base.RunContext.RunID,
-			nil,
-			0,
-		),
-		turnID,
-	); err != nil {
-		return nil, err
-	}
-
-	// Human‑readable reason strings for error contexts when finalization fails.
-	reasonText := func() string {
-		switch reason {
-		case planner.TerminationReasonTimeBudget:
-			return "time budget exceeded"
-		case planner.TerminationReasonToolCap:
-			return "tool call cap exceeded"
-		case planner.TerminationReasonFailureCap:
-			return "consecutive failed tool call cap exceeded"
-		default:
-			return "finalization failed"
-		}
-	}()
-
-	// Apply run-level Plan timeout override to Resume if present.
+	reasonText := finalizationReasonText(reason)
 	resumeOpts := reg.ResumeActivityOptions
 	if input.Policy != nil && input.Policy.PlanTimeout > 0 {
 		resumeOpts.StartToCloseTimeout = input.Policy.PlanTimeout
@@ -196,34 +93,12 @@ func (r *Runtime) finalizeWithPlanner(
 		}
 	}
 	if output.Result.FinalResponse != nil && !output.Result.Streamed {
-		if err := r.publishHook(
-			ctx,
-			hooks.NewAssistantMessageEvent(
-				base.RunContext.RunID,
-				input.AgentID,
-				base.RunContext.SessionID,
-				agentMessageText(finalMsg),
-				nil,
-			),
-			turnID,
-		); err != nil {
+		if err := r.publishFinalizationAssistantMessage(ctx, base, input, turnID, finalMsg); err != nil {
 			return nil, err
 		}
 	}
-	for _, note := range output.Result.Notes {
-		if err := r.publishHook(
-			ctx,
-			hooks.NewPlannerNoteEvent(
-				base.RunContext.RunID,
-				input.AgentID,
-				base.RunContext.SessionID,
-				note.Text,
-				note.Labels,
-			),
-			turnID,
-		); err != nil {
-			return nil, err
-		}
+	if err := r.publishPlannerNotes(ctx, base, input, turnID, output.Result.Notes); err != nil {
+		return nil, err
 	}
 	notes := make([]*planner.PlannerAnnotation, len(output.Result.Notes))
 	for i := range output.Result.Notes {
@@ -269,37 +144,12 @@ func (r *Runtime) handleInterrupts(
 		if req == nil {
 			return errors.New("pause: received nil pause request")
 		}
-		if err := r.publishHook(
-			ctx,
-			hooks.NewRunPausedEvent(
-				input.RunID,
-				input.AgentID,
-				input.SessionID,
-				req.Reason,
-				req.RequestedBy,
-				req.Labels,
-				req.Metadata,
-			),
-			turnID,
-		); err != nil {
+		if err := r.publishPauseEvent(ctx, input, turnID, req); err != nil {
 			return err
 		}
-
 		timeout, ok := timeoutUntil(budgetDeadline, wfCtx.Now())
 		if !ok {
-			if err := r.publishHook(
-				ctx,
-				hooks.NewRunResumedEvent(
-					input.RunID,
-					input.AgentID,
-					input.SessionID,
-					"deadline_exceeded",
-					"runtime",
-					map[string]string{"resumed_by": "deadline_exceeded"},
-					0,
-				),
-				turnID,
-			); err != nil {
+			if err := r.publishResumeReason(ctx, input, turnID, "deadline_exceeded"); err != nil {
 				return err
 			}
 			return nil
@@ -307,36 +157,12 @@ func (r *Runtime) handleInterrupts(
 		resumeReq, err := ctrl.WaitResume(ctx, timeout)
 		if err != nil {
 			if errors.Is(err, context.DeadlineExceeded) {
-				if err := r.publishHook(
-					ctx,
-					hooks.NewRunResumedEvent(
-						input.RunID,
-						input.AgentID,
-						input.SessionID,
-						"deadline_exceeded",
-						"runtime",
-						map[string]string{"resumed_by": "deadline_exceeded"},
-						0,
-					),
-					turnID,
-				); err != nil {
+				if err := r.publishResumeReason(ctx, input, turnID, "deadline_exceeded"); err != nil {
 					return err
 				}
 				return nil
 			}
-			if err2 := r.publishHook(
-				ctx,
-				hooks.NewRunResumedEvent(
-					input.RunID,
-					input.AgentID,
-					input.SessionID,
-					"resume_error",
-					"runtime",
-					map[string]string{"resumed_by": "resume_error"},
-					0,
-				),
-				turnID,
-			); err2 != nil {
+			if err2 := r.publishResumeReason(ctx, input, turnID, "resume_error"); err2 != nil {
 				return err2
 			}
 			return err
@@ -349,19 +175,7 @@ func (r *Runtime) handleInterrupts(
 		}
 		base.RunContext.Attempt = *nextAttempt
 		*nextAttempt++
-		if err := r.publishHook(
-			ctx,
-			hooks.NewRunResumedEvent(
-				input.RunID,
-				input.AgentID,
-				input.SessionID,
-				resumeReq.Notes,
-				resumeReq.RequestedBy,
-				resumeReq.Labels,
-				len(resumeReq.Messages),
-			),
-			turnID,
-		); err != nil {
+		if err := r.publishResumed(ctx, input, turnID, resumeReq); err != nil {
 			return err
 		}
 	}
@@ -399,24 +213,7 @@ func (r *Runtime) handleMissingFieldsPolicy(
 	if ctrl == nil || reg.Policy.OnMissingFields == "" {
 		return nil, nil
 	}
-	ctx := wfCtx.Context()
-	// Find first result with missing-fields hint and capture tool context.
-	var (
-		mf          *planner.RetryHint
-		triggerTool tools.Ident
-		triggerCall string
-	)
-	for _, tr := range results {
-		if tr == nil || tr.RetryHint == nil {
-			continue
-		}
-		if tr.RetryHint.Reason == planner.RetryReasonMissingFields {
-			mf = tr.RetryHint
-			triggerTool = tr.Name
-			triggerCall = tr.ToolCallID
-			break
-		}
-	}
+	mf, triggerTool, triggerCall := firstMissingFieldsHint(results)
 	if mf == nil {
 		return nil, nil
 	}
@@ -425,99 +222,201 @@ func (r *Runtime) handleMissingFieldsPolicy(
 		out, err := r.finalizeWithPlanner(wfCtx, reg, input, base, allResults, allToolOutputs, aggUsage, *nextAttempt, turnID, planner.TerminationReasonFailureCap, time.Time{})
 		return out, err
 	case MissingFieldsAwaitClarification:
-		// Generate deterministic await ID for correlation safety.
-		awaitID := generateDeterministicAwaitID(base.RunContext.RunID, base.RunContext.TurnID, triggerTool, triggerCall)
-		var restrict tools.Ident
-		if mf.RestrictToTool {
-			restrict = mf.Tool
-		}
-		if err := r.publishHook(ctx, hooks.NewAwaitClarificationEvent(
-			base.RunContext.RunID,
-			input.AgentID,
-			base.RunContext.SessionID,
-			awaitID,
-			mf.ClarifyingQuestion,
-			mf.MissingFields,
-			restrict,
-			mf.ExampleInput,
-		), turnID); err != nil {
-			return nil, err
-		}
-		if err := r.publishHook(
-			ctx,
-			hooks.NewRunPausedEvent(
-				base.RunContext.RunID,
-				input.AgentID,
-				base.RunContext.SessionID,
-				"await_clarification",
-				"runtime",
-				nil,
-				nil,
-			),
-			turnID,
-		); err != nil {
-			return nil, err
-		}
-		waitStartedAt := wfCtx.Now()
-		ans, err := ctrl.WaitProvideClarification(ctx, 0)
-		if deadlines != nil {
-			if delta := wfCtx.Now().Sub(waitStartedAt); delta > 0 {
-				// Awaiting clarification is external wait time; it must not consume run budget.
-				// Extend both deadlines so only active planner/tool execution counts.
-				deadlines.pause(delta)
-			}
-		}
-		if err != nil {
-			if err2 := r.publishHook(
-				ctx,
-				hooks.NewRunResumedEvent(
-					base.RunContext.RunID,
-					input.AgentID,
-					base.RunContext.SessionID,
-					"clarification_error",
-					"runtime",
-					map[string]string{
-						"resumed_by": "clarification_error",
-						"await_id":   awaitID,
-					},
-					0,
-				),
-				turnID,
-			); err2 != nil {
-				return nil, err2
-			}
-			return nil, err
-		}
-		if ans == nil {
-			return nil, errors.New("await_clarification: received nil clarification answer")
-		}
-		// Validate correlation when ID is present on the answer.
-		if ans.ID != "" && ans.ID != awaitID {
-			return nil, fmt.Errorf("unexpected await ID for clarification")
-		}
-		if ans.Answer != "" {
-			base.Messages = append(base.Messages, &model.Message{
-				Role:  model.ConversationRoleUser,
-				Parts: []model.Part{model.TextPart{Text: ans.Answer}},
-			})
-		}
-		if err := r.publishHook(ctx, hooks.NewRunResumedEvent(
-			base.RunContext.RunID,
-			input.AgentID,
-			base.RunContext.SessionID,
-			"clarification_provided",
-			input.RunID,
-			ans.Labels,
-			1,
-		), turnID); err != nil {
-			return nil, err
-		}
-		return nil, nil
+		return r.awaitMissingFieldClarification(wfCtx, input, base, turnID, ctrl, deadlines, mf, triggerTool, triggerCall)
 	case MissingFieldsResume:
 		return nil, nil
 	default:
 		return nil, nil
 	}
+}
+
+func (r *Runtime) publishFinalizingPhase(ctx context.Context, base *planner.PlanInput, input *RunInput, turnID string) error {
+	return r.publishHook(ctx, hooks.NewRunPhaseChangedEvent(base.RunContext.RunID, input.AgentID, base.RunContext.SessionID, run.PhaseSynthesizing), turnID)
+}
+
+func finalizationHint(reason planner.TerminationReason) string {
+	switch reason {
+	case planner.TerminationReasonTimeBudget:
+		return "FINALIZE NOW: time budget reached.\n\n- Provide the best possible final answer using ONLY the information already available in the conversation and tool results.\n- Do NOT call any tools.\n- Do NOT say you will call tools or that you will \"try\" another approach.\n- If additional tool calls would be needed, explain what you would have retrieved and how it would change the answer, then provide the best provisional answer."
+	case planner.TerminationReasonToolCap:
+		return "FINALIZE NOW: tool budget exhausted.\n\n- Provide the best possible final answer using ONLY the information already available in the conversation and tool results.\n- Do NOT call any tools.\n- Do NOT say you will call tools.\n- If further tool calls would be needed, describe them briefly and provide the best provisional answer."
+	case planner.TerminationReasonFailureCap:
+		return "FINALIZE NOW: too many tool failures.\n\n- Provide the best possible final answer using ONLY the information already available in the conversation and tool results.\n- Do NOT call any tools.\n- Do NOT say you will call tools.\n- If tools failed due to invalid arguments, summarize the failure and provide a corrected plan/payload shape (without actually calling tools), then provide the best provisional answer."
+	default:
+		return "FINALIZE NOW.\n\n- Provide the best possible final answer using ONLY the information already available in the conversation and tool results.\n- Do NOT call any tools.\n- Do NOT say you will call tools.\n- If more work is needed, describe it succinctly and provide the best provisional answer."
+	}
+}
+
+func prepareFinalizationMessages(messages []*model.Message, hint string) []*model.Message {
+	out := cloneMessages(messages)
+	out = appendSyntheticToolResultsForFinalize(out)
+	if hint != "" {
+		out = append(out, &model.Message{
+			Role:  model.ConversationRoleSystem,
+			Parts: []model.Part{model.TextPart{Text: hint}},
+		})
+	}
+	return out
+}
+
+func appendSyntheticToolResultsForFinalize(messages []*model.Message) []*model.Message {
+	if len(messages) == 0 {
+		return messages
+	}
+	last := messages[len(messages)-1]
+	if last.Role != model.ConversationRoleAssistant {
+		return messages
+	}
+	var parts []model.Part
+	for _, p := range last.Parts {
+		if tu, ok := p.(model.ToolUsePart); ok {
+			parts = append(parts, model.ToolResultPart{
+				ToolUseID: tu.ID,
+				Content:   "Finalized before a tool result was provided for this request.",
+				IsError:   true,
+			})
+		}
+	}
+	if len(parts) == 0 {
+		return messages
+	}
+	return append(messages, &model.Message{Role: model.ConversationRoleUser, Parts: parts})
+}
+
+func (r *Runtime) publishFinalizeTransition(ctx context.Context, base *planner.PlanInput, input *RunInput, turnID string, reason planner.TerminationReason) error {
+	if err := r.publishHook(ctx, hooks.NewRunPausedEvent(
+		base.RunContext.RunID, input.AgentID, base.RunContext.SessionID, "finalize", "runtime", map[string]string{"reason": string(reason)}, nil,
+	), turnID); err != nil {
+		return err
+	}
+	return r.publishHook(ctx, hooks.NewRunResumedEvent(
+		base.RunContext.RunID, input.AgentID, base.RunContext.SessionID, "finalize", base.RunContext.RunID, nil, 0,
+	), turnID)
+}
+
+func finalizationReasonText(reason planner.TerminationReason) string {
+	switch reason {
+	case planner.TerminationReasonTimeBudget:
+		return "time budget exceeded"
+	case planner.TerminationReasonToolCap:
+		return "tool call cap exceeded"
+	case planner.TerminationReasonFailureCap:
+		return "consecutive failed tool call cap exceeded"
+	default:
+		return "finalization failed"
+	}
+}
+
+func (r *Runtime) publishFinalizationAssistantMessage(ctx context.Context, base *planner.PlanInput, input *RunInput, turnID string, msg *model.Message) error {
+	return r.publishHook(ctx, hooks.NewAssistantMessageEvent(
+		base.RunContext.RunID, input.AgentID, base.RunContext.SessionID, agentMessageText(msg), nil,
+	), turnID)
+}
+
+func (r *Runtime) publishPlannerNotes(ctx context.Context, base *planner.PlanInput, input *RunInput, turnID string, notes []planner.PlannerAnnotation) error {
+	for _, note := range notes {
+		if err := r.publishHook(ctx, hooks.NewPlannerNoteEvent(
+			base.RunContext.RunID, input.AgentID, base.RunContext.SessionID, note.Text, note.Labels,
+		), turnID); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (r *Runtime) publishPauseEvent(ctx context.Context, input *RunInput, turnID string, req interrupt.PauseRequest) error {
+	return r.publishHook(ctx, hooks.NewRunPausedEvent(
+		input.RunID, input.AgentID, input.SessionID, req.Reason, req.RequestedBy, req.Labels, req.Metadata,
+	), turnID)
+}
+
+func (r *Runtime) publishResumeReason(ctx context.Context, input *RunInput, turnID string, reason string) error {
+	return r.publishHook(ctx, hooks.NewRunResumedEvent(
+		input.RunID, input.AgentID, input.SessionID, reason, "runtime", map[string]string{"resumed_by": reason}, 0,
+	), turnID)
+}
+
+func (r *Runtime) publishResumed(ctx context.Context, input *RunInput, turnID string, req interrupt.ResumeRequest) error {
+	return r.publishHook(ctx, hooks.NewRunResumedEvent(
+		input.RunID, input.AgentID, input.SessionID, req.Notes, req.RequestedBy, req.Labels, len(req.Messages),
+	), turnID)
+}
+
+func firstMissingFieldsHint(results []*planner.ToolResult) (*planner.RetryHint, tools.Ident, string) {
+	for _, tr := range results {
+		if tr == nil || tr.RetryHint == nil {
+			continue
+		}
+		if tr.RetryHint.Reason == planner.RetryReasonMissingFields {
+			return tr.RetryHint, tr.Name, tr.ToolCallID
+		}
+	}
+	return nil, "", ""
+}
+
+func (r *Runtime) awaitMissingFieldClarification(
+	wfCtx engine.WorkflowContext,
+	input *RunInput,
+	base *planner.PlanInput,
+	turnID string,
+	ctrl *interrupt.Controller,
+	deadlines *runDeadlines,
+	mf *planner.RetryHint,
+	triggerTool tools.Ident,
+	triggerCall string,
+) (*RunOutput, error) {
+	ctx := wfCtx.Context()
+	awaitID := generateDeterministicAwaitID(base.RunContext.RunID, base.RunContext.TurnID, triggerTool, triggerCall)
+	var restrict tools.Ident
+	if mf.RestrictToTool {
+		restrict = mf.Tool
+	}
+	if err := r.publishHook(ctx, hooks.NewAwaitClarificationEvent(
+		base.RunContext.RunID, input.AgentID, base.RunContext.SessionID, awaitID, mf.ClarifyingQuestion, mf.MissingFields, restrict, mf.ExampleInput,
+	), turnID); err != nil {
+		return nil, err
+	}
+	if err := r.publishHook(ctx, hooks.NewRunPausedEvent(
+		base.RunContext.RunID, input.AgentID, base.RunContext.SessionID, "await_clarification", "runtime", nil, nil,
+	), turnID); err != nil {
+		return nil, err
+	}
+	waitStartedAt := wfCtx.Now()
+	ans, err := ctrl.WaitProvideClarification(ctx, 0)
+	if deadlines != nil {
+		if delta := wfCtx.Now().Sub(waitStartedAt); delta > 0 {
+			deadlines.pause(delta)
+		}
+	}
+	if err != nil {
+		if err2 := r.publishHook(ctx, hooks.NewRunResumedEvent(
+			base.RunContext.RunID, input.AgentID, base.RunContext.SessionID, "clarification_error", "runtime",
+			map[string]string{"resumed_by": "clarification_error", "await_id": awaitID}, 0,
+		), turnID); err2 != nil {
+			return nil, err2
+		}
+		return nil, err
+	}
+	if ans == nil {
+		return nil, errors.New("await_clarification: received nil clarification answer")
+	}
+	if ans.ID != "" && ans.ID != awaitID {
+		return nil, fmt.Errorf("unexpected await ID for clarification")
+	}
+	if ans.Answer != "" {
+		base.Messages = append(base.Messages, &model.Message{
+			Role: model.ConversationRoleUser,
+			Parts: []model.Part{model.TextPart{
+				Text: ans.Answer,
+			}},
+		})
+	}
+	if err := r.publishHook(ctx, hooks.NewRunResumedEvent(
+		base.RunContext.RunID, input.AgentID, base.RunContext.SessionID, "clarification_provided", input.RunID, ans.Labels, 1,
+	), turnID); err != nil {
+		return nil, err
+	}
+	return nil, nil
 }
 
 // runPlanActivity schedules a plan/resume activity with the configured options.

@@ -29,7 +29,6 @@ func TestMCPProtocol(t *testing.T) {
 	for _, sc := range scenarios {
 		scenario := sc
 		t.Run(scenario.Name, func(t *testing.T) {
-			t.Parallel()
 			r := framework.NewRunner()
 			require.NoError(t, r.Run(t, []framework.Scenario{scenario}))
 		})
@@ -43,7 +42,6 @@ func TestMCPTools(t *testing.T) {
 	for _, sc := range scenarios {
 		scenario := sc
 		t.Run(scenario.Name, func(t *testing.T) {
-			t.Parallel()
 			r := framework.NewRunner()
 			require.NoError(t, r.Run(t, []framework.Scenario{scenario}))
 		})
@@ -57,7 +55,6 @@ func TestMCPResources(t *testing.T) {
 	for _, sc := range scenarios {
 		scenario := sc
 		t.Run(scenario.Name, func(t *testing.T) {
-			t.Parallel()
 			r := framework.NewRunner()
 			require.NoError(t, r.Run(t, []framework.Scenario{scenario}))
 		})
@@ -71,7 +68,6 @@ func TestMCPPrompts(t *testing.T) {
 	for _, sc := range scenarios {
 		scenario := sc
 		t.Run(scenario.Name, func(t *testing.T) {
-			t.Parallel()
 			r := framework.NewRunner()
 			require.NoError(t, r.Run(t, []framework.Scenario{scenario}))
 		})
@@ -89,7 +85,6 @@ func TestMCPPromptsCLI(t *testing.T) {
 	for _, sc := range scenarios {
 		scenario := sc
 		t.Run(scenario.Name, func(t *testing.T) {
-			t.Parallel()
 			r := framework.NewRunner()
 			require.NoError(t, r.Run(t, []framework.Scenario{scenario}))
 		})
@@ -103,7 +98,6 @@ func TestMCPNotifications(t *testing.T) {
 	for _, sc := range scenarios {
 		scenario := sc
 		t.Run(scenario.Name, func(t *testing.T) {
-			t.Parallel()
 			r := framework.NewRunner()
 			require.NoError(t, r.Run(t, []framework.Scenario{scenario}))
 		})

@@ -122,16 +122,23 @@ type sseEvent struct {
 const tailMaxBytes = 4096
 
 var (
-	codegenMu sync.Mutex
+	codegenMu            sync.Mutex
+	preparedExampleCache = map[string]preparedExample{}
 
-	// Pre-compiled binary state keyed by command directory so cloned SDK fixtures
-	// do not accidentally reuse a binary built from a different example root.
+	// Pre-compiled binary state keyed by the fixture command identity so cloned
+	// SDK fixtures can reuse the same binary instead of rebuilding identical
+	// temp-directory copies for every scenario.
 	serverBinMu    sync.Mutex
 	serverBinCache = map[string]serverBinaryBuild{}
 )
 
 type serverBinaryBuild struct {
 	path string
+	err  error
+}
+
+type preparedExample struct {
+	root string
 	err  error
 }
 
@@ -168,7 +175,7 @@ func SupportsCLI() bool {
 	return findExampleRoot() != ""
 }
 
-// Run executes the scenarios (always parallel, no filtering).
+// Run executes the scenarios in a single managed-server session.
 func (r *Runner) Run(t *testing.T, scenarios []Scenario) error {
 	t.Helper()
 	if len(scenarios) == 0 {
@@ -186,7 +193,6 @@ func (r *Runner) Run(t *testing.T, scenarios []Scenario) error {
 	for _, sc := range scenarios {
 		scenario := sc
 		t.Run(scenario.Name, func(t *testing.T) {
-			t.Parallel()
 			r.runSteps(t, scenario.Steps, scenario.Defaults, scenario.Pre)
 		})
 	}

@@ -141,7 +141,7 @@ func (r *Runner) executeJSONRPC(
 
 // executeSSE sends a request expecting SSE and returns captured events.
 //
-//nolint:cyclop,gocognit,nestif // SSE parsing is stateful and kept local to the transport boundary.
+//nolint:cyclop // SSE parsing is stateful and kept local to the transport boundary.
 func (r *Runner) executeSSE(
 	method string,
 	input map[string]any,

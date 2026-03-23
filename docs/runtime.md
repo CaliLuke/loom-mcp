@@ -1665,6 +1665,10 @@ Generated MCP JSON-RPC clients and MCP client adapters use the same
 normalization contract, so runtime callers and generated callers observe the
 same behavior for multi-part tool output.
 
+The same package also exposes canonical JSON helpers used at MCP boundaries.
+Those helpers accept string-keyed maps, including named string aliases, and
+fail fast on unsupported map key kinds instead of silently dropping entries.
+
 ### Server-initiated events (Broadcaster)
 
 Generated MCP adapters can stream server-initiated events (notifications, resource updates) to multiple

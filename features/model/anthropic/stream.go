@@ -193,151 +193,11 @@ func (p *anthropicChunkProcessor) Handle(event sdk.MessageStreamEventUnion) erro
 		p.stopReason = ""
 		return nil
 	case sdk.ContentBlockStartEvent:
-		idx := int(ev.Index)
-		start := ev.ContentBlock.AsAny()
-		if toolUse, ok := start.(sdk.ToolUseBlock); ok {
-			tb := &toolBuffer{}
-			if toolUse.ID == "" {
-				return fmt.Errorf("anthropic stream: tool use block missing id")
-			}
-			if toolUse.Name == "" {
-				return fmt.Errorf("anthropic stream: tool use block %q missing name", toolUse.ID)
-			}
-			raw := toolUse.Name
-			// Anthropic echoes the provider-visible tool name in tool_use blocks.
-			// When the model hallucinates a tool name that was not advertised in this
-			// request, the reverse map will not contain it. Surface the tool call
-			// as-is and let the runtime convert it into an "unknown tool" result so
-			// the model can recover on the next resume turn.
-			if canonical, ok := p.toolNameMap[raw]; ok {
-				tb.name = canonical
-			} else {
-				tb.name = raw
-			}
-			tb.id = toolUse.ID
-			p.toolBlocks[idx] = tb
-			return nil
-		}
-		return nil
+		return p.handleContentBlockStart(ev)
 	case sdk.ContentBlockDeltaEvent:
-		idx := int(ev.Index)
-		switch delta := ev.Delta.AsAny().(type) {
-		case sdk.TextDelta:
-			if delta.Text == "" {
-				return nil
-			}
-			return p.emit(model.Chunk{
-				Type: model.ChunkTypeText,
-				Message: &model.Message{
-					Role: model.ConversationRoleAssistant,
-					Parts: []model.Part{
-						model.TextPart{Text: delta.Text},
-					},
-					Meta: map[string]any{"content_index": idx},
-				},
-			})
-		case sdk.InputJSONDelta:
-			if delta.PartialJSON == "" {
-				return nil
-			}
-			if tb := p.toolBlocks[idx]; tb != nil {
-				tb.fragments = append(tb.fragments, delta.PartialJSON)
-				if tb.id == "" {
-					return fmt.Errorf("anthropic stream: tool JSON delta missing tool call id")
-				}
-				if tb.name == "" {
-					return fmt.Errorf("anthropic stream: tool JSON delta missing tool name for id %q", tb.id)
-				}
-				return p.emit(model.Chunk{
-					Type: model.ChunkTypeToolCallDelta,
-					ToolCallDelta: &model.ToolCallDelta{
-						Name:  tools.Ident(tb.name),
-						ID:    tb.id,
-						Delta: delta.PartialJSON,
-					},
-				})
-			}
-			return nil
-		case sdk.ThinkingDelta:
-			if delta.Thinking == "" {
-				return nil
-			}
-			tb := p.thinkingBlocks[idx]
-			if tb == nil {
-				tb = &thinkingBuffer{}
-				p.thinkingBlocks[idx] = tb
-			}
-			tb.text.WriteString(delta.Thinking)
-			return p.emit(model.Chunk{
-				Type:     model.ChunkTypeThinking,
-				Thinking: delta.Thinking,
-				Message: &model.Message{
-					Role: model.ConversationRoleAssistant,
-					Parts: []model.Part{
-						model.ThinkingPart{
-							Text:  delta.Thinking,
-							Index: idx,
-							Final: false,
-						},
-					},
-				},
-			})
-		case sdk.SignatureDelta:
-			if delta.Signature == "" {
-				return nil
-			}
-			tb := p.thinkingBlocks[idx]
-			if tb == nil {
-				tb = &thinkingBuffer{}
-				p.thinkingBlocks[idx] = tb
-			}
-			tb.signature = delta.Signature
-			return nil
-		default:
-			return nil
-		}
+		return p.handleContentBlockDelta(ev)
 	case sdk.ContentBlockStopEvent:
-		idx := int(ev.Index)
-		if tb := p.thinkingBlocks[idx]; tb != nil {
-			delete(p.thinkingBlocks, idx)
-			if part := tb.finalize(idx); part != nil {
-				if part.Text != "" {
-					if err := p.emit(model.Chunk{
-						Type:     model.ChunkTypeThinking,
-						Thinking: part.Text,
-						Message: &model.Message{
-							Role:  model.ConversationRoleAssistant,
-							Parts: []model.Part{*part},
-						},
-					}); err != nil {
-						return err
-					}
-				} else if len(part.Redacted) > 0 {
-					if err := p.emit(model.Chunk{
-						Type: model.ChunkTypeThinking,
-						Message: &model.Message{
-							Role:  model.ConversationRoleAssistant,
-							Parts: []model.Part{*part},
-						},
-					}); err != nil {
-						return err
-					}
-				}
-			}
-		}
-		if tb := p.toolBlocks[idx]; tb != nil {
-			payload := decodeToolPayload(tb.finalInput())
-			delete(p.toolBlocks, idx)
-			return p.emit(model.Chunk{
-				Type: model.ChunkTypeToolCall,
-				ToolCall: &model.ToolCall{
-					Name:    tools.Ident(tb.name),
-					Payload: payload,
-					ID:      tb.id,
-				},
-			})
-		}
-		return nil
+		return p.handleContentBlockStop(ev)
 	case sdk.MessageDeltaEvent:
 		p.stopReason = string(ev.Delta.StopReason)
 		usage := model.TokenUsage{
@@ -361,6 +221,183 @@ func (p *anthropicChunkProcessor) Handle(event sdk.MessageStreamEventUnion) erro
 		return p.emit(chunk)
 	}
 	return nil
+}
+
+func (p *anthropicChunkProcessor) handleContentBlockStart(ev sdk.ContentBlockStartEvent) error {
+	toolUse, ok := ev.ContentBlock.AsAny().(sdk.ToolUseBlock)
+	if !ok {
+		return nil
+	}
+	tb, err := p.newToolBuffer(toolUse)
+	if err != nil {
+		return err
+	}
+	p.toolBlocks[int(ev.Index)] = tb
+	return nil
+}
+
+func (p *anthropicChunkProcessor) newToolBuffer(toolUse sdk.ToolUseBlock) (*toolBuffer, error) {
+	if toolUse.ID == "" {
+		return nil, fmt.Errorf("anthropic stream: tool use block missing id")
+	}
+	if toolUse.Name == "" {
+		return nil, fmt.Errorf("anthropic stream: tool use block %q missing name", toolUse.ID)
+	}
+	tb := &toolBuffer{id: toolUse.ID}
+	if canonical, ok := p.toolNameMap[toolUse.Name]; ok {
+		tb.name = canonical
+	} else {
+		tb.name = toolUse.Name
+	}
+	return tb, nil
+}
+
+func (p *anthropicChunkProcessor) handleContentBlockDelta(ev sdk.ContentBlockDeltaEvent) error {
+	idx := int(ev.Index)
+	switch delta := ev.Delta.AsAny().(type) {
+	case sdk.TextDelta:
+		return p.emitTextDelta(idx, delta.Text)
+	case sdk.InputJSONDelta:
+		return p.emitToolJSONDelta(idx, delta.PartialJSON)
+	case sdk.ThinkingDelta:
+		return p.emitThinkingDelta(idx, delta.Thinking)
+	case sdk.SignatureDelta:
+		return p.recordThinkingSignature(idx, delta.Signature)
+	default:
+		return nil
+	}
+}
+
+func (p *anthropicChunkProcessor) emitTextDelta(idx int, text string) error {
+	if text == "" {
+		return nil
+	}
+	return p.emit(model.Chunk{
+		Type: model.ChunkTypeText,
+		Message: &model.Message{
+			Role: model.ConversationRoleAssistant,
+			Parts: []model.Part{
+				model.TextPart{Text: text},
+			},
+			Meta: map[string]any{"content_index": idx},
+		},
+	})
+}
+
+func (p *anthropicChunkProcessor) emitToolJSONDelta(idx int, fragment string) error {
+	if fragment == "" {
+		return nil
+	}
+	tb := p.toolBlocks[idx]
+	if tb == nil {
+		return nil
+	}
+	tb.fragments = append(tb.fragments, fragment)
+	if tb.id == "" {
+		return fmt.Errorf("anthropic stream: tool JSON delta missing tool call id")
+	}
+	if tb.name == "" {
+		return fmt.Errorf("anthropic stream: tool JSON delta missing tool name for id %q", tb.id)
+	}
+	return p.emit(model.Chunk{
+		Type: model.ChunkTypeToolCallDelta,
+		ToolCallDelta: &model.ToolCallDelta{
+			Name:  tools.Ident(tb.name),
+			ID:    tb.id,
+			Delta: fragment,
+		},
+	})
+}
+
+func (p *anthropicChunkProcessor) emitThinkingDelta(idx int, text string) error {
+	if text == "" {
+		return nil
+	}
+	tb := p.ensureThinkingBuffer(idx)
+	tb.text.WriteString(text)
+	return p.emit(model.Chunk{
+		Type:     model.ChunkTypeThinking,
+		Thinking: text,
+		Message: &model.Message{
+			Role: model.ConversationRoleAssistant,
+			Parts: []model.Part{
+				model.ThinkingPart{
+					Text:  text,
+					Index: idx,
+					Final: false,
+				},
+			},
+		},
+	})
+}
+
+func (p *anthropicChunkProcessor) recordThinkingSignature(idx int, signature string) error {
+	if signature == "" {
+		return nil
+	}
+	p.ensureThinkingBuffer(idx).signature = signature
+	return nil
+}
+
+func (p *anthropicChunkProcessor) ensureThinkingBuffer(idx int) *thinkingBuffer {
+	tb := p.thinkingBlocks[idx]
+	if tb == nil {
+		tb = &thinkingBuffer{}
+		p.thinkingBlocks[idx] = tb
+	}
+	return tb
+}
+
+func (p *anthropicChunkProcessor) handleContentBlockStop(ev sdk.ContentBlockStopEvent) error {
+	idx := int(ev.Index)
+	if err := p.emitFinalThinking(idx); err != nil {
+		return err
+	}
+	return p.emitFinalToolCall(idx)
+}
+
+func (p *anthropicChunkProcessor) emitFinalThinking(idx int) error {
+	tb := p.thinkingBlocks[idx]
+	if tb == nil {
+		return nil
+	}
+	delete(p.thinkingBlocks, idx)
+	part := tb.finalize(idx)
+	if part == nil {
+		return nil
+	}
+	chunk := model.Chunk{
+		Type: model.ChunkTypeThinking,
+		Message: &model.Message{
+			Role:  model.ConversationRoleAssistant,
+			Parts: []model.Part{*part},
+		},
+	}
+	if part.Text != "" {
+		chunk.Thinking = part.Text
+		return p.emit(chunk)
+	}
+	if len(part.Redacted) > 0 {
+		return p.emit(chunk)
+	}
+	return nil
+}
+
+func (p *anthropicChunkProcessor) emitFinalToolCall(idx int) error {
+	tb := p.toolBlocks[idx]
+	if tb == nil {
+		return nil
+	}
+	payload := decodeToolPayload(tb.finalInput())
+	delete(p.toolBlocks, idx)
+	return p.emit(model.Chunk{
+		Type: model.ChunkTypeToolCall,
+		ToolCall: &model.ToolCall{
+			Name:    tools.Ident(tb.name),
+			Payload: payload,
+			ID:      tb.id,
+		},
+	})
 }
 
 type toolBuffer struct {

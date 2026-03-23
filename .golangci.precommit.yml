@@ -15,12 +15,15 @@ linters:
     - exhaustive
     - goconst
     - gocritic
+    - funlen
     - goprintffuncname
     - gosec
+    - gocognit
     - ineffassign
     - makezero
     - misspell
     - nakedret
+    - nestif
     - nilerr
     - noctx
     - nolintlint
@@ -34,6 +37,13 @@ linters:
     - unused
     - whitespace
   settings:
+    funlen:
+      lines: 100
+      statements: 60
+    gocognit:
+      min-complexity: 120
+    nestif:
+      min-complexity: 25
     staticcheck:
       checks:
         - all
@@ -57,3 +67,18 @@ linters:
       - path: _test\.go
         linters:
           - dupl
+      - path: _test\.go
+        linters:
+          - funlen
+          - gocognit
+          - nestif
+      - path: ^codegen/
+        linters:
+          - funlen
+          - gocognit
+          - nestif
+      - path: ^integration_tests/
+        linters:
+          - funlen
+          - gocognit
+          - nestif

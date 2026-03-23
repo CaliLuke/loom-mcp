@@ -145,20 +145,15 @@ func (r *Runner) prepareWorkingRoot(t *testing.T) (string, error) {
 	if strings.EqualFold(os.Getenv("TEST_SKIP_GENERATION"), "true") {
 		return workingRoot, nil
 	}
-	codegenMu.Lock()
-	clonedRoot, err := cloneExampleRoot(exampleRoot)
-	codegenMu.Unlock()
+	preparedRoot, err := ensurePreparedExampleRoot(t, exampleRoot)
+	if err != nil {
+		return "", err
+	}
+	clonedRoot, err := cloneExampleRoot(preparedRoot)
 	if err != nil {
 		return "", err
 	}
 	t.Cleanup(func() { _ = os.RemoveAll(clonedRoot) })
-	if err := regenerateExample(t, clonedRoot); err != nil {
-		return "", err
-	}
-	if err := restoreFixtureCommandTree(exampleRoot, clonedRoot); err != nil {
-		_ = os.RemoveAll(clonedRoot)
-		return "", err
-	}
 	return clonedRoot, nil
 }
 

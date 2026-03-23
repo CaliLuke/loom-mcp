@@ -50,11 +50,9 @@ func (r *Runtime) ExecuteWorkflow(wfCtx engine.WorkflowContext, input *RunInput)
 	defer func() {
 		retErr = hooks.WrapRunCompletionError(retErr)
 	}()
-	if r.logger != nil {
-		r.logger.Info(wfCtx.Context(), "ExecuteWorkflow called", "agent_id", input.AgentID, "run_id", input.RunID)
-	}
-	if input.AgentID == "" {
-		return nil, errors.New("agent id is required")
+	r.logWorkflowStart(wfCtx, input)
+	if err := validateWorkflowInput(input); err != nil {
+		return nil, err
 	}
 	defer func() {
 		r.storeWorkflowHandle(input.RunID, nil)
@@ -68,175 +66,42 @@ func (r *Runtime) ExecuteWorkflow(wfCtx engine.WorkflowContext, input *RunInput)
 	}
 	r.logger.Info(wfCtx.Context(), "Agent found, executing plan activity", "agent_id", input.AgentID)
 	ctrl := interrupt.NewController(wfCtx)
-	runCtx := run.Context{
-		RunID:            input.RunID,
-		SessionID:        input.SessionID,
-		TurnID:           input.TurnID,
-		ParentToolCallID: input.ParentToolCallID,
-		ParentRunID:      input.ParentRunID,
-		ParentAgentID:    input.ParentAgentID,
-		Tool:             input.Tool,
-		ToolArgs:         input.ToolArgs,
-		Attempt:          1,
-		Labels:           input.Labels,
-	}
-	// Get turn ID for event stamping
+	runCtx := workflowRunContext(input)
 	turnID := input.TurnID
-	if err := r.publishHook(
-		wfCtx.Context(),
-		hooks.NewRunStartedEvent(input.RunID, input.AgentID, runCtx, *input),
-		turnID,
-	); err != nil {
-		return nil, err
-	}
-	// Initial phase: input has been received and planning is about to begin.
-	if err := r.publishHook(
-		wfCtx.Context(),
-		hooks.NewRunPhaseChangedEvent(input.RunID, input.AgentID, input.SessionID, run.PhasePrompted),
-		turnID,
-	); err != nil {
+	if err := r.publishInitialWorkflowEvents(wfCtx.Context(), input, runCtx, turnID); err != nil {
 		return nil, err
 	}
 	finalStatus := runStatusSuccess
 	var finalErr error
-	defer func() {
-		phase := terminalRunPhaseForStatus(finalStatus)
-		// Use a fresh context with timeout for terminal events. The workflow
-		// engine supplies a replay-aware context so subscribers can avoid
-		// re-applying side effects during history replay while still allowing
-		// session stores and UIs to observe a single terminal phase.
-		//
-		// Emit only RunCompletedEvent (which carries both status and phase).
-		// Emitting a separate RunPhaseChangedEvent before RunCompleted causes
-		// two terminal workflow events to reach subscribers, which can trigger
-		// race conditions in frontends that close streams on the first
-		// terminal event.
-		detached := wfCtx.Detached()
-		termCtx, cancel := context.WithTimeout(detached.Context(), 10*time.Second)
-		defer cancel()
-		if err := r.publishHookErr(
-			termCtx,
-			hooks.NewRunCompletedEvent(input.RunID, input.AgentID, input.SessionID, finalStatus, phase, finalErr),
-			turnID,
-		); err != nil {
-			r.logWarn(termCtx, "run completed hook failed", err, "run_id", input.RunID, "agent_id", input.AgentID)
-		}
-	}()
+	defer r.publishWorkflowCompletion(wfCtx, input, turnID, &finalStatus, &finalErr)
 
-	planInput := &planner.PlanInput{
-		Messages:   input.Messages,
-		RunContext: runCtx,
-	}
-	// Compute deadlines before the initial Plan so it cannot outlive the run window.
-	timing := resolveRunTiming(reg, input)
-	timeBudget := timing.TimeBudget
-	grace := timing.FinalizerGrace
-	var (
-		budgetDeadline time.Time
-		hardDeadline   time.Time
-	)
-	if timeBudget > 0 {
-		budgetDeadline = wfCtx.Now().Add(timeBudget)
-		hardDeadline = budgetDeadline.Add(grace)
-	}
-	startReq := PlanActivityInput{
-		AgentID:    input.AgentID,
-		RunID:      input.RunID,
-		Messages:   input.Messages,
-		RunContext: runCtx,
-	}
+	planInput, startReq, timing, deadlines := r.prepareWorkflowPlanning(wfCtx, reg, input, runCtx)
 	if err := enforcePlanActivityInputBudget(startReq); err != nil {
 		finalErr = err
 		finalStatus = runStatusFailed
 		return nil, err
 	}
-	// Apply run-level Plan timeout override when provided.
-	planOpts := reg.PlanActivityOptions
-	if input.Policy != nil && input.Policy.PlanTimeout > 0 {
-		planOpts.StartToCloseTimeout = input.Policy.PlanTimeout
-	}
-	// Emit timing resolution for observability.
-	if r.logger != nil {
-		var planTimeout time.Duration
-		if planOpts.StartToCloseTimeout > 0 {
-			planTimeout = planOpts.StartToCloseTimeout
-		}
-		toolTimeout := reg.ExecuteToolActivityOptions.StartToCloseTimeout
-		if toolTimeout == 0 {
-			toolTimeout = defaultExecuteToolActivityTimeout
-		}
-		if input.Policy != nil && input.Policy.ToolTimeout > 0 {
-			toolTimeout = input.Policy.ToolTimeout
-		}
-		r.logger.Info(wfCtx.Context(), "timing_resolved",
-			"time_budget", timeBudget,
-			"finalizer_grace", grace,
-			"hard_deadline", hardDeadline,
-			"plan_timeout", planTimeout,
-			"tool_timeout", toolTimeout,
-		)
-	}
-	// Transition into planning before invoking the planner activity.
-	if err := r.publishHook(
-		wfCtx.Context(),
-		hooks.NewRunPhaseChangedEvent(input.RunID, input.AgentID, input.SessionID, run.PhasePlanning),
-		turnID,
-	); err != nil {
+	planOpts := r.resolveAndLogWorkflowTiming(wfCtx, reg, input, timing)
+	if err := r.publishPlanningPhase(wfCtx.Context(), input, turnID); err != nil {
 		finalErr = err
 		finalStatus = terminalRunStatusForError(err)
 		return nil, err
 	}
-	firstOutput, err := r.runPlanActivity(wfCtx, reg.PlanActivityName, planOpts, startReq, hardDeadline)
+	firstOutput, err := r.runInitialPlan(wfCtx, reg, startReq, planOpts, deadlines.Hard)
 	if err != nil {
-		r.logger.Error(wfCtx.Context(), "Plan activity failed", "error", err)
 		finalErr = err
 		finalStatus = terminalRunStatusForError(err)
 		return nil, err
-	}
-	if firstOutput == nil || firstOutput.Result == nil {
-		r.logger.Error(wfCtx.Context(), "Plan activity returned nil result")
-		finalErr = fmt.Errorf("plan activity returned nil result")
-		finalStatus = runStatusFailed
-		return nil, finalErr
 	}
 	result := firstOutput.Result
-	r.logger.Info(wfCtx.Context(), "Plan activity completed", "tool_calls", len(result.ToolCalls), "final_response", result.FinalResponse != nil)
-	// Validate PlanResult structure - if planner returned ToolCalls, they should be present.
-	if len(result.ToolCalls) == 0 && result.FinalResponse == nil && result.Await == nil {
-		finalErr = fmt.Errorf("plan result has no tool calls, final response, or await")
+	caps, nextAttempt, parentTracker, err := r.prepareWorkflowLoopState(wfCtx.Context(), reg, input, planInput, result)
+	if err != nil {
+		finalErr = err
 		finalStatus = runStatusFailed
-		return nil, finalErr
+		return nil, err
 	}
-	// If ToolCalls is empty but planner returned them, serialization may have failed.
-	if len(result.ToolCalls) == 0 && result.FinalResponse != nil {
-		r.logger.Info(wfCtx.Context(), "PlanResult has FinalResponse but no ToolCalls - workflow will return early")
-	}
-	caps := initialCaps(reg.Policy)
-	// Apply per-run cap overrides (run-level)
-	if input.Policy != nil {
-		if input.Policy.MaxToolCalls > 0 {
-			caps.MaxToolCalls = input.Policy.MaxToolCalls
-			caps.RemainingToolCalls = input.Policy.MaxToolCalls
-		}
-		if input.Policy.MaxConsecutiveFailedToolCalls > 0 {
-			caps.MaxConsecutiveFailedToolCalls = input.Policy.MaxConsecutiveFailedToolCalls
-			caps.RemainingConsecutiveFailedToolCalls = input.Policy.MaxConsecutiveFailedToolCalls
-		}
-	}
-	// Deadlines (budgetDeadline, hardDeadline, grace) already computed above.
-	nextAttempt := planInput.RunContext.Attempt + 1
 	r.logger.Info(wfCtx.Context(), "Starting runLoop", "tool_calls", len(result.ToolCalls))
-	// Create parentTracker if this is a nested agent run (has ParentToolCallID)
-	var parentTracker *childTracker
-	if planInput.RunContext.ParentToolCallID != "" {
-		parentTracker = newChildTracker(planInput.RunContext.ParentToolCallID)
-	}
-	// Enter tool execution phase for the main run loop.
-	if err := r.publishHook(
-		wfCtx.Context(),
-		hooks.NewRunPhaseChangedEvent(input.RunID, input.AgentID, input.SessionID, run.PhaseExecutingTools),
-		turnID,
-	); err != nil {
+	if err := r.publishExecutionPhase(wfCtx.Context(), input, turnID); err != nil {
 		finalErr = err
 		finalStatus = terminalRunStatusForError(err)
 		return nil, err
@@ -250,13 +115,13 @@ func (r *Runtime) ExecuteWorkflow(wfCtx engine.WorkflowContext, input *RunInput)
 		firstOutput.Transcript,
 		firstOutput.Usage,
 		caps,
-		budgetDeadline,
-		hardDeadline,
+		deadlines.Budget,
+		deadlines.Hard,
 		nextAttempt,
 		turnID,
 		parentTracker,
 		ctrl,
-		grace,
+		timing.FinalizerGrace,
 	)
 	if err != nil {
 		finalErr = err
@@ -267,6 +132,187 @@ func (r *Runtime) ExecuteWorkflow(wfCtx engine.WorkflowContext, input *RunInput)
 	finalStatus = runStatusSuccess
 	finalErr = nil
 	return out, nil
+}
+
+func validateWorkflowInput(input *RunInput) error {
+	if input.AgentID == "" {
+		return errors.New("agent id is required")
+	}
+	return nil
+}
+
+func (r *Runtime) logWorkflowStart(wfCtx engine.WorkflowContext, input *RunInput) {
+	if r.logger != nil {
+		r.logger.Info(wfCtx.Context(), "ExecuteWorkflow called", "agent_id", input.AgentID, "run_id", input.RunID)
+	}
+}
+
+func workflowRunContext(input *RunInput) run.Context {
+	return run.Context{
+		RunID:            input.RunID,
+		SessionID:        input.SessionID,
+		TurnID:           input.TurnID,
+		ParentToolCallID: input.ParentToolCallID,
+		ParentRunID:      input.ParentRunID,
+		ParentAgentID:    input.ParentAgentID,
+		Tool:             input.Tool,
+		ToolArgs:         input.ToolArgs,
+		Attempt:          1,
+		Labels:           input.Labels,
+	}
+}
+
+func (r *Runtime) publishInitialWorkflowEvents(ctx context.Context, input *RunInput, runCtx run.Context, turnID string) error {
+	if err := r.publishHook(ctx, hooks.NewRunStartedEvent(input.RunID, input.AgentID, runCtx, *input), turnID); err != nil {
+		return err
+	}
+	return r.publishHook(ctx, hooks.NewRunPhaseChangedEvent(input.RunID, input.AgentID, input.SessionID, run.PhasePrompted), turnID)
+}
+
+func (r *Runtime) publishWorkflowCompletion(
+	wfCtx engine.WorkflowContext,
+	input *RunInput,
+	turnID string,
+	finalStatus *string,
+	finalErr *error,
+) {
+	phase := terminalRunPhaseForStatus(*finalStatus)
+	detached := wfCtx.Detached()
+	termCtx, cancel := context.WithTimeout(detached.Context(), 10*time.Second)
+	defer cancel()
+	if err := r.publishHookErr(
+		termCtx,
+		hooks.NewRunCompletedEvent(input.RunID, input.AgentID, input.SessionID, *finalStatus, phase, *finalErr),
+		turnID,
+	); err != nil {
+		r.logWarn(termCtx, "run completed hook failed", err, "run_id", input.RunID, "agent_id", input.AgentID)
+	}
+}
+
+func (r *Runtime) prepareWorkflowPlanning(
+	wfCtx engine.WorkflowContext,
+	reg AgentRegistration,
+	input *RunInput,
+	runCtx run.Context,
+) (*planner.PlanInput, PlanActivityInput, runTiming, runDeadlines) {
+	planInput := &planner.PlanInput{Messages: input.Messages, RunContext: runCtx}
+	timing := resolveRunTiming(reg, input)
+	deadlines := runDeadlines{FinalizerGrace: timing.FinalizerGrace}
+	if timing.TimeBudget > 0 {
+		deadlines.Budget = wfCtx.Now().Add(timing.TimeBudget)
+		deadlines.Hard = deadlines.Budget.Add(timing.FinalizerGrace)
+	}
+	return planInput, PlanActivityInput{
+		AgentID:    input.AgentID,
+		RunID:      input.RunID,
+		Messages:   input.Messages,
+		RunContext: runCtx,
+	}, timing, deadlines
+}
+
+func (r *Runtime) resolveAndLogWorkflowTiming(
+	wfCtx engine.WorkflowContext,
+	reg AgentRegistration,
+	input *RunInput,
+	timing runTiming,
+) engine.ActivityOptions {
+	planOpts := reg.PlanActivityOptions
+	if input.Policy != nil && input.Policy.PlanTimeout > 0 {
+		planOpts.StartToCloseTimeout = input.Policy.PlanTimeout
+	}
+	if r.logger != nil {
+		toolTimeout := reg.ExecuteToolActivityOptions.StartToCloseTimeout
+		if toolTimeout == 0 {
+			toolTimeout = defaultExecuteToolActivityTimeout
+		}
+		if input.Policy != nil && input.Policy.ToolTimeout > 0 {
+			toolTimeout = input.Policy.ToolTimeout
+		}
+		r.logger.Info(wfCtx.Context(), "timing_resolved",
+			"time_budget", timing.TimeBudget,
+			"finalizer_grace", timing.FinalizerGrace,
+			"hard_deadline", func() time.Time {
+				if timing.TimeBudget <= 0 {
+					return time.Time{}
+				}
+				return wfCtx.Now().Add(timing.TimeBudget + timing.FinalizerGrace)
+			}(),
+			"plan_timeout", planOpts.StartToCloseTimeout,
+			"tool_timeout", toolTimeout,
+		)
+	}
+	return planOpts
+}
+
+func (r *Runtime) publishPlanningPhase(ctx context.Context, input *RunInput, turnID string) error {
+	return r.publishHook(ctx, hooks.NewRunPhaseChangedEvent(input.RunID, input.AgentID, input.SessionID, run.PhasePlanning), turnID)
+}
+
+func (r *Runtime) validateFirstPlanOutput(ctx context.Context, output *PlanActivityOutput) error {
+	if output == nil || output.Result == nil {
+		r.logger.Error(ctx, "Plan activity returned nil result")
+		return fmt.Errorf("plan activity returned nil result")
+	}
+	r.logger.Info(ctx, "Plan activity completed", "tool_calls", len(output.Result.ToolCalls), "final_response", output.Result.FinalResponse != nil)
+	return nil
+}
+
+func (r *Runtime) runInitialPlan(
+	wfCtx engine.WorkflowContext,
+	reg AgentRegistration,
+	startReq PlanActivityInput,
+	planOpts engine.ActivityOptions,
+	hardDeadline time.Time,
+) (*PlanActivityOutput, error) {
+	firstOutput, err := r.runPlanActivity(wfCtx, reg.PlanActivityName, planOpts, startReq, hardDeadline)
+	if err != nil {
+		r.logger.Error(wfCtx.Context(), "Plan activity failed", "error", err)
+		return nil, err
+	}
+	if err := r.validateFirstPlanOutput(wfCtx.Context(), firstOutput); err != nil {
+		return nil, err
+	}
+	return firstOutput, nil
+}
+
+func applyWorkflowCaps(caps policy.CapsState, input *RunInput) policy.CapsState {
+	if input.Policy == nil {
+		return caps
+	}
+	if input.Policy.MaxToolCalls > 0 {
+		caps.MaxToolCalls = input.Policy.MaxToolCalls
+		caps.RemainingToolCalls = input.Policy.MaxToolCalls
+	}
+	if input.Policy.MaxConsecutiveFailedToolCalls > 0 {
+		caps.MaxConsecutiveFailedToolCalls = input.Policy.MaxConsecutiveFailedToolCalls
+		caps.RemainingConsecutiveFailedToolCalls = input.Policy.MaxConsecutiveFailedToolCalls
+	}
+	return caps
+}
+
+func (r *Runtime) publishExecutionPhase(ctx context.Context, input *RunInput, turnID string) error {
+	return r.publishHook(ctx, hooks.NewRunPhaseChangedEvent(input.RunID, input.AgentID, input.SessionID, run.PhaseExecutingTools), turnID)
+}
+
+func (r *Runtime) prepareWorkflowLoopState(
+	ctx context.Context,
+	reg AgentRegistration,
+	input *RunInput,
+	planInput *planner.PlanInput,
+	result *planner.PlanResult,
+) (policy.CapsState, int, *childTracker, error) {
+	if len(result.ToolCalls) == 0 && result.FinalResponse == nil && result.Await == nil {
+		return policy.CapsState{}, 0, nil, fmt.Errorf("plan result has no tool calls, final response, or await")
+	}
+	if len(result.ToolCalls) == 0 && result.FinalResponse != nil {
+		r.logger.Info(ctx, "PlanResult has FinalResponse but no ToolCalls - workflow will return early")
+	}
+	caps := applyWorkflowCaps(initialCaps(reg.Policy), input)
+	var parentTracker *childTracker
+	if planInput.RunContext.ParentToolCallID != "" {
+		parentTracker = newChildTracker(planInput.RunContext.ParentToolCallID)
+	}
+	return caps, planInput.RunContext.Attempt + 1, parentTracker, nil
 }
 
 // runLoop executes the plan/tool/resume cycle until the planner returns a final response
