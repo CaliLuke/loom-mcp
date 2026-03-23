@@ -105,48 +105,21 @@ func (m *streamManager) PublishToolCall(ctx context.Context, toolset string, msg
 		return fmt.Errorf("get stream for toolset %q: %w", toolset, err)
 	}
 
-	if msg.Type == toolregistry.MessageTypeCall {
-		tracer := otel.Tracer("github.com/CaliLuke/loom-mcp/registry")
-		var span trace.Span
-		ctx, span = tracer.Start(
-			ctx,
-			"toolregistry.publish",
-			trace.WithSpanKind(trace.SpanKindProducer),
-			trace.WithAttributes(
-				attribute.String("messaging.system", "pulse"),
-				attribute.String("messaging.destination.name", streamID),
-				attribute.String("messaging.operation", "publish"),
-				attribute.String("toolregistry.toolset", toolset),
-				attribute.String("toolregistry.tool_use_id", msg.ToolUseID),
-				attribute.String("toolregistry.tool", msg.Tool.String()),
-				attribute.String("toolregistry.stream_id", streamID),
-			),
-		)
+	ctx, span := startPublishSpan(ctx, toolset, streamID, msg)
+	if span != nil {
 		defer span.End()
-
-		msg.TraceParent, msg.TraceState, msg.Baggage = toolregistry.InjectTraceContext(ctx)
-		if msg.TraceParent != "" {
-			span.SetAttributes(attribute.Bool("toolregistry.trace_injected", true))
-		}
+		msg = injectPublishTraceContext(ctx, span, msg)
 	}
 
 	payload, err := json.Marshal(msg)
 	if err != nil {
-		if msg.Type == toolregistry.MessageTypeCall {
-			span := trace.SpanFromContext(ctx)
-			span.RecordError(err)
-			span.SetStatus(codes.Error, "marshal tool call message")
-		}
+		recordPublishSpanError(ctx, msg, err, "marshal tool call message")
 		return fmt.Errorf("marshal tool call message: %w", err)
 	}
 
 	eventID, err := stream.Add(ctx, string(msg.Type), payload)
 	if err != nil {
-		if msg.Type == toolregistry.MessageTypeCall {
-			span := trace.SpanFromContext(ctx)
-			span.RecordError(err)
-			span.SetStatus(codes.Error, "publish to stream")
-		}
+		recordPublishSpanError(ctx, msg, err, "publish to stream")
 		return fmt.Errorf("publish to stream: %w", err)
 	}
 	if msg.Type == toolregistry.MessageTypeCall {
@@ -156,4 +129,42 @@ func (m *streamManager) PublishToolCall(ctx context.Context, toolset string, msg
 		)
 	}
 	return nil
+}
+
+func startPublishSpan(ctx context.Context, toolset, streamID string, msg toolregistry.ToolCallMessage) (context.Context, trace.Span) {
+	if msg.Type != toolregistry.MessageTypeCall {
+		return ctx, nil
+	}
+	tracer := otel.Tracer("github.com/CaliLuke/loom-mcp/registry")
+	return tracer.Start(
+		ctx,
+		"toolregistry.publish",
+		trace.WithSpanKind(trace.SpanKindProducer),
+		trace.WithAttributes(
+			attribute.String("messaging.system", "pulse"),
+			attribute.String("messaging.destination.name", streamID),
+			attribute.String("messaging.operation", "publish"),
+			attribute.String("toolregistry.toolset", toolset),
+			attribute.String("toolregistry.tool_use_id", msg.ToolUseID),
+			attribute.String("toolregistry.tool", msg.Tool.String()),
+			attribute.String("toolregistry.stream_id", streamID),
+		),
+	)
+}
+
+func injectPublishTraceContext(ctx context.Context, span trace.Span, msg toolregistry.ToolCallMessage) toolregistry.ToolCallMessage {
+	msg.TraceParent, msg.TraceState, msg.Baggage = toolregistry.InjectTraceContext(ctx)
+	if msg.TraceParent != "" {
+		span.SetAttributes(attribute.Bool("toolregistry.trace_injected", true))
+	}
+	return msg
+}
+
+func recordPublishSpanError(ctx context.Context, msg toolregistry.ToolCallMessage, err error, description string) {
+	if msg.Type != toolregistry.MessageTypeCall {
+		return
+	}
+	span := trace.SpanFromContext(ctx)
+	span.RecordError(err)
+	span.SetStatus(codes.Error, description)
 }

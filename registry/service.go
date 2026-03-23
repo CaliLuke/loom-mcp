@@ -224,68 +224,21 @@ func (s *Service) Search(ctx context.Context, p *genregistry.SearchPayload) (*ge
 // It validates the payload against the tool's payload schema, checks provider health,
 // creates the per-call result stream, and publishes the request to the toolset stream.
 func (s *Service) CallTool(ctx context.Context, p *genregistry.CallToolPayload) (*genregistry.CallToolResult, error) {
-	// 1. Get the toolset to validate the tool exists and get its schema.
-	toolset, err := s.catalog.GetToolset(ctx, p.Toolset)
+	tool, err := s.lookupCallToolSchema(ctx, p.Toolset, p.Tool)
 	if err != nil {
-		if errors.Is(err, errToolsetNotFound) {
-			return nil, genregistry.MakeNotFound(fmt.Errorf("toolset %q not found", p.Toolset))
-		}
-		return nil, fmt.Errorf("get toolset: %w", err)
+		return nil, err
 	}
-
-	// 2. Find the tool within the toolset.
-	var tool *genregistry.ToolSchema
-	for _, t := range toolset.Tools {
-		if t.Name == p.Tool {
-			tool = t
-			break
-		}
-	}
-	if tool == nil {
-		return nil, genregistry.MakeNotFound(fmt.Errorf("tool %q not found in toolset %q", p.Tool, p.Toolset))
-	}
-
-	// 3. Validate payload against tool's payload schema.
 	if err := s.validator.ValidatePayload(tool.PayloadSchema, p.PayloadJSON); err != nil {
 		return nil, genregistry.MakeValidationError(fmt.Errorf("payload validation failed: %w", err))
 	}
-
-	// 4. Check provider health - return service_unavailable if unhealthy.
-	h, err := s.healthTracker.Health(p.Toolset)
-	if err != nil {
-		return nil, fmt.Errorf("check toolset %q health: %w", p.Toolset, err)
+	if err := s.ensureToolsetHealthy(p.Toolset); err != nil {
+		return nil, err
 	}
-	if !h.Healthy {
-		lastPong := "missing"
-		if !h.LastPong.IsZero() {
-			lastPong = h.LastPong.UTC().Format(time.RFC3339Nano)
-		}
-		return nil, genregistry.MakeServiceUnavailable(fmt.Errorf(
-			"no healthy providers for toolset %q (staleness_threshold=%s, last_pong=%s, age=%s)",
-			p.Toolset,
-			h.StalenessThreshold,
-			lastPong,
-			h.Age,
-		))
-	}
-
 	toolUseID := toolUseIDForCall(p.Meta)
-	resultStreamID := toolregistry.ResultStreamID(toolUseID)
-	resultStream, err := s.pulseClient.Stream(resultStreamID, streamopts.WithStreamTTL(s.resultStreamTTL))
-	if err != nil {
-		return nil, fmt.Errorf("open result stream %q: %w", resultStreamID, err)
+	if err := s.initializeResultStream(ctx, toolUseID); err != nil {
+		return nil, err
 	}
-	if _, err := resultStream.Add(ctx, "init", []byte("{}")); err != nil {
-		return nil, fmt.Errorf("initialize result stream %q: %w", resultStreamID, err)
-	}
-
-	meta := toolregistry.ToolCallMeta{
-		RunID:            p.Meta.RunID,
-		SessionID:        p.Meta.SessionID,
-		TurnID:           derefString(p.Meta.TurnID),
-		ToolCallID:       derefString(p.Meta.ToolCallID),
-		ParentToolCallID: derefString(p.Meta.ParentToolCallID),
-	}
+	meta := buildToolCallMeta(p.Meta)
 	msg := toolregistry.NewToolCallMessage(toolUseID, tools.Ident(p.Tool), json.RawMessage(p.PayloadJSON), &meta)
 	if err := s.streamManager.PublishToolCall(ctx, p.Toolset, msg); err != nil {
 		return nil, fmt.Errorf("publish tool call: %w", err)
@@ -293,6 +246,68 @@ func (s *Service) CallTool(ctx context.Context, p *genregistry.CallToolPayload) 
 	return &genregistry.CallToolResult{
 		ToolUseID: toolUseID,
 	}, nil
+}
+
+func (s *Service) lookupCallToolSchema(ctx context.Context, toolsetName, toolName string) (*genregistry.ToolSchema, error) {
+	toolset, err := s.catalog.GetToolset(ctx, toolsetName)
+	if err != nil {
+		if errors.Is(err, errToolsetNotFound) {
+			return nil, genregistry.MakeNotFound(fmt.Errorf("toolset %q not found", toolsetName))
+		}
+		return nil, fmt.Errorf("get toolset: %w", err)
+	}
+	for _, tool := range toolset.Tools {
+		if tool.Name == toolName {
+			return tool, nil
+		}
+	}
+	return nil, genregistry.MakeNotFound(fmt.Errorf("tool %q not found in toolset %q", toolName, toolsetName))
+}
+
+func (s *Service) ensureToolsetHealthy(toolsetName string) error {
+	h, err := s.healthTracker.Health(toolsetName)
+	if err != nil {
+		return fmt.Errorf("check toolset %q health: %w", toolsetName, err)
+	}
+	if h.Healthy {
+		return nil
+	}
+	lastPong := "missing"
+	if !h.LastPong.IsZero() {
+		lastPong = h.LastPong.UTC().Format(time.RFC3339Nano)
+	}
+	return genregistry.MakeServiceUnavailable(fmt.Errorf(
+		"no healthy providers for toolset %q (staleness_threshold=%s, last_pong=%s, age=%s)",
+		toolsetName,
+		h.StalenessThreshold,
+		lastPong,
+		h.Age,
+	))
+}
+
+func (s *Service) initializeResultStream(ctx context.Context, toolUseID string) error {
+	resultStreamID := toolregistry.ResultStreamID(toolUseID)
+	resultStream, err := s.pulseClient.Stream(resultStreamID, streamopts.WithStreamTTL(s.resultStreamTTL))
+	if err != nil {
+		return fmt.Errorf("open result stream %q: %w", resultStreamID, err)
+	}
+	if _, err := resultStream.Add(ctx, "init", []byte("{}")); err != nil {
+		return fmt.Errorf("initialize result stream %q: %w", resultStreamID, err)
+	}
+	return nil
+}
+
+func buildToolCallMeta(meta *genregistry.ToolCallMeta) toolregistry.ToolCallMeta {
+	if meta == nil {
+		return toolregistry.ToolCallMeta{}
+	}
+	return toolregistry.ToolCallMeta{
+		RunID:            meta.RunID,
+		SessionID:        meta.SessionID,
+		TurnID:           derefString(meta.TurnID),
+		ToolCallID:       derefString(meta.ToolCallID),
+		ParentToolCallID: derefString(meta.ParentToolCallID),
+	}
 }
 
 // toolUseIDForCall returns the stable transport identity for a registry-routed

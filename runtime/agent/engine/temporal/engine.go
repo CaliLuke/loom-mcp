@@ -206,42 +206,13 @@ func newEngine(opts Options, workerMode bool) (*Engine, error) {
 	if workerMode && defaultQueue == "" {
 		return nil, fmt.Errorf("temporal engine: worker options must include a default task queue")
 	}
-	logger := opts.Logger
-	if logger == nil {
-		logger = telemetry.NewNoopLogger()
-	}
-	metrics := opts.Metrics
-	if metrics == nil {
-		metrics = telemetry.NewNoopMetrics()
-	}
-	tracer := opts.Tracer
-	if tracer == nil {
-		tracer = telemetry.NewNoopTracer()
-	}
-
+	logger, metrics, tracer := resolveTelemetry(opts)
 	inst := configureInstrumentation(opts.Instrumentation)
-
-	cli := opts.Client
-	closeClient := false
-	if cli == nil {
-		if opts.ClientOptions == nil {
-			return nil, fmt.Errorf("temporal engine: client options are required when Client is nil")
-		}
-		clientOpts := *opts.ClientOptions
-		applyClientInstrumentation(&clientOpts, inst)
-		lazyClient, err := client.NewLazyClient(clientOpts)
-		if err != nil {
-			return nil, fmt.Errorf("temporal engine: create client: %w", err)
-		}
-		cli = lazyClient
-		closeClient = true
+	cli, closeClient, err := resolveTemporalClient(opts, inst)
+	if err != nil {
+		return nil, err
 	}
-
-	workerOpts := opts.WorkerOptions.Options
-	if workerMode {
-		applyWorkerInstrumentation(&workerOpts, inst)
-	}
-
+	workerOpts := resolveWorkerOptions(opts, inst, workerMode)
 	e := &Engine{
 		client:            cli,
 		closeClient:       closeClient,
@@ -259,6 +230,46 @@ func newEngine(opts Options, workerMode bool) (*Engine, error) {
 		pendingActivities: make(map[string]struct{}),
 	}
 	return e, nil
+}
+
+func resolveTelemetry(opts Options) (telemetry.Logger, telemetry.Metrics, telemetry.Tracer) {
+	logger := opts.Logger
+	if logger == nil {
+		logger = telemetry.NewNoopLogger()
+	}
+	metrics := opts.Metrics
+	if metrics == nil {
+		metrics = telemetry.NewNoopMetrics()
+	}
+	tracer := opts.Tracer
+	if tracer == nil {
+		tracer = telemetry.NewNoopTracer()
+	}
+	return logger, metrics, tracer
+}
+
+func resolveTemporalClient(opts Options, inst *instrumentation) (client.Client, bool, error) {
+	if opts.Client != nil {
+		return opts.Client, false, nil
+	}
+	if opts.ClientOptions == nil {
+		return nil, false, fmt.Errorf("temporal engine: client options are required when Client is nil")
+	}
+	clientOpts := *opts.ClientOptions
+	applyClientInstrumentation(&clientOpts, inst)
+	lazyClient, err := client.NewLazyClient(clientOpts)
+	if err != nil {
+		return nil, false, fmt.Errorf("temporal engine: create client: %w", err)
+	}
+	return lazyClient, true, nil
+}
+
+func resolveWorkerOptions(opts Options, inst *instrumentation, workerMode bool) worker.Options {
+	workerOpts := opts.WorkerOptions.Options
+	if workerMode {
+		applyWorkerInstrumentation(&workerOpts, inst)
+	}
+	return workerOpts
 }
 
 // RegisterWorkflow registers a workflow definition with the Temporal worker for

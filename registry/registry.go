@@ -106,48 +106,39 @@ func New(ctx context.Context, cfg Config) (*Registry, error) {
 	if cfg.Redis == nil {
 		return nil, fmt.Errorf("redis client is required")
 	}
+	parts, err := buildRegistryParts(ctx, cfg)
+	if err != nil {
+		return nil, err
+	}
+	service, err := buildRegistryService(cfg, parts)
+	if err != nil {
+		closeErr := closeRegistryParts(ctx, parts)
+		return nil, errors.Join(fmt.Errorf("create service: %w", err), closeErr)
+	}
+	return assembleRegistry(cfg.Redis, service, parts), nil
+}
 
-	// Apply defaults and derive Pulse resource names.
-	name := cfg.Name
+func registryResourceNames(name string) (string, string, string) {
 	if name == "" {
 		name = "registry"
 	}
-	poolName := name
-	healthMapName := name + ":health"
-	registryMapName := name + ":toolsets"
+	return name, name + ":health", name + ":toolsets"
+}
 
-	// Create Pulse client for stream operations.
-	pulseClient, err := clientspulse.New(clientspulse.Options{
-		Redis: cfg.Redis,
-	})
-	if err != nil {
-		return nil, fmt.Errorf("create pulse client: %w", err)
-	}
-
-	// Create Pulse replicated maps for shared state.
+func joinRegistryMaps(ctx context.Context, cfg Config, healthMapName, registryMapName string) (*rmap.Map, *rmap.Map, error) {
 	healthMap, err := rmap.Join(ctx, healthMapName, cfg.Redis)
 	if err != nil {
-		return nil, fmt.Errorf("join health map: %w", err)
+		return nil, nil, fmt.Errorf("join health map: %w", err)
 	}
-
 	registryMap, err := rmap.Join(ctx, registryMapName, cfg.Redis)
 	if err != nil {
 		healthMap.Close()
-		return nil, fmt.Errorf("join registry map: %w", err)
+		return nil, nil, fmt.Errorf("join registry map: %w", err)
 	}
+	return healthMap, registryMap, nil
+}
 
-	// Create Pulse pool node for distributed tickers.
-	poolNode, err := pool.AddNode(ctx, poolName, cfg.Redis, cfg.PoolNodeOptions...)
-	if err != nil {
-		healthMap.Close()
-		registryMap.Close()
-		return nil, fmt.Errorf("add pool node: %w", err)
-	}
-
-	// Create stream manager.
-	streamManager := NewStreamManager(pulseClient)
-
-	// Build health tracker options.
+func buildHealthTrackerOptions(cfg Config) []HealthTrackerOption {
 	var healthOpts []HealthTrackerOption
 	if cfg.PingInterval > 0 {
 		healthOpts = append(healthOpts, WithPingInterval(cfg.PingInterval))
@@ -158,45 +149,91 @@ func New(ctx context.Context, cfg Config) (*Registry, error) {
 	if cfg.Logger != nil {
 		healthOpts = append(healthOpts, WithHealthLogger(cfg.Logger))
 	}
+	return healthOpts
+}
 
-	// Create health tracker.
-	healthTracker, err := NewHealthTracker(streamManager, healthMap, registryMap, poolNode, healthOpts...)
+type registryParts struct {
+	pulseClient   clientspulse.Client
+	healthMap     *rmap.Map
+	registryMap   *rmap.Map
+	poolNode      *pool.Node
+	healthTracker HealthTracker
+	streamManager StreamManager
+}
+
+func buildRegistryParts(ctx context.Context, cfg Config) (*registryParts, error) {
+	poolName, healthMapName, registryMapName := registryResourceNames(cfg.Name)
+	pulseClient, err := clientspulse.New(clientspulse.Options{Redis: cfg.Redis})
+	if err != nil {
+		return nil, fmt.Errorf("create pulse client: %w", err)
+	}
+	healthMap, registryMap, err := joinRegistryMaps(ctx, cfg, healthMapName, registryMapName)
+	if err != nil {
+		return nil, err
+	}
+	poolNode, err := pool.AddNode(ctx, poolName, cfg.Redis, cfg.PoolNodeOptions...)
+	if err != nil {
+		healthMap.Close()
+		registryMap.Close()
+		return nil, fmt.Errorf("add pool node: %w", err)
+	}
+	streamManager := NewStreamManager(pulseClient)
+	healthTracker, err := NewHealthTracker(streamManager, healthMap, registryMap, poolNode, buildHealthTrackerOptions(cfg)...)
 	if err != nil {
 		healthMap.Close()
 		registryMap.Close()
 		closeErr := poolNode.Close(ctx)
 		return nil, errors.Join(fmt.Errorf("create health tracker: %w", err), closeErr)
 	}
-
-	// Create the authoritative toolset catalog.
-	catalog := newToolsetCatalog(registryMap)
-
-	// Create the service.
-	service, err := newService(serviceOptions{
-		catalog:         catalog,
-		StreamManager:   streamManager,
-		HealthTracker:   healthTracker,
-		PulseClient:     pulseClient,
-		ResultStreamTTL: cfg.ResultStreamTTL,
-	})
-	if err != nil {
-		htCloseErr := healthTracker.Close()
-		healthMap.Close()
-		registryMap.Close()
-		poolCloseErr := poolNode.Close(ctx)
-		return nil, errors.Join(fmt.Errorf("create service: %w", err), htCloseErr, poolCloseErr)
-	}
-
-	return &Registry{
-		service:       service,
+	return &registryParts{
 		pulseClient:   pulseClient,
 		healthMap:     healthMap,
 		registryMap:   registryMap,
 		poolNode:      poolNode,
 		healthTracker: healthTracker,
 		streamManager: streamManager,
-		redis:         cfg.Redis,
 	}, nil
+}
+
+func buildRegistryService(cfg Config, parts *registryParts) (*Service, error) {
+	return newService(serviceOptions{
+		catalog:         newToolsetCatalog(parts.registryMap),
+		StreamManager:   parts.streamManager,
+		HealthTracker:   parts.healthTracker,
+		PulseClient:     parts.pulseClient,
+		ResultStreamTTL: cfg.ResultStreamTTL,
+	})
+}
+
+func closeRegistryParts(ctx context.Context, parts *registryParts) error {
+	var htCloseErr error
+	if parts.healthTracker != nil {
+		htCloseErr = parts.healthTracker.Close()
+	}
+	if parts.healthMap != nil {
+		parts.healthMap.Close()
+	}
+	if parts.registryMap != nil {
+		parts.registryMap.Close()
+	}
+	var poolCloseErr error
+	if parts.poolNode != nil {
+		poolCloseErr = parts.poolNode.Close(ctx)
+	}
+	return errors.Join(htCloseErr, poolCloseErr)
+}
+
+func assembleRegistry(redis *redis.Client, service *Service, parts *registryParts) *Registry {
+	return &Registry{
+		service:       service,
+		pulseClient:   parts.pulseClient,
+		healthMap:     parts.healthMap,
+		registryMap:   parts.registryMap,
+		poolNode:      parts.poolNode,
+		healthTracker: parts.healthTracker,
+		streamManager: parts.streamManager,
+		redis:         redis,
+	}
 }
 
 // Service returns the registry service implementation.

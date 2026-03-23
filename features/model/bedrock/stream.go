@@ -219,7 +219,7 @@ func newChunkProcessor(
 func (p *chunkProcessor) Handle(event any) error {
 	switch ev := event.(type) {
 	case *brtypes.ConverseStreamOutputMemberMessageStart:
-		p.toolBlocks = make(map[int]*toolBuffer)
+		p.resetMessageState()
 		return nil
 	case *brtypes.ConverseStreamOutputMemberContentBlockStart:
 		return p.handleContentBlockStart(ev)
@@ -228,49 +228,52 @@ func (p *chunkProcessor) Handle(event any) error {
 	case *brtypes.ConverseStreamOutputMemberContentBlockStop:
 		return p.handleContentBlockStop(ev)
 	case *brtypes.ConverseStreamOutputMemberMessageStop:
-		chunk := model.Chunk{Type: model.ChunkTypeStop}
-		if ev.Value.StopReason != "" {
-			chunk.StopReason = string(ev.Value.StopReason)
-		}
-		p.toolBlocks = make(map[int]*toolBuffer)
-		p.reasoningBlocks = make(map[int]*reasoningBuffer)
-		return p.emit(chunk)
+		return p.handleMessageStop(ev)
 	case *brtypes.ConverseStreamOutputMemberMetadata:
-		if ev.Value.Usage == nil {
-			return nil
-		}
-		// Compute ints efficiently with direct nil checks (avoid helper + double cast)
-		var in, out, tot, cacheRead, cacheWrite int
-		if t := ev.Value.Usage.InputTokens; t != nil {
-			in = int(*t)
-		}
-		if t := ev.Value.Usage.OutputTokens; t != nil {
-			out = int(*t)
-		}
-		if t := ev.Value.Usage.TotalTokens; t != nil {
-			tot = int(*t)
-		}
-		if t := ev.Value.Usage.CacheReadInputTokens; t != nil {
-			cacheRead = int(*t)
-		}
-		if t := ev.Value.Usage.CacheWriteInputTokens; t != nil {
-			cacheWrite = int(*t)
-		}
-		usage := model.TokenUsage{
-			Model:            p.modelID,
-			ModelClass:       p.modelClass,
-			InputTokens:      in,
-			OutputTokens:     out,
-			TotalTokens:      tot,
-			CacheReadTokens:  cacheRead,
-			CacheWriteTokens: cacheWrite,
-		}
-		if p.recordUsage != nil {
-			p.recordUsage(usage)
-		}
-		return p.emit(model.Chunk{Type: model.ChunkTypeUsage, UsageDelta: &usage})
+		return p.handleMetadata(ev)
 	}
 	return nil
+}
+
+func (p *chunkProcessor) resetMessageState() {
+	p.toolBlocks = make(map[int]*toolBuffer)
+}
+
+func (p *chunkProcessor) handleMessageStop(ev *brtypes.ConverseStreamOutputMemberMessageStop) error {
+	chunk := model.Chunk{Type: model.ChunkTypeStop}
+	if ev.Value.StopReason != "" {
+		chunk.StopReason = string(ev.Value.StopReason)
+	}
+	p.toolBlocks = make(map[int]*toolBuffer)
+	p.reasoningBlocks = make(map[int]*reasoningBuffer)
+	return p.emit(chunk)
+}
+
+func (p *chunkProcessor) handleMetadata(ev *brtypes.ConverseStreamOutputMemberMetadata) error {
+	usage := bedrockStreamUsage(ev.Value.Usage, p.modelID, p.modelClass)
+	if usage == nil {
+		return nil
+	}
+	if p.recordUsage != nil {
+		p.recordUsage(*usage)
+	}
+	return p.emit(model.Chunk{Type: model.ChunkTypeUsage, UsageDelta: usage})
+}
+
+func bedrockStreamUsage(usage *brtypes.TokenUsage, modelID string, modelClass model.ModelClass) *model.TokenUsage {
+	if usage == nil {
+		return nil
+	}
+	out := model.TokenUsage{
+		Model:            modelID,
+		ModelClass:       modelClass,
+		InputTokens:      int(ptrValue(usage.InputTokens)),
+		OutputTokens:     int(ptrValue(usage.OutputTokens)),
+		TotalTokens:      int(ptrValue(usage.TotalTokens)),
+		CacheReadTokens:  int(ptrValue(usage.CacheReadInputTokens)),
+		CacheWriteTokens: int(ptrValue(usage.CacheWriteInputTokens)),
+	}
+	return &out
 }
 
 func (p *chunkProcessor) handleContentBlockStart(ev *brtypes.ConverseStreamOutputMemberContentBlockStart) error {

@@ -106,56 +106,7 @@ func CompileHintTemplates(raw map[tools.Ident]string, extra template.FuncMap) (m
 	if len(raw) == 0 {
 		return nil, nil
 	}
-	funcs := template.FuncMap{
-		"join": strings.Join,
-		"count": func(v any) int {
-			if xs, ok := v.([]any); ok {
-				return len(xs)
-			}
-			return 0
-		},
-		// humanTime renders a timestamp for user-facing hints at minute precision.
-		// It accepts RFC3339 timestamp strings and time.Time values.
-		//
-		// When parsing fails, it returns fmt.Sprint(v) so hint rendering can
-		// continue while still surfacing the original value.
-		"humanTime": func(v any) string {
-			ts, ok := parseTimestamp(v)
-			if !ok {
-				return fmt.Sprint(v)
-			}
-			return ts.Format("Jan 2, 3:04 PM")
-		},
-		// since returns the integer number of seconds between two timestamps:
-		// to - from.
-		//
-		// It accepts RFC3339 timestamp strings (including timezone offsets) and
-		// time.Time values. When parsing fails, it returns 0 so hint rendering
-		// can continue.
-		"since": func(from, to any) int64 {
-			a, ok := parseTimestamp(from)
-			if !ok {
-				return 0
-			}
-			b, ok := parseTimestamp(to)
-			if !ok {
-				return 0
-			}
-			return int64(b.Sub(a).Seconds())
-		},
-		"truncate": func(s string, n int) string {
-			if n <= 0 {
-				return ""
-			}
-			if len(s) <= n {
-				return s
-			}
-			return s[:n]
-		},
-	}
-	for k, v := range extra {
-		funcs[k] = v
-	}
+	funcs := hintTemplateFuncs(extra)
 	out := make(map[tools.Ident]*template.Template, len(raw))
 	for id, src := range raw {
 		if src == "" {
@@ -168,6 +119,57 @@ func CompileHintTemplates(raw map[tools.Ident]string, extra template.FuncMap) (m
 		out[id] = tmpl
 	}
 	return out, nil
+}
+
+func hintTemplateFuncs(extra template.FuncMap) template.FuncMap {
+	funcs := template.FuncMap{
+		"join":      strings.Join,
+		"count":     hintCount,
+		"humanTime": hintHumanTime,
+		"since":     hintSince,
+		"truncate":  hintTruncate,
+	}
+	for k, v := range extra {
+		funcs[k] = v
+	}
+	return funcs
+}
+
+func hintCount(v any) int {
+	if xs, ok := v.([]any); ok {
+		return len(xs)
+	}
+	return 0
+}
+
+func hintHumanTime(v any) string {
+	ts, ok := parseTimestamp(v)
+	if !ok {
+		return fmt.Sprint(v)
+	}
+	return ts.Format("Jan 2, 3:04 PM")
+}
+
+func hintSince(from, to any) int64 {
+	a, ok := parseTimestamp(from)
+	if !ok {
+		return 0
+	}
+	b, ok := parseTimestamp(to)
+	if !ok {
+		return 0
+	}
+	return int64(b.Sub(a).Seconds())
+}
+
+func hintTruncate(s string, n int) string {
+	if n <= 0 {
+		return ""
+	}
+	if len(s) <= n {
+		return s
+	}
+	return s[:n]
 }
 
 func parseTimestamp(v any) (time.Time, bool) {

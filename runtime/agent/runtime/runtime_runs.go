@@ -127,64 +127,16 @@ func (r *Runtime) startRunOn(ctx context.Context, input *RunInput, workflowName,
 	if input.RunID == "" {
 		input.RunID = generateRunID(string(input.AgentID))
 	}
-	if requireSession {
-		if strings.TrimSpace(input.SessionID) == "" {
-			return nil, ErrMissingSessionID
-		}
-		sess, err := r.SessionStore.LoadSession(ctx, input.SessionID)
-		if err != nil {
-			return nil, err
-		}
-		if sess.Status == session.StatusEnded {
-			return nil, session.ErrSessionEnded
-		}
-	} else if strings.TrimSpace(input.SessionID) != "" {
-		return nil, ErrSessionNotAllowed
+	if err := r.validateRunSession(ctx, input, requireSession); err != nil {
+		return nil, err
 	}
 	reg, _ := r.agentByID(input.AgentID)
-	req := engine.WorkflowStartRequest{
-		ID:        input.RunID,
-		Workflow:  workflowName,
-		TaskQueue: defaultQueue,
-		Input:     input,
+	req := buildWorkflowStartRequest(input, workflowName, defaultQueue, resolveRunTiming(reg, input).RunTimeout)
+	if err := validateWorkflowStartRequest(req, input.SessionID, requireSession); err != nil {
+		return nil, err
 	}
-	req.RunTimeout = resolveRunTiming(reg, input).RunTimeout
-	if opts := input.WorkflowOptions; opts != nil {
-		if opts.TaskQueue != "" {
-			req.TaskQueue = opts.TaskQueue
-		}
-		req.Memo = cloneMetadata(opts.Memo)
-		req.SearchAttributes = cloneMetadata(opts.SearchAttributes)
-		rp := engine.RetryPolicy{
-			MaxAttempts:        opts.RetryPolicy.MaxAttempts,
-			InitialInterval:    opts.RetryPolicy.InitialInterval,
-			BackoffCoefficient: opts.RetryPolicy.BackoffCoefficient,
-		}
-		if !isZeroRetryPolicy(rp) {
-			req.RetryPolicy = rp
-		}
-	}
-	if requireSession {
-		if v, ok := req.SearchAttributes["SessionID"]; ok && v != input.SessionID {
-			return nil, fmt.Errorf("workflow search attribute SessionID=%v does not match session id %q", v, input.SessionID)
-		}
-		now := time.Now().UTC()
-		if err := r.SessionStore.UpsertRun(ctx, session.RunMeta{
-			AgentID:   string(input.AgentID),
-			RunID:     input.RunID,
-			SessionID: input.SessionID,
-			Status:    session.RunStatusPending,
-			StartedAt: now,
-			UpdatedAt: now,
-			Labels:    cloneLabels(input.Labels),
-			Metadata:  cloneMetadata(input.Metadata),
-		}); err != nil {
-			return nil, err
-		}
-	} else if req.SearchAttributes != nil {
-		if _, ok := req.SearchAttributes["SessionID"]; ok {
-			return nil, fmt.Errorf("workflow search attribute SessionID is not allowed for one-shot runs")
-		}
+	if err := r.recordPendingRun(ctx, input, requireSession); err != nil {
+		return nil, err
 	}
 	handle, err := r.Engine.StartWorkflow(ctx, req)
 	if err != nil {
@@ -195,6 +147,89 @@ func (r *Runtime) startRunOn(ctx context.Context, input *RunInput, workflowName,
 	}
 	r.storeWorkflowHandle(input.RunID, handle)
 	return handle, nil
+}
+
+func (r *Runtime) validateRunSession(ctx context.Context, input *RunInput, requireSession bool) error {
+	sessionID := strings.TrimSpace(input.SessionID)
+	if !requireSession {
+		if sessionID != "" {
+			return ErrSessionNotAllowed
+		}
+		return nil
+	}
+	if sessionID == "" {
+		return ErrMissingSessionID
+	}
+	sess, err := r.SessionStore.LoadSession(ctx, input.SessionID)
+	if err != nil {
+		return err
+	}
+	if sess.Status == session.StatusEnded {
+		return session.ErrSessionEnded
+	}
+	return nil
+}
+
+func buildWorkflowStartRequest(input *RunInput, workflowName, defaultQueue string, runTimeout time.Duration) engine.WorkflowStartRequest {
+	req := engine.WorkflowStartRequest{
+		ID:         input.RunID,
+		Workflow:   workflowName,
+		TaskQueue:  defaultQueue,
+		Input:      input,
+		RunTimeout: runTimeout,
+	}
+	if opts := input.WorkflowOptions; opts != nil {
+		applyWorkflowOptions(&req, opts)
+	}
+	return req
+}
+
+func applyWorkflowOptions(req *engine.WorkflowStartRequest, opts *WorkflowOptions) {
+	if opts.TaskQueue != "" {
+		req.TaskQueue = opts.TaskQueue
+	}
+	req.Memo = cloneMetadata(opts.Memo)
+	req.SearchAttributes = cloneMetadata(opts.SearchAttributes)
+	rp := engine.RetryPolicy{
+		MaxAttempts:        opts.RetryPolicy.MaxAttempts,
+		InitialInterval:    opts.RetryPolicy.InitialInterval,
+		BackoffCoefficient: opts.RetryPolicy.BackoffCoefficient,
+	}
+	if !isZeroRetryPolicy(rp) {
+		req.RetryPolicy = rp
+	}
+}
+
+func validateWorkflowStartRequest(req engine.WorkflowStartRequest, sessionID string, requireSession bool) error {
+	if requireSession {
+		if v, ok := req.SearchAttributes["SessionID"]; ok && v != sessionID {
+			return fmt.Errorf("workflow search attribute SessionID=%v does not match session id %q", v, sessionID)
+		}
+		return nil
+	}
+	if req.SearchAttributes != nil {
+		if _, ok := req.SearchAttributes["SessionID"]; ok {
+			return fmt.Errorf("workflow search attribute SessionID is not allowed for one-shot runs")
+		}
+	}
+	return nil
+}
+
+func (r *Runtime) recordPendingRun(ctx context.Context, input *RunInput, requireSession bool) error {
+	if !requireSession {
+		return nil
+	}
+	now := time.Now().UTC()
+	return r.SessionStore.UpsertRun(ctx, session.RunMeta{
+		AgentID:   string(input.AgentID),
+		RunID:     input.RunID,
+		SessionID: input.SessionID,
+		Status:    session.RunStatusPending,
+		StartedAt: now,
+		UpdatedAt: now,
+		Labels:    cloneLabels(input.Labels),
+		Metadata:  cloneMetadata(input.Metadata),
+	})
 }
 
 // CancelRun requests cancellation of the workflow identified by runID.

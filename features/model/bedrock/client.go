@@ -195,7 +195,36 @@ func (c *Client) Stream(ctx context.Context, req *model.Request) (model.Streamer
 }
 
 func (c *Client) prepareRequest(ctx context.Context, req *model.Request) (*requestParts, error) {
-	// Rehydrate provider-ready messages from the ledger when a RunID is provided.
+	merged := c.mergedRequestMessages(ctx, req)
+	if err := validateBedrockRequestMessages(merged); err != nil {
+		return nil, err
+	}
+	modelID := c.resolveModelID(req)
+	if modelID == "" {
+		return nil, errors.New("bedrock: model identifier is required")
+	}
+	cacheAfterSystem, cacheAfterTools, err := validateBedrockCache(req, modelID)
+	if err != nil {
+		return nil, err
+	}
+	if err := validateBedrockThinking(req, modelID, merged); err != nil {
+		return nil, err
+	}
+	toolConfig, canonToSan, sanToCanon, err := encodeTools(ctx, req.Tools, req.ToolChoice, cacheAfterTools, c.logger)
+	if err != nil {
+		return nil, err
+	}
+	if err := validateBedrockToolConfig(req, merged, toolConfig); err != nil {
+		return nil, err
+	}
+	messages, system, err := encodeMessages(ctx, merged, canonToSan, cacheAfterSystem, c.logger)
+	if err != nil {
+		return nil, err
+	}
+	return buildRequestParts(modelID, req.ModelClass, messages, system, toolConfig, canonToSan, sanToCanon), nil
+}
+
+func (c *Client) mergedRequestMessages(ctx context.Context, req *model.Request) []*model.Message {
 	var merged []*model.Message
 	if c.ledger != nil && req.RunID != "" {
 		if msgs, err := c.ledger.Messages(ctx, req.RunID); err == nil && len(msgs) > 0 {
@@ -205,72 +234,70 @@ func (c *Client) prepareRequest(ctx context.Context, req *model.Request) (*reque
 	if len(req.Messages) > 0 {
 		merged = append(merged, req.Messages...)
 	}
-	if len(merged) == 0 {
-		return nil, errors.New("bedrock: messages are required")
+	return merged
+}
+
+func validateBedrockRequestMessages(messages []*model.Message) error {
+	if len(messages) == 0 {
+		return errors.New("bedrock: messages are required")
 	}
-	modelID := c.resolveModelID(req)
-	if modelID == "" {
-		return nil, errors.New("bedrock: model identifier is required")
+	return nil
+}
+
+func validateBedrockThinking(req *model.Request, modelID string, messages []*model.Message) error {
+	if req.Thinking == nil || !req.Thinking.Enable || isAdaptiveThinkingModel(modelID) {
+		return nil
 	}
-	// Enforce provider constraints early when thinking is enabled.
-	// Adaptive thinking (Opus 4.6+) lets the model skip thinking blocks
-	// entirely, so the thinking-first ordering rule does not apply.
-	thinkingEnabled := req.Thinking != nil && req.Thinking.Enable
-	if thinkingEnabled && !isAdaptiveThinkingModel(modelID) {
-		// Heal legacy or degraded messages before validation: if an
-		// assistant message has tool_use blocks but no leading thinking
-		// (e.g. the stream lost the signature delta), insert a redacted
-		// placeholder so the message satisfies Bedrock's ordering contract.
-		healThinkingGaps(merged)
-		if err := transcript.ValidateBedrock(merged, true); err != nil {
-			return nil, fmt.Errorf("bedrock: invalid message ordering with thinking enabled (run=%s, model=%s): %w", req.RunID, modelID, err)
-		}
+	healThinkingGaps(messages)
+	if err := transcript.ValidateBedrock(messages, true); err != nil {
+		return fmt.Errorf("bedrock: invalid message ordering with thinking enabled (run=%s, model=%s): %w", req.RunID, modelID, err)
 	}
-	// Extract cache options from request.
+	return nil
+}
+
+func validateBedrockCache(req *model.Request, modelID string) (bool, bool, error) {
 	var cacheAfterSystem, cacheAfterTools bool
 	if req.Cache != nil {
 		cacheAfterSystem = req.Cache.AfterSystem
 		cacheAfterTools = req.Cache.AfterTools
 	}
-	// Enforce model-specific cache capabilities: Nova models do not support
-	// tool-level cache checkpoints. Fail fast when AfterTools is requested
-	// for a Nova model rather than sending an invalid configuration.
 	if cacheAfterTools && isNovaModel(modelID) {
-		return nil, fmt.Errorf(
+		return false, false, fmt.Errorf(
 			"bedrock: Cache.AfterTools is not supported for Nova models (run=%s, model=%s)",
 			req.RunID, modelID,
 		)
 	}
-	// Build tool configuration and name maps before encoding messages so tool_use
-	// names can reuse the exact sanitized identifiers. encodeTools is the single
-	// source of truth for name sanitization.
-	toolConfig, canonToSan, sanToCanon, err := encodeTools(ctx, req.Tools, req.ToolChoice, cacheAfterTools, c.logger)
-	if err != nil {
-		return nil, err
+	return cacheAfterSystem, cacheAfterTools, nil
+}
+
+func validateBedrockToolConfig(req *model.Request, messages []*model.Message, toolConfig *brtypes.ToolConfiguration) error {
+	if toolConfig != nil || !messagesHaveToolBlocks(messages) {
+		return nil
 	}
-	// Bedrock requires toolConfig when messages contain tool_use or tool_result
-	// blocks. Fail fast with a clear error rather than letting Bedrock reject
-	// the request with a generic validation error.
-	if toolConfig == nil && messagesHaveToolBlocks(merged) {
-		return nil, fmt.Errorf(
-			"bedrock: messages contain tool_use/tool_result but no tools provided in request (run=%s); "+
-				"ensure the planner always passes tools when history has tool blocks",
-			req.RunID,
-		)
-	}
-	messages, system, err := encodeMessages(ctx, merged, canonToSan, cacheAfterSystem, c.logger)
-	if err != nil {
-		return nil, err
-	}
+	return fmt.Errorf(
+		"bedrock: messages contain tool_use/tool_result but no tools provided in request (run=%s); ensure the planner always passes tools when history has tool blocks",
+		req.RunID,
+	)
+}
+
+func buildRequestParts(
+	modelID string,
+	modelClass model.ModelClass,
+	messages []brtypes.Message,
+	system []brtypes.SystemContentBlock,
+	toolConfig *brtypes.ToolConfiguration,
+	canonToSan map[string]string,
+	sanToCanon map[string]string,
+) *requestParts {
 	return &requestParts{
 		modelID:                 modelID,
-		modelClass:              req.ModelClass,
+		modelClass:              modelClass,
 		messages:                messages,
 		system:                  system,
 		toolConfig:              toolConfig,
 		toolNameCanonicalToProv: canonToSan,
 		toolNameProvToCanonical: sanToCanon,
-	}, nil
+	}
 }
 
 // resolveModelID decides which concrete model ID to use based on Request.Model
@@ -708,66 +735,82 @@ func translateResponse(output *bedrockruntime.ConverseOutput, nameMap map[string
 	resp := &model.Response{}
 	if msg, ok := output.Output.(*brtypes.ConverseOutputMemberMessage); ok {
 		for _, block := range msg.Value.Content {
-			switch v := block.(type) {
-			case *brtypes.ContentBlockMemberText:
-				if v.Value == "" {
-					continue
-				}
-				resp.Content = append(resp.Content, model.Message{
-					Role:  "assistant",
-					Parts: []model.Part{model.TextPart{Text: v.Value}},
-				})
-			case *brtypes.ContentBlockMemberCitationsContent:
-				part := translateCitationsContent(v.Value)
-				if part.Text == "" && len(part.Citations) == 0 {
-					continue
-				}
-				resp.Content = append(resp.Content, model.Message{
-					Role:  "assistant",
-					Parts: []model.Part{part},
-				})
-			case *brtypes.ContentBlockMemberToolUse:
-				payload := decodeDocument(v.Value.Input)
-				name := ""
-				if v.Value.Name != nil {
-					raw := *v.Value.Name
-					key := normalizeToolName(raw)
-					// Bedrock tool_use blocks echo provider-visible names. When the model
-					// hallucinates a tool name that was not advertised in this request, the
-					// reverse map will not contain it. Surface the tool call as-is and let
-					// the runtime convert it into an "unknown tool" result so the model can
-					// recover on the next resume turn.
-					if canonical, ok := nameMap[key]; ok {
-						name = canonical
-					} else {
-						name = key
-					}
-				}
-				var id string
-				if v.Value.ToolUseId != nil {
-					id = *v.Value.ToolUseId
-				}
-				resp.ToolCalls = append(resp.ToolCalls, model.ToolCall{
-					Name:    tools.Ident(name),
-					Payload: payload,
-					ID:      id,
-				})
-			}
+			appendBedrockResponseBlock(resp, block, nameMap)
 		}
 	}
-	if usage := output.Usage; usage != nil {
-		resp.Usage = model.TokenUsage{
-			Model:            modelID,
-			ModelClass:       modelClass,
-			InputTokens:      int(ptrValue(usage.InputTokens)),
-			OutputTokens:     int(ptrValue(usage.OutputTokens)),
-			TotalTokens:      int(ptrValue(usage.TotalTokens)),
-			CacheReadTokens:  int(ptrValue(usage.CacheReadInputTokens)),
-			CacheWriteTokens: int(ptrValue(usage.CacheWriteInputTokens)),
-		}
-	}
+	resp.Usage = bedrockUsage(output.Usage, modelID, modelClass)
 	resp.StopReason = string(output.StopReason)
 	return resp, nil
+}
+
+func appendBedrockResponseBlock(resp *model.Response, block brtypes.ContentBlock, nameMap map[string]string) {
+	switch v := block.(type) {
+	case *brtypes.ContentBlockMemberText:
+		appendBedrockTextBlock(resp, v.Value)
+	case *brtypes.ContentBlockMemberCitationsContent:
+		appendBedrockCitationBlock(resp, v.Value)
+	case *brtypes.ContentBlockMemberToolUse:
+		resp.ToolCalls = append(resp.ToolCalls, bedrockToolCall(v.Value, nameMap))
+	}
+}
+
+func appendBedrockTextBlock(resp *model.Response, text string) {
+	if text == "" {
+		return
+	}
+	resp.Content = append(resp.Content, model.Message{
+		Role:  "assistant",
+		Parts: []model.Part{model.TextPart{Text: text}},
+	})
+}
+
+func appendBedrockCitationBlock(resp *model.Response, block brtypes.CitationsContentBlock) {
+	part := translateCitationsContent(block)
+	if part.Text == "" && len(part.Citations) == 0 {
+		return
+	}
+	resp.Content = append(resp.Content, model.Message{
+		Role:  "assistant",
+		Parts: []model.Part{part},
+	})
+}
+
+func bedrockToolCall(toolUse brtypes.ToolUseBlock, nameMap map[string]string) model.ToolCall {
+	var id string
+	if toolUse.ToolUseId != nil {
+		id = *toolUse.ToolUseId
+	}
+	return model.ToolCall{
+		Name:    tools.Ident(resolveBedrockToolName(toolUse.Name, nameMap)),
+		Payload: decodeDocument(toolUse.Input),
+		ID:      id,
+	}
+}
+
+func resolveBedrockToolName(raw *string, nameMap map[string]string) string {
+	if raw == nil {
+		return ""
+	}
+	key := normalizeToolName(*raw)
+	if canonical, ok := nameMap[key]; ok {
+		return canonical
+	}
+	return key
+}
+
+func bedrockUsage(usage *brtypes.TokenUsage, modelID string, modelClass model.ModelClass) model.TokenUsage {
+	if usage == nil {
+		return model.TokenUsage{}
+	}
+	return model.TokenUsage{
+		Model:            modelID,
+		ModelClass:       modelClass,
+		InputTokens:      int(ptrValue(usage.InputTokens)),
+		OutputTokens:     int(ptrValue(usage.OutputTokens)),
+		TotalTokens:      int(ptrValue(usage.TotalTokens)),
+		CacheReadTokens:  int(ptrValue(usage.CacheReadInputTokens)),
+		CacheWriteTokens: int(ptrValue(usage.CacheWriteInputTokens)),
+	}
 }
 
 func decodeDocument(doc document.Interface) rawjson.Message {

@@ -124,6 +124,22 @@ func (r *Runtime) buildPlannerToolOutputs(ctx context.Context, calls []planner.T
 	if len(calls) != len(results) {
 		return nil, fmt.Errorf("encode tool outputs: calls/results length mismatch (%d != %d)", len(calls), len(results))
 	}
+	resultsByToolCallID, err := indexToolResultsByCallID(results)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]*planner.ToolOutput, 0, len(calls))
+	for _, call := range calls {
+		output, err := r.buildPlannerToolOutput(ctx, call, resultsByToolCallID)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, output)
+	}
+	return out, nil
+}
+
+func indexToolResultsByCallID(results []*planner.ToolResult) (map[string]*planner.ToolResult, error) {
 	resultsByToolCallID := make(map[string]*planner.ToolResult, len(results))
 	for _, result := range results {
 		if result == nil {
@@ -137,42 +153,47 @@ func (r *Runtime) buildPlannerToolOutputs(ctx context.Context, calls []planner.T
 		}
 		resultsByToolCallID[result.ToolCallID] = result
 	}
-	out := make([]*planner.ToolOutput, 0, len(calls))
-	for _, call := range calls {
-		if call.ToolCallID == "" {
-			return nil, fmt.Errorf("build planner tool outputs: missing call tool_call_id for %s", call.Name)
-		}
-		result, ok := resultsByToolCallID[call.ToolCallID]
-		if !ok {
-			return nil, fmt.Errorf("build planner tool outputs: missing result for tool_call_id %s", call.ToolCallID)
-		}
-		if result.Name != "" && result.Name != call.Name {
-			return nil, fmt.Errorf("build planner tool outputs: result name %s does not match call %s", result.Name, call.Name)
-		}
-		output := &planner.ToolOutput{
-			Name:                call.Name,
-			ToolCallID:          call.ToolCallID,
-			Payload:             append(rawjson.Message(nil), call.Payload...),
-			ResultBytes:         result.ResultBytes,
-			ResultOmitted:       result.ResultOmitted,
-			ResultOmittedReason: result.ResultOmittedReason,
-			ServerData:          append(rawjson.Message(nil), result.ServerData...),
-			Bounds:              result.Bounds,
-			Error:               result.Error,
-			RetryHint:           result.RetryHint,
-			Telemetry:           result.Telemetry,
-		}
-		if !result.ResultOmitted {
-			resultJSON, err := r.marshalToolValue(ctx, call.Name, result.Result, result.Bounds)
-			if err != nil {
-				return nil, fmt.Errorf("build planner tool output result for %s: %w", call.Name, err)
-			}
-			output.Result = rawjson.Message(resultJSON)
-			output.ResultBytes = len(resultJSON)
-		}
-		out = append(out, output)
+	return resultsByToolCallID, nil
+}
+
+func (r *Runtime) buildPlannerToolOutput(
+	ctx context.Context,
+	call planner.ToolRequest,
+	resultsByToolCallID map[string]*planner.ToolResult,
+) (*planner.ToolOutput, error) {
+	if call.ToolCallID == "" {
+		return nil, fmt.Errorf("build planner tool outputs: missing call tool_call_id for %s", call.Name)
 	}
-	return out, nil
+	result, ok := resultsByToolCallID[call.ToolCallID]
+	if !ok {
+		return nil, fmt.Errorf("build planner tool outputs: missing result for tool_call_id %s", call.ToolCallID)
+	}
+	if result.Name != "" && result.Name != call.Name {
+		return nil, fmt.Errorf("build planner tool outputs: result name %s does not match call %s", result.Name, call.Name)
+	}
+	output := &planner.ToolOutput{
+		Name:                call.Name,
+		ToolCallID:          call.ToolCallID,
+		Payload:             append(rawjson.Message(nil), call.Payload...),
+		ResultBytes:         result.ResultBytes,
+		ResultOmitted:       result.ResultOmitted,
+		ResultOmittedReason: result.ResultOmittedReason,
+		ServerData:          append(rawjson.Message(nil), result.ServerData...),
+		Bounds:              result.Bounds,
+		Error:               result.Error,
+		RetryHint:           result.RetryHint,
+		Telemetry:           result.Telemetry,
+	}
+	if result.ResultOmitted {
+		return output, nil
+	}
+	resultJSON, err := r.marshalToolValue(ctx, call.Name, result.Result, result.Bounds)
+	if err != nil {
+		return nil, fmt.Errorf("build planner tool output result for %s: %w", call.Name, err)
+	}
+	output.Result = rawjson.Message(resultJSON)
+	output.ResultBytes = len(resultJSON)
+	return output, nil
 }
 
 // decodeToolOutputs converts workflow-boundary tool output envelopes back into

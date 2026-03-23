@@ -210,99 +210,107 @@ func Compress(triggerAt, keepRecent int, client model.Client, opts ...CompressOp
 	}
 
 	return func(ctx context.Context, msgs []*model.Message) ([]*model.Message, error) {
-		if triggerAt <= 0 || keepRecent < 0 || client == nil || len(msgs) == 0 {
+		if !shouldCompressHistory(triggerAt, keepRecent, client, msgs) {
 			return msgs, nil
 		}
-
-		// Identify system messages at the start (context, not history)
-		systemEnd := 0
-		for i, m := range msgs {
-			if m.Role != model.ConversationRoleSystem {
-				break
-			}
-			systemEnd = i + 1
-		}
-
-		// If everything is system messages, return as-is
+		systemEnd := leadingSystemMessageCount(msgs)
 		if systemEnd >= len(msgs) {
 			return msgs, nil
 		}
-
-		// Parse remaining messages into turns
-		history := msgs[systemEnd:]
-		turns := parseTurns(history)
-
-		// Check if compression should trigger
-		if len(turns) < triggerAt {
+		toCompress, toKeep, ok := splitHistoryTurns(msgs[systemEnd:], triggerAt, keepRecent)
+		if !ok {
 			return msgs, nil
 		}
-
-		// Split into [toCompress] and [keepRecent]
-		splitIdx := len(turns) - keepRecent
-		if splitIdx <= 0 {
-			return msgs, nil
-		}
-
-		toCompress := turns[:splitIdx]
-		toKeep := turns[splitIdx:]
-
-		// Build conversation text for summarization
-		var sb strings.Builder
-		for _, t := range toCompress {
-			for _, m := range t.messages {
-				sb.WriteString(formatMessage(m))
-				sb.WriteString("\n")
-			}
-		}
-
-		// Call the model to summarize
-		summaryPrompt := fmt.Sprintf(cfg.summaryPrompt, sb.String())
-		req := &model.Request{
-			ModelClass: cfg.modelClass,
-			Messages: []*model.Message{
-				{
-					Role:  model.ConversationRoleUser,
-					Parts: []model.Part{model.TextPart{Text: summaryPrompt}},
-				},
-			},
-		}
-
-		resp, err := client.Complete(ctx, req)
+		resp, err := client.Complete(ctx, compressionRequest(cfg, toCompress))
 		if err != nil {
-			// Surface the error so callers can decide whether to fall back to the
-			// original messages or terminate the run.
 			return msgs, err
 		}
-
-		// Extract summary text
 		summaryText := extractResponseText(resp)
 		if summaryText == "" {
 			return msgs, nil
 		}
+		return rebuildCompressedHistory(msgs, systemEnd, cfg, summaryText, toKeep), nil
+	}
+}
 
-		// Build summary message
-		summaryMsg := &model.Message{
-			Role: cfg.summaryRole,
-			Parts: []model.Part{
-				model.TextPart{Text: "[Conversation Summary]\n" + summaryText},
-			},
-			Meta: map[string]any{
-				"loom_mcp_history": "summary",
-			},
+func shouldCompressHistory(triggerAt, keepRecent int, client model.Client, msgs []*model.Message) bool {
+	return triggerAt > 0 && keepRecent >= 0 && client != nil && len(msgs) > 0
+}
+
+func leadingSystemMessageCount(msgs []*model.Message) int {
+	systemEnd := 0
+	for i, m := range msgs {
+		if m.Role != model.ConversationRoleSystem {
+			break
 		}
+		systemEnd = i + 1
+	}
+	return systemEnd
+}
 
-		// Reconstruct: system messages + summary + kept turns
-		var keepMsgs []*model.Message
-		for _, t := range toKeep {
-			keepMsgs = append(keepMsgs, t.messages...)
+func splitHistoryTurns(history []*model.Message, triggerAt, keepRecent int) ([]turn, []turn, bool) {
+	turns := parseTurns(history)
+	if len(turns) < triggerAt {
+		return nil, nil, false
+	}
+	splitIdx := len(turns) - keepRecent
+	if splitIdx <= 0 {
+		return nil, nil, false
+	}
+	return turns[:splitIdx], turns[splitIdx:], true
+}
+
+func compressionRequest(cfg *compressConfig, turns []turn) *model.Request {
+	return &model.Request{
+		ModelClass: cfg.modelClass,
+		Messages: []*model.Message{
+			{
+				Role: model.ConversationRoleUser,
+				Parts: []model.Part{model.TextPart{
+					Text: fmt.Sprintf(cfg.summaryPrompt, compressionSourceText(turns)),
+				}},
+			},
+		},
+	}
+}
+
+func compressionSourceText(turns []turn) string {
+	var sb strings.Builder
+	for _, t := range turns {
+		for _, m := range t.messages {
+			sb.WriteString(formatMessage(m))
+			sb.WriteString("\n")
 		}
+	}
+	return sb.String()
+}
 
-		result := make([]*model.Message, 0, systemEnd+1+len(keepMsgs))
-		result = append(result, msgs[:systemEnd]...)
-		result = append(result, summaryMsg)
-		result = append(result, keepMsgs...)
+func rebuildCompressedHistory(msgs []*model.Message, systemEnd int, cfg *compressConfig, summaryText string, toKeep []turn) []*model.Message {
+	keepMsgs := flattenTurns(toKeep)
+	result := make([]*model.Message, 0, systemEnd+1+len(keepMsgs))
+	result = append(result, msgs[:systemEnd]...)
+	result = append(result, summaryHistoryMessage(cfg, summaryText))
+	result = append(result, keepMsgs...)
+	return result
+}
 
-		return result, nil
+func flattenTurns(turns []turn) []*model.Message {
+	var out []*model.Message
+	for _, t := range turns {
+		out = append(out, t.messages...)
+	}
+	return out
+}
+
+func summaryHistoryMessage(cfg *compressConfig, summaryText string) *model.Message {
+	return &model.Message{
+		Role: cfg.summaryRole,
+		Parts: []model.Part{
+			model.TextPart{Text: "[Conversation Summary]\n" + summaryText},
+		},
+		Meta: map[string]any{
+			"loom_mcp_history": "summary",
+		},
 	}
 }
 

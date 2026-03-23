@@ -4,10 +4,13 @@ import (
 	"context"
 	"fmt"
 
+	agent "github.com/CaliLuke/loom-mcp/runtime/agent"
 	"github.com/CaliLuke/loom-mcp/runtime/agent/engine"
 	"github.com/CaliLuke/loom-mcp/runtime/agent/hooks"
+	"github.com/CaliLuke/loom-mcp/runtime/agent/model"
 	"github.com/CaliLuke/loom-mcp/runtime/agent/planner"
 	"github.com/CaliLuke/loom-mcp/runtime/agent/rawjson"
+	"github.com/CaliLuke/loom-mcp/runtime/agent/run"
 	"github.com/CaliLuke/loom-mcp/runtime/agent/tools"
 )
 
@@ -148,43 +151,17 @@ func (e *toolBatchExec) dispatchInlineAgentToolCall(wfCtx engine.WorkflowContext
 	ctx := wfCtx.Context()
 	messages, nestedRunCtx, err := e.r.buildAgentChildRequest(ctx, ts.AgentTool, &call, e.messages, e.runCtx)
 	if err != nil {
-		tr, resultErr := e.r.agentToolRequestFailureResult(call, err)
-		if resultErr != nil {
-			return resultErr
-		}
-		if err := e.publishToolResultReceived(ctx, call, tr, nil, 0); err != nil {
-			return err
-		}
-		b.inlineByID[call.ToolCallID] = tr
-		e.recordDiscoveredToolCall(b, call.ToolCallID)
-		return nil
+		return e.recordInlineAgentRequestFailure(ctx, b, call, err)
 	}
-	if err := e.r.publishHook(ctx, hooks.NewChildRunLinkedEvent(call.RunID, call.AgentID, call.SessionID, call.Name, call.ToolCallID, nestedRunCtx.RunID, ts.AgentTool.AgentID), ""); err != nil {
+	if err := e.publishChildRunLinked(ctx, call, nestedRunCtx.RunID, ts.AgentTool.AgentID); err != nil {
 		return err
 	}
 	route := ts.AgentTool.Route
 	if route.ID == "" || route.WorkflowName == "" || route.DefaultTaskQueue == "" {
 		return fmt.Errorf("agent tool route is incomplete for %s", call.Name)
 	}
-	input := RunInput{
-		AgentID:          route.ID,
-		RunID:            nestedRunCtx.RunID,
-		SessionID:        nestedRunCtx.SessionID,
-		TurnID:           nestedRunCtx.TurnID,
-		ParentToolCallID: nestedRunCtx.ParentToolCallID,
-		ParentRunID:      nestedRunCtx.ParentRunID,
-		ParentAgentID:    nestedRunCtx.ParentAgentID,
-		Tool:             nestedRunCtx.Tool,
-		ToolArgs:         nestedRunCtx.ToolArgs,
-		Labels:           nestedRunCtx.Labels,
-		Messages:         messages,
-	}
-	handle, err := wfCtx.StartChildWorkflow(ctx, engine.ChildWorkflowRequest{
-		ID:        input.RunID,
-		Workflow:  route.WorkflowName,
-		TaskQueue: route.DefaultTaskQueue,
-		Input:     &input,
-	})
+	input := buildInlineAgentRunInput(route.ID, nestedRunCtx, messages)
+	handle, err := startInlineAgentChildWorkflow(wfCtx, ctx, route, &input)
 	if err != nil {
 		return fmt.Errorf("failed to start agent child workflow for %s: %w", call.Name, err)
 	}
@@ -197,6 +174,53 @@ func (e *toolBatchExec) dispatchInlineAgentToolCall(wfCtx engine.WorkflowContext
 	})
 	e.recordDiscoveredToolCall(b, call.ToolCallID)
 	return nil
+}
+
+func (e *toolBatchExec) recordInlineAgentRequestFailure(ctx context.Context, b *toolCallBatch, call planner.ToolRequest, reqErr error) error {
+	tr, resultErr := e.r.agentToolRequestFailureResult(call, reqErr)
+	if resultErr != nil {
+		return resultErr
+	}
+	if err := e.publishToolResultReceived(ctx, call, tr, nil, 0); err != nil {
+		return err
+	}
+	b.inlineByID[call.ToolCallID] = tr
+	e.recordDiscoveredToolCall(b, call.ToolCallID)
+	return nil
+}
+
+func (e *toolBatchExec) publishChildRunLinked(ctx context.Context, call planner.ToolRequest, nestedRunID string, agentID agent.Ident) error {
+	return e.r.publishHook(ctx, hooks.NewChildRunLinkedEvent(call.RunID, call.AgentID, call.SessionID, call.Name, call.ToolCallID, nestedRunID, agentID), "")
+}
+
+func buildInlineAgentRunInput(agentID agent.Ident, nestedRunCtx run.Context, messages []*model.Message) RunInput {
+	return RunInput{
+		AgentID:          agentID,
+		RunID:            nestedRunCtx.RunID,
+		SessionID:        nestedRunCtx.SessionID,
+		TurnID:           nestedRunCtx.TurnID,
+		ParentToolCallID: nestedRunCtx.ParentToolCallID,
+		ParentRunID:      nestedRunCtx.ParentRunID,
+		ParentAgentID:    nestedRunCtx.ParentAgentID,
+		Tool:             nestedRunCtx.Tool,
+		ToolArgs:         nestedRunCtx.ToolArgs,
+		Labels:           nestedRunCtx.Labels,
+		Messages:         messages,
+	}
+}
+
+func startInlineAgentChildWorkflow(
+	wfCtx engine.WorkflowContext,
+	ctx context.Context,
+	route AgentRoute,
+	input *RunInput,
+) (engine.ChildWorkflowHandle, error) {
+	return wfCtx.StartChildWorkflow(ctx, engine.ChildWorkflowRequest{
+		ID:        input.RunID,
+		Workflow:  route.WorkflowName,
+		TaskQueue: route.DefaultTaskQueue,
+		Input:     input,
+	})
 }
 
 func (e *toolBatchExec) dispatchActivityToolCall(ctx context.Context, wfCtx engine.WorkflowContext, b *toolCallBatch, call planner.ToolRequest, spec tools.ToolSpec, hasTS bool, ts ToolsetRegistration) error {

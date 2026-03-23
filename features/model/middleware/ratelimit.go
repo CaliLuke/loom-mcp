@@ -282,31 +282,40 @@ func newClusterAdaptiveRateLimiter(ctx context.Context, m clusterMap, key string
 	if key == "" || m == nil {
 		return newAdaptiveRateLimiter(initialTPM, maxTPM)
 	}
-
-	// Best-effort initialization: if the key does not exist yet, seed it with
-	// the initial value. A concurrent writer may still win; we refresh below.
-	if _, ok := m.Get(key); !ok {
-		if _, err := m.SetIfNotExists(ctx, key, strconv.Itoa(int(initialTPM))); err != nil {
-			// When seeding the shared budget fails, fall back to a process-local
-			// limiter so callers still make progress instead of treating the
-			// cluster map as partially initialized.
-			return newAdaptiveRateLimiter(initialTPM, maxTPM)
-		}
+	if !seedClusterRateLimit(ctx, m, key, initialTPM) {
+		return newAdaptiveRateLimiter(initialTPM, maxTPM)
 	}
-
-	sharedTPM := initialTPM
-	if cur, ok := m.Get(key); ok {
-		if v, err := strconv.ParseFloat(cur, 64); err == nil && v > 0 {
-			sharedTPM = v
-		}
-	}
-
+	sharedTPM := loadSharedTPM(m, key, initialTPM)
 	l := newAdaptiveRateLimiter(sharedTPM, maxTPM)
+	configureClusterCallbacks(l, m, key)
+	watchSharedTPM(m, key, l)
+	return l
+}
 
+func seedClusterRateLimit(ctx context.Context, m clusterMap, key string, initialTPM float64) bool {
+	if _, ok := m.Get(key); ok {
+		return true
+	}
+	_, err := m.SetIfNotExists(ctx, key, strconv.Itoa(int(initialTPM)))
+	return err == nil
+}
+
+func loadSharedTPM(m clusterMap, key string, fallback float64) float64 {
+	cur, ok := m.Get(key)
+	if !ok {
+		return fallback
+	}
+	v, err := strconv.ParseFloat(cur, 64)
+	if err != nil || v <= 0 {
+		return fallback
+	}
+	return v
+}
+
+func configureClusterCallbacks(l *AdaptiveRateLimiter, m clusterMap, key string) {
 	min := l.minTPM
 	max := l.maxTPM
 	step := l.recoveryRate
-
 	l.setClusterCallbacks(
 		func(_ float64) {
 			go globalBackoff(context.Background(), m, key, min)
@@ -315,25 +324,30 @@ func newClusterAdaptiveRateLimiter(ctx context.Context, m clusterMap, key string
 			go globalProbe(context.Background(), m, key, step, max)
 		},
 	)
+}
 
-	// Watch for external changes to the shared budget and reconcile the local
-	// limiter when they occur.
+func watchSharedTPM(m clusterMap, key string, l *AdaptiveRateLimiter) {
 	ch := m.Subscribe()
 	go func() {
 		for range ch {
-			cur, ok := m.Get(key)
-			if !ok {
-				continue
+			v, ok := parseSharedTPM(m, key)
+			if ok {
+				l.replaceTPM(v)
 			}
-			v, err := strconv.ParseFloat(cur, 64)
-			if err != nil || v <= 0 {
-				continue
-			}
-			l.replaceTPM(v)
 		}
 	}()
+}
 
-	return l
+func parseSharedTPM(m clusterMap, key string) (float64, bool) {
+	cur, ok := m.Get(key)
+	if !ok {
+		return 0, false
+	}
+	v, err := strconv.ParseFloat(cur, 64)
+	if err != nil || v <= 0 {
+		return 0, false
+	}
+	return v, true
 }
 
 func globalBackoff(ctx context.Context, m clusterMap, key string, floor float64) {

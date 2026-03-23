@@ -76,11 +76,24 @@ func (r *RootExpr) WalkSets(walk eval.SetWalker) {
 	if len(r.Registries) > 0 {
 		walk(eval.ToExpressionSet(r.Registries))
 	}
-
 	walk(eval.ToExpressionSet(r.Agents))
+	groups := expressionGroups(r.Agents, r.ServiceExports)
+	if len(groups) > 0 {
+		walk(groups)
+	}
+	toolsets := gatheredToolsets(r.Agents, r.ServiceExports, r.Toolsets)
+	if len(toolsets) > 0 {
+		walk(eval.ToExpressionSet(toolsets))
+	}
+	tools := gatheredTools(toolsets)
+	if len(tools) > 0 {
+		walk(eval.ToExpressionSet(tools))
+	}
+}
 
+func expressionGroups(agents []*AgentExpr, serviceExports []*ServiceExportsExpr) eval.ExpressionSet {
 	var groups eval.ExpressionSet
-	for _, agent := range r.Agents {
+	for _, agent := range agents {
 		if agent.Used != nil {
 			groups = append(groups, agent.Used)
 		}
@@ -88,17 +101,17 @@ func (r *RootExpr) WalkSets(walk eval.SetWalker) {
 			groups = append(groups, agent.Exported)
 		}
 	}
-	for _, se := range r.ServiceExports {
+	for _, se := range serviceExports {
 		if se != nil {
 			groups = append(groups, se)
 		}
 	}
-	if len(groups) > 0 {
-		walk(groups)
-	}
+	return groups
+}
 
+func gatheredToolsets(agents []*AgentExpr, serviceExports []*ServiceExportsExpr, topLevel []*ToolsetExpr) []*ToolsetExpr {
 	var toolsets []*ToolsetExpr
-	for _, agent := range r.Agents {
+	for _, agent := range agents {
 		if agent.Used != nil {
 			toolsets = append(toolsets, agent.Used.Toolsets...)
 		}
@@ -106,16 +119,15 @@ func (r *RootExpr) WalkSets(walk eval.SetWalker) {
 			toolsets = append(toolsets, agent.Exported.Toolsets...)
 		}
 	}
-	for _, se := range r.ServiceExports {
+	for _, se := range serviceExports {
 		if se != nil {
 			toolsets = append(toolsets, se.Toolsets...)
 		}
 	}
-	toolsets = append(toolsets, r.Toolsets...)
-	if len(toolsets) > 0 {
-		walk(eval.ToExpressionSet(toolsets))
-	}
+	return append(toolsets, topLevel...)
+}
 
+func gatheredTools(toolsets []*ToolsetExpr) []*ToolExpr {
 	total := 0
 	for _, ts := range toolsets {
 		total += len(ts.Tools)
@@ -124,9 +136,7 @@ func (r *RootExpr) WalkSets(walk eval.SetWalker) {
 	for _, ts := range toolsets {
 		tools = append(tools, ts.Tools...)
 	}
-	if len(tools) > 0 {
-		walk(eval.ToExpressionSet(tools))
-	}
+	return tools
 }
 
 // Validate enforces repository-wide invariants that require a view of all
@@ -140,8 +150,30 @@ func (r *RootExpr) WalkSets(walk eval.SetWalker) {
 func (r *RootExpr) Validate() error {
 	verr := new(eval.ValidationErrors)
 	r.validateSanitizedAgentSlugs(verr)
+	r.validateUniqueRegistries(verr)
+	r.validateToolsets(verr)
+	r.validateOwnerScopedToolsetSlugs(verr)
 
-	// Validate registry name uniqueness.
+	return verr
+}
+
+type toolsetValidator struct {
+	root              *RootExpr
+	verr              *eval.ValidationErrors
+	toolsets          map[string]*ToolsetExpr
+	sanitizedToolsets map[string]*ToolsetExpr
+}
+
+func newToolsetValidator(root *RootExpr, verr *eval.ValidationErrors) *toolsetValidator {
+	return &toolsetValidator{
+		root:              root,
+		verr:              verr,
+		toolsets:          make(map[string]*ToolsetExpr),
+		sanitizedToolsets: make(map[string]*ToolsetExpr),
+	}
+}
+
+func (r *RootExpr) validateUniqueRegistries(verr *eval.ValidationErrors) {
 	registries := make(map[string]*RegistryExpr)
 	for _, reg := range r.Registries {
 		if other, dup := registries[reg.Name]; dup {
@@ -150,78 +182,70 @@ func (r *RootExpr) Validate() error {
 		}
 		registries[reg.Name] = reg
 	}
+}
 
-	toolsets := make(map[string]*ToolsetExpr)
-	sanitizedToolsets := make(map[string]*ToolsetExpr)
-	recordToolset := func(ts *ToolsetExpr) {
-		// Only enforce uniqueness on defining/origin toolsets; references
-		// inherit the origin name.
-		if ts.Origin != nil {
-			return
-		}
-		if ts.Name == "" {
-			return
-		}
-		if other, dup := toolsets[ts.Name]; dup {
-			if other == ts {
-				return
-			}
-			verr.Add(ts, "toolset name %q duplicates a toolset declared in %s", ts.Name, other.EvalName())
-			return
-		}
-		toolsets[ts.Name] = ts
-	}
-	record := func(ts *ToolsetExpr, scopeKey, scopeLabel string) {
-		r.recordSanitizedToolsetSlug(verr, sanitizedToolsets, ts, scopeKey, scopeLabel)
-		// Only defining toolsets need globally unique identities and per-toolset
-		// duplicate-tool checks. Referenced toolsets still participate in
-		// sanitized-slug validation because consumer-side generated paths and local
-		// helper names derive from the referenced alias.
-		if ts.Origin != nil {
-			return
-		}
-		// Record defining toolset names first to enforce global uniqueness.
-		recordToolset(ts)
-		// Enforce per-toolset uniqueness for tool names while allowing the
-		// same tool name to appear in multiple toolsets.
-		local := make(map[string]*ToolExpr)
-		for _, t := range ts.Tools {
-			name := t.Name
-			if name == "" {
-				continue
-			}
-			if other, dup := local[name]; dup {
-				verr.Add(t, "tool name %q duplicates a tool declared in %s", name, other.EvalName())
-				continue
-			}
-			local[name] = t
-		}
-	}
-	// Top-level toolsets.
-	for _, ts := range r.Toolsets {
-		record(ts, "top-level", "top-level toolsets")
-	}
-	// Agent Used/Exported toolsets.
+func (r *RootExpr) validateToolsets(verr *eval.ValidationErrors) {
+	validator := newToolsetValidator(r, verr)
+	r.validateScopedToolsets(validator, r.Toolsets, "top-level", "top-level toolsets")
 	for _, a := range r.Agents {
 		if a.Used != nil {
-			for _, ts := range a.Used.Toolsets {
-				record(ts, r.agentToolsetScopeKey(a), r.agentToolsetScopeLabel(a))
-			}
+			r.validateScopedToolsets(validator, a.Used.Toolsets, r.agentToolsetScopeKey(a), r.agentToolsetScopeLabel(a))
 		}
 		if a.Exported != nil {
-			for _, ts := range a.Exported.Toolsets {
-				record(ts, r.agentToolsetScopeKey(a), r.agentToolsetScopeLabel(a))
-			}
+			r.validateScopedToolsets(validator, a.Exported.Toolsets, r.agentToolsetScopeKey(a), r.agentToolsetScopeLabel(a))
 		}
 	}
 	for _, se := range r.ServiceExports {
-		for _, ts := range se.Toolsets {
-			record(ts, r.serviceExportScopeKey(se), r.serviceExportScopeLabel(se))
-		}
+		r.validateScopedToolsets(validator, se.Toolsets, r.serviceExportScopeKey(se), r.serviceExportScopeLabel(se))
 	}
-	r.validateOwnerScopedToolsetSlugs(verr)
+}
 
-	return verr
+func (r *RootExpr) validateScopedToolsets(
+	validator *toolsetValidator,
+	toolsets []*ToolsetExpr,
+	scopeKey string,
+	scopeLabel string,
+) {
+	for _, ts := range toolsets {
+		validator.record(ts, scopeKey, scopeLabel)
+	}
+}
+
+func (v *toolsetValidator) record(ts *ToolsetExpr, scopeKey, scopeLabel string) {
+	v.root.recordSanitizedToolsetSlug(v.verr, v.sanitizedToolsets, ts, scopeKey, scopeLabel)
+	if ts.Origin != nil {
+		return
+	}
+	v.recordToolset(ts)
+	v.recordToolNames(ts)
+}
+
+func (v *toolsetValidator) recordToolset(ts *ToolsetExpr) {
+	if ts.Name == "" {
+		return
+	}
+	if other, dup := v.toolsets[ts.Name]; dup {
+		if other != ts {
+			v.verr.Add(ts, "toolset name %q duplicates a toolset declared in %s", ts.Name, other.EvalName())
+		}
+		return
+	}
+	v.toolsets[ts.Name] = ts
+}
+
+func (v *toolsetValidator) recordToolNames(ts *ToolsetExpr) {
+	local := make(map[string]*ToolExpr)
+	for _, t := range ts.Tools {
+		name := t.Name
+		if name == "" {
+			continue
+		}
+		if other, dup := local[name]; dup {
+			v.verr.Add(t, "tool name %q duplicates a tool declared in %s", name, other.EvalName())
+			continue
+		}
+		local[name] = t
+	}
 }
 
 func (r *RootExpr) validateSanitizedAgentSlugs(verr *eval.ValidationErrors) {

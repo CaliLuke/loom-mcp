@@ -53,61 +53,160 @@ func (r *Runtime) handleToolTurn(
 	if out, err := r.enforceToolTurnGuards(wfCtx, reg, input, base, st, turnID, deadlines); err != nil || out != nil {
 		return out, err
 	}
-
-	allowed, toExecute, confirmations, execCalls, err := r.prepareToolTurnCalls(ctx, input, base, st, turnID, parentTracker, ctrl)
+	turn, err := r.prepareToolTurnExecution(ctx, input, base, st, turnID, parentTracker, ctrl, toolOpts, deadlines)
 	if err != nil {
 		return nil, err
 	}
-
-	grouped, timeouts := r.groupToolCallsByTimeout(execCalls, input, toolOpts.StartToCloseTimeout)
-	finishBy := time.Time{}
-	if !deadlines.Hard.IsZero() {
-		finishBy = deadlines.Hard.Add(-deadlines.finalizeReserve())
-	}
-	vals, timedOut, err := r.executeGroupedToolCalls(wfCtx, reg, input.AgentID, base, result.ExpectedChildren, parentTracker, finishBy, grouped, timeouts, toolOpts)
+	vals, timedOut, err := r.executePreparedToolTurn(wfCtx, reg, input, base, result.ExpectedChildren, parentTracker, turn, toolOpts)
 	if err != nil {
 		return nil, err
 	}
-	lastToolResults := vals
-	st.ToolEvents = append(st.ToolEvents, cloneToolResults(vals)...)
-	if err := r.appendToolOutputs(ctx, st, toExecute, vals); err != nil {
+	if err := applyExecutedToolTurn(ctx, r, base, st, turn.toExecute, vals); err != nil {
 		return nil, err
 	}
-	if err := r.appendUserToolResults(base, toExecute, vals, st.Ledger); err != nil {
-		return nil, err
-	}
-	if timedOut {
-		out, err := r.finalizeWithPlanner(wfCtx, reg, input, base, st.ToolEvents, st.ToolOutputs, st.AggUsage, st.NextAttempt, turnID, planner.TerminationReasonTimeBudget, deadlines.Hard)
+	if out, err := r.finishOrContinueToolTurn(wfCtx, reg, input, base, st, resumeOpts, toolOpts, deadlines, turnID, parentTracker, ctrl, turn, vals, timedOut); err != nil || out != nil {
 		return out, err
 	}
+	return nil, r.resumeAfterToolTurn(wfCtx, reg, input, base, st, resumeOpts, deadlines)
+}
 
+func (r *Runtime) finishOrContinueToolTurn(
+	wfCtx engine.WorkflowContext,
+	reg AgentRegistration,
+	input *RunInput,
+	base *planner.PlanInput,
+	st *runLoopState,
+	resumeOpts engine.ActivityOptions,
+	toolOpts engine.ActivityOptions,
+	deadlines *runDeadlines,
+	turnID string,
+	parentTracker *childTracker,
+	ctrl *interrupt.Controller,
+	turn *preparedToolTurn,
+	vals []*planner.ToolResult,
+	timedOut bool,
+) (*RunOutput, error) {
+	if timedOut {
+		return r.finalizeWithPlanner(wfCtx, reg, input, base, st.ToolEvents, st.ToolOutputs, st.AggUsage, st.NextAttempt, turnID, planner.TerminationReasonTimeBudget, deadlines.Hard)
+	}
 	terminal, err := r.executedTerminalRunTool(vals)
 	if err != nil {
 		return nil, err
 	}
 	if terminal {
-		return r.finishAfterTerminalToolCalls(ctx, input, base, st)
+		return r.finishAfterTerminalToolCalls(wfCtx.Context(), input, base, st)
 	}
-	if out, err := r.handleToolTurnPostExecution(wfCtx, reg, input, base, st, resumeOpts, toolOpts, deadlines, turnID, parentTracker, ctrl, confirmations, lastToolResults, allowed, vals); err != nil || out != nil {
-		return out, err
-	}
+	return r.handleToolTurnPostExecution(
+		wfCtx, reg, input, base, st, resumeOpts, toolOpts, deadlines, turnID, parentTracker, ctrl, turn.confirmations, vals, turn.allowed, vals,
+	)
+}
 
-	resumeReq, err := r.buildNextResumeRequest(input.AgentID, base, st.ToolOutputs, &st.NextAttempt)
+type preparedToolTurn struct {
+	allowed       []planner.ToolRequest
+	toExecute     []planner.ToolRequest
+	confirmations []confirmationAwait
+	grouped       [][]planner.ToolRequest
+	timeouts      []time.Duration
+	finishBy      time.Time
+}
+
+func (r *Runtime) prepareToolTurnExecution(
+	ctx context.Context,
+	input *RunInput,
+	base *planner.PlanInput,
+	st *runLoopState,
+	turnID string,
+	parentTracker *childTracker,
+	ctrl *interrupt.Controller,
+	toolOpts engine.ActivityOptions,
+	deadlines *runDeadlines,
+) (*preparedToolTurn, error) {
+	allowed, toExecute, confirmations, execCalls, err := r.prepareToolTurnCalls(ctx, input, base, st, turnID, parentTracker, ctrl)
 	if err != nil {
 		return nil, err
+	}
+	grouped, timeouts := r.groupToolCallsByTimeout(execCalls, input, toolOpts.StartToCloseTimeout)
+	return &preparedToolTurn{
+		allowed:       allowed,
+		toExecute:     toExecute,
+		confirmations: confirmations,
+		grouped:       grouped,
+		timeouts:      timeouts,
+		finishBy:      toolTurnFinishBy(deadlines),
+	}, nil
+}
+
+func toolTurnFinishBy(deadlines *runDeadlines) time.Time {
+	if deadlines == nil || deadlines.Hard.IsZero() {
+		return time.Time{}
+	}
+	return deadlines.Hard.Add(-deadlines.finalizeReserve())
+}
+
+func (r *Runtime) executePreparedToolTurn(
+	wfCtx engine.WorkflowContext,
+	reg AgentRegistration,
+	input *RunInput,
+	base *planner.PlanInput,
+	expectedChildren int,
+	parentTracker *childTracker,
+	turn *preparedToolTurn,
+	toolOpts engine.ActivityOptions,
+) ([]*planner.ToolResult, bool, error) {
+	return r.executeGroupedToolCalls(
+		wfCtx,
+		reg,
+		input.AgentID,
+		base,
+		expectedChildren,
+		parentTracker,
+		turn.finishBy,
+		turn.grouped,
+		turn.timeouts,
+		toolOpts,
+	)
+}
+
+func applyExecutedToolTurn(
+	ctx context.Context,
+	r *Runtime,
+	base *planner.PlanInput,
+	st *runLoopState,
+	toExecute []planner.ToolRequest,
+	vals []*planner.ToolResult,
+) error {
+	st.ToolEvents = append(st.ToolEvents, cloneToolResults(vals)...)
+	if err := r.appendToolOutputs(ctx, st, toExecute, vals); err != nil {
+		return err
+	}
+	return r.appendUserToolResults(base, toExecute, vals, st.Ledger)
+}
+
+func (r *Runtime) resumeAfterToolTurn(
+	wfCtx engine.WorkflowContext,
+	reg AgentRegistration,
+	input *RunInput,
+	base *planner.PlanInput,
+	st *runLoopState,
+	resumeOpts engine.ActivityOptions,
+	deadlines *runDeadlines,
+) error {
+	resumeReq, err := r.buildNextResumeRequest(input.AgentID, base, st.ToolOutputs, &st.NextAttempt)
+	if err != nil {
+		return err
 	}
 	resOutput, err := r.runPlanActivity(wfCtx, reg.ResumeActivityName, resumeOpts, resumeReq, deadlines.Budget)
 	if err != nil {
-		return nil, err
+		return err
 	}
 	if resOutput == nil || resOutput.Result == nil {
-		return nil, fmt.Errorf("plan activity returned nil result on resume")
+		return fmt.Errorf("plan activity returned nil result on resume")
 	}
 	st.AggUsage = addTokenUsage(st.AggUsage, resOutput.Usage)
 	st.Result = resOutput.Result
 	st.Transcript = resOutput.Transcript
 	st.Ledger = transcript.FromModelMessages(st.Transcript)
-	return nil, nil
+	return nil
 }
 
 func (r *Runtime) enforceToolTurnGuards(

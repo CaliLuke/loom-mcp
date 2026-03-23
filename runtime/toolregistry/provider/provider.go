@@ -170,26 +170,11 @@ func Serve(ctx context.Context, pulse pulseclients.Client, toolset string, handl
 	)
 
 	events := sink.Subscribe()
-	var (
-		cancelCtx, cancel = context.WithCancel(ctx)
-		wg                sync.WaitGroup
-		errc              = make(chan error, 1)
-	)
-	defer cancel()
+	state := newProviderServeState(ctx, cfg)
+	defer state.cancel()
 
-	work := make(chan workItem, cfg.maxQueued)
-	acks := make(chan *streaming.Event, cfg.maxQueued+1024)
-
-	signalErr := func(err error) {
-		select {
-		case errc <- err:
-			cancel()
-		default:
-		}
-	}
-
-	ackWG := startAckLoop(cancelCtx, &sync.WaitGroup{}, sink, acks, signalErr)
-	startWorkers(cancelCtx, &wg, cfg.maxConcurrent, workerDeps{
+	ackWG := startAckLoop(state.ctx, &sync.WaitGroup{}, sink, state.acks, state.signalErr)
+	startWorkers(state.ctx, &state.wg, cfg.maxConcurrent, workerDeps{
 		pulse:           pulse,
 		handler:         handler,
 		logger:          cfg.logger,
@@ -197,41 +182,84 @@ func Serve(ctx context.Context, pulse pulseclients.Client, toolset string, handl
 		toolset:         toolset,
 		streamID:        streamID,
 		resultEventType: cfg.resultEventType,
-		work:            work,
-		acks:            acks,
-		signalErr:       signalErr,
+		work:            state.work,
+		acks:            state.acks,
+		signalErr:       state.signalErr,
 	})
 
 	pending := make([]workItem, 0, cfg.maxQueued)
+	return runProviderLoop(events, sink, opts, cfg, toolset, streamID, state, ackWG, pending)
+}
 
+type providerServeState struct {
+	ctx    context.Context
+	cancel context.CancelFunc
+	wg     sync.WaitGroup
+	errc   chan error
+	work   chan workItem
+	acks   chan *streaming.Event
+}
+
+func newProviderServeState(ctx context.Context, cfg providerConfig) *providerServeState {
+	cancelCtx, cancel := context.WithCancel(ctx)
+	state := &providerServeState{
+		ctx:    cancelCtx,
+		cancel: cancel,
+		errc:   make(chan error, 1),
+		work:   make(chan workItem, cfg.maxQueued),
+		acks:   make(chan *streaming.Event, cfg.maxQueued+1024),
+	}
+	return state
+}
+
+func (s *providerServeState) signalErr(err error) {
+	select {
+	case s.errc <- err:
+		s.cancel()
+	default:
+	}
+}
+
+func runProviderLoop(
+	events <-chan *streaming.Event,
+	sink pulseclients.Sink,
+	opts Options,
+	cfg providerConfig,
+	toolset, streamID string,
+	state *providerServeState,
+	ackWG *sync.WaitGroup,
+	pending []workItem,
+) error {
 	for {
 		select {
-		case <-cancelCtx.Done():
-			wg.Wait()
-			ackWG.Wait()
-			return cancelCtx.Err()
-		case err := <-errc:
-			wg.Wait()
-			ackWG.Wait()
-			return err
+		case <-state.ctx.Done():
+			return finishProviderServe(state, ackWG, state.ctx.Err())
+		case err := <-state.errc:
+			return finishProviderServe(state, ackWG, err)
 		case ev, ok := <-events:
 			if !ok {
-				return fmt.Errorf("toolset stream subscription closed")
+				return finishProviderServe(state, ackWG, fmt.Errorf("toolset stream subscription closed"))
 			}
-			pending = drainPending(work, pending)
-			if _, err := handleSubscribedEvent(cancelCtx, sink, ev, pendingDeps{
+			pending = drainPending(state.work, pending)
+			if _, err := handleSubscribedEvent(state.ctx, sink, ev, pendingDeps{
 				opts:     opts,
 				cfg:      cfg,
 				logger:   cfg.logger,
 				toolset:  toolset,
 				streamID: streamID,
-				work:     work,
+				work:     state.work,
 				pending:  &pending,
 			}); err != nil {
-				return err
+				return finishProviderServe(state, ackWG, err)
 			}
 		}
 	}
+}
+
+func finishProviderServe(state *providerServeState, ackWG *sync.WaitGroup, err error) error {
+	state.wg.Wait()
+	ackWG.Wait()
+	return err
 }
 
 type workerDeps struct {

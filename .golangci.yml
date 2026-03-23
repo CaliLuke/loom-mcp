@@ -17,6 +17,7 @@ linters:
     - gocognit
     - ineffassign
     - makezero
+    - maintidx
     - misspell
     - nakedret
     - nestif
@@ -38,6 +39,8 @@ linters:
       statements: 60
     gocognit:
       min-complexity: 120
+    maintidx:
+      under: 40
     nestif:
       min-complexity: 25
     tagliatelle:
@@ -66,15 +69,18 @@ linters:
       - linters:
           - funlen
           - gocognit
+          - maintidx
           - nestif
         path: _test\.go
       - linters:
           - funlen
           - gocognit
+          - maintidx
           - nestif
         path: ^codegen/
       - linters:
           - funlen
           - gocognit
+          - maintidx
           - nestif
         path: ^integration_tests/

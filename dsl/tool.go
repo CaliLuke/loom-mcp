@@ -690,59 +690,84 @@ func TerminalRun() {
 
 // toolDSL mirrors Goa's method DSL helpers to define tool shapes.
 func toolDSL(m *agentsexpr.ToolExpr, suffix string, p any, args ...any) *goaexpr.AttributeExpr {
-	var (
-		att *goaexpr.AttributeExpr
-		fn  func()
-	)
-	switch actual := p.(type) {
-	case func():
-		fn = actual
-		att = &goaexpr.AttributeExpr{Type: &goaexpr.Object{}}
-	case goaexpr.UserType:
-		if len(args) == 0 {
-			// Do not duplicate type if it is not customized
-			return &goaexpr.AttributeExpr{Type: actual}
-		}
-		dupped := goaexpr.Dup(actual)
-		att = &goaexpr.AttributeExpr{Type: dupped}
-		if f, ok := args[len(args)-1].(func()); ok {
-			numreqs := 0
-			if att.Validation != nil {
-				numreqs = len(att.Validation.Required)
-			}
-			eval.Execute(f, att)
-			if att.Validation != nil && len(att.Validation.Required) != numreqs {
-				// If the DSL modifies the type attributes "requiredness"
-				// then rename the type to avoid collisions.
-				if renamer, ok := dupped.(interface{ Rename(string) }); ok {
-					renamer.Rename(actual.Name() + "_" + m.Name + "_" + suffix)
-				}
-			}
-		}
-	case goaexpr.DataType:
-		att = &goaexpr.AttributeExpr{Type: actual}
-	default:
-		eval.InvalidArgError("type or function", p)
+	att, fn := toolAttributeAndFunc(m, suffix, p, args)
+	if att == nil {
 		return nil
 	}
-	if len(args) >= 1 {
-		if f, ok := args[len(args)-1].(func()); ok {
-			if fn != nil {
-				eval.InvalidArgError("(type), (func), (type, func), (type, desc) or (type, desc, func)", f)
-			}
-			fn = f
-		}
-		if d, ok := args[0].(string); ok {
-			att.Description = d
-		}
+	applyToolDSLArgs(att, &fn, args)
+	finalizeToolAttribute(att, fn)
+	return att
+}
+
+func toolAttributeAndFunc(m *agentsexpr.ToolExpr, suffix string, p any, args []any) (*goaexpr.AttributeExpr, func()) {
+	switch actual := p.(type) {
+	case func():
+		return &goaexpr.AttributeExpr{Type: &goaexpr.Object{}}, actual
+	case goaexpr.UserType:
+		return toolUserTypeAttribute(m, suffix, actual, args), nil
+	case goaexpr.DataType:
+		return &goaexpr.AttributeExpr{Type: actual}, nil
+	default:
+		eval.InvalidArgError("type or function", p)
+		return nil, nil
 	}
-	if fn != nil {
-		eval.Execute(fn, att)
-		if obj, ok := att.Type.(*goaexpr.Object); ok {
-			if len(*obj) == 0 {
-				att.Type = goaexpr.Empty
-			}
-		}
+}
+
+func toolUserTypeAttribute(m *agentsexpr.ToolExpr, suffix string, actual goaexpr.UserType, args []any) *goaexpr.AttributeExpr {
+	if len(args) == 0 {
+		return &goaexpr.AttributeExpr{Type: actual}
+	}
+	dupped := goaexpr.Dup(actual)
+	att := &goaexpr.AttributeExpr{Type: dupped}
+	if f, ok := lastToolDSLFuncArg(args); ok {
+		maybeRenameToolType(att, dupped, actual, m, suffix, f)
 	}
 	return att
+}
+
+func maybeRenameToolType(att *goaexpr.AttributeExpr, dupped any, actual goaexpr.UserType, m *agentsexpr.ToolExpr, suffix string, f func()) {
+	numreqs := 0
+	if att.Validation != nil {
+		numreqs = len(att.Validation.Required)
+	}
+	eval.Execute(f, att)
+	if att.Validation == nil || len(att.Validation.Required) == numreqs {
+		return
+	}
+	if renamer, ok := dupped.(interface{ Rename(string) }); ok {
+		renamer.Rename(actual.Name() + "_" + m.Name + "_" + suffix)
+	}
+}
+
+func applyToolDSLArgs(att *goaexpr.AttributeExpr, fn *func(), args []any) {
+	if len(args) == 0 {
+		return
+	}
+	if f, ok := lastToolDSLFuncArg(args); ok {
+		if *fn != nil {
+			eval.InvalidArgError("(type), (func), (type, func), (type, desc) or (type, desc, func)", f)
+		}
+		*fn = f
+	}
+	if d, ok := args[0].(string); ok {
+		att.Description = d
+	}
+}
+
+func lastToolDSLFuncArg(args []any) (func(), bool) {
+	if len(args) == 0 {
+		return nil, false
+	}
+	f, ok := args[len(args)-1].(func())
+	return f, ok
+}
+
+func finalizeToolAttribute(att *goaexpr.AttributeExpr, fn func()) {
+	if fn == nil {
+		return
+	}
+	eval.Execute(fn, att)
+	if obj, ok := att.Type.(*goaexpr.Object); ok && len(*obj) == 0 {
+		att.Type = goaexpr.Empty
+	}
 }

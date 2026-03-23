@@ -276,39 +276,20 @@ func newFromOptions(opts Options) *Runtime {
 			panic(err)
 		}
 	}
-	bus := opts.Hooks
-	if bus == nil {
-		bus = hooks.NewBus()
-	}
-	eng := opts.Engine
-	if eng == nil {
-		eng = engineinmem.New()
-	}
-	metrics := opts.Metrics
-	if metrics == nil {
-		metrics = telemetry.NoopMetrics{}
-	}
-	logger := opts.Logger
-	if logger == nil {
-		logger = telemetry.NoopLogger{}
-	}
-	tracer := opts.Tracer
-	if tracer == nil {
-		tracer = telemetry.NoopTracer{}
-	}
-	if opts.RunEventStore == nil {
-		opts.RunEventStore = runloginmem.New()
-	}
-	if opts.SessionStore == nil {
-		opts.SessionStore = sessioninmem.New()
-	}
+	bus := resolveRuntimeBus(opts.Hooks)
+	eng := resolveRuntimeEngine(opts.Engine)
+	metrics := resolveRuntimeMetrics(opts.Metrics)
+	logger := resolveRuntimeLogger(opts.Logger)
+	tracer := resolveRuntimeTracer(opts.Tracer)
+	runEventStore := resolveRunEventStore(opts.RunEventStore)
+	sessionStore := resolveSessionStore(opts.SessionStore)
 	rt := &Runtime{
 		Engine:              eng,
 		Memory:              opts.MemoryStore,
 		PromptRegistry:      prompt.NewRegistry(opts.PromptStore),
-		SessionStore:        opts.SessionStore,
+		SessionStore:        sessionStore,
 		Policy:              opts.Policy,
-		RunEventStore:       opts.RunEventStore,
+		RunEventStore:       runEventStore,
 		Bus:                 bus,
 		Stream:              opts.Stream,
 		hookActivityTimeout: opts.HookActivityTimeout,
@@ -330,6 +311,55 @@ func newFromOptions(opts Options) *Runtime {
 	rt.PromptRegistry.SetObserver(rt.onPromptRendered)
 	rt.installRuntimeSubscribers(bus)
 	return rt
+}
+
+func resolveRuntimeBus(bus hooks.Bus) hooks.Bus {
+	if bus != nil {
+		return bus
+	}
+	return hooks.NewBus()
+}
+
+func resolveRuntimeEngine(eng engine.Engine) engine.Engine {
+	if eng != nil {
+		return eng
+	}
+	return engineinmem.New()
+}
+
+func resolveRuntimeMetrics(metrics telemetry.Metrics) telemetry.Metrics {
+	if metrics != nil {
+		return metrics
+	}
+	return telemetry.NoopMetrics{}
+}
+
+func resolveRuntimeLogger(logger telemetry.Logger) telemetry.Logger {
+	if logger != nil {
+		return logger
+	}
+	return telemetry.NoopLogger{}
+}
+
+func resolveRuntimeTracer(tracer telemetry.Tracer) telemetry.Tracer {
+	if tracer != nil {
+		return tracer
+	}
+	return telemetry.NoopTracer{}
+}
+
+func resolveRunEventStore(store runlog.Store) runlog.Store {
+	if store != nil {
+		return store
+	}
+	return runloginmem.New()
+}
+
+func resolveSessionStore(store session.Store) session.Store {
+	if store != nil {
+		return store
+	}
+	return sessioninmem.New()
 }
 
 func (r *Runtime) installRuntimeSubscribers(bus hooks.Bus) {
@@ -357,92 +387,104 @@ func (r *Runtime) registerSessionSubscriber(bus hooks.Bus) {
 		if event.SessionID() == "" {
 			return nil
 		}
-		var (
-			status   session.RunStatus
-			metadata map[string]any
-		)
-		ts := time.UnixMilli(event.Timestamp()).UTC()
-		switch evt := event.(type) {
-		case *hooks.RunStartedEvent:
-			status = session.RunStatusRunning
-			return r.SessionStore.UpsertRun(ctx, session.RunMeta{
-				AgentID:   evt.AgentID(),
-				RunID:     evt.RunID(),
-				SessionID: evt.SessionID(),
-				Status:    status,
-				UpdatedAt: ts,
-				Labels:    evt.RunContext.Labels,
-				Metadata:  nil,
-				StartedAt: time.Time{},
-			})
-		case *hooks.RunPausedEvent:
-			status = session.RunStatusPaused
-			return r.SessionStore.UpsertRun(ctx, session.RunMeta{
-				AgentID:   evt.AgentID(),
-				RunID:     evt.RunID(),
-				SessionID: evt.SessionID(),
-				Status:    status,
-				UpdatedAt: ts,
-				Labels:    evt.Labels,
-				Metadata:  evt.Metadata,
-			})
-		case *hooks.RunResumedEvent:
-			status = session.RunStatusRunning
-			return r.SessionStore.UpsertRun(ctx, session.RunMeta{
-				AgentID:   evt.AgentID(),
-				RunID:     evt.RunID(),
-				SessionID: evt.SessionID(),
-				Status:    status,
-				UpdatedAt: ts,
-				Labels:    evt.Labels,
-			})
-		case *hooks.RunCompletedEvent:
-			switch evt.Status {
-			case "success":
-				status = session.RunStatusCompleted
-			case "failed":
-				status = session.RunStatusFailed
-			case "canceled":
-				status = session.RunStatusCanceled
-			default:
-				return fmt.Errorf("unexpected run completed status %q", evt.Status)
-			}
-			if evt.PublicError != "" {
-				metadata = map[string]any{
-					"public_error": evt.PublicError,
-				}
-				if evt.ErrorProvider != "" {
-					metadata["error_provider"] = evt.ErrorProvider
-				}
-				if evt.ErrorOperation != "" {
-					metadata["error_operation"] = evt.ErrorOperation
-				}
-				if evt.ErrorKind != "" {
-					metadata["error_kind"] = evt.ErrorKind
-				}
-				if evt.ErrorCode != "" {
-					metadata["error_code"] = evt.ErrorCode
-				}
-				if evt.HTTPStatus != 0 {
-					metadata["http_status"] = evt.HTTPStatus
-				}
-				metadata["retryable"] = evt.Retryable
-			}
-			return r.SessionStore.UpsertRun(ctx, session.RunMeta{
-				AgentID:   evt.AgentID(),
-				RunID:     evt.RunID(),
-				SessionID: evt.SessionID(),
-				Status:    status,
-				UpdatedAt: ts,
-				Metadata:  metadata,
-			})
-		default:
-			return nil
+		meta, ok, err := sessionRunMetaFromEvent(event)
+		if err != nil || !ok {
+			return err
 		}
+		return r.SessionStore.UpsertRun(ctx, meta)
 	})
 	if _, err := bus.Register(sessionSub); err != nil {
 		r.logger.Warn(context.Background(), "failed to register session subscriber", "err", err)
 	}
+}
+
+func sessionRunMetaFromEvent(event hooks.Event) (session.RunMeta, bool, error) {
+	ts := time.UnixMilli(event.Timestamp()).UTC()
+	switch evt := event.(type) {
+	case *hooks.RunStartedEvent:
+		return session.RunMeta{
+			AgentID:   evt.AgentID(),
+			RunID:     evt.RunID(),
+			SessionID: evt.SessionID(),
+			Status:    session.RunStatusRunning,
+			UpdatedAt: ts,
+			Labels:    evt.RunContext.Labels,
+			StartedAt: time.Time{},
+		}, true, nil
+	case *hooks.RunPausedEvent:
+		return session.RunMeta{
+			AgentID:   evt.AgentID(),
+			RunID:     evt.RunID(),
+			SessionID: evt.SessionID(),
+			Status:    session.RunStatusPaused,
+			UpdatedAt: ts,
+			Labels:    evt.Labels,
+			Metadata:  evt.Metadata,
+		}, true, nil
+	case *hooks.RunResumedEvent:
+		return session.RunMeta{
+			AgentID:   evt.AgentID(),
+			RunID:     evt.RunID(),
+			SessionID: evt.SessionID(),
+			Status:    session.RunStatusRunning,
+			UpdatedAt: ts,
+			Labels:    evt.Labels,
+		}, true, nil
+	case *hooks.RunCompletedEvent:
+		status, err := sessionRunCompletedStatus(evt.Status)
+		if err != nil {
+			return session.RunMeta{}, false, err
+		}
+		return session.RunMeta{
+			AgentID:   evt.AgentID(),
+			RunID:     evt.RunID(),
+			SessionID: evt.SessionID(),
+			Status:    status,
+			UpdatedAt: ts,
+			Metadata:  sessionRunCompletedMetadata(evt),
+		}, true, nil
+	default:
+		return session.RunMeta{}, false, nil
+	}
+}
+
+func sessionRunCompletedStatus(status string) (session.RunStatus, error) {
+	switch status {
+	case "success":
+		return session.RunStatusCompleted, nil
+	case "failed":
+		return session.RunStatusFailed, nil
+	case "canceled":
+		return session.RunStatusCanceled, nil
+	default:
+		return "", fmt.Errorf("unexpected run completed status %q", status)
+	}
+}
+
+func sessionRunCompletedMetadata(evt *hooks.RunCompletedEvent) map[string]any {
+	if evt.PublicError == "" {
+		return nil
+	}
+	metadata := map[string]any{
+		"public_error": evt.PublicError,
+		"retryable":    evt.Retryable,
+	}
+	if evt.ErrorProvider != "" {
+		metadata["error_provider"] = evt.ErrorProvider
+	}
+	if evt.ErrorOperation != "" {
+		metadata["error_operation"] = evt.ErrorOperation
+	}
+	if evt.ErrorKind != "" {
+		metadata["error_kind"] = evt.ErrorKind
+	}
+	if evt.ErrorCode != "" {
+		metadata["error_code"] = evt.ErrorCode
+	}
+	if evt.HTTPStatus != 0 {
+		metadata["http_status"] = evt.HTTPStatus
+	}
+	return metadata
 }
 
 func (r *Runtime) registerMemorySubscriber(bus hooks.Bus) {

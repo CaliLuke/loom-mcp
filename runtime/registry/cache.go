@@ -195,38 +195,18 @@ func (c *MemoryCache) refreshLoop() {
 		case <-c.refreshCtx.Done():
 			return
 		case key := <-c.refreshCh:
-			// Skip if recently refreshed
-			if lastRefresh, ok := refreshed[key]; ok {
-				if time.Since(lastRefresh) < c.refreshCooldown {
-					continue
-				}
+			if c.shouldSkipRefresh(refreshed, key) {
+				continue
 			}
-
-			// Get current entry to check if refresh is still needed
-			c.mu.RLock()
-			entry, exists := c.entries[key]
-			c.mu.RUnlock()
-
+			entry, exists := c.refreshEntrySnapshot(key)
 			if !exists {
 				continue
 			}
-
-			// Refresh the entry
 			schema, err := c.refreshFunc(c.refreshCtx, key)
 			if err != nil {
-				// Keep existing entry on refresh failure
 				continue
 			}
-
-			// Update the cache with refreshed data
-			c.mu.Lock()
-			c.entries[key] = &cacheEntry{
-				schema:    schema,
-				expiresAt: time.Now().Add(entry.ttl),
-				ttl:       entry.ttl,
-			}
-			c.mu.Unlock()
-
+			c.storeRefreshedEntry(key, entry.ttl, schema)
 			refreshed[key] = time.Now()
 
 			// Clean up old refresh tracking entries periodically
@@ -240,4 +220,26 @@ func (c *MemoryCache) refreshLoop() {
 			}
 		}
 	}
+}
+
+func (c *MemoryCache) shouldSkipRefresh(refreshed map[string]time.Time, key string) bool {
+	lastRefresh, ok := refreshed[key]
+	return ok && time.Since(lastRefresh) < c.refreshCooldown
+}
+
+func (c *MemoryCache) refreshEntrySnapshot(key string) (*cacheEntry, bool) {
+	c.mu.RLock()
+	entry, exists := c.entries[key]
+	c.mu.RUnlock()
+	return entry, exists
+}
+
+func (c *MemoryCache) storeRefreshedEntry(key string, ttl time.Duration, schema *ToolsetSchema) {
+	c.mu.Lock()
+	c.entries[key] = &cacheEntry{
+		schema:    schema,
+		expiresAt: time.Now().Add(ttl),
+		ttl:       ttl,
+	}
+	c.mu.Unlock()
 }

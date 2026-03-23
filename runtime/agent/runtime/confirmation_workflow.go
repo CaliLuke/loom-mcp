@@ -82,24 +82,9 @@ type confirmationPlan struct {
 func (r *Runtime) confirmationPlan(ctx context.Context, call *planner.ToolRequest) (*confirmationPlan, bool, error) {
 	// Runtime override takes precedence and can require confirmation for tools that
 	// do not declare design-time Confirmation.
-	if r.toolConfirmation != nil && len(r.toolConfirmation.Confirm) > 0 {
-		if h, ok := r.toolConfirmation.Confirm[call.Name]; ok {
-			prompt, err := h.Prompt(ctx, call)
-			if err != nil {
-				return nil, false, err
-			}
-			deniedResult, err := h.DeniedResult(ctx, call)
-			if err != nil {
-				return nil, false, err
-			}
-			return &confirmationPlan{
-				Title:        "",
-				Prompt:       prompt,
-				DeniedResult: deniedResult,
-			}, true, nil
-		}
+	if plan, ok, err := r.runtimeConfirmationPlan(ctx, call); ok || err != nil {
+		return plan, ok, err
 	}
-
 	spec, ok := r.toolSpec(call.Name)
 	if !ok || spec.Confirmation == nil {
 		return nil, false, nil
@@ -132,6 +117,25 @@ func (r *Runtime) confirmationPlan(ctx context.Context, call *planner.ToolReques
 		Prompt:       prompt,
 		DeniedResult: deniedResult,
 	}, true, nil
+}
+
+func (r *Runtime) runtimeConfirmationPlan(ctx context.Context, call *planner.ToolRequest) (*confirmationPlan, bool, error) {
+	if r.toolConfirmation == nil || len(r.toolConfirmation.Confirm) == 0 {
+		return nil, false, nil
+	}
+	h, ok := r.toolConfirmation.Confirm[call.Name]
+	if !ok {
+		return nil, false, nil
+	}
+	prompt, err := h.Prompt(ctx, call)
+	if err != nil {
+		return nil, false, err
+	}
+	deniedResult, err := h.DeniedResult(ctx, call)
+	if err != nil {
+		return nil, false, err
+	}
+	return &confirmationPlan{Prompt: prompt, DeniedResult: deniedResult}, true, nil
 }
 
 // renderConfirmationTemplate renders a confirmation template against a decoded

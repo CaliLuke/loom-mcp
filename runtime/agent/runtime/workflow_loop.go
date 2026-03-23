@@ -17,6 +17,7 @@ package runtime
 //   place by loop methods.
 
 import (
+	"context"
 	"time"
 
 	"github.com/CaliLuke/loom-mcp/runtime/agent/engine"
@@ -127,99 +128,111 @@ func (d runDeadlines) shouldFinalize(now time.Time) bool {
 func (l *workflowLoop) run() (*RunOutput, error) {
 	ctx := l.wfCtx.Context()
 	for {
-		if err := l.r.handleInterrupts(
-			l.wfCtx,
-			l.input,
-			l.base,
-			l.turnID,
-			l.ctrl,
-			&l.st.NextAttempt,
-			l.deadlines.Budget,
-		); err != nil {
+		if out, err := l.beforeTurn(ctx); err != nil || out != nil {
+			return out, err
+		}
+		if out, handled, err := l.handleAwaitOnlyTurn(); err != nil {
 			return nil, err
-		}
-
-		now := l.wfCtx.Now()
-		if l.deadlines.shouldFinalize(now) {
-			return l.r.finalizeWithPlanner(
-				l.wfCtx,
-				l.reg,
-				l.input,
-				l.base,
-				l.st.ToolEvents,
-				l.st.ToolOutputs,
-				l.st.AggUsage,
-				l.st.NextAttempt,
-				l.turnID,
-				planner.TerminationReasonTimeBudget,
-				l.deadlines.Hard,
-			)
-		}
-		if !l.deadlines.Hard.IsZero() && now.After(l.deadlines.Hard) {
-			return l.r.finalizeWithPlanner(
-				l.wfCtx,
-				l.reg,
-				l.input,
-				l.base,
-				l.st.ToolEvents,
-				l.st.ToolOutputs,
-				l.st.AggUsage,
-				l.st.NextAttempt,
-				l.turnID,
-				planner.TerminationReasonTimeBudget,
-				l.deadlines.Hard,
-			)
-		}
-
-		// Await-only: publish await event, pause, and wait for external input.
-		//
-		// If the planner also returned tool calls, we must execute those first and only then
-		// pause for the await (handled in the tool-turn path).
-		if l.st.Result.Await != nil && len(l.st.Result.ToolCalls) == 0 {
-			out, err := l.r.handleAwaitOnlyResult(
-				l.wfCtx,
-				l.reg,
-				l.input,
-				l.base,
-				l.st,
-				l.resumeOpts,
-				l.ctrl,
-				&l.deadlines,
-				l.turnID,
-			)
-			if err != nil {
-				return nil, err
-			}
+		} else if handled {
 			if out != nil {
 				return out, nil
 			}
 			continue
 		}
-
-		l.r.logger.Info(ctx, "Checking result.ToolCalls", "len", len(l.st.Result.ToolCalls))
-		if len(l.st.Result.ToolCalls) == 0 {
-			l.r.logger.Info(ctx, "No tool calls, checking FinalResponse")
-			return l.r.finishWithoutToolCalls(ctx, l.input, l.base, l.st, l.turnID)
-		}
-
-		out, err := l.r.handleToolTurn(
-			l.wfCtx,
-			l.reg,
-			l.input,
-			l.base,
-			l.st,
-			l.resumeOpts,
-			l.toolOpts,
-			&l.deadlines,
-			l.turnID,
-			l.parentTracker,
-			l.ctrl,
-		)
-		if err != nil {
+		if out, done, err := l.handleToolOrFinish(ctx); err != nil {
 			return nil, err
-		}
-		if out != nil {
+		} else if done {
 			return out, nil
 		}
 	}
+}
+
+func (l *workflowLoop) beforeTurn(ctx context.Context) (*RunOutput, error) {
+	if err := l.handlePendingInterrupts(); err != nil {
+		return nil, err
+	}
+	if out, err := l.finalizeIfPastBudget(); err != nil || out != nil {
+		return out, err
+	}
+	l.r.logger.Info(ctx, "Checking result.ToolCalls", "len", len(l.st.Result.ToolCalls))
+	return nil, nil
+}
+
+func (l *workflowLoop) handleAwaitOnlyTurn() (*RunOutput, bool, error) {
+	if l.st.Result.Await == nil || len(l.st.Result.ToolCalls) != 0 {
+		return nil, false, nil
+	}
+	out, err := l.r.handleAwaitOnlyResult(
+		l.wfCtx,
+		l.reg,
+		l.input,
+		l.base,
+		l.st,
+		l.resumeOpts,
+		l.ctrl,
+		&l.deadlines,
+		l.turnID,
+	)
+	return out, true, err
+}
+
+func (l *workflowLoop) handleToolOrFinish(ctx context.Context) (*RunOutput, bool, error) {
+	if len(l.st.Result.ToolCalls) == 0 {
+		l.r.logger.Info(ctx, "No tool calls, checking FinalResponse")
+		out, err := l.r.finishWithoutToolCalls(ctx, l.input, l.base, l.st, l.turnID)
+		return out, true, err
+	}
+	out, err := l.r.handleToolTurn(
+		l.wfCtx,
+		l.reg,
+		l.input,
+		l.base,
+		l.st,
+		l.resumeOpts,
+		l.toolOpts,
+		&l.deadlines,
+		l.turnID,
+		l.parentTracker,
+		l.ctrl,
+	)
+	return out, out != nil, err
+}
+
+func (l *workflowLoop) handlePendingInterrupts() error {
+	return l.r.handleInterrupts(
+		l.wfCtx,
+		l.input,
+		l.base,
+		l.turnID,
+		l.ctrl,
+		&l.st.NextAttempt,
+		l.deadlines.Budget,
+	)
+}
+
+func (l *workflowLoop) finalizeIfPastBudget() (*RunOutput, error) {
+	now := l.wfCtx.Now()
+	if l.deadlines.shouldFinalize(now) {
+		return l.finalizeForTimeBudget()
+	}
+	if !l.deadlines.Hard.IsZero() && now.After(l.deadlines.Hard) {
+		return l.finalizeForTimeBudget()
+	}
+	return nil, nil
+}
+
+func (l *workflowLoop) finalizeForTimeBudget() (*RunOutput, error) {
+	return l.r.finalizeWithPlanner(
+		l.wfCtx,
+		l.reg,
+		l.input,
+		l.base,
+		l.st.ToolEvents,
+		l.st.ToolOutputs,
+		l.st.AggUsage,
+		l.st.NextAttempt,
+		l.turnID,
+		planner.TerminationReasonTimeBudget,
+		l.deadlines.Hard,
+	)
 }

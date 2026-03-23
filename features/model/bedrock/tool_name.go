@@ -32,63 +32,66 @@ func SanitizeToolName(in string) string {
 	}
 	const maxLen = 64
 	const hashLen = 8
-
-	// Fast path: if all runes are already allowed after mapping '.' to '_', keep
-	// the string allocation-free.
-	allowed := true
-	for _, r := range in {
-		if r == '.' {
-			r = '_'
-		}
-		switch {
-		case r >= 'a' && r <= 'z':
-		case r >= 'A' && r <= 'Z':
-		case r >= '0' && r <= '9':
-		case r == '_':
-		case r == '-':
-		default:
-			allowed = false
-		}
-		if !allowed {
-			break
-		}
-	}
-
-	var sanitized string
-	if allowed {
-		sanitized = strings.ReplaceAll(in, ".", "_")
-	} else {
-		out := make([]rune, 0, len(in))
-		for _, r := range in {
-			if r == '.' {
-				r = '_'
-			}
-			switch {
-			case r >= 'a' && r <= 'z':
-				out = append(out, r)
-			case r >= 'A' && r <= 'Z':
-				out = append(out, r)
-			case r >= '0' && r <= '9':
-				out = append(out, r)
-			case r == '_' || r == '-':
-				out = append(out, r)
-			default:
-				out = append(out, '_')
-			}
-		}
-		sanitized = string(out)
-	}
-
+	sanitized := sanitizeBedrockName(in)
 	if len(sanitized) <= maxLen {
 		return sanitized
 	}
+	return truncateSanitizedBedrockName(in, sanitized, maxLen, hashLen)
+}
 
-	// Truncate and append a stable hash suffix to keep names within Bedrock's
-	// documented 64-character limit while preserving uniqueness.
-	sum := sha256.Sum256([]byte(in))
+func sanitizeBedrockName(in string) string {
+	if isFastPathBedrockName(in) {
+		return strings.ReplaceAll(in, ".", "_")
+	}
+	out := make([]rune, 0, len(in))
+	for _, r := range in {
+		out = append(out, sanitizeBedrockRune(r))
+	}
+	return string(out)
+}
+
+func isFastPathBedrockName(in string) bool {
+	for _, r := range in {
+		if !isAllowedBedrockRune(replaceDotRune(r)) {
+			return false
+		}
+	}
+	return true
+}
+
+func sanitizeBedrockRune(r rune) rune {
+	r = replaceDotRune(r)
+	if isAllowedBedrockRune(r) {
+		return r
+	}
+	return '_'
+}
+
+func replaceDotRune(r rune) rune {
+	if r == '.' {
+		return '_'
+	}
+	return r
+}
+
+func isAllowedBedrockRune(r rune) bool {
+	switch {
+	case r >= 'a' && r <= 'z':
+		return true
+	case r >= 'A' && r <= 'Z':
+		return true
+	case r >= '0' && r <= '9':
+		return true
+	case r == '_', r == '-':
+		return true
+	default:
+		return false
+	}
+}
+
+func truncateSanitizedBedrockName(input, sanitized string, maxLen, hashLen int) string {
+	sum := sha256.Sum256([]byte(input))
 	suffix := hex.EncodeToString(sum[:])[:hashLen]
-
-	// Reserve "_" + hashLen at the end.
 	prefixLen := max(maxLen-(1+hashLen), 1)
 	return sanitized[:prefixLen] + "_" + suffix
 }

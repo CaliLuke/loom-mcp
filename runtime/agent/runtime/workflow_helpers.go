@@ -26,66 +26,11 @@ import (
 //   - Among prefix matches, the longest prefix wins.
 //   - Group ordering follows first appearance in the allowed slice.
 func (r *Runtime) groupToolCallsByTimeout(allowed []planner.ToolRequest, input *RunInput, defaultTimeout time.Duration) ([][]planner.ToolRequest, []time.Duration) {
-	var grouped [][]planner.ToolRequest
-	var timeouts []time.Duration
-	if input != nil && input.Policy != nil && len(input.Policy.PerToolTimeout) > 0 {
-		type timeoutRule struct {
-			prefix  string
-			timeout time.Duration
-		}
-		exact := make(map[string]time.Duration, len(input.Policy.PerToolTimeout))
-		prefixes := make([]timeoutRule, 0, len(input.Policy.PerToolTimeout))
-		for k, v := range input.Policy.PerToolTimeout {
-			kn := string(k)
-			if strings.HasSuffix(kn, "*") {
-				prefixes = append(prefixes, timeoutRule{
-					prefix:  strings.TrimSuffix(kn, "*"),
-					timeout: v,
-				})
-				continue
-			}
-			exact[kn] = v
-		}
-		sort.Slice(prefixes, func(i, j int) bool {
-			if len(prefixes[i].prefix) != len(prefixes[j].prefix) {
-				return len(prefixes[i].prefix) > len(prefixes[j].prefix)
-			}
-			return prefixes[i].prefix < prefixes[j].prefix
-		})
-
-		resolve := func(name tools.Ident) (time.Duration, bool) {
-			n := string(name)
-			if to, ok := exact[n]; ok {
-				return to, true
-			}
-			for _, r := range prefixes {
-				if strings.HasPrefix(n, r.prefix) {
-					return r.timeout, true
-				}
-			}
-			return 0, false
-		}
-
-		groupIndexByTimeout := make(map[time.Duration]int)
-		for _, call := range allowed {
-			to := defaultTimeout
-			if override, ok := resolve(call.Name); ok && override > 0 {
-				to = override
-			}
-			i, ok := groupIndexByTimeout[to]
-			if !ok {
-				i = len(grouped)
-				groupIndexByTimeout[to] = i
-				grouped = append(grouped, nil)
-				timeouts = append(timeouts, to)
-			}
-			grouped[i] = append(grouped[i], call)
-		}
-	} else {
-		grouped = [][]planner.ToolRequest{allowed}
-		timeouts = []time.Duration{defaultTimeout}
+	rules := timeoutRulesFromInput(input)
+	if rules == nil {
+		return [][]planner.ToolRequest{allowed}, []time.Duration{defaultTimeout}
 	}
-	return grouped, timeouts
+	return bucketToolCallsByTimeout(allowed, rules, defaultTimeout)
 }
 
 // executeGroupedToolCalls runs groups of tool calls with their respective
@@ -138,53 +83,9 @@ func (r *Runtime) appendUserToolResults(
 	if len(vals) == 0 {
 		return nil
 	}
-	resultsByID := make(map[string]*planner.ToolResult, len(vals))
-	for _, tr := range vals {
-		if tr == nil || tr.ToolCallID == "" {
-			continue
-		}
-		resultsByID[tr.ToolCallID] = tr
-	}
-
-	parts := make([]model.Part, 0, len(resultsByID))
-	specs := make([]transcript.ToolResultSpec, 0, len(resultsByID))
-	var reminders []string
-	for _, call := range allowed {
-		tr, ok := resultsByID[call.ToolCallID]
-		if !ok || tr == nil || tr.ToolCallID == "" {
-			continue
-		}
-		content, err := r.toolResultContent(tr)
-		if err != nil {
-			return err
-		}
-		parts = append(parts, model.ToolResultPart{
-			ToolUseID: tr.ToolCallID,
-			Content:   content,
-			IsError:   tr.Error != nil,
-		})
-		specs = append(specs, transcript.ToolResultSpec{
-			ToolUseID: tr.ToolCallID,
-			Content:   content,
-			IsError:   tr.Error != nil,
-		})
-		if spec, ok := r.toolSpec(tr.Name); ok && spec.ResultReminder != "" {
-			reminders = append(reminders, spec.ResultReminder)
-		}
-		if rem := retryHintReminder(tr); rem != "" {
-			reminders = append(reminders, rem)
-		}
-		if spec, ok := r.toolSpec(tr.Name); ok {
-			cursorField := ""
-			if spec.Bounds != nil && spec.Bounds.Paging != nil {
-				cursorField = spec.Bounds.Paging.CursorField
-			}
-			if rem := boundsReminder(tr, cursorField); rem != "" {
-				reminders = append(reminders, rem)
-			}
-		} else if rem := boundsReminder(tr, ""); rem != "" {
-			reminders = append(reminders, rem)
-		}
+	parts, specs, reminders, err := r.buildToolResultArtifacts(allowed, vals)
+	if err != nil {
+		return err
 	}
 	if len(parts) == 0 {
 		return nil
@@ -212,6 +113,126 @@ func (r *Runtime) appendUserToolResults(
 		})
 	}
 	return nil
+}
+
+type timeoutRule struct {
+	prefix  string
+	timeout time.Duration
+}
+
+type toolTimeoutRules struct {
+	exact    map[string]time.Duration
+	prefixes []timeoutRule
+}
+
+func timeoutRulesFromInput(input *RunInput) *toolTimeoutRules {
+	if input == nil || input.Policy == nil || len(input.Policy.PerToolTimeout) == 0 {
+		return nil
+	}
+	rules := &toolTimeoutRules{
+		exact:    make(map[string]time.Duration, len(input.Policy.PerToolTimeout)),
+		prefixes: make([]timeoutRule, 0, len(input.Policy.PerToolTimeout)),
+	}
+	for k, v := range input.Policy.PerToolTimeout {
+		kn := string(k)
+		if strings.HasSuffix(kn, "*") {
+			rules.prefixes = append(rules.prefixes, timeoutRule{
+				prefix:  strings.TrimSuffix(kn, "*"),
+				timeout: v,
+			})
+			continue
+		}
+		rules.exact[kn] = v
+	}
+	sort.Slice(rules.prefixes, func(i, j int) bool {
+		if len(rules.prefixes[i].prefix) != len(rules.prefixes[j].prefix) {
+			return len(rules.prefixes[i].prefix) > len(rules.prefixes[j].prefix)
+		}
+		return rules.prefixes[i].prefix < rules.prefixes[j].prefix
+	})
+	return rules
+}
+
+func bucketToolCallsByTimeout(allowed []planner.ToolRequest, rules *toolTimeoutRules, defaultTimeout time.Duration) ([][]planner.ToolRequest, []time.Duration) {
+	var grouped [][]planner.ToolRequest
+	var timeouts []time.Duration
+	groupIndexByTimeout := make(map[time.Duration]int)
+	for _, call := range allowed {
+		timeout := resolvedToolTimeout(call.Name, rules, defaultTimeout)
+		i, ok := groupIndexByTimeout[timeout]
+		if !ok {
+			i = len(grouped)
+			groupIndexByTimeout[timeout] = i
+			grouped = append(grouped, nil)
+			timeouts = append(timeouts, timeout)
+		}
+		grouped[i] = append(grouped[i], call)
+	}
+	return grouped, timeouts
+}
+
+func resolvedToolTimeout(name tools.Ident, rules *toolTimeoutRules, defaultTimeout time.Duration) time.Duration {
+	if rules == nil {
+		return defaultTimeout
+	}
+	n := string(name)
+	if to, ok := rules.exact[n]; ok && to > 0 {
+		return to
+	}
+	for _, r := range rules.prefixes {
+		if strings.HasPrefix(n, r.prefix) && r.timeout > 0 {
+			return r.timeout
+		}
+	}
+	return defaultTimeout
+}
+
+func (r *Runtime) buildToolResultArtifacts(
+	allowed []planner.ToolRequest,
+	vals []*planner.ToolResult,
+) ([]model.Part, []transcript.ToolResultSpec, []string, error) {
+	resultsByID := make(map[string]*planner.ToolResult, len(vals))
+	for _, tr := range vals {
+		if tr == nil || tr.ToolCallID == "" {
+			continue
+		}
+		resultsByID[tr.ToolCallID] = tr
+	}
+	parts := make([]model.Part, 0, len(resultsByID))
+	specs := make([]transcript.ToolResultSpec, 0, len(resultsByID))
+	var reminders []string
+	for _, call := range allowed {
+		tr, ok := resultsByID[call.ToolCallID]
+		if !ok || tr == nil || tr.ToolCallID == "" {
+			continue
+		}
+		content, err := r.toolResultContent(tr)
+		if err != nil {
+			return nil, nil, nil, err
+		}
+		parts = append(parts, model.ToolResultPart{ToolUseID: tr.ToolCallID, Content: content, IsError: tr.Error != nil})
+		specs = append(specs, transcript.ToolResultSpec{ToolUseID: tr.ToolCallID, Content: content, IsError: tr.Error != nil})
+		reminders = append(reminders, r.toolResultReminders(tr)...)
+	}
+	return parts, specs, reminders, nil
+}
+
+func (r *Runtime) toolResultReminders(tr *planner.ToolResult) []string {
+	var reminders []string
+	if spec, ok := r.toolSpec(tr.Name); ok && spec.ResultReminder != "" {
+		reminders = append(reminders, spec.ResultReminder)
+	}
+	if rem := retryHintReminder(tr); rem != "" {
+		reminders = append(reminders, rem)
+	}
+	cursorField := ""
+	if spec, ok := r.toolSpec(tr.Name); ok && spec.Bounds != nil && spec.Bounds.Paging != nil {
+		cursorField = spec.Bounds.Paging.CursorField
+	}
+	if rem := boundsReminder(tr, cursorField); rem != "" {
+		reminders = append(reminders, rem)
+	}
+	return reminders
 }
 
 func (r *Runtime) toolResultContent(tr *planner.ToolResult) (any, error) {

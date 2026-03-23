@@ -196,40 +196,16 @@ func (e *eng) RegisterExecuteToolActivity(_ context.Context, name string, opts e
 }
 
 func (e *eng) StartWorkflow(ctx context.Context, req engine.WorkflowStartRequest) (engine.WorkflowHandle, error) {
-	e.mu.RLock()
-	def, ok := e.workflows[req.Workflow]
-	e.mu.RUnlock()
-	if !ok {
-		return nil, fmt.Errorf("workflow %q not registered", req.Workflow)
+	def, err := e.lookupWorkflow(req.Workflow)
+	if err != nil {
+		return nil, err
 	}
-	if req.ID == "" {
-		return nil, errors.New("workflow id is required")
+	if err := validateWorkflowStartRequest(req); err != nil {
+		return nil, err
 	}
-
-	wctx := &wfCtx{
-		ctx: ctx,
-		id:  req.ID,
-		// In-memory assigns workflow ID as run ID.
-		runID: req.ID,
-		eng:   e,
-
-		pauseCh:       make(chan *api.PauseRequest, 1),
-		resumeCh:      make(chan *api.ResumeRequest, 1),
-		clarifyCh:     make(chan *api.ClarificationAnswer, 1),
-		toolResultsCh: make(chan *api.ToolResultsSet, 1),
-		confirmCh:     make(chan *api.ConfirmationDecision, 1),
-	}
-
+	wctx := e.newWorkflowContext(ctx, req.ID)
 	h := &handle{done: make(chan struct{}), wfCtx: wctx}
-
-	// Track workflow as running.
-	e.mu.Lock()
-	if e.statuses == nil {
-		e.statuses = make(map[string]engine.RunStatus)
-	}
-	e.statuses[req.ID] = engine.RunStatusRunning
-	e.mu.Unlock()
-
+	e.markWorkflowRunning(req.ID)
 	go func() {
 		defer close(h.done)
 		res, err := def.Handler(wctx, req.Input)
@@ -252,6 +228,46 @@ func (e *eng) StartWorkflow(ctx context.Context, req engine.WorkflowStartRequest
 	}()
 
 	return h, nil
+}
+
+func (e *eng) lookupWorkflow(name string) (engine.WorkflowDefinition, error) {
+	e.mu.RLock()
+	def, ok := e.workflows[name]
+	e.mu.RUnlock()
+	if !ok {
+		return engine.WorkflowDefinition{}, fmt.Errorf("workflow %q not registered", name)
+	}
+	return def, nil
+}
+
+func validateWorkflowStartRequest(req engine.WorkflowStartRequest) error {
+	if req.ID == "" {
+		return errors.New("workflow id is required")
+	}
+	return nil
+}
+
+func (e *eng) newWorkflowContext(ctx context.Context, id string) *wfCtx {
+	return &wfCtx{
+		ctx:           ctx,
+		id:            id,
+		runID:         id,
+		eng:           e,
+		pauseCh:       make(chan *api.PauseRequest, 1),
+		resumeCh:      make(chan *api.ResumeRequest, 1),
+		clarifyCh:     make(chan *api.ClarificationAnswer, 1),
+		toolResultsCh: make(chan *api.ToolResultsSet, 1),
+		confirmCh:     make(chan *api.ConfirmationDecision, 1),
+	}
+}
+
+func (e *eng) markWorkflowRunning(id string) {
+	e.mu.Lock()
+	if e.statuses == nil {
+		e.statuses = make(map[string]engine.RunStatus)
+	}
+	e.statuses[id] = engine.RunStatusRunning
+	e.mu.Unlock()
 }
 
 // QueryRunStatus returns the current lifecycle status for a workflow execution.

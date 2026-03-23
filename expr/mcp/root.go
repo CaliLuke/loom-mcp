@@ -53,39 +53,58 @@ func (r *RootExpr) Packages() []string {
 
 // WalkSets exposes the nested expressions to the eval engine.
 func (r *RootExpr) WalkSets(walk eval.SetWalker) {
-	mcps := make(eval.ExpressionSet, 0, len(r.MCPServers))
-	for _, mcp := range r.MCPServers {
-		mcps = append(mcps, mcp)
-	}
-	walk(mcps)
+	walk(mcpServersSet(r.MCPServers))
+	walk(mcpCapabilitiesSet(r.MCPServers))
+	walk(mcpToolsSet(r.MCPServers))
+	walk(mcpResourcesSet(r.MCPServers))
+	prompts, messages := mcpPromptSets(r.MCPServers)
+	walk(prompts)
+	walk(messages)
+	walk(dynamicPromptSet(r.DynamicPrompts))
+}
 
-	var caps eval.ExpressionSet
-	for _, m := range r.MCPServers {
+func mcpServersSet(servers map[string]*MCPExpr) eval.ExpressionSet {
+	set := make(eval.ExpressionSet, 0, len(servers))
+	for _, mcp := range servers {
+		set = append(set, mcp)
+	}
+	return set
+}
+
+func mcpCapabilitiesSet(servers map[string]*MCPExpr) eval.ExpressionSet {
+	var set eval.ExpressionSet
+	for _, m := range servers {
 		if m.Capabilities != nil {
-			caps = append(caps, m.Capabilities)
+			set = append(set, m.Capabilities)
 		}
 	}
-	walk(caps)
+	return set
+}
 
-	var tools eval.ExpressionSet
-	for _, m := range r.MCPServers {
+func mcpToolsSet(servers map[string]*MCPExpr) eval.ExpressionSet {
+	var set eval.ExpressionSet
+	for _, m := range servers {
 		for _, t := range m.Tools {
-			tools = append(tools, t)
+			set = append(set, t)
 		}
 	}
-	walk(tools)
+	return set
+}
 
-	var resources eval.ExpressionSet
-	for _, m := range r.MCPServers {
+func mcpResourcesSet(servers map[string]*MCPExpr) eval.ExpressionSet {
+	var set eval.ExpressionSet
+	for _, m := range servers {
 		for _, rsrc := range m.Resources {
-			resources = append(resources, rsrc)
+			set = append(set, rsrc)
 		}
 	}
-	walk(resources)
+	return set
+}
 
+func mcpPromptSets(servers map[string]*MCPExpr) (eval.ExpressionSet, eval.ExpressionSet) {
 	var prompts eval.ExpressionSet
 	var messages eval.ExpressionSet
-	for _, m := range r.MCPServers {
+	for _, m := range servers {
 		for _, p := range m.Prompts {
 			prompts = append(prompts, p)
 			for _, msg := range p.Messages {
@@ -93,16 +112,17 @@ func (r *RootExpr) WalkSets(walk eval.SetWalker) {
 			}
 		}
 	}
-	walk(prompts)
-	walk(messages)
+	return prompts, messages
+}
 
-	var dynPrompts eval.ExpressionSet
-	for _, ps := range r.DynamicPrompts {
+func dynamicPromptSet(prompts map[string][]*DynamicPromptExpr) eval.ExpressionSet {
+	var set eval.ExpressionSet
+	for _, ps := range prompts {
 		for _, p := range ps {
-			dynPrompts = append(dynPrompts, p)
+			set = append(set, p)
 		}
 	}
-	walk(dynPrompts)
+	return set
 }
 
 // RegisterMCP registers an MCP server configuration for a service

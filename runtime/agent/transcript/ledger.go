@@ -154,70 +154,15 @@ func ValidateBedrock(messages []*model.Message, thinkingEnabled bool) error {
 	if len(messages) == 0 {
 		return nil
 	}
-	// Validate assistant → user tooling handshakes. When thinking is enabled,
-	// also enforce that assistant messages with tool_use begin with thinking.
 	for i, m := range messages {
-		if m == nil || m.Role != model.ConversationRoleAssistant {
+		if !isAssistantMessage(m) {
 			continue
 		}
-		// Detect tool_use presence and optionally enforce thinking-first.
-		hasToolUse := false
-		for _, p := range m.Parts {
-			if _, ok := p.(model.ToolUsePart); ok {
-				hasToolUse = true
-				break
-			}
+		if !messageHasToolUse(m) {
+			continue
 		}
-		if hasToolUse {
-			if len(m.Parts) == 0 {
-				return fmt.Errorf("bedrock: assistant message[%d] is empty where tool_use present", i)
-			}
-			if thinkingEnabled {
-				if _, ok := m.Parts[0].(model.ThinkingPart); !ok {
-					return fmt.Errorf(
-						"bedrock: assistant message[%d] with tool_use must start with thinking (parts: %s)",
-						i, summarizeParts(m.Parts),
-					)
-				}
-			}
-			// The very next message must be a user message containing tool_result
-			// blocks that correspond to the tool_use IDs in this assistant message.
-			nextIndex := i + 1
-			if nextIndex >= len(messages) {
-				return errors.New("bedrock: expected user tool_result following assistant tool_use")
-			}
-			// #nosec G602 -- nextIndex is bounds-checked above.
-			next := messages[nextIndex]
-			if next == nil || next.Role != model.ConversationRoleUser {
-				return errors.New("bedrock: expected user tool_result following assistant tool_use")
-			}
-			// Collect tool_use IDs from assistant and tool_result IDs from user.
-			useIDs := make(map[string]struct{})
-			for _, p := range m.Parts {
-				if tu, ok := p.(model.ToolUsePart); ok {
-					if tu.ID != "" {
-						useIDs[tu.ID] = struct{}{}
-					}
-				}
-			}
-			resIDs := make(map[string]struct{})
-			for _, p := range next.Parts {
-				if tr, ok := p.(model.ToolResultPart); ok {
-					if tr.ToolUseID != "" {
-						resIDs[tr.ToolUseID] = struct{}{}
-					}
-				}
-			}
-			// Count check (cannot exceed).
-			if len(resIDs) > len(useIDs) {
-				return errors.New("bedrock: tool_result count exceeds prior assistant tool_use count")
-			}
-			// Subset check (all tool_result IDs must match declared tool_use IDs).
-			for id := range resIDs {
-				if _, ok := useIDs[id]; !ok {
-					return errors.New("bedrock: tool_result id does not match prior assistant tool_use id")
-				}
-			}
+		if err := validateAssistantToolUseMessage(messages, i, m, thinkingEnabled); err != nil {
+			return err
 		}
 	}
 	return nil
@@ -231,86 +176,13 @@ func BuildMessagesFromEvents(events []memory.Event) ([]*model.Message, error) {
 	var pendingResults []ToolResultSpec
 	var toolOrder []string
 	for _, e := range events {
-		switch e.Type {
-		case memory.EventAssistantMessage:
-			data, err := memory.DecodeAssistantMessageData(e)
-			if err != nil {
-				return nil, fmt.Errorf("transcript: decode %s event: %w", e.Type, err)
-			}
-			if data.Message != "" {
-				l.AppendText(data.Message)
-			}
-		case memory.EventToolCall:
-			data, err := memory.DecodeToolCallData(e)
-			if err != nil {
-				return nil, fmt.Errorf("transcript: decode %s event: %w", e.Type, err)
-			}
-			payload, err := data.Input()
-			if err != nil {
-				return nil, fmt.Errorf("transcript: decode tool_call %q payload: %w", data.ToolCallID, err)
-			}
-			l.DeclareToolUse(data.ToolCallID, string(data.ToolName), payload)
-			toolOrder = append(toolOrder, data.ToolCallID)
-		case memory.EventToolResult:
-			data, err := memory.DecodeToolResultData(e)
-			if err != nil {
-				return nil, fmt.Errorf("transcript: decode %s event: %w", e.Type, err)
-			}
-			content, err := ProjectToolResultContent(data.ResultJSON, data.Bounds, data.Preview, data.ErrorMessage)
-			if err != nil {
-				return nil, fmt.Errorf("transcript: reconstruct tool_result %q: %w", data.ToolCallID, err)
-			}
-			pendingResults = append(pendingResults, ToolResultSpec{
-				ToolUseID: data.ToolCallID,
-				Content:   content,
-				IsError:   data.ErrorMessage != "",
-			})
-		case memory.EventPlannerNote:
-			// Planner notes are not part of provider messages; ignore here.
-		case memory.EventUserMessage:
-			// User messages are not stored today by the runtime; if present, ignore here.
-		case memory.EventThinking:
-			data, err := memory.DecodeThinkingData(e)
-			if err != nil {
-				return nil, fmt.Errorf("transcript: decode %s event: %w", e.Type, err)
-			}
-			l.AppendThinking(ThinkingPart{
-				Text:      data.Text,
-				Signature: data.Signature,
-				Redacted:  data.Redacted,
-				Index:     data.ContentIndex,
-				Final:     data.Final,
-			})
+		nextResults, err := applyLedgerEvent(l, e, pendingResults, &toolOrder)
+		if err != nil {
+			return nil, err
 		}
+		pendingResults = nextResults
 	}
-	if len(pendingResults) > 0 {
-		// Order tool results to match the assistant tool_use declaration order
-		// recorded in toolOrder so that provider handshakes are deterministic.
-		// Flush the assistant message before appending user tool_results so that
-		// the final message sequence is assistant (thinking/text/tool_use)
-		// followed by user (tool_result), matching provider expectations.
-		l.FlushAssistant()
-		byID := make(map[string]ToolResultSpec, len(pendingResults))
-		for _, r := range pendingResults {
-			if r.ToolUseID == "" {
-				continue
-			}
-			byID[r.ToolUseID] = r
-		}
-		ordered := make([]ToolResultSpec, 0, len(byID))
-		for _, id := range toolOrder {
-			if r, ok := byID[id]; ok {
-				ordered = append(ordered, r)
-				delete(byID, id)
-			}
-		}
-		// Append any remaining results with unknown IDs at the end to preserve
-		// observability; this should not happen in normal operation.
-		for _, r := range byID {
-			ordered = append(ordered, r)
-		}
-		l.AppendUserToolResults(ordered)
-	}
+	flushPendingToolResults(l, pendingResults, toolOrder)
 	return l.BuildMessages(), nil
 }
 
@@ -442,98 +314,84 @@ func (l *Ledger) AppendUserToolResults(results []ToolResultSpec) {
 // BuildMessages flushes the current assistant (if any) and converts the ledger
 // to provider‑agnostic model messages suitable for provider adapters.
 func (l *Ledger) BuildMessages() []*model.Message {
-	// Flush any open assistant.
 	l.flushAssistant()
 	if len(l.messages) == 0 {
 		return nil
 	}
 	out := make([]*model.Message, 0, len(l.messages))
 	for i := range l.messages {
-		m := l.messages[i]
-		msg := &model.Message{
-			Role:  model.ConversationRole(m.Role),
-			Parts: make([]model.Part, 0, len(m.Parts)),
-			Meta:  m.Meta,
-		}
-		// Track whether the source had thinking parts and whether any
-		// survived the provider-validity filter (text+signature or redacted).
-		// When the stream captured intermediate thinking text but the final
-		// signature was lost (e.g. Bedrock did not send SignatureDelta), we
-		// must still emit a redacted placeholder so the assistant message
-		// retains a leading ThinkingPart. Without this, downstream
-		// providers that require thinking before tool_use reject the message.
-		var hadThinking, emittedThinking bool
-		for _, p := range m.Parts {
-			switch v := p.(type) {
-			case ThinkingPart:
-				hadThinking = true
-				if len(v.Redacted) > 0 {
-					emittedThinking = true
-					msg.Parts = append(
-						msg.Parts,
-						model.ThinkingPart{
-							Redacted: append([]byte(nil), v.Redacted...),
-							Index:    v.Index,
-							Final:    v.Final,
-						},
-					)
-				} else if v.Text != "" && v.Signature != "" {
-					emittedThinking = true
-					msg.Parts = append(
-						msg.Parts,
-						model.ThinkingPart{
-							Text:      v.Text,
-							Signature: v.Signature,
-							Index:     v.Index,
-							Final:     v.Final,
-						},
-					)
-				}
-			case TextPart:
-				msg.Parts = append(
-					msg.Parts,
-					model.TextPart{
-						Text: v.Text,
-					},
-				)
-			case ToolUsePart:
-				msg.Parts = append(
-					msg.Parts,
-					model.ToolUsePart{
-						ID:    v.ID,
-						Name:  v.Name,
-						Input: v.Args,
-					},
-				)
-			case ToolResultPart:
-				msg.Parts = append(
-					msg.Parts,
-					model.ToolResultPart{
-						ToolUseID: v.ToolUseID,
-						Content:   v.Content,
-						IsError:   v.IsError,
-					},
-				)
-			}
-		}
-		// If the source message had thinking parts but none were valid
-		// enough to emit (signature lost during streaming), prepend a
-		// redacted placeholder. This preserves the thinking→content
-		// ordering contract required by providers like Bedrock.
-		if hadThinking && !emittedThinking {
-			msg.Parts = append(
-				[]model.Part{model.ThinkingPart{
-					Redacted: []byte("redacted"),
-					Final:    true,
-				}},
-				msg.Parts...,
-			)
-		}
+		msg := buildModelMessage(l.messages[i])
 		if len(msg.Parts) > 0 {
 			out = append(out, msg)
 		}
 	}
 	return out
+}
+
+func buildModelMessage(m Message) *model.Message {
+	msg := &model.Message{
+		Role:  model.ConversationRole(m.Role),
+		Parts: make([]model.Part, 0, len(m.Parts)),
+		Meta:  m.Meta,
+	}
+	hadThinking, emittedThinking := appendLedgerParts(msg, m.Parts)
+	if hadThinking && !emittedThinking {
+		msg.Parts = append([]model.Part{redactedThinkingPart()}, msg.Parts...)
+	}
+	return msg
+}
+
+func appendLedgerParts(msg *model.Message, parts []Part) (bool, bool) {
+	var hadThinking bool
+	var emittedThinking bool
+	for _, p := range parts {
+		had, emitted := appendLedgerPart(msg, p)
+		hadThinking = hadThinking || had
+		emittedThinking = emittedThinking || emitted
+	}
+	return hadThinking, emittedThinking
+}
+
+func appendLedgerPart(msg *model.Message, p Part) (bool, bool) {
+	switch v := p.(type) {
+	case ThinkingPart:
+		return true, appendLedgerThinkingPart(msg, v)
+	case TextPart:
+		msg.Parts = append(msg.Parts, model.TextPart{Text: v.Text})
+	case ToolUsePart:
+		msg.Parts = append(msg.Parts, model.ToolUsePart{ID: v.ID, Name: v.Name, Input: v.Args})
+	case ToolResultPart:
+		msg.Parts = append(msg.Parts, model.ToolResultPart{ToolUseID: v.ToolUseID, Content: v.Content, IsError: v.IsError})
+	}
+	return false, false
+}
+
+func appendLedgerThinkingPart(msg *model.Message, v ThinkingPart) bool {
+	if len(v.Redacted) > 0 {
+		msg.Parts = append(msg.Parts, model.ThinkingPart{
+			Redacted: append([]byte(nil), v.Redacted...),
+			Index:    v.Index,
+			Final:    v.Final,
+		})
+		return true
+	}
+	if v.Text != "" && v.Signature != "" {
+		msg.Parts = append(msg.Parts, model.ThinkingPart{
+			Text:      v.Text,
+			Signature: v.Signature,
+			Index:     v.Index,
+			Final:     v.Final,
+		})
+		return true
+	}
+	return false
+}
+
+func redactedThinkingPart() model.ThinkingPart {
+	return model.ThinkingPart{
+		Redacted: []byte("redacted"),
+		Final:    true,
+	}
 }
 
 // IsEmpty reports whether the ledger currently holds any committed or pending parts.
@@ -548,57 +406,257 @@ func (l *Ledger) IsEmpty() bool {
 }
 
 func decodeLedgerPart(raw json.RawMessage) (Part, error) {
+	obj, err := decodeLedgerPartObject(raw)
+	if err != nil {
+		return nil, err
+	}
+	if hasAnyKey(obj, "Signature", "Redacted", "Index", "Final") {
+		return decodeLedgerThinkingPart(raw)
+	}
+	if _, ok := obj["ToolUseID"]; ok {
+		return decodeLedgerToolResultPart(raw)
+	}
+	if _, ok := obj["Name"]; ok {
+		return decodeLedgerToolUsePart(raw)
+	}
+	if _, ok := obj["Text"]; ok {
+		return decodeLedgerTextPart(raw)
+	}
+	return nil, errors.New("unknown part shape")
+}
+
+func decodeLedgerPartObject(raw json.RawMessage) (map[string]json.RawMessage, error) {
 	var obj map[string]json.RawMessage
 	if err := json.Unmarshal(raw, &obj); err != nil {
 		var text string
 		if errText := json.Unmarshal(raw, &text); errText == nil {
-			return TextPart{Text: text}, nil
+			return map[string]json.RawMessage{"Text": raw}, nil
 		}
 		return nil, fmt.Errorf("decode part object: %w", err)
 	}
 	if len(obj) == 0 {
 		return nil, errors.New("empty part payload")
 	}
+	return obj, nil
+}
 
-	if hasAnyKey(obj, "Signature", "Redacted", "Index", "Final") {
-		var thinking ThinkingPart
-		if err := json.Unmarshal(raw, &thinking); err != nil {
-			return nil, fmt.Errorf("decode ThinkingPart: %w", err)
-		}
-		return thinking, nil
+func decodeLedgerThinkingPart(raw json.RawMessage) (Part, error) {
+	var thinking ThinkingPart
+	if err := json.Unmarshal(raw, &thinking); err != nil {
+		return nil, fmt.Errorf("decode ThinkingPart: %w", err)
 	}
+	return thinking, nil
+}
 
-	if _, ok := obj["ToolUseID"]; ok {
-		var result ToolResultPart
-		if err := json.Unmarshal(raw, &result); err != nil {
-			return nil, fmt.Errorf("decode ToolResultPart: %w", err)
-		}
-		if result.ToolUseID == "" {
-			return nil, errors.New("ToolResultPart requires ToolUseID")
-		}
-		return result, nil
+func decodeLedgerToolResultPart(raw json.RawMessage) (Part, error) {
+	var result ToolResultPart
+	if err := json.Unmarshal(raw, &result); err != nil {
+		return nil, fmt.Errorf("decode ToolResultPart: %w", err)
 	}
-
-	if _, ok := obj["Name"]; ok {
-		var use ToolUsePart
-		if err := json.Unmarshal(raw, &use); err != nil {
-			return nil, fmt.Errorf("decode ToolUsePart: %w", err)
-		}
-		if use.Name == "" {
-			return nil, errors.New("ToolUsePart requires Name")
-		}
-		return use, nil
+	if result.ToolUseID == "" {
+		return nil, errors.New("ToolResultPart requires ToolUseID")
 	}
+	return result, nil
+}
 
-	if _, ok := obj["Text"]; ok {
-		var text TextPart
-		if err := json.Unmarshal(raw, &text); err != nil {
-			return nil, fmt.Errorf("decode TextPart: %w", err)
-		}
-		return text, nil
+func decodeLedgerToolUsePart(raw json.RawMessage) (Part, error) {
+	var use ToolUsePart
+	if err := json.Unmarshal(raw, &use); err != nil {
+		return nil, fmt.Errorf("decode ToolUsePart: %w", err)
 	}
+	if use.Name == "" {
+		return nil, errors.New("ToolUsePart requires Name")
+	}
+	return use, nil
+}
 
-	return nil, errors.New("unknown part shape")
+func decodeLedgerTextPart(raw json.RawMessage) (Part, error) {
+	var text TextPart
+	if err := json.Unmarshal(raw, &text); err != nil {
+		return nil, fmt.Errorf("decode TextPart: %w", err)
+	}
+	return text, nil
+}
+
+func isAssistantMessage(m *model.Message) bool {
+	return m != nil && m.Role == model.ConversationRoleAssistant
+}
+
+func messageHasToolUse(m *model.Message) bool {
+	for _, p := range m.Parts {
+		if _, ok := p.(model.ToolUsePart); ok {
+			return true
+		}
+	}
+	return false
+}
+
+func validateAssistantToolUseMessage(messages []*model.Message, index int, m *model.Message, thinkingEnabled bool) error {
+	if len(m.Parts) == 0 {
+		return fmt.Errorf("bedrock: assistant message[%d] is empty where tool_use present", index)
+	}
+	if thinkingEnabled {
+		if _, ok := m.Parts[0].(model.ThinkingPart); !ok {
+			return fmt.Errorf(
+				"bedrock: assistant message[%d] with tool_use must start with thinking (parts: %s)",
+				index,
+				summarizeParts(m.Parts),
+			)
+		}
+	}
+	next, err := nextToolResultMessage(messages, index)
+	if err != nil {
+		return err
+	}
+	return validateToolHandshake(m, next)
+}
+
+func nextToolResultMessage(messages []*model.Message, index int) (*model.Message, error) {
+	nextIndex := index + 1
+	if nextIndex >= len(messages) {
+		return nil, errors.New("bedrock: expected user tool_result following assistant tool_use")
+	}
+	next := messages[nextIndex]
+	if next == nil || next.Role != model.ConversationRoleUser {
+		return nil, errors.New("bedrock: expected user tool_result following assistant tool_use")
+	}
+	return next, nil
+}
+
+func validateToolHandshake(assistant, user *model.Message) error {
+	useIDs := toolUseIDs(assistant.Parts)
+	resIDs := toolResultIDs(user.Parts)
+	if len(resIDs) > len(useIDs) {
+		return errors.New("bedrock: tool_result count exceeds prior assistant tool_use count")
+	}
+	for id := range resIDs {
+		if _, ok := useIDs[id]; !ok {
+			return errors.New("bedrock: tool_result id does not match prior assistant tool_use id")
+		}
+	}
+	return nil
+}
+
+func toolUseIDs(parts []model.Part) map[string]struct{} {
+	ids := make(map[string]struct{})
+	for _, p := range parts {
+		if tu, ok := p.(model.ToolUsePart); ok && tu.ID != "" {
+			ids[tu.ID] = struct{}{}
+		}
+	}
+	return ids
+}
+
+func toolResultIDs(parts []model.Part) map[string]struct{} {
+	ids := make(map[string]struct{})
+	for _, p := range parts {
+		if tr, ok := p.(model.ToolResultPart); ok && tr.ToolUseID != "" {
+			ids[tr.ToolUseID] = struct{}{}
+		}
+	}
+	return ids
+}
+
+func applyLedgerEvent(l *Ledger, e memory.Event, pendingResults []ToolResultSpec, toolOrder *[]string) ([]ToolResultSpec, error) {
+	switch e.Type {
+	case memory.EventAssistantMessage:
+		return pendingResults, applyAssistantMessageEvent(l, e)
+	case memory.EventToolCall:
+		return pendingResults, applyToolCallEvent(l, e, toolOrder)
+	case memory.EventToolResult:
+		return appendToolResultEvent(pendingResults, e)
+	case memory.EventThinking:
+		return pendingResults, applyThinkingEvent(l, e)
+	case memory.EventPlannerNote, memory.EventUserMessage:
+		return pendingResults, nil
+	default:
+		return pendingResults, nil
+	}
+}
+
+func applyAssistantMessageEvent(l *Ledger, e memory.Event) error {
+	data, err := memory.DecodeAssistantMessageData(e)
+	if err != nil {
+		return fmt.Errorf("transcript: decode %s event: %w", e.Type, err)
+	}
+	if data.Message != "" {
+		l.AppendText(data.Message)
+	}
+	return nil
+}
+
+func applyToolCallEvent(l *Ledger, e memory.Event, toolOrder *[]string) error {
+	data, err := memory.DecodeToolCallData(e)
+	if err != nil {
+		return fmt.Errorf("transcript: decode %s event: %w", e.Type, err)
+	}
+	payload, err := data.Input()
+	if err != nil {
+		return fmt.Errorf("transcript: decode tool_call %q payload: %w", data.ToolCallID, err)
+	}
+	l.DeclareToolUse(data.ToolCallID, string(data.ToolName), payload)
+	*toolOrder = append(*toolOrder, data.ToolCallID)
+	return nil
+}
+
+func appendToolResultEvent(pendingResults []ToolResultSpec, e memory.Event) ([]ToolResultSpec, error) {
+	data, err := memory.DecodeToolResultData(e)
+	if err != nil {
+		return nil, fmt.Errorf("transcript: decode %s event: %w", e.Type, err)
+	}
+	content, err := ProjectToolResultContent(data.ResultJSON, data.Bounds, data.Preview, data.ErrorMessage)
+	if err != nil {
+		return nil, fmt.Errorf("transcript: reconstruct tool_result %q: %w", data.ToolCallID, err)
+	}
+	return append(pendingResults, ToolResultSpec{
+		ToolUseID: data.ToolCallID,
+		Content:   content,
+		IsError:   data.ErrorMessage != "",
+	}), nil
+}
+
+func applyThinkingEvent(l *Ledger, e memory.Event) error {
+	data, err := memory.DecodeThinkingData(e)
+	if err != nil {
+		return fmt.Errorf("transcript: decode %s event: %w", e.Type, err)
+	}
+	l.AppendThinking(ThinkingPart{
+		Text:      data.Text,
+		Signature: data.Signature,
+		Redacted:  data.Redacted,
+		Index:     data.ContentIndex,
+		Final:     data.Final,
+	})
+	return nil
+}
+
+func flushPendingToolResults(l *Ledger, pendingResults []ToolResultSpec, toolOrder []string) {
+	if len(pendingResults) == 0 {
+		return
+	}
+	l.FlushAssistant()
+	l.AppendUserToolResults(orderToolResults(pendingResults, toolOrder))
+}
+
+func orderToolResults(pendingResults []ToolResultSpec, toolOrder []string) []ToolResultSpec {
+	byID := make(map[string]ToolResultSpec, len(pendingResults))
+	for _, r := range pendingResults {
+		if r.ToolUseID == "" {
+			continue
+		}
+		byID[r.ToolUseID] = r
+	}
+	ordered := make([]ToolResultSpec, 0, len(byID))
+	for _, id := range toolOrder {
+		if r, ok := byID[id]; ok {
+			ordered = append(ordered, r)
+			delete(byID, id)
+		}
+	}
+	for _, r := range byID {
+		ordered = append(ordered, r)
+	}
+	return ordered
 }
 
 func hasAnyKey(obj map[string]json.RawMessage, keys ...string) bool {

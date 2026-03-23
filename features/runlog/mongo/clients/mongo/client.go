@@ -95,75 +95,27 @@ func (c *client) Ping(ctx context.Context) error {
 }
 
 func (c *client) Append(ctx context.Context, e *runlog.Event) (runlog.AppendResult, error) {
-	if e == nil {
-		return runlog.AppendResult{}, errors.New("event is required")
+	if err := validateAppendEvent(e); err != nil {
+		return runlog.AppendResult{}, err
 	}
-	if e.RunID == "" {
-		return runlog.AppendResult{}, errors.New("run id is required")
-	}
-	if e.EventKey == "" {
-		return runlog.AppendResult{}, errors.New("event key is required")
-	}
-	if e.Type == "" {
-		return runlog.AppendResult{}, errors.New("event type is required")
-	}
-	if e.Timestamp.IsZero() {
-		return runlog.AppendResult{}, errors.New("timestamp is required")
-	}
-
 	ctx, cancel := c.withTimeout(ctx)
 	defer cancel()
-
-	doc := eventDocument{
-		EventKey:  e.EventKey,
-		RunID:     e.RunID,
-		AgentID:   string(e.AgentID),
-		SessionID: e.SessionID,
-		TurnID:    e.TurnID,
-		Type:      string(e.Type),
-		Payload:   append([]byte(nil), e.Payload...),
-		Timestamp: e.Timestamp.UTC(),
-	}
+	doc := runlogEventDocument(e)
 	res, err := c.coll.InsertOne(ctx, doc)
 	if err != nil {
 		if mongodriver.IsDuplicateKeyError(err) {
-			existing, lookupErr := c.lookupEventByKey(ctx, e.RunID, e.EventKey)
-			if lookupErr != nil {
-				return runlog.AppendResult{}, lookupErr
-			}
-			if !sameEventDocument(existing, doc) {
-				return runlog.AppendResult{}, fmt.Errorf("event key %q conflicts with existing event body", e.EventKey)
-			}
-			e.ID = existing.ID.Hex()
-			return runlog.AppendResult{ID: e.ID, Inserted: false}, nil
+			return c.resolveDuplicateAppend(ctx, e, doc)
 		}
 		return runlog.AppendResult{}, err
 	}
-	oid, ok := res.InsertedID.(primitive.ObjectID)
-	if !ok {
-		return runlog.AppendResult{}, fmt.Errorf("unexpected inserted id type %T", res.InsertedID)
-	}
-	e.ID = oid.Hex()
-	return runlog.AppendResult{ID: e.ID, Inserted: true}, nil
+	return assignInsertedEventID(e, res.InsertedID)
 }
 
 func (c *client) List(ctx context.Context, runID string, cursor string, limit int) (page runlog.Page, err error) {
-	if runID == "" {
-		return runlog.Page{}, errors.New("run id is required")
+	filter, err := listRunlogFilter(runID, cursor, limit)
+	if err != nil {
+		return runlog.Page{}, err
 	}
-	if limit <= 0 {
-		return runlog.Page{}, errors.New("limit must be > 0")
-	}
-
-	filter := bson.M{"run_id": runID}
-	if cursor != "" {
-		oid, err := primitive.ObjectIDFromHex(cursor)
-		if err != nil {
-			return runlog.Page{}, fmt.Errorf("invalid cursor %q: %w", cursor, err)
-		}
-		filter["_id"] = bson.M{"$gt": oid}
-	}
-
 	ctx, cancel := c.withTimeout(ctx)
 	defer cancel()
 
@@ -180,37 +132,119 @@ func (c *client) List(ctx context.Context, runID string, cursor string, limit in
 		}
 	}()
 
-	var events []*runlog.Event
-	for cur.Next(ctx) {
-		var doc eventDocument
-		if err := cur.Decode(&doc); err != nil {
-			return runlog.Page{}, err
-		}
-		events = append(events, &runlog.Event{
-			ID:        doc.ID.Hex(),
-			EventKey:  doc.EventKey,
-			RunID:     doc.RunID,
-			AgentID:   agent.Ident(doc.AgentID),
-			SessionID: doc.SessionID,
-			TurnID:    doc.TurnID,
-			Type:      hooks.EventType(doc.Type),
-			Payload:   append([]byte(nil), doc.Payload...),
-			Timestamp: doc.Timestamp,
-		})
+	events, err := decodeRunlogEvents(ctx, cur)
+	if err != nil {
+		return runlog.Page{}, err
 	}
 	if err := cur.Err(); err != nil {
 		return runlog.Page{}, err
 	}
+	return buildRunlogPage(events, limit), nil
+}
 
+func validateAppendEvent(e *runlog.Event) error {
+	switch {
+	case e == nil:
+		return errors.New("event is required")
+	case e.RunID == "":
+		return errors.New("run id is required")
+	case e.EventKey == "":
+		return errors.New("event key is required")
+	case e.Type == "":
+		return errors.New("event type is required")
+	case e.Timestamp.IsZero():
+		return errors.New("timestamp is required")
+	default:
+		return nil
+	}
+}
+
+func runlogEventDocument(e *runlog.Event) eventDocument {
+	return eventDocument{
+		EventKey:  e.EventKey,
+		RunID:     e.RunID,
+		AgentID:   string(e.AgentID),
+		SessionID: e.SessionID,
+		TurnID:    e.TurnID,
+		Type:      string(e.Type),
+		Payload:   append([]byte(nil), e.Payload...),
+		Timestamp: e.Timestamp.UTC(),
+	}
+}
+
+func (c *client) resolveDuplicateAppend(ctx context.Context, e *runlog.Event, doc eventDocument) (runlog.AppendResult, error) {
+	existing, lookupErr := c.lookupEventByKey(ctx, e.RunID, e.EventKey)
+	if lookupErr != nil {
+		return runlog.AppendResult{}, lookupErr
+	}
+	if !sameEventDocument(existing, doc) {
+		return runlog.AppendResult{}, fmt.Errorf("event key %q conflicts with existing event body", e.EventKey)
+	}
+	e.ID = existing.ID.Hex()
+	return runlog.AppendResult{ID: e.ID, Inserted: false}, nil
+}
+
+func assignInsertedEventID(e *runlog.Event, insertedID any) (runlog.AppendResult, error) {
+	oid, ok := insertedID.(primitive.ObjectID)
+	if !ok {
+		return runlog.AppendResult{}, fmt.Errorf("unexpected inserted id type %T", insertedID)
+	}
+	e.ID = oid.Hex()
+	return runlog.AppendResult{ID: e.ID, Inserted: true}, nil
+}
+
+func listRunlogFilter(runID, cursor string, limit int) (bson.M, error) {
+	if runID == "" {
+		return nil, errors.New("run id is required")
+	}
+	if limit <= 0 {
+		return nil, errors.New("limit must be > 0")
+	}
+	filter := bson.M{"run_id": runID}
+	if cursor == "" {
+		return filter, nil
+	}
+	oid, err := primitive.ObjectIDFromHex(cursor)
+	if err != nil {
+		return nil, fmt.Errorf("invalid cursor %q: %w", cursor, err)
+	}
+	filter["_id"] = bson.M{"$gt": oid}
+	return filter, nil
+}
+
+func decodeRunlogEvents(ctx context.Context, cur cursor) ([]*runlog.Event, error) {
+	var events []*runlog.Event
+	for cur.Next(ctx) {
+		var doc eventDocument
+		if err := cur.Decode(&doc); err != nil {
+			return nil, err
+		}
+		events = append(events, runlogEventFromDocument(doc))
+	}
+	return events, nil
+}
+
+func runlogEventFromDocument(doc eventDocument) *runlog.Event {
+	return &runlog.Event{
+		ID:        doc.ID.Hex(),
+		EventKey:  doc.EventKey,
+		RunID:     doc.RunID,
+		AgentID:   agent.Ident(doc.AgentID),
+		SessionID: doc.SessionID,
+		TurnID:    doc.TurnID,
+		Type:      hooks.EventType(doc.Type),
+		Payload:   append([]byte(nil), doc.Payload...),
+		Timestamp: doc.Timestamp,
+	}
+}
+
+func buildRunlogPage(events []*runlog.Event, limit int) runlog.Page {
 	var next string
 	if len(events) > limit {
 		next = events[limit-1].ID
 		events = events[:limit]
 	}
-	return runlog.Page{
-		Events:     events,
-		NextCursor: next,
-	}, nil
+	return runlog.Page{Events: events, NextCursor: next}
 }
 
 func (c *client) withTimeout(ctx context.Context) (context.Context, context.CancelFunc) {

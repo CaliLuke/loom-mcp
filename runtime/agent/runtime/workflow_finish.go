@@ -30,64 +30,13 @@ func (r *Runtime) finishWithoutToolCalls(
 	turnID string,
 ) (*RunOutput, error) {
 	result := st.Result
-	if err := validateTerminalPlanResult(result); err != nil {
-		r.logger.Error(ctx, "ERROR - invalid planner terminal result", "err", err)
-		return nil, fmt.Errorf(
-			"%w - ToolCalls=%d, FinalResponse=%v, FinalToolResult=%v, Await=%v",
-			err,
-			len(result.ToolCalls),
-			result.FinalResponse != nil,
-			result.FinalToolResult != nil,
-			result.Await != nil,
-		)
+	if err := r.validateFinishResult(ctx, result); err != nil {
+		return nil, err
 	}
-
-	var finalMsg *model.Message
-	if result.FinalResponse != nil {
-		finalMsg = result.FinalResponse.Message
-		if result.Streamed && agentMessageText(finalMsg) == "" {
-			if text := transcriptText(st.Transcript); text != "" {
-				finalMsg = newTextAgentMessage(model.ConversationRoleAssistant, text)
-			}
-		}
+	finalMsg := finalPlannerMessage(&PlanActivityOutput{Result: result, Transcript: st.Transcript})
+	if err := r.publishFinishArtifacts(ctx, input, base, turnID, result, finalMsg); err != nil {
+		return nil, err
 	}
-
-	if result.FinalResponse != nil && !result.Streamed {
-		if err := r.publishHook(
-			ctx,
-			hooks.NewAssistantMessageEvent(
-				base.RunContext.RunID,
-				input.AgentID,
-				base.RunContext.SessionID,
-				agentMessageText(finalMsg),
-				nil,
-			),
-			turnID,
-		); err != nil {
-			return nil, err
-		}
-	}
-
-	for _, note := range result.Notes {
-		if err := r.publishHook(
-			ctx,
-			hooks.NewPlannerNoteEvent(
-				base.RunContext.RunID,
-				input.AgentID,
-				base.RunContext.SessionID,
-				note.Text,
-				note.Labels,
-			),
-			turnID,
-		); err != nil {
-			return nil, err
-		}
-	}
-	notes := make([]*planner.PlannerAnnotation, len(result.Notes))
-	for i := range result.Notes {
-		notes[i] = &result.Notes[i]
-	}
-
 	toolEvents, err := r.encodeToolEvents(ctx, st.ToolEvents)
 	if err != nil {
 		return nil, err
@@ -100,9 +49,62 @@ func (r *Runtime) finishWithoutToolCalls(
 		Final:           finalMsg,
 		FinalToolResult: finalToolResult,
 		ToolEvents:      toolEvents,
-		Notes:           notes,
+		Notes:           clonePlannerNotes(result.Notes),
 		Usage:           &st.AggUsage,
 	}, nil
+}
+
+func (r *Runtime) validateFinishResult(ctx context.Context, result *planner.PlanResult) error {
+	if err := validateTerminalPlanResult(result); err != nil {
+		r.logger.Error(ctx, "ERROR - invalid planner terminal result", "err", err)
+		return fmt.Errorf(
+			"%w - ToolCalls=%d, FinalResponse=%v, FinalToolResult=%v, Await=%v",
+			err,
+			len(result.ToolCalls),
+			result.FinalResponse != nil,
+			result.FinalToolResult != nil,
+			result.Await != nil,
+		)
+	}
+	return nil
+}
+
+func (r *Runtime) publishFinishArtifacts(
+	ctx context.Context,
+	input *RunInput,
+	base *planner.PlanInput,
+	turnID string,
+	result *planner.PlanResult,
+	finalMsg *model.Message,
+) error {
+	if err := r.publishFinishAssistantMessage(ctx, input, base, turnID, result, finalMsg); err != nil {
+		return err
+	}
+	return r.publishPlannerNotes(ctx, base, input, turnID, result.Notes)
+}
+
+func (r *Runtime) publishFinishAssistantMessage(
+	ctx context.Context,
+	input *RunInput,
+	base *planner.PlanInput,
+	turnID string,
+	result *planner.PlanResult,
+	finalMsg *model.Message,
+) error {
+	if result.FinalResponse == nil || result.Streamed {
+		return nil
+	}
+	return r.publishHook(
+		ctx,
+		hooks.NewAssistantMessageEvent(
+			base.RunContext.RunID,
+			input.AgentID,
+			base.RunContext.SessionID,
+			agentMessageText(finalMsg),
+			nil,
+		),
+		turnID,
+	)
 }
 
 func validateTerminalPlanResult(result *planner.PlanResult) error {

@@ -121,6 +121,10 @@ func assignCanonicalValue(raw any, dst reflect.Value) error {
 	if err, handled := assignViaJSONUnmarshaler(raw, dst); handled {
 		return err
 	}
+	return assignCanonicalByKind(raw, dst)
+}
+
+func assignCanonicalByKind(raw any, dst reflect.Value) error {
 	switch dst.Kind() {
 	case reflect.Invalid:
 		return &json.UnmarshalTypeError{Value: jsonValueKind(raw), Type: dst.Type()}
@@ -147,18 +151,18 @@ func assignCanonicalValue(raw any, dst reflect.Value) error {
 		return assignCanonicalFloat(raw, dst)
 	case reflect.Complex64, reflect.Complex128,
 		reflect.Chan, reflect.Func, reflect.Pointer, reflect.UnsafePointer:
-		data, err := json.Marshal(raw)
-		if err != nil {
-			return err
-		}
-		return json.Unmarshal(data, dst.Addr().Interface())
+		return assignCanonicalViaJSON(raw, dst)
 	default:
-		data, err := json.Marshal(raw)
-		if err != nil {
-			return err
-		}
-		return json.Unmarshal(data, dst.Addr().Interface())
+		return assignCanonicalViaJSON(raw, dst)
 	}
+}
+
+func assignCanonicalViaJSON(raw any, dst reflect.Value) error {
+	data, err := json.Marshal(raw)
+	if err != nil {
+		return err
+	}
+	return json.Unmarshal(data, dst.Addr().Interface())
 }
 
 func assignCanonicalNilOrPointer(raw any, dst reflect.Value) (error, bool) {

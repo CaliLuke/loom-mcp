@@ -15,6 +15,7 @@ import (
 	"github.com/CaliLuke/loom-mcp/runtime/agent/hooks"
 	"github.com/CaliLuke/loom-mcp/runtime/agent/planner"
 	"github.com/CaliLuke/loom-mcp/runtime/agent/policy"
+	"github.com/CaliLuke/loom-mcp/runtime/agent/tools"
 )
 
 // applyPerRunOverrides filters candidate tool calls using per-run overrides:
@@ -71,28 +72,15 @@ func (r *Runtime) applyRuntimePolicy(
 		return candidates, caps, nil
 	}
 	r.logger.Info(ctx, "Applying runtime policy decision")
-	decision, err := r.Policy.Decide(ctx, policy.Input{
-		RunContext:    base.RunContext,
-		Tools:         r.toolMetadata(candidates),
-		RetryHint:     toPolicyRetryHint(retry),
-		RemainingCaps: caps,
-		Requested:     toolHandles(candidates),
-		Labels:        base.RunContext.Labels,
-	})
+	decision, err := r.Policy.Decide(ctx, runtimePolicyInput(r, base, candidates, caps, retry))
 	if err != nil {
 		return nil, caps, err
 	}
-	if len(decision.Labels) > 0 {
-		base.RunContext.Labels = mergeLabels(base.RunContext.Labels, decision.Labels)
-		input.Labels = mergeLabels(input.Labels, decision.Labels)
-	}
+	applyPolicyLabels(base, input, decision.Labels)
 	if decision.DisableTools {
 		return nil, caps, errors.New("tool execution disabled by policy")
 	}
-	allowed := candidates
-	if len(decision.AllowedTools) > 0 {
-		allowed = filterToolCalls(allowed, decision.AllowedTools)
-	}
+	allowed := allowedPolicyCalls(candidates, decision.AllowedTools)
 	caps = mergeCaps(caps, decision.Caps)
 	if err := r.publishHook(
 		ctx,
@@ -110,6 +98,38 @@ func (r *Runtime) applyRuntimePolicy(
 		return nil, caps, err
 	}
 	return allowed, caps, nil
+}
+
+func runtimePolicyInput(
+	r *Runtime,
+	base *planner.PlanInput,
+	candidates []planner.ToolRequest,
+	caps policy.CapsState,
+	retry *planner.RetryHint,
+) policy.Input {
+	return policy.Input{
+		RunContext:    base.RunContext,
+		Tools:         r.toolMetadata(candidates),
+		RetryHint:     toPolicyRetryHint(retry),
+		RemainingCaps: caps,
+		Requested:     toolHandles(candidates),
+		Labels:        base.RunContext.Labels,
+	}
+}
+
+func applyPolicyLabels(base *planner.PlanInput, input *RunInput, labels map[string]string) {
+	if len(labels) == 0 {
+		return
+	}
+	base.RunContext.Labels = mergeLabels(base.RunContext.Labels, labels)
+	input.Labels = mergeLabels(input.Labels, labels)
+}
+
+func allowedPolicyCalls(candidates []planner.ToolRequest, allowed []tools.Ident) []planner.ToolRequest {
+	if len(allowed) == 0 {
+		return candidates
+	}
+	return filterToolCalls(candidates, allowed)
 }
 
 // capAllowedCalls applies per-turn and remaining caps to the allowed set.

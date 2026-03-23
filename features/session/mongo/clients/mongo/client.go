@@ -91,26 +91,18 @@ func (c *client) Ping(ctx context.Context) error {
 }
 
 func (c *client) CreateSession(ctx context.Context, sessionID string, createdAt time.Time) (session.Session, error) {
-	if sessionID == "" {
-		return session.Session{}, errors.New("session id is required")
+	if err := validateCreateSessionInput(sessionID, createdAt); err != nil {
+		return session.Session{}, err
 	}
-	if createdAt.IsZero() {
-		return session.Session{}, errors.New("created_at is required")
-	}
-
-	existing, err := c.LoadSession(ctx, sessionID)
+	existing, err := c.loadExistingSession(ctx, sessionID)
 	if err == nil {
-		if existing.Status == session.StatusEnded {
-			return session.Session{}, session.ErrSessionEnded
-		}
 		return existing, nil
 	}
 	if !errors.Is(err, session.ErrSessionNotFound) {
 		return session.Session{}, err
 	}
 
-	now := time.Now().UTC()
-	createdAt = createdAt.UTC()
+	now, createdAt := createSessionTimestamps(createdAt)
 	ctxWithTimeout, cancel := c.withTimeout(ctx)
 	defer cancel()
 	filter := bson.M{"session_id": sessionID}
@@ -500,6 +492,31 @@ func newClientWithCollections(mongoClient *mongodriver.Client, sessionsColl, run
 		runs:     runsColl,
 		timeout:  timeout,
 	}, nil
+}
+
+func validateCreateSessionInput(sessionID string, createdAt time.Time) error {
+	if sessionID == "" {
+		return errors.New("session id is required")
+	}
+	if createdAt.IsZero() {
+		return errors.New("created_at is required")
+	}
+	return nil
+}
+
+func (c *client) loadExistingSession(ctx context.Context, sessionID string) (session.Session, error) {
+	existing, err := c.LoadSession(ctx, sessionID)
+	if err != nil {
+		return session.Session{}, err
+	}
+	if existing.Status == session.StatusEnded {
+		return session.Session{}, session.ErrSessionEnded
+	}
+	return existing, nil
+}
+
+func createSessionTimestamps(createdAt time.Time) (time.Time, time.Time) {
+	return time.Now().UTC(), createdAt.UTC()
 }
 
 type collection interface {

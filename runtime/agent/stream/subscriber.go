@@ -131,99 +131,15 @@ func (s *Subscriber) handleUsageEvent(ctx context.Context, event hooks.Event) (e
 func (s *Subscriber) handleAwaitEvent(ctx context.Context, event hooks.Event) (error, bool) {
 	switch evt := event.(type) {
 	case *hooks.AwaitClarificationEvent:
-		if !s.profile.AwaitClarification {
-			return nil, true
-		}
-		payload := AwaitClarificationPayload{
-			ID:             evt.ID,
-			Question:       evt.Question,
-			MissingFields:  append([]string(nil), evt.MissingFields...),
-			RestrictToTool: string(evt.RestrictToTool),
-			ExampleInput:   evt.ExampleInput,
-		}
-		return s.sink.Send(ctx, AwaitClarification{
-			Base: newBaseFromHook(evt, EventAwaitClarification, payload),
-			Data: payload,
-		}), true
+		return s.sendAwaitClarification(ctx, evt), true
 	case *hooks.AwaitConfirmationEvent:
-		if !s.profile.AwaitConfirmation {
-			return nil, true
-		}
-		payload := AwaitConfirmationPayload{
-			ID:         evt.ID,
-			Title:      evt.Title,
-			Prompt:     evt.Prompt,
-			ToolName:   string(evt.ToolName),
-			ToolCallID: evt.ToolCallID,
-			Payload:    evt.Payload,
-		}
-		return s.sink.Send(ctx, AwaitConfirmation{
-			Base: newBaseFromHook(evt, EventAwaitConfirmation, payload),
-			Data: payload,
-		}), true
+		return s.sendAwaitConfirmation(ctx, evt), true
 	case *hooks.AwaitQuestionsEvent:
-		if !s.profile.AwaitQuestions {
-			return nil, true
-		}
-		qs := make([]AwaitQuestionPayload, 0, len(evt.Questions))
-		for _, q := range evt.Questions {
-			opts := make([]AwaitQuestionOptionPayload, 0, len(q.Options))
-			for _, o := range q.Options {
-				opts = append(opts, AwaitQuestionOptionPayload{
-					ID:    o.ID,
-					Label: o.Label,
-				})
-			}
-			qs = append(qs, AwaitQuestionPayload{
-				ID:            q.ID,
-				Prompt:        q.Prompt,
-				AllowMultiple: q.AllowMultiple,
-				Options:       opts,
-			})
-		}
-		payload := AwaitQuestionsPayload{
-			ID:         evt.ID,
-			ToolName:   string(evt.ToolName),
-			ToolCallID: evt.ToolCallID,
-			Title:      evt.Title,
-			Questions:  qs,
-		}
-		return s.sink.Send(ctx, AwaitQuestions{
-			Base: newBaseFromHook(evt, EventAwaitQuestions, payload),
-			Data: payload,
-		}), true
+		return s.sendAwaitQuestions(ctx, evt), true
 	case *hooks.AwaitExternalToolsEvent:
-		if !s.profile.AwaitExternalTools {
-			return nil, true
-		}
-		items := make([]AwaitToolPayload, 0, len(evt.Items))
-		for _, it := range evt.Items {
-			items = append(items, AwaitToolPayload{
-				ToolName:   string(it.ToolName),
-				ToolCallID: it.ToolCallID,
-				Payload:    it.Payload,
-			})
-		}
-		payload := AwaitExternalToolsPayload{ID: evt.ID, Items: items}
-		return s.sink.Send(ctx, AwaitExternalTools{
-			Base: newBaseFromHook(evt, EventAwaitExternalTools, payload),
-			Data: payload,
-		}), true
+		return s.sendAwaitExternalTools(ctx, evt), true
 	case *hooks.ToolAuthorizationEvent:
-		if !s.profile.ToolAuthorization {
-			return nil, true
-		}
-		payload := ToolAuthorizationPayload{
-			ToolName:   string(evt.ToolName),
-			ToolCallID: evt.ToolCallID,
-			Approved:   evt.Approved,
-			Summary:    evt.Summary,
-			ApprovedBy: evt.ApprovedBy,
-		}
-		return s.sink.Send(ctx, ToolAuthorization{
-			Base: newBaseFromHook(evt, EventToolAuthorization, payload),
-			Data: payload,
-		}), true
+		return s.sendToolAuthorization(ctx, evt), true
 	default:
 		return nil, false
 	}
@@ -232,155 +148,301 @@ func (s *Subscriber) handleAwaitEvent(ctx context.Context, event hooks.Event) (e
 func (s *Subscriber) handleToolEvent(ctx context.Context, event hooks.Event) (error, bool) {
 	switch evt := event.(type) {
 	case *hooks.ToolCallArgsDeltaEvent:
-		if !s.profile.ToolCallArgsDelta {
-			return nil, true
-		}
-		if evt.ToolCallID == "" || evt.Delta == "" {
-			return nil, true
-		}
-		if evt.ToolName == "" {
-			return fmt.Errorf("tool_call_args_delta missing tool name for tool_call_id %q", evt.ToolCallID), true
-		}
-		payload := ToolCallArgsDeltaPayload{
-			ToolCallID: evt.ToolCallID,
-			ToolName:   string(evt.ToolName),
-			Delta:      evt.Delta,
-		}
-		return s.sink.Send(ctx, ToolCallArgsDelta{
-			Base: newBaseFromHook(evt, EventToolCallArgsDelta, payload),
-			Data: payload,
-		}), true
+		return s.sendToolArgsDelta(ctx, evt), true
 	case *hooks.ToolCallScheduledEvent:
-		if !s.profile.ToolStart {
-			return nil, true
-		}
-		payload := ToolStartPayload{
-			ToolCallID:            evt.ToolCallID,
-			ToolName:              string(evt.ToolName),
-			Payload:               evt.Payload,
-			Queue:                 evt.Queue,
-			ParentToolCallID:      evt.ParentToolCallID,
-			ExpectedChildrenTotal: evt.ExpectedChildrenTotal,
-			DisplayHint:           evt.DisplayHint,
-		}
-		return s.sink.Send(ctx, ToolStart{
-			Base: newBaseFromHook(evt, EventToolStart, payload),
-			Data: payload,
-		}), true
+		return s.sendToolStart(ctx, evt), true
 	case *hooks.ToolResultReceivedEvent:
-		if !s.profile.ToolEnd {
-			return nil, true
-		}
-		if evt.ToolCallID == "" {
-			return errors.New("stream: tool_end missing tool_call_id"), true
-		}
-		if evt.ToolName == "" {
-			return errors.New("stream: tool_end missing tool_name"), true
-		}
-		payload := ToolEndPayload{
-			ToolCallID:       evt.ToolCallID,
-			ParentToolCallID: evt.ParentToolCallID,
-			ToolName:         string(evt.ToolName),
-			Result:           evt.ResultJSON,
-			Bounds:           evt.Bounds,
-			Duration:         evt.Duration,
-			Telemetry:        evt.Telemetry,
-			RetryHint:        evt.RetryHint,
-			Error:            evt.Error,
-		}
-		if preview := clampPreview(evt.ResultPreview); preview != "" {
-			payload.ResultPreview = preview
-		}
-		return s.sink.Send(ctx, ToolEnd{
-			Base:       newBaseFromHook(evt, EventToolEnd, payload),
-			ServerData: append(rawjson.Message(nil), evt.ServerData...),
-			Data:       payload,
-		}), true
+		return s.sendToolEnd(ctx, evt), true
 	case *hooks.ToolCallUpdatedEvent:
-		if !s.profile.ToolUpdate {
-			return nil, true
-		}
-		up := ToolUpdatePayload{
-			ToolCallID:            evt.ToolCallID,
-			ExpectedChildrenTotal: evt.ExpectedChildrenTotal,
-		}
-		return s.sink.Send(ctx, ToolUpdate{
-			Base: newBaseFromHook(evt, EventToolUpdate, up),
-			Data: up,
-		}), true
+		return s.sendToolUpdate(ctx, evt), true
 	case *hooks.ChildRunLinkedEvent:
-		if !s.profile.ChildRuns {
-			return nil, true
-		}
-		payload := ChildRunLinkedPayload{
-			ToolName:     string(evt.ToolName),
-			ToolCallID:   evt.ToolCallID,
-			ChildRunID:   evt.ChildRunID,
-			ChildAgentID: evt.ChildAgentID,
-		}
-		return s.sink.Send(ctx, ChildRunLinked{
-			Base: newBaseFromHook(evt, EventChildRunLinked, payload),
-			Data: payload,
-		}), true
+		return s.sendChildRunLinked(ctx, evt), true
 	default:
 		return nil, false
 	}
 }
 
+func (s *Subscriber) sendAwaitClarification(ctx context.Context, evt *hooks.AwaitClarificationEvent) error {
+	if !s.profile.AwaitClarification {
+		return nil
+	}
+	payload := AwaitClarificationPayload{
+		ID:             evt.ID,
+		Question:       evt.Question,
+		MissingFields:  append([]string(nil), evt.MissingFields...),
+		RestrictToTool: string(evt.RestrictToTool),
+		ExampleInput:   evt.ExampleInput,
+	}
+	return s.sink.Send(ctx, AwaitClarification{
+		Base: newBaseFromHook(evt, EventAwaitClarification, payload),
+		Data: payload,
+	})
+}
+
+func (s *Subscriber) sendAwaitConfirmation(ctx context.Context, evt *hooks.AwaitConfirmationEvent) error {
+	if !s.profile.AwaitConfirmation {
+		return nil
+	}
+	payload := AwaitConfirmationPayload{
+		ID:         evt.ID,
+		Title:      evt.Title,
+		Prompt:     evt.Prompt,
+		ToolName:   string(evt.ToolName),
+		ToolCallID: evt.ToolCallID,
+		Payload:    evt.Payload,
+	}
+	return s.sink.Send(ctx, AwaitConfirmation{
+		Base: newBaseFromHook(evt, EventAwaitConfirmation, payload),
+		Data: payload,
+	})
+}
+
+func (s *Subscriber) sendAwaitQuestions(ctx context.Context, evt *hooks.AwaitQuestionsEvent) error {
+	if !s.profile.AwaitQuestions {
+		return nil
+	}
+	payload := AwaitQuestionsPayload{
+		ID:         evt.ID,
+		ToolName:   string(evt.ToolName),
+		ToolCallID: evt.ToolCallID,
+		Title:      evt.Title,
+		Questions:  buildAwaitQuestionPayloads(evt.Questions),
+	}
+	return s.sink.Send(ctx, AwaitQuestions{
+		Base: newBaseFromHook(evt, EventAwaitQuestions, payload),
+		Data: payload,
+	})
+}
+
+func buildAwaitQuestionPayloads(questions []hooks.AwaitQuestion) []AwaitQuestionPayload {
+	out := make([]AwaitQuestionPayload, 0, len(questions))
+	for _, q := range questions {
+		out = append(out, AwaitQuestionPayload{
+			ID:            q.ID,
+			Prompt:        q.Prompt,
+			AllowMultiple: q.AllowMultiple,
+			Options:       buildAwaitQuestionOptions(q.Options),
+		})
+	}
+	return out
+}
+
+func buildAwaitQuestionOptions(options []hooks.AwaitQuestionOption) []AwaitQuestionOptionPayload {
+	out := make([]AwaitQuestionOptionPayload, 0, len(options))
+	for _, o := range options {
+		out = append(out, AwaitQuestionOptionPayload{ID: o.ID, Label: o.Label})
+	}
+	return out
+}
+
+func (s *Subscriber) sendAwaitExternalTools(ctx context.Context, evt *hooks.AwaitExternalToolsEvent) error {
+	if !s.profile.AwaitExternalTools {
+		return nil
+	}
+	payload := AwaitExternalToolsPayload{ID: evt.ID, Items: buildAwaitToolPayloads(evt.Items)}
+	return s.sink.Send(ctx, AwaitExternalTools{
+		Base: newBaseFromHook(evt, EventAwaitExternalTools, payload),
+		Data: payload,
+	})
+}
+
+func buildAwaitToolPayloads(items []hooks.AwaitToolItem) []AwaitToolPayload {
+	out := make([]AwaitToolPayload, 0, len(items))
+	for _, it := range items {
+		out = append(out, AwaitToolPayload{
+			ToolName:   string(it.ToolName),
+			ToolCallID: it.ToolCallID,
+			Payload:    it.Payload,
+		})
+	}
+	return out
+}
+
+func (s *Subscriber) sendToolAuthorization(ctx context.Context, evt *hooks.ToolAuthorizationEvent) error {
+	if !s.profile.ToolAuthorization {
+		return nil
+	}
+	payload := ToolAuthorizationPayload{
+		ToolName:   string(evt.ToolName),
+		ToolCallID: evt.ToolCallID,
+		Approved:   evt.Approved,
+		Summary:    evt.Summary,
+		ApprovedBy: evt.ApprovedBy,
+	}
+	return s.sink.Send(ctx, ToolAuthorization{
+		Base: newBaseFromHook(evt, EventToolAuthorization, payload),
+		Data: payload,
+	})
+}
+
+func (s *Subscriber) sendToolArgsDelta(ctx context.Context, evt *hooks.ToolCallArgsDeltaEvent) error {
+	if !s.profile.ToolCallArgsDelta || evt.ToolCallID == "" || evt.Delta == "" {
+		return nil
+	}
+	if evt.ToolName == "" {
+		return fmt.Errorf("tool_call_args_delta missing tool name for tool_call_id %q", evt.ToolCallID)
+	}
+	payload := ToolCallArgsDeltaPayload{
+		ToolCallID: evt.ToolCallID,
+		ToolName:   string(evt.ToolName),
+		Delta:      evt.Delta,
+	}
+	return s.sink.Send(ctx, ToolCallArgsDelta{
+		Base: newBaseFromHook(evt, EventToolCallArgsDelta, payload),
+		Data: payload,
+	})
+}
+
+func (s *Subscriber) sendToolStart(ctx context.Context, evt *hooks.ToolCallScheduledEvent) error {
+	if !s.profile.ToolStart {
+		return nil
+	}
+	payload := ToolStartPayload{
+		ToolCallID:            evt.ToolCallID,
+		ToolName:              string(evt.ToolName),
+		Payload:               evt.Payload,
+		Queue:                 evt.Queue,
+		ParentToolCallID:      evt.ParentToolCallID,
+		ExpectedChildrenTotal: evt.ExpectedChildrenTotal,
+		DisplayHint:           evt.DisplayHint,
+	}
+	return s.sink.Send(ctx, ToolStart{
+		Base: newBaseFromHook(evt, EventToolStart, payload),
+		Data: payload,
+	})
+}
+
+func (s *Subscriber) sendToolEnd(ctx context.Context, evt *hooks.ToolResultReceivedEvent) error {
+	if !s.profile.ToolEnd {
+		return nil
+	}
+	if evt.ToolCallID == "" {
+		return errors.New("stream: tool_end missing tool_call_id")
+	}
+	if evt.ToolName == "" {
+		return errors.New("stream: tool_end missing tool_name")
+	}
+	payload := ToolEndPayload{
+		ToolCallID:       evt.ToolCallID,
+		ParentToolCallID: evt.ParentToolCallID,
+		ToolName:         string(evt.ToolName),
+		Result:           evt.ResultJSON,
+		Bounds:           evt.Bounds,
+		Duration:         evt.Duration,
+		Telemetry:        evt.Telemetry,
+		RetryHint:        evt.RetryHint,
+		Error:            evt.Error,
+	}
+	if preview := clampPreview(evt.ResultPreview); preview != "" {
+		payload.ResultPreview = preview
+	}
+	return s.sink.Send(ctx, ToolEnd{
+		Base:       newBaseFromHook(evt, EventToolEnd, payload),
+		ServerData: append(rawjson.Message(nil), evt.ServerData...),
+		Data:       payload,
+	})
+}
+
+func (s *Subscriber) sendToolUpdate(ctx context.Context, evt *hooks.ToolCallUpdatedEvent) error {
+	if !s.profile.ToolUpdate {
+		return nil
+	}
+	payload := ToolUpdatePayload{
+		ToolCallID:            evt.ToolCallID,
+		ExpectedChildrenTotal: evt.ExpectedChildrenTotal,
+	}
+	return s.sink.Send(ctx, ToolUpdate{
+		Base: newBaseFromHook(evt, EventToolUpdate, payload),
+		Data: payload,
+	})
+}
+
+func (s *Subscriber) sendChildRunLinked(ctx context.Context, evt *hooks.ChildRunLinkedEvent) error {
+	if !s.profile.ChildRuns {
+		return nil
+	}
+	payload := ChildRunLinkedPayload{
+		ToolName:     string(evt.ToolName),
+		ToolCallID:   evt.ToolCallID,
+		ChildRunID:   evt.ChildRunID,
+		ChildAgentID: evt.ChildAgentID,
+	}
+	return s.sink.Send(ctx, ChildRunLinked{
+		Base: newBaseFromHook(evt, EventChildRunLinked, payload),
+		Data: payload,
+	})
+}
+
 func (s *Subscriber) handleMessageEvent(ctx context.Context, event hooks.Event) (error, bool) {
 	switch evt := event.(type) {
 	case *hooks.AssistantMessageEvent:
-		if !s.profile.Assistant {
-			return nil, true
-		}
-		payload := AssistantReplyPayload{Text: evt.Message}
-		return s.sink.Send(ctx, AssistantReply{
-			Base: newBaseFromHook(evt, EventAssistantReply, payload),
-			Data: payload,
-		}), true
+		return s.sendAssistantMessage(ctx, evt), true
 	case *hooks.PlannerNoteEvent:
-		if !s.profile.Thoughts {
-			return nil, true
-		}
-		payload := PlannerThoughtPayload{Note: evt.Note}
-		return s.sink.Send(ctx, PlannerThought{
-			Base: newBaseFromHook(evt, EventPlannerThought, payload),
-			Data: payload,
-		}), true
+		return s.sendPlannerNote(ctx, evt), true
 	case *hooks.PromptRenderedEvent:
-		if !s.profile.PromptRendered {
-			return nil, true
-		}
-		payload := PromptRenderedPayload{
-			PromptID: evt.PromptID.String(),
-			Version:  evt.Version,
-			Scope:    evt.Scope,
-		}
-		return s.sink.Send(ctx, PromptRendered{
-			Base: newBaseFromHook(evt, EventPromptRendered, payload),
-			Data: payload,
-		}), true
+		return s.sendPromptRendered(ctx, evt), true
 	case *hooks.ThinkingBlockEvent:
-		if !s.profile.Thoughts {
-			return nil, true
-		}
-		payload := PlannerThoughtPayload{
-			Text:         evt.Text,
-			Signature:    evt.Signature,
-			Redacted:     evt.Redacted,
-			ContentIndex: evt.ContentIndex,
-			Final:        evt.Final,
-		}
-		if !evt.Final && evt.Text != "" {
-			payload.Note = evt.Text
-		}
-		return s.sink.Send(ctx, PlannerThought{
-			Base: newBaseFromHook(evt, EventPlannerThought, payload),
-			Data: payload,
-		}), true
+		return s.sendThinkingBlock(ctx, evt), true
 	default:
 		return nil, false
 	}
+}
+
+func (s *Subscriber) sendAssistantMessage(ctx context.Context, evt *hooks.AssistantMessageEvent) error {
+	if !s.profile.Assistant {
+		return nil
+	}
+	payload := AssistantReplyPayload{Text: evt.Message}
+	return s.sink.Send(ctx, AssistantReply{
+		Base: newBaseFromHook(evt, EventAssistantReply, payload),
+		Data: payload,
+	})
+}
+
+func (s *Subscriber) sendPlannerNote(ctx context.Context, evt *hooks.PlannerNoteEvent) error {
+	if !s.profile.Thoughts {
+		return nil
+	}
+	payload := PlannerThoughtPayload{Note: evt.Note}
+	return s.sink.Send(ctx, PlannerThought{
+		Base: newBaseFromHook(evt, EventPlannerThought, payload),
+		Data: payload,
+	})
+}
+
+func (s *Subscriber) sendPromptRendered(ctx context.Context, evt *hooks.PromptRenderedEvent) error {
+	if !s.profile.PromptRendered {
+		return nil
+	}
+	payload := PromptRenderedPayload{
+		PromptID: evt.PromptID.String(),
+		Version:  evt.Version,
+		Scope:    evt.Scope,
+	}
+	return s.sink.Send(ctx, PromptRendered{
+		Base: newBaseFromHook(evt, EventPromptRendered, payload),
+		Data: payload,
+	})
+}
+
+func (s *Subscriber) sendThinkingBlock(ctx context.Context, evt *hooks.ThinkingBlockEvent) error {
+	if !s.profile.Thoughts {
+		return nil
+	}
+	payload := PlannerThoughtPayload{
+		Text:         evt.Text,
+		Signature:    evt.Signature,
+		Redacted:     evt.Redacted,
+		ContentIndex: evt.ContentIndex,
+		Final:        evt.Final,
+	}
+	if !evt.Final && evt.Text != "" {
+		payload.Note = evt.Text
+	}
+	return s.sink.Send(ctx, PlannerThought{
+		Base: newBaseFromHook(evt, EventPlannerThought, payload),
+		Data: payload,
+	})
 }
 
 func (s *Subscriber) handleWorkflowEvent(ctx context.Context, event hooks.Event) (error, bool) {

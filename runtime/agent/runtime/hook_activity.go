@@ -39,18 +39,9 @@ func (r *Runtime) hookActivity(ctx context.Context, input *HookActivityInput) er
 	stopHeartbeat := startActivityHeartbeat(ctx)
 	defer stopHeartbeat()
 
-	evt, err := hooks.DecodeFromHookInput(input)
+	evt, payload, err := r.decodeHookActivityEvent(ctx, input)
 	if err != nil {
 		return err
-	}
-	payload := append([]byte(nil), input.Payload...)
-	if e, ok := evt.(*hooks.ToolCallScheduledEvent); ok {
-		if enriched := r.enrichToolCallScheduledHint(ctx, e); enriched {
-			reencoded, err := hooks.EncodeToHookInput(e, input.TurnID)
-			if err == nil {
-				payload = append([]byte(nil), reencoded.Payload.RawMessage()...)
-			}
-		}
 	}
 	// Tool call argument deltas are best-effort UX signals. They are intentionally
 	// excluded from the canonical run event log to avoid bloating durable history.
@@ -58,53 +49,80 @@ func (r *Runtime) hookActivity(ctx context.Context, input *HookActivityInput) er
 	// Consumers must treat ToolCallArgsDelta as optional; the canonical tool
 	// payload is still emitted via tool_start/tool_end and the finalized tool call.
 	if input.Type != hooks.ToolCallArgsDelta {
-		if _, err := r.RunEventStore.Append(ctx, &runlog.Event{
-			EventKey:  input.EventKey,
-			RunID:     input.RunID,
-			AgentID:   input.AgentID,
-			SessionID: input.SessionID,
-			TurnID:    input.TurnID,
-			Type:      input.Type,
-			Payload:   payload,
-			Timestamp: time.UnixMilli(evt.Timestamp()).UTC(),
-		}); err != nil {
+		if err := r.appendHookRunEvent(ctx, input, evt, payload); err != nil {
 			return err
 		}
-
-		// Session-derived metadata exists only for sessionful runs. One-shot runs
-		// intentionally bypass SessionStore and keep canonical state in RunEventStore.
-		if input.SessionID != "" {
-			if err := r.updateRunMetaFromHookEvent(ctx, evt); err != nil {
-				return err
-			}
-		}
-	}
-
-	// Streaming is explicitly session-scoped. One-shot runs (empty SessionID) are
-	// runlog-only and must never publish to stream sinks.
-	if input.SessionID != "" && r.streamSubscriber != nil {
-		sess, err := r.SessionStore.LoadSession(ctx, input.SessionID)
-		if err != nil {
+		if err := r.updateHookRunMeta(ctx, input.SessionID, evt); err != nil {
 			return err
 		}
-		if sess.Status != session.StatusEnded {
-			if err := r.streamSubscriber.HandleEvent(ctx, evt); err != nil {
-				return err
-			}
-		}
 	}
-
-	// Tool call argument deltas are streaming-only; they do not participate in
-	// derived stores like memory.
-	if input.Type != hooks.ToolCallArgsDelta {
-		if err := r.Bus.Publish(ctx, evt); err != nil {
-			r.logWarn(ctx, "hook publish failed", err, "event", evt.Type())
-		}
+	if err := r.publishHookStreamEvent(ctx, input.SessionID, evt); err != nil {
+		return err
 	}
+	r.publishHookBusEvent(ctx, input.Type, evt)
 	if input.Type == hooks.RunCompleted {
 		r.storeWorkflowHandle(input.RunID, nil)
 	}
 	return nil
+}
+
+func (r *Runtime) decodeHookActivityEvent(ctx context.Context, input *HookActivityInput) (hooks.Event, []byte, error) {
+	evt, err := hooks.DecodeFromHookInput(input)
+	if err != nil {
+		return nil, nil, err
+	}
+	payload := append([]byte(nil), input.Payload...)
+	if e, ok := evt.(*hooks.ToolCallScheduledEvent); ok && r.enrichToolCallScheduledHint(ctx, e) {
+		reencoded, err := hooks.EncodeToHookInput(e, input.TurnID)
+		if err == nil {
+			payload = append([]byte(nil), reencoded.Payload.RawMessage()...)
+		}
+	}
+	return evt, payload, nil
+}
+
+func (r *Runtime) appendHookRunEvent(ctx context.Context, input *HookActivityInput, evt hooks.Event, payload []byte) error {
+	_, err := r.RunEventStore.Append(ctx, &runlog.Event{
+		EventKey:  input.EventKey,
+		RunID:     input.RunID,
+		AgentID:   input.AgentID,
+		SessionID: input.SessionID,
+		TurnID:    input.TurnID,
+		Type:      input.Type,
+		Payload:   payload,
+		Timestamp: time.UnixMilli(evt.Timestamp()).UTC(),
+	})
+	return err
+}
+
+func (r *Runtime) updateHookRunMeta(ctx context.Context, sessionID string, evt hooks.Event) error {
+	if sessionID == "" {
+		return nil
+	}
+	return r.updateRunMetaFromHookEvent(ctx, evt)
+}
+
+func (r *Runtime) publishHookStreamEvent(ctx context.Context, sessionID string, evt hooks.Event) error {
+	if sessionID == "" || r.streamSubscriber == nil {
+		return nil
+	}
+	sess, err := r.SessionStore.LoadSession(ctx, sessionID)
+	if err != nil {
+		return err
+	}
+	if sess.Status == session.StatusEnded {
+		return nil
+	}
+	return r.streamSubscriber.HandleEvent(ctx, evt)
+}
+
+func (r *Runtime) publishHookBusEvent(ctx context.Context, eventType hooks.EventType, evt hooks.Event) {
+	if eventType == hooks.ToolCallArgsDelta {
+		return
+	}
+	if err := r.Bus.Publish(ctx, evt); err != nil {
+		r.logWarn(ctx, "hook publish failed", err, "event", evt.Type())
+	}
 }
 
 func (r *Runtime) enrichToolCallScheduledHint(ctx context.Context, evt *hooks.ToolCallScheduledEvent) bool {
@@ -140,58 +158,9 @@ func (r *Runtime) updateRunMetaFromHookEvent(ctx context.Context, evt hooks.Even
 	}
 	switch e := evt.(type) {
 	case *hooks.RunStartedEvent:
-		run, err := r.SessionStore.LoadRun(ctx, e.RunID())
-		if err != nil {
-			if errors.Is(err, session.ErrRunNotFound) {
-				startedAt := time.UnixMilli(e.Timestamp()).UTC()
-				now := time.Now().UTC()
-				return r.SessionStore.UpsertRun(ctx, session.RunMeta{
-					AgentID:   e.AgentID(),
-					RunID:     e.RunID(),
-					SessionID: e.SessionID(),
-					Status:    session.RunStatusRunning,
-					StartedAt: startedAt,
-					UpdatedAt: now,
-					Labels:    cloneLabels(e.RunContext.Labels),
-					Metadata:  nil,
-				})
-			}
-			return err
-		}
-		run.Status = session.RunStatusRunning
-		run.UpdatedAt = time.Now().UTC()
-		run.Labels = cloneLabels(e.RunContext.Labels)
-		return r.SessionStore.UpsertRun(ctx, run)
+		return r.updateRunStartedMeta(ctx, e)
 	case *hooks.PromptRenderedEvent:
-		run, err := r.SessionStore.LoadRun(ctx, e.RunID())
-		if err != nil {
-			if errors.Is(err, session.ErrRunNotFound) {
-				now := time.Now().UTC()
-				return r.SessionStore.UpsertRun(ctx, session.RunMeta{
-					AgentID:   e.AgentID(),
-					RunID:     e.RunID(),
-					SessionID: e.SessionID(),
-					Status:    session.RunStatusRunning,
-					StartedAt: time.UnixMilli(e.Timestamp()).UTC(),
-					UpdatedAt: now,
-					Labels:    nil,
-					Metadata:  nil,
-					PromptRefs: []prompt.PromptRef{
-						{
-							ID:      e.PromptID,
-							Version: e.Version,
-						},
-					},
-				})
-			}
-			return err
-		}
-		run.UpdatedAt = time.Now().UTC()
-		run.PromptRefs = appendUniquePromptRef(run.PromptRefs, prompt.PromptRef{
-			ID:      e.PromptID,
-			Version: e.Version,
-		})
-		return r.SessionStore.UpsertRun(ctx, run)
+		return r.updatePromptRenderedMeta(ctx, e)
 	case *hooks.ChildRunLinkedEvent:
 		return r.SessionStore.LinkChildRun(ctx, e.RunID(), session.RunMeta{
 			AgentID:   string(e.ChildAgentID),
@@ -217,6 +186,57 @@ func (r *Runtime) updateRunMetaFromHookEvent(ctx context.Context, evt hooks.Even
 	default:
 		return nil
 	}
+}
+
+func (r *Runtime) updateRunStartedMeta(ctx context.Context, e *hooks.RunStartedEvent) error {
+	run, err := r.SessionStore.LoadRun(ctx, e.RunID())
+	if err != nil {
+		if errors.Is(err, session.ErrRunNotFound) {
+			startedAt := time.UnixMilli(e.Timestamp()).UTC()
+			now := time.Now().UTC()
+			return r.SessionStore.UpsertRun(ctx, session.RunMeta{
+				AgentID:   e.AgentID(),
+				RunID:     e.RunID(),
+				SessionID: e.SessionID(),
+				Status:    session.RunStatusRunning,
+				StartedAt: startedAt,
+				UpdatedAt: now,
+				Labels:    cloneLabels(e.RunContext.Labels),
+			})
+		}
+		return err
+	}
+	run.Status = session.RunStatusRunning
+	run.UpdatedAt = time.Now().UTC()
+	run.Labels = cloneLabels(e.RunContext.Labels)
+	return r.SessionStore.UpsertRun(ctx, run)
+}
+
+func (r *Runtime) updatePromptRenderedMeta(ctx context.Context, e *hooks.PromptRenderedEvent) error {
+	run, err := r.SessionStore.LoadRun(ctx, e.RunID())
+	if err != nil {
+		if errors.Is(err, session.ErrRunNotFound) {
+			now := time.Now().UTC()
+			return r.SessionStore.UpsertRun(ctx, session.RunMeta{
+				AgentID:   e.AgentID(),
+				RunID:     e.RunID(),
+				SessionID: e.SessionID(),
+				Status:    session.RunStatusRunning,
+				StartedAt: time.UnixMilli(e.Timestamp()).UTC(),
+				UpdatedAt: now,
+				PromptRefs: []prompt.PromptRef{
+					{ID: e.PromptID, Version: e.Version},
+				},
+			})
+		}
+		return err
+	}
+	run.UpdatedAt = time.Now().UTC()
+	run.PromptRefs = appendUniquePromptRef(run.PromptRefs, prompt.PromptRef{
+		ID:      e.PromptID,
+		Version: e.Version,
+	})
+	return r.SessionStore.UpsertRun(ctx, run)
 }
 
 func (r *Runtime) updateRunStatus(ctx context.Context, runID string, status session.RunStatus) error {

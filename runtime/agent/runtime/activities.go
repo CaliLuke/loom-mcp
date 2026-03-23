@@ -220,16 +220,31 @@ func (r *Runtime) ExecuteToolActivity(ctx context.Context, req *ToolInput) (*Too
 	if result == nil {
 		return nil, errors.New("tool execution returned nil result")
 	}
-	// Enrich or build telemetry via registration builder when available.
-	if reg.TelemetryBuilder != nil {
-		if tel := reg.TelemetryBuilder(ctx, meta, req.ToolName, start, time.Now(), nil); tel != nil && result.Telemetry == nil {
-			result.Telemetry = tel
-		}
-	}
+	applyToolActivityTelemetry(ctx, reg, meta, req.ToolName, start, result)
 	resultJSON, err := r.materializeToolResult(ctx, call, result)
 	if err != nil {
 		return nil, err
 	}
+	return newToolActivityOutput(resultJSON, result), nil
+}
+
+func applyToolActivityTelemetry(
+	ctx context.Context,
+	reg ToolsetRegistration,
+	meta ToolCallMeta,
+	toolName tools.Ident,
+	start time.Time,
+	result *planner.ToolResult,
+) {
+	if reg.TelemetryBuilder == nil || result.Telemetry != nil {
+		return
+	}
+	if tel := reg.TelemetryBuilder(ctx, meta, toolName, start, time.Now(), nil); tel != nil {
+		result.Telemetry = tel
+	}
+}
+
+func newToolActivityOutput(resultJSON rawjson.Message, result *planner.ToolResult) *ToolOutput {
 	resultOut := &ToolOutput{
 		Payload:    resultJSON,
 		Bounds:     result.Bounds,
@@ -242,7 +257,7 @@ func (r *Runtime) ExecuteToolActivity(ctx context.Context, req *ToolInput) (*Too
 	if result.RetryHint != nil {
 		resultOut.RetryHint = result.RetryHint
 	}
-	return resultOut, nil
+	return resultOut
 }
 
 func (r *Runtime) prepareToolActivity(ctx context.Context, req *ToolInput) (ToolsetRegistration, rawjson.Message, ToolCallMeta, *ToolOutput, error) {
@@ -356,23 +371,44 @@ func (r *Runtime) toolDecodeErrorOutput(toolName tools.Ident, decErr error) *Too
 // It returns the field anchors, a clarifying question, and the retry reason when
 // successful; otherwise ok is false.
 func buildRetryHintFromValidation(err error, toolName tools.Ident) ([]string, string, planner.RetryReason, bool) {
+	issues, ok := validationIssues(err)
+	if !ok || len(issues) == 0 {
+		return nil, "", planner.RetryReasonInvalidArguments, false
+	}
+	descs := validationDescriptions(err)
+	fields, missing := collectValidationFields(issues)
+	if len(fields) == 0 {
+		return nil, "", planner.RetryReasonInvalidArguments, false
+	}
+	question := buildValidationRetryQuestion(fields, issues, descs, toolName)
+	reason := planner.RetryReasonInvalidArguments
+	if len(missing) > 0 {
+		reason = planner.RetryReasonMissingFields
+	}
+	return fields, question, reason, true
+}
+
+func validationIssues(err error) ([]*tools.FieldIssue, bool) {
 	var ip interface {
 		Issues() []*tools.FieldIssue
 	}
 	if !errors.As(err, &ip) {
-		return nil, "", planner.RetryReasonInvalidArguments, false
+		return nil, false
 	}
-	issues := ip.Issues()
-	if len(issues) == 0 {
-		return nil, "", planner.RetryReasonInvalidArguments, false
-	}
-	var descs map[string]string
+	return ip.Issues(), true
+}
+
+func validationDescriptions(err error) map[string]string {
 	var described interface {
 		Descriptions() map[string]string
 	}
-	if errors.As(err, &described) {
-		descs = described.Descriptions()
+	if !errors.As(err, &described) {
+		return nil
 	}
+	return described.Descriptions()
+}
+
+func collectValidationFields(issues []*tools.FieldIssue) ([]string, []string) {
 	fields := make([]string, 0, len(issues))
 	missing := make([]string, 0, len(issues))
 	for _, is := range issues {
@@ -382,50 +418,39 @@ func buildRetryHintFromValidation(err error, toolName tools.Ident) ([]string, st
 		if !slices.Contains(fields, is.Field) {
 			fields = append(fields, is.Field)
 		}
-		if is.Constraint == "missing_field" {
-			if !slices.Contains(missing, is.Field) {
-				missing = append(missing, is.Field)
-			}
+		if is.Constraint == "missing_field" && !slices.Contains(missing, is.Field) {
+			missing = append(missing, is.Field)
 		}
 	}
+	return fields, missing
+}
+
+func buildValidationRetryQuestion(fields []string, issues []*tools.FieldIssue, descs map[string]string, toolName tools.Ident) string {
 	if len(fields) == 0 {
-		return nil, "", planner.RetryReasonInvalidArguments, false
+		return ""
 	}
-	// Build a concise, description-enriched question for up to three fields.
-	var question string
-	if n := len(fields); n > 0 {
-		max := n
-		if max > 3 {
-			max = 3
-		}
-		parts := make([]string, 0, max)
-		for i := 0; i < max; i++ {
-			f := fields[i]
-			label := f
-			if d, ok := descs[f]; ok && d != "" {
-				label = f + " (" + d + ")"
-			}
-			// If enum allowed values exist, append hint.
-			for _, is := range issues {
-				if is.Field == f && len(is.Allowed) > 0 {
-					label = label + " — one of: " + strings.Join(is.Allowed, ", ")
-					break
-				}
-			}
-			parts = append(parts, label)
-		}
-		list := strings.Join(parts, ", ")
-		if toolName != "" {
-			question = "I need additional information to run " + string(toolName) + ". Please provide: " + list + "."
-		} else {
-			question = "I need additional information. Please provide: " + list + "."
+	parts := make([]string, 0, min(len(fields), 3))
+	for _, field := range fields[:min(len(fields), 3)] {
+		parts = append(parts, validationQuestionLabel(field, issues, descs))
+	}
+	list := strings.Join(parts, ", ")
+	if toolName != "" {
+		return "I need additional information to run " + string(toolName) + ". Please provide: " + list + "."
+	}
+	return "I need additional information. Please provide: " + list + "."
+}
+
+func validationQuestionLabel(field string, issues []*tools.FieldIssue, descs map[string]string) string {
+	label := field
+	if d, ok := descs[field]; ok && d != "" {
+		label = field + " (" + d + ")"
+	}
+	for _, is := range issues {
+		if is.Field == field && len(is.Allowed) > 0 {
+			return label + " - one of: " + strings.Join(is.Allowed, ", ")
 		}
 	}
-	reason := planner.RetryReasonInvalidArguments
-	if len(missing) > 0 {
-		reason = planner.RetryReasonMissingFields
-	}
-	return fields, question, reason, true
+	return label
 }
 
 // buildRetryHintFromDecodeError examines JSON decode errors that occur before tool

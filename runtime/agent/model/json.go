@@ -76,70 +76,79 @@ func (m *Message) UnmarshalJSON(data []byte) error {
 func encodeMessagePart(p Part) (any, error) {
 	switch v := p.(type) {
 	case ThinkingPart:
-		return struct {
-			Kind string `json:"Kind"` //nolint:tagliatelle // Kind discriminator is intentionally upper-cased for compatibility.
-			ThinkingPart
-		}{
-			Kind:         "thinking",
-			ThinkingPart: v,
-		}, nil
+		return encodeThinkingPart(v), nil
 	case TextPart:
-		return struct {
-			Kind string `json:"Kind"` //nolint:tagliatelle // Kind discriminator is intentionally upper-cased for compatibility.
-			TextPart
-		}{
-			Kind:     "text",
-			TextPart: v,
-		}, nil
+		return encodeTextPart(v), nil
 	case ImagePart:
-		return struct {
-			Kind string `json:"Kind"` //nolint:tagliatelle // Kind discriminator is intentionally upper-cased for compatibility.
-			ImagePart
-		}{
-			Kind:      "image",
-			ImagePart: v,
-		}, nil
+		return encodeImagePart(v), nil
 	case DocumentPart:
-		return struct {
-			Kind string `json:"Kind"` //nolint:tagliatelle // Kind discriminator is intentionally upper-cased for compatibility.
-			DocumentPart
-		}{
-			Kind:         "document",
-			DocumentPart: v,
-		}, nil
+		return encodeDocumentPart(v), nil
 	case CitationsPart:
-		return struct {
-			Kind string `json:"Kind"` //nolint:tagliatelle // Kind discriminator is intentionally upper-cased for compatibility.
-			CitationsPart
-		}{
-			Kind:          "citations",
-			CitationsPart: v,
-		}, nil
+		return encodeCitationsPart(v), nil
 	case ToolUsePart:
-		return struct {
-			Kind string `json:"Kind"` //nolint:tagliatelle // Kind discriminator is intentionally upper-cased for compatibility.
-			ToolUsePart
-		}{
-			Kind:        "tool_use",
-			ToolUsePart: v,
-		}, nil
+		return encodeToolUsePart(v), nil
 	case ToolResultPart:
-		return struct {
-			Kind string `json:"Kind"` //nolint:tagliatelle // Kind discriminator is intentionally upper-cased for compatibility.
-			ToolResultPart
-		}{
-			Kind:           "tool_result",
-			ToolResultPart: v,
-		}, nil
+		return encodeToolResultPart(v), nil
 	case CacheCheckpointPart:
-		return struct {
-			Kind string `json:"Kind"` //nolint:tagliatelle // Kind discriminator is intentionally upper-cased for compatibility.
-		}{
-			Kind: "cache_checkpoint",
-		}, nil
+		return encodeCacheCheckpointPart(), nil
 	default:
 		return nil, fmt.Errorf("unknown part type %T", p)
 	}
+}
+
+func encodeThinkingPart(v ThinkingPart) any {
+	return struct {
+		Kind string `json:"Kind"` //nolint:tagliatelle // Kind discriminator is intentionally upper-cased for compatibility.
+		ThinkingPart
+	}{Kind: "thinking", ThinkingPart: v}
+}
+
+func encodeTextPart(v TextPart) any {
+	return struct {
+		Kind string `json:"Kind"` //nolint:tagliatelle // Kind discriminator is intentionally upper-cased for compatibility.
+		TextPart
+	}{Kind: "text", TextPart: v}
+}
+
+func encodeImagePart(v ImagePart) any {
+	return struct {
+		Kind string `json:"Kind"` //nolint:tagliatelle // Kind discriminator is intentionally upper-cased for compatibility.
+		ImagePart
+	}{Kind: "image", ImagePart: v}
+}
+
+func encodeDocumentPart(v DocumentPart) any {
+	return struct {
+		Kind string `json:"Kind"` //nolint:tagliatelle // Kind discriminator is intentionally upper-cased for compatibility.
+		DocumentPart
+	}{Kind: "document", DocumentPart: v}
+}
+
+func encodeCitationsPart(v CitationsPart) any {
+	return struct {
+		Kind string `json:"Kind"` //nolint:tagliatelle // Kind discriminator is intentionally upper-cased for compatibility.
+		CitationsPart
+	}{Kind: "citations", CitationsPart: v}
+}
+
+func encodeToolUsePart(v ToolUsePart) any {
+	return struct {
+		Kind string `json:"Kind"` //nolint:tagliatelle // Kind discriminator is intentionally upper-cased for compatibility.
+		ToolUsePart
+	}{Kind: "tool_use", ToolUsePart: v}
+}
+
+func encodeToolResultPart(v ToolResultPart) any {
+	return struct {
+		Kind string `json:"Kind"` //nolint:tagliatelle // Kind discriminator is intentionally upper-cased for compatibility.
+		ToolResultPart
+	}{Kind: "tool_result", ToolResultPart: v}
+}
+
+func encodeCacheCheckpointPart() any {
+	return struct {
+		Kind string `json:"Kind"` //nolint:tagliatelle // Kind discriminator is intentionally upper-cased for compatibility.
+	}{Kind: "cache_checkpoint"}
 }
 
 func decodeMessagePart(raw json.RawMessage) (Part, error) {

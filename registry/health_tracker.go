@@ -158,40 +158,11 @@ func WithHealthLogger(l telemetry.Logger) HealthTrackerOption {
 // registration-scoped health in the shared health map, and uses a Pulse pool
 // ticker so only one node in the cluster publishes pings at a time.
 func NewHealthTracker(streamManager StreamManager, healthMap, catalogMap *rmap.Map, node *pool.Node, opts ...HealthTrackerOption) (HealthTracker, error) {
-	if streamManager == nil {
-		return nil, fmt.Errorf("stream manager is required")
+	if err := validateHealthTrackerDeps(streamManager, healthMap, catalogMap, node); err != nil {
+		return nil, err
 	}
-	if healthMap == nil {
-		return nil, fmt.Errorf("health map is required for distributed health tracking")
-	}
-	if catalogMap == nil {
-		return nil, fmt.Errorf("catalog map is required for cross-node coordination")
-	}
-	if node == nil {
-		return nil, fmt.Errorf("pool node is required for distributed tickers")
-	}
-
-	options := &healthTrackerOptions{
-		pingInterval:        DefaultPingInterval,
-		missedPingThreshold: DefaultMissedPingThreshold,
-		logger:              telemetry.NewNoopLogger(),
-	}
-	for _, opt := range opts {
-		opt(options)
-	}
-	logger := options.logger
-	if logger == nil {
-		logger = telemetry.NewNoopLogger()
-	}
-
-	// Staleness threshold = (missedPingThreshold + 1) * pingInterval
-	// This gives providers enough time to respond before being marked unhealthy.
-	stalenessThreshold := time.Duration(options.missedPingThreshold+1) * options.pingInterval
-
-	// Subscribe before spawning goroutine to avoid race: if a catalog event
-	// arrives before the goroutine calls Subscribe(), the event is missed.
+	options := resolveHealthTrackerOptions(opts)
 	catalogEvents := catalogMap.Subscribe()
-
 	h := &healthTracker{
 		streamManager:        streamManager,
 		catalog:              newToolsetCatalog(catalogMap),
@@ -200,8 +171,8 @@ func NewHealthTracker(streamManager StreamManager, healthMap, catalogMap *rmap.M
 		poolNode:             node,
 		pingInterval:         options.pingInterval,
 		missedPingThreshold:  options.missedPingThreshold,
-		stalenessThreshold:   stalenessThreshold,
-		logger:               logger,
+		stalenessThreshold:   healthTrackerStalenessThreshold(options),
+		logger:               options.logger,
 		tickers:              make(map[string]*pool.Ticker),
 		cancels:              make(map[string]context.CancelFunc),
 		lastObservedHealthy:  make(map[string]bool),
@@ -216,6 +187,40 @@ func NewHealthTracker(streamManager StreamManager, healthMap, catalogMap *rmap.M
 	h.syncExistingToolsets()
 
 	return h, nil
+}
+
+func validateHealthTrackerDeps(streamManager StreamManager, healthMap, catalogMap *rmap.Map, node *pool.Node) error {
+	switch {
+	case streamManager == nil:
+		return fmt.Errorf("stream manager is required")
+	case healthMap == nil:
+		return fmt.Errorf("health map is required for distributed health tracking")
+	case catalogMap == nil:
+		return fmt.Errorf("catalog map is required for cross-node coordination")
+	case node == nil:
+		return fmt.Errorf("pool node is required for distributed tickers")
+	default:
+		return nil
+	}
+}
+
+func resolveHealthTrackerOptions(opts []HealthTrackerOption) *healthTrackerOptions {
+	options := &healthTrackerOptions{
+		pingInterval:        DefaultPingInterval,
+		missedPingThreshold: DefaultMissedPingThreshold,
+		logger:              telemetry.NewNoopLogger(),
+	}
+	for _, opt := range opts {
+		opt(options)
+	}
+	if options.logger == nil {
+		options.logger = telemetry.NewNoopLogger()
+	}
+	return options
+}
+
+func healthTrackerStalenessThreshold(options *healthTrackerOptions) time.Duration {
+	return time.Duration(options.missedPingThreshold+1) * options.pingInterval
 }
 
 // RecordPong implements HealthTracker.

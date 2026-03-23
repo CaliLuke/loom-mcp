@@ -400,21 +400,38 @@ func (d ToolResultData) ToMap() map[string]any {
 
 // FromMap reconstructs typed tool-result data from the persisted map shape.
 func (d *ToolResultData) FromMap(data any) error {
-	if typed, ok := data.(ToolResultData); ok {
-		*d = cloneToolResultData(typed)
-		return nil
-	}
-	if typed, ok := data.(*ToolResultData); ok {
-		if typed == nil {
-			return fmt.Errorf("memory: %s data is nil", EventToolResult)
+	if cloned, ok, err := cloneToolResultDataValue(data); ok || err != nil {
+		if err != nil {
+			return err
 		}
-		*d = cloneToolResultData(*typed)
+		*d = cloned
 		return nil
 	}
 	m, err := requireEventMap(EventToolResult, data)
 	if err != nil {
 		return err
 	}
+	if err := decodeToolResultDataFields(d, m); err != nil {
+		return err
+	}
+	return nil
+}
+
+func cloneToolResultDataValue(data any) (ToolResultData, bool, error) {
+	if typed, ok := data.(ToolResultData); ok {
+		return cloneToolResultData(typed), true, nil
+	}
+	if typed, ok := data.(*ToolResultData); ok {
+		if typed == nil {
+			return ToolResultData{}, true, fmt.Errorf("memory: %s data is nil", EventToolResult)
+		}
+		return cloneToolResultData(*typed), true, nil
+	}
+	return ToolResultData{}, false, nil
+}
+
+func decodeToolResultDataFields(d *ToolResultData, m map[string]any) error {
+	var err error
 	d.ToolCallID, err = requiredStringField(EventToolResult, m, eventFieldToolCallID)
 	if err != nil {
 		return err
@@ -424,6 +441,14 @@ func (d *ToolResultData) FromMap(data any) error {
 		return err
 	}
 	d.ToolName = tools.Ident(toolName)
+	if err := decodeToolResultOptionalFields(d, m); err != nil {
+		return err
+	}
+	return nil
+}
+
+func decodeToolResultOptionalFields(d *ToolResultData, m map[string]any) error {
+	var err error
 	d.ParentToolCallID, err = optionalStringField(EventToolResult, m, eventFieldParentToolCallID)
 	if err != nil {
 		return err
@@ -457,10 +482,7 @@ func (d *ToolResultData) FromMap(data any) error {
 		return err
 	}
 	d.ErrorMessage, err = optionalStringField(EventToolResult, m, eventFieldErrorMessage)
-	if err != nil {
-		return err
-	}
-	return nil
+	return err
 }
 
 // EventType reports the persisted event kind for a planner note.

@@ -57,83 +57,104 @@ func NewFromAPIKey(apiKey, defaultModel string) (*Client, error) {
 
 // Complete renders a chat completion using the configured OpenAI client.
 func (c *Client) Complete(ctx context.Context, req *model.Request) (*model.Response, error) {
-	if len(req.Messages) == 0 {
-		return nil, errors.New("messages are required")
-	}
-	modelID := req.Model
-	if modelID == "" {
-		modelID = c.model
-	}
-	messages := make([]openai.ChatCompletionMessage, 0, len(req.Messages))
-	for _, m := range req.Messages {
-		if m == nil {
-			continue
-		}
-		// Join only text parts for OpenAI; ignore tool_result parts.
-		var text string
-		for _, p := range m.Parts {
-			if tp, ok := p.(model.TextPart); ok && tp.Text != "" {
-				text += tp.Text
-			}
-		}
-		messages = append(messages, openai.ChatCompletionMessage{Role: string(m.Role), Content: text})
-	}
-	tools, err := encodeTools(req.Tools)
+	request, err := c.buildChatCompletionRequest(req)
 	if err != nil {
 		return nil, err
-	}
-	request := openai.ChatCompletionRequest{
-		Model:       modelID,
-		Messages:    messages,
-		Temperature: req.Temperature,
-		MaxTokens:   req.MaxTokens,
-		Tools:       tools,
-	}
-	if req.ToolChoice != nil {
-		tc := req.ToolChoice
-		switch tc.Mode {
-		case "", model.ToolChoiceModeAuto:
-			// Auto is the provider default; omit ToolChoice to preserve existing
-			// behavior.
-		case model.ToolChoiceModeNone:
-			// Disable tool use for this request.
-			request.ToolChoice = "none"
-		case model.ToolChoiceModeTool:
-			if tc.Name == "" {
-				return nil, fmt.Errorf(
-					"openai: tool choice mode %q requires a tool name",
-					tc.Mode,
-				)
-			}
-			if !hasToolDefinition(req.Tools, tc.Name) {
-				return nil, fmt.Errorf(
-					"openai: tool choice name %q does not match any tool",
-					tc.Name,
-				)
-			}
-			request.ToolChoice = openai.ToolChoice{
-				Type: openai.ToolTypeFunction,
-				Function: openai.ToolFunction{
-					Name: tc.Name,
-				},
-			}
-		case model.ToolChoiceModeAny:
-			return nil, fmt.Errorf(
-				"openai: tool choice mode %q is not supported",
-				tc.Mode,
-			)
-		default:
-			return nil, fmt.Errorf(
-				"openai: unsupported tool choice mode %q",
-				tc.Mode,
-			)
-		}
 	}
 	response, err := c.chat.CreateChatCompletion(ctx, request)
 	if err != nil {
 		return nil, fmt.Errorf("openai chat completion: %w", err)
 	}
 	return translateResponse(response), nil
+}
+
+func (c *Client) buildChatCompletionRequest(req *model.Request) (openai.ChatCompletionRequest, error) {
+	if len(req.Messages) == 0 {
+		return openai.ChatCompletionRequest{}, errors.New("messages are required")
+	}
+	tools, err := encodeTools(req.Tools)
+	if err != nil {
+		return openai.ChatCompletionRequest{}, err
+	}
+	request := openai.ChatCompletionRequest{
+		Model:       c.resolveModelID(req),
+		Messages:    encodeOpenAIMessages(req.Messages),
+		Temperature: req.Temperature,
+		MaxTokens:   req.MaxTokens,
+		Tools:       tools,
+	}
+	toolChoice, err := buildOpenAIToolChoice(req.ToolChoice, req.Tools)
+	if err != nil {
+		return openai.ChatCompletionRequest{}, err
+	}
+	if toolChoice != nil {
+		request.ToolChoice = toolChoice
+	}
+	return request, nil
+}
+
+func (c *Client) resolveModelID(req *model.Request) string {
+	if req.Model != "" {
+		return req.Model
+	}
+	return c.model
+}
+
+func encodeOpenAIMessages(messages []*model.Message) []openai.ChatCompletionMessage {
+	encoded := make([]openai.ChatCompletionMessage, 0, len(messages))
+	for _, m := range messages {
+		if m == nil {
+			continue
+		}
+		encoded = append(encoded, openai.ChatCompletionMessage{
+			Role:    string(m.Role),
+			Content: messageTextContent(m),
+		})
+	}
+	return encoded
+}
+
+func messageTextContent(m *model.Message) string {
+	var text string
+	for _, p := range m.Parts {
+		if tp, ok := p.(model.TextPart); ok && tp.Text != "" {
+			text += tp.Text
+		}
+	}
+	return text
+}
+
+func buildOpenAIToolChoice(choice *model.ToolChoice, defs []*model.ToolDefinition) (any, error) {
+	if choice == nil {
+		return nil, nil
+	}
+	switch choice.Mode {
+	case "", model.ToolChoiceModeAuto:
+		return nil, nil
+	case model.ToolChoiceModeNone:
+		return "none", nil
+	case model.ToolChoiceModeTool:
+		return namedOpenAIToolChoice(choice, defs)
+	case model.ToolChoiceModeAny:
+		return nil, fmt.Errorf("openai: tool choice mode %q is not supported", choice.Mode)
+	default:
+		return nil, fmt.Errorf("openai: unsupported tool choice mode %q", choice.Mode)
+	}
+}
+
+func namedOpenAIToolChoice(choice *model.ToolChoice, defs []*model.ToolDefinition) (any, error) {
+	if choice.Name == "" {
+		return nil, fmt.Errorf("openai: tool choice mode %q requires a tool name", choice.Mode)
+	}
+	if !hasToolDefinition(defs, choice.Name) {
+		return nil, fmt.Errorf("openai: tool choice name %q does not match any tool", choice.Name)
+	}
+	return openai.ToolChoice{
+		Type: openai.ToolTypeFunction,
+		Function: openai.ToolFunction{
+			Name: choice.Name,
+		},
+	}, nil
 }
 
 func hasToolDefinition(defs []*model.ToolDefinition, name string) bool {

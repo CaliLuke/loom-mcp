@@ -293,11 +293,29 @@ func validateInjectedFields(t *ToolExpr, m *goaexpr.MethodExpr, verr *eval.Valid
 	if t == nil || len(t.InjectedFields) == 0 {
 		return
 	}
-	if m == nil || m.Payload == nil || m.Payload.Type == nil || m.Payload.Type == goaexpr.Empty {
-		verr.Add(t, "Inject requires a non-empty bound method payload")
+	obj, required, ok := injectedFieldContext(t, m, verr)
+	if !ok {
 		return
 	}
 
+	seen := make(map[string]struct{})
+	for _, name := range t.InjectedFields {
+		if !recordInjectedFieldName(t, verr, seen, name) {
+			continue
+		}
+		if !isSupportedInjectedField(name) {
+			verr.Add(t, "Inject field %q is not supported (supported: %s)", name, supportedInjectedFieldsList())
+			continue
+		}
+		validateInjectedField(t, verr, obj, required, name)
+	}
+}
+
+func injectedFieldContext(t *ToolExpr, m *goaexpr.MethodExpr, verr *eval.ValidationErrors) (*goaexpr.Object, map[string]struct{}, bool) {
+	if m == nil || m.Payload == nil || m.Payload.Type == nil || m.Payload.Type == goaexpr.Empty {
+		verr.Add(t, "Inject requires a non-empty bound method payload")
+		return nil, nil, false
+	}
 	att := m.Payload
 	if ut, ok := att.Type.(goaexpr.UserType); ok && ut != nil {
 		att = ut.Attribute()
@@ -305,53 +323,52 @@ func validateInjectedFields(t *ToolExpr, m *goaexpr.MethodExpr, verr *eval.Valid
 	obj, ok := att.Type.(*goaexpr.Object)
 	if !ok || obj == nil {
 		verr.Add(t, "Inject requires the bound method payload to be an object")
-		return
+		return nil, nil, false
 	}
-
 	required := make(map[string]struct{})
 	if att.Validation != nil {
 		for _, r := range att.Validation.Required {
 			required[r] = struct{}{}
 		}
 	}
+	return obj, required, true
+}
 
-	seen := make(map[string]struct{})
-	for _, name := range t.InjectedFields {
-		if name == "" {
-			verr.Add(t, "Inject requires non-empty field names")
-			continue
-		}
-		if _, ok := seen[name]; ok {
-			verr.Add(t, "Inject field %q is declared more than once", name)
-			continue
-		}
-		seen[name] = struct{}{}
+func recordInjectedFieldName(t *ToolExpr, verr *eval.ValidationErrors, seen map[string]struct{}, name string) bool {
+	if name == "" {
+		verr.Add(t, "Inject requires non-empty field names")
+		return false
+	}
+	if _, ok := seen[name]; ok {
+		verr.Add(t, "Inject field %q is declared more than once", name)
+		return false
+	}
+	seen[name] = struct{}{}
+	return true
+}
 
-		if !isSupportedInjectedField(name) {
-			verr.Add(t, "Inject field %q is not supported (supported: %s)", name, supportedInjectedFieldsList())
-			continue
-		}
+func validateInjectedField(t *ToolExpr, verr *eval.ValidationErrors, obj *goaexpr.Object, required map[string]struct{}, name string) {
+	field := injectedPayloadField(obj, name)
+	if field == nil || field.Attribute == nil || field.Attribute.Type == nil || field.Attribute.Type == goaexpr.Empty {
+		verr.Add(t, "Inject field %q does not exist on bound method payload", name)
+		return
+	}
+	if _, ok := required[name]; !ok {
+		verr.Add(t, "Inject field %q must be required on the bound method payload", name)
+		return
+	}
+	if field.Attribute.Type != goaexpr.String {
+		verr.Add(t, "Inject field %q must be a String on the bound method payload", name)
+	}
+}
 
-		var field *goaexpr.NamedAttributeExpr
-		for _, na := range *obj {
-			if na.Name == name {
-				field = na
-				break
-			}
-		}
-		if field == nil || field.Attribute == nil || field.Attribute.Type == nil || field.Attribute.Type == goaexpr.Empty {
-			verr.Add(t, "Inject field %q does not exist on bound method payload", name)
-			continue
-		}
-		if _, ok := required[name]; !ok {
-			verr.Add(t, "Inject field %q must be required on the bound method payload", name)
-			continue
-		}
-		if field.Attribute.Type != goaexpr.String {
-			verr.Add(t, "Inject field %q must be a String on the bound method payload", name)
-			continue
+func injectedPayloadField(obj *goaexpr.Object, name string) *goaexpr.NamedAttributeExpr {
+	for _, na := range *obj {
+		if na.Name == name {
+			return na
 		}
 	}
+	return nil
 }
 
 func isSupportedInjectedField(name string) bool {
@@ -438,40 +455,6 @@ func validateBoundsShape(tool *ToolExpr, verr *eval.ValidationErrors) {
 	if tool.Bounds.Paging == nil {
 		return
 	}
-	validatePagingField := func(where string, att *goaexpr.AttributeExpr, name string, required bool) {
-		if att == nil || att.Type == nil || att.Type == goaexpr.Empty {
-			if required {
-				verr.Add(tool, "%s must be non-empty when configuring paging", where)
-			}
-			return
-		}
-
-		field := att.Find(name)
-		if field == nil || field.Type == nil || field.Type == goaexpr.Empty {
-			if required {
-				verr.Add(tool, "%s must define an optional String field named %q when configuring paging", where, name)
-			}
-			return
-		}
-		if field.Type != goaexpr.String {
-			verr.Add(tool, "%s field %q must be a String when configuring paging", where, name)
-			return
-		}
-
-		root := att
-		if ut, ok := att.Type.(goaexpr.UserType); ok && ut != nil {
-			root = ut.Attribute()
-		}
-		if root != nil && root.Validation != nil {
-			for _, req := range root.Validation.Required {
-				if req == name {
-					verr.Add(tool, "%s field %q must be optional when configuring paging", where, name)
-					return
-				}
-			}
-		}
-	}
-
 	if tool.Bounds.Paging.CursorField == "" {
 		verr.Add(tool, "Cursor() is required when configuring paging")
 		return
@@ -480,7 +463,47 @@ func validateBoundsShape(tool *ToolExpr, verr *eval.ValidationErrors) {
 		verr.Add(tool, "NextCursor() is required when configuring paging")
 		return
 	}
-	validatePagingField("Args", tool.Args, tool.Bounds.Paging.CursorField, true)
+	validatePagingField(tool, verr, "Args", tool.Args, tool.Bounds.Paging.CursorField, true)
+}
+
+func validatePagingField(tool *ToolExpr, verr *eval.ValidationErrors, where string, att *goaexpr.AttributeExpr, name string, required bool) {
+	if att == nil || att.Type == nil || att.Type == goaexpr.Empty {
+		if required {
+			verr.Add(tool, "%s must be non-empty when configuring paging", where)
+		}
+		return
+	}
+
+	field := att.Find(name)
+	if field == nil || field.Type == nil || field.Type == goaexpr.Empty {
+		if required {
+			verr.Add(tool, "%s must define an optional String field named %q when configuring paging", where, name)
+		}
+		return
+	}
+	if field.Type != goaexpr.String {
+		verr.Add(tool, "%s field %q must be a String when configuring paging", where, name)
+		return
+	}
+	if pagingFieldRequired(att, name) {
+		verr.Add(tool, "%s field %q must be optional when configuring paging", where, name)
+	}
+}
+
+func pagingFieldRequired(att *goaexpr.AttributeExpr, name string) bool {
+	root := att
+	if ut, ok := att.Type.(goaexpr.UserType); ok && ut != nil {
+		root = ut.Attribute()
+	}
+	if root == nil || root.Validation == nil {
+		return false
+	}
+	for _, req := range root.Validation.Required {
+		if req == name {
+			return true
+		}
+	}
+	return false
 }
 
 // validateToolReturnBoundsShape enforces that the explicit tool-facing Return

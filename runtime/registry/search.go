@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/CaliLuke/loom-mcp/runtime/agent/telemetry"
 	"go.opentelemetry.io/otel/attribute"
 )
 
@@ -82,46 +83,40 @@ func NewSearchClient(manager *Manager) *SearchClient {
 // If semantic search fails or is not supported, keyword search is used as fallback.
 func (s *SearchClient) Search(ctx context.Context, query string, opts SearchOptions) ([]*SearchResult, error) {
 	start := time.Now()
-
-	// Start trace span
-	ctx, span := s.obs.StartSpan(ctx, OpSearch,
-		attribute.String("query", query),
-		attribute.Bool("prefer_semantic", opts.PreferSemantic),
-	)
-
+	ctx, span := s.startSearchSpan(ctx, query, opts)
 	var outcome OperationOutcome
 	var opErr error
 	var resultCount int
 	defer func() {
-		duration := time.Since(start)
-		event := OperationEvent{
-			Operation:   OpSearch,
-			Query:       query,
-			Duration:    duration,
-			Outcome:     outcome,
-			ResultCount: resultCount,
-		}
-		if opErr != nil {
-			event.Error = opErr.Error()
-		}
-		s.obs.LogOperation(ctx, event)
-		s.obs.RecordOperationMetrics(event)
-		s.obs.EndSpan(span, outcome, opErr)
+		s.finishSearch(ctx, span, start, query, outcome, resultCount, opErr)
 	}()
-
-	// Get registries to search
 	entries := s.getRegistriesToSearch(opts.Registries)
 	if len(entries) == 0 {
 		outcome = OutcomeSuccess
 		return nil, nil
 	}
-
 	span.AddEvent("searching_registries", "registry_count", len(entries))
+	allResults, searchErrors := s.collectSearchResults(ctx, entries, query, opts)
+	if len(searchErrors) == len(entries) && len(searchErrors) > 0 {
+		outcome = OutcomeError
+		opErr = fmt.Errorf("all registries failed: %v", searchErrors)
+		return nil, opErr
+	}
+	allResults = s.filterResults(allResults, opts)
+	allResults = sortAndLimitSearchResults(allResults, opts.MaxResults)
+	resultCount = len(allResults)
+	outcome = OutcomeSuccess
+	return allResults, nil
+}
 
-	// Perform search across all registries
+func (s *SearchClient) collectSearchResults(
+	ctx context.Context,
+	entries map[string]*registryEntry,
+	query string,
+	opts SearchOptions,
+) ([]*SearchResult, []error) {
 	var allResults []*SearchResult
 	var searchErrors []error
-
 	for name, entry := range entries {
 		results, err := s.searchRegistry(ctx, name, entry, query, opts)
 		if err != nil {
@@ -130,30 +125,48 @@ func (s *SearchClient) Search(ctx context.Context, query string, opts SearchOpti
 		}
 		allResults = append(allResults, results...)
 	}
+	return allResults, searchErrors
+}
 
-	// Return error only if all registries failed
-	if len(searchErrors) == len(entries) && len(searchErrors) > 0 {
-		outcome = OutcomeError
-		opErr = fmt.Errorf("all registries failed: %v", searchErrors)
-		return nil, opErr
-	}
-
-	// Apply post-processing filters
-	allResults = s.filterResults(allResults, opts)
-
-	// Sort by relevance score (descending)
-	sort.Slice(allResults, func(i, j int) bool {
-		return allResults[i].RelevanceScore > allResults[j].RelevanceScore
+func sortAndLimitSearchResults(results []*SearchResult, maxResults int) []*SearchResult {
+	sort.Slice(results, func(i, j int) bool {
+		return results[i].RelevanceScore > results[j].RelevanceScore
 	})
-
-	// Apply max results limit
-	if opts.MaxResults > 0 && len(allResults) > opts.MaxResults {
-		allResults = allResults[:opts.MaxResults]
+	if maxResults > 0 && len(results) > maxResults {
+		return results[:maxResults]
 	}
+	return results
+}
 
-	resultCount = len(allResults)
-	outcome = OutcomeSuccess
-	return allResults, nil
+func (s *SearchClient) startSearchSpan(ctx context.Context, query string, opts SearchOptions) (context.Context, telemetry.Span) {
+	return s.obs.StartSpan(ctx, OpSearch,
+		attribute.String("query", query),
+		attribute.Bool("prefer_semantic", opts.PreferSemantic),
+	)
+}
+
+func (s *SearchClient) finishSearch(
+	ctx context.Context,
+	span telemetry.Span,
+	start time.Time,
+	query string,
+	outcome OperationOutcome,
+	resultCount int,
+	opErr error,
+) {
+	event := OperationEvent{
+		Operation:   OpSearch,
+		Query:       query,
+		Duration:    time.Since(start),
+		Outcome:     outcome,
+		ResultCount: resultCount,
+	}
+	if opErr != nil {
+		event.Error = opErr.Error()
+	}
+	s.obs.LogOperation(ctx, event)
+	s.obs.RecordOperationMetrics(event)
+	s.obs.EndSpan(span, outcome, opErr)
 }
 
 // getRegistriesToSearch returns the registry entries to search based on options.

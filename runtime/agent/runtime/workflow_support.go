@@ -13,6 +13,8 @@ import (
 	"fmt"
 	"time"
 
+	agent "github.com/CaliLuke/loom-mcp/runtime/agent"
+	"github.com/CaliLuke/loom-mcp/runtime/agent/api"
 	"github.com/CaliLuke/loom-mcp/runtime/agent/engine"
 	"github.com/CaliLuke/loom-mcp/runtime/agent/hooks"
 	"github.com/CaliLuke/loom-mcp/runtime/agent/interrupt"
@@ -40,85 +42,163 @@ func (r *Runtime) finalizeWithPlanner(
 		return nil, errors.New("base plan input is required")
 	}
 	ctx := wfCtx.Context()
-	if err := r.publishFinalizingPhase(ctx, base, input, turnID); err != nil {
-		return nil, err
-	}
-	hint := finalizationHint(reason)
-	messages := prepareFinalizationMessages(base.Messages, hint)
-	resumeCtx := base.RunContext
-	resumeCtx.Attempt = nextAttempt
-	resumeCtx.MaxDuration = "0s"
-	encodedToolOutputs, err := encodePlannerToolOutputs(allToolOutputs)
+	output, aggUsage, err := r.runFinalizationPlan(wfCtx, reg, input, base, allToolOutputs, aggUsage, nextAttempt, turnID, reason, hardDeadline)
 	if err != nil {
 		return nil, err
-	}
-	req := PlanActivityInput{
-		AgentID:     input.AgentID,
-		RunID:       base.RunContext.RunID,
-		Messages:    messages,
-		RunContext:  resumeCtx,
-		ToolOutputs: encodedToolOutputs,
-		Finalize:    &planner.Termination{Reason: reason, Message: hint},
-	}
-	if err := enforcePlanActivityInputBudget(req); err != nil {
-		return nil, err
-	}
-	if err := r.publishFinalizeTransition(ctx, base, input, turnID, reason); err != nil {
-		return nil, err
-	}
-	reasonText := finalizationReasonText(reason)
-	resumeOpts := reg.ResumeActivityOptions
-	if input.Policy != nil && input.Policy.PlanTimeout > 0 {
-		resumeOpts.StartToCloseTimeout = input.Policy.PlanTimeout
-	}
-	output, err := r.runPlanActivity(wfCtx, reg.ResumeActivityName, resumeOpts, req, hardDeadline)
-	if err != nil {
-		// Surface the termination reason prominently; include underlying error for observability.
-		return nil, fmt.Errorf("%s: %w", reasonText, err)
-	}
-	if output == nil || output.Result == nil {
-		return nil, fmt.Errorf("%s", reasonText)
-	}
-	if err := validateTerminalPlanResult(output.Result); err != nil {
-		return nil, fmt.Errorf("%s: %w", reasonText, err)
-	}
-	aggUsage = addTokenUsage(aggUsage, output.Usage)
-	var finalMsg *model.Message
-	if output.Result.FinalResponse != nil {
-		finalMsg = output.Result.FinalResponse.Message
-		if output.Result.Streamed && agentMessageText(finalMsg) == "" {
-			if text := transcriptText(output.Transcript); text != "" {
-				finalMsg = newTextAgentMessage(model.ConversationRoleAssistant, text)
-			}
-		}
-	}
-	if output.Result.FinalResponse != nil && !output.Result.Streamed {
-		if err := r.publishFinalizationAssistantMessage(ctx, base, input, turnID, finalMsg); err != nil {
-			return nil, err
-		}
-	}
-	if err := r.publishPlannerNotes(ctx, base, input, turnID, output.Result.Notes); err != nil {
-		return nil, err
-	}
-	notes := make([]*planner.PlannerAnnotation, len(output.Result.Notes))
-	for i := range output.Result.Notes {
-		notes[i] = &output.Result.Notes[i]
 	}
 	toolEvents, err := r.encodeToolEvents(ctx, allToolResults)
 	if err != nil {
 		return nil, err
 	}
-	finalToolResult := finalToolResultEvent(base.RunContext.Tool, output.Result.FinalToolResult)
+	return buildFinalizedRunOutput(input.AgentID, base, output, toolEvents, aggUsage), nil
+}
 
+func (r *Runtime) runFinalizationPlan(
+	wfCtx engine.WorkflowContext,
+	reg AgentRegistration,
+	input *RunInput,
+	base *planner.PlanInput,
+	allToolOutputs []*planner.ToolOutput,
+	aggUsage model.TokenUsage,
+	nextAttempt int,
+	turnID string,
+	reason planner.TerminationReason,
+	hardDeadline time.Time,
+) (*PlanActivityOutput, model.TokenUsage, error) {
+	ctx := wfCtx.Context()
+	req, reasonText, resumeOpts, err := r.prepareFinalizePlan(ctx, reg, input, base, allToolOutputs, nextAttempt, turnID, reason)
+	if err != nil {
+		return nil, aggUsage, err
+	}
+	output, err := r.runPlanActivity(wfCtx, reg.ResumeActivityName, resumeOpts, req, hardDeadline)
+	if err != nil {
+		return nil, aggUsage, fmt.Errorf("%s: %w", reasonText, err)
+	}
+	if err := validateFinalizePlanOutput(output, reasonText); err != nil {
+		return nil, aggUsage, err
+	}
+	aggUsage = addTokenUsage(aggUsage, output.Usage)
+	if err := r.publishFinalizeOutput(ctx, base, input, turnID, output); err != nil {
+		return nil, aggUsage, err
+	}
+	return output, aggUsage, nil
+}
+
+func validateFinalizePlanOutput(output *PlanActivityOutput, reasonText string) error {
+	if output == nil || output.Result == nil {
+		return fmt.Errorf("%s", reasonText)
+	}
+	if err := validateTerminalPlanResult(output.Result); err != nil {
+		return fmt.Errorf("%s: %w", reasonText, err)
+	}
+	return nil
+}
+
+func (r *Runtime) publishFinalizeOutput(
+	ctx context.Context,
+	base *planner.PlanInput,
+	input *RunInput,
+	turnID string,
+	output *PlanActivityOutput,
+) error {
+	finalMsg := finalPlannerMessage(output)
+	if output.Result.FinalResponse != nil && !output.Result.Streamed {
+		if err := r.publishFinalizationAssistantMessage(ctx, base, input, turnID, finalMsg); err != nil {
+			return err
+		}
+	}
+	return r.publishPlannerNotes(ctx, base, input, turnID, output.Result.Notes)
+}
+
+func buildFinalizedRunOutput(
+	agentID agent.Ident,
+	base *planner.PlanInput,
+	output *PlanActivityOutput,
+	toolEvents []*api.ToolEvent,
+	aggUsage model.TokenUsage,
+) *RunOutput {
 	return &RunOutput{
-		AgentID:         input.AgentID,
+		AgentID:         agentID,
 		RunID:           base.RunContext.RunID,
-		Final:           finalMsg,
-		FinalToolResult: finalToolResult,
+		Final:           finalPlannerMessage(output),
+		FinalToolResult: finalToolResultEvent(base.RunContext.Tool, output.Result.FinalToolResult),
 		ToolEvents:      toolEvents,
-		Notes:           notes,
+		Notes:           clonePlannerNotes(output.Result.Notes),
 		Usage:           &aggUsage,
-	}, nil
+	}
+}
+
+func (r *Runtime) prepareFinalizePlan(
+	ctx context.Context,
+	reg AgentRegistration,
+	input *RunInput,
+	base *planner.PlanInput,
+	allToolOutputs []*planner.ToolOutput,
+	nextAttempt int,
+	turnID string,
+	reason planner.TerminationReason,
+) (PlanActivityInput, string, engine.ActivityOptions, error) {
+	if err := r.publishFinalizingPhase(ctx, base, input, turnID); err != nil {
+		return PlanActivityInput{}, "", engine.ActivityOptions{}, err
+	}
+	req, reasonText, err := r.buildFinalizePlanRequest(base, input, allToolOutputs, nextAttempt, reason)
+	if err != nil {
+		return PlanActivityInput{}, "", engine.ActivityOptions{}, err
+	}
+	if err := r.publishFinalizeTransition(ctx, base, input, turnID, reason); err != nil {
+		return PlanActivityInput{}, "", engine.ActivityOptions{}, err
+	}
+	return req, reasonText, resolveResumeActivityOptions(reg, input), nil
+}
+
+func (r *Runtime) buildFinalizePlanRequest(
+	base *planner.PlanInput,
+	input *RunInput,
+	allToolOutputs []*planner.ToolOutput,
+	nextAttempt int,
+	reason planner.TerminationReason,
+) (PlanActivityInput, string, error) {
+	hint := finalizationHint(reason)
+	resumeCtx := base.RunContext
+	resumeCtx.Attempt = nextAttempt
+	resumeCtx.MaxDuration = "0s"
+	encodedToolOutputs, err := encodePlannerToolOutputs(allToolOutputs)
+	if err != nil {
+		return PlanActivityInput{}, "", err
+	}
+	req := PlanActivityInput{
+		AgentID:     input.AgentID,
+		RunID:       base.RunContext.RunID,
+		Messages:    prepareFinalizationMessages(base.Messages, hint),
+		RunContext:  resumeCtx,
+		ToolOutputs: encodedToolOutputs,
+		Finalize:    &planner.Termination{Reason: reason, Message: hint},
+	}
+	if err := enforcePlanActivityInputBudget(req); err != nil {
+		return PlanActivityInput{}, "", err
+	}
+	return req, finalizationReasonText(reason), nil
+}
+
+func finalPlannerMessage(output *PlanActivityOutput) *model.Message {
+	if output.Result.FinalResponse == nil {
+		return nil
+	}
+	finalMsg := output.Result.FinalResponse.Message
+	if output.Result.Streamed && agentMessageText(finalMsg) == "" {
+		if text := transcriptText(output.Transcript); text != "" {
+			return newTextAgentMessage(model.ConversationRoleAssistant, text)
+		}
+	}
+	return finalMsg
+}
+
+func clonePlannerNotes(in []planner.PlannerAnnotation) []*planner.PlannerAnnotation {
+	out := make([]*planner.PlannerAnnotation, len(in))
+	for i := range in {
+		out[i] = &in[i]
+	}
+	return out
 }
 
 // handleInterrupts drains pause signals and blocks until a resume signal arrives.
@@ -141,45 +221,71 @@ func (r *Runtime) handleInterrupts(
 		if !ok {
 			break
 		}
-		if req == nil {
-			return errors.New("pause: received nil pause request")
-		}
-		if err := r.publishPauseEvent(ctx, input, turnID, req); err != nil {
+		resumeReq, err := r.awaitInterruptResume(ctx, wfCtx, input, turnID, ctrl, budgetDeadline, req)
+		if err != nil || resumeReq == nil {
 			return err
 		}
-		timeout, ok := timeoutUntil(budgetDeadline, wfCtx.Now())
-		if !ok {
-			if err := r.publishResumeReason(ctx, input, turnID, "deadline_exceeded"); err != nil {
-				return err
-			}
-			return nil
-		}
-		resumeReq, err := ctrl.WaitResume(ctx, timeout)
-		if err != nil {
-			if errors.Is(err, context.DeadlineExceeded) {
-				if err := r.publishResumeReason(ctx, input, turnID, "deadline_exceeded"); err != nil {
-					return err
-				}
-				return nil
-			}
-			if err2 := r.publishResumeReason(ctx, input, turnID, "resume_error"); err2 != nil {
-				return err2
-			}
-			return err
-		}
-		if resumeReq == nil {
-			return errors.New("resume: received nil resume request")
-		}
-		if len(resumeReq.Messages) > 0 {
-			base.Messages = append(base.Messages, resumeReq.Messages...)
-		}
-		base.RunContext.Attempt = *nextAttempt
-		*nextAttempt++
+		applyResumeMessages(base, nextAttempt, resumeReq)
 		if err := r.publishResumed(ctx, input, turnID, resumeReq); err != nil {
 			return err
 		}
 	}
 	return nil
+}
+
+func (r *Runtime) awaitInterruptResume(
+	ctx context.Context,
+	wfCtx engine.WorkflowContext,
+	input *RunInput,
+	turnID string,
+	ctrl *interrupt.Controller,
+	budgetDeadline time.Time,
+	req interrupt.PauseRequest,
+) (interrupt.ResumeRequest, error) {
+	if req == nil {
+		return nil, errors.New("pause: received nil pause request")
+	}
+	if err := r.publishPauseEvent(ctx, input, turnID, req); err != nil {
+		return nil, err
+	}
+	timeout, ok := timeoutUntil(budgetDeadline, wfCtx.Now())
+	if !ok {
+		return nil, r.publishResumeReason(ctx, input, turnID, "deadline_exceeded")
+	}
+	resumeReq, err := ctrl.WaitResume(ctx, timeout)
+	if err != nil {
+		return nil, r.handleResumeWaitError(ctx, input, turnID, err)
+	}
+	if resumeReq == nil {
+		return nil, errors.New("resume: received nil resume request")
+	}
+	return resumeReq, nil
+}
+
+func (r *Runtime) handleResumeWaitError(ctx context.Context, input *RunInput, turnID string, err error) error {
+	if errors.Is(err, context.DeadlineExceeded) {
+		return r.publishResumeReason(ctx, input, turnID, "deadline_exceeded")
+	}
+	if err2 := r.publishResumeReason(ctx, input, turnID, "resume_error"); err2 != nil {
+		return err2
+	}
+	return err
+}
+
+func applyResumeMessages(base *planner.PlanInput, nextAttempt *int, resumeReq interrupt.ResumeRequest) {
+	if len(resumeReq.Messages) > 0 {
+		base.Messages = append(base.Messages, resumeReq.Messages...)
+	}
+	base.RunContext.Attempt = *nextAttempt
+	*nextAttempt++
+}
+
+func resolveResumeActivityOptions(reg AgentRegistration, input *RunInput) engine.ActivityOptions {
+	opts := reg.ResumeActivityOptions
+	if input.Policy != nil && input.Policy.PlanTimeout > 0 {
+		opts.StartToCloseTimeout = input.Policy.PlanTimeout
+	}
+	return opts
 }
 
 // handleMissingFieldsPolicy inspects tool results for a RetryHint indicating missing
@@ -367,32 +473,12 @@ func (r *Runtime) awaitMissingFieldClarification(
 ) (*RunOutput, error) {
 	ctx := wfCtx.Context()
 	awaitID := generateDeterministicAwaitID(base.RunContext.RunID, base.RunContext.TurnID, triggerTool, triggerCall)
-	var restrict tools.Ident
-	if mf.RestrictToTool {
-		restrict = mf.Tool
-	}
-	if err := r.publishHook(ctx, hooks.NewAwaitClarificationEvent(
-		base.RunContext.RunID, input.AgentID, base.RunContext.SessionID, awaitID, mf.ClarifyingQuestion, mf.MissingFields, restrict, mf.ExampleInput,
-	), turnID); err != nil {
+	if err := r.publishMissingFieldAwaitClarification(ctx, input, base, turnID, awaitID, mf); err != nil {
 		return nil, err
 	}
-	if err := r.publishHook(ctx, hooks.NewRunPausedEvent(
-		base.RunContext.RunID, input.AgentID, base.RunContext.SessionID, "await_clarification", "runtime", nil, nil,
-	), turnID); err != nil {
-		return nil, err
-	}
-	waitStartedAt := wfCtx.Now()
-	ans, err := ctrl.WaitProvideClarification(ctx, 0)
-	if deadlines != nil {
-		if delta := wfCtx.Now().Sub(waitStartedAt); delta > 0 {
-			deadlines.pause(delta)
-		}
-	}
+	ans, err := waitForClarificationAnswer(wfCtx, ctx, ctrl, deadlines)
 	if err != nil {
-		if err2 := r.publishHook(ctx, hooks.NewRunResumedEvent(
-			base.RunContext.RunID, input.AgentID, base.RunContext.SessionID, "clarification_error", "runtime",
-			map[string]string{"resumed_by": "clarification_error", "await_id": awaitID}, 0,
-		), turnID); err2 != nil {
+		if err2 := r.publishClarificationError(ctx, input, base, turnID, awaitID); err2 != nil {
 			return nil, err2
 		}
 		return nil, err
@@ -403,20 +489,84 @@ func (r *Runtime) awaitMissingFieldClarification(
 	if ans.ID != "" && ans.ID != awaitID {
 		return nil, fmt.Errorf("unexpected await ID for clarification")
 	}
-	if ans.Answer != "" {
-		base.Messages = append(base.Messages, &model.Message{
-			Role: model.ConversationRoleUser,
-			Parts: []model.Part{model.TextPart{
-				Text: ans.Answer,
-			}},
-		})
-	}
-	if err := r.publishHook(ctx, hooks.NewRunResumedEvent(
-		base.RunContext.RunID, input.AgentID, base.RunContext.SessionID, "clarification_provided", input.RunID, ans.Labels, 1,
-	), turnID); err != nil {
+	appendClarificationAnswer(base, ans.Answer)
+	if err := r.publishClarificationResumed(ctx, input, base, turnID, ans); err != nil {
 		return nil, err
 	}
 	return nil, nil
+}
+
+func (r *Runtime) publishMissingFieldAwaitClarification(
+	ctx context.Context,
+	input *RunInput,
+	base *planner.PlanInput,
+	turnID string,
+	awaitID string,
+	mf *planner.RetryHint,
+) error {
+	var restrict tools.Ident
+	if mf.RestrictToTool {
+		restrict = mf.Tool
+	}
+	if err := r.publishHook(ctx, hooks.NewAwaitClarificationEvent(
+		base.RunContext.RunID, input.AgentID, base.RunContext.SessionID, awaitID, mf.ClarifyingQuestion, mf.MissingFields, restrict, mf.ExampleInput,
+	), turnID); err != nil {
+		return err
+	}
+	return r.publishHook(ctx, hooks.NewRunPausedEvent(
+		base.RunContext.RunID, input.AgentID, base.RunContext.SessionID, "await_clarification", "runtime", nil, nil,
+	), turnID)
+}
+
+func waitForClarificationAnswer(
+	wfCtx engine.WorkflowContext,
+	ctx context.Context,
+	ctrl *interrupt.Controller,
+	deadlines *runDeadlines,
+) (interrupt.ClarificationAnswer, error) {
+	waitStartedAt := wfCtx.Now()
+	ans, err := ctrl.WaitProvideClarification(ctx, 0)
+	if deadlines != nil {
+		if delta := wfCtx.Now().Sub(waitStartedAt); delta > 0 {
+			deadlines.pause(delta)
+		}
+	}
+	return ans, err
+}
+
+func (r *Runtime) publishClarificationError(
+	ctx context.Context,
+	input *RunInput,
+	base *planner.PlanInput,
+	turnID string,
+	awaitID string,
+) error {
+	return r.publishHook(ctx, hooks.NewRunResumedEvent(
+		base.RunContext.RunID, input.AgentID, base.RunContext.SessionID, "clarification_error", "runtime",
+		map[string]string{"resumed_by": "clarification_error", "await_id": awaitID}, 0,
+	), turnID)
+}
+
+func appendClarificationAnswer(base *planner.PlanInput, answer string) {
+	if answer == "" {
+		return
+	}
+	base.Messages = append(base.Messages, &model.Message{
+		Role:  model.ConversationRoleUser,
+		Parts: []model.Part{model.TextPart{Text: answer}},
+	})
+}
+
+func (r *Runtime) publishClarificationResumed(
+	ctx context.Context,
+	input *RunInput,
+	base *planner.PlanInput,
+	turnID string,
+	ans interrupt.ClarificationAnswer,
+) error {
+	return r.publishHook(ctx, hooks.NewRunResumedEvent(
+		base.RunContext.RunID, input.AgentID, base.RunContext.SessionID, "clarification_provided", input.RunID, ans.Labels, 1,
+	), turnID)
 }
 
 // runPlanActivity schedules a plan/resume activity with the configured options.
@@ -430,14 +580,28 @@ func (r *Runtime) runPlanActivity(
 	if activityName == "" {
 		return nil, errors.New("plan activity not registered")
 	}
+	callOpts := capPlanActivityOptions(wfCtx, options, hardDeadline)
+	out, err := wfCtx.ExecutePlannerActivity(wfCtx.Context(), engine.PlannerActivityCall{
+		Name:    activityName,
+		Input:   &input,
+		Options: callOpts,
+	})
+	if err != nil {
+		return nil, err
+	}
+	if err := validatePlanActivityOutput(out); err != nil {
+		return nil, err
+	}
+	r.logPlanActivityResult(wfCtx.Context(), out)
+	return out, nil
+}
+
+func capPlanActivityOptions(wfCtx engine.WorkflowContext, options engine.ActivityOptions, hardDeadline time.Time) engine.ActivityOptions {
 	callOpts := options
-	// Cap queue wait and attempt time to the remaining hard deadline so finalizer
-	// handling stays deterministic even when workers are unavailable.
 	startToClose := options.StartToCloseTimeout
 	scheduleToStart := options.ScheduleToStartTimeout
 	if !hardDeadline.IsZero() {
-		now := wfCtx.Now()
-		if rem := hardDeadline.Sub(now); rem > 0 {
+		if rem := hardDeadline.Sub(wfCtx.Now()); rem > 0 {
 			if startToClose == 0 || startToClose > rem {
 				startToClose = rem
 			}
@@ -448,28 +612,27 @@ func (r *Runtime) runPlanActivity(
 	}
 	callOpts.StartToCloseTimeout = startToClose
 	callOpts.ScheduleToStartTimeout = scheduleToStart
+	return callOpts
+}
 
-	out, err := wfCtx.ExecutePlannerActivity(wfCtx.Context(), engine.PlannerActivityCall{
-		Name:    activityName,
-		Input:   &input,
-		Options: callOpts,
-	})
-	if err != nil {
-		return nil, err
-	}
+func validatePlanActivityOutput(out *PlanActivityOutput) error {
 	if out == nil {
-		return nil, fmt.Errorf("runPlanActivity received nil PlanActivityOutput")
+		return fmt.Errorf("runPlanActivity received nil PlanActivityOutput")
 	}
 	if out.Result == nil {
-		return nil, fmt.Errorf("runPlanActivity received nil PlanResult")
+		return fmt.Errorf("runPlanActivity received nil PlanResult")
 	}
 	if len(out.Result.ToolCalls) == 0 &&
 		out.Result.FinalResponse == nil &&
 		out.Result.FinalToolResult == nil &&
 		out.Result.Await == nil {
-		return nil, fmt.Errorf("runPlanActivity received PlanResult with no ToolCalls, FinalResponse, FinalToolResult, or Await")
+		return fmt.Errorf("runPlanActivity received PlanResult with no ToolCalls, FinalResponse, FinalToolResult, or Await")
 	}
-	r.logger.Info(wfCtx.Context(),
+	return nil
+}
+
+func (r *Runtime) logPlanActivityResult(ctx context.Context, out *PlanActivityOutput) {
+	r.logger.Info(ctx,
 		"runPlanActivity received PlanResult",
 		"tool_calls",
 		len(out.Result.ToolCalls),
@@ -480,5 +643,4 @@ func (r *Runtime) runPlanActivity(
 		"await",
 		out.Result.Await != nil,
 	)
-	return out, nil
 }
