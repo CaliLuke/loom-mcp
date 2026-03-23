@@ -162,7 +162,7 @@ This keeps consumers simple: render `error`, gate “Retry” on `retryable`, an
 
 ## Tool Input Schema
 
-For each tool with a non-empty payload, the plugin derives a compact JSON Schema from the Goa attribute and exposes it in `tools/list` under `inputSchema`. This uses Goa's `openapi.Schema` type for complete JSON Schema draft 2020-12 support.
+For each tool with a non-empty payload, the plugin derives a compact JSON Schema from the Goa attribute and exposes it in `tools/list` under `inputSchema`. Union payloads preserve their discriminator envelope (`oneOf` plus `discriminator.propertyName`) instead of collapsing to an empty object. This uses Goa's `openapi.Schema` type for complete JSON Schema draft 2020-12 support.
 
 ## Tool Identification
 

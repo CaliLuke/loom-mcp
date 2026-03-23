@@ -399,3 +399,26 @@ func (c *Client) GenerateDpiSpec() loom.Endpoint {
 		return decodeResponse(resp)
 	}
 }
+
+// DispatchAction returns an endpoint that makes JSON-RPC requests to the
+// assistant service dispatch_action method.
+func (c *Client) DispatchAction() loom.Endpoint {
+	var (
+		encodeRequest  = EncodeDispatchActionRequest(c.encoder)
+		decodeResponse = DecodeDispatchActionResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildDispatchActionRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		if err := encodeRequest(req, v); err != nil {
+			return nil, err
+		}
+		resp, err := c.Doer.Do(req)
+		if err != nil {
+			return nil, loomhttp.ErrRequestError("assistant", "dispatch_action", err)
+		}
+		return decodeResponse(resp)
+	}
+}

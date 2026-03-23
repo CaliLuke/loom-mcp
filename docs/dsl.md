@@ -585,6 +585,10 @@ Service("calculator", func() {
 })
 ```
 
+When the payload contains a Goa `OneOf(...)` union, the generated MCP `inputSchema`
+preserves the union envelope with `oneOf` variants and the declared discriminator
+field names. This is the schema clients receive from `tools/list`.
+
 ### Args and Return
 
 `Args` defines the input parameter schema for a tool. It follows the same patterns as Goa's

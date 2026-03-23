@@ -9,6 +9,12 @@ package assistant
 
 import (
 	"context"
+	"encoding/json"
+	"fmt"
+	"net/url"
+
+	loomhttp "github.com/CaliLuke/loom/http"
+	loom "github.com/CaliLuke/loom/pkg"
 )
 
 // AI Assistant service with full MCP protocol support
@@ -44,6 +50,8 @@ type Service interface {
 	// Generate a deterministic implementation-ready DPI spec from a fake Figma
 	// frame
 	GenerateDpiSpec(context.Context, *GenerateDpiSpecPayload) (res *DPISpec, err error)
+	// Dispatch an action encoded as a union payload
+	DispatchAction(context.Context, *DispatchActionPayload) (res *DispatchActionResult, err error)
 }
 
 // APIName is the name of the API as defined in the design.
@@ -60,7 +68,7 @@ const ServiceName = "assistant"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [15]string{"list_documents", "system_info", "conversation_history", "figma_design_system", "generate_prompts", "build_figma_implementation_prompt", "send_notification", "analyze_sentiment", "extract_keywords", "summarize_text", "search", "execute_code", "process_batch", "multi_content", "generate_dpi_spec"}
+var MethodNames = [16]string{"list_documents", "system_info", "conversation_history", "figma_design_system", "generate_prompts", "build_figma_implementation_prompt", "send_notification", "analyze_sentiment", "extract_keywords", "summarize_text", "search", "execute_code", "process_batch", "multi_content", "generate_dpi_spec", "dispatch_action"}
 
 // AnalyzeSentimentPayload is the payload type of the assistant service
 // analyze_sentiment method.
@@ -105,6 +113,11 @@ type ConversationHistoryPayload struct {
 type ConversationHistoryResult struct {
 	// History items
 	Items []string `json:"items,omitempty"`
+}
+
+type CreateAction struct {
+	// Name to create
+	Name string `json:"name"`
 }
 
 type DPICallToAction struct {
@@ -172,6 +185,20 @@ type DesignTokenGroup struct {
 	Typography []string `json:"typography"`
 }
 
+// DispatchActionPayload is the payload type of the assistant service
+// dispatch_action method.
+type DispatchActionPayload struct {
+	// Action envelope
+	Request CreateActionOrListAction `json:"request"`
+}
+
+// DispatchActionResult is the result type of the assistant service
+// dispatch_action method.
+type DispatchActionResult struct {
+	// Acknowledgement
+	Ack string `json:"ack"`
+}
+
 // Documents is the result type of the assistant service list_documents method.
 type Documents struct {
 	// Document entries
@@ -232,6 +259,11 @@ type GeneratePromptsPayload struct {
 	Context string `json:"context"`
 	// Task type
 	Task string `json:"task"`
+}
+
+type ListAction struct {
+	// Maximum number of items to list
+	Limit *int `json:"limit,omitempty"`
 }
 
 // MultiContentPayload is the payload type of the assistant service
@@ -323,4 +355,205 @@ type SystemInfoResult struct {
 	Name *string `json:"name,omitempty"`
 	// System version
 	Version *string `json:"version,omitempty"`
+}
+
+// CreateActionOrListAction is a sum-type union.
+type CreateActionOrListAction struct {
+	kind         CreateActionOrListActionKind
+	ListAction   *ListAction
+	CreateAction *CreateAction
+}
+
+// CreateActionOrListActionKind enumerates the union variants for CreateActionOrListAction.
+type CreateActionOrListActionKind string
+
+const (
+	// CreateActionOrListActionKindListAction identifies the ListAction branch of the union.
+	CreateActionOrListActionKindListAction CreateActionOrListActionKind = "ListAction"
+	// CreateActionOrListActionKindCreateAction identifies the CreateAction branch of the union.
+	CreateActionOrListActionKindCreateAction CreateActionOrListActionKind = "CreateAction"
+)
+
+// Kind returns the discriminator value of the union.
+func (u CreateActionOrListAction) Kind() CreateActionOrListActionKind {
+	return u.kind
+}
+
+// NewCreateActionOrListActionListAction constructs a CreateActionOrListAction with the ListAction branch set.
+func NewCreateActionOrListActionListAction(v *ListAction) CreateActionOrListAction {
+	return CreateActionOrListAction{
+		kind:       CreateActionOrListActionKindListAction,
+		ListAction: v,
+	}
+}
+
+// AsListAction returns the value of the ListAction branch if set.
+func (u CreateActionOrListAction) AsListAction() (_ *ListAction, ok bool) {
+	if u.kind != CreateActionOrListActionKindListAction {
+		return
+	}
+	return u.ListAction, true
+}
+
+// SetListAction sets the ListAction branch of the union.
+func (u *CreateActionOrListAction) SetListAction(v *ListAction) {
+	u.kind = CreateActionOrListActionKindListAction
+	u.ListAction = v
+}
+
+// NewCreateActionOrListActionCreateAction constructs a CreateActionOrListAction with the CreateAction branch set.
+func NewCreateActionOrListActionCreateAction(v *CreateAction) CreateActionOrListAction {
+	return CreateActionOrListAction{
+		kind:         CreateActionOrListActionKindCreateAction,
+		CreateAction: v,
+	}
+}
+
+// AsCreateAction returns the value of the CreateAction branch if set.
+func (u CreateActionOrListAction) AsCreateAction() (_ *CreateAction, ok bool) {
+	if u.kind != CreateActionOrListActionKindCreateAction {
+		return
+	}
+	return u.CreateAction, true
+}
+
+// SetCreateAction sets the CreateAction branch of the union.
+func (u *CreateActionOrListAction) SetCreateAction(v *CreateAction) {
+	u.kind = CreateActionOrListActionKindCreateAction
+	u.CreateAction = v
+}
+
+// Validate ensures the union discriminant is valid.
+func (u CreateActionOrListAction) Validate() error {
+	switch u.kind {
+	case "":
+		return loom.InvalidEnumValueError("action", "", []any{
+			string(CreateActionOrListActionKindListAction),
+			string(CreateActionOrListActionKindCreateAction),
+		})
+	case CreateActionOrListActionKindListAction:
+		return nil
+	case CreateActionOrListActionKindCreateAction:
+		return nil
+	default:
+		return loom.InvalidEnumValueError("action", u.kind, []any{
+			string(CreateActionOrListActionKindListAction),
+			string(CreateActionOrListActionKindCreateAction),
+		})
+	}
+}
+
+// MarshalJSON marshals the union into the canonical {type,value} JSON shape.
+func (u CreateActionOrListAction) MarshalJSON() ([]byte, error) {
+	if err := u.Validate(); err != nil {
+		return nil, err
+	}
+	var (
+		value any
+	)
+	switch u.kind {
+	case CreateActionOrListActionKindListAction:
+		value = u.ListAction
+	case CreateActionOrListActionKindCreateAction:
+		value = u.CreateAction
+	default:
+		return nil, fmt.Errorf("unexpected CreateActionOrListAction discriminant %q", u.kind)
+	}
+	return json.Marshal(struct {
+		Type  string `json:"action"`
+		Value any    `json:"value"`
+	}{
+		Type:  string(u.kind),
+		Value: value,
+	})
+}
+
+// MarshalFormValues marshals the union into application/x-www-form-urlencoded
+// values using the discriminator field plus flattened object fields for
+// object-shaped branches and the canonical {type,value} form shape for scalar
+// branches.
+func (u CreateActionOrListAction) MarshalFormValues(values url.Values, prefix string) error {
+	if err := u.Validate(); err != nil {
+		return err
+	}
+	values.Set(loomhttp.FormChildKey(prefix, "action"), string(u.kind))
+	switch u.kind {
+	case CreateActionOrListActionKindListAction:
+		_, err := loomhttp.EncodeFormValue(values, prefix, u.ListAction)
+		return err
+	case CreateActionOrListActionKindCreateAction:
+		_, err := loomhttp.EncodeFormValue(values, prefix, u.CreateAction)
+		return err
+	default:
+		return fmt.Errorf("unexpected CreateActionOrListAction discriminant %q", u.kind)
+	}
+}
+
+// UnmarshalFormValues unmarshals the union from application/x-www-form-urlencoded
+// values using the discriminator field plus flattened object fields for
+// object-shaped branches and the canonical {type,value} form shape for scalar
+// branches.
+func (u *CreateActionOrListAction) UnmarshalFormValues(values url.Values, prefix string) error {
+	typeKey := loomhttp.FormChildKey(prefix, "action")
+	rawType := values.Get(typeKey)
+	if rawType == "" {
+		return loom.MissingFieldError("action", "body")
+	}
+	switch rawType {
+	case string(CreateActionOrListActionKindListAction):
+		var v *ListAction
+		seen, err := loomhttp.DecodeFormValue(values, prefix, &v)
+		if err != nil {
+			return err
+		}
+		if !seen {
+			v = &ListAction{}
+		}
+		u.kind = CreateActionOrListActionKindListAction
+		u.ListAction = v
+	case string(CreateActionOrListActionKindCreateAction):
+		var v *CreateAction
+		seen, err := loomhttp.DecodeFormValue(values, prefix, &v)
+		if err != nil {
+			return err
+		}
+		if !seen {
+			return loom.MissingFieldError("value", "body")
+		}
+		u.kind = CreateActionOrListActionKindCreateAction
+		u.CreateAction = v
+	default:
+		return fmt.Errorf("unexpected CreateActionOrListAction type %q", rawType)
+	}
+	return nil
+}
+
+// UnmarshalJSON unmarshals the union from the canonical {type,value} JSON shape.
+func (u *CreateActionOrListAction) UnmarshalJSON(data []byte) error {
+	var raw struct {
+		Type  string          `json:"action"`
+		Value json.RawMessage `json:"value"`
+	}
+	if err := json.Unmarshal(data, &raw); err != nil {
+		return err
+	}
+	switch raw.Type {
+	case string(CreateActionOrListActionKindListAction):
+		var v *ListAction
+		if err := json.Unmarshal(raw.Value, &v); err != nil {
+			return err
+		}
+		u.kind = CreateActionOrListActionKindListAction
+		u.ListAction = v
+	case string(CreateActionOrListActionKindCreateAction):
+		var v *CreateAction
+		if err := json.Unmarshal(raw.Value, &v); err != nil {
+			return err
+		}
+		u.kind = CreateActionOrListActionKindCreateAction
+		u.CreateAction = v
+	default:
+		return fmt.Errorf("unexpected CreateActionOrListAction type %q", raw.Type)
+	}
+	return nil
 }

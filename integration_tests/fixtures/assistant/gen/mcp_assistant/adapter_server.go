@@ -694,6 +694,11 @@ func (a *MCPAdapter) ToolsList(ctx context.Context, p *ToolsListPayload) (res *T
 			Description: stringPtr("Generate a deterministic design implementation plan from fake Figma data"),
 			InputSchema: json.RawMessage([]byte("{\"type\":\"object\",\"required\":[\"screen_title\",\"platform\",\"density\",\"primary_cta\",\"sections\"],\"properties\":{\"density\":{\"type\":\"string\",\"description\":\"Layout density\",\"enum\":[\"compact\",\"comfortable\"]},\"include_dev_notes\":{\"type\":\"boolean\",\"description\":\"Whether to include implementation notes\"},\"platform\":{\"type\":\"string\",\"description\":\"Target platform\",\"enum\":[\"ios\",\"web\"]},\"primary_cta\":{\"type\":\"string\",\"description\":\"Primary call to action\"},\"screen_title\":{\"type\":\"string\",\"description\":\"Name of the frame or screen\"},\"sections\":{\"type\":\"array\",\"description\":\"Ordered screen sections\",\"items\":{\"type\":\"string\"}}},\"additionalProperties\":false}")),
 		},
+		{
+			Name:        "dispatch_action",
+			Description: stringPtr("Dispatch an action using a union payload"),
+			InputSchema: json.RawMessage([]byte("{\"type\":\"object\",\"required\":[\"request\"],\"properties\":{\"request\":{\"type\":\"object\",\"description\":\"Action envelope\",\"oneOf\":[{\"type\":\"object\",\"required\":[\"action\",\"value\"],\"properties\":{\"action\":{\"type\":\"string\",\"enum\":[\"ListAction\"]},\"value\":{\"type\":\"object\",\"properties\":{\"limit\":{\"type\":\"integer\",\"description\":\"Maximum number of items to list\"}},\"additionalProperties\":false}},\"additionalProperties\":false},{\"type\":\"object\",\"required\":[\"action\",\"value\"],\"properties\":{\"action\":{\"type\":\"string\",\"enum\":[\"CreateAction\"]},\"value\":{\"type\":\"object\",\"required\":[\"name\"],\"properties\":{\"name\":{\"type\":\"string\",\"description\":\"Name to create\"}},\"additionalProperties\":false}},\"additionalProperties\":false}],\"discriminator\":{\"propertyName\":\"action\"}}},\"additionalProperties\":false}")),
+		},
 	}
 	res = &ToolsListResult{Tools: tools}
 	a.log(ctx, "response", map[string]any{"method": "tools/list"})
@@ -1005,6 +1010,26 @@ func (a *MCPAdapter) toolsCallHandler(ctx context.Context, p *ToolsCallPayload, 
 			}
 		}
 		result, err := a.service.GenerateDpiSpec(ctx, payload)
+		if err != nil {
+			return true, a.sendToolError(ctx, stream, p.Name, err)
+		}
+		s, serr := mcpruntime.EncodeJSONToString(ctx, goahttp.ResponseEncoder, result)
+		if serr != nil {
+			return false, serr
+		}
+		final := &ToolsCallResult{
+			Content: []*ContentItem{
+				buildContentItem(a, s),
+			},
+		}
+		a.log(ctx, "response", map[string]any{"method": "tools/call", "name": p.Name})
+		return false, stream.SendAndClose(ctx, final)
+	case "dispatch_action":
+		var payload *assistant.DispatchActionPayload
+		if err := decodeMCPPayloadStrict(p.Arguments, &payload); err != nil {
+			return false, goa.PermanentError("invalid_params", "%s", err.Error())
+		}
+		result, err := a.service.DispatchAction(ctx, payload)
 		if err != nil {
 			return true, a.sendToolError(ctx, stream, p.Name, err)
 		}

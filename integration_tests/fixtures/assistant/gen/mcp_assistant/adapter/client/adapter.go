@@ -428,6 +428,36 @@ func NewEndpoints(
 		decode := assistantjsonrpcc.DecodeGenerateDpiSpecResponse(dec, false)
 		return decodeOriginalJSONRPCResult(enc, req3, toolResp.Result, decode)
 	}
+	// Tool: dispatch_action -> DispatchAction
+	e.DispatchAction = func(ctx context.Context, v any) (any, error) {
+		// Encode original payload to raw JSON using Goa encoder (no JSON-RPC envelope)
+		var payload any
+		payload = v.(*assistant.DispatchActionPayload)
+		args, err := encodeOriginalPayload(ctx, enc, payload)
+		if err != nil {
+			return nil, err
+		}
+
+		toolResp, err := mcpCaller.CallTool(ctx, mcpruntime.CallRequest{
+			Tool:    "dispatch_action",
+			Payload: args,
+		})
+		if err != nil {
+			prompt := retry.BuildRepairPrompt("tools/call:dispatch_action", err.Error(), "{\"request\":{\"name\":\"abc123\"}}", "{\"type\":\"object\",\"required\":[\"request\"],\"properties\":{\"request\":{\"type\":\"object\",\"description\":\"Action envelope\",\"oneOf\":[{\"type\":\"object\",\"required\":[\"action\",\"value\"],\"properties\":{\"action\":{\"type\":\"string\",\"enum\":[\"ListAction\"]},\"value\":{\"type\":\"object\",\"properties\":{\"limit\":{\"type\":\"integer\",\"description\":\"Maximum number of items to list\"}},\"additionalProperties\":false}},\"additionalProperties\":false},{\"type\":\"object\",\"required\":[\"action\",\"value\"],\"properties\":{\"action\":{\"type\":\"string\",\"enum\":[\"CreateAction\"]},\"value\":{\"type\":\"object\",\"required\":[\"name\"],\"properties\":{\"name\":{\"type\":\"string\",\"description\":\"Name to create\"}},\"additionalProperties\":false}},\"additionalProperties\":false}],\"discriminator\":{\"propertyName\":\"action\"}}},\"additionalProperties\":false}")
+			return nil, &retry.RetryableError{Prompt: prompt, Cause: err}
+		}
+		if len(toolResp.Result) == 0 {
+			prompt := retry.BuildRepairPrompt("tools/call:dispatch_action", "empty MCP tool response", "{\"request\":{\"name\":\"abc123\"}}", "{\"type\":\"object\",\"required\":[\"request\"],\"properties\":{\"request\":{\"type\":\"object\",\"description\":\"Action envelope\",\"oneOf\":[{\"type\":\"object\",\"required\":[\"action\",\"value\"],\"properties\":{\"action\":{\"type\":\"string\",\"enum\":[\"ListAction\"]},\"value\":{\"type\":\"object\",\"properties\":{\"limit\":{\"type\":\"integer\",\"description\":\"Maximum number of items to list\"}},\"additionalProperties\":false}},\"additionalProperties\":false},{\"type\":\"object\",\"required\":[\"action\",\"value\"],\"properties\":{\"action\":{\"type\":\"string\",\"enum\":[\"CreateAction\"]},\"value\":{\"type\":\"object\",\"required\":[\"name\"],\"properties\":{\"name\":{\"type\":\"string\",\"description\":\"Name to create\"}},\"additionalProperties\":false}},\"additionalProperties\":false}],\"discriminator\":{\"propertyName\":\"action\"}}},\"additionalProperties\":false}")
+			return nil, &retry.RetryableError{Prompt: prompt, Cause: fmt.Errorf("empty MCP tool response for dispatch_action")}
+		}
+		// Build JSON-RPC response envelope and decode using Goa-generated decoder
+		req3, err := origC.BuildDispatchActionRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		decode := assistantjsonrpcc.DecodeDispatchActionResponse(dec, false)
+		return decodeOriginalJSONRPCResult(enc, req3, toolResp.Result, decode)
+	}
 	// Resource: doc://list -> ListDocuments
 	e.ListDocuments = func(ctx context.Context, v any) (any, error) {
 		// Forward original payload parameters via URI query string when applicable
@@ -618,5 +648,6 @@ func NewClient(
 		e.ProcessBatch,
 		e.MultiContent,
 		e.GenerateDpiSpec,
+		e.DispatchAction,
 	)
 }

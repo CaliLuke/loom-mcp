@@ -58,6 +58,8 @@ type Server struct {
 	MultiContent func(context.Context, *http.Request, *jsonrpc.RawRequest, http.ResponseWriter) error
 	// GenerateDpiSpec is the handler for the generate_dpi_spec method.
 	GenerateDpiSpec func(context.Context, *http.Request, *jsonrpc.RawRequest, http.ResponseWriter) error
+	// DispatchAction is the handler for the dispatch_action method.
+	DispatchAction func(context.Context, *http.Request, *jsonrpc.RawRequest, http.ResponseWriter) error
 
 	decoder    func(*http.Request) loomhttp.Decoder
 	encoder    func(context.Context, http.ResponseWriter) loomhttp.Encoder
@@ -90,6 +92,7 @@ func New(
 			"process_batch",
 			"multi_content",
 			"generate_dpi_spec",
+			"dispatch_action",
 		},
 		ListDocuments:                  NewListDocumentsHandler(endpoints.ListDocuments, mux, decoder, encoder, errhandler),
 		SystemInfo:                     NewSystemInfoHandler(endpoints.SystemInfo, mux, decoder, encoder, errhandler),
@@ -106,6 +109,7 @@ func New(
 		ProcessBatch:                   NewProcessBatchHandler(endpoints.ProcessBatch, mux, decoder, encoder, errhandler),
 		MultiContent:                   NewMultiContentHandler(endpoints.MultiContent, mux, decoder, encoder, errhandler),
 		GenerateDpiSpec:                NewGenerateDpiSpecHandler(endpoints.GenerateDpiSpec, mux, decoder, encoder, errhandler),
+		DispatchAction:                 NewDispatchActionHandler(endpoints.DispatchAction, mux, decoder, encoder, errhandler),
 		decoder:                        decoder,
 		encoder:                        encoder,
 		errhandler:                     errhandler,
@@ -311,6 +315,10 @@ func (s *Server) processRequest(ctx context.Context, r *http.Request, req *jsonr
 	case "generate_dpi_spec":
 		if err := s.GenerateDpiSpec(ctx, r, req, w); err != nil {
 			s.errhandler(ctx, w, fmt.Errorf("handler error for %s: %w", "generate_dpi_spec", err))
+		}
+	case "dispatch_action":
+		if err := s.DispatchAction(ctx, r, req, w); err != nil {
+			s.errhandler(ctx, w, fmt.Errorf("handler error for %s: %w", "dispatch_action", err))
 		}
 	default:
 		s.encodeJSONRPCError(ctx, w, req, jsonrpc.MethodNotFound, "Method not found", nil)
@@ -1326,6 +1334,74 @@ func NewGenerateDpiSpecHandler(
 		}
 		// Convert result to response body with proper JSON tags
 		body := NewGenerateDpiSpecResponseBody(res.(*assistant.DPISpec))
+		response := jsonrpc.MakeSuccessResponse(id, body)
+		if err := encoder(ctx, w).Encode(response); err != nil {
+			errhandler(ctx, w, fmt.Errorf("failed to encode JSON-RPC response: %w", err))
+		}
+		return nil
+	}
+}
+
+// NewDispatchActionHandler creates a JSON-RPC handler which calls the
+// "assistant" service "dispatch_action" endpoint.
+func NewDispatchActionHandler(
+	endpoint loom.Endpoint,
+	mux loomhttp.Muxer,
+	decoder func(*http.Request) loomhttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) loomhttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+) func(context.Context, *http.Request, *jsonrpc.RawRequest, http.ResponseWriter) error {
+	decodeParams := DecodeDispatchActionRequest(mux, decoder)
+	return func(ctx context.Context, r *http.Request, req *jsonrpc.RawRequest, w http.ResponseWriter) error {
+		ctx = context.WithValue(ctx, loom.MethodKey, "dispatch_action")
+		ctx = context.WithValue(ctx, loom.ServiceKey, "assistant")
+
+		params, err := decodeParams(r, req)
+		if err != nil {
+			if req.ID != nil && req.ID != "" {
+				code := jsonrpc.InternalError
+				if _, ok := err.(*loom.ServiceError); ok {
+					code = jsonrpc.InvalidParams
+				}
+				encodeJSONRPCError(ctx, w, req, code, loom.ErrorSafeMessage(err), jsonrpc.NewErrorData(err), encoder, errhandler)
+			} else {
+				errhandler(ctx, w, fmt.Errorf("failed to decode parameters: %w", err))
+			}
+			return nil
+		}
+		res, err := endpoint(ctx, params)
+		if err != nil {
+			if req.ID != nil && req.ID != "" {
+				var en loom.LoomErrorNamer
+				if !errors.As(err, &en) {
+					encodeJSONRPCError(ctx, w, req, jsonrpc.InternalError, loom.ErrorSafeMessage(err), jsonrpc.NewErrorData(err), encoder, errhandler)
+					return nil
+				}
+				switch en.LoomErrorName() {
+				case "invalid_params":
+					encodeJSONRPCError(ctx, w, req, jsonrpc.InvalidParams, loom.ErrorSafeMessage(err), jsonrpc.NewErrorData(err), encoder, errhandler)
+				case "method_not_found":
+					encodeJSONRPCError(ctx, w, req, jsonrpc.MethodNotFound, loom.ErrorSafeMessage(err), jsonrpc.NewErrorData(err), encoder, errhandler)
+				default:
+					code := jsonrpc.InternalError
+					if _, ok := err.(*loom.ServiceError); ok {
+						code = jsonrpc.InvalidParams
+					}
+					encodeJSONRPCError(ctx, w, req, code, loom.ErrorSafeMessage(err), jsonrpc.NewErrorData(err), encoder, errhandler)
+				}
+			} else {
+				errhandler(ctx, w, fmt.Errorf("endpoint error: %w", err))
+			}
+			return nil
+		}
+
+		var id any
+		id = req.ID
+		if id == nil || id == "" {
+			return nil
+		}
+		// Convert result to response body with proper JSON tags
+		body := NewDispatchActionResponseBody(res.(*assistant.DispatchActionResult))
 		response := jsonrpc.MakeSuccessResponse(id, body)
 		if err := encoder(ctx, w).Encode(response); err != nil {
 			errhandler(ctx, w, fmt.Errorf("failed to encode JSON-RPC response: %w", err))

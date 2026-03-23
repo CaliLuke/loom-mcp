@@ -143,3 +143,11 @@ func (s *assistantsrvc) GenerateDpiSpec(ctx context.Context, p *assistant.Genera
 	log.Printf(ctx, "assistant.generate_dpi_spec")
 	return
 }
+
+// Dispatch an action encoded as a union payload.
+func (s *assistantsrvc) DispatchAction(ctx context.Context, p *assistant.DispatchActionPayload) (res *assistant.DispatchActionResult, err error) {
+	ack := "ok"
+	res = &assistant.DispatchActionResult{Ack: ack}
+	log.Printf(ctx, "assistant.dispatch_action")
+	return
+}

@@ -23,7 +23,7 @@ func BuildConversationHistoryPayload(assistantConversationHistoryBody string) (*
 	{
 		err = json.Unmarshal([]byte(assistantConversationHistoryBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"flag\": true,\n      \"limit\": 2181734835457565341,\n      \"nums\": [\n         0.012946015553952153,\n         0.6069391561265004\n      ]\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"flag\": false,\n      \"limit\": 2827353871820925106,\n      \"nums\": [\n         0.7303434885446921,\n         0.43197262016184984,\n         0.979982252011479,\n         0.6814888987920732\n      ]\n   }'")
 		}
 	}
 	v := &assistant.ConversationHistoryPayload{
@@ -277,6 +277,58 @@ func BuildGenerateDpiSpecPayload(assistantGenerateDpiSpecBody string) (*assistan
 		}
 	} else {
 		v.Sections = []string{}
+	}
+
+	return v, nil
+} // BuildDispatchActionPayload builds the payload for the assistant
+// dispatch_action endpoint from CLI flags.
+func BuildDispatchActionPayload(assistantDispatchActionBody string) (*assistant.DispatchActionPayload, error) {
+	var err error
+	var body DispatchActionRequestBody
+	{
+		err = json.Unmarshal([]byte(assistantDispatchActionBody), &body)
+		if err != nil {
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"request\": {\n         \"name\": \"Architecto et aut reiciendis.\"\n      }\n   }'")
+		}
+		if body.Request.Kind() == "" {
+			err = loom.MergeErrors(err, loom.MissingFieldError("request", "body"))
+		}
+		switch string(body.Request.Kind()) {
+		case "CreateAction":
+			actual, _ := body.Request.AsCreateAction()
+			if actual == nil {
+				err = loom.MergeErrors(err, loom.MissingFieldError("value", "body.request.value"))
+				break
+			}
+			if actual != nil {
+				if err2 := ValidateCreateActionRequestBody(actual); err2 != nil {
+					err = loom.MergeErrors(err, err2)
+				}
+			}
+		}
+		if err != nil {
+			return nil, err
+		}
+	}
+	v := &assistant.DispatchActionPayload{}
+	if body.Request.Kind() != "" {
+
+		switch string(body.Request.Kind()) {
+		case "ListAction":
+			actual, _ := body.Request.AsListAction()
+			obj := marshalListActionRequestBodyToAssistantListAction(actual)
+
+			u := v.Request
+			u.SetListAction((*assistant.ListAction)(obj))
+			v.Request = u
+		case "CreateAction":
+			actual, _ := body.Request.AsCreateAction()
+			obj := marshalCreateActionRequestBodyToAssistantCreateAction(actual)
+
+			u := v.Request
+			u.SetCreateAction((*assistant.CreateAction)(obj))
+			v.Request = u
+		}
 	}
 
 	return v, nil

@@ -210,6 +210,24 @@ var _ = Service("assistant", func() {
 		Tool("generate_dpi_spec", "Generate a deterministic design implementation plan from fake Figma data")
 		JSONRPC(func() {})
 	})
+
+	Method("dispatch_action", func() {
+		Description("Dispatch an action encoded as a union payload")
+		Payload(func() {
+			Attribute("request", OneOf("ListAction", "CreateAction"), func() {
+				Meta("oneof:type:field", "action")
+				Meta("oneof:value:field", "value")
+				Description("Action envelope")
+			})
+			Required("request")
+		})
+		Result(func() {
+			Attribute("ack", String, "Acknowledgement")
+			Required("ack")
+		})
+		Tool("dispatch_action", "Dispatch an action using a union payload")
+		JSONRPC(func() {})
+	})
 })
 
 // ---- Shared Types (subset sufficient for integration tests) ----
@@ -256,6 +274,15 @@ var DPICallToAction = Type("DPICallToAction", func() {
 	Attribute("label", String, "CTA label")
 	Attribute("style", String, "CTA visual style")
 	Required("label", "style")
+})
+
+var ListAction = Type("ListAction", func() {
+	Attribute("limit", Int, "Maximum number of items to list")
+})
+
+var CreateAction = Type("CreateAction", func() {
+	Attribute("name", String, "Name to create")
+	Required("name")
 })
 
 var DPISpec = Type("DPISpec", func() {

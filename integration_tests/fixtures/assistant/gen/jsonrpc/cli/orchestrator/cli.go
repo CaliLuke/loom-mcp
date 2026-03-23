@@ -22,7 +22,7 @@ import (
 //
 //	command (subcommand1|subcommand2|...)
 func UsageCommands() []string {
-	return []string{"assistant (list-documents|system-info|conversation-history|figma-design-system|generate-prompts|build-figma-implementation-prompt|send-notification|analyze-sentiment|extract-keywords|summarize-text|search|execute-code|process-batch|multi-content|generate-dpi-spec)"}
+	return []string{"assistant (list-documents|system-info|conversation-history|figma-design-system|generate-prompts|build-figma-implementation-prompt|send-notification|analyze-sentiment|extract-keywords|summarize-text|search|execute-code|process-batch|multi-content|generate-dpi-spec|dispatch-action)"}
 } // UsageExamples produces an example of a valid invocation of the CLI tool.
 func UsageExamples() string {
 	return os.Args[0] + " assistant list-documents\\n"
@@ -81,6 +81,9 @@ func ParseEndpoint(
 
 		assistantGenerateDpiSpecFlags    = flag.NewFlagSet("generate-dpi-spec", flag.ExitOnError)
 		assistantGenerateDpiSpecBodyFlag = assistantGenerateDpiSpecFlags.String("body", "REQUIRED", "")
+
+		assistantDispatchActionFlags    = flag.NewFlagSet("dispatch-action", flag.ExitOnError)
+		assistantDispatchActionBodyFlag = assistantDispatchActionFlags.String("body", "REQUIRED", "")
 	)
 	assistantFlags.Usage = assistantUsage
 	assistantListDocumentsFlags.Usage = assistantListDocumentsUsage
@@ -98,6 +101,7 @@ func ParseEndpoint(
 	assistantProcessBatchFlags.Usage = assistantProcessBatchUsage
 	assistantMultiContentFlags.Usage = assistantMultiContentUsage
 	assistantGenerateDpiSpecFlags.Usage = assistantGenerateDpiSpecUsage
+	assistantDispatchActionFlags.Usage = assistantDispatchActionUsage
 
 	if err := flag.CommandLine.Parse(os.Args[1:]); err != nil {
 		return nil, nil, err
@@ -178,6 +182,9 @@ func ParseEndpoint(
 			case "generate-dpi-spec":
 				epf = assistantGenerateDpiSpecFlags
 
+			case "dispatch-action":
+				epf = assistantDispatchActionFlags
+
 			}
 
 		}
@@ -245,6 +252,9 @@ func ParseEndpoint(
 			case "generate-dpi-spec":
 				endpoint = c.GenerateDpiSpec()
 				data, err = assistantc.BuildGenerateDpiSpecPayload(*assistantGenerateDpiSpecBodyFlag)
+			case "dispatch-action":
+				endpoint = c.DispatchAction()
+				data, err = assistantc.BuildDispatchActionPayload(*assistantDispatchActionBodyFlag)
 			}
 		}
 	}
@@ -276,6 +286,7 @@ func assistantUsage() {
 	fmt.Fprintln(os.Stderr, "    process-batch: Process batch of items")
 	fmt.Fprintln(os.Stderr, "    multi-content: Return multiple content items")
 	fmt.Fprintln(os.Stderr, "    generate-dpi-spec: Generate a deterministic implementation-ready DPI spec from a fake Figma frame")
+	fmt.Fprintln(os.Stderr, "    dispatch-action: Dispatch an action encoded as a union payload")
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Additional help:")
 	fmt.Fprintf(os.Stderr, "    %s assistant COMMAND --help\n", os.Args[0])
@@ -325,7 +336,7 @@ func assistantConversationHistoryUsage() {
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "assistant conversation-history --body '{\n      \"flag\": true,\n      \"limit\": 2181734835457565341,\n      \"nums\": [\n         0.012946015553952153,\n         0.6069391561265004\n      ]\n   }'")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "assistant conversation-history --body '{\n      \"flag\": false,\n      \"limit\": 2827353871820925106,\n      \"nums\": [\n         0.7303434885446921,\n         0.43197262016184984,\n         0.979982252011479,\n         0.6814888987920732\n      ]\n   }'")
 }
 func assistantFigmaDesignSystemUsage() {
 	// Header with flags
@@ -528,4 +539,21 @@ func assistantGenerateDpiSpecUsage() {
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
 	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "assistant generate-dpi-spec --body '{\n      \"density\": \"compact\",\n      \"include_dev_notes\": true,\n      \"platform\": \"ios\",\n      \"primary_cta\": \"Itaque omnis iure dolore consectetur.\",\n      \"screen_title\": \"Sed expedita vitae quia.\",\n      \"sections\": [\n         \"Eum molestias omnis error sequi et sint.\",\n         \"Culpa neque.\"\n      ]\n   }'")
+}
+func assistantDispatchActionUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] assistant dispatch-action", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Dispatch an action encoded as a union payload")
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, "    -body JSON: ")
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "assistant dispatch-action --body '{\n      \"request\": {\n         \"name\": \"Architecto et aut reiciendis.\"\n      }\n   }'")
 }

@@ -48,6 +48,8 @@ type inlineSchema struct {
 	Properties           map[string]*inlineSchema `json:"properties,omitempty"`
 	Items                *inlineSchema            `json:"items,omitempty"`
 	AdditionalProperties any                      `json:"additionalProperties,omitempty"`
+	OneOf                []*inlineSchema          `json:"oneOf,omitempty"`
+	Discriminator        *inlineDiscriminator     `json:"discriminator,omitempty"`
 	Enum                 []any                    `json:"enum,omitempty"`
 	Default              any                      `json:"default,omitempty"`
 	Minimum              *float64                 `json:"minimum,omitempty"`
@@ -58,6 +60,13 @@ type inlineSchema struct {
 	Format               string                   `json:"format,omitempty"`
 	MinItems             *int                     `json:"minItems,omitempty"`
 	MaxItems             *int                     `json:"maxItems,omitempty"`
+}
+
+// inlineDiscriminator mirrors the JSON Schema/OpenAPI discriminator object.
+//
+//nolint:tagliatelle // JSON Schema specification requires camelCase field names
+type inlineDiscriminator struct {
+	PropertyName string `json:"propertyName,omitempty"`
 }
 
 // buildInlineSchema creates a JSON Schema from a Goa attribute without $ref.
@@ -102,6 +111,30 @@ func buildInlineSchema(attr *expr.AttributeExpr, visited map[any]struct{}) (*inl
 			schema.Properties[nat.Name] = property
 		}
 		schema.AdditionalProperties = false
+	case *expr.Union:
+		schema.Type = jsonTypeObject
+		typeKey := t.GetTypeKey()
+		valueKey := t.GetValueKey()
+		schema.OneOf = make([]*inlineSchema, 0, len(t.Values))
+		schema.Discriminator = &inlineDiscriminator{PropertyName: typeKey}
+		for _, nat := range t.Values {
+			valueSchema, err := buildInlineSchema(nat.Attribute, visited)
+			if err != nil {
+				return nil, err
+			}
+			schema.OneOf = append(schema.OneOf, &inlineSchema{
+				Type: jsonTypeObject,
+				Properties: map[string]*inlineSchema{
+					typeKey: {
+						Type: jsonTypeString,
+						Enum: []any{nat.Name},
+					},
+					valueKey: valueSchema,
+				},
+				Required:             []string{typeKey, valueKey},
+				AdditionalProperties: false,
+			})
+		}
 	case *expr.UserTypeExpr:
 		return inlineWrappedSchema(attr, t.Attribute(), visited, t, t.TypeName)
 	case *expr.ResultTypeExpr:

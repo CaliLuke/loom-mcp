@@ -566,6 +566,49 @@ func DecodeGenerateDpiSpecRequest(mux loomhttp.Muxer, decoder func(*http.Request
 	}
 }
 
+// EncodeDispatchActionResponse returns an encoder for responses returned by
+// the assistant dispatch_action endpoint.
+func EncodeDispatchActionResponse(encoder func(context.Context, http.ResponseWriter) loomhttp.Encoder) func(context.Context, http.ResponseWriter, any) error {
+	return func(ctx context.Context, w http.ResponseWriter, v any) error {
+		res, _ := v.(*assistant.DispatchActionResult)
+		enc := encoder(ctx, w)
+		body := NewDispatchActionResponseBody(res)
+		w.WriteHeader(http.StatusOK)
+		return enc.Encode(body)
+	}
+}
+
+// DecodeDispatchActionRequest returns a decoder for requests sent to the
+// assistant dispatch_action endpoint.
+func DecodeDispatchActionRequest(mux loomhttp.Muxer, decoder func(*http.Request) loomhttp.Decoder) func(*http.Request, *jsonrpc.RawRequest) (*assistant.DispatchActionPayload, error) {
+	return func(r *http.Request, req *jsonrpc.RawRequest) (*assistant.DispatchActionPayload, error) {
+		r.Body = io.NopCloser(bytes.NewReader(req.Params))
+		var payload *assistant.DispatchActionPayload
+		var (
+			body DispatchActionRequestBody
+			err  error
+		)
+		err = decoder(r).Decode(&body)
+		if err != nil {
+			if errors.Is(err, io.EOF) {
+				return payload, loom.MissingPayloadError()
+			}
+			var gerr *loom.ServiceError
+			if errors.As(err, &gerr) {
+				return payload, gerr
+			}
+			return payload, loom.DecodePayloadError(err.Error())
+		}
+		err = ValidateDispatchActionRequestBody(&body)
+		if err != nil {
+			return payload, err
+		}
+		payload = NewDispatchActionPayload(&body)
+
+		return payload, nil
+	}
+}
+
 // marshalAssistantDesignTokenGroupToDesignTokenGroupResponseBody builds a
 // value of type *DesignTokenGroupResponseBody from a value of type
 // *assistant.DesignTokenGroup.
@@ -636,6 +679,32 @@ func marshalAssistantDPICallToActionToDPICallToActionResponseBody(v *assistant.D
 	res := &DPICallToActionResponseBody{
 		Label: v.Label,
 		Style: v.Style,
+	}
+
+	return res
+}
+
+// unmarshalListActionRequestBodyToAssistantListAction builds a value of type
+// *assistant.ListAction from a value of type *ListActionRequestBody.
+func unmarshalListActionRequestBodyToAssistantListAction(v *ListActionRequestBody) *assistant.ListAction {
+	if v == nil {
+		return nil
+	}
+	res := &assistant.ListAction{
+		Limit: v.Limit,
+	}
+
+	return res
+}
+
+// unmarshalCreateActionRequestBodyToAssistantCreateAction builds a value of
+// type *assistant.CreateAction from a value of type *CreateActionRequestBody.
+func unmarshalCreateActionRequestBodyToAssistantCreateAction(v *CreateActionRequestBody) *assistant.CreateAction {
+	if v == nil {
+		return nil
+	}
+	res := &assistant.CreateAction{
+		Name: *v.Name,
 	}
 
 	return res

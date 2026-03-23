@@ -369,6 +369,50 @@ var AssistantAssistantMcpToolsetToolSpecs = []tools.ToolSpec{
 			},
 		},
 	},
+	{
+		Name:        "dispatch_action",
+		Service:     "assistant",
+		Toolset:     "assistant.assistant-mcp",
+		Description: "Dispatch an action using a union payload",
+		Payload: tools.TypeSpec{
+			Name:   "*assistant.DispatchActionPayload",
+			Schema: []byte("{\"type\":\"object\",\"required\":[\"request\"],\"properties\":{\"request\":{\"type\":\"object\",\"description\":\"Action envelope\",\"oneOf\":[{\"type\":\"object\",\"required\":[\"action\",\"value\"],\"properties\":{\"action\":{\"type\":\"string\",\"enum\":[\"ListAction\"]},\"value\":{\"type\":\"object\",\"properties\":{\"limit\":{\"type\":\"integer\",\"description\":\"Maximum number of items to list\"}},\"additionalProperties\":false}},\"additionalProperties\":false},{\"type\":\"object\",\"required\":[\"action\",\"value\"],\"properties\":{\"action\":{\"type\":\"string\",\"enum\":[\"CreateAction\"]},\"value\":{\"type\":\"object\",\"required\":[\"name\"],\"properties\":{\"name\":{\"type\":\"string\",\"description\":\"Name to create\"}},\"additionalProperties\":false}},\"additionalProperties\":false}],\"discriminator\":{\"propertyName\":\"action\"}}},\"additionalProperties\":false}"),
+			Codec: tools.JSONCodec[any]{
+				ToJSON: func(v any) ([]byte, error) {
+					return json.Marshal(v)
+				},
+				FromJSON: func(data []byte) (any, error) {
+					if len(data) == 0 {
+						return nil, nil
+					}
+					var out any
+					if err := json.Unmarshal(data, &out); err != nil {
+						return nil, err
+					}
+					return out, nil
+				},
+			},
+		},
+		Result: tools.TypeSpec{
+			Name:   "*assistant.DispatchActionResult",
+			Schema: nil,
+			Codec: tools.JSONCodec[any]{
+				ToJSON: func(v any) ([]byte, error) {
+					return json.Marshal(v)
+				},
+				FromJSON: func(data []byte) (any, error) {
+					if len(data) == 0 {
+						return nil, nil
+					}
+					var out any
+					if err := json.Unmarshal(data, &out); err != nil {
+						return nil, err
+					}
+					return out, nil
+				},
+			},
+		},
+	},
 }
 
 // RegisterAssistantAssistantMcpToolset registers the assistant-mcp toolset with the runtime.
@@ -501,6 +545,9 @@ func AssistantAssistantMcpToolsetRetryHint(toolName tools.Ident, err error) *pla
 			case "generate_dpi_spec":
 				schemaJSON = "{\"type\":\"object\",\"required\":[\"screen_title\",\"platform\",\"density\",\"primary_cta\",\"sections\"],\"properties\":{\"density\":{\"type\":\"string\",\"description\":\"Layout density\",\"enum\":[\"compact\",\"comfortable\"]},\"include_dev_notes\":{\"type\":\"boolean\",\"description\":\"Whether to include implementation notes\"},\"platform\":{\"type\":\"string\",\"description\":\"Target platform\",\"enum\":[\"ios\",\"web\"]},\"primary_cta\":{\"type\":\"string\",\"description\":\"Primary call to action\"},\"screen_title\":{\"type\":\"string\",\"description\":\"Name of the frame or screen\"},\"sections\":{\"type\":\"array\",\"description\":\"Ordered screen sections\",\"items\":{\"type\":\"string\"}}},\"additionalProperties\":false}"
 				example = "{\"density\":\"comfortable\",\"include_dev_notes\":false,\"platform\":\"web\",\"primary_cta\":\"abc123\",\"screen_title\":\"abc123\",\"sections\":[\"abc123\"]}"
+			case "dispatch_action":
+				schemaJSON = "{\"type\":\"object\",\"required\":[\"request\"],\"properties\":{\"request\":{\"type\":\"object\",\"description\":\"Action envelope\",\"oneOf\":[{\"type\":\"object\",\"required\":[\"action\",\"value\"],\"properties\":{\"action\":{\"type\":\"string\",\"enum\":[\"ListAction\"]},\"value\":{\"type\":\"object\",\"properties\":{\"limit\":{\"type\":\"integer\",\"description\":\"Maximum number of items to list\"}},\"additionalProperties\":false}},\"additionalProperties\":false},{\"type\":\"object\",\"required\":[\"action\",\"value\"],\"properties\":{\"action\":{\"type\":\"string\",\"enum\":[\"CreateAction\"]},\"value\":{\"type\":\"object\",\"required\":[\"name\"],\"properties\":{\"name\":{\"type\":\"string\",\"description\":\"Name to create\"}},\"additionalProperties\":false}},\"additionalProperties\":false}],\"discriminator\":{\"propertyName\":\"action\"}}},\"additionalProperties\":false}"
+				example = "{\"request\":{\"name\":\"abc123\"}}"
 			}
 			prompt := retry.BuildRepairPrompt("tools/call:"+key, rpcErr.Message, example, schemaJSON)
 			return &planner.RetryHint{
