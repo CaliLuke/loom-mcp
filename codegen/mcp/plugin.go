@@ -23,6 +23,7 @@ func PrepareServices(_ string, roots []eval.Root) error {
 				if err := validatePureMCPService(svc, mcpexpr.Root.GetMCP(svc), source); err != nil {
 					return err
 				}
+				synthesizePureMCPJSONRPCEndpoints(r, svc)
 			}
 		}
 
@@ -43,4 +44,61 @@ func PrepareServices(_ string, roots []eval.Root) error {
 	}
 
 	return nil
+}
+
+func synthesizePureMCPJSONRPCEndpoints(root *expr.RootExpr, svc *expr.ServiceExpr) {
+	if root == nil || root.API == nil {
+		return
+	}
+	jsonrpcSvc := root.API.JSONRPC.Service(svc.Name)
+	if jsonrpcSvc == nil || jsonrpcSvc.JSONRPCRoute == nil {
+		return
+	}
+	if jsonrpcSvc.Root == nil {
+		jsonrpcSvc.Root = &root.API.JSONRPC.HTTPExpr
+	}
+
+	existing := make(map[string]struct{}, len(jsonrpcSvc.HTTPEndpoints))
+	for _, endpoint := range jsonrpcSvc.HTTPEndpoints {
+		if endpoint != nil && endpoint.MethodExpr != nil {
+			existing[endpoint.MethodExpr.Name] = struct{}{}
+		}
+	}
+
+	for _, method := range svc.Methods {
+		if _, ok := existing[method.Name]; ok {
+			continue
+		}
+		jsonrpcSvc.HTTPEndpoints = append(jsonrpcSvc.HTTPEndpoints, &expr.HTTPEndpointExpr{
+			MethodExpr: method,
+			Service:    jsonrpcSvc,
+			Meta: expr.MetaExpr{
+				"jsonrpc": []string{},
+			},
+			Body:    method.Payload,
+			Params:  expr.NewEmptyMappedAttributeExpr(),
+			Headers: expr.NewEmptyMappedAttributeExpr(),
+			Cookies: expr.NewEmptyMappedAttributeExpr(),
+			Routes: []*expr.RouteExpr{{
+				Method:   jsonrpcSvc.JSONRPCRoute.Method,
+				Path:     jsonrpcSvc.JSONRPCRoute.Path,
+				Endpoint: nil, // set below once the endpoint exists
+			}},
+		})
+		endpoint := jsonrpcSvc.HTTPEndpoints[len(jsonrpcSvc.HTTPEndpoints)-1]
+		endpoint.Routes[0].Endpoint = endpoint
+		if method.Stream == expr.ServerStreamKind {
+			endpoint.SSE = &expr.HTTPSSEExpr{}
+		}
+	}
+	previousRoot := expr.Root
+	expr.Root = root
+	defer func() {
+		expr.Root = previousRoot
+	}()
+
+	jsonrpcSvc.Prepare()
+	for _, endpoint := range jsonrpcSvc.HTTPEndpoints {
+		endpoint.Prepare()
+	}
 }

@@ -84,4 +84,5 @@ Within each section, place main logic first and helpers last.
 ## Repo Skills
 
 - Use `.agents/skills/loom-mcp/SKILL.md` for `loom-mcp` runtime, codegen, MCP, planner, and agent-as-tool guidance.
+- Use `.agents/skills/loom-mcp-release/SKILL.md` when cutting, tagging, pushing, or verifying a `loom-mcp` release from finished code.
 - Use `.agents/skills/mcp-tool-design/SKILL.md` when shaping MCP-facing tool contracts.

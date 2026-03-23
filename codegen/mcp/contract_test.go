@@ -61,6 +61,56 @@ func TestGenerate_RejectsUnmappedPureMCPMethodsWithoutPrepareServices(t *testing
 	require.ErrorContains(t, err, "subtract")
 }
 
+func TestGenerate_AcceptsMCPToolMethodsWithoutMethodLevelJSONRPC(t *testing.T) {
+	restore := resetMCPCodegenState(t)
+	defer restore()
+
+	svc, methods := testService("demo", "ping")
+	root := testRootExpr([]*expr.ServiceExpr{svc}, []*expr.HTTPServiceExpr{
+		jsonrpcService(svc, "/rpc"),
+	})
+	mcpexpr.Root.RegisterMCP(svc, &mcpexpr.MCPExpr{
+		Name:    "demo",
+		Version: "0.1.0",
+		Tools: []*mcpexpr.ToolExpr{
+			{Name: "ping", Method: methods["ping"]},
+		},
+	})
+
+	_, err := Generate("example.com/demo/gen", []eval.Root{root}, nil)
+
+	require.NoError(t, err)
+}
+
+func TestPrepareServices_SynthesizesJSONRPCEndpointsForPureMCPMethods(t *testing.T) {
+	restore := resetMCPCodegenState(t)
+	defer restore()
+
+	svc, methods := testService("demo", "ping")
+	root := testRootExpr([]*expr.ServiceExpr{svc}, []*expr.HTTPServiceExpr{
+		jsonrpcService(svc, "/rpc"),
+	})
+	mcpexpr.Root.RegisterMCP(svc, &mcpexpr.MCPExpr{
+		Name:    "demo",
+		Version: "0.1.0",
+		Tools: []*mcpexpr.ToolExpr{
+			{Name: "ping", Method: methods["ping"]},
+		},
+	})
+
+	err := PrepareServices("", []eval.Root{root})
+
+	require.NoError(t, err)
+
+	jsonrpcSvc := root.API.JSONRPC.Service("demo")
+	require.NotNil(t, jsonrpcSvc)
+	require.Len(t, jsonrpcSvc.HTTPEndpoints, 1)
+	require.Equal(t, "ping", jsonrpcSvc.HTTPEndpoints[0].MethodExpr.Name)
+	require.NotNil(t, jsonrpcSvc.HTTPEndpoints[0].Meta["jsonrpc"])
+	require.Len(t, jsonrpcSvc.HTTPEndpoints[0].Routes, 1)
+	require.Equal(t, "/rpc", jsonrpcSvc.HTTPEndpoints[0].Routes[0].Path)
+}
+
 func TestGenerateMCPClientAdapter_DoesNotRenderOriginalClientFallback(t *testing.T) {
 	restore := resetMCPCodegenState(t)
 	defer restore()
@@ -763,10 +813,12 @@ func testService(name string, methodNames ...string) (*expr.ServiceExpr, map[str
 	methods := make(map[string]*expr.MethodExpr, len(methodNames))
 	for _, methodName := range methodNames {
 		method := &expr.MethodExpr{
-			Name:    methodName,
-			Service: svc,
-			Payload: &expr.AttributeExpr{Type: expr.Empty},
-			Result:  &expr.AttributeExpr{Type: expr.String},
+			Name:             methodName,
+			Service:          svc,
+			Payload:          &expr.AttributeExpr{Type: expr.Empty},
+			Result:           &expr.AttributeExpr{Type: expr.String},
+			StreamingPayload: &expr.AttributeExpr{Type: expr.Empty},
+			StreamingResult:  &expr.AttributeExpr{Type: expr.Empty},
 		}
 		svc.Methods = append(svc.Methods, method)
 		methods[methodName] = method
@@ -829,6 +881,9 @@ func testRootExpr(services []*expr.ServiceExpr, jsonrpcServices []*expr.HTTPServ
 	return &expr.RootExpr{
 		Services: services,
 		API: &expr.APIExpr{
+			ExampleGenerator: &expr.ExampleGenerator{
+				Randomizer: expr.NewFakerRandomizer("mcp-contract-test"),
+			},
 			HTTP: &expr.HTTPExpr{Services: httpServices},
 			JSONRPC: &expr.JSONRPCExpr{
 				HTTPExpr: expr.HTTPExpr{Services: jsonrpcServices},

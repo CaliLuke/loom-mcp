@@ -9,10 +9,10 @@ Use this skill for `loom-mcp` work in this repo. Keep `AGENTS.md` short and keep
 ## Non-Negotiables
 
 - Treat `design/*.go` as the source of truth.
-- Regenerate after every design change with `goa gen <module-import-path>/design`.
+- Regenerate after every design change with `loom gen <module-import-path>/design`.
 - Never hand-edit generated `gen/` files.
 - Implement business logic in non-generated files.
-- Use Go import paths for Goa commands, not filesystem paths.
+- Use Go import paths for generation commands, not filesystem paths.
 - Commit generated code; do not rely on CI to regenerate it.
 - Keep this skill current with the product. Update `SKILL.md` and the reference files directly instead of writing sidecar delta docs.
 
@@ -36,9 +36,9 @@ Use this skill for `loom-mcp` work in this repo. Keep `AGENTS.md` short and keep
 - Runtime schemas come from generated `tool_specs.Specs` and codecs, not `docs.json`.
 - MCP is a two-way bridge:
   - consume external MCP servers through `runtime/mcp` callers,
-  - expose Goa services as MCP servers through generated adapters and registrations.
-- Codegen should use partial evaluation and Goa `NameScope` helpers rather than string surgery or runtime branching over static structure.
-- DSL/codegen/runtime internals should trust Goa invariants and fail fast instead of adding speculative fallback paths.
+  - expose designed services as MCP servers through generated adapters and registrations.
+- Codegen should use partial evaluation and `NameScope` helpers rather than string surgery or runtime branching over static structure.
+- DSL/codegen/runtime internals should trust evaluated design invariants and fail fast instead of adding speculative fallback paths.
 
 ## Command Reminders
 

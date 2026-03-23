@@ -3,7 +3,7 @@
 `loom-mcp` is the home for the agent, MCP, and registry framework in this repository.
 
 It combines:
-- a Goa-based DSL for describing agents, toolsets, MCP servers, and registries,
+- a Loom-powered design DSL for describing agents, toolsets, MCP servers, and registries,
 - code generation driven by `github.com/CaliLuke/loom`,
 - a runtime for planning, execution, streaming, memory, and durable workflows.
 
@@ -19,7 +19,7 @@ Repo identity and module identity are now aligned.
 
 ## What lives here
 
-- `design/`: Goa design source of truth.
+- `design/`: design source of truth.
 - `dsl/`: agent, MCP, and registry DSL.
 - `codegen/`: generators for agents, MCP adapters, codecs, and registries.
 - `runtime/`: execution runtime, planners, engines, MCP callers, and streaming.

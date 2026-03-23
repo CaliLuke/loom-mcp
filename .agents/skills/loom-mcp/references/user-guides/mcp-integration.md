@@ -15,11 +15,16 @@ Overview
 MCP integration follows this workflow:
 
 
-1. Service design: Declare the MCP server via Goa’s MCP DSL
+1. Service design: Declare the MCP server in your Loom design
 2. Agent design: Reference that suite with Use(MCPToolset("service", "suite"))
-3. Code generation: Produces the MCP JSON-RPC server (when Goa-backed) plus runtime registration helpers and toolset-owned specs/codecs for the suite
+3. Code generation: Produces the MCP JSON-RPC server (for generated services) plus runtime registration helpers and toolset-owned specs/codecs for the suite
 4. Runtime wiring: Instantiate an mcpruntime.Caller transport (HTTP/SSE/stdio). Generated helpers register the toolset and adapt JSON-RPC errors into planner.RetryHint values
 5. Planner execution: Planners simply enqueue tool calls with canonical JSON payloads; the runtime forwards them to the MCP caller, persists results via hooks, and surfaces structured telemetry
+
+For generated MCP servers, put the JSON-RPC route on the service with
+`JSONRPC(func() { POST("/rpc") })`. MCP-mapped methods inherit that transport shape;
+add method-level `JSONRPC(...)` only when a method needs explicit JSON-RPC options such
+as SSE, ID-field mapping, or method-specific error code responses.
 
 
 Declaring MCP Toolsets
@@ -29,7 +34,7 @@ Declaring MCP Toolsets
 In Service Design
 -----------------
 
-First, declare the MCP server in your Goa service design:
+First, declare the MCP server in your service design:
 
 --- CODE ---
 package design
@@ -84,7 +89,7 @@ var _ = Service("orchestrator", func() {
 External MCP Servers with Inline Schemas
 ---------------------------------------
 
-For external MCP servers (not Goa-backed), declare tools with inline schemas:
+For external MCP servers (not generated from your local service design), declare tools with inline schemas:
 
 --- CODE ---
 var RemoteSearch = MCPToolset("remote", "search", func() {
@@ -240,13 +245,13 @@ caller := mcpruntime.CallerFunc(func(ctx context.Context, req mcpruntime.CallReq
 --- END CODE ---
 
 
-Goa-Generated JSON-RPC Caller
+Generated JSON-RPC Caller
 -----------------------------
 
-For Goa-generated MCP clients that wrap service methods:
+For generated MCP clients that wrap service methods:
 
 --- CODE ---
-caller := mcpassistant.NewCaller(client) // Uses Goa-generated client
+caller := mcpassistant.NewCaller(client) // Uses the generated typed client
 --- END CODE ---
 
 
@@ -391,7 +396,7 @@ Best Practices
 ==============
 
 - Let codegen manage registration: Use the generated helper to register MCP toolsets; avoid hand-written glue so codecs and retry hints stay consistent
-- Use typed callers: Prefer Goa-generated JSON-RPC callers when available for type safety
+- Use typed callers: Prefer generated JSON-RPC callers when available for type safety
 - Handle errors gracefully: Map MCP errors to RetryHint values to help planners recover
 - Monitor telemetry: MCP calls emit structured telemetry events; use them for observability
 - Choose the right transport: Use HTTP for simple request/response, SSE for streaming, stdio for subprocess-based servers

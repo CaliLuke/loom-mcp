@@ -7,14 +7,14 @@ Use this file when editing DSL, generators, generated helpers, or MCP codegen be
 - The DSL in `design/*.go` is the only source of truth.
 - Regenerate after design changes. Never patch generated output by hand.
 - Keep business logic in non-generated packages.
-- Use import paths with Goa commands:
-  - `goa gen <module>/design`
-  - `goa example <module>/design`
+- Use import paths with generation commands:
+  - `loom gen <module>/design`
+  - `loom example <module>/design`
 
 ## Generated Surface
 
-- `goa gen` emits tool specs, codecs, workflow/runtime registration helpers, and `AGENTS_QUICKSTART.md`.
-- `goa example` emits application-owned scaffold under `internal/agents/`.
+- `loom gen` emits tool specs, codecs, workflow/runtime registration helpers, and `AGENTS_QUICKSTART.md`.
+- `loom example` emits application-owned scaffold under `internal/agents/`.
 - Disable generated quickstart docs from the DSL only when that surface is intentionally undesired.
 
 ## Partial Evaluation
@@ -26,10 +26,10 @@ Use this file when editing DSL, generators, generated helpers, or MCP codegen be
 
 ## Type References
 
-- Always derive type names and refs through Goa `NameScope` helpers.
+- Always derive type names and refs through `NameScope` helpers.
 - Prefer `GoTypeRef` and `GoFullTypeRef` over string concatenation.
 - Preserve original attributes so locator metadata remains intact.
-- Let Goa own pointer and value semantics. Do not force pointer mode outside transport-validation cases.
+- Let the shared type system own pointer and value semantics. Do not force pointer mode outside transport-validation cases.
 - Use `codegen.GoTransform(...)` with proper conversion contexts instead of post-processing emitted code.
 
 ## Generator Editing Rules
@@ -42,17 +42,17 @@ Use this file when editing DSL, generators, generated helpers, or MCP codegen be
 
 ## MCP Generator Rules
 
-- Treat MCP as a transport layered on Goa services.
-- Compose on Goa codegen rather than forking transport stacks.
-- Keep MCP file layout aligned with Goa conventions.
-- Reuse Goa encoding/decoding for payload and result transforms.
+- Treat MCP as a transport layered on service designs.
+- Compose on the existing codegen pipeline rather than forking transport stacks.
+- Keep MCP file layout aligned with current repository conventions.
+- Reuse generated encoding/decoding for payload and result transforms.
 - Prefer minimal post-processing over handwritten alternative generators.
 
 ## Validation And Contracts
 
 - Put validation in the DSL.
 - Service internals should trust validated payloads and generated contracts.
-- Avoid defensive guards for Goa invariants in DSL and codegen packages.
+- Avoid defensive guards for evaluated design invariants in DSL and codegen packages.
 - Fail fast when invariant holders are broken; do not add catch-all fallbacks.
 
 ## Where To Verify

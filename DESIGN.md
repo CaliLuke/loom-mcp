@@ -1,11 +1,11 @@
 # Loom MCP: Design-First Agentic Systems
 
-Build intelligent agents, MCP servers, and registry-integrated toolsets from your Goa designs. This plugin extends Goa with agent orchestration, MCP protocol support and centralized registries.
+Build intelligent agents, MCP servers, and registry-integrated toolsets from your Loom designs. `loom-mcp` layers agent orchestration, MCP protocol support, and centralized registries onto the core Loom design/codegen pipeline.
 
 ## What you get
 
 - **Agents**: Durable plan/execute loops with policy enforcement, memory, and streaming
-- **MCP**: Endpoints mapped from your Goa service (tools, resources, prompts) with JSON-RPC/SSE transport
+- **MCP**: Endpoints mapped from your service definition (tools, resources, prompts) with JSON-RPC/SSE transport
 - **Registries**: Centralized tool catalogs with federation, caching, and semantic search
 - **Unified Toolsets**: Single `Toolset` construct with providers (local, MCP, registry)
 
@@ -14,13 +14,13 @@ Build intelligent agents, MCP servers, and registry-integrated toolsets from you
 For each service annotated with agents or MCP, the plugin:
 
 1. Derives service expressions from your DSL (see `expr/agent/` and `expr/mcp.go`).
-2. Runs standard Goa generators:
+2. Runs the standard Loom code generation pipeline:
    - Service layer via `codegen/service` (service, endpoints, client)
    - JSON-RPC transport via `jsonrpc/codegen` (server, client, types; SSE when streaming)
    - Agent workflows, activities, and tool specs via `codegen/agent`
 3. Applies small, deterministic transformations so files land under appropriate paths.
 
-We compose on top of Goa—no forks, minimal templates, and predictable output.
+We compose on top of the shared Loom generation pipeline with minimal templates and predictable output.
 
 ## Layout
 
@@ -123,18 +123,18 @@ The generated `MCPAdapterOptions` provides configuration hooks:
 There are two distinct client-side MCP call paths, and they serve different purposes:
 
 - `runtime/mcp` provides transport callers (`NewStdioCaller`, `NewHTTPCaller`, `NewSSECaller`) for connecting to external MCP servers. These constructors create an SDK-backed `SessionCaller`, so initialize negotiation, capability exchange, and transport lifecycle are owned by the official Go SDK.
-- Generated MCP JSON-RPC clients are used only when Goa generates an MCP service and a matching typed JSON-RPC client for that same service. In that case the generated `NewCaller` wrapper adapts the generated JSON-RPC client to the shared `runtime/mcp.Caller` interface and reuses the runtime normalization contract.
+- Generated MCP JSON-RPC clients are used only when the design generates an MCP service and a matching typed JSON-RPC client for that same service. In that case the generated `NewCaller` wrapper adapts the generated JSON-RPC client to the shared `runtime/mcp.Caller` interface and reuses the runtime normalization contract.
 
 This split is intentional:
 
 - External MCP transports should use the SDK directly because transport/session semantics are protocol-level concerns.
-- Generated JSON-RPC clients should stay typed and Goa-native because they target Goa-generated MCP services, not arbitrary remote MCP transports.
+- Generated JSON-RPC clients should stay typed and design-native because they target generated MCP services, not arbitrary remote MCP transports.
 
 Both paths converge on the same runtime `Caller` contract and the same tool result normalization logic, so runtime-managed callers and generated callers expose identical multi-content behavior to the rest of loom-mcp.
 
 ## Streaming
 
-No custom streaming templates. When your methods stream, Goa's JSON-RPC generator emits the SSE stack. We simply adjust paths/imports so it lives under the MCP tree.
+No custom streaming templates. When your methods stream, the JSON-RPC generator emits the SSE stack. We simply adjust paths/imports so it lives under the MCP tree.
 
 ## Agent run lifecycle streaming contract
 
@@ -162,7 +162,7 @@ This keeps consumers simple: render `error`, gate “Retry” on `retryable`, an
 
 ## Tool Input Schema
 
-For each tool with a non-empty payload, the plugin derives a compact JSON Schema from the Goa attribute and exposes it in `tools/list` under `inputSchema`. Union payloads preserve their discriminator envelope (`oneOf` plus `discriminator.propertyName`) instead of collapsing to an empty object. This uses Goa's `openapi.Schema` type for complete JSON Schema draft 2020-12 support.
+For each tool with a non-empty payload, the plugin derives a compact JSON Schema from the authored attribute definition and exposes it in `tools/list` under `inputSchema`. Union payloads preserve their discriminator envelope (`oneOf` plus `discriminator.propertyName`) instead of collapsing to an empty object. This uses the shared OpenAPI schema machinery for complete JSON Schema draft 2020-12 support.
 
 ## Tool Identification
 
@@ -181,20 +181,20 @@ The `loom example` phase generates application-owned scaffold under `internal/ag
 ## Security considerations
 
 - Resource policy: use deny/allow lists to constrain which URIs can be read
-- Registry authentication: use Goa security schemes (`APIKeySecurity`, `OAuth2Security`, etc.)
+- Registry authentication: use the design-level security schemes (`APIKeySecurity`, `OAuth2Security`, etc.)
 - Logging: avoid logging sensitive payloads and results in production
 
 ## Error code mapping
 
-The adapter maps Goa `ServiceError` with name `invalid_params` to JSON-RPC `-32602`, `method_not_found` to `-32601`, and otherwise defaults to `-32603` (internal).
+The adapter maps service errors with name `invalid_params` to JSON-RPC `-32602`, `method_not_found` to `-32601`, and otherwise defaults to `-32603` (internal).
 
 ## Contributing
 
 - Add agent concepts in `expr/agent/` and update the expression builders
 - Add MCP concepts in `expr/mcp.go` and update the MCP expression builder
 - Add registry concepts in `expr/agent/registry.go`
-- Keep new templates small and transport-agnostic; compose on Goa JSON-RPC outputs
+- Keep new templates small and transport-agnostic; compose on the existing JSON-RPC outputs
 
 ## Summary
 
-This plugin gives you agents, MCP, and registries with familiar Goa patterns, minimal surface area, and a directory layout that feels natural. It's accurate, easy to maintain, and designed to evolve alongside Goa.
+This plugin gives you agents, MCP, and registries with familiar Loom patterns, minimal surface area, and a directory layout that feels natural. It's accurate, easy to maintain, and designed to evolve with the Loom toolchain.

@@ -1,0 +1,4 @@
+interface:
+  display_name: "loom-mcp Release"
+  short_description: "Cut, tag, publish, and verify a loom-mcp release."
+  default_prompt: "Use this skill to take loom-mcp from verified code to a published release tag, including remote Goa parity, mandatory verification, tag push, and post-publish checks."

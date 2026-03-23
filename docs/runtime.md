@@ -275,14 +275,14 @@ Start ──► PlanStart ──► Tool Calls? ──► Execute Tools ──�
 
 ### Tool payload codecs and defaults (Feature)
 
-Tool payloads are decoded using a Goa‑style two‑step model:
+Tool payloads are decoded using a two-step model shared by the generated transport/codegen layer:
 
 1. **Decode JSON into a helper “decode‑body” type** with pointer fields, so the codec can
    distinguish **missing** from **zero** and return precise validation issues.
-2. **Transform helper → final payload** using Goa’s `codegen.GoTransform`.
+2. **Transform helper → final payload** using `codegen.GoTransform`.
 
 For tool payloads, the generated payload struct uses **default‑aware field shapes**:
-optional primitives with defaults become **values** (non‑pointers). During step (2), Goa’s transform
+optional primitives with defaults become **values** (non‑pointers). During step (2), the transform
 generator injects defaults when helper fields are nil.
 
 This is a hard codegen contract: any generated transforms that read tool payload fields must use
@@ -547,7 +547,7 @@ For method-backed service toolsets, codegen emits a provider adapter at:
 
 - `gen/<service>/toolsets/<toolset>/provider.go`
 
-That generated provider implements a dispatcher that decodes the tool payload JSON using generated codecs, adapts into the Goa method payload (via generated transforms), calls the bound method, and re-encodes the tool result JSON together with any declared server-data (optional observer-facing server-data and always-on server-only metadata).
+That generated provider implements a dispatcher that decodes the tool payload JSON using generated codecs, adapts into the bound method payload (via generated transforms), calls the bound method, and re-encodes the tool result JSON together with any declared server-data (optional observer-facing server-data and always-on server-only metadata).
 
 To run it, wire the generated provider into the runtime provider loop:
 
@@ -1742,7 +1742,7 @@ Tool calls can fail because the input payload is missing fields, violates constr
 or has the wrong JSON shape. When that happens, callers generally need actionable,
 field-level feedback rather than a generic failure string.
 
-Goa‑AI supports two complementary paths that produce `planner.RetryHint`:
+Loom MCP supports two complementary paths that produce `planner.RetryHint`:
 
 1. **Decode‑time validation (generated codecs)**  
    The generated tool codec validates the tool JSON payload before execution.
@@ -1752,7 +1752,7 @@ Goa‑AI supports two complementary paths that produce `planner.RetryHint`:
    etc.).
 
 2. **Execution‑time validation (service / tool provider errors)**  
-   When a tool provider calls a bound service method, the method may return a Goa
+   When a tool provider calls a bound service method, the method may return a structured
    validation error (for example `goa.MissingFieldError`, `goa.InvalidLengthError`, …).
    Providers should surface these as **structured validation issues** in the tool result
    message so consumers can build a `RetryHint` without parsing error strings.
@@ -1901,7 +1901,7 @@ var ErrRateLimited = errors.New("model: rate limited")
    for grouping and memory association. `OneShotRun` is explicitly sessionless.
 
 5. **Trust the contracts.** Don't add defensive checks for values guaranteed by
-   Goa validation or construction. Let violations fail fast.
+   generated validation or construction. Let violations fail fast.
 
 6. **Configure stores for production.** In-memory defaults are suitable for
    development; use MongoDB stores for persistence.

@@ -8,16 +8,16 @@ details.
 
 ## Overview
 
-- **Import path:** `"github.com/CaliLuke/loom-mcp/dsl"` (typically dot-imported alongside Goa's DSL).
-- **Entry point:** Declare agents inside a regular Goa `Service` definition. The DSL augments Goa's
-  design tree and is processed during `loom gen`.
+- **Import path:** `"github.com/CaliLuke/loom-mcp/dsl"` (typically dot-imported alongside the core Loom DSL).
+- **Entry point:** Declare agents inside a regular `Service` definition. The DSL augments the design
+  tree and is processed during `loom gen`.
 - **Outcome:** `loom gen` produces agent packages (`gen/<service>/agents/<agent>`), tool
   codecs/specs, activity handlers, and registration helpers. A contextual `AGENTS_QUICKSTART.md` is
   written at the module root unless disabled via `DisableAgentDocs()`.
 
-The DSL is evaluated by Goa's `eval` engine, so the same rules apply as with the standard
-service/transport DSL: expressions must be invoked in the proper context, and attribute definitions
-reuse Goa's type system (`Attribute`, `Field`, validations, examples, etc.).
+The DSL is evaluated by the shared design `eval` engine, so the same rules apply as with the
+standard service/transport DSL: expressions must be invoked in the proper context, and attribute
+definitions reuse the same type system (`Attribute`, `Field`, validations, examples, etc.).
 
 ## Quickstart
 
@@ -147,7 +147,7 @@ on agent/tool contracts.
 | `AgentToolset(svc, agent, ts)` | Top-level or inside `Use` | References a toolset exported by another agent |
 | `UseAgentToolset(svc, agent, ts)` | Inside `Agent` | Combines `AgentToolset` with `Use` |
 | `DisableAgentDocs()` | Inside `API` | Disables `AGENTS_QUICKSTART.md` generation |
-| `Passthrough(tool, target...)` | Inside exported `Tool` | Forwards tool execution to a Goa service method |
+| `Passthrough(tool, target...)` | Inside exported `Tool` | Forwards tool execution to a bound service method |
 
 ### Toolset Functions
 
@@ -167,7 +167,7 @@ on agent/tool contracts.
 | `Return(type)` | Inside `Tool` | Defines output result schema |
 | `ServerData(kind, type, dsl?)` | Inside `Tool` | Defines server-only data emitted alongside results (never sent to model providers) |
 | `ServerDataDefault("on" \| "off")` | Inside `Tool` | Default emission for optional server-data when `server_data` is omitted or `"auto"` |
-| `BindTo(method)` or `BindTo(service, method)` | Inside `Tool` | Binds tool to a Goa service method |
+| `BindTo(method)` or `BindTo(service, method)` | Inside `Tool` | Binds tool to a service method |
 | `Inject(fields...)` | Inside `Tool` | Marks fields as server-injected (hidden from LLM) |
 | `CallHintTemplate(tmpl)` | Inside `Tool` | Go template for call display hint |
 | `ResultHintTemplate(tmpl)` | Inside `Tool` | Go template for result display hint |
@@ -179,11 +179,11 @@ on agent/tool contracts.
 
 ### Tool payload defaults (Feature)
 
-Tool payload defaults follow Goa’s request‑style semantics:
+Tool payload defaults follow the shared request-style semantics used by the generated transports:
 
 - Codecs decode JSON into helper “decode‑body” structs with pointer fields to distinguish **missing**
   from **zero**.
-- Codecs then transform helper → final payload using Goa’s transform generator, which injects
+- Codecs then transform helper → final payload using the generated transform helper, which injects
   default values deterministically.
 - As a result, optional primitive fields with defaults are emitted as **value fields** (non‑pointers)
   in the final tool payload type.
@@ -338,7 +338,7 @@ Notes:
 | `Registry(name, dsl?)` | Top-level | Declares a remote registry source |
 | `URL(url)` | Inside `Registry` | Sets the registry endpoint URL (required) |
 | `APIVersion(version)` | Inside `Registry` | Sets registry API version (default: "v1") |
-| `Security(scheme)` | Inside `Registry` | References Goa security scheme for auth |
+| `Security(scheme)` | Inside `Registry` | References a declared security scheme for auth |
 | `Timeout(duration)` | Inside `Registry` | Sets HTTP request timeout |
 | `Retry(maxRetries, backoff)` | Inside `Registry` | Configures retry policy |
 | `SyncInterval(duration)` | Inside `Registry` | Sets catalog refresh interval |
@@ -355,7 +355,7 @@ Notes:
 
 ### Agent
 
-`Agent` declares an LLM-powered agent within a Goa service. Each agent becomes a runtime
+`Agent` declares an LLM-powered agent within a service. Each agent becomes a runtime
 registration with:
 
 - A workflow definition and Temporal activity handlers
@@ -426,7 +426,7 @@ Agent("orchestrator", "Main coordinator", func() {
 
 ### Passthrough
 
-`Passthrough` defines deterministic forwarding for an exported tool to a Goa service method.
+`Passthrough` defines deterministic forwarding for an exported tool to a service method.
 Use it when an exported tool should directly invoke an existing service method without custom
 executor logic.
 
@@ -471,7 +471,7 @@ var CommonTools = Toolset("common", func() {
 
 `FromMCP` configures a toolset to be backed by an MCP server. Two patterns are supported:
 
-**Pattern 1: Goa-backed MCP server (same design)**
+**Pattern 1: MCP server generated from the same design**
 
 When your MCP server is defined in the same design using the `MCP` DSL:
 
@@ -585,14 +585,14 @@ Service("calculator", func() {
 })
 ```
 
-When the payload contains a Goa `OneOf(...)` union, the generated MCP `inputSchema`
+When the payload contains a `OneOf(...)` union, the generated MCP `inputSchema`
 preserves the union envelope with `oneOf` variants and the declared discriminator
 field names. This is the schema clients receive from `tools/list`.
 
 ### Args and Return
 
-`Args` defines the input parameter schema for a tool. It follows the same patterns as Goa's
-`Payload` function:
+`Args` defines the input parameter schema for a tool. It follows the same patterns as the
+service `Payload` function:
 
 ```go
 // Inline schema
@@ -609,7 +609,7 @@ Args(SearchParams)
 Args(String)  // Single string parameter
 ```
 
-`Return` defines the output result schema, following the same patterns as Goa's `Result`:
+`Return` defines the output result schema, following the same patterns as the service `Result`:
 
 ```go
 // Inline schema
@@ -703,7 +703,7 @@ Tool("get_time_series", "Get time series data", func() {
 
 ### BindTo (Service Method Binding)
 
-`BindTo` associates a tool with a Goa service method implementation. This enables tools to
+`BindTo` associates a tool with a service method implementation. This enables tools to
 reuse existing service logic with generated transforms between tool and method types.
 
 ```go
@@ -1117,8 +1117,8 @@ Agent("data-agent", "Data processing agent", func() {
 
 ### Security for Registries
 
-Registry implements Goa's `SecurityHolder` interface, allowing all Goa security DSL functions
-to work inside Registry blocks. This includes `APIKeySecurity`, `OAuth2Security`,
+Registry implements the shared `SecurityHolder` interface, allowing the standard security DSL
+functions to work inside Registry blocks. This includes `APIKeySecurity`, `OAuth2Security`,
 `JWTSecurity`, and `BasicAuthSecurity`.
 
 ```go
@@ -1158,7 +1158,7 @@ override when you need a specific identifier for cross-platform compatibility.
 
 ## Agent API Types (Re-exported)
 
-The DSL re-exports standardized agent API types for use in Goa service designs:
+The DSL re-exports standardized agent API types for use in service designs:
 
 - `AgentRunPayload`: input for agent run/start/resume endpoints
 - `AgentRunResult`: terminal result for non-streaming endpoints
@@ -1230,6 +1230,13 @@ Generated when an agent exports toolsets (agent-as-tool). Export packages provid
 When a service declares MCP (`MCP(...)`), `loom gen` emits JSON-RPC client/server code under
 `gen/jsonrpc/<service>/...` and runtime registration helpers in the service package.
 
+For MCP-only services, declare the JSON-RPC transport path once at the service level
+with `JSONRPC(func() { POST("/rpc") })`. Methods mapped with `Tool`, `Resource`,
+`Notification`, or dynamic prompt DSL participate in that JSON-RPC transport automatically;
+you only need method-level `JSONRPC(...)` blocks when a method needs method-specific
+JSON-RPC settings such as `ServerSentEvents`, `ID(...)` mapping, or custom error code
+responses.
+
 ---
 
 ## Wiring Example
@@ -1287,7 +1294,7 @@ via `Artifact` for downstream consumers.
 
 ## Transforms and Compatibility (BindTo)
 
-When a tool is bound to a Goa method via `BindTo`, codegen analyzes shapes and emits transform
+When a tool is bound to a method via `BindTo`, codegen analyzes shapes and emits transform
 helpers if compatible:
 
 ```go
@@ -1328,6 +1335,6 @@ return planner.ToolResult{Result: tr}, nil
 ```
 
 Notes:
-- Compatibility uses Goa's type system (names and structure, including `Extend`)
+- Compatibility uses the shared type system (names and structure, including `Extend`)
 - For nested shapes, keep pointers in user types for validators/codecs
 - Mapping lives in executors; transforms are conveniences when types align
