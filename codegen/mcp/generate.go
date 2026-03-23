@@ -338,6 +338,7 @@ func generateMCPTransport(genpkg string, svc *expr.ServiceExpr, data *AdapterDat
 		{Path: "strings"},
 		{Path: "sync"},
 		{Path: "time"},
+		{Path: "github.com/modelcontextprotocol/go-sdk/auth", Name: "mcpauth"},
 		{Path: "go.opentelemetry.io/otel"},
 		{Path: "go.opentelemetry.io/otel/attribute"},
 		{Path: "go.opentelemetry.io/otel/codes"},
@@ -490,8 +491,10 @@ func generateMCPTransport(genpkg string, svc *expr.ServiceExpr, data *AdapterDat
 		{Path: "fmt"},
 		{Path: "net/http"},
 		{Path: "net/url"},
+		{Path: "strings"},
 		{Path: "time"},
 		{Path: genpkg + "/" + svcName, Name: svcName},
+		{Path: "github.com/modelcontextprotocol/go-sdk/auth", Name: "mcpauth"},
 		{Path: "github.com/modelcontextprotocol/go-sdk/mcp", Name: "mcpsdk"},
 		{Path: "github.com/CaliLuke/loom-mcp/runtime/mcp", Name: "mcpruntime"},
 	}

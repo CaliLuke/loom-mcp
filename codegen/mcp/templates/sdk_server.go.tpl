@@ -51,37 +51,84 @@ func NewSDKServer(service {{ .Package }}.Service, opts *SDKServerOptions) (*SDKS
 	}
 
 	return &SDKServer{
-		Handler: newSDKHandler(server, adapter, streamableOpts),
+		Handler: newSDKHandler(server, adapter, requestContext, streamableOpts),
 		Adapter: adapter,
 		Server:  server,
 	}, nil
 }
 
-func newSDKHandler(server *mcpsdk.Server, adapter *MCPAdapter, streamableOpts *mcpsdk.StreamableHTTPOptions) http.Handler {
+type sdkResponseObserver struct {
+	http.ResponseWriter
+	statusCode int
+}
+
+func (w *sdkResponseObserver) WriteHeader(statusCode int) {
+	w.statusCode = statusCode
+	w.ResponseWriter.WriteHeader(statusCode)
+}
+
+func (w *sdkResponseObserver) Write(data []byte) (int, error) {
+	if w.statusCode == 0 {
+		w.statusCode = http.StatusOK
+	}
+	return w.ResponseWriter.Write(data)
+}
+
+func newSDKHandler(server *mcpsdk.Server, adapter *MCPAdapter, requestContext func(context.Context, *http.Request) context.Context, streamableOpts *mcpsdk.StreamableHTTPOptions) http.Handler {
 	base := mcpsdk.NewStreamableHTTPHandler(func(*http.Request) *mcpsdk.Server {
 		return server
 	}, streamableOpts)
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if requestContext != nil {
+			r = r.WithContext(requestContext(r.Context(), r))
+		}
 		if r.Method == http.MethodGet {
 			serveSDKEventsStream(server, adapter, w, r)
 			return
 		}
-		base.ServeHTTP(w, r)
+		observer := &sdkResponseObserver{ResponseWriter: w}
+		base.ServeHTTP(observer, r)
+		if sessionID := observer.Header().Get(mcpruntime.HeaderKeySessionID); sessionID != "" {
+			adapter.captureSessionPrincipal(r.Context(), sessionID)
+		}
 	})
 }
 
 func serveSDKEventsStream(server *mcpsdk.Server, adapter *MCPAdapter, w http.ResponseWriter, r *http.Request) {
 	sessionID := r.Header.Get("Mcp-Session-Id")
+	adapter.log(r.Context(), "events_stream_open", map[string]any{
+		"session_id": sessionID,
+		"has_accept": strings.TrimSpace(r.Header.Get("Accept")) != "",
+		"accept":     r.Header.Get("Accept"),
+	})
 	if sessionID == "" {
+		adapter.log(r.Context(), "events_stream_rejected", map[string]any{
+			"reason": "missing_session_id",
+		})
 		http.Error(w, "Missing session ID", http.StatusBadRequest)
 		return
 	}
 	if sdkSessionByID(server, sessionID) == nil {
+		adapter.clearSessionPrincipal(sessionID)
+		adapter.log(r.Context(), "events_stream_rejected", map[string]any{
+			"session_id": sessionID,
+			"reason":     "session_not_found",
+		})
 		http.Error(w, "session not found", http.StatusNotFound)
+		return
+	}
+	if err := adapter.assertSessionPrincipal(r.Context(), sessionID); err != nil {
+		adapter.log(r.Context(), "events_stream_rejected", map[string]any{
+			"session_id": sessionID,
+			"reason":     "session_principal_mismatch",
+			"error":      err.Error(),
+		})
+		http.Error(w, err.Error(), http.StatusForbidden)
 		return
 	}
 
 	adapter.markInitializedSession(sessionID)
+	adapter.captureSessionPrincipal(r.Context(), sessionID)
 	sub, err := adapter.broadcaster.Subscribe(r.Context())
 	if err != nil {
 		http.Error(w, fmt.Sprintf("failed to subscribe to events: %v", err), http.StatusInternalServerError)
@@ -93,29 +140,56 @@ func serveSDKEventsStream(server *mcpsdk.Server, adapter *MCPAdapter, w http.Res
 	w.Header().Set("Cache-Control", "no-cache")
 	w.Header().Set("Connection", "keep-alive")
 	w.Header().Set("X-Accel-Buffering", "no")
-	w.WriteHeader(http.StatusOK)
-
 	flusher, _ := w.(http.Flusher)
+	w.WriteHeader(http.StatusOK)
+	if flusher != nil {
+		flusher.Flush()
+	}
+	adapter.log(r.Context(), "events_stream_connected", map[string]any{
+		"session_id": sessionID,
+		"flushed":    flusher != nil,
+	})
 	ticker := time.NewTicker(250 * time.Millisecond)
 	defer ticker.Stop()
 
 	for {
 		select {
 		case <-r.Context().Done():
+			adapter.log(r.Context(), "events_stream_closed", map[string]any{
+				"session_id": sessionID,
+				"reason":     "request_context_done",
+			})
 			return
 		case <-ticker.C:
 			if sdkSessionByID(server, sessionID) == nil {
+				adapter.clearSessionPrincipal(sessionID)
+				adapter.log(r.Context(), "events_stream_closed", map[string]any{
+					"session_id": sessionID,
+					"reason":     "session_not_found",
+				})
 				return
 			}
 		case ev, ok := <-sub.C():
 			if !ok {
+				adapter.log(r.Context(), "events_stream_closed", map[string]any{
+					"session_id": sessionID,
+					"reason":     "broadcaster_closed",
+				})
 				return
 			}
 			res, ok := ev.(*EventsStreamResult)
 			if !ok {
+				adapter.log(r.Context(), "events_stream_skipped_event", map[string]any{
+					"session_id": sessionID,
+				})
 				continue
 			}
 			if err := writeSDKNotificationEvent(w, "events/stream", sdkEventsStreamParams(res)); err != nil {
+				adapter.log(r.Context(), "events_stream_closed", map[string]any{
+					"session_id": sessionID,
+					"reason":     "write_error",
+					"error":      err.Error(),
+				})
 				return
 			}
 			if flusher != nil {

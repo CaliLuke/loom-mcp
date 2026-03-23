@@ -4,6 +4,7 @@ type MCPAdapter struct {
     service {{ .Package }}.Service
     initialized bool
     initializedSessions map[string]struct{}
+    sessionPrincipals map[string]string
     mu sync.RWMutex
     opts *MCPAdapterOptions
     tracer trace.Tracer
@@ -74,6 +75,8 @@ type MCPAdapterOptions struct {
     DeniedResourceNames  []string
     StructuredStreamJSON bool
     ProtocolVersionOverride string
+    // SessionPrincipal extracts a stable auth/session owner identity from ctx.
+    SessionPrincipal func(context.Context) string
     // Pluggable broadcaster, else default channel broadcaster
     Broadcaster mcpruntime.Broadcaster
     BroadcastBuffer int
@@ -135,6 +138,7 @@ func NewMCPAdapter(service {{ .Package }}.Service{{ if or .StaticPrompts .Dynami
     return &MCPAdapter{
         service: service,
         initializedSessions: make(map[string]struct{}),
+        sessionPrincipals: make(map[string]string),
         opts: opts,
         tracer: tracer,
         callCounter: callCounter,
@@ -222,6 +226,61 @@ func (a *MCPAdapter) markInitializedSession(sessionID string) {
         return
     }
     a.initializedSessions[sessionID] = struct{}{}
+}
+
+func (a *MCPAdapter) captureSessionPrincipal(ctx context.Context, sessionID string) {
+    if a == nil || sessionID == "" {
+        return
+    }
+    principal := a.sessionPrincipal(ctx)
+    if principal == "" {
+        return
+    }
+    a.mu.Lock()
+    defer a.mu.Unlock()
+    if a.sessionPrincipals == nil {
+        a.sessionPrincipals = make(map[string]string)
+    }
+    if existing := strings.TrimSpace(a.sessionPrincipals[sessionID]); existing != "" {
+        return
+    }
+    a.sessionPrincipals[sessionID] = principal
+}
+
+func (a *MCPAdapter) clearSessionPrincipal(sessionID string) {
+    if a == nil || sessionID == "" {
+        return
+    }
+    a.mu.Lock()
+    defer a.mu.Unlock()
+    delete(a.sessionPrincipals, sessionID)
+}
+
+func (a *MCPAdapter) assertSessionPrincipal(ctx context.Context, sessionID string) error {
+    if a == nil || sessionID == "" {
+        return nil
+    }
+    a.mu.RLock()
+    expected := strings.TrimSpace(a.sessionPrincipals[sessionID])
+    a.mu.RUnlock()
+    if expected == "" {
+        return nil
+    }
+    actual := a.sessionPrincipal(ctx)
+    if actual == "" || actual != expected {
+        return errors.New("session user mismatch")
+    }
+    return nil
+}
+
+func (a *MCPAdapter) sessionPrincipal(ctx context.Context) string {
+    if a != nil && a.opts != nil && a.opts.SessionPrincipal != nil {
+        return strings.TrimSpace(a.opts.SessionPrincipal(ctx))
+    }
+    if tokenInfo := mcpauth.TokenInfoFromContext(ctx); tokenInfo != nil {
+        return strings.TrimSpace(tokenInfo.UserID)
+    }
+    return ""
 }
 
 func (a *MCPAdapter) log(ctx context.Context, event string, details any) {
@@ -480,6 +539,8 @@ func (a *MCPAdapter) Initialize(ctx context.Context, p *InitializePayload) (res 
         a.initializedSessions[sessionID] = struct{}{}
     }
     a.mu.Unlock()
+
+    a.captureSessionPrincipal(ctx, sessionID)
 
     serverInfo := &ServerInfo{
         Name:    {{ quote .MCPName }},
