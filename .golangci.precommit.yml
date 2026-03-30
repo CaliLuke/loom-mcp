@@ -76,7 +76,7 @@ linters:
           - gocognit
           - maintidx
           - nestif
-      - path: ^codegen/
+      - path: ^codegen/agent/tests/
         linters:
           - funlen
           - gocognit
