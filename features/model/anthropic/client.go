@@ -195,7 +195,7 @@ func (c *Client) newMessageParams(
 	params := sdk.MessageNewParams{
 		MaxTokens: int64(maxTokens),
 		Messages:  msgs,
-		Model:     sdk.Model(modelID),
+		Model:     modelID,
 	}
 	if len(system) > 0 {
 		params.System = system

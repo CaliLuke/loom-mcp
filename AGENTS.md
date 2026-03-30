@@ -46,6 +46,7 @@ Within each section, place main logic first and helpers last.
 - User-facing DSL, runtime, or codegen changes must also update the repo docs under `docs/` and any corresponding external docs set that publishes this project.
 - Keep repo-local skills current with the product. Update the skill files directly rather than adding sidecar delta documents.
 - When bumping the forked `github.com/CaliLuke/loom` replace, do not assume `main` or the default branch. This repo is currently tracking the fork branch `openapi-3.1`. Resolve the freshest relevant fork commit from actual refs and timestamps, then pin that exact pseudo-version in `go.mod`.
+- Do not use web search to verify whether a release exists. Check releases, tags, or published module versions from the authoritative source directly, such as `git ls-remote`, `gh release view`, or `go list -m -versions`.
 - Use local Goa checkout mode for iterative development and the pinned remote fork for CI. The standard toggle is `make goa-local` for local iteration and `make goa-remote` before CI-facing verification or commits. `make goa-status` shows the current mode.
 - After switching to local mode, use `make verify-mcp-local` for the default MCP fixture/framework verification ladder.
 - Use `make regen-assistant-fixture` when the assistant MCP fixture design changes so generated churn is intentional and reproducible.
