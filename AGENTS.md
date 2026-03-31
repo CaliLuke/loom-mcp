@@ -44,6 +44,7 @@ Within each section, place main logic first and helpers last.
 - After design changes, regenerate with `loom gen <module-import-path>/design`.
 - Run `loom example <module-import-path>/design` only when new scaffold files are intentionally desired.
 - User-facing DSL, runtime, or codegen changes must also update the repo docs under `docs/` and any corresponding external docs set that publishes this project.
+- The upstream Model Context Protocol reference lives in the submodule at `third_party/modelcontextprotocol`; the canonical spec folder for this repo is `third_party/modelcontextprotocol/docs/specification`.
 - Keep repo-local skills current with the product. Update the skill files directly rather than adding sidecar delta documents.
 - When bumping the forked `github.com/CaliLuke/loom` replace, do not assume `main` or the default branch. This repo is currently tracking the fork branch `openapi-3.1`. Resolve the freshest relevant fork commit from actual refs and timestamps, then pin that exact pseudo-version in `go.mod`.
 - Do not use web search to verify whether a release exists. Check releases, tags, or published module versions from the authoritative source directly, such as `git ls-remote`, `gh release view`, or `go list -m -versions`.
