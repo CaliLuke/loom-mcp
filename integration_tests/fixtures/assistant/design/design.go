@@ -20,7 +20,22 @@ var _ = API("assistant", func() {
 var _ = Service("assistant", func() {
 	Description("AI Assistant service with full MCP protocol support")
 
-	MCP("assistant-mcp", "1.0.0", ProtocolVersion("2025-06-18"))
+	MCP("assistant-mcp", "1.0.0",
+		ProtocolVersion("2025-06-18"),
+		WebsiteURL("https://assistant.example.com/docs"),
+		ServerIcons(
+			Icon("https://assistant.example.com/icons/server-light.png",
+				IconMIMEType("image/png"),
+				IconSizes("48x48"),
+				IconTheme(IconThemeLight),
+			),
+			Icon("https://assistant.example.com/icons/server-dark.png",
+				IconMIMEType("image/png"),
+				IconSizes("48x48"),
+				IconTheme(IconThemeDark),
+			),
+		),
+	)
 
 	// Keep the design minimal; integration tests exercise MCP protocol handlers.
 	JSONRPC(func() {
@@ -30,7 +45,14 @@ var _ = Service("assistant", func() {
 	Method("list_documents", func() {
 		Description("List available documents")
 		Result(Documents)
-		Resource("documents", "doc://list", "application/json")
+		Resource("documents", "doc://list", "application/json",
+			ResourceIcons(
+				Icon("https://assistant.example.com/icons/documents.png",
+					IconMIMEType("image/png"),
+					IconSizes("48x48"),
+				),
+			),
+		)
 		JSONRPC(func() {})
 	})
 
@@ -68,7 +90,15 @@ var _ = Service("assistant", func() {
 	})
 
 	// Static prompt for tests
-	StaticPrompt("code_review", "Simple code review prompt", "system", "Review the provided code and suggest improvements.")
+	StaticPrompt("code_review", "Simple code review prompt",
+		"system", "Review the provided code and suggest improvements.",
+		PromptIcons(
+			Icon("https://assistant.example.com/icons/code-review.svg",
+				IconMIMEType("image/svg+xml"),
+				IconSizes("any"),
+			),
+		),
+	)
 
 	Method("generate_prompts", func() {
 		Description("Generate context-aware prompts")
@@ -78,7 +108,14 @@ var _ = Service("assistant", func() {
 			Required("context", "task")
 		})
 		Result(PromptTemplates)
-		DynamicPrompt("contextual_prompts", "Generate prompts based on context")
+		DynamicPrompt("contextual_prompts", "Generate prompts based on context",
+			DynamicPromptIcons(
+				Icon("https://assistant.example.com/icons/contextual-prompts.png",
+					IconMIMEType("image/png"),
+					IconSizes("48x48"),
+				),
+			),
+		)
 		JSONRPC(func() {})
 	})
 
@@ -119,7 +156,14 @@ var _ = Service("assistant", func() {
 		Result(func() {
 			Attribute("sentiment", String, "Detected sentiment")
 		})
-		Tool("analyze_sentiment", "Analyze sentiment of text")
+		Tool("analyze_sentiment", "Analyze sentiment of text",
+			ToolIcons(
+				Icon("https://assistant.example.com/icons/analyze-sentiment.png",
+					IconMIMEType("image/png"),
+					IconSizes("48x48"),
+				),
+			),
+		)
 		JSONRPC(func() {})
 	})
 

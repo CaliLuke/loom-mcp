@@ -514,10 +514,14 @@ policies, and MCP servers within Goa service designs.
 |----------|---------|
 | `MCP(name, version, opts...)` | Enable MCP support for a service |
 | `ProtocolVersion(string)` | Configure MCP protocol version |
-| `Resource(name, uri, mimeType)` | Mark method as MCP resource provider |
-| `WatchableResource(name, uri, mimeType)` | Mark method as subscribable MCP resource |
-| `StaticPrompt(name, desc, messages...)` | Add static prompt template |
-| `DynamicPrompt(name, desc)` | Mark method as dynamic prompt generator |
+| `WebsiteURL(string)` | Add implementation website metadata |
+| `ServerIcons(icons...)` | Add implementation icons |
+| `Resource(name, uri, mimeType, opts...)` | Mark method as MCP resource provider |
+| `WatchableResource(name, uri, mimeType, opts...)` | Mark method as subscribable MCP resource |
+| `StaticPrompt(name, desc, messages..., opts...)` | Add static prompt template |
+| `DynamicPrompt(name, desc, opts...)` | Mark method as dynamic prompt generator |
+| `ToolIcons`, `ResourceIcons`, `PromptIcons`, `DynamicPromptIcons` | Add list-surface icon metadata |
+| `Icon(src, opts...)` | Build a reusable icon entry |
 | `Notification(name, desc)` | Mark method as MCP notification sender |
 | `Subscription(resourceName)` | Mark method as subscription handler |
 | `SubscriptionMonitor(name)` | Mark method as SSE subscription monitor |

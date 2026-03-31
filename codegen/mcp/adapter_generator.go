@@ -13,6 +13,14 @@ import (
 )
 
 type (
+	// IconData represents one icon metadata entry in generated templates.
+	IconData struct {
+		Source   string
+		MIMEType string
+		Sizes    []string
+		Theme    string
+	}
+
 	// AnnotationMetaEntry stores one generated tool annotation entry.
 	AnnotationMetaEntry struct {
 		Key    string
@@ -26,6 +34,8 @@ type (
 		MCPServiceName      string
 		MCPName             string
 		MCPVersion          string
+		WebsiteURL          string
+		Icons               []*IconData
 		ProtocolVersion     string
 		Package             string
 		MCPPackage          string
@@ -80,6 +90,7 @@ type (
 	ToolAdapter struct {
 		Name               string
 		Description        string
+		Icons              []*IconData
 		OriginalMethodName string
 		Meta               []AnnotationMetaEntry
 		AnnotationsJSON    string
@@ -114,6 +125,7 @@ type (
 		Description        string
 		URI                string
 		MimeType           string
+		Icons              []*IconData
 		OriginalMethodName string
 		HasPayload         bool
 		HasResult          bool
@@ -146,6 +158,7 @@ type (
 	StaticPromptAdapter struct {
 		Name        string
 		Description string
+		Icons       []*IconData
 		Messages    []*PromptMessageAdapter
 	}
 
@@ -159,6 +172,7 @@ type (
 	DynamicPromptAdapter struct {
 		Name               string
 		Description        string
+		Icons              []*IconData
 		OriginalMethodName string
 		HasPayload         bool
 		PayloadType        string
@@ -254,6 +268,8 @@ func (g *adapterGenerator) newAdapterData(tools []*ToolAdapter, resources []*Res
 		MCPServiceName:      g.originalService.Name,
 		MCPName:             g.mcp.Name,
 		MCPVersion:          g.mcp.Version,
+		WebsiteURL:          g.mcp.WebsiteURL,
+		Icons:               iconDataFromExprs(g.mcp.Icons),
 		ProtocolVersion:     g.mcp.ProtocolVersion,
 		Package:             codegen.SnakeCase(g.originalService.Name),
 		MCPPackage:          "mcp" + strings.ToLower(codegen.Goify(g.originalService.Name, false)),
@@ -406,6 +422,7 @@ func (g *adapterGenerator) buildToolAdapter(tool *mcpexpr.ToolExpr) (*ToolAdapte
 	adapter := &ToolAdapter{
 		Name:               tool.Name,
 		Description:        tool.Description,
+		Icons:              iconDataFromExprs(tool.Icons),
 		OriginalMethodName: codegen.Goify(tool.Method.Name, true),
 		Meta:               mcpAnnotationEntries(meta),
 		AnnotationsJSON:    mcpAnnotationJSON(meta),
@@ -544,6 +561,7 @@ func (g *adapterGenerator) buildResourceAdapter(resource *mcpexpr.ResourceExpr) 
 		Description:        resource.Description,
 		URI:                resource.URI,
 		MimeType:           resource.MimeType,
+		Icons:              iconDataFromExprs(resource.Icons),
 		OriginalMethodName: codegen.Goify(resource.Method.Name, true),
 		HasPayload:         hasNonEmptyPayload(resource.Method.Payload),
 		HasResult:          resource.Method.Result != nil,
@@ -578,6 +596,28 @@ func (g *adapterGenerator) populateResourceResultData(adapter *ResourceAdapter, 
 
 func hasNonEmptyPayload(attr *expr.AttributeExpr) bool {
 	return attr != nil && attr.Type != expr.Empty
+}
+
+func iconDataFromExprs(icons []*mcpexpr.IconExpr) []*IconData {
+	if len(icons) == 0 {
+		return nil
+	}
+	out := make([]*IconData, 0, len(icons))
+	for _, icon := range icons {
+		if icon == nil {
+			continue
+		}
+		out = append(out, &IconData{
+			Source:   icon.Source,
+			MIMEType: icon.MIMEType,
+			Sizes:    append([]string(nil), icon.Sizes...),
+			Theme:    icon.Theme,
+		})
+	}
+	if len(out) == 0 {
+		return nil
+	}
+	return out
 }
 
 // buildNotificationAdapters creates adapter data for notifications

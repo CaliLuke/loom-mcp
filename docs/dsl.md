@@ -118,8 +118,17 @@ different audiences and link child runs via run handles rather than flattening r
 
 ## Prompt Management in v1
 
-Loom MCP v1 does **not** define a mandatory prompt declaration DSL (`Prompt(...)`, `Prompts(...)`, etc.).
-Prompt management is intentionally runtime-driven:
+Loom MCP v1 supports two distinct prompt concepts:
+
+- **MCP protocol prompts** are prompts your server publishes to MCP clients. Clients can discover
+  them with `prompts/list` and fetch them with `prompts/get`. Declare these in the DSL with
+  `StaticPrompt(...)` and `DynamicPrompt(...)`.
+- **Runtime-managed prompts** are internal prompt templates Loom uses while running planners,
+  agents, and prompt override flows. They are not automatically exposed to MCP clients, and they
+  are intentionally runtime-driven rather than declared through a general-purpose `Prompt(...)` or
+  `Prompts(...)` DSL.
+
+The runtime-managed prompt layer works like this:
 
 - Register baseline prompt specs via `Runtime.PromptRegistry.Register(prompt.PromptSpec{...})`.
 - Configure scoped overrides with `runtime.WithPromptStore(...)` (for example, Mongo prompt store).
@@ -130,8 +139,8 @@ Prompt management is intentionally runtime-driven:
   configured, the runtime uses the canonical JSON tool payload bytes as the nested user message,
   and provider planners can render their own prompts with injected server-side context.
 
-This keeps prompt rollout and overrides operational (runtime/store level) while the DSL remains focused
-on agent/tool contracts.
+This separation keeps MCP prompt exposure explicit in the service DSL while prompt rollout and
+overrides remain operational at the runtime/store layer.
 
 ---
 
@@ -322,11 +331,19 @@ Notes:
 |----------|---------|---------|
 | `MCP(name, version, opts...)` | Inside `Service` | Enables MCP protocol for the service |
 | `ProtocolVersion(version)` | Option for `MCP` | Sets MCP protocol version (e.g., "2025-06-18") |
+| `WebsiteURL(url)` | Option for `MCP` | Sets implementation website metadata for `initialize.serverInfo` |
+| `ServerIcons(icons...)` | Option for `MCP` | Sets implementation icons for `initialize.serverInfo` |
 | `Tool(name, description)` | Inside `Method` (with MCP enabled) | Marks method as MCP tool |
-| `Resource(name, uri, mime)` | Inside `Method` | Marks method as MCP resource provider |
-| `WatchableResource(name, uri, mime)` | Inside `Method` | MCP resource with subscription support |
-| `StaticPrompt(name, desc, msgs...)` | Inside `Service` (with MCP) | Defines static MCP prompt template |
-| `DynamicPrompt(name, description)` | Inside `Method` | Marks method as dynamic prompt generator |
+| `ToolIcons(icons...)` | Option for method-level `Tool` | Sets tool icons for `tools/list` |
+| `Resource(name, uri, mime, opts...)` | Inside `Method` | Marks method as MCP resource provider |
+| `ResourceIcons(icons...)` | Option for `Resource` or `WatchableResource` | Sets resource icons for `resources/list` |
+| `WatchableResource(name, uri, mime, opts...)` | Inside `Method` | MCP resource with subscription support |
+| `StaticPrompt(name, desc, msgs..., opts...)` | Inside `Service` (with MCP) | Defines static MCP prompt template |
+| `PromptIcons(icons...)` | Option for `StaticPrompt` | Sets prompt icons for `prompts/list` |
+| `DynamicPrompt(name, description, opts...)` | Inside `Method` | Marks method as dynamic prompt generator |
+| `DynamicPromptIcons(icons...)` | Option for `DynamicPrompt` | Sets dynamic prompt icons for `prompts/list` |
+| `Icon(src, opts...)` | MCP metadata helper | Declares one icon entry |
+| `IconMIMEType`, `IconSizes`, `IconTheme` | Options for `Icon` | Configure MIME type, sizes, and light/dark theme |
 | `Notification(name, description)` | Inside `Method` | Marks method as MCP notification sender |
 | `Subscription(resourceName)` | Inside `Method` | Defines subscription handler for a resource |
 | `SubscriptionMonitor(name)` | Inside `Method` | Defines SSE monitor for subscriptions |
@@ -1010,7 +1027,16 @@ Enable MCP protocol for a service with `MCP`:
 
 ```go
 Service("calculator", func() {
-    MCP("calc", "1.0.0", ProtocolVersion("2025-06-18"))
+    MCP("calc", "1.0.0",
+        ProtocolVersion("2025-06-18"),
+        WebsiteURL("https://example.com/calc"),
+        ServerIcons(
+            Icon("https://example.com/icons/calc-light.png",
+                IconMIMEType("image/png"),
+                IconSizes("48x48"),
+                IconTheme(IconThemeLight)),
+        ),
+    )
 
     Method("add", func() {
         Payload(func() {
@@ -1020,12 +1046,24 @@ Service("calculator", func() {
         Result(func() {
             Attribute("sum", Int)
         })
-        Tool("add", "Add two numbers")  // Mark as MCP tool
+        Tool("add", "Add two numbers",
+            ToolIcons(
+                Icon("https://example.com/icons/add.png",
+                    IconMIMEType("image/png"),
+                    IconSizes("48x48")),
+            ),
+        )
     })
 
     Method("readme", func() {
         Result(String)
-        Resource("readme", "file:///docs/README.md", "text/markdown")
+        Resource("readme", "file:///docs/README.md", "text/markdown",
+            ResourceIcons(
+                Icon("https://example.com/icons/readme.png",
+                    IconMIMEType("image/png"),
+                    IconSizes("48x48")),
+            ),
+        )
     })
 
     Method("status", func() {
@@ -1037,7 +1075,13 @@ Service("calculator", func() {
 
     StaticPrompt("greeting", "Friendly greeting",
         "system", "You are a helpful assistant",
-        "user", "Hello!")
+        "user", "Hello!",
+        PromptIcons(
+            Icon("https://example.com/icons/greeting.svg",
+                IconMIMEType("image/svg+xml"),
+                IconSizes("any")),
+        ),
+    )
     
     Method("code_review", func() {
         Payload(func() {
@@ -1045,7 +1089,13 @@ Service("calculator", func() {
             Attribute("code", String)
         })
         Result(ArrayOf(Message))
-        DynamicPrompt("code_review", "Generate code review prompt")
+        DynamicPrompt("code_review", "Generate code review prompt",
+            DynamicPromptIcons(
+                Icon("https://example.com/icons/code-review.png",
+                    IconMIMEType("image/png"),
+                    IconSizes("48x48")),
+            ),
+        )
     })
 })
 ```

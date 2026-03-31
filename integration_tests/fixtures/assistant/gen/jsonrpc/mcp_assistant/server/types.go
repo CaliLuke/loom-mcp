@@ -174,6 +174,22 @@ type ServerInfoResponseBodyResponseBody struct {
 	Name string `form:"name" json:"name" xml:"name"`
 	// Server version
 	Version string `form:"version" json:"version" xml:"version"`
+	// Server website URL
+	WebsiteURL *string `form:"websiteUrl,omitempty" json:"websiteUrl,omitempty" xml:"websiteUrl,omitempty"`
+	// Server icons
+	Icons []*IconResponseBodyResponseBody `form:"icons,omitempty" json:"icons,omitempty" xml:"icons,omitempty"`
+}
+
+// IconResponseBodyResponseBody is used to define fields on response body types.
+type IconResponseBodyResponseBody struct {
+	// Icon source URI
+	Src string `form:"src" json:"src" xml:"src"`
+	// Icon MIME type
+	MimeType *string `form:"mimeType,omitempty" json:"mimeType,omitempty" xml:"mimeType,omitempty"`
+	// Supported icon sizes
+	Sizes []string `form:"sizes,omitempty" json:"sizes,omitempty" xml:"sizes,omitempty"`
+	// Optional icon theme preference
+	Theme *string `form:"theme,omitempty" json:"theme,omitempty" xml:"theme,omitempty"`
 }
 
 // PingResponseBodyResponseBody is used to define fields on response body types.
@@ -201,6 +217,8 @@ type ToolInfoResponseBodyResponseBody struct {
 	// Optional MCP tool annotations such as readOnlyHint, openWorldHint, or
 	// destructiveHint.
 	Annotations any `form:"annotations,omitempty" json:"annotations,omitempty" xml:"annotations,omitempty"`
+	// Tool icons
+	Icons []*IconResponseBodyResponseBody `form:"icons,omitempty" json:"icons,omitempty" xml:"icons,omitempty"`
 }
 
 // ToolsCallResponseBodyResponseBody is used to define fields on response body
@@ -245,6 +263,8 @@ type ResourceInfoResponseBodyResponseBody struct {
 	Description *string `form:"description,omitempty" json:"description,omitempty" xml:"description,omitempty"`
 	// Resource MIME type
 	MimeType *string `form:"mimeType,omitempty" json:"mimeType,omitempty" xml:"mimeType,omitempty"`
+	// Resource icons
+	Icons []*IconResponseBodyResponseBody `form:"icons,omitempty" json:"icons,omitempty" xml:"icons,omitempty"`
 }
 
 // ResourcesReadResponseBodyResponseBody is used to define fields on response
@@ -283,6 +303,8 @@ type PromptInfoResponseBodyResponseBody struct {
 	Description *string `form:"description,omitempty" json:"description,omitempty" xml:"description,omitempty"`
 	// Prompt arguments
 	Arguments []*PromptArgumentResponseBodyResponseBody `form:"arguments,omitempty" json:"arguments,omitempty" xml:"arguments,omitempty"`
+	// Prompt icons
+	Icons []*IconResponseBodyResponseBody `form:"icons,omitempty" json:"icons,omitempty" xml:"icons,omitempty"`
 }
 
 // PromptArgumentResponseBodyResponseBody is used to define fields on response
@@ -345,6 +367,23 @@ type ClientInfoRequestBodyRequestBodyRequestBodyRequestBody struct {
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// Client version
 	Version *string `form:"version,omitempty" json:"version,omitempty" xml:"version,omitempty"`
+	// Client website URL
+	WebsiteURL *string `form:"websiteUrl,omitempty" json:"websiteUrl,omitempty" xml:"websiteUrl,omitempty"`
+	// Client icons
+	Icons []*IconRequestBodyRequestBodyRequestBodyRequestBody `form:"icons,omitempty" json:"icons,omitempty" xml:"icons,omitempty"`
+}
+
+// IconRequestBodyRequestBodyRequestBodyRequestBody is used to define fields on
+// request body types.
+type IconRequestBodyRequestBodyRequestBodyRequestBody struct {
+	// Icon source URI
+	Src *string `form:"src,omitempty" json:"src,omitempty" xml:"src,omitempty"`
+	// Icon MIME type
+	MimeType *string `form:"mimeType,omitempty" json:"mimeType,omitempty" xml:"mimeType,omitempty"`
+	// Supported icon sizes
+	Sizes []string `form:"sizes,omitempty" json:"sizes,omitempty" xml:"sizes,omitempty"`
+	// Optional icon theme preference
+	Theme *string `form:"theme,omitempty" json:"theme,omitempty" xml:"theme,omitempty"`
 }
 
 // NewInitializeResponseBody builds the HTTP response body from the result of
@@ -697,6 +736,22 @@ func ValidateClientInfoRequestBodyRequestBodyRequestBodyRequestBody(body *Client
 	}
 	if body.Version == nil {
 		err = loom.MergeErrors(err, loom.MissingFieldError("version", "body"))
+	}
+	for _, e := range body.Icons {
+		if e != nil {
+			if err2 := ValidateIconRequestBodyRequestBodyRequestBodyRequestBody(e); err2 != nil {
+				err = loom.MergeErrors(err, err2)
+			}
+		}
+	}
+	return
+}
+
+// ValidateIconRequestBodyRequestBodyRequestBodyRequestBody runs the
+// validations defined on IconRequestBodyRequestBodyRequestBodyRequestBody
+func ValidateIconRequestBodyRequestBodyRequestBodyRequestBody(body *IconRequestBodyRequestBodyRequestBodyRequestBody) (err error) {
+	if body.Src == nil {
+		err = loom.MergeErrors(err, loom.MissingFieldError("src", "body"))
 	}
 	return
 }

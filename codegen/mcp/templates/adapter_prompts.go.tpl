@@ -8,14 +8,65 @@ func (a *MCPAdapter) PromptsList(ctx context.Context, p *PromptsListPayload) (*P
     a.log(ctx, "request", map[string]any{"method": "prompts/list"})
     prompts := []*PromptInfo{
     {{ range .DynamicPrompts }}
-        { Name: {{ quote .Name }}, Description: stringPtr({{ quote .Description }}), Arguments: []*PromptArgument{
-            {{ range .Arguments }}
-            { Name: {{ quote .Name }}, Description: stringPtr({{ quote .Description }}), Required: {{ .Required }} },
-            {{ end }}
-        } },
+        {
+            Name: {{ quote .Name }},
+            Description: stringPtr({{ quote .Description }}),
+            Arguments: []*PromptArgument{
+                {{ range .Arguments }}
+                { Name: {{ quote .Name }}, Description: stringPtr({{ quote .Description }}), Required: {{ .Required }} },
+                {{ end }}
+            },
+            {{- if .Icons }}
+            Icons: []*Icon{
+                {{- range .Icons }}
+                {
+                    Src: {{ quote .Source }},
+                    {{- if .MIMEType }}
+                    MimeType: stringPtr({{ quote .MIMEType }}),
+                    {{- end }}
+                    {{- if .Sizes }}
+                    Sizes: []string{
+                        {{- range .Sizes }}
+                        {{ quote . }},
+                        {{- end }}
+                    },
+                    {{- end }}
+                    {{- if .Theme }}
+                    Theme: stringPtr({{ quote .Theme }}),
+                    {{- end }}
+                },
+                {{- end }}
+            },
+            {{- end }}
+        },
     {{ end }}
     {{ range .StaticPrompts }}
-        { Name: {{ quote .Name }}, Description: stringPtr({{ quote .Description }}) },
+        {
+            Name: {{ quote .Name }},
+            Description: stringPtr({{ quote .Description }}),
+            {{- if .Icons }}
+            Icons: []*Icon{
+                {{- range .Icons }}
+                {
+                    Src: {{ quote .Source }},
+                    {{- if .MIMEType }}
+                    MimeType: stringPtr({{ quote .MIMEType }}),
+                    {{- end }}
+                    {{- if .Sizes }}
+                    Sizes: []string{
+                        {{- range .Sizes }}
+                        {{ quote . }},
+                        {{- end }}
+                    },
+                    {{- end }}
+                    {{- if .Theme }}
+                    Theme: stringPtr({{ quote .Theme }}),
+                    {{- end }}
+                },
+                {{- end }}
+            },
+            {{- end }}
+        },
     {{ end }}
     }
     res := &PromptsListResult{Prompts: prompts}
@@ -102,4 +153,3 @@ func (a *MCPAdapter) PromptsGet(ctx context.Context, p *PromptsGetPayload) (*Pro
     return nil, goa.PermanentError("method_not_found", "Unknown prompt: %s", p.Name)
 }
 {{- end }}
-

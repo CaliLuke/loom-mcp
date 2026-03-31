@@ -577,8 +577,27 @@ func (a *MCPAdapter) Initialize(ctx context.Context, p *InitializePayload) (res 
 	a.captureSessionPrincipal(ctx, sessionID)
 
 	serverInfo := &ServerInfo{
-		Name:    "assistant-mcp",
-		Version: "1.0.0",
+		Name:       "assistant-mcp",
+		Version:    "1.0.0",
+		WebsiteURL: stringPtr("https://assistant.example.com/docs"),
+		Icons: []*Icon{
+			{
+				Src:      "https://assistant.example.com/icons/server-light.png",
+				MimeType: stringPtr("image/png"),
+				Sizes: []string{
+					"48x48",
+				},
+				Theme: stringPtr("light"),
+			},
+			{
+				Src:      "https://assistant.example.com/icons/server-dark.png",
+				MimeType: stringPtr("image/png"),
+				Sizes: []string{
+					"48x48",
+				},
+				Theme: stringPtr("dark"),
+			},
+		},
 	}
 
 	capabilities := &ServerCapabilities{}
@@ -721,6 +740,15 @@ func (a *MCPAdapter) ToolsList(ctx context.Context, p *ToolsListPayload) (res *T
 			Name:        "analyze_sentiment",
 			Description: stringPtr("Analyze sentiment of text"),
 			InputSchema: json.RawMessage([]byte("{\"type\":\"object\",\"required\":[\"text\"],\"properties\":{\"text\":{\"type\":\"string\",\"description\":\"Input text to analyze\"}},\"additionalProperties\":false}")),
+			Icons: []*Icon{
+				{
+					Src:      "https://assistant.example.com/icons/analyze-sentiment.png",
+					MimeType: stringPtr("image/png"),
+					Sizes: []string{
+						"48x48",
+					},
+				},
+			},
 		},
 		{
 			Name:        "extract_keywords",
@@ -1120,10 +1148,39 @@ func (a *MCPAdapter) ResourcesList(ctx context.Context, p *ResourcesListPayload)
 	}
 	a.log(ctx, "request", map[string]any{"method": "resources/list"})
 	resources := []*ResourceInfo{
-		{URI: "doc://list", Name: stringPtr("documents"), Description: stringPtr("List available documents"), MimeType: stringPtr("application/json")},
-		{URI: "system://info", Name: stringPtr("system_info"), Description: stringPtr("Return system info"), MimeType: stringPtr("application/json")},
-		{URI: "conversation://history", Name: stringPtr("conversation_history"), Description: stringPtr("Return conversation history with optional query params"), MimeType: stringPtr("application/json")},
-		{URI: "figma://design-system/mobile-checkout", Name: stringPtr("figma_design_system"), Description: stringPtr("Return a fake Figma design system summary for implementation validation"), MimeType: stringPtr("application/json")},
+		{
+			URI:         "doc://list",
+			Name:        stringPtr("documents"),
+			Description: stringPtr("List available documents"),
+			MimeType:    stringPtr("application/json"),
+			Icons: []*Icon{
+				{
+					Src:      "https://assistant.example.com/icons/documents.png",
+					MimeType: stringPtr("image/png"),
+					Sizes: []string{
+						"48x48",
+					},
+				},
+			},
+		},
+		{
+			URI:         "system://info",
+			Name:        stringPtr("system_info"),
+			Description: stringPtr("Return system info"),
+			MimeType:    stringPtr("application/json"),
+		},
+		{
+			URI:         "conversation://history",
+			Name:        stringPtr("conversation_history"),
+			Description: stringPtr("Return conversation history with optional query params"),
+			MimeType:    stringPtr("application/json"),
+		},
+		{
+			URI:         "figma://design-system/mobile-checkout",
+			Name:        stringPtr("figma_design_system"),
+			Description: stringPtr("Return a fake Figma design system summary for implementation validation"),
+			MimeType:    stringPtr("application/json"),
+		},
 	}
 	res := &ResourcesListResult{Resources: resources}
 	a.log(ctx, "response", map[string]any{"method": "resources/list"})
@@ -1302,25 +1359,54 @@ func (a *MCPAdapter) PromptsList(ctx context.Context, p *PromptsListPayload) (*P
 	a.log(ctx, "request", map[string]any{"method": "prompts/list"})
 	prompts := []*PromptInfo{
 
-		{Name: "contextual_prompts", Description: stringPtr("Generate prompts based on context"), Arguments: []*PromptArgument{
+		{
+			Name:        "contextual_prompts",
+			Description: stringPtr("Generate prompts based on context"),
+			Arguments: []*PromptArgument{
 
-			{Name: "context", Description: stringPtr("Current context"), Required: true},
+				{Name: "context", Description: stringPtr("Current context"), Required: true},
 
-			{Name: "task", Description: stringPtr("Task type"), Required: true},
-		}},
+				{Name: "task", Description: stringPtr("Task type"), Required: true},
+			},
+			Icons: []*Icon{
+				{
+					Src:      "https://assistant.example.com/icons/contextual-prompts.png",
+					MimeType: stringPtr("image/png"),
+					Sizes: []string{
+						"48x48",
+					},
+				},
+			},
+		},
 
-		{Name: "figma_implementation_prompt", Description: stringPtr("Generate implementation instructions from a DPI spec"), Arguments: []*PromptArgument{
+		{
+			Name:        "figma_implementation_prompt",
+			Description: stringPtr("Generate implementation instructions from a DPI spec"),
+			Arguments: []*PromptArgument{
 
-			{Name: "screen_title", Description: stringPtr("Title of the screen being implemented"), Required: true},
+				{Name: "screen_title", Description: stringPtr("Title of the screen being implemented"), Required: true},
 
-			{Name: "framework", Description: stringPtr("Target UI framework"), Required: true},
+				{Name: "framework", Description: stringPtr("Target UI framework"), Required: true},
 
-			{Name: "design_tokens_uri", Description: stringPtr("Resource URI for the design system"), Required: true},
+				{Name: "design_tokens_uri", Description: stringPtr("Resource URI for the design system"), Required: true},
 
-			{Name: "dpi_json", Description: stringPtr("Serialized DPI spec JSON"), Required: true},
-		}},
+				{Name: "dpi_json", Description: stringPtr("Serialized DPI spec JSON"), Required: true},
+			},
+		},
 
-		{Name: "code_review", Description: stringPtr("Simple code review prompt")},
+		{
+			Name:        "code_review",
+			Description: stringPtr("Simple code review prompt"),
+			Icons: []*Icon{
+				{
+					Src:      "https://assistant.example.com/icons/code-review.svg",
+					MimeType: stringPtr("image/svg+xml"),
+					Sizes: []string{
+						"any",
+					},
+				},
+			},
+		},
 	}
 	res := &PromptsListResult{Prompts: prompts}
 	a.log(ctx, "response", map[string]any{"method": "prompts/list"})

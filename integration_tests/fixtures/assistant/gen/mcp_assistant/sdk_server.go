@@ -55,8 +55,27 @@ func NewSDKServer(service assistant.Service, opts *SDKServerOptions) (*SDKServer
 	adapter := NewMCPAdapter(service, promptProvider, adapterOpts)
 
 	server := mcpsdk.NewServer(&mcpsdk.Implementation{
-		Name:    "assistant-mcp",
-		Version: "1.0.0",
+		Name:       "assistant-mcp",
+		Version:    "1.0.0",
+		WebsiteURL: "https://assistant.example.com/docs",
+		Icons: []mcpsdk.Icon{
+			{
+				Source:   "https://assistant.example.com/icons/server-light.png",
+				MIMEType: "image/png",
+				Sizes: []string{
+					"48x48",
+				},
+				Theme: mcpsdk.IconTheme("light"),
+			},
+			{
+				Source:   "https://assistant.example.com/icons/server-dark.png",
+				MIMEType: "image/png",
+				Sizes: []string{
+					"48x48",
+				},
+				Theme: mcpsdk.IconTheme("dark"),
+			},
+		},
 	}, serverOpts)
 	if err := registerSDKTools(server, adapter, requestContext); err != nil {
 		return nil, err
@@ -289,6 +308,15 @@ func registerSDKTools(server *mcpsdk.Server, adapter *MCPAdapter, requestContext
 		Name:        "analyze_sentiment",
 		Description: "Analyze sentiment of text",
 		InputSchema: sdkToolInputSchema("{\"type\":\"object\",\"required\":[\"text\"],\"properties\":{\"text\":{\"type\":\"string\",\"description\":\"Input text to analyze\"}},\"additionalProperties\":false}"),
+		Icons: []mcpsdk.Icon{
+			{
+				Source:   "https://assistant.example.com/icons/analyze-sentiment.png",
+				MIMEType: "image/png",
+				Sizes: []string{
+					"48x48",
+				},
+			},
+		},
 	}, adapter.sdkToolHandler(requestContext))
 	server.AddTool(&mcpsdk.Tool{
 		Name:        "extract_keywords",
@@ -338,6 +366,15 @@ func registerSDKResources(server *mcpsdk.Server, adapter *MCPAdapter, requestCon
 		URI:         "doc://list",
 		Description: "List available documents",
 		MIMEType:    "application/json",
+		Icons: []mcpsdk.Icon{
+			{
+				Source:   "https://assistant.example.com/icons/documents.png",
+				MIMEType: "image/png",
+				Sizes: []string{
+					"48x48",
+				},
+			},
+		},
 	}, adapter.sdkResourceHandler(requestContext))
 	server.AddResource(&mcpsdk.Resource{
 		Name:        "system_info",
@@ -363,10 +400,28 @@ func registerSDKPrompts(server *mcpsdk.Server, adapter *MCPAdapter, requestConte
 	server.AddPrompt(&mcpsdk.Prompt{
 		Name:        "code_review",
 		Description: "Simple code review prompt",
+		Icons: []mcpsdk.Icon{
+			{
+				Source:   "https://assistant.example.com/icons/code-review.svg",
+				MIMEType: "image/svg+xml",
+				Sizes: []string{
+					"any",
+				},
+			},
+		},
 	}, adapter.sdkPromptHandler(requestContext))
 	server.AddPrompt(&mcpsdk.Prompt{
 		Name:        "contextual_prompts",
 		Description: "Generate prompts based on context",
+		Icons: []mcpsdk.Icon{
+			{
+				Source:   "https://assistant.example.com/icons/contextual-prompts.png",
+				MIMEType: "image/png",
+				Sizes: []string{
+					"48x48",
+				},
+			},
+		},
 		Arguments: []*mcpsdk.PromptArgument{
 			{
 				Name:        "context",

@@ -545,6 +545,31 @@ func (a *MCPAdapter) Initialize(ctx context.Context, p *InitializePayload) (res 
     serverInfo := &ServerInfo{
         Name:    {{ quote .MCPName }},
         Version: {{ quote .MCPVersion }},
+        {{- if .WebsiteURL }}
+        WebsiteURL: stringPtr({{ quote .WebsiteURL }}),
+        {{- end }}
+        {{- if .Icons }}
+        Icons: []*Icon{
+            {{- range .Icons }}
+            {
+                Src: {{ quote .Source }},
+                {{- if .MIMEType }}
+                MimeType: stringPtr({{ quote .MIMEType }}),
+                {{- end }}
+                {{- if .Sizes }}
+                Sizes: []string{
+                    {{- range .Sizes }}
+                    {{ quote . }},
+                    {{- end }}
+                },
+                {{- end }}
+                {{- if .Theme }}
+                Theme: stringPtr({{ quote .Theme }}),
+                {{- end }}
+            },
+            {{- end }}
+        },
+        {{- end }}
     }
 
     capabilities := &ServerCapabilities{}

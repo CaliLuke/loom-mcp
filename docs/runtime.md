@@ -187,6 +187,11 @@ The runtime always initializes `Runtime.PromptRegistry`. Prompt management has t
 - **Scoped overrides**: optionally resolve `org/facility/session` overrides through `prompt.Store`
   (`runtime.WithPromptStore(...)`).
 
+This registry is the internal runtime prompt system Loom uses while executing planners and agents.
+Registering a prompt here makes it available to Loom runtime code, not to MCP clients. MCP clients
+only see prompts declared with `StaticPrompt(...)` and `DynamicPrompt(...)`, which expose
+`prompts/list` and `prompts/get` on generated MCP servers.
+
 ```go
 import (
     promptmongo "github.com/CaliLuke/loom-mcp/features/prompt/mongo"

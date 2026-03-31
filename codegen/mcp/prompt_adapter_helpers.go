@@ -20,6 +20,7 @@ func (g *adapterGenerator) buildDynamicPromptAdapters() []*DynamicPromptAdapter 
 			adapter := &DynamicPromptAdapter{
 				Name:               dp.Name,
 				Description:        dp.Description,
+				Icons:              iconDataFromExprs(dp.Icons),
 				OriginalMethodName: codegen.Goify(dp.Method.Name, true),
 				HasPayload:         hasRealPayload,
 			}
@@ -51,6 +52,7 @@ func (g *adapterGenerator) buildStaticPrompts() []*StaticPromptAdapter {
 		adapter := &StaticPromptAdapter{
 			Name:        prompt.Name,
 			Description: prompt.Description,
+			Icons:       iconDataFromExprs(prompt.Icons),
 			Messages:    make([]*PromptMessageAdapter, len(prompt.Messages)),
 		}
 

@@ -8,7 +8,34 @@ func (a *MCPAdapter) ResourcesList(ctx context.Context, p *ResourcesListPayload)
     a.log(ctx, "request", map[string]any{"method": "resources/list"})
     resources := []*ResourceInfo{
         {{- range .Resources }}
-        { URI: {{ quote .URI }}, Name: stringPtr({{ quote .Name }}), Description: stringPtr({{ quote .Description }}), MimeType: stringPtr({{ quote .MimeType }}) },
+        {
+            URI: {{ quote .URI }},
+            Name: stringPtr({{ quote .Name }}),
+            Description: stringPtr({{ quote .Description }}),
+            MimeType: stringPtr({{ quote .MimeType }}),
+            {{- if .Icons }}
+            Icons: []*Icon{
+                {{- range .Icons }}
+                {
+                    Src: {{ quote .Source }},
+                    {{- if .MIMEType }}
+                    MimeType: stringPtr({{ quote .MIMEType }}),
+                    {{- end }}
+                    {{- if .Sizes }}
+                    Sizes: []string{
+                        {{- range .Sizes }}
+                        {{ quote . }},
+                        {{- end }}
+                    },
+                    {{- end }}
+                    {{- if .Theme }}
+                    Theme: stringPtr({{ quote .Theme }}),
+                    {{- end }}
+                },
+                {{- end }}
+            },
+            {{- end }}
+        },
         {{- end }}
     }
     res := &ResourcesListResult{Resources: resources}

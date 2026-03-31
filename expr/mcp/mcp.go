@@ -11,6 +11,20 @@ import (
 )
 
 type (
+	// IconExpr defines one icon metadata entry exposed through MCP.
+	IconExpr struct {
+		eval.Expression
+
+		// Source is the icon URI or data URI.
+		Source string
+		// MIMEType is the optional icon content type.
+		MIMEType string
+		// Sizes lists supported icon sizes.
+		Sizes []string
+		// Theme is the optional theme preference for the icon.
+		Theme string
+	}
+
 	// MCPExpr defines MCP server configuration for a Goa service.
 	MCPExpr struct {
 		eval.Expression
@@ -22,6 +36,12 @@ type (
 		// Description provides a human-readable explanation of the
 		// server's purpose.
 		Description string
+		// WebsiteURL is the optional documentation or home page URL for the
+		// server implementation.
+		WebsiteURL string
+		// Icons is the optional icon metadata exposed for the server
+		// implementation.
+		Icons []*IconExpr
 		// ProtocolVersion is the MCP protocol version this server
 		// implements.
 		ProtocolVersion string
@@ -102,6 +122,8 @@ type (
 		Method *expr.MethodExpr
 		// InputSchema defines the parameter schema for this tool.
 		InputSchema *expr.AttributeExpr
+		// Icons is the optional icon metadata exposed for this tool.
+		Icons []*IconExpr
 	}
 
 	// ResourceExpr defines an MCP resource that the server exposes for access.
@@ -122,6 +144,8 @@ type (
 		// Watchable indicates whether this resource supports change
 		// notifications.
 		Watchable bool
+		// Icons is the optional icon metadata exposed for this resource.
+		Icons []*IconExpr
 	}
 
 	// PromptExpr defines a static MCP prompt template exposed by the
@@ -140,6 +164,8 @@ type (
 		// Messages is the collection of message templates in this
 		// prompt.
 		Messages []*MessageExpr
+		// Icons is the optional icon metadata exposed for this prompt.
+		Icons []*IconExpr
 	}
 
 	// MessageExpr defines a single message within a prompt template.
@@ -164,6 +190,8 @@ type (
 		Description string
 		// Method is the Goa service method that generates this prompt.
 		Method *expr.MethodExpr
+		// Icons is the optional icon metadata exposed for this prompt.
+		Icons []*IconExpr
 	}
 
 	// NotificationExpr defines a notification that the server can send to
@@ -207,6 +235,13 @@ func (m *MCPExpr) EvalName() string {
 	return "MCP server for " + m.Service.Name
 }
 
+const (
+	// IconThemeLight declares that the icon is designed for light backgrounds.
+	IconThemeLight = "light"
+	// IconThemeDark declares that the icon is designed for dark backgrounds.
+	IconThemeDark = "dark"
+)
+
 // Finalize finalizes the MCP expression
 func (m *MCPExpr) Finalize() {
 	if m.Transport == "" {
@@ -234,6 +269,14 @@ func (m *MCPExpr) Validate() error {
 	}
 	if m.Version == "" {
 		verr.Add(m, "MCP server version is required")
+	}
+	for _, icon := range m.Icons {
+		if err := icon.Validate(); err != nil {
+			var ve *eval.ValidationErrors
+			if errors.As(err, &ve) {
+				verr.Merge(ve)
+			}
+		}
 	}
 	for _, t := range m.Tools {
 		if err := t.Validate(); err != nil {
@@ -274,6 +317,14 @@ func (t *ToolExpr) Validate() error {
 	if t.Description == "" {
 		verr.Add(t, "tool description is required")
 	}
+	for _, icon := range t.Icons {
+		if err := icon.Validate(); err != nil {
+			var ve *eval.ValidationErrors
+			if errors.As(err, &ve) {
+				verr.Merge(ve)
+			}
+		}
+	}
 	if len(verr.Errors) > 0 {
 		return verr
 	}
@@ -288,6 +339,14 @@ func (r *ResourceExpr) Validate() error {
 	}
 	if r.URI == "" {
 		verr.Add(r, "resource URI is required")
+	}
+	for _, icon := range r.Icons {
+		if err := icon.Validate(); err != nil {
+			var ve *eval.ValidationErrors
+			if errors.As(err, &ve) {
+				verr.Merge(ve)
+			}
+		}
 	}
 	if len(verr.Errors) > 0 {
 		return verr
@@ -304,6 +363,31 @@ func (p *PromptExpr) Validate() error {
 	if len(p.Messages) == 0 {
 		verr.Add(p, "prompt must have at least one message")
 	}
+	for _, icon := range p.Icons {
+		if err := icon.Validate(); err != nil {
+			var ve *eval.ValidationErrors
+			if errors.As(err, &ve) {
+				verr.Merge(ve)
+			}
+		}
+	}
+	if len(verr.Errors) > 0 {
+		return verr
+	}
+	return nil
+}
+
+// Validate validates icon metadata.
+func (i *IconExpr) Validate() error {
+	verr := new(eval.ValidationErrors)
+	if i.Source == "" {
+		verr.Add(i, "icon source is required")
+	}
+	switch i.Theme {
+	case "", IconThemeLight, IconThemeDark:
+	default:
+		verr.Add(i, "icon theme must be empty, light, or dark")
+	}
 	if len(verr.Errors) > 0 {
 		return verr
 	}
@@ -313,6 +397,11 @@ func (p *PromptExpr) Validate() error {
 // EvalName returns the name used for evaluation.
 func (c *CapabilitiesExpr) EvalName() string {
 	return "MCP capabilities"
+}
+
+// EvalName returns the name used for evaluation.
+func (i *IconExpr) EvalName() string {
+	return "MCP icon"
 }
 
 // EvalName returns the name used for evaluation.

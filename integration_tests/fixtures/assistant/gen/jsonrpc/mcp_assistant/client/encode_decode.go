@@ -1047,8 +1047,41 @@ func DecodeEventsStreamResponse(decoder func(*http.Response) loomhttp.Decoder, r
 // *mcpassistant.ClientInfo.
 func marshalMcpassistantClientInfoToClientInfoRequestBodyRequestBodyRequestBodyRequestBody(v *mcpassistant.ClientInfo) *ClientInfoRequestBodyRequestBodyRequestBodyRequestBody {
 	res := &ClientInfoRequestBodyRequestBodyRequestBodyRequestBody{
-		Name:    v.Name,
-		Version: v.Version,
+		Name:       v.Name,
+		Version:    v.Version,
+		WebsiteURL: v.WebsiteURL,
+	}
+	if v.Icons != nil {
+		res.Icons = make([]*IconRequestBodyRequestBodyRequestBodyRequestBody, len(v.Icons))
+		for i, val := range v.Icons {
+			if val == nil {
+				res.Icons[i] = nil
+				continue
+			}
+			res.Icons[i] = marshalMcpassistantIconToIconRequestBodyRequestBodyRequestBodyRequestBody(val)
+		}
+	}
+
+	return res
+}
+
+// marshalMcpassistantIconToIconRequestBodyRequestBodyRequestBodyRequestBody
+// builds a value of type *IconRequestBodyRequestBodyRequestBodyRequestBody
+// from a value of type *mcpassistant.Icon.
+func marshalMcpassistantIconToIconRequestBodyRequestBodyRequestBodyRequestBody(v *mcpassistant.Icon) *IconRequestBodyRequestBodyRequestBodyRequestBody {
+	if v == nil {
+		return nil
+	}
+	res := &IconRequestBodyRequestBodyRequestBodyRequestBody{
+		Src:      v.Src,
+		MimeType: v.MimeType,
+		Theme:    v.Theme,
+	}
+	if v.Sizes != nil {
+		res.Sizes = make([]string, len(v.Sizes))
+		for i, val := range v.Sizes {
+			res.Sizes[i] = val
+		}
 	}
 
 	return res
@@ -1059,8 +1092,41 @@ func marshalMcpassistantClientInfoToClientInfoRequestBodyRequestBodyRequestBodyR
 // *ClientInfoRequestBodyRequestBodyRequestBodyRequestBody.
 func marshalClientInfoRequestBodyRequestBodyRequestBodyRequestBodyToMcpassistantClientInfo(v *ClientInfoRequestBodyRequestBodyRequestBodyRequestBody) *mcpassistant.ClientInfo {
 	res := &mcpassistant.ClientInfo{
-		Name:    v.Name,
-		Version: v.Version,
+		Name:       v.Name,
+		Version:    v.Version,
+		WebsiteURL: v.WebsiteURL,
+	}
+	if v.Icons != nil {
+		res.Icons = make([]*mcpassistant.Icon, len(v.Icons))
+		for i, val := range v.Icons {
+			if val == nil {
+				res.Icons[i] = nil
+				continue
+			}
+			res.Icons[i] = marshalIconRequestBodyRequestBodyRequestBodyRequestBodyToMcpassistantIcon(val)
+		}
+	}
+
+	return res
+}
+
+// marshalIconRequestBodyRequestBodyRequestBodyRequestBodyToMcpassistantIcon
+// builds a value of type *mcpassistant.Icon from a value of type
+// *IconRequestBodyRequestBodyRequestBodyRequestBody.
+func marshalIconRequestBodyRequestBodyRequestBodyRequestBodyToMcpassistantIcon(v *IconRequestBodyRequestBodyRequestBodyRequestBody) *mcpassistant.Icon {
+	if v == nil {
+		return nil
+	}
+	res := &mcpassistant.Icon{
+		Src:      v.Src,
+		MimeType: v.MimeType,
+		Theme:    v.Theme,
+	}
+	if v.Sizes != nil {
+		res.Sizes = make([]string, len(v.Sizes))
+		for i, val := range v.Sizes {
+			res.Sizes[i] = val
+		}
 	}
 
 	return res
@@ -1131,8 +1197,40 @@ func unmarshalServerInfoResponseBodyResponseBodyToMcpassistantServerInfo(v *Serv
 		return nil
 	}
 	res := &mcpassistant.ServerInfo{
-		Name:    *v.Name,
-		Version: *v.Version,
+		Name:       *v.Name,
+		Version:    *v.Version,
+		WebsiteURL: v.WebsiteURL,
+	}
+	if v.Icons != nil {
+		res.Icons = make([]*mcpassistant.Icon, len(v.Icons))
+		for i, val := range v.Icons {
+			if val == nil {
+				res.Icons[i] = nil
+				continue
+			}
+			res.Icons[i] = unmarshalIconResponseBodyResponseBodyToMcpassistantIcon(val)
+		}
+	}
+
+	return res
+}
+
+// unmarshalIconResponseBodyResponseBodyToMcpassistantIcon builds a value of
+// type *mcpassistant.Icon from a value of type *IconResponseBodyResponseBody.
+func unmarshalIconResponseBodyResponseBodyToMcpassistantIcon(v *IconResponseBodyResponseBody) *mcpassistant.Icon {
+	if v == nil {
+		return nil
+	}
+	res := &mcpassistant.Icon{
+		Src:      *v.Src,
+		MimeType: v.MimeType,
+		Theme:    v.Theme,
+	}
+	if v.Sizes != nil {
+		res.Sizes = make([]string, len(v.Sizes))
+		for i, val := range v.Sizes {
+			res.Sizes[i] = val
+		}
 	}
 
 	return res
@@ -1150,6 +1248,16 @@ func unmarshalToolInfoResponseBodyResponseBodyToMcpassistantToolInfo(v *ToolInfo
 		Description: v.Description,
 		InputSchema: v.InputSchema,
 		Annotations: v.Annotations,
+	}
+	if v.Icons != nil {
+		res.Icons = make([]*mcpassistant.Icon, len(v.Icons))
+		for i, val := range v.Icons {
+			if val == nil {
+				res.Icons[i] = nil
+				continue
+			}
+			res.Icons[i] = unmarshalIconResponseBodyResponseBodyToMcpassistantIcon(val)
+		}
 	}
 
 	return res
@@ -1185,6 +1293,16 @@ func unmarshalResourceInfoResponseBodyResponseBodyToMcpassistantResourceInfo(v *
 		Name:        v.Name,
 		Description: v.Description,
 		MimeType:    v.MimeType,
+	}
+	if v.Icons != nil {
+		res.Icons = make([]*mcpassistant.Icon, len(v.Icons))
+		for i, val := range v.Icons {
+			if val == nil {
+				res.Icons[i] = nil
+				continue
+			}
+			res.Icons[i] = unmarshalIconResponseBodyResponseBodyToMcpassistantIcon(val)
+		}
 	}
 
 	return res
@@ -1226,6 +1344,16 @@ func unmarshalPromptInfoResponseBodyResponseBodyToMcpassistantPromptInfo(v *Prom
 				continue
 			}
 			res.Arguments[i] = unmarshalPromptArgumentResponseBodyResponseBodyToMcpassistantPromptArgument(val)
+		}
+	}
+	if v.Icons != nil {
+		res.Icons = make([]*mcpassistant.Icon, len(v.Icons))
+		for i, val := range v.Icons {
+			if val == nil {
+				res.Icons[i] = nil
+				continue
+			}
+			res.Icons[i] = unmarshalIconResponseBodyResponseBodyToMcpassistantIcon(val)
 		}
 	}
 

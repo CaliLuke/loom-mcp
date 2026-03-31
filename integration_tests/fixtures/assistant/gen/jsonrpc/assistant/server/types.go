@@ -19,19 +19,11 @@ import (
 
 // ListDocumentsResponseBody is the type of the "assistant" service
 // "list_documents" endpoint HTTP response body.
-type ListDocumentsResponseBody struct {
-	// Document entries
-	Items []string `form:"items" json:"items" xml:"items"`
-}
+type ListDocumentsResponseBody ListDocumentsResponseBodyResponseBody
 
 // SystemInfoResponseBody is the type of the "assistant" service "system_info"
 // endpoint HTTP response body.
-type SystemInfoResponseBody struct {
-	// System name
-	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
-	// System version
-	Version *string `form:"version,omitempty" json:"version,omitempty" xml:"version,omitempty"`
-}
+type SystemInfoResponseBody SystemInfoResponseBodyResponseBody
 
 // ConversationHistoryRequestBody is the type of the "assistant" service
 // "conversation_history" endpoint HTTP request body.
@@ -46,23 +38,11 @@ type ConversationHistoryRequestBody struct {
 
 // ConversationHistoryResponseBody is the type of the "assistant" service
 // "conversation_history" endpoint HTTP response body.
-type ConversationHistoryResponseBody struct {
-	// History items
-	Items []string `form:"items,omitempty" json:"items,omitempty" xml:"items,omitempty"`
-}
+type ConversationHistoryResponseBody ConversationHistoryResponseBodyResponseBody
 
 // FigmaDesignSystemResponseBody is the type of the "assistant" service
 // "figma_design_system" endpoint HTTP response body.
-type FigmaDesignSystemResponseBody struct {
-	// Design system name
-	Name string `form:"name" json:"name" xml:"name"`
-	// Design system version
-	Version string `form:"version" json:"version" xml:"version"`
-	// Platform the tokens target
-	Platform string `form:"platform" json:"platform" xml:"platform"`
-	// Grouped token information
-	Tokens *DesignTokenGroupResponseBody `form:"tokens" json:"tokens" xml:"tokens"`
-}
+type FigmaDesignSystemResponseBody FigmaDesignSystemResponseBodyResponseBody
 
 // GeneratePromptsRequestBody is the type of the "assistant" service
 // "generate_prompts" endpoint HTTP request body.
@@ -75,10 +55,7 @@ type GeneratePromptsRequestBody struct {
 
 // GeneratePromptsResponseBody is the type of the "assistant" service
 // "generate_prompts" endpoint HTTP response body.
-type GeneratePromptsResponseBody struct {
-	// Templates
-	Templates []string `form:"templates" json:"templates" xml:"templates"`
-}
+type GeneratePromptsResponseBody GeneratePromptsResponseBodyResponseBody
 
 // BuildFigmaImplementationPromptRequestBody is the type of the "assistant"
 // service "build_figma_implementation_prompt" endpoint HTTP request body.
@@ -95,10 +72,7 @@ type BuildFigmaImplementationPromptRequestBody struct {
 
 // BuildFigmaImplementationPromptResponseBody is the type of the "assistant"
 // service "build_figma_implementation_prompt" endpoint HTTP response body.
-type BuildFigmaImplementationPromptResponseBody struct {
-	// Templates
-	Templates []string `form:"templates" json:"templates" xml:"templates"`
-}
+type BuildFigmaImplementationPromptResponseBody BuildFigmaImplementationPromptResponseBodyResponseBody
 
 // SendNotificationRequestBody is the type of the "assistant" service
 // "send_notification" endpoint HTTP request body.
@@ -120,10 +94,7 @@ type AnalyzeSentimentRequestBody struct {
 
 // AnalyzeSentimentResponseBody is the type of the "assistant" service
 // "analyze_sentiment" endpoint HTTP response body.
-type AnalyzeSentimentResponseBody struct {
-	// Detected sentiment
-	Sentiment *string `form:"sentiment,omitempty" json:"sentiment,omitempty" xml:"sentiment,omitempty"`
-}
+type AnalyzeSentimentResponseBody AnalyzeSentimentResponseBodyResponseBody
 
 // ExtractKeywordsRequestBody is the type of the "assistant" service
 // "extract_keywords" endpoint HTTP request body.
@@ -134,10 +105,7 @@ type ExtractKeywordsRequestBody struct {
 
 // ExtractKeywordsResponseBody is the type of the "assistant" service
 // "extract_keywords" endpoint HTTP response body.
-type ExtractKeywordsResponseBody struct {
-	// Extracted keywords
-	Keywords []string `form:"keywords,omitempty" json:"keywords,omitempty" xml:"keywords,omitempty"`
-}
+type ExtractKeywordsResponseBody ExtractKeywordsResponseBodyResponseBody
 
 // SummarizeTextRequestBody is the type of the "assistant" service
 // "summarize_text" endpoint HTTP request body.
@@ -148,10 +116,7 @@ type SummarizeTextRequestBody struct {
 
 // SummarizeTextResponseBody is the type of the "assistant" service
 // "summarize_text" endpoint HTTP response body.
-type SummarizeTextResponseBody struct {
-	// Summary
-	Summary *string `form:"summary,omitempty" json:"summary,omitempty" xml:"summary,omitempty"`
-}
+type SummarizeTextResponseBody SummarizeTextResponseBodyResponseBody
 
 // SearchRequestBody is the type of the "assistant" service "search" endpoint
 // HTTP request body.
@@ -164,10 +129,7 @@ type SearchRequestBody struct {
 
 // SearchResponseBody is the type of the "assistant" service "search" endpoint
 // HTTP response body.
-type SearchResponseBody struct {
-	// Search results
-	Results []string `form:"results,omitempty" json:"results,omitempty" xml:"results,omitempty"`
-}
+type SearchResponseBody SearchResponseBodyResponseBody
 
 // ExecuteCodeRequestBody is the type of the "assistant" service "execute_code"
 // endpoint HTTP request body.
@@ -180,10 +142,7 @@ type ExecuteCodeRequestBody struct {
 
 // ExecuteCodeResponseBody is the type of the "assistant" service
 // "execute_code" endpoint HTTP response body.
-type ExecuteCodeResponseBody struct {
-	// Execution output
-	Output *string `form:"output,omitempty" json:"output,omitempty" xml:"output,omitempty"`
-}
+type ExecuteCodeResponseBody ExecuteCodeResponseBodyResponseBody
 
 // ProcessBatchRequestBody is the type of the "assistant" service
 // "process_batch" endpoint HTTP request body.
@@ -202,10 +161,7 @@ type ProcessBatchRequestBody struct {
 
 // ProcessBatchResponseBody is the type of the "assistant" service
 // "process_batch" endpoint HTTP response body.
-type ProcessBatchResponseBody struct {
-	// Operation status
-	OK *bool `form:"ok,omitempty" json:"ok,omitempty" xml:"ok,omitempty"`
-}
+type ProcessBatchResponseBody ProcessBatchResponseBodyResponseBody
 
 // MultiContentRequestBody is the type of the "assistant" service
 // "multi_content" endpoint HTTP request body.
@@ -216,10 +172,7 @@ type MultiContentRequestBody struct {
 
 // MultiContentResponseBody is the type of the "assistant" service
 // "multi_content" endpoint HTTP response body.
-type MultiContentResponseBody struct {
-	// Combined text result
-	Result *string `form:"result,omitempty" json:"result,omitempty" xml:"result,omitempty"`
-}
+type MultiContentResponseBody MultiContentResponseBodyResponseBody
 
 // GenerateDpiSpecRequestBody is the type of the "assistant" service
 // "generate_dpi_spec" endpoint HTTP request body.
@@ -240,24 +193,7 @@ type GenerateDpiSpecRequestBody struct {
 
 // GenerateDpiSpecResponseBody is the type of the "assistant" service
 // "generate_dpi_spec" endpoint HTTP response body.
-type GenerateDpiSpecResponseBody struct {
-	// Screen title
-	ScreenTitle string `form:"screen_title" json:"screen_title" xml:"screen_title"`
-	// Target platform
-	Platform string `form:"platform" json:"platform" xml:"platform"`
-	// Layout density
-	Density string `form:"density" json:"density" xml:"density"`
-	// Viewport dimensions
-	Viewport *DPIViewportResponseBody `form:"viewport" json:"viewport" xml:"viewport"`
-	// Ordered screen sections
-	Sections []*DPISectionResponseBody `form:"sections" json:"sections" xml:"sections"`
-	// Primary CTA
-	PrimaryCta *DPICallToActionResponseBody `form:"primary_cta" json:"primary_cta" xml:"primary_cta"`
-	// Design system resource URI
-	DesignTokensURI string `form:"design_tokens_uri" json:"design_tokens_uri" xml:"design_tokens_uri"`
-	// Development handoff notes
-	DevNotes []string `form:"dev_notes" json:"dev_notes" xml:"dev_notes"`
-}
+type GenerateDpiSpecResponseBody GenerateDpiSpecResponseBodyResponseBody
 
 // DispatchActionRequestBody is the type of the "assistant" service
 // "dispatch_action" endpoint HTTP request body.
@@ -268,13 +204,47 @@ type DispatchActionRequestBody struct {
 
 // DispatchActionResponseBody is the type of the "assistant" service
 // "dispatch_action" endpoint HTTP response body.
-type DispatchActionResponseBody struct {
-	// Acknowledgement
-	Ack string `form:"ack" json:"ack" xml:"ack"`
+type DispatchActionResponseBody DispatchActionResponseBodyResponseBody
+
+// ListDocumentsResponseBodyResponseBody is used to define fields on response
+// body types.
+type ListDocumentsResponseBodyResponseBody struct {
+	// Document entries
+	Items []string `form:"items" json:"items" xml:"items"`
 }
 
-// DesignTokenGroupResponseBody is used to define fields on response body types.
-type DesignTokenGroupResponseBody struct {
+// SystemInfoResponseBodyResponseBody is used to define fields on response body
+// types.
+type SystemInfoResponseBodyResponseBody struct {
+	// System name
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// System version
+	Version *string `form:"version,omitempty" json:"version,omitempty" xml:"version,omitempty"`
+}
+
+// ConversationHistoryResponseBodyResponseBody is used to define fields on
+// response body types.
+type ConversationHistoryResponseBodyResponseBody struct {
+	// History items
+	Items []string `form:"items,omitempty" json:"items,omitempty" xml:"items,omitempty"`
+}
+
+// FigmaDesignSystemResponseBodyResponseBody is used to define fields on
+// response body types.
+type FigmaDesignSystemResponseBodyResponseBody struct {
+	// Design system name
+	Name string `form:"name" json:"name" xml:"name"`
+	// Design system version
+	Version string `form:"version" json:"version" xml:"version"`
+	// Platform the tokens target
+	Platform string `form:"platform" json:"platform" xml:"platform"`
+	// Grouped token information
+	Tokens *DesignTokenGroupResponseBodyResponseBody `form:"tokens" json:"tokens" xml:"tokens"`
+}
+
+// DesignTokenGroupResponseBodyResponseBody is used to define fields on
+// response body types.
+type DesignTokenGroupResponseBodyResponseBody struct {
 	// Color tokens
 	Colors []string `form:"colors" json:"colors" xml:"colors"`
 	// Spacing tokens
@@ -283,16 +253,102 @@ type DesignTokenGroupResponseBody struct {
 	Typography []string `form:"typography" json:"typography" xml:"typography"`
 }
 
-// DPIViewportResponseBody is used to define fields on response body types.
-type DPIViewportResponseBody struct {
+// GeneratePromptsResponseBodyResponseBody is used to define fields on response
+// body types.
+type GeneratePromptsResponseBodyResponseBody struct {
+	// Templates
+	Templates []string `form:"templates" json:"templates" xml:"templates"`
+}
+
+// BuildFigmaImplementationPromptResponseBodyResponseBody is used to define
+// fields on response body types.
+type BuildFigmaImplementationPromptResponseBodyResponseBody struct {
+	// Templates
+	Templates []string `form:"templates" json:"templates" xml:"templates"`
+}
+
+// AnalyzeSentimentResponseBodyResponseBody is used to define fields on
+// response body types.
+type AnalyzeSentimentResponseBodyResponseBody struct {
+	// Detected sentiment
+	Sentiment *string `form:"sentiment,omitempty" json:"sentiment,omitempty" xml:"sentiment,omitempty"`
+}
+
+// ExtractKeywordsResponseBodyResponseBody is used to define fields on response
+// body types.
+type ExtractKeywordsResponseBodyResponseBody struct {
+	// Extracted keywords
+	Keywords []string `form:"keywords,omitempty" json:"keywords,omitempty" xml:"keywords,omitempty"`
+}
+
+// SummarizeTextResponseBodyResponseBody is used to define fields on response
+// body types.
+type SummarizeTextResponseBodyResponseBody struct {
+	// Summary
+	Summary *string `form:"summary,omitempty" json:"summary,omitempty" xml:"summary,omitempty"`
+}
+
+// SearchResponseBodyResponseBody is used to define fields on response body
+// types.
+type SearchResponseBodyResponseBody struct {
+	// Search results
+	Results []string `form:"results,omitempty" json:"results,omitempty" xml:"results,omitempty"`
+}
+
+// ExecuteCodeResponseBodyResponseBody is used to define fields on response
+// body types.
+type ExecuteCodeResponseBodyResponseBody struct {
+	// Execution output
+	Output *string `form:"output,omitempty" json:"output,omitempty" xml:"output,omitempty"`
+}
+
+// ProcessBatchResponseBodyResponseBody is used to define fields on response
+// body types.
+type ProcessBatchResponseBodyResponseBody struct {
+	// Operation status
+	OK *bool `form:"ok,omitempty" json:"ok,omitempty" xml:"ok,omitempty"`
+}
+
+// MultiContentResponseBodyResponseBody is used to define fields on response
+// body types.
+type MultiContentResponseBodyResponseBody struct {
+	// Combined text result
+	Result *string `form:"result,omitempty" json:"result,omitempty" xml:"result,omitempty"`
+}
+
+// GenerateDpiSpecResponseBodyResponseBody is used to define fields on response
+// body types.
+type GenerateDpiSpecResponseBodyResponseBody struct {
+	// Screen title
+	ScreenTitle string `form:"screen_title" json:"screen_title" xml:"screen_title"`
+	// Target platform
+	Platform string `form:"platform" json:"platform" xml:"platform"`
+	// Layout density
+	Density string `form:"density" json:"density" xml:"density"`
+	// Viewport dimensions
+	Viewport *DPIViewportResponseBodyResponseBody `form:"viewport" json:"viewport" xml:"viewport"`
+	// Ordered screen sections
+	Sections []*DPISectionResponseBodyResponseBody `form:"sections" json:"sections" xml:"sections"`
+	// Primary CTA
+	PrimaryCta *DPICallToActionResponseBodyResponseBody `form:"primary_cta" json:"primary_cta" xml:"primary_cta"`
+	// Design system resource URI
+	DesignTokensURI string `form:"design_tokens_uri" json:"design_tokens_uri" xml:"design_tokens_uri"`
+	// Development handoff notes
+	DevNotes []string `form:"dev_notes" json:"dev_notes" xml:"dev_notes"`
+}
+
+// DPIViewportResponseBodyResponseBody is used to define fields on response
+// body types.
+type DPIViewportResponseBodyResponseBody struct {
 	// Viewport width
 	Width int `form:"width" json:"width" xml:"width"`
 	// Viewport height
 	Height int `form:"height" json:"height" xml:"height"`
 }
 
-// DPISectionResponseBody is used to define fields on response body types.
-type DPISectionResponseBody struct {
+// DPISectionResponseBodyResponseBody is used to define fields on response body
+// types.
+type DPISectionResponseBodyResponseBody struct {
 	// Section name
 	Name string `form:"name" json:"name" xml:"name"`
 	// Primary UI component
@@ -301,22 +357,32 @@ type DPISectionResponseBody struct {
 	Notes []string `form:"notes" json:"notes" xml:"notes"`
 }
 
-// DPICallToActionResponseBody is used to define fields on response body types.
-type DPICallToActionResponseBody struct {
+// DPICallToActionResponseBodyResponseBody is used to define fields on response
+// body types.
+type DPICallToActionResponseBodyResponseBody struct {
 	// CTA label
 	Label string `form:"label" json:"label" xml:"label"`
 	// CTA visual style
 	Style string `form:"style" json:"style" xml:"style"`
 }
 
-// ListActionRequestBody is used to define fields on request body types.
-type ListActionRequestBody struct {
+// DispatchActionResponseBodyResponseBody is used to define fields on response
+// body types.
+type DispatchActionResponseBodyResponseBody struct {
+	// Acknowledgement
+	Ack string `form:"ack" json:"ack" xml:"ack"`
+}
+
+// ListActionRequestBodyRequestBody is used to define fields on request body
+// types.
+type ListActionRequestBodyRequestBody struct {
 	// Maximum number of items to list
 	Limit *int `form:"limit,omitempty" json:"limit,omitempty" xml:"limit,omitempty"`
 }
 
-// CreateActionRequestBody is used to define fields on request body types.
-type CreateActionRequestBody struct {
+// CreateActionRequestBodyRequestBody is used to define fields on request body
+// types.
+type CreateActionRequestBodyRequestBody struct {
 	// Name to create
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 }
@@ -324,8 +390,8 @@ type CreateActionRequestBody struct {
 // CreateActionOrListAction is a sum-type union.
 type CreateActionOrListAction struct {
 	kind         CreateActionOrListActionKind
-	ListAction   *ListActionRequestBody
-	CreateAction *CreateActionRequestBody
+	ListAction   *ListActionRequestBodyRequestBody
+	CreateAction *CreateActionRequestBodyRequestBody
 }
 
 // CreateActionOrListActionKind enumerates the union variants for CreateActionOrListAction.
@@ -344,7 +410,7 @@ func (u CreateActionOrListAction) Kind() CreateActionOrListActionKind {
 }
 
 // NewCreateActionOrListActionListAction constructs a CreateActionOrListAction with the ListAction branch set.
-func NewCreateActionOrListActionListAction(v *ListActionRequestBody) CreateActionOrListAction {
+func NewCreateActionOrListActionListAction(v *ListActionRequestBodyRequestBody) CreateActionOrListAction {
 	return CreateActionOrListAction{
 		kind:       CreateActionOrListActionKindListAction,
 		ListAction: v,
@@ -352,7 +418,7 @@ func NewCreateActionOrListActionListAction(v *ListActionRequestBody) CreateActio
 }
 
 // AsListAction returns the value of the ListAction branch if set.
-func (u CreateActionOrListAction) AsListAction() (_ *ListActionRequestBody, ok bool) {
+func (u CreateActionOrListAction) AsListAction() (_ *ListActionRequestBodyRequestBody, ok bool) {
 	if u.kind != CreateActionOrListActionKindListAction {
 		return
 	}
@@ -360,13 +426,13 @@ func (u CreateActionOrListAction) AsListAction() (_ *ListActionRequestBody, ok b
 }
 
 // SetListAction sets the ListAction branch of the union.
-func (u *CreateActionOrListAction) SetListAction(v *ListActionRequestBody) {
+func (u *CreateActionOrListAction) SetListAction(v *ListActionRequestBodyRequestBody) {
 	u.kind = CreateActionOrListActionKindListAction
 	u.ListAction = v
 }
 
 // NewCreateActionOrListActionCreateAction constructs a CreateActionOrListAction with the CreateAction branch set.
-func NewCreateActionOrListActionCreateAction(v *CreateActionRequestBody) CreateActionOrListAction {
+func NewCreateActionOrListActionCreateAction(v *CreateActionRequestBodyRequestBody) CreateActionOrListAction {
 	return CreateActionOrListAction{
 		kind:         CreateActionOrListActionKindCreateAction,
 		CreateAction: v,
@@ -374,7 +440,7 @@ func NewCreateActionOrListActionCreateAction(v *CreateActionRequestBody) CreateA
 }
 
 // AsCreateAction returns the value of the CreateAction branch if set.
-func (u CreateActionOrListAction) AsCreateAction() (_ *CreateActionRequestBody, ok bool) {
+func (u CreateActionOrListAction) AsCreateAction() (_ *CreateActionRequestBodyRequestBody, ok bool) {
 	if u.kind != CreateActionOrListActionKindCreateAction {
 		return
 	}
@@ -382,7 +448,7 @@ func (u CreateActionOrListAction) AsCreateAction() (_ *CreateActionRequestBody, 
 }
 
 // SetCreateAction sets the CreateAction branch of the union.
-func (u *CreateActionOrListAction) SetCreateAction(v *CreateActionRequestBody) {
+func (u *CreateActionOrListAction) SetCreateAction(v *CreateActionRequestBodyRequestBody) {
 	u.kind = CreateActionOrListActionKindCreateAction
 	u.CreateAction = v
 }
@@ -465,18 +531,18 @@ func (u *CreateActionOrListAction) UnmarshalFormValues(values url.Values, prefix
 	}
 	switch rawType {
 	case string(CreateActionOrListActionKindListAction):
-		var v *ListActionRequestBody
+		var v *ListActionRequestBodyRequestBody
 		seen, err := loomhttp.DecodeFormValue(values, prefix, &v)
 		if err != nil {
 			return err
 		}
 		if !seen {
-			v = &ListActionRequestBody{}
+			v = &ListActionRequestBodyRequestBody{}
 		}
 		u.kind = CreateActionOrListActionKindListAction
 		u.ListAction = v
 	case string(CreateActionOrListActionKindCreateAction):
-		var v *CreateActionRequestBody
+		var v *CreateActionRequestBodyRequestBody
 		seen, err := loomhttp.DecodeFormValue(values, prefix, &v)
 		if err != nil {
 			return err
@@ -503,14 +569,14 @@ func (u *CreateActionOrListAction) UnmarshalJSON(data []byte) error {
 	}
 	switch raw.Type {
 	case string(CreateActionOrListActionKindListAction):
-		var v *ListActionRequestBody
+		var v *ListActionRequestBodyRequestBody
 		if err := json.Unmarshal(raw.Value, &v); err != nil {
 			return err
 		}
 		u.kind = CreateActionOrListActionKindListAction
 		u.ListAction = v
 	case string(CreateActionOrListActionKindCreateAction):
-		var v *CreateActionRequestBody
+		var v *CreateActionRequestBodyRequestBody
 		if err := json.Unmarshal(raw.Value, &v); err != nil {
 			return err
 		}
@@ -569,7 +635,7 @@ func NewFigmaDesignSystemResponseBody(res *assistant.DesignSystem) *FigmaDesignS
 		Platform: res.Platform,
 	}
 	if res.Tokens != nil {
-		body.Tokens = marshalAssistantDesignTokenGroupToDesignTokenGroupResponseBody(res.Tokens)
+		body.Tokens = marshalAssistantDesignTokenGroupToDesignTokenGroupResponseBodyResponseBody(res.Tokens)
 	}
 	return body
 }
@@ -686,22 +752,22 @@ func NewGenerateDpiSpecResponseBody(res *assistant.DPISpec) *GenerateDpiSpecResp
 		DesignTokensURI: res.DesignTokensURI,
 	}
 	if res.Viewport != nil {
-		body.Viewport = marshalAssistantDPIViewportToDPIViewportResponseBody(res.Viewport)
+		body.Viewport = marshalAssistantDPIViewportToDPIViewportResponseBodyResponseBody(res.Viewport)
 	}
 	if res.Sections != nil {
-		body.Sections = make([]*DPISectionResponseBody, len(res.Sections))
+		body.Sections = make([]*DPISectionResponseBodyResponseBody, len(res.Sections))
 		for i, val := range res.Sections {
 			if val == nil {
 				body.Sections[i] = nil
 				continue
 			}
-			body.Sections[i] = marshalAssistantDPISectionToDPISectionResponseBody(val)
+			body.Sections[i] = marshalAssistantDPISectionToDPISectionResponseBodyResponseBody(val)
 		}
 	} else {
-		body.Sections = []*DPISectionResponseBody{}
+		body.Sections = []*DPISectionResponseBodyResponseBody{}
 	}
 	if res.PrimaryCta != nil {
-		body.PrimaryCta = marshalAssistantDPICallToActionToDPICallToActionResponseBody(res.PrimaryCta)
+		body.PrimaryCta = marshalAssistantDPICallToActionToDPICallToActionResponseBodyResponseBody(res.PrimaryCta)
 	}
 	if res.DevNotes != nil {
 		body.DevNotes = make([]string, len(res.DevNotes))
@@ -879,14 +945,14 @@ func NewDispatchActionPayload(body *DispatchActionRequestBody) *assistant.Dispat
 	switch string(body.Request.Kind()) {
 	case "ListAction":
 		actual, _ := body.Request.AsListAction()
-		obj := unmarshalListActionRequestBodyToAssistantListAction(actual)
+		obj := unmarshalListActionRequestBodyRequestBodyToAssistantListAction(actual)
 
 		u := v.Request
 		u.SetListAction((*assistant.ListAction)(obj))
 		v.Request = u
 	case "CreateAction":
 		actual, _ := body.Request.AsCreateAction()
-		obj := unmarshalCreateActionRequestBodyToAssistantCreateAction(actual)
+		obj := unmarshalCreateActionRequestBodyRequestBodyToAssistantCreateAction(actual)
 
 		u := v.Request
 		u.SetCreateAction((*assistant.CreateAction)(obj))
@@ -1063,7 +1129,7 @@ func ValidateDispatchActionRequestBody(body *DispatchActionRequestBody) (err err
 			break
 		}
 		if actual != nil {
-			if err2 := ValidateCreateActionRequestBody(actual); err2 != nil {
+			if err2 := ValidateCreateActionRequestBodyRequestBody(actual); err2 != nil {
 				err = loom.MergeErrors(err, err2)
 			}
 		}
@@ -1071,9 +1137,9 @@ func ValidateDispatchActionRequestBody(body *DispatchActionRequestBody) (err err
 	return
 }
 
-// ValidateCreateActionRequestBody runs the validations defined on
-// CreateActionRequestBody
-func ValidateCreateActionRequestBody(body *CreateActionRequestBody) (err error) {
+// ValidateCreateActionRequestBodyRequestBody runs the validations defined on
+// CreateActionRequestBodyRequestBody
+func ValidateCreateActionRequestBodyRequestBody(body *CreateActionRequestBodyRequestBody) (err error) {
 	if body.Name == nil {
 		err = loom.MergeErrors(err, loom.MissingFieldError("name", "body"))
 	}

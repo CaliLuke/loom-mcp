@@ -70,26 +70,19 @@ import (
 //	    })
 //	})
 func Tool(name string, args ...any) {
-	var description string
-	var dslf func()
-
 	if name == "" {
 		eval.ReportError("tool name cannot be empty")
 		return
 	}
 
-	// Parse arguments: (name, description?, func?)
-	for _, arg := range args {
-		switch a := arg.(type) {
-		case string:
-			description = a
-		case func():
-			dslf = a
-		}
-	}
+	description, dslf, mcpOpts := parseToolArgs(args)
 
 	switch parent := eval.Current().(type) {
 	case *agentsexpr.ToolsetExpr:
+		if len(mcpOpts) > 0 {
+			eval.ReportError("MCP tool metadata options may only be used when Tool is declared inside a Method")
+			return
+		}
 		parent.Tools = append(parent.Tools, &agentsexpr.ToolExpr{
 			Name:        name,
 			Description: description,
@@ -114,12 +107,36 @@ func Tool(name string, args ...any) {
 		if parent.Payload != nil {
 			tool.InputSchema = parent.Payload
 		}
+		for _, opt := range mcpOpts {
+			if opt != nil {
+				opt(tool)
+			}
+		}
 		tool.Expression = parent
 		mcp.Tools = append(mcp.Tools, tool)
 	default:
 		eval.IncompatibleDSL()
 		return
 	}
+}
+
+func parseToolArgs(args []any) (string, func(), []func(*mcpexpr.ToolExpr)) {
+	var description string
+	var dslf func()
+	var mcpOpts []func(*mcpexpr.ToolExpr)
+
+	for _, arg := range args {
+		switch actual := arg.(type) {
+		case string:
+			description = actual
+		case func():
+			dslf = actual
+		case func(*mcpexpr.ToolExpr):
+			mcpOpts = append(mcpOpts, actual)
+		}
+	}
+
+	return description, dslf, mcpOpts
 }
 
 // Args defines the input parameter schema for a tool. Use Args inside a Tool DSL

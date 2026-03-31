@@ -39,6 +39,31 @@ func NewSDKServer(service {{ .Package }}.Service, opts *SDKServerOptions) (*SDKS
 	server := mcpsdk.NewServer(&mcpsdk.Implementation{
 		Name:    {{ quote .MCPName }},
 		Version: {{ quote .MCPVersion }},
+		{{- if .WebsiteURL }}
+		WebsiteURL: {{ quote .WebsiteURL }},
+		{{- end }}
+		{{- if .Icons }}
+		Icons: []mcpsdk.Icon{
+			{{- range .Icons }}
+			{
+				Source: {{ quote .Source }},
+				{{- if .MIMEType }}
+				MIMEType: {{ quote .MIMEType }},
+				{{- end }}
+				{{- if .Sizes }}
+				Sizes: []string{
+					{{- range .Sizes }}
+					{{ quote . }},
+					{{- end }}
+				},
+				{{- end }}
+				{{- if .Theme }}
+				Theme: mcpsdk.IconTheme({{ quote .Theme }}),
+				{{- end }}
+			},
+			{{- end }}
+		},
+		{{- end }}
 	}, serverOpts)
 	if err := registerSDKTools(server, adapter, requestContext); err != nil {
 		return nil, err
@@ -278,6 +303,28 @@ func registerSDKTools(server *mcpsdk.Server, adapter *MCPAdapter, requestContext
 		Name:        {{ quote .Name }},
 		Description: {{ quote .Description }},
 		InputSchema: sdkToolInputSchema({{ quote .InputSchema }}),
+		{{- if .Icons }}
+		Icons: []mcpsdk.Icon{
+			{{- range .Icons }}
+			{
+				Source: {{ quote .Source }},
+				{{- if .MIMEType }}
+				MIMEType: {{ quote .MIMEType }},
+				{{- end }}
+				{{- if .Sizes }}
+				Sizes: []string{
+					{{- range .Sizes }}
+					{{ quote . }},
+					{{- end }}
+				},
+				{{- end }}
+				{{- if .Theme }}
+				Theme: mcpsdk.IconTheme({{ quote .Theme }}),
+				{{- end }}
+			},
+			{{- end }}
+		},
+		{{- end }}
 		{{- if .AnnotationsJSON }}
 		Annotations: annotations{{ goify .Name }},
 		{{- end }}
@@ -294,6 +341,28 @@ func registerSDKResources(server *mcpsdk.Server, adapter *MCPAdapter, requestCon
 		URI:         {{ quote .URI }},
 		Description: {{ quote .Description }},
 		MIMEType:    {{ quote .MimeType }},
+		{{- if .Icons }}
+		Icons: []mcpsdk.Icon{
+			{{- range .Icons }}
+			{
+				Source: {{ quote .Source }},
+				{{- if .MIMEType }}
+				MIMEType: {{ quote .MIMEType }},
+				{{- end }}
+				{{- if .Sizes }}
+				Sizes: []string{
+					{{- range .Sizes }}
+					{{ quote . }},
+					{{- end }}
+				},
+				{{- end }}
+				{{- if .Theme }}
+				Theme: mcpsdk.IconTheme({{ quote .Theme }}),
+				{{- end }}
+			},
+			{{- end }}
+		},
+		{{- end }}
 	}, adapter.sdkResourceHandler(requestContext))
 	{{- end }}
 	return nil
@@ -310,12 +379,56 @@ func registerSDKPrompts(server *mcpsdk.Server, adapter *MCPAdapter, requestConte
 	server.AddPrompt(&mcpsdk.Prompt{
 		Name:        {{ quote .Name }},
 		Description: {{ quote .Description }},
+		{{- if .Icons }}
+		Icons: []mcpsdk.Icon{
+			{{- range .Icons }}
+			{
+				Source: {{ quote .Source }},
+				{{- if .MIMEType }}
+				MIMEType: {{ quote .MIMEType }},
+				{{- end }}
+				{{- if .Sizes }}
+				Sizes: []string{
+					{{- range .Sizes }}
+					{{ quote . }},
+					{{- end }}
+				},
+				{{- end }}
+				{{- if .Theme }}
+				Theme: mcpsdk.IconTheme({{ quote .Theme }}),
+				{{- end }}
+			},
+			{{- end }}
+		},
+		{{- end }}
 	}, adapter.sdkPromptHandler(requestContext))
 	{{- end }}
 	{{- range .DynamicPrompts }}
 	server.AddPrompt(&mcpsdk.Prompt{
 		Name:        {{ quote .Name }},
 		Description: {{ quote .Description }},
+		{{- if .Icons }}
+		Icons: []mcpsdk.Icon{
+			{{- range .Icons }}
+			{
+				Source: {{ quote .Source }},
+				{{- if .MIMEType }}
+				MIMEType: {{ quote .MIMEType }},
+				{{- end }}
+				{{- if .Sizes }}
+				Sizes: []string{
+					{{- range .Sizes }}
+					{{ quote . }},
+					{{- end }}
+				},
+				{{- end }}
+				{{- if .Theme }}
+				Theme: mcpsdk.IconTheme({{ quote .Theme }}),
+				{{- end }}
+			},
+			{{- end }}
+		},
+		{{- end }}
 		Arguments: []*mcpsdk.PromptArgument{
 			{{- range .Arguments }}
 			{

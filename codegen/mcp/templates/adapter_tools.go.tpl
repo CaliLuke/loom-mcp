@@ -94,6 +94,28 @@ func (a *MCPAdapter) ToolsList(ctx context.Context, p *ToolsListPayload) (res *T
             {{- if .AnnotationsJSON }}
             Annotations: json.RawMessage([]byte({{ printf "%q" .AnnotationsJSON }})),
             {{- end }}
+            {{- if .Icons }}
+            Icons: []*Icon{
+                {{- range .Icons }}
+                {
+                    Src: {{ quote .Source }},
+                    {{- if .MIMEType }}
+                    MimeType: stringPtr({{ quote .MIMEType }}),
+                    {{- end }}
+                    {{- if .Sizes }}
+                    Sizes: []string{
+                        {{- range .Sizes }}
+                        {{ quote . }},
+                        {{- end }}
+                    },
+                    {{- end }}
+                    {{- if .Theme }}
+                    Theme: stringPtr({{ quote .Theme }}),
+                    {{- end }}
+                },
+                {{- end }}
+            },
+            {{- end }}
         },
         {{- end }}
     }

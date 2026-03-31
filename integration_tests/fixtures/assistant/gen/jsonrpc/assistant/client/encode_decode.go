@@ -1374,10 +1374,10 @@ func DecodeDispatchActionResponse(decoder func(*http.Response) loomhttp.Decoder,
 	}
 }
 
-// unmarshalDesignTokenGroupResponseBodyToAssistantDesignTokenGroup builds a
-// value of type *assistant.DesignTokenGroup from a value of type
-// *DesignTokenGroupResponseBody.
-func unmarshalDesignTokenGroupResponseBodyToAssistantDesignTokenGroup(v *DesignTokenGroupResponseBody) *assistant.DesignTokenGroup {
+// unmarshalDesignTokenGroupResponseBodyResponseBodyToAssistantDesignTokenGroup
+// builds a value of type *assistant.DesignTokenGroup from a value of type
+// *DesignTokenGroupResponseBodyResponseBody.
+func unmarshalDesignTokenGroupResponseBodyResponseBodyToAssistantDesignTokenGroup(v *DesignTokenGroupResponseBodyResponseBody) *assistant.DesignTokenGroup {
 	if v == nil {
 		return nil
 	}
@@ -1398,9 +1398,10 @@ func unmarshalDesignTokenGroupResponseBodyToAssistantDesignTokenGroup(v *DesignT
 	return res
 }
 
-// unmarshalDPIViewportResponseBodyToAssistantDPIViewport builds a value of
-// type *assistant.DPIViewport from a value of type *DPIViewportResponseBody.
-func unmarshalDPIViewportResponseBodyToAssistantDPIViewport(v *DPIViewportResponseBody) *assistant.DPIViewport {
+// unmarshalDPIViewportResponseBodyResponseBodyToAssistantDPIViewport builds a
+// value of type *assistant.DPIViewport from a value of type
+// *DPIViewportResponseBodyResponseBody.
+func unmarshalDPIViewportResponseBodyResponseBodyToAssistantDPIViewport(v *DPIViewportResponseBodyResponseBody) *assistant.DPIViewport {
 	if v == nil {
 		return nil
 	}
@@ -1412,9 +1413,10 @@ func unmarshalDPIViewportResponseBodyToAssistantDPIViewport(v *DPIViewportRespon
 	return res
 }
 
-// unmarshalDPISectionResponseBodyToAssistantDPISection builds a value of type
-// *assistant.DPISection from a value of type *DPISectionResponseBody.
-func unmarshalDPISectionResponseBodyToAssistantDPISection(v *DPISectionResponseBody) *assistant.DPISection {
+// unmarshalDPISectionResponseBodyResponseBodyToAssistantDPISection builds a
+// value of type *assistant.DPISection from a value of type
+// *DPISectionResponseBodyResponseBody.
+func unmarshalDPISectionResponseBodyResponseBodyToAssistantDPISection(v *DPISectionResponseBodyResponseBody) *assistant.DPISection {
 	if v == nil {
 		return nil
 	}
@@ -1430,10 +1432,10 @@ func unmarshalDPISectionResponseBodyToAssistantDPISection(v *DPISectionResponseB
 	return res
 }
 
-// unmarshalDPICallToActionResponseBodyToAssistantDPICallToAction builds a
-// value of type *assistant.DPICallToAction from a value of type
-// *DPICallToActionResponseBody.
-func unmarshalDPICallToActionResponseBodyToAssistantDPICallToAction(v *DPICallToActionResponseBody) *assistant.DPICallToAction {
+// unmarshalDPICallToActionResponseBodyResponseBodyToAssistantDPICallToAction
+// builds a value of type *assistant.DPICallToAction from a value of type
+// *DPICallToActionResponseBodyResponseBody.
+func unmarshalDPICallToActionResponseBodyResponseBodyToAssistantDPICallToAction(v *DPICallToActionResponseBodyResponseBody) *assistant.DPICallToAction {
 	if v == nil {
 		return nil
 	}
@@ -1445,29 +1447,32 @@ func unmarshalDPICallToActionResponseBodyToAssistantDPICallToAction(v *DPICallTo
 	return res
 }
 
-// marshalAssistantListActionToListActionRequestBody builds a value of type
-// *ListActionRequestBody from a value of type *assistant.ListAction.
-func marshalAssistantListActionToListActionRequestBody(v *assistant.ListAction) *ListActionRequestBody {
-	res := &ListActionRequestBody{
+// marshalAssistantListActionToListActionRequestBodyRequestBody builds a value
+// of type *ListActionRequestBodyRequestBody from a value of type
+// *assistant.ListAction.
+func marshalAssistantListActionToListActionRequestBodyRequestBody(v *assistant.ListAction) *ListActionRequestBodyRequestBody {
+	res := &ListActionRequestBodyRequestBody{
 		Limit: v.Limit,
 	}
 
 	return res
 }
 
-// marshalAssistantCreateActionToCreateActionRequestBody builds a value of type
-// *CreateActionRequestBody from a value of type *assistant.CreateAction.
-func marshalAssistantCreateActionToCreateActionRequestBody(v *assistant.CreateAction) *CreateActionRequestBody {
-	res := &CreateActionRequestBody{
+// marshalAssistantCreateActionToCreateActionRequestBodyRequestBody builds a
+// value of type *CreateActionRequestBodyRequestBody from a value of type
+// *assistant.CreateAction.
+func marshalAssistantCreateActionToCreateActionRequestBodyRequestBody(v *assistant.CreateAction) *CreateActionRequestBodyRequestBody {
+	res := &CreateActionRequestBodyRequestBody{
 		Name: v.Name,
 	}
 
 	return res
 }
 
-// marshalListActionRequestBodyToAssistantListAction builds a value of type
-// *assistant.ListAction from a value of type *ListActionRequestBody.
-func marshalListActionRequestBodyToAssistantListAction(v *ListActionRequestBody) *assistant.ListAction {
+// marshalListActionRequestBodyRequestBodyToAssistantListAction builds a value
+// of type *assistant.ListAction from a value of type
+// *ListActionRequestBodyRequestBody.
+func marshalListActionRequestBodyRequestBodyToAssistantListAction(v *ListActionRequestBodyRequestBody) *assistant.ListAction {
 	res := &assistant.ListAction{
 		Limit: v.Limit,
 	}
@@ -1475,9 +1480,10 @@ func marshalListActionRequestBodyToAssistantListAction(v *ListActionRequestBody)
 	return res
 }
 
-// marshalCreateActionRequestBodyToAssistantCreateAction builds a value of type
-// *assistant.CreateAction from a value of type *CreateActionRequestBody.
-func marshalCreateActionRequestBodyToAssistantCreateAction(v *CreateActionRequestBody) *assistant.CreateAction {
+// marshalCreateActionRequestBodyRequestBodyToAssistantCreateAction builds a
+// value of type *assistant.CreateAction from a value of type
+// *CreateActionRequestBodyRequestBody.
+func marshalCreateActionRequestBodyRequestBodyToAssistantCreateAction(v *CreateActionRequestBodyRequestBody) *assistant.CreateAction {
 	res := &assistant.CreateAction{
 		Name: v.Name,
 	}

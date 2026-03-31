@@ -182,6 +182,10 @@ type ClientInfo struct {
 	Name string `json:"name"`
 	// Client version
 	Version string `json:"version"`
+	// Client website URL
+	WebsiteURL *string `json:"websiteUrl,omitempty"`
+	// Client icons
+	Icons []*Icon `json:"icons,omitempty"`
 }
 
 type ContentItem struct {
@@ -204,6 +208,17 @@ type EventsStreamResult struct {
 	Content []*ContentItem `json:"content"`
 	// Whether the tool encountered an error
 	IsError *bool `json:"isError,omitempty"`
+}
+
+type Icon struct {
+	// Icon source URI
+	Src string `json:"src"`
+	// Icon MIME type
+	MimeType *string `json:"mimeType,omitempty"`
+	// Supported icon sizes
+	Sizes []string `json:"sizes,omitempty"`
+	// Optional icon theme preference
+	Theme *string `json:"theme,omitempty"`
 }
 
 // InitializePayload is the payload type of the mcp_assistant service
@@ -261,6 +276,8 @@ type PromptInfo struct {
 	Description *string `json:"description,omitempty"`
 	// Prompt arguments
 	Arguments []*PromptArgument `json:"arguments,omitempty"`
+	// Prompt icons
+	Icons []*Icon `json:"icons,omitempty"`
 }
 
 type PromptMessage struct {
@@ -326,6 +343,8 @@ type ResourceInfo struct {
 	Description *string `json:"description,omitempty"`
 	// Resource MIME type
 	MimeType *string `json:"mimeType,omitempty"`
+	// Resource icons
+	Icons []*Icon `json:"icons,omitempty"`
 }
 
 // Resources capability marker
@@ -399,6 +418,10 @@ type ServerInfo struct {
 	Name string `json:"name"`
 	// Server version
 	Version string `json:"version"`
+	// Server website URL
+	WebsiteURL *string `json:"websiteUrl,omitempty"`
+	// Server icons
+	Icons []*Icon `json:"icons,omitempty"`
 }
 
 type ToolInfo struct {
@@ -411,6 +434,8 @@ type ToolInfo struct {
 	// Optional MCP tool annotations such as readOnlyHint, openWorldHint, or
 	// destructiveHint.
 	Annotations any `json:"annotations,omitempty"`
+	// Tool icons
+	Icons []*Icon `json:"icons,omitempty"`
 }
 
 // ToolsCallPayload is the payload type of the mcp_assistant service tools/call

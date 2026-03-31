@@ -26,6 +26,60 @@ For generated MCP servers, put the JSON-RPC route on the service with
 add method-level `JSONRPC(...)` only when a method needs explicit JSON-RPC options such
 as SSE, ID-field mapping, or method-specific error code responses.
 
+Metadata Surfaces
+=================
+
+loom-mcp can publish MCP metadata for implementations and list surfaces directly
+from the DSL.
+
+- `WebsiteURL(...)` and `ServerIcons(...)` attach metadata to the server
+  implementation returned from `initialize.serverInfo`.
+- `ToolIcons(...)` attaches icons to `tools/list`.
+- `ResourceIcons(...)` attaches icons to `resources/list`.
+- `PromptIcons(...)` and `DynamicPromptIcons(...)` attach icons to
+  `prompts/list`.
+
+Use `Icon(src, opts...)` to define icon entries. Supported icon helpers are:
+
+- `IconMIMEType(...)`
+- `IconSizes(...)`
+- `IconTheme(IconThemeLight|IconThemeDark)`
+
+Example:
+
+--- CODE ---
+Service("assistant", func() {
+    MCP("assistant-mcp", "1.0.0",
+        ProtocolVersion("2025-06-18"),
+        WebsiteURL("https://assistant.example.com/docs"),
+        ServerIcons(
+            Icon("https://assistant.example.com/icons/server-light.png",
+                IconMIMEType("image/png"),
+                IconSizes("48x48"),
+                IconTheme(IconThemeLight)),
+        ),
+    )
+
+    Method("search", func() {
+        Payload(func() {
+            Attribute("query", String)
+            Required("query")
+        })
+        Result(func() {
+            Attribute("results", ArrayOf(String))
+            Required("results")
+        })
+        Tool("search", "Search documents",
+            ToolIcons(
+                Icon("https://assistant.example.com/icons/search.png",
+                    IconMIMEType("image/png"),
+                    IconSizes("48x48")),
+            ),
+        )
+    })
+})
+--- END CODE ---
+
 
 Declaring MCP Toolsets
 ======================

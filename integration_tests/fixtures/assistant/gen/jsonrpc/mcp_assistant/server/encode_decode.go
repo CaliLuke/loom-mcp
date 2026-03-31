@@ -461,8 +461,41 @@ func unmarshalClientInfoRequestBodyRequestBodyRequestBodyRequestBodyToMcpassista
 		return nil
 	}
 	res := &mcpassistant.ClientInfo{
-		Name:    *v.Name,
-		Version: *v.Version,
+		Name:       *v.Name,
+		Version:    *v.Version,
+		WebsiteURL: v.WebsiteURL,
+	}
+	if v.Icons != nil {
+		res.Icons = make([]*mcpassistant.Icon, len(v.Icons))
+		for i, val := range v.Icons {
+			if val == nil {
+				res.Icons[i] = nil
+				continue
+			}
+			res.Icons[i] = unmarshalIconRequestBodyRequestBodyRequestBodyRequestBodyToMcpassistantIcon(val)
+		}
+	}
+
+	return res
+}
+
+// unmarshalIconRequestBodyRequestBodyRequestBodyRequestBodyToMcpassistantIcon
+// builds a value of type *mcpassistant.Icon from a value of type
+// *IconRequestBodyRequestBodyRequestBodyRequestBody.
+func unmarshalIconRequestBodyRequestBodyRequestBodyRequestBodyToMcpassistantIcon(v *IconRequestBodyRequestBodyRequestBodyRequestBody) *mcpassistant.Icon {
+	if v == nil {
+		return nil
+	}
+	res := &mcpassistant.Icon{
+		Src:      *v.Src,
+		MimeType: v.MimeType,
+		Theme:    v.Theme,
+	}
+	if v.Sizes != nil {
+		res.Sizes = make([]string, len(v.Sizes))
+		for i, val := range v.Sizes {
+			res.Sizes[i] = val
+		}
 	}
 
 	return res
@@ -527,8 +560,40 @@ func marshalMcpassistantPromptsCapabilityToPromptsCapabilityResponseBodyResponse
 // *mcpassistant.ServerInfo.
 func marshalMcpassistantServerInfoToServerInfoResponseBodyResponseBody(v *mcpassistant.ServerInfo) *ServerInfoResponseBodyResponseBody {
 	res := &ServerInfoResponseBodyResponseBody{
-		Name:    v.Name,
-		Version: v.Version,
+		Name:       v.Name,
+		Version:    v.Version,
+		WebsiteURL: v.WebsiteURL,
+	}
+	if v.Icons != nil {
+		res.Icons = make([]*IconResponseBodyResponseBody, len(v.Icons))
+		for i, val := range v.Icons {
+			if val == nil {
+				res.Icons[i] = nil
+				continue
+			}
+			res.Icons[i] = marshalMcpassistantIconToIconResponseBodyResponseBody(val)
+		}
+	}
+
+	return res
+}
+
+// marshalMcpassistantIconToIconResponseBodyResponseBody builds a value of type
+// *IconResponseBodyResponseBody from a value of type *mcpassistant.Icon.
+func marshalMcpassistantIconToIconResponseBodyResponseBody(v *mcpassistant.Icon) *IconResponseBodyResponseBody {
+	if v == nil {
+		return nil
+	}
+	res := &IconResponseBodyResponseBody{
+		Src:      v.Src,
+		MimeType: v.MimeType,
+		Theme:    v.Theme,
+	}
+	if v.Sizes != nil {
+		res.Sizes = make([]string, len(v.Sizes))
+		for i, val := range v.Sizes {
+			res.Sizes[i] = val
+		}
 	}
 
 	return res
@@ -543,6 +608,16 @@ func marshalMcpassistantToolInfoToToolInfoResponseBodyResponseBody(v *mcpassista
 		Description: v.Description,
 		InputSchema: v.InputSchema,
 		Annotations: v.Annotations,
+	}
+	if v.Icons != nil {
+		res.Icons = make([]*IconResponseBodyResponseBody, len(v.Icons))
+		for i, val := range v.Icons {
+			if val == nil {
+				res.Icons[i] = nil
+				continue
+			}
+			res.Icons[i] = marshalMcpassistantIconToIconResponseBodyResponseBody(val)
+		}
 	}
 
 	return res
@@ -572,6 +647,16 @@ func marshalMcpassistantResourceInfoToResourceInfoResponseBodyResponseBody(v *mc
 		Name:        v.Name,
 		Description: v.Description,
 		MimeType:    v.MimeType,
+	}
+	if v.Icons != nil {
+		res.Icons = make([]*IconResponseBodyResponseBody, len(v.Icons))
+		for i, val := range v.Icons {
+			if val == nil {
+				res.Icons[i] = nil
+				continue
+			}
+			res.Icons[i] = marshalMcpassistantIconToIconResponseBodyResponseBody(val)
+		}
 	}
 
 	return res
@@ -607,6 +692,16 @@ func marshalMcpassistantPromptInfoToPromptInfoResponseBodyResponseBody(v *mcpass
 				continue
 			}
 			res.Arguments[i] = marshalMcpassistantPromptArgumentToPromptArgumentResponseBodyResponseBody(val)
+		}
+	}
+	if v.Icons != nil {
+		res.Icons = make([]*IconResponseBodyResponseBody, len(v.Icons))
+		for i, val := range v.Icons {
+			if val == nil {
+				res.Icons[i] = nil
+				continue
+			}
+			res.Icons[i] = marshalMcpassistantIconToIconResponseBodyResponseBody(val)
 		}
 	}
 

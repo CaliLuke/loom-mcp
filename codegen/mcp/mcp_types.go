@@ -8,6 +8,7 @@ import (
 // buildMCPTypes creates all MCP protocol type definitions
 func (b *mcpExprBuilder) buildMCPTypes() {
 	// Core types
+	b.getOrCreateType("Icon", b.buildIconType)
 	b.getOrCreateType("ClientInfo", b.buildClientInfoType)
 	b.getOrCreateType("ServerInfo", b.buildServerInfoType)
 	b.getOrCreateType("Capabilities", b.buildCapabilitiesType)
@@ -42,6 +43,32 @@ func (b *mcpExprBuilder) buildMCPTypes() {
 }
 
 // Core type builders
+
+func (b *mcpExprBuilder) buildIconType() *expr.AttributeExpr {
+	return &expr.AttributeExpr{
+		Type: &expr.Object{
+			{Name: "src", Attribute: &expr.AttributeExpr{
+				Type:        expr.String,
+				Description: "Icon source URI",
+			}},
+			{Name: "mimeType", Attribute: &expr.AttributeExpr{
+				Type:        expr.String,
+				Description: "Icon MIME type",
+			}},
+			{Name: "sizes", Attribute: &expr.AttributeExpr{
+				Type:        &expr.Array{ElemType: &expr.AttributeExpr{Type: expr.String}},
+				Description: "Supported icon sizes",
+			}},
+			{Name: "theme", Attribute: &expr.AttributeExpr{
+				Type:        expr.String,
+				Description: "Optional icon theme preference",
+			}},
+		},
+		Validation: &expr.ValidationExpr{
+			Required: []string{"src"},
+		},
+	}
+}
 
 func (b *mcpExprBuilder) buildInitializePayloadType() *expr.AttributeExpr {
 	return &expr.AttributeExpr{
@@ -94,6 +121,14 @@ func (b *mcpExprBuilder) buildClientInfoType() *expr.AttributeExpr {
 				Type:        expr.String,
 				Description: "Client version",
 			}},
+			{Name: "websiteUrl", Attribute: &expr.AttributeExpr{
+				Type:        expr.String,
+				Description: "Client website URL",
+			}},
+			{Name: "icons", Attribute: &expr.AttributeExpr{
+				Type:        &expr.Array{ElemType: &expr.AttributeExpr{Type: b.getOrCreateType("Icon", b.buildIconType)}},
+				Description: "Client icons",
+			}},
 		},
 		Validation: &expr.ValidationExpr{
 			Required: []string{"name", "version"},
@@ -111,6 +146,14 @@ func (b *mcpExprBuilder) buildServerInfoType() *expr.AttributeExpr {
 			{Name: "version", Attribute: &expr.AttributeExpr{
 				Type:        expr.String,
 				Description: "Server version",
+			}},
+			{Name: "websiteUrl", Attribute: &expr.AttributeExpr{
+				Type:        expr.String,
+				Description: "Server website URL",
+			}},
+			{Name: "icons", Attribute: &expr.AttributeExpr{
+				Type:        &expr.Array{ElemType: &expr.AttributeExpr{Type: b.getOrCreateType("Icon", b.buildIconType)}},
+				Description: "Server icons",
 			}},
 		},
 		Validation: &expr.ValidationExpr{
@@ -183,6 +226,52 @@ func (b *mcpExprBuilder) buildPingResultType() *expr.AttributeExpr {
 
 // Tool type builders
 
+func stringField(name, description string) *expr.NamedAttributeExpr {
+	return &expr.NamedAttributeExpr{
+		Name: name,
+		Attribute: &expr.AttributeExpr{
+			Type:        expr.String,
+			Description: description,
+		},
+	}
+}
+
+func anyField(name, description string) *expr.NamedAttributeExpr {
+	return &expr.NamedAttributeExpr{
+		Name: name,
+		Attribute: &expr.AttributeExpr{
+			Type:        expr.Any,
+			Description: description,
+		},
+	}
+}
+
+func arrayField(name, description string, elemType *expr.AttributeExpr) *expr.NamedAttributeExpr {
+	return &expr.NamedAttributeExpr{
+		Name: name,
+		Attribute: &expr.AttributeExpr{
+			Type:        &expr.Array{ElemType: elemType},
+			Description: description,
+		},
+	}
+}
+
+func (b *mcpExprBuilder) iconArrayField(description string) *expr.NamedAttributeExpr {
+	return arrayField("icons", description, &expr.AttributeExpr{Type: b.getOrCreateType("Icon", b.buildIconType)})
+}
+
+func infoObject(required []string, fields ...*expr.NamedAttributeExpr) *expr.AttributeExpr {
+	attr := &expr.AttributeExpr{Type: &expr.Object{}}
+	obj := attr.Type.(*expr.Object)
+	for _, field := range fields {
+		*obj = append(*obj, field)
+	}
+	if len(required) > 0 {
+		attr.Validation = &expr.ValidationExpr{Required: required}
+	}
+	return attr
+}
+
 func (b *mcpExprBuilder) buildToolsListPayloadType() *expr.AttributeExpr {
 	return &expr.AttributeExpr{
 		Type: &expr.Object{
@@ -209,29 +298,14 @@ func (b *mcpExprBuilder) buildToolsListResultType() *expr.AttributeExpr {
 }
 
 func (b *mcpExprBuilder) buildToolInfoType() *expr.AttributeExpr {
-	return &expr.AttributeExpr{
-		Type: &expr.Object{
-			{Name: "name", Attribute: &expr.AttributeExpr{
-				Type:        expr.String,
-				Description: "Tool name",
-			}},
-			{Name: "description", Attribute: &expr.AttributeExpr{
-				Type:        expr.String,
-				Description: "Tool description",
-			}},
-			{Name: "inputSchema", Attribute: &expr.AttributeExpr{
-				Type:        expr.Any,
-				Description: "JSON Schema for tool input",
-			}},
-			{Name: "annotations", Attribute: &expr.AttributeExpr{
-				Type:        expr.Any,
-				Description: "Optional MCP tool annotations such as readOnlyHint, openWorldHint, or destructiveHint.",
-			}},
-		},
-		Validation: &expr.ValidationExpr{
-			Required: []string{"name"},
-		},
-	}
+	return infoObject(
+		[]string{"name"},
+		stringField("name", "Tool name"),
+		stringField("description", "Tool description"),
+		anyField("inputSchema", "JSON Schema for tool input"),
+		anyField("annotations", "Optional MCP tool annotations such as readOnlyHint, openWorldHint, or destructiveHint."),
+		b.iconArrayField("Tool icons"),
+	)
 }
 
 func (b *mcpExprBuilder) buildToolsCallPayloadType() *expr.AttributeExpr {
@@ -326,29 +400,14 @@ func (b *mcpExprBuilder) buildResourcesListResultType() *expr.AttributeExpr {
 }
 
 func (b *mcpExprBuilder) buildResourceInfoType() *expr.AttributeExpr {
-	return &expr.AttributeExpr{
-		Type: &expr.Object{
-			{Name: "uri", Attribute: &expr.AttributeExpr{
-				Type:        expr.String,
-				Description: "Resource URI",
-			}},
-			{Name: "name", Attribute: &expr.AttributeExpr{
-				Type:        expr.String,
-				Description: "Resource name",
-			}},
-			{Name: "description", Attribute: &expr.AttributeExpr{
-				Type:        expr.String,
-				Description: "Resource description",
-			}},
-			{Name: "mimeType", Attribute: &expr.AttributeExpr{
-				Type:        expr.String,
-				Description: "Resource MIME type",
-			}},
-		},
-		Validation: &expr.ValidationExpr{
-			Required: []string{"uri"},
-		},
-	}
+	return infoObject(
+		[]string{"uri"},
+		stringField("uri", "Resource URI"),
+		stringField("name", "Resource name"),
+		stringField("description", "Resource description"),
+		stringField("mimeType", "Resource MIME type"),
+		b.iconArrayField("Resource icons"),
+	)
 }
 
 func (b *mcpExprBuilder) buildResourcesReadPayloadType() *expr.AttributeExpr {
@@ -436,25 +495,13 @@ func (b *mcpExprBuilder) buildPromptsListResultType() *expr.AttributeExpr {
 }
 
 func (b *mcpExprBuilder) buildPromptInfoType() *expr.AttributeExpr {
-	return &expr.AttributeExpr{
-		Type: &expr.Object{
-			{Name: "name", Attribute: &expr.AttributeExpr{
-				Type:        expr.String,
-				Description: "Prompt name",
-			}},
-			{Name: "description", Attribute: &expr.AttributeExpr{
-				Type:        expr.String,
-				Description: "Prompt description",
-			}},
-			{Name: "arguments", Attribute: &expr.AttributeExpr{
-				Type:        &expr.Array{ElemType: &expr.AttributeExpr{Type: b.getOrCreateType("PromptArgument", b.buildPromptArgumentType)}},
-				Description: "Prompt arguments",
-			}},
-		},
-		Validation: &expr.ValidationExpr{
-			Required: []string{"name"},
-		},
-	}
+	return infoObject(
+		[]string{"name"},
+		stringField("name", "Prompt name"),
+		stringField("description", "Prompt description"),
+		arrayField("arguments", "Prompt arguments", &expr.AttributeExpr{Type: b.getOrCreateType("PromptArgument", b.buildPromptArgumentType)}),
+		b.iconArrayField("Prompt icons"),
+	)
 }
 
 func (b *mcpExprBuilder) buildPromptsGetPayloadType() *expr.AttributeExpr {

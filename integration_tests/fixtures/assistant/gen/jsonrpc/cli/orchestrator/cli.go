@@ -368,7 +368,7 @@ func assistantGeneratePromptsUsage() {
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "assistant generate-prompts --body '{\n      \"context\": \"Voluptas itaque architecto veniam.\",\n      \"task\": \"Vero qui expedita voluptatem rerum.\"\n   }'")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "assistant generate-prompts --body '{\n      \"context\": \"Tenetur assumenda enim in.\",\n      \"task\": \"Quis molestiae perspiciatis laborum omnis quos voluptatem.\"\n   }'")
 }
 func assistantBuildFigmaImplementationPromptUsage() {
 	// Header with flags
@@ -385,7 +385,7 @@ func assistantBuildFigmaImplementationPromptUsage() {
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "assistant build-figma-implementation-prompt --body '{\n      \"design_tokens_uri\": \"Quia culpa doloribus et labore rerum tenetur.\",\n      \"dpi_json\": \"Iure a iste exercitationem tempore.\",\n      \"framework\": \"react\",\n      \"screen_title\": \"Quis molestiae perspiciatis laborum omnis quos voluptatem.\"\n   }'")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "assistant build-figma-implementation-prompt --body '{\n      \"design_tokens_uri\": \"Quasi eius.\",\n      \"dpi_json\": \"Omnis omnis qui qui.\",\n      \"framework\": \"swiftui\",\n      \"screen_title\": \"Laudantium esse suscipit tempore.\"\n   }'")
 }
 func assistantSendNotificationUsage() {
 	// Header with flags
@@ -402,7 +402,7 @@ func assistantSendNotificationUsage() {
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "assistant send-notification --body '{\n      \"data\": \"Excepturi voluptatem accusamus quibusdam suscipit.\",\n      \"message\": \"Et quia explicabo qui voluptatibus corporis laboriosam.\",\n      \"type\": \"Repellendus sit qui beatae voluptatem recusandae magnam.\"\n   }'")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "assistant send-notification --body '{\n      \"data\": \"Ad tempora dolorum deserunt laudantium enim quos.\",\n      \"message\": \"Error sapiente voluptatem.\",\n      \"type\": \"Excepturi voluptatem accusamus quibusdam suscipit.\"\n   }'")
 }
 func assistantAnalyzeSentimentUsage() {
 	// Header with flags
@@ -419,7 +419,7 @@ func assistantAnalyzeSentimentUsage() {
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "assistant analyze-sentiment --body '{\n      \"text\": \"Error sapiente voluptatem.\"\n   }'")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "assistant analyze-sentiment --body '{\n      \"text\": \"Ea adipisci illum blanditiis commodi impedit doloribus.\"\n   }'")
 }
 func assistantExtractKeywordsUsage() {
 	// Header with flags
@@ -436,7 +436,7 @@ func assistantExtractKeywordsUsage() {
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "assistant extract-keywords --body '{\n      \"text\": \"Ea adipisci illum blanditiis commodi impedit doloribus.\"\n   }'")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "assistant extract-keywords --body '{\n      \"text\": \"Iure ut quae cupiditate quia consequatur optio.\"\n   }'")
 }
 func assistantSummarizeTextUsage() {
 	// Header with flags
@@ -453,7 +453,7 @@ func assistantSummarizeTextUsage() {
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "assistant summarize-text --body '{\n      \"text\": \"Consequatur optio illum quidem autem deleniti voluptates.\"\n   }'")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "assistant summarize-text --body '{\n      \"text\": \"Odio eum qui explicabo dolores ea non.\"\n   }'")
 }
 func assistantSearchUsage() {
 	// Header with flags
@@ -470,7 +470,7 @@ func assistantSearchUsage() {
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "assistant search --body '{\n      \"limit\": 7397838945742369899,\n      \"query\": \"Sint quibusdam in delectus ipsum dolorem adipisci.\"\n   }'")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "assistant search --body '{\n      \"limit\": 7951362909687927829,\n      \"query\": \"Non qui magnam.\"\n   }'")
 }
 func assistantExecuteCodeUsage() {
 	// Header with flags
@@ -487,7 +487,7 @@ func assistantExecuteCodeUsage() {
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "assistant execute-code --body '{\n      \"code\": \"Magni saepe eveniet rerum non qui magnam.\",\n      \"language\": \"javascript\"\n   }'")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "assistant execute-code --body '{\n      \"code\": \"Aut quae sed voluptatem voluptatum.\",\n      \"language\": \"python\"\n   }'")
 }
 func assistantProcessBatchUsage() {
 	// Header with flags
@@ -504,7 +504,7 @@ func assistantProcessBatchUsage() {
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "assistant process-batch --body '{\n      \"blob\": \"Nihil saepe quia magnam eos accusamus sed.\",\n      \"format\": \"blob\",\n      \"items\": [\n         \"Aspernatur sequi minus.\",\n         \"Officia quia pariatur doloribus quis qui.\",\n         \"Atque aut quae sed.\",\n         \"Voluptatum aut quae expedita delectus vero.\"\n      ],\n      \"mimeType\": \"Temporibus et.\",\n      \"uri\": \"Optio soluta numquam nostrum est et ipsa.\"\n   }'")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "assistant process-batch --body '{\n      \"blob\": \"Maxime sed expedita vitae quia.\",\n      \"format\": \"text\",\n      \"items\": [\n         \"Nihil saepe quia magnam eos accusamus sed.\",\n         \"Optio soluta numquam nostrum est et ipsa.\",\n         \"Temporibus et.\",\n         \"Impedit et omnis id quis.\"\n      ],\n      \"mimeType\": \"Iure dolore consectetur alias.\",\n      \"uri\": \"Consequatur ducimus itaque.\"\n   }'")
 }
 func assistantMultiContentUsage() {
 	// Header with flags
@@ -521,7 +521,7 @@ func assistantMultiContentUsage() {
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "assistant multi-content --body '{\n      \"count\": 2619130649781045908\n   }'")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "assistant multi-content --body '{\n      \"count\": 9013701701709852357\n   }'")
 }
 func assistantGenerateDpiSpecUsage() {
 	// Header with flags
@@ -538,7 +538,7 @@ func assistantGenerateDpiSpecUsage() {
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "assistant generate-dpi-spec --body '{\n      \"density\": \"compact\",\n      \"include_dev_notes\": true,\n      \"platform\": \"ios\",\n      \"primary_cta\": \"Itaque omnis iure dolore consectetur.\",\n      \"screen_title\": \"Sed expedita vitae quia.\",\n      \"sections\": [\n         \"Eum molestias omnis error sequi et sint.\",\n         \"Culpa neque.\"\n      ]\n   }'")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "assistant generate-dpi-spec --body '{\n      \"density\": \"comfortable\",\n      \"include_dev_notes\": false,\n      \"platform\": \"ios\",\n      \"primary_cta\": \"Placeat omnis ut quis odio.\",\n      \"screen_title\": \"Culpa neque.\",\n      \"sections\": [\n         \"Voluptate quia quos occaecati quis molestias.\",\n         \"Dolorum officiis dignissimos placeat pariatur quo omnis.\"\n      ]\n   }'")
 }
 func assistantDispatchActionUsage() {
 	// Header with flags
@@ -555,5 +555,5 @@ func assistantDispatchActionUsage() {
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "assistant dispatch-action --body '{\n      \"request\": {\n         \"name\": \"Architecto et aut reiciendis.\"\n      }\n   }'")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "assistant dispatch-action --body '{\n      \"request\": {\n         \"limit\": 8911013707582422857\n      }\n   }'")
 }

@@ -41,6 +41,33 @@ func TestMCPWithProtocolVersion(t *testing.T) {
 	require.Equal(t, "2025-06-18", mcp.ProtocolVersion)
 }
 
+func TestMCPMetadata(t *testing.T) {
+	runMCPDSL(t, func() {
+		API("test", func() {})
+		Service("calculator", func() {
+			MCP("calc", "1.0.0",
+				WebsiteURL("https://example.com/calc"),
+				ServerIcons(
+					Icon("https://example.com/icons/calc-light.png",
+						IconMIMEType("image/png"),
+						IconSizes("48x48", "96x96"),
+						IconTheme(IconThemeLight),
+					),
+				),
+			)
+		})
+	})
+
+	mcp := mcpexpr.Root.MCPServers["calculator"]
+	require.NotNil(t, mcp)
+	require.Equal(t, "https://example.com/calc", mcp.WebsiteURL)
+	require.Len(t, mcp.Icons, 1)
+	require.Equal(t, "https://example.com/icons/calc-light.png", mcp.Icons[0].Source)
+	require.Equal(t, "image/png", mcp.Icons[0].MIMEType)
+	require.Equal(t, []string{"48x48", "96x96"}, mcp.Icons[0].Sizes)
+	require.Equal(t, IconThemeLight, mcp.Icons[0].Theme)
+}
+
 func TestMCPResource(t *testing.T) {
 	runMCPDSL(t, func() {
 		API("test", func() {})
@@ -48,7 +75,14 @@ func TestMCPResource(t *testing.T) {
 			MCP("docs-server", "1.0")
 			Method("readme", func() {
 				Result(String)
-				Resource("readme", "file:///docs/README.md", "text/markdown")
+				Resource("readme", "file:///docs/README.md", "text/markdown",
+					ResourceIcons(
+						Icon("https://example.com/icons/readme.png",
+							IconMIMEType("image/png"),
+							IconSizes("48x48"),
+						),
+					),
+				)
 			})
 		})
 	})
@@ -62,6 +96,8 @@ func TestMCPResource(t *testing.T) {
 	require.Equal(t, "file:///docs/README.md", res.URI)
 	require.Equal(t, "text/markdown", res.MimeType)
 	require.False(t, res.Watchable)
+	require.Len(t, res.Icons, 1)
+	require.Equal(t, "https://example.com/icons/readme.png", res.Icons[0].Source)
 }
 
 func TestMCPWatchableResource(t *testing.T) {
@@ -97,7 +133,14 @@ func TestMCPStaticPrompt(t *testing.T) {
 			MCP("assistant", "1.0")
 			StaticPrompt("greeting", "Friendly greeting",
 				"system", "You are a helpful assistant",
-				"user", "Hello!")
+				"user", "Hello!",
+				PromptIcons(
+					Icon("https://example.com/icons/greeting.svg",
+						IconMIMEType("image/svg+xml"),
+						IconSizes("any"),
+					),
+				),
+			)
 		})
 	})
 
@@ -113,6 +156,8 @@ func TestMCPStaticPrompt(t *testing.T) {
 	require.Equal(t, "You are a helpful assistant", prompt.Messages[0].Content)
 	require.Equal(t, "user", prompt.Messages[1].Role)
 	require.Equal(t, "Hello!", prompt.Messages[1].Content)
+	require.Len(t, prompt.Icons, 1)
+	require.Equal(t, "https://example.com/icons/greeting.svg", prompt.Icons[0].Source)
 }
 
 func TestMCPDynamicPrompt(t *testing.T) {
@@ -126,7 +171,14 @@ func TestMCPDynamicPrompt(t *testing.T) {
 					Attribute("code", String)
 				})
 				Result(ArrayOf(String))
-				DynamicPrompt("code_review", "Generate code review prompt")
+				DynamicPrompt("code_review", "Generate code review prompt",
+					DynamicPromptIcons(
+						Icon("https://example.com/icons/code-review.png",
+							IconMIMEType("image/png"),
+							IconSizes("64x64"),
+						),
+					),
+				)
 			})
 		})
 	})
@@ -139,6 +191,8 @@ func TestMCPDynamicPrompt(t *testing.T) {
 	require.Equal(t, "Generate code review prompt", prompt.Description)
 	require.NotNil(t, prompt.Method)
 	require.Equal(t, "code_review", prompt.Method.Name)
+	require.Len(t, prompt.Icons, 1)
+	require.Equal(t, "https://example.com/icons/code-review.png", prompt.Icons[0].Source)
 }
 
 func TestMCPNotification(t *testing.T) {
@@ -231,7 +285,14 @@ func TestMCPToolInMethod(t *testing.T) {
 				Result(func() {
 					Attribute("sum", Int)
 				})
-				Tool("add", "Add two numbers")
+				Tool("add", "Add two numbers",
+					ToolIcons(
+						Icon("https://example.com/icons/add.png",
+							IconMIMEType("image/png"),
+							IconSizes("48x48"),
+						),
+					),
+				)
 			})
 		})
 	})
@@ -244,6 +305,8 @@ func TestMCPToolInMethod(t *testing.T) {
 	require.Equal(t, "add", tool.Name)
 	require.Equal(t, "Add two numbers", tool.Description)
 	require.NotNil(t, tool.Method)
+	require.Len(t, tool.Icons, 1)
+	require.Equal(t, "https://example.com/icons/add.png", tool.Icons[0].Source)
 }
 
 func runMCPDSL(t *testing.T, dsl func()) {

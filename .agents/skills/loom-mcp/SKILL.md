@@ -37,6 +37,10 @@ Use this skill for `loom-mcp` work in this repo. Keep `AGENTS.md` short and keep
 - MCP is a two-way bridge:
   - consume external MCP servers through `runtime/mcp` callers,
   - expose designed services as MCP servers through generated adapters and registrations.
+- MCP metadata is design-owned. Implementation `WebsiteURL`/`ServerIcons` and
+  list-surface `ToolIcons`/`ResourceIcons`/`PromptIcons`/`DynamicPromptIcons`
+  should be declared in the DSL and allowed to flow through codegen into
+  `initialize`, `tools/list`, `resources/list`, and `prompts/list`.
 - Codegen should use partial evaluation and `NameScope` helpers rather than string surgery or runtime branching over static structure.
 - DSL/codegen/runtime internals should trust evaluated design invariants and fail fast instead of adding speculative fallback paths.
 
