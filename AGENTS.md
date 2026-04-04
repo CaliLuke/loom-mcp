@@ -37,18 +37,21 @@ Within each section, place main logic first and helpers last.
 
 ## loom-mcp Repo Rules
 
-- `design/*.go` is the source of truth.
+- Design packages are the source of truth. This includes top-level `design/*.go`, service-local design packages such as `registry/design`, and fixture designs such as `integration_tests/fixtures/assistant/design`.
 - Never edit generated `gen/` files by hand.
 - Put validations in the Goa DSL, not in service internals.
 - Use Goa import paths for generator commands, not filesystem paths.
 - After design changes, regenerate with `loom gen <module-import-path>/design`.
 - Run `loom example <module-import-path>/design` only when new scaffold files are intentionally desired.
+- Prefer repo `make` targets for standard generation flows:
+  - `make gen-registry` for `registry/design`
+  - `make regen-assistant-fixture` for `integration_tests/fixtures/assistant/design`
 - User-facing DSL, runtime, or codegen changes must also update the repo docs under `docs/` and any corresponding external docs set that publishes this project.
 - The upstream Model Context Protocol reference lives in the submodule at `third_party/modelcontextprotocol`; the canonical spec folder for this repo is `third_party/modelcontextprotocol/docs/specification`.
 - Keep repo-local skills current with the product. Update the skill files directly rather than adding sidecar delta documents.
 - When bumping the forked `github.com/CaliLuke/loom` replace, do not assume `main` or the default branch. This repo is currently tracking the fork branch `openapi-3.1`. Resolve the freshest relevant fork commit from actual refs and timestamps, then pin that exact pseudo-version in `go.mod`.
 - Do not use web search to verify whether a release exists. Check releases, tags, or published module versions from the authoritative source directly, such as `git ls-remote`, `gh release view`, or `go list -m -versions`.
-- Use local Goa checkout mode for iterative development and the pinned remote fork for CI. The standard toggle is `make goa-local` for local iteration and `make goa-remote` before CI-facing verification or commits. `make goa-status` shows the current mode.
+- Use local Loom checkout mode for iterative development and the pinned remote fork for CI. The standard toggle is `make loom-local` for local iteration and `make loom-remote` before CI-facing verification or commits. `make loom-status` shows the current mode.
 - After switching to local mode, use `make verify-mcp-local` for the default MCP fixture/framework verification ladder.
 - Use `make regen-assistant-fixture` when the assistant MCP fixture design changes so generated churn is intentional and reproducible.
 - The canonical local core checkout for this repo is `/Users/luca/code/loom-mono/loom`. If local mode points somewhere else, treat that as drift and correct it before interpreting test results.
@@ -66,12 +69,14 @@ Within each section, place main logic first and helpers last.
   2. fix issues
   3. `make test`
   4. `make itest` when integration behavior changed
-- For the MCP fixture and integration harness, verify in this order:
-  0. Choose Goa source intentionally: `make goa-local` for iterative local feedback, `make goa-remote` for CI/parity checks
-  0.5. `make regen-assistant-fixture` when fixture DSL changes
-  1. `make verify-mcp-local`
-  3. `go test ./...`
-- If a new `goa` fork bump breaks only integration semantics, do not patch around it in `loom-mcp`; capture the failing scenarios and return upstream tickets with exact scenario file references.
+- For local Loom framework validation, verify in this order:
+  1. Choose Loom source intentionally: `make loom-local` for iterative local feedback, `make loom-remote` for CI/parity checks.
+  2. Regenerate all affected outputs intentionally:
+     - run `make gen-registry` when registry design or upstream generation behavior changed
+     - run `make regen-assistant-fixture` when the assistant fixture design or upstream generation behavior changed
+  3. Run `make verify-mcp-local`.
+  4. Run the full repo suite: `make lint`, `make test`, and `make itest`.
+- If a new `loom` fork bump breaks only integration semantics, do not patch around it in `loom-mcp`; capture the failing scenarios and return upstream tickets with exact scenario file references.
 
 ## Safety
 

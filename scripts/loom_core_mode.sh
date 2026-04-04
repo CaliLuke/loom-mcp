@@ -5,37 +5,37 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 FIXTURE_DIR="${ROOT_DIR}/integration_tests/fixtures/assistant"
 REMOTE_VERSION="v1.0.7"
-LOCAL_GOA_DIR="${GOA_DIR:-/Users/luca/code/loom-mono/loom}"
+LOCAL_LOOM_DIR="${LOOM_DIR:-/Users/luca/code/loom-mono/loom}"
 
 usage() {
   cat <<EOF
 Usage: $(basename "$0") <local|remote|status>
 
 Modes:
-  local   Point both modules at the local Goa checkout (${LOCAL_GOA_DIR} by default)
+  local   Point both modules at the local Loom checkout (${LOCAL_LOOM_DIR} by default)
   remote  Restore the pinned Loom release (${REMOTE_VERSION})
   status  Print the current Loom source in both modules
 
 Environment:
-  GOA_DIR   Override the local Goa checkout path used by local mode
+  LOOM_DIR   Override the local Loom checkout path used by local mode
 EOF
 }
 
 set_local() {
-  if [[ ! -f "${LOCAL_GOA_DIR}/go.mod" ]]; then
-    echo "local Goa checkout not found at ${LOCAL_GOA_DIR}" >&2
+  if [[ ! -f "${LOCAL_LOOM_DIR}/go.mod" ]]; then
+    echo "local Loom checkout not found at ${LOCAL_LOOM_DIR}" >&2
     exit 1
   fi
 
   (
     cd "${ROOT_DIR}"
-    go mod edit -replace=github.com/CaliLuke/loom="${LOCAL_GOA_DIR}"
+    go mod edit -replace=github.com/CaliLuke/loom="${LOCAL_LOOM_DIR}"
     go mod tidy
   )
 
   (
     cd "${FIXTURE_DIR}"
-    go mod edit -replace=github.com/CaliLuke/loom="${LOCAL_GOA_DIR}"
+    go mod edit -replace=github.com/CaliLuke/loom="${LOCAL_LOOM_DIR}"
     go mod tidy
   )
 }

@@ -29,8 +29,8 @@ If a proposed task does not meet those rules, split it again before starting.
 
 ## Repo Constraints
 
-- Use `make goa-local` for iterative local feedback when core Goa integration is involved.
-- Use `make goa-remote` before CI-facing verification or commit preparation when fork parity matters.
+- Use `make loom-local` for iterative local feedback when core Loom integration is involved.
+- Use `make loom-remote` before CI-facing verification or commit preparation when fork parity matters.
 - Run `make regen-assistant-fixture` when the assistant fixture design changes.
 - User-facing DSL, runtime, or codegen changes may also require docs updates under `content/en/docs/2-loom-mcp/`.
 - Do not compensate in `loom-mcp` for upstream `loom` or fork regressions. Capture the failing scenario and stop.
@@ -69,10 +69,10 @@ Run this before every refactoring batch:
 
 Escalate to broader verification only when the boundary requires it:
 
-- Goa integration touched: `make goa-local`, then the focused command, then `make verify-mcp-local`.
+- Loom integration touched: `make loom-local`, then the focused command, then `make verify-mcp-local`.
 - Assistant fixture design touched: `make regen-assistant-fixture`, then `make verify-mcp-local`.
 - DSL, codegen, or user-facing generated behavior touched: regenerate intentionally, then review generated churn and update docs under `content/en/docs/2-loom-mcp/` if applicable.
-- CI-facing verification before merge: `make goa-remote`, `make lint`, `make test`, and `make itest` when integration behavior changed.
+- CI-facing verification before merge: `make loom-remote`, `make lint`, `make test`, and `make itest` when integration behavior changed.
 
 ## Execution Strategy
 

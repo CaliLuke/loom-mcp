@@ -44,9 +44,9 @@ go install github.com/CaliLuke/loom/cmd/loom@v1.0.2
 Common commands:
 
 ```bash
-make goa-status
-make goa-local
-make goa-remote
+make loom-status
+make loom-local
+make loom-remote
 make regen-assistant-fixture
 make verify-mcp-local
 make lint

@@ -12,7 +12,7 @@ PROTOC := $(shell command -v protoc 2>/dev/null)
 PROTOC_GEN_GO := protoc-gen-go
 PROTOC_GEN_GO_GRPC := protoc-gen-go-grpc
 
-.PHONY: all build lint lint-pre-commit lint-install-hook test itest ci tools ensure-golangci ensure-protoc-plugins protoc-check run-example example-gen goa-local goa-remote goa-status verify-mcp-local regen-assistant-fixture
+.PHONY: all build lint lint-pre-commit lint-install-hook test itest ci tools ensure-golangci ensure-protoc-plugins protoc-check run-example example-gen loom-local loom-remote loom-status verify-mcp-local regen-assistant-fixture
 
 all: build lint test
 
@@ -83,14 +83,14 @@ gen-example:
 gen-registry:
 	$(GO) run $(LOOM_CLI_PACKAGE) gen github.com/CaliLuke/loom-mcp/registry/design -o registry
 
-goa-local:
-	bash ./scripts/goa_core_mode.sh local
+loom-local:
+	bash ./scripts/loom_core_mode.sh local
 
-goa-remote:
-	bash ./scripts/goa_core_mode.sh remote
+loom-remote:
+	bash ./scripts/loom_core_mode.sh remote
 
-goa-status:
-	bash ./scripts/goa_core_mode.sh status
+loom-status:
+	bash ./scripts/loom_core_mode.sh status
 
 verify-mcp-local:
 	go test -C ./integration_tests/fixtures/assistant ./... -count=1
