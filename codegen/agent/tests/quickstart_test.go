@@ -19,6 +19,7 @@ import (
 )
 
 var goaCoreReplacePattern = regexp.MustCompile(`(?m)^replace goa\.design/goa/v3 => .+$`)
+var loomCoreReplacePattern = regexp.MustCompile(`(?m)^replace github\.com/CaliLuke/loom => .+$`)
 
 // TestQuickstartGeneratesAndRuns verifies that the quickstart example:
 // 1. Successfully generates code with `loom gen`
@@ -192,6 +193,14 @@ func rewriteQuickstartGoMod(repoRoot string, quickstartDir string) error {
 			updated = goaCoreReplacePattern.ReplaceAllString(updated, rootReplace)
 		} else {
 			updated = strings.TrimRight(updated, "\n") + "\n" + rootReplace + "\n"
+		}
+	}
+	loomReplace := loomCoreReplacePattern.FindString(string(rootRaw))
+	if loomReplace != "" {
+		if loomCoreReplacePattern.MatchString(updated) {
+			updated = loomCoreReplacePattern.ReplaceAllString(updated, loomReplace)
+		} else {
+			updated = strings.TrimRight(updated, "\n") + "\n" + loomReplace + "\n"
 		}
 	}
 

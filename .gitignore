@@ -6,3 +6,4 @@ agents/.DS_Store
 quickstart/orchestrator
 /gen/
 integration_tests/.tmp/
+.DS_Store
