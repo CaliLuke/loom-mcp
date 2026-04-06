@@ -478,38 +478,6 @@ func buildMCPProtocolVersionFile(pkgName, svcName, protocolVersion string) *code
 	}
 }
 
-func buildMCPSDKServerFile(genpkg string, svc *expr.ServiceExpr, data *AdapterData, svcName, pkgName string) *codegen.File {
-	sdkServerImports := []*codegen.ImportSpec{
-		{Path: "context"},
-		{Path: "encoding/base64"},
-		{Path: "encoding/json"},
-		{Path: "fmt"},
-		{Path: "net/http"},
-		{Path: "net/url"},
-		{Path: "strings"},
-		{Path: "time"},
-		{Path: genpkg + "/" + svcName, Name: svcName},
-		{Path: "github.com/modelcontextprotocol/go-sdk/auth", Name: "mcpauth"},
-		{Path: "github.com/modelcontextprotocol/go-sdk/mcp", Name: "mcpsdk"},
-		{Path: "github.com/CaliLuke/loom-mcp/runtime/mcp", Name: "mcpruntime"},
-	}
-	return &codegen.File{
-		Path: filepath.Join(codegen.Gendir, "mcp_"+svcName, "sdk_server.go"),
-		SectionTemplates: []*codegen.SectionTemplate{
-			codegen.Header(fmt.Sprintf("SDK-backed MCP server for %s service", svc.Name), pkgName, sdkServerImports),
-			{
-				Name:   "mcp-sdk-server",
-				Source: mcpTemplates.Read("sdk_server"),
-				Data:   data,
-				FuncMap: map[string]any{
-					"goify": func(s string) string { return codegen.Goify(s, true) },
-					"quote": func(s string) string { return fmt.Sprintf("%q", s) },
-				},
-			},
-		},
-	}
-}
-
 func buildMCPPromptProviderFile(genpkg string, svc *expr.ServiceExpr, data *AdapterData, svcName, pkgName string) *codegen.File {
 	if len(data.StaticPrompts) == 0 && len(data.DynamicPrompts) == 0 {
 		return nil

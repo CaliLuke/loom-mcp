@@ -23,19 +23,26 @@ import (
 )
 
 // SDK-backed MCP streamable HTTP server.
-
 type SDKServer struct {
 	Handler http.Handler
 	Adapter *MCPAdapter
 	Server  *mcpsdk.Server
 }
-
 type SDKServerOptions struct {
 	Adapter        *MCPAdapterOptions
 	RequestContext func(context.Context, *http.Request) context.Context
 	PromptProvider PromptProvider
 	Server         *mcpsdk.ServerOptions
 	StreamableHTTP *mcpsdk.StreamableHTTPOptions
+}
+type sdkResponseObserver struct {
+	http.ResponseWriter
+	statusCode int
+}
+type sdkToolCallCollector struct {
+	parts     []*ToolsCallResult
+	final     *ToolsCallResult
+	streamErr error
 }
 
 func NewSDKServer(service assistant.Service, opts *SDKServerOptions) (*SDKServer, error) {
@@ -51,31 +58,22 @@ func NewSDKServer(service assistant.Service, opts *SDKServerOptions) (*SDKServer
 		serverOpts = opts.Server
 		streamableOpts = opts.StreamableHTTP
 	}
-
 	adapter := NewMCPAdapter(service, promptProvider, adapterOpts)
-
 	server := mcpsdk.NewServer(&mcpsdk.Implementation{
+		Icons: []mcpsdk.Icon{mcpsdk.Icon{
+			MIMEType: "image/png",
+			Sizes:    []string{"48x48"},
+			Source:   "https://assistant.example.com/icons/server-light.png",
+			Theme:    mcpsdk.IconTheme("light"),
+		}, mcpsdk.Icon{
+			MIMEType: "image/png",
+			Sizes:    []string{"48x48"},
+			Source:   "https://assistant.example.com/icons/server-dark.png",
+			Theme:    mcpsdk.IconTheme("dark"),
+		}},
 		Name:       "assistant-mcp",
 		Version:    "1.0.0",
 		WebsiteURL: "https://assistant.example.com/docs",
-		Icons: []mcpsdk.Icon{
-			{
-				Source:   "https://assistant.example.com/icons/server-light.png",
-				MIMEType: "image/png",
-				Sizes: []string{
-					"48x48",
-				},
-				Theme: mcpsdk.IconTheme("light"),
-			},
-			{
-				Source:   "https://assistant.example.com/icons/server-dark.png",
-				MIMEType: "image/png",
-				Sizes: []string{
-					"48x48",
-				},
-				Theme: mcpsdk.IconTheme("dark"),
-			},
-		},
 	}, serverOpts)
 	if err := registerSDKTools(server, adapter, requestContext); err != nil {
 		return nil, err
@@ -86,31 +84,22 @@ func NewSDKServer(service assistant.Service, opts *SDKServerOptions) (*SDKServer
 	if err := registerSDKPrompts(server, adapter, requestContext); err != nil {
 		return nil, err
 	}
-
 	return &SDKServer{
-		Handler: newSDKHandler(server, adapter, requestContext, streamableOpts),
 		Adapter: adapter,
+		Handler: newSDKHandler(server, adapter, requestContext, streamableOpts),
 		Server:  server,
 	}, nil
 }
-
-type sdkResponseObserver struct {
-	http.ResponseWriter
-	statusCode int
-}
-
 func (w *sdkResponseObserver) WriteHeader(statusCode int) {
 	w.statusCode = statusCode
 	w.ResponseWriter.WriteHeader(statusCode)
 }
-
 func (w *sdkResponseObserver) Write(data []byte) (int, error) {
 	if w.statusCode == 0 {
 		w.statusCode = http.StatusOK
 	}
 	return w.ResponseWriter.Write(data)
 }
-
 func newSDKHandler(server *mcpsdk.Server, adapter *MCPAdapter, requestContext func(context.Context, *http.Request) context.Context, streamableOpts *mcpsdk.StreamableHTTPOptions) http.Handler {
 	base := mcpsdk.NewStreamableHTTPHandler(func(*http.Request) *mcpsdk.Server {
 		return server
@@ -131,40 +120,36 @@ func newSDKHandler(server *mcpsdk.Server, adapter *MCPAdapter, requestContext fu
 		}
 	})
 }
-
 func serveSDKEventsStream(server *mcpsdk.Server, adapter *MCPAdapter, w http.ResponseWriter, r *http.Request) {
 	sessionID := r.Header.Get("Mcp-Session-Id")
 	adapter.log(r.Context(), "events_stream_open", map[string]any{
-		"session_id": sessionID,
-		"has_accept": strings.TrimSpace(r.Header.Get("Accept")) != "",
 		"accept":     r.Header.Get("Accept"),
+		"has_accept": strings.TrimSpace(r.Header.Get("Accept")) != "",
+		"session_id": sessionID,
 	})
 	if sessionID == "" {
-		adapter.log(r.Context(), "events_stream_rejected", map[string]any{
-			"reason": "missing_session_id",
-		})
+		adapter.log(r.Context(), "events_stream_rejected", map[string]any{"reason": "missing_session_id"})
 		http.Error(w, "Missing session ID", http.StatusBadRequest)
 		return
 	}
 	if sdkSessionByID(server, sessionID) == nil {
 		adapter.clearSessionPrincipal(sessionID)
 		adapter.log(r.Context(), "events_stream_rejected", map[string]any{
-			"session_id": sessionID,
 			"reason":     "session_not_found",
+			"session_id": sessionID,
 		})
 		http.Error(w, "session not found", http.StatusNotFound)
 		return
 	}
 	if err := adapter.assertSessionPrincipal(r.Context(), sessionID); err != nil {
 		adapter.log(r.Context(), "events_stream_rejected", map[string]any{
-			"session_id": sessionID,
-			"reason":     "session_principal_mismatch",
 			"error":      err.Error(),
+			"reason":     "session_principal_mismatch",
+			"session_id": sessionID,
 		})
 		http.Error(w, err.Error(), http.StatusForbidden)
 		return
 	}
-
 	adapter.markInitializedSession(sessionID)
 	adapter.captureSessionPrincipal(r.Context(), sessionID)
 	sub, err := adapter.broadcaster.Subscribe(r.Context())
@@ -173,7 +158,6 @@ func serveSDKEventsStream(server *mcpsdk.Server, adapter *MCPAdapter, w http.Res
 		return
 	}
 	defer sub.Close()
-
 	w.Header().Set("Content-Type", "text/event-stream")
 	w.Header().Set("Cache-Control", "no-cache")
 	w.Header().Set("Connection", "keep-alive")
@@ -184,49 +168,46 @@ func serveSDKEventsStream(server *mcpsdk.Server, adapter *MCPAdapter, w http.Res
 		flusher.Flush()
 	}
 	adapter.log(r.Context(), "events_stream_connected", map[string]any{
-		"session_id": sessionID,
 		"flushed":    flusher != nil,
+		"session_id": sessionID,
 	})
 	ticker := time.NewTicker(250 * time.Millisecond)
 	defer ticker.Stop()
-
 	for {
 		select {
 		case <-r.Context().Done():
 			adapter.log(r.Context(), "events_stream_closed", map[string]any{
-				"session_id": sessionID,
 				"reason":     "request_context_done",
+				"session_id": sessionID,
 			})
 			return
 		case <-ticker.C:
 			if sdkSessionByID(server, sessionID) == nil {
 				adapter.clearSessionPrincipal(sessionID)
 				adapter.log(r.Context(), "events_stream_closed", map[string]any{
-					"session_id": sessionID,
 					"reason":     "session_not_found",
+					"session_id": sessionID,
 				})
 				return
 			}
 		case ev, ok := <-sub.C():
 			if !ok {
 				adapter.log(r.Context(), "events_stream_closed", map[string]any{
-					"session_id": sessionID,
 					"reason":     "broadcaster_closed",
+					"session_id": sessionID,
 				})
 				return
 			}
 			res, ok := ev.(*EventsStreamResult)
 			if !ok {
-				adapter.log(r.Context(), "events_stream_skipped_event", map[string]any{
-					"session_id": sessionID,
-				})
+				adapter.log(r.Context(), "events_stream_skipped_event", map[string]any{"session_id": sessionID})
 				continue
 			}
 			if err := writeSDKNotificationEvent(w, "events/stream", sdkEventsStreamParams(res)); err != nil {
 				adapter.log(r.Context(), "events_stream_closed", map[string]any{
-					"session_id": sessionID,
-					"reason":     "write_error",
 					"error":      err.Error(),
+					"reason":     "write_error",
+					"session_id": sessionID,
 				})
 				return
 			}
@@ -236,7 +217,6 @@ func serveSDKEventsStream(server *mcpsdk.Server, adapter *MCPAdapter, w http.Res
 		}
 	}
 }
-
 func sdkSessionByID(server *mcpsdk.Server, sessionID string) *mcpsdk.ServerSession {
 	if server == nil || sessionID == "" {
 		return nil
@@ -248,7 +228,6 @@ func sdkSessionByID(server *mcpsdk.Server, sessionID string) *mcpsdk.ServerSessi
 	}
 	return nil
 }
-
 func writeSDKNotificationEvent(w http.ResponseWriter, method string, params any) error {
 	message, err := json.Marshal(map[string]any{
 		"jsonrpc": "2.0",
@@ -263,11 +242,8 @@ func writeSDKNotificationEvent(w http.ResponseWriter, method string, params any)
 	}
 	return nil
 }
-
 func sdkEventsStreamParams(res *EventsStreamResult) map[string]any {
-	params := map[string]any{
-		"content": []map[string]any{},
-	}
+	params := map[string]any{"content": []map[string]any{}}
 	if res == nil {
 		return params
 	}
@@ -283,9 +259,7 @@ func sdkEventsStreamParams(res *EventsStreamResult) map[string]any {
 			content = append(content, nil)
 			continue
 		}
-		entry := map[string]any{
-			"type": item.Type,
-		}
+		entry := map[string]any{"type": item.Type}
 		if item.Text != nil {
 			entry["text"] = *item.Text
 		}
@@ -303,168 +277,142 @@ func sdkEventsStreamParams(res *EventsStreamResult) map[string]any {
 	params["content"] = content
 	return params
 }
-
 func registerSDKTools(server *mcpsdk.Server, adapter *MCPAdapter, requestContext func(context.Context, *http.Request) context.Context) error {
 	server.AddTool(&mcpsdk.Tool{
-		Name:        "analyze_sentiment",
 		Description: "Analyze sentiment of text",
+		Icons: []mcpsdk.Icon{mcpsdk.Icon{
+			MIMEType: "image/png",
+			Sizes:    []string{"48x48"},
+			Source:   "https://assistant.example.com/icons/analyze-sentiment.png",
+		}},
 		InputSchema: sdkToolInputSchema("{\"type\":\"object\",\"required\":[\"text\"],\"properties\":{\"text\":{\"type\":\"string\",\"description\":\"Input text to analyze\"}},\"additionalProperties\":false}"),
-		Icons: []mcpsdk.Icon{
-			{
-				Source:   "https://assistant.example.com/icons/analyze-sentiment.png",
-				MIMEType: "image/png",
-				Sizes: []string{
-					"48x48",
-				},
-			},
-		},
+		Name:        "analyze_sentiment",
 	}, adapter.sdkToolHandler(requestContext))
 	server.AddTool(&mcpsdk.Tool{
-		Name:        "extract_keywords",
 		Description: "Extract keywords from text",
 		InputSchema: sdkToolInputSchema("{\"type\":\"object\",\"required\":[\"text\"],\"properties\":{\"text\":{\"type\":\"string\",\"description\":\"Input text\"}},\"additionalProperties\":false}"),
+		Name:        "extract_keywords",
 	}, adapter.sdkToolHandler(requestContext))
 	server.AddTool(&mcpsdk.Tool{
-		Name:        "summarize_text",
 		Description: "Summarize text",
 		InputSchema: sdkToolInputSchema("{\"type\":\"object\",\"required\":[\"text\"],\"properties\":{\"text\":{\"type\":\"string\",\"description\":\"Input text to summarize\"}},\"additionalProperties\":false}"),
+		Name:        "summarize_text",
 	}, adapter.sdkToolHandler(requestContext))
 	server.AddTool(&mcpsdk.Tool{
-		Name:        "search",
 		Description: "Search knowledge base",
 		InputSchema: sdkToolInputSchema("{\"type\":\"object\",\"required\":[\"query\"],\"properties\":{\"limit\":{\"type\":\"integer\",\"description\":\"Maximum number of results\"},\"query\":{\"type\":\"string\",\"description\":\"Search query\"}},\"additionalProperties\":false}"),
+		Name:        "search",
 	}, adapter.sdkToolHandler(requestContext))
 	server.AddTool(&mcpsdk.Tool{
-		Name:        "execute_code",
 		Description: "Execute code",
 		InputSchema: sdkToolInputSchema("{\"type\":\"object\",\"required\":[\"language\",\"code\"],\"properties\":{\"code\":{\"type\":\"string\",\"description\":\"Code to execute\"},\"language\":{\"type\":\"string\",\"description\":\"Language to execute\",\"enum\":[\"python\",\"javascript\"]}},\"additionalProperties\":false}"),
+		Name:        "execute_code",
 	}, adapter.sdkToolHandler(requestContext))
 	server.AddTool(&mcpsdk.Tool{
-		Name:        "process_batch",
 		Description: "Process a batch of items",
 		InputSchema: sdkToolInputSchema("{\"type\":\"object\",\"required\":[\"items\"],\"properties\":{\"blob\":{\"type\":\"string\",\"description\":\"Base64 blob\"},\"format\":{\"type\":\"string\",\"description\":\"Output format\",\"enum\":[\"json\",\"text\",\"blob\",\"uri\"]},\"items\":{\"type\":\"array\",\"description\":\"Items to process\",\"items\":{\"type\":\"string\"}},\"mimeType\":{\"type\":\"string\",\"description\":\"MIME type\"},\"uri\":{\"type\":\"string\",\"description\":\"Resource URI\"}},\"additionalProperties\":false}"),
+		Name:        "process_batch",
 	}, adapter.sdkToolHandler(requestContext))
 	server.AddTool(&mcpsdk.Tool{
-		Name:        "multi_content",
 		Description: "Return multiple content items",
 		InputSchema: sdkToolInputSchema("{\"type\":\"object\",\"required\":[\"count\"],\"properties\":{\"count\":{\"type\":\"integer\",\"description\":\"Number of content items to return\"}},\"additionalProperties\":false}"),
+		Name:        "multi_content",
 	}, adapter.sdkToolHandler(requestContext))
 	server.AddTool(&mcpsdk.Tool{
-		Name:        "generate_dpi_spec",
 		Description: "Generate a deterministic design implementation plan from fake Figma data",
 		InputSchema: sdkToolInputSchema("{\"type\":\"object\",\"required\":[\"screen_title\",\"platform\",\"density\",\"primary_cta\",\"sections\"],\"properties\":{\"density\":{\"type\":\"string\",\"description\":\"Layout density\",\"enum\":[\"compact\",\"comfortable\"]},\"include_dev_notes\":{\"type\":\"boolean\",\"description\":\"Whether to include implementation notes\"},\"platform\":{\"type\":\"string\",\"description\":\"Target platform\",\"enum\":[\"ios\",\"web\"]},\"primary_cta\":{\"type\":\"string\",\"description\":\"Primary call to action\"},\"screen_title\":{\"type\":\"string\",\"description\":\"Name of the frame or screen\"},\"sections\":{\"type\":\"array\",\"description\":\"Ordered screen sections\",\"items\":{\"type\":\"string\"}}},\"additionalProperties\":false}"),
+		Name:        "generate_dpi_spec",
 	}, adapter.sdkToolHandler(requestContext))
 	server.AddTool(&mcpsdk.Tool{
-		Name:        "dispatch_action",
 		Description: "Dispatch an action using a union payload",
 		InputSchema: sdkToolInputSchema("{\"type\":\"object\",\"required\":[\"request\"],\"properties\":{\"request\":{\"type\":\"object\",\"description\":\"Action envelope\",\"oneOf\":[{\"type\":\"object\",\"required\":[\"action\",\"value\"],\"properties\":{\"action\":{\"type\":\"string\",\"enum\":[\"ListAction\"]},\"value\":{\"type\":\"object\",\"properties\":{\"limit\":{\"type\":\"integer\",\"description\":\"Maximum number of items to list\"}},\"additionalProperties\":false}},\"additionalProperties\":false},{\"type\":\"object\",\"required\":[\"action\",\"value\"],\"properties\":{\"action\":{\"type\":\"string\",\"enum\":[\"CreateAction\"]},\"value\":{\"type\":\"object\",\"required\":[\"name\"],\"properties\":{\"name\":{\"type\":\"string\",\"description\":\"Name to create\"}},\"additionalProperties\":false}},\"additionalProperties\":false}],\"discriminator\":{\"propertyName\":\"action\"}}},\"additionalProperties\":false}"),
+		Name:        "dispatch_action",
 	}, adapter.sdkToolHandler(requestContext))
 	return nil
 }
 func registerSDKResources(server *mcpsdk.Server, adapter *MCPAdapter, requestContext func(context.Context, *http.Request) context.Context) error {
 	server.AddResource(&mcpsdk.Resource{
-		Name:        "documents",
-		URI:         "doc://list",
 		Description: "List available documents",
-		MIMEType:    "application/json",
-		Icons: []mcpsdk.Icon{
-			{
-				Source:   "https://assistant.example.com/icons/documents.png",
-				MIMEType: "image/png",
-				Sizes: []string{
-					"48x48",
-				},
-			},
-		},
+		Icons: []mcpsdk.Icon{mcpsdk.Icon{
+			MIMEType: "image/png",
+			Sizes:    []string{"48x48"},
+			Source:   "https://assistant.example.com/icons/documents.png",
+		}},
+		MIMEType: "application/json",
+		Name:     "documents",
+		URI:      "doc://list",
 	}, adapter.sdkResourceHandler(requestContext))
 	server.AddResource(&mcpsdk.Resource{
-		Name:        "system_info",
-		URI:         "system://info",
 		Description: "Return system info",
 		MIMEType:    "application/json",
+		Name:        "system_info",
+		URI:         "system://info",
 	}, adapter.sdkResourceHandler(requestContext))
 	server.AddResource(&mcpsdk.Resource{
-		Name:        "conversation_history",
-		URI:         "conversation://history",
 		Description: "Return conversation history with optional query params",
 		MIMEType:    "application/json",
+		Name:        "conversation_history",
+		URI:         "conversation://history",
 	}, adapter.sdkResourceHandler(requestContext))
 	server.AddResource(&mcpsdk.Resource{
-		Name:        "figma_design_system",
-		URI:         "figma://design-system/mobile-checkout",
 		Description: "Return a fake Figma design system summary for implementation validation",
 		MIMEType:    "application/json",
+		Name:        "figma_design_system",
+		URI:         "figma://design-system/mobile-checkout",
 	}, adapter.sdkResourceHandler(requestContext))
 	return nil
 }
 func registerSDKPrompts(server *mcpsdk.Server, adapter *MCPAdapter, requestContext func(context.Context, *http.Request) context.Context) error {
 	server.AddPrompt(&mcpsdk.Prompt{
-		Name:        "code_review",
 		Description: "Simple code review prompt",
-		Icons: []mcpsdk.Icon{
-			{
-				Source:   "https://assistant.example.com/icons/code-review.svg",
-				MIMEType: "image/svg+xml",
-				Sizes: []string{
-					"any",
-				},
-			},
-		},
+		Icons: []mcpsdk.Icon{mcpsdk.Icon{
+			MIMEType: "image/svg+xml",
+			Sizes:    []string{"any"},
+			Source:   "https://assistant.example.com/icons/code-review.svg",
+		}},
+		Name: "code_review",
 	}, adapter.sdkPromptHandler(requestContext))
 	server.AddPrompt(&mcpsdk.Prompt{
-		Name:        "contextual_prompts",
+		Arguments: []*mcpsdk.PromptArgument{&mcpsdk.PromptArgument{
+			Description: "Current context",
+			Name:        "context",
+			Required:    true,
+		}, &mcpsdk.PromptArgument{
+			Description: "Task type",
+			Name:        "task",
+			Required:    true,
+		}},
 		Description: "Generate prompts based on context",
-		Icons: []mcpsdk.Icon{
-			{
-				Source:   "https://assistant.example.com/icons/contextual-prompts.png",
-				MIMEType: "image/png",
-				Sizes: []string{
-					"48x48",
-				},
-			},
-		},
-		Arguments: []*mcpsdk.PromptArgument{
-			{
-				Name:        "context",
-				Description: "Current context",
-				Required:    true,
-			},
-			{
-				Name:        "task",
-				Description: "Task type",
-				Required:    true,
-			},
-		},
+		Icons: []mcpsdk.Icon{mcpsdk.Icon{
+			MIMEType: "image/png",
+			Sizes:    []string{"48x48"},
+			Source:   "https://assistant.example.com/icons/contextual-prompts.png",
+		}},
+		Name: "contextual_prompts",
 	}, adapter.sdkPromptHandler(requestContext))
 	server.AddPrompt(&mcpsdk.Prompt{
-		Name:        "figma_implementation_prompt",
+		Arguments: []*mcpsdk.PromptArgument{&mcpsdk.PromptArgument{
+			Description: "Title of the screen being implemented",
+			Name:        "screen_title",
+			Required:    true,
+		}, &mcpsdk.PromptArgument{
+			Description: "Target UI framework",
+			Name:        "framework",
+			Required:    true,
+		}, &mcpsdk.PromptArgument{
+			Description: "Resource URI for the design system",
+			Name:        "design_tokens_uri",
+			Required:    true,
+		}, &mcpsdk.PromptArgument{
+			Description: "Serialized DPI spec JSON",
+			Name:        "dpi_json",
+			Required:    true,
+		}},
 		Description: "Generate implementation instructions from a DPI spec",
-		Arguments: []*mcpsdk.PromptArgument{
-			{
-				Name:        "screen_title",
-				Description: "Title of the screen being implemented",
-				Required:    true,
-			},
-			{
-				Name:        "framework",
-				Description: "Target UI framework",
-				Required:    true,
-			},
-			{
-				Name:        "design_tokens_uri",
-				Description: "Resource URI for the design system",
-				Required:    true,
-			},
-			{
-				Name:        "dpi_json",
-				Description: "Serialized DPI spec JSON",
-				Required:    true,
-			},
-		},
+		Name:        "figma_implementation_prompt",
 	}, adapter.sdkPromptHandler(requestContext))
 	return nil
 }
-
 func sdkToolAnnotations(raw any) (*mcpsdk.ToolAnnotations, error) {
 	if raw == nil {
 		return nil, nil
@@ -479,14 +427,12 @@ func sdkToolAnnotations(raw any) (*mcpsdk.ToolAnnotations, error) {
 	}
 	return &annotations, nil
 }
-
 func sdkToolInputSchema(raw string) any {
 	if raw == "" {
-		return json.RawMessage(`{"type":"object"}`)
+		return json.RawMessage("{\"type\":\"object\"}")
 	}
 	return json.RawMessage([]byte(raw))
 }
-
 func (a *MCPAdapter) sdkToolHandler(requestContext func(context.Context, *http.Request) context.Context) mcpsdk.ToolHandler {
 	return func(ctx context.Context, req *mcpsdk.CallToolRequest) (*mcpsdk.CallToolResult, error) {
 		payload := &ToolsCallPayload{}
@@ -537,7 +483,6 @@ func (a *MCPAdapter) sdkResourceHandler(requestContext func(context.Context, *ht
 		return sdkReadResourceResult(result)
 	}
 }
-
 func (a *MCPAdapter) sdkRequestContext(ctx context.Context, session mcpsdk.Session, extra *mcpsdk.RequestExtra, requestContext func(context.Context, *http.Request) context.Context) context.Context {
 	if requestContext != nil {
 		ctx = requestContext(ctx, sdkSyntheticHTTPRequest(ctx, extra))
@@ -554,11 +499,10 @@ func (a *MCPAdapter) sdkRequestContext(ctx context.Context, session mcpsdk.Sessi
 	a.markInitializedSession(sessionID)
 	return mcpruntime.WithSessionID(ctx, sessionID)
 }
-
 func sdkSyntheticHTTPRequest(ctx context.Context, extra *mcpsdk.RequestExtra) *http.Request {
 	req := &http.Request{
-		Method: http.MethodPost,
 		Header: make(http.Header),
+		Method: http.MethodPost,
 		URL:    &url.URL{Path: "/mcp"},
 	}
 	if extra != nil && extra.Header != nil {
@@ -572,42 +516,29 @@ func sdkSyntheticHTTPRequest(ctx context.Context, extra *mcpsdk.RequestExtra) *h
 	}
 	return req
 }
-
-type sdkToolCallCollector struct {
-	parts     []*ToolsCallResult
-	final     *ToolsCallResult
-	streamErr error
-}
-
 func (c *sdkToolCallCollector) Send(_ context.Context, event ToolsCallEvent) error {
-	res, ok := event.(*ToolsCallResult)
-	if !ok {
-		return fmt.Errorf("unexpected tools/call event type %T", event)
-	}
+	res := event.(*ToolsCallResult)
 	c.parts = append(c.parts, res)
 	return nil
 }
-
 func (c *sdkToolCallCollector) SendAndClose(_ context.Context, event ToolsCallEvent) error {
-	res, ok := event.(*ToolsCallResult)
-	if !ok {
-		return fmt.Errorf("unexpected tools/call final event type %T", event)
-	}
+	res := event.(*ToolsCallResult)
 	c.final = res
 	return nil
 }
-
 func (c *sdkToolCallCollector) SendError(_ context.Context, _ string, err error) error {
 	c.streamErr = err
 	return nil
 }
-
 func (c *sdkToolCallCollector) result() *ToolsCallResult {
 	if c == nil {
 		return &ToolsCallResult{}
 	}
 	if c.streamErr != nil {
-		item := &ContentItem{Type: "text", Text: stringPtr(c.streamErr.Error())}
+		item := &ContentItem{
+			Text: stringPtr(c.streamErr.Error()),
+			Type: "text",
+		}
 		return &ToolsCallResult{
 			Content: []*ContentItem{item},
 			IsError: boolPtr(true),
@@ -637,7 +568,6 @@ func (c *sdkToolCallCollector) result() *ToolsCallResult {
 	}
 	return merged
 }
-
 func sdkCallToolResult(result *ToolsCallResult) (*mcpsdk.CallToolResult, error) {
 	if result == nil {
 		return &mcpsdk.CallToolResult{Content: []mcpsdk.Content{}}, nil
@@ -673,6 +603,32 @@ func sdkGetPromptResult(result *PromptsGetResult) (*mcpsdk.GetPromptResult, erro
 		Messages:    messages,
 	}, nil
 }
+func sdkPromptMessage(message *PromptMessage) (*mcpsdk.PromptMessage, error) {
+	if message == nil {
+		return &mcpsdk.PromptMessage{Content: &mcpsdk.TextContent{}}, nil
+	}
+	content, err := sdkContentFromMessageContent(message.Content)
+	if err != nil {
+		return nil, err
+	}
+	return &mcpsdk.PromptMessage{
+		Content: content,
+		Role:    mcpsdk.Role(message.Role),
+	}, nil
+}
+func sdkContentFromMessageContent(item *MessageContent) (mcpsdk.Content, error) {
+	if item == nil {
+		return &mcpsdk.TextContent{}, nil
+	}
+	contentItem := &ContentItem{
+		Data:     item.Data,
+		MimeType: item.MimeType,
+		Text:     item.Text,
+		Type:     item.Type,
+		URI:      item.URI,
+	}
+	return sdkContentFromItem(contentItem)
+}
 func sdkReadResourceResult(result *ResourcesReadResult) (*mcpsdk.ReadResourceResult, error) {
 	if result == nil {
 		return &mcpsdk.ReadResourceResult{Contents: []*mcpsdk.ResourceContents{}}, nil
@@ -687,7 +643,24 @@ func sdkReadResourceResult(result *ResourcesReadResult) (*mcpsdk.ReadResourceRes
 	}
 	return &mcpsdk.ReadResourceResult{Contents: contents}, nil
 }
-
+func sdkReadResourceContent(item *ResourceContent) (*mcpsdk.ResourceContents, error) {
+	if item == nil {
+		return &mcpsdk.ResourceContents{}, nil
+	}
+	resource := &mcpsdk.ResourceContents{
+		MIMEType: derefString(item.MimeType),
+		Text:     derefString(item.Text),
+		URI:      item.URI,
+	}
+	if item.Blob != nil {
+		data, err := sdkDecodeBase64(item.Blob)
+		if err != nil {
+			return nil, err
+		}
+		resource.Blob = data
+	}
+	return resource, nil
+}
 func sdkContentFromItem(item *ContentItem) (mcpsdk.Content, error) {
 	if item == nil {
 		return &mcpsdk.TextContent{}, nil
@@ -730,39 +703,11 @@ func sdkContentFromItem(item *ContentItem) (mcpsdk.Content, error) {
 		return nil, fmt.Errorf("unsupported MCP content type %q", item.Type)
 	}
 }
-func sdkPromptMessage(message *PromptMessage) (*mcpsdk.PromptMessage, error) {
-	if message == nil {
-		return &mcpsdk.PromptMessage{Content: &mcpsdk.TextContent{}}, nil
-	}
-	content, err := sdkContentFromMessageContent(message.Content)
-	if err != nil {
-		return nil, err
-	}
-	return &mcpsdk.PromptMessage{
-		Role:    mcpsdk.Role(message.Role),
-		Content: content,
-	}, nil
-}
-
-func sdkContentFromMessageContent(item *MessageContent) (mcpsdk.Content, error) {
-	if item == nil {
-		return &mcpsdk.TextContent{}, nil
-	}
-	contentItem := &ContentItem{
-		Type:     item.Type,
-		Text:     item.Text,
-		Data:     item.Data,
-		MimeType: item.MimeType,
-		URI:      item.URI,
-	}
-	return sdkContentFromItem(contentItem)
-}
-
 func sdkResourceContents(item *ContentItem) (*mcpsdk.ResourceContents, error) {
 	resource := &mcpsdk.ResourceContents{
-		URI:      derefString(item.URI),
 		MIMEType: derefString(item.MimeType),
 		Text:     derefString(item.Text),
+		URI:      derefString(item.URI),
 	}
 	if item.Data != nil {
 		data, err := sdkDecodeBase64(item.Data)
@@ -773,25 +718,6 @@ func sdkResourceContents(item *ContentItem) (*mcpsdk.ResourceContents, error) {
 	}
 	return resource, nil
 }
-func sdkReadResourceContent(item *ResourceContent) (*mcpsdk.ResourceContents, error) {
-	if item == nil {
-		return &mcpsdk.ResourceContents{}, nil
-	}
-	resource := &mcpsdk.ResourceContents{
-		URI:      item.URI,
-		MIMEType: derefString(item.MimeType),
-		Text:     derefString(item.Text),
-	}
-	if item.Blob != nil {
-		data, err := sdkDecodeBase64(item.Blob)
-		if err != nil {
-			return nil, err
-		}
-		resource.Blob = data
-	}
-	return resource, nil
-}
-
 func sdkDecodeBase64(raw *string) ([]byte, error) {
 	if raw == nil || *raw == "" {
 		return nil, nil
@@ -802,14 +728,12 @@ func sdkDecodeBase64(raw *string) ([]byte, error) {
 	}
 	return data, nil
 }
-
 func derefString(s *string) string {
 	if s == nil {
 		return ""
 	}
 	return *s
 }
-
 func boolPtr(v bool) *bool {
 	return &v
 }
