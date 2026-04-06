@@ -43,7 +43,6 @@ func (s *mcpAssistantSSEStream) initSSEHeaders() {
 		s.w.WriteHeader(http.StatusOK)
 	})
 }
-
 func (s *mcpAssistantSSEStream) sendSSEEvent(eventType string, v any) error {
 	s.initSSEHeaders()
 	if err := loomhttp.WriteJSONSSEEvent(s.w, loomhttp.SSEMessage{Type: eventType}, v); err != nil {
@@ -51,7 +50,6 @@ func (s *mcpAssistantSSEStream) sendSSEEvent(eventType string, v any) error {
 	}
 	return http.NewResponseController(s.w).Flush()
 }
-
 func (s *mcpAssistantSSEStream) sendError(ctx context.Context, id any, code jsonrpc.Code, message string, data any) error {
 	response := jsonrpc.MakeErrorResponse(id, code, message, data)
 	return s.sendSSEEvent("message", response)
@@ -71,8 +69,8 @@ func (s *mcpAssistantSSEStream) Send(ctx context.Context, event mcpassistant.Eve
 		if isResponse {
 			resp := jsonrpc.MakeSuccessResponse(id, body)
 			message = map[string]any{
-				"jsonrpc": resp.JSONRPC,
 				"id":      resp.ID,
+				"jsonrpc": resp.JSONRPC,
 				"result":  resp.Result,
 			}
 			eventType = "response"
@@ -94,8 +92,8 @@ func (s *mcpAssistantSSEStream) Send(ctx context.Context, event mcpassistant.Eve
 		if isResponse {
 			resp := jsonrpc.MakeSuccessResponse(id, body)
 			message = map[string]any{
-				"jsonrpc": resp.JSONRPC,
 				"id":      resp.ID,
+				"jsonrpc": resp.JSONRPC,
 				"result":  resp.Result,
 			}
 			eventType = "response"

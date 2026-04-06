@@ -13,6 +13,7 @@ const HeaderKeySessionID = "Mcp-Session-Id"
 
 type (
 	sessionIDKey      struct{}
+	requestHeadersKey struct{}
 	responseWriterKey struct{}
 )
 
@@ -32,6 +33,30 @@ func SessionIDFromContext(ctx context.Context) string {
 		}
 	}
 	return ""
+}
+
+// WithRequestHeaders stores request-scoped MCP headers in ctx.
+func WithRequestHeaders(ctx context.Context, headers http.Header) context.Context {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	if len(headers) == 0 {
+		return context.WithValue(ctx, requestHeadersKey{}, http.Header{})
+	}
+	return context.WithValue(ctx, requestHeadersKey{}, headers.Clone())
+}
+
+// RequestHeadersFromContext returns request-scoped MCP headers from ctx.
+func RequestHeadersFromContext(ctx context.Context) http.Header {
+	if ctx == nil {
+		return nil
+	}
+	if v := ctx.Value(requestHeadersKey{}); v != nil {
+		if headers, ok := v.(http.Header); ok {
+			return headers.Clone()
+		}
+	}
+	return nil
 }
 
 // WithResponseWriter stores the active HTTP response writer in ctx.

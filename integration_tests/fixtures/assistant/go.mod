@@ -66,3 +66,5 @@ require (
 )
 
 replace github.com/CaliLuke/loom-mcp => ../../..
+
+replace github.com/CaliLuke/loom => /Users/luca/code/loom-mono/loom

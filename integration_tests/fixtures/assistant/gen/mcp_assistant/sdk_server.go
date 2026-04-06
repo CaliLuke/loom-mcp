@@ -116,6 +116,7 @@ func newSDKHandler(server *mcpsdk.Server, adapter *MCPAdapter, requestContext fu
 		return server
 	}, streamableOpts)
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		r = r.WithContext(mcpruntime.WithRequestHeaders(r.Context(), r.Header))
 		if requestContext != nil {
 			r = r.WithContext(requestContext(r.Context(), r))
 		}
@@ -539,7 +540,7 @@ func (a *MCPAdapter) sdkResourceHandler(requestContext func(context.Context, *ht
 
 func (a *MCPAdapter) sdkRequestContext(ctx context.Context, session mcpsdk.Session, extra *mcpsdk.RequestExtra, requestContext func(context.Context, *http.Request) context.Context) context.Context {
 	if requestContext != nil {
-		ctx = requestContext(ctx, sdkSyntheticHTTPRequest(extra))
+		ctx = requestContext(ctx, sdkSyntheticHTTPRequest(ctx, extra))
 	}
 	if session == nil {
 		a.markInitializedSession("")
@@ -554,16 +555,21 @@ func (a *MCPAdapter) sdkRequestContext(ctx context.Context, session mcpsdk.Sessi
 	return mcpruntime.WithSessionID(ctx, sessionID)
 }
 
-func sdkSyntheticHTTPRequest(extra *mcpsdk.RequestExtra) *http.Request {
+func sdkSyntheticHTTPRequest(ctx context.Context, extra *mcpsdk.RequestExtra) *http.Request {
 	req := &http.Request{
 		Method: http.MethodPost,
 		Header: make(http.Header),
 		URL:    &url.URL{Path: "/mcp"},
 	}
-	if extra == nil || extra.Header == nil {
-		return req
+	if extra != nil && extra.Header != nil {
+		req.Header = extra.Header.Clone()
 	}
-	req.Header = extra.Header.Clone()
+	for key, values := range mcpruntime.RequestHeadersFromContext(ctx) {
+		req.Header.Del(key)
+		for _, value := range values {
+			req.Header.Add(key, value)
+		}
+	}
 	return req
 }
 

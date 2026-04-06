@@ -1301,11 +1301,6 @@ func (a *MCPAdapter) assertResourceURIAllowed(ctx context.Context, pURI string) 
 			}
 		}
 	}
-	for _, allow := range extraAllowURIs {
-		if allow == base {
-			return nil
-		}
-	}
 	var denied []string
 	if a.opts != nil {
 		denied = a.opts.DeniedResourceURIs
@@ -1320,7 +1315,7 @@ func (a *MCPAdapter) assertResourceURIAllowed(ctx context.Context, pURI string) 
 		allowed = a.opts.AllowedResourceURIs
 	}
 	if len(allowed) == 0 && len(extraAllowURIs) == 0 {
-		return fmt.Errorf("resource URI not allowed: %s", pURI)
+		return nil
 	}
 	for _, allow := range append(allowed, extraAllowURIs...) {
 		if allow == base {

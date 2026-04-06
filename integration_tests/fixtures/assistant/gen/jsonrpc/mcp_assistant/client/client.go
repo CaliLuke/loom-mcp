@@ -42,29 +42,22 @@ type Client struct {
 }
 
 // bufferPool is a pool of bytes.Buffers for encoding requests.
-var bufferPool = sync.Pool{
-	New: func() any { return new(bytes.Buffer) },
-}
+var bufferPool = sync.Pool{New: func() any {
+	return new(bytes.Buffer)
+}}
 
 // NewClient instantiates HTTP clients for all the mcp_assistant service
 // servers.
-func NewClient(
-	scheme string,
-	host string,
-	doer loomhttp.Doer,
-	enc func(*http.Request) loomhttp.Encoder,
-	dec func(*http.Response) loomhttp.Decoder,
-	restoreBody bool,
-) *Client {
+func NewClient(scheme string, host string, doer loomhttp.Doer, enc func(*http.Request) loomhttp.Encoder, dec func(*http.Response) loomhttp.Decoder, restoreBody bool) *Client {
 	return &Client{
 		Doer:                doer,
-		ToolsCallDoer:       doer,
 		EventsStreamDoer:    doer,
 		RestoreResponseBody: restoreBody,
-		scheme:              scheme,
-		host:                host,
+		ToolsCallDoer:       doer,
 		decoder:             dec,
 		encoder:             enc,
+		host:                host,
+		scheme:              scheme,
 	}
 }
 
@@ -75,6 +68,7 @@ func (c *Client) Initialize() loom.Endpoint {
 		encodeRequest  = EncodeInitializeRequest(c.encoder)
 		decodeResponse = DecodeInitializeResponse(c.decoder, c.RestoreResponseBody)
 	)
+
 	return func(ctx context.Context, v any) (any, error) {
 		req, err := c.BuildInitializeRequest(ctx, v)
 		if err != nil {
@@ -89,15 +83,14 @@ func (c *Client) Initialize() loom.Endpoint {
 		}
 		return decodeResponse(resp)
 	}
-}
-
-// Ping returns an endpoint that makes JSON-RPC requests to the mcp_assistant
+} // Ping returns an endpoint that makes JSON-RPC requests to the mcp_assistant
 // service ping method.
 func (c *Client) Ping() loom.Endpoint {
 	var (
 		encodeRequest  = EncodePingRequest(c.encoder)
 		decodeResponse = DecodePingResponse(c.decoder, c.RestoreResponseBody)
 	)
+
 	return func(ctx context.Context, v any) (any, error) {
 		req, err := c.BuildPingRequest(ctx, v)
 		if err != nil {
@@ -112,15 +105,14 @@ func (c *Client) Ping() loom.Endpoint {
 		}
 		return decodeResponse(resp)
 	}
-}
-
-// ToolsList returns an endpoint that makes JSON-RPC requests to the
+} // ToolsList returns an endpoint that makes JSON-RPC requests to the
 // mcp_assistant service tools/list method.
 func (c *Client) ToolsList() loom.Endpoint {
 	var (
 		encodeRequest  = EncodeToolsListRequest(c.encoder)
 		decodeResponse = DecodeToolsListResponse(c.decoder, c.RestoreResponseBody)
 	)
+
 	return func(ctx context.Context, v any) (any, error) {
 		req, err := c.BuildToolsListRequest(ctx, v)
 		if err != nil {
@@ -135,14 +127,13 @@ func (c *Client) ToolsList() loom.Endpoint {
 		}
 		return decodeResponse(resp)
 	}
-}
-
-// ToolsCall returns an endpoint that makes JSON-RPC requests to the
+} // ToolsCall returns an endpoint that makes JSON-RPC requests to the
 // mcp_assistant service tools/call method.
 func (c *Client) ToolsCall() loom.Endpoint {
 	var (
 		encodeRequest = EncodeToolsCallRequest(c.encoder)
 	)
+
 	return func(ctx context.Context, v any) (any, error) {
 		req, err := c.BuildToolsCallRequest(ctx, v)
 		if err != nil {
@@ -169,21 +160,20 @@ func (c *Client) ToolsCall() loom.Endpoint {
 		}
 
 		stream := &ToolsCallClientStream{
-			resp:    resp,
-			reader:  bufio.NewReader(resp.Body),
 			decoder: c.decoder,
+			reader:  bufio.NewReader(resp.Body),
+			resp:    resp,
 		}
 		return stream, nil
 	}
-}
-
-// ResourcesList returns an endpoint that makes JSON-RPC requests to the
+} // ResourcesList returns an endpoint that makes JSON-RPC requests to the
 // mcp_assistant service resources/list method.
 func (c *Client) ResourcesList() loom.Endpoint {
 	var (
 		encodeRequest  = EncodeResourcesListRequest(c.encoder)
 		decodeResponse = DecodeResourcesListResponse(c.decoder, c.RestoreResponseBody)
 	)
+
 	return func(ctx context.Context, v any) (any, error) {
 		req, err := c.BuildResourcesListRequest(ctx, v)
 		if err != nil {
@@ -198,15 +188,14 @@ func (c *Client) ResourcesList() loom.Endpoint {
 		}
 		return decodeResponse(resp)
 	}
-}
-
-// ResourcesRead returns an endpoint that makes JSON-RPC requests to the
+} // ResourcesRead returns an endpoint that makes JSON-RPC requests to the
 // mcp_assistant service resources/read method.
 func (c *Client) ResourcesRead() loom.Endpoint {
 	var (
 		encodeRequest  = EncodeResourcesReadRequest(c.encoder)
 		decodeResponse = DecodeResourcesReadResponse(c.decoder, c.RestoreResponseBody)
 	)
+
 	return func(ctx context.Context, v any) (any, error) {
 		req, err := c.BuildResourcesReadRequest(ctx, v)
 		if err != nil {
@@ -221,15 +210,14 @@ func (c *Client) ResourcesRead() loom.Endpoint {
 		}
 		return decodeResponse(resp)
 	}
-}
-
-// ResourcesSubscribe returns an endpoint that makes JSON-RPC requests to the
+} // ResourcesSubscribe returns an endpoint that makes JSON-RPC requests to the
 // mcp_assistant service resources/subscribe method.
 func (c *Client) ResourcesSubscribe() loom.Endpoint {
 	var (
 		encodeRequest  = EncodeResourcesSubscribeRequest(c.encoder)
 		decodeResponse = DecodeResourcesSubscribeResponse(c.decoder, c.RestoreResponseBody)
 	)
+
 	return func(ctx context.Context, v any) (any, error) {
 		req, err := c.BuildResourcesSubscribeRequest(ctx, v)
 		if err != nil {
@@ -244,15 +232,14 @@ func (c *Client) ResourcesSubscribe() loom.Endpoint {
 		}
 		return decodeResponse(resp)
 	}
-}
-
-// ResourcesUnsubscribe returns an endpoint that makes JSON-RPC requests to the
+} // ResourcesUnsubscribe returns an endpoint that makes JSON-RPC requests to the
 // mcp_assistant service resources/unsubscribe method.
 func (c *Client) ResourcesUnsubscribe() loom.Endpoint {
 	var (
 		encodeRequest  = EncodeResourcesUnsubscribeRequest(c.encoder)
 		decodeResponse = DecodeResourcesUnsubscribeResponse(c.decoder, c.RestoreResponseBody)
 	)
+
 	return func(ctx context.Context, v any) (any, error) {
 		req, err := c.BuildResourcesUnsubscribeRequest(ctx, v)
 		if err != nil {
@@ -267,15 +254,14 @@ func (c *Client) ResourcesUnsubscribe() loom.Endpoint {
 		}
 		return decodeResponse(resp)
 	}
-}
-
-// PromptsList returns an endpoint that makes JSON-RPC requests to the
+} // PromptsList returns an endpoint that makes JSON-RPC requests to the
 // mcp_assistant service prompts/list method.
 func (c *Client) PromptsList() loom.Endpoint {
 	var (
 		encodeRequest  = EncodePromptsListRequest(c.encoder)
 		decodeResponse = DecodePromptsListResponse(c.decoder, c.RestoreResponseBody)
 	)
+
 	return func(ctx context.Context, v any) (any, error) {
 		req, err := c.BuildPromptsListRequest(ctx, v)
 		if err != nil {
@@ -290,15 +276,14 @@ func (c *Client) PromptsList() loom.Endpoint {
 		}
 		return decodeResponse(resp)
 	}
-}
-
-// PromptsGet returns an endpoint that makes JSON-RPC requests to the
+} // PromptsGet returns an endpoint that makes JSON-RPC requests to the
 // mcp_assistant service prompts/get method.
 func (c *Client) PromptsGet() loom.Endpoint {
 	var (
 		encodeRequest  = EncodePromptsGetRequest(c.encoder)
 		decodeResponse = DecodePromptsGetResponse(c.decoder, c.RestoreResponseBody)
 	)
+
 	return func(ctx context.Context, v any) (any, error) {
 		req, err := c.BuildPromptsGetRequest(ctx, v)
 		if err != nil {
@@ -313,15 +298,14 @@ func (c *Client) PromptsGet() loom.Endpoint {
 		}
 		return decodeResponse(resp)
 	}
-}
-
-// NotifyStatusUpdate returns an endpoint that makes JSON-RPC requests to the
+} // NotifyStatusUpdate returns an endpoint that makes JSON-RPC requests to the
 // mcp_assistant service notify_status_update method.
 func (c *Client) NotifyStatusUpdate() loom.Endpoint {
 	var (
 		encodeRequest  = EncodeNotifyStatusUpdateRequest(c.encoder)
 		decodeResponse = DecodeNotifyStatusUpdateResponse(c.decoder, c.RestoreResponseBody)
 	)
+
 	return func(ctx context.Context, v any) (any, error) {
 		req, err := c.BuildNotifyStatusUpdateRequest(ctx, v)
 		if err != nil {
@@ -336,14 +320,13 @@ func (c *Client) NotifyStatusUpdate() loom.Endpoint {
 		}
 		return decodeResponse(resp)
 	}
-}
-
-// EventsStream returns an endpoint that makes JSON-RPC requests to the
+} // EventsStream returns an endpoint that makes JSON-RPC requests to the
 // mcp_assistant service events/stream method.
 func (c *Client) EventsStream() loom.Endpoint {
 	var (
 		encodeRequest = EncodeEventsStreamRequest(c.encoder)
 	)
+
 	return func(ctx context.Context, v any) (any, error) {
 		req, err := c.BuildEventsStreamRequest(ctx, v)
 		if err != nil {
@@ -370,9 +353,9 @@ func (c *Client) EventsStream() loom.Endpoint {
 		}
 
 		stream := &EventsStreamClientStream{
-			resp:    resp,
-			reader:  bufio.NewReader(resp.Body),
 			decoder: c.decoder,
+			reader:  bufio.NewReader(resp.Body),
+			resp:    resp,
 		}
 		return stream, nil
 	}

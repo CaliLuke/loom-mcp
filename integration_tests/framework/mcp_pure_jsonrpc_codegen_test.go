@@ -6,6 +6,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"strings"
 	"testing"
 
 	"github.com/CaliLuke/loom-mcp/internal/upstreampaths"
@@ -18,6 +19,7 @@ func TestLoomGen_MCPPureServiceWithoutMethodLevelJSONRPC(t *testing.T) {
 	_, filename, _, ok := runtime.Caller(0)
 	require.True(t, ok)
 	repoRoot := filepath.Clean(filepath.Join(filepath.Dir(filename), "..", ".."))
+	localLoomDir := currentLocalLoomReplace(t, repoRoot)
 
 	fixtureRoot := t.TempDir()
 	require.NoError(t, os.MkdirAll(filepath.Join(fixtureRoot, "design"), 0o750))
@@ -33,6 +35,11 @@ require (
 
 replace github.com/CaliLuke/loom-mcp => ` + repoRoot + `
 `
+	if localLoomDir != "" {
+		goMod += `
+replace github.com/CaliLuke/loom => ` + localLoomDir + `
+`
+	}
 	require.NoError(t, os.WriteFile(filepath.Join(fixtureRoot, "go.mod"), []byte(goMod), 0o600))
 
 	design := `package design
@@ -76,4 +83,18 @@ var _ = Service("demo", func() {
 	run("go", "run", upstreampaths.LoomCLIPackage, "gen", "example.com/repro/design")
 	run("go", "mod", "tidy")
 	run("go", "test", "./...")
+}
+
+func currentLocalLoomReplace(t *testing.T, repoRoot string) string {
+	t.Helper()
+	//nolint:gosec // Test helper reads local repo go.mod from runtime-derived repo root.
+	goMod, err := os.ReadFile(filepath.Join(repoRoot, "go.mod"))
+	require.NoError(t, err)
+	for _, line := range strings.Split(string(goMod), "\n") {
+		const prefix = "replace github.com/CaliLuke/loom => "
+		if strings.HasPrefix(line, prefix) {
+			return strings.TrimSpace(strings.TrimPrefix(line, prefix))
+		}
+	}
+	return ""
 }

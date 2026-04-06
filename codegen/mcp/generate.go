@@ -1,6 +1,7 @@
 package codegen
 
 import (
+	"bytes"
 	"fmt"
 	"path/filepath"
 	"sort"
@@ -19,10 +20,13 @@ import (
 
 const headerSection = "source-header"
 const exampleMCPStubSection = "example-mcp-stub"
+const jsonrpcServerMountSectionName = "jsonrpc-server-mount"
 
 // Generate orchestrates MCP code generation for services that declare MCP
 // configuration in the DSL. It composes Goa service and JSON-RPC generators
 // and adds adapter/client helpers.
+//
+//nolint:maintidx // Top-level generator orchestration intentionally keeps the MCP pipeline in one place.
 func Generate(genpkg string, roots []eval.Root, files []*codegen.File) ([]*codegen.File, error) {
 	// Process MCP services from source snapshot and preserve deterministic order.
 	source := collectSourceSnapshot(roots)
@@ -132,14 +136,7 @@ func applyMCPPolicyHeadersToJSONRPCMount(files []*codegen.File) {
 		if filepath.Base(filepath.Dir(filepath.ToSlash(f.Path))) != "server" || filepath.Base(f.Path) != "server.go" {
 			continue
 		}
-		sections := f.AllSections()
-		if len(sections) > 0 {
-			updated := make([]codegen.Section, 0, len(sections))
-			for _, sec := range sections {
-				updated = append(updated, replaceJSONRPCServerSection(sec))
-			}
-			f.SetSections(updated)
-		}
+		rewriteJSONRPCServerFile(f)
 		if header := f.HeaderTemplate(); header != nil {
 			codegen.AddImport(header, &codegen.ImportSpec{Path: "encoding/json"})
 			codegen.AddImport(header, &codegen.ImportSpec{Path: "github.com/CaliLuke/loom-mcp/runtime/mcp", Name: "mcpruntime"})
@@ -147,7 +144,19 @@ func applyMCPPolicyHeadersToJSONRPCMount(files []*codegen.File) {
 	}
 }
 
-func replaceJSONRPCServerSection(section codegen.Section) codegen.Section {
+func rewriteJSONRPCServerFile(file *codegen.File) {
+	sections := file.AllSections()
+	if len(sections) == 0 {
+		return
+	}
+	updated := make([]codegen.Section, 0, len(sections))
+	for _, section := range sections {
+		updated = append(updated, rewriteJSONRPCServerSection(section))
+	}
+	file.SetSections(updated)
+}
+
+func rewriteJSONRPCServerSection(section codegen.Section) codegen.Section {
 	switch sec := section.(type) {
 	case *codegen.SectionTemplate:
 		if sec == nil {
@@ -158,18 +167,50 @@ func replaceJSONRPCServerSection(section codegen.Section) codegen.Section {
 			clone.Source = source
 			return &clone
 		}
-		return sec
-	case *codegen.RawSection:
-		if sec == nil {
-			return nil
-		}
-		if sec.Name == "jsonrpc-server-mount" {
-			return codegen.NewRawSection(sec.Name, rewriteJSONRPCServerMountSource(sec.Source))
+		if rewritten, ok := rewriteJSONRPCSectionByRenderedSource(sec); ok {
+			return rewritten
 		}
 		return sec
+	case *codegen.RawSection, *codegen.RenderSection, *codegen.JenniferSection:
+		if rewritten, ok := rewriteJSONRPCSectionByRenderedSource(sec); ok {
+			return rewritten
+		}
 	default:
-		return section
+		if rewritten, ok := rewriteJSONRPCSectionByRenderedSource(section); ok {
+			return rewritten
+		}
 	}
+	return section
+}
+
+func rewriteJSONRPCSectionByRenderedSource(section codegen.Section) (codegen.Section, bool) {
+	if section == nil {
+		return nil, false
+	}
+	source, ok := renderedSectionSource(section)
+	if !ok {
+		return nil, false
+	}
+	if section.SectionName() != jsonrpcServerMountSectionName && !isJSONRPCMountSource(source) {
+		return nil, false
+	}
+	return codegen.NewRenderSection(section.SectionName(), func() string {
+		return rewriteJSONRPCServerMountSource(source)
+	}), true
+}
+
+func renderedSectionSource(section codegen.Section) (string, bool) {
+	var buf bytes.Buffer
+	if err := section.Write(&buf); err != nil {
+		return "", false
+	}
+	return buf.String(), true
+}
+
+func isJSONRPCMountSource(source string) bool {
+	return strings.Contains(source, "configures the mux to serve the JSON-RPC") &&
+		strings.Contains(source, "mux.Handle(") &&
+		(strings.Contains(source, "h.ServeHTTP") || strings.Contains(source, "h.handleSSE"))
 }
 
 func mcpJSONRPCServerSectionSource(name string) (string, bool) {
@@ -207,6 +248,7 @@ func rewriteJSONRPCServerMountSource(source string) string {
 	return strings.TrimRight(updated, "\n") + jsonrpcServerMountHelperSource
 }
 
+//nolint:maintidx // Source rewriting keeps the upstream mount patch localized until full Jennifer ownership lands.
 func addMixedTransportSessionRoutes(source string) string {
 	lines := strings.Split(source, "\n")
 	insertAt := -1
@@ -320,229 +362,20 @@ func generateMCPTransport(genpkg string, svc *expr.ServiceExpr, data *AdapterDat
 	var files []*codegen.File
 	svcName := codegen.SnakeCase(svc.Name)
 
-	// Generate server adapter in gen/mcp_<service>/adapter_server.go (same package as MCP service)
-	adapterPath := filepath.Join(codegen.Gendir, "mcp_"+svcName, "adapter_server.go")
 	pkgName := data.MCPPackage
-
-	adapterImports := []*codegen.ImportSpec{
-		{Path: "bytes"},
-		{Path: "context"},
-		{Path: "encoding/json"},
-		{Path: "errors"},
-		{Path: "fmt"},
-		{Path: "io"},
-		{Path: "net/http"},
-		{Path: "net/url"},
-		{Path: "path"},
-		{Path: "strconv"},
-		{Path: "strings"},
-		{Path: "sync"},
-		{Path: "time"},
-		{Path: "github.com/modelcontextprotocol/go-sdk/auth", Name: "mcpauth"},
-		{Path: "go.opentelemetry.io/otel"},
-		{Path: "go.opentelemetry.io/otel/attribute"},
-		{Path: "go.opentelemetry.io/otel/codes"},
-		{Path: "go.opentelemetry.io/otel/metric"},
-		{Path: "go.opentelemetry.io/otel/trace"},
-		{Path: genpkg + "/" + svcName, Name: svcName},
-		{Path: "github.com/CaliLuke/loom-mcp/runtime/mcp", Name: "mcpruntime"},
-		{Path: upstreampaths.LoomMCPHTTPImportPath, Name: "goahttp"},
-		{Path: upstreampaths.LoomPkgImportPath, Name: "goa"},
+	files = append(files, buildMCPAdapterFile(genpkg, svc, data, svcName))
+	files = append(files, buildMCPProtocolVersionFile(pkgName, svcName, data.ProtocolVersion))
+	files = append(files, buildMCPSDKServerFile(genpkg, svc, data, svcName, pkgName))
+	if provider := buildMCPPromptProviderFile(genpkg, svc, data, svcName, pkgName); provider != nil {
+		files = append(files, provider)
 	}
-	// Include external user type imports referenced by method payloads/results.
-	existing := make(map[string]struct{}, len(adapterImports))
-	for _, im := range adapterImports {
-		if im != nil && im.Path != "" {
-			existing[im.Path] = struct{}{}
-		}
-	}
-	extra := make(map[string]*codegen.ImportSpec)
-	for _, m := range svc.Methods {
-		if m.Payload != nil {
-			for _, im := range shared.GatherAttributeImports(genpkg, m.Payload) {
-				if im != nil && im.Path != "" {
-					extra[im.Path] = im
-				}
-			}
-		}
-		if m.Result != nil {
-			for _, im := range shared.GatherAttributeImports(genpkg, m.Result) {
-				if im != nil && im.Path != "" {
-					extra[im.Path] = im
-				}
-			}
-		}
-	}
-	if len(extra) > 0 {
-		// Deterministic order
-		paths := make([]string, 0, len(extra))
-		for p := range extra {
-			if _, ok := existing[p]; ok {
-				continue
-			}
-			paths = append(paths, p)
-		}
-		sort.Strings(paths)
-		for _, p := range paths {
-			adapterImports = append(adapterImports, extra[p])
-		}
-	}
-	files = append(files, &codegen.File{
-		Path: adapterPath,
-		SectionTemplates: []*codegen.SectionTemplate{
-			codegen.Header(fmt.Sprintf("MCP server adapter for %s service", svc.Name), pkgName, adapterImports),
-			{
-				Name:   "mcp-adapter-core",
-				Source: mcpTemplates.Read("adapter_core"),
-				Data:   data,
-				FuncMap: map[string]any{
-					"goify":   func(s string) string { return codegen.Goify(s, true) },
-					"comment": codegen.Comment,
-					"quote":   func(s string) string { return fmt.Sprintf("%q", s) },
-				},
-			},
-			{
-				Name:   "mcp-adapter-broadcast",
-				Source: mcpTemplates.Read("adapter_broadcast"),
-				Data:   data,
-				FuncMap: map[string]any{
-					"goify":   func(s string) string { return codegen.Goify(s, true) },
-					"comment": codegen.Comment,
-					"quote":   func(s string) string { return fmt.Sprintf("%q", s) },
-				},
-			},
-			{
-				Name:   "mcp-adapter-tools",
-				Source: mcpTemplates.Read("adapter_tools"),
-				Data:   data,
-				FuncMap: map[string]any{
-					"goify":   func(s string) string { return codegen.Goify(s, true) },
-					"comment": codegen.Comment,
-					"quote":   func(s string) string { return fmt.Sprintf("%q", s) },
-				},
-			},
-			{
-				Name:   "mcp-adapter-resources",
-				Source: mcpTemplates.Read("adapter_resources"),
-				Data:   data,
-				FuncMap: map[string]any{
-					"goify":   func(s string) string { return codegen.Goify(s, true) },
-					"comment": codegen.Comment,
-					"quote":   func(s string) string { return fmt.Sprintf("%q", s) },
-				},
-			},
-			{
-				Name:   "mcp-adapter-prompts",
-				Source: mcpTemplates.Read("adapter_prompts"),
-				Data:   data,
-				FuncMap: map[string]any{
-					"goify":   func(s string) string { return codegen.Goify(s, true) },
-					"comment": codegen.Comment,
-					"quote":   func(s string) string { return fmt.Sprintf("%q", s) },
-				},
-			},
-			{
-				Name:   "mcp-adapter-notifications",
-				Source: mcpTemplates.Read("adapter_notifications"),
-				Data:   data,
-				FuncMap: map[string]any{
-					"goify":   func(s string) string { return codegen.Goify(s, true) },
-					"comment": codegen.Comment,
-					"quote":   func(s string) string { return fmt.Sprintf("%q", s) },
-				},
-			},
-			{
-				Name:   "mcp-adapter-subscriptions",
-				Source: mcpTemplates.Read("adapter_subscriptions"),
-				Data:   data,
-				FuncMap: map[string]any{
-					"goify":   func(s string) string { return codegen.Goify(s, true) },
-					"comment": codegen.Comment,
-					"quote":   func(s string) string { return fmt.Sprintf("%q", s) },
-				},
-			},
-		},
-	})
-
-	// Generate protocol version constant in MCP package
-	versionPath := filepath.Join(codegen.Gendir, "mcp_"+svcName, "protocol_version.go")
-	versionImports := []*codegen.ImportSpec{}
-	pv := data.ProtocolVersion
-	if pv == "" {
-		// Default to integration test expected version when none provided via DSL
-		pv = "2025-06-18"
-	}
-	files = append(files, &codegen.File{
-		Path: versionPath,
-		SectionTemplates: []*codegen.SectionTemplate{
-			codegen.Header("MCP protocol version", pkgName, versionImports),
-			{
-				Name:   "mcp-protocol-version",
-				Source: fmt.Sprintf("const DefaultProtocolVersion = %q\n", pv),
-			},
-		},
-	})
-
-	sdkServerPath := filepath.Join(codegen.Gendir, "mcp_"+svcName, "sdk_server.go")
-	sdkServerImports := []*codegen.ImportSpec{
-		{Path: "context"},
-		{Path: "encoding/base64"},
-		{Path: "encoding/json"},
-		{Path: "fmt"},
-		{Path: "net/http"},
-		{Path: "net/url"},
-		{Path: "strings"},
-		{Path: "time"},
-		{Path: genpkg + "/" + svcName, Name: svcName},
-		{Path: "github.com/modelcontextprotocol/go-sdk/auth", Name: "mcpauth"},
-		{Path: "github.com/modelcontextprotocol/go-sdk/mcp", Name: "mcpsdk"},
-		{Path: "github.com/CaliLuke/loom-mcp/runtime/mcp", Name: "mcpruntime"},
-	}
-	files = append(files, &codegen.File{
-		Path: sdkServerPath,
-		SectionTemplates: []*codegen.SectionTemplate{
-			codegen.Header(fmt.Sprintf("SDK-backed MCP server for %s service", svc.Name), pkgName, sdkServerImports),
-			{
-				Name:   "mcp-sdk-server",
-				Source: mcpTemplates.Read("sdk_server"),
-				Data:   data,
-				FuncMap: map[string]any{
-					"goify": func(s string) string { return codegen.Goify(s, true) },
-					"quote": func(s string) string { return fmt.Sprintf("%q", s) },
-				},
-			},
-		},
-	})
-
-	// If prompts are present, generate prompt_provider in a separate file (same package)
-	if len(data.StaticPrompts) > 0 || len(data.DynamicPrompts) > 0 {
-		providerPath := filepath.Join(codegen.Gendir, "mcp_"+svcName, "prompt_provider.go")
-		providerImports := []*codegen.ImportSpec{
-			{Path: "context"},
-			{Path: "encoding/json"},
-			{Path: genpkg + "/" + svcName, Name: svcName},
-		}
-		files = append(files, &codegen.File{
-			Path: providerPath,
-			SectionTemplates: []*codegen.SectionTemplate{
-				codegen.Header(fmt.Sprintf("MCP prompt provider for %s service", svc.Name), pkgName, providerImports),
-				{
-					Name:   "mcp-prompt-provider",
-					Source: mcpTemplates.Read("prompt_provider"),
-					Data:   data,
-					FuncMap: map[string]any{
-						"goify": func(s string) string { return codegen.Goify(s, true) },
-					},
-				},
-			},
-		})
-	}
-
 	return files
 }
 
 // generateMCPClientAdapter generates a client adapter that exposes the original
 // service endpoints while calling MCP JSON-RPC methods under the hood.
+//
+//nolint:maintidx // Alias wiring and mapping derivation are generation-time only and intentionally explicit.
 func generateMCPClientAdapter(genpkg string, svc *expr.ServiceExpr, data *AdapterData) []*codegen.File {
 	files := make([]*codegen.File, 0, 1)
 
@@ -649,6 +482,174 @@ func generateMCPClientAdapter(genpkg string, svc *expr.ServiceExpr, data *Adapte
 	})
 
 	return files
+}
+
+func buildMCPAdapterFile(genpkg string, svc *expr.ServiceExpr, data *AdapterData, svcName string) *codegen.File {
+	adapterPath := filepath.Join(codegen.Gendir, "mcp_"+svcName, "adapter_server.go")
+	return &codegen.File{
+		Path: adapterPath,
+		SectionTemplates: []*codegen.SectionTemplate{
+			codegen.Header(fmt.Sprintf("MCP server adapter for %s service", svc.Name), data.MCPPackage, adapterImports(genpkg, svc, svcName)),
+			templateSection("mcp-adapter-core", "adapter_core", data),
+			templateSection("mcp-adapter-broadcast", "adapter_broadcast", data),
+			templateSection("mcp-adapter-tools", "adapter_tools", data),
+			templateSection("mcp-adapter-resources", "adapter_resources", data),
+			templateSection("mcp-adapter-prompts", "adapter_prompts", data),
+			templateSection("mcp-adapter-notifications", "adapter_notifications", data),
+			templateSection("mcp-adapter-subscriptions", "adapter_subscriptions", data),
+		},
+	}
+}
+
+func adapterImports(genpkg string, svc *expr.ServiceExpr, svcName string) []*codegen.ImportSpec {
+	imports := make([]*codegen.ImportSpec, 0, 24)
+	imports = append(imports, []*codegen.ImportSpec{
+		{Path: "bytes"},
+		{Path: "context"},
+		{Path: "encoding/json"},
+		{Path: "errors"},
+		{Path: "fmt"},
+		{Path: "io"},
+		{Path: "net/http"},
+		{Path: "net/url"},
+		{Path: "path"},
+		{Path: "strconv"},
+		{Path: "strings"},
+		{Path: "sync"},
+		{Path: "time"},
+		{Path: "github.com/modelcontextprotocol/go-sdk/auth", Name: "mcpauth"},
+		{Path: "go.opentelemetry.io/otel"},
+		{Path: "go.opentelemetry.io/otel/attribute"},
+		{Path: "go.opentelemetry.io/otel/codes"},
+		{Path: "go.opentelemetry.io/otel/metric"},
+		{Path: "go.opentelemetry.io/otel/trace"},
+		{Path: genpkg + "/" + svcName, Name: svcName},
+		{Path: "github.com/CaliLuke/loom-mcp/runtime/mcp", Name: "mcpruntime"},
+		{Path: upstreampaths.LoomMCPHTTPImportPath, Name: "goahttp"},
+		{Path: upstreampaths.LoomPkgImportPath, Name: "goa"},
+	}...)
+	return append(imports, adapterAttributeImports(genpkg, svc, imports)...)
+}
+
+func adapterAttributeImports(genpkg string, svc *expr.ServiceExpr, imports []*codegen.ImportSpec) []*codegen.ImportSpec {
+	existing := make(map[string]struct{}, len(imports))
+	for _, im := range imports {
+		if im != nil && im.Path != "" {
+			existing[im.Path] = struct{}{}
+		}
+	}
+	extra := make(map[string]*codegen.ImportSpec)
+	for _, m := range svc.Methods {
+		addAttributeImports(extra, genpkg, m.Payload)
+		addAttributeImports(extra, genpkg, m.Result)
+	}
+	paths := make([]string, 0, len(extra))
+	for p := range extra {
+		if _, ok := existing[p]; ok {
+			continue
+		}
+		paths = append(paths, p)
+	}
+	sort.Strings(paths)
+	result := make([]*codegen.ImportSpec, 0, len(paths))
+	for _, p := range paths {
+		result = append(result, extra[p])
+	}
+	return result
+}
+
+func addAttributeImports(target map[string]*codegen.ImportSpec, genpkg string, attr *expr.AttributeExpr) {
+	if attr == nil {
+		return
+	}
+	for _, im := range shared.GatherAttributeImports(genpkg, attr) {
+		if im != nil && im.Path != "" {
+			target[im.Path] = im
+		}
+	}
+}
+
+func buildMCPProtocolVersionFile(pkgName, svcName, protocolVersion string) *codegen.File {
+	pv := protocolVersion
+	if pv == "" {
+		pv = "2025-06-18"
+	}
+	return &codegen.File{
+		Path: filepath.Join(codegen.Gendir, "mcp_"+svcName, "protocol_version.go"),
+		SectionTemplates: []*codegen.SectionTemplate{
+			codegen.Header("MCP protocol version", pkgName, nil),
+			{Name: "mcp-protocol-version", Source: fmt.Sprintf("const DefaultProtocolVersion = %q\n", pv)},
+		},
+	}
+}
+
+func buildMCPSDKServerFile(genpkg string, svc *expr.ServiceExpr, data *AdapterData, svcName, pkgName string) *codegen.File {
+	sdkServerImports := []*codegen.ImportSpec{
+		{Path: "context"},
+		{Path: "encoding/base64"},
+		{Path: "encoding/json"},
+		{Path: "fmt"},
+		{Path: "net/http"},
+		{Path: "net/url"},
+		{Path: "strings"},
+		{Path: "time"},
+		{Path: genpkg + "/" + svcName, Name: svcName},
+		{Path: "github.com/modelcontextprotocol/go-sdk/auth", Name: "mcpauth"},
+		{Path: "github.com/modelcontextprotocol/go-sdk/mcp", Name: "mcpsdk"},
+		{Path: "github.com/CaliLuke/loom-mcp/runtime/mcp", Name: "mcpruntime"},
+	}
+	return &codegen.File{
+		Path: filepath.Join(codegen.Gendir, "mcp_"+svcName, "sdk_server.go"),
+		SectionTemplates: []*codegen.SectionTemplate{
+			codegen.Header(fmt.Sprintf("SDK-backed MCP server for %s service", svc.Name), pkgName, sdkServerImports),
+			{
+				Name:   "mcp-sdk-server",
+				Source: mcpTemplates.Read("sdk_server"),
+				Data:   data,
+				FuncMap: map[string]any{
+					"goify": func(s string) string { return codegen.Goify(s, true) },
+					"quote": func(s string) string { return fmt.Sprintf("%q", s) },
+				},
+			},
+		},
+	}
+}
+
+func buildMCPPromptProviderFile(genpkg string, svc *expr.ServiceExpr, data *AdapterData, svcName, pkgName string) *codegen.File {
+	if len(data.StaticPrompts) == 0 && len(data.DynamicPrompts) == 0 {
+		return nil
+	}
+	return &codegen.File{
+		Path: filepath.Join(codegen.Gendir, "mcp_"+svcName, "prompt_provider.go"),
+		SectionTemplates: []*codegen.SectionTemplate{
+			codegen.Header(fmt.Sprintf("MCP prompt provider for %s service", svc.Name), pkgName, []*codegen.ImportSpec{
+				{Path: "context"},
+				{Path: "encoding/json"},
+				{Path: genpkg + "/" + svcName, Name: svcName},
+			}),
+			{
+				Name:   "mcp-prompt-provider",
+				Source: mcpTemplates.Read("prompt_provider"),
+				Data:   data,
+				FuncMap: map[string]any{
+					"goify": func(s string) string { return codegen.Goify(s, true) },
+				},
+			},
+		},
+	}
+}
+
+func templateSection(name, templateName string, data *AdapterData) *codegen.SectionTemplate {
+	return &codegen.SectionTemplate{
+		Name:   name,
+		Source: mcpTemplates.Read(templateName),
+		Data:   data,
+		FuncMap: map[string]any{
+			"goify":   func(s string) string { return codegen.Goify(s, true) },
+			"comment": codegen.Comment,
+			"quote":   func(s string) string { return fmt.Sprintf("%q", s) },
+		},
+	}
 }
 
 // queryValueExpr returns the direct Go expression that formats one statically

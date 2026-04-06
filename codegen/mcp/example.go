@@ -16,6 +16,8 @@ import (
 // includes the MCP JSON-RPC server without manual cmd edits. It runs the same
 // pure-MCP contract validation as Generate so example scaffolding cannot mask
 // invalid MCP mappings.
+//
+//nolint:funlen,maintidx // Example mutation is intentionally centralized so generation order stays explicit.
 func PrepareExample(_ string, roots []eval.Root) error {
 	source := collectSourceSnapshot(roots)
 	for _, root := range roots {
@@ -144,9 +146,10 @@ func ModifyExampleFiles(_ string, roots []eval.Root, files []*codegen.File) ([]*
 
 	// Ensure example stub returns the adapter-backed service instead of zero-value stub
 	files = generateExampleAdapterStubs(mcpServices, files)
+	servers := example.NewServersData()
 
 	for _, svr := range r.API.Servers {
-		dir := example.Servers.Get(svr, r).Dir
+		dir := servers.Get(svr, r).Dir
 		files = patchCLIForServer(dir, svr, mcpServices, files)
 	}
 
@@ -178,6 +181,8 @@ func collectMCPServices(r *expr.RootExpr) []*expr.ServiceExpr {
 
 // patchCLIForServer locates the generated JSON-RPC CLI support file and rewrites it
 // to instantiate the MCP adapter client endpoints. It also adds required imports.
+//
+//nolint:maintidx // File patching is legacy glue around upstream example generation.
 func patchCLIForServer(dir string, svr *expr.ServerExpr, mcpServices []*expr.ServiceExpr, files []*codegen.File) []*codegen.File {
 	cliPath := filepath.Join("cmd", dir+"-cli", "jsonrpc.go")
 	var cliFile *codegen.File
@@ -244,6 +249,8 @@ func patchCLIForServer(dir string, svr *expr.ServerExpr, mcpServices []*expr.Ser
 // patchExampleStubForMCP rewrites the generated example stub (mcp_<svc>.go)
 // to return the adapter that wraps the original service implementation, so the
 // server exposes proper MCP behavior.
+//
+//nolint:maintidx // Stub rewrites stay in one pass so example scaffolding remains deterministic.
 func generateExampleAdapterStubs(mcpServices []*expr.ServiceExpr, files []*codegen.File) []*codegen.File {
 	if len(mcpServices) == 0 {
 		return files

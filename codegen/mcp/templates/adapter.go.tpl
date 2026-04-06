@@ -698,13 +698,7 @@ func (a *MCPAdapter) assertResourceURIAllowed(ctx context.Context, pURI string) 
             }
         }
     }
-    // If header-based allow explicitly lists this URI, allow it (overrides default denies)
-    for _, allow := range extraAllowURIs {
-        if allow == base {
-            return nil
-        }
-    }
-    // Otherwise, deny list takes precedence
+    // Deny list takes precedence over explicit allow entries.
     var denied []string
     if a.opts != nil { denied = a.opts.DeniedResourceURIs }
     for _, d := range append(denied, extraDenyURIs...) {
@@ -716,7 +710,7 @@ func (a *MCPAdapter) assertResourceURIAllowed(ctx context.Context, pURI string) 
     var allowed []string
     if a.opts != nil { allowed = a.opts.AllowedResourceURIs }
     if len(allowed) == 0 && len(extraAllowURIs) == 0 {
-        return fmt.Errorf("resource URI not allowed: %s", pURI)
+        return nil
     }
     for _, allow := range append(allowed, extraAllowURIs...) {
         if allow == base {

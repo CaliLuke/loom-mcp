@@ -86,9 +86,7 @@ func DecodeListDocumentsResponse(decoder func(*http.Response) loomhttp.Decoder, 
 		res := NewListDocumentsDocumentsOK(&body)
 		return res, nil
 	}
-}
-
-// BuildSystemInfoRequest instantiates a HTTP request object with method and
+} // BuildSystemInfoRequest instantiates a HTTP request object with method and
 // path set to call the "assistant" service "system_info" endpoint
 func (c *Client) BuildSystemInfoRequest(ctx context.Context, v any) (*http.Request, error) {
 	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: SystemInfoAssistantPath()}
@@ -150,9 +148,7 @@ func DecodeSystemInfoResponse(decoder func(*http.Response) loomhttp.Decoder, res
 		res := NewSystemInfoResultOK(&body)
 		return res, nil
 	}
-}
-
-// BuildConversationHistoryRequest instantiates a HTTP request object with
+} // BuildConversationHistoryRequest instantiates a HTTP request object with
 // method and path set to call the "assistant" service "conversation_history"
 // endpoint
 func (c *Client) BuildConversationHistoryRequest(ctx context.Context, v any) (*http.Request, error) {
@@ -239,9 +235,7 @@ func DecodeConversationHistoryResponse(decoder func(*http.Response) loomhttp.Dec
 		res := NewConversationHistoryResultOK(&body)
 		return res, nil
 	}
-}
-
-// BuildFigmaDesignSystemRequest instantiates a HTTP request object with method
+} // BuildFigmaDesignSystemRequest instantiates a HTTP request object with method
 // and path set to call the "assistant" service "figma_design_system" endpoint
 func (c *Client) BuildFigmaDesignSystemRequest(ctx context.Context, v any) (*http.Request, error) {
 	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: FigmaDesignSystemAssistantPath()}
@@ -307,9 +301,7 @@ func DecodeFigmaDesignSystemResponse(decoder func(*http.Response) loomhttp.Decod
 		res := NewFigmaDesignSystemDesignSystemOK(&body)
 		return res, nil
 	}
-}
-
-// BuildGeneratePromptsRequest instantiates a HTTP request object with method
+} // BuildGeneratePromptsRequest instantiates a HTTP request object with method
 // and path set to call the "assistant" service "generate_prompts" endpoint
 func (c *Client) BuildGeneratePromptsRequest(ctx context.Context, v any) (*http.Request, error) {
 	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: GeneratePromptsAssistantPath()}
@@ -399,9 +391,7 @@ func DecodeGeneratePromptsResponse(decoder func(*http.Response) loomhttp.Decoder
 		res := NewGeneratePromptsPromptTemplatesOK(&body)
 		return res, nil
 	}
-}
-
-// BuildBuildFigmaImplementationPromptRequest instantiates a HTTP request
+} // BuildBuildFigmaImplementationPromptRequest instantiates a HTTP request
 // object with method and path set to call the "assistant" service
 // "build_figma_implementation_prompt" endpoint
 func (c *Client) BuildBuildFigmaImplementationPromptRequest(ctx context.Context, v any) (*http.Request, error) {
@@ -493,9 +483,7 @@ func DecodeBuildFigmaImplementationPromptResponse(decoder func(*http.Response) l
 		res := NewBuildFigmaImplementationPromptPromptTemplatesOK(&body)
 		return res, nil
 	}
-}
-
-// BuildSendNotificationRequest instantiates a HTTP request object with method
+} // BuildSendNotificationRequest instantiates a HTTP request object with method
 // and path set to call the "assistant" service "send_notification" endpoint
 func (c *Client) BuildSendNotificationRequest(ctx context.Context, v any) (*http.Request, error) {
 	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: SendNotificationAssistantPath()}
@@ -572,9 +560,7 @@ func DecodeSendNotificationResponse(decoder func(*http.Response) loomhttp.Decode
 		resp.Body = io.NopCloser(bytes.NewBuffer(jresp.Result))
 		return nil, nil
 	}
-}
-
-// BuildAnalyzeSentimentRequest instantiates a HTTP request object with method
+} // BuildAnalyzeSentimentRequest instantiates a HTTP request object with method
 // and path set to call the "assistant" service "analyze_sentiment" endpoint
 func (c *Client) BuildAnalyzeSentimentRequest(ctx context.Context, v any) (*http.Request, error) {
 	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: AnalyzeSentimentAssistantPath()}
@@ -660,9 +646,7 @@ func DecodeAnalyzeSentimentResponse(decoder func(*http.Response) loomhttp.Decode
 		res := NewAnalyzeSentimentResultOK(&body)
 		return res, nil
 	}
-}
-
-// BuildExtractKeywordsRequest instantiates a HTTP request object with method
+} // BuildExtractKeywordsRequest instantiates a HTTP request object with method
 // and path set to call the "assistant" service "extract_keywords" endpoint
 func (c *Client) BuildExtractKeywordsRequest(ctx context.Context, v any) (*http.Request, error) {
 	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: ExtractKeywordsAssistantPath()}
@@ -748,9 +732,7 @@ func DecodeExtractKeywordsResponse(decoder func(*http.Response) loomhttp.Decoder
 		res := NewExtractKeywordsResultOK(&body)
 		return res, nil
 	}
-}
-
-// BuildSummarizeTextRequest instantiates a HTTP request object with method and
+} // BuildSummarizeTextRequest instantiates a HTTP request object with method and
 // path set to call the "assistant" service "summarize_text" endpoint
 func (c *Client) BuildSummarizeTextRequest(ctx context.Context, v any) (*http.Request, error) {
 	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: SummarizeTextAssistantPath()}
@@ -836,9 +818,7 @@ func DecodeSummarizeTextResponse(decoder func(*http.Response) loomhttp.Decoder, 
 		res := NewSummarizeTextResultOK(&body)
 		return res, nil
 	}
-}
-
-// BuildSearchRequest instantiates a HTTP request object with method and path
+} // BuildSearchRequest instantiates a HTTP request object with method and path
 // set to call the "assistant" service "search" endpoint
 func (c *Client) BuildSearchRequest(ctx context.Context, v any) (*http.Request, error) {
 	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: SearchAssistantPath()}
@@ -924,9 +904,7 @@ func DecodeSearchResponse(decoder func(*http.Response) loomhttp.Decoder, restore
 		res := NewSearchResultOK(&body)
 		return res, nil
 	}
-}
-
-// BuildExecuteCodeRequest instantiates a HTTP request object with method and
+} // BuildExecuteCodeRequest instantiates a HTTP request object with method and
 // path set to call the "assistant" service "execute_code" endpoint
 func (c *Client) BuildExecuteCodeRequest(ctx context.Context, v any) (*http.Request, error) {
 	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: ExecuteCodeAssistantPath()}
@@ -1012,9 +990,7 @@ func DecodeExecuteCodeResponse(decoder func(*http.Response) loomhttp.Decoder, re
 		res := NewExecuteCodeResultOK(&body)
 		return res, nil
 	}
-}
-
-// BuildProcessBatchRequest instantiates a HTTP request object with method and
+} // BuildProcessBatchRequest instantiates a HTTP request object with method and
 // path set to call the "assistant" service "process_batch" endpoint
 func (c *Client) BuildProcessBatchRequest(ctx context.Context, v any) (*http.Request, error) {
 	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: ProcessBatchAssistantPath()}
@@ -1100,9 +1076,7 @@ func DecodeProcessBatchResponse(decoder func(*http.Response) loomhttp.Decoder, r
 		res := NewProcessBatchResultOK(&body)
 		return res, nil
 	}
-}
-
-// BuildMultiContentRequest instantiates a HTTP request object with method and
+} // BuildMultiContentRequest instantiates a HTTP request object with method and
 // path set to call the "assistant" service "multi_content" endpoint
 func (c *Client) BuildMultiContentRequest(ctx context.Context, v any) (*http.Request, error) {
 	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: MultiContentAssistantPath()}
@@ -1188,9 +1162,7 @@ func DecodeMultiContentResponse(decoder func(*http.Response) loomhttp.Decoder, r
 		res := NewMultiContentResultOK(&body)
 		return res, nil
 	}
-}
-
-// BuildGenerateDpiSpecRequest instantiates a HTTP request object with method
+} // BuildGenerateDpiSpecRequest instantiates a HTTP request object with method
 // and path set to call the "assistant" service "generate_dpi_spec" endpoint
 func (c *Client) BuildGenerateDpiSpecRequest(ctx context.Context, v any) (*http.Request, error) {
 	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: GenerateDpiSpecAssistantPath()}
@@ -1280,9 +1252,7 @@ func DecodeGenerateDpiSpecResponse(decoder func(*http.Response) loomhttp.Decoder
 		res := NewGenerateDpiSpecDPISpecOK(&body)
 		return res, nil
 	}
-}
-
-// BuildDispatchActionRequest instantiates a HTTP request object with method
+} // BuildDispatchActionRequest instantiates a HTTP request object with method
 // and path set to call the "assistant" service "dispatch_action" endpoint
 func (c *Client) BuildDispatchActionRequest(ctx context.Context, v any) (*http.Request, error) {
 	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: DispatchActionAssistantPath()}
@@ -1372,9 +1342,7 @@ func DecodeDispatchActionResponse(decoder func(*http.Response) loomhttp.Decoder,
 		res := NewDispatchActionResultOK(&body)
 		return res, nil
 	}
-}
-
-// unmarshalDesignTokenGroupResponseBodyResponseBodyToAssistantDesignTokenGroup
+} // unmarshalDesignTokenGroupResponseBodyResponseBodyToAssistantDesignTokenGroup
 // builds a value of type *assistant.DesignTokenGroup from a value of type
 // *DesignTokenGroupResponseBodyResponseBody.
 func unmarshalDesignTokenGroupResponseBodyResponseBodyToAssistantDesignTokenGroup(v *DesignTokenGroupResponseBodyResponseBody) *assistant.DesignTokenGroup {
@@ -1497,43 +1465,39 @@ func EncodeListDocumentsRequest(encoder func(*http.Request) loomhttp.Encoder) fu
 	return func(req *http.Request, v any) error {
 		id := uuid.New().String()
 		body := &jsonrpc.Request{
+			ID:      id,
 			JSONRPC: "2.0",
 			Method:  "list_documents",
-			ID:      id,
 		}
 		if err := encoder(req).Encode(body); err != nil {
 			return loomhttp.ErrEncodingError("assistant", "list_documents", err)
 		}
 		return nil
 	}
-}
-
-// EncodeSystemInfoRequest returns an encoder for requests sent to the
+} // EncodeSystemInfoRequest returns an encoder for requests sent to the
 // assistant service system_info JSON-RPC method.
 func EncodeSystemInfoRequest(encoder func(*http.Request) loomhttp.Encoder) func(*http.Request, any) error {
 	return func(req *http.Request, v any) error {
 		id := uuid.New().String()
 		body := &jsonrpc.Request{
+			ID:      id,
 			JSONRPC: "2.0",
 			Method:  "system_info",
-			ID:      id,
 		}
 		if err := encoder(req).Encode(body); err != nil {
 			return loomhttp.ErrEncodingError("assistant", "system_info", err)
 		}
 		return nil
 	}
-}
-
-// EncodeFigmaDesignSystemRequest returns an encoder for requests sent to the
+} // EncodeFigmaDesignSystemRequest returns an encoder for requests sent to the
 // assistant service figma_design_system JSON-RPC method.
 func EncodeFigmaDesignSystemRequest(encoder func(*http.Request) loomhttp.Encoder) func(*http.Request, any) error {
 	return func(req *http.Request, v any) error {
 		id := uuid.New().String()
 		body := &jsonrpc.Request{
+			ID:      id,
 			JSONRPC: "2.0",
 			Method:  "figma_design_system",
-			ID:      id,
 		}
 		if err := encoder(req).Encode(body); err != nil {
 			return loomhttp.ErrEncodingError("assistant", "figma_design_system", err)

@@ -61,40 +61,21 @@ type Server struct {
 
 // New creates a JSON-RPC server which loads HTTP requests and calls the
 // "mcp_assistant" service methods.
-func New(
-	endpoints *mcpassistant.Endpoints,
-	mux loomhttp.Muxer,
-	decoder func(*http.Request) loomhttp.Decoder,
-	encoder func(context.Context, http.ResponseWriter) loomhttp.Encoder,
-	errhandler func(context.Context, http.ResponseWriter, error),
-) *Server {
+func New(endpoints *mcpassistant.Endpoints, mux loomhttp.Muxer, decoder func(*http.Request) loomhttp.Decoder, encoder func(context.Context, http.ResponseWriter) loomhttp.Encoder, errhandler func(context.Context, http.ResponseWriter, error)) *Server {
 	s := &Server{
-		Methods: []string{
-			"initialize",
-			"ping",
-			"tools/list",
-			"tools/call",
-			"resources/list",
-			"resources/read",
-			"resources/subscribe",
-			"resources/unsubscribe",
-			"prompts/list",
-			"prompts/get",
-			"notify_status_update",
-			"events/stream",
-		},
+		EventsStream:         NewEventsStreamHandler(endpoints.EventsStream, mux, decoder, encoder, errhandler),
 		Initialize:           NewInitializeHandler(endpoints.Initialize, mux, decoder, encoder, errhandler),
+		Methods:              []string{"initialize", "ping", "tools/list", "tools/call", "resources/list", "resources/read", "resources/subscribe", "resources/unsubscribe", "prompts/list", "prompts/get", "notify_status_update", "events/stream"},
+		NotifyStatusUpdate:   NewNotifyStatusUpdateHandler(endpoints.NotifyStatusUpdate, mux, decoder, encoder, errhandler),
 		Ping:                 NewPingHandler(endpoints.Ping, mux, decoder, encoder, errhandler),
-		ToolsList:            NewToolsListHandler(endpoints.ToolsList, mux, decoder, encoder, errhandler),
-		ToolsCall:            NewToolsCallHandler(endpoints.ToolsCall, mux, decoder, encoder, errhandler),
+		PromptsGet:           NewPromptsGetHandler(endpoints.PromptsGet, mux, decoder, encoder, errhandler),
+		PromptsList:          NewPromptsListHandler(endpoints.PromptsList, mux, decoder, encoder, errhandler),
 		ResourcesList:        NewResourcesListHandler(endpoints.ResourcesList, mux, decoder, encoder, errhandler),
 		ResourcesRead:        NewResourcesReadHandler(endpoints.ResourcesRead, mux, decoder, encoder, errhandler),
 		ResourcesSubscribe:   NewResourcesSubscribeHandler(endpoints.ResourcesSubscribe, mux, decoder, encoder, errhandler),
 		ResourcesUnsubscribe: NewResourcesUnsubscribeHandler(endpoints.ResourcesUnsubscribe, mux, decoder, encoder, errhandler),
-		PromptsList:          NewPromptsListHandler(endpoints.PromptsList, mux, decoder, encoder, errhandler),
-		PromptsGet:           NewPromptsGetHandler(endpoints.PromptsGet, mux, decoder, encoder, errhandler),
-		NotifyStatusUpdate:   NewNotifyStatusUpdateHandler(endpoints.NotifyStatusUpdate, mux, decoder, encoder, errhandler),
-		EventsStream:         NewEventsStreamHandler(endpoints.EventsStream, mux, decoder, encoder, errhandler),
+		ToolsCall:            NewToolsCallHandler(endpoints.ToolsCall, mux, decoder, encoder, errhandler),
+		ToolsList:            NewToolsListHandler(endpoints.ToolsList, mux, decoder, encoder, errhandler),
 		decoder:              decoder,
 		encoder:              encoder,
 		errhandler:           errhandler,
@@ -105,7 +86,9 @@ func New(
 }
 
 // Service returns the name of the service served.
-func (s *Server) Service() string { return "mcp_assistant" }
+func (s *Server) Service() string {
+	return "mcp_assistant"
+}
 
 // Use wraps the server handlers with the given middleware.
 func (s *Server) Use(m func(http.Handler) http.Handler) {
@@ -113,7 +96,9 @@ func (s *Server) Use(m func(http.Handler) http.Handler) {
 }
 
 // MethodNames returns the methods served.
-func (s *Server) MethodNames() []string { return mcpassistant.MethodNames[:] }
+func (s *Server) MethodNames() []string {
+	return mcpassistant.MethodNames[:]
+}
 
 type jsonrpcResponseCapture struct {
 	header     http.Header
@@ -127,21 +112,18 @@ func (c *jsonrpcResponseCapture) Header() http.Header {
 	}
 	return c.header
 }
-
 func (c *jsonrpcResponseCapture) Write(data []byte) (int, error) {
 	if c.statusCode == 0 {
 		c.statusCode = http.StatusOK
 	}
 	return c.body.Write(data)
 }
-
 func (c *jsonrpcResponseCapture) WriteHeader(statusCode int) {
 	if c.statusCode != 0 {
 		return
 	}
 	c.statusCode = statusCode
 }
-
 func copyJSONRPCResponseMetadata(dst http.ResponseWriter, src *jsonrpcResponseCapture) {
 	for key, vals := range src.Header() {
 		switch http.CanonicalHeaderKey(key) {
@@ -188,7 +170,7 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		r.Body = io.NopCloser(bytes.NewReader(body))
 
 		trimmed := bytes.TrimLeft(body, " \t\r\n")
-		if len(trimmed) == 0 || trimmed[0] == '[' {
+		if len(trimmed) == 0 || trimmed[0] == byte(0x5b) {
 			s.handleHTTP(w, r)
 			return
 		}
@@ -228,8 +210,8 @@ func (s *Server) handleHTTP(w http.ResponseWriter, r *http.Request) {
 		io.Reader
 		io.Closer
 	}{
-		Reader: bufReader,
 		Closer: r.Body,
+		Reader: bufReader,
 	}
 	defer func(r *http.Request) {
 		if err := r.Body.Close(); err != nil {
@@ -238,7 +220,7 @@ func (s *Server) handleHTTP(w http.ResponseWriter, r *http.Request) {
 	}(r)
 
 	// Route to appropriate handler
-	if len(peek) > 0 && peek[0] == '[' {
+	if len(peek) > 0 && peek[0] == byte(0x5b) {
 		s.handleBatch(w, r)
 		return
 	}
@@ -268,79 +250,74 @@ func (s *Server) handleBatch(w http.ResponseWriter, r *http.Request) {
 		}
 		return
 	}
-
 	w.Header().Set("Content-Type", "application/json")
 	writer := &batchWriter{Writer: w}
-
 	for _, req := range reqs {
 		s.processRequest(r.Context(), r, &req, writer)
 	}
-
 	if writer.written {
-		writer.Writer.Write([]byte{']'})
+		writer.Writer.Write([]byte{byte(0x5d)})
 	}
 }
 
-// ProcessRequest processes a single JSON-RPC request.
+// processRequest processes a single JSON-RPC request.
 func (s *Server) processRequest(ctx context.Context, r *http.Request, req *jsonrpc.RawRequest, w http.ResponseWriter) {
 	if req.JSONRPC != "2.0" {
 		s.encodeJSONRPCError(ctx, w, req, jsonrpc.InvalidRequest, "Invalid request", nil)
 		return
 	}
-
 	if req.Method == "" {
 		s.encodeJSONRPCError(ctx, w, req, jsonrpc.InvalidRequest, "Missing method field", nil)
 		return
 	}
-
 	switch req.Method {
 	case "initialize":
 		if err := s.Initialize(ctx, r, req, w); err != nil {
-			s.errhandler(ctx, w, fmt.Errorf("handler error for %s: %w", "initialize", err))
+			s.errhandler(ctx, w, fmt.Errorf("handler error for initialize: %w", err))
 		}
 	case "ping":
 		if err := s.Ping(ctx, r, req, w); err != nil {
-			s.errhandler(ctx, w, fmt.Errorf("handler error for %s: %w", "ping", err))
+			s.errhandler(ctx, w, fmt.Errorf("handler error for ping: %w", err))
 		}
 	case "tools/list":
 		if err := s.ToolsList(ctx, r, req, w); err != nil {
-			s.errhandler(ctx, w, fmt.Errorf("handler error for %s: %w", "tools/list", err))
+			s.errhandler(ctx, w, fmt.Errorf("handler error for tools/list: %w", err))
 		}
 	case "tools/call":
 		if err := s.ToolsCall(ctx, r, req, w); err != nil {
-			s.errhandler(ctx, w, fmt.Errorf("handler error for %s: %w", "tools/call", err))
+			s.errhandler(ctx, w, fmt.Errorf("handler error for tools/call: %w", err))
 		}
 	case "resources/list":
 		if err := s.ResourcesList(ctx, r, req, w); err != nil {
-			s.errhandler(ctx, w, fmt.Errorf("handler error for %s: %w", "resources/list", err))
+			s.errhandler(ctx, w, fmt.Errorf("handler error for resources/list: %w", err))
 		}
 	case "resources/read":
 		if err := s.ResourcesRead(ctx, r, req, w); err != nil {
-			s.errhandler(ctx, w, fmt.Errorf("handler error for %s: %w", "resources/read", err))
+			s.errhandler(ctx, w, fmt.Errorf("handler error for resources/read: %w", err))
 		}
 	case "resources/subscribe":
 		if err := s.ResourcesSubscribe(ctx, r, req, w); err != nil {
-			s.errhandler(ctx, w, fmt.Errorf("handler error for %s: %w", "resources/subscribe", err))
+			s.errhandler(ctx, w, fmt.Errorf("handler error for resources/subscribe: %w", err))
 		}
 	case "resources/unsubscribe":
 		if err := s.ResourcesUnsubscribe(ctx, r, req, w); err != nil {
-			s.errhandler(ctx, w, fmt.Errorf("handler error for %s: %w", "resources/unsubscribe", err))
+			s.errhandler(ctx, w, fmt.Errorf("handler error for resources/unsubscribe: %w", err))
 		}
 	case "prompts/list":
 		if err := s.PromptsList(ctx, r, req, w); err != nil {
-			s.errhandler(ctx, w, fmt.Errorf("handler error for %s: %w", "prompts/list", err))
+			s.errhandler(ctx, w, fmt.Errorf("handler error for prompts/list: %w", err))
 		}
 	case "prompts/get":
 		if err := s.PromptsGet(ctx, r, req, w); err != nil {
-			s.errhandler(ctx, w, fmt.Errorf("handler error for %s: %w", "prompts/get", err))
+			s.errhandler(ctx, w, fmt.Errorf("handler error for prompts/get: %w", err))
 		}
 	case "notify_status_update":
 		if err := s.NotifyStatusUpdate(ctx, r, req, w); err != nil {
-			s.errhandler(ctx, w, fmt.Errorf("handler error for %s: %w", "notify_status_update", err))
+			s.errhandler(ctx, w, fmt.Errorf("handler error for notify_status_update: %w", err))
 		}
 	case "events/stream":
 		if err := s.EventsStream(ctx, r, req, w); err != nil {
-			s.errhandler(ctx, w, fmt.Errorf("handler error for %s: %w", "events/stream", err))
+			s.errhandler(ctx, w, fmt.Errorf("handler error for events/stream: %w", err))
 		}
 	default:
 		s.encodeJSONRPCError(ctx, w, req, jsonrpc.MethodNotFound, "Method not found", nil)
@@ -361,32 +338,33 @@ func (rb *batchWriter) Header() http.Header {
 	}
 	return rb.header
 }
-
 func (rb *batchWriter) WriteHeader(statusCode int) {
 	if rb.written {
 		return
 	}
 	rb.statusCode = statusCode
 }
-
 func (rb *batchWriter) Write(data []byte) (int, error) {
 	if !rb.written {
 		rb.written = true
-		rb.Writer.Write([]byte{'['})
+		rb.Writer.Write([]byte{byte(0x5b)})
 	} else {
-		rb.Writer.Write([]byte{','})
+		rb.Writer.Write([]byte{byte(0x2c)})
 	}
 	return rb.Writer.Write(data)
-}
-
-// handleSSE handles JSON-RPC SSE requests by dispatching to the appropriate method.
+} // handleSSE handles JSON-RPC SSE requests by dispatching to the appropriate method.
 func (s *Server) handleSSE(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
 	var req jsonrpc.RawRequest
 	if err := s.decoder(r).Decode(&req); err != nil {
-		stream := &mcpAssistantSSEStream{w: w, r: r, encoder: s.encoder, decoder: s.decoder}
-		_ = stream.sendError(ctx, nil, jsonrpc.ParseError, "Parse error", nil)
+		stream := &mcpAssistantSSEStream{
+			decoder: s.decoder,
+			encoder: s.encoder,
+			r:       r,
+			w:       w,
+		}
+		stream.sendError(ctx, nil, jsonrpc.ParseError, "Parse error", nil)
 		return
 	}
 
@@ -395,8 +373,13 @@ func (s *Server) handleSSE(w http.ResponseWriter, r *http.Request) {
 			w.WriteHeader(http.StatusNoContent)
 			return
 		}
-		stream := &mcpAssistantSSEStream{w: w, r: r, encoder: s.encoder, decoder: s.decoder}
-		_ = stream.sendError(ctx, req.ID, jsonrpc.InvalidRequest, "Invalid request", nil)
+		stream := &mcpAssistantSSEStream{
+			decoder: s.decoder,
+			encoder: s.encoder,
+			r:       r,
+			w:       w,
+		}
+		stream.sendError(ctx, req.ID, jsonrpc.InvalidRequest, "Invalid request", nil)
 		return
 	}
 
@@ -405,8 +388,13 @@ func (s *Server) handleSSE(w http.ResponseWriter, r *http.Request) {
 			w.WriteHeader(http.StatusNoContent)
 			return
 		}
-		stream := &mcpAssistantSSEStream{w: w, r: r, encoder: s.encoder, decoder: s.decoder}
-		_ = stream.sendError(ctx, req.ID, jsonrpc.InvalidRequest, "Invalid request", nil)
+		stream := &mcpAssistantSSEStream{
+			decoder: s.decoder,
+			encoder: s.encoder,
+			r:       r,
+			w:       w,
+		}
+		stream.sendError(ctx, req.ID, jsonrpc.InvalidRequest, "Invalid request", nil)
 		return
 	}
 
@@ -421,8 +409,13 @@ func (s *Server) handleSSE(w http.ResponseWriter, r *http.Request) {
 			w.WriteHeader(http.StatusNoContent)
 			return
 		}
-		stream := &mcpAssistantSSEStream{w: w, r: r, encoder: s.encoder, decoder: s.decoder}
-		_ = stream.sendError(ctx, req.ID, jsonrpc.MethodNotFound, "Method not found", nil)
+		stream := &mcpAssistantSSEStream{
+			decoder: s.decoder,
+			encoder: s.encoder,
+			r:       r,
+			w:       w,
+		}
+		stream.sendError(ctx, req.ID, jsonrpc.MethodNotFound, "Method not found", nil)
 		return
 	}
 
@@ -433,9 +426,7 @@ func (s *Server) handleSSE(w http.ResponseWriter, r *http.Request) {
 
 	switch req.Method {
 	}
-}
-
-// Mount configures the mux to serve the JSON-RPC mcp_assistant service methods.
+} // Mount configures the mux to serve the JSON-RPC mcp_assistant service methods.
 func Mount(mux loomhttp.Muxer, h *Server) {
 	// Mixed transports: mount unified handler that negotiates HTTP vs SSE by Accept header and JSON-RPC method
 	mux.Handle("POST", "/rpc", withMCPPolicyHeaders(h.ServeHTTP))
@@ -478,13 +469,7 @@ func withMCPPolicyHeaders(next http.HandlerFunc) http.HandlerFunc {
 
 // NewInitializeHandler creates a JSON-RPC handler which calls the
 // "mcp_assistant" service "initialize" endpoint.
-func NewInitializeHandler(
-	endpoint loom.Endpoint,
-	mux loomhttp.Muxer,
-	decoder func(*http.Request) loomhttp.Decoder,
-	encoder func(context.Context, http.ResponseWriter) loomhttp.Encoder,
-	errhandler func(context.Context, http.ResponseWriter, error),
-) func(context.Context, *http.Request, *jsonrpc.RawRequest, http.ResponseWriter) error {
+func NewInitializeHandler(endpoint loom.Endpoint, mux loomhttp.Muxer, decoder func(*http.Request) loomhttp.Decoder, encoder func(context.Context, http.ResponseWriter) loomhttp.Encoder, errhandler func(context.Context, http.ResponseWriter, error)) func(ctx context.Context, r *http.Request, req *jsonrpc.RawRequest, w http.ResponseWriter) error {
 	decodeParams := DecodeInitializeRequest(mux, decoder)
 	return func(ctx context.Context, r *http.Request, req *jsonrpc.RawRequest, w http.ResponseWriter) error {
 		ctx = context.WithValue(ctx, loom.MethodKey, "initialize")
@@ -542,17 +527,9 @@ func NewInitializeHandler(
 		}
 		return nil
 	}
-}
-
-// NewPingHandler creates a JSON-RPC handler which calls the "mcp_assistant"
+} // NewPingHandler creates a JSON-RPC handler which calls the "mcp_assistant"
 // service "ping" endpoint.
-func NewPingHandler(
-	endpoint loom.Endpoint,
-	mux loomhttp.Muxer,
-	decoder func(*http.Request) loomhttp.Decoder,
-	encoder func(context.Context, http.ResponseWriter) loomhttp.Encoder,
-	errhandler func(context.Context, http.ResponseWriter, error),
-) func(context.Context, *http.Request, *jsonrpc.RawRequest, http.ResponseWriter) error {
+func NewPingHandler(endpoint loom.Endpoint, mux loomhttp.Muxer, decoder func(*http.Request) loomhttp.Decoder, encoder func(context.Context, http.ResponseWriter) loomhttp.Encoder, errhandler func(context.Context, http.ResponseWriter, error)) func(ctx context.Context, r *http.Request, req *jsonrpc.RawRequest, w http.ResponseWriter) error {
 	return func(ctx context.Context, r *http.Request, req *jsonrpc.RawRequest, w http.ResponseWriter) error {
 		ctx = context.WithValue(ctx, loom.MethodKey, "ping")
 		ctx = context.WithValue(ctx, loom.ServiceKey, "mcp_assistant")
@@ -596,17 +573,9 @@ func NewPingHandler(
 		}
 		return nil
 	}
-}
-
-// NewToolsListHandler creates a JSON-RPC handler which calls the
+} // NewToolsListHandler creates a JSON-RPC handler which calls the
 // "mcp_assistant" service "tools/list" endpoint.
-func NewToolsListHandler(
-	endpoint loom.Endpoint,
-	mux loomhttp.Muxer,
-	decoder func(*http.Request) loomhttp.Decoder,
-	encoder func(context.Context, http.ResponseWriter) loomhttp.Encoder,
-	errhandler func(context.Context, http.ResponseWriter, error),
-) func(context.Context, *http.Request, *jsonrpc.RawRequest, http.ResponseWriter) error {
+func NewToolsListHandler(endpoint loom.Endpoint, mux loomhttp.Muxer, decoder func(*http.Request) loomhttp.Decoder, encoder func(context.Context, http.ResponseWriter) loomhttp.Encoder, errhandler func(context.Context, http.ResponseWriter, error)) func(ctx context.Context, r *http.Request, req *jsonrpc.RawRequest, w http.ResponseWriter) error {
 	decodeParams := DecodeToolsListRequest(mux, decoder)
 	return func(ctx context.Context, r *http.Request, req *jsonrpc.RawRequest, w http.ResponseWriter) error {
 		ctx = context.WithValue(ctx, loom.MethodKey, "tools/list")
@@ -664,26 +633,18 @@ func NewToolsListHandler(
 		}
 		return nil
 	}
-}
-
-// NewToolsCallHandler creates a JSON-RPC handler which calls the
+} // NewToolsCallHandler creates a JSON-RPC handler which calls the
 // "mcp_assistant" service "tools/call" endpoint.
-func NewToolsCallHandler(
-	endpoint loom.Endpoint,
-	mux loomhttp.Muxer,
-	decoder func(*http.Request) loomhttp.Decoder,
-	encoder func(context.Context, http.ResponseWriter) loomhttp.Encoder,
-	errhandler func(context.Context, http.ResponseWriter, error),
-) func(context.Context, *http.Request, *jsonrpc.RawRequest, http.ResponseWriter) error {
+func NewToolsCallHandler(endpoint loom.Endpoint, mux loomhttp.Muxer, decoder func(*http.Request) loomhttp.Decoder, encoder func(context.Context, http.ResponseWriter) loomhttp.Encoder, errhandler func(context.Context, http.ResponseWriter, error)) func(ctx context.Context, r *http.Request, req *jsonrpc.RawRequest, w http.ResponseWriter) error {
 	return func(ctx context.Context, r *http.Request, req *jsonrpc.RawRequest, w http.ResponseWriter) error {
 		ctx = context.WithValue(ctx, loom.MethodKey, "tools/call")
 		ctx = context.WithValue(ctx, loom.ServiceKey, "mcp_assistant")
 
 		strm := &ToolsCallServerStream{
-			w:         w,
-			r:         r,
 			encoder:   encoder,
+			r:         r,
 			requestID: req.ID,
+			w:         w,
 		}
 		if r.Method == http.MethodGet && req.Method == "events/stream" {
 			if err := strm.open(); err != nil {
@@ -699,8 +660,8 @@ func NewToolsCallHandler(
 			return nil
 		}
 		v := &mcpassistant.ToolsCallEndpointInput{
-			Stream:  strm,
 			Payload: params,
+			Stream:  strm,
 		}
 		if _, err := endpoint(ctx, v); err != nil {
 			if req.ID != nil && req.ID != "" {
@@ -723,17 +684,9 @@ func NewToolsCallHandler(
 		}
 		return nil
 	}
-}
-
-// NewResourcesListHandler creates a JSON-RPC handler which calls the
+} // NewResourcesListHandler creates a JSON-RPC handler which calls the
 // "mcp_assistant" service "resources/list" endpoint.
-func NewResourcesListHandler(
-	endpoint loom.Endpoint,
-	mux loomhttp.Muxer,
-	decoder func(*http.Request) loomhttp.Decoder,
-	encoder func(context.Context, http.ResponseWriter) loomhttp.Encoder,
-	errhandler func(context.Context, http.ResponseWriter, error),
-) func(context.Context, *http.Request, *jsonrpc.RawRequest, http.ResponseWriter) error {
+func NewResourcesListHandler(endpoint loom.Endpoint, mux loomhttp.Muxer, decoder func(*http.Request) loomhttp.Decoder, encoder func(context.Context, http.ResponseWriter) loomhttp.Encoder, errhandler func(context.Context, http.ResponseWriter, error)) func(ctx context.Context, r *http.Request, req *jsonrpc.RawRequest, w http.ResponseWriter) error {
 	decodeParams := DecodeResourcesListRequest(mux, decoder)
 	return func(ctx context.Context, r *http.Request, req *jsonrpc.RawRequest, w http.ResponseWriter) error {
 		ctx = context.WithValue(ctx, loom.MethodKey, "resources/list")
@@ -791,17 +744,9 @@ func NewResourcesListHandler(
 		}
 		return nil
 	}
-}
-
-// NewResourcesReadHandler creates a JSON-RPC handler which calls the
+} // NewResourcesReadHandler creates a JSON-RPC handler which calls the
 // "mcp_assistant" service "resources/read" endpoint.
-func NewResourcesReadHandler(
-	endpoint loom.Endpoint,
-	mux loomhttp.Muxer,
-	decoder func(*http.Request) loomhttp.Decoder,
-	encoder func(context.Context, http.ResponseWriter) loomhttp.Encoder,
-	errhandler func(context.Context, http.ResponseWriter, error),
-) func(context.Context, *http.Request, *jsonrpc.RawRequest, http.ResponseWriter) error {
+func NewResourcesReadHandler(endpoint loom.Endpoint, mux loomhttp.Muxer, decoder func(*http.Request) loomhttp.Decoder, encoder func(context.Context, http.ResponseWriter) loomhttp.Encoder, errhandler func(context.Context, http.ResponseWriter, error)) func(ctx context.Context, r *http.Request, req *jsonrpc.RawRequest, w http.ResponseWriter) error {
 	decodeParams := DecodeResourcesReadRequest(mux, decoder)
 	return func(ctx context.Context, r *http.Request, req *jsonrpc.RawRequest, w http.ResponseWriter) error {
 		ctx = context.WithValue(ctx, loom.MethodKey, "resources/read")
@@ -859,17 +804,9 @@ func NewResourcesReadHandler(
 		}
 		return nil
 	}
-}
-
-// NewResourcesSubscribeHandler creates a JSON-RPC handler which calls the
+} // NewResourcesSubscribeHandler creates a JSON-RPC handler which calls the
 // "mcp_assistant" service "resources/subscribe" endpoint.
-func NewResourcesSubscribeHandler(
-	endpoint loom.Endpoint,
-	mux loomhttp.Muxer,
-	decoder func(*http.Request) loomhttp.Decoder,
-	encoder func(context.Context, http.ResponseWriter) loomhttp.Encoder,
-	errhandler func(context.Context, http.ResponseWriter, error),
-) func(context.Context, *http.Request, *jsonrpc.RawRequest, http.ResponseWriter) error {
+func NewResourcesSubscribeHandler(endpoint loom.Endpoint, mux loomhttp.Muxer, decoder func(*http.Request) loomhttp.Decoder, encoder func(context.Context, http.ResponseWriter) loomhttp.Encoder, errhandler func(context.Context, http.ResponseWriter, error)) func(ctx context.Context, r *http.Request, req *jsonrpc.RawRequest, w http.ResponseWriter) error {
 	decodeParams := DecodeResourcesSubscribeRequest(mux, decoder)
 	return func(ctx context.Context, r *http.Request, req *jsonrpc.RawRequest, w http.ResponseWriter) error {
 		ctx = context.WithValue(ctx, loom.MethodKey, "resources/subscribe")
@@ -923,17 +860,9 @@ func NewResourcesSubscribeHandler(
 		}
 		return nil
 	}
-}
-
-// NewResourcesUnsubscribeHandler creates a JSON-RPC handler which calls the
+} // NewResourcesUnsubscribeHandler creates a JSON-RPC handler which calls the
 // "mcp_assistant" service "resources/unsubscribe" endpoint.
-func NewResourcesUnsubscribeHandler(
-	endpoint loom.Endpoint,
-	mux loomhttp.Muxer,
-	decoder func(*http.Request) loomhttp.Decoder,
-	encoder func(context.Context, http.ResponseWriter) loomhttp.Encoder,
-	errhandler func(context.Context, http.ResponseWriter, error),
-) func(context.Context, *http.Request, *jsonrpc.RawRequest, http.ResponseWriter) error {
+func NewResourcesUnsubscribeHandler(endpoint loom.Endpoint, mux loomhttp.Muxer, decoder func(*http.Request) loomhttp.Decoder, encoder func(context.Context, http.ResponseWriter) loomhttp.Encoder, errhandler func(context.Context, http.ResponseWriter, error)) func(ctx context.Context, r *http.Request, req *jsonrpc.RawRequest, w http.ResponseWriter) error {
 	decodeParams := DecodeResourcesUnsubscribeRequest(mux, decoder)
 	return func(ctx context.Context, r *http.Request, req *jsonrpc.RawRequest, w http.ResponseWriter) error {
 		ctx = context.WithValue(ctx, loom.MethodKey, "resources/unsubscribe")
@@ -987,17 +916,9 @@ func NewResourcesUnsubscribeHandler(
 		}
 		return nil
 	}
-}
-
-// NewPromptsListHandler creates a JSON-RPC handler which calls the
+} // NewPromptsListHandler creates a JSON-RPC handler which calls the
 // "mcp_assistant" service "prompts/list" endpoint.
-func NewPromptsListHandler(
-	endpoint loom.Endpoint,
-	mux loomhttp.Muxer,
-	decoder func(*http.Request) loomhttp.Decoder,
-	encoder func(context.Context, http.ResponseWriter) loomhttp.Encoder,
-	errhandler func(context.Context, http.ResponseWriter, error),
-) func(context.Context, *http.Request, *jsonrpc.RawRequest, http.ResponseWriter) error {
+func NewPromptsListHandler(endpoint loom.Endpoint, mux loomhttp.Muxer, decoder func(*http.Request) loomhttp.Decoder, encoder func(context.Context, http.ResponseWriter) loomhttp.Encoder, errhandler func(context.Context, http.ResponseWriter, error)) func(ctx context.Context, r *http.Request, req *jsonrpc.RawRequest, w http.ResponseWriter) error {
 	decodeParams := DecodePromptsListRequest(mux, decoder)
 	return func(ctx context.Context, r *http.Request, req *jsonrpc.RawRequest, w http.ResponseWriter) error {
 		ctx = context.WithValue(ctx, loom.MethodKey, "prompts/list")
@@ -1055,17 +976,9 @@ func NewPromptsListHandler(
 		}
 		return nil
 	}
-}
-
-// NewPromptsGetHandler creates a JSON-RPC handler which calls the
+} // NewPromptsGetHandler creates a JSON-RPC handler which calls the
 // "mcp_assistant" service "prompts/get" endpoint.
-func NewPromptsGetHandler(
-	endpoint loom.Endpoint,
-	mux loomhttp.Muxer,
-	decoder func(*http.Request) loomhttp.Decoder,
-	encoder func(context.Context, http.ResponseWriter) loomhttp.Encoder,
-	errhandler func(context.Context, http.ResponseWriter, error),
-) func(context.Context, *http.Request, *jsonrpc.RawRequest, http.ResponseWriter) error {
+func NewPromptsGetHandler(endpoint loom.Endpoint, mux loomhttp.Muxer, decoder func(*http.Request) loomhttp.Decoder, encoder func(context.Context, http.ResponseWriter) loomhttp.Encoder, errhandler func(context.Context, http.ResponseWriter, error)) func(ctx context.Context, r *http.Request, req *jsonrpc.RawRequest, w http.ResponseWriter) error {
 	decodeParams := DecodePromptsGetRequest(mux, decoder)
 	return func(ctx context.Context, r *http.Request, req *jsonrpc.RawRequest, w http.ResponseWriter) error {
 		ctx = context.WithValue(ctx, loom.MethodKey, "prompts/get")
@@ -1123,17 +1036,9 @@ func NewPromptsGetHandler(
 		}
 		return nil
 	}
-}
-
-// NewNotifyStatusUpdateHandler creates a JSON-RPC handler which calls the
+} // NewNotifyStatusUpdateHandler creates a JSON-RPC handler which calls the
 // "mcp_assistant" service "notify_status_update" endpoint.
-func NewNotifyStatusUpdateHandler(
-	endpoint loom.Endpoint,
-	mux loomhttp.Muxer,
-	decoder func(*http.Request) loomhttp.Decoder,
-	encoder func(context.Context, http.ResponseWriter) loomhttp.Encoder,
-	errhandler func(context.Context, http.ResponseWriter, error),
-) func(context.Context, *http.Request, *jsonrpc.RawRequest, http.ResponseWriter) error {
+func NewNotifyStatusUpdateHandler(endpoint loom.Endpoint, mux loomhttp.Muxer, decoder func(*http.Request) loomhttp.Decoder, encoder func(context.Context, http.ResponseWriter) loomhttp.Encoder, errhandler func(context.Context, http.ResponseWriter, error)) func(ctx context.Context, r *http.Request, req *jsonrpc.RawRequest, w http.ResponseWriter) error {
 	decodeParams := DecodeNotifyStatusUpdateRequest(mux, decoder)
 	return func(ctx context.Context, r *http.Request, req *jsonrpc.RawRequest, w http.ResponseWriter) error {
 		ctx = context.WithValue(ctx, loom.MethodKey, "notify_status_update")
@@ -1187,35 +1092,25 @@ func NewNotifyStatusUpdateHandler(
 		}
 		return nil
 	}
-}
-
-// NewEventsStreamHandler creates a JSON-RPC handler which calls the
+} // NewEventsStreamHandler creates a JSON-RPC handler which calls the
 // "mcp_assistant" service "events/stream" endpoint.
-func NewEventsStreamHandler(
-	endpoint loom.Endpoint,
-	mux loomhttp.Muxer,
-	decoder func(*http.Request) loomhttp.Decoder,
-	encoder func(context.Context, http.ResponseWriter) loomhttp.Encoder,
-	errhandler func(context.Context, http.ResponseWriter, error),
-) func(context.Context, *http.Request, *jsonrpc.RawRequest, http.ResponseWriter) error {
+func NewEventsStreamHandler(endpoint loom.Endpoint, mux loomhttp.Muxer, decoder func(*http.Request) loomhttp.Decoder, encoder func(context.Context, http.ResponseWriter) loomhttp.Encoder, errhandler func(context.Context, http.ResponseWriter, error)) func(ctx context.Context, r *http.Request, req *jsonrpc.RawRequest, w http.ResponseWriter) error {
 	return func(ctx context.Context, r *http.Request, req *jsonrpc.RawRequest, w http.ResponseWriter) error {
 		ctx = context.WithValue(ctx, loom.MethodKey, "events/stream")
 		ctx = context.WithValue(ctx, loom.ServiceKey, "mcp_assistant")
 
 		strm := &EventsStreamServerStream{
-			w:         w,
-			r:         r,
 			encoder:   encoder,
+			r:         r,
 			requestID: req.ID,
+			w:         w,
 		}
 		if r.Method == http.MethodGet && req.Method == "events/stream" {
 			if err := strm.open(); err != nil {
 				return err
 			}
 		}
-		v := &mcpassistant.EventsStreamEndpointInput{
-			Stream: strm,
-		}
+		v := &mcpassistant.EventsStreamEndpointInput{Stream: strm}
 		if _, err := endpoint(ctx, v); err != nil {
 			if req.ID != nil && req.ID != "" {
 				var en loom.LoomErrorNamer
@@ -1237,24 +1132,13 @@ func NewEventsStreamHandler(
 		}
 		return nil
 	}
-}
-
-// encodeJSONRPCError creates and sends a JSON-RPC error response (handles nil ID gracefully)
+} // encodeJSONRPCError creates and sends a JSON-RPC error response (handles nil ID gracefully)
 func (s *Server) encodeJSONRPCError(ctx context.Context, w http.ResponseWriter, req *jsonrpc.RawRequest, code jsonrpc.Code, message string, data any) {
 	encodeJSONRPCError(ctx, w, req, code, message, data, s.encoder, s.errhandler)
 }
 
 // encodeJSONRPCError creates and sends a JSON-RPC error response (handles nil ID gracefully)
-func encodeJSONRPCError(
-	ctx context.Context,
-	w http.ResponseWriter,
-	req *jsonrpc.RawRequest,
-	code jsonrpc.Code,
-	message string,
-	data any,
-	encoder func(context.Context, http.ResponseWriter) loomhttp.Encoder,
-	errhandler func(context.Context, http.ResponseWriter, error),
-) {
+func encodeJSONRPCError(ctx context.Context, w http.ResponseWriter, req *jsonrpc.RawRequest, code jsonrpc.Code, message string, data any, encoder func(context.Context, http.ResponseWriter) loomhttp.Encoder, errhandler func(context.Context, http.ResponseWriter, error)) {
 	if req.ID != nil {
 		response := jsonrpc.MakeErrorResponse(req.ID, code, message, data)
 		if err := encoder(ctx, w).Encode(response); err != nil {

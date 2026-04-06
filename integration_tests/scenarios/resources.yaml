@@ -140,8 +140,9 @@ scenarios:
         op: ResourcesRead
         input: { uri: "system://info" }
         expect:
-          status: error
-          error: { code: -32602 }
+          status: success
+          result:
+            contents: [ { uri: "system://info", mimeType: "application/json" } ]
 
   - name: resources_subscribe_unsubscribe
     defaults:

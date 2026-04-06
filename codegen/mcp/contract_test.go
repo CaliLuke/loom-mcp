@@ -13,6 +13,7 @@ import (
 	generatorcodegen "github.com/CaliLuke/loom/codegen/generator"
 	"github.com/CaliLuke/loom/eval"
 	"github.com/CaliLuke/loom/expr"
+	"github.com/dave/jennifer/jen"
 	"github.com/stretchr/testify/require"
 )
 
@@ -272,6 +273,41 @@ func TestGenerateMCPClientAdapter_RendersOriginalClientForDynamicPrompts(t *test
 	require.Contains(t, rendered, "origC.BuildGeneratePromptRequest")
 }
 
+func TestGenerateSDKServer_MergesContextRequestHeadersIntoSyntheticRequest(t *testing.T) {
+	restore := resetMCPCodegenState(t)
+	defer restore()
+
+	svc, methods := testService("assistant", "system_info")
+	methods["system_info"].Result = &expr.AttributeExpr{Type: expr.Empty}
+	root := testRootExpr([]*expr.ServiceExpr{svc}, []*expr.HTTPServiceExpr{
+		jsonrpcService(svc, "/rpc"),
+	})
+	mcp := &mcpexpr.MCPExpr{
+		Name:    "assistant-mcp",
+		Version: "1.0.0",
+		Resources: []*mcpexpr.ResourceExpr{
+			{Name: "system_info", URI: "system://info", Method: methods["system_info"]},
+		},
+	}
+	mcpexpr.Root.RegisterMCP(svc, mcp)
+
+	files, err := Generate("example.com/assistant/gen", []eval.Root{root}, nil)
+	require.NoError(t, err)
+
+	var rendered string
+	for _, file := range files {
+		if filepath.Base(file.Path) == "sdk_server.go" {
+			rendered = renderGeneratedFile(t, file)
+			break
+		}
+	}
+
+	require.NotEmpty(t, rendered)
+	require.Contains(t, rendered, "r = r.WithContext(mcpruntime.WithRequestHeaders(r.Context(), r.Header))")
+	require.Contains(t, rendered, "sdkSyntheticHTTPRequest(ctx, extra)")
+	require.Contains(t, rendered, "for key, values := range mcpruntime.RequestHeadersFromContext(ctx)")
+}
+
 func TestBuildAdapterData_DefaultedEnumFieldsStayScalarAndReapplyDefaults(t *testing.T) {
 	restore := resetMCPCodegenState(t)
 	defer restore()
@@ -406,6 +442,95 @@ func (s *Server) MountAssistant(mux goahttp.Muxer) {
 	require.Contains(t, rendered, `mux.Handle("POST", "/rpc", withMCPPolicyHeaders(h.ServeHTTP))`)
 	require.Contains(t, rendered, `mux.Handle("GET", "/rpc", withMCPPolicyHeaders(h.ServeHTTP))`)
 	require.Contains(t, rendered, `mux.Handle("DELETE", "/rpc", withMCPPolicyHeaders(h.ServeHTTP))`)
+	require.Contains(t, rendered, "func withMCPPolicyHeaders(next http.HandlerFunc) http.HandlerFunc {")
+	require.Contains(t, rendered, `ctx = mcpruntime.WithResponseWriter(ctx, w)`)
+}
+
+func TestApplyMCPPolicyHeadersToJSONRPCMount_RewritesRawMountSectionBySourceShape(t *testing.T) {
+	header := gcodegen.Header("JSON-RPC server", "server", nil)
+	file := &gcodegen.File{
+		Path: "gen/jsonrpc/assistant/server/server.go",
+		Sections: []gcodegen.Section{
+			header,
+			gcodegen.NewRawSection("loom-jsonrpc-mount", `
+// MountAssistant configures the mux to serve the JSON-RPC assistant service methods.
+func MountAssistant(mux goahttp.Muxer, h *Server) {
+	// Mixed transports: mount unified handler that negotiates HTTP vs SSE by Accept header and JSON-RPC method
+	mux.Handle("POST", "/rpc", h.ServeHTTP)
+	mux.Handle("GET", "/rpc", h.ServeHTTP)
+}
+`),
+		},
+	}
+
+	applyMCPPolicyHeadersToJSONRPCMount([]*gcodegen.File{file})
+
+	rendered := renderGeneratedFile(t, file)
+	require.Contains(t, rendered, `mux.Handle("POST", "/rpc", withMCPPolicyHeaders(h.ServeHTTP))`)
+	require.Contains(t, rendered, `mux.Handle("GET", "/rpc", withMCPPolicyHeaders(h.ServeHTTP))`)
+	require.Contains(t, rendered, "func withMCPPolicyHeaders(next http.HandlerFunc) http.HandlerFunc {")
+}
+
+func TestApplyMCPPolicyHeadersToJSONRPCMount_RewritesJenniferMountSection(t *testing.T) {
+	header := gcodegen.Header("JSON-RPC server", "server", nil)
+	file := &gcodegen.File{
+		Path: "gen/jsonrpc/assistant/server/server.go",
+		Sections: []gcodegen.Section{
+			header,
+			gcodegen.NewJenniferSection("loom-jsonrpc-mount", func(stmt *jen.Statement) {
+				stmt.Comment("MountAssistant configures the mux to serve the JSON-RPC assistant service methods.").Line()
+				stmt.Func().Id("MountAssistant").
+					Params(
+						jen.Id("mux").Qual("goa.design/goa/v3/http", "Muxer"),
+						jen.Id("h").Op("*").Id("Server"),
+					).
+					Block(
+						jen.Comment("Mixed transports: mount unified handler that negotiates HTTP vs SSE by Accept header and JSON-RPC method"),
+						jen.Id("mux").Dot("Handle").Call(jen.Lit("POST"), jen.Lit("/rpc"), jen.Id("h").Dot("ServeHTTP")),
+						jen.Id("mux").Dot("Handle").Call(jen.Lit("GET"), jen.Lit("/rpc"), jen.Id("h").Dot("ServeHTTP")),
+					)
+			}),
+		},
+	}
+
+	applyMCPPolicyHeadersToJSONRPCMount([]*gcodegen.File{file})
+
+	rendered := renderGeneratedFile(t, file)
+	require.Contains(t, rendered, `mux.Handle("POST", "/rpc", withMCPPolicyHeaders(h.ServeHTTP))`)
+	require.Contains(t, rendered, `mux.Handle("GET", "/rpc", withMCPPolicyHeaders(h.ServeHTTP))`)
+	require.Contains(t, rendered, "func withMCPPolicyHeaders(next http.HandlerFunc) http.HandlerFunc {")
+}
+
+func TestGenerate_ActualMCPServerMountIncludesPolicyWrapper(t *testing.T) {
+	restore := resetMCPCodegenState(t)
+	defer restore()
+
+	svc, methods := testService("assistant", "analyze_sentiment")
+	root := testRootExpr([]*expr.ServiceExpr{svc}, []*expr.HTTPServiceExpr{
+		jsonrpcService(svc, "/rpc"),
+	})
+	mcpexpr.Root.RegisterMCP(svc, &mcpexpr.MCPExpr{
+		Name:    "assistant-mcp",
+		Version: "1.0.0",
+		Tools: []*mcpexpr.ToolExpr{
+			{Name: "analyze_sentiment", Method: methods["analyze_sentiment"]},
+		},
+	})
+
+	files, err := Generate("example.com/assistant/gen", []eval.Root{root}, nil)
+	require.NoError(t, err)
+
+	var rendered string
+	for _, file := range files {
+		if file.Path == "gen/jsonrpc/mcp_assistant/server/server.go" {
+			rendered = renderGeneratedFile(t, file)
+			break
+		}
+	}
+
+	require.NotEmpty(t, rendered)
+	require.Contains(t, rendered, `mux.Handle("POST", "/rpc", withMCPPolicyHeaders(h.ServeHTTP))`)
+	require.Contains(t, rendered, `mux.Handle("GET", "/rpc", withMCPPolicyHeaders(h.ServeHTTP))`)
 	require.Contains(t, rendered, "func withMCPPolicyHeaders(next http.HandlerFunc) http.HandlerFunc {")
 	require.Contains(t, rendered, `ctx = mcpruntime.WithResponseWriter(ctx, w)`)
 }
