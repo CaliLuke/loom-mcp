@@ -1142,60 +1142,52 @@ func (a *MCPAdapter) toolsCallHandler(ctx context.Context, p *ToolsCallPayload, 
 }
 
 // Resources handling
-
 func (a *MCPAdapter) ResourcesList(ctx context.Context, p *ResourcesListPayload) (*ResourcesListResult, error) {
 	if !a.isInitialized(ctx) {
 		return nil, goa.PermanentError("invalid_params", "Not initialized")
 	}
 	a.log(ctx, "request", map[string]any{"method": "resources/list"})
-	resources := []*ResourceInfo{
-		{
-			URI:         "doc://list",
-			Name:        stringPtr("documents"),
-			Description: stringPtr("List available documents"),
-			MimeType:    stringPtr("application/json"),
-			Icons: []*Icon{
-				{
-					Src:      "https://assistant.example.com/icons/documents.png",
-					MimeType: stringPtr("image/png"),
-					Sizes: []string{
-						"48x48",
-					},
-				},
-			},
-		},
-		{
-			URI:         "system://info",
-			Name:        stringPtr("system_info"),
-			Description: stringPtr("Return system info"),
-			MimeType:    stringPtr("application/json"),
-		},
-		{
-			URI:         "conversation://history",
-			Name:        stringPtr("conversation_history"),
-			Description: stringPtr("Return conversation history with optional query params"),
-			MimeType:    stringPtr("application/json"),
-		},
-		{
-			URI:         "figma://design-system/mobile-checkout",
-			Name:        stringPtr("figma_design_system"),
-			Description: stringPtr("Return a fake Figma design system summary for implementation validation"),
-			MimeType:    stringPtr("application/json"),
-		},
-	}
+	resources := []*ResourceInfo{&ResourceInfo{
+		Description: stringPtr("List available documents"),
+		Icons: []*Icon{&Icon{
+			MimeType: stringPtr("image/png"),
+			Sizes:    []string{"48x48"},
+			Src:      "https://assistant.example.com/icons/documents.png",
+		}},
+		MimeType: stringPtr("application/json"),
+		Name:     stringPtr("documents"),
+		URI:      "doc://list",
+	}, &ResourceInfo{
+		Description: stringPtr("Return system info"),
+		MimeType:    stringPtr("application/json"),
+		Name:        stringPtr("system_info"),
+		URI:         "system://info",
+	}, &ResourceInfo{
+		Description: stringPtr("Return conversation history with optional query params"),
+		MimeType:    stringPtr("application/json"),
+		Name:        stringPtr("conversation_history"),
+		URI:         "conversation://history",
+	}, &ResourceInfo{
+		Description: stringPtr("Return a fake Figma design system summary for implementation validation"),
+		MimeType:    stringPtr("application/json"),
+		Name:        stringPtr("figma_design_system"),
+		URI:         "figma://design-system/mobile-checkout",
+	}}
 	res := &ResourcesListResult{Resources: resources}
 	a.log(ctx, "response", map[string]any{"method": "resources/list"})
 	return res, nil
 }
-
 func (a *MCPAdapter) ResourcesRead(ctx context.Context, p *ResourcesReadPayload) (*ResourcesReadResult, error) {
 	if !a.isInitialized(ctx) {
 		return nil, goa.PermanentError("invalid_params", "Not initialized")
 	}
-	a.log(ctx, "request", map[string]any{"method": "resources/read", "uri": p.URI})
+	a.log(ctx, "request", map[string]any{
+		"method": "resources/read",
+		"uri":    p.URI,
+	})
 	baseURI := p.URI
 	if i := strings.Index(baseURI, "?"); i >= 0 {
-		baseURI = baseURI[:i]
+		baseURI = baseURI[0:i]
 	}
 	switch baseURI {
 	case "doc://list":
@@ -1210,8 +1202,15 @@ func (a *MCPAdapter) ResourcesRead(ctx context.Context, p *ResourcesReadPayload)
 		if serr != nil {
 			return nil, goa.PermanentError("invalid_params", "%s", serr.Error())
 		}
-		res := &ResourcesReadResult{Contents: []*ResourceContent{{URI: baseURI, MimeType: stringPtr("application/json"), Text: &s}}}
-		a.log(ctx, "response", map[string]any{"method": "resources/read", "uri": baseURI})
+		res := &ResourcesReadResult{Contents: []*ResourceContent{&ResourceContent{
+			MimeType: stringPtr("application/json"),
+			Text:     &s,
+			URI:      baseURI,
+		}}}
+		a.log(ctx, "response", map[string]any{
+			"method": "resources/read",
+			"uri":    baseURI,
+		})
 		return res, nil
 	case "system://info":
 		if err := a.assertResourceURIAllowed(ctx, p.URI); err != nil {
@@ -1225,8 +1224,15 @@ func (a *MCPAdapter) ResourcesRead(ctx context.Context, p *ResourcesReadPayload)
 		if serr != nil {
 			return nil, goa.PermanentError("invalid_params", "%s", serr.Error())
 		}
-		res := &ResourcesReadResult{Contents: []*ResourceContent{{URI: baseURI, MimeType: stringPtr("application/json"), Text: &s}}}
-		a.log(ctx, "response", map[string]any{"method": "resources/read", "uri": baseURI})
+		res := &ResourcesReadResult{Contents: []*ResourceContent{&ResourceContent{
+			MimeType: stringPtr("application/json"),
+			Text:     &s,
+			URI:      baseURI,
+		}}}
+		a.log(ctx, "response", map[string]any{
+			"method": "resources/read",
+			"uri":    baseURI,
+		})
 		return res, nil
 	case "conversation://history":
 		if err := a.assertResourceURIAllowed(ctx, p.URI); err != nil {
@@ -1236,7 +1242,10 @@ func (a *MCPAdapter) ResourcesRead(ctx context.Context, p *ResourcesReadPayload)
 		if aerr != nil {
 			return nil, goa.PermanentError("invalid_params", "%s", aerr.Error())
 		}
-		req := &http.Request{Body: io.NopCloser(bytes.NewReader(args)), Header: http.Header{"Content-Type": []string{"application/json"}}}
+		req := &http.Request{
+			Body:   io.NopCloser(bytes.NewReader(args)),
+			Header: http.Header{"Content-Type": []string{"application/json"}},
+		}
 		var payload *assistant.ConversationHistoryPayload
 		if err := goahttp.RequestDecoder(req).Decode(&payload); err != nil {
 			return nil, goa.PermanentError("invalid_params", "%s", err.Error())
@@ -1249,8 +1258,15 @@ func (a *MCPAdapter) ResourcesRead(ctx context.Context, p *ResourcesReadPayload)
 		if serr != nil {
 			return nil, goa.PermanentError("invalid_params", "%s", serr.Error())
 		}
-		res := &ResourcesReadResult{Contents: []*ResourceContent{{URI: baseURI, MimeType: stringPtr("application/json"), Text: &s}}}
-		a.log(ctx, "response", map[string]any{"method": "resources/read", "uri": baseURI})
+		res := &ResourcesReadResult{Contents: []*ResourceContent{&ResourceContent{
+			MimeType: stringPtr("application/json"),
+			Text:     &s,
+			URI:      baseURI,
+		}}}
+		a.log(ctx, "response", map[string]any{
+			"method": "resources/read",
+			"uri":    baseURI,
+		})
 		return res, nil
 	case "figma://design-system/mobile-checkout":
 		if err := a.assertResourceURIAllowed(ctx, p.URI); err != nil {
@@ -1264,8 +1280,15 @@ func (a *MCPAdapter) ResourcesRead(ctx context.Context, p *ResourcesReadPayload)
 		if serr != nil {
 			return nil, goa.PermanentError("invalid_params", "%s", serr.Error())
 		}
-		res := &ResourcesReadResult{Contents: []*ResourceContent{{URI: baseURI, MimeType: stringPtr("application/json"), Text: &s}}}
-		a.log(ctx, "response", map[string]any{"method": "resources/read", "uri": baseURI})
+		res := &ResourcesReadResult{Contents: []*ResourceContent{&ResourceContent{
+			MimeType: stringPtr("application/json"),
+			Text:     &s,
+			URI:      baseURI,
+		}}}
+		a.log(ctx, "response", map[string]any{
+			"method": "resources/read",
+			"uri":    baseURI,
+		})
 		return res, nil
 	default:
 		return nil, goa.PermanentError("method_not_found", "Unknown resource: %s", p.URI)
@@ -1276,15 +1299,14 @@ func (a *MCPAdapter) ResourcesRead(ctx context.Context, p *ResourcesReadPayload)
 func (a *MCPAdapter) assertResourceURIAllowed(ctx context.Context, pURI string) error {
 	base := pURI
 	if i := strings.Index(base, "?"); i >= 0 {
-		base = base[:i]
+		base = base[0:i]
 	}
-	// Merge header-driven allow/deny lists from context (CSV of names)
-	var extraAllowURIs, extraDenyURIs []string
+	var extraAllowURIs []string
+	var extraDenyURIs []string
 	if ctx != nil {
 		if v := ctx.Value("mcp_allow_names"); v != nil {
 			if s, ok := v.(string); ok {
 				for _, n := range strings.Split(s, ",") {
-					n = n
 					if u, ok2 := a.resourceNameToURI[n]; ok2 {
 						extraAllowURIs = append(extraAllowURIs, u)
 					}
@@ -1294,7 +1316,6 @@ func (a *MCPAdapter) assertResourceURIAllowed(ctx context.Context, pURI string) 
 		if v := ctx.Value("mcp_deny_names"); v != nil {
 			if s, ok := v.(string); ok {
 				for _, n := range strings.Split(s, ",") {
-					n = n
 					if u, ok2 := a.resourceNameToURI[n]; ok2 {
 						extraDenyURIs = append(extraDenyURIs, u)
 					}
@@ -1325,7 +1346,6 @@ func (a *MCPAdapter) assertResourceURIAllowed(ctx context.Context, pURI string) 
 	}
 	return fmt.Errorf("resource URI not allowed: %s", pURI)
 }
-
 func (a *MCPAdapter) ResourcesSubscribe(ctx context.Context, p *ResourcesSubscribePayload) error {
 	if !a.isInitialized(ctx) {
 		return goa.PermanentError("invalid_params", "Not initialized")
@@ -1335,7 +1355,6 @@ func (a *MCPAdapter) ResourcesSubscribe(ctx context.Context, p *ResourcesSubscri
 		return goa.PermanentError("method_not_found", "Unknown resource: %s", p.URI)
 	}
 }
-
 func (a *MCPAdapter) ResourcesUnsubscribe(ctx context.Context, p *ResourcesUnsubscribePayload) error {
 	if !a.isInitialized(ctx) {
 		return goa.PermanentError("invalid_params", "Not initialized")

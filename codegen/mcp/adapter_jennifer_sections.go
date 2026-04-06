@@ -218,6 +218,292 @@ func adapterPromptsSection(data *AdapterData) codegen.Section {
 	})
 }
 
+func adapterResourcesSection(data *AdapterData) codegen.Section {
+	return codegen.MustJenniferSection("mcp-adapter-resources", func(stmt *jen.Statement) {
+		if len(data.Resources) == 0 {
+			return
+		}
+		stmt.Comment("Resources handling").Line()
+		emitResourcesList(stmt, data)
+		emitResourcesRead(stmt, data)
+		emitAssertResourceURIAllowed(stmt)
+		emitResourcesSubscribe(stmt, data)
+		emitResourcesUnsubscribe(stmt, data)
+	})
+}
+
+func emitResourcesList(stmt *jen.Statement, data *AdapterData) {
+	stmt.Func().Params(jen.Id("a").Op("*").Id("MCPAdapter")).
+		Id("ResourcesList").
+		Params(
+			jen.Id("ctx").Qual("context", "Context"),
+			jen.Id("p").Op("*").Id("ResourcesListPayload"),
+		).
+		Params(jen.Op("*").Id("ResourcesListResult"), jen.Error()).
+		BlockFunc(func(g *jen.Group) {
+			g.If(jen.Op("!").Id("a").Dot("isInitialized").Call(jen.Id("ctx"))).Block(
+				jen.Return(jen.Nil(), jen.Id("goa").Dot("PermanentError").Call(jen.Lit("invalid_params"), jen.Lit("Not initialized"))),
+			)
+			g.Id("a").Dot("log").Call(jen.Id("ctx"), jen.Lit("request"), jen.Map(jen.String()).Any().Values(jen.Dict{
+				jen.Lit("method"): jen.Lit("resources/list"),
+			}))
+			g.Id("resources").Op(":=").Index().Op("*").Id("ResourceInfo").ValuesFunc(func(vals *jen.Group) {
+				for _, resource := range data.Resources {
+					dict := jen.Dict{
+						jen.Id("URI"):         jen.Lit(resource.URI),
+						jen.Id("Name"):        jen.Id("stringPtr").Call(jen.Lit(resource.Name)),
+						jen.Id("Description"): jen.Id("stringPtr").Call(jen.Lit(resource.Description)),
+						jen.Id("MimeType"):    jen.Id("stringPtr").Call(jen.Lit(resource.MimeType)),
+					}
+					if icons := iconSliceValue(resource.Icons); icons != nil {
+						dict[jen.Id("Icons")] = icons
+					}
+					vals.Add(jen.Op("&").Id("ResourceInfo").Values(dict))
+				}
+			})
+			g.Id("res").Op(":=").Op("&").Id("ResourcesListResult").Values(jen.Dict{
+				jen.Id("Resources"): jen.Id("resources"),
+			})
+			g.Id("a").Dot("log").Call(jen.Id("ctx"), jen.Lit("response"), jen.Map(jen.String()).Any().Values(jen.Dict{
+				jen.Lit("method"): jen.Lit("resources/list"),
+			}))
+			g.Return(jen.Id("res"), jen.Nil())
+		})
+	stmt.Line()
+}
+
+func emitResourcesRead(stmt *jen.Statement, data *AdapterData) {
+	stmt.Func().Params(jen.Id("a").Op("*").Id("MCPAdapter")).
+		Id("ResourcesRead").
+		Params(
+			jen.Id("ctx").Qual("context", "Context"),
+			jen.Id("p").Op("*").Id("ResourcesReadPayload"),
+		).
+		Params(jen.Op("*").Id("ResourcesReadResult"), jen.Error()).
+		BlockFunc(func(g *jen.Group) {
+			g.If(jen.Op("!").Id("a").Dot("isInitialized").Call(jen.Id("ctx"))).Block(
+				jen.Return(jen.Nil(), jen.Id("goa").Dot("PermanentError").Call(jen.Lit("invalid_params"), jen.Lit("Not initialized"))),
+			)
+			g.Id("a").Dot("log").Call(jen.Id("ctx"), jen.Lit("request"), jen.Map(jen.String()).Any().Values(jen.Dict{
+				jen.Lit("method"): jen.Lit("resources/read"),
+				jen.Lit("uri"):    jen.Id("p").Dot("URI"),
+			}))
+			g.Id("baseURI").Op(":=").Id("p").Dot("URI")
+			g.If(jen.Id("i").Op(":=").Qual("strings", "Index").Call(jen.Id("baseURI"), jen.Lit("?")), jen.Id("i").Op(">=").Lit(0)).Block(
+				jen.Id("baseURI").Op("=").Id("baseURI").Index(jen.Lit(0), jen.Id("i")),
+			)
+			g.Switch(jen.Id("baseURI")).BlockFunc(func(sw *jen.Group) {
+				for _, resource := range data.Resources {
+					sw.Case(jen.Lit(resource.URI)).BlockFunc(func(caseg *jen.Group) {
+						caseg.If(jen.Id("err").Op(":=").Id("a").Dot("assertResourceURIAllowed").Call(jen.Id("ctx"), jen.Id("p").Dot("URI")), jen.Id("err").Op("!=").Nil()).Block(
+							jen.Return(jen.Nil(), jen.Id("goa").Dot("PermanentError").Call(jen.Lit("invalid_params"), jen.Lit("%s"), jen.Id("err").Dot("Error").Call())),
+						)
+						if resource.HasPayload {
+							caseg.List(jen.Id("args"), jen.Id("aerr")).Op(":=").Id("parseQueryParamsToJSON").Call(jen.Id("p").Dot("URI"))
+							caseg.If(jen.Id("aerr").Op("!=").Nil()).Block(
+								jen.Return(jen.Nil(), jen.Id("goa").Dot("PermanentError").Call(jen.Lit("invalid_params"), jen.Lit("%s"), jen.Id("aerr").Dot("Error").Call())),
+							)
+							caseg.Id("req").Op(":=").Op("&").Qual("net/http", "Request").Values(jen.Dict{
+								jen.Id("Body"): jen.Qual("io", "NopCloser").Call(jen.Qual("bytes", "NewReader").Call(jen.Id("args"))),
+								jen.Id("Header"): jen.Qual("net/http", "Header").Values(jen.Dict{
+									jen.Lit("Content-Type"): jen.Index().String().Values(jen.Lit("application/json")),
+								}),
+							})
+							caseg.Var().Id("payload").Add(rawExpr(resource.PayloadType))
+							caseg.If(jen.Id("err").Op(":=").Id("goahttp").Dot("RequestDecoder").Call(jen.Id("req")).Dot("Decode").Call(jen.Op("&").Id("payload")), jen.Id("err").Op("!=").Nil()).Block(
+								jen.Return(jen.Nil(), jen.Id("goa").Dot("PermanentError").Call(jen.Lit("invalid_params"), jen.Lit("%s"), jen.Id("err").Dot("Error").Call())),
+							)
+						}
+						if resource.HasResult {
+							if resource.HasPayload {
+								caseg.List(jen.Id("result"), jen.Id("err")).Op(":=").Id("a").Dot("service").Dot(resource.OriginalMethodName).Call(jen.Id("ctx"), jen.Id("payload"))
+							} else {
+								caseg.List(jen.Id("result"), jen.Id("err")).Op(":=").Id("a").Dot("service").Dot(resource.OriginalMethodName).Call(jen.Id("ctx"))
+							}
+							caseg.If(jen.Id("err").Op("!=").Nil()).Block(
+								jen.Return(jen.Nil(), jen.Id("a").Dot("mapError").Call(jen.Id("err"))),
+							)
+							caseg.List(jen.Id("s"), jen.Id("serr")).Op(":=").Id("mcpruntime").Dot("EncodeJSONToString").Call(jen.Id("ctx"), jen.Id("goahttp").Dot("ResponseEncoder"), jen.Id("result"))
+							caseg.If(jen.Id("serr").Op("!=").Nil()).Block(
+								jen.Return(jen.Nil(), jen.Id("goa").Dot("PermanentError").Call(jen.Lit("invalid_params"), jen.Lit("%s"), jen.Id("serr").Dot("Error").Call())),
+							)
+							caseg.Id("res").Op(":=").Op("&").Id("ResourcesReadResult").Values(jen.Dict{
+								jen.Id("Contents"): jen.Index().Op("*").Id("ResourceContent").Values(
+									jen.Op("&").Id("ResourceContent").Values(jen.Dict{
+										jen.Id("URI"):      jen.Id("baseURI"),
+										jen.Id("MimeType"): jen.Id("stringPtr").Call(jen.Lit(resource.MimeType)),
+										jen.Id("Text"):     jen.Op("&").Id("s"),
+									}),
+								),
+							})
+							caseg.Id("a").Dot("log").Call(jen.Id("ctx"), jen.Lit("response"), jen.Map(jen.String()).Any().Values(jen.Dict{
+								jen.Lit("method"): jen.Lit("resources/read"),
+								jen.Lit("uri"):    jen.Id("baseURI"),
+							}))
+							caseg.Return(jen.Id("res"), jen.Nil())
+							return
+						}
+						if resource.HasPayload {
+							caseg.If(jen.Id("err").Op(":=").Id("a").Dot("service").Dot(resource.OriginalMethodName).Call(jen.Id("ctx"), jen.Id("payload")), jen.Id("err").Op("!=").Nil()).Block(
+								jen.Return(jen.Nil(), jen.Id("a").Dot("mapError").Call(jen.Id("err"))),
+							)
+						} else {
+							caseg.If(jen.Id("err").Op(":=").Id("a").Dot("service").Dot(resource.OriginalMethodName).Call(jen.Id("ctx")), jen.Id("err").Op("!=").Nil()).Block(
+								jen.Return(jen.Nil(), jen.Id("a").Dot("mapError").Call(jen.Id("err"))),
+							)
+						}
+						caseg.Id("res").Op(":=").Op("&").Id("ResourcesReadResult").Values(jen.Dict{
+							jen.Id("Contents"): jen.Index().Op("*").Id("ResourceContent").Values(
+								jen.Op("&").Id("ResourceContent").Values(jen.Dict{
+									jen.Id("URI"):      jen.Id("baseURI"),
+									jen.Id("MimeType"): jen.Id("stringPtr").Call(jen.Lit(resource.MimeType)),
+									jen.Id("Text"):     jen.Id("stringPtr").Call(jen.Lit(`{"status":"success"}`)),
+								}),
+							),
+						})
+						caseg.Id("a").Dot("log").Call(jen.Id("ctx"), jen.Lit("response"), jen.Map(jen.String()).Any().Values(jen.Dict{
+							jen.Lit("method"): jen.Lit("resources/read"),
+							jen.Lit("uri"):    jen.Id("baseURI"),
+						}))
+						caseg.Return(jen.Id("res"), jen.Nil())
+					})
+				}
+				sw.Default().Block(
+					jen.Return(jen.Nil(), jen.Id("goa").Dot("PermanentError").Call(jen.Lit("method_not_found"), jen.Lit("Unknown resource: %s"), jen.Id("p").Dot("URI"))),
+				)
+			})
+		})
+	stmt.Line()
+}
+
+func emitAssertResourceURIAllowed(stmt *jen.Statement) {
+	stmt.Comment("assertResourceURIAllowed verifies pURI passes allow/deny filters when configured.").Line()
+	stmt.Func().Params(jen.Id("a").Op("*").Id("MCPAdapter")).
+		Id("assertResourceURIAllowed").
+		Params(
+			jen.Id("ctx").Qual("context", "Context"),
+			jen.Id("pURI").String(),
+		).
+		Error().
+		Block(
+			jen.Id("base").Op(":=").Id("pURI"),
+			jen.If(jen.Id("i").Op(":=").Qual("strings", "Index").Call(jen.Id("base"), jen.Lit("?")), jen.Id("i").Op(">=").Lit(0)).Block(
+				jen.Id("base").Op("=").Id("base").Index(jen.Lit(0), jen.Id("i")),
+			),
+			jen.Var().Id("extraAllowURIs").Index().String(),
+			jen.Var().Id("extraDenyURIs").Index().String(),
+			jen.If(jen.Id("ctx").Op("!=").Nil()).Block(
+				appendResourceURIsFromContextValue("mcp_allow_names", "extraAllowURIs"),
+				appendResourceURIsFromContextValue("mcp_deny_names", "extraDenyURIs"),
+			),
+			jen.Var().Id("denied").Index().String(),
+			jen.If(jen.Id("a").Dot("opts").Op("!=").Nil()).Block(
+				jen.Id("denied").Op("=").Id("a").Dot("opts").Dot("DeniedResourceURIs"),
+			),
+			jen.For(jen.List(jen.Id("_"), jen.Id("d")).Op(":=").Range().Append(jen.Id("denied"), jen.Id("extraDenyURIs").Op("..."))).Block(
+				jen.If(jen.Id("d").Op("==").Id("base")).Block(
+					jen.Return(jen.Qual("fmt", "Errorf").Call(jen.Lit("resource URI denied: %s"), jen.Id("pURI"))),
+				),
+			),
+			jen.Var().Id("allowed").Index().String(),
+			jen.If(jen.Id("a").Dot("opts").Op("!=").Nil()).Block(
+				jen.Id("allowed").Op("=").Id("a").Dot("opts").Dot("AllowedResourceURIs"),
+			),
+			jen.If(jen.Len(jen.Id("allowed")).Op("==").Lit(0).Op("&&").Len(jen.Id("extraAllowURIs")).Op("==").Lit(0)).Block(
+				jen.Return(jen.Nil()),
+			),
+			jen.For(jen.List(jen.Id("_"), jen.Id("allow")).Op(":=").Range().Append(jen.Id("allowed"), jen.Id("extraAllowURIs").Op("..."))).Block(
+				jen.If(jen.Id("allow").Op("==").Id("base")).Block(
+					jen.Return(jen.Nil()),
+				),
+			),
+			jen.Return(jen.Qual("fmt", "Errorf").Call(jen.Lit("resource URI not allowed: %s"), jen.Id("pURI"))),
+		)
+	stmt.Line()
+}
+
+func appendResourceURIsFromContextValue(ctxKey, targetSlice string) jen.Code {
+	return jen.If(jen.Id("v").Op(":=").Id("ctx").Dot("Value").Call(jen.Lit(ctxKey)), jen.Id("v").Op("!=").Nil()).Block(
+		jen.If(jen.List(jen.Id("s"), jen.Id("ok")).Op(":=").Id("v").Assert(jen.String()), jen.Id("ok")).Block(
+			jen.For(jen.List(jen.Id("_"), jen.Id("n")).Op(":=").Range().Qual("strings", "Split").Call(jen.Id("s"), jen.Lit(","))).Block(
+				jen.If(jen.List(jen.Id("u"), jen.Id("ok2")).Op(":=").Id("a").Dot("resourceNameToURI").Index(jen.Id("n")), jen.Id("ok2")).Block(
+					jen.Id(targetSlice).Op("=").Append(jen.Id(targetSlice), jen.Id("u")),
+				),
+			),
+		),
+	)
+}
+
+func emitResourcesSubscribe(stmt *jen.Statement, data *AdapterData) {
+	stmt.Func().Params(jen.Id("a").Op("*").Id("MCPAdapter")).
+		Id("ResourcesSubscribe").
+		Params(
+			jen.Id("ctx").Qual("context", "Context"),
+			jen.Id("p").Op("*").Id("ResourcesSubscribePayload"),
+		).
+		Error().
+		BlockFunc(func(g *jen.Group) {
+			g.If(jen.Op("!").Id("a").Dot("isInitialized").Call(jen.Id("ctx"))).Block(
+				jen.Return(jen.Id("goa").Dot("PermanentError").Call(jen.Lit("invalid_params"), jen.Lit("Not initialized"))),
+			)
+			g.Switch(jen.Id("p").Dot("URI")).BlockFunc(func(sw *jen.Group) {
+				for _, resource := range data.Resources {
+					if !resource.Watchable {
+						continue
+					}
+					sw.Case(jen.Lit(resource.URI)).Block(
+						jen.Id("a").Dot("subsMu").Dot("Lock").Call(),
+						jen.Id("a").Dot("subs").Index(jen.Id("p").Dot("URI")).Op("=").Id("a").Dot("subs").Index(jen.Id("p").Dot("URI")).Op("+").Lit(1),
+						jen.Id("a").Dot("subsMu").Dot("Unlock").Call(),
+						jen.Return(jen.Nil()),
+					)
+				}
+				sw.Default().Block(
+					jen.Return(jen.Id("goa").Dot("PermanentError").Call(jen.Lit("method_not_found"), jen.Lit("Unknown resource: %s"), jen.Id("p").Dot("URI"))),
+				)
+			})
+		})
+	stmt.Line()
+}
+
+func emitResourcesUnsubscribe(stmt *jen.Statement, data *AdapterData) {
+	stmt.Func().Params(jen.Id("a").Op("*").Id("MCPAdapter")).
+		Id("ResourcesUnsubscribe").
+		Params(
+			jen.Id("ctx").Qual("context", "Context"),
+			jen.Id("p").Op("*").Id("ResourcesUnsubscribePayload"),
+		).
+		Error().
+		BlockFunc(func(g *jen.Group) {
+			g.If(jen.Op("!").Id("a").Dot("isInitialized").Call(jen.Id("ctx"))).Block(
+				jen.Return(jen.Id("goa").Dot("PermanentError").Call(jen.Lit("invalid_params"), jen.Lit("Not initialized"))),
+			)
+			g.Switch(jen.Id("p").Dot("URI")).BlockFunc(func(sw *jen.Group) {
+				for _, resource := range data.Resources {
+					if !resource.Watchable {
+						continue
+					}
+					sw.Case(jen.Lit(resource.URI)).Block(
+						jen.Id("a").Dot("subsMu").Dot("Lock").Call(),
+						jen.If(jen.List(jen.Id("n"), jen.Id("ok")).Op(":=").Id("a").Dot("subs").Index(jen.Id("p").Dot("URI")), jen.Id("ok")).Block(
+							jen.If(jen.Id("n").Op(">").Lit(1)).Block(
+								jen.Id("a").Dot("subs").Index(jen.Id("p").Dot("URI")).Op("=").Id("n").Op("-").Lit(1),
+							).Else().Block(
+								jen.Delete(jen.Id("a").Dot("subs"), jen.Id("p").Dot("URI")),
+							),
+						),
+						jen.Id("a").Dot("subsMu").Dot("Unlock").Call(),
+						jen.Return(jen.Nil()),
+					)
+				}
+				sw.Default().Block(
+					jen.Return(jen.Id("goa").Dot("PermanentError").Call(jen.Lit("method_not_found"), jen.Lit("Unknown resource: %s"), jen.Id("p").Dot("URI"))),
+				)
+			})
+		})
+	stmt.Line()
+}
+
 func emitPromptsList(stmt *jen.Statement, data *AdapterData) {
 	stmt.Func().Params(jen.Id("a").Op("*").Id("MCPAdapter")).
 		Id("PromptsList").

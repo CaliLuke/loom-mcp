@@ -18,7 +18,7 @@ Goal: replace template-backed Go code generation where Jennifer materially impro
 - [x] `codegen/mcp/templates/sdk_server.go.tpl`
 - [ ] `codegen/mcp/templates/adapter_core.go.tpl`
 - [ ] `codegen/mcp/templates/adapter_tools.go.tpl`
-- [ ] `codegen/mcp/templates/adapter_resources.go.tpl`
+- [x] `codegen/mcp/templates/adapter_resources.go.tpl`
 - [x] `codegen/mcp/templates/adapter_prompts.go.tpl`
 - [x] `codegen/mcp/templates/adapter_notifications.go.tpl`
 - [x] `codegen/mcp/templates/adapter_subscriptions.go.tpl`

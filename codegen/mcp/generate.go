@@ -388,7 +388,7 @@ func buildMCPAdapterFile(genpkg string, svc *expr.ServiceExpr, data *AdapterData
 			templateSection("mcp-adapter-core", "adapter_core", data),
 			adapterBroadcastSection(),
 			templateSection("mcp-adapter-tools", "adapter_tools", data),
-			templateSection("mcp-adapter-resources", "adapter_resources", data),
+			adapterResourcesSection(data),
 			adapterPromptsSection(data),
 			adapterNotificationsSection(),
 			adapterSubscriptionsSection(data),
