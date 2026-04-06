@@ -28,13 +28,8 @@ import (
 	jsonrpc "github.com/CaliLuke/loom/jsonrpc"
 )
 
-// encodeOriginalPayload serializes an original-service payload without a
-// JSON-RPC envelope so MCP tool and prompt calls can forward raw arguments.
-func encodeOriginalPayload(
-	ctx context.Context,
-	enc func(*http.Request) goahttp.Encoder,
-	payload any,
-) ([]byte, error) {
+// encodeOriginalPayload serializes an original-service payload without a JSON-RPC envelope so MCP calls can forward raw arguments.
+func encodeOriginalPayload(ctx context.Context, enc func(*http.Request) goahttp.Encoder, payload any) ([]byte, error) {
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, "", nil)
 	if err != nil {
 		return nil, err
@@ -45,14 +40,8 @@ func encodeOriginalPayload(
 	return io.ReadAll(req.Body)
 }
 
-// decodeOriginalJSONRPCResult rehydrates one MCP result as the original
-// service's JSON-RPC response shape and decodes it with Goa's generated client.
-func decodeOriginalJSONRPCResult(
-	enc func(*http.Request) goahttp.Encoder,
-	req *http.Request,
-	result []byte,
-	decode func(*http.Response) (any, error),
-) (any, error) {
+// decodeOriginalJSONRPCResult rehydrates one MCP result into the original service JSON-RPC response shape.
+func decodeOriginalJSONRPCResult(enc func(*http.Request) goahttp.Encoder, req *http.Request, result []byte, decode func(*http.Response) (any, error)) (any, error) {
 	raw := &jsonrpc.RawResponse{
 		JSONRPC: "2.0",
 		Result:  result,
@@ -65,8 +54,8 @@ func decodeOriginalJSONRPCResult(
 		return nil, err
 	}
 	resp := &http.Response{
-		StatusCode: http.StatusOK,
 		Body:       io.NopCloser(bytes.NewReader(bodyBytes)),
+		StatusCode: http.StatusOK,
 	}
 	return decode(resp)
 }
@@ -103,7 +92,6 @@ func (d *sessionAwareDoer) Do(req *http.Request) (*http.Response, error) {
 	d.captureSessionID(resp)
 	return resp, nil
 }
-
 func (d *sessionAwareDoer) ensureInitialized(ctx context.Context) error {
 	d.initMu.Lock()
 	defer d.initMu.Unlock()
@@ -119,13 +107,11 @@ func (d *sessionAwareDoer) ensureInitialized(ctx context.Context) error {
 	d.initialized = true
 	return nil
 }
-
 func (d *sessionAwareDoer) currentSessionID() string {
 	d.sessionMu.Lock()
 	defer d.sessionMu.Unlock()
 	return d.sessionID
 }
-
 func (d *sessionAwareDoer) captureSessionID(resp *http.Response) {
 	if d == nil || resp == nil {
 		return
@@ -136,7 +122,6 @@ func (d *sessionAwareDoer) captureSessionID(resp *http.Response) {
 		d.sessionMu.Unlock()
 	}
 }
-
 func jsonRPCMethod(req *http.Request) (string, error) {
 	if req == nil || req.Body == nil {
 		return "", nil
@@ -158,59 +143,49 @@ func jsonRPCMethod(req *http.Request) (string, error) {
 	return envelope.Method, nil
 }
 
-// NewEndpoints creates endpoints that expose the original service API while
-// invoking the MCP transport under the hood for mapped methods.
-// NewEndpoints creates an Endpoints set that routes mapped methods through
-// the MCP transport while leaving unmapped methods on the original transport.
-func NewEndpoints(
-	scheme string,
-	host string,
-	doer goahttp.Doer,
-	enc func(*http.Request) goahttp.Encoder,
-	dec func(*http.Response) goahttp.Decoder,
-	restore bool,
-) *assistant.Endpoints {
-	// Transport clients
+// NewEndpoints creates endpoints that expose the original service API while routing mapped methods through MCP.
+func NewEndpoints(scheme string, host string, doer goahttp.Doer, enc func(*http.Request) goahttp.Encoder, dec func(*http.Response) goahttp.Decoder, restore bool) *assistant.Endpoints {
 	sessionDoer := &sessionAwareDoer{base: doer}
 	mcpC := mcpAssistantjsonrpcc.NewClient(scheme, host, sessionDoer, enc, dec, restore)
 	sessionDoer.bootstrap = func(ctx context.Context) error {
 		_, err := mcpC.Initialize()(ctx, &mcpAssistant.InitializePayload{
-			ProtocolVersion: "2025-06-18",
 			ClientInfo: &mcpAssistant.ClientInfo{
 				Name:    "loom-mcp-adapter",
 				Version: "dev",
 			},
+			ProtocolVersion: "2025-06-18",
 		})
 		return err
 	}
 	mcpCaller := mcpAssistantjsonrpcc.NewCaller(mcpC, "")
 	origC := assistantjsonrpcc.NewClient(scheme, host, doer, enc, dec, restore)
-
-	// Build endpoints matching the original service
 	e := &assistant.Endpoints{}
 	// Tool: analyze_sentiment -> AnalyzeSentiment
 	e.AnalyzeSentiment = func(ctx context.Context, v any) (any, error) {
-		// Encode original payload to raw JSON using Goa encoder (no JSON-RPC envelope)
 		var payload any
 		payload = v.(*assistant.AnalyzeSentimentPayload)
 		args, err := encodeOriginalPayload(ctx, enc, payload)
 		if err != nil {
 			return nil, err
 		}
-
 		toolResp, err := mcpCaller.CallTool(ctx, mcpruntime.CallRequest{
-			Tool:    "analyze_sentiment",
 			Payload: args,
+			Tool:    "analyze_sentiment",
 		})
 		if err != nil {
 			prompt := retry.BuildRepairPrompt("tools/call:analyze_sentiment", err.Error(), "{\"text\":\"abc123\"}", "{\"type\":\"object\",\"required\":[\"text\"],\"properties\":{\"text\":{\"type\":\"string\",\"description\":\"Input text to analyze\"}},\"additionalProperties\":false}")
-			return nil, &retry.RetryableError{Prompt: prompt, Cause: err}
+			return nil, &retry.RetryableError{
+				Cause:  err,
+				Prompt: prompt,
+			}
 		}
 		if len(toolResp.Result) == 0 {
 			prompt := retry.BuildRepairPrompt("tools/call:analyze_sentiment", "empty MCP tool response", "{\"text\":\"abc123\"}", "{\"type\":\"object\",\"required\":[\"text\"],\"properties\":{\"text\":{\"type\":\"string\",\"description\":\"Input text to analyze\"}},\"additionalProperties\":false}")
-			return nil, &retry.RetryableError{Prompt: prompt, Cause: fmt.Errorf("empty MCP tool response for analyze_sentiment")}
+			return nil, &retry.RetryableError{
+				Cause:  fmt.Errorf("empty MCP tool response for analyze_sentiment"),
+				Prompt: prompt,
+			}
 		}
-		// Build JSON-RPC response envelope and decode using Goa-generated decoder
 		req3, err := origC.BuildAnalyzeSentimentRequest(ctx, v)
 		if err != nil {
 			return nil, err
@@ -218,29 +193,33 @@ func NewEndpoints(
 		decode := assistantjsonrpcc.DecodeAnalyzeSentimentResponse(dec, false)
 		return decodeOriginalJSONRPCResult(enc, req3, toolResp.Result, decode)
 	}
+
 	// Tool: extract_keywords -> ExtractKeywords
 	e.ExtractKeywords = func(ctx context.Context, v any) (any, error) {
-		// Encode original payload to raw JSON using Goa encoder (no JSON-RPC envelope)
 		var payload any
 		payload = v.(*assistant.ExtractKeywordsPayload)
 		args, err := encodeOriginalPayload(ctx, enc, payload)
 		if err != nil {
 			return nil, err
 		}
-
 		toolResp, err := mcpCaller.CallTool(ctx, mcpruntime.CallRequest{
-			Tool:    "extract_keywords",
 			Payload: args,
+			Tool:    "extract_keywords",
 		})
 		if err != nil {
 			prompt := retry.BuildRepairPrompt("tools/call:extract_keywords", err.Error(), "{\"text\":\"abc123\"}", "{\"type\":\"object\",\"required\":[\"text\"],\"properties\":{\"text\":{\"type\":\"string\",\"description\":\"Input text\"}},\"additionalProperties\":false}")
-			return nil, &retry.RetryableError{Prompt: prompt, Cause: err}
+			return nil, &retry.RetryableError{
+				Cause:  err,
+				Prompt: prompt,
+			}
 		}
 		if len(toolResp.Result) == 0 {
 			prompt := retry.BuildRepairPrompt("tools/call:extract_keywords", "empty MCP tool response", "{\"text\":\"abc123\"}", "{\"type\":\"object\",\"required\":[\"text\"],\"properties\":{\"text\":{\"type\":\"string\",\"description\":\"Input text\"}},\"additionalProperties\":false}")
-			return nil, &retry.RetryableError{Prompt: prompt, Cause: fmt.Errorf("empty MCP tool response for extract_keywords")}
+			return nil, &retry.RetryableError{
+				Cause:  fmt.Errorf("empty MCP tool response for extract_keywords"),
+				Prompt: prompt,
+			}
 		}
-		// Build JSON-RPC response envelope and decode using Goa-generated decoder
 		req3, err := origC.BuildExtractKeywordsRequest(ctx, v)
 		if err != nil {
 			return nil, err
@@ -248,29 +227,33 @@ func NewEndpoints(
 		decode := assistantjsonrpcc.DecodeExtractKeywordsResponse(dec, false)
 		return decodeOriginalJSONRPCResult(enc, req3, toolResp.Result, decode)
 	}
+
 	// Tool: summarize_text -> SummarizeText
 	e.SummarizeText = func(ctx context.Context, v any) (any, error) {
-		// Encode original payload to raw JSON using Goa encoder (no JSON-RPC envelope)
 		var payload any
 		payload = v.(*assistant.SummarizeTextPayload)
 		args, err := encodeOriginalPayload(ctx, enc, payload)
 		if err != nil {
 			return nil, err
 		}
-
 		toolResp, err := mcpCaller.CallTool(ctx, mcpruntime.CallRequest{
-			Tool:    "summarize_text",
 			Payload: args,
+			Tool:    "summarize_text",
 		})
 		if err != nil {
 			prompt := retry.BuildRepairPrompt("tools/call:summarize_text", err.Error(), "{\"text\":\"abc123\"}", "{\"type\":\"object\",\"required\":[\"text\"],\"properties\":{\"text\":{\"type\":\"string\",\"description\":\"Input text to summarize\"}},\"additionalProperties\":false}")
-			return nil, &retry.RetryableError{Prompt: prompt, Cause: err}
+			return nil, &retry.RetryableError{
+				Cause:  err,
+				Prompt: prompt,
+			}
 		}
 		if len(toolResp.Result) == 0 {
 			prompt := retry.BuildRepairPrompt("tools/call:summarize_text", "empty MCP tool response", "{\"text\":\"abc123\"}", "{\"type\":\"object\",\"required\":[\"text\"],\"properties\":{\"text\":{\"type\":\"string\",\"description\":\"Input text to summarize\"}},\"additionalProperties\":false}")
-			return nil, &retry.RetryableError{Prompt: prompt, Cause: fmt.Errorf("empty MCP tool response for summarize_text")}
+			return nil, &retry.RetryableError{
+				Cause:  fmt.Errorf("empty MCP tool response for summarize_text"),
+				Prompt: prompt,
+			}
 		}
-		// Build JSON-RPC response envelope and decode using Goa-generated decoder
 		req3, err := origC.BuildSummarizeTextRequest(ctx, v)
 		if err != nil {
 			return nil, err
@@ -278,29 +261,33 @@ func NewEndpoints(
 		decode := assistantjsonrpcc.DecodeSummarizeTextResponse(dec, false)
 		return decodeOriginalJSONRPCResult(enc, req3, toolResp.Result, decode)
 	}
+
 	// Tool: search -> Search
 	e.Search = func(ctx context.Context, v any) (any, error) {
-		// Encode original payload to raw JSON using Goa encoder (no JSON-RPC envelope)
 		var payload any
 		payload = v.(*assistant.SearchPayload)
 		args, err := encodeOriginalPayload(ctx, enc, payload)
 		if err != nil {
 			return nil, err
 		}
-
 		toolResp, err := mcpCaller.CallTool(ctx, mcpruntime.CallRequest{
-			Tool:    "search",
 			Payload: args,
+			Tool:    "search",
 		})
 		if err != nil {
 			prompt := retry.BuildRepairPrompt("tools/call:search", err.Error(), "{\"limit\":1,\"query\":\"abc123\"}", "{\"type\":\"object\",\"required\":[\"query\"],\"properties\":{\"limit\":{\"type\":\"integer\",\"description\":\"Maximum number of results\"},\"query\":{\"type\":\"string\",\"description\":\"Search query\"}},\"additionalProperties\":false}")
-			return nil, &retry.RetryableError{Prompt: prompt, Cause: err}
+			return nil, &retry.RetryableError{
+				Cause:  err,
+				Prompt: prompt,
+			}
 		}
 		if len(toolResp.Result) == 0 {
 			prompt := retry.BuildRepairPrompt("tools/call:search", "empty MCP tool response", "{\"limit\":1,\"query\":\"abc123\"}", "{\"type\":\"object\",\"required\":[\"query\"],\"properties\":{\"limit\":{\"type\":\"integer\",\"description\":\"Maximum number of results\"},\"query\":{\"type\":\"string\",\"description\":\"Search query\"}},\"additionalProperties\":false}")
-			return nil, &retry.RetryableError{Prompt: prompt, Cause: fmt.Errorf("empty MCP tool response for search")}
+			return nil, &retry.RetryableError{
+				Cause:  fmt.Errorf("empty MCP tool response for search"),
+				Prompt: prompt,
+			}
 		}
-		// Build JSON-RPC response envelope and decode using Goa-generated decoder
 		req3, err := origC.BuildSearchRequest(ctx, v)
 		if err != nil {
 			return nil, err
@@ -308,29 +295,33 @@ func NewEndpoints(
 		decode := assistantjsonrpcc.DecodeSearchResponse(dec, false)
 		return decodeOriginalJSONRPCResult(enc, req3, toolResp.Result, decode)
 	}
+
 	// Tool: execute_code -> ExecuteCode
 	e.ExecuteCode = func(ctx context.Context, v any) (any, error) {
-		// Encode original payload to raw JSON using Goa encoder (no JSON-RPC envelope)
 		var payload any
 		payload = v.(*assistant.ExecuteCodePayload)
 		args, err := encodeOriginalPayload(ctx, enc, payload)
 		if err != nil {
 			return nil, err
 		}
-
 		toolResp, err := mcpCaller.CallTool(ctx, mcpruntime.CallRequest{
-			Tool:    "execute_code",
 			Payload: args,
+			Tool:    "execute_code",
 		})
 		if err != nil {
 			prompt := retry.BuildRepairPrompt("tools/call:execute_code", err.Error(), "{\"code\":\"abc123\",\"language\":\"javascript\"}", "{\"type\":\"object\",\"required\":[\"language\",\"code\"],\"properties\":{\"code\":{\"type\":\"string\",\"description\":\"Code to execute\"},\"language\":{\"type\":\"string\",\"description\":\"Language to execute\",\"enum\":[\"python\",\"javascript\"]}},\"additionalProperties\":false}")
-			return nil, &retry.RetryableError{Prompt: prompt, Cause: err}
+			return nil, &retry.RetryableError{
+				Cause:  err,
+				Prompt: prompt,
+			}
 		}
 		if len(toolResp.Result) == 0 {
 			prompt := retry.BuildRepairPrompt("tools/call:execute_code", "empty MCP tool response", "{\"code\":\"abc123\",\"language\":\"javascript\"}", "{\"type\":\"object\",\"required\":[\"language\",\"code\"],\"properties\":{\"code\":{\"type\":\"string\",\"description\":\"Code to execute\"},\"language\":{\"type\":\"string\",\"description\":\"Language to execute\",\"enum\":[\"python\",\"javascript\"]}},\"additionalProperties\":false}")
-			return nil, &retry.RetryableError{Prompt: prompt, Cause: fmt.Errorf("empty MCP tool response for execute_code")}
+			return nil, &retry.RetryableError{
+				Cause:  fmt.Errorf("empty MCP tool response for execute_code"),
+				Prompt: prompt,
+			}
 		}
-		// Build JSON-RPC response envelope and decode using Goa-generated decoder
 		req3, err := origC.BuildExecuteCodeRequest(ctx, v)
 		if err != nil {
 			return nil, err
@@ -338,29 +329,33 @@ func NewEndpoints(
 		decode := assistantjsonrpcc.DecodeExecuteCodeResponse(dec, false)
 		return decodeOriginalJSONRPCResult(enc, req3, toolResp.Result, decode)
 	}
+
 	// Tool: process_batch -> ProcessBatch
 	e.ProcessBatch = func(ctx context.Context, v any) (any, error) {
-		// Encode original payload to raw JSON using Goa encoder (no JSON-RPC envelope)
 		var payload any
 		payload = v.(*assistant.ProcessBatchPayload)
 		args, err := encodeOriginalPayload(ctx, enc, payload)
 		if err != nil {
 			return nil, err
 		}
-
 		toolResp, err := mcpCaller.CallTool(ctx, mcpruntime.CallRequest{
-			Tool:    "process_batch",
 			Payload: args,
+			Tool:    "process_batch",
 		})
 		if err != nil {
 			prompt := retry.BuildRepairPrompt("tools/call:process_batch", err.Error(), "{\"blob\":\"abc123\",\"format\":\"text\",\"items\":[\"abc123\"],\"mimeType\":\"abc123\",\"uri\":\"abc123\"}", "{\"type\":\"object\",\"required\":[\"items\"],\"properties\":{\"blob\":{\"type\":\"string\",\"description\":\"Base64 blob\"},\"format\":{\"type\":\"string\",\"description\":\"Output format\",\"enum\":[\"json\",\"text\",\"blob\",\"uri\"]},\"items\":{\"type\":\"array\",\"description\":\"Items to process\",\"items\":{\"type\":\"string\"}},\"mimeType\":{\"type\":\"string\",\"description\":\"MIME type\"},\"uri\":{\"type\":\"string\",\"description\":\"Resource URI\"}},\"additionalProperties\":false}")
-			return nil, &retry.RetryableError{Prompt: prompt, Cause: err}
+			return nil, &retry.RetryableError{
+				Cause:  err,
+				Prompt: prompt,
+			}
 		}
 		if len(toolResp.Result) == 0 {
 			prompt := retry.BuildRepairPrompt("tools/call:process_batch", "empty MCP tool response", "{\"blob\":\"abc123\",\"format\":\"text\",\"items\":[\"abc123\"],\"mimeType\":\"abc123\",\"uri\":\"abc123\"}", "{\"type\":\"object\",\"required\":[\"items\"],\"properties\":{\"blob\":{\"type\":\"string\",\"description\":\"Base64 blob\"},\"format\":{\"type\":\"string\",\"description\":\"Output format\",\"enum\":[\"json\",\"text\",\"blob\",\"uri\"]},\"items\":{\"type\":\"array\",\"description\":\"Items to process\",\"items\":{\"type\":\"string\"}},\"mimeType\":{\"type\":\"string\",\"description\":\"MIME type\"},\"uri\":{\"type\":\"string\",\"description\":\"Resource URI\"}},\"additionalProperties\":false}")
-			return nil, &retry.RetryableError{Prompt: prompt, Cause: fmt.Errorf("empty MCP tool response for process_batch")}
+			return nil, &retry.RetryableError{
+				Cause:  fmt.Errorf("empty MCP tool response for process_batch"),
+				Prompt: prompt,
+			}
 		}
-		// Build JSON-RPC response envelope and decode using Goa-generated decoder
 		req3, err := origC.BuildProcessBatchRequest(ctx, v)
 		if err != nil {
 			return nil, err
@@ -368,29 +363,33 @@ func NewEndpoints(
 		decode := assistantjsonrpcc.DecodeProcessBatchResponse(dec, false)
 		return decodeOriginalJSONRPCResult(enc, req3, toolResp.Result, decode)
 	}
+
 	// Tool: multi_content -> MultiContent
 	e.MultiContent = func(ctx context.Context, v any) (any, error) {
-		// Encode original payload to raw JSON using Goa encoder (no JSON-RPC envelope)
 		var payload any
 		payload = v.(*assistant.MultiContentPayload)
 		args, err := encodeOriginalPayload(ctx, enc, payload)
 		if err != nil {
 			return nil, err
 		}
-
 		toolResp, err := mcpCaller.CallTool(ctx, mcpruntime.CallRequest{
-			Tool:    "multi_content",
 			Payload: args,
+			Tool:    "multi_content",
 		})
 		if err != nil {
 			prompt := retry.BuildRepairPrompt("tools/call:multi_content", err.Error(), "{\"count\":1}", "{\"type\":\"object\",\"required\":[\"count\"],\"properties\":{\"count\":{\"type\":\"integer\",\"description\":\"Number of content items to return\"}},\"additionalProperties\":false}")
-			return nil, &retry.RetryableError{Prompt: prompt, Cause: err}
+			return nil, &retry.RetryableError{
+				Cause:  err,
+				Prompt: prompt,
+			}
 		}
 		if len(toolResp.Result) == 0 {
 			prompt := retry.BuildRepairPrompt("tools/call:multi_content", "empty MCP tool response", "{\"count\":1}", "{\"type\":\"object\",\"required\":[\"count\"],\"properties\":{\"count\":{\"type\":\"integer\",\"description\":\"Number of content items to return\"}},\"additionalProperties\":false}")
-			return nil, &retry.RetryableError{Prompt: prompt, Cause: fmt.Errorf("empty MCP tool response for multi_content")}
+			return nil, &retry.RetryableError{
+				Cause:  fmt.Errorf("empty MCP tool response for multi_content"),
+				Prompt: prompt,
+			}
 		}
-		// Build JSON-RPC response envelope and decode using Goa-generated decoder
 		req3, err := origC.BuildMultiContentRequest(ctx, v)
 		if err != nil {
 			return nil, err
@@ -398,29 +397,33 @@ func NewEndpoints(
 		decode := assistantjsonrpcc.DecodeMultiContentResponse(dec, false)
 		return decodeOriginalJSONRPCResult(enc, req3, toolResp.Result, decode)
 	}
+
 	// Tool: generate_dpi_spec -> GenerateDpiSpec
 	e.GenerateDpiSpec = func(ctx context.Context, v any) (any, error) {
-		// Encode original payload to raw JSON using Goa encoder (no JSON-RPC envelope)
 		var payload any
 		payload = v.(*assistant.GenerateDpiSpecPayload)
 		args, err := encodeOriginalPayload(ctx, enc, payload)
 		if err != nil {
 			return nil, err
 		}
-
 		toolResp, err := mcpCaller.CallTool(ctx, mcpruntime.CallRequest{
-			Tool:    "generate_dpi_spec",
 			Payload: args,
+			Tool:    "generate_dpi_spec",
 		})
 		if err != nil {
 			prompt := retry.BuildRepairPrompt("tools/call:generate_dpi_spec", err.Error(), "{\"density\":\"comfortable\",\"include_dev_notes\":false,\"platform\":\"web\",\"primary_cta\":\"abc123\",\"screen_title\":\"abc123\",\"sections\":[\"abc123\"]}", "{\"type\":\"object\",\"required\":[\"screen_title\",\"platform\",\"density\",\"primary_cta\",\"sections\"],\"properties\":{\"density\":{\"type\":\"string\",\"description\":\"Layout density\",\"enum\":[\"compact\",\"comfortable\"]},\"include_dev_notes\":{\"type\":\"boolean\",\"description\":\"Whether to include implementation notes\"},\"platform\":{\"type\":\"string\",\"description\":\"Target platform\",\"enum\":[\"ios\",\"web\"]},\"primary_cta\":{\"type\":\"string\",\"description\":\"Primary call to action\"},\"screen_title\":{\"type\":\"string\",\"description\":\"Name of the frame or screen\"},\"sections\":{\"type\":\"array\",\"description\":\"Ordered screen sections\",\"items\":{\"type\":\"string\"}}},\"additionalProperties\":false}")
-			return nil, &retry.RetryableError{Prompt: prompt, Cause: err}
+			return nil, &retry.RetryableError{
+				Cause:  err,
+				Prompt: prompt,
+			}
 		}
 		if len(toolResp.Result) == 0 {
 			prompt := retry.BuildRepairPrompt("tools/call:generate_dpi_spec", "empty MCP tool response", "{\"density\":\"comfortable\",\"include_dev_notes\":false,\"platform\":\"web\",\"primary_cta\":\"abc123\",\"screen_title\":\"abc123\",\"sections\":[\"abc123\"]}", "{\"type\":\"object\",\"required\":[\"screen_title\",\"platform\",\"density\",\"primary_cta\",\"sections\"],\"properties\":{\"density\":{\"type\":\"string\",\"description\":\"Layout density\",\"enum\":[\"compact\",\"comfortable\"]},\"include_dev_notes\":{\"type\":\"boolean\",\"description\":\"Whether to include implementation notes\"},\"platform\":{\"type\":\"string\",\"description\":\"Target platform\",\"enum\":[\"ios\",\"web\"]},\"primary_cta\":{\"type\":\"string\",\"description\":\"Primary call to action\"},\"screen_title\":{\"type\":\"string\",\"description\":\"Name of the frame or screen\"},\"sections\":{\"type\":\"array\",\"description\":\"Ordered screen sections\",\"items\":{\"type\":\"string\"}}},\"additionalProperties\":false}")
-			return nil, &retry.RetryableError{Prompt: prompt, Cause: fmt.Errorf("empty MCP tool response for generate_dpi_spec")}
+			return nil, &retry.RetryableError{
+				Cause:  fmt.Errorf("empty MCP tool response for generate_dpi_spec"),
+				Prompt: prompt,
+			}
 		}
-		// Build JSON-RPC response envelope and decode using Goa-generated decoder
 		req3, err := origC.BuildGenerateDpiSpecRequest(ctx, v)
 		if err != nil {
 			return nil, err
@@ -428,29 +431,33 @@ func NewEndpoints(
 		decode := assistantjsonrpcc.DecodeGenerateDpiSpecResponse(dec, false)
 		return decodeOriginalJSONRPCResult(enc, req3, toolResp.Result, decode)
 	}
+
 	// Tool: dispatch_action -> DispatchAction
 	e.DispatchAction = func(ctx context.Context, v any) (any, error) {
-		// Encode original payload to raw JSON using Goa encoder (no JSON-RPC envelope)
 		var payload any
 		payload = v.(*assistant.DispatchActionPayload)
 		args, err := encodeOriginalPayload(ctx, enc, payload)
 		if err != nil {
 			return nil, err
 		}
-
 		toolResp, err := mcpCaller.CallTool(ctx, mcpruntime.CallRequest{
-			Tool:    "dispatch_action",
 			Payload: args,
+			Tool:    "dispatch_action",
 		})
 		if err != nil {
 			prompt := retry.BuildRepairPrompt("tools/call:dispatch_action", err.Error(), "{\"request\":{\"name\":\"abc123\"}}", "{\"type\":\"object\",\"required\":[\"request\"],\"properties\":{\"request\":{\"type\":\"object\",\"description\":\"Action envelope\",\"oneOf\":[{\"type\":\"object\",\"required\":[\"action\",\"value\"],\"properties\":{\"action\":{\"type\":\"string\",\"enum\":[\"ListAction\"]},\"value\":{\"type\":\"object\",\"properties\":{\"limit\":{\"type\":\"integer\",\"description\":\"Maximum number of items to list\"}},\"additionalProperties\":false}},\"additionalProperties\":false},{\"type\":\"object\",\"required\":[\"action\",\"value\"],\"properties\":{\"action\":{\"type\":\"string\",\"enum\":[\"CreateAction\"]},\"value\":{\"type\":\"object\",\"required\":[\"name\"],\"properties\":{\"name\":{\"type\":\"string\",\"description\":\"Name to create\"}},\"additionalProperties\":false}},\"additionalProperties\":false}],\"discriminator\":{\"propertyName\":\"action\"}}},\"additionalProperties\":false}")
-			return nil, &retry.RetryableError{Prompt: prompt, Cause: err}
+			return nil, &retry.RetryableError{
+				Cause:  err,
+				Prompt: prompt,
+			}
 		}
 		if len(toolResp.Result) == 0 {
 			prompt := retry.BuildRepairPrompt("tools/call:dispatch_action", "empty MCP tool response", "{\"request\":{\"name\":\"abc123\"}}", "{\"type\":\"object\",\"required\":[\"request\"],\"properties\":{\"request\":{\"type\":\"object\",\"description\":\"Action envelope\",\"oneOf\":[{\"type\":\"object\",\"required\":[\"action\",\"value\"],\"properties\":{\"action\":{\"type\":\"string\",\"enum\":[\"ListAction\"]},\"value\":{\"type\":\"object\",\"properties\":{\"limit\":{\"type\":\"integer\",\"description\":\"Maximum number of items to list\"}},\"additionalProperties\":false}},\"additionalProperties\":false},{\"type\":\"object\",\"required\":[\"action\",\"value\"],\"properties\":{\"action\":{\"type\":\"string\",\"enum\":[\"CreateAction\"]},\"value\":{\"type\":\"object\",\"required\":[\"name\"],\"properties\":{\"name\":{\"type\":\"string\",\"description\":\"Name to create\"}},\"additionalProperties\":false}},\"additionalProperties\":false}],\"discriminator\":{\"propertyName\":\"action\"}}},\"additionalProperties\":false}")
-			return nil, &retry.RetryableError{Prompt: prompt, Cause: fmt.Errorf("empty MCP tool response for dispatch_action")}
+			return nil, &retry.RetryableError{
+				Cause:  fmt.Errorf("empty MCP tool response for dispatch_action"),
+				Prompt: prompt,
+			}
 		}
-		// Build JSON-RPC response envelope and decode using Goa-generated decoder
 		req3, err := origC.BuildDispatchActionRequest(ctx, v)
 		if err != nil {
 			return nil, err
@@ -458,9 +465,9 @@ func NewEndpoints(
 		decode := assistantjsonrpcc.DecodeDispatchActionResponse(dec, false)
 		return decodeOriginalJSONRPCResult(enc, req3, toolResp.Result, decode)
 	}
+
 	// Resource: doc://list -> ListDocuments
 	e.ListDocuments = func(ctx context.Context, v any) (any, error) {
-		// Forward original payload parameters via URI query string when applicable
 		uri := "doc://list"
 		ires, err := mcpC.ResourcesRead()(ctx, &mcpAssistant.ResourcesReadPayload{URI: uri})
 		if err != nil {
@@ -470,7 +477,6 @@ func NewEndpoints(
 		if rr == nil || rr.Contents == nil || len(rr.Contents) == 0 || rr.Contents[0] == nil || rr.Contents[0].Text == nil {
 			return nil, fmt.Errorf("empty MCP resource response for doc://list")
 		}
-		// Build JSON-RPC response envelope and decode using Goa-generated decoder
 		req3, err := origC.BuildListDocumentsRequest(ctx, v)
 		if err != nil {
 			return nil, err
@@ -478,9 +484,9 @@ func NewEndpoints(
 		decode := assistantjsonrpcc.DecodeListDocumentsResponse(dec, false)
 		return decodeOriginalJSONRPCResult(enc, req3, []byte(*rr.Contents[0].Text), decode)
 	}
+
 	// Resource: system://info -> SystemInfo
 	e.SystemInfo = func(ctx context.Context, v any) (any, error) {
-		// Forward original payload parameters via URI query string when applicable
 		uri := "system://info"
 		ires, err := mcpC.ResourcesRead()(ctx, &mcpAssistant.ResourcesReadPayload{URI: uri})
 		if err != nil {
@@ -490,7 +496,6 @@ func NewEndpoints(
 		if rr == nil || rr.Contents == nil || len(rr.Contents) == 0 || rr.Contents[0] == nil || rr.Contents[0].Text == nil {
 			return nil, fmt.Errorf("empty MCP resource response for system://info")
 		}
-		// Build JSON-RPC response envelope and decode using Goa-generated decoder
 		req3, err := origC.BuildSystemInfoRequest(ctx, v)
 		if err != nil {
 			return nil, err
@@ -498,9 +503,9 @@ func NewEndpoints(
 		decode := assistantjsonrpcc.DecodeSystemInfoResponse(dec, false)
 		return decodeOriginalJSONRPCResult(enc, req3, []byte(*rr.Contents[0].Text), decode)
 	}
+
 	// Resource: conversation://history -> ConversationHistory
 	e.ConversationHistory = func(ctx context.Context, v any) (any, error) {
-		// Forward original payload parameters via URI query string when applicable
 		uri := "conversation://history"
 		payload := v.(*assistant.ConversationHistoryPayload)
 		query := url.Values{}
@@ -526,7 +531,6 @@ func NewEndpoints(
 		if rr == nil || rr.Contents == nil || len(rr.Contents) == 0 || rr.Contents[0] == nil || rr.Contents[0].Text == nil {
 			return nil, fmt.Errorf("empty MCP resource response for conversation://history")
 		}
-		// Build JSON-RPC response envelope and decode using Goa-generated decoder
 		req3, err := origC.BuildConversationHistoryRequest(ctx, v)
 		if err != nil {
 			return nil, err
@@ -534,9 +538,9 @@ func NewEndpoints(
 		decode := assistantjsonrpcc.DecodeConversationHistoryResponse(dec, false)
 		return decodeOriginalJSONRPCResult(enc, req3, []byte(*rr.Contents[0].Text), decode)
 	}
+
 	// Resource: figma://design-system/mobile-checkout -> FigmaDesignSystem
 	e.FigmaDesignSystem = func(ctx context.Context, v any) (any, error) {
-		// Forward original payload parameters via URI query string when applicable
 		uri := "figma://design-system/mobile-checkout"
 		ires, err := mcpC.ResourcesRead()(ctx, &mcpAssistant.ResourcesReadPayload{URI: uri})
 		if err != nil {
@@ -546,7 +550,6 @@ func NewEndpoints(
 		if rr == nil || rr.Contents == nil || len(rr.Contents) == 0 || rr.Contents[0] == nil || rr.Contents[0].Text == nil {
 			return nil, fmt.Errorf("empty MCP resource response for figma://design-system/mobile-checkout")
 		}
-		// Build JSON-RPC response envelope and decode using Goa-generated decoder
 		req3, err := origC.BuildFigmaDesignSystemRequest(ctx, v)
 		if err != nil {
 			return nil, err
@@ -554,6 +557,7 @@ func NewEndpoints(
 		decode := assistantjsonrpcc.DecodeFigmaDesignSystemResponse(dec, false)
 		return decodeOriginalJSONRPCResult(enc, req3, []byte(*rr.Contents[0].Text), decode)
 	}
+
 	// Dynamic Prompt: contextual_prompts -> GeneratePrompts
 	e.GeneratePrompts = func(ctx context.Context, v any) (any, error) {
 		var payload any
@@ -562,17 +566,25 @@ func NewEndpoints(
 		if err != nil {
 			return nil, err
 		}
-		ires, err := mcpC.PromptsGet()(ctx, &mcpAssistant.PromptsGetPayload{Name: "contextual_prompts", Arguments: args})
+		ires, err := mcpC.PromptsGet()(ctx, &mcpAssistant.PromptsGetPayload{
+			Arguments: args,
+			Name:      "contextual_prompts",
+		})
 		if err != nil {
-			prompt := retry.BuildRepairPrompt("prompts/get:contextual_prompts", err.Error(), "{\"context\":\"abc123\",\"task\":\"abc123\"}", "")
-			return nil, &retry.RetryableError{Prompt: prompt, Cause: err}
+			repairPrompt := retry.BuildRepairPrompt("prompts/get:contextual_prompts", err.Error(), "{\"context\":\"abc123\",\"task\":\"abc123\"}", "")
+			return nil, &retry.RetryableError{
+				Cause:  err,
+				Prompt: repairPrompt,
+			}
 		}
 		r := ires.(*mcpAssistant.PromptsGetResult)
 		if r == nil || r.Messages == nil || len(r.Messages) == 0 || r.Messages[0] == nil || r.Messages[0].Content == nil || r.Messages[0].Content.Text == nil {
-			prompt := retry.BuildRepairPrompt("prompts/get:contextual_prompts", "empty MCP prompt response", "{\"context\":\"abc123\",\"task\":\"abc123\"}", "")
-			return nil, &retry.RetryableError{Prompt: prompt, Cause: fmt.Errorf("empty MCP prompt response for contextual_prompts")}
+			repairPrompt := retry.BuildRepairPrompt("prompts/get:contextual_prompts", "empty MCP prompt response", "{\"context\":\"abc123\",\"task\":\"abc123\"}", "")
+			return nil, &retry.RetryableError{
+				Cause:  fmt.Errorf("empty MCP prompt response for contextual_prompts"),
+				Prompt: repairPrompt,
+			}
 		}
-		// Build JSON-RPC response envelope and decode using Goa-generated decoder
 		req3, err := origC.BuildGeneratePromptsRequest(ctx, v)
 		if err != nil {
 			return nil, err
@@ -580,6 +592,7 @@ func NewEndpoints(
 		decode := assistantjsonrpcc.DecodeGeneratePromptsResponse(dec, false)
 		return decodeOriginalJSONRPCResult(enc, req3, []byte(*r.Messages[0].Content.Text), decode)
 	}
+
 	// Dynamic Prompt: figma_implementation_prompt -> BuildFigmaImplementationPrompt
 	e.BuildFigmaImplementationPrompt = func(ctx context.Context, v any) (any, error) {
 		var payload any
@@ -588,17 +601,25 @@ func NewEndpoints(
 		if err != nil {
 			return nil, err
 		}
-		ires, err := mcpC.PromptsGet()(ctx, &mcpAssistant.PromptsGetPayload{Name: "figma_implementation_prompt", Arguments: args})
+		ires, err := mcpC.PromptsGet()(ctx, &mcpAssistant.PromptsGetPayload{
+			Arguments: args,
+			Name:      "figma_implementation_prompt",
+		})
 		if err != nil {
-			prompt := retry.BuildRepairPrompt("prompts/get:figma_implementation_prompt", err.Error(), "{\"design_tokens_uri\":\"abc123\",\"dpi_json\":\"abc123\",\"framework\":\"swiftui\",\"screen_title\":\"abc123\"}", "")
-			return nil, &retry.RetryableError{Prompt: prompt, Cause: err}
+			repairPrompt := retry.BuildRepairPrompt("prompts/get:figma_implementation_prompt", err.Error(), "{\"design_tokens_uri\":\"abc123\",\"dpi_json\":\"abc123\",\"framework\":\"swiftui\",\"screen_title\":\"abc123\"}", "")
+			return nil, &retry.RetryableError{
+				Cause:  err,
+				Prompt: repairPrompt,
+			}
 		}
 		r := ires.(*mcpAssistant.PromptsGetResult)
 		if r == nil || r.Messages == nil || len(r.Messages) == 0 || r.Messages[0] == nil || r.Messages[0].Content == nil || r.Messages[0].Content.Text == nil {
-			prompt := retry.BuildRepairPrompt("prompts/get:figma_implementation_prompt", "empty MCP prompt response", "{\"design_tokens_uri\":\"abc123\",\"dpi_json\":\"abc123\",\"framework\":\"swiftui\",\"screen_title\":\"abc123\"}", "")
-			return nil, &retry.RetryableError{Prompt: prompt, Cause: fmt.Errorf("empty MCP prompt response for figma_implementation_prompt")}
+			repairPrompt := retry.BuildRepairPrompt("prompts/get:figma_implementation_prompt", "empty MCP prompt response", "{\"design_tokens_uri\":\"abc123\",\"dpi_json\":\"abc123\",\"framework\":\"swiftui\",\"screen_title\":\"abc123\"}", "")
+			return nil, &retry.RetryableError{
+				Cause:  fmt.Errorf("empty MCP prompt response for figma_implementation_prompt"),
+				Prompt: repairPrompt,
+			}
 		}
-		// Build JSON-RPC response envelope and decode using Goa-generated decoder
 		req3, err := origC.BuildBuildFigmaImplementationPromptRequest(ctx, v)
 		if err != nil {
 			return nil, err
@@ -606,13 +627,12 @@ func NewEndpoints(
 		decode := assistantjsonrpcc.DecodeBuildFigmaImplementationPromptResponse(dec, false)
 		return decodeOriginalJSONRPCResult(enc, req3, []byte(*r.Messages[0].Content.Text), decode)
 	}
+
 	// Notification: status_update -> SendNotification
 	e.SendNotification = func(ctx context.Context, v any) (any, error) {
 		payload := v.(*assistant.SendNotificationPayload)
-		notificationPayload := &mcpAssistant.SendNotificationPayload{
-			Type: payload.Type,
-			Data: payload.Data,
-		}
+		notificationPayload := &mcpAssistant.SendNotificationPayload{Type: payload.Type}
+		notificationPayload.Data = payload.Data
 		message := payload.Message
 		notificationPayload.Message = &message
 		_, err := mcpC.NotifyStatusUpdate()(ctx, notificationPayload)
@@ -623,31 +643,7 @@ func NewEndpoints(
 }
 
 // NewClient returns *assistant.Client using MCP-backed endpoints.
-func NewClient(
-	scheme string,
-	host string,
-	doer goahttp.Doer,
-	enc func(*http.Request) goahttp.Encoder,
-	dec func(*http.Response) goahttp.Decoder,
-	restore bool,
-) *assistant.Client {
+func NewClient(scheme string, host string, doer goahttp.Doer, enc func(*http.Request) goahttp.Encoder, dec func(*http.Response) goahttp.Decoder, restore bool) *assistant.Client {
 	e := NewEndpoints(scheme, host, doer, enc, dec, restore)
-	return assistant.NewClient(
-		e.ListDocuments,
-		e.SystemInfo,
-		e.ConversationHistory,
-		e.FigmaDesignSystem,
-		e.GeneratePrompts,
-		e.BuildFigmaImplementationPrompt,
-		e.SendNotification,
-		e.AnalyzeSentiment,
-		e.ExtractKeywords,
-		e.SummarizeText,
-		e.Search,
-		e.ExecuteCode,
-		e.ProcessBatch,
-		e.MultiContent,
-		e.GenerateDpiSpec,
-		e.DispatchAction,
-	)
+	return assistant.NewClient(e.ListDocuments, e.SystemInfo, e.ConversationHistory, e.FigmaDesignSystem, e.GeneratePrompts, e.BuildFigmaImplementationPrompt, e.SendNotification, e.AnalyzeSentiment, e.ExtractKeywords, e.SummarizeText, e.Search, e.ExecuteCode, e.ProcessBatch, e.MultiContent, e.GenerateDpiSpec, e.DispatchAction)
 }

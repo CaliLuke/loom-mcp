@@ -5,7 +5,6 @@ import (
 	"github.com/dave/jennifer/jen"
 )
 
-//nolint:maintidx // Generator section builder is data-heavy but intentionally centralized.
 func adapterBroadcastSection() codegen.Section {
 	return codegen.MustJenniferSection("mcp-adapter-broadcast", func(stmt *jen.Statement) {
 		stmt.Comment("Broadcaster and publish helpers for server-initiated events").Line()
@@ -57,7 +56,6 @@ func adapterBroadcastSection() codegen.Section {
 	})
 }
 
-//nolint:funlen,maintidx // Event stream generator keeps the MCP notification flow in one section.
 func adapterNotificationsSection() codegen.Section {
 	return codegen.MustJenniferSection("mcp-adapter-notifications", func(stmt *jen.Statement) {
 		stmt.Comment("Notifications and events stream").Line()
@@ -354,7 +352,6 @@ func staticPromptCase(prompt *StaticPromptAdapter) []jen.Code {
 	return codes
 }
 
-//nolint:maintidx // Dynamic prompt generation mirrors payload validation branches directly.
 func dynamicPromptCase(prompt *DynamicPromptAdapter) []jen.Code {
 	codes := make([]jen.Code, 0, 8)
 	hasRequired := false

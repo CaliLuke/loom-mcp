@@ -23,7 +23,7 @@ Goal: replace template-backed Go code generation where Jennifer materially impro
 - [x] `codegen/mcp/templates/adapter_notifications.go.tpl`
 - [x] `codegen/mcp/templates/adapter_subscriptions.go.tpl`
 - [x] `codegen/mcp/templates/adapter_broadcast.go.tpl`
-- [ ] `codegen/mcp/templates/client_retry_helpers.go.tpl`
+- [x] `codegen/mcp/templates/client_retry_helpers.go.tpl` removed as dead template while migrating the client adapter surface
 
 Reason:
 - Transport and adapter code has branching, protocol rules, and upstream coupling.
@@ -32,7 +32,7 @@ Reason:
 
 ## Priority 2: Medium Value MCP Conversions
 
-- [ ] `codegen/mcp/templates/mcp_client_wrapper.go.tpl`
+- [x] `codegen/mcp/templates/mcp_client_wrapper.go.tpl`
 - [x] `codegen/mcp/templates/prompt_provider.go.tpl`
 - [ ] `codegen/mcp/templates/cli_dojsonrpc.go.tpl`
 - [ ] `codegen/mcp/templates/example_mcp_stub.go.tpl`

@@ -222,7 +222,6 @@ func emitRegisterHandleError(stmt *jen.Statement, reg *RegisterData) {
 	stmt.Line()
 }
 
-//nolint:maintidx // Generated retry-hint branches mirror protocol error handling in one place.
 func emitRegisterRetryHint(stmt *jen.Statement, reg *RegisterData) {
 	stmt.Commentf("%sRetryHint determines if an error should trigger a retry and returns appropriate hints.", reg.HelperName).Line()
 	stmt.Func().Id(reg.HelperName+"RetryHint").

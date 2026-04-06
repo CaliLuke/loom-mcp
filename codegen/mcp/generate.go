@@ -25,8 +25,6 @@ const jsonrpcServerMountSectionName = "jsonrpc-server-mount"
 // Generate orchestrates MCP code generation for services that declare MCP
 // configuration in the DSL. It composes Goa service and JSON-RPC generators
 // and adds adapter/client helpers.
-//
-//nolint:maintidx // Top-level generator orchestration intentionally keeps the MCP pipeline in one place.
 func Generate(genpkg string, roots []eval.Root, files []*codegen.File) ([]*codegen.File, error) {
 	// Process MCP services from source snapshot and preserve deterministic order.
 	source := collectSourceSnapshot(roots)
@@ -249,7 +247,6 @@ func rewriteJSONRPCServerMountSource(source string) string {
 	return strings.TrimRight(updated, "\n") + jsonrpcServerMountHelperSource
 }
 
-//nolint:maintidx // Source rewriting keeps the upstream mount patch localized until full Jennifer ownership lands.
 func addMixedTransportSessionRoutes(source string) string {
 	lines := strings.Split(source, "\n")
 	insertAt := -1
@@ -375,114 +372,11 @@ func generateMCPTransport(genpkg string, svc *expr.ServiceExpr, data *AdapterDat
 
 // generateMCPClientAdapter generates a client adapter that exposes the original
 // service endpoints while calling MCP JSON-RPC methods under the hood.
-//
-//nolint:maintidx // Alias wiring and mapping derivation are generation-time only and intentionally explicit.
 func generateMCPClientAdapter(genpkg string, svc *expr.ServiceExpr, data *AdapterData) []*codegen.File {
-	files := make([]*codegen.File, 0, 1)
-
-	svcName := codegen.SnakeCase(svc.Name)
-	// Match the package alias used elsewhere (strip underscores)
-	mcpPkgAlias := codegen.Goify("mcp_"+svcName, false)
-	svcJSONRPCCAlias := svcName + "jsonrpcc"
-	mcpJSONRPCCAlias := mcpPkgAlias + "jsonrpcc"
-
-	// Extend data passed to template with aliases needed by imports
-	type methodInfo struct {
-		Name     string
-		IsMapped bool // Whether this method is mapped to an MCP construct
+	if file := clientAdapterFile(genpkg, svc, data); file != nil {
+		return []*codegen.File{file}
 	}
-
-	type clientAdapterTemplateData struct {
-		*AdapterData
-		ServiceGoName    string
-		ServicePkg       string
-		MCPPkgAlias      string
-		SvcJSONRPCCAlias string
-		MCPJSONRPCCAlias string
-		AllMethods       []methodInfo // All service methods with mapping info
-	}
-
-	// Build set of mapped methods
-	mapped := make(map[string]struct{})
-	for _, t := range data.Tools {
-		mapped[t.OriginalMethodName] = struct{}{}
-	}
-	for _, r := range data.Resources {
-		mapped[r.OriginalMethodName] = struct{}{}
-	}
-	for _, dp := range data.DynamicPrompts {
-		mapped[dp.OriginalMethodName] = struct{}{}
-	}
-	for _, n := range data.Notifications {
-		mapped[n.OriginalMethodName] = struct{}{}
-	}
-
-	// Collect all service method names and check if they're mapped to MCP constructs
-	allMethods := make([]methodInfo, len(svc.Methods))
-	for i, m := range svc.Methods {
-		methodName := codegen.Goify(m.Name, true)
-		_, ok := mapped[methodName]
-		allMethods[i] = methodInfo{
-			Name:     methodName,
-			IsMapped: ok,
-		}
-	}
-
-	tdata := &clientAdapterTemplateData{
-		AdapterData:      data,
-		ServiceGoName:    codegen.Goify(svc.Name, true),
-		ServicePkg:       svcName,
-		MCPPkgAlias:      mcpPkgAlias,
-		SvcJSONRPCCAlias: svcJSONRPCCAlias,
-		MCPJSONRPCCAlias: mcpJSONRPCCAlias,
-		AllMethods:       allMethods,
-	}
-
-	imports := []*codegen.ImportSpec{
-		{Path: "bytes"},
-		{Path: "context"},
-		{Path: "encoding/json", Name: "stdjson"},
-		{Path: "fmt"},
-		{Path: "io"},
-		{Path: "net/url"},
-		{Path: "net/http"},
-		{Path: "sync"},
-		{Path: "github.com/CaliLuke/loom-mcp/runtime/mcp", Name: "mcpruntime"},
-		{Path: upstreampaths.LoomMCPHTTPImportPath, Name: "goahttp"},
-		{Path: upstreampaths.LoomMCPJSONRPCImportPath, Name: "jsonrpc"},
-		{Path: "github.com/CaliLuke/loom-mcp/runtime/mcp/retry", Name: "retry"},
-		{Path: genpkg + "/" + svcName, Name: svcName},
-		{Path: genpkg + "/jsonrpc/" + svcName + "/client", Name: svcJSONRPCCAlias},
-		// Import the MCP service package for types since we're now in a subpackage
-		{Path: genpkg + "/mcp_" + svcName, Name: mcpPkgAlias},
-		{Path: genpkg + "/jsonrpc/mcp_" + svcName + "/client", Name: mcpJSONRPCCAlias},
-	}
-	if data.NeedsQueryFormatting {
-		imports = append(imports, &codegen.ImportSpec{Path: "strconv"})
-	}
-
-	// Put client adapter in a separate subpackage to avoid import cycle
-	adapterPkgName := mcpPkgAlias + "adapter"
-	files = append(files, &codegen.File{
-		Path: filepath.Join(codegen.Gendir, "mcp_"+svcName, "adapter", "client", "adapter.go"),
-		SectionTemplates: []*codegen.SectionTemplate{
-			codegen.Header("MCP client adapter exposing original service endpoints", adapterPkgName, imports),
-			{
-				Name:   "mcp-client-adapter",
-				Source: mcpTemplates.Read("mcp_client_wrapper"),
-				Data:   tdata,
-				FuncMap: map[string]any{
-					"comment": codegen.Comment,
-					"goify": func(s string) string {
-						return codegen.Goify(s, true)
-					},
-					"queryValueExpr": queryValueExpr,
-				},
-			},
-		},
-	})
-
-	return files
+	return nil
 }
 
 func buildMCPAdapterFile(genpkg string, svc *expr.ServiceExpr, data *AdapterData, svcName string) *codegen.File {
@@ -643,26 +537,5 @@ func templateSection(name, templateName string, data *AdapterData) *codegen.Sect
 			"comment": codegen.Comment,
 			"quote":   func(s string) string { return fmt.Sprintf("%q", s) },
 		},
-	}
-}
-
-// queryValueExpr returns the direct Go expression that formats one statically
-// known resource query value into the string form expected by url.Values.
-func queryValueExpr(formatKind, valueExpr string) string {
-	switch formatKind {
-	case resourceQueryFormatString:
-		return valueExpr
-	case resourceQueryFormatBool:
-		return fmt.Sprintf("strconv.FormatBool(%s)", valueExpr)
-	case resourceQueryFormatInt:
-		return fmt.Sprintf("strconv.FormatInt(int64(%s), 10)", valueExpr)
-	case resourceQueryFormatUint:
-		return fmt.Sprintf("strconv.FormatUint(uint64(%s), 10)", valueExpr)
-	case resourceQueryFormatFloat32:
-		return fmt.Sprintf("strconv.FormatFloat(float64(%s), 'g', -1, 32)", valueExpr)
-	case resourceQueryFormatFloat64:
-		return fmt.Sprintf("strconv.FormatFloat(%s, 'g', -1, 64)", valueExpr)
-	default:
-		panic(fmt.Sprintf("unsupported resource query format kind %q", formatKind))
 	}
 }
