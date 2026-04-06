@@ -86,82 +86,72 @@ func registerExecFunc(reg *RegisterData) jen.Code {
 			jen.Error(),
 		).
 		BlockFunc(func(fn *jen.Group) {
-			fn.Add(registerExecPrelude(reg))
-			fn.Add(registerExecPayload())
-			fn.Add(registerExecCallRemote(reg))
-			fn.Add(registerExecDecodeResult())
-			fn.Add(registerExecDecodeStructured())
+			emitRegisterExecPrelude(fn, reg)
+			emitRegisterExecPayload(fn)
+			emitRegisterExecCallRemote(fn, reg)
+			emitRegisterExecDecodeResult(fn)
+			emitRegisterExecDecodeStructured(fn)
 			fn.Return(registerToolResultValue(), jen.Nil())
 		})
 }
 
-func registerExecPrelude(reg *RegisterData) jen.Code {
-	return jen.Block(
-		jen.Id("fullName").Op(":=").Id("call").Dot("Name"),
-		jen.Id("toolName").Op(":=").String().Call(jen.Id("fullName")),
-		jen.Const().Id("suitePrefix").Op("=").Lit(reg.SuiteQualifiedName+"."),
-		jen.If(jen.Qual("strings", "HasPrefix").Call(jen.Id("toolName"), jen.Id("suitePrefix"))).Block(
-			jen.Id("toolName").Op("=").Id("toolName").Index(jen.Len(jen.Id("suitePrefix")).Op(":")),
-		),
+func emitRegisterExecPrelude(fn *jen.Group, reg *RegisterData) {
+	fn.Id("fullName").Op(":=").Id("call").Dot("Name")
+	fn.Id("toolName").Op(":=").String().Call(jen.Id("fullName"))
+	fn.Const().Id("suitePrefix").Op("=").Lit(reg.SuiteQualifiedName + ".")
+	fn.If(jen.Qual("strings", "HasPrefix").Call(jen.Id("toolName"), jen.Id("suitePrefix"))).Block(
+		jen.Id("toolName").Op("=").Id("toolName").Index(jen.Len(jen.Id("suitePrefix")).Op(":")),
 	)
 }
 
-func registerExecPayload() jen.Code {
-	return jen.Block(
-		jen.List(jen.Id("payload"), jen.Id("err")).Op(":=").Qual("encoding/json", "Marshal").Call(jen.Id("call").Dot("Payload")),
-		jen.If(jen.Id("err").Op("!=").Nil()).Block(
+func emitRegisterExecPayload(fn *jen.Group) {
+	fn.List(jen.Id("payload"), jen.Id("err")).Op(":=").Qual("encoding/json", "Marshal").Call(jen.Id("call").Dot("Payload"))
+	fn.If(jen.Id("err").Op("!=").Nil()).Block(
+		jen.Return(registerErrorResultValue(), jen.Id("err")),
+	)
+}
+
+func emitRegisterExecCallRemote(fn *jen.Group, reg *RegisterData) {
+	fn.List(jen.Id("resp"), jen.Id("err")).Op(":=").Id("caller").Dot("CallTool").Call(
+		jen.Id("ctx"),
+		jen.Id("mcpruntime").Dot("CallRequest").Values(jen.Dict{
+			jen.Id("Suite"):   jen.Lit(reg.SuiteQualifiedName),
+			jen.Id("Tool"):    jen.Id("toolName"),
+			jen.Id("Payload"): jen.Id("payload"),
+		}),
+	)
+	fn.If(jen.Id("err").Op("!=").Nil()).Block(
+		jen.Return(jen.Id(reg.HelperName+"HandleError").Call(jen.Id("fullName"), jen.Id("err")), jen.Nil()),
+	)
+}
+
+func emitRegisterExecDecodeResult(fn *jen.Group) {
+	fn.Var().Id("value").Any()
+	fn.If(jen.Len(jen.Id("resp").Dot("Result")).Op(">").Lit(0)).Block(
+		jen.If(
+			jen.Id("err").Op(":=").Qual("encoding/json", "Unmarshal").Call(jen.Id("resp").Dot("Result"), jen.Op("&").Id("value")),
+			jen.Id("err").Op("!=").Nil(),
+		).Block(
 			jen.Return(registerErrorResultValue(), jen.Id("err")),
 		),
 	)
 }
 
-func registerExecCallRemote(reg *RegisterData) jen.Code {
-	return jen.Block(
-		jen.List(jen.Id("resp"), jen.Id("err")).Op(":=").Id("caller").Dot("CallTool").Call(
-			jen.Id("ctx"),
-			jen.Id("mcpruntime").Dot("CallRequest").Values(jen.Dict{
-				jen.Id("Suite"):   jen.Lit(reg.SuiteQualifiedName),
-				jen.Id("Tool"):    jen.Id("toolName"),
-				jen.Id("Payload"): jen.Id("payload"),
+func emitRegisterExecDecodeStructured(fn *jen.Group) {
+	fn.Var().Id("toolTelemetry").Op("*").Qual("github.com/CaliLuke/loom-mcp/runtime/agent/telemetry", "ToolTelemetry")
+	fn.If(jen.Len(jen.Id("resp").Dot("Structured")).Op(">").Lit(0)).Block(
+		jen.Var().Id("structured").Any(),
+		jen.If(
+			jen.Id("err").Op(":=").Qual("encoding/json", "Unmarshal").Call(jen.Id("resp").Dot("Structured"), jen.Op("&").Id("structured")),
+			jen.Id("err").Op("!=").Nil(),
+		).Block(
+			jen.Return(registerErrorResultValue(), jen.Id("err")),
+		),
+		jen.Id("toolTelemetry").Op("=").Op("&").Qual("github.com/CaliLuke/loom-mcp/runtime/agent/telemetry", "ToolTelemetry").Values(jen.Dict{
+			jen.Id("Extra"): jen.Map(jen.String()).Any().Values(jen.Dict{
+				jen.Lit("structured"): jen.Id("structured"),
 			}),
-		),
-		jen.If(jen.Id("err").Op("!=").Nil()).Block(
-			jen.Return(jen.Id(reg.HelperName+"HandleError").Call(jen.Id("fullName"), jen.Id("err")), jen.Nil()),
-		),
-	)
-}
-
-func registerExecDecodeResult() jen.Code {
-	return jen.Block(
-		jen.Var().Id("value").Any(),
-		jen.If(jen.Len(jen.Id("resp").Dot("Result")).Op(">").Lit(0)).Block(
-			jen.If(
-				jen.Id("err").Op(":=").Qual("encoding/json", "Unmarshal").Call(jen.Id("resp").Dot("Result"), jen.Op("&").Id("value")),
-				jen.Id("err").Op("!=").Nil(),
-			).Block(
-				jen.Return(registerErrorResultValue(), jen.Id("err")),
-			),
-		),
-	)
-}
-
-func registerExecDecodeStructured() jen.Code {
-	return jen.Block(
-		jen.Var().Id("toolTelemetry").Op("*").Qual("github.com/CaliLuke/loom-mcp/runtime/agent/telemetry", "ToolTelemetry"),
-		jen.If(jen.Len(jen.Id("resp").Dot("Structured")).Op(">").Lit(0)).Block(
-			jen.Var().Id("structured").Any(),
-			jen.If(
-				jen.Id("err").Op(":=").Qual("encoding/json", "Unmarshal").Call(jen.Id("resp").Dot("Structured"), jen.Op("&").Id("structured")),
-				jen.Id("err").Op("!=").Nil(),
-			).Block(
-				jen.Return(registerErrorResultValue(), jen.Id("err")),
-			),
-			jen.Id("toolTelemetry").Op("=").Op("&").Qual("github.com/CaliLuke/loom-mcp/runtime/agent/telemetry", "ToolTelemetry").Values(jen.Dict{
-				jen.Id("Extra"): jen.Map(jen.String()).Any().Values(jen.Dict{
-					jen.Lit("structured"): jen.Id("structured"),
-				}),
-			}),
-		),
+		}),
 	)
 }
 

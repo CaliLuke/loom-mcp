@@ -146,7 +146,7 @@ func ModifyExampleFiles(_ string, roots []eval.Root, files []*codegen.File) ([]*
 
 	// Ensure example stub returns the adapter-backed service instead of zero-value stub
 	files = generateExampleAdapterStubs(mcpServices, files)
-	servers := example.NewServersData()
+	servers := make(example.ServersData)
 
 	for _, svr := range r.API.Servers {
 		dir := servers.Get(svr, r).Dir

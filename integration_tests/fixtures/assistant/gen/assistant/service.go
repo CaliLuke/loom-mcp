@@ -364,8 +364,7 @@ type CreateActionOrListAction struct {
 	CreateAction *CreateAction
 }
 
-// CreateActionOrListActionKind enumerates the union variants for
-// CreateActionOrListAction.
+// CreateActionOrListActionKind enumerates the union variants for CreateActionOrListAction.
 type CreateActionOrListActionKind string
 
 const (
@@ -380,8 +379,7 @@ func (u CreateActionOrListAction) Kind() CreateActionOrListActionKind {
 	return u.kind
 }
 
-// NewCreateActionOrListActionListAction constructs a CreateActionOrListAction
-// with the ListAction branch set.
+// NewCreateActionOrListActionListAction constructs a CreateActionOrListAction with the ListAction branch set.
 func NewCreateActionOrListActionListAction(v *ListAction) CreateActionOrListAction {
 	return CreateActionOrListAction{
 		kind:       CreateActionOrListActionKindListAction,
@@ -403,8 +401,7 @@ func (u *CreateActionOrListAction) SetListAction(v *ListAction) {
 	u.ListAction = v
 }
 
-// NewCreateActionOrListActionCreateAction constructs a
-// CreateActionOrListAction with the CreateAction branch set.
+// NewCreateActionOrListActionCreateAction constructs a CreateActionOrListAction with the CreateAction branch set.
 func NewCreateActionOrListActionCreateAction(v *CreateAction) CreateActionOrListAction {
 	return CreateActionOrListAction{
 		kind:         CreateActionOrListActionKindCreateAction,

@@ -32,19 +32,26 @@ type Client struct {
 }
 
 // bufferPool is a pool of bytes.Buffers for encoding requests.
-var bufferPool = sync.Pool{New: func() any {
-	return new(bytes.Buffer)
-}}
+var bufferPool = sync.Pool{
+	New: func() any { return new(bytes.Buffer) },
+}
 
 // NewClient instantiates HTTP clients for all the assistant service servers.
-func NewClient(scheme string, host string, doer loomhttp.Doer, enc func(*http.Request) loomhttp.Encoder, dec func(*http.Response) loomhttp.Decoder, restoreBody bool) *Client {
+func NewClient(
+	scheme string,
+	host string,
+	doer loomhttp.Doer,
+	enc func(*http.Request) loomhttp.Encoder,
+	dec func(*http.Response) loomhttp.Decoder,
+	restoreBody bool,
+) *Client {
 	return &Client{
 		Doer:                doer,
 		RestoreResponseBody: restoreBody,
+		scheme:              scheme,
+		host:                host,
 		decoder:             dec,
 		encoder:             enc,
-		host:                host,
-		scheme:              scheme,
 	}
 }
 
@@ -55,7 +62,6 @@ func (c *Client) ListDocuments() loom.Endpoint {
 		encodeRequest  = EncodeListDocumentsRequest(c.encoder)
 		decodeResponse = DecodeListDocumentsResponse(c.decoder, c.RestoreResponseBody)
 	)
-
 	return func(ctx context.Context, v any) (any, error) {
 		req, err := c.BuildListDocumentsRequest(ctx, v)
 		if err != nil {
@@ -70,14 +76,15 @@ func (c *Client) ListDocuments() loom.Endpoint {
 		}
 		return decodeResponse(resp)
 	}
-} // SystemInfo returns an endpoint that makes JSON-RPC requests to the assistant
+}
+
+// SystemInfo returns an endpoint that makes JSON-RPC requests to the assistant
 // service system_info method.
 func (c *Client) SystemInfo() loom.Endpoint {
 	var (
 		encodeRequest  = EncodeSystemInfoRequest(c.encoder)
 		decodeResponse = DecodeSystemInfoResponse(c.decoder, c.RestoreResponseBody)
 	)
-
 	return func(ctx context.Context, v any) (any, error) {
 		req, err := c.BuildSystemInfoRequest(ctx, v)
 		if err != nil {
@@ -92,14 +99,15 @@ func (c *Client) SystemInfo() loom.Endpoint {
 		}
 		return decodeResponse(resp)
 	}
-} // ConversationHistory returns an endpoint that makes JSON-RPC requests to the
+}
+
+// ConversationHistory returns an endpoint that makes JSON-RPC requests to the
 // assistant service conversation_history method.
 func (c *Client) ConversationHistory() loom.Endpoint {
 	var (
 		encodeRequest  = EncodeConversationHistoryRequest(c.encoder)
 		decodeResponse = DecodeConversationHistoryResponse(c.decoder, c.RestoreResponseBody)
 	)
-
 	return func(ctx context.Context, v any) (any, error) {
 		req, err := c.BuildConversationHistoryRequest(ctx, v)
 		if err != nil {
@@ -114,14 +122,15 @@ func (c *Client) ConversationHistory() loom.Endpoint {
 		}
 		return decodeResponse(resp)
 	}
-} // FigmaDesignSystem returns an endpoint that makes JSON-RPC requests to the
+}
+
+// FigmaDesignSystem returns an endpoint that makes JSON-RPC requests to the
 // assistant service figma_design_system method.
 func (c *Client) FigmaDesignSystem() loom.Endpoint {
 	var (
 		encodeRequest  = EncodeFigmaDesignSystemRequest(c.encoder)
 		decodeResponse = DecodeFigmaDesignSystemResponse(c.decoder, c.RestoreResponseBody)
 	)
-
 	return func(ctx context.Context, v any) (any, error) {
 		req, err := c.BuildFigmaDesignSystemRequest(ctx, v)
 		if err != nil {
@@ -136,14 +145,15 @@ func (c *Client) FigmaDesignSystem() loom.Endpoint {
 		}
 		return decodeResponse(resp)
 	}
-} // GeneratePrompts returns an endpoint that makes JSON-RPC requests to the
+}
+
+// GeneratePrompts returns an endpoint that makes JSON-RPC requests to the
 // assistant service generate_prompts method.
 func (c *Client) GeneratePrompts() loom.Endpoint {
 	var (
 		encodeRequest  = EncodeGeneratePromptsRequest(c.encoder)
 		decodeResponse = DecodeGeneratePromptsResponse(c.decoder, c.RestoreResponseBody)
 	)
-
 	return func(ctx context.Context, v any) (any, error) {
 		req, err := c.BuildGeneratePromptsRequest(ctx, v)
 		if err != nil {
@@ -158,14 +168,15 @@ func (c *Client) GeneratePrompts() loom.Endpoint {
 		}
 		return decodeResponse(resp)
 	}
-} // BuildFigmaImplementationPrompt returns an endpoint that makes JSON-RPC
+}
+
+// BuildFigmaImplementationPrompt returns an endpoint that makes JSON-RPC
 // requests to the assistant service build_figma_implementation_prompt method.
 func (c *Client) BuildFigmaImplementationPrompt() loom.Endpoint {
 	var (
 		encodeRequest  = EncodeBuildFigmaImplementationPromptRequest(c.encoder)
 		decodeResponse = DecodeBuildFigmaImplementationPromptResponse(c.decoder, c.RestoreResponseBody)
 	)
-
 	return func(ctx context.Context, v any) (any, error) {
 		req, err := c.BuildBuildFigmaImplementationPromptRequest(ctx, v)
 		if err != nil {
@@ -180,14 +191,15 @@ func (c *Client) BuildFigmaImplementationPrompt() loom.Endpoint {
 		}
 		return decodeResponse(resp)
 	}
-} // SendNotification returns an endpoint that makes JSON-RPC requests to the
+}
+
+// SendNotification returns an endpoint that makes JSON-RPC requests to the
 // assistant service send_notification method.
 func (c *Client) SendNotification() loom.Endpoint {
 	var (
 		encodeRequest  = EncodeSendNotificationRequest(c.encoder)
 		decodeResponse = DecodeSendNotificationResponse(c.decoder, c.RestoreResponseBody)
 	)
-
 	return func(ctx context.Context, v any) (any, error) {
 		req, err := c.BuildSendNotificationRequest(ctx, v)
 		if err != nil {
@@ -202,14 +214,15 @@ func (c *Client) SendNotification() loom.Endpoint {
 		}
 		return decodeResponse(resp)
 	}
-} // AnalyzeSentiment returns an endpoint that makes JSON-RPC requests to the
+}
+
+// AnalyzeSentiment returns an endpoint that makes JSON-RPC requests to the
 // assistant service analyze_sentiment method.
 func (c *Client) AnalyzeSentiment() loom.Endpoint {
 	var (
 		encodeRequest  = EncodeAnalyzeSentimentRequest(c.encoder)
 		decodeResponse = DecodeAnalyzeSentimentResponse(c.decoder, c.RestoreResponseBody)
 	)
-
 	return func(ctx context.Context, v any) (any, error) {
 		req, err := c.BuildAnalyzeSentimentRequest(ctx, v)
 		if err != nil {
@@ -224,14 +237,15 @@ func (c *Client) AnalyzeSentiment() loom.Endpoint {
 		}
 		return decodeResponse(resp)
 	}
-} // ExtractKeywords returns an endpoint that makes JSON-RPC requests to the
+}
+
+// ExtractKeywords returns an endpoint that makes JSON-RPC requests to the
 // assistant service extract_keywords method.
 func (c *Client) ExtractKeywords() loom.Endpoint {
 	var (
 		encodeRequest  = EncodeExtractKeywordsRequest(c.encoder)
 		decodeResponse = DecodeExtractKeywordsResponse(c.decoder, c.RestoreResponseBody)
 	)
-
 	return func(ctx context.Context, v any) (any, error) {
 		req, err := c.BuildExtractKeywordsRequest(ctx, v)
 		if err != nil {
@@ -246,14 +260,15 @@ func (c *Client) ExtractKeywords() loom.Endpoint {
 		}
 		return decodeResponse(resp)
 	}
-} // SummarizeText returns an endpoint that makes JSON-RPC requests to the
+}
+
+// SummarizeText returns an endpoint that makes JSON-RPC requests to the
 // assistant service summarize_text method.
 func (c *Client) SummarizeText() loom.Endpoint {
 	var (
 		encodeRequest  = EncodeSummarizeTextRequest(c.encoder)
 		decodeResponse = DecodeSummarizeTextResponse(c.decoder, c.RestoreResponseBody)
 	)
-
 	return func(ctx context.Context, v any) (any, error) {
 		req, err := c.BuildSummarizeTextRequest(ctx, v)
 		if err != nil {
@@ -268,14 +283,15 @@ func (c *Client) SummarizeText() loom.Endpoint {
 		}
 		return decodeResponse(resp)
 	}
-} // Search returns an endpoint that makes JSON-RPC requests to the assistant
+}
+
+// Search returns an endpoint that makes JSON-RPC requests to the assistant
 // service search method.
 func (c *Client) Search() loom.Endpoint {
 	var (
 		encodeRequest  = EncodeSearchRequest(c.encoder)
 		decodeResponse = DecodeSearchResponse(c.decoder, c.RestoreResponseBody)
 	)
-
 	return func(ctx context.Context, v any) (any, error) {
 		req, err := c.BuildSearchRequest(ctx, v)
 		if err != nil {
@@ -290,14 +306,15 @@ func (c *Client) Search() loom.Endpoint {
 		}
 		return decodeResponse(resp)
 	}
-} // ExecuteCode returns an endpoint that makes JSON-RPC requests to the
+}
+
+// ExecuteCode returns an endpoint that makes JSON-RPC requests to the
 // assistant service execute_code method.
 func (c *Client) ExecuteCode() loom.Endpoint {
 	var (
 		encodeRequest  = EncodeExecuteCodeRequest(c.encoder)
 		decodeResponse = DecodeExecuteCodeResponse(c.decoder, c.RestoreResponseBody)
 	)
-
 	return func(ctx context.Context, v any) (any, error) {
 		req, err := c.BuildExecuteCodeRequest(ctx, v)
 		if err != nil {
@@ -312,14 +329,15 @@ func (c *Client) ExecuteCode() loom.Endpoint {
 		}
 		return decodeResponse(resp)
 	}
-} // ProcessBatch returns an endpoint that makes JSON-RPC requests to the
+}
+
+// ProcessBatch returns an endpoint that makes JSON-RPC requests to the
 // assistant service process_batch method.
 func (c *Client) ProcessBatch() loom.Endpoint {
 	var (
 		encodeRequest  = EncodeProcessBatchRequest(c.encoder)
 		decodeResponse = DecodeProcessBatchResponse(c.decoder, c.RestoreResponseBody)
 	)
-
 	return func(ctx context.Context, v any) (any, error) {
 		req, err := c.BuildProcessBatchRequest(ctx, v)
 		if err != nil {
@@ -334,14 +352,15 @@ func (c *Client) ProcessBatch() loom.Endpoint {
 		}
 		return decodeResponse(resp)
 	}
-} // MultiContent returns an endpoint that makes JSON-RPC requests to the
+}
+
+// MultiContent returns an endpoint that makes JSON-RPC requests to the
 // assistant service multi_content method.
 func (c *Client) MultiContent() loom.Endpoint {
 	var (
 		encodeRequest  = EncodeMultiContentRequest(c.encoder)
 		decodeResponse = DecodeMultiContentResponse(c.decoder, c.RestoreResponseBody)
 	)
-
 	return func(ctx context.Context, v any) (any, error) {
 		req, err := c.BuildMultiContentRequest(ctx, v)
 		if err != nil {
@@ -356,14 +375,15 @@ func (c *Client) MultiContent() loom.Endpoint {
 		}
 		return decodeResponse(resp)
 	}
-} // GenerateDpiSpec returns an endpoint that makes JSON-RPC requests to the
+}
+
+// GenerateDpiSpec returns an endpoint that makes JSON-RPC requests to the
 // assistant service generate_dpi_spec method.
 func (c *Client) GenerateDpiSpec() loom.Endpoint {
 	var (
 		encodeRequest  = EncodeGenerateDpiSpecRequest(c.encoder)
 		decodeResponse = DecodeGenerateDpiSpecResponse(c.decoder, c.RestoreResponseBody)
 	)
-
 	return func(ctx context.Context, v any) (any, error) {
 		req, err := c.BuildGenerateDpiSpecRequest(ctx, v)
 		if err != nil {
@@ -378,14 +398,15 @@ func (c *Client) GenerateDpiSpec() loom.Endpoint {
 		}
 		return decodeResponse(resp)
 	}
-} // DispatchAction returns an endpoint that makes JSON-RPC requests to the
+}
+
+// DispatchAction returns an endpoint that makes JSON-RPC requests to the
 // assistant service dispatch_action method.
 func (c *Client) DispatchAction() loom.Endpoint {
 	var (
 		encodeRequest  = EncodeDispatchActionRequest(c.encoder)
 		decodeResponse = DecodeDispatchActionResponse(c.decoder, c.RestoreResponseBody)
 	)
-
 	return func(ctx context.Context, v any) (any, error) {
 		req, err := c.BuildDispatchActionRequest(ctx, v)
 		if err != nil {

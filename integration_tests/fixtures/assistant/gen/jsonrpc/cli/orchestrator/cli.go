@@ -26,40 +26,64 @@ func UsageCommands() []string {
 } // UsageExamples produces an example of a valid invocation of the CLI tool.
 func UsageExamples() string {
 	return os.Args[0] + " assistant list-documents\\n"
-} // ParseEndpoint returns the endpoint and payload as specified on the command
+}
+
+// ParseEndpoint returns the endpoint and payload as specified on the command
 // line.
-func ParseEndpoint(scheme string, host string, doer loomhttp.Doer, enc func(*http.Request) loomhttp.Encoder, dec func(*http.Response) loomhttp.Decoder, restore bool) (loom.Endpoint, any, error) {
+func ParseEndpoint(
+	scheme, host string,
+	doer loomhttp.Doer,
+	enc func(*http.Request) loomhttp.Encoder,
+	dec func(*http.Response) loomhttp.Decoder,
+	restore bool,
+) (loom.Endpoint, any, error) {
 	var (
-		assistantFlags                                  = flag.NewFlagSet("assistant", flag.ContinueOnError)
-		assistantListDocumentsFlags                     = flag.NewFlagSet("list-documents", flag.ExitOnError)
-		assistantSystemInfoFlags                        = flag.NewFlagSet("system-info", flag.ExitOnError)
-		assistantConversationHistoryFlags               = flag.NewFlagSet("conversation-history", flag.ExitOnError)
-		assistantConversationHistoryBodyFlag            = assistantConversationHistoryFlags.String("body", "REQUIRED", "")
-		assistantFigmaDesignSystemFlags                 = flag.NewFlagSet("figma-design-system", flag.ExitOnError)
-		assistantGeneratePromptsFlags                   = flag.NewFlagSet("generate-prompts", flag.ExitOnError)
-		assistantGeneratePromptsBodyFlag                = assistantGeneratePromptsFlags.String("body", "REQUIRED", "")
+		assistantFlags = flag.NewFlagSet("assistant", flag.ContinueOnError)
+
+		assistantListDocumentsFlags = flag.NewFlagSet("list-documents", flag.ExitOnError)
+
+		assistantSystemInfoFlags = flag.NewFlagSet("system-info", flag.ExitOnError)
+
+		assistantConversationHistoryFlags    = flag.NewFlagSet("conversation-history", flag.ExitOnError)
+		assistantConversationHistoryBodyFlag = assistantConversationHistoryFlags.String("body", "REQUIRED", "")
+
+		assistantFigmaDesignSystemFlags = flag.NewFlagSet("figma-design-system", flag.ExitOnError)
+
+		assistantGeneratePromptsFlags    = flag.NewFlagSet("generate-prompts", flag.ExitOnError)
+		assistantGeneratePromptsBodyFlag = assistantGeneratePromptsFlags.String("body", "REQUIRED", "")
+
 		assistantBuildFigmaImplementationPromptFlags    = flag.NewFlagSet("build-figma-implementation-prompt", flag.ExitOnError)
 		assistantBuildFigmaImplementationPromptBodyFlag = assistantBuildFigmaImplementationPromptFlags.String("body", "REQUIRED", "")
-		assistantSendNotificationFlags                  = flag.NewFlagSet("send-notification", flag.ExitOnError)
-		assistantSendNotificationBodyFlag               = assistantSendNotificationFlags.String("body", "REQUIRED", "")
-		assistantAnalyzeSentimentFlags                  = flag.NewFlagSet("analyze-sentiment", flag.ExitOnError)
-		assistantAnalyzeSentimentBodyFlag               = assistantAnalyzeSentimentFlags.String("body", "REQUIRED", "")
-		assistantExtractKeywordsFlags                   = flag.NewFlagSet("extract-keywords", flag.ExitOnError)
-		assistantExtractKeywordsBodyFlag                = assistantExtractKeywordsFlags.String("body", "REQUIRED", "")
-		assistantSummarizeTextFlags                     = flag.NewFlagSet("summarize-text", flag.ExitOnError)
-		assistantSummarizeTextBodyFlag                  = assistantSummarizeTextFlags.String("body", "REQUIRED", "")
-		assistantSearchFlags                            = flag.NewFlagSet("search", flag.ExitOnError)
-		assistantSearchBodyFlag                         = assistantSearchFlags.String("body", "REQUIRED", "")
-		assistantExecuteCodeFlags                       = flag.NewFlagSet("execute-code", flag.ExitOnError)
-		assistantExecuteCodeBodyFlag                    = assistantExecuteCodeFlags.String("body", "REQUIRED", "")
-		assistantProcessBatchFlags                      = flag.NewFlagSet("process-batch", flag.ExitOnError)
-		assistantProcessBatchBodyFlag                   = assistantProcessBatchFlags.String("body", "REQUIRED", "")
-		assistantMultiContentFlags                      = flag.NewFlagSet("multi-content", flag.ExitOnError)
-		assistantMultiContentBodyFlag                   = assistantMultiContentFlags.String("body", "REQUIRED", "")
-		assistantGenerateDpiSpecFlags                   = flag.NewFlagSet("generate-dpi-spec", flag.ExitOnError)
-		assistantGenerateDpiSpecBodyFlag                = assistantGenerateDpiSpecFlags.String("body", "REQUIRED", "")
-		assistantDispatchActionFlags                    = flag.NewFlagSet("dispatch-action", flag.ExitOnError)
-		assistantDispatchActionBodyFlag                 = assistantDispatchActionFlags.String("body", "REQUIRED", "")
+
+		assistantSendNotificationFlags    = flag.NewFlagSet("send-notification", flag.ExitOnError)
+		assistantSendNotificationBodyFlag = assistantSendNotificationFlags.String("body", "REQUIRED", "")
+
+		assistantAnalyzeSentimentFlags    = flag.NewFlagSet("analyze-sentiment", flag.ExitOnError)
+		assistantAnalyzeSentimentBodyFlag = assistantAnalyzeSentimentFlags.String("body", "REQUIRED", "")
+
+		assistantExtractKeywordsFlags    = flag.NewFlagSet("extract-keywords", flag.ExitOnError)
+		assistantExtractKeywordsBodyFlag = assistantExtractKeywordsFlags.String("body", "REQUIRED", "")
+
+		assistantSummarizeTextFlags    = flag.NewFlagSet("summarize-text", flag.ExitOnError)
+		assistantSummarizeTextBodyFlag = assistantSummarizeTextFlags.String("body", "REQUIRED", "")
+
+		assistantSearchFlags    = flag.NewFlagSet("search", flag.ExitOnError)
+		assistantSearchBodyFlag = assistantSearchFlags.String("body", "REQUIRED", "")
+
+		assistantExecuteCodeFlags    = flag.NewFlagSet("execute-code", flag.ExitOnError)
+		assistantExecuteCodeBodyFlag = assistantExecuteCodeFlags.String("body", "REQUIRED", "")
+
+		assistantProcessBatchFlags    = flag.NewFlagSet("process-batch", flag.ExitOnError)
+		assistantProcessBatchBodyFlag = assistantProcessBatchFlags.String("body", "REQUIRED", "")
+
+		assistantMultiContentFlags    = flag.NewFlagSet("multi-content", flag.ExitOnError)
+		assistantMultiContentBodyFlag = assistantMultiContentFlags.String("body", "REQUIRED", "")
+
+		assistantGenerateDpiSpecFlags    = flag.NewFlagSet("generate-dpi-spec", flag.ExitOnError)
+		assistantGenerateDpiSpecBodyFlag = assistantGenerateDpiSpecFlags.String("body", "REQUIRED", "")
+
+		assistantDispatchActionFlags    = flag.NewFlagSet("dispatch-action", flag.ExitOnError)
+		assistantDispatchActionBodyFlag = assistantDispatchActionFlags.String("body", "REQUIRED", "")
 	)
 	assistantFlags.Usage = assistantUsage
 	assistantListDocumentsFlags.Usage = assistantListDocumentsUsage
@@ -82,9 +106,11 @@ func ParseEndpoint(scheme string, host string, doer loomhttp.Doer, enc func(*htt
 	if err := flag.CommandLine.Parse(os.Args[1:]); err != nil {
 		return nil, nil, err
 	}
-	if flag.NArg() < 2 {
+
+	if flag.NArg() < 2 { // two non flag args are required: SERVICE and ENDPOINT (aka COMMAND)
 		return nil, nil, fmt.Errorf("not enough arguments")
 	}
+
 	var (
 		svcn string
 		svcf *flag.FlagSet
@@ -101,6 +127,7 @@ func ParseEndpoint(scheme string, host string, doer loomhttp.Doer, enc func(*htt
 	if err := svcf.Parse(flag.Args()[1:]); err != nil {
 		return nil, nil, err
 	}
+
 	var (
 		epn string
 		epf *flag.FlagSet
@@ -112,42 +139,61 @@ func ParseEndpoint(scheme string, host string, doer loomhttp.Doer, enc func(*htt
 			switch epn {
 			case "list-documents":
 				epf = assistantListDocumentsFlags
+
 			case "system-info":
 				epf = assistantSystemInfoFlags
+
 			case "conversation-history":
 				epf = assistantConversationHistoryFlags
+
 			case "figma-design-system":
 				epf = assistantFigmaDesignSystemFlags
+
 			case "generate-prompts":
 				epf = assistantGeneratePromptsFlags
+
 			case "build-figma-implementation-prompt":
 				epf = assistantBuildFigmaImplementationPromptFlags
+
 			case "send-notification":
 				epf = assistantSendNotificationFlags
+
 			case "analyze-sentiment":
 				epf = assistantAnalyzeSentimentFlags
+
 			case "extract-keywords":
 				epf = assistantExtractKeywordsFlags
+
 			case "summarize-text":
 				epf = assistantSummarizeTextFlags
+
 			case "search":
 				epf = assistantSearchFlags
+
 			case "execute-code":
 				epf = assistantExecuteCodeFlags
+
 			case "process-batch":
 				epf = assistantProcessBatchFlags
+
 			case "multi-content":
 				epf = assistantMultiContentFlags
+
 			case "generate-dpi-spec":
 				epf = assistantGenerateDpiSpecFlags
+
 			case "dispatch-action":
 				epf = assistantDispatchActionFlags
+
 			}
+
 		}
 	}
 	if epf == nil {
 		return nil, nil, fmt.Errorf("unknown %q endpoint %q", svcn, epn)
 	}
+
+	// Parse endpoint flags if any
 	if svcf.NArg() > 1 {
 		if err := epf.Parse(svcf.Args()[1:]); err != nil {
 			return nil, nil, err
@@ -215,8 +261,11 @@ func ParseEndpoint(scheme string, host string, doer loomhttp.Doer, enc func(*htt
 	if err != nil {
 		return nil, nil, err
 	}
+
 	return endpoint, data, nil
-} // assistantUsage displays the usage of the assistant command and its
+}
+
+// assistantUsage displays the usage of the assistant command and its
 // subcommands.
 func assistantUsage() {
 	fmt.Fprintln(os.Stderr, "AI Assistant service with full MCP protocol support")

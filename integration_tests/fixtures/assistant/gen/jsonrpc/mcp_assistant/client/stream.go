@@ -37,7 +37,7 @@ func (s *ToolsCallClientStream) readSSEEvent() ([]byte, error) {
 	var event bytes.Buffer
 
 	for {
-		line, err := s.reader.ReadString(byte(0xa))
+		line, err := s.reader.ReadString('\n')
 		if err != nil {
 			if err == io.EOF && event.Len() > 0 {
 				return event.Bytes(), nil
@@ -110,9 +110,7 @@ func (s *ToolsCallClientStream) Recv(ctx context.Context) (*mcpassistant.ToolsCa
 				return zero, fmt.Errorf("failed to parse response: %w", err)
 			}
 			if response.Error != nil {
-				{
-					return zero, fmt.Errorf("JSON-RPC error %d: %s", response.Error.Code, response.Error.Message)
-				}
+				return zero, fmt.Errorf("JSON-RPC error %d: %s", response.Error.Code, response.Error.Message)
 			}
 			if response.Result == nil {
 				return zero, fmt.Errorf("missing result in response")
@@ -125,6 +123,7 @@ func (s *ToolsCallClientStream) Recv(ctx context.Context) (*mcpassistant.ToolsCa
 			if err != nil {
 				return zero, fmt.Errorf("failed to decode final result: %w", err)
 			}
+			s.closed = true
 			return result, nil
 		case "error":
 			var response jsonrpc.Response
@@ -167,10 +166,8 @@ func (s *ToolsCallClientStream) Recv(ctx context.Context) (*mcpassistant.ToolsCa
 				return zero, fmt.Errorf("failed to parse response: %w", err)
 			}
 			if response.Error != nil {
-				{
-					s.closed = true
-					return zero, fmt.Errorf("JSON-RPC error %d: %s", response.Error.Code, response.Error.Message)
-				}
+				s.closed = true
+				return zero, fmt.Errorf("JSON-RPC error %d: %s", response.Error.Code, response.Error.Message)
 			}
 			if response.Result == nil {
 				return zero, fmt.Errorf("missing result in response")
@@ -190,10 +187,11 @@ func (s *ToolsCallClientStream) Recv(ctx context.Context) (*mcpassistant.ToolsCa
 		}
 	}
 }
+
 func (s *ToolsCallClientStream) decodeResult(data json.RawMessage) (*mcpassistant.ToolsCallResult, error) {
 	resp := &http.Response{
-		Body:       io.NopCloser(bytes.NewReader(data)),
 		StatusCode: http.StatusOK,
+		Body:       io.NopCloser(bytes.NewReader(data)),
 	}
 	decoder := s.decoder(resp)
 	var result *mcpassistant.ToolsCallResult
@@ -215,7 +213,9 @@ func (s *ToolsCallClientStream) Close() error {
 		}
 	}
 	return nil
-} // EventsStreamClientStream implements the
+}
+
+// EventsStreamClientStream implements the
 // mcpassistant.EventsStreamClientStream interface using Server-Sent Events.
 type EventsStreamClientStream struct {
 	resp    *http.Response
@@ -229,7 +229,7 @@ func (s *EventsStreamClientStream) readSSEEvent() ([]byte, error) {
 	var event bytes.Buffer
 
 	for {
-		line, err := s.reader.ReadString(byte(0xa))
+		line, err := s.reader.ReadString('\n')
 		if err != nil {
 			if err == io.EOF && event.Len() > 0 {
 				return event.Bytes(), nil
@@ -302,9 +302,7 @@ func (s *EventsStreamClientStream) Recv(ctx context.Context) (*mcpassistant.Even
 				return zero, fmt.Errorf("failed to parse response: %w", err)
 			}
 			if response.Error != nil {
-				{
-					return zero, fmt.Errorf("JSON-RPC error %d: %s", response.Error.Code, response.Error.Message)
-				}
+				return zero, fmt.Errorf("JSON-RPC error %d: %s", response.Error.Code, response.Error.Message)
 			}
 			if response.Result == nil {
 				return zero, fmt.Errorf("missing result in response")
@@ -317,6 +315,7 @@ func (s *EventsStreamClientStream) Recv(ctx context.Context) (*mcpassistant.Even
 			if err != nil {
 				return zero, fmt.Errorf("failed to decode final result: %w", err)
 			}
+			s.closed = true
 			return result, nil
 		case "error":
 			var response jsonrpc.Response
@@ -359,10 +358,8 @@ func (s *EventsStreamClientStream) Recv(ctx context.Context) (*mcpassistant.Even
 				return zero, fmt.Errorf("failed to parse response: %w", err)
 			}
 			if response.Error != nil {
-				{
-					s.closed = true
-					return zero, fmt.Errorf("JSON-RPC error %d: %s", response.Error.Code, response.Error.Message)
-				}
+				s.closed = true
+				return zero, fmt.Errorf("JSON-RPC error %d: %s", response.Error.Code, response.Error.Message)
 			}
 			if response.Result == nil {
 				return zero, fmt.Errorf("missing result in response")
@@ -382,10 +379,11 @@ func (s *EventsStreamClientStream) Recv(ctx context.Context) (*mcpassistant.Even
 		}
 	}
 }
+
 func (s *EventsStreamClientStream) decodeResult(data json.RawMessage) (*mcpassistant.EventsStreamResult, error) {
 	resp := &http.Response{
-		Body:       io.NopCloser(bytes.NewReader(data)),
 		StatusCode: http.StatusOK,
+		Body:       io.NopCloser(bytes.NewReader(data)),
 	}
 	decoder := s.decoder(resp)
 	var result *mcpassistant.EventsStreamResult

@@ -71,11 +71,11 @@ func emitCallerCallTool(stmt *jen.Statement) {
 			jen.Error(),
 		).
 		BlockFunc(func(g *jen.Group) {
-			g.Add(callerRequireClient())
-			g.Add(callerBuildPayload())
-			g.Add(callerCallStream())
-			g.Add(callerMergeEvents())
-			g.Add(callerReturnMerged())
+			emitCallerRequireClient(g)
+			emitCallerBuildPayload(g)
+			emitCallerCallStream(g)
+			emitCallerMergeEvents(g)
+			emitCallerReturnMerged(g)
 		})
 	stmt.Line()
 }
@@ -109,8 +109,8 @@ func emitCallerNormalizer(stmt *jen.Statement) {
 	stmt.Line()
 }
 
-func callerRequireClient() jen.Code {
-	return jen.If(jen.Id("c").Dot("client").Op("==").Nil()).Block(
+func emitCallerRequireClient(g *jen.Group) {
+	g.If(jen.Id("c").Dot("client").Op("==").Nil()).Block(
 		jen.Return(
 			jen.Id("mcpruntime").Dot("CallResponse").Values(),
 			jen.Qual("errors", "New").Call(jen.Lit("mcp client not configured")),
@@ -118,55 +118,51 @@ func callerRequireClient() jen.Code {
 	)
 }
 
-func callerBuildPayload() jen.Code {
-	return jen.Id("payload").Op(":=").Op("&").Id("mcppkg").Dot("ToolsCallPayload").Values(jen.Dict{
+func emitCallerBuildPayload(g *jen.Group) {
+	g.Id("payload").Op(":=").Op("&").Id("mcppkg").Dot("ToolsCallPayload").Values(jen.Dict{
 		jen.Id("Name"):      jen.Id("req").Dot("Tool"),
 		jen.Id("Arguments"): jen.Qual("encoding/json", "RawMessage").Call(jen.Id("req").Dot("Payload")),
 	})
 }
 
-func callerCallStream() jen.Code {
-	return jen.Block(
-		jen.Id("streamEndpoint").Op(":=").Id("c").Dot("client").Dot("ToolsCall").Call(),
-		jen.List(jen.Id("stream"), jen.Id("err")).Op(":=").Id("streamEndpoint").Call(jen.Id("ctx"), jen.Id("payload")),
-		jen.If(jen.Id("err").Op("!=").Nil()).Block(
-			jen.Return(jen.Id("mcpruntime").Dot("CallResponse").Values(), jen.Id("err")),
-		),
-		jen.List(jen.Id("clientStream"), jen.Id("ok")).Op(":=").Id("stream").Assert(jen.Op("*").Id("ToolsCallClientStream")),
-		jen.If(jen.Op("!").Id("ok")).Block(
-			jen.Return(
-				jen.Id("mcpruntime").Dot("CallResponse").Values(),
-				jen.Qual("errors", "New").Call(jen.Lit("invalid tools/call stream type")),
-			),
+func emitCallerCallStream(g *jen.Group) {
+	g.Id("streamEndpoint").Op(":=").Id("c").Dot("client").Dot("ToolsCall").Call()
+	g.List(jen.Id("stream"), jen.Id("err")).Op(":=").Id("streamEndpoint").Call(jen.Id("ctx"), jen.Id("payload"))
+	g.If(jen.Id("err").Op("!=").Nil()).Block(
+		jen.Return(jen.Id("mcpruntime").Dot("CallResponse").Values(), jen.Id("err")),
+	)
+	g.List(jen.Id("clientStream"), jen.Id("ok")).Op(":=").Id("stream").Assert(jen.Op("*").Id("ToolsCallClientStream"))
+	g.If(jen.Op("!").Id("ok")).Block(
+		jen.Return(
+			jen.Id("mcpruntime").Dot("CallResponse").Values(),
+			jen.Qual("errors", "New").Call(jen.Lit("invalid tools/call stream type")),
 		),
 	)
 }
 
-func callerMergeEvents() jen.Code {
-	return jen.Block(
-		jen.Var().Id("merged").Op("*").Id("mcppkg").Dot("ToolsCallResult"),
-		jen.Id("eventCount").Op(":=").Lit(0),
-		jen.For().Block(
-			jen.List(jen.Id("ev"), jen.Id("recvErr")).Op(":=").Id("clientStream").Dot("Recv").Call(jen.Id("ctx")),
-			jen.If(jen.Id("recvErr").Op("==").Qual("io", "EOF")).Block(jen.Break()),
-			jen.If(jen.Id("recvErr").Op("!=").Nil()).Block(
-				jen.Return(jen.Id("mcpruntime").Dot("CallResponse").Values(), jen.Id("recvErr")),
-			),
-			jen.If(jen.Id("ev").Op("==").Nil()).Block(jen.Continue()),
-			jen.Id("eventCount").Op("++"),
-			jen.If(jen.Id("merged").Op("==").Nil()).Block(
-				jen.Id("merged").Op("=").Op("&").Id("mcppkg").Dot("ToolsCallResult").Values(),
-			),
-			jen.Id("merged").Dot("Content").Op("=").Append(jen.Id("merged").Dot("Content"), jen.Id("ev").Dot("Content").Op("...")),
-			jen.If(jen.Id("ev").Dot("IsError").Op("!=").Nil()).Block(
-				jen.Id("merged").Dot("IsError").Op("=").Id("ev").Dot("IsError"),
-			),
+func emitCallerMergeEvents(g *jen.Group) {
+	g.Var().Id("merged").Op("*").Id("mcppkg").Dot("ToolsCallResult")
+	g.Id("eventCount").Op(":=").Lit(0)
+	g.For().Block(
+		jen.List(jen.Id("ev"), jen.Id("recvErr")).Op(":=").Id("clientStream").Dot("Recv").Call(jen.Id("ctx")),
+		jen.If(jen.Id("recvErr").Op("==").Qual("io", "EOF")).Block(jen.Break()),
+		jen.If(jen.Id("recvErr").Op("!=").Nil()).Block(
+			jen.Return(jen.Id("mcpruntime").Dot("CallResponse").Values(), jen.Id("recvErr")),
+		),
+		jen.If(jen.Id("ev").Op("==").Nil()).Block(jen.Continue()),
+		jen.Id("eventCount").Op("++"),
+		jen.If(jen.Id("merged").Op("==").Nil()).Block(
+			jen.Id("merged").Op("=").Op("&").Id("mcppkg").Dot("ToolsCallResult").Values(),
+		),
+		jen.Id("merged").Dot("Content").Op("=").Append(jen.Id("merged").Dot("Content"), jen.Id("ev").Dot("Content").Op("...")),
+		jen.If(jen.Id("ev").Dot("IsError").Op("!=").Nil()).Block(
+			jen.Id("merged").Dot("IsError").Op("=").Id("ev").Dot("IsError"),
 		),
 	)
 }
 
-func callerReturnMerged() jen.Code {
-	return jen.If(jen.Id("merged").Op("==").Nil().Op("||").Len(jen.Id("merged").Dot("Content")).Op("==").Lit(0)).Block(
+func emitCallerReturnMerged(g *jen.Group) {
+	g.If(jen.Id("merged").Op("==").Nil().Op("||").Len(jen.Id("merged").Dot("Content")).Op("==").Lit(0)).Block(
 		jen.Return(
 			jen.Id("mcpruntime").Dot("CallResponse").Values(),
 			jen.Qual("fmt", "Errorf").Call(

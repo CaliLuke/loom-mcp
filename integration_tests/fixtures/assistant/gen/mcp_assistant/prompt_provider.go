@@ -12,13 +12,13 @@ import (
 	"encoding/json"
 )
 
-// PromptProvider defines the interface for providing prompt content
-// Users must implement this interface to provide actual prompt implementations
+// PromptProvider defines the interface for providing prompt content.
+// Users must implement this interface to provide actual prompt implementations.
 type PromptProvider interface {
-	// GetCodeReviewPrompt returns the content for the code_review prompt
+	// GetCodeReviewPrompt returns the content for the code_review prompt.
 	GetCodeReviewPrompt(arguments json.RawMessage) (*PromptsGetResult, error)
-	// GetContextualPromptsPrompt returns the dynamic content for the contextual_prompts prompt
+	// GetContextualPromptsPrompt returns the dynamic content for the contextual_prompts prompt.
 	GetContextualPromptsPrompt(ctx context.Context, arguments json.RawMessage) (*PromptsGetResult, error)
-	// GetFigmaImplementationPromptPrompt returns the dynamic content for the figma_implementation_prompt prompt
+	// GetFigmaImplementationPromptPrompt returns the dynamic content for the figma_implementation_prompt prompt.
 	GetFigmaImplementationPromptPrompt(ctx context.Context, arguments json.RawMessage) (*PromptsGetResult, error)
 }

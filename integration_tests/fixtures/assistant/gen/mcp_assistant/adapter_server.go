@@ -632,7 +632,6 @@ func (a *MCPAdapter) Ping(ctx context.Context) (res *PingResult, err error) {
 }
 
 // Broadcaster and publish helpers for server-initiated events
-
 // Publish sends an event to all event stream subscribers.
 func (a *MCPAdapter) Publish(ev *EventsStreamResult) {
 	if a == nil || a.broadcaster == nil {
@@ -643,14 +642,16 @@ func (a *MCPAdapter) Publish(ev *EventsStreamResult) {
 
 // PublishStatus is a convenience to publish a status_update message.
 func (a *MCPAdapter) PublishStatus(ctx context.Context, typ string, message string, data any) {
-	n := &mcpruntime.Notification{Type: typ, Message: &message, Data: data}
+	n := &mcpruntime.Notification{
+		Data:    data,
+		Message: &message,
+		Type:    typ,
+	}
 	s, err := mcpruntime.EncodeJSONToString(ctx, goahttp.ResponseEncoder, n)
 	if err != nil {
 		return
 	}
-	a.Publish(&EventsStreamResult{
-		Content: []*ContentItem{buildContentItem(a, s)},
-	})
+	a.Publish(&EventsStreamResult{Content: []*ContentItem{buildContentItem(a, s)}})
 }
 
 // Tools handling
@@ -1346,68 +1347,61 @@ func (a *MCPAdapter) ResourcesUnsubscribe(ctx context.Context, p *ResourcesUnsub
 }
 
 // Prompts handling
-
 func (a *MCPAdapter) PromptsList(ctx context.Context, p *PromptsListPayload) (*PromptsListResult, error) {
 	if !a.isInitialized(ctx) {
 		return nil, goa.PermanentError("invalid_params", "Not initialized")
 	}
 	a.log(ctx, "request", map[string]any{"method": "prompts/list"})
-	prompts := []*PromptInfo{
-
-		{
-			Name:        "contextual_prompts",
-			Description: stringPtr("Generate prompts based on context"),
-			Arguments: []*PromptArgument{
-
-				{Name: "context", Description: stringPtr("Current context"), Required: true},
-
-				{Name: "task", Description: stringPtr("Task type"), Required: true},
-			},
-			Icons: []*Icon{
-				{
-					Src:      "https://assistant.example.com/icons/contextual-prompts.png",
-					MimeType: stringPtr("image/png"),
-					Sizes: []string{
-						"48x48",
-					},
-				},
-			},
-		},
-
-		{
-			Name:        "figma_implementation_prompt",
-			Description: stringPtr("Generate implementation instructions from a DPI spec"),
-			Arguments: []*PromptArgument{
-
-				{Name: "screen_title", Description: stringPtr("Title of the screen being implemented"), Required: true},
-
-				{Name: "framework", Description: stringPtr("Target UI framework"), Required: true},
-
-				{Name: "design_tokens_uri", Description: stringPtr("Resource URI for the design system"), Required: true},
-
-				{Name: "dpi_json", Description: stringPtr("Serialized DPI spec JSON"), Required: true},
-			},
-		},
-
-		{
-			Name:        "code_review",
-			Description: stringPtr("Simple code review prompt"),
-			Icons: []*Icon{
-				{
-					Src:      "https://assistant.example.com/icons/code-review.svg",
-					MimeType: stringPtr("image/svg+xml"),
-					Sizes: []string{
-						"any",
-					},
-				},
-			},
-		},
-	}
+	prompts := []*PromptInfo{&PromptInfo{
+		Arguments: []*PromptArgument{&PromptArgument{
+			Description: stringPtr("Current context"),
+			Name:        "context",
+			Required:    true,
+		}, &PromptArgument{
+			Description: stringPtr("Task type"),
+			Name:        "task",
+			Required:    true,
+		}},
+		Description: stringPtr("Generate prompts based on context"),
+		Icons: []*Icon{&Icon{
+			MimeType: stringPtr("image/png"),
+			Sizes:    []string{"48x48"},
+			Src:      "https://assistant.example.com/icons/contextual-prompts.png",
+		}},
+		Name: "contextual_prompts",
+	}, &PromptInfo{
+		Arguments: []*PromptArgument{&PromptArgument{
+			Description: stringPtr("Title of the screen being implemented"),
+			Name:        "screen_title",
+			Required:    true,
+		}, &PromptArgument{
+			Description: stringPtr("Target UI framework"),
+			Name:        "framework",
+			Required:    true,
+		}, &PromptArgument{
+			Description: stringPtr("Resource URI for the design system"),
+			Name:        "design_tokens_uri",
+			Required:    true,
+		}, &PromptArgument{
+			Description: stringPtr("Serialized DPI spec JSON"),
+			Name:        "dpi_json",
+			Required:    true,
+		}},
+		Description: stringPtr("Generate implementation instructions from a DPI spec"),
+		Name:        "figma_implementation_prompt",
+	}, &PromptInfo{
+		Description: stringPtr("Simple code review prompt"),
+		Icons: []*Icon{&Icon{
+			MimeType: stringPtr("image/svg+xml"),
+			Sizes:    []string{"any"},
+			Src:      "https://assistant.example.com/icons/code-review.svg",
+		}},
+		Name: "code_review",
+	}}
 	res := &PromptsListResult{Prompts: prompts}
 	a.log(ctx, "response", map[string]any{"method": "prompts/list"})
 	return res, nil
 }
-
 func (a *MCPAdapter) PromptsGet(ctx context.Context, p *PromptsGetPayload) (*PromptsGetResult, error) {
 	if !a.isInitialized(ctx) {
 		return nil, goa.PermanentError("invalid_params", "Not initialized")
@@ -1415,57 +1409,53 @@ func (a *MCPAdapter) PromptsGet(ctx context.Context, p *PromptsGetPayload) (*Pro
 	if p == nil || p.Name == "" {
 		return nil, goa.PermanentError("invalid_params", "Missing prompt name")
 	}
-	a.log(ctx, "request", map[string]any{"method": "prompts/get", "name": p.Name})
+	a.log(ctx, "request", map[string]any{
+		"method": "prompts/get",
+		"name":   p.Name,
+	})
 	switch p.Name {
-
 	case "code_review":
 		if a.promptProvider != nil {
 			if res, err := a.promptProvider.GetCodeReviewPrompt(p.Arguments); err == nil && res != nil {
-				a.log(ctx, "response", map[string]any{"method": "prompts/get", "name": p.Name})
+				a.log(ctx, "response", map[string]any{
+					"method": "prompts/get",
+					"name":   p.Name,
+				})
 				return res, nil
 			} else if err != nil {
 				return nil, err
 			}
 		}
-		msgs := make([]*PromptMessage, 0, 1)
-
-		msgs = append(msgs, &PromptMessage{
-			Role: "system",
+		msgs := []*PromptMessage{&PromptMessage{
 			Content: &MessageContent{
-				Type: "text",
 				Text: stringPtr("Review the provided code and suggest improvements."),
+				Type: "text",
 			},
-		})
-
+			Role: "system",
+		}}
 		res := &PromptsGetResult{
 			Description: stringPtr("Simple code review prompt"),
 			Messages:    msgs,
 		}
-		a.log(ctx, "response", map[string]any{"method": "prompts/get", "name": p.Name})
+		a.log(ctx, "response", map[string]any{
+			"method": "prompts/get",
+			"name":   p.Name,
+		})
 		return res, nil
-
 	}
-
 	switch p.Name {
-
 	case "contextual_prompts":
-		{
-
-			var args map[string]any
-			if len(p.Arguments) > 0 {
-				if err := json.Unmarshal(p.Arguments, &args); err != nil {
-					return nil, goa.PermanentError("invalid_params", "%s", err.Error())
-				}
+		var args map[string]any
+		if len(p.Arguments) > 0 {
+			if err := json.Unmarshal(p.Arguments, &args); err != nil {
+				return nil, goa.PermanentError("invalid_params", "%s", err.Error())
 			}
-
-			if _, ok := args["context"]; !ok {
-				return nil, goa.PermanentError("invalid_params", "Missing required argument: context")
-			}
-
-			if _, ok := args["task"]; !ok {
-				return nil, goa.PermanentError("invalid_params", "Missing required argument: task")
-			}
-
+		}
+		if _, ok := args["context"]; !ok {
+			return nil, goa.PermanentError("invalid_params", "Missing required argument: context")
+		}
+		if _, ok := args["task"]; !ok {
+			return nil, goa.PermanentError("invalid_params", "Missing required argument: task")
 		}
 		if a.promptProvider == nil {
 			return nil, goa.PermanentError("invalid_params", "No prompt provider configured for dynamic prompts")
@@ -1474,35 +1464,29 @@ func (a *MCPAdapter) PromptsGet(ctx context.Context, p *PromptsGetPayload) (*Pro
 		if err != nil {
 			return nil, a.mapError(err)
 		}
-		a.log(ctx, "response", map[string]any{"method": "prompts/get", "name": p.Name})
+		a.log(ctx, "response", map[string]any{
+			"method": "prompts/get",
+			"name":   p.Name,
+		})
 		return res, nil
-
 	case "figma_implementation_prompt":
-		{
-
-			var args map[string]any
-			if len(p.Arguments) > 0 {
-				if err := json.Unmarshal(p.Arguments, &args); err != nil {
-					return nil, goa.PermanentError("invalid_params", "%s", err.Error())
-				}
+		var args map[string]any
+		if len(p.Arguments) > 0 {
+			if err := json.Unmarshal(p.Arguments, &args); err != nil {
+				return nil, goa.PermanentError("invalid_params", "%s", err.Error())
 			}
-
-			if _, ok := args["screen_title"]; !ok {
-				return nil, goa.PermanentError("invalid_params", "Missing required argument: screen_title")
-			}
-
-			if _, ok := args["framework"]; !ok {
-				return nil, goa.PermanentError("invalid_params", "Missing required argument: framework")
-			}
-
-			if _, ok := args["design_tokens_uri"]; !ok {
-				return nil, goa.PermanentError("invalid_params", "Missing required argument: design_tokens_uri")
-			}
-
-			if _, ok := args["dpi_json"]; !ok {
-				return nil, goa.PermanentError("invalid_params", "Missing required argument: dpi_json")
-			}
-
+		}
+		if _, ok := args["screen_title"]; !ok {
+			return nil, goa.PermanentError("invalid_params", "Missing required argument: screen_title")
+		}
+		if _, ok := args["framework"]; !ok {
+			return nil, goa.PermanentError("invalid_params", "Missing required argument: framework")
+		}
+		if _, ok := args["design_tokens_uri"]; !ok {
+			return nil, goa.PermanentError("invalid_params", "Missing required argument: design_tokens_uri")
+		}
+		if _, ok := args["dpi_json"]; !ok {
+			return nil, goa.PermanentError("invalid_params", "Missing required argument: dpi_json")
 		}
 		if a.promptProvider == nil {
 			return nil, goa.PermanentError("invalid_params", "No prompt provider configured for dynamic prompts")
@@ -1511,16 +1495,16 @@ func (a *MCPAdapter) PromptsGet(ctx context.Context, p *PromptsGetPayload) (*Pro
 		if err != nil {
 			return nil, a.mapError(err)
 		}
-		a.log(ctx, "response", map[string]any{"method": "prompts/get", "name": p.Name})
+		a.log(ctx, "response", map[string]any{
+			"method": "prompts/get",
+			"name":   p.Name,
+		})
 		return res, nil
-
 	}
-
 	return nil, goa.PermanentError("method_not_found", "Unknown prompt: %s", p.Name)
 }
 
 // Notifications and events stream
-
 func (a *MCPAdapter) NotifyStatusUpdate(ctx context.Context, n *mcpruntime.Notification) error {
 	if !a.isInitialized(ctx) {
 		return goa.PermanentError("invalid_params", "Not initialized")
@@ -1529,19 +1513,15 @@ func (a *MCPAdapter) NotifyStatusUpdate(ctx context.Context, n *mcpruntime.Notif
 		return goa.PermanentError("invalid_params", "Missing notification type")
 	}
 	a.log(ctx, "request", map[string]any{
+		"message": n.Message,
 		"method":  "notify_status_update",
 		"type":    n.Type,
-		"message": n.Message,
 	})
 	s, err := mcpruntime.EncodeJSONToString(ctx, goahttp.ResponseEncoder, n)
 	if err != nil {
 		return err
 	}
-	ev := &EventsStreamResult{
-		Content: []*ContentItem{
-			buildContentItem(a, s),
-		},
-	}
+	ev := &EventsStreamResult{Content: []*ContentItem{buildContentItem(a, s)}}
 	a.Publish(ev)
 	a.log(ctx, "response", map[string]any{
 		"method": "notify_status_update",
@@ -1549,7 +1529,6 @@ func (a *MCPAdapter) NotifyStatusUpdate(ctx context.Context, n *mcpruntime.Notif
 	})
 	return nil
 }
-
 func (a *MCPAdapter) EventsStream(ctx context.Context, stream EventsStreamServerStream) error {
 	if !a.isInitialized(ctx) {
 		return goa.PermanentError("internal_error", "Not initialized")
@@ -1567,29 +1546,28 @@ func (a *MCPAdapter) EventsStream(ctx context.Context, stream EventsStreamServer
 		select {
 		case <-ctx.Done():
 			a.log(ctx, "response", map[string]any{
-				"method":     "events/stream",
-				"session_id": mcpruntime.SessionIDFromContext(ctx),
 				"closed":     true,
+				"method":     "events/stream",
 				"reason":     ctx.Err().Error(),
+				"session_id": mcpruntime.SessionIDFromContext(ctx),
 			})
 			return ctx.Err()
 		case ev, ok := <-sub.C():
 			if !ok {
 				a.log(ctx, "response", map[string]any{
-					"method":     "events/stream",
-					"session_id": mcpruntime.SessionIDFromContext(ctx),
 					"closed":     true,
+					"method":     "events/stream",
 					"reason":     "broadcaster_closed",
+					"session_id": mcpruntime.SessionIDFromContext(ctx),
 				})
 				return nil
 			}
-			// Ensure published events implement the generated EventsStreamEvent marker.
 			evt, ok := ev.(EventsStreamEvent)
 			if !ok {
 				a.log(ctx, "response", map[string]any{
+					"dropped_event_type": fmt.Sprintf("%T", ev),
 					"method":             "events/stream",
 					"session_id":         mcpruntime.SessionIDFromContext(ctx),
-					"dropped_event_type": fmt.Sprintf("%T", ev),
 				})
 				continue
 			}
@@ -1597,9 +1575,9 @@ func (a *MCPAdapter) EventsStream(ctx context.Context, stream EventsStreamServer
 				return goa.PermanentError("internal_error", "Failed to send event: %v", err)
 			}
 			a.log(ctx, "response", map[string]any{
+				"event_type": fmt.Sprintf("%T", evt),
 				"method":     "events/stream",
 				"session_id": mcpruntime.SessionIDFromContext(ctx),
-				"event_type": fmt.Sprintf("%T", evt),
 			})
 		}
 	}

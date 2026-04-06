@@ -19,10 +19,10 @@ Goal: replace template-backed Go code generation where Jennifer materially impro
 - [ ] `codegen/mcp/templates/adapter_core.go.tpl`
 - [ ] `codegen/mcp/templates/adapter_tools.go.tpl`
 - [ ] `codegen/mcp/templates/adapter_resources.go.tpl`
-- [ ] `codegen/mcp/templates/adapter_prompts.go.tpl`
-- [ ] `codegen/mcp/templates/adapter_notifications.go.tpl`
-- [ ] `codegen/mcp/templates/adapter_subscriptions.go.tpl`
-- [ ] `codegen/mcp/templates/adapter_broadcast.go.tpl`
+- [x] `codegen/mcp/templates/adapter_prompts.go.tpl`
+- [x] `codegen/mcp/templates/adapter_notifications.go.tpl`
+- [x] `codegen/mcp/templates/adapter_subscriptions.go.tpl`
+- [x] `codegen/mcp/templates/adapter_broadcast.go.tpl`
 - [ ] `codegen/mcp/templates/client_retry_helpers.go.tpl`
 
 Reason:
@@ -33,7 +33,7 @@ Reason:
 ## Priority 2: Medium Value MCP Conversions
 
 - [ ] `codegen/mcp/templates/mcp_client_wrapper.go.tpl`
-- [ ] `codegen/mcp/templates/prompt_provider.go.tpl`
+- [x] `codegen/mcp/templates/prompt_provider.go.tpl`
 - [ ] `codegen/mcp/templates/cli_dojsonrpc.go.tpl`
 - [ ] `codegen/mcp/templates/example_mcp_stub.go.tpl`
 

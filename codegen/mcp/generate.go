@@ -171,7 +171,7 @@ func rewriteJSONRPCServerSection(section codegen.Section) codegen.Section {
 			return rewritten
 		}
 		return sec
-	case *codegen.RawSection, *codegen.RenderSection, *codegen.JenniferSection:
+	case *codegen.RawSection, *codegen.JenniferSection:
 		if rewritten, ok := rewriteJSONRPCSectionByRenderedSource(sec); ok {
 			return rewritten
 		}
@@ -194,9 +194,10 @@ func rewriteJSONRPCSectionByRenderedSource(section codegen.Section) (codegen.Sec
 	if section.SectionName() != jsonrpcServerMountSectionName && !isJSONRPCMountSource(source) {
 		return nil, false
 	}
-	return codegen.NewRenderSection(section.SectionName(), func() string {
-		return rewriteJSONRPCServerMountSource(source)
-	}), true
+	return &codegen.RawSection{
+		Name:   section.SectionName(),
+		Source: rewriteJSONRPCServerMountSource(source),
+	}, true
 }
 
 func renderedSectionSource(section codegen.Section) (string, bool) {
@@ -488,15 +489,15 @@ func buildMCPAdapterFile(genpkg string, svc *expr.ServiceExpr, data *AdapterData
 	adapterPath := filepath.Join(codegen.Gendir, "mcp_"+svcName, "adapter_server.go")
 	return &codegen.File{
 		Path: adapterPath,
-		SectionTemplates: []*codegen.SectionTemplate{
+		Sections: []codegen.Section{
 			codegen.Header(fmt.Sprintf("MCP server adapter for %s service", svc.Name), data.MCPPackage, adapterImports(genpkg, svc, svcName)),
 			templateSection("mcp-adapter-core", "adapter_core", data),
-			templateSection("mcp-adapter-broadcast", "adapter_broadcast", data),
+			adapterBroadcastSection(),
 			templateSection("mcp-adapter-tools", "adapter_tools", data),
 			templateSection("mcp-adapter-resources", "adapter_resources", data),
-			templateSection("mcp-adapter-prompts", "adapter_prompts", data),
-			templateSection("mcp-adapter-notifications", "adapter_notifications", data),
-			templateSection("mcp-adapter-subscriptions", "adapter_subscriptions", data),
+			adapterPromptsSection(data),
+			adapterNotificationsSection(),
+			adapterSubscriptionsSection(data),
 		},
 	}
 }
@@ -621,20 +622,13 @@ func buildMCPPromptProviderFile(genpkg string, svc *expr.ServiceExpr, data *Adap
 	}
 	return &codegen.File{
 		Path: filepath.Join(codegen.Gendir, "mcp_"+svcName, "prompt_provider.go"),
-		SectionTemplates: []*codegen.SectionTemplate{
+		Sections: []codegen.Section{
 			codegen.Header(fmt.Sprintf("MCP prompt provider for %s service", svc.Name), pkgName, []*codegen.ImportSpec{
 				{Path: "context"},
 				{Path: "encoding/json"},
 				{Path: genpkg + "/" + svcName, Name: svcName},
 			}),
-			{
-				Name:   "mcp-prompt-provider",
-				Source: mcpTemplates.Read("prompt_provider"),
-				Data:   data,
-				FuncMap: map[string]any{
-					"goify": func(s string) string { return codegen.Goify(s, true) },
-				},
-			},
+			promptProviderSection(data),
 		},
 	}
 }

@@ -110,7 +110,9 @@ func DecodeInitializeResponse(decoder func(*http.Response) loomhttp.Decoder, res
 		res := NewInitializeResultOK(&body)
 		return res, nil
 	}
-} // BuildPingRequest instantiates a HTTP request object with method and path set
+}
+
+// BuildPingRequest instantiates a HTTP request object with method and path set
 // to call the "mcp_assistant" service "ping" endpoint
 func (c *Client) BuildPingRequest(ctx context.Context, v any) (*http.Request, error) {
 	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: PingMcpAssistantPath()}
@@ -176,7 +178,9 @@ func DecodePingResponse(decoder func(*http.Response) loomhttp.Decoder, restoreBo
 		res := NewPingResultOK(&body)
 		return res, nil
 	}
-} // BuildToolsListRequest instantiates a HTTP request object with method and
+}
+
+// BuildToolsListRequest instantiates a HTTP request object with method and
 // path set to call the "mcp_assistant" service "tools/list" endpoint
 func (c *Client) BuildToolsListRequest(ctx context.Context, v any) (*http.Request, error) {
 	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: ToolsListMcpAssistantPath()}
@@ -266,7 +270,9 @@ func DecodeToolsListResponse(decoder func(*http.Response) loomhttp.Decoder, rest
 		res := NewToolsListResultOK(&body)
 		return res, nil
 	}
-} // BuildToolsCallRequest instantiates a HTTP request object with method and
+}
+
+// BuildToolsCallRequest instantiates a HTTP request object with method and
 // path set to call the "mcp_assistant" service "tools/call" endpoint
 func (c *Client) BuildToolsCallRequest(ctx context.Context, v any) (*http.Request, error) {
 	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: ToolsCallMcpAssistantPath()}
@@ -356,7 +362,9 @@ func DecodeToolsCallResponse(decoder func(*http.Response) loomhttp.Decoder, rest
 		res := NewToolsCallResultOK(&body)
 		return res, nil
 	}
-} // BuildResourcesListRequest instantiates a HTTP request object with method and
+}
+
+// BuildResourcesListRequest instantiates a HTTP request object with method and
 // path set to call the "mcp_assistant" service "resources/list" endpoint
 func (c *Client) BuildResourcesListRequest(ctx context.Context, v any) (*http.Request, error) {
 	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: ResourcesListMcpAssistantPath()}
@@ -446,7 +454,9 @@ func DecodeResourcesListResponse(decoder func(*http.Response) loomhttp.Decoder, 
 		res := NewResourcesListResultOK(&body)
 		return res, nil
 	}
-} // BuildResourcesReadRequest instantiates a HTTP request object with method and
+}
+
+// BuildResourcesReadRequest instantiates a HTTP request object with method and
 // path set to call the "mcp_assistant" service "resources/read" endpoint
 func (c *Client) BuildResourcesReadRequest(ctx context.Context, v any) (*http.Request, error) {
 	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: ResourcesReadMcpAssistantPath()}
@@ -536,7 +546,9 @@ func DecodeResourcesReadResponse(decoder func(*http.Response) loomhttp.Decoder, 
 		res := NewResourcesReadResultOK(&body)
 		return res, nil
 	}
-} // BuildResourcesSubscribeRequest instantiates a HTTP request object with
+}
+
+// BuildResourcesSubscribeRequest instantiates a HTTP request object with
 // method and path set to call the "mcp_assistant" service
 // "resources/subscribe" endpoint
 func (c *Client) BuildResourcesSubscribeRequest(ctx context.Context, v any) (*http.Request, error) {
@@ -614,7 +626,9 @@ func DecodeResourcesSubscribeResponse(decoder func(*http.Response) loomhttp.Deco
 		resp.Body = io.NopCloser(bytes.NewBuffer(jresp.Result))
 		return nil, nil
 	}
-} // BuildResourcesUnsubscribeRequest instantiates a HTTP request object with
+}
+
+// BuildResourcesUnsubscribeRequest instantiates a HTTP request object with
 // method and path set to call the "mcp_assistant" service
 // "resources/unsubscribe" endpoint
 func (c *Client) BuildResourcesUnsubscribeRequest(ctx context.Context, v any) (*http.Request, error) {
@@ -693,7 +707,9 @@ func DecodeResourcesUnsubscribeResponse(decoder func(*http.Response) loomhttp.De
 		resp.Body = io.NopCloser(bytes.NewBuffer(jresp.Result))
 		return nil, nil
 	}
-} // BuildPromptsListRequest instantiates a HTTP request object with method and
+}
+
+// BuildPromptsListRequest instantiates a HTTP request object with method and
 // path set to call the "mcp_assistant" service "prompts/list" endpoint
 func (c *Client) BuildPromptsListRequest(ctx context.Context, v any) (*http.Request, error) {
 	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: PromptsListMcpAssistantPath()}
@@ -783,7 +799,9 @@ func DecodePromptsListResponse(decoder func(*http.Response) loomhttp.Decoder, re
 		res := NewPromptsListResultOK(&body)
 		return res, nil
 	}
-} // BuildPromptsGetRequest instantiates a HTTP request object with method and
+}
+
+// BuildPromptsGetRequest instantiates a HTTP request object with method and
 // path set to call the "mcp_assistant" service "prompts/get" endpoint
 func (c *Client) BuildPromptsGetRequest(ctx context.Context, v any) (*http.Request, error) {
 	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: PromptsGetMcpAssistantPath()}
@@ -873,7 +891,9 @@ func DecodePromptsGetResponse(decoder func(*http.Response) loomhttp.Decoder, res
 		res := NewPromptsGetResultOK(&body)
 		return res, nil
 	}
-} // BuildNotifyStatusUpdateRequest instantiates a HTTP request object with
+}
+
+// BuildNotifyStatusUpdateRequest instantiates a HTTP request object with
 // method and path set to call the "mcp_assistant" service
 // "notify_status_update" endpoint
 func (c *Client) BuildNotifyStatusUpdateRequest(ctx context.Context, v any) (*http.Request, error) {
@@ -951,7 +971,9 @@ func DecodeNotifyStatusUpdateResponse(decoder func(*http.Response) loomhttp.Deco
 		resp.Body = io.NopCloser(bytes.NewBuffer(jresp.Result))
 		return nil, nil
 	}
-} // BuildEventsStreamRequest instantiates a HTTP request object with method and
+}
+
+// BuildEventsStreamRequest instantiates a HTTP request object with method and
 // path set to call the "mcp_assistant" service "events/stream" endpoint
 func (c *Client) BuildEventsStreamRequest(ctx context.Context, v any) (*http.Request, error) {
 	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: EventsStreamMcpAssistantPath()}
@@ -1017,7 +1039,9 @@ func DecodeEventsStreamResponse(decoder func(*http.Response) loomhttp.Decoder, r
 		res := NewEventsStreamResultOK(&body)
 		return res, nil
 	}
-} // marshalMcpassistantClientInfoToClientInfoRequestBodyRequestBodyRequestBodyRequestBody
+}
+
+// marshalMcpassistantClientInfoToClientInfoRequestBodyRequestBodyRequestBodyRequestBody
 // builds a value of type
 // *ClientInfoRequestBodyRequestBodyRequestBodyRequestBody from a value of type
 // *mcpassistant.ClientInfo.
@@ -1391,24 +1415,26 @@ func EncodePingRequest(encoder func(*http.Request) loomhttp.Encoder) func(*http.
 	return func(req *http.Request, v any) error {
 		id := uuid.New().String()
 		body := &jsonrpc.Request{
-			ID:      id,
 			JSONRPC: "2.0",
 			Method:  "ping",
+			ID:      id,
 		}
 		if err := encoder(req).Encode(body); err != nil {
 			return loomhttp.ErrEncodingError("mcp_assistant", "ping", err)
 		}
 		return nil
 	}
-} // EncodeEventsStreamRequest returns an encoder for requests sent to the
+}
+
+// EncodeEventsStreamRequest returns an encoder for requests sent to the
 // mcp_assistant service events/stream JSON-RPC method.
 func EncodeEventsStreamRequest(encoder func(*http.Request) loomhttp.Encoder) func(*http.Request, any) error {
 	return func(req *http.Request, v any) error {
 		id := uuid.New().String()
 		body := &jsonrpc.Request{
-			ID:      id,
 			JSONRPC: "2.0",
 			Method:  "events/stream",
+			ID:      id,
 		}
 		if err := encoder(req).Encode(body); err != nil {
 			return loomhttp.ErrEncodingError("mcp_assistant", "events/stream", err)
