@@ -188,6 +188,7 @@ func MarshalEchoPayload(v *EchoPayload) ([]byte, error) {
 	out = &toolhttp.EchoPayloadTransport{
 		ID: &in.ID,
 	}
+
 	switch string(in.Value.Kind()) {
 	case "number":
 		actual, _ := in.Value.AsNumber()
@@ -225,6 +226,7 @@ func UnmarshalEchoPayload(data []byte) (*EchoPayload, error) {
 	out = &EchoPayload{
 		ID: *in.ID,
 	}
+
 	switch string(in.Value.Kind()) {
 	case "number":
 		actual, _ := in.Value.AsNumber()
@@ -253,6 +255,7 @@ func MarshalEchoResult(v *EchoResult) ([]byte, error) {
 	out = &toolhttp.EchoResultTransport{
 		ID: &in.ID,
 	}
+
 	switch string(in.Value.Kind()) {
 	case "number":
 		actual, _ := in.Value.AsNumber()
@@ -290,6 +293,7 @@ func UnmarshalEchoResult(data []byte) (*EchoResult, error) {
 	out = &EchoResult{
 		ID: *in.ID,
 	}
+
 	switch string(in.Value.Kind()) {
 	case "number":
 		actual, _ := in.Value.AsNumber()

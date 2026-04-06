@@ -4,7 +4,7 @@ set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 FIXTURE_DIR="${ROOT_DIR}/integration_tests/fixtures/assistant"
-REMOTE_VERSION="v1.0.7"
+REMOTE_VERSION="v1.0.8"
 LOCAL_LOOM_DIR="${LOOM_DIR:-/Users/luca/code/loom-mono/loom}"
 
 usage() {
