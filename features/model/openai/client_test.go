@@ -2,45 +2,70 @@ package openai_test
 
 import (
 	"context"
-	"encoding/json"
 	"testing"
 
-	openai "github.com/sashabaranov/go-openai"
 	"github.com/stretchr/testify/require"
 
 	openaimodel "github.com/CaliLuke/loom-mcp/features/model/openai"
 	"github.com/CaliLuke/loom-mcp/runtime/agent/model"
 	"github.com/CaliLuke/loom-mcp/runtime/agent/tools"
+	"github.com/openai/openai-go/option"
+	"github.com/openai/openai-go/responses"
 )
 
 func TestClientComplete(t *testing.T) {
-	mock := &mockChatClient{}
+	mock := &mockResponsesClient{}
 	client, err := openaimodel.New(openaimodel.Options{Client: mock, DefaultModel: "gpt-4o"})
 	require.NoError(t, err)
 
-	mock.response = openai.ChatCompletionResponse{
-		Choices: []openai.ChatCompletionChoice{
+	mock.response = &responses.Response{
+		Status: responses.ResponseStatusCompleted,
+		Model:  "gpt-4o",
+		Output: []responses.ResponseOutputItemUnion{
 			{
-				FinishReason: "stop",
-				Message: openai.ChatCompletionMessage{
-					Role:    "assistant",
-					Content: "hi there",
-					ToolCalls: []openai.ToolCall{
-						{
-							Function: openai.FunctionCall{
-								Name:      "lookup",
-								Arguments: `{"query":"docs"}`,
-							},
-						},
-					},
+				Type: "message",
+				Content: []responses.ResponseOutputMessageContentUnion{
+					{Type: "output_text", Text: "hi there"},
 				},
 			},
+			{
+				Type:      "function_call",
+				Name:      "lookup",
+				Arguments: `{"query":"docs"}`,
+				CallID:    "call-1",
+			},
 		},
-		Usage: openai.Usage{PromptTokens: 10, CompletionTokens: 5, TotalTokens: 15},
+		Usage: responses.ResponseUsage{
+			InputTokens:  10,
+			OutputTokens: 5,
+			TotalTokens:  15,
+			InputTokensDetails: responses.ResponseUsageInputTokensDetails{
+				CachedTokens: 3,
+			},
+		},
 	}
 
 	resp, err := client.Complete(context.Background(), &model.Request{
-		Messages: []*model.Message{{Role: "user", Parts: []model.Part{model.TextPart{Text: "ping"}}}},
+		Messages: []*model.Message{
+			{
+				Role: "user",
+				Parts: []model.Part{
+					model.TextPart{Text: "ping"},
+				},
+			},
+			{
+				Role: model.ConversationRoleAssistant,
+				Parts: []model.Part{
+					model.ToolUsePart{ID: "tool-1", Name: "lookup", Input: map[string]any{"query": "old"}},
+				},
+			},
+			{
+				Role: model.ConversationRoleUser,
+				Parts: []model.Part{
+					model.ToolResultPart{ToolUseID: "tool-1", Content: map[string]any{"hits": 2}},
+				},
+			},
+		},
 		Tools: []*model.ToolDefinition{{
 			Name:        "lookup",
 			Description: "Search",
@@ -49,7 +74,6 @@ func TestClientComplete(t *testing.T) {
 	})
 	require.NoError(t, err)
 	require.Len(t, resp.Content, 1)
-	// Extract text from parts
 	found := false
 	for _, p := range resp.Content[0].Parts {
 		if tp, ok := p.(model.TextPart); ok && tp.Text == "hi there" {
@@ -59,32 +83,48 @@ func TestClientComplete(t *testing.T) {
 	}
 	require.True(t, found, "expected hi there text part")
 	require.Equal(t, tools.Ident("lookup"), resp.ToolCalls[0].Name)
-	var args map[string]any
-	require.NoError(t, json.Unmarshal(resp.ToolCalls[0].Payload, &args))
-	require.Equal(t, "docs", args["query"])
-	require.Equal(t, "stop", resp.StopReason)
+	require.JSONEq(t, `{"query":"docs"}`, string(resp.ToolCalls[0].Payload))
+	require.Equal(t, "call-1", resp.ToolCalls[0].ID)
+	require.Equal(t, "completed", resp.StopReason)
 	require.Equal(t, 15, resp.Usage.TotalTokens)
+	require.Equal(t, 3, resp.Usage.CacheReadTokens)
 
 	req := mock.captured
 	require.Equal(t, "gpt-4o", req.Model)
-	require.Len(t, req.Messages, 1)
-	require.Equal(t, "ping", req.Messages[0].Content)
 	require.Len(t, req.Tools, 1)
-	require.Equal(t, openai.ToolTypeFunction, req.Tools[0].Type)
-	params, ok := req.Tools[0].Function.Parameters.(json.RawMessage)
-	require.True(t, ok)
-	require.JSONEq(t, `{"type":"object"}`, string(params))
+	functionTool := req.Tools[0].OfFunction
+	require.NotNil(t, functionTool)
+	require.Equal(t, "lookup", functionTool.Name)
+	require.Equal(t, "Search", functionTool.Description.Value)
+	require.Equal(t, "object", functionTool.Parameters["type"])
+
+	require.Len(t, req.Input.OfInputItemList, 3)
+	first := req.Input.OfInputItemList[0].OfMessage
+	require.NotNil(t, first)
+	require.Equal(t, responses.EasyInputMessageRoleUser, first.Role)
+	require.Equal(t, "ping", first.Content.OfString.Value)
+
+	second := req.Input.OfInputItemList[1].OfFunctionCall
+	require.NotNil(t, second)
+	require.Equal(t, "lookup", second.Name)
+	require.Equal(t, "tool-1", second.CallID)
+	require.JSONEq(t, `{"query":"old"}`, second.Arguments)
+
+	third := req.Input.OfInputItemList[2].OfFunctionCallOutput
+	require.NotNil(t, third)
+	require.Equal(t, "tool-1", third.CallID)
+	require.JSONEq(t, `{"hits":2}`, third.Output)
 }
 
 func TestClientCompleteWithToolChoiceTool(t *testing.T) {
-	mock := &mockChatClient{}
+	mock := &mockResponsesClient{}
 	client, err := openaimodel.New(openaimodel.Options{
 		Client:       mock,
 		DefaultModel: "gpt-4o",
 	})
 	require.NoError(t, err)
 
-	mock.response = openai.ChatCompletionResponse{}
+	mock.response = &responses.Response{}
 
 	_, err = client.Complete(context.Background(), &model.Request{
 		Messages: []*model.Message{
@@ -108,21 +148,19 @@ func TestClientCompleteWithToolChoiceTool(t *testing.T) {
 	require.NoError(t, err)
 
 	req := mock.captured
-	tc, ok := req.ToolChoice.(openai.ToolChoice)
-	require.True(t, ok, "expected ToolChoice object")
-	require.Equal(t, openai.ToolTypeFunction, tc.Type)
-	require.Equal(t, "lookup", tc.Function.Name)
+	require.NotNil(t, req.ToolChoice.OfFunctionTool)
+	require.Equal(t, "lookup", req.ToolChoice.OfFunctionTool.Name)
 }
 
 func TestClientCompleteWithToolChoiceNone(t *testing.T) {
-	mock := &mockChatClient{}
+	mock := &mockResponsesClient{}
 	client, err := openaimodel.New(openaimodel.Options{
 		Client:       mock,
 		DefaultModel: "gpt-4o",
 	})
 	require.NoError(t, err)
 
-	mock.response = openai.ChatCompletionResponse{}
+	mock.response = &responses.Response{}
 
 	_, err = client.Complete(context.Background(), &model.Request{
 		Messages: []*model.Message{
@@ -145,21 +183,54 @@ func TestClientCompleteWithToolChoiceNone(t *testing.T) {
 	require.NoError(t, err)
 
 	req := mock.captured
-	require.Equal(t, "none", req.ToolChoice)
+	require.Equal(t, responses.ToolChoiceOptionsNone, req.ToolChoice.OfToolChoiceMode.Value)
+}
+
+func TestClientCompleteWithToolChoiceAny(t *testing.T) {
+	mock := &mockResponsesClient{}
+	client, err := openaimodel.New(openaimodel.Options{
+		Client:       mock,
+		DefaultModel: "gpt-4o",
+	})
+	require.NoError(t, err)
+
+	mock.response = &responses.Response{}
+
+	_, err = client.Complete(context.Background(), &model.Request{
+		Messages: []*model.Message{
+			{
+				Role:  model.ConversationRoleUser,
+				Parts: []model.Part{model.TextPart{Text: "ping"}},
+			},
+		},
+		Tools: []*model.ToolDefinition{
+			{
+				Name:        "lookup",
+				Description: "Search",
+				InputSchema: map[string]any{"type": "object"},
+			},
+		},
+		ToolChoice: &model.ToolChoice{
+			Mode: model.ToolChoiceModeAny,
+		},
+	})
+	require.NoError(t, err)
+
+	req := mock.captured
+	require.Equal(t, responses.ToolChoiceOptionsRequired, req.ToolChoice.OfToolChoiceMode.Value)
 }
 
 func TestClientRequiresDefaultModel(t *testing.T) {
-	_, err := openaimodel.New(openaimodel.Options{Client: &mockChatClient{}})
+	_, err := openaimodel.New(openaimodel.Options{Client: &mockResponsesClient{}})
 	require.Error(t, err)
 }
 
-type mockChatClient struct {
-	response openai.ChatCompletionResponse
-	captured openai.ChatCompletionRequest
+type mockResponsesClient struct {
+	response *responses.Response
+	captured responses.ResponseNewParams
 }
 
-func (m *mockChatClient) CreateChatCompletion(ctx context.Context, request openai.ChatCompletionRequest) (
-	openai.ChatCompletionResponse, error) {
+func (m *mockResponsesClient) New(ctx context.Context, request responses.ResponseNewParams, _ ...option.RequestOption) (*responses.Response, error) {
 	m.captured = request
 	return m.response, nil
 }

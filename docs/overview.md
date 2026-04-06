@@ -1127,6 +1127,7 @@ profile := stream.MetricsProfile()
 | `features/model/bedrock` | AWS Bedrock model client (Claude, etc.)                |
 | `features/model/openai`  | OpenAI‑compatible model client                         |
 | `features/model/anthropic` | Anthropic API model client                           |
+| `features/model/gemini` | Google Gemini model client                              |
 | `features/model/gateway` | Remote model gateway for centralized model serving     |
 | `features/model/middleware` | Model client middleware (rate limiting, etc.)       |
 | `features/policy/basic`  | Basic policy engine for tool filtering and caps        |

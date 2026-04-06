@@ -1590,6 +1590,7 @@ type Tracer interface {
 | `features/model/bedrock` | AWS Bedrock model client |
 | `features/model/openai` | OpenAI-compatible model client |
 | `features/model/anthropic` | Direct Anthropic Claude API client |
+| `features/model/gemini` | Google Gemini model client |
 | `features/model/gateway` | Remote model gateway client |
 | `features/model/middleware` | Rate limiting, logging, metrics |
 | `features/policy/basic` | Basic policy engine |
