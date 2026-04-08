@@ -29,28 +29,21 @@ func UsageExamples() string {
 // line.
 func ParseEndpoint(cc *grpc.ClientConn, opts ...grpc.CallOption) (loom.Endpoint, any, error) {
 	var (
-		registryFlags = flag.NewFlagSet("registry", flag.ContinueOnError)
-
-		registryRegisterFlags       = flag.NewFlagSet("register", flag.ExitOnError)
-		registryRegisterMessageFlag = registryRegisterFlags.String("message", "", "")
-
-		registryUnregisterFlags       = flag.NewFlagSet("unregister", flag.ExitOnError)
-		registryUnregisterMessageFlag = registryUnregisterFlags.String("message", "", "")
-
-		registryPongFlags       = flag.NewFlagSet("pong", flag.ExitOnError)
-		registryPongMessageFlag = registryPongFlags.String("message", "", "")
-
+		registryFlags                   = flag.NewFlagSet("registry", flag.ContinueOnError)
+		registryRegisterFlags           = flag.NewFlagSet("register", flag.ExitOnError)
+		registryRegisterMessageFlag     = registryRegisterFlags.String("message", "", "")
+		registryUnregisterFlags         = flag.NewFlagSet("unregister", flag.ExitOnError)
+		registryUnregisterMessageFlag   = registryUnregisterFlags.String("message", "", "")
+		registryPongFlags               = flag.NewFlagSet("pong", flag.ExitOnError)
+		registryPongMessageFlag         = registryPongFlags.String("message", "", "")
 		registryListToolsetsFlags       = flag.NewFlagSet("list-toolsets", flag.ExitOnError)
 		registryListToolsetsMessageFlag = registryListToolsetsFlags.String("message", "", "")
-
-		registryGetToolsetFlags       = flag.NewFlagSet("get-toolset", flag.ExitOnError)
-		registryGetToolsetMessageFlag = registryGetToolsetFlags.String("message", "", "")
-
-		registrySearchFlags       = flag.NewFlagSet("search", flag.ExitOnError)
-		registrySearchMessageFlag = registrySearchFlags.String("message", "", "")
-
-		registryCallToolFlags       = flag.NewFlagSet("call-tool", flag.ExitOnError)
-		registryCallToolMessageFlag = registryCallToolFlags.String("message", "", "")
+		registryGetToolsetFlags         = flag.NewFlagSet("get-toolset", flag.ExitOnError)
+		registryGetToolsetMessageFlag   = registryGetToolsetFlags.String("message", "", "")
+		registrySearchFlags             = flag.NewFlagSet("search", flag.ExitOnError)
+		registrySearchMessageFlag       = registrySearchFlags.String("message", "", "")
+		registryCallToolFlags           = flag.NewFlagSet("call-tool", flag.ExitOnError)
+		registryCallToolMessageFlag     = registryCallToolFlags.String("message", "", "")
 	)
 	registryFlags.Usage = registryUsage
 	registryRegisterFlags.Usage = registryRegisterUsage
@@ -64,11 +57,9 @@ func ParseEndpoint(cc *grpc.ClientConn, opts ...grpc.CallOption) (loom.Endpoint,
 	if err := flag.CommandLine.Parse(os.Args[1:]); err != nil {
 		return nil, nil, err
 	}
-
-	if flag.NArg() < 2 { // two non flag args are required: SERVICE and ENDPOINT (aka COMMAND)
+	if flag.NArg() < 2 {
 		return nil, nil, fmt.Errorf("not enough arguments")
 	}
-
 	var (
 		svcn string
 		svcf *flag.FlagSet
@@ -85,7 +76,6 @@ func ParseEndpoint(cc *grpc.ClientConn, opts ...grpc.CallOption) (loom.Endpoint,
 	if err := svcf.Parse(flag.Args()[1:]); err != nil {
 		return nil, nil, err
 	}
-
 	var (
 		epn string
 		epf *flag.FlagSet
@@ -97,34 +87,24 @@ func ParseEndpoint(cc *grpc.ClientConn, opts ...grpc.CallOption) (loom.Endpoint,
 			switch epn {
 			case "register":
 				epf = registryRegisterFlags
-
 			case "unregister":
 				epf = registryUnregisterFlags
-
 			case "pong":
 				epf = registryPongFlags
-
 			case "list-toolsets":
 				epf = registryListToolsetsFlags
-
 			case "get-toolset":
 				epf = registryGetToolsetFlags
-
 			case "search":
 				epf = registrySearchFlags
-
 			case "call-tool":
 				epf = registryCallToolFlags
-
 			}
-
 		}
 	}
 	if epf == nil {
 		return nil, nil, fmt.Errorf("unknown %q endpoint %q", svcn, epn)
 	}
-
-	// Parse endpoint flags if any
 	if svcf.NArg() > 1 {
 		if err := epf.Parse(svcf.Args()[1:]); err != nil {
 			return nil, nil, err

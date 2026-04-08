@@ -110,9 +110,7 @@ func DecodeInitializeResponse(decoder func(*http.Response) loomhttp.Decoder, res
 		res := NewInitializeResultOK(&body)
 		return res, nil
 	}
-}
-
-// BuildPingRequest instantiates a HTTP request object with method and path set
+} // BuildPingRequest instantiates a HTTP request object with method and path set
 // to call the "mcp_assistant" service "ping" endpoint
 func (c *Client) BuildPingRequest(ctx context.Context, v any) (*http.Request, error) {
 	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: PingMcpAssistantPath()}
@@ -178,9 +176,7 @@ func DecodePingResponse(decoder func(*http.Response) loomhttp.Decoder, restoreBo
 		res := NewPingResultOK(&body)
 		return res, nil
 	}
-}
-
-// BuildToolsListRequest instantiates a HTTP request object with method and
+} // BuildToolsListRequest instantiates a HTTP request object with method and
 // path set to call the "mcp_assistant" service "tools/list" endpoint
 func (c *Client) BuildToolsListRequest(ctx context.Context, v any) (*http.Request, error) {
 	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: ToolsListMcpAssistantPath()}
@@ -270,9 +266,7 @@ func DecodeToolsListResponse(decoder func(*http.Response) loomhttp.Decoder, rest
 		res := NewToolsListResultOK(&body)
 		return res, nil
 	}
-}
-
-// BuildToolsCallRequest instantiates a HTTP request object with method and
+} // BuildToolsCallRequest instantiates a HTTP request object with method and
 // path set to call the "mcp_assistant" service "tools/call" endpoint
 func (c *Client) BuildToolsCallRequest(ctx context.Context, v any) (*http.Request, error) {
 	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: ToolsCallMcpAssistantPath()}
@@ -362,9 +356,7 @@ func DecodeToolsCallResponse(decoder func(*http.Response) loomhttp.Decoder, rest
 		res := NewToolsCallResultOK(&body)
 		return res, nil
 	}
-}
-
-// BuildResourcesListRequest instantiates a HTTP request object with method and
+} // BuildResourcesListRequest instantiates a HTTP request object with method and
 // path set to call the "mcp_assistant" service "resources/list" endpoint
 func (c *Client) BuildResourcesListRequest(ctx context.Context, v any) (*http.Request, error) {
 	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: ResourcesListMcpAssistantPath()}
@@ -454,9 +446,7 @@ func DecodeResourcesListResponse(decoder func(*http.Response) loomhttp.Decoder, 
 		res := NewResourcesListResultOK(&body)
 		return res, nil
 	}
-}
-
-// BuildResourcesReadRequest instantiates a HTTP request object with method and
+} // BuildResourcesReadRequest instantiates a HTTP request object with method and
 // path set to call the "mcp_assistant" service "resources/read" endpoint
 func (c *Client) BuildResourcesReadRequest(ctx context.Context, v any) (*http.Request, error) {
 	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: ResourcesReadMcpAssistantPath()}
@@ -546,9 +536,7 @@ func DecodeResourcesReadResponse(decoder func(*http.Response) loomhttp.Decoder, 
 		res := NewResourcesReadResultOK(&body)
 		return res, nil
 	}
-}
-
-// BuildResourcesSubscribeRequest instantiates a HTTP request object with
+} // BuildResourcesSubscribeRequest instantiates a HTTP request object with
 // method and path set to call the "mcp_assistant" service
 // "resources/subscribe" endpoint
 func (c *Client) BuildResourcesSubscribeRequest(ctx context.Context, v any) (*http.Request, error) {
@@ -626,9 +614,7 @@ func DecodeResourcesSubscribeResponse(decoder func(*http.Response) loomhttp.Deco
 		resp.Body = io.NopCloser(bytes.NewBuffer(jresp.Result))
 		return nil, nil
 	}
-}
-
-// BuildResourcesUnsubscribeRequest instantiates a HTTP request object with
+} // BuildResourcesUnsubscribeRequest instantiates a HTTP request object with
 // method and path set to call the "mcp_assistant" service
 // "resources/unsubscribe" endpoint
 func (c *Client) BuildResourcesUnsubscribeRequest(ctx context.Context, v any) (*http.Request, error) {
@@ -707,9 +693,7 @@ func DecodeResourcesUnsubscribeResponse(decoder func(*http.Response) loomhttp.De
 		resp.Body = io.NopCloser(bytes.NewBuffer(jresp.Result))
 		return nil, nil
 	}
-}
-
-// BuildPromptsListRequest instantiates a HTTP request object with method and
+} // BuildPromptsListRequest instantiates a HTTP request object with method and
 // path set to call the "mcp_assistant" service "prompts/list" endpoint
 func (c *Client) BuildPromptsListRequest(ctx context.Context, v any) (*http.Request, error) {
 	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: PromptsListMcpAssistantPath()}
@@ -799,9 +783,7 @@ func DecodePromptsListResponse(decoder func(*http.Response) loomhttp.Decoder, re
 		res := NewPromptsListResultOK(&body)
 		return res, nil
 	}
-}
-
-// BuildPromptsGetRequest instantiates a HTTP request object with method and
+} // BuildPromptsGetRequest instantiates a HTTP request object with method and
 // path set to call the "mcp_assistant" service "prompts/get" endpoint
 func (c *Client) BuildPromptsGetRequest(ctx context.Context, v any) (*http.Request, error) {
 	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: PromptsGetMcpAssistantPath()}
@@ -891,9 +873,7 @@ func DecodePromptsGetResponse(decoder func(*http.Response) loomhttp.Decoder, res
 		res := NewPromptsGetResultOK(&body)
 		return res, nil
 	}
-}
-
-// BuildNotifyStatusUpdateRequest instantiates a HTTP request object with
+} // BuildNotifyStatusUpdateRequest instantiates a HTTP request object with
 // method and path set to call the "mcp_assistant" service
 // "notify_status_update" endpoint
 func (c *Client) BuildNotifyStatusUpdateRequest(ctx context.Context, v any) (*http.Request, error) {
@@ -971,9 +951,7 @@ func DecodeNotifyStatusUpdateResponse(decoder func(*http.Response) loomhttp.Deco
 		resp.Body = io.NopCloser(bytes.NewBuffer(jresp.Result))
 		return nil, nil
 	}
-}
-
-// BuildEventsStreamRequest instantiates a HTTP request object with method and
+} // BuildEventsStreamRequest instantiates a HTTP request object with method and
 // path set to call the "mcp_assistant" service "events/stream" endpoint
 func (c *Client) BuildEventsStreamRequest(ctx context.Context, v any) (*http.Request, error) {
 	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: EventsStreamMcpAssistantPath()}
@@ -1039,9 +1017,7 @@ func DecodeEventsStreamResponse(decoder func(*http.Response) loomhttp.Decoder, r
 		res := NewEventsStreamResultOK(&body)
 		return res, nil
 	}
-}
-
-// marshalMcpassistantClientInfoToClientInfoRequestBodyRequestBodyRequestBodyRequestBody
+} // marshalMcpassistantClientInfoToClientInfoRequestBodyRequestBodyRequestBodyRequestBody
 // builds a value of type
 // *ClientInfoRequestBodyRequestBodyRequestBodyRequestBody from a value of type
 // *mcpassistant.ClientInfo.
@@ -1132,31 +1108,31 @@ func marshalIconRequestBodyRequestBodyRequestBodyRequestBodyToMcpassistantIcon(v
 	return res
 }
 
-// unmarshalServerCapabilitiesResponseBodyResponseBodyToMcpassistantServerCapabilities
+// unmarshalServerCapabilitiesResponseBodyToMcpassistantServerCapabilities
 // builds a value of type *mcpassistant.ServerCapabilities from a value of type
-// *ServerCapabilitiesResponseBodyResponseBody.
-func unmarshalServerCapabilitiesResponseBodyResponseBodyToMcpassistantServerCapabilities(v *ServerCapabilitiesResponseBodyResponseBody) *mcpassistant.ServerCapabilities {
+// *ServerCapabilitiesResponseBody.
+func unmarshalServerCapabilitiesResponseBodyToMcpassistantServerCapabilities(v *ServerCapabilitiesResponseBody) *mcpassistant.ServerCapabilities {
 	if v == nil {
 		return nil
 	}
 	res := &mcpassistant.ServerCapabilities{}
 	if v.Tools != nil {
-		res.Tools = unmarshalToolsCapabilityResponseBodyResponseBodyToMcpassistantToolsCapability(v.Tools)
+		res.Tools = unmarshalToolsCapabilityResponseBodyToMcpassistantToolsCapability(v.Tools)
 	}
 	if v.Resources != nil {
-		res.Resources = unmarshalResourcesCapabilityResponseBodyResponseBodyToMcpassistantResourcesCapability(v.Resources)
+		res.Resources = unmarshalResourcesCapabilityResponseBodyToMcpassistantResourcesCapability(v.Resources)
 	}
 	if v.Prompts != nil {
-		res.Prompts = unmarshalPromptsCapabilityResponseBodyResponseBodyToMcpassistantPromptsCapability(v.Prompts)
+		res.Prompts = unmarshalPromptsCapabilityResponseBodyToMcpassistantPromptsCapability(v.Prompts)
 	}
 
 	return res
 }
 
-// unmarshalToolsCapabilityResponseBodyResponseBodyToMcpassistantToolsCapability
-// builds a value of type *mcpassistant.ToolsCapability from a value of type
-// *ToolsCapabilityResponseBodyResponseBody.
-func unmarshalToolsCapabilityResponseBodyResponseBodyToMcpassistantToolsCapability(v *ToolsCapabilityResponseBodyResponseBody) *mcpassistant.ToolsCapability {
+// unmarshalToolsCapabilityResponseBodyToMcpassistantToolsCapability builds a
+// value of type *mcpassistant.ToolsCapability from a value of type
+// *ToolsCapabilityResponseBody.
+func unmarshalToolsCapabilityResponseBodyToMcpassistantToolsCapability(v *ToolsCapabilityResponseBody) *mcpassistant.ToolsCapability {
 	if v == nil {
 		return nil
 	}
@@ -1165,10 +1141,10 @@ func unmarshalToolsCapabilityResponseBodyResponseBodyToMcpassistantToolsCapabili
 	return res
 }
 
-// unmarshalResourcesCapabilityResponseBodyResponseBodyToMcpassistantResourcesCapability
+// unmarshalResourcesCapabilityResponseBodyToMcpassistantResourcesCapability
 // builds a value of type *mcpassistant.ResourcesCapability from a value of
-// type *ResourcesCapabilityResponseBodyResponseBody.
-func unmarshalResourcesCapabilityResponseBodyResponseBodyToMcpassistantResourcesCapability(v *ResourcesCapabilityResponseBodyResponseBody) *mcpassistant.ResourcesCapability {
+// type *ResourcesCapabilityResponseBody.
+func unmarshalResourcesCapabilityResponseBodyToMcpassistantResourcesCapability(v *ResourcesCapabilityResponseBody) *mcpassistant.ResourcesCapability {
 	if v == nil {
 		return nil
 	}
@@ -1177,10 +1153,10 @@ func unmarshalResourcesCapabilityResponseBodyResponseBodyToMcpassistantResources
 	return res
 }
 
-// unmarshalPromptsCapabilityResponseBodyResponseBodyToMcpassistantPromptsCapability
-// builds a value of type *mcpassistant.PromptsCapability from a value of type
-// *PromptsCapabilityResponseBodyResponseBody.
-func unmarshalPromptsCapabilityResponseBodyResponseBodyToMcpassistantPromptsCapability(v *PromptsCapabilityResponseBodyResponseBody) *mcpassistant.PromptsCapability {
+// unmarshalPromptsCapabilityResponseBodyToMcpassistantPromptsCapability builds
+// a value of type *mcpassistant.PromptsCapability from a value of type
+// *PromptsCapabilityResponseBody.
+func unmarshalPromptsCapabilityResponseBodyToMcpassistantPromptsCapability(v *PromptsCapabilityResponseBody) *mcpassistant.PromptsCapability {
 	if v == nil {
 		return nil
 	}
@@ -1189,10 +1165,9 @@ func unmarshalPromptsCapabilityResponseBodyResponseBodyToMcpassistantPromptsCapa
 	return res
 }
 
-// unmarshalServerInfoResponseBodyResponseBodyToMcpassistantServerInfo builds a
-// value of type *mcpassistant.ServerInfo from a value of type
-// *ServerInfoResponseBodyResponseBody.
-func unmarshalServerInfoResponseBodyResponseBodyToMcpassistantServerInfo(v *ServerInfoResponseBodyResponseBody) *mcpassistant.ServerInfo {
+// unmarshalServerInfoResponseBodyToMcpassistantServerInfo builds a value of
+// type *mcpassistant.ServerInfo from a value of type *ServerInfoResponseBody.
+func unmarshalServerInfoResponseBodyToMcpassistantServerInfo(v *ServerInfoResponseBody) *mcpassistant.ServerInfo {
 	if v == nil {
 		return nil
 	}
@@ -1208,16 +1183,16 @@ func unmarshalServerInfoResponseBodyResponseBodyToMcpassistantServerInfo(v *Serv
 				res.Icons[i] = nil
 				continue
 			}
-			res.Icons[i] = unmarshalIconResponseBodyResponseBodyToMcpassistantIcon(val)
+			res.Icons[i] = unmarshalIconResponseBodyToMcpassistantIcon(val)
 		}
 	}
 
 	return res
 }
 
-// unmarshalIconResponseBodyResponseBodyToMcpassistantIcon builds a value of
-// type *mcpassistant.Icon from a value of type *IconResponseBodyResponseBody.
-func unmarshalIconResponseBodyResponseBodyToMcpassistantIcon(v *IconResponseBodyResponseBody) *mcpassistant.Icon {
+// unmarshalIconResponseBodyToMcpassistantIcon builds a value of type
+// *mcpassistant.Icon from a value of type *IconResponseBody.
+func unmarshalIconResponseBodyToMcpassistantIcon(v *IconResponseBody) *mcpassistant.Icon {
 	if v == nil {
 		return nil
 	}
@@ -1236,10 +1211,9 @@ func unmarshalIconResponseBodyResponseBodyToMcpassistantIcon(v *IconResponseBody
 	return res
 }
 
-// unmarshalToolInfoResponseBodyResponseBodyToMcpassistantToolInfo builds a
-// value of type *mcpassistant.ToolInfo from a value of type
-// *ToolInfoResponseBodyResponseBody.
-func unmarshalToolInfoResponseBodyResponseBodyToMcpassistantToolInfo(v *ToolInfoResponseBodyResponseBody) *mcpassistant.ToolInfo {
+// unmarshalToolInfoResponseBodyToMcpassistantToolInfo builds a value of type
+// *mcpassistant.ToolInfo from a value of type *ToolInfoResponseBody.
+func unmarshalToolInfoResponseBodyToMcpassistantToolInfo(v *ToolInfoResponseBody) *mcpassistant.ToolInfo {
 	if v == nil {
 		return nil
 	}
@@ -1256,17 +1230,16 @@ func unmarshalToolInfoResponseBodyResponseBodyToMcpassistantToolInfo(v *ToolInfo
 				res.Icons[i] = nil
 				continue
 			}
-			res.Icons[i] = unmarshalIconResponseBodyResponseBodyToMcpassistantIcon(val)
+			res.Icons[i] = unmarshalIconResponseBodyToMcpassistantIcon(val)
 		}
 	}
 
 	return res
 }
 
-// unmarshalContentItemResponseBodyResponseBodyToMcpassistantContentItem builds
-// a value of type *mcpassistant.ContentItem from a value of type
-// *ContentItemResponseBodyResponseBody.
-func unmarshalContentItemResponseBodyResponseBodyToMcpassistantContentItem(v *ContentItemResponseBodyResponseBody) *mcpassistant.ContentItem {
+// unmarshalContentItemResponseBodyToMcpassistantContentItem builds a value of
+// type *mcpassistant.ContentItem from a value of type *ContentItemResponseBody.
+func unmarshalContentItemResponseBodyToMcpassistantContentItem(v *ContentItemResponseBody) *mcpassistant.ContentItem {
 	if v == nil {
 		return nil
 	}
@@ -1281,10 +1254,10 @@ func unmarshalContentItemResponseBodyResponseBodyToMcpassistantContentItem(v *Co
 	return res
 }
 
-// unmarshalResourceInfoResponseBodyResponseBodyToMcpassistantResourceInfo
-// builds a value of type *mcpassistant.ResourceInfo from a value of type
-// *ResourceInfoResponseBodyResponseBody.
-func unmarshalResourceInfoResponseBodyResponseBodyToMcpassistantResourceInfo(v *ResourceInfoResponseBodyResponseBody) *mcpassistant.ResourceInfo {
+// unmarshalResourceInfoResponseBodyToMcpassistantResourceInfo builds a value
+// of type *mcpassistant.ResourceInfo from a value of type
+// *ResourceInfoResponseBody.
+func unmarshalResourceInfoResponseBodyToMcpassistantResourceInfo(v *ResourceInfoResponseBody) *mcpassistant.ResourceInfo {
 	if v == nil {
 		return nil
 	}
@@ -1301,17 +1274,17 @@ func unmarshalResourceInfoResponseBodyResponseBodyToMcpassistantResourceInfo(v *
 				res.Icons[i] = nil
 				continue
 			}
-			res.Icons[i] = unmarshalIconResponseBodyResponseBodyToMcpassistantIcon(val)
+			res.Icons[i] = unmarshalIconResponseBodyToMcpassistantIcon(val)
 		}
 	}
 
 	return res
 }
 
-// unmarshalResourceContentResponseBodyResponseBodyToMcpassistantResourceContent
-// builds a value of type *mcpassistant.ResourceContent from a value of type
-// *ResourceContentResponseBodyResponseBody.
-func unmarshalResourceContentResponseBodyResponseBodyToMcpassistantResourceContent(v *ResourceContentResponseBodyResponseBody) *mcpassistant.ResourceContent {
+// unmarshalResourceContentResponseBodyToMcpassistantResourceContent builds a
+// value of type *mcpassistant.ResourceContent from a value of type
+// *ResourceContentResponseBody.
+func unmarshalResourceContentResponseBodyToMcpassistantResourceContent(v *ResourceContentResponseBody) *mcpassistant.ResourceContent {
 	if v == nil {
 		return nil
 	}
@@ -1325,10 +1298,9 @@ func unmarshalResourceContentResponseBodyResponseBodyToMcpassistantResourceConte
 	return res
 }
 
-// unmarshalPromptInfoResponseBodyResponseBodyToMcpassistantPromptInfo builds a
-// value of type *mcpassistant.PromptInfo from a value of type
-// *PromptInfoResponseBodyResponseBody.
-func unmarshalPromptInfoResponseBodyResponseBodyToMcpassistantPromptInfo(v *PromptInfoResponseBodyResponseBody) *mcpassistant.PromptInfo {
+// unmarshalPromptInfoResponseBodyToMcpassistantPromptInfo builds a value of
+// type *mcpassistant.PromptInfo from a value of type *PromptInfoResponseBody.
+func unmarshalPromptInfoResponseBodyToMcpassistantPromptInfo(v *PromptInfoResponseBody) *mcpassistant.PromptInfo {
 	if v == nil {
 		return nil
 	}
@@ -1343,7 +1315,7 @@ func unmarshalPromptInfoResponseBodyResponseBodyToMcpassistantPromptInfo(v *Prom
 				res.Arguments[i] = nil
 				continue
 			}
-			res.Arguments[i] = unmarshalPromptArgumentResponseBodyResponseBodyToMcpassistantPromptArgument(val)
+			res.Arguments[i] = unmarshalPromptArgumentResponseBodyToMcpassistantPromptArgument(val)
 		}
 	}
 	if v.Icons != nil {
@@ -1353,17 +1325,17 @@ func unmarshalPromptInfoResponseBodyResponseBodyToMcpassistantPromptInfo(v *Prom
 				res.Icons[i] = nil
 				continue
 			}
-			res.Icons[i] = unmarshalIconResponseBodyResponseBodyToMcpassistantIcon(val)
+			res.Icons[i] = unmarshalIconResponseBodyToMcpassistantIcon(val)
 		}
 	}
 
 	return res
 }
 
-// unmarshalPromptArgumentResponseBodyResponseBodyToMcpassistantPromptArgument
-// builds a value of type *mcpassistant.PromptArgument from a value of type
-// *PromptArgumentResponseBodyResponseBody.
-func unmarshalPromptArgumentResponseBodyResponseBodyToMcpassistantPromptArgument(v *PromptArgumentResponseBodyResponseBody) *mcpassistant.PromptArgument {
+// unmarshalPromptArgumentResponseBodyToMcpassistantPromptArgument builds a
+// value of type *mcpassistant.PromptArgument from a value of type
+// *PromptArgumentResponseBody.
+func unmarshalPromptArgumentResponseBodyToMcpassistantPromptArgument(v *PromptArgumentResponseBody) *mcpassistant.PromptArgument {
 	if v == nil {
 		return nil
 	}
@@ -1376,25 +1348,25 @@ func unmarshalPromptArgumentResponseBodyResponseBodyToMcpassistantPromptArgument
 	return res
 }
 
-// unmarshalPromptMessageResponseBodyResponseBodyToMcpassistantPromptMessage
-// builds a value of type *mcpassistant.PromptMessage from a value of type
-// *PromptMessageResponseBodyResponseBody.
-func unmarshalPromptMessageResponseBodyResponseBodyToMcpassistantPromptMessage(v *PromptMessageResponseBodyResponseBody) *mcpassistant.PromptMessage {
+// unmarshalPromptMessageResponseBodyToMcpassistantPromptMessage builds a value
+// of type *mcpassistant.PromptMessage from a value of type
+// *PromptMessageResponseBody.
+func unmarshalPromptMessageResponseBodyToMcpassistantPromptMessage(v *PromptMessageResponseBody) *mcpassistant.PromptMessage {
 	if v == nil {
 		return nil
 	}
 	res := &mcpassistant.PromptMessage{
 		Role: *v.Role,
 	}
-	res.Content = unmarshalMessageContentResponseBodyResponseBodyToMcpassistantMessageContent(v.Content)
+	res.Content = unmarshalMessageContentResponseBodyToMcpassistantMessageContent(v.Content)
 
 	return res
 }
 
-// unmarshalMessageContentResponseBodyResponseBodyToMcpassistantMessageContent
-// builds a value of type *mcpassistant.MessageContent from a value of type
-// *MessageContentResponseBodyResponseBody.
-func unmarshalMessageContentResponseBodyResponseBodyToMcpassistantMessageContent(v *MessageContentResponseBodyResponseBody) *mcpassistant.MessageContent {
+// unmarshalMessageContentResponseBodyToMcpassistantMessageContent builds a
+// value of type *mcpassistant.MessageContent from a value of type
+// *MessageContentResponseBody.
+func unmarshalMessageContentResponseBodyToMcpassistantMessageContent(v *MessageContentResponseBody) *mcpassistant.MessageContent {
 	if v == nil {
 		return nil
 	}
@@ -1415,26 +1387,24 @@ func EncodePingRequest(encoder func(*http.Request) loomhttp.Encoder) func(*http.
 	return func(req *http.Request, v any) error {
 		id := uuid.New().String()
 		body := &jsonrpc.Request{
+			ID:      id,
 			JSONRPC: "2.0",
 			Method:  "ping",
-			ID:      id,
 		}
 		if err := encoder(req).Encode(body); err != nil {
 			return loomhttp.ErrEncodingError("mcp_assistant", "ping", err)
 		}
 		return nil
 	}
-}
-
-// EncodeEventsStreamRequest returns an encoder for requests sent to the
+} // EncodeEventsStreamRequest returns an encoder for requests sent to the
 // mcp_assistant service events/stream JSON-RPC method.
 func EncodeEventsStreamRequest(encoder func(*http.Request) loomhttp.Encoder) func(*http.Request, any) error {
 	return func(req *http.Request, v any) error {
 		id := uuid.New().String()
 		body := &jsonrpc.Request{
+			ID:      id,
 			JSONRPC: "2.0",
 			Method:  "events/stream",
-			ID:      id,
 		}
 		if err := encoder(req).Encode(body); err != nil {
 			return loomhttp.ErrEncodingError("mcp_assistant", "events/stream", err)

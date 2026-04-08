@@ -72,15 +72,15 @@ type ToolsCallServerStream interface {
 	// not expect a response.
 	// IMPORTANT: Send only sends JSON-RPC notifications. Use SendAndClose to send
 	// a final response.
-	Send(ctx context.Context, event ToolsCallEvent) error
+	Send(context.Context, ToolsCallEvent) error
 	// SendAndClose sends a final response with "ToolsCallResult" and closes the
 	// stream.
 	// The result will be sent as a JSON-RPC response with the original request ID.
 	// If the result has an ID field populated, that ID will be used instead of the
 	// request ID.
-	SendAndClose(ctx context.Context, event ToolsCallEvent) error
+	SendAndClose(context.Context, ToolsCallEvent) error
 	// SendError sends a JSON-RPC error response.
-	SendError(ctx context.Context, id string, err error) error
+	SendError(context.Context, string, error) error
 }
 
 // ToolsCallClientStream allows streaming instances of *ToolsCallResult to the
@@ -109,15 +109,15 @@ type EventsStreamServerStream interface {
 	// do not expect a response.
 	// IMPORTANT: Send only sends JSON-RPC notifications. Use SendAndClose to send
 	// a final response.
-	Send(ctx context.Context, event EventsStreamEvent) error
+	Send(context.Context, EventsStreamEvent) error
 	// SendAndClose sends a final response with "EventsStreamResult" and closes the
 	// stream.
 	// The result will be sent as a JSON-RPC response with the original request ID.
 	// If the result has an ID field populated, that ID will be used instead of the
 	// request ID.
-	SendAndClose(ctx context.Context, event EventsStreamEvent) error
+	SendAndClose(context.Context, EventsStreamEvent) error
 	// SendError sends a JSON-RPC error response.
-	SendError(ctx context.Context, id string, err error) error
+	SendError(context.Context, string, error) error
 }
 
 // EventsStreamClientStream allows streaming instances of *EventsStreamResult
@@ -141,7 +141,7 @@ type Stream interface {
 	// Accepted types: *InitializeResult, *PingResult, *ToolsListResult,
 	// *ToolsCallResult, *ResourcesListResult, *ResourcesReadResult,
 	// *PromptsListResult, *PromptsGetResult, *EventsStreamResult
-	Send(ctx context.Context, event Event) error
+	Send(context.Context, Event) error
 }
 
 // Event is the interface implemented by all result types that can be sent via
