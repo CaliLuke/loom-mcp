@@ -146,6 +146,39 @@ func TestNormalizeSDKToolResultFallsBackToStructuredItemWhenNoTextExists(t *test
 	assert.Equal(t, "image", structured[0]["type"])
 }
 
+func TestNormalizeSDKToolResultReturnsToolCallErrorForIsErrorResponses(t *testing.T) {
+	t.Parallel()
+
+	_, err := normalizeSDKToolResult(&sdkmcp.CallToolResult{
+		IsError: true,
+		Content: []sdkmcp.Content{
+			&sdkmcp.TextContent{Text: "[invalid_params] bad input\nRecovery: retry with valid arguments"},
+		},
+	})
+	require.Error(t, err)
+	var toolErr *ToolCallError
+	require.ErrorAs(t, err, &toolErr)
+	assert.Equal(t, "[invalid_params] bad input\nRecovery: retry with valid arguments", toolErr.Error())
+}
+
+func TestNormalizeSDKToolResultPrefersStructuredContentWhenTextIsCompact(t *testing.T) {
+	t.Parallel()
+
+	resp, err := normalizeSDKToolResult(&sdkmcp.CallToolResult{
+		Content: []sdkmcp.Content{
+			&sdkmcp.TextContent{Text: "positive"},
+		},
+		StructuredContent: map[string]any{"sentiment": "positive"},
+	})
+	require.NoError(t, err)
+	require.JSONEq(t, `{"sentiment":"positive"}`, string(resp.Result))
+
+	var structured []map[string]any
+	require.NoError(t, json.Unmarshal(resp.Structured, &structured))
+	require.Len(t, structured, 1)
+	assert.Equal(t, "positive", structured[0]["text"])
+}
+
 func TestSDKStdioServerProcess(t *testing.T) {
 	if os.Getenv(sdkStdioHelperEnv) != "1" {
 		t.Skip("helper subprocess")

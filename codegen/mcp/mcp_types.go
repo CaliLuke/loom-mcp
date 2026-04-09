@@ -336,6 +336,13 @@ func (b *mcpExprBuilder) buildToolsCallResultType() *expr.AttributeExpr {
 				Type:        &expr.Array{ElemType: &expr.AttributeExpr{Type: b.getOrCreateType("ContentItem", b.buildContentItemType)}},
 				Description: "Tool execution results",
 			}},
+			{Name: "structuredContent", Attribute: &expr.AttributeExpr{
+				Type:        expr.Any,
+				Description: "Optional structured result for machine consumers",
+				Meta: expr.MetaExpr{
+					"struct:field:type": []string{"json.RawMessage", "encoding/json"},
+				},
+			}},
 			{Name: "isError", Attribute: &expr.AttributeExpr{
 				Type:        expr.Boolean,
 				Description: "Whether the tool encountered an error",

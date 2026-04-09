@@ -86,8 +86,13 @@ func normalizeToolResult(last *mcppkg.ToolsCallResult) (mcpruntime.CallResponse,
 		}
 	}
 	var fallback any
-	if len(last.Content) > 0 {
+	if last.StructuredContent != nil {
+		fallback = last.StructuredContent
+	} else if len(last.Content) > 0 {
 		fallback = last.Content[0]
+	}
+	if last.IsError != nil && *last.IsError {
+		return mcpruntime.CallResponse{}, mcpruntime.ToolCallErrorFromResponse(textParts, fallback)
 	}
 	return mcpruntime.NormalizeToolCallResponse(textParts, last.Content, fallback)
 }

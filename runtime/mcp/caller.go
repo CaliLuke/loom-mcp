@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"strconv"
 	"strings"
 	"time"
 
@@ -36,6 +37,19 @@ type CallResponse struct {
 	Structured json.RawMessage
 }
 
+// ToolCallError reports a remote MCP tool failure that was returned as an
+// isError tool result rather than a transport/protocol error.
+type ToolCallError struct {
+	Message string
+}
+
+func (e *ToolCallError) Error() string {
+	if e == nil || strings.TrimSpace(e.Message) == "" {
+		return "remote MCP tool failed"
+	}
+	return e.Message
+}
+
 // NormalizeToolCallResponse converts raw text parts and structured content into
 // the canonical CallResponse representation used by MCP callers.
 //
@@ -55,6 +69,12 @@ func NormalizeToolCallResponse(textParts []string, structured any, fallbackResul
 	switch {
 	case textResult != "" && json.Valid(textBytes):
 		result = append(json.RawMessage(nil), textBytes...)
+	case textResult != "" && shouldUseStructuredFallback(fallbackResult):
+		marshaled, err := json.Marshal(fallbackResult)
+		if err != nil {
+			return CallResponse{}, fmt.Errorf("failed to marshal fallback content: %w", err)
+		}
+		result = marshaled
 	case textResult != "":
 		marshaled, err := json.Marshal(textResult)
 		if err != nil {
@@ -82,6 +102,43 @@ func NormalizeToolCallResponse(textParts []string, structured any, fallbackResul
 		Result:     result,
 		Structured: structuredPayload,
 	}, nil
+}
+
+func shouldUseStructuredFallback(v any) bool {
+	switch v.(type) {
+	case nil, string, *string, []byte, json.RawMessage:
+		return false
+	default:
+		return true
+	}
+}
+
+// ToolCallErrorFromResponse converts an MCP isError content payload into a Go
+// error while preserving the compact text message when present.
+func ToolCallErrorFromResponse(textParts []string, fallbackResult any) error {
+	message := strings.TrimSpace(strings.Join(textParts, ""))
+	if message == "" && fallbackResult != nil {
+		switch v := fallbackResult.(type) {
+		case string:
+			message = strings.TrimSpace(v)
+		case []byte:
+			message = strings.TrimSpace(string(v))
+		case json.RawMessage:
+			message = strings.TrimSpace(string(v))
+		default:
+			marshaled, err := json.Marshal(v)
+			if err == nil {
+				message = strings.TrimSpace(string(marshaled))
+			}
+		}
+	}
+	if unquoted, err := strconv.Unquote(message); err == nil {
+		message = unquoted
+	}
+	if message == "" {
+		message = "remote MCP tool failed"
+	}
+	return &ToolCallError{Message: message}
 }
 
 // SessionCaller implements Caller by wrapping an MCP SDK ClientSession.
@@ -152,8 +209,15 @@ func normalizeSDKToolResult(res *mcp.CallToolResult) (CallResponse, error) {
 			textParts = append(textParts, textContent.Text)
 		}
 	}
+	if res.IsError {
+		return CallResponse{}, ToolCallErrorFromResponse(textParts, res.Content[0])
+	}
+	fallback := any(res.Content[0])
+	if res.StructuredContent != nil {
+		fallback = res.StructuredContent
+	}
 
-	return NormalizeToolCallResponse(textParts, structured, res.Content[0])
+	return NormalizeToolCallResponse(textParts, structured, fallback)
 }
 
 // connectSession establishes an SDK session without tying the live session

@@ -3,10 +3,15 @@ package assistantapi
 import (
 	"context"
 	"encoding/json"
+	"net/http"
+	"net/url"
 	"testing"
 	"time"
 
+	mcpAssistantjsonrpcc "example.com/assistant/gen/jsonrpc/mcp_assistant/client"
+	mcpassistant "example.com/assistant/gen/mcp_assistant"
 	mcpruntime "github.com/CaliLuke/loom-mcp/runtime/mcp"
+	goahttp "github.com/CaliLuke/loom/http"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -75,4 +80,60 @@ func TestGeneratedNewCallerAgainstGeneratedServerNormalizesMultiContent(t *testi
 	require.NoError(t, json.Unmarshal(imageResp.Result, &result))
 	assert.Equal(t, "image", result["type"])
 	assert.Equal(t, "image/png", result["mimeType"])
+}
+
+func TestGeneratedJSONRPCServerToolsCallUsesCompactTextAndStructuredContent(t *testing.T) {
+	t.Parallel()
+
+	server := newGeneratedJSONRPCServer(t)
+	defer server.Close()
+
+	u, err := url.Parse(server.URL)
+	require.NoError(t, err)
+
+	doer := &testSessionDoer{
+		base: &http.Client{
+			Timeout: 10 * time.Second,
+			Transport: testHeaderRoundTripper{
+				base: http.DefaultTransport,
+				headers: map[string]string{
+					"Accept": "text/event-stream",
+				},
+			},
+		},
+	}
+	client := mcpAssistantjsonrpcc.NewClient(
+		u.Scheme,
+		u.Host,
+		doer,
+		goahttp.RequestEncoder,
+		goahttp.ResponseDecoder,
+		false,
+	)
+
+	_, err = client.Initialize()(context.Background(), &mcpassistant.InitializePayload{
+		ProtocolVersion: "2025-06-18",
+		ClientInfo: &mcpassistant.ClientInfo{
+			Name:    "compact-text-proof",
+			Version: "1.0.0",
+		},
+	})
+	require.NoError(t, err)
+
+	stream, err := client.ToolsCall()(context.Background(), &mcpassistant.ToolsCallPayload{
+		Name:      "analyze_sentiment",
+		Arguments: json.RawMessage(`{"text":"I love parity checks"}`),
+	})
+	require.NoError(t, err)
+
+	clientStream := stream.(*mcpAssistantjsonrpcc.ToolsCallClientStream)
+	result, err := clientStream.Recv(context.Background())
+	require.NoError(t, err)
+	require.Len(t, result.Content, 1)
+	require.NotNil(t, result.Content[0].Text)
+	assert.Equal(t, "positive", *result.Content[0].Text)
+	require.NotNil(t, result.StructuredContent)
+	structuredJSON, err := json.Marshal(result.StructuredContent)
+	require.NoError(t, err)
+	assert.Contains(t, string(structuredJSON), `"sentiment":"positive"`)
 }

@@ -95,8 +95,19 @@ func emitCallerNormalizer(stmt *jen.Statement) {
 				),
 			)
 			g.Var().Id("fallback").Any()
-			g.If(jen.Len(jen.Id("last").Dot("Content")).Op(">").Lit(0)).Block(
+			g.If(jen.Id("last").Dot("StructuredContent").Op("!=").Nil()).Block(
+				jen.Id("fallback").Op("=").Id("last").Dot("StructuredContent"),
+			).Else().If(jen.Len(jen.Id("last").Dot("Content")).Op(">").Lit(0)).Block(
 				jen.Id("fallback").Op("=").Id("last").Dot("Content").Index(jen.Lit(0)),
+			)
+			g.If(jen.Id("last").Dot("IsError").Op("!=").Nil().Op("&&").Op("*").Id("last").Dot("IsError")).Block(
+				jen.Return(
+					jen.Id("mcpruntime").Dot("CallResponse").Values(),
+					jen.Id("mcpruntime").Dot("ToolCallErrorFromResponse").Call(
+						jen.Id("textParts"),
+						jen.Id("fallback"),
+					),
+				),
 			)
 			g.Return(
 				jen.Id("mcpruntime").Dot("NormalizeToolCallResponse").Call(

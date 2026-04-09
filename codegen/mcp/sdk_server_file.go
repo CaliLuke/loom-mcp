@@ -824,6 +824,9 @@ func emitSDKCallToolResult(stmt *jen.Statement) {
 			jen.Id("callResult").Op(":=").Op("&").Id("mcpsdk").Dot("CallToolResult").Values(jen.Dict{
 				jen.Id("Content"): jen.Id("content"),
 			}),
+			jen.If(jen.Id("result").Dot("StructuredContent").Op("!=").Nil()).Block(
+				jen.Id("callResult").Dot("StructuredContent").Op("=").Id("result").Dot("StructuredContent"),
+			),
 			jen.If(jen.Id("result").Dot("IsError").Op("!=").Nil()).Block(
 				jen.Id("callResult").Dot("IsError").Op("=").Op("*").Id("result").Dot("IsError"),
 			),

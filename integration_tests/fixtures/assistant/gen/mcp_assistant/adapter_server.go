@@ -16,6 +16,8 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"sort"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -482,38 +484,299 @@ func (a *MCPAdapter) sendToolError(ctx context.Context, stream ToolsCallServerSt
 		return nil
 	}
 
-	if streamErr, ok := toolStreamError(err); ok {
-		a.log(ctx, "response", map[string]any{"method": "tools/call", "name": toolName, "is_error": true})
-		return streamErr
-	}
-
 	mapped := a.mapError(err)
-	if streamErr, ok := toolStreamError(mapped); ok {
-		a.log(ctx, "response", map[string]any{"method": "tools/call", "name": toolName, "is_error": true})
-		return streamErr
+	if mapped == nil {
+		mapped = err
 	}
-	return mapped
+	isError := true
+	result := &ToolsCallResult{
+		Content: []*ContentItem{
+			buildContentItem(a, formatToolErrorText(mapped)),
+		},
+		IsError: &isError,
+	}
+	a.log(ctx, "response", map[string]any{"method": "tools/call", "name": toolName, "is_error": true})
+	return stream.SendAndClose(ctx, result)
 }
 
-func toolStreamError(err error) (error, bool) {
+func formatToolErrorText(err error) string {
 	if err == nil {
-		return nil, false
+		return "[internal_error] Tool execution failed."
 	}
 
-	status, ok := goa.ErrorStatusCode(err)
+	code := strings.TrimSpace(goa.ErrorRemedyCode(err))
+	if code == "" {
+		var namer goa.LoomErrorNamer
+		if errors.As(err, &namer) {
+			code = strings.TrimSpace(namer.LoomErrorName())
+		}
+	}
+	if code == "" {
+		if status, ok := goa.ErrorStatusCode(err); ok {
+			switch status {
+			case http.StatusBadRequest:
+				code = "invalid_params"
+			case http.StatusNotFound:
+				code = "not_found"
+			default:
+				code = "internal_error"
+			}
+		}
+	}
+	if code == "" {
+		code = "internal_error"
+	}
+
+	message := strings.TrimSpace(goa.ErrorSafeMessage(err))
+	if message == "" {
+		message = "Tool execution failed."
+	}
+	recovery := strings.TrimSpace(goa.ErrorRetryHint(err))
+	if recovery == "" {
+		return fmt.Sprintf("[%s] %s", code, message)
+	}
+	return fmt.Sprintf("[%s] %s\nRecovery: %s", code, message, recovery)
+}
+
+func toolCallError(err error, defaultCode string, defaultRecovery string) error {
+	if err == nil {
+		err = goa.PermanentError(defaultCode, "Tool execution failed.")
+	}
+	code := strings.TrimSpace(goa.ErrorRemedyCode(err))
+	if code == "" {
+		code = defaultCode
+	}
+	message := strings.TrimSpace(goa.ErrorSafeMessage(err))
+	if message == "" {
+		message = "Tool execution failed."
+	}
+	recovery := strings.TrimSpace(goa.ErrorRetryHint(err))
+	if recovery == "" {
+		recovery = defaultRecovery
+	}
+	return goa.WithErrorRemedy(goa.PermanentError(code, "%s", message), &goa.ErrorRemedy{
+		Code:        code,
+		SafeMessage: message,
+		RetryHint:   recovery,
+	})
+}
+
+func toolInputError(err error, raw json.RawMessage) error {
+	return toolCallError(err, "invalid_params", inferToolInputRecovery(err, raw))
+}
+
+func inferToolInputRecovery(err error, raw json.RawMessage) string {
+	message := strings.TrimSpace(goa.ErrorSafeMessage(err))
+	if message == "" {
+		message = strings.TrimSpace(err.Error())
+	}
+	if field := missingFieldFromMessage(message); field != "" {
+		return fmt.Sprintf("Include required field %q.", field)
+	}
+	if action, ok := actionValueEnvelopeExample(raw); ok {
+		return fmt.Sprintf("Include the nested value object. Example: %s", action)
+	}
+	if strings.Contains(message, "unexpected end of JSON input") || strings.Contains(message, "unexpected EOF") {
+		return "Provide complete JSON arguments. If a field expects an object, include {} instead of leaving it incomplete."
+	}
+	return "Provide valid tool arguments."
+}
+
+func missingFieldFromMessage(message string) string {
+	const prefix = "Missing required field: "
+	if !strings.HasPrefix(message, prefix) {
+		return ""
+	}
+	return strings.TrimSpace(strings.TrimPrefix(message, prefix))
+}
+
+func actionValueEnvelopeExample(raw json.RawMessage) (string, bool) {
+	var fields map[string]json.RawMessage
+	if err := json.Unmarshal(raw, &fields); err != nil {
+		return "", false
+	}
+	if action, ok := actionValueExampleForObject(fields); ok {
+		return action, true
+	}
+	for name, nestedRaw := range fields {
+		var nested map[string]json.RawMessage
+		if err := json.Unmarshal(nestedRaw, &nested); err != nil {
+			continue
+		}
+		if example, ok := actionValueExampleForObject(nested); ok {
+			return fmt.Sprintf(`{"%s":%s}`, name, example), true
+		}
+	}
+	return "", false
+}
+
+func actionValueExampleForObject(fields map[string]json.RawMessage) (string, bool) {
+	actionRaw, hasAction := fields["action"]
+	if !hasAction {
+		return "", false
+	}
+	if _, hasValue := fields["value"]; hasValue {
+		return "", false
+	}
+	var action string
+	if err := json.Unmarshal(actionRaw, &action); err != nil {
+		return "", false
+	}
+	action = strings.TrimSpace(action)
+	if action == "" {
+		return "", false
+	}
+	return fmt.Sprintf(`{"action":%q,"value":{}}`, action), true
+}
+
+func formatToolSuccessText(v any) string {
+	switch value := v.(type) {
+	case nil:
+		return "OK"
+	case string:
+		if strings.TrimSpace(value) == "" {
+			return "OK"
+		}
+		return value
+	case *string:
+		if value == nil || strings.TrimSpace(*value) == "" {
+			return "OK"
+		}
+		return *value
+	case bool:
+		if value {
+			return "true"
+		}
+		return "false"
+	case *bool:
+		if value == nil {
+			return "OK"
+		}
+		if *value {
+			return "true"
+		}
+		return "false"
+	}
+
+	normalized, ok := normalizeToolSuccessValue(v)
 	if !ok {
+		return fmt.Sprint(v)
+	}
+	return summarizeToolSuccessValue(normalized)
+}
+
+func normalizeToolSuccessValue(v any) (any, bool) {
+	if v == nil {
 		return nil, false
 	}
+	raw, err := json.Marshal(v)
+	if err != nil {
+		return nil, false
+	}
+	var normalized any
+	if err := json.Unmarshal(raw, &normalized); err != nil {
+		return nil, false
+	}
+	return normalized, true
+}
 
-	message := goa.ErrorSafeMessage(err)
-
-	switch status {
-	case http.StatusBadRequest:
-		return goa.PermanentError("invalid_params", "%s", message), true
-	case http.StatusNotFound:
-		return goa.PermanentError("method_not_found", "%s", message), true
+func summarizeToolSuccessValue(v any) string {
+	switch value := v.(type) {
+	case nil:
+		return "OK"
+	case string:
+		if strings.TrimSpace(value) == "" {
+			return "OK"
+		}
+		return value
+	case bool:
+		if value {
+			return "true"
+		}
+		return "false"
+	case float64:
+		return strconv.FormatFloat(value, 'f', -1, 64)
+	case []any:
+		return summarizeToolSuccessList(value)
+	case map[string]any:
+		return summarizeToolSuccessMap(value)
 	default:
-		return goa.PermanentError("internal_error", "%s", message), true
+		return fmt.Sprint(value)
+	}
+}
+
+func summarizeToolSuccessList(items []any) string {
+	if len(items) == 0 {
+		return "No items."
+	}
+	parts := make([]string, 0, min(len(items), 5))
+	for _, item := range items {
+		part := strings.TrimSpace(summarizeToolSuccessValue(item))
+		if part == "" {
+			continue
+		}
+		parts = append(parts, part)
+		if len(parts) == 5 {
+			break
+		}
+	}
+	if len(parts) == 0 {
+		return fmt.Sprintf("%d items.", len(items))
+	}
+	if len(items) > len(parts) {
+		parts = append(parts, fmt.Sprintf("... (%d total)", len(items)))
+	}
+	return strings.Join(parts, "\n")
+}
+
+func summarizeToolSuccessMap(fields map[string]any) string {
+	preferredScalars := []string{"result", "output", "summary", "message", "value", "name", "ack", "sentiment", "status"}
+	for _, key := range preferredScalars {
+		if scalar, ok := scalarToolSuccessText(fields[key]); ok {
+			return scalar
+		}
+	}
+	preferredLists := []string{"items", "results", "keywords", "templates", "documents"}
+	for _, key := range preferredLists {
+		if list, ok := fields[key].([]any); ok {
+			return summarizeToolSuccessList(list)
+		}
+	}
+	if len(fields) == 1 {
+		for _, value := range fields {
+			return summarizeToolSuccessValue(value)
+		}
+	}
+	if name, ok := scalarToolSuccessText(fields["name"]); ok {
+		if version, ok := scalarToolSuccessText(fields["version"]); ok {
+			return strings.TrimSpace(name + " " + version)
+		}
+	}
+	keys := make([]string, 0, len(fields))
+	for key := range fields {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+	if len(keys) > 4 {
+		keys = keys[:4]
+	}
+	return fmt.Sprintf("Fields: %s", strings.Join(keys, ", "))
+}
+
+func scalarToolSuccessText(v any) (string, bool) {
+	switch value := v.(type) {
+	case string:
+		trimmed := strings.TrimSpace(value)
+		return trimmed, trimmed != ""
+	case bool:
+		if value {
+			return "true", true
+		}
+		return "false", true
+	case float64:
+		return strconv.FormatFloat(value, 'f', -1, 64), true
+	default:
+		return "", false
 	}
 }
 
@@ -700,11 +963,19 @@ func decodeMCPPayloadFields(data []byte) (map[string]json.RawMessage, error) {
 func validateMCPPayloadRequired(fields map[string]json.RawMessage, field string) error {
 	raw, ok := fields[field]
 	if !ok {
-		return goa.PermanentError("invalid_params", "Missing required field: %s", field)
+		return goa.WithErrorRemedy(goa.PermanentError("invalid_params", "Missing required field: %s", field), &goa.ErrorRemedy{
+			Code:        "invalid_params",
+			SafeMessage: fmt.Sprintf("Missing required field: %s", field),
+			RetryHint:   fmt.Sprintf("Include required field %q.", field),
+		})
 	}
 	trimmed := bytes.TrimSpace(raw)
 	if bytes.Equal(trimmed, []byte(`""`)) || bytes.Equal(trimmed, []byte("null")) {
-		return goa.PermanentError("invalid_params", "Missing required field: %s", field)
+		return goa.WithErrorRemedy(goa.PermanentError("invalid_params", "Missing required field: %s", field), &goa.ErrorRemedy{
+			Code:        "invalid_params",
+			SafeMessage: fmt.Sprintf("Missing required field: %s", field),
+			RetryHint:   fmt.Sprintf("Include required field %q.", field),
+		})
 	}
 	return nil
 }
@@ -724,7 +995,11 @@ func validateMCPPayloadEnum(fields map[string]json.RawMessage, field string, all
 			return nil
 		}
 	}
-	return goa.PermanentError("invalid_params", "Invalid value for %s", field)
+	return goa.WithErrorRemedy(goa.PermanentError("invalid_params", "Invalid value for %s", field), &goa.ErrorRemedy{
+		Code:        "invalid_params",
+		SafeMessage: fmt.Sprintf("Invalid value for %s", field),
+		RetryHint:   fmt.Sprintf("Use one of: %s.", strings.Join(allowed, ", ")),
+	})
 }
 
 func (a *MCPAdapter) ToolsList(ctx context.Context, p *ToolsListPayload) (res *ToolsListResult, err error) {
@@ -830,27 +1105,28 @@ func (a *MCPAdapter) toolsCallHandler(ctx context.Context, p *ToolsCallPayload, 
 		var payload *assistant.AnalyzeSentimentPayload
 		fields, ferr := topLevelJSONFieldSet(p.Arguments)
 		if ferr != nil {
-			return false, goa.PermanentError("invalid_params", "%s", ferr.Error())
+			return true, a.sendToolError(ctx, stream, p.Name, toolInputError(ferr, p.Arguments))
 		}
 		rawFields, err := decodeMCPPayloadFields(p.Arguments)
 		if err != nil {
-			return false, goa.PermanentError("invalid_params", "%s", err.Error())
+			return true, a.sendToolError(ctx, stream, p.Name, toolInputError(err, p.Arguments))
 		}
 		_ = fields
 		_ = rawFields
 		if err := decodeMCPPayloadStrict(p.Arguments, &payload); err != nil {
-			return false, goa.PermanentError("invalid_params", "%s", err.Error())
+			return true, a.sendToolError(ctx, stream, p.Name, toolInputError(err, p.Arguments))
 		}
 		{
 			if err := validateMCPPayloadRequired(rawFields, "text"); err != nil {
-				return false, err
+				return true, a.sendToolError(ctx, stream, p.Name, toolInputError(err, p.Arguments))
 			}
 		}
 		result, err := a.service.AnalyzeSentiment(ctx, payload)
 		if err != nil {
 			return true, a.sendToolError(ctx, stream, p.Name, err)
 		}
-		s, serr := mcpruntime.EncodeJSONToString(ctx, goahttp.ResponseEncoder, result)
+		s := formatToolSuccessText(result)
+		structuredContent, serr := json.Marshal(result)
 		if serr != nil {
 			return false, serr
 		}
@@ -858,6 +1134,7 @@ func (a *MCPAdapter) toolsCallHandler(ctx context.Context, p *ToolsCallPayload, 
 			Content: []*ContentItem{
 				buildContentItem(a, s),
 			},
+			StructuredContent: structuredContent,
 		}
 		a.log(ctx, "response", map[string]any{"method": "tools/call", "name": p.Name})
 		return false, stream.SendAndClose(ctx, final)
@@ -865,27 +1142,28 @@ func (a *MCPAdapter) toolsCallHandler(ctx context.Context, p *ToolsCallPayload, 
 		var payload *assistant.ExtractKeywordsPayload
 		fields, ferr := topLevelJSONFieldSet(p.Arguments)
 		if ferr != nil {
-			return false, goa.PermanentError("invalid_params", "%s", ferr.Error())
+			return true, a.sendToolError(ctx, stream, p.Name, toolInputError(ferr, p.Arguments))
 		}
 		rawFields, err := decodeMCPPayloadFields(p.Arguments)
 		if err != nil {
-			return false, goa.PermanentError("invalid_params", "%s", err.Error())
+			return true, a.sendToolError(ctx, stream, p.Name, toolInputError(err, p.Arguments))
 		}
 		_ = fields
 		_ = rawFields
 		if err := decodeMCPPayloadStrict(p.Arguments, &payload); err != nil {
-			return false, goa.PermanentError("invalid_params", "%s", err.Error())
+			return true, a.sendToolError(ctx, stream, p.Name, toolInputError(err, p.Arguments))
 		}
 		{
 			if err := validateMCPPayloadRequired(rawFields, "text"); err != nil {
-				return false, err
+				return true, a.sendToolError(ctx, stream, p.Name, toolInputError(err, p.Arguments))
 			}
 		}
 		result, err := a.service.ExtractKeywords(ctx, payload)
 		if err != nil {
 			return true, a.sendToolError(ctx, stream, p.Name, err)
 		}
-		s, serr := mcpruntime.EncodeJSONToString(ctx, goahttp.ResponseEncoder, result)
+		s := formatToolSuccessText(result)
+		structuredContent, serr := json.Marshal(result)
 		if serr != nil {
 			return false, serr
 		}
@@ -893,6 +1171,7 @@ func (a *MCPAdapter) toolsCallHandler(ctx context.Context, p *ToolsCallPayload, 
 			Content: []*ContentItem{
 				buildContentItem(a, s),
 			},
+			StructuredContent: structuredContent,
 		}
 		a.log(ctx, "response", map[string]any{"method": "tools/call", "name": p.Name})
 		return false, stream.SendAndClose(ctx, final)
@@ -900,27 +1179,28 @@ func (a *MCPAdapter) toolsCallHandler(ctx context.Context, p *ToolsCallPayload, 
 		var payload *assistant.SummarizeTextPayload
 		fields, ferr := topLevelJSONFieldSet(p.Arguments)
 		if ferr != nil {
-			return false, goa.PermanentError("invalid_params", "%s", ferr.Error())
+			return true, a.sendToolError(ctx, stream, p.Name, toolInputError(ferr, p.Arguments))
 		}
 		rawFields, err := decodeMCPPayloadFields(p.Arguments)
 		if err != nil {
-			return false, goa.PermanentError("invalid_params", "%s", err.Error())
+			return true, a.sendToolError(ctx, stream, p.Name, toolInputError(err, p.Arguments))
 		}
 		_ = fields
 		_ = rawFields
 		if err := decodeMCPPayloadStrict(p.Arguments, &payload); err != nil {
-			return false, goa.PermanentError("invalid_params", "%s", err.Error())
+			return true, a.sendToolError(ctx, stream, p.Name, toolInputError(err, p.Arguments))
 		}
 		{
 			if err := validateMCPPayloadRequired(rawFields, "text"); err != nil {
-				return false, err
+				return true, a.sendToolError(ctx, stream, p.Name, toolInputError(err, p.Arguments))
 			}
 		}
 		result, err := a.service.SummarizeText(ctx, payload)
 		if err != nil {
 			return true, a.sendToolError(ctx, stream, p.Name, err)
 		}
-		s, serr := mcpruntime.EncodeJSONToString(ctx, goahttp.ResponseEncoder, result)
+		s := formatToolSuccessText(result)
+		structuredContent, serr := json.Marshal(result)
 		if serr != nil {
 			return false, serr
 		}
@@ -928,6 +1208,7 @@ func (a *MCPAdapter) toolsCallHandler(ctx context.Context, p *ToolsCallPayload, 
 			Content: []*ContentItem{
 				buildContentItem(a, s),
 			},
+			StructuredContent: structuredContent,
 		}
 		a.log(ctx, "response", map[string]any{"method": "tools/call", "name": p.Name})
 		return false, stream.SendAndClose(ctx, final)
@@ -935,27 +1216,28 @@ func (a *MCPAdapter) toolsCallHandler(ctx context.Context, p *ToolsCallPayload, 
 		var payload *assistant.SearchPayload
 		fields, ferr := topLevelJSONFieldSet(p.Arguments)
 		if ferr != nil {
-			return false, goa.PermanentError("invalid_params", "%s", ferr.Error())
+			return true, a.sendToolError(ctx, stream, p.Name, toolInputError(ferr, p.Arguments))
 		}
 		rawFields, err := decodeMCPPayloadFields(p.Arguments)
 		if err != nil {
-			return false, goa.PermanentError("invalid_params", "%s", err.Error())
+			return true, a.sendToolError(ctx, stream, p.Name, toolInputError(err, p.Arguments))
 		}
 		_ = fields
 		_ = rawFields
 		if err := decodeMCPPayloadStrict(p.Arguments, &payload); err != nil {
-			return false, goa.PermanentError("invalid_params", "%s", err.Error())
+			return true, a.sendToolError(ctx, stream, p.Name, toolInputError(err, p.Arguments))
 		}
 		{
 			if err := validateMCPPayloadRequired(rawFields, "query"); err != nil {
-				return false, err
+				return true, a.sendToolError(ctx, stream, p.Name, toolInputError(err, p.Arguments))
 			}
 		}
 		result, err := a.service.Search(ctx, payload)
 		if err != nil {
 			return true, a.sendToolError(ctx, stream, p.Name, err)
 		}
-		s, serr := mcpruntime.EncodeJSONToString(ctx, goahttp.ResponseEncoder, result)
+		s := formatToolSuccessText(result)
+		structuredContent, serr := json.Marshal(result)
 		if serr != nil {
 			return false, serr
 		}
@@ -963,6 +1245,7 @@ func (a *MCPAdapter) toolsCallHandler(ctx context.Context, p *ToolsCallPayload, 
 			Content: []*ContentItem{
 				buildContentItem(a, s),
 			},
+			StructuredContent: structuredContent,
 		}
 		a.log(ctx, "response", map[string]any{"method": "tools/call", "name": p.Name})
 		return false, stream.SendAndClose(ctx, final)
@@ -970,35 +1253,36 @@ func (a *MCPAdapter) toolsCallHandler(ctx context.Context, p *ToolsCallPayload, 
 		var payload *assistant.ExecuteCodePayload
 		fields, ferr := topLevelJSONFieldSet(p.Arguments)
 		if ferr != nil {
-			return false, goa.PermanentError("invalid_params", "%s", ferr.Error())
+			return true, a.sendToolError(ctx, stream, p.Name, toolInputError(ferr, p.Arguments))
 		}
 		rawFields, err := decodeMCPPayloadFields(p.Arguments)
 		if err != nil {
-			return false, goa.PermanentError("invalid_params", "%s", err.Error())
+			return true, a.sendToolError(ctx, stream, p.Name, toolInputError(err, p.Arguments))
 		}
 		_ = fields
 		_ = rawFields
 		if err := decodeMCPPayloadStrict(p.Arguments, &payload); err != nil {
-			return false, goa.PermanentError("invalid_params", "%s", err.Error())
+			return true, a.sendToolError(ctx, stream, p.Name, toolInputError(err, p.Arguments))
 		}
 		{
 			if err := validateMCPPayloadRequired(rawFields, "language"); err != nil {
-				return false, err
+				return true, a.sendToolError(ctx, stream, p.Name, toolInputError(err, p.Arguments))
 			}
 			if err := validateMCPPayloadRequired(rawFields, "code"); err != nil {
-				return false, err
+				return true, a.sendToolError(ctx, stream, p.Name, toolInputError(err, p.Arguments))
 			}
 		}
 		{
 			if err := validateMCPPayloadEnum(rawFields, "language", "python", "javascript"); err != nil {
-				return false, err
+				return true, a.sendToolError(ctx, stream, p.Name, toolInputError(err, p.Arguments))
 			}
 		}
 		result, err := a.service.ExecuteCode(ctx, payload)
 		if err != nil {
 			return true, a.sendToolError(ctx, stream, p.Name, err)
 		}
-		s, serr := mcpruntime.EncodeJSONToString(ctx, goahttp.ResponseEncoder, result)
+		s := formatToolSuccessText(result)
+		structuredContent, serr := json.Marshal(result)
 		if serr != nil {
 			return false, serr
 		}
@@ -1006,6 +1290,7 @@ func (a *MCPAdapter) toolsCallHandler(ctx context.Context, p *ToolsCallPayload, 
 			Content: []*ContentItem{
 				buildContentItem(a, s),
 			},
+			StructuredContent: structuredContent,
 		}
 		a.log(ctx, "response", map[string]any{"method": "tools/call", "name": p.Name})
 		return false, stream.SendAndClose(ctx, final)
@@ -1013,27 +1298,28 @@ func (a *MCPAdapter) toolsCallHandler(ctx context.Context, p *ToolsCallPayload, 
 		var payload *assistant.ProcessBatchPayload
 		fields, ferr := topLevelJSONFieldSet(p.Arguments)
 		if ferr != nil {
-			return false, goa.PermanentError("invalid_params", "%s", ferr.Error())
+			return true, a.sendToolError(ctx, stream, p.Name, toolInputError(ferr, p.Arguments))
 		}
 		rawFields, err := decodeMCPPayloadFields(p.Arguments)
 		if err != nil {
-			return false, goa.PermanentError("invalid_params", "%s", err.Error())
+			return true, a.sendToolError(ctx, stream, p.Name, toolInputError(err, p.Arguments))
 		}
 		_ = fields
 		_ = rawFields
 		if err := decodeMCPPayloadStrict(p.Arguments, &payload); err != nil {
-			return false, goa.PermanentError("invalid_params", "%s", err.Error())
+			return true, a.sendToolError(ctx, stream, p.Name, toolInputError(err, p.Arguments))
 		}
 		{
 			if err := validateMCPPayloadEnum(rawFields, "format", "json", "text", "blob", "uri"); err != nil {
-				return false, err
+				return true, a.sendToolError(ctx, stream, p.Name, toolInputError(err, p.Arguments))
 			}
 		}
 		result, err := a.service.ProcessBatch(ctx, payload)
 		if err != nil {
 			return true, a.sendToolError(ctx, stream, p.Name, err)
 		}
-		s, serr := mcpruntime.EncodeJSONToString(ctx, goahttp.ResponseEncoder, result)
+		s := formatToolSuccessText(result)
+		structuredContent, serr := json.Marshal(result)
 		if serr != nil {
 			return false, serr
 		}
@@ -1041,19 +1327,21 @@ func (a *MCPAdapter) toolsCallHandler(ctx context.Context, p *ToolsCallPayload, 
 			Content: []*ContentItem{
 				buildContentItem(a, s),
 			},
+			StructuredContent: structuredContent,
 		}
 		a.log(ctx, "response", map[string]any{"method": "tools/call", "name": p.Name})
 		return false, stream.SendAndClose(ctx, final)
 	case "multi_content":
 		var payload *assistant.MultiContentPayload
 		if err := decodeMCPPayloadStrict(p.Arguments, &payload); err != nil {
-			return false, goa.PermanentError("invalid_params", "%s", err.Error())
+			return true, a.sendToolError(ctx, stream, p.Name, toolInputError(err, p.Arguments))
 		}
 		result, err := a.service.MultiContent(ctx, payload)
 		if err != nil {
 			return true, a.sendToolError(ctx, stream, p.Name, err)
 		}
-		s, serr := mcpruntime.EncodeJSONToString(ctx, goahttp.ResponseEncoder, result)
+		s := formatToolSuccessText(result)
+		structuredContent, serr := json.Marshal(result)
 		if serr != nil {
 			return false, serr
 		}
@@ -1061,6 +1349,7 @@ func (a *MCPAdapter) toolsCallHandler(ctx context.Context, p *ToolsCallPayload, 
 			Content: []*ContentItem{
 				buildContentItem(a, s),
 			},
+			StructuredContent: structuredContent,
 		}
 		a.log(ctx, "response", map[string]any{"method": "tools/call", "name": p.Name})
 		return false, stream.SendAndClose(ctx, final)
@@ -1068,44 +1357,45 @@ func (a *MCPAdapter) toolsCallHandler(ctx context.Context, p *ToolsCallPayload, 
 		var payload *assistant.GenerateDpiSpecPayload
 		fields, ferr := topLevelJSONFieldSet(p.Arguments)
 		if ferr != nil {
-			return false, goa.PermanentError("invalid_params", "%s", ferr.Error())
+			return true, a.sendToolError(ctx, stream, p.Name, toolInputError(ferr, p.Arguments))
 		}
 		rawFields, err := decodeMCPPayloadFields(p.Arguments)
 		if err != nil {
-			return false, goa.PermanentError("invalid_params", "%s", err.Error())
+			return true, a.sendToolError(ctx, stream, p.Name, toolInputError(err, p.Arguments))
 		}
 		_ = fields
 		_ = rawFields
 		if err := decodeMCPPayloadStrict(p.Arguments, &payload); err != nil {
-			return false, goa.PermanentError("invalid_params", "%s", err.Error())
+			return true, a.sendToolError(ctx, stream, p.Name, toolInputError(err, p.Arguments))
 		}
 		{
 			if err := validateMCPPayloadRequired(rawFields, "screen_title"); err != nil {
-				return false, err
+				return true, a.sendToolError(ctx, stream, p.Name, toolInputError(err, p.Arguments))
 			}
 			if err := validateMCPPayloadRequired(rawFields, "platform"); err != nil {
-				return false, err
+				return true, a.sendToolError(ctx, stream, p.Name, toolInputError(err, p.Arguments))
 			}
 			if err := validateMCPPayloadRequired(rawFields, "density"); err != nil {
-				return false, err
+				return true, a.sendToolError(ctx, stream, p.Name, toolInputError(err, p.Arguments))
 			}
 			if err := validateMCPPayloadRequired(rawFields, "primary_cta"); err != nil {
-				return false, err
+				return true, a.sendToolError(ctx, stream, p.Name, toolInputError(err, p.Arguments))
 			}
 		}
 		{
 			if err := validateMCPPayloadEnum(rawFields, "density", "compact", "comfortable"); err != nil {
-				return false, err
+				return true, a.sendToolError(ctx, stream, p.Name, toolInputError(err, p.Arguments))
 			}
 			if err := validateMCPPayloadEnum(rawFields, "platform", "ios", "web"); err != nil {
-				return false, err
+				return true, a.sendToolError(ctx, stream, p.Name, toolInputError(err, p.Arguments))
 			}
 		}
 		result, err := a.service.GenerateDpiSpec(ctx, payload)
 		if err != nil {
 			return true, a.sendToolError(ctx, stream, p.Name, err)
 		}
-		s, serr := mcpruntime.EncodeJSONToString(ctx, goahttp.ResponseEncoder, result)
+		s := formatToolSuccessText(result)
+		structuredContent, serr := json.Marshal(result)
 		if serr != nil {
 			return false, serr
 		}
@@ -1113,19 +1403,21 @@ func (a *MCPAdapter) toolsCallHandler(ctx context.Context, p *ToolsCallPayload, 
 			Content: []*ContentItem{
 				buildContentItem(a, s),
 			},
+			StructuredContent: structuredContent,
 		}
 		a.log(ctx, "response", map[string]any{"method": "tools/call", "name": p.Name})
 		return false, stream.SendAndClose(ctx, final)
 	case "dispatch_action":
 		var payload *assistant.DispatchActionPayload
 		if err := decodeMCPPayloadStrict(p.Arguments, &payload); err != nil {
-			return false, goa.PermanentError("invalid_params", "%s", err.Error())
+			return true, a.sendToolError(ctx, stream, p.Name, toolInputError(err, p.Arguments))
 		}
 		result, err := a.service.DispatchAction(ctx, payload)
 		if err != nil {
 			return true, a.sendToolError(ctx, stream, p.Name, err)
 		}
-		s, serr := mcpruntime.EncodeJSONToString(ctx, goahttp.ResponseEncoder, result)
+		s := formatToolSuccessText(result)
+		structuredContent, serr := json.Marshal(result)
 		if serr != nil {
 			return false, serr
 		}
@@ -1133,6 +1425,7 @@ func (a *MCPAdapter) toolsCallHandler(ctx context.Context, p *ToolsCallPayload, 
 			Content: []*ContentItem{
 				buildContentItem(a, s),
 			},
+			StructuredContent: structuredContent,
 		}
 		a.log(ctx, "response", map[string]any{"method": "tools/call", "name": p.Name})
 		return false, stream.SendAndClose(ctx, final)

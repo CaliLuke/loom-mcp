@@ -581,6 +581,9 @@ func sdkCallToolResult(result *ToolsCallResult) (*mcpsdk.CallToolResult, error) 
 		content = append(content, converted)
 	}
 	callResult := &mcpsdk.CallToolResult{Content: content}
+	if result.StructuredContent != nil {
+		callResult.StructuredContent = result.StructuredContent
+	}
 	if result.IsError != nil {
 		callResult.IsError = *result.IsError
 	}

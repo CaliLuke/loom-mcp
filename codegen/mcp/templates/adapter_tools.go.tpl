@@ -43,15 +43,23 @@ func decodeMCPPayloadFields(data []byte) (map[string]json.RawMessage, error) {
 }
 
 func validateMCPPayloadRequired(fields map[string]json.RawMessage, field string) error {
-    raw, ok := fields[field]
-    if !ok {
-        return goa.PermanentError("invalid_params", "Missing required field: %s", field)
-    }
-    trimmed := bytes.TrimSpace(raw)
-    if bytes.Equal(trimmed, []byte(`""`)) || bytes.Equal(trimmed, []byte("null")) {
-        return goa.PermanentError("invalid_params", "Missing required field: %s", field)
-    }
-    return nil
+	raw, ok := fields[field]
+	if !ok {
+		return goa.WithErrorRemedy(goa.PermanentError("invalid_params", "Missing required field: %s", field), &goa.ErrorRemedy{
+			Code:        "invalid_params",
+			SafeMessage: fmt.Sprintf("Missing required field: %s", field),
+			RetryHint:   fmt.Sprintf("Include required field %q.", field),
+		})
+	}
+	trimmed := bytes.TrimSpace(raw)
+	if bytes.Equal(trimmed, []byte(`""`)) || bytes.Equal(trimmed, []byte("null")) {
+		return goa.WithErrorRemedy(goa.PermanentError("invalid_params", "Missing required field: %s", field), &goa.ErrorRemedy{
+			Code:        "invalid_params",
+			SafeMessage: fmt.Sprintf("Missing required field: %s", field),
+			RetryHint:   fmt.Sprintf("Include required field %q.", field),
+		})
+	}
+	return nil
 }
 
 func validateMCPPayloadEnum(fields map[string]json.RawMessage, field string, allowed ...string) error {
@@ -64,12 +72,16 @@ func validateMCPPayloadEnum(fields map[string]json.RawMessage, field string, all
         return err
     }
     actual := fmt.Sprint(value)
-    for _, candidate := range allowed {
-        if actual == candidate {
-            return nil
-        }
-    }
-    return goa.PermanentError("invalid_params", "Invalid value for %s", field)
+	for _, candidate := range allowed {
+		if actual == candidate {
+			return nil
+		}
+	}
+	return goa.WithErrorRemedy(goa.PermanentError("invalid_params", "Invalid value for %s", field), &goa.ErrorRemedy{
+		Code:        "invalid_params",
+		SafeMessage: fmt.Sprintf("Invalid value for %s", field),
+		RetryHint:   fmt.Sprintf("Use one of: %s.", strings.Join(allowed, ", ")),
+	})
 }
 
 func (a *MCPAdapter) ToolsList(ctx context.Context, p *ToolsListPayload) (res *ToolsListResult, err error) {
@@ -196,17 +208,17 @@ func (a *MCPAdapter) toolsCallHandler(ctx context.Context, p *ToolsCallPayload, 
         {{- if or .DefaultFields .RequiredFields .EnumFields }}
         fields, ferr := topLevelJSONFieldSet(p.Arguments)
         if ferr != nil {
-            return false, goa.PermanentError("invalid_params", "%s", ferr.Error())
+            return true, a.sendToolError(ctx, stream, p.Name, toolInputError(ferr, p.Arguments))
         }
         rawFields, err := decodeMCPPayloadFields(p.Arguments)
         if err != nil {
-            return false, goa.PermanentError("invalid_params", "%s", err.Error())
+            return true, a.sendToolError(ctx, stream, p.Name, toolInputError(err, p.Arguments))
         }
         _ = fields
         _ = rawFields
         {{- end }}
         if err := decodeMCPPayloadStrict(p.Arguments, &payload); err != nil {
-            return false, goa.PermanentError("invalid_params", "%s", err.Error())
+            return true, a.sendToolError(ctx, stream, p.Name, toolInputError(err, p.Arguments))
         }
         {{- if .DefaultFields }}
         {
@@ -227,7 +239,7 @@ func (a *MCPAdapter) toolsCallHandler(ctx context.Context, p *ToolsCallPayload, 
         {
             {{- range .RequiredFields }}
             if err := validateMCPPayloadRequired(rawFields, {{ printf "%q" . }}); err != nil {
-                return false, err
+                return true, a.sendToolError(ctx, stream, p.Name, toolInputError(err, p.Arguments))
             }
             {{- end }}
         }
@@ -236,7 +248,7 @@ func (a *MCPAdapter) toolsCallHandler(ctx context.Context, p *ToolsCallPayload, 
         {
             {{- range $field, $vals := .EnumFields }}
             if err := validateMCPPayloadEnum(rawFields, {{ printf "%q" $field }}, {{- range $idx, $val := $vals }}{{ if $idx }}, {{ end }}{{ printf "%q" $val }}{{- end }}); err != nil {
-                return false, err
+                return true, a.sendToolError(ctx, stream, p.Name, toolInputError(err, p.Arguments))
             }
             {{- end }}
         }
@@ -251,17 +263,17 @@ func (a *MCPAdapter) toolsCallHandler(ctx context.Context, p *ToolsCallPayload, 
         {{- if or .DefaultFields .RequiredFields .EnumFields }}
         fields, ferr := topLevelJSONFieldSet(p.Arguments)
         if ferr != nil {
-            return false, goa.PermanentError("invalid_params", "%s", ferr.Error())
+            return true, a.sendToolError(ctx, stream, p.Name, toolInputError(ferr, p.Arguments))
         }
         rawFields, err := decodeMCPPayloadFields(p.Arguments)
         if err != nil {
-            return false, goa.PermanentError("invalid_params", "%s", err.Error())
+            return true, a.sendToolError(ctx, stream, p.Name, toolInputError(err, p.Arguments))
         }
         _ = fields
         _ = rawFields
         {{- end }}
         if err := decodeMCPPayloadStrict(p.Arguments, &payload); err != nil {
-            return false, goa.PermanentError("invalid_params", "%s", err.Error())
+            return true, a.sendToolError(ctx, stream, p.Name, toolInputError(err, p.Arguments))
         }
         {{- if .DefaultFields }}
         {
@@ -282,7 +294,7 @@ func (a *MCPAdapter) toolsCallHandler(ctx context.Context, p *ToolsCallPayload, 
         {
             {{- range .RequiredFields }}
             if err := validateMCPPayloadRequired(rawFields, {{ printf "%q" . }}); err != nil {
-                return false, err
+                return true, a.sendToolError(ctx, stream, p.Name, toolInputError(err, p.Arguments))
             }
             {{- end }}
         }
@@ -291,7 +303,7 @@ func (a *MCPAdapter) toolsCallHandler(ctx context.Context, p *ToolsCallPayload, 
         {
             {{- range $field, $vals := .EnumFields }}
             if err := validateMCPPayloadEnum(rawFields, {{ printf "%q" $field }}, {{- range $idx, $val := $vals }}{{ if $idx }}, {{ end }}{{ printf "%q" $val }}{{- end }}); err != nil {
-                return false, err
+                return true, a.sendToolError(ctx, stream, p.Name, toolInputError(err, p.Arguments))
             }
             {{- end }}
         }
@@ -310,8 +322,10 @@ func (a *MCPAdapter) toolsCallHandler(ctx context.Context, p *ToolsCallPayload, 
         }
         {{- if eq .ResultType "string" }}
         s := string(result)
+        structuredContent := json.RawMessage(nil)
         {{- else }}
-        s, serr := mcpruntime.EncodeJSONToString(ctx, goahttp.ResponseEncoder, result)
+        s := formatToolSuccessText(result)
+        structuredContent, serr := json.Marshal(result)
         if serr != nil {
             return false, serr
         }
@@ -320,6 +334,7 @@ func (a *MCPAdapter) toolsCallHandler(ctx context.Context, p *ToolsCallPayload, 
             Content: []*ContentItem{
                 buildContentItem(a, s),
             },
+            StructuredContent: structuredContent,
         }
         a.log(ctx, "response", map[string]any{"method": "tools/call", "name": p.Name})
         return false, stream.SendAndClose(ctx, final)
@@ -333,7 +348,7 @@ func (a *MCPAdapter) toolsCallHandler(ctx context.Context, p *ToolsCallPayload, 
             return true, a.sendToolError(ctx, stream, p.Name, err)
         }
         {{- end }}
-        ok := stringPtr("{\"status\":\"success\"}")
+        ok := stringPtr("OK")
         a.log(ctx, "response", map[string]any{"method": "tools/call", "name": p.Name})
         return false, stream.SendAndClose(ctx, &ToolsCallResult{
             Content: []*ContentItem{

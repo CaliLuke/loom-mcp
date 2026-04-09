@@ -408,6 +408,7 @@ func adapterImports(genpkg string, svc *expr.ServiceExpr, svcName string) []*cod
 		{Path: "net/http"},
 		{Path: "net/url"},
 		{Path: "path"},
+		{Path: "sort"},
 		{Path: "strconv"},
 		{Path: "strings"},
 		{Path: "sync"},

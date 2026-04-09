@@ -249,6 +249,8 @@ type ToolInfoResponseBody struct {
 type ToolsCallResponseBodyResponseBody struct {
 	// Tool execution results
 	Content []*ContentItemResponseBody `form:"content,omitempty" json:"content,omitempty" xml:"content,omitempty"`
+	// Optional structured result for machine consumers
+	StructuredContent json.RawMessage `form:"structuredContent,omitempty" json:"structuredContent,omitempty" xml:"structuredContent,omitempty"`
 	// Whether the tool encountered an error
 	IsError *bool `form:"isError,omitempty" json:"isError,omitempty" xml:"isError,omitempty"`
 }
@@ -517,7 +519,8 @@ func NewToolsListResultOK(body *ToolsListResponseBody) *mcpassistant.ToolsListRe
 // result from a HTTP "OK" response.
 func NewToolsCallResultOK(body *ToolsCallResponseBody) *mcpassistant.ToolsCallResult {
 	v := &mcpassistant.ToolsCallResult{
-		IsError: body.IsError,
+		StructuredContent: body.StructuredContent,
+		IsError:           body.IsError,
 	}
 	v.Content = make([]*mcpassistant.ContentItem, len(body.Content))
 	for i, val := range body.Content {

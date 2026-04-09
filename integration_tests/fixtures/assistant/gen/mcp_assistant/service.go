@@ -452,6 +452,8 @@ type ToolsCallPayload struct {
 type ToolsCallResult struct {
 	// Tool execution results
 	Content []*ContentItem `json:"content"`
+	// Optional structured result for machine consumers
+	StructuredContent json.RawMessage `json:"structuredContent,omitempty"`
 	// Whether the tool encountered an error
 	IsError *bool `json:"isError,omitempty"`
 }

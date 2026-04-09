@@ -223,6 +223,8 @@ type ToolInfoResponseBody struct {
 type ToolsCallResponseBodyResponseBody struct {
 	// Tool execution results
 	Content []*ContentItemResponseBody `form:"content" json:"content" xml:"content"`
+	// Optional structured result for machine consumers
+	StructuredContent json.RawMessage `form:"structuredContent,omitempty" json:"structuredContent,omitempty" xml:"structuredContent,omitempty"`
 	// Whether the tool encountered an error
 	IsError *bool `form:"isError,omitempty" json:"isError,omitempty" xml:"isError,omitempty"`
 }
@@ -423,7 +425,8 @@ func NewToolsListResponseBody(res *mcpassistant.ToolsListResult) *ToolsListRespo
 // the "tools/call" endpoint of the "mcp_assistant" service.
 func NewToolsCallResponseBody(res *mcpassistant.ToolsCallResult) *ToolsCallResponseBody {
 	body := &ToolsCallResponseBody{
-		IsError: res.IsError,
+		StructuredContent: res.StructuredContent,
+		IsError:           res.IsError,
 	}
 	if res.Content != nil {
 		body.Content = make([]*ContentItemResponseBody, len(res.Content))
