@@ -6,15 +6,16 @@ Use this checklist when cutting a release from already-finished code.
 
 - Worktree clean enough to understand exactly what will ship: `git status --short`
 - On the intended branch, normally `main`: `git branch --show-current`
-- Confirm current Goa source: `make goa-status`
+- Confirm current Loom source: `make loom-status`
 - Confirm the next version tag is correct: `git tag --sort=creatordate`
+- Confirm whether GitHub Release objects already exist: `gh release list --limit 20`
 
 ## 2. Release Parity
 
 Release verification must use the pinned remote `github.com/CaliLuke/loom` dependency:
 
 ```bash
-make goa-remote
+make loom-remote
 ```
 
 If the repo was iterating against `/Users/luca/code/loom-mono/loom`, this command removes the local replace and restores the pinned release in both the root module and the assistant fixture module.
@@ -60,24 +61,40 @@ Do not use `--no-verify`.
 
 ## 6. Tag and Publish
 
-Create an annotated semver tag and push both branch and tag:
+Create an annotated semver tag, push both branch and tag, then create the GitHub Release object:
 
 ```bash
 git tag -a vX.Y.Z -m "vX.Y.Z"
 git push origin main
 git push origin vX.Y.Z
+gh release create vX.Y.Z --verify-tag --generate-notes --latest
 ```
 
 ## 7. Remote Verification
 
-Check that the branch and tag exist remotely:
+Check that the branch, tag, and GitHub Release object exist remotely:
 
 ```bash
 git ls-remote origin main
 git ls-remote --tags origin vX.Y.Z
+gh release view vX.Y.Z --json tagName,isDraft,isPrerelease,url,publishedAt
 ```
 
-## 8. Module Availability
+The release is not complete until the GitHub Release exists and is not a draft.
+
+## 8. Backfill Missing GitHub Releases
+
+If a tag was already pushed without a GitHub Release object:
+
+```bash
+git ls-remote --tags origin vX.Y.Z
+gh release create vX.Y.Z --verify-tag --generate-notes
+gh release view vX.Y.Z --json tagName,isDraft,isPrerelease,url,publishedAt
+```
+
+Use `--notes-from-tag` instead of `--generate-notes` only when the annotated tag message already contains the intended release notes.
+
+## 9. Module Availability
 
 If the goal is "fully published" rather than only "git release pushed", also check module visibility:
 

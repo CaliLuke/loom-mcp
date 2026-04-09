@@ -65,10 +65,6 @@ Start here:
 - [`quickstart/README.md`](quickstart/README.md)
 - [`AGENTS.md`](AGENTS.md)
 
-## Release prep note
-
-This repo has intentionally been reset to a clean branch/repository identity. Old branch structure and inherited tags have been removed, and the next published tag should start the new `loom-mcp` release line.
-
 ## License
 
 MIT. See [`LICENSE`](LICENSE).
