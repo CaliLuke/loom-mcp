@@ -14,6 +14,7 @@ type (
 		// Right operand
 		Right int32 `json:"right"`
 	}
+
 	// AddResult defines the JSON result for the math.add tool.
 	AddResult = struct {
 		// Sum

@@ -2,6 +2,8 @@
 package codegen
 
 import (
+	"bytes"
+	"fmt"
 	"path/filepath"
 	"strings"
 
@@ -10,6 +12,7 @@ import (
 	"github.com/CaliLuke/loom/codegen/example"
 	"github.com/CaliLuke/loom/eval"
 	"github.com/CaliLuke/loom/expr"
+	"github.com/dave/jennifer/jen"
 )
 
 // PrepareExample augments the original roots so the Goa example generator
@@ -474,10 +477,93 @@ func renderCLIDoJSONRPC(services []cliServiceTemplateData) string {
 	if len(services) == 0 {
 		return ""
 	}
-	data := cliParseTemplateData{Services: services}
-	return mcpTemplates.MustRender("cli_dojsonrpc", data)
+	section := codegen.MustJenniferSection("cli-dojsonrpc", func(stmt *jen.Statement) {
+		emitCLIDoJSONRPC(stmt, services)
+	})
+	var buf bytes.Buffer
+	if err := section.Write(&buf); err != nil {
+		panic(fmt.Sprintf("render cli doJSONRPC section: %v", err))
+	}
+	return buf.String()
 }
 
 func methodCommandName(name string) string {
 	return strings.ReplaceAll(codegen.SnakeCase(name), "_", "-")
+}
+
+func emitCLIDoJSONRPC(stmt *jen.Statement, services []cliServiceTemplateData) {
+	stmt.Func().Id("doJSONRPC").
+		Params(
+			jen.Id("scheme").String(),
+			jen.Id("host").String(),
+			jen.Id("timeout").Int(),
+			jen.Id("debug").Bool(),
+		).
+		Params(jen.Id("goa").Dot("Endpoint"), jen.Any(), jen.Error()).
+		BlockFunc(func(g *jen.Group) {
+			g.Var().Id("doer").Id("goahttp").Dot("Doer")
+			g.Block(
+				jen.Id("doer").Op("=").Op("&").Qual("net/http", "Client").Values(jen.Dict{
+					jen.Id("Timeout"): jen.Qual("time", "Duration").Call(jen.Id("timeout")).Op("*").Qual("time", "Second"),
+				}),
+				jen.If(jen.Id("debug")).Block(
+					jen.Id("doer").Op("=").Id("goahttp").Dot("NewDebugDoer").Call(jen.Id("doer")),
+				),
+			)
+			g.Line()
+			g.List(jen.Id("endpoint"), jen.Id("payload"), jen.Id("err")).Op(":=").Id("cli").Dot("ParseEndpoint").Call(
+				jen.Id("scheme"),
+				jen.Id("host"),
+				jen.Id("doer"),
+				jen.Id("goahttp").Dot("RequestEncoder"),
+				jen.Id("goahttp").Dot("ResponseDecoder"),
+				jen.Id("debug"),
+			)
+			g.If(jen.Id("err").Op("!=").Nil()).Block(
+				jen.Return(jen.Nil(), jen.Nil(), jen.Id("err")),
+			)
+			g.Line()
+			g.Var().Id("nonflags").Index().String()
+			g.For(jen.Id("i").Op(":=").Lit(1), jen.Id("i").Op("<").Len(jen.Id("os").Dot("Args")), jen.Id("i").Op("++")).Block(
+				jen.Id("a").Op(":=").Id("os").Dot("Args").Index(jen.Id("i")),
+				jen.If(jen.Qual("strings", "HasPrefix").Call(jen.Id("a"), jen.Lit("-"))).Block(
+					jen.If(jen.Op("!").Qual("strings", "Contains").Call(jen.Id("a"), jen.Lit("=")).Op("&&").Id("i").Op("+").Lit(1).Op("<").Len(jen.Id("os").Dot("Args"))).Block(
+						jen.Id("i").Op("++"),
+					),
+					jen.Continue(),
+				),
+				jen.Id("nonflags").Op("=").Append(jen.Id("nonflags"), jen.Id("a")),
+			)
+			g.If(jen.Len(jen.Id("nonflags")).Op("<").Lit(2)).Block(
+				jen.Return(jen.Nil(), jen.Nil(), jen.Qual("fmt", "Errorf").Call(jen.Lit("not enough arguments"))),
+			)
+			g.Line()
+			g.Id("service").Op(":=").Id("nonflags").Index(jen.Lit(0))
+			g.Id("subcmd").Op(":=").Id("nonflags").Index(jen.Lit(1))
+			g.Line()
+			g.Switch(jen.Id("service")).BlockFunc(func(sw *jen.Group) {
+				for _, svc := range services {
+					sw.Case(jen.Lit(svc.Name)).BlockFunc(func(caseg *jen.Group) {
+						caseg.Id("e").Op(":=").Id(svc.Alias).Dot("NewEndpoints").Call(
+							jen.Id("scheme"),
+							jen.Id("host"),
+							jen.Id("doer"),
+							jen.Id("goahttp").Dot("RequestEncoder"),
+							jen.Id("goahttp").Dot("ResponseDecoder"),
+							jen.Id("debug"),
+						)
+						caseg.Switch(jen.Id("subcmd")).BlockFunc(func(subsw *jen.Group) {
+							for _, method := range svc.Methods {
+								subsw.Case(jen.Lit(method.Command)).Block(
+									jen.Return(jen.Id("e").Dot(method.Endpoint), jen.Id("payload"), jen.Nil()),
+								)
+							}
+						})
+						caseg.Return(jen.Id("endpoint"), jen.Id("payload"), jen.Nil())
+					})
+				}
+			})
+			g.Line()
+			g.Return(jen.Id("endpoint"), jen.Id("payload"), jen.Nil())
+		})
 }

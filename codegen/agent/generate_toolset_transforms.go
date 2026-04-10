@@ -287,20 +287,16 @@ func toolsetAdapterTransformsFile(genpkg string, ts *ToolsetData) *codegen.File 
 		imports = append(imports, &im2)
 	}
 
-	sections := []*codegen.SectionTemplate{
+	sections := []codegen.Section{
 		codegen.Header(ts.Name+" adapter transforms", ts.SpecsPackageName, imports),
-		{
-			Name:   "tool-transforms",
-			Source: agentsTemplates.Read(toolTransformsFileT),
-			Data: transformsFileData{
-				Functions: fns,
-				Helpers:   fileHelpers,
-			},
-		},
+		toolTransformsSection(transformsFileData{
+			Functions: fns,
+			Helpers:   fileHelpers,
+		}),
 	}
 	return &codegen.File{
-		Path:             filepath.Join(ts.SpecsDir, "transforms.go"),
-		SectionTemplates: sections,
+		Path:     filepath.Join(ts.SpecsDir, "transforms.go"),
+		Sections: sections,
 	}
 }
 

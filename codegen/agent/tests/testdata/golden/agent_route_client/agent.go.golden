@@ -23,12 +23,16 @@ const AgentID agent.Ident = "calc.scribe"
 const (
 	// WorkflowName is the fully-qualified workflow identifier registered with the engine.
 	WorkflowName = "calc.scribe.workflow"
+
 	// DefaultTaskQueue is the engine queue this agent polls for workflow and activity tasks.
 	DefaultTaskQueue = "calc_scribe_workflow"
+
 	// PlanActivity is the activity name that runs the initial planning turn.
 	PlanActivity = "calc.scribe.plan"
+
 	// ResumeActivity is the activity name that runs the resume turn after tool execution.
 	ResumeActivity = "calc.scribe.resume"
+
 	// ExecuteToolActivity is the activity name used to execute tools via the engine.
 	ExecuteToolActivity = "calc.scribe.executetool"
 )
@@ -63,9 +67,9 @@ func NewWorker(opts ...runtime.WorkerOption) runtime.WorkerConfig {
 // caller process without registering the agent locally.
 func Route() runtime.AgentRoute {
 	return runtime.AgentRoute{
+		DefaultTaskQueue: "calc_scribe_workflow",
 		ID:               AgentID,
 		WorkflowName:     WorkflowName,
-		DefaultTaskQueue: "calc_scribe_workflow",
 	}
 }
 

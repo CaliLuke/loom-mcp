@@ -7,31 +7,11 @@ import (
 )
 
 const (
-	agentFileT                 = "agent"
-	agentToolsFileT            = "agent_tools"
-	agentToolsConsumerT        = "agent_tools_consumer"
-	bootstrapInternalT         = "bootstrap_internal"
-	cmdMainT                   = "cmd_main"
-	exampleExecutorStubT       = "example_executor_stub"
-	configFileT                = "config"
-	plannerInternalStubT       = "planner_internal_stub"
-	quickstartReadmeT          = "agents_quickstart"
-	registryFileT              = "registry"
-	registryClientFileT        = "registry_client"
-	registryClientOptionsFileT = "registry_client_options"
-	registryToolsetSpecsFileT  = "registry_toolset_specs"
-	mcpExecutorFileT           = "mcp_executor"
-	serviceExecutorFileT       = "service_executor"
-	toolCodecsFileT            = "tool_codecs"
-	toolSpecFileT              = "tool_spec"
-	toolProviderFileT          = "tool_provider"
-	toolSpecsAggregateT        = "specs_aggregate"
-	toolTransformsFileT        = "tool_transforms"
-	toolTransportTypesFileT    = "tool_transport_types"
-	toolTransportValidateFileT = "tool_transport_validate"
-	toolTypesFileT             = "tool_types"
-	toolUnionTypesFileT        = "tool_union_types"
-	usedToolsFileT             = "used_tools"
+	bootstrapInternalT   = "bootstrap_internal"
+	cmdMainT             = "cmd_main"
+	exampleExecutorStubT = "example_executor_stub"
+	plannerInternalStubT = "planner_internal_stub"
+	quickstartReadmeT    = "agents_quickstart"
 )
 
 //go:embed templates/*.go.tpl

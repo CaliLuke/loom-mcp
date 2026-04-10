@@ -18,6 +18,7 @@ type (
 		// Optional note about progress.
 		Note *string `json:"note,omitempty"`
 	}
+
 	// SetStepStatusResult defines the JSON result for the progress.set_step_status tool.
 	SetStepStatusResult = struct{}
 )

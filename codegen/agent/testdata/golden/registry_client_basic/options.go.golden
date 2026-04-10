@@ -69,10 +69,10 @@ func WithEndpoint(endpoint string) Option {
 }
 
 // WithBasicAuth creates an auth provider with the given credentials.
-func WithBasicAuth(username, password string) Option {
+func WithBasicAuth(username string, password string) Option {
 	return WithAuth(&BasicAuthAuth{
-		Username: username,
 		Password: password,
+		Username: username,
 	})
 }
 

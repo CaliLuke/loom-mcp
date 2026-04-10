@@ -128,16 +128,11 @@ func toolsetSpecsFiles(data *GeneratorData) []*codegen.File {
 		}
 		if len(transportTypes) > 0 && ts.SpecsImportPath != "" {
 			timports := specsData.transportTypeImports()
-			transportSections := []*codegen.SectionTemplate{
+			transportSections := []codegen.Section{
 				codegen.Header(ts.Name+" tool transport types", transportPkgName, timports),
-				{
-					Name:    "tool-transport-types",
-					Source:  agentsTemplates.Read(toolTransportTypesFileT),
-					Data:    toolTransportTypesFileData{Types: transportTypes},
-					FuncMap: templateFuncMap(),
-				},
+				toolTransportTypesSection(toolTransportTypesFileData{Types: transportTypes}),
 			}
-			out = append(out, &codegen.File{Path: filepath.Join(ts.SpecsDir, transportDirName, "types.go"), SectionTemplates: transportSections})
+			out = append(out, &codegen.File{Path: filepath.Join(ts.SpecsDir, transportDirName, "types.go"), Sections: transportSections})
 			// http/validate.go
 			validateImports := []*codegen.ImportSpec{
 				codegen.SimpleImport("encoding/json"),
@@ -148,16 +143,11 @@ func toolsetSpecsFiles(data *GeneratorData) []*codegen.File {
 			if specsData.needsUnicodeImport() {
 				validateImports = append(validateImports, codegen.SimpleImport("unicode/utf8"))
 			}
-			validateSections := []*codegen.SectionTemplate{
+			validateSections := []codegen.Section{
 				codegen.Header(ts.Name+" tool transport validators", transportPkgName, validateImports),
-				{
-					Name:    "tool-transport-validate",
-					Source:  agentsTemplates.Read(toolTransportValidateFileT),
-					Data:    toolTransportTypesFileData{Types: transportTypes},
-					FuncMap: templateFuncMap(),
-				},
+				toolTransportValidateSection(toolTransportTypesFileData{Types: transportTypes}),
 			}
-			out = append(out, &codegen.File{Path: filepath.Join(ts.SpecsDir, transportDirName, "validate.go"), SectionTemplates: validateSections})
+			out = append(out, &codegen.File{Path: filepath.Join(ts.SpecsDir, transportDirName, "validate.go"), Sections: validateSections})
 			if len(specsData.TransportUnions) > 0 {
 				unionImports := make([]*codegen.ImportSpec, 0, 3+len(timports))
 				unionImports = append(unionImports,
@@ -166,30 +156,20 @@ func toolsetSpecsFiles(data *GeneratorData) []*codegen.File {
 					codegen.LoomImport(""),
 				)
 				unionImports = append(unionImports, timports...)
-				unionSections := []*codegen.SectionTemplate{
+				unionSections := []codegen.Section{
 					codegen.Header(ts.Name+" tool transport union types", transportPkgName, unionImports),
-					{
-						Name:    "tool-transport-union-types",
-						Source:  agentsTemplates.Read(toolUnionTypesFileT),
-						Data:    toolUnionTypesFileData{Unions: specsData.TransportUnions},
-						FuncMap: templateFuncMap(),
-					},
+					toolUnionTypesSection(toolUnionTypesFileData{Unions: specsData.TransportUnions}),
 				}
-				out = append(out, &codegen.File{Path: filepath.Join(ts.SpecsDir, transportDirName, "unions.go"), SectionTemplates: unionSections})
+				out = append(out, &codegen.File{Path: filepath.Join(ts.SpecsDir, transportDirName, "unions.go"), Sections: unionSections})
 			}
 		}
 		// types.go
 		if pure := specsData.pureTypes(); len(pure) > 0 {
-			sections := []*codegen.SectionTemplate{
+			sections := []codegen.Section{
 				codegen.Header(ts.Name+" tool types", ts.SpecsPackageName, specsData.typeImports()),
-				{
-					Name:    "tool-spec-types",
-					Source:  agentsTemplates.Read(toolTypesFileT),
-					Data:    toolTypesFileData{Types: pure},
-					FuncMap: templateFuncMap(),
-				},
+				toolTypesSection(toolTypesFileData{Types: pure}),
 			}
-			out = append(out, &codegen.File{Path: filepath.Join(ts.SpecsDir, "types.go"), SectionTemplates: sections})
+			out = append(out, &codegen.File{Path: filepath.Join(ts.SpecsDir, "types.go"), Sections: sections})
 		}
 		// unions.go
 		if len(specsData.Unions) > 0 {
@@ -201,16 +181,11 @@ func toolsetSpecsFiles(data *GeneratorData) []*codegen.File {
 				codegen.LoomImport(""),
 			)
 			unionImports = append(unionImports, typeImports...)
-			unionSections := []*codegen.SectionTemplate{
+			unionSections := []codegen.Section{
 				codegen.Header(ts.Name+" tool union types", ts.SpecsPackageName, unionImports),
-				{
-					Name:    "tool-spec-union-types",
-					Source:  agentsTemplates.Read(toolUnionTypesFileT),
-					Data:    toolUnionTypesFileData{Unions: specsData.Unions},
-					FuncMap: templateFuncMap(),
-				},
+				toolUnionTypesSection(toolUnionTypesFileData{Unions: specsData.Unions}),
 			}
-			out = append(out, &codegen.File{Path: filepath.Join(ts.SpecsDir, "unions.go"), SectionTemplates: unionSections})
+			out = append(out, &codegen.File{Path: filepath.Join(ts.SpecsDir, "unions.go"), Sections: unionSections})
 		}
 		if len(specsData.tools) > 0 {
 			types := specsData.typesList()
@@ -226,26 +201,21 @@ func toolsetSpecsFiles(data *GeneratorData) []*codegen.File {
 					codecImports = append(codecImports, transportImport)
 				}
 			}
-			codecsSections := []*codegen.SectionTemplate{
+			codecsSections := []codegen.Section{
 				codegen.Header(ts.Name+" tool codecs", ts.SpecsPackageName, codecImports),
-				{
-					Name:    "tool-spec-codecs",
-					Source:  agentsTemplates.Read(toolCodecsFileT),
-					Data:    toolCodecsFileData{Types: types, Tools: specsData.tools, Helpers: specsData.CodecTransformHelpers},
-					FuncMap: templateFuncMap(),
-				},
+				toolCodecsSection(toolCodecsFileData{Types: types, Tools: specsData.tools, Helpers: specsData.CodecTransformHelpers}),
 			}
-			out = append(out, &codegen.File{Path: filepath.Join(ts.SpecsDir, "codecs.go"), SectionTemplates: codecsSections})
+			out = append(out, &codegen.File{Path: filepath.Join(ts.SpecsDir, "codecs.go"), Sections: codecsSections})
 			// specs.go
 			specImports := []*codegen.ImportSpec{
 				{Path: "github.com/CaliLuke/loom-mcp/runtime/agent/policy"},
 				{Path: "github.com/CaliLuke/loom-mcp/runtime/agent/tools"},
 			}
-			specSections := []*codegen.SectionTemplate{
+			specSections := []codegen.Section{
 				codegen.Header(ts.Name+" tool specs", ts.SpecsPackageName, specImports),
-				{Name: "tool-specs", Source: agentsTemplates.Read(toolSpecFileT), Data: toolSpecFileData{PackageName: ts.SpecsPackageName, Tools: specsData.tools, Types: specsData.typesList()}, FuncMap: templateFuncMap()},
+				toolSpecsSection(toolSpecFileData{PackageName: ts.SpecsPackageName, Tools: specsData.tools, Types: specsData.typesList()}),
 			}
-			out = append(out, &codegen.File{Path: filepath.Join(ts.SpecsDir, "specs.go"), SectionTemplates: specSections})
+			out = append(out, &codegen.File{Path: filepath.Join(ts.SpecsDir, "specs.go"), Sections: specSections})
 		}
 
 		if f := toolsetAdapterTransformsFile(data.Genpkg, ts); f != nil {
@@ -294,22 +264,17 @@ func toolsetProviderFile(genpkg string, ts *ToolsetData) *codegen.File {
 	if hasBoundsProjection {
 		imports = append(imports, &codegen.ImportSpec{Path: "github.com/CaliLuke/loom-mcp/runtime/agent"})
 	}
-	sections := []*codegen.SectionTemplate{
+	sections := []codegen.Section{
 		codegen.Header(ts.Name+" tool provider", ts.SpecsPackageName, imports),
-		{
-			Name:   "tool-provider",
-			Source: agentsTemplates.Read(toolProviderFileT),
-			Data: toolProviderFileData{
-				PackageName:    ts.SpecsPackageName,
-				ServiceTypeRef: fmt.Sprintf("%s.Service", ts.SourceService.PkgName),
-				Tools:          ts.Tools,
-			},
-			FuncMap: templateFuncMap(),
-		},
+		toolProviderSection(toolProviderFileData{
+			PackageName:    ts.SpecsPackageName,
+			ServiceTypeRef: fmt.Sprintf("%s.Service", ts.SourceService.PkgName),
+			Tools:          ts.Tools,
+		}),
 	}
 	return &codegen.File{
-		Path:             filepath.Join(ts.SpecsDir, "provider.go"),
-		SectionTemplates: sections,
+		Path:     filepath.Join(ts.SpecsDir, "provider.go"),
+		Sections: sections,
 	}
 }
 
@@ -329,24 +294,19 @@ func toolsetRegistrySpecsFiles(ts *ToolsetData) []*codegen.File {
 		{Path: "github.com/CaliLuke/loom-mcp/runtime/agent/policy"},
 		{Path: "github.com/CaliLuke/loom-mcp/runtime/agent/tools"},
 	}
-	sections := []*codegen.SectionTemplate{
+	sections := []codegen.Section{
 		codegen.Header(ts.Name+" registry toolset specs", ts.SpecsPackageName, specImports),
-		{
-			Name:   "registry-toolset-specs",
-			Source: agentsTemplates.Read(registryToolsetSpecsFileT),
-			Data: registryToolsetSpecsFileData{
-				PackageName:   ts.SpecsPackageName,
-				QualifiedName: ts.QualifiedName,
-				ServiceName:   ts.ServiceName,
-				Registry:      ts.Registry,
-			},
-			FuncMap: templateFuncMap(),
-		},
+		registryToolsetSpecsSection(registryToolsetSpecsFileData{
+			PackageName:   ts.SpecsPackageName,
+			QualifiedName: ts.QualifiedName,
+			ServiceName:   ts.ServiceName,
+			Registry:      ts.Registry,
+		}),
 	}
 	return []*codegen.File{
 		{
-			Path:             filepath.Join(ts.SpecsDir, "specs.go"),
-			SectionTemplates: sections,
+			Path:     filepath.Join(ts.SpecsDir, "specs.go"),
+			Sections: sections,
 		},
 	}
 }

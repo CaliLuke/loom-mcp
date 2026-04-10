@@ -14,6 +14,7 @@ type (
 		// Identifier
 		ID string `json:"id"`
 	}
+
 	// StoreResult defines the JSON result for the docs.store tool.
 	StoreResult = struct {
 		// Identifier

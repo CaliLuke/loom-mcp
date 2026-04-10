@@ -213,20 +213,7 @@ func isJSONRPCMountSource(source string) bool {
 }
 
 func mcpJSONRPCServerSectionSource(name string) (string, bool) {
-	switch name {
-	case "jsonrpc-server-struct":
-		return mcpTemplates.Read("jsonrpc_server_struct"), true
-	case "jsonrpc-server-init":
-		return mcpTemplates.Read("jsonrpc_server_init"), true
-	case "jsonrpc-server-handler":
-		return mcpTemplates.Read("jsonrpc_server_handler"), true
-	case "jsonrpc-mixed-server-handler":
-		return mcpTemplates.Read("jsonrpc_mixed_server_handler"), true
-	case "jsonrpc-server-mount":
-		return mcpTemplates.Read("jsonrpc_server_mount"), true
-	default:
-		return "", false
-	}
+	return "", false
 }
 
 func rewriteJSONRPCServerMountSource(source string) string {
@@ -385,9 +372,9 @@ func buildMCPAdapterFile(genpkg string, svc *expr.ServiceExpr, data *AdapterData
 		Path: adapterPath,
 		Sections: []codegen.Section{
 			codegen.Header(fmt.Sprintf("MCP server adapter for %s service", svc.Name), data.MCPPackage, adapterImports(genpkg, svc, svcName)),
-			templateSection("mcp-adapter-core", "adapter_core", data),
+			adapterCoreSection(data),
 			adapterBroadcastSection(),
-			templateSection("mcp-adapter-tools", "adapter_tools", data),
+			adapterToolsSection(data),
 			adapterResourcesSection(data),
 			adapterPromptsSection(data),
 			adapterNotificationsSection(),
@@ -492,19 +479,6 @@ func buildMCPPromptProviderFile(genpkg string, svc *expr.ServiceExpr, data *Adap
 				{Path: genpkg + "/" + svcName, Name: svcName},
 			}),
 			promptProviderSection(data),
-		},
-	}
-}
-
-func templateSection(name, templateName string, data *AdapterData) *codegen.SectionTemplate {
-	return &codegen.SectionTemplate{
-		Name:   name,
-		Source: mcpTemplates.Read(templateName),
-		Data:   data,
-		FuncMap: map[string]any{
-			"goify":   func(s string) string { return codegen.Goify(s, true) },
-			"comment": codegen.Comment,
-			"quote":   func(s string) string { return fmt.Sprintf("%q", s) },
 		},
 	}
 }

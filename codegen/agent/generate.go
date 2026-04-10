@@ -122,11 +122,11 @@ func agentSpecsAggregatorFile(agent *AgentData) *codegen.File {
 	if len(toolsets) == 0 {
 		return nil
 	}
-	sections := []*codegen.SectionTemplate{
+	sections := []codegen.Section{
 		codegen.Header(agent.StructName+" aggregated tool specs", "specs", imports),
-		{Name: "tool-specs-aggregate", Source: agentsTemplates.Read(toolSpecsAggregateT), Data: toolSpecsAggregateData{Toolsets: toolsets}},
+		toolSpecsAggregateSection(toolSpecsAggregateData{Toolsets: toolsets}),
 	}
-	return &codegen.File{Path: filepath.Join(agent.Dir, "specs", "specs.go"), SectionTemplates: sections}
+	return &codegen.File{Path: filepath.Join(agent.Dir, "specs", "specs.go"), Sections: sections}
 }
 
 func agentImplFile(agent *AgentData) *codegen.File {
@@ -139,15 +139,11 @@ func agentImplFile(agent *AgentData) *codegen.File {
 		{Path: "github.com/CaliLuke/loom-mcp/runtime/agent/runtime", Name: "runtime"},
 		{Path: "github.com/CaliLuke/loom-mcp/runtime/agent/planner"},
 	}
-	sections := []*codegen.SectionTemplate{
+	sections := []codegen.Section{
 		codegen.Header(agent.StructName+" implementation", agent.PackageName, imports),
-		{
-			Name:   "agent-impl",
-			Source: agentsTemplates.Read(agentFileT),
-			Data:   agent,
-		},
+		agentImplSection(agent),
 	}
-	return &codegen.File{Path: filepath.Join(agent.Dir, "agent.go"), SectionTemplates: sections}
+	return &codegen.File{Path: filepath.Join(agent.Dir, "agent.go"), Sections: sections}
 }
 
 func agentConfigFile(agent *AgentData) *codegen.File {
@@ -201,16 +197,11 @@ func agentConfigFile(agent *AgentData) *codegen.File {
 			imports = append(imports, &codegen.ImportSpec{Path: ts.PackageImportPath, Name: ts.PackageName})
 		}
 	}
-	sections := []*codegen.SectionTemplate{
+	sections := []codegen.Section{
 		codegen.Header(agent.StructName+" config", agent.PackageName, imports),
-		{
-			Name:    "agent-config",
-			Source:  agentsTemplates.Read(configFileT),
-			Data:    agent,
-			FuncMap: templateFuncMap(),
-		},
+		agentConfigSection(agent),
 	}
-	return &codegen.File{Path: filepath.Join(agent.Dir, "config.go"), SectionTemplates: sections}
+	return &codegen.File{Path: filepath.Join(agent.Dir, "config.go"), Sections: sections}
 }
 
 func agentRegistryFile(agent *AgentData) *codegen.File {
@@ -334,21 +325,16 @@ func agentRegistryFile(agent *AgentData) *codegen.File {
 		agentForRegistry.UsedToolsets = cloneToolsetsWithSpecsAliases(agent.UsedToolsets, usedSpecsAliases)
 		agentForRegistry.AllToolsets = cloneToolsetsWithSpecsAliases(agent.AllToolsets, usedSpecsAliases)
 	}
-	sections := []*codegen.SectionTemplate{
+	sections := []codegen.Section{
 		codegen.Header(agent.StructName+" registry", agent.PackageName, imports),
-		{
-			Name:   "agent-registry",
-			Source: agentsTemplates.Read(registryFileT),
-			Data: struct {
-				*AgentData
-				HasExternalMCP bool
-			}{AgentData: &agentForRegistry, HasExternalMCP: hasExternal},
-			FuncMap: templateFuncMap(),
-		},
+		agentRegistrySection(struct {
+			*AgentData
+			HasExternalMCP bool
+		}{AgentData: &agentForRegistry, HasExternalMCP: hasExternal}),
 	}
 	return &codegen.File{
-		Path:             filepath.Join(agent.Dir, "registry.go"),
-		SectionTemplates: sections,
+		Path:     filepath.Join(agent.Dir, "registry.go"),
+		Sections: sections,
 	}
 }
 
@@ -431,20 +417,12 @@ func agentToolsFiles(agent *AgentData) []*codegen.File {
 				Name: "hints",
 			})
 		}
-		sections := []*codegen.SectionTemplate{
+		sections := []codegen.Section{
 			codegen.Header(ts.Name+" agent tools", ts.AgentToolsPackage, imports),
-			{
-				Name:    "agent-tools",
-				Source:  agentsTemplates.Read(agentToolsFileT),
-				Data:    data,
-				FuncMap: templateFuncMap(),
-			},
+			agentToolsSection(data),
 		}
 		path := filepath.Join(ts.AgentToolsDir, "helpers.go")
-		files = append(files, &codegen.File{
-			Path:             path,
-			SectionTemplates: sections,
-		})
+		files = append(files, &codegen.File{Path: path, Sections: sections})
 	}
 	return files
 }
@@ -473,24 +451,16 @@ func agentToolsConsumerFiles(agent *AgentData) []*codegen.File {
 			{Path: "github.com/CaliLuke/loom-mcp/runtime/agent/runtime", Name: "runtime"},
 			{Path: ts.AgentToolsImportPath, Name: ts.AgentToolsPackage},
 		}
-		sections := []*codegen.SectionTemplate{
+		sections := []codegen.Section{
 			codegen.Header(
 				ts.Name+" agent toolset client",
 				agent.PackageName,
 				imports,
 			),
-			{
-				Name:    "agent-tools-consumer",
-				Source:  agentsTemplates.Read(agentToolsConsumerT),
-				Data:    data,
-				FuncMap: templateFuncMap(),
-			},
+			agentToolsConsumerSection(data),
 		}
 		path := filepath.Join(agent.Dir, ts.PathName+"_agenttools_client.go")
-		files = append(files, &codegen.File{
-			Path:             path,
-			SectionTemplates: sections,
-		})
+		files = append(files, &codegen.File{Path: path, Sections: sections})
 	}
 	return files
 }
@@ -521,16 +491,11 @@ func mcpExecutorFiles(agent *AgentData) []*codegen.File {
 			// Per-toolset specs package (codecs + schemas)
 			{Path: ts.SpecsImportPath, Name: ts.SpecsPackageName},
 		}
-		sections := []*codegen.SectionTemplate{
+		sections := []codegen.Section{
 			codegen.Header(ts.Name+" MCP executor", ts.PackageName, imports),
-			{
-				Name:    "mcp-executor",
-				Source:  agentsTemplates.Read(mcpExecutorFileT),
-				Data:    data,
-				FuncMap: templateFuncMap(),
-			},
+			mcpExecutorSection(data),
 		}
-		out = append(out, &codegen.File{Path: path, SectionTemplates: sections})
+		out = append(out, &codegen.File{Path: path, Sections: sections})
 	}
 	return out
 }
@@ -562,17 +527,12 @@ func usedToolsFiles(agent *AgentData) []*codegen.File {
 			// Per-toolset specs package for typed payloads
 			{Path: ts.SpecsImportPath, Name: ts.SpecsPackageName + "specs"},
 		}
-		sections := []*codegen.SectionTemplate{
+		sections := []codegen.Section{
 			codegen.Header(ts.Name+" used tool helpers", ts.PackageName, imports),
-			{
-				Name:    "used-tools",
-				Source:  agentsTemplates.Read(usedToolsFileT),
-				Data:    data,
-				FuncMap: templateFuncMap(),
-			},
+			usedToolsSection(data),
 		}
 		path := filepath.Join(ts.Dir, "used_tools.go")
-		files = append(files, &codegen.File{Path: path, SectionTemplates: sections})
+		files = append(files, &codegen.File{Path: path, Sections: sections})
 	}
 	return files
 }
@@ -725,17 +685,12 @@ func serviceExecutorFiles(agent *AgentData) []*codegen.File {
 			}
 			imports = append(imports, im)
 		}
-		sections := []*codegen.SectionTemplate{
+		sections := []codegen.Section{
 			codegen.Header(ts.Name+" service executor", ts.PackageName, imports),
-			{
-				Name:    "service-executor",
-				Source:  agentsTemplates.Read(serviceExecutorFileT),
-				Data:    data,
-				FuncMap: templateFuncMap(),
-			},
+			serviceExecutorSection(data),
 		}
 		path := filepath.Join(ts.Dir, "service_executor.go")
-		files = append(files, &codegen.File{Path: path, SectionTemplates: sections})
+		files = append(files, &codegen.File{Path: path, Sections: sections})
 	}
 	return files
 }

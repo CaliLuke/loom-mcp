@@ -12,6 +12,7 @@ type (
 		// Profile
 		Profile *Profile `json:"profile"`
 	}
+
 	// UpsertResult defines the JSON result for the profiles.upsert tool.
 	UpsertResult = struct {
 		// Identifier
@@ -21,6 +22,7 @@ type (
 		// Address
 		Address *Address `json:"address"`
 	}
+
 	// Address is a helper type materialized for nested references.
 	Address = struct {
 		// Street
@@ -28,6 +30,7 @@ type (
 		// City
 		City string `json:"city"`
 	}
+
 	// Profile is a helper type materialized for nested references.
 	Profile = struct {
 		// Identifier

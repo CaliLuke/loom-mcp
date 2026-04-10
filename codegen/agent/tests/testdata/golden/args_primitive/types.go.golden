@@ -9,6 +9,7 @@ package ops
 type (
 	// EchoPayload defines the JSON payload for the ops.echo tool.
 	EchoPayload = string
+
 	// EchoResult defines the JSON result for the ops.echo tool.
 	EchoResult = string
 )

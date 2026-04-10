@@ -1,4 +1,27 @@
-{{- define "activityOptionsLiteral" -}}
+package codegen
+
+import (
+	"bytes"
+	"text/template"
+
+	"github.com/CaliLuke/loom/codegen"
+)
+
+func agentRegistrySection(data struct {
+	*AgentData
+	HasExternalMCP bool
+}) codegen.Section {
+	return codegen.MustRenderSection("agent-registry", func() string {
+		tpl := template.Must(template.New("agent-registry").Funcs(templateFuncMap()).Parse(agentRegistryTemplateSource))
+		var buf bytes.Buffer
+		if err := tpl.Execute(&buf, data); err != nil {
+			panic(err)
+		}
+		return buf.String()
+	})
+}
+
+const agentRegistryTemplateSource = `{{- define "activityOptionsLiteral" -}}
 engine.ActivityOptions{
 {{- if ne .Queue "" }}
     Queue: {{ printf "%q" .Queue }},
@@ -295,3 +318,4 @@ func With{{ goify .PathName true }}Executor(exec agentsruntime.ToolCallExecutor)
 {{- end }}
 {{- end }}
 {{- end }}
+`

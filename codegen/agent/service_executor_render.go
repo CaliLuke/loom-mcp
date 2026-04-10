@@ -1,4 +1,24 @@
-// Default service executor for {{ .Toolset.Name }}
+package codegen
+
+import (
+	"bytes"
+	"text/template"
+
+	"github.com/CaliLuke/loom/codegen"
+)
+
+func serviceExecutorSection(data serviceToolsetFileData) codegen.Section {
+	return codegen.MustRenderSection("service-executor", func() string {
+		tpl := template.Must(template.New("service-executor").Funcs(templateFuncMap()).Parse(serviceExecutorTemplateSource))
+		var buf bytes.Buffer
+		if err := tpl.Execute(&buf, data); err != nil {
+			panic(err)
+		}
+		return buf.String()
+	})
+}
+
+const serviceExecutorTemplateSource = `// Default service executor for {{ .Toolset.Name }}
 // This factory builds a runtime.ToolCallExecutor that dispatches tool calls to
 // user-provided per-tool callers. It decodes tool payloads with generated codecs,
 // allows optional payload/result mappers, and returns results as-is (or mapped).
@@ -392,3 +412,4 @@ func init{{ goify .Name true }}Bounds(mr {{ .MethodResultTypeRef }}) *agent.Boun
 }
 {{- end }}
 {{- end }}
+`

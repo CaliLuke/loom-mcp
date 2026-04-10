@@ -1,4 +1,31 @@
-// RegistryClient defines the interface for fetching toolset data from a registry.
+package codegen
+
+import (
+	"strconv"
+	"strings"
+
+	"github.com/CaliLuke/loom/codegen"
+)
+
+func registryToolsetSpecsSection(data registryToolsetSpecsFileData) codegen.Section {
+	return codegen.MustRenderSection("registry-toolset-specs", func() string {
+		source := registryToolsetSpecsTemplateSource
+		versionBlock := ""
+		if data.Registry != nil && data.Registry.Version != "" {
+			versionBlock = "\n// Version is the pinned version for this toolset.\nconst Version = " + strconv.Quote(data.Registry.Version) + "\n"
+		}
+		replacer := strings.NewReplacer(
+			"__QUALIFIED_NAME__", strconv.Quote(data.QualifiedName),
+			"__REGISTRY_NAME__", strconv.Quote(data.Registry.RegistryName),
+			"__TOOLSET_NAME__", strconv.Quote(data.Registry.ToolsetName),
+			"__SERVICE_NAME__", strconv.Quote(data.ServiceName),
+			"__VERSION_BLOCK__", versionBlock,
+		)
+		return replacer.Replace(source)
+	})
+}
+
+const registryToolsetSpecsTemplateSource = `// RegistryClient defines the interface for fetching toolset data from a registry.
 type RegistryClient interface {
 	GetToolset(ctx context.Context, name string) (*ToolsetSchema, error)
 }
@@ -35,20 +62,14 @@ type SchemaValidationErrors struct {
 }
 
 // RegistryToolsetID is the identifier for this registry-backed toolset.
-const RegistryToolsetID = {{ printf "%q" .QualifiedName }}
+const RegistryToolsetID = __QUALIFIED_NAME__
 
 // RegistryName is the name of the registry source.
-const RegistryName = {{ printf "%q" .Registry.RegistryName }}
+const RegistryName = __REGISTRY_NAME__
 
 // ToolsetName is the name of the toolset in the registry.
-const ToolsetName = {{ printf "%q" .Registry.ToolsetName }}
-
-{{- if .Registry.Version }}
-
-// Version is the pinned version for this toolset.
-const Version = {{ printf "%q" .Registry.Version }}
-{{- end }}
-
+const ToolsetName = __TOOLSET_NAME__
+__VERSION_BLOCK__
 // Specs holds the tool specifications discovered from the registry.
 // This slice is populated at runtime via DiscoverAndPopulate.
 var Specs []tools.ToolSpec
@@ -84,7 +105,7 @@ func DiscoverAndPopulate(ctx context.Context, client RegistryClient) error {
 	for _, tool := range toolset.Tools {
 		spec := tools.ToolSpec{
 			Name:        tools.Ident(tool.Name),
-			Service:     {{ printf "%q" .ServiceName }},
+			Service:     __SERVICE_NAME__,
 			Toolset:     ToolsetName,
 			Description: tool.Description,
 			Tags:        tool.Tags,
@@ -484,3 +505,4 @@ func joinPath(base, field string) string {
 	}
 	return base + "." + field
 }
+`

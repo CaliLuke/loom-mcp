@@ -14,27 +14,21 @@ import (
 
 var (
 	// Specs is the static list of tool specs exported by this agent.
-	Specs = []tools.ToolSpec{
-		helpers.SpecSummarize,
-	}
+
+	Specs = []tools.ToolSpec{helpers.SpecSummarize}
 
 	// metadata is the static list of policy metadata exported by this agent.
-	metadata = []policy.ToolMetadata{
-		{
-			ID:          tools.Ident("helpers.summarize"),
-			Title:       "Summarize",
-			Description: "Summarize a document",
-			Tags: []string{
-				"nlp",
-				"summarization",
-			},
-		},
-	}
+
+	metadata = []policy.ToolMetadata{{
+		Description: "Summarize a document",
+		ID:          tools.Ident("helpers.summarize"),
+		Tags:        []string{"nlp", "summarization"},
+		Title:       "Summarize",
+	}}
 
 	// names is the static list of exported tool identifiers.
-	names = []tools.Ident{
-		helpers.Summarize,
-	}
+
+	names = []tools.Ident{helpers.Summarize}
 )
 
 // Names returns the tool identifiers exported by this agent.
@@ -68,7 +62,8 @@ func ResultSchema(name tools.Ident) ([]byte, bool) {
 	return nil, false
 }
 
-// AdvertisedSpecs returns the full list of tool specs to advertise to the model.
+// AdvertisedSpecs returns the full list of tool specs to advertise to the
+// model.
 func AdvertisedSpecs() []tools.ToolSpec {
 	return Specs
 }

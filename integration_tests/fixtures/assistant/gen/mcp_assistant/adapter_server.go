@@ -35,7 +35,6 @@ import (
 )
 
 // MCPAdapter core: types, options, constructor, helpers
-
 type MCPAdapter struct {
 	service             assistant.Service
 	initialized         bool
@@ -56,7 +55,6 @@ type MCPAdapter struct {
 	// resourceNameToURI holds DSL-derived mapping for policy and lookups
 	resourceNameToURI map[string]string
 }
-
 type (
 	// ToolCallInterceptorInfo describes a generated MCP tools/call invocation.
 	ToolCallInterceptorInfo interface {
@@ -71,7 +69,6 @@ type (
 	// ToolCallInterceptor wraps generated MCP tool execution.
 	ToolCallInterceptor func(ctx context.Context, info ToolCallInterceptorInfo, payload *ToolsCallPayload, stream ToolsCallServerStream, next ToolCallHandler) (bool, error)
 )
-
 type toolCallInterceptorInfo struct {
 	service    string
 	method     string
@@ -80,12 +77,24 @@ type toolCallInterceptorInfo struct {
 	rawArgs    json.RawMessage
 }
 
-func (i *toolCallInterceptorInfo) Service() string                   { return i.service }
-func (i *toolCallInterceptorInfo) Method() string                    { return i.method }
-func (i *toolCallInterceptorInfo) CallType() goa.InterceptorCallType { return goa.InterceptorUnary }
-func (i *toolCallInterceptorInfo) RawPayload() any                   { return i.rawPayload }
-func (i *toolCallInterceptorInfo) Tool() string                      { return i.tool }
-func (i *toolCallInterceptorInfo) RawArguments() json.RawMessage     { return i.rawArgs }
+func (i *toolCallInterceptorInfo) Service() string {
+	return i.service
+}
+func (i *toolCallInterceptorInfo) Method() string {
+	return i.method
+}
+func (i *toolCallInterceptorInfo) Tool() string {
+	return i.tool
+}
+func (i *toolCallInterceptorInfo) CallType() goa.InterceptorCallType {
+	return goa.InterceptorUnary
+}
+func (i *toolCallInterceptorInfo) RawPayload() any {
+	return i.rawPayload
+}
+func (i *toolCallInterceptorInfo) RawArguments() json.RawMessage {
+	return i.rawArgs
+}
 
 // MCPAdapterOptions allows customizing adapter behavior.
 type MCPAdapterOptions struct {
@@ -120,12 +129,7 @@ type MCPAdapterOptions struct {
 func NewMCPAdapter(service assistant.Service, promptProvider PromptProvider, opts *MCPAdapterOptions) *MCPAdapter {
 	// Resolve name-based policy to URIs
 	if opts != nil && (len(opts.AllowedResourceNames) > 0 || len(opts.DeniedResourceNames) > 0) {
-		nameToURI := map[string]string{
-			"documents":            "doc://list",
-			"system_info":          "system://info",
-			"conversation_history": "conversation://history",
-			"figma_design_system":  "figma://design-system/mobile-checkout",
-		}
+		nameToURI := map[string]string{"documents": "doc://list", "system_info": "system://info", "conversation_history": "conversation://history", "figma_design_system": "figma://design-system/mobile-checkout"}
 		seen := map[string]struct{}{}
 		for _, n := range opts.AllowedResourceNames {
 			if u, ok := nameToURI[n]; ok {
@@ -165,26 +169,8 @@ func NewMCPAdapter(service assistant.Service, promptProvider PromptProvider, opt
 	tracer := defaultMCPAdapterTracer(opts, telemetryName)
 	callCounter, errorCounter, durationHistogram := defaultMCPAdapterMetrics(opts, telemetryName)
 	// Build name->URI map from generated resources
-	nameToURI := map[string]string{
-		"documents":            "doc://list",
-		"system_info":          "system://info",
-		"conversation_history": "conversation://history",
-		"figma_design_system":  "figma://design-system/mobile-checkout",
-	}
-	return &MCPAdapter{
-		service:             service,
-		initializedSessions: make(map[string]struct{}),
-		sessionPrincipals:   make(map[string]string),
-		opts:                opts,
-		tracer:              tracer,
-		callCounter:         callCounter,
-		errorCounter:        errorCounter,
-		durationHistogram:   durationHistogram,
-		promptProvider:      promptProvider,
-		subs:                make(map[string]int),
-		broadcaster:         bc,
-		resourceNameToURI:   nameToURI,
-	}
+	nameToURI := map[string]string{"documents": "doc://list", "system_info": "system://info", "conversation_history": "conversation://history", "figma_design_system": "figma://design-system/mobile-checkout"}
+	return &MCPAdapter{service: service, initializedSessions: make(map[string]struct{}), sessionPrincipals: make(map[string]string), opts: opts, tracer: tracer, callCounter: callCounter, errorCounter: errorCounter, durationHistogram: durationHistogram, promptProvider: promptProvider, subs: make(map[string]int), broadcaster: bc, resourceNameToURI: nameToURI}
 }
 
 // mcpProtocolVersion resolves the protocol version from options or default.
@@ -194,7 +180,6 @@ func (a *MCPAdapter) mcpProtocolVersion() string {
 	}
 	return DefaultProtocolVersion
 }
-
 func (a *MCPAdapter) supportsProtocolVersion(requested string) bool {
 	base := a.mcpProtocolVersion()
 	if requested == base {
@@ -205,7 +190,6 @@ func (a *MCPAdapter) supportsProtocolVersion(requested string) bool {
 	}
 	return requested >= base
 }
-
 func validMCPProtocolVersionDate(v string) bool {
 	if len(v) != 10 {
 		return false
@@ -243,7 +227,6 @@ func parseQueryParamsToJSON(uri string) ([]byte, error) {
 	coerced := mcpruntime.CoerceQuery(m)
 	return json.Marshal(coerced)
 }
-
 func (a *MCPAdapter) isInitialized(ctx context.Context) bool {
 	a.mu.RLock()
 	defer a.mu.RUnlock()
@@ -253,7 +236,6 @@ func (a *MCPAdapter) isInitialized(ctx context.Context) bool {
 	}
 	return a.initialized
 }
-
 func (a *MCPAdapter) markInitializedSession(sessionID string) {
 	a.mu.Lock()
 	defer a.mu.Unlock()
@@ -263,7 +245,6 @@ func (a *MCPAdapter) markInitializedSession(sessionID string) {
 	}
 	a.initializedSessions[sessionID] = struct{}{}
 }
-
 func (a *MCPAdapter) captureSessionPrincipal(ctx context.Context, sessionID string) {
 	if a == nil || sessionID == "" {
 		return
@@ -282,7 +263,6 @@ func (a *MCPAdapter) captureSessionPrincipal(ctx context.Context, sessionID stri
 	}
 	a.sessionPrincipals[sessionID] = principal
 }
-
 func (a *MCPAdapter) clearSessionPrincipal(sessionID string) {
 	if a == nil || sessionID == "" {
 		return
@@ -291,7 +271,6 @@ func (a *MCPAdapter) clearSessionPrincipal(sessionID string) {
 	defer a.mu.Unlock()
 	delete(a.sessionPrincipals, sessionID)
 }
-
 func (a *MCPAdapter) assertSessionPrincipal(ctx context.Context, sessionID string) error {
 	if a == nil || sessionID == "" {
 		return nil
@@ -308,7 +287,6 @@ func (a *MCPAdapter) assertSessionPrincipal(ctx context.Context, sessionID strin
 	}
 	return nil
 }
-
 func (a *MCPAdapter) sessionPrincipal(ctx context.Context) string {
 	if a != nil && a.opts != nil && a.opts.SessionPrincipal != nil {
 		return strings.TrimSpace(a.opts.SessionPrincipal(ctx))
@@ -318,13 +296,11 @@ func (a *MCPAdapter) sessionPrincipal(ctx context.Context) string {
 	}
 	return ""
 }
-
 func (a *MCPAdapter) log(ctx context.Context, event string, details any) {
 	if a != nil && a.opts != nil && a.opts.Logger != nil {
 		a.opts.Logger(ctx, event, details)
 	}
 }
-
 func (a *MCPAdapter) mapError(err error) error {
 	if a != nil && a.opts != nil && a.opts.ErrorMapper != nil && err != nil {
 		if m := a.opts.ErrorMapper(err); m != nil {
@@ -333,12 +309,11 @@ func (a *MCPAdapter) mapError(err error) error {
 	}
 	return err
 }
-
 func (a *MCPAdapter) toolCallInfo(p *ToolsCallPayload) ToolCallInterceptorInfo {
 	info := &toolCallInterceptorInfo{
-		service:    "assistant",
 		method:     "tools/call",
 		rawPayload: p,
+		service:    "assistant",
 	}
 	if p != nil {
 		info.tool = p.Name
@@ -346,7 +321,6 @@ func (a *MCPAdapter) toolCallInfo(p *ToolsCallPayload) ToolCallInterceptorInfo {
 	}
 	return info
 }
-
 func (a *MCPAdapter) wrapToolCallHandler(info ToolCallInterceptorInfo, next ToolCallHandler) ToolCallHandler {
 	if a == nil || a.opts == nil || len(a.opts.ToolCallInterceptors) == 0 {
 		return next
@@ -364,21 +338,18 @@ func (a *MCPAdapter) wrapToolCallHandler(info ToolCallInterceptorInfo, next Tool
 	}
 	return wrapped
 }
-
 func defaultMCPAdapterTelemetryName(opts *MCPAdapterOptions) string {
 	if opts != nil && opts.TelemetryName != "" {
 		return opts.TelemetryName
 	}
 	return "loom-mcp/mcp/mcpassistant"
 }
-
 func defaultMCPAdapterTracer(opts *MCPAdapterOptions, name string) trace.Tracer {
 	if opts != nil && opts.Tracer != nil {
 		return opts.Tracer
 	}
 	return otel.Tracer(name)
 }
-
 func defaultMCPAdapterMetrics(opts *MCPAdapterOptions, name string) (metric.Int64Counter, metric.Int64Counter, metric.Float64Histogram) {
 	var meter metric.Meter
 	if opts != nil && opts.Meter != nil {
@@ -386,30 +357,13 @@ func defaultMCPAdapterMetrics(opts *MCPAdapterOptions, name string) (metric.Int6
 	} else {
 		meter = otel.Meter(name)
 	}
-	callCounter, _ := meter.Int64Counter(
-		"loom_mcp.mcp.calls",
-		metric.WithUnit("{call}"),
-		metric.WithDescription("Total MCP calls handled by the generated adapter."),
-	)
-	errorCounter, _ := meter.Int64Counter(
-		"loom_mcp.mcp.errors",
-		metric.WithUnit("{call}"),
-		metric.WithDescription("Total MCP calls handled by the generated adapter that resulted in an error."),
-	)
-	durationHistogram, _ := meter.Float64Histogram(
-		"loom_mcp.mcp.duration_ms",
-		metric.WithUnit("ms"),
-		metric.WithDescription("Duration of MCP calls handled by the generated adapter in milliseconds."),
-	)
+	callCounter, _ := meter.Int64Counter("loom_mcp.mcp.calls", metric.WithUnit("{call}"), metric.WithDescription("Total MCP calls handled by the generated adapter."))
+	errorCounter, _ := meter.Int64Counter("loom_mcp.mcp.errors", metric.WithUnit("{call}"), metric.WithDescription("Total MCP calls handled by the generated adapter that resulted in an error."))
+	durationHistogram, _ := meter.Float64Histogram("loom_mcp.mcp.duration_ms", metric.WithUnit("ms"), metric.WithDescription("Duration of MCP calls handled by the generated adapter in milliseconds."))
 	return callCounter, errorCounter, durationHistogram
 }
-
 func (a *MCPAdapter) startTelemetry(ctx context.Context, method string, attrs ...attribute.KeyValue) (context.Context, trace.Span, time.Time, []attribute.KeyValue) {
-	baseAttrs := append([]attribute.KeyValue{
-		attribute.String("rpc.system", "mcp"),
-		attribute.String("rpc.method", method),
-		attribute.String("mcp.service", "assistant"),
-	}, attrs...)
+	baseAttrs := append([]attribute.KeyValue{attribute.String("rpc.system", "mcp"), attribute.String("rpc.method", method), attribute.String("mcp.service", "assistant")}, attrs...)
 	tracer := a.tracer
 	if tracer == nil {
 		tracer = otel.Tracer(defaultMCPAdapterTelemetryName(a.opts))
@@ -418,7 +372,6 @@ func (a *MCPAdapter) startTelemetry(ctx context.Context, method string, attrs ..
 	span.SetAttributes(baseAttrs...)
 	return ctx, span, time.Now(), baseAttrs
 }
-
 func (a *MCPAdapter) finishTelemetry(ctx context.Context, span trace.Span, start time.Time, attrs []attribute.KeyValue, err error, toolErr bool) {
 	duration := time.Since(start)
 	statusClass := "ok"
@@ -426,10 +379,7 @@ func (a *MCPAdapter) finishTelemetry(ctx context.Context, span trace.Span, start
 		statusClass = "error"
 	}
 	metricAttrs := append([]attribute.KeyValue{}, attrs...)
-	metricAttrs = append(metricAttrs,
-		attribute.String("status_class", statusClass),
-		attribute.Bool("mcp.tool_error", toolErr),
-	)
+	metricAttrs = append(metricAttrs, attribute.String("status_class", statusClass), attribute.Bool("mcp.tool_error", toolErr))
 	if a.callCounter != nil {
 		a.callCounter.Add(ctx, 1, metric.WithAttributes(metricAttrs...))
 	}
@@ -439,11 +389,7 @@ func (a *MCPAdapter) finishTelemetry(ctx context.Context, span trace.Span, start
 	if (err != nil || toolErr) && a.errorCounter != nil {
 		a.errorCounter.Add(ctx, 1, metric.WithAttributes(metricAttrs...))
 	}
-	span.SetAttributes(
-		attribute.String("status_class", statusClass),
-		attribute.Bool("mcp.tool_error", toolErr),
-		attribute.Int64("mcp.duration_ms", duration.Milliseconds()),
-	)
+	span.SetAttributes(attribute.String("status_class", statusClass), attribute.Bool("mcp.tool_error", toolErr), attribute.Int64("mcp.duration_ms", duration.Milliseconds()))
 	if err != nil {
 		span.RecordError(err)
 		span.SetStatus(codes.Error, err.Error())
@@ -454,11 +400,9 @@ func (a *MCPAdapter) finishTelemetry(ctx context.Context, span trace.Span, start
 	}
 	span.End()
 }
-
 func stringPtr(s string) *string {
 	return &s
 }
-
 func isLikelyJSON(s string) bool {
 	return json.Valid([]byte(s))
 }
@@ -468,42 +412,40 @@ func buildContentItem(a *MCPAdapter, s string) *ContentItem {
 	if a != nil && a.opts != nil && a.opts.StructuredStreamJSON && isLikelyJSON(s) {
 		mt := stringPtr("application/json")
 		return &ContentItem{
-			Type:     "text",
 			MimeType: mt,
 			Text:     &s,
+			Type:     "text",
 		}
 	}
 	return &ContentItem{
-		Type: "text",
 		Text: &s,
+		Type: "text",
 	}
 }
-
 func (a *MCPAdapter) sendToolError(ctx context.Context, stream ToolsCallServerStream, toolName string, err error) error {
 	if err == nil {
 		return nil
 	}
-
 	mapped := a.mapError(err)
 	if mapped == nil {
 		mapped = err
 	}
 	isError := true
 	result := &ToolsCallResult{
-		Content: []*ContentItem{
-			buildContentItem(a, formatToolErrorText(mapped)),
-		},
+		Content: []*ContentItem{buildContentItem(a, formatToolErrorText(mapped))},
 		IsError: &isError,
 	}
-	a.log(ctx, "response", map[string]any{"method": "tools/call", "name": toolName, "is_error": true})
+	a.log(ctx, "response", map[string]any{
+		"is_error": true,
+		"method":   "tools/call",
+		"name":     toolName,
+	})
 	return stream.SendAndClose(ctx, result)
 }
-
 func formatToolErrorText(err error) string {
 	if err == nil {
 		return "[internal_error] Tool execution failed."
 	}
-
 	code := strings.TrimSpace(goa.ErrorRemedyCode(err))
 	if code == "" {
 		var namer goa.LoomErrorNamer
@@ -526,7 +468,6 @@ func formatToolErrorText(err error) string {
 	if code == "" {
 		code = "internal_error"
 	}
-
 	message := strings.TrimSpace(goa.ErrorSafeMessage(err))
 	if message == "" {
 		message = "Tool execution failed."
@@ -537,7 +478,6 @@ func formatToolErrorText(err error) string {
 	}
 	return fmt.Sprintf("[%s] %s\nRecovery: %s", code, message, recovery)
 }
-
 func toolCallError(err error, defaultCode string, defaultRecovery string) error {
 	if err == nil {
 		err = goa.PermanentError(defaultCode, "Tool execution failed.")
@@ -556,15 +496,13 @@ func toolCallError(err error, defaultCode string, defaultRecovery string) error 
 	}
 	return goa.WithErrorRemedy(goa.PermanentError(code, "%s", message), &goa.ErrorRemedy{
 		Code:        code,
-		SafeMessage: message,
 		RetryHint:   recovery,
+		SafeMessage: message,
 	})
 }
-
 func toolInputError(err error, raw json.RawMessage) error {
 	return toolCallError(err, "invalid_params", inferToolInputRecovery(err, raw))
 }
-
 func inferToolInputRecovery(err error, raw json.RawMessage) string {
 	message := strings.TrimSpace(goa.ErrorSafeMessage(err))
 	if message == "" {
@@ -581,7 +519,6 @@ func inferToolInputRecovery(err error, raw json.RawMessage) string {
 	}
 	return "Provide valid tool arguments."
 }
-
 func missingFieldFromMessage(message string) string {
 	const prefix = "Missing required field: "
 	if !strings.HasPrefix(message, prefix) {
@@ -589,7 +526,6 @@ func missingFieldFromMessage(message string) string {
 	}
 	return strings.TrimSpace(strings.TrimPrefix(message, prefix))
 }
-
 func actionValueEnvelopeExample(raw json.RawMessage) (string, bool) {
 	var fields map[string]json.RawMessage
 	if err := json.Unmarshal(raw, &fields); err != nil {
@@ -604,12 +540,11 @@ func actionValueEnvelopeExample(raw json.RawMessage) (string, bool) {
 			continue
 		}
 		if example, ok := actionValueExampleForObject(nested); ok {
-			return fmt.Sprintf(`{"%s":%s}`, name, example), true
+			return fmt.Sprintf("{\"%s\":%s}", name, example), true
 		}
 	}
 	return "", false
 }
-
 func actionValueExampleForObject(fields map[string]json.RawMessage) (string, bool) {
 	actionRaw, hasAction := fields["action"]
 	if !hasAction {
@@ -626,9 +561,8 @@ func actionValueExampleForObject(fields map[string]json.RawMessage) (string, boo
 	if action == "" {
 		return "", false
 	}
-	return fmt.Sprintf(`{"action":%q,"value":{}}`, action), true
+	return fmt.Sprintf("{\"action\":%q,\"value\":{}}", action), true
 }
-
 func formatToolSuccessText(v any) string {
 	switch value := v.(type) {
 	case nil:
@@ -657,14 +591,12 @@ func formatToolSuccessText(v any) string {
 		}
 		return "false"
 	}
-
 	normalized, ok := normalizeToolSuccessValue(v)
 	if !ok {
 		return fmt.Sprint(v)
 	}
 	return summarizeToolSuccessValue(normalized)
 }
-
 func normalizeToolSuccessValue(v any) (any, bool) {
 	if v == nil {
 		return nil, false
@@ -679,7 +611,6 @@ func normalizeToolSuccessValue(v any) (any, bool) {
 	}
 	return normalized, true
 }
-
 func summarizeToolSuccessValue(v any) string {
 	switch value := v.(type) {
 	case nil:
@@ -704,7 +635,6 @@ func summarizeToolSuccessValue(v any) string {
 		return fmt.Sprint(value)
 	}
 }
-
 func summarizeToolSuccessList(items []any) string {
 	if len(items) == 0 {
 		return "No items."
@@ -728,7 +658,6 @@ func summarizeToolSuccessList(items []any) string {
 	}
 	return strings.Join(parts, "\n")
 }
-
 func summarizeToolSuccessMap(fields map[string]any) string {
 	preferredScalars := []string{"result", "output", "summary", "message", "value", "name", "ack", "sentiment", "status"}
 	for _, key := range preferredScalars {
@@ -762,7 +691,6 @@ func summarizeToolSuccessMap(fields map[string]any) string {
 	}
 	return fmt.Sprintf("Fields: %s", strings.Join(keys, ", "))
 }
-
 func scalarToolSuccessText(v any) (string, bool) {
 	switch value := v.(type) {
 	case string:
@@ -793,8 +721,8 @@ func (a *MCPAdapter) Initialize(ctx context.Context, p *InitializePayload) (res 
 	}
 	a.log(ctx, "request", map[string]any{
 		"method":           "initialize",
-		"session_id":       requestSessionID,
 		"protocol_version": requestProtocol,
+		"session_id":       requestSessionID,
 	})
 	if p == nil || p.ProtocolVersion == "" {
 		return nil, goa.PermanentError("invalid_params", "Missing protocolVersion")
@@ -806,17 +734,16 @@ func (a *MCPAdapter) Initialize(ctx context.Context, p *InitializePayload) (res 
 	if sessionID == "" && mcpruntime.ResponseWriterFromContext(ctx) != nil {
 		sessionID = mcpruntime.EnsureSessionID(ctx)
 	}
-
 	a.mu.Lock()
 	if sessionID == "" {
 		if a.initialized {
 			a.mu.Unlock()
 			err = goa.PermanentError("invalid_params", "Already initialized")
 			a.log(ctx, "response", map[string]any{
-				"method":           "initialize",
-				"session_id":       sessionID,
-				"protocol_version": p.ProtocolVersion,
 				"error":            err.Error(),
+				"method":           "initialize",
+				"protocol_version": p.ProtocolVersion,
+				"session_id":       sessionID,
 			})
 			return nil, err
 		}
@@ -826,58 +753,42 @@ func (a *MCPAdapter) Initialize(ctx context.Context, p *InitializePayload) (res 
 			a.mu.Unlock()
 			err = goa.PermanentError("invalid_params", "Already initialized")
 			a.log(ctx, "response", map[string]any{
-				"method":           "initialize",
-				"session_id":       sessionID,
-				"protocol_version": p.ProtocolVersion,
 				"error":            err.Error(),
+				"method":           "initialize",
+				"protocol_version": p.ProtocolVersion,
+				"session_id":       sessionID,
 			})
 			return nil, err
 		}
 		a.initializedSessions[sessionID] = struct{}{}
 	}
 	a.mu.Unlock()
-
 	a.captureSessionPrincipal(ctx, sessionID)
-
-	serverInfo := &ServerInfo{
-		Name:       "assistant-mcp",
-		Version:    "1.0.0",
-		WebsiteURL: stringPtr("https://assistant.example.com/docs"),
-		Icons: []*Icon{
-			{
-				Src:      "https://assistant.example.com/icons/server-light.png",
-				MimeType: stringPtr("image/png"),
-				Sizes: []string{
-					"48x48",
-				},
-				Theme: stringPtr("light"),
-			},
-			{
-				Src:      "https://assistant.example.com/icons/server-dark.png",
-				MimeType: stringPtr("image/png"),
-				Sizes: []string{
-					"48x48",
-				},
-				Theme: stringPtr("dark"),
-			},
-		},
-	}
-
+	serverInfo := &ServerInfo{Name: "assistant-mcp", Version: "1.0.0", WebsiteURL: stringPtr("https://assistant.example.com/docs"), Icons: []*Icon{&Icon{
+		MimeType: stringPtr("image/png"),
+		Sizes:    []string{"48x48"},
+		Src:      "https://assistant.example.com/icons/server-light.png",
+		Theme:    stringPtr("light"),
+	}, &Icon{
+		MimeType: stringPtr("image/png"),
+		Sizes:    []string{"48x48"},
+		Src:      "https://assistant.example.com/icons/server-dark.png",
+		Theme:    stringPtr("dark"),
+	}}}
 	capabilities := &ServerCapabilities{}
 	capabilities.Tools = &ToolsCapability{}
 	capabilities.Resources = &ResourcesCapability{}
 	capabilities.Prompts = &PromptsCapability{}
-
 	res = &InitializeResult{
+		Capabilities:    capabilities,
 		ProtocolVersion: a.mcpProtocolVersion(),
 		ServerInfo:      serverInfo,
-		Capabilities:    capabilities,
 	}
 	a.log(ctx, "response", map[string]any{
 		"method":           "initialize",
-		"session_id":       sessionID,
 		"protocol_version": res.ProtocolVersion,
 		"server_name":      serverInfo.Name,
+		"session_id":       sessionID,
 	})
 	return res, nil
 }
@@ -918,7 +829,6 @@ func (a *MCPAdapter) PublishStatus(ctx context.Context, typ string, message stri
 }
 
 // Tools handling
-
 func decodeMCPPayloadStrict(data []byte, payload any) error {
 	dec := json.NewDecoder(bytes.NewReader(data))
 	dec.DisallowUnknownFields()
@@ -933,7 +843,6 @@ func decodeMCPPayloadStrict(data []byte, payload any) error {
 	}
 	return nil
 }
-
 func topLevelJSONFieldSet(raw json.RawMessage) (map[string]struct{}, error) {
 	fields := make(map[string]struct{})
 	if len(bytes.TrimSpace(raw)) == 0 {
@@ -948,7 +857,6 @@ func topLevelJSONFieldSet(raw json.RawMessage) (map[string]struct{}, error) {
 	}
 	return fields, nil
 }
-
 func decodeMCPPayloadFields(data []byte) (map[string]json.RawMessage, error) {
 	var fields map[string]json.RawMessage
 	if err := json.Unmarshal(data, &fields); err != nil {
@@ -959,27 +867,25 @@ func decodeMCPPayloadFields(data []byte) (map[string]json.RawMessage, error) {
 	}
 	return fields, nil
 }
-
 func validateMCPPayloadRequired(fields map[string]json.RawMessage, field string) error {
 	raw, ok := fields[field]
 	if !ok {
 		return goa.WithErrorRemedy(goa.PermanentError("invalid_params", "Missing required field: %s", field), &goa.ErrorRemedy{
 			Code:        "invalid_params",
-			SafeMessage: fmt.Sprintf("Missing required field: %s", field),
 			RetryHint:   fmt.Sprintf("Include required field %q.", field),
+			SafeMessage: fmt.Sprintf("Missing required field: %s", field),
 		})
 	}
 	trimmed := bytes.TrimSpace(raw)
-	if bytes.Equal(trimmed, []byte(`""`)) || bytes.Equal(trimmed, []byte("null")) {
+	if bytes.Equal(trimmed, []byte("\"\"")) || bytes.Equal(trimmed, []byte("null")) {
 		return goa.WithErrorRemedy(goa.PermanentError("invalid_params", "Missing required field: %s", field), &goa.ErrorRemedy{
 			Code:        "invalid_params",
-			SafeMessage: fmt.Sprintf("Missing required field: %s", field),
 			RetryHint:   fmt.Sprintf("Include required field %q.", field),
+			SafeMessage: fmt.Sprintf("Missing required field: %s", field),
 		})
 	}
 	return nil
 }
-
 func validateMCPPayloadEnum(fields map[string]json.RawMessage, field string, allowed ...string) error {
 	raw, ok := fields[field]
 	if !ok {
@@ -997,11 +903,10 @@ func validateMCPPayloadEnum(fields map[string]json.RawMessage, field string, all
 	}
 	return goa.WithErrorRemedy(goa.PermanentError("invalid_params", "Invalid value for %s", field), &goa.ErrorRemedy{
 		Code:        "invalid_params",
-		SafeMessage: fmt.Sprintf("Invalid value for %s", field),
 		RetryHint:   fmt.Sprintf("Use one of: %s.", strings.Join(allowed, ", ")),
+		SafeMessage: fmt.Sprintf("Invalid value for %s", field),
 	})
 }
-
 func (a *MCPAdapter) ToolsList(ctx context.Context, p *ToolsListPayload) (res *ToolsListResult, err error) {
 	ctx, span, start, attrs := a.startTelemetry(ctx, "tools/list")
 	defer func() {
@@ -1011,74 +916,56 @@ func (a *MCPAdapter) ToolsList(ctx context.Context, p *ToolsListPayload) (res *T
 		return nil, goa.PermanentError("invalid_params", "Not initialized")
 	}
 	a.log(ctx, "request", map[string]any{"method": "tools/list"})
-	tools := []*ToolInfo{
-		{
-			Name:        "analyze_sentiment",
-			Description: stringPtr("Analyze sentiment of text"),
-			InputSchema: json.RawMessage([]byte("{\"type\":\"object\",\"required\":[\"text\"],\"properties\":{\"text\":{\"type\":\"string\",\"description\":\"Input text to analyze\"}},\"additionalProperties\":false}")),
-			Icons: []*Icon{
-				{
-					Src:      "https://assistant.example.com/icons/analyze-sentiment.png",
-					MimeType: stringPtr("image/png"),
-					Sizes: []string{
-						"48x48",
-					},
-				},
-			},
-		},
-		{
-			Name:        "extract_keywords",
-			Description: stringPtr("Extract keywords from text"),
-			InputSchema: json.RawMessage([]byte("{\"type\":\"object\",\"required\":[\"text\"],\"properties\":{\"text\":{\"type\":\"string\",\"description\":\"Input text\"}},\"additionalProperties\":false}")),
-		},
-		{
-			Name:        "summarize_text",
-			Description: stringPtr("Summarize text"),
-			InputSchema: json.RawMessage([]byte("{\"type\":\"object\",\"required\":[\"text\"],\"properties\":{\"text\":{\"type\":\"string\",\"description\":\"Input text to summarize\"}},\"additionalProperties\":false}")),
-		},
-		{
-			Name:        "search",
-			Description: stringPtr("Search knowledge base"),
-			InputSchema: json.RawMessage([]byte("{\"type\":\"object\",\"required\":[\"query\"],\"properties\":{\"limit\":{\"type\":\"integer\",\"description\":\"Maximum number of results\"},\"query\":{\"type\":\"string\",\"description\":\"Search query\"}},\"additionalProperties\":false}")),
-		},
-		{
-			Name:        "execute_code",
-			Description: stringPtr("Execute code"),
-			InputSchema: json.RawMessage([]byte("{\"type\":\"object\",\"required\":[\"language\",\"code\"],\"properties\":{\"code\":{\"type\":\"string\",\"description\":\"Code to execute\"},\"language\":{\"type\":\"string\",\"description\":\"Language to execute\",\"enum\":[\"python\",\"javascript\"]}},\"additionalProperties\":false}")),
-		},
-		{
-			Name:        "process_batch",
-			Description: stringPtr("Process a batch of items"),
-			InputSchema: json.RawMessage([]byte("{\"type\":\"object\",\"required\":[\"items\"],\"properties\":{\"blob\":{\"type\":\"string\",\"description\":\"Base64 blob\"},\"format\":{\"type\":\"string\",\"description\":\"Output format\",\"enum\":[\"json\",\"text\",\"blob\",\"uri\"]},\"items\":{\"type\":\"array\",\"description\":\"Items to process\",\"items\":{\"type\":\"string\"}},\"mimeType\":{\"type\":\"string\",\"description\":\"MIME type\"},\"uri\":{\"type\":\"string\",\"description\":\"Resource URI\"}},\"additionalProperties\":false}")),
-		},
-		{
-			Name:        "multi_content",
-			Description: stringPtr("Return multiple content items"),
-			InputSchema: json.RawMessage([]byte("{\"type\":\"object\",\"required\":[\"count\"],\"properties\":{\"count\":{\"type\":\"integer\",\"description\":\"Number of content items to return\"}},\"additionalProperties\":false}")),
-		},
-		{
-			Name:        "generate_dpi_spec",
-			Description: stringPtr("Generate a deterministic design implementation plan from fake Figma data"),
-			InputSchema: json.RawMessage([]byte("{\"type\":\"object\",\"required\":[\"screen_title\",\"platform\",\"density\",\"primary_cta\",\"sections\"],\"properties\":{\"density\":{\"type\":\"string\",\"description\":\"Layout density\",\"enum\":[\"compact\",\"comfortable\"]},\"include_dev_notes\":{\"type\":\"boolean\",\"description\":\"Whether to include implementation notes\"},\"platform\":{\"type\":\"string\",\"description\":\"Target platform\",\"enum\":[\"ios\",\"web\"]},\"primary_cta\":{\"type\":\"string\",\"description\":\"Primary call to action\"},\"screen_title\":{\"type\":\"string\",\"description\":\"Name of the frame or screen\"},\"sections\":{\"type\":\"array\",\"description\":\"Ordered screen sections\",\"items\":{\"type\":\"string\"}}},\"additionalProperties\":false}")),
-		},
-		{
-			Name:        "dispatch_action",
-			Description: stringPtr("Dispatch an action using a union payload"),
-			InputSchema: json.RawMessage([]byte("{\"type\":\"object\",\"required\":[\"request\"],\"properties\":{\"request\":{\"type\":\"object\",\"description\":\"Action envelope\",\"oneOf\":[{\"type\":\"object\",\"required\":[\"action\",\"value\"],\"properties\":{\"action\":{\"type\":\"string\",\"enum\":[\"ListAction\"]},\"value\":{\"type\":\"object\",\"properties\":{\"limit\":{\"type\":\"integer\",\"description\":\"Maximum number of items to list\"}},\"additionalProperties\":false}},\"additionalProperties\":false},{\"type\":\"object\",\"required\":[\"action\",\"value\"],\"properties\":{\"action\":{\"type\":\"string\",\"enum\":[\"CreateAction\"]},\"value\":{\"type\":\"object\",\"required\":[\"name\"],\"properties\":{\"name\":{\"type\":\"string\",\"description\":\"Name to create\"}},\"additionalProperties\":false}},\"additionalProperties\":false}],\"discriminator\":{\"propertyName\":\"action\"}}},\"additionalProperties\":false}")),
-		},
-	}
+	tools := []*ToolInfo{&ToolInfo{
+		Description: stringPtr("Analyze sentiment of text"),
+		Icons: []*Icon{&Icon{
+			MimeType: stringPtr("image/png"),
+			Sizes:    []string{"48x48"},
+			Src:      "https://assistant.example.com/icons/analyze-sentiment.png",
+		}},
+		InputSchema: json.RawMessage([]byte("{\"type\":\"object\",\"required\":[\"text\"],\"properties\":{\"text\":{\"type\":\"string\",\"description\":\"Input text to analyze\"}},\"additionalProperties\":false}")),
+		Name:        "analyze_sentiment",
+	}, &ToolInfo{
+		Description: stringPtr("Extract keywords from text"),
+		InputSchema: json.RawMessage([]byte("{\"type\":\"object\",\"required\":[\"text\"],\"properties\":{\"text\":{\"type\":\"string\",\"description\":\"Input text\"}},\"additionalProperties\":false}")),
+		Name:        "extract_keywords",
+	}, &ToolInfo{
+		Description: stringPtr("Summarize text"),
+		InputSchema: json.RawMessage([]byte("{\"type\":\"object\",\"required\":[\"text\"],\"properties\":{\"text\":{\"type\":\"string\",\"description\":\"Input text to summarize\"}},\"additionalProperties\":false}")),
+		Name:        "summarize_text",
+	}, &ToolInfo{
+		Description: stringPtr("Search knowledge base"),
+		InputSchema: json.RawMessage([]byte("{\"type\":\"object\",\"required\":[\"query\"],\"properties\":{\"limit\":{\"type\":\"integer\",\"description\":\"Maximum number of results\"},\"query\":{\"type\":\"string\",\"description\":\"Search query\"}},\"additionalProperties\":false}")),
+		Name:        "search",
+	}, &ToolInfo{
+		Description: stringPtr("Execute code"),
+		InputSchema: json.RawMessage([]byte("{\"type\":\"object\",\"required\":[\"language\",\"code\"],\"properties\":{\"code\":{\"type\":\"string\",\"description\":\"Code to execute\"},\"language\":{\"type\":\"string\",\"description\":\"Language to execute\",\"enum\":[\"python\",\"javascript\"]}},\"additionalProperties\":false}")),
+		Name:        "execute_code",
+	}, &ToolInfo{
+		Description: stringPtr("Process a batch of items"),
+		InputSchema: json.RawMessage([]byte("{\"type\":\"object\",\"required\":[\"items\"],\"properties\":{\"blob\":{\"type\":\"string\",\"description\":\"Base64 blob\"},\"format\":{\"type\":\"string\",\"description\":\"Output format\",\"enum\":[\"json\",\"text\",\"blob\",\"uri\"]},\"items\":{\"type\":\"array\",\"description\":\"Items to process\",\"items\":{\"type\":\"string\"}},\"mimeType\":{\"type\":\"string\",\"description\":\"MIME type\"},\"uri\":{\"type\":\"string\",\"description\":\"Resource URI\"}},\"additionalProperties\":false}")),
+		Name:        "process_batch",
+	}, &ToolInfo{
+		Description: stringPtr("Return multiple content items"),
+		InputSchema: json.RawMessage([]byte("{\"type\":\"object\",\"required\":[\"count\"],\"properties\":{\"count\":{\"type\":\"integer\",\"description\":\"Number of content items to return\"}},\"additionalProperties\":false}")),
+		Name:        "multi_content",
+	}, &ToolInfo{
+		Description: stringPtr("Generate a deterministic design implementation plan from fake Figma data"),
+		InputSchema: json.RawMessage([]byte("{\"type\":\"object\",\"required\":[\"screen_title\",\"platform\",\"density\",\"primary_cta\",\"sections\"],\"properties\":{\"density\":{\"type\":\"string\",\"description\":\"Layout density\",\"enum\":[\"compact\",\"comfortable\"]},\"include_dev_notes\":{\"type\":\"boolean\",\"description\":\"Whether to include implementation notes\"},\"platform\":{\"type\":\"string\",\"description\":\"Target platform\",\"enum\":[\"ios\",\"web\"]},\"primary_cta\":{\"type\":\"string\",\"description\":\"Primary call to action\"},\"screen_title\":{\"type\":\"string\",\"description\":\"Name of the frame or screen\"},\"sections\":{\"type\":\"array\",\"description\":\"Ordered screen sections\",\"items\":{\"type\":\"string\"}}},\"additionalProperties\":false}")),
+		Name:        "generate_dpi_spec",
+	}, &ToolInfo{
+		Description: stringPtr("Dispatch an action using a union payload"),
+		InputSchema: json.RawMessage([]byte("{\"type\":\"object\",\"required\":[\"request\"],\"properties\":{\"request\":{\"type\":\"object\",\"description\":\"Action envelope\",\"oneOf\":[{\"type\":\"object\",\"required\":[\"action\",\"value\"],\"properties\":{\"action\":{\"type\":\"string\",\"enum\":[\"ListAction\"]},\"value\":{\"type\":\"object\",\"properties\":{\"limit\":{\"type\":\"integer\",\"description\":\"Maximum number of items to list\"}},\"additionalProperties\":false}},\"additionalProperties\":false},{\"type\":\"object\",\"required\":[\"action\",\"value\"],\"properties\":{\"action\":{\"type\":\"string\",\"enum\":[\"CreateAction\"]},\"value\":{\"type\":\"object\",\"required\":[\"name\"],\"properties\":{\"name\":{\"type\":\"string\",\"description\":\"Name to create\"}},\"additionalProperties\":false}},\"additionalProperties\":false}],\"discriminator\":{\"propertyName\":\"action\"}}},\"additionalProperties\":false}")),
+		Name:        "dispatch_action",
+	}}
 	res = &ToolsListResult{Tools: tools}
 	a.log(ctx, "response", map[string]any{"method": "tools/list"})
 	return res, nil
 }
-
 func (a *MCPAdapter) ToolsCall(ctx context.Context, p *ToolsCallPayload, stream ToolsCallServerStream) (err error) {
 	attrs := []attribute.KeyValue{}
 	if p != nil && p.Name != "" {
-		attrs = append(attrs,
-			attribute.String("mcp.tool", p.Name),
-			attribute.String("tool", p.Name),
-		)
+		attrs = append(attrs, attribute.String("mcp.tool", p.Name), attribute.String("tool", p.Name))
 	}
 	ctx, span, start, attrs := a.startTelemetry(ctx, "tools/call", attrs...)
 	toolErr := false
@@ -1090,8 +977,7 @@ func (a *MCPAdapter) ToolsCall(ctx context.Context, p *ToolsCallPayload, stream 
 	toolErr, err = handler(ctx, p, stream)
 	return err
 }
-
-func (a *MCPAdapter) toolsCallHandler(ctx context.Context, p *ToolsCallPayload, stream ToolsCallServerStream) (toolErr bool, err error) {
+func (a *MCPAdapter) toolsCallHandler(ctx context.Context, p *ToolsCallPayload, stream ToolsCallServerStream) (bool, error) {
 	if !a.isInitialized(ctx) {
 		return false, goa.PermanentError("invalid_params", "Not initialized")
 	}
@@ -1099,7 +985,10 @@ func (a *MCPAdapter) toolsCallHandler(ctx context.Context, p *ToolsCallPayload, 
 	if p != nil {
 		name = p.Name
 	}
-	a.log(ctx, "request", map[string]any{"method": "tools/call", "name": name})
+	a.log(ctx, "request", map[string]any{
+		"method": "tools/call",
+		"name":   name,
+	})
 	switch p.Name {
 	case "analyze_sentiment":
 		var payload *assistant.AnalyzeSentimentPayload
@@ -1131,12 +1020,13 @@ func (a *MCPAdapter) toolsCallHandler(ctx context.Context, p *ToolsCallPayload, 
 			return false, serr
 		}
 		final := &ToolsCallResult{
-			Content: []*ContentItem{
-				buildContentItem(a, s),
-			},
+			Content:           []*ContentItem{buildContentItem(a, s)},
 			StructuredContent: structuredContent,
 		}
-		a.log(ctx, "response", map[string]any{"method": "tools/call", "name": p.Name})
+		a.log(ctx, "response", map[string]any{
+			"method": "tools/call",
+			"name":   p.Name,
+		})
 		return false, stream.SendAndClose(ctx, final)
 	case "extract_keywords":
 		var payload *assistant.ExtractKeywordsPayload
@@ -1168,12 +1058,13 @@ func (a *MCPAdapter) toolsCallHandler(ctx context.Context, p *ToolsCallPayload, 
 			return false, serr
 		}
 		final := &ToolsCallResult{
-			Content: []*ContentItem{
-				buildContentItem(a, s),
-			},
+			Content:           []*ContentItem{buildContentItem(a, s)},
 			StructuredContent: structuredContent,
 		}
-		a.log(ctx, "response", map[string]any{"method": "tools/call", "name": p.Name})
+		a.log(ctx, "response", map[string]any{
+			"method": "tools/call",
+			"name":   p.Name,
+		})
 		return false, stream.SendAndClose(ctx, final)
 	case "summarize_text":
 		var payload *assistant.SummarizeTextPayload
@@ -1205,12 +1096,13 @@ func (a *MCPAdapter) toolsCallHandler(ctx context.Context, p *ToolsCallPayload, 
 			return false, serr
 		}
 		final := &ToolsCallResult{
-			Content: []*ContentItem{
-				buildContentItem(a, s),
-			},
+			Content:           []*ContentItem{buildContentItem(a, s)},
 			StructuredContent: structuredContent,
 		}
-		a.log(ctx, "response", map[string]any{"method": "tools/call", "name": p.Name})
+		a.log(ctx, "response", map[string]any{
+			"method": "tools/call",
+			"name":   p.Name,
+		})
 		return false, stream.SendAndClose(ctx, final)
 	case "search":
 		var payload *assistant.SearchPayload
@@ -1242,12 +1134,13 @@ func (a *MCPAdapter) toolsCallHandler(ctx context.Context, p *ToolsCallPayload, 
 			return false, serr
 		}
 		final := &ToolsCallResult{
-			Content: []*ContentItem{
-				buildContentItem(a, s),
-			},
+			Content:           []*ContentItem{buildContentItem(a, s)},
 			StructuredContent: structuredContent,
 		}
-		a.log(ctx, "response", map[string]any{"method": "tools/call", "name": p.Name})
+		a.log(ctx, "response", map[string]any{
+			"method": "tools/call",
+			"name":   p.Name,
+		})
 		return false, stream.SendAndClose(ctx, final)
 	case "execute_code":
 		var payload *assistant.ExecuteCodePayload
@@ -1287,12 +1180,13 @@ func (a *MCPAdapter) toolsCallHandler(ctx context.Context, p *ToolsCallPayload, 
 			return false, serr
 		}
 		final := &ToolsCallResult{
-			Content: []*ContentItem{
-				buildContentItem(a, s),
-			},
+			Content:           []*ContentItem{buildContentItem(a, s)},
 			StructuredContent: structuredContent,
 		}
-		a.log(ctx, "response", map[string]any{"method": "tools/call", "name": p.Name})
+		a.log(ctx, "response", map[string]any{
+			"method": "tools/call",
+			"name":   p.Name,
+		})
 		return false, stream.SendAndClose(ctx, final)
 	case "process_batch":
 		var payload *assistant.ProcessBatchPayload
@@ -1324,12 +1218,13 @@ func (a *MCPAdapter) toolsCallHandler(ctx context.Context, p *ToolsCallPayload, 
 			return false, serr
 		}
 		final := &ToolsCallResult{
-			Content: []*ContentItem{
-				buildContentItem(a, s),
-			},
+			Content:           []*ContentItem{buildContentItem(a, s)},
 			StructuredContent: structuredContent,
 		}
-		a.log(ctx, "response", map[string]any{"method": "tools/call", "name": p.Name})
+		a.log(ctx, "response", map[string]any{
+			"method": "tools/call",
+			"name":   p.Name,
+		})
 		return false, stream.SendAndClose(ctx, final)
 	case "multi_content":
 		var payload *assistant.MultiContentPayload
@@ -1346,12 +1241,13 @@ func (a *MCPAdapter) toolsCallHandler(ctx context.Context, p *ToolsCallPayload, 
 			return false, serr
 		}
 		final := &ToolsCallResult{
-			Content: []*ContentItem{
-				buildContentItem(a, s),
-			},
+			Content:           []*ContentItem{buildContentItem(a, s)},
 			StructuredContent: structuredContent,
 		}
-		a.log(ctx, "response", map[string]any{"method": "tools/call", "name": p.Name})
+		a.log(ctx, "response", map[string]any{
+			"method": "tools/call",
+			"name":   p.Name,
+		})
 		return false, stream.SendAndClose(ctx, final)
 	case "generate_dpi_spec":
 		var payload *assistant.GenerateDpiSpecPayload
@@ -1383,10 +1279,10 @@ func (a *MCPAdapter) toolsCallHandler(ctx context.Context, p *ToolsCallPayload, 
 			}
 		}
 		{
-			if err := validateMCPPayloadEnum(rawFields, "density", "compact", "comfortable"); err != nil {
+			if err := validateMCPPayloadEnum(rawFields, "platform", "ios", "web"); err != nil {
 				return true, a.sendToolError(ctx, stream, p.Name, toolInputError(err, p.Arguments))
 			}
-			if err := validateMCPPayloadEnum(rawFields, "platform", "ios", "web"); err != nil {
+			if err := validateMCPPayloadEnum(rawFields, "density", "compact", "comfortable"); err != nil {
 				return true, a.sendToolError(ctx, stream, p.Name, toolInputError(err, p.Arguments))
 			}
 		}
@@ -1400,12 +1296,13 @@ func (a *MCPAdapter) toolsCallHandler(ctx context.Context, p *ToolsCallPayload, 
 			return false, serr
 		}
 		final := &ToolsCallResult{
-			Content: []*ContentItem{
-				buildContentItem(a, s),
-			},
+			Content:           []*ContentItem{buildContentItem(a, s)},
 			StructuredContent: structuredContent,
 		}
-		a.log(ctx, "response", map[string]any{"method": "tools/call", "name": p.Name})
+		a.log(ctx, "response", map[string]any{
+			"method": "tools/call",
+			"name":   p.Name,
+		})
 		return false, stream.SendAndClose(ctx, final)
 	case "dispatch_action":
 		var payload *assistant.DispatchActionPayload
@@ -1422,12 +1319,13 @@ func (a *MCPAdapter) toolsCallHandler(ctx context.Context, p *ToolsCallPayload, 
 			return false, serr
 		}
 		final := &ToolsCallResult{
-			Content: []*ContentItem{
-				buildContentItem(a, s),
-			},
+			Content:           []*ContentItem{buildContentItem(a, s)},
 			StructuredContent: structuredContent,
 		}
-		a.log(ctx, "response", map[string]any{"method": "tools/call", "name": p.Name})
+		a.log(ctx, "response", map[string]any{
+			"method": "tools/call",
+			"name":   p.Name,
+		})
 		return false, stream.SendAndClose(ctx, final)
 	default:
 		return false, goa.PermanentError("method_not_found", "Unknown tool: %s", p.Name)

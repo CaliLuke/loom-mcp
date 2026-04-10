@@ -12,6 +12,7 @@ type (
 		// Document identifier
 		DocID string `json:"doc_id"`
 	}
+
 	// SummarizeDocResult defines the JSON result for the helpers.summarize_doc tool.
 	SummarizeDocResult = struct {
 		// Title

@@ -58,10 +58,7 @@ func TestToolSpecsDeterministicTypeRefs(t *testing.T) {
 	var codecs string
 	for _, f := range files {
 		if filepath.ToSlash(f.Path) == filepath.ToSlash("gen/alpha/toolsets/summarize/codecs.go") {
-			//nolint:staticcheck // Tests still inspect the legacy section list while generators migrate to Section.
-			for _, s := range f.SectionTemplates {
-				codecs += s.Source
-			}
+			codecs = testhelpers.FileContent(t, files, filepath.ToSlash("gen/alpha/toolsets/summarize/codecs.go"))
 			break
 		}
 	}

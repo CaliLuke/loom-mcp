@@ -13,14 +13,17 @@ type (
 		ID    string `json:"id"`
 		Value Value  `json:"value"`
 	}
+
 	// EchoResult defines the JSON result for the union.echo tool.
 	EchoResult = struct {
 		// Request identifier
 		ID    string `json:"id"`
 		Value Value  `json:"value"`
 	}
+
 	// ValueNumber is a helper type materialized for nested references.
 	ValueNumber = int32
+
 	// ValueText is a helper type materialized for nested references.
 	ValueText = string
 )

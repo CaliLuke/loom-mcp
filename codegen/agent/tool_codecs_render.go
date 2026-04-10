@@ -1,4 +1,24 @@
-var (
+package codegen
+
+import (
+	"bytes"
+	"text/template"
+
+	"github.com/CaliLuke/loom/codegen"
+)
+
+func toolCodecsSection(data toolCodecsFileData) codegen.Section {
+	return codegen.MustRenderSection("tool-spec-codecs", func() string {
+		tpl := template.Must(template.New("tool-codecs").Parse(toolCodecsTemplateSource))
+		var buf bytes.Buffer
+		if err := tpl.Execute(&buf, data); err != nil {
+			panic(err)
+		}
+		return buf.String()
+	})
+}
+
+const toolCodecsTemplateSource = `var (
 {{- $printed := false }}
 {{- range .Types }}
     {{- if .GenerateCodec }}
@@ -37,7 +57,6 @@ var (
 {{- end }}
 )
 
-{{- /* Emit field descriptions map per type if available */ -}}
 {{- range .Types }}
 {{- if .FieldDescs }}
 var {{ .TypeName }}FieldDescs = map[string]string{
@@ -48,7 +67,6 @@ var {{ .TypeName }}FieldDescs = map[string]string{
 {{- end }}
 {{- end }}
 
-{{- /* Compute whether any type has transport validation to gate helper emission */ -}}
 {{- $hasValidation := false }}
 {{- range .Types }}
     {{- if .TransportValidationSrc }}
@@ -119,7 +137,6 @@ func newValidationError(err error) error {
 }
 {{- end }}
 
-{{- /* Per-type enrichment attaching descriptions for any type with validation (payload or non-payload) */ -}}
 {{- range .Types }}
 {{- if and .FieldDescs .TransportValidationSrc (ne (index .TransportValidationSrc 0) "") }}
 func enrich{{ .TypeName }}ValidationError(err error) error {
@@ -261,3 +278,4 @@ func {{ .Name }}(v {{ .ParamTypeRef }}) {{ .ResultTypeRef }} {
 
 {{- end }}
 {{- end }}
+`

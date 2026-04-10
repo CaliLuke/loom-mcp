@@ -15,32 +15,26 @@ import (
 
 var (
 	// Specs is the static list of tool specs exported by this agent.
-	Specs = []tools.ToolSpec{
-		math.SpecAdd,
-		ops.SpecEcho,
-	}
+
+	Specs = []tools.ToolSpec{math.SpecAdd, ops.SpecEcho}
 
 	// metadata is the static list of policy metadata exported by this agent.
-	metadata = []policy.ToolMetadata{
-		{
-			ID:          tools.Ident("math.add"),
-			Title:       "Add",
-			Description: "Add",
-			Tags:        []string{},
-		},
-		{
-			ID:          tools.Ident("ops.echo"),
-			Title:       "Echo",
-			Description: "Echo",
-			Tags:        []string{},
-		},
-	}
+
+	metadata = []policy.ToolMetadata{{
+		Description: "Add",
+		ID:          tools.Ident("math.add"),
+		Tags:        []string{},
+		Title:       "Add",
+	}, {
+		Description: "Echo",
+		ID:          tools.Ident("ops.echo"),
+		Tags:        []string{},
+		Title:       "Echo",
+	}}
 
 	// names is the static list of exported tool identifiers.
-	names = []tools.Ident{
-		math.Add,
-		ops.Echo,
-	}
+
+	names = []tools.Ident{math.Add, ops.Echo}
 )
 
 // Names returns the tool identifiers exported by this agent.
@@ -76,7 +70,8 @@ func ResultSchema(name tools.Ident) ([]byte, bool) {
 	return nil, false
 }
 
-// AdvertisedSpecs returns the full list of tool specs to advertise to the model.
+// AdvertisedSpecs returns the full list of tool specs to advertise to the
+// model.
 func AdvertisedSpecs() []tools.ToolSpec {
 	return Specs
 }
