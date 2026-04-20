@@ -98,7 +98,11 @@ func TestGeneratedServerSDKCallToolWorks(t *testing.T) {
 
 	firstText, ok := res.Content[0].(*mcp.TextContent)
 	require.True(t, ok)
-	assert.JSONEq(t, `{"sentiment":"positive"}`, firstText.Text)
+	assert.Equal(t, "positive", firstText.Text)
+
+	structured, err := json.Marshal(res.StructuredContent)
+	require.NoError(t, err)
+	assert.JSONEq(t, `{"sentiment":"positive"}`, string(structured))
 }
 
 func TestGeneratedServerSDKReadResourceAndGetPrompt(t *testing.T) {
@@ -170,8 +174,11 @@ func TestGeneratedServerSDKClosedLoopFigmaFlow(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, toolResult.Content, 1)
 
-	firstText, ok := toolResult.Content[0].(*mcp.TextContent)
+	_, ok := toolResult.Content[0].(*mcp.TextContent)
 	require.True(t, ok)
+
+	structured, err := json.Marshal(toolResult.StructuredContent)
+	require.NoError(t, err)
 
 	var spec struct {
 		ScreenTitle     string `json:"screen_title"`
@@ -184,7 +191,7 @@ func TestGeneratedServerSDKClosedLoopFigmaFlow(t *testing.T) {
 			Label string `json:"label"`
 		} `json:"primary_cta"`
 	}
-	require.NoError(t, json.Unmarshal([]byte(firstText.Text), &spec))
+	require.NoError(t, json.Unmarshal(structured, &spec))
 	assert.Equal(t, "Checkout", spec.ScreenTitle)
 	assert.Equal(t, "ios", spec.Platform)
 	assert.Equal(t, "figma://design-system/mobile-checkout", spec.DesignTokensURI)
@@ -208,7 +215,7 @@ func TestGeneratedServerSDKClosedLoopFigmaFlow(t *testing.T) {
 			"screen_title":      spec.ScreenTitle,
 			"framework":         "react",
 			"design_tokens_uri": spec.DesignTokensURI,
-			"dpi_json":          firstText.Text,
+			"dpi_json":          string(structured),
 		},
 	})
 	require.NoError(t, err)

@@ -291,7 +291,7 @@ type mongoCollection struct {
 }
 
 func (c mongoCollection) FindOne(ctx context.Context, filter any, opts ...*options.FindOneOptions) singleResult {
-	return mongoSingleResult{res: c.coll.FindOne(ctx, filter, opts...)}
+	return clientinfra.SingleResult{Res: c.coll.FindOne(ctx, filter, opts...)}
 }
 
 func (c mongoCollection) Find(ctx context.Context, filter any, opts ...*options.FindOptions) (cursor, error) {
@@ -299,7 +299,7 @@ func (c mongoCollection) Find(ctx context.Context, filter any, opts ...*options.
 	if err != nil {
 		return nil, err
 	}
-	return mongoCursor{cur: cur}, nil
+	return clientinfra.Cursor{Cur: cur}, nil
 }
 
 func (c mongoCollection) InsertOne(ctx context.Context, document any, opts ...*options.InsertOneOptions) (*mongodriver.InsertOneResult, error) {
@@ -307,41 +307,5 @@ func (c mongoCollection) InsertOne(ctx context.Context, document any, opts ...*o
 }
 
 func (c mongoCollection) Indexes() indexView {
-	return mongoIndexView{view: c.coll.Indexes()}
-}
-
-type mongoSingleResult struct {
-	res *mongodriver.SingleResult
-}
-
-func (r mongoSingleResult) Decode(val any) error {
-	return r.res.Decode(val)
-}
-
-type mongoCursor struct {
-	cur *mongodriver.Cursor
-}
-
-func (c mongoCursor) Next(ctx context.Context) bool {
-	return c.cur.Next(ctx)
-}
-
-func (c mongoCursor) Decode(val any) error {
-	return c.cur.Decode(val)
-}
-
-func (c mongoCursor) Err() error {
-	return c.cur.Err()
-}
-
-func (c mongoCursor) Close(ctx context.Context) error {
-	return c.cur.Close(ctx)
-}
-
-type mongoIndexView struct {
-	view mongodriver.IndexView
-}
-
-func (v mongoIndexView) CreateOne(ctx context.Context, model mongodriver.IndexModel, opts ...*options.CreateIndexesOptions) (string, error) {
-	return v.view.CreateOne(ctx, model, opts...)
+	return clientinfra.IndexView{View: c.coll.Indexes()}
 }

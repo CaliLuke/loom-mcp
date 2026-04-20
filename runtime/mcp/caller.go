@@ -212,9 +212,12 @@ func normalizeSDKToolResult(res *mcp.CallToolResult) (CallResponse, error) {
 	if res.IsError {
 		return CallResponse{}, ToolCallErrorFromResponse(textParts, res.Content[0])
 	}
-	fallback := any(res.Content[0])
-	if res.StructuredContent != nil {
+	var fallback any
+	switch {
+	case res.StructuredContent != nil:
 		fallback = res.StructuredContent
+	case len(textParts) == 0:
+		fallback = res.Content[0]
 	}
 
 	return NormalizeToolCallResponse(textParts, structured, fallback)

@@ -255,7 +255,7 @@ type mongoCollection struct {
 }
 
 func (c mongoCollection) FindOne(ctx context.Context, filter any, opts ...*options.FindOneOptions) singleResult {
-	return mongoSingleResult{res: c.coll.FindOne(ctx, filter, opts...)}
+	return clientinfra.SingleResult{Res: c.coll.FindOne(ctx, filter, opts...)}
 }
 
 func (c mongoCollection) UpdateOne(ctx context.Context, filter any, update any,
@@ -264,22 +264,5 @@ func (c mongoCollection) UpdateOne(ctx context.Context, filter any, update any,
 }
 
 func (c mongoCollection) Indexes() indexView {
-	return mongoIndexView{view: c.coll.Indexes()}
-}
-
-type mongoSingleResult struct {
-	res *mongodriver.SingleResult
-}
-
-func (r mongoSingleResult) Decode(val any) error {
-	return r.res.Decode(val)
-}
-
-type mongoIndexView struct {
-	view mongodriver.IndexView
-}
-
-func (v mongoIndexView) CreateOne(ctx context.Context, model mongodriver.IndexModel,
-	opts ...*options.CreateIndexesOptions) (string, error) {
-	return v.view.CreateOne(ctx, model, opts...)
+	return clientinfra.IndexView{View: c.coll.Indexes()}
 }

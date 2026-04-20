@@ -68,6 +68,9 @@ func (c Caller) CallTool(ctx context.Context, req mcpruntime.CallRequest) (mcpru
 			merged = &mcppkg.ToolsCallResult{}
 		}
 		merged.Content = append(merged.Content, ev.Content...)
+		if ev.StructuredContent != nil {
+			merged.StructuredContent = ev.StructuredContent
+		}
 		if ev.IsError != nil {
 			merged.IsError = ev.IsError
 		}
@@ -86,8 +89,12 @@ func normalizeToolResult(last *mcppkg.ToolsCallResult) (mcpruntime.CallResponse,
 		}
 	}
 	var fallback any
-	if last.StructuredContent != nil {
-		fallback = last.StructuredContent
+	if len(last.StructuredContent) > 0 {
+		var decoded any
+		if err := json.Unmarshal(last.StructuredContent, &decoded); err != nil {
+			return mcpruntime.CallResponse{}, fmt.Errorf("failed to decode structured content: %w", err)
+		}
+		fallback = decoded
 	} else if len(last.Content) > 0 {
 		fallback = last.Content[0]
 	}

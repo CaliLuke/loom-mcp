@@ -133,5 +133,3 @@ require (
 	google.golang.org/genproto/googleapis/api v0.0.0-20260401024825-9d38bb4040a9 // indirect
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20260401024825-9d38bb4040a9 // indirect
 )
-
-replace github.com/CaliLuke/loom => /Users/luca/code/loom-mono/loom

@@ -95,8 +95,12 @@ func emitCallerNormalizer(stmt *jen.Statement) {
 				),
 			)
 			g.Var().Id("fallback").Any()
-			g.If(jen.Id("last").Dot("StructuredContent").Op("!=").Nil()).Block(
-				jen.Id("fallback").Op("=").Id("last").Dot("StructuredContent"),
+			g.If(jen.Len(jen.Id("last").Dot("StructuredContent")).Op(">").Lit(0)).Block(
+				jen.Var().Id("decoded").Any(),
+				jen.If(jen.Id("err").Op(":=").Qual("encoding/json", "Unmarshal").Call(jen.Id("last").Dot("StructuredContent"), jen.Op("&").Id("decoded")), jen.Id("err").Op("!=").Nil()).Block(
+					jen.Return(jen.Id("mcpruntime").Dot("CallResponse").Values(), jen.Qual("fmt", "Errorf").Call(jen.Lit("failed to decode structured content: %w"), jen.Id("err"))),
+				),
+				jen.Id("fallback").Op("=").Id("decoded"),
 			).Else().If(jen.Len(jen.Id("last").Dot("Content")).Op(">").Lit(0)).Block(
 				jen.Id("fallback").Op("=").Id("last").Dot("Content").Index(jen.Lit(0)),
 			)
@@ -166,6 +170,9 @@ func emitCallerMergeEvents(g *jen.Group) {
 			jen.Id("merged").Op("=").Op("&").Id("mcppkg").Dot("ToolsCallResult").Values(),
 		),
 		jen.Id("merged").Dot("Content").Op("=").Append(jen.Id("merged").Dot("Content"), jen.Id("ev").Dot("Content").Op("...")),
+		jen.If(jen.Id("ev").Dot("StructuredContent").Op("!=").Nil()).Block(
+			jen.Id("merged").Dot("StructuredContent").Op("=").Id("ev").Dot("StructuredContent"),
+		),
 		jen.If(jen.Id("ev").Dot("IsError").Op("!=").Nil()).Block(
 			jen.Id("merged").Dot("IsError").Op("=").Id("ev").Dot("IsError"),
 		),

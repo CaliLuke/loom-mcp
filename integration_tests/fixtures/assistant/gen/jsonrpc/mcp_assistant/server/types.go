@@ -136,38 +136,40 @@ type InitializeResponseBodyResponseBody struct {
 	// MCP protocol version
 	ProtocolVersion string `form:"protocolVersion" json:"protocolVersion" xml:"protocolVersion"`
 	// Server capabilities
-	Capabilities *ServerCapabilitiesResponseBody `form:"capabilities" json:"capabilities" xml:"capabilities"`
+	Capabilities *ServerCapabilitiesResponseBodyResponseBody `form:"capabilities" json:"capabilities" xml:"capabilities"`
 	// Server information
-	ServerInfo *ServerInfoResponseBody `form:"serverInfo" json:"serverInfo" xml:"serverInfo"`
+	ServerInfo *ServerInfoResponseBodyResponseBody `form:"serverInfo" json:"serverInfo" xml:"serverInfo"`
 }
 
-// ServerCapabilitiesResponseBody is used to define fields on response body
-// types.
-type ServerCapabilitiesResponseBody struct {
+// ServerCapabilitiesResponseBodyResponseBody is used to define fields on
+// response body types.
+type ServerCapabilitiesResponseBodyResponseBody struct {
 	// Tool capabilities
-	Tools *ToolsCapabilityResponseBody `form:"tools,omitempty" json:"tools,omitempty" xml:"tools,omitempty"`
+	Tools *ToolsCapabilityResponseBodyResponseBody `form:"tools,omitempty" json:"tools,omitempty" xml:"tools,omitempty"`
 	// Resource capabilities
-	Resources *ResourcesCapabilityResponseBody `form:"resources,omitempty" json:"resources,omitempty" xml:"resources,omitempty"`
+	Resources *ResourcesCapabilityResponseBodyResponseBody `form:"resources,omitempty" json:"resources,omitempty" xml:"resources,omitempty"`
 	// Prompt capabilities
-	Prompts *PromptsCapabilityResponseBody `form:"prompts,omitempty" json:"prompts,omitempty" xml:"prompts,omitempty"`
+	Prompts *PromptsCapabilityResponseBodyResponseBody `form:"prompts,omitempty" json:"prompts,omitempty" xml:"prompts,omitempty"`
 }
 
-// ToolsCapabilityResponseBody is used to define fields on response body types.
-type ToolsCapabilityResponseBody struct {
+// ToolsCapabilityResponseBodyResponseBody is used to define fields on response
+// body types.
+type ToolsCapabilityResponseBodyResponseBody struct {
 }
 
-// ResourcesCapabilityResponseBody is used to define fields on response body
+// ResourcesCapabilityResponseBodyResponseBody is used to define fields on
+// response body types.
+type ResourcesCapabilityResponseBodyResponseBody struct {
+}
+
+// PromptsCapabilityResponseBodyResponseBody is used to define fields on
+// response body types.
+type PromptsCapabilityResponseBodyResponseBody struct {
+}
+
+// ServerInfoResponseBodyResponseBody is used to define fields on response body
 // types.
-type ResourcesCapabilityResponseBody struct {
-}
-
-// PromptsCapabilityResponseBody is used to define fields on response body
-// types.
-type PromptsCapabilityResponseBody struct {
-}
-
-// ServerInfoResponseBody is used to define fields on response body types.
-type ServerInfoResponseBody struct {
+type ServerInfoResponseBodyResponseBody struct {
 	// Server name
 	Name string `form:"name" json:"name" xml:"name"`
 	// Server version
@@ -175,11 +177,11 @@ type ServerInfoResponseBody struct {
 	// Server website URL
 	WebsiteURL *string `form:"websiteUrl,omitempty" json:"websiteUrl,omitempty" xml:"websiteUrl,omitempty"`
 	// Server icons
-	Icons []*IconResponseBody `form:"icons,omitempty" json:"icons,omitempty" xml:"icons,omitempty"`
+	Icons []*IconResponseBodyResponseBody `form:"icons,omitempty" json:"icons,omitempty" xml:"icons,omitempty"`
 }
 
-// IconResponseBody is used to define fields on response body types.
-type IconResponseBody struct {
+// IconResponseBodyResponseBody is used to define fields on response body types.
+type IconResponseBodyResponseBody struct {
 	// Icon source URI
 	Src string `form:"src" json:"src" xml:"src"`
 	// Icon MIME type
@@ -200,11 +202,12 @@ type PingResponseBodyResponseBody struct {
 // types.
 type ToolsListResponseBodyResponseBody struct {
 	// List of available tools
-	Tools []*ToolInfoResponseBody `form:"tools" json:"tools" xml:"tools"`
+	Tools []*ToolInfoResponseBodyResponseBody `form:"tools" json:"tools" xml:"tools"`
 }
 
-// ToolInfoResponseBody is used to define fields on response body types.
-type ToolInfoResponseBody struct {
+// ToolInfoResponseBodyResponseBody is used to define fields on response body
+// types.
+type ToolInfoResponseBodyResponseBody struct {
 	// Tool name
 	Name string `form:"name" json:"name" xml:"name"`
 	// Tool description
@@ -215,22 +218,23 @@ type ToolInfoResponseBody struct {
 	// destructiveHint.
 	Annotations any `form:"annotations,omitempty" json:"annotations,omitempty" xml:"annotations,omitempty"`
 	// Tool icons
-	Icons []*IconResponseBody `form:"icons,omitempty" json:"icons,omitempty" xml:"icons,omitempty"`
+	Icons []*IconResponseBodyResponseBody `form:"icons,omitempty" json:"icons,omitempty" xml:"icons,omitempty"`
 }
 
 // ToolsCallResponseBodyResponseBody is used to define fields on response body
 // types.
 type ToolsCallResponseBodyResponseBody struct {
 	// Tool execution results
-	Content []*ContentItemResponseBody `form:"content" json:"content" xml:"content"`
+	Content []*ContentItemResponseBodyResponseBody `form:"content" json:"content" xml:"content"`
 	// Optional structured result for machine consumers
 	StructuredContent json.RawMessage `form:"structuredContent,omitempty" json:"structuredContent,omitempty" xml:"structuredContent,omitempty"`
 	// Whether the tool encountered an error
 	IsError *bool `form:"isError,omitempty" json:"isError,omitempty" xml:"isError,omitempty"`
 }
 
-// ContentItemResponseBody is used to define fields on response body types.
-type ContentItemResponseBody struct {
+// ContentItemResponseBodyResponseBody is used to define fields on response
+// body types.
+type ContentItemResponseBodyResponseBody struct {
 	// Content type
 	Type string `form:"type" json:"type" xml:"type"`
 	// Text content
@@ -247,11 +251,12 @@ type ContentItemResponseBody struct {
 // body types.
 type ResourcesListResponseBodyResponseBody struct {
 	// List of available resources
-	Resources []*ResourceInfoResponseBody `form:"resources" json:"resources" xml:"resources"`
+	Resources []*ResourceInfoResponseBodyResponseBody `form:"resources" json:"resources" xml:"resources"`
 }
 
-// ResourceInfoResponseBody is used to define fields on response body types.
-type ResourceInfoResponseBody struct {
+// ResourceInfoResponseBodyResponseBody is used to define fields on response
+// body types.
+type ResourceInfoResponseBodyResponseBody struct {
 	// Resource URI
 	URI string `form:"uri" json:"uri" xml:"uri"`
 	// Resource name
@@ -261,18 +266,19 @@ type ResourceInfoResponseBody struct {
 	// Resource MIME type
 	MimeType *string `form:"mimeType,omitempty" json:"mimeType,omitempty" xml:"mimeType,omitempty"`
 	// Resource icons
-	Icons []*IconResponseBody `form:"icons,omitempty" json:"icons,omitempty" xml:"icons,omitempty"`
+	Icons []*IconResponseBodyResponseBody `form:"icons,omitempty" json:"icons,omitempty" xml:"icons,omitempty"`
 }
 
 // ResourcesReadResponseBodyResponseBody is used to define fields on response
 // body types.
 type ResourcesReadResponseBodyResponseBody struct {
 	// Resource contents
-	Contents []*ResourceContentResponseBody `form:"contents" json:"contents" xml:"contents"`
+	Contents []*ResourceContentResponseBodyResponseBody `form:"contents" json:"contents" xml:"contents"`
 }
 
-// ResourceContentResponseBody is used to define fields on response body types.
-type ResourceContentResponseBody struct {
+// ResourceContentResponseBodyResponseBody is used to define fields on response
+// body types.
+type ResourceContentResponseBodyResponseBody struct {
 	// Resource URI
 	URI string `form:"uri" json:"uri" xml:"uri"`
 	// Content MIME type
@@ -287,23 +293,25 @@ type ResourceContentResponseBody struct {
 // body types.
 type PromptsListResponseBodyResponseBody struct {
 	// List of available prompts
-	Prompts []*PromptInfoResponseBody `form:"prompts" json:"prompts" xml:"prompts"`
+	Prompts []*PromptInfoResponseBodyResponseBody `form:"prompts" json:"prompts" xml:"prompts"`
 }
 
-// PromptInfoResponseBody is used to define fields on response body types.
-type PromptInfoResponseBody struct {
+// PromptInfoResponseBodyResponseBody is used to define fields on response body
+// types.
+type PromptInfoResponseBodyResponseBody struct {
 	// Prompt name
 	Name string `form:"name" json:"name" xml:"name"`
 	// Prompt description
 	Description *string `form:"description,omitempty" json:"description,omitempty" xml:"description,omitempty"`
 	// Prompt arguments
-	Arguments []*PromptArgumentResponseBody `form:"arguments,omitempty" json:"arguments,omitempty" xml:"arguments,omitempty"`
+	Arguments []*PromptArgumentResponseBodyResponseBody `form:"arguments,omitempty" json:"arguments,omitempty" xml:"arguments,omitempty"`
 	// Prompt icons
-	Icons []*IconResponseBody `form:"icons,omitempty" json:"icons,omitempty" xml:"icons,omitempty"`
+	Icons []*IconResponseBodyResponseBody `form:"icons,omitempty" json:"icons,omitempty" xml:"icons,omitempty"`
 }
 
-// PromptArgumentResponseBody is used to define fields on response body types.
-type PromptArgumentResponseBody struct {
+// PromptArgumentResponseBodyResponseBody is used to define fields on response
+// body types.
+type PromptArgumentResponseBodyResponseBody struct {
 	// Argument name
 	Name string `form:"name" json:"name" xml:"name"`
 	// Argument description
@@ -318,19 +326,21 @@ type PromptsGetResponseBodyResponseBody struct {
 	// Prompt description
 	Description *string `form:"description,omitempty" json:"description,omitempty" xml:"description,omitempty"`
 	// Prompt messages
-	Messages []*PromptMessageResponseBody `form:"messages" json:"messages" xml:"messages"`
+	Messages []*PromptMessageResponseBodyResponseBody `form:"messages" json:"messages" xml:"messages"`
 }
 
-// PromptMessageResponseBody is used to define fields on response body types.
-type PromptMessageResponseBody struct {
+// PromptMessageResponseBodyResponseBody is used to define fields on response
+// body types.
+type PromptMessageResponseBodyResponseBody struct {
 	// Message role
 	Role string `form:"role" json:"role" xml:"role"`
 	// Message content
-	Content *MessageContentResponseBody `form:"content" json:"content" xml:"content"`
+	Content *MessageContentResponseBodyResponseBody `form:"content" json:"content" xml:"content"`
 }
 
-// MessageContentResponseBody is used to define fields on response body types.
-type MessageContentResponseBody struct {
+// MessageContentResponseBodyResponseBody is used to define fields on response
+// body types.
+type MessageContentResponseBodyResponseBody struct {
 	// Content type
 	Type string `form:"type" json:"type" xml:"type"`
 	// Text content
@@ -347,7 +357,7 @@ type MessageContentResponseBody struct {
 // body types.
 type EventsStreamResponseBodyResponseBody struct {
 	// Tool execution results
-	Content []*ContentItemResponseBody `form:"content" json:"content" xml:"content"`
+	Content []*ContentItemResponseBodyResponseBody `form:"content" json:"content" xml:"content"`
 	// Whether the tool encountered an error
 	IsError *bool `form:"isError,omitempty" json:"isError,omitempty" xml:"isError,omitempty"`
 }
@@ -385,10 +395,10 @@ func NewInitializeResponseBody(res *mcpassistant.InitializeResult) *InitializeRe
 		ProtocolVersion: res.ProtocolVersion,
 	}
 	if res.Capabilities != nil {
-		body.Capabilities = marshalMcpassistantServerCapabilitiesToServerCapabilitiesResponseBody(res.Capabilities)
+		body.Capabilities = marshalMcpassistantServerCapabilitiesToServerCapabilitiesResponseBodyResponseBody(res.Capabilities)
 	}
 	if res.ServerInfo != nil {
-		body.ServerInfo = marshalMcpassistantServerInfoToServerInfoResponseBody(res.ServerInfo)
+		body.ServerInfo = marshalMcpassistantServerInfoToServerInfoResponseBodyResponseBody(res.ServerInfo)
 	}
 	return body
 }
@@ -407,16 +417,16 @@ func NewPingResponseBody(res *mcpassistant.PingResult) *PingResponseBody {
 func NewToolsListResponseBody(res *mcpassistant.ToolsListResult) *ToolsListResponseBody {
 	body := &ToolsListResponseBody{}
 	if res.Tools != nil {
-		body.Tools = make([]*ToolInfoResponseBody, len(res.Tools))
+		body.Tools = make([]*ToolInfoResponseBodyResponseBody, len(res.Tools))
 		for i, val := range res.Tools {
 			if val == nil {
 				body.Tools[i] = nil
 				continue
 			}
-			body.Tools[i] = marshalMcpassistantToolInfoToToolInfoResponseBody(val)
+			body.Tools[i] = marshalMcpassistantToolInfoToToolInfoResponseBodyResponseBody(val)
 		}
 	} else {
-		body.Tools = []*ToolInfoResponseBody{}
+		body.Tools = []*ToolInfoResponseBodyResponseBody{}
 	}
 	return body
 }
@@ -429,16 +439,16 @@ func NewToolsCallResponseBody(res *mcpassistant.ToolsCallResult) *ToolsCallRespo
 		IsError:           res.IsError,
 	}
 	if res.Content != nil {
-		body.Content = make([]*ContentItemResponseBody, len(res.Content))
+		body.Content = make([]*ContentItemResponseBodyResponseBody, len(res.Content))
 		for i, val := range res.Content {
 			if val == nil {
 				body.Content[i] = nil
 				continue
 			}
-			body.Content[i] = marshalMcpassistantContentItemToContentItemResponseBody(val)
+			body.Content[i] = marshalMcpassistantContentItemToContentItemResponseBodyResponseBody(val)
 		}
 	} else {
-		body.Content = []*ContentItemResponseBody{}
+		body.Content = []*ContentItemResponseBodyResponseBody{}
 	}
 	return body
 }
@@ -448,16 +458,16 @@ func NewToolsCallResponseBody(res *mcpassistant.ToolsCallResult) *ToolsCallRespo
 func NewResourcesListResponseBody(res *mcpassistant.ResourcesListResult) *ResourcesListResponseBody {
 	body := &ResourcesListResponseBody{}
 	if res.Resources != nil {
-		body.Resources = make([]*ResourceInfoResponseBody, len(res.Resources))
+		body.Resources = make([]*ResourceInfoResponseBodyResponseBody, len(res.Resources))
 		for i, val := range res.Resources {
 			if val == nil {
 				body.Resources[i] = nil
 				continue
 			}
-			body.Resources[i] = marshalMcpassistantResourceInfoToResourceInfoResponseBody(val)
+			body.Resources[i] = marshalMcpassistantResourceInfoToResourceInfoResponseBodyResponseBody(val)
 		}
 	} else {
-		body.Resources = []*ResourceInfoResponseBody{}
+		body.Resources = []*ResourceInfoResponseBodyResponseBody{}
 	}
 	return body
 }
@@ -467,16 +477,16 @@ func NewResourcesListResponseBody(res *mcpassistant.ResourcesListResult) *Resour
 func NewResourcesReadResponseBody(res *mcpassistant.ResourcesReadResult) *ResourcesReadResponseBody {
 	body := &ResourcesReadResponseBody{}
 	if res.Contents != nil {
-		body.Contents = make([]*ResourceContentResponseBody, len(res.Contents))
+		body.Contents = make([]*ResourceContentResponseBodyResponseBody, len(res.Contents))
 		for i, val := range res.Contents {
 			if val == nil {
 				body.Contents[i] = nil
 				continue
 			}
-			body.Contents[i] = marshalMcpassistantResourceContentToResourceContentResponseBody(val)
+			body.Contents[i] = marshalMcpassistantResourceContentToResourceContentResponseBodyResponseBody(val)
 		}
 	} else {
-		body.Contents = []*ResourceContentResponseBody{}
+		body.Contents = []*ResourceContentResponseBodyResponseBody{}
 	}
 	return body
 }
@@ -486,16 +496,16 @@ func NewResourcesReadResponseBody(res *mcpassistant.ResourcesReadResult) *Resour
 func NewPromptsListResponseBody(res *mcpassistant.PromptsListResult) *PromptsListResponseBody {
 	body := &PromptsListResponseBody{}
 	if res.Prompts != nil {
-		body.Prompts = make([]*PromptInfoResponseBody, len(res.Prompts))
+		body.Prompts = make([]*PromptInfoResponseBodyResponseBody, len(res.Prompts))
 		for i, val := range res.Prompts {
 			if val == nil {
 				body.Prompts[i] = nil
 				continue
 			}
-			body.Prompts[i] = marshalMcpassistantPromptInfoToPromptInfoResponseBody(val)
+			body.Prompts[i] = marshalMcpassistantPromptInfoToPromptInfoResponseBodyResponseBody(val)
 		}
 	} else {
-		body.Prompts = []*PromptInfoResponseBody{}
+		body.Prompts = []*PromptInfoResponseBodyResponseBody{}
 	}
 	return body
 }
@@ -507,16 +517,16 @@ func NewPromptsGetResponseBody(res *mcpassistant.PromptsGetResult) *PromptsGetRe
 		Description: res.Description,
 	}
 	if res.Messages != nil {
-		body.Messages = make([]*PromptMessageResponseBody, len(res.Messages))
+		body.Messages = make([]*PromptMessageResponseBodyResponseBody, len(res.Messages))
 		for i, val := range res.Messages {
 			if val == nil {
 				body.Messages[i] = nil
 				continue
 			}
-			body.Messages[i] = marshalMcpassistantPromptMessageToPromptMessageResponseBody(val)
+			body.Messages[i] = marshalMcpassistantPromptMessageToPromptMessageResponseBodyResponseBody(val)
 		}
 	} else {
-		body.Messages = []*PromptMessageResponseBody{}
+		body.Messages = []*PromptMessageResponseBodyResponseBody{}
 	}
 	return body
 }
@@ -528,16 +538,16 @@ func NewEventsStreamResponseBody(res *mcpassistant.EventsStreamResult) *EventsSt
 		IsError: res.IsError,
 	}
 	if res.Content != nil {
-		body.Content = make([]*ContentItemResponseBody, len(res.Content))
+		body.Content = make([]*ContentItemResponseBodyResponseBody, len(res.Content))
 		for i, val := range res.Content {
 			if val == nil {
 				body.Content[i] = nil
 				continue
 			}
-			body.Content[i] = marshalMcpassistantContentItemToContentItemResponseBody(val)
+			body.Content[i] = marshalMcpassistantContentItemToContentItemResponseBodyResponseBody(val)
 		}
 	} else {
-		body.Content = []*ContentItemResponseBody{}
+		body.Content = []*ContentItemResponseBodyResponseBody{}
 	}
 	return body
 }

@@ -1342,10 +1342,10 @@ func DecodeDispatchActionResponse(decoder func(*http.Response) loomhttp.Decoder,
 		res := NewDispatchActionResultOK(&body)
 		return res, nil
 	}
-} // unmarshalDesignTokenGroupResponseBodyToAssistantDesignTokenGroup builds a
-// value of type *assistant.DesignTokenGroup from a value of type
-// *DesignTokenGroupResponseBody.
-func unmarshalDesignTokenGroupResponseBodyToAssistantDesignTokenGroup(v *DesignTokenGroupResponseBody) *assistant.DesignTokenGroup {
+} // unmarshalDesignTokenGroupResponseBodyResponseBodyToAssistantDesignTokenGroup
+// builds a value of type *assistant.DesignTokenGroup from a value of type
+// *DesignTokenGroupResponseBodyResponseBody.
+func unmarshalDesignTokenGroupResponseBodyResponseBodyToAssistantDesignTokenGroup(v *DesignTokenGroupResponseBodyResponseBody) *assistant.DesignTokenGroup {
 	if v == nil {
 		return nil
 	}
@@ -1366,9 +1366,10 @@ func unmarshalDesignTokenGroupResponseBodyToAssistantDesignTokenGroup(v *DesignT
 	return res
 }
 
-// unmarshalDPIViewportResponseBodyToAssistantDPIViewport builds a value of
-// type *assistant.DPIViewport from a value of type *DPIViewportResponseBody.
-func unmarshalDPIViewportResponseBodyToAssistantDPIViewport(v *DPIViewportResponseBody) *assistant.DPIViewport {
+// unmarshalDPIViewportResponseBodyResponseBodyToAssistantDPIViewport builds a
+// value of type *assistant.DPIViewport from a value of type
+// *DPIViewportResponseBodyResponseBody.
+func unmarshalDPIViewportResponseBodyResponseBodyToAssistantDPIViewport(v *DPIViewportResponseBodyResponseBody) *assistant.DPIViewport {
 	if v == nil {
 		return nil
 	}
@@ -1380,9 +1381,10 @@ func unmarshalDPIViewportResponseBodyToAssistantDPIViewport(v *DPIViewportRespon
 	return res
 }
 
-// unmarshalDPISectionResponseBodyToAssistantDPISection builds a value of type
-// *assistant.DPISection from a value of type *DPISectionResponseBody.
-func unmarshalDPISectionResponseBodyToAssistantDPISection(v *DPISectionResponseBody) *assistant.DPISection {
+// unmarshalDPISectionResponseBodyResponseBodyToAssistantDPISection builds a
+// value of type *assistant.DPISection from a value of type
+// *DPISectionResponseBodyResponseBody.
+func unmarshalDPISectionResponseBodyResponseBodyToAssistantDPISection(v *DPISectionResponseBodyResponseBody) *assistant.DPISection {
 	if v == nil {
 		return nil
 	}
@@ -1398,10 +1400,10 @@ func unmarshalDPISectionResponseBodyToAssistantDPISection(v *DPISectionResponseB
 	return res
 }
 
-// unmarshalDPICallToActionResponseBodyToAssistantDPICallToAction builds a
-// value of type *assistant.DPICallToAction from a value of type
-// *DPICallToActionResponseBody.
-func unmarshalDPICallToActionResponseBodyToAssistantDPICallToAction(v *DPICallToActionResponseBody) *assistant.DPICallToAction {
+// unmarshalDPICallToActionResponseBodyResponseBodyToAssistantDPICallToAction
+// builds a value of type *assistant.DPICallToAction from a value of type
+// *DPICallToActionResponseBodyResponseBody.
+func unmarshalDPICallToActionResponseBodyResponseBodyToAssistantDPICallToAction(v *DPICallToActionResponseBodyResponseBody) *assistant.DPICallToAction {
 	if v == nil {
 		return nil
 	}

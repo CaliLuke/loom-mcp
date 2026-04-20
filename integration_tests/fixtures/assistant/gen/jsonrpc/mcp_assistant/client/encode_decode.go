@@ -1108,31 +1108,31 @@ func marshalIconRequestBodyRequestBodyRequestBodyRequestBodyToMcpassistantIcon(v
 	return res
 }
 
-// unmarshalServerCapabilitiesResponseBodyToMcpassistantServerCapabilities
+// unmarshalServerCapabilitiesResponseBodyResponseBodyToMcpassistantServerCapabilities
 // builds a value of type *mcpassistant.ServerCapabilities from a value of type
-// *ServerCapabilitiesResponseBody.
-func unmarshalServerCapabilitiesResponseBodyToMcpassistantServerCapabilities(v *ServerCapabilitiesResponseBody) *mcpassistant.ServerCapabilities {
+// *ServerCapabilitiesResponseBodyResponseBody.
+func unmarshalServerCapabilitiesResponseBodyResponseBodyToMcpassistantServerCapabilities(v *ServerCapabilitiesResponseBodyResponseBody) *mcpassistant.ServerCapabilities {
 	if v == nil {
 		return nil
 	}
 	res := &mcpassistant.ServerCapabilities{}
 	if v.Tools != nil {
-		res.Tools = unmarshalToolsCapabilityResponseBodyToMcpassistantToolsCapability(v.Tools)
+		res.Tools = unmarshalToolsCapabilityResponseBodyResponseBodyToMcpassistantToolsCapability(v.Tools)
 	}
 	if v.Resources != nil {
-		res.Resources = unmarshalResourcesCapabilityResponseBodyToMcpassistantResourcesCapability(v.Resources)
+		res.Resources = unmarshalResourcesCapabilityResponseBodyResponseBodyToMcpassistantResourcesCapability(v.Resources)
 	}
 	if v.Prompts != nil {
-		res.Prompts = unmarshalPromptsCapabilityResponseBodyToMcpassistantPromptsCapability(v.Prompts)
+		res.Prompts = unmarshalPromptsCapabilityResponseBodyResponseBodyToMcpassistantPromptsCapability(v.Prompts)
 	}
 
 	return res
 }
 
-// unmarshalToolsCapabilityResponseBodyToMcpassistantToolsCapability builds a
-// value of type *mcpassistant.ToolsCapability from a value of type
-// *ToolsCapabilityResponseBody.
-func unmarshalToolsCapabilityResponseBodyToMcpassistantToolsCapability(v *ToolsCapabilityResponseBody) *mcpassistant.ToolsCapability {
+// unmarshalToolsCapabilityResponseBodyResponseBodyToMcpassistantToolsCapability
+// builds a value of type *mcpassistant.ToolsCapability from a value of type
+// *ToolsCapabilityResponseBodyResponseBody.
+func unmarshalToolsCapabilityResponseBodyResponseBodyToMcpassistantToolsCapability(v *ToolsCapabilityResponseBodyResponseBody) *mcpassistant.ToolsCapability {
 	if v == nil {
 		return nil
 	}
@@ -1141,10 +1141,10 @@ func unmarshalToolsCapabilityResponseBodyToMcpassistantToolsCapability(v *ToolsC
 	return res
 }
 
-// unmarshalResourcesCapabilityResponseBodyToMcpassistantResourcesCapability
+// unmarshalResourcesCapabilityResponseBodyResponseBodyToMcpassistantResourcesCapability
 // builds a value of type *mcpassistant.ResourcesCapability from a value of
-// type *ResourcesCapabilityResponseBody.
-func unmarshalResourcesCapabilityResponseBodyToMcpassistantResourcesCapability(v *ResourcesCapabilityResponseBody) *mcpassistant.ResourcesCapability {
+// type *ResourcesCapabilityResponseBodyResponseBody.
+func unmarshalResourcesCapabilityResponseBodyResponseBodyToMcpassistantResourcesCapability(v *ResourcesCapabilityResponseBodyResponseBody) *mcpassistant.ResourcesCapability {
 	if v == nil {
 		return nil
 	}
@@ -1153,10 +1153,10 @@ func unmarshalResourcesCapabilityResponseBodyToMcpassistantResourcesCapability(v
 	return res
 }
 
-// unmarshalPromptsCapabilityResponseBodyToMcpassistantPromptsCapability builds
-// a value of type *mcpassistant.PromptsCapability from a value of type
-// *PromptsCapabilityResponseBody.
-func unmarshalPromptsCapabilityResponseBodyToMcpassistantPromptsCapability(v *PromptsCapabilityResponseBody) *mcpassistant.PromptsCapability {
+// unmarshalPromptsCapabilityResponseBodyResponseBodyToMcpassistantPromptsCapability
+// builds a value of type *mcpassistant.PromptsCapability from a value of type
+// *PromptsCapabilityResponseBodyResponseBody.
+func unmarshalPromptsCapabilityResponseBodyResponseBodyToMcpassistantPromptsCapability(v *PromptsCapabilityResponseBodyResponseBody) *mcpassistant.PromptsCapability {
 	if v == nil {
 		return nil
 	}
@@ -1165,9 +1165,10 @@ func unmarshalPromptsCapabilityResponseBodyToMcpassistantPromptsCapability(v *Pr
 	return res
 }
 
-// unmarshalServerInfoResponseBodyToMcpassistantServerInfo builds a value of
-// type *mcpassistant.ServerInfo from a value of type *ServerInfoResponseBody.
-func unmarshalServerInfoResponseBodyToMcpassistantServerInfo(v *ServerInfoResponseBody) *mcpassistant.ServerInfo {
+// unmarshalServerInfoResponseBodyResponseBodyToMcpassistantServerInfo builds a
+// value of type *mcpassistant.ServerInfo from a value of type
+// *ServerInfoResponseBodyResponseBody.
+func unmarshalServerInfoResponseBodyResponseBodyToMcpassistantServerInfo(v *ServerInfoResponseBodyResponseBody) *mcpassistant.ServerInfo {
 	if v == nil {
 		return nil
 	}
@@ -1183,16 +1184,16 @@ func unmarshalServerInfoResponseBodyToMcpassistantServerInfo(v *ServerInfoRespon
 				res.Icons[i] = nil
 				continue
 			}
-			res.Icons[i] = unmarshalIconResponseBodyToMcpassistantIcon(val)
+			res.Icons[i] = unmarshalIconResponseBodyResponseBodyToMcpassistantIcon(val)
 		}
 	}
 
 	return res
 }
 
-// unmarshalIconResponseBodyToMcpassistantIcon builds a value of type
-// *mcpassistant.Icon from a value of type *IconResponseBody.
-func unmarshalIconResponseBodyToMcpassistantIcon(v *IconResponseBody) *mcpassistant.Icon {
+// unmarshalIconResponseBodyResponseBodyToMcpassistantIcon builds a value of
+// type *mcpassistant.Icon from a value of type *IconResponseBodyResponseBody.
+func unmarshalIconResponseBodyResponseBodyToMcpassistantIcon(v *IconResponseBodyResponseBody) *mcpassistant.Icon {
 	if v == nil {
 		return nil
 	}
@@ -1211,9 +1212,10 @@ func unmarshalIconResponseBodyToMcpassistantIcon(v *IconResponseBody) *mcpassist
 	return res
 }
 
-// unmarshalToolInfoResponseBodyToMcpassistantToolInfo builds a value of type
-// *mcpassistant.ToolInfo from a value of type *ToolInfoResponseBody.
-func unmarshalToolInfoResponseBodyToMcpassistantToolInfo(v *ToolInfoResponseBody) *mcpassistant.ToolInfo {
+// unmarshalToolInfoResponseBodyResponseBodyToMcpassistantToolInfo builds a
+// value of type *mcpassistant.ToolInfo from a value of type
+// *ToolInfoResponseBodyResponseBody.
+func unmarshalToolInfoResponseBodyResponseBodyToMcpassistantToolInfo(v *ToolInfoResponseBodyResponseBody) *mcpassistant.ToolInfo {
 	if v == nil {
 		return nil
 	}
@@ -1230,16 +1232,17 @@ func unmarshalToolInfoResponseBodyToMcpassistantToolInfo(v *ToolInfoResponseBody
 				res.Icons[i] = nil
 				continue
 			}
-			res.Icons[i] = unmarshalIconResponseBodyToMcpassistantIcon(val)
+			res.Icons[i] = unmarshalIconResponseBodyResponseBodyToMcpassistantIcon(val)
 		}
 	}
 
 	return res
 }
 
-// unmarshalContentItemResponseBodyToMcpassistantContentItem builds a value of
-// type *mcpassistant.ContentItem from a value of type *ContentItemResponseBody.
-func unmarshalContentItemResponseBodyToMcpassistantContentItem(v *ContentItemResponseBody) *mcpassistant.ContentItem {
+// unmarshalContentItemResponseBodyResponseBodyToMcpassistantContentItem builds
+// a value of type *mcpassistant.ContentItem from a value of type
+// *ContentItemResponseBodyResponseBody.
+func unmarshalContentItemResponseBodyResponseBodyToMcpassistantContentItem(v *ContentItemResponseBodyResponseBody) *mcpassistant.ContentItem {
 	if v == nil {
 		return nil
 	}
@@ -1254,10 +1257,10 @@ func unmarshalContentItemResponseBodyToMcpassistantContentItem(v *ContentItemRes
 	return res
 }
 
-// unmarshalResourceInfoResponseBodyToMcpassistantResourceInfo builds a value
-// of type *mcpassistant.ResourceInfo from a value of type
-// *ResourceInfoResponseBody.
-func unmarshalResourceInfoResponseBodyToMcpassistantResourceInfo(v *ResourceInfoResponseBody) *mcpassistant.ResourceInfo {
+// unmarshalResourceInfoResponseBodyResponseBodyToMcpassistantResourceInfo
+// builds a value of type *mcpassistant.ResourceInfo from a value of type
+// *ResourceInfoResponseBodyResponseBody.
+func unmarshalResourceInfoResponseBodyResponseBodyToMcpassistantResourceInfo(v *ResourceInfoResponseBodyResponseBody) *mcpassistant.ResourceInfo {
 	if v == nil {
 		return nil
 	}
@@ -1274,17 +1277,17 @@ func unmarshalResourceInfoResponseBodyToMcpassistantResourceInfo(v *ResourceInfo
 				res.Icons[i] = nil
 				continue
 			}
-			res.Icons[i] = unmarshalIconResponseBodyToMcpassistantIcon(val)
+			res.Icons[i] = unmarshalIconResponseBodyResponseBodyToMcpassistantIcon(val)
 		}
 	}
 
 	return res
 }
 
-// unmarshalResourceContentResponseBodyToMcpassistantResourceContent builds a
-// value of type *mcpassistant.ResourceContent from a value of type
-// *ResourceContentResponseBody.
-func unmarshalResourceContentResponseBodyToMcpassistantResourceContent(v *ResourceContentResponseBody) *mcpassistant.ResourceContent {
+// unmarshalResourceContentResponseBodyResponseBodyToMcpassistantResourceContent
+// builds a value of type *mcpassistant.ResourceContent from a value of type
+// *ResourceContentResponseBodyResponseBody.
+func unmarshalResourceContentResponseBodyResponseBodyToMcpassistantResourceContent(v *ResourceContentResponseBodyResponseBody) *mcpassistant.ResourceContent {
 	if v == nil {
 		return nil
 	}
@@ -1298,9 +1301,10 @@ func unmarshalResourceContentResponseBodyToMcpassistantResourceContent(v *Resour
 	return res
 }
 
-// unmarshalPromptInfoResponseBodyToMcpassistantPromptInfo builds a value of
-// type *mcpassistant.PromptInfo from a value of type *PromptInfoResponseBody.
-func unmarshalPromptInfoResponseBodyToMcpassistantPromptInfo(v *PromptInfoResponseBody) *mcpassistant.PromptInfo {
+// unmarshalPromptInfoResponseBodyResponseBodyToMcpassistantPromptInfo builds a
+// value of type *mcpassistant.PromptInfo from a value of type
+// *PromptInfoResponseBodyResponseBody.
+func unmarshalPromptInfoResponseBodyResponseBodyToMcpassistantPromptInfo(v *PromptInfoResponseBodyResponseBody) *mcpassistant.PromptInfo {
 	if v == nil {
 		return nil
 	}
@@ -1315,7 +1319,7 @@ func unmarshalPromptInfoResponseBodyToMcpassistantPromptInfo(v *PromptInfoRespon
 				res.Arguments[i] = nil
 				continue
 			}
-			res.Arguments[i] = unmarshalPromptArgumentResponseBodyToMcpassistantPromptArgument(val)
+			res.Arguments[i] = unmarshalPromptArgumentResponseBodyResponseBodyToMcpassistantPromptArgument(val)
 		}
 	}
 	if v.Icons != nil {
@@ -1325,17 +1329,17 @@ func unmarshalPromptInfoResponseBodyToMcpassistantPromptInfo(v *PromptInfoRespon
 				res.Icons[i] = nil
 				continue
 			}
-			res.Icons[i] = unmarshalIconResponseBodyToMcpassistantIcon(val)
+			res.Icons[i] = unmarshalIconResponseBodyResponseBodyToMcpassistantIcon(val)
 		}
 	}
 
 	return res
 }
 
-// unmarshalPromptArgumentResponseBodyToMcpassistantPromptArgument builds a
-// value of type *mcpassistant.PromptArgument from a value of type
-// *PromptArgumentResponseBody.
-func unmarshalPromptArgumentResponseBodyToMcpassistantPromptArgument(v *PromptArgumentResponseBody) *mcpassistant.PromptArgument {
+// unmarshalPromptArgumentResponseBodyResponseBodyToMcpassistantPromptArgument
+// builds a value of type *mcpassistant.PromptArgument from a value of type
+// *PromptArgumentResponseBodyResponseBody.
+func unmarshalPromptArgumentResponseBodyResponseBodyToMcpassistantPromptArgument(v *PromptArgumentResponseBodyResponseBody) *mcpassistant.PromptArgument {
 	if v == nil {
 		return nil
 	}
@@ -1348,25 +1352,25 @@ func unmarshalPromptArgumentResponseBodyToMcpassistantPromptArgument(v *PromptAr
 	return res
 }
 
-// unmarshalPromptMessageResponseBodyToMcpassistantPromptMessage builds a value
-// of type *mcpassistant.PromptMessage from a value of type
-// *PromptMessageResponseBody.
-func unmarshalPromptMessageResponseBodyToMcpassistantPromptMessage(v *PromptMessageResponseBody) *mcpassistant.PromptMessage {
+// unmarshalPromptMessageResponseBodyResponseBodyToMcpassistantPromptMessage
+// builds a value of type *mcpassistant.PromptMessage from a value of type
+// *PromptMessageResponseBodyResponseBody.
+func unmarshalPromptMessageResponseBodyResponseBodyToMcpassistantPromptMessage(v *PromptMessageResponseBodyResponseBody) *mcpassistant.PromptMessage {
 	if v == nil {
 		return nil
 	}
 	res := &mcpassistant.PromptMessage{
 		Role: *v.Role,
 	}
-	res.Content = unmarshalMessageContentResponseBodyToMcpassistantMessageContent(v.Content)
+	res.Content = unmarshalMessageContentResponseBodyResponseBodyToMcpassistantMessageContent(v.Content)
 
 	return res
 }
 
-// unmarshalMessageContentResponseBodyToMcpassistantMessageContent builds a
-// value of type *mcpassistant.MessageContent from a value of type
-// *MessageContentResponseBody.
-func unmarshalMessageContentResponseBodyToMcpassistantMessageContent(v *MessageContentResponseBody) *mcpassistant.MessageContent {
+// unmarshalMessageContentResponseBodyResponseBodyToMcpassistantMessageContent
+// builds a value of type *mcpassistant.MessageContent from a value of type
+// *MessageContentResponseBodyResponseBody.
+func unmarshalMessageContentResponseBodyResponseBodyToMcpassistantMessageContent(v *MessageContentResponseBodyResponseBody) *mcpassistant.MessageContent {
 	if v == nil {
 		return nil
 	}

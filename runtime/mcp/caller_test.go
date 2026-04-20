@@ -121,6 +121,23 @@ func TestNormalizeSDKToolResultConcatenatesTextAcrossAllContentItems(t *testing.
 	assert.Equal(t, "text", structured[1]["type"])
 }
 
+func TestNormalizeSDKToolResultReturnsPlainTextAsStringWhenNotJSON(t *testing.T) {
+	t.Parallel()
+
+	resp, err := normalizeSDKToolResult(&sdkmcp.CallToolResult{
+		Content: []sdkmcp.Content{
+			&sdkmcp.TextContent{Text: "hello "},
+			&sdkmcp.TextContent{Text: "world"},
+			&sdkmcp.TextContent{Text: "!"},
+		},
+	})
+	require.NoError(t, err)
+
+	var result string
+	require.NoError(t, json.Unmarshal(resp.Result, &result))
+	assert.Equal(t, "hello world!", result)
+}
+
 func TestNormalizeSDKToolResultFallsBackToStructuredItemWhenNoTextExists(t *testing.T) {
 	t.Parallel()
 

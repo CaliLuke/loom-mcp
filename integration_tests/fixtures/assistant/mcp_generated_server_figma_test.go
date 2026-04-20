@@ -42,11 +42,14 @@ func TestGeneratedSDKServerClosedLoopFigmaFlow(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, toolResult.Content, 1)
 
-	textContent, ok := toolResult.Content[0].(*sdkmcp.TextContent)
+	_, ok := toolResult.Content[0].(*sdkmcp.TextContent)
 	require.True(t, ok)
 
+	structured, err := json.Marshal(toolResult.StructuredContent)
+	require.NoError(t, err)
+
 	var spec assistant.DPISpec
-	require.NoError(t, json.Unmarshal([]byte(textContent.Text), &spec))
+	require.NoError(t, json.Unmarshal(structured, &spec))
 	assert.Equal(t, "Checkout", spec.ScreenTitle)
 	assert.Equal(t, "ios", spec.Platform)
 	assert.Equal(t, 390, spec.Viewport.Width)
@@ -73,7 +76,7 @@ func TestGeneratedSDKServerClosedLoopFigmaFlow(t *testing.T) {
 			"screen_title":      spec.ScreenTitle,
 			"framework":         "react",
 			"design_tokens_uri": spec.DesignTokensURI,
-			"dpi_json":          textContent.Text,
+			"dpi_json":          string(structured),
 		},
 	})
 	require.NoError(t, err)

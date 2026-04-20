@@ -165,10 +165,12 @@ scenarios:
         stream_expect:
           min_events: 1
           events:
-            - event: message
+            - event: response
               data:
-                error:
-                  code: -32602
+                result:
+                  isError: true
+                  content:
+                    - type: text
 
   - name: tool_call_invalid_name
     defaults:
@@ -206,11 +208,12 @@ scenarios:
         stream_expect:
           min_events: 1
           events:
-            - event: message
+            - event: response
               data:
-                error:
-                  code: -32602
-                  message: "Missing required field: text"
+                result:
+                  isError: true
+                  content:
+                    - type: text
 
   - name: tool_call_invalid_arg_type
     defaults:
@@ -228,9 +231,12 @@ scenarios:
         stream_expect:
           min_events: 1
           events:
-            - event: message
+            - event: response
               data:
-                error: { code: -32602 }
+                result:
+                  isError: true
+                  content:
+                    - type: text
 
   - name: tool_call_invalid_enum
     defaults:
@@ -248,11 +254,12 @@ scenarios:
         stream_expect:
           min_events: 1
           events:
-            - event: message
+            - event: response
               data:
-                error:
-                  code: -32602
-                  message: "Invalid value for format"
+                result:
+                  isError: true
+                  content:
+                    - type: text
 
   - name: tool_call_malformed_arguments
     defaults:
@@ -270,9 +277,12 @@ scenarios:
         stream_expect:
           min_events: 1
           events:
-            - event: message
+            - event: response
               data:
-                error: { code: -32602 }
+                result:
+                  isError: true
+                  content:
+                    - type: text
 
   - name: tool_process_batch_invalid_enum
     defaults:
@@ -290,11 +300,12 @@ scenarios:
         stream_expect:
           min_events: 1
           events:
-            - event: message
+            - event: response
               data:
-                error:
-                  code: -32602
-                  message: "Invalid value for format"
+                result:
+                  isError: true
+                  content:
+                    - type: text
 
   - name: tool_process_batch_json
     defaults:
