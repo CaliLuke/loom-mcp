@@ -3,6 +3,7 @@
 `loom-mcp` is the home for the agent, MCP, and registry framework in this repository.
 
 It combines:
+
 - a Loom-powered design DSL for describing agents, toolsets, MCP servers, and registries,
 - code generation driven by `github.com/CaliLuke/loom`,
 - a runtime for planning, execution, streaming, memory, and durable workflows.
@@ -12,6 +13,7 @@ It combines:
 This repository has been rehomed and detached from the original fork network to prepare for a fresh release line.
 
 Two facts are important right now:
+
 - The repository name is `loom-mcp`.
 - The Go module path is `github.com/CaliLuke/loom-mcp`.
 
@@ -30,13 +32,15 @@ Repo identity and module identity are now aligned.
 ## Dependencies
 
 This repo currently targets:
-- `github.com/CaliLuke/loom v1.0.2`
-- Go `1.25.5`
+
+- `github.com/CaliLuke/loom v1.0.10`
+- `github.com/modelcontextprotocol/go-sdk v1.5.0`
+- Go `1.26.1`
 
 The standard CLI for generation is:
 
 ```bash
-go install github.com/CaliLuke/loom/cmd/loom@v1.0.2
+go install github.com/CaliLuke/loom/cmd/loom@v1.0.10
 ```
 
 ## Working in this repo
@@ -59,6 +63,7 @@ Design changes should always start in `design/*.go`. Regenerate after changing t
 ## Documentation
 
 Start here:
+
 - [`docs/overview.md`](docs/overview.md)
 - [`docs/dsl.md`](docs/dsl.md)
 - [`docs/runtime.md`](docs/runtime.md)

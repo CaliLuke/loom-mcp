@@ -352,7 +352,9 @@ func (rb *batchWriter) Write(data []byte) (int, error) {
 		rb.Writer.Write([]byte{byte(0x2c)})
 	}
 	return rb.Writer.Write(data)
-} // handleSSE handles JSON-RPC SSE requests by dispatching to the appropriate method.
+}
+
+// handleSSE handles JSON-RPC SSE requests by dispatching to the appropriate method.
 func (s *Server) handleSSE(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 

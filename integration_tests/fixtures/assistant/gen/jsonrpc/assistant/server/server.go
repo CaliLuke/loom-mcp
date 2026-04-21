@@ -326,7 +326,9 @@ func (rb *batchWriter) Write(data []byte) (int, error) {
 		rb.Writer.Write([]byte{byte(0x2c)})
 	}
 	return rb.Writer.Write(data)
-} // Mount configures the mux to serve the JSON-RPC assistant service methods.
+}
+
+// Mount configures the mux to serve the JSON-RPC assistant service methods.
 func Mount(mux loomhttp.Muxer, h *Server) {
 	// HTTP only
 	mux.Handle("POST", "/rpc", h.ServeHTTP)
