@@ -116,6 +116,91 @@ func WebsiteURL(rawURL string) func(*exprmcp.MCPExpr) {
 	}
 }
 
+// OAuthOption configures one aspect of the MCP OAuth protected-resource
+// configuration.
+type OAuthOption func(*exprmcp.OAuthExpr)
+
+// OAuth declares that the MCP server is an OAuth 2.0 protected resource.
+// Pass AuthorizationServer, Scope, ResourceIdentifier, BearerMethodsSupported,
+// and ResourceDocumentationURL options to populate the Protected Resource
+// Metadata document (RFC 9728) and the WWW-Authenticate challenge.
+//
+// Example:
+//
+//	MCP("server", "1.0.0",
+//	    OAuth(
+//	        AuthorizationServer("https://auth.example.com"),
+//	        OAuthScope("read", "Read tool results"),
+//	        ResourceIdentifier("https://api.example.com/mcp"),
+//	    ),
+//	)
+func OAuth(opts ...OAuthOption) func(*exprmcp.MCPExpr) {
+	return func(m *exprmcp.MCPExpr) {
+		o := &exprmcp.OAuthExpr{}
+		for _, opt := range opts {
+			if opt != nil {
+				opt(o)
+			}
+		}
+		m.OAuth = o
+	}
+}
+
+// AuthorizationServer appends one OAuth 2.0 authorization server URL to
+// the PRM document. Call multiple times to advertise more than one.
+func AuthorizationServer(url string) OAuthOption {
+	return func(o *exprmcp.OAuthExpr) {
+		o.AuthorizationServers = append(o.AuthorizationServers, strings.TrimSpace(url))
+	}
+}
+
+// OAuthScope documents one OAuth 2.0 scope exposed by the protected
+// resource. The name is "OAuthScope" rather than "Scope" to avoid
+// colliding with goa.design/goa/v3/dsl.Scope when both DSLs are
+// dot-imported in a design file.
+func OAuthScope(name, description string) OAuthOption {
+	return func(o *exprmcp.OAuthExpr) {
+		o.Scopes = append(o.Scopes, &exprmcp.ScopeExpr{
+			Name:        strings.TrimSpace(name),
+			Description: strings.TrimSpace(description),
+		})
+	}
+}
+
+// ResourceIdentifier pins the canonical resource URI emitted as the
+// "resource" field in the Protected Resource Metadata document. When
+// omitted, the generated handler derives the value from the incoming
+// request URL, honoring X-Forwarded-* and Forwarded headers. Declaring
+// ResourceIdentifier is the recommended production posture.
+func ResourceIdentifier(url string) OAuthOption {
+	return func(o *exprmcp.OAuthExpr) {
+		o.ResourceIdentifier = strings.TrimSpace(url)
+	}
+}
+
+// BearerMethodsSupported enumerates the OAuth 2.0 bearer token methods
+// (header, body, query) the server accepts. Defaults to ["header"] at
+// generation time when empty.
+func BearerMethodsSupported(methods ...string) OAuthOption {
+	return func(o *exprmcp.OAuthExpr) {
+		for _, m := range methods {
+			trimmed := strings.TrimSpace(m)
+			if trimmed == "" {
+				continue
+			}
+			o.BearerMethodsSupported = append(o.BearerMethodsSupported, trimmed)
+		}
+	}
+}
+
+// ResourceDocumentationURL surfaces as resource_documentation in the PRM
+// document.
+func ResourceDocumentationURL(url string) OAuthOption {
+	return func(o *exprmcp.OAuthExpr) {
+		o.ResourceDocumentationURL = strings.TrimSpace(url)
+	}
+}
+
 // ServerIcons attaches implementation icons to the MCP server metadata.
 func ServerIcons(icons ...*exprmcp.IconExpr) func(*exprmcp.MCPExpr) {
 	return func(m *exprmcp.MCPExpr) {

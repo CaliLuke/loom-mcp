@@ -5,10 +5,20 @@ package mcp
 
 import (
 	"errors"
+	"net/url"
 
 	"github.com/CaliLuke/loom/eval"
 	"github.com/CaliLuke/loom/expr"
 )
+
+var (
+	errAbsoluteURLRequired        = errors.New("must be an absolute URL with scheme and host")
+	errResourceIdentifierFragment = errors.New("must not contain a fragment")
+)
+
+func urlParse(raw string) (*url.URL, error) {
+	return url.Parse(raw)
+}
 
 type (
 	// IconExpr defines one icon metadata entry exposed through MCP.
@@ -69,9 +79,49 @@ type (
 		// SubscriptionMonitors is the collection of subscription
 		// monitor expressions for SSE.
 		SubscriptionMonitors []*SubscriptionMonitorExpr
+		// OAuth is the optional OAuth 2.0 protected-resource configuration
+		// that drives Protected Resource Metadata emission and the
+		// WWW-Authenticate challenge. When nil, the server does not
+		// advertise OAuth discovery.
+		OAuth *OAuthExpr
 		// Service is the Goa service expression this MCP server is
 		// bound to.
 		Service *expr.ServiceExpr
+	}
+
+	// OAuthExpr describes the OAuth 2.0 protected-resource configuration
+	// exposed by an MCP server. It backs the Protected Resource Metadata
+	// document (RFC 9728) served at .well-known/oauth-protected-resource
+	// and the WWW-Authenticate challenge emitted for unauthenticated
+	// requests.
+	OAuthExpr struct {
+		// AuthorizationServers lists the OAuth 2.0 authorization servers
+		// that can issue tokens for this resource. Required; at least
+		// one entry.
+		AuthorizationServers []string
+		// Scopes documents the scopes the resource defines.
+		Scopes []*ScopeExpr
+		// ResourceIdentifier is the optional canonical audience URI
+		// emitted as the "resource" field in PRM JSON. When empty, the
+		// generated handler derives it from the incoming request.
+		ResourceIdentifier string
+		// BearerMethodsSupported enumerates the ways a client may
+		// present a bearer token. Defaults to ["header"] at generation
+		// time when empty.
+		BearerMethodsSupported []string
+		// ResourceDocumentationURL surfaces as resource_documentation
+		// in the PRM document.
+		ResourceDocumentationURL string
+	}
+
+	// ScopeExpr documents one OAuth 2.0 scope advertised by an MCP
+	// server.
+	ScopeExpr struct {
+		// Name is the scope token value.
+		Name string
+		// Description is the human-readable summary surfaced in PRM
+		// JSON and in the WWW-Authenticate challenge.
+		Description string
 	}
 
 	// CapabilitiesExpr defines which MCP protocol capabilities a server supports.
@@ -270,40 +320,90 @@ func (m *MCPExpr) Validate() error {
 	if m.Version == "" {
 		verr.Add(m, "MCP server version is required")
 	}
-	for _, icon := range m.Icons {
-		if err := icon.Validate(); err != nil {
-			var ve *eval.ValidationErrors
-			if errors.As(err, &ve) {
-				verr.Merge(ve)
-			}
+	mergeChildErrors(verr, m.Icons, iconValidator)
+	mergeChildErrors(verr, m.Tools, toolValidator)
+	mergeChildErrors(verr, m.Resources, resourceValidator)
+	mergeChildErrors(verr, m.Prompts, promptValidator)
+	if m.OAuth != nil {
+		mergeValidationError(verr, m.OAuth.Validate())
+	}
+	if len(verr.Errors) > 0 {
+		return verr
+	}
+	return nil
+}
+
+func iconValidator(icon *IconExpr) error      { return icon.Validate() }
+func toolValidator(t *ToolExpr) error         { return t.Validate() }
+func resourceValidator(r *ResourceExpr) error { return r.Validate() }
+func promptValidator(p *PromptExpr) error     { return p.Validate() }
+
+func mergeChildErrors[T any](dst *eval.ValidationErrors, items []T, validate func(T) error) {
+	for _, item := range items {
+		mergeValidationError(dst, validate(item))
+	}
+}
+
+func mergeValidationError(dst *eval.ValidationErrors, err error) {
+	if err == nil {
+		return
+	}
+	var ve *eval.ValidationErrors
+	if errors.As(err, &ve) {
+		dst.Merge(ve)
+	}
+}
+
+// Validate checks the OAuth protected-resource configuration against the
+// constraints the generator and RFC 9728 require.
+func (o *OAuthExpr) Validate() error {
+	verr := new(eval.ValidationErrors)
+	if len(o.AuthorizationServers) == 0 {
+		verr.Add(nil, "OAuth requires at least one AuthorizationServer")
+	}
+	seenScope := make(map[string]struct{}, len(o.Scopes))
+	for _, scope := range o.Scopes {
+		if scope == nil {
+			continue
+		}
+		if scope.Name == "" {
+			verr.Add(nil, "OAuth scope name is required")
+			continue
+		}
+		if _, dup := seenScope[scope.Name]; dup {
+			verr.Add(nil, "OAuth scope %q declared more than once", scope.Name)
+			continue
+		}
+		seenScope[scope.Name] = struct{}{}
+	}
+	for _, method := range o.BearerMethodsSupported {
+		switch method {
+		case "header", "body", "query":
+		default:
+			verr.Add(nil, "OAuth BearerMethodsSupported must be header, body, or query; got %q", method)
 		}
 	}
-	for _, t := range m.Tools {
-		if err := t.Validate(); err != nil {
-			var ve *eval.ValidationErrors
-			if errors.As(err, &ve) {
-				verr.Merge(ve)
-			}
-		}
-	}
-	for _, r := range m.Resources {
-		if err := r.Validate(); err != nil {
-			var ve *eval.ValidationErrors
-			if errors.As(err, &ve) {
-				verr.Merge(ve)
-			}
-		}
-	}
-	for _, p := range m.Prompts {
-		if err := p.Validate(); err != nil {
-			var ve *eval.ValidationErrors
-			if errors.As(err, &ve) {
-				verr.Merge(ve)
-			}
+	if id := o.ResourceIdentifier; id != "" {
+		if err := validateResourceIdentifier(id); err != nil {
+			verr.Add(nil, "OAuth ResourceIdentifier invalid: %s", err.Error())
 		}
 	}
 	if len(verr.Errors) > 0 {
 		return verr
+	}
+	return nil
+}
+
+func validateResourceIdentifier(id string) error {
+	u, err := urlParse(id)
+	if err != nil {
+		return err
+	}
+	if u.Scheme == "" || u.Host == "" {
+		return errAbsoluteURLRequired
+	}
+	if u.Fragment != "" {
+		return errResourceIdentifierFragment
 	}
 	return nil
 }
