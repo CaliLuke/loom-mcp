@@ -153,3 +153,68 @@ func escapeHeaderQuoted(s string) string {
 	replacer := strings.NewReplacer(`\`, `\\`, `"`, `\"`)
 	return replacer.Replace(s)
 }
+
+// ChallengeBuilder formats a WWW-Authenticate header value for a request
+// against the server mounted at mountPath. Generated packages export
+// OAuthChallengeHeader matching this signature.
+type ChallengeBuilder func(r *http.Request, mountPath string) string
+
+// WithOAuthChallenge wraps a handler so that 401 responses missing a
+// resource_metadata-carrying WWW-Authenticate header are augmented with
+// the spec-compliant challenge built by challenge. Responses that
+// already include resource_metadata are left untouched so consumer
+// middleware can still override the default.
+func WithOAuthChallenge(handler http.Handler, mountPath string, challenge ChallengeBuilder) http.Handler {
+	if handler == nil {
+		return nil
+	}
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		interceptor := &challengeInterceptor{
+			ResponseWriter: w,
+			request:        r,
+			mountPath:      mountPath,
+			challenge:      challenge,
+		}
+		handler.ServeHTTP(interceptor, r)
+	})
+}
+
+type challengeInterceptor struct {
+	http.ResponseWriter
+	request     *http.Request
+	mountPath   string
+	challenge   ChallengeBuilder
+	wroteHeader bool
+}
+
+func (c *challengeInterceptor) WriteHeader(status int) {
+	if c.wroteHeader {
+		return
+	}
+	c.wroteHeader = true
+	if status == http.StatusUnauthorized && c.challenge != nil {
+		existing := c.Header().Get("WWW-Authenticate")
+		if !strings.Contains(existing, "resource_metadata=") {
+			c.Header().Set("WWW-Authenticate", c.challenge(c.request, c.mountPath))
+		}
+	}
+	c.ResponseWriter.WriteHeader(status)
+}
+
+func (c *challengeInterceptor) Write(p []byte) (int, error) {
+	if !c.wroteHeader {
+		c.WriteHeader(http.StatusOK)
+	}
+	return c.ResponseWriter.Write(p)
+}
+
+// Flush passes through to the wrapped ResponseWriter if it supports
+// flushing. Required because MCP streams rely on SSE-style flushing.
+func (c *challengeInterceptor) Flush() {
+	if !c.wroteHeader {
+		c.WriteHeader(http.StatusOK)
+	}
+	if flusher, ok := c.ResponseWriter.(http.Flusher); ok {
+		flusher.Flush()
+	}
+}
