@@ -46,6 +46,27 @@ scenarios:
           status: success
           result: { resources: [ {} ] }
 
+  - name: resources_list_exposes_icons
+    defaults:
+      client: jsonrpc.mcp_assistant
+      headers:
+        Accept: application/json
+        x-mcp-allow-names: "documents"
+    pre:
+      auto_initialize: true
+    steps:
+      - name: list
+        op: ResourcesList
+        input: {}
+        expect:
+          status: success
+          result:
+            resources:
+              - name: documents
+                icons:
+                  - src: "https://assistant.example.com/icons/documents.png"
+                    mimeType: "image/png"
+
   - name: resources_read_system
     defaults:
       client: jsonrpc.mcp_assistant

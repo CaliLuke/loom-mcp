@@ -97,6 +97,26 @@ scenarios:
               version: "1.0.0"
               description: "AI Assistant service with full MCP protocol support"
 
+  - name: initialize_server_info_includes_icons
+    defaults:
+      client: jsonrpc.mcp_assistant
+    pre:
+      auto_initialize: false
+    steps:
+      - name: initialize
+        op: Initialize
+        input:
+          protocolVersion: "2025-11-25"
+          capabilities: {}
+          clientInfo: { name: "test-client", version: "1.0.0" }
+        expect:
+          status: success
+          result:
+            serverInfo:
+              icons:
+                - src: "https://assistant.example.com/icons/server-light.png"
+                  mimeType: "image/png"
+
   - name: initialize_unknown_version_falls_back_to_latest
     defaults:
       client: jsonrpc.mcp_assistant

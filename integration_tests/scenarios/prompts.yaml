@@ -19,6 +19,24 @@ scenarios:
                   - { name: context, required: true }
                   - { name: task, required: true }
 
+  - name: prompts_list_exposes_icons
+    defaults:
+      client: jsonrpc.mcp_assistant
+    pre:
+      auto_initialize: true
+    steps:
+      - name: list
+        op: PromptsList
+        input: {}
+        expect:
+          status: success
+          result:
+            prompts:
+              - name: contextual_prompts
+                icons:
+                  - src: "https://assistant.example.com/icons/contextual-prompts.png"
+                    mimeType: "image/png"
+
   - name: prompts_get_static
     defaults:
       client: jsonrpc.mcp_assistant
