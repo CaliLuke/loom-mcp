@@ -80,6 +80,34 @@ func BuildBearerChallenge(resourceMetadataURL, scope string) string {
 	return b.String()
 }
 
+// BuildInvalidTokenChallenge formats the WWW-Authenticate header for an
+// RFC 6750 §3 invalid_token response (used for audience mismatches,
+// expired tokens, and revoked tokens). errorDescription is optional and
+// should be a short human-readable string safe to surface to clients.
+func BuildInvalidTokenChallenge(resourceMetadataURL, errorDescription string) string {
+	var b strings.Builder
+	b.WriteString(`Bearer resource_metadata="`)
+	b.WriteString(escapeHeaderQuoted(resourceMetadataURL))
+	b.WriteString(`", error="invalid_token"`)
+	if errorDescription != "" {
+		b.WriteString(`, error_description="`)
+		b.WriteString(escapeHeaderQuoted(errorDescription))
+		b.WriteString(`"`)
+	}
+	return b.String()
+}
+
+// WriteInvalidToken writes a 401 response with the invalid_token Bearer
+// challenge. Consumers call this from a verifier wrapper when a
+// decoded token carries the wrong audience, is expired, or is revoked.
+func WriteInvalidToken(w http.ResponseWriter, resourceMetadataURL, errorDescription string) {
+	challenge := BuildInvalidTokenChallenge(resourceMetadataURL, errorDescription)
+	w.Header().Set("WWW-Authenticate", challenge)
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusUnauthorized)
+	_, _ = w.Write([]byte(`{"error":"invalid_token"}`))
+}
+
 func forwardedScheme(r *http.Request) string {
 	if v := r.Header.Get("X-Forwarded-Proto"); v != "" {
 		return strings.ToLower(strings.TrimSpace(firstCSV(v)))

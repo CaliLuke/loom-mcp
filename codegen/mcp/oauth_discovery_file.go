@@ -123,6 +123,22 @@ func emitOAuthHandlers(stmt *jen.Statement) {
 		jen.Return(jen.Id("mcpruntime").Dot("BuildBearerChallenge").Call(jen.Id("metaURL"), jen.Id("oauthChallengeScope"))),
 	).Line()
 
+	stmt.Comment("OAuthInvalidTokenChallengeHeader formats the RFC 6750 Bearer invalid_token challenge, used when a decoded token fails audience binding, is expired, or is revoked.").Line()
+	stmt.Func().Id("OAuthInvalidTokenChallengeHeader").Params(
+		jen.Id("r").Op("*").Qual("net/http", "Request"),
+		jen.Id("mountPath").String(),
+		jen.Id("errorDescription").String(),
+	).String().Block(
+		jen.Id("base").Op(":=").Id("mcpruntime").Dot("CanonicalizeResourceURL").Call(jen.Id("r")),
+		jen.Id("metaURL").Op(":=").Id("buildOAuthMetadataURL").Call(jen.Id("base"), jen.Id("mountPath")),
+		jen.Return(jen.Id("mcpruntime").Dot("BuildInvalidTokenChallenge").Call(jen.Id("metaURL"), jen.Id("errorDescription"))),
+	).Line()
+
+	stmt.Comment("ExpectedResourceIdentifier returns the DSL-declared ResourceIdentifier or an empty string when audience binding is not pinned.").Line()
+	stmt.Func().Id("ExpectedResourceIdentifier").Params().String().Block(
+		jen.Return(jen.Id("oauthResourceIdentifier")),
+	).Line()
+
 	stmt.Func().Id("buildOAuthMetadataURL").Params(jen.Id("requestURL"), jen.Id("mountPath").String()).String().Block(
 		jen.If(jen.Id("requestURL").Op("==").Lit("")).Block(
 			jen.Return(jen.Id("mcpruntime").Dot("ProtectedResourceMetadataPath").Call(jen.Id("mountPath"))),

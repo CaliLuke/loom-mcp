@@ -71,6 +71,18 @@ func OAuthChallengeHeader(r *http.Request, mountPath string) string {
 	metaURL := buildOAuthMetadataURL(base, mountPath)
 	return mcpruntime.BuildBearerChallenge(metaURL, oauthChallengeScope)
 }
+
+// OAuthInvalidTokenChallengeHeader formats the RFC 6750 Bearer invalid_token challenge, used when a decoded token fails audience binding, is expired, or is revoked.
+func OAuthInvalidTokenChallengeHeader(r *http.Request, mountPath string, errorDescription string) string {
+	base := mcpruntime.CanonicalizeResourceURL(r)
+	metaURL := buildOAuthMetadataURL(base, mountPath)
+	return mcpruntime.BuildInvalidTokenChallenge(metaURL, errorDescription)
+}
+
+// ExpectedResourceIdentifier returns the DSL-declared ResourceIdentifier or an empty string when audience binding is not pinned.
+func ExpectedResourceIdentifier() string {
+	return oauthResourceIdentifier
+}
 func buildOAuthMetadataURL(requestURL, mountPath string) string {
 	if requestURL == "" {
 		return mcpruntime.ProtectedResourceMetadataPath(mountPath)
