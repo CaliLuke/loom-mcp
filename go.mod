@@ -3,7 +3,7 @@ module github.com/CaliLuke/loom-mcp
 go 1.26.1
 
 require (
-	github.com/CaliLuke/loom v1.0.8
+	github.com/CaliLuke/loom v1.0.9
 	github.com/anthropics/anthropic-sdk-go v1.27.1
 	github.com/aws/aws-sdk-go-v2 v1.41.5
 	github.com/aws/aws-sdk-go-v2/service/bedrockruntime v1.50.4
@@ -11,7 +11,7 @@ require (
 	github.com/dave/jennifer v1.7.1
 	github.com/google/uuid v1.6.0
 	github.com/leanovate/gopter v0.2.11
-	github.com/modelcontextprotocol/go-sdk v1.4.1
+	github.com/modelcontextprotocol/go-sdk v1.5.0
 	github.com/openai/openai-go v1.12.0
 	github.com/redis/go-redis/v9 v9.18.0
 	github.com/santhosh-tekuri/jsonschema/v6 v6.0.2

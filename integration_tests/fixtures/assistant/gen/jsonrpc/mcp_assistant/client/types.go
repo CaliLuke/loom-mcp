@@ -162,40 +162,38 @@ type InitializeResponseBodyResponseBody struct {
 	// MCP protocol version
 	ProtocolVersion *string `form:"protocolVersion,omitempty" json:"protocolVersion,omitempty" xml:"protocolVersion,omitempty"`
 	// Server capabilities
-	Capabilities *ServerCapabilitiesResponseBodyResponseBody `form:"capabilities,omitempty" json:"capabilities,omitempty" xml:"capabilities,omitempty"`
+	Capabilities *ServerCapabilitiesResponseBody `form:"capabilities,omitempty" json:"capabilities,omitempty" xml:"capabilities,omitempty"`
 	// Server information
-	ServerInfo *ServerInfoResponseBodyResponseBody `form:"serverInfo,omitempty" json:"serverInfo,omitempty" xml:"serverInfo,omitempty"`
+	ServerInfo *ServerInfoResponseBody `form:"serverInfo,omitempty" json:"serverInfo,omitempty" xml:"serverInfo,omitempty"`
 }
 
-// ServerCapabilitiesResponseBodyResponseBody is used to define fields on
-// response body types.
-type ServerCapabilitiesResponseBodyResponseBody struct {
-	// Tool capabilities
-	Tools *ToolsCapabilityResponseBodyResponseBody `form:"tools,omitempty" json:"tools,omitempty" xml:"tools,omitempty"`
-	// Resource capabilities
-	Resources *ResourcesCapabilityResponseBodyResponseBody `form:"resources,omitempty" json:"resources,omitempty" xml:"resources,omitempty"`
-	// Prompt capabilities
-	Prompts *PromptsCapabilityResponseBodyResponseBody `form:"prompts,omitempty" json:"prompts,omitempty" xml:"prompts,omitempty"`
-}
-
-// ToolsCapabilityResponseBodyResponseBody is used to define fields on response
-// body types.
-type ToolsCapabilityResponseBodyResponseBody struct {
-}
-
-// ResourcesCapabilityResponseBodyResponseBody is used to define fields on
-// response body types.
-type ResourcesCapabilityResponseBodyResponseBody struct {
-}
-
-// PromptsCapabilityResponseBodyResponseBody is used to define fields on
-// response body types.
-type PromptsCapabilityResponseBodyResponseBody struct {
-}
-
-// ServerInfoResponseBodyResponseBody is used to define fields on response body
+// ServerCapabilitiesResponseBody is used to define fields on response body
 // types.
-type ServerInfoResponseBodyResponseBody struct {
+type ServerCapabilitiesResponseBody struct {
+	// Tool capabilities
+	Tools *ToolsCapabilityResponseBody `form:"tools,omitempty" json:"tools,omitempty" xml:"tools,omitempty"`
+	// Resource capabilities
+	Resources *ResourcesCapabilityResponseBody `form:"resources,omitempty" json:"resources,omitempty" xml:"resources,omitempty"`
+	// Prompt capabilities
+	Prompts *PromptsCapabilityResponseBody `form:"prompts,omitempty" json:"prompts,omitempty" xml:"prompts,omitempty"`
+}
+
+// ToolsCapabilityResponseBody is used to define fields on response body types.
+type ToolsCapabilityResponseBody struct {
+}
+
+// ResourcesCapabilityResponseBody is used to define fields on response body
+// types.
+type ResourcesCapabilityResponseBody struct {
+}
+
+// PromptsCapabilityResponseBody is used to define fields on response body
+// types.
+type PromptsCapabilityResponseBody struct {
+}
+
+// ServerInfoResponseBody is used to define fields on response body types.
+type ServerInfoResponseBody struct {
 	// Server name
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// Server version
@@ -203,11 +201,11 @@ type ServerInfoResponseBodyResponseBody struct {
 	// Server website URL
 	WebsiteURL *string `form:"websiteUrl,omitempty" json:"websiteUrl,omitempty" xml:"websiteUrl,omitempty"`
 	// Server icons
-	Icons []*IconResponseBodyResponseBody `form:"icons,omitempty" json:"icons,omitempty" xml:"icons,omitempty"`
+	Icons []*IconResponseBody `form:"icons,omitempty" json:"icons,omitempty" xml:"icons,omitempty"`
 }
 
-// IconResponseBodyResponseBody is used to define fields on response body types.
-type IconResponseBodyResponseBody struct {
+// IconResponseBody is used to define fields on response body types.
+type IconResponseBody struct {
 	// Icon source URI
 	Src *string `form:"src,omitempty" json:"src,omitempty" xml:"src,omitempty"`
 	// Icon MIME type
@@ -228,12 +226,11 @@ type PingResponseBodyResponseBody struct {
 // types.
 type ToolsListResponseBodyResponseBody struct {
 	// List of available tools
-	Tools []*ToolInfoResponseBodyResponseBody `form:"tools,omitempty" json:"tools,omitempty" xml:"tools,omitempty"`
+	Tools []*ToolInfoResponseBody `form:"tools,omitempty" json:"tools,omitempty" xml:"tools,omitempty"`
 }
 
-// ToolInfoResponseBodyResponseBody is used to define fields on response body
-// types.
-type ToolInfoResponseBodyResponseBody struct {
+// ToolInfoResponseBody is used to define fields on response body types.
+type ToolInfoResponseBody struct {
 	// Tool name
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// Tool description
@@ -244,23 +241,22 @@ type ToolInfoResponseBodyResponseBody struct {
 	// destructiveHint.
 	Annotations any `form:"annotations,omitempty" json:"annotations,omitempty" xml:"annotations,omitempty"`
 	// Tool icons
-	Icons []*IconResponseBodyResponseBody `form:"icons,omitempty" json:"icons,omitempty" xml:"icons,omitempty"`
+	Icons []*IconResponseBody `form:"icons,omitempty" json:"icons,omitempty" xml:"icons,omitempty"`
 }
 
 // ToolsCallResponseBodyResponseBody is used to define fields on response body
 // types.
 type ToolsCallResponseBodyResponseBody struct {
 	// Tool execution results
-	Content []*ContentItemResponseBodyResponseBody `form:"content,omitempty" json:"content,omitempty" xml:"content,omitempty"`
+	Content []*ContentItemResponseBody `form:"content,omitempty" json:"content,omitempty" xml:"content,omitempty"`
 	// Optional structured result for machine consumers
 	StructuredContent json.RawMessage `form:"structuredContent,omitempty" json:"structuredContent,omitempty" xml:"structuredContent,omitempty"`
 	// Whether the tool encountered an error
 	IsError *bool `form:"isError,omitempty" json:"isError,omitempty" xml:"isError,omitempty"`
 }
 
-// ContentItemResponseBodyResponseBody is used to define fields on response
-// body types.
-type ContentItemResponseBodyResponseBody struct {
+// ContentItemResponseBody is used to define fields on response body types.
+type ContentItemResponseBody struct {
 	// Content type
 	Type *string `form:"type,omitempty" json:"type,omitempty" xml:"type,omitempty"`
 	// Text content
@@ -277,12 +273,11 @@ type ContentItemResponseBodyResponseBody struct {
 // body types.
 type ResourcesListResponseBodyResponseBody struct {
 	// List of available resources
-	Resources []*ResourceInfoResponseBodyResponseBody `form:"resources,omitempty" json:"resources,omitempty" xml:"resources,omitempty"`
+	Resources []*ResourceInfoResponseBody `form:"resources,omitempty" json:"resources,omitempty" xml:"resources,omitempty"`
 }
 
-// ResourceInfoResponseBodyResponseBody is used to define fields on response
-// body types.
-type ResourceInfoResponseBodyResponseBody struct {
+// ResourceInfoResponseBody is used to define fields on response body types.
+type ResourceInfoResponseBody struct {
 	// Resource URI
 	URI *string `form:"uri,omitempty" json:"uri,omitempty" xml:"uri,omitempty"`
 	// Resource name
@@ -292,19 +287,18 @@ type ResourceInfoResponseBodyResponseBody struct {
 	// Resource MIME type
 	MimeType *string `form:"mimeType,omitempty" json:"mimeType,omitempty" xml:"mimeType,omitempty"`
 	// Resource icons
-	Icons []*IconResponseBodyResponseBody `form:"icons,omitempty" json:"icons,omitempty" xml:"icons,omitempty"`
+	Icons []*IconResponseBody `form:"icons,omitempty" json:"icons,omitempty" xml:"icons,omitempty"`
 }
 
 // ResourcesReadResponseBodyResponseBody is used to define fields on response
 // body types.
 type ResourcesReadResponseBodyResponseBody struct {
 	// Resource contents
-	Contents []*ResourceContentResponseBodyResponseBody `form:"contents,omitempty" json:"contents,omitempty" xml:"contents,omitempty"`
+	Contents []*ResourceContentResponseBody `form:"contents,omitempty" json:"contents,omitempty" xml:"contents,omitempty"`
 }
 
-// ResourceContentResponseBodyResponseBody is used to define fields on response
-// body types.
-type ResourceContentResponseBodyResponseBody struct {
+// ResourceContentResponseBody is used to define fields on response body types.
+type ResourceContentResponseBody struct {
 	// Resource URI
 	URI *string `form:"uri,omitempty" json:"uri,omitempty" xml:"uri,omitempty"`
 	// Content MIME type
@@ -319,25 +313,23 @@ type ResourceContentResponseBodyResponseBody struct {
 // body types.
 type PromptsListResponseBodyResponseBody struct {
 	// List of available prompts
-	Prompts []*PromptInfoResponseBodyResponseBody `form:"prompts,omitempty" json:"prompts,omitempty" xml:"prompts,omitempty"`
+	Prompts []*PromptInfoResponseBody `form:"prompts,omitempty" json:"prompts,omitempty" xml:"prompts,omitempty"`
 }
 
-// PromptInfoResponseBodyResponseBody is used to define fields on response body
-// types.
-type PromptInfoResponseBodyResponseBody struct {
+// PromptInfoResponseBody is used to define fields on response body types.
+type PromptInfoResponseBody struct {
 	// Prompt name
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// Prompt description
 	Description *string `form:"description,omitempty" json:"description,omitempty" xml:"description,omitempty"`
 	// Prompt arguments
-	Arguments []*PromptArgumentResponseBodyResponseBody `form:"arguments,omitempty" json:"arguments,omitempty" xml:"arguments,omitempty"`
+	Arguments []*PromptArgumentResponseBody `form:"arguments,omitempty" json:"arguments,omitempty" xml:"arguments,omitempty"`
 	// Prompt icons
-	Icons []*IconResponseBodyResponseBody `form:"icons,omitempty" json:"icons,omitempty" xml:"icons,omitempty"`
+	Icons []*IconResponseBody `form:"icons,omitempty" json:"icons,omitempty" xml:"icons,omitempty"`
 }
 
-// PromptArgumentResponseBodyResponseBody is used to define fields on response
-// body types.
-type PromptArgumentResponseBodyResponseBody struct {
+// PromptArgumentResponseBody is used to define fields on response body types.
+type PromptArgumentResponseBody struct {
 	// Argument name
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// Argument description
@@ -352,21 +344,19 @@ type PromptsGetResponseBodyResponseBody struct {
 	// Prompt description
 	Description *string `form:"description,omitempty" json:"description,omitempty" xml:"description,omitempty"`
 	// Prompt messages
-	Messages []*PromptMessageResponseBodyResponseBody `form:"messages,omitempty" json:"messages,omitempty" xml:"messages,omitempty"`
+	Messages []*PromptMessageResponseBody `form:"messages,omitempty" json:"messages,omitempty" xml:"messages,omitempty"`
 }
 
-// PromptMessageResponseBodyResponseBody is used to define fields on response
-// body types.
-type PromptMessageResponseBodyResponseBody struct {
+// PromptMessageResponseBody is used to define fields on response body types.
+type PromptMessageResponseBody struct {
 	// Message role
 	Role *string `form:"role,omitempty" json:"role,omitempty" xml:"role,omitempty"`
 	// Message content
-	Content *MessageContentResponseBodyResponseBody `form:"content,omitempty" json:"content,omitempty" xml:"content,omitempty"`
+	Content *MessageContentResponseBody `form:"content,omitempty" json:"content,omitempty" xml:"content,omitempty"`
 }
 
-// MessageContentResponseBodyResponseBody is used to define fields on response
-// body types.
-type MessageContentResponseBodyResponseBody struct {
+// MessageContentResponseBody is used to define fields on response body types.
+type MessageContentResponseBody struct {
 	// Content type
 	Type *string `form:"type,omitempty" json:"type,omitempty" xml:"type,omitempty"`
 	// Text content
@@ -383,7 +373,7 @@ type MessageContentResponseBodyResponseBody struct {
 // body types.
 type EventsStreamResponseBodyResponseBody struct {
 	// Tool execution results
-	Content []*ContentItemResponseBodyResponseBody `form:"content,omitempty" json:"content,omitempty" xml:"content,omitempty"`
+	Content []*ContentItemResponseBody `form:"content,omitempty" json:"content,omitempty" xml:"content,omitempty"`
 	// Whether the tool encountered an error
 	IsError *bool `form:"isError,omitempty" json:"isError,omitempty" xml:"isError,omitempty"`
 }
@@ -493,8 +483,8 @@ func NewInitializeResultOK(body *InitializeResponseBody) *mcpassistant.Initializ
 	v := &mcpassistant.InitializeResult{
 		ProtocolVersion: *body.ProtocolVersion,
 	}
-	v.Capabilities = unmarshalServerCapabilitiesResponseBodyResponseBodyToMcpassistantServerCapabilities(body.Capabilities)
-	v.ServerInfo = unmarshalServerInfoResponseBodyResponseBodyToMcpassistantServerInfo(body.ServerInfo)
+	v.Capabilities = unmarshalServerCapabilitiesResponseBodyToMcpassistantServerCapabilities(body.Capabilities)
+	v.ServerInfo = unmarshalServerInfoResponseBodyToMcpassistantServerInfo(body.ServerInfo)
 
 	return v
 }
@@ -519,7 +509,7 @@ func NewToolsListResultOK(body *ToolsListResponseBody) *mcpassistant.ToolsListRe
 			v.Tools[i] = nil
 			continue
 		}
-		v.Tools[i] = unmarshalToolInfoResponseBodyResponseBodyToMcpassistantToolInfo(val)
+		v.Tools[i] = unmarshalToolInfoResponseBodyToMcpassistantToolInfo(val)
 	}
 
 	return v
@@ -538,7 +528,7 @@ func NewToolsCallResultOK(body *ToolsCallResponseBody) *mcpassistant.ToolsCallRe
 			v.Content[i] = nil
 			continue
 		}
-		v.Content[i] = unmarshalContentItemResponseBodyResponseBodyToMcpassistantContentItem(val)
+		v.Content[i] = unmarshalContentItemResponseBodyToMcpassistantContentItem(val)
 	}
 
 	return v
@@ -554,7 +544,7 @@ func NewResourcesListResultOK(body *ResourcesListResponseBody) *mcpassistant.Res
 			v.Resources[i] = nil
 			continue
 		}
-		v.Resources[i] = unmarshalResourceInfoResponseBodyResponseBodyToMcpassistantResourceInfo(val)
+		v.Resources[i] = unmarshalResourceInfoResponseBodyToMcpassistantResourceInfo(val)
 	}
 
 	return v
@@ -570,7 +560,7 @@ func NewResourcesReadResultOK(body *ResourcesReadResponseBody) *mcpassistant.Res
 			v.Contents[i] = nil
 			continue
 		}
-		v.Contents[i] = unmarshalResourceContentResponseBodyResponseBodyToMcpassistantResourceContent(val)
+		v.Contents[i] = unmarshalResourceContentResponseBodyToMcpassistantResourceContent(val)
 	}
 
 	return v
@@ -586,7 +576,7 @@ func NewPromptsListResultOK(body *PromptsListResponseBody) *mcpassistant.Prompts
 			v.Prompts[i] = nil
 			continue
 		}
-		v.Prompts[i] = unmarshalPromptInfoResponseBodyResponseBodyToMcpassistantPromptInfo(val)
+		v.Prompts[i] = unmarshalPromptInfoResponseBodyToMcpassistantPromptInfo(val)
 	}
 
 	return v
@@ -604,7 +594,7 @@ func NewPromptsGetResultOK(body *PromptsGetResponseBody) *mcpassistant.PromptsGe
 			v.Messages[i] = nil
 			continue
 		}
-		v.Messages[i] = unmarshalPromptMessageResponseBodyResponseBodyToMcpassistantPromptMessage(val)
+		v.Messages[i] = unmarshalPromptMessageResponseBodyToMcpassistantPromptMessage(val)
 	}
 
 	return v
@@ -622,7 +612,7 @@ func NewEventsStreamResultOK(body *EventsStreamResponseBody) *mcpassistant.Event
 			v.Content[i] = nil
 			continue
 		}
-		v.Content[i] = unmarshalContentItemResponseBodyResponseBodyToMcpassistantContentItem(val)
+		v.Content[i] = unmarshalContentItemResponseBodyToMcpassistantContentItem(val)
 	}
 
 	return v
@@ -641,7 +631,7 @@ func ValidateInitializeResponseBody(body *InitializeResponseBody) (err error) {
 		err = loom.MergeErrors(err, loom.MissingFieldError("serverInfo", "body"))
 	}
 	if body.ServerInfo != nil {
-		if err2 := ValidateServerInfoResponseBodyResponseBody(body.ServerInfo); err2 != nil {
+		if err2 := ValidateServerInfoResponseBody(body.ServerInfo); err2 != nil {
 			err = loom.MergeErrors(err, err2)
 		}
 	}
@@ -664,7 +654,7 @@ func ValidateToolsListResponseBody(body *ToolsListResponseBody) (err error) {
 	}
 	for _, e := range body.Tools {
 		if e != nil {
-			if err2 := ValidateToolInfoResponseBodyResponseBody(e); err2 != nil {
+			if err2 := ValidateToolInfoResponseBody(e); err2 != nil {
 				err = loom.MergeErrors(err, err2)
 			}
 		}
@@ -680,7 +670,7 @@ func ValidateToolsCallResponseBody(body *ToolsCallResponseBody) (err error) {
 	}
 	for _, e := range body.Content {
 		if e != nil {
-			if err2 := ValidateContentItemResponseBodyResponseBody(e); err2 != nil {
+			if err2 := ValidateContentItemResponseBody(e); err2 != nil {
 				err = loom.MergeErrors(err, err2)
 			}
 		}
@@ -696,7 +686,7 @@ func ValidateResourcesListResponseBody(body *ResourcesListResponseBody) (err err
 	}
 	for _, e := range body.Resources {
 		if e != nil {
-			if err2 := ValidateResourceInfoResponseBodyResponseBody(e); err2 != nil {
+			if err2 := ValidateResourceInfoResponseBody(e); err2 != nil {
 				err = loom.MergeErrors(err, err2)
 			}
 		}
@@ -712,7 +702,7 @@ func ValidateResourcesReadResponseBody(body *ResourcesReadResponseBody) (err err
 	}
 	for _, e := range body.Contents {
 		if e != nil {
-			if err2 := ValidateResourceContentResponseBodyResponseBody(e); err2 != nil {
+			if err2 := ValidateResourceContentResponseBody(e); err2 != nil {
 				err = loom.MergeErrors(err, err2)
 			}
 		}
@@ -728,7 +718,7 @@ func ValidatePromptsListResponseBody(body *PromptsListResponseBody) (err error) 
 	}
 	for _, e := range body.Prompts {
 		if e != nil {
-			if err2 := ValidatePromptInfoResponseBodyResponseBody(e); err2 != nil {
+			if err2 := ValidatePromptInfoResponseBody(e); err2 != nil {
 				err = loom.MergeErrors(err, err2)
 			}
 		}
@@ -744,7 +734,7 @@ func ValidatePromptsGetResponseBody(body *PromptsGetResponseBody) (err error) {
 	}
 	for _, e := range body.Messages {
 		if e != nil {
-			if err2 := ValidatePromptMessageResponseBodyResponseBody(e); err2 != nil {
+			if err2 := ValidatePromptMessageResponseBody(e); err2 != nil {
 				err = loom.MergeErrors(err, err2)
 			}
 		}
@@ -760,7 +750,7 @@ func ValidateEventsStreamResponseBody(body *EventsStreamResponseBody) (err error
 	}
 	for _, e := range body.Content {
 		if e != nil {
-			if err2 := ValidateContentItemResponseBodyResponseBody(e); err2 != nil {
+			if err2 := ValidateContentItemResponseBody(e); err2 != nil {
 				err = loom.MergeErrors(err, err2)
 			}
 		}
@@ -781,16 +771,16 @@ func ValidateInitializeResponseBodyResponseBody(body *InitializeResponseBodyResp
 		err = loom.MergeErrors(err, loom.MissingFieldError("serverInfo", "body"))
 	}
 	if body.ServerInfo != nil {
-		if err2 := ValidateServerInfoResponseBodyResponseBody(body.ServerInfo); err2 != nil {
+		if err2 := ValidateServerInfoResponseBody(body.ServerInfo); err2 != nil {
 			err = loom.MergeErrors(err, err2)
 		}
 	}
 	return
 }
 
-// ValidateServerInfoResponseBodyResponseBody runs the validations defined on
-// ServerInfoResponseBodyResponseBody
-func ValidateServerInfoResponseBodyResponseBody(body *ServerInfoResponseBodyResponseBody) (err error) {
+// ValidateServerInfoResponseBody runs the validations defined on
+// ServerInfoResponseBody
+func ValidateServerInfoResponseBody(body *ServerInfoResponseBody) (err error) {
 	if body.Name == nil {
 		err = loom.MergeErrors(err, loom.MissingFieldError("name", "body"))
 	}
@@ -799,7 +789,7 @@ func ValidateServerInfoResponseBodyResponseBody(body *ServerInfoResponseBodyResp
 	}
 	for _, e := range body.Icons {
 		if e != nil {
-			if err2 := ValidateIconResponseBodyResponseBody(e); err2 != nil {
+			if err2 := ValidateIconResponseBody(e); err2 != nil {
 				err = loom.MergeErrors(err, err2)
 			}
 		}
@@ -807,9 +797,8 @@ func ValidateServerInfoResponseBodyResponseBody(body *ServerInfoResponseBodyResp
 	return
 }
 
-// ValidateIconResponseBodyResponseBody runs the validations defined on
-// IconResponseBodyResponseBody
-func ValidateIconResponseBodyResponseBody(body *IconResponseBodyResponseBody) (err error) {
+// ValidateIconResponseBody runs the validations defined on IconResponseBody
+func ValidateIconResponseBody(body *IconResponseBody) (err error) {
 	if body.Src == nil {
 		err = loom.MergeErrors(err, loom.MissingFieldError("src", "body"))
 	}
@@ -833,7 +822,7 @@ func ValidateToolsListResponseBodyResponseBody(body *ToolsListResponseBodyRespon
 	}
 	for _, e := range body.Tools {
 		if e != nil {
-			if err2 := ValidateToolInfoResponseBodyResponseBody(e); err2 != nil {
+			if err2 := ValidateToolInfoResponseBody(e); err2 != nil {
 				err = loom.MergeErrors(err, err2)
 			}
 		}
@@ -841,15 +830,15 @@ func ValidateToolsListResponseBodyResponseBody(body *ToolsListResponseBodyRespon
 	return
 }
 
-// ValidateToolInfoResponseBodyResponseBody runs the validations defined on
-// ToolInfoResponseBodyResponseBody
-func ValidateToolInfoResponseBodyResponseBody(body *ToolInfoResponseBodyResponseBody) (err error) {
+// ValidateToolInfoResponseBody runs the validations defined on
+// ToolInfoResponseBody
+func ValidateToolInfoResponseBody(body *ToolInfoResponseBody) (err error) {
 	if body.Name == nil {
 		err = loom.MergeErrors(err, loom.MissingFieldError("name", "body"))
 	}
 	for _, e := range body.Icons {
 		if e != nil {
-			if err2 := ValidateIconResponseBodyResponseBody(e); err2 != nil {
+			if err2 := ValidateIconResponseBody(e); err2 != nil {
 				err = loom.MergeErrors(err, err2)
 			}
 		}
@@ -865,7 +854,7 @@ func ValidateToolsCallResponseBodyResponseBody(body *ToolsCallResponseBodyRespon
 	}
 	for _, e := range body.Content {
 		if e != nil {
-			if err2 := ValidateContentItemResponseBodyResponseBody(e); err2 != nil {
+			if err2 := ValidateContentItemResponseBody(e); err2 != nil {
 				err = loom.MergeErrors(err, err2)
 			}
 		}
@@ -873,9 +862,9 @@ func ValidateToolsCallResponseBodyResponseBody(body *ToolsCallResponseBodyRespon
 	return
 }
 
-// ValidateContentItemResponseBodyResponseBody runs the validations defined on
-// ContentItemResponseBodyResponseBody
-func ValidateContentItemResponseBodyResponseBody(body *ContentItemResponseBodyResponseBody) (err error) {
+// ValidateContentItemResponseBody runs the validations defined on
+// ContentItemResponseBody
+func ValidateContentItemResponseBody(body *ContentItemResponseBody) (err error) {
 	if body.Type == nil {
 		err = loom.MergeErrors(err, loom.MissingFieldError("type", "body"))
 	}
@@ -895,7 +884,7 @@ func ValidateResourcesListResponseBodyResponseBody(body *ResourcesListResponseBo
 	}
 	for _, e := range body.Resources {
 		if e != nil {
-			if err2 := ValidateResourceInfoResponseBodyResponseBody(e); err2 != nil {
+			if err2 := ValidateResourceInfoResponseBody(e); err2 != nil {
 				err = loom.MergeErrors(err, err2)
 			}
 		}
@@ -903,15 +892,15 @@ func ValidateResourcesListResponseBodyResponseBody(body *ResourcesListResponseBo
 	return
 }
 
-// ValidateResourceInfoResponseBodyResponseBody runs the validations defined on
-// ResourceInfoResponseBodyResponseBody
-func ValidateResourceInfoResponseBodyResponseBody(body *ResourceInfoResponseBodyResponseBody) (err error) {
+// ValidateResourceInfoResponseBody runs the validations defined on
+// ResourceInfoResponseBody
+func ValidateResourceInfoResponseBody(body *ResourceInfoResponseBody) (err error) {
 	if body.URI == nil {
 		err = loom.MergeErrors(err, loom.MissingFieldError("uri", "body"))
 	}
 	for _, e := range body.Icons {
 		if e != nil {
-			if err2 := ValidateIconResponseBodyResponseBody(e); err2 != nil {
+			if err2 := ValidateIconResponseBody(e); err2 != nil {
 				err = loom.MergeErrors(err, err2)
 			}
 		}
@@ -927,7 +916,7 @@ func ValidateResourcesReadResponseBodyResponseBody(body *ResourcesReadResponseBo
 	}
 	for _, e := range body.Contents {
 		if e != nil {
-			if err2 := ValidateResourceContentResponseBodyResponseBody(e); err2 != nil {
+			if err2 := ValidateResourceContentResponseBody(e); err2 != nil {
 				err = loom.MergeErrors(err, err2)
 			}
 		}
@@ -935,9 +924,9 @@ func ValidateResourcesReadResponseBodyResponseBody(body *ResourcesReadResponseBo
 	return
 }
 
-// ValidateResourceContentResponseBodyResponseBody runs the validations defined
-// on ResourceContentResponseBodyResponseBody
-func ValidateResourceContentResponseBodyResponseBody(body *ResourceContentResponseBodyResponseBody) (err error) {
+// ValidateResourceContentResponseBody runs the validations defined on
+// ResourceContentResponseBody
+func ValidateResourceContentResponseBody(body *ResourceContentResponseBody) (err error) {
 	if body.URI == nil {
 		err = loom.MergeErrors(err, loom.MissingFieldError("uri", "body"))
 	}
@@ -952,7 +941,7 @@ func ValidatePromptsListResponseBodyResponseBody(body *PromptsListResponseBodyRe
 	}
 	for _, e := range body.Prompts {
 		if e != nil {
-			if err2 := ValidatePromptInfoResponseBodyResponseBody(e); err2 != nil {
+			if err2 := ValidatePromptInfoResponseBody(e); err2 != nil {
 				err = loom.MergeErrors(err, err2)
 			}
 		}
@@ -960,22 +949,22 @@ func ValidatePromptsListResponseBodyResponseBody(body *PromptsListResponseBodyRe
 	return
 }
 
-// ValidatePromptInfoResponseBodyResponseBody runs the validations defined on
-// PromptInfoResponseBodyResponseBody
-func ValidatePromptInfoResponseBodyResponseBody(body *PromptInfoResponseBodyResponseBody) (err error) {
+// ValidatePromptInfoResponseBody runs the validations defined on
+// PromptInfoResponseBody
+func ValidatePromptInfoResponseBody(body *PromptInfoResponseBody) (err error) {
 	if body.Name == nil {
 		err = loom.MergeErrors(err, loom.MissingFieldError("name", "body"))
 	}
 	for _, e := range body.Arguments {
 		if e != nil {
-			if err2 := ValidatePromptArgumentResponseBodyResponseBody(e); err2 != nil {
+			if err2 := ValidatePromptArgumentResponseBody(e); err2 != nil {
 				err = loom.MergeErrors(err, err2)
 			}
 		}
 	}
 	for _, e := range body.Icons {
 		if e != nil {
-			if err2 := ValidateIconResponseBodyResponseBody(e); err2 != nil {
+			if err2 := ValidateIconResponseBody(e); err2 != nil {
 				err = loom.MergeErrors(err, err2)
 			}
 		}
@@ -983,9 +972,9 @@ func ValidatePromptInfoResponseBodyResponseBody(body *PromptInfoResponseBodyResp
 	return
 }
 
-// ValidatePromptArgumentResponseBodyResponseBody runs the validations defined
-// on PromptArgumentResponseBodyResponseBody
-func ValidatePromptArgumentResponseBodyResponseBody(body *PromptArgumentResponseBodyResponseBody) (err error) {
+// ValidatePromptArgumentResponseBody runs the validations defined on
+// PromptArgumentResponseBody
+func ValidatePromptArgumentResponseBody(body *PromptArgumentResponseBody) (err error) {
 	if body.Name == nil {
 		err = loom.MergeErrors(err, loom.MissingFieldError("name", "body"))
 	}
@@ -1003,7 +992,7 @@ func ValidatePromptsGetResponseBodyResponseBody(body *PromptsGetResponseBodyResp
 	}
 	for _, e := range body.Messages {
 		if e != nil {
-			if err2 := ValidatePromptMessageResponseBodyResponseBody(e); err2 != nil {
+			if err2 := ValidatePromptMessageResponseBody(e); err2 != nil {
 				err = loom.MergeErrors(err, err2)
 			}
 		}
@@ -1011,9 +1000,9 @@ func ValidatePromptsGetResponseBodyResponseBody(body *PromptsGetResponseBodyResp
 	return
 }
 
-// ValidatePromptMessageResponseBodyResponseBody runs the validations defined
-// on PromptMessageResponseBodyResponseBody
-func ValidatePromptMessageResponseBodyResponseBody(body *PromptMessageResponseBodyResponseBody) (err error) {
+// ValidatePromptMessageResponseBody runs the validations defined on
+// PromptMessageResponseBody
+func ValidatePromptMessageResponseBody(body *PromptMessageResponseBody) (err error) {
 	if body.Role == nil {
 		err = loom.MergeErrors(err, loom.MissingFieldError("role", "body"))
 	}
@@ -1026,16 +1015,16 @@ func ValidatePromptMessageResponseBodyResponseBody(body *PromptMessageResponseBo
 		}
 	}
 	if body.Content != nil {
-		if err2 := ValidateMessageContentResponseBodyResponseBody(body.Content); err2 != nil {
+		if err2 := ValidateMessageContentResponseBody(body.Content); err2 != nil {
 			err = loom.MergeErrors(err, err2)
 		}
 	}
 	return
 }
 
-// ValidateMessageContentResponseBodyResponseBody runs the validations defined
-// on MessageContentResponseBodyResponseBody
-func ValidateMessageContentResponseBodyResponseBody(body *MessageContentResponseBodyResponseBody) (err error) {
+// ValidateMessageContentResponseBody runs the validations defined on
+// MessageContentResponseBody
+func ValidateMessageContentResponseBody(body *MessageContentResponseBody) (err error) {
 	if body.Type == nil {
 		err = loom.MergeErrors(err, loom.MissingFieldError("type", "body"))
 	}
@@ -1055,7 +1044,7 @@ func ValidateEventsStreamResponseBodyResponseBody(body *EventsStreamResponseBody
 	}
 	for _, e := range body.Content {
 		if e != nil {
-			if err2 := ValidateContentItemResponseBodyResponseBody(e); err2 != nil {
+			if err2 := ValidateContentItemResponseBody(e); err2 != nil {
 				err = loom.MergeErrors(err, err2)
 			}
 		}

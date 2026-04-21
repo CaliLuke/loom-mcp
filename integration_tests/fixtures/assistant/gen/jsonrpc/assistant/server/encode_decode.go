@@ -609,11 +609,11 @@ func DecodeDispatchActionRequest(mux loomhttp.Muxer, decoder func(*http.Request)
 	}
 }
 
-// marshalAssistantDesignTokenGroupToDesignTokenGroupResponseBodyResponseBody
-// builds a value of type *DesignTokenGroupResponseBodyResponseBody from a
-// value of type *assistant.DesignTokenGroup.
-func marshalAssistantDesignTokenGroupToDesignTokenGroupResponseBodyResponseBody(v *assistant.DesignTokenGroup) *DesignTokenGroupResponseBodyResponseBody {
-	res := &DesignTokenGroupResponseBodyResponseBody{}
+// marshalAssistantDesignTokenGroupToDesignTokenGroupResponseBody builds a
+// value of type *DesignTokenGroupResponseBody from a value of type
+// *assistant.DesignTokenGroup.
+func marshalAssistantDesignTokenGroupToDesignTokenGroupResponseBody(v *assistant.DesignTokenGroup) *DesignTokenGroupResponseBody {
+	res := &DesignTokenGroupResponseBody{}
 	if v.Colors != nil {
 		res.Colors = make([]string, len(v.Colors))
 		for i, val := range v.Colors {
@@ -642,11 +642,10 @@ func marshalAssistantDesignTokenGroupToDesignTokenGroupResponseBodyResponseBody(
 	return res
 }
 
-// marshalAssistantDPIViewportToDPIViewportResponseBodyResponseBody builds a
-// value of type *DPIViewportResponseBodyResponseBody from a value of type
-// *assistant.DPIViewport.
-func marshalAssistantDPIViewportToDPIViewportResponseBodyResponseBody(v *assistant.DPIViewport) *DPIViewportResponseBodyResponseBody {
-	res := &DPIViewportResponseBodyResponseBody{
+// marshalAssistantDPIViewportToDPIViewportResponseBody builds a value of type
+// *DPIViewportResponseBody from a value of type *assistant.DPIViewport.
+func marshalAssistantDPIViewportToDPIViewportResponseBody(v *assistant.DPIViewport) *DPIViewportResponseBody {
+	res := &DPIViewportResponseBody{
 		Width:  v.Width,
 		Height: v.Height,
 	}
@@ -654,11 +653,10 @@ func marshalAssistantDPIViewportToDPIViewportResponseBodyResponseBody(v *assista
 	return res
 }
 
-// marshalAssistantDPISectionToDPISectionResponseBodyResponseBody builds a
-// value of type *DPISectionResponseBodyResponseBody from a value of type
-// *assistant.DPISection.
-func marshalAssistantDPISectionToDPISectionResponseBodyResponseBody(v *assistant.DPISection) *DPISectionResponseBodyResponseBody {
-	res := &DPISectionResponseBodyResponseBody{
+// marshalAssistantDPISectionToDPISectionResponseBody builds a value of type
+// *DPISectionResponseBody from a value of type *assistant.DPISection.
+func marshalAssistantDPISectionToDPISectionResponseBody(v *assistant.DPISection) *DPISectionResponseBody {
+	res := &DPISectionResponseBody{
 		Name:      v.Name,
 		Component: v.Component,
 	}
@@ -674,11 +672,11 @@ func marshalAssistantDPISectionToDPISectionResponseBodyResponseBody(v *assistant
 	return res
 }
 
-// marshalAssistantDPICallToActionToDPICallToActionResponseBodyResponseBody
-// builds a value of type *DPICallToActionResponseBodyResponseBody from a value
-// of type *assistant.DPICallToAction.
-func marshalAssistantDPICallToActionToDPICallToActionResponseBodyResponseBody(v *assistant.DPICallToAction) *DPICallToActionResponseBodyResponseBody {
-	res := &DPICallToActionResponseBodyResponseBody{
+// marshalAssistantDPICallToActionToDPICallToActionResponseBody builds a value
+// of type *DPICallToActionResponseBody from a value of type
+// *assistant.DPICallToAction.
+func marshalAssistantDPICallToActionToDPICallToActionResponseBody(v *assistant.DPICallToAction) *DPICallToActionResponseBody {
+	res := &DPICallToActionResponseBody{
 		Label: v.Label,
 		Style: v.Style,
 	}

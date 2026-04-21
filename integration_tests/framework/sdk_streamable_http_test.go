@@ -34,7 +34,7 @@ func TestGeneratedServerSDKInitializeAndListCatalog(t *testing.T) {
 
 	initResult := session.InitializeResult()
 	require.NotNil(t, initResult)
-	assert.Equal(t, "2025-06-18", initResult.ProtocolVersion)
+	assert.Equal(t, "2025-11-25", initResult.ProtocolVersion)
 	require.NotNil(t, initResult.Capabilities)
 	require.NotNil(t, initResult.Capabilities.Tools)
 	require.NotNil(t, initResult.Capabilities.Resources)

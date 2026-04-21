@@ -239,12 +239,11 @@ type FigmaDesignSystemResponseBodyResponseBody struct {
 	// Platform the tokens target
 	Platform *string `form:"platform,omitempty" json:"platform,omitempty" xml:"platform,omitempty"`
 	// Grouped token information
-	Tokens *DesignTokenGroupResponseBodyResponseBody `form:"tokens,omitempty" json:"tokens,omitempty" xml:"tokens,omitempty"`
+	Tokens *DesignTokenGroupResponseBody `form:"tokens,omitempty" json:"tokens,omitempty" xml:"tokens,omitempty"`
 }
 
-// DesignTokenGroupResponseBodyResponseBody is used to define fields on
-// response body types.
-type DesignTokenGroupResponseBodyResponseBody struct {
+// DesignTokenGroupResponseBody is used to define fields on response body types.
+type DesignTokenGroupResponseBody struct {
 	// Color tokens
 	Colors []string `form:"colors,omitempty" json:"colors,omitempty" xml:"colors,omitempty"`
 	// Spacing tokens
@@ -326,29 +325,27 @@ type GenerateDpiSpecResponseBodyResponseBody struct {
 	// Layout density
 	Density *string `form:"density,omitempty" json:"density,omitempty" xml:"density,omitempty"`
 	// Viewport dimensions
-	Viewport *DPIViewportResponseBodyResponseBody `form:"viewport,omitempty" json:"viewport,omitempty" xml:"viewport,omitempty"`
+	Viewport *DPIViewportResponseBody `form:"viewport,omitempty" json:"viewport,omitempty" xml:"viewport,omitempty"`
 	// Ordered screen sections
-	Sections []*DPISectionResponseBodyResponseBody `form:"sections,omitempty" json:"sections,omitempty" xml:"sections,omitempty"`
+	Sections []*DPISectionResponseBody `form:"sections,omitempty" json:"sections,omitempty" xml:"sections,omitempty"`
 	// Primary CTA
-	PrimaryCta *DPICallToActionResponseBodyResponseBody `form:"primary_cta,omitempty" json:"primary_cta,omitempty" xml:"primary_cta,omitempty"`
+	PrimaryCta *DPICallToActionResponseBody `form:"primary_cta,omitempty" json:"primary_cta,omitempty" xml:"primary_cta,omitempty"`
 	// Design system resource URI
 	DesignTokensURI *string `form:"design_tokens_uri,omitempty" json:"design_tokens_uri,omitempty" xml:"design_tokens_uri,omitempty"`
 	// Development handoff notes
 	DevNotes []string `form:"dev_notes,omitempty" json:"dev_notes,omitempty" xml:"dev_notes,omitempty"`
 }
 
-// DPIViewportResponseBodyResponseBody is used to define fields on response
-// body types.
-type DPIViewportResponseBodyResponseBody struct {
+// DPIViewportResponseBody is used to define fields on response body types.
+type DPIViewportResponseBody struct {
 	// Viewport width
 	Width *int `form:"width,omitempty" json:"width,omitempty" xml:"width,omitempty"`
 	// Viewport height
 	Height *int `form:"height,omitempty" json:"height,omitempty" xml:"height,omitempty"`
 }
 
-// DPISectionResponseBodyResponseBody is used to define fields on response body
-// types.
-type DPISectionResponseBodyResponseBody struct {
+// DPISectionResponseBody is used to define fields on response body types.
+type DPISectionResponseBody struct {
 	// Section name
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// Primary UI component
@@ -357,9 +354,8 @@ type DPISectionResponseBodyResponseBody struct {
 	Notes []string `form:"notes,omitempty" json:"notes,omitempty" xml:"notes,omitempty"`
 }
 
-// DPICallToActionResponseBodyResponseBody is used to define fields on response
-// body types.
-type DPICallToActionResponseBodyResponseBody struct {
+// DPICallToActionResponseBody is used to define fields on response body types.
+type DPICallToActionResponseBody struct {
 	// CTA label
 	Label *string `form:"label,omitempty" json:"label,omitempty" xml:"label,omitempty"`
 	// CTA visual style
@@ -809,7 +805,7 @@ func NewFigmaDesignSystemDesignSystemOK(body *FigmaDesignSystemResponseBody) *as
 		Version:  *body.Version,
 		Platform: *body.Platform,
 	}
-	v.Tokens = unmarshalDesignTokenGroupResponseBodyResponseBodyToAssistantDesignTokenGroup(body.Tokens)
+	v.Tokens = unmarshalDesignTokenGroupResponseBodyToAssistantDesignTokenGroup(body.Tokens)
 
 	return v
 }
@@ -926,16 +922,16 @@ func NewGenerateDpiSpecDPISpecOK(body *GenerateDpiSpecResponseBody) *assistant.D
 		Density:         *body.Density,
 		DesignTokensURI: *body.DesignTokensURI,
 	}
-	v.Viewport = unmarshalDPIViewportResponseBodyResponseBodyToAssistantDPIViewport(body.Viewport)
+	v.Viewport = unmarshalDPIViewportResponseBodyToAssistantDPIViewport(body.Viewport)
 	v.Sections = make([]*assistant.DPISection, len(body.Sections))
 	for i, val := range body.Sections {
 		if val == nil {
 			v.Sections[i] = nil
 			continue
 		}
-		v.Sections[i] = unmarshalDPISectionResponseBodyResponseBodyToAssistantDPISection(val)
+		v.Sections[i] = unmarshalDPISectionResponseBodyToAssistantDPISection(val)
 	}
-	v.PrimaryCta = unmarshalDPICallToActionResponseBodyResponseBodyToAssistantDPICallToAction(body.PrimaryCta)
+	v.PrimaryCta = unmarshalDPICallToActionResponseBodyToAssistantDPICallToAction(body.PrimaryCta)
 	v.DevNotes = make([]string, len(body.DevNotes))
 	for i, val := range body.DevNotes {
 		v.DevNotes[i] = val
@@ -979,7 +975,7 @@ func ValidateFigmaDesignSystemResponseBody(body *FigmaDesignSystemResponseBody) 
 		err = loom.MergeErrors(err, loom.MissingFieldError("tokens", "body"))
 	}
 	if body.Tokens != nil {
-		if err2 := ValidateDesignTokenGroupResponseBodyResponseBody(body.Tokens); err2 != nil {
+		if err2 := ValidateDesignTokenGroupResponseBody(body.Tokens); err2 != nil {
 			err = loom.MergeErrors(err, err2)
 		}
 	}
@@ -1032,19 +1028,19 @@ func ValidateGenerateDpiSpecResponseBody(body *GenerateDpiSpecResponseBody) (err
 		err = loom.MergeErrors(err, loom.MissingFieldError("dev_notes", "body"))
 	}
 	if body.Viewport != nil {
-		if err2 := ValidateDPIViewportResponseBodyResponseBody(body.Viewport); err2 != nil {
+		if err2 := ValidateDPIViewportResponseBody(body.Viewport); err2 != nil {
 			err = loom.MergeErrors(err, err2)
 		}
 	}
 	for _, e := range body.Sections {
 		if e != nil {
-			if err2 := ValidateDPISectionResponseBodyResponseBody(e); err2 != nil {
+			if err2 := ValidateDPISectionResponseBody(e); err2 != nil {
 				err = loom.MergeErrors(err, err2)
 			}
 		}
 	}
 	if body.PrimaryCta != nil {
-		if err2 := ValidateDPICallToActionResponseBodyResponseBody(body.PrimaryCta); err2 != nil {
+		if err2 := ValidateDPICallToActionResponseBody(body.PrimaryCta); err2 != nil {
 			err = loom.MergeErrors(err, err2)
 		}
 	}
@@ -1107,16 +1103,16 @@ func ValidateFigmaDesignSystemResponseBodyResponseBody(body *FigmaDesignSystemRe
 		err = loom.MergeErrors(err, loom.MissingFieldError("tokens", "body"))
 	}
 	if body.Tokens != nil {
-		if err2 := ValidateDesignTokenGroupResponseBodyResponseBody(body.Tokens); err2 != nil {
+		if err2 := ValidateDesignTokenGroupResponseBody(body.Tokens); err2 != nil {
 			err = loom.MergeErrors(err, err2)
 		}
 	}
 	return
 }
 
-// ValidateDesignTokenGroupResponseBodyResponseBody runs the validations
-// defined on DesignTokenGroupResponseBodyResponseBody
-func ValidateDesignTokenGroupResponseBodyResponseBody(body *DesignTokenGroupResponseBodyResponseBody) (err error) {
+// ValidateDesignTokenGroupResponseBody runs the validations defined on
+// DesignTokenGroupResponseBody
+func ValidateDesignTokenGroupResponseBody(body *DesignTokenGroupResponseBody) (err error) {
 	if body.Colors == nil {
 		err = loom.MergeErrors(err, loom.MissingFieldError("colors", "body"))
 	}
@@ -1176,28 +1172,28 @@ func ValidateGenerateDpiSpecResponseBodyResponseBody(body *GenerateDpiSpecRespon
 		err = loom.MergeErrors(err, loom.MissingFieldError("dev_notes", "body"))
 	}
 	if body.Viewport != nil {
-		if err2 := ValidateDPIViewportResponseBodyResponseBody(body.Viewport); err2 != nil {
+		if err2 := ValidateDPIViewportResponseBody(body.Viewport); err2 != nil {
 			err = loom.MergeErrors(err, err2)
 		}
 	}
 	for _, e := range body.Sections {
 		if e != nil {
-			if err2 := ValidateDPISectionResponseBodyResponseBody(e); err2 != nil {
+			if err2 := ValidateDPISectionResponseBody(e); err2 != nil {
 				err = loom.MergeErrors(err, err2)
 			}
 		}
 	}
 	if body.PrimaryCta != nil {
-		if err2 := ValidateDPICallToActionResponseBodyResponseBody(body.PrimaryCta); err2 != nil {
+		if err2 := ValidateDPICallToActionResponseBody(body.PrimaryCta); err2 != nil {
 			err = loom.MergeErrors(err, err2)
 		}
 	}
 	return
 }
 
-// ValidateDPIViewportResponseBodyResponseBody runs the validations defined on
-// DPIViewportResponseBodyResponseBody
-func ValidateDPIViewportResponseBodyResponseBody(body *DPIViewportResponseBodyResponseBody) (err error) {
+// ValidateDPIViewportResponseBody runs the validations defined on
+// DPIViewportResponseBody
+func ValidateDPIViewportResponseBody(body *DPIViewportResponseBody) (err error) {
 	if body.Width == nil {
 		err = loom.MergeErrors(err, loom.MissingFieldError("width", "body"))
 	}
@@ -1207,9 +1203,9 @@ func ValidateDPIViewportResponseBodyResponseBody(body *DPIViewportResponseBodyRe
 	return
 }
 
-// ValidateDPISectionResponseBodyResponseBody runs the validations defined on
-// DPISectionResponseBodyResponseBody
-func ValidateDPISectionResponseBodyResponseBody(body *DPISectionResponseBodyResponseBody) (err error) {
+// ValidateDPISectionResponseBody runs the validations defined on
+// DPISectionResponseBody
+func ValidateDPISectionResponseBody(body *DPISectionResponseBody) (err error) {
 	if body.Name == nil {
 		err = loom.MergeErrors(err, loom.MissingFieldError("name", "body"))
 	}
@@ -1222,9 +1218,9 @@ func ValidateDPISectionResponseBodyResponseBody(body *DPISectionResponseBodyResp
 	return
 }
 
-// ValidateDPICallToActionResponseBodyResponseBody runs the validations defined
-// on DPICallToActionResponseBodyResponseBody
-func ValidateDPICallToActionResponseBodyResponseBody(body *DPICallToActionResponseBodyResponseBody) (err error) {
+// ValidateDPICallToActionResponseBody runs the validations defined on
+// DPICallToActionResponseBody
+func ValidateDPICallToActionResponseBody(body *DPICallToActionResponseBody) (err error) {
 	if body.Label == nil {
 		err = loom.MergeErrors(err, loom.MissingFieldError("label", "body"))
 	}

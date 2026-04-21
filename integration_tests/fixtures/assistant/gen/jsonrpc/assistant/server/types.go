@@ -239,12 +239,11 @@ type FigmaDesignSystemResponseBodyResponseBody struct {
 	// Platform the tokens target
 	Platform string `form:"platform" json:"platform" xml:"platform"`
 	// Grouped token information
-	Tokens *DesignTokenGroupResponseBodyResponseBody `form:"tokens" json:"tokens" xml:"tokens"`
+	Tokens *DesignTokenGroupResponseBody `form:"tokens" json:"tokens" xml:"tokens"`
 }
 
-// DesignTokenGroupResponseBodyResponseBody is used to define fields on
-// response body types.
-type DesignTokenGroupResponseBodyResponseBody struct {
+// DesignTokenGroupResponseBody is used to define fields on response body types.
+type DesignTokenGroupResponseBody struct {
 	// Color tokens
 	Colors []string `form:"colors" json:"colors" xml:"colors"`
 	// Spacing tokens
@@ -326,29 +325,27 @@ type GenerateDpiSpecResponseBodyResponseBody struct {
 	// Layout density
 	Density string `form:"density" json:"density" xml:"density"`
 	// Viewport dimensions
-	Viewport *DPIViewportResponseBodyResponseBody `form:"viewport" json:"viewport" xml:"viewport"`
+	Viewport *DPIViewportResponseBody `form:"viewport" json:"viewport" xml:"viewport"`
 	// Ordered screen sections
-	Sections []*DPISectionResponseBodyResponseBody `form:"sections" json:"sections" xml:"sections"`
+	Sections []*DPISectionResponseBody `form:"sections" json:"sections" xml:"sections"`
 	// Primary CTA
-	PrimaryCta *DPICallToActionResponseBodyResponseBody `form:"primary_cta" json:"primary_cta" xml:"primary_cta"`
+	PrimaryCta *DPICallToActionResponseBody `form:"primary_cta" json:"primary_cta" xml:"primary_cta"`
 	// Design system resource URI
 	DesignTokensURI string `form:"design_tokens_uri" json:"design_tokens_uri" xml:"design_tokens_uri"`
 	// Development handoff notes
 	DevNotes []string `form:"dev_notes" json:"dev_notes" xml:"dev_notes"`
 }
 
-// DPIViewportResponseBodyResponseBody is used to define fields on response
-// body types.
-type DPIViewportResponseBodyResponseBody struct {
+// DPIViewportResponseBody is used to define fields on response body types.
+type DPIViewportResponseBody struct {
 	// Viewport width
 	Width int `form:"width" json:"width" xml:"width"`
 	// Viewport height
 	Height int `form:"height" json:"height" xml:"height"`
 }
 
-// DPISectionResponseBodyResponseBody is used to define fields on response body
-// types.
-type DPISectionResponseBodyResponseBody struct {
+// DPISectionResponseBody is used to define fields on response body types.
+type DPISectionResponseBody struct {
 	// Section name
 	Name string `form:"name" json:"name" xml:"name"`
 	// Primary UI component
@@ -357,9 +354,8 @@ type DPISectionResponseBodyResponseBody struct {
 	Notes []string `form:"notes" json:"notes" xml:"notes"`
 }
 
-// DPICallToActionResponseBodyResponseBody is used to define fields on response
-// body types.
-type DPICallToActionResponseBodyResponseBody struct {
+// DPICallToActionResponseBody is used to define fields on response body types.
+type DPICallToActionResponseBody struct {
 	// CTA label
 	Label string `form:"label" json:"label" xml:"label"`
 	// CTA visual style
@@ -638,7 +634,7 @@ func NewFigmaDesignSystemResponseBody(res *assistant.DesignSystem) *FigmaDesignS
 		Platform: res.Platform,
 	}
 	if res.Tokens != nil {
-		body.Tokens = marshalAssistantDesignTokenGroupToDesignTokenGroupResponseBodyResponseBody(res.Tokens)
+		body.Tokens = marshalAssistantDesignTokenGroupToDesignTokenGroupResponseBody(res.Tokens)
 	}
 	return body
 }
@@ -755,22 +751,22 @@ func NewGenerateDpiSpecResponseBody(res *assistant.DPISpec) *GenerateDpiSpecResp
 		DesignTokensURI: res.DesignTokensURI,
 	}
 	if res.Viewport != nil {
-		body.Viewport = marshalAssistantDPIViewportToDPIViewportResponseBodyResponseBody(res.Viewport)
+		body.Viewport = marshalAssistantDPIViewportToDPIViewportResponseBody(res.Viewport)
 	}
 	if res.Sections != nil {
-		body.Sections = make([]*DPISectionResponseBodyResponseBody, len(res.Sections))
+		body.Sections = make([]*DPISectionResponseBody, len(res.Sections))
 		for i, val := range res.Sections {
 			if val == nil {
 				body.Sections[i] = nil
 				continue
 			}
-			body.Sections[i] = marshalAssistantDPISectionToDPISectionResponseBodyResponseBody(val)
+			body.Sections[i] = marshalAssistantDPISectionToDPISectionResponseBody(val)
 		}
 	} else {
-		body.Sections = []*DPISectionResponseBodyResponseBody{}
+		body.Sections = []*DPISectionResponseBody{}
 	}
 	if res.PrimaryCta != nil {
-		body.PrimaryCta = marshalAssistantDPICallToActionToDPICallToActionResponseBodyResponseBody(res.PrimaryCta)
+		body.PrimaryCta = marshalAssistantDPICallToActionToDPICallToActionResponseBody(res.PrimaryCta)
 	}
 	if res.DevNotes != nil {
 		body.DevNotes = make([]string, len(res.DevNotes))
