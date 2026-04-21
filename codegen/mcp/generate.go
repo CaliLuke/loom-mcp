@@ -351,6 +351,9 @@ func generateMCPTransport(genpkg string, svc *expr.ServiceExpr, data *AdapterDat
 	pkgName := data.MCPPackage
 	files = append(files, buildMCPAdapterFile(genpkg, svc, data, svcName))
 	files = append(files, buildMCPProtocolVersionFile(pkgName, svcName, data.ProtocolVersion))
+	if discovery := oauthDiscoveryFile(data); discovery != nil {
+		files = append(files, discovery)
+	}
 	files = append(files, buildMCPSDKServerFile(genpkg, svc, data, svcName, pkgName))
 	if provider := buildMCPPromptProviderFile(genpkg, svc, data, svcName, pkgName); provider != nil {
 		files = append(files, provider)

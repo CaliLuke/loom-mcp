@@ -187,7 +187,19 @@ func newGeneratedSDKServer(t *testing.T) (*mcpassistant.SDKServer, *httptest.Ser
 	require.NoError(t, err)
 	mux := http.NewServeMux()
 	mux.Handle("/rpc", sdkServer.Handler)
+	mountOAuthDiscovery(mux, "/rpc")
 	return sdkServer, httptest.NewServer(mux)
+}
+
+// mountOAuthDiscovery wires the generated OAuth protected-resource
+// metadata handler onto the provided mux at both the path-suffixed
+// well-known URL (per RFC 9728 §3.1) and the root alias.
+func mountOAuthDiscovery(mux *http.ServeMux, mountPath string) {
+	mux.HandleFunc(mcpassistant.OAuthMetadataPath(mountPath), mcpassistant.HandleProtectedResourceMetadata)
+	rootPath := mcpassistant.OAuthMetadataPath("")
+	if rootPath != mcpassistant.OAuthMetadataPath(mountPath) {
+		mux.HandleFunc(rootPath, mcpassistant.HandleProtectedResourceMetadata)
+	}
 }
 
 func newGeneratedCallerFromServer(t *testing.T, rawURL string) mcpruntime.Caller {

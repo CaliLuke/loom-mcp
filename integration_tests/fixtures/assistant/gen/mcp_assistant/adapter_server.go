@@ -1286,10 +1286,10 @@ func (a *MCPAdapter) toolsCallHandler(ctx context.Context, p *ToolsCallPayload, 
 			}
 		}
 		{
-			if err := validateMCPPayloadEnum(rawFields, "platform", "ios", "web"); err != nil {
+			if err := validateMCPPayloadEnum(rawFields, "density", "compact", "comfortable"); err != nil {
 				return true, a.sendToolError(ctx, stream, p.Name, toolInputError(err, p.Arguments))
 			}
-			if err := validateMCPPayloadEnum(rawFields, "density", "compact", "comfortable"); err != nil {
+			if err := validateMCPPayloadEnum(rawFields, "platform", "ios", "web"); err != nil {
 				return true, a.sendToolError(ctx, stream, p.Name, toolInputError(err, p.Arguments))
 			}
 		}

@@ -35,6 +35,13 @@ var _ = Service("assistant", func() {
 				IconTheme(IconThemeDark),
 			),
 		),
+		OAuth(
+			AuthorizationServer("https://auth.example.com"),
+			OAuthScope("read", "Read tool results and resource contents"),
+			OAuthScope("write", "Invoke mutating tools"),
+			ResourceIdentifier("https://api.example.com/mcp"),
+			ResourceDocumentationURL("https://docs.example.com/mcp-auth"),
+		),
 	)
 
 	// Keep the design minimal; integration tests exercise MCP protocol handlers.
