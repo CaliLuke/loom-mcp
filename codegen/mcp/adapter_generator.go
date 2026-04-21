@@ -58,6 +58,24 @@ type (
 
 		Register     *RegisterData
 		ClientCaller *ClientCallerData
+		OAuth        *OAuthData
+	}
+
+	// OAuthData carries the OAuth protected-resource configuration into
+	// generation. Nil when the DSL does not declare OAuth.
+	OAuthData struct {
+		AuthorizationServers     []string
+		Scopes                   []OAuthScopeData
+		ResourceIdentifier       string
+		BearerMethodsSupported   []string
+		ResourceDocumentationURL string
+	}
+
+	// OAuthScopeData describes one scope advertised by the protected
+	// resource.
+	OAuthScopeData struct {
+		Name        string
+		Description string
 	}
 
 	// RegisterData drives generation of runtime registration helpers.
@@ -271,6 +289,7 @@ func (g *adapterGenerator) newAdapterData(tools []*ToolAdapter, resources []*Res
 		MCPVersion:          g.mcp.Version,
 		MCPDescription:      g.mcp.Description,
 		WebsiteURL:          g.mcp.WebsiteURL,
+		OAuth:               oauthDataFromExpr(g.mcp.OAuth),
 		Icons:               iconDataFromExprs(g.mcp.Icons),
 		ProtocolVersion:     g.mcp.ProtocolVersion,
 		Package:             codegen.SnakeCase(g.originalService.Name),
@@ -598,6 +617,32 @@ func (g *adapterGenerator) populateResourceResultData(adapter *ResourceAdapter, 
 
 func hasNonEmptyPayload(attr *expr.AttributeExpr) bool {
 	return attr != nil && attr.Type != expr.Empty
+}
+
+func oauthDataFromExpr(o *mcpexpr.OAuthExpr) *OAuthData {
+	if o == nil {
+		return nil
+	}
+	data := &OAuthData{
+		AuthorizationServers:     append([]string(nil), o.AuthorizationServers...),
+		ResourceIdentifier:       o.ResourceIdentifier,
+		ResourceDocumentationURL: o.ResourceDocumentationURL,
+	}
+	if len(o.BearerMethodsSupported) > 0 {
+		data.BearerMethodsSupported = append([]string(nil), o.BearerMethodsSupported...)
+	} else {
+		data.BearerMethodsSupported = []string{"header"}
+	}
+	for _, scope := range o.Scopes {
+		if scope == nil || scope.Name == "" {
+			continue
+		}
+		data.Scopes = append(data.Scopes, OAuthScopeData{
+			Name:        scope.Name,
+			Description: scope.Description,
+		})
+	}
+	return data
 }
 
 func iconDataFromExprs(icons []*mcpexpr.IconExpr) []*IconData {
