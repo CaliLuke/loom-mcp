@@ -2,6 +2,8 @@
 package codegen
 
 import (
+	"strings"
+
 	"github.com/CaliLuke/loom/expr"
 )
 
@@ -111,49 +113,37 @@ func (b *mcpExprBuilder) buildInitializeResultType() *expr.AttributeExpr {
 }
 
 func (b *mcpExprBuilder) buildClientInfoType() *expr.AttributeExpr {
-	return &expr.AttributeExpr{
-		Type: &expr.Object{
-			{Name: "name", Attribute: &expr.AttributeExpr{
-				Type:        expr.String,
-				Description: "Client name",
-			}},
-			{Name: "version", Attribute: &expr.AttributeExpr{
-				Type:        expr.String,
-				Description: "Client version",
-			}},
-			{Name: "websiteUrl", Attribute: &expr.AttributeExpr{
-				Type:        expr.String,
-				Description: "Client website URL",
-			}},
-			{Name: "icons", Attribute: &expr.AttributeExpr{
-				Type:        &expr.Array{ElemType: &expr.AttributeExpr{Type: b.getOrCreateType("Icon", b.buildIconType)}},
-				Description: "Client icons",
-			}},
-		},
-		Validation: &expr.ValidationExpr{
-			Required: []string{"name", "version"},
-		},
-	}
+	return b.buildImplementationType("Client")
 }
 
 func (b *mcpExprBuilder) buildServerInfoType() *expr.AttributeExpr {
+	return b.buildImplementationType("Server")
+}
+
+// buildImplementationType builds the shared MCP Implementation schema
+// (clientInfo / serverInfo) with role-specific descriptions.
+func (b *mcpExprBuilder) buildImplementationType(role string) *expr.AttributeExpr {
 	return &expr.AttributeExpr{
 		Type: &expr.Object{
 			{Name: "name", Attribute: &expr.AttributeExpr{
 				Type:        expr.String,
-				Description: "Server name",
+				Description: role + " name",
 			}},
 			{Name: "version", Attribute: &expr.AttributeExpr{
 				Type:        expr.String,
-				Description: "Server version",
+				Description: role + " version",
+			}},
+			{Name: "description", Attribute: &expr.AttributeExpr{
+				Type:        expr.String,
+				Description: "Human-readable description of the " + strings.ToLower(role),
 			}},
 			{Name: "websiteUrl", Attribute: &expr.AttributeExpr{
 				Type:        expr.String,
-				Description: "Server website URL",
+				Description: role + " website URL",
 			}},
 			{Name: "icons", Attribute: &expr.AttributeExpr{
 				Type:        &expr.Array{ElemType: &expr.AttributeExpr{Type: b.getOrCreateType("Icon", b.buildIconType)}},
-				Description: "Server icons",
+				Description: role + " icons",
 			}},
 		},
 		Validation: &expr.ValidationExpr{

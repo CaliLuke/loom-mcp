@@ -7,4 +7,11 @@
 
 package mcpassistant
 
-const DefaultProtocolVersion = "2025-06-18"
+const DefaultProtocolVersion = "2025-11-25"
+
+var SupportedProtocolVersions = []string{
+	"2025-11-25",
+	"2025-06-18",
+	"2025-03-26",
+	"2024-11-05",
+}

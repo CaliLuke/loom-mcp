@@ -182,6 +182,8 @@ type ClientInfo struct {
 	Name string `json:"name"`
 	// Client version
 	Version string `json:"version"`
+	// Human-readable description of the client
+	Description *string `json:"description,omitempty"`
 	// Client website URL
 	WebsiteURL *string `json:"websiteUrl,omitempty"`
 	// Client icons
@@ -418,6 +420,8 @@ type ServerInfo struct {
 	Name string `json:"name"`
 	// Server version
 	Version string `json:"version"`
+	// Human-readable description of the server
+	Description *string `json:"description,omitempty"`
 	// Server website URL
 	WebsiteURL *string `json:"websiteUrl,omitempty"`
 	// Server icons

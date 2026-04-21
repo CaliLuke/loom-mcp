@@ -181,14 +181,23 @@ func (a *MCPAdapter) mcpProtocolVersion() string {
 	return DefaultProtocolVersion
 }
 func (a *MCPAdapter) supportsProtocolVersion(requested string) bool {
-	base := a.mcpProtocolVersion()
-	if requested == base {
-		return true
+	if a != nil && a.opts != nil && a.opts.ProtocolVersionOverride != "" {
+		return requested == a.opts.ProtocolVersionOverride
 	}
-	if !validMCPProtocolVersionDate(requested) || !validMCPProtocolVersionDate(base) {
-		return false
+	for _, v := range SupportedProtocolVersions {
+		if v == requested {
+			return true
+		}
 	}
-	return requested >= base
+	return false
+}
+
+// negotiateProtocolVersion returns the requested version if supported, otherwise the server's latest.
+func (a *MCPAdapter) negotiateProtocolVersion(requested string) string {
+	if a.supportsProtocolVersion(requested) {
+		return requested
+	}
+	return a.mcpProtocolVersion()
 }
 func validMCPProtocolVersionDate(v string) bool {
 	if len(v) != 10 {
@@ -727,9 +736,7 @@ func (a *MCPAdapter) Initialize(ctx context.Context, p *InitializePayload) (res 
 	if p == nil || p.ProtocolVersion == "" {
 		return nil, goa.PermanentError("invalid_params", "Missing protocolVersion")
 	}
-	if !a.supportsProtocolVersion(p.ProtocolVersion) {
-		return nil, goa.PermanentError("invalid_params", "Unsupported protocol version")
-	}
+	negotiatedVersion := a.negotiateProtocolVersion(p.ProtocolVersion)
 	sessionID := requestSessionID
 	if sessionID == "" && mcpruntime.ResponseWriterFromContext(ctx) != nil {
 		sessionID = mcpruntime.EnsureSessionID(ctx)
@@ -764,7 +771,7 @@ func (a *MCPAdapter) Initialize(ctx context.Context, p *InitializePayload) (res 
 	}
 	a.mu.Unlock()
 	a.captureSessionPrincipal(ctx, sessionID)
-	serverInfo := &ServerInfo{Name: "assistant-mcp", Version: "1.0.0", WebsiteURL: stringPtr("https://assistant.example.com/docs"), Icons: []*Icon{&Icon{
+	serverInfo := &ServerInfo{Name: "assistant-mcp", Version: "1.0.0", Description: stringPtr("AI Assistant service with full MCP protocol support"), WebsiteURL: stringPtr("https://assistant.example.com/docs"), Icons: []*Icon{&Icon{
 		MimeType: stringPtr("image/png"),
 		Sizes:    []string{"48x48"},
 		Src:      "https://assistant.example.com/icons/server-light.png",
@@ -781,7 +788,7 @@ func (a *MCPAdapter) Initialize(ctx context.Context, p *InitializePayload) (res 
 	capabilities.Prompts = &PromptsCapability{}
 	res = &InitializeResult{
 		Capabilities:    capabilities,
-		ProtocolVersion: a.mcpProtocolVersion(),
+		ProtocolVersion: negotiatedVersion,
 		ServerInfo:      serverInfo,
 	}
 	a.log(ctx, "response", map[string]any{

@@ -34,6 +34,7 @@ type (
 		MCPServiceName      string
 		MCPName             string
 		MCPVersion          string
+		MCPDescription      string
 		WebsiteURL          string
 		Icons               []*IconData
 		ProtocolVersion     string
@@ -268,6 +269,7 @@ func (g *adapterGenerator) newAdapterData(tools []*ToolAdapter, resources []*Res
 		MCPServiceName:      g.originalService.Name,
 		MCPName:             g.mcp.Name,
 		MCPVersion:          g.mcp.Version,
+		MCPDescription:      g.mcp.Description,
 		WebsiteURL:          g.mcp.WebsiteURL,
 		Icons:               iconDataFromExprs(g.mcp.Icons),
 		ProtocolVersion:     g.mcp.ProtocolVersion,

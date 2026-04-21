@@ -172,6 +172,8 @@ type ServerInfoResponseBody struct {
 	Name string `form:"name" json:"name" xml:"name"`
 	// Server version
 	Version string `form:"version" json:"version" xml:"version"`
+	// Human-readable description of the server
+	Description *string `form:"description,omitempty" json:"description,omitempty" xml:"description,omitempty"`
 	// Server website URL
 	WebsiteURL *string `form:"websiteUrl,omitempty" json:"websiteUrl,omitempty" xml:"websiteUrl,omitempty"`
 	// Server icons
@@ -359,6 +361,8 @@ type ClientInfoRequestBodyRequestBodyRequestBodyRequestBody struct {
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// Client version
 	Version *string `form:"version,omitempty" json:"version,omitempty" xml:"version,omitempty"`
+	// Human-readable description of the client
+	Description *string `form:"description,omitempty" json:"description,omitempty" xml:"description,omitempty"`
 	// Client website URL
 	WebsiteURL *string `form:"websiteUrl,omitempty" json:"websiteUrl,omitempty" xml:"websiteUrl,omitempty"`
 	// Client icons

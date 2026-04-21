@@ -271,14 +271,27 @@ func emitProtocolVersionHelpers(stmt *jen.Statement) {
 	stmt.Func().Params(jen.Id("a").Op("*").Id("MCPAdapter")).
 		Id("supportsProtocolVersion").Params(jen.Id("requested").String()).Bool().
 		Block(
-			jen.Id("base").Op(":=").Id("a").Dot("mcpProtocolVersion").Call(),
-			jen.If(jen.Id("requested").Op("==").Id("base")).Block(
-				jen.Return(jen.True()),
+			jen.If(jen.Id("a").Op("!=").Nil().Op("&&").Id("a").Dot("opts").Op("!=").Nil().Op("&&").Id("a").Dot("opts").Dot("ProtocolVersionOverride").Op("!=").Lit("")).Block(
+				jen.Return(jen.Id("requested").Op("==").Id("a").Dot("opts").Dot("ProtocolVersionOverride")),
 			),
-			jen.If(jen.Op("!").Id("validMCPProtocolVersionDate").Call(jen.Id("requested")).Op("||").Op("!").Id("validMCPProtocolVersionDate").Call(jen.Id("base"))).Block(
-				jen.Return(jen.False()),
+			jen.For(jen.List(jen.Id("_"), jen.Id("v")).Op(":=").Range().Id("SupportedProtocolVersions")).Block(
+				jen.If(jen.Id("v").Op("==").Id("requested")).Block(
+					jen.Return(jen.True()),
+				),
 			),
-			jen.Return(jen.Id("requested").Op(">=").Id("base")),
+			jen.Return(jen.False()),
+		)
+	stmt.Line()
+
+	// negotiateProtocolVersion
+	stmt.Comment("negotiateProtocolVersion returns the requested version if supported, otherwise the server's latest.").Line()
+	stmt.Func().Params(jen.Id("a").Op("*").Id("MCPAdapter")).
+		Id("negotiateProtocolVersion").Params(jen.Id("requested").String()).String().
+		Block(
+			jen.If(jen.Id("a").Dot("supportsProtocolVersion").Call(jen.Id("requested"))).Block(
+				jen.Return(jen.Id("requested")),
+			),
+			jen.Return(jen.Id("a").Dot("mcpProtocolVersion").Call()),
 		)
 	stmt.Line()
 
@@ -1059,9 +1072,7 @@ func emitInitializeHandler(stmt *jen.Statement, data *AdapterData) {
 			g.If(jen.Id("p").Op("==").Nil().Op("||").Id("p").Dot("ProtocolVersion").Op("==").Lit("")).Block(
 				jen.Return(jen.Nil(), jen.Id("goa").Dot("PermanentError").Call(jen.Lit("invalid_params"), jen.Lit("Missing protocolVersion"))),
 			)
-			g.If(jen.Op("!").Id("a").Dot("supportsProtocolVersion").Call(jen.Id("p").Dot("ProtocolVersion"))).Block(
-				jen.Return(jen.Nil(), jen.Id("goa").Dot("PermanentError").Call(jen.Lit("invalid_params"), jen.Lit("Unsupported protocol version"))),
-			)
+			g.Id("negotiatedVersion").Op(":=").Id("a").Dot("negotiateProtocolVersion").Call(jen.Id("p").Dot("ProtocolVersion"))
 
 			g.Id("sessionID").Op(":=").Id("requestSessionID")
 			g.If(jen.Id("sessionID").Op("==").Lit("").Op("&&").Id("mcpruntime").Dot("ResponseWriterFromContext").Call(jen.Id("ctx")).Op("!=").Nil()).Block(
@@ -1095,6 +1106,9 @@ func emitInitializeHandler(stmt *jen.Statement, data *AdapterData) {
 			g.Id("serverInfo").Op(":=").Op("&").Id("ServerInfo").ValuesFunc(func(v *jen.Group) {
 				v.Id("Name").Op(":").Lit(data.MCPName)
 				v.Id("Version").Op(":").Lit(data.MCPVersion)
+				if data.MCPDescription != "" {
+					v.Id("Description").Op(":").Id("stringPtr").Call(jen.Lit(data.MCPDescription))
+				}
 				if data.WebsiteURL != "" {
 					v.Id("WebsiteURL").Op(":").Id("stringPtr").Call(jen.Lit(data.WebsiteURL))
 				}
@@ -1116,7 +1130,7 @@ func emitInitializeHandler(stmt *jen.Statement, data *AdapterData) {
 			}
 
 			g.Id("res").Op("=").Op("&").Id("InitializeResult").Values(jen.Dict{
-				jen.Id("ProtocolVersion"): jen.Id("a").Dot("mcpProtocolVersion").Call(),
+				jen.Id("ProtocolVersion"): jen.Id("negotiatedVersion"),
 				jen.Id("ServerInfo"):      jen.Id("serverInfo"),
 				jen.Id("Capabilities"):    jen.Id("capabilities"),
 			})

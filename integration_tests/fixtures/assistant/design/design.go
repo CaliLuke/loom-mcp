@@ -21,7 +21,7 @@ var _ = Service("assistant", func() {
 	Description("AI Assistant service with full MCP protocol support")
 
 	MCP("assistant-mcp", "1.0.0",
-		ProtocolVersion("2025-06-18"),
+		ProtocolVersion("2025-11-25"),
 		WebsiteURL("https://assistant.example.com/docs"),
 		ServerIcons(
 			Icon("https://assistant.example.com/icons/server-light.png",

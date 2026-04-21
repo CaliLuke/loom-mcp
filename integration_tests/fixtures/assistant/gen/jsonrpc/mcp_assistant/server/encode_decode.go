@@ -461,9 +461,10 @@ func unmarshalClientInfoRequestBodyRequestBodyRequestBodyRequestBodyToMcpassista
 		return nil
 	}
 	res := &mcpassistant.ClientInfo{
-		Name:       *v.Name,
-		Version:    *v.Version,
-		WebsiteURL: v.WebsiteURL,
+		Name:        *v.Name,
+		Version:     *v.Version,
+		Description: v.Description,
+		WebsiteURL:  v.WebsiteURL,
 	}
 	if v.Icons != nil {
 		res.Icons = make([]*mcpassistant.Icon, len(v.Icons))
@@ -559,9 +560,10 @@ func marshalMcpassistantPromptsCapabilityToPromptsCapabilityResponseBody(v *mcpa
 // *ServerInfoResponseBody from a value of type *mcpassistant.ServerInfo.
 func marshalMcpassistantServerInfoToServerInfoResponseBody(v *mcpassistant.ServerInfo) *ServerInfoResponseBody {
 	res := &ServerInfoResponseBody{
-		Name:       v.Name,
-		Version:    v.Version,
-		WebsiteURL: v.WebsiteURL,
+		Name:        v.Name,
+		Version:     v.Version,
+		Description: v.Description,
+		WebsiteURL:  v.WebsiteURL,
 	}
 	if v.Icons != nil {
 		res.Icons = make([]*IconResponseBody, len(v.Icons))

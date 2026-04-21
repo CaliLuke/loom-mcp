@@ -15,6 +15,34 @@ scenarios:
           result:
             tools: [ { name: "analyze_sentiment" }, { name: "extract_keywords" }, { name: "summarize_text" }, { name: "search" }, { name: "execute_code" }, { name: "process_batch" } ]
 
+  - name: tools_list_deterministic_ordering
+    defaults:
+      client: jsonrpc.mcp_assistant
+    pre:
+      auto_initialize: true
+    steps:
+      - name: list_first
+        op: ToolsList
+        input: {}
+        expect:
+          status: success
+          result:
+            tools: [ { name: "analyze_sentiment" }, { name: "extract_keywords" }, { name: "summarize_text" }, { name: "search" }, { name: "execute_code" }, { name: "process_batch" } ]
+      - name: list_second
+        op: ToolsList
+        input: {}
+        expect:
+          status: success
+          result:
+            tools: [ { name: "analyze_sentiment" }, { name: "extract_keywords" }, { name: "summarize_text" }, { name: "search" }, { name: "execute_code" }, { name: "process_batch" } ]
+      - name: list_third
+        op: ToolsList
+        input: {}
+        expect:
+          status: success
+          result:
+            tools: [ { name: "analyze_sentiment" }, { name: "extract_keywords" }, { name: "summarize_text" }, { name: "search" }, { name: "execute_code" }, { name: "process_batch" } ]
+
   - name: tools_list_schema
     defaults:
       client: jsonrpc.mcp_assistant

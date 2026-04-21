@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"fmt"
 	"path/filepath"
+	"slices"
 	"sort"
 	"strings"
 
@@ -455,13 +456,22 @@ func addAttributeImports(target map[string]*codegen.ImportSpec, genpkg string, a
 func buildMCPProtocolVersionFile(pkgName, svcName, protocolVersion string) *codegen.File {
 	pv := protocolVersion
 	if pv == "" {
-		pv = "2025-06-18"
+		pv = "2025-11-25"
 	}
+	supported := []string{"2025-11-25", "2025-06-18", "2025-03-26", "2024-11-05"}
+	if !slices.Contains(supported, pv) {
+		supported = append([]string{pv}, supported...)
+	}
+	var list strings.Builder
+	for _, v := range supported {
+		fmt.Fprintf(&list, "\t%q,\n", v)
+	}
+	source := fmt.Sprintf("const DefaultProtocolVersion = %q\n\nvar SupportedProtocolVersions = []string{\n%s}\n", pv, list.String())
 	return &codegen.File{
 		Path: filepath.Join(codegen.Gendir, "mcp_"+svcName, "protocol_version.go"),
 		SectionTemplates: []*codegen.SectionTemplate{
 			codegen.Header("MCP protocol version", pkgName, nil),
-			{Name: "mcp-protocol-version", Source: fmt.Sprintf("const DefaultProtocolVersion = %q\n", pv)},
+			{Name: "mcp-protocol-version", Source: source},
 		},
 	}
 }

@@ -1023,9 +1023,10 @@ func DecodeEventsStreamResponse(decoder func(*http.Response) loomhttp.Decoder, r
 // *mcpassistant.ClientInfo.
 func marshalMcpassistantClientInfoToClientInfoRequestBodyRequestBodyRequestBodyRequestBody(v *mcpassistant.ClientInfo) *ClientInfoRequestBodyRequestBodyRequestBodyRequestBody {
 	res := &ClientInfoRequestBodyRequestBodyRequestBodyRequestBody{
-		Name:       v.Name,
-		Version:    v.Version,
-		WebsiteURL: v.WebsiteURL,
+		Name:        v.Name,
+		Version:     v.Version,
+		Description: v.Description,
+		WebsiteURL:  v.WebsiteURL,
 	}
 	if v.Icons != nil {
 		res.Icons = make([]*IconRequestBodyRequestBodyRequestBodyRequestBody, len(v.Icons))
@@ -1068,9 +1069,10 @@ func marshalMcpassistantIconToIconRequestBodyRequestBodyRequestBodyRequestBody(v
 // *ClientInfoRequestBodyRequestBodyRequestBodyRequestBody.
 func marshalClientInfoRequestBodyRequestBodyRequestBodyRequestBodyToMcpassistantClientInfo(v *ClientInfoRequestBodyRequestBodyRequestBodyRequestBody) *mcpassistant.ClientInfo {
 	res := &mcpassistant.ClientInfo{
-		Name:       v.Name,
-		Version:    v.Version,
-		WebsiteURL: v.WebsiteURL,
+		Name:        v.Name,
+		Version:     v.Version,
+		Description: v.Description,
+		WebsiteURL:  v.WebsiteURL,
 	}
 	if v.Icons != nil {
 		res.Icons = make([]*mcpassistant.Icon, len(v.Icons))
@@ -1172,9 +1174,10 @@ func unmarshalServerInfoResponseBodyToMcpassistantServerInfo(v *ServerInfoRespon
 		return nil
 	}
 	res := &mcpassistant.ServerInfo{
-		Name:       *v.Name,
-		Version:    *v.Version,
-		WebsiteURL: v.WebsiteURL,
+		Name:        *v.Name,
+		Version:     *v.Version,
+		Description: v.Description,
+		WebsiteURL:  v.WebsiteURL,
 	}
 	if v.Icons != nil {
 		res.Icons = make([]*mcpassistant.Icon, len(v.Icons))
