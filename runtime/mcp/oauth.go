@@ -5,14 +5,36 @@
 package mcp
 
 import (
+	"errors"
 	"net/http"
 	"net/url"
 	"strings"
 )
 
+// ErrInvalidForwardedHeaders signals that a forwarded-identity header was
+// present on the request but failed validation (contained control or
+// delimiter characters, or was otherwise unsafe to embed in a URL).
+// Callers that derive the RFC 8707 canonical resource URI from request
+// context should treat this as a 400 Bad Request rather than silently
+// falling back to `r.Host`: a malformed forwarded header signals either a
+// misconfigured proxy or a client probing for injection vectors, and
+// either way the safe response is to reject the request.
+var ErrInvalidForwardedHeaders = errors.New("mcp/oauth: invalid forwarded identity header")
+
+// ErrEmptyResourceURL signals that CanonicalizeResourceURL could not
+// derive a non-empty scheme+host for the request. Callers should treat
+// this as a 400 Bad Request because RFC 9728 requires `resource` to be a
+// fully-qualified URI.
+var ErrEmptyResourceURL = errors.New("mcp/oauth: cannot derive canonical resource URL")
+
 // ProtectedResourceMetadataPrefix is the RFC 9728 well-known prefix for
 // OAuth 2.0 protected-resource metadata.
 const ProtectedResourceMetadataPrefix = "/.well-known/oauth-protected-resource"
+
+const (
+	schemeHTTP  = "http"
+	schemeHTTPS = "https"
+)
 
 // ProtectedResourceMetadataPath returns the RFC 9728 §3.1 path-suffixed
 // metadata path for a server mounted at mountPath. The root alias
@@ -30,24 +52,89 @@ func ProtectedResourceMetadataPath(mountPath string) string {
 }
 
 // CanonicalizeResourceURL derives the RFC 8707 canonical resource URI
-// from an incoming request. It honors X-Forwarded-Proto and
+// from an incoming request.
+//
+// When trustProxy is true, the function honors X-Forwarded-Proto and
 // X-Forwarded-Host (and RFC 7239 Forwarded) so the value reflects the
-// client-visible URL when the server sits behind a reverse proxy the
-// operator trusts. Operators who cannot vouch for those headers should
-// declare the resource identifier explicitly in the MCP DSL.
-func CanonicalizeResourceURL(r *http.Request) string {
+// client-visible URL behind a trusted reverse proxy; a forwarded header
+// present but malformed is rejected with ErrInvalidForwardedHeaders.
+//
+// When trustProxy is false (the default for a generated server without
+// TrustProxyHeaders() in the DSL), forwarded headers are ignored
+// entirely and the origin is derived from r.Host + r.TLS only. This is
+// the safe default for any server reachable directly by clients:
+// without it, an attacker with direct access controls the PRM
+// `resource` field advertised to clients.
+//
+// Returns ErrEmptyResourceURL when no scheme+host can be derived.
+// Callers should surface errors as 400 Bad Request rather than emitting
+// a PRM document or challenge URL built from attacker-influenced or
+// unusable inputs.
+//
+// Operators who cannot vouch for forwarded headers should either leave
+// trustProxy at its default or declare the resource identifier
+// explicitly in the MCP DSL; generated code uses the declared value
+// and does not call this function in the pinned case.
+func CanonicalizeResourceURL(r *http.Request, trustProxy bool) (string, error) {
 	if r == nil {
-		return ""
+		return "", ErrEmptyResourceURL
 	}
-	scheme := forwardedScheme(r)
-	host := forwardedHost(r)
-	path := canonicalPath(r.URL.Path)
+	var scheme, host string
+	if trustProxy {
+		s, err := forwardedSchemeStrict(r)
+		if err != nil {
+			return "", err
+		}
+		h, err := forwardedHostStrict(r)
+		if err != nil {
+			return "", err
+		}
+		scheme, host = s, h
+	} else {
+		scheme = schemeHTTP
+		if r.TLS != nil {
+			scheme = schemeHTTPS
+		}
+		host = r.Host
+	}
 	if scheme == "" || host == "" {
-		return ""
+		return "", ErrEmptyResourceURL
 	}
 	host = strings.ToLower(host)
 	host = stripDefaultPort(scheme, host)
-	u := &url.URL{Scheme: scheme, Host: host, Path: path}
+	u := &url.URL{Scheme: scheme, Host: host, Path: canonicalPath(r.URL.Path)}
+	return u.String(), nil
+}
+
+// CanonicalizeChallengeOrigin derives an origin URL suitable for embedding
+// in a WWW-Authenticate `resource_metadata` parameter. Unlike the strict
+// CanonicalizeResourceURL, this function never returns an error: if
+// forwarded headers are malformed (or the caller did not opt into
+// trusting them), it falls back to the request scheme and Host header so
+// the challenge still points at some reachable origin.
+//
+// This fallback is deliberate and narrow: a challenge is a formatting
+// artifact inside a 401 response, not an identity claim. Emitting a
+// slightly-wrong URL back to a client whose request carried malformed
+// proxy headers is better than emitting nothing. Do not use this function
+// to populate the PRM `resource` field — use CanonicalizeResourceURL
+// there so the request fails loudly on malformed input.
+func CanonicalizeChallengeOrigin(r *http.Request, trustProxy bool) string {
+	if r == nil {
+		return ""
+	}
+	if u, err := CanonicalizeResourceURL(r, trustProxy); err == nil {
+		return u
+	}
+	scheme := schemeHTTP
+	if r.TLS != nil {
+		scheme = schemeHTTPS
+	}
+	host := strings.ToLower(stripDefaultPort(scheme, r.Host))
+	if host == "" {
+		return ""
+	}
+	u := &url.URL{Scheme: scheme, Host: host, Path: canonicalPath(r.URL.Path)}
 	return u.String()
 }
 
@@ -108,51 +195,205 @@ func WriteInvalidToken(w http.ResponseWriter, resourceMetadataURL, errorDescript
 	_, _ = w.Write([]byte(`{"error":"invalid_token"}`))
 }
 
-func forwardedScheme(r *http.Request) string {
+// forwardedSchemeStrict returns the client-visible scheme after validating
+// forwarded headers. A forwarded header that is present but malformed
+// (unknown scheme, control/delimiter chars) returns ErrInvalidForwardedHeaders
+// rather than falling back silently.
+func forwardedSchemeStrict(r *http.Request) (string, error) {
 	if v := r.Header.Get("X-Forwarded-Proto"); v != "" {
-		return strings.ToLower(strings.TrimSpace(firstCSV(v)))
+		s := strings.ToLower(strings.TrimSpace(firstCSV(v)))
+		if !isValidScheme(s) {
+			return "", ErrInvalidForwardedHeaders
+		}
+		return s, nil
 	}
-	if v := forwardedParam(r.Header.Get("Forwarded"), "proto"); v != "" {
-		return strings.ToLower(v)
+	if v, ok := forwardedParam(r.Header.Get("Forwarded"), "proto"); ok {
+		s := strings.ToLower(v)
+		if !isValidScheme(s) {
+			return "", ErrInvalidForwardedHeaders
+		}
+		return s, nil
 	}
 	if r.TLS != nil {
-		return "https"
+		return schemeHTTPS, nil
 	}
-	return "http"
+	return schemeHTTP, nil
 }
 
-func forwardedHost(r *http.Request) string {
+// forwardedHostStrict returns the client-visible host after validating
+// forwarded headers. A forwarded header that is present but malformed
+// returns ErrInvalidForwardedHeaders rather than falling back to
+// r.Host — a malformed proxy header is a signal, not noise to ignore.
+func forwardedHostStrict(r *http.Request) (string, error) {
 	if v := r.Header.Get("X-Forwarded-Host"); v != "" {
-		return strings.TrimSpace(firstCSV(v))
+		host := strings.TrimSpace(firstCSV(v))
+		if !isValidHostPort(host) {
+			return "", ErrInvalidForwardedHeaders
+		}
+		return host, nil
 	}
-	if v := forwardedParam(r.Header.Get("Forwarded"), "host"); v != "" {
-		return v
+	if v, ok := forwardedParam(r.Header.Get("Forwarded"), "host"); ok {
+		if !isValidHostPort(v) {
+			return "", ErrInvalidForwardedHeaders
+		}
+		return v, nil
 	}
-	return r.Host
+	return r.Host, nil
 }
 
-func forwardedParam(header, key string) string {
-	if header == "" {
-		return ""
+// isValidScheme returns true for the only schemes MCP transports speak.
+// HTTP and HTTPS cover every MCP Streamable HTTP and JSON-RPC deployment;
+// anything else from a forwarded header is a misconfiguration or
+// injection attempt.
+func isValidScheme(s string) bool {
+	return s == schemeHTTP || s == schemeHTTPS
+}
+
+// isValidHostPort returns true when v looks like an RFC 3986 host[:port]
+// authority component and contains no characters that would let it escape
+// a URL context or inject into a response header. This deliberately
+// rejects userinfo (`@`), path/query/fragment markers (`/`, `?`, `#`),
+// whitespace, and any ASCII control characters (including CR/LF).
+func isValidHostPort(v string) bool {
+	if v == "" {
+		return false
 	}
-	first := firstCSV(header)
-	for _, part := range strings.Split(first, ";") {
+	for i := 0; i < len(v); i++ {
+		c := v[i]
+		switch c {
+		case '/', '?', '#', '@', ' ', '\t', '\r', '\n':
+			return false
+		}
+		if c < 0x20 || c == 0x7f {
+			return false
+		}
+	}
+	return true
+}
+
+// forwardedParam parses an RFC 7239 Forwarded header value and returns the
+// value associated with key in the first forwarded-element. The second
+// return is true when the key was present, regardless of whether the
+// value is empty — callers rely on that distinction to tell "no forwarded
+// header" from "present but empty," which matter differently for strict
+// validation.
+//
+// The parser is intentionally small. It handles quoted-string values
+// (including semicolons inside quotes) and quoted-pair escapes, which
+// covers legitimate proxy output. It does not attempt to validate every
+// RFC 7239 nuance; isValidHostPort / isValidScheme do that downstream.
+func forwardedParam(header, key string) (string, bool) {
+	if header == "" {
+		return "", false
+	}
+	first := firstForwardedElement(header)
+	for _, part := range splitForwardedParams(first) {
 		kv := strings.SplitN(strings.TrimSpace(part), "=", 2)
 		if len(kv) != 2 {
 			continue
 		}
 		if strings.EqualFold(kv[0], key) {
-			return strings.Trim(kv[1], `"`)
+			return unquoteForwardedValue(kv[1]), true
 		}
 	}
-	return ""
+	return "", false
+}
+
+// firstForwardedElement returns the first element of an RFC 7239
+// Forwarded header, where elements are comma-separated but commas inside
+// quoted strings must not split. A naive strings.IndexByte(',') is wrong
+// here: `host="a,b"` is one element with a comma in its quoted host.
+func firstForwardedElement(header string) string {
+	var b strings.Builder
+	inQuotes := false
+	escaped := false
+	for i := 0; i < len(header); i++ {
+		c := header[i]
+		if escaped {
+			b.WriteByte(c)
+			escaped = false
+			continue
+		}
+		if c == '\\' && inQuotes {
+			b.WriteByte(c)
+			escaped = true
+			continue
+		}
+		if c == '"' {
+			inQuotes = !inQuotes
+			b.WriteByte(c)
+			continue
+		}
+		if c == ',' && !inQuotes {
+			break
+		}
+		b.WriteByte(c)
+	}
+	return strings.TrimSpace(b.String())
+}
+
+// splitForwardedParams splits a single forwarded-element on `;` while
+// respecting quoted strings and quoted-pair escapes. Necessary because
+// `host="public;injected"` must parse as one parameter, not two.
+func splitForwardedParams(element string) []string {
+	var out []string
+	var b strings.Builder
+	inQuotes := false
+	escaped := false
+	for i := 0; i < len(element); i++ {
+		c := element[i]
+		if escaped {
+			b.WriteByte(c)
+			escaped = false
+			continue
+		}
+		if c == '\\' && inQuotes {
+			b.WriteByte(c)
+			escaped = true
+			continue
+		}
+		if c == '"' {
+			inQuotes = !inQuotes
+			b.WriteByte(c)
+			continue
+		}
+		if c == ';' && !inQuotes {
+			out = append(out, b.String())
+			b.Reset()
+			continue
+		}
+		b.WriteByte(c)
+	}
+	out = append(out, b.String())
+	return out
+}
+
+// unquoteForwardedValue strips surrounding DQUOTEs and resolves
+// quoted-pair escapes (`\X` → `X`) per RFC 7239 §4. Unquoted tokens are
+// returned unchanged.
+func unquoteForwardedValue(v string) string {
+	v = strings.TrimSpace(v)
+	if len(v) < 2 || v[0] != '"' || v[len(v)-1] != '"' {
+		return v
+	}
+	inner := v[1 : len(v)-1]
+	var b strings.Builder
+	b.Grow(len(inner))
+	for i := 0; i < len(inner); i++ {
+		c := inner[i]
+		if c == '\\' && i+1 < len(inner) {
+			b.WriteByte(inner[i+1])
+			i++
+			continue
+		}
+		b.WriteByte(c)
+	}
+	return b.String()
 }
 
 func firstCSV(v string) string {
-	if i := strings.IndexByte(v, ','); i >= 0 {
-		return strings.TrimSpace(v[:i])
-	}
-	return strings.TrimSpace(v)
+	first, _, _ := strings.Cut(v, ",")
+	return strings.TrimSpace(first)
 }
 
 func canonicalPath(p string) string {
@@ -167,18 +408,29 @@ func canonicalPath(p string) string {
 
 func stripDefaultPort(scheme, host string) string {
 	switch scheme {
-	case "http":
+	case schemeHTTP:
 		return strings.TrimSuffix(host, ":80")
-	case "https":
+	case schemeHTTPS:
 		return strings.TrimSuffix(host, ":443")
 	default:
 		return host
 	}
 }
 
+// escapeHeaderQuoted escapes a value for embedding inside an RFC 7230
+// quoted-string header parameter. It escapes `"` and `\` per the spec,
+// and strips CR and LF entirely — those would split the header and let
+// untrusted input forge additional response headers. Stripping rather
+// than escaping matches what net/http's own header validation does: the
+// characters are simply not permitted in a response header value, so
+// removing them is equivalent to rejecting the offending byte.
 func escapeHeaderQuoted(s string) string {
-	// RFC 7230: quoted-string escapes " and \.
-	replacer := strings.NewReplacer(`\`, `\\`, `"`, `\"`)
+	replacer := strings.NewReplacer(
+		`\`, `\\`,
+		`"`, `\"`,
+		"\r", "",
+		"\n", "",
+	)
 	return replacer.Replace(s)
 }
 
@@ -222,7 +474,10 @@ func (c *challengeInterceptor) WriteHeader(status int) {
 	c.wroteHeader = true
 	if status == http.StatusUnauthorized && c.challenge != nil {
 		existing := c.Header().Get("WWW-Authenticate")
-		if !strings.Contains(existing, "resource_metadata=") {
+		// RFC 7235 challenge parameter names are case-insensitive, so
+		// `Resource_Metadata=` from an upstream handler should still
+		// prevent us from overwriting the challenge.
+		if !strings.Contains(strings.ToLower(existing), "resource_metadata=") {
 			c.Header().Set("WWW-Authenticate", c.challenge(c.request, c.mountPath))
 		}
 	}

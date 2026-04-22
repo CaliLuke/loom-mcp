@@ -201,6 +201,27 @@ func ResourceDocumentationURL(url string) OAuthOption {
 	}
 }
 
+// TrustProxyHeaders opts the generated server into honoring
+// X-Forwarded-Proto, X-Forwarded-Host, and RFC 7239 Forwarded headers
+// when deriving the canonical resource URL and the WWW-Authenticate
+// challenge origin. Default (without this option) is not to trust
+// forwarded headers at all.
+//
+// Only enable this when every request reaches the server through a
+// reverse proxy the operator fully controls and that strips these
+// headers from direct-client requests. A server reachable directly by
+// clients must NOT trust forwarded headers — an attacker would otherwise
+// control the PRM `resource` field advertised to clients.
+//
+// For most production deployments, pinning ResourceIdentifier(...) is
+// preferred: a declared identifier bypasses forwarded-header derivation
+// entirely and is the spec's recommended posture.
+func TrustProxyHeaders() OAuthOption {
+	return func(o *exprmcp.OAuthExpr) {
+		o.TrustProxyHeaders = true
+	}
+}
+
 // ServerIcons attaches implementation icons to the MCP server metadata.
 func ServerIcons(icons ...*exprmcp.IconExpr) func(*exprmcp.MCPExpr) {
 	return func(m *exprmcp.MCPExpr) {

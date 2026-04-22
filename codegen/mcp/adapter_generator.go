@@ -69,6 +69,13 @@ type (
 		ResourceIdentifier       string
 		BearerMethodsSupported   []string
 		ResourceDocumentationURL string
+		// TrustProxyHeaders controls whether generated code honors
+		// X-Forwarded-* and RFC 7239 Forwarded headers when deriving
+		// the canonical resource URL and the WWW-Authenticate
+		// challenge origin. Default is false: a server reachable
+		// directly by clients must not trust forwarded headers because
+		// an attacker could otherwise control the PRM `resource` field.
+		TrustProxyHeaders bool
 	}
 
 	// OAuthScopeData describes one scope advertised by the protected
@@ -627,6 +634,7 @@ func oauthDataFromExpr(o *mcpexpr.OAuthExpr) *OAuthData {
 		AuthorizationServers:     append([]string(nil), o.AuthorizationServers...),
 		ResourceIdentifier:       o.ResourceIdentifier,
 		ResourceDocumentationURL: o.ResourceDocumentationURL,
+		TrustProxyHeaders:        o.TrustProxyHeaders,
 	}
 	if len(o.BearerMethodsSupported) > 0 {
 		data.BearerMethodsSupported = append([]string(nil), o.BearerMethodsSupported...)

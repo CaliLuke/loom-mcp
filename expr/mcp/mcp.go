@@ -112,6 +112,15 @@ type (
 		// ResourceDocumentationURL surfaces as resource_documentation
 		// in the PRM document.
 		ResourceDocumentationURL string
+		// TrustProxyHeaders determines whether the generated server
+		// consumes X-Forwarded-Proto / X-Forwarded-Host / Forwarded
+		// headers when deriving the canonical resource URL or the
+		// challenge origin. Default is false: forwarded headers are
+		// ignored entirely, and origin is derived from r.Host + r.TLS.
+		// Enable this only when the server sits behind a proxy the
+		// operator fully controls and trusts — otherwise an attacker
+		// with direct access can poison the PRM `resource` field.
+		TrustProxyHeaders bool
 	}
 
 	// ScopeExpr documents one OAuth 2.0 scope advertised by an MCP

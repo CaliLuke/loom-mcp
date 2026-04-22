@@ -23,7 +23,7 @@ overview, see [`docs/overview.md`](overview.md).
 
 The runtime operates on three layers:
 
-```
+```text
 ┌─────────────────────────────────────────────────────────────────────┐
 │                        Application Layer                            │
 │  Services call generated clients to start runs and stream events    │
@@ -42,14 +42,14 @@ The runtime operates on three layers:
 
 **Key concepts:**
 
-| Concept | Purpose |
-|---------|---------|
-| **Runtime** | Central registry and coordinator. Holds agents, toolsets, models, hooks, and stores. |
-| **Engine** | Workflow backend (Temporal or in-memory). Provides durable execution, activities, and signals. |
-| **Planner** | Decision-maker. Analyzes messages and returns tool calls or a final response. |
-| **Toolset** | Collection of tools with shared execution logic. Generated from DSL or registered manually. |
-| **Hooks** | Internal event bus. Publishes lifecycle events for memory, streaming, and telemetry. |
-| **Stream** | External event delivery. Transforms hook events into client-facing updates (SSE, WebSocket, Pulse). |
+| Concept     | Purpose                                                                                             |
+| ----------- | --------------------------------------------------------------------------------------------------- |
+| **Runtime** | Central registry and coordinator. Holds agents, toolsets, models, hooks, and stores.                |
+| **Engine**  | Workflow backend (Temporal or in-memory). Provides durable execution, activities, and signals.      |
+| **Planner** | Decision-maker. Analyzes messages and returns tool calls or a final response.                       |
+| **Toolset** | Collection of tools with shared execution logic. Generated from DSL or registered manually.         |
+| **Hooks**   | Internal event bus. Publishes lifecycle events for memory, streaming, and telemetry.                |
+| **Stream**  | External event delivery. Transforms hook events into client-facing updates (SSE, WebSocket, Pulse). |
 
 ---
 
@@ -163,15 +163,15 @@ rt := runtime.New(
 
 When options are omitted, the runtime uses sensible defaults:
 
-| Option | Default |
-|--------|---------|
-| Engine | In-memory (synchronous, non-durable) |
-| MemoryStore | None (transcripts not persisted) |
-| PromptStore | None (baseline prompt specs only, no scoped overrides) |
-| Stream | None (no external event delivery) |
-| Policy | None (all tools allowed, caps from agent registration) |
-| Hooks | In-process bus |
-| Logger/Metrics/Tracer | No-op implementations |
+| Option                | Default                                                |
+| --------------------- | ------------------------------------------------------ |
+| Engine                | In-memory (synchronous, non-durable)                   |
+| MemoryStore           | None (transcripts not persisted)                       |
+| PromptStore           | None (baseline prompt specs only, no scoped overrides) |
+| Stream                | None (no external event delivery)                      |
+| Policy                | None (all tools allowed, caps from agent registration) |
+| Hooks                 | In-process bus                                         |
+| Logger/Metrics/Tracer | No-op implementations                                  |
 
 `runtime.WithWorker(...)` is intentionally narrow: it controls agent placement
 (`Queue`) only. Semantic planner and tool attempt budgets come from the DSL
@@ -257,7 +257,7 @@ client-only processes can submit runs to remote workers.
 
 Every agent run follows this lifecycle:
 
-```
+```text
 Start ──► PlanStart ──► Tool Calls? ──► Execute Tools ──► PlanResume ──► ...
                 │                                              │
                 │                                              │
@@ -410,7 +410,7 @@ func (p *MyPlanner) PlanResume(ctx context.Context, input *PlanResumeInput) (*Pl
         Messages:   input.Messages,
         Stream:     true,
     }
-    
+
     st, err := mc.Stream(ctx, req)
     if err != nil {
         return nil, err
@@ -918,7 +918,7 @@ At execution time, the workflow:
 - When denied, synthesizes a **schema-compliant** tool result (so the transcript remains valid and
   the planner can react to the denial deterministically).
 
-**Confirmation protocol**
+#### Confirmation protocol
 
 The runtime uses a runtime-owned confirmation protocol to obtain an explicit approval/denial
 decision before executing a confirmed tool.
@@ -978,7 +978,7 @@ The event is emitted immediately after the decision is received:
 
 Consumers (UIs, audit stores, session recorders) should rely on `tool_authorization` for “who/when/what” rather than inferring authorization from tool results.
 
-**Runtime validation**
+#### Runtime validation
 
 The runtime treats confirmation as a boundary and validates:
 
@@ -1010,22 +1010,22 @@ workflow thread. Activities and other non-workflow code publish directly.
 
 **Event types:**
 
-| Event | When |
-|-------|------|
-| `RunStarted` | Run begins |
-| `RunCompleted` | Run finishes (success, failed, canceled) |
-| `RunPaused` / `RunResumed` | Human-in-the-loop transitions |
-| `RunPhaseChanged` | Phase transitions (planning, executing_tools, etc.) |
-| `PromptRendered` | Runtime resolves and renders a prompt spec |
-| `ToolCallScheduled` | Tool activity scheduled |
-| `ToolResultReceived` | Tool completes |
-| `ToolCallUpdated` | Parent tool discovers more children |
-| `AssistantMessage` | Final assistant response |
-| `PlannerNote` / `ThinkingBlock` | Planner reasoning |
-| `AwaitClarification` / `AwaitExternalTools` | Pause requests |
-| `PolicyDecision` | Policy evaluation result |
-| `Usage` | Token usage report |
-| `ChildRunLinked` | Agent-as-tool child run link |
+| Event                                       | When                                                |
+| ------------------------------------------- | --------------------------------------------------- |
+| `RunStarted`                                | Run begins                                          |
+| `RunCompleted`                              | Run finishes (success, failed, canceled)            |
+| `RunPaused` / `RunResumed`                  | Human-in-the-loop transitions                       |
+| `RunPhaseChanged`                           | Phase transitions (planning, executing_tools, etc.) |
+| `PromptRendered`                            | Runtime resolves and renders a prompt spec          |
+| `ToolCallScheduled`                         | Tool activity scheduled                             |
+| `ToolResultReceived`                        | Tool completes                                      |
+| `ToolCallUpdated`                           | Parent tool discovers more children                 |
+| `AssistantMessage`                          | Final assistant response                            |
+| `PlannerNote` / `ThinkingBlock`             | Planner reasoning                                   |
+| `AwaitClarification` / `AwaitExternalTools` | Pause requests                                      |
+| `PolicyDecision`                            | Policy evaluation result                            |
+| `Usage`                                     | Token usage report                                  |
+| `ChildRunLinked`                            | Agent-as-tool child run link                        |
 
 ### Custom Subscribers
 
@@ -1055,19 +1055,19 @@ type Sink interface {
 
 **Stream event types:**
 
-| Event | Payload |
-|-------|---------|
-| `prompt_rendered` | `PromptRenderedPayload` (`prompt_id`, `version`, `scope`) |
-| `tool_start` | `ToolStartPayload` (tool_call_id, tool_name, payload) |
-| `tool_end` | `ToolEndPayload` (result, error, duration, telemetry) |
-| `tool_update` | `ToolUpdatePayload` (expected_children_total) |
-| `assistant_reply` | `AssistantReplyPayload` (text) |
-| `planner_thought` | `PlannerThoughtPayload` (note, thinking blocks) |
-| `await_clarification` | `AwaitClarificationPayload` |
-| `await_external_tools` | `AwaitExternalToolsPayload` |
-| `usage` | `UsagePayload` (input_tokens, output_tokens) |
-| `workflow` | `WorkflowPayload` (phase, status, error_kind, retryable, error, debug_error) |
-| `child_run_linked` | `ChildRunLinkedPayload` (child run link) |
+| Event                  | Payload                                                                      |
+| ---------------------- | ---------------------------------------------------------------------------- |
+| `prompt_rendered`      | `PromptRenderedPayload` (`prompt_id`, `version`, `scope`)                    |
+| `tool_start`           | `ToolStartPayload` (tool_call_id, tool_name, payload)                        |
+| `tool_end`             | `ToolEndPayload` (result, error, duration, telemetry)                        |
+| `tool_update`          | `ToolUpdatePayload` (expected_children_total)                                |
+| `assistant_reply`      | `AssistantReplyPayload` (text)                                               |
+| `planner_thought`      | `PlannerThoughtPayload` (note, thinking blocks)                              |
+| `await_clarification`  | `AwaitClarificationPayload`                                                  |
+| `await_external_tools` | `AwaitExternalToolsPayload`                                                  |
+| `usage`                | `UsagePayload` (input_tokens, output_tokens)                                 |
+| `workflow`             | `WorkflowPayload` (phase, status, error_kind, retryable, error, debug_error) |
+| `child_run_linked`     | `ChildRunLinkedPayload` (child run link)                                     |
 
 ### Stream Profiles
 
@@ -1329,9 +1329,9 @@ input.Agent.RemoveReminder("pending_todos")
 
 **Tiers:**
 
-| Tier | Purpose |
-|------|---------|
-| `TierSafety` | Never suppressed (P0) |
+| Tier           | Purpose                             |
+| -------------- | ----------------------------------- |
+| `TierSafety`   | Never suppressed (P0)               |
 | `TierGuidance` | Soft nudges, first to suppress (P2) |
 
 ---
@@ -1580,20 +1580,20 @@ type Tracer interface {
 
 ## Feature Modules
 
-| Package | Purpose |
-|---------|---------|
-| `features/memory/mongo` | MongoDB-backed memory store |
-| `features/prompt/mongo` | MongoDB-backed prompt override store |
-| `features/runlog/mongo` | MongoDB-backed run event log store |
-| `features/session/mongo` | MongoDB-backed session store |
-| `features/stream/pulse` | Pulse message bus sink |
-| `features/model/bedrock` | AWS Bedrock model client |
-| `features/model/openai` | OpenAI-compatible model client |
-| `features/model/anthropic` | Direct Anthropic Claude API client |
-| `features/model/gemini` | Google Gemini model client |
-| `features/model/gateway` | Remote model gateway client |
-| `features/model/middleware` | Rate limiting, logging, metrics |
-| `features/policy/basic` | Basic policy engine |
+| Package                     | Purpose                              |
+| --------------------------- | ------------------------------------ |
+| `features/memory/mongo`     | MongoDB-backed memory store          |
+| `features/prompt/mongo`     | MongoDB-backed prompt override store |
+| `features/runlog/mongo`     | MongoDB-backed run event log store   |
+| `features/session/mongo`    | MongoDB-backed session store         |
+| `features/stream/pulse`     | Pulse message bus sink               |
+| `features/model/bedrock`    | AWS Bedrock model client             |
+| `features/model/openai`     | OpenAI-compatible model client       |
+| `features/model/anthropic`  | Direct Anthropic Claude API client   |
+| `features/model/gemini`     | Google Gemini model client           |
+| `features/model/gateway`    | Remote model gateway client          |
+| `features/model/middleware` | Rate limiting, logging, metrics      |
+| `features/policy/basic`     | Basic policy engine                  |
 
 ---
 
@@ -1694,17 +1694,127 @@ correction: the model returns JSON-only corrected params, which are decoded into
 
 ---
 
-## Stream Profiles
+## OAuth 2.0 Protected Resource
+
+When the MCP design declares `OAuth(...)`, loom-mcp generates spec-compliant
+discovery and challenge plumbing. Runtime helpers in `runtime/mcp/oauth.go`
+back that generated code. Consumers interact with three surfaces: the DSL,
+the generated helpers, and the runtime primitives below.
+
+### Canonicalization
+
+Two functions derive URLs used in PRM and challenges. They differ in how
+they handle forwarded headers and failure.
+
+- `CanonicalizeResourceURL(r, trustProxy bool) (string, error)` — strict.
+  Derives the RFC 8707 canonical resource URI. When `trustProxy` is false
+  (the default for any generated server without `TrustProxyHeaders()` in
+  the DSL), forwarded headers are ignored entirely and the origin is
+  derived from `r.Host` + `r.TLS` only. When `trustProxy` is true,
+  `X-Forwarded-Proto`, `X-Forwarded-Host`, and RFC 7239 `Forwarded` are
+  consumed; a header present but malformed is rejected with
+  `ErrInvalidForwardedHeaders`. Callers MUST surface errors as 400 Bad
+  Request — never silently substitute `r.Host`.
+- `CanonicalizeChallengeOrigin(r, trustProxy bool) string` — lenient.
+  Used for challenge emission only. Never returns an error: if the strict
+  canonicalizer would fail, the function falls back to `r.Host` + `r.TLS`
+  so the 401 response still carries some `resource_metadata` URL. This is
+  deliberate — a challenge is a formatting artifact inside an already-401
+  response, not an identity claim.
+
+### Challenge helpers
+
+- `BuildBearerChallenge(resourceMetadataURL, scope string) string` — RFC 6750
+  §3 Bearer challenge. Scope parameter is omitted when empty.
+- `BuildInvalidTokenChallenge(resourceMetadataURL, errorDescription string) string` —
+  RFC 6750 §3.1 `invalid_token` challenge. Used when a decoded token
+  fails audience binding, is expired, or is revoked.
+- `WriteUnauthorized(w, resourceMetadataURL, scope string)` —
+  convenience wrapper that writes the 401 + JSON body + challenge.
+- `WriteInvalidToken(w, resourceMetadataURL, errorDescription string)` —
+  same, but for the `invalid_token` form.
+
+`escapeHeaderQuoted` strips CR and LF from header values — defense in depth
+against response-splitting even if a misconfigured DSL constant or bypassed
+canonicalizer feeds a URL with raw newlines into a challenge builder.
+
+### WithOAuthChallenge middleware
+
+```go
+handler := mcpruntime.WithOAuthChallenge(
+    mcpauth.RequireBearerToken(verifier, nil)(sdkServer.Handler),
+    "/rpc",
+    mcpassistant.OAuthChallengeHeader,
+)
+```
+
+Intercepts responses and augments any 401 that does NOT already carry a
+`resource_metadata=` parameter (case-insensitively, per RFC 7235) with the
+spec-compliant challenge from `challenge(r, mountPath)`. Existing upstream
+challenges are preserved verbatim, so consumer middleware can still override
+the default. The interceptor passes through `Flush()` so SSE streaming is
+unaffected.
+
+### Audience binding
+
+When the DSL declares `ResourceIdentifier(...)`, the generated package
+exposes `EnforceAudience(base mcpauth.TokenVerifier) mcpauth.TokenVerifier`.
+Wrap the consumer verifier once at mount time:
+
+```go
+verifier := mcpassistant.EnforceAudience(consumerVerifier)
+handler := mcpauth.RequireBearerToken(verifier, nil)(sdkServer.Handler)
+```
+
+The wrapper reads `TokenInfo.Extra["aud"]` and accepts `string`,
+`[]string`, and `[]any` (the shape `encoding/json` produces when decoding
+a JWT `aud` array). Missing or wrong-typed claims fail closed — there is
+no silent admission path. Mismatches return `ErrAudienceMismatch`, which
+wraps `mcpauth.ErrInvalidToken` so `RequireBearerToken` responds 401 and
+`WithOAuthChallenge` emits the challenge automatically.
+
+Without `ResourceIdentifier(...)`, the framework cannot know the expected
+audience (it would be per-request), so `EnforceAudience` is not generated.
+Audience enforcement in that mode remains the consumer's responsibility.
+
+### Forwarded-header trust posture
+
+loom-mcp's default is to NOT trust `X-Forwarded-*` or RFC 7239 `Forwarded`
+headers. Enable `TrustProxyHeaders()` in the DSL only when every request
+reaches the server through a reverse proxy the operator fully controls and
+that strips these headers from direct-client requests. Otherwise an
+attacker with direct network access can set forwarded headers to control
+the PRM `resource` field advertised to clients.
+
+For most deployments, pinning `ResourceIdentifier(...)` is preferred. A
+declared identifier bypasses forwarded-header derivation entirely and is
+the spec's recommended posture. The PRM handler also short-circuits the
+strict canonicalizer when the identifier is pinned, so a malformed
+forwarded header cannot fail the PRM request in that configuration.
+
+### Sentinels
+
+- `ErrInvalidForwardedHeaders` — a `Forwarded` or `X-Forwarded-*` header was
+  present but malformed (control characters, path/fragment/userinfo
+  delimiters, etc.). Surface as 400.
+- `ErrEmptyResourceURL` — no scheme+host could be derived. Surface as 400
+  with a diagnostic message; if this fires in steady state, pin
+  `ResourceIdentifier` or enable `TrustProxyHeaders()` as appropriate for
+  the deployment.
+
+---
+
+## Stream Profile Reference
 
 Stream profiles control which events reach different audiences. Use profiles to filter
 events for specific use cases.
 
-| Profile | Purpose | Events Included |
-|---------|---------|-----------------|
-| `DefaultProfile()` | All events, child runs linked | All event types |
-| `UserChatProfile()` | End-user chat UIs | Same as default |
-| `AgentDebugProfile()` | Debug view | All event types |
-| `MetricsProfile()` | Telemetry and monitoring | `usage`, `workflow` only |
+| Profile               | Purpose                       | Events Included          |
+| --------------------- | ----------------------------- | ------------------------ |
+| `DefaultProfile()`    | All events, child runs linked | All event types          |
+| `UserChatProfile()`   | End-user chat UIs             | Same as default          |
+| `AgentDebugProfile()` | Debug view                    | All event types          |
+| `MetricsProfile()`    | Telemetry and monitoring      | `usage`, `workflow` only |
 
 ```go
 import "goa.design/loom-mcp/runtime/agent/stream"
@@ -1762,7 +1872,6 @@ Loom MCP supports two complementary paths that produce `planner.RetryHint`:
    validation error (for example `goa.MissingFieldError`, `goa.InvalidLengthError`, …).
    Providers should surface these as **structured validation issues** in the tool result
    message so consumers can build a `RetryHint` without parsing error strings.
-
    - **Provider behavior (generated)**: generated providers call
      `toolregistry.ValidationIssues(err)` and, when issues are present, emit an error
      result that includes them.
@@ -1846,13 +1955,13 @@ defer cancel()
 executor := runtime.ToolCallExecutorFunc(func(ctx context.Context, meta *runtime.ToolCallMeta, call *planner.ToolRequest) (*planner.ToolResult, error) {
     // Access explicit metadata
     log.Printf("Executing %s in run %s, session %s", call.Name, meta.RunID, meta.SessionID)
-    
+
     // Call your service
     result, err := myService.Execute(ctx, call.Payload)
     if err != nil {
         return nil, err
     }
-    
+
     return &planner.ToolResult{
         Name:   call.Name,
         Result: result,
@@ -1922,16 +2031,16 @@ var ErrRateLimited = errors.New("model: rate limited")
 
 ## Glossary
 
-| Term | Definition |
-|------|------------|
-| **Run** | A single workflow execution. Has a unique RunID. |
-| **Session** | Groups related runs (e.g., multi-turn conversation). |
-| **Turn** | A user message → agent response cycle. May span multiple runs if interrupted. |
-| **Planner** | Decision-maker that analyzes messages and returns tool calls or final responses. |
-| **Toolset** | Collection of related tools with shared execution logic. |
-| **Tool Spec** | Metadata and JSON codecs for a tool (name, schema, codec functions). |
-| **Bounds** | Metadata describing how a tool result was truncated or limited. |
-| **Hook** | Internal event emitted for observability (memory, streaming, telemetry). |
-| **Stream Event** | Client-facing event delivered via Sink (tool progress, assistant replies). |
-| **Finalizer** | Aggregates child results into parent tool result for agent-as-tool (does not propagate artifacts). |
-| **Reminder** | Structured backstage guidance injected into planner prompts. |
+| Term             | Definition                                                                                         |
+| ---------------- | -------------------------------------------------------------------------------------------------- |
+| **Run**          | A single workflow execution. Has a unique RunID.                                                   |
+| **Session**      | Groups related runs (e.g., multi-turn conversation).                                               |
+| **Turn**         | A user message → agent response cycle. May span multiple runs if interrupted.                      |
+| **Planner**      | Decision-maker that analyzes messages and returns tool calls or final responses.                   |
+| **Toolset**      | Collection of related tools with shared execution logic.                                           |
+| **Tool Spec**    | Metadata and JSON codecs for a tool (name, schema, codec functions).                               |
+| **Bounds**       | Metadata describing how a tool result was truncated or limited.                                    |
+| **Hook**         | Internal event emitted for observability (memory, streaming, telemetry).                           |
+| **Stream Event** | Client-facing event delivered via Sink (tool progress, assistant replies).                         |
+| **Finalizer**    | Aggregates child results into parent tool result for agent-as-tool (does not propagate artifacts). |
+| **Reminder**     | Structured backstage guidance injected into planner prompts.                                       |

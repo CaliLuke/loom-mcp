@@ -25,55 +25,55 @@ definitions reuse the same type system (`Attribute`, `Field`, validations, examp
 package design
 
 import (
-	. "github.com/CaliLuke/loom/dsl"
-	. "github.com/CaliLuke/loom-mcp/dsl"
+ . "github.com/CaliLuke/loom/dsl"
+ . "github.com/CaliLuke/loom-mcp/dsl"
 )
 
 var DocsToolset = Toolset("docs.search", func() {
-	Tool("search", "Search indexed documentation", func() {
-		Args(func() {
-			Attribute("query", String, "Search phrase")
-			Attribute("limit", Int, "Max results", func() { Default(5) })
-			Required("query")
-		})
-		Return(func() {
-			Attribute("documents", ArrayOf(String), "Matched snippets")
-			Required("documents")
-		})
-		Tags("docs", "search")
-	})
+ Tool("search", "Search indexed documentation", func() {
+  Args(func() {
+   Attribute("query", String, "Search phrase")
+   Attribute("limit", Int, "Max results", func() { Default(5) })
+   Required("query")
+  })
+  Return(func() {
+   Attribute("documents", ArrayOf(String), "Matched snippets")
+   Required("documents")
+  })
+  Tags("docs", "search")
+ })
 })
 
 var AssistantSuite = Toolset(FromMCP("assistant", "assistant-mcp"))
 
 var _ = Service("orchestrator", func() {
-	Description("Human front door for the knowledge agent.")
+ Description("Human front door for the knowledge agent.")
 
-	Agent("chat", "Conversational runner", func() {
-		Use(DocsToolset)
-		Use(AssistantSuite)
-		Export("chat.tools", func() {
-			Tool("summarize_status", "Produce operator-ready summaries", func() {
-				Args(func() {
-					Attribute("prompt", String, "User instructions")
-					Required("prompt")
-				})
-				Return(func() {
-					Attribute("summary", String, "Assistant response")
-					Required("summary")
-				})
-				Tags("chat")
-			})
-		})
-		RunPolicy(func() {
-			DefaultCaps(
-				MaxToolCalls(8),
-				MaxConsecutiveFailedToolCalls(3),
-			)
-			TimeBudget("2m")
-			OnMissingFields("await_clarification")
-		})
-	})
+ Agent("chat", "Conversational runner", func() {
+  Use(DocsToolset)
+  Use(AssistantSuite)
+  Export("chat.tools", func() {
+   Tool("summarize_status", "Produce operator-ready summaries", func() {
+    Args(func() {
+     Attribute("prompt", String, "User instructions")
+     Required("prompt")
+    })
+    Return(func() {
+     Attribute("summary", String, "Assistant response")
+     Required("summary")
+    })
+    Tags("chat")
+   })
+  })
+  RunPolicy(func() {
+   DefaultCaps(
+    MaxToolCalls(8),
+    MaxConsecutiveFailedToolCalls(3),
+   )
+   TimeBudget("2m")
+   OnMissingFields("await_clarification")
+  })
+ })
 })
 ```
 
@@ -148,43 +148,43 @@ overrides remain operational at the runtime/store layer.
 
 ### Agent Functions
 
-| Function | Context | Purpose |
-|----------|---------|---------|
-| `Agent(name, description, dsl)` | Inside `Service` | Declares an LLM agent with tool usage/exports and run policy |
-| `Use(value, dsl?)` | Inside `Agent` | Declares toolset consumption (referencing or inline definition) |
-| `Export(value, dsl?)` | Inside `Agent` or `Service` | Declares toolsets exposed to other agents |
-| `AgentToolset(svc, agent, ts)` | Top-level or inside `Use` | References a toolset exported by another agent |
-| `UseAgentToolset(svc, agent, ts)` | Inside `Agent` | Combines `AgentToolset` with `Use` |
-| `DisableAgentDocs()` | Inside `API` | Disables `AGENTS_QUICKSTART.md` generation |
-| `Passthrough(tool, target...)` | Inside exported `Tool` | Forwards tool execution to a bound service method |
+| Function                          | Context                     | Purpose                                                         |
+| --------------------------------- | --------------------------- | --------------------------------------------------------------- |
+| `Agent(name, description, dsl)`   | Inside `Service`            | Declares an LLM agent with tool usage/exports and run policy    |
+| `Use(value, dsl?)`                | Inside `Agent`              | Declares toolset consumption (referencing or inline definition) |
+| `Export(value, dsl?)`             | Inside `Agent` or `Service` | Declares toolsets exposed to other agents                       |
+| `AgentToolset(svc, agent, ts)`    | Top-level or inside `Use`   | References a toolset exported by another agent                  |
+| `UseAgentToolset(svc, agent, ts)` | Inside `Agent`              | Combines `AgentToolset` with `Use`                              |
+| `DisableAgentDocs()`              | Inside `API`                | Disables `AGENTS_QUICKSTART.md` generation                      |
+| `Passthrough(tool, target...)`    | Inside exported `Tool`      | Forwards tool execution to a bound service method               |
 
 ### Toolset Functions
 
-| Function | Context | Purpose |
-|----------|---------|---------|
-| `Toolset(args...)` | Top-level | Defines a provider-owned toolset |
-| `FromMCP(service, toolset)` | Argument to `Toolset` | Configures MCP server as toolset provider |
-| `FromRegistry(registry, toolset)` | Argument to `Toolset` | Configures registry as toolset provider |
-| `Tags(values...)` | Inside `Toolset` or `Tool` | Attaches metadata labels for categorization |
+| Function                          | Context                    | Purpose                                     |
+| --------------------------------- | -------------------------- | ------------------------------------------- |
+| `Toolset(args...)`                | Top-level                  | Defines a provider-owned toolset            |
+| `FromMCP(service, toolset)`       | Argument to `Toolset`      | Configures MCP server as toolset provider   |
+| `FromRegistry(registry, toolset)` | Argument to `Toolset`      | Configures registry as toolset provider     |
+| `Tags(values...)`                 | Inside `Toolset` or `Tool` | Attaches metadata labels for categorization |
 
 ### Tool Functions
 
-| Function | Context | Purpose |
-|----------|---------|---------|
-| `Tool(name, description?, dsl?)` | Inside `Toolset` or `Method` | Declares a callable tool |
-| `Args(type)` | Inside `Tool` | Defines input parameter schema |
-| `Return(type)` | Inside `Tool` | Defines output result schema |
-| `ServerData(kind, type, dsl?)` | Inside `Tool` | Defines server-only data emitted alongside results (never sent to model providers) |
-| `ServerDataDefault("on" \| "off")` | Inside `Tool` | Default emission for optional server-data when `server_data` is omitted or `"auto"` |
-| `BindTo(method)` or `BindTo(service, method)` | Inside `Tool` | Binds tool to a service method |
-| `Inject(fields...)` | Inside `Tool` | Marks fields as server-injected (hidden from LLM) |
-| `CallHintTemplate(tmpl)` | Inside `Tool` | Go template for call display hint |
-| `ResultHintTemplate(tmpl)` | Inside `Tool` | Go template for result display hint |
-| `BoundedResult(dsl?)` | Inside `Tool` | Declares a runtime-owned bounded-result contract; optional sub-DSL can declare paging cursor fields |
-| `Cursor(name)` | Inside `BoundedResult(func() { ... })` | Declares which payload field carries the paging cursor (optional) |
-| `NextCursor(name)` | Inside `BoundedResult(func() { ... })` | Declares the projected result field name for the next-page cursor (optional) |
-| `ResultReminder(text)` | Inside `Tool` | Static system reminder injected after tool result |
-| `Confirmation(dsl)` | Inside `Tool` | Declares that tool execution must be explicitly approved out-of-band |
+| Function                                      | Context                                | Purpose                                                                                             |
+| --------------------------------------------- | -------------------------------------- | --------------------------------------------------------------------------------------------------- |
+| `Tool(name, description?, dsl?)`              | Inside `Toolset` or `Method`           | Declares a callable tool                                                                            |
+| `Args(type)`                                  | Inside `Tool`                          | Defines input parameter schema                                                                      |
+| `Return(type)`                                | Inside `Tool`                          | Defines output result schema                                                                        |
+| `ServerData(kind, type, dsl?)`                | Inside `Tool`                          | Defines server-only data emitted alongside results (never sent to model providers)                  |
+| `ServerDataDefault("on" \| "off")`            | Inside `Tool`                          | Default emission for optional server-data when `server_data` is omitted or `"auto"`                 |
+| `BindTo(method)` or `BindTo(service, method)` | Inside `Tool`                          | Binds tool to a service method                                                                      |
+| `Inject(fields...)`                           | Inside `Tool`                          | Marks fields as server-injected (hidden from LLM)                                                   |
+| `CallHintTemplate(tmpl)`                      | Inside `Tool`                          | Go template for call display hint                                                                   |
+| `ResultHintTemplate(tmpl)`                    | Inside `Tool`                          | Go template for result display hint                                                                 |
+| `BoundedResult(dsl?)`                         | Inside `Tool`                          | Declares a runtime-owned bounded-result contract; optional sub-DSL can declare paging cursor fields |
+| `Cursor(name)`                                | Inside `BoundedResult(func() { ... })` | Declares which payload field carries the paging cursor (optional)                                   |
+| `NextCursor(name)`                            | Inside `BoundedResult(func() { ... })` | Declares the projected result field name for the next-page cursor (optional)                        |
+| `ResultReminder(text)`                        | Inside `Tool`                          | Static system reminder injected after tool result                                                   |
+| `Confirmation(dsl)`                           | Inside `Tool`                          | Declares that tool execution must be explicitly approved out-of-band                                |
 
 ### Tool payload defaults (Feature)
 
@@ -290,81 +290,174 @@ Notes:
 
 ### Policy Functions
 
-| Function | Context | Purpose |
-|----------|---------|---------|
-| `RunPolicy(dsl)` | Inside `Agent` | Configures runtime execution constraints |
-| `DefaultCaps(opts...)` | Inside `RunPolicy` | Sets resource limits using option functions |
-| `MaxToolCalls(n)` | Argument to `DefaultCaps` | Maximum total tool invocations |
-| `MaxConsecutiveFailedToolCalls(n)` | Argument to `DefaultCaps` | Maximum consecutive failures before stopping |
-| `TimeBudget(duration)` | Inside `RunPolicy` | Maximum wall-clock execution time (e.g., "5m") |
-| `InterruptsAllowed(bool)` | Inside `RunPolicy` | Enables user interruption handling |
-| `OnMissingFields(action)` | Inside `RunPolicy` | Validation behavior: `""`, `"finalize"`, `"await_clarification"`, `"resume"` |
+| Function                           | Context                   | Purpose                                                                      |
+| ---------------------------------- | ------------------------- | ---------------------------------------------------------------------------- |
+| `RunPolicy(dsl)`                   | Inside `Agent`            | Configures runtime execution constraints                                     |
+| `DefaultCaps(opts...)`             | Inside `RunPolicy`        | Sets resource limits using option functions                                  |
+| `MaxToolCalls(n)`                  | Argument to `DefaultCaps` | Maximum total tool invocations                                               |
+| `MaxConsecutiveFailedToolCalls(n)` | Argument to `DefaultCaps` | Maximum consecutive failures before stopping                                 |
+| `TimeBudget(duration)`             | Inside `RunPolicy`        | Maximum wall-clock execution time (e.g., "5m")                               |
+| `InterruptsAllowed(bool)`          | Inside `RunPolicy`        | Enables user interruption handling                                           |
+| `OnMissingFields(action)`          | Inside `RunPolicy`        | Validation behavior: `""`, `"finalize"`, `"await_clarification"`, `"resume"` |
 
 ### Timing Functions
 
-| Function | Context | Purpose |
-|----------|---------|---------|
-| `Timing(dsl)` | Inside `RunPolicy` | Groups timing configuration |
-| `Budget(duration)` | Inside `RunPolicy` or `Timing` | Total wall-clock budget for the run |
-| `Plan(duration)` | Inside `RunPolicy` or `Timing` | Timeout for Plan and Resume activities |
-| `Tools(duration)` | Inside `RunPolicy` or `Timing` | Default timeout for tool activities |
+| Function           | Context                        | Purpose                                |
+| ------------------ | ------------------------------ | -------------------------------------- |
+| `Timing(dsl)`      | Inside `RunPolicy`             | Groups timing configuration            |
+| `Budget(duration)` | Inside `RunPolicy` or `Timing` | Total wall-clock budget for the run    |
+| `Plan(duration)`   | Inside `RunPolicy` or `Timing` | Timeout for Plan and Resume activities |
+| `Tools(duration)`  | Inside `RunPolicy` or `Timing` | Default timeout for tool activities    |
 
 ### History Functions
 
-| Function | Context | Purpose |
-|----------|---------|---------|
-| `History(dsl)` | Inside `RunPolicy` | Configures conversation history management |
-| `KeepRecentTurns(n)` | Inside `History` | Retain only the most recent N turns |
-| `Compress(triggerAt, keepRecent)` | Inside `History` | Summarize older turns when threshold reached |
+| Function                          | Context            | Purpose                                      |
+| --------------------------------- | ------------------ | -------------------------------------------- |
+| `History(dsl)`                    | Inside `RunPolicy` | Configures conversation history management   |
+| `KeepRecentTurns(n)`              | Inside `History`   | Retain only the most recent N turns          |
+| `Compress(triggerAt, keepRecent)` | Inside `History`   | Summarize older turns when threshold reached |
 
 ### Cache Functions
 
-| Function | Context | Purpose |
-|----------|---------|---------|
-| `Cache(dsl)` | Inside `RunPolicy` | Configures prompt caching hints |
-| `AfterSystem()` | Inside `Cache` | Place cache checkpoint after system messages |
-| `AfterTools()` | Inside `Cache` | Place cache checkpoint after tool definitions |
+| Function        | Context            | Purpose                                       |
+| --------------- | ------------------ | --------------------------------------------- |
+| `Cache(dsl)`    | Inside `RunPolicy` | Configures prompt caching hints               |
+| `AfterSystem()` | Inside `Cache`     | Place cache checkpoint after system messages  |
+| `AfterTools()`  | Inside `Cache`     | Place cache checkpoint after tool definitions |
 
 ### MCP Functions
 
-| Function | Context | Purpose |
-|----------|---------|---------|
-| `MCP(name, version, opts...)` | Inside `Service` | Enables MCP protocol for the service |
-| `ProtocolVersion(version)` | Option for `MCP` | Sets MCP protocol version (e.g., "2025-06-18") |
-| `WebsiteURL(url)` | Option for `MCP` | Sets implementation website metadata for `initialize.serverInfo` |
-| `ServerIcons(icons...)` | Option for `MCP` | Sets implementation icons for `initialize.serverInfo` |
-| `Tool(name, description)` | Inside `Method` (with MCP enabled) | Marks method as MCP tool |
-| `ToolIcons(icons...)` | Option for method-level `Tool` | Sets tool icons for `tools/list` |
-| `Resource(name, uri, mime, opts...)` | Inside `Method` | Marks method as MCP resource provider |
-| `ResourceIcons(icons...)` | Option for `Resource` or `WatchableResource` | Sets resource icons for `resources/list` |
-| `WatchableResource(name, uri, mime, opts...)` | Inside `Method` | MCP resource with subscription support |
-| `StaticPrompt(name, desc, msgs..., opts...)` | Inside `Service` (with MCP) | Defines static MCP prompt template |
-| `PromptIcons(icons...)` | Option for `StaticPrompt` | Sets prompt icons for `prompts/list` |
-| `DynamicPrompt(name, description, opts...)` | Inside `Method` | Marks method as dynamic prompt generator |
-| `DynamicPromptIcons(icons...)` | Option for `DynamicPrompt` | Sets dynamic prompt icons for `prompts/list` |
-| `Icon(src, opts...)` | MCP metadata helper | Declares one icon entry |
-| `IconMIMEType`, `IconSizes`, `IconTheme` | Options for `Icon` | Configure MIME type, sizes, and light/dark theme |
-| `Notification(name, description)` | Inside `Method` | Marks method as MCP notification sender |
-| `Subscription(resourceName)` | Inside `Method` | Defines subscription handler for a resource |
-| `SubscriptionMonitor(name)` | Inside `Method` | Defines SSE monitor for subscriptions |
+| Function                                      | Context                                      | Purpose                                                                                                                           |
+| --------------------------------------------- | -------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------- |
+| `MCP(name, version, opts...)`                 | Inside `Service`                             | Enables MCP protocol for the service                                                                                              |
+| `ProtocolVersion(version)`                    | Option for `MCP`                             | Sets MCP protocol version (e.g., "2025-06-18")                                                                                    |
+| `WebsiteURL(url)`                             | Option for `MCP`                             | Sets implementation website metadata for `initialize.serverInfo`                                                                  |
+| `ServerIcons(icons...)`                       | Option for `MCP`                             | Sets implementation icons for `initialize.serverInfo`                                                                             |
+| `Tool(name, description)`                     | Inside `Method` (with MCP enabled)           | Marks method as MCP tool                                                                                                          |
+| `ToolIcons(icons...)`                         | Option for method-level `Tool`               | Sets tool icons for `tools/list`                                                                                                  |
+| `Resource(name, uri, mime, opts...)`          | Inside `Method`                              | Marks method as MCP resource provider                                                                                             |
+| `ResourceIcons(icons...)`                     | Option for `Resource` or `WatchableResource` | Sets resource icons for `resources/list`                                                                                          |
+| `WatchableResource(name, uri, mime, opts...)` | Inside `Method`                              | MCP resource with subscription support                                                                                            |
+| `StaticPrompt(name, desc, msgs..., opts...)`  | Inside `Service` (with MCP)                  | Defines static MCP prompt template                                                                                                |
+| `PromptIcons(icons...)`                       | Option for `StaticPrompt`                    | Sets prompt icons for `prompts/list`                                                                                              |
+| `DynamicPrompt(name, description, opts...)`   | Inside `Method`                              | Marks method as dynamic prompt generator                                                                                          |
+| `DynamicPromptIcons(icons...)`                | Option for `DynamicPrompt`                   | Sets dynamic prompt icons for `prompts/list`                                                                                      |
+| `Icon(src, opts...)`                          | MCP metadata helper                          | Declares one icon entry                                                                                                           |
+| `IconMIMEType`, `IconSizes`, `IconTheme`      | Options for `Icon`                           | Configure MIME type, sizes, and light/dark theme                                                                                  |
+| `Notification(name, description)`             | Inside `Method`                              | Marks method as MCP notification sender                                                                                           |
+| `Subscription(resourceName)`                  | Inside `Method`                              | Defines subscription handler for a resource                                                                                       |
+| `SubscriptionMonitor(name)`                   | Inside `Method`                              | Defines SSE monitor for subscriptions                                                                                             |
+| `OAuth(opts...)`                              | Option for `MCP`                             | Declares the service is an OAuth 2.0 protected resource; drives RFC 9728 PRM emission and the RFC 6750 WWW-Authenticate challenge |
+| `AuthorizationServer(url)`                    | Option for `OAuth`                           | Advertises one OAuth 2.0 authorization server; call multiple times for multiple servers                                           |
+| `OAuthScope(name, description)`               | Option for `OAuth`                           | Documents one scope the resource defines (emitted in `scopes_supported` and in challenge `scope`)                                 |
+| `ResourceIdentifier(url)`                     | Option for `OAuth`                           | Pins the canonical audience URI emitted as `resource` in PRM; enables the generated `EnforceAudience` verifier wrapper            |
+| `BearerMethodsSupported(methods...)`          | Option for `OAuth`                           | Bearer token transport methods; defaults to `["header"]`                                                                          |
+| `ResourceDocumentationURL(url)`               | Option for `OAuth`                           | Surfaces as `resource_documentation` in PRM                                                                                       |
+| `TrustProxyHeaders()`                         | Option for `OAuth`                           | Opts into consuming `X-Forwarded-*` / `Forwarded` headers; default is to ignore them for safety                                   |
+
+#### OAuth 2.0 protected-resource configuration
+
+```go
+MCP("assistant-mcp", "1.0.0",
+    OAuth(
+        AuthorizationServer("https://auth.example.com"),
+        OAuthScope("read", "Read tool results"),
+        OAuthScope("write", "Mutating tool invocations"),
+        ResourceIdentifier("https://api.example.com/mcp"),
+        ResourceDocumentationURL("https://docs.example.com/mcp-auth"),
+    ),
+)
+```
+
+The `OAuth(...)` block makes the generated server advertise OAuth 2.0
+discovery per RFC 9728 and emit spec-compliant `WWW-Authenticate` challenges
+per RFC 6750. Declaring it triggers generation of:
+
+- `HandleProtectedResourceMetadata` — serves `/.well-known/oauth-protected-resource`
+  and the path-suffixed form per RFC 9728 §3.1. Returns **400 Bad Request** on
+  malformed forwarded headers rather than emitting a document with an
+  attacker-influenced `resource` field.
+- `OAuthChallengeHeader(r, mountPath)` — formats the `Bearer` challenge.
+- `OAuthInvalidTokenChallengeHeader(r, mountPath, errorDescription)` — formats
+  the RFC 6750 §3.1 `invalid_token` challenge.
+- `OAuthMetadataPath(mountPath)` — returns the well-known URL to route to
+  `HandleProtectedResourceMetadata`.
+- `ExpectedResourceIdentifier()` — returns the pinned identifier or empty
+  string.
+
+When `ResourceIdentifier(...)` is declared, two more helpers are generated:
+
+- `EnforceAudience(base mcpauth.TokenVerifier) mcpauth.TokenVerifier` — wraps
+  the consumer's verifier so tokens whose `aud` claim does not match the
+  pinned identifier are rejected with `ErrAudienceMismatch`. The claim is
+  read from `TokenInfo.Extra["aud"]` and accepted as `string`, `[]string`,
+  or `[]any` (matching how `encoding/json` decodes a JWT `aud` array).
+  Missing or wrong-typed claims fail closed.
+- `ErrAudienceMismatch` — wraps `mcpauth.ErrInvalidToken` so
+  `mcpauth.RequireBearerToken` and `mcpruntime.WithOAuthChallenge` emit the
+  RFC 6750 `invalid_token` response automatically.
+
+#### Forwarded-header trust posture
+
+By default, loom-mcp **does not trust** `X-Forwarded-Proto`,
+`X-Forwarded-Host`, or RFC 7239 `Forwarded` headers. The generated server
+derives the canonical resource URL and the challenge origin from
+`r.Host` + `r.TLS` only. This is the safe posture for any server reachable
+directly by clients: without it, an attacker with direct network access
+could set forwarded headers to control the `resource` field the PRM
+document advertises.
+
+Enable `TrustProxyHeaders()` **only** when every request reaches the server
+through a reverse proxy the operator fully controls and that strips these
+headers from direct-client requests. When enabled, malformed forwarded
+headers are rejected strictly (400 on PRM, lenient fallback on challenge).
+
+For most deployments, pinning `ResourceIdentifier(...)` is preferred over
+relying on forwarded-header derivation: a declared identifier bypasses the
+derivation entirely and is the spec's recommended posture.
+
+#### Mounting the OAuth-protected server
+
+```go
+import (
+    mcpassistant "example.com/assistant/gen/mcp_assistant"
+    mcpruntime "github.com/CaliLuke/loom-mcp/runtime/mcp"
+    mcpauth "github.com/modelcontextprotocol/go-sdk/auth"
+)
+
+// Consumer-provided verifier: validates the JWT, populates TokenInfo.
+// EnforceAudience wraps it so audience mismatch fails closed.
+verifier := mcpassistant.EnforceAudience(consumerVerifier)
+
+protected := mcpruntime.WithOAuthChallenge(
+    mcpauth.RequireBearerToken(verifier, nil)(sdkServer.Handler),
+    "/rpc",
+    mcpassistant.OAuthChallengeHeader,
+)
+
+mux := http.NewServeMux()
+mux.Handle("/rpc", protected)
+mux.HandleFunc(mcpassistant.OAuthMetadataPath("/rpc"), mcpassistant.HandleProtectedResourceMetadata)
+mux.HandleFunc(mcpassistant.OAuthMetadataPath(""), mcpassistant.HandleProtectedResourceMetadata)
+```
 
 ### Registry Functions
 
-| Function | Context | Purpose |
-|----------|---------|---------|
-| `Registry(name, dsl?)` | Top-level | Declares a remote registry source |
-| `URL(url)` | Inside `Registry` | Sets the registry endpoint URL (required) |
-| `APIVersion(version)` | Inside `Registry` | Sets registry API version (default: "v1") |
-| `Security(scheme)` | Inside `Registry` | References a declared security scheme for auth |
-| `Timeout(duration)` | Inside `Registry` | Sets HTTP request timeout |
-| `Retry(maxRetries, backoff)` | Inside `Registry` | Configures retry policy |
-| `SyncInterval(duration)` | Inside `Registry` | Sets catalog refresh interval |
-| `CacheTTL(duration)` | Inside `Registry` | Sets local cache duration |
-| `Federation(dsl)` | Inside `Registry` | Configures external registry imports |
-| `Include(patterns...)` | Inside `Federation` | Glob patterns for namespaces to import |
-| `Exclude(patterns...)` | Inside `Federation` | Glob patterns for namespaces to skip |
-| `PublishTo(registry)` | Inside `Toolset` (in `Export`) | Configures registry publication |
-| `Version(version)` | Inside `Toolset` (with `FromRegistry`) | Pins toolset version |
+| Function                     | Context                                | Purpose                                        |
+| ---------------------------- | -------------------------------------- | ---------------------------------------------- |
+| `Registry(name, dsl?)`       | Top-level                              | Declares a remote registry source              |
+| `URL(url)`                   | Inside `Registry`                      | Sets the registry endpoint URL (required)      |
+| `APIVersion(version)`        | Inside `Registry`                      | Sets registry API version (default: "v1")      |
+| `Security(scheme)`           | Inside `Registry`                      | References a declared security scheme for auth |
+| `Timeout(duration)`          | Inside `Registry`                      | Sets HTTP request timeout                      |
+| `Retry(maxRetries, backoff)` | Inside `Registry`                      | Configures retry policy                        |
+| `SyncInterval(duration)`     | Inside `Registry`                      | Sets catalog refresh interval                  |
+| `CacheTTL(duration)`         | Inside `Registry`                      | Sets local cache duration                      |
+| `Federation(dsl)`            | Inside `Registry`                      | Configures external registry imports           |
+| `Include(patterns...)`       | Inside `Federation`                    | Glob patterns for namespaces to import         |
+| `Exclude(patterns...)`       | Inside `Federation`                    | Glob patterns for namespaces to skip           |
+| `PublishTo(registry)`        | Inside `Toolset` (in `Export`)         | Configures registry publication                |
+| `Version(version)`           | Inside `Toolset` (with `FromRegistry`) | Pins toolset version                           |
 
 ---
 
@@ -399,6 +492,7 @@ Service("orchestrator", func() {
 - A string name for an inline, agent-local toolset definition
 
 An optional DSL function can:
+
 - Subset tools from a referenced provider toolset by name
 - Define ad-hoc tools local to this agent
 
@@ -488,7 +582,7 @@ var CommonTools = Toolset("common", func() {
 
 `FromMCP` configures a toolset to be backed by an MCP server. Two patterns are supported:
 
-**Pattern 1: MCP server generated from the same design**
+#### Pattern 1: MCP server generated from the same design
 
 When your MCP server is defined in the same design using the `MCP` DSL:
 
@@ -510,7 +604,7 @@ Agent("chat", "Chat agent", func() {
 })
 ```
 
-**Pattern 2: External MCP server (inline schemas)**
+#### Pattern 2: External MCP server (inline schemas)
 
 For external MCP servers, define the schemas inline:
 
@@ -664,7 +758,7 @@ always-on server-data is intended for in-process subscribers such as persistence
 
 #### Declaring a server-data audience (`Audience*`)
 
-Each `ServerData` entry declares an *audience* that downstream consumers use to route the payload
+Each `ServerData` entry declares an _audience_ that downstream consumers use to route the payload
 without relying on kind naming conventions:
 
 - `"timeline"`: persisted and eligible for observer-facing projection (e.g., timeline/UI cards)
@@ -735,7 +829,7 @@ Service("docs", func() {
             Attribute("documents", ArrayOf(Document))
         })
     })
-    
+
     Agent("assistant", "Document assistant", func() {
         Use("doc-tools", func() {
             Tool("search", "Search documents", func() {
@@ -873,6 +967,7 @@ Toolset("admin-tools", func() {
 ```
 
 Common tag patterns include:
+
 - Domain: `"nlp"`, `"database"`, `"api"`, `"filesystem"`
 - Capability: `"read"`, `"write"`, `"search"`, `"transform"`
 - Risk: `"safe"`, `"destructive"`, `"external"`
@@ -912,7 +1007,7 @@ RunPolicy(func() {
         MaxToolCalls(20),
         MaxConsecutiveFailedToolCalls(3),
     )
-    
+
     // Timing
     TimeBudget("5m")
     Timing(func() {
@@ -920,16 +1015,16 @@ RunPolicy(func() {
         Plan("45s")     // Planner activity timeout
         Tools("2m")     // Default tool timeout
     })
-    
+
     // Behavior
     InterruptsAllowed(true)
     OnMissingFields("await_clarification")
-    
+
     // History management
     History(func() {
         KeepRecentTurns(20)
     })
-    
+
     // Prompt caching
     Cache(func() {
         AfterSystem()
@@ -940,19 +1035,19 @@ RunPolicy(func() {
 
 ### DefaultCaps Options
 
-| Option | Purpose |
-|--------|---------|
-| `MaxToolCalls(n)` | Maximum total tool invocations per run |
-| `MaxConsecutiveFailedToolCalls(n)` | Stop after N consecutive failures |
+| Option                             | Purpose                                |
+| ---------------------------------- | -------------------------------------- |
+| `MaxToolCalls(n)`                  | Maximum total tool invocations per run |
+| `MaxConsecutiveFailedToolCalls(n)` | Stop after N consecutive failures      |
 
 ### OnMissingFields Values
 
-| Value | Behavior |
-|-------|----------|
-| `""` (empty) | Let the planner decide based on context |
-| `"finalize"` | Stop execution when required fields are missing |
-| `"await_clarification"` | Pause and wait for user input |
-| `"resume"` | Continue execution despite missing fields |
+| Value                   | Behavior                                        |
+| ----------------------- | ----------------------------------------------- |
+| `""` (empty)            | Let the planner decide based on context         |
+| `"finalize"`            | Stop execution when required fields are missing |
+| `"await_clarification"` | Pause and wait for user input                   |
+| `"resume"`              | Continue execution despite missing fields       |
 
 ### History Policies
 
@@ -1082,7 +1177,7 @@ Service("calculator", func() {
                 IconSizes("any")),
         ),
     )
-    
+
     Method("code_review", func() {
         Payload(func() {
             Attribute("language", String)
@@ -1102,16 +1197,16 @@ Service("calculator", func() {
 
 ### MCP Capabilities
 
-| DSL Function | MCP Capability |
-|--------------|----------------|
-| `Tool(name, desc)` in Method | `tools/list`, `tools/call` |
-| `Resource(name, uri, mime)` | `resources/list`, `resources/read` |
-| `WatchableResource(...)` | Resources with `resources/subscribe` |
-| `StaticPrompt(...)` | `prompts/list`, `prompts/get` (static) |
-| `DynamicPrompt(...)` | `prompts/list`, `prompts/get` (dynamic, method-backed) |
-| `Notification(...)` | Notification senders |
-| `Subscription(...)` | Subscription handlers |
-| `SubscriptionMonitor(...)` | SSE subscription monitors |
+| DSL Function                 | MCP Capability                                         |
+| ---------------------------- | ------------------------------------------------------ |
+| `Tool(name, desc)` in Method | `tools/list`, `tools/call`                             |
+| `Resource(name, uri, mime)`  | `resources/list`, `resources/read`                     |
+| `WatchableResource(...)`     | Resources with `resources/subscribe`                   |
+| `StaticPrompt(...)`          | `prompts/list`, `prompts/get` (static)                 |
+| `DynamicPrompt(...)`         | `prompts/list`, `prompts/get` (dynamic, method-backed) |
+| `Notification(...)`          | Notification senders                                   |
+| `Subscription(...)`          | Subscription handlers                                  |
+| `SubscriptionMonitor(...)`   | SSE subscription monitors                              |
 
 ---
 
@@ -1385,6 +1480,7 @@ return planner.ToolResult{Result: tr}, nil
 ```
 
 Notes:
+
 - Compatibility uses the shared type system (names and structure, including `Extend`)
 - For nested shapes, keep pointers in user types for validators/codecs
 - Mapping lives in executors; transforms are conveniences when types align

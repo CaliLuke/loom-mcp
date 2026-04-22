@@ -8,11 +8,14 @@
 package mcpassistant
 
 import (
+	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/url"
 
 	mcpruntime "github.com/CaliLuke/loom-mcp/runtime/mcp"
+	mcpauth "github.com/modelcontextprotocol/go-sdk/auth"
 )
 
 var oauthAuthorizationServers = []string{"https://auth.example.com"}
@@ -22,6 +25,7 @@ var oauthBearerMethodsSupported = []string{"header"}
 const oauthResourceIdentifier = "https://api.example.com/mcp"
 const oauthResourceDocumentation = "https://docs.example.com/mcp-auth"
 const oauthChallengeScope = "read write"
+const oauthTrustProxyHeaders = false
 
 // protectedResourceMetadataDocument is the JSON document returned at the RFC 9728 well-known endpoint.
 type protectedResourceMetadataDocument struct {
@@ -33,11 +37,23 @@ type protectedResourceMetadataDocument struct {
 }
 
 // HandleProtectedResourceMetadata serves the RFC 9728 Protected Resource Metadata document.
+//
+// Returns 400 Bad Request when the request carries a malformed
+// Forwarded or X-Forwarded-* header, or when the request context
+// yields no canonical resource URL (and no ResourceIdentifier is
+// declared in the DSL). Emitting a PRM document with an empty or
+// attacker-influenced `resource` field would violate RFC 9728 and
+// silently accept malformed input; failing loud is the safe default.
 func HandleProtectedResourceMetadata(w http.ResponseWriter, r *http.Request) {
+	resource, resourceErr := resolveOAuthResourceIdentifier(r)
+	if resourceErr != nil {
+		http.Error(w, resourceErr.Error(), http.StatusBadRequest)
+		return
+	}
 	doc := protectedResourceMetadataDocument{
 		AuthorizationServers:   oauthAuthorizationServers,
 		BearerMethodsSupported: oauthBearerMethodsSupported,
-		Resource:               resolveOAuthResourceIdentifier(r),
+		Resource:               resource,
 		ResourceDocumentation:  oauthResourceDocumentation,
 		ScopesSupported:        oauthScopesSupported,
 	}
@@ -53,11 +69,16 @@ func HandleProtectedResourceMetadata(w http.ResponseWriter, r *http.Request) {
 }
 
 // resolveOAuthResourceIdentifier returns the DSL-declared ResourceIdentifier when set, otherwise derives it from the request per RFC 8707.
-func resolveOAuthResourceIdentifier(r *http.Request) string {
+//
+// Returns an error when forwarded headers are present but malformed
+// or when no canonical resource URL can be derived. Callers MUST
+// surface that error as 400 Bad Request rather than falling back to
+// a request-host origin, which would silently accept attacker input.
+func resolveOAuthResourceIdentifier(r *http.Request) (string, error) {
 	if oauthResourceIdentifier != "" {
-		return oauthResourceIdentifier
+		return oauthResourceIdentifier, nil
 	}
-	return mcpruntime.CanonicalizeResourceURL(r)
+	return mcpruntime.CanonicalizeResourceURL(r, oauthTrustProxyHeaders)
 }
 
 // OAuthMetadataPath returns the RFC 9728 well-known path for a server mounted at mountPath.
@@ -66,15 +87,22 @@ func OAuthMetadataPath(mountPath string) string {
 }
 
 // OAuthChallengeHeader formats the RFC 6750 Bearer challenge for requests against a server mounted at mountPath.
+//
+// Uses CanonicalizeChallengeOrigin, which tolerates malformed
+// forwarded headers by falling back to the request host rather than
+// erroring. A challenge is a formatting artifact inside a 401
+// response, not an identity claim — a less-than-ideal challenge URL
+// is safer than no challenge at all. The PRM handler, which does
+// emit identity, uses the strict canonicalizer instead.
 func OAuthChallengeHeader(r *http.Request, mountPath string) string {
-	base := mcpruntime.CanonicalizeResourceURL(r)
+	base := mcpruntime.CanonicalizeChallengeOrigin(r, oauthTrustProxyHeaders)
 	metaURL := buildOAuthMetadataURL(base, mountPath)
 	return mcpruntime.BuildBearerChallenge(metaURL, oauthChallengeScope)
 }
 
 // OAuthInvalidTokenChallengeHeader formats the RFC 6750 Bearer invalid_token challenge, used when a decoded token fails audience binding, is expired, or is revoked.
 func OAuthInvalidTokenChallengeHeader(r *http.Request, mountPath string, errorDescription string) string {
-	base := mcpruntime.CanonicalizeResourceURL(r)
+	base := mcpruntime.CanonicalizeChallengeOrigin(r, oauthTrustProxyHeaders)
 	metaURL := buildOAuthMetadataURL(base, mountPath)
 	return mcpruntime.BuildInvalidTokenChallenge(metaURL, errorDescription)
 }
@@ -95,4 +123,74 @@ func buildOAuthMetadataURL(requestURL, mountPath string) string {
 	u.RawQuery = ""
 	u.Fragment = ""
 	return u.String()
+}
+
+// ErrAudienceMismatch is returned by EnforceAudience when a decoded token's
+// `aud` claim does not match the DSL-declared ResourceIdentifier. It
+// unwraps to mcpauth.ErrInvalidToken so go-sdk/auth.RequireBearerToken returns
+// 401 and mcpruntime.WithOAuthChallenge augments the response with the
+// standard Bearer challenge (`resource_metadata="..."`, plus `scope="..."`
+// when scopes are declared).
+//
+// Note: WithOAuthChallenge is error-agnostic — it does not distinguish
+// audience mismatch from a missing token, so it does NOT add
+// `error="invalid_token"` to the challenge on its own. Callers who need the
+// RFC 6750 §3.1 invalid_token challenge parameter should either emit it
+// manually from a verifier wrapper (see OAuthInvalidTokenChallengeHeader) or
+// wait for the planned error-aware challenge middleware — tracked in
+// MCP_AUTH_MODERNIZATION_PLAN.md.
+var ErrAudienceMismatch = fmt.Errorf("token audience does not match protected resource %q: %w", oauthResourceIdentifier, mcpauth.ErrInvalidToken)
+
+// EnforceAudience wraps a bearer-token verifier so tokens whose `aud` claim
+// does not match the DSL-declared ResourceIdentifier are rejected.
+//
+// The claim is read from TokenInfo.Extra["aud"] and may be a string, a
+// []string, or a []any (matching how encoding/json decodes a JWT `aud`
+// array). Missing or wrong-typed claims are treated as mismatches.
+//
+// Wrap the consumer's verifier exactly once at mount time:
+//
+//	mcpauth.RequireBearerToken(EnforceAudience(verifier), nil)
+func EnforceAudience(base mcpauth.TokenVerifier) mcpauth.TokenVerifier {
+	return func(ctx context.Context, token string, r *http.Request) (*mcpauth.TokenInfo, error) {
+		info, err := base(ctx, token, r)
+		if err != nil {
+			return info, err
+		}
+		if info == nil {
+			return nil, fmt.Errorf("verifier returned nil TokenInfo: %w", mcpauth.ErrInvalidToken)
+		}
+		if !audienceMatchesResourceIdentifier(info.Extra["aud"]) {
+			return nil, ErrAudienceMismatch
+		}
+		return info, nil
+	}
+}
+
+// audienceMatchesResourceIdentifier tests a JWT `aud` claim (which may be a
+// string or an array of strings per RFC 7519 §4.1.3) against the pinned
+// resource identifier. Returns false on missing, empty, or wrong-typed
+// claims so mismatches surface as invalid_token rather than being silently
+// admitted.
+func audienceMatchesResourceIdentifier(claim any) bool {
+	switch v := claim.(type) {
+	case string:
+		return v == oauthResourceIdentifier
+	case []string:
+		for _, s := range v {
+			if s == oauthResourceIdentifier {
+				return true
+			}
+		}
+		return false
+	case []any:
+		for _, e := range v {
+			if s, ok := e.(string); ok && s == oauthResourceIdentifier {
+				return true
+			}
+		}
+		return false
+	default:
+		return false
+	}
 }

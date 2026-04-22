@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 var stubTLS = tls.ConnectionState{}
@@ -170,7 +171,9 @@ func TestCanonicalizeResourceURL(t *testing.T) {
 			if tc.tls {
 				r.TLS = &stubTLS
 			}
-			assert.Equal(t, tc.want, CanonicalizeResourceURL(r))
+			got, err := CanonicalizeResourceURL(r, true)
+			require.NoError(t, err)
+			assert.Equal(t, tc.want, got)
 		})
 	}
 }
