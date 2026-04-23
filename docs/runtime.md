@@ -1865,7 +1865,10 @@ Loom MCP supports two complementary paths that produce `planner.RetryHint`:
    If validation fails, the codec returns a generated validation error that exposes
    structured issues (`Issues() []*tools.FieldIssue`) and descriptions. The runtime
    converts these into `planner.RetryHint` automatically (missing fields, enum values,
-   etc.).
+   etc.). Generated union decoders report invalid discriminators with the allowed
+   enum values and report a missing nested union `value` as a missing field, so
+   MCP callers receive actionable retry guidance instead of transport-level JSON
+   decoder failures.
 
 2. **Execution‑time validation (service / tool provider errors)**  
    When a tool provider calls a bound service method, the method may return a structured

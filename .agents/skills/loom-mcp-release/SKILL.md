@@ -82,7 +82,7 @@ make loom-status
 git tag --sort=creatordate
 gh release list --limit 20
 make loom-remote
-<update docs if behavior or workflow changed>
+<update docs and repo-local skills if behavior or workflow changed>
 make lint
 make test
 make itest

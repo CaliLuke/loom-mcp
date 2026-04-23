@@ -328,10 +328,12 @@ var DPICallToAction = Type("DPICallToAction", func() {
 })
 
 var ListAction = Type("ListAction", func() {
+	Meta("oneof:type:tag", "list")
 	Attribute("limit", Int, "Maximum number of items to list")
 })
 
 var CreateAction = Type("CreateAction", func() {
+	Meta("oneof:type:tag", "create")
 	Attribute("name", String, "Name to create")
 	Required("name")
 })

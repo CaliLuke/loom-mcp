@@ -294,7 +294,7 @@ func BuildDispatchActionPayload(assistantDispatchActionBody string) (*assistant.
 			err = loom.MergeErrors(err, loom.MissingFieldError("request", "body"))
 		}
 		switch string(body.Request.Kind()) {
-		case "CreateAction":
+		case "create":
 			actual, _ := body.Request.AsCreateAction()
 			if actual == nil {
 				err = loom.MergeErrors(err, loom.MissingFieldError("value", "body.request.value"))
@@ -314,14 +314,14 @@ func BuildDispatchActionPayload(assistantDispatchActionBody string) (*assistant.
 	if body.Request.Kind() != "" {
 
 		switch string(body.Request.Kind()) {
-		case "ListAction":
+		case "list":
 			actual, _ := body.Request.AsListAction()
 			obj := marshalListActionRequestBodyRequestBodyToAssistantListAction(actual)
 
 			u := v.Request
 			u.SetListAction((*assistant.ListAction)(obj))
 			v.Request = u
-		case "CreateAction":
+		case "create":
 			actual, _ := body.Request.AsCreateAction()
 			obj := marshalCreateActionRequestBodyRequestBodyToAssistantCreateAction(actual)
 

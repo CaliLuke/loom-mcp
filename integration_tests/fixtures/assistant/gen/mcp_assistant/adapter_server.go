@@ -517,11 +517,11 @@ func inferToolInputRecovery(err error, raw json.RawMessage) string {
 	if message == "" {
 		message = strings.TrimSpace(err.Error())
 	}
-	if field := missingFieldFromMessage(message); field != "" {
-		return fmt.Sprintf("Include required field %q.", field)
-	}
 	if action, ok := actionValueEnvelopeExample(raw); ok {
 		return fmt.Sprintf("Include the nested value object. Example: %s", action)
+	}
+	if field := missingFieldFromMessage(message); field != "" {
+		return fmt.Sprintf("Include required field %q.", field)
 	}
 	if strings.Contains(message, "unexpected end of JSON input") || strings.Contains(message, "unexpected EOF") {
 		return "Provide complete JSON arguments. If a field expects an object, include {} instead of leaving it incomplete."
@@ -962,7 +962,7 @@ func (a *MCPAdapter) ToolsList(ctx context.Context, p *ToolsListPayload) (res *T
 		Name:        "generate_dpi_spec",
 	}, &ToolInfo{
 		Description: stringPtr("Dispatch an action using a union payload"),
-		InputSchema: json.RawMessage([]byte("{\"type\":\"object\",\"required\":[\"request\"],\"properties\":{\"request\":{\"type\":\"object\",\"description\":\"Action envelope\",\"oneOf\":[{\"type\":\"object\",\"required\":[\"action\",\"value\"],\"properties\":{\"action\":{\"type\":\"string\",\"enum\":[\"ListAction\"]},\"value\":{\"type\":\"object\",\"properties\":{\"limit\":{\"type\":\"integer\",\"description\":\"Maximum number of items to list\"}},\"additionalProperties\":false}},\"additionalProperties\":false},{\"type\":\"object\",\"required\":[\"action\",\"value\"],\"properties\":{\"action\":{\"type\":\"string\",\"enum\":[\"CreateAction\"]},\"value\":{\"type\":\"object\",\"required\":[\"name\"],\"properties\":{\"name\":{\"type\":\"string\",\"description\":\"Name to create\"}},\"additionalProperties\":false}},\"additionalProperties\":false}],\"discriminator\":{\"propertyName\":\"action\"}}},\"additionalProperties\":false}")),
+		InputSchema: json.RawMessage([]byte("{\"type\":\"object\",\"required\":[\"request\"],\"properties\":{\"request\":{\"type\":\"object\",\"description\":\"Action envelope\",\"oneOf\":[{\"type\":\"object\",\"required\":[\"action\",\"value\"],\"properties\":{\"action\":{\"type\":\"string\",\"enum\":[\"list\"]},\"value\":{\"type\":\"object\",\"properties\":{\"limit\":{\"type\":\"integer\",\"description\":\"Maximum number of items to list\"}},\"additionalProperties\":false}},\"additionalProperties\":false},{\"type\":\"object\",\"required\":[\"action\",\"value\"],\"properties\":{\"action\":{\"type\":\"string\",\"enum\":[\"create\"]},\"value\":{\"type\":\"object\",\"required\":[\"name\"],\"properties\":{\"name\":{\"type\":\"string\",\"description\":\"Name to create\"}},\"additionalProperties\":false}},\"additionalProperties\":false}],\"discriminator\":{\"propertyName\":\"action\"}}},\"additionalProperties\":false}")),
 		Name:        "dispatch_action",
 	}}
 	res = &ToolsListResult{Tools: tools}

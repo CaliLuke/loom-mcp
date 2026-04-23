@@ -111,10 +111,10 @@ func TestGeneratedSDKServerAdvertisesUnionToolSchema(t *testing.T) {
 		actions[actionName] = variantSchema
 	}
 
-	listVariant, ok := actions["ListAction"]
-	require.True(t, ok, "ListAction variant must be advertised")
-	createVariant, ok := actions["CreateAction"]
-	require.True(t, ok, "CreateAction variant must be advertised")
+	listVariant, ok := actions["list"]
+	require.True(t, ok, "list variant must be advertised")
+	createVariant, ok := actions["create"]
+	require.True(t, ok, "create variant must be advertised")
 
 	listProperties := listVariant["properties"].(map[string]any)
 	listValueSchema := listProperties["value"].(map[string]any)

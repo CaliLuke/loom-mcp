@@ -704,6 +704,12 @@ the MCP schema, agent tool schemas, and related generated contracts rather than
 falling back to derived type names. This is the schema clients receive from
 `tools/list`.
 
+Generated union decoders use the same contract at call time. An unknown
+discriminator value is reported as a validation error with the allowed enum
+values, and a present discriminator with a missing nested `value` object is
+reported as a missing `value` field rather than leaking a low-level JSON decode
+error.
+
 ### Args and Return
 
 `Args` defines the input parameter schema for a tool. It follows the same patterns as the

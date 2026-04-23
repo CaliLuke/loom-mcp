@@ -150,7 +150,40 @@ func TestGeneratedAdapterToolsCallReturnsSpecificRecoveryForNestedActionPayloads
 	assert.True(t, *stream.events[0].IsError)
 	require.NotNil(t, stream.events[0].Content[0].Text)
 	assert.Equal(t,
-		"[invalid_params] unexpected CreateActionOrListAction type \"list\"\nRecovery: Include the nested value object. Example: {\"request\":{\"action\":\"list\",\"value\":{}}}",
+		"[invalid_params] Missing required field: value\nRecovery: Include the nested value object. Example: {\"request\":{\"action\":\"list\",\"value\":{}}}",
+		*stream.events[0].Content[0].Text,
+	)
+}
+
+func TestGeneratedAdapterToolsCallReturnsSpecificErrorForInvalidActionDiscriminator(t *testing.T) {
+	t.Parallel()
+
+	adapter := mcpassistant.NewMCPAdapter(NewAssistant(), promptProvider{}, nil)
+
+	_, err := adapter.Initialize(context.Background(), &mcpassistant.InitializePayload{
+		ProtocolVersion: "2025-06-18",
+		ClientInfo: &mcpassistant.ClientInfo{
+			Name:    "tool-invalid-action-test",
+			Version: "1.0.0",
+		},
+	})
+	require.NoError(t, err)
+
+	stream := &capturedToolsCallStream{}
+	err = adapter.ToolsCall(context.Background(), &mcpassistant.ToolsCallPayload{
+		Name:      "dispatch_action",
+		Arguments: json.RawMessage(`{"request":{"action":"GetActive","value":{}}}`),
+	}, stream)
+	require.NoError(t, err)
+
+	require.False(t, stream.sendErrorCalled, "invalid payload must not escape as transport error")
+	require.Len(t, stream.events, 1)
+	require.Len(t, stream.events[0].Content, 1)
+	require.NotNil(t, stream.events[0].IsError)
+	assert.True(t, *stream.events[0].IsError)
+	require.NotNil(t, stream.events[0].Content[0].Text)
+	assert.Equal(t,
+		"[invalid_params] invalid value for \"action\": got \"GetActive\", expected one of \"list\", \"create\"\nRecovery: Provide valid tool arguments.",
 		*stream.events[0].Content[0].Text,
 	)
 }

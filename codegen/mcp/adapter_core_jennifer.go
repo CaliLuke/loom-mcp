@@ -792,11 +792,11 @@ func emitInferToolInputRecovery(stmt *jen.Statement) {
 			jen.If(jen.Id("message").Op("==").Lit("")).Block(
 				jen.Id("message").Op("=").Qual("strings", "TrimSpace").Call(jen.Id("err").Dot("Error").Call()),
 			),
-			jen.If(jen.Id("field").Op(":=").Id("missingFieldFromMessage").Call(jen.Id("message")), jen.Id("field").Op("!=").Lit("")).Block(
-				jen.Return(jen.Qual("fmt", "Sprintf").Call(jen.Lit("Include required field %q."), jen.Id("field"))),
-			),
 			jen.If(jen.List(jen.Id("action"), jen.Id("ok")).Op(":=").Id("actionValueEnvelopeExample").Call(jen.Id("raw")), jen.Id("ok")).Block(
 				jen.Return(jen.Qual("fmt", "Sprintf").Call(jen.Lit("Include the nested value object. Example: %s"), jen.Id("action"))),
+			),
+			jen.If(jen.Id("field").Op(":=").Id("missingFieldFromMessage").Call(jen.Id("message")), jen.Id("field").Op("!=").Lit("")).Block(
+				jen.Return(jen.Qual("fmt", "Sprintf").Call(jen.Lit("Include required field %q."), jen.Id("field"))),
 			),
 			jen.If(jen.Qual("strings", "Contains").Call(jen.Id("message"), jen.Lit("unexpected end of JSON input")).Op("||").Qual("strings", "Contains").Call(jen.Id("message"), jen.Lit("unexpected EOF"))).Block(
 				jen.Return(jen.Lit("Provide complete JSON arguments. If a field expects an object, include {} instead of leaving it incomplete.")),

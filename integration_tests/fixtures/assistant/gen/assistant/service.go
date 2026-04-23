@@ -370,9 +370,9 @@ type CreateActionOrListActionKind string
 
 const (
 	// CreateActionOrListActionKindListAction identifies the ListAction branch of the union.
-	CreateActionOrListActionKindListAction CreateActionOrListActionKind = "ListAction"
+	CreateActionOrListActionKindListAction CreateActionOrListActionKind = "list"
 	// CreateActionOrListActionKindCreateAction identifies the CreateAction branch of the union.
-	CreateActionOrListActionKindCreateAction CreateActionOrListActionKind = "CreateAction"
+	CreateActionOrListActionKindCreateAction CreateActionOrListActionKind = "create"
 )
 
 // Kind returns the discriminator value of the union.
@@ -526,7 +526,10 @@ func (u *CreateActionOrListAction) UnmarshalFormValues(values url.Values, prefix
 		u.kind = CreateActionOrListActionKindCreateAction
 		u.CreateAction = v
 	default:
-		return fmt.Errorf("unexpected CreateActionOrListAction type %q", rawType)
+		return loom.InvalidEnumValueError("action", rawType, []any{
+			string(CreateActionOrListActionKindListAction),
+			string(CreateActionOrListActionKindCreateAction),
+		})
 	}
 	return nil
 }
@@ -543,6 +546,9 @@ func (u *CreateActionOrListAction) UnmarshalJSON(data []byte) error {
 	switch raw.Type {
 	case string(CreateActionOrListActionKindListAction):
 		var v *ListAction
+		if len(raw.Value) == 0 {
+			return loom.MissingFieldError("value", "body")
+		}
 		if err := json.Unmarshal(raw.Value, &v); err != nil {
 			return err
 		}
@@ -550,13 +556,19 @@ func (u *CreateActionOrListAction) UnmarshalJSON(data []byte) error {
 		u.ListAction = v
 	case string(CreateActionOrListActionKindCreateAction):
 		var v *CreateAction
+		if len(raw.Value) == 0 {
+			return loom.MissingFieldError("value", "body")
+		}
 		if err := json.Unmarshal(raw.Value, &v); err != nil {
 			return err
 		}
 		u.kind = CreateActionOrListActionKindCreateAction
 		u.CreateAction = v
 	default:
-		return fmt.Errorf("unexpected CreateActionOrListAction type %q", raw.Type)
+		return loom.InvalidEnumValueError("action", raw.Type, []any{
+			string(CreateActionOrListActionKindListAction),
+			string(CreateActionOrListActionKindCreateAction),
+		})
 	}
 	return nil
 }

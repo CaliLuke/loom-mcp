@@ -1,5 +1,5 @@
-github.com/CaliLuke/loom v1.0.11 h1:KoyMWK4viqqSRyp0/kjalwvEZeOEbUhRtdeNgE6Itng=
-github.com/CaliLuke/loom v1.0.11/go.mod h1:eJZdUdNbeyez4gFfWIYZyzh04n3IWHoEieV4ZvFfkiY=
+github.com/CaliLuke/loom v1.0.12 h1:9rfWeEpG2Ro8TUMlVm2gz4rwfpZ3x/s3oy5BGRVtkVw=
+github.com/CaliLuke/loom v1.0.12/go.mod h1:eJZdUdNbeyez4gFfWIYZyzh04n3IWHoEieV4ZvFfkiY=
 github.com/aws/aws-sdk-go-v2 v1.41.6 h1:1AX0AthnBQzMx1vbmir3Y4WsnJgiydmnJjiLu+LvXOg=
 github.com/aws/aws-sdk-go-v2 v1.41.6/go.mod h1:dy0UzBIfwSeot4grGvY1AqFWN5zgziMmWGzysDnHFcQ=
 github.com/aws/aws-sdk-go-v2/aws/protocol/eventstream v1.7.9 h1:adBsCIIpLbLmYnkQU+nAChU5yhVTvu5PerROm+/Kq2A=
