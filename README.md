@@ -33,14 +33,14 @@ Repo identity and module identity are now aligned.
 
 This repo currently targets:
 
-- `github.com/CaliLuke/loom v1.0.10`
+- `github.com/CaliLuke/loom v1.0.11`
 - `github.com/modelcontextprotocol/go-sdk v1.5.0`
 - Go `1.26.1`
 
 The standard CLI for generation is:
 
 ```bash
-go install github.com/CaliLuke/loom/cmd/loom@v1.0.10
+go install github.com/CaliLuke/loom/cmd/loom@v1.0.11
 ```
 
 ## Working in this repo

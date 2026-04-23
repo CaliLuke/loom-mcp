@@ -47,6 +47,10 @@ Use this file when editing DSL, generators, generated helpers, or MCP codegen be
 - Keep MCP file layout aligned with current repository conventions.
 - Reuse generated encoding/decoding for payload and result transforms.
 - Prefer minimal post-processing over handwritten alternative generators.
+- For `OneOf(...)` unions, preserve explicit discriminator tags from
+  `Meta("oneof:type:tag", "...")` across MCP schemas, agent tool schemas,
+  and generated union helpers. Do not fall back to derived type names when an
+  explicit tag is present.
 
 ## Validation And Contracts
 

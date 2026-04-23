@@ -698,7 +698,11 @@ Service("calculator", func() {
 
 When the payload contains a `OneOf(...)` union, the generated MCP `inputSchema`
 preserves the union envelope with `oneOf` variants and the declared discriminator
-field names. This is the schema clients receive from `tools/list`.
+field names. When variants declare `Meta("oneof:type:tag", "...")`, the
+generated discriminator enum values use those explicit tags consistently across
+the MCP schema, agent tool schemas, and related generated contracts rather than
+falling back to derived type names. This is the schema clients receive from
+`tools/list`.
 
 ### Args and Return
 

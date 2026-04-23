@@ -571,3 +571,71 @@ func TestToolSchemaUsesArrayBoundsKeywords(t *testing.T) {
 	require.NotContains(t, schema, "minLength")
 	require.NotContains(t, schema, "maxLength")
 }
+
+func TestToolSchemaUsesUnionVariantTagsInEnums(t *testing.T) {
+	union := &expr.Union{
+		TypeKey:  "action",
+		ValueKey: "value",
+		Values: []*expr.NamedAttributeExpr{
+			{
+				Name: "List",
+				Attribute: &expr.AttributeExpr{
+					Type: &expr.Object{
+						&expr.NamedAttributeExpr{
+							Name: "limit",
+							Attribute: &expr.AttributeExpr{
+								Type: expr.Int,
+							},
+						},
+					},
+					Meta: expr.MetaExpr{
+						"oneof:type:tag": []string{"list"},
+						"name:original":  []string{"List"},
+					},
+				},
+			},
+			{
+				Name: "GetActive",
+				Attribute: &expr.AttributeExpr{
+					Type: &expr.Object{},
+					Meta: expr.MetaExpr{
+						"oneof:type:tag": []string{"get_active"},
+						"name:original":  []string{"GetActive"},
+					},
+				},
+			},
+		},
+	}
+	attr := &expr.AttributeExpr{Type: union}
+
+	jsonStr, err := shared.ToJSONSchema(attr)
+
+	require.NoError(t, err)
+	var schema map[string]any
+	require.NoError(t, json.Unmarshal([]byte(jsonStr), &schema))
+	require.Equal(t, map[string]any{"propertyName": "action"}, schema["discriminator"])
+
+	oneOf, ok := schema["oneOf"].([]any)
+	require.True(t, ok)
+	require.Len(t, oneOf, 2)
+
+	gotTags := make([]string, 0, len(oneOf))
+	for _, raw := range oneOf {
+		branch, ok := raw.(map[string]any)
+		require.True(t, ok)
+		properties, ok := branch["properties"].(map[string]any)
+		require.True(t, ok)
+		action, ok := properties["action"].(map[string]any)
+		require.True(t, ok)
+		enumValues, ok := action["enum"].([]any)
+		require.True(t, ok)
+		require.Len(t, enumValues, 1)
+		tag, ok := enumValues[0].(string)
+		require.True(t, ok)
+		gotTags = append(gotTags, tag)
+	}
+
+	require.ElementsMatch(t, []string{"list", "get_active"}, gotTags)
+	require.NotContains(t, gotTags, "List")
+	require.NotContains(t, gotTags, "GetActive")
+}

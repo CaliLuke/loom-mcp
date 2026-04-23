@@ -12,6 +12,7 @@ Use this skill when releasing `github.com/CaliLuke/loom-mcp`. Keep the workflow 
 - Never bypass hooks. If commit-time hooks fail, fix the underlying problem and retry.
 - Use `make loom-remote` before release verification and before the release commit so the repo is pinned to the published `github.com/CaliLuke/loom` dependency, not a local checkout.
 - If the release changed assistant fixture DSL or generated MCP output, run `make regen-assistant-fixture` before verification.
+- If the release changed user-facing DSL, codegen, runtime, or release workflow behavior, update the repo docs in `docs/`, any release-facing root docs, and the relevant repo-local skills in `.agents/skills/` before tagging.
 - Do not hand-edit generated `gen/` files.
 - Do not call the release published until `main`, the tag, and the GitHub Release object all exist remotely.
 - If a tag already exists without a GitHub Release, backfill the release object before treating that version as published.
@@ -29,25 +30,29 @@ Use this skill when releasing `github.com/CaliLuke/loom-mcp`. Keep the workflow 
 3. Regenerate only when required by the change:
    - `make regen-assistant-fixture` for assistant fixture DSL changes
    - any normal design/codegen regeneration already required by the change itself
-4. Run the full release verification suite in this order:
+4. Update docs whenever shipped behavior or release workflow guidance changed:
+   - update `docs/` for user-facing DSL, runtime, or codegen contract changes
+   - update release-facing root docs such as `README.md` when dependency pins, commands, or workflow expectations changed
+   - update the relevant repo-local skills in `.agents/skills/`, especially `.agents/skills/loom-mcp/` and this release skill, when the shipped product or release workflow changed
+5. Run the full release verification suite in this order:
    - `make lint`
    - `make test`
    - `make itest`
    - `make verify-mcp-local`
    - `go test ./...`
-5. Review the final diff and ensure docs are updated when user-facing DSL, runtime, or codegen behavior changed.
-6. Commit the release-ready changes on `main`.
-7. Create an annotated tag for the release version, for example:
+6. Review the final diff and confirm the docs shipped with the same contract as the code.
+7. Commit the release-ready changes on `main`.
+8. Create an annotated tag for the release version, for example:
    - `git tag -a v1.0.3 -m "v1.0.3"`
-8. Publish the release:
+9. Publish the release:
    - `git push origin main`
    - `git push origin v1.0.3`
    - `gh release create v1.0.3 --verify-tag --generate-notes --latest`
-9. Verify the published state:
+10. Verify the published state:
    - `git ls-remote --tags origin v1.0.3`
    - `git ls-remote origin main`
    - `gh release view v1.0.3 --json tagName,isDraft,isPrerelease,url,publishedAt`
-10. Verify module visibility if the user asks for full downstream confirmation:
+11. Verify module visibility if the user asks for full downstream confirmation:
    - `go list -m -versions github.com/CaliLuke/loom-mcp`
    - if the new version is not visible yet, note that Go proxy propagation can lag after the Git push
 
@@ -77,6 +82,7 @@ make loom-status
 git tag --sort=creatordate
 gh release list --limit 20
 make loom-remote
+<update docs if behavior or workflow changed>
 make lint
 make test
 make itest
@@ -100,6 +106,8 @@ gh release view vX.Y.Z --json tagName,isDraft,isPrerelease,url,publishedAt
 - If verification fails after switching to remote mode, stop. Do not patch around an upstream `loom` regression in `loom-mcp`; return the exact failing scenario.
 - If generated output changed unexpectedly, trace it back to source changes before committing.
 - If the release includes user-facing framework behavior changes, update the repo docs under `docs/` in the same release.
+- If dependency pins, verification commands, or local-vs-remote workflow guidance changed, update release-facing root docs such as `README.md` in the same release.
+- If the shipped product or release workflow changed, update the relevant repo-local skills in `.agents/skills/` in the same release.
 - If the user asked for a dot release, prefer the smallest semver bump that matches the shipped behavior.
 - If `gh release view vX.Y.Z` fails while `git ls-remote --tags origin vX.Y.Z` succeeds, backfill the missing GitHub Release before closing the task.
 
@@ -108,6 +116,7 @@ gh release view vX.Y.Z --json tagName,isDraft,isPrerelease,url,publishedAt
 Treat the release as complete only when all of the following are true:
 
 - verification passed in remote mode
+- docs and relevant repo-local skills were reviewed and updated wherever the shipped contract or release workflow changed
 - the release commit exists on `main`
 - the annotated `vX.Y.Z` tag exists locally and on `origin`
 - `origin/main` points at the release commit

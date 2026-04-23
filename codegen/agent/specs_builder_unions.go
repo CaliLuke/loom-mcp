@@ -134,7 +134,7 @@ func buildUnionTypeData(u *goaexpr.Union, scope *codegen.NameScope) *service.Uni
 			KindConst: kindConst,
 			FieldName: fieldName,
 			FieldType: fieldType,
-			TypeTag:   nat.Name,
+			TypeTag:   goaexpr.UnionVariantTag(nat),
 		})
 	}
 
