@@ -61,19 +61,11 @@ func New(opts Options) (Client, error) {
 	if err := clientinfra.ValidateMongoOptions(opts.Client, opts.Database); err != nil {
 		return nil, err
 	}
-	sessionsCollection := opts.SessionsCollection
-	if sessionsCollection == "" {
-		sessionsCollection = defaultSessionsCollection
-	}
-	runsCollection := opts.RunsCollection
-	if runsCollection == "" {
-		runsCollection = defaultRunsCollection
-	}
+	sessionsCollection := clientinfra.ResolveCollectionName(opts.SessionsCollection, defaultSessionsCollection)
+	runsCollection := clientinfra.ResolveCollectionName(opts.RunsCollection, defaultRunsCollection)
 	timeout := clientinfra.ResolveTimeout(opts.Timeout, defaultOpTimeout)
-	sessColl := opts.Client.Database(opts.Database).Collection(sessionsCollection)
-	runColl := opts.Client.Database(opts.Database).Collection(runsCollection)
-	sessWrapper := mongoCollection{coll: sessColl}
-	runWrapper := mongoCollection{coll: runColl}
+	sessWrapper := clientinfra.NewCollection(opts.Client, opts.Database, sessionsCollection)
+	runWrapper := clientinfra.NewCollection(opts.Client, opts.Database, runsCollection)
 	if err := clientinfra.EnsureIndexes(timeout, func(ctx context.Context) error {
 		return ensureIndexes(ctx, sessWrapper, runWrapper)
 	}); err != nil {
@@ -482,8 +474,8 @@ func ensureIndexes(ctx context.Context, sessionsColl, runsColl collection) error
 }
 
 func newClientWithCollections(mongoClient *mongodriver.Client, sessionsColl, runsColl collection, timeout time.Duration) (*client, error) {
-	if sessionsColl == nil || runsColl == nil {
-		return nil, errors.New("collections are required")
+	if err := clientinfra.ValidateCollections("collections are required", sessionsColl, runsColl); err != nil {
+		return nil, err
 	}
 	timeout = clientinfra.ResolveTimeout(timeout, defaultOpTimeout)
 	return &client{
@@ -520,50 +512,14 @@ func createSessionTimestamps(createdAt time.Time) (time.Time, time.Time) {
 }
 
 type collection interface {
-	FindOne(ctx context.Context, filter any, opts ...*options.FindOneOptions) singleResult
-	Find(ctx context.Context, filter any, opts ...*options.FindOptions) (cursor, error)
-	UpdateOne(ctx context.Context, filter any, update any,
-		opts ...*options.UpdateOptions) (*mongodriver.UpdateResult, error)
-	Indexes() indexView
+	clientinfra.FindOneCollection
+	clientinfra.FindCollection
+	clientinfra.UpdateOneCollection
+	clientinfra.IndexedCollection
 }
 
-type indexView interface {
-	CreateOne(ctx context.Context, model mongodriver.IndexModel,
-		opts ...*options.CreateIndexesOptions) (string, error)
-}
+type singleResult = clientinfra.SingleResultDecoder
 
-type singleResult interface {
-	Decode(val any) error
-}
+type cursor = clientinfra.CursorReader
 
-type cursor interface {
-	Close(ctx context.Context) error
-	Decode(val any) error
-	Err() error
-	Next(ctx context.Context) bool
-}
-
-type mongoCollection struct {
-	coll *mongodriver.Collection
-}
-
-func (c mongoCollection) FindOne(ctx context.Context, filter any, opts ...*options.FindOneOptions) singleResult {
-	return clientinfra.SingleResult{Res: c.coll.FindOne(ctx, filter, opts...)}
-}
-
-func (c mongoCollection) Find(ctx context.Context, filter any, opts ...*options.FindOptions) (cursor, error) {
-	cur, err := c.coll.Find(ctx, filter, opts...)
-	if err != nil {
-		return nil, err
-	}
-	return clientinfra.Cursor{Cur: cur}, nil
-}
-
-func (c mongoCollection) UpdateOne(ctx context.Context, filter any, update any,
-	opts ...*options.UpdateOptions) (*mongodriver.UpdateResult, error) {
-	return c.coll.UpdateOne(ctx, filter, update, opts...)
-}
-
-func (c mongoCollection) Indexes() indexView {
-	return clientinfra.IndexView{View: c.coll.Indexes()}
-}
+type indexView = clientinfra.IndexCreator

@@ -12,65 +12,6 @@ import (
 	"github.com/CaliLuke/loom-mcp/runtime/agent/tools"
 )
 
-func (e *toolBatchExec) synthesizeTimedOutActivityResults(wfCtx engine.WorkflowContext, activityByID map[string]*planner.ToolResult, pending []futureInfo, cancelMsg string) error {
-	for _, info := range pending {
-		if info.call.ToolCallID == "" {
-			continue
-		}
-		if _, ok := activityByID[info.call.ToolCallID]; ok {
-			continue
-		}
-		tr, err := e.synthesizeTimeoutToolResult(wfCtx, info.call, info.startTime, cancelMsg)
-		if err != nil {
-			return err
-		}
-		activityByID[info.call.ToolCallID] = tr
-	}
-	return nil
-}
-
-func (e *toolBatchExec) synthesizeTimedOutChildResults(wfCtx engine.WorkflowContext, inlineByID map[string]*planner.ToolResult, pending []agentChildFutureInfo, cancelMsg string) error {
-	for _, info := range pending {
-		if info.call.ToolCallID == "" {
-			continue
-		}
-		if _, ok := inlineByID[info.call.ToolCallID]; ok {
-			continue
-		}
-		tr, err := e.synthesizeTimeoutToolResult(wfCtx, info.call, info.startTime, cancelMsg)
-		if err != nil {
-			return err
-		}
-		inlineByID[info.call.ToolCallID] = tr
-	}
-	return nil
-}
-
-func (e *toolBatchExec) synthesizeTimeoutToolResult(wfCtx engine.WorkflowContext, call planner.ToolRequest, startTime time.Time, cancelMsg string) (*planner.ToolResult, error) {
-	ctx := wfCtx.Context()
-	toolErr := planner.NewToolError(cancelMsg)
-	tr := &planner.ToolResult{
-		Name:       call.Name,
-		ToolCallID: call.ToolCallID,
-		Error:      toolErr,
-	}
-	duration := wfCtx.Now().Sub(startTime)
-	if _, ok := e.r.toolSpec(call.Name); ok {
-		resultJSON, err := e.r.materializeToolResult(ctx, call, tr)
-		if err != nil {
-			return nil, err
-		}
-		if err := e.publishToolResultReceived(ctx, call, tr, resultJSON, duration); err != nil {
-			return nil, err
-		}
-		return tr, nil
-	}
-	if err := e.publishToolResultReceived(ctx, call, tr, nil, duration); err != nil {
-		return nil, err
-	}
-	return tr, nil
-}
-
 func (e *toolBatchExec) collectActivityResultsAsComplete(wfCtx engine.WorkflowContext, futures []futureInfo, finalizeTimer engine.Future[time.Time]) (map[string]*planner.ToolResult, []futureInfo, bool, error) {
 	ctx := wfCtx.Context()
 	activityByID := make(map[string]*planner.ToolResult, len(futures))

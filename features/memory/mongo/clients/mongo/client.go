@@ -51,13 +51,9 @@ func New(opts Options) (Client, error) {
 	if err := clientinfra.ValidateMongoOptions(opts.Client, opts.Database); err != nil {
 		return nil, err
 	}
-	collection := opts.Collection
-	if collection == "" {
-		collection = defaultCollection
-	}
+	collection := clientinfra.ResolveCollectionName(opts.Collection, defaultCollection)
 	timeout := clientinfra.ResolveTimeout(opts.Timeout, defaultTimeout)
-	mcoll := opts.Client.Database(opts.Database).Collection(collection)
-	wrapper := mongoCollection{coll: mcoll}
+	wrapper := clientinfra.NewCollection(opts.Client, opts.Database, collection)
 	if err := clientinfra.EnsureIndexes(timeout, func(ctx context.Context) error {
 		return ensureIndexes(ctx, wrapper)
 	}); err != nil {
@@ -223,8 +219,8 @@ func ensureIndexes(ctx context.Context, coll collection) error {
 }
 
 func newClientWithCollection(mongoClient *mongodriver.Client, coll collection, timeout time.Duration) (*client, error) {
-	if coll == nil {
-		return nil, errors.New("collection is required")
+	if err := clientinfra.ValidateCollections("collection is required", coll); err != nil {
+		return nil, err
 	}
 	timeout = clientinfra.ResolveTimeout(timeout, defaultTimeout)
 	return &client{
@@ -235,34 +231,11 @@ func newClientWithCollection(mongoClient *mongodriver.Client, coll collection, t
 }
 
 type collection interface {
-	FindOne(ctx context.Context, filter any, opts ...*options.FindOneOptions) singleResult
-	UpdateOne(ctx context.Context, filter any, update any,
-		opts ...*options.UpdateOptions) (*mongodriver.UpdateResult, error)
-	Indexes() indexView
+	clientinfra.FindOneCollection
+	clientinfra.UpdateOneCollection
+	clientinfra.IndexedCollection
 }
 
-type indexView interface {
-	CreateOne(ctx context.Context, model mongodriver.IndexModel,
-		opts ...*options.CreateIndexesOptions) (string, error)
-}
+type singleResult = clientinfra.SingleResultDecoder
 
-type singleResult interface {
-	Decode(val any) error
-}
-
-type mongoCollection struct {
-	coll *mongodriver.Collection
-}
-
-func (c mongoCollection) FindOne(ctx context.Context, filter any, opts ...*options.FindOneOptions) singleResult {
-	return clientinfra.SingleResult{Res: c.coll.FindOne(ctx, filter, opts...)}
-}
-
-func (c mongoCollection) UpdateOne(ctx context.Context, filter any, update any,
-	opts ...*options.UpdateOptions) (*mongodriver.UpdateResult, error) {
-	return c.coll.UpdateOne(ctx, filter, update, opts...)
-}
-
-func (c mongoCollection) Indexes() indexView {
-	return clientinfra.IndexView{View: c.coll.Indexes()}
-}
+type indexView = clientinfra.IndexCreator

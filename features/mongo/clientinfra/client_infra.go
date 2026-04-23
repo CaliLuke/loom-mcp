@@ -4,6 +4,7 @@ package clientinfra
 import (
 	"context"
 	"errors"
+	"reflect"
 	"time"
 
 	mongodriver "go.mongodb.org/mongo-driver/mongo"
@@ -27,6 +28,24 @@ func ResolveTimeout(timeout time.Duration, defaultTimeout time.Duration) time.Du
 		return defaultTimeout
 	}
 	return timeout
+}
+
+// ResolveCollectionName applies the package default when the configured collection is empty.
+func ResolveCollectionName(collection string, defaultCollection string) string {
+	if collection == "" {
+		return defaultCollection
+	}
+	return collection
+}
+
+// ValidateCollections checks that test or production collection adapters are present.
+func ValidateCollections(message string, collections ...any) error {
+	for _, collection := range collections {
+		if isNil(collection) {
+			return errors.New(message)
+		}
+	}
+	return nil
 }
 
 // EnsureIndexes runs index initialization with a timeout-bounded background context.
@@ -53,4 +72,21 @@ func WithTimeout(ctx context.Context, timeout time.Duration, normalizeNil bool) 
 		return ctx, func() {}
 	}
 	return context.WithTimeout(ctx, timeout)
+}
+
+func isNil(v any) bool {
+	if v == nil {
+		return true
+	}
+	rv := reflect.ValueOf(v)
+	kind := rv.Kind()
+	if kind == reflect.Chan ||
+		kind == reflect.Func ||
+		kind == reflect.Interface ||
+		kind == reflect.Map ||
+		kind == reflect.Pointer ||
+		kind == reflect.Slice {
+		return rv.IsNil()
+	}
+	return false
 }

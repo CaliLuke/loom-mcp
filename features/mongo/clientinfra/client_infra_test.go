@@ -24,6 +24,23 @@ func TestResolveTimeout(t *testing.T) {
 	assert.Equal(t, 2*time.Second, ResolveTimeout(2*time.Second, 5*time.Second))
 }
 
+func TestResolveCollectionName(t *testing.T) {
+	t.Parallel()
+
+	assert.Equal(t, "default", ResolveCollectionName("", "default"))
+	assert.Equal(t, "custom", ResolveCollectionName("custom", "default"))
+}
+
+func TestValidateCollections(t *testing.T) {
+	t.Parallel()
+
+	require.NoError(t, ValidateCollections("collection is required", &struct{}{}))
+	require.EqualError(t, ValidateCollections("collection is required", nil), "collection is required")
+
+	var ptr *struct{}
+	require.EqualError(t, ValidateCollections("collection is required", ptr), "collection is required")
+}
+
 func TestEnsureIndexesUsesDeadlineContext(t *testing.T) {
 	t.Parallel()
 
