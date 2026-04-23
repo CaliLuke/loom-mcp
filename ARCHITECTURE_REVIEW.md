@@ -13,17 +13,6 @@
 3. Replace arbitrary fixed sleeps with explicit polling/readiness checks around `ping`.
 **Confidence**: High
 
-**ID**: CR-002
-**Severity**: S2
-**Title**: Overloaded Registry Manager Violates Single Responsibility Principle
-**Impact**: Modifying registry discovery or federation logic carries a high risk of side-effects because one-shot operations and background synchronization share the same control flow blocks. This also makes testing timing-sensitive and difficult.
-**Evidence**: `runtime/registry/manager.go` (675 lines). Mixes cache management, tool discovery (`DiscoverToolset`), federation filtering, background synchronization (`StartSync`, `syncRegistry`), and observability logging.
-**Recommendation**: 
-1. Split discovery and cache paths from background sync and federation logic into separate files/structs.
-2. Move observability/logging helpers behind narrower interfaces.
-3. Replace test sleeps with deterministic controllable clocks or polling hooks in `manager_test.go`.
-**Confidence**: High
-
 **ID**: CR-003
 **Severity**: S2
 **Title**: High Complexity in Runtime Tool Execution Hotspots
@@ -54,8 +43,8 @@ However, the **implementation architecture** has accrued significant monolithic 
 
 ## 3. Test/Verification Gaps
 
-- **Timing Debt in Tests**: Widespread use of `time.Sleep()` instead of deterministic waiting or polling in `integration_tests/framework/runner.go` and `runtime/registry/manager_test.go`. This masks true readiness state and causes intermittent CI failures.
-- **Missing Characterization Tests**: Before refactoring the hotspots, existing behavior (especially around server startup/shutdown and registry cache hit/miss semantics) lacks isolated characterization tests to guarantee safe extraction.
+- **Timing Debt in Tests**: Widespread use of `time.Sleep()` instead of deterministic waiting or polling in `integration_tests/framework/runner.go`. This masks true readiness state and causes intermittent CI failures.
+- **Missing Characterization Tests**: Before refactoring the remaining hotspots, existing behavior around server startup/shutdown and registry cache hit/miss semantics lacks isolated characterization tests to guarantee safe extraction.
 
 ---
 
@@ -67,18 +56,14 @@ To gain the highest leverage and immediate speed-of-development improvements, re
    - Extract `startServer`, `stopServer`, and `ping` from `Runner`.
    - Separate fixture prep from transport logic (JSON-RPC vs SSE).
    - Replace fixed startup sleeps with deterministic readiness checks.
-2. **Phase 2: Registry Manager**
-   - Separate one-shot tool discovery (`DiscoverToolset`) from background federation sync loops.
-   - Decouple observability from core business decisions.
-3. **Phase 3: Runtime Orchestration**
+2. **Phase 2: Runtime Orchestration**
    - Refactor `runtime/agent/runtime/tool_calls.go` to split dispatch, merge, and timeout logic.
    - Refactor `runtime/agent/runtime/agent_tools.go` to split validation from execution.
-4. **Phase 4: Mongo Client Consolidation**
+3. **Phase 3: Mongo Client Consolidation**
    - Inventory parity across memory, prompt, runlog, and session stores.
    - Extract common connection and timeout infrastructure.
 
 ---
-
 ## 5. Fundamental Architectural Deep Dive
 
 Beyond the known refactoring hotspots, an investigation into the core design principles of `loom-mcp` reveals several deep architectural insights regarding the DSL, Codegen, Runtime, and Streaming models.

@@ -218,8 +218,7 @@ func (s *SearchClient) searchRegistry(ctx context.Context, name string, entry *r
 				return results, nil
 			}
 			// Semantic search failed, fall back to keyword search
-			s.manager.logger.Warn(ctx, "semantic search failed, falling back to keyword search",
-				"registry", name, "query", query, "error", err)
+			s.obs.LogSemanticFallback(ctx, name, query, err)
 		}
 	}
 

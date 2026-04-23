@@ -82,6 +82,14 @@ type Observability struct {
 	tracer  telemetry.Tracer
 }
 
+type logSeverity string
+
+const (
+	logSeverityInfo  logSeverity = "info"
+	logSeverityWarn  logSeverity = "warn"
+	logSeverityError logSeverity = "error"
+)
+
 // NewObservability creates a new Observability instance with the given telemetry components.
 func NewObservability(logger telemetry.Logger, metrics telemetry.Metrics, tracer telemetry.Tracer) *Observability {
 	obs := &Observability{
@@ -138,6 +146,31 @@ func (o *Observability) LogOperation(ctx context.Context, event OperationEvent) 
 	case OutcomeSuccess, OutcomeCacheHit, OutcomeCacheMiss:
 		o.logger.Info(ctx, msg, keyvals...)
 	}
+}
+
+// LogSyncLifecycle emits sync loop lifecycle logs without exposing the raw logger.
+func (o *Observability) LogSyncLifecycle(ctx context.Context, state string) {
+	o.log(ctx, logSeverityInfo, "registry sync loop state changed", "state", state)
+}
+
+// LogCacheWriteFailure emits a structured warning for cache write failures.
+func (o *Observability) LogCacheWriteFailure(ctx context.Context, message, registry, toolset string, err error) {
+	o.logRegistryWarning(ctx, message, registry, toolset, "", err)
+}
+
+// LogSearchFailure emits a structured warning for per-registry search failures.
+func (o *Observability) LogSearchFailure(ctx context.Context, registry, query string, err error) {
+	o.logRegistryWarning(ctx, "search failed for registry", registry, "", query, err)
+}
+
+// LogSemanticFallback emits a warning when semantic search degrades to keyword search.
+func (o *Observability) LogSemanticFallback(ctx context.Context, registry, query string, err error) {
+	o.logRegistryWarning(ctx, "semantic search failed, falling back to keyword search", registry, "", query, err)
+}
+
+// LogSyncFetchFailure emits a warning when background sync cannot load a toolset schema.
+func (o *Observability) LogSyncFetchFailure(ctx context.Context, registry, toolset string, err error) {
+	o.logRegistryWarning(ctx, "failed to fetch toolset during sync", registry, toolset, "", err)
 }
 
 // RecordOperationMetrics records metrics for a registry operation.
@@ -220,6 +253,38 @@ func (o *Observability) EndSpan(span telemetry.Span, outcome OperationOutcome, e
 		span.SetStatus(codes.Ok, string(outcome))
 	}
 	span.End()
+}
+
+func (o *Observability) logRegistryWarning(
+	ctx context.Context,
+	message, registry, toolset, query string,
+	err error,
+) {
+	keyvals := make([]any, 0, 6)
+	if registry != "" {
+		keyvals = append(keyvals, "registry", registry)
+	}
+	if toolset != "" {
+		keyvals = append(keyvals, "toolset", toolset)
+	}
+	if query != "" {
+		keyvals = append(keyvals, "query", query)
+	}
+	if err != nil {
+		keyvals = append(keyvals, "error", err)
+	}
+	o.log(ctx, logSeverityWarn, message, keyvals...)
+}
+
+func (o *Observability) log(ctx context.Context, severity logSeverity, msg string, keyvals ...any) {
+	switch severity {
+	case logSeverityError:
+		o.logger.Error(ctx, msg, keyvals...)
+	case logSeverityWarn:
+		o.logger.Warn(ctx, msg, keyvals...)
+	case logSeverityInfo:
+		o.logger.Info(ctx, msg, keyvals...)
+	}
 }
 
 // InjectTraceContext injects trace context into HTTP headers for propagation.

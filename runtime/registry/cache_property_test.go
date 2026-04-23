@@ -210,18 +210,11 @@ func TestCacheExpirationAfterTTLProperty(t *testing.T) {
 			}
 
 			expired := false
-			deadline := time.Now().Add(shortTTL * 4)
-			for time.Now().Before(deadline) {
+			waitForCondition(t, func() bool {
 				cached, cacheErr := cache.Get(ctx, cacheKey(tc.registryName, tc.toolsetName))
-				if cacheErr == nil && cached == nil {
-					expired = true
-					break
-				}
-				time.Sleep(testPollInterval)
-			}
-			if !expired {
-				return false
-			}
+				expired = cacheErr == nil && cached == nil
+				return expired
+			}, "expected cache entry to expire")
 
 			// Now fetch should fail since cache expired and registry unavailable
 			_, err = manager.DiscoverToolset(ctx, tc.registryName, tc.toolsetName)

@@ -14,14 +14,25 @@ const (
 func waitForCondition(t *testing.T, check func() bool, message string) {
 	t.Helper()
 
-	deadline := time.Now().Add(testWaitTimeout)
-	for time.Now().Before(deadline) {
-		if check() {
-			return
-		}
-		time.Sleep(testPollInterval)
+	if check() {
+		return
 	}
-	t.Fatal(message)
+
+	ticker := time.NewTicker(testPollInterval)
+	defer ticker.Stop()
+	timeout := time.NewTimer(testWaitTimeout)
+	defer timeout.Stop()
+
+	for {
+		select {
+		case <-ticker.C:
+			if check() {
+				return
+			}
+		case <-timeout.C:
+			t.Fatal(message)
+		}
+	}
 }
 
 func waitForCacheEntry(

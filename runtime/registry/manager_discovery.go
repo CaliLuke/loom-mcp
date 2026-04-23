@@ -107,6 +107,6 @@ func (m *Manager) cacheToolset(
 		ttl = defaultRegistryCacheTTL
 	}
 	if err := m.cache.Set(ctx, cacheKey(registry, toolset), schema, ttl); err != nil {
-		m.logger.Warn(ctx, message, "registry", registry, "toolset", toolset, "error", err)
+		m.obs.LogCacheWriteFailure(ctx, message, registry, toolset, err)
 	}
 }

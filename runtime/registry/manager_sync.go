@@ -27,7 +27,7 @@ func (m *Manager) StartSync(ctx context.Context) error {
 		go m.syncRegistry(name, entry)
 	}
 
-	m.logger.Info(ctx, "sync loop started")
+	m.obs.LogSyncLifecycle(ctx, "started")
 	return nil
 }
 
@@ -43,7 +43,7 @@ func (m *Manager) StopSync() {
 	}
 	m.syncWg.Wait()
 
-	m.logger.Info(context.Background(), "sync loop stopped")
+	m.obs.LogSyncLifecycle(context.Background(), "stopped")
 }
 
 // syncRegistry runs the sync loop for a single registry.
@@ -113,7 +113,7 @@ func (m *Manager) cacheSyncedToolsets(ctx context.Context, registry string, entr
 		toolset.Origin = registry
 		schema, err := entry.client.GetToolset(ctx, toolset.Name)
 		if err != nil {
-			m.logger.Warn(ctx, "failed to fetch toolset during sync", "registry", registry, "toolset", toolset.Name, "error", err)
+			m.obs.LogSyncFetchFailure(ctx, registry, toolset.Name, err)
 			continue
 		}
 		schema.Origin = registry

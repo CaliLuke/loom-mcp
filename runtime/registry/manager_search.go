@@ -81,7 +81,7 @@ func (m *Manager) searchRegistries(
 			defer wg.Done()
 			results, err := entry.client.Search(ctx, query)
 			if err != nil {
-				m.logger.Warn(ctx, "search failed for registry", "registry", name, "query", query, "error", err)
+				m.obs.LogSearchFailure(ctx, name, query, err)
 				resultCh <- searchResult{registry: name, err: err}
 				return
 			}
