@@ -183,12 +183,13 @@ func WithTemplateAll(ids []tools.Ident, t *template.Template) AgentToolOption {
 // NewAgentToolsetRegistration creates a toolset registration for an agent-as-tool.
 func NewAgentToolsetRegistration(rt *Runtime, cfg AgentToolConfig) ToolsetRegistration {
 	return ToolsetRegistration{
-		Name:        cfg.Name,
-		Description: cfg.Description,
-		TaskQueue:   cfg.TaskQueue,
-		Inline:      true,
-		Execute:     defaultAgentToolExecute(rt, cfg),
-		AgentTool:   &cfg,
+		Name:         cfg.Name,
+		Description:  cfg.Description,
+		TaskQueue:    cfg.TaskQueue,
+		Inline:       true,
+		Execute:      defaultAgentToolExecute(rt, cfg),
+		AgentTool:    &cfg,
+		DispatchMode: DispatchAgentChild,
 	}
 }
 

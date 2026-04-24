@@ -115,6 +115,36 @@ func (r *Runtime) applyAgentWorkerQueueOverrides(reg AgentRegistration) AgentReg
 	return reg
 }
 
+// Dispatch modes for ToolsetRegistration. See DispatchMode for context.
+const (
+	// DispatchActivity runs tools as workflow activities (default for
+	// service-backed toolsets: isolation, retries, per-queue placement).
+	DispatchActivity DispatchMode = iota
+	// DispatchInline runs tool Execute callbacks directly in the workflow loop.
+	// Used for workflow-native toolsets that must share the workflow context.
+	DispatchInline
+	// DispatchAgentChild starts a nested agent as a child workflow and adapts
+	// its RunOutput to a ToolResult. Used for agent-as-tool registrations.
+	DispatchAgentChild
+)
+
+// resolveToolsetDispatchMode derives the DispatchMode for a registration from
+// the existing Inline / AgentTool signals when DispatchMode is unset. Agent
+// tool registrations always dispatch as AgentChild; other inline toolsets run
+// as Inline; everything else runs as an activity.
+func resolveToolsetDispatchMode(ts ToolsetRegistration) DispatchMode {
+	if ts.DispatchMode != DispatchActivity {
+		return ts.DispatchMode
+	}
+	if ts.AgentTool != nil {
+		return DispatchAgentChild
+	}
+	if ts.Inline {
+		return DispatchInline
+	}
+	return DispatchActivity
+}
+
 func applyAgentActivityDefaults(reg AgentRegistration) AgentRegistration {
 	if reg.PlanActivityOptions.StartToCloseTimeout == 0 {
 		reg.PlanActivityOptions.StartToCloseTimeout = defaultPlanActivityTimeout

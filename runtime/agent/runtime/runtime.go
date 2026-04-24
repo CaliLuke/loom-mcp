@@ -255,6 +255,12 @@ type (
 		Policy RunPolicy
 	}
 
+	// DispatchMode selects how the runtime executes tool calls for a given
+	// toolset. The runtime sets it at registration time from the existing
+	// Inline/AgentTool signals so dispatch code can branch on a single explicit
+	// field instead of probing multiple optional ones.
+	DispatchMode int
+
 	// ToolsetRegistration holds the metadata and execution logic for a toolset.
 	// Users register toolsets by providing an Execute function that handles all
 	// tools in the toolset. Codegen auto-generates registrations for service-based
@@ -332,6 +338,11 @@ type (
 		// start nested agent runs directly (fan-out/fan-in) without relying on the
 		// synchronous Execute callback.
 		AgentTool *AgentToolConfig
+
+		// DispatchMode selects the runtime dispatch path. Registration derives
+		// this from Inline/AgentTool when unset so dispatch code branches on one
+		// explicit field.
+		DispatchMode DispatchMode
 	}
 
 	// RunPolicy configures per-agent runtime behavior (caps, time budgets, interrupts).

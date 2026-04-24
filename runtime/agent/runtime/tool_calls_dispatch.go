@@ -61,10 +61,35 @@ func (e *toolBatchExec) prepareToolDispatch(ctx context.Context, b *toolCallBatc
 
 func (e *toolBatchExec) dispatchResolvedToolCall(ctx context.Context, wfCtx engine.WorkflowContext, b *toolCallBatch, call planner.ToolRequest, index int) error {
 	spec, ts, hasTS := e.loadToolRegistration(call.Name)
-	if hasTS && ts.Inline {
-		return e.dispatchInlineResolvedToolCall(ctx, wfCtx, b, call, spec, ts, index)
+	if !hasTS {
+		return e.dispatchActivityToolCall(ctx, wfCtx, b, call, spec, hasTS, ts)
 	}
-	return e.dispatchActivityToolCall(ctx, wfCtx, b, call, spec, hasTS, ts)
+	switch resolveToolsetDispatchMode(ts) {
+	case DispatchAgentChild:
+		if err := e.adaptAndRecordInlinePayload(ctx, b, &call, ts, index); err != nil {
+			return err
+		}
+		return e.dispatchInlineAgentToolCall(wfCtx, b, call, ts)
+	case DispatchInline:
+		if err := e.adaptAndRecordInlinePayload(ctx, b, &call, ts, index); err != nil {
+			return err
+		}
+		return e.dispatchInlineToolCall(wfCtx, b, call, ts)
+	case DispatchActivity:
+		return e.dispatchActivityToolCall(ctx, wfCtx, b, call, spec, hasTS, ts)
+	default:
+		return e.dispatchActivityToolCall(ctx, wfCtx, b, call, spec, hasTS, ts)
+	}
+}
+
+func (e *toolBatchExec) adaptAndRecordInlinePayload(ctx context.Context, b *toolCallBatch, call *planner.ToolRequest, ts ToolsetRegistration, index int) error {
+	adapted, err := e.adaptInlinePayload(ctx, *call, ts)
+	if err != nil {
+		return err
+	}
+	*call = adapted
+	b.calls[index] = adapted
+	return nil
 }
 
 func (e *toolBatchExec) loadToolRegistration(name tools.Ident) (tools.ToolSpec, ToolsetRegistration, bool) {
@@ -73,18 +98,6 @@ func (e *toolBatchExec) loadToolRegistration(name tools.Ident) (tools.ToolSpec, 
 	ts, hasTS := e.r.toolsets[spec.Toolset]
 	e.r.mu.RUnlock()
 	return spec, ts, hasTS
-}
-
-func (e *toolBatchExec) dispatchInlineResolvedToolCall(ctx context.Context, wfCtx engine.WorkflowContext, b *toolCallBatch, call planner.ToolRequest, spec tools.ToolSpec, ts ToolsetRegistration, index int) error {
-	call, err := e.adaptInlinePayload(ctx, call, ts)
-	if err != nil {
-		return err
-	}
-	b.calls[index] = call
-	if spec.IsAgentTool {
-		return e.dispatchInlineAgentToolCall(wfCtx, b, call, ts)
-	}
-	return e.dispatchInlineToolCall(wfCtx, b, call, ts)
 }
 
 func (e *toolBatchExec) dispatchUnknownToolCall(ctx context.Context, b *toolCallBatch, call planner.ToolRequest) error {
@@ -236,7 +249,7 @@ func (e *toolBatchExec) dispatchActivityToolCall(ctx context.Context, wfCtx engi
 		ParentToolCallID: call.ParentToolCallID,
 	}
 	callOpts := computeToolActivityOptions(wfCtx, e.toolActOptions, e.finishBy)
-	if callOpts.Queue == "" && hasTS && !ts.Inline && ts.TaskQueue != "" {
+	if callOpts.Queue == "" && hasTS && ts.TaskQueue != "" {
 		callOpts.Queue = ts.TaskQueue
 	}
 	future, err := wfCtx.ExecuteToolActivityAsync(ctx, engine.ToolActivityCall{

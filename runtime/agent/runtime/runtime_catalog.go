@@ -10,8 +10,10 @@ import (
 )
 
 // addToolsetLocked registers a toolset and its specs without acquiring the lock.
-// Caller must hold r.mu.
+// It also resolves the DispatchMode from Inline/AgentTool so dispatch code can
+// branch on a single explicit field. Caller must hold r.mu.
 func (r *Runtime) addToolsetLocked(ts ToolsetRegistration) {
+	ts.DispatchMode = resolveToolsetDispatchMode(ts)
 	r.toolsets[ts.Name] = ts
 	r.addToolSpecsLocked(ts.Specs)
 }
