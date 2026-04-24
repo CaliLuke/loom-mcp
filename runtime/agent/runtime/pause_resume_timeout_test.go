@@ -156,6 +156,60 @@ func TestMissingFieldsClarificationAwaitResumesWhenProvided(t *testing.T) {
 	}, pauseResumeSequence(recorder.events))
 }
 
+// TestHandleInterruptsAppliesResumeMessages exercises
+// handleInterrupts -> awaitInterruptResume -> applyResumeMessages end-to-end
+// with a resume request carrying messages, asserting the resulting
+// PlanInput.Messages contain the appended resume content.
+func TestHandleInterruptsAppliesResumeMessages(t *testing.T) {
+	recorder := &recordingHooks{}
+	rt := &Runtime{
+		Bus:           recorder,
+		RunEventStore: runloginmem.New(),
+		SessionStore:  sessioninmem.New(),
+		logger:        telemetry.NoopLogger{},
+		metrics:       telemetry.NoopMetrics{},
+		tracer:        telemetry.NoopTracer{},
+	}
+
+	baseCtx := &testWorkflowContext{
+		ctx:         context.Background(),
+		hookRuntime: rt,
+	}
+	baseCtx.ensureSignals()
+	baseCtx.pauseCh <- &api.PauseRequest{RunID: "run-1", Reason: "human", RequestedBy: "user"}
+	resumeMsg := &model.Message{
+		Role:  model.ConversationRoleUser,
+		Parts: []model.Part{model.TextPart{Text: "continue please"}},
+	}
+	baseCtx.resumeCh <- &api.ResumeRequest{
+		RunID:       "run-1",
+		Notes:       "resumed_by_operator",
+		RequestedBy: "operator",
+		Messages:    []*model.Message{resumeMsg},
+	}
+
+	ctrl := interrupt.NewController(baseCtx)
+	input := &RunInput{AgentID: "svc.agent", RunID: "run-1", SessionID: "sess-1"}
+	seedRunMeta(t, rt, input)
+	base := &planner.PlanInput{
+		RunContext: run.Context{RunID: input.RunID, SessionID: input.SessionID, TurnID: "turn-1"},
+	}
+	nextAttempt := 2
+	deadline := baseCtx.Now().Add(1 * time.Hour)
+
+	err := rt.handleInterrupts(baseCtx, input, base, "turn-1", ctrl, &nextAttempt, deadline)
+	require.NoError(t, err)
+
+	require.Len(t, base.Messages, 1, "applyResumeMessages should append the resume message to PlanInput.Messages")
+	require.Equal(t, resumeMsg, base.Messages[0])
+	require.Equal(t, 3, nextAttempt, "applyResumeMessages must bump nextAttempt after setting it on the RunContext")
+	require.Equal(t, 2, base.RunContext.Attempt)
+	require.Equal(t, []string{
+		"pause:human",
+		"resume:resumed_by_operator",
+	}, pauseResumeSequence(recorder.events))
+}
+
 func TestHandleInterruptsTimeoutBalancesPauseResume(t *testing.T) {
 	recorder := &recordingHooks{}
 	rt := &Runtime{
