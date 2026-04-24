@@ -59,7 +59,9 @@ func (r *Runtime) hookActivity(ctx context.Context, input *HookActivityInput) er
 	if err := r.publishHookStreamEvent(ctx, input.SessionID, evt); err != nil {
 		return err
 	}
-	r.publishHookBusEvent(ctx, input.Type, evt)
+	if err := r.publishHookBusEvent(ctx, input.Type, evt); err != nil {
+		return err
+	}
 	if input.Type == hooks.RunCompleted {
 		r.storeWorkflowHandle(input.RunID, nil)
 	}
@@ -116,13 +118,19 @@ func (r *Runtime) publishHookStreamEvent(ctx context.Context, sessionID string, 
 	return r.streamSubscriber.HandleEvent(ctx, evt)
 }
 
-func (r *Runtime) publishHookBusEvent(ctx context.Context, eventType hooks.EventType, evt hooks.Event) {
+// publishHookBusEvent forwards evt to every bus subscriber and returns the
+// first propagated error. Best-effort subscribers installed via
+// registerSubscriber have their errors swallowed inside the wrapper, so any
+// returned error here came from a critical subscriber.
+func (r *Runtime) publishHookBusEvent(ctx context.Context, eventType hooks.EventType, evt hooks.Event) error {
 	if eventType == hooks.ToolCallArgsDelta {
-		return
+		return nil
 	}
 	if err := r.Bus.Publish(ctx, evt); err != nil {
 		r.logWarn(ctx, "hook publish failed", err, "event", evt.Type())
+		return err
 	}
+	return nil
 }
 
 func (r *Runtime) enrichToolCallScheduledHint(ctx context.Context, evt *hooks.ToolCallScheduledEvent) bool {

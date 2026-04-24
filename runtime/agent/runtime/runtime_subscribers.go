@@ -41,7 +41,7 @@ func (r *Runtime) registerSessionSubscriber(bus hooks.Bus) {
 		}
 		return r.SessionStore.UpsertRun(ctx, meta)
 	})
-	if _, err := bus.Register(sessionSub); err != nil {
+	if _, err := r.registerSubscriber(bus, sessionSub, SubscriberBestEffort); err != nil {
 		r.logger.Warn(context.Background(), "failed to register session subscriber", "err", err)
 	}
 }
@@ -54,7 +54,7 @@ func (r *Runtime) registerMemorySubscriber(bus hooks.Bus) {
 		}
 		return r.Memory.AppendEvents(ctx, agentID, runID, memEvent)
 	})
-	if _, err := bus.Register(memSub); err != nil {
+	if _, err := r.registerSubscriber(bus, memSub, SubscriberBestEffort); err != nil {
 		r.logger.Warn(context.Background(), "failed to register memory subscriber", "err", err)
 	}
 }

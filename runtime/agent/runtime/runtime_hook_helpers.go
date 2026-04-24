@@ -10,6 +10,26 @@ import (
 	"github.com/CaliLuke/loom-mcp/runtime/agent/rawjson"
 )
 
+// SubscriberMode classifies how a hook-bus subscriber's errors are treated.
+//
+//   - SubscriberCritical: errors propagate out of Bus.Publish and can fail the
+//     hook activity (and therefore the agent run). Use for sinks whose
+//     correctness is coupled to the canonical run record (audit/runlog).
+//   - SubscriberBestEffort: errors are recorded on the logger and tracer but
+//     never propagate. Use for derived projections (session metadata, memory
+//     projection) and external observers (stream) that must not corrupt the
+//     canonical record.
+type SubscriberMode int
+
+const (
+	// SubscriberCritical subscribers fail the hook activity (and therefore the
+	// run) on error.
+	SubscriberCritical SubscriberMode = iota
+	// SubscriberBestEffort subscribers cannot fail a run; their errors are
+	// logged and recorded on the tracer only.
+	SubscriberBestEffort
+)
+
 const maxHookPayloadBytes = 1_000_000
 
 // logWarn emits a warning log and records the error in the current span if tracing is enabled.
@@ -88,6 +108,30 @@ func compactOversizedHookInput(evt hooks.Event, turnID string) (*hooks.ActivityI
 // publishHook emits a runtime hook event and returns an error on failure.
 func (r *Runtime) publishHook(ctx context.Context, evt hooks.Event, turnID string) error {
 	return r.publishHookErr(ctx, evt, turnID)
+}
+
+// registerSubscriber installs sub on bus and returns the subscription. When
+// mode is SubscriberBestEffort, sub's HandleEvent errors are logged and
+// recorded on the runtime tracer but never surface back to Bus.Publish. When
+// mode is SubscriberCritical, sub is installed unchanged so that its errors
+// propagate out of Bus.Publish and can fail the hook activity.
+func (r *Runtime) registerSubscriber(bus hooks.Bus, sub hooks.Subscriber, mode SubscriberMode) (hooks.Subscription, error) {
+	if mode == SubscriberBestEffort {
+		sub = r.wrapBestEffortSubscriber(sub)
+	}
+	return bus.Register(sub)
+}
+
+func (r *Runtime) wrapBestEffortSubscriber(sub hooks.Subscriber) hooks.Subscriber {
+	return hooks.SubscriberFunc(func(ctx context.Context, event hooks.Event) error {
+		if sub == nil {
+			return nil
+		}
+		if err := sub.HandleEvent(ctx, event); err != nil {
+			r.logWarn(ctx, "best-effort hook subscriber failed", err, "event", string(event.Type()))
+		}
+		return nil
+	})
 }
 
 // onPromptRendered is the runtime-owned observer callback used by PromptRegistry.
