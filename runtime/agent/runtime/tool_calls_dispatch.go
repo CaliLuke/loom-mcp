@@ -64,7 +64,9 @@ func (e *toolBatchExec) dispatchResolvedToolCall(ctx context.Context, wfCtx engi
 	if !hasTS {
 		return e.dispatchActivityToolCall(ctx, wfCtx, b, call, spec, hasTS, ts)
 	}
-	switch resolveToolsetDispatchMode(ts) {
+	switch ts.DispatchMode {
+	case DispatchUnset:
+		return e.dispatchActivityToolCall(ctx, wfCtx, b, call, spec, hasTS, ts)
 	case DispatchAgentChild:
 		if err := e.adaptAndRecordInlinePayload(ctx, b, &call, ts, index); err != nil {
 			return err

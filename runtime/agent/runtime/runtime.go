@@ -257,8 +257,9 @@ type (
 
 	// DispatchMode selects how the runtime executes tool calls for a given
 	// toolset. The runtime sets it at registration time from the existing
-	// Inline/AgentTool signals so dispatch code can branch on a single explicit
-	// field instead of probing multiple optional ones.
+	// Inline/AgentTool signals when DispatchMode is DispatchUnset, so dispatch
+	// code can branch on a single explicit field instead of probing multiple
+	// optional ones.
 	DispatchMode int
 
 	// ToolsetRegistration holds the metadata and execution logic for a toolset.

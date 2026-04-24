@@ -65,11 +65,12 @@ func toolUnavailableToolsetRegistration() ToolsetRegistration {
 		},
 	}
 	return ToolsetRegistration{
-		Name:        toolUnavailableToolsetName,
-		Description: "loom-mcp runtime internal tools",
-		Inline:      true,
-		Execute:     executeToolUnavailable,
-		Specs:       []tools.ToolSpec{spec},
+		Name:         toolUnavailableToolsetName,
+		Description:  "loom-mcp runtime internal tools",
+		Inline:       true,
+		DispatchMode: DispatchInline,
+		Execute:      executeToolUnavailable,
+		Specs:        []tools.ToolSpec{spec},
 	}
 }
 

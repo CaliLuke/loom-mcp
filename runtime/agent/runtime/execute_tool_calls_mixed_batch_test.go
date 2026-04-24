@@ -24,7 +24,8 @@ func TestExecuteToolCalls_MixedBatch_DoesNotRegressOrderingWithinCategories(t *t
 		toolsets: map[string]ToolsetRegistration{
 			"svc.tools": {},
 			"inline.ts": {
-				Inline: true,
+				Inline:       true,
+				DispatchMode: DispatchInline,
 				Execute: func(ctx context.Context, call *planner.ToolRequest) (*planner.ToolResult, error) {
 					return &planner.ToolResult{
 						Name:       call.Name,

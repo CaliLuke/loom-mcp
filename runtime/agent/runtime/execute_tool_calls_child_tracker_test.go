@@ -22,7 +22,8 @@ func TestExecuteToolCalls_ChildTrackerUpdateEmittedOnIncrease(t *testing.T) {
 	rt := &Runtime{
 		toolsets: map[string]ToolsetRegistration{
 			"inline.ts": {
-				Inline: true,
+				Inline:       true,
+				DispatchMode: DispatchInline,
 				Execute: func(ctx context.Context, call *planner.ToolRequest) (*planner.ToolResult, error) {
 					return &planner.ToolResult{
 						Name:       call.Name,

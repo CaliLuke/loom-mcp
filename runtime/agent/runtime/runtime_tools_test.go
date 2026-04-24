@@ -865,7 +865,8 @@ func TestInlineToolsetEmitsParentToolEvents(t *testing.T) {
 	}
 	rt.toolsets = map[string]ToolsetRegistration{
 		"child.tools": {
-			Inline: true,
+			Inline:       true,
+			DispatchMode: DispatchInline,
 			Execute: func(ctx context.Context, call *planner.ToolRequest) (*planner.ToolResult, error) {
 				require.NotNil(t, call)
 				require.Equal(t, tools.Ident("child.get_time_series"), call.Name)

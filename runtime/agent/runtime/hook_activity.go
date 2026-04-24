@@ -25,10 +25,9 @@ const hookActivityName = "runtime.publish_hook"
 //   - The canonical record of runtime events is the run event log. Appending to
 //     RunEventStore is a correctness invariant: failures must fail the activity
 //     so the workflow run can stop and/or be retried by the engine.
-//   - Streaming is a session contract:
-//   - While the session is active, stream emission failures must fail the
-//     activity so workflows can retry or stop rather than silently diverge
-//     from the stream consumer's view.
+//   - Streaming is a best-effort session projection:
+//   - While the session is active, stream emission failures are logged/traced
+//     but must not fail the activity or corrupt the canonical run record.
 //   - After the session is ended, stream emission becomes a no-op to avoid
 //     "stream destroyed mid-run" turning into spurious run failures.
 //   - One-shot runs (empty SessionID) bypass SessionStore and stream sinks.
@@ -56,9 +55,7 @@ func (r *Runtime) hookActivity(ctx context.Context, input *HookActivityInput) er
 			return err
 		}
 	}
-	if err := r.publishHookStreamEvent(ctx, input.SessionID, evt); err != nil {
-		return err
-	}
+	r.publishHookStreamEvent(ctx, input.SessionID, evt)
 	if err := r.publishHookBusEvent(ctx, input.Type, evt); err != nil {
 		return err
 	}
@@ -104,18 +101,21 @@ func (r *Runtime) updateHookRunMeta(ctx context.Context, sessionID string, evt h
 	return r.updateRunMetaFromHookEvent(ctx, evt)
 }
 
-func (r *Runtime) publishHookStreamEvent(ctx context.Context, sessionID string, evt hooks.Event) error {
+func (r *Runtime) publishHookStreamEvent(ctx context.Context, sessionID string, evt hooks.Event) {
 	if sessionID == "" || r.streamSubscriber == nil {
-		return nil
+		return
 	}
 	sess, err := r.SessionStore.LoadSession(ctx, sessionID)
 	if err != nil {
-		return err
+		r.logWarn(ctx, "stream session lookup failed", err, "session_id", sessionID, "event", string(evt.Type()))
+		return
 	}
 	if sess.Status == session.StatusEnded {
-		return nil
+		return
 	}
-	return r.streamSubscriber.HandleEvent(ctx, evt)
+	if err := r.streamSubscriber.HandleEvent(ctx, evt); err != nil {
+		r.logWarn(ctx, "stream subscriber failed", err, "session_id", sessionID, "event", string(evt.Type()))
+	}
 }
 
 // publishHookBusEvent forwards evt to every bus subscriber and returns the

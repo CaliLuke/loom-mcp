@@ -91,6 +91,54 @@ func TestExecuteToolCalls_ServiceToolsPublishResultsAsComplete(t *testing.T) {
 	// If the goroutine deadlocked, executeToolCalls would never return.
 }
 
+func TestExecuteToolCalls_ExplicitActivityDispatchIgnoresLegacyInlineFlag(t *testing.T) {
+	recorder := &recordingHooks{}
+	inlineCalled := false
+	rt := &Runtime{
+		Bus:           recorder,
+		RunEventStore: runloginmem.New(),
+		logger:        telemetry.NoopLogger{},
+		metrics:       telemetry.NoopMetrics{},
+		tracer:        telemetry.NoopTracer{},
+		toolsets: map[string]ToolsetRegistration{
+			"svc.tools": {
+				Inline:       true,
+				DispatchMode: DispatchActivity,
+				Execute: func(ctx context.Context, call *planner.ToolRequest) (*planner.ToolResult, error) {
+					inlineCalled = true
+					return nil, errors.New("inline execute should not run for explicit activity dispatch")
+				},
+			},
+		},
+		toolSpecs: map[tools.Ident]tools.ToolSpec{
+			tools.Ident("svc.tools.force_activity"): newAnyJSONSpec("svc.tools.force_activity", "svc.tools"),
+		},
+	}
+
+	call := planner.ToolRequest{
+		Name:       tools.Ident("svc.tools.force_activity"),
+		RunID:      "run-1",
+		SessionID:  "sess-1",
+		TurnID:     "turn-1",
+		ToolCallID: "call-activity",
+	}
+	ready := make(chan struct{})
+	close(ready)
+	wfCtx := &testWorkflowContext{
+		ctx:         context.Background(),
+		hookRuntime: rt,
+		toolFutures: map[string]*controlledToolFuture{
+			call.ToolCallID: {ready: ready, out: &ToolOutput{Payload: []byte(`{"ok":true}`)}},
+		},
+	}
+
+	results, _, err := rt.executeToolCalls(wfCtx, "execute", engine.ActivityOptions{}, agent.Ident("agent-1"), &run.Context{RunID: "run-1", SessionID: "sess-1", TurnID: "turn-1"}, nil, []planner.ToolRequest{call}, 0, nil, time.Time{})
+	require.NoError(t, err)
+	require.Len(t, results, 1)
+	require.False(t, inlineCalled)
+	require.Equal(t, "execute", wfCtx.lastToolCall.Name)
+}
+
 func TestExecuteToolCalls_ServiceToolErrorDoesNotAbortRun(t *testing.T) {
 	recorder := &recordingHooks{}
 	rt := &Runtime{

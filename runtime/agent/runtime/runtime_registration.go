@@ -117,9 +117,12 @@ func (r *Runtime) applyAgentWorkerQueueOverrides(reg AgentRegistration) AgentReg
 
 // Dispatch modes for ToolsetRegistration. See DispatchMode for context.
 const (
+	// DispatchUnset preserves backwards compatibility for registrations that
+	// still rely on Inline / AgentTool being inferred during registration.
+	DispatchUnset DispatchMode = iota
 	// DispatchActivity runs tools as workflow activities (default for
 	// service-backed toolsets: isolation, retries, per-queue placement).
-	DispatchActivity DispatchMode = iota
+	DispatchActivity
 	// DispatchInline runs tool Execute callbacks directly in the workflow loop.
 	// Used for workflow-native toolsets that must share the workflow context.
 	DispatchInline
@@ -133,7 +136,7 @@ const (
 // tool registrations always dispatch as AgentChild; other inline toolsets run
 // as Inline; everything else runs as an activity.
 func resolveToolsetDispatchMode(ts ToolsetRegistration) DispatchMode {
-	if ts.DispatchMode != DispatchActivity {
+	if ts.DispatchMode != DispatchUnset {
 		return ts.DispatchMode
 	}
 	if ts.AgentTool != nil {

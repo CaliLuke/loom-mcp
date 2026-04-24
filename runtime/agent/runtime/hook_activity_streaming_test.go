@@ -11,6 +11,7 @@ import (
 	"github.com/CaliLuke/loom-mcp/runtime/agent/session"
 	sessioninmem "github.com/CaliLuke/loom-mcp/runtime/agent/session/inmem"
 	"github.com/CaliLuke/loom-mcp/runtime/agent/stream"
+	"github.com/CaliLuke/loom-mcp/runtime/agent/telemetry"
 	"github.com/stretchr/testify/require"
 )
 
@@ -26,7 +27,7 @@ func (s failingStreamSink) Close(ctx context.Context) error {
 	return nil
 }
 
-func TestHookActivity_StreamFailureFailsRunWhileSessionActive(t *testing.T) {
+func TestHookActivity_StreamFailureIsBestEffortWhileSessionActive(t *testing.T) {
 	t.Parallel()
 
 	streamErr := errors.New("stream send failed")
@@ -41,6 +42,8 @@ func TestHookActivity_StreamFailureFailsRunWhileSessionActive(t *testing.T) {
 		Bus:              hooks.NewBus(),
 		SessionStore:     store,
 		streamSubscriber: sub,
+		logger:           telemetry.NoopLogger{},
+		tracer:           telemetry.NoopTracer{},
 	}
 
 	now := time.Now().UTC()
@@ -51,7 +54,7 @@ func TestHookActivity_StreamFailureFailsRunWhileSessionActive(t *testing.T) {
 	require.NoError(t, err)
 
 	err = rt.hookActivity(context.Background(), input)
-	require.ErrorIs(t, err, streamErr)
+	require.NoError(t, err)
 	require.Len(t, rl.events, 1, "expected canonical run log append even when stream send fails")
 }
 
@@ -70,6 +73,8 @@ func TestHookActivity_StreamFailureNoopAfterSessionEnded(t *testing.T) {
 		Bus:              hooks.NewBus(),
 		SessionStore:     store,
 		streamSubscriber: sub,
+		logger:           telemetry.NoopLogger{},
+		tracer:           telemetry.NoopTracer{},
 	}
 
 	now := time.Now().UTC()
