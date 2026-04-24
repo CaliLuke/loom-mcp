@@ -56,9 +56,48 @@ func (r *Runtime) applyPerRunOverrides(ctx context.Context, input *RunInput, can
 	return filtered
 }
 
+// policyApplicationResult is the single output of applyPolicy. It captures
+// the filtered and capped tool calls, the remaining caps state, the labels
+// the decision applied (already merged into base/input), and the hook events
+// the decision published (already emitted). Callers use it to proceed with
+// execution and for observability; labels and events are not re-applied.
+type policyApplicationResult struct {
+	AllowedCalls []planner.ToolRequest
+	Caps         policy.CapsState
+	Labels       map[string]string
+	Events       []hooks.Event
+}
+
+// applyPolicy is the single policy-application boundary used by the workflow
+// loop. It runs the runtime policy (if configured), merges labels, publishes
+// the PolicyDecision hook, and clamps the allowed set to per-turn and
+// remaining-cap limits in one call.
+func (r *Runtime) applyPolicy(
+	ctx context.Context,
+	base *planner.PlanInput,
+	input *RunInput,
+	candidates []planner.ToolRequest,
+	caps policy.CapsState,
+	turnID string,
+	retry *planner.RetryHint,
+) (policyApplicationResult, error) {
+	allowed, caps, labels, events, err := r.applyRuntimePolicy(ctx, base, input, candidates, caps, turnID, retry)
+	if err != nil {
+		return policyApplicationResult{}, err
+	}
+	return policyApplicationResult{
+		AllowedCalls: r.capAllowedCalls(allowed, input, caps),
+		Caps:         caps,
+		Labels:       labels,
+		Events:       events,
+	}, nil
+}
+
 // applyRuntimePolicy applies the runtime policy (if configured) to the provided
-// candidates, returning the allowed set and updated caps. It also records and
-// publishes the policy decision.
+// candidates, returning the allowed set, updated caps, the labels merged into
+// base/input, and the policy events published. It also records and publishes
+// the policy decision as a side effect. Only applyPolicy in this file calls
+// this helper directly.
 func (r *Runtime) applyRuntimePolicy(
 	ctx context.Context,
 	base *planner.PlanInput,
@@ -67,37 +106,34 @@ func (r *Runtime) applyRuntimePolicy(
 	caps policy.CapsState,
 	turnID string,
 	retry *planner.RetryHint,
-) ([]planner.ToolRequest, policy.CapsState, error) {
+) ([]planner.ToolRequest, policy.CapsState, map[string]string, []hooks.Event, error) {
 	if r.Policy == nil {
-		return candidates, caps, nil
+		return candidates, caps, nil, nil, nil
 	}
 	r.logger.Info(ctx, "Applying runtime policy decision")
 	decision, err := r.Policy.Decide(ctx, runtimePolicyInput(r, base, candidates, caps, retry))
 	if err != nil {
-		return nil, caps, err
+		return nil, caps, nil, nil, err
 	}
 	applyPolicyLabels(base, input, decision.Labels)
 	if decision.DisableTools {
-		return nil, caps, errors.New("tool execution disabled by policy")
+		return nil, caps, decision.Labels, nil, errors.New("tool execution disabled by policy")
 	}
 	allowed := allowedPolicyCalls(candidates, decision.AllowedTools)
 	caps = mergeCaps(caps, decision.Caps)
-	if err := r.publishHook(
-		ctx,
-		hooks.NewPolicyDecisionEvent(
-			base.RunContext.RunID,
-			input.AgentID,
-			base.RunContext.SessionID,
-			decision.AllowedTools,
-			caps,
-			cloneLabels(decision.Labels),
-			cloneMetadata(decision.Metadata),
-		),
-		turnID,
-	); err != nil {
-		return nil, caps, err
+	evt := hooks.NewPolicyDecisionEvent(
+		base.RunContext.RunID,
+		input.AgentID,
+		base.RunContext.SessionID,
+		decision.AllowedTools,
+		caps,
+		cloneLabels(decision.Labels),
+		cloneMetadata(decision.Metadata),
+	)
+	if err := r.publishHook(ctx, evt, turnID); err != nil {
+		return nil, caps, decision.Labels, nil, err
 	}
-	return allowed, caps, nil
+	return allowed, caps, decision.Labels, []hooks.Event{evt}, nil
 }
 
 func runtimePolicyInput(

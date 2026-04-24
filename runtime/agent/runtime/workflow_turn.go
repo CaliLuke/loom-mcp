@@ -243,11 +243,12 @@ func (r *Runtime) prepareToolTurnCalls(
 	if err != nil {
 		return nil, nil, nil, nil, err
 	}
-	allowed, nextCaps, err := r.applyRuntimePolicy(ctx, base, input, rewritten, st.Caps, turnID, st.Result.RetryHint)
+	result, err := r.applyPolicy(ctx, base, input, rewritten, st.Caps, turnID, st.Result.RetryHint)
 	if err != nil {
 		return nil, nil, nil, nil, err
 	}
-	st.Caps = nextCaps
+	st.Caps = result.Caps
+	allowed := result.AllowedCalls
 	if len(allowed) == 0 {
 		r.logger.Error(ctx, "ERROR - No tools allowed for execution after filtering", "candidates", len(st.Result.ToolCalls))
 		return nil, nil, nil, nil, errors.New("no tools allowed for execution")
@@ -256,7 +257,6 @@ func (r *Runtime) prepareToolTurnCalls(
 	if err := r.updateParentTracker(ctx, base, turnID, parentTracker, allowed); err != nil {
 		return nil, nil, nil, nil, err
 	}
-	allowed = r.capAllowedCalls(allowed, input, st.Caps)
 	allowed = r.prepareAllowedCallsMetadata(input.AgentID, base, allowed, parentTracker)
 	toExecute, confirmations, err := r.splitConfirmationCalls(ctx, base, allowed)
 	if err != nil {
