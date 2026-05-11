@@ -13,7 +13,7 @@ import (
 
 	assistantapi "example.com/assistant"
 	mcpassistant "example.com/assistant/gen/mcp_assistant"
-	"goa.design/clue/log"
+	"github.com/CaliLuke/loom/clue/log"
 )
 
 func main() {

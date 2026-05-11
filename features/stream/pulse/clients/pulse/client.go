@@ -12,9 +12,9 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/CaliLuke/loom/pulse/streaming"
+	streamopts "github.com/CaliLuke/loom/pulse/streaming/options"
 	"github.com/redis/go-redis/v9"
-	"goa.design/pulse/streaming"
-	streamopts "goa.design/pulse/streaming/options"
 )
 
 type (
@@ -34,7 +34,7 @@ type (
 	}
 
 	// Client exposes the subset of Pulse APIs required by the loom-mcp stream sink.
-	// Implementations wrap goa.design/pulse streaming and provide type-safe access
+	// Implementations wrap github.com/CaliLuke/loom/pulse streaming and provide type-safe access
 	// to stream operations.
 	Client interface {
 		// Stream returns a handle to the named Pulse stream, creating it if needed.
@@ -56,7 +56,7 @@ type (
 		Destroy(ctx context.Context) error
 	}
 
-	// Sink mirrors the subset of goa.design/pulse streaming sinks required by the subscriber.
+	// Sink mirrors the subset of github.com/CaliLuke/loom/pulse streaming sinks required by the subscriber.
 	// It represents a consumer group that reads from a Pulse stream.
 	Sink interface {
 		// Subscribe returns a channel that emits events as they arrive from the stream.

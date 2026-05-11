@@ -156,7 +156,7 @@ func AuthorizationServer(url string) OAuthOption {
 
 // OAuthScope documents one OAuth 2.0 scope exposed by the protected
 // resource. The name is "OAuthScope" rather than "Scope" to avoid
-// colliding with goa.design/goa/v3/dsl.Scope when both DSLs are
+// colliding with Loom's core DSL Scope when both DSLs are
 // dot-imported in a design file.
 func OAuthScope(name, description string) OAuthOption {
 	return func(o *exprmcp.OAuthExpr) {

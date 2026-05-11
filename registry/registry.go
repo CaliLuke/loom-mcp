@@ -42,9 +42,9 @@ import (
 	grpcserver "github.com/CaliLuke/loom-mcp/registry/gen/grpc/registry/server"
 	genregistry "github.com/CaliLuke/loom-mcp/registry/gen/registry"
 	"github.com/CaliLuke/loom-mcp/runtime/agent/telemetry"
+	"github.com/CaliLuke/loom/pulse/pool"
+	"github.com/CaliLuke/loom/pulse/rmap"
 	"github.com/redis/go-redis/v9"
-	"goa.design/pulse/pool"
-	"goa.design/pulse/rmap"
 	"google.golang.org/grpc"
 )
 

@@ -17,8 +17,8 @@ import (
 	genregistry "github.com/CaliLuke/loom-mcp/registry/gen/registry"
 	"github.com/CaliLuke/loom-mcp/runtime/agent/tools"
 	"github.com/CaliLuke/loom-mcp/runtime/toolregistry"
+	streamopts "github.com/CaliLuke/loom/pulse/streaming/options"
 	"github.com/google/uuid"
-	streamopts "goa.design/pulse/streaming/options"
 )
 
 type (

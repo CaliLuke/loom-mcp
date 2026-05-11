@@ -1,3 +1,4 @@
+//nolint:goconst // Repeated registry fixture values keep tests readable.
 package registry
 
 import (
@@ -10,11 +11,11 @@ import (
 	"testing"
 
 	goa "github.com/CaliLuke/loom/pkg"
+	streamopts "github.com/CaliLuke/loom/pulse/streaming/options"
 	"github.com/leanovate/gopter"
 	"github.com/leanovate/gopter/gen"
 	"github.com/leanovate/gopter/prop"
 	"github.com/stretchr/testify/require"
-	streamopts "goa.design/pulse/streaming/options"
 
 	clientspulse "github.com/CaliLuke/loom-mcp/features/stream/pulse/clients/pulse"
 	mockpulse "github.com/CaliLuke/loom-mcp/features/stream/pulse/clients/pulse/mocks"

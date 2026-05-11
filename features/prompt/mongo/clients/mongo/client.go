@@ -13,7 +13,7 @@ import (
 	mongodriver "go.mongodb.org/mongo-driver/mongo"
 	"go.mongodb.org/mongo-driver/mongo/options"
 
-	"goa.design/clue/health"
+	"github.com/CaliLuke/loom/clue/health"
 
 	clientinfra "github.com/CaliLuke/loom-mcp/features/mongo/clientinfra"
 	"github.com/CaliLuke/loom-mcp/runtime/agent/prompt"
@@ -60,6 +60,8 @@ const (
 	defaultCollection = "prompt_overrides"
 	defaultTimeout    = 5 * time.Second
 	clientName        = "prompt-mongo"
+	fieldPromptID     = "prompt_id"
+	fieldCreatedAt    = "created_at"
 )
 
 // New returns a Client backed by the provided MongoDB client.
@@ -94,8 +96,8 @@ func (c *client) Resolve(ctx context.Context, promptID prompt.Ident, scope promp
 	ctx, cancel := c.withTimeout(ctx)
 	defer cancel()
 
-	cur, err := c.coll.Find(ctx, bson.M{"prompt_id": promptID.String()}, options.Find().SetSort(bson.D{
-		{Key: "created_at", Value: -1},
+	cur, err := c.coll.Find(ctx, bson.M{fieldPromptID: promptID.String()}, options.Find().SetSort(bson.D{
+		{Key: fieldCreatedAt, Value: -1},
 	}))
 	if err != nil {
 		return nil, err
@@ -156,7 +158,7 @@ func (c *client) History(ctx context.Context, promptID prompt.Ident) ([]*prompt.
 	ctx, cancel := c.withTimeout(ctx)
 	defer cancel()
 
-	cur, err := c.coll.Find(ctx, bson.M{"prompt_id": promptID.String()}, options.Find().SetSort(bson.D{{Key: "created_at", Value: -1}}))
+	cur, err := c.coll.Find(ctx, bson.M{fieldPromptID: promptID.String()}, options.Find().SetSort(bson.D{{Key: fieldCreatedAt, Value: -1}}))
 	if err != nil {
 		return nil, err
 	}
@@ -170,7 +172,7 @@ func (c *client) List(ctx context.Context) ([]*prompt.Override, error) {
 	ctx, cancel := c.withTimeout(ctx)
 	defer cancel()
 
-	cur, err := c.coll.Find(ctx, bson.M{}, options.Find().SetSort(bson.D{{Key: "created_at", Value: -1}}))
+	cur, err := c.coll.Find(ctx, bson.M{}, options.Find().SetSort(bson.D{{Key: fieldCreatedAt, Value: -1}}))
 	if err != nil {
 		return nil, err
 	}
@@ -227,10 +229,10 @@ func cloneMetadata(src map[string]string) map[string]string {
 func ensureIndexes(ctx context.Context, coll collection) error {
 	lookup := mongodriver.IndexModel{
 		Keys: bson.D{
-			{Key: "prompt_id", Value: 1},
+			{Key: fieldPromptID, Value: 1},
 			{Key: "scope_session", Value: 1},
 			{Key: "scope_label_count", Value: -1},
-			{Key: "created_at", Value: -1},
+			{Key: fieldCreatedAt, Value: -1},
 		},
 	}
 	if _, err := coll.Indexes().CreateOne(ctx, lookup); err != nil {
@@ -238,8 +240,8 @@ func ensureIndexes(ctx context.Context, coll collection) error {
 	}
 	history := mongodriver.IndexModel{
 		Keys: bson.D{
-			{Key: "prompt_id", Value: 1},
-			{Key: "created_at", Value: -1},
+			{Key: fieldPromptID, Value: 1},
+			{Key: fieldCreatedAt, Value: -1},
 		},
 	}
 	if _, err := coll.Indexes().CreateOne(ctx, history); err != nil {

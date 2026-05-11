@@ -1,3 +1,4 @@
+//nolint:goconst // Repeated stream IDs keep pulse test fixtures readable.
 package pulse
 
 import (
@@ -12,7 +13,7 @@ import (
 	mockpulse "github.com/CaliLuke/loom-mcp/features/stream/pulse/clients/pulse/mocks"
 	"github.com/CaliLuke/loom-mcp/runtime/agent/rawjson"
 	"github.com/CaliLuke/loom-mcp/runtime/agent/stream"
-	streamopts "goa.design/pulse/streaming/options"
+	streamopts "github.com/CaliLuke/loom/pulse/streaming/options"
 )
 
 func TestSendPublishesEnvelope(t *testing.T) {

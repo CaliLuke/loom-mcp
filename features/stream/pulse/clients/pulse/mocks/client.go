@@ -9,9 +9,9 @@ import (
 	"context"
 	"testing"
 
-	"goa.design/clue/mock"
-	"goa.design/pulse/streaming"
-	"goa.design/pulse/streaming/options"
+	"github.com/CaliLuke/loom/clue/mock"
+	"github.com/CaliLuke/loom/pulse/streaming"
+	"github.com/CaliLuke/loom/pulse/streaming/options"
 
 	"github.com/CaliLuke/loom-mcp/features/stream/pulse/clients/pulse"
 )

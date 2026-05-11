@@ -4,16 +4,16 @@ import (
 	"context"
 	"time"
 
+	"github.com/CaliLuke/loom/clue/log"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/codes"
 	"go.opentelemetry.io/otel/metric"
 	"go.opentelemetry.io/otel/trace"
-	"goa.design/clue/log"
 )
 
 type (
-	// ClueLogger wraps goa.design/clue/log for runtime logging.
+	// ClueLogger wraps github.com/CaliLuke/loom/clue/log for runtime logging.
 	ClueLogger struct{}
 
 	// ClueMetrics wraps OTEL metrics for runtime instrumentation.
@@ -32,7 +32,9 @@ type (
 	}
 )
 
-// NewClueLogger constructs a Logger that delegates to goa.design/clue/log.
+const clueMessageKey = "msg"
+
+// NewClueLogger constructs a Logger that delegates to github.com/CaliLuke/loom/clue/log.
 // The logger reads formatting and debug settings from the context (set via
 // log.Context and log.WithFormat/log.WithDebug).
 func NewClueLogger() Logger {
@@ -58,13 +60,13 @@ func NewClueTracer() Tracer {
 
 // Debug emits a debug-level log message with structured key-value pairs.
 func (ClueLogger) Debug(ctx context.Context, msg string, keyvals ...any) {
-	fielders := append([]log.Fielder{log.KV{K: "msg", V: msg}}, kvSliceToClue(keyvals)...)
+	fielders := append([]log.Fielder{log.KV{K: clueMessageKey, V: msg}}, kvSliceToClue(keyvals)...)
 	log.Debug(ctx, fielders...)
 }
 
 // Info emits an info-level log message with structured key-value pairs.
 func (ClueLogger) Info(ctx context.Context, msg string, keyvals ...any) {
-	fielders := append([]log.Fielder{log.KV{K: "msg", V: msg}}, kvSliceToClue(keyvals)...)
+	fielders := append([]log.Fielder{log.KV{K: clueMessageKey, V: msg}}, kvSliceToClue(keyvals)...)
 	log.Info(ctx, fielders...)
 }
 
@@ -72,14 +74,14 @@ func (ClueLogger) Info(ctx context.Context, msg string, keyvals ...any) {
 func (ClueLogger) Warn(ctx context.Context, msg string, keyvals ...any) {
 	clueKVs := kvSliceToClue(keyvals)
 	fielders := make([]log.Fielder, 0, 2+len(clueKVs))
-	fielders = append(fielders, log.KV{K: "msg", V: msg}, log.KV{K: "severity", V: "warning"})
+	fielders = append(fielders, log.KV{K: clueMessageKey, V: msg}, log.KV{K: "severity", V: "warning"})
 	fielders = append(fielders, clueKVs...)
 	log.Warn(ctx, fielders...)
 }
 
 // Error emits an error-level log message with structured key-value pairs.
 func (ClueLogger) Error(ctx context.Context, msg string, keyvals ...any) {
-	fielders := append([]log.Fielder{log.KV{K: "msg", V: msg}}, kvSliceToClue(keyvals)...)
+	fielders := append([]log.Fielder{log.KV{K: clueMessageKey, V: msg}}, kvSliceToClue(keyvals)...)
 	log.Error(ctx, nil, fielders...)
 }
 

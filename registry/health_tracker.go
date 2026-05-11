@@ -17,9 +17,9 @@ import (
 
 	"github.com/CaliLuke/loom-mcp/runtime/agent/telemetry"
 	"github.com/CaliLuke/loom-mcp/runtime/toolregistry"
+	"github.com/CaliLuke/loom/pulse/pool"
+	"github.com/CaliLuke/loom/pulse/rmap"
 	"github.com/google/uuid"
-	"goa.design/pulse/pool"
-	"goa.design/pulse/rmap"
 )
 
 type (

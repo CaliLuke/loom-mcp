@@ -5,7 +5,7 @@ import (
 	"testing"
 	"time"
 
-	"goa.design/pulse/pool"
+	"github.com/CaliLuke/loom/pulse/pool"
 )
 
 // TestNewRegistry verifies that the Registry constructor wires all components correctly.

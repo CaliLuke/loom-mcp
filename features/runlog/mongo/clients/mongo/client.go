@@ -15,7 +15,7 @@ import (
 	mongodriver "go.mongodb.org/mongo-driver/mongo"
 	"go.mongodb.org/mongo-driver/mongo/options"
 
-	"goa.design/clue/health"
+	"github.com/CaliLuke/loom/clue/health"
 
 	clientinfra "github.com/CaliLuke/loom-mcp/features/mongo/clientinfra"
 	"github.com/CaliLuke/loom-mcp/runtime/agent"
@@ -63,6 +63,7 @@ const (
 	defaultCollection = "agent_run_events"
 	defaultTimeout    = 5 * time.Second
 	clientName        = "runlog-mongo"
+	fieldRunID        = "run_id"
 )
 
 // New returns a Client backed by the provided MongoDB client.
@@ -196,7 +197,7 @@ func listRunlogFilter(runID, cursor string, limit int) (bson.M, error) {
 	if limit <= 0 {
 		return nil, errors.New("limit must be > 0")
 	}
-	filter := bson.M{"run_id": runID}
+	filter := bson.M{fieldRunID: runID}
 	if cursor == "" {
 		return filter, nil
 	}
@@ -250,7 +251,7 @@ func (c *client) withTimeout(ctx context.Context) (context.Context, context.Canc
 func ensureIndexes(ctx context.Context, coll collection) error {
 	cursorIndex := mongodriver.IndexModel{
 		Keys: bson.D{
-			{Key: "run_id", Value: 1},
+			{Key: fieldRunID, Value: 1},
 			{Key: "_id", Value: 1},
 		},
 	}
@@ -259,7 +260,7 @@ func ensureIndexes(ctx context.Context, coll collection) error {
 	}
 	identityIndex := mongodriver.IndexModel{
 		Keys: bson.D{
-			{Key: "run_id", Value: 1},
+			{Key: fieldRunID, Value: 1},
 			{Key: "event_key", Value: 1},
 		},
 		Options: options.Index().SetUnique(true),
@@ -296,7 +297,7 @@ type indexView = clientinfra.IndexCreator
 func (c *client) lookupEventByKey(ctx context.Context, runID string, eventKey string) (eventDocument, error) {
 	var doc eventDocument
 	err := c.coll.FindOne(ctx, bson.M{
-		"run_id":    runID,
+		fieldRunID:  runID,
 		"event_key": eventKey,
 	}).Decode(&doc)
 	if err != nil {

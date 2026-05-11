@@ -13,8 +13,8 @@ import (
 	pulseclients "github.com/CaliLuke/loom-mcp/features/stream/pulse/clients/pulse"
 	"github.com/CaliLuke/loom-mcp/runtime/agent/telemetry"
 	"github.com/CaliLuke/loom-mcp/runtime/toolregistry"
-	"goa.design/pulse/streaming"
-	streamopts "goa.design/pulse/streaming/options"
+	"github.com/CaliLuke/loom/pulse/streaming"
+	streamopts "github.com/CaliLuke/loom/pulse/streaming/options"
 
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/codes"

@@ -1,5 +1,5 @@
 // Package pulse exposes a stream.Sink implementation that publishes runtime
-// events to goa.design/pulse streams. It mirrors the layering used by existing
+// events to github.com/CaliLuke/loom/pulse streams. It mirrors the layering used by existing
 // Pulse deployments: services build a Redis client, pass it to the Pulse client,
 // and hand the resulting sink to the runtime.
 package pulse

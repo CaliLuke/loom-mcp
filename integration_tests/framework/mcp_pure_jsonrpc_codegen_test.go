@@ -87,6 +87,10 @@ var _ = Service("demo", func() {
 
 func currentLocalLoomReplace(t *testing.T, repoRoot string) string {
 	t.Helper()
+	siblingLoom := filepath.Clean(filepath.Join(repoRoot, "..", "loom"))
+	if _, err := os.Stat(filepath.Join(siblingLoom, "go.mod")); err == nil {
+		return siblingLoom
+	}
 	//nolint:gosec // Test helper reads local repo go.mod from runtime-derived repo root.
 	goMod, err := os.ReadFile(filepath.Join(repoRoot, "go.mod"))
 	require.NoError(t, err)

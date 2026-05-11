@@ -12,7 +12,7 @@ import (
 	mongodriver "go.mongodb.org/mongo-driver/mongo"
 	"go.mongodb.org/mongo-driver/mongo/options"
 
-	"goa.design/clue/health"
+	"github.com/CaliLuke/loom/clue/health"
 
 	clientinfra "github.com/CaliLuke/loom-mcp/features/mongo/clientinfra"
 	"github.com/CaliLuke/loom-mcp/runtime/agent/memory"
@@ -22,6 +22,8 @@ const (
 	defaultCollection = "agent_memory"
 	defaultTimeout    = 5 * time.Second
 	clientName        = "memory-mongo"
+	fieldAgentID      = "agent_id"
+	fieldRunID        = "run_id"
 )
 
 // Client exposes Mongo-backed operations for memory snapshots.
@@ -80,7 +82,7 @@ func (c *client) LoadRun(ctx context.Context, agentID, runID string) (memory.Sna
 	ctx, cancel := c.withTimeout(ctx)
 	defer cancel()
 
-	filter := bson.M{"agent_id": agentID, "run_id": runID}
+	filter := bson.M{fieldAgentID: agentID, fieldRunID: runID}
 	var doc runDocument
 	if err := c.coll.FindOne(ctx, filter).Decode(&doc); err != nil {
 		if errors.Is(err, mongodriver.ErrNoDocuments) {
@@ -115,12 +117,12 @@ func (c *client) AppendEvents(ctx context.Context, agentID, runID string, events
 
 	now := time.Now().UTC()
 	docs := toEventDocuments(events, now)
-	filter := bson.M{"agent_id": agentID, "run_id": runID}
+	filter := bson.M{fieldAgentID: agentID, fieldRunID: runID}
 	update := bson.M{
 		"$setOnInsert": bson.M{
-			"agent_id": agentID,
-			"run_id":   runID,
-			"events":   []eventDocument{},
+			fieldAgentID: agentID,
+			fieldRunID:   runID,
+			"events":     []eventDocument{},
 		},
 		"$set": bson.M{
 			"updated_at": now,
@@ -211,7 +213,7 @@ func cloneMeta(src map[string]any) map[string]any {
 
 func ensureIndexes(ctx context.Context, coll collection) error {
 	index := mongodriver.IndexModel{
-		Keys:    bson.D{{Key: "agent_id", Value: 1}, {Key: "run_id", Value: 1}},
+		Keys:    bson.D{{Key: fieldAgentID, Value: 1}, {Key: fieldRunID, Value: 1}},
 		Options: options.Index().SetUnique(true),
 	}
 	_, err := coll.Indexes().CreateOne(ctx, index)

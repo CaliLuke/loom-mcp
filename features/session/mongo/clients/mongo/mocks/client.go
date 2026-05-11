@@ -10,7 +10,7 @@ import (
 	"testing"
 	"time"
 
-	"goa.design/clue/mock"
+	"github.com/CaliLuke/loom/clue/mock"
 
 	"github.com/CaliLuke/loom-mcp/features/session/mongo/clients/mongo"
 	"github.com/CaliLuke/loom-mcp/runtime/agent/session"

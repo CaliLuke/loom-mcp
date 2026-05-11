@@ -1,3 +1,4 @@
+//nolint:goconst // Repeated stream IDs keep pulse test fixtures readable.
 package pulse
 
 import (
@@ -7,9 +8,9 @@ import (
 	"testing"
 	"time"
 
+	"github.com/CaliLuke/loom/pulse/streaming"
+	streamopts "github.com/CaliLuke/loom/pulse/streaming/options"
 	"github.com/stretchr/testify/require"
-	"goa.design/pulse/streaming"
-	streamopts "goa.design/pulse/streaming/options"
 
 	clientspulse "github.com/CaliLuke/loom-mcp/features/stream/pulse/clients/pulse"
 	mockpulse "github.com/CaliLuke/loom-mcp/features/stream/pulse/clients/pulse/mocks"

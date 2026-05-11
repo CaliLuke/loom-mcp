@@ -9,9 +9,9 @@ import (
 
 	mcpassistantjssvr "example.com/assistant/gen/jsonrpc/mcp_assistant/server"
 	mcpassistant "example.com/assistant/gen/mcp_assistant"
+	"github.com/CaliLuke/loom/clue/debug"
+	"github.com/CaliLuke/loom/clue/log"
 	goahttp "github.com/CaliLuke/loom/http"
-	"goa.design/clue/debug"
-	"goa.design/clue/log"
 )
 
 // handleHTTPServer starts configures and starts a HTTP server on the given

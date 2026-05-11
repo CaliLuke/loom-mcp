@@ -5,7 +5,7 @@ import (
 	"encoding/json"
 
 	assistant "example.com/assistant/gen/assistant"
-	"goa.design/clue/log"
+	"github.com/CaliLuke/loom/clue/log"
 )
 
 // assistant service example implementation.

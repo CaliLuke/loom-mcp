@@ -1,3 +1,4 @@
+//nolint:goconst // Repeated literals keep cluster rate-limit test fixtures readable.
 package middleware
 
 import (
@@ -8,7 +9,7 @@ import (
 	"time"
 
 	"github.com/CaliLuke/loom-mcp/runtime/agent/model"
-	"goa.design/pulse/rmap"
+	"github.com/CaliLuke/loom/pulse/rmap"
 )
 
 type fakeClusterMap struct {

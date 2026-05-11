@@ -203,6 +203,15 @@ func rewriteQuickstartGoMod(repoRoot string, quickstartDir string) error {
 			updated = strings.TrimRight(updated, "\n") + "\n" + loomReplace + "\n"
 		}
 	}
+	localLoomDir := filepath.Clean(filepath.Join(repoRoot, "..", "loom"))
+	if _, err := os.Stat(filepath.Join(localLoomDir, "go.mod")); err == nil {
+		loomReplace := "replace github.com/CaliLuke/loom => " + localLoomDir
+		if loomCoreReplacePattern.MatchString(updated) {
+			updated = loomCoreReplacePattern.ReplaceAllString(updated, loomReplace)
+		} else {
+			updated = strings.TrimRight(updated, "\n") + "\n" + loomReplace + "\n"
+		}
+	}
 
 	//nolint:gosec // Test helper rewrites a trusted copied fixture file inside t.TempDir().
 	return os.WriteFile(modPath, []byte(updated), 0o600)

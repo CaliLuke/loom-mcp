@@ -12,7 +12,7 @@ import (
 	"golang.org/x/time/rate"
 
 	"github.com/CaliLuke/loom-mcp/runtime/agent/model"
-	"goa.design/pulse/rmap"
+	"github.com/CaliLuke/loom/pulse/rmap"
 )
 
 type (

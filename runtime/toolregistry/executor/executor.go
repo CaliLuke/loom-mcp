@@ -22,8 +22,8 @@ import (
 	"github.com/CaliLuke/loom-mcp/runtime/agent/telemetry"
 	"github.com/CaliLuke/loom-mcp/runtime/agent/tools"
 	"github.com/CaliLuke/loom-mcp/runtime/toolregistry"
-	"goa.design/pulse/streaming"
-	"goa.design/pulse/streaming/options"
+	"github.com/CaliLuke/loom/pulse/streaming"
+	"github.com/CaliLuke/loom/pulse/streaming/options"
 
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/codes"

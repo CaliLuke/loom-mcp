@@ -9,7 +9,7 @@ import (
 	"context"
 	"testing"
 
-	"goa.design/clue/mock"
+	"github.com/CaliLuke/loom/clue/mock"
 
 	"github.com/CaliLuke/loom-mcp/features/prompt/mongo/clients/mongo"
 	"github.com/CaliLuke/loom-mcp/runtime/agent/prompt"

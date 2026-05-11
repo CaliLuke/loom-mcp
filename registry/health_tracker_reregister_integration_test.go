@@ -5,8 +5,8 @@ import (
 	"testing"
 	"time"
 
-	"goa.design/pulse/pool"
-	"goa.design/pulse/rmap"
+	"github.com/CaliLuke/loom/pulse/pool"
+	"github.com/CaliLuke/loom/pulse/rmap"
 )
 
 // TestPingsSurviveReregisterAndFailover verifies that calling StartPingLoop again

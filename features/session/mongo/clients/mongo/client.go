@@ -12,7 +12,7 @@ import (
 	mongodriver "go.mongodb.org/mongo-driver/mongo"
 	"go.mongodb.org/mongo-driver/mongo/options"
 
-	"goa.design/clue/health"
+	"github.com/CaliLuke/loom/clue/health"
 
 	clientinfra "github.com/CaliLuke/loom-mcp/features/mongo/clientinfra"
 	"github.com/CaliLuke/loom-mcp/runtime/agent/prompt"
@@ -24,6 +24,11 @@ const (
 	defaultRunsCollection     = "agent_runs"
 	defaultOpTimeout          = 5 * time.Second
 	sessionClientName         = "session-mongo"
+	fieldAgentID              = "agent_id"
+	fieldRunID                = "run_id"
+	fieldSessionID            = "session_id"
+	fieldStatus               = "status"
+	fieldUpdatedAt            = "updated_at"
 )
 
 // Client exposes Mongo-backed operations for session metadata.
@@ -97,7 +102,7 @@ func (c *client) CreateSession(ctx context.Context, sessionID string, createdAt 
 	now, createdAt := createSessionTimestamps(createdAt)
 	ctxWithTimeout, cancel := c.withTimeout(ctx)
 	defer cancel()
-	filter := bson.M{"session_id": sessionID}
+	filter := bson.M{fieldSessionID: sessionID}
 	update := bson.M{
 		// Idempotent insert: CreateSession must never modify an existing session.
 		//
@@ -106,10 +111,10 @@ func (c *client) CreateSession(ctx context.Context, sessionID string, createdAt 
 		// as a pure $setOnInsert update avoids that class of bugs and makes
 		// CreateSession safe under retries and races.
 		"$setOnInsert": bson.M{
-			"session_id": sessionID,
-			"status":     session.StatusActive,
-			"created_at": createdAt,
-			"updated_at": now,
+			fieldSessionID: sessionID,
+			fieldStatus:    session.StatusActive,
+			"created_at":   createdAt,
+			fieldUpdatedAt: now,
 		},
 	}
 	if _, err := c.sessions.UpdateOne(ctxWithTimeout, filter, update, options.Update().SetUpsert(true)); err != nil {
@@ -132,7 +137,7 @@ func (c *client) LoadSession(ctx context.Context, sessionID string) (session.Ses
 	}
 	ctx, cancel := c.withTimeout(ctx)
 	defer cancel()
-	filter := bson.M{"session_id": sessionID}
+	filter := bson.M{fieldSessionID: sessionID}
 	var doc sessionDocument
 	if err := c.sessions.FindOne(ctx, filter).Decode(&doc); err != nil {
 		if errors.Is(err, mongodriver.ErrNoDocuments) {
@@ -163,12 +168,12 @@ func (c *client) EndSession(ctx context.Context, sessionID string, endedAt time.
 	ctx, cancel := c.withTimeout(ctx)
 	defer cancel()
 
-	filter := bson.M{"session_id": sessionID}
+	filter := bson.M{fieldSessionID: sessionID}
 	update := bson.M{
 		"$set": bson.M{
-			"status":     session.StatusEnded,
-			"ended_at":   endedAt.UTC(),
-			"updated_at": now,
+			fieldStatus:    session.StatusEnded,
+			"ended_at":     endedAt.UTC(),
+			fieldUpdatedAt: now,
 		},
 	}
 	if _, err := c.sessions.UpdateOne(ctx, filter, update); err != nil {
@@ -196,14 +201,14 @@ func (c *client) UpsertRun(ctx context.Context, run session.RunMeta) error {
 	ctx, cancel := c.withTimeout(ctx)
 	defer cancel()
 
-	filter := bson.M{"run_id": run.RunID}
+	filter := bson.M{fieldRunID: run.RunID}
 	update := bson.M{
 		"$set": bson.M{
-			"run_id":        doc.RunID,
-			"agent_id":      doc.AgentID,
-			"session_id":    doc.SessionID,
-			"status":        doc.Status,
-			"updated_at":    doc.UpdatedAt,
+			fieldRunID:      doc.RunID,
+			fieldAgentID:    doc.AgentID,
+			fieldSessionID:  doc.SessionID,
+			fieldStatus:     doc.Status,
+			fieldUpdatedAt:  doc.UpdatedAt,
 			"labels":        doc.Labels,
 			"prompt_refs":   doc.PromptRefs,
 			"child_run_ids": doc.ChildRunIDs,
@@ -279,7 +284,7 @@ func (c *client) LoadRun(ctx context.Context, runID string) (session.RunMeta, er
 	}
 	ctx, cancel := c.withTimeout(ctx)
 	defer cancel()
-	filter := bson.M{"run_id": runID}
+	filter := bson.M{fieldRunID: runID}
 	var doc runDocument
 	if err := c.runs.FindOne(ctx, filter).Decode(&doc); err != nil {
 		if errors.Is(err, mongodriver.ErrNoDocuments) {
@@ -294,9 +299,9 @@ func (c *client) ListRunsBySession(ctx context.Context, sessionID string, status
 	if sessionID == "" {
 		return nil, errors.New("session id is required")
 	}
-	filter := bson.M{"session_id": sessionID}
+	filter := bson.M{fieldSessionID: sessionID}
 	if len(statuses) > 0 {
-		filter["status"] = bson.M{"$in": statuses}
+		filter[fieldStatus] = bson.M{"$in": statuses}
 	}
 	ctx, cancel := c.withTimeout(ctx)
 	defer cancel()
@@ -442,29 +447,29 @@ func appendUniqueRunID(runIDs []string, runID string) []string {
 
 func ensureIndexes(ctx context.Context, sessionsColl, runsColl collection) error {
 	sessionIndex := mongodriver.IndexModel{
-		Keys:    bson.D{{Key: "session_id", Value: 1}},
+		Keys:    bson.D{{Key: fieldSessionID, Value: 1}},
 		Options: options.Index().SetUnique(true),
 	}
 	if _, err := sessionsColl.Indexes().CreateOne(ctx, sessionIndex); err != nil {
 		return err
 	}
 	runIndex := mongodriver.IndexModel{
-		Keys:    bson.D{{Key: "run_id", Value: 1}},
+		Keys:    bson.D{{Key: fieldRunID, Value: 1}},
 		Options: options.Index().SetUnique(true),
 	}
 	if _, err := runsColl.Indexes().CreateOne(ctx, runIndex); err != nil {
 		return err
 	}
 	runSessionIndex := mongodriver.IndexModel{
-		Keys: bson.D{{Key: "session_id", Value: 1}},
+		Keys: bson.D{{Key: fieldSessionID, Value: 1}},
 	}
 	if _, err := runsColl.Indexes().CreateOne(ctx, runSessionIndex); err != nil {
 		return err
 	}
 	runSessionStatusIndex := mongodriver.IndexModel{
 		Keys: bson.D{
-			{Key: "session_id", Value: 1},
-			{Key: "status", Value: 1},
+			{Key: fieldSessionID, Value: 1},
+			{Key: fieldStatus, Value: 1},
 		},
 	}
 	if _, err := runsColl.Indexes().CreateOne(ctx, runSessionStatusIndex); err != nil {

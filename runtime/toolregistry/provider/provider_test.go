@@ -1,3 +1,4 @@
+//nolint:goconst // Repeated stream fixture values keep tests readable.
 package provider
 
 import (
@@ -11,9 +12,9 @@ import (
 	mockpulse "github.com/CaliLuke/loom-mcp/features/stream/pulse/clients/pulse/mocks"
 	"github.com/CaliLuke/loom-mcp/runtime/agent/tools"
 	"github.com/CaliLuke/loom-mcp/runtime/toolregistry"
+	"github.com/CaliLuke/loom/pulse/streaming"
+	streamopts "github.com/CaliLuke/loom/pulse/streaming/options"
 	"github.com/stretchr/testify/require"
-	"goa.design/pulse/streaming"
-	streamopts "goa.design/pulse/streaming/options"
 
 	"sync/atomic"
 )

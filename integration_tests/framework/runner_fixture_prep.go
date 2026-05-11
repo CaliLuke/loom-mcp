@@ -93,8 +93,8 @@ import (
 	assistantapi "example.com/assistant"
 	assistant "example.com/assistant/gen/assistant"
 	mcpassistant "example.com/assistant/gen/mcp_assistant"
-	"goa.design/clue/debug"
-	"goa.design/clue/log"
+	"github.com/CaliLuke/loom/clue/debug"
+	"github.com/CaliLuke/loom/clue/log"
 	goahttp "github.com/CaliLuke/loom/http"
 )
 
@@ -248,7 +248,7 @@ import (
 
 	assistantapi "example.com/assistant"
 	mcpassistant "example.com/assistant/gen/mcp_assistant"
-	"goa.design/clue/log"
+	"github.com/CaliLuke/loom/clue/log"
 )
 
 func main() {

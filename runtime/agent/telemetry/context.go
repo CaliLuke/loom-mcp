@@ -3,9 +3,9 @@ package telemetry
 import (
 	"context"
 
+	"github.com/CaliLuke/loom/clue/log"
 	"go.opentelemetry.io/otel/baggage"
 	"go.opentelemetry.io/otel/trace"
-	"goa.design/clue/log"
 )
 
 // MergeContext injects logging, tracing, and baggage metadata carried by base

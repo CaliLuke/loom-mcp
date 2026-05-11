@@ -7,7 +7,7 @@ import (
 	"fmt"
 	"time"
 
-	streamopts "goa.design/pulse/streaming/options"
+	streamopts "github.com/CaliLuke/loom/pulse/streaming/options"
 
 	clientspulse "github.com/CaliLuke/loom-mcp/features/stream/pulse/clients/pulse"
 	"github.com/CaliLuke/loom-mcp/runtime/agent/stream"

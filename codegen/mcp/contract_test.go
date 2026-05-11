@@ -1,3 +1,4 @@
+//nolint:goconst // Repeated literals keep MCP contract fixtures readable.
 package codegen
 
 import (
@@ -481,7 +482,7 @@ func TestApplyMCPPolicyHeadersToJSONRPCMount_RewritesJenniferMountSection(t *tes
 				stmt.Comment("MountAssistant configures the mux to serve the JSON-RPC assistant service methods.").Line()
 				stmt.Func().Id("MountAssistant").
 					Params(
-						jen.Id("mux").Qual("goa.design/goa/v3/http", "Muxer"),
+						jen.Id("mux").Qual("github.com/CaliLuke/loom/http", "Muxer"),
 						jen.Id("h").Op("*").Id("Server"),
 					).
 					Block(

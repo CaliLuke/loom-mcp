@@ -1,3 +1,4 @@
+//nolint:goconst // Repeated registry fixture values keep tests readable.
 package registry
 
 import (
@@ -13,12 +14,12 @@ import (
 	mockpulse "github.com/CaliLuke/loom-mcp/features/stream/pulse/clients/pulse/mocks"
 	genregistry "github.com/CaliLuke/loom-mcp/registry/gen/registry"
 	"github.com/CaliLuke/loom-mcp/runtime/toolregistry"
+	"github.com/CaliLuke/loom/pulse/pool"
+	"github.com/CaliLuke/loom/pulse/rmap"
 	"github.com/leanovate/gopter"
 	"github.com/leanovate/gopter/gen"
 	"github.com/leanovate/gopter/prop"
 	"github.com/stretchr/testify/require"
-	"goa.design/pulse/pool"
-	"goa.design/pulse/rmap"
 )
 
 // iterCounter provides unique IDs for each property test iteration.

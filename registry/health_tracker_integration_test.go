@@ -10,11 +10,11 @@ import (
 
 	clientspulse "github.com/CaliLuke/loom-mcp/features/stream/pulse/clients/pulse"
 	"github.com/CaliLuke/loom-mcp/runtime/toolregistry"
+	"github.com/CaliLuke/loom/pulse/pool"
+	"github.com/CaliLuke/loom/pulse/rmap"
 	"github.com/redis/go-redis/v9"
 	"github.com/testcontainers/testcontainers-go"
 	"github.com/testcontainers/testcontainers-go/wait"
-	"goa.design/pulse/pool"
-	"goa.design/pulse/rmap"
 )
 
 var (
