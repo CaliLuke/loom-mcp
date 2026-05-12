@@ -34,9 +34,9 @@ jobs:
         run: |
           make tools
 
-      - name: Install Goa CLI
+      - name: Install Loom CLI
         run: |
-          go install goa.design/goa/v3/cmd/goa@latest
+          go install github.com/CaliLuke/loom/cmd/loom@latest
           echo "$(go env GOPATH)/bin" >> $GITHUB_PATH
 
       - name: Lint (golangci-lint v2)
