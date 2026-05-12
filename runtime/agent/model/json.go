@@ -10,6 +10,8 @@ import (
 )
 
 const (
+	partKindThinking        = "thinking"
+	partKindText            = "text"
 	partKindImage           = "image"
 	partKindDocument        = "document"
 	partKindCitations       = "citations"
@@ -109,14 +111,14 @@ func encodeThinkingPart(v ThinkingPart) any {
 	return struct {
 		Kind string `json:"Kind"` //nolint:tagliatelle // Kind discriminator is intentionally upper-cased for compatibility.
 		ThinkingPart
-	}{Kind: ChunkTypeThinking, ThinkingPart: v}
+	}{Kind: partKindThinking, ThinkingPart: v}
 }
 
 func encodeTextPart(v TextPart) any {
 	return struct {
 		Kind string `json:"Kind"` //nolint:tagliatelle // Kind discriminator is intentionally upper-cased for compatibility.
 		TextPart
-	}{Kind: ChunkTypeText, TextPart: v}
+	}{Kind: partKindText, TextPart: v}
 }
 
 func encodeImagePart(v ImagePart) any {
@@ -212,7 +214,7 @@ func decodePartByKind(raw json.RawMessage, obj map[string]json.RawMessage, kindR
 		return decodeImagePart(raw)
 	case partKindDocument:
 		return decodeDocumentPart(raw)
-	case ChunkTypeThinking:
+	case partKindThinking:
 		return decodeThinkingPart(raw)
 	case partKindCitations:
 		return decodeCitationsPart(raw)
@@ -220,7 +222,7 @@ func decodePartByKind(raw json.RawMessage, obj map[string]json.RawMessage, kindR
 		return decodeToolResultPart(raw)
 	case partKindToolUse:
 		return decodeToolUsePart(raw, obj)
-	case ChunkTypeText:
+	case partKindText:
 		return decodeTextPart(raw)
 	case partKindCacheCheckpoint:
 		return CacheCheckpointPart{}, nil

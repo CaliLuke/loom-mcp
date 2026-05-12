@@ -33,6 +33,7 @@ const (
 	bedrockProviderName   = "bedrock"
 	bedrockRoleAssistant  = "assistant"
 	bedrockSchemaTypeKey  = "type"
+	bedrockConfigTypeKey  = "type"
 	bedrockObjectType     = "object"
 )
 
@@ -357,9 +358,9 @@ func (c *Client) buildConverseStreamInput(parts *requestParts, req *model.Reques
 			// Opus 4.6+: adaptive thinking lets the model decide when and how
 			// deeply to reason. Interleaved thinking is automatic — no beta
 			// header required.
-			fields["thinking"] = map[string]any{bedrockSchemaTypeKey: "adaptive"}
+			fields["thinking"] = map[string]any{bedrockConfigTypeKey: "adaptive"}
 		} else {
-			thinkingCfg := map[string]any{bedrockSchemaTypeKey: "enabled"}
+			thinkingCfg := map[string]any{bedrockConfigTypeKey: "enabled"}
 			if thinking.budget > 0 {
 				thinkingCfg["budget_tokens"] = thinking.budget
 			}
