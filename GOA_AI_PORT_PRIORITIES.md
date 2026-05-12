@@ -201,7 +201,7 @@ Relevant local files:
 - `runtime/agent/runtime/workflow_await_wait.go`
 - `runtime/agent/engine/temporal/workflow_context.go`
 
-## Post-v0.50.0 Releases (v0.51.0 – v0.53.3)
+## Post-v0.50.0 Releases (v0.51.0 – v0.53.11)
 
 Covers upstream releases newer than the original survey above.
 
@@ -238,7 +238,7 @@ Recommended scope:
 
 #### Canonical tool policy metadata and bookkeeping-aware budgets
 
-Upstream reference: `v0.53.0`
+Upstream references: `v0.53.0`, `v0.53.4`, `v0.53.10`
 
 Why it matters:
 
@@ -247,6 +247,12 @@ Why it matters:
   facts from `tools.ToolSpec` at evaluation time.
 - Clarifies that `RunPolicy.MaxToolCalls` counts only budgeted, non-bookkeeping
   invocations, and that `TerminalRun` specs must also be `Bookkeeping`.
+- Keeps successful bookkeeping-only tool turns out of planner-visible transcript
+  and tool-output state.
+- Keeps retryable bookkeeping failures visible to the planner so it can repair
+  terminal/progress calls in the same workflow.
+- Removes the transient `PlannerVisible` DSL/runtime contract that upstream
+  briefly introduced in `v0.53.5`; do not port that intermediate shape.
 
 Why it is worth doing:
 
@@ -269,6 +275,112 @@ Recommended scope:
 - Store metadata once at registration time; remove on-demand synthesis.
 - Enforce `TerminalRun => Bookkeeping` and exempt bookkeeping tools from the
   `MaxToolCalls` budget.
+- Rebuild provider transcript/tool-use entries only from runtime-admitted,
+  planner-facing calls.
+- Keep retry hints for retryable bookkeeping failures structured and visible
+  without replaying successful bookkeeping side effects into planner state.
+
+#### Restricted-tool terminal finalization contract
+
+Upstream references: `v0.53.6`, `v0.53.8`
+
+Why it matters:
+
+- Restricted-tool runs should stay on the restricted tool path until the hard
+  deadline instead of falling back to a tool-free finalization turn too early.
+- Retry hints from restricted tools need to survive across subsequent turns so
+  missing/invalid arguments can be repaired deterministically.
+- Provider `FinalToolResult` values must be accepted as terminal run-loop output.
+- Failed tool attempts should be counted consistently, including retry-hinted
+  argument failures.
+
+Why it is worth doing:
+
+- This fork has terminal tools, `FinalToolResult`, retry hints, missing-field
+  awaits, and tool caps already, but the cross-product is subtle enough to pin
+  with focused regression tests before relying on it.
+
+Relevant local files:
+
+- `runtime/agent/runtime/workflow_turn.go`
+- `runtime/agent/runtime/workflow_finalize.go`
+- `runtime/agent/runtime/workflow_finish.go`
+- `runtime/agent/runtime/workflow_clarification.go`
+- `runtime/agent/runtime/tool_calls.go`
+- `runtime/agent/planner/planner.go`
+
+Recommended scope:
+
+- Add regression tests for restricted tool retry hints across resume/finalize.
+- Add regression tests for provider `FinalToolResult` as terminal output.
+- Ensure failed tool attempt accounting treats retry-hinted argument failures
+  the same way as other failed attempts.
+- Keep restricted-tool finalization on the tool path until deadline/grace policy
+  explicitly requires terminal finalization.
+
+#### Tool pause transcript ordering
+
+Upstream reference: `v0.53.11`
+
+Why it matters:
+
+- When a budgeted tool returns a runtime-owned pause or user-input request, the
+  planner-facing tool result must be recorded before the workflow awaits input.
+- Resume transcripts must preserve the original assistant `tool_use` / user
+  `tool_result` ordering so providers receive valid conversation history.
+
+Why it is worth doing:
+
+- This fork has a richer await/confirmation path than upstream, which makes this
+  a good regression target even if the exact executor envelope differs.
+- It pairs naturally with the pause-aware `ToolExecutionResult` work below.
+
+Relevant local files:
+
+- `runtime/agent/runtime/workflow_turn.go`
+- `runtime/agent/runtime/workflow_await_queue.go`
+- `runtime/agent/runtime/workflow_await_wait.go`
+- `runtime/agent/runtime/workflow_helpers.go`
+- `runtime/agent/transcript/...`
+
+Recommended scope:
+
+- Add regression coverage for tool-created pause/await followed by resume.
+- Assert the planner-facing tool output is appended before awaiting user input.
+- Assert resumed provider transcripts preserve assistant tool-use ordering.
+
+#### Workflow step and generated tool-registration normalization
+
+Upstream reference: `v0.53.7`
+
+Why it matters:
+
+- Runtime state transitions should stay canonical across planner/tool/await
+  boundaries.
+- Generated tool registration and lookup should be specialized from
+  generator-owned metadata instead of re-derived at runtime.
+- Fan-out workflows need explicit key-event handling, while non-fan-out recipes
+  should stay on a single-anchor contract.
+
+Why it is worth doing:
+
+- This overlaps with the `ToolMetadata` / `BudgetClass` work and should be
+  reviewed during that refactor rather than treated as a separate broad rewrite.
+
+Relevant local files:
+
+- `runtime/agent/runtime/...`
+- `runtime/agent/run/...`
+- `codegen/agent/...`
+- `runtime/toolregistry/...`
+
+Recommended scope:
+
+- Audit workflow step transitions around planner, tool, await, and terminal
+  paths for one canonical representation.
+- Fold generated registration specialization into the `ToolMetadata` work.
+- Add tests around fan-out/key-event behavior only if the corresponding local
+  concept exists in current runtime code.
 
 #### Pause-aware `ToolExecutionResult` envelope
 
