@@ -97,6 +97,45 @@ RequestContext: func(ctx context.Context, r *http.Request) context.Context {
 }
 ```
 
+### Ctx-Cached Values Can Be Stale — Read `r.Header` First
+
+The supplied `*http.Request` carries fresh per-call values. The supplied
+`ctx`, however, can carry stale values: the upstream MCP SDK threads a
+session-scoped context through tool dispatches, so values written into
+ctx during the `initialize` call (for example, by an HTTP middleware that
+populated a request-id key on the inbound request's context) are visible
+on later tool invocations.
+
+The framework cannot strip those values without a broader behavior change
+to the SDK. The rule for application callbacks is therefore:
+
+- Read `r.Header` first and treat that as authoritative.
+- Fall back to ctx-derived values only when the header is absent.
+- Don't derive a "current request id" by reading ctx first and writing it
+  back to ctx on cache miss — that pattern silently propagates the
+  initialize-time value forward.
+
+A callback that always reads `r.Header` (as in the example above) is
+already correct. A callback that wants compatibility with both
+header-bearing and header-less callers should explicitly prefer the
+header:
+
+```go
+RequestContext: func(ctx context.Context, r *http.Request) context.Context {
+    rid := ""
+    if r != nil {
+        rid = r.Header.Get("X-Request-ID")
+    }
+    if rid == "" {
+        rid = correlationIDFromCtx(ctx) // optional, header-absent fallback
+    }
+    if rid != "" {
+        ctx = withCorrelationID(ctx, rid)
+    }
+    return ctx
+}
+```
+
 ## Session and Response Writer Helpers
 
 The generated handler also exposes the MCP session id and the active HTTP
