@@ -1,6 +1,8 @@
 package codegen
 
 import (
+	"fmt"
+
 	"github.com/CaliLuke/loom/codegen"
 	"github.com/dave/jennifer/jen"
 )
@@ -19,9 +21,120 @@ func adapterToolsSection(data *AdapterData) codegen.Section {
 		emitValidateMCPPayloadEnum(stmt)
 		emitToolsList(stmt, data)
 		emitToolStreamBridges(stmt, data)
+		for _, tool := range data.Tools {
+			if !tool.HasPayload {
+				continue
+			}
+			emitToolInputRecovery(stmt, tool)
+		}
 		emitToolsCall(stmt)
 		emitToolsCallHandler(stmt, data)
 	})
+}
+
+// toolRecoveryFuncName returns the generated per-tool recovery function name.
+func toolRecoveryFuncName(tool *ToolAdapter) string {
+	return codegen.Goify(tool.OriginalMethodName, false) + "InputRecovery"
+}
+
+// emitToolInputRecovery emits a per-tool function that turns a decoder/validation
+// error into a recovery hint string. The hint references a canonical example
+// synthesized from the IR at codegen time; for tools whose payload contains a
+// single union envelope, a sibling <tool>ExampleForRaw function reads the
+// caller's discriminator and returns the per-tag example when valid, so a
+// "valid tag + malformed inner branch" caller does not see their tag rewritten
+// by the hint.
+func emitToolInputRecovery(stmt *jen.Statement, tool *ToolAdapter) {
+	canonical := tool.CanonicalExampleJSON
+	if canonical == "" {
+		canonical = "{}"
+	}
+	var dynamicEnv *UnionEnvelopeMeta
+	if len(tool.UnionEnvelopes) == 1 && len(tool.UnionEnvelopes[0].TagExamples) > 0 {
+		dynamicEnv = &tool.UnionEnvelopes[0]
+	}
+	if dynamicEnv != nil {
+		emitToolExampleSelector(stmt, tool, dynamicEnv, canonical)
+	}
+	stmt.Func().Id(toolRecoveryFuncName(tool)).
+		Params(jen.Id("err").Error(), jen.Id("raw").Qual("encoding/json", "RawMessage")).
+		String().
+		BlockFunc(func(g *jen.Group) {
+			g.Id("message").Op(":=").Qual("strings", "TrimSpace").Call(jen.Id("loom").Dot("ErrorSafeMessage").Call(jen.Id("err")))
+			g.If(jen.Id("message").Op("==").Lit("")).Block(
+				jen.Id("message").Op("=").Qual("strings", "TrimSpace").Call(jen.Id("err").Dot("Error").Call()),
+			)
+			if dynamicEnv != nil {
+				g.Id("example").Op(":=").Id(toolExampleSelectorName(tool)).Call(jen.Id("raw"))
+			} else {
+				g.Id("_").Op("=").Id("raw")
+				g.Id("example").Op(":=").Lit(canonical)
+			}
+			for _, env := range tool.UnionEnvelopes {
+				if len(env.Tags) == 0 {
+					continue
+				}
+				envSubstr := fmt.Sprintf("invalid value for %q", env.TypeKey)
+				hintPrefix := fmt.Sprintf("Field %q must use one of %s for %q. Example: ",
+					env.FieldName, FormatTagList(env.Tags), env.TypeKey)
+				g.If(jen.Qual("strings", "Contains").Call(jen.Id("message"), jen.Lit(envSubstr))).Block(
+					jen.Return(jen.Lit(hintPrefix).Op("+").Id("example")),
+				)
+			}
+			g.If(jen.Id("field").Op(":=").Id("missingFieldFromMessage").Call(jen.Id("message")), jen.Id("field").Op("!=").Lit("")).Block(
+				jen.Return(jen.Qual("fmt", "Sprintf").Call(jen.Lit("Include required field %q. Example: %s"), jen.Id("field"), jen.Id("example"))),
+			)
+			g.If(jen.Qual("strings", "Contains").Call(jen.Id("message"), jen.Lit("unexpected end of JSON input")).Op("||").Qual("strings", "Contains").Call(jen.Id("message"), jen.Lit("unexpected EOF"))).Block(
+				jen.Return(jen.Lit("Provide complete JSON arguments. Example: ").Op("+").Id("example")),
+			)
+			g.Return(jen.Lit("Provide valid tool arguments. Example: ").Op("+").Id("example"))
+		})
+	stmt.Line()
+}
+
+func toolExampleSelectorName(tool *ToolAdapter) string {
+	return codegen.Goify(tool.OriginalMethodName, false) + "RecoveryExample"
+}
+
+// emitToolExampleSelector emits a helper that picks a tag-specific canonical
+// example based on the caller's raw input. If the caller's envelope field
+// carries a discriminator value that is a member of the declared tag set, the
+// matching per-tag example is returned; otherwise the first-tag example is
+// returned.
+func emitToolExampleSelector(stmt *jen.Statement, tool *ToolAdapter, env *UnionEnvelopeMeta, fallback string) {
+	caseStmts := make([]jen.Code, 0, len(env.TagExamples)+1)
+	for _, tag := range env.Tags {
+		ex, ok := env.TagExamples[tag]
+		if !ok {
+			continue
+		}
+		caseStmts = append(caseStmts, jen.Case(jen.Lit(tag)).Block(jen.Return(jen.Lit(ex))))
+	}
+	stmt.Func().Id(toolExampleSelectorName(tool)).
+		Params(jen.Id("raw").Qual("encoding/json", "RawMessage")).
+		String().
+		BlockFunc(func(g *jen.Group) {
+			g.Const().Id("fallback").Op("=").Lit(fallback)
+			g.Var().Id("top").Map(jen.String()).Qual("encoding/json", "RawMessage")
+			g.If(jen.Qual("encoding/json", "Unmarshal").Call(jen.Id("raw"), jen.Op("&").Id("top")).Op("!=").Nil()).Block(
+				jen.Return(jen.Id("fallback")),
+			)
+			g.List(jen.Id("envRaw"), jen.Id("hasEnv")).Op(":=").Id("top").Index(jen.Lit(env.FieldName))
+			g.If(jen.Op("!").Id("hasEnv")).Block(jen.Return(jen.Id("fallback")))
+			g.Var().Id("envelope").Map(jen.String()).Qual("encoding/json", "RawMessage")
+			g.If(jen.Qual("encoding/json", "Unmarshal").Call(jen.Id("envRaw"), jen.Op("&").Id("envelope")).Op("!=").Nil()).Block(
+				jen.Return(jen.Id("fallback")),
+			)
+			g.List(jen.Id("tagRaw"), jen.Id("hasTag")).Op(":=").Id("envelope").Index(jen.Lit(env.TypeKey))
+			g.If(jen.Op("!").Id("hasTag")).Block(jen.Return(jen.Id("fallback")))
+			g.Var().Id("tag").String()
+			g.If(jen.Qual("encoding/json", "Unmarshal").Call(jen.Id("tagRaw"), jen.Op("&").Id("tag")).Op("!=").Nil()).Block(
+				jen.Return(jen.Id("fallback")),
+			)
+			g.Switch(jen.Id("tag")).Block(caseStmts...)
+			g.Return(jen.Id("fallback"))
+		})
+	stmt.Line()
 }
 
 func emitDecodeMCPPayloadStrict(stmt *jen.Statement) {
@@ -107,13 +220,17 @@ func emitValidateMCPPayloadRequired(stmt *jen.Statement) {
 	stmt.Line()
 }
 
+// requiredFieldErrorExpr emits the error returned when a required payload
+// field is missing. The error carries Code + SafeMessage only; the per-tool
+// recovery function attaches the DSL-derived retry hint (including a canonical
+// example), so omitting RetryHint here is intentional — it would otherwise
+// pre-empt the richer per-tool hint inside toolCallError.
 func requiredFieldErrorExpr(field jen.Code) jen.Code {
 	return jen.Id("loom").Dot("WithErrorRemedy").Call(
 		jen.Id("loom").Dot("PermanentError").Call(jen.Lit("invalid_params"), jen.Lit("Missing required field: %s"), field),
 		jen.Op("&").Id("loom").Dot("ErrorRemedy").Values(jen.Dict{
 			jen.Id("Code"):        jen.Lit("invalid_params"),
 			jen.Id("SafeMessage"): jen.Qual("fmt", "Sprintf").Call(jen.Lit("Missing required field: %s"), field),
-			jen.Id("RetryHint"):   jen.Qual("fmt", "Sprintf").Call(jen.Lit("Include required field %q."), field),
 		}),
 	)
 }
@@ -147,7 +264,6 @@ func emitValidateMCPPayloadEnum(stmt *jen.Statement) {
 					jen.Op("&").Id("loom").Dot("ErrorRemedy").Values(jen.Dict{
 						jen.Id("Code"):        jen.Lit("invalid_params"),
 						jen.Id("SafeMessage"): jen.Qual("fmt", "Sprintf").Call(jen.Lit("Invalid value for %s"), jen.Id("field")),
-						jen.Id("RetryHint"):   jen.Qual("fmt", "Sprintf").Call(jen.Lit("Use one of: %s."), jen.Qual("strings", "Join").Call(jen.Id("allowed"), jen.Lit(", "))),
 					}),
 				),
 			),
@@ -342,17 +458,17 @@ func emitToolCase(g *jen.Group, tool *ToolAdapter) {
 		if len(tool.DefaultFields) > 0 || len(tool.RequiredFields) > 0 || len(tool.EnumFields) > 0 {
 			g.List(jen.Id("fields"), jen.Id("ferr")).Op(":=").Id("topLevelJSONFieldSet").Call(jen.Id("p").Dot("Arguments"))
 			g.If(jen.Id("ferr").Op("!=").Nil()).Block(
-				jen.Return(jen.True(), jen.Id("a").Dot("sendToolError").Call(jen.Id("ctx"), jen.Id("stream"), jen.Id("p").Dot("Name"), jen.Id("toolInputError").Call(jen.Id("ferr"), jen.Id("p").Dot("Arguments")))),
+				jen.Return(jen.True(), jen.Id("a").Dot("sendToolError").Call(jen.Id("ctx"), jen.Id("stream"), jen.Id("p").Dot("Name"), jen.Id("toolCallError").Call(jen.Id("ferr"), jen.Lit("invalid_params"), jen.Id(toolRecoveryFuncName(tool)).Call(jen.Id("ferr"), jen.Id("p").Dot("Arguments"))))),
 			)
 			g.List(jen.Id("rawFields"), jen.Id("err")).Op(":=").Id("decodeMCPPayloadFields").Call(jen.Id("p").Dot("Arguments"))
 			g.If(jen.Id("err").Op("!=").Nil()).Block(
-				jen.Return(jen.True(), jen.Id("a").Dot("sendToolError").Call(jen.Id("ctx"), jen.Id("stream"), jen.Id("p").Dot("Name"), jen.Id("toolInputError").Call(jen.Id("err"), jen.Id("p").Dot("Arguments")))),
+				jen.Return(jen.True(), jen.Id("a").Dot("sendToolError").Call(jen.Id("ctx"), jen.Id("stream"), jen.Id("p").Dot("Name"), jen.Id("toolCallError").Call(jen.Id("err"), jen.Lit("invalid_params"), jen.Id(toolRecoveryFuncName(tool)).Call(jen.Id("err"), jen.Id("p").Dot("Arguments"))))),
 			)
 			g.Id("_").Op("=").Id("fields")
 			g.Id("_").Op("=").Id("rawFields")
 		}
 		g.If(jen.Id("err").Op(":=").Id("decodeMCPPayloadStrict").Call(jen.Id("p").Dot("Arguments"), jen.Op("&").Id("payload")), jen.Id("err").Op("!=").Nil()).Block(
-			jen.Return(jen.True(), jen.Id("a").Dot("sendToolError").Call(jen.Id("ctx"), jen.Id("stream"), jen.Id("p").Dot("Name"), jen.Id("toolInputError").Call(jen.Id("err"), jen.Id("p").Dot("Arguments")))),
+			jen.Return(jen.True(), jen.Id("a").Dot("sendToolError").Call(jen.Id("ctx"), jen.Id("stream"), jen.Id("p").Dot("Name"), jen.Id("toolCallError").Call(jen.Id("err"), jen.Lit("invalid_params"), jen.Id(toolRecoveryFuncName(tool)).Call(jen.Id("err"), jen.Id("p").Dot("Arguments"))))),
 		)
 		emitToolDefaultAssignments(g, tool)
 		emitToolRequiredChecks(g, tool)
@@ -441,7 +557,7 @@ func emitToolRequiredChecks(g *jen.Group, tool *ToolAdapter) {
 	g.BlockFunc(func(block *jen.Group) {
 		for _, field := range tool.RequiredFields {
 			block.If(jen.Id("err").Op(":=").Id("validateMCPPayloadRequired").Call(jen.Id("rawFields"), jen.Lit(field)), jen.Id("err").Op("!=").Nil()).Block(
-				jen.Return(jen.True(), jen.Id("a").Dot("sendToolError").Call(jen.Id("ctx"), jen.Id("stream"), jen.Id("p").Dot("Name"), jen.Id("toolInputError").Call(jen.Id("err"), jen.Id("p").Dot("Arguments")))),
+				jen.Return(jen.True(), jen.Id("a").Dot("sendToolError").Call(jen.Id("ctx"), jen.Id("stream"), jen.Id("p").Dot("Name"), jen.Id("toolCallError").Call(jen.Id("err"), jen.Lit("invalid_params"), jen.Id(toolRecoveryFuncName(tool)).Call(jen.Id("err"), jen.Id("p").Dot("Arguments"))))),
 			)
 		}
 	})
@@ -459,7 +575,7 @@ func emitToolEnumChecks(g *jen.Group, tool *ToolAdapter) {
 				args = append(args, jen.Lit(val))
 			}
 			block.If(jen.Id("err").Op(":=").Id("validateMCPPayloadEnum").Call(args...), jen.Id("err").Op("!=").Nil()).Block(
-				jen.Return(jen.True(), jen.Id("a").Dot("sendToolError").Call(jen.Id("ctx"), jen.Id("stream"), jen.Id("p").Dot("Name"), jen.Id("toolInputError").Call(jen.Id("err"), jen.Id("p").Dot("Arguments")))),
+				jen.Return(jen.True(), jen.Id("a").Dot("sendToolError").Call(jen.Id("ctx"), jen.Id("stream"), jen.Id("p").Dot("Name"), jen.Id("toolCallError").Call(jen.Id("err"), jen.Lit("invalid_params"), jen.Id(toolRecoveryFuncName(tool)).Call(jen.Id("err"), jen.Id("p").Dot("Arguments"))))),
 			)
 		}
 	})

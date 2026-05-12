@@ -509,68 +509,12 @@ func toolCallError(err error, defaultCode string, defaultRecovery string) error 
 		SafeMessage: message,
 	})
 }
-func toolInputError(err error, raw json.RawMessage) error {
-	return toolCallError(err, "invalid_params", inferToolInputRecovery(err, raw))
-}
-func inferToolInputRecovery(err error, raw json.RawMessage) string {
-	message := strings.TrimSpace(loom.ErrorSafeMessage(err))
-	if message == "" {
-		message = strings.TrimSpace(err.Error())
-	}
-	if action, ok := actionValueEnvelopeExample(raw); ok {
-		return fmt.Sprintf("Include the nested value object. Example: %s", action)
-	}
-	if field := missingFieldFromMessage(message); field != "" {
-		return fmt.Sprintf("Include required field %q.", field)
-	}
-	if strings.Contains(message, "unexpected end of JSON input") || strings.Contains(message, "unexpected EOF") {
-		return "Provide complete JSON arguments. If a field expects an object, include {} instead of leaving it incomplete."
-	}
-	return "Provide valid tool arguments."
-}
 func missingFieldFromMessage(message string) string {
 	const prefix = "Missing required field: "
 	if !strings.HasPrefix(message, prefix) {
 		return ""
 	}
 	return strings.TrimSpace(strings.TrimPrefix(message, prefix))
-}
-func actionValueEnvelopeExample(raw json.RawMessage) (string, bool) {
-	var fields map[string]json.RawMessage
-	if err := json.Unmarshal(raw, &fields); err != nil {
-		return "", false
-	}
-	if action, ok := actionValueExampleForObject(fields); ok {
-		return action, true
-	}
-	for name, nestedRaw := range fields {
-		var nested map[string]json.RawMessage
-		if err := json.Unmarshal(nestedRaw, &nested); err != nil {
-			continue
-		}
-		if example, ok := actionValueExampleForObject(nested); ok {
-			return fmt.Sprintf("{\"%s\":%s}", name, example), true
-		}
-	}
-	return "", false
-}
-func actionValueExampleForObject(fields map[string]json.RawMessage) (string, bool) {
-	actionRaw, hasAction := fields["action"]
-	if !hasAction {
-		return "", false
-	}
-	if _, hasValue := fields["value"]; hasValue {
-		return "", false
-	}
-	var action string
-	if err := json.Unmarshal(actionRaw, &action); err != nil {
-		return "", false
-	}
-	action = strings.TrimSpace(action)
-	if action == "" {
-		return "", false
-	}
-	return fmt.Sprintf("{\"action\":%q,\"value\":{}}", action), true
 }
 func formatToolSuccessText(v any) string {
 	switch value := v.(type) {
@@ -879,7 +823,6 @@ func validateMCPPayloadRequired(fields map[string]json.RawMessage, field string)
 	if !ok {
 		return loom.WithErrorRemedy(loom.PermanentError("invalid_params", "Missing required field: %s", field), &loom.ErrorRemedy{
 			Code:        "invalid_params",
-			RetryHint:   fmt.Sprintf("Include required field %q.", field),
 			SafeMessage: fmt.Sprintf("Missing required field: %s", field),
 		})
 	}
@@ -887,7 +830,6 @@ func validateMCPPayloadRequired(fields map[string]json.RawMessage, field string)
 	if bytes.Equal(trimmed, []byte("\"\"")) || bytes.Equal(trimmed, []byte("null")) {
 		return loom.WithErrorRemedy(loom.PermanentError("invalid_params", "Missing required field: %s", field), &loom.ErrorRemedy{
 			Code:        "invalid_params",
-			RetryHint:   fmt.Sprintf("Include required field %q.", field),
 			SafeMessage: fmt.Sprintf("Missing required field: %s", field),
 		})
 	}
@@ -910,7 +852,6 @@ func validateMCPPayloadEnum(fields map[string]json.RawMessage, field string, all
 	}
 	return loom.WithErrorRemedy(loom.PermanentError("invalid_params", "Invalid value for %s", field), &loom.ErrorRemedy{
 		Code:        "invalid_params",
-		RetryHint:   fmt.Sprintf("Use one of: %s.", strings.Join(allowed, ", ")),
 		SafeMessage: fmt.Sprintf("Invalid value for %s", field),
 	})
 }
@@ -964,10 +905,228 @@ func (a *MCPAdapter) ToolsList(ctx context.Context, p *ToolsListPayload) (res *T
 		Description: stringPtr("Dispatch an action using a union payload"),
 		InputSchema: json.RawMessage([]byte("{\"type\":\"object\",\"required\":[\"request\"],\"properties\":{\"request\":{\"type\":\"object\",\"description\":\"Action envelope\",\"oneOf\":[{\"type\":\"object\",\"required\":[\"action\",\"value\"],\"properties\":{\"action\":{\"type\":\"string\",\"enum\":[\"list\"]},\"value\":{\"type\":\"object\",\"properties\":{\"limit\":{\"type\":\"integer\",\"description\":\"Maximum number of items to list\"}},\"additionalProperties\":false}},\"additionalProperties\":false},{\"type\":\"object\",\"required\":[\"action\",\"value\"],\"properties\":{\"action\":{\"type\":\"string\",\"enum\":[\"create\"]},\"value\":{\"type\":\"object\",\"required\":[\"name\"],\"properties\":{\"name\":{\"type\":\"string\",\"description\":\"Name to create\"}},\"additionalProperties\":false}},\"additionalProperties\":false}],\"discriminator\":{\"propertyName\":\"action\"}}},\"additionalProperties\":false}")),
 		Name:        "dispatch_action",
+	}, &ToolInfo{
+		Description: stringPtr("Dispatch a command using a non-value branch-key union"),
+		InputSchema: json.RawMessage([]byte("{\"type\":\"object\",\"required\":[\"command\"],\"properties\":{\"command\":{\"type\":\"object\",\"description\":\"Command envelope with custom branch key\",\"oneOf\":[{\"type\":\"object\",\"required\":[\"action\",\"args\"],\"properties\":{\"action\":{\"type\":\"string\",\"enum\":[\"foo\"]},\"args\":{\"type\":\"object\",\"properties\":{\"label\":{\"type\":\"string\",\"description\":\"Foo label\"}},\"additionalProperties\":false}},\"additionalProperties\":false},{\"type\":\"object\",\"required\":[\"action\",\"args\"],\"properties\":{\"action\":{\"type\":\"string\",\"enum\":[\"bar\"]},\"args\":{\"type\":\"object\",\"required\":[\"count\"],\"properties\":{\"count\":{\"type\":\"integer\",\"description\":\"Bar count\"}},\"additionalProperties\":false}},\"additionalProperties\":false}],\"discriminator\":{\"propertyName\":\"action\"}}},\"additionalProperties\":false}")),
+		Name:        "dispatch_command",
 	}}
 	res = &ToolsListResult{Tools: tools}
 	a.log(ctx, "response", map[string]any{"method": "tools/list"})
 	return res, nil
+}
+func analyzeSentimentInputRecovery(err error, raw json.RawMessage) string {
+	message := strings.TrimSpace(loom.ErrorSafeMessage(err))
+	if message == "" {
+		message = strings.TrimSpace(err.Error())
+	}
+	_ = raw
+	example := "{\"text\":\"example\"}"
+	if field := missingFieldFromMessage(message); field != "" {
+		return fmt.Sprintf("Include required field %q. Example: %s", field, example)
+	}
+	if strings.Contains(message, "unexpected end of JSON input") || strings.Contains(message, "unexpected EOF") {
+		return "Provide complete JSON arguments. Example: " + example
+	}
+	return "Provide valid tool arguments. Example: " + example
+}
+func extractKeywordsInputRecovery(err error, raw json.RawMessage) string {
+	message := strings.TrimSpace(loom.ErrorSafeMessage(err))
+	if message == "" {
+		message = strings.TrimSpace(err.Error())
+	}
+	_ = raw
+	example := "{\"text\":\"example\"}"
+	if field := missingFieldFromMessage(message); field != "" {
+		return fmt.Sprintf("Include required field %q. Example: %s", field, example)
+	}
+	if strings.Contains(message, "unexpected end of JSON input") || strings.Contains(message, "unexpected EOF") {
+		return "Provide complete JSON arguments. Example: " + example
+	}
+	return "Provide valid tool arguments. Example: " + example
+}
+func summarizeTextInputRecovery(err error, raw json.RawMessage) string {
+	message := strings.TrimSpace(loom.ErrorSafeMessage(err))
+	if message == "" {
+		message = strings.TrimSpace(err.Error())
+	}
+	_ = raw
+	example := "{\"text\":\"example\"}"
+	if field := missingFieldFromMessage(message); field != "" {
+		return fmt.Sprintf("Include required field %q. Example: %s", field, example)
+	}
+	if strings.Contains(message, "unexpected end of JSON input") || strings.Contains(message, "unexpected EOF") {
+		return "Provide complete JSON arguments. Example: " + example
+	}
+	return "Provide valid tool arguments. Example: " + example
+}
+func searchInputRecovery(err error, raw json.RawMessage) string {
+	message := strings.TrimSpace(loom.ErrorSafeMessage(err))
+	if message == "" {
+		message = strings.TrimSpace(err.Error())
+	}
+	_ = raw
+	example := "{\"query\":\"example\"}"
+	if field := missingFieldFromMessage(message); field != "" {
+		return fmt.Sprintf("Include required field %q. Example: %s", field, example)
+	}
+	if strings.Contains(message, "unexpected end of JSON input") || strings.Contains(message, "unexpected EOF") {
+		return "Provide complete JSON arguments. Example: " + example
+	}
+	return "Provide valid tool arguments. Example: " + example
+}
+func executeCodeInputRecovery(err error, raw json.RawMessage) string {
+	message := strings.TrimSpace(loom.ErrorSafeMessage(err))
+	if message == "" {
+		message = strings.TrimSpace(err.Error())
+	}
+	_ = raw
+	example := "{\"code\":\"example\",\"language\":\"python\"}"
+	if field := missingFieldFromMessage(message); field != "" {
+		return fmt.Sprintf("Include required field %q. Example: %s", field, example)
+	}
+	if strings.Contains(message, "unexpected end of JSON input") || strings.Contains(message, "unexpected EOF") {
+		return "Provide complete JSON arguments. Example: " + example
+	}
+	return "Provide valid tool arguments. Example: " + example
+}
+func processBatchInputRecovery(err error, raw json.RawMessage) string {
+	message := strings.TrimSpace(loom.ErrorSafeMessage(err))
+	if message == "" {
+		message = strings.TrimSpace(err.Error())
+	}
+	_ = raw
+	example := "{\"items\":[]}"
+	if field := missingFieldFromMessage(message); field != "" {
+		return fmt.Sprintf("Include required field %q. Example: %s", field, example)
+	}
+	if strings.Contains(message, "unexpected end of JSON input") || strings.Contains(message, "unexpected EOF") {
+		return "Provide complete JSON arguments. Example: " + example
+	}
+	return "Provide valid tool arguments. Example: " + example
+}
+func multiContentInputRecovery(err error, raw json.RawMessage) string {
+	message := strings.TrimSpace(loom.ErrorSafeMessage(err))
+	if message == "" {
+		message = strings.TrimSpace(err.Error())
+	}
+	_ = raw
+	example := "{\"count\":0}"
+	if field := missingFieldFromMessage(message); field != "" {
+		return fmt.Sprintf("Include required field %q. Example: %s", field, example)
+	}
+	if strings.Contains(message, "unexpected end of JSON input") || strings.Contains(message, "unexpected EOF") {
+		return "Provide complete JSON arguments. Example: " + example
+	}
+	return "Provide valid tool arguments. Example: " + example
+}
+func generateDpiSpecInputRecovery(err error, raw json.RawMessage) string {
+	message := strings.TrimSpace(loom.ErrorSafeMessage(err))
+	if message == "" {
+		message = strings.TrimSpace(err.Error())
+	}
+	_ = raw
+	example := "{\"density\":\"compact\",\"platform\":\"ios\",\"primary_cta\":\"example\",\"screen_title\":\"example\",\"sections\":[]}"
+	if field := missingFieldFromMessage(message); field != "" {
+		return fmt.Sprintf("Include required field %q. Example: %s", field, example)
+	}
+	if strings.Contains(message, "unexpected end of JSON input") || strings.Contains(message, "unexpected EOF") {
+		return "Provide complete JSON arguments. Example: " + example
+	}
+	return "Provide valid tool arguments. Example: " + example
+}
+func dispatchActionRecoveryExample(raw json.RawMessage) string {
+	const fallback = "{\"request\":{\"action\":\"list\",\"value\":{}}}"
+	var top map[string]json.RawMessage
+	if json.Unmarshal(raw, &top) != nil {
+		return fallback
+	}
+	envRaw, hasEnv := top["request"]
+	if !hasEnv {
+		return fallback
+	}
+	var envelope map[string]json.RawMessage
+	if json.Unmarshal(envRaw, &envelope) != nil {
+		return fallback
+	}
+	tagRaw, hasTag := envelope["action"]
+	if !hasTag {
+		return fallback
+	}
+	var tag string
+	if json.Unmarshal(tagRaw, &tag) != nil {
+		return fallback
+	}
+	switch tag {
+	case "list":
+		return "{\"request\":{\"action\":\"list\",\"value\":{}}}"
+	case "create":
+		return "{\"request\":{\"action\":\"create\",\"value\":{\"name\":\"example\"}}}"
+	}
+	return fallback
+}
+func dispatchActionInputRecovery(err error, raw json.RawMessage) string {
+	message := strings.TrimSpace(loom.ErrorSafeMessage(err))
+	if message == "" {
+		message = strings.TrimSpace(err.Error())
+	}
+	example := dispatchActionRecoveryExample(raw)
+	if strings.Contains(message, "invalid value for \"action\"") {
+		return "Field \"request\" must use one of \"list\", \"create\" for \"action\". Example: " + example
+	}
+	if field := missingFieldFromMessage(message); field != "" {
+		return fmt.Sprintf("Include required field %q. Example: %s", field, example)
+	}
+	if strings.Contains(message, "unexpected end of JSON input") || strings.Contains(message, "unexpected EOF") {
+		return "Provide complete JSON arguments. Example: " + example
+	}
+	return "Provide valid tool arguments. Example: " + example
+}
+func dispatchCommandRecoveryExample(raw json.RawMessage) string {
+	const fallback = "{\"command\":{\"action\":\"foo\",\"args\":{}}}"
+	var top map[string]json.RawMessage
+	if json.Unmarshal(raw, &top) != nil {
+		return fallback
+	}
+	envRaw, hasEnv := top["command"]
+	if !hasEnv {
+		return fallback
+	}
+	var envelope map[string]json.RawMessage
+	if json.Unmarshal(envRaw, &envelope) != nil {
+		return fallback
+	}
+	tagRaw, hasTag := envelope["action"]
+	if !hasTag {
+		return fallback
+	}
+	var tag string
+	if json.Unmarshal(tagRaw, &tag) != nil {
+		return fallback
+	}
+	switch tag {
+	case "foo":
+		return "{\"command\":{\"action\":\"foo\",\"args\":{}}}"
+	case "bar":
+		return "{\"command\":{\"action\":\"bar\",\"args\":{\"count\":0}}}"
+	}
+	return fallback
+}
+func dispatchCommandInputRecovery(err error, raw json.RawMessage) string {
+	message := strings.TrimSpace(loom.ErrorSafeMessage(err))
+	if message == "" {
+		message = strings.TrimSpace(err.Error())
+	}
+	example := dispatchCommandRecoveryExample(raw)
+	if strings.Contains(message, "invalid value for \"action\"") {
+		return "Field \"command\" must use one of \"foo\", \"bar\" for \"action\". Example: " + example
+	}
+	if field := missingFieldFromMessage(message); field != "" {
+		return fmt.Sprintf("Include required field %q. Example: %s", field, example)
+	}
+	if strings.Contains(message, "unexpected end of JSON input") || strings.Contains(message, "unexpected EOF") {
+		return "Provide complete JSON arguments. Example: " + example
+	}
+	return "Provide valid tool arguments. Example: " + example
 }
 func (a *MCPAdapter) ToolsCall(ctx context.Context, p *ToolsCallPayload, stream ToolsCallServerStream) (err error) {
 	attrs := []attribute.KeyValue{}
@@ -1001,20 +1160,20 @@ func (a *MCPAdapter) toolsCallHandler(ctx context.Context, p *ToolsCallPayload, 
 		var payload *assistant.AnalyzeSentimentPayload
 		fields, ferr := topLevelJSONFieldSet(p.Arguments)
 		if ferr != nil {
-			return true, a.sendToolError(ctx, stream, p.Name, toolInputError(ferr, p.Arguments))
+			return true, a.sendToolError(ctx, stream, p.Name, toolCallError(ferr, "invalid_params", analyzeSentimentInputRecovery(ferr, p.Arguments)))
 		}
 		rawFields, err := decodeMCPPayloadFields(p.Arguments)
 		if err != nil {
-			return true, a.sendToolError(ctx, stream, p.Name, toolInputError(err, p.Arguments))
+			return true, a.sendToolError(ctx, stream, p.Name, toolCallError(err, "invalid_params", analyzeSentimentInputRecovery(err, p.Arguments)))
 		}
 		_ = fields
 		_ = rawFields
 		if err := decodeMCPPayloadStrict(p.Arguments, &payload); err != nil {
-			return true, a.sendToolError(ctx, stream, p.Name, toolInputError(err, p.Arguments))
+			return true, a.sendToolError(ctx, stream, p.Name, toolCallError(err, "invalid_params", analyzeSentimentInputRecovery(err, p.Arguments)))
 		}
 		{
 			if err := validateMCPPayloadRequired(rawFields, "text"); err != nil {
-				return true, a.sendToolError(ctx, stream, p.Name, toolInputError(err, p.Arguments))
+				return true, a.sendToolError(ctx, stream, p.Name, toolCallError(err, "invalid_params", analyzeSentimentInputRecovery(err, p.Arguments)))
 			}
 		}
 		result, err := a.service.AnalyzeSentiment(ctx, payload)
@@ -1039,20 +1198,20 @@ func (a *MCPAdapter) toolsCallHandler(ctx context.Context, p *ToolsCallPayload, 
 		var payload *assistant.ExtractKeywordsPayload
 		fields, ferr := topLevelJSONFieldSet(p.Arguments)
 		if ferr != nil {
-			return true, a.sendToolError(ctx, stream, p.Name, toolInputError(ferr, p.Arguments))
+			return true, a.sendToolError(ctx, stream, p.Name, toolCallError(ferr, "invalid_params", extractKeywordsInputRecovery(ferr, p.Arguments)))
 		}
 		rawFields, err := decodeMCPPayloadFields(p.Arguments)
 		if err != nil {
-			return true, a.sendToolError(ctx, stream, p.Name, toolInputError(err, p.Arguments))
+			return true, a.sendToolError(ctx, stream, p.Name, toolCallError(err, "invalid_params", extractKeywordsInputRecovery(err, p.Arguments)))
 		}
 		_ = fields
 		_ = rawFields
 		if err := decodeMCPPayloadStrict(p.Arguments, &payload); err != nil {
-			return true, a.sendToolError(ctx, stream, p.Name, toolInputError(err, p.Arguments))
+			return true, a.sendToolError(ctx, stream, p.Name, toolCallError(err, "invalid_params", extractKeywordsInputRecovery(err, p.Arguments)))
 		}
 		{
 			if err := validateMCPPayloadRequired(rawFields, "text"); err != nil {
-				return true, a.sendToolError(ctx, stream, p.Name, toolInputError(err, p.Arguments))
+				return true, a.sendToolError(ctx, stream, p.Name, toolCallError(err, "invalid_params", extractKeywordsInputRecovery(err, p.Arguments)))
 			}
 		}
 		result, err := a.service.ExtractKeywords(ctx, payload)
@@ -1077,20 +1236,20 @@ func (a *MCPAdapter) toolsCallHandler(ctx context.Context, p *ToolsCallPayload, 
 		var payload *assistant.SummarizeTextPayload
 		fields, ferr := topLevelJSONFieldSet(p.Arguments)
 		if ferr != nil {
-			return true, a.sendToolError(ctx, stream, p.Name, toolInputError(ferr, p.Arguments))
+			return true, a.sendToolError(ctx, stream, p.Name, toolCallError(ferr, "invalid_params", summarizeTextInputRecovery(ferr, p.Arguments)))
 		}
 		rawFields, err := decodeMCPPayloadFields(p.Arguments)
 		if err != nil {
-			return true, a.sendToolError(ctx, stream, p.Name, toolInputError(err, p.Arguments))
+			return true, a.sendToolError(ctx, stream, p.Name, toolCallError(err, "invalid_params", summarizeTextInputRecovery(err, p.Arguments)))
 		}
 		_ = fields
 		_ = rawFields
 		if err := decodeMCPPayloadStrict(p.Arguments, &payload); err != nil {
-			return true, a.sendToolError(ctx, stream, p.Name, toolInputError(err, p.Arguments))
+			return true, a.sendToolError(ctx, stream, p.Name, toolCallError(err, "invalid_params", summarizeTextInputRecovery(err, p.Arguments)))
 		}
 		{
 			if err := validateMCPPayloadRequired(rawFields, "text"); err != nil {
-				return true, a.sendToolError(ctx, stream, p.Name, toolInputError(err, p.Arguments))
+				return true, a.sendToolError(ctx, stream, p.Name, toolCallError(err, "invalid_params", summarizeTextInputRecovery(err, p.Arguments)))
 			}
 		}
 		result, err := a.service.SummarizeText(ctx, payload)
@@ -1115,20 +1274,20 @@ func (a *MCPAdapter) toolsCallHandler(ctx context.Context, p *ToolsCallPayload, 
 		var payload *assistant.SearchPayload
 		fields, ferr := topLevelJSONFieldSet(p.Arguments)
 		if ferr != nil {
-			return true, a.sendToolError(ctx, stream, p.Name, toolInputError(ferr, p.Arguments))
+			return true, a.sendToolError(ctx, stream, p.Name, toolCallError(ferr, "invalid_params", searchInputRecovery(ferr, p.Arguments)))
 		}
 		rawFields, err := decodeMCPPayloadFields(p.Arguments)
 		if err != nil {
-			return true, a.sendToolError(ctx, stream, p.Name, toolInputError(err, p.Arguments))
+			return true, a.sendToolError(ctx, stream, p.Name, toolCallError(err, "invalid_params", searchInputRecovery(err, p.Arguments)))
 		}
 		_ = fields
 		_ = rawFields
 		if err := decodeMCPPayloadStrict(p.Arguments, &payload); err != nil {
-			return true, a.sendToolError(ctx, stream, p.Name, toolInputError(err, p.Arguments))
+			return true, a.sendToolError(ctx, stream, p.Name, toolCallError(err, "invalid_params", searchInputRecovery(err, p.Arguments)))
 		}
 		{
 			if err := validateMCPPayloadRequired(rawFields, "query"); err != nil {
-				return true, a.sendToolError(ctx, stream, p.Name, toolInputError(err, p.Arguments))
+				return true, a.sendToolError(ctx, stream, p.Name, toolCallError(err, "invalid_params", searchInputRecovery(err, p.Arguments)))
 			}
 		}
 		result, err := a.service.Search(ctx, payload)
@@ -1153,28 +1312,28 @@ func (a *MCPAdapter) toolsCallHandler(ctx context.Context, p *ToolsCallPayload, 
 		var payload *assistant.ExecuteCodePayload
 		fields, ferr := topLevelJSONFieldSet(p.Arguments)
 		if ferr != nil {
-			return true, a.sendToolError(ctx, stream, p.Name, toolInputError(ferr, p.Arguments))
+			return true, a.sendToolError(ctx, stream, p.Name, toolCallError(ferr, "invalid_params", executeCodeInputRecovery(ferr, p.Arguments)))
 		}
 		rawFields, err := decodeMCPPayloadFields(p.Arguments)
 		if err != nil {
-			return true, a.sendToolError(ctx, stream, p.Name, toolInputError(err, p.Arguments))
+			return true, a.sendToolError(ctx, stream, p.Name, toolCallError(err, "invalid_params", executeCodeInputRecovery(err, p.Arguments)))
 		}
 		_ = fields
 		_ = rawFields
 		if err := decodeMCPPayloadStrict(p.Arguments, &payload); err != nil {
-			return true, a.sendToolError(ctx, stream, p.Name, toolInputError(err, p.Arguments))
+			return true, a.sendToolError(ctx, stream, p.Name, toolCallError(err, "invalid_params", executeCodeInputRecovery(err, p.Arguments)))
 		}
 		{
 			if err := validateMCPPayloadRequired(rawFields, "language"); err != nil {
-				return true, a.sendToolError(ctx, stream, p.Name, toolInputError(err, p.Arguments))
+				return true, a.sendToolError(ctx, stream, p.Name, toolCallError(err, "invalid_params", executeCodeInputRecovery(err, p.Arguments)))
 			}
 			if err := validateMCPPayloadRequired(rawFields, "code"); err != nil {
-				return true, a.sendToolError(ctx, stream, p.Name, toolInputError(err, p.Arguments))
+				return true, a.sendToolError(ctx, stream, p.Name, toolCallError(err, "invalid_params", executeCodeInputRecovery(err, p.Arguments)))
 			}
 		}
 		{
 			if err := validateMCPPayloadEnum(rawFields, "language", "python", "javascript"); err != nil {
-				return true, a.sendToolError(ctx, stream, p.Name, toolInputError(err, p.Arguments))
+				return true, a.sendToolError(ctx, stream, p.Name, toolCallError(err, "invalid_params", executeCodeInputRecovery(err, p.Arguments)))
 			}
 		}
 		result, err := a.service.ExecuteCode(ctx, payload)
@@ -1199,20 +1358,20 @@ func (a *MCPAdapter) toolsCallHandler(ctx context.Context, p *ToolsCallPayload, 
 		var payload *assistant.ProcessBatchPayload
 		fields, ferr := topLevelJSONFieldSet(p.Arguments)
 		if ferr != nil {
-			return true, a.sendToolError(ctx, stream, p.Name, toolInputError(ferr, p.Arguments))
+			return true, a.sendToolError(ctx, stream, p.Name, toolCallError(ferr, "invalid_params", processBatchInputRecovery(ferr, p.Arguments)))
 		}
 		rawFields, err := decodeMCPPayloadFields(p.Arguments)
 		if err != nil {
-			return true, a.sendToolError(ctx, stream, p.Name, toolInputError(err, p.Arguments))
+			return true, a.sendToolError(ctx, stream, p.Name, toolCallError(err, "invalid_params", processBatchInputRecovery(err, p.Arguments)))
 		}
 		_ = fields
 		_ = rawFields
 		if err := decodeMCPPayloadStrict(p.Arguments, &payload); err != nil {
-			return true, a.sendToolError(ctx, stream, p.Name, toolInputError(err, p.Arguments))
+			return true, a.sendToolError(ctx, stream, p.Name, toolCallError(err, "invalid_params", processBatchInputRecovery(err, p.Arguments)))
 		}
 		{
 			if err := validateMCPPayloadEnum(rawFields, "format", "json", "text", "blob", "uri"); err != nil {
-				return true, a.sendToolError(ctx, stream, p.Name, toolInputError(err, p.Arguments))
+				return true, a.sendToolError(ctx, stream, p.Name, toolCallError(err, "invalid_params", processBatchInputRecovery(err, p.Arguments)))
 			}
 		}
 		result, err := a.service.ProcessBatch(ctx, payload)
@@ -1236,7 +1395,7 @@ func (a *MCPAdapter) toolsCallHandler(ctx context.Context, p *ToolsCallPayload, 
 	case "multi_content":
 		var payload *assistant.MultiContentPayload
 		if err := decodeMCPPayloadStrict(p.Arguments, &payload); err != nil {
-			return true, a.sendToolError(ctx, stream, p.Name, toolInputError(err, p.Arguments))
+			return true, a.sendToolError(ctx, stream, p.Name, toolCallError(err, "invalid_params", multiContentInputRecovery(err, p.Arguments)))
 		}
 		result, err := a.service.MultiContent(ctx, payload)
 		if err != nil {
@@ -1260,37 +1419,37 @@ func (a *MCPAdapter) toolsCallHandler(ctx context.Context, p *ToolsCallPayload, 
 		var payload *assistant.GenerateDpiSpecPayload
 		fields, ferr := topLevelJSONFieldSet(p.Arguments)
 		if ferr != nil {
-			return true, a.sendToolError(ctx, stream, p.Name, toolInputError(ferr, p.Arguments))
+			return true, a.sendToolError(ctx, stream, p.Name, toolCallError(ferr, "invalid_params", generateDpiSpecInputRecovery(ferr, p.Arguments)))
 		}
 		rawFields, err := decodeMCPPayloadFields(p.Arguments)
 		if err != nil {
-			return true, a.sendToolError(ctx, stream, p.Name, toolInputError(err, p.Arguments))
+			return true, a.sendToolError(ctx, stream, p.Name, toolCallError(err, "invalid_params", generateDpiSpecInputRecovery(err, p.Arguments)))
 		}
 		_ = fields
 		_ = rawFields
 		if err := decodeMCPPayloadStrict(p.Arguments, &payload); err != nil {
-			return true, a.sendToolError(ctx, stream, p.Name, toolInputError(err, p.Arguments))
+			return true, a.sendToolError(ctx, stream, p.Name, toolCallError(err, "invalid_params", generateDpiSpecInputRecovery(err, p.Arguments)))
 		}
 		{
 			if err := validateMCPPayloadRequired(rawFields, "screen_title"); err != nil {
-				return true, a.sendToolError(ctx, stream, p.Name, toolInputError(err, p.Arguments))
+				return true, a.sendToolError(ctx, stream, p.Name, toolCallError(err, "invalid_params", generateDpiSpecInputRecovery(err, p.Arguments)))
 			}
 			if err := validateMCPPayloadRequired(rawFields, "platform"); err != nil {
-				return true, a.sendToolError(ctx, stream, p.Name, toolInputError(err, p.Arguments))
+				return true, a.sendToolError(ctx, stream, p.Name, toolCallError(err, "invalid_params", generateDpiSpecInputRecovery(err, p.Arguments)))
 			}
 			if err := validateMCPPayloadRequired(rawFields, "density"); err != nil {
-				return true, a.sendToolError(ctx, stream, p.Name, toolInputError(err, p.Arguments))
+				return true, a.sendToolError(ctx, stream, p.Name, toolCallError(err, "invalid_params", generateDpiSpecInputRecovery(err, p.Arguments)))
 			}
 			if err := validateMCPPayloadRequired(rawFields, "primary_cta"); err != nil {
-				return true, a.sendToolError(ctx, stream, p.Name, toolInputError(err, p.Arguments))
+				return true, a.sendToolError(ctx, stream, p.Name, toolCallError(err, "invalid_params", generateDpiSpecInputRecovery(err, p.Arguments)))
 			}
 		}
 		{
-			if err := validateMCPPayloadEnum(rawFields, "density", "compact", "comfortable"); err != nil {
-				return true, a.sendToolError(ctx, stream, p.Name, toolInputError(err, p.Arguments))
-			}
 			if err := validateMCPPayloadEnum(rawFields, "platform", "ios", "web"); err != nil {
-				return true, a.sendToolError(ctx, stream, p.Name, toolInputError(err, p.Arguments))
+				return true, a.sendToolError(ctx, stream, p.Name, toolCallError(err, "invalid_params", generateDpiSpecInputRecovery(err, p.Arguments)))
+			}
+			if err := validateMCPPayloadEnum(rawFields, "density", "compact", "comfortable"); err != nil {
+				return true, a.sendToolError(ctx, stream, p.Name, toolCallError(err, "invalid_params", generateDpiSpecInputRecovery(err, p.Arguments)))
 			}
 		}
 		result, err := a.service.GenerateDpiSpec(ctx, payload)
@@ -1314,9 +1473,32 @@ func (a *MCPAdapter) toolsCallHandler(ctx context.Context, p *ToolsCallPayload, 
 	case "dispatch_action":
 		var payload *assistant.DispatchActionPayload
 		if err := decodeMCPPayloadStrict(p.Arguments, &payload); err != nil {
-			return true, a.sendToolError(ctx, stream, p.Name, toolInputError(err, p.Arguments))
+			return true, a.sendToolError(ctx, stream, p.Name, toolCallError(err, "invalid_params", dispatchActionInputRecovery(err, p.Arguments)))
 		}
 		result, err := a.service.DispatchAction(ctx, payload)
+		if err != nil {
+			return true, a.sendToolError(ctx, stream, p.Name, err)
+		}
+		s := formatToolSuccessText(result)
+		structuredContent, serr := json.Marshal(result)
+		if serr != nil {
+			return false, serr
+		}
+		final := &ToolsCallResult{
+			Content:           []*ContentItem{buildContentItem(a, s)},
+			StructuredContent: structuredContent,
+		}
+		a.log(ctx, "response", map[string]any{
+			"method": "tools/call",
+			"name":   p.Name,
+		})
+		return false, stream.SendAndClose(ctx, final)
+	case "dispatch_command":
+		var payload *assistant.DispatchCommandPayload
+		if err := decodeMCPPayloadStrict(p.Arguments, &payload); err != nil {
+			return true, a.sendToolError(ctx, stream, p.Name, toolCallError(err, "invalid_params", dispatchCommandInputRecovery(err, p.Arguments)))
+		}
+		result, err := a.service.DispatchCommand(ctx, payload)
 		if err != nil {
 			return true, a.sendToolError(ctx, stream, p.Name, err)
 		}

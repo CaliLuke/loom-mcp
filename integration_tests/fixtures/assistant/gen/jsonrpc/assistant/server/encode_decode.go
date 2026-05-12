@@ -609,6 +609,49 @@ func DecodeDispatchActionRequest(mux loomhttp.Muxer, decoder func(*http.Request)
 	}
 }
 
+// EncodeDispatchCommandResponse returns an encoder for responses returned by
+// the assistant dispatch_command endpoint.
+func EncodeDispatchCommandResponse(encoder func(context.Context, http.ResponseWriter) loomhttp.Encoder) func(context.Context, http.ResponseWriter, any) error {
+	return func(ctx context.Context, w http.ResponseWriter, v any) error {
+		res, _ := v.(*assistant.DispatchCommandResult)
+		enc := encoder(ctx, w)
+		body := NewDispatchCommandResponseBody(res)
+		w.WriteHeader(http.StatusOK)
+		return enc.Encode(body)
+	}
+}
+
+// DecodeDispatchCommandRequest returns a decoder for requests sent to the
+// assistant dispatch_command endpoint.
+func DecodeDispatchCommandRequest(mux loomhttp.Muxer, decoder func(*http.Request) loomhttp.Decoder) func(*http.Request, *jsonrpc.RawRequest) (*assistant.DispatchCommandPayload, error) {
+	return func(r *http.Request, req *jsonrpc.RawRequest) (*assistant.DispatchCommandPayload, error) {
+		r.Body = io.NopCloser(bytes.NewReader(req.Params))
+		var payload *assistant.DispatchCommandPayload
+		var (
+			body DispatchCommandRequestBody
+			err  error
+		)
+		err = decoder(r).Decode(&body)
+		if err != nil {
+			if errors.Is(err, io.EOF) {
+				return payload, loom.MissingPayloadError()
+			}
+			var gerr *loom.ServiceError
+			if errors.As(err, &gerr) {
+				return payload, gerr
+			}
+			return payload, loom.DecodePayloadError(err.Error())
+		}
+		err = ValidateDispatchCommandRequestBody(&body)
+		if err != nil {
+			return payload, err
+		}
+		payload = NewDispatchCommandPayload(&body)
+
+		return payload, nil
+	}
+}
+
 // marshalAssistantDesignTokenGroupToDesignTokenGroupResponseBody builds a
 // value of type *DesignTokenGroupResponseBody from a value of type
 // *assistant.DesignTokenGroup.
@@ -707,6 +750,32 @@ func unmarshalCreateActionRequestBodyRequestBodyToAssistantCreateAction(v *Creat
 	}
 	res := &assistant.CreateAction{
 		Name: *v.Name,
+	}
+
+	return res
+}
+
+// unmarshalFooCmdRequestBodyRequestBodyToAssistantFooCmd builds a value of
+// type *assistant.FooCmd from a value of type *FooCmdRequestBodyRequestBody.
+func unmarshalFooCmdRequestBodyRequestBodyToAssistantFooCmd(v *FooCmdRequestBodyRequestBody) *assistant.FooCmd {
+	if v == nil {
+		return nil
+	}
+	res := &assistant.FooCmd{
+		Label: v.Label,
+	}
+
+	return res
+}
+
+// unmarshalBarCmdRequestBodyRequestBodyToAssistantBarCmd builds a value of
+// type *assistant.BarCmd from a value of type *BarCmdRequestBodyRequestBody.
+func unmarshalBarCmdRequestBodyRequestBodyToAssistantBarCmd(v *BarCmdRequestBodyRequestBody) *assistant.BarCmd {
+	if v == nil {
+		return nil
+	}
+	res := &assistant.BarCmd{
+		Count: *v.Count,
 	}
 
 	return res

@@ -31,6 +31,7 @@ type Endpoints struct {
 	MultiContent                   loom.Endpoint
 	GenerateDpiSpec                loom.Endpoint
 	DispatchAction                 loom.Endpoint
+	DispatchCommand                loom.Endpoint
 }
 
 // NewEndpoints wraps the methods of the "assistant" service with endpoints.
@@ -52,6 +53,7 @@ func NewEndpoints(s Service) *Endpoints {
 		MultiContent:                   NewMultiContentEndpoint(s),
 		GenerateDpiSpec:                NewGenerateDpiSpecEndpoint(s),
 		DispatchAction:                 NewDispatchActionEndpoint(s),
+		DispatchCommand:                NewDispatchCommandEndpoint(s),
 	}
 }
 
@@ -73,6 +75,7 @@ func (e *Endpoints) Use(m func(loom.Endpoint) loom.Endpoint) {
 	e.MultiContent = m(e.MultiContent)
 	e.GenerateDpiSpec = m(e.GenerateDpiSpec)
 	e.DispatchAction = m(e.DispatchAction)
+	e.DispatchCommand = m(e.DispatchCommand)
 }
 
 // NewListDocumentsEndpoint returns an endpoint function that calls the method
@@ -213,5 +216,14 @@ func NewDispatchActionEndpoint(s Service) loom.Endpoint {
 	return func(ctx context.Context, req any) (any, error) {
 		p := req.(*DispatchActionPayload)
 		return s.DispatchAction(ctx, p)
+	}
+}
+
+// NewDispatchCommandEndpoint returns an endpoint function that calls the
+// method "dispatch_command" of service "assistant".
+func NewDispatchCommandEndpoint(s Service) loom.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*DispatchCommandPayload)
+		return s.DispatchCommand(ctx, p)
 	}
 }

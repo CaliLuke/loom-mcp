@@ -400,4 +400,26 @@ func (c *Client) DispatchAction() loom.Endpoint {
 		}
 		return decodeResponse(resp)
 	}
+} // DispatchCommand returns an endpoint that makes JSON-RPC requests to the
+// assistant service dispatch_command method.
+func (c *Client) DispatchCommand() loom.Endpoint {
+	var (
+		encodeRequest  = EncodeDispatchCommandRequest(c.encoder)
+		decodeResponse = DecodeDispatchCommandResponse(c.decoder, c.RestoreResponseBody)
+	)
+
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildDispatchCommandRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		if err := encodeRequest(req, v); err != nil {
+			return nil, err
+		}
+		resp, err := c.Doer.Do(req)
+		if err != nil {
+			return nil, loomhttp.ErrRequestError("assistant", "dispatch_command", err)
+		}
+		return decodeResponse(resp)
+	}
 }

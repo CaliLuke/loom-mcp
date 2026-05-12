@@ -52,6 +52,8 @@ type Service interface {
 	GenerateDpiSpec(context.Context, *GenerateDpiSpecPayload) (res *DPISpec, err error)
 	// Dispatch an action encoded as a union payload
 	DispatchAction(context.Context, *DispatchActionPayload) (res *DispatchActionResult, err error)
+	// Dispatch a command using a union payload with a non-default branch key
+	DispatchCommand(context.Context, *DispatchCommandPayload) (res *DispatchCommandResult, err error)
 }
 
 // APIName is the name of the API as defined in the design.
@@ -68,7 +70,7 @@ const ServiceName = "assistant"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [16]string{"list_documents", "system_info", "conversation_history", "figma_design_system", "generate_prompts", "build_figma_implementation_prompt", "send_notification", "analyze_sentiment", "extract_keywords", "summarize_text", "search", "execute_code", "process_batch", "multi_content", "generate_dpi_spec", "dispatch_action"}
+var MethodNames = [17]string{"list_documents", "system_info", "conversation_history", "figma_design_system", "generate_prompts", "build_figma_implementation_prompt", "send_notification", "analyze_sentiment", "extract_keywords", "summarize_text", "search", "execute_code", "process_batch", "multi_content", "generate_dpi_spec", "dispatch_action", "dispatch_command"}
 
 // AnalyzeSentimentPayload is the payload type of the assistant service
 // analyze_sentiment method.
@@ -82,6 +84,11 @@ type AnalyzeSentimentPayload struct {
 type AnalyzeSentimentResult struct {
 	// Detected sentiment
 	Sentiment *string `json:"sentiment,omitempty"`
+}
+
+type BarCmd struct {
+	// Bar count
+	Count int `json:"count"`
 }
 
 // BuildFigmaImplementationPromptPayload is the payload type of the assistant
@@ -199,6 +206,20 @@ type DispatchActionResult struct {
 	Ack string `json:"ack"`
 }
 
+// DispatchCommandPayload is the payload type of the assistant service
+// dispatch_command method.
+type DispatchCommandPayload struct {
+	// Command envelope with custom branch key
+	Command BarCmdOrFooCmd `json:"command"`
+}
+
+// DispatchCommandResult is the result type of the assistant service
+// dispatch_command method.
+type DispatchCommandResult struct {
+	// Acknowledgement
+	Ack string `json:"ack"`
+}
+
 // Documents is the result type of the assistant service list_documents method.
 type Documents struct {
 	// Document entries
@@ -233,6 +254,11 @@ type ExtractKeywordsPayload struct {
 type ExtractKeywordsResult struct {
 	// Extracted keywords
 	Keywords []string `json:"keywords,omitempty"`
+}
+
+type FooCmd struct {
+	// Foo label
+	Label *string `json:"label,omitempty"`
 }
 
 // GenerateDpiSpecPayload is the payload type of the assistant service
@@ -355,6 +381,221 @@ type SystemInfoResult struct {
 	Name *string `json:"name,omitempty"`
 	// System version
 	Version *string `json:"version,omitempty"`
+}
+
+// BarCmdOrFooCmd is a sum-type union.
+type BarCmdOrFooCmd struct {
+	kind   BarCmdOrFooCmdKind
+	FooCmd *FooCmd
+	BarCmd *BarCmd
+}
+
+// BarCmdOrFooCmdKind enumerates the union variants for BarCmdOrFooCmd.
+type BarCmdOrFooCmdKind string
+
+const (
+	// BarCmdOrFooCmdKindFooCmd identifies the FooCmd branch of the union.
+	BarCmdOrFooCmdKindFooCmd BarCmdOrFooCmdKind = "foo"
+	// BarCmdOrFooCmdKindBarCmd identifies the BarCmd branch of the union.
+	BarCmdOrFooCmdKindBarCmd BarCmdOrFooCmdKind = "bar"
+)
+
+// Kind returns the discriminator value of the union.
+func (u BarCmdOrFooCmd) Kind() BarCmdOrFooCmdKind {
+	return u.kind
+}
+
+// NewBarCmdOrFooCmdFooCmd constructs a BarCmdOrFooCmd with the FooCmd branch
+// set.
+func NewBarCmdOrFooCmdFooCmd(v *FooCmd) BarCmdOrFooCmd {
+	return BarCmdOrFooCmd{
+		kind:   BarCmdOrFooCmdKindFooCmd,
+		FooCmd: v,
+	}
+}
+
+// AsFooCmd returns the value of the FooCmd branch if set.
+func (u BarCmdOrFooCmd) AsFooCmd() (_ *FooCmd, ok bool) {
+	if u.kind != BarCmdOrFooCmdKindFooCmd {
+		return
+	}
+	return u.FooCmd, true
+}
+
+// SetFooCmd sets the FooCmd branch of the union.
+func (u *BarCmdOrFooCmd) SetFooCmd(v *FooCmd) {
+	u.kind = BarCmdOrFooCmdKindFooCmd
+	u.FooCmd = v
+}
+
+// NewBarCmdOrFooCmdBarCmd constructs a BarCmdOrFooCmd with the BarCmd branch
+// set.
+func NewBarCmdOrFooCmdBarCmd(v *BarCmd) BarCmdOrFooCmd {
+	return BarCmdOrFooCmd{
+		kind:   BarCmdOrFooCmdKindBarCmd,
+		BarCmd: v,
+	}
+}
+
+// AsBarCmd returns the value of the BarCmd branch if set.
+func (u BarCmdOrFooCmd) AsBarCmd() (_ *BarCmd, ok bool) {
+	if u.kind != BarCmdOrFooCmdKindBarCmd {
+		return
+	}
+	return u.BarCmd, true
+}
+
+// SetBarCmd sets the BarCmd branch of the union.
+func (u *BarCmdOrFooCmd) SetBarCmd(v *BarCmd) {
+	u.kind = BarCmdOrFooCmdKindBarCmd
+	u.BarCmd = v
+}
+
+// Validate ensures the union discriminant is valid.
+func (u BarCmdOrFooCmd) Validate() error {
+	switch u.kind {
+	case "":
+		return loom.InvalidEnumValueError("action", "", []any{
+			string(BarCmdOrFooCmdKindFooCmd),
+			string(BarCmdOrFooCmdKindBarCmd),
+		})
+	case BarCmdOrFooCmdKindFooCmd:
+		return nil
+	case BarCmdOrFooCmdKindBarCmd:
+		return nil
+	default:
+		return loom.InvalidEnumValueError("action", u.kind, []any{
+			string(BarCmdOrFooCmdKindFooCmd),
+			string(BarCmdOrFooCmdKindBarCmd),
+		})
+	}
+}
+
+// MarshalJSON marshals the union into the canonical {type,value} JSON shape.
+func (u BarCmdOrFooCmd) MarshalJSON() ([]byte, error) {
+	if err := u.Validate(); err != nil {
+		return nil, err
+	}
+	var (
+		value any
+	)
+	switch u.kind {
+	case BarCmdOrFooCmdKindFooCmd:
+		value = u.FooCmd
+	case BarCmdOrFooCmdKindBarCmd:
+		value = u.BarCmd
+	default:
+		return nil, fmt.Errorf("unexpected BarCmdOrFooCmd discriminant %q", u.kind)
+	}
+	return json.Marshal(struct {
+		Type  string `json:"action"`
+		Value any    `json:"args"`
+	}{
+		Type:  string(u.kind),
+		Value: value,
+	})
+}
+
+// MarshalFormValues marshals the union into application/x-www-form-urlencoded
+// values using the discriminator field plus flattened object fields for
+// object-shaped branches and the canonical {type,value} form shape for scalar
+// branches.
+func (u BarCmdOrFooCmd) MarshalFormValues(values url.Values, prefix string) error {
+	if err := u.Validate(); err != nil {
+		return err
+	}
+	values.Set(loomhttp.FormChildKey(prefix, "action"), string(u.kind))
+	switch u.kind {
+	case BarCmdOrFooCmdKindFooCmd:
+		_, err := loomhttp.EncodeFormValue(values, prefix, u.FooCmd)
+		return err
+	case BarCmdOrFooCmdKindBarCmd:
+		_, err := loomhttp.EncodeFormValue(values, prefix, u.BarCmd)
+		return err
+	default:
+		return fmt.Errorf("unexpected BarCmdOrFooCmd discriminant %q", u.kind)
+	}
+}
+
+// UnmarshalFormValues unmarshals the union from application/x-www-form-urlencoded
+// values using the discriminator field plus flattened object fields for
+// object-shaped branches and the canonical {type,value} form shape for scalar
+// branches.
+func (u *BarCmdOrFooCmd) UnmarshalFormValues(values url.Values, prefix string) error {
+	typeKey := loomhttp.FormChildKey(prefix, "action")
+	rawType := values.Get(typeKey)
+	if rawType == "" {
+		return loom.MissingFieldError("action", "body")
+	}
+	switch rawType {
+	case string(BarCmdOrFooCmdKindFooCmd):
+		var v *FooCmd
+		seen, err := loomhttp.DecodeFormValue(values, prefix, &v)
+		if err != nil {
+			return err
+		}
+		if !seen {
+			v = &FooCmd{}
+		}
+		u.kind = BarCmdOrFooCmdKindFooCmd
+		u.FooCmd = v
+	case string(BarCmdOrFooCmdKindBarCmd):
+		var v *BarCmd
+		seen, err := loomhttp.DecodeFormValue(values, prefix, &v)
+		if err != nil {
+			return err
+		}
+		if !seen {
+			return loom.MissingFieldError("args", "body")
+		}
+		u.kind = BarCmdOrFooCmdKindBarCmd
+		u.BarCmd = v
+	default:
+		return loom.InvalidEnumValueError("action", rawType, []any{
+			string(BarCmdOrFooCmdKindFooCmd),
+			string(BarCmdOrFooCmdKindBarCmd),
+		})
+	}
+	return nil
+}
+
+// UnmarshalJSON unmarshals the union from the canonical {type,value} JSON shape.
+func (u *BarCmdOrFooCmd) UnmarshalJSON(data []byte) error {
+	var raw struct {
+		Type  string          `json:"action"`
+		Value json.RawMessage `json:"args"`
+	}
+	if err := json.Unmarshal(data, &raw); err != nil {
+		return err
+	}
+	switch raw.Type {
+	case string(BarCmdOrFooCmdKindFooCmd):
+		var v *FooCmd
+		if len(raw.Value) == 0 {
+			return loom.MissingFieldError("args", "body")
+		}
+		if err := json.Unmarshal(raw.Value, &v); err != nil {
+			return err
+		}
+		u.kind = BarCmdOrFooCmdKindFooCmd
+		u.FooCmd = v
+	case string(BarCmdOrFooCmdKindBarCmd):
+		var v *BarCmd
+		if len(raw.Value) == 0 {
+			return loom.MissingFieldError("args", "body")
+		}
+		if err := json.Unmarshal(raw.Value, &v); err != nil {
+			return err
+		}
+		u.kind = BarCmdOrFooCmdKindBarCmd
+		u.BarCmd = v
+	default:
+		return loom.InvalidEnumValueError("action", raw.Type, []any{
+			string(BarCmdOrFooCmdKindFooCmd),
+			string(BarCmdOrFooCmdKindBarCmd),
+		})
+	}
+	return nil
 }
 
 // CreateActionOrListAction is a sum-type union.

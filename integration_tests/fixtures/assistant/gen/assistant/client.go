@@ -31,11 +31,12 @@ type Client struct {
 	MultiContentEndpoint                   loom.Endpoint
 	GenerateDpiSpecEndpoint                loom.Endpoint
 	DispatchActionEndpoint                 loom.Endpoint
+	DispatchCommandEndpoint                loom.Endpoint
 }
 
 // NewClient initializes a "assistant" service client given the endpoints.
-func NewClient(listDocuments, systemInfo, conversationHistory, figmaDesignSystem, generatePrompts, buildFigmaImplementationPrompt, sendNotification, analyzeSentiment, extractKeywords, summarizeText, search, executeCode, processBatch, multiContent, generateDpiSpec, dispatchAction loom.Endpoint) *Client {
-	return &Client{ListDocumentsEndpoint: listDocuments, SystemInfoEndpoint: systemInfo, ConversationHistoryEndpoint: conversationHistory, FigmaDesignSystemEndpoint: figmaDesignSystem, GeneratePromptsEndpoint: generatePrompts, BuildFigmaImplementationPromptEndpoint: buildFigmaImplementationPrompt, SendNotificationEndpoint: sendNotification, AnalyzeSentimentEndpoint: analyzeSentiment, ExtractKeywordsEndpoint: extractKeywords, SummarizeTextEndpoint: summarizeText, SearchEndpoint: search, ExecuteCodeEndpoint: executeCode, ProcessBatchEndpoint: processBatch, MultiContentEndpoint: multiContent, GenerateDpiSpecEndpoint: generateDpiSpec, DispatchActionEndpoint: dispatchAction}
+func NewClient(listDocuments, systemInfo, conversationHistory, figmaDesignSystem, generatePrompts, buildFigmaImplementationPrompt, sendNotification, analyzeSentiment, extractKeywords, summarizeText, search, executeCode, processBatch, multiContent, generateDpiSpec, dispatchAction, dispatchCommand loom.Endpoint) *Client {
+	return &Client{ListDocumentsEndpoint: listDocuments, SystemInfoEndpoint: systemInfo, ConversationHistoryEndpoint: conversationHistory, FigmaDesignSystemEndpoint: figmaDesignSystem, GeneratePromptsEndpoint: generatePrompts, BuildFigmaImplementationPromptEndpoint: buildFigmaImplementationPrompt, SendNotificationEndpoint: sendNotification, AnalyzeSentimentEndpoint: analyzeSentiment, ExtractKeywordsEndpoint: extractKeywords, SummarizeTextEndpoint: summarizeText, SearchEndpoint: search, ExecuteCodeEndpoint: executeCode, ProcessBatchEndpoint: processBatch, MultiContentEndpoint: multiContent, GenerateDpiSpecEndpoint: generateDpiSpec, DispatchActionEndpoint: dispatchAction, DispatchCommandEndpoint: dispatchCommand}
 }
 
 // ListDocuments calls the "list_documents" endpoint of the "assistant" service.
@@ -201,4 +202,15 @@ func (c *Client) DispatchAction(ctx context.Context, p *DispatchActionPayload) (
 		return
 	}
 	return ires.(*DispatchActionResult), nil
+}
+
+// DispatchCommand calls the "dispatch_command" endpoint of the "assistant"
+// service.
+func (c *Client) DispatchCommand(ctx context.Context, p *DispatchCommandPayload) (res *DispatchCommandResult, err error) {
+	var ires any
+	ires, err = c.DispatchCommandEndpoint(ctx, p)
+	if err != nil {
+		return
+	}
+	return ires.(*DispatchCommandResult), nil
 }

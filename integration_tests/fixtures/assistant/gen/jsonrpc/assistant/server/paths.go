@@ -86,3 +86,8 @@ func GenerateDpiSpecAssistantPath() string {
 func DispatchActionAssistantPath() string {
 	return "/rpc"
 }
+
+// DispatchCommandAssistantPath returns the URL path to the assistant service dispatch_command HTTP endpoint.
+func DispatchCommandAssistantPath() string {
+	return "/rpc"
+}

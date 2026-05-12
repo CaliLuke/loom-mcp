@@ -135,6 +135,14 @@ type (
 		DefaultFields  []DefaultField
 		// ExampleArguments contains a minimal valid JSON for tool arguments
 		ExampleArguments string
+		// CanonicalExampleJSON is a deterministic, always-valid JSON example of
+		// the payload, synthesized from the IR. Used by the per-tool input
+		// recovery function emitted into the adapter.
+		CanonicalExampleJSON string
+		// UnionEnvelopes lists, for each top-level payload field whose type is
+		// a discriminated union, the metadata the recovery hint needs to
+		// describe valid discriminator values and the configured branch key.
+		UnionEnvelopes []UnionEnvelopeMeta
 	}
 
 	// DefaultField describes a top-level payload field default assignment.
@@ -492,6 +500,8 @@ func (g *adapterGenerator) populateToolPayloadData(adapter *ToolAdapter, tool *m
 	adapter.EnumFieldsPtr = enumPtr
 	adapter.DefaultFields = defaults
 	adapter.ExampleArguments = buildExampleJSON(payload)
+	adapter.CanonicalExampleJSON = synthesizeCanonicalExample(payload)
+	adapter.UnionEnvelopes = collectUnionEnvelopes(payload)
 	return nil
 }
 

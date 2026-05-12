@@ -279,6 +279,24 @@ var _ = Service("assistant", func() {
 		Tool("dispatch_action", "Dispatch an action using a union payload")
 		JSONRPC(func() {})
 	})
+
+	Method("dispatch_command", func() {
+		Description("Dispatch a command using a union payload with a non-default branch key")
+		Payload(func() {
+			Attribute("command", OneOf("FooCmd", "BarCmd"), func() {
+				Meta("oneof:type:field", "action")
+				Meta("oneof:value:field", "args")
+				Description("Command envelope with custom branch key")
+			})
+			Required("command")
+		})
+		Result(func() {
+			Attribute("ack", String, "Acknowledgement")
+			Required("ack")
+		})
+		Tool("dispatch_command", "Dispatch a command using a non-value branch-key union")
+		JSONRPC(func() {})
+	})
 })
 
 // ---- Shared Types (subset sufficient for integration tests) ----
@@ -336,6 +354,17 @@ var CreateAction = Type("CreateAction", func() {
 	Meta("oneof:type:tag", "create")
 	Attribute("name", String, "Name to create")
 	Required("name")
+})
+
+var FooCmd = Type("FooCmd", func() {
+	Meta("oneof:type:tag", "foo")
+	Attribute("label", String, "Foo label")
+})
+
+var BarCmd = Type("BarCmd", func() {
+	Meta("oneof:type:tag", "bar")
+	Attribute("count", Int, "Bar count")
+	Required("count")
 })
 
 var DPISpec = Type("DPISpec", func() {

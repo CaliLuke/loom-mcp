@@ -22,10 +22,7 @@ func adapterCoreSection(data *AdapterData) codegen.Section {
 		emitSendToolError(stmt)
 		emitFormatToolErrorText(stmt)
 		emitToolCallError(stmt)
-		emitToolInputError(stmt)
-		emitInferToolInputRecovery(stmt)
 		emitMissingFieldFromMessage(stmt)
-		emitActionValueEnvelopeExample(stmt)
 		emitFormatToolSuccessText(stmt)
 		emitNormalizeToolSuccessValue(stmt)
 		emitSummarizeToolSuccessValue(stmt)
@@ -775,37 +772,6 @@ func emitToolCallError(stmt *jen.Statement) {
 	stmt.Line()
 }
 
-// emitToolInputError generates toolInputError.
-func emitToolInputError(stmt *jen.Statement) {
-	stmt.Func().Id("toolInputError").Params(jen.Id("err").Error(), jen.Id("raw").Qual("encoding/json", "RawMessage")).Error().
-		Block(
-			jen.Return(jen.Id("toolCallError").Call(jen.Id("err"), jen.Lit("invalid_params"), jen.Id("inferToolInputRecovery").Call(jen.Id("err"), jen.Id("raw")))),
-		)
-	stmt.Line()
-}
-
-// emitInferToolInputRecovery generates inferToolInputRecovery.
-func emitInferToolInputRecovery(stmt *jen.Statement) {
-	stmt.Func().Id("inferToolInputRecovery").Params(jen.Id("err").Error(), jen.Id("raw").Qual("encoding/json", "RawMessage")).String().
-		Block(
-			jen.Id("message").Op(":=").Qual("strings", "TrimSpace").Call(jen.Id("loom").Dot("ErrorSafeMessage").Call(jen.Id("err"))),
-			jen.If(jen.Id("message").Op("==").Lit("")).Block(
-				jen.Id("message").Op("=").Qual("strings", "TrimSpace").Call(jen.Id("err").Dot("Error").Call()),
-			),
-			jen.If(jen.List(jen.Id("action"), jen.Id("ok")).Op(":=").Id("actionValueEnvelopeExample").Call(jen.Id("raw")), jen.Id("ok")).Block(
-				jen.Return(jen.Qual("fmt", "Sprintf").Call(jen.Lit("Include the nested value object. Example: %s"), jen.Id("action"))),
-			),
-			jen.If(jen.Id("field").Op(":=").Id("missingFieldFromMessage").Call(jen.Id("message")), jen.Id("field").Op("!=").Lit("")).Block(
-				jen.Return(jen.Qual("fmt", "Sprintf").Call(jen.Lit("Include required field %q."), jen.Id("field"))),
-			),
-			jen.If(jen.Qual("strings", "Contains").Call(jen.Id("message"), jen.Lit("unexpected end of JSON input")).Op("||").Qual("strings", "Contains").Call(jen.Id("message"), jen.Lit("unexpected EOF"))).Block(
-				jen.Return(jen.Lit("Provide complete JSON arguments. If a field expects an object, include {} instead of leaving it incomplete.")),
-			),
-			jen.Return(jen.Lit("Provide valid tool arguments.")),
-		)
-	stmt.Line()
-}
-
 // emitMissingFieldFromMessage generates missingFieldFromMessage.
 func emitMissingFieldFromMessage(stmt *jen.Statement) {
 	stmt.Func().Id("missingFieldFromMessage").Params(jen.Id("message").String()).String().
@@ -815,52 +781,6 @@ func emitMissingFieldFromMessage(stmt *jen.Statement) {
 				jen.Return(jen.Lit("")),
 			),
 			jen.Return(jen.Qual("strings", "TrimSpace").Call(jen.Qual("strings", "TrimPrefix").Call(jen.Id("message"), jen.Id("prefix")))),
-		)
-	stmt.Line()
-}
-
-// emitActionValueEnvelopeExample generates actionValueEnvelopeExample and actionValueExampleForObject.
-func emitActionValueEnvelopeExample(stmt *jen.Statement) {
-	stmt.Func().Id("actionValueEnvelopeExample").Params(jen.Id("raw").Qual("encoding/json", "RawMessage")).Params(jen.String(), jen.Bool()).
-		Block(
-			jen.Var().Id("fields").Map(jen.String()).Qual("encoding/json", "RawMessage"),
-			jen.If(jen.Id("err").Op(":=").Qual("encoding/json", "Unmarshal").Call(jen.Id("raw"), jen.Op("&").Id("fields")), jen.Id("err").Op("!=").Nil()).Block(
-				jen.Return(jen.Lit(""), jen.False()),
-			),
-			jen.If(jen.List(jen.Id("action"), jen.Id("ok")).Op(":=").Id("actionValueExampleForObject").Call(jen.Id("fields")), jen.Id("ok")).Block(
-				jen.Return(jen.Id("action"), jen.True()),
-			),
-			jen.For(jen.List(jen.Id("name"), jen.Id("nestedRaw")).Op(":=").Range().Id("fields")).Block(
-				jen.Var().Id("nested").Map(jen.String()).Qual("encoding/json", "RawMessage"),
-				jen.If(jen.Id("err").Op(":=").Qual("encoding/json", "Unmarshal").Call(jen.Id("nestedRaw"), jen.Op("&").Id("nested")), jen.Id("err").Op("!=").Nil()).Block(
-					jen.Continue(),
-				),
-				jen.If(jen.List(jen.Id("example"), jen.Id("ok")).Op(":=").Id("actionValueExampleForObject").Call(jen.Id("nested")), jen.Id("ok")).Block(
-					jen.Return(jen.Qual("fmt", "Sprintf").Call(jen.Lit(`{"%s":%s}`), jen.Id("name"), jen.Id("example")), jen.True()),
-				),
-			),
-			jen.Return(jen.Lit(""), jen.False()),
-		)
-	stmt.Line()
-
-	stmt.Func().Id("actionValueExampleForObject").Params(jen.Id("fields").Map(jen.String()).Qual("encoding/json", "RawMessage")).Params(jen.String(), jen.Bool()).
-		Block(
-			jen.List(jen.Id("actionRaw"), jen.Id("hasAction")).Op(":=").Id("fields").Index(jen.Lit("action")),
-			jen.If(jen.Op("!").Id("hasAction")).Block(
-				jen.Return(jen.Lit(""), jen.False()),
-			),
-			jen.If(jen.List(jen.Id("_"), jen.Id("hasValue")).Op(":=").Id("fields").Index(jen.Lit("value")), jen.Id("hasValue")).Block(
-				jen.Return(jen.Lit(""), jen.False()),
-			),
-			jen.Var().Id("action").String(),
-			jen.If(jen.Id("err").Op(":=").Qual("encoding/json", "Unmarshal").Call(jen.Id("actionRaw"), jen.Op("&").Id("action")), jen.Id("err").Op("!=").Nil()).Block(
-				jen.Return(jen.Lit(""), jen.False()),
-			),
-			jen.Id("action").Op("=").Qual("strings", "TrimSpace").Call(jen.Id("action")),
-			jen.If(jen.Id("action").Op("==").Lit("")).Block(
-				jen.Return(jen.Lit(""), jen.False()),
-			),
-			jen.Return(jen.Qual("fmt", "Sprintf").Call(jen.Lit(`{"action":%q,"value":{}}`), jen.Id("action")), jen.True()),
 		)
 	stmt.Line()
 }

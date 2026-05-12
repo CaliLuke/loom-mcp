@@ -1342,6 +1342,96 @@ func DecodeDispatchActionResponse(decoder func(*http.Response) loomhttp.Decoder,
 		res := NewDispatchActionResultOK(&body)
 		return res, nil
 	}
+} // BuildDispatchCommandRequest instantiates a HTTP request object with method
+// and path set to call the "assistant" service "dispatch_command" endpoint
+func (c *Client) BuildDispatchCommandRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: DispatchCommandAssistantPath()}
+	req, err := http.NewRequest("POST", u.String(), nil)
+	if err != nil {
+		return nil, loomhttp.ErrInvalidURL("assistant", "dispatch_command", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeDispatchCommandRequest returns an encoder for requests sent to the
+// assistant dispatch_command server.
+func EncodeDispatchCommandRequest(encoder func(*http.Request) loomhttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*assistant.DispatchCommandPayload)
+		if !ok {
+			return loomhttp.ErrInvalidType("assistant", "dispatch_command", "*assistant.DispatchCommandPayload", v)
+		}
+		b := NewDispatchCommandRequestBody(p)
+		body := &jsonrpc.Request{
+			JSONRPC: "2.0",
+			Method:  "dispatch_command",
+			Params:  b,
+		}
+		// No ID field in payload - always send as a request with generated ID
+		id := uuid.New().String()
+		body.ID = id
+		if err := encoder(req).Encode(&body); err != nil {
+			return loomhttp.ErrEncodingError("assistant", "dispatch_command", err)
+		}
+		return nil
+	}
+}
+
+// DecodeDispatchCommandResponse returns a decoder for responses returned by
+// the assistant service dispatch_command JSON-RPC method. restoreBody controls
+// whether the response body should be restored after having been read.
+func DecodeDispatchCommandResponse(decoder func(*http.Response) loomhttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		}
+		defer resp.Body.Close()
+
+		if resp.StatusCode != http.StatusOK {
+			body, _ := io.ReadAll(resp.Body)
+			return nil, loomhttp.ErrInvalidResponse("assistant", "dispatch_command", resp.StatusCode, string(body))
+		}
+
+		var jresp jsonrpc.RawResponse
+		if err := decoder(resp).Decode(&jresp); err != nil {
+			return nil, loomhttp.ErrDecodingError("assistant", "dispatch_command", err)
+		}
+
+		if jresp.Error != nil {
+			switch jresp.Error.Code {
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, loomhttp.ErrInvalidResponse("assistant", "dispatch_command", resp.StatusCode, string(body))
+			}
+		}
+
+		resp.Body = io.NopCloser(bytes.NewBuffer(jresp.Result))
+		var (
+			body DispatchCommandResponseBody
+			err  error
+		)
+		err = decoder(resp).Decode(&body)
+		if err != nil {
+			return nil, loomhttp.ErrDecodingError("assistant", "dispatch_command", err)
+		}
+		err = ValidateDispatchCommandResponseBody(&body)
+		if err != nil {
+			return nil, loomhttp.ErrValidationError("assistant", "dispatch_command", err)
+		}
+		res := NewDispatchCommandResultOK(&body)
+		return res, nil
+	}
 } // unmarshalDesignTokenGroupResponseBodyToAssistantDesignTokenGroup builds a
 // value of type *assistant.DesignTokenGroup from a value of type
 // *DesignTokenGroupResponseBody.
@@ -1452,6 +1542,46 @@ func marshalListActionRequestBodyRequestBodyToAssistantListAction(v *ListActionR
 func marshalCreateActionRequestBodyRequestBodyToAssistantCreateAction(v *CreateActionRequestBodyRequestBody) *assistant.CreateAction {
 	res := &assistant.CreateAction{
 		Name: v.Name,
+	}
+
+	return res
+}
+
+// marshalAssistantFooCmdToFooCmdRequestBodyRequestBody builds a value of type
+// *FooCmdRequestBodyRequestBody from a value of type *assistant.FooCmd.
+func marshalAssistantFooCmdToFooCmdRequestBodyRequestBody(v *assistant.FooCmd) *FooCmdRequestBodyRequestBody {
+	res := &FooCmdRequestBodyRequestBody{
+		Label: v.Label,
+	}
+
+	return res
+}
+
+// marshalAssistantBarCmdToBarCmdRequestBodyRequestBody builds a value of type
+// *BarCmdRequestBodyRequestBody from a value of type *assistant.BarCmd.
+func marshalAssistantBarCmdToBarCmdRequestBodyRequestBody(v *assistant.BarCmd) *BarCmdRequestBodyRequestBody {
+	res := &BarCmdRequestBodyRequestBody{
+		Count: v.Count,
+	}
+
+	return res
+}
+
+// marshalFooCmdRequestBodyRequestBodyToAssistantFooCmd builds a value of type
+// *assistant.FooCmd from a value of type *FooCmdRequestBodyRequestBody.
+func marshalFooCmdRequestBodyRequestBodyToAssistantFooCmd(v *FooCmdRequestBodyRequestBody) *assistant.FooCmd {
+	res := &assistant.FooCmd{
+		Label: v.Label,
+	}
+
+	return res
+}
+
+// marshalBarCmdRequestBodyRequestBodyToAssistantBarCmd builds a value of type
+// *assistant.BarCmd from a value of type *BarCmdRequestBodyRequestBody.
+func marshalBarCmdRequestBodyRequestBodyToAssistantBarCmd(v *BarCmdRequestBodyRequestBody) *assistant.BarCmd {
+	res := &assistant.BarCmd{
+		Count: v.Count,
 	}
 
 	return res

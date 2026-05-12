@@ -61,6 +61,8 @@ type Server struct {
 	GenerateDpiSpec func(context.Context, *http.Request, *jsonrpc.RawRequest, http.ResponseWriter) error
 	// DispatchAction is the handler for the dispatch_action method.
 	DispatchAction func(context.Context, *http.Request, *jsonrpc.RawRequest, http.ResponseWriter) error
+	// DispatchCommand is the handler for the dispatch_command method.
+	DispatchCommand func(context.Context, *http.Request, *jsonrpc.RawRequest, http.ResponseWriter) error
 
 	decoder    func(*http.Request) loomhttp.Decoder
 	encoder    func(context.Context, http.ResponseWriter) loomhttp.Encoder
@@ -75,13 +77,14 @@ func New(endpoints *assistant.Endpoints, mux loomhttp.Muxer, decoder func(*http.
 		BuildFigmaImplementationPrompt: NewBuildFigmaImplementationPromptHandler(endpoints.BuildFigmaImplementationPrompt, mux, decoder, encoder, errhandler),
 		ConversationHistory:            NewConversationHistoryHandler(endpoints.ConversationHistory, mux, decoder, encoder, errhandler),
 		DispatchAction:                 NewDispatchActionHandler(endpoints.DispatchAction, mux, decoder, encoder, errhandler),
+		DispatchCommand:                NewDispatchCommandHandler(endpoints.DispatchCommand, mux, decoder, encoder, errhandler),
 		ExecuteCode:                    NewExecuteCodeHandler(endpoints.ExecuteCode, mux, decoder, encoder, errhandler),
 		ExtractKeywords:                NewExtractKeywordsHandler(endpoints.ExtractKeywords, mux, decoder, encoder, errhandler),
 		FigmaDesignSystem:              NewFigmaDesignSystemHandler(endpoints.FigmaDesignSystem, mux, decoder, encoder, errhandler),
 		GenerateDpiSpec:                NewGenerateDpiSpecHandler(endpoints.GenerateDpiSpec, mux, decoder, encoder, errhandler),
 		GeneratePrompts:                NewGeneratePromptsHandler(endpoints.GeneratePrompts, mux, decoder, encoder, errhandler),
 		ListDocuments:                  NewListDocumentsHandler(endpoints.ListDocuments, mux, decoder, encoder, errhandler),
-		Methods:                        []string{"list_documents", "system_info", "conversation_history", "figma_design_system", "generate_prompts", "build_figma_implementation_prompt", "send_notification", "analyze_sentiment", "extract_keywords", "summarize_text", "search", "execute_code", "process_batch", "multi_content", "generate_dpi_spec", "dispatch_action"},
+		Methods:                        []string{"list_documents", "system_info", "conversation_history", "figma_design_system", "generate_prompts", "build_figma_implementation_prompt", "send_notification", "analyze_sentiment", "extract_keywords", "summarize_text", "search", "execute_code", "process_batch", "multi_content", "generate_dpi_spec", "dispatch_action", "dispatch_command"},
 		MultiContent:                   NewMultiContentHandler(endpoints.MultiContent, mux, decoder, encoder, errhandler),
 		ProcessBatch:                   NewProcessBatchHandler(endpoints.ProcessBatch, mux, decoder, encoder, errhandler),
 		Search:                         NewSearchHandler(endpoints.Search, mux, decoder, encoder, errhandler),
@@ -319,6 +322,11 @@ func (s *Server) processRequest(ctx context.Context, r *http.Request, req *jsonr
 		if err := s.DispatchAction(ctx, r, req, w); err != nil {
 			loomtransport.RequestObserverFromContext(ctx).Fail(loomtransport.ReasonHandlerError)
 			s.errhandler(ctx, w, fmt.Errorf("handler error for dispatch_action: %w", err))
+		}
+	case "dispatch_command":
+		if err := s.DispatchCommand(ctx, r, req, w); err != nil {
+			loomtransport.RequestObserverFromContext(ctx).Fail(loomtransport.ReasonHandlerError)
+			s.errhandler(ctx, w, fmt.Errorf("handler error for dispatch_command: %w", err))
 		}
 	default:
 		loomtransport.RequestObserverFromContext(ctx).Fail(loomtransport.ReasonUnsupportedMethod)
@@ -1318,6 +1326,69 @@ func NewDispatchActionHandler(endpoint loom.Endpoint, mux loomhttp.Muxer, decode
 		}
 		// Convert result to response body with proper JSON tags
 		body := NewDispatchActionResponseBody(res.(*assistant.DispatchActionResult))
+		response := jsonrpc.MakeSuccessResponse(id, body)
+		if err := encoder(ctx, w).Encode(response); err != nil {
+			loomtransport.RequestObserverFromContext(ctx).Fail(loomtransport.ReasonResponseWriteFailed)
+			errhandler(ctx, w, fmt.Errorf("failed to encode JSON-RPC response: %w", err))
+		}
+		return nil
+	}
+} // NewDispatchCommandHandler creates a JSON-RPC handler which calls the
+// "assistant" service "dispatch_command" endpoint.
+func NewDispatchCommandHandler(endpoint loom.Endpoint, mux loomhttp.Muxer, decoder func(*http.Request) loomhttp.Decoder, encoder func(context.Context, http.ResponseWriter) loomhttp.Encoder, errhandler func(context.Context, http.ResponseWriter, error)) func(ctx context.Context, r *http.Request, req *jsonrpc.RawRequest, w http.ResponseWriter) error {
+	decodeParams := DecodeDispatchCommandRequest(mux, decoder)
+	return func(ctx context.Context, r *http.Request, req *jsonrpc.RawRequest, w http.ResponseWriter) error {
+		ctx = context.WithValue(ctx, loom.MethodKey, "dispatch_command")
+		ctx = context.WithValue(ctx, loom.ServiceKey, "assistant")
+
+		params, err := decodeParams(r, req)
+		if err != nil {
+			loomtransport.RequestObserverFromContext(ctx).Fail(loomtransport.ReasonInvalidJSONRPCParams)
+			if req.ID != nil && req.ID != "" {
+				code := jsonrpc.InternalError
+				if _, ok := err.(*loom.ServiceError); ok {
+					code = jsonrpc.InvalidParams
+				}
+				encodeJSONRPCError(ctx, w, req, code, loom.ErrorSafeMessage(err), jsonrpc.NewErrorData(err), encoder, errhandler)
+			} else {
+				errhandler(ctx, w, fmt.Errorf("failed to decode parameters: %w", err))
+			}
+			return nil
+		}
+		res, err := endpoint(ctx, params)
+		if err != nil {
+			loomtransport.RequestObserverFromContext(ctx).Fail(loomtransport.ReasonHandlerError)
+			if req.ID != nil && req.ID != "" {
+				var en loom.LoomErrorNamer
+				if !errors.As(err, &en) {
+					encodeJSONRPCError(ctx, w, req, jsonrpc.InternalError, loom.ErrorSafeMessage(err), jsonrpc.NewErrorData(err), encoder, errhandler)
+					return nil
+				}
+				switch en.LoomErrorName() {
+				case "invalid_params":
+					encodeJSONRPCError(ctx, w, req, jsonrpc.InvalidParams, loom.ErrorSafeMessage(err), jsonrpc.NewErrorData(err), encoder, errhandler)
+				case "method_not_found":
+					encodeJSONRPCError(ctx, w, req, jsonrpc.MethodNotFound, loom.ErrorSafeMessage(err), jsonrpc.NewErrorData(err), encoder, errhandler)
+				default:
+					code := jsonrpc.InternalError
+					if _, ok := err.(*loom.ServiceError); ok {
+						code = jsonrpc.InvalidParams
+					}
+					encodeJSONRPCError(ctx, w, req, code, loom.ErrorSafeMessage(err), jsonrpc.NewErrorData(err), encoder, errhandler)
+				}
+			} else {
+				errhandler(ctx, w, fmt.Errorf("endpoint error: %w", err))
+			}
+			return nil
+		}
+
+		var id any
+		id = req.ID
+		if id == nil || id == "" {
+			return nil
+		}
+		// Convert result to response body with proper JSON tags
+		body := NewDispatchCommandResponseBody(res.(*assistant.DispatchCommandResult))
 		response := jsonrpc.MakeSuccessResponse(id, body)
 		if err := encoder(ctx, w).Encode(response); err != nil {
 			loomtransport.RequestObserverFromContext(ctx).Fail(loomtransport.ReasonResponseWriteFailed)

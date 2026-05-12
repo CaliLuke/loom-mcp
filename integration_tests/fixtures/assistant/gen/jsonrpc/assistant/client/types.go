@@ -206,6 +206,17 @@ type DispatchActionRequestBody struct {
 // "dispatch_action" endpoint HTTP response body.
 type DispatchActionResponseBody DispatchActionResponseBodyResponseBody
 
+// DispatchCommandRequestBody is the type of the "assistant" service
+// "dispatch_command" endpoint HTTP request body.
+type DispatchCommandRequestBody struct {
+	// Command envelope with custom branch key
+	Command BarCmdOrFooCmd `form:"command" json:"command" xml:"command"`
+}
+
+// DispatchCommandResponseBody is the type of the "assistant" service
+// "dispatch_command" endpoint HTTP response body.
+type DispatchCommandResponseBody DispatchCommandResponseBodyResponseBody
+
 // ListDocumentsResponseBodyResponseBody is used to define fields on response
 // body types.
 type ListDocumentsResponseBodyResponseBody struct {
@@ -381,6 +392,240 @@ type CreateActionRequestBodyRequestBody struct {
 type DispatchActionResponseBodyResponseBody struct {
 	// Acknowledgement
 	Ack *string `form:"ack,omitempty" json:"ack,omitempty" xml:"ack,omitempty"`
+}
+
+// FooCmdRequestBodyRequestBody is used to define fields on request body types.
+type FooCmdRequestBodyRequestBody struct {
+	// Foo label
+	Label *string `form:"label,omitempty" json:"label,omitempty" xml:"label,omitempty"`
+}
+
+// BarCmdRequestBodyRequestBody is used to define fields on request body types.
+type BarCmdRequestBodyRequestBody struct {
+	// Bar count
+	Count int `form:"count" json:"count" xml:"count"`
+}
+
+// DispatchCommandResponseBodyResponseBody is used to define fields on response
+// body types.
+type DispatchCommandResponseBodyResponseBody struct {
+	// Acknowledgement
+	Ack *string `form:"ack,omitempty" json:"ack,omitempty" xml:"ack,omitempty"`
+}
+
+// BarCmdOrFooCmd is a sum-type union.
+type BarCmdOrFooCmd struct {
+	kind   BarCmdOrFooCmdKind
+	FooCmd *FooCmdRequestBodyRequestBody
+	BarCmd *BarCmdRequestBodyRequestBody
+}
+
+// BarCmdOrFooCmdKind enumerates the union variants for BarCmdOrFooCmd.
+type BarCmdOrFooCmdKind string
+
+const (
+	// BarCmdOrFooCmdKindFooCmd identifies the FooCmd branch of the union.
+	BarCmdOrFooCmdKindFooCmd BarCmdOrFooCmdKind = "foo"
+	// BarCmdOrFooCmdKindBarCmd identifies the BarCmd branch of the union.
+	BarCmdOrFooCmdKindBarCmd BarCmdOrFooCmdKind = "bar"
+)
+
+// Kind returns the discriminator value of the union.
+func (u BarCmdOrFooCmd) Kind() BarCmdOrFooCmdKind {
+	return u.kind
+}
+
+// NewBarCmdOrFooCmdFooCmd constructs a BarCmdOrFooCmd with the FooCmd branch
+// set.
+func NewBarCmdOrFooCmdFooCmd(v *FooCmdRequestBodyRequestBody) BarCmdOrFooCmd {
+	return BarCmdOrFooCmd{
+		kind:   BarCmdOrFooCmdKindFooCmd,
+		FooCmd: v,
+	}
+}
+
+// AsFooCmd returns the value of the FooCmd branch if set.
+func (u BarCmdOrFooCmd) AsFooCmd() (_ *FooCmdRequestBodyRequestBody, ok bool) {
+	if u.kind != BarCmdOrFooCmdKindFooCmd {
+		return
+	}
+	return u.FooCmd, true
+}
+
+// SetFooCmd sets the FooCmd branch of the union.
+func (u *BarCmdOrFooCmd) SetFooCmd(v *FooCmdRequestBodyRequestBody) {
+	u.kind = BarCmdOrFooCmdKindFooCmd
+	u.FooCmd = v
+}
+
+// NewBarCmdOrFooCmdBarCmd constructs a BarCmdOrFooCmd with the BarCmd branch
+// set.
+func NewBarCmdOrFooCmdBarCmd(v *BarCmdRequestBodyRequestBody) BarCmdOrFooCmd {
+	return BarCmdOrFooCmd{
+		kind:   BarCmdOrFooCmdKindBarCmd,
+		BarCmd: v,
+	}
+}
+
+// AsBarCmd returns the value of the BarCmd branch if set.
+func (u BarCmdOrFooCmd) AsBarCmd() (_ *BarCmdRequestBodyRequestBody, ok bool) {
+	if u.kind != BarCmdOrFooCmdKindBarCmd {
+		return
+	}
+	return u.BarCmd, true
+}
+
+// SetBarCmd sets the BarCmd branch of the union.
+func (u *BarCmdOrFooCmd) SetBarCmd(v *BarCmdRequestBodyRequestBody) {
+	u.kind = BarCmdOrFooCmdKindBarCmd
+	u.BarCmd = v
+}
+
+// Validate ensures the union discriminant is valid.
+func (u BarCmdOrFooCmd) Validate() error {
+	switch u.kind {
+	case "":
+		return loom.InvalidEnumValueError("action", "", []any{
+			string(BarCmdOrFooCmdKindFooCmd),
+			string(BarCmdOrFooCmdKindBarCmd),
+		})
+	case BarCmdOrFooCmdKindFooCmd:
+		return nil
+	case BarCmdOrFooCmdKindBarCmd:
+		return nil
+	default:
+		return loom.InvalidEnumValueError("action", u.kind, []any{
+			string(BarCmdOrFooCmdKindFooCmd),
+			string(BarCmdOrFooCmdKindBarCmd),
+		})
+	}
+}
+
+// MarshalJSON marshals the union into the canonical {type,value} JSON shape.
+func (u BarCmdOrFooCmd) MarshalJSON() ([]byte, error) {
+	if err := u.Validate(); err != nil {
+		return nil, err
+	}
+	var (
+		value any
+	)
+	switch u.kind {
+	case BarCmdOrFooCmdKindFooCmd:
+		value = u.FooCmd
+	case BarCmdOrFooCmdKindBarCmd:
+		value = u.BarCmd
+	default:
+		return nil, fmt.Errorf("unexpected BarCmdOrFooCmd discriminant %q", u.kind)
+	}
+	return json.Marshal(struct {
+		Type  string `json:"action"`
+		Value any    `json:"args"`
+	}{
+		Type:  string(u.kind),
+		Value: value,
+	})
+}
+
+// MarshalFormValues marshals the union into application/x-www-form-urlencoded
+// values using the discriminator field plus flattened object fields for
+// object-shaped branches and the canonical {type,value} form shape for scalar
+// branches.
+func (u BarCmdOrFooCmd) MarshalFormValues(values url.Values, prefix string) error {
+	if err := u.Validate(); err != nil {
+		return err
+	}
+	values.Set(loomhttp.FormChildKey(prefix, "action"), string(u.kind))
+	switch u.kind {
+	case BarCmdOrFooCmdKindFooCmd:
+		_, err := loomhttp.EncodeFormValue(values, prefix, u.FooCmd)
+		return err
+	case BarCmdOrFooCmdKindBarCmd:
+		_, err := loomhttp.EncodeFormValue(values, prefix, u.BarCmd)
+		return err
+	default:
+		return fmt.Errorf("unexpected BarCmdOrFooCmd discriminant %q", u.kind)
+	}
+}
+
+// UnmarshalFormValues unmarshals the union from application/x-www-form-urlencoded
+// values using the discriminator field plus flattened object fields for
+// object-shaped branches and the canonical {type,value} form shape for scalar
+// branches.
+func (u *BarCmdOrFooCmd) UnmarshalFormValues(values url.Values, prefix string) error {
+	typeKey := loomhttp.FormChildKey(prefix, "action")
+	rawType := values.Get(typeKey)
+	if rawType == "" {
+		return loom.MissingFieldError("action", "body")
+	}
+	switch rawType {
+	case string(BarCmdOrFooCmdKindFooCmd):
+		var v *FooCmdRequestBodyRequestBody
+		seen, err := loomhttp.DecodeFormValue(values, prefix, &v)
+		if err != nil {
+			return err
+		}
+		if !seen {
+			v = &FooCmdRequestBodyRequestBody{}
+		}
+		u.kind = BarCmdOrFooCmdKindFooCmd
+		u.FooCmd = v
+	case string(BarCmdOrFooCmdKindBarCmd):
+		var v *BarCmdRequestBodyRequestBody
+		seen, err := loomhttp.DecodeFormValue(values, prefix, &v)
+		if err != nil {
+			return err
+		}
+		if !seen {
+			return loom.MissingFieldError("args", "body")
+		}
+		u.kind = BarCmdOrFooCmdKindBarCmd
+		u.BarCmd = v
+	default:
+		return loom.InvalidEnumValueError("action", rawType, []any{
+			string(BarCmdOrFooCmdKindFooCmd),
+			string(BarCmdOrFooCmdKindBarCmd),
+		})
+	}
+	return nil
+}
+
+// UnmarshalJSON unmarshals the union from the canonical {type,value} JSON shape.
+func (u *BarCmdOrFooCmd) UnmarshalJSON(data []byte) error {
+	var raw struct {
+		Type  string          `json:"action"`
+		Value json.RawMessage `json:"args"`
+	}
+	if err := json.Unmarshal(data, &raw); err != nil {
+		return err
+	}
+	switch raw.Type {
+	case string(BarCmdOrFooCmdKindFooCmd):
+		var v *FooCmdRequestBodyRequestBody
+		if len(raw.Value) == 0 {
+			return loom.MissingFieldError("args", "body")
+		}
+		if err := json.Unmarshal(raw.Value, &v); err != nil {
+			return err
+		}
+		u.kind = BarCmdOrFooCmdKindFooCmd
+		u.FooCmd = v
+	case string(BarCmdOrFooCmdKindBarCmd):
+		var v *BarCmdRequestBodyRequestBody
+		if len(raw.Value) == 0 {
+			return loom.MissingFieldError("args", "body")
+		}
+		if err := json.Unmarshal(raw.Value, &v); err != nil {
+			return err
+		}
+		u.kind = BarCmdOrFooCmdKindBarCmd
+		u.BarCmd = v
+	default:
+		return loom.InvalidEnumValueError("action", raw.Type, []any{
+			string(BarCmdOrFooCmdKindFooCmd),
+			string(BarCmdOrFooCmdKindBarCmd),
+		})
+	}
+	return nil
 }
 
 // CreateActionOrListAction is a sum-type union.
@@ -772,6 +1017,32 @@ func NewDispatchActionRequestBody(p *assistant.DispatchActionPayload) *DispatchA
 	return body
 }
 
+// NewDispatchCommandRequestBody builds the HTTP request body from the payload
+// of the "dispatch_command" endpoint of the "assistant" service.
+func NewDispatchCommandRequestBody(p *assistant.DispatchCommandPayload) *DispatchCommandRequestBody {
+	body := &DispatchCommandRequestBody{}
+	if p.Command.Kind() != "" {
+
+		switch string(p.Command.Kind()) {
+		case "foo":
+			actual, _ := p.Command.AsFooCmd()
+			obj := marshalAssistantFooCmdToFooCmdRequestBodyRequestBody(actual)
+
+			u := body.Command
+			u.SetFooCmd((*FooCmdRequestBodyRequestBody)(obj))
+			body.Command = u
+		case "bar":
+			actual, _ := p.Command.AsBarCmd()
+			obj := marshalAssistantBarCmdToBarCmdRequestBodyRequestBody(actual)
+
+			u := body.Command
+			u.SetBarCmd((*BarCmdRequestBodyRequestBody)(obj))
+			body.Command = u
+		}
+	}
+	return body
+}
+
 // NewListDocumentsDocumentsOK builds a "assistant" service "list_documents"
 // endpoint result from a HTTP "OK" response.
 func NewListDocumentsDocumentsOK(body *ListDocumentsResponseBody) *assistant.Documents {
@@ -962,6 +1233,16 @@ func NewDispatchActionResultOK(body *DispatchActionResponseBody) *assistant.Disp
 	return v
 }
 
+// NewDispatchCommandResultOK builds a "assistant" service "dispatch_command"
+// endpoint result from a HTTP "OK" response.
+func NewDispatchCommandResultOK(body *DispatchCommandResponseBody) *assistant.DispatchCommandResult {
+	v := &assistant.DispatchCommandResult{
+		Ack: *body.Ack,
+	}
+
+	return v
+}
+
 // ValidateListDocumentsResponseBody runs the validations defined on
 // list_documents_response_body
 func ValidateListDocumentsResponseBody(body *ListDocumentsResponseBody) (err error) {
@@ -1071,6 +1352,24 @@ func ValidateDispatchActionRequestBody(body *DispatchActionRequestBody) (err err
 // ValidateDispatchActionResponseBody runs the validations defined on
 // dispatch_action_response_body
 func ValidateDispatchActionResponseBody(body *DispatchActionResponseBody) (err error) {
+	if body.Ack == nil {
+		err = loom.MergeErrors(err, loom.MissingFieldError("ack", "body"))
+	}
+	return
+}
+
+// ValidateDispatchCommandRequestBody runs the validations defined on
+// dispatch_command_request_body
+func ValidateDispatchCommandRequestBody(body *DispatchCommandRequestBody) (err error) {
+	if body.Command.Kind() == "" {
+		err = loom.MergeErrors(err, loom.MissingFieldError("command", "body"))
+	}
+	return
+}
+
+// ValidateDispatchCommandResponseBody runs the validations defined on
+// dispatch_command_response_body
+func ValidateDispatchCommandResponseBody(body *DispatchCommandResponseBody) (err error) {
 	if body.Ack == nil {
 		err = loom.MergeErrors(err, loom.MissingFieldError("ack", "body"))
 	}
@@ -1246,6 +1545,29 @@ func ValidateCreateActionRequestBodyRequestBody(body *CreateActionRequestBodyReq
 // ValidateDispatchActionResponseBodyResponseBody runs the validations defined
 // on dispatch_action_response_bodyResponseBody
 func ValidateDispatchActionResponseBodyResponseBody(body *DispatchActionResponseBodyResponseBody) (err error) {
+	if body.Ack == nil {
+		err = loom.MergeErrors(err, loom.MissingFieldError("ack", "body"))
+	}
+	return
+}
+
+// ValidateFooCmdRequestBodyRequestBody runs the validations defined on
+// FooCmdRequestBodyRequestBody
+func ValidateFooCmdRequestBodyRequestBody(body *FooCmdRequestBodyRequestBody) (err error) {
+	// no validations
+	return
+}
+
+// ValidateBarCmdRequestBodyRequestBody runs the validations defined on
+// BarCmdRequestBodyRequestBody
+func ValidateBarCmdRequestBodyRequestBody(body *BarCmdRequestBodyRequestBody) (err error) {
+	// no validations
+	return
+}
+
+// ValidateDispatchCommandResponseBodyResponseBody runs the validations defined
+// on dispatch_command_response_bodyResponseBody
+func ValidateDispatchCommandResponseBodyResponseBody(body *DispatchCommandResponseBodyResponseBody) (err error) {
 	if body.Ack == nil {
 		err = loom.MergeErrors(err, loom.MissingFieldError("ack", "body"))
 	}

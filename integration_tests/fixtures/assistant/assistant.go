@@ -151,3 +151,11 @@ func (s *assistantsrvc) DispatchAction(ctx context.Context, p *assistant.Dispatc
 	log.Printf(ctx, "assistant.dispatch_action")
 	return
 }
+
+// Dispatch a command using a union payload with a non-default branch key.
+func (s *assistantsrvc) DispatchCommand(ctx context.Context, p *assistant.DispatchCommandPayload) (res *assistant.DispatchCommandResult, err error) {
+	ack := "ok"
+	res = &assistant.DispatchCommandResult{Ack: ack}
+	log.Printf(ctx, "assistant.dispatch_command")
+	return
+}
