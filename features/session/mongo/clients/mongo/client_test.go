@@ -8,12 +8,21 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/require"
-	"go.mongodb.org/mongo-driver/bson"
-	mongodriver "go.mongodb.org/mongo-driver/mongo"
-	"go.mongodb.org/mongo-driver/mongo/options"
+	"go.mongodb.org/mongo-driver/v2/bson"
+	mongodriver "go.mongodb.org/mongo-driver/v2/mongo"
+	"go.mongodb.org/mongo-driver/v2/mongo/options"
 
 	"github.com/CaliLuke/loom-mcp/runtime/agent/prompt"
 	"github.com/CaliLuke/loom-mcp/runtime/agent/session"
+)
+
+const (
+	testAgentChat  = "agent.chat"
+	testSessionID  = "sess-1"
+	testRunTwo     = "run-2"
+	testRunThree   = "run-3"
+	testChildRun   = "run-child"
+	testChildAgent = "agent.child"
 )
 
 func TestEnsureIndexes(t *testing.T) {
@@ -67,12 +76,12 @@ func TestUpsertAndLoad(t *testing.T) {
 	client := mustNewTestClient()
 	run := session.RunMeta{
 		RunID:       "run-1",
-		AgentID:     "agent.chat",
-		SessionID:   "sess-1",
+		AgentID:     testAgentChat,
+		SessionID:   testSessionID,
 		Status:      session.RunStatusPending,
 		Labels:      map[string]string{"org": "demo"},
 		PromptRefs:  []prompt.PromptRef{{ID: prompt.Ident("prompt.a"), Version: "v1"}},
-		ChildRunIDs: []string{"run-2", "run-3"},
+		ChildRunIDs: []string{testRunTwo, testRunThree},
 		Metadata:    map[string]any{"reason": "test"},
 	}
 	err := client.UpsertRun(context.Background(), run)
@@ -86,7 +95,7 @@ func TestUpsertAndLoad(t *testing.T) {
 	require.Equal(t, run.Status, stored.Status)
 	require.Equal(t, "demo", stored.Labels["org"])
 	require.Equal(t, []prompt.PromptRef{{ID: prompt.Ident("prompt.a"), Version: "v1"}}, stored.PromptRefs)
-	require.Equal(t, []string{"run-2", "run-3"}, stored.ChildRunIDs)
+	require.Equal(t, []string{testRunTwo, testRunThree}, stored.ChildRunIDs)
 
 	run.Status = session.RunStatusCompleted
 	err = client.UpsertRun(context.Background(), run)
@@ -103,40 +112,40 @@ func TestLinkChildRun(t *testing.T) {
 	require.NoError(t, client.UpsertRun(context.Background(), session.RunMeta{
 		RunID:     "run-parent",
 		AgentID:   "agent.parent",
-		SessionID: "sess-1",
+		SessionID: testSessionID,
 		Status:    session.RunStatusRunning,
 		StartedAt: now,
 		UpdatedAt: now,
 	}))
 	require.NoError(t, client.LinkChildRun(context.Background(), "run-parent", session.RunMeta{
-		RunID:     "run-child",
-		AgentID:   "agent.child",
-		SessionID: "sess-1",
+		RunID:     testChildRun,
+		AgentID:   testChildAgent,
+		SessionID: testSessionID,
 		Status:    session.RunStatusPending,
 	}))
 	require.NoError(t, client.LinkChildRun(context.Background(), "run-parent", session.RunMeta{
-		RunID:     "run-child",
-		AgentID:   "agent.child",
-		SessionID: "sess-1",
+		RunID:     testChildRun,
+		AgentID:   testChildAgent,
+		SessionID: testSessionID,
 		Status:    session.RunStatusPending,
 	}))
 
 	parent, err := client.LoadRun(context.Background(), "run-parent")
 	require.NoError(t, err)
-	require.Equal(t, []string{"run-child"}, parent.ChildRunIDs)
+	require.Equal(t, []string{testChildRun}, parent.ChildRunIDs)
 
-	child, err := client.LoadRun(context.Background(), "run-child")
+	child, err := client.LoadRun(context.Background(), testChildRun)
 	require.NoError(t, err)
-	require.Equal(t, "agent.child", child.AgentID)
+	require.Equal(t, testChildAgent, child.AgentID)
 	require.Equal(t, session.RunStatusPending, child.Status)
 }
 
 func TestLinkChildRunValidationError(t *testing.T) {
 	client := mustNewTestClient()
 	err := client.LinkChildRun(context.Background(), "", session.RunMeta{
-		RunID:     "run-child",
-		AgentID:   "agent.child",
-		SessionID: "sess-1",
+		RunID:     testChildRun,
+		AgentID:   testChildAgent,
+		SessionID: testSessionID,
 		Status:    session.RunStatusPending,
 	})
 	require.ErrorIs(t, err, session.ErrParentRunIDRequired)
@@ -148,15 +157,15 @@ func TestLinkChildRunSessionMismatchError(t *testing.T) {
 	require.NoError(t, client.UpsertRun(context.Background(), session.RunMeta{
 		RunID:     "run-parent",
 		AgentID:   "agent.parent",
-		SessionID: "sess-1",
+		SessionID: testSessionID,
 		Status:    session.RunStatusRunning,
 		StartedAt: now,
 		UpdatedAt: now,
 	}))
 
 	err := client.LinkChildRun(context.Background(), "run-parent", session.RunMeta{
-		RunID:     "run-child",
-		AgentID:   "agent.child",
+		RunID:     testChildRun,
+		AgentID:   testChildAgent,
 		SessionID: "sess-2",
 		Status:    session.RunStatusPending,
 	})
@@ -168,30 +177,30 @@ func TestListRunsBySession(t *testing.T) {
 	now := time.Now().UTC()
 	require.NoError(t, client.UpsertRun(context.Background(), session.RunMeta{
 		RunID:     "run-1",
-		AgentID:   "agent.chat",
-		SessionID: "sess-1",
+		AgentID:   testAgentChat,
+		SessionID: testSessionID,
 		Status:    session.RunStatusRunning,
 		StartedAt: now,
 		UpdatedAt: now,
 	}))
 	require.NoError(t, client.UpsertRun(context.Background(), session.RunMeta{
-		RunID:     "run-2",
-		AgentID:   "agent.chat",
-		SessionID: "sess-1",
+		RunID:     testRunTwo,
+		AgentID:   testAgentChat,
+		SessionID: testSessionID,
 		Status:    session.RunStatusPending,
 		StartedAt: now,
 		UpdatedAt: now,
 	}))
 	require.NoError(t, client.UpsertRun(context.Background(), session.RunMeta{
-		RunID:     "run-3",
-		AgentID:   "agent.chat",
+		RunID:     testRunThree,
+		AgentID:   testAgentChat,
 		SessionID: "sess-2",
 		Status:    session.RunStatusRunning,
 		StartedAt: now,
 		UpdatedAt: now,
 	}))
 
-	out, err := client.ListRunsBySession(context.Background(), "sess-1", []session.RunStatus{session.RunStatusRunning})
+	out, err := client.ListRunsBySession(context.Background(), testSessionID, []session.RunStatus{session.RunStatusRunning})
 	require.NoError(t, err)
 	require.Len(t, out, 1)
 	require.Equal(t, "run-1", out[0].RunID)
@@ -239,7 +248,7 @@ func newFakeRunsCollection() *fakeRunsCollection {
 	return &fakeRunsCollection{docs: make(map[string]runDocument)}
 }
 
-func (c *fakeRunsCollection) FindOne(ctx context.Context, filter any, opts ...*options.FindOneOptions) singleResult {
+func (c *fakeRunsCollection) FindOne(ctx context.Context, filter any, opts ...options.Lister[options.FindOneOptions]) singleResult {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	runID := filter.(bson.M)["run_id"].(string)
@@ -251,7 +260,7 @@ func (c *fakeRunsCollection) FindOne(ctx context.Context, filter any, opts ...*o
 	return fakeSingleResult{doc: &copyDoc}
 }
 
-func (c *fakeRunsCollection) Find(ctx context.Context, filter any, opts ...*options.FindOptions) (cursor, error) {
+func (c *fakeRunsCollection) Find(ctx context.Context, filter any, opts ...options.Lister[options.FindOptions]) (cursor, error) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
@@ -283,7 +292,7 @@ func (c *fakeRunsCollection) Find(ctx context.Context, filter any, opts ...*opti
 }
 
 func (c *fakeRunsCollection) UpdateOne(ctx context.Context, filter any, update any,
-	opts ...*options.UpdateOptions) (*mongodriver.UpdateResult, error) {
+	opts ...options.Lister[options.UpdateOneOptions]) (*mongodriver.UpdateResult, error) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	runID := filter.(bson.M)["run_id"].(string)
@@ -344,7 +353,7 @@ type fakeIndexView struct {
 }
 
 func (v fakeIndexView) CreateOne(ctx context.Context, model mongodriver.IndexModel,
-	opts ...*options.CreateIndexesOptions) (string, error) {
+	opts ...options.Lister[options.CreateIndexesOptions]) (string, error) {
 	if len(model.Keys.(bson.D)) == 0 {
 		return "", errors.New("missing keys")
 	}
@@ -382,7 +391,7 @@ func newFakeSessionsCollection() *fakeSessionsCollection {
 	return &fakeSessionsCollection{docs: make(map[string]sessionDocument)}
 }
 
-func (c *fakeSessionsCollection) FindOne(ctx context.Context, filter any, opts ...*options.FindOneOptions) singleResult {
+func (c *fakeSessionsCollection) FindOne(ctx context.Context, filter any, opts ...options.Lister[options.FindOneOptions]) singleResult {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	sessionID := filter.(bson.M)["session_id"].(string)
@@ -394,12 +403,12 @@ func (c *fakeSessionsCollection) FindOne(ctx context.Context, filter any, opts .
 	return fakeSingleResult{doc: &copyDoc}
 }
 
-func (c *fakeSessionsCollection) Find(ctx context.Context, filter any, opts ...*options.FindOptions) (cursor, error) {
+func (c *fakeSessionsCollection) Find(ctx context.Context, filter any, opts ...options.Lister[options.FindOptions]) (cursor, error) {
 	return newFakeCursor(nil), nil
 }
 
 func (c *fakeSessionsCollection) UpdateOne(ctx context.Context, filter any, update any,
-	opts ...*options.UpdateOptions) (*mongodriver.UpdateResult, error) {
+	opts ...options.Lister[options.UpdateOneOptions]) (*mongodriver.UpdateResult, error) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
@@ -410,9 +419,13 @@ func (c *fakeSessionsCollection) UpdateOne(ctx context.Context, filter any, upda
 	}
 
 	up := update.(bson.M)
+	updateOpts, err := applyTestOptions[options.UpdateOneOptions](opts...)
+	if err != nil {
+		return nil, err
+	}
 	upsert := false
-	if len(opts) > 0 && opts[0] != nil && opts[0].Upsert != nil {
-		upsert = *opts[0].Upsert
+	if updateOpts.Upsert != nil {
+		upsert = *updateOpts.Upsert
 	}
 
 	if !ok && upsert {
@@ -469,6 +482,21 @@ func (c *fakeSessionsCollection) UpdateOne(ctx context.Context, filter any, upda
 
 func (c *fakeSessionsCollection) Indexes() indexView {
 	return fakeIndexView{parent: &c.indexCreated}
+}
+
+func applyTestOptions[T any](opts ...options.Lister[T]) (*T, error) {
+	var out T
+	for _, opt := range opts {
+		if opt == nil {
+			continue
+		}
+		for _, set := range opt.List() {
+			if err := set(&out); err != nil {
+				return nil, err
+			}
+		}
+	}
+	return &out, nil
 }
 
 type fakeCursor struct {

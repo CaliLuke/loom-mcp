@@ -8,9 +8,9 @@ import (
 	"errors"
 	"time"
 
-	"go.mongodb.org/mongo-driver/bson"
-	mongodriver "go.mongodb.org/mongo-driver/mongo"
-	"go.mongodb.org/mongo-driver/mongo/options"
+	"go.mongodb.org/mongo-driver/v2/bson"
+	mongodriver "go.mongodb.org/mongo-driver/v2/mongo"
+	"go.mongodb.org/mongo-driver/v2/mongo/options"
 
 	"github.com/CaliLuke/loom/clue/health"
 
@@ -117,7 +117,7 @@ func (c *client) CreateSession(ctx context.Context, sessionID string, createdAt 
 			fieldUpdatedAt: now,
 		},
 	}
-	if _, err := c.sessions.UpdateOne(ctxWithTimeout, filter, update, options.Update().SetUpsert(true)); err != nil {
+	if _, err := c.sessions.UpdateOne(ctxWithTimeout, filter, update, options.UpdateOne().SetUpsert(true)); err != nil {
 		return session.Session{}, err
 	}
 
@@ -218,7 +218,7 @@ func (c *client) UpsertRun(ctx context.Context, run session.RunMeta) error {
 			"started_at": doc.StartedAt,
 		},
 	}
-	_, err := c.runs.UpdateOne(ctx, filter, update, options.Update().SetUpsert(true))
+	_, err := c.runs.UpdateOne(ctx, filter, update, options.UpdateOne().SetUpsert(true))
 	return err
 }
 
@@ -235,7 +235,7 @@ func (c *client) LinkChildRun(ctx context.Context, parentRunID string, child ses
 		return err
 	}
 	defer sessionCtx.EndSession(ctx)
-	_, err = sessionCtx.WithTransaction(ctx, func(txCtx mongodriver.SessionContext) (any, error) {
+	_, err = sessionCtx.WithTransaction(ctx, func(txCtx context.Context) (any, error) {
 		return nil, c.linkChildRun(txCtx, parentRunID, child)
 	})
 	return err

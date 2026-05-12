@@ -9,11 +9,19 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/require"
-	"go.mongodb.org/mongo-driver/bson"
-	mongodriver "go.mongodb.org/mongo-driver/mongo"
-	"go.mongodb.org/mongo-driver/mongo/options"
+	"go.mongodb.org/mongo-driver/v2/bson"
+	mongodriver "go.mongodb.org/mongo-driver/v2/mongo"
+	"go.mongodb.org/mongo-driver/v2/mongo/options"
 
 	"github.com/CaliLuke/loom-mcp/runtime/agent/prompt"
+)
+
+const (
+	labelAccount     = "account"
+	labelRegion      = "region"
+	accountAcme      = "acme"
+	regionWest       = "west"
+	missingSessionID = "missing_session"
 )
 
 func TestEnsureIndexes(t *testing.T) {
@@ -35,28 +43,28 @@ func TestSetAndResolveByPrecedence(t *testing.T) {
 	require.NoError(t, client.Set(ctx, id, prompt.Scope{}, "global", nil))
 	require.NoError(t, client.Set(ctx, id, prompt.Scope{
 		Labels: map[string]string{
-			"account": "acme",
+			labelAccount: accountAcme,
 		},
 	}, "account", nil))
 	require.NoError(t, client.Set(ctx, id, prompt.Scope{
 		Labels: map[string]string{
-			"account": "acme",
-			"region":  "west",
+			labelAccount: accountAcme,
+			labelRegion:  regionWest,
 		},
 	}, "region", nil))
 	require.NoError(t, client.Set(ctx, id, prompt.Scope{
 		SessionID: "sess_1",
 		Labels: map[string]string{
-			"account": "acme",
-			"region":  "west",
+			labelAccount: accountAcme,
+			labelRegion:  regionWest,
 		},
 	}, "session", nil))
 
 	override, err := client.Resolve(ctx, id, prompt.Scope{
 		SessionID: "sess_1",
 		Labels: map[string]string{
-			"account": "acme",
-			"region":  "west",
+			labelAccount: accountAcme,
+			labelRegion:  regionWest,
 		},
 	})
 	require.NoError(t, err)
@@ -73,21 +81,21 @@ func TestResolveFallsBackAcrossScopes(t *testing.T) {
 	require.NoError(t, client.Set(ctx, id, prompt.Scope{}, "global", nil))
 	require.NoError(t, client.Set(ctx, id, prompt.Scope{
 		Labels: map[string]string{
-			"account": "acme",
+			labelAccount: accountAcme,
 		},
 	}, "account", nil))
 	require.NoError(t, client.Set(ctx, id, prompt.Scope{
 		Labels: map[string]string{
-			"account": "acme",
-			"region":  "west",
+			labelAccount: accountAcme,
+			labelRegion:  regionWest,
 		},
 	}, "region", nil))
 
 	override, err := client.Resolve(ctx, id, prompt.Scope{
-		SessionID: "missing_session",
+		SessionID: missingSessionID,
 		Labels: map[string]string{
-			"account": "acme",
-			"region":  "west",
+			labelAccount: accountAcme,
+			labelRegion:  regionWest,
 		},
 	})
 	require.NoError(t, err)
@@ -95,10 +103,10 @@ func TestResolveFallsBackAcrossScopes(t *testing.T) {
 	require.Equal(t, "region", override.Template)
 
 	override, err = client.Resolve(ctx, id, prompt.Scope{
-		SessionID: "missing_session",
+		SessionID: missingSessionID,
 		Labels: map[string]string{
-			"account": "acme",
-			"region":  "missing_region",
+			labelAccount: accountAcme,
+			labelRegion:  "missing_region",
 		},
 	})
 	require.NoError(t, err)
@@ -106,9 +114,9 @@ func TestResolveFallsBackAcrossScopes(t *testing.T) {
 	require.Equal(t, "account", override.Template)
 
 	override, err = client.Resolve(ctx, id, prompt.Scope{
-		SessionID: "missing_session",
+		SessionID: missingSessionID,
 		Labels: map[string]string{
-			"account": "missing_account",
+			labelAccount: "missing_account",
 		},
 	})
 	require.NoError(t, err)
@@ -202,7 +210,7 @@ func newFakeCollection() *fakeCollection {
 	}
 }
 
-func (c *fakeCollection) FindOne(ctx context.Context, filter any, opts ...*options.FindOneOptions) singleResult {
+func (c *fakeCollection) FindOne(ctx context.Context, filter any, opts ...options.Lister[options.FindOneOptions]) singleResult {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
@@ -216,7 +224,7 @@ func (c *fakeCollection) FindOne(ctx context.Context, filter any, opts ...*optio
 	return fakeSingleResult{doc: &matches[0]}
 }
 
-func (c *fakeCollection) Find(ctx context.Context, filter any, opts ...*options.FindOptions) (cursor, error) {
+func (c *fakeCollection) Find(ctx context.Context, filter any, opts ...options.Lister[options.FindOptions]) (cursor, error) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
@@ -227,7 +235,7 @@ func (c *fakeCollection) Find(ctx context.Context, filter any, opts ...*options.
 	return &fakeCursor{docs: matches, idx: -1}, nil
 }
 
-func (c *fakeCollection) InsertOne(ctx context.Context, document any, opts ...*options.InsertOneOptions) (*mongodriver.InsertOneResult, error) {
+func (c *fakeCollection) InsertOne(ctx context.Context, document any, opts ...options.Lister[options.InsertOneOptions]) (*mongodriver.InsertOneResult, error) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
@@ -329,7 +337,7 @@ type fakeIndexView struct {
 }
 
 func (v fakeIndexView) CreateOne(ctx context.Context, model mongodriver.IndexModel,
-	opts ...*options.CreateIndexesOptions) (string, error) {
+	opts ...options.Lister[options.CreateIndexesOptions]) (string, error) {
 	v.parent.mu.Lock()
 	defer v.parent.mu.Unlock()
 	v.parent.indexes = append(v.parent.indexes, model)

@@ -112,7 +112,7 @@ Upstream reference: `v0.50.0`
 
 Why it matters:
 
-- This repo still depends on `go.mongodb.org/mongo-driver v1`.
+- This repo has migrated the Mongo-backed stores to `go.mongodb.org/mongo-driver/v2`.
 - Upstream moved memory, prompt, runlog, and session stores to v2.
 
 Why it is worth doing:

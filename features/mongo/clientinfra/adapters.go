@@ -3,8 +3,8 @@ package clientinfra
 import (
 	"context"
 
-	mongodriver "go.mongodb.org/mongo-driver/mongo"
-	"go.mongodb.org/mongo-driver/mongo/options"
+	mongodriver "go.mongodb.org/mongo-driver/v2/mongo"
+	"go.mongodb.org/mongo-driver/v2/mongo/options"
 )
 
 type (
@@ -23,27 +23,27 @@ type (
 
 	// IndexCreator is the common index creation shape used by feature clients.
 	IndexCreator interface {
-		CreateOne(ctx context.Context, model mongodriver.IndexModel, opts ...*options.CreateIndexesOptions) (string, error)
+		CreateOne(ctx context.Context, model mongodriver.IndexModel, opts ...options.Lister[options.CreateIndexesOptions]) (string, error)
 	}
 
 	// FindOneCollection captures the common Mongo FindOne operation.
 	FindOneCollection interface {
-		FindOne(ctx context.Context, filter any, opts ...*options.FindOneOptions) SingleResultDecoder
+		FindOne(ctx context.Context, filter any, opts ...options.Lister[options.FindOneOptions]) SingleResultDecoder
 	}
 
 	// FindCollection captures the common Mongo Find operation.
 	FindCollection interface {
-		Find(ctx context.Context, filter any, opts ...*options.FindOptions) (CursorReader, error)
+		Find(ctx context.Context, filter any, opts ...options.Lister[options.FindOptions]) (CursorReader, error)
 	}
 
 	// InsertOneCollection captures the common Mongo InsertOne operation.
 	InsertOneCollection interface {
-		InsertOne(ctx context.Context, document any, opts ...*options.InsertOneOptions) (*mongodriver.InsertOneResult, error)
+		InsertOne(ctx context.Context, document any, opts ...options.Lister[options.InsertOneOptions]) (*mongodriver.InsertOneResult, error)
 	}
 
 	// UpdateOneCollection captures the common Mongo UpdateOne operation.
 	UpdateOneCollection interface {
-		UpdateOne(ctx context.Context, filter any, update any, opts ...*options.UpdateOptions) (*mongodriver.UpdateResult, error)
+		UpdateOne(ctx context.Context, filter any, update any, opts ...options.Lister[options.UpdateOneOptions]) (*mongodriver.UpdateResult, error)
 	}
 
 	// IndexedCollection captures access to Mongo index management.
@@ -103,17 +103,17 @@ func (c Cursor) Close(ctx context.Context) error {
 }
 
 // CreateOne forwards to the wrapped IndexView.
-func (v IndexView) CreateOne(ctx context.Context, model mongodriver.IndexModel, opts ...*options.CreateIndexesOptions) (string, error) {
+func (v IndexView) CreateOne(ctx context.Context, model mongodriver.IndexModel, opts ...options.Lister[options.CreateIndexesOptions]) (string, error) {
 	return v.View.CreateOne(ctx, model, opts...)
 }
 
 // FindOne forwards to the wrapped Collection.
-func (c Collection) FindOne(ctx context.Context, filter any, opts ...*options.FindOneOptions) SingleResultDecoder {
+func (c Collection) FindOne(ctx context.Context, filter any, opts ...options.Lister[options.FindOneOptions]) SingleResultDecoder {
 	return SingleResult{Res: c.Coll.FindOne(ctx, filter, opts...)}
 }
 
 // Find forwards to the wrapped Collection.
-func (c Collection) Find(ctx context.Context, filter any, opts ...*options.FindOptions) (CursorReader, error) {
+func (c Collection) Find(ctx context.Context, filter any, opts ...options.Lister[options.FindOptions]) (CursorReader, error) {
 	cur, err := c.Coll.Find(ctx, filter, opts...)
 	if err != nil {
 		return nil, err
@@ -122,12 +122,12 @@ func (c Collection) Find(ctx context.Context, filter any, opts ...*options.FindO
 }
 
 // InsertOne forwards to the wrapped Collection.
-func (c Collection) InsertOne(ctx context.Context, document any, opts ...*options.InsertOneOptions) (*mongodriver.InsertOneResult, error) {
+func (c Collection) InsertOne(ctx context.Context, document any, opts ...options.Lister[options.InsertOneOptions]) (*mongodriver.InsertOneResult, error) {
 	return c.Coll.InsertOne(ctx, document, opts...)
 }
 
 // UpdateOne forwards to the wrapped Collection.
-func (c Collection) UpdateOne(ctx context.Context, filter any, update any, opts ...*options.UpdateOptions) (*mongodriver.UpdateResult, error) {
+func (c Collection) UpdateOne(ctx context.Context, filter any, update any, opts ...options.Lister[options.UpdateOneOptions]) (*mongodriver.UpdateResult, error) {
 	return c.Coll.UpdateOne(ctx, filter, update, opts...)
 }
 

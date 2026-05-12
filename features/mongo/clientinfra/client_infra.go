@@ -7,8 +7,8 @@ import (
 	"reflect"
 	"time"
 
-	mongodriver "go.mongodb.org/mongo-driver/mongo"
-	"go.mongodb.org/mongo-driver/mongo/readpref"
+	mongodriver "go.mongodb.org/mongo-driver/v2/mongo"
+	"go.mongodb.org/mongo-driver/v2/mongo/readpref"
 )
 
 // ValidateMongoOptions checks the shared required Mongo constructor inputs.

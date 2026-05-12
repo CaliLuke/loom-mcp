@@ -8,13 +8,20 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"go.mongodb.org/mongo-driver/bson"
-	"go.mongodb.org/mongo-driver/bson/primitive"
-	mongodriver "go.mongodb.org/mongo-driver/mongo"
-	"go.mongodb.org/mongo-driver/mongo/options"
+	"go.mongodb.org/mongo-driver/v2/bson"
+	mongodriver "go.mongodb.org/mongo-driver/v2/mongo"
+	"go.mongodb.org/mongo-driver/v2/mongo/options"
 
 	"github.com/CaliLuke/loom-mcp/runtime/agent/hooks"
 	"github.com/CaliLuke/loom-mcp/runtime/agent/runlog"
+)
+
+const (
+	testEventKey  = "evt-1"
+	testRunID     = "run-1"
+	testAgentID   = "agent-1"
+	testSessionID = "session-1"
+	testTurnID    = "turn-1"
 )
 
 func TestClientAppendAssignsID(t *testing.T) {
@@ -27,11 +34,11 @@ func TestClientAppendAssignsID(t *testing.T) {
 	c := &client{coll: coll}
 
 	e := &runlog.Event{
-		EventKey:  "evt-1",
-		RunID:     "run-1",
-		AgentID:   "agent-1",
-		SessionID: "session-1",
-		TurnID:    "turn-1",
+		EventKey:  testEventKey,
+		RunID:     testRunID,
+		AgentID:   testAgentID,
+		SessionID: testSessionID,
+		TurnID:    testTurnID,
 		Type:      hooks.RunStarted,
 		Payload:   []byte(`{"ok":true}`),
 		Timestamp: time.Unix(1, 0).UTC(),
@@ -87,7 +94,7 @@ func TestClientListNextCursor(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 
-			runID := "run-1"
+			runID := testRunID
 			coll := &fakeCollection{
 				findDocs: fakeEventDocuments(runID, tc.eventCount),
 			}
@@ -120,14 +127,14 @@ func TestClientAppendReturnsExistingIDForDuplicateEventKey(t *testing.T) {
 	c := &client{coll: coll}
 
 	e := &runlog.Event{
-		RunID:     "run-1",
-		AgentID:   "agent-1",
-		SessionID: "session-1",
-		TurnID:    "turn-1",
+		RunID:     testRunID,
+		AgentID:   testAgentID,
+		SessionID: testSessionID,
+		TurnID:    testTurnID,
 		Type:      hooks.RunStarted,
 		Payload:   []byte(`{"ok":true}`),
 		Timestamp: time.Unix(1, 0).UTC(),
-		EventKey:  "evt-1",
+		EventKey:  testEventKey,
 	}
 	first, err := c.Append(context.Background(), e)
 	require.NoError(t, err)
@@ -140,25 +147,25 @@ func TestClientAppendReturnsExistingIDForDuplicateEventKey(t *testing.T) {
 	}
 	coll.findOneDoc = eventDocument{
 		ID:        oid,
-		RunID:     "run-1",
-		AgentID:   "agent-1",
-		SessionID: "session-1",
-		TurnID:    "turn-1",
+		RunID:     testRunID,
+		AgentID:   testAgentID,
+		SessionID: testSessionID,
+		TurnID:    testTurnID,
 		Type:      string(hooks.RunStarted),
 		Payload:   []byte(`{"ok":true}`),
 		Timestamp: time.Unix(1, 0).UTC(),
-		EventKey:  "evt-1",
+		EventKey:  testEventKey,
 	}
 
 	dup := &runlog.Event{
-		RunID:     "run-1",
-		AgentID:   "agent-1",
-		SessionID: "session-1",
-		TurnID:    "turn-1",
+		RunID:     testRunID,
+		AgentID:   testAgentID,
+		SessionID: testSessionID,
+		TurnID:    testTurnID,
 		Type:      hooks.RunStarted,
 		Payload:   []byte(`{"ok":true}`),
 		Timestamp: time.Unix(1, 0).UTC(),
-		EventKey:  "evt-1",
+		EventKey:  testEventKey,
 	}
 	second, err := c.Append(context.Background(), dup)
 	require.NoError(t, err)
@@ -170,13 +177,13 @@ func TestClientAppendReturnsExistingIDForDuplicateEventKey(t *testing.T) {
 func fakeEventDocuments(runID string, n int) []eventDocument {
 	docs := make([]eventDocument, 0, n)
 	for i := 1; i <= n; i++ {
-		oid := primitive.ObjectID{0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, byte(i)}
+		oid := bson.ObjectID{0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, byte(i)}
 		docs = append(docs, eventDocument{
 			ID:        oid,
 			RunID:     runID,
-			AgentID:   "agent-1",
-			SessionID: "session-1",
-			TurnID:    "turn-1",
+			AgentID:   testAgentID,
+			SessionID: testSessionID,
+			TurnID:    testTurnID,
 			Type:      string(hooks.RunStarted),
 			Payload:   []byte(`{}`),
 			Timestamp: time.Unix(int64(i), 0).UTC(),
@@ -185,10 +192,10 @@ func fakeEventDocuments(runID string, n int) []eventDocument {
 	return docs
 }
 
-func mustOID(t *testing.T, hex string) primitive.ObjectID {
+func mustOID(t *testing.T, hex string) bson.ObjectID {
 	t.Helper()
 
-	oid, err := primitive.ObjectIDFromHex(hex)
+	oid, err := bson.ObjectIDFromHex(hex)
 	if !assert.NoError(t, err) {
 		t.FailNow()
 	}
@@ -196,33 +203,33 @@ func mustOID(t *testing.T, hex string) primitive.ObjectID {
 }
 
 type fakeCollection struct {
-	insertedID primitive.ObjectID
+	insertedID bson.ObjectID
 	findDocs   []eventDocument
 	findOneDoc eventDocument
 	insertErr  error
 }
 
-func (c *fakeCollection) InsertOne(context.Context, any, ...*options.InsertOneOptions) (*mongodriver.InsertOneResult, error) {
+func (c *fakeCollection) InsertOne(context.Context, any, ...options.Lister[options.InsertOneOptions]) (*mongodriver.InsertOneResult, error) {
 	if c.insertErr != nil {
 		return nil, c.insertErr
 	}
 	return &mongodriver.InsertOneResult{InsertedID: c.insertedID}, nil
 }
 
-func (c *fakeCollection) FindOne(_ context.Context, _ any, _ ...*options.FindOneOptions) singleResult {
+func (c *fakeCollection) FindOne(_ context.Context, _ any, _ ...options.Lister[options.FindOneOptions]) singleResult {
 	return fakeSingleResult{doc: c.findOneDoc}
 }
 
-func (c *fakeCollection) Find(_ context.Context, filter any, opts ...*options.FindOptions) (cursor, error) {
+func (c *fakeCollection) Find(_ context.Context, filter any, opts ...options.Lister[options.FindOptions]) (cursor, error) {
 	f, ok := filter.(bson.M)
 	if !ok {
 		return &fakeCursor{}, nil
 	}
 
 	runID, _ := f["run_id"].(string)
-	var after primitive.ObjectID
+	var after bson.ObjectID
 	if id, ok := f["_id"].(bson.M); ok {
-		if gt, ok := id["$gt"].(primitive.ObjectID); ok {
+		if gt, ok := id["$gt"].(bson.ObjectID); ok {
 			after = gt
 		}
 	}
@@ -238,9 +245,13 @@ func (c *fakeCollection) Find(_ context.Context, filter any, opts ...*options.Fi
 		filtered = append(filtered, doc)
 	}
 
+	findOpts, err := applyTestOptions[options.FindOptions](opts...)
+	if err != nil {
+		return nil, err
+	}
 	var limit int64
-	if len(opts) > 0 && opts[0] != nil && opts[0].Limit != nil {
-		limit = *opts[0].Limit
+	if findOpts.Limit != nil {
+		limit = *findOpts.Limit
 	}
 	if limit > 0 && int64(len(filtered)) > limit {
 		filtered = filtered[:limit]
@@ -255,8 +266,23 @@ func (c *fakeCollection) Indexes() indexView {
 
 type fakeIndexView struct{}
 
-func (fakeIndexView) CreateOne(context.Context, mongodriver.IndexModel, ...*options.CreateIndexesOptions) (string, error) {
+func (fakeIndexView) CreateOne(context.Context, mongodriver.IndexModel, ...options.Lister[options.CreateIndexesOptions]) (string, error) {
 	return "", nil
+}
+
+func applyTestOptions[T any](opts ...options.Lister[T]) (*T, error) {
+	var out T
+	for _, opt := range opts {
+		if opt == nil {
+			continue
+		}
+		for _, set := range opt.List() {
+			if err := set(&out); err != nil {
+				return nil, err
+			}
+		}
+	}
+	return &out, nil
 }
 
 type fakeCursor struct {

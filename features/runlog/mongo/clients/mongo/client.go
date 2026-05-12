@@ -10,10 +10,9 @@ import (
 	"fmt"
 	"time"
 
-	"go.mongodb.org/mongo-driver/bson"
-	"go.mongodb.org/mongo-driver/bson/primitive"
-	mongodriver "go.mongodb.org/mongo-driver/mongo"
-	"go.mongodb.org/mongo-driver/mongo/options"
+	"go.mongodb.org/mongo-driver/v2/bson"
+	mongodriver "go.mongodb.org/mongo-driver/v2/mongo"
+	"go.mongodb.org/mongo-driver/v2/mongo/options"
 
 	"github.com/CaliLuke/loom/clue/health"
 
@@ -47,15 +46,15 @@ type (
 	}
 
 	eventDocument struct {
-		ID        primitive.ObjectID `bson:"_id,omitempty"`
-		EventKey  string             `bson:"event_key"`
-		RunID     string             `bson:"run_id"`
-		AgentID   string             `bson:"agent_id"`
-		SessionID string             `bson:"session_id"`
-		TurnID    string             `bson:"turn_id"`
-		Type      string             `bson:"type"`
-		Payload   []byte             `bson:"payload"`
-		Timestamp time.Time          `bson:"timestamp"`
+		ID        bson.ObjectID `bson:"_id,omitempty"`
+		EventKey  string        `bson:"event_key"`
+		RunID     string        `bson:"run_id"`
+		AgentID   string        `bson:"agent_id"`
+		SessionID string        `bson:"session_id"`
+		TurnID    string        `bson:"turn_id"`
+		Type      string        `bson:"type"`
+		Payload   []byte        `bson:"payload"`
+		Timestamp time.Time     `bson:"timestamp"`
 	}
 )
 
@@ -182,7 +181,7 @@ func (c *client) resolveDuplicateAppend(ctx context.Context, e *runlog.Event, do
 }
 
 func assignInsertedEventID(e *runlog.Event, insertedID any) (runlog.AppendResult, error) {
-	oid, ok := insertedID.(primitive.ObjectID)
+	oid, ok := insertedID.(bson.ObjectID)
 	if !ok {
 		return runlog.AppendResult{}, fmt.Errorf("unexpected inserted id type %T", insertedID)
 	}
@@ -201,7 +200,7 @@ func listRunlogFilter(runID, cursor string, limit int) (bson.M, error) {
 	if cursor == "" {
 		return filter, nil
 	}
-	oid, err := primitive.ObjectIDFromHex(cursor)
+	oid, err := bson.ObjectIDFromHex(cursor)
 	if err != nil {
 		return nil, fmt.Errorf("invalid cursor %q: %w", cursor, err)
 	}

@@ -200,7 +200,7 @@ import (
 )
 
 mongoClient, _ := clientmongo.New(clientmongo.Options{
-    Client:     rawMongoClient,
+    Client:     rawMongoClient, // *mongo.Client from go.mongodb.org/mongo-driver/v2/mongo
     Database:   "aura",
     Collection: "prompt_overrides",
 })
