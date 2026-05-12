@@ -27,7 +27,7 @@ Create design/design.go:
 package design
 
 import (
-    . "goa.design/goa/v3/dsl"
+    . "github.com/CaliLuke/loom/dsl"
     . "github.com/CaliLuke/loom-mcp/dsl"
 )
 
@@ -74,7 +74,7 @@ var _ = Service("orchestrator", func() {
 Generate code:
 
 --- CODE ---
-goa gen example.com/tutorial/design
+loom gen example.com/tutorial/design
 --- END CODE ---
 
 

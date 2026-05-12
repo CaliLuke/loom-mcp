@@ -474,7 +474,7 @@ func emitToolProviderTypes(stmt *jen.Statement, data toolProviderFileData) {
 
 func emitToolProviderHelpers(stmt *jen.Statement) {
 	stmt.Func().Id("toolErrorCode").Params(jen.Id("err").Error()).String().Block(
-		jen.Var().Id("se").Op("*").Id("goa").Dot("ServiceError"),
+		jen.Var().Id("se").Op("*").Id("loom").Dot("ServiceError"),
 		jen.If(jen.Qual("errors", "As").Call(jen.Id("err"), jen.Op("&").Id("se"))).Block(
 			jen.If(jen.Id("se").Dot("Timeout")).Block(
 				jen.Return(jen.Lit("timeout")),

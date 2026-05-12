@@ -121,8 +121,8 @@ git commit -m "feat: move activity liveness tuning into temporal engine"
 - Modify: `docs/runtime.md`
 - Modify: `docs/dsl.md`
 - Modify: `docs/overview.md`
-- Modify: `../goa.design/content/en/docs/2-loom-mcp/runtime.md`
-- Modify: `../goa.design/content/en/docs/2-loom-mcp/dsl-reference.md`
+- Modify: `../docs-site/content/en/docs/loom-mcp/runtime.md`
+- Modify: `../docs-site/content/en/docs/loom-mcp/dsl-reference.md`
 
 **Step 1: Update the runtime docs**
 
@@ -135,19 +135,19 @@ Explain that:
 
 Clarify that `Timing` does not expose engine internals. It sets semantic planner/tool attempt budgets only.
 
-**Step 3: Update the public goa.design docs**
+**Step 3: Update the public public docs**
 
 Mirror the same explanation in the English runtime and DSL reference pages so the external docs and repository docs say the same thing.
 
 **Step 4: Verify the docs read consistently**
 
-Run: `rg "WithWorker|Heartbeat|ScheduleToStart|Timing\\(|Plan\\(|Tools\\(" docs ../goa.design/content/en/docs/2-loom-mcp`
+Run: `rg "WithWorker|Heartbeat|ScheduleToStart|Timing\\(|Plan\\(|Tools\\(" docs ../docs-site/content/en/docs/loom-mcp`
 Expected: the remaining matches describe the new boundary consistently and do not present `runtime.WorkerConfig` as a Temporal activity tuning surface.
 
 **Step 5: Commit**
 
 ```bash
-git add docs/runtime.md docs/dsl.md docs/overview.md ../goa.design/content/en/docs/2-loom-mcp/runtime.md ../goa.design/content/en/docs/2-loom-mcp/dsl-reference.md
+git add docs/runtime.md docs/dsl.md docs/overview.md ../docs-site/content/en/docs/loom-mcp/runtime.md ../docs-site/content/en/docs/loom-mcp/dsl-reference.md
 git commit -m "docs: explain runtime and temporal timing boundary"
 ```
 
@@ -160,8 +160,8 @@ git commit -m "docs: explain runtime and temporal timing boundary"
 - Modify: `docs/runtime.md`
 - Modify: `docs/dsl.md`
 - Modify: `docs/overview.md`
-- Modify: `../goa.design/content/en/docs/2-loom-mcp/runtime.md`
-- Modify: `../goa.design/content/en/docs/2-loom-mcp/dsl-reference.md`
+- Modify: `../docs-site/content/en/docs/loom-mcp/runtime.md`
+- Modify: `../docs-site/content/en/docs/loom-mcp/dsl-reference.md`
 
 **Step 1: Format touched Go files**
 
@@ -184,13 +184,13 @@ Expected: no new diagnostics.
 
 **Step 4: Check the diff**
 
-Run: `git diff -- runtime/agent/runtime runtime/agent/engine/temporal docs ../goa.design/content/en/docs/2-loom-mcp`
+Run: `git diff -- runtime/agent/runtime runtime/agent/engine/temporal docs ../docs-site/content/en/docs/loom-mcp`
 Expected: runtime surface is cleaner, Temporal owns liveness tuning, docs align.
 
 **Step 5: Commit**
 
 ```bash
-git add runtime/agent/runtime runtime/agent/engine/temporal docs ../goa.design/content/en/docs/2-loom-mcp
+git add runtime/agent/runtime runtime/agent/engine/temporal docs ../docs-site/content/en/docs/loom-mcp
 git commit -m "refactor: move activity liveness behind temporal engine"
 ```
 

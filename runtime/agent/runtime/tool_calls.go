@@ -14,7 +14,7 @@ import (
 	"github.com/CaliLuke/loom-mcp/runtime/agent/rawjson"
 	"github.com/CaliLuke/loom-mcp/runtime/agent/run"
 	"github.com/CaliLuke/loom-mcp/runtime/agent/tools"
-	goa "github.com/CaliLuke/loom/pkg"
+	loom "github.com/CaliLuke/loom/pkg"
 )
 
 type (
@@ -152,7 +152,7 @@ func parentToolCallID(call planner.ToolRequest, runCtx *run.Context) string {
 }
 
 func retryHintFromExecutionError(tool tools.Ident, err error) *planner.RetryHint {
-	var svcErr *goa.ServiceError
+	var svcErr *loom.ServiceError
 	if errors.As(err, &svcErr) && svcErr.Name == "service_unavailable" {
 		return &planner.RetryHint{
 			Reason: planner.RetryReasonToolUnavailable,

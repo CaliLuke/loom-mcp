@@ -5,7 +5,7 @@
 ```bash
 mkdir quickstart && cd quickstart
 go mod init quickstart
-go get goa.design/goa/v3@latest github.com/CaliLuke/loom-mcp@latest
+go get github.com/CaliLuke/loom@v1.1.0 github.com/CaliLuke/loom-mcp@latest
 ```
 
 Create `design/design.go`.
@@ -14,7 +14,7 @@ Create `design/design.go`.
 package design
 
 import (
-    . "goa.design/goa/v3/dsl"
+    . "github.com/CaliLuke/loom/dsl"
     . "github.com/CaliLuke/loom-mcp/dsl"
 )
 
@@ -45,7 +45,7 @@ var _ = Service("demo", func() {
 ## Generate code
 
 ```bash
-goa gen quickstart/design
+loom gen quickstart/design
 ```
 
 This creates loom-mcp generated registration and toolset packages:

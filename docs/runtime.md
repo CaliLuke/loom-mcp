@@ -589,7 +589,7 @@ Loom MCP provides a reusable executor implementation in `runtime/toolregistry/ex
 
 ```go
 import (
-    toolregexec "goa.design/loom-mcp/runtime/toolregistry/executor"
+    toolregexec "github.com/CaliLuke/loom-mcp/runtime/toolregistry/executor"
 )
 
 exec := toolregexec.New(registryClient, pulseClient, specs)
@@ -1376,7 +1376,7 @@ resp, err := modelClient.Complete(ctx, &model.Request{
 Apply adaptive rate limiting:
 
 ```go
-import mdlmw "goa.design/loom-mcp/features/model/middleware"
+import mdlmw "github.com/CaliLuke/loom-mcp/features/model/middleware"
 
 rl := mdlmw.NewAdaptiveRateLimiter(
     ctx,
@@ -1491,7 +1491,7 @@ type WorkflowContext interface {
 **Temporal worker** — Production-grade durable execution:
 
 ```go
-import temporal "goa.design/loom-mcp/runtime/agent/engine/temporal"
+import temporal "github.com/CaliLuke/loom-mcp/runtime/agent/engine/temporal"
 
 eng, _ := temporal.NewWorker(temporal.Options{
     ClientOptions: &client.Options{
@@ -1537,7 +1537,7 @@ In this split:
 **In-memory** — Fast iteration, no durability:
 
 ```go
-import inmem "goa.design/loom-mcp/runtime/agent/engine/inmem"
+import inmem "github.com/CaliLuke/loom-mcp/runtime/agent/engine/inmem"
 
 eng := inmem.New()
 ```
@@ -1608,7 +1608,7 @@ caller that can be reused across multiple tool invocations.
 Spawns an MCP server as a subprocess and communicates via stdin/stdout:
 
 ```go
-import "goa.design/loom-mcp/runtime/mcp"
+import "github.com/CaliLuke/loom-mcp/runtime/mcp"
 
 caller, err := mcp.NewStdioCaller(mcp.StdioOptions{
     Command: "npx",
@@ -1817,7 +1817,7 @@ events for specific use cases.
 | `MetricsProfile()`    | Telemetry and monitoring      | `usage`, `workflow` only |
 
 ```go
-import "goa.design/loom-mcp/runtime/agent/stream"
+import "github.com/CaliLuke/loom-mcp/runtime/agent/stream"
 
 // Get a profile
 profile := stream.AgentDebugProfile()
@@ -1834,7 +1834,7 @@ The `runtime/agent/toolerrors` package provides structured error types for tool 
 failures that integrate with the planner retry system.
 
 ```go
-import "goa.design/loom-mcp/runtime/agent/toolerrors"
+import "github.com/CaliLuke/loom-mcp/runtime/agent/toolerrors"
 
 // Create a tool error with retry hint
 err := toolerrors.New(
@@ -1872,7 +1872,7 @@ Loom MCP supports two complementary paths that produce `planner.RetryHint`:
 
 2. **Execution‑time validation (service / tool provider errors)**  
    When a tool provider calls a bound service method, the method may return a structured
-   validation error (for example `goa.MissingFieldError`, `goa.InvalidLengthError`, …).
+   validation error (for example `loom.MissingFieldError`, `loom.InvalidLengthError`, …).
    Providers should surface these as **structured validation issues** in the tool result
    message so consumers can build a `RetryHint` without parsing error strings.
    - **Provider behavior (generated)**: generated providers call
@@ -1896,7 +1896,7 @@ The `features/model/middleware` package provides middleware for model clients.
 Apply adaptive rate limiting to handle provider throttling:
 
 ```go
-import mdlmw "goa.design/loom-mcp/features/model/middleware"
+import mdlmw "github.com/CaliLuke/loom-mcp/features/model/middleware"
 
 rl := mdlmw.NewAdaptiveRateLimiter(
     ctx,
@@ -1933,7 +1933,7 @@ defer cleanup()
 ### Pulse Streaming
 
 ```go
-import pulsestream "goa.design/loom-mcp/features/stream/pulse"
+import pulsestream "github.com/CaliLuke/loom-mcp/features/stream/pulse"
 
 streams, _ := pulsestream.NewRuntimeStreams(pulsestream.RuntimeStreamsOptions{
     Client: pulseClient,

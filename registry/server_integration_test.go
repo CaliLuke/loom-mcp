@@ -11,7 +11,7 @@ import (
 	registrypb "github.com/CaliLuke/loom-mcp/registry/gen/grpc/registry/pb"
 	grpcserver "github.com/CaliLuke/loom-mcp/registry/gen/grpc/registry/server"
 	genregistry "github.com/CaliLuke/loom-mcp/registry/gen/registry"
-	goa "github.com/CaliLuke/loom/pkg"
+	loom "github.com/CaliLuke/loom/pkg"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 )
@@ -134,7 +134,7 @@ func TestServerIntegration(t *testing.T) {
 		if err == nil {
 			t.Fatal("expected error for nonexistent toolset")
 		}
-		var svcErr *goa.ServiceError
+		var svcErr *loom.ServiceError
 		if !errors.As(err, &svcErr) {
 			t.Fatalf("expected ServiceError, got %T", err)
 		}
@@ -213,7 +213,7 @@ func TestServerIntegration(t *testing.T) {
 		if err == nil {
 			t.Fatal("expected error for nonexistent toolset")
 		}
-		var svcErr *goa.ServiceError
+		var svcErr *loom.ServiceError
 		if !errors.As(err, &svcErr) {
 			t.Fatalf("expected ServiceError, got %T", err)
 		}
@@ -339,7 +339,7 @@ func TestServerValidationErrors(t *testing.T) {
 		if err == nil {
 			t.Fatal("expected error for invalid schema")
 		}
-		var svcErr *goa.ServiceError
+		var svcErr *loom.ServiceError
 		if !errors.As(err, &svcErr) {
 			t.Fatalf("expected ServiceError, got %T: %v", err, err)
 		}
@@ -362,7 +362,7 @@ func TestServerValidationErrors(t *testing.T) {
 		if err == nil {
 			t.Fatal("expected error for empty schema")
 		}
-		var svcErr *goa.ServiceError
+		var svcErr *loom.ServiceError
 		if !errors.As(err, &svcErr) {
 			t.Fatalf("expected ServiceError, got %T: %v", err, err)
 		}

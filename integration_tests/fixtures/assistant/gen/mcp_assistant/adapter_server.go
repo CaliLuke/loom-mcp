@@ -25,7 +25,7 @@ import (
 	assistant "example.com/assistant/gen/assistant"
 	mcpruntime "github.com/CaliLuke/loom-mcp/runtime/mcp"
 	goahttp "github.com/CaliLuke/loom/http"
-	goa "github.com/CaliLuke/loom/pkg"
+	loom "github.com/CaliLuke/loom/pkg"
 	mcpauth "github.com/modelcontextprotocol/go-sdk/auth"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
@@ -58,7 +58,7 @@ type MCPAdapter struct {
 type (
 	// ToolCallInterceptorInfo describes a generated MCP tools/call invocation.
 	ToolCallInterceptorInfo interface {
-		goa.InterceptorInfo
+		loom.InterceptorInfo
 		Tool() string
 		RawArguments() json.RawMessage
 	}
@@ -86,8 +86,8 @@ func (i *toolCallInterceptorInfo) Method() string {
 func (i *toolCallInterceptorInfo) Tool() string {
 	return i.tool
 }
-func (i *toolCallInterceptorInfo) CallType() goa.InterceptorCallType {
-	return goa.InterceptorUnary
+func (i *toolCallInterceptorInfo) CallType() loom.InterceptorCallType {
+	return loom.InterceptorUnary
 }
 func (i *toolCallInterceptorInfo) RawPayload() any {
 	return i.rawPayload
@@ -455,15 +455,15 @@ func formatToolErrorText(err error) string {
 	if err == nil {
 		return "[internal_error] Tool execution failed."
 	}
-	code := strings.TrimSpace(goa.ErrorRemedyCode(err))
+	code := strings.TrimSpace(loom.ErrorRemedyCode(err))
 	if code == "" {
-		var namer goa.LoomErrorNamer
+		var namer loom.LoomErrorNamer
 		if errors.As(err, &namer) {
 			code = strings.TrimSpace(namer.LoomErrorName())
 		}
 	}
 	if code == "" {
-		if status, ok := goa.ErrorStatusCode(err); ok {
+		if status, ok := loom.ErrorStatusCode(err); ok {
 			switch status {
 			case http.StatusBadRequest:
 				code = "invalid_params"
@@ -477,11 +477,11 @@ func formatToolErrorText(err error) string {
 	if code == "" {
 		code = "internal_error"
 	}
-	message := strings.TrimSpace(goa.ErrorSafeMessage(err))
+	message := strings.TrimSpace(loom.ErrorSafeMessage(err))
 	if message == "" {
 		message = "Tool execution failed."
 	}
-	recovery := strings.TrimSpace(goa.ErrorRetryHint(err))
+	recovery := strings.TrimSpace(loom.ErrorRetryHint(err))
 	if recovery == "" {
 		return fmt.Sprintf("[%s] %s", code, message)
 	}
@@ -489,21 +489,21 @@ func formatToolErrorText(err error) string {
 }
 func toolCallError(err error, defaultCode string, defaultRecovery string) error {
 	if err == nil {
-		err = goa.PermanentError(defaultCode, "Tool execution failed.")
+		err = loom.PermanentError(defaultCode, "Tool execution failed.")
 	}
-	code := strings.TrimSpace(goa.ErrorRemedyCode(err))
+	code := strings.TrimSpace(loom.ErrorRemedyCode(err))
 	if code == "" {
 		code = defaultCode
 	}
-	message := strings.TrimSpace(goa.ErrorSafeMessage(err))
+	message := strings.TrimSpace(loom.ErrorSafeMessage(err))
 	if message == "" {
 		message = "Tool execution failed."
 	}
-	recovery := strings.TrimSpace(goa.ErrorRetryHint(err))
+	recovery := strings.TrimSpace(loom.ErrorRetryHint(err))
 	if recovery == "" {
 		recovery = defaultRecovery
 	}
-	return goa.WithErrorRemedy(goa.PermanentError(code, "%s", message), &goa.ErrorRemedy{
+	return loom.WithErrorRemedy(loom.PermanentError(code, "%s", message), &loom.ErrorRemedy{
 		Code:        code,
 		RetryHint:   recovery,
 		SafeMessage: message,
@@ -513,7 +513,7 @@ func toolInputError(err error, raw json.RawMessage) error {
 	return toolCallError(err, "invalid_params", inferToolInputRecovery(err, raw))
 }
 func inferToolInputRecovery(err error, raw json.RawMessage) string {
-	message := strings.TrimSpace(goa.ErrorSafeMessage(err))
+	message := strings.TrimSpace(loom.ErrorSafeMessage(err))
 	if message == "" {
 		message = strings.TrimSpace(err.Error())
 	}
@@ -734,7 +734,7 @@ func (a *MCPAdapter) Initialize(ctx context.Context, p *InitializePayload) (res 
 		"session_id":       requestSessionID,
 	})
 	if p == nil || p.ProtocolVersion == "" {
-		return nil, goa.PermanentError("invalid_params", "Missing protocolVersion")
+		return nil, loom.PermanentError("invalid_params", "Missing protocolVersion")
 	}
 	negotiatedVersion := a.negotiateProtocolVersion(p.ProtocolVersion)
 	sessionID := requestSessionID
@@ -745,7 +745,7 @@ func (a *MCPAdapter) Initialize(ctx context.Context, p *InitializePayload) (res 
 	if sessionID == "" {
 		if a.initialized {
 			a.mu.Unlock()
-			err = goa.PermanentError("invalid_params", "Already initialized")
+			err = loom.PermanentError("invalid_params", "Already initialized")
 			a.log(ctx, "response", map[string]any{
 				"error":            err.Error(),
 				"method":           "initialize",
@@ -758,7 +758,7 @@ func (a *MCPAdapter) Initialize(ctx context.Context, p *InitializePayload) (res 
 	} else {
 		if _, ok := a.initializedSessions[sessionID]; ok {
 			a.mu.Unlock()
-			err = goa.PermanentError("invalid_params", "Already initialized")
+			err = loom.PermanentError("invalid_params", "Already initialized")
 			a.log(ctx, "response", map[string]any{
 				"error":            err.Error(),
 				"method":           "initialize",
@@ -877,7 +877,7 @@ func decodeMCPPayloadFields(data []byte) (map[string]json.RawMessage, error) {
 func validateMCPPayloadRequired(fields map[string]json.RawMessage, field string) error {
 	raw, ok := fields[field]
 	if !ok {
-		return goa.WithErrorRemedy(goa.PermanentError("invalid_params", "Missing required field: %s", field), &goa.ErrorRemedy{
+		return loom.WithErrorRemedy(loom.PermanentError("invalid_params", "Missing required field: %s", field), &loom.ErrorRemedy{
 			Code:        "invalid_params",
 			RetryHint:   fmt.Sprintf("Include required field %q.", field),
 			SafeMessage: fmt.Sprintf("Missing required field: %s", field),
@@ -885,7 +885,7 @@ func validateMCPPayloadRequired(fields map[string]json.RawMessage, field string)
 	}
 	trimmed := bytes.TrimSpace(raw)
 	if bytes.Equal(trimmed, []byte("\"\"")) || bytes.Equal(trimmed, []byte("null")) {
-		return goa.WithErrorRemedy(goa.PermanentError("invalid_params", "Missing required field: %s", field), &goa.ErrorRemedy{
+		return loom.WithErrorRemedy(loom.PermanentError("invalid_params", "Missing required field: %s", field), &loom.ErrorRemedy{
 			Code:        "invalid_params",
 			RetryHint:   fmt.Sprintf("Include required field %q.", field),
 			SafeMessage: fmt.Sprintf("Missing required field: %s", field),
@@ -908,7 +908,7 @@ func validateMCPPayloadEnum(fields map[string]json.RawMessage, field string, all
 			return nil
 		}
 	}
-	return goa.WithErrorRemedy(goa.PermanentError("invalid_params", "Invalid value for %s", field), &goa.ErrorRemedy{
+	return loom.WithErrorRemedy(loom.PermanentError("invalid_params", "Invalid value for %s", field), &loom.ErrorRemedy{
 		Code:        "invalid_params",
 		RetryHint:   fmt.Sprintf("Use one of: %s.", strings.Join(allowed, ", ")),
 		SafeMessage: fmt.Sprintf("Invalid value for %s", field),
@@ -920,7 +920,7 @@ func (a *MCPAdapter) ToolsList(ctx context.Context, p *ToolsListPayload) (res *T
 		a.finishTelemetry(ctx, span, start, attrs, err, false)
 	}()
 	if !a.isInitialized(ctx) {
-		return nil, goa.PermanentError("invalid_params", "Not initialized")
+		return nil, loom.PermanentError("invalid_params", "Not initialized")
 	}
 	a.log(ctx, "request", map[string]any{"method": "tools/list"})
 	tools := []*ToolInfo{&ToolInfo{
@@ -986,7 +986,7 @@ func (a *MCPAdapter) ToolsCall(ctx context.Context, p *ToolsCallPayload, stream 
 }
 func (a *MCPAdapter) toolsCallHandler(ctx context.Context, p *ToolsCallPayload, stream ToolsCallServerStream) (bool, error) {
 	if !a.isInitialized(ctx) {
-		return false, goa.PermanentError("invalid_params", "Not initialized")
+		return false, loom.PermanentError("invalid_params", "Not initialized")
 	}
 	name := ""
 	if p != nil {
@@ -1286,10 +1286,10 @@ func (a *MCPAdapter) toolsCallHandler(ctx context.Context, p *ToolsCallPayload, 
 			}
 		}
 		{
-			if err := validateMCPPayloadEnum(rawFields, "platform", "ios", "web"); err != nil {
+			if err := validateMCPPayloadEnum(rawFields, "density", "compact", "comfortable"); err != nil {
 				return true, a.sendToolError(ctx, stream, p.Name, toolInputError(err, p.Arguments))
 			}
-			if err := validateMCPPayloadEnum(rawFields, "density", "compact", "comfortable"); err != nil {
+			if err := validateMCPPayloadEnum(rawFields, "platform", "ios", "web"); err != nil {
 				return true, a.sendToolError(ctx, stream, p.Name, toolInputError(err, p.Arguments))
 			}
 		}
@@ -1335,14 +1335,14 @@ func (a *MCPAdapter) toolsCallHandler(ctx context.Context, p *ToolsCallPayload, 
 		})
 		return false, stream.SendAndClose(ctx, final)
 	default:
-		return false, goa.PermanentError("method_not_found", "Unknown tool: %s", p.Name)
+		return false, loom.PermanentError("method_not_found", "Unknown tool: %s", p.Name)
 	}
 }
 
 // Resources handling
 func (a *MCPAdapter) ResourcesList(ctx context.Context, p *ResourcesListPayload) (*ResourcesListResult, error) {
 	if !a.isInitialized(ctx) {
-		return nil, goa.PermanentError("invalid_params", "Not initialized")
+		return nil, loom.PermanentError("invalid_params", "Not initialized")
 	}
 	a.log(ctx, "request", map[string]any{"method": "resources/list"})
 	resources := []*ResourceInfo{&ResourceInfo{
@@ -1377,7 +1377,7 @@ func (a *MCPAdapter) ResourcesList(ctx context.Context, p *ResourcesListPayload)
 }
 func (a *MCPAdapter) ResourcesRead(ctx context.Context, p *ResourcesReadPayload) (*ResourcesReadResult, error) {
 	if !a.isInitialized(ctx) {
-		return nil, goa.PermanentError("invalid_params", "Not initialized")
+		return nil, loom.PermanentError("invalid_params", "Not initialized")
 	}
 	a.log(ctx, "request", map[string]any{
 		"method": "resources/read",
@@ -1390,7 +1390,7 @@ func (a *MCPAdapter) ResourcesRead(ctx context.Context, p *ResourcesReadPayload)
 	switch baseURI {
 	case "doc://list":
 		if err := a.assertResourceURIAllowed(ctx, p.URI); err != nil {
-			return nil, goa.PermanentError("invalid_params", "%s", err.Error())
+			return nil, loom.PermanentError("invalid_params", "%s", err.Error())
 		}
 		result, err := a.service.ListDocuments(ctx)
 		if err != nil {
@@ -1398,7 +1398,7 @@ func (a *MCPAdapter) ResourcesRead(ctx context.Context, p *ResourcesReadPayload)
 		}
 		s, serr := mcpruntime.EncodeJSONToString(ctx, goahttp.ResponseEncoder, result)
 		if serr != nil {
-			return nil, goa.PermanentError("invalid_params", "%s", serr.Error())
+			return nil, loom.PermanentError("invalid_params", "%s", serr.Error())
 		}
 		res := &ResourcesReadResult{Contents: []*ResourceContent{&ResourceContent{
 			MimeType: stringPtr("application/json"),
@@ -1412,7 +1412,7 @@ func (a *MCPAdapter) ResourcesRead(ctx context.Context, p *ResourcesReadPayload)
 		return res, nil
 	case "system://info":
 		if err := a.assertResourceURIAllowed(ctx, p.URI); err != nil {
-			return nil, goa.PermanentError("invalid_params", "%s", err.Error())
+			return nil, loom.PermanentError("invalid_params", "%s", err.Error())
 		}
 		result, err := a.service.SystemInfo(ctx)
 		if err != nil {
@@ -1420,7 +1420,7 @@ func (a *MCPAdapter) ResourcesRead(ctx context.Context, p *ResourcesReadPayload)
 		}
 		s, serr := mcpruntime.EncodeJSONToString(ctx, goahttp.ResponseEncoder, result)
 		if serr != nil {
-			return nil, goa.PermanentError("invalid_params", "%s", serr.Error())
+			return nil, loom.PermanentError("invalid_params", "%s", serr.Error())
 		}
 		res := &ResourcesReadResult{Contents: []*ResourceContent{&ResourceContent{
 			MimeType: stringPtr("application/json"),
@@ -1434,11 +1434,11 @@ func (a *MCPAdapter) ResourcesRead(ctx context.Context, p *ResourcesReadPayload)
 		return res, nil
 	case "conversation://history":
 		if err := a.assertResourceURIAllowed(ctx, p.URI); err != nil {
-			return nil, goa.PermanentError("invalid_params", "%s", err.Error())
+			return nil, loom.PermanentError("invalid_params", "%s", err.Error())
 		}
 		args, aerr := parseQueryParamsToJSON(p.URI)
 		if aerr != nil {
-			return nil, goa.PermanentError("invalid_params", "%s", aerr.Error())
+			return nil, loom.PermanentError("invalid_params", "%s", aerr.Error())
 		}
 		req := &http.Request{
 			Body:   io.NopCloser(bytes.NewReader(args)),
@@ -1446,7 +1446,7 @@ func (a *MCPAdapter) ResourcesRead(ctx context.Context, p *ResourcesReadPayload)
 		}
 		var payload *assistant.ConversationHistoryPayload
 		if err := goahttp.RequestDecoder(req).Decode(&payload); err != nil {
-			return nil, goa.PermanentError("invalid_params", "%s", err.Error())
+			return nil, loom.PermanentError("invalid_params", "%s", err.Error())
 		}
 		result, err := a.service.ConversationHistory(ctx, payload)
 		if err != nil {
@@ -1454,7 +1454,7 @@ func (a *MCPAdapter) ResourcesRead(ctx context.Context, p *ResourcesReadPayload)
 		}
 		s, serr := mcpruntime.EncodeJSONToString(ctx, goahttp.ResponseEncoder, result)
 		if serr != nil {
-			return nil, goa.PermanentError("invalid_params", "%s", serr.Error())
+			return nil, loom.PermanentError("invalid_params", "%s", serr.Error())
 		}
 		res := &ResourcesReadResult{Contents: []*ResourceContent{&ResourceContent{
 			MimeType: stringPtr("application/json"),
@@ -1468,7 +1468,7 @@ func (a *MCPAdapter) ResourcesRead(ctx context.Context, p *ResourcesReadPayload)
 		return res, nil
 	case "figma://design-system/mobile-checkout":
 		if err := a.assertResourceURIAllowed(ctx, p.URI); err != nil {
-			return nil, goa.PermanentError("invalid_params", "%s", err.Error())
+			return nil, loom.PermanentError("invalid_params", "%s", err.Error())
 		}
 		result, err := a.service.FigmaDesignSystem(ctx)
 		if err != nil {
@@ -1476,7 +1476,7 @@ func (a *MCPAdapter) ResourcesRead(ctx context.Context, p *ResourcesReadPayload)
 		}
 		s, serr := mcpruntime.EncodeJSONToString(ctx, goahttp.ResponseEncoder, result)
 		if serr != nil {
-			return nil, goa.PermanentError("invalid_params", "%s", serr.Error())
+			return nil, loom.PermanentError("invalid_params", "%s", serr.Error())
 		}
 		res := &ResourcesReadResult{Contents: []*ResourceContent{&ResourceContent{
 			MimeType: stringPtr("application/json"),
@@ -1489,7 +1489,7 @@ func (a *MCPAdapter) ResourcesRead(ctx context.Context, p *ResourcesReadPayload)
 		})
 		return res, nil
 	default:
-		return nil, goa.PermanentError("method_not_found", "Unknown resource: %s", p.URI)
+		return nil, loom.PermanentError("method_not_found", "Unknown resource: %s", p.URI)
 	}
 }
 
@@ -1546,27 +1546,27 @@ func (a *MCPAdapter) assertResourceURIAllowed(ctx context.Context, pURI string) 
 }
 func (a *MCPAdapter) ResourcesSubscribe(ctx context.Context, p *ResourcesSubscribePayload) error {
 	if !a.isInitialized(ctx) {
-		return goa.PermanentError("invalid_params", "Not initialized")
+		return loom.PermanentError("invalid_params", "Not initialized")
 	}
 	switch p.URI {
 	default:
-		return goa.PermanentError("method_not_found", "Unknown resource: %s", p.URI)
+		return loom.PermanentError("method_not_found", "Unknown resource: %s", p.URI)
 	}
 }
 func (a *MCPAdapter) ResourcesUnsubscribe(ctx context.Context, p *ResourcesUnsubscribePayload) error {
 	if !a.isInitialized(ctx) {
-		return goa.PermanentError("invalid_params", "Not initialized")
+		return loom.PermanentError("invalid_params", "Not initialized")
 	}
 	switch p.URI {
 	default:
-		return goa.PermanentError("method_not_found", "Unknown resource: %s", p.URI)
+		return loom.PermanentError("method_not_found", "Unknown resource: %s", p.URI)
 	}
 }
 
 // Prompts handling
 func (a *MCPAdapter) PromptsList(ctx context.Context, p *PromptsListPayload) (*PromptsListResult, error) {
 	if !a.isInitialized(ctx) {
-		return nil, goa.PermanentError("invalid_params", "Not initialized")
+		return nil, loom.PermanentError("invalid_params", "Not initialized")
 	}
 	a.log(ctx, "request", map[string]any{"method": "prompts/list"})
 	prompts := []*PromptInfo{&PromptInfo{
@@ -1621,10 +1621,10 @@ func (a *MCPAdapter) PromptsList(ctx context.Context, p *PromptsListPayload) (*P
 }
 func (a *MCPAdapter) PromptsGet(ctx context.Context, p *PromptsGetPayload) (*PromptsGetResult, error) {
 	if !a.isInitialized(ctx) {
-		return nil, goa.PermanentError("invalid_params", "Not initialized")
+		return nil, loom.PermanentError("invalid_params", "Not initialized")
 	}
 	if p == nil || p.Name == "" {
-		return nil, goa.PermanentError("invalid_params", "Missing prompt name")
+		return nil, loom.PermanentError("invalid_params", "Missing prompt name")
 	}
 	a.log(ctx, "request", map[string]any{
 		"method": "prompts/get",
@@ -1665,17 +1665,17 @@ func (a *MCPAdapter) PromptsGet(ctx context.Context, p *PromptsGetPayload) (*Pro
 		var args map[string]any
 		if len(p.Arguments) > 0 {
 			if err := json.Unmarshal(p.Arguments, &args); err != nil {
-				return nil, goa.PermanentError("invalid_params", "%s", err.Error())
+				return nil, loom.PermanentError("invalid_params", "%s", err.Error())
 			}
 		}
 		if _, ok := args["context"]; !ok {
-			return nil, goa.PermanentError("invalid_params", "Missing required argument: context")
+			return nil, loom.PermanentError("invalid_params", "Missing required argument: context")
 		}
 		if _, ok := args["task"]; !ok {
-			return nil, goa.PermanentError("invalid_params", "Missing required argument: task")
+			return nil, loom.PermanentError("invalid_params", "Missing required argument: task")
 		}
 		if a.promptProvider == nil {
-			return nil, goa.PermanentError("invalid_params", "No prompt provider configured for dynamic prompts")
+			return nil, loom.PermanentError("invalid_params", "No prompt provider configured for dynamic prompts")
 		}
 		res, err := a.promptProvider.GetContextualPromptsPrompt(ctx, p.Arguments)
 		if err != nil {
@@ -1690,23 +1690,23 @@ func (a *MCPAdapter) PromptsGet(ctx context.Context, p *PromptsGetPayload) (*Pro
 		var args map[string]any
 		if len(p.Arguments) > 0 {
 			if err := json.Unmarshal(p.Arguments, &args); err != nil {
-				return nil, goa.PermanentError("invalid_params", "%s", err.Error())
+				return nil, loom.PermanentError("invalid_params", "%s", err.Error())
 			}
 		}
 		if _, ok := args["screen_title"]; !ok {
-			return nil, goa.PermanentError("invalid_params", "Missing required argument: screen_title")
+			return nil, loom.PermanentError("invalid_params", "Missing required argument: screen_title")
 		}
 		if _, ok := args["framework"]; !ok {
-			return nil, goa.PermanentError("invalid_params", "Missing required argument: framework")
+			return nil, loom.PermanentError("invalid_params", "Missing required argument: framework")
 		}
 		if _, ok := args["design_tokens_uri"]; !ok {
-			return nil, goa.PermanentError("invalid_params", "Missing required argument: design_tokens_uri")
+			return nil, loom.PermanentError("invalid_params", "Missing required argument: design_tokens_uri")
 		}
 		if _, ok := args["dpi_json"]; !ok {
-			return nil, goa.PermanentError("invalid_params", "Missing required argument: dpi_json")
+			return nil, loom.PermanentError("invalid_params", "Missing required argument: dpi_json")
 		}
 		if a.promptProvider == nil {
-			return nil, goa.PermanentError("invalid_params", "No prompt provider configured for dynamic prompts")
+			return nil, loom.PermanentError("invalid_params", "No prompt provider configured for dynamic prompts")
 		}
 		res, err := a.promptProvider.GetFigmaImplementationPromptPrompt(ctx, p.Arguments)
 		if err != nil {
@@ -1718,16 +1718,16 @@ func (a *MCPAdapter) PromptsGet(ctx context.Context, p *PromptsGetPayload) (*Pro
 		})
 		return res, nil
 	}
-	return nil, goa.PermanentError("method_not_found", "Unknown prompt: %s", p.Name)
+	return nil, loom.PermanentError("method_not_found", "Unknown prompt: %s", p.Name)
 }
 
 // Notifications and events stream
 func (a *MCPAdapter) NotifyStatusUpdate(ctx context.Context, n *mcpruntime.Notification) error {
 	if !a.isInitialized(ctx) {
-		return goa.PermanentError("invalid_params", "Not initialized")
+		return loom.PermanentError("invalid_params", "Not initialized")
 	}
 	if n == nil || n.Type == "" {
-		return goa.PermanentError("invalid_params", "Missing notification type")
+		return loom.PermanentError("invalid_params", "Missing notification type")
 	}
 	a.log(ctx, "request", map[string]any{
 		"message": n.Message,
@@ -1748,7 +1748,7 @@ func (a *MCPAdapter) NotifyStatusUpdate(ctx context.Context, n *mcpruntime.Notif
 }
 func (a *MCPAdapter) EventsStream(ctx context.Context, stream EventsStreamServerStream) error {
 	if !a.isInitialized(ctx) {
-		return goa.PermanentError("internal_error", "Not initialized")
+		return loom.PermanentError("internal_error", "Not initialized")
 	}
 	a.log(ctx, "request", map[string]any{
 		"method":     "events/stream",
@@ -1756,7 +1756,7 @@ func (a *MCPAdapter) EventsStream(ctx context.Context, stream EventsStreamServer
 	})
 	sub, err := a.broadcaster.Subscribe(ctx)
 	if err != nil {
-		return goa.PermanentError("internal_error", "Failed to subscribe to events: %v", err)
+		return loom.PermanentError("internal_error", "Failed to subscribe to events: %v", err)
 	}
 	defer sub.Close()
 	for {
@@ -1789,7 +1789,7 @@ func (a *MCPAdapter) EventsStream(ctx context.Context, stream EventsStreamServer
 				continue
 			}
 			if err := stream.Send(ctx, evt); err != nil {
-				return goa.PermanentError("internal_error", "Failed to send event: %v", err)
+				return loom.PermanentError("internal_error", "Failed to send event: %v", err)
 			}
 			a.log(ctx, "response", map[string]any{
 				"event_type": fmt.Sprintf("%T", evt),

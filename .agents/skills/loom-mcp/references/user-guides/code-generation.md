@@ -9,7 +9,7 @@ Goa's code generation transforms your design into production-ready code. Rather 
 ### Installation
 
 ```bash
-go install goa.design/goa/v3/cmd/goa@latest
+go install github.com/CaliLuke/loom/cmd/loom@v1.1.0
 ```
 
 ### Commands
@@ -18,16 +18,16 @@ All commands expect Go package import paths, not filesystem paths:
 
 ```bash
 # Correct: using Go package import path
-goa gen goa.design/examples/calc/design
+loom gen example.com/calc/design
 
 # Incorrect: using filesystem path
-goa gen ./design
+loom gen ./design
 ```
 
-### Generate Code (`goa gen`)
+### Generate Code (`loom gen`)
 
 ```bash
-goa gen <design-package-import-path> [-o <output-dir>]
+loom gen <design-package-import-path> [-o <output-dir>]
 ```
 
 The primary command for code generation:
@@ -36,10 +36,10 @@ The primary command for code generation:
 - Recreates the entire `gen/` directory from scratch each time
 - Run after every design change
 
-### Create Example (`goa example`)
+### Create Example (`loom example`)
 
 ```bash
-goa example <design-package-import-path> [-o <output-dir>]
+loom example <design-package-import-path> [-o <output-dir>]
 ```
 
 A scaffolding command:
@@ -52,22 +52,22 @@ A scaffolding command:
 ### Show Version
 
 ```bash
-goa version
+loom version
 ```
 
 ### Development Workflow
 
 1. Create initial design
-2. Run `goa gen` to generate base code
-3. Run `goa example` to create implementation stubs
+2. Run `loom gen` to generate base code
+3. Run `loom example` to create implementation stubs
 4. Implement your service logic
-5. Run `goa gen` after every design change
+5. Run `loom gen` after every design change
 
 Best practice: commit generated code to version control rather than generating during CI/CD. This ensures reproducible builds and allows tracking changes in generated code.
 
 ## Generation Process
 
-When you run `goa gen`, Goa follows a systematic process:
+When you run `loom gen`, Goa follows a systematic process:
 
 ### 1. Bootstrap Phase
 
@@ -548,7 +548,7 @@ Example using the CORS plugin:
 
 ```go
 import (
-    . "goa.design/goa/v3/dsl"
+    . "github.com/CaliLuke/loom/dsl"
     cors "goa.design/plugins/v3/cors/dsl"
 )
 

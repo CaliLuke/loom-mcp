@@ -80,7 +80,7 @@ func emitToolCallInterceptorTypes(stmt *jen.Statement) {
 	stmt.Type().Defs(
 		jen.Comment("ToolCallInterceptorInfo describes a generated MCP tools/call invocation.").Line().
 			Id("ToolCallInterceptorInfo").Interface(
-			jen.Id("goa").Dot("InterceptorInfo"),
+			jen.Id("loom").Dot("InterceptorInfo"),
 			jen.Id("Tool").Params().String(),
 			jen.Id("RawArguments").Params().Qual("encoding/json", "RawMessage"),
 		),
@@ -124,8 +124,8 @@ func emitToolCallInterceptorTypes(stmt *jen.Statement) {
 	}
 
 	stmt.Func().Params(jen.Id("i").Op("*").Id("toolCallInterceptorInfo")).
-		Id("CallType").Params().Id("goa").Dot("InterceptorCallType").
-		Block(jen.Return(jen.Id("goa").Dot("InterceptorUnary")))
+		Id("CallType").Params().Id("loom").Dot("InterceptorCallType").
+		Block(jen.Return(jen.Id("loom").Dot("InterceptorUnary")))
 	stmt.Line()
 
 	stmt.Func().Params(jen.Id("i").Op("*").Id("toolCallInterceptorInfo")).
@@ -706,15 +706,15 @@ func emitFormatToolErrorText(stmt *jen.Statement) {
 			jen.If(jen.Id("err").Op("==").Nil()).Block(
 				jen.Return(jen.Lit("[internal_error] Tool execution failed.")),
 			),
-			jen.Id("code").Op(":=").Qual("strings", "TrimSpace").Call(jen.Id("goa").Dot("ErrorRemedyCode").Call(jen.Id("err"))),
+			jen.Id("code").Op(":=").Qual("strings", "TrimSpace").Call(jen.Id("loom").Dot("ErrorRemedyCode").Call(jen.Id("err"))),
 			jen.If(jen.Id("code").Op("==").Lit("")).Block(
-				jen.Var().Id("namer").Id("goa").Dot("LoomErrorNamer"),
+				jen.Var().Id("namer").Id("loom").Dot("LoomErrorNamer"),
 				jen.If(jen.Qual("errors", "As").Call(jen.Id("err"), jen.Op("&").Id("namer"))).Block(
 					jen.Id("code").Op("=").Qual("strings", "TrimSpace").Call(jen.Id("namer").Dot("LoomErrorName").Call()),
 				),
 			),
 			jen.If(jen.Id("code").Op("==").Lit("")).Block(
-				jen.If(jen.List(jen.Id("status"), jen.Id("ok")).Op(":=").Id("goa").Dot("ErrorStatusCode").Call(jen.Id("err")), jen.Id("ok")).Block(
+				jen.If(jen.List(jen.Id("status"), jen.Id("ok")).Op(":=").Id("loom").Dot("ErrorStatusCode").Call(jen.Id("err")), jen.Id("ok")).Block(
 					jen.Switch(jen.Id("status")).Block(
 						jen.Case(jen.Qual("net/http", "StatusBadRequest")).Block(
 							jen.Id("code").Op("=").Lit("invalid_params"),
@@ -731,11 +731,11 @@ func emitFormatToolErrorText(stmt *jen.Statement) {
 			jen.If(jen.Id("code").Op("==").Lit("")).Block(
 				jen.Id("code").Op("=").Lit("internal_error"),
 			),
-			jen.Id("message").Op(":=").Qual("strings", "TrimSpace").Call(jen.Id("goa").Dot("ErrorSafeMessage").Call(jen.Id("err"))),
+			jen.Id("message").Op(":=").Qual("strings", "TrimSpace").Call(jen.Id("loom").Dot("ErrorSafeMessage").Call(jen.Id("err"))),
 			jen.If(jen.Id("message").Op("==").Lit("")).Block(
 				jen.Id("message").Op("=").Lit("Tool execution failed."),
 			),
-			jen.Id("recovery").Op(":=").Qual("strings", "TrimSpace").Call(jen.Id("goa").Dot("ErrorRetryHint").Call(jen.Id("err"))),
+			jen.Id("recovery").Op(":=").Qual("strings", "TrimSpace").Call(jen.Id("loom").Dot("ErrorRetryHint").Call(jen.Id("err"))),
 			jen.If(jen.Id("recovery").Op("==").Lit("")).Block(
 				jen.Return(jen.Qual("fmt", "Sprintf").Call(jen.Lit("[%s] %s"), jen.Id("code"), jen.Id("message"))),
 			),
@@ -749,23 +749,23 @@ func emitToolCallError(stmt *jen.Statement) {
 	stmt.Func().Id("toolCallError").Params(jen.Id("err").Error(), jen.Id("defaultCode").String(), jen.Id("defaultRecovery").String()).Error().
 		Block(
 			jen.If(jen.Id("err").Op("==").Nil()).Block(
-				jen.Id("err").Op("=").Id("goa").Dot("PermanentError").Call(jen.Id("defaultCode"), jen.Lit("Tool execution failed.")),
+				jen.Id("err").Op("=").Id("loom").Dot("PermanentError").Call(jen.Id("defaultCode"), jen.Lit("Tool execution failed.")),
 			),
-			jen.Id("code").Op(":=").Qual("strings", "TrimSpace").Call(jen.Id("goa").Dot("ErrorRemedyCode").Call(jen.Id("err"))),
+			jen.Id("code").Op(":=").Qual("strings", "TrimSpace").Call(jen.Id("loom").Dot("ErrorRemedyCode").Call(jen.Id("err"))),
 			jen.If(jen.Id("code").Op("==").Lit("")).Block(
 				jen.Id("code").Op("=").Id("defaultCode"),
 			),
-			jen.Id("message").Op(":=").Qual("strings", "TrimSpace").Call(jen.Id("goa").Dot("ErrorSafeMessage").Call(jen.Id("err"))),
+			jen.Id("message").Op(":=").Qual("strings", "TrimSpace").Call(jen.Id("loom").Dot("ErrorSafeMessage").Call(jen.Id("err"))),
 			jen.If(jen.Id("message").Op("==").Lit("")).Block(
 				jen.Id("message").Op("=").Lit("Tool execution failed."),
 			),
-			jen.Id("recovery").Op(":=").Qual("strings", "TrimSpace").Call(jen.Id("goa").Dot("ErrorRetryHint").Call(jen.Id("err"))),
+			jen.Id("recovery").Op(":=").Qual("strings", "TrimSpace").Call(jen.Id("loom").Dot("ErrorRetryHint").Call(jen.Id("err"))),
 			jen.If(jen.Id("recovery").Op("==").Lit("")).Block(
 				jen.Id("recovery").Op("=").Id("defaultRecovery"),
 			),
-			jen.Return(jen.Id("goa").Dot("WithErrorRemedy").Call(
-				jen.Id("goa").Dot("PermanentError").Call(jen.Id("code"), jen.Lit("%s"), jen.Id("message")),
-				jen.Op("&").Id("goa").Dot("ErrorRemedy").Values(jen.Dict{
+			jen.Return(jen.Id("loom").Dot("WithErrorRemedy").Call(
+				jen.Id("loom").Dot("PermanentError").Call(jen.Id("code"), jen.Lit("%s"), jen.Id("message")),
+				jen.Op("&").Id("loom").Dot("ErrorRemedy").Values(jen.Dict{
 					jen.Id("Code"):        jen.Id("code"),
 					jen.Id("SafeMessage"): jen.Id("message"),
 					jen.Id("RetryHint"):   jen.Id("recovery"),
@@ -788,7 +788,7 @@ func emitToolInputError(stmt *jen.Statement) {
 func emitInferToolInputRecovery(stmt *jen.Statement) {
 	stmt.Func().Id("inferToolInputRecovery").Params(jen.Id("err").Error(), jen.Id("raw").Qual("encoding/json", "RawMessage")).String().
 		Block(
-			jen.Id("message").Op(":=").Qual("strings", "TrimSpace").Call(jen.Id("goa").Dot("ErrorSafeMessage").Call(jen.Id("err"))),
+			jen.Id("message").Op(":=").Qual("strings", "TrimSpace").Call(jen.Id("loom").Dot("ErrorSafeMessage").Call(jen.Id("err"))),
 			jen.If(jen.Id("message").Op("==").Lit("")).Block(
 				jen.Id("message").Op("=").Qual("strings", "TrimSpace").Call(jen.Id("err").Dot("Error").Call()),
 			),
@@ -1070,7 +1070,7 @@ func emitInitializeHandler(stmt *jen.Statement, data *AdapterData) {
 			}))
 
 			g.If(jen.Id("p").Op("==").Nil().Op("||").Id("p").Dot("ProtocolVersion").Op("==").Lit("")).Block(
-				jen.Return(jen.Nil(), jen.Id("goa").Dot("PermanentError").Call(jen.Lit("invalid_params"), jen.Lit("Missing protocolVersion"))),
+				jen.Return(jen.Nil(), jen.Id("loom").Dot("PermanentError").Call(jen.Lit("invalid_params"), jen.Lit("Missing protocolVersion"))),
 			)
 			g.Id("negotiatedVersion").Op(":=").Id("a").Dot("negotiateProtocolVersion").Call(jen.Id("p").Dot("ProtocolVersion"))
 
@@ -1083,7 +1083,7 @@ func emitInitializeHandler(stmt *jen.Statement, data *AdapterData) {
 			g.Id("a").Dot("mu").Dot("Lock").Call()
 			alreadyInitBlock := []jen.Code{
 				jen.Id("a").Dot("mu").Dot("Unlock").Call(),
-				jen.Id("err").Op("=").Id("goa").Dot("PermanentError").Call(jen.Lit("invalid_params"), jen.Lit("Already initialized")),
+				jen.Id("err").Op("=").Id("loom").Dot("PermanentError").Call(jen.Lit("invalid_params"), jen.Lit("Already initialized")),
 				jen.Id("a").Dot("log").Call(jen.Id("ctx"), jen.Lit("response"), jen.Map(jen.String()).Any().Values(jen.Dict{
 					jen.Lit("method"):           jen.Lit("initialize"),
 					jen.Lit("session_id"):       jen.Id("sessionID"),

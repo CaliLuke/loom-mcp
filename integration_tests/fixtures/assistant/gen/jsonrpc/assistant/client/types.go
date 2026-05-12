@@ -1065,19 +1065,6 @@ func ValidateDispatchActionRequestBody(body *DispatchActionRequestBody) (err err
 	if body.Request.Kind() == "" {
 		err = loom.MergeErrors(err, loom.MissingFieldError("request", "body"))
 	}
-	switch string(body.Request.Kind()) {
-	case "create":
-		actual, _ := body.Request.AsCreateAction()
-		if actual == nil {
-			err = loom.MergeErrors(err, loom.MissingFieldError("value", "body.request.value"))
-			break
-		}
-		if actual != nil {
-			if err2 := ValidateCreateActionRequestBodyRequestBody(actual); err2 != nil {
-				err = loom.MergeErrors(err, err2)
-			}
-		}
-	}
 	return
 }
 

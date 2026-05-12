@@ -543,7 +543,7 @@ Behavior:
 
 ---
 
-## 13. Work Stream 8: Documentation Updates (loom-mcp + goa.design)
+## 13. Work Stream 8: Documentation Updates (loom-mcp + public docs)
 
 Documentation updates are required deliverables, not follow-up polish.
 
@@ -562,7 +562,7 @@ integration points:
   - Document current state (no mandatory agent prompt DSL in v1), and reference
     runtime-level prompt registration as the supported mechanism.
 
-### 13.2 Update goa.design docs (`content/en/docs/2-loom-mcp/`)
+### 13.2 Update public docs (`content/en/docs/2-loom-mcp/`)
 
 Update public docs to describe the new feature surface and operational model:
 
@@ -614,11 +614,11 @@ is intentionally deferred).
 11. `docs/overview.md`
 12. `docs/runtime.md`
 13. `docs/dsl.md`
-14. `goa.design/content/en/docs/2-loom-mcp/runtime.md`
-15. `goa.design/content/en/docs/2-loom-mcp/production.md`
-16. `goa.design/content/en/docs/2-loom-mcp/registry.md`
-17. `goa.design/content/en/docs/2-loom-mcp/dsl-reference.md`
-18. `goa.design/content/en/docs/2-loom-mcp/quickstart.md`
+14. `docs-site/content/en/docs/loom-mcp/runtime.md`
+15. `docs-site/content/en/docs/loom-mcp/production.md`
+16. `docs-site/content/en/docs/loom-mcp/registry.md`
+17. `docs-site/content/en/docs/loom-mcp/dsl-reference.md`
+18. `docs-site/content/en/docs/loom-mcp/quickstart.md`
 
 ---
 
@@ -710,7 +710,7 @@ Cases:
 
 - Implement work stream 8.
 - Publish loom-mcp internal docs updates.
-- Publish goa.design docs updates (and localization follow-ups as needed).
+- Publish public docs updates (and localization follow-ups as needed).
 
 ---
 
@@ -759,7 +759,7 @@ graph TD
 - Engineer B: WS4 (Mongo)
 - Engineer C: WS5 (Runtime/Planner + AgentTools)
 - Engineer D: WS6 + WS7 (Events + model request metadata)
-- Engineer E: WS8 (loom-mcp + goa.design docs)
+- Engineer E: WS8 (loom-mcp + public docs)
 
 ---
 
@@ -773,7 +773,7 @@ graph TD
 5. `model.Request` carries prompt refs end-to-end without breaking providers.
 6. Existing runtime behavior remains unchanged when prompt features are unused.
 7. loom-mcp internal docs are updated for runtime usage and contracts.
-8. goa.design docs are updated for runtime, production, registry, and quickstart
+8. public docs are updated for runtime, production, registry, and quickstart
    guidance (with localization plan documented).
 
 ---

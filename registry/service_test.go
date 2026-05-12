@@ -9,7 +9,7 @@ import (
 	"sync"
 	"testing"
 
-	goa "github.com/CaliLuke/loom/pkg"
+	loom "github.com/CaliLuke/loom/pkg"
 	streamopts "github.com/CaliLuke/loom/pulse/streaming/options"
 	"github.com/leanovate/gopter"
 	"github.com/leanovate/gopter/gen"
@@ -321,7 +321,7 @@ func TestCallToolPayloadValidation(t *testing.T) {
 			}
 
 			// Check that it's a validation error.
-			var svcErr *goa.ServiceError
+			var svcErr *loom.ServiceError
 			if !errors.As(err, &svcErr) {
 				return false
 			}
@@ -369,7 +369,7 @@ func TestCallToolRejectsToolsetWithoutPayloadSchema(t *testing.T) {
 	})
 	require.Error(t, err)
 
-	var svcErr *goa.ServiceError
+	var svcErr *loom.ServiceError
 	require.ErrorAs(t, err, &svcErr)
 	require.Equal(t, "validation_error", svcErr.Name)
 }
@@ -799,7 +799,7 @@ func TestInvalidSchemaRejection(t *testing.T) {
 			}
 
 			// Check that it's a validation error.
-			var svcErr *goa.ServiceError
+			var svcErr *loom.ServiceError
 			if !errors.As(err, &svcErr) {
 				return false
 			}
@@ -853,7 +853,7 @@ func TestRegisterRejectsSemanticallyInvalidSchemaWithoutSideEffects(t *testing.T
 			_, err = svc.Register(ctx, payload)
 			require.Error(t, err)
 
-			var svcErr *goa.ServiceError
+			var svcErr *loom.ServiceError
 			require.ErrorAs(t, err, &svcErr)
 			require.Equal(t, "validation_error", svcErr.Name)
 			require.Empty(t, streams.createdToolsets)
@@ -1030,7 +1030,7 @@ func TestUnregisterNonExistentReturnsNotFound(t *testing.T) {
 			}
 
 			// Check that it's a not-found error.
-			var svcErr *goa.ServiceError
+			var svcErr *loom.ServiceError
 			if !errors.As(err, &svcErr) {
 				return false
 			}

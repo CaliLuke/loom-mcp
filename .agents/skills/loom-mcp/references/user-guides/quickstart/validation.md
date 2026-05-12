@@ -18,7 +18,7 @@ Args(func() {
 Regenerate:
 
 ```bash
-goa gen quickstart/design
+loom gen quickstart/design
 ```
 
 Runtime rejects invalid payloads before executor. A failure returns `RetryHint`:

@@ -143,7 +143,7 @@ func toolUnionTypesSection(data toolUnionTypesFileData) gocodegen.Section {
 				fmt.Fprintf(&b, "// Set%s sets the %s branch of the union.\n", f.FieldName, f.Name)
 				fmt.Fprintf(&b, "func (u *%s) Set%s(v %s) {\n\tu.kind = %s\n\tu.%s = v\n}\n\n", u.Name, f.FieldName, f.FieldType, f.KindConst, f.FieldName)
 			}
-			fmt.Fprintf(&b, "// Validate ensures the union discriminant is valid.\nfunc (u %s) Validate() error {\n\tswitch u.kind {\n\tcase \"\":\n\t\treturn goa.InvalidEnumValueError(\"type\", \"\", []any{\n", u.Name)
+			fmt.Fprintf(&b, "// Validate ensures the union discriminant is valid.\nfunc (u %s) Validate() error {\n\tswitch u.kind {\n\tcase \"\":\n\t\treturn loom.InvalidEnumValueError(\"type\", \"\", []any{\n", u.Name)
 			for _, f := range u.Fields {
 				fmt.Fprintf(&b, "\t\t\tstring(%s),\n", f.KindConst)
 			}
@@ -151,7 +151,7 @@ func toolUnionTypesSection(data toolUnionTypesFileData) gocodegen.Section {
 			for _, f := range u.Fields {
 				fmt.Fprintf(&b, "\tcase %s:\n\t\treturn nil\n", f.KindConst)
 			}
-			b.WriteString("\tdefault:\n\t\treturn goa.InvalidEnumValueError(\"type\", u.kind, []any{\n")
+			b.WriteString("\tdefault:\n\t\treturn loom.InvalidEnumValueError(\"type\", u.kind, []any{\n")
 			for _, f := range u.Fields {
 				fmt.Fprintf(&b, "\t\t\tstring(%s),\n", f.KindConst)
 			}

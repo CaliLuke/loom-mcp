@@ -20,13 +20,13 @@ Install the Goa packages and CLI tool:
 
 ```bash
 # Pull the Goa packages
-go get goa.design/goa/v3/...
+go get github.com/CaliLuke/loom/...
 
-# Install the Goa CLI
-go install goa.design/goa/v3/cmd/goa@latest
+# Install the Loom CLI
+go install github.com/CaliLuke/loom/cmd/loom@v1.1.0
 
 # Verify the installation
-goa version
+loom version
 ```
 
 You should see the current Goa version (e.g., v3.x.x). If the `goa` command isn't found, ensure your Go bin directory is in your `PATH`:
@@ -64,7 +64,7 @@ Create `design/design.go`:
 package design
 
 import (
-    . "goa.design/goa/v3/dsl"
+    . "github.com/CaliLuke/loom/dsl"
 )
 
 var _ = Service("hello", func() {
@@ -96,7 +96,7 @@ This declarative approach means you describe what your API does, and Goa handles
 Transform your design into a fully functional service structure:
 
 ```bash
-goa gen hello/design
+loom gen hello/design
 ```
 
 This creates a `gen` folder containing:
@@ -109,7 +109,7 @@ This creates a `gen` folder containing:
 Now scaffold a working implementation:
 
 ```bash
-goa example hello/design
+loom example hello/design
 ```
 
 Important: The `gen` command regenerates the `gen/` folder each time you run it. The `example` command creates starter implementation files that you own and customize. Goa won't overwrite them on subsequent runs.
@@ -202,7 +202,7 @@ As your service evolves, you'll modify the design and regenerate code:
 
 ```bash
 # After updating design/design.go
-goa gen hello/design
+loom gen hello/design
 ```
 
 Key points:

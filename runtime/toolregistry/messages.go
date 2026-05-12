@@ -8,7 +8,7 @@ import (
 	"strings"
 
 	"github.com/CaliLuke/loom-mcp/runtime/agent"
-	goa "github.com/CaliLuke/loom/pkg"
+	loom "github.com/CaliLuke/loom/pkg"
 
 	"github.com/CaliLuke/loom-mcp/runtime/agent/tools"
 )
@@ -214,7 +214,7 @@ func ValidationIssues(err error) []*tools.FieldIssue {
 		return cloneFieldIssues(ip.Issues())
 	}
 
-	var se *goa.ServiceError
+	var se *loom.ServiceError
 	if !errors.As(err, &se) {
 		return nil
 	}
@@ -274,13 +274,13 @@ func cloneFieldIssues(in []*tools.FieldIssue) []*tools.FieldIssue {
 
 func isGoaValidationConstraint(name string) bool {
 	switch name {
-	case goa.InvalidFieldType,
-		goa.MissingField,
-		goa.InvalidEnumValue,
-		goa.InvalidFormat,
-		goa.InvalidPattern,
-		goa.InvalidRange,
-		goa.InvalidLength:
+	case loom.InvalidFieldType,
+		loom.MissingField,
+		loom.InvalidEnumValue,
+		loom.InvalidFormat,
+		loom.InvalidPattern,
+		loom.InvalidRange,
+		loom.InvalidLength:
 		return true
 	default:
 		return false

@@ -254,9 +254,9 @@ import (
  "fmt"
 
  chat "example.com/quickstart/gen/orchestrator/agents/chat"
- "goa.design/loom-mcp/runtime/agent/model"
- "goa.design/loom-mcp/runtime/agent/planner"
- "goa.design/loom-mcp/runtime/agent/runtime"
+ "github.com/CaliLuke/loom-mcp/runtime/agent/model"
+ "github.com/CaliLuke/loom-mcp/runtime/agent/planner"
+ "github.com/CaliLuke/loom-mcp/runtime/agent/runtime"
 )
 
 // A tiny planner: always replies, no tools (perfect for first run)
@@ -1092,7 +1092,7 @@ rt := runtime.New(runtime.WithStream(sink))
 ### Manual Bridge (Direct Bus Access)
 
 ```go
-import "goa.design/loom-mcp/runtime/agent/stream/bridge"
+import "github.com/CaliLuke/loom-mcp/runtime/agent/stream/bridge"
 
 sub, _ := bridge.Register(rt.Bus, sink)
 defer sub.Close()

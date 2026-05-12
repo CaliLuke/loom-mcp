@@ -31,7 +31,7 @@ var _ = Service("demo", func() {
 Regenerate:
 
 ```bash
-goa gen quickstart/design
+loom gen quickstart/design
 ```
 
 Runtime handles nested agent runs with child `RunLink` and linked streaming events.

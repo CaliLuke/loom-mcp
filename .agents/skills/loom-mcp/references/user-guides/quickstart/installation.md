@@ -8,11 +8,11 @@ Go 1.24+
 go version
 ```
 
-Install the Goa CLI:
+Install the Loom CLI:
 
 ```bash
-go install goa.design/goa/v3/cmd/goa@latest
-goa version
+go install github.com/CaliLuke/loom/cmd/loom@v1.1.0
+loom version
 ```
 
 ## Project setup
@@ -20,5 +20,5 @@ goa version
 ```bash
 mkdir quickstart && cd quickstart
 go mod init quickstart
-go get goa.design/goa/v3@latest github.com/CaliLuke/loom-mcp@latest
+go get github.com/CaliLuke/loom@v1.1.0 github.com/CaliLuke/loom-mcp@latest
 ```

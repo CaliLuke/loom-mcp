@@ -413,7 +413,7 @@ func adapterImports(genpkg string, svc *expr.ServiceExpr, svcName string) []*cod
 		{Path: genpkg + "/" + svcName, Name: svcName},
 		{Path: "github.com/CaliLuke/loom-mcp/runtime/mcp", Name: "mcpruntime"},
 		{Path: upstreampaths.LoomMCPHTTPImportPath, Name: "goahttp"},
-		{Path: upstreampaths.LoomPkgImportPath, Name: "goa"},
+		{Path: upstreampaths.LoomPkgImportPath, Name: "loom"},
 	}...)
 	return append(imports, adapterAttributeImports(genpkg, svc, imports)...)
 }

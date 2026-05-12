@@ -113,7 +113,7 @@ loom-mcp extends Goa’s DSL with functions for declaring agents, toolsets, and 
 
 ```go
 import (
-    . "goa.design/goa/v3/dsl"
+    . "github.com/CaliLuke/loom/dsl"
     . "github.com/CaliLuke/loom-mcp/dsl"
 )
 ```
@@ -124,7 +124,7 @@ Declare agents inside a regular Goa `Service` definition.
 
 ## Outcome
 
-Running `goa gen` produces:
+Running `loom gen` produces:
 
 - Agent packages under `gen/<service>/agents/<agent>` with workflow definitions and registration helpers
 - Toolset owner packages under `gen/<service>/toolsets/<toolset>`
@@ -139,7 +139,7 @@ Running `goa gen` produces:
 package design
 
 import (
-    . "goa.design/goa/v3/dsl"
+    . "github.com/CaliLuke/loom/dsl"
     . "github.com/CaliLuke/loom-mcp/dsl"
 )
 
@@ -190,7 +190,7 @@ var _ = Service("orchestrator", func() {
 })
 ```
 
-Running `goa gen example.com/assistant/design` produces:
+Running `loom gen example.com/assistant/design` produces:
 
 - `gen/orchestrator/agents/chat` workflow and planner activities.
 - `gen/orchestrator/agents/chat/specs` tool catalog.

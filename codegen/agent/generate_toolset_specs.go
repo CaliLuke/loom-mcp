@@ -258,7 +258,7 @@ func toolsetProviderFile(genpkg string, ts *ToolsetData) *codegen.File {
 		codegen.SimpleImport("errors"),
 		codegen.SimpleImport("fmt"),
 		&codegen.ImportSpec{Path: "github.com/CaliLuke/loom-mcp/runtime/toolregistry"},
-		&codegen.ImportSpec{Name: "goa", Path: upstreampaths.LoomPkgImportPath},
+		&codegen.ImportSpec{Name: "loom", Path: upstreampaths.LoomPkgImportPath},
 		&codegen.ImportSpec{Name: ts.SourceService.PkgName, Path: serviceImportPath},
 	)
 	if hasBoundsProjection {

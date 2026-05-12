@@ -5,7 +5,7 @@ Minimal, copy‑paste runnable example to go from zero → talking agent. Keep y
 ## Prerequisites
 
 - Go 1.24+
-- Goa v3 CLI (`go install github.com/CaliLuke/loom/cmd/loom@latest`)
+- Loom CLI (`go install github.com/CaliLuke/loom/cmd/loom@v1.1.0`)
 - Temporal dev server (for workflow execution)
   - Easiest: Docker one‑liner below, or use Temporalite
 
@@ -15,7 +15,7 @@ Minimal, copy‑paste runnable example to go from zero → talking agent. Keep y
 mkdir -p $GOPATH/src/example.com/quickstart && cd $_
 go mod init example.com/quickstart
 go get github.com/CaliLuke/loom@latest
-go get goa.design/loom-mcp@latest
+go get github.com/CaliLuke/loom-mcp@latest
 ```
 
 ## 2) Add a tiny design (design/design.go)
@@ -27,7 +27,7 @@ package design
 
 import (
     . "github.com/CaliLuke/loom/dsl"
-    . "goa.design/loom-mcp/dsl"
+    . "github.com/CaliLuke/loom-mcp/dsl"
 )
 
 var _ = API("orchestrator", func() {})
@@ -101,7 +101,7 @@ Then modify the bootstrap to use the Temporal engine:
 
 ```go
 import (
-    "goa.design/loom-mcp/runtime/agent/engine/temporal"
+    "github.com/CaliLuke/loom-mcp/runtime/agent/engine/temporal"
     "go.temporal.io/sdk/client"
 
     // Your generated tool specs aggregate.

@@ -108,9 +108,9 @@ func emitValidateMCPPayloadRequired(stmt *jen.Statement) {
 }
 
 func requiredFieldErrorExpr(field jen.Code) jen.Code {
-	return jen.Id("goa").Dot("WithErrorRemedy").Call(
-		jen.Id("goa").Dot("PermanentError").Call(jen.Lit("invalid_params"), jen.Lit("Missing required field: %s"), field),
-		jen.Op("&").Id("goa").Dot("ErrorRemedy").Values(jen.Dict{
+	return jen.Id("loom").Dot("WithErrorRemedy").Call(
+		jen.Id("loom").Dot("PermanentError").Call(jen.Lit("invalid_params"), jen.Lit("Missing required field: %s"), field),
+		jen.Op("&").Id("loom").Dot("ErrorRemedy").Values(jen.Dict{
 			jen.Id("Code"):        jen.Lit("invalid_params"),
 			jen.Id("SafeMessage"): jen.Qual("fmt", "Sprintf").Call(jen.Lit("Missing required field: %s"), field),
 			jen.Id("RetryHint"):   jen.Qual("fmt", "Sprintf").Call(jen.Lit("Include required field %q."), field),
@@ -142,9 +142,9 @@ func emitValidateMCPPayloadEnum(stmt *jen.Statement) {
 				),
 			),
 			jen.Return(
-				jen.Id("goa").Dot("WithErrorRemedy").Call(
-					jen.Id("goa").Dot("PermanentError").Call(jen.Lit("invalid_params"), jen.Lit("Invalid value for %s"), jen.Id("field")),
-					jen.Op("&").Id("goa").Dot("ErrorRemedy").Values(jen.Dict{
+				jen.Id("loom").Dot("WithErrorRemedy").Call(
+					jen.Id("loom").Dot("PermanentError").Call(jen.Lit("invalid_params"), jen.Lit("Invalid value for %s"), jen.Id("field")),
+					jen.Op("&").Id("loom").Dot("ErrorRemedy").Values(jen.Dict{
 						jen.Id("Code"):        jen.Lit("invalid_params"),
 						jen.Id("SafeMessage"): jen.Qual("fmt", "Sprintf").Call(jen.Lit("Invalid value for %s"), jen.Id("field")),
 						jen.Id("RetryHint"):   jen.Qual("fmt", "Sprintf").Call(jen.Lit("Use one of: %s."), jen.Qual("strings", "Join").Call(jen.Id("allowed"), jen.Lit(", "))),
@@ -172,7 +172,7 @@ func emitToolsList(stmt *jen.Statement, data *AdapterData) {
 				jen.Id("a").Dot("finishTelemetry").Call(jen.Id("ctx"), jen.Id("span"), jen.Id("start"), jen.Id("attrs"), jen.Id("err"), jen.False()),
 			).Call()
 			g.If(jen.Op("!").Id("a").Dot("isInitialized").Call(jen.Id("ctx"))).Block(
-				jen.Return(jen.Nil(), jen.Id("goa").Dot("PermanentError").Call(jen.Lit("invalid_params"), jen.Lit("Not initialized"))),
+				jen.Return(jen.Nil(), jen.Id("loom").Dot("PermanentError").Call(jen.Lit("invalid_params"), jen.Lit("Not initialized"))),
 			)
 			g.Id("a").Dot("log").Call(jen.Id("ctx"), jen.Lit("request"), jen.Map(jen.String()).Any().Values(jen.Dict{
 				jen.Lit("method"): jen.Lit("tools/list"),
@@ -312,7 +312,7 @@ func emitToolsCallHandler(stmt *jen.Statement, data *AdapterData) {
 		Params(jen.Bool(), jen.Error()).
 		BlockFunc(func(g *jen.Group) {
 			g.If(jen.Op("!").Id("a").Dot("isInitialized").Call(jen.Id("ctx"))).Block(
-				jen.Return(jen.False(), jen.Id("goa").Dot("PermanentError").Call(jen.Lit("invalid_params"), jen.Lit("Not initialized"))),
+				jen.Return(jen.False(), jen.Id("loom").Dot("PermanentError").Call(jen.Lit("invalid_params"), jen.Lit("Not initialized"))),
 			)
 			g.Id("name").Op(":=").Lit("")
 			g.If(jen.Id("p").Op("!=").Nil()).Block(
@@ -329,7 +329,7 @@ func emitToolsCallHandler(stmt *jen.Statement, data *AdapterData) {
 					})
 				}
 				sw.Default().Block(
-					jen.Return(jen.False(), jen.Id("goa").Dot("PermanentError").Call(jen.Lit("method_not_found"), jen.Lit("Unknown tool: %s"), jen.Id("p").Dot("Name"))),
+					jen.Return(jen.False(), jen.Id("loom").Dot("PermanentError").Call(jen.Lit("method_not_found"), jen.Lit("Unknown tool: %s"), jen.Id("p").Dot("Name"))),
 				)
 			})
 		})

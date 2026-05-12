@@ -466,7 +466,7 @@ The CORS plugin handles cross-origin requests. Import it:
 ```go
 import (
     cors "goa.design/plugins/v3/cors/dsl"
-    . "goa.design/goa/v3/dsl"
+    . "github.com/CaliLuke/loom/dsl"
 )
 ```
 

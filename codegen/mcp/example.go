@@ -499,7 +499,7 @@ func emitCLIDoJSONRPC(stmt *jen.Statement, services []cliServiceTemplateData) {
 			jen.Id("timeout").Int(),
 			jen.Id("debug").Bool(),
 		).
-		Params(jen.Id("goa").Dot("Endpoint"), jen.Any(), jen.Error()).
+		Params(jen.Id("loom").Dot("Endpoint"), jen.Any(), jen.Error()).
 		BlockFunc(func(g *jen.Group) {
 			g.Var().Id("doer").Id("goahttp").Dot("Doer")
 			g.Block(

@@ -388,7 +388,7 @@ Agent("chat", "Chat agent", func() {
 3. Regenerate code after DSL changes:
 
 --- CODE ---
-goa gen example.com/project/design
+loom gen example.com/project/design
 --- END CODE ---
 
 

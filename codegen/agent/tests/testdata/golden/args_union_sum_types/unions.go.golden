@@ -82,7 +82,7 @@ func (u *Value) SetText(v ValueText) {
 func (u Value) Validate() error {
 	switch u.kind {
 	case "":
-		return goa.InvalidEnumValueError("type", "", []any{
+		return loom.InvalidEnumValueError("type", "", []any{
 			string(ValueKindNumber),
 			string(ValueKindText),
 		})
@@ -91,7 +91,7 @@ func (u Value) Validate() error {
 	case ValueKindText:
 		return nil
 	default:
-		return goa.InvalidEnumValueError("type", u.kind, []any{
+		return loom.InvalidEnumValueError("type", u.kind, []any{
 			string(ValueKindNumber),
 			string(ValueKindText),
 		})

@@ -94,7 +94,7 @@ First, declare the MCP server in your service design:
 package design
 
 import (
-    . "goa.design/goa/v3/dsl"
+    . "github.com/CaliLuke/loom/dsl"
     . "github.com/CaliLuke/loom-mcp/dsl"
 )
 
@@ -344,7 +344,7 @@ Design
 package design
 
 import (
-    . "goa.design/goa/v3/dsl"
+    . "github.com/CaliLuke/loom/dsl"
     . "github.com/CaliLuke/loom-mcp/dsl"
 )
 

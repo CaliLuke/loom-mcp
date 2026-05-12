@@ -104,14 +104,14 @@ func (e ValidationError) Descriptions() map[string]string {
     return out
 }
 {{- if $hasValidation }}
-// newValidationError converts a goa.ServiceError (possibly merged) into a
+// newValidationError converts a loom.ServiceError (possibly merged) into a
 // ValidationError with structured FieldIssue entries. It trims any leading
 // "body." from field names for conciseness.
 func newValidationError(err error) error {
     if err == nil {
         return nil
     }
-    var se *goa.ServiceError
+    var se *loom.ServiceError
     if !errors.As(err, &se) {
         return err
     }
