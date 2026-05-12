@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"path/filepath"
 	"slices"
+	"strings"
 	"testing"
 	"text/template"
 
@@ -306,6 +307,19 @@ func TestGenerateSDKServer_MergesContextRequestHeadersIntoSyntheticRequest(t *te
 	require.Contains(t, rendered, "r = r.WithContext(mcpruntime.WithRequestHeaders(r.Context(), r.Header))")
 	require.Contains(t, rendered, "sdkSyntheticHTTPRequest(ctx, extra)")
 	require.Contains(t, rendered, "for key, values := range mcpruntime.RequestHeadersFromContext(ctx)")
+
+	// Header precedence: extra.Header must overlay ctx headers, not the
+	// other way around. The per-JSON-RPC-call values that the SDK puts in
+	// extra.Header should win over any stale values stored on ctx, which
+	// is the runtime contract pinned by
+	// TestRequestContextSeesPerCallHeaders in the assistant fixture and
+	// the behavioral guarantee the autok review asked us to lock in here
+	// at the codegen layer.
+	ctxLoopIdx := strings.Index(rendered, "for key, values := range mcpruntime.RequestHeadersFromContext(ctx)")
+	require.GreaterOrEqual(t, ctxLoopIdx, 0)
+	extraLoopIdx := strings.Index(rendered, "for key, values := range extra.Header")
+	require.GreaterOrEqual(t, extraLoopIdx, 0, "synthetic request must overlay extra.Header values")
+	require.Greater(t, extraLoopIdx, ctxLoopIdx, "extra.Header overlay must come after the RequestHeadersFromContext copy so per-call headers win over the ctx-bridged values")
 }
 
 func TestBuildAdapterData_DefaultedEnumFieldsStayScalarAndReapplyDefaults(t *testing.T) {

@@ -528,13 +528,18 @@ func sdkSyntheticHTTPRequest(ctx context.Context, extra *mcpsdk.RequestExtra) *h
 		Method: http.MethodPost,
 		URL:    &url.URL{Path: "/mcp"},
 	}
-	if extra != nil && extra.Header != nil {
-		req.Header = extra.Header.Clone()
-	}
 	for key, values := range mcpruntime.RequestHeadersFromContext(ctx) {
 		req.Header.Del(key)
 		for _, value := range values {
 			req.Header.Add(key, value)
+		}
+	}
+	if extra != nil && extra.Header != nil {
+		for key, values := range extra.Header {
+			req.Header.Del(key)
+			for _, value := range values {
+				req.Header.Add(key, value)
+			}
 		}
 	}
 	return req

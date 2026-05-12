@@ -745,13 +745,18 @@ func sdkServerHandlerSection(data *AdapterData) codegen.Section {
 					jen.Id("Header"): jen.Make(jen.Qual("net/http", "Header")),
 					jen.Id("URL"):    jen.Op("&").Qual("net/url", "URL").Values(jen.Dict{jen.Id("Path"): jen.Lit("/mcp")}),
 				}),
-				jen.If(jen.Id("extra").Op("!=").Nil().Op("&&").Id("extra").Dot("Header").Op("!=").Nil()).Block(
-					jen.Id("req").Dot("Header").Op("=").Id("extra").Dot("Header").Dot("Clone").Call(),
-				),
 				jen.For(jen.List(jen.Id("key"), jen.Id("values")).Op(":=").Range().Id("mcpruntime").Dot("RequestHeadersFromContext").Call(jen.Id("ctx"))).Block(
 					jen.Id("req").Dot("Header").Dot("Del").Call(jen.Id("key")),
 					jen.For(jen.List(jen.Id("_"), jen.Id("value")).Op(":=").Range().Id("values")).Block(
 						jen.Id("req").Dot("Header").Dot("Add").Call(jen.Id("key"), jen.Id("value")),
+					),
+				),
+				jen.If(jen.Id("extra").Op("!=").Nil().Op("&&").Id("extra").Dot("Header").Op("!=").Nil()).Block(
+					jen.For(jen.List(jen.Id("key"), jen.Id("values")).Op(":=").Range().Id("extra").Dot("Header")).Block(
+						jen.Id("req").Dot("Header").Dot("Del").Call(jen.Id("key")),
+						jen.For(jen.List(jen.Id("_"), jen.Id("value")).Op(":=").Range().Id("values")).Block(
+							jen.Id("req").Dot("Header").Dot("Add").Call(jen.Id("key"), jen.Id("value")),
+						),
 					),
 				),
 				jen.Return(jen.Id("req")),
