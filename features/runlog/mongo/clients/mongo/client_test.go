@@ -3,6 +3,7 @@ package mongo
 import (
 	"bytes"
 	"context"
+	"sort"
 	"testing"
 	"time"
 
@@ -252,6 +253,11 @@ func (c *fakeCollection) Find(_ context.Context, filter any, opts ...options.Lis
 	var limit int64
 	if findOpts.Limit != nil {
 		limit = *findOpts.Limit
+	}
+	if findOpts.Sort != nil {
+		sort.Slice(filtered, func(i, j int) bool {
+			return bytes.Compare(filtered[i].ID[:], filtered[j].ID[:]) < 0
+		})
 	}
 	if limit > 0 && int64(len(filtered)) > limit {
 		filtered = filtered[:limit]

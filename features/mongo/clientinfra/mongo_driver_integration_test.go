@@ -125,7 +125,7 @@ func newMongoIntegrationClient(t *testing.T) (*mongodriver.Client, string) {
 		_ = container.Terminate(context.Background())
 	})
 
-	initMongoReplicaSet(t, ctx, container)
+	initMongoReplicaSet(ctx, t, container)
 
 	host, err := container.Host(ctx)
 	require.NoError(t, err)
@@ -147,7 +147,7 @@ func newMongoIntegrationClient(t *testing.T) (*mongodriver.Client, string) {
 	return client, database
 }
 
-func initMongoReplicaSet(t *testing.T, ctx context.Context, container testcontainers.Container) {
+func initMongoReplicaSet(ctx context.Context, t *testing.T, container testcontainers.Container) {
 	t.Helper()
 	initScript := `try {
   rs.initiate({_id: "rs0", members: [{_id: 0, host: "127.0.0.1:27017"}]})
@@ -163,7 +163,13 @@ func initMongoReplicaSet(t *testing.T, ctx context.Context, container testcontai
 		t.Fatalf("failed to initiate Mongo replica set: exit %d: %s", exitCode, body)
 	}
 
-	waitScript := `while (!db.hello().isWritablePrimary) { sleep(100) }`
+	waitScript := `const deadline = Date.now() + 30000
+while (!db.hello().isWritablePrimary) {
+  if (Date.now() > deadline) {
+    throw new Error("timed out waiting for writable primary")
+  }
+  sleep(100)
+}`
 	exitCode, output, err = container.Exec(ctx, []string{"mongosh", "--quiet", "--eval", waitScript})
 	require.NoError(t, err)
 	if exitCode != 0 {
