@@ -11,6 +11,8 @@ import (
 	"github.com/CaliLuke/loom-mcp/runtime/agent/model"
 )
 
+const historySummaryKind = "summary"
+
 type (
 	// HistoryPolicy transforms message history before planning. Implementations
 	// must:
@@ -309,7 +311,7 @@ func summaryHistoryMessage(cfg *compressConfig, summaryText string) *model.Messa
 			model.TextPart{Text: "[Conversation Summary]\n" + summaryText},
 		},
 		Meta: map[string]any{
-			"loom_mcp_history": "summary",
+			"loom_mcp_history": historySummaryKind,
 		},
 	}
 }

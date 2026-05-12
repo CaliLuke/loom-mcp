@@ -182,11 +182,11 @@ func (r *Runtime) updateRunMetaFromHookEvent(ctx context.Context, evt hooks.Even
 		return r.updateRunStatus(ctx, e.RunID(), session.RunStatusRunning)
 	case *hooks.RunCompletedEvent:
 		switch e.Status {
-		case "success":
+		case runStatusSuccess:
 			return r.updateRunStatus(ctx, e.RunID(), session.RunStatusCompleted)
-		case "failed":
+		case runStatusFailed:
 			return r.updateRunStatus(ctx, e.RunID(), session.RunStatusFailed)
-		case "canceled":
+		case runStatusCanceled:
 			return r.updateRunStatus(ctx, e.RunID(), session.RunStatusCanceled)
 		default:
 			return errors.New("runtime: run completed event has unknown status")

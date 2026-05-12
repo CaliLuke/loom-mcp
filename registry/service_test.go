@@ -1,4 +1,3 @@
-//nolint:goconst // Repeated registry fixture values keep tests readable.
 package registry
 
 import (

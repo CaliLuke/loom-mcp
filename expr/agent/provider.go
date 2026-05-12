@@ -2,6 +2,11 @@ package agent
 
 import "fmt"
 
+const (
+	providerLocalString   = "local"
+	providerLocalEvalName = "local provider"
+)
+
 // ProviderKind identifies the source/executor type for a toolset.
 type ProviderKind int
 
@@ -19,7 +24,7 @@ const (
 func (k ProviderKind) String() string {
 	switch k {
 	case ProviderLocal:
-		return "local"
+		return providerLocalString
 	case ProviderMCP:
 		return "mcp"
 	case ProviderRegistry:
@@ -55,7 +60,7 @@ type ProviderExpr struct {
 func (p *ProviderExpr) EvalName() string {
 	switch p.Kind {
 	case ProviderLocal:
-		return "local provider"
+		return providerLocalEvalName
 	case ProviderMCP:
 		return fmt.Sprintf("MCP provider (service=%q, toolset=%q)", p.MCPService, p.MCPToolset)
 	case ProviderRegistry:
@@ -65,6 +70,6 @@ func (p *ProviderExpr) EvalName() string {
 		}
 		return fmt.Sprintf("registry provider (registry=%q, toolset=%q)", regName, p.ToolsetName)
 	default:
-		return "local provider"
+		return providerLocalEvalName
 	}
 }

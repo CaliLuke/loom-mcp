@@ -1,4 +1,3 @@
-//nolint:goconst // Repeated literals keep cluster rate-limit test fixtures readable.
 package middleware
 
 import (

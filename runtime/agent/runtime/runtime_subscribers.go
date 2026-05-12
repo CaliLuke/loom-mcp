@@ -111,11 +111,11 @@ func sessionRunMetaFromEvent(event hooks.Event) (session.RunMeta, bool, error) {
 
 func sessionRunCompletedStatus(status string) (session.RunStatus, error) {
 	switch status {
-	case "success":
+	case runStatusSuccess:
 		return session.RunStatusCompleted, nil
-	case "failed":
+	case runStatusFailed:
 		return session.RunStatusFailed, nil
-	case "canceled":
+	case runStatusCanceled:
 		return session.RunStatusCanceled, nil
 	default:
 		return "", fmt.Errorf("unexpected run completed status %q", status)

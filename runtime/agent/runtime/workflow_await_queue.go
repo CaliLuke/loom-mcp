@@ -275,9 +275,9 @@ func (r *Runtime) publishAwaitResume(ctx context.Context, input *RunInput, base 
 	return r.publishHook(
 		ctx,
 		hooks.NewRunResumedEvent(base.RunContext.RunID, input.AgentID, base.RunContext.SessionID, "await_completed", "runtime", map[string]string{
-			"resumed_by":    "await_queue",
-			"confirmations": fmt.Sprintf("%d", len(confirmations)),
-			"items":         fmt.Sprintf("%d", len(items)),
+			resumeMetadataKey: "await_queue",
+			"confirmations":   fmt.Sprintf("%d", len(confirmations)),
+			"items":           fmt.Sprintf("%d", len(items)),
 		}, 0),
 		turnID,
 	)

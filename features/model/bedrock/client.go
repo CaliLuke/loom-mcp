@@ -31,6 +31,9 @@ import (
 const (
 	defaultThinkingBudget = 16384
 	bedrockProviderName   = "bedrock"
+	bedrockRoleAssistant  = "assistant"
+	bedrockSchemaTypeKey  = "type"
+	bedrockObjectType     = "object"
 )
 
 // RuntimeClient mirrors the subset of the AWS Bedrock runtime client required
@@ -354,9 +357,9 @@ func (c *Client) buildConverseStreamInput(parts *requestParts, req *model.Reques
 			// Opus 4.6+: adaptive thinking lets the model decide when and how
 			// deeply to reason. Interleaved thinking is automatic — no beta
 			// header required.
-			fields["thinking"] = map[string]any{"type": "adaptive"}
+			fields["thinking"] = map[string]any{bedrockSchemaTypeKey: "adaptive"}
 		} else {
-			thinkingCfg := map[string]any{"type": "enabled"}
+			thinkingCfg := map[string]any{bedrockSchemaTypeKey: "enabled"}
 			if thinking.budget > 0 {
 				thinkingCfg["budget_tokens"] = thinking.budget
 			}
@@ -674,7 +677,7 @@ func toDocument(ctx context.Context, schema any, logger telemetry.Logger) docume
 		logger = telemetry.NewNoopLogger()
 	}
 	if schema == nil {
-		m := map[string]any{"type": "object"}
+		m := map[string]any{bedrockSchemaTypeKey: bedrockObjectType}
 		return lazyDocument(m)
 	}
 	switch v := schema.(type) {
@@ -683,7 +686,7 @@ func toDocument(ctx context.Context, schema any, logger telemetry.Logger) docume
 	case json.RawMessage:
 		var decoded any
 		if len(v) == 0 {
-			return lazyDocument(map[string]any{"type": "object"})
+			return lazyDocument(map[string]any{bedrockSchemaTypeKey: bedrockObjectType})
 		}
 		if err := json.Unmarshal(v, &decoded); err != nil {
 			logger.Error(
@@ -693,7 +696,7 @@ func toDocument(ctx context.Context, schema any, logger telemetry.Logger) docume
 				"event", "unmarshal_schema_failed",
 				"err", err,
 			)
-			return lazyDocument(map[string]any{"type": "object"})
+			return lazyDocument(map[string]any{bedrockSchemaTypeKey: bedrockObjectType})
 		}
 		return lazyDocument(decoded)
 	default:
@@ -759,7 +762,7 @@ func appendBedrockTextBlock(resp *model.Response, text string) {
 		return
 	}
 	resp.Content = append(resp.Content, model.Message{
-		Role:  "assistant",
+		Role:  bedrockRoleAssistant,
 		Parts: []model.Part{model.TextPart{Text: text}},
 	})
 }
@@ -770,7 +773,7 @@ func appendBedrockCitationBlock(resp *model.Response, block brtypes.CitationsCon
 		return
 	}
 	resp.Content = append(resp.Content, model.Message{
-		Role:  "assistant",
+		Role:  bedrockRoleAssistant,
 		Parts: []model.Part{part},
 	})
 }

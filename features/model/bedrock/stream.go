@@ -340,7 +340,7 @@ func (p *chunkProcessor) emitTextDelta(idx int, text string) error {
 	return p.emit(model.Chunk{
 		Type: model.ChunkTypeText,
 		Message: &model.Message{
-			Role:  "assistant",
+			Role:  bedrockRoleAssistant,
 			Parts: []model.Part{model.TextPart{Text: text}},
 			Meta:  map[string]any{"content_index": idx},
 		},
@@ -397,7 +397,7 @@ func (p *chunkProcessor) emitReasoningText(idx int, rb *reasoningBuffer, text st
 		Type:     model.ChunkTypeThinking,
 		Thinking: text,
 		Message: &model.Message{
-			Role: "assistant",
+			Role: bedrockRoleAssistant,
 			Parts: []model.Part{model.ThinkingPart{
 				Text:  text,
 				Index: idx,
@@ -456,7 +456,7 @@ func (p *chunkProcessor) emitFinalReasoning(idx int) error {
 	chunk := model.Chunk{
 		Type: model.ChunkTypeThinking,
 		Message: &model.Message{
-			Role:  "assistant",
+			Role:  bedrockRoleAssistant,
 			Parts: []model.Part{*part},
 		},
 	}

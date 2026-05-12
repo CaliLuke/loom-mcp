@@ -1,4 +1,3 @@
-//nolint:goconst // Repeated tool/run fixture values keep tests readable.
 package executor
 
 import (

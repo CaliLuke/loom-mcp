@@ -21,6 +21,11 @@ import (
 	"github.com/CaliLuke/loom-mcp/runtime/agent/model"
 )
 
+const (
+	ledgerPartToolUse    = "tool_use"
+	ledgerPartToolResult = "tool_result"
+)
+
 type (
 	// Part is the canonical provider‑precise content fragment stored by the ledger.
 	// Implementations must be one of ThinkingPart, TextPart, ToolUsePart, or
@@ -220,7 +225,7 @@ func (m *Message) UnmarshalJSON(data []byte) error {
 // a new assistant message is started.
 func (l *Ledger) AppendThinking(tp ThinkingPart) {
 	if l.current == nil {
-		l.current = &Message{Role: "assistant", Parts: make([]Part, 0, 2)}
+		l.current = &Message{Role: string(model.ConversationRoleAssistant), Parts: make([]Part, 0, 2)}
 	}
 	// Ensure all thinking parts stay at the head of the message.
 	// Insert this block directly after any existing leading thinking parts.
@@ -256,7 +261,7 @@ func (l *Ledger) AppendText(text string) {
 		return
 	}
 	if l.current == nil {
-		l.current = &Message{Role: "assistant", Parts: make([]Part, 0, 1)}
+		l.current = &Message{Role: string(model.ConversationRoleAssistant), Parts: make([]Part, 0, 1)}
 	}
 	// Coalesce sequential text deltas to avoid storing one part per chunk.
 	// This preserves provider-visible ordering while reducing workflow state size.
@@ -276,7 +281,7 @@ func (l *Ledger) AppendText(text string) {
 // set of tool_use blocks.
 func (l *Ledger) DeclareToolUse(id, name string, args any) {
 	if l.current == nil {
-		l.current = &Message{Role: "assistant", Parts: make([]Part, 0, 1)}
+		l.current = &Message{Role: string(model.ConversationRoleAssistant), Parts: make([]Part, 0, 1)}
 	}
 	l.current.Parts = append(l.current.Parts, ToolUsePart{
 		ID:   id,
@@ -689,13 +694,13 @@ func summarizeParts(parts []model.Part) string {
 	for i, p := range parts {
 		switch p.(type) {
 		case model.ThinkingPart:
-			names[i] = "thinking"
+			names[i] = model.ChunkTypeThinking
 		case model.TextPart:
-			names[i] = "text"
+			names[i] = model.ChunkTypeText
 		case model.ToolUsePart:
-			names[i] = "tool_use"
+			names[i] = ledgerPartToolUse
 		case model.ToolResultPart:
-			names[i] = "tool_result"
+			names[i] = ledgerPartToolResult
 		default:
 			names[i] = fmt.Sprintf("%T", p)
 		}

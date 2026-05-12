@@ -1,4 +1,3 @@
-//nolint:goconst // Repeated stream fixture values keep tests readable.
 package provider
 
 import (

@@ -13,7 +13,10 @@ import (
 	"github.com/CaliLuke/loom-mcp/runtime/agent/tools"
 )
 
-const unknownID = "unknown"
+const (
+	unknownID       = "unknown"
+	defaultToolName = "tool"
+)
 
 type (
 	// PromptRenderHookContext identifies one agent run turn for prompt_rendered hook emission.
@@ -89,7 +92,7 @@ func generateDeterministicToolCallID(runID, turnID string, attempt int, toolName
 		runID = unknownID
 	}
 	if toolName == "" {
-		toolName = "tool"
+		toolName = defaultToolName
 	}
 	safeTool := strings.ReplaceAll(string(toolName), ".", "-")
 	tid := turnID
@@ -106,7 +109,7 @@ func generateDeterministicAwaitID(runID, turnID string, tool tools.Ident, toolCa
 	}
 	safeTool := strings.ReplaceAll(string(tool), ".", "-")
 	if safeTool == "" {
-		safeTool = "tool"
+		safeTool = defaultToolName
 	}
 	tid := turnID
 	if tid == "" {

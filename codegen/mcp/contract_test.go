@@ -1,4 +1,3 @@
-//nolint:goconst // Repeated literals keep MCP contract fixtures readable.
 package codegen
 
 import (

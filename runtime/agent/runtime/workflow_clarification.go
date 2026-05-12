@@ -164,7 +164,7 @@ func (r *Runtime) publishClarificationError(
 ) error {
 	return r.publishHook(ctx, hooks.NewRunResumedEvent(
 		base.RunContext.RunID, input.AgentID, base.RunContext.SessionID, "clarification_error", "runtime",
-		map[string]string{"resumed_by": "clarification_error", "await_id": awaitID}, 0,
+		map[string]string{resumeMetadataKey: "clarification_error", "await_id": awaitID}, 0,
 	), turnID)
 }
 

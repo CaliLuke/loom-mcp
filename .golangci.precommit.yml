@@ -72,10 +72,16 @@ linters:
           - dupl
       - path: _test\.go
         linters:
+          - goconst
+      - path: _test\.go
+        linters:
           - funlen
           - gocognit
           - maintidx
           - nestif
+      - path: ^codegen/
+        linters:
+          - goconst
       - path: ^codegen/
         linters:
           - funlen
@@ -94,3 +100,6 @@ linters:
           - gocognit
           - maintidx
           - nestif
+      - path: ^integration_tests/
+        linters:
+          - goconst

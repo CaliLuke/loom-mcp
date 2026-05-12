@@ -13,6 +13,8 @@ import (
 	"github.com/CaliLuke/loom-mcp/runtime/agent/telemetry"
 )
 
+const plannerThoughtCodeKey = "code"
+
 // PlanStartActivity executes the planner's PlanStart method.
 //
 // Advanced & generated integration
@@ -51,7 +53,7 @@ func (r *Runtime) PlanStartActivity(ctx context.Context, input *PlanActivityInpu
 			events.PlannerThought(
 				ctx,
 				"Model provider is rate-limiting this request. It is safe to retry after a short delay.",
-				map[string]string{"code": "rate_limited"},
+				map[string]string{plannerThoughtCodeKey: "rate_limited"},
 			)
 		}
 		return nil, err
@@ -113,7 +115,7 @@ func (r *Runtime) PlanResumeActivity(ctx context.Context, input *PlanActivityInp
 			events.PlannerThought(
 				ctx,
 				"Model provider is rate-limiting this request. It is safe to retry after a short delay.",
-				map[string]string{"code": "rate_limited"},
+				map[string]string{plannerThoughtCodeKey: "rate_limited"},
 			)
 		}
 		return nil, err

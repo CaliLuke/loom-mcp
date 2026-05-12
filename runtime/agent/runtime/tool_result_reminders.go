@@ -9,6 +9,8 @@ import (
 	"github.com/CaliLuke/loom-mcp/runtime/agent/planner"
 )
 
+const defaultCursorField = "cursor"
+
 var (
 	retryHintReminderTemplate = template.Must(
 		template.New("tool_retry_hint_reminder").
@@ -103,7 +105,7 @@ func boundsReminder(tr *planner.ToolResult, cursorField string) string {
 	}
 	field := strings.TrimSpace(cursorField)
 	if field == "" {
-		field = "cursor"
+		field = defaultCursorField
 	}
 	view := boundsReminderView{
 		ToolName:       string(tr.Name),

@@ -18,6 +18,8 @@ import (
 	"github.com/CaliLuke/loom-mcp/runtime/agent/planner"
 )
 
+const resumeMetadataKey = "resumed_by"
+
 // handleInterrupts drains pause signals and blocks until a resume signal arrives.
 // When budgetDeadline is reached, it returns nil so the caller can finalize cleanly.
 func (r *Runtime) handleInterrupts(
@@ -113,7 +115,7 @@ func (r *Runtime) publishPauseEvent(ctx context.Context, input *RunInput, turnID
 
 func (r *Runtime) publishResumeReason(ctx context.Context, input *RunInput, turnID string, reason string) error {
 	return r.publishHook(ctx, hooks.NewRunResumedEvent(
-		input.RunID, input.AgentID, input.SessionID, reason, "runtime", map[string]string{"resumed_by": reason}, 0,
+		input.RunID, input.AgentID, input.SessionID, reason, "runtime", map[string]string{resumeMetadataKey: reason}, 0,
 	), turnID)
 }
 

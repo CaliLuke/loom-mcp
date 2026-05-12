@@ -1,4 +1,3 @@
-//nolint:goconst // Repeated stream IDs keep pulse test fixtures readable.
 package pulse
 
 import (

@@ -104,7 +104,7 @@ func convertSearchResults(pbToolsets []*registrypb.ToolsetInfo) []*SearchResult 
 		result[i] = &SearchResult{
 			Name:        pb.GetName(),
 			Description: pb.GetDescription(),
-			Type:        "toolset",
+			Type:        searchResultTypeToolset,
 			Tags:        pb.GetTags(),
 		}
 	}

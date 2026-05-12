@@ -11,6 +11,11 @@ import (
 	"github.com/CaliLuke/loom-mcp/runtime/agent/tools"
 )
 
+const (
+	validationConstraintMissingField = "missing_field"
+	payloadFieldAnchor               = "$payload"
+)
+
 func (r *Runtime) toolDecodeErrorOutput(toolName tools.Ident, decErr error) *ToolOutput {
 	if fields, question, reason, ok := buildRetryHintFromValidation(decErr, toolName); ok {
 		return &ToolOutput{
@@ -86,7 +91,7 @@ func collectValidationFields(issues []*tools.FieldIssue) ([]string, []string) {
 		if !slices.Contains(fields, is.Field) {
 			fields = append(fields, is.Field)
 		}
-		if is.Constraint == "missing_field" && !slices.Contains(missing, is.Field) {
+		if is.Constraint == validationConstraintMissingField && !slices.Contains(missing, is.Field) {
 			missing = append(missing, is.Field)
 		}
 	}
@@ -141,7 +146,7 @@ func buildRetryHintFromDecodeError(err error, toolName tools.Ident, spec *tools.
 	case errors.As(err, &typeErr):
 		field := typeErr.Field
 		if field == "" {
-			field = "$payload"
+			field = payloadFieldAnchor
 		}
 		fields = []string{field}
 		reason = planner.RetryReasonMissingFields
@@ -151,7 +156,7 @@ func buildRetryHintFromDecodeError(err error, toolName tools.Ident, spec *tools.
 			field,
 		)
 	case errors.As(err, &syntaxErr):
-		fields = []string{"$payload"}
+		fields = []string{payloadFieldAnchor}
 		reason = planner.RetryReasonMissingFields
 		question = fmt.Sprintf(
 			"I could not parse the %s tool input as JSON (syntax error near byte offset %d). Please resend this tool call with a valid JSON object payload.",

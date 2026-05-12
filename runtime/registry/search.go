@@ -13,6 +13,11 @@ import (
 	"go.opentelemetry.io/otel/attribute"
 )
 
+const (
+	searchResultTypeTool    = "tool"
+	searchResultTypeToolset = "toolset"
+)
+
 type (
 	// SearchClient provides search functionality across registries with
 	// semantic search and keyword fallback support.
@@ -325,7 +330,7 @@ func ParseSearchResults(results []*SearchResult) []*SearchResult {
 
 		// Default type if not specified
 		if result.Type == "" {
-			result.Type = "tool"
+			result.Type = searchResultTypeTool
 		}
 
 		parsed = append(parsed, result)
