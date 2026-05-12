@@ -3,7 +3,7 @@ module example.com/assistant
 go 1.26.1
 
 require (
-	github.com/CaliLuke/loom v1.0.12
+	github.com/CaliLuke/loom v1.0.13
 	github.com/CaliLuke/loom-mcp v1.0.8-0.20260410010650-904a9b9c01f6
 	github.com/google/uuid v1.6.0
 	github.com/modelcontextprotocol/go-sdk v1.6.0
@@ -64,5 +64,3 @@ require (
 )
 
 replace github.com/CaliLuke/loom-mcp => ../../..
-
-replace github.com/CaliLuke/loom => ../../../../loom
