@@ -19,6 +19,7 @@ import (
 
 	assistant "example.com/assistant/gen/assistant"
 	mcpruntime "github.com/CaliLuke/loom-mcp/runtime/mcp"
+	"github.com/CaliLuke/loom/observability/transport"
 	mcpsdk "github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
@@ -113,8 +114,13 @@ func newSDKHandler(server *mcpsdk.Server, adapter *MCPAdapter, requestContext fu
 			serveSDKEventsStream(server, adapter, w, r)
 			return
 		}
-		observer := &sdkResponseObserver{ResponseWriter: w}
+		transportObs, transportW := transport.BeginHTTPRequest(r.Context(), w, "mcp", r.Method, r)
+		defer transportObs.End()
+		observer := &sdkResponseObserver{ResponseWriter: transportW}
 		base.ServeHTTP(observer, r)
+		if observer.statusCode >= 400 {
+			transportObs.Fail(transport.ReasonHandlerError)
+		}
 		if sessionID := observer.Header().Get(mcpruntime.HeaderKeySessionID); sessionID != "" {
 			adapter.captureSessionPrincipal(r.Context(), sessionID)
 		}
@@ -132,17 +138,22 @@ func sdkStreamableHTTPOptions(opts *mcpsdk.StreamableHTTPOptions) *mcpsdk.Stream
 }
 func serveSDKEventsStream(server *mcpsdk.Server, adapter *MCPAdapter, w http.ResponseWriter, r *http.Request) {
 	sessionID := r.Header.Get("Mcp-Session-Id")
+	streamObs := transport.BeginRequest(r.Context(), transport.TransportMCP, "mcp", "events/stream")
+	defer streamObs.End()
+	streamObs.SetSession(sessionID)
 	adapter.log(r.Context(), "events_stream_open", map[string]any{
 		"accept":     r.Header.Get("Accept"),
 		"has_accept": strings.TrimSpace(r.Header.Get("Accept")) != "",
 		"session_id": sessionID,
 	})
 	if sessionID == "" {
+		streamObs.Fail(transport.ReasonMCPSessionMissing)
 		adapter.log(r.Context(), "events_stream_rejected", map[string]any{"reason": "missing_session_id"})
 		http.Error(w, "Missing session ID", http.StatusBadRequest)
 		return
 	}
 	if sdkSessionByID(server, sessionID) == nil {
+		streamObs.Fail(transport.ReasonMCPSessionNotFound)
 		adapter.clearSessionPrincipal(sessionID)
 		adapter.log(r.Context(), "events_stream_rejected", map[string]any{
 			"reason":     "session_not_found",
@@ -152,6 +163,7 @@ func serveSDKEventsStream(server *mcpsdk.Server, adapter *MCPAdapter, w http.Res
 		return
 	}
 	if err := adapter.assertSessionPrincipal(r.Context(), sessionID); err != nil {
+		streamObs.Fail(transport.ReasonMCPSessionPrincipalMismatch)
 		adapter.log(r.Context(), "events_stream_rejected", map[string]any{
 			"error":      err.Error(),
 			"reason":     "session_principal_mismatch",
@@ -214,6 +226,7 @@ func serveSDKEventsStream(server *mcpsdk.Server, adapter *MCPAdapter, w http.Res
 				continue
 			}
 			if err := writeSDKNotificationEvent(w, "events/stream", sdkEventsStreamParams(res)); err != nil {
+				streamObs.Fail(transport.ReasonMCPEventsStreamWriteFailed)
 				adapter.log(r.Context(), "events_stream_closed", map[string]any{
 					"error":      err.Error(),
 					"reason":     "write_error",

@@ -21,6 +21,7 @@ import (
 	mcpruntime "github.com/CaliLuke/loom-mcp/runtime/mcp"
 	loomhttp "github.com/CaliLuke/loom/http"
 	"github.com/CaliLuke/loom/jsonrpc"
+	loomtransport "github.com/CaliLuke/loom/observability/transport"
 	loom "github.com/CaliLuke/loom/pkg"
 )
 
@@ -196,11 +197,15 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 // handleHTTP handles JSON-RPC requests.
 func (s *Server) handleHTTP(w http.ResponseWriter, r *http.Request) {
+	obs, w := loomtransport.BeginJSONRPCRequest(r.Context(), w, "mcp_assistant", r)
+	defer obs.End()
+	r = r.WithContext(loomtransport.WithRequestObserver(r.Context(), obs))
 	// Peek at the first byte to determine request type
 	bufReader := bufio.NewReader(r.Body)
 	peek, err := bufReader.Peek(1)
 	if err != nil && err != io.EOF {
 		r.Body.Close()
+		obs.Fail(loomtransport.ReasonRequestDecodeFailed)
 		s.errhandler(r.Context(), w, fmt.Errorf("failed to read request body: %w", err))
 		return
 	}
@@ -231,6 +236,7 @@ func (s *Server) handleHTTP(w http.ResponseWriter, r *http.Request) {
 func (s *Server) handleSingle(w http.ResponseWriter, r *http.Request) {
 	var req jsonrpc.RawRequest
 	if err := s.decoder(r).Decode(&req); err != nil {
+		loomtransport.RequestObserverFromContext(r.Context()).Fail(loomtransport.ReasonInvalidJSONRPCEnvelope)
 		response := jsonrpc.MakeErrorResponse(nil, jsonrpc.ParseError, "Parse error", nil)
 		if encErr := s.encoder(r.Context(), w).Encode(response); encErr != nil {
 			s.errhandler(r.Context(), w, fmt.Errorf("failed to encode parse error response: %w", encErr))
@@ -244,12 +250,14 @@ func (s *Server) handleSingle(w http.ResponseWriter, r *http.Request) {
 func (s *Server) handleBatch(w http.ResponseWriter, r *http.Request) {
 	var reqs []jsonrpc.RawRequest
 	if err := s.decoder(r).Decode(&reqs); err != nil {
+		loomtransport.RequestObserverFromContext(r.Context()).Fail(loomtransport.ReasonInvalidJSONRPCBatch)
 		response := jsonrpc.MakeErrorResponse(nil, jsonrpc.ParseError, "Parse error", nil)
 		if encErr := s.encoder(r.Context(), w).Encode(response); encErr != nil {
 			s.errhandler(r.Context(), w, fmt.Errorf("failed to encode parse error response: %w", encErr))
 		}
 		return
 	}
+	loomtransport.RequestObserverFromContext(r.Context()).SetJSONRPC("", "", len(reqs), false)
 	w.Header().Set("Content-Type", "application/json")
 	writer := &batchWriter{Writer: w}
 	for _, req := range reqs {
@@ -262,64 +270,80 @@ func (s *Server) handleBatch(w http.ResponseWriter, r *http.Request) {
 
 // processRequest processes a single JSON-RPC request.
 func (s *Server) processRequest(ctx context.Context, r *http.Request, req *jsonrpc.RawRequest, w http.ResponseWriter) {
+	loomtransport.RequestObserverFromContext(ctx).SetJSONRPC(req.Method, jsonrpc.IDToString(req.ID), 0, !req.HasID)
 	if req.JSONRPC != "2.0" {
+		loomtransport.RequestObserverFromContext(ctx).Fail(loomtransport.ReasonInvalidJSONRPCEnvelope)
 		s.encodeJSONRPCError(ctx, w, req, jsonrpc.InvalidRequest, "Invalid request", nil)
 		return
 	}
 	if req.Method == "" {
+		loomtransport.RequestObserverFromContext(ctx).Fail(loomtransport.ReasonInvalidJSONRPCMethod)
 		s.encodeJSONRPCError(ctx, w, req, jsonrpc.InvalidRequest, "Missing method field", nil)
 		return
 	}
 	switch req.Method {
 	case "initialize":
 		if err := s.Initialize(ctx, r, req, w); err != nil {
+			loomtransport.RequestObserverFromContext(ctx).Fail(loomtransport.ReasonHandlerError)
 			s.errhandler(ctx, w, fmt.Errorf("handler error for initialize: %w", err))
 		}
 	case "ping":
 		if err := s.Ping(ctx, r, req, w); err != nil {
+			loomtransport.RequestObserverFromContext(ctx).Fail(loomtransport.ReasonHandlerError)
 			s.errhandler(ctx, w, fmt.Errorf("handler error for ping: %w", err))
 		}
 	case "tools/list":
 		if err := s.ToolsList(ctx, r, req, w); err != nil {
+			loomtransport.RequestObserverFromContext(ctx).Fail(loomtransport.ReasonHandlerError)
 			s.errhandler(ctx, w, fmt.Errorf("handler error for tools/list: %w", err))
 		}
 	case "tools/call":
 		if err := s.ToolsCall(ctx, r, req, w); err != nil {
+			loomtransport.RequestObserverFromContext(ctx).Fail(loomtransport.ReasonHandlerError)
 			s.errhandler(ctx, w, fmt.Errorf("handler error for tools/call: %w", err))
 		}
 	case "resources/list":
 		if err := s.ResourcesList(ctx, r, req, w); err != nil {
+			loomtransport.RequestObserverFromContext(ctx).Fail(loomtransport.ReasonHandlerError)
 			s.errhandler(ctx, w, fmt.Errorf("handler error for resources/list: %w", err))
 		}
 	case "resources/read":
 		if err := s.ResourcesRead(ctx, r, req, w); err != nil {
+			loomtransport.RequestObserverFromContext(ctx).Fail(loomtransport.ReasonHandlerError)
 			s.errhandler(ctx, w, fmt.Errorf("handler error for resources/read: %w", err))
 		}
 	case "resources/subscribe":
 		if err := s.ResourcesSubscribe(ctx, r, req, w); err != nil {
+			loomtransport.RequestObserverFromContext(ctx).Fail(loomtransport.ReasonHandlerError)
 			s.errhandler(ctx, w, fmt.Errorf("handler error for resources/subscribe: %w", err))
 		}
 	case "resources/unsubscribe":
 		if err := s.ResourcesUnsubscribe(ctx, r, req, w); err != nil {
+			loomtransport.RequestObserverFromContext(ctx).Fail(loomtransport.ReasonHandlerError)
 			s.errhandler(ctx, w, fmt.Errorf("handler error for resources/unsubscribe: %w", err))
 		}
 	case "prompts/list":
 		if err := s.PromptsList(ctx, r, req, w); err != nil {
+			loomtransport.RequestObserverFromContext(ctx).Fail(loomtransport.ReasonHandlerError)
 			s.errhandler(ctx, w, fmt.Errorf("handler error for prompts/list: %w", err))
 		}
 	case "prompts/get":
 		if err := s.PromptsGet(ctx, r, req, w); err != nil {
+			loomtransport.RequestObserverFromContext(ctx).Fail(loomtransport.ReasonHandlerError)
 			s.errhandler(ctx, w, fmt.Errorf("handler error for prompts/get: %w", err))
 		}
 	case "notify_status_update":
 		if err := s.NotifyStatusUpdate(ctx, r, req, w); err != nil {
+			loomtransport.RequestObserverFromContext(ctx).Fail(loomtransport.ReasonHandlerError)
 			s.errhandler(ctx, w, fmt.Errorf("handler error for notify_status_update: %w", err))
 		}
 	case "events/stream":
 		if err := s.EventsStream(ctx, r, req, w); err != nil {
+			loomtransport.RequestObserverFromContext(ctx).Fail(loomtransport.ReasonHandlerError)
 			s.errhandler(ctx, w, fmt.Errorf("handler error for events/stream: %w", err))
 		}
 	default:
+		loomtransport.RequestObserverFromContext(ctx).Fail(loomtransport.ReasonUnsupportedMethod)
 		s.encodeJSONRPCError(ctx, w, req, jsonrpc.MethodNotFound, "Method not found", nil)
 	}
 }
@@ -479,6 +503,7 @@ func NewInitializeHandler(endpoint loom.Endpoint, mux loomhttp.Muxer, decoder fu
 
 		params, err := decodeParams(r, req)
 		if err != nil {
+			loomtransport.RequestObserverFromContext(ctx).Fail(loomtransport.ReasonInvalidJSONRPCParams)
 			if req.ID != nil && req.ID != "" {
 				code := jsonrpc.InternalError
 				if _, ok := err.(*loom.ServiceError); ok {
@@ -492,6 +517,7 @@ func NewInitializeHandler(endpoint loom.Endpoint, mux loomhttp.Muxer, decoder fu
 		}
 		res, err := endpoint(ctx, params)
 		if err != nil {
+			loomtransport.RequestObserverFromContext(ctx).Fail(loomtransport.ReasonHandlerError)
 			if req.ID != nil && req.ID != "" {
 				var en loom.LoomErrorNamer
 				if !errors.As(err, &en) {
@@ -525,6 +551,7 @@ func NewInitializeHandler(endpoint loom.Endpoint, mux loomhttp.Muxer, decoder fu
 		body := NewInitializeResponseBody(res.(*mcpassistant.InitializeResult))
 		response := jsonrpc.MakeSuccessResponse(id, body)
 		if err := encoder(ctx, w).Encode(response); err != nil {
+			loomtransport.RequestObserverFromContext(ctx).Fail(loomtransport.ReasonResponseWriteFailed)
 			errhandler(ctx, w, fmt.Errorf("failed to encode JSON-RPC response: %w", err))
 		}
 		return nil
@@ -538,6 +565,7 @@ func NewPingHandler(endpoint loom.Endpoint, mux loomhttp.Muxer, decoder func(*ht
 
 		res, err := endpoint(ctx, nil)
 		if err != nil {
+			loomtransport.RequestObserverFromContext(ctx).Fail(loomtransport.ReasonHandlerError)
 			if req.ID != nil && req.ID != "" {
 				var en loom.LoomErrorNamer
 				if !errors.As(err, &en) {
@@ -571,6 +599,7 @@ func NewPingHandler(endpoint loom.Endpoint, mux loomhttp.Muxer, decoder func(*ht
 		body := NewPingResponseBody(res.(*mcpassistant.PingResult))
 		response := jsonrpc.MakeSuccessResponse(id, body)
 		if err := encoder(ctx, w).Encode(response); err != nil {
+			loomtransport.RequestObserverFromContext(ctx).Fail(loomtransport.ReasonResponseWriteFailed)
 			errhandler(ctx, w, fmt.Errorf("failed to encode JSON-RPC response: %w", err))
 		}
 		return nil
@@ -585,6 +614,7 @@ func NewToolsListHandler(endpoint loom.Endpoint, mux loomhttp.Muxer, decoder fun
 
 		params, err := decodeParams(r, req)
 		if err != nil {
+			loomtransport.RequestObserverFromContext(ctx).Fail(loomtransport.ReasonInvalidJSONRPCParams)
 			if req.ID != nil && req.ID != "" {
 				code := jsonrpc.InternalError
 				if _, ok := err.(*loom.ServiceError); ok {
@@ -598,6 +628,7 @@ func NewToolsListHandler(endpoint loom.Endpoint, mux loomhttp.Muxer, decoder fun
 		}
 		res, err := endpoint(ctx, params)
 		if err != nil {
+			loomtransport.RequestObserverFromContext(ctx).Fail(loomtransport.ReasonHandlerError)
 			if req.ID != nil && req.ID != "" {
 				var en loom.LoomErrorNamer
 				if !errors.As(err, &en) {
@@ -631,6 +662,7 @@ func NewToolsListHandler(endpoint loom.Endpoint, mux loomhttp.Muxer, decoder fun
 		body := NewToolsListResponseBody(res.(*mcpassistant.ToolsListResult))
 		response := jsonrpc.MakeSuccessResponse(id, body)
 		if err := encoder(ctx, w).Encode(response); err != nil {
+			loomtransport.RequestObserverFromContext(ctx).Fail(loomtransport.ReasonResponseWriteFailed)
 			errhandler(ctx, w, fmt.Errorf("failed to encode JSON-RPC response: %w", err))
 		}
 		return nil
@@ -696,6 +728,7 @@ func NewResourcesListHandler(endpoint loom.Endpoint, mux loomhttp.Muxer, decoder
 
 		params, err := decodeParams(r, req)
 		if err != nil {
+			loomtransport.RequestObserverFromContext(ctx).Fail(loomtransport.ReasonInvalidJSONRPCParams)
 			if req.ID != nil && req.ID != "" {
 				code := jsonrpc.InternalError
 				if _, ok := err.(*loom.ServiceError); ok {
@@ -709,6 +742,7 @@ func NewResourcesListHandler(endpoint loom.Endpoint, mux loomhttp.Muxer, decoder
 		}
 		res, err := endpoint(ctx, params)
 		if err != nil {
+			loomtransport.RequestObserverFromContext(ctx).Fail(loomtransport.ReasonHandlerError)
 			if req.ID != nil && req.ID != "" {
 				var en loom.LoomErrorNamer
 				if !errors.As(err, &en) {
@@ -742,6 +776,7 @@ func NewResourcesListHandler(endpoint loom.Endpoint, mux loomhttp.Muxer, decoder
 		body := NewResourcesListResponseBody(res.(*mcpassistant.ResourcesListResult))
 		response := jsonrpc.MakeSuccessResponse(id, body)
 		if err := encoder(ctx, w).Encode(response); err != nil {
+			loomtransport.RequestObserverFromContext(ctx).Fail(loomtransport.ReasonResponseWriteFailed)
 			errhandler(ctx, w, fmt.Errorf("failed to encode JSON-RPC response: %w", err))
 		}
 		return nil
@@ -756,6 +791,7 @@ func NewResourcesReadHandler(endpoint loom.Endpoint, mux loomhttp.Muxer, decoder
 
 		params, err := decodeParams(r, req)
 		if err != nil {
+			loomtransport.RequestObserverFromContext(ctx).Fail(loomtransport.ReasonInvalidJSONRPCParams)
 			if req.ID != nil && req.ID != "" {
 				code := jsonrpc.InternalError
 				if _, ok := err.(*loom.ServiceError); ok {
@@ -769,6 +805,7 @@ func NewResourcesReadHandler(endpoint loom.Endpoint, mux loomhttp.Muxer, decoder
 		}
 		res, err := endpoint(ctx, params)
 		if err != nil {
+			loomtransport.RequestObserverFromContext(ctx).Fail(loomtransport.ReasonHandlerError)
 			if req.ID != nil && req.ID != "" {
 				var en loom.LoomErrorNamer
 				if !errors.As(err, &en) {
@@ -802,6 +839,7 @@ func NewResourcesReadHandler(endpoint loom.Endpoint, mux loomhttp.Muxer, decoder
 		body := NewResourcesReadResponseBody(res.(*mcpassistant.ResourcesReadResult))
 		response := jsonrpc.MakeSuccessResponse(id, body)
 		if err := encoder(ctx, w).Encode(response); err != nil {
+			loomtransport.RequestObserverFromContext(ctx).Fail(loomtransport.ReasonResponseWriteFailed)
 			errhandler(ctx, w, fmt.Errorf("failed to encode JSON-RPC response: %w", err))
 		}
 		return nil
@@ -816,6 +854,7 @@ func NewResourcesSubscribeHandler(endpoint loom.Endpoint, mux loomhttp.Muxer, de
 
 		params, err := decodeParams(r, req)
 		if err != nil {
+			loomtransport.RequestObserverFromContext(ctx).Fail(loomtransport.ReasonInvalidJSONRPCParams)
 			if req.ID != nil && req.ID != "" {
 				code := jsonrpc.InternalError
 				if _, ok := err.(*loom.ServiceError); ok {
@@ -829,6 +868,7 @@ func NewResourcesSubscribeHandler(endpoint loom.Endpoint, mux loomhttp.Muxer, de
 		}
 		_, err = endpoint(ctx, params)
 		if err != nil {
+			loomtransport.RequestObserverFromContext(ctx).Fail(loomtransport.ReasonHandlerError)
 			if req.ID != nil && req.ID != "" {
 				var en loom.LoomErrorNamer
 				if !errors.As(err, &en) {
@@ -872,6 +912,7 @@ func NewResourcesUnsubscribeHandler(endpoint loom.Endpoint, mux loomhttp.Muxer, 
 
 		params, err := decodeParams(r, req)
 		if err != nil {
+			loomtransport.RequestObserverFromContext(ctx).Fail(loomtransport.ReasonInvalidJSONRPCParams)
 			if req.ID != nil && req.ID != "" {
 				code := jsonrpc.InternalError
 				if _, ok := err.(*loom.ServiceError); ok {
@@ -885,6 +926,7 @@ func NewResourcesUnsubscribeHandler(endpoint loom.Endpoint, mux loomhttp.Muxer, 
 		}
 		_, err = endpoint(ctx, params)
 		if err != nil {
+			loomtransport.RequestObserverFromContext(ctx).Fail(loomtransport.ReasonHandlerError)
 			if req.ID != nil && req.ID != "" {
 				var en loom.LoomErrorNamer
 				if !errors.As(err, &en) {
@@ -928,6 +970,7 @@ func NewPromptsListHandler(endpoint loom.Endpoint, mux loomhttp.Muxer, decoder f
 
 		params, err := decodeParams(r, req)
 		if err != nil {
+			loomtransport.RequestObserverFromContext(ctx).Fail(loomtransport.ReasonInvalidJSONRPCParams)
 			if req.ID != nil && req.ID != "" {
 				code := jsonrpc.InternalError
 				if _, ok := err.(*loom.ServiceError); ok {
@@ -941,6 +984,7 @@ func NewPromptsListHandler(endpoint loom.Endpoint, mux loomhttp.Muxer, decoder f
 		}
 		res, err := endpoint(ctx, params)
 		if err != nil {
+			loomtransport.RequestObserverFromContext(ctx).Fail(loomtransport.ReasonHandlerError)
 			if req.ID != nil && req.ID != "" {
 				var en loom.LoomErrorNamer
 				if !errors.As(err, &en) {
@@ -974,6 +1018,7 @@ func NewPromptsListHandler(endpoint loom.Endpoint, mux loomhttp.Muxer, decoder f
 		body := NewPromptsListResponseBody(res.(*mcpassistant.PromptsListResult))
 		response := jsonrpc.MakeSuccessResponse(id, body)
 		if err := encoder(ctx, w).Encode(response); err != nil {
+			loomtransport.RequestObserverFromContext(ctx).Fail(loomtransport.ReasonResponseWriteFailed)
 			errhandler(ctx, w, fmt.Errorf("failed to encode JSON-RPC response: %w", err))
 		}
 		return nil
@@ -988,6 +1033,7 @@ func NewPromptsGetHandler(endpoint loom.Endpoint, mux loomhttp.Muxer, decoder fu
 
 		params, err := decodeParams(r, req)
 		if err != nil {
+			loomtransport.RequestObserverFromContext(ctx).Fail(loomtransport.ReasonInvalidJSONRPCParams)
 			if req.ID != nil && req.ID != "" {
 				code := jsonrpc.InternalError
 				if _, ok := err.(*loom.ServiceError); ok {
@@ -1001,6 +1047,7 @@ func NewPromptsGetHandler(endpoint loom.Endpoint, mux loomhttp.Muxer, decoder fu
 		}
 		res, err := endpoint(ctx, params)
 		if err != nil {
+			loomtransport.RequestObserverFromContext(ctx).Fail(loomtransport.ReasonHandlerError)
 			if req.ID != nil && req.ID != "" {
 				var en loom.LoomErrorNamer
 				if !errors.As(err, &en) {
@@ -1034,6 +1081,7 @@ func NewPromptsGetHandler(endpoint loom.Endpoint, mux loomhttp.Muxer, decoder fu
 		body := NewPromptsGetResponseBody(res.(*mcpassistant.PromptsGetResult))
 		response := jsonrpc.MakeSuccessResponse(id, body)
 		if err := encoder(ctx, w).Encode(response); err != nil {
+			loomtransport.RequestObserverFromContext(ctx).Fail(loomtransport.ReasonResponseWriteFailed)
 			errhandler(ctx, w, fmt.Errorf("failed to encode JSON-RPC response: %w", err))
 		}
 		return nil
@@ -1048,6 +1096,7 @@ func NewNotifyStatusUpdateHandler(endpoint loom.Endpoint, mux loomhttp.Muxer, de
 
 		params, err := decodeParams(r, req)
 		if err != nil {
+			loomtransport.RequestObserverFromContext(ctx).Fail(loomtransport.ReasonInvalidJSONRPCParams)
 			if req.ID != nil && req.ID != "" {
 				code := jsonrpc.InternalError
 				if _, ok := err.(*loom.ServiceError); ok {
@@ -1061,6 +1110,7 @@ func NewNotifyStatusUpdateHandler(endpoint loom.Endpoint, mux loomhttp.Muxer, de
 		}
 		_, err = endpoint(ctx, params)
 		if err != nil {
+			loomtransport.RequestObserverFromContext(ctx).Fail(loomtransport.ReasonHandlerError)
 			if req.ID != nil && req.ID != "" {
 				var en loom.LoomErrorNamer
 				if !errors.As(err, &en) {

@@ -22,6 +22,7 @@ func buildMCPSDKServerFile(genpkg string, svc *expr.ServiceExpr, data *AdapterDa
 		{Path: "github.com/modelcontextprotocol/go-sdk/auth", Name: "mcpauth"},
 		{Path: "github.com/modelcontextprotocol/go-sdk/mcp", Name: "mcpsdk"},
 		{Path: "github.com/CaliLuke/loom-mcp/runtime/mcp", Name: "mcpruntime"},
+		{Path: "github.com/CaliLuke/loom/observability/transport"},
 	}
 	sections := []codegen.Section{
 		codegen.Header("SDK-backed MCP server for "+svc.Name+" service", pkgName, sdkServerImports),
@@ -189,8 +190,19 @@ func sdkServerHTTPSection() codegen.Section {
 								jen.Id("serveSDKEventsStream").Call(jen.Id("server"), jen.Id("adapter"), jen.Id("w"), jen.Id("r")),
 								jen.Return(),
 							),
-							jen.Id("observer").Op(":=").Op("&").Id("sdkResponseObserver").Values(jen.Dict{jen.Id("ResponseWriter"): jen.Id("w")}),
+							jen.List(jen.Id("transportObs"), jen.Id("transportW")).Op(":=").Qual("github.com/CaliLuke/loom/observability/transport", "BeginHTTPRequest").Call(
+								jen.Id("r").Dot("Context").Call(),
+								jen.Id("w"),
+								jen.Lit("mcp"),
+								jen.Id("r").Dot("Method"),
+								jen.Id("r"),
+							),
+							jen.Defer().Id("transportObs").Dot("End").Call(),
+							jen.Id("observer").Op(":=").Op("&").Id("sdkResponseObserver").Values(jen.Dict{jen.Id("ResponseWriter"): jen.Id("transportW")}),
 							jen.Id("base").Dot("ServeHTTP").Call(jen.Id("observer"), jen.Id("r")),
+							jen.If(jen.Id("observer").Dot("statusCode").Op(">=").Lit(400)).Block(
+								jen.Id("transportObs").Dot("Fail").Call(jen.Qual("github.com/CaliLuke/loom/observability/transport", "ReasonHandlerError")),
+							),
 							jen.If(jen.Id("sessionID").Op(":=").Id("observer").Dot("Header").Call().Dot("Get").Call(jen.Id("mcpruntime").Dot("HeaderKeySessionID")), jen.Id("sessionID").Op("!=").Lit("")).Block(
 								jen.Id("adapter").Dot("captureSessionPrincipal").Call(jen.Id("r").Dot("Context").Call(), jen.Id("sessionID")),
 							),
@@ -226,12 +238,21 @@ func sdkServerHTTPSection() codegen.Section {
 			).
 			Block(
 				jen.Id("sessionID").Op(":=").Id("r").Dot("Header").Dot("Get").Call(jen.Lit("Mcp-Session-Id")),
+				jen.Id("streamObs").Op(":=").Qual("github.com/CaliLuke/loom/observability/transport", "BeginRequest").Call(
+					jen.Id("r").Dot("Context").Call(),
+					jen.Qual("github.com/CaliLuke/loom/observability/transport", "TransportMCP"),
+					jen.Lit("mcp"),
+					jen.Lit("events/stream"),
+				),
+				jen.Defer().Id("streamObs").Dot("End").Call(),
+				jen.Id("streamObs").Dot("SetSession").Call(jen.Id("sessionID")),
 				jen.Id("adapter").Dot("log").Call(jen.Id("r").Dot("Context").Call(), jen.Lit("events_stream_open"), jen.Map(jen.String()).Any().Values(jen.Dict{
 					jen.Lit("session_id"): jen.Id("sessionID"),
 					jen.Lit("has_accept"): jen.Qual("strings", "TrimSpace").Call(jen.Id("r").Dot("Header").Dot("Get").Call(jen.Lit("Accept"))).Op("!=").Lit(""),
 					jen.Lit("accept"):     jen.Id("r").Dot("Header").Dot("Get").Call(jen.Lit("Accept")),
 				})),
 				jen.If(jen.Id("sessionID").Op("==").Lit("")).Block(
+					jen.Id("streamObs").Dot("Fail").Call(jen.Qual("github.com/CaliLuke/loom/observability/transport", "ReasonMCPSessionMissing")),
 					jen.Id("adapter").Dot("log").Call(jen.Id("r").Dot("Context").Call(), jen.Lit("events_stream_rejected"), jen.Map(jen.String()).Any().Values(jen.Dict{
 						jen.Lit("reason"): jen.Lit("missing_session_id"),
 					})),
@@ -239,6 +260,7 @@ func sdkServerHTTPSection() codegen.Section {
 					jen.Return(),
 				),
 				jen.If(jen.Id("sdkSessionByID").Call(jen.Id("server"), jen.Id("sessionID")).Op("==").Nil()).Block(
+					jen.Id("streamObs").Dot("Fail").Call(jen.Qual("github.com/CaliLuke/loom/observability/transport", "ReasonMCPSessionNotFound")),
 					jen.Id("adapter").Dot("clearSessionPrincipal").Call(jen.Id("sessionID")),
 					jen.Id("adapter").Dot("log").Call(jen.Id("r").Dot("Context").Call(), jen.Lit("events_stream_rejected"), jen.Map(jen.String()).Any().Values(jen.Dict{
 						jen.Lit("session_id"): jen.Id("sessionID"),
@@ -248,6 +270,7 @@ func sdkServerHTTPSection() codegen.Section {
 					jen.Return(),
 				),
 				jen.If(jen.Id("err").Op(":=").Id("adapter").Dot("assertSessionPrincipal").Call(jen.Id("r").Dot("Context").Call(), jen.Id("sessionID")), jen.Id("err").Op("!=").Nil()).Block(
+					jen.Id("streamObs").Dot("Fail").Call(jen.Qual("github.com/CaliLuke/loom/observability/transport", "ReasonMCPSessionPrincipalMismatch")),
 					jen.Id("adapter").Dot("log").Call(jen.Id("r").Dot("Context").Call(), jen.Lit("events_stream_rejected"), jen.Map(jen.String()).Any().Values(jen.Dict{
 						jen.Lit("session_id"): jen.Id("sessionID"),
 						jen.Lit("reason"):     jen.Lit("session_principal_mismatch"),
@@ -314,6 +337,7 @@ func sdkServerHTTPSection() codegen.Section {
 								jen.Continue(),
 							),
 							jen.If(jen.Id("err").Op(":=").Id("writeSDKNotificationEvent").Call(jen.Id("w"), jen.Lit("events/stream"), jen.Id("sdkEventsStreamParams").Call(jen.Id("res"))), jen.Id("err").Op("!=").Nil()).Block(
+								jen.Id("streamObs").Dot("Fail").Call(jen.Qual("github.com/CaliLuke/loom/observability/transport", "ReasonMCPEventsStreamWriteFailed")),
 								jen.Id("adapter").Dot("log").Call(jen.Id("r").Dot("Context").Call(), jen.Lit("events_stream_closed"), jen.Map(jen.String()).Any().Values(jen.Dict{
 									jen.Lit("session_id"): jen.Id("sessionID"),
 									jen.Lit("reason"):     jen.Lit("write_error"),

@@ -19,6 +19,7 @@ import (
 	assistant "example.com/assistant/gen/assistant"
 	loomhttp "github.com/CaliLuke/loom/http"
 	"github.com/CaliLuke/loom/jsonrpc"
+	loomtransport "github.com/CaliLuke/loom/observability/transport"
 	loom "github.com/CaliLuke/loom/pkg"
 )
 
@@ -154,11 +155,15 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 // handleHTTP handles JSON-RPC requests.
 func (s *Server) handleHTTP(w http.ResponseWriter, r *http.Request) {
+	obs, w := loomtransport.BeginJSONRPCRequest(r.Context(), w, "assistant", r)
+	defer obs.End()
+	r = r.WithContext(loomtransport.WithRequestObserver(r.Context(), obs))
 	// Peek at the first byte to determine request type
 	bufReader := bufio.NewReader(r.Body)
 	peek, err := bufReader.Peek(1)
 	if err != nil && err != io.EOF {
 		r.Body.Close()
+		obs.Fail(loomtransport.ReasonRequestDecodeFailed)
 		s.errhandler(r.Context(), w, fmt.Errorf("failed to read request body: %w", err))
 		return
 	}
@@ -189,6 +194,7 @@ func (s *Server) handleHTTP(w http.ResponseWriter, r *http.Request) {
 func (s *Server) handleSingle(w http.ResponseWriter, r *http.Request) {
 	var req jsonrpc.RawRequest
 	if err := s.decoder(r).Decode(&req); err != nil {
+		loomtransport.RequestObserverFromContext(r.Context()).Fail(loomtransport.ReasonInvalidJSONRPCEnvelope)
 		response := jsonrpc.MakeErrorResponse(nil, jsonrpc.ParseError, "Parse error", nil)
 		if encErr := s.encoder(r.Context(), w).Encode(response); encErr != nil {
 			s.errhandler(r.Context(), w, fmt.Errorf("failed to encode parse error response: %w", encErr))
@@ -202,12 +208,14 @@ func (s *Server) handleSingle(w http.ResponseWriter, r *http.Request) {
 func (s *Server) handleBatch(w http.ResponseWriter, r *http.Request) {
 	var reqs []jsonrpc.RawRequest
 	if err := s.decoder(r).Decode(&reqs); err != nil {
+		loomtransport.RequestObserverFromContext(r.Context()).Fail(loomtransport.ReasonInvalidJSONRPCBatch)
 		response := jsonrpc.MakeErrorResponse(nil, jsonrpc.ParseError, "Parse error", nil)
 		if encErr := s.encoder(r.Context(), w).Encode(response); encErr != nil {
 			s.errhandler(r.Context(), w, fmt.Errorf("failed to encode parse error response: %w", encErr))
 		}
 		return
 	}
+	loomtransport.RequestObserverFromContext(r.Context()).SetJSONRPC("", "", len(reqs), false)
 	w.Header().Set("Content-Type", "application/json")
 	writer := &batchWriter{Writer: w}
 	for _, req := range reqs {
@@ -220,80 +228,100 @@ func (s *Server) handleBatch(w http.ResponseWriter, r *http.Request) {
 
 // processRequest processes a single JSON-RPC request.
 func (s *Server) processRequest(ctx context.Context, r *http.Request, req *jsonrpc.RawRequest, w http.ResponseWriter) {
+	loomtransport.RequestObserverFromContext(ctx).SetJSONRPC(req.Method, jsonrpc.IDToString(req.ID), 0, !req.HasID)
 	if req.JSONRPC != "2.0" {
+		loomtransport.RequestObserverFromContext(ctx).Fail(loomtransport.ReasonInvalidJSONRPCEnvelope)
 		s.encodeJSONRPCError(ctx, w, req, jsonrpc.InvalidRequest, "Invalid request", nil)
 		return
 	}
 	if req.Method == "" {
+		loomtransport.RequestObserverFromContext(ctx).Fail(loomtransport.ReasonInvalidJSONRPCMethod)
 		s.encodeJSONRPCError(ctx, w, req, jsonrpc.InvalidRequest, "Missing method field", nil)
 		return
 	}
 	switch req.Method {
 	case "list_documents":
 		if err := s.ListDocuments(ctx, r, req, w); err != nil {
+			loomtransport.RequestObserverFromContext(ctx).Fail(loomtransport.ReasonHandlerError)
 			s.errhandler(ctx, w, fmt.Errorf("handler error for list_documents: %w", err))
 		}
 	case "system_info":
 		if err := s.SystemInfo(ctx, r, req, w); err != nil {
+			loomtransport.RequestObserverFromContext(ctx).Fail(loomtransport.ReasonHandlerError)
 			s.errhandler(ctx, w, fmt.Errorf("handler error for system_info: %w", err))
 		}
 	case "conversation_history":
 		if err := s.ConversationHistory(ctx, r, req, w); err != nil {
+			loomtransport.RequestObserverFromContext(ctx).Fail(loomtransport.ReasonHandlerError)
 			s.errhandler(ctx, w, fmt.Errorf("handler error for conversation_history: %w", err))
 		}
 	case "figma_design_system":
 		if err := s.FigmaDesignSystem(ctx, r, req, w); err != nil {
+			loomtransport.RequestObserverFromContext(ctx).Fail(loomtransport.ReasonHandlerError)
 			s.errhandler(ctx, w, fmt.Errorf("handler error for figma_design_system: %w", err))
 		}
 	case "generate_prompts":
 		if err := s.GeneratePrompts(ctx, r, req, w); err != nil {
+			loomtransport.RequestObserverFromContext(ctx).Fail(loomtransport.ReasonHandlerError)
 			s.errhandler(ctx, w, fmt.Errorf("handler error for generate_prompts: %w", err))
 		}
 	case "build_figma_implementation_prompt":
 		if err := s.BuildFigmaImplementationPrompt(ctx, r, req, w); err != nil {
+			loomtransport.RequestObserverFromContext(ctx).Fail(loomtransport.ReasonHandlerError)
 			s.errhandler(ctx, w, fmt.Errorf("handler error for build_figma_implementation_prompt: %w", err))
 		}
 	case "send_notification":
 		if err := s.SendNotification(ctx, r, req, w); err != nil {
+			loomtransport.RequestObserverFromContext(ctx).Fail(loomtransport.ReasonHandlerError)
 			s.errhandler(ctx, w, fmt.Errorf("handler error for send_notification: %w", err))
 		}
 	case "analyze_sentiment":
 		if err := s.AnalyzeSentiment(ctx, r, req, w); err != nil {
+			loomtransport.RequestObserverFromContext(ctx).Fail(loomtransport.ReasonHandlerError)
 			s.errhandler(ctx, w, fmt.Errorf("handler error for analyze_sentiment: %w", err))
 		}
 	case "extract_keywords":
 		if err := s.ExtractKeywords(ctx, r, req, w); err != nil {
+			loomtransport.RequestObserverFromContext(ctx).Fail(loomtransport.ReasonHandlerError)
 			s.errhandler(ctx, w, fmt.Errorf("handler error for extract_keywords: %w", err))
 		}
 	case "summarize_text":
 		if err := s.SummarizeText(ctx, r, req, w); err != nil {
+			loomtransport.RequestObserverFromContext(ctx).Fail(loomtransport.ReasonHandlerError)
 			s.errhandler(ctx, w, fmt.Errorf("handler error for summarize_text: %w", err))
 		}
 	case "search":
 		if err := s.Search(ctx, r, req, w); err != nil {
+			loomtransport.RequestObserverFromContext(ctx).Fail(loomtransport.ReasonHandlerError)
 			s.errhandler(ctx, w, fmt.Errorf("handler error for search: %w", err))
 		}
 	case "execute_code":
 		if err := s.ExecuteCode(ctx, r, req, w); err != nil {
+			loomtransport.RequestObserverFromContext(ctx).Fail(loomtransport.ReasonHandlerError)
 			s.errhandler(ctx, w, fmt.Errorf("handler error for execute_code: %w", err))
 		}
 	case "process_batch":
 		if err := s.ProcessBatch(ctx, r, req, w); err != nil {
+			loomtransport.RequestObserverFromContext(ctx).Fail(loomtransport.ReasonHandlerError)
 			s.errhandler(ctx, w, fmt.Errorf("handler error for process_batch: %w", err))
 		}
 	case "multi_content":
 		if err := s.MultiContent(ctx, r, req, w); err != nil {
+			loomtransport.RequestObserverFromContext(ctx).Fail(loomtransport.ReasonHandlerError)
 			s.errhandler(ctx, w, fmt.Errorf("handler error for multi_content: %w", err))
 		}
 	case "generate_dpi_spec":
 		if err := s.GenerateDpiSpec(ctx, r, req, w); err != nil {
+			loomtransport.RequestObserverFromContext(ctx).Fail(loomtransport.ReasonHandlerError)
 			s.errhandler(ctx, w, fmt.Errorf("handler error for generate_dpi_spec: %w", err))
 		}
 	case "dispatch_action":
 		if err := s.DispatchAction(ctx, r, req, w); err != nil {
+			loomtransport.RequestObserverFromContext(ctx).Fail(loomtransport.ReasonHandlerError)
 			s.errhandler(ctx, w, fmt.Errorf("handler error for dispatch_action: %w", err))
 		}
 	default:
+		loomtransport.RequestObserverFromContext(ctx).Fail(loomtransport.ReasonUnsupportedMethod)
 		s.encodeJSONRPCError(ctx, w, req, jsonrpc.MethodNotFound, "Method not found", nil)
 	}
 }
@@ -348,6 +376,7 @@ func NewListDocumentsHandler(endpoint loom.Endpoint, mux loomhttp.Muxer, decoder
 
 		res, err := endpoint(ctx, nil)
 		if err != nil {
+			loomtransport.RequestObserverFromContext(ctx).Fail(loomtransport.ReasonHandlerError)
 			if req.ID != nil && req.ID != "" {
 				var en loom.LoomErrorNamer
 				if !errors.As(err, &en) {
@@ -381,6 +410,7 @@ func NewListDocumentsHandler(endpoint loom.Endpoint, mux loomhttp.Muxer, decoder
 		body := NewListDocumentsResponseBody(res.(*assistant.Documents))
 		response := jsonrpc.MakeSuccessResponse(id, body)
 		if err := encoder(ctx, w).Encode(response); err != nil {
+			loomtransport.RequestObserverFromContext(ctx).Fail(loomtransport.ReasonResponseWriteFailed)
 			errhandler(ctx, w, fmt.Errorf("failed to encode JSON-RPC response: %w", err))
 		}
 		return nil
@@ -394,6 +424,7 @@ func NewSystemInfoHandler(endpoint loom.Endpoint, mux loomhttp.Muxer, decoder fu
 
 		res, err := endpoint(ctx, nil)
 		if err != nil {
+			loomtransport.RequestObserverFromContext(ctx).Fail(loomtransport.ReasonHandlerError)
 			if req.ID != nil && req.ID != "" {
 				var en loom.LoomErrorNamer
 				if !errors.As(err, &en) {
@@ -427,6 +458,7 @@ func NewSystemInfoHandler(endpoint loom.Endpoint, mux loomhttp.Muxer, decoder fu
 		body := NewSystemInfoResponseBody(res.(*assistant.SystemInfoResult))
 		response := jsonrpc.MakeSuccessResponse(id, body)
 		if err := encoder(ctx, w).Encode(response); err != nil {
+			loomtransport.RequestObserverFromContext(ctx).Fail(loomtransport.ReasonResponseWriteFailed)
 			errhandler(ctx, w, fmt.Errorf("failed to encode JSON-RPC response: %w", err))
 		}
 		return nil
@@ -441,6 +473,7 @@ func NewConversationHistoryHandler(endpoint loom.Endpoint, mux loomhttp.Muxer, d
 
 		params, err := decodeParams(r, req)
 		if err != nil {
+			loomtransport.RequestObserverFromContext(ctx).Fail(loomtransport.ReasonInvalidJSONRPCParams)
 			if req.ID != nil && req.ID != "" {
 				code := jsonrpc.InternalError
 				if _, ok := err.(*loom.ServiceError); ok {
@@ -454,6 +487,7 @@ func NewConversationHistoryHandler(endpoint loom.Endpoint, mux loomhttp.Muxer, d
 		}
 		res, err := endpoint(ctx, params)
 		if err != nil {
+			loomtransport.RequestObserverFromContext(ctx).Fail(loomtransport.ReasonHandlerError)
 			if req.ID != nil && req.ID != "" {
 				var en loom.LoomErrorNamer
 				if !errors.As(err, &en) {
@@ -487,6 +521,7 @@ func NewConversationHistoryHandler(endpoint loom.Endpoint, mux loomhttp.Muxer, d
 		body := NewConversationHistoryResponseBody(res.(*assistant.ConversationHistoryResult))
 		response := jsonrpc.MakeSuccessResponse(id, body)
 		if err := encoder(ctx, w).Encode(response); err != nil {
+			loomtransport.RequestObserverFromContext(ctx).Fail(loomtransport.ReasonResponseWriteFailed)
 			errhandler(ctx, w, fmt.Errorf("failed to encode JSON-RPC response: %w", err))
 		}
 		return nil
@@ -500,6 +535,7 @@ func NewFigmaDesignSystemHandler(endpoint loom.Endpoint, mux loomhttp.Muxer, dec
 
 		res, err := endpoint(ctx, nil)
 		if err != nil {
+			loomtransport.RequestObserverFromContext(ctx).Fail(loomtransport.ReasonHandlerError)
 			if req.ID != nil && req.ID != "" {
 				var en loom.LoomErrorNamer
 				if !errors.As(err, &en) {
@@ -533,6 +569,7 @@ func NewFigmaDesignSystemHandler(endpoint loom.Endpoint, mux loomhttp.Muxer, dec
 		body := NewFigmaDesignSystemResponseBody(res.(*assistant.DesignSystem))
 		response := jsonrpc.MakeSuccessResponse(id, body)
 		if err := encoder(ctx, w).Encode(response); err != nil {
+			loomtransport.RequestObserverFromContext(ctx).Fail(loomtransport.ReasonResponseWriteFailed)
 			errhandler(ctx, w, fmt.Errorf("failed to encode JSON-RPC response: %w", err))
 		}
 		return nil
@@ -547,6 +584,7 @@ func NewGeneratePromptsHandler(endpoint loom.Endpoint, mux loomhttp.Muxer, decod
 
 		params, err := decodeParams(r, req)
 		if err != nil {
+			loomtransport.RequestObserverFromContext(ctx).Fail(loomtransport.ReasonInvalidJSONRPCParams)
 			if req.ID != nil && req.ID != "" {
 				code := jsonrpc.InternalError
 				if _, ok := err.(*loom.ServiceError); ok {
@@ -560,6 +598,7 @@ func NewGeneratePromptsHandler(endpoint loom.Endpoint, mux loomhttp.Muxer, decod
 		}
 		res, err := endpoint(ctx, params)
 		if err != nil {
+			loomtransport.RequestObserverFromContext(ctx).Fail(loomtransport.ReasonHandlerError)
 			if req.ID != nil && req.ID != "" {
 				var en loom.LoomErrorNamer
 				if !errors.As(err, &en) {
@@ -593,6 +632,7 @@ func NewGeneratePromptsHandler(endpoint loom.Endpoint, mux loomhttp.Muxer, decod
 		body := NewGeneratePromptsResponseBody(res.(*assistant.PromptTemplates))
 		response := jsonrpc.MakeSuccessResponse(id, body)
 		if err := encoder(ctx, w).Encode(response); err != nil {
+			loomtransport.RequestObserverFromContext(ctx).Fail(loomtransport.ReasonResponseWriteFailed)
 			errhandler(ctx, w, fmt.Errorf("failed to encode JSON-RPC response: %w", err))
 		}
 		return nil
@@ -607,6 +647,7 @@ func NewBuildFigmaImplementationPromptHandler(endpoint loom.Endpoint, mux loomht
 
 		params, err := decodeParams(r, req)
 		if err != nil {
+			loomtransport.RequestObserverFromContext(ctx).Fail(loomtransport.ReasonInvalidJSONRPCParams)
 			if req.ID != nil && req.ID != "" {
 				code := jsonrpc.InternalError
 				if _, ok := err.(*loom.ServiceError); ok {
@@ -620,6 +661,7 @@ func NewBuildFigmaImplementationPromptHandler(endpoint loom.Endpoint, mux loomht
 		}
 		res, err := endpoint(ctx, params)
 		if err != nil {
+			loomtransport.RequestObserverFromContext(ctx).Fail(loomtransport.ReasonHandlerError)
 			if req.ID != nil && req.ID != "" {
 				var en loom.LoomErrorNamer
 				if !errors.As(err, &en) {
@@ -653,6 +695,7 @@ func NewBuildFigmaImplementationPromptHandler(endpoint loom.Endpoint, mux loomht
 		body := NewBuildFigmaImplementationPromptResponseBody(res.(*assistant.PromptTemplates))
 		response := jsonrpc.MakeSuccessResponse(id, body)
 		if err := encoder(ctx, w).Encode(response); err != nil {
+			loomtransport.RequestObserverFromContext(ctx).Fail(loomtransport.ReasonResponseWriteFailed)
 			errhandler(ctx, w, fmt.Errorf("failed to encode JSON-RPC response: %w", err))
 		}
 		return nil
@@ -667,6 +710,7 @@ func NewSendNotificationHandler(endpoint loom.Endpoint, mux loomhttp.Muxer, deco
 
 		params, err := decodeParams(r, req)
 		if err != nil {
+			loomtransport.RequestObserverFromContext(ctx).Fail(loomtransport.ReasonInvalidJSONRPCParams)
 			if req.ID != nil && req.ID != "" {
 				code := jsonrpc.InternalError
 				if _, ok := err.(*loom.ServiceError); ok {
@@ -680,6 +724,7 @@ func NewSendNotificationHandler(endpoint loom.Endpoint, mux loomhttp.Muxer, deco
 		}
 		_, err = endpoint(ctx, params)
 		if err != nil {
+			loomtransport.RequestObserverFromContext(ctx).Fail(loomtransport.ReasonHandlerError)
 			if req.ID != nil && req.ID != "" {
 				var en loom.LoomErrorNamer
 				if !errors.As(err, &en) {
@@ -723,6 +768,7 @@ func NewAnalyzeSentimentHandler(endpoint loom.Endpoint, mux loomhttp.Muxer, deco
 
 		params, err := decodeParams(r, req)
 		if err != nil {
+			loomtransport.RequestObserverFromContext(ctx).Fail(loomtransport.ReasonInvalidJSONRPCParams)
 			if req.ID != nil && req.ID != "" {
 				code := jsonrpc.InternalError
 				if _, ok := err.(*loom.ServiceError); ok {
@@ -736,6 +782,7 @@ func NewAnalyzeSentimentHandler(endpoint loom.Endpoint, mux loomhttp.Muxer, deco
 		}
 		res, err := endpoint(ctx, params)
 		if err != nil {
+			loomtransport.RequestObserverFromContext(ctx).Fail(loomtransport.ReasonHandlerError)
 			if req.ID != nil && req.ID != "" {
 				var en loom.LoomErrorNamer
 				if !errors.As(err, &en) {
@@ -769,6 +816,7 @@ func NewAnalyzeSentimentHandler(endpoint loom.Endpoint, mux loomhttp.Muxer, deco
 		body := NewAnalyzeSentimentResponseBody(res.(*assistant.AnalyzeSentimentResult))
 		response := jsonrpc.MakeSuccessResponse(id, body)
 		if err := encoder(ctx, w).Encode(response); err != nil {
+			loomtransport.RequestObserverFromContext(ctx).Fail(loomtransport.ReasonResponseWriteFailed)
 			errhandler(ctx, w, fmt.Errorf("failed to encode JSON-RPC response: %w", err))
 		}
 		return nil
@@ -783,6 +831,7 @@ func NewExtractKeywordsHandler(endpoint loom.Endpoint, mux loomhttp.Muxer, decod
 
 		params, err := decodeParams(r, req)
 		if err != nil {
+			loomtransport.RequestObserverFromContext(ctx).Fail(loomtransport.ReasonInvalidJSONRPCParams)
 			if req.ID != nil && req.ID != "" {
 				code := jsonrpc.InternalError
 				if _, ok := err.(*loom.ServiceError); ok {
@@ -796,6 +845,7 @@ func NewExtractKeywordsHandler(endpoint loom.Endpoint, mux loomhttp.Muxer, decod
 		}
 		res, err := endpoint(ctx, params)
 		if err != nil {
+			loomtransport.RequestObserverFromContext(ctx).Fail(loomtransport.ReasonHandlerError)
 			if req.ID != nil && req.ID != "" {
 				var en loom.LoomErrorNamer
 				if !errors.As(err, &en) {
@@ -829,6 +879,7 @@ func NewExtractKeywordsHandler(endpoint loom.Endpoint, mux loomhttp.Muxer, decod
 		body := NewExtractKeywordsResponseBody(res.(*assistant.ExtractKeywordsResult))
 		response := jsonrpc.MakeSuccessResponse(id, body)
 		if err := encoder(ctx, w).Encode(response); err != nil {
+			loomtransport.RequestObserverFromContext(ctx).Fail(loomtransport.ReasonResponseWriteFailed)
 			errhandler(ctx, w, fmt.Errorf("failed to encode JSON-RPC response: %w", err))
 		}
 		return nil
@@ -843,6 +894,7 @@ func NewSummarizeTextHandler(endpoint loom.Endpoint, mux loomhttp.Muxer, decoder
 
 		params, err := decodeParams(r, req)
 		if err != nil {
+			loomtransport.RequestObserverFromContext(ctx).Fail(loomtransport.ReasonInvalidJSONRPCParams)
 			if req.ID != nil && req.ID != "" {
 				code := jsonrpc.InternalError
 				if _, ok := err.(*loom.ServiceError); ok {
@@ -856,6 +908,7 @@ func NewSummarizeTextHandler(endpoint loom.Endpoint, mux loomhttp.Muxer, decoder
 		}
 		res, err := endpoint(ctx, params)
 		if err != nil {
+			loomtransport.RequestObserverFromContext(ctx).Fail(loomtransport.ReasonHandlerError)
 			if req.ID != nil && req.ID != "" {
 				var en loom.LoomErrorNamer
 				if !errors.As(err, &en) {
@@ -889,6 +942,7 @@ func NewSummarizeTextHandler(endpoint loom.Endpoint, mux loomhttp.Muxer, decoder
 		body := NewSummarizeTextResponseBody(res.(*assistant.SummarizeTextResult))
 		response := jsonrpc.MakeSuccessResponse(id, body)
 		if err := encoder(ctx, w).Encode(response); err != nil {
+			loomtransport.RequestObserverFromContext(ctx).Fail(loomtransport.ReasonResponseWriteFailed)
 			errhandler(ctx, w, fmt.Errorf("failed to encode JSON-RPC response: %w", err))
 		}
 		return nil
@@ -903,6 +957,7 @@ func NewSearchHandler(endpoint loom.Endpoint, mux loomhttp.Muxer, decoder func(*
 
 		params, err := decodeParams(r, req)
 		if err != nil {
+			loomtransport.RequestObserverFromContext(ctx).Fail(loomtransport.ReasonInvalidJSONRPCParams)
 			if req.ID != nil && req.ID != "" {
 				code := jsonrpc.InternalError
 				if _, ok := err.(*loom.ServiceError); ok {
@@ -916,6 +971,7 @@ func NewSearchHandler(endpoint loom.Endpoint, mux loomhttp.Muxer, decoder func(*
 		}
 		res, err := endpoint(ctx, params)
 		if err != nil {
+			loomtransport.RequestObserverFromContext(ctx).Fail(loomtransport.ReasonHandlerError)
 			if req.ID != nil && req.ID != "" {
 				var en loom.LoomErrorNamer
 				if !errors.As(err, &en) {
@@ -949,6 +1005,7 @@ func NewSearchHandler(endpoint loom.Endpoint, mux loomhttp.Muxer, decoder func(*
 		body := NewSearchResponseBody(res.(*assistant.SearchResult))
 		response := jsonrpc.MakeSuccessResponse(id, body)
 		if err := encoder(ctx, w).Encode(response); err != nil {
+			loomtransport.RequestObserverFromContext(ctx).Fail(loomtransport.ReasonResponseWriteFailed)
 			errhandler(ctx, w, fmt.Errorf("failed to encode JSON-RPC response: %w", err))
 		}
 		return nil
@@ -963,6 +1020,7 @@ func NewExecuteCodeHandler(endpoint loom.Endpoint, mux loomhttp.Muxer, decoder f
 
 		params, err := decodeParams(r, req)
 		if err != nil {
+			loomtransport.RequestObserverFromContext(ctx).Fail(loomtransport.ReasonInvalidJSONRPCParams)
 			if req.ID != nil && req.ID != "" {
 				code := jsonrpc.InternalError
 				if _, ok := err.(*loom.ServiceError); ok {
@@ -976,6 +1034,7 @@ func NewExecuteCodeHandler(endpoint loom.Endpoint, mux loomhttp.Muxer, decoder f
 		}
 		res, err := endpoint(ctx, params)
 		if err != nil {
+			loomtransport.RequestObserverFromContext(ctx).Fail(loomtransport.ReasonHandlerError)
 			if req.ID != nil && req.ID != "" {
 				var en loom.LoomErrorNamer
 				if !errors.As(err, &en) {
@@ -1009,6 +1068,7 @@ func NewExecuteCodeHandler(endpoint loom.Endpoint, mux loomhttp.Muxer, decoder f
 		body := NewExecuteCodeResponseBody(res.(*assistant.ExecuteCodeResult))
 		response := jsonrpc.MakeSuccessResponse(id, body)
 		if err := encoder(ctx, w).Encode(response); err != nil {
+			loomtransport.RequestObserverFromContext(ctx).Fail(loomtransport.ReasonResponseWriteFailed)
 			errhandler(ctx, w, fmt.Errorf("failed to encode JSON-RPC response: %w", err))
 		}
 		return nil
@@ -1023,6 +1083,7 @@ func NewProcessBatchHandler(endpoint loom.Endpoint, mux loomhttp.Muxer, decoder 
 
 		params, err := decodeParams(r, req)
 		if err != nil {
+			loomtransport.RequestObserverFromContext(ctx).Fail(loomtransport.ReasonInvalidJSONRPCParams)
 			if req.ID != nil && req.ID != "" {
 				code := jsonrpc.InternalError
 				if _, ok := err.(*loom.ServiceError); ok {
@@ -1036,6 +1097,7 @@ func NewProcessBatchHandler(endpoint loom.Endpoint, mux loomhttp.Muxer, decoder 
 		}
 		res, err := endpoint(ctx, params)
 		if err != nil {
+			loomtransport.RequestObserverFromContext(ctx).Fail(loomtransport.ReasonHandlerError)
 			if req.ID != nil && req.ID != "" {
 				var en loom.LoomErrorNamer
 				if !errors.As(err, &en) {
@@ -1069,6 +1131,7 @@ func NewProcessBatchHandler(endpoint loom.Endpoint, mux loomhttp.Muxer, decoder 
 		body := NewProcessBatchResponseBody(res.(*assistant.ProcessBatchResult))
 		response := jsonrpc.MakeSuccessResponse(id, body)
 		if err := encoder(ctx, w).Encode(response); err != nil {
+			loomtransport.RequestObserverFromContext(ctx).Fail(loomtransport.ReasonResponseWriteFailed)
 			errhandler(ctx, w, fmt.Errorf("failed to encode JSON-RPC response: %w", err))
 		}
 		return nil
@@ -1083,6 +1146,7 @@ func NewMultiContentHandler(endpoint loom.Endpoint, mux loomhttp.Muxer, decoder 
 
 		params, err := decodeParams(r, req)
 		if err != nil {
+			loomtransport.RequestObserverFromContext(ctx).Fail(loomtransport.ReasonInvalidJSONRPCParams)
 			if req.ID != nil && req.ID != "" {
 				code := jsonrpc.InternalError
 				if _, ok := err.(*loom.ServiceError); ok {
@@ -1096,6 +1160,7 @@ func NewMultiContentHandler(endpoint loom.Endpoint, mux loomhttp.Muxer, decoder 
 		}
 		res, err := endpoint(ctx, params)
 		if err != nil {
+			loomtransport.RequestObserverFromContext(ctx).Fail(loomtransport.ReasonHandlerError)
 			if req.ID != nil && req.ID != "" {
 				var en loom.LoomErrorNamer
 				if !errors.As(err, &en) {
@@ -1129,6 +1194,7 @@ func NewMultiContentHandler(endpoint loom.Endpoint, mux loomhttp.Muxer, decoder 
 		body := NewMultiContentResponseBody(res.(*assistant.MultiContentResult))
 		response := jsonrpc.MakeSuccessResponse(id, body)
 		if err := encoder(ctx, w).Encode(response); err != nil {
+			loomtransport.RequestObserverFromContext(ctx).Fail(loomtransport.ReasonResponseWriteFailed)
 			errhandler(ctx, w, fmt.Errorf("failed to encode JSON-RPC response: %w", err))
 		}
 		return nil
@@ -1143,6 +1209,7 @@ func NewGenerateDpiSpecHandler(endpoint loom.Endpoint, mux loomhttp.Muxer, decod
 
 		params, err := decodeParams(r, req)
 		if err != nil {
+			loomtransport.RequestObserverFromContext(ctx).Fail(loomtransport.ReasonInvalidJSONRPCParams)
 			if req.ID != nil && req.ID != "" {
 				code := jsonrpc.InternalError
 				if _, ok := err.(*loom.ServiceError); ok {
@@ -1156,6 +1223,7 @@ func NewGenerateDpiSpecHandler(endpoint loom.Endpoint, mux loomhttp.Muxer, decod
 		}
 		res, err := endpoint(ctx, params)
 		if err != nil {
+			loomtransport.RequestObserverFromContext(ctx).Fail(loomtransport.ReasonHandlerError)
 			if req.ID != nil && req.ID != "" {
 				var en loom.LoomErrorNamer
 				if !errors.As(err, &en) {
@@ -1189,6 +1257,7 @@ func NewGenerateDpiSpecHandler(endpoint loom.Endpoint, mux loomhttp.Muxer, decod
 		body := NewGenerateDpiSpecResponseBody(res.(*assistant.DPISpec))
 		response := jsonrpc.MakeSuccessResponse(id, body)
 		if err := encoder(ctx, w).Encode(response); err != nil {
+			loomtransport.RequestObserverFromContext(ctx).Fail(loomtransport.ReasonResponseWriteFailed)
 			errhandler(ctx, w, fmt.Errorf("failed to encode JSON-RPC response: %w", err))
 		}
 		return nil
@@ -1203,6 +1272,7 @@ func NewDispatchActionHandler(endpoint loom.Endpoint, mux loomhttp.Muxer, decode
 
 		params, err := decodeParams(r, req)
 		if err != nil {
+			loomtransport.RequestObserverFromContext(ctx).Fail(loomtransport.ReasonInvalidJSONRPCParams)
 			if req.ID != nil && req.ID != "" {
 				code := jsonrpc.InternalError
 				if _, ok := err.(*loom.ServiceError); ok {
@@ -1216,6 +1286,7 @@ func NewDispatchActionHandler(endpoint loom.Endpoint, mux loomhttp.Muxer, decode
 		}
 		res, err := endpoint(ctx, params)
 		if err != nil {
+			loomtransport.RequestObserverFromContext(ctx).Fail(loomtransport.ReasonHandlerError)
 			if req.ID != nil && req.ID != "" {
 				var en loom.LoomErrorNamer
 				if !errors.As(err, &en) {
@@ -1249,6 +1320,7 @@ func NewDispatchActionHandler(endpoint loom.Endpoint, mux loomhttp.Muxer, decode
 		body := NewDispatchActionResponseBody(res.(*assistant.DispatchActionResult))
 		response := jsonrpc.MakeSuccessResponse(id, body)
 		if err := encoder(ctx, w).Encode(response); err != nil {
+			loomtransport.RequestObserverFromContext(ctx).Fail(loomtransport.ReasonResponseWriteFailed)
 			errhandler(ctx, w, fmt.Errorf("failed to encode JSON-RPC response: %w", err))
 		}
 		return nil
