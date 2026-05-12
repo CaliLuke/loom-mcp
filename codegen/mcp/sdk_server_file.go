@@ -176,7 +176,7 @@ func sdkServerHTTPSection() codegen.Section {
 					jen.Func().Params(jen.Op("*").Qual("net/http", "Request")).Op("*").Id("mcpsdk").Dot("Server").Block(
 						jen.Return(jen.Id("server")),
 					),
-					jen.Id("streamableOpts"),
+					jen.Id("sdkStreamableHTTPOptions").Call(jen.Id("streamableOpts")),
 				),
 				jen.Return(
 					jen.Qual("net/http", "HandlerFunc").Call(
@@ -197,6 +197,23 @@ func sdkServerHTTPSection() codegen.Section {
 						),
 					),
 				),
+			)
+		stmt.Line()
+
+		stmt.Func().Id("sdkStreamableHTTPOptions").
+			Params(jen.Id("opts").Op("*").Id("mcpsdk").Dot("StreamableHTTPOptions")).
+			Op("*").Id("mcpsdk").Dot("StreamableHTTPOptions").
+			Block(
+				jen.If(jen.Id("opts").Op("==").Nil()).Block(
+					jen.Return(jen.Op("&").Id("mcpsdk").Dot("StreamableHTTPOptions").Values(jen.Dict{
+						jen.Id("CrossOriginProtection"): jen.Qual("net/http", "NewCrossOriginProtection").Call(),
+					})),
+				),
+				jen.Id("configured").Op(":=").Op("*").Id("opts"),
+				jen.If(jen.Id("configured").Dot("CrossOriginProtection").Op("==").Nil()).Block(
+					jen.Id("configured").Dot("CrossOriginProtection").Op("=").Qual("net/http", "NewCrossOriginProtection").Call(),
+				),
+				jen.Return(jen.Op("&").Id("configured")),
 			)
 		stmt.Line()
 

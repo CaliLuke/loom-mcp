@@ -103,7 +103,7 @@ func (w *sdkResponseObserver) Write(data []byte) (int, error) {
 func newSDKHandler(server *mcpsdk.Server, adapter *MCPAdapter, requestContext func(context.Context, *http.Request) context.Context, streamableOpts *mcpsdk.StreamableHTTPOptions) http.Handler {
 	base := mcpsdk.NewStreamableHTTPHandler(func(*http.Request) *mcpsdk.Server {
 		return server
-	}, streamableOpts)
+	}, sdkStreamableHTTPOptions(streamableOpts))
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		r = r.WithContext(mcpruntime.WithRequestHeaders(r.Context(), r.Header))
 		if requestContext != nil {
@@ -119,6 +119,16 @@ func newSDKHandler(server *mcpsdk.Server, adapter *MCPAdapter, requestContext fu
 			adapter.captureSessionPrincipal(r.Context(), sessionID)
 		}
 	})
+}
+func sdkStreamableHTTPOptions(opts *mcpsdk.StreamableHTTPOptions) *mcpsdk.StreamableHTTPOptions {
+	if opts == nil {
+		return &mcpsdk.StreamableHTTPOptions{CrossOriginProtection: http.NewCrossOriginProtection()}
+	}
+	configured := *opts
+	if configured.CrossOriginProtection == nil {
+		configured.CrossOriginProtection = http.NewCrossOriginProtection()
+	}
+	return &configured
 }
 func serveSDKEventsStream(server *mcpsdk.Server, adapter *MCPAdapter, w http.ResponseWriter, r *http.Request) {
 	sessionID := r.Header.Get("Mcp-Session-Id")
