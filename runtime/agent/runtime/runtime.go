@@ -133,6 +133,15 @@ type (
 		// avoiding dynamic handler registration on active workers.
 		registrationClosed bool
 
+		// activationComplete reports whether the runtime activation boundary has
+		// completed successfully. Failed Seal attempts leave registration closed
+		// but keep this false so callers may retry activation.
+		activationComplete bool
+
+		// sealMu serializes activation attempts so repeated Seal calls cannot race
+		// and a failed attempt may be retried deterministically.
+		sealMu sync.Mutex
+
 		// hookActivityRegistered tracks whether the runtime hook activity has
 		// been registered with the engine.
 		hookActivityRegistered bool

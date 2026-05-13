@@ -138,6 +138,22 @@ func main() {
 }
 ```
 
+### Seal semantics
+
+`rt.Seal(ctx)` is a real activation boundary, not a pure no-op. On worker-mode
+engines it:
+
+- Closes registration so any later `RegisterAgent` / `RegisterToolset` call
+  fails with `ErrRegistrationClosed`. This happens even if activation later
+  fails, so partial bring-up cannot smuggle handlers onto a sealed runtime.
+- Activates every staged Temporal worker by calling `worker.Start()` with
+  retries until activation succeeds or `ctx` ends.
+- Returns the activation error verbatim (queue-qualified) when `ctx` ends
+  before the worker accepts. Callers may retry `Seal` with a fresh context;
+  successful retries are idempotent.
+- Surfaces process-fatal worker failures through `worker.OnFatalError` rather
+  than crashing the goroutine — chain your own callback if you need to escalate.
+
 ---
 
 ## Runtime Configuration

@@ -10,15 +10,43 @@ import (
 	"github.com/CaliLuke/loom-mcp/runtime/agent/tools"
 )
 
-// Seal closes the registration phase and activates engines that stage worker handlers.
+// Seal closes the registration phase and activates engines that stage worker
+// handlers until the runtime is fully configured. Worker deployments should
+// call Seal after registering all toolsets and agents, before serving traffic.
+// When the engine supports staged workers, Seal returns only after activation
+// succeeds or ctx ends.
+//
+// Successful Seal calls are idempotent. The first call closes registration so
+// later RegisterAgent/RegisterToolset calls fail fast even if activation later
+// fails. Callers may retry Seal after a context-limited activation failure.
 func (r *Runtime) Seal(ctx context.Context) error {
-	alreadyClosed := r.closeRegistration()
-	if alreadyClosed {
+	r.mu.Lock()
+	alreadyActivated := r.activationComplete
+	r.registrationClosed = true
+	r.mu.Unlock()
+	if alreadyActivated {
 		return nil
 	}
-	if sealer, ok := r.Engine.(engine.RegistrationSealer); ok {
-		return sealer.SealRegistration(ctx)
+
+	r.sealMu.Lock()
+	defer r.sealMu.Unlock()
+
+	r.mu.Lock()
+	if r.activationComplete {
+		r.mu.Unlock()
+		return nil
 	}
+	r.mu.Unlock()
+
+	if sealer, ok := r.Engine.(engine.RegistrationSealer); ok {
+		if err := sealer.SealRegistration(ctx); err != nil {
+			return err
+		}
+	}
+
+	r.mu.Lock()
+	r.activationComplete = true
+	r.mu.Unlock()
 	return nil
 }
 
@@ -233,14 +261,6 @@ func (r *Runtime) storeRegisteredToolset(ts ToolsetRegistration) error {
 	r.addToolsetLocked(ts)
 	registerToolsetHints(ts)
 	return nil
-}
-
-func (r *Runtime) closeRegistration() bool {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	alreadyClosed := r.registrationClosed
-	r.registrationClosed = true
-	return alreadyClosed
 }
 
 func (r *Runtime) hookActivityRegistrationOptions() engine.ActivityOptions {

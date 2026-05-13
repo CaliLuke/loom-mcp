@@ -268,28 +268,6 @@ Recommended scope:
 - Add session-scoped runlog pagination.
 - Refresh codegen goldens.
 
-#### Truthful `Seal` / Temporal worker activation
-
-Upstream reference: `v0.51.1`
-
-Why it matters:
-
-- Makes `Runtime.Seal(...)` / Temporal `SealRegistration(...)` truthful
-  activation boundaries: failed activations remain retryable instead of
-  silently becoming no-op successes. Temporal worker lifecycle switches to
-  explicit `worker.Start()` / `worker.Stop()` with queue-qualified fatal
-  errors via `OnFatalError`.
-
-Relevant local files:
-
-- `runtime/agent/runtime/...`
-- `runtime/agent/engine/temporal/...`
-
-Recommended scope:
-
-- Make `Seal` retry-honest; switch worker lifecycle to explicit
-  `worker.Start/Stop` with `OnFatalError`.
-
 ## Already Covered Here
 
 These upstream themes appear already implemented in this fork and are not port
@@ -329,3 +307,11 @@ targets:
   downstream consumers can subscribe to the canonical upstream event name.
   Memory projection and run-snapshot derivation deliberately stay on
   `AssistantMessageEvent` to avoid double-processing.
+- Truthful `Runtime.Seal(...)` / Temporal `SealRegistration(...)` activation
+  boundary (`v0.51.1` PR #123): Seal blocks until every staged worker
+  activates or `ctx` ends, leaves registration closed even on activation
+  failure so partial bring-up cannot register late handlers, and is
+  retryable. Temporal workers switched to explicit `worker.Start()` /
+  `worker.Stop()` with retry on transient startup errors and
+  queue-qualified fatal errors via `OnFatalError`. See `docs/runtime.md` for
+  the caller contract.
