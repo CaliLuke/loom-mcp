@@ -94,7 +94,7 @@ func (r *Runtime) publishFinishAssistantMessage(
 	if result.FinalResponse == nil || result.Streamed {
 		return nil
 	}
-	return r.publishHook(
+	if err := r.publishHook(
 		ctx,
 		hooks.NewAssistantMessageEvent(
 			base.RunContext.RunID,
@@ -102,6 +102,34 @@ func (r *Runtime) publishFinishAssistantMessage(
 			base.RunContext.SessionID,
 			agentMessageText(finalMsg),
 			nil,
+		),
+		turnID,
+	); err != nil {
+		return err
+	}
+	return r.publishAssistantTurnCommitted(ctx, input, base, turnID, finalMsg)
+}
+
+// publishAssistantTurnCommitted emits the canonical AssistantTurnCommittedEvent
+// for the terminal assistant message, after the corresponding AssistantMessage
+// hook has been durably appended.
+func (r *Runtime) publishAssistantTurnCommitted(
+	ctx context.Context,
+	input *RunInput,
+	base *planner.PlanInput,
+	turnID string,
+	msg *model.Message,
+) error {
+	if msg == nil || agentMessageText(msg) == "" {
+		return nil
+	}
+	return r.publishHook(
+		ctx,
+		hooks.NewAssistantTurnCommittedEvent(
+			base.RunContext.RunID,
+			input.AgentID,
+			base.RunContext.SessionID,
+			msg,
 		),
 		turnID,
 	)

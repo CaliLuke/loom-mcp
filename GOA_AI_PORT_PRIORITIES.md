@@ -268,48 +268,25 @@ Recommended scope:
 - Add session-scoped runlog pagination.
 - Refresh codegen goldens.
 
-#### Canonical `assistant_turn_committed` + truthful `Seal`
+#### Truthful `Seal` / Temporal worker activation
 
-Upstream references: `v0.51.0`, `v0.51.1`
+Upstream reference: `v0.51.1`
 
 Why it matters:
 
-- Makes the durable transcript the single source of truth for final assistant
-  output; adds `AssistantTurnCommittedEvent` hook and `assistant_turn` stream
-  event fired only after the durable append.
-- `RunCompletedEvent` and `stream.WorkflowPayload` become lifecycle-only.
-- Splits seeded run-start history from appended turns so seeded history stays
-  replayable without being re-emitted as fresh committed assistant output.
 - Makes `Runtime.Seal(...)` / Temporal `SealRegistration(...)` truthful
   activation boundaries: failed activations remain retryable instead of
   silently becoming no-op successes. Temporal worker lifecycle switches to
   explicit `worker.Start()` / `worker.Stop()` with queue-qualified fatal
   errors via `OnFatalError`.
-- Treats `model.CitationsPart` text as assistant-visible in transcripts.
-
-Why it is worth doing:
-
-- These two releases share one contract; port them together.
-- Breaking for any downstream consumer that reads final assistant text off
-  completion events.
 
 Relevant local files:
 
-- `runtime/agent/runtime/...` (transcript persistence, commit/stream fanout)
-- `runtime/agent/hooks/...`
-- `runtime/agent/stream/...`
+- `runtime/agent/runtime/...`
 - `runtime/agent/engine/temporal/...`
-- `runtime/agent/run/...` (snapshot derivation)
 
 Recommended scope:
 
-- Add `AssistantTurnCommittedEvent` + `assistant_turn` stream event, emitted
-  only after durable run-log append.
-- Append terminal assistant messages into the transcript on terminal no-tool
-  paths.
-- Derive snapshot `LastAssistantMessage` from transcript replay.
-- Separate seeded vs. appended transcript records; limit committed-turn
-  fanout to appended records.
 - Make `Seal` retry-honest; switch worker lifecycle to explicit
   `worker.Start/Stop` with `OnFatalError`.
 
@@ -337,3 +314,18 @@ targets:
 - OpenAI Responses API migration (`v0.48.0`); loom-mcp's
   `features/model/openai/client.go` uses `github.com/openai/openai-go`'s
   `responses` package
+- `AssistantTurnCommittedEvent` hook + `assistant_turn` stream event surface
+  and `model.CitationsPart` treated as assistant-visible in `agentMessageText`
+  (`v0.51.0` PR #121). Upstream derives the new event from a separately
+  durable transcript-delta runlog record so consumers gain a "canonical,
+  replay-safe" guarantee distinct from the best-effort streamed
+  `AssistantMessage`. loom-mcp has no transcript-delta runlog record:
+  `AssistantMessageEvent` itself is already durably appended via
+  `hookActivity` → `RunEventStore.Append` before stream/bus fanout, so the
+  upstream split does not solve a real divergence here. The port therefore
+  emits `AssistantTurnCommittedEvent` alongside `AssistantMessageEvent` from
+  the no-tool finish path (`workflow_finish.go`) and the planner-driven
+  finalize path (`workflow_finalize.go`) as a forward-compatibility shim so
+  downstream consumers can subscribe to the canonical upstream event name.
+  Memory projection and run-snapshot derivation deliberately stay on
+  `AssistantMessageEvent` to avoid double-processing.

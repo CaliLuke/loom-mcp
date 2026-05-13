@@ -43,6 +43,42 @@ func TestStreamSubscriber(t *testing.T) {
 	require.Equal(t, "hello", v.Data.Text)
 }
 
+func TestStreamSubscriber_AssistantTurnCommitted(t *testing.T) {
+	sink := &mockSink{}
+	sub, err := NewSubscriber(sink)
+	require.NoError(t, err)
+
+	msg := &model.Message{
+		Role:  model.ConversationRoleAssistant,
+		Parts: []model.Part{model.TextPart{Text: "hello"}},
+	}
+	evt := hooks.NewAssistantTurnCommittedEvent("r1", agent.Ident("agent1"), "session-1", msg)
+	require.NoError(t, sub.HandleEvent(context.Background(), evt))
+
+	require.Len(t, sink.events, 1)
+	require.Equal(t, EventAssistantTurn, sink.events[0].Type())
+	v, ok := sink.events[0].(AssistantTurn)
+	require.True(t, ok)
+	require.NotNil(t, v.Data.Message)
+	require.Equal(t, msg, v.Data.Message)
+}
+
+func TestStreamSubscriber_AssistantTurnCommittedRespectsProfileToggle(t *testing.T) {
+	sink := &mockSink{}
+	profile := DefaultProfile()
+	profile.AssistantTurns = false
+	sub, err := NewSubscriberWithProfile(sink, profile)
+	require.NoError(t, err)
+
+	msg := &model.Message{
+		Role:  model.ConversationRoleAssistant,
+		Parts: []model.Part{model.TextPart{Text: "hello"}},
+	}
+	evt := hooks.NewAssistantTurnCommittedEvent("r1", agent.Ident("agent1"), "session-1", msg)
+	require.NoError(t, sub.HandleEvent(context.Background(), evt))
+	require.Empty(t, sink.events)
+}
+
 func TestStreamSubscriber_PreservesHookEventKey(t *testing.T) {
 	sink := &mockSink{}
 	sub, err := NewSubscriber(sink)

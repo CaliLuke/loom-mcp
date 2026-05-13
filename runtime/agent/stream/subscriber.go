@@ -377,6 +377,8 @@ func (s *Subscriber) handleMessageEvent(ctx context.Context, event hooks.Event) 
 	switch evt := event.(type) {
 	case *hooks.AssistantMessageEvent:
 		return s.sendAssistantMessage(ctx, evt), true
+	case *hooks.AssistantTurnCommittedEvent:
+		return s.sendAssistantTurn(ctx, evt), true
 	case *hooks.PlannerNoteEvent:
 		return s.sendPlannerNote(ctx, evt), true
 	case *hooks.PromptRenderedEvent:
@@ -395,6 +397,20 @@ func (s *Subscriber) sendAssistantMessage(ctx context.Context, evt *hooks.Assist
 	payload := AssistantReplyPayload{Text: evt.Message}
 	return s.sink.Send(ctx, AssistantReply{
 		Base: newBaseFromHook(evt, EventAssistantReply, payload),
+		Data: payload,
+	})
+}
+
+func (s *Subscriber) sendAssistantTurn(ctx context.Context, evt *hooks.AssistantTurnCommittedEvent) error {
+	if !s.profile.AssistantTurns {
+		return nil
+	}
+	if evt.Message == nil {
+		return fmt.Errorf("assistant_turn_committed missing message for run %s", evt.RunID())
+	}
+	payload := AssistantTurnPayload{Message: evt.Message}
+	return s.sink.Send(ctx, AssistantTurn{
+		Base: newBaseFromHook(evt, EventAssistantTurn, payload),
 		Data: payload,
 	})
 }

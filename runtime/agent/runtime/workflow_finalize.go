@@ -278,7 +278,10 @@ func finalizationReasonText(reason planner.TerminationReason) string {
 }
 
 func (r *Runtime) publishFinalizationAssistantMessage(ctx context.Context, base *planner.PlanInput, input *RunInput, turnID string, msg *model.Message) error {
-	return r.publishHook(ctx, hooks.NewAssistantMessageEvent(
+	if err := r.publishHook(ctx, hooks.NewAssistantMessageEvent(
 		base.RunContext.RunID, input.AgentID, base.RunContext.SessionID, agentMessageText(msg), nil,
-	), turnID)
+	), turnID); err != nil {
+		return err
+	}
+	return r.publishAssistantTurnCommitted(ctx, input, base, turnID, msg)
 }

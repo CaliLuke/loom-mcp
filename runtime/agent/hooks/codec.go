@@ -253,6 +253,8 @@ func decodeAuxEvent(input *ActivityInput) (Event, bool, error) {
 		return decodePromptRenderedEvent(input)
 	case AssistantMessage:
 		return decodeAssistantMessageEvent(input)
+	case AssistantTurnCommitted:
+		return decodeAssistantTurnCommittedEvent(input)
 	case PlannerNote:
 		return decodePlannerNoteEvent(input)
 	case ThinkingBlock:
@@ -395,6 +397,14 @@ func decodeAssistantMessageEvent(input *ActivityInput) (Event, bool, error) {
 		return nil, false, err
 	}
 	return NewAssistantMessageEvent(input.RunID, input.AgentID, input.SessionID, p.Message, p.Structured), true, nil
+}
+
+func decodeAssistantTurnCommittedEvent(input *ActivityInput) (Event, bool, error) {
+	var p AssistantTurnCommittedEvent
+	if err := decodeHookPayload(input, &p); err != nil {
+		return nil, false, err
+	}
+	return NewAssistantTurnCommittedEvent(input.RunID, input.AgentID, input.SessionID, p.Message), true, nil
 }
 
 func decodePlannerNoteEvent(input *ActivityInput) (Event, bool, error) {

@@ -157,6 +157,61 @@ func TestFinishWithoutToolCalls_UsesPlannerFinalToolResult(t *testing.T) {
 	require.JSONEq(t, `{"status":"ok"}`, string(out.FinalToolResult.Result))
 }
 
+func TestFinishWithoutToolCalls_PublishesAssistantTurnCommitted(t *testing.T) {
+	recorder := &recordingHooks{}
+	rt := &Runtime{
+		logger:        telemetry.NoopLogger{},
+		metrics:       telemetry.NoopMetrics{},
+		tracer:        telemetry.NoopTracer{},
+		RunEventStore: runloginmem.New(),
+		Bus:           recorder,
+	}
+	input := &RunInput{
+		AgentID:   "svc.agent",
+		SessionID: "",
+	}
+	base := &planner.PlanInput{
+		RunContext: run.Context{
+			RunID:     "run-1",
+			SessionID: "",
+		},
+	}
+	msg := &model.Message{
+		Role:  model.ConversationRoleAssistant,
+		Parts: []model.Part{model.TextPart{Text: "all done"}},
+	}
+	st := &runLoopState{
+		Result: &planner.PlanResult{
+			FinalResponse: &planner.FinalResponse{Message: msg},
+		},
+	}
+
+	out, err := rt.finishWithoutToolCalls(context.Background(), input, base, st, "turn-1")
+	require.NoError(t, err)
+	require.NotNil(t, out)
+
+	recorder.mu.Lock()
+	defer recorder.mu.Unlock()
+	var sawAssistantMessage, sawTurnCommitted bool
+	var assistantIdx, turnIdx int
+	for i, evt := range recorder.events {
+		switch e := evt.(type) {
+		case *hooks.AssistantMessageEvent:
+			sawAssistantMessage = true
+			assistantIdx = i
+			require.Equal(t, "all done", e.Message)
+		case *hooks.AssistantTurnCommittedEvent:
+			sawTurnCommitted = true
+			turnIdx = i
+			require.NotNil(t, e.Message)
+			require.Equal(t, msg, e.Message)
+		}
+	}
+	require.True(t, sawAssistantMessage, "AssistantMessageEvent must be published")
+	require.True(t, sawTurnCommitted, "AssistantTurnCommittedEvent must be published")
+	require.Less(t, assistantIdx, turnIdx, "AssistantTurnCommittedEvent must follow AssistantMessageEvent")
+}
+
 func TestFinishWithoutToolCallsRejectsDualTerminalOutputs(t *testing.T) {
 	rt := &Runtime{
 		logger:        telemetry.NoopLogger{},
