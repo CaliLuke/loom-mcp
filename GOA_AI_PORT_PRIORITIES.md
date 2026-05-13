@@ -171,37 +171,6 @@ Recommended scope:
 - Keep restricted-tool finalization on the tool path until deadline/grace policy
   explicitly requires terminal finalization.
 
-#### Tool pause transcript ordering
-
-Upstream reference: `v0.53.11`
-
-Why it matters:
-
-- When a budgeted tool returns a runtime-owned pause or user-input request, the
-  planner-facing tool result must be recorded before the workflow awaits input.
-- Resume transcripts must preserve the original assistant `tool_use` / user
-  `tool_result` ordering so providers receive valid conversation history.
-
-Why it is worth doing:
-
-- This fork has a richer await/confirmation path than upstream, which makes this
-  a good regression target even if the exact executor envelope differs.
-- It pairs naturally with the pause-aware `ToolExecutionResult` work below.
-
-Relevant local files:
-
-- `runtime/agent/runtime/workflow_turn.go`
-- `runtime/agent/runtime/workflow_await_queue.go`
-- `runtime/agent/runtime/workflow_await_wait.go`
-- `runtime/agent/runtime/workflow_helpers.go`
-- `runtime/agent/transcript/...`
-
-Recommended scope:
-
-- Add regression coverage for tool-created pause/await followed by resume.
-- Assert the planner-facing tool output is appended before awaiting user input.
-- Assert resumed provider transcripts preserve assistant tool-use ordering.
-
 #### Workflow step and generated tool-registration normalization
 
 Upstream reference: `v0.53.7`
@@ -298,3 +267,15 @@ targets:
   pagination; this fork has no current consumer driving session-scoped
   runlog reads, so that half is intentionally deferred and can be ported
   separately when a consumer emerges.
+- Tool pause transcript ordering (`v0.53.11`): in loom-mcp,
+  `handleToolTurn` already calls `applyExecutedToolTurn`
+  (`appendToolOutputs` + `appendUserToolResults`) before
+  `finishOrContinueToolTurn` → `handleToolTurnPostExecution` →
+  `handleAwaitQueue`, so the durable planner-facing tool result is appended
+  to `base.Messages` before any clarification answer. This means resumed
+  transcripts already keep assistant `tool_use` / user `tool_result` pairs
+  adjacent without an upstream-style `recorded`/`stepBatch` book-keeping
+  field. The port adds `TestToolPauseTranscriptOrder_RecordsResultBefore`
+  `ClarificationAnswer` in `tool_pause_execution_test.go` as the regression
+  target so future refactors of the turn flow cannot silently break this
+  ordering.
