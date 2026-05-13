@@ -172,7 +172,7 @@ func registerExecuteFunc() jen.Code {
 			jen.Id("call").Op("*").Qual("github.com/CaliLuke/loom-mcp/runtime/agent/planner", "ToolRequest"),
 		).
 		Params(
-			jen.Op("*").Qual("github.com/CaliLuke/loom-mcp/runtime/agent/planner", "ToolResult"),
+			jen.Op("*").Id("agentsruntime").Dot("ToolExecutionResult"),
 			jen.Error(),
 		).
 		Block(
@@ -183,7 +183,10 @@ func registerExecuteFunc() jen.Code {
 			jen.If(jen.Id("err").Op("!=").Nil()).Block(
 				jen.Return(jen.Nil(), jen.Id("err")),
 			),
-			jen.Return(jen.Op("&").Id("out"), jen.Nil()),
+			jen.Return(
+				jen.Id("agentsruntime").Dot("Executed").Call(jen.Op("&").Id("out")),
+				jen.Nil(),
+			),
 		)
 }
 

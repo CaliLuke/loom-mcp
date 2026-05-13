@@ -13,8 +13,8 @@ import (
 )
 
 // defaultAgentToolExecute returns the standard Execute function for agent-as-tool registrations.
-func defaultAgentToolExecute(rt *Runtime, cfg AgentToolConfig) func(context.Context, *planner.ToolRequest) (*planner.ToolResult, error) {
-	return func(ctx context.Context, call *planner.ToolRequest) (*planner.ToolResult, error) {
+func defaultAgentToolExecute(rt *Runtime, cfg AgentToolConfig) func(context.Context, *planner.ToolRequest) (*ToolExecutionResult, error) {
+	return func(ctx context.Context, call *planner.ToolRequest) (*ToolExecutionResult, error) {
 		wfCtx := engine.WorkflowContextFromContext(ctx)
 		if wfCtx == nil {
 			return nil, fmt.Errorf("workflow context not found")
@@ -29,7 +29,11 @@ func defaultAgentToolExecute(rt *Runtime, cfg AgentToolConfig) func(context.Cont
 		}
 		messages, nestedRunCtx, err := rt.buildAgentChildRequest(wfCtx.Context(), &cfg, call, nil, parentRun)
 		if err != nil {
-			return rt.agentToolRequestFailureResult(*call, err)
+			result, ferr := rt.agentToolRequestFailureResult(*call, err)
+			if ferr != nil {
+				return nil, ferr
+			}
+			return Executed(result), nil
 		}
 		if err := rt.publishHook(
 			wfCtx.Context(),
@@ -50,7 +54,11 @@ func defaultAgentToolExecute(rt *Runtime, cfg AgentToolConfig) func(context.Cont
 		if err != nil {
 			return nil, fmt.Errorf("execute agent: %w", err)
 		}
-		return rt.adaptAgentChildOutput(ctx, &cfg, call, nestedRunCtx, outPtr)
+		result, err := rt.adaptAgentChildOutput(ctx, &cfg, call, nestedRunCtx, outPtr)
+		if err != nil {
+			return nil, err
+		}
+		return Executed(result), nil
 	}
 }
 

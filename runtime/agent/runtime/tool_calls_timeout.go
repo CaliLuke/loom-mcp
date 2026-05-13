@@ -8,9 +8,9 @@ import (
 	"github.com/CaliLuke/loom-mcp/runtime/agent/planner"
 )
 
-func (e *toolBatchExec) synthesizeExpiredBatchResults(ctx context.Context, calls []planner.ToolRequest) ([]*planner.ToolResult, error) {
+func (e *toolBatchExec) synthesizeExpiredBatchResults(ctx context.Context, calls []planner.ToolRequest) ([]*ToolExecutionResult, error) {
 	const cancelMsg = "canceled: time budget reached"
-	results := make([]*planner.ToolResult, 0, len(calls))
+	results := make([]*ToolExecutionResult, 0, len(calls))
 	for i, call := range calls {
 		call = e.normalizeToolCall(call, i)
 		queue := e.toolQueue(call.Name)
@@ -21,7 +21,7 @@ func (e *toolBatchExec) synthesizeExpiredBatchResults(ctx context.Context, calls
 		if err != nil {
 			return nil, err
 		}
-		results = append(results, tr)
+		results = append(results, Executed(tr))
 	}
 	return results, nil
 }
@@ -48,7 +48,7 @@ func (e *toolBatchExec) newCanceledToolResult(ctx context.Context, call planner.
 	return tr, nil
 }
 
-func (e *toolBatchExec) handleTimedOutBatch(wfCtx engine.WorkflowContext, ctx context.Context, timedOut bool, activityByID map[string]*planner.ToolResult, inlineByID map[string]*planner.ToolResult, pendingActs []futureInfo, pendingChildren []agentChildFutureInfo) error {
+func (e *toolBatchExec) handleTimedOutBatch(wfCtx engine.WorkflowContext, ctx context.Context, timedOut bool, activityByID map[string]*ToolExecutionResult, inlineByID map[string]*ToolExecutionResult, pendingActs []futureInfo, pendingChildren []agentChildFutureInfo) error {
 	if !timedOut {
 		return nil
 	}
@@ -74,7 +74,7 @@ func cancelPendingChildren(ctx context.Context, pendingChildren []agentChildFutu
 	return nil
 }
 
-func (e *toolBatchExec) synthesizeTimedOutActivityResults(wfCtx engine.WorkflowContext, activityByID map[string]*planner.ToolResult, pending []futureInfo, cancelMsg string) error {
+func (e *toolBatchExec) synthesizeTimedOutActivityResults(wfCtx engine.WorkflowContext, activityByID map[string]*ToolExecutionResult, pending []futureInfo, cancelMsg string) error {
 	for _, info := range pending {
 		if info.call.ToolCallID == "" {
 			continue
@@ -86,12 +86,12 @@ func (e *toolBatchExec) synthesizeTimedOutActivityResults(wfCtx engine.WorkflowC
 		if err != nil {
 			return err
 		}
-		activityByID[info.call.ToolCallID] = tr
+		activityByID[info.call.ToolCallID] = Executed(tr)
 	}
 	return nil
 }
 
-func (e *toolBatchExec) synthesizeTimedOutChildResults(wfCtx engine.WorkflowContext, inlineByID map[string]*planner.ToolResult, pending []agentChildFutureInfo, cancelMsg string) error {
+func (e *toolBatchExec) synthesizeTimedOutChildResults(wfCtx engine.WorkflowContext, inlineByID map[string]*ToolExecutionResult, pending []agentChildFutureInfo, cancelMsg string) error {
 	for _, info := range pending {
 		if info.call.ToolCallID == "" {
 			continue
@@ -103,7 +103,7 @@ func (e *toolBatchExec) synthesizeTimedOutChildResults(wfCtx engine.WorkflowCont
 		if err != nil {
 			return err
 		}
-		inlineByID[info.call.ToolCallID] = tr
+		inlineByID[info.call.ToolCallID] = Executed(tr)
 	}
 	return nil
 }

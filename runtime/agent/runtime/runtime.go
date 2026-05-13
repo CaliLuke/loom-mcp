@@ -297,7 +297,7 @@ type (
 		// populate AgentTool so the workflow runtime can start nested agents as child
 		// workflows and adapt their RunOutput into a ToolResult.
 		// For custom/server-side tools, users provide their own implementation.
-		Execute func(ctx context.Context, call *planner.ToolRequest) (*planner.ToolResult, error)
+		Execute func(ctx context.Context, call *planner.ToolRequest) (*ToolExecutionResult, error)
 
 		// Specs enumerates the codecs associated with each tool in the set.
 		// Used by the runtime for JSON marshaling/unmarshaling and schema validation.

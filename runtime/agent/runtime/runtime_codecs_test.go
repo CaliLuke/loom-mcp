@@ -39,11 +39,11 @@ func TestExecuteToolActivity_UsesGeneratedCodecs(t *testing.T) {
 	rt := &Runtime{
 		toolsets: map[string]ToolsetRegistration{
 			"svc.ts": {
-				Execute: func(ctx context.Context, call *planner.ToolRequest) (*planner.ToolResult, error) {
+				Execute: func(ctx context.Context, call *planner.ToolRequest) (*ToolExecutionResult, error) {
 					// Executors receive canonical JSON payloads.
 					require.JSONEq(t, "{}", string(call.Payload))
 					// Return arbitrary value; encode path should use result codec.
-					return &planner.ToolResult{Result: map[string]string{"status": "ok"}}, nil
+					return Executed(&planner.ToolResult{Result: map[string]string{"status": "ok"}}), nil
 				},
 			},
 		},

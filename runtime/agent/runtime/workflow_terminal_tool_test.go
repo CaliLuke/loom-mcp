@@ -22,12 +22,12 @@ func TestRunLoopStopsAfterTerminalTool(t *testing.T) {
 	terminalTool.TerminalRun = true
 	require.NoError(t, rt.RegisterToolset(ToolsetRegistration{
 		Name: "tasks.progress",
-		Execute: func(ctx context.Context, call *planner.ToolRequest) (*planner.ToolResult, error) {
-			return &planner.ToolResult{
+		Execute: func(ctx context.Context, call *planner.ToolRequest) (*ToolExecutionResult, error) {
+			return Executed(&planner.ToolResult{
 				Name:       call.Name,
 				Result:     map[string]any{"ok": true},
 				ToolCallID: call.ToolCallID,
-			}, nil
+			}), nil
 		},
 		Specs: []tools.ToolSpec{terminalTool},
 	}))

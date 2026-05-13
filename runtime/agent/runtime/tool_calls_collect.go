@@ -12,9 +12,9 @@ import (
 	"github.com/CaliLuke/loom-mcp/runtime/agent/tools"
 )
 
-func (e *toolBatchExec) collectActivityResultsAsComplete(wfCtx engine.WorkflowContext, futures []futureInfo, finalizeTimer engine.Future[time.Time]) (map[string]*planner.ToolResult, []futureInfo, bool, error) {
+func (e *toolBatchExec) collectActivityResultsAsComplete(wfCtx engine.WorkflowContext, futures []futureInfo, finalizeTimer engine.Future[time.Time]) (map[string]*ToolExecutionResult, []futureInfo, bool, error) {
 	ctx := wfCtx.Context()
-	activityByID := make(map[string]*planner.ToolResult, len(futures))
+	activityByID := make(map[string]*ToolExecutionResult, len(futures))
 	pending := append([]futureInfo(nil), futures...)
 	for len(pending) > 0 {
 		if err := waitForReadyActivityResult(wfCtx, ctx, pending, finalizeTimer); err != nil {
@@ -26,11 +26,11 @@ func (e *toolBatchExec) collectActivityResultsAsComplete(wfCtx engine.WorkflowCo
 			if !ok {
 				break
 			}
-			toolRes, err := e.collectActivityResult(wfCtx, ctx, info)
+			exec, err := e.collectActivityExecution(wfCtx, ctx, info)
 			if err != nil {
 				return nil, nil, false, err
 			}
-			activityByID[info.call.ToolCallID] = toolRes
+			activityByID[info.call.ToolCallID] = exec
 		}
 		if finalizeTimer != nil && finalizeTimer.IsReady() && len(pending) > 0 {
 			return activityByID, pending, true, nil
@@ -39,13 +39,13 @@ func (e *toolBatchExec) collectActivityResultsAsComplete(wfCtx engine.WorkflowCo
 	return activityByID, nil, false, nil
 }
 
-func (e *toolBatchExec) collectAgentChildResults(wfCtx engine.WorkflowContext, children []agentChildFutureInfo, finalizeTimer engine.Future[time.Time]) (map[string]*planner.ToolResult, []agentChildFutureInfo, bool, error) {
+func (e *toolBatchExec) collectAgentChildResults(wfCtx engine.WorkflowContext, children []agentChildFutureInfo, finalizeTimer engine.Future[time.Time]) (map[string]*ToolExecutionResult, []agentChildFutureInfo, bool, error) {
 	ctx := wfCtx.Context()
 	if len(children) == 0 {
-		return map[string]*planner.ToolResult{}, nil, false, nil
+		return map[string]*ToolExecutionResult{}, nil, false, nil
 	}
 
-	out := make(map[string]*planner.ToolResult, len(children))
+	out := make(map[string]*ToolExecutionResult, len(children))
 	pending := append([]agentChildFutureInfo(nil), children...)
 	for len(pending) > 0 {
 		if err := waitForReadyChildResult(wfCtx, ctx, pending, finalizeTimer); err != nil {
@@ -61,7 +61,7 @@ func (e *toolBatchExec) collectAgentChildResults(wfCtx engine.WorkflowContext, c
 			if err != nil {
 				return nil, nil, false, err
 			}
-			out[info.call.ToolCallID] = toolRes
+			out[info.call.ToolCallID] = Executed(toolRes)
 		}
 		if finalizeTimer != nil && finalizeTimer.IsReady() && len(pending) > 0 {
 			return out, pending, true, nil
@@ -70,8 +70,8 @@ func (e *toolBatchExec) collectAgentChildResults(wfCtx engine.WorkflowContext, c
 	return out, nil, false, nil
 }
 
-func mergeToolResultsInCallOrder(calls []planner.ToolRequest, activityByID, inlineByID map[string]*planner.ToolResult) ([]*planner.ToolResult, error) {
-	results := make([]*planner.ToolResult, 0, len(calls))
+func mergeToolResultsInCallOrder(calls []planner.ToolRequest, activityByID, inlineByID map[string]*ToolExecutionResult) ([]*ToolExecutionResult, error) {
+	results := make([]*ToolExecutionResult, 0, len(calls))
 	for _, call := range calls {
 		if ar, ok := activityByID[call.ToolCallID]; ok {
 			results = append(results, ar)
@@ -84,6 +84,42 @@ func mergeToolResultsInCallOrder(calls []planner.ToolRequest, activityByID, inli
 		return nil, fmt.Errorf("missing tool result for %q (%s)", call.Name, call.ToolCallID)
 	}
 	return results, nil
+}
+
+// collectActivityExecution adapts collectActivityResult into a ToolExecutionResult,
+// threading the runtime-owned pause signal through from the activity output.
+func (e *toolBatchExec) collectActivityExecution(wfCtx engine.WorkflowContext, ctx context.Context, info futureInfo) (*ToolExecutionResult, error) {
+	out, err := info.future.Get(ctx)
+	if err != nil {
+		duration := wfCtx.Now().Sub(info.startTime)
+		tr, synthErr := e.synthesizeToolError(ctx, info.call, err, "tool activity failed", duration)
+		if synthErr != nil {
+			return nil, synthErr
+		}
+		return Executed(tr), nil
+	}
+	if out == nil {
+		return nil, fmt.Errorf("tool %q returned nil output", info.call.Name)
+	}
+	duration := wfCtx.Now().Sub(info.startTime)
+	if _, ok := e.r.toolSpec(info.call.Name); !ok {
+		tr, synthErr := e.synthesizeUnknownToolResult(ctx, info.call, duration)
+		if synthErr != nil {
+			return nil, synthErr
+		}
+		return Executed(tr), nil
+	}
+	toolRes, err := e.decodeActivityToolResult(ctx, info, out)
+	if err != nil {
+		return nil, err
+	}
+	if err := validateToolPauseContract(info.call, toolRes, out.Pause); err != nil {
+		return nil, err
+	}
+	if err := e.publishToolResultReceived(ctx, info.call, toolRes, out.Payload, duration); err != nil {
+		return nil, err
+	}
+	return &ToolExecutionResult{ToolResult: toolRes, Pause: out.Pause}, nil
 }
 
 func waitForReadyActivityResult(wfCtx engine.WorkflowContext, ctx context.Context, pending []futureInfo, finalizeTimer engine.Future[time.Time]) error {
@@ -109,29 +145,6 @@ func popReadyActivityFuture(pending []futureInfo) (futureInfo, []futureInfo, boo
 		return info, pending[:len(pending)-1], true
 	}
 	return futureInfo{}, pending, false
-}
-
-func (e *toolBatchExec) collectActivityResult(wfCtx engine.WorkflowContext, ctx context.Context, info futureInfo) (*planner.ToolResult, error) {
-	out, err := info.future.Get(ctx)
-	if err != nil {
-		duration := wfCtx.Now().Sub(info.startTime)
-		return e.synthesizeToolError(ctx, info.call, err, "tool activity failed", duration)
-	}
-	if out == nil {
-		return nil, fmt.Errorf("tool %q returned nil output", info.call.Name)
-	}
-	duration := wfCtx.Now().Sub(info.startTime)
-	if _, ok := e.r.toolSpec(info.call.Name); !ok {
-		return e.synthesizeUnknownToolResult(ctx, info.call, duration)
-	}
-	toolRes, err := e.decodeActivityToolResult(ctx, info, out)
-	if err != nil {
-		return nil, err
-	}
-	if err := e.publishToolResultReceived(ctx, info.call, toolRes, out.Payload, duration); err != nil {
-		return nil, err
-	}
-	return toolRes, nil
 }
 
 func (e *toolBatchExec) decodeActivityToolResult(ctx context.Context, info futureInfo, out *ToolOutput) (*planner.ToolResult, error) {

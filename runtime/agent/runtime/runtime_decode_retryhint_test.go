@@ -113,7 +113,7 @@ func TestExecuteToolActivity_DecodeErrorRetryHint(t *testing.T) {
 	}
 	rt.toolsets["svc.ts"] = ToolsetRegistration{
 		Name: "svc.ts",
-		Execute: func(ctx context.Context, call *planner.ToolRequest) (*planner.ToolResult, error) {
+		Execute: func(ctx context.Context, call *planner.ToolRequest) (*ToolExecutionResult, error) {
 			t.Fatalf("executor should not be called when pre-decode fails")
 			return nil, nil
 		},

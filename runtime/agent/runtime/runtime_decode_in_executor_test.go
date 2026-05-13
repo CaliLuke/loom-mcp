@@ -22,11 +22,11 @@ func TestExecuteToolActivity_DecodeInExecutor_PassesRaw(t *testing.T) {
 	ts := ToolsetRegistration{
 		Name:             "svc.ts",
 		DecodeInExecutor: true,
-		Execute: func(ctx context.Context, call *planner.ToolRequest) (*planner.ToolResult, error) {
+		Execute: func(ctx context.Context, call *planner.ToolRequest) (*ToolExecutionResult, error) {
 			called = true
 			// Payload must be raw JSON to honor decode-in-executor contract.
 			require.JSONEq(t, `{"x":1}`, string(call.Payload))
-			return &planner.ToolResult{Name: tools.Ident("svc.ts.tool"), Result: map[string]any{"ok": true}}, nil
+			return Executed(&planner.ToolResult{Name: tools.Ident("svc.ts.tool"), Result: map[string]any{"ok": true}}), nil
 		},
 		Specs: []tools.ToolSpec{{
 			Name:    tools.Ident("svc.ts.tool"),

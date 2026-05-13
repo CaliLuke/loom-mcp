@@ -109,8 +109,8 @@ func TestExecuteToolCalls_AgentToolsFanOut(t *testing.T) {
 	require.Equal(t, len(calls), wfCtx.firstChildGetCount)
 
 	// Results must be merged in original call order regardless of completion order.
-	require.Equal(t, calls[0].ToolCallID, results[0].ToolCallID)
-	require.Equal(t, calls[1].ToolCallID, results[1].ToolCallID)
+	require.Equal(t, calls[0].ToolCallID, results[0].ToolResult.ToolCallID)
+	require.Equal(t, calls[1].ToolCallID, results[1].ToolResult.ToolCallID)
 
 	// ToolResultReceived events should be published once per tool with matching IDs.
 	var toolEnds []*hooks.ToolResultReceivedEvent

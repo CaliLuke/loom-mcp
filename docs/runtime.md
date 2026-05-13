@@ -517,7 +517,7 @@ type ToolsetRegistration struct {
     Name        string                     // Qualified identifier (service.toolset)
     Description string                     // Human-readable context
     Metadata    policy.ToolMetadata        // Policy metadata
-    Execute     func(ctx, *ToolRequest) (*ToolResult, error)  // Dispatcher
+    Execute     func(ctx, *ToolRequest) (*ToolExecutionResult, error)  // Dispatcher
     Specs       []tools.ToolSpec           // JSON codecs and schemas
     TaskQueue   string                     // Optional queue override
     Inline      bool                       // Execute in workflow context
@@ -634,13 +634,74 @@ These are client-side helpers. The standalone registry service implementation li
 ```go
 reg := runtime.ToolsetRegistration{
     Name: "myservice.helpers",
-    Execute: func(ctx context.Context, call *planner.ToolRequest) (*planner.ToolResult, error) {
-        // Decode payload, execute logic, return result
+    Execute: func(ctx context.Context, call *planner.ToolRequest) (*runtime.ToolExecutionResult, error) {
+        // Decode payload, execute logic, return the durable result envelope.
+        return runtime.Executed(&planner.ToolResult{
+            Name:       call.Name,
+            ToolCallID: call.ToolCallID,
+            Result:     /* ... */,
+        }), nil
     },
     Specs: []tools.ToolSpec{...},
 }
 rt.RegisterToolset(reg)
 ```
+
+#### Executor result envelope: `runtime.ToolExecutionResult`
+
+Tool executors return `*runtime.ToolExecutionResult` rather than `*planner.ToolResult` directly:
+
+```go
+type ToolExecutionResult struct {
+    ToolResult *planner.ToolResult // Durable planner-visible result (always required)
+    Pause      *api.ToolPause      // Optional runtime-owned pause signal for the current batch
+}
+```
+
+- `ToolResult` is the durable, planner-facing tool outcome. It lands in the
+  transcript, the cumulative `ToolOutputs` history, and the
+  `ToolResultReceivedEvent` hook fanout exactly as before.
+- `Pause` is a current-batch-only signal. When non-nil it is projected into the
+  workflow's await queue (e.g. as an `AwaitClarification` item) and never
+  persists into cumulative `ToolOutputs`, so replaying a pause envelope cannot
+  re-trigger an await on a later turn.
+
+For the common case where an executor just emits a durable result with no
+runtime-owned pause, use the `runtime.Executed(...)` helper:
+
+```go
+return runtime.Executed(&planner.ToolResult{ /* ... */ }), nil
+```
+
+To request a clarification from the user from inside an executor, attach a
+`ToolPause`:
+
+```go
+return &runtime.ToolExecutionResult{
+    ToolResult: &planner.ToolResult{
+        Name:       call.Name,
+        ToolCallID: call.ToolCallID,
+        Result:     partialResult,
+    },
+    Pause: &api.ToolPause{
+        Clarification: &api.ToolPauseClarification{
+            ID:       "ambiguous-target",
+            Question: "Which target did you mean: A or B?",
+        },
+    },
+}, nil
+```
+
+The runtime contract enforces that a `Pause` must not be paired with a tool
+error and must carry a non-nil payload (validated by
+`validateToolPauseContract`).
+
+> **Breaking change (v0.52.0)**: the executor signature changed from
+> `func(ctx, *ToolRequest) (*planner.ToolResult, error)` to
+> `func(ctx, *ToolRequest) (*ToolExecutionResult, error)`. Custom executors,
+> the registry-routed executor, the MCP executor, and example scaffolds all
+> need to wrap their return value via `runtime.Executed(...)` or construct
+> the envelope explicitly.
 
 **Agent-as-tool** — Nested agent execution:
 

@@ -57,14 +57,16 @@ func (r *Runtime) handleToolTurn(
 	if err != nil {
 		return nil, err
 	}
-	vals, timedOut, err := r.executePreparedToolTurn(wfCtx, reg, input, base, result.ExpectedChildren, parentTracker, turn, toolOpts)
+	outcomes, timedOut, err := r.executePreparedToolTurn(wfCtx, reg, input, base, result.ExpectedChildren, parentTracker, turn, toolOpts)
 	if err != nil {
 		return nil, err
 	}
+	vals := toolResultsFromExecutions(outcomes)
+	toolPauses := toolPausesFromExecutions(outcomes)
 	if err := applyExecutedToolTurn(ctx, r, base, st, turn.toExecute, vals); err != nil {
 		return nil, err
 	}
-	if out, err := r.finishOrContinueToolTurn(wfCtx, reg, input, base, st, resumeOpts, toolOpts, deadlines, turnID, parentTracker, ctrl, turn, vals, timedOut); err != nil || out != nil {
+	if out, err := r.finishOrContinueToolTurn(wfCtx, reg, input, base, st, resumeOpts, toolOpts, deadlines, turnID, parentTracker, ctrl, turn, vals, toolPauses, timedOut); err != nil || out != nil {
 		return out, err
 	}
 	return nil, r.resumeAfterToolTurn(wfCtx, reg, input, base, st, resumeOpts, deadlines, turnID)
@@ -84,6 +86,7 @@ func (r *Runtime) finishOrContinueToolTurn(
 	ctrl *interrupt.Controller,
 	turn *preparedToolTurn,
 	vals []*planner.ToolResult,
+	toolPauses []*ToolPause,
 	timedOut bool,
 ) (*RunOutput, error) {
 	if timedOut {
@@ -97,8 +100,59 @@ func (r *Runtime) finishOrContinueToolTurn(
 		return r.finishAfterTerminalToolCalls(wfCtx.Context(), input, base, st)
 	}
 	return r.handleToolTurnPostExecution(
-		wfCtx, reg, input, base, st, resumeOpts, toolOpts, deadlines, turnID, parentTracker, ctrl, turn.confirmations, vals, turn.allowed, vals,
+		wfCtx, reg, input, base, st, resumeOpts, toolOpts, deadlines, turnID, parentTracker, ctrl, turn.confirmations, vals, turn.allowed, toolPauses,
 	)
+}
+
+// toolResultsFromExecutions extracts durable planner-visible tool results from a
+// batch of runtime-owned execution outcomes.
+func toolResultsFromExecutions(outcomes []*ToolExecutionResult) []*planner.ToolResult {
+	if len(outcomes) == 0 {
+		return nil
+	}
+	results := make([]*planner.ToolResult, 0, len(outcomes))
+	for _, outcome := range outcomes {
+		if outcome == nil || outcome.ToolResult == nil {
+			continue
+		}
+		results = append(results, outcome.ToolResult)
+	}
+	return results
+}
+
+// toolPausesFromExecutions extracts current-batch runtime pause signals from a
+// batch of execution outcomes in canonical tool-call order.
+func toolPausesFromExecutions(outcomes []*ToolExecutionResult) []*ToolPause {
+	if len(outcomes) == 0 {
+		return nil
+	}
+	pauses := make([]*ToolPause, 0, len(outcomes))
+	for _, outcome := range outcomes {
+		if outcome == nil || outcome.Pause == nil {
+			continue
+		}
+		pauses = append(pauses, outcome.Pause)
+	}
+	return pauses
+}
+
+// toolPauseAwaitItems projects runtime-owned tool pauses into the existing await
+// queue item model.
+func toolPauseAwaitItems(pauses []*ToolPause) ([]planner.AwaitItem, error) {
+	if len(pauses) == 0 {
+		return nil, nil
+	}
+	items := make([]planner.AwaitItem, 0, len(pauses))
+	for i, pause := range pauses {
+		if pause == nil || pause.Clarification == nil {
+			return nil, fmt.Errorf("tool pause %d is invalid", i)
+		}
+		items = append(items, planner.AwaitClarificationItem(&planner.AwaitClarification{
+			ID:       pause.Clarification.ID,
+			Question: pause.Clarification.Question,
+		}))
+	}
+	return items, nil
 }
 
 type preparedToolTurn struct {
@@ -152,7 +206,7 @@ func (r *Runtime) executePreparedToolTurn(
 	parentTracker *childTracker,
 	turn *preparedToolTurn,
 	toolOpts engine.ActivityOptions,
-) ([]*planner.ToolResult, bool, error) {
+) ([]*ToolExecutionResult, bool, error) {
 	return r.executeGroupedToolCalls(
 		wfCtx,
 		reg,
@@ -340,19 +394,29 @@ func (r *Runtime) handleToolTurnPostExecution(
 	confirmations []confirmationAwait,
 	lastToolResults []*planner.ToolResult,
 	allowed []planner.ToolRequest,
-	vals []*planner.ToolResult,
+	toolPauses []*ToolPause,
 ) (*RunOutput, error) {
 	st.Caps.RemainingToolCalls = decrementCap(st.Caps.RemainingToolCalls, len(allowed))
-	if len(confirmations) > 0 || (st.Result.Await != nil && len(st.Result.Await.Items) > 0) {
-		items := []planner.AwaitItem(nil)
+	if st.Result.Await != nil && len(st.Result.Await.Items) > 0 && len(toolPauses) > 0 {
+		return nil, fmt.Errorf("planner await and tool pause cannot both be present in the same turn")
+	}
+	if len(confirmations) > 0 || (st.Result.Await != nil && len(st.Result.Await.Items) > 0) || len(toolPauses) > 0 {
+		items := make([]planner.AwaitItem, 0)
 		if st.Result.Await != nil {
-			items = st.Result.Await.Items
+			items = append(items, st.Result.Await.Items...)
+		}
+		if len(toolPauses) > 0 {
+			pauseItems, err := toolPauseAwaitItems(toolPauses)
+			if err != nil {
+				return nil, err
+			}
+			items = append(items, pauseItems...)
 		}
 		return r.handleAwaitQueue(
 			wfCtx, reg, input, base, st, resumeOpts, toolOpts, st.Result.ExpectedChildren, parentTracker, ctrl, deadlines, turnID, confirmations, items, lastToolResults,
 		)
 	}
-	if out, err := r.applyFailureAndProtectionPolicy(wfCtx, reg, input, base, st, turnID, ctrl, deadlines, vals); err != nil || out != nil {
+	if out, err := r.applyFailureAndProtectionPolicy(wfCtx, reg, input, base, st, turnID, ctrl, deadlines, lastToolResults); err != nil || out != nil {
 		return out, err
 	}
 	return nil, nil

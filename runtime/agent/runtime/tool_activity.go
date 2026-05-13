@@ -43,19 +43,25 @@ func (r *Runtime) ExecuteToolActivity(ctx context.Context, req *ToolInput) (*Too
 		ToolCallID:       req.ToolCallID,
 	}
 	start := time.Now()
-	result, err := reg.Execute(ctx, &call)
+	execResult, err := reg.Execute(ctx, &call)
 	if err != nil {
 		return nil, err
 	}
-	if result == nil {
-		return nil, errors.New("tool execution returned nil result")
+	if execResult == nil {
+		return nil, errors.New("tool execution returned nil execution result")
 	}
-	applyToolActivityTelemetry(ctx, reg, meta, req.ToolName, start, result)
-	resultJSON, err := r.materializeToolResult(ctx, call, result)
+	if execResult.ToolResult != nil {
+		applyToolActivityTelemetry(ctx, reg, meta, req.ToolName, start, execResult.ToolResult)
+	}
+	result, resultJSON, pause, err := r.materializeToolExecutionResult(ctx, call, execResult)
 	if err != nil {
 		return nil, err
 	}
-	return newToolActivityOutput(resultJSON, result), nil
+	out = newToolActivityOutput(resultJSON, result)
+	if pause != nil {
+		out.Pause = pause
+	}
+	return out, nil
 }
 
 func applyToolActivityTelemetry(

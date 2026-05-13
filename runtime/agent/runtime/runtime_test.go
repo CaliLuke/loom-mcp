@@ -538,11 +538,11 @@ func TestRuntimeResumeRunSignalsWorkflow(t *testing.T) {
 func TestConsecutiveFailureBreaker(t *testing.T) {
 	rt := &Runtime{
 		toolsets: map[string]ToolsetRegistration{
-			"svc.tools": {Execute: func(ctx context.Context, call *planner.ToolRequest) (*planner.ToolResult, error) {
-				return &planner.ToolResult{
+			"svc.tools": {Execute: func(ctx context.Context, call *planner.ToolRequest) (*ToolExecutionResult, error) {
+				return Executed(&planner.ToolResult{
 					Name:  call.Name,
 					Error: planner.NewToolError("boom"),
-				}, nil
+				}), nil
 			}},
 		},
 		toolSpecs: map[tools.Ident]tools.ToolSpec{
@@ -680,8 +680,8 @@ func TestSealClosesRegistrationAndDelegatesToEngine(t *testing.T) {
 
 	err := rt.RegisterToolset(ToolsetRegistration{
 		Name: "svc.toolset",
-		Execute: func(ctx context.Context, call *planner.ToolRequest) (*planner.ToolResult, error) {
-			return &planner.ToolResult{}, nil
+		Execute: func(ctx context.Context, call *planner.ToolRequest) (*ToolExecutionResult, error) {
+			return Executed(&planner.ToolResult{}), nil
 		},
 	})
 	require.ErrorIs(t, err, ErrRegistrationClosed)
@@ -711,8 +711,8 @@ func TestSealRetriesAfterActivationFailure(t *testing.T) {
 
 	err = rt.RegisterToolset(ToolsetRegistration{
 		Name: "svc.toolset",
-		Execute: func(ctx context.Context, call *planner.ToolRequest) (*planner.ToolResult, error) {
-			return &planner.ToolResult{}, nil
+		Execute: func(ctx context.Context, call *planner.ToolRequest) (*ToolExecutionResult, error) {
+			return Executed(&planner.ToolResult{}), nil
 		},
 	})
 	require.ErrorIs(t, err, ErrRegistrationClosed)
@@ -726,10 +726,10 @@ func TestSealRetriesAfterActivationFailure(t *testing.T) {
 
 func TestTimeBudgetExceeded(t *testing.T) {
 	rt := &Runtime{
-		toolsets: map[string]ToolsetRegistration{"svc.ts": {Execute: func(ctx context.Context, call *planner.ToolRequest) (*planner.ToolResult, error) {
-			return &planner.ToolResult{
+		toolsets: map[string]ToolsetRegistration{"svc.ts": {Execute: func(ctx context.Context, call *planner.ToolRequest) (*ToolExecutionResult, error) {
+			return Executed(&planner.ToolResult{
 				Name: call.Name,
-			}, nil
+			}), nil
 		}}},
 		toolSpecs: map[tools.Ident]tools.ToolSpec{"tool": newAnyJSONSpec("tool", "svc.ts")},
 		Bus:       noopHooks{},
@@ -821,11 +821,11 @@ func TestAgentAsToolNestedUpdates(t *testing.T) {
 	// Register nested tools toolset used by nested agent
 	rt.toolsets = map[string]ToolsetRegistration{
 		"nested.tools": {
-			Execute: func(ctx context.Context, call *planner.ToolRequest) (*planner.ToolResult, error) {
-				return &planner.ToolResult{
+			Execute: func(ctx context.Context, call *planner.ToolRequest) (*ToolExecutionResult, error) {
+				return Executed(&planner.ToolResult{
 					Name:   call.Name,
 					Result: map[string]string{"ok": "true"},
-				}, nil
+				}), nil
 			},
 		},
 	}
@@ -890,7 +890,7 @@ func TestAgentAsToolNestedUpdates(t *testing.T) {
 	// Parent agent-tools toolset that invokes nested agent inline
 	agentTools := ToolsetRegistration{
 		Name: "svc.agenttools",
-		Execute: func(ctx context.Context, call *planner.ToolRequest) (*planner.ToolResult, error) {
+		Execute: func(ctx context.Context, call *planner.ToolRequest) (*ToolExecutionResult, error) {
 			if call == nil {
 				return nil, fmt.Errorf("tool request is nil")
 			}
@@ -923,7 +923,7 @@ func TestAgentAsToolNestedUpdates(t *testing.T) {
 				return nil, fmt.Errorf("nil nested output")
 			}
 			result := ConvertRunOutputToToolResult(call.Name, outPtr)
-			return &result, nil
+			return Executed(&result), nil
 		},
 	}
 	// Register parent toolset
@@ -1001,10 +1001,10 @@ func TestExecuteToolCallsPublishesChildUpdates(t *testing.T) {
 	rt := &Runtime{
 		toolsets: map[string]ToolsetRegistration{
 			"svc.export": {
-				Execute: func(ctx context.Context, call *planner.ToolRequest) (*planner.ToolResult, error) {
-					return &planner.ToolResult{
+				Execute: func(ctx context.Context, call *planner.ToolRequest) (*ToolExecutionResult, error) {
+					return Executed(&planner.ToolResult{
 						Name: call.Name,
-					}, nil
+					}), nil
 				},
 			},
 		},

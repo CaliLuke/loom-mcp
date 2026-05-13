@@ -518,7 +518,7 @@ func RegisterAssistantAssistantMcpToolset(ctx context.Context, rt *agentsruntime
 	return rt.RegisterToolset(agentsruntime.ToolsetRegistration{
 		DecodeInExecutor: true,
 		Description:      "AI Assistant service with full MCP protocol support",
-		Execute: func(ctx context.Context, call *planner.ToolRequest) (*planner.ToolResult, error) {
+		Execute: func(ctx context.Context, call *planner.ToolRequest) (*agentsruntime.ToolExecutionResult, error) {
 			if call == nil {
 				return nil, errors.New("tool request is nil")
 			}
@@ -526,7 +526,7 @@ func RegisterAssistantAssistantMcpToolset(ctx context.Context, rt *agentsruntime
 			if err != nil {
 				return nil, err
 			}
-			return &out, nil
+			return agentsruntime.Executed(&out), nil
 		},
 		Name:  "assistant.assistant-mcp",
 		Specs: AssistantAssistantMcpToolsetToolSpecs,

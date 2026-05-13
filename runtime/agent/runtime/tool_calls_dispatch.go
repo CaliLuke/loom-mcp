@@ -39,7 +39,7 @@ func newToolCallBatch(calls []planner.ToolRequest) *toolCallBatch {
 		calls:         calls,
 		futures:       make([]futureInfo, 0, len(calls)),
 		childFutures:  make([]agentChildFutureInfo, 0, len(calls)),
-		inlineByID:    make(map[string]*planner.ToolResult, len(calls)),
+		inlineByID:    make(map[string]*ToolExecutionResult, len(calls)),
 		discoveredIDs: make([]string, 0, len(calls)),
 	}
 }
@@ -110,7 +110,7 @@ func (e *toolBatchExec) dispatchUnknownToolCall(ctx context.Context, b *toolCall
 	if err != nil {
 		return err
 	}
-	b.inlineByID[call.ToolCallID] = tr
+	b.inlineByID[call.ToolCallID] = Executed(tr)
 	e.recordDiscoveredToolCall(b, call.ToolCallID)
 	return nil
 }
@@ -142,22 +142,22 @@ func (e *toolBatchExec) dispatchInlineToolCall(wfCtx engine.WorkflowContext, b *
 	start := wfCtx.Now()
 	ctx := wfCtx.Context()
 	ctxInline := engine.WithWorkflowContext(ctx, wfCtx)
-	result, err := ts.Execute(ctxInline, &call)
+	execResult, err := ts.Execute(ctxInline, &call)
 	if err != nil {
 		return fmt.Errorf("inline tool %q failed: %w", call.Name, err)
 	}
-	if result == nil {
-		return fmt.Errorf("inline tool %q returned nil result", call.Name)
+	if execResult == nil {
+		return fmt.Errorf("inline tool %q returned nil execution result", call.Name)
 	}
 	duration := wfCtx.Now().Sub(start)
-	resultJSON, err := e.r.materializeToolResult(ctx, call, result)
+	result, resultJSON, pause, err := e.r.materializeToolExecutionResult(ctx, call, execResult)
 	if err != nil {
 		return err
 	}
 	if err := e.publishToolResultReceived(ctx, call, result, resultJSON, duration); err != nil {
 		return err
 	}
-	b.inlineByID[call.ToolCallID] = result
+	b.inlineByID[call.ToolCallID] = &ToolExecutionResult{ToolResult: result, Pause: pause}
 	e.recordDiscoveredToolCall(b, call.ToolCallID)
 	return nil
 }
@@ -199,7 +199,7 @@ func (e *toolBatchExec) recordInlineAgentRequestFailure(ctx context.Context, b *
 	if err := e.publishToolResultReceived(ctx, call, tr, nil, 0); err != nil {
 		return err
 	}
-	b.inlineByID[call.ToolCallID] = tr
+	b.inlineByID[call.ToolCallID] = Executed(tr)
 	e.recordDiscoveredToolCall(b, call.ToolCallID)
 	return nil
 }

@@ -74,8 +74,8 @@ func TestExecuteToolCalls_ServiceToolsPublishResultsAsComplete(t *testing.T) {
 	require.Len(t, results, 2)
 
 	// Returned results remain in original call order.
-	require.Equal(t, callSlow.ToolCallID, results[0].ToolCallID)
-	require.Equal(t, callFast.ToolCallID, results[1].ToolCallID)
+	require.Equal(t, callSlow.ToolCallID, results[0].ToolResult.ToolCallID)
+	require.Equal(t, callFast.ToolCallID, results[1].ToolResult.ToolCallID)
 
 	// Streamed ToolResultReceived events should reflect completion order.
 	var ends []*hooks.ToolResultReceivedEvent
@@ -104,7 +104,7 @@ func TestExecuteToolCalls_ExplicitActivityDispatchIgnoresLegacyInlineFlag(t *tes
 			"svc.tools": {
 				Inline:       true,
 				DispatchMode: DispatchActivity,
-				Execute: func(ctx context.Context, call *planner.ToolRequest) (*planner.ToolResult, error) {
+				Execute: func(ctx context.Context, call *planner.ToolRequest) (*ToolExecutionResult, error) {
 					inlineCalled = true
 					return nil, errors.New("inline execute should not run for explicit activity dispatch")
 				},
@@ -179,10 +179,10 @@ func TestExecuteToolCalls_ServiceToolErrorDoesNotAbortRun(t *testing.T) {
 	results, _, err := rt.executeToolCalls(wfCtx, "execute", engine.ActivityOptions{}, agent.Ident("agent-1"), &run.Context{RunID: "run-1", SessionID: "sess-1", TurnID: "turn-1"}, nil, []planner.ToolRequest{callFail}, 0, nil, time.Time{})
 	require.NoError(t, err)
 	require.Len(t, results, 1)
-	require.NotNil(t, results[0].Error)
-	require.Equal(t, "tool activity failed", results[0].Error.Message)
-	require.NotNil(t, results[0].Error.Cause)
-	require.Equal(t, "activity start-to-close timeout", results[0].Error.Cause.Message)
+	require.NotNil(t, results[0].ToolResult.Error)
+	require.Equal(t, "tool activity failed", results[0].ToolResult.Error.Message)
+	require.NotNil(t, results[0].ToolResult.Error.Cause)
+	require.Equal(t, "activity start-to-close timeout", results[0].ToolResult.Error.Cause.Message)
 
 	var ends []*hooks.ToolResultReceivedEvent
 	for _, evt := range recorder.events {

@@ -57,7 +57,7 @@ type (
 
 		futures      []futureInfo
 		childFutures []agentChildFutureInfo
-		inlineByID   map[string]*planner.ToolResult
+		inlineByID   map[string]*ToolExecutionResult
 
 		discoveredIDs []string
 	}
@@ -283,7 +283,7 @@ func minNonZeroDuration(current, candidate time.Duration) time.Duration {
 //
 // expectedChildren indicates how many child tools are expected to be discovered dynamically
 // by the tools in this batch (0 if not tracked).
-func (r *Runtime) executeToolCalls(wfCtx engine.WorkflowContext, activityName string, toolActOptions engine.ActivityOptions, agentID agent.Ident, runCtx *run.Context, messages []*model.Message, calls []planner.ToolRequest, expectedChildren int, parentTracker *childTracker, finishBy time.Time) ([]*planner.ToolResult, bool, error) {
+func (r *Runtime) executeToolCalls(wfCtx engine.WorkflowContext, activityName string, toolActOptions engine.ActivityOptions, agentID agent.Ident, runCtx *run.Context, messages []*model.Message, calls []planner.ToolRequest, expectedChildren int, parentTracker *childTracker, finishBy time.Time) ([]*ToolExecutionResult, bool, error) {
 	if runCtx == nil {
 		return nil, false, fmt.Errorf("missing run context")
 	}
@@ -327,7 +327,7 @@ func (r *Runtime) executeToolCalls(wfCtx engine.WorkflowContext, activityName st
 	return r.runToolBatch(wfCtx, execWfCtx, ctx, exec, calls, finalizeTimer, cancelExecOnce)
 }
 
-func (r *Runtime) runToolBatch(wfCtx engine.WorkflowContext, execWfCtx engine.WorkflowContext, ctx context.Context, exec *toolBatchExec, calls []planner.ToolRequest, finalizeTimer engine.Future[time.Time], cancelExecOnce func()) ([]*planner.ToolResult, bool, error) {
+func (r *Runtime) runToolBatch(wfCtx engine.WorkflowContext, execWfCtx engine.WorkflowContext, ctx context.Context, exec *toolBatchExec, calls []planner.ToolRequest, finalizeTimer engine.Future[time.Time], cancelExecOnce func()) ([]*ToolExecutionResult, bool, error) {
 	batch, err := exec.dispatchToolCalls(execWfCtx, calls)
 	if err != nil {
 		cancelExecOnce()
@@ -397,7 +397,7 @@ func (e *toolBatchExec) newFinalizeTimer(ctx context.Context, wfCtx engine.Workf
 	return t, nil
 }
 
-func mergeToolResultMaps(dst map[string]*planner.ToolResult, src map[string]*planner.ToolResult) {
+func mergeToolResultMaps(dst map[string]*ToolExecutionResult, src map[string]*ToolExecutionResult) {
 	for id, tr := range src {
 		dst[id] = tr
 	}

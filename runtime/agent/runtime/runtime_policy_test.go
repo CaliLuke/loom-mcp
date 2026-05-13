@@ -77,11 +77,11 @@ func TestPolicyAllowlistTrimsToolExecution(t *testing.T) {
 		RunEventStore: runloginmem.New(),
 	}
 	rt.toolsets = map[string]ToolsetRegistration{"svc.tools": {
-		Execute: func(ctx context.Context, call *planner.ToolRequest) (*planner.ToolResult, error) {
-			return &planner.ToolResult{
+		Execute: func(ctx context.Context, call *planner.ToolRequest) (*ToolExecutionResult, error) {
+			return Executed(&planner.ToolResult{
 				Name:   call.Name,
 				Result: map[string]any{"ok": true},
-			}, nil
+			}), nil
 		}}}
 	rt.toolSpecs = map[tools.Ident]tools.ToolSpec{"allowed": newAnyJSONSpec("allowed", "svc.tools"), "blocked": newAnyJSONSpec("blocked", "svc.tools")}
 	wfCtx := &testWorkflowContext{

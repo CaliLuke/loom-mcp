@@ -41,19 +41,19 @@ func (r *Runtime) waitAwaitConfirmation(
 	ctrl *interrupt.Controller,
 	deadlines *runDeadlines,
 	it confirmationAwait,
-) ([]*planner.ToolResult, *RunOutput, error) {
+) ([]*planner.ToolResult, []*ToolPause, *RunOutput, error) {
 	if deadlines == nil {
-		return nil, nil, errors.New("missing run deadlines")
+		return nil, nil, nil, errors.New("missing run deadlines")
 	}
 	dec, err := waitForConfirmationDecision(ctx, wfCtx, ctrl, deadlines)
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, nil, err
 	}
 	if err := validateConfirmationDecision(dec, it); err != nil {
-		return nil, nil, err
+		return nil, nil, nil, err
 	}
 	if err := r.publishAuthorizationDecision(ctx, input, base, turnID, it, dec); err != nil {
-		return nil, nil, err
+		return nil, nil, nil, err
 	}
 
 	// Confirmation gates tool execution. We represent both approval and denial as
@@ -62,7 +62,8 @@ func (r *Runtime) waitAwaitConfirmation(
 	r.recordAssistantTurn(base, st.Transcript, []planner.ToolRequest{it.call}, st.Ledger)
 
 	if !dec.Approved {
-		return r.handleDeniedConfirmation(ctx, base, st, turnID, expectedChildren, it)
+		res, err := r.handleDeniedConfirmation(ctx, base, st, turnID, expectedChildren, it)
+		return res, nil, nil, err
 	}
 	return r.executeConfirmedToolCall(ctx, wfCtx, reg, input, base, st, toolOpts, expectedChildren, parentTracker, turnID, deadlines, it)
 }
@@ -94,13 +95,14 @@ func (r *Runtime) handleAwaitQueue(
 	if err := r.publishAwaitPause(ctx, input, base, turnID); err != nil {
 		return nil, err
 	}
-	allToolResults, out, err := r.collectAwaitResults(ctx, wfCtx, reg, input, base, st, toolOpts, expectedChildren, parentTracker, turnID, ctrl, deadlines, confirmations, items, priorToolResults)
+	allToolResults, extraItems, out, err := r.collectAwaitResults(ctx, wfCtx, reg, input, base, st, toolOpts, expectedChildren, parentTracker, turnID, ctrl, deadlines, confirmations, items, priorToolResults)
 	if err != nil {
 		return nil, err
 	}
 	if out != nil {
 		return out, nil
 	}
+	items = append(items, extraItems...)
 	if out, err := r.handleAwaitPostProcessing(ctx, wfCtx, reg, input, base, st, resumeOpts, turnID, ctrl, deadlines, confirmations, items, allToolResults); err != nil {
 		return nil, err
 	} else if out != nil {
@@ -168,28 +170,36 @@ func (r *Runtime) publishAwaitPause(ctx context.Context, input *RunInput, base *
 	)
 }
 
-func (r *Runtime) collectAwaitResults(ctx context.Context, wfCtx engine.WorkflowContext, reg AgentRegistration, input *RunInput, base *planner.PlanInput, st *runLoopState, toolOpts engine.ActivityOptions, expectedChildren int, parentTracker *childTracker, turnID string, ctrl *interrupt.Controller, deadlines *runDeadlines, confirmations []confirmationAwait, items []planner.AwaitItem, priorToolResults []*planner.ToolResult) ([]*planner.ToolResult, *RunOutput, error) {
+func (r *Runtime) collectAwaitResults(ctx context.Context, wfCtx engine.WorkflowContext, reg AgentRegistration, input *RunInput, base *planner.PlanInput, st *runLoopState, toolOpts engine.ActivityOptions, expectedChildren int, parentTracker *childTracker, turnID string, ctrl *interrupt.Controller, deadlines *runDeadlines, confirmations []confirmationAwait, items []planner.AwaitItem, priorToolResults []*planner.ToolResult) ([]*planner.ToolResult, []planner.AwaitItem, *RunOutput, error) {
 	waitTimeout := time.Duration(0)
 	allToolResults := append(make([]*planner.ToolResult, 0, len(priorToolResults)+8), priorToolResults...)
+	extraItems := []planner.AwaitItem(nil)
 
 	for _, it := range confirmations {
-		res, out, err := r.waitAwaitConfirmation(ctx, wfCtx, reg, input, base, st, toolOpts, expectedChildren, parentTracker, turnID, ctrl, deadlines, it)
+		res, pauses, out, err := r.waitAwaitConfirmation(ctx, wfCtx, reg, input, base, st, toolOpts, expectedChildren, parentTracker, turnID, ctrl, deadlines, it)
 		if err != nil {
-			return nil, nil, err
+			return nil, nil, nil, err
 		}
 		if out != nil {
-			return nil, out, nil
+			return nil, nil, out, nil
 		}
 		allToolResults = appendAwaitToolResults(allToolResults, res)
+		if len(pauses) > 0 {
+			pauseItems, err := toolPauseAwaitItems(pauses)
+			if err != nil {
+				return nil, nil, nil, err
+			}
+			extraItems = append(extraItems, pauseItems...)
+		}
 	}
 	for _, it := range items {
 		res, err := r.waitForAwaitItem(ctx, wfCtx, ctrl, input, base, st, turnID, waitTimeout, deadlines, it)
 		if err != nil {
-			return nil, nil, err
+			return nil, nil, nil, err
 		}
 		allToolResults = appendAwaitToolResults(allToolResults, res)
 	}
-	return allToolResults, nil, nil
+	return allToolResults, extraItems, nil, nil
 }
 
 func (r *Runtime) waitForAwaitItem(ctx context.Context, wfCtx engine.WorkflowContext, ctrl *interrupt.Controller, input *RunInput, base *planner.PlanInput, st *runLoopState, turnID string, timeout time.Duration, deadlines *runDeadlines, it planner.AwaitItem) ([]*planner.ToolResult, error) {
@@ -319,10 +329,10 @@ func (r *Runtime) publishAuthorizationDecision(ctx context.Context, input *RunIn
 	), turnID)
 }
 
-func (r *Runtime) handleDeniedConfirmation(ctx context.Context, base *planner.PlanInput, st *runLoopState, turnID string, expectedChildren int, it confirmationAwait) ([]*planner.ToolResult, *RunOutput, error) {
+func (r *Runtime) handleDeniedConfirmation(ctx context.Context, base *planner.PlanInput, st *runLoopState, turnID string, expectedChildren int, it confirmationAwait) ([]*planner.ToolResult, error) {
 	deniedResult := it.plan.DeniedResult
 	if err := r.publishDeniedConfirmationEvents(ctx, turnID, expectedChildren, it, deniedResult); err != nil {
-		return nil, nil, err
+		return nil, err
 	}
 	tr := &planner.ToolResult{
 		Name:       it.call.Name,
@@ -330,9 +340,9 @@ func (r *Runtime) handleDeniedConfirmation(ctx context.Context, base *planner.Pl
 		Result:     deniedResult,
 	}
 	if err := r.recordConfirmationToolResult(ctx, base, st, it.call, tr); err != nil {
-		return nil, nil, err
+		return nil, err
 	}
-	return []*planner.ToolResult{tr}, nil, nil
+	return []*planner.ToolResult{tr}, nil
 }
 
 func (r *Runtime) publishDeniedConfirmationEvents(ctx context.Context, turnID string, expectedChildren int, it confirmationAwait, deniedResult any) error {
@@ -380,14 +390,14 @@ func (r *Runtime) recordConfirmationToolResult(ctx context.Context, base *planne
 	return r.appendUserToolResults(base, []planner.ToolRequest{call}, []*planner.ToolResult{tr}, st.Ledger)
 }
 
-func (r *Runtime) executeConfirmedToolCall(ctx context.Context, wfCtx engine.WorkflowContext, reg AgentRegistration, input *RunInput, base *planner.PlanInput, st *runLoopState, toolOpts engine.ActivityOptions, expectedChildren int, parentTracker *childTracker, turnID string, deadlines *runDeadlines, it confirmationAwait) ([]*planner.ToolResult, *RunOutput, error) {
+func (r *Runtime) executeConfirmedToolCall(ctx context.Context, wfCtx engine.WorkflowContext, reg AgentRegistration, input *RunInput, base *planner.PlanInput, st *runLoopState, toolOpts engine.ActivityOptions, expectedChildren int, parentTracker *childTracker, turnID string, deadlines *runDeadlines, it confirmationAwait) ([]*planner.ToolResult, []*ToolPause, *RunOutput, error) {
 	call := it.call
 	if call.ToolCallID == "" {
 		call.ToolCallID = generateDeterministicToolCallID(base.RunContext.RunID, call.TurnID, base.RunContext.Attempt, call.Name, 0)
 	}
 	grouped, timeouts := r.groupToolCallsByTimeout([]planner.ToolRequest{call}, input, toolOpts.StartToCloseTimeout)
 	finishBy := confirmationFinishBy(deadlines)
-	vals, timedOut, err := r.executeGroupedToolCalls(
+	outcomes, timedOut, err := r.executeGroupedToolCalls(
 		wfCtx,
 		reg,
 		input.AgentID,
@@ -400,16 +410,18 @@ func (r *Runtime) executeConfirmedToolCall(ctx context.Context, wfCtx engine.Wor
 		toolOpts,
 	)
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, nil, err
 	}
+	vals := toolResultsFromExecutions(outcomes)
+	pauses := toolPausesFromExecutions(outcomes)
 	if err := r.recordExecutedConfirmationResults(ctx, base, st, call, vals); err != nil {
-		return nil, nil, err
+		return nil, nil, nil, err
 	}
 	if timedOut {
 		out, err := r.finalizeWithPlanner(wfCtx, reg, input, base, st.ToolEvents, st.ToolOutputs, st.AggUsage, st.NextAttempt, turnID, planner.TerminationReasonTimeBudget, deadlines.Hard)
-		return nil, out, err
+		return nil, nil, out, err
 	}
-	return vals, nil, nil
+	return vals, pauses, nil, nil
 }
 
 func confirmationFinishBy(deadlines *runDeadlines) time.Time {

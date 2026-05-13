@@ -652,21 +652,25 @@ func emitMCPExecutorConstructor(stmt *jen.Statement, data serviceToolsetFileData
 							jen.Id("meta").Op("*").Id("runtime").Dot("ToolCallMeta"),
 							jen.Id("call").Op("*").Id("planner").Dot("ToolRequest"),
 						).
-						Params(jen.Op("*").Id("planner").Dot("ToolResult"), jen.Error()).
+						Params(jen.Op("*").Id("runtime").Dot("ToolExecutionResult"), jen.Error()).
 						Block(
 							jen.If(jen.Id("call").Op("==").Nil()).Block(
 								jen.Return(
-									jen.Op("&").Id("planner").Dot("ToolResult").Values(jen.Dict{
-										jen.Id("Error"): jen.Id("planner").Dot("NewToolError").Call(jen.Lit("tool request is nil")),
-									}),
+									jen.Id("runtime").Dot("Executed").Call(
+										jen.Op("&").Id("planner").Dot("ToolResult").Values(jen.Dict{
+											jen.Id("Error"): jen.Id("planner").Dot("NewToolError").Call(jen.Lit("tool request is nil")),
+										}),
+									),
 									jen.Nil(),
 								),
 							),
 							jen.If(jen.Id("meta").Op("==").Nil()).Block(
 								jen.Return(
-									jen.Op("&").Id("planner").Dot("ToolResult").Values(jen.Dict{
-										jen.Id("Error"): jen.Id("planner").Dot("NewToolError").Call(jen.Lit("tool call meta is nil")),
-									}),
+									jen.Id("runtime").Dot("Executed").Call(
+										jen.Op("&").Id("planner").Dot("ToolResult").Values(jen.Dict{
+											jen.Id("Error"): jen.Id("planner").Dot("NewToolError").Call(jen.Lit("tool call meta is nil")),
+										}),
+									),
 									jen.Nil(),
 								),
 							),
@@ -682,10 +686,12 @@ func emitMCPExecutorConstructor(stmt *jen.Statement, data serviceToolsetFileData
 								jen.List(jen.Id("payload"), jen.Id("err")).Op(":=").Id("pc").Dot("ToJSON").Call(jen.Id("call").Dot("Payload")),
 								jen.If(jen.Id("err").Op("!=").Nil()).Block(
 									jen.Return(
-										jen.Op("&").Id("planner").Dot("ToolResult").Values(jen.Dict{
-											jen.Id("Name"):  jen.Id("full"),
-											jen.Id("Error"): jen.Id("planner").Dot("ToolErrorFromError").Call(jen.Id("err")),
-										}),
+										jen.Id("runtime").Dot("Executed").Call(
+											jen.Op("&").Id("planner").Dot("ToolResult").Values(jen.Dict{
+												jen.Id("Name"):  jen.Id("full"),
+												jen.Id("Error"): jen.Id("planner").Dot("ToolErrorFromError").Call(jen.Id("err")),
+											}),
+										),
 										jen.Nil(),
 									),
 								),
@@ -699,10 +705,12 @@ func emitMCPExecutorConstructor(stmt *jen.Statement, data serviceToolsetFileData
 								),
 								jen.If(jen.Id("err").Op("!=").Nil()).Block(
 									jen.Return(
-										jen.Op("&").Id("planner").Dot("ToolResult").Values(jen.Dict{
-											jen.Id("Name"):  jen.Id("full"),
-											jen.Id("Error"): jen.Id("planner").Dot("ToolErrorFromError").Call(jen.Id("err")),
-										}),
+										jen.Id("runtime").Dot("Executed").Call(
+											jen.Op("&").Id("planner").Dot("ToolResult").Values(jen.Dict{
+												jen.Id("Name"):  jen.Id("full"),
+												jen.Id("Error"): jen.Id("planner").Dot("ToolErrorFromError").Call(jen.Id("err")),
+											}),
+										),
 										jen.Nil(),
 									),
 								),
@@ -715,10 +723,12 @@ func emitMCPExecutorConstructor(stmt *jen.Statement, data serviceToolsetFileData
 										jen.List(jen.Id("v"), jen.Id("err")).Op(":=").Id("rc").Dot("FromJSON").Call(jen.Id("resp").Dot("Result")),
 										jen.If(jen.Id("err").Op("!=").Nil()).Block(
 											jen.Return(
-												jen.Op("&").Id("planner").Dot("ToolResult").Values(jen.Dict{
-													jen.Id("Name"):  jen.Id("full"),
-													jen.Id("Error"): jen.Id("planner").Dot("ToolErrorFromError").Call(jen.Id("err")),
-												}),
+												jen.Id("runtime").Dot("Executed").Call(
+													jen.Op("&").Id("planner").Dot("ToolResult").Values(jen.Dict{
+														jen.Id("Name"):  jen.Id("full"),
+														jen.Id("Error"): jen.Id("planner").Dot("ToolErrorFromError").Call(jen.Id("err")),
+													}),
+												),
 												jen.Nil(),
 											),
 										),
@@ -734,19 +744,23 @@ func emitMCPExecutorConstructor(stmt *jen.Statement, data serviceToolsetFileData
 									}),
 								),
 								jen.Return(
-									jen.Op("&").Id("planner").Dot("ToolResult").Values(jen.Dict{
-										jen.Id("Name"):      jen.Id("full"),
-										jen.Id("Result"):    jen.Id("value"),
-										jen.Id("Telemetry"): jen.Id("tel"),
-									}),
+									jen.Id("runtime").Dot("Executed").Call(
+										jen.Op("&").Id("planner").Dot("ToolResult").Values(jen.Dict{
+											jen.Id("Name"):      jen.Id("full"),
+											jen.Id("Result"):    jen.Id("value"),
+											jen.Id("Telemetry"): jen.Id("tel"),
+										}),
+									),
 									jen.Nil(),
 								),
 							),
 							jen.Return(
-								jen.Op("&").Id("planner").Dot("ToolResult").Values(jen.Dict{
-									jen.Id("Name"):  jen.Id("full"),
-									jen.Id("Error"): jen.Id("planner").Dot("NewToolError").Call(jen.Lit("payload codec not found")),
-								}),
+								jen.Id("runtime").Dot("Executed").Call(
+									jen.Op("&").Id("planner").Dot("ToolResult").Values(jen.Dict{
+										jen.Id("Name"):  jen.Id("full"),
+										jen.Id("Error"): jen.Id("planner").Dot("NewToolError").Call(jen.Lit("payload codec not found")),
+									}),
+								),
 								jen.Nil(),
 							),
 						),

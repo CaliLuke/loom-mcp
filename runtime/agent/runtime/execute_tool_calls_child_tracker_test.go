@@ -24,12 +24,12 @@ func TestExecuteToolCalls_ChildTrackerUpdateEmittedOnIncrease(t *testing.T) {
 			"inline.ts": {
 				Inline:       true,
 				DispatchMode: DispatchInline,
-				Execute: func(ctx context.Context, call *planner.ToolRequest) (*planner.ToolResult, error) {
-					return &planner.ToolResult{
+				Execute: func(ctx context.Context, call *planner.ToolRequest) (*ToolExecutionResult, error) {
+					return Executed(&planner.ToolResult{
 						Name:       call.Name,
 						ToolCallID: call.ToolCallID,
 						Result:     "ok",
-					}, nil
+					}), nil
 				},
 			},
 		},

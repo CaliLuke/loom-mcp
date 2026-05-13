@@ -235,39 +235,6 @@ Recommended scope:
 - Add tests around fan-out/key-event behavior only if the corresponding local
   concept exists in current runtime code.
 
-#### Pause-aware `ToolExecutionResult` envelope
-
-Upstream reference: `v0.52.0`
-
-Why it matters:
-
-- Introduces `runtime.ToolExecutionResult` so tool-owned pauses (`api.ToolPause`
-  / `api.ToolPauseClarification`) survive the executor boundary without
-  polluting cumulative `ToolOutputs` history.
-- Also adds `runlog.SessionReader` and Mongo-backed `ListSession` for
-  session-scoped forward pagination over durable records.
-
-Why it is worth doing:
-
-- Cleans up the await/pause path so current-batch pause signals are not
-  smuggled through tool-result history.
-- Breaking executor-contract change, but self-contained.
-
-Relevant local files:
-
-- `runtime/agent/runtime/activities.go`
-- `runtime/toolregistry/...`
-- `codegen/...` (service, MCP, and registry executor emitters)
-- `features/runlog/...` (+ Mongo adapter)
-
-Recommended scope:
-
-- Switch `ToolCallExecutor` to return `*runtime.ToolExecutionResult`.
-- Provide `runtime.Executed(result)` wrapper for executors that only return a
-  durable result.
-- Add session-scoped runlog pagination.
-- Refresh codegen goldens.
-
 ## Already Covered Here
 
 These upstream themes appear already implemented in this fork and are not port
@@ -315,3 +282,19 @@ targets:
   `worker.Stop()` with retry on transient startup errors and
   queue-qualified fatal errors via `OnFatalError`. See `docs/runtime.md` for
   the caller contract.
+- Pause-aware `runtime.ToolExecutionResult` envelope (`v0.52.0` PR #124):
+  tool executors return `*ToolExecutionResult{ToolResult, Pause}` instead of
+  `*planner.ToolResult`. The `Pause` carries `api.ToolPause` /
+  `api.ToolPauseClarification` only for the current batch and is never
+  persisted into cumulative `ToolOutputs` history. Workflow turns and the
+  await-queue collector unwrap the durable tool result for transcript and
+  hook fanout while projecting any pauses into the planner await queue.
+  `validateToolPauseContract` rejects pauses paired with errors or missing
+  payloads. `runtime.Executed(result)` is the helper for executors that
+  emit only a durable result. The MCP register, agent registry, service
+  executor, MCP executor, and example scaffolds all emit the new shape;
+  codegen goldens and the assistant fixture have been refreshed. Upstream
+  also added `runlog.SessionReader` and Mongo-backed session-scoped
+  pagination; this fork has no current consumer driving session-scoped
+  runlog reads, so that half is intentionally deferred and can be ported
+  separately when a consumer emerges.

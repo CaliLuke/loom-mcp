@@ -149,7 +149,7 @@ func Register{{ .StructName }}(ctx context.Context, rt *agentsruntime.Runtime, c
             Name: {{ printf "%q" .QualifiedName }},
             // Use the used-toolset specs package for strong-contract payload/result codecs.
             Specs: {{ .SpecsPackageName }}.Specs,
-            Execute: func(ctx context.Context, call *planner.ToolRequest) (*planner.ToolResult, error) {
+            Execute: func(ctx context.Context, call *planner.ToolRequest) (*agentsruntime.ToolExecutionResult, error) {
                 if call == nil {
                     return nil, fmt.Errorf("tool request is nil")
                 }
@@ -165,7 +165,7 @@ func Register{{ .StructName }}(ctx context.Context, rt *agentsruntime.Runtime, c
                     return nil, err
                 }
                 if result == nil {
-                    return nil, fmt.Errorf("executor returned nil result")
+                    return nil, fmt.Errorf("executor returned nil execution result")
                 }
                 return result, nil
             },
@@ -221,19 +221,19 @@ func RegisterUsedToolsets(ctx context.Context, rt *agentsruntime.Runtime, opts .
         reg := agentsruntime.ToolsetRegistration{
             Name:  toolsetID,
             Specs: {{ .SpecsPackageName }}.Specs,
-            Execute: func(ctx context.Context, call *planner.ToolRequest) (*planner.ToolResult, error) {
+            Execute: func(ctx context.Context, call *planner.ToolRequest) (*agentsruntime.ToolExecutionResult, error) {
                 if call == nil {
                     return nil, fmt.Errorf("tool request is nil")
                 }
                 if exec == nil {
-                    return &planner.ToolResult{
+                    return agentsruntime.Executed(&planner.ToolResult{
                         Error: planner.NewToolError(
                             fmt.Sprintf(
                                 "no executor registered for toolset %q; ensure the appropriate With...Executor is wired in RegisterUsedToolsets",
                                 toolsetID,
                             ),
                         ),
-                    }, nil
+                    }), nil
                 }
                 meta := &agentsruntime.ToolCallMeta{
                     RunID:            call.RunID,
@@ -247,7 +247,7 @@ func RegisterUsedToolsets(ctx context.Context, rt *agentsruntime.Runtime, opts .
                     return nil, err
                 }
                 if result == nil {
-                    return nil, fmt.Errorf("executor returned nil result")
+                    return nil, fmt.Errorf("executor returned nil execution result")
                 }
                 return result, nil
             },
