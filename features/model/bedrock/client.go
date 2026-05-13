@@ -34,8 +34,17 @@ const (
 	bedrockRoleAssistant  = "assistant"
 	bedrockSchemaTypeKey  = "type"
 	bedrockConfigTypeKey  = "type"
+	bedrockConfigDisplay  = "display"
 	bedrockObjectType     = "object"
 )
+
+var opus47ModelMarkers = []string{
+	"anthropic.claude-opus-4-7",
+	"us.anthropic.claude-opus-4-7",
+	"eu.anthropic.claude-opus-4-7",
+	"jp.anthropic.claude-opus-4-7",
+	"global.anthropic.claude-opus-4-7",
+}
 
 // RuntimeClient mirrors the subset of the AWS Bedrock runtime client required
 // by the adapter. It matches *bedrockruntime.Client so callers can pass either
@@ -335,7 +344,7 @@ func (c *Client) buildConverseInput(parts *requestParts, req *model.Request) *be
 	if parts.toolConfig != nil {
 		input.ToolConfig = parts.toolConfig
 	}
-	if cfg := c.inferenceConfig(req.MaxTokens, req.Temperature); cfg != nil {
+	if cfg := c.inferenceConfig(parts.modelID, req.MaxTokens, req.Temperature); cfg != nil {
 		input.InferenceConfig = cfg
 	}
 	return input
@@ -358,7 +367,10 @@ func (c *Client) buildConverseStreamInput(parts *requestParts, req *model.Reques
 			// Opus 4.6+: adaptive thinking lets the model decide when and how
 			// deeply to reason. Interleaved thinking is automatic — no beta
 			// header required.
-			fields["thinking"] = map[string]any{bedrockConfigTypeKey: "adaptive"}
+			fields["thinking"] = map[string]any{
+				bedrockConfigTypeKey: "adaptive",
+				bedrockConfigDisplay: "summarized",
+			}
 		} else {
 			thinkingCfg := map[string]any{bedrockConfigTypeKey: "enabled"}
 			if thinking.budget > 0 {
@@ -371,7 +383,7 @@ func (c *Client) buildConverseStreamInput(parts *requestParts, req *model.Reques
 		}
 		input.AdditionalModelRequestFields = document.NewLazyDocument(&fields)
 	}
-	if cfg := c.inferenceConfig(req.MaxTokens, req.Temperature); cfg != nil {
+	if cfg := c.inferenceConfig(parts.modelID, req.MaxTokens, req.Temperature); cfg != nil {
 		input.InferenceConfig = cfg
 	}
 	return input
@@ -381,18 +393,19 @@ func (c *Client) resolveThinking(req *model.Request, parts *requestParts) thinki
 	if req.Thinking == nil || !req.Thinking.Enable {
 		return thinkingConfig{}
 	}
-	if parts.toolConfig == nil {
-		return thinkingConfig{}
-	}
-	// Opus 4.6 requires adaptive thinking: the model dynamically decides when
+	// Opus 4.6+ requires adaptive thinking: the model dynamically decides when
 	// and how deeply to reason. Interleaved thinking is automatic in adaptive
 	// mode — no beta header is needed. The legacy type:"enabled" + budget_tokens
-	// config is deprecated for Opus 4.6 and produces unreliable signatures.
+	// config is rejected by Opus 4.7 and produces unreliable signatures on Opus
+	// 4.6. Adaptive thinking is useful on both tool and no-tool requests.
 	if isAdaptiveThinkingModel(parts.modelID) {
 		return thinkingConfig{
 			enable:   true,
 			adaptive: true,
 		}
+	}
+	if parts.toolConfig == nil {
+		return thinkingConfig{}
 	}
 	budget := req.Thinking.BudgetTokens
 	if budget <= 0 {
@@ -428,13 +441,13 @@ func (c *Client) streamOptions(thinking thinkingConfig) []func(*bedrockruntime.O
 	}
 }
 
-func (c *Client) inferenceConfig(maxTokens int, temp float32) *brtypes.InferenceConfiguration {
+func (c *Client) inferenceConfig(modelID string, maxTokens int, temp float32) *brtypes.InferenceConfiguration {
 	var cfg brtypes.InferenceConfiguration
 	tokens := c.effectiveMaxTokens(maxTokens)
 	if tokens > 0 {
 		cfg.MaxTokens = aws.Int32(int32(tokens)) //nolint:gosec // AWS SDK requires int32
 	}
-	if t := c.effectiveTemperature(temp); t > 0 {
+	if t := c.effectiveTemperature(temp); t > 0 && !isOpus47Model(modelID) {
 		cfg.Temperature = aws.Float32(t)
 	}
 	if cfg.MaxTokens == nil && cfg.Temperature == nil {
@@ -941,9 +954,16 @@ func hasToolDefinition(defs []*model.ToolDefinition, name string) bool {
 // is automatic in adaptive mode — no beta header is needed. Using the legacy
 // config with these models produces unreliable thinking signatures.
 func isAdaptiveThinkingModel(modelID string) bool {
-	// Bedrock model IDs use the form "global.anthropic.claude-opus-4-6-v1" or
-	// "anthropic.claude-opus-4-6-…". Match the "opus-4-6" segment.
-	return strings.Contains(modelID, "opus-4-6")
+	return strings.Contains(modelID, "opus-4-6") || isOpus47Model(modelID)
+}
+
+func isOpus47Model(modelID string) bool {
+	for _, marker := range opus47ModelMarkers {
+		if strings.Contains(modelID, marker) {
+			return true
+		}
+	}
+	return false
 }
 
 // isNovaModel reports whether the given model identifier refers to an Amazon

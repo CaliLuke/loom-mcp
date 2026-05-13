@@ -65,9 +65,12 @@ func (r *Runtime) PlanStartActivity(ctx context.Context, input *PlanActivityInpu
 	transcript := events.exportTranscript()
 	normalizeTranscriptRawJSON(transcript)
 	out := &PlanActivityOutput{
-		Result:     result,
-		Transcript: transcript,
-		Usage:      events.exportUsage(),
+		Result:           result,
+		Transcript:       transcript,
+		Usage:            events.exportUsage(),
+		ToolPolicyActive: input.ToolPolicyActive,
+		AllowedTools:     cloneToolIdents(input.AllowedTools),
+		PolicyCaps:       input.PolicyCaps,
 	}
 	return out, nil
 }
@@ -95,20 +98,7 @@ func (r *Runtime) PlanResumeActivity(ctx context.Context, input *PlanActivityInp
 	if err != nil {
 		return nil, err
 	}
-	var rems []reminder.Reminder
-	if r.reminders != nil {
-		rems = r.reminders.Snapshot(input.RunID)
-	}
-	msgs := r.applyHistoryPolicy(ctx, reg, input.Messages)
-	planInput := &planner.PlanResumeInput{
-		Messages:    msgs,
-		RunContext:  input.RunContext,
-		Agent:       agentCtx,
-		Events:      events,
-		ToolOutputs: toolOutputs,
-		Finalize:    input.Finalize,
-		Reminders:   rems,
-	}
+	planInput := r.resumePlanInput(ctx, reg, agentCtx, events, input, toolOutputs)
 	result, err := r.planResume(ctx, reg, planInput)
 	if err != nil {
 		if errors.Is(err, model.ErrRateLimited) {
@@ -126,11 +116,37 @@ func (r *Runtime) PlanResumeActivity(ctx context.Context, input *PlanActivityInp
 	transcript := events.exportTranscript()
 	normalizeTranscriptRawJSON(transcript)
 	out := &PlanActivityOutput{
-		Result:     result,
-		Transcript: transcript,
-		Usage:      events.exportUsage(),
+		Result:           result,
+		Transcript:       transcript,
+		Usage:            events.exportUsage(),
+		ToolPolicyActive: input.ToolPolicyActive,
+		AllowedTools:     cloneToolIdents(input.AllowedTools),
+		PolicyCaps:       input.PolicyCaps,
 	}
 	return out, nil
+}
+
+func (r *Runtime) resumePlanInput(
+	ctx context.Context,
+	reg *AgentRegistration,
+	agentCtx planner.PlannerContext,
+	events planner.PlannerEvents,
+	input *PlanActivityInput,
+	toolOutputs []*planner.ToolOutput,
+) *planner.PlanResumeInput {
+	var rems []reminder.Reminder
+	if r.reminders != nil {
+		rems = r.reminders.Snapshot(input.RunID)
+	}
+	return &planner.PlanResumeInput{
+		Messages:    r.applyHistoryPolicy(ctx, reg, input.Messages),
+		RunContext:  input.RunContext,
+		Agent:       agentCtx,
+		Events:      events,
+		ToolOutputs: toolOutputs,
+		Finalize:    input.Finalize,
+		Reminders:   rems,
+	}
 }
 
 // planStart invokes the planner's PlanStart method with tracing.
@@ -190,6 +206,10 @@ func (r *Runtime) plannerContext(ctx context.Context, input *PlanActivityInput, 
 		turnID:    input.RunContext.TurnID,
 		events:    events,
 		cache:     reg.Policy.Cache,
+		toolPolicy: toolPolicyEnvelope{
+			Active:  input.ToolPolicyActive,
+			Allowed: cloneToolIdents(input.AllowedTools),
+		},
 	})
 	return &reg, agentCtx, nil
 }

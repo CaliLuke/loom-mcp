@@ -665,7 +665,7 @@ func TestConsumeProvidedToolResultsRunsResultMaterializer(t *testing.T) {
 			TurnID:    "turn-1",
 		},
 	}
-	state := newRunLoopState(nil, nil, model.TokenUsage{}, policy.CapsState{}, 1)
+	state := newRunLoopState(nil, nil, model.TokenUsage{}, policy.CapsState{}, 1, toolPolicyEnvelope{})
 	allowed := []planner.ToolRequest{
 		{
 			Name:       tools.Ident("svc.tools.example"),

@@ -10,6 +10,8 @@ package runtime
 import (
 	"context"
 	"errors"
+	"slices"
+	"strings"
 
 	"github.com/CaliLuke/loom-mcp/runtime/agent"
 	"github.com/CaliLuke/loom-mcp/runtime/agent/hooks"
@@ -17,6 +19,12 @@ import (
 	"github.com/CaliLuke/loom-mcp/runtime/agent/policy"
 	"github.com/CaliLuke/loom-mcp/runtime/agent/tools"
 )
+
+type prePlanPolicyResult struct {
+	Envelope toolPolicyEnvelope
+	Caps     policy.CapsState
+	Labels   map[string]string
+}
 
 // applyPerRunOverrides filters candidate tool calls using per-run overrides:
 // RestrictToTool and tag allow/deny lists. Returns the filtered slice.
@@ -80,7 +88,15 @@ func (r *Runtime) applyPolicy(
 	caps policy.CapsState,
 	turnID string,
 	retry *planner.RetryHint,
+	toolPolicy toolPolicyEnvelope,
 ) (policyApplicationResult, error) {
+	if toolPolicy.Active {
+		allowedCalls := filterToolCalls(candidates, toolPolicy.Allowed)
+		return policyApplicationResult{
+			AllowedCalls: r.capAllowedCalls(allowedCalls, input, caps),
+			Caps:         caps,
+		}, nil
+	}
 	allowed, caps, labels, events, err := r.applyRuntimePolicy(ctx, base, input, candidates, caps, turnID, retry)
 	if err != nil {
 		return policyApplicationResult{}, err
@@ -91,6 +107,76 @@ func (r *Runtime) applyPolicy(
 		Labels:       labels,
 		Events:       events,
 	}, nil
+}
+
+func (r *Runtime) preparePrePlanToolPolicy(
+	ctx context.Context,
+	reg AgentRegistration,
+	input *RunInput,
+	base *planner.PlanInput,
+	caps policy.CapsState,
+	turnID string,
+) (prePlanPolicyResult, error) {
+	candidates := r.policyCandidateCalls(reg)
+	candidates = r.applyPerRunOverrides(ctx, input, candidates)
+	allowed := candidates
+	var labels map[string]string
+	if r.Policy != nil {
+		decision, err := r.Policy.Decide(ctx, runtimePolicyInput(r, base, candidates, caps, nil))
+		if err != nil {
+			return prePlanPolicyResult{}, err
+		}
+		applyPolicyLabels(base, input, decision.Labels)
+		labels = decision.Labels
+		if decision.DisableTools {
+			allowed = nil
+		} else {
+			allowed = allowedPolicyCalls(candidates, decision.AllowedTools)
+		}
+		caps = mergeCaps(caps, decision.Caps)
+		allowed = r.capAllowedCalls(allowed, input, caps)
+		evt := hooks.NewPolicyDecisionEvent(
+			base.RunContext.RunID,
+			input.AgentID,
+			base.RunContext.SessionID,
+			toolHandles(allowed),
+			caps,
+			cloneLabels(decision.Labels),
+			cloneMetadata(decision.Metadata),
+		)
+		if err := r.publishHook(ctx, evt, turnID); err != nil {
+			return prePlanPolicyResult{}, err
+		}
+	}
+	allowed = r.capAllowedCalls(allowed, input, caps)
+	return prePlanPolicyResult{
+		Envelope: toolPolicyEnvelope{
+			Active:  true,
+			Allowed: toolHandles(allowed),
+		},
+		Caps:   caps,
+		Labels: labels,
+	}, nil
+}
+
+func (r *Runtime) policyCandidateCalls(reg AgentRegistration) []planner.ToolRequest {
+	specs := reg.Specs
+	if len(specs) == 0 {
+		r.mu.RLock()
+		specs = make([]tools.ToolSpec, 0, len(r.toolSpecs))
+		for _, spec := range r.toolSpecs {
+			specs = append(specs, spec)
+		}
+		r.mu.RUnlock()
+		slices.SortFunc(specs, func(a, b tools.ToolSpec) int {
+			return strings.Compare(a.Name.String(), b.Name.String())
+		})
+	}
+	calls := make([]planner.ToolRequest, 0, len(specs))
+	for _, spec := range specs {
+		calls = append(calls, planner.ToolRequest{Name: spec.Name})
+	}
+	return calls
 }
 
 // applyRuntimePolicy applies the runtime policy (if configured) to the provided

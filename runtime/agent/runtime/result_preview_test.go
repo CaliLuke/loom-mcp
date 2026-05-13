@@ -5,7 +5,9 @@ import (
 	"text/template"
 
 	"github.com/CaliLuke/loom-mcp/runtime/agent"
+	"github.com/CaliLuke/loom-mcp/runtime/agent/rawjson"
 	rthints "github.com/CaliLuke/loom-mcp/runtime/agent/runtime/hints"
+	"github.com/CaliLuke/loom-mcp/runtime/agent/telemetry"
 	"github.com/CaliLuke/loom-mcp/runtime/agent/tools"
 	"github.com/stretchr/testify/require"
 )
@@ -39,4 +41,27 @@ func TestFormatResultPreviewLeavesBoundsNilWhenAbsent(t *testing.T) {
 	}, nil)
 
 	require.Equal(t, "1 result", preview)
+}
+
+func TestFormatResultPreviewExposesTypedArgs(t *testing.T) {
+	toolName := tools.Ident("svc.tools.preview_args")
+	rthints.RegisterResultHint(toolName, template.Must(template.New("preview_args").Parse(
+		`{{ .Args.query }} -> {{ .Result.status }}`,
+	)))
+	rt := &Runtime{
+		toolSpecs: map[tools.Ident]tools.ToolSpec{
+			toolName: newAnyJSONSpec(toolName, "svc.tools"),
+		},
+		logger: telemetry.NoopLogger{},
+	}
+
+	preview := rt.formatResultPreview(
+		t.Context(),
+		toolName,
+		rawjson.Message([]byte(`{"query":"alpha"}`)),
+		map[string]any{"status": "ok"},
+		nil,
+	)
+
+	require.Equal(t, "alpha -> ok", preview)
 }

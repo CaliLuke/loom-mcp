@@ -19,6 +19,8 @@ Reference: <https://github.com/goadesign/goa-ai/releases>
 
 ### 1. Pre-model tool policy enforcement
 
+Status: ported in this repo.
+
 Upstream reference: `v0.47.10`
 
 Why it matters:
@@ -79,6 +81,8 @@ Recommended scope:
 - Revalidate tool calling, transcript mapping, and streaming behavior explicitly.
 
 ### 2. Richer result hint template contract
+
+Status: ported in this repo.
 
 Upstream reference: `v0.49.2`, `v0.49.3`
 
@@ -208,6 +212,8 @@ Covers upstream releases newer than the original survey above.
 ### Must-Port (post-v0.50.0)
 
 #### Opus 4.7 Bedrock patch trio
+
+Status: ported in this repo.
 
 Upstream references: `v0.53.1`, `v0.53.2`, `v0.53.3`
 

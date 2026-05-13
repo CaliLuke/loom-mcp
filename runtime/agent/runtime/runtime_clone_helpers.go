@@ -4,6 +4,7 @@ import (
 	"github.com/CaliLuke/loom-mcp/runtime/agent/engine"
 	"github.com/CaliLuke/loom-mcp/runtime/agent/model"
 	"github.com/CaliLuke/loom-mcp/runtime/agent/planner"
+	"github.com/CaliLuke/loom-mcp/runtime/agent/tools"
 )
 
 // isZeroRetryPolicy checks if a retry policy is effectively zero.
@@ -41,6 +42,15 @@ func cloneStrings(src []string) []string {
 		return nil
 	}
 	dst := make([]string, len(src))
+	copy(dst, src)
+	return dst
+}
+
+func cloneToolIdents(src []tools.Ident) []tools.Ident {
+	if len(src) == 0 {
+		return nil
+	}
+	dst := make([]tools.Ident, len(src))
 	copy(dst, src)
 	return dst
 }

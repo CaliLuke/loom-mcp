@@ -363,7 +363,7 @@ func (r *Runtime) publishDeniedConfirmationEvents(ctx context.Context, turnID st
 		deniedResult,
 		rawjson.Message(resultJSON),
 		nil,
-		formatResultPreview(it.call.Name, deniedResult, nil),
+		r.formatResultPreview(ctx, it.call.Name, it.call.Payload, deniedResult, nil),
 		nil,
 		0,
 		nil,

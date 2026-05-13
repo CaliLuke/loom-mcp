@@ -11,6 +11,7 @@ import (
 	"github.com/CaliLuke/loom-mcp/runtime/agent/hooks"
 	"github.com/CaliLuke/loom-mcp/runtime/agent/model"
 	"github.com/CaliLuke/loom-mcp/runtime/agent/planner"
+	"github.com/CaliLuke/loom-mcp/runtime/agent/policy"
 	"github.com/CaliLuke/loom-mcp/runtime/agent/rawjson"
 	"github.com/CaliLuke/loom-mcp/runtime/agent/run"
 	"github.com/CaliLuke/loom-mcp/runtime/agent/telemetry"
@@ -324,6 +325,17 @@ type (
 
 		// Finalize requests a final turn with no further tool calls.
 		Finalize *planner.Termination
+
+		// ToolPolicyActive indicates that AllowedTools is the canonical per-turn
+		// model-visible and execution-visible tool allowlist.
+		ToolPolicyActive bool
+
+		// AllowedTools lists the tool identifiers available to the planner for this
+		// turn after run overrides, runtime policy, and caps are applied.
+		AllowedTools []tools.Ident
+
+		// PolicyCaps carries the cap state used to derive AllowedTools.
+		PolicyCaps policy.CapsState
 	}
 
 	// PlanActivityOutput wraps the planner result produced by a plan/resume activity.
@@ -336,6 +348,15 @@ type (
 
 		// Usage is the token usage reported by the model provider when available.
 		Usage model.TokenUsage
+
+		// ToolPolicyActive echoes the planner input policy envelope.
+		ToolPolicyActive bool
+
+		// AllowedTools echoes the canonical allowlist used for this planner turn.
+		AllowedTools []tools.Ident
+
+		// PolicyCaps echoes the cap state used to derive AllowedTools.
+		PolicyCaps policy.CapsState
 	}
 
 	// HookActivityInput is the canonical workflow-to-activity envelope for hook events.

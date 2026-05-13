@@ -254,7 +254,7 @@ func (r *Runtime) toolResultContent(tr *planner.ToolResult) (any, error) {
 	return transcript.ProjectToolResultContent(
 		resultJSON,
 		tr.Bounds,
-		formatResultPreview(tr.Name, tr.Result, tr.Bounds),
+		r.formatResultPreview(context.Background(), tr.Name, rawjson.Message(nil), tr.Result, tr.Bounds),
 		errorMessage,
 	)
 }

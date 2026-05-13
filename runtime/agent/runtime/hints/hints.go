@@ -5,6 +5,7 @@ package hints
 
 import (
 	"fmt"
+	"reflect"
 	"strings"
 	"sync"
 	"text/template"
@@ -173,14 +174,10 @@ func hintTruncate(s string, n int) string {
 }
 
 func parseTimestamp(v any) (time.Time, bool) {
+	if ts, ok := parseTimestampValue(reflect.ValueOf(v)); ok {
+		return ts, true
+	}
 	switch t := v.(type) {
-	case time.Time:
-		return t, true
-	case *time.Time:
-		if t == nil {
-			return time.Time{}, false
-		}
-		return *t, true
 	case string:
 		if t == "" {
 			return time.Time{}, false
@@ -201,4 +198,34 @@ func parseTimestamp(v any) (time.Time, bool) {
 		}
 		return ts, true
 	}
+}
+
+func parseTimestampValue(v reflect.Value) (time.Time, bool) {
+	if !v.IsValid() {
+		return time.Time{}, false
+	}
+	for v.Kind() == reflect.Pointer {
+		if v.IsNil() {
+			return time.Time{}, false
+		}
+		v = v.Elem()
+	}
+	if v.Type() == reflect.TypeOf(time.Time{}) {
+		return v.Interface().(time.Time), true
+	}
+	if v.Type().ConvertibleTo(reflect.TypeOf(time.Time{})) {
+		return v.Convert(reflect.TypeOf(time.Time{})).Interface().(time.Time), true
+	}
+	if v.Kind() == reflect.String {
+		s := v.String()
+		if s == "" {
+			return time.Time{}, false
+		}
+		ts, err := time.Parse(time.RFC3339, s)
+		if err != nil {
+			return time.Time{}, false
+		}
+		return ts, true
+	}
+	return time.Time{}, false
 }

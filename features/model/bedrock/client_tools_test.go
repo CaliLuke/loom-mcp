@@ -2,6 +2,7 @@ package bedrock
 
 import (
 	"context"
+	"encoding/json"
 	"strings"
 	"testing"
 
@@ -132,6 +133,100 @@ func TestIsNovaModel(t *testing.T) {
 			require.Equal(t, tt.want, got)
 		})
 	}
+}
+
+func TestIsAdaptiveThinkingModel_MatchesOpus47Scopes(t *testing.T) {
+	cases := []struct {
+		name string
+		in   string
+		want bool
+	}{
+		{name: "empty", in: "", want: false},
+		{name: "opus 4.6", in: "global.anthropic.claude-opus-4-6-v1:0", want: true},
+		{name: "opus 4.7 base", in: "anthropic.claude-opus-4-7-v1:0", want: true},
+		{name: "opus 4.7 us", in: "us.anthropic.claude-opus-4-7-v1:0", want: true},
+		{name: "opus 4.7 eu", in: "eu.anthropic.claude-opus-4-7-v1:0", want: true},
+		{name: "opus 4.7 jp", in: "jp.anthropic.claude-opus-4-7-v1:0", want: true},
+		{name: "opus 4.7 global", in: "global.anthropic.claude-opus-4-7-v1:0", want: true},
+		{name: "sonnet", in: "us.anthropic.claude-sonnet-4-20250514-v1:0", want: false},
+	}
+	for _, tt := range cases {
+		t.Run(tt.name, func(t *testing.T) {
+			got := isAdaptiveThinkingModel(tt.in)
+			require.Equal(t, tt.want, got)
+		})
+	}
+}
+
+func TestResolveThinking_AdaptiveModelDoesNotRequireTools(t *testing.T) {
+	client := &Client{think: defaultThinkingBudget}
+	req := &model.Request{
+		Thinking: &model.ThinkingOptions{Enable: true},
+	}
+	parts := &requestParts{
+		modelID: "global.anthropic.claude-opus-4-7-v1:0",
+	}
+
+	got := client.resolveThinking(req, parts)
+
+	require.True(t, got.enable)
+	require.True(t, got.adaptive)
+	require.False(t, got.interleaved)
+	require.Zero(t, got.budget)
+}
+
+func TestBuildConverseStreamInput_AdaptiveThinkingRequestsSummaries(t *testing.T) {
+	client := &Client{
+		maxTok: 1024,
+		temp:   0.7,
+		think:  defaultThinkingBudget,
+	}
+	req := &model.Request{
+		Thinking: &model.ThinkingOptions{Enable: true},
+		Messages: []*model.Message{{
+			Role: model.ConversationRoleUser,
+			Parts: []model.Part{
+				model.TextPart{Text: "hello"},
+			},
+		}},
+	}
+	parts := &requestParts{
+		modelID: "global.anthropic.claude-opus-4-7-v1:0",
+		messages: []brtypes.Message{{
+			Role: brtypes.ConversationRoleUser,
+		}},
+	}
+	thinking := client.resolveThinking(req, parts)
+
+	input := client.buildConverseStreamInput(parts, req, thinking)
+
+	require.NotNil(t, input.AdditionalModelRequestFields)
+	raw, err := input.AdditionalModelRequestFields.MarshalSmithyDocument()
+	require.NoError(t, err)
+	var fields map[string]any
+	require.NoError(t, json.Unmarshal(raw, &fields))
+	thinkingField, ok := fields["thinking"].(map[string]any)
+	require.True(t, ok)
+	require.Equal(t, "adaptive", thinkingField["type"])
+	require.Equal(t, "summarized", thinkingField["display"])
+}
+
+func TestInferenceConfig_OmitsTemperatureForOpus47(t *testing.T) {
+	client := &Client{
+		maxTok: 2048,
+		temp:   0.7,
+	}
+
+	opus := client.inferenceConfig("us.anthropic.claude-opus-4-7-v1:0", 0, 0)
+	require.NotNil(t, opus)
+	require.NotNil(t, opus.MaxTokens)
+	require.Nil(t, opus.Temperature)
+
+	sonnet := client.inferenceConfig("us.anthropic.claude-sonnet-4-20250514-v1:0", 0, 0)
+	require.NotNil(t, sonnet)
+	require.NotNil(t, sonnet.MaxTokens)
+	require.NotNil(t, sonnet.Temperature)
+	require.InEpsilon(t, float32(0.7), *sonnet.Temperature, 0.0001)
 }
 
 func TestSanitizeToolName_StripsNamespaces(t *testing.T) {

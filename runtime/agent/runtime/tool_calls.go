@@ -230,7 +230,7 @@ func (e *toolBatchExec) publishToolResultReceived(ctx context.Context, call plan
 		tr.Result,
 		resultJSON,
 		tr.ServerData,
-		formatResultPreview(call.Name, tr.Result, tr.Bounds),
+		e.r.formatResultPreview(ctx, call.Name, call.Payload, tr.Result, tr.Bounds),
 		tr.Bounds,
 		duration,
 		tr.Telemetry,

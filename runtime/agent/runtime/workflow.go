@@ -176,7 +176,7 @@ func (r *Runtime) executeWorkflowRun(
 	if err != nil {
 		return nil, workflowStatusForError(err), err
 	}
-	caps, nextAttempt, parentTracker, err := r.prepareWorkflowLoopState(wfCtx.Context(), reg, input, planInput, firstOutput.Result)
+	caps, nextAttempt, parentTracker, err := r.prepareWorkflowLoopState(wfCtx.Context(), reg, input, planInput, firstOutput.Result, firstOutput)
 	if err != nil {
 		return nil, runStatusFailed, err
 	}
@@ -200,6 +200,10 @@ func (r *Runtime) executeWorkflowRun(
 		parentTracker,
 		ctrl,
 		timing.FinalizerGrace,
+		toolPolicyEnvelope{
+			Active:  firstOutput.ToolPolicyActive,
+			Allowed: cloneToolIdents(firstOutput.AllowedTools),
+		},
 	)
 	if err != nil {
 		return nil, terminalRunStatusForError(err), err
@@ -215,6 +219,16 @@ func (r *Runtime) startWorkflowRun(
 	turnID string,
 ) (*planner.PlanInput, *PlanActivityOutput, runTiming, runDeadlines, error) {
 	planInput, startReq, timing, deadlines := r.prepareWorkflowPlanning(wfCtx, reg, input, runCtx)
+	caps := applyWorkflowCaps(initialCaps(reg.Policy), input)
+	policyResult, err := r.preparePrePlanToolPolicy(wfCtx.Context(), reg, input, planInput, caps, turnID)
+	if err != nil {
+		return nil, nil, runTiming{}, runDeadlines{}, err
+	}
+	caps = policyResult.Caps
+	startReq.ToolPolicyActive = policyResult.Envelope.Active
+	startReq.AllowedTools = cloneToolIdents(policyResult.Envelope.Allowed)
+	startReq.PolicyCaps = caps
+	startReq.RunContext.Labels = cloneLabels(planInput.RunContext.Labels)
 	if err := enforcePlanActivityInputBudget(startReq); err != nil {
 		return nil, nil, runTiming{}, runDeadlines{}, err
 	}
@@ -326,6 +340,7 @@ func (r *Runtime) prepareWorkflowLoopState(
 	input *RunInput,
 	planInput *planner.PlanInput,
 	result *planner.PlanResult,
+	output *PlanActivityOutput,
 ) (policy.CapsState, int, *childTracker, error) {
 	if len(result.ToolCalls) == 0 && result.FinalResponse == nil && result.Await == nil {
 		return policy.CapsState{}, 0, nil, fmt.Errorf("plan result has no tool calls, final response, or await")
@@ -334,6 +349,9 @@ func (r *Runtime) prepareWorkflowLoopState(
 		r.logger.Info(ctx, "PlanResult has FinalResponse but no ToolCalls - workflow will return early")
 	}
 	caps := applyWorkflowCaps(initialCaps(reg.Policy), input)
+	if output != nil && output.ToolPolicyActive {
+		caps = output.PolicyCaps
+	}
 	var parentTracker *childTracker
 	if planInput.RunContext.ParentToolCallID != "" {
 		parentTracker = newChildTracker(planInput.RunContext.ParentToolCallID)
@@ -359,6 +377,7 @@ func (r *Runtime) runLoop(
 	parentTracker *childTracker,
 	ctrl *interrupt.Controller,
 	finalizerGrace time.Duration,
+	initialToolPolicies ...toolPolicyEnvelope,
 ) (*RunOutput, error) {
 	if err := r.validateRunLoopInputs(base, initialResult); err != nil {
 		return nil, err
@@ -366,7 +385,11 @@ func (r *Runtime) runLoop(
 	ctx := wfCtx.Context()
 	r.ensureWorkflowLogger()
 	r.logRunLoopStart(ctx, initialResult)
-	st := newRunLoopState(initialResult, initialTranscript, initialUsage, caps, nextAttempt)
+	var initialToolPolicy toolPolicyEnvelope
+	if len(initialToolPolicies) > 0 {
+		initialToolPolicy = initialToolPolicies[0]
+	}
+	st := newRunLoopState(initialResult, initialTranscript, initialUsage, caps, nextAttempt, initialToolPolicy)
 	if err := setLedgerMessagesQuery(wfCtx, st); err != nil {
 		return nil, err
 	}

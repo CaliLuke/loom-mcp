@@ -165,12 +165,13 @@ func (r *Runtime) buildFinalizePlanRequest(
 		return PlanActivityInput{}, "", err
 	}
 	req := PlanActivityInput{
-		AgentID:     input.AgentID,
-		RunID:       base.RunContext.RunID,
-		Messages:    prepareFinalizationMessages(base.Messages, hint),
-		RunContext:  resumeCtx,
-		ToolOutputs: encodedToolOutputs,
-		Finalize:    &planner.Termination{Reason: reason, Message: hint},
+		AgentID:          input.AgentID,
+		RunID:            base.RunContext.RunID,
+		Messages:         prepareFinalizationMessages(base.Messages, hint),
+		RunContext:       resumeCtx,
+		ToolOutputs:      encodedToolOutputs,
+		Finalize:         &planner.Termination{Reason: reason, Message: hint},
+		ToolPolicyActive: true,
 	}
 	if err := enforcePlanActivityInputBudget(req); err != nil {
 		return PlanActivityInput{}, "", err

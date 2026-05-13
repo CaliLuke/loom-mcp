@@ -41,10 +41,14 @@ type (
 		// ToolOutputs is the accumulated executed tool-call history emitted over
 		// the lifetime of this run.
 		ToolOutputs []*planner.ToolOutput
+
+		// ToolPolicy is the canonical model-visible and execution-visible allowlist
+		// for the current planner turn.
+		ToolPolicy toolPolicyEnvelope
 	}
 )
 
-func newRunLoopState(result *planner.PlanResult, transcriptMsgs []*model.Message, usage model.TokenUsage, caps policy.CapsState, nextAttempt int) *runLoopState {
+func newRunLoopState(result *planner.PlanResult, transcriptMsgs []*model.Message, usage model.TokenUsage, caps policy.CapsState, nextAttempt int, toolPolicy toolPolicyEnvelope) *runLoopState {
 	return &runLoopState{
 		Caps:        caps,
 		NextAttempt: nextAttempt,
@@ -52,5 +56,6 @@ func newRunLoopState(result *planner.PlanResult, transcriptMsgs []*model.Message
 		Result:      result,
 		Transcript:  transcriptMsgs,
 		Ledger:      transcript.FromModelMessages(transcriptMsgs),
+		ToolPolicy:  cloneToolPolicyEnvelope(toolPolicy),
 	}
 }

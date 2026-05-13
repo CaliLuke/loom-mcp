@@ -14,41 +14,44 @@ import (
 
 // agentContextOptions configures construction of a planner.PlannerContext.
 type agentContextOptions struct {
-	runtime   *Runtime
-	agentID   agent.Ident
-	runID     string
-	memory    memory.Reader
-	sessionID string
-	labels    map[string]string
-	turnID    string
-	events    planner.PlannerEvents
-	cache     CachePolicy
+	runtime    *Runtime
+	agentID    agent.Ident
+	runID      string
+	memory     memory.Reader
+	sessionID  string
+	labels     map[string]string
+	turnID     string
+	events     planner.PlannerEvents
+	cache      CachePolicy
+	toolPolicy toolPolicyEnvelope
 }
 
 // simplePlannerContext is a minimal implementation of planner.PlannerContext.
 type simplePlannerContext struct {
-	rt        *Runtime
-	agent     agent.Ident
-	runID     string
-	turnID    string
-	mem       memory.Reader
-	sessionID string
-	labels    map[string]string
-	ev        planner.PlannerEvents
-	cache     CachePolicy
+	rt         *Runtime
+	agent      agent.Ident
+	runID      string
+	turnID     string
+	mem        memory.Reader
+	sessionID  string
+	labels     map[string]string
+	ev         planner.PlannerEvents
+	cache      CachePolicy
+	toolPolicy toolPolicyEnvelope
 }
 
 func newAgentContext(opts agentContextOptions) planner.PlannerContext {
 	return &simplePlannerContext{
-		rt:        opts.runtime,
-		agent:     opts.agentID,
-		runID:     opts.runID,
-		turnID:    opts.turnID,
-		mem:       opts.memory,
-		sessionID: opts.sessionID,
-		labels:    cloneLabels(opts.labels),
-		ev:        opts.events,
-		cache:     opts.cache,
+		rt:         opts.runtime,
+		agent:      opts.agentID,
+		runID:      opts.runID,
+		turnID:     opts.turnID,
+		mem:        opts.memory,
+		sessionID:  opts.sessionID,
+		labels:     cloneLabels(opts.labels),
+		ev:         opts.events,
+		cache:      opts.cache,
+		toolPolicy: opts.toolPolicy,
 	}
 }
 
@@ -77,6 +80,7 @@ func (c *simplePlannerContext) ModelClient(id string) (model.Client, bool) {
 	if c.cache.AfterSystem || c.cache.AfterTools {
 		cli = newCacheConfiguredClient(cli, c.cache)
 	}
+	cli = newToolPolicyConfiguredClient(cli, c.toolPolicy)
 	// Ensure the runtime-owned tool_unavailable tool is always present when tool
 	// history may be re-encoded for providers with strict tool availability rules.
 	cli = newToolUnavailableConfiguredClient(cli)

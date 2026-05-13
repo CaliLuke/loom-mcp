@@ -205,7 +205,7 @@ func (r *Runtime) publishProvidedToolResult(ctx context.Context, input *RunInput
 			tr.Result,
 			resultJSON,
 			tr.ServerData,
-			formatResultPreview(tr.Name, tr.Result, tr.Bounds),
+			r.formatResultPreview(ctx, tr.Name, rawjson.Message(nil), tr.Result, tr.Bounds),
 			tr.Bounds,
 			0,
 			nil,

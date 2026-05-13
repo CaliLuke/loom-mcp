@@ -4,6 +4,7 @@ import (
 	"strings"
 	"testing"
 	"text/template"
+	"time"
 
 	"github.com/CaliLuke/loom-mcp/runtime/agent/tools"
 )
@@ -131,5 +132,33 @@ func TestCompileHintTemplates_HumanTime(t *testing.T) {
 				t.Fatalf("unexpected output: got %q want %q", got, tc.want)
 			}
 		})
+	}
+}
+
+func TestCompileHintTemplates_TimestampAliases(t *testing.T) {
+	t.Parallel()
+
+	type aliasString string
+	type aliasTime time.Time
+	at := aliasString("2025-01-01T00:00:00Z")
+	toTime := aliasTime(time.Date(2025, 1, 1, 0, 0, 10, 0, time.UTC))
+
+	raw := map[tools.Ident]string{
+		tools.Ident("t"): "{{ since .From .To }}",
+	}
+	compiled, err := CompileHintTemplates(raw, template.FuncMap{})
+	if err != nil {
+		t.Fatalf("CompileHintTemplates error: %v", err)
+	}
+
+	var b strings.Builder
+	if err := compiled[tools.Ident("t")].Execute(&b, map[string]any{
+		"From": &at,
+		"To":   &toTime,
+	}); err != nil {
+		t.Fatalf("Execute error: %v", err)
+	}
+	if got := strings.TrimSpace(b.String()); got != "10" {
+		t.Fatalf("unexpected output: got %q want %q", got, "10")
 	}
 }

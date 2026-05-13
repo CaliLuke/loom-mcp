@@ -175,11 +175,31 @@ type toolUnavailableConfiguredClient struct {
 	inner model.Client
 }
 
+type toolPolicyEnvelope struct {
+	Active  bool
+	Allowed []tools.Ident
+}
+
+type toolPolicyConfiguredClient struct {
+	inner  model.Client
+	policy toolPolicyEnvelope
+}
+
 func newToolUnavailableConfiguredClient(inner model.Client) model.Client {
 	if inner == nil {
 		return nil
 	}
 	return &toolUnavailableConfiguredClient{inner: inner}
+}
+
+func newToolPolicyConfiguredClient(inner model.Client, policy toolPolicyEnvelope) model.Client {
+	if inner == nil || !policy.Active {
+		return inner
+	}
+	return &toolPolicyConfiguredClient{
+		inner:  inner,
+		policy: cloneToolPolicyEnvelope(policy),
+	}
 }
 
 func (c *toolUnavailableConfiguredClient) Complete(ctx context.Context, req *model.Request) (*model.Response, error) {
@@ -189,6 +209,16 @@ func (c *toolUnavailableConfiguredClient) Complete(ctx context.Context, req *mod
 
 func (c *toolUnavailableConfiguredClient) Stream(ctx context.Context, req *model.Request) (model.Streamer, error) {
 	ensureToolUnavailableDefinition(req)
+	return c.inner.Stream(ctx, req)
+}
+
+func (c *toolPolicyConfiguredClient) Complete(ctx context.Context, req *model.Request) (*model.Response, error) {
+	applyModelToolPolicy(req, c.policy)
+	return c.inner.Complete(ctx, req)
+}
+
+func (c *toolPolicyConfiguredClient) Stream(ctx context.Context, req *model.Request) (model.Streamer, error) {
+	applyModelToolPolicy(req, c.policy)
 	return c.inner.Stream(ctx, req)
 }
 
@@ -242,6 +272,49 @@ func requestMayReferenceTools(req *model.Request) bool {
 		}
 	}
 	return false
+}
+
+func applyModelToolPolicy(req *model.Request, policy toolPolicyEnvelope) {
+	if req == nil || !policy.Active {
+		return
+	}
+	allowed := make(map[string]struct{}, len(policy.Allowed))
+	for _, tool := range policy.Allowed {
+		allowed[tool.String()] = struct{}{}
+	}
+	if len(req.Tools) > 0 {
+		filtered := make([]*model.ToolDefinition, 0, len(req.Tools))
+		for _, def := range req.Tools {
+			if def == nil {
+				continue
+			}
+			if _, ok := allowed[def.Name]; ok {
+				filtered = append(filtered, def)
+			}
+		}
+		req.Tools = filtered
+	}
+	if req.ToolChoice == nil {
+		return
+	}
+	switch req.ToolChoice.Mode {
+	case model.ToolChoiceModeTool:
+		if _, ok := allowed[req.ToolChoice.Name]; !ok {
+			req.ToolChoice = nil
+		}
+	case model.ToolChoiceModeAny:
+		if len(req.Tools) == 0 {
+			req.ToolChoice = nil
+		}
+	case model.ToolChoiceModeAuto, model.ToolChoiceModeNone:
+	}
+}
+
+func cloneToolPolicyEnvelope(in toolPolicyEnvelope) toolPolicyEnvelope {
+	return toolPolicyEnvelope{
+		Active:  in.Active,
+		Allowed: cloneToolIdents(in.Allowed),
+	}
 }
 
 // emitMessageContent forwards assistant text and thinking parts from a message.

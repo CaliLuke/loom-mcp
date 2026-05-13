@@ -67,7 +67,7 @@ func (r *Runtime) handleToolTurn(
 	if out, err := r.finishOrContinueToolTurn(wfCtx, reg, input, base, st, resumeOpts, toolOpts, deadlines, turnID, parentTracker, ctrl, turn, vals, timedOut); err != nil || out != nil {
 		return out, err
 	}
-	return nil, r.resumeAfterToolTurn(wfCtx, reg, input, base, st, resumeOpts, deadlines)
+	return nil, r.resumeAfterToolTurn(wfCtx, reg, input, base, st, resumeOpts, deadlines, turnID)
 }
 
 func (r *Runtime) finishOrContinueToolTurn(
@@ -190,11 +190,21 @@ func (r *Runtime) resumeAfterToolTurn(
 	st *runLoopState,
 	resumeOpts engine.ActivityOptions,
 	deadlines *runDeadlines,
+	turnID string,
 ) error {
+	policyResult, err := r.preparePrePlanToolPolicy(wfCtx.Context(), reg, input, base, st.Caps, turnID)
+	if err != nil {
+		return err
+	}
+	st.Caps = policyResult.Caps
 	resumeReq, err := r.buildNextResumeRequest(input.AgentID, base, st.ToolOutputs, &st.NextAttempt)
 	if err != nil {
 		return err
 	}
+	resumeReq.ToolPolicyActive = policyResult.Envelope.Active
+	resumeReq.AllowedTools = cloneToolIdents(policyResult.Envelope.Allowed)
+	resumeReq.PolicyCaps = st.Caps
+	resumeReq.RunContext.Labels = cloneLabels(base.RunContext.Labels)
 	resOutput, err := r.runPlanActivity(wfCtx, reg.ResumeActivityName, resumeOpts, resumeReq, deadlines.Budget)
 	if err != nil {
 		return err
@@ -206,6 +216,10 @@ func (r *Runtime) resumeAfterToolTurn(
 	st.Result = resOutput.Result
 	st.Transcript = resOutput.Transcript
 	st.Ledger = transcript.FromModelMessages(st.Transcript)
+	st.ToolPolicy = toolPolicyEnvelope{
+		Active:  resOutput.ToolPolicyActive,
+		Allowed: cloneToolIdents(resOutput.AllowedTools),
+	}
 	return nil
 }
 
@@ -243,7 +257,7 @@ func (r *Runtime) prepareToolTurnCalls(
 	if err != nil {
 		return nil, nil, nil, nil, err
 	}
-	result, err := r.applyPolicy(ctx, base, input, rewritten, st.Caps, turnID, st.Result.RetryHint)
+	result, err := r.applyPolicy(ctx, base, input, rewritten, st.Caps, turnID, st.Result.RetryHint, st.ToolPolicy)
 	if err != nil {
 		return nil, nil, nil, nil, err
 	}
