@@ -15,128 +15,6 @@ through deeper refactors, so they are intentionally omitted.
 
 Reference: <https://github.com/goadesign/goa-ai/releases>
 
-## Must-Port
-
-### 1. Pre-model tool policy enforcement
-
-Status: ported in this repo.
-
-Upstream reference: `v0.47.10`
-
-Why it matters:
-
-- Today this fork filters tool calls after planning, but does not clearly apply the
-  same policy to the tool definitions advertised to the model.
-- That means the planner/model can still see tools it is not actually allowed to
-  execute, which creates avoidable retries and weakens the runtime contract.
-
-Why it is a gap here:
-
-- Per-run overrides and runtime policy decisions are applied to candidate tool
-  calls in `runtime/agent/runtime/workflow_policy.go`.
-- The current code does not show an equivalent pre-prompt filtering pass over
-  `model.Request.Tools`.
-
-Relevant local files:
-
-- `runtime/agent/runtime/workflow_policy.go`
-- `runtime/agent/runtime/model_wrapper.go`
-- `runtime/agent/runtime/activities.go`
-
-Recommended scope:
-
-- Derive one canonical allowed-tool predicate per turn.
-- Apply it both:
-  - when building model-visible tool definitions
-  - when enforcing execution
-- Preserve the current policy event/audit behavior.
-
-## Should-Port
-
-### 1. OpenAI Responses API migration
-
-Upstream reference: `v0.48.0`
-
-Why it matters:
-
-- This fork still uses Chat Completions via `github.com/sashabaranov/go-openai`.
-- Upstream moved to the official Responses API and treated that as part of a
-  cleaner runtime transport boundary.
-
-Why it is worth doing:
-
-- Better alignment with OpenAI’s current API direction.
-- Reduces future adapter drift.
-- Likely makes transcript/tool behavior easier to keep consistent with other
-  providers over time.
-
-Relevant local files:
-
-- `features/model/openai/client.go`
-- `go.mod`
-
-Recommended scope:
-
-- Replace the OpenAI adapter with an official Responses-based client.
-- Revalidate tool calling, transcript mapping, and streaming behavior explicitly.
-
-### 2. Richer result hint template contract
-
-Status: ported in this repo.
-
-Upstream reference: `v0.49.2`, `v0.49.3`
-
-Why it matters:
-
-- This fork already has result hints, but the current template root exposes
-  `.Result` and `.Bounds`, not typed `.Args`.
-- Timestamp helpers are also narrower than upstream’s later version.
-
-Why it is worth doing:
-
-- Better UX for result previews and hook/stream rendering.
-- Makes hints more expressive without forcing application-specific reshaping.
-
-Relevant local files:
-
-- `runtime/agent/runtime/result_preview.go`
-- `runtime/agent/runtime/hints/hints.go`
-- `runtime/agent/runtime/runtime_hints_sink.go`
-
-Recommended scope:
-
-- Extend result hint rendering to include typed args under `.Args`.
-- Broaden `humanTime` / `since` helper parsing to handle alias and pointer-wrapped
-  timestamp shapes robustly.
-- Add regression coverage for preview rendering through hooks and stream output.
-
-### 3. Mongo driver v2 migration
-
-Upstream reference: `v0.50.0`
-
-Why it matters:
-
-- This repo has migrated the Mongo-backed stores to `go.mongodb.org/mongo-driver/v2`.
-- Upstream moved memory, prompt, runlog, and session stores to v2.
-
-Why it is worth doing:
-
-- Keeps the storage layer current.
-- Reduces future divergence in store behavior and maintenance burden.
-
-Relevant local files:
-
-- `go.mod`
-- `features/memory/mongo/...`
-- `features/prompt/mongo/...`
-- `features/runlog/mongo/...`
-- `features/session/mongo/...`
-
-Recommended scope:
-
-- Migrate all Mongo-backed stores together.
-- Re-run full verification because this is broad dependency and integration work.
-
 ## Nice-To-Have
 
 ### 1. Shared tracing contract cleanup
@@ -208,37 +86,6 @@ Relevant local files:
 ## Post-v0.50.0 Releases (v0.51.0 – v0.53.11)
 
 Covers upstream releases newer than the original survey above.
-
-### Must-Port (post-v0.50.0)
-
-#### Opus 4.7 Bedrock patch trio
-
-Status: ported in this repo.
-
-Upstream references: `v0.53.1`, `v0.53.2`, `v0.53.3`
-
-Why it matters:
-
-- Claude Opus 4.7 on Bedrock rejects the legacy `thinking: {enabled,
-budget_tokens}` shape, rejects a `temperature` field, and needs explicit
-  summarized-reasoning display to stream visible thinking text.
-- Without these patches, configuring any `claude-opus-4-7` inference profile
-  against the Bedrock adapter fails with 400s or silently loses visible
-  reasoning.
-
-Relevant local files:
-
-- `features/model/bedrock/...` (model matcher, inference config, streaming
-  request builder)
-
-Recommended scope:
-
-- Extend `isAdaptiveThinkingModel` with an explicit Opus marker slice covering
-  Opus 4.7 across in-region, `us.` / `eu.` / `jp.` geo, and `global.` scopes.
-- Omit `temperature` from Bedrock inference config for Opus 4.7.
-- Request summarized reasoning for adaptive Claude models, including on
-  no-tool requests.
-- Port all three together; they share the same file surface.
 
 ### Should-Port (post-v0.50.0)
 
@@ -466,28 +313,6 @@ Recommended scope:
 - Make `Seal` retry-honest; switch worker lifecycle to explicit
   `worker.Start/Stop` with `OnFatalError`.
 
-### Nice-To-Have (post-v0.50.0)
-
-#### Authored DSL `Example(...)` in generated tool specs + dependency refresh
-
-Upstream reference: `v0.52.1`
-
-Why it is lower priority:
-
-- Hygiene work; not a correctness gap.
-- May force regeneration of downstream golden snapshots.
-
-Recommended scope:
-
-- Prefer the last explicit top-level DSL payload `Example(...)` when
-  generating `ExampleJSON`; normalize through the canonical JSON rewrite
-  (including unions) so authored examples stay transport-correct.
-- Keep the synthesized transport-example fallback for specs without an
-  authored example.
-- Fold the dependency bumps (Goa v3.26.0, Temporal SDK v1.42.0, Temporal API
-  v1.62.8, Anthropic SDK v1.35.0, OpenTelemetry and `x/*`) into a general
-  dependency refresh.
-
 ## Already Covered Here
 
 These upstream themes appear already implemented in this fork and are not port
@@ -501,3 +326,14 @@ targets:
 - health-tracker restart hardening
 - JSON `omitempty` fix for generated tool payloads
 - exported Bedrock tool-name sanitizer
+- pre-model tool policy enforcement (`v0.47.10`)
+- richer result hint template contract with typed `.Args` (`v0.49.2`, `v0.49.3`)
+- Mongo driver v2 migration across memory/prompt/runlog/session stores (`v0.50.0`)
+- Opus 4.7 Bedrock patch trio (`v0.53.1`, `v0.53.2`, `v0.53.3`)
+- dependency-refresh half of `v0.52.1` (PR #126); loom-mcp tracks newer versions
+  of Anthropic SDK, Temporal SDK/API, Goa, and OpenTelemetry
+- authored DSL `Example(...)` preserved in generated tool specs (`v0.52.1`
+  PR #125)
+- OpenAI Responses API migration (`v0.48.0`); loom-mcp's
+  `features/model/openai/client.go` uses `github.com/openai/openai-go`'s
+  `responses` package

@@ -25,16 +25,24 @@ type toolUnavailablePayload struct {
 	RequestedPayload rawjson.Message `json:"requested_payload,omitempty"`
 }
 
+// JSON schema field keys and value tokens reused across the tool-unavailable
+// schema. Lifted to constants to satisfy goconst on the embedded JSON-schema
+// literals.
+const (
+	jsonSchemaTypeKey   = "type"
+	jsonSchemaTypeValue = "object"
+)
+
 func toolUnavailableToolDefinition() *model.ToolDefinition {
 	return &model.ToolDefinition{
 		Name:        tools.ToolUnavailable.String(),
 		Description: "Internal. Used when the model requests an unknown tool name. Always returns an error with a retry hint to pick a tool from the advertised list.",
 		InputSchema: map[string]any{
-			"type": "object",
+			jsonSchemaTypeKey: jsonSchemaTypeValue,
 			"properties": map[string]any{
 				"requested_tool": map[string]any{
-					"type":        "string",
-					"description": "The provider-visible tool name originally requested by the model.",
+					jsonSchemaTypeKey: "string",
+					"description":     "The provider-visible tool name originally requested by the model.",
 				},
 				"requested_payload": map[string]any{
 					"description": "The original JSON payload that the model provided for the unknown tool.",
