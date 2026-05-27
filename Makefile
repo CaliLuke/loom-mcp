@@ -5,6 +5,7 @@ HTTP_PORT ?= 8888
 LOOM_CORE_MODULE ?= github.com/CaliLuke/loom
 LOOM_MCP_MODULE ?= $(LOOM_CORE_MODULE)
 LOOM_CLI_PACKAGE ?= $(LOOM_CORE_MODULE)/cmd/loom
+MCP_GO_SDK_VERSION ?= v1.6.1
 
 GOPATH ?= $(shell go env GOPATH)
 GOLANGCI_LINT := $(shell command -v golangci-lint 2>/dev/null)
@@ -12,7 +13,7 @@ PROTOC := $(shell command -v protoc 2>/dev/null)
 PROTOC_GEN_GO := protoc-gen-go
 PROTOC_GEN_GO_GRPC := protoc-gen-go-grpc
 
-.PHONY: all build lint lint-pre-commit lint-install-hook test itest ci tools ensure-golangci ensure-protoc-plugins protoc-check run-example example-gen loom-local loom-remote loom-status verify-mcp-local regen-assistant-fixture
+.PHONY: all build lint lint-pre-commit lint-install-hook test itest ci tools ensure-golangci ensure-protoc-plugins protoc-check run-example example-gen loom-local loom-remote loom-status update-mcp-go-sdk verify-mcp-local regen-assistant-fixture
 
 all: build lint test
 
@@ -91,6 +92,13 @@ loom-remote:
 
 loom-status:
 	bash ./scripts/loom_core_mode.sh status
+
+update-mcp-go-sdk:
+	$(GO) get github.com/modelcontextprotocol/go-sdk@$(MCP_GO_SDK_VERSION)
+	cd ./integration_tests/fixtures/assistant && $(GO) get github.com/modelcontextprotocol/go-sdk@$(MCP_GO_SDK_VERSION)
+	$(GO) work edit -replace github.com/modelcontextprotocol/go-sdk=github.com/modelcontextprotocol/go-sdk@$(MCP_GO_SDK_VERSION)
+	$(GO) mod tidy
+	cd ./integration_tests/fixtures/assistant && $(GO) mod tidy
 
 verify-mcp-local:
 	go test -C ./integration_tests/fixtures/assistant ./... -count=1

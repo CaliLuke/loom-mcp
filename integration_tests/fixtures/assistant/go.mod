@@ -6,7 +6,7 @@ require (
 	github.com/CaliLuke/loom v1.0.13
 	github.com/CaliLuke/loom-mcp v1.0.8-0.20260410010650-904a9b9c01f6
 	github.com/google/uuid v1.6.0
-	github.com/modelcontextprotocol/go-sdk v1.6.0
+	github.com/modelcontextprotocol/go-sdk v1.6.1
 	github.com/stretchr/testify v1.11.1
 	go.opentelemetry.io/otel v1.43.0
 	go.opentelemetry.io/otel/metric v1.43.0

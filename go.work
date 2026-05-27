@@ -1,0 +1,8 @@
+go 1.26.1
+
+use (
+	.
+	./integration_tests/fixtures/assistant
+)
+
+replace github.com/modelcontextprotocol/go-sdk => github.com/modelcontextprotocol/go-sdk v1.6.1
