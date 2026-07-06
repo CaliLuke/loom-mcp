@@ -148,7 +148,11 @@ func TestIsAdaptiveThinkingModel_MatchesOpus47Scopes(t *testing.T) {
 		{name: "opus 4.7 eu", in: "eu.anthropic.claude-opus-4-7-v1:0", want: true},
 		{name: "opus 4.7 jp", in: "jp.anthropic.claude-opus-4-7-v1:0", want: true},
 		{name: "opus 4.7 global", in: "global.anthropic.claude-opus-4-7-v1:0", want: true},
+		{name: "opus 4.8", in: "global.anthropic.claude-opus-4-8-v1:0", want: true},
+		{name: "fable 5", in: "global.anthropic.claude-fable-5-v1:0", want: true},
+		{name: "mythos 5", in: "us.anthropic.claude-mythos-5-v1:0", want: true},
 		{name: "sonnet", in: "us.anthropic.claude-sonnet-4-20250514-v1:0", want: false},
+		{name: "mythos preview", in: "claude-mythos-preview", want: false},
 	}
 	for _, tt := range cases {
 		t.Run(tt.name, func(t *testing.T) {
@@ -227,6 +231,28 @@ func TestInferenceConfig_OmitsTemperatureForOpus47(t *testing.T) {
 	require.NotNil(t, sonnet.MaxTokens)
 	require.NotNil(t, sonnet.Temperature)
 	require.InEpsilon(t, float32(0.7), *sonnet.Temperature, 0.0001)
+}
+
+func TestInferenceConfig_OmitsTemperatureForClaudeNewerGenerations(t *testing.T) {
+	client := &Client{
+		maxTok: 2048,
+		temp:   0.7,
+	}
+
+	cases := []string{
+		"us.anthropic.claude-opus-4-8-v1:0",
+		"us.anthropic.claude-sonnet-5-v1:0",
+		"global.anthropic.claude-haiku-5-v1:0",
+		"global.anthropic.claude-fable-5-v1:0",
+		"us.anthropic.claude-mythos-5-v1:0",
+	}
+	for _, modelID := range cases {
+		t.Run(modelID, func(t *testing.T) {
+			cfg := client.inferenceConfig(modelID, 0, 0)
+			require.NotNil(t, cfg)
+			require.Nil(t, cfg.Temperature)
+		})
+	}
 }
 
 func TestSanitizeToolName_StripsNamespaces(t *testing.T) {

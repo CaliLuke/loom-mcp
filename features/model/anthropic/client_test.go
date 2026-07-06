@@ -199,6 +199,57 @@ func TestComplete_RateLimited(t *testing.T) {
 	}
 }
 
+func TestComplete_SendsTemperatureWhenClaudeSupportsIt(t *testing.T) {
+	stub := &stubMessagesClient{resp: &sdk.Message{}}
+	cl, err := New(stub, Options{
+		DefaultModel: "claude-sonnet-4-5-20250929",
+		MaxTokens:    64,
+		Temperature:  0.7,
+	})
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+
+	_, err = cl.Complete(context.Background(), &model.Request{
+		Messages: []*model.Message{
+			{Role: model.ConversationRoleUser, Parts: []model.Part{model.TextPart{Text: "hi"}}},
+		},
+	})
+	if err != nil {
+		t.Fatalf("Complete: %v", err)
+	}
+	if !stub.lastParams.Temperature.Valid() {
+		t.Fatal("expected temperature to be sent")
+	}
+	if stub.lastParams.Temperature.Value != 0.7 {
+		t.Fatalf("unexpected temperature %v", stub.lastParams.Temperature.Value)
+	}
+}
+
+func TestComplete_OmitsTemperatureWhenClaudeRejectsIt(t *testing.T) {
+	stub := &stubMessagesClient{resp: &sdk.Message{}}
+	cl, err := New(stub, Options{
+		DefaultModel: "claude-sonnet-5",
+		MaxTokens:    64,
+		Temperature:  0.7,
+	})
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+
+	_, err = cl.Complete(context.Background(), &model.Request{
+		Messages: []*model.Message{
+			{Role: model.ConversationRoleUser, Parts: []model.Part{model.TextPart{Text: "hi"}}},
+		},
+	})
+	if err != nil {
+		t.Fatalf("Complete: %v", err)
+	}
+	if stub.lastParams.Temperature.Valid() {
+		t.Fatalf("expected temperature to be omitted, got %v", stub.lastParams.Temperature.Value)
+	}
+}
+
 func TestComplete_RejectsStructuredOutput(t *testing.T) {
 	cl, err := New(&stubMessagesClient{}, Options{
 		DefaultModel: "claude-3.5-sonnet",

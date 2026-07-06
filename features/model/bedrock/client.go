@@ -21,6 +21,7 @@ import (
 	smithy "github.com/aws/smithy-go"
 	smithyhttp "github.com/aws/smithy-go/transport/http"
 
+	"github.com/CaliLuke/loom-mcp/features/model/internal/claudecaps"
 	"github.com/CaliLuke/loom-mcp/runtime/agent/model"
 	"github.com/CaliLuke/loom-mcp/runtime/agent/rawjson"
 	"github.com/CaliLuke/loom-mcp/runtime/agent/telemetry"
@@ -37,14 +38,6 @@ const (
 	bedrockConfigDisplay  = "display"
 	bedrockObjectType     = "object"
 )
-
-var opus47ModelMarkers = []string{
-	"anthropic.claude-opus-4-7",
-	"us.anthropic.claude-opus-4-7",
-	"eu.anthropic.claude-opus-4-7",
-	"jp.anthropic.claude-opus-4-7",
-	"global.anthropic.claude-opus-4-7",
-}
 
 // RuntimeClient mirrors the subset of the AWS Bedrock runtime client required
 // by the adapter. It matches *bedrockruntime.Client so callers can pass either
@@ -535,7 +528,7 @@ func (c *Client) inferenceConfig(modelID string, maxTokens int, temp float32) *b
 	if tokens > 0 {
 		cfg.MaxTokens = aws.Int32(int32(tokens)) //nolint:gosec // AWS SDK requires int32
 	}
-	if t := c.effectiveTemperature(temp); t > 0 && !isOpus47Model(modelID) {
+	if t := c.effectiveTemperature(temp); t > 0 && claudecaps.TemperatureSupported(modelID) {
 		cfg.Temperature = aws.Float32(t)
 	}
 	if cfg.MaxTokens == nil && cfg.Temperature == nil {
@@ -1042,16 +1035,7 @@ func hasToolDefinition(defs []*model.ToolDefinition, name string) bool {
 // is automatic in adaptive mode — no beta header is needed. Using the legacy
 // config with these models produces unreliable thinking signatures.
 func isAdaptiveThinkingModel(modelID string) bool {
-	return strings.Contains(modelID, "opus-4-6") || isOpus47Model(modelID)
-}
-
-func isOpus47Model(modelID string) bool {
-	for _, marker := range opus47ModelMarkers {
-		if strings.Contains(modelID, marker) {
-			return true
-		}
-	}
-	return false
+	return claudecaps.AdaptiveThinkingRequired(modelID)
 }
 
 // isNovaModel reports whether the given model identifier refers to an Amazon
