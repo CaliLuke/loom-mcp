@@ -7,8 +7,12 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
+	"go.opentelemetry.io/otel/attribute"
+	sdktrace "go.opentelemetry.io/otel/sdk/trace"
+	"go.opentelemetry.io/otel/sdk/trace/tracetest"
 
 	"github.com/CaliLuke/loom-mcp/runtime/agent/model"
+	"github.com/CaliLuke/loom-mcp/runtime/agent/telemetry"
 	brtypes "github.com/aws/aws-sdk-go-v2/service/bedrockruntime/types"
 )
 
@@ -202,7 +206,7 @@ func TestBuildConverseStreamInput_AdaptiveThinkingRequestsSummaries(t *testing.T
 	}
 	thinking := client.resolveThinking(req, parts)
 
-	input := client.buildConverseStreamInput(parts, req, thinking)
+	input := client.buildConverseStreamInput(context.Background(), parts, req, thinking)
 
 	require.NotNil(t, input.AdditionalModelRequestFields)
 	raw, err := input.AdditionalModelRequestFields.MarshalSmithyDocument()
@@ -253,6 +257,34 @@ func TestInferenceConfig_OmitsTemperatureForClaudeNewerGenerations(t *testing.T)
 			require.Nil(t, cfg.Temperature)
 		})
 	}
+}
+
+func TestInferenceConfig_RecordsOmittedTemperature(t *testing.T) {
+	client := &Client{
+		maxTok: 2048,
+		temp:   0.7,
+	}
+	spanRecorder := tracetest.NewSpanRecorder()
+	tracerProvider := sdktrace.NewTracerProvider(sdktrace.WithSpanProcessor(spanRecorder))
+	ctx, span := tracerProvider.Tracer("test").Start(context.Background(), "test")
+
+	cfg := client.inferenceConfigWithContext(ctx, "us.anthropic.claude-sonnet-5-v1:0", 0, 0)
+	span.End()
+
+	require.NotNil(t, cfg)
+	require.Nil(t, cfg.Temperature)
+	attrs := bedrockSpanAttrMap(spanRecorder.Ended()[0].Attributes())
+	require.InEpsilon(t, 0.7, attrs[telemetry.AttrGenAIRequestTemperature].AsFloat64(), 0.0001)
+	require.True(t, attrs[telemetry.AttrGenAIRequestTemperatureOmitted].AsBool())
+	require.Equal(t, "us.anthropic.claude-sonnet-5-v1:0", attrs[telemetry.AttrGenAIRequestModel].AsString())
+}
+
+func bedrockSpanAttrMap(attrs []attribute.KeyValue) map[attribute.Key]attribute.Value {
+	values := make(map[attribute.Key]attribute.Value, len(attrs))
+	for _, attr := range attrs {
+		values[attr.Key] = attr.Value
+	}
+	return values
 }
 
 func TestSanitizeToolName_StripsNamespaces(t *testing.T) {

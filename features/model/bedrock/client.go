@@ -172,7 +172,7 @@ func (c *Client) Complete(ctx context.Context, req *model.Request) (*model.Respo
 	if err != nil {
 		return nil, err
 	}
-	output, err := c.runtime.Converse(ctx, c.buildConverseInput(parts, req))
+	output, err := c.runtime.Converse(ctx, c.buildConverseInput(ctx, parts, req))
 	if err != nil {
 		if isRateLimited(err) {
 			return nil, fmt.Errorf("%w: %w", model.ErrRateLimited, err)
@@ -223,7 +223,7 @@ func (c *Client) Stream(ctx context.Context, req *model.Request) (model.Streamer
 		return nil, err
 	}
 	thinking := c.resolveThinking(req, parts)
-	input := c.buildConverseStreamInput(parts, req, thinking)
+	input := c.buildConverseStreamInput(ctx, parts, req, thinking)
 	out, err := c.runtime.ConverseStream(ctx, input, c.streamOptions(thinking)...)
 	if err != nil {
 		if isRateLimited(err) {
@@ -397,7 +397,7 @@ func (c *Client) resolveModelID(req *model.Request) string {
 	return c.defaultModel
 }
 
-func (c *Client) buildConverseInput(parts *requestParts, req *model.Request) *bedrockruntime.ConverseInput {
+func (c *Client) buildConverseInput(ctx context.Context, parts *requestParts, req *model.Request) *bedrockruntime.ConverseInput {
 	input := &bedrockruntime.ConverseInput{
 		ModelId:  aws.String(parts.modelID),
 		Messages: parts.messages,
@@ -411,7 +411,7 @@ func (c *Client) buildConverseInput(parts *requestParts, req *model.Request) *be
 	if parts.outputConfig != nil {
 		input.OutputConfig = parts.outputConfig
 	}
-	if cfg := c.inferenceConfig(parts.modelID, req.MaxTokens, req.Temperature); cfg != nil {
+	if cfg := c.inferenceConfigWithContext(ctx, parts.modelID, req.MaxTokens, req.Temperature); cfg != nil {
 		input.InferenceConfig = cfg
 	}
 	return input
@@ -431,7 +431,7 @@ func (c *Client) buildCountTokensInput(parts *requestParts) *bedrockruntime.Coun
 	}
 }
 
-func (c *Client) buildConverseStreamInput(parts *requestParts, req *model.Request, thinking thinkingConfig) *bedrockruntime.ConverseStreamInput {
+func (c *Client) buildConverseStreamInput(ctx context.Context, parts *requestParts, req *model.Request, thinking thinkingConfig) *bedrockruntime.ConverseStreamInput {
 	input := &bedrockruntime.ConverseStreamInput{
 		ModelId:  aws.String(parts.modelID),
 		Messages: parts.messages,
@@ -464,7 +464,7 @@ func (c *Client) buildConverseStreamInput(parts *requestParts, req *model.Reques
 		}
 		input.AdditionalModelRequestFields = document.NewLazyDocument(&fields)
 	}
-	if cfg := c.inferenceConfig(parts.modelID, req.MaxTokens, req.Temperature); cfg != nil {
+	if cfg := c.inferenceConfigWithContext(ctx, parts.modelID, req.MaxTokens, req.Temperature); cfg != nil {
 		input.InferenceConfig = cfg
 	}
 	return input
@@ -523,13 +523,21 @@ func (c *Client) streamOptions(thinking thinkingConfig) []func(*bedrockruntime.O
 }
 
 func (c *Client) inferenceConfig(modelID string, maxTokens int, temp float32) *brtypes.InferenceConfiguration {
+	return c.inferenceConfigWithContext(context.Background(), modelID, maxTokens, temp)
+}
+
+func (c *Client) inferenceConfigWithContext(ctx context.Context, modelID string, maxTokens int, temp float32) *brtypes.InferenceConfiguration {
 	var cfg brtypes.InferenceConfiguration
 	tokens := c.effectiveMaxTokens(maxTokens)
 	if tokens > 0 {
 		cfg.MaxTokens = aws.Int32(int32(tokens)) //nolint:gosec // AWS SDK requires int32
 	}
-	if t := c.effectiveTemperature(temp); t > 0 && claudecaps.TemperatureSupported(modelID) {
-		cfg.Temperature = aws.Float32(t)
+	if t := c.effectiveTemperature(temp); t > 0 {
+		if claudecaps.TemperatureSupported(modelID) {
+			cfg.Temperature = aws.Float32(t)
+		} else {
+			traceTemperatureOmitted(ctx, modelID, t)
+		}
 	}
 	if cfg.MaxTokens == nil && cfg.Temperature == nil {
 		return nil

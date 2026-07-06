@@ -26,6 +26,8 @@ const (
 	AttrGenAIRequestMaxTokens = attribute.Key("gen_ai.request.max_tokens")
 	// AttrGenAIRequestTemperature records the requested sampling temperature.
 	AttrGenAIRequestTemperature = attribute.Key("gen_ai.request.temperature")
+	// AttrGenAIRequestTemperatureOmitted records that a provider rejected the requested temperature.
+	AttrGenAIRequestTemperatureOmitted = attribute.Key("gen_ai.request.temperature_omitted")
 	// AttrGenAIResponseModel records the provider-resolved response model.
 	AttrGenAIResponseModel = attribute.Key("gen_ai.response.model")
 	// AttrGenAIResponseFinishReasons records provider finish reasons.
@@ -49,5 +51,15 @@ func GenAIUsageAttrs(input, output, cacheRead, cacheCreation int) []attribute.Ke
 		AttrGenAIUsageOutputTokens.Int(output),
 		AttrGenAIUsageCacheReadTokens.Int(cacheRead),
 		AttrGenAIUsageCacheCreationTokens.Int(cacheCreation),
+	}
+}
+
+// GenAITemperatureOmittedAttrs returns attributes for a requested temperature
+// that was intentionally omitted because the resolved model does not accept it.
+func GenAITemperatureOmittedAttrs(modelID string, temperature float64) []attribute.KeyValue {
+	return []attribute.KeyValue{
+		AttrGenAIRequestTemperature.Float64(temperature),
+		AttrGenAIRequestTemperatureOmitted.Bool(true),
+		AttrGenAIRequestModel.String(modelID),
 	}
 }

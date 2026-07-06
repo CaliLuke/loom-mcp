@@ -163,7 +163,7 @@ func (c *Client) prepareRequest(ctx context.Context, req *model.Request) (*sdk.M
 	if err != nil {
 		return nil, nil, err
 	}
-	params := c.newMessageParams(modelID, maxTokens, msgs, system, tools, req.Temperature)
+	params := c.newMessageParams(ctx, modelID, maxTokens, msgs, system, tools, req.Temperature)
 	if err := c.applyThinkingConfig(&params, req, maxTokens); err != nil {
 		return nil, nil, err
 	}
@@ -189,6 +189,7 @@ func (c *Client) validateRequestInputs(req *model.Request) (string, int, error) 
 }
 
 func (c *Client) newMessageParams(
+	ctx context.Context,
 	modelID string,
 	maxTokens int,
 	msgs []sdk.MessageParam,
@@ -207,8 +208,12 @@ func (c *Client) newMessageParams(
 	if len(tools) > 0 {
 		params.Tools = tools
 	}
-	if t := c.effectiveTemperature(temperature); t > 0 && claudecaps.TemperatureSupported(modelID) {
-		params.Temperature = sdk.Float(t)
+	if t := c.effectiveTemperature(temperature); t > 0 {
+		if claudecaps.TemperatureSupported(modelID) {
+			params.Temperature = sdk.Float(t)
+		} else {
+			traceTemperatureOmitted(ctx, modelID, t)
+		}
 	}
 	return params
 }

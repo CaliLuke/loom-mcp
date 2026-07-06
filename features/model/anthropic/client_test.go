@@ -9,8 +9,13 @@ import (
 	sdk "github.com/anthropics/anthropic-sdk-go"
 	"github.com/anthropics/anthropic-sdk-go/option"
 	"github.com/anthropics/anthropic-sdk-go/packages/ssestream"
+	"github.com/stretchr/testify/require"
+	"go.opentelemetry.io/otel/attribute"
+	sdktrace "go.opentelemetry.io/otel/sdk/trace"
+	"go.opentelemetry.io/otel/sdk/trace/tracetest"
 
 	"github.com/CaliLuke/loom-mcp/runtime/agent/model"
+	"github.com/CaliLuke/loom-mcp/runtime/agent/telemetry"
 )
 
 type stubMessagesClient struct {
@@ -237,17 +242,34 @@ func TestComplete_OmitsTemperatureWhenClaudeRejectsIt(t *testing.T) {
 		t.Fatalf("New: %v", err)
 	}
 
-	_, err = cl.Complete(context.Background(), &model.Request{
+	spanRecorder := tracetest.NewSpanRecorder()
+	tracerProvider := sdktrace.NewTracerProvider(sdktrace.WithSpanProcessor(spanRecorder))
+	ctx, span := tracerProvider.Tracer("test").Start(context.Background(), "test")
+
+	_, err = cl.Complete(ctx, &model.Request{
 		Messages: []*model.Message{
 			{Role: model.ConversationRoleUser, Parts: []model.Part{model.TextPart{Text: "hi"}}},
 		},
 	})
+	span.End()
 	if err != nil {
 		t.Fatalf("Complete: %v", err)
 	}
 	if stub.lastParams.Temperature.Valid() {
 		t.Fatalf("expected temperature to be omitted, got %v", stub.lastParams.Temperature.Value)
 	}
+	attrs := spanAttrMap(spanRecorder.Ended()[0].Attributes())
+	require.InEpsilon(t, 0.7, attrs[telemetry.AttrGenAIRequestTemperature].AsFloat64(), 0.0001)
+	require.True(t, attrs[telemetry.AttrGenAIRequestTemperatureOmitted].AsBool())
+	require.Equal(t, "claude-sonnet-5", attrs[telemetry.AttrGenAIRequestModel].AsString())
+}
+
+func spanAttrMap(attrs []attribute.KeyValue) map[attribute.Key]attribute.Value {
+	values := make(map[attribute.Key]attribute.Value, len(attrs))
+	for _, attr := range attrs {
+		values[attr.Key] = attr.Value
+	}
+	return values
 }
 
 func TestComplete_RejectsStructuredOutput(t *testing.T) {
