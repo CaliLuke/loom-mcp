@@ -19,10 +19,36 @@ import (
 	"github.com/CaliLuke/loom-mcp/runtime/agent/planner"
 	"github.com/CaliLuke/loom-mcp/runtime/agent/rawjson"
 	agentsruntime "github.com/CaliLuke/loom-mcp/runtime/agent/runtime"
+	"github.com/CaliLuke/loom-mcp/runtime/agent/tools"
 	"github.com/stretchr/testify/require"
 )
 
-func TestGeneratedAgentFeatureFixtureRunsEndToEnd(t *testing.T) {
+func TestGeneratedFeatureFixtureRegistersRuntimeSurface(t *testing.T) {
+	ctx := context.Background()
+	rt := agentsruntime.New(
+		agentsruntime.WithMemoryStore(memoryinmem.New()),
+		agentsruntime.WithArtifactStore(artifact.NewMemoryStore()),
+		agentsruntime.WithNamedInterceptors(map[string]agentsruntime.Interceptor{
+			"audit": &auditInterceptor{},
+		}),
+	)
+	require.NoError(t, coordinator.RegisterUsedToolsets(ctx, rt, coordinator.WithWorkflowExecutor(newRecordingWorkflowExecutor())))
+	require.NoError(t, coordinator.RegisterCoordinatorAgent(ctx, rt, coordinator.CoordinatorAgentConfig{}))
+
+	toolsets := rt.ListToolsets()
+	require.Contains(t, toolsets, "features.artifacts")
+	require.Contains(t, toolsets, "features.memory")
+	require.Contains(t, toolsets, "features.skills")
+	require.Contains(t, toolsets, "features.workflow")
+	require.ElementsMatch(t, []tools.Ident{
+		workflow.Draft,
+		workflow.Review,
+		workflow.Retry,
+		workflow.Publish,
+	}, workflow.Names())
+}
+
+func TestGeneratedFeatureRunPublishesAwaitAndResumesWithTypedInput(t *testing.T) {
 	ctx := context.Background()
 	rt, recorder, audit := newFeatureRuntime(t)
 	exec := newRecordingWorkflowExecutor()
@@ -63,7 +89,7 @@ func TestGeneratedAgentFeatureFixtureRunsEndToEnd(t *testing.T) {
 	require.GreaterOrEqual(t, recorder.count(hooks.ToolResultReceived), 5)
 }
 
-func TestGeneratedAgentToolsetsUseRuntimeStores(t *testing.T) {
+func TestGeneratedFeatureRunPersistsArtifactsMemorySkillsAndDebugState(t *testing.T) {
 	ctx := context.Background()
 	mem := memoryinmem.New()
 	artifacts := artifact.NewMemoryStore()
@@ -135,7 +161,7 @@ func TestGeneratedAgentToolsetsUseRuntimeStores(t *testing.T) {
 	require.Contains(t, string(listSkills.Payload), "release-check")
 }
 
-func TestGeneratedNamedInterceptorsApplyToRunToolModelAndEventPaths(t *testing.T) {
+func TestGeneratedFeatureRunAppliesNamedInterceptorsAndRetryReflect(t *testing.T) {
 	ctx := context.Background()
 	rt, _, audit := newFeatureRuntime(t)
 	require.NoError(t, rt.RegisterModel("test-model", modelClientFunc(func(ctx context.Context, req *model.Request) (*model.Response, error) {
@@ -160,6 +186,40 @@ func TestGeneratedNamedInterceptorsApplyToRunToolModelAndEventPaths(t *testing.T
 	require.GreaterOrEqual(t, audit.beforeToolCount(), 1)
 	require.GreaterOrEqual(t, audit.beforeModelCount(), 1)
 	require.GreaterOrEqual(t, audit.beforeEventCount(), 1)
+}
+
+func TestGeneratedFeatureRunBranchesToReviseWhenApprovalFalse(t *testing.T) {
+	ctx := context.Background()
+	rt, recorder, _ := newFeatureRuntime(t)
+	exec := newRecordingWorkflowExecutor()
+	require.NoError(t, coordinator.RegisterUsedToolsets(ctx, rt, coordinator.WithWorkflowExecutor(exec)))
+	require.NoError(t, coordinator.RegisterCoordinatorAgent(ctx, rt, coordinator.CoordinatorAgentConfig{}))
+	_, err := rt.CreateSession(ctx, "sess-revise")
+	require.NoError(t, err)
+
+	runID := "run-generated-agent-features-revise"
+	handle, err := coordinator.NewClient(rt).Start(
+		ctx,
+		"sess-revise",
+		[]*model.Message{{Role: model.ConversationRoleUser, Parts: []model.Part{model.TextPart{Text: "revise it"}}}},
+		agentsruntime.WithRunID(runID),
+	)
+	require.NoError(t, err)
+	require.Eventually(t, func() bool {
+		return recorder.count(hooks.AwaitTypedInput) == 1
+	}, time.Second, 10*time.Millisecond)
+
+	err = rt.ProvideTypedInput(ctx, &api.TypedInputAnswer{
+		RunID:   runID,
+		ID:      "approval",
+		Payload: rawjson.Message([]byte(`{"approved":false}`)),
+	})
+	require.NoError(t, err)
+	_, err = handle.Wait(ctx)
+	require.NoError(t, err)
+
+	require.Contains(t, exec.toolNames(), tools.Ident("workflow.revise"))
+	require.NotContains(t, exec.toolNames(), workflow.Publish)
 }
 
 type recordingWorkflowExecutor struct {
@@ -215,6 +275,16 @@ func (e *recordingWorkflowExecutor) toolCallIDs() []string {
 		ids = append(ids, call.ToolCallID)
 	}
 	return ids
+}
+
+func (e *recordingWorkflowExecutor) toolNames() []tools.Ident {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	names := make([]tools.Ident, 0, len(e.calls))
+	for _, call := range e.calls {
+		names = append(names, call.Name)
+	}
+	return names
 }
 
 type namedInterceptorPlanner struct{}
