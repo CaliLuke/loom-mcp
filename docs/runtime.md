@@ -494,6 +494,26 @@ This helper drains the stream, emits events via `PlannerEvents`, and returns a
 
 **Important:** Never combine a decorated client with `ConsumeStream`.
 
+### Typed Structured Completions
+
+`runtime/agent/completion` wraps a raw `model.Client` with a generated-style
+typed completion spec. The helper clones the request, installs
+`model.StructuredOutput`, rejects tool calls on that request, and decodes the
+provider's structured JSON through the supplied codec:
+
+```go
+resp, err := completion.Complete(ctx, modelClient, req, completions.SpecDraft)
+if err != nil {
+    return err
+}
+fmt.Println(resp.Value)
+```
+
+For streaming completions, `completion.Stream` returns a `model.Streamer` that
+allows `completion_delta`, thinking, and usage chunks, but requires exactly one
+canonical `completion` chunk before EOF. Decode the final typed value with
+`completion.DecodeChunk`.
+
 ---
 
 ## Tool Execution
