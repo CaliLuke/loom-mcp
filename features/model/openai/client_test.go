@@ -2,6 +2,8 @@ package openai_test
 
 import (
 	"context"
+	"errors"
+	"io"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -10,6 +12,7 @@ import (
 	"github.com/CaliLuke/loom-mcp/runtime/agent/model"
 	"github.com/CaliLuke/loom-mcp/runtime/agent/tools"
 	"github.com/openai/openai-go/option"
+	"github.com/openai/openai-go/packages/ssestream"
 	"github.com/openai/openai-go/responses"
 )
 
@@ -363,12 +366,257 @@ func TestClientRequiresDefaultModel(t *testing.T) {
 	require.Error(t, err)
 }
 
+func TestClientStreamEmitsTextToolCallsUsageAndStop(t *testing.T) {
+	mock := &mockResponsesClient{
+		stream: newMockOpenAIStream(
+			`{
+				"type":"response.output_text.delta",
+				"sequence_number":1,
+				"item_id":"msg_1",
+				"output_index":0,
+				"content_index":0,
+				"delta":"Hel",
+				"logprobs":[]
+			}`,
+			`{
+				"type":"response.output_text.delta",
+				"sequence_number":2,
+				"item_id":"msg_1",
+				"output_index":0,
+				"content_index":0,
+				"delta":"lo",
+				"logprobs":[]
+			}`,
+			`{
+				"type":"response.output_item.added",
+				"sequence_number":3,
+				"output_index":1,
+				"item":{
+					"id":"fc_1",
+					"type":"function_call",
+					"call_id":"call_1",
+					"name":"lookup",
+					"arguments":"",
+					"status":"in_progress"
+				}
+			}`,
+			`{
+				"type":"response.function_call_arguments.delta",
+				"sequence_number":4,
+				"item_id":"fc_1",
+				"output_index":1,
+				"delta":"{\"query\""
+			}`,
+			`{
+				"type":"response.function_call_arguments.delta",
+				"sequence_number":5,
+				"item_id":"fc_1",
+				"output_index":1,
+				"delta":":\"docs\"}"
+			}`,
+			`{
+				"type":"response.completed",
+				"sequence_number":6,
+				"response":{
+					"model":"gpt-4o",
+					"status":"completed",
+					"usage":{
+						"input_tokens":10,
+						"input_tokens_details":{"cached_tokens":0},
+						"output_tokens":5,
+						"output_tokens_details":{"reasoning_tokens":0},
+						"total_tokens":15
+					},
+					"output":[
+						{
+							"id":"msg_1",
+							"type":"message",
+							"role":"assistant",
+							"status":"completed",
+							"content":[{"type":"output_text","text":"Hello","annotations":[],"logprobs":[]}]
+						},
+						{
+							"id":"fc_1",
+							"type":"function_call",
+							"call_id":"call_1",
+							"name":"lookup",
+							"arguments":"{\"query\":\"docs\"}",
+							"status":"completed"
+						}
+					]
+				}
+			}`,
+		),
+	}
+	client, err := openaimodel.New(openaimodel.Options{Client: mock, DefaultModel: "gpt-4o"})
+	require.NoError(t, err)
+
+	streamer, err := client.Stream(context.Background(), &model.Request{
+		Messages: []*model.Message{{
+			Role:  model.ConversationRoleUser,
+			Parts: []model.Part{model.TextPart{Text: "Ping"}},
+		}},
+		Tools: []*model.ToolDefinition{{
+			Name:        "lookup",
+			Description: "Search",
+			InputSchema: map[string]any{"type": "object"},
+		}},
+	})
+	require.NoError(t, err)
+	defer func() {
+		require.NoError(t, streamer.Close())
+	}()
+
+	chunks := collectStreamChunks(t, streamer)
+	require.Len(t, chunks, 7)
+	require.Equal(t, model.ChunkTypeText, chunks[0].Type)
+	require.Equal(t, "Hel", chunks[0].Message.Parts[0].(model.TextPart).Text)
+	require.Equal(t, model.ChunkTypeText, chunks[1].Type)
+	require.Equal(t, "lo", chunks[1].Message.Parts[0].(model.TextPart).Text)
+	require.Equal(t, model.ChunkTypeToolCallDelta, chunks[2].Type)
+	require.Equal(t, "call_1", chunks[2].ToolCallDelta.ID)
+	require.Equal(t, tools.Ident("lookup"), chunks[2].ToolCallDelta.Name)
+	require.Equal(t, model.ChunkTypeToolCallDelta, chunks[3].Type)
+	require.Equal(t, model.ChunkTypeToolCall, chunks[4].Type)
+	require.Equal(t, "call_1", chunks[4].ToolCall.ID)
+	require.JSONEq(t, `{"query":"docs"}`, string(chunks[4].ToolCall.Payload))
+	require.Equal(t, model.ChunkTypeUsage, chunks[5].Type)
+	require.Equal(t, 15, chunks[5].UsageDelta.TotalTokens)
+	require.Equal(t, "gpt-4o", chunks[5].UsageDelta.Model)
+	require.Equal(t, model.ChunkTypeStop, chunks[6].Type)
+	require.Equal(t, "completed", chunks[6].StopReason)
+
+	meta := streamer.Metadata()
+	require.NotNil(t, meta)
+	usage, ok := meta["usage"].(model.TokenUsage)
+	require.True(t, ok)
+	require.Equal(t, 15, usage.TotalTokens)
+	require.Equal(t, "gpt-4o", usage.Model)
+	require.Equal(t, "gpt-4o", mock.streamCaptured.Model)
+}
+
+func TestClientStreamStructuredOutput(t *testing.T) {
+	mock := &mockResponsesClient{
+		stream: newMockOpenAIStream(
+			`{
+				"type":"response.output_text.delta",
+				"sequence_number":1,
+				"item_id":"msg_1",
+				"output_index":0,
+				"content_index":0,
+				"delta":"{\"answer\":\"ok\"}",
+				"logprobs":[]
+			}`,
+			`{
+				"type":"response.completed",
+				"sequence_number":2,
+				"response":{
+					"model":"gpt-4o",
+					"status":"completed",
+					"output":[
+						{
+							"id":"msg_1",
+							"type":"message",
+							"role":"assistant",
+							"status":"completed",
+							"content":[{"type":"output_text","text":"{\"answer\":\"ok\"}","annotations":[],"logprobs":[]}]
+						}
+					]
+				}
+			}`,
+		),
+	}
+	client, err := openaimodel.New(openaimodel.Options{Client: mock, DefaultModel: "gpt-4o"})
+	require.NoError(t, err)
+
+	streamer, err := client.Stream(context.Background(), &model.Request{
+		Messages: []*model.Message{{
+			Role:  model.ConversationRoleUser,
+			Parts: []model.Part{model.TextPart{Text: "Ping"}},
+		}},
+		StructuredOutput: &model.StructuredOutput{
+			Name:   "draft",
+			Schema: []byte(`{"type":"object","required":["answer"],"properties":{"answer":{"type":"string"}}}`),
+		},
+	})
+	require.NoError(t, err)
+	defer func() {
+		require.NoError(t, streamer.Close())
+	}()
+
+	chunks := collectStreamChunks(t, streamer)
+	require.Len(t, chunks, 3)
+	require.Equal(t, model.ChunkTypeCompletionDelta, chunks[0].Type)
+	require.Equal(t, "draft", chunks[0].CompletionDelta.Name)
+	require.JSONEq(t, `{"answer":"ok"}`, chunks[0].CompletionDelta.Delta)
+	require.Equal(t, model.ChunkTypeCompletion, chunks[1].Type)
+	require.Equal(t, "draft", chunks[1].Completion.Name)
+	require.JSONEq(t, `{"answer":"ok"}`, string(chunks[1].Completion.Payload))
+	require.Equal(t, model.ChunkTypeStop, chunks[2].Type)
+}
+
 type mockResponsesClient struct {
-	response *responses.Response
-	captured responses.ResponseNewParams
+	response       *responses.Response
+	stream         *ssestream.Stream[responses.ResponseStreamEventUnion]
+	captured       responses.ResponseNewParams
+	streamCaptured responses.ResponseNewParams
 }
 
 func (m *mockResponsesClient) New(ctx context.Context, request responses.ResponseNewParams, _ ...option.RequestOption) (*responses.Response, error) {
 	m.captured = request
 	return m.response, nil
+}
+
+func (m *mockResponsesClient) NewStreaming(ctx context.Context, request responses.ResponseNewParams, _ ...option.RequestOption) *ssestream.Stream[responses.ResponseStreamEventUnion] {
+	m.streamCaptured = request
+	return m.stream
+}
+
+type mockStreamDecoder struct {
+	events []ssestream.Event
+	idx    int
+}
+
+func newMockOpenAIStream(raws ...string) *ssestream.Stream[responses.ResponseStreamEventUnion] {
+	events := make([]ssestream.Event, 0, len(raws))
+	for _, raw := range raws {
+		events = append(events, ssestream.Event{Data: []byte(raw)})
+	}
+	return ssestream.NewStream[responses.ResponseStreamEventUnion](&mockStreamDecoder{events: events}, nil)
+}
+
+func (d *mockStreamDecoder) Event() ssestream.Event {
+	if d.idx == 0 || d.idx > len(d.events) {
+		return ssestream.Event{}
+	}
+	return d.events[d.idx-1]
+}
+
+func (d *mockStreamDecoder) Next() bool {
+	if d.idx >= len(d.events) {
+		return false
+	}
+	d.idx++
+	return true
+}
+
+func (d *mockStreamDecoder) Close() error {
+	return nil
+}
+
+func (d *mockStreamDecoder) Err() error {
+	return nil
+}
+
+func collectStreamChunks(t *testing.T, streamer model.Streamer) []model.Chunk {
+	t.Helper()
+	var chunks []model.Chunk
+	for {
+		chunk, err := streamer.Recv()
+		if errors.Is(err, io.EOF) {
+			return chunks
+		}
+		require.NoError(t, err)
+		chunks = append(chunks, chunk)
+	}
 }

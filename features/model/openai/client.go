@@ -13,6 +13,7 @@ import (
 	openai "github.com/openai/openai-go"
 	"github.com/openai/openai-go/option"
 	"github.com/openai/openai-go/packages/param"
+	"github.com/openai/openai-go/packages/ssestream"
 	"github.com/openai/openai-go/responses"
 	"github.com/openai/openai-go/shared"
 
@@ -24,6 +25,7 @@ import (
 // ResponseClient captures the subset of the official OpenAI client used by the adapter.
 type ResponseClient interface {
 	New(ctx context.Context, body responses.ResponseNewParams, opts ...option.RequestOption) (*responses.Response, error)
+	NewStreaming(ctx context.Context, body responses.ResponseNewParams, opts ...option.RequestOption) *ssestream.Stream[responses.ResponseStreamEventUnion]
 }
 
 type openAIToolCodec struct {
@@ -258,10 +260,17 @@ func hasToolDefinition(defs []*model.ToolDefinition, name string) bool {
 	return false
 }
 
-// Stream reports that OpenAI Responses streaming is not yet supported by this
-// adapter. Callers should fall back to Complete.
-func (c *Client) Stream(context.Context, *model.Request) (model.Streamer, error) {
-	return nil, model.ErrStreamingUnsupported
+// Stream renders a streaming response using the configured OpenAI client.
+func (c *Client) Stream(ctx context.Context, req *model.Request) (model.Streamer, error) {
+	request, codec, err := c.buildResponseRequest(req)
+	if err != nil {
+		return nil, err
+	}
+	stream := c.resp.NewStreaming(ctx, request)
+	if stream == nil {
+		return nil, errors.New("openai: stream is nil")
+	}
+	return newOpenAIStreamer(ctx, stream, codec, c.resolveModelID(req), req.StructuredOutput), nil
 }
 
 func encodeTools(defs []*model.ToolDefinition) ([]responses.ToolUnionParam, *openAIToolCodec, error) {
