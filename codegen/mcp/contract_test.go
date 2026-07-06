@@ -322,6 +322,46 @@ func TestGenerateSDKServer_MergesContextRequestHeadersIntoSyntheticRequest(t *te
 	require.Greater(t, extraLoopIdx, ctxLoopIdx, "extra.Header overlay must come after the RequestHeadersFromContext copy so per-call headers win over the ctx-bridged values")
 }
 
+func TestGenerateSDKServer_CompletionTotalCountsAllMatchesBeforeTruncation(t *testing.T) {
+	restore := resetMCPCodegenState(t)
+	defer restore()
+
+	svc, methods := testService("assistant", "generate_prompt")
+	methods["generate_prompt"].Payload = &expr.AttributeExpr{Type: &expr.Object{
+		{Name: "framework", Attribute: &expr.AttributeExpr{Type: expr.String, Validation: &expr.ValidationExpr{Values: []any{"react", "swiftui"}}}},
+	}}
+	root := testRootExpr([]*expr.ServiceExpr{svc}, []*expr.HTTPServiceExpr{
+		jsonrpcService(svc, "/rpc"),
+	})
+	mcp := &mcpexpr.MCPExpr{
+		Name:    "assistant-mcp",
+		Version: "1.0.0",
+	}
+	mcpexpr.Root.RegisterMCP(svc, mcp)
+	mcpexpr.Root.DynamicPrompts[svc.Name] = []*mcpexpr.DynamicPromptExpr{
+		{Name: "assistant_prompt", Method: methods["generate_prompt"]},
+	}
+
+	files, err := Generate("example.com/assistant/gen", []eval.Root{root}, nil)
+	require.NoError(t, err)
+
+	var rendered string
+	for _, file := range files {
+		if filepath.Base(file.Path) == "sdk_server.go" {
+			rendered = renderGeneratedFile(t, file)
+			break
+		}
+	}
+
+	require.NotEmpty(t, rendered)
+	totalIdx := strings.Index(rendered, "total := len(matches)")
+	truncateIdx := strings.Index(rendered, "matches = matches[:100]")
+	require.GreaterOrEqual(t, totalIdx, 0, "completion total must be captured before truncating returned values")
+	require.GreaterOrEqual(t, truncateIdx, 0, "completion values must still be capped at the MCP limit")
+	require.Less(t, totalIdx, truncateIdx, "completion total must count all matches, not only the truncated values")
+	require.Contains(t, rendered, "return sdkCompleteValues(matches, total, hasMore)")
+}
+
 func TestBuildAdapterData_DefaultedEnumFieldsStayScalarAndReapplyDefaults(t *testing.T) {
 	restore := resetMCPCodegenState(t)
 	defer restore()

@@ -781,12 +781,13 @@ func sdkFilteredCompletion(prefix string, values []string) *mcpsdk.CompleteResul
 			matches = append(matches, value)
 		}
 	}
+	total := len(matches)
 	hasMore := false
 	if len(matches) > 100 {
 		matches = matches[:100]
 		hasMore = true
 	}
-	return sdkCompleteValues(matches, len(matches), hasMore)
+	return sdkCompleteValues(matches, total, hasMore)
 }
 func sdkCompleteValues(values []string, total int, hasMore bool) *mcpsdk.CompleteResult {
 	if values == nil {

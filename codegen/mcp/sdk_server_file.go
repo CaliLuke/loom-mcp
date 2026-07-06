@@ -1090,12 +1090,13 @@ func emitSDKCompletionConversion(stmt *jen.Statement) {
 					jen.Id("matches").Op("=").Append(jen.Id("matches"), jen.Id("value")),
 				),
 			),
+			jen.Id("total").Op(":=").Len(jen.Id("matches")),
 			jen.Id("hasMore").Op(":=").False(),
 			jen.If(jen.Len(jen.Id("matches")).Op(">").Lit(100)).Block(
 				jen.Id("matches").Op("=").Id("matches").Index(jen.Empty(), jen.Lit(100)),
 				jen.Id("hasMore").Op("=").True(),
 			),
-			jen.Return(jen.Id("sdkCompleteValues").Call(jen.Id("matches"), jen.Len(jen.Id("matches")), jen.Id("hasMore"))),
+			jen.Return(jen.Id("sdkCompleteValues").Call(jen.Id("matches"), jen.Id("total"), jen.Id("hasMore"))),
 		)
 	stmt.Line()
 	stmt.Func().Id("sdkCompleteValues").
