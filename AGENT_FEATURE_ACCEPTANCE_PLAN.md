@@ -11,6 +11,7 @@ Refactor confidence around the existing generated `integration_tests/fixtures/ag
 - 2026-07-06 — Milestone 1 red test added. `go test -C ./integration_tests/fixtures/agent_features ./... -run TestGenerated -count=1` fails in `TestGeneratedFeatureRunBranchesToReviseWhenApprovalFalse` because observed tools are `workflow.review`, `workflow.draft`, `workflow.retry`, `workflow.retry`, `workflow.publish`, with no `workflow.revise`.
 - 2026-07-06 — Milestone 2 reconciled the fixture DSL with `workflow.revise`, regenerated `integration_tests/fixtures/agent_features`, and added `regen-agent-feature-fixture` plus `verify-agent-feature-fixture`. `make loom-status` initially reported remote mode for root, fixture, and quickstart; `make loom-local` required restoring the canonical `/Users/luca/code/loom-mono` symlink to the existing local checkout. The focused registration proof passes after returning to remote mode.
 - 2026-07-06 — Milestone 3 expanded the acceptance harness into `acceptance_helpers_test.go`, fixed branch target dependency construction so `publish` and `revise` both depend on `route`, fixed current-run memory to use the store even when an indexed searcher is configured, and proved `go test -C ./integration_tests/fixtures/agent_features ./... -run TestGenerated -count=1`, `go test ./dsl -run TestWorkflowBranchTargetsShareBranchDependency -count=1`, and `go test ./runtime/agent/runtime -run TestMemoryToolsetCurrentRunUsesStoreWhenSearcherConfigured -count=1`.
+- 2026-07-06 — Milestone 4 confirmed layer boundaries with `go test ./dsl ./expr/agent ./codegen/agent/tests ./runtime/agent/planner ./runtime/agent/runtime ./runtime/mcp/skills ./runtime/agent/debug -count=1`.
 
 ## Milestones
 
@@ -105,11 +106,11 @@ Acceptance Criteria
 
 Checklist
 
-- [ ] Confirm `runtime/agent/runtime/artifact_test.go` contains existing `TestArtifactRefsRejectMismatchedToolCallID` and keep it as the artifact-ref scope regression.
-- [ ] Keep `dsl/artifact_test.go`, `dsl/memory_test.go`, `dsl/interceptors_test.go`, `dsl/workflow_graph_test.go`, `expr/agent/artifact_test.go`, `expr/agent/memory_test.go`, `expr/agent/interceptors_test.go`, and `expr/agent/workflow_graph_test.go` focused on DSL and validation behavior.
-- [ ] Keep `codegen/agent/tests/golden_artifacts_toolset_test.go`, `codegen/agent/tests/golden_memory_toolset_test.go`, `codegen/agent/tests/golden_skills_toolset_test.go`, `codegen/agent/tests/golden_workflow_graph_test.go`, and `codegen/agent/tests/golden_run_policy_test.go` focused on generated-shape assertions.
-- [ ] Keep `runtime/agent/planner/workflow_graph_test.go`, `runtime/agent/runtime/memory_toolset_test.go`, `runtime/agent/runtime/skill_toolset_test.go`, `runtime/agent/runtime/runtime_interceptors_test.go`, `runtime/agent/runtime/runtime_interceptors_m3_test.go`, `runtime/agent/runtime/typed_input_test.go`, and `runtime/agent/debug/server_test.go` as package-level behavior tests.
-- [ ] Run `go test ./dsl ./expr/agent ./codegen/agent/tests ./runtime/agent/planner ./runtime/agent/runtime ./runtime/mcp/skills ./runtime/agent/debug -count=1`.
+- [x] Confirm `runtime/agent/runtime/artifact_test.go` contains existing `TestArtifactRefsRejectMismatchedToolCallID` and keep it as the artifact-ref scope regression.
+- [x] Keep `dsl/artifact_test.go`, `dsl/memory_test.go`, `dsl/interceptors_test.go`, `dsl/workflow_graph_test.go`, `expr/agent/artifact_test.go`, `expr/agent/memory_test.go`, `expr/agent/interceptors_test.go`, and `expr/agent/workflow_graph_test.go` focused on DSL and validation behavior.
+- [x] Keep `codegen/agent/tests/golden_artifacts_toolset_test.go`, `codegen/agent/tests/golden_memory_toolset_test.go`, `codegen/agent/tests/golden_skills_toolset_test.go`, `codegen/agent/tests/golden_workflow_graph_test.go`, and `codegen/agent/tests/golden_run_policy_test.go` focused on generated-shape assertions.
+- [x] Keep `runtime/agent/planner/workflow_graph_test.go`, `runtime/agent/runtime/memory_toolset_test.go`, `runtime/agent/runtime/skill_toolset_test.go`, `runtime/agent/runtime/runtime_interceptors_test.go`, `runtime/agent/runtime/runtime_interceptors_m3_test.go`, `runtime/agent/runtime/typed_input_test.go`, and `runtime/agent/debug/server_test.go` as package-level behavior tests.
+- [x] Run `go test ./dsl ./expr/agent ./codegen/agent/tests ./runtime/agent/planner ./runtime/agent/runtime ./runtime/mcp/skills ./runtime/agent/debug -count=1`.
 
 ### Milestone 5: Documentation And Skill Contract
 
