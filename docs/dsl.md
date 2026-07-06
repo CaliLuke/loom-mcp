@@ -877,8 +877,8 @@ Codegen produces transform helpers when shapes are compatible:
 `Inject` marks payload fields as server-injected. Injected fields are:
 
 1. Hidden from the LLM (excluded from JSON schema)
-2. Exposed in generated structs with setter methods
-3. Populated by runtime hooks (ToolInterceptor)
+2. Exposed in generated structs
+3. Populated by generated injection helpers from runtime metadata or run labels
 
 ```go
 Tool("get_data", "Get user data", func() {
@@ -891,6 +891,15 @@ Tool("get_data", "Get user data", func() {
     Inject("session_id")  // Hidden from LLM, set by runtime
 })
 ```
+
+Names matching `runtime.ToolCallMeta` fields (`run_id`, `session_id`,
+`turn_id`, `tool_call_id`, `parent_tool_call_id`) are metadata-backed. Other
+required string fields are label-backed and are read from run labels, for
+example `runtime.WithLabels(map[string]string{"household_id": "house-42"})`.
+Generated toolset specs expose `Inject<Tool>` and `Decode<Tool>` helpers so
+custom executors can decode payload JSON and apply injection in one step.
+Registry-served bound tools should use metadata-backed names until registry
+tool-call messages carry run labels.
 
 ### Display Hint Templates
 

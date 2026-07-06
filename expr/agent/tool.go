@@ -164,7 +164,20 @@ type (
 		TargetService string
 		TargetMethod  string
 	}
+
+	injectTarget struct {
+		att  *goaexpr.AttributeExpr
+		desc string
+	}
 )
+
+var runtimeMetaFieldNames = map[string]struct{}{
+	"RunID":            {},
+	"SessionID":        {},
+	"TurnID":           {},
+	"ToolCallID":       {},
+	"ParentToolCallID": {},
+}
 
 // AddMeta adds metadata to the tool expression.
 //
@@ -260,7 +273,12 @@ func (t *ToolExpr) Prepare() {
 // service and method.
 func (t *ToolExpr) Validate() error {
 	if t.bindMethodName == "" {
-		return t.validateShapes()
+		verr := new(eval.ValidationErrors)
+		validateInjectedFields(t, injectTargets(t, nil), verr)
+		if err := t.validateShapes(); err != nil {
+			verr.AddError(t, err)
+		}
+		return verr
 	}
 	verr := new(eval.ValidationErrors)
 	var svc *goaexpr.ServiceExpr
@@ -277,7 +295,8 @@ func (t *ToolExpr) Validate() error {
 	for _, m := range svc.Methods {
 		if codegen.Goify(m.Name, true) == desired {
 			t.Method = m
-			validateInjectedFields(t, m, verr)
+			validateInjectedFields(t, injectTargets(t, m), verr)
+			validateNoLabelBackedInjectOnBoundTool(t, verr)
 			if err := t.validateShapes(); err != nil {
 				verr.AddError(t, err)
 				return verr
@@ -289,49 +308,34 @@ func (t *ToolExpr) Validate() error {
 	return verr
 }
 
-func validateInjectedFields(t *ToolExpr, m *goaexpr.MethodExpr, verr *eval.ValidationErrors) {
+func injectTargets(t *ToolExpr, m *goaexpr.MethodExpr) []injectTarget {
+	if m == nil {
+		return []injectTarget{{att: t.Args, desc: "tool payload"}}
+	}
+	if t.Args == nil || t.Args.Type == nil || t.Args.Type == goaexpr.Empty {
+		return []injectTarget{{att: m.Payload, desc: "bound method payload"}}
+	}
+	return []injectTarget{
+		{att: t.Args, desc: "tool Args"},
+		{att: m.Payload, desc: "bound method payload"},
+	}
+}
+
+func validateInjectedFields(t *ToolExpr, targets []injectTarget, verr *eval.ValidationErrors) {
 	if t == nil || len(t.InjectedFields) == 0 {
 		return
 	}
-	obj, required, ok := injectedFieldContext(t, m, verr)
-	if !ok {
-		return
-	}
-
+	names := make([]string, 0, len(t.InjectedFields))
 	seen := make(map[string]struct{})
 	for _, name := range t.InjectedFields {
 		if !recordInjectedFieldName(t, verr, seen, name) {
 			continue
 		}
-		if !isSupportedInjectedField(name) {
-			verr.Add(t, "Inject field %q is not supported (supported: %s)", name, supportedInjectedFieldsList())
-			continue
-		}
-		validateInjectedField(t, verr, obj, required, name)
+		names = append(names, name)
 	}
-}
-
-func injectedFieldContext(t *ToolExpr, m *goaexpr.MethodExpr, verr *eval.ValidationErrors) (*goaexpr.Object, map[string]struct{}, bool) {
-	if m == nil || m.Payload == nil || m.Payload.Type == nil || m.Payload.Type == goaexpr.Empty {
-		verr.Add(t, "Inject requires a non-empty bound method payload")
-		return nil, nil, false
+	for i, target := range targets {
+		validateInjectedFieldsAgainst(t, target, names, otherTargets(targets, i), verr)
 	}
-	att := m.Payload
-	if ut, ok := att.Type.(goaexpr.UserType); ok && ut != nil {
-		att = ut.Attribute()
-	}
-	obj, ok := att.Type.(*goaexpr.Object)
-	if !ok || obj == nil {
-		verr.Add(t, "Inject requires the bound method payload to be an object")
-		return nil, nil, false
-	}
-	required := make(map[string]struct{})
-	if att.Validation != nil {
-		for _, r := range att.Validation.Required {
-			required[r] = struct{}{}
-		}
-	}
-	return obj, required, true
 }
 
 func recordInjectedFieldName(t *ToolExpr, verr *eval.ValidationErrors, seen map[string]struct{}, name string) bool {
@@ -347,41 +351,85 @@ func recordInjectedFieldName(t *ToolExpr, verr *eval.ValidationErrors, seen map[
 	return true
 }
 
-func validateInjectedField(t *ToolExpr, verr *eval.ValidationErrors, obj *goaexpr.Object, required map[string]struct{}, name string) {
-	field := injectedPayloadField(obj, name)
-	if field == nil || field.Attribute == nil || field.Attribute.Type == nil || field.Attribute.Type == goaexpr.Empty {
-		verr.Add(t, "Inject field %q does not exist on bound method payload", name)
+func validateInjectedFieldsAgainst(t *ToolExpr, target injectTarget, names []string, others []injectTarget, verr *eval.ValidationErrors) {
+	if target.att == nil || target.att.Type == nil || target.att.Type == goaexpr.Empty {
+		verr.Add(t, "Inject requires a non-empty %s", target.desc)
 		return
 	}
-	if _, ok := required[name]; !ok {
-		verr.Add(t, "Inject field %q must be required on the bound method payload", name)
+	att := target.att
+	if ut, ok := att.Type.(goaexpr.UserType); ok && ut != nil {
+		att = ut.Attribute()
+	}
+	obj, ok := att.Type.(*goaexpr.Object)
+	if !ok || obj == nil {
+		verr.Add(t, "Inject requires the %s to be an object", target.desc)
 		return
 	}
-	if field.Attribute.Type != goaexpr.String {
-		verr.Add(t, "Inject field %q must be a String on the bound method payload", name)
-	}
-}
-
-func injectedPayloadField(obj *goaexpr.Object, name string) *goaexpr.NamedAttributeExpr {
-	for _, na := range *obj {
-		if na.Name == name {
-			return na
+	required := make(map[string]struct{})
+	if att.Validation != nil {
+		for _, r := range att.Validation.Required {
+			required[r] = struct{}{}
 		}
 	}
-	return nil
-}
-
-func isSupportedInjectedField(name string) bool {
-	switch name {
-	case "run_id", "session_id", "turn_id", "tool_call_id", "parent_tool_call_id":
-		return true
-	default:
-		return false
+	for _, name := range names {
+		field := obj.Attribute(name)
+		if field == nil || field.Type == nil || field.Type == goaexpr.Empty {
+			if other, found := targetDefiningField(others, name); found {
+				verr.Add(t, "Inject field %q does not exist on the %s even though the %s defines it; the two shapes diverge -- declare %q on the %s or remove Inject(%q)", name, target.desc, other.desc, name, target.desc, name)
+				continue
+			}
+			verr.Add(t, "Inject field %q does not exist on the %s", name, target.desc)
+			continue
+		}
+		if _, ok := required[name]; !ok {
+			verr.Add(t, "Inject field %q must be required on the %s; injected fields are always server-populated and hidden from the model, so an optional injected field is a contradiction", name, target.desc)
+			continue
+		}
+		if field.Type != goaexpr.String {
+			verr.Add(t, "Inject field %q must be a String on the %s", name, target.desc)
+		}
 	}
 }
 
-func supportedInjectedFieldsList() string {
-	return `"run_id", "session_id", "turn_id", "tool_call_id", "parent_tool_call_id"`
+func otherTargets(targets []injectTarget, i int) []injectTarget {
+	if len(targets) <= 1 {
+		return nil
+	}
+	out := make([]injectTarget, 0, len(targets)-1)
+	out = append(out, targets[:i]...)
+	return append(out, targets[i+1:]...)
+}
+
+func targetDefiningField(targets []injectTarget, name string) (injectTarget, bool) {
+	for _, target := range targets {
+		if target.att == nil || target.att.Type == nil || target.att.Type == goaexpr.Empty {
+			continue
+		}
+		att := target.att
+		if ut, ok := att.Type.(goaexpr.UserType); ok && ut != nil {
+			att = ut.Attribute()
+		}
+		obj, ok := att.Type.(*goaexpr.Object)
+		if !ok || obj == nil {
+			continue
+		}
+		if field := obj.Attribute(name); field != nil && field.Type != nil && field.Type != goaexpr.Empty {
+			return target, true
+		}
+	}
+	return injectTarget{}, false
+}
+
+func validateNoLabelBackedInjectOnBoundTool(t *ToolExpr, verr *eval.ValidationErrors) {
+	for _, name := range t.InjectedFields {
+		if name == "" {
+			continue
+		}
+		if _, ok := runtimeMetaFieldNames[codegen.Goify(name, true)]; ok {
+			continue
+		}
+		verr.Add(t, "Inject field %q is label-backed, but tool %q is bound to a service method via BindTo; registry-served bound tools can only inject ToolCallMeta-backed names", name, t.Name)
+	}
 }
 
 func (t *ToolExpr) validateShapes() error {

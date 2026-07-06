@@ -217,6 +217,9 @@ func toolsetSpecsFiles(data *GeneratorData) []*codegen.File {
 			}
 			out = append(out, &codegen.File{Path: filepath.Join(ts.SpecsDir, "specs.go"), Sections: specSections})
 		}
+		if f := toolsetInjectFile(ts); f != nil {
+			out = append(out, f)
+		}
 
 		if f := toolsetAdapterTransformsFile(data.Genpkg, ts); f != nil {
 			out = append(out, f)

@@ -13,7 +13,15 @@ import (
 // share the same helpers (e.g., goify for consistent identifier casing).
 func templateFuncMap() map[string]any {
 	return map[string]any{
-		"goify":      goacodegen.Goify,
+		"goify": goacodegen.Goify,
+		"isMetaInject": func(name string) bool {
+			switch goacodegen.Goify(name, true) {
+			case "RunID", "SessionID", "TurnID", "ToolCallID", "ParentToolCallID":
+				return true
+			default:
+				return false
+			}
+		},
 		"trimPrefix": strings.TrimPrefix,
 		"trimSuffix": strings.TrimSuffix,
 		"ToLower":    strings.ToLower,

@@ -181,6 +181,29 @@ func New{{ .Agent.GoName }}{{ goify .Toolset.PathName true }}Exec(opts ...ExecOp
             }
             toolArgs = val
         }
+        {{- if .Toolset.Tools }}
+        switch call.Name {
+        {{- range .Toolset.Tools }}
+        {{- if .InjectedFields }}
+        case tools.Ident({{ printf "%q" .QualifiedName }}):
+            p := toolArgs.(*{{ $.Toolset.SpecsPackageName }}.{{ .ConstName }}Payload)
+            {{- range .InjectedFields }}
+            {{- if isMetaInject . }}
+            p.{{ goify . true }} = meta.{{ goify . true }}
+            {{- else }}
+            v, ok := call.Labels[{{ printf "%q" . }}]
+            if !ok || v == "" {
+                err := fmt.Errorf("missing required run label %q for injected field %q", {{ printf "%q" . }}, {{ printf "%q" . }})
+                return runtime.Executed(&planner.ToolResult{Name: call.Name, Error: planner.ToolErrorFromError(err)}), nil
+            }
+            p.{{ goify . true }} = v
+            {{- end }}
+            {{- end }}
+            toolArgs = p
+        {{- end }}
+        {{- end }}
+        }
+        {{- end }}
         // Map to method payload
         var methodIn any
         if cfg.mapPayload != nil {
@@ -200,7 +223,16 @@ func New{{ .Agent.GoName }}{{ goify .Toolset.PathName true }}Exec(opts ...ExecOp
                  {{- if .InjectedFields }}
                  p := methodIn.({{ .MethodPayloadTypeRef }})
                  {{- range .InjectedFields }}
+                 {{- if isMetaInject . }}
                  p.{{ goify . true }} = meta.{{ goify . true }}
+                 {{- else }}
+                 v, ok := call.Labels[{{ printf "%q" . }}]
+                 if !ok || v == "" {
+                     err := fmt.Errorf("missing required run label %q for injected field %q", {{ printf "%q" . }}, {{ printf "%q" . }})
+                     return runtime.Executed(&planner.ToolResult{Name: call.Name, Error: planner.ToolErrorFromError(err)}), nil
+                 }
+                 p.{{ goify . true }} = v
+                 {{- end }}
                  {{- end }}
                  methodIn = p
                  {{- end }}
@@ -209,7 +241,16 @@ func New{{ .Agent.GoName }}{{ goify .Toolset.PathName true }}Exec(opts ...ExecOp
                  p := {{ $.Toolset.SpecsPackageName }}.Init{{ goify .Name true }}MethodPayload(toolArgs.(*{{ $.Toolset.SpecsPackageName }}.{{ .ConstName }}Payload))
                  {{- if .InjectedFields }}
                  {{- range .InjectedFields }}
+                 {{- if isMetaInject . }}
                  p.{{ goify . true }} = meta.{{ goify . true }}
+                 {{- else }}
+                 v, ok := call.Labels[{{ printf "%q" . }}]
+                 if !ok || v == "" {
+                     err := fmt.Errorf("missing required run label %q for injected field %q", {{ printf "%q" . }}, {{ printf "%q" . }})
+                     return runtime.Executed(&planner.ToolResult{Name: call.Name, Error: planner.ToolErrorFromError(err)}), nil
+                 }
+                 p.{{ goify . true }} = v
+                 {{- end }}
                  {{- end }}
                  {{- end }}
                  methodIn = p
