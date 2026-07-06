@@ -17,6 +17,8 @@ import (
 	goahttp "github.com/CaliLuke/loom/http"
 )
 
+const jsonValueKindObject = "object"
+
 // EncodeJSONToString encodes v into JSON using the provided encoder factory.
 // The factory should produce an Encoder bound to the given ResponseWriter.
 func EncodeJSONToString(
@@ -363,7 +365,7 @@ func assignCanonicalMap(raw any, dst reflect.Value) error {
 		return &json.UnmarshalTypeError{Value: jsonValueKind(raw), Type: dst.Type()}
 	}
 	if dst.Type().Key().Kind() != reflect.String {
-		return &json.UnmarshalTypeError{Value: "object", Type: dst.Type()}
+		return &json.UnmarshalTypeError{Value: jsonValueKindObject, Type: dst.Type()}
 	}
 	m := reflect.MakeMapWithSize(dst.Type(), len(obj))
 	for key, val := range obj {
@@ -597,7 +599,7 @@ func jsonValueKind(raw any) string {
 	case []any:
 		return "array"
 	case map[string]any:
-		return "object"
+		return jsonValueKindObject
 	default:
 		return reflect.TypeOf(raw).String()
 	}
