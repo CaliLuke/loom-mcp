@@ -1441,6 +1441,15 @@ client, err := rt.NewBedrockModelClient(awsClient, runtime.BedrockConfig{
 })
 ```
 
+Create an OpenAI Responses client through the runtime helper:
+
+```go
+client, err := rt.NewOpenAIModelClient(runtime.OpenAIConfig{
+    APIKey:       os.Getenv("OPENAI_API_KEY"),
+    DefaultModel: "gpt-4.1",
+})
+```
+
 Gemini is backed by Google's official `google.golang.org/genai` SDK. Use the
 Gemini API helper for API-key deployments:
 

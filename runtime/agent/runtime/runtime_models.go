@@ -8,8 +8,11 @@ import (
 
 	bedrock "github.com/CaliLuke/loom-mcp/features/model/bedrock"
 	gemini "github.com/CaliLuke/loom-mcp/features/model/gemini"
+	openaifeature "github.com/CaliLuke/loom-mcp/features/model/openai"
 	"github.com/CaliLuke/loom-mcp/runtime/agent/model"
 	"github.com/aws/aws-sdk-go-v2/service/bedrockruntime"
+	openaisdk "github.com/openai/openai-go"
+	"github.com/openai/openai-go/option"
 	"google.golang.org/genai"
 )
 
@@ -21,6 +24,13 @@ type BedrockConfig struct {
 	MaxTokens      int
 	ThinkingBudget int
 	Temperature    float32
+}
+
+// OpenAIConfig configures the OpenAI-backed model client created by the runtime.
+type OpenAIConfig struct {
+	APIKey       string
+	BaseURL      string
+	DefaultModel string
 }
 
 // GeminiConfig configures the Gemini API-backed model client created by the runtime.
@@ -88,6 +98,30 @@ func (r *Runtime) NewBedrockModelClient(awsrt *bedrockruntime.Client, cfg Bedroc
 		return bedrock.New(awsrt, opts, bedrock.NewTemporalLedgerSource(querier))
 	}
 	return bedrock.New(awsrt, opts, nil)
+}
+
+// NewOpenAIModelClient constructs a model.Client backed by the OpenAI Responses
+// API using the official OpenAI Go SDK. The client is not registered
+// automatically; pass it to RegisterModel with the model ID your planners use.
+func (r *Runtime) NewOpenAIModelClient(cfg OpenAIConfig) (model.Client, error) {
+	apiKey := strings.TrimSpace(cfg.APIKey)
+	if apiKey == "" {
+		return nil, errors.New("openai: api key is required")
+	}
+	if strings.TrimSpace(cfg.DefaultModel) == "" {
+		return nil, errors.New("openai: default model is required")
+	}
+	requestOptions := []option.RequestOption{
+		option.WithAPIKey(apiKey),
+	}
+	if baseURL := strings.TrimSpace(cfg.BaseURL); baseURL != "" {
+		requestOptions = append(requestOptions, option.WithBaseURL(baseURL))
+	}
+	client := openaisdk.NewClient(requestOptions...)
+	return openaifeature.New(openaifeature.Options{
+		Client:       &client.Responses,
+		DefaultModel: cfg.DefaultModel,
+	})
 }
 
 // NewGeminiModelClient constructs a model.Client backed by the Gemini API using

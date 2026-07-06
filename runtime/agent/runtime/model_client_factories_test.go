@@ -6,8 +6,33 @@ import (
 	"testing"
 
 	geminifeature "github.com/CaliLuke/loom-mcp/features/model/gemini"
+	openaifeature "github.com/CaliLuke/loom-mcp/features/model/openai"
 	"github.com/stretchr/testify/require"
 )
+
+func TestNewOpenAIModelClientRequiresAPIKey(t *testing.T) {
+	rt := &Runtime{}
+
+	client, err := rt.NewOpenAIModelClient(OpenAIConfig{DefaultModel: "gpt-4o"})
+	require.Error(t, err)
+	require.Nil(t, client)
+	require.Contains(t, err.Error(), "api key is required")
+}
+
+func TestNewOpenAIModelClientBuildsSDKClient(t *testing.T) {
+	rt := &Runtime{}
+
+	client, err := rt.NewOpenAIModelClient(OpenAIConfig{
+		APIKey:       "sk-test",
+		DefaultModel: "gpt-4o",
+	})
+	require.NoError(t, err)
+
+	openaiClient, ok := client.(*openaifeature.Client)
+	require.True(t, ok)
+	value := reflect.ValueOf(openaiClient).Elem()
+	require.Equal(t, "gpt-4o", value.FieldByName("model").String())
+}
 
 func TestNewGeminiModelClientRequiresAPIKey(t *testing.T) {
 	rt := &Runtime{}
