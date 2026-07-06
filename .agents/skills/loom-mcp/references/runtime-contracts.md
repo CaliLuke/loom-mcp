@@ -66,6 +66,9 @@ Use this file for current loom-mcp runtime behavior in this repo. Prefer it over
 - `PlannerContext.ModelClient(id)` applies model interceptors after cache and
   tool-policy decorators and before tracing. Raw clients passed directly to
   `planner.ConsumeStream` are not wrapped by runtime model interceptors.
+- `BeforeModel` may return a response to short-circuit non-streaming
+  completions. Streaming calls do not synthesize a `model.Streamer` from that
+  response; returning one from `BeforeModel` on `Stream` fails the call.
 - Event interceptors run in `runtime.publish_hook` before `appendHookRunEvent`,
   stream publication, and hook-bus publication. Dropped events must be absent
   from all three surfaces.

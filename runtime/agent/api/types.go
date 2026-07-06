@@ -424,6 +424,9 @@ type (
 		// Telemetry contains execution timing and provider usage metadata when available.
 		Telemetry *telemetry.ToolTelemetry
 
+		// Artifacts contains workflow-safe references to persisted artifacts.
+		Artifacts []artifact.Ref `json:"artifacts,omitempty"`
+
 		// Error is a plain-text error message when tool execution failed.
 		Error string
 

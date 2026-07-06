@@ -86,6 +86,9 @@ func validateArtifactRefScope(call planner.ToolRequest, ref artifact.Ref) error 
 	if ref.RunID != "" && ref.RunID != call.RunID {
 		return fmt.Errorf("artifact ref scope mismatch: run_id %q does not match call run_id %q", ref.RunID, call.RunID)
 	}
+	if ref.ToolCallID != "" && ref.ToolCallID != call.ToolCallID {
+		return fmt.Errorf("artifact ref scope mismatch: tool_call_id %q does not match call tool_call_id %q", ref.ToolCallID, call.ToolCallID)
+	}
 	return nil
 }
 

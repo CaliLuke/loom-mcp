@@ -742,7 +742,9 @@ Agent("assistant", "Artifact-aware assistant", func() {
 
 Tools return `artifact.Content` values on `planner.ToolResult.Artifacts`; the runtime stores
 the bodies and carries only `artifact.Ref` values through planner outputs, hook events, API
-envelopes, and memory.
+envelopes, and memory. Activity-backed tool execution carries those refs across the
+workflow boundary, so generated service-backed tools and inline/runtime-backed tools expose
+the same artifact references in run outputs and events.
 
 ### Memory-Backed Toolsets
 
@@ -766,6 +768,25 @@ Agent("assistant", "Memory-aware assistant", func() {
 `events`, `truncated`, and `scope`. `scope:"current_run"` can fall back to the configured
 memory store. `scope:"indexed"` requires `runtime.WithMemorySearcher(...)`; otherwise the
 tool returns a structured `unsupported_operation` retry hint.
+
+### Generated Feature Acceptance Fixture
+
+The repo keeps a generated acceptance fixture at
+`integration_tests/fixtures/agent_features`. Its design combines `FromArtifacts`,
+`FromMemory`, `FromSkills`, graph `Workflow` nodes, `RequestInput`, and
+`RunPolicy(Interceptors(...), RetryAndReflect(...), PreloadMemory(...))`.
+
+Regenerate it from the fixture directory:
+
+```bash
+go run github.com/CaliLuke/loom/cmd/loom gen example.com/agentfeatures/design
+```
+
+Verify the generated runtime path with:
+
+```bash
+go test -C ./integration_tests/fixtures/agent_features ./... -count=1
+```
 
 ---
 

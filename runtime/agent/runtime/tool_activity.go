@@ -106,6 +106,7 @@ func newToolActivityOutput(resultJSON rawjson.Message, result *planner.ToolResul
 		Bounds:     result.Bounds,
 		ServerData: result.ServerData,
 		Telemetry:  result.Telemetry,
+		Artifacts:  artifactRefsFromContents(result.Artifacts),
 	}
 	if result.Error != nil {
 		resultOut.Error = result.Error.Error()

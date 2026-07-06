@@ -1,0 +1,168 @@
+{
+  "tools": [
+    {
+      "id": "workflow.draft",
+      "service": "features",
+      "toolset": "features.workflow",
+      "title": "Draft",
+      "description": "Draft a response",
+      "payload": {
+        "name": "DraftPayload",
+        "schema": {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "type": "object",
+          "properties": {
+            "topic": {
+              "type": "string",
+              "description": "Topic to process",
+              "example": "Voluptatem rem et natus nihil quisquam inventore."
+            }
+          },
+          "required": [
+            "topic"
+          ]
+        }
+      },
+      "result": {
+        "name": "DraftResult",
+        "schema": {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "type": "object",
+          "properties": {
+            "approved": {
+              "type": "boolean",
+              "description": "Whether the operation was approved",
+              "example": false
+            },
+            "ok": {
+              "type": "boolean",
+              "description": "Whether the operation succeeded",
+              "example": false
+            }
+          },
+          "required": [
+            "ok"
+          ]
+        }
+      }
+    },
+    {
+      "id": "workflow.publish",
+      "service": "features",
+      "toolset": "features.workflow",
+      "title": "Publish",
+      "description": "Publish the result",
+      "payload": {
+        "name": "PublishPayload",
+        "schema": {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "type": "object"
+        }
+      },
+      "result": {
+        "name": "PublishResult",
+        "schema": {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "type": "object",
+          "properties": {
+            "approved": {
+              "type": "boolean",
+              "description": "Whether the operation was approved",
+              "example": true
+            },
+            "ok": {
+              "type": "boolean",
+              "description": "Whether the operation succeeded",
+              "example": true
+            }
+          },
+          "required": [
+            "ok"
+          ]
+        }
+      }
+    },
+    {
+      "id": "workflow.retry",
+      "service": "features",
+      "toolset": "features.workflow",
+      "title": "Retry",
+      "description": "Run a bounded retry step",
+      "payload": {
+        "name": "RetryPayload",
+        "schema": {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "type": "object"
+        }
+      },
+      "result": {
+        "name": "RetryResult",
+        "schema": {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "type": "object",
+          "properties": {
+            "approved": {
+              "type": "boolean",
+              "description": "Whether the operation was approved",
+              "example": true
+            },
+            "ok": {
+              "type": "boolean",
+              "description": "Whether the operation succeeded",
+              "example": true
+            }
+          },
+          "required": [
+            "ok"
+          ]
+        }
+      }
+    },
+    {
+      "id": "workflow.review",
+      "service": "features",
+      "toolset": "features.workflow",
+      "title": "Review",
+      "description": "Review the draft",
+      "payload": {
+        "name": "ReviewPayload",
+        "schema": {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "type": "object",
+          "properties": {
+            "strict": {
+              "type": "boolean",
+              "description": "Whether review should be strict",
+              "example": true
+            }
+          },
+          "required": [
+            "strict"
+          ]
+        }
+      },
+      "result": {
+        "name": "ReviewResult",
+        "schema": {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "type": "object",
+          "properties": {
+            "approved": {
+              "type": "boolean",
+              "description": "Whether the operation was approved",
+              "example": true
+            },
+            "ok": {
+              "type": "boolean",
+              "description": "Whether the operation succeeded",
+              "example": true
+            }
+          },
+          "required": [
+            "ok"
+          ]
+        }
+      }
+    }
+  ]
+}

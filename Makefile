@@ -40,6 +40,7 @@ test: tools
 
 # Run integration tests (scenarios under integration_tests/)
 itest: tools
+	$(GO) test -C ./integration_tests/fixtures/agent_features ./... -count=1
 	$(GO) test -race -vet=off -parallel 1 ./integration_tests/...
 
 ci: build lint test
@@ -102,6 +103,7 @@ update-mcp-go-sdk:
 
 verify-mcp-local:
 	go test -C ./integration_tests/fixtures/assistant ./... -count=1
+	go test -C ./integration_tests/fixtures/agent_features ./... -count=1
 	go test ./integration_tests/framework -count=1
 
 regen-assistant-fixture:

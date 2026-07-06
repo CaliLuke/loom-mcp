@@ -163,6 +163,7 @@ func (e *toolBatchExec) decodeActivityToolResult(ctx context.Context, info futur
 		ServerData: out.ServerData,
 		ToolCallID: info.call.ToolCallID,
 		Telemetry:  out.Telemetry,
+		Artifacts:  artifactContentsFromRefs(out.Artifacts),
 	}
 	if out.Error != "" {
 		toolRes.Error = planner.NewToolError(out.Error)

@@ -226,6 +226,32 @@ func TestAgentComposition(t *testing.T) {
 --- END CODE ---
 
 
+Generated Agent Feature Fixture
+-------------------------------
+
+Use `integration_tests/fixtures/agent_features` when a change needs proof that
+DSL, codegen, generated registration, and runtime behavior work together for
+agent features. The fixture design includes runtime-backed artifact, memory,
+and skill toolsets; generated graph workflow nodes; typed input resume;
+retry/reflect policy; and named runtime interceptors.
+
+Regenerate with:
+
+--- CODE ---
+cd integration_tests/fixtures/agent_features
+go run github.com/CaliLuke/loom/cmd/loom gen example.com/agentfeatures/design
+--- END CODE ---
+
+Verify with:
+
+--- CODE ---
+go test -C ./integration_tests/fixtures/agent_features ./... -count=1
+--- END CODE ---
+
+Keep this fixture focused on generated agent runtime acceptance. Use the
+assistant fixture for MCP service/server protocol coverage.
+
+
 Troubleshooting
 ===============
 

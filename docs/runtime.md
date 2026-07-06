@@ -749,8 +749,10 @@ Key mutation rules:
   full `ToolExecutionResult`, or the error.
 - `BeforeModel` wraps clients returned by `PlannerContext.ModelClient(id)` after
   cache/tool-policy decorators and before tracing. It can rewrite the
-  `model.Request` or short-circuit with a response. `AfterModel` can replace the
-  response or error.
+  `model.Request`. For non-streaming completions it can also short-circuit with
+  a response. Streaming calls do not synthesize a `model.Streamer` from a
+  response short-circuit; returning a response from `BeforeModel` on `Stream`
+  fails the call. `AfterModel` can replace the response or error.
 - `BeforeEvent` runs in `runtime.publish_hook` before runlog append, stream
   publish, and hook-bus publish. Returning `Drop` makes the event absent from all
   three surfaces.

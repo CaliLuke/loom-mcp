@@ -2,6 +2,7 @@ go 1.26.1
 
 use (
 	.
+	./integration_tests/fixtures/agent_features
 	./integration_tests/fixtures/assistant
 )
 
