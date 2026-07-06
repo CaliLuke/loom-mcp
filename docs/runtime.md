@@ -456,6 +456,13 @@ Typed human-input nodes emit `AwaitTypedInput` and resume through
 `Runtime.ProvideTypedInput`; typed answers are kept separate from tool execution
 history.
 
+Cross-layer changes that span the agent DSL, generated registration, and runtime
+behavior should extend `integration_tests/fixtures/agent_features`. That fixture
+is the acceptance proof for model-facing artifacts, memory, skills, interceptors,
+retry-and-reflect, workflow graphs, typed input, and debug endpoint visibility;
+package-level tests remain the owner for narrower DSL, codegen, planner, runtime
+toolset, and debug-server contracts.
+
 ---
 
 ## Streaming Planners

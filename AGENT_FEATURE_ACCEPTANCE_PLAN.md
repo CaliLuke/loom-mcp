@@ -12,6 +12,7 @@ Refactor confidence around the existing generated `integration_tests/fixtures/ag
 - 2026-07-06 — Milestone 2 reconciled the fixture DSL with `workflow.revise`, regenerated `integration_tests/fixtures/agent_features`, and added `regen-agent-feature-fixture` plus `verify-agent-feature-fixture`. `make loom-status` initially reported remote mode for root, fixture, and quickstart; `make loom-local` required restoring the canonical `/Users/luca/code/loom-mono` symlink to the existing local checkout. The focused registration proof passes after returning to remote mode.
 - 2026-07-06 — Milestone 3 expanded the acceptance harness into `acceptance_helpers_test.go`, fixed branch target dependency construction so `publish` and `revise` both depend on `route`, fixed current-run memory to use the store even when an indexed searcher is configured, and proved `go test -C ./integration_tests/fixtures/agent_features ./... -run TestGenerated -count=1`, `go test ./dsl -run TestWorkflowBranchTargetsShareBranchDependency -count=1`, and `go test ./runtime/agent/runtime -run TestMemoryToolsetCurrentRunUsesStoreWhenSearcherConfigured -count=1`.
 - 2026-07-06 — Milestone 4 confirmed layer boundaries with `go test ./dsl ./expr/agent ./codegen/agent/tests ./runtime/agent/planner ./runtime/agent/runtime ./runtime/mcp/skills ./runtime/agent/debug -count=1`.
+- 2026-07-06 — Milestone 5 documented `integration_tests/fixtures/agent_features` as the cross-layer acceptance fixture in `docs/runtime.md` and `.agents/skills/loom-mcp/SKILL.md`. External review findings are applied: preserve the existing fixture, use current generated owner names, add a real `revise` branch, use `Start(...)` for typed-input runs, and avoid importing `workflow.Revise` before regeneration.
 
 ## Milestones
 
@@ -126,10 +127,10 @@ Acceptance Criteria
 
 Checklist
 
-- [ ] Update existing file `docs/runtime.md` near the runtime feature sections to point new cross-layer agent feature changes at `integration_tests/fixtures/agent_features`.
-- [ ] Update existing file `.agents/skills/loom-mcp/SKILL.md` so future DSL, codegen, runtime, model-facing skill, artifact, memory, interceptor, workflow, and typed-input work includes the generated acceptance fixture when behavior crosses layers.
-- [ ] Append a dated `AGENT_FEATURE_ACCEPTANCE_PLAN.md` status entry listing the external review findings as applied.
-- [ ] Run `python3 /Users/luca/code/skills/skills/design-docs-execution-plans/render_plan.py AGENT_FEATURE_ACCEPTANCE_PLAN.md`.
+- [x] Update existing file `docs/runtime.md` near the runtime feature sections to point new cross-layer agent feature changes at `integration_tests/fixtures/agent_features`.
+- [x] Update existing file `.agents/skills/loom-mcp/SKILL.md` so future DSL, codegen, runtime, model-facing skill, artifact, memory, interceptor, workflow, and typed-input work includes the generated acceptance fixture when behavior crosses layers.
+- [x] Append a dated `AGENT_FEATURE_ACCEPTANCE_PLAN.md` status entry listing the external review findings as applied.
+- [x] Run `python3 /Users/luca/code/skills/skills/design-docs-execution-plans/render_plan.py AGENT_FEATURE_ACCEPTANCE_PLAN.md`.
 
 ### Milestone 6: Full Verification And Handoff
 

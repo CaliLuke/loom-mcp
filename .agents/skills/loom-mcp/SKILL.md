@@ -46,6 +46,10 @@ Use this skill for `loom-mcp` work in this repo. Keep `AGENTS.md` short and keep
   full repo gates expected by AGENTS.md: `make lint`, `make test`, `make itest`,
   and `make verify-mcp-local`, with targeted package commands only as earlier
   red-green checks.
+- When a model-facing agent feature crosses DSL, codegen, generated
+  registration, and runtime behavior, extend
+  `integration_tests/fixtures/agent_features` as the generated acceptance
+  fixture in addition to focused package tests.
 
 ## Current Product Rules
 
