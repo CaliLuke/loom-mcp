@@ -100,6 +100,21 @@ func TestMCPResource(t *testing.T) {
 	require.Equal(t, "https://example.com/icons/readme.png", res.Icons[0].Source)
 }
 
+func TestMCPSkillDirectory(t *testing.T) {
+	runMCPDSL(t, func() {
+		API("test", func() {})
+		Service("docs", func() {
+			MCP("docs-server", "1.0")
+			SkillDirectory(".agents/skills")
+		})
+	})
+
+	mcp := mcpexpr.Root.MCPServers["docs"]
+	require.NotNil(t, mcp)
+	require.Len(t, mcp.SkillDirectories, 1)
+	require.Equal(t, ".agents/skills", mcp.SkillDirectories[0].Root)
+}
+
 func TestMCPWatchableResource(t *testing.T) {
 	runMCPDSL(t, func() {
 		API("test", func() {})
@@ -158,6 +173,28 @@ func TestMCPStaticPrompt(t *testing.T) {
 	require.Equal(t, "Hello!", prompt.Messages[1].Content)
 	require.Len(t, prompt.Icons, 1)
 	require.Equal(t, "https://example.com/icons/greeting.svg", prompt.Icons[0].Source)
+}
+
+func TestMCPStaticPromptRuntimePromptSpec(t *testing.T) {
+	runMCPDSL(t, func() {
+		API("test", func() {})
+		Service("assistant", func() {
+			MCP("assistant", "1.0")
+			StaticPrompt("greeting", "Friendly greeting",
+				"system", "You are {{ .Name }}",
+				RuntimePrompt("assistant.chat", "system", RuntimePromptVersion("v1")),
+			)
+		})
+	})
+
+	mcp := mcpexpr.Root.MCPServers["assistant"]
+	require.NotNil(t, mcp)
+	require.Len(t, mcp.Prompts, 1)
+	prompt := mcp.Prompts[0]
+	require.NotNil(t, prompt.Runtime)
+	require.Equal(t, "assistant.chat", prompt.Runtime.AgentID)
+	require.Equal(t, "system", prompt.Runtime.Role)
+	require.Equal(t, "v1", prompt.Runtime.Version)
 }
 
 func TestMCPDynamicPrompt(t *testing.T) {

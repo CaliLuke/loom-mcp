@@ -62,6 +62,14 @@ func (g *adapterGenerator) buildStaticPrompts() []*StaticPromptAdapter {
 				Content: msg.Content,
 			}
 		}
+		if prompt.Runtime != nil && len(prompt.Messages) == 1 {
+			adapter.RuntimePrompt = &RuntimePromptAdapter{
+				AgentID:  prompt.Runtime.AgentID,
+				Role:     prompt.Runtime.Role,
+				Template: prompt.Messages[0].Content,
+				Version:  prompt.Runtime.Version,
+			}
+		}
 
 		prompts = append(prompts, adapter)
 	}

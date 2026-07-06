@@ -220,7 +220,7 @@ func adapterPromptsSection(data *AdapterData) codegen.Section {
 
 func adapterResourcesSection(data *AdapterData) codegen.Section {
 	return codegen.MustJenniferSection("mcp-adapter-resources", func(stmt *jen.Statement) {
-		if len(data.Resources) == 0 {
+		if len(data.Resources) == 0 && len(data.SkillDirectories) == 0 {
 			return
 		}
 		stmt.Comment("Resources handling").Line()
@@ -261,6 +261,21 @@ func emitResourcesList(stmt *jen.Statement, data *AdapterData) {
 					vals.Add(jen.Op("&").Id("ResourceInfo").Values(dict))
 				}
 			})
+			if len(data.SkillDirectories) > 0 {
+				g.Id("skillSources").Op(":=").Id("skillSources").Call()
+				g.List(jen.Id("skillResources"), jen.Err()).Op(":=").Id("mcpskills").Dot("List").Call(jen.Id("ctx"), jen.Id("skillSources"))
+				g.If(jen.Err().Op("!=").Nil()).Block(
+					jen.Return(jen.Nil(), jen.Err()),
+				)
+				g.For(jen.List(jen.Id("_"), jen.Id("resource")).Op(":=").Range().Id("skillResources")).Block(
+					jen.Id("resources").Op("=").Append(jen.Id("resources"), jen.Op("&").Id("ResourceInfo").Values(jen.Dict{
+						jen.Id("URI"):         jen.Id("resource").Dot("URI"),
+						jen.Id("Name"):        jen.Id("stringPtr").Call(jen.Id("resource").Dot("Name")),
+						jen.Id("Description"): jen.Id("stringPtr").Call(jen.Id("resource").Dot("Description")),
+						jen.Id("MimeType"):    jen.Id("stringPtr").Call(jen.Id("resource").Dot("MimeType")),
+					})),
+				)
+			}
 			g.Id("res").Op(":=").Op("&").Id("ResourcesListResult").Values(jen.Dict{
 				jen.Id("Resources"): jen.Id("resources"),
 			})
@@ -292,6 +307,30 @@ func emitResourcesRead(stmt *jen.Statement, data *AdapterData) {
 			g.If(jen.Id("i").Op(":=").Qual("strings", "Index").Call(jen.Id("baseURI"), jen.Lit("?")), jen.Id("i").Op(">=").Lit(0)).Block(
 				jen.Id("baseURI").Op("=").Id("baseURI").Index(jen.Lit(0), jen.Id("i")),
 			)
+			if len(data.SkillDirectories) > 0 {
+				g.If(jen.Qual("strings", "HasPrefix").Call(jen.Id("baseURI"), jen.Lit("skill://"))).Block(
+					jen.Id("skillSources").Op(":=").Id("skillSources").Call(),
+					jen.List(jen.Id("content"), jen.Err()).Op(":=").Id("mcpskills").Dot("Read").Call(jen.Id("ctx"), jen.Id("skillSources"), jen.Id("baseURI")),
+					jen.If(jen.Err().Op("!=").Nil()).Block(
+						jen.Return(jen.Nil(), jen.Id("loom").Dot("PermanentError").Call(jen.Lit("invalid_params"), jen.Lit("%s"), jen.Err().Dot("Error").Call())),
+					),
+					jen.Id("res").Op(":=").Op("&").Id("ResourcesReadResult").Values(jen.Dict{
+						jen.Id("Contents"): jen.Index().Op("*").Id("ResourceContent").Values(
+							jen.Op("&").Id("ResourceContent").Values(jen.Dict{
+								jen.Id("URI"):      jen.Id("content").Dot("URI"),
+								jen.Id("MimeType"): jen.Id("stringPtr").Call(jen.Id("content").Dot("MimeType")),
+								jen.Id("Text"):     jen.Id("content").Dot("Text"),
+								jen.Id("Blob"):     jen.Id("content").Dot("Blob"),
+							}),
+						),
+					}),
+					jen.Id("a").Dot("log").Call(jen.Id("ctx"), jen.Lit("response"), jen.Map(jen.String()).Any().Values(jen.Dict{
+						jen.Lit("method"): jen.Lit("resources/read"),
+						jen.Lit("uri"):    jen.Id("baseURI"),
+					})),
+					jen.Return(jen.Id("res"), jen.Nil()),
+				)
+			}
 			g.Switch(jen.Id("baseURI")).BlockFunc(func(sw *jen.Group) {
 				for _, resource := range data.Resources {
 					sw.Case(jen.Lit(resource.URI)).BlockFunc(func(caseg *jen.Group) {
@@ -373,6 +412,22 @@ func emitResourcesRead(stmt *jen.Statement, data *AdapterData) {
 				)
 			})
 		})
+	stmt.Line()
+	if len(data.SkillDirectories) > 0 {
+		emitSkillSources(stmt, data)
+	}
+}
+
+func emitSkillSources(stmt *jen.Statement, data *AdapterData) {
+	stmt.Func().Id("skillSources").Params().Index().Id("mcpskills").Dot("Source").Block(
+		jen.Return(jen.Index().Id("mcpskills").Dot("Source").ValuesFunc(func(vals *jen.Group) {
+			for _, dir := range data.SkillDirectories {
+				vals.Values(jen.Dict{
+					jen.Id("Root"): jen.Lit(dir.Root),
+				})
+			}
+		})),
+	)
 	stmt.Line()
 }
 
@@ -741,5 +796,59 @@ func promptProviderSection(data *AdapterData) codegen.Section {
 			}
 		})
 		stmt.Line()
+		if !hasRuntimePrompts(data.StaticPrompts) {
+			return
+		}
+		stmt.Comment("RegisterRuntimePrompts registers design-declared MCP prompts as runtime prompt specs.").Line()
+		stmt.Func().Id("RegisterRuntimePrompts").
+			Params(jen.Id("reg").Op("*").Qual("github.com/CaliLuke/loom-mcp/runtime/agent/prompt", "Registry")).
+			Params(jen.Error()).
+			BlockFunc(func(g *jen.Group) {
+				for _, p := range data.StaticPrompts {
+					if p.RuntimePrompt == nil {
+						continue
+					}
+					g.If(
+						jen.Err().Op(":=").Id("reg").Dot("Register").Call(
+							jen.Qual("github.com/CaliLuke/loom-mcp/runtime/agent/prompt", "PromptSpec").Values(jen.Dict{
+								jen.Id("ID"):          jen.Qual("github.com/CaliLuke/loom-mcp/runtime/agent/prompt", "Ident").Call(jen.Lit(p.Name)),
+								jen.Id("AgentID"):     jen.Lit(p.RuntimePrompt.AgentID),
+								jen.Id("Role"):        promptRoleCode(p.RuntimePrompt.Role),
+								jen.Id("Description"): jen.Lit(p.Description),
+								jen.Id("Template"):    jen.Lit(p.RuntimePrompt.Template),
+								jen.Id("Version"):     jen.Lit(p.RuntimePrompt.Version),
+							}),
+						),
+						jen.Err().Op("!=").Nil(),
+					).Block(
+						jen.Return(jen.Err()),
+					)
+				}
+				g.Return(jen.Nil())
+			})
 	})
+}
+
+func hasRuntimePrompts(prompts []*StaticPromptAdapter) bool {
+	for _, p := range prompts {
+		if p.RuntimePrompt != nil {
+			return true
+		}
+	}
+	return false
+}
+
+func promptRoleCode(role string) jen.Code {
+	switch role {
+	case "system":
+		return jen.Qual("github.com/CaliLuke/loom-mcp/runtime/agent/prompt", "PromptRoleSystem")
+	case "user":
+		return jen.Qual("github.com/CaliLuke/loom-mcp/runtime/agent/prompt", "PromptRoleUser")
+	case "tool":
+		return jen.Qual("github.com/CaliLuke/loom-mcp/runtime/agent/prompt", "PromptRoleTool")
+	case "synthesis":
+		return jen.Qual("github.com/CaliLuke/loom-mcp/runtime/agent/prompt", "PromptRoleSynthesis")
+	default:
+		return jen.Qual("github.com/CaliLuke/loom-mcp/runtime/agent/prompt", "PromptRole").Call(jen.Lit(role))
+	}
 }

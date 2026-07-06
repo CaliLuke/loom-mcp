@@ -48,6 +48,15 @@ listener) on the same path.
 | `RequestContext` | no       | Per-request hook called once per MCP RPC. Receives the inbound request context and a synthetic `*http.Request` carrying the live transport headers; returns a new ctx. |
 | `StreamableHTTP` | no       | `*mcpsdk.StreamableHTTPOptions` passed through to the upstream SDK. When `nil`, a default `net/http.NewCrossOriginProtection()` is applied.                            |
 
+## Design-Declared Skill Resources
+
+Services that declare `SkillDirectory(root)` expose local agent skills through
+the generated SDK server resource surface. The server scans the configured root
+at startup, lists each child directory with a `SKILL.md` file as
+`skill://<skill>/SKILL.md`, and also publishes `skill://<skill>/_manifest`.
+`resources/read` can read `SKILL.md`, `_manifest`, and supporting files that
+stay inside the skill directory.
+
 ## Request Context Callback
 
 `RequestContext` is the supported extension point for propagating
@@ -96,6 +105,12 @@ RequestContext: func(ctx context.Context, r *http.Request) context.Context {
     return ctx
 }
 ```
+
+`SDKServerOptions.Adapter.ToolSearch` passes through to the generated MCP
+adapter. When set, SDK-backed servers use the same large-catalog discovery mode
+as JSON-RPC adapters: `tools/list` returns pinned tools plus synthetic
+`search_tools` and `call_tool` entries, while direct `tools/call` access to real
+generated tools remains available.
 
 ### Ctx-Cached Values Can Be Stale — Read `r.Header` First
 

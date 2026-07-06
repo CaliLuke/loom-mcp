@@ -274,6 +274,76 @@ func TestGenerateMCPClientAdapter_RendersOriginalClientForDynamicPrompts(t *test
 	require.Contains(t, rendered, "origC.BuildGeneratePromptRequest")
 }
 
+func TestGeneratePromptProvider_RendersRuntimePromptRegistrar(t *testing.T) {
+	restore := resetMCPCodegenState(t)
+	defer restore()
+
+	svc, _ := testService("assistant")
+	root := testRootExpr([]*expr.ServiceExpr{svc}, []*expr.HTTPServiceExpr{
+		jsonrpcService(svc, "/rpc"),
+	})
+	mcpexpr.Root.RegisterMCP(svc, &mcpexpr.MCPExpr{
+		Name:    "assistant",
+		Version: "0.1.0",
+		Prompts: []*mcpexpr.PromptExpr{
+			{
+				Name:        "greeting",
+				Description: "Friendly greeting",
+				Messages: []*mcpexpr.MessageExpr{
+					{Role: "system", Content: "You are {{ .Name }}"},
+				},
+				Runtime: &mcpexpr.RuntimePromptExpr{
+					AgentID: "assistant.chat",
+					Role:    "system",
+					Version: "v1",
+				},
+			},
+		},
+	})
+
+	files, err := Generate("example.com/assistant/gen", []eval.Root{root}, nil)
+	require.NoError(t, err)
+
+	file := findGeneratedFile(t, files, filepath.Join(gcodegen.Gendir, "mcp_assistant", "prompt_provider.go"))
+	rendered := renderGeneratedFile(t, file)
+
+	require.Contains(t, rendered, `func RegisterRuntimePrompts(reg *prompt.Registry) error {`)
+	require.Contains(t, rendered, `ID:          prompt.Ident("greeting"),`)
+	require.Contains(t, rendered, `AgentID:     "assistant.chat",`)
+	require.Contains(t, rendered, `Role:        prompt.PromptRoleSystem,`)
+	require.Contains(t, rendered, "Template:    \"You are {{ .Name }}\",")
+	require.Contains(t, rendered, `Version:     "v1",`)
+}
+
+func TestGenerateAdapter_RendersSkillResourceProvider(t *testing.T) {
+	restore := resetMCPCodegenState(t)
+	defer restore()
+
+	svc, _ := testService("assistant")
+	root := testRootExpr([]*expr.ServiceExpr{svc}, []*expr.HTTPServiceExpr{
+		jsonrpcService(svc, "/rpc"),
+	})
+	mcpexpr.Root.RegisterMCP(svc, &mcpexpr.MCPExpr{
+		Name:    "assistant",
+		Version: "0.1.0",
+		SkillDirectories: []*mcpexpr.SkillDirectoryExpr{
+			{Root: ".agents/skills"},
+		},
+	})
+
+	files, err := Generate("example.com/assistant/gen", []eval.Root{root}, nil)
+	require.NoError(t, err)
+
+	file := findGeneratedFile(t, files, filepath.Join(gcodegen.Gendir, "mcp_assistant", "adapter_server.go"))
+	rendered := renderGeneratedFile(t, file)
+
+	require.Contains(t, rendered, `func skillSources() []mcpskills.Source {`)
+	require.Contains(t, rendered, `Root: ".agents/skills"`)
+	require.Contains(t, rendered, `skillResources, err := mcpskills.List(ctx, skillSources)`)
+	require.Contains(t, rendered, `if strings.HasPrefix(baseURI, "skill://") {`)
+	require.Contains(t, rendered, `content, err := mcpskills.Read(ctx, skillSources, baseURI)`)
+}
+
 func TestGenerateSDKServer_MergesContextRequestHeadersIntoSyntheticRequest(t *testing.T) {
 	restore := resetMCPCodegenState(t)
 	defer restore()
@@ -1121,6 +1191,18 @@ func jsonrpcServiceWithMethod(svc *expr.ServiceExpr, path string, method string)
 			Path:   path,
 		},
 	}
+}
+
+func findGeneratedFile(t *testing.T, files []*gcodegen.File, path string) *gcodegen.File {
+	t.Helper()
+	want := filepath.ToSlash(path)
+	for _, file := range files {
+		if filepath.ToSlash(file.Path) == want {
+			return file
+		}
+	}
+	require.Failf(t, "generated file not found", "missing %s", want)
+	return nil
 }
 
 func renderGeneratedFile(t *testing.T, file *gcodegen.File) string {

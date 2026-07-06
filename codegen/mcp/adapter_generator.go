@@ -44,6 +44,7 @@ type (
 		ImportPath          string
 		Tools               []*ToolAdapter
 		Resources           []*ResourceAdapter
+		SkillDirectories    []*SkillDirectoryAdapter
 		StaticPrompts       []*StaticPromptAdapter
 		DynamicPrompts      []*DynamicPromptAdapter
 		Notifications       []*NotificationAdapter
@@ -180,6 +181,11 @@ type (
 		Repeated       bool
 	}
 
+	// SkillDirectoryAdapter represents one skill root exposed as MCP resources.
+	SkillDirectoryAdapter struct {
+		Root string
+	}
+
 	// resourceQueryFieldDefinition captures one flattened top-level resource
 	// query field together with the presence rules implied by the Goa payload.
 	resourceQueryFieldDefinition struct {
@@ -190,10 +196,20 @@ type (
 
 	// StaticPromptAdapter represents a static prompt
 	StaticPromptAdapter struct {
-		Name        string
-		Description string
-		Icons       []*IconData
-		Messages    []*PromptMessageAdapter
+		Name          string
+		Description   string
+		Icons         []*IconData
+		Messages      []*PromptMessageAdapter
+		RuntimePrompt *RuntimePromptAdapter
+	}
+
+	// RuntimePromptAdapter represents a runtime prompt spec generated from a
+	// static MCP prompt.
+	RuntimePromptAdapter struct {
+		AgentID  string
+		Role     string
+		Template string
+		Version  string
 	}
 
 	// PromptMessageAdapter represents a prompt message
@@ -314,6 +330,7 @@ func (g *adapterGenerator) newAdapterData(tools []*ToolAdapter, resources []*Res
 		ImportPath:          g.genpkg,
 		Tools:               tools,
 		Resources:           resources,
+		SkillDirectories:    g.buildSkillDirectoryAdapters(),
 	}
 }
 
@@ -592,6 +609,14 @@ func (g *adapterGenerator) buildResourceAdapters() ([]*ResourceAdapter, error) {
 	}
 
 	return adapters, nil
+}
+
+func (g *adapterGenerator) buildSkillDirectoryAdapters() []*SkillDirectoryAdapter {
+	dirs := make([]*SkillDirectoryAdapter, 0, len(g.mcp.SkillDirectories))
+	for _, dir := range g.mcp.SkillDirectories {
+		dirs = append(dirs, &SkillDirectoryAdapter{Root: dir.Root})
+	}
+	return dirs
 }
 
 func (g *adapterGenerator) buildResourceAdapter(resource *mcpexpr.ResourceExpr) (*ResourceAdapter, error) {

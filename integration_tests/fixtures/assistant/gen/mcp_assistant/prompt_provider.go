@@ -10,6 +10,8 @@ package mcpassistant
 import (
 	"context"
 	"encoding/json"
+
+	"github.com/CaliLuke/loom-mcp/runtime/agent/prompt"
 )
 
 // PromptProvider defines the interface for providing prompt content.
@@ -21,4 +23,19 @@ type PromptProvider interface {
 	GetContextualPromptsPrompt(ctx context.Context, arguments json.RawMessage) (*PromptsGetResult, error)
 	// GetFigmaImplementationPromptPrompt returns the dynamic content for the figma_implementation_prompt prompt.
 	GetFigmaImplementationPromptPrompt(ctx context.Context, arguments json.RawMessage) (*PromptsGetResult, error)
+}
+
+// RegisterRuntimePrompts registers design-declared MCP prompts as runtime prompt specs.
+func RegisterRuntimePrompts(reg *prompt.Registry) error {
+	if err := reg.Register(prompt.PromptSpec{
+		AgentID:     "assistant.chat",
+		Description: "Simple code review prompt",
+		ID:          prompt.Ident("code_review"),
+		Role:        prompt.PromptRoleSystem,
+		Template:    "Review the provided code and suggest improvements.",
+		Version:     "v1",
+	}); err != nil {
+		return err
+	}
+	return nil
 }

@@ -19,6 +19,7 @@ import (
 
 	assistant "example.com/assistant/gen/assistant"
 	mcpruntime "github.com/CaliLuke/loom-mcp/runtime/mcp"
+	mcpskills "github.com/CaliLuke/loom-mcp/runtime/mcp/skills"
 	"github.com/CaliLuke/loom/observability/transport"
 	mcpsdk "github.com/modelcontextprotocol/go-sdk/mcp"
 )
@@ -404,6 +405,18 @@ func registerSDKResources(server *mcpsdk.Server, adapter *MCPAdapter, requestCon
 		Name:        "figma_design_system",
 		URI:         "figma://design-system/mobile-checkout",
 	}, adapter.sdkResourceHandler(requestContext))
+	skillResources, err := mcpskills.List(context.Background(), skillSources())
+	if err != nil {
+		return err
+	}
+	for _, resource := range skillResources {
+		server.AddResource(&mcpsdk.Resource{
+			Description: resource.Description,
+			MIMEType:    resource.MimeType,
+			Name:        resource.Name,
+			URI:         resource.URI,
+		}, adapter.sdkResourceHandler(requestContext))
+	}
 	return nil
 }
 func registerSDKPrompts(server *mcpsdk.Server, adapter *MCPAdapter, requestContext func(context.Context, *http.Request) context.Context) error {
@@ -541,7 +554,6 @@ func (a *MCPAdapter) sdkCompletionHandler(requestContext func(context.Context, *
 		default:
 			return sdkCompleteValues(nil, 0, false), nil
 		}
-		return sdkCompleteValues(nil, 0, false), nil
 	}
 }
 func (a *MCPAdapter) sdkResourceHandler(requestContext func(context.Context, *http.Request) context.Context) mcpsdk.ResourceHandler {

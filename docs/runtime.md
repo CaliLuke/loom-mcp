@@ -204,12 +204,20 @@ The runtime always initializes `Runtime.PromptRegistry`. Prompt management has t
   (`runtime.WithPromptStore(...)`).
 
 This registry is the internal runtime prompt system Loom uses while executing planners and agents.
-Registering a prompt here makes it available to Loom runtime code, not to MCP clients. MCP clients
-only see prompts declared with `StaticPrompt(...)` and `DynamicPrompt(...)`, which expose
-`prompts/list` and `prompts/get` on generated MCP servers.
+Registering a prompt here makes it available to Loom runtime code. MCP clients see prompts declared
+with `StaticPrompt(...)` and `DynamicPrompt(...)`, which expose `prompts/list` and `prompts/get` on
+generated MCP servers. A single-message `StaticPrompt(...)` can opt into both surfaces with
+`RuntimePrompt(...)`; generated MCP packages then expose `RegisterRuntimePrompts(reg)` to register
+matching baseline `prompt.PromptSpec` values from the same design declaration.
+
+Generated MCP servers also expose design-declared `SkillDirectory(...)` roots as
+`skill://` resources. Use that when MCP clients should discover local agent
+skills through `resources/list` and read `SKILL.md`, `_manifest`, or supporting
+files through `resources/read`.
 
 ```go
 import (
+    mcpassistant "example.com/assistant/gen/mcp_assistant"
     promptmongo "github.com/CaliLuke/loom-mcp/features/prompt/mongo"
     clientmongo "github.com/CaliLuke/loom-mcp/features/prompt/mongo/clients/mongo"
     "github.com/CaliLuke/loom-mcp/runtime/agent/prompt"
@@ -232,6 +240,9 @@ _ = rt.PromptRegistry.Register(prompt.PromptSpec{
     Role:     prompt.PromptRoleSystem,
     Template: "You are {{ .AssistantName }}.",
 })
+
+// For design-declared shared MCP/runtime prompts:
+_ = mcpassistant.RegisterRuntimePrompts(rt.PromptRegistry)
 ```
 
 Render prompts from planners through `PlannerContext.RenderPrompt(...)`. The result includes rendered
@@ -1914,6 +1925,23 @@ same behavior for multi-part tool output.
 The same package also exposes canonical JSON helpers used at MCP boundaries.
 Those helpers accept string-keyed maps, including named string aliases, and
 fail fast on unsupported map key kinds instead of silently dropping entries.
+
+### Generated MCP tool search
+
+Generated MCP adapters can opt into large-catalog tool discovery with
+`MCPAdapterOptions.ToolSearch`. When enabled, `tools/list` returns pinned tools
+from `ToolSearchOptions.AlwaysVisible` plus two synthetic tools:
+
+- `search_tools` searches generated tool names, descriptions, parameter names,
+  and parameter descriptions with a case-insensitive regex pattern, returning
+  full `ToolInfo` definitions in catalog order.
+- `call_tool` calls one discovered real tool by name with an `arguments` object.
+
+The original generated tools are still directly callable through `tools/call`;
+tool search only changes discovery. The `call_tool` proxy rejects calls to the
+synthetic tools themselves and dispatches real tools back through the generated
+tool-call interceptor chain. `MaxResults`, `SearchToolName`, and `CallToolName`
+customize the search limit and synthetic tool names.
 
 ### Server-initiated events (Broadcaster)
 

@@ -250,6 +250,37 @@ func PromptIcons(icons ...*exprmcp.IconExpr) func(*exprmcp.PromptExpr) {
 	}
 }
 
+// RuntimePromptOption customizes the runtime prompt spec generated for a static
+// MCP prompt.
+type RuntimePromptOption func(*exprmcp.RuntimePromptExpr)
+
+// RuntimePrompt declares that a static MCP prompt should also be registered as a
+// runtime prompt spec. The static prompt must contain exactly one message so the
+// generated prompt spec has one unambiguous template body.
+func RuntimePrompt(agentID, role string, opts ...RuntimePromptOption) func(*exprmcp.PromptExpr) {
+	return func(prompt *exprmcp.PromptExpr) {
+		runtime := &exprmcp.RuntimePromptExpr{
+			AgentID: strings.TrimSpace(agentID),
+			Role:    strings.TrimSpace(role),
+		}
+		for _, opt := range opts {
+			if opt != nil {
+				opt(runtime)
+			}
+		}
+		prompt.Runtime = runtime
+	}
+}
+
+// RuntimePromptVersion sets the baseline version for a generated runtime
+// prompt spec. When omitted, the runtime prompt registry derives a deterministic
+// version from the template.
+func RuntimePromptVersion(version string) RuntimePromptOption {
+	return func(runtime *exprmcp.RuntimePromptExpr) {
+		runtime.Version = strings.TrimSpace(version)
+	}
+}
+
 // DynamicPromptIcons attaches icon metadata to a dynamic MCP prompt.
 func DynamicPromptIcons(icons ...*exprmcp.IconExpr) func(*exprmcp.DynamicPromptExpr) {
 	return func(prompt *exprmcp.DynamicPromptExpr) {
@@ -342,6 +373,27 @@ func WatchableResource(name, uri, mimeType string, opts ...func(*exprmcp.Resourc
 		}
 	}
 	mcp.Resources = append(mcp.Resources, resource)
+}
+
+// SkillDirectory exposes agent skill directories as MCP skill:// resources.
+//
+// The root directory is scanned at runtime. Each child directory containing a
+// SKILL.md file becomes a skill with resources for SKILL.md, _manifest, and any
+// supporting files named by the manifest.
+func SkillDirectory(root string) func(*exprmcp.MCPExpr) {
+	dir := &exprmcp.SkillDirectoryExpr{Root: strings.TrimSpace(root)}
+	var mcp *exprmcp.MCPExpr
+	if svc, ok := eval.Current().(*goaexpr.ServiceExpr); ok {
+		if r := exprmcp.Root; r != nil {
+			mcp = r.GetMCP(svc)
+		}
+	}
+	if mcp != nil {
+		mcp.SkillDirectories = append(mcp.SkillDirectories, dir)
+	}
+	return func(m *exprmcp.MCPExpr) {
+		m.SkillDirectories = append(m.SkillDirectories, dir)
+	}
 }
 
 // StaticPrompt adds a static prompt template to the MCP server. Static prompts

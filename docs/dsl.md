@@ -118,19 +118,21 @@ different audiences and link child runs via run handles rather than flattening r
 
 ## Prompt Management in v1
 
-Loom MCP v1 supports two distinct prompt concepts:
+Loom MCP v1 supports two prompt concepts with an explicit bridge for simple shared declarations:
 
 - **MCP protocol prompts** are prompts your server publishes to MCP clients. Clients can discover
   them with `prompts/list` and fetch them with `prompts/get`. Declare these in the DSL with
   `StaticPrompt(...)` and `DynamicPrompt(...)`.
 - **Runtime-managed prompts** are internal prompt templates Loom uses while running planners,
-  agents, and prompt override flows. They are not automatically exposed to MCP clients, and they
-  are intentionally runtime-driven rather than declared through a general-purpose `Prompt(...)` or
-  `Prompts(...)` DSL.
+  agents, and prompt override flows. Register baseline prompt specs through the runtime registry, or
+  declare `RuntimePrompt(...)` on a single-message `StaticPrompt(...)` to generate a registrar from
+  the same design-owned prompt declaration.
 
 The runtime-managed prompt layer works like this:
 
 - Register baseline prompt specs via `Runtime.PromptRegistry.Register(prompt.PromptSpec{...})`.
+- For single-message MCP static prompts, call the generated
+  `RegisterRuntimePrompts(rt.PromptRegistry)` helper to register the matching baseline specs.
 - Configure scoped overrides with `runtime.WithPromptStore(...)` (for example, Mongo prompt store).
 - Render prompts in planners using `PlannerContext.RenderPrompt(...)`.
 - For agent-as-tool registrations, consumer-side prompt rendering is optional. If you need the
@@ -343,6 +345,7 @@ Notes:
 | `ProtocolVersion(version)`                    | Option for `MCP`                             | Sets MCP protocol version (e.g., "2025-06-18")                                                                                    |
 | `WebsiteURL(url)`                             | Option for `MCP`                             | Sets implementation website metadata for `initialize.serverInfo`                                                                  |
 | `ServerIcons(icons...)`                       | Option for `MCP`                             | Sets implementation icons for `initialize.serverInfo`                                                                             |
+| `SkillDirectory(root)`                        | Option for `MCP`, or inside `Service`        | Exposes child skill directories as `skill://` resources through `resources/list` and `resources/read`                              |
 | `Tool(name, description)`                     | Inside `Method` (with MCP enabled)           | Marks method as MCP tool                                                                                                          |
 | `ToolIcons(icons...)`                         | Option for method-level `Tool`               | Sets tool icons for `tools/list`                                                                                                  |
 | `Resource(name, uri, mime, opts...)`          | Inside `Method`                              | Marks method as MCP resource provider                                                                                             |
@@ -350,6 +353,8 @@ Notes:
 | `WatchableResource(name, uri, mime, opts...)` | Inside `Method`                              | MCP resource with subscription support                                                                                            |
 | `StaticPrompt(name, desc, msgs..., opts...)`  | Inside `Service` (with MCP)                  | Defines static MCP prompt template                                                                                                |
 | `PromptIcons(icons...)`                       | Option for `StaticPrompt`                    | Sets prompt icons for `prompts/list`                                                                                              |
+| `RuntimePrompt(agentID, role, opts...)`       | Option for single-message `StaticPrompt`     | Also emits a runtime `prompt.PromptSpec` registration helper from the same prompt declaration                                      |
+| `RuntimePromptVersion(version)`               | Option for `RuntimePrompt`                   | Sets the baseline runtime prompt version; omitted versions are derived by the runtime registry                                     |
 | `DynamicPrompt(name, description, opts...)`   | Inside `Method`                              | Marks method as dynamic prompt generator                                                                                          |
 | `DynamicPromptIcons(icons...)`                | Option for `DynamicPrompt`                   | Sets dynamic prompt icons for `prompts/list`                                                                                      |
 | `Icon(src, opts...)`                          | MCP metadata helper                          | Declares one icon entry                                                                                                           |
@@ -1214,6 +1219,7 @@ Service("calculator", func() {
     MCP("calc", "1.0.0",
         ProtocolVersion("2025-06-18"),
         WebsiteURL("https://example.com/calc"),
+        SkillDirectory(".agents/skills"),
         ServerIcons(
             Icon("https://example.com/icons/calc-light.png",
                 IconMIMEType("image/png"),
@@ -1259,12 +1265,12 @@ Service("calculator", func() {
 
     StaticPrompt("greeting", "Friendly greeting",
         "system", "You are a helpful assistant",
-        "user", "Hello!",
         PromptIcons(
             Icon("https://example.com/icons/greeting.svg",
                 IconMIMEType("image/svg+xml"),
                 IconSizes("any")),
         ),
+        RuntimePrompt("assistant.chat", "system", RuntimePromptVersion("v1")),
     )
 
     Method("code_review", func() {
@@ -1284,18 +1290,34 @@ Service("calculator", func() {
 })
 ```
 
+`SkillDirectory(root)` scans the root at runtime. Each child directory with a
+`SKILL.md` file becomes a skill namespace. Generated MCP servers list
+`skill://<skill>/SKILL.md` and `skill://<skill>/_manifest`; clients may also
+read supporting files with `skill://<skill>/<path>` when the path stays inside
+the skill directory.
+
 ### MCP Capabilities
 
 | DSL Function                 | MCP Capability                                         |
 | ---------------------------- | ------------------------------------------------------ |
 | `Tool(name, desc)` in Method | `tools/list`, `tools/call`                             |
 | `Resource(name, uri, mime)`  | `resources/list`, `resources/read`                     |
+| `SkillDirectory(root)`       | `skill://` resources from local skill directories      |
 | `WatchableResource(...)`     | Resources with `resources/subscribe`                   |
 | `StaticPrompt(...)`          | `prompts/list`, `prompts/get` (static)                 |
+| `RuntimePrompt(...)`         | Generated `RegisterRuntimePrompts(*prompt.Registry)`   |
 | `DynamicPrompt(...)`         | `prompts/list`, `prompts/get` (dynamic, method-backed) |
 | `Notification(...)`          | Notification senders                                   |
 | `Subscription(...)`          | Subscription handlers                                  |
 | `SubscriptionMonitor(...)`   | SSE subscription monitors                              |
+
+Generated adapters also support runtime-configured tool search for large MCP
+catalogs. Set `MCPAdapterOptions.ToolSearch` (or `SDKServerOptions.Adapter.ToolSearch`)
+to replace the default `tools/list` catalog with pinned real tools plus
+synthetic `search_tools` and `call_tool` entries. This is an adapter option, not
+a DSL declaration: the design still owns the real tool contracts, while
+deployment code decides whether to expose the full catalog up front or require
+on-demand discovery.
 
 ---
 

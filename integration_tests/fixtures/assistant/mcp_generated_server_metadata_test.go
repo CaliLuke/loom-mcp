@@ -47,6 +47,20 @@ func TestGeneratedSDKServerExposesSEP973Metadata(t *testing.T) {
 	resource := findResourceByURI(t, resources.Resources, "doc://list")
 	require.Len(t, resource.Icons, 1)
 	assert.Equal(t, "https://assistant.example.com/icons/documents.png", resource.Icons[0].Source)
+	skillResource := findResourceByURI(t, resources.Resources, "skill://code-review/SKILL.md")
+	assert.Equal(t, "code-review", skillResource.Name)
+	assert.Equal(t, "Review code changes for correctness and maintainability.", skillResource.Description)
+
+	skillContent, err := session.ReadResource(ctx, &sdkmcp.ReadResourceParams{URI: "skill://code-review/SKILL.md"})
+	require.NoError(t, err)
+	require.Len(t, skillContent.Contents, 1)
+	require.Contains(t, skillContent.Contents[0].Text, "# Code Review")
+
+	manifestContent, err := session.ReadResource(ctx, &sdkmcp.ReadResourceParams{URI: "skill://code-review/_manifest"})
+	require.NoError(t, err)
+	require.Len(t, manifestContent.Contents, 1)
+	require.Contains(t, manifestContent.Contents[0].Text, `"path":"SKILL.md"`)
+	require.Contains(t, manifestContent.Contents[0].Text, `"path":"reference.md"`)
 
 	prompts, err := session.ListPrompts(ctx, nil)
 	require.NoError(t, err)
@@ -85,6 +99,19 @@ func TestGeneratedJSONRPCServerExposesSEP973MetadataOnWire(t *testing.T) {
 	resources := nestedSlice(t, resourcesResult, "resources")
 	resource := findMapByStringField(t, resources, "uri", "doc://list")
 	require.Len(t, nestedSlice(t, resource, "icons"), 1)
+	skillResource := findMapByStringField(t, resources, "uri", "skill://code-review/SKILL.md")
+	assert.Equal(t, "code-review", skillResource["name"])
+	assert.Equal(t, "Review code changes for correctness and maintainability.", skillResource["description"])
+
+	skillReadResult := rawJSONRPCResult(t, ctx, server.URL+"/rpc", sessionID, "resources/read", map[string]any{
+		"uri": "skill://code-review/reference.md",
+	})
+	contents := nestedSlice(t, skillReadResult, "contents")
+	require.Len(t, contents, 1)
+	content, ok := contents[0].(map[string]any)
+	require.True(t, ok)
+	assert.Equal(t, "skill://code-review/reference.md", content["uri"])
+	assert.Contains(t, content["text"], "Prioritize concrete bugs")
 
 	promptsResult := rawJSONRPCResult(t, ctx, server.URL+"/rpc", sessionID, "prompts/list", map[string]any{})
 	prompts := nestedSlice(t, promptsResult, "prompts")

@@ -16,6 +16,7 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"regexp"
 	"sort"
 	"strconv"
 	"strings"
@@ -24,6 +25,7 @@ import (
 
 	assistant "example.com/assistant/gen/assistant"
 	mcpruntime "github.com/CaliLuke/loom-mcp/runtime/mcp"
+	mcpskills "github.com/CaliLuke/loom-mcp/runtime/mcp/skills"
 	goahttp "github.com/CaliLuke/loom/http"
 	loom "github.com/CaliLuke/loom/pkg"
 	mcpauth "github.com/modelcontextprotocol/go-sdk/auth"
@@ -96,6 +98,18 @@ func (i *toolCallInterceptorInfo) RawArguments() json.RawMessage {
 	return i.rawArgs
 }
 
+// ToolSearchOptions enables large-catalog tool discovery through synthetic search_tools and call_tool tools.
+type ToolSearchOptions struct {
+	// MaxResults limits search results. Values <= 0 use the generated default.
+	MaxResults int
+	// AlwaysVisible keeps selected real tool names in tools/list alongside the synthetic tools.
+	AlwaysVisible []string
+	// SearchToolName overrides the synthetic search tool name. Default: search_tools.
+	SearchToolName string
+	// CallToolName overrides the synthetic call proxy tool name. Default: call_tool.
+	CallToolName string
+}
+
 // MCPAdapterOptions allows customizing adapter behavior.
 type MCPAdapterOptions struct {
 	// Logger is an optional hook called with internal adapter events.
@@ -104,6 +118,8 @@ type MCPAdapterOptions struct {
 	ErrorMapper func(error) error
 	// ToolCallInterceptors wrap generated tools/call execution.
 	ToolCallInterceptors []ToolCallInterceptor
+	// ToolSearch, when non-nil, replaces the tools/list catalog with synthetic discovery tools plus pinned tools.
+	ToolSearch *ToolSearchOptions
 	// TelemetryName overrides the instrumentation scope used for OpenTelemetry spans and metrics.
 	TelemetryName string
 	// Tracer overrides the tracer used by the generated MCP adapter.
@@ -855,16 +871,18 @@ func validateMCPPayloadEnum(fields map[string]json.RawMessage, field string, all
 		SafeMessage: fmt.Sprintf("Invalid value for %s", field),
 	})
 }
-func (a *MCPAdapter) ToolsList(ctx context.Context, p *ToolsListPayload) (res *ToolsListResult, err error) {
-	ctx, span, start, attrs := a.startTelemetry(ctx, "tools/list")
-	defer func() {
-		a.finishTelemetry(ctx, span, start, attrs, err, false)
-	}()
-	if !a.isInitialized(ctx) {
-		return nil, loom.PermanentError("invalid_params", "Not initialized")
-	}
-	a.log(ctx, "request", map[string]any{"method": "tools/list"})
-	tools := []*ToolInfo{&ToolInfo{
+
+type toolSearchPayload struct {
+	Pattern    string `json:"pattern"`
+	MaxResults *int   `json:"max_results,omitempty"`
+}
+type toolCallProxyPayload struct {
+	Name      string          `json:"name"`
+	Arguments json.RawMessage `json:"arguments,omitempty"`
+}
+
+func (a *MCPAdapter) generatedToolCatalog() []*ToolInfo {
+	return []*ToolInfo{&ToolInfo{
 		Description: stringPtr("Analyze sentiment of text"),
 		Icons: []*Icon{&Icon{
 			MimeType: stringPtr("image/png"),
@@ -910,6 +928,183 @@ func (a *MCPAdapter) ToolsList(ctx context.Context, p *ToolsListPayload) (res *T
 		InputSchema: json.RawMessage([]byte("{\"type\":\"object\",\"required\":[\"command\"],\"properties\":{\"command\":{\"type\":\"object\",\"description\":\"Command envelope with custom branch key\",\"oneOf\":[{\"type\":\"object\",\"required\":[\"action\",\"args\"],\"properties\":{\"action\":{\"type\":\"string\",\"enum\":[\"foo\"]},\"args\":{\"type\":\"object\",\"properties\":{\"label\":{\"type\":\"string\",\"description\":\"Foo label\"}},\"additionalProperties\":false}},\"additionalProperties\":false},{\"type\":\"object\",\"required\":[\"action\",\"args\"],\"properties\":{\"action\":{\"type\":\"string\",\"enum\":[\"bar\"]},\"args\":{\"type\":\"object\",\"required\":[\"count\"],\"properties\":{\"count\":{\"type\":\"integer\",\"description\":\"Bar count\"}},\"additionalProperties\":false}},\"additionalProperties\":false}],\"discriminator\":{\"propertyName\":\"action\"}}},\"additionalProperties\":false}")),
 		Name:        "dispatch_command",
 	}}
+}
+func (a *MCPAdapter) toolSearchEnabled() bool {
+	return a != nil && a.opts != nil && a.opts.ToolSearch != nil
+}
+func (a *MCPAdapter) toolSearchNames() (string, string) {
+	searchName := "search_tools"
+	callName := "call_tool"
+	if a.toolSearchEnabled() {
+		if a.opts.ToolSearch.SearchToolName != "" {
+			searchName = a.opts.ToolSearch.SearchToolName
+		}
+		if a.opts.ToolSearch.CallToolName != "" {
+			callName = a.opts.ToolSearch.CallToolName
+		}
+	}
+	return searchName, callName
+}
+func (a *MCPAdapter) isToolSearchName(name string) bool {
+	searchName, _ := a.toolSearchNames()
+	return a.toolSearchEnabled() && name == searchName
+}
+func (a *MCPAdapter) isToolCallProxyName(name string) bool {
+	_, callName := a.toolSearchNames()
+	return a.toolSearchEnabled() && name == callName
+}
+func (a *MCPAdapter) toolSearchMaxResults() int {
+	if a.toolSearchEnabled() && a.opts.ToolSearch.MaxResults > 0 {
+		return a.opts.ToolSearch.MaxResults
+	}
+	return 5
+}
+func (a *MCPAdapter) visibleToolCatalog(tools []*ToolInfo) []*ToolInfo {
+	if !a.toolSearchEnabled() {
+		return tools
+	}
+	pinned := make(map[string]struct{}, len(a.opts.ToolSearch.AlwaysVisible))
+	for _, name := range a.opts.ToolSearch.AlwaysVisible {
+		if name != "" {
+			pinned[name] = struct{}{}
+		}
+	}
+	visible := make([]*ToolInfo, 0, len(pinned)+2)
+	for _, tool := range tools {
+		if tool == nil {
+			continue
+		}
+		if _, ok := pinned[tool.Name]; ok {
+			visible = append(visible, tool)
+		}
+	}
+	return visible
+}
+func (a *MCPAdapter) toolSearchSyntheticTools() []*ToolInfo {
+	searchName, callName := a.toolSearchNames()
+	return []*ToolInfo{toolSearchToolInfo(searchName), toolCallProxyToolInfo(callName)}
+}
+func toolSearchToolInfo(name string) *ToolInfo {
+	return &ToolInfo{
+		Description: stringPtr("Search available tools by regex pattern and return matching tool definitions."),
+		InputSchema: json.RawMessage([]byte("{\"type\":\"object\",\"required\":[\"pattern\"],\"properties\":{\"pattern\":{\"type\":\"string\",\"description\":\"Case-insensitive regex pattern matched against tool names, descriptions, parameter names, and parameter descriptions\"},\"max_results\":{\"type\":\"integer\",\"description\":\"Maximum number of tools to return for this search\"}},\"additionalProperties\":false}")),
+		Name:        name,
+	}
+}
+func toolCallProxyToolInfo(name string) *ToolInfo {
+	return &ToolInfo{
+		Description: stringPtr("Call a discovered tool by name with its arguments."),
+		InputSchema: json.RawMessage([]byte("{\"type\":\"object\",\"required\":[\"name\"],\"properties\":{\"name\":{\"type\":\"string\",\"description\":\"Name of the discovered tool to call\"},\"arguments\":{\"type\":\"object\",\"description\":\"Arguments object for the discovered tool\"}},\"additionalProperties\":false}")),
+		Name:        name,
+	}
+}
+func toolSearchHaystack(tool *ToolInfo) string {
+	if tool == nil {
+		return ""
+	}
+	parts := []string{tool.Name}
+	if tool.Description != nil {
+		parts = append(parts, *tool.Description)
+	}
+	switch schema := tool.InputSchema.(type) {
+	case json.RawMessage:
+		parts = append(parts, string(schema))
+	case []byte:
+		parts = append(parts, string(schema))
+	default:
+		if schema != nil {
+			if raw, err := json.Marshal(schema); err == nil {
+				parts = append(parts, string(raw))
+			}
+		}
+	}
+	return strings.Join(parts, " ")
+}
+func (a *MCPAdapter) handleSearchTools(ctx context.Context, p *ToolsCallPayload, stream ToolsCallServerStream) (bool, error) {
+	var payload toolSearchPayload
+	if err := decodeMCPPayloadStrict(p.Arguments, &payload); err != nil {
+		return true, a.sendToolError(ctx, stream, p.Name, toolCallError(err, "invalid_params", "Provide {\"pattern\":\"...\"} to search tools."))
+	}
+	pattern := strings.TrimSpace(payload.Pattern)
+	if pattern == "" {
+		return true, a.sendToolError(ctx, stream, p.Name, toolCallError(loom.PermanentError("invalid_params", "Missing required field: pattern"), "invalid_params", "Provide {\"pattern\":\"...\"} to search tools."))
+	}
+	re, err := regexp.Compile("(?i)" + pattern)
+	if err != nil {
+		return false, stream.SendAndClose(ctx, &ToolsCallResult{
+			Content:           []*ContentItem{buildContentItem(a, "No tools found.")},
+			StructuredContent: json.RawMessage([]byte("{\"tools\":[]}")),
+		})
+	}
+	limit := a.toolSearchMaxResults()
+	if payload.MaxResults != nil && *payload.MaxResults > 0 {
+		limit = *payload.MaxResults
+	}
+	matches := make([]*ToolInfo, 0, limit)
+	_, callName := a.toolSearchNames()
+	for _, tool := range a.generatedToolCatalog() {
+		if tool == nil {
+			continue
+		}
+		if tool.Name == callName {
+			continue
+		}
+		if re.MatchString(toolSearchHaystack(tool)) {
+			matches = append(matches, tool)
+			if len(matches) >= limit {
+				break
+			}
+		}
+	}
+	result := &ToolsListResult{Tools: matches}
+	structured, err := json.Marshal(result)
+	if err != nil {
+		return false, err
+	}
+	text := fmt.Sprintf("Found %d tool(s).", len(matches))
+	return false, stream.SendAndClose(ctx, &ToolsCallResult{
+		Content:           []*ContentItem{buildContentItem(a, text)},
+		StructuredContent: structured,
+	})
+}
+func (a *MCPAdapter) handleCallToolProxy(ctx context.Context, p *ToolsCallPayload, stream ToolsCallServerStream) (bool, error) {
+	var payload toolCallProxyPayload
+	if err := decodeMCPPayloadStrict(p.Arguments, &payload); err != nil {
+		return true, a.sendToolError(ctx, stream, p.Name, toolCallError(err, "invalid_params", "Provide {\"name\":\"tool_name\",\"arguments\":{...}} to call a discovered tool."))
+	}
+	payload.Name = strings.TrimSpace(payload.Name)
+	if payload.Name == "" {
+		return true, a.sendToolError(ctx, stream, p.Name, toolCallError(loom.PermanentError("invalid_params", "Missing required field: name"), "invalid_params", "Provide {\"name\":\"tool_name\",\"arguments\":{...}} to call a discovered tool."))
+	}
+	if a.isToolSearchName(payload.Name) || a.isToolCallProxyName(payload.Name) {
+		return true, a.sendToolError(ctx, stream, p.Name, toolCallError(loom.PermanentError("invalid_params", "call_tool cannot call synthetic tool %q", payload.Name), "invalid_params", "Call one of the real tools returned by search_tools."))
+	}
+	arguments := payload.Arguments
+	if len(bytes.TrimSpace(arguments)) == 0 {
+		arguments = json.RawMessage([]byte("{}"))
+	}
+	proxied := &ToolsCallPayload{
+		Arguments: arguments,
+		Name:      payload.Name,
+	}
+	info := a.toolCallInfo(proxied)
+	handler := a.wrapToolCallHandler(info, a.toolsCallHandler)
+	return handler(ctx, proxied, stream)
+}
+func (a *MCPAdapter) ToolsList(ctx context.Context, p *ToolsListPayload) (res *ToolsListResult, err error) {
+	ctx, span, start, attrs := a.startTelemetry(ctx, "tools/list")
+	defer func() {
+		a.finishTelemetry(ctx, span, start, attrs, err, false)
+	}()
+	if !a.isInitialized(ctx) {
+		return nil, loom.PermanentError("invalid_params", "Not initialized")
+	}
+	a.log(ctx, "request", map[string]any{"method": "tools/list"})
+	tools := a.generatedToolCatalog()
+	if a.toolSearchEnabled() {
+		tools = a.visibleToolCatalog(tools)
+		tools = append(tools, a.toolSearchSyntheticTools()...)
+	}
 	res = &ToolsListResult{Tools: tools}
 	a.log(ctx, "response", map[string]any{"method": "tools/list"})
 	return res, nil
@@ -1155,6 +1350,12 @@ func (a *MCPAdapter) toolsCallHandler(ctx context.Context, p *ToolsCallPayload, 
 		"method": "tools/call",
 		"name":   name,
 	})
+	if a.isToolSearchName(name) {
+		return a.handleSearchTools(ctx, p, stream)
+	}
+	if a.isToolCallProxyName(name) {
+		return a.handleCallToolProxy(ctx, p, stream)
+	}
 	switch p.Name {
 	case "analyze_sentiment":
 		var payload *assistant.AnalyzeSentimentPayload
@@ -1553,6 +1754,19 @@ func (a *MCPAdapter) ResourcesList(ctx context.Context, p *ResourcesListPayload)
 		Name:        stringPtr("figma_design_system"),
 		URI:         "figma://design-system/mobile-checkout",
 	}}
+	skillSources := skillSources()
+	skillResources, err := mcpskills.List(ctx, skillSources)
+	if err != nil {
+		return nil, err
+	}
+	for _, resource := range skillResources {
+		resources = append(resources, &ResourceInfo{
+			Description: stringPtr(resource.Description),
+			MimeType:    stringPtr(resource.MimeType),
+			Name:        stringPtr(resource.Name),
+			URI:         resource.URI,
+		})
+	}
 	res := &ResourcesListResult{Resources: resources}
 	a.log(ctx, "response", map[string]any{"method": "resources/list"})
 	return res, nil
@@ -1568,6 +1782,24 @@ func (a *MCPAdapter) ResourcesRead(ctx context.Context, p *ResourcesReadPayload)
 	baseURI := p.URI
 	if i := strings.Index(baseURI, "?"); i >= 0 {
 		baseURI = baseURI[0:i]
+	}
+	if strings.HasPrefix(baseURI, "skill://") {
+		skillSources := skillSources()
+		content, err := mcpskills.Read(ctx, skillSources, baseURI)
+		if err != nil {
+			return nil, loom.PermanentError("invalid_params", "%s", err.Error())
+		}
+		res := &ResourcesReadResult{Contents: []*ResourceContent{&ResourceContent{
+			Blob:     content.Blob,
+			MimeType: stringPtr(content.MimeType),
+			Text:     content.Text,
+			URI:      content.URI,
+		}}}
+		a.log(ctx, "response", map[string]any{
+			"method": "resources/read",
+			"uri":    baseURI,
+		})
+		return res, nil
 	}
 	switch baseURI {
 	case "doc://list":
@@ -1673,6 +1905,9 @@ func (a *MCPAdapter) ResourcesRead(ctx context.Context, p *ResourcesReadPayload)
 	default:
 		return nil, loom.PermanentError("method_not_found", "Unknown resource: %s", p.URI)
 	}
+}
+func skillSources() []mcpskills.Source {
+	return []mcpskills.Source{{Root: ".agents/skills"}}
 }
 
 // assertResourceURIAllowed verifies pURI passes allow/deny filters when configured.

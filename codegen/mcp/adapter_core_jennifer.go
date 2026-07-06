@@ -10,6 +10,7 @@ func adapterCoreSection(data *AdapterData) codegen.Section {
 		stmt.Comment("MCPAdapter core: types, options, constructor, helpers").Line()
 		emitAdapterStruct(stmt, data)
 		emitToolCallInterceptorTypes(stmt)
+		emitToolSearchOptions(stmt)
 		emitAdapterOptions(stmt)
 		emitAdapterConstructor(stmt, data)
 		emitProtocolVersionHelpers(stmt)
@@ -136,6 +137,21 @@ func emitToolCallInterceptorTypes(stmt *jen.Statement) {
 	stmt.Line()
 }
 
+func emitToolSearchOptions(stmt *jen.Statement) {
+	stmt.Comment("ToolSearchOptions enables large-catalog tool discovery through synthetic search_tools and call_tool tools.").Line()
+	stmt.Type().Id("ToolSearchOptions").Struct(
+		jen.Comment("MaxResults limits search results. Values <= 0 use the generated default."),
+		jen.Id("MaxResults").Int(),
+		jen.Comment("AlwaysVisible keeps selected real tool names in tools/list alongside the synthetic tools."),
+		jen.Id("AlwaysVisible").Index().String(),
+		jen.Comment("SearchToolName overrides the synthetic search tool name. Default: search_tools."),
+		jen.Id("SearchToolName").String(),
+		jen.Comment("CallToolName overrides the synthetic call proxy tool name. Default: call_tool."),
+		jen.Id("CallToolName").String(),
+	)
+	stmt.Line()
+}
+
 // emitAdapterOptions generates the MCPAdapterOptions struct.
 func emitAdapterOptions(stmt *jen.Statement) {
 	stmt.Comment("MCPAdapterOptions allows customizing adapter behavior.").Line()
@@ -146,6 +162,8 @@ func emitAdapterOptions(stmt *jen.Statement) {
 		jen.Id("ErrorMapper").Func().Params(jen.Error()).Error(),
 		jen.Comment("ToolCallInterceptors wrap generated tools/call execution."),
 		jen.Id("ToolCallInterceptors").Index().Id("ToolCallInterceptor"),
+		jen.Comment("ToolSearch, when non-nil, replaces the tools/list catalog with synthetic discovery tools plus pinned tools."),
+		jen.Id("ToolSearch").Op("*").Id("ToolSearchOptions"),
 		jen.Comment("TelemetryName overrides the instrumentation scope used for OpenTelemetry spans and metrics."),
 		jen.Id("TelemetryName").String(),
 		jen.Comment("Tracer overrides the tracer used by the generated MCP adapter."),

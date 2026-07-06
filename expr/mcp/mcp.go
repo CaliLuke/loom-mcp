@@ -67,6 +67,9 @@ type (
 		// Resources is the collection of resource expressions exposed
 		// by this server.
 		Resources []*ResourceExpr
+		// SkillDirectories are filesystem roots scanned for agent skills
+		// and exposed as skill:// MCP resources.
+		SkillDirectories []*SkillDirectoryExpr
 		// Prompts is the collection of static prompt expressions
 		// exposed by this server.
 		Prompts []*PromptExpr
@@ -131,6 +134,16 @@ type (
 		// Description is the human-readable summary surfaced in PRM
 		// JSON and in the WWW-Authenticate challenge.
 		Description string
+	}
+
+	// SkillDirectoryExpr declares a filesystem root containing skill
+	// directories. Each child directory with a SKILL.md file is exposed as
+	// skill:// resources.
+	SkillDirectoryExpr struct {
+		eval.Expression
+
+		// Root is the filesystem directory containing skill subdirectories.
+		Root string
 	}
 
 	// CapabilitiesExpr defines which MCP protocol capabilities a server supports.
@@ -223,8 +236,24 @@ type (
 		// Messages is the collection of message templates in this
 		// prompt.
 		Messages []*MessageExpr
+		// Runtime optionally declares that this MCP prompt should also be
+		// registered as a runtime prompt spec.
+		Runtime *RuntimePromptExpr
 		// Icons is the optional icon metadata exposed for this prompt.
 		Icons []*IconExpr
+	}
+
+	// RuntimePromptExpr describes the runtime prompt spec generated from a
+	// static MCP prompt declaration.
+	RuntimePromptExpr struct {
+		eval.Expression
+
+		// AgentID identifies the owning runtime agent.
+		AgentID string
+		// Role identifies how the prompt is used at runtime.
+		Role string
+		// Version identifies the baseline runtime prompt version.
+		Version string
 	}
 
 	// MessageExpr defines a single message within a prompt template.
@@ -299,6 +328,14 @@ const (
 	IconThemeLight = "light"
 	// IconThemeDark declares that the icon is designed for dark backgrounds.
 	IconThemeDark = "dark"
+	// RuntimePromptRoleSystem identifies runtime system prompts.
+	RuntimePromptRoleSystem = "system"
+	// RuntimePromptRoleUser identifies runtime user prompts.
+	RuntimePromptRoleUser = "user"
+	// RuntimePromptRoleTool identifies runtime tool prompts.
+	RuntimePromptRoleTool = "tool"
+	// RuntimePromptRoleSynthesis identifies runtime synthesis prompts.
+	RuntimePromptRoleSynthesis = "synthesis"
 )
 
 // Finalize finalizes the MCP expression
@@ -312,7 +349,7 @@ func (m *MCPExpr) Finalize() {
 	if len(m.Tools) > 0 {
 		m.Capabilities.EnableTools = true
 	}
-	if len(m.Resources) > 0 {
+	if len(m.Resources) > 0 || len(m.SkillDirectories) > 0 {
 		m.Capabilities.EnableResources = true
 	}
 	if len(m.Prompts) > 0 {
@@ -332,6 +369,7 @@ func (m *MCPExpr) Validate() error {
 	mergeChildErrors(verr, m.Icons, iconValidator)
 	mergeChildErrors(verr, m.Tools, toolValidator)
 	mergeChildErrors(verr, m.Resources, resourceValidator)
+	mergeChildErrors(verr, m.SkillDirectories, skillDirectoryValidator)
 	mergeChildErrors(verr, m.Prompts, promptValidator)
 	if m.OAuth != nil {
 		mergeValidationError(verr, m.OAuth.Validate())
@@ -346,6 +384,9 @@ func iconValidator(icon *IconExpr) error      { return icon.Validate() }
 func toolValidator(t *ToolExpr) error         { return t.Validate() }
 func resourceValidator(r *ResourceExpr) error { return r.Validate() }
 func promptValidator(p *PromptExpr) error     { return p.Validate() }
+func skillDirectoryValidator(s *SkillDirectoryExpr) error {
+	return s.Validate()
+}
 
 func mergeChildErrors[T any](dst *eval.ValidationErrors, items []T, validate func(T) error) {
 	for _, item := range items {
@@ -463,6 +504,18 @@ func (r *ResourceExpr) Validate() error {
 	return nil
 }
 
+// Validate validates a skill directory expression.
+func (s *SkillDirectoryExpr) Validate() error {
+	verr := new(eval.ValidationErrors)
+	if s.Root == "" {
+		verr.Add(s, "skill directory root is required")
+	}
+	if len(verr.Errors) > 0 {
+		return verr
+	}
+	return nil
+}
+
 // Validate validates a prompt expression
 func (p *PromptExpr) Validate() error {
 	verr := new(eval.ValidationErrors)
@@ -479,6 +532,34 @@ func (p *PromptExpr) Validate() error {
 				verr.Merge(ve)
 			}
 		}
+	}
+	if p.Runtime != nil {
+		if err := p.Runtime.Validate(); err != nil {
+			var ve *eval.ValidationErrors
+			if errors.As(err, &ve) {
+				verr.Merge(ve)
+			}
+		}
+		if len(p.Messages) != 1 {
+			verr.Add(p, "runtime prompt %q must have exactly one message", p.Name)
+		}
+	}
+	if len(verr.Errors) > 0 {
+		return verr
+	}
+	return nil
+}
+
+// Validate validates a runtime prompt expression.
+func (r *RuntimePromptExpr) Validate() error {
+	verr := new(eval.ValidationErrors)
+	if r.AgentID == "" {
+		verr.Add(r, "runtime prompt agent id is required")
+	}
+	switch r.Role {
+	case RuntimePromptRoleSystem, RuntimePromptRoleUser, RuntimePromptRoleTool, RuntimePromptRoleSynthesis:
+	default:
+		verr.Add(r, "runtime prompt role must be system, user, tool, or synthesis")
 	}
 	if len(verr.Errors) > 0 {
 		return verr
@@ -524,6 +605,11 @@ func (r *ResourceExpr) EvalName() string {
 }
 
 // EvalName returns the name used for evaluation.
+func (s *SkillDirectoryExpr) EvalName() string {
+	return "MCP skill directory"
+}
+
+// EvalName returns the name used for evaluation.
 func (p *PromptExpr) EvalName() string {
 	return "MCP prompt " + p.Name
 }
@@ -531,6 +617,11 @@ func (p *PromptExpr) EvalName() string {
 // EvalName returns the name used for evaluation.
 func (m *MessageExpr) EvalName() string {
 	return "MCP message"
+}
+
+// EvalName returns the name used for evaluation.
+func (r *RuntimePromptExpr) EvalName() string {
+	return "runtime prompt"
 }
 
 // EvalName returns the name used for evaluation.

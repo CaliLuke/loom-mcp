@@ -375,7 +375,7 @@ func buildMCPAdapterFile(genpkg string, svc *expr.ServiceExpr, data *AdapterData
 	return &codegen.File{
 		Path: adapterPath,
 		Sections: []codegen.Section{
-			codegen.Header(fmt.Sprintf("MCP server adapter for %s service", svc.Name), data.MCPPackage, adapterImports(genpkg, svc, svcName)),
+			codegen.Header(fmt.Sprintf("MCP server adapter for %s service", svc.Name), data.MCPPackage, adapterImports(genpkg, svc, svcName, data)),
 			adapterCoreSection(data),
 			adapterBroadcastSection(),
 			adapterToolsSection(data),
@@ -387,7 +387,7 @@ func buildMCPAdapterFile(genpkg string, svc *expr.ServiceExpr, data *AdapterData
 	}
 }
 
-func adapterImports(genpkg string, svc *expr.ServiceExpr, svcName string) []*codegen.ImportSpec {
+func adapterImports(genpkg string, svc *expr.ServiceExpr, svcName string, data *AdapterData) []*codegen.ImportSpec {
 	imports := make([]*codegen.ImportSpec, 0, 24)
 	imports = append(imports, []*codegen.ImportSpec{
 		{Path: "bytes"},
@@ -415,6 +415,15 @@ func adapterImports(genpkg string, svc *expr.ServiceExpr, svcName string) []*cod
 		{Path: upstreampaths.LoomMCPHTTPImportPath, Name: "goahttp"},
 		{Path: upstreampaths.LoomPkgImportPath, Name: "loom"},
 	}...)
+	if len(data.SkillDirectories) > 0 {
+		imports = append(imports, &codegen.ImportSpec{
+			Path: "github.com/CaliLuke/loom-mcp/runtime/mcp/skills",
+			Name: "mcpskills",
+		})
+	}
+	if len(data.Tools) > 0 {
+		imports = append(imports, &codegen.ImportSpec{Path: "regexp"})
+	}
 	return append(imports, adapterAttributeImports(genpkg, svc, imports)...)
 }
 
@@ -483,14 +492,20 @@ func buildMCPPromptProviderFile(genpkg string, svc *expr.ServiceExpr, data *Adap
 	if len(data.StaticPrompts) == 0 && len(data.DynamicPrompts) == 0 {
 		return nil
 	}
+	imports := []*codegen.ImportSpec{
+		{Path: "context"},
+		{Path: "encoding/json"},
+		{Path: genpkg + "/" + svcName, Name: svcName},
+	}
+	if hasRuntimePrompts(data.StaticPrompts) {
+		imports = append(imports, &codegen.ImportSpec{
+			Path: "github.com/CaliLuke/loom-mcp/runtime/agent/prompt",
+		})
+	}
 	return &codegen.File{
 		Path: filepath.Join(codegen.Gendir, "mcp_"+svcName, "prompt_provider.go"),
 		Sections: []codegen.Section{
-			codegen.Header(fmt.Sprintf("MCP prompt provider for %s service", svc.Name), pkgName, []*codegen.ImportSpec{
-				{Path: "context"},
-				{Path: "encoding/json"},
-				{Path: genpkg + "/" + svcName, Name: svcName},
-			}),
+			codegen.Header(fmt.Sprintf("MCP prompt provider for %s service", svc.Name), pkgName, imports),
 			promptProviderSection(data),
 		},
 	}

@@ -24,6 +24,12 @@ func buildMCPSDKServerFile(genpkg string, svc *expr.ServiceExpr, data *AdapterDa
 		{Path: "github.com/CaliLuke/loom-mcp/runtime/mcp", Name: "mcpruntime"},
 		{Path: "github.com/CaliLuke/loom/observability/transport"},
 	}
+	if len(data.SkillDirectories) > 0 {
+		sdkServerImports = append(sdkServerImports, &codegen.ImportSpec{
+			Path: "github.com/CaliLuke/loom-mcp/runtime/mcp/skills",
+			Name: "mcpskills",
+		})
+	}
 	sections := []codegen.Section{
 		codegen.Header("SDK-backed MCP server for "+svc.Name+" service", pkgName, sdkServerImports),
 		sdkServerTypesSection(data),
@@ -551,7 +557,7 @@ func emitSDKRegisterResources(stmt *jen.Statement, data *AdapterData) {
 		).
 		Error().
 		BlockFunc(func(g *jen.Group) {
-			if len(data.Resources) == 0 {
+			if len(data.Resources) == 0 && len(data.SkillDirectories) == 0 {
 				g.Return(jen.Nil())
 				return
 			}
@@ -568,6 +574,23 @@ func emitSDKRegisterResources(stmt *jen.Statement, data *AdapterData) {
 				g.Id("server").Dot("AddResource").Call(
 					jen.Op("&").Id("mcpsdk").Dot("Resource").Values(dict),
 					jen.Id("adapter").Dot("sdkResourceHandler").Call(jen.Id("requestContext")),
+				)
+			}
+			if len(data.SkillDirectories) > 0 {
+				g.List(jen.Id("skillResources"), jen.Err()).Op(":=").Id("mcpskills").Dot("List").Call(jen.Qual("context", "Background").Call(), jen.Id("skillSources").Call())
+				g.If(jen.Err().Op("!=").Nil()).Block(
+					jen.Return(jen.Err()),
+				)
+				g.For(jen.List(jen.Id("_"), jen.Id("resource")).Op(":=").Range().Id("skillResources")).Block(
+					jen.Id("server").Dot("AddResource").Call(
+						jen.Op("&").Id("mcpsdk").Dot("Resource").Values(jen.Dict{
+							jen.Id("Name"):        jen.Id("resource").Dot("Name"),
+							jen.Id("URI"):         jen.Id("resource").Dot("URI"),
+							jen.Id("Description"): jen.Id("resource").Dot("Description"),
+							jen.Id("MIMEType"):    jen.Id("resource").Dot("MimeType"),
+						}),
+						jen.Id("adapter").Dot("sdkResourceHandler").Call(jen.Id("requestContext")),
+					),
 				)
 			}
 			g.Return(jen.Nil())
@@ -773,7 +796,7 @@ func sdkServerHandlerSection(data *AdapterData) codegen.Section {
 				)
 			stmt.Line()
 		}
-		if len(data.Resources) > 0 {
+		if len(data.Resources) > 0 || len(data.SkillDirectories) > 0 {
 			stmt.Func().Params(jen.Id("a").Op("*").Id("MCPAdapter")).
 				Id("sdkResourceHandler").
 				Params(jen.Id("requestContext").Func().Params(jen.Qual("context", "Context"), jen.Op("*").Qual("net/http", "Request")).Qual("context", "Context")).
