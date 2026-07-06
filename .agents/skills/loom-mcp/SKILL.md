@@ -41,6 +41,9 @@ Use this skill for `loom-mcp` work in this repo. Keep `AGENTS.md` short and keep
   list-surface `ToolIcons`/`ResourceIcons`/`PromptIcons`/`DynamicPromptIcons`
   should be declared in the DSL and allowed to flow through codegen into
   `initialize`, `tools/list`, `resources/list`, and `prompts/list`.
+- Generated SDK-backed MCP servers expose prompt argument completion for
+  enum-backed dynamic prompt arguments and place a runtime elicitor in request
+  contexts so service code can call `runtime/mcp.Elicit` during MCP calls.
 - Codegen should use partial evaluation and `NameScope` helpers rather than string surgery or runtime branching over static structure.
 - DSL/codegen/runtime internals should trust evaluated design invariants and fail fast instead of adding speculative fallback paths.
 
