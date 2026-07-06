@@ -769,7 +769,6 @@ func sdkServerHandlerSection(data *AdapterData) codegen.Section {
 									jen.Return(jen.Id("sdkCompleteValues").Call(jen.Nil(), jen.Lit(0), jen.False()), jen.Nil()),
 								)
 							})
-							g.Return(jen.Id("sdkCompleteValues").Call(jen.Nil(), jen.Lit(0), jen.False()), jen.Nil())
 						})),
 				)
 			stmt.Line()
