@@ -39,6 +39,12 @@ Use this file for current loom-mcp runtime behavior in this repo. Prefer it over
 - Use generated `tool_specs.Specs` and codecs for payload/result schema and encoding needs.
 - Do not introspect `docs.json` at runtime.
 - Tool results and retry hints should stay structured; avoid best-effort coercion when contracts fail.
+- Tool confirmation is runtime-owned. Design-time `Confirmation(...)` records
+  `tools.ConfirmationSpec` on generated tool specs; runtime
+  `WithToolConfirmation(...)` can require or override confirmation for specific
+  tools. Confirmed calls emit `AwaitConfirmation`, resume through
+  `ProvideConfirmation`, record a `ToolAuthorization` hook/stream event, execute
+  only when approved, and return schema-compliant denied results when rejected.
 - Tool-produced artifacts use `artifact.Content` on `planner.ToolResult.Artifacts`;
   runtime persistence converts them to workflow-safe `artifact.Ref` values on
   planner outputs, API tool events, hook payloads, and memory records.

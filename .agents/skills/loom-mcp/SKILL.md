@@ -59,6 +59,12 @@ Use this skill for `loom-mcp` work in this repo. Keep `AGENTS.md` short and keep
 - Agent-as-tool runs as a real child workflow. Parent and child are linked by `ChildRunLinked`, and parent tool results carry `RunLink`.
 - Stream visibility is profile-driven. Child runs are linked, not flattened, by default.
 - Runtime schemas come from generated `tool_specs.Specs` and codecs, not `docs.json`.
+- Tool confirmation is runtime-owned and design-visible: declare
+  `Confirmation(...)` in tool DSL for default approval requirements, or use
+  `runtime.WithToolConfirmation(...)` for runtime overrides. The runtime emits
+  `AwaitConfirmation`, resumes through `ProvideConfirmation`, records
+  `ToolAuthorization`, executes only approved calls, and synthesizes
+  schema-compliant denied results.
 - MCP is a two-way bridge:
   - consume external MCP servers through `runtime/mcp` callers,
   - expose designed services as MCP servers through generated adapters and registrations.
