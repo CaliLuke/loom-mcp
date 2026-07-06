@@ -127,6 +127,31 @@ func TestGeneratedJSONRPCToolSearchSearchesQueryText(t *testing.T) {
 	assert.Equal(t, "sentiment", list.Query)
 }
 
+func TestGeneratedJSONRPCToolSearchMatchesNaturalLanguageTokenQuery(t *testing.T) {
+	t.Parallel()
+
+	server := newGeneratedJSONRPCServerWithAdapterOptions(t, &mcpassistant.MCPAdapterOptions{
+		ToolSearch: &mcpassistant.ToolSearchOptions{MaxResults: 1},
+	})
+	defer server.Close()
+	client := newToolSearchJSONRPCClient(t, server.URL)
+
+	raw, err := client.ToolsCall()(context.Background(), &mcpassistant.ToolsCallPayload{
+		Name:      "search_tools",
+		Arguments: json.RawMessage(`{"query":"document lookup"}`),
+	})
+	require.NoError(t, err)
+	stream := raw.(*mcpAssistantjsonrpcc.ToolsCallClientStream)
+	result, err := stream.Recv(context.Background())
+	require.NoError(t, err)
+
+	var list toolSearchResult
+	require.NoError(t, json.Unmarshal(result.StructuredContent, &list))
+	assert.Equal(t, []string{"search"}, toolSearchDescriptorNames(list.Tools))
+	require.Len(t, list.Tools, 1)
+	assert.NotEmpty(t, list.Tools[0].WhyMatched)
+}
+
 func TestGeneratedJSONRPCToolSearchAcceptsOmittedArguments(t *testing.T) {
 	t.Parallel()
 
@@ -199,4 +224,10 @@ func TestGeneratedJSONRPCToolSearchReturnsStructuredDescriptors(t *testing.T) {
 	assert.Equal(t, "analysis", list.Tools[0].Category)
 	assert.NotEmpty(t, list.Tools[0].InputSchema)
 	assert.NotEmpty(t, list.Tools[0].OutputSchema)
+	assert.Equal(t, "call_tool", list.Tools[0].CallToolName)
+	assert.Contains(t, list.Tools[0].CallToolJSON, `"name": "analyze_sentiment"`)
+	assert.Contains(t, list.Tools[0].CallToolJSON, `"arguments": {`)
+	require.Len(t, result.Content, 1)
+	require.NotNil(t, result.Content[0].Text)
+	assert.Contains(t, *result.Content[0].Text, "Call this tool through call_tool. Do not call analyze_sentiment directly.")
 }

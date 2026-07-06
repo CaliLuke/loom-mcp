@@ -2097,14 +2097,21 @@ real tools named in `ToolSearchOptions.AlwaysVisible`.
 
 `search_tools` accepts either a plain `query` or a case-insensitive regex
 `pattern`, never both. It also accepts `category`, `tags`, `max_results`, and
-`include_schemas`. Matches are ranked before limiting by exact or partial name,
-title, discovery metadata, description, input parameter names and descriptions,
-then schema text. The result includes model-readable text such as
-`invoke: call_tool name="<tool>"` and structured content with `tools`,
+`include_schemas`. Plain query matching normalizes snake_case names into words,
+singularizes simple plurals, drops common instruction words, and ranks token
+overlap before limiting. Exact or partial name, title, discovery metadata,
+description, input parameter names and descriptions, and schema text all
+contribute to ranking.
+
+The result includes model-readable text with exact `call_tool` JSON examples,
+not only a prose invocation hint. Structured content includes `tools`,
 `total_matches`, `truncated`, and the supplied `query` or `pattern`. Tool
 descriptors preserve MCP Tool-shaped fields including `inputSchema`,
 `outputSchema`, `_meta`, `annotations`, and `icons`; schemas are omitted by
-default and included only when `include_schemas` is true.
+default and included only when `include_schemas` is true. Each descriptor also
+includes `why_matched`, `call_tool_name`, `call_tool_arguments`, and
+`call_tool_json` so clients and models can invoke the hidden target through the
+wrapper without guessing the schema.
 
 `call_tool` invokes a discovered real tool by name with an `arguments` object. It
 rejects synthetic targets and unknown real tool names as tool errors. In compact

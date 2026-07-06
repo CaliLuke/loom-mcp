@@ -63,9 +63,12 @@ Use this file when editing DSL, generators, generated helpers, or MCP codegen be
   When enabled, generated `tools/list` is the compact authoritative public
   catalog: `search_tools`, `call_tool`, and validated `AlwaysVisible` pins.
   Search descriptors carry discovery metadata and omit schemas unless requested.
-  Hidden real tools are called through `call_tool`; direct hidden JSON-RPC calls
-  require `AllowDirectHiddenCalls`, and SDK compact mode must reject that option
-  because unregistered SDK tools cannot be directly invoked.
+  `search_tools` must normalize snake_case names into searchable words, rank
+  natural-language token overlap, explain `why_matched`, and include exact
+  `call_tool` JSON examples in both text guidance and structured descriptor
+  fields. Hidden real tools are called through `call_tool`; direct hidden
+  JSON-RPC calls require `AllowDirectHiddenCalls`, and SDK compact mode must
+  reject that option because unregistered SDK tools cannot be directly invoked.
 
 ## Validation And Contracts
 

@@ -87,8 +87,11 @@ Use this skill for `loom-mcp` work in this repo. Keep `AGENTS.md` short and keep
   it exposes `search_tools`, `call_tool`, and validated `AlwaysVisible` pins.
   Hidden real tools are invoked through `call_tool`; direct hidden `tools/call`
   is rejected by default, except for the explicit JSON-RPC compatibility option
-  `AllowDirectHiddenCalls`. SDK compact mode must reject that compatibility
-  option at construction.
+  `AllowDirectHiddenCalls`. `search_tools` must support tokenized natural
+  language queries and return exact `call_tool` JSON examples; `call_tool`
+  schema text must require top-level `name` and `arguments` and warn not to use
+  `args`. SDK compact mode must reject direct-hidden compatibility at
+  construction.
 - Generated SDK-backed MCP servers expose prompt argument completion for
   enum-backed dynamic prompt arguments and place a runtime elicitor in request
   contexts so service code can call `runtime/mcp.Elicit` during MCP calls.

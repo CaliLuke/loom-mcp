@@ -26,17 +26,21 @@ type toolSearchResult struct {
 }
 
 type toolSearchDescriptor struct {
-	Name         string          `json:"name"`
-	Title        string          `json:"title,omitempty"`
-	Description  string          `json:"description,omitempty"`
-	InputSchema  json.RawMessage `json:"inputSchema,omitempty"`
-	OutputSchema json.RawMessage `json:"outputSchema,omitempty"`
-	Annotations  json.RawMessage `json:"annotations,omitempty"`
-	Meta         json.RawMessage `json:"_meta,omitempty"`
-	Icons        []any           `json:"icons,omitempty"`
-	Category     string          `json:"category,omitempty"`
-	Tags         []string        `json:"tags,omitempty"`
-	Keywords     []string        `json:"keywords,omitempty"`
+	Name              string          `json:"name"`
+	Title             string          `json:"title,omitempty"`
+	Description       string          `json:"description,omitempty"`
+	InputSchema       json.RawMessage `json:"inputSchema,omitempty"`
+	OutputSchema      json.RawMessage `json:"outputSchema,omitempty"`
+	Annotations       json.RawMessage `json:"annotations,omitempty"`
+	Meta              json.RawMessage `json:"_meta,omitempty"`
+	Icons             []any           `json:"icons,omitempty"`
+	Category          string          `json:"category,omitempty"`
+	Tags              []string        `json:"tags,omitempty"`
+	Keywords          []string        `json:"keywords,omitempty"`
+	WhyMatched        []string        `json:"why_matched,omitempty"`
+	CallToolName      string          `json:"call_tool_name,omitempty"`
+	CallToolArguments json.RawMessage `json:"call_tool_arguments,omitempty"`
+	CallToolJSON      string          `json:"call_tool_json,omitempty"`
 }
 
 func newToolSearchAdapter(t *testing.T, opts *mcpassistant.ToolSearchOptions) *mcpassistant.MCPAdapter {
@@ -161,6 +165,26 @@ func TestGeneratedAdapterToolSearchSearchesQueryText(t *testing.T) {
 	assert.Equal(t, 1, result.TotalMatches)
 	assert.False(t, result.Truncated)
 	assert.Equal(t, "sentiment", result.Query)
+}
+
+func TestGeneratedAdapterToolSearchMatchesNaturalLanguageTokenQuery(t *testing.T) {
+	t.Parallel()
+
+	adapter := newToolSearchAdapter(t, &mcpassistant.ToolSearchOptions{MaxResults: 1})
+	stream := &capturedToolsCallStream{}
+
+	err := adapter.ToolsCall(context.Background(), &mcpassistant.ToolsCallPayload{
+		Name:      "search_tools",
+		Arguments: json.RawMessage(`{"query":"document lookup"}`),
+	}, stream)
+	require.NoError(t, err)
+	require.Len(t, stream.events, 1)
+
+	var result toolSearchResult
+	require.NoError(t, json.Unmarshal(stream.events[0].StructuredContent, &result))
+	assert.Equal(t, []string{"search"}, toolSearchDescriptorNames(result.Tools))
+	require.Len(t, result.Tools, 1)
+	assert.NotEmpty(t, result.Tools[0].WhyMatched)
 }
 
 func TestGeneratedAdapterToolSearchAcceptsOmittedArguments(t *testing.T) {
@@ -413,7 +437,12 @@ func TestGeneratedAdapterToolSearchReturnsModelReadableText(t *testing.T) {
 	require.Len(t, stream.events, 1)
 	require.Len(t, stream.events[0].Content, 1)
 	require.NotNil(t, stream.events[0].Content[0].Text)
-	assert.Contains(t, *stream.events[0].Content[0].Text, `invoke: call_tool name="analyze_sentiment"`)
+	text := *stream.events[0].Content[0].Text
+	assert.Contains(t, text, "Call this tool through call_tool. Do not call analyze_sentiment directly.")
+	assert.Contains(t, text, "Tool: call_tool")
+	assert.Contains(t, text, `"name": "analyze_sentiment"`)
+	assert.Contains(t, text, `"arguments": {`)
+	assert.Contains(t, text, `"text": "<string>"`)
 }
 
 func TestGeneratedAdapterToolSearchReturnsStructuredDescriptors(t *testing.T) {
@@ -439,6 +468,30 @@ func TestGeneratedAdapterToolSearchReturnsStructuredDescriptors(t *testing.T) {
 	assert.Equal(t, "analysis", result.Tools[0].Category)
 	assert.ElementsMatch(t, []string{"sentiment", "nlp"}, result.Tools[0].Tags)
 	assert.NotEmpty(t, result.Tools[0].Meta)
+	assert.Equal(t, "call_tool", result.Tools[0].CallToolName)
+	require.NotEmpty(t, result.Tools[0].CallToolArguments)
+	assert.Contains(t, result.Tools[0].CallToolJSON, `"name": "analyze_sentiment"`)
+	assert.Contains(t, result.Tools[0].CallToolJSON, `"arguments": {`)
+}
+
+func TestGeneratedAdapterToolSearchCallToolSchemaShowsExactWrapperShape(t *testing.T) {
+	t.Parallel()
+
+	adapter := newToolSearchAdapter(t, &mcpassistant.ToolSearchOptions{})
+
+	result, err := adapter.ToolsList(context.Background(), &mcpassistant.ToolsListPayload{})
+	require.NoError(t, err)
+	require.Len(t, result.Tools, 2)
+
+	callTool := result.Tools[1]
+	require.Equal(t, "call_tool", callTool.Name)
+	schemaJSON, err := json.Marshal(callTool.InputSchema)
+	require.NoError(t, err)
+	schema := string(schemaJSON)
+	assert.Contains(t, schema, `"required":["name","arguments"]`)
+	assert.Contains(t, schema, "Exact discovered tool name")
+	assert.Contains(t, schema, "Use {} when the discovered tool takes no arguments")
+	assert.Contains(t, schema, "Do not use args")
 }
 
 func TestGeneratedAdapterToolSearchStructuredContentIncludesPattern(t *testing.T) {

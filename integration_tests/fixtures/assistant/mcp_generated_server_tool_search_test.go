@@ -112,6 +112,33 @@ func TestGeneratedSDKServerToolSearchAcceptsOmittedSearchArguments(t *testing.T)
 	assert.True(t, structured["truncated"].(bool))
 }
 
+func TestGeneratedSDKServerToolSearchReturnsCallToolExample(t *testing.T) {
+	t.Parallel()
+
+	session := newToolSearchSDKSession(t, &mcpassistant.ToolSearchOptions{MaxResults: 1})
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	result, err := session.CallTool(ctx, &sdkmcp.CallToolParams{
+		Name: "search_tools",
+		Arguments: map[string]any{
+			"query": "document lookup",
+		},
+	})
+	require.NoError(t, err)
+	assert.False(t, result.IsError)
+	structured, ok := result.StructuredContent.(map[string]any)
+	require.True(t, ok)
+	tools, ok := structured["tools"].([]any)
+	require.True(t, ok)
+	require.Len(t, tools, 1)
+	tool, ok := tools[0].(map[string]any)
+	require.True(t, ok)
+	assert.Equal(t, "search", tool["name"])
+	assert.Equal(t, "call_tool", tool["call_tool_name"])
+	assert.Contains(t, tool["call_tool_json"], `"name": "search"`)
+}
+
 func sdkToolNames(tools []*sdkmcp.Tool) []string {
 	names := make([]string, 0, len(tools))
 	for _, tool := range tools {

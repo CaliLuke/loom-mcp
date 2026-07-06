@@ -895,17 +895,21 @@ type toolSearchResult struct {
 	Pattern      string                 `json:"pattern,omitempty"`
 }
 type toolSearchDescriptor struct {
-	Name         string          `json:"name"`
-	Title        string          `json:"title,omitempty"`
-	Description  string          `json:"description,omitempty"`
-	InputSchema  json.RawMessage `json:"inputSchema,omitempty"`
-	OutputSchema json.RawMessage `json:"outputSchema,omitempty"`
-	Annotations  json.RawMessage `json:"annotations,omitempty"`
-	Meta         json.RawMessage `json:"_meta,omitempty"`
-	Icons        []*Icon         `json:"icons,omitempty"`
-	Category     string          `json:"category,omitempty"`
-	Tags         []string        `json:"tags,omitempty"`
-	Keywords     []string        `json:"keywords,omitempty"`
+	Name              string          `json:"name"`
+	Title             string          `json:"title,omitempty"`
+	Description       string          `json:"description,omitempty"`
+	InputSchema       json.RawMessage `json:"inputSchema,omitempty"`
+	OutputSchema      json.RawMessage `json:"outputSchema,omitempty"`
+	Annotations       json.RawMessage `json:"annotations,omitempty"`
+	Meta              json.RawMessage `json:"_meta,omitempty"`
+	Icons             []*Icon         `json:"icons,omitempty"`
+	Category          string          `json:"category,omitempty"`
+	Tags              []string        `json:"tags,omitempty"`
+	Keywords          []string        `json:"keywords,omitempty"`
+	WhyMatched        []string        `json:"why_matched,omitempty"`
+	CallToolName      string          `json:"call_tool_name,omitempty"`
+	CallToolArguments json.RawMessage `json:"call_tool_arguments,omitempty"`
+	CallToolJSON      string          `json:"call_tool_json,omitempty"`
 }
 type toolSearchCandidate struct {
 	tool  *ToolInfo
@@ -1114,14 +1118,14 @@ func toolSearchToolInfo(name string) *ToolInfo {
 		Description:  stringPtr("Search available tools by plain text query or regex pattern and return matching tool definitions."),
 		InputSchema:  json.RawMessage([]byte("{\"type\":\"object\",\"properties\":{\"query\":{\"type\":\"string\",\"description\":\"Plain text query matched against tool names, titles, descriptions, metadata, and schemas\"},\"pattern\":{\"type\":\"string\",\"description\":\"Case-insensitive regex pattern matched against tool names, titles, descriptions, metadata, and schemas\"},\"max_results\":{\"type\":\"integer\",\"description\":\"Maximum number of tools to return for this search\"},\"include_schemas\":{\"type\":\"boolean\",\"description\":\"Include input and output schemas in returned descriptors\"},\"category\":{\"type\":\"string\",\"description\":\"Discovery category filter\"},\"tags\":{\"type\":\"array\",\"items\":{\"type\":\"string\"},\"description\":\"Discovery tag filters\"}},\"additionalProperties\":false}")),
 		Name:         name,
-		OutputSchema: json.RawMessage([]byte("{\"type\":\"object\",\"required\":[\"tools\",\"total_matches\",\"truncated\"],\"properties\":{\"tools\":{\"type\":\"array\",\"items\":{\"type\":\"object\",\"required\":[\"name\",\"description\"],\"properties\":{\"name\":{\"type\":\"string\"},\"title\":{\"type\":\"string\"},\"description\":{\"type\":\"string\"},\"inputSchema\":{\"type\":\"object\"},\"outputSchema\":{\"type\":\"object\"},\"annotations\":{\"type\":\"object\"},\"_meta\":{\"type\":\"object\"},\"icons\":{\"type\":\"array\",\"items\":{\"type\":\"object\"}},\"category\":{\"type\":\"string\"},\"tags\":{\"type\":\"array\",\"items\":{\"type\":\"string\"}},\"keywords\":{\"type\":\"array\",\"items\":{\"type\":\"string\"}}}}},\"total_matches\":{\"type\":\"integer\"},\"truncated\":{\"type\":\"boolean\"},\"query\":{\"type\":\"string\"},\"pattern\":{\"type\":\"string\"}},\"additionalProperties\":false}")),
+		OutputSchema: json.RawMessage([]byte("{\"type\":\"object\",\"required\":[\"tools\",\"total_matches\",\"truncated\"],\"properties\":{\"tools\":{\"type\":\"array\",\"items\":{\"type\":\"object\",\"required\":[\"name\",\"description\"],\"properties\":{\"name\":{\"type\":\"string\"},\"title\":{\"type\":\"string\"},\"description\":{\"type\":\"string\"},\"inputSchema\":{\"type\":\"object\"},\"outputSchema\":{\"type\":\"object\"},\"annotations\":{\"type\":\"object\"},\"_meta\":{\"type\":\"object\"},\"icons\":{\"type\":\"array\",\"items\":{\"type\":\"object\"}},\"category\":{\"type\":\"string\"},\"tags\":{\"type\":\"array\",\"items\":{\"type\":\"string\"}},\"keywords\":{\"type\":\"array\",\"items\":{\"type\":\"string\"}},\"why_matched\":{\"type\":\"array\",\"items\":{\"type\":\"string\"}},\"call_tool_name\":{\"type\":\"string\"},\"call_tool_arguments\":{\"type\":\"object\"},\"call_tool_json\":{\"type\":\"string\"}}}},\"total_matches\":{\"type\":\"integer\"},\"truncated\":{\"type\":\"boolean\"},\"query\":{\"type\":\"string\"},\"pattern\":{\"type\":\"string\"}},\"additionalProperties\":false}")),
 		Title:        stringPtr("Search Tools"),
 	}
 }
 func toolCallProxyToolInfo(name string) *ToolInfo {
 	return &ToolInfo{
-		Description: stringPtr("Call a discovered tool by name with its arguments."),
-		InputSchema: json.RawMessage([]byte("{\"type\":\"object\",\"required\":[\"name\"],\"properties\":{\"name\":{\"type\":\"string\",\"description\":\"Name of the discovered tool to call\"},\"arguments\":{\"type\":\"object\",\"description\":\"Arguments object for the discovered tool\"}},\"additionalProperties\":false}")),
+		Description: stringPtr("Call a discovered tool by exact name. Always provide both top-level fields: name and arguments. Use arguments: {} when the discovered tool takes no arguments. Do not use args."),
+		InputSchema: json.RawMessage([]byte("{\"type\":\"object\",\"required\":[\"name\",\"arguments\"],\"properties\":{\"name\":{\"type\":\"string\",\"description\":\"Exact discovered tool name. Required. Copy this from search_tools results.\"},\"arguments\":{\"type\":\"object\",\"description\":\"Arguments object for the discovered tool. Required. Use {} when the discovered tool takes no arguments. Do not use args.\"}},\"additionalProperties\":false}")),
 		Name:        name,
 		Title:       stringPtr("Call Tool"),
 	}
@@ -1201,13 +1205,19 @@ func toolDiscoveryMetadata(tool *ToolInfo) (string, []string, []string) {
 	discovery := meta["com.github.caliluke.loom-mcp/discovery"]
 	return discovery.Category, discovery.Tags, discovery.Keywords
 }
-func toolSearchDescriptorFor(tool *ToolInfo, includeSchemas bool) toolSearchDescriptor {
+func toolSearchDescriptorFor(tool *ToolInfo, includeSchemas bool, callName string, query string, score int) toolSearchDescriptor {
 	category, tags, keywords := toolDiscoveryMetadata(tool)
+	callArguments := toolCallArgumentsExample(tool)
+	callArgumentsJSON, _ := marshalToolSearchJSON(callArguments)
 	descriptor := toolSearchDescriptor{
-		Category: category,
-		Keywords: keywords,
-		Name:     tool.Name,
-		Tags:     tags,
+		CallToolArguments: json.RawMessage(callArgumentsJSON),
+		CallToolJSON:      string(callArgumentsJSON),
+		CallToolName:      callName,
+		Category:          category,
+		Keywords:          keywords,
+		Name:              tool.Name,
+		Tags:              tags,
+		WhyMatched:        toolSearchWhyMatched(tool, query, score),
 	}
 	if tool.Title != nil {
 		descriptor.Title = *tool.Title
@@ -1271,6 +1281,127 @@ func toolInputParameterText(tool *ToolInfo) string {
 	}
 	return strings.Join(parts, " ")
 }
+func toolSearchNormalizeText(text string) string {
+	text = strings.ToLower(text)
+	replacer := strings.NewReplacer("_", " ", "-", " ", ".", " ", "/", " ", ":", " ", ",", " ", ";", " ", "(", " ", ")", " ", "{", " ", "}", " ", "[", " ", "]", " ", "\"", " ", "'", " ")
+	return replacer.Replace(text)
+}
+func toolSearchToken(token string) string {
+	token = strings.TrimSpace(token)
+	if len(token) > 3 && strings.HasSuffix(token, "s") {
+		token = strings.TrimSuffix(token, "s")
+	}
+	return token
+}
+func toolSearchStopWord(token string) bool {
+	switch token {
+	case "a", "an", "and", "by", "for", "from", "get", "in", "into", "list", "of", "or", "please", "review", "show", "the", "this", "to", "with":
+		return true
+	default:
+		return false
+	}
+}
+func toolSearchTokens(text string) []string {
+	fields := strings.Fields(toolSearchNormalizeText(text))
+	tokens := make([]string, 0, len(fields))
+	for _, field := range fields {
+		token := toolSearchToken(field)
+		if len(token) <= 1 || toolSearchStopWord(token) {
+			continue
+		}
+		tokens = append(tokens, token)
+	}
+	return tokens
+}
+func toolSearchTokenMatch(a string, b string) bool {
+	return a == b || strings.HasPrefix(a, b) || strings.HasPrefix(b, a)
+}
+func toolSearchTokenOverlap(tool *ToolInfo, query string) (int, int) {
+	queryTokens := toolSearchTokens(query)
+	if len(queryTokens) == 0 {
+		return 0, 0
+	}
+	documentTokens := toolSearchTokens(toolSearchHaystack(tool))
+	matched := 0
+	for _, queryToken := range queryTokens {
+		for _, documentToken := range documentTokens {
+			if toolSearchTokenMatch(queryToken, documentToken) {
+				matched++
+				break
+			}
+		}
+	}
+	return matched, len(queryTokens)
+}
+func toolSearchWhyMatched(tool *ToolInfo, query string, score int) []string {
+	query = strings.TrimSpace(query)
+	if query == "" || score < 0 {
+		return nil
+	}
+	matched, total := toolSearchTokenOverlap(tool, query)
+	if total > 0 && matched > 0 {
+		return []string{fmt.Sprintf("matched %d of %d query tokens from %q against tool name, title, description, metadata, or parameters", matched, total, query)}
+	}
+	return []string{fmt.Sprintf("matched query %q against tool metadata", query)}
+}
+func marshalToolSearchJSON(value any) ([]byte, error) {
+	var buf bytes.Buffer
+	enc := json.NewEncoder(&buf)
+	enc.SetEscapeHTML(false)
+	enc.SetIndent("", "  ")
+	if err := enc.Encode(value); err != nil {
+		return nil, err
+	}
+	return bytes.TrimRight(buf.Bytes(), "\n"), nil
+}
+func toolExampleValue(property map[string]any) any {
+	typ := ""
+	switch v := property["type"].(type) {
+	case string:
+		typ = v
+	case []any:
+		if len(v) > 0 {
+			if s, ok := v[0].(string); ok {
+				typ = s
+			}
+		}
+	}
+	switch typ {
+	case "boolean":
+		return false
+	case "integer", "number":
+		return 0
+	case "array":
+		return []any{}
+	case "object":
+		return map[string]any{}
+	default:
+		return "<string>"
+	}
+}
+func toolCallArgumentsExample(tool *ToolInfo) map[string]any {
+	example := map[string]any{
+		"arguments": map[string]any{},
+		"name":      tool.Name,
+	}
+	raw := toolRawJSON(tool.InputSchema)
+	if len(raw) == 0 {
+		return example
+	}
+	var schema struct {
+		Required   []string                  `json:"required"`
+		Properties map[string]map[string]any `json:"properties"`
+	}
+	if json.Unmarshal(raw, &schema) != nil {
+		return example
+	}
+	arguments := map[string]any{}
+	for _, name := range schema.Required {
+		arguments[name] = toolExampleValue(schema.Properties[name])
+	}
+	example["arguments"] = arguments
+	return example
+}
 func toolSearchRank(tool *ToolInfo, query string) int {
 	query = strings.ToLower(strings.TrimSpace(query))
 	if query == "" {
@@ -1302,6 +1433,14 @@ func toolSearchRank(tool *ToolInfo, query string) int {
 	}
 	if strings.Contains(strings.ToLower(toolSearchHaystack(tool)), query) {
 		return 300
+	}
+	matchedTokens, totalTokens := toolSearchTokenOverlap(tool, query)
+	if matchedTokens > 0 {
+		score := 100 + matchedTokens*50
+		if matchedTokens == totalTokens {
+			score += 100
+		}
+		return score
 	}
 	return -1
 }
@@ -1376,9 +1515,9 @@ func (a *MCPAdapter) handleSearchTools(ctx context.Context, p *ToolsCallPayload,
 	_, callName := a.toolSearchNames()
 	lines = append(lines, fmt.Sprintf("Found %d of %d matching tool(s).", len(matches), totalMatches))
 	for _, match := range matches {
-		descriptor := toolSearchDescriptorFor(match.tool, payload.IncludeSchemas)
+		descriptor := toolSearchDescriptorFor(match.tool, payload.IncludeSchemas, callName, query, match.score)
 		descriptors = append(descriptors, descriptor)
-		lines = append(lines, fmt.Sprintf("- %s: invoke: %s name=\"%s\"", descriptor.Name, callName, descriptor.Name))
+		lines = append(lines, fmt.Sprintf("Tool: %s", descriptor.Name), fmt.Sprintf("Call this tool through %s. Do not call %s directly.", callName, descriptor.Name), fmt.Sprintf("Tool: %s", callName), "Arguments:", descriptor.CallToolJSON)
 	}
 	result := &toolSearchResult{
 		Pattern:      pattern,
