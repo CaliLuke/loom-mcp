@@ -3,7 +3,7 @@ module example.com/quickstart
 go 1.26.1
 
 require (
-	github.com/CaliLuke/loom v1.1.1-0.20260706045915-f7adecc4666b
+	github.com/CaliLuke/loom v1.2.0
 	github.com/CaliLuke/loom-mcp v1.1.3
 )
 

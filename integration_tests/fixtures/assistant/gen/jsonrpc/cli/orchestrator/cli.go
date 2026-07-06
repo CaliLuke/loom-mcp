@@ -15,6 +15,7 @@ import (
 
 	assistantc "example.com/assistant/gen/jsonrpc/assistant/client"
 	loomhttp "github.com/CaliLuke/loom/http"
+	loomhttpcli "github.com/CaliLuke/loom/http/cli"
 	loom "github.com/CaliLuke/loom/pkg"
 )
 
@@ -26,136 +27,156 @@ func UsageCommands() []string {
 } // UsageExamples produces an example of a valid invocation of the CLI tool.
 func UsageExamples() string {
 	return os.Args[0] + " assistant list-documents\\n"
-} // ParseEndpoint returns the endpoint and payload as specified on the command
+}
+
+type commandLine struct {
+	Assistant struct {
+		ListDocuments       struct{} `cmd:"" help:"List available documents" name:"list-documents"`
+		SystemInfo          struct{} `cmd:"" help:"Return system info" name:"system-info"`
+		ConversationHistory struct {
+			Body string `help:"" name:"body" required:""`
+		} `cmd:"" help:"Return conversation history with optional query params" name:"conversation-history"`
+		FigmaDesignSystem struct{} `cmd:"" help:"Return a fake Figma design system summary for implementation validation" name:"figma-design-system"`
+		GeneratePrompts   struct {
+			Body string `help:"" name:"body" required:""`
+		} `cmd:"" help:"Generate context-aware prompts" name:"generate-prompts"`
+		BuildFigmaImplementationPrompt struct {
+			Body string `help:"" name:"body" required:""`
+		} `cmd:"" help:"Build a Figma-style implementation handoff prompt from a generated DPI spec" name:"build-figma-implementation-prompt"`
+		SendNotification struct {
+			Body string `help:"" name:"body" required:""`
+		} `cmd:"" help:"Send status notification to client" name:"send-notification"`
+		AnalyzeSentiment struct {
+			Body string `help:"" name:"body" required:""`
+		} `cmd:"" help:"Analyze sentiment of text" name:"analyze-sentiment"`
+		ExtractKeywords struct {
+			Body string `help:"" name:"body" required:""`
+		} `cmd:"" help:"Extract keywords from text" name:"extract-keywords"`
+		SummarizeText struct {
+			Body string `help:"" name:"body" required:""`
+		} `cmd:"" help:"Summarize text" name:"summarize-text"`
+		Search struct {
+			Body string `help:"" name:"body" required:""`
+		} `cmd:"" help:"Search knowledge base" name:"search"`
+		ExecuteCode struct {
+			Body string `help:"" name:"body" required:""`
+		} `cmd:"" help:"Execute code" name:"execute-code"`
+		ProcessBatch struct {
+			Body string `help:"" name:"body" required:""`
+		} `cmd:"" help:"Process batch of items" name:"process-batch"`
+		MultiContent struct {
+			Body string `help:"" name:"body" required:""`
+		} `cmd:"" help:"Return multiple content items" name:"multi-content"`
+		GenerateDpiSpec struct {
+			Body string `help:"" name:"body" required:""`
+		} `cmd:"" help:"Generate a deterministic implementation-ready DPI spec from a fake Figma frame" name:"generate-dpi-spec"`
+		DispatchAction struct {
+			Body string `help:"" name:"body" required:""`
+		} `cmd:"" help:"Dispatch an action encoded as a union payload" name:"dispatch-action"`
+		DispatchCommand struct {
+			Body string `help:"" name:"body" required:""`
+		} `cmd:"" help:"Dispatch a command using a union payload with a non-default branch key" name:"dispatch-command"`
+	} `cmd:"" help:"AI Assistant service with full MCP protocol support" name:"assistant"`
+}
+
+// ParseEndpoint returns the endpoint and payload as specified on the command
 // line.
 func ParseEndpoint(scheme string, host string, doer loomhttp.Doer, enc func(*http.Request) loomhttp.Encoder, dec func(*http.Response) loomhttp.Decoder, restore bool) (loom.Endpoint, any, error) {
 	var (
-		assistantFlags                                  = flag.NewFlagSet("assistant", flag.ContinueOnError)
-		assistantListDocumentsFlags                     = flag.NewFlagSet("list-documents", flag.ExitOnError)
-		assistantSystemInfoFlags                        = flag.NewFlagSet("system-info", flag.ExitOnError)
-		assistantConversationHistoryFlags               = flag.NewFlagSet("conversation-history", flag.ExitOnError)
-		assistantConversationHistoryBodyFlag            = assistantConversationHistoryFlags.String("body", "REQUIRED", "")
-		assistantFigmaDesignSystemFlags                 = flag.NewFlagSet("figma-design-system", flag.ExitOnError)
-		assistantGeneratePromptsFlags                   = flag.NewFlagSet("generate-prompts", flag.ExitOnError)
-		assistantGeneratePromptsBodyFlag                = assistantGeneratePromptsFlags.String("body", "REQUIRED", "")
-		assistantBuildFigmaImplementationPromptFlags    = flag.NewFlagSet("build-figma-implementation-prompt", flag.ExitOnError)
-		assistantBuildFigmaImplementationPromptBodyFlag = assistantBuildFigmaImplementationPromptFlags.String("body", "REQUIRED", "")
-		assistantSendNotificationFlags                  = flag.NewFlagSet("send-notification", flag.ExitOnError)
-		assistantSendNotificationBodyFlag               = assistantSendNotificationFlags.String("body", "REQUIRED", "")
-		assistantAnalyzeSentimentFlags                  = flag.NewFlagSet("analyze-sentiment", flag.ExitOnError)
-		assistantAnalyzeSentimentBodyFlag               = assistantAnalyzeSentimentFlags.String("body", "REQUIRED", "")
-		assistantExtractKeywordsFlags                   = flag.NewFlagSet("extract-keywords", flag.ExitOnError)
-		assistantExtractKeywordsBodyFlag                = assistantExtractKeywordsFlags.String("body", "REQUIRED", "")
-		assistantSummarizeTextFlags                     = flag.NewFlagSet("summarize-text", flag.ExitOnError)
-		assistantSummarizeTextBodyFlag                  = assistantSummarizeTextFlags.String("body", "REQUIRED", "")
-		assistantSearchFlags                            = flag.NewFlagSet("search", flag.ExitOnError)
-		assistantSearchBodyFlag                         = assistantSearchFlags.String("body", "REQUIRED", "")
-		assistantExecuteCodeFlags                       = flag.NewFlagSet("execute-code", flag.ExitOnError)
-		assistantExecuteCodeBodyFlag                    = assistantExecuteCodeFlags.String("body", "REQUIRED", "")
-		assistantProcessBatchFlags                      = flag.NewFlagSet("process-batch", flag.ExitOnError)
-		assistantProcessBatchBodyFlag                   = assistantProcessBatchFlags.String("body", "REQUIRED", "")
-		assistantMultiContentFlags                      = flag.NewFlagSet("multi-content", flag.ExitOnError)
-		assistantMultiContentBodyFlag                   = assistantMultiContentFlags.String("body", "REQUIRED", "")
-		assistantGenerateDpiSpecFlags                   = flag.NewFlagSet("generate-dpi-spec", flag.ExitOnError)
-		assistantGenerateDpiSpecBodyFlag                = assistantGenerateDpiSpecFlags.String("body", "REQUIRED", "")
-		assistantDispatchActionFlags                    = flag.NewFlagSet("dispatch-action", flag.ExitOnError)
-		assistantDispatchActionBodyFlag                 = assistantDispatchActionFlags.String("body", "REQUIRED", "")
-		assistantDispatchCommandFlags                   = flag.NewFlagSet("dispatch-command", flag.ExitOnError)
-		assistantDispatchCommandBodyFlag                = assistantDispatchCommandFlags.String("body", "REQUIRED", "")
-	)
-	assistantFlags.Usage = assistantUsage
-	assistantListDocumentsFlags.Usage = assistantListDocumentsUsage
-	assistantSystemInfoFlags.Usage = assistantSystemInfoUsage
-	assistantConversationHistoryFlags.Usage = assistantConversationHistoryUsage
-	assistantFigmaDesignSystemFlags.Usage = assistantFigmaDesignSystemUsage
-	assistantGeneratePromptsFlags.Usage = assistantGeneratePromptsUsage
-	assistantBuildFigmaImplementationPromptFlags.Usage = assistantBuildFigmaImplementationPromptUsage
-	assistantSendNotificationFlags.Usage = assistantSendNotificationUsage
-	assistantAnalyzeSentimentFlags.Usage = assistantAnalyzeSentimentUsage
-	assistantExtractKeywordsFlags.Usage = assistantExtractKeywordsUsage
-	assistantSummarizeTextFlags.Usage = assistantSummarizeTextUsage
-	assistantSearchFlags.Usage = assistantSearchUsage
-	assistantExecuteCodeFlags.Usage = assistantExecuteCodeUsage
-	assistantProcessBatchFlags.Usage = assistantProcessBatchUsage
-	assistantMultiContentFlags.Usage = assistantMultiContentUsage
-	assistantGenerateDpiSpecFlags.Usage = assistantGenerateDpiSpecUsage
-	assistantDispatchActionFlags.Usage = assistantDispatchActionUsage
-	assistantDispatchCommandFlags.Usage = assistantDispatchCommandUsage
-
-	if err := flag.CommandLine.Parse(os.Args[1:]); err != nil {
-		return nil, nil, err
-	}
-	if flag.NArg() < 2 {
-		return nil, nil, fmt.Errorf("not enough arguments")
-	}
-	var (
-		svcn string
-		svcf *flag.FlagSet
+		command                                         commandLine
+		args                                            []string
+		svcn                                            string
+		epn                                             string
+		assistantConversationHistoryBodyFlag            *string
+		assistantGeneratePromptsBodyFlag                *string
+		assistantBuildFigmaImplementationPromptBodyFlag *string
+		assistantSendNotificationBodyFlag               *string
+		assistantAnalyzeSentimentBodyFlag               *string
+		assistantExtractKeywordsBodyFlag                *string
+		assistantSummarizeTextBodyFlag                  *string
+		assistantSearchBodyFlag                         *string
+		assistantExecuteCodeBodyFlag                    *string
+		assistantProcessBatchBodyFlag                   *string
+		assistantMultiContentBodyFlag                   *string
+		assistantGenerateDpiSpecBodyFlag                *string
+		assistantDispatchActionBodyFlag                 *string
+		assistantDispatchCommandBodyFlag                *string
 	)
 	{
-		svcn = flag.Arg(0)
-		switch svcn {
-		case "assistant":
-			svcf = assistantFlags
-		default:
-			return nil, nil, fmt.Errorf("unknown service %q", svcn)
+		args = flag.Args()
+		if len(args) == 0 {
+			args = os.Args[1:]
 		}
-	}
-	if err := svcf.Parse(flag.Args()[1:]); err != nil {
-		return nil, nil, err
-	}
-	var (
-		epn string
-		epf *flag.FlagSet
-	)
-	{
-		epn = svcf.Arg(0)
-		switch svcn {
-		case "assistant":
-			switch epn {
-			case "list-documents":
-				epf = assistantListDocumentsFlags
-			case "system-info":
-				epf = assistantSystemInfoFlags
-			case "conversation-history":
-				epf = assistantConversationHistoryFlags
-			case "figma-design-system":
-				epf = assistantFigmaDesignSystemFlags
-			case "generate-prompts":
-				epf = assistantGeneratePromptsFlags
-			case "build-figma-implementation-prompt":
-				epf = assistantBuildFigmaImplementationPromptFlags
-			case "send-notification":
-				epf = assistantSendNotificationFlags
-			case "analyze-sentiment":
-				epf = assistantAnalyzeSentimentFlags
-			case "extract-keywords":
-				epf = assistantExtractKeywordsFlags
-			case "summarize-text":
-				epf = assistantSummarizeTextFlags
-			case "search":
-				epf = assistantSearchFlags
-			case "execute-code":
-				epf = assistantExecuteCodeFlags
-			case "process-batch":
-				epf = assistantProcessBatchFlags
-			case "multi-content":
-				epf = assistantMultiContentFlags
-			case "generate-dpi-spec":
-				epf = assistantGenerateDpiSpecFlags
-			case "dispatch-action":
-				epf = assistantDispatchActionFlags
-			case "dispatch-command":
-				epf = assistantDispatchCommandFlags
-			}
+		path, err := loomhttpcli.Parse(&command, os.Args[0], args)
+		if err != nil {
+			return nil, nil, fmt.Errorf("parse command: %w", err)
 		}
-	}
-	if epf == nil {
-		return nil, nil, fmt.Errorf("unknown %q endpoint %q", svcn, epn)
-	}
-	if svcf.NArg() > 1 {
-		if err := epf.Parse(svcf.Args()[1:]); err != nil {
-			return nil, nil, err
+		assistantConversationHistoryBodyFlag = &command.Assistant.ConversationHistory.Body
+		assistantGeneratePromptsBodyFlag = &command.Assistant.GeneratePrompts.Body
+		assistantBuildFigmaImplementationPromptBodyFlag = &command.Assistant.BuildFigmaImplementationPrompt.Body
+		assistantSendNotificationBodyFlag = &command.Assistant.SendNotification.Body
+		assistantAnalyzeSentimentBodyFlag = &command.Assistant.AnalyzeSentiment.Body
+		assistantExtractKeywordsBodyFlag = &command.Assistant.ExtractKeywords.Body
+		assistantSummarizeTextBodyFlag = &command.Assistant.SummarizeText.Body
+		assistantSearchBodyFlag = &command.Assistant.Search.Body
+		assistantExecuteCodeBodyFlag = &command.Assistant.ExecuteCode.Body
+		assistantProcessBatchBodyFlag = &command.Assistant.ProcessBatch.Body
+		assistantMultiContentBodyFlag = &command.Assistant.MultiContent.Body
+		assistantGenerateDpiSpecBodyFlag = &command.Assistant.GenerateDpiSpec.Body
+		assistantDispatchActionBodyFlag = &command.Assistant.DispatchAction.Body
+		assistantDispatchCommandBodyFlag = &command.Assistant.DispatchCommand.Body
+		switch path {
+		case "assistant list-documents":
+			svcn = "assistant"
+			epn = "list-documents"
+		case "assistant system-info":
+			svcn = "assistant"
+			epn = "system-info"
+		case "assistant conversation-history":
+			svcn = "assistant"
+			epn = "conversation-history"
+		case "assistant figma-design-system":
+			svcn = "assistant"
+			epn = "figma-design-system"
+		case "assistant generate-prompts":
+			svcn = "assistant"
+			epn = "generate-prompts"
+		case "assistant build-figma-implementation-prompt":
+			svcn = "assistant"
+			epn = "build-figma-implementation-prompt"
+		case "assistant send-notification":
+			svcn = "assistant"
+			epn = "send-notification"
+		case "assistant analyze-sentiment":
+			svcn = "assistant"
+			epn = "analyze-sentiment"
+		case "assistant extract-keywords":
+			svcn = "assistant"
+			epn = "extract-keywords"
+		case "assistant summarize-text":
+			svcn = "assistant"
+			epn = "summarize-text"
+		case "assistant search":
+			svcn = "assistant"
+			epn = "search"
+		case "assistant execute-code":
+			svcn = "assistant"
+			epn = "execute-code"
+		case "assistant process-batch":
+			svcn = "assistant"
+			epn = "process-batch"
+		case "assistant multi-content":
+			svcn = "assistant"
+			epn = "multi-content"
+		case "assistant generate-dpi-spec":
+			svcn = "assistant"
+			epn = "generate-dpi-spec"
+		case "assistant dispatch-action":
+			svcn = "assistant"
+			epn = "dispatch-action"
+		case "assistant dispatch-command":
+			svcn = "assistant"
+			epn = "dispatch-command"
 		}
 	}
 
