@@ -3,7 +3,6 @@ package codegen
 import (
 	"strings"
 
-	agentsExpr "github.com/CaliLuke/loom-mcp/expr/agent"
 	goacodegen "github.com/CaliLuke/loom/codegen"
 	goaexpr "github.com/CaliLuke/loom/expr"
 )
@@ -98,9 +97,18 @@ func templateFuncMap() map[string]any {
 			return false
 		},
 		// isMCPBacked reports whether the given toolset is backed by an MCP server.
-		"isMCPBacked": func(ts *ToolsetData) bool {
-			return ts != nil && ts.Expr != nil && ts.Expr.Provider != nil && ts.Expr.Provider.Kind == agentsExpr.ProviderMCP
-		},
+		"isMCPBacked": isMCPBackedToolset,
+		// isSkillsBacked reports whether the given toolset is backed by model-facing skills.
+		"isSkillsBacked": isSkillsBackedToolset,
+		// needsExecutorBackedRegistration reports whether RegisterUsedToolsets
+		// should ask application code for an executor for this toolset.
+		"needsExecutorBackedRegistration": needsExecutorBackedRegistration,
+		// needsRuntimeBackedRegistration reports whether RegisterUsedToolsets
+		// can construct the runtime registration directly from DSL metadata.
+		"needsRuntimeBackedRegistration": needsRuntimeBackedRegistration,
+		// needsUsedToolsetRegistration reports whether RegisterUsedToolsets should
+		// emit any registration block for this used toolset.
+		"needsUsedToolsetRegistration": needsUsedToolsetRegistration,
 		// mcpService returns the MCP service name for an MCP-backed toolset.
 		"mcpService": func(ts *ToolsetData) string {
 			if ts == nil || ts.Expr == nil || ts.Expr.Provider == nil {

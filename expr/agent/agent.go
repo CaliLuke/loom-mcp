@@ -32,6 +32,8 @@ type (
 		// RunPolicy defines runtime execution and resource constraints
 		// for this agent.
 		RunPolicy *RunPolicyExpr
+		// Workflow defines a generated deterministic workflow planner.
+		Workflow *WorkflowExpr
 	}
 
 	// ToolsetGroupExpr represents a logical group of toolsets, as exposed
@@ -73,6 +75,9 @@ func (a *AgentExpr) WalkSets(walk eval.SetWalker) {
 	if a.Exported != nil {
 		walk(eval.ExpressionSet{a.Exported})
 		walk(eval.ToExpressionSet(a.Exported.Toolsets))
+	}
+	if a.Workflow != nil {
+		walk(eval.ExpressionSet{a.Workflow})
 	}
 }
 

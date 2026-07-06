@@ -164,6 +164,7 @@ type (
 		// See ToolConfirmationConfig for details.
 		toolConfirmation *ToolConfirmationConfig
 
+		interceptors  []Interceptor
 		hintOverrides map[tools.Ident]HintOverrideFunc
 	}
 
@@ -212,6 +213,10 @@ type (
 		// tools (for example, requiring explicit operator approval before executing
 		// additional tools that are not marked with design-time Confirmation).
 		ToolConfirmation *ToolConfirmationConfig
+
+		// Interceptors observe or change runtime call-path behavior before durable
+		// hook events are emitted.
+		Interceptors []Interceptor
 
 		// HintOverrides optionally overrides DSL-authored call hints for specific tools
 		// when streaming tool_start events.
@@ -267,6 +272,9 @@ type (
 		Specs []tools.ToolSpec
 		// Policy configures caps/time budget/interrupt settings for the agent.
 		Policy RunPolicy
+		// Interceptors configures agent-scoped tool middleware. These run after
+		// runtime-level interceptors for tool calls issued by this agent.
+		Interceptors []Interceptor
 	}
 
 	// DispatchMode selects how the runtime executes tool calls for a given

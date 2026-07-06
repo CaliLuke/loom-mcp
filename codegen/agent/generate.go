@@ -139,6 +139,12 @@ func agentImplFile(agent *AgentData) *codegen.File {
 		{Path: "github.com/CaliLuke/loom-mcp/runtime/agent/runtime", Name: "runtime"},
 		{Path: "github.com/CaliLuke/loom-mcp/runtime/agent/planner"},
 	}
+	if agent.Workflow != nil {
+		imports = append(imports,
+			&codegen.ImportSpec{Path: "github.com/CaliLuke/loom-mcp/runtime/agent/rawjson", Name: "rawjson"},
+			&codegen.ImportSpec{Path: "github.com/CaliLuke/loom-mcp/runtime/agent/tools", Name: "tools"},
+		)
+	}
 	sections := []codegen.Section{
 		codegen.Header(agent.StructName+" implementation", agent.PackageName, imports),
 		agentImplSection(agent),
@@ -148,8 +154,10 @@ func agentImplFile(agent *AgentData) *codegen.File {
 
 func agentConfigFile(agent *AgentData) *codegen.File {
 	imports := []*codegen.ImportSpec{
-		{Path: "errors"},
 		{Path: "github.com/CaliLuke/loom-mcp/runtime/agent/planner"},
+	}
+	if agent.Workflow == nil || (agent.RunPolicy.History != nil && agent.RunPolicy.History.Mode == "compress") {
+		imports = append(imports, &codegen.ImportSpec{Path: "errors"})
 	}
 	// Import model client when a compress-history policy is configured so the
 	// generated config can reference model.Client in the HistoryModel field.
@@ -205,21 +213,31 @@ func agentConfigFile(agent *AgentData) *codegen.File {
 }
 
 func agentRegistryFile(agent *AgentData) *codegen.File {
-	imports := []*codegen.ImportSpec{
-		{Path: "context"},
-		{Path: "errors"},
-		{Path: "fmt"},
-		{Path: "github.com/CaliLuke/loom-mcp/runtime/agent/engine"},
-		{Path: "github.com/CaliLuke/loom-mcp/runtime/agent/planner"},
-		{Path: "github.com/CaliLuke/loom-mcp/runtime/agent/runtime", Name: "agentsruntime"},
-	}
-	// fmt needed for error messages in registry (used in both MCP and Used toolsets paths)
 	hasExternal := false
 	for _, ts := range agent.AllToolsets {
-		if ts.Expr != nil && ts.Expr.Provider != nil && ts.Expr.Provider.Kind == agentsExpr.ProviderMCP {
+		if isMCPBackedToolset(ts) {
 			hasExternal = true
 			break
 		}
+	}
+	hasExecutorBacked := false
+	for _, ts := range agent.UsedToolsets {
+		if needsExecutorBackedRegistration(ts) {
+			hasExecutorBacked = true
+			break
+		}
+	}
+	imports := []*codegen.ImportSpec{
+		{Path: "context"},
+		{Path: "errors"},
+		{Path: "github.com/CaliLuke/loom-mcp/runtime/agent/engine"},
+		{Path: "github.com/CaliLuke/loom-mcp/runtime/agent/runtime", Name: "agentsruntime"},
+	}
+	if hasExternal || hasExecutorBacked {
+		imports = append(imports,
+			&codegen.ImportSpec{Path: "fmt"},
+			&codegen.ImportSpec{Path: "github.com/CaliLuke/loom-mcp/runtime/agent/planner"},
+		)
 	}
 	// Import toolset packages that have method-backed tools so we can call their registration helpers.
 	for _, ts := range agent.AllToolsets {
@@ -231,7 +249,7 @@ func agentRegistryFile(agent *AgentData) *codegen.File {
 				break
 			}
 		}
-		if ts.Expr != nil && ts.Expr.Provider != nil && ts.Expr.Provider.Kind == agentsExpr.ProviderMCP {
+		if isMCPBackedToolset(ts) {
 			needs = true
 		}
 		if needs && ts.PackageImportPath != "" {
@@ -243,7 +261,7 @@ func agentRegistryFile(agent *AgentData) *codegen.File {
 	// hint code entirely when no templates are present.
 	needsTools := false
 	for _, ts := range agent.UsedToolsets {
-		if ts.Expr != nil && ts.Expr.Provider != nil && ts.Expr.Provider.Kind == agentsExpr.ProviderMCP {
+		if isMCPBackedToolset(ts) || isSkillsBackedToolset(ts) {
 			continue
 		}
 		if ts.AgentToolsImportPath != "" {
@@ -297,7 +315,7 @@ func agentRegistryFile(agent *AgentData) *codegen.File {
 	usedSpecsImports := make(map[string]struct{})
 	usedSpecsAliases := make(map[string]string)
 	for _, ts := range agent.UsedToolsets {
-		if ts.AgentToolsImportPath != "" || ts.SpecsImportPath == "" || ts.SpecsPackageName == "" {
+		if ts.AgentToolsImportPath != "" || isSkillsBackedToolset(ts) || ts.SpecsImportPath == "" || ts.SpecsPackageName == "" {
 			continue
 		}
 		alias, ok := usedSpecsAliases[ts.QualifiedName]

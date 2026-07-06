@@ -1,6 +1,8 @@
 package dsl
 
 import (
+	"strings"
+
 	"github.com/CaliLuke/loom/eval"
 	goaexpr "github.com/CaliLuke/loom/expr"
 
@@ -90,6 +92,8 @@ func Toolset(args ...any) *agentsexpr.ToolsetExpr {
 			name = provider.MCPToolset
 		case agentsexpr.ProviderRegistry:
 			name = provider.ToolsetName
+		case agentsexpr.ProviderSkills:
+			name = "skills"
 		}
 	}
 
@@ -132,6 +136,35 @@ func FromMCP(service, toolset string) *agentsexpr.ProviderExpr {
 		Kind:       agentsexpr.ProviderMCP,
 		MCPService: service,
 		MCPToolset: toolset,
+	}
+}
+
+// FromSkills configures a toolset to expose local agent skills as model-facing
+// tools. Each root must contain child skill directories with SKILL.md files.
+//
+// Example:
+//
+//	var Skills = Toolset(FromSkills(".agents/skills"))
+//
+// Or with an explicit name:
+//
+//	var AssistantSkills = Toolset("assistant.skills", FromSkills(".agents/skills"))
+func FromSkills(roots ...string) *agentsexpr.ProviderExpr {
+	cleaned := make([]string, 0, len(roots))
+	for _, root := range roots {
+		root = strings.TrimSpace(root)
+		if root == "" {
+			continue
+		}
+		cleaned = append(cleaned, root)
+	}
+	if len(cleaned) == 0 {
+		eval.ReportError("FromSkills requires at least one non-empty skill root")
+		return nil
+	}
+	return &agentsexpr.ProviderExpr{
+		Kind:       agentsexpr.ProviderSkills,
+		SkillRoots: cleaned,
 	}
 }
 

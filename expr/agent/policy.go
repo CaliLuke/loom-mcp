@@ -36,6 +36,21 @@ type (
 		History *HistoryExpr
 		// Cache configures prompt caching hints for planner/model calls.
 		Cache *CacheExpr
+		// RetryAndReflect configures tool-error reflection into planner retry
+		// hints for this agent.
+		RetryAndReflect *RetryAndReflectExpr
+	}
+
+	// RetryAndReflectExpr captures tool retry reflection policy for an agent.
+	RetryAndReflectExpr struct {
+		// Policy is the run policy expression this retry configuration belongs to.
+		Policy *RunPolicyExpr
+		// MaxRetries bounds reflected retry hints per run/tool. Zero uses the
+		// runtime default.
+		MaxRetries int
+		// ErrorIfRetryExceeded returns the original tool error after the retry
+		// budget has been consumed.
+		ErrorIfRetryExceeded bool
 	}
 
 	// CapsExpr defines per-run limits on agent tool usage.
@@ -116,6 +131,7 @@ func (r *RunPolicyExpr) Validate() error {
 	verr := new(eval.ValidationErrors)
 	r.validateMissingFields(verr)
 	r.validateHistory(verr)
+	r.validateRetryAndReflect(verr)
 	return verr
 }
 
@@ -131,6 +147,15 @@ func (r *RunPolicyExpr) validateMissingFields(verr *eval.ValidationErrors) {
 		if r.OnMissingFields == "await_clarification" && !r.InterruptsAllowed {
 			verr.Add(r, "OnMissingFields(\"await_clarification\") requires InterruptsAllowed(true)")
 		}
+	}
+}
+
+func (r *RunPolicyExpr) validateRetryAndReflect(verr *eval.ValidationErrors) {
+	if r.RetryAndReflect == nil {
+		return
+	}
+	if r.RetryAndReflect.MaxRetries < 0 {
+		verr.Add(r.RetryAndReflect, "RetryAndReflect MaxRetries must be non-negative")
 	}
 }
 
@@ -196,4 +221,12 @@ func (c *CacheExpr) EvalName() string {
 // EvalName returns a descriptive identifier for error reporting.
 func (c *CapsExpr) EvalName() string {
 	return fmt.Sprintf("caps for agent %q", c.Policy.Agent.Name)
+}
+
+// EvalName returns a descriptive identifier for error reporting.
+func (r *RetryAndReflectExpr) EvalName() string {
+	if r == nil || r.Policy == nil || r.Policy.Agent == nil {
+		return "retry and reflect policy"
+	}
+	return fmt.Sprintf("retry and reflect policy for agent %q", r.Policy.Agent.Name)
 }

@@ -140,6 +140,18 @@ func Register{{ .StructName }}(ctx context.Context, rt *agentsruntime.Runtime, c
             },
 {{- end }}
         },
+{{- if .RunPolicy.RetryAndReflect }}
+        Interceptors: []agentsruntime.Interceptor{
+            agentsruntime.NewRetryAndReflectInterceptor(agentsruntime.RetryAndReflectConfig{
+{{- if gt .RunPolicy.RetryAndReflect.MaxRetries 0 }}
+                MaxRetries: {{ .RunPolicy.RetryAndReflect.MaxRetries }},
+{{- end }}
+{{- if .RunPolicy.RetryAndReflect.ErrorIfRetryExceeded }}
+                ErrorIfRetryExceeded: true,
+{{- end }}
+            }),
+        },
+{{- end }}
     }); err != nil {
         return err
     }
@@ -198,36 +210,59 @@ func Register{{ .StructName }}(ctx context.Context, rt *agentsruntime.Runtime, c
 }
 
 {{- $had := false -}}
+{{- $hasExecutorBacked := false -}}
 {{- range .UsedToolsets }}
-{{- if and (not (isMCPBacked .)) (eq .AgentToolsImportPath "") }}
+{{- if needsUsedToolsetRegistration . }}
 {{- $had = true -}}
+{{- end }}
+{{- if needsExecutorBackedRegistration . }}
+{{- $hasExecutorBacked = true -}}
 {{- end }}
 {{- end }}
 {{- if $had }}
 // RegisterUsedToolsets registers all non-MCP Used toolsets for this agent.
-// Provide executors via typed options for each required toolset.
+{{- if $hasExecutorBacked }}
+// Provide executors via typed options for each executor-backed toolset.
 //
 // Example:
 //   err := RegisterUsedToolsets(ctx, rt,
 {{- range .UsedToolsets }}
-{{- if and (not (isMCPBacked .)) (eq .AgentToolsImportPath "") }}
+{{- if needsExecutorBackedRegistration . }}
 //       With{{ goify .PathName true }}Executor(exec),
 {{- end }}
 {{- end }}
 //   )
+{{- end }}
 func RegisterUsedToolsets(ctx context.Context, rt *agentsruntime.Runtime, opts ...func(map[string]agentsruntime.ToolCallExecutor)) error {
     if rt == nil {
         return errors.New("runtime is required")
     }
+    {{- if $hasExecutorBacked }}
     execs := make(map[string]agentsruntime.ToolCallExecutor)
     for _, o := range opts {
         if o != nil {
             o(execs)
         }
     }
+    {{- end }}
     // Register non-MCP used toolsets that are not provided by agent-as-tool exports.
     {{- range .UsedToolsets }}
-    {{- if and (not (isMCPBacked .)) (eq .AgentToolsImportPath "") }}
+    {{- if needsRuntimeBackedRegistration . }}
+    {
+        reg := agentsruntime.NewSkillToolsetRegistration(agentsruntime.SkillToolsetConfig{
+            Name: {{ printf "%q" .QualifiedName }},
+            Roots: []string{
+            {{- range .Expr.Provider.SkillRoots }}
+                {{ printf "%q" . }},
+            {{- end }}
+            },
+        })
+        if err := rt.RegisterToolset(reg); err != nil {
+            return err
+        }
+    }
+    {{- end }}
+    {{- if needsExecutorBackedRegistration . }}
     {
         const toolsetID = {{ printf "%q" .QualifiedName }}
         exec := execs[toolsetID]
@@ -318,7 +353,7 @@ func RegisterUsedToolsets(ctx context.Context, rt *agentsruntime.Runtime, opts .
 }
 
     {{- range .UsedToolsets }}
-    {{- if and (not (isMCPBacked .)) (eq .AgentToolsImportPath "") }}
+    {{- if needsExecutorBackedRegistration . }}
 // With{{ goify .PathName true }}Executor associates an executor for {{ .QualifiedName }}.
 func With{{ goify .PathName true }}Executor(exec agentsruntime.ToolCallExecutor) func(map[string]agentsruntime.ToolCallExecutor) {
     return func(m map[string]agentsruntime.ToolCallExecutor) {

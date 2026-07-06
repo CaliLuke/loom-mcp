@@ -174,6 +174,48 @@ func OnMissingFields(action string) {
 // on agent execution.
 type CapsOption func(*expragents.CapsExpr)
 
+// RetryAndReflectOption configures RetryAndReflect policy behavior.
+type RetryAndReflectOption func(*expragents.RetryAndReflectExpr)
+
+// RetryAndReflect enables tool-error reflection. When a tool executor returns
+// an error, the runtime converts it into a planner retry hint so the model can
+// repair the call arguments instead of immediately failing the run.
+//
+// RetryAndReflect must appear in a RunPolicy expression.
+func RetryAndReflect(opts ...RetryAndReflectOption) {
+	policy, ok := eval.Current().(*expragents.RunPolicyExpr)
+	if !ok {
+		eval.IncompatibleDSL()
+		return
+	}
+	retry := policy.RetryAndReflect
+	if retry == nil {
+		retry = &expragents.RetryAndReflectExpr{Policy: policy}
+		policy.RetryAndReflect = retry
+	}
+	for _, opt := range opts {
+		if opt != nil {
+			opt(retry)
+		}
+	}
+}
+
+// MaxRetries configures how many reflected retry hints are allowed for a
+// run/tool pair. Zero uses the runtime default.
+func MaxRetries(n int) RetryAndReflectOption {
+	return func(r *expragents.RetryAndReflectExpr) {
+		r.MaxRetries = n
+	}
+}
+
+// ErrorIfRetryExceeded configures whether the original tool error should be
+// returned once the reflected retry budget has been consumed.
+func ErrorIfRetryExceeded(enabled bool) RetryAndReflectOption {
+	return func(r *expragents.RetryAndReflectExpr) {
+		r.ErrorIfRetryExceeded = enabled
+	}
+}
+
 // MaxToolCalls configures the maximum number of tool invocations allowed during
 // agent execution. Use this with DefaultCaps to limit total tool usage.
 //

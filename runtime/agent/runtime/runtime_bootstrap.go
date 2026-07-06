@@ -103,6 +103,13 @@ func WithToolConfirmation(cfg *ToolConfirmationConfig) RuntimeOption {
 	return func(o *Options) { o.ToolConfirmation = cfg }
 }
 
+// WithInterceptors registers call-path interceptors in execution order.
+func WithInterceptors(interceptors ...Interceptor) RuntimeOption {
+	return func(o *Options) {
+		o.Interceptors = append(o.Interceptors, interceptors...)
+	}
+}
+
 // WithHintOverrides configures per-tool call hint overrides.
 func WithHintOverrides(m map[tools.Ident]HintOverrideFunc) RuntimeOption {
 	return func(o *Options) { o.HintOverrides = m }
@@ -161,6 +168,7 @@ func newFromOptions(opts Options) *Runtime {
 		workers:              opts.Workers,
 		reminders:            reminder.NewEngine(),
 		toolConfirmation:     opts.ToolConfirmation,
+		interceptors:         append([]Interceptor(nil), opts.Interceptors...),
 		hintOverrides:        opts.HintOverrides,
 	}
 	rt.PromptRegistry.SetObserver(rt.onPromptRendered)

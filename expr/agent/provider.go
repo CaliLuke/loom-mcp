@@ -18,6 +18,8 @@ const (
 	ProviderMCP
 	// ProviderRegistry indicates a toolset sourced from a registry.
 	ProviderRegistry
+	// ProviderSkills indicates a toolset sourced from local skill directories.
+	ProviderSkills
 )
 
 // String returns a human-readable representation of the provider kind.
@@ -29,6 +31,8 @@ func (k ProviderKind) String() string {
 		return "mcp"
 	case ProviderRegistry:
 		return "registry"
+	case ProviderSkills:
+		return "skills"
 	default:
 		return fmt.Sprintf("unknown(%d)", k)
 	}
@@ -54,6 +58,9 @@ type ProviderExpr struct {
 	// Version pins the toolset to a specific version.
 	// Used when Kind is ProviderRegistry.
 	Version string
+	// SkillRoots are filesystem directories containing child skill directories.
+	// Used when Kind is ProviderSkills.
+	SkillRoots []string
 }
 
 // EvalName returns a descriptive identifier for error reporting.
@@ -69,6 +76,8 @@ func (p *ProviderExpr) EvalName() string {
 			regName = p.Registry.Name
 		}
 		return fmt.Sprintf("registry provider (registry=%q, toolset=%q)", regName, p.ToolsetName)
+	case ProviderSkills:
+		return fmt.Sprintf("skills provider (roots=%d)", len(p.SkillRoots))
 	default:
 		return providerLocalEvalName
 	}

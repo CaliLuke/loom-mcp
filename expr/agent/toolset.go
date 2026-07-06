@@ -123,6 +123,10 @@ func (t *ToolsetExpr) Validate() error {
 			if t.Provider.ToolsetName == "" {
 				verr.Add(t, "toolset name is required for FromRegistry provider")
 			}
+		case ProviderSkills:
+			if len(t.Provider.SkillRoots) == 0 {
+				verr.Add(t, "at least one skill root is required for FromSkills provider")
+			}
 		case ProviderLocal:
 			// Local toolsets have inline schemas; no additional validation needed.
 		}

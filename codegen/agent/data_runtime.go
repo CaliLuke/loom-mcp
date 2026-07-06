@@ -47,6 +47,12 @@ func newRunPolicyData(expr *agentsExpr.RunPolicyExpr) RunPolicyData {
 			AfterTools:  expr.Cache.AfterTools,
 		}
 	}
+	if expr.RetryAndReflect != nil {
+		rp.RetryAndReflect = &RetryAndReflectData{
+			MaxRetries:           expr.RetryAndReflect.MaxRetries,
+			ErrorIfRetryExceeded: expr.RetryAndReflect.ErrorIfRetryExceeded,
+		}
+	}
 	if expr.DefaultCaps != nil {
 		rp.Caps = CapsData{
 			MaxToolCalls:                  expr.DefaultCaps.MaxToolCalls,

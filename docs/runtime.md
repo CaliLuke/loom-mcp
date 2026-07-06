@@ -400,6 +400,17 @@ type PlannerEvents interface {
 }
 ```
 
+### Deterministic Workflow Composition
+
+For fixed, model-free coordination, `planner.NewSequentialWorkflowPlanner(...)`
+emits authored tool steps one at a time and derives the next step from
+accumulated `ToolOutputs`. It stores no hidden in-memory step cursor, so it is
+safe across durable planner activity invocations.
+
+Use this for simple sequential workflows where the tool order is known in
+advance. Branching, looping, and generated DSL composition should build on the
+same `planner.Planner` contract rather than bypassing the runtime loop.
+
 ---
 
 ## Streaming Planners
@@ -666,6 +677,37 @@ reg := runtime.ToolsetRegistration{
 }
 rt.RegisterToolset(reg)
 ```
+
+### Runtime Interceptors
+
+`runtime.WithInterceptors(...)` registers inline call-path interceptors. Hooks
+publish durable observability events; interceptors run before or after execution
+and may change the request or result before those events are emitted.
+
+The first public interceptor surface wraps tool execution:
+
+- `BeforeTool` can rewrite raw JSON payloads before the registered executor
+  runs, or return a `ToolExecutionResult` to skip the executor.
+- `AfterTool` can replace the `planner.ToolResult`, replace the full
+  `ToolExecutionResult`, or convert an execution error into a tool result.
+
+`runtime.NewRetryAndReflectInterceptor(...)` uses this path to convert tool
+execution errors into planner-visible tool errors with structured
+`planner.RetryHint` guidance, keeping the run alive so the planner can repair
+the call.
+
+### Model-Facing Skills
+
+`runtime.NewSkillToolsetRegistration(...)` exposes local skill directories as
+ordinary model tools:
+
+- `<toolset>.list_skills`
+- `<toolset>.load_skill`
+- `<toolset>.load_skill_resource`
+
+This complements MCP `skill://` resources. MCP clients can discover and read
+skills through resources, while model planners can advertise the same skill
+roots as tool calls when the model needs to inspect skill instructions.
 
 #### Executor result envelope: `runtime.ToolExecutionResult`
 

@@ -128,6 +128,8 @@ type (
 		ToolSpecsDir string
 		// RunPolicy captures caps/time budget settings.
 		RunPolicy RunPolicyData
+		// Workflow captures generated deterministic workflow planner configuration.
+		Workflow *WorkflowData
 		// UsedToolsets lists toolsets referenced via `Use`.
 		UsedToolsets []*ToolsetData
 		// ExportedToolsets lists toolsets declared via `Export`.
@@ -167,6 +169,24 @@ type (
 		Service string
 		// Method is the name of the target Goa method.
 		Method string
+	}
+
+	// WorkflowData represents a generated deterministic workflow planner.
+	WorkflowData struct {
+		// Steps are executed sequentially.
+		Steps []*WorkflowStepData
+		// FinalMessage is emitted after all steps complete.
+		FinalMessage string
+	}
+
+	// WorkflowStepData represents one generated workflow planner step.
+	WorkflowStepData struct {
+		// Name identifies the step and generated tool call ID.
+		Name string
+		// Tool is the fully qualified tool identifier.
+		Tool string
+		// Payload is the raw JSON payload literal.
+		Payload string
 	}
 
 	// RunPolicyData represents the runtime execution constraints and resource
@@ -209,6 +229,17 @@ type (
 		// cache checkpoints unless explicit CacheCheckpointPart messages are
 		// present in requests.
 		Cache CacheData
+		// RetryAndReflect captures tool-error retry reflection policy.
+		RetryAndReflect *RetryAndReflectData
+	}
+
+	// RetryAndReflectData represents generated retry reflection policy.
+	RetryAndReflectData struct {
+		// MaxRetries bounds reflected retry hints per run/tool. Zero uses the
+		// runtime default.
+		MaxRetries int
+		// ErrorIfRetryExceeded returns the original tool error after retries are exhausted.
+		ErrorIfRetryExceeded bool
 	}
 
 	// HistoryData represents the configured history policy for an agent. It
@@ -831,11 +862,33 @@ func newAgentData(
 	agent := newBaseAgentData(genpkg, svc, agentExpr)
 	agent.Runtime = buildAgentRuntimeData(agent)
 	agent.RunPolicy = newRunPolicyData(agentExpr.RunPolicy)
+	agent.Workflow = newWorkflowData(agentExpr.Workflow)
 	applyAgentRunPolicy(&agent.Runtime, agent.RunPolicy)
 	populateAgentToolsets(agent, agentExpr, servicesData)
 	populateAgentToolCollections(agent)
 	populateAgentMethods(agent)
 	return agent
+}
+
+func newWorkflowData(expr *agentsExpr.WorkflowExpr) *WorkflowData {
+	if expr == nil {
+		return nil
+	}
+	workflow := &WorkflowData{
+		FinalMessage: expr.FinalMessage,
+		Steps:        make([]*WorkflowStepData, 0, len(expr.Steps)),
+	}
+	for _, step := range expr.Steps {
+		if step == nil {
+			continue
+		}
+		workflow.Steps = append(workflow.Steps, &WorkflowStepData{
+			Name:    step.Name,
+			Tool:    step.Tool,
+			Payload: step.Payload,
+		})
+	}
+	return workflow
 }
 
 func newBaseAgentData(genpkg string, svc *service.Data, agentExpr *agentsExpr.AgentExpr) *AgentData {

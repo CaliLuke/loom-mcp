@@ -79,6 +79,50 @@ func TestRunPolicyDefaults(t *testing.T) {
 	require.Equal(t, 45*time.Second, policy.TimeBudget)
 }
 
+func TestRunPolicyRetryAndReflect(t *testing.T) {
+	runDSL(t, func() {
+		API("test", func() {})
+		Service("tasks", func() {
+			Agent("planner", "Planner agent", func() {
+				RunPolicy(func() {
+					RetryAndReflect(MaxRetries(2), ErrorIfRetryExceeded(true))
+				})
+			})
+		})
+	})
+
+	require.Len(t, agentsexpr.Root.Agents, 1)
+	policy := agentsexpr.Root.Agents[0].RunPolicy
+	require.NotNil(t, policy)
+	require.NotNil(t, policy.RetryAndReflect)
+	require.Equal(t, 2, policy.RetryAndReflect.MaxRetries)
+	require.True(t, policy.RetryAndReflect.ErrorIfRetryExceeded)
+}
+
+func TestWorkflowCompositionDSL(t *testing.T) {
+	runDSL(t, func() {
+		API("test", func() {})
+		Service("tasks", func() {
+			Agent("planner", "Planner agent", func() {
+				Workflow(func() {
+					Step("draft", "writer.draft", `{"topic":"loom"}`)
+					Step("review", "reviewer.review", `{"strict":true}`)
+					FinalMessage("workflow complete")
+				})
+			})
+		})
+	})
+
+	require.Len(t, agentsexpr.Root.Agents, 1)
+	workflow := agentsexpr.Root.Agents[0].Workflow
+	require.NotNil(t, workflow)
+	require.Len(t, workflow.Steps, 2)
+	require.Equal(t, "draft", workflow.Steps[0].Name)
+	require.Equal(t, "writer.draft", workflow.Steps[0].Tool)
+	require.JSONEq(t, `{"topic":"loom"}`, workflow.Steps[0].Payload)
+	require.Equal(t, "workflow complete", workflow.FinalMessage)
+}
+
 func TestToolsetReferenceReuse(t *testing.T) {
 	runDSL(t, func() {
 		API("test", func() {})
@@ -229,6 +273,19 @@ func TestProviderInference_LocalAndMCP(t *testing.T) {
 	require.Equal(t, agentsexpr.ProviderMCP, mcp.Provider.Kind)
 	require.Equal(t, "svc", mcp.Provider.MCPService)
 	require.Equal(t, "search", mcp.Provider.MCPToolset)
+}
+
+func TestFromSkillsProvider(t *testing.T) {
+	runDSL(t, func() {
+		Toolset(FromSkills(".agents/skills"))
+	})
+
+	require.Len(t, agentsexpr.Root.Toolsets, 1)
+	ts := agentsexpr.Root.Toolsets[0]
+	require.Equal(t, "skills", ts.Name)
+	require.NotNil(t, ts.Provider)
+	require.Equal(t, agentsexpr.ProviderSkills, ts.Provider.Kind)
+	require.Equal(t, []string{".agents/skills"}, ts.Provider.SkillRoots)
 }
 
 func runDSL(t *testing.T, dsl func()) {

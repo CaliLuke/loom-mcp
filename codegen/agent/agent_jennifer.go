@@ -58,17 +58,45 @@ func emitAgentStruct(stmt *jen.Statement, agent *AgentData) {
 
 func emitAgentConstructor(stmt *jen.Statement, agent *AgentData) {
 	codegen.Doc(stmt, "New"+agent.StructName+" validates the configuration and constructs a "+agent.StructName+".")
+	body := []jen.Code{
+		jen.If(jen.Id("err").Op(":=").Id("cfg").Dot("Validate").Call(), jen.Id("err").Op("!=").Nil()).Block(
+			jen.Return(jen.Nil(), jen.Id("err")),
+		),
+	}
+	if agent.Workflow != nil {
+		body = append(body,
+			jen.Id("plannerImpl").Op(":=").Id("cfg").Dot("Planner"),
+			jen.If(jen.Id("plannerImpl").Op("==").Nil()).Block(
+				jen.Id("plannerImpl").Op("=").Id("planner").Dot("NewSequentialWorkflowPlanner").Call(
+					jen.Id("planner").Dot("SequentialWorkflowConfig").Values(jen.Dict{
+						jen.Id("Steps"): jen.Index().Id("planner").Dot("WorkflowStep").ValuesFunc(func(g *jen.Group) {
+							for _, step := range agent.Workflow.Steps {
+								g.Values(jen.Dict{
+									jen.Id("Name"):    jen.Lit(step.Name),
+									jen.Id("Tool"):    jen.Id("tools").Dot("Ident").Call(jen.Lit(step.Tool)),
+									jen.Id("Payload"): jen.Id("rawjson").Dot("Message").Call(jen.Index().Byte().Call(jen.Lit(step.Payload))),
+								})
+							}
+						}),
+						jen.Id("FinalMessage"): jen.Lit(agent.Workflow.FinalMessage),
+					}),
+				),
+			),
+		)
+	}
+	plannerExpr := jen.Id("cfg").Dot("Planner")
+	if agent.Workflow != nil {
+		plannerExpr = jen.Id("plannerImpl")
+	}
+	body = append(body,
+		jen.Return(jen.Op("&").Id(agent.StructName).Values(jen.Dict{
+			jen.Id("Planner"): plannerExpr,
+		}), jen.Nil()),
+	)
 	stmt.Func().Id("New"+agent.StructName).
 		Params(jen.Id("cfg").Id(agent.ConfigType)).
 		Params(jen.Op("*").Id(agent.StructName), jen.Error()).
-		Block(
-			jen.If(jen.Id("err").Op(":=").Id("cfg").Dot("Validate").Call(), jen.Id("err").Op("!=").Nil()).Block(
-				jen.Return(jen.Nil(), jen.Id("err")),
-			),
-			jen.Return(jen.Op("&").Id(agent.StructName).Values(jen.Dict{
-				jen.Id("Planner"): jen.Id("cfg").Dot("Planner"),
-			}), jen.Nil()),
-		)
+		Block(body...)
 	stmt.Line()
 }
 
@@ -147,9 +175,11 @@ func emitAgentConfigStruct(stmt *jen.Statement, agent *AgentData) {
 func emitAgentConfigValidate(stmt *jen.Statement, agent *AgentData) {
 	codegen.Doc(stmt, "Validate ensures the configuration is usable.")
 	stmt.Func().Params(jen.Id("c").Id(agent.ConfigType)).Id("Validate").Params().Error().BlockFunc(func(g *jen.Group) {
-		g.If(jen.Id("c").Dot("Planner").Op("==").Nil()).Block(
-			jen.Return(jen.Qual("errors", "New").Call(jen.Lit("planner is required"))),
-		)
+		if agent.Workflow == nil {
+			g.If(jen.Id("c").Dot("Planner").Op("==").Nil()).Block(
+				jen.Return(jen.Qual("errors", "New").Call(jen.Lit("planner is required"))),
+			)
+		}
 		if agent.RunPolicy.History != nil && agent.RunPolicy.History.Mode == historyModeCompress {
 			g.If(jen.Id("c").Dot("HistoryModel").Op("==").Nil()).Block(
 				jen.Return(jen.Qual("errors", "New").Call(jen.Lit("history model is required when Compress history policy is configured"))),

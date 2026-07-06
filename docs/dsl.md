@@ -153,6 +153,9 @@ overrides remain operational at the runtime/store layer.
 | `Agent(name, description, dsl)`   | Inside `Service`            | Declares an LLM agent with tool usage/exports and run policy    |
 | `Use(value, dsl?)`                | Inside `Agent`              | Declares toolset consumption (referencing or inline definition) |
 | `Export(value, dsl?)`             | Inside `Agent` or `Service` | Declares toolsets exposed to other agents                       |
+| `Workflow(dsl)`                   | Inside `Agent`              | Defines a generated sequential workflow planner                 |
+| `Step(name, tool, payloadJSON)`    | Inside `Workflow`           | Adds one deterministic tool-call step                           |
+| `FinalMessage(message)`           | Inside `Workflow`           | Sets the assistant message after workflow completion            |
 | `AgentToolset(svc, agent, ts)`    | Top-level or inside `Use`   | References a toolset exported by another agent                  |
 | `UseAgentToolset(svc, agent, ts)` | Inside `Agent`              | Combines `AgentToolset` with `Use`                              |
 | `DisableAgentDocs()`              | Inside `API`                | Disables `AGENTS_QUICKSTART.md` generation                      |
@@ -165,6 +168,7 @@ overrides remain operational at the runtime/store layer.
 | `Toolset(args...)`                | Top-level                  | Defines a provider-owned toolset            |
 | `FromMCP(service, toolset)`       | Argument to `Toolset`      | Configures MCP server as toolset provider   |
 | `FromRegistry(registry, toolset)` | Argument to `Toolset`      | Configures registry as toolset provider     |
+| `FromSkills(roots...)`            | Argument to `Toolset`      | Exposes skill files as model-facing tools   |
 | `Tags(values...)`                 | Inside `Toolset` or `Tool` | Attaches metadata labels for categorization |
 
 ### Tool Functions
@@ -299,6 +303,9 @@ Notes:
 | `TimeBudget(duration)`             | Inside `RunPolicy`        | Maximum wall-clock execution time (e.g., "5m")                               |
 | `InterruptsAllowed(bool)`          | Inside `RunPolicy`        | Enables user interruption handling                                           |
 | `OnMissingFields(action)`          | Inside `RunPolicy`        | Validation behavior: `""`, `"finalize"`, `"await_clarification"`, `"resume"` |
+| `RetryAndReflect(opts...)`         | Inside `RunPolicy`        | Converts tool errors into planner retry hints                                |
+| `MaxRetries(n)`                    | Argument to `RetryAndReflect` | Per-run/tool reflected retry budget                                      |
+| `ErrorIfRetryExceeded(bool)`       | Argument to `RetryAndReflect` | Return the original tool error after retry budget exhaustion              |
 
 ### Timing Functions
 
@@ -652,6 +659,22 @@ var DataTools = Toolset(FromRegistry(CorpRegistry, "data-tools"))
 // With version pinning
 var PinnedTools = Toolset(FromRegistry(CorpRegistry, "data-tools"), func() {
     Version("1.2.3")
+})
+```
+
+### Skill-Backed Toolsets
+
+`FromSkills` exposes local skill directories as model-facing tools. The generated agent package
+registers a runtime skill toolset with `list_skills`, `load_skill`, and `load_skill_resource`
+tools. This is distinct from MCP `SkillDirectory`: MCP skill directories expose `skill://`
+resources to MCP clients, while `FromSkills` makes those authoring assets callable by the agent
+planner.
+
+```go
+var LocalSkills = Toolset(FromSkills(".agents/skills", "shared/skills"))
+
+Agent("assistant", "Skill-aware assistant", func() {
+    Use(LocalSkills)
 })
 ```
 
@@ -1052,6 +1075,10 @@ RunPolicy(func() {
     // Behavior
     InterruptsAllowed(true)
     OnMissingFields("await_clarification")
+    RetryAndReflect(
+        MaxRetries(2),
+        ErrorIfRetryExceeded(true),
+    )
 
     // History management
     History(func() {
@@ -1065,6 +1092,10 @@ RunPolicy(func() {
     })
 })
 ```
+
+`RetryAndReflect` installs an agent-scoped interceptor. When a tool executor returns an error, the
+interceptor converts that failure into a planner retry hint so the planner can repair the tool call
+arguments on a follow-up turn.
 
 ### DefaultCaps Options
 
@@ -1152,6 +1183,25 @@ example `temporal.Options.ActivityDefaults` for the Temporal engine).
 `Budget(...)` sets the semantic wall-clock budget for the run; the runtime then
 derives an engine run timeout by adding finalizer reserve and small engine
 headroom so the final planner turn and terminal cleanup can still complete.
+
+---
+
+## Workflow Composition
+
+`Workflow` defines a generated sequential planner for deterministic multi-tool flows. Each `Step`
+emits one tool request with a stable tool call ID equal to the step name. The generated agent config
+still accepts `Planner`; when `cfg.Planner` is provided it overrides the generated workflow planner.
+
+```go
+Agent("release", "Release workflow", func() {
+    Use(ReleaseTools)
+    Workflow(func() {
+        Step("draft", "release.notes.draft", `{"audience":"operators"}`)
+        Step("review", "release.notes.review", `{"strict":true}`)
+        FinalMessage("workflow complete")
+    })
+})
+```
 
 ---
 

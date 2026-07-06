@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"time"
 
+	agent "github.com/CaliLuke/loom-mcp/runtime/agent"
 	"github.com/CaliLuke/loom-mcp/runtime/agent/planner"
 	"github.com/CaliLuke/loom-mcp/runtime/agent/rawjson"
 	"github.com/CaliLuke/loom-mcp/runtime/agent/tools"
@@ -42,13 +43,20 @@ func (r *Runtime) ExecuteToolActivity(ctx context.Context, req *ToolInput) (*Too
 		ParentToolCallID: req.ParentToolCallID,
 		ToolCallID:       req.ToolCallID,
 	}
-	start := time.Now()
-	execResult, err := reg.Execute(ctx, &call)
+	interceptors := r.interceptorsForAgent(req.AgentID)
+	call, interceptedResult, err := runBeforeToolInterceptors(ctx, interceptors, call)
 	if err != nil {
 		return nil, err
 	}
+	start := time.Now()
+	execResult := interceptedResult
 	if execResult == nil {
-		return nil, errors.New("tool execution returned nil execution result")
+		execResult, err = reg.Execute(ctx, &call)
+	}
+	duration := time.Since(start)
+	execResult, err = runAfterToolInterceptors(ctx, interceptors, call, execResult, err, duration)
+	if err != nil {
+		return nil, err
 	}
 	if execResult.ToolResult != nil {
 		applyToolActivityTelemetry(ctx, reg, meta, req.ToolName, start, execResult.ToolResult)
@@ -62,6 +70,18 @@ func (r *Runtime) ExecuteToolActivity(ctx context.Context, req *ToolInput) (*Too
 		out.Pause = pause
 	}
 	return out, nil
+}
+
+func (r *Runtime) interceptorsForAgent(agentID agent.Ident) []Interceptor {
+	interceptors := append([]Interceptor(nil), r.interceptors...)
+	if agentID == "" {
+		return interceptors
+	}
+	reg, ok := r.agentByID(agentID)
+	if !ok || len(reg.Interceptors) == 0 {
+		return interceptors
+	}
+	return append(interceptors, reg.Interceptors...)
 }
 
 func applyToolActivityTelemetry(

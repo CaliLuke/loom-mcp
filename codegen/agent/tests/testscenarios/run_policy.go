@@ -15,6 +15,7 @@ func RunPolicyBasic() func() {
 					DefaultCaps(MaxToolCalls(5), MaxConsecutiveFailedToolCalls(2))
 					TimeBudget("30s")
 					InterruptsAllowed(true)
+					RetryAndReflect(MaxRetries(2), ErrorIfRetryExceeded(true))
 					History(func() {
 						CompressAtMaxInputTokens(120000)
 						KeepMaxInputTokens(40000)
