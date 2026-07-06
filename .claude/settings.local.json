@@ -1,0 +1,32 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(ln -s ../.agents/skills /Users/luca/code/loom-mono/loom-mcp/.claude/skills)",
+      "Bash(make loom-status *)",
+      "Bash(gh release *)",
+      "Bash(awk '/^type mongoSingleResult/,/^}$/; /^func \\\\\\(r mongoSingleResult\\\\\\)/,/^}$/; /^type mongoCursor/,/^}$/; /^func \\\\\\(c mongoCursor\\\\\\)/,/^}$/; /^type mongoIndexView/,/^}$/; /^func \\\\\\(v mongoIndexView\\\\\\)/,/^}$/' __TRACKED_VAR__/mongo/clients/mongo/client.go)",
+      "Bash(go build *)",
+      "Bash(go test *)",
+      "Bash(make lint *)",
+      "Bash(make test *)",
+      "Bash(make loom-remote *)",
+      "Bash(make itest *)",
+      "Bash(make verify-mcp-local *)",
+      "Bash(go doc *)",
+      "Bash(make regen-assistant-fixture *)",
+      "Bash(go list *)",
+      "Bash(wait)",
+      "Bash(go get *)",
+      "Bash(go mod *)",
+      "Bash(gofmt -w codegen/mcp/generate.go)",
+      "Read(//tmp/**)",
+      "WebFetch(domain:datatracker.ietf.org)",
+      "Bash(gofmt -w dsl/mcp.go expr/mcp/mcp.go)",
+      "Bash(make loom-local *)",
+      "Bash(make gen-registry *)"
+    ]
+  },
+  "disabledMcpjsonServers": [
+    "typedb"
+  ]
+}
