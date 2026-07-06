@@ -396,6 +396,16 @@ type (
 		MinimumTokens int
 	}
 
+	// StructuredOutput configures provider-enforced JSON output when supported.
+	// Schema must contain a JSON Schema object accepted by the target provider.
+	StructuredOutput struct {
+		// Name identifies the response format for providers that require one.
+		Name string
+
+		// Schema is the JSON Schema payload sent to the provider.
+		Schema rawjson.Message
+	}
+
 	// Request captures inputs for a model invocation.
 	Request struct {
 		// RunID identifies the logical run for this request when available.
@@ -427,6 +437,10 @@ type (
 
 		// MaxTokens caps the number of output tokens when supported.
 		MaxTokens int
+
+		// StructuredOutput constrains assistant output to a JSON schema when the
+		// provider supports native structured-output enforcement.
+		StructuredOutput *StructuredOutput
 
 		// Stream requests streaming responses when true and supported.
 		Stream bool
@@ -659,6 +673,10 @@ const (
 // ErrStreamingUnsupported indicates the provider does not support streaming.
 var ErrStreamingUnsupported = errors.New("model: streaming not supported")
 
+// ErrStructuredOutputUnsupported indicates the provider does not support native
+// structured output for the requested call shape.
+var ErrStructuredOutputUnsupported = errors.New("model: structured output not supported")
+
 // ErrRateLimited indicates the provider rejected the request due to rate
 // limiting after exhausting any configured retries. Callers must not retry
 // in a tight loop and should treat this as a transient infrastructure
@@ -723,6 +741,9 @@ func requestCharacterCount(req *Request) int {
 	}
 	for _, def := range req.Tools {
 		total += toolDefinitionCharacterCount(def)
+	}
+	if req.StructuredOutput != nil {
+		total += len(req.StructuredOutput.Name) + len(req.StructuredOutput.Schema)
 	}
 	return total
 }

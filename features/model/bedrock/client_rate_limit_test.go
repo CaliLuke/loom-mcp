@@ -93,3 +93,27 @@ func TestStream_WrapsRateLimitedErrors(t *testing.T) {
 	require.Error(t, err)
 	require.ErrorIs(t, err, model.ErrRateLimited)
 }
+
+func TestComplete_RejectsStructuredOutput(t *testing.T) {
+	client := &Client{
+		runtime:      &errorRuntimeClient{},
+		defaultModel: "test-model",
+		maxTok:       10,
+		temp:         0.5,
+		think:        defaultThinkingBudget,
+	}
+	req := model.Request{
+		ModelClass: model.ModelClassDefault,
+		Messages: []*model.Message{
+			{Role: model.ConversationRoleUser, Parts: []model.Part{model.TextPart{Text: "hello"}}},
+		},
+		StructuredOutput: &model.StructuredOutput{
+			Name:   "draft",
+			Schema: []byte(`{"type":"object"}`),
+		},
+	}
+
+	resp, err := client.Complete(context.Background(), &req)
+	require.Nil(t, resp)
+	require.ErrorIs(t, err, model.ErrStructuredOutputUnsupported)
+}

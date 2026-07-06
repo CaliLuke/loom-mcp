@@ -242,6 +242,9 @@ func (c *Client) Stream(ctx context.Context, req *model.Request) (model.Streamer
 }
 
 func (c *Client) prepareRequest(ctx context.Context, req *model.Request) (*requestParts, error) {
+	if req.StructuredOutput != nil {
+		return nil, fmt.Errorf("bedrock: structured output is not supported: %w", model.ErrStructuredOutputUnsupported)
+	}
 	merged := c.mergedRequestMessages(ctx, req)
 	if err := validateBedrockRequestMessages(merged); err != nil {
 		return nil, err

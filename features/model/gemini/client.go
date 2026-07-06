@@ -165,6 +165,9 @@ func (c *Client) buildRequest(req *model.Request) (string, []*genai.Content, *ge
 	if len(req.Messages) == 0 {
 		return "", nil, nil, errors.New("gemini: messages are required")
 	}
+	if req.StructuredOutput != nil && len(req.Tools) > 0 {
+		return "", nil, nil, fmt.Errorf("gemini: structured output cannot be combined with tools: %w", model.ErrStructuredOutputUnsupported)
+	}
 	modelID := c.resolveModelID(req)
 	if modelID == "" {
 		return "", nil, nil, errors.New("gemini: model identifier is required")
@@ -213,6 +216,9 @@ func (c *Client) buildGenerateContentConfig(systemInstruction *genai.Content, re
 	if err := applyToolConfig(config, req); err != nil {
 		return nil, err
 	}
+	if err := applyStructuredOutputConfig(config, req.StructuredOutput); err != nil {
+		return nil, err
+	}
 	if err := c.applyThinkingConfig(config, req); err != nil {
 		return nil, err
 	}
@@ -258,6 +264,19 @@ func applyToolConfig(config *genai.GenerateContentConfig, req *model.Request) er
 	return nil
 }
 
+func applyStructuredOutputConfig(config *genai.GenerateContentConfig, output *model.StructuredOutput) error {
+	if output == nil {
+		return nil
+	}
+	schema, err := normalizeStructuredOutputSchema(output.Schema)
+	if err != nil {
+		return err
+	}
+	config.ResponseMIMEType = "application/json"
+	config.ResponseJsonSchema = schema
+	return nil
+}
+
 func (c *Client) applyThinkingConfig(config *genai.GenerateContentConfig, req *model.Request) error {
 	if req.Thinking != nil && req.Thinking.Enable {
 		budget := req.Thinking.BudgetTokens
@@ -274,6 +293,17 @@ func (c *Client) applyThinkingConfig(config *genai.GenerateContentConfig, req *m
 		config.ThinkingConfig = thinking
 	}
 	return nil
+}
+
+func normalizeStructuredOutputSchema(schema rawjson.Message) (any, error) {
+	if len(schema) == 0 {
+		return nil, errors.New("gemini: structured output schema is required")
+	}
+	var out any
+	if err := json.Unmarshal(schema, &out); err != nil {
+		return nil, fmt.Errorf("gemini: structured output schema must be valid JSON: %w", err)
+	}
+	return out, nil
 }
 
 func encodeMessages(msgs []*model.Message) ([]*genai.Content, *genai.Content, error) {

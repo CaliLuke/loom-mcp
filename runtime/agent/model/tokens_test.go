@@ -47,3 +47,26 @@ func TestTokenEstimatorCountsLargestToolProjection(t *testing.T) {
 	assert.Equal(t, "gemini-test", count.Model)
 	assert.Positive(t, count.InputTokens)
 }
+
+func TestTokenEstimatorCountsStructuredOutputSchema(t *testing.T) {
+	estimator := TokenEstimator{CharactersPerToken: 1, OverheadTokens: 0, MinimumTokens: 1}
+	base := &Request{
+		Messages: []*Message{
+			{Role: ConversationRoleUser, Parts: []Part{TextPart{Text: "hello"}}},
+		},
+	}
+	withSchema := &Request{
+		Messages: base.Messages,
+		StructuredOutput: &StructuredOutput{
+			Name:   "draft",
+			Schema: []byte(`{"type":"object","required":["title"],"properties":{"title":{"type":"string"}}}`),
+		},
+	}
+
+	baseCount, err := estimator.CountTokens(context.Background(), base)
+	require.NoError(t, err)
+	schemaCount, err := estimator.CountTokens(context.Background(), withSchema)
+	require.NoError(t, err)
+
+	assert.Greater(t, schemaCount.InputTokens, baseCount.InputTokens)
+}

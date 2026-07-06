@@ -207,6 +207,55 @@ func TestClientCompleteAppliesOptionDefaults(t *testing.T) {
 	require.Equal(t, int32(2048), *mock.config.ThinkingConfig.ThinkingBudget)
 }
 
+func TestClientCompleteSupportsStructuredOutput(t *testing.T) {
+	mock := &mockModelsClient{response: &genai.GenerateContentResponse{}}
+	client, err := geminimodel.New(geminimodel.Options{
+		Client:       mock,
+		DefaultModel: "gemini-2.5-flash",
+	})
+	require.NoError(t, err)
+
+	_, err = client.Complete(context.Background(), &model.Request{
+		Messages: []*model.Message{
+			{Role: model.ConversationRoleUser, Parts: []model.Part{model.TextPart{Text: "ping"}}},
+		},
+		StructuredOutput: &model.StructuredOutput{
+			Name:   "draft",
+			Schema: []byte(`{"type":"object","required":["title"],"properties":{"title":{"type":"string"}}}`),
+		},
+	})
+	require.NoError(t, err)
+	require.Equal(t, "application/json", mock.config.ResponseMIMEType)
+	require.Equal(t, map[string]any{
+		"type":     "object",
+		"required": []any{"title"},
+		"properties": map[string]any{
+			"title": map[string]any{"type": "string"},
+		},
+	}, normalizeJSONValue(t, mock.config.ResponseJsonSchema))
+}
+
+func TestClientCompleteRejectsStructuredOutputWithTools(t *testing.T) {
+	mock := &mockModelsClient{response: &genai.GenerateContentResponse{}}
+	client, err := geminimodel.New(geminimodel.Options{
+		Client:       mock,
+		DefaultModel: "gemini-2.5-flash",
+	})
+	require.NoError(t, err)
+
+	_, err = client.Complete(context.Background(), &model.Request{
+		Messages: []*model.Message{
+			{Role: model.ConversationRoleUser, Parts: []model.Part{model.TextPart{Text: "ping"}}},
+		},
+		Tools: []*model.ToolDefinition{{Name: "lookup", InputSchema: map[string]any{"type": "object"}}},
+		StructuredOutput: &model.StructuredOutput{
+			Name:   "draft",
+			Schema: []byte(`{"type":"object"}`),
+		},
+	})
+	require.ErrorIs(t, err, model.ErrStructuredOutputUnsupported)
+}
+
 func TestClientCountTokens(t *testing.T) {
 	mock := &mockModelsClient{
 		countResponse: &genai.CountTokensResponse{TotalTokens: 42},
@@ -308,6 +357,15 @@ func normalizeJSONMap(t *testing.T, in map[string]any) map[string]any {
 	data, err := json.Marshal(in)
 	require.NoError(t, err)
 	var out map[string]any
+	require.NoError(t, json.Unmarshal(data, &out))
+	return out
+}
+
+func normalizeJSONValue(t *testing.T, in any) any {
+	t.Helper()
+	data, err := json.Marshal(in)
+	require.NoError(t, err)
+	var out any
 	require.NoError(t, json.Unmarshal(data, &out))
 	return out
 }

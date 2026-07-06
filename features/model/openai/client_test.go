@@ -220,6 +220,55 @@ func TestClientCompleteWithToolChoiceAny(t *testing.T) {
 	require.Equal(t, responses.ToolChoiceOptionsRequired, req.ToolChoice.OfToolChoiceMode.Value)
 }
 
+func TestClientCompleteSupportsStructuredOutput(t *testing.T) {
+	mock := &mockResponsesClient{}
+	client, err := openaimodel.New(openaimodel.Options{
+		Client:       mock,
+		DefaultModel: "gpt-4o",
+	})
+	require.NoError(t, err)
+	mock.response = &responses.Response{}
+
+	_, err = client.Complete(context.Background(), &model.Request{
+		Messages: []*model.Message{
+			{Role: model.ConversationRoleUser, Parts: []model.Part{model.TextPart{Text: "ping"}}},
+		},
+		StructuredOutput: &model.StructuredOutput{
+			Name:   "draft",
+			Schema: []byte(`{"type":"object","required":["title"],"properties":{"title":{"type":"string"}}}`),
+		},
+	})
+	require.NoError(t, err)
+
+	format := mock.captured.Text.Format.OfJSONSchema
+	require.NotNil(t, format)
+	require.Equal(t, "draft", format.Name)
+	require.True(t, format.Strict.Value)
+	require.Equal(t, "object", format.Schema["type"])
+}
+
+func TestClientCompleteRejectsStructuredOutputWithTools(t *testing.T) {
+	mock := &mockResponsesClient{}
+	client, err := openaimodel.New(openaimodel.Options{
+		Client:       mock,
+		DefaultModel: "gpt-4o",
+	})
+	require.NoError(t, err)
+	mock.response = &responses.Response{}
+
+	_, err = client.Complete(context.Background(), &model.Request{
+		Messages: []*model.Message{
+			{Role: model.ConversationRoleUser, Parts: []model.Part{model.TextPart{Text: "ping"}}},
+		},
+		Tools: []*model.ToolDefinition{{Name: "lookup", InputSchema: map[string]any{"type": "object"}}},
+		StructuredOutput: &model.StructuredOutput{
+			Name:   "draft",
+			Schema: []byte(`{"type":"object"}`),
+		},
+	})
+	require.ErrorContains(t, err, "structured output cannot be combined with tools")
+}
+
 func TestClientRequiresDefaultModel(t *testing.T) {
 	_, err := openaimodel.New(openaimodel.Options{Client: &mockResponsesClient{}})
 	require.Error(t, err)

@@ -147,6 +147,9 @@ func (c *Client) Stream(ctx context.Context, req *model.Request) (model.Streamer
 }
 
 func (c *Client) prepareRequest(ctx context.Context, req *model.Request) (*sdk.MessageNewParams, map[string]string, error) {
+	if req.StructuredOutput != nil {
+		return nil, nil, fmt.Errorf("anthropic: structured output is not supported: %w", model.ErrStructuredOutputUnsupported)
+	}
 	modelID, maxTokens, err := c.validateRequestInputs(req)
 	if err != nil {
 		return nil, nil, err

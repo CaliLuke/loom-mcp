@@ -1470,6 +1470,34 @@ client, err := rt.NewVertexGeminiModelClient(ctx, runtime.VertexConfig{
 })
 ```
 
+### Structured Output
+
+`model.Request.StructuredOutput` asks the provider to enforce a JSON Schema for
+the assistant response:
+
+```go
+resp, err := modelClient.Complete(ctx, &model.Request{
+    Messages: input.Messages,
+    StructuredOutput: &model.StructuredOutput{
+        Name: "draft",
+        Schema: []byte(`{
+            "type": "object",
+            "required": ["title", "summary"],
+            "properties": {
+                "title": {"type": "string"},
+                "summary": {"type": "string"}
+            }
+        }`),
+    },
+})
+```
+
+Gemini and OpenAI map this to their native structured-output request fields.
+Anthropic and Bedrock currently fail fast with
+`model.ErrStructuredOutputUnsupported` instead of silently ignoring the schema.
+Structured output cannot be combined with model tools in the current Gemini and
+OpenAI adapters.
+
 When planners render prompts through `RenderPrompt`, copy prompt provenance into model requests:
 
 ```go

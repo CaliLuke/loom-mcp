@@ -75,6 +75,9 @@ func (c *Client) buildResponseRequest(req *model.Request) (responses.ResponseNew
 	if len(req.Messages) == 0 {
 		return responses.ResponseNewParams{}, errors.New("messages are required")
 	}
+	if req.StructuredOutput != nil && (len(req.Tools) > 0 || req.ToolChoice != nil) {
+		return responses.ResponseNewParams{}, errors.New("openai: structured output cannot be combined with tools")
+	}
 	input, err := encodeInput(req.Messages)
 	if err != nil {
 		return responses.ResponseNewParams{}, err
@@ -93,6 +96,13 @@ func (c *Client) buildResponseRequest(req *model.Request) (responses.ResponseNew
 	}
 	if req.MaxTokens > 0 {
 		request.MaxOutputTokens = openai.Int(int64(req.MaxTokens))
+	}
+	textConfig, err := encodeStructuredOutput(req.StructuredOutput)
+	if err != nil {
+		return responses.ResponseNewParams{}, err
+	}
+	if textConfig != (responses.ResponseTextConfigParam{}) {
+		request.Text = textConfig
 	}
 	toolChoice, err := buildOpenAIToolChoice(req.ToolChoice, req.Tools)
 	if err != nil {
@@ -272,6 +282,32 @@ func encodeTools(defs []*model.ToolDefinition) ([]responses.ToolUnionParam, erro
 		})
 	}
 	return tools, nil
+}
+
+func encodeStructuredOutput(output *model.StructuredOutput) (responses.ResponseTextConfigParam, error) {
+	if output == nil {
+		return responses.ResponseTextConfigParam{}, nil
+	}
+	if len(output.Schema) == 0 {
+		return responses.ResponseTextConfigParam{}, errors.New("openai: structured output schema is required")
+	}
+	name := output.Name
+	if name == "" {
+		name = "structured_output"
+	}
+	schema, err := schemaObject(name, output.Schema)
+	if err != nil {
+		return responses.ResponseTextConfigParam{}, fmt.Errorf("openai: structured output schema: %w", err)
+	}
+	return responses.ResponseTextConfigParam{
+		Format: responses.ResponseFormatTextConfigUnionParam{
+			OfJSONSchema: &responses.ResponseFormatTextJSONSchemaConfigParam{
+				Name:   name,
+				Schema: schema,
+				Strict: param.NewOpt(true),
+			},
+		},
+	}, nil
 }
 
 func translateResponse(resp *responses.Response) *model.Response {
