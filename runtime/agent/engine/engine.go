@@ -261,6 +261,9 @@ type (
 		// ConfirmationDecisions returns a typed receiver for tool confirmation decisions.
 		ConfirmationDecisions() Receiver[*api.ConfirmationDecision]
 
+		// TypedInputAnswers returns a typed receiver for schema-typed human input answers.
+		TypedInputAnswers() Receiver[*api.TypedInputAnswer]
+
 		// Now returns the current workflow time in a deterministic manner. Implementations
 		// must return a time source that is replay-safe (e.g., Temporal's workflow.Now).
 		Now() time.Time

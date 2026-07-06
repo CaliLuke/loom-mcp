@@ -292,6 +292,8 @@ type ResourceInfoResponseBody struct {
 	MimeType *string `form:"mimeType,omitempty" json:"mimeType,omitempty" xml:"mimeType,omitempty"`
 	// Resource icons
 	Icons []*IconResponseBody `form:"icons,omitempty" json:"icons,omitempty" xml:"icons,omitempty"`
+	// Resource metadata
+	Meta any `form:"_meta,omitempty" json:"_meta,omitempty" xml:"_meta,omitempty"`
 }
 
 // ResourcesReadResponseBodyResponseBody is used to define fields on response
@@ -311,6 +313,8 @@ type ResourceContentResponseBody struct {
 	Text *string `form:"text,omitempty" json:"text,omitempty" xml:"text,omitempty"`
 	// Base64 encoded binary content
 	Blob *string `form:"blob,omitempty" json:"blob,omitempty" xml:"blob,omitempty"`
+	// Resource content metadata
+	Meta any `form:"_meta,omitempty" json:"_meta,omitempty" xml:"_meta,omitempty"`
 }
 
 // PromptsListResponseBodyResponseBody is used to define fields on response

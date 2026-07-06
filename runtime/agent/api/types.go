@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/CaliLuke/loom-mcp/runtime/agent"
+	"github.com/CaliLuke/loom-mcp/runtime/agent/artifact"
 	"github.com/CaliLuke/loom-mcp/runtime/agent/hooks"
 	"github.com/CaliLuke/loom-mcp/runtime/agent/model"
 	"github.com/CaliLuke/loom-mcp/runtime/agent/planner"
@@ -250,6 +251,9 @@ type (
 		// RunLink links this tool result to a nested agent run when it was produced by
 		// an agent-as-tool. Nil for service-backed tools.
 		RunLink *run.Handle
+
+		// Artifacts contains workflow-safe references to persisted artifacts.
+		Artifacts []artifact.Ref `json:"artifacts,omitempty"`
 	}
 
 	// ToolCallOutput is the workflow-boundary safe record of one executed tool call
@@ -299,6 +303,9 @@ type (
 
 		// Telemetry contains tool execution metrics (duration, token usage, model).
 		Telemetry *telemetry.ToolTelemetry
+
+		// Artifacts contains workflow-safe references to persisted artifacts.
+		Artifacts []artifact.Ref `json:"artifacts,omitempty"`
 	}
 
 	// PlanActivityInput carries the planner input for PlanStart and PlanResume activities.
@@ -322,6 +329,9 @@ type (
 		//   workflow/activity boundary.
 		// - Entries preserve the canonical tool input, output, and server data bytes.
 		ToolOutputs []*ToolCallOutput
+
+		// TypedInputs is the accumulated schema-typed human input history for the run so far.
+		TypedInputs []planner.TypedInputOutput
 
 		// Finalize requests a final turn with no further tool calls.
 		Finalize *planner.Termination
@@ -521,6 +531,21 @@ type (
 		Metadata map[string]any
 	}
 
+	// TypedInputAnswer carries a typed human-input answer for an await request.
+	TypedInputAnswer struct {
+		// RunID identifies the run associated with the typed input.
+		RunID string
+
+		// ID is the typed input await identifier.
+		ID string
+
+		// Payload is the canonical JSON answer payload.
+		Payload rawjson.Message
+
+		// Labels carries optional metadata associated with the answer.
+		Labels map[string]string
+	}
+
 	// ProvidedToolResult carries one externally supplied tool result across the
 	// await-resume workflow boundary.
 	//
@@ -551,6 +576,10 @@ type (
 		// RetryHint optionally provides structured guidance for recovering from a
 		// provided tool failure.
 		RetryHint *planner.RetryHint
+
+		// Artifacts contains externally supplied artifact references. Bodies are never
+		// accepted across this workflow boundary.
+		Artifacts []artifact.Ref `json:"artifacts,omitempty"`
 	}
 
 	// ToolResultsSet carries results for an external tools await request.
@@ -588,6 +617,9 @@ const (
 
 	// SignalProvideConfirmation delivers a ConfirmationDecision to a waiting run.
 	SignalProvideConfirmation = "loom_mcp.runtime.provide.confirmation"
+
+	// SignalProvideTypedInput delivers a TypedInputAnswer to a waiting run.
+	SignalProvideTypedInput = "loom_mcp.runtime.provide.typed_input"
 )
 
 // UnmarshalJSON handles decoding PlanActivityOutput so that Transcript entries are

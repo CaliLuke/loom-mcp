@@ -128,6 +128,45 @@ func TestToolsetExpr_Validate_ProviderLocal(t *testing.T) {
 	})
 }
 
+func TestToolsetExprValidateSkillsProviderModes(t *testing.T) {
+	t.Run("valid", func(t *testing.T) {
+		ts := &ToolsetExpr{
+			Name: "skills",
+			Provider: &ProviderExpr{
+				Kind:         ProviderSkills,
+				SkillRoots:   []string{".agents/skills"},
+				SkillPreload: SkillPreloadOnStart,
+				SkillReload:  SkillReloadPerCall,
+			},
+		}
+		require.NoError(t, ts.Validate())
+	})
+
+	t.Run("invalid preload", func(t *testing.T) {
+		ts := &ToolsetExpr{
+			Name: "skills",
+			Provider: &ProviderExpr{
+				Kind:         ProviderSkills,
+				SkillRoots:   []string{".agents/skills"},
+				SkillPreload: SkillPreloadMode("sometimes"),
+			},
+		}
+		require.ErrorContains(t, ts.Validate(), "unknown skill preload mode")
+	})
+
+	t.Run("invalid reload", func(t *testing.T) {
+		ts := &ToolsetExpr{
+			Name: "skills",
+			Provider: &ProviderExpr{
+				Kind:        ProviderSkills,
+				SkillRoots:  []string{".agents/skills"},
+				SkillReload: SkillReloadMode("often"),
+			},
+		}
+		require.ErrorContains(t, ts.Validate(), "unknown skill reload mode")
+	})
+}
+
 func TestToolsetExpr_ProviderResolution(t *testing.T) {
 	t.Run("toolset without provider is local", func(t *testing.T) {
 		ts := &ToolsetExpr{Name: "local"}

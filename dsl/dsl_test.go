@@ -277,7 +277,7 @@ func TestProviderInference_LocalAndMCP(t *testing.T) {
 
 func TestFromSkillsProvider(t *testing.T) {
 	runDSL(t, func() {
-		Toolset(FromSkills(".agents/skills"))
+		Toolset(FromSkills(".agents/skills", SkillPreload(SkillPreloadOnStart), SkillReload(SkillReloadPerCall)))
 	})
 
 	require.Len(t, agentsexpr.Root.Toolsets, 1)
@@ -286,6 +286,8 @@ func TestFromSkillsProvider(t *testing.T) {
 	require.NotNil(t, ts.Provider)
 	require.Equal(t, agentsexpr.ProviderSkills, ts.Provider.Kind)
 	require.Equal(t, []string{".agents/skills"}, ts.Provider.SkillRoots)
+	require.Equal(t, agentsexpr.SkillPreloadOnStart, ts.Provider.SkillPreload)
+	require.Equal(t, agentsexpr.SkillReloadPerCall, ts.Provider.SkillReload)
 }
 
 func runDSL(t *testing.T, dsl func()) {

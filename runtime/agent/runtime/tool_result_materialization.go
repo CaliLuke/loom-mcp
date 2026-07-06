@@ -19,6 +19,7 @@ import (
 
 	"github.com/CaliLuke/loom-mcp/runtime/agent"
 	"github.com/CaliLuke/loom-mcp/runtime/agent/api"
+	"github.com/CaliLuke/loom-mcp/runtime/agent/artifact"
 	"github.com/CaliLuke/loom-mcp/runtime/agent/planner"
 	"github.com/CaliLuke/loom-mcp/runtime/agent/rawjson"
 	"github.com/CaliLuke/loom-mcp/runtime/agent/tools"
@@ -38,6 +39,9 @@ func (r *Runtime) materializeToolResult(ctx context.Context, call planner.ToolRe
 	if err := r.enforceToolResultContracts(spec, call, result); err != nil {
 		return nil, err
 	}
+	if err := r.persistToolResultArtifacts(ctx, call, result); err != nil {
+		return nil, err
+	}
 	var resultJSON rawjson.Message
 	if result.Error == nil {
 		encoded, err := r.marshalToolValue(ctx, call.Name, result.Result, result.Bounds)
@@ -47,6 +51,55 @@ func (r *Runtime) materializeToolResult(ctx context.Context, call planner.ToolRe
 		resultJSON = rawjson.Message(encoded)
 	}
 	return resultJSON, nil
+}
+
+func (r *Runtime) persistToolResultArtifacts(ctx context.Context, call planner.ToolRequest, result *planner.ToolResult) error {
+	if result == nil || len(result.Artifacts) == 0 {
+		return nil
+	}
+	for i := range result.Artifacts {
+		content := &result.Artifacts[i]
+		content.Ref = normalizeArtifactRef(call, content.Ref)
+		if content.Ref.ID != "" {
+			continue
+		}
+		if r.ArtifactStore == nil {
+			return fmt.Errorf("persist artifacts for %s: artifact store is not configured", call.Name)
+		}
+		ref, err := r.ArtifactStore.Save(ctx, artifactSaveInput(call, *content))
+		if err != nil {
+			return fmt.Errorf("persist artifact for %s: %w", call.Name, err)
+		}
+		content.Ref = ref
+		content.SizeBytes = ref.SizeBytes
+	}
+	return nil
+}
+
+func normalizeArtifactRef(call planner.ToolRequest, ref artifact.Ref) artifact.Ref {
+	if ref.AgentID == "" {
+		ref.AgentID = string(call.AgentID)
+	}
+	if ref.RunID == "" {
+		ref.RunID = call.RunID
+	}
+	if ref.ToolCallID == "" {
+		ref.ToolCallID = call.ToolCallID
+	}
+	return ref
+}
+
+func artifactSaveInput(call planner.ToolRequest, content artifact.Content) artifact.SaveInput {
+	ref := normalizeArtifactRef(call, content.Ref)
+	return artifact.SaveInput{
+		AgentID:    ref.AgentID,
+		RunID:      ref.RunID,
+		ToolCallID: ref.ToolCallID,
+		Name:       ref.Name,
+		MimeType:   ref.MimeType,
+		Metadata:   ref.Metadata,
+		Body:       content.Body,
+	}
 }
 
 // materializeToolExecutionResult validates the runtime-owned execution wrapper,
@@ -151,6 +204,7 @@ func (r *Runtime) decodeProvidedToolResult(ctx context.Context, spec tools.ToolS
 		Error:      item.Error,
 		RetryHint:  item.RetryHint,
 		ToolCallID: call.ToolCallID,
+		Artifacts:  artifactContentsFromRefs(item.Artifacts),
 	}
 	resultJSON, err := r.materializeToolResult(ctx, call, result)
 	if err != nil {

@@ -83,6 +83,10 @@ func (panicWorkflowContext) ConfirmationDecisions() engine.Receiver[*api.Confirm
 	return nil
 }
 
+func (panicWorkflowContext) TypedInputAnswers() engine.Receiver[*api.TypedInputAnswer] {
+	return nil
+}
+
 func (panicWorkflowContext) Now() time.Time {
 	return time.Unix(0, 0).UTC()
 }
@@ -265,6 +269,10 @@ func (w *cancelOnPlannerWorkflowContext) ExternalToolResults() engine.Receiver[*
 }
 
 func (w *cancelOnPlannerWorkflowContext) ConfirmationDecisions() engine.Receiver[*api.ConfirmationDecision] {
+	return nil
+}
+
+func (w *cancelOnPlannerWorkflowContext) TypedInputAnswers() engine.Receiver[*api.TypedInputAnswer] {
 	return nil
 }
 

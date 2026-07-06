@@ -48,6 +48,7 @@ type (
 		clarifyCh     chan *api.ClarificationAnswer
 		toolResultsCh chan *api.ToolResultsSet
 		confirmCh     chan *api.ConfirmationDecision
+		typedInputCh  chan *api.TypedInputAnswer
 	}
 
 	// handle is the in-memory implementation of engine.WorkflowHandle.
@@ -258,6 +259,7 @@ func (e *eng) newWorkflowContext(ctx context.Context, id string) *wfCtx {
 		clarifyCh:     make(chan *api.ClarificationAnswer, 1),
 		toolResultsCh: make(chan *api.ToolResultsSet, 1),
 		confirmCh:     make(chan *api.ConfirmationDecision, 1),
+		typedInputCh:  make(chan *api.TypedInputAnswer, 1),
 	}
 }
 
@@ -304,43 +306,68 @@ func (h *handle) Wait(ctx context.Context) (*api.RunOutput, error) {
 func (h *handle) Signal(ctx context.Context, name string, payload any) error {
 	switch name {
 	case api.SignalPause:
-		req, ok := payload.(*api.PauseRequest)
-		if !ok {
-			return fmt.Errorf("signal %q expects api.PauseRequest, got %T", name, payload)
-		}
-		return sendSignal(ctx, h.done, h.wfCtx.pauseCh, req)
-
+		return h.signalPause(ctx, name, payload)
 	case api.SignalResume:
-		req, ok := payload.(*api.ResumeRequest)
-		if !ok {
-			return fmt.Errorf("signal %q expects api.ResumeRequest, got %T", name, payload)
-		}
-		return sendSignal(ctx, h.done, h.wfCtx.resumeCh, req)
-
+		return h.signalResume(ctx, name, payload)
 	case api.SignalProvideClarification:
-		req, ok := payload.(*api.ClarificationAnswer)
-		if !ok {
-			return fmt.Errorf("signal %q expects api.ClarificationAnswer, got %T", name, payload)
-		}
-		return sendSignal(ctx, h.done, h.wfCtx.clarifyCh, req)
-
+		return h.signalClarification(ctx, name, payload)
 	case api.SignalProvideToolResults:
-		req, ok := payload.(*api.ToolResultsSet)
-		if !ok {
-			return fmt.Errorf("signal %q expects api.ToolResultsSet, got %T", name, payload)
-		}
-		return sendSignal(ctx, h.done, h.wfCtx.toolResultsCh, req)
-
+		return h.signalToolResults(ctx, name, payload)
 	case api.SignalProvideConfirmation:
-		req, ok := payload.(*api.ConfirmationDecision)
-		if !ok {
-			return fmt.Errorf("signal %q expects api.ConfirmationDecision, got %T", name, payload)
-		}
-		return sendSignal(ctx, h.done, h.wfCtx.confirmCh, req)
-
+		return h.signalConfirmation(ctx, name, payload)
+	case api.SignalProvideTypedInput:
+		return h.signalTypedInput(ctx, name, payload)
 	default:
 		return fmt.Errorf("unknown signal %q", name)
 	}
+}
+
+func (h *handle) signalPause(ctx context.Context, name string, payload any) error {
+	req, ok := payload.(*api.PauseRequest)
+	if !ok {
+		return fmt.Errorf("signal %q expects api.PauseRequest, got %T", name, payload)
+	}
+	return sendSignal(ctx, h.done, h.wfCtx.pauseCh, req)
+}
+
+func (h *handle) signalResume(ctx context.Context, name string, payload any) error {
+	req, ok := payload.(*api.ResumeRequest)
+	if !ok {
+		return fmt.Errorf("signal %q expects api.ResumeRequest, got %T", name, payload)
+	}
+	return sendSignal(ctx, h.done, h.wfCtx.resumeCh, req)
+}
+
+func (h *handle) signalClarification(ctx context.Context, name string, payload any) error {
+	req, ok := payload.(*api.ClarificationAnswer)
+	if !ok {
+		return fmt.Errorf("signal %q expects api.ClarificationAnswer, got %T", name, payload)
+	}
+	return sendSignal(ctx, h.done, h.wfCtx.clarifyCh, req)
+}
+
+func (h *handle) signalToolResults(ctx context.Context, name string, payload any) error {
+	req, ok := payload.(*api.ToolResultsSet)
+	if !ok {
+		return fmt.Errorf("signal %q expects api.ToolResultsSet, got %T", name, payload)
+	}
+	return sendSignal(ctx, h.done, h.wfCtx.toolResultsCh, req)
+}
+
+func (h *handle) signalConfirmation(ctx context.Context, name string, payload any) error {
+	req, ok := payload.(*api.ConfirmationDecision)
+	if !ok {
+		return fmt.Errorf("signal %q expects api.ConfirmationDecision, got %T", name, payload)
+	}
+	return sendSignal(ctx, h.done, h.wfCtx.confirmCh, req)
+}
+
+func (h *handle) signalTypedInput(ctx context.Context, name string, payload any) error {
+	req, ok := payload.(*api.TypedInputAnswer)
+	if !ok {
+		return fmt.Errorf("signal %q expects api.TypedInputAnswer, got %T", name, payload)
+	}
+	return sendSignal(ctx, h.done, h.wfCtx.typedInputCh, req)
 }
 
 func (h *handle) Cancel(_ context.Context) error {
@@ -560,6 +587,10 @@ func (w *wfCtx) ExternalToolResults() engine.Receiver[*api.ToolResultsSet] {
 
 func (w *wfCtx) ConfirmationDecisions() engine.Receiver[*api.ConfirmationDecision] {
 	return receiver[*api.ConfirmationDecision]{ch: w.confirmCh}
+}
+
+func (w *wfCtx) TypedInputAnswers() engine.Receiver[*api.TypedInputAnswer] {
+	return receiver[*api.TypedInputAnswer]{ch: w.typedInputCh}
 }
 
 // Receive blocks until a signal value is delivered and returns it.

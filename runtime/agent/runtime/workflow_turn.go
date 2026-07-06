@@ -251,7 +251,7 @@ func (r *Runtime) resumeAfterToolTurn(
 		return err
 	}
 	st.Caps = policyResult.Caps
-	resumeReq, err := r.buildNextResumeRequest(input.AgentID, base, st.ToolOutputs, &st.NextAttempt)
+	resumeReq, err := r.buildNextResumeRequest(input.AgentID, base, st.ToolOutputs, st.TypedInputs, &st.NextAttempt)
 	if err != nil {
 		return err
 	}

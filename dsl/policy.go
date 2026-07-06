@@ -174,8 +174,66 @@ func OnMissingFields(action string) {
 // on agent execution.
 type CapsOption func(*expragents.CapsExpr)
 
+// PreloadMemoryOption configures bounded memory preload.
+type PreloadMemoryOption interface {
+	applyPreloadMemory(*expragents.MemoryPreloadExpr)
+}
+
+type memoryScopeOption expragents.MemoryScope
+
 // RetryAndReflectOption configures RetryAndReflect policy behavior.
 type RetryAndReflectOption func(*expragents.RetryAndReflectExpr)
+
+// Interceptors declares application-owned interceptor IDs for this agent.
+//
+// Interceptors must appear in a RunPolicy expression.
+func Interceptors(ids ...string) {
+	policy, ok := eval.Current().(*expragents.RunPolicyExpr)
+	if !ok {
+		eval.IncompatibleDSL()
+		return
+	}
+	policy.Interceptors = append(policy.Interceptors, ids...)
+}
+
+// PreloadMemory enables bounded memory snippets in planner inputs.
+//
+// PreloadMemory must appear in a RunPolicy expression.
+func PreloadMemory(opts ...PreloadMemoryOption) {
+	policy, ok := eval.Current().(*expragents.RunPolicyExpr)
+	if !ok {
+		eval.IncompatibleDSL()
+		return
+	}
+	preload := policy.PreloadMemory
+	if preload == nil {
+		preload = &expragents.MemoryPreloadExpr{Policy: policy}
+		policy.PreloadMemory = preload
+	}
+	for _, opt := range opts {
+		if opt != nil {
+			opt.applyPreloadMemory(preload)
+		}
+	}
+}
+
+// MemoryScopeCurrentRun selects current-run memory for preload.
+func MemoryScopeCurrentRun() memoryScopeOption {
+	return memoryScopeOption(expragents.MemoryScopeCurrentRun)
+}
+
+// MemoryScopeIndexed selects indexed memory for preload.
+func MemoryScopeIndexed() memoryScopeOption {
+	return memoryScopeOption(expragents.MemoryScopeIndexed)
+}
+
+func (o memoryScopeOption) applyPreloadMemory(preload *expragents.MemoryPreloadExpr) {
+	preload.Scope = expragents.MemoryScope(o)
+}
+
+func (o memoryMaxResultsOption) applyPreloadMemory(preload *expragents.MemoryPreloadExpr) {
+	preload.MaxResults = int(o)
+}
 
 // RetryAndReflect enables tool-error reflection. When a tool executor returns
 // an error, the runtime converts it into a planner retry hint so the model can

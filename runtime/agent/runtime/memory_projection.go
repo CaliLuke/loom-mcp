@@ -60,6 +60,7 @@ func newToolResultMemoryData(evt *hooks.ToolResultReceivedEvent) memory.ToolResu
 		Telemetry:        evt.Telemetry,
 		RetryHint:        toMemoryRetryHint(evt.RetryHint),
 		ErrorMessage:     errorMessage,
+		Artifacts:        cloneArtifactRefs(evt.Artifacts),
 	}
 }
 

@@ -33,6 +33,7 @@ import (
 	"time"
 
 	agent "github.com/CaliLuke/loom-mcp/runtime/agent"
+	"github.com/CaliLuke/loom-mcp/runtime/agent/artifact"
 	"github.com/CaliLuke/loom-mcp/runtime/agent/engine"
 	"github.com/CaliLuke/loom-mcp/runtime/agent/hooks"
 	"github.com/CaliLuke/loom-mcp/runtime/agent/memory"
@@ -85,6 +86,10 @@ type (
 		Engine engine.Engine
 		// MemoryStore persists run transcripts and annotations.
 		Memory memory.Store
+		// MemorySearcher provides indexed or cross-run memory lookup.
+		MemorySearcher memory.Searcher
+		// ArtifactStore persists tool-produced run artifacts.
+		ArtifactStore artifact.Store
 		// PromptRegistry resolves prompt specs and optional scoped overrides.
 		PromptRegistry *prompt.Registry
 		// SessionStore persists session lifecycle state and run metadata.
@@ -164,8 +169,9 @@ type (
 		// See ToolConfirmationConfig for details.
 		toolConfirmation *ToolConfirmationConfig
 
-		interceptors  []Interceptor
-		hintOverrides map[tools.Ident]HintOverrideFunc
+		interceptors      []Interceptor
+		namedInterceptors map[string]Interceptor
+		hintOverrides     map[tools.Ident]HintOverrideFunc
 	}
 
 	// Options configures the Runtime instance. All fields are optional except Engine
@@ -176,6 +182,10 @@ type (
 		Engine engine.Engine
 		// MemoryStore persists run transcripts and annotations.
 		MemoryStore memory.Store
+		// MemorySearcher provides indexed or cross-run memory lookup.
+		MemorySearcher memory.Searcher
+		// ArtifactStore persists tool-produced run artifacts.
+		ArtifactStore artifact.Store
 		// PromptStore resolves scoped prompt overrides. When nil, prompt rendering
 		// uses baseline registered PromptSpecs only.
 		PromptStore prompt.Store
@@ -217,6 +227,10 @@ type (
 		// Interceptors observe or change runtime call-path behavior before durable
 		// hook events are emitted.
 		Interceptors []Interceptor
+
+		// NamedInterceptors maps design-owned interceptor IDs to application-owned
+		// implementations used by generated agent registrations.
+		NamedInterceptors map[string]Interceptor
 
 		// HintOverrides optionally overrides DSL-authored call hints for specific tools
 		// when streaming tool_start events.
@@ -403,6 +417,25 @@ type (
 
 		// Cache configures automatic prompt cache checkpoint placement.
 		Cache CachePolicy
+
+		// NamedInterceptors lists application-owned interceptor IDs declared in
+		// the agent design.
+		NamedInterceptors []string
+
+		// PreloadMemory injects bounded memory snippets into planner inputs before
+		// each planning turn. Nil preserves the default no-preload behavior.
+		PreloadMemory *MemoryPreloadPolicy
+	}
+
+	// MemoryScope identifies which memory backing source a query should use.
+	MemoryScope string
+
+	// MemoryPreloadPolicy configures bounded planner-input memory preload.
+	MemoryPreloadPolicy struct {
+		// Scope selects the memory source.
+		Scope MemoryScope
+		// MaxResults caps the number of memory events injected into planner input.
+		MaxResults int
 	}
 
 	// CachePolicy configures automatic cache checkpoint placement for an agent.
@@ -418,4 +451,11 @@ type (
 		// providers support tool-level checkpoints (e.g., Nova does not).
 		AfterTools bool
 	}
+)
+
+const (
+	// MemoryScopeCurrentRun scopes memory lookup to the current run snapshot.
+	MemoryScopeCurrentRun MemoryScope = "current_run"
+	// MemoryScopeIndexed scopes memory lookup to the configured memory searcher.
+	MemoryScopeIndexed MemoryScope = "indexed"
 )

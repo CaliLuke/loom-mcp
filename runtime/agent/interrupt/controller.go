@@ -27,14 +27,18 @@ type (
 	// ToolResultsSet carries results for an external tools await request.
 	ToolResultsSet = *api.ToolResultsSet
 
+	// TypedInputAnswer carries schema-typed human input for a typed await request.
+	TypedInputAnswer = *api.TypedInputAnswer
+
 	// Controller drains runtime interrupt signals and exposes helpers the
 	// workflow loop can call to react to pause/resume and await requests.
 	Controller struct {
-		pauseCh   engine.Receiver[*api.PauseRequest]
-		resumeCh  engine.Receiver[*api.ResumeRequest]
-		clarifyCh engine.Receiver[*api.ClarificationAnswer]
-		resultsCh engine.Receiver[*api.ToolResultsSet]
-		confirmCh engine.Receiver[*api.ConfirmationDecision]
+		pauseCh      engine.Receiver[*api.PauseRequest]
+		resumeCh     engine.Receiver[*api.ResumeRequest]
+		clarifyCh    engine.Receiver[*api.ClarificationAnswer]
+		resultsCh    engine.Receiver[*api.ToolResultsSet]
+		confirmCh    engine.Receiver[*api.ConfirmationDecision]
+		typedInputCh engine.Receiver[*api.TypedInputAnswer]
 	}
 )
 
@@ -50,16 +54,19 @@ const (
 	SignalProvideToolResults = api.SignalProvideToolResults
 	// SignalProvideConfirmation delivers a ConfirmationDecision to a waiting run.
 	SignalProvideConfirmation = api.SignalProvideConfirmation
+	// SignalProvideTypedInput delivers a TypedInputAnswer to a waiting run.
+	SignalProvideTypedInput = api.SignalProvideTypedInput
 )
 
 // NewController builds a controller wired to the workflow context signals.
 func NewController(wfCtx engine.WorkflowContext) *Controller {
 	return &Controller{
-		pauseCh:   wfCtx.PauseRequests(),
-		resumeCh:  wfCtx.ResumeRequests(),
-		clarifyCh: wfCtx.ClarificationAnswers(),
-		resultsCh: wfCtx.ExternalToolResults(),
-		confirmCh: wfCtx.ConfirmationDecisions(),
+		pauseCh:      wfCtx.PauseRequests(),
+		resumeCh:     wfCtx.ResumeRequests(),
+		clarifyCh:    wfCtx.ClarificationAnswers(),
+		resultsCh:    wfCtx.ExternalToolResults(),
+		confirmCh:    wfCtx.ConfirmationDecisions(),
+		typedInputCh: wfCtx.TypedInputAnswers(),
 	}
 }
 
@@ -113,4 +120,16 @@ func (c *Controller) WaitProvideConfirmation(ctx context.Context, timeout time.D
 		return c.confirmCh.ReceiveWithTimeout(ctx, timeout)
 	}
 	return c.confirmCh.Receive(ctx)
+}
+
+// WaitProvideTypedInput blocks until a typed input answer is delivered or the
+// timeout elapses.
+//
+// When timeout is <= 0, WaitProvideTypedInput blocks until an answer is
+// delivered or ctx is done.
+func (c *Controller) WaitProvideTypedInput(ctx context.Context, timeout time.Duration) (TypedInputAnswer, error) {
+	if timeout > 0 {
+		return c.typedInputCh.ReceiveWithTimeout(ctx, timeout)
+	}
+	return c.typedInputCh.Receive(ctx)
 }

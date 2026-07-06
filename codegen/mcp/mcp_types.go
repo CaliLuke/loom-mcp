@@ -404,6 +404,7 @@ func (b *mcpExprBuilder) buildResourceInfoType() *expr.AttributeExpr {
 		stringField("description", "Resource description"),
 		stringField("mimeType", "Resource MIME type"),
 		b.iconArrayField("Resource icons"),
+		anyField("_meta", "Resource metadata"),
 	)
 }
 
@@ -456,6 +457,10 @@ func (b *mcpExprBuilder) buildResourceContentType() *expr.AttributeExpr {
 			{Name: "blob", Attribute: &expr.AttributeExpr{
 				Type:        expr.String,
 				Description: "Base64 encoded binary content",
+			}},
+			{Name: "_meta", Attribute: &expr.AttributeExpr{
+				Type:        expr.Any,
+				Description: "Resource content metadata",
 			}},
 		},
 		Validation: &expr.ValidationExpr{

@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/CaliLuke/loom-mcp/runtime/agent"
+	"github.com/CaliLuke/loom-mcp/runtime/agent/artifact"
 	"github.com/CaliLuke/loom-mcp/runtime/agent/planner"
 	"github.com/CaliLuke/loom-mcp/runtime/agent/rawjson"
 	"github.com/CaliLuke/loom-mcp/runtime/agent/run"
@@ -56,6 +57,7 @@ type (
 		Telemetry        *telemetry.ToolTelemetry `json:"telemetry,omitempty"`
 		RetryHint        *planner.RetryHint       `json:"retry_hint,omitempty"`
 		Error            *toolerrors.ToolError    `json:"error,omitempty"`
+		Artifacts        []artifact.Ref           `json:"artifacts,omitempty"`
 	}
 )
 
@@ -122,6 +124,7 @@ func encodeToolResultPayload(e *ToolResultReceivedEvent) (rawjson.Message, error
 		Telemetry:        e.Telemetry,
 		RetryHint:        e.RetryHint,
 		Error:            e.Error,
+		Artifacts:        e.Artifacts,
 	})
 }
 
@@ -215,6 +218,8 @@ func decodeAwaitEvent(input *ActivityInput) (Event, bool, error) {
 		return decodeAwaitClarificationEvent(input)
 	case AwaitQuestions:
 		return decodeAwaitQuestionsEvent(input)
+	case AwaitTypedInput:
+		return decodeAwaitTypedInputEvent(input)
 	case AwaitConfirmation:
 		return decodeAwaitConfirmationEvent(input)
 	case AwaitExternalTools:
@@ -311,6 +316,14 @@ func decodeAwaitQuestionsEvent(input *ActivityInput) (Event, bool, error) {
 	return NewAwaitQuestionsEvent(input.RunID, input.AgentID, input.SessionID, p.ID, p.ToolName, p.ToolCallID, p.Payload, p.Title, p.Questions), true, nil
 }
 
+func decodeAwaitTypedInputEvent(input *ActivityInput) (Event, bool, error) {
+	var p AwaitTypedInputEvent
+	if err := decodeHookPayload(input, &p); err != nil {
+		return nil, false, err
+	}
+	return NewAwaitTypedInputEvent(input.RunID, input.AgentID, input.SessionID, p.ID, p.Title, p.Schema), true, nil
+}
+
 func decodeAwaitConfirmationEvent(input *ActivityInput) (Event, bool, error) {
 	var p AwaitConfirmationEvent
 	if err := decodeHookPayload(input, &p); err != nil {
@@ -372,7 +385,9 @@ func decodeToolResultReceivedEvent(input *ActivityInput) (Event, bool, error) {
 	if err := decodeHookPayload(input, &p); err != nil {
 		return nil, false, err
 	}
-	return NewToolResultReceivedEvent(input.RunID, input.AgentID, input.SessionID, p.ToolName, p.ToolCallID, p.ParentToolCallID, p.Result, p.ResultJSON, p.ServerData, p.ResultPreview, p.Bounds, p.Duration, p.Telemetry, p.RetryHint, p.Error), true, nil
+	ev := NewToolResultReceivedEvent(input.RunID, input.AgentID, input.SessionID, p.ToolName, p.ToolCallID, p.ParentToolCallID, p.Result, p.ResultJSON, p.ServerData, p.ResultPreview, p.Bounds, p.Duration, p.Telemetry, p.RetryHint, p.Error)
+	ev.Artifacts = p.Artifacts
+	return ev, true, nil
 }
 
 func decodeRetryHintIssuedEvent(input *ActivityInput) (Event, bool, error) {

@@ -19,6 +19,7 @@ func TestGolden_RunPolicy(t *testing.T) {
 	require.Contains(t, reg, "KeepMaxInputTokens: 40000")
 	require.Contains(t, reg, "KeepMaxTurns: 12")
 	require.Contains(t, reg, "Interceptors: []agentsruntime.Interceptor{")
+	require.Contains(t, reg, `NamedInterceptors: []string{"audit", "safety"}`)
 	require.Contains(t, reg, "agentsruntime.NewRetryAndReflectInterceptor(agentsruntime.RetryAndReflectConfig{")
 	require.Contains(t, reg, "MaxRetries: 2")
 	require.Contains(t, reg, "ErrorIfRetryExceeded: true")

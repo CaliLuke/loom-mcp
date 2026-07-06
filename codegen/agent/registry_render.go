@@ -98,6 +98,9 @@ func Register{{ .StructName }}(ctx context.Context, rt *agentsruntime.Runtime, c
 {{- if .RunPolicy.InterruptsAllowed }}
             InterruptsAllowed: true,
 {{- end }}
+{{- if .RunPolicy.NamedInterceptors }}
+            NamedInterceptors: []string{ {{- range $idx, $id := .RunPolicy.NamedInterceptors }}{{ if $idx }}, {{ end }}{{ printf "%q" $id }}{{- end }}},
+{{- end }}
 {{- if .RunPolicy.OnMissingFields }}
             {{- if eq .RunPolicy.OnMissingFields "finalize" }}
             OnMissingFields: agentsruntime.MissingFieldsFinalize,
@@ -137,6 +140,16 @@ func Register{{ .StructName }}(ctx context.Context, rt *agentsruntime.Runtime, c
             {{- if .RunPolicy.Cache.AfterTools }}
                 AfterTools: true,
             {{- end }}
+            },
+{{- end }}
+{{- if .RunPolicy.PreloadMemory }}
+            PreloadMemory: &agentsruntime.MemoryPreloadPolicy{
+            {{- if eq .RunPolicy.PreloadMemory.Scope "current_run" }}
+                Scope: agentsruntime.MemoryScopeCurrentRun,
+            {{- else if eq .RunPolicy.PreloadMemory.Scope "indexed" }}
+                Scope: agentsruntime.MemoryScopeIndexed,
+            {{- end }}
+                MaxResults: {{ .RunPolicy.PreloadMemory.MaxResults }},
             },
 {{- end }}
         },
@@ -248,6 +261,7 @@ func RegisterUsedToolsets(ctx context.Context, rt *agentsruntime.Runtime, opts .
     // Register non-MCP used toolsets that are not provided by agent-as-tool exports.
     {{- range .UsedToolsets }}
     {{- if needsRuntimeBackedRegistration . }}
+    {{- if isSkillsBacked . }}
     {
         reg := agentsruntime.NewSkillToolsetRegistration(agentsruntime.SkillToolsetConfig{
             Name: {{ printf "%q" .QualifiedName }},
@@ -256,11 +270,38 @@ func RegisterUsedToolsets(ctx context.Context, rt *agentsruntime.Runtime, opts .
                 {{ printf "%q" . }},
             {{- end }}
             },
+            Preload: {{ skillPreloadRef .Expr.Provider.SkillPreload }},
+            Reload: {{ skillReloadRef .Expr.Provider.SkillReload }},
         })
         if err := rt.RegisterToolset(reg); err != nil {
             return err
         }
     }
+    {{- else if isArtifactsBacked . }}
+    {
+        reg := agentsruntime.NewArtifactToolsetRegistration(agentsruntime.ArtifactToolsetConfig{
+            Store: rt.ArtifactStore,
+            Name: {{ printf "%q" .QualifiedName }},
+            MaxArtifactBytes: {{ .Expr.Provider.ArtifactMaxBytes }},
+            MaxArtifacts: {{ .Expr.Provider.ArtifactMaxCount }},
+        })
+        if err := rt.RegisterToolset(reg); err != nil {
+            return err
+        }
+    }
+    {{- else if isMemoryBacked . }}
+    {
+        reg := agentsruntime.NewMemoryToolsetRegistration(agentsruntime.MemoryToolsetConfig{
+            Store: rt.Memory,
+            Searcher: rt.MemorySearcher,
+            Name: {{ printf "%q" .QualifiedName }},
+            MaxResults: {{ .Expr.Provider.MemoryMaxResults }},
+        })
+        if err := rt.RegisterToolset(reg); err != nil {
+            return err
+        }
+    }
+    {{- end }}
     {{- end }}
     {{- if needsExecutorBackedRegistration . }}
     {

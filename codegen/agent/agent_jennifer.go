@@ -67,20 +67,7 @@ func emitAgentConstructor(stmt *jen.Statement, agent *AgentData) {
 		body = append(body,
 			jen.Id("plannerImpl").Op(":=").Id("cfg").Dot("Planner"),
 			jen.If(jen.Id("plannerImpl").Op("==").Nil()).Block(
-				jen.Id("plannerImpl").Op("=").Id("planner").Dot("NewSequentialWorkflowPlanner").Call(
-					jen.Id("planner").Dot("SequentialWorkflowConfig").Values(jen.Dict{
-						jen.Id("Steps"): jen.Index().Id("planner").Dot("WorkflowStep").ValuesFunc(func(g *jen.Group) {
-							for _, step := range agent.Workflow.Steps {
-								g.Values(jen.Dict{
-									jen.Id("Name"):    jen.Lit(step.Name),
-									jen.Id("Tool"):    jen.Id("tools").Dot("Ident").Call(jen.Lit(step.Tool)),
-									jen.Id("Payload"): jen.Id("rawjson").Dot("Message").Call(jen.Index().Byte().Call(jen.Lit(step.Payload))),
-								})
-							}
-						}),
-						jen.Id("FinalMessage"): jen.Lit(agent.Workflow.FinalMessage),
-					}),
-				),
+				workflowPlannerLiteral(agent),
 			),
 		)
 	}
@@ -98,6 +85,111 @@ func emitAgentConstructor(stmt *jen.Statement, agent *AgentData) {
 		Params(jen.Op("*").Id(agent.StructName), jen.Error()).
 		Block(body...)
 	stmt.Line()
+}
+
+func workflowPlannerLiteral(agent *AgentData) jen.Code {
+	if len(agent.Workflow.GraphNodes) > 0 {
+		return jen.Id("plannerImpl").Op("=").Id("planner").Dot("NewGraphWorkflowPlanner").Call(
+			jen.Id("planner").Dot("WorkflowGraphConfig").Values(jen.Dict{
+				jen.Id("Nodes"): jen.Index().Id("planner").Dot("WorkflowNode").ValuesFunc(func(g *jen.Group) {
+					for _, node := range agent.Workflow.GraphNodes {
+						g.Values(workflowGraphNodeLiteral(node))
+					}
+				}),
+				jen.Id("FinalMessage"): jen.Lit(agent.Workflow.FinalMessage),
+			}),
+		)
+	}
+	return jen.Id("plannerImpl").Op("=").Id("planner").Dot("NewSequentialWorkflowPlanner").Call(
+		jen.Id("planner").Dot("SequentialWorkflowConfig").Values(jen.Dict{
+			jen.Id("Steps"): jen.Index().Id("planner").Dot("WorkflowStep").ValuesFunc(func(g *jen.Group) {
+				for _, step := range agent.Workflow.Steps {
+					g.Values(jen.Dict{
+						jen.Id("Name"):    jen.Lit(step.Name),
+						jen.Id("Tool"):    jen.Id("tools").Dot("Ident").Call(jen.Lit(step.Tool)),
+						jen.Id("Payload"): jen.Id("rawjson").Dot("Message").Call(jen.Index().Byte().Call(jen.Lit(step.Payload))),
+					})
+				}
+			}),
+			jen.Id("FinalMessage"): jen.Lit(agent.Workflow.FinalMessage),
+		}),
+	)
+}
+
+func workflowGraphNodeLiteral(node *WorkflowNodeData) jen.Dict {
+	dict := jen.Dict{
+		jen.Id("ID"):   jen.Lit(node.ID),
+		jen.Id("Kind"): jen.Id("planner").Dot(workflowGraphNodeKind(node.Kind)),
+	}
+	if node.Tool != "" {
+		dict[jen.Id("Tool")] = jen.Id("tools").Dot("Ident").Call(jen.Lit(node.Tool))
+	}
+	if node.Payload != "" {
+		dict[jen.Id("Payload")] = jen.Id("rawjson").Dot("Message").Call(jen.Index().Byte().Call(jen.Lit(node.Payload)))
+	}
+	if node.Title != "" {
+		dict[jen.Id("Title")] = jen.Lit(node.Title)
+	}
+	if node.Schema != "" {
+		dict[jen.Id("Schema")] = jen.Id("rawjson").Dot("Message").Call(jen.Index().Byte().Call(jen.Lit(node.Schema)))
+	}
+	if len(node.DependsOn) > 0 {
+		dict[jen.Id("DependsOn")] = jen.Index().String().ValuesFunc(func(g *jen.Group) {
+			for _, dep := range node.DependsOn {
+				g.Lit(dep)
+			}
+		})
+	}
+	if node.Loop != nil {
+		loopDict := jen.Dict{
+			jen.Id("Tool"):          jen.Id("tools").Dot("Ident").Call(jen.Lit(node.Loop.Tool)),
+			jen.Id("Payload"):       jen.Id("rawjson").Dot("Message").Call(jen.Index().Byte().Call(jen.Lit(node.Loop.Payload))),
+			jen.Id("MaxIterations"): jen.Lit(node.Loop.MaxIterations),
+		}
+		if node.Loop.Until != nil {
+			loopDict[jen.Id("Until")] = workflowPredicateLiteral(node.Loop.Until)
+		}
+		dict[jen.Id("Loop")] = jen.Op("&").Id("planner").Dot("WorkflowLoopConfig").Values(loopDict)
+	}
+	if node.Branch != nil {
+		dict[jen.Id("Branch")] = jen.Op("&").Id("planner").Dot("WorkflowBranchConfig").Values(jen.Dict{
+			jen.Id("FromStep"): jen.Lit(node.Branch.FromStep),
+			jen.Id("Default"):  jen.Lit(node.Branch.Default),
+			jen.Id("Cases"): jen.Index().Id("planner").Dot("WorkflowBranchCase").ValuesFunc(func(g *jen.Group) {
+				for _, branchCase := range node.Branch.Cases {
+					g.Values(jen.Dict{
+						jen.Id("Path"):   jen.Lit(branchCase.Path),
+						jen.Id("Equals"): jen.Lit(branchCase.Equals),
+						jen.Id("Target"): jen.Lit(branchCase.Target),
+					})
+				}
+			}),
+		})
+	}
+	return dict
+}
+
+func workflowGraphNodeKind(kind string) string {
+	switch kind {
+	case "branch":
+		return "WorkflowNodeBranch"
+	case "join":
+		return "WorkflowNodeJoin"
+	case "loop":
+		return "WorkflowNodeLoop"
+	case "typed_input":
+		return "WorkflowNodeTypedInput"
+	default:
+		return "WorkflowNodeTool"
+	}
+}
+
+func workflowPredicateLiteral(predicate *WorkflowPredicateData) jen.Code {
+	return jen.Op("&").Id("planner").Dot("WorkflowPredicateConfig").Values(jen.Dict{
+		jen.Id("Step"):   jen.Lit(predicate.Step),
+		jen.Id("Path"):   jen.Lit(predicate.Path),
+		jen.Id("Equals"): jen.Lit(predicate.Equals),
+	})
 }
 
 func emitAgentWorker(stmt *jen.Statement) {

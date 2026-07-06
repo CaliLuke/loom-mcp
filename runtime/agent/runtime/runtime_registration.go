@@ -63,10 +63,31 @@ func (r *Runtime) RegisterAgent(ctx context.Context, reg AgentRegistration) erro
 	}
 	reg = r.applyAgentWorkerQueueOverrides(reg)
 	reg = applyAgentActivityDefaults(reg)
+	resolved, err := r.resolveNamedAgentInterceptors(reg)
+	if err != nil {
+		return err
+	}
+	reg = resolved
 	if err := r.registerAgentWithEngine(ctx, reg); err != nil {
 		return err
 	}
 	return r.storeRegisteredAgent(reg)
+}
+
+func (r *Runtime) resolveNamedAgentInterceptors(reg AgentRegistration) (AgentRegistration, error) {
+	if len(reg.Policy.NamedInterceptors) == 0 {
+		return reg, nil
+	}
+	resolved := make([]Interceptor, 0, len(reg.Policy.NamedInterceptors)+len(reg.Interceptors))
+	for _, id := range reg.Policy.NamedInterceptors {
+		interceptor := r.namedInterceptors[id]
+		if interceptor == nil {
+			return reg, fmt.Errorf("%w: interceptor %q is not registered", ErrInvalidConfig, id)
+		}
+		resolved = append(resolved, interceptor)
+	}
+	reg.Interceptors = append(resolved, reg.Interceptors...)
+	return reg, nil
 }
 
 func (r *Runtime) ensureHookActivityRegistered(ctx context.Context) error {

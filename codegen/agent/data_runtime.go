@@ -29,6 +29,7 @@ func newRunPolicyData(expr *agentsExpr.RunPolicyExpr) RunPolicyData {
 		ToolTimeout:       expr.ToolTimeout,
 		InterruptsAllowed: expr.InterruptsAllowed,
 		OnMissingFields:   expr.OnMissingFields,
+		NamedInterceptors: append([]string(nil), expr.Interceptors...),
 	}
 	if expr.History != nil {
 		h := &HistoryData{
@@ -51,6 +52,12 @@ func newRunPolicyData(expr *agentsExpr.RunPolicyExpr) RunPolicyData {
 		rp.RetryAndReflect = &RetryAndReflectData{
 			MaxRetries:           expr.RetryAndReflect.MaxRetries,
 			ErrorIfRetryExceeded: expr.RetryAndReflect.ErrorIfRetryExceeded,
+		}
+	}
+	if expr.PreloadMemory != nil {
+		rp.PreloadMemory = &MemoryPreloadData{
+			Scope:      string(expr.PreloadMemory.Scope),
+			MaxResults: expr.PreloadMemory.MaxResults,
 		}
 	}
 	if expr.DefaultCaps != nil {

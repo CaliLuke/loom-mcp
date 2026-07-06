@@ -33,6 +33,7 @@ import (
 	"context"
 
 	"github.com/CaliLuke/loom-mcp/runtime/agent"
+	"github.com/CaliLuke/loom-mcp/runtime/agent/artifact"
 	"github.com/CaliLuke/loom-mcp/runtime/agent/memory"
 	"github.com/CaliLuke/loom-mcp/runtime/agent/model"
 	"github.com/CaliLuke/loom-mcp/runtime/agent/prompt"
@@ -260,6 +261,11 @@ type ToolResult struct {
 	// is nil. Callers can use RunLink to subscribe to or display the child
 	// agent run separately from the parent tool call.
 	RunLink *run.Handle
+
+	// Artifacts carries tool-produced artifact bodies. The runtime persists
+	// these through the configured artifact store and exposes only references
+	// across workflow, hook, and API boundaries.
+	Artifacts []artifact.Content
 }
 
 // ToolOutput captures one executed tool call in a workflow-safe form suitable
@@ -307,6 +313,10 @@ type ToolOutput struct {
 
 	// Telemetry contains execution metrics attributed to this tool output.
 	Telemetry *telemetry.ToolTelemetry
+
+	// Artifacts contains workflow-safe references to persisted artifacts. Bodies
+	// are loaded out-of-band through artifact tools.
+	Artifacts []artifact.Ref
 }
 
 // RetryHint communicates planner guidance after tool failures so policy engines
@@ -417,6 +427,7 @@ const (
 	AwaitItemKindClarification AwaitItemKind = "clarification"
 	AwaitItemKindQuestions     AwaitItemKind = "questions"
 	AwaitItemKindExternalTools AwaitItemKind = "external_tools"
+	AwaitItemKindTypedInput    AwaitItemKind = "typed_input"
 )
 
 // AwaitItem describes one external-input prompt.
@@ -428,6 +439,7 @@ type AwaitItem struct {
 	Clarification *AwaitClarification
 	Questions     *AwaitQuestions
 	ExternalTools *AwaitExternalTools
+	TypedInput    *AwaitTypedInput
 }
 
 // NewAwait constructs an Await barrier with items in the given order.
@@ -448,6 +460,11 @@ func AwaitQuestionsItem(q *AwaitQuestions) AwaitItem {
 // AwaitExternalToolsItem constructs an external-tools await item.
 func AwaitExternalToolsItem(e *AwaitExternalTools) AwaitItem {
 	return AwaitItem{Kind: AwaitItemKindExternalTools, ExternalTools: e}
+}
+
+// AwaitTypedInputItem constructs a typed-input await item.
+func AwaitTypedInputItem(t *AwaitTypedInput) AwaitItem {
+	return AwaitItem{Kind: AwaitItemKindTypedInput, TypedInput: t}
 }
 
 // AwaitClarification requests missing information from the user.
@@ -529,6 +546,24 @@ type AwaitExternalTools struct {
 	Items []AwaitToolItem
 }
 
+// AwaitTypedInput requests typed human input validated by the caller/UI.
+type AwaitTypedInput struct {
+	// ID uniquely identifies this typed input request.
+	ID string
+	// Title is an optional display title.
+	Title string
+	// Schema is the JSON schema describing the required answer payload.
+	Schema rawjson.Message
+}
+
+// TypedInputOutput carries a typed human input answer into PlanResume.
+type TypedInputOutput struct {
+	// ID identifies the awaited typed input request.
+	ID string
+	// Payload is the canonical JSON answer payload.
+	Payload rawjson.Message
+}
+
 // AwaitToolItem describes one requested external tool call.
 type AwaitToolItem struct {
 	// Name is the tool identifier to invoke externally.
@@ -582,6 +617,11 @@ type PlanInput struct {
 	// Callers should treat this slice as read-only and rely on
 	// PlannerContext.AddReminder to register new reminders for future turns.
 	Reminders []reminder.Reminder
+
+	// PreloadedMemory contains bounded memory snippets requested by run policy.
+	// Defaults to empty; planners should use explicit memory tools for follow-up
+	// lookup instead of assuming broad transcript availability here.
+	PreloadedMemory []memory.Event
 }
 
 // PlanResumeInput carries messages plus execution history into PlanResume.
@@ -605,11 +645,19 @@ type PlanResumeInput struct {
 	// canonical tool outputs instead of relying on a duplicate runtime field.
 	ToolOutputs []*ToolOutput
 
+	// TypedInputs contains typed human-input answers received during await resume.
+	TypedInputs []TypedInputOutput
+
 	// Finalize is non-nil when the runtime forces termination and requests a final response.
 	Finalize *Termination
 
 	// Reminders contains the active system reminders for this planner turn.
 	Reminders []reminder.Reminder
+
+	// PreloadedMemory contains bounded memory snippets requested by run policy.
+	// Defaults to empty; planners should use explicit memory tools for follow-up
+	// lookup instead of assuming broad transcript availability here.
+	PreloadedMemory []memory.Event
 }
 
 // PlanResult is the planner's decision for the next step.

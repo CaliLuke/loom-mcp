@@ -38,6 +38,7 @@ type testWorkflowContext struct {
 	clarifyCh     chan *api.ClarificationAnswer
 	toolResultsCh chan *api.ToolResultsSet
 	confirmCh     chan *api.ConfirmationDecision
+	typedInputCh  chan *api.TypedInputAnswer
 
 	planResult    *planner.PlanResult
 	hasPlanResult bool
@@ -326,6 +327,12 @@ func (t *testWorkflowContext) ConfirmationDecisions() engine.Receiver[*api.Confi
 	return testReceiver[*api.ConfirmationDecision]{ch: root.confirmCh}
 }
 
+func (t *testWorkflowContext) TypedInputAnswers() engine.Receiver[*api.TypedInputAnswer] {
+	root := t.root()
+	root.ensureSignals()
+	return testReceiver[*api.TypedInputAnswer]{ch: root.typedInputCh}
+}
+
 func (t *testWorkflowContext) ensureSignals() {
 	t.sigMu.Lock()
 	defer t.sigMu.Unlock()
@@ -343,6 +350,9 @@ func (t *testWorkflowContext) ensureSignals() {
 	}
 	if t.confirmCh == nil {
 		t.confirmCh = make(chan *api.ConfirmationDecision, 1)
+	}
+	if t.typedInputCh == nil {
+		t.typedInputCh = make(chan *api.TypedInputAnswer, 1)
 	}
 }
 
@@ -520,6 +530,7 @@ type routeWorkflowContext struct {
 	clarifyCh     chan *api.ClarificationAnswer
 	toolResultsCh chan *api.ToolResultsSet
 	confirmCh     chan *api.ConfirmationDecision
+	typedInputCh  chan *api.TypedInputAnswer
 
 	hookRuntime  *Runtime // optional runtime for hook activity execution
 	childRuntime *Runtime // optional runtime for child workflow execution
@@ -723,6 +734,12 @@ func (r *routeWorkflowContext) ConfirmationDecisions() engine.Receiver[*api.Conf
 	return testReceiver[*api.ConfirmationDecision]{ch: root.confirmCh}
 }
 
+func (r *routeWorkflowContext) TypedInputAnswers() engine.Receiver[*api.TypedInputAnswer] {
+	root := r.root()
+	root.ensureSignals()
+	return testReceiver[*api.TypedInputAnswer]{ch: root.typedInputCh}
+}
+
 func (r *routeWorkflowContext) ensureSignals() {
 	r.sigMu.Lock()
 	defer r.sigMu.Unlock()
@@ -740,6 +757,9 @@ func (r *routeWorkflowContext) ensureSignals() {
 	}
 	if r.confirmCh == nil {
 		r.confirmCh = make(chan *api.ConfirmationDecision, 1)
+	}
+	if r.typedInputCh == nil {
+		r.typedInputCh = make(chan *api.TypedInputAnswer, 1)
 	}
 }
 

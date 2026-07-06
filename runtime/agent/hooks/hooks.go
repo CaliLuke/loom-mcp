@@ -72,6 +72,9 @@ const (
 	// AwaitQuestions fires when the planner requests structured multiple-choice user input.
 	AwaitQuestions EventType = "await_questions"
 
+	// AwaitTypedInput fires when the planner requests schema-typed user input.
+	AwaitTypedInput EventType = "await_typed_input"
+
 	// AwaitConfirmation fires when the runtime requests operator confirmation.
 	AwaitConfirmation EventType = "await_confirmation"
 

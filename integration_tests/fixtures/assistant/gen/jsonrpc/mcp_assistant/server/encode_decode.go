@@ -646,6 +646,7 @@ func marshalMcpassistantResourceInfoToResourceInfoResponseBody(v *mcpassistant.R
 		Name:        v.Name,
 		Description: v.Description,
 		MimeType:    v.MimeType,
+		Meta:        v.Meta,
 	}
 	if v.Icons != nil {
 		res.Icons = make([]*IconResponseBody, len(v.Icons))
@@ -670,6 +671,7 @@ func marshalMcpassistantResourceContentToResourceContentResponseBody(v *mcpassis
 		MimeType: v.MimeType,
 		Text:     v.Text,
 		Blob:     v.Blob,
+		Meta:     v.Meta,
 	}
 
 	return res

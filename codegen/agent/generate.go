@@ -261,7 +261,7 @@ func agentRegistryFile(agent *AgentData) *codegen.File {
 	// hint code entirely when no templates are present.
 	needsTools := false
 	for _, ts := range agent.UsedToolsets {
-		if isMCPBackedToolset(ts) || isSkillsBackedToolset(ts) {
+		if isMCPBackedToolset(ts) || isSkillsBackedToolset(ts) || isArtifactsBackedToolset(ts) || isMemoryBackedToolset(ts) {
 			continue
 		}
 		if ts.AgentToolsImportPath != "" {
@@ -315,7 +315,7 @@ func agentRegistryFile(agent *AgentData) *codegen.File {
 	usedSpecsImports := make(map[string]struct{})
 	usedSpecsAliases := make(map[string]string)
 	for _, ts := range agent.UsedToolsets {
-		if ts.AgentToolsImportPath != "" || isSkillsBackedToolset(ts) || ts.SpecsImportPath == "" || ts.SpecsPackageName == "" {
+		if ts.AgentToolsImportPath != "" || isSkillsBackedToolset(ts) || isArtifactsBackedToolset(ts) || isMemoryBackedToolset(ts) || ts.SpecsImportPath == "" || ts.SpecsPackageName == "" {
 			continue
 		}
 		alias, ok := usedSpecsAliases[ts.QualifiedName]

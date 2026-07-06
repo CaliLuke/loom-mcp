@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/CaliLuke/loom-mcp/runtime/agent"
+	"github.com/CaliLuke/loom-mcp/runtime/agent/artifact"
 	"github.com/CaliLuke/loom-mcp/runtime/agent/model"
 	"github.com/CaliLuke/loom-mcp/runtime/agent/planner"
 	"github.com/CaliLuke/loom-mcp/runtime/agent/policy"
@@ -278,6 +279,8 @@ type (
 		RetryHint *planner.RetryHint
 		// Error contains any error returned by the tool execution. Nil on success.
 		Error *toolerrors.ToolError
+		// Artifacts contains persisted artifact references associated with the result.
+		Artifacts []artifact.Ref
 	}
 
 	// ToolCallUpdatedEvent fires when a tool call's metadata is updated after
@@ -478,6 +481,17 @@ type (
 		Title *string
 		// Questions are the structured questions to present to the user.
 		Questions []AwaitQuestion
+	}
+
+	// AwaitTypedInputEvent indicates the planner requested schema-typed user input.
+	AwaitTypedInputEvent struct {
+		baseEvent
+		// ID correlates this await with a subsequent ProvideTypedInput.
+		ID string
+		// Title is an optional display title for the input UI.
+		Title string
+		// Schema is the JSON schema for the expected answer payload.
+		Schema rawjson.Message
 	}
 
 	// AwaitQuestion describes a single multiple-choice question.
@@ -796,6 +810,18 @@ func NewAwaitQuestionsEvent(runID string, agentID agent.Ident, sessionID, id str
 	}
 }
 
+// NewAwaitTypedInputEvent constructs an AwaitTypedInputEvent.
+func NewAwaitTypedInputEvent(runID string, agentID agent.Ident, sessionID, id, title string, schema rawjson.Message) *AwaitTypedInputEvent {
+	be := newBaseEvent(runID, agentID)
+	be.sessionID = sessionID
+	return &AwaitTypedInputEvent{
+		baseEvent: be,
+		ID:        id,
+		Title:     title,
+		Schema:    schema,
+	}
+}
+
 // NewPolicyDecisionEvent constructs a PolicyDecisionEvent with the provided metadata.
 func NewPolicyDecisionEvent(runID string, agentID agent.Ident, sessionID string, allowed []tools.Ident, caps policy.CapsState, labels map[string]string, metadata map[string]any) *PolicyDecisionEvent {
 	be := newBaseEvent(runID, agentID)
@@ -820,6 +846,9 @@ func (e *ToolAuthorizationEvent) Type() EventType { return ToolAuthorization }
 
 // Type implements Event for AwaitQuestionsEvent.
 func (e *AwaitQuestionsEvent) Type() EventType { return AwaitQuestions }
+
+// Type implements Event for AwaitTypedInputEvent.
+func (e *AwaitTypedInputEvent) Type() EventType { return AwaitTypedInput }
 
 // Type implements Event for AwaitExternalToolsEvent.
 func (e *AwaitExternalToolsEvent) Type() EventType { return AwaitExternalTools }

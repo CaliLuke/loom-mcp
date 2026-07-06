@@ -211,6 +211,7 @@ func TestBuildNextResumeRequestRejectsNilToolOutputEntry(t *testing.T) {
 		"svc.agent",
 		base,
 		[]*planner.ToolOutput{nil},
+		nil,
 		&nextAttempt,
 	)
 	require.Error(t, err)

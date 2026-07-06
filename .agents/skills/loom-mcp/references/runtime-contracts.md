@@ -39,6 +39,79 @@ Use this file for current loom-mcp runtime behavior in this repo. Prefer it over
 - Use generated `tool_specs.Specs` and codecs for payload/result schema and encoding needs.
 - Do not introspect `docs.json` at runtime.
 - Tool results and retry hints should stay structured; avoid best-effort coercion when contracts fail.
+- Tool-produced artifacts use `artifact.Content` on `planner.ToolResult.Artifacts`;
+  runtime persistence converts them to workflow-safe `artifact.Ref` values on
+  planner outputs, API tool events, hook payloads, and memory records.
+- Model-facing artifact access is design-owned through `Toolset("artifacts",
+  FromArtifacts(MaxArtifactBytes(...), MaxArtifacts(...)))`. Generated
+  registration must use `runtime.NewArtifactToolsetRegistration(...)` and the
+  application runtime must provide `runtime.WithArtifactStore(...)`.
+- Model-facing memory access is design-owned through `Toolset("memory",
+  FromMemory(MemoryMaxResults(...)))`. Generated registration must use
+  `runtime.NewMemoryToolsetRegistration(...)`; `scope:"current_run"` falls back
+  to `runtime.WithMemoryStore(...)`, while `scope:"indexed"` requires
+  `runtime.WithMemorySearcher(...)` and otherwise returns an
+  `unsupported_operation` retry hint.
+- Planner-input memory preload is opt-in through generated
+  `RunPolicy.PreloadMemory`. It fills `planner.PlanInput.PreloadedMemory` and
+  `planner.PlanResumeInput.PreloadedMemory` with bounded snippets without
+  changing default transcript/history behavior.
+
+## Interceptors
+
+- Interceptors are opt-in typed interfaces: run, tool, model, and event.
+- Runtime-level interceptors execute before agent-scoped interceptors.
+- Generated `RunPolicy(func(){ Interceptors("id") })` stores interceptor IDs;
+  application code supplies implementations with `runtime.WithNamedInterceptors(...)`.
+- `PlannerContext.ModelClient(id)` applies model interceptors after cache and
+  tool-policy decorators and before tracing. Raw clients passed directly to
+  `planner.ConsumeStream` are not wrapped by runtime model interceptors.
+- Event interceptors run in `runtime.publish_hook` before `appendHookRunEvent`,
+  stream publication, and hook-bus publication. Dropped events must be absent
+  from all three surfaces.
+- Interceptor errors short-circuit the active path.
+
+## Workflow Composition
+
+- Plain `Workflow` plus `Step` remains source-compatible and generated through
+  `planner.NewSequentialWorkflowPlanner(...)`.
+- Graph helpers (`Parallel`, `Join`, `RequestInput`, `Loop`, `Branch`) generate
+  `planner.NewGraphWorkflowPlanner(...)`.
+- Graph workflow resume state is derived from stable node/tool-call IDs in
+  `ToolOutputs`, not from `len(ToolOutputs)`.
+- Parallel resume must schedule only unfinished ready nodes. Joins are virtual
+  dependency barriers. Loops must be bounded by `MaxIterations`.
+- `RequestInput` emits `AwaitTypedInput`; answers resume via
+  `Runtime.ProvideTypedInput` and enter `PlanResumeInput.TypedInputs`, not
+  `ToolOutputs`.
+- The branch default DSL helper is `BranchDefault` to avoid colliding with Goa's
+  `Default` helper in dot-imported designs.
+
+## Skills
+
+- `runtime/mcp/skills` is the shared discovery and read path for MCP
+  `SkillDirectory(...)` resources and model-facing `Toolset(FromSkills(...))`
+  tools.
+- `SKILL.md` frontmatter supports `id`, `name`, `description`,
+  `allowed_tools`, `preload`, and `reload`. Skills without frontmatter remain
+  compatible by deriving the ID from the directory name and description from the
+  first heading or text line.
+- Duplicate skill IDs, invalid frontmatter, unknown preload modes, and unknown
+  reload modes are hard discovery errors.
+- Generated `FromSkills(..., SkillPreload(...), SkillReload(...))`
+  registrations wire `runtime.NewSkillToolsetRegistration(...)`; model-facing
+  `list_skills` and `load_skill*` results include parsed metadata.
+
+## Debug Server
+
+- `runtime/agent/debug` is opt-in application code, not a DSL or generated API
+  surface.
+- `debug.NewServer(debug.Config{Runtime: rt})` defaults to `127.0.0.1:0`.
+- Debug responses use `{data:...}` and `{error:{code,message}}` JSON
+  envelopes for run snapshots, events, await state, memory, artifacts, and
+  workflow counts.
+- The debug server must read runtime stores without changing planner, hook,
+  stream, MCP, or generated API behavior.
 
 ## Where To Verify
 

@@ -334,6 +334,8 @@ type ResourceContent struct {
 	Text *string `json:"text,omitempty"`
 	// Base64 encoded binary content
 	Blob *string `json:"blob,omitempty"`
+	// Resource content metadata
+	Meta any `json:"_meta,omitempty"`
 }
 
 type ResourceInfo struct {
@@ -347,6 +349,8 @@ type ResourceInfo struct {
 	MimeType *string `json:"mimeType,omitempty"`
 	// Resource icons
 	Icons []*Icon `json:"icons,omitempty"`
+	// Resource metadata
+	Meta any `json:"_meta,omitempty"`
 }
 
 // Resources capability marker

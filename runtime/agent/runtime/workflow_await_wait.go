@@ -2,10 +2,13 @@ package runtime
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"strings"
 	"time"
+
+	jsonschema "github.com/santhosh-tekuri/jsonschema/v6"
 
 	"github.com/CaliLuke/loom-mcp/runtime/agent/api"
 	"github.com/CaliLuke/loom-mcp/runtime/agent/hooks"
@@ -23,6 +26,8 @@ func (r *Runtime) waitAwaitQueueItem(ctx context.Context, ctrl *interrupt.Contro
 		return r.waitAwaitQuestions(ctx, ctrl, input, base, st, turnID, timeout, it.Questions)
 	case planner.AwaitItemKindExternalTools:
 		return r.waitAwaitExternalTools(ctx, ctrl, input, base, st, turnID, timeout, it.ExternalTools)
+	case planner.AwaitItemKindTypedInput:
+		return waitAwaitTypedInput(ctx, ctrl, st, timeout, it.TypedInput)
 	default:
 		return nil, fmt.Errorf("unknown await item kind %q", it.Kind)
 	}
@@ -76,6 +81,62 @@ func waitAwaitClarification(ctx context.Context, ctrl *interrupt.Controller, bas
 		})
 	}
 	return nil, nil
+}
+
+func waitAwaitTypedInput(ctx context.Context, ctrl *interrupt.Controller, st *runLoopState, timeout time.Duration, typedInput *planner.AwaitTypedInput) ([]*planner.ToolResult, error) {
+	if typedInput == nil {
+		return nil, errors.New("await typed_input missing payload")
+	}
+	if typedInput.ID == "" {
+		return nil, errors.New("await typed_input: missing id")
+	}
+	if len(typedInput.Schema) == 0 || !json.Valid(typedInput.Schema) {
+		return nil, errors.New("await typed_input: invalid schema")
+	}
+	ans, err := ctrl.WaitProvideTypedInput(ctx, timeout)
+	if err != nil {
+		return nil, err
+	}
+	if ans == nil {
+		return nil, errors.New("await typed_input: nil answer")
+	}
+	if ans.ID != "" && ans.ID != typedInput.ID {
+		return nil, errors.New("unexpected await ID for typed_input")
+	}
+	if len(ans.Payload) == 0 || !json.Valid(ans.Payload) {
+		return nil, errors.New("await typed_input: invalid answer payload")
+	}
+	if err := validateTypedInputPayload(typedInput.Schema, ans.Payload); err != nil {
+		return nil, err
+	}
+	st.TypedInputs = append(st.TypedInputs, planner.TypedInputOutput{
+		ID:      typedInput.ID,
+		Payload: append(ans.Payload[:0:0], ans.Payload...),
+	})
+	return nil, nil
+}
+
+func validateTypedInputPayload(schemaJSON rawjson.Message, payload rawjson.Message) error {
+	var schemaDoc any
+	if err := json.Unmarshal(schemaJSON.RawMessage(), &schemaDoc); err != nil {
+		return fmt.Errorf("await typed_input: invalid schema: %w", err)
+	}
+	compiler := jsonschema.NewCompiler()
+	if err := compiler.AddResource("schema.json", schemaDoc); err != nil {
+		return fmt.Errorf("await typed_input: invalid schema: %w", err)
+	}
+	schema, err := compiler.Compile("schema.json")
+	if err != nil {
+		return fmt.Errorf("await typed_input: invalid schema: %w", err)
+	}
+	var value any
+	if err := json.Unmarshal(payload.RawMessage(), &value); err != nil {
+		return fmt.Errorf("await typed_input: invalid answer payload: %w", err)
+	}
+	if err := schema.Validate(value); err != nil {
+		return fmt.Errorf("await typed_input: answer does not match schema: %w", err)
+	}
+	return nil
 }
 
 func (r *Runtime) waitAwaitQuestions(ctx context.Context, ctrl *interrupt.Controller, input *RunInput, base *planner.PlanInput, st *runLoopState, turnID string, timeout time.Duration, questions *planner.AwaitQuestions) ([]*planner.ToolResult, error) {
@@ -193,25 +254,23 @@ func (r *Runtime) publishProvidedToolResult(ctx context.Context, input *RunInput
 	if idx < len(resultJSONs) {
 		resultJSON = resultJSONs[idx]
 	}
-	return r.publishHook(
-		ctx,
-		hooks.NewToolResultReceivedEvent(
-			base.RunContext.RunID,
-			input.AgentID,
-			base.RunContext.SessionID,
-			tr.Name,
-			tr.ToolCallID,
-			"",
-			tr.Result,
-			resultJSON,
-			tr.ServerData,
-			r.formatResultPreview(ctx, tr.Name, rawjson.Message(nil), tr.Result, tr.Bounds),
-			tr.Bounds,
-			0,
-			nil,
-			tr.RetryHint,
-			tr.Error,
-		),
-		turnID,
+	ev := hooks.NewToolResultReceivedEvent(
+		base.RunContext.RunID,
+		input.AgentID,
+		base.RunContext.SessionID,
+		tr.Name,
+		tr.ToolCallID,
+		"",
+		tr.Result,
+		resultJSON,
+		tr.ServerData,
+		r.formatResultPreview(ctx, tr.Name, rawjson.Message(nil), tr.Result, tr.Bounds),
+		tr.Bounds,
+		0,
+		nil,
+		tr.RetryHint,
+		tr.Error,
 	)
+	ev.Artifacts = artifactRefsFromContents(tr.Artifacts)
+	return r.publishHook(ctx, ev, turnID)
 }

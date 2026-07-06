@@ -46,7 +46,7 @@ const (
 // and runtime hooks. Returns the final agent output or an error if the workflow
 // fails. Generated code calls this from the workflow handler registered with
 // the engine.
-func (r *Runtime) ExecuteWorkflow(wfCtx engine.WorkflowContext, input *RunInput) (_ *RunOutput, retErr error) {
+func (r *Runtime) ExecuteWorkflow(wfCtx engine.WorkflowContext, input *RunInput) (out *RunOutput, retErr error) {
 	defer func() {
 		retErr = hooks.WrapRunCompletionError(retErr)
 	}()
@@ -55,6 +55,12 @@ func (r *Runtime) ExecuteWorkflow(wfCtx engine.WorkflowContext, input *RunInput)
 	if err != nil {
 		return nil, err
 	}
+	effectiveInput, err := runBeforeRunInterceptors(wfCtx.Context(), r.interceptorsForAgent(input.AgentID), *input, runCtx)
+	if err != nil {
+		return nil, err
+	}
+	input = &effectiveInput
+	runCtx = workflowRunContext(input)
 	defer func() {
 		r.storeWorkflowHandle(input.RunID, nil)
 		if r.reminders != nil {
@@ -66,8 +72,18 @@ func (r *Runtime) ExecuteWorkflow(wfCtx engine.WorkflowContext, input *RunInput)
 	}
 	finalStatus := runStatusSuccess
 	var finalErr error
-	defer r.publishWorkflowCompletion(wfCtx, input, turnID, &finalStatus, &finalErr)
-	out, status, err := r.executeWorkflowRun(wfCtx, reg, input, runCtx, turnID, ctrl)
+	defer func() {
+		afterOut, afterErr := runAfterRunInterceptors(wfCtx.Context(), r.interceptorsForAgent(input.AgentID), *input, runCtx, out, finalErr)
+		out = afterOut
+		if afterErr != nil {
+			finalErr = afterErr
+			retErr = afterErr
+			finalStatus = runStatusFailed
+		}
+		r.publishWorkflowCompletion(wfCtx, input, turnID, &finalStatus, &finalErr)
+	}()
+	var status string
+	out, status, err = r.executeWorkflowRun(wfCtx, reg, input, runCtx, turnID, ctrl)
 	finalStatus = status
 	finalErr = err
 	return out, err

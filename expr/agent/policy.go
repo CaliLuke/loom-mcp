@@ -39,6 +39,25 @@ type (
 		// RetryAndReflect configures tool-error reflection into planner retry
 		// hints for this agent.
 		RetryAndReflect *RetryAndReflectExpr
+		// Interceptors lists application-owned interceptor IDs for this agent.
+		Interceptors []string
+		// PreloadMemory configures bounded planner-input memory preload.
+		PreloadMemory *MemoryPreloadExpr
+	}
+
+	// MemoryScope identifies the memory source used by preload policy.
+	MemoryScope string
+
+	// MemoryPreloadExpr captures design-time memory preload policy.
+	MemoryPreloadExpr struct {
+		eval.DSLFunc
+
+		// Policy is the run policy expression this preload configuration belongs to.
+		Policy *RunPolicyExpr
+		// Scope selects the memory source.
+		Scope MemoryScope
+		// MaxResults caps the number of memory events injected into planner input.
+		MaxResults int
 	}
 
 	// RetryAndReflectExpr captures tool retry reflection policy for an agent.
@@ -119,6 +138,10 @@ const (
 	// HistoryModeCompress configures a summarization policy that
 	// compresses older turns once a trigger threshold is reached.
 	HistoryModeCompress HistoryMode = "compress"
+	// MemoryScopeCurrentRun scopes memory preload to the current run snapshot.
+	MemoryScopeCurrentRun MemoryScope = "current_run"
+	// MemoryScopeIndexed scopes memory preload to the configured memory searcher.
+	MemoryScopeIndexed MemoryScope = "indexed"
 )
 
 // EvalName returns a descriptive identifier for error reporting.
@@ -132,7 +155,27 @@ func (r *RunPolicyExpr) Validate() error {
 	r.validateMissingFields(verr)
 	r.validateHistory(verr)
 	r.validateRetryAndReflect(verr)
+	r.validateInterceptors(verr)
+	r.validatePreloadMemory(verr)
+	if len(verr.Errors) == 0 {
+		return nil
+	}
 	return verr
+}
+
+func (r *RunPolicyExpr) validateInterceptors(verr *eval.ValidationErrors) {
+	seen := make(map[string]struct{}, len(r.Interceptors))
+	for _, id := range r.Interceptors {
+		if id == "" {
+			verr.Add(r, "interceptor id must be non-empty")
+			continue
+		}
+		if _, ok := seen[id]; ok {
+			verr.Add(r, "duplicate interceptor id %q", id)
+			continue
+		}
+		seen[id] = struct{}{}
+	}
 }
 
 // validateMissingFields checks the missing-field policy cross-field contract.
@@ -156,6 +199,23 @@ func (r *RunPolicyExpr) validateRetryAndReflect(verr *eval.ValidationErrors) {
 	}
 	if r.RetryAndReflect.MaxRetries < 0 {
 		verr.Add(r.RetryAndReflect, "RetryAndReflect MaxRetries must be non-negative")
+	}
+}
+
+func (r *RunPolicyExpr) validatePreloadMemory(verr *eval.ValidationErrors) {
+	if r.PreloadMemory == nil {
+		return
+	}
+	switch r.PreloadMemory.Scope {
+	case "":
+		verr.Add(r.PreloadMemory, "PreloadMemory requires a scope")
+	case MemoryScopeCurrentRun, MemoryScopeIndexed:
+		// ok
+	default:
+		verr.Add(r.PreloadMemory, "unknown PreloadMemory scope %q", r.PreloadMemory.Scope)
+	}
+	if r.PreloadMemory.MaxResults < 0 {
+		verr.Add(r.PreloadMemory, "PreloadMemory MaxResults must be non-negative")
 	}
 }
 
@@ -229,4 +289,12 @@ func (r *RetryAndReflectExpr) EvalName() string {
 		return "retry and reflect policy"
 	}
 	return fmt.Sprintf("retry and reflect policy for agent %q", r.Policy.Agent.Name)
+}
+
+// EvalName returns a descriptive identifier for error reporting.
+func (m *MemoryPreloadExpr) EvalName() string {
+	if m == nil || m.Policy == nil || m.Policy.Agent == nil {
+		return "memory preload policy"
+	}
+	return fmt.Sprintf("memory preload policy for agent %q", m.Policy.Agent.Name)
 }

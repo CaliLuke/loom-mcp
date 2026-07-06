@@ -16,6 +16,8 @@ func TestGolden_SkillsToolset_RegisterUsedToolsets(t *testing.T) {
 	require.Contains(t, registry, `Roots: []string{`)
 	require.Contains(t, registry, `".agents/skills",`)
 	require.Contains(t, registry, `"shared/skills",`)
+	require.Contains(t, registry, `Preload: agentsruntime.SkillPreloadOnStart,`)
+	require.Contains(t, registry, `Reload: agentsruntime.SkillReloadPerCall,`)
 	require.NotContains(t, registry, `WithSkillsExecutor`)
 	require.NotContains(t, registry, `"fmt"`)
 	require.NotContains(t, registry, `runtime/agent/planner`)

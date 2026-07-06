@@ -26,6 +26,27 @@ Use this skill for `loom-mcp` work in this repo. Keep `AGENTS.md` short and keep
 6. Implement or refactor non-generated logic.
 7. Verify with formatting, lint, and relevant tests.
 
+## Planning Quality Rules
+
+- Multi-file or multi-layer plans must start with a current-contract inventory
+  that names the existing structs, files, generated surfaces, and invariants the
+  work will change.
+- Plans must use concrete Loom DSL shapes, runtime type names, generated-code
+  owners, test files, and proof commands. Avoid placeholder feature names once
+  code inspection has revealed the owner.
+- Contract tests may intentionally compile-fail before implementation, but the
+  plan must mark them as contract tests and must not run package proof commands
+  until the symbols those tests import have been added.
+- Before accepting a plan, check for impossible or wrongly placed tests: planner
+  behavior belongs in `runtime/agent/planner`, runtime context and model-client
+  decoration belong in `runtime/agent/runtime`, MCP skill resources belong in
+  `runtime/mcp/skills`, and model-facing skill tools belong in
+  `runtime/agent/runtime`.
+- Framework-scale DSL, codegen, runtime, or MCP feature work must include the
+  full repo gates expected by AGENTS.md: `make lint`, `make test`, `make itest`,
+  and `make verify-mcp-local`, with targeted package commands only as earlier
+  red-green checks.
+
 ## Current Product Rules
 
 - Runtime planners have two streaming modes only:
@@ -44,6 +65,13 @@ Use this skill for `loom-mcp` work in this repo. Keep `AGENTS.md` short and keep
 - MCP skill exposure is design-owned too: declare local agent skill roots with
   `SkillDirectory(...)`, then let generated JSON-RPC and SDK servers expose
   `skill://` entries through `resources/list` and `resources/read`.
+- Model-facing skill exposure is design-owned through
+  `Toolset(FromSkills(..., SkillPreload(...), SkillReload(...)))`; generated
+  agent registration should wire these skills into `runtime/agent/runtime`
+  skill tools rather than MCP resource handlers.
+- Local skills can declare structured `SKILL.md` frontmatter (`id`, `name`,
+  `description`, `allowed_tools`, `preload`, `reload`). Duplicate IDs and
+  unknown load modes are hard errors, not silent skips.
 - Generated MCP adapters can opt into large-catalog discovery with
   `MCPAdapterOptions.ToolSearch`, which hides unpinned tools from `tools/list`
   behind synthetic `search_tools` and `call_tool` entries without disabling

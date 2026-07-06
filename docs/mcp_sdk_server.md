@@ -57,6 +57,12 @@ at startup, lists each child directory with a `SKILL.md` file as
 `resources/read` can read `SKILL.md`, `_manifest`, and supporting files that
 stay inside the skill directory.
 
+`SKILL.md` may include structured YAML frontmatter (`id`, `name`,
+`description`, `allowed_tools`, `preload`, and `reload`). Missing frontmatter is
+compatible with older skills: the directory name becomes the ID and the first
+heading or text line becomes the description. Duplicate IDs and invalid
+metadata fail resource discovery.
+
 ## Request Context Callback
 
 `RequestContext` is the supported extension point for propagating

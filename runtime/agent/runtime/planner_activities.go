@@ -35,17 +35,9 @@ func (r *Runtime) PlanStartActivity(ctx context.Context, input *PlanActivityInpu
 	if err != nil {
 		return nil, err
 	}
-	var rems []reminder.Reminder
-	if r.reminders != nil {
-		rems = r.reminders.Snapshot(input.RunID)
-	}
-	msgs := r.applyHistoryPolicy(ctx, reg, input.Messages)
-	planInput := &planner.PlanInput{
-		Messages:   msgs,
-		RunContext: input.RunContext,
-		Agent:      agentCtx,
-		Events:     events,
-		Reminders:  rems,
+	planInput, err := r.startPlanInput(ctx, reg, agentCtx, events, input)
+	if err != nil {
+		return nil, err
 	}
 	result, err := r.planStart(ctx, reg, planInput)
 	if err != nil {
@@ -75,6 +67,27 @@ func (r *Runtime) PlanStartActivity(ctx context.Context, input *PlanActivityInpu
 	return out, nil
 }
 
+func (r *Runtime) startPlanInput(
+	ctx context.Context,
+	reg *AgentRegistration,
+	agentCtx planner.PlannerContext,
+	events planner.PlannerEvents,
+	input *PlanActivityInput,
+) (*planner.PlanInput, error) {
+	preloadedMemory, err := r.preloadMemory(ctx, reg.Policy.PreloadMemory, string(input.AgentID), input.RunContext, agentCtx.Memory())
+	if err != nil {
+		return nil, err
+	}
+	return &planner.PlanInput{
+		Messages:        r.applyHistoryPolicy(ctx, reg, input.Messages),
+		RunContext:      input.RunContext,
+		Agent:           agentCtx,
+		Events:          events,
+		Reminders:       r.reminderSnapshot(input.RunID),
+		PreloadedMemory: preloadedMemory,
+	}, nil
+}
+
 // PlanResumeActivity executes the planner's PlanResume method.
 //
 // Advanced & generated integration
@@ -98,7 +111,10 @@ func (r *Runtime) PlanResumeActivity(ctx context.Context, input *PlanActivityInp
 	if err != nil {
 		return nil, err
 	}
-	planInput := r.resumePlanInput(ctx, reg, agentCtx, events, input, toolOutputs)
+	planInput, err := r.resumePlanInput(ctx, reg, agentCtx, events, input, toolOutputs)
+	if err != nil {
+		return nil, err
+	}
 	result, err := r.planResume(ctx, reg, planInput)
 	if err != nil {
 		if errors.Is(err, model.ErrRateLimited) {
@@ -133,20 +149,43 @@ func (r *Runtime) resumePlanInput(
 	events planner.PlannerEvents,
 	input *PlanActivityInput,
 	toolOutputs []*planner.ToolOutput,
-) *planner.PlanResumeInput {
-	var rems []reminder.Reminder
-	if r.reminders != nil {
-		rems = r.reminders.Snapshot(input.RunID)
+) (*planner.PlanResumeInput, error) {
+	preloadedMemory, err := r.preloadMemory(ctx, reg.Policy.PreloadMemory, string(input.AgentID), input.RunContext, agentCtx.Memory())
+	if err != nil {
+		return nil, err
 	}
 	return &planner.PlanResumeInput{
-		Messages:    r.applyHistoryPolicy(ctx, reg, input.Messages),
-		RunContext:  input.RunContext,
-		Agent:       agentCtx,
-		Events:      events,
-		ToolOutputs: toolOutputs,
-		Finalize:    input.Finalize,
-		Reminders:   rems,
+		Messages:        r.applyHistoryPolicy(ctx, reg, input.Messages),
+		RunContext:      input.RunContext,
+		Agent:           agentCtx,
+		Events:          events,
+		ToolOutputs:     toolOutputs,
+		TypedInputs:     cloneTypedInputOutputs(input.TypedInputs),
+		Finalize:        input.Finalize,
+		Reminders:       r.reminderSnapshot(input.RunID),
+		PreloadedMemory: preloadedMemory,
+	}, nil
+}
+
+func cloneTypedInputOutputs(in []planner.TypedInputOutput) []planner.TypedInputOutput {
+	if len(in) == 0 {
+		return nil
 	}
+	out := make([]planner.TypedInputOutput, len(in))
+	for i, item := range in {
+		out[i] = planner.TypedInputOutput{
+			ID:      item.ID,
+			Payload: append(item.Payload[:0:0], item.Payload...),
+		}
+	}
+	return out
+}
+
+func (r *Runtime) reminderSnapshot(runID string) []reminder.Reminder {
+	if r.reminders == nil {
+		return nil
+	}
+	return r.reminders.Snapshot(runID)
 }
 
 // planStart invokes the planner's PlanStart method with tracing.

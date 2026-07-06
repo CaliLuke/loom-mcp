@@ -237,6 +237,7 @@ func (e *toolBatchExec) publishToolResultReceived(ctx context.Context, call plan
 		tr.RetryHint,
 		tr.Error,
 	)
+	ev.Artifacts = artifactRefsFromContents(tr.Artifacts)
 	return e.r.publishHook(ctx, ev, e.turnID)
 }
 

@@ -53,6 +53,7 @@ func (r *Runtime) encodeToolEvents(ctx context.Context, events []*planner.ToolRe
 			ToolCallID:    ev.ToolCallID,
 			ChildrenCount: ev.ChildrenCount,
 			RunLink:       ev.RunLink,
+			Artifacts:     artifactRefsFromContents(ev.Artifacts),
 		})
 	}
 	return out, nil
@@ -103,6 +104,7 @@ func (r *Runtime) encodeToolEventsForPlanning(ctx context.Context, events []*pla
 			ToolCallID:          ev.ToolCallID,
 			ChildrenCount:       ev.ChildrenCount,
 			RunLink:             ev.RunLink,
+			Artifacts:           artifactRefsFromContents(ev.Artifacts),
 		})
 	}
 	return out, nil
@@ -171,6 +173,9 @@ func (r *Runtime) buildPlannerToolOutput(
 	if result.Name != "" && result.Name != call.Name {
 		return nil, fmt.Errorf("build planner tool outputs: result name %s does not match call %s", result.Name, call.Name)
 	}
+	if err := r.persistToolResultArtifacts(ctx, call, result); err != nil {
+		return nil, err
+	}
 	output := &planner.ToolOutput{
 		Name:                call.Name,
 		ToolCallID:          call.ToolCallID,
@@ -183,6 +188,7 @@ func (r *Runtime) buildPlannerToolOutput(
 		Error:               result.Error,
 		RetryHint:           result.RetryHint,
 		Telemetry:           result.Telemetry,
+		Artifacts:           artifactRefsFromContents(result.Artifacts),
 	}
 	if result.ResultOmitted {
 		return output, nil
@@ -220,6 +226,7 @@ func (r *Runtime) decodeToolOutputs(events []*api.ToolCallOutput) ([]*planner.To
 			Error:               ev.Error,
 			RetryHint:           ev.RetryHint,
 			Telemetry:           ev.Telemetry,
+			Artifacts:           cloneArtifactRefs(ev.Artifacts),
 		})
 	}
 	return out, nil
@@ -249,6 +256,7 @@ func encodePlannerToolOutputs(outputs []*planner.ToolOutput) ([]*api.ToolCallOut
 			Error:               output.Error,
 			RetryHint:           output.RetryHint,
 			Telemetry:           output.Telemetry,
+			Artifacts:           cloneArtifactRefs(output.Artifacts),
 		})
 	}
 	return out, nil

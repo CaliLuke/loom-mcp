@@ -325,6 +325,7 @@ func (r *Runtime) buildNextResumeRequest(
 	agentID agent.Ident,
 	base *planner.PlanInput,
 	toolOutputs []*planner.ToolOutput,
+	typedInputs []planner.TypedInputOutput,
 	nextAttempt *int,
 ) (PlanActivityInput, error) {
 	resumeCtx := base.RunContext
@@ -344,6 +345,7 @@ func (r *Runtime) buildNextResumeRequest(
 		Messages:    plannerMsgs,
 		RunContext:  resumeCtx,
 		ToolOutputs: encodedToolOutputs,
+		TypedInputs: cloneTypedInputOutputs(typedInputs),
 	}
 	if err := enforcePlanActivityInputBudget(out); err != nil {
 		return PlanActivityInput{}, err

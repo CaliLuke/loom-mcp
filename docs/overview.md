@@ -71,6 +71,11 @@ handling, retries, and tracing baked in.
 Configure a memory store and stream sink once. The runtime automatically persists transcripts,
 publishes real‑time events, and instruments everything with OTEL‑aware logging, metrics, and traces.
 
+For local development, applications may opt into `runtime/agent/debug`. The
+debug server binds to `127.0.0.1:0` by default and exposes run snapshots,
+events, awaits, memory, artifacts, and workflow counts through JSON debug
+endpoints. It is not part of generated service or MCP APIs.
+
 ---
 
 ## Toolsets: Where the Magic Happens

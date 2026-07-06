@@ -267,6 +267,14 @@ func (w *temporalWorkflowContext) ConfirmationDecisions() engine.Receiver[*api.C
 	}
 }
 
+func (w *temporalWorkflowContext) TypedInputAnswers() engine.Receiver[*api.TypedInputAnswer] {
+	ch := workflow.GetSignalChannel(w.ctx, api.SignalProvideTypedInput)
+	return &temporalReceiver[*api.TypedInputAnswer]{
+		ctx: w.ctx,
+		ch:  ch,
+	}
+}
+
 func (w *temporalWorkflowContext) Logger() telemetry.Logger {
 	return w.logger
 }

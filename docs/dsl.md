@@ -155,8 +155,17 @@ overrides remain operational at the runtime/store layer.
 | `Agent(name, description, dsl)`   | Inside `Service`            | Declares an LLM agent with tool usage/exports and run policy    |
 | `Use(value, dsl?)`                | Inside `Agent`              | Declares toolset consumption (referencing or inline definition) |
 | `Export(value, dsl?)`             | Inside `Agent` or `Service` | Declares toolsets exposed to other agents                       |
-| `Workflow(dsl)`                   | Inside `Agent`              | Defines a generated sequential workflow planner                 |
-| `Step(name, tool, payloadJSON)`    | Inside `Workflow`           | Adds one deterministic tool-call step                           |
+| `Workflow(dsl)`                   | Inside `Agent`              | Defines a generated deterministic workflow planner              |
+| `Step(name, tool, payloadJSON)`    | Inside `Workflow`           | Adds one deterministic tool-call step or graph node             |
+| `Parallel(dsl)`                   | Inside `Workflow`           | Declares concurrently ready step nodes                          |
+| `Join(name, deps...)`             | Inside `Workflow`           | Declares a graph dependency barrier                             |
+| `RequestInput(name, title, schemaJSON)` | Inside `Workflow`     | Declares a schema-typed human input graph node                  |
+| `Loop(name, tool, payload, opts...)` | Inside `Workflow`         | Declares a bounded repeated tool node                           |
+| `MaxIterations(n)`                | Argument to `Loop`          | Caps loop iterations                                            |
+| `UntilJSONPath(step, path, equals)` | Argument to `Loop`        | Stops loop when a result JSONPath equals a value                |
+| `Branch(name, fromStep, opts...)` | Inside `Workflow`           | Declares deterministic branch selection                         |
+| `Case(path, equals, target)`      | Argument to `Branch`        | Routes to target node when JSONPath equals a value              |
+| `BranchDefault(target)`           | Argument to `Branch`        | Routes to target node when no case matches                      |
 | `FinalMessage(message)`           | Inside `Workflow`           | Sets the assistant message after workflow completion            |
 | `AgentToolset(svc, agent, ts)`    | Top-level or inside `Use`   | References a toolset exported by another agent                  |
 | `UseAgentToolset(svc, agent, ts)` | Inside `Agent`              | Combines `AgentToolset` with `Use`                              |
@@ -170,7 +179,9 @@ overrides remain operational at the runtime/store layer.
 | `Toolset(args...)`                | Top-level                  | Defines a provider-owned toolset            |
 | `FromMCP(service, toolset)`       | Argument to `Toolset`      | Configures MCP server as toolset provider   |
 | `FromRegistry(registry, toolset)` | Argument to `Toolset`      | Configures registry as toolset provider     |
-| `FromSkills(roots...)`            | Argument to `Toolset`      | Exposes skill files as model-facing tools   |
+| `FromSkills(roots..., opts...)`    | Argument to `Toolset`      | Exposes skill files as model-facing tools   |
+| `SkillPreload(mode)`              | Argument to `FromSkills`   | Configures skill instruction preload mode   |
+| `SkillReload(mode)`               | Argument to `FromSkills`   | Configures skill file reload mode           |
 | `Tags(values...)`                 | Inside `Toolset` or `Tool` | Attaches metadata labels for categorization |
 
 ### Tool Functions
@@ -305,9 +316,14 @@ Notes:
 | `TimeBudget(duration)`             | Inside `RunPolicy`        | Maximum wall-clock execution time (e.g., "5m")                               |
 | `InterruptsAllowed(bool)`          | Inside `RunPolicy`        | Enables user interruption handling                                           |
 | `OnMissingFields(action)`          | Inside `RunPolicy`        | Validation behavior: `""`, `"finalize"`, `"await_clarification"`, `"resume"` |
+| `Interceptors(ids...)`             | Inside `RunPolicy`        | Declares application-owned runtime interceptor IDs                           |
 | `RetryAndReflect(opts...)`         | Inside `RunPolicy`        | Converts tool errors into planner retry hints                                |
 | `MaxRetries(n)`                    | Argument to `RetryAndReflect` | Per-run/tool reflected retry budget                                      |
 | `ErrorIfRetryExceeded(bool)`       | Argument to `RetryAndReflect` | Return the original tool error after retry budget exhaustion              |
+| `PreloadMemory(opts...)`           | Inside `RunPolicy`        | Injects bounded memory snippets into planner input                           |
+| `MemoryScopeCurrentRun()`          | Argument to `PreloadMemory` | Reads snippets from the current run memory snapshot                        |
+| `MemoryScopeIndexed()`             | Argument to `PreloadMemory` | Reads snippets through the configured runtime memory searcher               |
+| `MemoryMaxResults(n)`              | Argument to memory helpers | Caps memory tool or preload result count                                     |
 
 ### Timing Functions
 
@@ -676,12 +692,80 @@ resources to MCP clients, while `FromSkills` makes those authoring assets callab
 planner.
 
 ```go
-var LocalSkills = Toolset(FromSkills(".agents/skills", "shared/skills"))
+var LocalSkills = Toolset(FromSkills(
+    ".agents/skills",
+    "shared/skills",
+    SkillPreload(SkillPreloadOnStart),
+    SkillReload(SkillReloadPerCall),
+))
 
 Agent("assistant", "Skill-aware assistant", func() {
     Use(LocalSkills)
 })
 ```
+
+Skill `SKILL.md` files may include structured YAML frontmatter:
+
+```markdown
+---
+id: code-review
+name: Code Review
+description: Review code changes for correctness.
+allowed_tools:
+  - shell
+preload: on_start
+reload: per_call
+---
+# Code Review
+```
+
+Without frontmatter, the skill ID is the child directory name and the
+description is derived from the first heading or first non-empty text line.
+Duplicate skill IDs and unknown `preload` or `reload` modes fail discovery.
+
+### Artifact-Backed Toolsets
+
+`FromArtifacts` exposes persisted run artifacts as model-facing tools. The generated agent
+package registers `list_artifacts` and `load_artifact` through the runtime; application code
+must configure an artifact store with `runtime.WithArtifactStore(...)`.
+
+```go
+var Artifacts = Toolset("artifacts", FromArtifacts(
+    MaxArtifactBytes(65536),
+    MaxArtifacts(50),
+))
+
+Agent("assistant", "Artifact-aware assistant", func() {
+    Use(Artifacts)
+})
+```
+
+Tools return `artifact.Content` values on `planner.ToolResult.Artifacts`; the runtime stores
+the bodies and carries only `artifact.Ref` values through planner outputs, hook events, API
+envelopes, and memory.
+
+### Memory-Backed Toolsets
+
+`FromMemory` exposes bounded memory lookup as a model-facing `load_memory` tool. The generated
+agent package registers the toolset through the runtime; application code should configure
+`runtime.WithMemoryStore(...)` for current-run lookup and may configure
+`runtime.WithMemorySearcher(...)` for indexed lookup.
+
+```go
+var Memory = Toolset("memory", FromMemory(MemoryMaxResults(20)))
+
+Agent("assistant", "Memory-aware assistant", func() {
+    Use(Memory)
+    RunPolicy(func() {
+        PreloadMemory(MemoryScopeCurrentRun(), MemoryMaxResults(5))
+    })
+})
+```
+
+`memory.load_memory` accepts `scope`, `event_types`, `labels`, and `limit`, and returns
+`events`, `truncated`, and `scope`. `scope:"current_run"` can fall back to the configured
+memory store. `scope:"indexed"` requires `runtime.WithMemorySearcher(...)`; otherwise the
+tool returns a structured `unsupported_operation` retry hint.
 
 ---
 
@@ -1102,6 +1186,21 @@ RunPolicy(func() {
 interceptor converts that failure into a planner retry hint so the planner can repair the tool call
 arguments on a follow-up turn.
 
+`Interceptors("audit", "safety")` records design-owned interceptor IDs in generated registration.
+Application runtime wiring provides the concrete implementations with
+`runtime.WithNamedInterceptors(...)`; generated code does not instantiate policy-specific
+interceptors itself.
+
+`PreloadMemory` is opt-in. It injects only bounded snippets into `planner.PlanInput` and
+`planner.PlanResumeInput`; default transcript/history behavior is unchanged. Use explicit
+`Toolset("memory", FromMemory(...))` tools when the planner should ask for additional memory.
+
+```go
+RunPolicy(func() {
+    PreloadMemory(MemoryScopeCurrentRun(), MemoryMaxResults(5))
+})
+```
+
 ### DefaultCaps Options
 
 | Option                             | Purpose                                |
@@ -1193,9 +1292,10 @@ headroom so the final planner turn and terminal cleanup can still complete.
 
 ## Workflow Composition
 
-`Workflow` defines a generated sequential planner for deterministic multi-tool flows. Each `Step`
-emits one tool request with a stable tool call ID equal to the step name. The generated agent config
-still accepts `Planner`; when `cfg.Planner` is provided it overrides the generated workflow planner.
+`Workflow` defines a generated deterministic planner for multi-tool flows. A plain sequence of
+`Step` calls remains source-compatible and emits one tool request at a time. Graph helpers switch
+the generated planner to `planner.NewGraphWorkflowPlanner(...)`, where node completion is keyed by
+stable step IDs rather than `len(ToolOutputs)`.
 
 ```go
 Agent("release", "Release workflow", func() {
@@ -1207,6 +1307,38 @@ Agent("release", "Release workflow", func() {
     })
 })
 ```
+
+Graph workflows can express parallel fan-out, joins, bounded loops, and deterministic branches:
+
+```go
+Workflow(func() {
+    Parallel(func() {
+        Step("draft", "release.notes.draft", `{"audience":"operators"}`)
+        Step("review", "release.notes.review", `{"strict":true}`)
+    })
+    Join("ready", "draft", "review")
+    RequestInput("approval", "Approval", `{
+        "type":"object",
+        "properties":{"approved":{"type":"boolean"}},
+        "required":["approved"]
+    }`)
+    Loop("revise", "release.notes.revise", `{}`, MaxIterations(2), UntilJSONPath("revise#1", "$.done", "true"))
+    Branch("route", "revise#1",
+        Case("$.approved", "true", "publish"),
+        BranchDefault("review"),
+    )
+    Step("publish", "release.notes.publish", `{}`)
+    FinalMessage("workflow complete")
+})
+```
+
+`RequestInput` emits a typed human-input await item with the supplied JSON schema.
+The answer resumes through `Runtime.ProvideTypedInput` and is available to the
+generated graph planner as `PlanResumeInput.TypedInputs`; it does not enter
+`ToolOutputs`.
+
+`BranchDefault` is named to avoid colliding with Goa's `Default` DSL helper when both DSL packages
+are dot-imported.
 
 ---
 
@@ -1291,10 +1423,11 @@ Service("calculator", func() {
 ```
 
 `SkillDirectory(root)` scans the root at runtime. Each child directory with a
-`SKILL.md` file becomes a skill namespace. Generated MCP servers list
-`skill://<skill>/SKILL.md` and `skill://<skill>/_manifest`; clients may also
-read supporting files with `skill://<skill>/<path>` when the path stays inside
-the skill directory.
+`SKILL.md` file becomes a skill namespace. Structured frontmatter can override
+the skill ID, display name, description, allowed tools, preload mode, and reload
+mode. Generated MCP servers list `skill://<skill>/SKILL.md` and
+`skill://<skill>/_manifest`; clients may also read supporting files with
+`skill://<skill>/<path>` when the path stays inside the skill directory.
 
 ### MCP Capabilities
 

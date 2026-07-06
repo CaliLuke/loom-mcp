@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/CaliLuke/loom-mcp/runtime/agent"
+	"github.com/CaliLuke/loom-mcp/runtime/agent/artifact"
 	"github.com/CaliLuke/loom-mcp/runtime/agent/rawjson"
 	"github.com/CaliLuke/loom-mcp/runtime/agent/telemetry"
 	"github.com/CaliLuke/loom-mcp/runtime/agent/tools"
@@ -86,6 +87,8 @@ type (
 		RetryHint *RetryHintData
 		// ErrorMessage is the plain-text tool failure message.
 		ErrorMessage string
+		// Artifacts contains persisted artifact references associated with the result.
+		Artifacts []artifact.Ref
 	}
 
 	// RetryHintData stores the durable retry guidance associated with a tool result
@@ -139,6 +142,7 @@ const (
 	eventFieldTelemetry             = "telemetry"
 	eventFieldRetryHint             = "retry_hint"
 	eventFieldErrorMessage          = "error_message"
+	eventFieldArtifacts             = "artifacts"
 	eventFieldNote                  = "note"
 	eventFieldText                  = "text"
 	eventFieldSignature             = "signature"
@@ -395,6 +399,9 @@ func (d ToolResultData) ToMap() map[string]any {
 	if d.ErrorMessage != "" {
 		m[eventFieldErrorMessage] = d.ErrorMessage
 	}
+	if len(d.Artifacts) > 0 {
+		m[eventFieldArtifacts] = cloneArtifactRefs(d.Artifacts)
+	}
 	return m
 }
 
@@ -482,6 +489,10 @@ func decodeToolResultOptionalFields(d *ToolResultData, m map[string]any) error {
 		return err
 	}
 	d.ErrorMessage, err = optionalStringField(EventToolResult, m, eventFieldErrorMessage)
+	if err != nil {
+		return err
+	}
+	d.Artifacts, err = optionalArtifactRefsField(EventToolResult, m, eventFieldArtifacts)
 	return err
 }
 
@@ -866,7 +877,41 @@ func cloneToolResultData(data ToolResultData) ToolResultData {
 	data.Bounds = cloneBounds(data.Bounds)
 	data.Telemetry = cloneToolTelemetry(data.Telemetry)
 	data.RetryHint = cloneRetryHint(data.RetryHint)
+	data.Artifacts = cloneArtifactRefs(data.Artifacts)
 	return data
+}
+
+func optionalArtifactRefsField(event EventType, m map[string]any, field string) ([]artifact.Ref, error) {
+	value, ok := m[field]
+	if !ok || value == nil {
+		return nil, nil
+	}
+	if refs, ok := value.([]artifact.Ref); ok {
+		return cloneArtifactRefs(refs), nil
+	}
+	b, err := json.Marshal(value)
+	if err != nil {
+		return nil, fmt.Errorf("memory: %s field %q must contain artifact refs", event, field)
+	}
+	var refs []artifact.Ref
+	if err := json.Unmarshal(b, &refs); err != nil {
+		return nil, fmt.Errorf("memory: %s field %q must contain artifact refs: %w", event, field, err)
+	}
+	return cloneArtifactRefs(refs), nil
+}
+
+func cloneArtifactRefs(refs []artifact.Ref) []artifact.Ref {
+	if len(refs) == 0 {
+		return nil
+	}
+	cloned := make([]artifact.Ref, len(refs))
+	for i, ref := range refs {
+		cloned[i] = ref
+		if len(ref.Metadata) > 0 {
+			cloned[i].Metadata = maps.Clone(ref.Metadata)
+		}
+	}
+	return cloned
 }
 
 func cloneThinkingData(data ThinkingData) ThinkingData {

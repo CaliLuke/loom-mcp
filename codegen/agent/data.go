@@ -175,6 +175,8 @@ type (
 	WorkflowData struct {
 		// Steps are executed sequentially.
 		Steps []*WorkflowStepData
+		// GraphNodes are executed by graph workflow planners.
+		GraphNodes []*WorkflowNodeData
 		// FinalMessage is emitted after all steps complete.
 		FinalMessage string
 	}
@@ -187,6 +189,49 @@ type (
 		Tool string
 		// Payload is the raw JSON payload literal.
 		Payload string
+	}
+
+	// WorkflowNodeData represents one generated graph workflow node.
+	WorkflowNodeData struct {
+		ID            string
+		Kind          string
+		Tool          string
+		Payload       string
+		Title         string
+		Schema        string
+		DependsOn     []string
+		Loop          *WorkflowLoopData
+		Branch        *WorkflowBranchData
+		MaxIterations int
+	}
+
+	// WorkflowLoopData represents bounded loop node data.
+	WorkflowLoopData struct {
+		Tool          string
+		Payload       string
+		MaxIterations int
+		Until         *WorkflowPredicateData
+	}
+
+	// WorkflowBranchData represents generated branch node data.
+	WorkflowBranchData struct {
+		FromStep string
+		Cases    []*WorkflowBranchCaseData
+		Default  string
+	}
+
+	// WorkflowBranchCaseData represents one branch case.
+	WorkflowBranchCaseData struct {
+		Path   string
+		Equals string
+		Target string
+	}
+
+	// WorkflowPredicateData represents generated JSONPath predicate data.
+	WorkflowPredicateData struct {
+		Step   string
+		Path   string
+		Equals string
 	}
 
 	// RunPolicyData represents the runtime execution constraints and resource
@@ -231,6 +276,10 @@ type (
 		Cache CacheData
 		// RetryAndReflect captures tool-error retry reflection policy.
 		RetryAndReflect *RetryAndReflectData
+		// NamedInterceptors lists application-owned interceptor IDs.
+		NamedInterceptors []string
+		// PreloadMemory captures bounded planner-input memory preload policy.
+		PreloadMemory *MemoryPreloadData
 	}
 
 	// RetryAndReflectData represents generated retry reflection policy.
@@ -240,6 +289,14 @@ type (
 		MaxRetries int
 		// ErrorIfRetryExceeded returns the original tool error after retries are exhausted.
 		ErrorIfRetryExceeded bool
+	}
+
+	// MemoryPreloadData represents generated memory preload policy.
+	MemoryPreloadData struct {
+		// Scope selects the runtime memory source.
+		Scope string
+		// MaxResults bounds the number of events injected into planner input.
+		MaxResults int
 	}
 
 	// HistoryData represents the configured history policy for an agent. It
@@ -877,6 +934,7 @@ func newWorkflowData(expr *agentsExpr.WorkflowExpr) *WorkflowData {
 	workflow := &WorkflowData{
 		FinalMessage: expr.FinalMessage,
 		Steps:        make([]*WorkflowStepData, 0, len(expr.Steps)),
+		GraphNodes:   make([]*WorkflowNodeData, 0, len(expr.GraphNodes)),
 	}
 	for _, step := range expr.Steps {
 		if step == nil {
@@ -887,6 +945,49 @@ func newWorkflowData(expr *agentsExpr.WorkflowExpr) *WorkflowData {
 			Tool:    step.Tool,
 			Payload: step.Payload,
 		})
+	}
+	for _, node := range expr.GraphNodes {
+		if node == nil {
+			continue
+		}
+		data := &WorkflowNodeData{
+			ID:        node.ID,
+			Kind:      string(node.Kind),
+			Tool:      node.Tool,
+			Payload:   node.Payload,
+			Title:     node.Title,
+			Schema:    node.Schema,
+			DependsOn: append([]string(nil), node.DependsOn...),
+		}
+		if node.Loop != nil {
+			data.Loop = &WorkflowLoopData{
+				Tool:          node.Loop.Tool,
+				Payload:       node.Loop.Payload,
+				MaxIterations: node.Loop.MaxIterations,
+			}
+			if node.Loop.Until != nil {
+				data.Loop.Until = &WorkflowPredicateData{
+					Step:   node.Loop.Until.Step,
+					Path:   node.Loop.Until.Path,
+					Equals: node.Loop.Until.Equals,
+				}
+			}
+		}
+		if node.Branch != nil {
+			data.Branch = &WorkflowBranchData{
+				FromStep: node.Branch.FromStep,
+				Default:  node.Branch.Default,
+				Cases:    make([]*WorkflowBranchCaseData, 0, len(node.Branch.Cases)),
+			}
+			for _, branchCase := range node.Branch.Cases {
+				data.Branch.Cases = append(data.Branch.Cases, &WorkflowBranchCaseData{
+					Path:   branchCase.Path,
+					Equals: branchCase.Equals,
+					Target: branchCase.Target,
+				})
+			}
+		}
+		workflow.GraphNodes = append(workflow.GraphNodes, data)
 	}
 	return workflow
 }

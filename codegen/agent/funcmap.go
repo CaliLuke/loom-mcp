@@ -3,6 +3,7 @@ package codegen
 import (
 	"strings"
 
+	agentsExpr "github.com/CaliLuke/loom-mcp/expr/agent"
 	goacodegen "github.com/CaliLuke/loom/codegen"
 	goaexpr "github.com/CaliLuke/loom/expr"
 )
@@ -100,6 +101,30 @@ func templateFuncMap() map[string]any {
 		"isMCPBacked": isMCPBackedToolset,
 		// isSkillsBacked reports whether the given toolset is backed by model-facing skills.
 		"isSkillsBacked": isSkillsBackedToolset,
+		"skillPreloadRef": func(mode agentsExpr.SkillPreloadMode) string {
+			switch mode {
+			case agentsExpr.SkillPreloadOnStart:
+				return "agentsruntime.SkillPreloadOnStart"
+			case agentsExpr.SkillPreloadNone, "":
+				return "agentsruntime.SkillPreloadNone"
+			default:
+				return "agentsruntime.SkillPreloadNone"
+			}
+		},
+		"skillReloadRef": func(mode agentsExpr.SkillReloadMode) string {
+			switch mode {
+			case agentsExpr.SkillReloadPerCall:
+				return "agentsruntime.SkillReloadPerCall"
+			case agentsExpr.SkillReloadNever, "":
+				return "agentsruntime.SkillReloadNever"
+			default:
+				return "agentsruntime.SkillReloadNever"
+			}
+		},
+		// isArtifactsBacked reports whether the given toolset is backed by runtime artifact tools.
+		"isArtifactsBacked": isArtifactsBackedToolset,
+		// isMemoryBacked reports whether the given toolset is backed by runtime memory tools.
+		"isMemoryBacked": isMemoryBackedToolset,
 		// needsExecutorBackedRegistration reports whether RegisterUsedToolsets
 		// should ask application code for an executor for this toolset.
 		"needsExecutorBackedRegistration": needsExecutorBackedRegistration,

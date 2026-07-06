@@ -19,12 +19,22 @@ type (
 		Name string
 		// Roots are filesystem directories containing child skill directories.
 		Roots []string
+		// Preload controls global skill preloading when skill metadata does not opt in.
+		Preload mcpskills.PreloadMode
+		// Reload controls global skill reload behavior when skill metadata does not override it.
+		Reload mcpskills.ReloadMode
 	}
 
 	skillListItem struct {
-		Name        string `json:"name"`
-		Description string `json:"description,omitempty"`
-		URI         string `json:"uri"`
+		ID           string                `json:"id,omitempty"`
+		Name         string                `json:"name"`
+		Description  string                `json:"description,omitempty"`
+		URI          string                `json:"uri"`
+		AllowedTools []string              `json:"allowed_tools,omitempty"`
+		Preload      mcpskills.PreloadMode `json:"preload,omitempty"`
+		Reload       mcpskills.ReloadMode  `json:"reload,omitempty"`
+		Metadata     *mcpskills.Metadata   `json:"metadata,omitempty"`
+		Preloaded    bool                  `json:"preloaded,omitempty"`
 	}
 
 	skillListResult struct {
@@ -41,10 +51,19 @@ type (
 	}
 
 	loadSkillResult struct {
-		URI      string  `json:"uri"`
-		MimeType string  `json:"mime_type,omitempty"`
-		Text     *string `json:"text,omitempty"`
-		Blob     *string `json:"blob,omitempty"`
+		URI      string              `json:"uri"`
+		MimeType string              `json:"mime_type,omitempty"`
+		Text     *string             `json:"text,omitempty"`
+		Blob     *string             `json:"blob,omitempty"`
+		Metadata *mcpskills.Metadata `json:"metadata,omitempty"`
+		Reloaded bool                `json:"reloaded,omitempty"`
+	}
+
+	skillToolExecutor struct {
+		sources []mcpskills.Source
+		preload mcpskills.PreloadMode
+		reload  mcpskills.ReloadMode
+		cache   map[string]*mcpskills.Content
 	}
 )
 
@@ -52,6 +71,15 @@ const (
 	skillToolList         = "list_skills"
 	skillToolLoad         = "load_skill"
 	skillToolLoadResource = "load_skill_resource"
+
+	// SkillPreloadNone leaves skill instructions unloaded until requested.
+	SkillPreloadNone = mcpskills.PreloadNone
+	// SkillPreloadOnStart preloads SKILL.md when the toolset registration is built.
+	SkillPreloadOnStart = mcpskills.PreloadOnStart
+	// SkillReloadNever reuses loaded content until the toolset registration is rebuilt.
+	SkillReloadNever = mcpskills.ReloadNever
+	// SkillReloadPerCall reloads skill files for each load call.
+	SkillReloadPerCall = mcpskills.ReloadPerCall
 )
 
 // NewSkillToolsetRegistration exposes skill directories as ordinary model
@@ -63,12 +91,12 @@ func NewSkillToolsetRegistration(cfg SkillToolsetConfig) ToolsetRegistration {
 	if name == "" {
 		name = "skills"
 	}
-	sources := skillSourcesFromRoots(cfg.Roots)
+	exec := newSkillToolExecutor(cfg)
 	return ToolsetRegistration{
 		Name:        name,
 		Description: "Model-facing tools for discovering and loading local agent skills.",
 		Execute: func(ctx context.Context, call *planner.ToolRequest) (*ToolExecutionResult, error) {
-			return executeSkillTool(ctx, sources, call)
+			return exec.execute(ctx, call)
 		},
 		Specs: []tools.ToolSpec{
 			skillToolSpec(name, skillToolList, "List available skills."),
@@ -78,29 +106,62 @@ func NewSkillToolsetRegistration(cfg SkillToolsetConfig) ToolsetRegistration {
 	}
 }
 
-func executeSkillTool(ctx context.Context, sources []mcpskills.Source, call *planner.ToolRequest) (*ToolExecutionResult, error) {
+func newSkillToolExecutor(cfg SkillToolsetConfig) *skillToolExecutor {
+	exec := &skillToolExecutor{
+		sources: skillSourcesFromRoots(cfg.Roots),
+		preload: cfg.Preload,
+		reload:  cfg.Reload,
+		cache:   make(map[string]*mcpskills.Content),
+	}
+	if exec.reload == "" {
+		exec.reload = mcpskills.ReloadNever
+	}
+	exec.preloadSkills(context.Background())
+	return exec
+}
+
+func (e *skillToolExecutor) preloadSkills(ctx context.Context) {
+	resources, err := mcpskills.List(ctx, e.sources)
+	if err != nil {
+		return
+	}
+	for _, resource := range resources {
+		if !strings.HasSuffix(resource.URI, "/SKILL.md") {
+			continue
+		}
+		if e.preload != mcpskills.PreloadOnStart && (resource.Metadata == nil || resource.Metadata.Preload != mcpskills.PreloadOnStart) {
+			continue
+		}
+		content, err := mcpskills.Read(ctx, e.sources, resource.URI)
+		if err == nil {
+			e.cache[resource.URI] = content
+		}
+	}
+}
+
+func (e *skillToolExecutor) execute(ctx context.Context, call *planner.ToolRequest) (*ToolExecutionResult, error) {
 	switch call.Name.Tool() {
 	case skillToolList:
-		return executeListSkills(ctx, sources, call)
+		return e.executeListSkills(ctx, call)
 	case skillToolLoad:
 		var payload loadSkillPayload
 		if err := decodeSkillPayload(call, &payload); err != nil {
 			return nil, err
 		}
-		return executeLoadSkill(ctx, sources, call, payload.Skill, "SKILL.md")
+		return e.executeLoadSkill(ctx, call, payload.Skill, "SKILL.md")
 	case skillToolLoadResource:
 		var payload loadSkillResourcePayload
 		if err := decodeSkillPayload(call, &payload); err != nil {
 			return nil, err
 		}
-		return executeLoadSkill(ctx, sources, call, payload.Skill, payload.Path)
+		return e.executeLoadSkill(ctx, call, payload.Skill, payload.Path)
 	default:
 		return nil, fmt.Errorf("unknown skill tool %q", call.Name)
 	}
 }
 
-func executeListSkills(ctx context.Context, sources []mcpskills.Source, call *planner.ToolRequest) (*ToolExecutionResult, error) {
-	resources, err := mcpskills.List(ctx, sources)
+func (e *skillToolExecutor) executeListSkills(ctx context.Context, call *planner.ToolRequest) (*ToolExecutionResult, error) {
+	resources, err := mcpskills.List(ctx, e.sources)
 	if err != nil {
 		return nil, err
 	}
@@ -109,23 +170,33 @@ func executeListSkills(ctx context.Context, sources []mcpskills.Source, call *pl
 		if !strings.HasSuffix(resource.URI, "/SKILL.md") {
 			continue
 		}
-		result.Skills = append(result.Skills, skillListItem{
+		item := skillListItem{
 			Name:        resource.Name,
 			Description: resource.Description,
 			URI:         resource.URI,
-		})
+			Metadata:    resource.Metadata,
+			Preloaded:   e.cache[resource.URI] != nil,
+		}
+		if resource.Metadata != nil {
+			item.ID = resource.Metadata.ID
+			item.AllowedTools = append([]string(nil), resource.Metadata.AllowedTools...)
+			item.Preload = resource.Metadata.Preload
+			item.Reload = resource.Metadata.Reload
+		}
+		result.Skills = append(result.Skills, item)
 	}
 	return Executed(&planner.ToolResult{Name: call.Name, ToolCallID: call.ToolCallID, Result: result}), nil
 }
 
-func executeLoadSkill(ctx context.Context, sources []mcpskills.Source, call *planner.ToolRequest, skillName, rel string) (*ToolExecutionResult, error) {
+func (e *skillToolExecutor) executeLoadSkill(ctx context.Context, call *planner.ToolRequest, skillName, rel string) (*ToolExecutionResult, error) {
 	if strings.TrimSpace(skillName) == "" {
 		return nil, fmt.Errorf("skill is required")
 	}
 	if strings.TrimSpace(rel) == "" {
 		return nil, fmt.Errorf("path is required")
 	}
-	content, err := mcpskills.Read(ctx, sources, skillURI(skillName, rel))
+	uri := skillURI(skillName, rel)
+	content, reloaded, err := e.readSkillContent(ctx, uri)
 	if err != nil {
 		return nil, err
 	}
@@ -134,8 +205,27 @@ func executeLoadSkill(ctx context.Context, sources []mcpskills.Source, call *pla
 		MimeType: content.MimeType,
 		Text:     content.Text,
 		Blob:     content.Blob,
+		Metadata: content.Metadata,
+		Reloaded: reloaded,
 	}
 	return Executed(&planner.ToolResult{Name: call.Name, ToolCallID: call.ToolCallID, Result: result}), nil
+}
+
+func (e *skillToolExecutor) readSkillContent(ctx context.Context, uri string) (*mcpskills.Content, bool, error) {
+	if content := e.cache[uri]; content != nil && e.reload != mcpskills.ReloadPerCall {
+		if content.Metadata == nil || content.Metadata.Reload != mcpskills.ReloadPerCall {
+			return content, false, nil
+		}
+	}
+	content, err := mcpskills.Read(ctx, e.sources, uri)
+	if err != nil {
+		return nil, false, err
+	}
+	perCall := e.reload == mcpskills.ReloadPerCall || (content.Metadata != nil && content.Metadata.Reload == mcpskills.ReloadPerCall)
+	if !perCall {
+		e.cache[uri] = content
+	}
+	return content, perCall, nil
 }
 
 func decodeSkillPayload(call *planner.ToolRequest, out any) error {

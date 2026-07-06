@@ -340,6 +340,24 @@ func (r *Runtime) ProvideConfirmation(ctx context.Context, dec interrupt.Confirm
 	return r.mapAwaitSignalError(ctx, dec.RunID, handle.Signal(ctx, interrupt.SignalProvideConfirmation, dec))
 }
 
+// ProvideTypedInput sends a schema-typed human input answer to a waiting run.
+func (r *Runtime) ProvideTypedInput(ctx context.Context, ans interrupt.TypedInputAnswer) error {
+	if ans == nil {
+		return errors.New("typed input answer is required")
+	}
+	if strings.TrimSpace(ans.RunID) == "" {
+		return errors.New("run id is required")
+	}
+	if s, ok := r.Engine.(engine.Signaler); ok {
+		return r.mapAwaitSignalError(ctx, ans.RunID, s.SignalByID(ctx, ans.RunID, "", interrupt.SignalProvideTypedInput, ans))
+	}
+	handle, ok := r.workflowHandle(ans.RunID)
+	if !ok {
+		return r.mapAwaitSignalError(ctx, ans.RunID, engine.ErrWorkflowNotFound)
+	}
+	return r.mapAwaitSignalError(ctx, ans.RunID, handle.Signal(ctx, interrupt.SignalProvideTypedInput, ans))
+}
+
 // mapAwaitSignalError converts engine signal-delivery errors into typed runtime await-resume errors.
 func (r *Runtime) mapAwaitSignalError(ctx context.Context, runID string, err error) error {
 	if err == nil {

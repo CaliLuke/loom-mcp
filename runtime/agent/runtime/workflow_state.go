@@ -42,6 +42,10 @@ type (
 		// the lifetime of this run.
 		ToolOutputs []*planner.ToolOutput
 
+		// TypedInputs is the accumulated typed human-input history emitted over
+		// the lifetime of this run.
+		TypedInputs []planner.TypedInputOutput
+
 		// ToolPolicy is the canonical model-visible and execution-visible allowlist
 		// for the current planner turn.
 		ToolPolicy toolPolicyEnvelope

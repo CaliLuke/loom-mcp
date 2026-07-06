@@ -103,37 +103,83 @@ func (t *ToolsetExpr) WalkSets(walk eval.SetWalker) {
 // Validate performs semantic checks on the toolset expression.
 func (t *ToolsetExpr) Validate() error {
 	verr := new(eval.ValidationErrors)
-
-	// Validate provider configuration.
 	if t.Provider != nil {
-		switch t.Provider.Kind {
-		case ProviderMCP:
-			if t.Provider.MCPToolset == "" {
-				verr.Add(t, "MCP server name is required; set it via FromMCP(service, toolset)")
-			}
-			if t.Provider.MCPService != "" {
-				if goaexpr.Root.Service(t.Provider.MCPService) == nil {
-					verr.Add(t, "FromMCP could not resolve service %q", t.Provider.MCPService)
-				}
-			}
-		case ProviderRegistry:
-			if t.Provider.Registry == nil {
-				verr.Add(t, "registry is required for FromRegistry provider")
-			}
-			if t.Provider.ToolsetName == "" {
-				verr.Add(t, "toolset name is required for FromRegistry provider")
-			}
-		case ProviderSkills:
-			if len(t.Provider.SkillRoots) == 0 {
-				verr.Add(t, "at least one skill root is required for FromSkills provider")
-			}
-		case ProviderLocal:
-			// Local toolsets have inline schemas; no additional validation needed.
-		}
+		t.validateProvider(verr)
 	}
-
 	if len(verr.Errors) == 0 {
 		return nil
 	}
 	return verr
+}
+
+func (t *ToolsetExpr) validateProvider(verr *eval.ValidationErrors) {
+	switch t.Provider.Kind {
+	case ProviderMCP:
+		t.validateMCPProvider(verr)
+	case ProviderRegistry:
+		t.validateRegistryProvider(verr)
+	case ProviderSkills:
+		if len(t.Provider.SkillRoots) == 0 {
+			verr.Add(t, "at least one skill root is required for FromSkills provider")
+		}
+		t.validateSkillsProvider(verr)
+	case ProviderArtifacts:
+		t.validateArtifactProvider(verr)
+	case ProviderMemory:
+		t.validateMemoryProvider(verr)
+	case ProviderLocal:
+		// Local toolsets have inline schemas; no additional validation needed.
+	}
+}
+
+func (t *ToolsetExpr) validateSkillsProvider(verr *eval.ValidationErrors) {
+	switch t.Provider.SkillPreload {
+	case "", SkillPreloadNone, SkillPreloadOnStart:
+	default:
+		verr.Add(t, "unknown skill preload mode %q", t.Provider.SkillPreload)
+	}
+	switch t.Provider.SkillReload {
+	case "", SkillReloadNever, SkillReloadPerCall:
+	default:
+		verr.Add(t, "unknown skill reload mode %q", t.Provider.SkillReload)
+	}
+}
+
+func (t *ToolsetExpr) validateMCPProvider(verr *eval.ValidationErrors) {
+	if t.Provider.MCPToolset == "" {
+		verr.Add(t, "MCP server name is required; set it via FromMCP(service, toolset)")
+	}
+	if t.Provider.MCPService != "" && goaexpr.Root.Service(t.Provider.MCPService) == nil {
+		verr.Add(t, "FromMCP could not resolve service %q", t.Provider.MCPService)
+	}
+}
+
+func (t *ToolsetExpr) validateRegistryProvider(verr *eval.ValidationErrors) {
+	if t.Provider.Registry == nil {
+		verr.Add(t, "registry is required for FromRegistry provider")
+	}
+	if t.Provider.ToolsetName == "" {
+		verr.Add(t, "toolset name is required for FromRegistry provider")
+	}
+}
+
+func (t *ToolsetExpr) validateArtifactProvider(verr *eval.ValidationErrors) {
+	if t.Provider.ArtifactMaxBytes < 0 {
+		verr.Add(t, "MaxArtifactBytes must be non-negative")
+	}
+	if t.Provider.ArtifactMaxCount < 0 {
+		verr.Add(t, "MaxArtifacts must be non-negative")
+	}
+	if len(t.Tools) > 0 {
+		verr.Add(t, "FromArtifacts toolsets cannot declare inline tools")
+	}
+}
+
+func (t *ToolsetExpr) validateMemoryProvider(verr *eval.ValidationErrors) {
+	if t.Provider.MemoryMaxResults < 0 {
+		verr.Add(t, "MemoryMaxResults must be non-negative")
+	}
+	if len(t.Tools) > 0 {
+		verr.Add(t, "FromMemory toolsets cannot declare inline tools")
+	}
 }

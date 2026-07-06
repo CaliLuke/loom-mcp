@@ -73,6 +73,30 @@ func (s *Store) AppendEvents(_ context.Context, agentID, runID string, events ..
 	return nil
 }
 
+// Query searches appended events by agent, run, event type, labels, and limit.
+func (s *Store) Query(_ context.Context, query memory.Query) (memory.QueryResult, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	var events []memory.Event
+	if query.AgentID != "" {
+		runs := s.runs[query.AgentID]
+		if query.RunID != "" {
+			events = append(events, runs[query.RunID]...)
+		} else {
+			for _, runEvents := range runs {
+				events = append(events, runEvents...)
+			}
+		}
+	} else {
+		for _, runs := range s.runs {
+			for _, runEvents := range runs {
+				events = append(events, runEvents...)
+			}
+		}
+	}
+	return memory.QueryEvents(events, query), nil
+}
+
 // Reset clears all stored events across all agents and runs. Primarily useful
 // in tests to reset state between test cases. Not typically needed in production
 // since inmem stores are ephemeral.

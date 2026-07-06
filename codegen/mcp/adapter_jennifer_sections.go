@@ -273,6 +273,7 @@ func emitResourcesList(stmt *jen.Statement, data *AdapterData) {
 						jen.Id("Name"):        jen.Id("stringPtr").Call(jen.Id("resource").Dot("Name")),
 						jen.Id("Description"): jen.Id("stringPtr").Call(jen.Id("resource").Dot("Description")),
 						jen.Id("MimeType"):    jen.Id("stringPtr").Call(jen.Id("resource").Dot("MimeType")),
+						jen.Id("Meta"):        jen.Id("mcpskills").Dot("MetadataMeta").Call(jen.Id("resource").Dot("Metadata")),
 					})),
 				)
 			}
@@ -321,6 +322,7 @@ func emitResourcesRead(stmt *jen.Statement, data *AdapterData) {
 								jen.Id("MimeType"): jen.Id("stringPtr").Call(jen.Id("content").Dot("MimeType")),
 								jen.Id("Text"):     jen.Id("content").Dot("Text"),
 								jen.Id("Blob"):     jen.Id("content").Dot("Blob"),
+								jen.Id("Meta"):     jen.Id("mcpskills").Dot("MetadataMeta").Call(jen.Id("content").Dot("Metadata")),
 							}),
 						),
 					}),

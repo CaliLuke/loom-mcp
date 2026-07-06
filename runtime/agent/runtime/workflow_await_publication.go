@@ -21,6 +21,8 @@ func (r *Runtime) publishAwaitQueueItem(ctx context.Context, input *RunInput, ba
 		return r.publishAwaitQuestions(ctx, input, base, st, turnID, it.Questions, idx)
 	case planner.AwaitItemKindExternalTools:
 		return r.publishAwaitExternalTools(ctx, input, base, st, turnID, it.ExternalTools, idx)
+	case planner.AwaitItemKindTypedInput:
+		return r.publishAwaitTypedInput(ctx, input, base, turnID, it.TypedInput, idx)
 	default:
 		return fmt.Errorf("unknown await item kind %q", it.Kind)
 	}
@@ -39,6 +41,26 @@ func (r *Runtime) publishAwaitClarification(ctx context.Context, input *RunInput
 		c.MissingFields,
 		c.RestrictToTool,
 		c.ExampleInput,
+	), turnID)
+}
+
+func (r *Runtime) publishAwaitTypedInput(ctx context.Context, input *RunInput, base *planner.PlanInput, turnID string, t *planner.AwaitTypedInput, idx int) error {
+	if t == nil {
+		return fmt.Errorf("await typed_input item %d missing payload", idx)
+	}
+	if t.ID == "" {
+		return errors.New("await typed_input: missing id")
+	}
+	if len(t.Schema) == 0 {
+		return errors.New("await typed_input: missing schema")
+	}
+	return r.publishHook(ctx, hooks.NewAwaitTypedInputEvent(
+		base.RunContext.RunID,
+		input.AgentID,
+		base.RunContext.SessionID,
+		t.ID,
+		t.Title,
+		t.Schema,
 	), turnID)
 }
 

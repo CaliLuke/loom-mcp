@@ -9,7 +9,7 @@ import (
 func SkillsToolset() func() {
 	return func() {
 		API("alpha", func() {})
-		var Skills = Toolset(FromSkills(".agents/skills", "shared/skills"))
+		var Skills = Toolset(FromSkills(".agents/skills", "shared/skills", SkillPreload(SkillPreloadOnStart), SkillReload(SkillReloadPerCall)))
 		Service("alpha", func() {
 			Agent("scribe", "Doc helper", func() {
 				Use(Skills)

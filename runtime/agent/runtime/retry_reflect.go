@@ -49,7 +49,7 @@ func (r *retryAndReflectInterceptor) BeforeTool(context.Context, *BeforeToolInpu
 	return nil, nil
 }
 
-func (r *retryAndReflectInterceptor) AfterTool(ctx context.Context, input *AfterToolInput) (*AfterToolDecision, error) {
+func (r *retryAndReflectInterceptor) AfterTool(_ context.Context, input *AfterToolInput) (*AfterToolDecision, error) {
 	if input == nil || input.Err == nil {
 		if input != nil {
 			r.reset(input.Call)

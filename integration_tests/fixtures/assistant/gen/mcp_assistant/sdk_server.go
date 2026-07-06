@@ -413,6 +413,7 @@ func registerSDKResources(server *mcpsdk.Server, adapter *MCPAdapter, requestCon
 		server.AddResource(&mcpsdk.Resource{
 			Description: resource.Description,
 			MIMEType:    resource.MimeType,
+			Meta:        sdkMeta(mcpskills.MetadataMeta(resource.Metadata)),
 			Name:        resource.Name,
 			URI:         resource.URI,
 		}, adapter.sdkResourceHandler(requestContext))
@@ -774,6 +775,7 @@ func sdkReadResourceContent(item *ResourceContent) (*mcpsdk.ResourceContents, er
 	}
 	resource := &mcpsdk.ResourceContents{
 		MIMEType: derefString(item.MimeType),
+		Meta:     sdkMeta(item.Meta),
 		Text:     derefString(item.Text),
 		URI:      item.URI,
 	}
@@ -867,6 +869,18 @@ func sdkResourceContents(item *ContentItem) (*mcpsdk.ResourceContents, error) {
 		resource.Blob = data
 	}
 	return resource, nil
+}
+func sdkMeta(value any) mcpsdk.Meta {
+	switch typed := value.(type) {
+	case nil:
+		return nil
+	case mcpsdk.Meta:
+		return typed
+	case map[string]any:
+		return mcpsdk.Meta(typed)
+	default:
+		return nil
+	}
 }
 func sdkDecodeBase64(raw *string) ([]byte, error) {
 	if raw == nil || *raw == "" {

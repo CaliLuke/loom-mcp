@@ -241,7 +241,7 @@ func (r *Runtime) finalizeProtectedAwaitRun(ctx context.Context, wfCtx engine.Wo
 }
 
 func (r *Runtime) resumeAfterAwait(wfCtx engine.WorkflowContext, reg AgentRegistration, input *RunInput, base *planner.PlanInput, st *runLoopState, resumeOpts engine.ActivityOptions, deadlines *runDeadlines) (*RunOutput, error) {
-	resumeReq, err := r.buildNextResumeRequest(input.AgentID, base, st.ToolOutputs, &st.NextAttempt)
+	resumeReq, err := r.buildNextResumeRequest(input.AgentID, base, st.ToolOutputs, st.TypedInputs, &st.NextAttempt)
 	if err != nil {
 		return nil, err
 	}

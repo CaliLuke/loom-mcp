@@ -1762,6 +1762,7 @@ func (a *MCPAdapter) ResourcesList(ctx context.Context, p *ResourcesListPayload)
 	for _, resource := range skillResources {
 		resources = append(resources, &ResourceInfo{
 			Description: stringPtr(resource.Description),
+			Meta:        mcpskills.MetadataMeta(resource.Metadata),
 			MimeType:    stringPtr(resource.MimeType),
 			Name:        stringPtr(resource.Name),
 			URI:         resource.URI,
@@ -1791,6 +1792,7 @@ func (a *MCPAdapter) ResourcesRead(ctx context.Context, p *ResourcesReadPayload)
 		}
 		res := &ResourcesReadResult{Contents: []*ResourceContent{&ResourceContent{
 			Blob:     content.Blob,
+			Meta:     mcpskills.MetadataMeta(content.Metadata),
 			MimeType: stringPtr(content.MimeType),
 			Text:     content.Text,
 			URI:      content.URI,

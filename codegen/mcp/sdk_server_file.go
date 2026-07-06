@@ -588,6 +588,7 @@ func emitSDKRegisterResources(stmt *jen.Statement, data *AdapterData) {
 							jen.Id("URI"):         jen.Id("resource").Dot("URI"),
 							jen.Id("Description"): jen.Id("resource").Dot("Description"),
 							jen.Id("MIMEType"):    jen.Id("resource").Dot("MimeType"),
+							jen.Id("Meta"):        jen.Id("sdkMeta").Call(jen.Id("mcpskills").Dot("MetadataMeta").Call(jen.Id("resource").Dot("Metadata"))),
 						}),
 						jen.Id("adapter").Dot("sdkResourceHandler").Call(jen.Id("requestContext")),
 					),
@@ -1171,6 +1172,7 @@ func emitSDKReadResourceConversion(stmt *jen.Statement) {
 				jen.Id("URI"):      jen.Id("item").Dot("URI"),
 				jen.Id("MIMEType"): jen.Id("derefString").Call(jen.Id("item").Dot("MimeType")),
 				jen.Id("Text"):     jen.Id("derefString").Call(jen.Id("item").Dot("Text")),
+				jen.Id("Meta"):     jen.Id("sdkMeta").Call(jen.Id("item").Dot("Meta")),
 			}),
 			jen.If(jen.Id("item").Dot("Blob").Op("!=").Nil()).Block(
 				jen.List(jen.Id("data"), jen.Id("err")).Op(":=").Id("sdkDecodeBase64").Call(jen.Id("item").Dot("Blob")),
@@ -1247,6 +1249,27 @@ func emitSDKContentConversions(stmt *jen.Statement) {
 }
 
 func emitSDKHelpers(stmt *jen.Statement) {
+	stmt.Func().Id("sdkMeta").
+		Params(jen.Id("value").Any()).
+		Id("mcpsdk").Dot("Meta").
+		Block(
+			jen.Switch(jen.Id("typed").Op(":=").Id("value").Assert(jen.Type())).Block(
+				jen.Case(jen.Nil()).Block(
+					jen.Return(jen.Nil()),
+				),
+				jen.Case(jen.Id("mcpsdk").Dot("Meta")).Block(
+					jen.Return(jen.Id("typed")),
+				),
+				jen.Case(jen.Map(jen.String()).Any()).Block(
+					jen.Return(jen.Id("mcpsdk").Dot("Meta").Call(jen.Id("typed"))),
+				),
+				jen.Default().Block(
+					jen.Return(jen.Nil()),
+				),
+			),
+		)
+	stmt.Line()
+
 	stmt.Func().Id("sdkDecodeBase64").
 		Params(jen.Id("raw").Op("*").String()).
 		Params(jen.Index().Byte(), jen.Error()).

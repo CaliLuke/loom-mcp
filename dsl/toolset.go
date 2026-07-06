@@ -83,18 +83,8 @@ func Toolset(args ...any) *agentsexpr.ToolsetExpr {
 		}
 	}
 
-	// Derive name from provider if not explicitly set.
 	if name == "" && provider != nil {
-		switch provider.Kind {
-		case agentsexpr.ProviderLocal:
-			// Local providers require explicit name
-		case agentsexpr.ProviderMCP:
-			name = provider.MCPToolset
-		case agentsexpr.ProviderRegistry:
-			name = provider.ToolsetName
-		case agentsexpr.ProviderSkills:
-			name = "skills"
-		}
+		name = toolsetNameFromProvider(provider)
 	}
 
 	if name == "" {
@@ -139,6 +129,20 @@ func FromMCP(service, toolset string) *agentsexpr.ProviderExpr {
 	}
 }
 
+// SkillProviderOption configures FromSkills.
+type SkillProviderOption func(*agentsexpr.ProviderExpr)
+
+const (
+	// SkillPreloadNone leaves skill instructions unloaded until requested.
+	SkillPreloadNone = agentsexpr.SkillPreloadNone
+	// SkillPreloadOnStart preloads SKILL.md when the generated registration is built.
+	SkillPreloadOnStart = agentsexpr.SkillPreloadOnStart
+	// SkillReloadNever reuses loaded content until the registration is rebuilt.
+	SkillReloadNever = agentsexpr.SkillReloadNever
+	// SkillReloadPerCall reloads skill files for each load call.
+	SkillReloadPerCall = agentsexpr.SkillReloadPerCall
+)
+
 // FromSkills configures a toolset to expose local agent skills as model-facing
 // tools. Each root must contain child skill directories with SKILL.md files.
 //
@@ -148,24 +152,102 @@ func FromMCP(service, toolset string) *agentsexpr.ProviderExpr {
 //
 // Or with an explicit name:
 //
-//	var AssistantSkills = Toolset("assistant.skills", FromSkills(".agents/skills"))
-func FromSkills(roots ...string) *agentsexpr.ProviderExpr {
-	cleaned := make([]string, 0, len(roots))
-	for _, root := range roots {
-		root = strings.TrimSpace(root)
-		if root == "" {
-			continue
-		}
-		cleaned = append(cleaned, root)
+//	var AssistantSkills = Toolset("assistant.skills", FromSkills(".agents/skills", SkillPreload(SkillPreloadOnStart)))
+func FromSkills(args ...any) *agentsexpr.ProviderExpr {
+	provider := &agentsexpr.ProviderExpr{
+		Kind:        agentsexpr.ProviderSkills,
+		SkillReload: agentsexpr.SkillReloadNever,
 	}
-	if len(cleaned) == 0 {
+	for _, arg := range args {
+		switch value := arg.(type) {
+		case string:
+			root := strings.TrimSpace(value)
+			if root != "" {
+				provider.SkillRoots = append(provider.SkillRoots, root)
+			}
+		case SkillProviderOption:
+			if value != nil {
+				value(provider)
+			}
+		default:
+			eval.ReportError("FromSkills accepts skill roots and SkillProviderOption values, got %T", arg)
+		}
+	}
+	if len(provider.SkillRoots) == 0 {
 		eval.ReportError("FromSkills requires at least one non-empty skill root")
 		return nil
 	}
-	return &agentsexpr.ProviderExpr{
-		Kind:       agentsexpr.ProviderSkills,
-		SkillRoots: cleaned,
+	return provider
+}
+
+// SkillPreload configures when model-facing skill instructions are preloaded.
+func SkillPreload(mode agentsexpr.SkillPreloadMode) SkillProviderOption {
+	return func(provider *agentsexpr.ProviderExpr) {
+		provider.SkillPreload = mode
 	}
+}
+
+// SkillReload configures when model-facing skill files are reloaded from disk.
+func SkillReload(mode agentsexpr.SkillReloadMode) SkillProviderOption {
+	return func(provider *agentsexpr.ProviderExpr) {
+		provider.SkillReload = mode
+	}
+}
+
+// ArtifactProviderOption configures FromArtifacts.
+type ArtifactProviderOption func(*agentsexpr.ProviderExpr)
+
+// FromArtifacts configures a toolset to expose persisted run artifacts as
+// model-facing tools.
+func FromArtifacts(opts ...ArtifactProviderOption) *agentsexpr.ProviderExpr {
+	provider := &agentsexpr.ProviderExpr{Kind: agentsexpr.ProviderArtifacts}
+	for _, opt := range opts {
+		if opt != nil {
+			opt(provider)
+		}
+	}
+	return provider
+}
+
+// MaxArtifactBytes caps load_artifact response content bytes.
+func MaxArtifactBytes(n int) ArtifactProviderOption {
+	return func(provider *agentsexpr.ProviderExpr) {
+		provider.ArtifactMaxBytes = n
+	}
+}
+
+// MaxArtifacts caps list_artifacts response count.
+func MaxArtifacts(n int) ArtifactProviderOption {
+	return func(provider *agentsexpr.ProviderExpr) {
+		provider.ArtifactMaxCount = n
+	}
+}
+
+// MemoryProviderOption configures FromMemory.
+type MemoryProviderOption interface {
+	applyMemoryProvider(*agentsexpr.ProviderExpr)
+}
+
+type memoryMaxResultsOption int
+
+// FromMemory configures a toolset to expose bounded memory lookup tools.
+func FromMemory(opts ...MemoryProviderOption) *agentsexpr.ProviderExpr {
+	provider := &agentsexpr.ProviderExpr{Kind: agentsexpr.ProviderMemory}
+	for _, opt := range opts {
+		if opt != nil {
+			opt.applyMemoryProvider(provider)
+		}
+	}
+	return provider
+}
+
+// MemoryMaxResults caps memory results for memory tools or preload.
+func MemoryMaxResults(n int) memoryMaxResultsOption {
+	return memoryMaxResultsOption(n)
+}
+
+func (o memoryMaxResultsOption) applyMemoryProvider(provider *agentsexpr.ProviderExpr) {
+	provider.MemoryMaxResults = int(o)
 }
 
 // FromRegistry configures a toolset to be sourced from a registry. Use
@@ -213,6 +295,25 @@ func newToolsetDefinition(name string, dsl func()) *agentsexpr.ToolsetExpr {
 	return &agentsexpr.ToolsetExpr{
 		Name:    name,
 		DSLFunc: dsl,
+	}
+}
+
+func toolsetNameFromProvider(provider *agentsexpr.ProviderExpr) string {
+	switch provider.Kind {
+	case agentsexpr.ProviderLocal:
+		return ""
+	case agentsexpr.ProviderMCP:
+		return provider.MCPToolset
+	case agentsexpr.ProviderRegistry:
+		return provider.ToolsetName
+	case agentsexpr.ProviderSkills:
+		return "skills"
+	case agentsexpr.ProviderArtifacts:
+		return "artifacts"
+	case agentsexpr.ProviderMemory:
+		return "memory"
+	default:
+		return ""
 	}
 }
 

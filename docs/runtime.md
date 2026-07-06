@@ -166,6 +166,7 @@ Create a runtime using `runtime.New()` with functional options:
 rt := runtime.New(
     runtime.WithEngine(engine),          // Workflow backend (required for production)
     runtime.WithMemoryStore(store),      // Transcript persistence
+    runtime.WithMemorySearcher(searcher),// Indexed/cross-run memory lookup
     runtime.WithPromptStore(promptStore),// Scoped prompt overrides
     runtime.WithStream(sink),            // Real-time event streaming
     runtime.WithPolicy(engine),          // Policy enforcement
@@ -177,12 +178,37 @@ rt := runtime.New(
 )
 ```
 
+### Local Debug Server
+
+`runtime/agent/debug` provides an explicit development-only HTTP server for
+local run inspection:
+
+```go
+srv, err := debug.NewServer(debug.Config{
+    Runtime: rt,
+    Addr:    "127.0.0.1:0",
+})
+if err != nil {
+    return err
+}
+if err := srv.Start(); err != nil {
+    return err
+}
+defer srv.Shutdown(context.Background())
+```
+
+The server is disabled by default and is not generated into service, MCP, or
+agent APIs. The default bind address is `127.0.0.1:0`. It returns JSON
+envelopes for run snapshots, run events, await state, memory, artifacts, and
+workflow event counts under `/runs/{id}`.
+
 When options are omitted, the runtime uses sensible defaults:
 
 | Option                | Default                                                |
 | --------------------- | ------------------------------------------------------ |
 | Engine                | In-memory (synchronous, non-durable)                   |
 | MemoryStore           | None (transcripts not persisted)                       |
+| MemorySearcher        | None (indexed memory search unavailable)               |
 | PromptStore           | None (baseline prompt specs only, no scoped overrides) |
 | Stream                | None (no external event delivery)                      |
 | Policy                | None (all tools allowed, caps from agent registration) |
@@ -413,14 +439,22 @@ type PlannerEvents interface {
 
 ### Deterministic Workflow Composition
 
-For fixed, model-free coordination, `planner.NewSequentialWorkflowPlanner(...)`
-emits authored tool steps one at a time and derives the next step from
-accumulated `ToolOutputs`. It stores no hidden in-memory step cursor, so it is
-safe across durable planner activity invocations.
+For fixed, model-free coordination, generated workflows use planner implementations
+instead of bypassing the runtime loop.
 
-Use this for simple sequential workflows where the tool order is known in
-advance. Branching, looping, and generated DSL composition should build on the
-same `planner.Planner` contract rather than bypassing the runtime loop.
+`planner.NewSequentialWorkflowPlanner(...)` remains the source-compatible path for
+plain `Workflow` plus `Step` declarations. It emits authored tool steps one at a
+time.
+
+`planner.NewGraphWorkflowPlanner(...)` powers graph workflows with parallel nodes,
+join barriers, typed human-input nodes, branch targets, and bounded loops. It
+derives tool completion from stable node/tool-call IDs in accumulated
+`ToolOutputs`, and typed-input completion from `PlanResumeInput.TypedInputs`, so
+resuming after partial parallel completion schedules only the remaining ready nodes.
+
+Typed human-input nodes emit `AwaitTypedInput` and resume through
+`Runtime.ProvideTypedInput`; typed answers are kept separate from tool execution
+history.
 
 ---
 
@@ -693,17 +727,37 @@ rt.RegisterToolset(reg)
 
 `runtime.WithInterceptors(...)` registers inline call-path interceptors. Hooks
 publish durable observability events; interceptors run before or after execution
-and may change the request or result before those events are emitted.
+and may change requests, results, or event publication before durable events are
+emitted.
 
-The first public interceptor surface wraps tool execution:
+Interceptors are opt-in typed interfaces. A value may implement one or more of:
 
-- `BeforeTool` can rewrite raw JSON payloads before the registered executor
-  runs, or return a `ToolExecutionResult` to skip the executor.
-- `AfterTool` can replace the `planner.ToolResult`, replace the full
-  `ToolExecutionResult`, or convert an execution error into a tool result.
+- `RunInterceptor`: `BeforeRun` / `AfterRun`
+- `ToolInterceptor`: `BeforeTool` / `AfterTool`
+- `ModelInterceptor`: `BeforeModel` / `AfterModel`
+- `EventInterceptor`: `BeforeEvent` / `AfterEvent`
 
-`runtime.NewRetryAndReflectInterceptor(...)` uses this path to convert tool
-execution errors into planner-visible tool errors with structured
+Ordering is registration order. Runtime-level interceptors run before agent
+interceptors. Generated `RunPolicy(func(){ Interceptors("audit") })` stores
+design-owned IDs; application code supplies the implementations with
+`runtime.WithNamedInterceptors(...)`.
+
+Key mutation rules:
+
+- `BeforeTool` can rewrite raw JSON payloads or return a `ToolExecutionResult`
+  to skip the executor. `AfterTool` can replace the `planner.ToolResult`, the
+  full `ToolExecutionResult`, or the error.
+- `BeforeModel` wraps clients returned by `PlannerContext.ModelClient(id)` after
+  cache/tool-policy decorators and before tracing. It can rewrite the
+  `model.Request` or short-circuit with a response. `AfterModel` can replace the
+  response or error.
+- `BeforeEvent` runs in `runtime.publish_hook` before runlog append, stream
+  publish, and hook-bus publish. Returning `Drop` makes the event absent from all
+  three surfaces.
+- Interceptor errors short-circuit the active path.
+
+`runtime.NewRetryAndReflectInterceptor(...)` implements the tool path to convert
+tool execution errors into planner-visible tool errors with structured
 `planner.RetryHint` guidance, keeping the run alive so the planner can repair
 the call.
 
@@ -719,6 +773,41 @@ ordinary model tools:
 This complements MCP `skill://` resources. MCP clients can discover and read
 skills through resources, while model planners can advertise the same skill
 roots as tool calls when the model needs to inspect skill instructions.
+
+Skill metadata comes from `SKILL.md` YAML frontmatter:
+
+```yaml
+id: code-review
+name: Code Review
+description: Review code changes for correctness.
+allowed_tools: [shell]
+preload: on_start
+reload: per_call
+```
+
+`list_skills` returns this metadata. `load_skill` and `load_skill_resource`
+include metadata on the returned content. `preload: on_start` caches `SKILL.md`
+when the toolset registration is built; `reload: per_call` reloads files from
+disk for each load request. Duplicate skill IDs and invalid mode values fail
+discovery.
+
+### Artifact Store And Tools
+
+Configure persisted run artifacts with `runtime.WithArtifactStore(...)`. Tools may attach
+`artifact.Content` values to `planner.ToolResult.Artifacts`; the runtime saves those bodies
+and propagates only `artifact.Ref` values across workflow-safe boundaries:
+
+- `planner.ToolOutput.Artifacts`
+- `api.ToolEvent.Artifacts` and `api.ToolCallOutput.Artifacts`
+- `hooks.ToolResultReceivedEvent.Artifacts`
+- durable memory `ToolResultData.Artifacts`
+
+`runtime.NewArtifactToolsetRegistration(...)` exposes two model-facing tools:
+
+- `<toolset>.list_artifacts` returns refs filtered by `mime_type`, metadata, and limit.
+- `<toolset>.load_artifact` returns bounded `{content, mime_type, truncated, size_bytes}`.
+
+Artifact bodies are never embedded in hook/runlog payloads or planner workflow envelopes.
 
 #### Executor result envelope: `runtime.ToolExecutionResult`
 
@@ -1047,6 +1136,36 @@ Those rules apply only at execution/history boundaries. Once the runtime project
 tool output into transcript messages, models never see raw `Result` bytes or
 structured Go error values.
 
+### Typed Human Input
+
+Graph workflow planners can request schema-typed human input without pretending
+the answer is a tool result:
+
+```go
+return &planner.PlanResult{
+    Await: &planner.Await{
+        Items: []planner.AwaitItem{planner.AwaitTypedInputItem(&planner.AwaitTypedInput{
+            ID:     "approval",
+            Title:  "Approval",
+            Schema: json.RawMessage(`{"type":"object","properties":{"approved":{"type":"boolean"}}}`),
+        })},
+    },
+}
+```
+
+The runtime emits an `AwaitTypedInput` hook event. Callers resume with:
+
+```go
+err := rt.ProvideTypedInput(ctx, &api.TypedInputAnswer{
+    RunID:   "run-123",
+    ID:      "approval",
+    Payload: json.RawMessage(`{"approved":true}`),
+})
+```
+
+The resumed planner receives the answer in `PlanResumeInput.TypedInputs`.
+Typed-input answers are not copied into `ToolOutputs`.
+
 ### Tool Confirmation (Design-Time + Runtime Overrides)
 
 Loom MCP supports **runtime-enforced** confirmation gates for sensitive tools.
@@ -1363,6 +1482,39 @@ type Store interface {
 
 The runtime automatically subscribes to hooks and persists events when a memory
 store is configured.
+
+### Memory Search And Tools
+
+Memory search is optional and separate from transcript persistence. `runtime.WithMemoryStore(...)`
+enables current-run snapshots. `runtime.WithMemorySearcher(...)` enables indexed or cross-run
+queries through the `memory.Searcher` contract:
+
+```go
+type Searcher interface {
+    Query(ctx context.Context, query memory.Query) (memory.QueryResult, error)
+}
+```
+
+Generated memory-backed toolsets use `runtime.NewMemoryToolsetRegistration(...)`.
+The model-facing `memory.load_memory` tool accepts `scope`, `event_types`, `labels`, and
+`limit`, and returns `events`, `truncated`, and `scope`.
+
+- `scope:"current_run"` uses the configured searcher when present, otherwise it falls back to
+  `MemoryStore.LoadRun`.
+- `scope:"indexed"` requires `WithMemorySearcher`; without it, the tool returns a structured
+  tool error with retry hint reason `unsupported_operation`.
+
+Run policy can also opt into bounded planner-input preload:
+
+```go
+RunPolicy(func() {
+    PreloadMemory(MemoryScopeCurrentRun(), MemoryMaxResults(5))
+})
+```
+
+Preloaded memory appears on `planner.PlanInput.PreloadedMemory` and
+`planner.PlanResumeInput.PreloadedMemory`. Nil policy preserves the default no-preload behavior;
+planners should use explicit memory tools for follow-up lookup.
 
 ### Run event store (runlog.Store)
 

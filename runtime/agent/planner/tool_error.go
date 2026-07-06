@@ -36,6 +36,10 @@ const (
 	// RetryReasonToolUnavailable indicates the tool is temporarily or permanently
 	// unavailable (service down, not configured, etc.).
 	RetryReasonToolUnavailable RetryReason = "tool_unavailable"
+
+	// RetryReasonUnsupportedOperation indicates the requested tool operation is
+	// not supported by the current runtime configuration.
+	RetryReasonUnsupportedOperation RetryReason = "unsupported_operation"
 )
 
 // NewToolError constructs a ToolError with the provided message.

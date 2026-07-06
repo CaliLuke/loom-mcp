@@ -104,7 +104,10 @@ func capFailures(results []*planner.ToolResult) int {
 		}
 		if h := res.RetryHint; h != nil {
 			switch h.Reason {
-			case planner.RetryReasonMissingFields, planner.RetryReasonInvalidArguments, planner.RetryReasonToolUnavailable:
+			case planner.RetryReasonMissingFields,
+				planner.RetryReasonInvalidArguments,
+				planner.RetryReasonToolUnavailable,
+				planner.RetryReasonUnsupportedOperation:
 				continue
 			case planner.RetryReasonMalformedResponse,
 				planner.RetryReasonTimeout,

@@ -2,9 +2,32 @@ package agent
 
 import "fmt"
 
+type (
+	// SkillPreloadMode controls generated model-facing skill preload behavior.
+	SkillPreloadMode string
+
+	// SkillReloadMode controls generated model-facing skill reload behavior.
+	SkillReloadMode string
+)
+
 const (
 	providerLocalString   = "local"
 	providerLocalEvalName = "local provider"
+	providerArtifactsName = "artifacts"
+	providerMemoryName    = "memory"
+	providerSkillsName    = "skills"
+)
+
+const (
+	// SkillPreloadNone does not preload skill instructions.
+	SkillPreloadNone SkillPreloadMode = "none"
+	// SkillPreloadOnStart preloads SKILL.md when generated registrations are built.
+	SkillPreloadOnStart SkillPreloadMode = "on_start"
+
+	// SkillReloadNever reuses cached loaded content.
+	SkillReloadNever SkillReloadMode = "never"
+	// SkillReloadPerCall reloads skill files for each model-facing load call.
+	SkillReloadPerCall SkillReloadMode = "per_call"
 )
 
 // ProviderKind identifies the source/executor type for a toolset.
@@ -20,6 +43,10 @@ const (
 	ProviderRegistry
 	// ProviderSkills indicates a toolset sourced from local skill directories.
 	ProviderSkills
+	// ProviderArtifacts indicates a toolset backed by runtime artifact tools.
+	ProviderArtifacts
+	// ProviderMemory indicates a toolset backed by runtime memory tools.
+	ProviderMemory
 )
 
 // String returns a human-readable representation of the provider kind.
@@ -32,7 +59,11 @@ func (k ProviderKind) String() string {
 	case ProviderRegistry:
 		return "registry"
 	case ProviderSkills:
-		return "skills"
+		return providerSkillsName
+	case ProviderArtifacts:
+		return providerArtifactsName
+	case ProviderMemory:
+		return providerMemoryName
 	default:
 		return fmt.Sprintf("unknown(%d)", k)
 	}
@@ -61,6 +92,19 @@ type ProviderExpr struct {
 	// SkillRoots are filesystem directories containing child skill directories.
 	// Used when Kind is ProviderSkills.
 	SkillRoots []string
+	// SkillPreload controls generated model-facing skill preload behavior.
+	SkillPreload SkillPreloadMode
+	// SkillReload controls generated model-facing skill reload behavior.
+	SkillReload SkillReloadMode
+	// ArtifactMaxBytes caps artifact load responses.
+	// Used when Kind is ProviderArtifacts.
+	ArtifactMaxBytes int
+	// ArtifactMaxCount caps artifact list responses.
+	// Used when Kind is ProviderArtifacts.
+	ArtifactMaxCount int
+	// MemoryMaxResults caps memory tool responses.
+	// Used when Kind is ProviderMemory.
+	MemoryMaxResults int
 }
 
 // EvalName returns a descriptive identifier for error reporting.
@@ -77,7 +121,11 @@ func (p *ProviderExpr) EvalName() string {
 		}
 		return fmt.Sprintf("registry provider (registry=%q, toolset=%q)", regName, p.ToolsetName)
 	case ProviderSkills:
-		return fmt.Sprintf("skills provider (roots=%d)", len(p.SkillRoots))
+		return fmt.Sprintf("%s provider (roots=%d)", providerSkillsName, len(p.SkillRoots))
+	case ProviderArtifacts:
+		return fmt.Sprintf("artifacts provider (max_bytes=%d, max_artifacts=%d)", p.ArtifactMaxBytes, p.ArtifactMaxCount)
+	case ProviderMemory:
+		return fmt.Sprintf("memory provider (max_results=%d)", p.MemoryMaxResults)
 	default:
 		return providerLocalEvalName
 	}

@@ -84,3 +84,24 @@ func TestProvideConfirmation_PassesThroughNonContractError(t *testing.T) {
 	require.ErrorIs(t, err, want)
 	require.False(t, IsRunNotAwaitable(err))
 }
+
+func TestProvideTypedInput_MapsCompletedRunToTypedError(t *testing.T) {
+	t.Parallel()
+
+	rt := New(WithEngine(&signalByIDEngine{
+		Engine: engineinmem.New(),
+		err:    engine.ErrWorkflowCompleted,
+	}))
+	err := rt.ProvideTypedInput(context.Background(), &api.TypedInputAnswer{
+		RunID: "run-4",
+		ID:    "approval",
+	})
+	require.Error(t, err)
+	require.True(t, IsRunNotAwaitable(err))
+	require.ErrorIs(t, err, engine.ErrWorkflowCompleted)
+
+	typed, ok := AsRunNotAwaitable(err)
+	require.True(t, ok)
+	require.Equal(t, "run-4", typed.RunID)
+	require.Equal(t, RunNotAwaitableCompletedRun, typed.Reason)
+}

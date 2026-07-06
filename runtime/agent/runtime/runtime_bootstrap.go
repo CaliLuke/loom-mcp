@@ -5,6 +5,7 @@ import (
 	"time"
 
 	agent "github.com/CaliLuke/loom-mcp/runtime/agent"
+	"github.com/CaliLuke/loom-mcp/runtime/agent/artifact"
 	"github.com/CaliLuke/loom-mcp/runtime/agent/engine"
 	engineinmem "github.com/CaliLuke/loom-mcp/runtime/agent/engine/inmem"
 	"github.com/CaliLuke/loom-mcp/runtime/agent/hooks"
@@ -66,6 +67,16 @@ func WithHookActivityTimeout(d time.Duration) RuntimeOption {
 // WithMemoryStore sets the memory store.
 func WithMemoryStore(m memory.Store) RuntimeOption { return func(o *Options) { o.MemoryStore = m } }
 
+// WithMemorySearcher sets the indexed or cross-run memory searcher.
+func WithMemorySearcher(s memory.Searcher) RuntimeOption {
+	return func(o *Options) { o.MemorySearcher = s }
+}
+
+// WithArtifactStore sets the artifact store.
+func WithArtifactStore(s artifact.Store) RuntimeOption {
+	return func(o *Options) { o.ArtifactStore = s }
+}
+
 // WithPromptStore sets the prompt override store.
 func WithPromptStore(s prompt.Store) RuntimeOption { return func(o *Options) { o.PromptStore = s } }
 
@@ -110,6 +121,18 @@ func WithInterceptors(interceptors ...Interceptor) RuntimeOption {
 	}
 }
 
+// WithNamedInterceptors registers application-owned interceptors by design ID.
+func WithNamedInterceptors(interceptors map[string]Interceptor) RuntimeOption {
+	return func(o *Options) {
+		if o.NamedInterceptors == nil {
+			o.NamedInterceptors = make(map[string]Interceptor, len(interceptors))
+		}
+		for id, interceptor := range interceptors {
+			o.NamedInterceptors[id] = interceptor
+		}
+	}
+}
+
 // WithHintOverrides configures per-tool call hint overrides.
 func WithHintOverrides(m map[tools.Ident]HintOverrideFunc) RuntimeOption {
 	return func(o *Options) { o.HintOverrides = m }
@@ -147,6 +170,8 @@ func newFromOptions(opts Options) *Runtime {
 	rt := &Runtime{
 		Engine:               eng,
 		Memory:               opts.MemoryStore,
+		MemorySearcher:       opts.MemorySearcher,
+		ArtifactStore:        opts.ArtifactStore,
 		PromptRegistry:       prompt.NewRegistry(opts.PromptStore),
 		SessionStore:         sessionStore,
 		Policy:               opts.Policy,
@@ -169,11 +194,23 @@ func newFromOptions(opts Options) *Runtime {
 		reminders:            reminder.NewEngine(),
 		toolConfirmation:     opts.ToolConfirmation,
 		interceptors:         append([]Interceptor(nil), opts.Interceptors...),
+		namedInterceptors:    cloneNamedInterceptors(opts.NamedInterceptors),
 		hintOverrides:        opts.HintOverrides,
 	}
 	rt.PromptRegistry.SetObserver(rt.onPromptRendered)
 	rt.installRuntimeSubscribers(bus)
 	return rt
+}
+
+func cloneNamedInterceptors(in map[string]Interceptor) map[string]Interceptor {
+	if len(in) == 0 {
+		return nil
+	}
+	out := make(map[string]Interceptor, len(in))
+	for id, interceptor := range in {
+		out[id] = interceptor
+	}
+	return out
 }
 
 func resolveRuntimeBus(bus hooks.Bus) hooks.Bus {

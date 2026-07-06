@@ -36,6 +36,24 @@ func Step(name string, tool string, payloadJSON string) {
 		eval.ReportError("workflow step %q payload must be valid JSON", name)
 		return
 	}
+	if workflow.GraphMode || workflow.ParallelDepth > 0 || len(workflow.CurrentDependsOn) > 0 {
+		kind := expragents.WorkflowNodeTool
+		if workflow.ParallelDepth > 0 {
+			kind = expragents.WorkflowNodeParallelStep
+		}
+		workflow.GraphMode = true
+		workflow.GraphNodes = append(workflow.GraphNodes, &expragents.WorkflowNodeExpr{
+			ID:        name,
+			Kind:      kind,
+			Tool:      tool,
+			Payload:   payloadJSON,
+			DependsOn: append([]string(nil), workflow.CurrentDependsOn...),
+		})
+		if workflow.ParallelDepth == 0 {
+			workflow.CurrentDependsOn = []string{name}
+		}
+		return
+	}
 	workflow.Steps = append(workflow.Steps, &expragents.WorkflowStepExpr{
 		Name:    name,
 		Tool:    tool,
@@ -51,4 +69,162 @@ func FinalMessage(message string) {
 		return
 	}
 	workflow.FinalMessage = message
+}
+
+// Parallel declares tool steps that are ready at the same graph frontier.
+func Parallel(fn func()) {
+	workflow, ok := eval.Current().(*expragents.WorkflowExpr)
+	if !ok {
+		eval.IncompatibleDSL()
+		return
+	}
+	workflow.GraphMode = true
+	start := len(workflow.GraphNodes)
+	workflow.ParallelDepth++
+	if fn != nil {
+		eval.Execute(fn, workflow)
+	}
+	workflow.ParallelDepth--
+	ids := make([]string, 0, len(workflow.GraphNodes)-start)
+	for _, node := range workflow.GraphNodes[start:] {
+		if node != nil {
+			ids = append(ids, node.ID)
+		}
+	}
+	workflow.CurrentDependsOn = ids
+}
+
+// Join declares a dependency barrier in a workflow graph.
+func Join(name string, deps ...string) {
+	workflow, ok := eval.Current().(*expragents.WorkflowExpr)
+	if !ok {
+		eval.IncompatibleDSL()
+		return
+	}
+	workflow.GraphMode = true
+	if len(deps) == 0 {
+		deps = workflow.CurrentDependsOn
+	}
+	workflow.GraphNodes = append(workflow.GraphNodes, &expragents.WorkflowNodeExpr{
+		ID:        name,
+		Kind:      expragents.WorkflowNodeJoin,
+		DependsOn: append([]string(nil), deps...),
+	})
+	workflow.CurrentDependsOn = []string{name}
+}
+
+// RequestInput declares a schema-typed human input node in a workflow graph.
+func RequestInput(name string, title string, schemaJSON string) {
+	workflow, ok := eval.Current().(*expragents.WorkflowExpr)
+	if !ok {
+		eval.IncompatibleDSL()
+		return
+	}
+	if !json.Valid([]byte(schemaJSON)) {
+		eval.ReportError("workflow input %q schema must be valid JSON", name)
+		return
+	}
+	workflow.GraphMode = true
+	workflow.GraphNodes = append(workflow.GraphNodes, &expragents.WorkflowNodeExpr{
+		ID:        name,
+		Kind:      expragents.WorkflowNodeTypedInput,
+		Title:     title,
+		Schema:    schemaJSON,
+		DependsOn: append([]string(nil), workflow.CurrentDependsOn...),
+	})
+	if workflow.ParallelDepth == 0 {
+		workflow.CurrentDependsOn = []string{name}
+	}
+}
+
+// LoopOption configures Loop nodes.
+type LoopOption func(*expragents.WorkflowLoopExpr)
+
+// BranchOption configures Branch nodes.
+type BranchOption func(*expragents.WorkflowBranchExpr)
+
+// Loop declares a bounded repeated tool node in a workflow graph.
+func Loop(name string, tool string, payloadJSON string, opts ...LoopOption) {
+	workflow, ok := eval.Current().(*expragents.WorkflowExpr)
+	if !ok {
+		eval.IncompatibleDSL()
+		return
+	}
+	if !json.Valid([]byte(payloadJSON)) {
+		eval.ReportError("workflow loop %q payload must be valid JSON", name)
+		return
+	}
+	loop := &expragents.WorkflowLoopExpr{Tool: tool, Payload: payloadJSON}
+	for _, opt := range opts {
+		if opt != nil {
+			opt(loop)
+		}
+	}
+	workflow.GraphMode = true
+	workflow.GraphNodes = append(workflow.GraphNodes, &expragents.WorkflowNodeExpr{
+		ID:        name,
+		Kind:      expragents.WorkflowNodeLoop,
+		DependsOn: append([]string(nil), workflow.CurrentDependsOn...),
+		Loop:      loop,
+	})
+	workflow.CurrentDependsOn = []string{name}
+}
+
+// MaxIterations bounds Loop execution.
+func MaxIterations(n int) LoopOption {
+	return func(loop *expragents.WorkflowLoopExpr) {
+		loop.MaxIterations = n
+	}
+}
+
+// UntilJSONPath stops Loop when a prior step JSON value equals the expected string.
+func UntilJSONPath(step, path, equals string) LoopOption {
+	return func(loop *expragents.WorkflowLoopExpr) {
+		loop.Until = &expragents.WorkflowPredicateExpr{Step: step, Path: path, Equals: equals}
+	}
+}
+
+// Branch declares a deterministic branch selector.
+func Branch(name string, fromStep string, opts ...BranchOption) {
+	workflow, ok := eval.Current().(*expragents.WorkflowExpr)
+	if !ok {
+		eval.IncompatibleDSL()
+		return
+	}
+	branch := &expragents.WorkflowBranchExpr{FromStep: fromStep}
+	for _, opt := range opts {
+		if opt != nil {
+			opt(branch)
+		}
+	}
+	workflow.GraphMode = true
+	deps := append([]string(nil), workflow.CurrentDependsOn...)
+	if len(deps) == 0 && fromStep != "" {
+		deps = []string{fromStep}
+	}
+	workflow.GraphNodes = append(workflow.GraphNodes, &expragents.WorkflowNodeExpr{
+		ID:        name,
+		Kind:      expragents.WorkflowNodeBranch,
+		DependsOn: deps,
+		Branch:    branch,
+	})
+	workflow.CurrentDependsOn = []string{name}
+}
+
+// Case maps a JSONPath equality predicate to a branch target node.
+func Case(path, equals, target string) BranchOption {
+	return func(branch *expragents.WorkflowBranchExpr) {
+		branch.Cases = append(branch.Cases, expragents.WorkflowBranchCaseExpr{
+			Path:   path,
+			Equals: equals,
+			Target: target,
+		})
+	}
+}
+
+// BranchDefault sets the branch target used when no Case matches.
+func BranchDefault(target string) BranchOption {
+	return func(branch *expragents.WorkflowBranchExpr) {
+		branch.Default = target
+	}
 }

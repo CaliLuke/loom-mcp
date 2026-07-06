@@ -1,6 +1,9 @@
 package runtime
 
 import (
+	"maps"
+
+	"github.com/CaliLuke/loom-mcp/runtime/agent/artifact"
 	"github.com/CaliLuke/loom-mcp/runtime/agent/engine"
 	"github.com/CaliLuke/loom-mcp/runtime/agent/model"
 	"github.com/CaliLuke/loom-mcp/runtime/agent/planner"
@@ -67,9 +70,64 @@ func cloneToolResults(src []*planner.ToolResult) []*planner.ToolResult {
 			continue
 		}
 		cp := *tr
+		cp.Artifacts = cloneArtifactContents(tr.Artifacts)
 		out = append(out, &cp)
 	}
 	return out
+}
+
+func artifactRefsFromContents(contents []artifact.Content) []artifact.Ref {
+	if len(contents) == 0 {
+		return nil
+	}
+	refs := make([]artifact.Ref, 0, len(contents))
+	for _, content := range contents {
+		if content.Ref.ID == "" && content.Ref.Name == "" && content.Ref.MimeType == "" && content.Ref.SizeBytes == 0 {
+			continue
+		}
+		refs = append(refs, cloneArtifactRef(content.Ref))
+	}
+	return refs
+}
+
+func artifactContentsFromRefs(refs []artifact.Ref) []artifact.Content {
+	if len(refs) == 0 {
+		return nil
+	}
+	contents := make([]artifact.Content, len(refs))
+	for i, ref := range refs {
+		contents[i] = artifact.Content{Ref: cloneArtifactRef(ref)}
+	}
+	return contents
+}
+
+func cloneArtifactContents(contents []artifact.Content) []artifact.Content {
+	if len(contents) == 0 {
+		return nil
+	}
+	cloned := make([]artifact.Content, len(contents))
+	for i, content := range contents {
+		cloned[i] = content
+		cloned[i].Ref = cloneArtifactRef(content.Ref)
+		cloned[i].Body = append([]byte(nil), content.Body...)
+	}
+	return cloned
+}
+
+func cloneArtifactRefs(refs []artifact.Ref) []artifact.Ref {
+	if len(refs) == 0 {
+		return nil
+	}
+	cloned := make([]artifact.Ref, len(refs))
+	for i, ref := range refs {
+		cloned[i] = cloneArtifactRef(ref)
+	}
+	return cloned
+}
+
+func cloneArtifactRef(ref artifact.Ref) artifact.Ref {
+	ref.Metadata = maps.Clone(ref.Metadata)
+	return ref
 }
 
 func addTokenUsage(current, delta model.TokenUsage) model.TokenUsage {

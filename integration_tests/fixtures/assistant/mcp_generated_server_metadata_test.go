@@ -50,11 +50,13 @@ func TestGeneratedSDKServerExposesSEP973Metadata(t *testing.T) {
 	skillResource := findResourceByURI(t, resources.Resources, "skill://code-review/SKILL.md")
 	assert.Equal(t, "code-review", skillResource.Name)
 	assert.Equal(t, "Review code changes for correctness and maintainability.", skillResource.Description)
+	assert.Equal(t, "code-review", nestedSDKMetaString(t, skillResource.Meta, "skill", "id"))
 
 	skillContent, err := session.ReadResource(ctx, &sdkmcp.ReadResourceParams{URI: "skill://code-review/SKILL.md"})
 	require.NoError(t, err)
 	require.Len(t, skillContent.Contents, 1)
 	require.Contains(t, skillContent.Contents[0].Text, "# Code Review")
+	assert.Equal(t, "code-review", nestedSDKMetaString(t, skillContent.Contents[0].Meta, "skill", "id"))
 
 	manifestContent, err := session.ReadResource(ctx, &sdkmcp.ReadResourceParams{URI: "skill://code-review/_manifest"})
 	require.NoError(t, err)
@@ -102,6 +104,7 @@ func TestGeneratedJSONRPCServerExposesSEP973MetadataOnWire(t *testing.T) {
 	skillResource := findMapByStringField(t, resources, "uri", "skill://code-review/SKILL.md")
 	assert.Equal(t, "code-review", skillResource["name"])
 	assert.Equal(t, "Review code changes for correctness and maintainability.", skillResource["description"])
+	assert.Equal(t, "code-review", nestedMap(t, nestedMap(t, skillResource, "_meta"), "skill")["id"])
 
 	skillReadResult := rawJSONRPCResult(t, ctx, server.URL+"/rpc", sessionID, "resources/read", map[string]any{
 		"uri": "skill://code-review/reference.md",
@@ -112,6 +115,7 @@ func TestGeneratedJSONRPCServerExposesSEP973MetadataOnWire(t *testing.T) {
 	require.True(t, ok)
 	assert.Equal(t, "skill://code-review/reference.md", content["uri"])
 	assert.Contains(t, content["text"], "Prioritize concrete bugs")
+	assert.Equal(t, "code-review", nestedMap(t, nestedMap(t, content, "_meta"), "skill")["id"])
 
 	promptsResult := rawJSONRPCResult(t, ctx, server.URL+"/rpc", sessionID, "prompts/list", map[string]any{})
 	prompts := nestedSlice(t, promptsResult, "prompts")
@@ -224,6 +228,19 @@ func findPromptByName(t *testing.T, prompts []*sdkmcp.Prompt, name string) *sdkm
 	}
 	t.Fatalf("prompt %q not found", name)
 	return nil
+}
+
+func nestedSDKMetaString(t *testing.T, meta sdkmcp.Meta, keys ...string) string {
+	t.Helper()
+	var current any = map[string]any(meta)
+	for _, key := range keys {
+		m, ok := current.(map[string]any)
+		require.True(t, ok, "expected nested meta map at %q", key)
+		current = m[key]
+	}
+	value, ok := current.(string)
+	require.True(t, ok)
+	return value
 }
 
 func nestedMap(t *testing.T, m map[string]any, key string) map[string]any {

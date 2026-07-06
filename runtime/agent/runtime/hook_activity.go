@@ -42,27 +42,37 @@ func (r *Runtime) hookActivity(ctx context.Context, input *HookActivityInput) er
 	if err != nil {
 		return err
 	}
+	interceptors := r.interceptorsForAgent(input.AgentID)
+	var dropped bool
+	evt, payload, dropped, err = runBeforeEventInterceptors(ctx, interceptors, evt, payload, *input)
+	if err != nil {
+		return err
+	}
+	if dropped {
+		return runAfterEventInterceptors(ctx, interceptors, evt, true, nil)
+	}
+	eventType := evt.Type()
 	// Tool call argument deltas are best-effort UX signals. They are intentionally
 	// excluded from the canonical run event log to avoid bloating durable history.
 	//
 	// Consumers must treat ToolCallArgsDelta as optional; the canonical tool
 	// payload is still emitted via tool_start/tool_end and the finalized tool call.
-	if input.Type != hooks.ToolCallArgsDelta {
+	if eventType != hooks.ToolCallArgsDelta {
 		if err := r.appendHookRunEvent(ctx, input, evt, payload); err != nil {
-			return err
+			return runAfterEventInterceptors(ctx, interceptors, evt, false, err)
 		}
 		if err := r.updateHookRunMeta(ctx, input.SessionID, evt); err != nil {
-			return err
+			return runAfterEventInterceptors(ctx, interceptors, evt, false, err)
 		}
 	}
 	r.publishHookStreamEvent(ctx, input.SessionID, evt)
-	if err := r.publishHookBusEvent(ctx, input.Type, evt); err != nil {
-		return err
+	if err := r.publishHookBusEvent(ctx, eventType, evt); err != nil {
+		return runAfterEventInterceptors(ctx, interceptors, evt, false, err)
 	}
-	if input.Type == hooks.RunCompleted {
+	if eventType == hooks.RunCompleted {
 		r.storeWorkflowHandle(input.RunID, nil)
 	}
-	return nil
+	return runAfterEventInterceptors(ctx, interceptors, evt, false, nil)
 }
 
 func (r *Runtime) decodeHookActivityEvent(ctx context.Context, input *HookActivityInput) (hooks.Event, []byte, error) {

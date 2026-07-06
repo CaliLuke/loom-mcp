@@ -84,6 +84,7 @@ func (c *simplePlannerContext) ModelClient(id string) (model.Client, bool) {
 	// Ensure the runtime-owned tool_unavailable tool is always present when tool
 	// history may be re-encoded for providers with strict tool availability rules.
 	cli = newToolUnavailableConfiguredClient(cli)
+	cli = newModelInterceptedClient(cli, c.rt.interceptorsForAgent(c.agent), c.agent, c.runID, c.sessionID, c.turnID, id)
 	// Wrap with tracing so model invocations are always visible in traces, including
 	// full stream lifetimes when streaming is used.
 	cli = newTracedClient(cli, c.rt.tracer, c.rt.logger, modelTraceConfig{
