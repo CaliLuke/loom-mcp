@@ -1,0 +1,834 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Progressive Tool Discovery Plan</title>
+<style>
+:root {
+  --bg: #f6f7f8;
+  --surface: #ffffff;
+  --ink: #1a1a1a;
+  --ink-2: #3d3d3d;
+  --muted: #6b6b6b;
+  --line: #e3e5e8;
+  --line-2: #edf0f2;
+  --accent: #2563eb;
+  --accent-soft: #eff5ff;
+  --done: #15803d;
+  --warn: #b45309;
+  --warn-soft: #fffbeb;
+  --code-bg: #f1f3f5;
+  --date: #7c3aed;
+  --shadow: 0 1px 2px rgba(0,0,0,0.04), 0 4px 16px rgba(0,0,0,0.04);
+  --radius: 8px;
+  --anchor-offset: 1rem;
+}
+* { box-sizing: border-box; }
+html { scroll-behavior: smooth; }
+@media (prefers-reduced-motion: reduce) {
+  html { scroll-behavior: auto; }
+  *, *::before, *::after {
+    transition-duration: 0.01ms !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+  }
+}
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--ink);
+  font: 15.5px/1.65 -apple-system, BlinkMacSystemFont, "Inter", "Segoe UI", "Helvetica Neue", sans-serif;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+.skip-link {
+  position: absolute;
+  left: 1rem;
+  top: 1rem;
+  transform: translateY(-150%);
+  background: var(--ink);
+  color: white;
+  padding: 0.45rem 0.7rem;
+  border-radius: 6px;
+  z-index: 10;
+}
+.skip-link:focus-visible {
+  transform: translateY(0);
+  outline: 3px solid var(--accent);
+  outline-offset: 2px;
+}
+.layout {
+  display: grid;
+  grid-template-columns: 280px minmax(0, 1fr);
+  max-width: 1240px;
+  margin: 0 auto;
+  gap: 2rem;
+  padding: 2rem;
+}
+nav.toc {
+  position: sticky;
+  top: 1.5rem;
+  align-self: start;
+  max-height: calc(100vh - 3rem);
+  overflow-y: auto;
+  font-size: 0.88rem;
+  padding: 1.25rem 1rem 1rem;
+}
+.toc-details > summary {
+  display: none;
+}
+.toc-body {
+  display: block;
+}
+nav.toc h2 {
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--muted);
+  margin: 0 0 0.85rem;
+  border: 0;
+  font-weight: 600;
+}
+nav.toc ul { list-style: none; padding: 0; margin: 0; }
+nav.toc .toc-body > ul > li { margin-bottom: 0.15rem; }
+nav.toc ul ul { padding-left: 0; margin-top: 0.25rem; }
+nav.toc a {
+  color: var(--ink-2);
+  text-decoration: none;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  padding: 0.4rem 0.6rem;
+  border-radius: 6px;
+  transition: background 120ms, color 120ms;
+}
+nav.toc a:hover { color: var(--accent); background: var(--accent-soft); }
+nav.toc a:focus-visible,
+.totop:focus-visible,
+details.collapse summary:focus-visible,
+details.review-fold summary:focus-visible {
+  outline: 3px solid color-mix(in srgb, var(--accent) 35%, transparent);
+  outline-offset: 2px;
+}
+nav.toc .toc-progress {
+  font-family: ui-monospace, "SF Mono", Menlo, monospace;
+  font-size: 0.72rem;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+nav.toc .ms-link { padding-left: 1.1rem; font-size: 0.85rem; }
+main { min-width: 0; }
+.hero,
+.section {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+}
+.hero {
+  padding: 2rem 2.25rem;
+  margin-bottom: 1.25rem;
+}
+.hero h1 {
+  font-size: 1.85rem;
+  margin: 0 0 0.5rem;
+  font-weight: 650;
+  letter-spacing: 0;
+}
+.hero .lede {
+  margin: 0;
+  color: var(--ink-2);
+  font-size: 1rem;
+  line-height: 1.7;
+}
+.hero-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  margin-top: 1.25rem;
+  padding-top: 1.25rem;
+  border-top: 1px solid var(--line-2);
+}
+.stat { flex: 1 1 130px; }
+.stat-label {
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--muted);
+  font-weight: 600;
+}
+.stat-value {
+  font-size: 1.4rem;
+  font-weight: 600;
+  margin-top: 0.2rem;
+  font-variant-numeric: tabular-nums;
+}
+.section {
+  padding: 1.75rem 2rem 1.5rem;
+  margin-bottom: 1.25rem;
+}
+.section.unframed {
+  background: transparent;
+  border: 0;
+  border-radius: 0;
+  padding: 0;
+  box-shadow: none;
+}
+.section > h2:first-child,
+.section > .ms-header:first-child { margin-top: 0; }
+h2 {
+  font-size: 1.25rem;
+  font-weight: 600;
+  letter-spacing: 0;
+  margin: 0 0 1rem;
+  border: 0;
+  scroll-margin-top: var(--anchor-offset);
+}
+.ms-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  margin: 0 0 0.4rem;
+  scroll-margin-top: var(--anchor-offset);
+}
+section[id],
+article[id] {
+  scroll-margin-top: var(--anchor-offset);
+}
+.ms-header h2 { margin: 0; font-size: 1.2rem; }
+.ms-header .ms-num {
+  font-family: ui-monospace, "SF Mono", Menlo, monospace;
+  font-size: 0.78rem;
+  color: var(--muted);
+  margin-right: 0.5rem;
+  font-weight: 500;
+}
+.badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  font-size: 0.75rem;
+  font-weight: 600;
+  padding: 0.2rem 0.55rem;
+  border-radius: 999px;
+  white-space: nowrap;
+}
+.badge.pending {
+  background: var(--warn-soft);
+  color: var(--warn);
+  border: 1px solid #fde68a;
+}
+.badge.pending::before { content: "○"; font-size: 0.72rem; }
+.badge.done {
+  background: #ecfdf5;
+  color: var(--done);
+  border: 1px solid #bbf7d0;
+}
+.badge.done::before {
+  content: "●";
+  font-size: 0.6rem;
+}
+.ms-progress {
+  height: 4px;
+  background: var(--line-2);
+  border-radius: 999px;
+  overflow: hidden;
+  margin: 0.4rem 0 1.25rem;
+}
+.ms-progress-bar {
+  height: 100%;
+  background: var(--done);
+  border-radius: 999px;
+}
+.goal { margin: 0 0 1.25rem; color: var(--ink-2); }
+.goal strong { font-weight: 600; color: var(--ink); }
+.subhead {
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--muted);
+  font-weight: 600;
+  margin: 1.5rem 0 0.6rem;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+.subhead::after {
+  content: "";
+  flex: 1;
+  height: 1px;
+  background: var(--line-2);
+}
+p { margin: 0.75rem 0; }
+a { color: var(--accent); text-decoration: none; }
+a:hover { text-decoration: underline; }
+code {
+  background: var(--code-bg);
+  padding: 0.1em 0.4em;
+  border-radius: 4px;
+  font: 0.84em ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  color: #1f2937;
+  word-break: break-word;
+}
+pre {
+  background: var(--code-bg);
+  padding: 1rem;
+  border-radius: 8px;
+  overflow-x: auto;
+}
+pre code { background: none; padding: 0; font-size: 0.86em; }
+ul { padding-left: 1.4rem; margin: 0.5rem 0; }
+li { margin: 0.3rem 0; }
+.acceptance ul {
+  list-style: none;
+  padding-left: 0;
+  display: grid;
+  gap: 0.5rem;
+}
+.acceptance li {
+  position: relative;
+  padding: 0.6rem 0.85rem 0.6rem 2rem;
+  background: var(--bg);
+  border: 1px solid var(--line-2);
+  border-radius: 8px;
+  font-size: 0.95rem;
+  margin: 0;
+}
+.acceptance li::before {
+  content: "✓";
+  position: absolute;
+  left: 0.7rem;
+  top: 0.55rem;
+  color: var(--done);
+  font-weight: 700;
+  font-size: 0.95rem;
+}
+.checklist ul { list-style: none; padding-left: 0; }
+.checklist li {
+  display: grid;
+  grid-template-columns: 16px minmax(0, 1fr);
+  align-items: flex-start;
+  column-gap: 0.65rem;
+  row-gap: 0.35rem;
+  padding: 0.45rem 0.75rem;
+  border-radius: 6px;
+  margin: 0.1rem 0;
+  transition: background 120ms;
+}
+.checklist li:hover { background: var(--bg); }
+.checklist .task-text {
+  grid-column: 2;
+  min-width: 0;
+}
+.checklist li > details.collapse {
+  grid-column: 2;
+  display: block;
+  min-width: 0;
+  width: 100%;
+}
+input[type="checkbox"] {
+  grid-column: 1;
+  appearance: none;
+  width: 16px; height: 16px;
+  border: 1.5px solid #c7c5bf;
+  border-radius: 4px;
+  flex-shrink: 0;
+  margin-top: 0.32em;
+  position: relative;
+  background: var(--surface);
+  cursor: default;
+}
+input[type="checkbox"]:checked { background: var(--done); border-color: var(--done); }
+input[type="checkbox"]:checked::after {
+  content: "✓";
+  color: white;
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 11px;
+  font-weight: 800;
+  line-height: 1;
+}
+.timeline {
+  list-style: none;
+  padding: 0.5rem 0 0;
+  margin: 0;
+  position: relative;
+}
+.timeline::before {
+  content: "";
+  position: absolute;
+  left: 7px;
+  top: 0;
+  bottom: 0.5rem;
+  width: 2px;
+  background: linear-gradient(to bottom, var(--line), var(--line-2));
+}
+.timeline li {
+  position: relative;
+  padding: 0.25rem 0 0.85rem 2rem;
+  margin: 0;
+  font-size: 0.94rem;
+  color: var(--ink-2);
+}
+.timeline li::before {
+  content: "";
+  position: absolute;
+  left: 2px;
+  top: 0.55rem;
+  width: 12px; height: 12px;
+  border-radius: 50%;
+  background: var(--surface);
+  border: 2px solid var(--accent);
+  box-shadow: 0 0 0 3px var(--surface);
+}
+.timeline .date {
+  display: inline-block;
+  font-family: ui-monospace, "SF Mono", Menlo, monospace;
+  font-size: 0.78rem;
+  color: var(--date);
+  font-weight: 600;
+  margin-right: 0.55rem;
+  background: #f5f3ff;
+  padding: 0.05rem 0.4rem;
+  border-radius: 4px;
+}
+details.review-fold {
+  border-top: 1px solid var(--line-2);
+  margin-top: 1rem;
+  padding-top: 0.75rem;
+}
+details.review-fold summary {
+  cursor: pointer;
+  color: var(--accent);
+  font-weight: 600;
+  font-size: 0.9rem;
+}
+details.review-fold summary::marker { color: var(--muted); }
+details.toc-details summary::-webkit-details-marker { display: none; }
+details.collapse { display: inline; }
+details.collapse summary {
+  cursor: pointer;
+  color: var(--accent);
+  font-size: 0.88rem;
+  list-style: none;
+  display: inline;
+}
+details.collapse summary::-webkit-details-marker { display: none; }
+details.collapse summary::before {
+  content: "▸ ";
+  display: inline-block;
+  transition: transform 150ms;
+}
+details.collapse[open] summary::before { content: "▾ "; }
+details.collapse[open] summary { display: block; margin-bottom: 0.4rem; }
+details.collapse pre {
+  margin: 0.4rem 0 0;
+  font-size: 0.8rem;
+  white-space: pre-wrap;
+  word-break: break-all;
+}
+.totop {
+  position: fixed;
+  right: 1.5rem;
+  bottom: 1.5rem;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  width: 40px; height: 40px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--muted);
+  text-decoration: none;
+  box-shadow: var(--shadow);
+  font-size: 1.1rem;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 200ms;
+}
+.totop.show { opacity: 1; pointer-events: auto; }
+.totop:hover { color: var(--accent); }
+
+@media (max-width: 920px) {
+  :root {
+    --anchor-offset: 72px;
+  }
+  .layout {
+    display: flex;
+    flex-direction: column;
+    padding: 0 1rem 1rem;
+    gap: 1rem;
+  }
+  nav.toc { order: 1; }
+  main { order: 2; }
+  nav.toc {
+    position: sticky;
+    top: 0;
+    z-index: 20;
+    align-self: stretch;
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: var(--radius);
+    box-shadow: var(--shadow);
+    margin: 0 -1rem;
+    padding: 0;
+  }
+  .toc-details > summary {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.75rem;
+    min-height: 48px;
+    padding: 0.72rem 1rem;
+    cursor: pointer;
+    color: var(--ink);
+    font-weight: 650;
+    list-style: none;
+  }
+  .toc-details > summary::after {
+    content: "▾";
+    color: var(--muted);
+    font-size: 0.9rem;
+    transition: transform 150ms;
+  }
+  .toc-details[open] > summary::after {
+    transform: rotate(180deg);
+  }
+  .toc-summary-main {
+    display: flex;
+    align-items: baseline;
+    gap: 0.55rem;
+    min-width: 0;
+  }
+  .toc-summary-label {
+    font-size: 0.92rem;
+  }
+  .toc-summary-progress {
+    font-family: ui-monospace, "SF Mono", Menlo, monospace;
+    font-size: 0.78rem;
+    color: var(--muted);
+    font-variant-numeric: tabular-nums;
+  }
+  .toc-body {
+    border-top: 1px solid var(--line-2);
+    max-height: min(62vh, 460px);
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    padding: 0.55rem 0.75rem 0.75rem;
+  }
+  nav.toc h2 { display: none; }
+  nav.toc a { padding: 0.45rem 0.55rem; }
+  nav.toc .ms-link { padding-left: 0.55rem; }
+}
+
+@media (max-width: 640px) {
+  body {
+    font-size: 14.5px;
+    line-height: 1.6;
+  }
+  .layout {
+    padding: 0.75rem;
+    gap: 0.75rem;
+  }
+  nav.toc {
+    margin: -0.75rem -0.75rem 0;
+    border-left: 0;
+    border-right: 0;
+    border-top: 0;
+    border-radius: 0 0 var(--radius) var(--radius);
+    padding: 0;
+    font-size: 0.84rem;
+  }
+  .toc-details > summary {
+    min-height: 44px;
+    padding: 0.65rem 0.75rem;
+  }
+  .toc-body {
+    padding: 0.45rem 0.55rem 0.65rem;
+  }
+  nav.toc a {
+    gap: 0.4rem;
+    padding: 0.34rem 0.45rem;
+  }
+  nav.toc a span:first-child,
+  .task-text,
+  .goal,
+  .acceptance li {
+    overflow-wrap: anywhere;
+  }
+  nav.toc .ms-link { padding-left: 0.45rem; }
+  .hero,
+  .section {
+    box-shadow: none;
+  }
+  .hero {
+    padding: 1.25rem;
+    margin-bottom: 0.75rem;
+  }
+  .hero h1 {
+    font-size: 1.55rem;
+    line-height: 1.18;
+    margin-bottom: 0.65rem;
+  }
+  .hero .lede {
+    font-size: 0.95rem;
+    line-height: 1.62;
+  }
+  .hero-meta {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0.65rem;
+    margin-top: 1rem;
+    padding-top: 1rem;
+  }
+  .stat { min-width: 0; }
+  .stat-label {
+    font-size: 0.64rem;
+    line-height: 1.25;
+  }
+  .stat-value {
+    font-size: 1.15rem;
+  }
+  .section {
+    padding: 1.1rem;
+    margin-bottom: 0.75rem;
+  }
+  .section.unframed { padding: 0; }
+  h2 { font-size: 1.08rem; }
+  .ms-header {
+    align-items: flex-start;
+    gap: 0.65rem;
+  }
+  .ms-header h2 {
+    font-size: 1.05rem;
+    line-height: 1.32;
+    min-width: 0;
+  }
+  .ms-header .ms-num {
+    display: block;
+    margin: 0 0 0.1rem;
+    font-size: 0.72rem;
+  }
+  .badge {
+    flex: 0 0 auto;
+    font-size: 0.68rem;
+    padding: 0.14rem 0.42rem;
+  }
+  .subhead {
+    margin-top: 1.15rem;
+    letter-spacing: 0.08em;
+  }
+  .acceptance ul { gap: 0.4rem; }
+  .acceptance li {
+    padding: 0.55rem 0.65rem 0.55rem 1.75rem;
+    font-size: 0.9rem;
+  }
+  .acceptance li::before {
+    left: 0.6rem;
+    top: 0.55rem;
+  }
+  .checklist li {
+    column-gap: 0.55rem;
+    padding: 0.42rem 0.25rem;
+  }
+  .timeline li {
+    padding-left: 1.6rem;
+  }
+  .timeline .date {
+    display: block;
+    width: fit-content;
+    margin: 0 0 0.2rem;
+  }
+  pre {
+    padding: 0.75rem;
+  }
+  code {
+    font-size: 0.82em;
+  }
+  .totop {
+    right: 0.85rem;
+    bottom: 0.85rem;
+    width: 36px;
+    height: 36px;
+  }
+}
+
+@media (max-width: 360px) {
+  .layout { padding: 0.5rem; }
+  nav.toc { margin: -0.5rem -0.5rem 0; }
+  .hero { padding: 1rem; }
+  .section { padding: 0.95rem; }
+  .hero-meta { grid-template-columns: 1fr; }
+  .ms-header {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
+}
+</style>
+</head>
+<body>
+<a class="skip-link" href="#main">Skip to main content</a>
+<div class="layout">
+<nav class="toc">
+  <details class="toc-details" open>
+    <summary>
+      <span class="toc-summary-main">
+        <span class="toc-summary-label">Contents</span>
+        <span class="toc-summary-progress" data-total-progress>68/68</span>
+      </span>
+    </summary>
+    <div class="toc-body">
+      <h2>Contents</h2>
+      <ul>
+        <li><a href="#status"><span>Status</span><span class="toc-progress" data-status-count>17</span></a></li>
+        <li><a href="#milestones"><span>Milestones</span><span class="toc-progress" data-total-progress>68/68</span></a></li>
+        <li>
+          <ul>
+            <li><a class="ms-link" href="#ms-1"><span>M1 - Inventory</span><span class="toc-progress" data-ms-progress="ms-1">6/6</span></a></li><li><a class="ms-link" href="#ms-2"><span>M2 - Tool Shape</span><span class="toc-progress" data-ms-progress="ms-2">14/14</span></a></li><li><a class="ms-link" href="#ms-3"><span>M3 - JSON-RPC</span><span class="toc-progress" data-ms-progress="ms-3">19/19</span></a></li><li><a class="ms-link" href="#ms-4"><span>M4 - SDK</span><span class="toc-progress" data-ms-progress="ms-4">7/7</span></a></li><li><a class="ms-link" href="#ms-5"><span>M5 - Docs</span><span class="toc-progress" data-ms-progress="ms-5">6/6</span></a></li><li><a class="ms-link" href="#ms-6"><span>M6 - Review</span><span class="toc-progress" data-ms-progress="ms-6">4/4</span></a></li><li><a class="ms-link" href="#ms-7"><span>M7 - Handoff</span><span class="toc-progress" data-ms-progress="ms-7">12/12</span></a></li>
+          </ul>
+        </li>
+      </ul>
+    </div>
+  </details>
+</nav>
+<main id="main">
+
+<header class="hero">
+  <h1>Progressive Tool Discovery Plan</h1>
+  <p class="lede">Generated MCP servers will add opt-in progressive discovery without inventing a protocol method. Disabled mode keeps the full <code>tools/list</code> catalog. Enabled mode makes <code>tools/list</code> the authoritative compact public surface, exposes synthetic <code>search_tools</code> and <code>call_tool</code> plus validated <code>AlwaysVisible</code> real tools, rejects direct calls to hidden real tools by default, and returns Tool-shaped search descriptors that instruct clients to invoke targets through <code>call_tool</code>. The test strategy is fixture-first: unit and generator tests protect local contracts, but acceptance depends on regenerating <code>integration_tests/fixtures/assistant</code> and proving behavior through generated adapter, generated JSON-RPC, and generated SDK integration tests.</p>
+  <div class="hero-meta">
+    <div class="stat">
+      <div class="stat-label">Milestones</div>
+      <div class="stat-value" data-stat="milestones">7 / 7</div>
+    </div>
+    <div class="stat">
+      <div class="stat-label">Tasks complete</div>
+      <div class="stat-value" data-stat="tasks">68 / 68</div>
+    </div>
+    <div class="stat">
+      <div class="stat-label">Overall progress</div>
+      <div class="stat-value" data-stat="percent">100%</div>
+    </div>
+    <div class="stat">
+      <div class="stat-label">Status updates</div>
+      <div class="stat-value" data-stat="status">17</div>
+    </div>
+  </div>
+</header>
+
+<section class="section" id="status">
+  <h2>Status</h2>
+  <ul class="timeline"><li><span class="date">2026-07-06</span>Plan created.</li><li><span class="date">2026-07-06</span>Fresh-agent review found sequencing, SDK, outputSchema, direct hidden-call, collision, proxy-proof, docs-scope, and final-gate blockers; plan rewritten to separate DSL, generated contracts, JSON-RPC adapter behavior, SDK behavior, docs, review, and final verification.</li><li><span class="date">2026-07-06</span>Focused review found SDK <code>AllowDirectHiddenCalls</code> inconsistency and an unassigned old direct-call test; plan updated to make SDK compact mode reject direct-hidden compatibility and to require fixture-first generated integration coverage.</li><li><span class="date">2026-07-06</span>Second focused review found missing spec/SDK contract inventory and generated JSON-RPC wire tests; plan updated to add both before development.</li><li><span class="date">2026-07-06</span>Fourth focused review found proxy dispatch could re-enter the hidden-tool public gate, synthetic <code>search_tools</code> outputSchema lacked a named proof, and generated fixture compile proof was missing after Tool DTO regeneration; plan updated to require a private real-tool execution helper and those proofs.</li><li><span class="date">2026-07-06</span>Fifth focused review found generated JSON-RPC compact-mode setup, proxy telemetry semantics, and positive query/pattern structured-output proofs were still implicit; plan updated to pin those contracts.</li><li><span class="date">2026-07-06</span>Focused fresh-agent readiness review returned READY on test strategy and sequencing: regenerated assistant fixture, generated JSON-RPC wire tests, SDK integration tests, red-before-green ordering, and full local Loom/repo gates are explicit enough to start development. Non-blocking note: keep first fixture tests narrow and run them immediately after regeneration to isolate codegen, runtime, and wire failures.</li><li><span class="date">2026-07-06</span>Execution started. Workflow recited before code edits; <code>.agents/skills/loom-mcp/SKILL.md</code>, <code>.agents/skills/loom-mcp/references/codegen-contracts.md</code>, and <code>/Users/luca/code/skills/skills/design-docs-execution-plans/SKILL.md</code> were read. Generated <code>gen/</code> files will be regenerated, not hand-edited.</li><li><span class="date">2026-07-06</span>MCP 2025-06-18 contract inventory: <code>tools/list</code> and <code>tools/call</code> remain the protocol methods for discovery and invocation; <code>Tool</code> includes <code>title</code>, <code>outputSchema</code>, and <code>_meta</code>; tool-originated failures return <code>isError: true</code>. Local SDK inventory used <code>github.com/modelcontextprotocol/go-sdk v1.6.1</code> from <code>/Users/luca/go/pkg/mod/github.com/modelcontextprotocol/go-sdk@v1.6.1/mcp/protocol.go</code>.</li><li><span class="date">2026-07-06</span>Implementation owners inspected: <code>expr/mcp/mcp.go</code>, <code>dsl/mcp.go</code>, <code>codegen/mcp/mcp_types.go</code>, <code>codegen/mcp/adapter_generator.go</code>, <code>codegen/mcp/adapter_tools_jennifer.go</code>, <code>codegen/mcp/adapter_core_jennifer.go</code>, <code>codegen/mcp/sdk_server_file.go</code>, <code>integration_tests/fixtures/assistant/design/design.go</code>, and <code>integration_tests/fixtures/assistant/mcp_generated_tool_search_test.go</code>.</li><li><span class="date">2026-07-06</span>Red DSL/expression contract tests added as <code>TestMCPToolDiscoveryMetadataOptions</code>; <code>go test ./dsl ./expr/mcp -run TestMCPToolDiscoveryMetadataOptions -count=1</code> fails on missing <code>ToolTitle</code>, <code>ToolDiscoveryCategory</code>, <code>ToolDiscoveryTags</code>, <code>ToolDiscoveryKeywords</code>, and missing <code>ToolExpr</code> metadata fields.</li><li><span class="date">2026-07-06</span>Milestone 2 implemented: <code>ToolExpr</code> and MCP DSL now carry title/category/tags/keywords, generated <code>ToolInfo</code> includes <code>title</code>, <code>outputSchema</code>, and <code>_meta</code>, adapter data derives discovery <code>_meta</code> and object result output schemas, assistant fixture metadata was added and regenerated. Proofs passed: <code>go test ./dsl ./expr/mcp -run TestMCPToolDiscoveryMetadataOptions -count=1</code>, <code>make regen-assistant-fixture</code>, <code>go test ./integration_tests/fixtures/assistant -run '^$' -count=1</code>, and <code>go test ./codegen/mcp -run 'TestGeneratedToolInfoIncludesMCPDiscoveryFields|TestGeneratedToolInfoConversionsPreserveDiscoveryFields|TestGeneratedSearchToolsHasOutputSchema' -count=1</code>.</li><li><span class="date">2026-07-06</span>Milestone 3 implemented: generated JSON-RPC adapters now expose compact authoritative <code>tools/list</code>, validate ToolSearch construction, reject direct hidden calls by default, invoke hidden targets through a private real-tool dispatcher, return ranked <code>search_tools</code> descriptors with metadata/schema controls, preserve proxy validation/error/context/interceptor behavior, and record <code>mcp.target_tool</code> telemetry on proxy calls. Proof passed: <code>go test ./codegen/mcp ./integration_tests/fixtures/assistant -run 'TestGeneratedToolInfoIncludesMCPDiscoveryFields|TestGeneratedToolInfoConversionsPreserveDiscoveryFields|TestGeneratedSearchToolsHasOutputSchema|TestGenerateSDKServerRendersToolSearchSyntheticTools|TestGeneratedAdapterToolSearch|TestGeneratedJSONRPCToolSearch|TestGeneratedSDKServerToolSearch' -count=1</code>.</li><li><span class="date">2026-07-06</span>Milestone 4 implemented: SDK-backed compact mode registers synthetic tools plus validated pins, sets full SDK Tool fields, invokes hidden tools through <code>call_tool</code>, rejects direct hidden calls, and fails construction when <code>AllowDirectHiddenCalls</code> is true. Proof included in the focused command above.</li><li><span class="date">2026-07-06</span>Milestone 5 implemented: <code>docs/runtime.md</code>, <code>docs/dsl.md</code>, <code>docs/mcp_sdk_server.md</code>, <code>.agents/skills/loom-mcp/SKILL.md</code>, and <code>.agents/skills/loom-mcp/references/codegen-contracts.md</code> now describe progressive discovery. <code>rg -n "direct.*tools/call|search_tools|call_tool|ToolSearchOptions|large-catalog|progressive discovery" docs .agents/skills/loom-mcp</code> is aligned; surviving matches under <code>docs/plans/2026-03-30-mcp-protected-resource-discovery-design.md</code> are historical plan text and intentionally stale.</li><li><span class="date">2026-07-06</span>Milestone 6 review completed. Fresh reviewer found three blockers: omitted <code>search_tools</code> arguments failed despite an optional input schema; descriptor wording said Tool-shaped while implementation was compact custom-only; and final full gates were still open. The first was fixed by normalizing blank <code>search_tools</code> arguments to <code>{}</code> and adding adapter, JSON-RPC, and SDK regressions. The second was fixed by preserving MCP Tool-shaped descriptor fields (<code>inputSchema</code>, <code>outputSchema</code>, <code>_meta</code>, <code>annotations</code>, <code>icons</code>) while keeping extracted discovery fields. The third remains the planned Milestone 7 work. Rerun proofs passed: <code>go test ./codegen/mcp ./integration_tests/fixtures/assistant -run 'TestGeneratedToolInfoIncludesMCPDiscoveryFields|TestGeneratedToolInfoConversionsPreserveDiscoveryFields|TestGeneratedSearchToolsHasOutputSchema|TestGenerateSDKServerRendersToolSearchSyntheticTools|TestGeneratedAdapterToolSearch|TestGeneratedJSONRPCToolSearch|TestGeneratedSDKServerToolSearch' -count=1</code> and reviewer-scoped <code>git diff --check</code>.</li><li><span class="date">2026-07-06</span>Milestone 7 completed. Starting and ending Loom mode were remote <code>github.com/CaliLuke/loom v1.2.0</code> for root, fixture, and quickstart. Passed in order: <code>make loom-status</code>, <code>make loom-local</code>, <code>make verify-mcp-local</code>, <code>make loom-remote</code>, <code>make loom-status</code>, <code>go fmt ./...</code>, <code>make build</code>, <code>make lint</code>, <code>make test</code>, and <code>make itest</code>. Final status shows intended progressive discovery source/docs/generated/test changes plus intended untracked <code>PROGRESSIVE_TOOL_DISCOVERY_PLAN.md</code> and rendered <code>PROGRESSIVE_TOOL_DISCOVERY_PLAN.html</code>; unrelated untracked local dirt left untouched: <code>ADK_PRODUCT_GAPS.md</code> and <code>docs/plans/2026-07-06-memory-service-plan.md</code>.</li></ul>
+</section>
+
+<section class="section unframed" id="milestones"><h2>Milestones</h2>
+
+<article class="section" id="ms-1"><div class="ms-header"><h2><span class="ms-num">Milestone 1</span>Contract Inventory And Red Tests</h2><span class="badge done">Complete</span></div><div class="ms-progress"><div class="ms-progress-bar" style="width:100%"></div></div><p class="goal"><strong>Goal:</strong> Establish exact owners and failing contract tests before implementation code changes.</p><div class="subhead">Acceptance Criteria</div><div class="acceptance"><ul><li>The executing agent has recited the workflow on the record before any code edits.</li><li>This plan status records the target MCP contract from <code>third_party/modelcontextprotocol/docs/specification/2025-06-18/server/tools.mdx</code>, <code>third_party/modelcontextprotocol/docs/specification/2025-06-18/schema.mdx</code>, and the local <code>github.com/modelcontextprotocol/go-sdk v1.6.1</code> <code>mcp.Tool</code> type.</li><li><code>go test ./dsl ./expr/mcp -run TestMCPToolDiscoveryMetadataOptions -count=1</code> fails because the new MCP discovery metadata DSL and expression fields do not exist.</li></ul></div><details class="review-fold"><summary>Checklist 6/6</summary><div class="checklist"><ul><li><input type="checkbox" disabled checked><span class="task-text">Read this plan end-to-end, read the linked skill at <code>/Users/luca/code/skills/skills/design-docs-execution-plans/SKILL.md</code>, then recite the workflow you will follow — milestone order, exit criteria, named commands in execution order, test-first rule, peer-review gate, commit/push handoff, and any inherited repo constraints. Do not edit code before this recital is on the record.</span></li><li><input type="checkbox" disabled checked><span class="task-text">Read <code>.agents/skills/loom-mcp/SKILL.md</code> and <code>.agents/skills/loom-mcp/references/codegen-contracts.md</code>; record in this plan status that generated <code>gen/</code> files are regenerated, not hand-edited.</span></li><li><input type="checkbox" disabled checked><span class="task-text">Inspect <code>third_party/modelcontextprotocol/docs/specification/2025-06-18/server/tools.mdx</code>, <code>third_party/modelcontextprotocol/docs/specification/2025-06-18/schema.mdx</code>, and <code>/Users/luca/go/pkg/mod/github.com/modelcontextprotocol/go-sdk@v1.6.1/mcp/protocol.go</code>; record in this plan status that <code>tools/list</code> and <code>tools/call</code> remain the only protocol methods, <code>Tool</code> includes <code>title</code>, <code>outputSchema</code>, and <code>_meta</code>, and tool-originated failures return <code>isError: true</code>.</span></li><li><input type="checkbox" disabled checked><span class="task-text">Inspect <code>expr/mcp/mcp.go</code>, <code>dsl/mcp.go</code>, <code>codegen/mcp/mcp_types.go</code>, <code>codegen/mcp/adapter_generator.go</code>, <code>codegen/mcp/adapter_tools_jennifer.go</code>, <code>codegen/mcp/adapter_core_jennifer.go</code>, <code>codegen/mcp/sdk_server_file.go</code>, <code>integration_tests/fixtures/assistant/design/design.go</code>, and <code>integration_tests/fixtures/assistant/mcp_generated_tool_search_test.go</code>; record these as the implementation owners in this plan status.</span></li><li><input type="checkbox" disabled checked><span class="task-text">Add failing DSL and expression tests named <code>TestMCPToolDiscoveryMetadataOptions</code> proving <code>ToolTitle</code>, <code>ToolDiscoveryCategory</code>, <code>ToolDiscoveryTags</code>, and <code>ToolDiscoveryKeywords</code> populate MCP <code>ToolExpr</code> metadata.</span></li><li><input type="checkbox" disabled checked><span class="task-text">Run <code>go test ./dsl ./expr/mcp -run TestMCPToolDiscoveryMetadataOptions -count=1</code> from <code>/Users/luca/code/my-tools/loom-mono/loom-mcp</code> and keep the failure output tied to the missing DSL and expression fields.</span></li></ul></div></details></article><article class="section" id="ms-2"><div class="ms-header"><h2><span class="ms-num">Milestone 2</span>DSL And Generated Tool Shape</h2><span class="badge done">Complete</span></div><div class="ms-progress"><div class="ms-progress-bar" style="width:100%"></div></div><p class="goal"><strong>Goal:</strong> Add first-class MCP discovery metadata and generate complete MCP Tool fields through JSON-RPC DTOs.</p><div class="subhead">Acceptance Criteria</div><div class="acceptance"><ul><li><code>expr/mcp.ToolExpr</code> has <code>Title string</code>, <code>DiscoveryCategory string</code>, <code>DiscoveryTags []string</code>, and <code>DiscoveryKeywords []string</code>, and <code>go test ./dsl ./expr/mcp -run TestMCPToolDiscoveryMetadataOptions -count=1</code> passes.</li><li>Generator tests in <code>codegen/mcp</code> assert generated source contains <code>title</code>, <code>outputSchema</code>, <code>_meta</code>, synthetic <code>search_tools</code> outputSchema, plus conversion paths for generated service, JSON-RPC server, and JSON-RPC client Tool DTOs.</li><li><code>integration_tests/fixtures/assistant/gen/mcp_assistant/service.go</code>, <code>gen/jsonrpc/mcp_assistant/server/types.go</code>, and <code>gen/jsonrpc/mcp_assistant/client/types.go</code> regenerate with <code>title</code>, <code>outputSchema</code>, and <code>_meta</code> Tool fields matching MCP JSON names.</li></ul></div><details class="review-fold"><summary>Checklist 14/14</summary><div class="checklist"><ul><li><input type="checkbox" disabled checked><span class="task-text">Extend <code>expr/mcp/mcp.go</code> <code>ToolExpr</code> with <code>Title string</code>, <code>DiscoveryCategory string</code>, <code>DiscoveryTags []string</code>, and <code>DiscoveryKeywords []string</code>.</span></li><li><input type="checkbox" disabled checked><span class="task-text">Add MCP tool option helpers in <code>dsl/mcp.go</code>: <code>ToolTitle</code>, <code>ToolDiscoveryCategory</code>, <code>ToolDiscoveryTags</code>, and <code>ToolDiscoveryKeywords</code>.</span></li><li><input type="checkbox" disabled checked><span class="task-text">Run <code>go test ./dsl ./expr/mcp -run TestMCPToolDiscoveryMetadataOptions -count=1</code> from <code>/Users/luca/code/my-tools/loom-mono/loom-mcp</code>.</span></li><li><input type="checkbox" disabled checked><span class="task-text">Add generator contract tests in <code>codegen/mcp</code> named <code>TestGeneratedToolInfoIncludesMCPDiscoveryFields</code>, <code>TestGeneratedToolInfoConversionsPreserveDiscoveryFields</code>, and <code>TestGeneratedSearchToolsHasOutputSchema</code>.</span></li><li><input type="checkbox" disabled checked><span class="task-text">Update <code>codegen/mcp/mcp_types.go</code> so <code>buildToolInfoType</code> emits optional <code>title</code>, <code>outputSchema</code>, and <code>_meta</code> fields in addition to name, description, inputSchema, annotations, and icons.</span></li><li><input type="checkbox" disabled checked><span class="task-text">Extend <code>codegen/mcp/adapter_generator.go</code> <code>ToolAdapter</code> with <code>Title</code>, <code>DiscoveryCategory</code>, <code>DiscoveryTags</code>, <code>DiscoveryKeywords</code>, <code>MetaJSON</code>, and <code>OutputSchema</code>.</span></li><li><input type="checkbox" disabled checked><span class="task-text">Generate <code>ToolAdapter.Title</code> from <code>ToolExpr.Title</code> with <code>codegen/naming.HumanizeTitle(tool.Name)</code> as the fallback.</span></li><li><input type="checkbox" disabled checked><span class="task-text">Generate <code>ToolAdapter.MetaJSON</code> with <code>_meta["com.github.caliluke.loom-mcp/discovery"]</code> containing category, tags, and keywords, and never generate <code>io.modelcontextprotocol/*</code> custom keys.</span></li><li><input type="checkbox" disabled checked><span class="task-text">Generate <code>ToolAdapter.OutputSchema</code> with <code>shared.ToJSONSchema(tool.Method.Result)</code> only when the result attribute unwraps to <code>*expr.Object</code>, including named result types backed by objects; omit <code>outputSchema</code> for nil results and primitive, array, map, and union result shapes.</span></li><li><input type="checkbox" disabled checked><span class="task-text">Update <code>codegen/mcp/adapter_tools_jennifer.go</code> <code>toolInfoValue</code>, <code>toolSearchToolInfo</code>, and <code>toolCallProxyToolInfo</code> so real and synthetic ToolInfo values set title, input schema, output schema, annotations, <code>_meta</code>, and icons consistently.</span></li><li><input type="checkbox" disabled checked><span class="task-text">Update <code>integration_tests/fixtures/assistant/design/design.go</code> to declare metadata on <code>analyze_sentiment</code>, <code>extract_keywords</code>, and <code>search</code> with <code>ToolTitle</code>, <code>ToolDiscoveryCategory</code>, <code>ToolDiscoveryTags</code>, and <code>ToolDiscoveryKeywords</code>.</span></li><li><input type="checkbox" disabled checked><span class="task-text">Run <code>make regen-assistant-fixture</code> from <code>/Users/luca/code/my-tools/loom-mono/loom-mcp</code>.</span></li><li><input type="checkbox" disabled checked><span class="task-text">Run <code>go test ./integration_tests/fixtures/assistant -run '^$' -count=1</code> from <code>/Users/luca/code/my-tools/loom-mono/loom-mcp</code> to prove regenerated service, server, and client DTOs compile before runtime behavior tests.</span></li><li><input type="checkbox" disabled checked><span class="task-text">Run <code>go test ./codegen/mcp -run 'TestGeneratedToolInfoIncludesMCPDiscoveryFields|TestGeneratedToolInfoConversionsPreserveDiscoveryFields|TestGeneratedSearchToolsHasOutputSchema' -count=1</code> from <code>/Users/luca/code/my-tools/loom-mono/loom-mcp</code>.</span></li></ul></div></details></article><article class="section" id="ms-3"><div class="ms-header"><h2><span class="ms-num">Milestone 3</span>JSON-RPC Progressive Discovery</h2><span class="badge done">Complete</span></div><div class="ms-progress"><div class="ms-progress-bar" style="width:100%"></div></div><p class="goal"><strong>Goal:</strong> Replace the old regex-first adapter search with compact JSON-RPC progressive discovery and default-hidden direct-call behavior.</p><div class="subhead">Acceptance Criteria</div><div class="acceptance"><ul><li><code>integration_tests/fixtures/assistant/mcp_generated_tool_search_test.go</code> passes named direct-adapter tests for disabled full list, compact public list, validated pins, collision panics, direct hidden-call protocol errors, proxy invocation through the private real-tool execution path, ranking, invalid input, text guidance, structured content, synthetic <code>search_tools</code> outputSchema, and proxy-preserved execution path.</li><li><code>integration_tests/fixtures/assistant/mcp_generated_jsonrpc_tool_search_test.go</code> passes generated JSON-RPC server/client tests for compact list wire shape, direct hidden-call protocol error, <code>call_tool</code> hidden invocation, plain <code>query</code> search, and <code>search_tools</code> structured descriptors.</li><li><code>search_tools</code> returns useful text with <code>invoke: call_tool name="&lt;tool&gt;"</code>, structured content with <code>tools</code>, <code>total_matches</code>, <code>truncated</code>, and the supplied <code>query</code> or <code>pattern</code> field, and <code>isError: true</code> for invalid regex or query-plus-pattern input.</li></ul></div><details class="review-fold"><summary>Checklist 19/19</summary><div class="checklist"><ul><li><input type="checkbox" disabled checked><span class="task-text">Add red fixture tests in <code>integration_tests/fixtures/assistant/mcp_generated_tool_search_test.go</code>: <code>TestGeneratedAdapterToolSearchListsFullCatalogWhenDisabled</code>, <code>TestGeneratedAdapterToolSearchCompactsPublicCatalog</code>, <code>TestGeneratedAdapterToolSearchRejectsUnknownAlwaysVisibleTool</code>, <code>TestGeneratedAdapterToolSearchPanicsOnSyntheticNameCollision</code>, and <code>TestGeneratedAdapterToolSearchOverrideNames</code>.</span></li><li><input type="checkbox" disabled checked><span class="task-text">Rewrite existing <code>TestGeneratedAdapterToolSearchDoesNotBlockDirectToolCalls</code> in <code>integration_tests/fixtures/assistant/mcp_generated_tool_search_test.go</code> into tests named <code>TestGeneratedAdapterToolSearchRejectsDirectHiddenCallsByDefault</code> and <code>TestGeneratedAdapterToolSearchAllowsDirectHiddenCallsWhenCompatEnabled</code>.</span></li><li><input type="checkbox" disabled checked><span class="task-text">Add red fixture tests in <code>integration_tests/fixtures/assistant/mcp_generated_tool_search_test.go</code>: <code>TestGeneratedAdapterToolSearchAlwaysVisibleToolRemainsDirectlyCallable</code>, <code>TestGeneratedAdapterToolSearchCallToolInvokesHiddenTool</code>, and <code>TestGeneratedAdapterToolSearchCallToolInvokesHiddenToolDespiteDirectHiddenGate</code>.</span></li><li><input type="checkbox" disabled checked><span class="task-text">Add red fixture tests in <code>integration_tests/fixtures/assistant/mcp_generated_tool_search_test.go</code>: <code>TestGeneratedAdapterToolSearchSearchesQueryText</code>, <code>TestGeneratedAdapterToolSearchRanksBeforeLimiting</code>, <code>TestGeneratedAdapterToolSearchFiltersByCategory</code>, <code>TestGeneratedAdapterToolSearchFiltersByTags</code>, <code>TestGeneratedAdapterToolSearchOmitsSchemasByDefault</code>, <code>TestGeneratedAdapterToolSearchIncludesSchemasWhenRequested</code>, <code>TestGeneratedAdapterToolSearchRejectsQueryAndPattern</code>, <code>TestGeneratedAdapterToolSearchRejectsInvalidRegex</code>, <code>TestGeneratedAdapterToolSearchReturnsModelReadableText</code>, <code>TestGeneratedAdapterToolSearchReturnsStructuredDescriptors</code>, <code>TestGeneratedAdapterToolSearchStructuredContentIncludesPattern</code>, and <code>TestGeneratedAdapterToolSearchSyntheticToolHasOutputSchema</code>.</span></li><li><input type="checkbox" disabled checked><span class="task-text">Add red fixture tests in <code>integration_tests/fixtures/assistant/mcp_generated_tool_search_test.go</code>: <code>TestGeneratedAdapterToolSearchProxyPreservesToolContext</code>, <code>TestGeneratedAdapterToolSearchProxyPreservesValidationErrors</code>, <code>TestGeneratedAdapterToolSearchProxyPreservesErrorMapping</code>, <code>TestGeneratedAdapterToolSearchProxyRecordsProxyAndTargetTelemetryAttributes</code>, and <code>TestGeneratedAdapterToolSearchProxyPreservesRequestContext</code>.</span></li><li><input type="checkbox" disabled checked><span class="task-text">Update or add a generated JSON-RPC test helper in <code>integration_tests/fixtures/assistant/mcp_generated_server_test_helpers.go</code> that accepts <code>*mcpassistant.MCPAdapterOptions</code> and starts the generated JSON-RPC server with <code>ToolSearch</code> enabled for compact-mode tests.</span></li><li><input type="checkbox" disabled checked><span class="task-text">Add red generated JSON-RPC fixture tests in new file <code>integration_tests/fixtures/assistant/mcp_generated_jsonrpc_tool_search_test.go</code>: <code>TestGeneratedJSONRPCToolSearchUsesCompactCatalog</code>, <code>TestGeneratedJSONRPCToolSearchRejectsDirectHiddenCalls</code>, <code>TestGeneratedJSONRPCToolSearchCallToolInvokesHiddenTool</code>, <code>TestGeneratedJSONRPCToolSearchSearchesQueryText</code>, <code>TestGeneratedJSONRPCToolSearchStructuredContentIncludesPattern</code>, and <code>TestGeneratedJSONRPCToolSearchReturnsStructuredDescriptors</code>.</span></li><li><input type="checkbox" disabled checked><span class="task-text">Update <code>ToolSearchOptions</code> in <code>codegen/mcp/adapter_core_jennifer.go</code> with <code>AllowDirectHiddenCalls bool</code> documented as a compatibility option outside the compact public discovery contract.</span></li><li><input type="checkbox" disabled checked><span class="task-text">Add generated construction-time validation in <code>codegen/mcp/adapter_core_jennifer.go</code> so <code>NewMCPAdapter</code> panics when synthetic names match each other, collide with generated real tools, or <code>AlwaysVisible</code> names do not match generated real tools.</span></li><li><input type="checkbox" disabled checked><span class="task-text">Update <code>toolSearchPayload</code> in <code>codegen/mcp/adapter_tools_jennifer.go</code> to include <code>Query string</code>, <code>Pattern string</code>, <code>MaxResults *int</code>, <code>IncludeSchemas bool</code>, <code>Category string</code>, and <code>Tags []string</code>.</span></li><li><input type="checkbox" disabled checked><span class="task-text">Add helper generation in <code>codegen/mcp/adapter_tools_jennifer.go</code> for extracting parameter names and parameter descriptions from decoded JSON schema objects.</span></li><li><input type="checkbox" disabled checked><span class="task-text">Implement deterministic ranking in <code>codegen/mcp/adapter_tools_jennifer.go</code>: exact name, name prefix or substring, title, tag/category/keyword, description, input parameter name, input schema or parameter description, then generated catalog order.</span></li><li><input type="checkbox" disabled checked><span class="task-text">Update <code>handleSearchTools</code> in <code>codegen/mcp/adapter_tools_jennifer.go</code> to reject <code>query</code> plus <code>pattern</code>, reject invalid regex with <code>isError: true</code>, rank before applying <code>max_results</code>, omit schemas when <code>include_schemas</code> is false, and build text with <code>invoke: call_tool name="&lt;tool&gt;"</code>.</span></li><li><input type="checkbox" disabled checked><span class="task-text">Split generated public and private tool dispatch in <code>codegen/mcp/adapter_tools_jennifer.go</code>: top-level public <code>ToolsCall</code> applies the compact hidden-tool gate, while a private real-tool execution helper dispatches generated real tools without re-entering that public gate.</span></li><li><input type="checkbox" disabled checked><span class="task-text">Update <code>toolsCallHandler</code> in <code>codegen/mcp/adapter_tools_jennifer.go</code> so compact mode returns a protocol-level unknown tool error for direct public calls to hidden generated tools when <code>AllowDirectHiddenCalls</code> is false, while pinned <code>AlwaysVisible</code> tools remain directly callable.</span></li><li><input type="checkbox" disabled checked><span class="task-text">Update <code>handleCallToolProxy</code> in <code>codegen/mcp/adapter_tools_jennifer.go</code> so synthetic targets and invalid target names return <code>isError: true</code>, and valid target calls use the private real-tool execution helper while preserving generated validation, interceptors, auth context, request context, and error mapping.</span></li><li><input type="checkbox" disabled checked><span class="task-text">Update telemetry in <code>codegen/mcp/adapter_tools_jennifer.go</code> so <code>call_tool</code> proxy calls record both <code>mcp.tool=call_tool</code> for the public MCP call and <code>mcp.target_tool=&lt;hidden-name&gt;</code> for the proxied generated target; make <code>TestGeneratedAdapterToolSearchProxyRecordsProxyAndTargetTelemetryAttributes</code> assert both attributes.</span></li><li><input type="checkbox" disabled checked><span class="task-text">Run <code>make regen-assistant-fixture</code> from <code>/Users/luca/code/my-tools/loom-mono/loom-mcp</code>.</span></li><li><input type="checkbox" disabled checked><span class="task-text">Run <code>go test ./integration_tests/fixtures/assistant -run 'TestGeneratedAdapterToolSearch|TestGeneratedJSONRPCToolSearch' -count=1</code> from <code>/Users/luca/code/my-tools/loom-mono/loom-mcp</code>.</span></li></ul></div></details></article><article class="section" id="ms-4"><div class="ms-header"><h2><span class="ms-num">Milestone 4</span>SDK Progressive Discovery</h2><span class="badge done">Complete</span></div><div class="ms-progress"><div class="ms-progress-bar" style="width:100%"></div></div><p class="goal"><strong>Goal:</strong> Make SDK-backed servers expose the same compact public discovery contract as generated JSON-RPC adapters.</p><div class="subhead">Acceptance Criteria</div><div class="acceptance"><ul><li>SDK server tests prove <code>SDKServerOptions.Adapter.ToolSearch</code> makes SDK <code>tools/list</code> return synthetic tools plus validated pins, not every generated real tool.</li><li>SDK server tests prove SDK <code>tools/call</code> rejects direct hidden tools by default and invokes hidden real tools through <code>call_tool</code>.</li><li>SDK server construction fails fast when <code>SDKServerOptions.Adapter.ToolSearch.AllowDirectHiddenCalls</code> is true, because unregistered SDK tools cannot be directly invoked while preserving compact authoritative <code>tools/list</code>.</li></ul></div><details class="review-fold"><summary>Checklist 7/7</summary><div class="checklist"><ul><li><input type="checkbox" disabled checked><span class="task-text">Add SDK fixture tests in new file <code>integration_tests/fixtures/assistant/mcp_generated_server_tool_search_test.go</code> named <code>TestGeneratedSDKServerToolSearchUsesCompactCatalog</code>, <code>TestGeneratedSDKServerToolSearchRejectsDirectHiddenCalls</code>, <code>TestGeneratedSDKServerToolSearchRejectsDirectHiddenCompatOption</code>, and <code>TestGeneratedSDKServerToolSearchCallToolInvokesHiddenTool</code>.</span></li><li><input type="checkbox" disabled checked><span class="task-text">Add a generator test in <code>codegen/mcp</code> named <code>TestGenerateSDKServerRendersToolSearchSyntheticTools</code>.</span></li><li><input type="checkbox" disabled checked><span class="task-text">Update <code>codegen/mcp/sdk_server_file.go</code> <code>registerSDKTools</code> generation so SDK servers register synthetic <code>search_tools</code> and <code>call_tool</code> plus <code>AlwaysVisible</code> real tools when <code>adapter.toolSearchEnabled()</code> is true.</span></li><li><input type="checkbox" disabled checked><span class="task-text">Update <code>codegen/mcp/sdk_server_file.go</code> server construction so SDK compact mode rejects <code>AllowDirectHiddenCalls</code> with an actionable construction error.</span></li><li><input type="checkbox" disabled checked><span class="task-text">Update <code>codegen/mcp/sdk_server_file.go</code> tool registration so SDK-backed servers set <code>mcpsdk.Tool.Title</code>, <code>OutputSchema</code>, embedded <code>Meta</code>, <code>Annotations</code>, <code>InputSchema</code>, <code>Name</code>, and <code>Icons</code>.</span></li><li><input type="checkbox" disabled checked><span class="task-text">Run <code>make regen-assistant-fixture</code> from <code>/Users/luca/code/my-tools/loom-mono/loom-mcp</code>.</span></li><li><input type="checkbox" disabled checked><span class="task-text">Run <code>go test ./codegen/mcp ./integration_tests/fixtures/assistant -run 'TestGenerateSDKServerRendersToolSearchSyntheticTools|TestGeneratedSDKServerToolSearch' -count=1</code> from <code>/Users/luca/code/my-tools/loom-mono/loom-mcp</code>.</span></li></ul></div></details></article><article class="section" id="ms-5"><div class="ms-header"><h2><span class="ms-num">Milestone 5</span>Docs And Skill Contract</h2><span class="badge done">Complete</span></div><div class="ms-progress"><div class="ms-progress-bar" style="width:100%"></div></div><p class="goal"><strong>Goal:</strong> Update public docs and repo-local guidance so downstream servers can adopt generated progressive discovery without hand-written catalogs.</p><div class="subhead">Acceptance Criteria</div><div class="acceptance"><ul><li><code>docs/runtime.md</code>, <code>docs/dsl.md</code>, and <code>docs/mcp_sdk_server.md</code> describe compact <code>tools/list</code> as the authoritative public surface, <code>call_tool</code> as the invocation path for hidden tools, validated <code>AlwaysVisible</code> pins, JSON-RPC direct hidden calls as an explicit compatibility option, and SDK direct hidden compatibility as unsupported in compact mode.</li><li><code>.agents/skills/loom-mcp/SKILL.md</code> and <code>.agents/skills/loom-mcp/references/codegen-contracts.md</code> record the progressive discovery contract and no longer state that hidden real tools remain directly callable by default.</li><li><code>rg -n "direct.*tools/call|search_tools|call_tool|ToolSearchOptions|large-catalog|progressive discovery" docs .agents/skills/loom-mcp</code> has each surviving non-archived match aligned with the new contract.</li></ul></div><details class="review-fold"><summary>Checklist 6/6</summary><div class="checklist"><ul><li><input type="checkbox" disabled checked><span class="task-text">Update <code>docs/runtime.md</code> section <code>Generated MCP tool search</code> to describe opt-in progressive discovery, compact authoritative <code>tools/list</code>, <code>query</code> and <code>pattern</code> input, category and tag filters, include_schemas behavior, structured content, text invocation guidance, collision validation, validated pins, JSON-RPC <code>AllowDirectHiddenCalls</code>, and SDK rejection of direct-hidden compatibility.</span></li><li><input type="checkbox" disabled checked><span class="task-text">Update <code>docs/mcp_sdk_server.md</code> so <code>SDKServerOptions.Adapter.ToolSearch</code> describes compact SDK <code>tools/list</code>, synthetic search and call tools, and construction failure when <code>AllowDirectHiddenCalls</code> is true.</span></li><li><input type="checkbox" disabled checked><span class="task-text">Update <code>docs/dsl.md</code> large-catalog discovery text so downstream users configure <code>MCPAdapterOptions.ToolSearch</code>, declare discovery metadata with MCP tool options, and invoke hidden tools through <code>call_tool</code>.</span></li><li><input type="checkbox" disabled checked><span class="task-text">Update <code>.agents/skills/loom-mcp/SKILL.md</code> current product rules so future agents preserve compact authoritative <code>tools/list</code> semantics and do not re-enable direct hidden calls by default.</span></li><li><input type="checkbox" disabled checked><span class="task-text">Update <code>.agents/skills/loom-mcp/references/codegen-contracts.md</code> with the generated Tool field and SDK parity contract for progressive discovery.</span></li><li><input type="checkbox" disabled checked><span class="task-text">Run <code>rg -n "direct.*tools/call|search_tools|call_tool|ToolSearchOptions|large-catalog|progressive discovery" docs .agents/skills/loom-mcp</code> from <code>/Users/luca/code/my-tools/loom-mono/loom-mcp</code> and record archived historical docs under <code>docs/plans/</code> as intentionally stale when their text is historical.</span></li></ul></div></details></article><article class="section" id="ms-6"><div class="ms-header"><h2><span class="ms-num">Milestone 6</span>Peer Review Reconciliation</h2><span class="badge done">Complete</span></div><div class="ms-progress"><div class="ms-progress-bar" style="width:100%"></div></div><p class="goal"><strong>Goal:</strong> Get a fresh design/code review before final full gates and reconcile every blocker.</p><div class="subhead">Acceptance Criteria</div><div class="acceptance"><ul><li>A fresh reviewer inspects this plan and the changed code paths and returns no unresolved sequencing, design, implementation-owner, or proof-command blockers.</li><li>This plan's status section records each reviewer blocker as applied, rejected with reason, or absent.</li><li>Every code or plan change made after peer review has its smallest named proof command rerun before final full verification.</li></ul></div><details class="review-fold"><summary>Checklist 4/4</summary><div class="checklist"><ul><li><input type="checkbox" disabled checked><span class="task-text">Ask a fresh reviewer to inspect <code>PROGRESSIVE_TOOL_DISCOVERY_PLAN.md</code>, <code>expr/mcp/mcp.go</code>, <code>dsl/mcp.go</code>, <code>codegen/mcp/mcp_types.go</code>, <code>codegen/mcp/adapter_generator.go</code>, <code>codegen/mcp/adapter_tools_jennifer.go</code>, <code>codegen/mcp/adapter_core_jennifer.go</code>, <code>codegen/mcp/sdk_server_file.go</code>, <code>integration_tests/fixtures/assistant/mcp_generated_tool_search_test.go</code>, <code>integration_tests/fixtures/assistant/mcp_generated_jsonrpc_tool_search_test.go</code>, <code>integration_tests/fixtures/assistant/mcp_generated_server_tool_search_test.go</code>, and docs changed in Milestone 5; require critique only.</span></li><li><input type="checkbox" disabled checked><span class="task-text">Reconcile every reviewer blocker in code, tests, docs, or this plan.</span></li><li><input type="checkbox" disabled checked><span class="task-text">Rerun the smallest proof command named by each reconciled blocker.</span></li><li><input type="checkbox" disabled checked><span class="task-text">Re-render this tracker with <code>python3 /Users/luca/code/skills/skills/design-docs-execution-plans/render_plan.py PROGRESSIVE_TOOL_DISCOVERY_PLAN.md</code>.</span></li></ul></div></details></article><article class="section" id="ms-7"><div class="ms-header"><h2><span class="ms-num">Milestone 7</span>Full Verification And Handoff</h2><span class="badge done">Complete</span></div><div class="ms-progress"><div class="ms-progress-bar" style="width:100%"></div></div><p class="goal"><strong>Goal:</strong> Finish with intentional Loom mode, full repo gates, and a clear handoff state that preserves unrelated local dirt.</p><div class="subhead">Acceptance Criteria</div><div class="acceptance"><ul><li><code>make loom-status</code>, <code>make loom-local</code>, <code>make verify-mcp-local</code>, <code>make loom-remote</code>, <code>make build</code>, <code>make lint</code>, <code>make test</code>, and <code>make itest</code> all pass from <code>/Users/luca/code/my-tools/loom-mono/loom-mcp</code>.</li><li>Final <code>git status --short --branch</code> records intended progressive discovery changes separately from pre-existing unrelated files.</li><li>Commit and push remain out of scope until the user asks for them explicitly.</li></ul></div><details class="review-fold"><summary>Checklist 12/12</summary><div class="checklist"><ul><li><input type="checkbox" disabled checked><span class="task-text">Run <code>make loom-status</code> from <code>/Users/luca/code/my-tools/loom-mono/loom-mcp</code> and record the starting Loom mode.</span></li><li><input type="checkbox" disabled checked><span class="task-text">Run <code>make loom-local</code> from <code>/Users/luca/code/my-tools/loom-mono/loom-mcp</code>.</span></li><li><input type="checkbox" disabled checked><span class="task-text">Run <code>make verify-mcp-local</code> from <code>/Users/luca/code/my-tools/loom-mono/loom-mcp</code>.</span></li><li><input type="checkbox" disabled checked><span class="task-text">Run <code>make loom-remote</code> from <code>/Users/luca/code/my-tools/loom-mono/loom-mcp</code>.</span></li><li><input type="checkbox" disabled checked><span class="task-text">Run <code>make loom-status</code> from <code>/Users/luca/code/my-tools/loom-mono/loom-mcp</code> and record that remote mode was restored before CI-facing gates.</span></li><li><input type="checkbox" disabled checked><span class="task-text">Run <code>go fmt ./...</code> from <code>/Users/luca/code/my-tools/loom-mono/loom-mcp</code>.</span></li><li><input type="checkbox" disabled checked><span class="task-text">Run <code>make build</code> from <code>/Users/luca/code/my-tools/loom-mono/loom-mcp</code>.</span></li><li><input type="checkbox" disabled checked><span class="task-text">Run <code>make lint</code> from <code>/Users/luca/code/my-tools/loom-mono/loom-mcp</code>.</span></li><li><input type="checkbox" disabled checked><span class="task-text">Run <code>make test</code> from <code>/Users/luca/code/my-tools/loom-mono/loom-mcp</code>.</span></li><li><input type="checkbox" disabled checked><span class="task-text">Run <code>make itest</code> from <code>/Users/luca/code/my-tools/loom-mono/loom-mcp</code>.</span></li><li><input type="checkbox" disabled checked><span class="task-text">Run <code>git status --short --branch</code> from <code>/Users/luca/code/my-tools/loom-mono/loom-mcp</code> and record intended progressive discovery files separately from unrelated local dirt.</span></li><li><input type="checkbox" disabled checked><span class="task-text">Leave commit and push for a separate explicit user request.</span></li></ul></div></details></article>
+
+</section>
+</main>
+</div>
+<a href="#" class="totop" id="totop" title="Back to top" aria-label="Back to top">↑</a>
+<script>
+const totop = document.getElementById('totop');
+window.addEventListener('scroll', () => {
+  totop.classList.toggle('show', window.scrollY > 500);
+});
+
+const tocDetails = document.querySelector('.toc-details');
+const narrowToc = window.matchMedia('(max-width: 920px)');
+function syncTocMode(event) {
+  if (!tocDetails) return;
+  tocDetails.open = !event.matches;
+}
+syncTocMode(narrowToc);
+narrowToc.addEventListener('change', syncTocMode);
+document.querySelectorAll('.toc-body a').forEach((link) => {
+  link.addEventListener('click', (event) => {
+    if (!tocDetails || !narrowToc.matches) return;
+    const hash = link.getAttribute('href') || '';
+    if (!hash.startsWith('#')) {
+      tocDetails.open = false;
+      return;
+    }
+    const target = document.querySelector(hash);
+    if (!target) {
+      tocDetails.open = false;
+      return;
+    }
+    event.preventDefault();
+    tocDetails.open = false;
+    requestAnimationFrame(() => {
+      target.scrollIntoView();
+      history.pushState(null, '', hash);
+    });
+  });
+});
+
+function updateProgress() {
+  const milestones = [...document.querySelectorAll('#milestones > article.section[id]')];
+  let totalTasks = 0;
+  let doneTasks = 0;
+  let doneMilestones = 0;
+
+  milestones.forEach((milestone) => {
+    const boxes = [...milestone.querySelectorAll('.checklist input[type="checkbox"]')];
+    const done = boxes.filter((box) => box.checked).length;
+    const total = boxes.length;
+    const complete = total > 0 && done === total;
+    const percent = total === 0 ? 0 : Math.round((done / total) * 100);
+
+    totalTasks += total;
+    doneTasks += done;
+    if (complete) doneMilestones += 1;
+
+    const progressBar = milestone.querySelector('.ms-progress-bar');
+    if (progressBar) progressBar.style.width = `${percent}%`;
+
+    const badge = milestone.querySelector('.badge');
+    if (badge) {
+      badge.textContent = complete ? 'Complete' : 'Pending';
+      badge.classList.toggle('done', complete);
+      badge.classList.toggle('pending', !complete);
+    }
+
+    const summary = milestone.querySelector('details.review-fold > summary');
+    if (summary) summary.textContent = `Checklist ${done}/${total}`;
+
+    const tocProgress = document.querySelector(`[data-ms-progress="${milestone.id}"]`);
+    if (tocProgress) {
+      tocProgress.textContent = `${done}/${total}`;
+      tocProgress.classList.toggle('done', complete);
+    }
+  });
+
+  const totalPercent = totalTasks === 0 ? 0 : Math.round((doneTasks / totalTasks) * 100);
+  const statusCount = document.querySelectorAll('#status .timeline li').length;
+
+  document.querySelectorAll('[data-total-progress]').forEach((el) => {
+    el.textContent = `${doneTasks}/${totalTasks}`;
+    el.classList.toggle('done', doneTasks === totalTasks && totalTasks > 0);
+  });
+  document.querySelectorAll('[data-status-count]').forEach((el) => {
+    el.textContent = String(statusCount);
+  });
+
+  document.querySelector('[data-stat="milestones"]').textContent = `${doneMilestones} / ${milestones.length}`;
+  document.querySelector('[data-stat="tasks"]').textContent = `${doneTasks} / ${totalTasks}`;
+  document.querySelector('[data-stat="percent"]').textContent = `${totalPercent}%`;
+  document.querySelector('[data-stat="status"]').textContent = String(statusCount);
+}
+
+updateProgress();
+window.setTimeout(() => {
+  window.location.reload();
+}, 30000);
+</script>
+</body>
+</html>

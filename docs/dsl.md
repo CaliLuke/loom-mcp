@@ -1465,13 +1465,20 @@ mode. Generated MCP servers list `skill://<skill>/SKILL.md` and
 | `Subscription(...)`          | Subscription handlers                                  |
 | `SubscriptionMonitor(...)`   | SSE subscription monitors                              |
 
-Generated adapters also support runtime-configured tool search for large MCP
-catalogs. Set `MCPAdapterOptions.ToolSearch` (or `SDKServerOptions.Adapter.ToolSearch`)
-to replace the default `tools/list` catalog with pinned real tools plus
-synthetic `search_tools` and `call_tool` entries. This is an adapter option, not
-a DSL declaration: the design still owns the real tool contracts, while
-deployment code decides whether to expose the full catalog up front or require
-on-demand discovery.
+Generated adapters also support runtime-configured progressive discovery for
+large MCP catalogs. Set `MCPAdapterOptions.ToolSearch` (or
+`SDKServerOptions.Adapter.ToolSearch`) to replace the default `tools/list`
+catalog with synthetic `search_tools` and `call_tool` entries plus pinned real
+tools from `ToolSearchOptions.AlwaysVisible`. Hidden real tools are discovered
+through `search_tools` and invoked through `call_tool`; direct JSON-RPC hidden
+calls are rejected by default.
+
+This is an adapter option, not a DSL declaration: the design still owns the real
+tool contracts, while deployment code decides whether to expose the full catalog
+up front or require on-demand discovery. Tool declarations can improve discovery
+with MCP options such as `ToolTitle`, `ToolDiscoveryCategory`,
+`ToolDiscoveryTags`, and `ToolDiscoveryKeywords`; generated `search_tools`
+descriptors include that metadata and can filter by category or tags.
 
 ---
 

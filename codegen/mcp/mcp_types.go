@@ -291,9 +291,12 @@ func (b *mcpExprBuilder) buildToolInfoType() *expr.AttributeExpr {
 	return infoObject(
 		[]string{"name"},
 		stringField("name", "Tool name"),
+		stringField("title", "Human-readable tool title"),
 		stringField("description", "Tool description"),
 		anyField("inputSchema", "JSON Schema for tool input"),
+		anyField("outputSchema", "Optional JSON Schema for structured tool output"),
 		anyField("annotations", "Optional MCP tool annotations such as readOnlyHint, openWorldHint, or destructiveHint."),
+		anyField("_meta", "Optional MCP tool metadata"),
 		b.iconArrayField("Tool icons"),
 	)
 }

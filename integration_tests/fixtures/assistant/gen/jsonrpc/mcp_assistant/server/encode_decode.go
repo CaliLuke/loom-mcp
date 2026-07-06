@@ -604,10 +604,13 @@ func marshalMcpassistantIconToIconResponseBody(v *mcpassistant.Icon) *IconRespon
 // *ToolInfoResponseBody from a value of type *mcpassistant.ToolInfo.
 func marshalMcpassistantToolInfoToToolInfoResponseBody(v *mcpassistant.ToolInfo) *ToolInfoResponseBody {
 	res := &ToolInfoResponseBody{
-		Name:        v.Name,
-		Description: v.Description,
-		InputSchema: v.InputSchema,
-		Annotations: v.Annotations,
+		Name:         v.Name,
+		Title:        v.Title,
+		Description:  v.Description,
+		InputSchema:  v.InputSchema,
+		OutputSchema: v.OutputSchema,
+		Annotations:  v.Annotations,
+		Meta:         v.Meta,
 	}
 	if v.Icons != nil {
 		res.Icons = make([]*IconResponseBody, len(v.Icons))

@@ -6,6 +6,7 @@ import (
 	"path"
 	"strings"
 
+	"github.com/CaliLuke/loom-mcp/codegen/naming"
 	"github.com/CaliLuke/loom-mcp/codegen/shared"
 	mcpexpr "github.com/CaliLuke/loom-mcp/expr/mcp"
 	"github.com/CaliLuke/loom/codegen"
@@ -117,15 +118,21 @@ type (
 	ToolAdapter struct {
 		Name               string
 		Description        string
+		Title              string
+		DiscoveryCategory  string
+		DiscoveryTags      []string
+		DiscoveryKeywords  []string
 		Icons              []*IconData
 		OriginalMethodName string
 		Meta               []AnnotationMetaEntry
+		MetaJSON           string
 		AnnotationsJSON    string
 		HasPayload         bool
 		HasResult          bool
 		PayloadType        string
 		ResultType         string
 		InputSchema        string
+		OutputSchema       string
 		IsStreaming        bool
 		StreamInterface    string
 		StreamEventType    string
@@ -476,9 +483,14 @@ func (g *adapterGenerator) buildToolAdapter(tool *mcpexpr.ToolExpr) (*ToolAdapte
 	adapter := &ToolAdapter{
 		Name:               tool.Name,
 		Description:        tool.Description,
+		Title:              defaultString(tool.Title, naming.HumanizeTitle(tool.Name)),
+		DiscoveryCategory:  tool.DiscoveryCategory,
+		DiscoveryTags:      append([]string(nil), tool.DiscoveryTags...),
+		DiscoveryKeywords:  append([]string(nil), tool.DiscoveryKeywords...),
 		Icons:              iconDataFromExprs(tool.Icons),
 		OriginalMethodName: codegen.Goify(tool.Method.Name, true),
 		Meta:               mcpAnnotationEntries(meta),
+		MetaJSON:           mcpDiscoveryMetaJSON(tool),
 		AnnotationsJSON:    mcpAnnotationJSON(meta),
 		HasPayload:         hasNonEmptyPayload(tool.Method.Payload),
 		HasResult:          tool.Method.Result != nil,
@@ -488,7 +500,9 @@ func (g *adapterGenerator) buildToolAdapter(tool *mcpexpr.ToolExpr) (*ToolAdapte
 	if err := g.populateToolPayloadData(adapter, tool); err != nil {
 		return nil, err
 	}
-	g.populateToolResultData(adapter, tool)
+	if err := g.populateToolResultData(adapter, tool); err != nil {
+		return nil, err
+	}
 	return adapter, nil
 }
 
@@ -523,11 +537,68 @@ func (g *adapterGenerator) populateToolPayloadData(adapter *ToolAdapter, tool *m
 	return nil
 }
 
-func (g *adapterGenerator) populateToolResultData(adapter *ToolAdapter, tool *mcpexpr.ToolExpr) {
+func (g *adapterGenerator) populateToolResultData(adapter *ToolAdapter, tool *mcpexpr.ToolExpr) error {
 	if tool.Method.Result == nil {
-		return
+		return nil
 	}
 	adapter.ResultType = g.getTypeReference(tool.Method.Result)
+	if !isObjectBackedAttribute(tool.Method.Result) {
+		return nil
+	}
+	schema, err := shared.ToJSONSchema(tool.Method.Result)
+	if err != nil {
+		return fmt.Errorf("build output schema for tool %q: %w", tool.Name, err)
+	}
+	adapter.OutputSchema = schema
+	return nil
+}
+
+func defaultString(value, fallback string) string {
+	if value == "" {
+		return fallback
+	}
+	return value
+}
+
+func mcpDiscoveryMetaJSON(tool *mcpexpr.ToolExpr) string {
+	if tool == nil {
+		return ""
+	}
+	discovery := map[string]any{}
+	if tool.DiscoveryCategory != "" {
+		discovery["category"] = tool.DiscoveryCategory
+	}
+	if len(tool.DiscoveryTags) > 0 {
+		discovery["tags"] = append([]string(nil), tool.DiscoveryTags...)
+	}
+	if len(tool.DiscoveryKeywords) > 0 {
+		discovery["keywords"] = append([]string(nil), tool.DiscoveryKeywords...)
+	}
+	if len(discovery) == 0 {
+		return ""
+	}
+	meta := map[string]any{
+		"com.github.caliluke.loom-mcp/discovery": discovery,
+	}
+	raw, err := json.Marshal(meta)
+	if err != nil {
+		return ""
+	}
+	return string(raw)
+}
+
+func isObjectBackedAttribute(attr *expr.AttributeExpr) bool {
+	if attr == nil || attr.Type == nil {
+		return false
+	}
+	switch actual := attr.Type.(type) {
+	case *expr.Object:
+		return true
+	case expr.UserType:
+		return isObjectBackedAttribute(actual.Attribute())
+	default:
+		return false
+	}
 }
 
 func mcpAnnotationJSON(meta expr.MetaExpr) string {

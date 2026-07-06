@@ -166,6 +166,10 @@ var _ = Service("assistant", func() {
 			Attribute("sentiment", String, "Detected sentiment")
 		})
 		Tool("analyze_sentiment", "Analyze sentiment of text",
+			ToolTitle("Analyze Sentiment"),
+			ToolDiscoveryCategory("analysis"),
+			ToolDiscoveryTags("sentiment", "nlp"),
+			ToolDiscoveryKeywords("tone", "emotion", "polarity"),
 			ToolIcons(
 				Icon("https://assistant.example.com/icons/analyze-sentiment.png",
 					IconMIMEType("image/png"),
@@ -183,7 +187,12 @@ var _ = Service("assistant", func() {
 			Required("text")
 		})
 		Result(func() { Attribute("keywords", ArrayOf(String), "Extracted keywords") })
-		Tool("extract_keywords", "Extract keywords from text")
+		Tool("extract_keywords", "Extract keywords from text",
+			ToolTitle("Extract Keywords"),
+			ToolDiscoveryCategory("analysis"),
+			ToolDiscoveryTags("keywords", "nlp"),
+			ToolDiscoveryKeywords("terms", "phrases", "entities"),
+		)
 		JSONRPC(func() {})
 	})
 
@@ -206,7 +215,12 @@ var _ = Service("assistant", func() {
 			Required("query")
 		})
 		Result(func() { Attribute("results", ArrayOf(String), "Search results") })
-		Tool("search", "Search knowledge base")
+		Tool("search", "Search knowledge base",
+			ToolTitle("Search Knowledge Base"),
+			ToolDiscoveryCategory("knowledge"),
+			ToolDiscoveryTags("search", "retrieval"),
+			ToolDiscoveryKeywords("lookup", "documents", "knowledge"),
+		)
 		JSONRPC(func() {})
 	})
 

@@ -432,6 +432,69 @@ func TestGenerateSDKServer_CompletionTotalCountsAllMatchesBeforeTruncation(t *te
 	require.Contains(t, rendered, "return sdkCompleteValues(matches, total, hasMore)")
 }
 
+func TestGeneratedToolInfoIncludesMCPDiscoveryFields(t *testing.T) {
+	files := generateToolDiscoveryFixture(t)
+	serviceFile := findGeneratedFile(t, files, filepath.Join(gcodegen.Gendir, "mcp_assistant", "service.go"))
+	adapterFile := findGeneratedFile(t, files, filepath.Join(gcodegen.Gendir, "mcp_assistant", "adapter_server.go"))
+
+	serviceSource := renderGeneratedFile(t, serviceFile)
+	require.Contains(t, serviceSource, "Title *string `json:\"title,omitempty\"")
+	require.Contains(t, serviceSource, "OutputSchema any `json:\"outputSchema,omitempty\"")
+	require.Contains(t, serviceSource, "Meta any `json:\"_meta,omitempty\"")
+
+	adapterSource := renderGeneratedFile(t, adapterFile)
+	require.Contains(t, adapterSource, "Title:")
+	require.Contains(t, adapterSource, "stringPtr(\"Search Content\")")
+	require.Contains(t, adapterSource, "OutputSchema: json.RawMessage([]byte(")
+	require.Contains(t, adapterSource, "com.github.caliluke.loom-mcp/discovery")
+	require.Contains(t, adapterSource, "category")
+	require.Contains(t, adapterSource, "knowledge")
+	require.Contains(t, adapterSource, "tags")
+	require.Contains(t, adapterSource, "search")
+	require.Contains(t, adapterSource, "retrieval")
+	require.Contains(t, adapterSource, "keywords")
+	require.Contains(t, adapterSource, "lookup")
+	require.Contains(t, adapterSource, "documents")
+}
+
+func TestGeneratedToolInfoConversionsPreserveDiscoveryFields(t *testing.T) {
+	files := generateToolDiscoveryFixture(t)
+	serverFile := findGeneratedFile(t, files, filepath.Join(gcodegen.Gendir, "jsonrpc", "mcp_assistant", "server", "types.go"))
+	clientFile := findGeneratedFile(t, files, filepath.Join(gcodegen.Gendir, "jsonrpc", "mcp_assistant", "client", "types.go"))
+
+	for _, file := range []*gcodegen.File{serverFile, clientFile} {
+		source := renderGeneratedFile(t, file)
+		require.Contains(t, source, "json:\"title,omitempty\"")
+		require.Contains(t, source, "json:\"outputSchema,omitempty\"")
+		require.Contains(t, source, "json:\"_meta,omitempty\"")
+	}
+	require.Contains(t, renderGeneratedFile(t, serverFile), "marshalMcpassistantToolInfoToToolInfoResponseBody")
+	require.Contains(t, renderGeneratedFile(t, clientFile), "unmarshalToolInfoResponseBodyToMcpassistantToolInfo")
+}
+
+func TestGeneratedSearchToolsHasOutputSchema(t *testing.T) {
+	files := generateToolDiscoveryFixture(t)
+	adapterFile := findGeneratedFile(t, files, filepath.Join(gcodegen.Gendir, "mcp_assistant", "adapter_server.go"))
+	adapterSource := renderGeneratedFile(t, adapterFile)
+
+	require.Contains(t, adapterSource, "func toolSearchToolInfo(name string) *ToolInfo")
+	require.Contains(t, adapterSource, "OutputSchema: json.RawMessage([]byte(")
+	require.Contains(t, adapterSource, `\"tools\"`)
+	require.Contains(t, adapterSource, "total_matches")
+	require.Contains(t, adapterSource, `\"truncated\"`)
+}
+
+func TestGenerateSDKServerRendersToolSearchSyntheticTools(t *testing.T) {
+	files := generateToolDiscoveryFixture(t)
+	sdkFile := findGeneratedFile(t, files, filepath.Join(gcodegen.Gendir, "mcp_assistant", "sdk_server.go"))
+	sdkSource := renderGeneratedFile(t, sdkFile)
+
+	require.Contains(t, sdkSource, "adapter.toolSearchEnabled()")
+	require.Contains(t, sdkSource, "adapter.toolSearchSyntheticTools()")
+	require.Contains(t, sdkSource, "adapter.visibleToolCatalog(adapter.generatedToolCatalog())")
+	require.Contains(t, sdkSource, "SDK ToolSearch compact mode does not support AllowDirectHiddenCalls")
+}
+
 func TestBuildAdapterData_DefaultedEnumFieldsStayScalarAndReapplyDefaults(t *testing.T) {
 	restore := resetMCPCodegenState(t)
 	defer restore()
@@ -1087,6 +1150,49 @@ func resetMCPCodegenState(t *testing.T) func() {
 	return func() {
 		mcpexpr.Root = previousRoot
 	}
+}
+
+func generateToolDiscoveryFixture(t *testing.T) []*gcodegen.File {
+	t.Helper()
+	restore := resetMCPCodegenState(t)
+	t.Cleanup(restore)
+
+	svc, methods := testService("assistant", "search")
+	methods["search"].Payload = &expr.AttributeExpr{
+		Type: &expr.Object{
+			{Name: "query", Attribute: &expr.AttributeExpr{Type: expr.String, Description: "Search query"}},
+		},
+		Validation: &expr.ValidationExpr{Required: []string{"query"}},
+	}
+	methods["search"].Result = &expr.AttributeExpr{
+		Type: &expr.Object{
+			{Name: "summary", Attribute: &expr.AttributeExpr{Type: expr.String, Description: "Search summary"}},
+			{Name: "score", Attribute: &expr.AttributeExpr{Type: expr.Float64, Description: "Search score"}},
+		},
+		Validation: &expr.ValidationExpr{Required: []string{"summary"}},
+	}
+	root := testRootExpr([]*expr.ServiceExpr{svc}, []*expr.HTTPServiceExpr{
+		jsonrpcService(svc, "/rpc"),
+	})
+	mcpexpr.Root.RegisterMCP(svc, &mcpexpr.MCPExpr{
+		Name:    "assistant-mcp",
+		Version: "1.0.0",
+		Tools: []*mcpexpr.ToolExpr{
+			{
+				Name:              "search",
+				Description:       "Search indexed content",
+				Title:             "Search Content",
+				DiscoveryCategory: "knowledge",
+				DiscoveryTags:     []string{"search", "retrieval"},
+				DiscoveryKeywords: []string{"lookup", "documents"},
+				Method:            methods["search"],
+			},
+		},
+	})
+
+	files, err := Generate("example.com/assistant/gen", []eval.Root{root}, nil)
+	require.NoError(t, err)
+	return files
 }
 
 func testService(name string, methodNames ...string) (*expr.ServiceExpr, map[string]*expr.MethodExpr) {

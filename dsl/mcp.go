@@ -236,6 +236,34 @@ func ToolIcons(icons ...*exprmcp.IconExpr) func(*exprmcp.ToolExpr) {
 	}
 }
 
+// ToolTitle sets the MCP tool display title.
+func ToolTitle(title string) func(*exprmcp.ToolExpr) {
+	return func(tool *exprmcp.ToolExpr) {
+		tool.Title = strings.TrimSpace(title)
+	}
+}
+
+// ToolDiscoveryCategory sets the MCP tool progressive discovery category.
+func ToolDiscoveryCategory(category string) func(*exprmcp.ToolExpr) {
+	return func(tool *exprmcp.ToolExpr) {
+		tool.DiscoveryCategory = strings.TrimSpace(category)
+	}
+}
+
+// ToolDiscoveryTags sets the MCP tool progressive discovery tags.
+func ToolDiscoveryTags(tags ...string) func(*exprmcp.ToolExpr) {
+	return func(tool *exprmcp.ToolExpr) {
+		tool.DiscoveryTags = cleanStrings(tags)
+	}
+}
+
+// ToolDiscoveryKeywords sets the MCP tool progressive discovery keywords.
+func ToolDiscoveryKeywords(keywords ...string) func(*exprmcp.ToolExpr) {
+	return func(tool *exprmcp.ToolExpr) {
+		tool.DiscoveryKeywords = cleanStrings(keywords)
+	}
+}
+
 // ResourceIcons attaches icon metadata to an MCP resource.
 func ResourceIcons(icons ...*exprmcp.IconExpr) func(*exprmcp.ResourceExpr) {
 	return func(resource *exprmcp.ResourceExpr) {
@@ -500,6 +528,18 @@ func cloneIcons(icons []*exprmcp.IconExpr) []*exprmcp.IconExpr {
 	}
 	if len(out) == 0 {
 		return nil
+	}
+	return out
+}
+
+func cleanStrings(values []string) []string {
+	out := make([]string, 0, len(values))
+	for _, value := range values {
+		trimmed := strings.TrimSpace(value)
+		if trimmed == "" {
+			continue
+		}
+		out = append(out, trimmed)
 	}
 	return out
 }

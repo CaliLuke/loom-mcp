@@ -55,6 +55,17 @@ Use this file when editing DSL, generators, generated helpers, or MCP codegen be
   discriminators and missing nested union values. Invalid discriminators should
   use the allowed enum values; missing `value` envelopes should use the generated
   missing-field error path, not raw JSON decoder failures.
+- Generated MCP `ToolInfo` surfaces must preserve MCP Tool fields across service,
+  JSON-RPC server, JSON-RPC client, and SDK paths: `name`, `title`,
+  `description`, `inputSchema`, `outputSchema`, `annotations`, `_meta`, and
+  `icons`.
+- Progressive tool discovery is opt-in through `MCPAdapterOptions.ToolSearch`.
+  When enabled, generated `tools/list` is the compact authoritative public
+  catalog: `search_tools`, `call_tool`, and validated `AlwaysVisible` pins.
+  Search descriptors carry discovery metadata and omit schemas unless requested.
+  Hidden real tools are called through `call_tool`; direct hidden JSON-RPC calls
+  require `AllowDirectHiddenCalls`, and SDK compact mode must reject that option
+  because unregistered SDK tools cannot be directly invoked.
 
 ## Validation And Contracts
 

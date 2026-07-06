@@ -148,6 +148,8 @@ func emitToolSearchOptions(stmt *jen.Statement) {
 		jen.Id("SearchToolName").String(),
 		jen.Comment("CallToolName overrides the synthetic call proxy tool name. Default: call_tool."),
 		jen.Id("CallToolName").String(),
+		jen.Comment("AllowDirectHiddenCalls permits direct tools/call for hidden real tools as a JSON-RPC compatibility option."),
+		jen.Id("AllowDirectHiddenCalls").Bool(),
 	)
 	stmt.Line()
 }
@@ -201,6 +203,8 @@ func emitAdapterConstructor(stmt *jen.Statement, data *AdapterData) {
 	params = append(params, jen.Id("opts").Op("*").Id("MCPAdapterOptions"))
 
 	stmt.Func().Id("NewMCPAdapter").Params(params...).Op("*").Id("MCPAdapter").BlockFunc(func(g *jen.Group) {
+		g.Id("validateToolSearchOptions").Call(jen.Id("opts"))
+
 		// Resolve name-based policy to URIs
 		g.Comment("Resolve name-based policy to URIs")
 		g.If(jen.Id("opts").Op("!=").Nil().Op("&&").Parens(jen.Len(jen.Id("opts").Dot("AllowedResourceNames")).Op(">").Lit(0).Op("||").Len(jen.Id("opts").Dot("DeniedResourceNames")).Op(">").Lit(0))).BlockFunc(func(ig *jen.Group) {

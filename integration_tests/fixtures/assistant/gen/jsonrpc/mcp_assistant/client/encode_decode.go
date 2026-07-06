@@ -1221,10 +1221,13 @@ func unmarshalToolInfoResponseBodyToMcpassistantToolInfo(v *ToolInfoResponseBody
 		return nil
 	}
 	res := &mcpassistant.ToolInfo{
-		Name:        *v.Name,
-		Description: v.Description,
-		InputSchema: v.InputSchema,
-		Annotations: v.Annotations,
+		Name:         *v.Name,
+		Title:        v.Title,
+		Description:  v.Description,
+		InputSchema:  v.InputSchema,
+		OutputSchema: v.OutputSchema,
+		Annotations:  v.Annotations,
+		Meta:         v.Meta,
 	}
 	if v.Icons != nil {
 		res.Icons = make([]*mcpassistant.Icon, len(v.Icons))

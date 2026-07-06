@@ -113,10 +113,16 @@ RequestContext: func(ctx context.Context, r *http.Request) context.Context {
 ```
 
 `SDKServerOptions.Adapter.ToolSearch` passes through to the generated MCP
-adapter. When set, SDK-backed servers use the same large-catalog discovery mode
-as JSON-RPC adapters: `tools/list` returns pinned tools plus synthetic
-`search_tools` and `call_tool` entries, while direct `tools/call` access to real
-generated tools remains available.
+adapter. When set, SDK-backed servers use the same compact public discovery
+surface as JSON-RPC adapters: SDK `tools/list` registers synthetic
+`search_tools` and `call_tool` entries plus real tools pinned in
+`ToolSearchOptions.AlwaysVisible`. Hidden real tools are not registered directly;
+clients discover them through `search_tools` and invoke them through `call_tool`.
+
+`ToolSearchOptions.AllowDirectHiddenCalls` is unsupported for SDK-backed compact
+mode. `NewSDKServer` fails construction when that option is true because the SDK
+cannot directly call tools that were intentionally omitted from the registered
+public catalog.
 
 ### Ctx-Cached Values Can Be Stale — Read `r.Header` First
 

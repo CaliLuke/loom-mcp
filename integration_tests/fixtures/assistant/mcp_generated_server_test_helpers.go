@@ -142,14 +142,20 @@ func openRawEventsStream(t *testing.T, ctx context.Context, server *httptest.Ser
 }
 
 func newGeneratedJSONRPCServer(t *testing.T) *httptest.Server {
+	return newGeneratedJSONRPCServerWithAdapterOptions(t, nil)
+}
+
+func newGeneratedJSONRPCServerWithAdapterOptions(t *testing.T, opts *mcpassistant.MCPAdapterOptions) *httptest.Server {
 	t.Helper()
 
-	svc := NewMcpAssistantWithOptions(&mcpassistant.MCPAdapterOptions{
-		Logger: func(ctx context.Context, event string, details any) {
-			t.Helper()
-			t.Logf("generated-mcp-adapter event=%s details=%v session_id=%s", event, details, mcpruntime.SessionIDFromContext(ctx))
-		},
-	})
+	if opts == nil {
+		opts = &mcpassistant.MCPAdapterOptions{}
+	}
+	opts.Logger = func(ctx context.Context, event string, details any) {
+		t.Helper()
+		t.Logf("generated-mcp-adapter event=%s details=%v session_id=%s", event, details, mcpruntime.SessionIDFromContext(ctx))
+	}
+	svc := NewMcpAssistantWithOptions(opts)
 	endpoints := mcpassistant.NewEndpoints(svc)
 	mux := goahttp.NewMuxer()
 	server := mcpAssistantjssvr.New(
@@ -167,10 +173,15 @@ func newGeneratedJSONRPCServer(t *testing.T) *httptest.Server {
 }
 
 func newGeneratedSDKServer(t *testing.T) (*mcpassistant.SDKServer, *httptest.Server) {
+	return newGeneratedSDKServerWithAdapterOptions(t, nil)
+}
+
+func newGeneratedSDKServerWithAdapterOptions(t *testing.T, adapterOpts *mcpassistant.MCPAdapterOptions) (*mcpassistant.SDKServer, *httptest.Server) {
 	t.Helper()
 
 	sdkServer, err := mcpassistant.NewSDKServer(NewAssistant(), &mcpassistant.SDKServerOptions{
 		PromptProvider: promptProvider{},
+		Adapter:        adapterOpts,
 		RequestContext: func(ctx context.Context, r *http.Request) context.Context {
 			if r == nil {
 				return ctx

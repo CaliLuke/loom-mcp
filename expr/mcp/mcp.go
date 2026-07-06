@@ -190,6 +190,17 @@ type (
 		// Description provides a human-readable explanation of what the
 		// tool does.
 		Description string
+		// Title is the optional human-readable display name for this tool.
+		Title string
+		// DiscoveryCategory is the optional category used by generated
+		// progressive discovery search metadata.
+		DiscoveryCategory string
+		// DiscoveryTags are optional labels used by generated
+		// progressive discovery search metadata.
+		DiscoveryTags []string
+		// DiscoveryKeywords are optional extra search terms used by
+		// generated progressive discovery search metadata.
+		DiscoveryKeywords []string
 		// Method is the Goa service method that implements this tool.
 		Method *expr.MethodExpr
 		// InputSchema defines the parameter schema for this tool.

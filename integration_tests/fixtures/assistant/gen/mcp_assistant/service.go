@@ -435,13 +435,19 @@ type ServerInfo struct {
 type ToolInfo struct {
 	// Tool name
 	Name string `json:"name"`
+	// Human-readable tool title
+	Title *string `json:"title,omitempty"`
 	// Tool description
 	Description *string `json:"description,omitempty"`
 	// JSON Schema for tool input
 	InputSchema any `json:"inputSchema,omitempty"`
+	// Optional JSON Schema for structured tool output
+	OutputSchema any `json:"outputSchema,omitempty"`
 	// Optional MCP tool annotations such as readOnlyHint, openWorldHint, or
 	// destructiveHint.
 	Annotations any `json:"annotations,omitempty"`
+	// Optional MCP tool metadata
+	Meta any `json:"_meta,omitempty"`
 	// Tool icons
 	Icons []*Icon `json:"icons,omitempty"`
 }

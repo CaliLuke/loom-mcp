@@ -237,13 +237,19 @@ type ToolsListResponseBodyResponseBody struct {
 type ToolInfoResponseBody struct {
 	// Tool name
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// Human-readable tool title
+	Title *string `form:"title,omitempty" json:"title,omitempty" xml:"title,omitempty"`
 	// Tool description
 	Description *string `form:"description,omitempty" json:"description,omitempty" xml:"description,omitempty"`
 	// JSON Schema for tool input
 	InputSchema any `form:"inputSchema,omitempty" json:"inputSchema,omitempty" xml:"inputSchema,omitempty"`
+	// Optional JSON Schema for structured tool output
+	OutputSchema any `form:"outputSchema,omitempty" json:"outputSchema,omitempty" xml:"outputSchema,omitempty"`
 	// Optional MCP tool annotations such as readOnlyHint, openWorldHint, or
 	// destructiveHint.
 	Annotations any `form:"annotations,omitempty" json:"annotations,omitempty" xml:"annotations,omitempty"`
+	// Optional MCP tool metadata
+	Meta any `form:"_meta,omitempty" json:"_meta,omitempty" xml:"_meta,omitempty"`
 	// Tool icons
 	Icons []*IconResponseBody `form:"icons,omitempty" json:"icons,omitempty" xml:"icons,omitempty"`
 }

@@ -21,7 +21,7 @@ func adapterToolsSection(data *AdapterData) codegen.Section {
 		emitValidateMCPPayloadEnum(stmt)
 		emitToolSearchPayloadTypes(stmt)
 		emitGeneratedToolCatalog(stmt, data)
-		emitToolSearchHelpers(stmt)
+		emitToolSearchHelpers(stmt, data)
 		emitToolsList(stmt)
 		emitToolStreamBridges(stmt, data)
 		for _, tool := range data.Tools {
@@ -276,8 +276,12 @@ func emitValidateMCPPayloadEnum(stmt *jen.Statement) {
 
 func emitToolSearchPayloadTypes(stmt *jen.Statement) {
 	stmt.Type().Id("toolSearchPayload").Struct(
+		jen.Id("Query").String().Tag(map[string]string{"json": "query,omitempty"}),
 		jen.Id("Pattern").String().Tag(map[string]string{"json": "pattern"}),
 		jen.Id("MaxResults").Op("*").Int().Tag(map[string]string{"json": "max_results,omitempty"}),
+		jen.Id("IncludeSchemas").Bool().Tag(map[string]string{"json": "include_schemas,omitempty"}),
+		jen.Id("Category").String().Tag(map[string]string{"json": "category,omitempty"}),
+		jen.Id("Tags").Index().String().Tag(map[string]string{"json": "tags,omitempty"}),
 	)
 	stmt.Line()
 
@@ -286,11 +290,43 @@ func emitToolSearchPayloadTypes(stmt *jen.Statement) {
 		jen.Id("Arguments").Qual("encoding/json", "RawMessage").Tag(map[string]string{"json": "arguments,omitempty"}),
 	)
 	stmt.Line()
+
+	stmt.Type().Id("toolSearchResult").Struct(
+		jen.Id("Tools").Index().Id("toolSearchDescriptor").Tag(map[string]string{"json": "tools"}),
+		jen.Id("TotalMatches").Int().Tag(map[string]string{"json": "total_matches"}),
+		jen.Id("Truncated").Bool().Tag(map[string]string{"json": "truncated"}),
+		jen.Id("Query").String().Tag(map[string]string{"json": "query,omitempty"}),
+		jen.Id("Pattern").String().Tag(map[string]string{"json": "pattern,omitempty"}),
+	)
+	stmt.Line()
+
+	stmt.Type().Id("toolSearchDescriptor").Struct(
+		jen.Id("Name").String().Tag(map[string]string{"json": "name"}),
+		jen.Id("Title").String().Tag(map[string]string{"json": "title,omitempty"}),
+		jen.Id("Description").String().Tag(map[string]string{"json": "description,omitempty"}),
+		jen.Id("InputSchema").Qual("encoding/json", "RawMessage").Tag(map[string]string{"json": "inputSchema,omitempty"}),
+		jen.Id("OutputSchema").Qual("encoding/json", "RawMessage").Tag(map[string]string{"json": "outputSchema,omitempty"}),
+		jen.Id("Annotations").Qual("encoding/json", "RawMessage").Tag(map[string]string{"json": "annotations,omitempty"}),
+		jen.Id("Meta").Qual("encoding/json", "RawMessage").Tag(map[string]string{"json": "_meta,omitempty"}),
+		jen.Id("Icons").Index().Op("*").Id("Icon").Tag(map[string]string{"json": "icons,omitempty"}),
+		jen.Id("Category").String().Tag(map[string]string{"json": "category,omitempty"}),
+		jen.Id("Tags").Index().String().Tag(map[string]string{"json": "tags,omitempty"}),
+		jen.Id("Keywords").Index().String().Tag(map[string]string{"json": "keywords,omitempty"}),
+	)
+	stmt.Line()
+
+	stmt.Type().Id("toolSearchCandidate").Struct(
+		jen.Id("tool").Op("*").Id("ToolInfo"),
+		jen.Id("score").Int(),
+		jen.Id("order").Int(),
+	)
+	stmt.Line()
 }
 
 func toolInfoValue(tool *ToolAdapter) jen.Code {
 	dict := jen.Dict{
 		jen.Id("Name"):        jen.Lit(tool.Name),
+		jen.Id("Title"):       jen.Id("stringPtr").Call(jen.Lit(tool.Title)),
 		jen.Id("Description"): jen.Id("stringPtr").Call(jen.Lit(tool.Description)),
 	}
 	if tool.InputSchema != "" {
@@ -298,8 +334,14 @@ func toolInfoValue(tool *ToolAdapter) jen.Code {
 	} else {
 		dict[jen.Id("InputSchema")] = jen.Qual("encoding/json", "RawMessage").Call(jen.Index().Byte().Call(jen.Lit(`{"type":"object","properties":{},"additionalProperties":false}`)))
 	}
+	if tool.OutputSchema != "" {
+		dict[jen.Id("OutputSchema")] = jen.Qual("encoding/json", "RawMessage").Call(jen.Index().Byte().Call(jen.Lit(tool.OutputSchema)))
+	}
 	if tool.AnnotationsJSON != "" {
 		dict[jen.Id("Annotations")] = jen.Qual("encoding/json", "RawMessage").Call(jen.Index().Byte().Call(jen.Lit(tool.AnnotationsJSON)))
+	}
+	if tool.MetaJSON != "" {
+		dict[jen.Id("Meta")] = jen.Qual("encoding/json", "RawMessage").Call(jen.Index().Byte().Call(jen.Lit(tool.MetaJSON)))
 	}
 	if icons := iconSliceValue(tool.Icons); icons != nil {
 		dict[jen.Id("Icons")] = icons
@@ -320,15 +362,18 @@ func emitGeneratedToolCatalog(stmt *jen.Statement, data *AdapterData) {
 	stmt.Line()
 }
 
-func emitToolSearchHelpers(stmt *jen.Statement) {
+func emitToolSearchHelpers(stmt *jen.Statement, data *AdapterData) {
 	emitToolSearchEnabled(stmt)
 	emitToolSearchNames(stmt)
+	emitGeneratedToolNameHelpers(stmt, data)
+	emitValidateToolSearchOptions(stmt, data)
 	emitToolSearchMaxResults(stmt)
 	emitVisibleToolCatalog(stmt)
 	emitToolSearchSyntheticTools(stmt)
 	emitToolSearchToolInfo(stmt)
 	emitToolCallProxyToolInfo(stmt)
 	emitToolSearchHaystack(stmt)
+	emitToolSearchDescriptorHelpers(stmt)
 	emitHandleSearchTools(stmt)
 	emitHandleCallToolProxy(stmt)
 }
@@ -375,6 +420,71 @@ func emitToolSearchNames(stmt *jen.Statement) {
 			jen.Return(jen.Id("a").Dot("toolSearchEnabled").Call().Op("&&").Id("name").Op("==").Id("callName")),
 		)
 	stmt.Line()
+}
+
+func emitGeneratedToolNameHelpers(stmt *jen.Statement, data *AdapterData) {
+	stmt.Func().Id("isGeneratedToolName").Params(jen.Id("name").String()).Bool().
+		Block(
+			jen.Switch(jen.Id("name")).BlockFunc(func(sw *jen.Group) {
+				for _, tool := range data.Tools {
+					sw.Case(jen.Lit(tool.Name)).Block(jen.Return(jen.True()))
+				}
+				sw.Default().Block(jen.Return(jen.False()))
+			}),
+		)
+	stmt.Line()
+
+	stmt.Func().Params(jen.Id("a").Op("*").Id("MCPAdapter")).
+		Id("isAlwaysVisibleToolName").Params(jen.Id("name").String()).Bool().
+		Block(
+			jen.If(jen.Op("!").Id("a").Dot("toolSearchEnabled").Call()).Block(
+				jen.Return(jen.True()),
+			),
+			jen.For(jen.List(jen.Id("_"), jen.Id("visible")).Op(":=").Range().Id("a").Dot("opts").Dot("ToolSearch").Dot("AlwaysVisible")).Block(
+				jen.If(jen.Id("visible").Op("==").Id("name")).Block(
+					jen.Return(jen.True()),
+				),
+			),
+			jen.Return(jen.False()),
+		)
+	stmt.Line()
+}
+
+func emitValidateToolSearchOptions(stmt *jen.Statement, data *AdapterData) {
+	stmt.Func().Id("validateToolSearchOptions").Params(jen.Id("opts").Op("*").Id("MCPAdapterOptions")).Block(
+		jen.If(jen.Id("opts").Op("==").Nil().Op("||").Id("opts").Dot("ToolSearch").Op("==").Nil()).Block(
+			jen.Return(),
+		),
+		jen.Id("searchName").Op(":=").Lit("search_tools"),
+		jen.Id("callName").Op(":=").Lit("call_tool"),
+		jen.If(jen.Id("opts").Dot("ToolSearch").Dot("SearchToolName").Op("!=").Lit("")).Block(
+			jen.Id("searchName").Op("=").Id("opts").Dot("ToolSearch").Dot("SearchToolName"),
+		),
+		jen.If(jen.Id("opts").Dot("ToolSearch").Dot("CallToolName").Op("!=").Lit("")).Block(
+			jen.Id("callName").Op("=").Id("opts").Dot("ToolSearch").Dot("CallToolName"),
+		),
+		jen.If(jen.Id("searchName").Op("==").Id("callName")).Block(
+			jen.Panic(jen.Qual("fmt", "Sprintf").Call(jen.Lit("MCP ToolSearch synthetic tool names must be distinct: %q"), jen.Id("searchName"))),
+		),
+		jen.If(jen.Id("isGeneratedToolName").Call(jen.Id("searchName"))).Block(
+			jen.Panic(jen.Qual("fmt", "Sprintf").Call(jen.Lit("MCP ToolSearch search tool name %q collides with a generated tool"), jen.Id("searchName"))),
+		),
+		jen.If(jen.Id("isGeneratedToolName").Call(jen.Id("callName"))).Block(
+			jen.Panic(jen.Qual("fmt", "Sprintf").Call(jen.Lit("MCP ToolSearch call tool name %q collides with a generated tool"), jen.Id("callName"))),
+		),
+		jen.For(jen.List(jen.Id("_"), jen.Id("name")).Op(":=").Range().Id("opts").Dot("ToolSearch").Dot("AlwaysVisible")).Block(
+			jen.If(jen.Id("name").Op("==").Lit("")).Block(jen.Continue()),
+			jen.If(jen.Op("!").Id("isGeneratedToolName").Call(jen.Id("name"))).Block(
+				jen.Panic(jen.Qual("fmt", "Sprintf").Call(jen.Lit("MCP ToolSearch AlwaysVisible tool %q is not a generated tool"), jen.Id("name"))),
+			),
+			jen.If(jen.Id("name").Op("==").Id("searchName").Op("||").Id("name").Op("==").Id("callName")).Block(
+				jen.Panic(jen.Qual("fmt", "Sprintf").Call(jen.Lit("MCP ToolSearch AlwaysVisible tool %q collides with a synthetic tool"), jen.Id("name"))),
+			),
+		),
+	)
+	stmt.Line()
+
+	_ = data
 }
 
 func emitToolSearchMaxResults(stmt *jen.Statement) {
@@ -431,9 +541,11 @@ func emitToolSearchToolInfo(stmt *jen.Statement) {
 	stmt.Func().Id("toolSearchToolInfo").Params(jen.Id("name").String()).Op("*").Id("ToolInfo").
 		Block(
 			jen.Return(jen.Op("&").Id("ToolInfo").Values(jen.Dict{
-				jen.Id("Name"):        jen.Id("name"),
-				jen.Id("Description"): jen.Id("stringPtr").Call(jen.Lit("Search available tools by regex pattern and return matching tool definitions.")),
-				jen.Id("InputSchema"): jen.Qual("encoding/json", "RawMessage").Call(jen.Index().Byte().Call(jen.Lit(`{"type":"object","required":["pattern"],"properties":{"pattern":{"type":"string","description":"Case-insensitive regex pattern matched against tool names, descriptions, parameter names, and parameter descriptions"},"max_results":{"type":"integer","description":"Maximum number of tools to return for this search"}},"additionalProperties":false}`))),
+				jen.Id("Name"):         jen.Id("name"),
+				jen.Id("Title"):        jen.Id("stringPtr").Call(jen.Lit("Search Tools")),
+				jen.Id("Description"):  jen.Id("stringPtr").Call(jen.Lit("Search available tools by plain text query or regex pattern and return matching tool definitions.")),
+				jen.Id("InputSchema"):  jen.Qual("encoding/json", "RawMessage").Call(jen.Index().Byte().Call(jen.Lit(`{"type":"object","properties":{"query":{"type":"string","description":"Plain text query matched against tool names, titles, descriptions, metadata, and schemas"},"pattern":{"type":"string","description":"Case-insensitive regex pattern matched against tool names, titles, descriptions, metadata, and schemas"},"max_results":{"type":"integer","description":"Maximum number of tools to return for this search"},"include_schemas":{"type":"boolean","description":"Include input and output schemas in returned descriptors"},"category":{"type":"string","description":"Discovery category filter"},"tags":{"type":"array","items":{"type":"string"},"description":"Discovery tag filters"}},"additionalProperties":false}`))),
+				jen.Id("OutputSchema"): jen.Qual("encoding/json", "RawMessage").Call(jen.Index().Byte().Call(jen.Lit(`{"type":"object","required":["tools","total_matches","truncated"],"properties":{"tools":{"type":"array","items":{"type":"object","required":["name","description"],"properties":{"name":{"type":"string"},"title":{"type":"string"},"description":{"type":"string"},"inputSchema":{"type":"object"},"outputSchema":{"type":"object"},"annotations":{"type":"object"},"_meta":{"type":"object"},"icons":{"type":"array","items":{"type":"object"}},"category":{"type":"string"},"tags":{"type":"array","items":{"type":"string"}},"keywords":{"type":"array","items":{"type":"string"}}}}},"total_matches":{"type":"integer"},"truncated":{"type":"boolean"},"query":{"type":"string"},"pattern":{"type":"string"}},"additionalProperties":false}`))),
 			})),
 		)
 	stmt.Line()
@@ -444,6 +556,7 @@ func emitToolCallProxyToolInfo(stmt *jen.Statement) {
 		Block(
 			jen.Return(jen.Op("&").Id("ToolInfo").Values(jen.Dict{
 				jen.Id("Name"):        jen.Id("name"),
+				jen.Id("Title"):       jen.Id("stringPtr").Call(jen.Lit("Call Tool")),
 				jen.Id("Description"): jen.Id("stringPtr").Call(jen.Lit("Call a discovered tool by name with its arguments.")),
 				jen.Id("InputSchema"): jen.Qual("encoding/json", "RawMessage").Call(jen.Index().Byte().Call(jen.Lit(`{"type":"object","required":["name"],"properties":{"name":{"type":"string","description":"Name of the discovered tool to call"},"arguments":{"type":"object","description":"Arguments object for the discovered tool"}},"additionalProperties":false}`))),
 			})),
@@ -458,6 +571,9 @@ func emitToolSearchHaystack(stmt *jen.Statement) {
 			jen.Id("parts").Op(":=").Index().String().Values(jen.Id("tool").Dot("Name")),
 			jen.If(jen.Id("tool").Dot("Description").Op("!=").Nil()).Block(
 				jen.Id("parts").Op("=").Append(jen.Id("parts"), jen.Op("*").Id("tool").Dot("Description")),
+			),
+			jen.If(jen.Id("tool").Dot("Title").Op("!=").Nil()).Block(
+				jen.Id("parts").Op("=").Append(jen.Id("parts"), jen.Op("*").Id("tool").Dot("Title")),
 			),
 			jen.Switch(jen.Id("schema").Op(":=").Id("tool").Dot("InputSchema").Assert(jen.Type())).Block(
 				jen.Case(jen.Qual("encoding/json", "RawMessage")).Block(
@@ -474,7 +590,144 @@ func emitToolSearchHaystack(stmt *jen.Statement) {
 					),
 				),
 			),
+			jen.Switch(jen.Id("schema").Op(":=").Id("tool").Dot("OutputSchema").Assert(jen.Type())).Block(
+				jen.Case(jen.Qual("encoding/json", "RawMessage")).Block(
+					jen.Id("parts").Op("=").Append(jen.Id("parts"), jen.String().Call(jen.Id("schema"))),
+				),
+				jen.Case(jen.Index().Byte()).Block(
+					jen.Id("parts").Op("=").Append(jen.Id("parts"), jen.String().Call(jen.Id("schema"))),
+				),
+			),
+			jen.Switch(jen.Id("meta").Op(":=").Id("tool").Dot("Meta").Assert(jen.Type())).Block(
+				jen.Case(jen.Qual("encoding/json", "RawMessage")).Block(
+					jen.Id("parts").Op("=").Append(jen.Id("parts"), jen.String().Call(jen.Id("meta"))),
+				),
+				jen.Case(jen.Index().Byte()).Block(
+					jen.Id("parts").Op("=").Append(jen.Id("parts"), jen.String().Call(jen.Id("meta"))),
+				),
+			),
 			jen.Return(jen.Qual("strings", "Join").Call(jen.Id("parts"), jen.Lit(" "))),
+		)
+	stmt.Line()
+}
+
+func emitToolSearchDescriptorHelpers(stmt *jen.Statement) {
+	stmt.Func().Id("toolRawJSON").Params(jen.Id("value").Any()).Qual("encoding/json", "RawMessage").
+		Block(
+			jen.Switch(jen.Id("v").Op(":=").Id("value").Assert(jen.Type())).Block(
+				jen.Case(jen.Qual("encoding/json", "RawMessage")).Block(jen.Return(jen.Id("v"))),
+				jen.Case(jen.Index().Byte()).Block(jen.Return(jen.Qual("encoding/json", "RawMessage").Call(jen.Id("v")))),
+				jen.Case(jen.String()).Block(jen.Return(jen.Qual("encoding/json", "RawMessage").Call(jen.Index().Byte().Call(jen.Id("v"))))),
+				jen.Default().Block(
+					jen.If(jen.Id("v").Op("==").Nil()).Block(jen.Return(jen.Nil())),
+					jen.List(jen.Id("raw"), jen.Id("err")).Op(":=").Qual("encoding/json", "Marshal").Call(jen.Id("v")),
+					jen.If(jen.Id("err").Op("!=").Nil()).Block(jen.Return(jen.Nil())),
+					jen.Return(jen.Qual("encoding/json", "RawMessage").Call(jen.Id("raw"))),
+				),
+			),
+		)
+	stmt.Line()
+
+	stmt.Func().Id("toolDiscoveryMetadata").Params(jen.Id("tool").Op("*").Id("ToolInfo")).Params(jen.String(), jen.Index().String(), jen.Index().String()).
+		Block(
+			jen.If(jen.Id("tool").Op("==").Nil()).Block(jen.Return(jen.Lit(""), jen.Nil(), jen.Nil())),
+			jen.Id("raw").Op(":=").Id("toolRawJSON").Call(jen.Id("tool").Dot("Meta")),
+			jen.If(jen.Len(jen.Id("raw")).Op("==").Lit(0)).Block(jen.Return(jen.Lit(""), jen.Nil(), jen.Nil())),
+			jen.Var().Id("meta").Map(jen.String()).Struct(
+				jen.Id("Category").String().Tag(map[string]string{"json": "category"}),
+				jen.Id("Tags").Index().String().Tag(map[string]string{"json": "tags"}),
+				jen.Id("Keywords").Index().String().Tag(map[string]string{"json": "keywords"}),
+			),
+			jen.If(jen.Qual("encoding/json", "Unmarshal").Call(jen.Id("raw"), jen.Op("&").Id("meta")).Op("!=").Nil()).Block(
+				jen.Return(jen.Lit(""), jen.Nil(), jen.Nil()),
+			),
+			jen.Id("discovery").Op(":=").Id("meta").Index(jen.Lit("com.github.caliluke.loom-mcp/discovery")),
+			jen.Return(jen.Id("discovery").Dot("Category"), jen.Id("discovery").Dot("Tags"), jen.Id("discovery").Dot("Keywords")),
+		)
+	stmt.Line()
+
+	stmt.Func().Id("toolSearchDescriptorFor").Params(jen.Id("tool").Op("*").Id("ToolInfo"), jen.Id("includeSchemas").Bool()).Id("toolSearchDescriptor").
+		Block(
+			jen.Id("category").Op(",").Id("tags").Op(",").Id("keywords").Op(":=").Id("toolDiscoveryMetadata").Call(jen.Id("tool")),
+			jen.Id("descriptor").Op(":=").Id("toolSearchDescriptor").Values(jen.Dict{
+				jen.Id("Name"):     jen.Id("tool").Dot("Name"),
+				jen.Id("Category"): jen.Id("category"),
+				jen.Id("Tags"):     jen.Id("tags"),
+				jen.Id("Keywords"): jen.Id("keywords"),
+			}),
+			jen.If(jen.Id("tool").Dot("Title").Op("!=").Nil()).Block(
+				jen.Id("descriptor").Dot("Title").Op("=").Op("*").Id("tool").Dot("Title"),
+			),
+			jen.If(jen.Id("tool").Dot("Description").Op("!=").Nil()).Block(
+				jen.Id("descriptor").Dot("Description").Op("=").Op("*").Id("tool").Dot("Description"),
+			),
+			jen.Id("descriptor").Dot("Annotations").Op("=").Id("toolRawJSON").Call(jen.Id("tool").Dot("Annotations")),
+			jen.Id("descriptor").Dot("Meta").Op("=").Id("toolRawJSON").Call(jen.Id("tool").Dot("Meta")),
+			jen.Id("descriptor").Dot("Icons").Op("=").Id("tool").Dot("Icons"),
+			jen.If(jen.Id("includeSchemas")).Block(
+				jen.Id("descriptor").Dot("InputSchema").Op("=").Id("toolRawJSON").Call(jen.Id("tool").Dot("InputSchema")),
+				jen.Id("descriptor").Dot("OutputSchema").Op("=").Id("toolRawJSON").Call(jen.Id("tool").Dot("OutputSchema")),
+			),
+			jen.Return(jen.Id("descriptor")),
+		)
+	stmt.Line()
+
+	stmt.Func().Id("toolMatchesCategory").Params(jen.Id("tool").Op("*").Id("ToolInfo"), jen.Id("category").String()).Bool().
+		Block(
+			jen.Id("category").Op("=").Qual("strings", "TrimSpace").Call(jen.Id("category")),
+			jen.If(jen.Id("category").Op("==").Lit("")).Block(jen.Return(jen.True())),
+			jen.Id("actual").Op(",").Id("_").Op(",").Id("_").Op(":=").Id("toolDiscoveryMetadata").Call(jen.Id("tool")),
+			jen.Return(jen.Qual("strings", "EqualFold").Call(jen.Id("actual"), jen.Id("category"))),
+		)
+	stmt.Line()
+
+	stmt.Func().Id("toolMatchesTags").Params(jen.Id("tool").Op("*").Id("ToolInfo"), jen.Id("required").Index().String()).Bool().
+		Block(
+			jen.If(jen.Len(jen.Id("required")).Op("==").Lit(0)).Block(jen.Return(jen.True())),
+			jen.Id("_").Op(",").Id("tags").Op(",").Id("_").Op(":=").Id("toolDiscoveryMetadata").Call(jen.Id("tool")),
+			jen.Id("available").Op(":=").Make(jen.Map(jen.String()).Struct(), jen.Len(jen.Id("tags"))),
+			jen.For(jen.List(jen.Id("_"), jen.Id("tag")).Op(":=").Range().Id("tags")).Block(
+				jen.Id("available").Index(jen.Qual("strings", "ToLower").Call(jen.Qual("strings", "TrimSpace").Call(jen.Id("tag")))).Op("=").Struct().Values(),
+			),
+			jen.For(jen.List(jen.Id("_"), jen.Id("tag")).Op(":=").Range().Id("required")).Block(
+				jen.Id("tag").Op("=").Qual("strings", "ToLower").Call(jen.Qual("strings", "TrimSpace").Call(jen.Id("tag"))),
+				jen.If(jen.Id("tag").Op("==").Lit("")).Block(jen.Continue()),
+				jen.If(jen.List(jen.Id("_"), jen.Id("ok")).Op(":=").Id("available").Index(jen.Id("tag")), jen.Op("!").Id("ok")).Block(jen.Return(jen.False())),
+			),
+			jen.Return(jen.True()),
+		)
+	stmt.Line()
+
+	stmt.Func().Id("toolInputParameterText").Params(jen.Id("tool").Op("*").Id("ToolInfo")).String().
+		Block(
+			jen.Id("raw").Op(":=").Id("toolRawJSON").Call(jen.Id("tool").Dot("InputSchema")),
+			jen.If(jen.Len(jen.Id("raw")).Op("==").Lit(0)).Block(jen.Return(jen.Lit(""))),
+			jen.Var().Id("schema").Struct(jen.Id("Properties").Map(jen.String()).Struct(jen.Id("Description").String().Tag(map[string]string{"json": "description"})).Tag(map[string]string{"json": "properties"})),
+			jen.If(jen.Qual("encoding/json", "Unmarshal").Call(jen.Id("raw"), jen.Op("&").Id("schema")).Op("!=").Nil()).Block(jen.Return(jen.Lit(""))),
+			jen.Id("parts").Op(":=").Make(jen.Index().String(), jen.Lit(0), jen.Len(jen.Id("schema").Dot("Properties")).Op("*").Lit(2)),
+			jen.For(jen.List(jen.Id("name"), jen.Id("property")).Op(":=").Range().Id("schema").Dot("Properties")).Block(
+				jen.Id("parts").Op("=").Append(jen.Id("parts"), jen.Id("name"), jen.Id("property").Dot("Description")),
+			),
+			jen.Return(jen.Qual("strings", "Join").Call(jen.Id("parts"), jen.Lit(" "))),
+		)
+	stmt.Line()
+
+	stmt.Func().Id("toolSearchRank").Params(jen.Id("tool").Op("*").Id("ToolInfo"), jen.Id("query").String()).Int().
+		Block(
+			jen.Id("query").Op("=").Qual("strings", "ToLower").Call(jen.Qual("strings", "TrimSpace").Call(jen.Id("query"))),
+			jen.If(jen.Id("query").Op("==").Lit("")).Block(jen.Return(jen.Lit(0))),
+			jen.Id("name").Op(":=").Qual("strings", "ToLower").Call(jen.Id("tool").Dot("Name")),
+			jen.If(jen.Id("name").Op("==").Id("query")).Block(jen.Return(jen.Lit(1000))),
+			jen.If(jen.Qual("strings", "HasPrefix").Call(jen.Id("name"), jen.Id("query"))).Block(jen.Return(jen.Lit(900))),
+			jen.If(jen.Qual("strings", "Contains").Call(jen.Id("name"), jen.Id("query"))).Block(jen.Return(jen.Lit(800))),
+			jen.If(jen.Id("tool").Dot("Title").Op("!=").Nil().Op("&&").Qual("strings", "Contains").Call(jen.Qual("strings", "ToLower").Call(jen.Op("*").Id("tool").Dot("Title")), jen.Id("query"))).Block(jen.Return(jen.Lit(700))),
+			jen.Id("category").Op(",").Id("tags").Op(",").Id("keywords").Op(":=").Id("toolDiscoveryMetadata").Call(jen.Id("tool")),
+			jen.Id("metadata").Op(":=").Qual("strings", "ToLower").Call(jen.Id("category").Op("+").Lit(" ").Op("+").Qual("strings", "Join").Call(jen.Id("tags"), jen.Lit(" ")).Op("+").Lit(" ").Op("+").Qual("strings", "Join").Call(jen.Id("keywords"), jen.Lit(" "))),
+			jen.If(jen.Qual("strings", "Contains").Call(jen.Id("metadata"), jen.Id("query"))).Block(jen.Return(jen.Lit(600))),
+			jen.If(jen.Id("tool").Dot("Description").Op("!=").Nil().Op("&&").Qual("strings", "Contains").Call(jen.Qual("strings", "ToLower").Call(jen.Op("*").Id("tool").Dot("Description")), jen.Id("query"))).Block(jen.Return(jen.Lit(500))),
+			jen.If(jen.Qual("strings", "Contains").Call(jen.Qual("strings", "ToLower").Call(jen.Id("toolInputParameterText").Call(jen.Id("tool"))), jen.Id("query"))).Block(jen.Return(jen.Lit(400))),
+			jen.If(jen.Qual("strings", "Contains").Call(jen.Qual("strings", "ToLower").Call(jen.Id("toolSearchHaystack").Call(jen.Id("tool"))), jen.Id("query"))).Block(jen.Return(jen.Lit(300))),
+			jen.Return(jen.Lit(-1)),
 		)
 	stmt.Line()
 }
@@ -488,38 +741,83 @@ func emitHandleSearchTools(stmt *jen.Statement) {
 	).Params(jen.Bool(), jen.Error()).
 		BlockFunc(func(g *jen.Group) {
 			g.Var().Id("payload").Id("toolSearchPayload")
-			g.If(jen.Id("err").Op(":=").Id("decodeMCPPayloadStrict").Call(jen.Id("p").Dot("Arguments"), jen.Op("&").Id("payload")), jen.Id("err").Op("!=").Nil()).Block(
-				jen.Return(jen.True(), jen.Id("a").Dot("sendToolError").Call(jen.Id("ctx"), jen.Id("stream"), jen.Id("p").Dot("Name"), jen.Id("toolCallError").Call(jen.Id("err"), jen.Lit("invalid_params"), jen.Lit(`Provide {"pattern":"..."} to search tools.`)))),
+			g.Id("arguments").Op(":=").Id("p").Dot("Arguments")
+			g.If(jen.Len(jen.Qual("bytes", "TrimSpace").Call(jen.Id("arguments"))).Op("==").Lit(0)).Block(
+				jen.Id("arguments").Op("=").Qual("encoding/json", "RawMessage").Call(jen.Index().Byte().Call(jen.Lit(`{}`))),
 			)
+			g.If(jen.Id("err").Op(":=").Id("decodeMCPPayloadStrict").Call(jen.Id("arguments"), jen.Op("&").Id("payload")), jen.Id("err").Op("!=").Nil()).Block(
+				jen.Return(jen.True(), jen.Id("a").Dot("sendToolError").Call(jen.Id("ctx"), jen.Id("stream"), jen.Id("p").Dot("Name"), jen.Id("toolCallError").Call(jen.Id("err"), jen.Lit("invalid_params"), jen.Lit(`Provide {"query":"..."} or {"pattern":"..."} to search tools.`)))),
+			)
+			g.Id("query").Op(":=").Qual("strings", "TrimSpace").Call(jen.Id("payload").Dot("Query"))
 			g.Id("pattern").Op(":=").Qual("strings", "TrimSpace").Call(jen.Id("payload").Dot("Pattern"))
-			g.If(jen.Id("pattern").Op("==").Lit("")).Block(
-				jen.Return(jen.True(), jen.Id("a").Dot("sendToolError").Call(jen.Id("ctx"), jen.Id("stream"), jen.Id("p").Dot("Name"), jen.Id("toolCallError").Call(jen.Id("loom").Dot("PermanentError").Call(jen.Lit("invalid_params"), jen.Lit("Missing required field: pattern")), jen.Lit("invalid_params"), jen.Lit(`Provide {"pattern":"..."} to search tools.`)))),
+			g.If(jen.Id("query").Op("!=").Lit("").Op("&&").Id("pattern").Op("!=").Lit("")).Block(
+				jen.Return(jen.True(), jen.Id("a").Dot("sendToolError").Call(jen.Id("ctx"), jen.Id("stream"), jen.Id("p").Dot("Name"), jen.Id("toolCallError").Call(jen.Id("loom").Dot("PermanentError").Call(jen.Lit("invalid_params"), jen.Lit("provide query or pattern, not both")), jen.Lit("invalid_params"), jen.Lit(`Provide either {"query":"..."} or {"pattern":"..."}.`)))),
 			)
-			g.List(jen.Id("re"), jen.Id("err")).Op(":=").Qual("regexp", "Compile").Call(jen.Lit("(?i)").Op("+").Id("pattern"))
-			g.If(jen.Id("err").Op("!=").Nil()).Block(
-				jen.Return(jen.False(), jen.Id("stream").Dot("SendAndClose").Call(jen.Id("ctx"), jen.Op("&").Id("ToolsCallResult").Values(jen.Dict{
-					jen.Id("Content"):           jen.Index().Op("*").Id("ContentItem").Values(jen.Id("buildContentItem").Call(jen.Id("a"), jen.Lit("No tools found."))),
-					jen.Id("StructuredContent"): jen.Qual("encoding/json", "RawMessage").Call(jen.Index().Byte().Call(jen.Lit(`{"tools":[]}`))),
-				}))),
+			g.Var().Id("re").Op("*").Qual("regexp", "Regexp")
+			g.If(jen.Id("pattern").Op("!=").Lit("")).Block(
+				jen.List(jen.Id("compiled"), jen.Id("err")).Op(":=").Qual("regexp", "Compile").Call(jen.Lit("(?i)").Op("+").Id("pattern")),
+				jen.If(jen.Id("err").Op("!=").Nil()).Block(
+					jen.Return(jen.True(), jen.Id("a").Dot("sendToolError").Call(jen.Id("ctx"), jen.Id("stream"), jen.Id("p").Dot("Name"), jen.Id("toolCallError").Call(jen.Id("err"), jen.Lit("invalid_params"), jen.Lit("Provide a valid regular expression pattern.")))),
+				),
+				jen.Id("re").Op("=").Id("compiled"),
 			)
 			g.Id("limit").Op(":=").Id("a").Dot("toolSearchMaxResults").Call()
 			g.If(jen.Id("payload").Dot("MaxResults").Op("!=").Nil().Op("&&").Op("*").Id("payload").Dot("MaxResults").Op(">").Lit(0)).Block(
 				jen.Id("limit").Op("=").Op("*").Id("payload").Dot("MaxResults"),
 			)
-			g.Id("matches").Op(":=").Make(jen.Index().Op("*").Id("ToolInfo"), jen.Lit(0), jen.Id("limit"))
-			g.Id("_").Op(",").Id("callName").Op(":=").Id("a").Dot("toolSearchNames").Call()
-			g.For(jen.List(jen.Id("_"), jen.Id("tool")).Op(":=").Range().Id("a").Dot("generatedToolCatalog").Call()).Block(
+			g.Id("matches").Op(":=").Make(jen.Index().Id("toolSearchCandidate"), jen.Lit(0))
+			g.For(jen.List(jen.Id("order"), jen.Id("tool")).Op(":=").Range().Id("a").Dot("generatedToolCatalog").Call()).Block(
 				jen.If(jen.Id("tool").Op("==").Nil()).Block(jen.Continue()),
-				jen.If(jen.Id("tool").Dot("Name").Op("==").Id("callName")).Block(jen.Continue()),
-				jen.If(jen.Id("re").Dot("MatchString").Call(jen.Id("toolSearchHaystack").Call(jen.Id("tool")))).Block(
-					jen.Id("matches").Op("=").Append(jen.Id("matches"), jen.Id("tool")),
-					jen.If(jen.Len(jen.Id("matches")).Op(">=").Id("limit")).Block(jen.Break()),
+				jen.If(jen.Op("!").Id("toolMatchesCategory").Call(jen.Id("tool"), jen.Id("payload").Dot("Category"))).Block(jen.Continue()),
+				jen.If(jen.Op("!").Id("toolMatchesTags").Call(jen.Id("tool"), jen.Id("payload").Dot("Tags"))).Block(jen.Continue()),
+				jen.Id("haystack").Op(":=").Id("toolSearchHaystack").Call(jen.Id("tool")),
+				jen.Id("matched").Op(":=").Id("query").Op("==").Lit("").Op("&&").Id("pattern").Op("==").Lit(""),
+				jen.Id("score").Op(":=").Lit(0),
+				jen.If(jen.Id("query").Op("!=").Lit("")).Block(
+					jen.Id("score").Op("=").Id("toolSearchRank").Call(jen.Id("tool"), jen.Id("query")),
+					jen.Id("matched").Op("=").Id("score").Op(">=").Lit(0),
+				),
+				jen.If(jen.Id("re").Op("!=").Nil()).Block(
+					jen.Id("matched").Op("=").Id("re").Dot("MatchString").Call(jen.Id("haystack")),
+				),
+				jen.If(jen.Id("matched")).Block(
+					jen.Id("matches").Op("=").Append(jen.Id("matches"), jen.Id("toolSearchCandidate").Values(jen.Dict{
+						jen.Id("tool"):  jen.Id("tool"),
+						jen.Id("score"): jen.Id("score"),
+						jen.Id("order"): jen.Id("order"),
+					})),
 				),
 			)
-			g.Id("result").Op(":=").Op("&").Id("ToolsListResult").Values(jen.Dict{jen.Id("Tools"): jen.Id("matches")})
+			g.Qual("sort", "SliceStable").Call(jen.Id("matches"), jen.Func().Params(jen.Id("i").Int(), jen.Id("j").Int()).Bool().Block(
+				jen.If(jen.Id("matches").Index(jen.Id("i")).Dot("score").Op("!=").Id("matches").Index(jen.Id("j")).Dot("score")).Block(
+					jen.Return(jen.Id("matches").Index(jen.Id("i")).Dot("score").Op(">").Id("matches").Index(jen.Id("j")).Dot("score")),
+				),
+				jen.Return(jen.Id("matches").Index(jen.Id("i")).Dot("order").Op("<").Id("matches").Index(jen.Id("j")).Dot("order")),
+			))
+			g.Id("totalMatches").Op(":=").Len(jen.Id("matches"))
+			g.Id("truncated").Op(":=").Id("totalMatches").Op(">").Id("limit")
+			g.If(jen.Id("truncated")).Block(
+				jen.Id("matches").Op("=").Id("matches").Index(jen.Empty(), jen.Id("limit")),
+			)
+			g.Id("descriptors").Op(":=").Make(jen.Index().Id("toolSearchDescriptor"), jen.Lit(0), jen.Len(jen.Id("matches")))
+			g.Id("lines").Op(":=").Make(jen.Index().String(), jen.Lit(0), jen.Len(jen.Id("matches")).Op("+").Lit(1))
+			g.Id("_").Op(",").Id("callName").Op(":=").Id("a").Dot("toolSearchNames").Call()
+			g.Id("lines").Op("=").Append(jen.Id("lines"), jen.Qual("fmt", "Sprintf").Call(jen.Lit("Found %d of %d matching tool(s)."), jen.Len(jen.Id("matches")), jen.Id("totalMatches")))
+			g.For(jen.List(jen.Id("_"), jen.Id("match")).Op(":=").Range().Id("matches")).Block(
+				jen.Id("descriptor").Op(":=").Id("toolSearchDescriptorFor").Call(jen.Id("match").Dot("tool"), jen.Id("payload").Dot("IncludeSchemas")),
+				jen.Id("descriptors").Op("=").Append(jen.Id("descriptors"), jen.Id("descriptor")),
+				jen.Id("lines").Op("=").Append(jen.Id("lines"), jen.Qual("fmt", "Sprintf").Call(jen.Lit(`- %s: invoke: %s name="%s"`), jen.Id("descriptor").Dot("Name"), jen.Id("callName"), jen.Id("descriptor").Dot("Name"))),
+			)
+			g.Id("result").Op(":=").Op("&").Id("toolSearchResult").Values(jen.Dict{
+				jen.Id("Tools"):        jen.Id("descriptors"),
+				jen.Id("TotalMatches"): jen.Id("totalMatches"),
+				jen.Id("Truncated"):    jen.Id("truncated"),
+				jen.Id("Query"):        jen.Id("query"),
+				jen.Id("Pattern"):      jen.Id("pattern"),
+			})
 			g.List(jen.Id("structured"), jen.Id("err")).Op(":=").Qual("encoding/json", "Marshal").Call(jen.Id("result"))
 			g.If(jen.Id("err").Op("!=").Nil()).Block(jen.Return(jen.False(), jen.Id("err")))
-			g.Id("text").Op(":=").Qual("fmt", "Sprintf").Call(jen.Lit("Found %d tool(s)."), jen.Len(jen.Id("matches")))
+			g.Id("text").Op(":=").Qual("strings", "Join").Call(jen.Id("lines"), jen.Lit("\n"))
 			g.Return(jen.False(), jen.Id("stream").Dot("SendAndClose").Call(jen.Id("ctx"), jen.Op("&").Id("ToolsCallResult").Values(jen.Dict{
 				jen.Id("Content"):           jen.Index().Op("*").Id("ContentItem").Values(jen.Id("buildContentItem").Call(jen.Id("a"), jen.Id("text"))),
 				jen.Id("StructuredContent"): jen.Id("structured"),
@@ -547,6 +845,9 @@ func emitHandleCallToolProxy(stmt *jen.Statement) {
 			g.If(jen.Id("a").Dot("isToolSearchName").Call(jen.Id("payload").Dot("Name")).Op("||").Id("a").Dot("isToolCallProxyName").Call(jen.Id("payload").Dot("Name"))).Block(
 				jen.Return(jen.True(), jen.Id("a").Dot("sendToolError").Call(jen.Id("ctx"), jen.Id("stream"), jen.Id("p").Dot("Name"), jen.Id("toolCallError").Call(jen.Id("loom").Dot("PermanentError").Call(jen.Lit("invalid_params"), jen.Lit("call_tool cannot call synthetic tool %q"), jen.Id("payload").Dot("Name")), jen.Lit("invalid_params"), jen.Lit("Call one of the real tools returned by search_tools.")))),
 			)
+			g.If(jen.Op("!").Id("isGeneratedToolName").Call(jen.Id("payload").Dot("Name"))).Block(
+				jen.Return(jen.True(), jen.Id("a").Dot("sendToolError").Call(jen.Id("ctx"), jen.Id("stream"), jen.Id("p").Dot("Name"), jen.Id("toolCallError").Call(jen.Id("loom").Dot("PermanentError").Call(jen.Lit("invalid_params"), jen.Lit("unknown target tool %q"), jen.Id("payload").Dot("Name")), jen.Lit("invalid_params"), jen.Lit("Call one of the real tools returned by search_tools.")))),
+			)
 			g.Id("arguments").Op(":=").Id("payload").Dot("Arguments")
 			g.If(jen.Len(jen.Qual("bytes", "TrimSpace").Call(jen.Id("arguments"))).Op("==").Lit(0)).Block(
 				jen.Id("arguments").Op("=").Qual("encoding/json", "RawMessage").Call(jen.Index().Byte().Call(jen.Lit(`{}`))),
@@ -556,7 +857,7 @@ func emitHandleCallToolProxy(stmt *jen.Statement) {
 				jen.Id("Arguments"): jen.Id("arguments"),
 			})
 			g.Id("info").Op(":=").Id("a").Dot("toolCallInfo").Call(jen.Id("proxied"))
-			g.Id("handler").Op(":=").Id("a").Dot("wrapToolCallHandler").Call(jen.Id("info"), jen.Id("a").Dot("toolsCallHandler"))
+			g.Id("handler").Op(":=").Id("a").Dot("wrapToolCallHandler").Call(jen.Id("info"), jen.Id("a").Dot("executeRealTool"))
 			g.Return(jen.Id("handler").Call(jen.Id("ctx"), jen.Id("proxied"), jen.Id("stream")))
 		})
 	stmt.Line()
@@ -586,8 +887,9 @@ func emitToolsList(stmt *jen.Statement) {
 			}))
 			g.Id("tools").Op(":=").Id("a").Dot("generatedToolCatalog").Call()
 			g.If(jen.Id("a").Dot("toolSearchEnabled").Call()).Block(
-				jen.Id("tools").Op("=").Id("a").Dot("visibleToolCatalog").Call(jen.Id("tools")),
-				jen.Id("tools").Op("=").Append(jen.Id("tools"), jen.Id("a").Dot("toolSearchSyntheticTools").Call().Op("...")),
+				jen.Id("visible").Op(":=").Id("a").Dot("visibleToolCatalog").Call(jen.Id("tools")),
+				jen.Id("tools").Op("=").Id("a").Dot("toolSearchSyntheticTools").Call(),
+				jen.Id("tools").Op("=").Append(jen.Id("tools"), jen.Id("visible").Op("...")),
 			)
 			g.Id("res").Op("=").Op("&").Id("ToolsListResult").Values(jen.Dict{
 				jen.Id("Tools"): jen.Id("tools"),
@@ -679,6 +981,12 @@ func emitToolsCall(stmt *jen.Statement) {
 					jen.Qual("go.opentelemetry.io/otel/attribute", "String").Call(jen.Lit("mcp.tool"), jen.Id("p").Dot("Name")),
 					jen.Qual("go.opentelemetry.io/otel/attribute", "String").Call(jen.Lit("tool"), jen.Id("p").Dot("Name")),
 				),
+				jen.If(jen.Id("a").Dot("isToolCallProxyName").Call(jen.Id("p").Dot("Name"))).Block(
+					jen.Var().Id("target").Id("toolCallProxyPayload"),
+					jen.If(jen.Qual("encoding/json", "Unmarshal").Call(jen.Id("p").Dot("Arguments"), jen.Op("&").Id("target")).Op("==").Nil().Op("&&").Qual("strings", "TrimSpace").Call(jen.Id("target").Dot("Name")).Op("!=").Lit("")).Block(
+						jen.Id("attrs").Op("=").Append(jen.Id("attrs"), jen.Qual("go.opentelemetry.io/otel/attribute", "String").Call(jen.Lit("mcp.target_tool"), jen.Qual("strings", "TrimSpace").Call(jen.Id("target").Dot("Name")))),
+					),
+				),
 			),
 			jen.Id("ctx").Op(",").Id("span").Op(",").Id("start").Op(",").Id("attrs").Op(":=").Id("a").Dot("startTelemetry").Call(jen.Id("ctx"), jen.Lit("tools/call"), jen.Id("attrs").Op("...")),
 			jen.Id("toolErr").Op(":=").False(),
@@ -720,6 +1028,22 @@ func emitToolsCallHandler(stmt *jen.Statement, data *AdapterData) {
 			g.If(jen.Id("a").Dot("isToolCallProxyName").Call(jen.Id("name"))).Block(
 				jen.Return(jen.Id("a").Dot("handleCallToolProxy").Call(jen.Id("ctx"), jen.Id("p"), jen.Id("stream"))),
 			)
+			g.If(jen.Id("a").Dot("toolSearchEnabled").Call().Op("&&").Op("!").Id("a").Dot("opts").Dot("ToolSearch").Dot("AllowDirectHiddenCalls").Op("&&").Id("isGeneratedToolName").Call(jen.Id("name")).Op("&&").Op("!").Id("a").Dot("isAlwaysVisibleToolName").Call(jen.Id("name"))).Block(
+				jen.Return(jen.False(), jen.Id("loom").Dot("PermanentError").Call(jen.Lit("method_not_found"), jen.Lit("Unknown tool: %s"), jen.Id("name"))),
+			)
+			g.Return(jen.Id("a").Dot("executeRealTool").Call(jen.Id("ctx"), jen.Id("p"), jen.Id("stream")))
+		})
+	stmt.Line()
+
+	stmt.Func().Params(jen.Id("a").Op("*").Id("MCPAdapter")).
+		Id("executeRealTool").
+		Params(
+			jen.Id("ctx").Qual("context", "Context"),
+			jen.Id("p").Op("*").Id("ToolsCallPayload"),
+			jen.Id("stream").Id("ToolsCallServerStream"),
+		).
+		Params(jen.Bool(), jen.Error()).
+		BlockFunc(func(g *jen.Group) {
 			g.Switch(jen.Id("p").Dot("Name")).BlockFunc(func(sw *jen.Group) {
 				for _, tool := range data.Tools {
 					sw.Case(jen.Lit(tool.Name)).BlockFunc(func(caseg *jen.Group) {

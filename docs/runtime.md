@@ -2089,20 +2089,32 @@ fail fast on unsupported map key kinds instead of silently dropping entries.
 
 ### Generated MCP tool search
 
-Generated MCP adapters can opt into large-catalog tool discovery with
-`MCPAdapterOptions.ToolSearch`. When enabled, `tools/list` returns pinned tools
-from `ToolSearchOptions.AlwaysVisible` plus two synthetic tools:
+Generated MCP adapters can opt into progressive discovery with
+`MCPAdapterOptions.ToolSearch`. Disabled mode keeps the full generated
+`tools/list` catalog. Enabled mode makes `tools/list` the authoritative compact
+public surface: it returns synthetic `search_tools` and `call_tool` entries plus
+real tools named in `ToolSearchOptions.AlwaysVisible`.
 
-- `search_tools` searches generated tool names, descriptions, parameter names,
-  and parameter descriptions with a case-insensitive regex pattern, returning
-  full `ToolInfo` definitions in catalog order.
-- `call_tool` calls one discovered real tool by name with an `arguments` object.
+`search_tools` accepts either a plain `query` or a case-insensitive regex
+`pattern`, never both. It also accepts `category`, `tags`, `max_results`, and
+`include_schemas`. Matches are ranked before limiting by exact or partial name,
+title, discovery metadata, description, input parameter names and descriptions,
+then schema text. The result includes model-readable text such as
+`invoke: call_tool name="<tool>"` and structured content with `tools`,
+`total_matches`, `truncated`, and the supplied `query` or `pattern`. Tool
+descriptors preserve MCP Tool-shaped fields including `inputSchema`,
+`outputSchema`, `_meta`, `annotations`, and `icons`; schemas are omitted by
+default and included only when `include_schemas` is true.
 
-The original generated tools are still directly callable through `tools/call`;
-tool search only changes discovery. The `call_tool` proxy rejects calls to the
-synthetic tools themselves and dispatches real tools back through the generated
-tool-call interceptor chain. `MaxResults`, `SearchToolName`, and `CallToolName`
-customize the search limit and synthetic tool names.
+`call_tool` invokes a discovered real tool by name with an `arguments` object. It
+rejects synthetic targets and unknown real tool names as tool errors. In compact
+mode, direct public `tools/call` requests for hidden real tools are rejected by
+default; pinned `AlwaysVisible` tools remain directly callable. JSON-RPC
+adapters can opt into `ToolSearchOptions.AllowDirectHiddenCalls` as a
+compatibility escape hatch, while SDK-backed servers reject that option at
+construction because unregistered SDK tools cannot preserve compact authoritative
+discovery. Synthetic name collisions and unknown `AlwaysVisible` pins fail fast
+during adapter construction.
 
 ### Server-initiated events (Broadcaster)
 

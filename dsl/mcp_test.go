@@ -346,6 +346,38 @@ func TestMCPToolInMethod(t *testing.T) {
 	require.Equal(t, "https://example.com/icons/add.png", tool.Icons[0].Source)
 }
 
+func TestMCPToolDiscoveryMetadataOptions(t *testing.T) {
+	runMCPDSL(t, func() {
+		API("test", func() {})
+		Service("assistant", func() {
+			MCP("assistant", "1.0.0")
+			Method("search", func() {
+				Payload(func() {
+					Attribute("query", String)
+				})
+				Result(func() {
+					Attribute("summary", String)
+				})
+				Tool("search", "Search indexed content",
+					ToolTitle("Search Content"),
+					ToolDiscoveryCategory("knowledge"),
+					ToolDiscoveryTags("search", "retrieval"),
+					ToolDiscoveryKeywords("lookup", "documents"),
+				)
+			})
+		})
+	})
+
+	mcp := mcpexpr.Root.MCPServers["assistant"]
+	require.NotNil(t, mcp)
+	require.Len(t, mcp.Tools, 1)
+	tool := mcp.Tools[0]
+	require.Equal(t, "Search Content", tool.Title)
+	require.Equal(t, "knowledge", tool.DiscoveryCategory)
+	require.Equal(t, []string{"search", "retrieval"}, tool.DiscoveryTags)
+	require.Equal(t, []string{"lookup", "documents"}, tool.DiscoveryKeywords)
+}
+
 func runMCPDSL(t *testing.T, dsl func()) {
 	t.Helper()
 

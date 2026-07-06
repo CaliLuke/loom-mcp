@@ -107,6 +107,9 @@ func sdkServerConstructorSection(data *AdapterData) codegen.Section {
 					ifg.Id("serverOpts").Op("=").Id("opts").Dot("Server")
 					ifg.Id("streamableOpts").Op("=").Id("opts").Dot("StreamableHTTP")
 				})
+				g.If(jen.Id("adapterOpts").Op("!=").Nil().Op("&&").Id("adapterOpts").Dot("ToolSearch").Op("!=").Nil().Op("&&").Id("adapterOpts").Dot("ToolSearch").Dot("AllowDirectHiddenCalls")).Block(
+					jen.Return(jen.Nil(), jen.Qual("fmt", "Errorf").Call(jen.Lit("SDK ToolSearch compact mode does not support AllowDirectHiddenCalls"))),
+				)
 				if len(data.StaticPrompts) > 0 || len(data.DynamicPrompts) > 0 {
 					g.Id("adapter").Op(":=").Id("NewMCPAdapter").Call(jen.Id("service"), jen.Id("promptProvider"), jen.Id("adapterOpts"))
 					g.Id("serverOpts").Op("=").Id("sdkServerOptionsWithCompletion").Call(
@@ -505,6 +508,41 @@ func sdkServerRegistrationSection(data *AdapterData) codegen.Section {
 				jen.Return(jen.Qual("encoding/json", "RawMessage").Call(jen.Index().Byte().Call(jen.Id("raw")))),
 			)
 		stmt.Line()
+		stmt.Func().Id("sdkToolFromToolInfo").
+			Params(jen.Id("tool").Op("*").Id("ToolInfo")).
+			Params(jen.Op("*").Id("mcpsdk").Dot("Tool"), jen.Error()).
+			Block(
+				jen.If(jen.Id("tool").Op("==").Nil()).Block(
+					jen.Return(jen.Nil(), jen.Qual("fmt", "Errorf").Call(jen.Lit("nil MCP tool info"))),
+				),
+				jen.List(jen.Id("annotations"), jen.Id("err")).Op(":=").Id("sdkToolAnnotations").Call(jen.Id("tool").Dot("Annotations")),
+				jen.If(jen.Id("err").Op("!=").Nil()).Block(
+					jen.Return(jen.Nil(), jen.Id("err")),
+				),
+				jen.Id("sdkTool").Op(":=").Op("&").Id("mcpsdk").Dot("Tool").Values(jen.Dict{
+					jen.Id("Name"):         jen.Id("tool").Dot("Name"),
+					jen.Id("Title"):        jen.Id("derefString").Call(jen.Id("tool").Dot("Title")),
+					jen.Id("Description"):  jen.Id("derefString").Call(jen.Id("tool").Dot("Description")),
+					jen.Id("InputSchema"):  jen.Id("tool").Dot("InputSchema"),
+					jen.Id("OutputSchema"): jen.Id("tool").Dot("OutputSchema"),
+					jen.Id("Annotations"):  jen.Id("annotations"),
+					jen.Id("Meta"):         jen.Id("sdkMeta").Call(jen.Id("tool").Dot("Meta")),
+				}),
+				jen.If(jen.Len(jen.Id("tool").Dot("Icons")).Op(">").Lit(0)).Block(
+					jen.Id("sdkTool").Dot("Icons").Op("=").Make(jen.Index().Id("mcpsdk").Dot("Icon"), jen.Lit(0), jen.Len(jen.Id("tool").Dot("Icons"))),
+					jen.For(jen.List(jen.Id("_"), jen.Id("icon")).Op(":=").Range().Id("tool").Dot("Icons")).Block(
+						jen.Id("sdkIcon").Op(":=").Id("mcpsdk").Dot("Icon").Values(jen.Dict{
+							jen.Id("Source"):   jen.Id("icon").Dot("Src"),
+							jen.Id("MIMEType"): jen.Id("derefString").Call(jen.Id("icon").Dot("MimeType")),
+							jen.Id("Sizes"):    jen.Id("icon").Dot("Sizes"),
+							jen.Id("Theme"):    jen.Id("mcpsdk").Dot("IconTheme").Call(jen.Id("derefString").Call(jen.Id("icon").Dot("Theme"))),
+						}),
+						jen.Id("sdkTool").Dot("Icons").Op("=").Append(jen.Id("sdkTool").Dot("Icons"), jen.Id("sdkIcon")),
+					),
+				),
+				jen.Return(jen.Id("sdkTool"), jen.Nil()),
+			)
+		stmt.Line()
 	})
 }
 
@@ -517,6 +555,19 @@ func emitSDKRegisterTools(stmt *jen.Statement, data *AdapterData) {
 		).
 		Error().
 		BlockFunc(func(g *jen.Group) {
+			g.If(jen.Id("adapter").Dot("toolSearchEnabled").Call()).Block(
+				jen.Id("tools").Op(":=").Id("adapter").Dot("toolSearchSyntheticTools").Call(),
+				jen.Id("tools").Op("=").Append(jen.Id("tools"), jen.Id("adapter").Dot("visibleToolCatalog").Call(jen.Id("adapter").Dot("generatedToolCatalog").Call()).Op("...")),
+				jen.For(jen.List(jen.Id("_"), jen.Id("tool")).Op(":=").Range().Id("tools")).Block(
+					jen.List(jen.Id("sdkTool"), jen.Id("err")).Op(":=").Id("sdkToolFromToolInfo").Call(jen.Id("tool")),
+					jen.If(jen.Id("err").Op("!=").Nil()).Block(jen.Return(jen.Id("err"))),
+					jen.Id("server").Dot("AddTool").Call(
+						jen.Id("sdkTool"),
+						jen.Id("adapter").Dot("sdkToolHandler").Call(jen.Id("requestContext")),
+					),
+				),
+				jen.Return(jen.Nil()),
+			)
 			for _, tool := range data.Tools {
 				if tool.AnnotationsJSON != "" {
 					name := "annotations" + codegen.Goify(tool.Name, true)
@@ -529,8 +580,15 @@ func emitSDKRegisterTools(stmt *jen.Statement, data *AdapterData) {
 				}
 				dict := jen.Dict{
 					jen.Id("Name"):        jen.Lit(tool.Name),
+					jen.Id("Title"):       jen.Lit(tool.Title),
 					jen.Id("Description"): jen.Lit(tool.Description),
 					jen.Id("InputSchema"): jen.Id("sdkToolInputSchema").Call(jen.Lit(tool.InputSchema)),
+				}
+				if tool.OutputSchema != "" {
+					dict[jen.Id("OutputSchema")] = jen.Id("sdkToolInputSchema").Call(jen.Lit(tool.OutputSchema))
+				}
+				if tool.MetaJSON != "" {
+					dict[jen.Id("Meta")] = jen.Id("sdkMeta").Call(jen.Qual("encoding/json", "RawMessage").Call(jen.Index().Byte().Call(jen.Lit(tool.MetaJSON))))
 				}
 				if icons := sdkIconSliceValue(tool.Icons); icons != nil {
 					dict[jen.Id("Icons")] = icons
@@ -1262,6 +1320,20 @@ func emitSDKHelpers(stmt *jen.Statement) {
 				),
 				jen.Case(jen.Map(jen.String()).Any()).Block(
 					jen.Return(jen.Id("mcpsdk").Dot("Meta").Call(jen.Id("typed"))),
+				),
+				jen.Case(jen.Qual("encoding/json", "RawMessage")).Block(
+					jen.Var().Id("meta").Map(jen.String()).Any(),
+					jen.If(jen.Id("err").Op(":=").Qual("encoding/json", "Unmarshal").Call(jen.Id("typed"), jen.Op("&").Id("meta")), jen.Id("err").Op("!=").Nil()).Block(
+						jen.Return(jen.Nil()),
+					),
+					jen.Return(jen.Id("mcpsdk").Dot("Meta").Call(jen.Id("meta"))),
+				),
+				jen.Case(jen.Index().Byte()).Block(
+					jen.Var().Id("meta").Map(jen.String()).Any(),
+					jen.If(jen.Id("err").Op(":=").Qual("encoding/json", "Unmarshal").Call(jen.Id("typed"), jen.Op("&").Id("meta")), jen.Id("err").Op("!=").Nil()).Block(
+						jen.Return(jen.Nil()),
+					),
+					jen.Return(jen.Id("mcpsdk").Dot("Meta").Call(jen.Id("meta"))),
 				),
 				jen.Default().Block(
 					jen.Return(jen.Nil()),

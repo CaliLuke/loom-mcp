@@ -155,6 +155,23 @@ func TestToolExpr_Validate(t *testing.T) {
 	}
 }
 
+func TestMCPToolDiscoveryMetadataOptions(t *testing.T) {
+	tool := &ToolExpr{
+		Name:              "search",
+		Description:       "Search indexed content",
+		Title:             "Search Content",
+		DiscoveryCategory: "knowledge",
+		DiscoveryTags:     []string{"search", "retrieval"},
+		DiscoveryKeywords: []string{"lookup", "documents"},
+	}
+
+	require.Equal(t, "Search Content", tool.Title)
+	require.Equal(t, "knowledge", tool.DiscoveryCategory)
+	require.Equal(t, []string{"search", "retrieval"}, tool.DiscoveryTags)
+	require.Equal(t, []string{"lookup", "documents"}, tool.DiscoveryKeywords)
+	require.NoError(t, tool.Validate())
+}
+
 func TestResourceExpr_Validate(t *testing.T) {
 	tests := []struct {
 		name     string

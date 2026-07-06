@@ -82,10 +82,13 @@ Use this skill for `loom-mcp` work in this repo. Keep `AGENTS.md` short and keep
 - Local skills can declare structured `SKILL.md` frontmatter (`id`, `name`,
   `description`, `allowed_tools`, `preload`, `reload`). Duplicate IDs and
   unknown load modes are hard errors, not silent skips.
-- Generated MCP adapters can opt into large-catalog discovery with
-  `MCPAdapterOptions.ToolSearch`, which hides unpinned tools from `tools/list`
-  behind synthetic `search_tools` and `call_tool` entries without disabling
-  direct `tools/call` execution of real tools.
+- Generated MCP adapters can opt into progressive discovery with
+  `MCPAdapterOptions.ToolSearch`. Compact mode makes `tools/list` authoritative:
+  it exposes `search_tools`, `call_tool`, and validated `AlwaysVisible` pins.
+  Hidden real tools are invoked through `call_tool`; direct hidden `tools/call`
+  is rejected by default, except for the explicit JSON-RPC compatibility option
+  `AllowDirectHiddenCalls`. SDK compact mode must reject that compatibility
+  option at construction.
 - Generated SDK-backed MCP servers expose prompt argument completion for
   enum-backed dynamic prompt arguments and place a runtime elicitor in request
   contexts so service code can call `runtime/mcp.Elicit` during MCP calls.
