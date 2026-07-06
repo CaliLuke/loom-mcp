@@ -1507,6 +1507,10 @@ fast with `model.ErrStructuredOutputUnsupported` instead of silently ignoring
 the schema. Structured output cannot be combined with model tools in the current
 Gemini and OpenAI adapters.
 
+The OpenAI adapter projects tool and structured-output schemas into the
+provider's strict-mode JSON Schema subset and canonicalizes strict-mode `null`
+omissions back to absent fields before returning tool or structured payloads.
+
 When planners render prompts through `RenderPrompt`, copy prompt provenance into model requests:
 
 ```go

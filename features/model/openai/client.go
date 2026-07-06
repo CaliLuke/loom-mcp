@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"strings"
 
 	openai "github.com/openai/openai-go"
 	"github.com/openai/openai-go/option"
@@ -23,6 +24,10 @@ import (
 // ResponseClient captures the subset of the official OpenAI client used by the adapter.
 type ResponseClient interface {
 	New(ctx context.Context, body responses.ResponseNewParams, opts ...option.RequestOption) (*responses.Response, error)
+}
+
+type openAIToolCodec struct {
+	schemas map[string]rawjson.Message
 }
 
 // Options configures the OpenAI adapter.
@@ -60,7 +65,7 @@ func NewFromAPIKey(apiKey, defaultModel string) (*Client, error) {
 
 // Complete renders a response using the configured OpenAI client.
 func (c *Client) Complete(ctx context.Context, req *model.Request) (*model.Response, error) {
-	request, err := c.buildResponseRequest(req)
+	request, codec, err := c.buildResponseRequest(req)
 	if err != nil {
 		return nil, err
 	}
@@ -68,23 +73,23 @@ func (c *Client) Complete(ctx context.Context, req *model.Request) (*model.Respo
 	if err != nil {
 		return nil, fmt.Errorf("openai responses: %w", err)
 	}
-	return translateResponse(response), nil
+	return translateResponse(response, codec, req.StructuredOutput)
 }
 
-func (c *Client) buildResponseRequest(req *model.Request) (responses.ResponseNewParams, error) {
+func (c *Client) buildResponseRequest(req *model.Request) (responses.ResponseNewParams, *openAIToolCodec, error) {
 	if len(req.Messages) == 0 {
-		return responses.ResponseNewParams{}, errors.New("messages are required")
+		return responses.ResponseNewParams{}, nil, errors.New("messages are required")
 	}
 	if req.StructuredOutput != nil && (len(req.Tools) > 0 || req.ToolChoice != nil) {
-		return responses.ResponseNewParams{}, errors.New("openai: structured output cannot be combined with tools")
+		return responses.ResponseNewParams{}, nil, errors.New("openai: structured output cannot be combined with tools")
 	}
 	input, err := encodeInput(req.Messages)
 	if err != nil {
-		return responses.ResponseNewParams{}, err
+		return responses.ResponseNewParams{}, nil, err
 	}
-	tools, err := encodeTools(req.Tools)
+	tools, codec, err := encodeTools(req.Tools)
 	if err != nil {
-		return responses.ResponseNewParams{}, err
+		return responses.ResponseNewParams{}, nil, err
 	}
 	request := responses.ResponseNewParams{
 		Model: openaiModel(c.resolveModelID(req)),
@@ -99,19 +104,19 @@ func (c *Client) buildResponseRequest(req *model.Request) (responses.ResponseNew
 	}
 	textConfig, err := encodeStructuredOutput(req.StructuredOutput)
 	if err != nil {
-		return responses.ResponseNewParams{}, err
+		return responses.ResponseNewParams{}, nil, err
 	}
 	if textConfig != (responses.ResponseTextConfigParam{}) {
 		request.Text = textConfig
 	}
 	toolChoice, err := buildOpenAIToolChoice(req.ToolChoice, req.Tools)
 	if err != nil {
-		return responses.ResponseNewParams{}, err
+		return responses.ResponseNewParams{}, nil, err
 	}
 	if toolChoice != (responses.ResponseNewParamsToolChoiceUnion{}) {
 		request.ToolChoice = toolChoice
 	}
-	return request, nil
+	return request, codec, nil
 }
 
 func (c *Client) resolveModelID(req *model.Request) string {
@@ -259,29 +264,35 @@ func (c *Client) Stream(context.Context, *model.Request) (model.Streamer, error)
 	return nil, model.ErrStreamingUnsupported
 }
 
-func encodeTools(defs []*model.ToolDefinition) ([]responses.ToolUnionParam, error) {
+func encodeTools(defs []*model.ToolDefinition) ([]responses.ToolUnionParam, *openAIToolCodec, error) {
 	if len(defs) == 0 {
-		return nil, nil
+		return nil, nil, nil
 	}
 	tools := make([]responses.ToolUnionParam, 0, len(defs))
+	codec := &openAIToolCodec{schemas: make(map[string]rawjson.Message, len(defs))}
 	for _, def := range defs {
 		if def == nil {
 			continue
 		}
-		schema, err := schemaObject(def.Name, def.InputSchema)
+		schema, err := schemaMessage(def.Name, def.InputSchema)
 		if err != nil {
-			return nil, err
+			return nil, nil, err
+		}
+		parameters, err := projectStrictSchema(schema)
+		if err != nil {
+			return nil, nil, fmt.Errorf("openai: tool %q schema: %w", def.Name, err)
 		}
 		tools = append(tools, responses.ToolUnionParam{
 			OfFunction: &responses.FunctionToolParam{
 				Name:        def.Name,
 				Description: openai.String(def.Description),
-				Parameters:  schema,
+				Parameters:  parameters,
 				Strict:      openai.Bool(true),
 			},
 		})
+		codec.schemas[def.Name] = schema
 	}
-	return tools, nil
+	return tools, codec, nil
 }
 
 func encodeStructuredOutput(output *model.StructuredOutput) (responses.ResponseTextConfigParam, error) {
@@ -295,7 +306,11 @@ func encodeStructuredOutput(output *model.StructuredOutput) (responses.ResponseT
 	if name == "" {
 		name = "structured_output"
 	}
-	schema, err := schemaObject(name, output.Schema)
+	schema, err := schemaMessage(name, output.Schema)
+	if err != nil {
+		return responses.ResponseTextConfigParam{}, fmt.Errorf("openai: structured output schema: %w", err)
+	}
+	parameters, err := projectStrictSchema(schema)
 	if err != nil {
 		return responses.ResponseTextConfigParam{}, fmt.Errorf("openai: structured output schema: %w", err)
 	}
@@ -303,16 +318,16 @@ func encodeStructuredOutput(output *model.StructuredOutput) (responses.ResponseT
 		Format: responses.ResponseFormatTextConfigUnionParam{
 			OfJSONSchema: &responses.ResponseFormatTextJSONSchemaConfigParam{
 				Name:   name,
-				Schema: schema,
+				Schema: parameters,
 				Strict: param.NewOpt(true),
 			},
 		},
 	}, nil
 }
 
-func translateResponse(resp *responses.Response) *model.Response {
+func translateResponse(resp *responses.Response, codec *openAIToolCodec, output *model.StructuredOutput) (*model.Response, error) {
 	if resp == nil {
-		return &model.Response{}
+		return &model.Response{}, nil
 	}
 	messages := make([]model.Message, 0, len(resp.Output))
 	toolCalls := make([]model.ToolCall, 0)
@@ -324,17 +339,16 @@ func translateResponse(resp *responses.Response) *model.Response {
 				messages = append(messages, msg)
 			}
 		case "function_call":
-			payload := parseToolArguments(item.Arguments)
-			toolCallID := item.CallID
-			if toolCallID == "" {
-				toolCallID = item.ID
+			toolCall, err := translateFunctionCall(item, codec)
+			if err != nil {
+				return nil, err
 			}
-			toolCalls = append(toolCalls, model.ToolCall{
-				Name:    tools.Ident(item.Name),
-				Payload: payload,
-				ID:      toolCallID,
-			})
+			toolCalls = append(toolCalls, toolCall)
 		}
+	}
+	messages, err := canonicalizeStructuredOutputMessages(messages, output)
+	if err != nil {
+		return nil, err
 	}
 	usage := model.TokenUsage{
 		Model:           resp.Model,
@@ -348,7 +362,45 @@ func translateResponse(resp *responses.Response) *model.Response {
 		ToolCalls:  toolCalls,
 		Usage:      usage,
 		StopReason: string(resp.Status),
+	}, nil
+}
+
+func translateFunctionCall(item responses.ResponseOutputItemUnion, codec *openAIToolCodec) (model.ToolCall, error) {
+	payload, err := parseToolArguments(item.Arguments)
+	if err != nil {
+		return model.ToolCall{}, fmt.Errorf("openai responses: tool call %q payload: %w", item.CallID, err)
 	}
+	if codec != nil {
+		if schema := codec.schemas[item.Name]; len(schema) > 0 {
+			payload, err = canonicalizeStrictPayload(schema, payload)
+			if err != nil {
+				return model.ToolCall{}, fmt.Errorf("openai responses: tool call %q payload: %w", item.CallID, err)
+			}
+		}
+	}
+	toolCallID := item.CallID
+	if toolCallID == "" {
+		toolCallID = item.ID
+	}
+	return model.ToolCall{
+		Name:    tools.Ident(item.Name),
+		Payload: payload,
+		ID:      toolCallID,
+	}, nil
+}
+
+func canonicalizeStructuredOutputMessages(messages []model.Message, output *model.StructuredOutput) ([]model.Message, error) {
+	if output == nil {
+		return messages, nil
+	}
+	payload, err := structuredOutputPayload(messages, output)
+	if err != nil {
+		return nil, err
+	}
+	return []model.Message{{
+		Role:  model.ConversationRoleAssistant,
+		Parts: []model.Part{model.TextPart{Text: string(payload)}},
+	}}, nil
 }
 
 func translateOutputMessage(item responses.ResponseOutputItemUnion) model.Message {
@@ -368,15 +420,18 @@ func translateOutputMessage(item responses.ResponseOutputItemUnion) model.Messag
 	return msg
 }
 
-func parseToolArguments(raw string) rawjson.Message {
+func parseToolArguments(raw string) (rawjson.Message, error) {
 	if raw == "" {
-		return nil
+		return nil, nil
 	}
 	data := []byte(raw)
 	if len(data) == 0 {
-		return nil
+		return nil, nil
 	}
-	return rawjson.Message(data)
+	if !json.Valid(data) {
+		return nil, errors.New("invalid JSON")
+	}
+	return rawjson.Message(data), nil
 }
 
 func marshalJSONValue(v any) ([]byte, error) {
@@ -403,19 +458,58 @@ func marshalJSONValue(v any) ([]byte, error) {
 	}
 }
 
-func schemaObject(name string, v any) (map[string]any, error) {
+func schemaMessage(name string, v any) (rawjson.Message, error) {
 	if v == nil {
-		return map[string]any{"type": "object"}, nil
+		return nil, nil
+	}
+	switch val := v.(type) {
+	case rawjson.Message:
+		return val, nil
+	case json.RawMessage:
+		return rawjson.Message(val), nil
+	case []byte:
+		return rawjson.Message(val), nil
+	case string:
+		return rawjson.Message(val), nil
 	}
 	data, err := json.Marshal(v)
 	if err != nil {
 		return nil, fmt.Errorf("marshal tool %s schema: %w", name, err)
 	}
-	var out map[string]any
-	if err := json.Unmarshal(data, &out); err != nil {
-		return nil, fmt.Errorf("decode tool %s schema object: %w", name, err)
+	return rawjson.Message(data), nil
+}
+
+func structuredOutputPayload(content []model.Message, output *model.StructuredOutput) (rawjson.Message, error) {
+	text := strings.TrimSpace(extractAssistantText(content))
+	if text == "" {
+		return nil, fmt.Errorf("openai: structured output %q completed without content", output.Name)
 	}
-	return out, nil
+	if !json.Valid([]byte(text)) {
+		return nil, fmt.Errorf("openai: structured output %q payload is not valid JSON", output.Name)
+	}
+	payload, err := canonicalizeStrictPayload(output.Schema, rawjson.Message(text))
+	if err != nil {
+		return nil, fmt.Errorf("openai: structured output %q payload: %w", output.Name, err)
+	}
+	return payload, nil
+}
+
+func extractAssistantText(content []model.Message) string {
+	var text strings.Builder
+	for _, message := range content {
+		if message.Role != model.ConversationRoleAssistant {
+			continue
+		}
+		for _, part := range message.Parts {
+			switch actual := part.(type) {
+			case model.TextPart:
+				text.WriteString(actual.Text)
+			case model.CitationsPart:
+				text.WriteString(actual.Text)
+			}
+		}
+	}
+	return text.String()
 }
 
 func openaiModel(id string) shared.ResponsesModel {

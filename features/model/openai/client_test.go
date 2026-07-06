@@ -227,7 +227,15 @@ func TestClientCompleteSupportsStructuredOutput(t *testing.T) {
 		DefaultModel: "gpt-4o",
 	})
 	require.NoError(t, err)
-	mock.response = &responses.Response{}
+	mock.response = &responses.Response{
+		Output: []responses.ResponseOutputItemUnion{{
+			Type: "message",
+			Content: []responses.ResponseOutputMessageContentUnion{{
+				Type: "output_text",
+				Text: `{"title":"ok"}`,
+			}},
+		}},
+	}
 
 	_, err = client.Complete(context.Background(), &model.Request{
 		Messages: []*model.Message{
@@ -267,6 +275,87 @@ func TestClientCompleteRejectsStructuredOutputWithTools(t *testing.T) {
 		},
 	})
 	require.ErrorContains(t, err, "structured output cannot be combined with tools")
+}
+
+func TestClientCompleteCanonicalizesStrictToolPayload(t *testing.T) {
+	mock := &mockResponsesClient{}
+	client, err := openaimodel.New(openaimodel.Options{
+		Client:       mock,
+		DefaultModel: "gpt-4o",
+	})
+	require.NoError(t, err)
+	mock.response = &responses.Response{
+		Output: []responses.ResponseOutputItemUnion{{
+			Type:      "function_call",
+			Name:      "lookup",
+			Arguments: `{"query":"docs","limit":null}`,
+			CallID:    "call-1",
+		}},
+	}
+
+	resp, err := client.Complete(context.Background(), &model.Request{
+		Messages: []*model.Message{
+			{Role: model.ConversationRoleUser, Parts: []model.Part{model.TextPart{Text: "ping"}}},
+		},
+		Tools: []*model.ToolDefinition{{
+			Name:        "lookup",
+			Description: "Search",
+			InputSchema: map[string]any{
+				"type": "object",
+				"properties": map[string]any{
+					"query": map[string]any{"type": "string"},
+					"limit": map[string]any{"type": "integer"},
+				},
+				"required": []any{"query"},
+			},
+		}},
+	})
+
+	require.NoError(t, err)
+	require.Len(t, resp.ToolCalls, 1)
+	require.JSONEq(t, `{"query":"docs"}`, string(resp.ToolCalls[0].Payload))
+}
+
+func TestClientCompleteCanonicalizesStructuredOutputPayload(t *testing.T) {
+	mock := &mockResponsesClient{}
+	client, err := openaimodel.New(openaimodel.Options{
+		Client:       mock,
+		DefaultModel: "gpt-4o",
+	})
+	require.NoError(t, err)
+	mock.response = &responses.Response{
+		Output: []responses.ResponseOutputItemUnion{{
+			Type: "message",
+			Content: []responses.ResponseOutputMessageContentUnion{{
+				Type: "output_text",
+				Text: `{"title":"ok","summary":null}`,
+			}},
+		}},
+	}
+
+	resp, err := client.Complete(context.Background(), &model.Request{
+		Messages: []*model.Message{
+			{Role: model.ConversationRoleUser, Parts: []model.Part{model.TextPart{Text: "ping"}}},
+		},
+		StructuredOutput: &model.StructuredOutput{
+			Name: "draft",
+			Schema: []byte(`{
+				"type": "object",
+				"properties": {
+					"title": {"type": "string"},
+					"summary": {"type": "string"}
+				},
+				"required": ["title"]
+			}`),
+		},
+	})
+
+	require.NoError(t, err)
+	require.Len(t, resp.Content, 1)
+	require.Len(t, resp.Content[0].Parts, 1)
+	part, ok := resp.Content[0].Parts[0].(model.TextPart)
+	require.True(t, ok)
+	require.JSONEq(t, `{"title":"ok"}`, part.Text)
 }
 
 func TestClientRequiresDefaultModel(t *testing.T) {
