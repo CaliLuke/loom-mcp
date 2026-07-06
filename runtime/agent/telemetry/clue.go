@@ -136,6 +136,11 @@ func (s *clueSpan) AddEvent(name string, attrs ...any) {
 	s.span.AddEvent(name, trace.WithAttributes(kvSliceToAttrs(attrs)...))
 }
 
+// SetAttributes records attributes on the underlying OTEL span.
+func (s *clueSpan) SetAttributes(attrs ...attribute.KeyValue) {
+	s.span.SetAttributes(attrs...)
+}
+
 // SetStatus sets the span status code and description.
 func (s *clueSpan) SetStatus(code codes.Code, description string) {
 	s.span.SetStatus(code, description)

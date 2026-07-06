@@ -86,7 +86,13 @@ func (c *simplePlannerContext) ModelClient(id string) (model.Client, bool) {
 	cli = newToolUnavailableConfiguredClient(cli)
 	// Wrap with tracing so model invocations are always visible in traces, including
 	// full stream lifetimes when streaming is used.
-	cli = newTracedClient(cli, c.rt.tracer, c.rt.logger, id)
+	cli = newTracedClient(cli, c.rt.tracer, c.rt.logger, modelTraceConfig{
+		ModelID:              id,
+		AgentID:              string(c.agent),
+		AgentName:            string(c.agent),
+		ConversationID:       firstNonEmpty(c.sessionID, c.runID),
+		CaptureGenAIMessages: c.rt.captureGenAIMessages,
+	})
 	return cli, true
 }
 

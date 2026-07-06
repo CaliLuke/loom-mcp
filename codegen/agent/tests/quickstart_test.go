@@ -195,8 +195,10 @@ func rewriteQuickstartGoMod(repoRoot string, quickstartDir string) error {
 			updated = strings.TrimRight(updated, "\n") + "\n" + rootReplace + "\n"
 		}
 	}
+	sourceHasLoomReplace := loomCoreReplacePattern.MatchString(string(raw))
 	loomReplace := loomCoreReplacePattern.FindString(string(rootRaw))
 	if loomReplace != "" {
+		sourceHasLoomReplace = true
 		if loomCoreReplacePattern.MatchString(updated) {
 			updated = loomCoreReplacePattern.ReplaceAllString(updated, loomReplace)
 		} else {
@@ -204,7 +206,7 @@ func rewriteQuickstartGoMod(repoRoot string, quickstartDir string) error {
 		}
 	}
 	localLoomDir := filepath.Clean(filepath.Join(repoRoot, "..", "loom"))
-	if _, err := os.Stat(filepath.Join(localLoomDir, "go.mod")); err == nil {
+	if sourceHasLoomReplace && loomReplace == "" {
 		loomReplace := "replace github.com/CaliLuke/loom => " + localLoomDir
 		if loomCoreReplacePattern.MatchString(updated) {
 			updated = loomCoreReplacePattern.ReplaceAllString(updated, loomReplace)

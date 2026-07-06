@@ -62,6 +62,7 @@ linters:
       - gql/*
       - mocks/*
       - codegen/agents/tests/testscenarios/*
+      - third_party/modelcontextprotocol/node_modules/*
     rules:
       - linters:
           - dupl

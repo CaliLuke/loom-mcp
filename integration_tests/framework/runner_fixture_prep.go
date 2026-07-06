@@ -406,14 +406,13 @@ func regenerateExample(t *testing.T, exampleRoot string) error {
 	if err := cleanGeneratedExampleArtifacts(exampleRoot); err != nil {
 		return err
 	}
-	tidyCmd := exec.CommandContext(context.Background(), "go", "mod", "tidy")
+	tidyCmd := tempModuleGoCommand(context.Background(), "mod", "tidy")
 	tidyCmd.Dir = exampleRoot
 	if out, err := tidyCmd.CombinedOutput(); err != nil {
 		return fmt.Errorf("go mod tidy failed: %w\n%s", err, string(out))
 	}
-	genCmd := exec.CommandContext(
+	genCmd := tempModuleGoCommand(
 		context.Background(),
-		"go",
 		"run",
 		"-C",
 		exampleRoot,
@@ -429,9 +428,8 @@ func regenerateExample(t *testing.T, exampleRoot string) error {
 	_ = os.Remove(filepath.Join(exampleRoot, "websocket.go"))
 	_ = os.Remove(filepath.Join(exampleRoot, "grpcstream.go"))
 	_ = os.Remove(filepath.Join(exampleRoot, "mcp_assistant.go"))
-	exCmd := exec.CommandContext(
+	exCmd := tempModuleGoCommand(
 		context.Background(),
-		"go",
 		"run",
 		"-C",
 		exampleRoot,
@@ -443,7 +441,7 @@ func regenerateExample(t *testing.T, exampleRoot string) error {
 		return fmt.Errorf("loom example failed: %w\n%s", err, string(out))
 	}
 	_ = os.Remove(filepath.Join(exampleRoot, "mcp_assistant.go"))
-	postTidy := exec.CommandContext(context.Background(), "go", "mod", "tidy")
+	postTidy := tempModuleGoCommand(context.Background(), "mod", "tidy")
 	postTidy.Dir = exampleRoot
 	if out, err := postTidy.CombinedOutput(); err != nil {
 		return fmt.Errorf("post loom example tidy failed: %w\n%s", err, string(out))
@@ -589,7 +587,7 @@ func buildServerBinary(exampleRoot string) (string, error) {
 		return "", fmt.Errorf("close temp file for binary: %w", err)
 	}
 
-	buildCmd := exec.CommandContext(context.Background(), "go", "build", "-o", binPath, ".") // #nosec G204 -- cmdPath is resolved from the trusted fixture tree
+	buildCmd := tempModuleGoCommand(context.Background(), "build", "-o", binPath, ".") // #nosec G204 -- cmdPath is resolved from the trusted fixture tree
 	buildCmd.Dir = cmdPath
 	out, err := buildCmd.CombinedOutput()
 	if err != nil {
@@ -607,6 +605,12 @@ func buildServerBinary(exampleRoot string) (string, error) {
 	}
 	serverBinCache[cacheKey] = serverBinaryBuild{path: binPath}
 	return binPath, nil
+}
+
+func tempModuleGoCommand(ctx context.Context, args ...string) *exec.Cmd {
+	cmd := exec.CommandContext(ctx, "go", args...) // #nosec G204 -- test harness executes fixed Go toolchain commands.
+	cmd.Env = append(os.Environ(), "GOWORK=off")
+	return cmd
 }
 
 func serverBinaryCacheKey(exampleRoot, cmdPath string) (string, error) {

@@ -104,6 +104,8 @@ type (
 		logger  telemetry.Logger
 		metrics telemetry.Metrics
 		tracer  telemetry.Tracer
+		// captureGenAIMessages opts model spans into sensitive GenAI transcript attributes.
+		captureGenAIMessages bool
 
 		mu        sync.RWMutex
 		agents    map[agent.Ident]AgentRegistration
@@ -192,6 +194,9 @@ type (
 		Metrics telemetry.Metrics
 		// Tracer emits spans for planner/tool execution.
 		Tracer telemetry.Tracer
+		// CaptureGenAIMessages records full model input/output messages on GenAI
+		// spans. This is default-off because the payload can contain sensitive data.
+		CaptureGenAIMessages bool
 
 		// HookActivityTimeout overrides the StartToClose timeout for the
 		// hook publishing activity (`runtime.publish_hook`). Zero means use the

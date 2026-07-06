@@ -93,6 +93,11 @@ func WithMetrics(m telemetry.Metrics) RuntimeOption { return func(o *Options) { 
 // WithTracer sets the tracer.
 func WithTracer(t telemetry.Tracer) RuntimeOption { return func(o *Options) { o.Tracer = t } }
 
+// WithCaptureGenAIMessages opts model spans into sensitive GenAI message attributes.
+func WithCaptureGenAIMessages(enabled bool) RuntimeOption {
+	return func(o *Options) { o.CaptureGenAIMessages = enabled }
+}
+
 // WithToolConfirmation configures runtime-enforced confirmation for selected tools.
 func WithToolConfirmation(cfg *ToolConfirmationConfig) RuntimeOption {
 	return func(o *Options) { o.ToolConfirmation = cfg }
@@ -133,29 +138,30 @@ func newFromOptions(opts Options) *Runtime {
 	runEventStore := resolveRunEventStore(opts.RunEventStore)
 	sessionStore := resolveSessionStore(opts.SessionStore)
 	rt := &Runtime{
-		Engine:              eng,
-		Memory:              opts.MemoryStore,
-		PromptRegistry:      prompt.NewRegistry(opts.PromptStore),
-		SessionStore:        sessionStore,
-		Policy:              opts.Policy,
-		RunEventStore:       runEventStore,
-		Bus:                 bus,
-		Stream:              opts.Stream,
-		hookActivityTimeout: opts.HookActivityTimeout,
-		logger:              logger,
-		metrics:             metrics,
-		tracer:              tracer,
-		agents:              make(map[agent.Ident]AgentRegistration),
-		toolsets:            make(map[string]ToolsetRegistration),
-		toolSpecs:           make(map[tools.Ident]tools.ToolSpec),
-		toolSchemas:         make(map[string]map[string]any),
-		models:              make(map[string]model.Client),
-		runHandles:          make(map[string]engine.WorkflowHandle),
-		agentToolSpecs:      make(map[agent.Ident][]tools.ToolSpec),
-		workers:             opts.Workers,
-		reminders:           reminder.NewEngine(),
-		toolConfirmation:    opts.ToolConfirmation,
-		hintOverrides:       opts.HintOverrides,
+		Engine:               eng,
+		Memory:               opts.MemoryStore,
+		PromptRegistry:       prompt.NewRegistry(opts.PromptStore),
+		SessionStore:         sessionStore,
+		Policy:               opts.Policy,
+		RunEventStore:        runEventStore,
+		Bus:                  bus,
+		Stream:               opts.Stream,
+		hookActivityTimeout:  opts.HookActivityTimeout,
+		logger:               logger,
+		metrics:              metrics,
+		tracer:               tracer,
+		captureGenAIMessages: opts.CaptureGenAIMessages,
+		agents:               make(map[agent.Ident]AgentRegistration),
+		toolsets:             make(map[string]ToolsetRegistration),
+		toolSpecs:            make(map[tools.Ident]tools.ToolSpec),
+		toolSchemas:          make(map[string]map[string]any),
+		models:               make(map[string]model.Client),
+		runHandles:           make(map[string]engine.WorkflowHandle),
+		agentToolSpecs:       make(map[agent.Ident][]tools.ToolSpec),
+		workers:              opts.Workers,
+		reminders:            reminder.NewEngine(),
+		toolConfirmation:     opts.ToolConfirmation,
+		hintOverrides:        opts.HintOverrides,
 	}
 	rt.PromptRegistry.SetObserver(rt.onPromptRendered)
 	rt.installRuntimeSubscribers(bus)

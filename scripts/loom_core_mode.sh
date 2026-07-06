@@ -4,7 +4,8 @@ set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 FIXTURE_DIR="${ROOT_DIR}/integration_tests/fixtures/assistant"
-REMOTE_VERSION="v1.0.13"
+QUICKSTART_DIR="${ROOT_DIR}/quickstart"
+REMOTE_VERSION="v1.1.0"
 LOCAL_LOOM_DIR="${LOOM_DIR:-/Users/luca/code/loom-mono/loom}"
 
 usage() {
@@ -12,9 +13,9 @@ usage() {
 Usage: $(basename "$0") <local|remote|status>
 
 Modes:
-  local   Point both modules at the local Loom checkout (${LOCAL_LOOM_DIR} by default)
+  local   Point repo modules at the local Loom checkout (${LOCAL_LOOM_DIR} by default)
   remote  Restore the pinned Loom release (${REMOTE_VERSION})
-  status  Print the current Loom source in both modules
+  status  Print the current Loom source in repo modules
 
 Environment:
   LOOM_DIR   Override the local Loom checkout path used by local mode
@@ -38,6 +39,12 @@ set_local() {
     go mod edit -replace=github.com/CaliLuke/loom="${LOCAL_LOOM_DIR}"
     go mod tidy
   )
+
+  (
+    cd "${QUICKSTART_DIR}"
+    go mod edit -replace=github.com/CaliLuke/loom="${LOCAL_LOOM_DIR}"
+    go mod tidy
+  )
 }
 
 set_remote() {
@@ -54,6 +61,13 @@ set_remote() {
     go get github.com/CaliLuke/loom@"${REMOTE_VERSION}"
     go mod tidy
   )
+
+  (
+    cd "${QUICKSTART_DIR}"
+    go mod edit -dropreplace=github.com/CaliLuke/loom || true
+    go get github.com/CaliLuke/loom@"${REMOTE_VERSION}"
+    go mod tidy
+  )
 }
 
 show_module_status() {
@@ -66,6 +80,8 @@ show_status() {
   show_module_status "${ROOT_DIR}/go.mod"
   echo "fixture:"
   show_module_status "${FIXTURE_DIR}/go.mod"
+  echo "quickstart:"
+  show_module_status "${QUICKSTART_DIR}/go.mod"
 }
 
 main() {

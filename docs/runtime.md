@@ -1653,6 +1653,27 @@ type Tracer interface {
 }
 ```
 
+Model calls emit both Loom-specific correlation attributes (`loom_mcp.*`) and
+standard OpenTelemetry GenAI attributes (`gen_ai.*`) on `model.complete` and
+`model.stream` spans. Token usage, finish reasons, requested model, resolved
+model, and streaming time-to-first-chunk are recorded as span attributes.
+
+Full GenAI input/output message capture is available but disabled by default
+because message payloads can contain sensitive data:
+
+```go
+rt := runtime.New(
+    runtime.WithTracer(telemetry.NewClueTracer()),
+    runtime.WithCaptureGenAIMessages(true),
+)
+```
+
+When enabled, model spans include `gen_ai.input.messages` and
+`gen_ai.output.messages`. Reasoning/thinking parts are deliberately omitted,
+streamed text deltas are coalesced into one output message at stream end, and
+serialization failures are recorded as span events instead of failing the model
+call.
+
 ---
 
 ## Feature Modules
