@@ -325,6 +325,15 @@ func toolEventCallIDs(events []*api.ToolEvent) []string {
 	return ids
 }
 
+func toolEventByCallID(events []*api.ToolEvent, callID string) *api.ToolEvent {
+	for _, event := range events {
+		if event.ToolCallID == callID {
+			return event
+		}
+	}
+	return nil
+}
+
 func publishArtifacts(events []*api.ToolEvent) []artifact.Ref {
 	for _, event := range events {
 		if event.ToolCallID == "publish" {

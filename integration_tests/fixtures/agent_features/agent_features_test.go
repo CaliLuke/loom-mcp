@@ -53,6 +53,7 @@ func TestGeneratedFeatureRunPublishesAwaitAndResumesWithTypedInput(t *testing.T)
 	fx := newFeatureRuntime(t)
 	rt := fx.rt
 	exec := newRecordingWorkflowExecutor()
+	exec.failRetryOnce = true
 	require.NoError(t, coordinator.RegisterUsedToolsets(ctx, rt, coordinator.WithWorkflowExecutor(exec)))
 	require.NoError(t, coordinator.RegisterCoordinatorAgent(ctx, rt, coordinator.CoordinatorAgentConfig{}))
 	_, err := rt.CreateSession(ctx, "sess-1")
@@ -84,6 +85,12 @@ func TestGeneratedFeatureRunPublishesAwaitAndResumesWithTypedInput(t *testing.T)
 	require.Equal(t, "generated workflow complete", messageText(out.Final))
 	require.ElementsMatch(t, []string{"draft", "review", "retry#1", "retry#2", "publish"}, exec.toolCallIDs())
 	require.Contains(t, toolEventCallIDs(out.ToolEvents), "publish")
+	retryEvent := toolEventByCallID(out.ToolEvents, "retry#1")
+	require.NotNil(t, retryEvent)
+	require.NotNil(t, retryEvent.Error)
+	require.NotNil(t, retryEvent.RetryHint)
+	require.Equal(t, workflow.Retry, retryEvent.RetryHint.Tool)
+	require.NotNil(t, toolEventByCallID(out.ToolEvents, "retry#2"))
 	require.Len(t, publishArtifacts(out.ToolEvents), 1)
 	require.GreaterOrEqual(t, fx.audit.beforeRunCount(), 1)
 	require.GreaterOrEqual(t, fx.audit.beforeToolCount(), 5)
@@ -209,17 +216,34 @@ func TestGeneratedFeatureRunPersistsArtifactsMemorySkillsAndDebugState(t *testin
 
 	srv, err := agentdebug.NewServer(agentdebug.Config{Runtime: rt})
 	require.NoError(t, err)
-	for _, path := range []string{
-		"/runs/" + runID + "/await",
-		"/runs/" + runID + "/memory",
-		"/runs/" + runID + "/artifacts",
-		"/runs/" + runID + "/workflow",
+	for path, want := range map[string][]string{
+		"/runs/" + runID + "/await": {
+			`"ID":"approval"`,
+			`"approved"`,
+		},
+		"/runs/" + runID + "/memory": {
+			"seed memory",
+			"workflow.publish",
+			refs[0].ID,
+		},
+		"/runs/" + runID + "/artifacts": {
+			refs[0].ID,
+			"publish.txt",
+		},
+		"/runs/" + runID + "/workflow": {
+			`"id":"publish"`,
+			`"tool_name":"workflow.publish"`,
+			`"status":"completed"`,
+		},
 	} {
 		rec := httptest.NewRecorder()
 		req := httptest.NewRequestWithContext(ctx, http.MethodGet, path, nil)
 		srv.Handler().ServeHTTP(rec, req)
 		require.Equal(t, http.StatusOK, rec.Code, path)
 		require.Contains(t, rec.Body.String(), `"data"`, path)
+		for _, text := range want {
+			require.Contains(t, rec.Body.String(), text, path)
+		}
 	}
 }
 
@@ -314,4 +338,15 @@ func TestGeneratedFeatureRunBranchesToReviseWhenApprovalFalse(t *testing.T) {
 
 	require.Contains(t, exec.toolNames(), workflow.Revise)
 	require.NotContains(t, exec.toolNames(), workflow.Publish)
+
+	srv, err := agentdebug.NewServer(agentdebug.Config{Runtime: rt})
+	require.NoError(t, err)
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequestWithContext(ctx, http.MethodGet, "/runs/"+runID+"/workflow", nil)
+	srv.Handler().ServeHTTP(rec, req)
+	require.Equal(t, http.StatusOK, rec.Code)
+	require.Contains(t, rec.Body.String(), `"id":"revise"`)
+	require.Contains(t, rec.Body.String(), `"tool_name":"workflow.revise"`)
+	require.Contains(t, rec.Body.String(), `"status":"completed"`)
+	require.NotContains(t, rec.Body.String(), `"id":"publish"`)
 }
