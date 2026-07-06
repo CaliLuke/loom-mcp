@@ -3,8 +3,10 @@ package gemini_test
 import (
 	"context"
 	"encoding/json"
+	"reflect"
 	"testing"
 
+	"cloud.google.com/go/auth"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/genai"
 
@@ -324,6 +326,55 @@ func TestClientCountTokensOmitsThinkingParts(t *testing.T) {
 func TestClientRequiresDefaultModel(t *testing.T) {
 	_, err := geminimodel.New(geminimodel.Options{Client: &mockModelsClient{}})
 	require.Error(t, err)
+}
+
+func TestNewFromVertexBuildsSDKClient(t *testing.T) {
+	client, err := geminimodel.NewFromVertex(context.Background(), geminimodel.VertexOptions{
+		ProjectID:      "test-project",
+		Location:       "global",
+		Credentials:    &auth.Credentials{},
+		DefaultModel:   "gemini-2.5-pro",
+		HighModel:      "gemini-2.5-pro",
+		SmallModel:     "gemini-2.5-flash",
+		MaxTokens:      2048,
+		Temperature:    0.2,
+		ThinkingBudget: 4096,
+	})
+	require.NoError(t, err)
+
+	value := reflect.ValueOf(client).Elem()
+	require.Equal(t, "gemini-2.5-pro", value.FieldByName("defaultModel").String())
+	require.Equal(t, "gemini-2.5-pro", value.FieldByName("highModel").String())
+	require.Equal(t, "gemini-2.5-flash", value.FieldByName("smallModel").String())
+	require.Equal(t, 2048, int(value.FieldByName("maxTokens").Int()))
+	require.InDelta(t, 0.2, float32(value.FieldByName("temperature").Float()), 0.0001)
+	require.Equal(t, 4096, int(value.FieldByName("thinkingBudget").Int()))
+}
+
+func TestNewFromVertexValidatesRequiredFields(t *testing.T) {
+	client, err := geminimodel.NewFromVertex(context.Background(), geminimodel.VertexOptions{
+		Location:     "global",
+		DefaultModel: "gemini-2.5-pro",
+	})
+	require.Error(t, err)
+	require.Nil(t, client)
+	require.Contains(t, err.Error(), "project id is required")
+
+	client, err = geminimodel.NewFromVertex(context.Background(), geminimodel.VertexOptions{
+		ProjectID:    "test-project",
+		DefaultModel: "gemini-2.5-pro",
+	})
+	require.Error(t, err)
+	require.Nil(t, client)
+	require.Contains(t, err.Error(), "location is required")
+
+	client, err = geminimodel.NewFromVertex(context.Background(), geminimodel.VertexOptions{
+		ProjectID: "test-project",
+		Location:  "global",
+	})
+	require.Error(t, err)
+	require.Nil(t, client)
+	require.Contains(t, err.Error(), "default model is required")
 }
 
 type mockModelsClient struct {

@@ -1486,7 +1486,7 @@ client, err := rt.NewGeminiModelClient(ctx, runtime.GeminiConfig{
 
 Use the Vertex helper when Google Cloud project and location should own auth and
 routing. The Gen AI SDK uses Application Default Credentials for the Vertex
-backend:
+backend unless `APIKey` or explicit `Credentials` are set:
 
 ```go
 client, err := rt.NewVertexGeminiModelClient(ctx, runtime.VertexConfig{

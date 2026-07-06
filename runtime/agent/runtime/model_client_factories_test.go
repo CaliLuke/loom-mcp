@@ -5,6 +5,7 @@ import (
 	"reflect"
 	"testing"
 
+	"cloud.google.com/go/auth"
 	geminifeature "github.com/CaliLuke/loom-mcp/features/model/gemini"
 	openaifeature "github.com/CaliLuke/loom-mcp/features/model/openai"
 	"github.com/stretchr/testify/require"
@@ -90,4 +91,28 @@ func TestNewVertexGeminiModelClientValidates(t *testing.T) {
 	require.Error(t, err)
 	require.Nil(t, client)
 	require.Contains(t, err.Error(), "default model is required")
+}
+
+func TestNewVertexGeminiModelClientBuildsSDKClient(t *testing.T) {
+	rt := &Runtime{}
+
+	client, err := rt.NewVertexGeminiModelClient(context.Background(), VertexConfig{
+		ProjectID:      "project",
+		Location:       "global",
+		Credentials:    &auth.Credentials{},
+		DefaultModel:   "gemini-2.5-pro",
+		HighModel:      "gemini-2.5-pro",
+		SmallModel:     "gemini-2.5-flash",
+		MaxTokens:      2048,
+		Temperature:    0.2,
+		ThinkingBudget: 4096,
+	})
+	require.NoError(t, err)
+
+	geminiClient, ok := client.(*geminifeature.Client)
+	require.True(t, ok)
+	value := reflect.ValueOf(geminiClient).Elem()
+	require.Equal(t, "gemini-2.5-pro", value.FieldByName("defaultModel").String())
+	require.Equal(t, "gemini-2.5-pro", value.FieldByName("highModel").String())
+	require.Equal(t, "gemini-2.5-flash", value.FieldByName("smallModel").String())
 }

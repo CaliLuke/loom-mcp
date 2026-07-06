@@ -11,6 +11,7 @@ import (
 	"math"
 	"net/http"
 
+	"cloud.google.com/go/auth"
 	"google.golang.org/genai"
 
 	"github.com/CaliLuke/loom-mcp/runtime/agent/model"
@@ -32,6 +33,52 @@ type (
 	Options struct {
 		// Client is the underlying Gen AI models client.
 		Client ModelsClient
+
+		// DefaultModel is the model identifier used when Request.Model is empty.
+		DefaultModel string
+
+		// HighModel is used when Request.ModelClass is high-reasoning and
+		// Request.Model is empty.
+		HighModel string
+
+		// SmallModel is used when Request.ModelClass is small and Request.Model is
+		// empty.
+		SmallModel string
+
+		// MaxTokens is the default completion token cap when Request.MaxTokens is
+		// unset.
+		MaxTokens int
+
+		// Temperature is the default sampling temperature when Request.Temperature
+		// is unset.
+		Temperature float32
+
+		// ThinkingBudget is the default thinking-token budget when thinking is
+		// enabled without a per-request budget.
+		ThinkingBudget int
+	}
+
+	// VertexOptions configures a Vertex AI-backed Gemini adapter.
+	VertexOptions struct {
+		// ProjectID is the Google Cloud project used for Vertex AI requests.
+		ProjectID string
+
+		// Location is the Google Cloud location or region used for Vertex AI
+		// requests.
+		Location string
+
+		// APIKey optionally configures API-key auth for Vertex AI. Leave empty
+		// to use Credentials or Application Default Credentials.
+		APIKey string
+
+		// Credentials optionally supplies explicit Google Cloud credentials.
+		Credentials *auth.Credentials
+
+		// HTTPClient optionally supplies the HTTP client used by the Gen AI SDK.
+		HTTPClient *http.Client
+
+		// HTTPOptions optionally overrides Gen AI SDK HTTP behavior.
+		HTTPOptions genai.HTTPOptions
 
 		// DefaultModel is the model identifier used when Request.Model is empty.
 		DefaultModel string
@@ -108,6 +155,41 @@ func NewFromAPIKey(apiKey, defaultModel string) (*Client, error) {
 		return nil, fmt.Errorf("gemini client init: %w", err)
 	}
 	return New(Options{Client: client.Models, DefaultModel: defaultModel})
+}
+
+// NewFromVertex constructs a Gemini client using the official Gen AI SDK's
+// Vertex AI backend.
+func NewFromVertex(ctx context.Context, opts VertexOptions) (*Client, error) {
+	if opts.APIKey == "" && opts.ProjectID == "" {
+		return nil, errors.New("vertex: project id is required")
+	}
+	if opts.APIKey == "" && opts.Location == "" {
+		return nil, errors.New("vertex: location is required")
+	}
+	if opts.DefaultModel == "" {
+		return nil, errors.New("vertex: default model is required")
+	}
+	client, err := genai.NewClient(ctx, &genai.ClientConfig{
+		APIKey:      opts.APIKey,
+		Backend:     genai.BackendVertexAI,
+		Project:     opts.ProjectID,
+		Location:    opts.Location,
+		Credentials: opts.Credentials,
+		HTTPClient:  opts.HTTPClient,
+		HTTPOptions: opts.HTTPOptions,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("vertex gemini client init: %w", err)
+	}
+	return New(Options{
+		Client:         client.Models,
+		DefaultModel:   opts.DefaultModel,
+		HighModel:      opts.HighModel,
+		SmallModel:     opts.SmallModel,
+		MaxTokens:      opts.MaxTokens,
+		Temperature:    opts.Temperature,
+		ThinkingBudget: opts.ThinkingBudget,
+	})
 }
 
 // Complete renders a response using the configured Gemini client.

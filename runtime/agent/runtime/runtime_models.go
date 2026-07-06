@@ -4,8 +4,10 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net/http"
 	"strings"
 
+	"cloud.google.com/go/auth"
 	bedrock "github.com/CaliLuke/loom-mcp/features/model/bedrock"
 	gemini "github.com/CaliLuke/loom-mcp/features/model/gemini"
 	openaifeature "github.com/CaliLuke/loom-mcp/features/model/openai"
@@ -48,6 +50,10 @@ type GeminiConfig struct {
 type VertexConfig struct {
 	ProjectID      string
 	Location       string
+	APIKey         string
+	Credentials    *auth.Credentials
+	HTTPClient     *http.Client
+	HTTPOptions    genai.HTTPOptions
 	DefaultModel   string
 	HighModel      string
 	SmallModel     string
@@ -159,26 +165,24 @@ func (r *Runtime) NewGeminiModelClient(ctx context.Context, cfg GeminiConfig) (m
 // explicit credentials are supplied by the environment.
 func (r *Runtime) NewVertexGeminiModelClient(ctx context.Context, cfg VertexConfig) (model.Client, error) {
 	projectID := strings.TrimSpace(cfg.ProjectID)
-	if projectID == "" {
+	apiKey := strings.TrimSpace(cfg.APIKey)
+	if apiKey == "" && projectID == "" {
 		return nil, errors.New("vertex: project id is required")
 	}
 	location := strings.TrimSpace(cfg.Location)
-	if location == "" {
+	if apiKey == "" && location == "" {
 		return nil, errors.New("vertex: location is required")
 	}
 	if strings.TrimSpace(cfg.DefaultModel) == "" {
 		return nil, errors.New("vertex: default model is required")
 	}
-	client, err := genai.NewClient(ctx, &genai.ClientConfig{
-		Backend:  genai.BackendVertexAI,
-		Project:  projectID,
-		Location: location,
-	})
-	if err != nil {
-		return nil, fmt.Errorf("vertex gemini client init: %w", err)
-	}
-	return gemini.New(gemini.Options{
-		Client:         client.Models,
+	return gemini.NewFromVertex(ctx, gemini.VertexOptions{
+		ProjectID:      projectID,
+		Location:       location,
+		APIKey:         apiKey,
+		Credentials:    cfg.Credentials,
+		HTTPClient:     cfg.HTTPClient,
+		HTTPOptions:    cfg.HTTPOptions,
 		DefaultModel:   cfg.DefaultModel,
 		HighModel:      cfg.HighModel,
 		SmallModel:     cfg.SmallModel,
