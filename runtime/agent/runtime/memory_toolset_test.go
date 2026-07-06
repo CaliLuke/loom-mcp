@@ -45,6 +45,37 @@ func TestMemoryToolsetLoadMemoryFallsBackToCurrentRunStore(t *testing.T) {
 	require.NotContains(t, string(encoded), `"planner_note"`)
 }
 
+func TestMemoryToolsetCurrentRunWithSessionIDReturnsRunEventsWithoutSessionLabels(t *testing.T) {
+	store := memoryinmem.New()
+	ctx := context.Background()
+	require.NoError(t, store.AppendEvents(ctx, "svc.agent", "run-1",
+		memory.NewEvent(time.Unix(10, 0), memory.UserMessageData{Message: "sessionless label event"}, nil),
+		memory.NewEvent(time.Unix(20, 0), memory.PlannerNoteData{Note: "run scoped note"}, nil),
+	))
+
+	reg := NewMemoryToolsetRegistration(MemoryToolsetConfig{
+		Name:       "memory",
+		Store:      store,
+		MaxResults: 20,
+	})
+	result, err := reg.Execute(ctx, &planner.ToolRequest{
+		Name:       "memory.load_memory",
+		AgentID:    "svc.agent",
+		RunID:      "run-1",
+		SessionID:  "sess-1",
+		ToolCallID: "memory-1",
+		Payload:    rawjson.Message([]byte(`{"scope":"current_run","limit":5}`)),
+	})
+	require.NoError(t, err)
+	require.Nil(t, result.ToolResult.Error)
+
+	encoded, err := json.Marshal(result.ToolResult.Result)
+	require.NoError(t, err)
+	require.Contains(t, string(encoded), `"scope":"current_run"`)
+	require.Contains(t, string(encoded), `"sessionless label event"`)
+	require.Contains(t, string(encoded), `"run scoped note"`)
+}
+
 func TestMemoryToolsetLoadMemoryUsesConfiguredSearcher(t *testing.T) {
 	called := false
 	searcher := memory.SearcherFunc(func(_ context.Context, query memory.Query) (memory.QueryResult, error) {
@@ -126,6 +157,42 @@ func TestPlanStartActivityInjectsPreloadedMemory(t *testing.T) {
 		RunContext: run.Context{
 			RunID:  "run-123",
 			Labels: map[string]string{"tenant": "acme"},
+		},
+	})
+	require.NoError(t, err)
+	require.True(t, called)
+	require.NotNil(t, out.Result.FinalResponse)
+}
+
+func TestPlanStartActivityPreloadCurrentRunWithSessionIDReturnsRunEvents(t *testing.T) {
+	store := memoryinmem.New()
+	ctx := context.Background()
+	require.NoError(t, store.AppendEvents(ctx, "service.agent", "run-123",
+		memory.NewEvent(time.Unix(10, 0), memory.UserMessageData{Message: "preload without session label"}, nil),
+	))
+
+	called := false
+	pl := &stubPlanner{start: func(_ context.Context, input *planner.PlanInput) (*planner.PlanResult, error) {
+		called = true
+		require.Len(t, input.PreloadedMemory, 1)
+		require.Equal(t, memory.EventUserMessage, input.PreloadedMemory[0].Type)
+		data, err := memory.DecodeUserMessageData(input.PreloadedMemory[0])
+		require.NoError(t, err)
+		require.Equal(t, "preload without session label", data.Message)
+		return &planner.PlanResult{FinalResponse: &planner.FinalResponse{Message: &model.Message{Role: "assistant", Parts: []model.Part{model.TextPart{Text: "ok"}}}}}, nil
+	}}
+	rt := newTestRuntimeWithPlanner("service.agent", pl)
+	rt.Memory = store
+	reg := rt.agents["service.agent"]
+	reg.Policy.PreloadMemory = &MemoryPreloadPolicy{Scope: MemoryScopeCurrentRun, MaxResults: 5}
+	rt.agents["service.agent"] = reg
+
+	out, err := rt.PlanStartActivity(ctx, &PlanActivityInput{
+		AgentID: "service.agent",
+		RunID:   "run-123",
+		RunContext: run.Context{
+			RunID:     "run-123",
+			SessionID: "sess-1",
 		},
 	})
 	require.NoError(t, err)

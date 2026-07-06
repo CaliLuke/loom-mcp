@@ -2,6 +2,7 @@ package runtime
 
 import (
 	"context"
+	"errors"
 
 	agent "github.com/CaliLuke/loom-mcp/runtime/agent"
 	"github.com/CaliLuke/loom-mcp/runtime/agent/model"
@@ -42,8 +43,11 @@ func (c *modelInterceptedClient) Complete(ctx context.Context, req *model.Reques
 }
 
 func (c *modelInterceptedClient) Stream(ctx context.Context, req *model.Request) (model.Streamer, error) {
-	currentReq, _, err, short := c.beforeModel(ctx, req)
+	currentReq, resp, err, short := c.beforeModel(ctx, req)
 	if short {
+		if err == nil && resp != nil {
+			err = errors.New("model response short-circuit is unsupported for streaming")
+		}
 		return nil, err
 	}
 	st, err := c.inner.Stream(ctx, currentReq)

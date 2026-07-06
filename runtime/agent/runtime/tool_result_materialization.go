@@ -59,6 +59,9 @@ func (r *Runtime) persistToolResultArtifacts(ctx context.Context, call planner.T
 	}
 	for i := range result.Artifacts {
 		content := &result.Artifacts[i]
+		if err := validateArtifactRefScope(call, content.Ref); err != nil {
+			return err
+		}
 		content.Ref = normalizeArtifactRef(call, content.Ref)
 		if content.Ref.ID != "" {
 			continue
@@ -72,6 +75,16 @@ func (r *Runtime) persistToolResultArtifacts(ctx context.Context, call planner.T
 		}
 		content.Ref = ref
 		content.SizeBytes = ref.SizeBytes
+	}
+	return nil
+}
+
+func validateArtifactRefScope(call planner.ToolRequest, ref artifact.Ref) error {
+	if ref.AgentID != "" && ref.AgentID != string(call.AgentID) {
+		return fmt.Errorf("artifact ref scope mismatch: agent_id %q does not match call agent_id %q", ref.AgentID, call.AgentID)
+	}
+	if ref.RunID != "" && ref.RunID != call.RunID {
+		return fmt.Errorf("artifact ref scope mismatch: run_id %q does not match call run_id %q", ref.RunID, call.RunID)
 	}
 	return nil
 }

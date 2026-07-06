@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"testing"
 
+	"github.com/CaliLuke/loom-mcp/runtime/agent/api"
 	"github.com/CaliLuke/loom-mcp/runtime/agent/artifact"
 	"github.com/CaliLuke/loom-mcp/runtime/agent/planner"
 	"github.com/CaliLuke/loom-mcp/runtime/agent/rawjson"
@@ -111,4 +112,32 @@ func TestArtifactToolsetListsAndLoadsArtifacts(t *testing.T) {
 	loadBytes, err := json.Marshal(loadResult.ToolResult.Result)
 	require.NoError(t, err)
 	require.JSONEq(t, `{"content":"hello","mime_type":"text/plain","truncated":true,"size_bytes":11}`, string(loadBytes))
+}
+
+func TestProvidedToolResultArtifactRefsRejectForeignScope(t *testing.T) {
+	rt := &Runtime{
+		toolSpecs: map[tools.Ident]tools.ToolSpec{
+			"svc.ts.export": newAnyJSONSpec("svc.ts.export", "svc.ts"),
+		},
+		logger:  telemetry.NoopLogger{},
+		metrics: telemetry.NoopMetrics{},
+		tracer:  telemetry.NoopTracer{},
+	}
+	call := planner.ToolRequest{
+		Name:       "svc.ts.export",
+		AgentID:    "svc.agent",
+		RunID:      "run-1",
+		ToolCallID: "call-1",
+	}
+
+	_, _, err := rt.decodeProvidedToolResult(context.Background(), rt.toolSpecs[call.Name], call, &api.ProvidedToolResult{
+		ToolCallID: "call-1",
+		Result:     rawjson.Message([]byte(`{"status":"ok"}`)),
+		Artifacts: []artifact.Ref{{
+			ID:      "artifact-1",
+			AgentID: "other.agent",
+			RunID:   "other-run",
+		}},
+	})
+	require.ErrorContains(t, err, "artifact ref scope")
 }

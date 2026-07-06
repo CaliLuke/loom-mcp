@@ -14,6 +14,7 @@ import (
 	"github.com/CaliLuke/loom-mcp/runtime/agent/runlog"
 	"github.com/CaliLuke/loom-mcp/runtime/agent/session"
 	sessioninmem "github.com/CaliLuke/loom-mcp/runtime/agent/session/inmem"
+	"github.com/CaliLuke/loom-mcp/runtime/agent/stream"
 	"github.com/stretchr/testify/require"
 )
 
@@ -121,6 +122,93 @@ func TestEventInterceptorCanDropBeforeRunlogStreamAndBus(t *testing.T) {
 	require.NoError(t, rt.hookActivity(context.Background(), input))
 	require.Empty(t, rl.events)
 	require.Nil(t, published)
+}
+
+func TestEventInterceptorReplacementPersistsMutatedEventTypeEverywhere(t *testing.T) {
+	rl := &recordingRunlog{}
+	bus := hooks.NewBus()
+	store := sessioninmem.New()
+	sink := &recordingStreamSink{}
+	replacement := hooks.NewAssistantMessageEvent("run-1", "svc.agent", "sess-1", "mutated assistant", nil)
+	replacementInput, err := hooks.EncodeToHookInput(replacement, "turn-1")
+	require.NoError(t, err)
+	rt := New(
+		WithRunEventStore(rl),
+		WithHooks(bus),
+		WithSessionStore(store),
+		WithStream(sink),
+		WithInterceptors(RuntimeInterceptorFuncs{
+			BeforeEventFunc: func(_ context.Context, input *BeforeEventInput) (*BeforeEventDecision, error) {
+				require.Equal(t, hooks.PlannerNote, input.Event.Type())
+				return &BeforeEventDecision{
+					Event:   replacement,
+					Payload: replacementInput.Payload.RawMessage(),
+				}, nil
+			},
+		}),
+	)
+
+	var published hooks.Event
+	sub, err := bus.Register(hooks.SubscriberFunc(func(_ context.Context, evt hooks.Event) error {
+		published = evt
+		return nil
+	}))
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = sub.Close() })
+
+	now := time.Now().UTC()
+	_, err = store.CreateSession(context.Background(), "sess-1", now)
+	require.NoError(t, err)
+	require.NoError(t, store.UpsertRun(context.Background(), session.RunMeta{
+		AgentID:   "svc.agent",
+		RunID:     "run-1",
+		SessionID: "sess-1",
+		Status:    session.RunStatusPending,
+		StartedAt: now,
+		UpdatedAt: now,
+	}))
+
+	input, err := hooks.EncodeToHookInput(hooks.NewPlannerNoteEvent("run-1", "svc.agent", "sess-1", "original note", nil), "turn-1")
+	require.NoError(t, err)
+	require.NoError(t, rt.hookActivity(context.Background(), input))
+
+	require.Len(t, rl.events, 1)
+	require.Equal(t, hooks.AssistantMessage, rl.events[0].Type)
+	require.NotNil(t, published)
+	require.Equal(t, hooks.AssistantMessage, published.Type())
+	streamEvents := sink.snapshot()
+	require.Len(t, streamEvents, 1)
+	require.Equal(t, stream.EventAssistantReply, streamEvents[0].Type())
+}
+
+func TestModelInterceptorStreamShortCircuitResponseDoesNotReturnNilStreamer(t *testing.T) {
+	rt := New(WithInterceptors(RuntimeInterceptorFuncs{
+		BeforeModelFunc: func(context.Context, *BeforeModelInput) (*BeforeModelDecision, error) {
+			return &BeforeModelDecision{
+				Response: &model.Response{
+					Content: []model.Message{{
+						Role:  model.ConversationRoleAssistant,
+						Parts: []model.Part{model.TextPart{Text: "short-circuited"}},
+					}},
+				},
+			}, nil
+		},
+	}))
+	var calls []string
+	rt.models["default"] = interceptableModelClient{calls: &calls}
+	ctx := newAgentContext(agentContextOptions{
+		runtime: rt,
+		agentID: "svc.agent",
+		runID:   "run-1",
+		turnID:  "turn-1",
+	})
+	client, ok := ctx.ModelClient("default")
+	require.True(t, ok)
+
+	streamer, err := client.Stream(context.Background(), &model.Request{Model: "test"})
+	require.ErrorContains(t, err, "model response short-circuit is unsupported for streaming")
+	require.Nil(t, streamer)
+	require.Empty(t, calls)
 }
 
 func TestRunInterceptorsOrderAndErrorShortCircuit(t *testing.T) {

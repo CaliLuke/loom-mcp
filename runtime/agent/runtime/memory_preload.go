@@ -23,6 +23,7 @@ func (r *Runtime) preloadMemory(ctx context.Context, policy *MemoryPreloadPolicy
 		if reader == nil {
 			return nil, nil
 		}
+		query.SessionID = ""
 		result := memory.QueryEvents(reader.Events(), query)
 		return result.Events, nil
 	case MemoryScopeIndexed:

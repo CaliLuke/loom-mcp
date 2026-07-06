@@ -97,7 +97,7 @@ func (r *Runtime) appendHookRunEvent(ctx context.Context, input *HookActivityInp
 		AgentID:   input.AgentID,
 		SessionID: input.SessionID,
 		TurnID:    input.TurnID,
-		Type:      input.Type,
+		Type:      evt.Type(),
 		Payload:   payload,
 		Timestamp: time.UnixMilli(evt.Timestamp()).UTC(),
 	})

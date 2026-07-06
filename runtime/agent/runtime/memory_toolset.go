@@ -104,6 +104,7 @@ func executeLoadMemory(ctx context.Context, cfg MemoryToolsetConfig, call *plann
 		if loadErr != nil {
 			return nil, loadErr
 		}
+		query.SessionID = ""
 		result = memory.QueryEvents(snapshot.Events, query)
 	case scope == MemoryScopeIndexed:
 		return unsupportedMemorySearch(call), nil
