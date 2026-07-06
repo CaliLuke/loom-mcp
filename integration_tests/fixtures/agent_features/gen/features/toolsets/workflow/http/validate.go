@@ -58,3 +58,11 @@ func ValidateReviewResultTransport(body *ReviewResultTransport) (err error) {
 	}
 	return
 }
+
+// ValidateReviseResultTransport runs the validations defined on ReviseResultTransport.
+func ValidateReviseResultTransport(body *ReviseResultTransport) (err error) {
+	if body.OK == nil {
+		err = loom.MergeErrors(err, loom.MissingFieldError("ok", "body"))
+	}
+	return
+}

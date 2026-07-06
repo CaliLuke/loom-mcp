@@ -16,7 +16,7 @@ import (
 var (
 	// Specs is the static list of tool specs exported by this agent.
 
-	Specs = []tools.ToolSpec{workflow.SpecDraft, workflow.SpecPublish, workflow.SpecRetry, workflow.SpecReview}
+	Specs = []tools.ToolSpec{workflow.SpecDraft, workflow.SpecPublish, workflow.SpecRetry, workflow.SpecReview, workflow.SpecRevise}
 
 	// metadata is the static list of policy metadata exported by this agent.
 
@@ -40,11 +40,16 @@ var (
 		ID:          tools.Ident("workflow.review"),
 		Tags:        []string{},
 		Title:       "Review",
+	}, {
+		Description: "Revise the result",
+		ID:          tools.Ident("workflow.revise"),
+		Tags:        []string{},
+		Title:       "Revise",
 	}}
 
 	// names is the static list of exported tool identifiers.
 
-	names = []tools.Ident{workflow.Draft, workflow.Publish, workflow.Retry, workflow.Review}
+	names = []tools.Ident{workflow.Draft, workflow.Publish, workflow.Retry, workflow.Review, workflow.Revise}
 )
 
 // Names returns the tool identifiers exported by this agent.
@@ -63,6 +68,8 @@ func Spec(name tools.Ident) (*tools.ToolSpec, bool) {
 		return &workflow.SpecRetry, true
 	case tools.Ident("workflow.review"):
 		return &workflow.SpecReview, true
+	case tools.Ident("workflow.revise"):
+		return &workflow.SpecRevise, true
 	default:
 		return nil, false
 	}

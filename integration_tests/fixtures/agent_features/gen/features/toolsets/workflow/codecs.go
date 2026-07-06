@@ -59,6 +59,16 @@ var (
 		ToJSON:   MarshalReviewResult,
 		FromJSON: UnmarshalReviewResult,
 	}
+	// RevisePayloadCodec serializes values of type *RevisePayload to canonical JSON.
+	RevisePayloadCodec = tools.JSONCodec[*RevisePayload]{
+		ToJSON:   MarshalRevisePayload,
+		FromJSON: UnmarshalRevisePayload,
+	}
+	// ReviseResultCodec serializes values of type *ReviseResult to canonical JSON.
+	ReviseResultCodec = tools.JSONCodec[*ReviseResult]{
+		ToJSON:   MarshalReviseResult,
+		FromJSON: UnmarshalReviseResult,
+	}
 	// draftPayloadCodec provides an untyped codec for *DraftPayload.
 	draftPayloadCodec = tools.JSONCodec[any]{
 		ToJSON: func(v any) ([]byte, error) {
@@ -163,6 +173,32 @@ var (
 			return UnmarshalReviewResult(data)
 		},
 	}
+	// revisePayloadCodec provides an untyped codec for *RevisePayload.
+	revisePayloadCodec = tools.JSONCodec[any]{
+		ToJSON: func(v any) ([]byte, error) {
+			// Prefer typed marshal when the value matches the expected type.
+			if typed, ok := v.(*RevisePayload); ok {
+				return MarshalRevisePayload(typed)
+			}
+			return nil, fmt.Errorf("invalid value type for *RevisePayload: %T", v)
+		},
+		FromJSON: func(data []byte) (any, error) {
+			return UnmarshalRevisePayload(data)
+		},
+	}
+	// reviseResultCodec provides an untyped codec for *ReviseResult.
+	reviseResultCodec = tools.JSONCodec[any]{
+		ToJSON: func(v any) ([]byte, error) {
+			// Prefer typed marshal when the value matches the expected type.
+			if typed, ok := v.(*ReviseResult); ok {
+				return MarshalReviseResult(typed)
+			}
+			return nil, fmt.Errorf("invalid value type for *ReviseResult: %T", v)
+		},
+		FromJSON: func(data []byte) (any, error) {
+			return UnmarshalReviseResult(data)
+		},
+	}
 )
 var DraftPayloadFieldDescs = map[string]string{
 	"topic": "Topic to process",
@@ -183,6 +219,10 @@ var ReviewPayloadFieldDescs = map[string]string{
 	"strict": "Whether review should be strict",
 }
 var ReviewResultFieldDescs = map[string]string{
+	"approved": "Whether the operation was approved",
+	"ok":       "Whether the operation succeeded",
+}
+var ReviseResultFieldDescs = map[string]string{
 	"approved": "Whether the operation was approved",
 	"ok":       "Whether the operation succeeded",
 }
@@ -350,6 +390,23 @@ func enrichReviewResultValidationError(err error) error {
 	ve.descriptions = m
 	return ve
 }
+func enrichReviseResultValidationError(err error) error {
+	ve, ok := err.(*ValidationError)
+	if !ok || ve == nil {
+		return err
+	}
+	if len(ve.issues) == 0 {
+		return err
+	}
+	m := make(map[string]string)
+	for _, is := range ve.issues {
+		if d, ok := ReviseResultFieldDescs[is.Field]; ok && d != "" {
+			m[is.Field] = d
+		}
+	}
+	ve.descriptions = m
+	return ve
+}
 
 // PayloadCodec returns the generic codec for the named tool payload.
 func PayloadCodec(name string) (*tools.JSONCodec[any], bool) {
@@ -362,6 +419,8 @@ func PayloadCodec(name string) (*tools.JSONCodec[any], bool) {
 		return &retryPayloadCodec, true
 	case "workflow.review":
 		return &reviewPayloadCodec, true
+	case "workflow.revise":
+		return &revisePayloadCodec, true
 	default:
 		return nil, false
 	}
@@ -378,6 +437,8 @@ func ResultCodec(name string) (*tools.JSONCodec[any], bool) {
 		return &retryResultCodec, true
 	case "workflow.review":
 		return &reviewResultCodec, true
+	case "workflow.revise":
+		return &reviseResultCodec, true
 	default:
 		return nil, false
 	}
@@ -665,6 +726,74 @@ func UnmarshalReviewResult(data []byte) (*ReviewResult, error) {
 	_ = in
 	var out *ReviewResult
 	out = &ReviewResult{
+		OK:       *in.OK,
+		Approved: in.Approved,
+	}
+	return out, nil
+}
+
+// MarshalRevisePayload serializes *RevisePayload into JSON.
+func MarshalRevisePayload(v *RevisePayload) ([]byte, error) {
+	if v == nil {
+		return nil, fmt.Errorf("revisePayload is nil")
+	}
+	in := v
+	_ = in
+	var out *toolhttp.RevisePayloadTransport
+	out = &toolhttp.RevisePayloadTransport{}
+	return json.Marshal(out)
+}
+
+// UnmarshalRevisePayload deserializes JSON into *RevisePayload.
+func UnmarshalRevisePayload(data []byte) (*RevisePayload, error) {
+	if len(data) == 0 {
+		var v *RevisePayload
+		return v, nil
+	}
+	var tv toolhttp.RevisePayloadTransport
+	if err := json.Unmarshal(data, &tv); err != nil {
+		return nil, fmt.Errorf("decode revisePayload: %w", err)
+	}
+	in := &tv
+	_ = in
+	var out *RevisePayload
+	out = &RevisePayload{}
+	return out, nil
+}
+
+// MarshalReviseResult serializes *ReviseResult into JSON.
+func MarshalReviseResult(v *ReviseResult) ([]byte, error) {
+	if v == nil {
+		return nil, fmt.Errorf("reviseResult is nil")
+	}
+	in := v
+	_ = in
+	var out *toolhttp.ReviseResultTransport
+	out = &toolhttp.ReviseResultTransport{
+		OK:       &in.OK,
+		Approved: in.Approved,
+	}
+	return json.Marshal(out)
+}
+
+// UnmarshalReviseResult deserializes JSON into *ReviseResult.
+func UnmarshalReviseResult(data []byte) (*ReviseResult, error) {
+	if len(data) == 0 {
+		return nil, fmt.Errorf("reviseResult JSON is empty")
+	}
+	var tv toolhttp.ReviseResultTransport
+	if err := json.Unmarshal(data, &tv); err != nil {
+		return nil, fmt.Errorf("decode reviseResult: %w", err)
+	}
+	if err := toolhttp.ValidateReviseResultTransport(&tv); err != nil {
+		err = newValidationError(err)
+		err = enrichReviseResultValidationError(err)
+		return nil, err
+	}
+	in := &tv
+	_ = in
+	var out *ReviseResult
+	out = &ReviseResult{
 		OK:       *in.OK,
 		Approved: in.Approved,
 	}

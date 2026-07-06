@@ -87,7 +87,7 @@ func NewCoordinatorAgent(cfg CoordinatorAgentConfig) (*CoordinatorAgent, error) 
 						Path:   "$.approved",
 						Target: "publish",
 					}},
-					Default:  "publish",
+					Default:  "revise",
 					FromStep: "approval",
 				},
 				DependsOn: []string{"retry"},
@@ -99,6 +99,12 @@ func NewCoordinatorAgent(cfg CoordinatorAgentConfig) (*CoordinatorAgent, error) 
 				Kind:      planner.WorkflowNodeTool,
 				Payload:   rawjson.Message([]byte("{}")),
 				Tool:      tools.Ident("workflow.publish"),
+			}, {
+				DependsOn: []string{"publish"},
+				ID:        "revise",
+				Kind:      planner.WorkflowNodeTool,
+				Payload:   rawjson.Message([]byte("{}")),
+				Tool:      tools.Ident("workflow.revise"),
 			}},
 		})
 	}

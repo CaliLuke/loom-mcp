@@ -57,6 +57,10 @@ var _ = Service("features", func() {
 				Args(EmptyPayload)
 				Return(StatusResult)
 			})
+			Tool("revise", "Revise the result", func() {
+				Args(EmptyPayload)
+				Return(StatusResult)
+			})
 		})
 		RunPolicy(func() {
 			DefaultCaps(MaxToolCalls(12), MaxConsecutiveFailedToolCalls(2))
@@ -73,8 +77,9 @@ var _ = Service("features", func() {
 			Join("reviewed", "draft", "review")
 			RequestInput("approval", "Approval", `{"type":"object","properties":{"approved":{"type":"boolean"}},"required":["approved"]}`)
 			Loop("retry", "workflow.retry", `{}`, MaxIterations(2))
-			Branch("route", "approval", Case("$.approved", "true", "publish"), BranchDefault("publish"))
+			Branch("route", "approval", Case("$.approved", "true", "publish"), BranchDefault("revise"))
 			Step("publish", "workflow.publish", `{}`)
+			Step("revise", "workflow.revise", `{}`)
 			FinalMessage("generated workflow complete")
 		})
 	})

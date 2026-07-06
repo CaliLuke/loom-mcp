@@ -9,6 +9,7 @@ Refactor confidence around the existing generated `integration_tests/fixtures/ag
 - 2026-07-06 — Plan reconciled to preserve the existing fixture, use current generated owner names, add a real `revise` branch, and drive typed-input acceptance through generated registration plus `coordinator.NewClient(rt).Start(...)`.
 - 2026-07-06 — Focused review found the reconciled draft still said `Run(...)` where typed input needs `Start(...)`, risked importing `workflow.Revise` before regeneration, and missed existing `agent_features_test.go`; plan updated to extend that file, use `Start(...)`, and assert pre-regeneration `tools.Ident("workflow.revise")`.
 - 2026-07-06 — Milestone 1 red test added. `go test -C ./integration_tests/fixtures/agent_features ./... -run TestGenerated -count=1` fails in `TestGeneratedFeatureRunBranchesToReviseWhenApprovalFalse` because observed tools are `workflow.review`, `workflow.draft`, `workflow.retry`, `workflow.retry`, `workflow.publish`, with no `workflow.revise`.
+- 2026-07-06 — Milestone 2 reconciled the fixture DSL with `workflow.revise`, regenerated `integration_tests/fixtures/agent_features`, and added `regen-agent-feature-fixture` plus `verify-agent-feature-fixture`. `make loom-status` initially reported remote mode for root, fixture, and quickstart; `make loom-local` required restoring the canonical `/Users/luca/code/loom-mono` symlink to the existing local checkout. The focused registration proof passes after returning to remote mode.
 
 ## Milestones
 
@@ -51,17 +52,17 @@ Acceptance Criteria
 
 Checklist
 
-- [ ] Update existing file `integration_tests/fixtures/agent_features/design/design.go` to add `workflow.revise` with `Args(EmptyPayload)` and `Return(StatusResult)`.
-- [ ] Update existing file `integration_tests/fixtures/agent_features/design/design.go` so `Branch("route", "approval", Case("$.approved", "true", "publish"), BranchDefault("revise"))` routes false approvals to `revise`.
-- [ ] Preserve existing `Toolset("artifacts", FromArtifacts(MaxArtifactBytes(65536), MaxArtifacts(50)))`, `Toolset("memory", FromMemory(MemoryMaxResults(20)))`, `Toolset("skills", FromSkills(".agents/skills", SkillPreload(SkillPreloadOnStart), SkillReload(SkillReloadPerCall)))`, `Interceptors("audit")`, `RetryAndReflect(MaxRetries(1), ErrorIfRetryExceeded(true))`, and `PreloadMemory(MemoryScopeCurrentRun(), MemoryMaxResults(5))`.
-- [ ] Preserve existing `go.work` use entry `./integration_tests/fixtures/agent_features` and do not remove unrelated local runtime changes.
-- [ ] Add `regen-agent-feature-fixture` to `Makefile` with `cd ./integration_tests/fixtures/agent_features && $(GO) run $(LOOM_CLI_PACKAGE) gen example.com/agentfeatures/design`.
-- [ ] Add `verify-agent-feature-fixture` to `Makefile` with `go test -C ./integration_tests/fixtures/agent_features ./... -count=1`.
-- [ ] Update `verify-mcp-local` in `Makefile` so it runs `go test -C ./integration_tests/fixtures/assistant ./... -count=1`, `go test -C ./integration_tests/fixtures/agent_features ./... -count=1`, and `go test ./integration_tests/framework -count=1`.
-- [ ] Run `make loom-status` and record whether local or remote Loom mode is active.
-- [ ] Run `make loom-local`.
-- [ ] Run `make regen-agent-feature-fixture`.
-- [ ] Run `go test -C ./integration_tests/fixtures/agent_features ./... -run TestGeneratedFeatureFixtureRegistersRuntimeSurface -count=1`.
+- [x] Update existing file `integration_tests/fixtures/agent_features/design/design.go` to add `workflow.revise` with `Args(EmptyPayload)` and `Return(StatusResult)`.
+- [x] Update existing file `integration_tests/fixtures/agent_features/design/design.go` so `Branch("route", "approval", Case("$.approved", "true", "publish"), BranchDefault("revise"))` routes false approvals to `revise`.
+- [x] Preserve existing `Toolset("artifacts", FromArtifacts(MaxArtifactBytes(65536), MaxArtifacts(50)))`, `Toolset("memory", FromMemory(MemoryMaxResults(20)))`, `Toolset("skills", FromSkills(".agents/skills", SkillPreload(SkillPreloadOnStart), SkillReload(SkillReloadPerCall)))`, `Interceptors("audit")`, `RetryAndReflect(MaxRetries(1), ErrorIfRetryExceeded(true))`, and `PreloadMemory(MemoryScopeCurrentRun(), MemoryMaxResults(5))`.
+- [x] Preserve existing `go.work` use entry `./integration_tests/fixtures/agent_features` and do not remove unrelated local runtime changes.
+- [x] Add `regen-agent-feature-fixture` to `Makefile` with `cd ./integration_tests/fixtures/agent_features && $(GO) run $(LOOM_CLI_PACKAGE) gen example.com/agentfeatures/design`.
+- [x] Add `verify-agent-feature-fixture` to `Makefile` with `go test -C ./integration_tests/fixtures/agent_features ./... -count=1`.
+- [x] Update `verify-mcp-local` in `Makefile` so it runs `go test -C ./integration_tests/fixtures/assistant ./... -count=1`, `go test -C ./integration_tests/fixtures/agent_features ./... -count=1`, and `go test ./integration_tests/framework -count=1`.
+- [x] Run `make loom-status` and record whether local or remote Loom mode is active.
+- [x] Run `make loom-local`.
+- [x] Run `make regen-agent-feature-fixture`.
+- [x] Run `go test -C ./integration_tests/fixtures/agent_features ./... -run TestGeneratedFeatureFixtureRegistersRuntimeSurface -count=1`.
 
 ### Milestone 3: Runtime Acceptance Harness
 

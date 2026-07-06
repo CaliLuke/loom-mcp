@@ -83,4 +83,22 @@ type (
 		// Whether the operation was approved
 		Approved *bool `json:"approved,omitempty"`
 	}
+
+	// RevisePayloadTransport is the internal JSON transport type for RevisePayload.
+	// It lives in the toolset-local http package and is used only for JSON
+	// decode + validation (missing-field detection) before transforming into
+	// the public tool type.
+	RevisePayloadTransport struct {
+	}
+
+	// ReviseResultTransport is the internal JSON transport type for ReviseResult.
+	// It lives in the toolset-local http package and is used only for JSON
+	// decode + validation (missing-field detection) before transforming into
+	// the public tool type.
+	ReviseResultTransport struct {
+		// Whether the operation succeeded
+		OK *bool `json:"ok"`
+		// Whether the operation was approved
+		Approved *bool `json:"approved,omitempty"`
+	}
 )

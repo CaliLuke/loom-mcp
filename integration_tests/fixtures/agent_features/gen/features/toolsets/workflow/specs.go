@@ -18,6 +18,7 @@ const (
 	Publish tools.Ident = "workflow.publish"
 	Retry   tools.Ident = "workflow.retry"
 	Review  tools.Ident = "workflow.review"
+	Revise  tools.Ident = "workflow.revise"
 )
 
 var Specs = []tools.ToolSpec{
@@ -25,6 +26,7 @@ var Specs = []tools.ToolSpec{
 	SpecPublish,
 	SpecRetry,
 	SpecReview,
+	SpecRevise,
 }
 
 var (
@@ -64,6 +66,15 @@ var (
 		Payload:     tools.TypeSpec{Name: "ReviewPayload", Schema: []byte("{\"$schema\":\"https://json-schema.org/draft/2020-12/schema\",\"type\":\"object\",\"properties\":{\"strict\":{\"type\":\"boolean\",\"description\":\"Whether review should be strict\",\"example\":true}},\"required\":[\"strict\"]}"), ExampleJSON: []byte("{\"strict\":false}"), ExampleInput: map[string]any{"strict": false}, Codec: reviewPayloadCodec},
 		Result:      tools.TypeSpec{Name: "ReviewResult", Schema: []byte("{\"$schema\":\"https://json-schema.org/draft/2020-12/schema\",\"type\":\"object\",\"properties\":{\"approved\":{\"type\":\"boolean\",\"description\":\"Whether the operation was approved\",\"example\":true},\"ok\":{\"type\":\"boolean\",\"description\":\"Whether the operation succeeded\",\"example\":true}},\"required\":[\"ok\"]}"), Codec: reviewResultCodec},
 	}
+	SpecRevise = tools.ToolSpec{
+		Name:        Revise,
+		Service:     "features",
+		Toolset:     "features.workflow",
+		Description: "Revise the result",
+		Tags:        []string{},
+		Payload:     tools.TypeSpec{Name: "RevisePayload", Schema: []byte("{\"$schema\":\"https://json-schema.org/draft/2020-12/schema\",\"type\":\"object\"}"), ExampleJSON: nil, ExampleInput: nil, Codec: revisePayloadCodec},
+		Result:      tools.TypeSpec{Name: "ReviseResult", Schema: []byte("{\"$schema\":\"https://json-schema.org/draft/2020-12/schema\",\"type\":\"object\",\"properties\":{\"approved\":{\"type\":\"boolean\",\"description\":\"Whether the operation was approved\",\"example\":false},\"ok\":{\"type\":\"boolean\",\"description\":\"Whether the operation succeeded\",\"example\":true}},\"required\":[\"ok\"]}"), Codec: reviseResultCodec},
+	}
 )
 
 var (
@@ -92,12 +103,19 @@ var (
 			Description: "Review the draft",
 			Tags:        []string{},
 		},
+		{
+			ID:          Revise,
+			Title:       "Revise",
+			Description: "Revise the result",
+			Tags:        []string{},
+		},
 	}
 	names = []tools.Ident{
 		Draft,
 		Publish,
 		Retry,
 		Review,
+		Revise,
 	}
 )
 
@@ -117,6 +135,8 @@ func Spec(name tools.Ident) (*tools.ToolSpec, bool) {
 		return &SpecRetry, true
 	case Review:
 		return &SpecReview, true
+	case Revise:
+		return &SpecRevise, true
 	default:
 		return nil, false
 	}
@@ -133,6 +153,8 @@ func PayloadSchema(name tools.Ident) ([]byte, bool) {
 		return SpecRetry.Payload.Schema, true
 	case Review:
 		return SpecReview.Payload.Schema, true
+	case Revise:
+		return SpecRevise.Payload.Schema, true
 	default:
 		return nil, false
 	}
@@ -149,6 +171,8 @@ func ResultSchema(name tools.Ident) ([]byte, bool) {
 		return SpecRetry.Result.Schema, true
 	case Review:
 		return SpecReview.Result.Schema, true
+	case Revise:
+		return SpecRevise.Result.Schema, true
 	default:
 		return nil, false
 	}

@@ -59,4 +59,16 @@ type (
 		// Whether the operation was approved
 		Approved *bool `json:"approved,omitempty"`
 	}
+
+	// RevisePayload defines the JSON payload for the workflow.revise tool.
+	RevisePayload = struct {
+	}
+
+	// ReviseResult defines the JSON result for the workflow.revise tool.
+	ReviseResult = struct {
+		// Whether the operation succeeded
+		OK bool `json:"ok"`
+		// Whether the operation was approved
+		Approved *bool `json:"approved,omitempty"`
+	}
 )

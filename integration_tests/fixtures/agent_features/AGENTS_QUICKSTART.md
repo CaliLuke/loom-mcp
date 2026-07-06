@@ -335,6 +335,8 @@ cfg := <agentpkg>.<AgentConfig>{
 * *Run a bounded retry step*
 * **Tool: `workflow.review`**
 * *Review the draft*
+* **Tool: `workflow.revise`**
+* *Revise the result*
 * **Tools this agent EXPORTS for others to use:**
 * *This agent does not export any toolsets.*
 </details>

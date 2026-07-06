@@ -45,6 +45,7 @@ func TestGeneratedFeatureFixtureRegistersRuntimeSurface(t *testing.T) {
 		workflow.Review,
 		workflow.Retry,
 		workflow.Publish,
+		workflow.Revise,
 	}, workflow.Names())
 }
 
@@ -218,7 +219,7 @@ func TestGeneratedFeatureRunBranchesToReviseWhenApprovalFalse(t *testing.T) {
 	_, err = handle.Wait(ctx)
 	require.NoError(t, err)
 
-	require.Contains(t, exec.toolNames(), tools.Ident("workflow.revise"))
+	require.Contains(t, exec.toolNames(), workflow.Revise)
 	require.NotContains(t, exec.toolNames(), workflow.Publish)
 }
 

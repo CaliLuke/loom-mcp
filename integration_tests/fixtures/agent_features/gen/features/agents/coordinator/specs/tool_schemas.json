@@ -15,7 +15,7 @@
             "topic": {
               "type": "string",
               "description": "Topic to process",
-              "example": "Voluptatem rem et natus nihil quisquam inventore."
+              "example": "Quisquam inventore minima consequuntur vero facilis."
             }
           },
           "required": [
@@ -32,12 +32,12 @@
             "approved": {
               "type": "boolean",
               "description": "Whether the operation was approved",
-              "example": false
+              "example": true
             },
             "ok": {
               "type": "boolean",
               "description": "Whether the operation succeeded",
-              "example": false
+              "example": true
             }
           },
           "required": [
@@ -143,6 +143,42 @@
       },
       "result": {
         "name": "ReviewResult",
+        "schema": {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "type": "object",
+          "properties": {
+            "approved": {
+              "type": "boolean",
+              "description": "Whether the operation was approved",
+              "example": false
+            },
+            "ok": {
+              "type": "boolean",
+              "description": "Whether the operation succeeded",
+              "example": false
+            }
+          },
+          "required": [
+            "ok"
+          ]
+        }
+      }
+    },
+    {
+      "id": "workflow.revise",
+      "service": "features",
+      "toolset": "features.workflow",
+      "title": "Revise",
+      "description": "Revise the result",
+      "payload": {
+        "name": "RevisePayload",
+        "schema": {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "type": "object"
+        }
+      },
+      "result": {
+        "name": "ReviseResult",
         "schema": {
           "$schema": "https://json-schema.org/draft/2020-12/schema",
           "type": "object",
