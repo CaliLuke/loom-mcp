@@ -24,6 +24,10 @@ type (
 		GenerateContent(ctx context.Context, model string, contents []*genai.Content, config *genai.GenerateContentConfig) (*genai.GenerateContentResponse, error)
 	}
 
+	tokenCountingModelsClient interface {
+		CountTokens(ctx context.Context, model string, contents []*genai.Content, config *genai.CountTokensConfig) (*genai.CountTokensResponse, error)
+	}
+
 	// Options configures optional Gemini adapter behavior.
 	Options struct {
 		// Client is the underlying Gen AI models client.
@@ -102,6 +106,36 @@ func (c *Client) Complete(ctx context.Context, req *model.Request) (*model.Respo
 		return nil, fmt.Errorf("gemini generate_content: %w", err)
 	}
 	return translateResponse(modelID, resp)
+}
+
+// CountTokens implements model.TokenCounter using Gemini's native counter.
+func (c *Client) CountTokens(ctx context.Context, req *model.Request) (model.TokenCount, error) {
+	counter, ok := c.models.(tokenCountingModelsClient)
+	if !ok {
+		return model.TokenCount{}, errors.New("gemini: models client does not support count_tokens")
+	}
+	countReq := *req
+	countReq.Messages = geminiMessagesWithoutThinking(req.Messages)
+	modelID, contents, config, err := c.buildRequest(&countReq)
+	if err != nil {
+		return model.TokenCount{}, err
+	}
+	resp, err := counter.CountTokens(ctx, modelID, contents, &genai.CountTokensConfig{
+		SystemInstruction: config.SystemInstruction,
+		Tools:             config.Tools,
+	})
+	if err != nil {
+		if isRateLimited(err) {
+			return model.TokenCount{}, fmt.Errorf("%w: %w", model.ErrRateLimited, err)
+		}
+		return model.TokenCount{}, fmt.Errorf("gemini count_tokens: %w", err)
+	}
+	return model.TokenCount{
+		Model:       modelID,
+		ModelClass:  req.ModelClass,
+		InputTokens: int(resp.TotalTokens),
+		Exact:       true,
+	}, nil
 }
 
 // Stream reports that Gemini streaming is not yet supported by this adapter.
@@ -212,6 +246,29 @@ func encodeMessages(msgs []*model.Message) ([]*genai.Content, *genai.Content, er
 		systemInstruction = genai.NewContentFromParts(systemParts, genai.RoleUser)
 	}
 	return contents, systemInstruction, nil
+}
+
+func geminiMessagesWithoutThinking(msgs []*model.Message) []*model.Message {
+	out := make([]*model.Message, 0, len(msgs))
+	for _, msg := range msgs {
+		if msg == nil {
+			continue
+		}
+		parts := make([]model.Part, 0, len(msg.Parts))
+		for _, part := range msg.Parts {
+			if _, ok := part.(model.ThinkingPart); ok {
+				continue
+			}
+			parts = append(parts, part)
+		}
+		if len(parts) == 0 {
+			continue
+		}
+		copied := *msg
+		copied.Parts = parts
+		out = append(out, &copied)
+	}
+	return out
 }
 
 func encodeSystemParts(parts []model.Part) ([]*genai.Part, error) {

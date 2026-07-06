@@ -171,15 +171,22 @@ func TestEstimateTokensMonotonic(t *testing.T) {
 		},
 	}
 
-	small := estimateTokens(smallReq)
-	big := estimateTokens(bigReq)
-
-	if small <= 0 {
-		t.Fatalf("expected positive token estimate for small request, got %d",
-			small)
+	estimator := model.TokenEstimator{}
+	small, err := estimator.CountTokens(context.Background(), smallReq)
+	if err != nil {
+		t.Fatalf("expected small token estimate, got error %v", err)
 	}
-	if big <= small {
+	big, err := estimator.CountTokens(context.Background(), bigReq)
+	if err != nil {
+		t.Fatalf("expected big token estimate, got error %v", err)
+	}
+
+	if small.InputTokens <= 0 {
+		t.Fatalf("expected positive token estimate for small request, got %d",
+			small.InputTokens)
+	}
+	if big.InputTokens <= small.InputTokens {
 		t.Fatalf("expected larger estimate for larger request, small=%d big=%d",
-			small, big)
+			small.InputTokens, big.InputTokens)
 	}
 }

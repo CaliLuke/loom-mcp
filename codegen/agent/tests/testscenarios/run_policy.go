@@ -15,6 +15,11 @@ func RunPolicyBasic() func() {
 					DefaultCaps(MaxToolCalls(5), MaxConsecutiveFailedToolCalls(2))
 					TimeBudget("30s")
 					InterruptsAllowed(true)
+					History(func() {
+						CompressAtMaxInputTokens(120000)
+						KeepMaxInputTokens(40000)
+						KeepMaxTurns(12)
+					})
 				})
 				Use("helpers", func() {
 					Tool("noop", "Noop", func() {})

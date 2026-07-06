@@ -315,7 +315,10 @@ Notes:
 | --------------------------------- | ------------------ | -------------------------------------------- |
 | `History(dsl)`                    | Inside `RunPolicy` | Configures conversation history management   |
 | `KeepRecentTurns(n)`              | Inside `History`   | Retain only the most recent N turns          |
-| `Compress(triggerAt, keepRecent)` | Inside `History`   | Summarize older turns when threshold reached |
+| `CompressAtTurns(n)`              | Inside `History`   | Summarize once N logical turns accumulate    |
+| `CompressAtMaxInputTokens(n)`     | Inside `History`   | Summarize once exact input tokens exceed N   |
+| `KeepMaxTurns(n)`                 | Inside `History`   | Keep at most N newest turns exact            |
+| `KeepMaxInputTokens(n)`           | Inside `History`   | Keep newest whole turns within token budget  |
 
 ### Cache Functions
 
@@ -1079,14 +1082,20 @@ RunPolicy(func() {
 ```go
 RunPolicy(func() {
     History(func() {
-        Compress(30, 10)  // Trigger at 30 turns, keep 10 recent
+        CompressAtMaxInputTokens(120000)
+        KeepMaxInputTokens(40000)
+        KeepMaxTurns(12)
     })
 })
 ```
 
-When `Compress` is used, the generated agent config includes a `HistoryModel` field that
-callers must supply with a `model.Client`. The runtime uses `ModelClassSmall` for
-summarization.
+Compression requires at least one trigger (`CompressAtTurns` or
+`CompressAtMaxInputTokens`) and at least one retention budget (`KeepMaxTurns` or
+`KeepMaxInputTokens`). Token budgets use exact provider token counts; models used
+for token-budget compression must implement `model.TokenCounter`. When
+compression is configured, generated agent config includes a `HistoryModel` field
+that callers must supply with a `model.Client`. The runtime uses
+`ModelClassSmall` for summarization.
 
 ### Cache Policies
 

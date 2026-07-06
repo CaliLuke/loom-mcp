@@ -9,8 +9,12 @@ import (
 // each planner invocation. It can either:
 //
 //   - KeepRecentTurns(N) to retain only the last N turns, or
-//   - Compress(triggerAt, keepRecent) to summarize older turns once the
-//     trigger threshold is reached.
+//   - CompressAt... plus KeepMax... to summarize older turns while preserving
+//     an exact recent tail.
+//
+// CompressAtMaxInputTokens and CompressAtTurns decide when summarization runs,
+// while KeepMaxInputTokens and KeepMaxTurns decide which newest complete turns
+// stay exact after summarization.
 //
 // At most one history policy may be configured per agent.
 //
@@ -134,45 +138,88 @@ func KeepRecentTurns(n int) {
 	h.KeepRecent = n
 }
 
-// Compress configures a history policy that summarizes older turns once a
-// trigger threshold is reached, retaining the most recent keepRecent turns in
-// full fidelity. The runtime uses the configured thresholds to construct a
-// compression policy; applications supply the model client via generated
-// configuration when Compress is enabled.
+// CompressAtTurns configures compression to run once at least n logical turns
+// have accumulated. It is optional when CompressAtMaxInputTokens is set.
 //
-// Compress must appear inside a History expression. At most one of
-// KeepRecentTurns or Compress may be configured.
+// CompressAtTurns must appear inside a History expression.
+func CompressAtTurns(n int) {
+	h := compressHistory("CompressAtTurns")
+	if h == nil {
+		return
+	}
+	if n <= 0 {
+		eval.ReportError("CompressAtTurns requires n > 0, got %d", n)
+		return
+	}
+	h.CompressAtTurns = n
+}
+
+// CompressAtMaxInputTokens configures compression to run when the
+// provider-visible transcript exceeds n exact input tokens.
 //
-// Example:
+// CompressAtMaxInputTokens must appear inside a History expression.
+func CompressAtMaxInputTokens(n int) {
+	h := compressHistory("CompressAtMaxInputTokens")
+	if h == nil {
+		return
+	}
+	if n <= 0 {
+		eval.ReportError("CompressAtMaxInputTokens requires n > 0, got %d", n)
+		return
+	}
+	h.CompressAtMaxInputTokens = n
+}
+
+// KeepMaxTurns caps the exact retention tail to at most n newest logical turns
+// after compression.
 //
-//	RunPolicy(func() {
-//	    History(func() {
-//	        Compress(30, 10) // trigger at 30 turns, keep 10 recent
-//	    })
-//	})
-func Compress(triggerAt, keepRecent int) {
+// KeepMaxTurns must appear inside a History expression with a compression
+// trigger.
+func KeepMaxTurns(n int) {
+	h := compressHistory("KeepMaxTurns")
+	if h == nil {
+		return
+	}
+	if n <= 0 {
+		eval.ReportError("KeepMaxTurns requires n > 0, got %d", n)
+		return
+	}
+	h.KeepMaxTurns = n
+}
+
+// KeepMaxInputTokens keeps the newest whole logical turns whose exact transcript
+// cost fits within n input tokens after compression.
+//
+// KeepMaxInputTokens must appear inside a History expression with a compression
+// trigger.
+func KeepMaxInputTokens(n int) {
+	h := compressHistory("KeepMaxInputTokens")
+	if h == nil {
+		return
+	}
+	if n <= 0 {
+		eval.ReportError("KeepMaxInputTokens requires n > 0, got %d", n)
+		return
+	}
+	h.KeepMaxInputTokens = n
+}
+
+func compressHistory(name string) *expragents.HistoryExpr {
 	h, ok := eval.Current().(*expragents.HistoryExpr)
 	if !ok {
 		eval.IncompatibleDSL()
-		return
+		return nil
 	}
-	if h.Mode != "" {
-		eval.ReportError("only one history policy may be configured per agent")
-		return
+	switch h.Mode {
+	case "":
+		h.Mode = expragents.HistoryModeCompress
+	case expragents.HistoryModeCompress:
+	case expragents.HistoryModeKeepRecent:
+		eval.ReportError("%s cannot be combined with KeepRecentTurns", name)
+		return nil
+	default:
+		eval.ReportError("unknown history policy mode %q", h.Mode)
+		return nil
 	}
-	if triggerAt <= 0 {
-		eval.ReportError("Compress requires triggerAt > 0, got %d", triggerAt)
-		return
-	}
-	if keepRecent < 0 {
-		eval.ReportError("Compress requires keepRecent >= 0, got %d", keepRecent)
-		return
-	}
-	if keepRecent >= triggerAt {
-		eval.ReportError("Compress requires keepRecent < triggerAt (got %d >= %d)", keepRecent, triggerAt)
-		return
-	}
-	h.Mode = expragents.HistoryModeCompress
-	h.TriggerAt = triggerAt
-	h.CompressKeepRecent = keepRecent
+	return h
 }

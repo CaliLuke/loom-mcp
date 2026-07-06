@@ -54,6 +54,10 @@ type RuntimeClient interface {
 	ConverseStream(ctx context.Context, params *bedrockruntime.ConverseStreamInput, optFns ...func(*bedrockruntime.Options)) (*bedrockruntime.ConverseStreamOutput, error)
 }
 
+type tokenCountingRuntimeClient interface {
+	CountTokens(ctx context.Context, params *bedrockruntime.CountTokensInput, optFns ...func(*bedrockruntime.Options)) (*bedrockruntime.CountTokensOutput, error)
+}
+
 // StreamOutput is the subset of the AWS ConverseStream output type required by
 // the adapter. It is satisfied by *bedrockruntime.ConverseStreamOutput and
 // simplifies unit testing by allowing fake implementations.
@@ -182,6 +186,36 @@ func (c *Client) Complete(ctx context.Context, req *model.Request) (*model.Respo
 		return nil, wrapBedrockError("converse", err)
 	}
 	return translateResponse(output, parts.toolNameProvToCanonical, parts.modelID, parts.modelClass)
+}
+
+// CountTokens asks Bedrock to count the exact input tokens for req using the
+// same Converse request preparation path as Complete, except that replayed
+// thinking blocks are omitted per the model.TokenCounter contract.
+func (c *Client) CountTokens(ctx context.Context, req *model.Request) (model.TokenCount, error) {
+	counter, ok := c.runtime.(tokenCountingRuntimeClient)
+	if !ok {
+		return model.TokenCount{}, errors.New("bedrock: runtime client does not support count_tokens")
+	}
+	countReq := *req
+	countReq.Messages = messagesWithoutThinking(req.Messages)
+	countReq.Thinking = nil
+	parts, err := c.prepareRequest(ctx, &countReq)
+	if err != nil {
+		return model.TokenCount{}, err
+	}
+	output, err := counter.CountTokens(ctx, c.buildCountTokensInput(parts))
+	if err != nil {
+		return model.TokenCount{}, wrapBedrockError("count_tokens", err)
+	}
+	if output.InputTokens == nil {
+		return model.TokenCount{}, errors.New("bedrock: count_tokens response missing input tokens")
+	}
+	return model.TokenCount{
+		Model:       parts.modelID,
+		ModelClass:  parts.modelClass,
+		InputTokens: int(*output.InputTokens),
+		Exact:       true,
+	}, nil
 }
 
 // Stream invokes the Bedrock ConverseStream API and adapts incremental events
@@ -348,6 +382,20 @@ func (c *Client) buildConverseInput(parts *requestParts, req *model.Request) *be
 		input.InferenceConfig = cfg
 	}
 	return input
+}
+
+func (c *Client) buildCountTokensInput(parts *requestParts) *bedrockruntime.CountTokensInput {
+	converse := brtypes.ConverseTokensRequest{
+		Messages: parts.messages,
+		System:   parts.system,
+	}
+	if parts.toolConfig != nil {
+		converse.ToolConfig = parts.toolConfig
+	}
+	return &bedrockruntime.CountTokensInput{
+		ModelId: aws.String(parts.modelID),
+		Input:   &brtypes.CountTokensInputMemberConverse{Value: converse},
+	}
 }
 
 func (c *Client) buildConverseStreamInput(parts *requestParts, req *model.Request, thinking thinkingConfig) *bedrockruntime.ConverseStreamInput {
@@ -1026,4 +1074,27 @@ func healThinkingGaps(msgs []*model.Message) {
 			)
 		}
 	}
+}
+
+func messagesWithoutThinking(msgs []*model.Message) []*model.Message {
+	out := make([]*model.Message, 0, len(msgs))
+	for _, msg := range msgs {
+		if msg == nil {
+			continue
+		}
+		parts := make([]model.Part, 0, len(msg.Parts))
+		for _, part := range msg.Parts {
+			if _, ok := part.(model.ThinkingPart); ok {
+				continue
+			}
+			parts = append(parts, part)
+		}
+		if len(parts) == 0 {
+			continue
+		}
+		copied := *msg
+		copied.Parts = parts
+		out = append(out, &copied)
+	}
+	return out
 }

@@ -180,16 +180,86 @@ func TestClientCompleteWithToolChoiceNone(t *testing.T) {
 	require.Equal(t, genai.FunctionCallingConfigModeNone, mock.config.ToolConfig.FunctionCallingConfig.Mode)
 }
 
+func TestClientCountTokens(t *testing.T) {
+	mock := &mockModelsClient{
+		countResponse: &genai.CountTokensResponse{TotalTokens: 42},
+	}
+	client, err := geminimodel.New(geminimodel.Options{
+		Client:       mock,
+		DefaultModel: "gemini-2.5-flash",
+	})
+	require.NoError(t, err)
+
+	count, err := client.CountTokens(context.Background(), &model.Request{
+		ModelClass: model.ModelClassDefault,
+		Messages: []*model.Message{
+			{Role: model.ConversationRoleSystem, Parts: []model.Part{model.TextPart{Text: "system"}}},
+			{Role: model.ConversationRoleUser, Parts: []model.Part{model.TextPart{Text: "hello"}}},
+		},
+		Tools: []*model.ToolDefinition{{
+			Name:        "lookup",
+			Description: "Search docs",
+			InputSchema: map[string]any{"type": "object"},
+		}},
+	})
+	require.NoError(t, err)
+	require.Equal(t, 42, count.InputTokens)
+	require.Equal(t, "gemini-2.5-flash", count.Model)
+	require.Equal(t, model.ModelClassDefault, count.ModelClass)
+	require.True(t, count.Exact)
+
+	require.Equal(t, "gemini-2.5-flash", mock.countModel)
+	require.Len(t, mock.countContents, 1)
+	require.NotNil(t, mock.countConfig.SystemInstruction)
+	require.Len(t, mock.countConfig.Tools, 1)
+}
+
+func TestClientCountTokensOmitsThinkingParts(t *testing.T) {
+	mock := &mockModelsClient{
+		countResponse: &genai.CountTokensResponse{TotalTokens: 7},
+	}
+	client, err := geminimodel.New(geminimodel.Options{
+		Client:       mock,
+		DefaultModel: "gemini-2.5-flash",
+	})
+	require.NoError(t, err)
+
+	_, err = client.CountTokens(context.Background(), &model.Request{
+		Messages: []*model.Message{
+			{Role: model.ConversationRoleUser, Parts: []model.Part{model.TextPart{Text: "hello"}}},
+			{
+				Role: model.ConversationRoleAssistant,
+				Parts: []model.Part{
+					model.ThinkingPart{Text: "reasoning", Signature: "sig"},
+					model.TextPart{Text: "answer"},
+				},
+			},
+			{Role: model.ConversationRoleAssistant, Parts: []model.Part{model.ThinkingPart{Text: "thinking only", Signature: "sig2"}}},
+		},
+	})
+	require.NoError(t, err)
+
+	require.Len(t, mock.countContents, 2)
+	require.Len(t, mock.countContents[1].Parts, 1)
+	require.False(t, mock.countContents[1].Parts[0].Thought)
+	require.Equal(t, "answer", mock.countContents[1].Parts[0].Text)
+}
+
 func TestClientRequiresDefaultModel(t *testing.T) {
 	_, err := geminimodel.New(geminimodel.Options{Client: &mockModelsClient{}})
 	require.Error(t, err)
 }
 
 type mockModelsClient struct {
-	response *genai.GenerateContentResponse
-	model    string
-	contents []*genai.Content
-	config   *genai.GenerateContentConfig
+	response      *genai.GenerateContentResponse
+	countResponse *genai.CountTokensResponse
+	countErr      error
+	model         string
+	contents      []*genai.Content
+	config        *genai.GenerateContentConfig
+	countModel    string
+	countContents []*genai.Content
+	countConfig   *genai.CountTokensConfig
 }
 
 func (m *mockModelsClient) GenerateContent(_ context.Context, model string, contents []*genai.Content, config *genai.GenerateContentConfig) (*genai.GenerateContentResponse, error) {
@@ -197,6 +267,13 @@ func (m *mockModelsClient) GenerateContent(_ context.Context, model string, cont
 	m.contents = contents
 	m.config = config
 	return m.response, nil
+}
+
+func (m *mockModelsClient) CountTokens(_ context.Context, model string, contents []*genai.Content, config *genai.CountTokensConfig) (*genai.CountTokensResponse, error) {
+	m.countModel = model
+	m.countContents = contents
+	m.countConfig = config
+	return m.countResponse, m.countErr
 }
 
 func normalizeJSONMap(t *testing.T, in map[string]any) map[string]any {

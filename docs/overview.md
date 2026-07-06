@@ -230,8 +230,10 @@ var _ = Service("orchestrator", func() {
    DefaultCaps(MaxToolCalls(2), MaxConsecutiveFailedToolCalls(1))
    TimeBudget("15s")
    History(func() {
-    // For long sessions, summarize older turns and keep the last 10.
-    Compress(30, 10)
+    // For long sessions, summarize older turns and keep a measured exact tail.
+    CompressAtMaxInputTokens(120000)
+    KeepMaxInputTokens(40000)
+    KeepMaxTurns(12)
    })
   })
  })
@@ -491,7 +493,10 @@ policies, and MCP servers within Goa service designs.
 | --------------------------------- | -------------------------------------------- |
 | `History(func())`                 | Configure conversation history management    |
 | `KeepRecentTurns(n)`              | Retain only the most recent N turns          |
-| `Compress(triggerAt, keepRecent)` | Summarize older turns when threshold reached |
+| `CompressAtTurns(n)`              | Summarize once N logical turns accumulate    |
+| `CompressAtMaxInputTokens(n)`     | Summarize once exact input tokens exceed N   |
+| `KeepMaxTurns(n)`                 | Keep at most N newest turns exact            |
+| `KeepMaxInputTokens(n)`           | Keep newest whole turns within token budget  |
 
 ### Prompt Caching
 

@@ -5,6 +5,7 @@ package model
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 
 	"github.com/CaliLuke/loom-mcp/runtime/agent/prompt"
@@ -349,6 +350,52 @@ type (
 		CacheWriteTokens int
 	}
 
+	// TokenCount reports preflight input-token usage for a model request.
+	TokenCount struct {
+		// Model is the provider-resolved model identifier that would receive this
+		// request. It is empty when an estimator cannot resolve the concrete model.
+		Model string
+
+		// ModelClass is the logical model family requested by the caller.
+		ModelClass ModelClass
+
+		// InputTokens is the number of input tokens counted or estimated.
+		InputTokens int
+
+		// Exact reports whether InputTokens came from provider-native counting.
+		Exact bool
+	}
+
+	// TokenCounter is an optional model-client capability for preflight token
+	// counting. Provider adapters that can count tokens natively should implement
+	// it with Exact=true. Local estimators should report Exact=false so callers
+	// can reject approximation when enforcing hard context-window contracts.
+	//
+	// Counts measure the durable transcript. Implementations exclude replayed
+	// thinking blocks from the counted surface because thinking signatures are
+	// provider-specific replay metadata, not portable user-visible input.
+	TokenCounter interface {
+		CountTokens(ctx context.Context, req *Request) (TokenCount, error)
+	}
+
+	// TokenEstimator provides an explicit local fallback for clients that cannot
+	// count tokens natively. It measures the provider-visible request surface by
+	// byte size and converts it with a conservative character-per-token ratio.
+	TokenEstimator struct {
+		// CharactersPerToken is the approximate byte-to-token conversion ratio.
+		// When zero, the estimator uses three characters per token.
+		CharactersPerToken int
+
+		// OverheadTokens adds a fixed allowance for provider framing and request
+		// fields that are not represented directly in message text.
+		// When zero, the estimator uses 500 tokens.
+		OverheadTokens int
+
+		// MinimumTokens is the minimum non-zero estimate returned for tiny
+		// requests. When zero, the estimator uses 500 tokens.
+		MinimumTokens int
+	}
+
 	// Request captures inputs for a model invocation.
 	Request struct {
 		// RunID identifies the logical run for this request when available.
@@ -617,6 +664,129 @@ var ErrStreamingUnsupported = errors.New("model: streaming not supported")
 // in a tight loop and should treat this as a transient infrastructure
 // failure that is safe to surface to higher layers.
 var ErrRateLimited = errors.New("model: rate limited")
+
+// CountTokens estimates req's input-token usage with Exact=false. It is intended
+// for explicit fallback paths such as rate limiting or non-native providers, not
+// for provider-specific billing or hard context-window guarantees.
+func (e TokenEstimator) CountTokens(ctx context.Context, req *Request) (TokenCount, error) {
+	if err := ctx.Err(); err != nil {
+		return TokenCount{}, err
+	}
+	return TokenCount{
+		Model:       reqModel(req),
+		ModelClass:  reqModelClass(req),
+		InputTokens: e.estimate(req),
+		Exact:       false,
+	}, nil
+}
+
+func (e TokenEstimator) estimate(req *Request) int {
+	charCount := requestCharacterCount(req)
+	if charCount <= 0 {
+		return e.minimumTokens()
+	}
+	tokens := charCount / e.charactersPerToken()
+	if tokens < 1 {
+		tokens = 1
+	}
+	return tokens + e.overheadTokens()
+}
+
+func (e TokenEstimator) charactersPerToken() int {
+	if e.CharactersPerToken <= 0 {
+		return 3
+	}
+	return e.CharactersPerToken
+}
+
+func (e TokenEstimator) overheadTokens() int {
+	if e.OverheadTokens <= 0 {
+		return 500
+	}
+	return e.OverheadTokens
+}
+
+func (e TokenEstimator) minimumTokens() int {
+	if e.MinimumTokens <= 0 {
+		return 500
+	}
+	return e.MinimumTokens
+}
+
+func requestCharacterCount(req *Request) int {
+	if req == nil {
+		return 0
+	}
+	total := len(req.Model) + len(req.ModelClass)
+	for _, msg := range req.Messages {
+		total += messageCharacterCount(msg)
+	}
+	for _, def := range req.Tools {
+		total += toolDefinitionCharacterCount(def)
+	}
+	return total
+}
+
+func messageCharacterCount(msg *Message) int {
+	if msg == nil {
+		return 0
+	}
+	total := len(msg.Role)
+	for _, part := range msg.Parts {
+		switch v := part.(type) {
+		case TextPart:
+			total += len(v.Text)
+		case ImagePart:
+			total += len(v.Format) + len(v.Bytes)
+		case DocumentPart:
+			total += len(v.Name) + len(v.Format) + len(v.Bytes) + len(v.Text) + len(v.URI) + len(v.Context)
+			for _, chunk := range v.Chunks {
+				total += len(chunk)
+			}
+		case CitationsPart:
+			total += len(v.Text)
+		case ThinkingPart:
+			continue
+		case ToolUsePart:
+			total += len(v.ID) + len(v.Name) + marshaledLength(v.Input)
+		case ToolResultPart:
+			total += len(v.ToolUseID) + marshaledLength(v.Content)
+		}
+	}
+	return total
+}
+
+func toolDefinitionCharacterCount(def *ToolDefinition) int {
+	if def == nil {
+		return 0
+	}
+	return len(def.Name) + len(def.Description) + marshaledLength(def.InputSchema)
+}
+
+func marshaledLength(v any) int {
+	if v == nil {
+		return 0
+	}
+	data, err := json.Marshal(v)
+	if err != nil {
+		return 0
+	}
+	return len(data)
+}
+
+func reqModel(req *Request) string {
+	if req == nil {
+		return ""
+	}
+	return req.Model
+}
+
+func reqModelClass(req *Request) ModelClass {
+	if req == nil {
+		return ""
+	}
+	return req.ModelClass
+}
 
 func (TextPart) isPart() {}
 

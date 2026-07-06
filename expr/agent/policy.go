@@ -68,12 +68,18 @@ type (
 		// KeepRecent is the number of recent turns to retain when
 		// ModeKeepRecent is selected.
 		KeepRecent int
-		// TriggerAt is the number of turns that must accumulate before
-		// compression triggers when ModeCompress is selected.
-		TriggerAt int
-		// CompressKeepRecent is the number of recent turns to retain in full
-		// fidelity when ModeCompress is selected.
-		CompressKeepRecent int
+		// CompressAtTurns is the optional logical-turn threshold that triggers
+		// compression.
+		CompressAtTurns int
+		// CompressAtMaxInputTokens is the optional runtime-counted input-token
+		// threshold that triggers compression.
+		CompressAtMaxInputTokens int
+		// KeepMaxTurns is the optional maximum number of newest logical turns to
+		// retain exactly after compression.
+		KeepMaxTurns int
+		// KeepMaxInputTokens is the optional runtime-counted input-token budget
+		// for newest exact turns after compression.
+		KeepMaxInputTokens int
 	}
 
 	// CacheExpr captures the design-time configuration for prompt caching
@@ -108,6 +114,13 @@ func (r *RunPolicyExpr) EvalName() string {
 // Validate enforces semantic constraints on the run policy.
 func (r *RunPolicyExpr) Validate() error {
 	verr := new(eval.ValidationErrors)
+	r.validateMissingFields(verr)
+	r.validateHistory(verr)
+	return verr
+}
+
+// validateMissingFields checks the missing-field policy cross-field contract.
+func (r *RunPolicyExpr) validateMissingFields(verr *eval.ValidationErrors) {
 	if r.OnMissingFields != "" {
 		switch r.OnMissingFields {
 		case "finalize", "await_clarification", "resume":
@@ -119,6 +132,10 @@ func (r *RunPolicyExpr) Validate() error {
 			verr.Add(r, "OnMissingFields(\"await_clarification\") requires InterruptsAllowed(true)")
 		}
 	}
+}
+
+// validateHistory checks the selected history mode and its required settings.
+func (r *RunPolicyExpr) validateHistory(verr *eval.ValidationErrors) {
 	if r.History != nil {
 		switch r.History.Mode {
 		case "":
@@ -128,20 +145,36 @@ func (r *RunPolicyExpr) Validate() error {
 				verr.Add(r.History, "KeepRecentTurns requires a positive turn count")
 			}
 		case HistoryModeCompress:
-			if r.History.TriggerAt <= 0 {
-				verr.Add(r.History, "Compress requires TriggerAt > 0")
-			}
-			if r.History.CompressKeepRecent < 0 {
-				verr.Add(r.History, "Compress requires keepRecent >= 0")
-			}
-			if r.History.CompressKeepRecent >= r.History.TriggerAt {
-				verr.Add(r.History, "Compress keepRecent must be less than TriggerAt")
-			}
+			r.History.validateCompress(verr)
 		default:
 			verr.Add(r.History, "unknown history mode %q", r.History.Mode)
 		}
 	}
-	return verr
+}
+
+// validateCompress checks token-aware compression triggers and retention caps.
+func (h *HistoryExpr) validateCompress(verr *eval.ValidationErrors) {
+	if h.CompressAtTurns <= 0 && h.CompressAtMaxInputTokens <= 0 {
+		verr.Add(h, "compression requires CompressAtTurns or CompressAtMaxInputTokens")
+	}
+	if h.KeepMaxTurns <= 0 && h.KeepMaxInputTokens <= 0 {
+		verr.Add(h, "compression requires KeepMaxTurns or KeepMaxInputTokens")
+	}
+	if h.CompressAtTurns < 0 {
+		verr.Add(h, "CompressAtTurns must be positive when set")
+	}
+	if h.CompressAtMaxInputTokens < 0 {
+		verr.Add(h, "CompressAtMaxInputTokens must be positive when set")
+	}
+	if h.KeepMaxTurns < 0 {
+		verr.Add(h, "KeepMaxTurns must be positive when set")
+	}
+	if h.KeepMaxInputTokens < 0 {
+		verr.Add(h, "KeepMaxInputTokens must be positive when set")
+	}
+	if h.CompressAtTurns > 0 && h.KeepMaxTurns >= h.CompressAtTurns {
+		verr.Add(h, "KeepMaxTurns must be less than CompressAtTurns")
+	}
 }
 
 // EvalName returns a descriptive identifier for error reporting.

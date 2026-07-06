@@ -220,12 +220,18 @@ type (
 		// KeepRecent is the number of recent turns to retain when Mode ==
 		// "keep_recent".
 		KeepRecent int
-		// TriggerAt is the number of turns that must accumulate before
-		// compression triggers when Mode == "compress".
-		TriggerAt int
-		// CompressKeepRecent is the number of recent turns to retain in full
-		// fidelity when Mode == "compress".
-		CompressKeepRecent int
+		// CompressAtTurns triggers summarization after this many logical turns
+		// when Mode == "compress".
+		CompressAtTurns int
+		// CompressAtMaxInputTokens triggers summarization after this runtime
+		// counted input-token threshold when Mode == "compress".
+		CompressAtMaxInputTokens int
+		// KeepMaxTurns caps exact retention to this many newest logical turns
+		// when Mode == "compress".
+		KeepMaxTurns int
+		// KeepMaxInputTokens caps exact retention to newest whole turns that fit
+		// this runtime counted input-token budget when Mode == "compress".
+		KeepMaxInputTokens int
 	}
 
 	// CacheData represents the configured prompt caching policy for an agent.

@@ -2,6 +2,7 @@ package runtime
 
 import (
 	"context"
+	"encoding/json"
 
 	"github.com/CaliLuke/loom-mcp/runtime/agent/model"
 	"github.com/CaliLuke/loom-mcp/runtime/agent/planner"
@@ -30,7 +31,7 @@ func (r *Runtime) applyHistoryPolicy(ctx context.Context, reg *AgentRegistration
 	if reg.Policy.History == nil || len(msgs) == 0 {
 		return msgs
 	}
-	out, err := reg.Policy.History(ctx, msgs)
+	out, err := reg.Policy.History(ctx, msgs, toolDefinitionsForHistory(reg.Specs))
 	if err != nil {
 		r.logWarn(ctx, "history policy failed", err, "agent_id", reg.ID)
 		return msgs
@@ -39,6 +40,32 @@ func (r *Runtime) applyHistoryPolicy(ctx context.Context, reg *AgentRegistration
 		return msgs
 	}
 	return out
+}
+
+func toolDefinitionsForHistory(specs []tools.ToolSpec) []*model.ToolDefinition {
+	if len(specs) == 0 {
+		return nil
+	}
+	defs := make([]*model.ToolDefinition, 0, len(specs))
+	for _, spec := range specs {
+		defs = append(defs, &model.ToolDefinition{
+			Name:        spec.Name.String(),
+			Description: spec.Description,
+			InputSchema: historyToolInputSchema(spec),
+		})
+	}
+	return defs
+}
+
+func historyToolInputSchema(spec tools.ToolSpec) any {
+	if len(spec.Payload.Schema) == 0 {
+		return map[string]any{jsonSchemaTypeKey: jsonSchemaTypeValue}
+	}
+	var schema any
+	if err := json.Unmarshal(spec.Payload.Schema, &schema); err != nil {
+		return map[string]any{jsonSchemaTypeKey: jsonSchemaTypeValue}
+	}
+	return schema
 }
 
 // initialCaps constructs the initial caps state from the agent's run policy.

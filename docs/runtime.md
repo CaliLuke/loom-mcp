@@ -1354,7 +1354,9 @@ Model-assisted summarization for long conversations:
 // DSL
 RunPolicy(func() {
     History(func() {
-        Compress(30, 10) // Trigger at 30 turns, keep 10 recent
+        CompressAtMaxInputTokens(120000)
+        KeepMaxInputTokens(40000)
+        KeepMaxTurns(12)
     })
 })
 
@@ -1364,6 +1366,14 @@ cfg := chat.ChatAgentConfig{
     HistoryModel: smallModelClient, // For compression
 }
 ```
+
+Compression triggers are explicit. Use `CompressAtTurns` for a turn-count
+threshold, `CompressAtMaxInputTokens` for an exact provider input-token
+threshold, or both. Retention is explicit too: `KeepMaxTurns` caps the newest
+exact turns, while `KeepMaxInputTokens` keeps newest whole turns that fit within
+the measured token budget. Token-budget compression requires a history model
+that implements `model.TokenCounter`; approximate estimators are rejected for
+hard compression decisions.
 
 ---
 
