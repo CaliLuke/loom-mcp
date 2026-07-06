@@ -116,6 +116,46 @@ func TestMemoryToolsetLoadMemoryUsesConfiguredSearcher(t *testing.T) {
 	require.Contains(t, string(encoded), `"scope":"indexed"`)
 }
 
+func TestMemoryToolsetCurrentRunUsesStoreWhenSearcherConfigured(t *testing.T) {
+	store := memoryinmem.New()
+	ctx := context.Background()
+	require.NoError(t, store.AppendEvents(ctx, "svc.agent", "run-1",
+		memory.NewEvent(time.Unix(10, 0), memory.UserMessageData{Message: "from store"}, nil),
+	))
+	called := false
+	searcher := memory.SearcherFunc(func(_ context.Context, query memory.Query) (memory.QueryResult, error) {
+		called = true
+		return memory.QueryResult{
+			Events: []memory.Event{
+				memory.NewEvent(time.Unix(20, 0), memory.UserMessageData{Message: "from index"}, nil),
+			},
+		}, nil
+	})
+
+	reg := NewMemoryToolsetRegistration(MemoryToolsetConfig{
+		Name:       "memory",
+		Store:      store,
+		Searcher:   searcher,
+		MaxResults: 20,
+	})
+	result, err := reg.Execute(ctx, &planner.ToolRequest{
+		Name:       "memory.load_memory",
+		AgentID:    "svc.agent",
+		RunID:      "run-1",
+		SessionID:  "sess-1",
+		ToolCallID: "memory-1",
+		Payload:    rawjson.Message([]byte(`{"scope":"current_run","limit":5}`)),
+	})
+	require.NoError(t, err)
+	require.False(t, called)
+	require.Nil(t, result.ToolResult.Error)
+
+	encoded, err := json.Marshal(result.ToolResult.Result)
+	require.NoError(t, err)
+	require.Contains(t, string(encoded), `"from store"`)
+	require.NotContains(t, string(encoded), `"from index"`)
+}
+
 func TestMemoryToolsetIndexedSearchUnavailableReturnsStructuredToolError(t *testing.T) {
 	reg := NewMemoryToolsetRegistration(MemoryToolsetConfig{Name: "memory"})
 	result, err := reg.Execute(context.Background(), &planner.ToolRequest{

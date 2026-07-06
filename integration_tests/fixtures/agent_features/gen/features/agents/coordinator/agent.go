@@ -100,7 +100,7 @@ func NewCoordinatorAgent(cfg CoordinatorAgentConfig) (*CoordinatorAgent, error) 
 				Payload:   rawjson.Message([]byte("{}")),
 				Tool:      tools.Ident("workflow.publish"),
 			}, {
-				DependsOn: []string{"publish"},
+				DependsOn: []string{"route"},
 				ID:        "revise",
 				Kind:      planner.WorkflowNodeTool,
 				Payload:   rawjson.Message([]byte("{}")),

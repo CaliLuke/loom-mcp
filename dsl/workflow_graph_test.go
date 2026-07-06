@@ -35,3 +35,26 @@ func TestWorkflowGraphDSL(t *testing.T) {
 	require.JSONEq(t, `{"type":"object","properties":{"approved":{"type":"boolean"}}}`, workflow.GraphNodes[3].Schema)
 	require.Equal(t, 2, workflow.GraphNodes[4].Loop.MaxIterations)
 }
+
+func TestWorkflowBranchTargetsShareBranchDependency(t *testing.T) {
+	runDSL(t, func() {
+		API("alpha", func() {})
+		Service("alpha", func() {
+			Agent("assistant", "Assistant", func() {
+				Workflow(func() {
+					RequestInput("approval", "Approval", `{"type":"object","properties":{"approved":{"type":"boolean"}}}`)
+					Branch("route", "approval", Case("$.approved", "true", "publish"), BranchDefault("revise"))
+					Step("publish", "publisher.publish", `{}`)
+					Step("revise", "publisher.revise", `{}`)
+					Join("done", "publish", "revise")
+				})
+			})
+		})
+	})
+
+	workflow := agentsexpr.Root.Agents[0].Workflow
+	require.Len(t, workflow.GraphNodes, 5)
+	require.Equal(t, []string{"route"}, workflow.GraphNodes[2].DependsOn)
+	require.Equal(t, []string{"route"}, workflow.GraphNodes[3].DependsOn)
+	require.Equal(t, []string{"publish", "revise"}, workflow.GraphNodes[4].DependsOn)
+}

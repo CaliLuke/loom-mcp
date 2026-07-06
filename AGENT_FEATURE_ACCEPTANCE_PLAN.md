@@ -10,6 +10,7 @@ Refactor confidence around the existing generated `integration_tests/fixtures/ag
 - 2026-07-06 — Focused review found the reconciled draft still said `Run(...)` where typed input needs `Start(...)`, risked importing `workflow.Revise` before regeneration, and missed existing `agent_features_test.go`; plan updated to extend that file, use `Start(...)`, and assert pre-regeneration `tools.Ident("workflow.revise")`.
 - 2026-07-06 — Milestone 1 red test added. `go test -C ./integration_tests/fixtures/agent_features ./... -run TestGenerated -count=1` fails in `TestGeneratedFeatureRunBranchesToReviseWhenApprovalFalse` because observed tools are `workflow.review`, `workflow.draft`, `workflow.retry`, `workflow.retry`, `workflow.publish`, with no `workflow.revise`.
 - 2026-07-06 — Milestone 2 reconciled the fixture DSL with `workflow.revise`, regenerated `integration_tests/fixtures/agent_features`, and added `regen-agent-feature-fixture` plus `verify-agent-feature-fixture`. `make loom-status` initially reported remote mode for root, fixture, and quickstart; `make loom-local` required restoring the canonical `/Users/luca/code/loom-mono` symlink to the existing local checkout. The focused registration proof passes after returning to remote mode.
+- 2026-07-06 — Milestone 3 expanded the acceptance harness into `acceptance_helpers_test.go`, fixed branch target dependency construction so `publish` and `revise` both depend on `route`, fixed current-run memory to use the store even when an indexed searcher is configured, and proved `go test -C ./integration_tests/fixtures/agent_features ./... -run TestGenerated -count=1`, `go test ./dsl -run TestWorkflowBranchTargetsShareBranchDependency -count=1`, and `go test ./runtime/agent/runtime -run TestMemoryToolsetCurrentRunUsesStoreWhenSearcherConfigured -count=1`.
 
 ## Milestones
 
@@ -78,17 +79,17 @@ Acceptance Criteria
 
 Checklist
 
-- [ ] Create new file `integration_tests/fixtures/agent_features/acceptance_helpers_test.go` by moving reusable helper types from existing `agent_features_test.go` and adding helpers that construct `engineinmem.New`, in-memory session store, runlog store, memory store, memory searcher, artifact store, hook recorder, stream recorder, runtime interceptors, named `audit` interceptors, and the generated coordinator registrations.
-- [ ] Implement a `features.workflow` executor in `acceptance_helpers_test.go` that records tool call order and returns deterministic results for `workflow.draft`, `workflow.review`, `workflow.retry`, `workflow.publish`, and `workflow.revise`.
-- [ ] Make the `workflow.retry` executor fail on its first call with a structured tool error and succeed on the second call so retry-and-reflect behavior is observable.
-- [ ] Make the `workflow.publish` executor return an artifact body through `planner.ToolResult.Artifacts` so artifact materialization is observed through the generated run.
-- [ ] Seed current-run memory without session labels before `PlanStartActivity` runs and assert generated memory preload reaches the planner through the registered agent path.
-- [ ] Seed `.agents/skills/release-check/SKILL.md` frontmatter in the fixture and assert generated `features.skills` tools expose `allowed_tools`, `preload`, `reload`, `preloaded`, and `reloaded`.
-- [ ] Assert artifact list output omits artifact body text and artifact load output returns bounded content for the artifact produced by the generated run.
-- [ ] Assert memory current-run lookup ignores `SessionID` for run-scoped events and indexed lookup calls the configured `MemorySearcher` with `AgentID`, `RunID`, `SessionID`, labels, event types, and limit.
-- [ ] Assert runtime-level interceptors run before the named `audit` interceptor resolved from `RunPolicy.NamedInterceptors`.
-- [ ] Assert `TestGeneratedFeatureRunBranchesToReviseWhenApprovalFalse` observes `workflow.revise` and does not observe `workflow.publish`.
-- [ ] Run `go test -C ./integration_tests/fixtures/agent_features ./... -run TestGenerated -count=1`.
+- [x] Create new file `integration_tests/fixtures/agent_features/acceptance_helpers_test.go` by moving reusable helper types from existing `agent_features_test.go` and adding helpers that construct `engineinmem.New`, in-memory session store, runlog store, memory store, memory searcher, artifact store, hook recorder, stream recorder, runtime interceptors, named `audit` interceptors, and the generated coordinator registrations.
+- [x] Implement a `features.workflow` executor in `acceptance_helpers_test.go` that records tool call order and returns deterministic results for `workflow.draft`, `workflow.review`, `workflow.retry`, `workflow.publish`, and `workflow.revise`.
+- [x] Make the `workflow.retry` executor fail on its first call with a structured tool error and succeed on the second call so retry-and-reflect behavior is observable.
+- [x] Make the `workflow.publish` executor return an artifact body through `planner.ToolResult.Artifacts` so artifact materialization is observed through the generated run.
+- [x] Seed current-run memory without session labels before `PlanStartActivity` runs and assert generated memory preload reaches the planner through the registered agent path.
+- [x] Seed `.agents/skills/release-check/SKILL.md` frontmatter in the fixture and assert generated `features.skills` tools expose `allowed_tools`, `preload`, `reload`, `preloaded`, and `reloaded`.
+- [x] Assert artifact list output omits artifact body text and artifact load output returns bounded content for the artifact produced by the generated run.
+- [x] Assert memory current-run lookup ignores `SessionID` for run-scoped events and indexed lookup calls the configured `MemorySearcher` with `AgentID`, `RunID`, `SessionID`, labels, event types, and limit.
+- [x] Assert runtime-level interceptors run before the named `audit` interceptor resolved from `RunPolicy.NamedInterceptors`.
+- [x] Assert `TestGeneratedFeatureRunBranchesToReviseWhenApprovalFalse` observes `workflow.revise` and does not observe `workflow.publish`.
+- [x] Run `go test -C ./integration_tests/fixtures/agent_features ./... -run TestGenerated -count=1`.
 
 ### Milestone 4: Layer Boundaries Stay Sharp
 

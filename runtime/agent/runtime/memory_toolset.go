@@ -93,10 +93,8 @@ func executeLoadMemory(ctx context.Context, cfg MemoryToolsetConfig, call *plann
 
 	var result memory.QueryResult
 	var err error
-	switch {
-	case cfg.Searcher != nil:
-		result, err = cfg.Searcher.Query(ctx, query)
-	case scope == MemoryScopeCurrentRun:
+	switch scope {
+	case MemoryScopeCurrentRun:
 		if cfg.Store == nil {
 			return nil, fmt.Errorf("memory store is required")
 		}
@@ -106,7 +104,11 @@ func executeLoadMemory(ctx context.Context, cfg MemoryToolsetConfig, call *plann
 		}
 		query.SessionID = ""
 		result = memory.QueryEvents(snapshot.Events, query)
-	case scope == MemoryScopeIndexed:
+	case MemoryScopeIndexed:
+		if cfg.Searcher != nil {
+			result, err = cfg.Searcher.Query(ctx, query)
+			break
+		}
 		return unsupportedMemorySearch(call), nil
 	default:
 		return nil, fmt.Errorf("unknown memory scope %q", scope)

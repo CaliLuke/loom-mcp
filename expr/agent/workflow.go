@@ -26,6 +26,12 @@ type (
 		ParallelDepth int
 		// CurrentDependsOn carries graph dependencies for subsequent nodes.
 		CurrentDependsOn []string
+		// BranchTargetDependsOn carries the branch dependency while branch targets are declared.
+		BranchTargetDependsOn []string
+		// BranchTargetPending tracks target node IDs that should share the branch dependency.
+		BranchTargetPending map[string]struct{}
+		// BranchTargetEmitted tracks target node IDs declared for the active branch.
+		BranchTargetEmitted []string
 	}
 
 	// WorkflowNodeKind identifies deterministic graph workflow node behavior.

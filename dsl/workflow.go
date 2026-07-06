@@ -41,16 +41,17 @@ func Step(name string, tool string, payloadJSON string) {
 		if workflow.ParallelDepth > 0 {
 			kind = expragents.WorkflowNodeParallelStep
 		}
+		deps, branchTarget := workflowStepDependsOn(workflow, name)
 		workflow.GraphMode = true
 		workflow.GraphNodes = append(workflow.GraphNodes, &expragents.WorkflowNodeExpr{
 			ID:        name,
 			Kind:      kind,
 			Tool:      tool,
 			Payload:   payloadJSON,
-			DependsOn: append([]string(nil), workflow.CurrentDependsOn...),
+			DependsOn: deps,
 		})
 		if workflow.ParallelDepth == 0 {
-			workflow.CurrentDependsOn = []string{name}
+			advanceWorkflowStepDependsOn(workflow, name, branchTarget)
 		}
 		return
 	}
@@ -59,6 +60,30 @@ func Step(name string, tool string, payloadJSON string) {
 		Tool:    tool,
 		Payload: payloadJSON,
 	})
+}
+
+func workflowStepDependsOn(workflow *expragents.WorkflowExpr, name string) ([]string, bool) {
+	if _, ok := workflow.BranchTargetPending[name]; ok {
+		return append([]string(nil), workflow.BranchTargetDependsOn...), true
+	}
+	return append([]string(nil), workflow.CurrentDependsOn...), false
+}
+
+func advanceWorkflowStepDependsOn(workflow *expragents.WorkflowExpr, name string, branchTarget bool) {
+	if !branchTarget {
+		workflow.CurrentDependsOn = []string{name}
+		return
+	}
+	delete(workflow.BranchTargetPending, name)
+	workflow.BranchTargetEmitted = append(workflow.BranchTargetEmitted, name)
+	if len(workflow.BranchTargetPending) > 0 {
+		workflow.CurrentDependsOn = append([]string(nil), workflow.BranchTargetDependsOn...)
+		return
+	}
+	workflow.CurrentDependsOn = append([]string(nil), workflow.BranchTargetEmitted...)
+	workflow.BranchTargetDependsOn = nil
+	workflow.BranchTargetEmitted = nil
+	workflow.BranchTargetPending = nil
 }
 
 // FinalMessage sets the assistant message emitted after all workflow steps complete.
@@ -209,6 +234,20 @@ func Branch(name string, fromStep string, opts ...BranchOption) {
 		Branch:    branch,
 	})
 	workflow.CurrentDependsOn = []string{name}
+	targets := map[string]struct{}{}
+	for _, branchCase := range branch.Cases {
+		if branchCase.Target != "" {
+			targets[branchCase.Target] = struct{}{}
+		}
+	}
+	if branch.Default != "" {
+		targets[branch.Default] = struct{}{}
+	}
+	if len(targets) > 0 {
+		workflow.BranchTargetDependsOn = []string{name}
+		workflow.BranchTargetPending = targets
+		workflow.BranchTargetEmitted = nil
+	}
 }
 
 // Case maps a JSONPath equality predicate to a branch target node.
