@@ -358,6 +358,10 @@ Notes:
 | `ResourceDocumentationURL(url)`               | Option for `OAuth`                           | Surfaces as `resource_documentation` in PRM                                                                                       |
 | `TrustProxyHeaders()`                         | Option for `OAuth`                           | Opts into consuming `X-Forwarded-*` / `Forwarded` headers; default is to ignore them for safety                                   |
 
+SDK-backed generated MCP servers expose `completion/complete` when prompts are
+defined. Completion currently returns deterministic suggestions for dynamic
+prompt arguments with enum-backed payload fields.
+
 #### OAuth 2.0 protected-resource configuration
 
 ```go

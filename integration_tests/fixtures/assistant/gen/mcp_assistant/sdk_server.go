@@ -60,6 +60,7 @@ func NewSDKServer(service assistant.Service, opts *SDKServerOptions) (*SDKServer
 		streamableOpts = opts.StreamableHTTP
 	}
 	adapter := NewMCPAdapter(service, promptProvider, adapterOpts)
+	serverOpts = sdkServerOptionsWithCompletion(serverOpts, adapter.sdkCompletionHandler(requestContext))
 	server := mcpsdk.NewServer(&mcpsdk.Implementation{
 		Icons: []mcpsdk.Icon{mcpsdk.Icon{
 			MIMEType: "image/png",
@@ -90,6 +91,18 @@ func NewSDKServer(service assistant.Service, opts *SDKServerOptions) (*SDKServer
 		Handler: newSDKHandler(server, adapter, requestContext, streamableOpts),
 		Server:  server,
 	}, nil
+}
+func sdkServerOptionsWithCompletion(opts *mcpsdk.ServerOptions, handler func(context.Context, *mcpsdk.CompleteRequest) (*mcpsdk.CompleteResult, error)) *mcpsdk.ServerOptions {
+	if opts == nil {
+		opts = &mcpsdk.ServerOptions{}
+	} else {
+		copied := *opts
+		opts = &copied
+	}
+	if opts.CompletionHandler == nil {
+		opts.CompletionHandler = handler
+	}
+	return opts
 }
 func (w *sdkResponseObserver) WriteHeader(statusCode int) {
 	w.statusCode = statusCode
@@ -497,6 +510,37 @@ func (a *MCPAdapter) sdkPromptHandler(requestContext func(context.Context, *http
 		return sdkGetPromptResult(result)
 	}
 }
+func (a *MCPAdapter) sdkCompletionHandler(requestContext func(context.Context, *http.Request) context.Context) func(context.Context, *mcpsdk.CompleteRequest) (*mcpsdk.CompleteResult, error) {
+	return func(ctx context.Context, req *mcpsdk.CompleteRequest) (*mcpsdk.CompleteResult, error) {
+		if req != nil {
+			ctx = a.sdkRequestContext(ctx, req.GetSession(), req.GetExtra(), requestContext)
+		}
+		if req == nil || req.Params == nil || req.Params.Ref == nil {
+			return sdkCompleteValues(nil, 0, false), nil
+		}
+		if req.Params.Ref.Type != "ref/prompt" {
+			return sdkCompleteValues(nil, 0, false), nil
+		}
+		_ = ctx
+		switch req.Params.Ref.Name {
+		case "contextual_prompts":
+			switch req.Params.Argument.Name {
+			default:
+				return sdkCompleteValues(nil, 0, false), nil
+			}
+		case "figma_implementation_prompt":
+			switch req.Params.Argument.Name {
+			case "framework":
+				return sdkFilteredCompletion(req.Params.Argument.Value, []string{"react", "swiftui", "jetpack-compose"}), nil
+			default:
+				return sdkCompleteValues(nil, 0, false), nil
+			}
+		default:
+			return sdkCompleteValues(nil, 0, false), nil
+		}
+		return sdkCompleteValues(nil, 0, false), nil
+	}
+}
 func (a *MCPAdapter) sdkResourceHandler(requestContext func(context.Context, *http.Request) context.Context) mcpsdk.ResourceHandler {
 	return func(ctx context.Context, req *mcpsdk.ReadResourceRequest) (*mcpsdk.ReadResourceResult, error) {
 		payload := &ResourcesReadPayload{}
@@ -696,6 +740,30 @@ func sdkReadResourceContent(item *ResourceContent) (*mcpsdk.ResourceContents, er
 		resource.Blob = data
 	}
 	return resource, nil
+}
+func sdkFilteredCompletion(prefix string, values []string) *mcpsdk.CompleteResult {
+	matches := make([]string, 0, len(values))
+	for _, value := range values {
+		if prefix == "" || strings.HasPrefix(value, prefix) {
+			matches = append(matches, value)
+		}
+	}
+	hasMore := false
+	if len(matches) > 100 {
+		matches = matches[:100]
+		hasMore = true
+	}
+	return sdkCompleteValues(matches, len(matches), hasMore)
+}
+func sdkCompleteValues(values []string, total int, hasMore bool) *mcpsdk.CompleteResult {
+	if values == nil {
+		values = []string{}
+	}
+	return &mcpsdk.CompleteResult{Completion: mcpsdk.CompletionResultDetails{
+		HasMore: hasMore,
+		Total:   total,
+		Values:  values,
+	}}
 }
 func sdkContentFromItem(item *ContentItem) (mcpsdk.Content, error) {
 	if item == nil {

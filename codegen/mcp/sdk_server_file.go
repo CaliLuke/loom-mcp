@@ -99,6 +99,10 @@ func sdkServerConstructorSection(data *AdapterData) codegen.Section {
 				})
 				if len(data.StaticPrompts) > 0 || len(data.DynamicPrompts) > 0 {
 					g.Id("adapter").Op(":=").Id("NewMCPAdapter").Call(jen.Id("service"), jen.Id("promptProvider"), jen.Id("adapterOpts"))
+					g.Id("serverOpts").Op("=").Id("sdkServerOptionsWithCompletion").Call(
+						jen.Id("serverOpts"),
+						jen.Id("adapter").Dot("sdkCompletionHandler").Call(jen.Id("requestContext")),
+					)
 				} else {
 					g.Id("adapter").Op(":=").Id("NewMCPAdapter").Call(jen.Id("service"), jen.Id("adapterOpts"))
 				}
@@ -125,6 +129,29 @@ func sdkServerConstructorSection(data *AdapterData) codegen.Section {
 				)
 			})
 		stmt.Line()
+		if len(data.StaticPrompts) > 0 || len(data.DynamicPrompts) > 0 {
+			stmt.Func().Id("sdkServerOptionsWithCompletion").
+				Params(
+					jen.Id("opts").Op("*").Id("mcpsdk").Dot("ServerOptions"),
+					jen.Id("handler").Func().
+						Params(jen.Qual("context", "Context"), jen.Op("*").Id("mcpsdk").Dot("CompleteRequest")).
+						Params(jen.Op("*").Id("mcpsdk").Dot("CompleteResult"), jen.Error()),
+				).
+				Op("*").Id("mcpsdk").Dot("ServerOptions").
+				Block(
+					jen.If(jen.Id("opts").Op("==").Nil()).Block(
+						jen.Id("opts").Op("=").Op("&").Id("mcpsdk").Dot("ServerOptions").Values(),
+					).Else().Block(
+						jen.Id("copied").Op(":=").Op("*").Id("opts"),
+						jen.Id("opts").Op("=").Op("&").Id("copied"),
+					),
+					jen.If(jen.Id("opts").Dot("CompletionHandler").Op("==").Nil()).Block(
+						jen.Id("opts").Dot("CompletionHandler").Op("=").Id("handler"),
+					),
+					jen.Return(jen.Id("opts")),
+				)
+			stmt.Line()
+		}
 
 		stmt.Func().Params(jen.Id("w").Op("*").Id("sdkResponseObserver")).
 			Id("WriteHeader").
@@ -685,6 +712,63 @@ func sdkServerHandlerSection(data *AdapterData) codegen.Section {
 						)),
 				)
 			stmt.Line()
+			stmt.Func().Params(jen.Id("a").Op("*").Id("MCPAdapter")).
+				Id("sdkCompletionHandler").
+				Params(jen.Id("requestContext").Func().Params(jen.Qual("context", "Context"), jen.Op("*").Qual("net/http", "Request")).Qual("context", "Context")).
+				Func().
+				Params(jen.Qual("context", "Context"), jen.Op("*").Id("mcpsdk").Dot("CompleteRequest")).
+				Params(jen.Op("*").Id("mcpsdk").Dot("CompleteResult"), jen.Error()).
+				Block(
+					jen.Return(jen.Func().
+						Params(jen.Id("ctx").Qual("context", "Context"), jen.Id("req").Op("*").Id("mcpsdk").Dot("CompleteRequest")).
+						Params(jen.Op("*").Id("mcpsdk").Dot("CompleteResult"), jen.Error()).
+						BlockFunc(func(g *jen.Group) {
+							g.If(jen.Id("req").Op("!=").Nil()).Block(
+								jen.Id("ctx").Op("=").Id("a").Dot("sdkRequestContext").Call(jen.Id("ctx"), jen.Id("req").Dot("GetSession").Call(), jen.Id("req").Dot("GetExtra").Call(), jen.Id("requestContext")),
+							)
+							g.If(jen.Id("req").Op("==").Nil().Op("||").Id("req").Dot("Params").Op("==").Nil().Op("||").Id("req").Dot("Params").Dot("Ref").Op("==").Nil()).Block(
+								jen.Return(jen.Id("sdkCompleteValues").Call(jen.Nil(), jen.Lit(0), jen.False()), jen.Nil()),
+							)
+							g.If(jen.Id("req").Dot("Params").Dot("Ref").Dot("Type").Op("!=").Lit("ref/prompt")).Block(
+								jen.Return(jen.Id("sdkCompleteValues").Call(jen.Nil(), jen.Lit(0), jen.False()), jen.Nil()),
+							)
+							g.Id("_").Op("=").Id("ctx")
+							g.Switch(jen.Id("req").Dot("Params").Dot("Ref").Dot("Name")).BlockFunc(func(sg *jen.Group) {
+								for _, prompt := range data.DynamicPrompts {
+									sg.Case(jen.Lit(prompt.Name)).BlockFunc(func(cg *jen.Group) {
+										cg.Switch(jen.Id("req").Dot("Params").Dot("Argument").Dot("Name")).BlockFunc(func(argg *jen.Group) {
+											for _, arg := range prompt.Arguments {
+												if len(arg.Values) == 0 {
+													continue
+												}
+												values := make([]jen.Code, 0, len(arg.Values))
+												for _, value := range arg.Values {
+													values = append(values, jen.Lit(value))
+												}
+												argg.Case(jen.Lit(arg.Name)).Block(
+													jen.Return(
+														jen.Id("sdkFilteredCompletion").Call(
+															jen.Id("req").Dot("Params").Dot("Argument").Dot("Value"),
+															jen.Index().String().Values(values...),
+														),
+														jen.Nil(),
+													),
+												)
+											}
+											argg.Default().Block(
+												jen.Return(jen.Id("sdkCompleteValues").Call(jen.Nil(), jen.Lit(0), jen.False()), jen.Nil()),
+											)
+										})
+									})
+								}
+								sg.Default().Block(
+									jen.Return(jen.Id("sdkCompleteValues").Call(jen.Nil(), jen.Lit(0), jen.False()), jen.Nil()),
+								)
+							})
+							g.Return(jen.Id("sdkCompleteValues").Call(jen.Nil(), jen.Lit(0), jen.False()), jen.Nil())
+						})),
+				)
+			stmt.Line()
 		}
 		if len(data.Resources) > 0 {
 			stmt.Func().Params(jen.Id("a").Op("*").Id("MCPAdapter")).
@@ -774,6 +858,9 @@ func sdkServerConversionSection(data *AdapterData) codegen.Section {
 		}
 		if len(data.Resources) > 0 {
 			emitSDKReadResourceConversion(stmt)
+		}
+		if len(data.StaticPrompts) > 0 || len(data.DynamicPrompts) > 0 {
+			emitSDKCompletionConversion(stmt)
 		}
 		emitSDKContentConversions(stmt)
 		emitSDKHelpers(stmt)
@@ -935,6 +1022,43 @@ func emitSDKPromptConversion(stmt *jen.Statement) {
 				jen.Id("URI"):      jen.Id("item").Dot("URI"),
 			}),
 			jen.Return(jen.Id("sdkContentFromItem").Call(jen.Id("contentItem"))),
+		)
+	stmt.Line()
+}
+
+func emitSDKCompletionConversion(stmt *jen.Statement) {
+	stmt.Func().Id("sdkFilteredCompletion").
+		Params(jen.Id("prefix").String(), jen.Id("values").Index().String()).
+		Op("*").Id("mcpsdk").Dot("CompleteResult").
+		Block(
+			jen.Id("matches").Op(":=").Make(jen.Index().String(), jen.Lit(0), jen.Len(jen.Id("values"))),
+			jen.For(jen.List(jen.Id("_"), jen.Id("value")).Op(":=").Range().Id("values")).Block(
+				jen.If(jen.Id("prefix").Op("==").Lit("").Op("||").Qual("strings", "HasPrefix").Call(jen.Id("value"), jen.Id("prefix"))).Block(
+					jen.Id("matches").Op("=").Append(jen.Id("matches"), jen.Id("value")),
+				),
+			),
+			jen.Id("hasMore").Op(":=").False(),
+			jen.If(jen.Len(jen.Id("matches")).Op(">").Lit(100)).Block(
+				jen.Id("matches").Op("=").Id("matches").Index(jen.Empty(), jen.Lit(100)),
+				jen.Id("hasMore").Op("=").True(),
+			),
+			jen.Return(jen.Id("sdkCompleteValues").Call(jen.Id("matches"), jen.Len(jen.Id("matches")), jen.Id("hasMore"))),
+		)
+	stmt.Line()
+	stmt.Func().Id("sdkCompleteValues").
+		Params(jen.Id("values").Index().String(), jen.Id("total").Int(), jen.Id("hasMore").Bool()).
+		Op("*").Id("mcpsdk").Dot("CompleteResult").
+		Block(
+			jen.If(jen.Id("values").Op("==").Nil()).Block(
+				jen.Id("values").Op("=").Index().String().Values(),
+			),
+			jen.Return(jen.Op("&").Id("mcpsdk").Dot("CompleteResult").Values(jen.Dict{
+				jen.Id("Completion"): jen.Id("mcpsdk").Dot("CompletionResultDetails").Values(jen.Dict{
+					jen.Id("Values"):  jen.Id("values"),
+					jen.Id("Total"):   jen.Id("total"),
+					jen.Id("HasMore"): jen.Id("hasMore"),
+				}),
+			})),
 		)
 	stmt.Line()
 }

@@ -222,6 +222,7 @@ type (
 		Name        string
 		Description string
 		Required    bool
+		Values      []string
 	}
 
 	// NotificationAdapter represents a notification mapping

@@ -105,6 +105,7 @@ func promptArgsFromPayload(attr *expr.AttributeExpr) []PromptArg {
 			required[n] = struct{}{}
 		}
 	}
+	_, enums, _, _ := collectTopLevelValidations(attr)
 	for _, nat := range *obj {
 		name := nat.Name
 		desc := ""
@@ -112,7 +113,7 @@ func promptArgsFromPayload(attr *expr.AttributeExpr) []PromptArg {
 			desc = nat.Attribute.Description
 		}
 		_, req := required[name]
-		out = append(out, PromptArg{Name: name, Description: desc, Required: req})
+		out = append(out, PromptArg{Name: name, Description: desc, Required: req, Values: enums[name]})
 	}
 	return out
 }
