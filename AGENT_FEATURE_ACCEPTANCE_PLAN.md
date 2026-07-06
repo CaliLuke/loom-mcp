@@ -13,6 +13,7 @@ Refactor confidence around the existing generated `integration_tests/fixtures/ag
 - 2026-07-06 — Milestone 3 expanded the acceptance harness into `acceptance_helpers_test.go`, fixed branch target dependency construction so `publish` and `revise` both depend on `route`, fixed current-run memory to use the store even when an indexed searcher is configured, and proved `go test -C ./integration_tests/fixtures/agent_features ./... -run TestGenerated -count=1`, `go test ./dsl -run TestWorkflowBranchTargetsShareBranchDependency -count=1`, and `go test ./runtime/agent/runtime -run TestMemoryToolsetCurrentRunUsesStoreWhenSearcherConfigured -count=1`.
 - 2026-07-06 — Milestone 4 confirmed layer boundaries with `go test ./dsl ./expr/agent ./codegen/agent/tests ./runtime/agent/planner ./runtime/agent/runtime ./runtime/mcp/skills ./runtime/agent/debug -count=1`.
 - 2026-07-06 — Milestone 5 documented `integration_tests/fixtures/agent_features` as the cross-layer acceptance fixture in `docs/runtime.md` and `.agents/skills/loom-mcp/SKILL.md`. External review findings are applied: preserve the existing fixture, use current generated owner names, add a real `revise` branch, use `Start(...)` for typed-input runs, and avoid importing `workflow.Revise` before regeneration.
+- 2026-07-06 — Milestone 6 restored remote Loom mode and passed `make verify-mcp-local`, `make lint`, `make test`, and `make itest`. Final `git status --short --branch` shows only unrelated untracked `PROGRESSIVE_TOOL_DISCOVERY_PLAN.*` files.
 
 ## Milestones
 
@@ -146,11 +147,11 @@ Acceptance Criteria
 
 Checklist
 
-- [ ] Run `make loom-remote`.
-- [ ] Run `make verify-mcp-local`.
-- [ ] Run `make lint`.
-- [ ] Run `make test`.
-- [ ] Run `make itest`.
-- [ ] Run `git status --short --branch`.
-- [ ] Report the final changed-file set, verification results, existing local runtime artifact-ref changes, and commit boundary to the user.
-- [ ] Leave commit and push for an explicit user request, with all intended files ready for scoped staging.
+- [x] Run `make loom-remote`.
+- [x] Run `make verify-mcp-local`.
+- [x] Run `make lint`.
+- [x] Run `make test`.
+- [x] Run `make itest`.
+- [x] Run `git status --short --branch`.
+- [x] Report the final changed-file set, verification results, existing local runtime artifact-ref changes, and commit boundary to the user.
+- [x] Leave commit and push for an explicit user request, with all intended files ready for scoped staging.
