@@ -96,7 +96,7 @@ func generateMCPServiceCode(genpkg string, root *expr.RootExpr, mcpService *expr
 	serviceFiles := service.Files(genpkg, mcpService, servicesData, userTypePkgs)
 	for _, f := range serviceFiles {
 		if strings.HasSuffix(filepath.ToSlash(f.Path), "/service.go") {
-			service.AddServiceDataMetaTypeImports(f.HeaderTemplate(), mcpService, servicesData.Get(mcpService.Name))
+			service.AddServiceDataMetaTypeImports(f.HeaderTemplate(), servicesData.Get(mcpService.Name))
 		}
 	}
 	files = append(files, serviceFiles...)

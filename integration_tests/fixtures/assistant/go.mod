@@ -3,7 +3,7 @@ module example.com/assistant
 go 1.26.1
 
 require (
-	github.com/CaliLuke/loom v1.1.0
+	github.com/CaliLuke/loom v1.1.1-0.20260706045915-f7adecc4666b
 	github.com/CaliLuke/loom-mcp v1.0.8-0.20260410010650-904a9b9c01f6
 	github.com/google/uuid v1.6.0
 	github.com/modelcontextprotocol/go-sdk v1.6.1
@@ -58,7 +58,7 @@ require (
 	github.com/tmaxmax/go-sse v0.11.0 // indirect
 	github.com/yosida95/uritemplate/v3 v3.0.2 // indirect
 	go.opentelemetry.io/auto/sdk v1.2.1 // indirect
-	go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp v0.68.0 // indirect
+	go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp v0.69.0 // indirect
 	go.temporal.io/api v1.62.11 // indirect
 	go.temporal.io/sdk v1.43.0 // indirect
 	golang.org/x/crypto v0.53.0 // indirect
@@ -73,7 +73,7 @@ require (
 	golang.org/x/tools v0.45.0 // indirect
 	google.golang.org/api v0.278.0 // indirect
 	google.golang.org/genai v1.62.0 // indirect
-	google.golang.org/genproto/googleapis/api v0.0.0-20260504160031-60b97b32f348 // indirect
+	google.golang.org/genproto/googleapis/api v0.0.0-20260526163538-3dc84a4a5aaa // indirect
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20260526163538-3dc84a4a5aaa // indirect
 	google.golang.org/grpc v1.81.1 // indirect
 	google.golang.org/protobuf v1.36.11 // indirect
