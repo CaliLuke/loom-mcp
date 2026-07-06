@@ -45,6 +45,9 @@ type sdkToolCallCollector struct {
 	final     *ToolsCallResult
 	streamErr error
 }
+type sdkSessionElicitor struct {
+	session *mcpsdk.ServerSession
+}
 
 func NewSDKServer(service assistant.Service, opts *SDKServerOptions) (*SDKServer, error) {
 	var adapterOpts *MCPAdapterOptions
@@ -563,6 +566,7 @@ func (a *MCPAdapter) sdkRequestContext(ctx context.Context, session mcpsdk.Sessi
 		a.markInitializedSession("")
 		return ctx
 	}
+	ctx = sdkContextWithElicitor(ctx, session)
 	sessionID := session.ID()
 	if sessionID == "" {
 		a.markInitializedSession("")
@@ -570,6 +574,35 @@ func (a *MCPAdapter) sdkRequestContext(ctx context.Context, session mcpsdk.Sessi
 	}
 	a.markInitializedSession(sessionID)
 	return mcpruntime.WithSessionID(ctx, sessionID)
+}
+func sdkContextWithElicitor(ctx context.Context, session mcpsdk.Session) context.Context {
+	serverSession, ok := session.(*mcpsdk.ServerSession)
+	if !ok || serverSession == nil {
+		return ctx
+	}
+	return mcpruntime.WithElicitor(ctx, sdkSessionElicitor{session: serverSession})
+}
+func (e sdkSessionElicitor) Elicit(ctx context.Context, req mcpruntime.ElicitRequest) (*mcpruntime.ElicitResult, error) {
+	if e.session == nil {
+		return nil, mcpruntime.ErrElicitorUnavailable
+	}
+	result, err := e.session.Elicit(ctx, &mcpsdk.ElicitParams{
+		ElicitationID:   req.ElicitationID,
+		Message:         req.Message,
+		Mode:            req.Mode,
+		RequestedSchema: req.RequestedSchema,
+		URL:             req.URL,
+	})
+	if err != nil {
+		return nil, err
+	}
+	if result == nil {
+		return &mcpruntime.ElicitResult{}, nil
+	}
+	return &mcpruntime.ElicitResult{
+		Action:  result.Action,
+		Content: result.Content,
+	}, nil
 }
 func sdkSyntheticHTTPRequest(ctx context.Context, extra *mcpsdk.RequestExtra) *http.Request {
 	req := &http.Request{

@@ -362,6 +362,13 @@ SDK-backed generated MCP servers expose `completion/complete` when prompts are
 defined. Completion currently returns deterministic suggestions for dynamic
 prompt arguments with enum-backed payload fields.
 
+SDK-backed generated MCP servers also expose the active MCP client elicitation
+channel to tool, resource, and prompt implementations through
+`runtime/mcp.Elicit(ctx, req)`. Use it from service code when a workflow needs
+form-mode user input during an MCP call; the generated server converts the
+runtime request into the SDK `elicitation/create` request and returns the
+client's action/content response.
+
 #### OAuth 2.0 protected-resource configuration
 
 ```go

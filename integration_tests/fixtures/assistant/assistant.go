@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 
 	assistant "example.com/assistant/gen/assistant"
+	mcpruntime "github.com/CaliLuke/loom-mcp/runtime/mcp"
 	"github.com/CaliLuke/loom/clue/log"
 )
 
@@ -99,6 +100,33 @@ func (s *assistantsrvc) ExtractKeywords(ctx context.Context, p *assistant.Extrac
 
 // Summarize text
 func (s *assistantsrvc) SummarizeText(ctx context.Context, p *assistant.SummarizeTextPayload) (res *assistant.SummarizeTextResult, err error) {
+	if p != nil && p.Text == "needs-elicitation" {
+		result, elicitErr := mcpruntime.Elicit(ctx, mcpruntime.ElicitRequest{
+			Mode:    "form",
+			Message: "Provide a summary for the requested text.",
+			RequestedSchema: map[string]any{
+				"type": "object",
+				"properties": map[string]any{
+					"summary": map[string]any{
+						"type": "string",
+					},
+				},
+				"required": []any{"summary"},
+			},
+		})
+		if elicitErr != nil {
+			return nil, elicitErr
+		}
+		summary := "Elicitation declined."
+		if result != nil && result.Action == "accept" {
+			if value, ok := result.Content["summary"].(string); ok {
+				summary = value
+			}
+		}
+		res = &assistant.SummarizeTextResult{Summary: &summary}
+		log.Printf(ctx, "assistant.summarize_text.elicited")
+		return res, nil
+	}
 	summary := "Implementation handoff generated."
 	res = &assistant.SummarizeTextResult{Summary: &summary}
 	log.Printf(ctx, "assistant.summarize_text")

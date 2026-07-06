@@ -69,6 +69,10 @@ func sdkServerTypesSection(data *AdapterData) codegen.Section {
 			jen.Id("streamErr").Error(),
 		)
 		stmt.Line()
+		stmt.Type().Id("sdkSessionElicitor").Struct(
+			jen.Id("session").Op("*").Id("mcpsdk").Dot("ServerSession"),
+		)
+		stmt.Line()
 	})
 }
 
@@ -810,6 +814,7 @@ func sdkServerHandlerSection(data *AdapterData) codegen.Section {
 					jen.Id("a").Dot("markInitializedSession").Call(jen.Lit("")),
 					jen.Return(jen.Id("ctx")),
 				),
+				jen.Id("ctx").Op("=").Id("sdkContextWithElicitor").Call(jen.Id("ctx"), jen.Id("session")),
 				jen.Id("sessionID").Op(":=").Id("session").Dot("ID").Call(),
 				jen.If(jen.Id("sessionID").Op("==").Lit("")).Block(
 					jen.Id("a").Dot("markInitializedSession").Call(jen.Lit("")),
@@ -817,6 +822,54 @@ func sdkServerHandlerSection(data *AdapterData) codegen.Section {
 				),
 				jen.Id("a").Dot("markInitializedSession").Call(jen.Id("sessionID")),
 				jen.Return(jen.Id("mcpruntime").Dot("WithSessionID").Call(jen.Id("ctx"), jen.Id("sessionID"))),
+			)
+		stmt.Line()
+
+		stmt.Func().Id("sdkContextWithElicitor").
+			Params(jen.Id("ctx").Qual("context", "Context"), jen.Id("session").Id("mcpsdk").Dot("Session")).
+			Qual("context", "Context").
+			Block(
+				jen.Id("serverSession").Op(",").Id("ok").Op(":=").Id("session").Assert(jen.Op("*").Id("mcpsdk").Dot("ServerSession")),
+				jen.If(jen.Op("!").Id("ok").Op("||").Id("serverSession").Op("==").Nil()).Block(
+					jen.Return(jen.Id("ctx")),
+				),
+				jen.Return(jen.Id("mcpruntime").Dot("WithElicitor").Call(
+					jen.Id("ctx"),
+					jen.Id("sdkSessionElicitor").Values(jen.Dict{
+						jen.Id("session"): jen.Id("serverSession"),
+					}),
+				)),
+			)
+		stmt.Line()
+
+		stmt.Func().Params(jen.Id("e").Id("sdkSessionElicitor")).
+			Id("Elicit").
+			Params(jen.Id("ctx").Qual("context", "Context"), jen.Id("req").Id("mcpruntime").Dot("ElicitRequest")).
+			Params(jen.Op("*").Id("mcpruntime").Dot("ElicitResult"), jen.Error()).
+			Block(
+				jen.If(jen.Id("e").Dot("session").Op("==").Nil()).Block(
+					jen.Return(jen.Nil(), jen.Id("mcpruntime").Dot("ErrElicitorUnavailable")),
+				),
+				jen.List(jen.Id("result"), jen.Id("err")).Op(":=").Id("e").Dot("session").Dot("Elicit").Call(
+					jen.Id("ctx"),
+					jen.Op("&").Id("mcpsdk").Dot("ElicitParams").Values(jen.Dict{
+						jen.Id("ElicitationID"):   jen.Id("req").Dot("ElicitationID"),
+						jen.Id("Message"):         jen.Id("req").Dot("Message"),
+						jen.Id("Mode"):            jen.Id("req").Dot("Mode"),
+						jen.Id("RequestedSchema"): jen.Id("req").Dot("RequestedSchema"),
+						jen.Id("URL"):             jen.Id("req").Dot("URL"),
+					}),
+				),
+				jen.If(jen.Id("err").Op("!=").Nil()).Block(
+					jen.Return(jen.Nil(), jen.Id("err")),
+				),
+				jen.If(jen.Id("result").Op("==").Nil()).Block(
+					jen.Return(jen.Op("&").Id("mcpruntime").Dot("ElicitResult").Values(), jen.Nil()),
+				),
+				jen.Return(jen.Op("&").Id("mcpruntime").Dot("ElicitResult").Values(jen.Dict{
+					jen.Id("Action"):  jen.Id("result").Dot("Action"),
+					jen.Id("Content"): jen.Id("result").Dot("Content"),
+				}), jen.Nil()),
 			)
 		stmt.Line()
 

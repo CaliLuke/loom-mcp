@@ -136,6 +136,32 @@ RequestContext: func(ctx context.Context, r *http.Request) context.Context {
 }
 ```
 
+## Elicitation
+
+Generated SDK servers place an MCP elicitor in the context passed to tool,
+resource, and prompt implementations. Service code can request client-side
+form input with the runtime API:
+
+```go
+result, err := mcpruntime.Elicit(ctx, mcpruntime.ElicitRequest{
+    Mode:    "form",
+    Message: "Provide the missing summary.",
+    RequestedSchema: map[string]any{
+        "type": "object",
+        "properties": map[string]any{
+            "summary": map[string]any{"type": "string"},
+        },
+        "required": []any{"summary"},
+    },
+})
+```
+
+The generated server adapts that call to the official Go SDK's
+`ServerSession.Elicit`, which sends `elicitation/create` to clients that
+advertise the `elicitation` capability. If service code calls
+`mcpruntime.Elicit` outside an MCP SDK request context, the runtime returns
+`mcpruntime.ErrElicitorUnavailable`.
+
 ## Session and Response Writer Helpers
 
 The generated handler also exposes the MCP session id and the active HTTP
