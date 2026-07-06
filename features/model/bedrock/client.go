@@ -215,9 +215,6 @@ func (c *Client) CountTokens(ctx context.Context, req *model.Request) (model.Tok
 // Stream invokes the Bedrock ConverseStream API and adapts incremental events
 // into model.Chunks so planners can surface partial responses.
 func (c *Client) Stream(ctx context.Context, req *model.Request) (model.Streamer, error) {
-	if req.StructuredOutput != nil {
-		return nil, fmt.Errorf("bedrock stream: structured output is not supported: %w", model.ErrStructuredOutputUnsupported)
-	}
 	parts, err := c.prepareRequest(ctx, req)
 	if err != nil {
 		return nil, err
@@ -235,7 +232,7 @@ func (c *Client) Stream(ctx context.Context, req *model.Request) (model.Streamer
 	if stream == nil {
 		return nil, errors.New("bedrock: stream output missing event stream")
 	}
-	return newBedrockStreamer(ctx, stream, parts.toolNameProvToCanonical, parts.modelID, parts.modelClass), nil
+	return newBedrockStreamer(ctx, stream, parts.toolNameProvToCanonical, parts.modelID, parts.modelClass, req.StructuredOutput), nil
 }
 
 func (c *Client) prepareRequest(ctx context.Context, req *model.Request) (*requestParts, error) {
@@ -441,6 +438,9 @@ func (c *Client) buildConverseStreamInput(ctx context.Context, parts *requestPar
 	}
 	if parts.toolConfig != nil {
 		input.ToolConfig = parts.toolConfig
+	}
+	if parts.outputConfig != nil {
+		input.OutputConfig = parts.outputConfig
 	}
 	if thinking.enable {
 		fields := map[string]any{}

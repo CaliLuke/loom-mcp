@@ -12,9 +12,10 @@ import (
 )
 
 type errorRuntimeClient struct {
-	converseErr       error
-	converseStreamErr error
-	converseInput     *bedrockruntime.ConverseInput
+	converseErr         error
+	converseStreamErr   error
+	converseInput       *bedrockruntime.ConverseInput
+	converseStreamInput *bedrockruntime.ConverseStreamInput
 }
 
 func (e *errorRuntimeClient) Converse(
@@ -31,9 +32,10 @@ func (e *errorRuntimeClient) Converse(
 
 func (e *errorRuntimeClient) ConverseStream(
 	_ context.Context,
-	_ *bedrockruntime.ConverseStreamInput,
+	input *bedrockruntime.ConverseStreamInput,
 	_ ...func(*bedrockruntime.Options),
 ) (*bedrockruntime.ConverseStreamOutput, error) {
+	e.converseStreamInput = input
 	return nil, e.converseStreamErr
 }
 
@@ -128,9 +130,10 @@ func TestComplete_SetsStructuredOutputConfig(t *testing.T) {
 	require.NotNil(t, rt.converseInput.OutputConfig.TextFormat)
 }
 
-func TestStream_RejectsStructuredOutput(t *testing.T) {
+func TestStream_SetsStructuredOutputConfig(t *testing.T) {
+	rt := &errorRuntimeClient{converseStreamErr: model.ErrRateLimited}
 	client := &Client{
-		runtime:      &errorRuntimeClient{},
+		runtime:      rt,
 		defaultModel: "test-model",
 		maxTok:       10,
 		temp:         0.5,
@@ -148,6 +151,9 @@ func TestStream_RejectsStructuredOutput(t *testing.T) {
 	}
 
 	stream, err := client.Stream(context.Background(), &req)
-	require.ErrorIs(t, err, model.ErrStructuredOutputUnsupported)
+	require.ErrorIs(t, err, model.ErrRateLimited)
 	require.Nil(t, stream)
+	require.NotNil(t, rt.converseStreamInput)
+	require.NotNil(t, rt.converseStreamInput.OutputConfig)
+	require.NotNil(t, rt.converseStreamInput.OutputConfig.TextFormat)
 }
