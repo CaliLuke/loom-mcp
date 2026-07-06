@@ -1441,6 +1441,35 @@ client, err := rt.NewBedrockModelClient(awsClient, runtime.BedrockConfig{
 })
 ```
 
+Gemini is backed by Google's official `google.golang.org/genai` SDK. Use the
+Gemini API helper for API-key deployments:
+
+```go
+client, err := rt.NewGeminiModelClient(ctx, runtime.GeminiConfig{
+    APIKey:         os.Getenv("GEMINI_API_KEY"),
+    DefaultModel:   "gemini-2.5-flash",
+    HighModel:      "gemini-2.5-pro",
+    SmallModel:     "gemini-2.5-flash-lite",
+    MaxTokens:      4096,
+    ThinkingBudget: 8192,
+})
+```
+
+Use the Vertex helper when Google Cloud project and location should own auth and
+routing. The Gen AI SDK uses Application Default Credentials for the Vertex
+backend:
+
+```go
+client, err := rt.NewVertexGeminiModelClient(ctx, runtime.VertexConfig{
+    ProjectID:      "my-gcp-project",
+    Location:       "global",
+    DefaultModel:   "gemini-2.5-pro",
+    SmallModel:     "gemini-2.5-flash",
+    MaxTokens:      4096,
+    ThinkingBudget: 8192,
+})
+```
+
 When planners render prompts through `RenderPrompt`, copy prompt provenance into model requests:
 
 ```go
@@ -1698,7 +1727,7 @@ call.
 | `features/model/bedrock`    | AWS Bedrock model client             |
 | `features/model/openai`     | OpenAI-compatible model client       |
 | `features/model/anthropic`  | Direct Anthropic Claude API client   |
-| `features/model/gemini`     | Google Gemini model client           |
+| `features/model/gemini`     | Google Gemini API and Vertex AI model client |
 | `features/model/gateway`    | Remote model gateway client          |
 | `features/model/middleware` | Rate limiting, logging, metrics      |
 | `features/policy/basic`     | Basic policy engine                  |

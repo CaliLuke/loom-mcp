@@ -1,15 +1,43 @@
 package runtime
 
 import (
+	"context"
 	"errors"
+	"fmt"
+	"strings"
 
 	bedrock "github.com/CaliLuke/loom-mcp/features/model/bedrock"
+	gemini "github.com/CaliLuke/loom-mcp/features/model/gemini"
 	"github.com/CaliLuke/loom-mcp/runtime/agent/model"
 	"github.com/aws/aws-sdk-go-v2/service/bedrockruntime"
+	"google.golang.org/genai"
 )
 
 // BedrockConfig configures the bedrock-backed model client created by the runtime.
 type BedrockConfig struct {
+	DefaultModel   string
+	HighModel      string
+	SmallModel     string
+	MaxTokens      int
+	ThinkingBudget int
+	Temperature    float32
+}
+
+// GeminiConfig configures the Gemini API-backed model client created by the runtime.
+type GeminiConfig struct {
+	APIKey         string
+	DefaultModel   string
+	HighModel      string
+	SmallModel     string
+	MaxTokens      int
+	ThinkingBudget int
+	Temperature    float32
+}
+
+// VertexConfig configures the Vertex AI Gemini model client created by the runtime.
+type VertexConfig struct {
+	ProjectID      string
+	Location       string
 	DefaultModel   string
 	HighModel      string
 	SmallModel     string
@@ -60,4 +88,68 @@ func (r *Runtime) NewBedrockModelClient(awsrt *bedrockruntime.Client, cfg Bedroc
 		return bedrock.New(awsrt, opts, bedrock.NewTemporalLedgerSource(querier))
 	}
 	return bedrock.New(awsrt, opts, nil)
+}
+
+// NewGeminiModelClient constructs a model.Client backed by the Gemini API using
+// Google's official Gen AI SDK. The client is not registered automatically; pass
+// it to RegisterModel with the model ID your planners use.
+func (r *Runtime) NewGeminiModelClient(ctx context.Context, cfg GeminiConfig) (model.Client, error) {
+	apiKey := strings.TrimSpace(cfg.APIKey)
+	if apiKey == "" {
+		return nil, errors.New("gemini: api key is required")
+	}
+	if strings.TrimSpace(cfg.DefaultModel) == "" {
+		return nil, errors.New("gemini: default model is required")
+	}
+	client, err := genai.NewClient(ctx, &genai.ClientConfig{
+		APIKey:  apiKey,
+		Backend: genai.BackendGeminiAPI,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("gemini client init: %w", err)
+	}
+	return gemini.New(gemini.Options{
+		Client:         client.Models,
+		DefaultModel:   cfg.DefaultModel,
+		HighModel:      cfg.HighModel,
+		SmallModel:     cfg.SmallModel,
+		MaxTokens:      cfg.MaxTokens,
+		ThinkingBudget: cfg.ThinkingBudget,
+		Temperature:    cfg.Temperature,
+	})
+}
+
+// NewVertexGeminiModelClient constructs a model.Client backed by Vertex AI
+// Gemini using Google's official Gen AI SDK. Authentication is delegated to the
+// SDK's Vertex backend, which uses Application Default Credentials when no
+// explicit credentials are supplied by the environment.
+func (r *Runtime) NewVertexGeminiModelClient(ctx context.Context, cfg VertexConfig) (model.Client, error) {
+	projectID := strings.TrimSpace(cfg.ProjectID)
+	if projectID == "" {
+		return nil, errors.New("vertex: project id is required")
+	}
+	location := strings.TrimSpace(cfg.Location)
+	if location == "" {
+		return nil, errors.New("vertex: location is required")
+	}
+	if strings.TrimSpace(cfg.DefaultModel) == "" {
+		return nil, errors.New("vertex: default model is required")
+	}
+	client, err := genai.NewClient(ctx, &genai.ClientConfig{
+		Backend:  genai.BackendVertexAI,
+		Project:  projectID,
+		Location: location,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("vertex gemini client init: %w", err)
+	}
+	return gemini.New(gemini.Options{
+		Client:         client.Models,
+		DefaultModel:   cfg.DefaultModel,
+		HighModel:      cfg.HighModel,
+		SmallModel:     cfg.SmallModel,
+		MaxTokens:      cfg.MaxTokens,
+		ThinkingBudget: cfg.ThinkingBudget,
+		Temperature:    cfg.Temperature,
+	})
 }

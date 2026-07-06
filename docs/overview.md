@@ -42,7 +42,7 @@ Think of it as a pipeline from intention to execution:
    iteration; Temporal for production durability.
 
 5. **Features** (`features/*`) — Plug in what you need: Mongo for memory/sessions/run event logs and prompt
-   overrides, Pulse for real‑time streams, Bedrock/OpenAI/Gateway model clients, policy engines.
+   overrides, Pulse for real‑time streams, Bedrock/OpenAI/Gemini/Gateway model clients, policy engines.
 
 ## Ways to Work
 
@@ -1149,7 +1149,7 @@ profile := stream.MetricsProfile()
 | `features/model/bedrock`    | AWS Bedrock model client (Claude, etc.)                |
 | `features/model/openai`     | OpenAI‑compatible model client                         |
 | `features/model/anthropic`  | Anthropic API model client                             |
-| `features/model/gemini`     | Google Gemini model client                             |
+| `features/model/gemini`     | Google Gemini API and Vertex AI model client           |
 | `features/model/gateway`    | Remote model gateway for centralized model serving     |
 | `features/model/middleware` | Model client middleware (rate limiting, etc.)          |
 | `features/policy/basic`     | Basic policy engine for tool filtering and caps        |

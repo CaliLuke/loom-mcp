@@ -180,6 +180,33 @@ func TestClientCompleteWithToolChoiceNone(t *testing.T) {
 	require.Equal(t, genai.FunctionCallingConfigModeNone, mock.config.ToolConfig.FunctionCallingConfig.Mode)
 }
 
+func TestClientCompleteAppliesOptionDefaults(t *testing.T) {
+	mock := &mockModelsClient{response: &genai.GenerateContentResponse{}}
+	client, err := geminimodel.New(geminimodel.Options{
+		Client:         mock,
+		DefaultModel:   "gemini-2.5-flash",
+		MaxTokens:      512,
+		Temperature:    0.3,
+		ThinkingBudget: 2048,
+	})
+	require.NoError(t, err)
+
+	_, err = client.Complete(context.Background(), &model.Request{
+		Messages: []*model.Message{
+			{Role: model.ConversationRoleUser, Parts: []model.Part{model.TextPart{Text: "ping"}}},
+		},
+		Thinking: &model.ThinkingOptions{Enable: true},
+	})
+	require.NoError(t, err)
+	require.Equal(t, int32(512), mock.config.MaxOutputTokens)
+	require.NotNil(t, mock.config.Temperature)
+	require.InDelta(t, 0.3, *mock.config.Temperature, 0.0001)
+	require.NotNil(t, mock.config.ThinkingConfig)
+	require.True(t, mock.config.ThinkingConfig.IncludeThoughts)
+	require.NotNil(t, mock.config.ThinkingConfig.ThinkingBudget)
+	require.Equal(t, int32(2048), *mock.config.ThinkingConfig.ThinkingBudget)
+}
+
 func TestClientCountTokens(t *testing.T) {
 	mock := &mockModelsClient{
 		countResponse: &genai.CountTokensResponse{TotalTokens: 42},

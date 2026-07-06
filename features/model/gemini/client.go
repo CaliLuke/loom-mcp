@@ -43,14 +43,29 @@ type (
 		// SmallModel is used when Request.ModelClass is small and Request.Model is
 		// empty.
 		SmallModel string
+
+		// MaxTokens is the default completion token cap when Request.MaxTokens is
+		// unset.
+		MaxTokens int
+
+		// Temperature is the default sampling temperature when Request.Temperature
+		// is unset.
+		Temperature float32
+
+		// ThinkingBudget is the default thinking-token budget when thinking is
+		// enabled without a per-request budget.
+		ThinkingBudget int
 	}
 
 	// Client implements model.Client using Gemini GenerateContent calls.
 	Client struct {
-		models       ModelsClient
-		defaultModel string
-		highModel    string
-		smallModel   string
+		models         ModelsClient
+		defaultModel   string
+		highModel      string
+		smallModel     string
+		maxTokens      int
+		temperature    float32
+		thinkingBudget int
 	}
 
 	toolResultRef struct {
@@ -70,10 +85,13 @@ func New(opts Options) (*Client, error) {
 		return nil, errors.New("default model identifier is required")
 	}
 	return &Client{
-		models:       opts.Client,
-		defaultModel: opts.DefaultModel,
-		highModel:    opts.HighModel,
-		smallModel:   opts.SmallModel,
+		models:         opts.Client,
+		defaultModel:   opts.DefaultModel,
+		highModel:      opts.HighModel,
+		smallModel:     opts.SmallModel,
+		maxTokens:      opts.MaxTokens,
+		temperature:    opts.Temperature,
+		thinkingBudget: opts.ThinkingBudget,
 	}, nil
 }
 
@@ -158,7 +176,7 @@ func (c *Client) buildRequest(req *model.Request) (string, []*genai.Content, *ge
 	if len(contents) == 0 {
 		return "", nil, nil, errors.New("gemini: at least one user or assistant message is required")
 	}
-	config, err := buildGenerateContentConfig(systemInstruction, req)
+	config, err := c.buildGenerateContentConfig(systemInstruction, req)
 	if err != nil {
 		return "", nil, nil, err
 	}
@@ -184,35 +202,78 @@ func (c *Client) resolveModelID(req *model.Request) string {
 	return c.defaultModel
 }
 
-func buildGenerateContentConfig(systemInstruction *genai.Content, req *model.Request) (*genai.GenerateContentConfig, error) {
+func (c *Client) buildGenerateContentConfig(systemInstruction *genai.Content, req *model.Request) (*genai.GenerateContentConfig, error) {
 	config := &genai.GenerateContentConfig{}
 	if systemInstruction != nil {
 		config.SystemInstruction = systemInstruction
 	}
-	if req.Temperature != 0 {
-		config.Temperature = genai.Ptr(req.Temperature)
+	if err := c.applyScalarDefaults(config, req); err != nil {
+		return nil, err
 	}
-	if req.MaxTokens > 0 {
-		if req.MaxTokens > math.MaxInt32 {
-			return nil, fmt.Errorf("gemini: max tokens %d exceed int32 range", req.MaxTokens)
+	if err := applyToolConfig(config, req); err != nil {
+		return nil, err
+	}
+	if err := c.applyThinkingConfig(config, req); err != nil {
+		return nil, err
+	}
+	return config, nil
+}
+
+func (c *Client) applyScalarDefaults(config *genai.GenerateContentConfig, req *model.Request) error {
+	temperature := req.Temperature
+	if temperature == 0 {
+		temperature = c.temperature
+	}
+	if temperature != 0 {
+		config.Temperature = genai.Ptr(temperature)
+	}
+	maxTokens := req.MaxTokens
+	if maxTokens == 0 {
+		maxTokens = c.maxTokens
+	}
+	if maxTokens > 0 {
+		if maxTokens > math.MaxInt32 {
+			return fmt.Errorf("gemini: max tokens %d exceed int32 range", maxTokens)
 		}
-		config.MaxOutputTokens = int32(req.MaxTokens)
+		config.MaxOutputTokens = int32(maxTokens)
 	}
+	return nil
+}
+
+func applyToolConfig(config *genai.GenerateContentConfig, req *model.Request) error {
 	if len(req.Tools) > 0 {
 		tool, err := encodeToolDefinitions(req.Tools)
 		if err != nil {
-			return nil, err
+			return err
 		}
 		config.Tools = []*genai.Tool{tool}
 	}
 	toolConfig, err := encodeToolChoice(req.ToolChoice, req.Tools)
 	if err != nil {
-		return nil, err
+		return err
 	}
 	if toolConfig != nil {
 		config.ToolConfig = toolConfig
 	}
-	return config, nil
+	return nil
+}
+
+func (c *Client) applyThinkingConfig(config *genai.GenerateContentConfig, req *model.Request) error {
+	if req.Thinking != nil && req.Thinking.Enable {
+		budget := req.Thinking.BudgetTokens
+		if budget == 0 {
+			budget = c.thinkingBudget
+		}
+		thinking := &genai.ThinkingConfig{IncludeThoughts: true}
+		if budget > 0 {
+			if budget > math.MaxInt32 {
+				return fmt.Errorf("gemini: thinking budget %d exceed int32 range", budget)
+			}
+			thinking.ThinkingBudget = genai.Ptr(int32(budget))
+		}
+		config.ThinkingConfig = thinking
+	}
+	return nil
 }
 
 func encodeMessages(msgs []*model.Message) ([]*genai.Content, *genai.Content, error) {
