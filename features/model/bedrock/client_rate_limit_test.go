@@ -14,14 +14,19 @@ import (
 type errorRuntimeClient struct {
 	converseErr       error
 	converseStreamErr error
+	converseInput     *bedrockruntime.ConverseInput
 }
 
 func (e *errorRuntimeClient) Converse(
 	_ context.Context,
-	_ *bedrockruntime.ConverseInput,
+	input *bedrockruntime.ConverseInput,
 	_ ...func(*bedrockruntime.Options),
 ) (*bedrockruntime.ConverseOutput, error) {
-	return nil, e.converseErr
+	e.converseInput = input
+	if e.converseErr != nil {
+		return nil, e.converseErr
+	}
+	return &bedrockruntime.ConverseOutput{}, nil
 }
 
 func (e *errorRuntimeClient) ConverseStream(
@@ -89,12 +94,41 @@ func TestStream_WrapsRateLimitedErrors(t *testing.T) {
 			},
 		},
 	}
-	_, err := client.Stream(context.Background(), &req)
+	stream, err := client.Stream(context.Background(), &req)
 	require.Error(t, err)
 	require.ErrorIs(t, err, model.ErrRateLimited)
+	require.Nil(t, stream)
 }
 
-func TestComplete_RejectsStructuredOutput(t *testing.T) {
+func TestComplete_SetsStructuredOutputConfig(t *testing.T) {
+	rt := &errorRuntimeClient{}
+	client := &Client{
+		runtime:      rt,
+		defaultModel: "test-model",
+		maxTok:       10,
+		temp:         0.5,
+		think:        defaultThinkingBudget,
+	}
+	req := model.Request{
+		ModelClass: model.ModelClassDefault,
+		Messages: []*model.Message{
+			{Role: model.ConversationRoleUser, Parts: []model.Part{model.TextPart{Text: "hello"}}},
+		},
+		StructuredOutput: &model.StructuredOutput{
+			Name:   "draft",
+			Schema: []byte(`{"type":"object"}`),
+		},
+	}
+
+	resp, err := client.Complete(context.Background(), &req)
+	require.NoError(t, err)
+	require.NotNil(t, resp)
+	require.NotNil(t, rt.converseInput)
+	require.NotNil(t, rt.converseInput.OutputConfig)
+	require.NotNil(t, rt.converseInput.OutputConfig.TextFormat)
+}
+
+func TestStream_RejectsStructuredOutput(t *testing.T) {
 	client := &Client{
 		runtime:      &errorRuntimeClient{},
 		defaultModel: "test-model",
@@ -113,7 +147,7 @@ func TestComplete_RejectsStructuredOutput(t *testing.T) {
 		},
 	}
 
-	resp, err := client.Complete(context.Background(), &req)
-	require.Nil(t, resp)
+	stream, err := client.Stream(context.Background(), &req)
 	require.ErrorIs(t, err, model.ErrStructuredOutputUnsupported)
+	require.Nil(t, stream)
 }

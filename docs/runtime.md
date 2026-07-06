@@ -1501,11 +1501,11 @@ resp, err := modelClient.Complete(ctx, &model.Request{
 })
 ```
 
-Gemini and OpenAI map this to their native structured-output request fields.
-Anthropic and Bedrock currently fail fast with
-`model.ErrStructuredOutputUnsupported` instead of silently ignoring the schema.
-Structured output cannot be combined with model tools in the current Gemini and
-OpenAI adapters.
+Gemini, OpenAI, and Bedrock `Complete` map this to their native
+structured-output request fields. Anthropic and Bedrock streaming currently fail
+fast with `model.ErrStructuredOutputUnsupported` instead of silently ignoring
+the schema. Structured output cannot be combined with model tools in the current
+Gemini and OpenAI adapters.
 
 When planners render prompts through `RenderPrompt`, copy prompt provenance into model requests:
 

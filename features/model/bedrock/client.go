@@ -123,6 +123,7 @@ type requestParts struct {
 	messages                []brtypes.Message
 	system                  []brtypes.SystemContentBlock
 	toolConfig              *brtypes.ToolConfiguration
+	outputConfig            *brtypes.OutputConfig
 	toolNameCanonicalToProv map[string]string
 	toolNameProvToCanonical map[string]string
 }
@@ -221,6 +222,9 @@ func (c *Client) CountTokens(ctx context.Context, req *model.Request) (model.Tok
 // Stream invokes the Bedrock ConverseStream API and adapts incremental events
 // into model.Chunks so planners can surface partial responses.
 func (c *Client) Stream(ctx context.Context, req *model.Request) (model.Streamer, error) {
+	if req.StructuredOutput != nil {
+		return nil, fmt.Errorf("bedrock stream: structured output is not supported: %w", model.ErrStructuredOutputUnsupported)
+	}
 	parts, err := c.prepareRequest(ctx, req)
 	if err != nil {
 		return nil, err
@@ -242,9 +246,6 @@ func (c *Client) Stream(ctx context.Context, req *model.Request) (model.Streamer
 }
 
 func (c *Client) prepareRequest(ctx context.Context, req *model.Request) (*requestParts, error) {
-	if req.StructuredOutput != nil {
-		return nil, fmt.Errorf("bedrock: structured output is not supported: %w", model.ErrStructuredOutputUnsupported)
-	}
 	merged := c.mergedRequestMessages(ctx, req)
 	if err := validateBedrockRequestMessages(merged); err != nil {
 		return nil, err
@@ -267,11 +268,15 @@ func (c *Client) prepareRequest(ctx context.Context, req *model.Request) (*reque
 	if err := validateBedrockToolConfig(req, merged, toolConfig); err != nil {
 		return nil, err
 	}
+	outputConfig, err := encodeOutputConfig(req.StructuredOutput)
+	if err != nil {
+		return nil, err
+	}
 	messages, system, err := encodeMessages(ctx, merged, canonToSan, cacheAfterSystem, c.logger)
 	if err != nil {
 		return nil, err
 	}
-	return buildRequestParts(modelID, req.ModelClass, messages, system, toolConfig, canonToSan, sanToCanon), nil
+	return buildRequestParts(modelID, req.ModelClass, messages, system, toolConfig, outputConfig, canonToSan, sanToCanon), nil
 }
 
 func (c *Client) mergedRequestMessages(ctx context.Context, req *model.Request) []*model.Message {
@@ -336,6 +341,7 @@ func buildRequestParts(
 	messages []brtypes.Message,
 	system []brtypes.SystemContentBlock,
 	toolConfig *brtypes.ToolConfiguration,
+	outputConfig *brtypes.OutputConfig,
 	canonToSan map[string]string,
 	sanToCanon map[string]string,
 ) *requestParts {
@@ -345,9 +351,37 @@ func buildRequestParts(
 		messages:                messages,
 		system:                  system,
 		toolConfig:              toolConfig,
+		outputConfig:            outputConfig,
 		toolNameCanonicalToProv: canonToSan,
 		toolNameProvToCanonical: sanToCanon,
 	}
+}
+
+func encodeOutputConfig(output *model.StructuredOutput) (*brtypes.OutputConfig, error) {
+	if output == nil {
+		return nil, nil
+	}
+	if len(output.Schema) == 0 {
+		return nil, errors.New("bedrock: structured output requires a schema")
+	}
+	schema, err := normalizeStructuredOutputSchemaForBedrock(output.Schema)
+	if err != nil {
+		return nil, err
+	}
+	definition := brtypes.JsonSchemaDefinition{
+		Schema: aws.String(string(schema)),
+	}
+	if output.Name != "" {
+		definition.Name = aws.String(output.Name)
+	}
+	return &brtypes.OutputConfig{
+		TextFormat: &brtypes.OutputFormat{
+			Type: brtypes.OutputFormatTypeJsonSchema,
+			Structure: &brtypes.OutputFormatStructureMemberJsonSchema{
+				Value: definition,
+			},
+		},
+	}, nil
 }
 
 // resolveModelID decides which concrete model ID to use based on Request.Model
@@ -380,6 +414,9 @@ func (c *Client) buildConverseInput(parts *requestParts, req *model.Request) *be
 	}
 	if parts.toolConfig != nil {
 		input.ToolConfig = parts.toolConfig
+	}
+	if parts.outputConfig != nil {
+		input.OutputConfig = parts.outputConfig
 	}
 	if cfg := c.inferenceConfig(parts.modelID, req.MaxTokens, req.Temperature); cfg != nil {
 		input.InferenceConfig = cfg
