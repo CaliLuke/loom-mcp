@@ -7,6 +7,7 @@ import (
 
 	"cloud.google.com/go/auth"
 	geminifeature "github.com/CaliLuke/loom-mcp/features/model/gemini"
+	ollamafeature "github.com/CaliLuke/loom-mcp/features/model/ollama"
 	openaifeature "github.com/CaliLuke/loom-mcp/features/model/openai"
 	"github.com/stretchr/testify/require"
 )
@@ -33,6 +34,42 @@ func TestNewOpenAIModelClientBuildsSDKClient(t *testing.T) {
 	require.True(t, ok)
 	value := reflect.ValueOf(openaiClient).Elem()
 	require.Equal(t, "gpt-4o", value.FieldByName("model").String())
+}
+
+func TestNewOllamaModelClientValidates(t *testing.T) {
+	rt := &Runtime{}
+
+	client, err := rt.NewOllamaModelClient(OllamaConfig{DefaultModel: "llama3.1"})
+	require.Error(t, err)
+	require.Nil(t, client)
+	require.Contains(t, err.Error(), "server URL is required")
+
+	client, err = rt.NewOllamaModelClient(OllamaConfig{ServerURL: "http://localhost:11434"})
+	require.Error(t, err)
+	require.Nil(t, client)
+	require.Contains(t, err.Error(), "default model is required")
+}
+
+func TestNewOllamaModelClientBuildsClient(t *testing.T) {
+	rt := &Runtime{}
+
+	client, err := rt.NewOllamaModelClient(OllamaConfig{
+		ServerURL:    "http://localhost:11434/",
+		DefaultModel: "llama3.1",
+		HighModel:    "qwen3:32b",
+		SmallModel:   "llama3.2",
+		MaxTokens:    1024,
+		Temperature:  0.2,
+	})
+	require.NoError(t, err)
+
+	ollamaClient, ok := client.(*ollamafeature.Client)
+	require.True(t, ok)
+	value := reflect.ValueOf(ollamaClient).Elem()
+	require.Equal(t, "http://localhost:11434", value.FieldByName("serverURL").String())
+	require.Equal(t, "llama3.1", value.FieldByName("defaultModel").String())
+	require.Equal(t, "qwen3:32b", value.FieldByName("highModel").String())
+	require.Equal(t, "llama3.2", value.FieldByName("smallModel").String())
 }
 
 func TestNewGeminiModelClientRequiresAPIKey(t *testing.T) {

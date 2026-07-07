@@ -6,10 +6,12 @@ import (
 	"fmt"
 	"net/http"
 	"strings"
+	"time"
 
 	"cloud.google.com/go/auth"
 	bedrock "github.com/CaliLuke/loom-mcp/features/model/bedrock"
 	gemini "github.com/CaliLuke/loom-mcp/features/model/gemini"
+	ollamafeature "github.com/CaliLuke/loom-mcp/features/model/ollama"
 	openaifeature "github.com/CaliLuke/loom-mcp/features/model/openai"
 	"github.com/CaliLuke/loom-mcp/runtime/agent/model"
 	"github.com/aws/aws-sdk-go-v2/service/bedrockruntime"
@@ -33,6 +35,18 @@ type OpenAIConfig struct {
 	APIKey       string
 	BaseURL      string
 	DefaultModel string
+}
+
+// OllamaConfig configures the local Ollama-backed model client created by the runtime.
+type OllamaConfig struct {
+	ServerURL    string
+	HTTPClient   *http.Client
+	DefaultModel string
+	HighModel    string
+	SmallModel   string
+	MaxTokens    int
+	Temperature  float32
+	Timeout      time.Duration
 }
 
 // GeminiConfig configures the Gemini API-backed model client created by the runtime.
@@ -127,6 +141,29 @@ func (r *Runtime) NewOpenAIModelClient(cfg OpenAIConfig) (model.Client, error) {
 	return openaifeature.New(openaifeature.Options{
 		Client:       &client.Responses,
 		DefaultModel: cfg.DefaultModel,
+	})
+}
+
+// NewOllamaModelClient constructs a model.Client backed by a local Ollama
+// server. The client is not registered automatically; pass it to RegisterModel
+// with the model ID your planners use.
+func (r *Runtime) NewOllamaModelClient(cfg OllamaConfig) (model.Client, error) {
+	serverURL := strings.TrimSpace(cfg.ServerURL)
+	if serverURL == "" {
+		return nil, errors.New("ollama: server URL is required")
+	}
+	if strings.TrimSpace(cfg.DefaultModel) == "" {
+		return nil, errors.New("ollama: default model is required")
+	}
+	return ollamafeature.New(ollamafeature.Options{
+		HTTPClient:   cfg.HTTPClient,
+		ServerURL:    serverURL,
+		DefaultModel: cfg.DefaultModel,
+		HighModel:    cfg.HighModel,
+		SmallModel:   cfg.SmallModel,
+		MaxTokens:    cfg.MaxTokens,
+		Temperature:  cfg.Temperature,
+		Timeout:      cfg.Timeout,
 	})
 }
 

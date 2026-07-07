@@ -1717,6 +1717,20 @@ client, err := rt.NewOpenAIModelClient(runtime.OpenAIConfig{
 })
 ```
 
+Create a local Ollama chat client through the runtime helper. Ollama uses the
+`/api/chat` endpoint and supports text, images, streaming text, function tools,
+and schema-backed structured output for models that support those features:
+
+```go
+client, err := rt.NewOllamaModelClient(runtime.OllamaConfig{
+    ServerURL:    "http://localhost:11434",
+    DefaultModel: "llama3.1",
+    HighModel:    "qwen3:32b",
+    SmallModel:   "llama3.2",
+    MaxTokens:    4096,
+})
+```
+
 Gemini is backed by Google's official `google.golang.org/genai` SDK. Use the
 Gemini API helper for API-key deployments:
 
@@ -2035,6 +2049,7 @@ call.
 | `features/model/bedrock`    | AWS Bedrock model client             |
 | `features/model/openai`     | OpenAI-compatible model client       |
 | `features/model/anthropic`  | Direct Anthropic Claude API client   |
+| `features/model/ollama`     | Local Ollama chat model client       |
 | `features/model/gemini`     | Google Gemini API and Vertex AI model client |
 | `features/model/gateway`    | Remote model gateway client          |
 | `features/model/middleware` | Rate limiting, logging, metrics      |

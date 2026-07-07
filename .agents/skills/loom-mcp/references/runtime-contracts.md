@@ -33,6 +33,16 @@ Use this file for current loom-mcp runtime behavior in this repo. Prefer it over
 - `runtime.WithPromptStore(...)` adds scoped overrides.
 - Planners should render prompts through `RenderPrompt(...)` so provenance flows into model requests.
 
+## Model Clients
+
+- Runtime model clients implement `runtime/agent/model.Client`.
+- Provider packages live under `features/model/*`; runtime helpers construct
+  Bedrock, OpenAI, Gemini/Vertex, and local Ollama clients.
+- The Ollama adapter uses the local `/api/chat` endpoint for text, image,
+  streaming, function-tool, and structured-output requests. It should keep tool
+  calls as `model.ToolCall` values so the runtime, not the provider adapter,
+  owns tool execution and unknown-tool recovery.
+
 ## Tool Execution Contracts
 
 - Runtime-owned tool specs and codecs are the schema source of truth.
