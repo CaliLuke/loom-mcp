@@ -217,6 +217,29 @@ type DispatchCommandRequestBody struct {
 // "dispatch_command" endpoint HTTP response body.
 type DispatchCommandResponseBody DispatchCommandResponseBodyResponseBody
 
+// ProjectedLookupRequestBody is the type of the "assistant" service
+// "projected_lookup" endpoint HTTP request body.
+type ProjectedLookupRequestBody struct {
+	// Projected lookup query
+	Query string `form:"query" json:"query" xml:"query"`
+}
+
+// ProjectedLookupResponseBody is the type of the "assistant" service
+// "projected_lookup" endpoint HTTP response body.
+type ProjectedLookupResponseBody struct {
+	// Projected lookup answer
+	Answer *string `form:"answer,omitempty" json:"answer,omitempty" xml:"answer,omitempty"`
+	// Projected lookup source
+	Source *string `form:"source,omitempty" json:"source,omitempty" xml:"source,omitempty"`
+}
+
+// ProjectedStatusResponseBody is the type of the "assistant" service
+// "projected_status" endpoint HTTP response body.
+type ProjectedStatusResponseBody struct {
+	// Projected runtime status
+	Status *string `form:"status,omitempty" json:"status,omitempty" xml:"status,omitempty"`
+}
+
 // ListDocumentsResponseBodyResponseBody is used to define fields on response
 // body types.
 type ListDocumentsResponseBodyResponseBody struct {
@@ -1043,6 +1066,15 @@ func NewDispatchCommandRequestBody(p *assistant.DispatchCommandPayload) *Dispatc
 	return body
 }
 
+// NewProjectedLookupRequestBody builds the HTTP request body from the payload
+// of the "projected_lookup" endpoint of the "assistant" service.
+func NewProjectedLookupRequestBody(p *assistant.ProjectedLookupPayload) *ProjectedLookupRequestBody {
+	body := &ProjectedLookupRequestBody{
+		Query: p.Query,
+	}
+	return body
+}
+
 // NewListDocumentsDocumentsOK builds a "assistant" service "list_documents"
 // endpoint result from a HTTP "OK" response.
 func NewListDocumentsDocumentsOK(body *ListDocumentsResponseBody) *assistant.Documents {
@@ -1243,6 +1275,27 @@ func NewDispatchCommandResultOK(body *DispatchCommandResponseBody) *assistant.Di
 	return v
 }
 
+// NewProjectedLookupResultOK builds a "assistant" service "projected_lookup"
+// endpoint result from a HTTP "OK" response.
+func NewProjectedLookupResultOK(body *ProjectedLookupResponseBody) *assistant.ProjectedLookupResult {
+	v := &assistant.ProjectedLookupResult{
+		Answer: *body.Answer,
+		Source: *body.Source,
+	}
+
+	return v
+}
+
+// NewProjectedStatusResultOK builds a "assistant" service "projected_status"
+// endpoint result from a HTTP "OK" response.
+func NewProjectedStatusResultOK(body *ProjectedStatusResponseBody) *assistant.ProjectedStatusResult {
+	v := &assistant.ProjectedStatusResult{
+		Status: *body.Status,
+	}
+
+	return v
+}
+
 // ValidateListDocumentsResponseBody runs the validations defined on
 // list_documents_response_body
 func ValidateListDocumentsResponseBody(body *ListDocumentsResponseBody) (err error) {
@@ -1372,6 +1425,27 @@ func ValidateDispatchCommandRequestBody(body *DispatchCommandRequestBody) (err e
 func ValidateDispatchCommandResponseBody(body *DispatchCommandResponseBody) (err error) {
 	if body.Ack == nil {
 		err = loom.MergeErrors(err, loom.MissingFieldError("ack", "body"))
+	}
+	return
+}
+
+// ValidateProjectedLookupResponseBody runs the validations defined on
+// projected_lookup_response_body
+func ValidateProjectedLookupResponseBody(body *ProjectedLookupResponseBody) (err error) {
+	if body.Answer == nil {
+		err = loom.MergeErrors(err, loom.MissingFieldError("answer", "body"))
+	}
+	if body.Source == nil {
+		err = loom.MergeErrors(err, loom.MissingFieldError("source", "body"))
+	}
+	return
+}
+
+// ValidateProjectedStatusResponseBody runs the validations defined on
+// projected_status_response_body
+func ValidateProjectedStatusResponseBody(body *ProjectedStatusResponseBody) (err error) {
+	if body.Status == nil {
+		err = loom.MergeErrors(err, loom.MissingFieldError("status", "body"))
 	}
 	return
 }

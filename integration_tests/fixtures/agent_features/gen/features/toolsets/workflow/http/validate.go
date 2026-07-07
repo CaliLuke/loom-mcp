@@ -27,6 +27,25 @@ func ValidateDraftResultTransport(body *DraftResultTransport) (err error) {
 	return
 }
 
+// ValidateMethodEchoPayloadTransport runs the validations defined on MethodEchoPayloadTransport.
+func ValidateMethodEchoPayloadTransport(body *MethodEchoPayloadTransport) (err error) {
+	if body.Topic == nil {
+		err = loom.MergeErrors(err, loom.MissingFieldError("topic", "body"))
+	}
+	return
+}
+
+// ValidateMethodEchoResultTransport runs the validations defined on MethodEchoResultTransport.
+func ValidateMethodEchoResultTransport(body *MethodEchoResultTransport) (err error) {
+	if body.OK == nil {
+		err = loom.MergeErrors(err, loom.MissingFieldError("ok", "body"))
+	}
+	if body.Message == nil {
+		err = loom.MergeErrors(err, loom.MissingFieldError("message", "body"))
+	}
+	return
+}
+
 // ValidatePublishResultTransport runs the validations defined on PublishResultTransport.
 func ValidatePublishResultTransport(body *PublishResultTransport) (err error) {
 	if body.OK == nil {

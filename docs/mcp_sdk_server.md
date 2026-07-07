@@ -123,6 +123,14 @@ Search ranking uses the same generated DSL defaults and runtime
 narrowing, fuzzy name/title matching, broad fallback control, score cutoff, and
 field weights.
 
+Method-backed toolset tools projected into MCP with
+`Expose(AgentRuntime, MCPSurface)` and `MCPPlacement(...)` are included in the
+same generated adapter catalog as method-level MCP tools. SDK `ListTools`
+advertises their `ToolInfo` schemas from generated toolset specs, compact mode
+can pin them with `AlwaysVisible`, and SDK `call_tool` invokes them through the
+generated MCP adapter so execution still uses the shared method-backed
+dispatcher.
+
 `ToolSearchOptions.AllowDirectHiddenCalls` is unsupported for SDK-backed compact
 mode. `NewSDKServer` fails construction when that option is true because the SDK
 cannot directly call tools that were intentionally omitted from the registered

@@ -8,6 +8,7 @@ import (
 	"sync"
 	"testing"
 
+	"example.com/agentfeatures/gen/features"
 	"example.com/agentfeatures/gen/features/toolsets/workflow"
 	"github.com/CaliLuke/loom-mcp/runtime/agent/api"
 	"github.com/CaliLuke/loom-mcp/runtime/agent/artifact"
@@ -42,8 +43,20 @@ type recordingWorkflowExecutor struct {
 	retryFailed   bool
 }
 
+type methodBackedFeatureService struct {
+	topic string
+}
+
 func newRecordingWorkflowExecutor() *recordingWorkflowExecutor {
 	return &recordingWorkflowExecutor{}
+}
+
+func (s *methodBackedFeatureService) EchoTopic(ctx context.Context, payload *features.MethodEchoPayload) (*features.MethodEchoResult, error) {
+	s.topic = payload.Topic
+	return &features.MethodEchoResult{
+		OK:      true,
+		Message: "echo:" + payload.Topic,
+	}, nil
 }
 
 func (e *recordingWorkflowExecutor) Execute(ctx context.Context, meta *agentsruntime.ToolCallMeta, call *planner.ToolRequest) (*agentsruntime.ToolExecutionResult, error) {

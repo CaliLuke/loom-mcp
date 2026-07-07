@@ -8,16 +8,33 @@
 package features
 
 import (
+	"context"
+
 	loom "github.com/CaliLuke/loom/pkg"
 )
 
 // Endpoints wraps the "features" service endpoints.
-type Endpoints struct{}
+type Endpoints struct {
+	EchoTopic loom.Endpoint
+}
 
 // NewEndpoints wraps the methods of the "features" service with endpoints.
 func NewEndpoints(s Service) *Endpoints {
-	return &Endpoints{}
+	return &Endpoints{
+		EchoTopic: NewEchoTopicEndpoint(s),
+	}
 }
 
 // Use applies the given middleware to all the "features" service endpoints.
-func (e *Endpoints) Use(m func(loom.Endpoint) loom.Endpoint) {}
+func (e *Endpoints) Use(m func(loom.Endpoint) loom.Endpoint) {
+	e.EchoTopic = m(e.EchoTopic)
+}
+
+// NewEchoTopicEndpoint returns an endpoint function that calls the method
+// "echo_topic" of service "features".
+func NewEchoTopicEndpoint(s Service) loom.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*MethodEchoPayload)
+		return s.EchoTopic(ctx, p)
+	}
+}

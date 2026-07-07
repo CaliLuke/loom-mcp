@@ -238,11 +238,17 @@ func toolsetProviderFile(genpkg string, ts *ToolsetData) *codegen.File {
 	}
 	hasMethods := false
 	hasBoundsProjection := false
+	hasServerDataProjection := false
 	for _, t := range ts.Tools {
 		if t == nil || !t.IsMethodBacked {
 			continue
 		}
 		hasMethods = true
+		for _, sd := range t.ServerData {
+			if sd != nil && sd.MethodResultField != "" {
+				hasServerDataProjection = true
+			}
+		}
 		if t.Bounds == nil || t.Bounds.Projection == nil || t.Bounds.Projection.Returned == nil || t.Bounds.Projection.Truncated == nil {
 			continue
 		}
@@ -258,14 +264,21 @@ func toolsetProviderFile(genpkg string, ts *ToolsetData) *codegen.File {
 	imports := make([]*codegen.ImportSpec, 0, 6)
 	imports = append(imports,
 		codegen.SimpleImport("context"),
+		codegen.SimpleImport("encoding/json"),
 		codegen.SimpleImport("errors"),
 		codegen.SimpleImport("fmt"),
+		&codegen.ImportSpec{Path: "github.com/CaliLuke/loom-mcp/runtime/agent/planner"},
+		&codegen.ImportSpec{Path: "github.com/CaliLuke/loom-mcp/runtime/agent/runtime"},
+		&codegen.ImportSpec{Path: "github.com/CaliLuke/loom-mcp/runtime/agent/tools"},
 		&codegen.ImportSpec{Path: "github.com/CaliLuke/loom-mcp/runtime/toolregistry"},
 		&codegen.ImportSpec{Name: "loom", Path: upstreampaths.LoomPkgImportPath},
 		&codegen.ImportSpec{Name: ts.SourceService.PkgName, Path: serviceImportPath},
 	)
 	if hasBoundsProjection {
 		imports = append(imports, &codegen.ImportSpec{Path: "github.com/CaliLuke/loom-mcp/runtime/agent"})
+	}
+	if hasServerDataProjection {
+		imports = append(imports, &codegen.ImportSpec{Path: "github.com/CaliLuke/loom-mcp/runtime/agent/rawjson"})
 	}
 	sections := []codegen.Section{
 		codegen.Header(ts.Name+" tool provider", ts.SpecsPackageName, imports),

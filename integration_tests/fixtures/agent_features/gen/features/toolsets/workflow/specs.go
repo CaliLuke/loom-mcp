@@ -14,15 +14,17 @@ import (
 
 // Tool IDs for this toolset.
 const (
-	Draft   tools.Ident = "workflow.draft"
-	Publish tools.Ident = "workflow.publish"
-	Retry   tools.Ident = "workflow.retry"
-	Review  tools.Ident = "workflow.review"
-	Revise  tools.Ident = "workflow.revise"
+	Draft      tools.Ident = "workflow.draft"
+	MethodEcho tools.Ident = "workflow.method_echo"
+	Publish    tools.Ident = "workflow.publish"
+	Retry      tools.Ident = "workflow.retry"
+	Review     tools.Ident = "workflow.review"
+	Revise     tools.Ident = "workflow.revise"
 )
 
 var Specs = []tools.ToolSpec{
 	SpecDraft,
+	SpecMethodEcho,
 	SpecPublish,
 	SpecRetry,
 	SpecReview,
@@ -36,8 +38,17 @@ var (
 		Toolset:     "features.workflow",
 		Description: "Draft a response",
 		Tags:        []string{},
-		Payload:     tools.TypeSpec{Name: "DraftPayload", Schema: []byte("{\"$schema\":\"https://json-schema.org/draft/2020-12/schema\",\"type\":\"object\",\"properties\":{\"topic\":{\"type\":\"string\",\"description\":\"Topic to process\",\"example\":\"Tempore error nobis officiis.\"}},\"required\":[\"topic\"]}"), ExampleJSON: []byte("{\"topic\":\"abc123\"}"), ExampleInput: map[string]any{"topic": "abc123"}, Codec: draftPayloadCodec},
-		Result:      tools.TypeSpec{Name: "DraftResult", Schema: []byte("{\"$schema\":\"https://json-schema.org/draft/2020-12/schema\",\"type\":\"object\",\"properties\":{\"approved\":{\"type\":\"boolean\",\"description\":\"Whether the operation was approved\",\"example\":false},\"ok\":{\"type\":\"boolean\",\"description\":\"Whether the operation succeeded\",\"example\":true}},\"required\":[\"ok\"]}"), Codec: draftResultCodec},
+		Payload:     tools.TypeSpec{Name: "DraftPayload", Schema: []byte("{\"$schema\":\"https://json-schema.org/draft/2020-12/schema\",\"type\":\"object\",\"properties\":{\"topic\":{\"type\":\"string\",\"description\":\"Topic to process\",\"example\":\"Molestiae aut omnis eum voluptatibus corporis maiores.\"}},\"required\":[\"topic\"]}"), ExampleJSON: []byte("{\"topic\":\"abc123\"}"), ExampleInput: map[string]any{"topic": "abc123"}, Codec: draftPayloadCodec},
+		Result:      tools.TypeSpec{Name: "DraftResult", Schema: []byte("{\"$schema\":\"https://json-schema.org/draft/2020-12/schema\",\"type\":\"object\",\"properties\":{\"approved\":{\"type\":\"boolean\",\"description\":\"Whether the operation was approved\",\"example\":true},\"ok\":{\"type\":\"boolean\",\"description\":\"Whether the operation succeeded\",\"example\":true}},\"required\":[\"ok\"]}"), Codec: draftResultCodec},
+	}
+	SpecMethodEcho = tools.ToolSpec{
+		Name:        MethodEcho,
+		Service:     "features",
+		Toolset:     "features.workflow",
+		Description: "Echo a topic through the generated method dispatcher",
+		Tags:        []string{},
+		Payload:     tools.TypeSpec{Name: "MethodEchoPayload", Schema: []byte("{\"$schema\":\"https://json-schema.org/draft/2020-12/schema\",\"type\":\"object\",\"properties\":{\"topic\":{\"type\":\"string\",\"description\":\"Topic to send to the service method\",\"example\":\"In ducimus laudantium consequatur libero.\"}},\"required\":[\"topic\"]}"), ExampleJSON: []byte("{\"topic\":\"abc123\"}"), ExampleInput: map[string]any{"topic": "abc123"}, Codec: methodEchoPayloadCodec},
+		Result:      tools.TypeSpec{Name: "MethodEchoResult", Schema: []byte("{\"$schema\":\"https://json-schema.org/draft/2020-12/schema\",\"type\":\"object\",\"properties\":{\"message\":{\"type\":\"string\",\"description\":\"Message returned to the agent runtime\",\"example\":\"Ut voluptatem rem et natus nihil.\"},\"ok\":{\"type\":\"boolean\",\"description\":\"Whether the method-backed tool succeeded\",\"example\":true}},\"required\":[\"ok\",\"message\"]}"), Codec: methodEchoResultCodec},
 	}
 	SpecPublish = tools.ToolSpec{
 		Name:        Publish,
@@ -55,7 +66,7 @@ var (
 		Description: "Run a bounded retry step",
 		Tags:        []string{},
 		Payload:     tools.TypeSpec{Name: "RetryPayload", Schema: []byte("{\"$schema\":\"https://json-schema.org/draft/2020-12/schema\",\"type\":\"object\"}"), ExampleJSON: nil, ExampleInput: nil, Codec: retryPayloadCodec},
-		Result:      tools.TypeSpec{Name: "RetryResult", Schema: []byte("{\"$schema\":\"https://json-schema.org/draft/2020-12/schema\",\"type\":\"object\",\"properties\":{\"approved\":{\"type\":\"boolean\",\"description\":\"Whether the operation was approved\",\"example\":true},\"ok\":{\"type\":\"boolean\",\"description\":\"Whether the operation succeeded\",\"example\":false}},\"required\":[\"ok\"]}"), Codec: retryResultCodec},
+		Result:      tools.TypeSpec{Name: "RetryResult", Schema: []byte("{\"$schema\":\"https://json-schema.org/draft/2020-12/schema\",\"type\":\"object\",\"properties\":{\"approved\":{\"type\":\"boolean\",\"description\":\"Whether the operation was approved\",\"example\":false},\"ok\":{\"type\":\"boolean\",\"description\":\"Whether the operation succeeded\",\"example\":false}},\"required\":[\"ok\"]}"), Codec: retryResultCodec},
 	}
 	SpecReview = tools.ToolSpec{
 		Name:        Review,
@@ -73,7 +84,7 @@ var (
 		Description: "Revise the result",
 		Tags:        []string{},
 		Payload:     tools.TypeSpec{Name: "RevisePayload", Schema: []byte("{\"$schema\":\"https://json-schema.org/draft/2020-12/schema\",\"type\":\"object\"}"), ExampleJSON: nil, ExampleInput: nil, Codec: revisePayloadCodec},
-		Result:      tools.TypeSpec{Name: "ReviseResult", Schema: []byte("{\"$schema\":\"https://json-schema.org/draft/2020-12/schema\",\"type\":\"object\",\"properties\":{\"approved\":{\"type\":\"boolean\",\"description\":\"Whether the operation was approved\",\"example\":false},\"ok\":{\"type\":\"boolean\",\"description\":\"Whether the operation succeeded\",\"example\":true}},\"required\":[\"ok\"]}"), Codec: reviseResultCodec},
+		Result:      tools.TypeSpec{Name: "ReviseResult", Schema: []byte("{\"$schema\":\"https://json-schema.org/draft/2020-12/schema\",\"type\":\"object\",\"properties\":{\"approved\":{\"type\":\"boolean\",\"description\":\"Whether the operation was approved\",\"example\":true},\"ok\":{\"type\":\"boolean\",\"description\":\"Whether the operation succeeded\",\"example\":true}},\"required\":[\"ok\"]}"), Codec: reviseResultCodec},
 	}
 )
 
@@ -83,6 +94,12 @@ var (
 			ID:          Draft,
 			Title:       "Draft",
 			Description: "Draft a response",
+			Tags:        []string{},
+		},
+		{
+			ID:          MethodEcho,
+			Title:       "Method Echo",
+			Description: "Echo a topic through the generated method dispatcher",
 			Tags:        []string{},
 		},
 		{
@@ -112,6 +129,7 @@ var (
 	}
 	names = []tools.Ident{
 		Draft,
+		MethodEcho,
 		Publish,
 		Retry,
 		Review,
@@ -129,6 +147,8 @@ func Spec(name tools.Ident) (*tools.ToolSpec, bool) {
 	switch name {
 	case Draft:
 		return &SpecDraft, true
+	case MethodEcho:
+		return &SpecMethodEcho, true
 	case Publish:
 		return &SpecPublish, true
 	case Retry:
@@ -147,6 +167,8 @@ func PayloadSchema(name tools.Ident) ([]byte, bool) {
 	switch name {
 	case Draft:
 		return SpecDraft.Payload.Schema, true
+	case MethodEcho:
+		return SpecMethodEcho.Payload.Schema, true
 	case Publish:
 		return SpecPublish.Payload.Schema, true
 	case Retry:
@@ -165,6 +187,8 @@ func ResultSchema(name tools.Ident) ([]byte, bool) {
 	switch name {
 	case Draft:
 		return SpecDraft.Result.Schema, true
+	case MethodEcho:
+		return SpecMethodEcho.Result.Schema, true
 	case Publish:
 		return SpecPublish.Result.Schema, true
 	case Retry:

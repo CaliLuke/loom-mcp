@@ -91,3 +91,13 @@ func DispatchActionAssistantPath() string {
 func DispatchCommandAssistantPath() string {
 	return "/rpc"
 }
+
+// ProjectedLookupAssistantPath returns the URL path to the assistant service projected_lookup HTTP endpoint.
+func ProjectedLookupAssistantPath() string {
+	return "/rpc"
+}
+
+// ProjectedStatusAssistantPath returns the URL path to the assistant service projected_status HTTP endpoint.
+func ProjectedStatusAssistantPath() string {
+	return "/rpc"
+}

@@ -422,4 +422,48 @@ func (c *Client) DispatchCommand() loom.Endpoint {
 		}
 		return decodeResponse(resp)
 	}
+} // ProjectedLookup returns an endpoint that makes JSON-RPC requests to the
+// assistant service projected_lookup method.
+func (c *Client) ProjectedLookup() loom.Endpoint {
+	var (
+		encodeRequest  = EncodeProjectedLookupRequest(c.encoder)
+		decodeResponse = DecodeProjectedLookupResponse(c.decoder, c.RestoreResponseBody)
+	)
+
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildProjectedLookupRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		if err := encodeRequest(req, v); err != nil {
+			return nil, err
+		}
+		resp, err := c.Doer.Do(req)
+		if err != nil {
+			return nil, loomhttp.ErrRequestError("assistant", "projected_lookup", err)
+		}
+		return decodeResponse(resp)
+	}
+} // ProjectedStatus returns an endpoint that makes JSON-RPC requests to the
+// assistant service projected_status method.
+func (c *Client) ProjectedStatus() loom.Endpoint {
+	var (
+		encodeRequest  = EncodeProjectedStatusRequest(c.encoder)
+		decodeResponse = DecodeProjectedStatusResponse(c.decoder, c.RestoreResponseBody)
+	)
+
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildProjectedStatusRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		if err := encodeRequest(req, v); err != nil {
+			return nil, err
+		}
+		resp, err := c.Doer.Do(req)
+		if err != nil {
+			return nil, loomhttp.ErrRequestError("assistant", "projected_status", err)
+		}
+		return decodeResponse(resp)
+	}
 }

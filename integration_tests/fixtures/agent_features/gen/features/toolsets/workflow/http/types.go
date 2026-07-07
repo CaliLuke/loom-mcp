@@ -28,6 +28,26 @@ type (
 		Approved *bool `json:"approved,omitempty"`
 	}
 
+	// MethodEchoPayloadTransport is the internal JSON transport type for MethodEchoPayload.
+	// It lives in the toolset-local http package and is used only for JSON
+	// decode + validation (missing-field detection) before transforming into
+	// the public tool type.
+	MethodEchoPayloadTransport struct {
+		// Topic to send to the service method
+		Topic *string `json:"topic"`
+	}
+
+	// MethodEchoResultTransport is the internal JSON transport type for MethodEchoResult.
+	// It lives in the toolset-local http package and is used only for JSON
+	// decode + validation (missing-field detection) before transforming into
+	// the public tool type.
+	MethodEchoResultTransport struct {
+		// Whether the method-backed tool succeeded
+		OK *bool `json:"ok"`
+		// Message returned to the agent runtime
+		Message *string `json:"message"`
+	}
+
 	// PublishPayloadTransport is the internal JSON transport type for PublishPayload.
 	// It lives in the toolset-local http package and is used only for JSON
 	// decode + validation (missing-field detection) before transforming into

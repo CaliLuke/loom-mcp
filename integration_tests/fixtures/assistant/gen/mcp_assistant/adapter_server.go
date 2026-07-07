@@ -24,6 +24,8 @@ import (
 	"time"
 
 	assistant "example.com/assistant/gen/assistant"
+	projected "example.com/assistant/gen/assistant/toolsets/projected"
+	agentruntime "github.com/CaliLuke/loom-mcp/runtime/agent/runtime"
 	mcpruntime "github.com/CaliLuke/loom-mcp/runtime/mcp"
 	mcpskills "github.com/CaliLuke/loom-mcp/runtime/mcp/skills"
 	goahttp "github.com/CaliLuke/loom/http"
@@ -1020,6 +1022,18 @@ func (a *MCPAdapter) generatedToolCatalog() []*ToolInfo {
 		Name:         "dispatch_command",
 		OutputSchema: json.RawMessage([]byte("{\"type\":\"object\",\"required\":[\"ack\"],\"properties\":{\"ack\":{\"type\":\"string\",\"description\":\"Acknowledgement\"}},\"additionalProperties\":false}")),
 		Title:        stringPtr("Dispatch Command"),
+	}, &ToolInfo{
+		Description:  stringPtr("Lookup projected runtime tool data"),
+		InputSchema:  json.RawMessage(projected.SpecProjectedLookupTool.Payload.Schema),
+		Name:         "projected_lookup_tool",
+		OutputSchema: json.RawMessage(projected.SpecProjectedLookupTool.Result.Schema),
+		Title:        stringPtr("Projected Lookup Tool"),
+	}, &ToolInfo{
+		Description:  stringPtr("Return projected runtime status"),
+		InputSchema:  json.RawMessage(projected.SpecProjectedStatusTool.Payload.Schema),
+		Name:         "projected_status_tool",
+		OutputSchema: json.RawMessage(projected.SpecProjectedStatusTool.Result.Schema),
+		Title:        stringPtr("Projected Status Tool"),
 	}}
 }
 func (a *MCPAdapter) toolSearchEnabled() bool {
@@ -1067,6 +1081,10 @@ func isGeneratedToolName(name string) bool {
 	case "dispatch_action":
 		return true
 	case "dispatch_command":
+		return true
+	case "projected_lookup_tool":
+		return true
+	case "projected_status_tool":
 		return true
 	default:
 		return false
@@ -1982,6 +2000,21 @@ func dispatchCommandInputRecovery(err error, raw json.RawMessage) string {
 	}
 	return "Provide valid tool arguments. Example: " + example
 }
+func projectedLookupInputRecovery(err error, raw json.RawMessage) string {
+	message := strings.TrimSpace(loom.ErrorSafeMessage(err))
+	if message == "" {
+		message = strings.TrimSpace(err.Error())
+	}
+	_ = raw
+	example := "{\"query\":\"abc123\"}"
+	if field := missingFieldFromMessage(message); field != "" {
+		return fmt.Sprintf("Include required field %q. Example: %s", field, example)
+	}
+	if strings.Contains(message, "unexpected end of JSON input") || strings.Contains(message, "unexpected EOF") {
+		return "Provide complete JSON arguments. Example: " + example
+	}
+	return "Provide valid tool arguments. Example: " + example
+}
 func (a *MCPAdapter) ToolsCall(ctx context.Context, p *ToolsCallPayload, stream ToolsCallServerStream) (err error) {
 	attrs := []attribute.KeyValue{}
 	if p != nil && p.Name != "" {
@@ -2376,6 +2409,62 @@ func (a *MCPAdapter) executeRealTool(ctx context.Context, p *ToolsCallPayload, s
 		}
 		s := formatToolSuccessText(result)
 		structuredContent, serr := json.Marshal(result)
+		if serr != nil {
+			return false, serr
+		}
+		final := &ToolsCallResult{
+			Content:           []*ContentItem{buildContentItem(a, s)},
+			StructuredContent: structuredContent,
+		}
+		a.log(ctx, "response", map[string]any{
+			"method": "tools/call",
+			"name":   p.Name,
+		})
+		return false, stream.SendAndClose(ctx, final)
+	case "projected_lookup_tool":
+		meta := &agentruntime.ToolCallMeta{}
+		toolResult, err := projected.DispatchProjectedLookupToolMethod(ctx, meta, p.Arguments, nil, projected.ProjectedLookupToolDispatchOptions{Call: func(ctx context.Context, args any) (any, error) {
+			return a.service.ProjectedLookup(ctx, args.(*assistant.ProjectedLookupPayload))
+		}})
+		if err != nil {
+			return true, a.sendToolError(ctx, stream, p.Name, err)
+		}
+		if toolResult == nil {
+			return false, fmt.Errorf("projected tool %q returned nil result", p.Name)
+		}
+		if toolResult.Error != nil {
+			return true, a.sendToolError(ctx, stream, p.Name, toolResult.Error)
+		}
+		s := formatToolSuccessText(toolResult.Result)
+		structuredContent, serr := json.Marshal(toolResult.Result)
+		if serr != nil {
+			return false, serr
+		}
+		final := &ToolsCallResult{
+			Content:           []*ContentItem{buildContentItem(a, s)},
+			StructuredContent: structuredContent,
+		}
+		a.log(ctx, "response", map[string]any{
+			"method": "tools/call",
+			"name":   p.Name,
+		})
+		return false, stream.SendAndClose(ctx, final)
+	case "projected_status_tool":
+		meta := &agentruntime.ToolCallMeta{}
+		toolResult, err := projected.DispatchProjectedStatusToolMethod(ctx, meta, p.Arguments, nil, projected.ProjectedStatusToolDispatchOptions{Call: func(ctx context.Context, args any) (any, error) {
+			return a.service.ProjectedStatus(ctx)
+		}})
+		if err != nil {
+			return true, a.sendToolError(ctx, stream, p.Name, err)
+		}
+		if toolResult == nil {
+			return false, fmt.Errorf("projected tool %q returned nil result", p.Name)
+		}
+		if toolResult.Error != nil {
+			return true, a.sendToolError(ctx, stream, p.Name, toolResult.Error)
+		}
+		s := formatToolSuccessText(toolResult.Result)
+		structuredContent, serr := json.Marshal(toolResult.Result)
 		if serr != nil {
 			return false, serr
 		}

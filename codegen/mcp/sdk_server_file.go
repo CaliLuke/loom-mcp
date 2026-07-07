@@ -2,6 +2,7 @@ package codegen
 
 import (
 	"path/filepath"
+	"sort"
 
 	"github.com/CaliLuke/loom/codegen"
 	"github.com/CaliLuke/loom/expr"
@@ -28,6 +29,24 @@ func buildMCPSDKServerFile(genpkg string, svc *expr.ServiceExpr, data *AdapterDa
 		sdkServerImports = append(sdkServerImports, &codegen.ImportSpec{
 			Path: "github.com/CaliLuke/loom-mcp/runtime/mcp/skills",
 			Name: "mcpskills",
+		})
+	}
+	projectedImports := make(map[string]string)
+	for _, tool := range data.Tools {
+		if tool == nil || tool.Projected == nil {
+			continue
+		}
+		projectedImports[tool.Projected.SpecsPackageName] = tool.Projected.SpecsImportPath
+	}
+	projectedNames := make([]string, 0, len(projectedImports))
+	for name := range projectedImports {
+		projectedNames = append(projectedNames, name)
+	}
+	sort.Strings(projectedNames)
+	for _, name := range projectedNames {
+		sdkServerImports = append(sdkServerImports, &codegen.ImportSpec{
+			Path: projectedImports[name],
+			Name: name,
 		})
 	}
 	sections := []codegen.Section{
@@ -582,10 +601,10 @@ func emitSDKRegisterTools(stmt *jen.Statement, data *AdapterData) {
 					jen.Id("Name"):        jen.Lit(tool.Name),
 					jen.Id("Title"):       jen.Lit(tool.Title),
 					jen.Id("Description"): jen.Lit(tool.Description),
-					jen.Id("InputSchema"): jen.Id("sdkToolInputSchema").Call(jen.Lit(tool.InputSchema)),
+					jen.Id("InputSchema"): sdkToolSchemaValue(tool, true),
 				}
-				if tool.OutputSchema != "" {
-					dict[jen.Id("OutputSchema")] = jen.Id("sdkToolInputSchema").Call(jen.Lit(tool.OutputSchema))
+				if outputSchema := sdkToolSchemaValue(tool, false); outputSchema != nil {
+					dict[jen.Id("OutputSchema")] = outputSchema
 				}
 				if tool.MetaJSON != "" {
 					dict[jen.Id("Meta")] = jen.Id("sdkMeta").Call(jen.Qual("encoding/json", "RawMessage").Call(jen.Index().Byte().Call(jen.Lit(tool.MetaJSON))))
@@ -604,6 +623,28 @@ func emitSDKRegisterTools(stmt *jen.Statement, data *AdapterData) {
 			g.Return(jen.Nil())
 		})
 	stmt.Line()
+}
+
+func sdkToolSchemaValue(tool *ToolAdapter, input bool) jen.Code {
+	if tool.Projected != nil {
+		if input {
+			return jen.Qual("encoding/json", "RawMessage").Call(
+				jen.Id(tool.Projected.SpecsPackageName).Dot(tool.Projected.SpecName).Dot("Payload").Dot("Schema"),
+			)
+		}
+		if !input && tool.Projected.HasResult {
+			return jen.Qual("encoding/json", "RawMessage").Call(
+				jen.Id(tool.Projected.SpecsPackageName).Dot(tool.Projected.SpecName).Dot("Result").Dot("Schema"),
+			)
+		}
+	}
+	if input {
+		return jen.Id("sdkToolInputSchema").Call(jen.Lit(tool.InputSchema))
+	}
+	if tool.OutputSchema == "" {
+		return nil
+	}
+	return jen.Id("sdkToolInputSchema").Call(jen.Lit(tool.OutputSchema))
 }
 
 func emitSDKRegisterResources(stmt *jen.Statement, data *AdapterData) {

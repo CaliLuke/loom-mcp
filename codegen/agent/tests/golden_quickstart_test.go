@@ -18,6 +18,7 @@ func TestQuickstart_Renders_Minimal(t *testing.T) {
 
 	content := fileContent(t, files, "AGENTS_QUICKSTART.md")
 	require.NotEmpty(t, content)
+	require.NotContains(t, content, "* **`calc.helpers`** ")
 
 	// Compare the header + services overview against a golden with normalization.
 	// Split at the start of section 2 to keep the golden focused and stable.

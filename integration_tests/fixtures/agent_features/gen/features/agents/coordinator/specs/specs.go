@@ -16,7 +16,7 @@ import (
 var (
 	// Specs is the static list of tool specs exported by this agent.
 
-	Specs = []tools.ToolSpec{workflow.SpecDraft, workflow.SpecPublish, workflow.SpecRetry, workflow.SpecReview, workflow.SpecRevise}
+	Specs = []tools.ToolSpec{workflow.SpecDraft, workflow.SpecMethodEcho, workflow.SpecPublish, workflow.SpecRetry, workflow.SpecReview, workflow.SpecRevise}
 
 	// metadata is the static list of policy metadata exported by this agent.
 
@@ -25,6 +25,11 @@ var (
 		ID:          tools.Ident("workflow.draft"),
 		Tags:        []string{},
 		Title:       "Draft",
+	}, {
+		Description: "Echo a topic through the generated method dispatcher",
+		ID:          tools.Ident("workflow.method_echo"),
+		Tags:        []string{},
+		Title:       "Method Echo",
 	}, {
 		Description: "Publish the result",
 		ID:          tools.Ident("workflow.publish"),
@@ -49,7 +54,7 @@ var (
 
 	// names is the static list of exported tool identifiers.
 
-	names = []tools.Ident{workflow.Draft, workflow.Publish, workflow.Retry, workflow.Review, workflow.Revise}
+	names = []tools.Ident{workflow.Draft, workflow.MethodEcho, workflow.Publish, workflow.Retry, workflow.Review, workflow.Revise}
 )
 
 // Names returns the tool identifiers exported by this agent.
@@ -62,6 +67,8 @@ func Spec(name tools.Ident) (*tools.ToolSpec, bool) {
 	switch name {
 	case tools.Ident("workflow.draft"):
 		return &workflow.SpecDraft, true
+	case tools.Ident("workflow.method_echo"):
+		return &workflow.SpecMethodEcho, true
 	case tools.Ident("workflow.publish"):
 		return &workflow.SpecPublish, true
 	case tools.Ident("workflow.retry"):

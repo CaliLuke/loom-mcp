@@ -408,7 +408,7 @@ cfg := <agentpkg>.<AgentConfig>{
 * **Tools this agent can USE:**
 {{- if .UsedToolsets }}
 {{- range .UsedToolsets }}
-* **`{{ .QualifiedName }}`** {{ if isMCPBacked . }}(MCP Suite: `{{ mcpService . }}.{{ .Name }}`){{ end }}
+* **`{{ .QualifiedName }}`**{{ if isMCPBacked . }} (MCP Suite: `{{ mcpService . }}.{{ .Name }}`){{ end }}
 {{- if .Tools }}
 {{- range .Tools }}
 * **Tool: `{{ .QualifiedName }}`**

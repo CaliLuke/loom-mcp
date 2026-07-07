@@ -348,12 +348,22 @@ func toolInfoValue(tool *ToolAdapter) jen.Code {
 		jen.Id("Title"):       jen.Id("stringPtr").Call(jen.Lit(tool.Title)),
 		jen.Id("Description"): jen.Id("stringPtr").Call(jen.Lit(tool.Description)),
 	}
-	if tool.InputSchema != "" {
+	switch {
+	case tool.Projected != nil:
+		dict[jen.Id("InputSchema")] = jen.Qual("encoding/json", "RawMessage").Call(
+			jen.Id(tool.Projected.SpecsPackageName).Dot(tool.Projected.SpecName).Dot("Payload").Dot("Schema"),
+		)
+	case tool.InputSchema != "":
 		dict[jen.Id("InputSchema")] = jen.Qual("encoding/json", "RawMessage").Call(jen.Index().Byte().Call(jen.Lit(tool.InputSchema)))
-	} else {
+	default:
 		dict[jen.Id("InputSchema")] = jen.Qual("encoding/json", "RawMessage").Call(jen.Index().Byte().Call(jen.Lit(`{"type":"object","properties":{},"additionalProperties":false}`)))
 	}
-	if tool.OutputSchema != "" {
+	switch {
+	case tool.Projected != nil && tool.Projected.HasResult:
+		dict[jen.Id("OutputSchema")] = jen.Qual("encoding/json", "RawMessage").Call(
+			jen.Id(tool.Projected.SpecsPackageName).Dot(tool.Projected.SpecName).Dot("Result").Dot("Schema"),
+		)
+	case tool.OutputSchema != "":
 		dict[jen.Id("OutputSchema")] = jen.Qual("encoding/json", "RawMessage").Call(jen.Index().Byte().Call(jen.Lit(tool.OutputSchema)))
 	}
 	if tool.AnnotationsJSON != "" {
@@ -1397,6 +1407,10 @@ func emitToolsCallHandler(stmt *jen.Statement, data *AdapterData) {
 }
 
 func emitToolCase(g *jen.Group, tool *ToolAdapter) {
+	if tool.Projected != nil {
+		emitProjectedToolCase(g, tool)
+		return
+	}
 	if tool.HasPayload {
 		g.Var().Id("payload").Add(rawExpr(tool.PayloadType))
 		if len(tool.DefaultFields) > 0 || len(tool.RequiredFields) > 0 || len(tool.EnumFields) > 0 {
@@ -1534,4 +1548,70 @@ func serviceMethodCall(tool *ToolAdapter, receiver *jen.Statement, ctx jen.Code,
 		args = append(args, stream)
 	}
 	return receiver.Dot(tool.OriginalMethodName).Call(args...)
+}
+
+func emitProjectedToolCase(g *jen.Group, tool *ToolAdapter) {
+	projected := tool.Projected
+	specs := jen.Id(projected.SpecsPackageName)
+	g.Id("meta").Op(":=").Op("&").Id("agentruntime").Dot("ToolCallMeta").Values()
+	g.List(jen.Id("toolResult"), jen.Id("err")).Op(":=").Id(projected.SpecsPackageName).Dot(projected.DispatcherFuncName).Call(
+		jen.Id("ctx"),
+		jen.Id("meta"),
+		jen.Id("p").Dot("Arguments"),
+		jen.Nil(),
+		specs.Dot(projected.DispatchOptionsName).Values(jen.Dict{
+			jen.Id("Call"): projectedServiceCallFunc(projected),
+		}),
+	)
+	g.If(jen.Id("err").Op("!=").Nil()).Block(
+		jen.Return(jen.True(), jen.Id("a").Dot("sendToolError").Call(jen.Id("ctx"), jen.Id("stream"), jen.Id("p").Dot("Name"), jen.Id("err"))),
+	)
+	g.If(jen.Id("toolResult").Op("==").Nil()).Block(
+		jen.Return(jen.False(), jen.Qual("fmt", "Errorf").Call(jen.Lit("projected tool %q returned nil result"), jen.Id("p").Dot("Name"))),
+	)
+	g.If(jen.Id("toolResult").Dot("Error").Op("!=").Nil()).Block(
+		jen.Return(jen.True(), jen.Id("a").Dot("sendToolError").Call(jen.Id("ctx"), jen.Id("stream"), jen.Id("p").Dot("Name"), jen.Id("toolResult").Dot("Error"))),
+	)
+	if tool.HasResult {
+		g.Id("s").Op(":=").Id("formatToolSuccessText").Call(jen.Id("toolResult").Dot("Result"))
+		g.List(jen.Id("structuredContent"), jen.Id("serr")).Op(":=").Qual("encoding/json", "Marshal").Call(jen.Id("toolResult").Dot("Result"))
+		g.If(jen.Id("serr").Op("!=").Nil()).Block(
+			jen.Return(jen.False(), jen.Id("serr")),
+		)
+		g.Id("final").Op(":=").Op("&").Id("ToolsCallResult").Values(jen.Dict{
+			jen.Id("Content"): jen.Index().Op("*").Id("ContentItem").Values(
+				jen.Id("buildContentItem").Call(jen.Id("a"), jen.Id("s")),
+			),
+			jen.Id("StructuredContent"): jen.Id("structuredContent"),
+		})
+		g.Id("a").Dot("log").Call(jen.Id("ctx"), jen.Lit("response"), jen.Map(jen.String()).Any().Values(jen.Dict{
+			jen.Lit("method"): jen.Lit("tools/call"),
+			jen.Lit("name"):   jen.Id("p").Dot("Name"),
+		}))
+		g.Return(jen.False(), jen.Id("stream").Dot("SendAndClose").Call(jen.Id("ctx"), jen.Id("final")))
+		return
+	}
+	g.Id("ok").Op(":=").Id("stringPtr").Call(jen.Lit("OK"))
+	g.Return(jen.False(), jen.Id("stream").Dot("SendAndClose").Call(jen.Id("ctx"), jen.Op("&").Id("ToolsCallResult").Values(jen.Dict{
+		jen.Id("Content"): jen.Index().Op("*").Id("ContentItem").Values(
+			jen.Op("&").Id("ContentItem").Values(jen.Dict{
+				jen.Id("Type"): jen.Lit("text"),
+				jen.Id("Text"): jen.Id("ok"),
+			}),
+		),
+	})))
+}
+
+func projectedServiceCallFunc(projected *ProjectedToolAdapter) jen.Code {
+	call := jen.Id("a").Dot("service").Dot(projected.BoundMethod)
+	if !projected.HasPayload {
+		return jen.Func().
+			Params(jen.Id("ctx").Qual("context", "Context"), jen.Id("args").Any()).
+			Params(jen.Any(), jen.Error()).
+			Block(jen.Return(call.Call(jen.Id("ctx"))))
+	}
+	return jen.Func().
+		Params(jen.Id("ctx").Qual("context", "Context"), jen.Id("args").Any()).
+		Params(jen.Any(), jen.Error()).
+		Block(jen.Return(call.Call(jen.Id("ctx"), jen.Id("args").Assert(rawExpr(projected.MethodPayloadType)))))
 }

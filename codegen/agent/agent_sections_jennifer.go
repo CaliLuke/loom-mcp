@@ -48,6 +48,7 @@ func usedToolsSection(data agentToolsetFileData) gocodegen.Section {
 func toolProviderSection(data toolProviderFileData) gocodegen.Section {
 	return gocodegen.MustJenniferSection("tool-provider", func(stmt *jen.Statement) {
 		emitToolProviderTypes(stmt, data)
+		emitToolProviderDispatchers(stmt, data)
 		emitToolProviderHelpers(stmt)
 		emitToolProviderCtor(stmt, data)
 		emitToolProviderHandle(stmt, data)
@@ -472,6 +473,234 @@ func emitToolProviderTypes(stmt *jen.Statement, data toolProviderFileData) {
 	stmt.Line()
 }
 
+func emitToolProviderDispatchers(stmt *jen.Statement, data toolProviderFileData) {
+	for _, tool := range data.Tools {
+		if !tool.IsMethodBacked {
+			continue
+		}
+		optionsName := tool.ConstName + "DispatchOptions"
+		dispatchName := "Dispatch" + tool.ConstName + "Method"
+		gocodegen.Doc(stmt, optionsName+" customizes "+dispatchName+".")
+		stmt.Type().Id(optionsName).Struct(
+			jen.Id("Call").Func().Params(jen.Qual("context", "Context"), jen.Any()).Params(jen.Any(), jen.Error()),
+			jen.Id("MapPayload").Func().Params(jen.Id("tools").Dot("Ident"), jen.Any(), jen.Op("*").Id("runtime").Dot("ToolCallMeta")).Params(jen.Any(), jen.Error()),
+			jen.Id("MapResult").Func().Params(jen.Id("tools").Dot("Ident"), jen.Any(), jen.Op("*").Id("runtime").Dot("ToolCallMeta")).Params(jen.Any(), jen.Error()),
+			jen.Id("Injectors").Index().Func().Params(jen.Qual("context", "Context"), jen.Any(), jen.Op("*").Id("runtime").Dot("ToolCallMeta")).Error(),
+		)
+		stmt.Line()
+		gocodegen.Doc(stmt, dispatchName+" executes "+tool.QualifiedName+" through its bound service method.")
+		stmt.Func().Id(dispatchName).
+			Params(
+				jen.Id("ctx").Qual("context", "Context"),
+				jen.Id("meta").Op("*").Id("runtime").Dot("ToolCallMeta"),
+				jen.Id("raw").Qual("encoding/json", "RawMessage"),
+				jen.Id("labels").Map(jen.String()).String(),
+				jen.Id("opts").Id(optionsName),
+			).
+			Params(jen.Op("*").Id("planner").Dot("ToolResult"), jen.Error()).
+			BlockFunc(func(g *jen.Group) {
+				g.If(jen.Id("opts").Dot("Call").Op("==").Nil()).Block(
+					jen.Return(jen.Op("&").Id("planner").Dot("ToolResult").Values(jen.Dict{
+						jen.Id("Name"):  jen.Id(tool.ConstName),
+						jen.Id("Error"): jen.Id("planner").Dot("NewToolError").Call(jen.Lit("method dispatcher missing Call")),
+					}), jen.Nil()),
+				)
+				g.Var().Id("toolArgs").Any()
+				g.If(jen.Len(jen.Id("raw")).Op(">").Lit(0)).Block(
+					jen.List(jen.Id("value"), jen.Id("err")).Op(":=").Id(tool.ConstName+"PayloadCodec").Dot("FromJSON").Call(jen.Id("raw")),
+					jen.If(jen.Id("err").Op("!=").Nil()).Block(
+						jen.Return(jen.Op("&").Id("planner").Dot("ToolResult").Values(jen.Dict{
+							jen.Id("Name"):  jen.Id(tool.ConstName),
+							jen.Id("Error"): jen.Id("planner").Dot("ToolErrorFromError").Call(jen.Id("err")),
+						}), jen.Nil()),
+					),
+					jen.Id("toolArgs").Op("=").Id("value"),
+				)
+				g.Var().Id("methodIn").Any()
+				g.If(jen.Id("opts").Dot("MapPayload").Op("!=").Nil()).Block(
+					jen.List(jen.Id("value"), jen.Id("err")).Op(":=").Id("opts").Dot("MapPayload").Call(jen.Id(tool.ConstName), jen.Id("toolArgs"), jen.Id("meta")),
+					jen.If(jen.Id("err").Op("!=").Nil()).Block(
+						emitToolProviderDispatcherErrResult(tool),
+					),
+					jen.Id("methodIn").Op("=").Id("value"),
+				).Else().BlockFunc(func(eg *jen.Group) {
+					switch {
+					case tool.MethodPayloadTypeRef == "":
+						eg.Id("methodIn").Op("=").Nil()
+					case tool.PayloadAliasesMethod:
+						eg.Id("methodIn").Op("=").Id("toolArgs")
+					default:
+						eg.Id("methodIn").Op("=").Id("Init" + tool.ConstName + "MethodPayload").Call(jen.Id("toolArgs").Assert(jen.Op("*").Id(tool.ConstName + "Payload")))
+					}
+				})
+				if len(tool.InjectedFields) > 0 {
+					g.Id("payload").Op(":=").Id("methodIn").Assert(gocodegen.TypeRef(tool.MethodPayloadTypeRef))
+					for _, field := range tool.InjectedFields {
+						if isMetaInject(field) {
+							g.Id("payload").Dot(gocodegen.Goify(field, true)).Op("=").Id("meta").Dot(gocodegen.Goify(field, true))
+							continue
+						}
+						g.List(jen.Id("value"), jen.Id("ok")).Op(":=").Id("labels").Index(jen.Lit(field))
+						g.If(jen.Op("!").Id("ok").Op("||").Id("value").Op("==").Lit("")).Block(
+							jen.Id("err").Op(":=").Qual("fmt", "Errorf").Call(jen.Lit("missing required run label %q for injected field %q"), jen.Lit(field), jen.Lit(field)),
+							jen.Return(jen.Op("&").Id("planner").Dot("ToolResult").Values(jen.Dict{
+								jen.Id("Name"):  jen.Id(tool.ConstName),
+								jen.Id("Error"): jen.Id("planner").Dot("ToolErrorFromError").Call(jen.Id("err")),
+							}), jen.Nil()),
+						)
+						g.Id("payload").Dot(gocodegen.Goify(field, true)).Op("=").Id("value")
+					}
+					g.Id("methodIn").Op("=").Id("payload")
+				}
+				g.For(jen.List(jen.Id("_"), jen.Id("inject")).Op(":=").Range().Id("opts").Dot("Injectors")).Block(
+					jen.If(jen.Id("inject").Op("==").Nil()).Block(jen.Continue()),
+					jen.If(jen.Id("err").Op(":=").Id("inject").Call(jen.Id("ctx"), jen.Id("methodIn"), jen.Id("meta")), jen.Id("err").Op("!=").Nil()).Block(
+						jen.Return(jen.Op("&").Id("planner").Dot("ToolResult").Values(jen.Dict{
+							jen.Id("Name"):  jen.Id(tool.ConstName),
+							jen.Id("Error"): jen.Id("planner").Dot("ToolErrorFromError").Call(jen.Id("err")),
+						}), jen.Nil()),
+					),
+				)
+				g.List(jen.Id("methodOut"), jen.Id("err")).Op(":=").Id("opts").Dot("Call").Call(jen.Id("ctx"), jen.Id("methodIn"))
+				g.If(jen.Id("err").Op("!=").Nil()).Block(
+					jen.Id("tr").Op(":=").Op("&").Id("planner").Dot("ToolResult").Values(jen.Dict{
+						jen.Id("Name"):  jen.Id(tool.ConstName),
+						jen.Id("Error"): jen.Id("planner").Dot("ToolErrorFromError").Call(jen.Id("err")),
+					}),
+					jen.Var().Id("provider").Id("planner").Dot("RetryHintProvider"),
+					jen.If(jen.Qual("errors", "As").Call(jen.Id("err"), jen.Op("&").Id("provider"))).Block(
+						jen.If(jen.Id("hint").Op(":=").Id("provider").Dot("RetryHint").Call(jen.Id(tool.ConstName)), jen.Id("hint").Op("!=").Nil()).Block(
+							jen.Id("tr").Dot("RetryHint").Op("=").Id("hint"),
+						),
+					),
+					jen.Return(jen.Id("tr"), jen.Nil()),
+				)
+				if toolNeedsMethodResultProjection(tool) {
+					g.List(jen.Id("typedMethodOut"), jen.Id("ok")).Op(":=").Id("methodOut").Assert(gocodegen.TypeRef(tool.MethodResultTypeRef))
+					g.If(jen.Op("!").Id("ok")).Block(
+						jen.Return(jen.Op("&").Id("planner").Dot("ToolResult").Values(jen.Dict{
+							jen.Id("Name"):  jen.Id(tool.ConstName),
+							jen.Id("Error"): jen.Id("planner").Dot("NewToolError").Call(jen.Qual("fmt", "Sprintf").Call(jen.Lit("unexpected method result type for %q"), jen.Id(tool.ConstName))),
+						}), jen.Nil()),
+					)
+				}
+				if tool.HasResult {
+					g.Var().Id("result").Any()
+					g.If(jen.Id("opts").Dot("MapResult").Op("!=").Nil()).Block(
+						jen.List(jen.Id("value"), jen.Id("err")).Op(":=").Id("opts").Dot("MapResult").Call(jen.Id(tool.ConstName), jen.Id("methodOut"), jen.Id("meta")),
+						jen.If(jen.Id("err").Op("!=").Nil()).Block(
+							emitToolProviderDispatcherErrResult(tool),
+						),
+						jen.Id("result").Op("=").Id("value"),
+					).Else().BlockFunc(func(eg *jen.Group) {
+						if tool.ResultAliasesMethod {
+							eg.Id("result").Op("=").Id("methodOut")
+						} else {
+							if toolNeedsMethodResultProjection(tool) {
+								eg.Id("result").Op("=").Id("Init" + tool.ConstName + "ToolResult").Call(jen.Id("typedMethodOut"))
+							} else {
+								eg.Id("result").Op("=").Id("Init" + tool.ConstName + "ToolResult").Call(jen.Id("methodOut").Assert(gocodegen.TypeRef(tool.MethodResultTypeRef)))
+							}
+						}
+					})
+					resultFields := jen.Dict{
+						jen.Id("Name"):   jen.Id(tool.ConstName),
+						jen.Id("Result"): jen.Id("result"),
+					}
+					if toolHasBoundsProjection(tool) {
+						g.Id("bounds").Op(":=").Id("init" + gocodegen.Goify(tool.Name, true) + "Bounds").Call(jen.Id("typedMethodOut"))
+						resultFields[jen.Id("Bounds")] = jen.Id("bounds")
+					}
+					if toolHasServerDataProjection(tool) {
+						emitToolProviderDispatcherServerData(g, tool)
+						resultFields[jen.Id("ServerData")] = jen.Id("serverData")
+					}
+					g.Return(jen.Op("&").Id("planner").Dot("ToolResult").Values(resultFields), jen.Nil())
+				} else {
+					g.Return(jen.Op("&").Id("planner").Dot("ToolResult").Values(jen.Dict{
+						jen.Id("Name"): jen.Id(tool.ConstName),
+					}), jen.Nil())
+				}
+			})
+		stmt.Line()
+	}
+}
+
+func toolNeedsMethodResultProjection(tool *ToolData) bool {
+	return toolHasBoundsProjection(tool) || toolHasServerDataProjection(tool)
+}
+
+func toolHasBoundsProjection(tool *ToolData) bool {
+	return tool != nil && tool.Bounds != nil && tool.Bounds.Projection != nil && tool.Bounds.Projection.Returned != nil && tool.Bounds.Projection.Truncated != nil
+}
+
+func toolHasServerDataProjection(tool *ToolData) bool {
+	if tool == nil {
+		return false
+	}
+	for _, sd := range tool.ServerData {
+		if sd != nil && sd.MethodResultField != "" {
+			return true
+		}
+	}
+	return false
+}
+
+func isMetaInject(name string) bool {
+	switch gocodegen.Goify(name, true) {
+	case "RunID", "SessionID", "TurnID", "ToolCallID", "ParentToolCallID":
+		return true
+	default:
+		return false
+	}
+}
+
+func emitToolProviderDispatcherErrResult(tool *ToolData) jen.Code {
+	return jen.Return(jen.Op("&").Id("planner").Dot("ToolResult").Values(jen.Dict{
+		jen.Id("Name"):  jen.Id(tool.ConstName),
+		jen.Id("Error"): jen.Id("planner").Dot("ToolErrorFromError").Call(jen.Id("err")),
+	}), jen.Nil())
+}
+
+func emitToolProviderDispatcherServerData(g *jen.Group, tool *ToolData) {
+	g.Var().Id("serverItems").Index().Op("*").Id("toolregistry").Dot("ServerDataItem")
+	for _, sd := range tool.ServerData {
+		if sd == nil || sd.MethodResultField == "" {
+			continue
+		}
+		dataFunc := "Init" + tool.ConstName + gocodegen.Goify(sd.Kind, true) + "ServerData"
+		codecName := tool.ConstName + gocodegen.Goify(sd.Kind, true) + "ServerDataCodec"
+		g.Block(
+			jen.Id("data").Op(":=").Id(dataFunc).Call(jen.Id("typedMethodOut").Dot(gocodegen.Goify(sd.MethodResultField, true))),
+			jen.List(jen.Id("dataJSON"), jen.Id("err")).Op(":=").Id(codecName).Dot("ToJSON").Call(jen.Id("data")),
+			jen.If(jen.Id("err").Op("!=").Nil()).Block(
+				jen.Return(jen.Op("&").Id("planner").Dot("ToolResult").Values(jen.Dict{
+					jen.Id("Name"):  jen.Id(tool.ConstName),
+					jen.Id("Error"): jen.Id("planner").Dot("ToolErrorFromError").Call(jen.Id("err")),
+				}), jen.Nil()),
+			),
+			jen.If(jen.String().Call(jen.Id("dataJSON")).Op("!=").Lit("null")).Block(
+				jen.Id("serverItems").Op("=").Append(jen.Id("serverItems"), jen.Op("&").Id("toolregistry").Dot("ServerDataItem").Values(jen.Dict{
+					jen.Id("Kind"):     jen.Lit(sd.Kind),
+					jen.Id("Audience"): jen.Lit(sd.Audience),
+					jen.Id("Data"):     jen.Id("dataJSON"),
+				})),
+			),
+		)
+	}
+	g.Var().Id("serverData").Id("rawjson").Dot("Message")
+	g.If(jen.Len(jen.Id("serverItems")).Op(">").Lit(0)).Block(
+		jen.List(jen.Id("data"), jen.Id("err")).Op(":=").Qual("encoding/json", "Marshal").Call(jen.Id("serverItems")),
+		jen.If(jen.Id("err").Op("!=").Nil()).Block(
+			jen.Return(jen.Op("&").Id("planner").Dot("ToolResult").Values(jen.Dict{
+				jen.Id("Name"):  jen.Id(tool.ConstName),
+				jen.Id("Error"): jen.Id("planner").Dot("ToolErrorFromError").Call(jen.Id("err")),
+			}), jen.Nil()),
+		),
+		jen.Id("serverData").Op("=").Id("rawjson").Dot("Message").Call(jen.Id("data")),
+	)
+}
+
 func emitToolProviderHelpers(stmt *jen.Statement) {
 	stmt.Func().Id("toolErrorCode").Params(jen.Id("err").Error()).String().Block(
 		jen.Var().Id("se").Op("*").Id("loom").Dot("ServiceError"),
@@ -519,18 +748,26 @@ func emitToolProviderHandle(stmt *jen.Statement, data toolProviderFileData) {
 						continue
 					}
 					g.Case(jen.Id(tool.ConstName)).BlockFunc(func(cg *jen.Group) {
-						cg.List(jen.Id("args"), jen.Id("err")).Op(":=").Id(tool.ConstName + "PayloadCodec").Dot("FromJSON").Call(jen.Id("msg").Dot("Payload"))
-						cg.If(jen.Id("err").Op("!=").Nil()).Block(
-							jen.If(jen.List(jen.Id("issues")).Op(":=").Id("toolregistry").Dot("ValidationIssues").Call(jen.Id("err")), jen.Len(jen.Id("issues")).Op(">").Lit(0)).Block(
-								jen.Return(jen.Id("toolregistry").Dot("NewToolResultErrorMessageWithIssues").Call(jen.Id("msg").Dot("ToolUseID"), jen.Lit("invalid_arguments"), jen.Id("err").Dot("Error").Call(), jen.Id("issues")), jen.Nil()),
-							),
-							jen.Return(jen.Id("toolregistry").Dot("NewToolResultErrorMessage").Call(jen.Id("msg").Dot("ToolUseID"), jen.Lit("invalid_arguments"), jen.Id("err").Dot("Error").Call()), jen.Nil()),
-						)
-						cg.Id("methodIn").Op(":=").Id("Init" + tool.ConstName + "MethodPayload").Call(jen.Id("args"))
-						for _, field := range tool.InjectedFields {
-							cg.Id("methodIn").Dot(gocodegen.Goify(field, true)).Op("=").Id("msg").Dot("Meta").Dot(gocodegen.Goify(field, true))
+						if tool.MethodPayloadTypeRef != "" {
+							cg.List(jen.Id("args"), jen.Id("err")).Op(":=").Id(tool.ConstName + "PayloadCodec").Dot("FromJSON").Call(jen.Id("msg").Dot("Payload"))
+							cg.If(jen.Id("err").Op("!=").Nil()).Block(
+								jen.If(jen.List(jen.Id("issues")).Op(":=").Id("toolregistry").Dot("ValidationIssues").Call(jen.Id("err")), jen.Len(jen.Id("issues")).Op(">").Lit(0)).Block(
+									jen.Return(jen.Id("toolregistry").Dot("NewToolResultErrorMessageWithIssues").Call(jen.Id("msg").Dot("ToolUseID"), jen.Lit("invalid_arguments"), jen.Id("err").Dot("Error").Call(), jen.Id("issues")), jen.Nil()),
+								),
+								jen.Return(jen.Id("toolregistry").Dot("NewToolResultErrorMessage").Call(jen.Id("msg").Dot("ToolUseID"), jen.Lit("invalid_arguments"), jen.Id("err").Dot("Error").Call()), jen.Nil()),
+							)
+							if tool.PayloadAliasesMethod {
+								cg.Id("methodIn").Op(":=").Id("args")
+							} else {
+								cg.Id("methodIn").Op(":=").Id("Init" + tool.ConstName + "MethodPayload").Call(jen.Id("args"))
+							}
+							for _, field := range tool.InjectedFields {
+								cg.Id("methodIn").Dot(gocodegen.Goify(field, true)).Op("=").Id("msg").Dot("Meta").Dot(gocodegen.Goify(field, true))
+							}
+							cg.List(jen.Id("methodOut"), jen.Id("err")).Op(":=").Id("p").Dot("svc").Dot(tool.MethodGoName).Call(jen.Id("ctx"), jen.Id("methodIn"))
+						} else {
+							cg.List(jen.Id("methodOut"), jen.Id("err")).Op(":=").Id("p").Dot("svc").Dot(tool.MethodGoName).Call(jen.Id("ctx"))
 						}
-						cg.List(jen.Id("methodOut"), jen.Id("err")).Op(":=").Id("p").Dot("svc").Dot(tool.MethodGoName).Call(jen.Id("ctx"), jen.Id("methodIn"))
 						cg.If(jen.Id("err").Op("!=").Nil()).Block(
 							jen.If(jen.List(jen.Id("issues")).Op(":=").Id("toolregistry").Dot("ValidationIssues").Call(jen.Id("err")), jen.Len(jen.Id("issues")).Op(">").Lit(0)).Block(
 								jen.Return(jen.Id("toolregistry").Dot("NewToolResultErrorMessageWithIssues").Call(jen.Id("msg").Dot("ToolUseID"), jen.Lit("invalid_arguments"), jen.Id("err").Dot("Error").Call(), jen.Id("issues")), jen.Nil()),
@@ -538,8 +775,12 @@ func emitToolProviderHandle(stmt *jen.Statement, data toolProviderFileData) {
 							jen.Return(jen.Id("toolregistry").Dot("NewToolResultErrorMessage").Call(jen.Id("msg").Dot("ToolUseID"), jen.Id("toolErrorCode").Call(jen.Id("err")), jen.Id("err").Dot("Error").Call()), jen.Nil()),
 						)
 						if tool.HasResult {
-							cg.Id("result").Op(":=").Id("Init" + tool.ConstName + "ToolResult").Call(jen.Id("methodOut"))
-							cg.List(jen.Id("resultJSON"), jen.Id("err")).Op(":=").Id(tool.ConstName + "ResultCodec").Dot("ToJSON").Call(jen.Id("result"))
+							if tool.ResultAliasesMethod {
+								cg.List(jen.Id("resultJSON"), jen.Id("err")).Op(":=").Qual("encoding/json", "Marshal").Call(jen.Id("methodOut"))
+							} else {
+								cg.Id("result").Op(":=").Id("Init" + tool.ConstName + "ToolResult").Call(jen.Id("methodOut"))
+								cg.List(jen.Id("resultJSON"), jen.Id("err")).Op(":=").Id(tool.ConstName + "ResultCodec").Dot("ToJSON").Call(jen.Id("result"))
+							}
 							cg.If(jen.Id("err").Op("!=").Nil()).Block(
 								jen.Return(jen.Id("toolregistry").Dot("NewToolResultErrorMessage").Call(jen.Id("msg").Dot("ToolUseID"), jen.Lit("encode_failed"), jen.Id("err").Dot("Error").Call()), jen.Nil()),
 							)

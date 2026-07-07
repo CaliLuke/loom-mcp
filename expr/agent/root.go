@@ -5,6 +5,7 @@ import (
 	"sort"
 
 	"github.com/CaliLuke/loom-mcp/codegen/naming"
+	exprmcp "github.com/CaliLuke/loom-mcp/expr/mcp"
 	"github.com/CaliLuke/loom/eval"
 	goaexpr "github.com/CaliLuke/loom/expr"
 )
@@ -62,7 +63,7 @@ func (r *RootExpr) EvalName() string {
 
 // DependsOn returns the Goa roots this plugin depends on.
 func (r *RootExpr) DependsOn() []eval.Root {
-	return []eval.Root{goaexpr.Root}
+	return []eval.Root{goaexpr.Root, exprmcp.Root}
 }
 
 // Packages returns packages considered for DSL error attribution.
@@ -153,8 +154,54 @@ func (r *RootExpr) Validate() error {
 	r.validateUniqueRegistries(verr)
 	r.validateToolsets(verr)
 	r.validateOwnerScopedToolsetSlugs(verr)
+	r.validateMCPProjections(verr)
 
+	if len(verr.Errors) == 0 {
+		return nil
+	}
 	return verr
+}
+
+func (r *RootExpr) validateMCPProjections(verr *eval.ValidationErrors) {
+	if r == nil || verr == nil || exprmcp.Root == nil {
+		return
+	}
+	projectedNames := make(map[string]*ToolExpr)
+	for _, tool := range gatheredTools(gatheredToolsets(r.Agents, r.ServiceExports, r.Toolsets)) {
+		if tool == nil || !tool.ExposesSurface(ToolSurfaceMCP) {
+			continue
+		}
+		placement := tool.MCPPlacement
+		if placement == nil {
+			continue
+		}
+		mcp := exprmcp.Root.ServiceMCP(placement.Service, placement.MCPServer)
+		if mcp == nil {
+			verr.Add(tool, "MCPPlacement could not resolve service %q MCP server %q", placement.Service, placement.MCPServer)
+			continue
+		}
+		boundService := tool.ProjectedBoundServiceName()
+		if boundService == "" {
+			verr.Add(tool, "MCPPlacement requires a concrete BindTo service")
+			continue
+		}
+		if boundService != placement.Service {
+			verr.Add(tool, "MCPPlacement service %q must match bound service %q in v1", placement.Service, boundService)
+			continue
+		}
+		key := placement.Service + ":" + placement.MCPServer + ":" + tool.Name
+		if other, dup := projectedNames[key]; dup {
+			verr.Add(tool, "projected MCP tool name %q duplicates projected tool declared in %s", tool.Name, other.EvalName())
+			continue
+		}
+		projectedNames[key] = tool
+		for _, existing := range mcp.Tools {
+			if existing != nil && existing.Name == tool.Name {
+				verr.Add(tool, "projected MCP tool name %q duplicates method-level MCP tool in service %q MCP server %q", tool.Name, placement.Service, placement.MCPServer)
+				break
+			}
+		}
+	}
 }
 
 type toolsetValidator struct {

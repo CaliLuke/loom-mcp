@@ -59,6 +59,17 @@ Use this skill for `loom-mcp` work in this repo. Keep `AGENTS.md` short and keep
 - Agent-as-tool runs as a real child workflow. Parent and child are linked by `ChildRunLinked`, and parent tool results carry `RunLink`.
 - Stream visibility is profile-driven. Child runs are linked, not flattened, by default.
 - Runtime schemas come from generated `tool_specs.Specs` and codecs, not `docs.json`.
+- Toolset tools are runtime-only by default. Project a method-backed toolset
+  tool into MCP only with `Expose(AgentRuntime, MCPSurface)` plus
+  `MCPPlacement(service, mcpServer)`, and keep the placement on the same service
+  as the bound method. Method-level `Tool(...)` declarations remain MCP-only.
+- Projected MCP tools use generated toolset specs for MCP `ToolInfo` schemas
+  and generated `Dispatch<Tool>Method(...)` for execution. Do not duplicate
+  `BindTo(...)` transforms in MCP adapters.
+- Unified tool-surface projection v1 rejects projected tools that use
+  `Confirmation(...)`, `Inject(...)`, `ServerData(...)`,
+  `ResultReminder(...)`, or `BoundedResult(...)`; treat those as validation
+  errors until the runtime/MCP contract is explicitly extended.
 - Tool confirmation is runtime-owned and design-visible: declare
   `Confirmation(...)` in tool DSL for default approval requirements, or use
   `runtime.WithToolConfirmation(...)` for runtime overrides. The runtime emits
@@ -99,6 +110,9 @@ Use this skill for `loom-mcp` work in this repo. Keep `AGENTS.md` short and keep
   examples. `call_tool` schema text must require top-level `name` and
   `arguments` and warn not to use `args`. SDK compact mode must reject
   direct-hidden compatibility at construction.
+- Projected MCP tools must participate in compact discovery like method-level
+  MCP tools: validated `AlwaysVisible` pins, hidden `search_tools` discovery,
+  and `call_tool` invocation through `MCPAdapter.ToolsCall`.
 - Generated SDK-backed MCP servers expose prompt argument completion for
   enum-backed dynamic prompt arguments and place a runtime elicitor in request
   contexts so service code can call `runtime/mcp.Elicit` during MCP calls.

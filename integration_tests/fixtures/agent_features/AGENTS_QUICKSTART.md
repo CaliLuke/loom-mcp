@@ -290,6 +290,45 @@ func Execute(ctx context.Context, meta *runtime.ToolCallMeta, call *planner.Tool
 	}), nil
 }
 ```
+---
+
+#### Service-Side Tool Providers (Registry-Routed Execution)
+
+When a toolset is **method-backed** (a tool is declared via `BindTo(...)`) and the toolset is owned by a service, loom-mcp also generates a **tool provider**:
+
+- `gen/<service>/toolsets/<toolset>/provider.go`
+
+The provider implements `HandleToolCall(ctx, msg)` which:
+
+- Decodes the incoming tool payload JSON using the generated payload codec
+- Builds the Goa method payload (using the generated transforms)
+- Calls the bound service method
+- Encodes the tool result JSON (and optional artifact/sidecar) using the generated result codec
+
+To serve tool calls from the registry gateway, run the provider loop inside the owning service process:
+
+```go
+// cmd/<service>/main.go (or your service bootstrap)
+handler := <toolsetpkg>.NewProvider(svcImpl)
+go func() {
+    err := toolprovider.Serve(ctx, pulseClient, toolsetID, handler, toolprovider.Options{
+        Pong: func(ctx context.Context, pingID string) error {
+            return registryClient.Pong(ctx, &registry.PongPayload{
+                PingID:  pingID,
+                Toolset: toolsetID,
+            })
+        },
+    })
+    if err != nil {
+        panic(err)
+    }
+}()
+```
+
+Notes:
+
+- The registry publishes tool calls to the deterministic stream `toolset:<toolsetID>:requests` and providers publish results to `result:<toolUseID>`.
+- Providers are generated only when the toolset has at least one **method-backed** tool (and the toolset is not registry-backed).
 
 #### Connecting to Remote Services (MCP)
 
@@ -324,13 +363,15 @@ cfg := <agentpkg>.<AgentConfig>{
 ### Agent `coordinator` Toolsets
 
 * **Tools this agent can USE:**
-* **`features.artifacts`** 
+* **`features.artifacts`**
 * **`features.long_term_memory`**
-* **`features.memory`** 
-* **`features.skills`** 
-* **`features.workflow`** 
+* **`features.memory`**
+* **`features.skills`**
+* **`features.workflow`**
 * **Tool: `workflow.draft`**
 * *Draft a response*
+* **Tool: `workflow.method_echo`**
+* *Echo a topic through the generated method dispatcher*
 * **Tool: `workflow.publish`**
 * *Publish the result*
 * **Tool: `workflow.retry`**

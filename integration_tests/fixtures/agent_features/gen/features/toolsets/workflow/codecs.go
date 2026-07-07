@@ -29,6 +29,16 @@ var (
 		ToJSON:   MarshalDraftResult,
 		FromJSON: UnmarshalDraftResult,
 	}
+	// MethodEchoPayloadCodec serializes values of type *MethodEchoPayload to canonical JSON.
+	MethodEchoPayloadCodec = tools.JSONCodec[*MethodEchoPayload]{
+		ToJSON:   MarshalMethodEchoPayload,
+		FromJSON: UnmarshalMethodEchoPayload,
+	}
+	// MethodEchoResultCodec serializes values of type *MethodEchoResult to canonical JSON.
+	MethodEchoResultCodec = tools.JSONCodec[*MethodEchoResult]{
+		ToJSON:   MarshalMethodEchoResult,
+		FromJSON: UnmarshalMethodEchoResult,
+	}
 	// PublishPayloadCodec serializes values of type *PublishPayload to canonical JSON.
 	PublishPayloadCodec = tools.JSONCodec[*PublishPayload]{
 		ToJSON:   MarshalPublishPayload,
@@ -93,6 +103,32 @@ var (
 		},
 		FromJSON: func(data []byte) (any, error) {
 			return UnmarshalDraftResult(data)
+		},
+	}
+	// methodEchoPayloadCodec provides an untyped codec for *MethodEchoPayload.
+	methodEchoPayloadCodec = tools.JSONCodec[any]{
+		ToJSON: func(v any) ([]byte, error) {
+			// Prefer typed marshal when the value matches the expected type.
+			if typed, ok := v.(*MethodEchoPayload); ok {
+				return MarshalMethodEchoPayload(typed)
+			}
+			return nil, fmt.Errorf("invalid value type for *MethodEchoPayload: %T", v)
+		},
+		FromJSON: func(data []byte) (any, error) {
+			return UnmarshalMethodEchoPayload(data)
+		},
+	}
+	// methodEchoResultCodec provides an untyped codec for *MethodEchoResult.
+	methodEchoResultCodec = tools.JSONCodec[any]{
+		ToJSON: func(v any) ([]byte, error) {
+			// Prefer typed marshal when the value matches the expected type.
+			if typed, ok := v.(*MethodEchoResult); ok {
+				return MarshalMethodEchoResult(typed)
+			}
+			return nil, fmt.Errorf("invalid value type for *MethodEchoResult: %T", v)
+		},
+		FromJSON: func(data []byte) (any, error) {
+			return UnmarshalMethodEchoResult(data)
 		},
 	}
 	// publishPayloadCodec provides an untyped codec for *PublishPayload.
@@ -206,6 +242,13 @@ var DraftPayloadFieldDescs = map[string]string{
 var DraftResultFieldDescs = map[string]string{
 	"approved": "Whether the operation was approved",
 	"ok":       "Whether the operation succeeded",
+}
+var MethodEchoPayloadFieldDescs = map[string]string{
+	"topic": "Topic to send to the service method",
+}
+var MethodEchoResultFieldDescs = map[string]string{
+	"message": "Message returned to the agent runtime",
+	"ok":      "Whether the method-backed tool succeeded",
 }
 var PublishResultFieldDescs = map[string]string{
 	"approved": "Whether the operation was approved",
@@ -322,6 +365,40 @@ func enrichDraftResultValidationError(err error) error {
 	ve.descriptions = m
 	return ve
 }
+func enrichMethodEchoPayloadValidationError(err error) error {
+	ve, ok := err.(*ValidationError)
+	if !ok || ve == nil {
+		return err
+	}
+	if len(ve.issues) == 0 {
+		return err
+	}
+	m := make(map[string]string)
+	for _, is := range ve.issues {
+		if d, ok := MethodEchoPayloadFieldDescs[is.Field]; ok && d != "" {
+			m[is.Field] = d
+		}
+	}
+	ve.descriptions = m
+	return ve
+}
+func enrichMethodEchoResultValidationError(err error) error {
+	ve, ok := err.(*ValidationError)
+	if !ok || ve == nil {
+		return err
+	}
+	if len(ve.issues) == 0 {
+		return err
+	}
+	m := make(map[string]string)
+	for _, is := range ve.issues {
+		if d, ok := MethodEchoResultFieldDescs[is.Field]; ok && d != "" {
+			m[is.Field] = d
+		}
+	}
+	ve.descriptions = m
+	return ve
+}
 func enrichPublishResultValidationError(err error) error {
 	ve, ok := err.(*ValidationError)
 	if !ok || ve == nil {
@@ -413,6 +490,8 @@ func PayloadCodec(name string) (*tools.JSONCodec[any], bool) {
 	switch name {
 	case "workflow.draft":
 		return &draftPayloadCodec, true
+	case "workflow.method_echo":
+		return &methodEchoPayloadCodec, true
 	case "workflow.publish":
 		return &publishPayloadCodec, true
 	case "workflow.retry":
@@ -431,6 +510,8 @@ func ResultCodec(name string) (*tools.JSONCodec[any], bool) {
 	switch name {
 	case "workflow.draft":
 		return &draftResultCodec, true
+	case "workflow.method_echo":
+		return &methodEchoResultCodec, true
 	case "workflow.publish":
 		return &publishResultCodec, true
 	case "workflow.retry":
@@ -516,6 +597,82 @@ func UnmarshalDraftResult(data []byte) (*DraftResult, error) {
 	out = &DraftResult{
 		OK:       *in.OK,
 		Approved: in.Approved,
+	}
+	return out, nil
+}
+
+// MarshalMethodEchoPayload serializes *MethodEchoPayload into JSON.
+func MarshalMethodEchoPayload(v *MethodEchoPayload) ([]byte, error) {
+	if v == nil {
+		return nil, fmt.Errorf("methodEchoPayload is nil")
+	}
+	in := v
+	_ = in
+	var out *toolhttp.MethodEchoPayloadTransport
+	out = &toolhttp.MethodEchoPayloadTransport{
+		Topic: &in.Topic,
+	}
+	return json.Marshal(out)
+}
+
+// UnmarshalMethodEchoPayload deserializes JSON into *MethodEchoPayload.
+func UnmarshalMethodEchoPayload(data []byte) (*MethodEchoPayload, error) {
+	if len(data) == 0 {
+		return nil, fmt.Errorf("methodEchoPayload JSON is empty")
+	}
+	var tv toolhttp.MethodEchoPayloadTransport
+	if err := json.Unmarshal(data, &tv); err != nil {
+		return nil, fmt.Errorf("decode methodEchoPayload: %w", err)
+	}
+	if err := toolhttp.ValidateMethodEchoPayloadTransport(&tv); err != nil {
+		err = newValidationError(err)
+		err = enrichMethodEchoPayloadValidationError(err)
+		return nil, err
+	}
+	in := &tv
+	_ = in
+	var out *MethodEchoPayload
+	out = &MethodEchoPayload{
+		Topic: *in.Topic,
+	}
+	return out, nil
+}
+
+// MarshalMethodEchoResult serializes *MethodEchoResult into JSON.
+func MarshalMethodEchoResult(v *MethodEchoResult) ([]byte, error) {
+	if v == nil {
+		return nil, fmt.Errorf("methodEchoResult is nil")
+	}
+	in := v
+	_ = in
+	var out *toolhttp.MethodEchoResultTransport
+	out = &toolhttp.MethodEchoResultTransport{
+		OK:      &in.OK,
+		Message: &in.Message,
+	}
+	return json.Marshal(out)
+}
+
+// UnmarshalMethodEchoResult deserializes JSON into *MethodEchoResult.
+func UnmarshalMethodEchoResult(data []byte) (*MethodEchoResult, error) {
+	if len(data) == 0 {
+		return nil, fmt.Errorf("methodEchoResult JSON is empty")
+	}
+	var tv toolhttp.MethodEchoResultTransport
+	if err := json.Unmarshal(data, &tv); err != nil {
+		return nil, fmt.Errorf("decode methodEchoResult: %w", err)
+	}
+	if err := toolhttp.ValidateMethodEchoResultTransport(&tv); err != nil {
+		err = newValidationError(err)
+		err = enrichMethodEchoResultValidationError(err)
+		return nil, err
+	}
+	in := &tv
+	_ = in
+	var out *MethodEchoResult
+	out = &MethodEchoResult{
+		OK:      *in.OK,
+		Message: *in.Message,
 	}
 	return out, nil
 }

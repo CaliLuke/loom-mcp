@@ -22,6 +22,20 @@ type (
 		Approved *bool `json:"approved,omitempty"`
 	}
 
+	// MethodEchoPayload defines the JSON payload for the workflow.method_echo tool.
+	MethodEchoPayload = struct {
+		// Topic to send to the service method
+		Topic string `json:"topic"`
+	}
+
+	// MethodEchoResult defines the JSON result for the workflow.method_echo tool.
+	MethodEchoResult = struct {
+		// Whether the method-backed tool succeeded
+		OK bool `json:"ok"`
+		// Message returned to the agent runtime
+		Message string `json:"message"`
+	}
+
 	// PublishPayload defines the JSON payload for the workflow.publish tool.
 	PublishPayload = struct {
 	}

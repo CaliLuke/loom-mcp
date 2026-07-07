@@ -37,7 +37,33 @@ var StatusResult = Type("StatusResult", func() {
 	Required("ok")
 })
 
+var MethodEchoPayload = Type("MethodEchoPayload", func() {
+	Attribute("topic", String, "Topic to echo through the service method")
+	Required("topic")
+})
+
+var MethodEchoResult = Type("MethodEchoResult", func() {
+	Attribute("ok", Boolean, "Whether the method-backed tool succeeded")
+	Attribute("message", String, "Message returned by the service method")
+	Required("ok", "message")
+})
+
+var MethodToolPayload = Type("MethodToolPayload", func() {
+	Attribute("topic", String, "Topic to send to the service method")
+	Required("topic")
+})
+
+var MethodToolResult = Type("MethodToolResult", func() {
+	Attribute("ok", Boolean, "Whether the method-backed tool succeeded")
+	Attribute("message", String, "Message returned to the agent runtime")
+	Required("ok", "message")
+})
+
 var _ = Service("features", func() {
+	Method("echo_topic", func() {
+		Payload(MethodEchoPayload)
+		Result(MethodEchoResult)
+	})
 	Agent("coordinator", "Generated acceptance agent", func() {
 		Use(ArtifactTools)
 		Use(MemoryTools)
@@ -63,6 +89,11 @@ var _ = Service("features", func() {
 			Tool("revise", "Revise the result", func() {
 				Args(EmptyPayload)
 				Return(StatusResult)
+			})
+			Tool("method_echo", "Echo a topic through the generated method dispatcher", func() {
+				Args(MethodToolPayload)
+				Return(MethodToolResult)
+				BindTo("features", "echo_topic")
 			})
 		})
 		RunPolicy(func() {

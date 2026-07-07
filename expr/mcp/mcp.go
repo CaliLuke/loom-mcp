@@ -253,6 +253,12 @@ type (
 		InputSchema *expr.AttributeExpr
 		// Icons is the optional icon metadata exposed for this tool.
 		Icons []*IconExpr
+		// ExposedSurfaces records projection option use on method-level tools.
+		ExposedSurfaces []string
+		// MCPPlacementService records invalid placement use on method-level tools.
+		MCPPlacementService string
+		// MCPPlacementServer records invalid placement use on method-level tools.
+		MCPPlacementServer string
 	}
 
 	// ResourceExpr defines an MCP resource that the server exposes for access.
@@ -571,6 +577,14 @@ func (t *ToolExpr) Validate() error {
 				verr.Merge(ve)
 			}
 		}
+	}
+	for _, surface := range t.ExposedSurfaces {
+		if surface == "agent_runtime" {
+			verr.Add(t, "Expose(AgentRuntime) is invalid on method-level MCP tools")
+		}
+	}
+	if t.MCPPlacementService != "" || t.MCPPlacementServer != "" {
+		verr.Add(t, "MCPPlacement is invalid on method-level MCP tools")
 	}
 	if len(verr.Errors) > 0 {
 		return verr

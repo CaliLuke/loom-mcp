@@ -651,48 +651,15 @@ func serviceExecutorFiles(agent *AgentData) []*codegen.File {
 				break
 			}
 		}
-		needsRawJSON := false
-		for _, t := range ts.Tools {
-			if t == nil || !t.IsMethodBacked {
-				continue
-			}
-			for _, sd := range t.ServerData {
-				if sd != nil && sd.MethodResultField != "" {
-					needsRawJSON = true
-					break
-				}
-			}
-			if needsRawJSON {
-				break
-			}
-		}
-		needsAgentBounds := false
-		for _, t := range ts.Tools {
-			if t == nil || !t.IsMethodBacked || t.Bounds == nil || t.Bounds.Projection == nil {
-				continue
-			}
-			if t.Bounds.Projection.Returned != nil && t.Bounds.Projection.Truncated != nil {
-				needsAgentBounds = true
-				break
-			}
-		}
 		imports := []*codegen.ImportSpec{
 			{Path: "context"},
 			{Path: "encoding/json"},
-			{Path: "errors"},
 			{Path: "fmt"},
 			{Path: "strings"},
 			{Path: "github.com/CaliLuke/loom-mcp/runtime/agent/planner"},
 			{Path: "github.com/CaliLuke/loom-mcp/runtime/agent/runtime", Name: "runtime"},
 			{Path: "github.com/CaliLuke/loom-mcp/runtime/agent/tools"},
-			{Path: "github.com/CaliLuke/loom-mcp/runtime/toolregistry"},
 			{Path: ts.SpecsImportPath, Name: specsAlias},
-		}
-		if needsAgentBounds {
-			imports = append(imports, &codegen.ImportSpec{Path: "github.com/CaliLuke/loom-mcp/runtime/agent", Name: "agent"})
-		}
-		if needsRawJSON {
-			imports = append(imports, &codegen.ImportSpec{Path: "github.com/CaliLuke/loom-mcp/runtime/agent/rawjson"})
 		}
 		if needsSharedTypes {
 			typesPath := filepath.ToSlash(filepath.Join(agent.Genpkg, "types"))

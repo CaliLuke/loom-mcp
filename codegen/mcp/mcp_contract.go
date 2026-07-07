@@ -53,6 +53,9 @@ func validatePureMCPService(svc *expr.ServiceExpr, mcp *mcpexpr.MCPExpr, source 
 			mapped[prompt.Method.Name] = struct{}{}
 		}
 	}
+	for method := range source.projectedMethodNames(svc.Name, mcp.Name) {
+		mapped[method] = struct{}{}
+	}
 
 	unmapped := make([]string, 0, len(svc.Methods))
 	for _, method := range svc.Methods {

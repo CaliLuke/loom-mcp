@@ -91,6 +91,63 @@ func TestGeneratedSDKServerToolSearchCallToolInvokesHiddenTool(t *testing.T) {
 	assert.Equal(t, "positive", structured["sentiment"])
 }
 
+func TestGeneratedSDKServerToolSearchIncludesProjectedTools(t *testing.T) {
+	t.Parallel()
+
+	session := newToolSearchSDKSession(t, &mcpassistant.ToolSearchOptions{AlwaysVisible: []string{"projected_lookup_tool"}})
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	listResult, err := session.ListTools(ctx, nil)
+	require.NoError(t, err)
+	assert.Contains(t, sdkToolNames(listResult.Tools), "projected_lookup_tool")
+
+	callResult, err := session.CallTool(ctx, &sdkmcp.CallToolParams{
+		Name: "call_tool",
+		Arguments: map[string]any{
+			"name": "projected_lookup_tool",
+			"arguments": map[string]any{
+				"query": "loom",
+			},
+		},
+	})
+	require.NoError(t, err)
+	assert.False(t, callResult.IsError)
+	structured, ok := callResult.StructuredContent.(map[string]any)
+	require.True(t, ok)
+	assert.Equal(t, "projected:loom", structured["answer"])
+}
+
+func TestGeneratedSDKServerToolSearchFindsProjectedTool(t *testing.T) {
+	t.Parallel()
+
+	session := newToolSearchSDKSession(t, &mcpassistant.ToolSearchOptions{MaxResults: 1})
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	result, err := session.CallTool(ctx, &sdkmcp.CallToolParams{
+		Name: "search_tools",
+		Arguments: map[string]any{
+			"query":           "projected lookup",
+			"include_schemas": true,
+		},
+	})
+	require.NoError(t, err)
+	assert.False(t, result.IsError)
+	structured, ok := result.StructuredContent.(map[string]any)
+	require.True(t, ok)
+	tools, ok := structured["tools"].([]any)
+	require.True(t, ok)
+	require.Len(t, tools, 1)
+	tool, ok := tools[0].(map[string]any)
+	require.True(t, ok)
+	assert.Equal(t, "projected_lookup_tool", tool["name"])
+	assert.Equal(t, "call_tool", tool["call_tool_name"])
+	assert.Contains(t, tool["call_tool_json"], `"name": "projected_lookup_tool"`)
+	assert.NotNil(t, tool["inputSchema"])
+	assert.NotNil(t, tool["outputSchema"])
+}
+
 func TestGeneratedSDKServerToolSearchAcceptsOmittedSearchArguments(t *testing.T) {
 	t.Parallel()
 

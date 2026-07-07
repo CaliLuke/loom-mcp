@@ -7,7 +7,9 @@ import (
 	"testing"
 	"time"
 
+	"example.com/agentfeatures/gen/features"
 	"example.com/agentfeatures/gen/features/agents/coordinator"
+	coordinatorworkflow "example.com/agentfeatures/gen/features/agents/coordinator/workflow"
 	"example.com/agentfeatures/gen/features/toolsets/workflow"
 	"github.com/CaliLuke/loom-mcp/runtime/agent/api"
 	"github.com/CaliLuke/loom-mcp/runtime/agent/artifact"
@@ -42,11 +44,36 @@ func TestGeneratedFeatureFixtureRegistersRuntimeSurface(t *testing.T) {
 	require.Contains(t, toolsets, "features.workflow")
 	require.ElementsMatch(t, []tools.Ident{
 		workflow.Draft,
+		workflow.MethodEcho,
 		workflow.Review,
 		workflow.Retry,
 		workflow.Publish,
 		workflow.Revise,
 	}, workflow.Names())
+}
+
+func TestAgentFeatureMethodBackedDispatcher(t *testing.T) {
+	ctx := context.Background()
+	fx := newFeatureRuntime(t)
+	svc := &methodBackedFeatureService{}
+	client := features.NewClient(features.NewEchoTopicEndpoint(svc))
+	exec := coordinatorworkflow.NewCoordinatorWorkflowExec(coordinatorworkflow.WithClient(client))
+
+	require.NoError(t, coordinator.RegisterUsedToolsets(ctx, fx.rt, coordinator.WithWorkflowExecutor(exec)))
+	require.NoError(t, coordinator.RegisterCoordinatorAgent(ctx, fx.rt, coordinator.CoordinatorAgentConfig{}))
+
+	out, err := fx.rt.ExecuteToolActivity(ctx, &agentsruntime.ToolInput{
+		AgentID:    coordinator.AgentID,
+		RunID:      "run-method-backed-dispatcher",
+		SessionID:  "sess-method-backed-dispatcher",
+		ToolName:   workflow.MethodEcho,
+		ToolCallID: "method-echo",
+		Payload:    rawjson.Message([]byte(`{"topic":"loom"}`)),
+		Labels:     map[string]string{"tenant": "acme"},
+	})
+	require.NoError(t, err)
+	require.JSONEq(t, `{"ok":true,"message":"echo:loom"}`, string(out.Payload))
+	require.Equal(t, "loom", svc.topic)
 }
 
 func TestGeneratedFeatureRunPublishesAwaitAndResumesWithTypedInput(t *testing.T) {

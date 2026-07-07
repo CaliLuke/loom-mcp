@@ -167,6 +167,35 @@ type (
 		// a discriminated union, the metadata the recovery hint needs to
 		// describe valid discriminator values and the configured branch key.
 		UnionEnvelopes []UnionEnvelopeMeta
+		// Projected is non-nil when this adapter comes from an agent toolset
+		// projected into MCP instead of a method-level MCP Tool declaration.
+		Projected *ProjectedToolAdapter
+	}
+
+	// ProjectedToolAdapter carries ownership data for method-backed toolset
+	// tools projected into MCP.
+	ProjectedToolAdapter struct {
+		SourceToolset       string
+		SourceTool          string
+		Description         string
+		Title               string
+		PlacementService    string
+		PlacementMCPServer  string
+		SpecsPackageName    string
+		SpecsImportPath     string
+		SpecName            string
+		BoundService        string
+		BoundMethod         string
+		MethodPayloadType   string
+		RuntimeToolName     string
+		DispatcherFuncName  string
+		DispatchOptionsName string
+		QualifiedSourceTool string
+		HasPayload          bool
+		HasResult           bool
+		InputSchema         string
+		OutputSchema        string
+		ExampleArguments    string
 	}
 
 	// DefaultField describes a top-level payload field default assignment.
@@ -287,6 +316,7 @@ type (
 		originalService *expr.ServiceExpr
 		mcp             *mcpexpr.MCPExpr
 		mapping         *ServiceMethodMapping
+		projected       []*ProjectedToolAdapter
 		scope           *codegen.NameScope
 	}
 )
@@ -314,12 +344,14 @@ func newAdapterGenerator(
 	svc *expr.ServiceExpr,
 	mcp *mcpexpr.MCPExpr,
 	mapping *ServiceMethodMapping,
+	projected []*ProjectedToolAdapter,
 ) *adapterGenerator {
 	return &adapterGenerator{
 		genpkg:          genpkg,
 		originalService: svc,
 		mcp:             mcp,
 		mapping:         mapping,
+		projected:       projected,
 		scope:           codegen.NewNameScope(),
 	}
 }
@@ -535,17 +567,46 @@ func adapterDataNeedsQueryFormatting(resources []*ResourceAdapter) bool {
 
 // buildToolAdapters creates adapter data for tools.
 func (g *adapterGenerator) buildToolAdapters() ([]*ToolAdapter, error) {
-	adapters := make([]*ToolAdapter, 0, len(g.mcp.Tools))
+	adapters := make([]*ToolAdapter, 0, len(g.mcp.Tools)+len(g.projected))
+	seen := make(map[string]struct{}, len(g.mcp.Tools)+len(g.projected))
 
 	for _, tool := range g.mcp.Tools {
 		adapter, err := g.buildToolAdapter(tool)
 		if err != nil {
 			return nil, err
 		}
+		if _, ok := seen[adapter.Name]; ok {
+			return nil, fmt.Errorf("duplicate MCP tool %q", adapter.Name)
+		}
+		seen[adapter.Name] = struct{}{}
+		adapters = append(adapters, adapter)
+	}
+	for _, projected := range g.projected {
+		adapter := g.buildProjectedToolAdapter(projected)
+		if _, ok := seen[adapter.Name]; ok {
+			return nil, fmt.Errorf("duplicate MCP tool %q", adapter.Name)
+		}
+		seen[adapter.Name] = struct{}{}
 		adapters = append(adapters, adapter)
 	}
 
 	return adapters, nil
+}
+
+func (g *adapterGenerator) buildProjectedToolAdapter(projected *ProjectedToolAdapter) *ToolAdapter {
+	return &ToolAdapter{
+		Name:                 projected.SourceTool,
+		Description:          projected.Description,
+		Title:                defaultString(projected.Title, naming.HumanizeTitle(projected.SourceTool)),
+		OriginalMethodName:   projected.BoundMethod,
+		HasPayload:           projected.HasPayload,
+		HasResult:            projected.HasResult,
+		InputSchema:          projected.InputSchema,
+		OutputSchema:         projected.OutputSchema,
+		ExampleArguments:     projected.ExampleArguments,
+		CanonicalExampleJSON: projected.ExampleArguments,
+		Projected:            projected,
+	}
 }
 
 func (g *adapterGenerator) buildToolAdapter(tool *mcpexpr.ToolExpr) (*ToolAdapter, error) {

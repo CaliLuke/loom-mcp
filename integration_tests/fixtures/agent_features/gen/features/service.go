@@ -7,8 +7,15 @@
 
 package features
 
+import (
+	"context"
+)
+
 // Service is the features service interface.
-type Service interface{}
+type Service interface {
+	// EchoTopic implements echo_topic.
+	EchoTopic(context.Context, *MethodEchoPayload) (res *MethodEchoResult, err error)
+}
 
 // APIName is the name of the API as defined in the design.
 const APIName = "agentfeatures"
@@ -24,9 +31,37 @@ const ServiceName = "features"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [0]string{}
+var MethodNames = [1]string{"echo_topic"}
 
 type EmptyPayload struct {
+}
+
+// MethodEchoPayload is the payload type of the features service echo_topic
+// method.
+type MethodEchoPayload struct {
+	// Topic to echo through the service method
+	Topic string `json:"topic"`
+}
+
+// MethodEchoResult is the result type of the features service echo_topic
+// method.
+type MethodEchoResult struct {
+	// Whether the method-backed tool succeeded
+	OK bool `json:"ok"`
+	// Message returned by the service method
+	Message string `json:"message"`
+}
+
+type MethodToolPayload struct {
+	// Topic to send to the service method
+	Topic string `json:"topic"`
+}
+
+type MethodToolResult struct {
+	// Whether the method-backed tool succeeded
+	OK bool `json:"ok"`
+	// Message returned to the agent runtime
+	Message string `json:"message"`
 }
 
 type ReviewPayload struct {

@@ -14,7 +14,7 @@ import (
 	"time"
 
 	specs "example.com/agentfeatures/gen/features/agents/coordinator/specs"
-	workflow "example.com/agentfeatures/gen/features/toolsets/workflow"
+	workflow2 "example.com/agentfeatures/gen/features/toolsets/workflow"
 	"github.com/CaliLuke/loom-mcp/runtime/agent/engine"
 	"github.com/CaliLuke/loom-mcp/runtime/agent/memory"
 	"github.com/CaliLuke/loom-mcp/runtime/agent/planner"
@@ -173,7 +173,7 @@ func RegisterUsedToolsets(ctx context.Context, rt *agentsruntime.Runtime, opts .
 		exec := execs[toolsetID]
 		reg := agentsruntime.ToolsetRegistration{
 			Name:  toolsetID,
-			Specs: workflow.Specs,
+			Specs: workflow2.Specs,
 			Execute: func(ctx context.Context, call *planner.ToolRequest) (*agentsruntime.ToolExecutionResult, error) {
 				if call == nil {
 					return nil, fmt.Errorf("tool request is nil")

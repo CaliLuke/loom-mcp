@@ -217,6 +217,29 @@ type DispatchCommandRequestBody struct {
 // "dispatch_command" endpoint HTTP response body.
 type DispatchCommandResponseBody DispatchCommandResponseBodyResponseBody
 
+// ProjectedLookupRequestBody is the type of the "assistant" service
+// "projected_lookup" endpoint HTTP request body.
+type ProjectedLookupRequestBody struct {
+	// Projected lookup query
+	Query *string `form:"query,omitempty" json:"query,omitempty" xml:"query,omitempty"`
+}
+
+// ProjectedLookupResponseBody is the type of the "assistant" service
+// "projected_lookup" endpoint HTTP response body.
+type ProjectedLookupResponseBody struct {
+	// Projected lookup answer
+	Answer string `form:"answer" json:"answer" xml:"answer"`
+	// Projected lookup source
+	Source string `form:"source" json:"source" xml:"source"`
+}
+
+// ProjectedStatusResponseBody is the type of the "assistant" service
+// "projected_status" endpoint HTTP response body.
+type ProjectedStatusResponseBody struct {
+	// Projected runtime status
+	Status string `form:"status" json:"status" xml:"status"`
+}
+
 // ListDocumentsResponseBodyResponseBody is used to define fields on response
 // body types.
 type ListDocumentsResponseBodyResponseBody struct {
@@ -1054,6 +1077,25 @@ func NewDispatchCommandResponseBody(res *assistant.DispatchCommandResult) *Dispa
 	return body
 }
 
+// NewProjectedLookupResponseBody builds the HTTP response body from the result
+// of the "projected_lookup" endpoint of the "assistant" service.
+func NewProjectedLookupResponseBody(res *assistant.ProjectedLookupResult) *ProjectedLookupResponseBody {
+	body := &ProjectedLookupResponseBody{
+		Answer: res.Answer,
+		Source: res.Source,
+	}
+	return body
+}
+
+// NewProjectedStatusResponseBody builds the HTTP response body from the result
+// of the "projected_status" endpoint of the "assistant" service.
+func NewProjectedStatusResponseBody(res *assistant.ProjectedStatusResult) *ProjectedStatusResponseBody {
+	body := &ProjectedStatusResponseBody{
+		Status: res.Status,
+	}
+	return body
+}
+
 // NewConversationHistoryPayload builds a assistant service
 // conversation_history endpoint payload.
 func NewConversationHistoryPayload(body *ConversationHistoryRequestBody) *assistant.ConversationHistoryPayload {
@@ -1253,6 +1295,16 @@ func NewDispatchCommandPayload(body *DispatchCommandRequestBody) *assistant.Disp
 	return v
 }
 
+// NewProjectedLookupPayload builds a assistant service projected_lookup
+// endpoint payload.
+func NewProjectedLookupPayload(body *ProjectedLookupRequestBody) *assistant.ProjectedLookupPayload {
+	v := &assistant.ProjectedLookupPayload{
+		Query: *body.Query,
+	}
+
+	return v
+}
+
 // ValidateGeneratePromptsRequestBody runs the validations defined on
 // generate_prompts_request_body
 func ValidateGeneratePromptsRequestBody(body *GeneratePromptsRequestBody) (err error) {
@@ -1446,6 +1498,15 @@ func ValidateDispatchCommandRequestBody(body *DispatchCommandRequestBody) (err e
 				err = loom.MergeErrors(err, err2)
 			}
 		}
+	}
+	return
+}
+
+// ValidateProjectedLookupRequestBody runs the validations defined on
+// projected_lookup_request_body
+func ValidateProjectedLookupRequestBody(body *ProjectedLookupRequestBody) (err error) {
+	if body.Query == nil {
+		err = loom.MergeErrors(err, loom.MissingFieldError("query", "body"))
 	}
 	return
 }

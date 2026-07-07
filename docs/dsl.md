@@ -202,6 +202,8 @@ overrides remain operational at the runtime/store layer.
 | `NextCursor(name)`                            | Inside `BoundedResult(func() { ... })` | Declares the projected result field name for the next-page cursor (optional)                        |
 | `ResultReminder(text)`                        | Inside `Tool`                          | Static system reminder injected after tool result                                                   |
 | `Confirmation(dsl)`                           | Inside `Tool`                          | Declares that tool execution must be explicitly approved out-of-band                                |
+| `Expose(surfaces...)`                         | Inside toolset `Tool`                  | Declares design-time exposure permission; omitted means `AgentRuntime`                              |
+| `MCPPlacement(service, mcpServer)`             | Inside toolset `Tool`                  | Places a method-backed toolset tool into an existing service MCP server when `MCPSurface` is exposed |
 
 ### Tool payload defaults (Feature)
 
@@ -878,6 +880,39 @@ values, and a present discriminator with a missing nested `value` object is
 reported as a missing `value` field rather than leaking a low-level JSON decode
 error.
 
+### Projecting Toolset Tools Into MCP
+
+Toolset tools are runtime-only by default. A method-backed toolset tool can opt
+into both runtime and MCP exposure with `Expose(AgentRuntime, MCPSurface)` and
+`MCPPlacement(service, mcpServer)`. The placement must name an existing
+`MCP(...)` block for the same service as the bound method:
+
+```go
+Toolset("projected", func() {
+    Tool("projected_lookup_tool", "Lookup projected runtime tool data", func() {
+        Args(ProjectedLookupToolPayload)
+        Return(ProjectedLookupToolResult)
+        BindTo("assistant", "projected_lookup")
+        Expose(AgentRuntime, MCPSurface)
+        MCPPlacement("assistant", "assistant-mcp")
+    })
+})
+```
+
+`Expose(...)` is a design-time permission set, not a deployment decision.
+Runtime registration still chooses whether the generated toolset is available to
+agents; MCP adapter construction still chooses which generated MCP server is
+served. Method-level `Tool(...)` inside a Goa method remains MCP-only and must
+not use `Expose(AgentRuntime)` or `MCPPlacement(...)`.
+
+The v1 projection path is intentionally narrow. Projected MCP tools must be
+method-backed with `BindTo(...)`, must include `AgentRuntime` alongside
+`MCPSurface`, and cannot use `Confirmation(...)`, `Inject(...)`,
+`ServerData(...)`, `ResultReminder(...)`, or `BoundedResult(...)`. Validation
+also rejects missing or inert placements, cross-service placements, unresolved
+MCP servers, duplicate surfaces, and name collisions with method-level MCP
+tools or other projected tools in the same MCP catalog.
+
 ### Args and Return
 
 `Args` defines the input parameter schema for a tool. It follows the same patterns as the
@@ -1541,6 +1576,11 @@ up front or require on-demand discovery. Tool declarations can improve discovery
 with MCP options such as `ToolTitle`, `ToolDiscoveryCategory`,
 `ToolDiscoveryTags`, and `ToolDiscoveryKeywords`; generated `search_tools`
 descriptors include that metadata and can filter by category or tags.
+Projected toolset tools participate in the same catalog and compact-discovery
+path as method-level MCP tools: they can be pinned with `AlwaysVisible`, found
+through hidden search, and invoked through `call_tool`. Their MCP `ToolInfo`
+schemas are emitted from the generated toolset specs, so the runtime tool
+contract and MCP adapter contract stay aligned.
 
 ---
 

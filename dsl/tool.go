@@ -10,6 +10,16 @@ import (
 	mcpexpr "github.com/CaliLuke/loom-mcp/expr/mcp"
 )
 
+// ToolSurface identifies a generated surface a toolset tool may be exposed on.
+type ToolSurface = agentsexpr.ToolSurface
+
+const (
+	// AgentRuntime exposes a toolset tool to agent runtime registration.
+	AgentRuntime = agentsexpr.ToolSurfaceAgentRuntime
+	// MCPSurface exposes a method-backed toolset tool through a generated MCP adapter.
+	MCPSurface = agentsexpr.ToolSurfaceMCP
+)
+
 // Tool declares a tool for agents or MCP servers. It has two distinct use cases:
 //
 //  1. Inside a Toolset (agent tools): Declares a tool with inline argument and
@@ -137,6 +147,42 @@ func parseToolArgs(args []any) (string, func(), []func(*mcpexpr.ToolExpr)) {
 	}
 
 	return description, dslf, mcpOpts
+}
+
+// Expose declares the generated surfaces for the current toolset tool or returns
+// a method-level MCP tool option.
+func Expose(surfaces ...ToolSurface) func(*mcpexpr.ToolExpr) {
+	if tool, ok := eval.Current().(*agentsexpr.ToolExpr); ok {
+		tool.Surfaces = append([]agentsexpr.ToolSurface(nil), surfaces...)
+	}
+	return func(tool *mcpexpr.ToolExpr) {
+		tool.ExposedSurfaces = toolSurfacesAsStrings(surfaces)
+	}
+}
+
+// MCPPlacement declares the generated MCP server that receives a projected
+// method-backed toolset tool.
+func MCPPlacement(service string, mcpServer string) func(*mcpexpr.ToolExpr) {
+	service = strings.TrimSpace(service)
+	mcpServer = strings.TrimSpace(mcpServer)
+	if tool, ok := eval.Current().(*agentsexpr.ToolExpr); ok {
+		tool.MCPPlacement = &agentsexpr.ToolMCPPlacementExpr{
+			Service:   service,
+			MCPServer: mcpServer,
+		}
+	}
+	return func(tool *mcpexpr.ToolExpr) {
+		tool.MCPPlacementService = service
+		tool.MCPPlacementServer = mcpServer
+	}
+}
+
+func toolSurfacesAsStrings(surfaces []ToolSurface) []string {
+	out := make([]string, 0, len(surfaces))
+	for _, surface := range surfaces {
+		out = append(out, string(surface))
+	}
+	return out
 }
 
 // Args defines the input parameter schema for a tool. Use Args inside a Tool DSL

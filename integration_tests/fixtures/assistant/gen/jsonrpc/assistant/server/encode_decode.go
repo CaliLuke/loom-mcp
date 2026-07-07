@@ -652,6 +652,61 @@ func DecodeDispatchCommandRequest(mux loomhttp.Muxer, decoder func(*http.Request
 	}
 }
 
+// EncodeProjectedLookupResponse returns an encoder for responses returned by
+// the assistant projected_lookup endpoint.
+func EncodeProjectedLookupResponse(encoder func(context.Context, http.ResponseWriter) loomhttp.Encoder) func(context.Context, http.ResponseWriter, any) error {
+	return func(ctx context.Context, w http.ResponseWriter, v any) error {
+		res, _ := v.(*assistant.ProjectedLookupResult)
+		enc := encoder(ctx, w)
+		body := NewProjectedLookupResponseBody(res)
+		w.WriteHeader(http.StatusOK)
+		return enc.Encode(body)
+	}
+}
+
+// DecodeProjectedLookupRequest returns a decoder for requests sent to the
+// assistant projected_lookup endpoint.
+func DecodeProjectedLookupRequest(mux loomhttp.Muxer, decoder func(*http.Request) loomhttp.Decoder) func(*http.Request, *jsonrpc.RawRequest) (*assistant.ProjectedLookupPayload, error) {
+	return func(r *http.Request, req *jsonrpc.RawRequest) (*assistant.ProjectedLookupPayload, error) {
+		r.Body = io.NopCloser(bytes.NewReader(req.Params))
+		var payload *assistant.ProjectedLookupPayload
+		var (
+			body ProjectedLookupRequestBody
+			err  error
+		)
+		err = decoder(r).Decode(&body)
+		if err != nil {
+			if errors.Is(err, io.EOF) {
+				return payload, loom.MissingPayloadError()
+			}
+			var gerr *loom.ServiceError
+			if errors.As(err, &gerr) {
+				return payload, gerr
+			}
+			return payload, loom.DecodePayloadError(err.Error())
+		}
+		err = ValidateProjectedLookupRequestBody(&body)
+		if err != nil {
+			return payload, err
+		}
+		payload = NewProjectedLookupPayload(&body)
+
+		return payload, nil
+	}
+}
+
+// EncodeProjectedStatusResponse returns an encoder for responses returned by
+// the assistant projected_status endpoint.
+func EncodeProjectedStatusResponse(encoder func(context.Context, http.ResponseWriter) loomhttp.Encoder) func(context.Context, http.ResponseWriter, any) error {
+	return func(ctx context.Context, w http.ResponseWriter, v any) error {
+		res, _ := v.(*assistant.ProjectedStatusResult)
+		enc := encoder(ctx, w)
+		body := NewProjectedStatusResponseBody(res)
+		w.WriteHeader(http.StatusOK)
+		return enc.Encode(body)
+	}
+}
+
 // marshalAssistantDesignTokenGroupToDesignTokenGroupResponseBody builds a
 // value of type *DesignTokenGroupResponseBody from a value of type
 // *assistant.DesignTokenGroup.

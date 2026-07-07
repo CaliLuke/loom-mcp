@@ -23,10 +23,23 @@ Defined in an agent `Export` block, consumed by other agents.
 
 ### MCP Toolsets
 
-Declared via `MCPToolset(service, suite)` and referenced via `Use(MCPToolset(...))`.
+Declared via `Toolset(FromMCP(service, suite))` and referenced with `Use(...)`.
 
 - Generated wrappers handle JSON schemas, transports, and retries.
 - Decoding uses MCP executor path with raw JSON input semantics.
+
+### Projected MCP Tools
+
+Method-backed service-owned toolset tools may be projected into a generated MCP
+server with `Expose(AgentRuntime, MCPSurface)` and
+`MCPPlacement(service, mcpServer)`.
+
+- Omitted `Expose(...)` means runtime-only `AgentRuntime`.
+- Projected MCP tools keep their runtime toolset specs as the schema source.
+- Generated MCP calls route through the same `Dispatch<Tool>Method(...)`
+  dispatcher used by runtime method-backed execution.
+- In v1, projected tools cannot use confirmation, injection, server-data,
+  result reminders, or bounded-result contracts.
 
 ## BindTo vs Inline
 
@@ -175,4 +188,3 @@ type Artifact struct {
 - Keep hints concise and actionable.
 - Avoid re-validating in services; assume boundary validation.
 - Use explicit tool IDs (`tools.Ident`) over string literals.
-

@@ -54,6 +54,10 @@ type Service interface {
 	DispatchAction(context.Context, *DispatchActionPayload) (res *DispatchActionResult, err error)
 	// Dispatch a command using a union payload with a non-default branch key
 	DispatchCommand(context.Context, *DispatchCommandPayload) (res *DispatchCommandResult, err error)
+	// Lookup projected runtime tool data
+	ProjectedLookup(context.Context, *ProjectedLookupPayload) (res *ProjectedLookupResult, err error)
+	// Return projected runtime status without a payload
+	ProjectedStatus(context.Context) (res *ProjectedStatusResult, err error)
 }
 
 // APIName is the name of the API as defined in the design.
@@ -70,7 +74,7 @@ const ServiceName = "assistant"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [17]string{"list_documents", "system_info", "conversation_history", "figma_design_system", "generate_prompts", "build_figma_implementation_prompt", "send_notification", "analyze_sentiment", "extract_keywords", "summarize_text", "search", "execute_code", "process_batch", "multi_content", "generate_dpi_spec", "dispatch_action", "dispatch_command"}
+var MethodNames = [19]string{"list_documents", "system_info", "conversation_history", "figma_design_system", "generate_prompts", "build_figma_implementation_prompt", "send_notification", "analyze_sentiment", "extract_keywords", "summarize_text", "search", "execute_code", "process_batch", "multi_content", "generate_dpi_spec", "dispatch_action", "dispatch_command", "projected_lookup", "projected_status"}
 
 // AnalyzeSentimentPayload is the payload type of the assistant service
 // analyze_sentiment method.
@@ -326,6 +330,41 @@ type ProcessBatchPayload struct {
 type ProcessBatchResult struct {
 	// Operation status
 	OK *bool `json:"ok,omitempty"`
+}
+
+// ProjectedLookupPayload is the payload type of the assistant service
+// projected_lookup method.
+type ProjectedLookupPayload struct {
+	// Projected lookup query
+	Query string `json:"query"`
+}
+
+// ProjectedLookupResult is the result type of the assistant service
+// projected_lookup method.
+type ProjectedLookupResult struct {
+	// Projected lookup answer
+	Answer string `json:"answer"`
+	// Projected lookup source
+	Source string `json:"source"`
+}
+
+type ProjectedLookupToolPayload struct {
+	// Projected lookup query
+	Query string `json:"query"`
+}
+
+type ProjectedLookupToolResult struct {
+	// Projected lookup answer
+	Answer string `json:"answer"`
+	// Projected lookup source
+	Source string `json:"source"`
+}
+
+// ProjectedStatusResult is the result type of the assistant service
+// projected_status method.
+type ProjectedStatusResult struct {
+	// Projected runtime status
+	Status string `json:"status"`
 }
 
 // PromptTemplates is the result type of the assistant service generate_prompts

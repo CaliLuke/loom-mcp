@@ -10,6 +10,9 @@ import (
 )
 
 type (
+	// ToolSurface identifies a generated surface a toolset tool may be exposed on.
+	ToolSurface string
+
 	// ToolExpr captures an individual tool declaration within a toolset.
 	ToolExpr struct {
 		eval.DSLFunc
@@ -88,8 +91,20 @@ type (
 		// the tool (unless runtime overrides supersede the confirmation).
 		Confirmation *ToolConfirmationExpr
 
+		// Surfaces declares where this tool may be exposed. Empty means agent runtime.
+		Surfaces []ToolSurface
+
+		// MCPPlacement identifies the generated MCP adapter that should project this tool.
+		MCPPlacement *ToolMCPPlacementExpr
+
 		bindServiceName string
 		bindMethodName  string
+	}
+
+	// ToolMCPPlacementExpr records the target generated MCP server for projection.
+	ToolMCPPlacementExpr struct {
+		Service   string
+		MCPServer string
 	}
 
 	// ServerDataExpr declares one server-only data item emitted alongside a tool
@@ -169,6 +184,13 @@ type (
 		att  *goaexpr.AttributeExpr
 		desc string
 	}
+)
+
+const (
+	// ToolSurfaceAgentRuntime exposes a toolset tool to agent runtime registration.
+	ToolSurfaceAgentRuntime ToolSurface = "agent_runtime"
+	// ToolSurfaceMCP exposes a method-backed toolset tool through a generated MCP adapter.
+	ToolSurfaceMCP ToolSurface = "mcp"
 )
 
 var runtimeMetaFieldNames = map[string]struct{}{
@@ -272,19 +294,23 @@ func (t *ToolExpr) Prepare() {
 // Validate checks that any recorded binding can be resolved to an existing
 // service and method.
 func (t *ToolExpr) Validate() error {
+	t.defaultSurfaces()
+	verr := new(eval.ValidationErrors)
+	validateToolSurfaces(t, verr)
 	if t.bindMethodName == "" {
-		verr := new(eval.ValidationErrors)
 		validateInjectedFields(t, injectTargets(t, nil), verr)
 		if err := t.validateShapes(); err != nil {
 			verr.AddError(t, err)
 		}
+		if len(verr.Errors) == 0 {
+			return nil
+		}
 		return verr
 	}
-	verr := new(eval.ValidationErrors)
 	var svc *goaexpr.ServiceExpr
 	if t.bindServiceName != "" {
 		svc = goaexpr.Root.Service(t.bindServiceName)
-	} else {
+	} else if t.Toolset != nil && t.Toolset.Agent != nil {
 		svc = t.Toolset.Agent.Service
 	}
 	if svc == nil {
@@ -301,11 +327,128 @@ func (t *ToolExpr) Validate() error {
 				verr.AddError(t, err)
 				return verr
 			}
-			return nil
+			if len(verr.Errors) == 0 {
+				return nil
+			}
+			return verr
 		}
 	}
 	verr.Add(t, "service method %q not found in service %q", t.bindMethodName, svc.Name)
 	return verr
+}
+
+func (t *ToolExpr) defaultSurfaces() {
+	if t == nil || len(t.Surfaces) > 0 {
+		return
+	}
+	t.Surfaces = []ToolSurface{ToolSurfaceAgentRuntime}
+}
+
+func validateToolSurfaces(t *ToolExpr, verr *eval.ValidationErrors) {
+	if t == nil || verr == nil {
+		return
+	}
+	if len(t.Surfaces) == 0 {
+		verr.Add(t, "Expose requires at least one surface")
+		return
+	}
+	hasRuntime, hasMCP := validateToolSurfaceSet(t, verr)
+	if hasMCP && !hasRuntime {
+		verr.Add(t, "MCPSurface requires AgentRuntime in v1")
+	}
+	if hasMCP && t.MCPPlacement == nil {
+		verr.Add(t, "MCPPlacement is required when Expose includes MCPSurface")
+	}
+	if !hasMCP && t.MCPPlacement != nil {
+		verr.Add(t, "MCPPlacement requires MCPSurface")
+	}
+	if hasMCP && t.bindMethodName == "" {
+		verr.Add(t, "MCPSurface projection requires BindTo")
+	}
+	if hasMCP && t.bindServiceName == "" && (t.Toolset == nil || t.Toolset.Agent == nil || t.Toolset.Agent.Service == nil) {
+		verr.Add(t, "projected one-argument BindTo requires an owning agent service or an explicit service in BindTo")
+	}
+	if hasMCP {
+		validateMCPProjectionUnsupportedFeatures(t, verr)
+	}
+}
+
+func validateToolSurfaceSet(t *ToolExpr, verr *eval.ValidationErrors) (bool, bool) {
+	seen := make(map[ToolSurface]struct{}, len(t.Surfaces))
+	hasRuntime := false
+	hasMCP := false
+	for _, surface := range t.Surfaces {
+		if !validateToolSurfaceEntry(t, surface, seen, verr) {
+			continue
+		}
+		switch surface {
+		case ToolSurfaceAgentRuntime:
+			hasRuntime = true
+		case ToolSurfaceMCP:
+			hasMCP = true
+		default:
+			verr.Add(t, "Expose declares unknown surface %q", surface)
+		}
+	}
+	return hasRuntime, hasMCP
+}
+
+func validateToolSurfaceEntry(t *ToolExpr, surface ToolSurface, seen map[ToolSurface]struct{}, verr *eval.ValidationErrors) bool {
+	if surface == "" {
+		verr.Add(t, "Expose requires non-empty surfaces")
+		return false
+	}
+	if _, dup := seen[surface]; dup {
+		verr.Add(t, "Expose declares surface %q more than once", surface)
+		return false
+	}
+	seen[surface] = struct{}{}
+	return true
+}
+
+func validateMCPProjectionUnsupportedFeatures(t *ToolExpr, verr *eval.ValidationErrors) {
+	if t.Confirmation != nil {
+		verr.Add(t, "Confirmation is not supported for MCPSurface projection in v1")
+	}
+	if len(t.InjectedFields) > 0 {
+		verr.Add(t, "Inject is not supported for MCPSurface projection in v1")
+	}
+	if len(t.ServerData) > 0 {
+		verr.Add(t, "ServerData is not supported for MCPSurface projection in v1")
+	}
+	if t.ResultReminder != "" {
+		verr.Add(t, "ResultReminder is not supported for MCPSurface projection in v1")
+	}
+	if t.Bounds != nil {
+		verr.Add(t, "BoundedResult is not supported for MCPSurface projection in v1")
+	}
+}
+
+// ExposesSurface reports whether the tool exposes the requested surface.
+func (t *ToolExpr) ExposesSurface(surface ToolSurface) bool {
+	if t == nil {
+		return false
+	}
+	for _, candidate := range t.Surfaces {
+		if candidate == surface {
+			return true
+		}
+	}
+	return false
+}
+
+// ProjectedBoundServiceName returns the concrete service used by BindTo.
+func (t *ToolExpr) ProjectedBoundServiceName() string {
+	if t == nil {
+		return ""
+	}
+	if t.bindServiceName != "" {
+		return t.bindServiceName
+	}
+	if t.Toolset != nil && t.Toolset.Agent != nil && t.Toolset.Agent.Service != nil {
+		return t.Toolset.Agent.Service.Name
+	}
+	return ""
 }
 
 func injectTargets(t *ToolExpr, m *goaexpr.MethodExpr) []injectTarget {

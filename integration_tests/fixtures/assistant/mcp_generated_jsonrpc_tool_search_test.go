@@ -59,6 +59,21 @@ func TestGeneratedJSONRPCToolSearchUsesCompactCatalog(t *testing.T) {
 	assert.Equal(t, []string{"search_tools", "call_tool", "search"}, toolNames(result.Tools))
 }
 
+func TestGeneratedJSONRPCToolSearchAlwaysVisibleProjectedTool(t *testing.T) {
+	t.Parallel()
+
+	server := newGeneratedJSONRPCServerWithAdapterOptions(t, &mcpassistant.MCPAdapterOptions{
+		ToolSearch: &mcpassistant.ToolSearchOptions{AlwaysVisible: []string{"projected_lookup_tool"}},
+	})
+	defer server.Close()
+	client := newToolSearchJSONRPCClient(t, server.URL)
+
+	raw, err := client.ToolsList()(context.Background(), &mcpassistant.ToolsListPayload{})
+	require.NoError(t, err)
+	result := raw.(*mcpassistant.ToolsListResult)
+	assert.Equal(t, []string{"search_tools", "call_tool", "projected_lookup_tool"}, toolNames(result.Tools))
+}
+
 func TestGeneratedJSONRPCToolSearchRejectsDirectHiddenCalls(t *testing.T) {
 	t.Parallel()
 
@@ -101,6 +116,30 @@ func TestGeneratedJSONRPCToolSearchCallToolInvokesHiddenTool(t *testing.T) {
 	require.NoError(t, json.Unmarshal(result.StructuredContent, &sentiment))
 	require.NotNil(t, sentiment.Sentiment)
 	assert.Equal(t, "positive", *sentiment.Sentiment)
+}
+
+func TestGeneratedJSONRPCToolSearchCallToolInvokesProjectedTool(t *testing.T) {
+	t.Parallel()
+
+	server := newGeneratedJSONRPCServerWithAdapterOptions(t, &mcpassistant.MCPAdapterOptions{
+		ToolSearch: &mcpassistant.ToolSearchOptions{},
+	})
+	defer server.Close()
+	client := newToolSearchJSONRPCClient(t, server.URL)
+
+	raw, err := client.ToolsCall()(context.Background(), &mcpassistant.ToolsCallPayload{
+		Name:      "call_tool",
+		Arguments: json.RawMessage(`{"name":"projected_lookup_tool","arguments":{"query":"loom"}}`),
+	})
+	require.NoError(t, err)
+	stream := raw.(*mcpAssistantjsonrpcc.ToolsCallClientStream)
+	result, err := stream.Recv(context.Background())
+	require.NoError(t, err)
+
+	var projected assistant.ProjectedLookupToolResult
+	require.NoError(t, json.Unmarshal(result.StructuredContent, &projected))
+	assert.Equal(t, "projected:loom", projected.Answer)
+	assert.Equal(t, "runtime-toolset", projected.Source)
 }
 
 func TestGeneratedJSONRPCToolSearchSearchesQueryText(t *testing.T) {
@@ -150,6 +189,34 @@ func TestGeneratedJSONRPCToolSearchMatchesNaturalLanguageTokenQuery(t *testing.T
 	assert.Equal(t, []string{"search"}, toolSearchDescriptorNames(list.Tools))
 	require.Len(t, list.Tools, 1)
 	assert.NotEmpty(t, list.Tools[0].WhyMatched)
+}
+
+func TestGeneratedJSONRPCToolSearchFindsProjectedTool(t *testing.T) {
+	t.Parallel()
+
+	server := newGeneratedJSONRPCServerWithAdapterOptions(t, &mcpassistant.MCPAdapterOptions{
+		ToolSearch: &mcpassistant.ToolSearchOptions{MaxResults: 1},
+	})
+	defer server.Close()
+	client := newToolSearchJSONRPCClient(t, server.URL)
+
+	raw, err := client.ToolsCall()(context.Background(), &mcpassistant.ToolsCallPayload{
+		Name:      "search_tools",
+		Arguments: json.RawMessage(`{"query":"projected lookup","include_schemas":true}`),
+	})
+	require.NoError(t, err)
+	stream := raw.(*mcpAssistantjsonrpcc.ToolsCallClientStream)
+	result, err := stream.Recv(context.Background())
+	require.NoError(t, err)
+
+	var list toolSearchResult
+	require.NoError(t, json.Unmarshal(result.StructuredContent, &list))
+	assert.Equal(t, []string{"projected_lookup_tool"}, toolSearchDescriptorNames(list.Tools))
+	require.Len(t, list.Tools, 1)
+	assert.NotEmpty(t, list.Tools[0].InputSchema)
+	assert.NotEmpty(t, list.Tools[0].OutputSchema)
+	assert.Equal(t, "call_tool", list.Tools[0].CallToolName)
+	assert.Contains(t, list.Tools[0].CallToolJSON, `"name": "projected_lookup_tool"`)
 }
 
 func TestGeneratedJSONRPCToolSearchExactNameSuppressesWeakMatches(t *testing.T) {

@@ -15,16 +15,21 @@ func TestGolden_ServerData_UsesGeneratedCodec(t *testing.T) {
 
 	provider := generatedContentBySuffix(t, files, "toolsets/lookup/provider.go")
 	require.Contains(t, provider, "ByIDAuraEvidenceServerDataCodec.ToJSON")
-	require.Contains(t, provider, "InitByIDAuraEvidenceServerData(methodOut.Evidence)")
+	require.Contains(t, provider, "InitByIDAuraEvidenceServerData(typedMethodOut.Evidence)")
 	require.NotContains(t, provider, "json.Marshal(methodOut.")
+	require.Contains(t, provider, "var serverData rawjson.Message")
+	require.Contains(t, provider, "serverData = rawjson.Message(data)")
+	require.NotContains(t, provider, "rawjson.RawJSON")
 
 	executor := generatedContentBySuffix(t, files, "agents/scribe/lookup/service_executor.go")
-	require.Contains(t, executor, "ByIDAuraEvidenceServerDataCodec.ToJSON")
-	require.Contains(t, executor, "lookup.InitByIDAuraEvidenceServerData(mr.Evidence)")
-	require.NotContains(t, executor, "json.Marshal(mr.")
-	require.Contains(t, executor, "var serverData rawjson.Message")
-	require.Contains(t, executor, "serverData = rawjson.Message(b)")
-	require.NotContains(t, executor, "rawjson.RawJSON")
+	require.Contains(t, executor, "lookup.DispatchByIDMethod(ctx, meta, json.RawMessage(call.Payload), call.Labels, lookup.ByIDDispatchOptions{")
+	require.Contains(t, executor, "Call: caller,")
+	require.Contains(t, executor, "MapPayload: cfg.mapPayload,")
+	require.Contains(t, executor, "MapResult: cfg.mapResult,")
+	require.Contains(t, executor, "Injectors: dispatchInjectors(cfg.injectors),")
+	require.NotContains(t, executor, "ByIDAuraEvidenceServerDataCodec.ToJSON")
+	require.NotContains(t, executor, "lookup.InitByIDAuraEvidenceServerData")
+	require.NotContains(t, executor, "rawjson.Message")
 }
 
 func generatedContentBySuffix(t *testing.T, files []*codegen.File, suffix string) string {

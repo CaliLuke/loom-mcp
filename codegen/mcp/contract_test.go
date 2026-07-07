@@ -163,6 +163,7 @@ func TestGenerateMCPClientAdapter_DoesNotRenderOriginalClientFallback(t *testing
 		svc,
 		mcp,
 		newMCPExprBuilder(svc, mcp, nil).BuildServiceMapping(),
+		nil,
 	).buildAdapterData()
 
 	require.NoError(t, err)
@@ -194,6 +195,7 @@ func TestGenerateMCPClientAdapter_RendersNotificationEndpoints(t *testing.T) {
 		svc,
 		mcp,
 		newMCPExprBuilder(svc, mcp, nil).BuildServiceMapping(),
+		nil,
 	).buildAdapterData()
 
 	require.NoError(t, err)
@@ -231,6 +233,7 @@ func TestGenerateMCPClientAdapter_RendersOriginalClientForResourceResults(t *tes
 		svc,
 		mcp,
 		newMCPExprBuilder(svc, mcp, nil).BuildServiceMapping(),
+		nil,
 	).buildAdapterData()
 
 	require.NoError(t, err)
@@ -263,6 +266,7 @@ func TestGenerateMCPClientAdapter_RendersOriginalClientForDynamicPrompts(t *test
 		svc,
 		mcp,
 		newMCPExprBuilder(svc, mcp, collectSourceSnapshot([]eval.Root{root})).BuildServiceMapping(),
+		nil,
 	).buildAdapterData()
 
 	require.NoError(t, err)
@@ -561,6 +565,7 @@ func TestBuildAdapterData_DefaultedEnumFieldsStayScalarAndReapplyDefaults(t *tes
 		svc,
 		mcp,
 		newMCPExprBuilder(svc, mcp, nil).BuildServiceMapping(),
+		nil,
 	).buildAdapterData()
 
 	require.NoError(t, err)
@@ -607,6 +612,7 @@ func TestGenerateMCPClientAdapter_SpecializesResourceQueryConstruction(t *testin
 		svc,
 		mcp,
 		newMCPExprBuilder(svc, mcp, nil).BuildServiceMapping(),
+		nil,
 	).buildAdapterData()
 
 	require.NoError(t, err)
@@ -1047,6 +1053,7 @@ func TestPrepareServices_AcceptedPureMCPServiceAssignsEveryOriginalEndpoint(t *t
 		svc,
 		mcp,
 		newMCPExprBuilder(svc, mcp, nil).BuildServiceMapping(),
+		nil,
 	).buildAdapterData()
 	require.NoError(t, err)
 

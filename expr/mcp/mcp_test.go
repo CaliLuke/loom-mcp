@@ -172,6 +172,39 @@ func TestMCPToolDiscoveryMetadataOptions(t *testing.T) {
 	require.NoError(t, tool.Validate())
 }
 
+func TestMCPToolValidation(t *testing.T) {
+	t.Run("rejects agent runtime exposure on method-level MCP tool", func(t *testing.T) {
+		tool := &ToolExpr{
+			Name:            "lookup",
+			Description:     "Lookup",
+			ExposedSurfaces: []string{"agent_runtime"},
+		}
+
+		require.ErrorContains(t, tool.Validate(), "Expose(AgentRuntime) is invalid")
+	})
+
+	t.Run("rejects MCPPlacement on method-level MCP tool", func(t *testing.T) {
+		tool := &ToolExpr{
+			Name:                "lookup",
+			Description:         "Lookup",
+			MCPPlacementService: "assistant",
+			MCPPlacementServer:  "assistant-mcp",
+		}
+
+		require.ErrorContains(t, tool.Validate(), "MCPPlacement is invalid")
+	})
+
+	t.Run("allows explicit MCP-only surface bookkeeping", func(t *testing.T) {
+		tool := &ToolExpr{
+			Name:            "lookup",
+			Description:     "Lookup",
+			ExposedSurfaces: []string{"mcp"},
+		}
+
+		require.NoError(t, tool.Validate())
+	})
+}
+
 func TestMCPToolSearchPolicyValidation(t *testing.T) {
 	enabled := true
 	nameWeight := 10

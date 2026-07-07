@@ -59,6 +59,22 @@ Use this file when editing DSL, generators, generated helpers, or MCP codegen be
   JSON-RPC server, JSON-RPC client, and SDK paths: `name`, `title`,
   `description`, `inputSchema`, `outputSchema`, `annotations`, `_meta`, and
   `icons`.
+- Method-backed toolset tools may project into MCP only when the evaluated
+  design exposes both `AgentRuntime` and `MCPSurface` and places the tool with
+  `MCPPlacement(service, mcpServer)`. Codegen should trust validation for
+  same-service placement, resolved MCP server names, and catalog collision
+  checks, while still failing fast if adapter catalog merging sees a duplicate.
+- Generated toolset owner packages must own method-backed execution through
+  exported `Dispatch<Tool>Method(...)` helpers. Generated runtime service
+  executors and projected MCP `tools/call` cases should call those dispatchers
+  rather than duplicating payload/result transforms, injection, bounds,
+  server-data projection, retry hints, or tool-error mapping. Registry provider
+  loops still use their generated provider adapter path unless that path is
+  explicitly unified in a later milestone.
+- Projected MCP `ToolInfo` schemas must come from the generated toolset
+  `tools.ToolSpec` payload and result schemas, not from service-method-only
+  schema extraction. This keeps runtime specs, JSON-RPC adapters, and SDK
+  servers on one schema contract.
 - Progressive tool discovery is opt-in through `MCPAdapterOptions.ToolSearch`.
   When enabled, generated `tools/list` is the compact authoritative public
   catalog: `search_tools`, `call_tool`, and validated `AlwaysVisible` pins.
@@ -72,7 +88,8 @@ Use this file when editing DSL, generators, generated helpers, or MCP codegen be
   matches by default. Hidden real tools are called through `call_tool`; direct
   hidden JSON-RPC calls require `AllowDirectHiddenCalls`, and SDK compact mode
   must reject that option because unregistered SDK tools cannot be directly
-  invoked.
+  invoked. Projected MCP tools must follow the same `AlwaysVisible`,
+  `search_tools`, and `call_tool` behavior as method-level MCP tools.
 
 ## Validation And Contracts
 

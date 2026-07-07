@@ -7,10 +7,28 @@
 
 package features
 
+import (
+	"context"
+
+	loom "github.com/CaliLuke/loom/pkg"
+)
+
 // Client is the "features" service client.
-type Client struct{}
+type Client struct {
+	EchoTopicEndpoint loom.Endpoint
+}
 
 // NewClient initializes a "features" service client given the endpoints.
-func NewClient() *Client {
-	return &Client{}
+func NewClient(echoTopic loom.Endpoint) *Client {
+	return &Client{EchoTopicEndpoint: echoTopic}
+}
+
+// EchoTopic calls the "echo_topic" endpoint of the "features" service.
+func (c *Client) EchoTopic(ctx context.Context, p *MethodEchoPayload) (res *MethodEchoResult, err error) {
+	var ires any
+	ires, err = c.EchoTopicEndpoint(ctx, p)
+	if err != nil {
+		return
+	}
+	return ires.(*MethodEchoResult), nil
 }

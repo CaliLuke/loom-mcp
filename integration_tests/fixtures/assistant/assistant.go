@@ -187,3 +187,19 @@ func (s *assistantsrvc) DispatchCommand(ctx context.Context, p *assistant.Dispat
 	log.Printf(ctx, "assistant.dispatch_command")
 	return
 }
+
+// Lookup projected runtime tool data.
+func (s *assistantsrvc) ProjectedLookup(ctx context.Context, p *assistant.ProjectedLookupPayload) (res *assistant.ProjectedLookupResult, err error) {
+	answer := "projected:" + p.Query
+	source := "runtime-toolset"
+	res = &assistant.ProjectedLookupResult{Answer: answer, Source: source}
+	log.Printf(ctx, "assistant.projected_lookup")
+	return
+}
+
+// Return projected runtime status without a payload.
+func (s *assistantsrvc) ProjectedStatus(ctx context.Context) (res *assistant.ProjectedStatusResult, err error) {
+	res = &assistant.ProjectedStatusResult{Status: "ready"}
+	log.Printf(ctx, "assistant.projected_status")
+	return
+}

@@ -667,6 +667,15 @@ type (
 		// Confirmation configures design-time confirmation requirements for this tool.
 		Confirmation *ToolConfirmationData
 
+		// Surfaces declares where this tool may be exposed.
+		Surfaces []agentsExpr.ToolSurface
+		// MCPPlacementService is the target service for MCP projection.
+		MCPPlacementService string
+		// MCPPlacementServer is the target generated MCP server for projection.
+		MCPPlacementServer string
+		// MCPProjected reports whether this method-backed tool is projected into MCP.
+		MCPProjected bool
+
 		// PassthroughService is the Goa service name for deterministic forwarding
 		// when this tool is part of an exported toolset.
 		PassthroughService string

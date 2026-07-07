@@ -18,6 +18,7 @@ import (
 	"time"
 
 	assistant "example.com/assistant/gen/assistant"
+	projected "example.com/assistant/gen/assistant/toolsets/projected"
 	mcpruntime "github.com/CaliLuke/loom-mcp/runtime/mcp"
 	mcpskills "github.com/CaliLuke/loom-mcp/runtime/mcp/skills"
 	"github.com/CaliLuke/loom/observability/transport"
@@ -410,6 +411,20 @@ func registerSDKTools(server *mcpsdk.Server, adapter *MCPAdapter, requestContext
 		Name:         "dispatch_command",
 		OutputSchema: sdkToolInputSchema("{\"type\":\"object\",\"required\":[\"ack\"],\"properties\":{\"ack\":{\"type\":\"string\",\"description\":\"Acknowledgement\"}},\"additionalProperties\":false}"),
 		Title:        "Dispatch Command",
+	}, adapter.sdkToolHandler(requestContext))
+	server.AddTool(&mcpsdk.Tool{
+		Description:  "Lookup projected runtime tool data",
+		InputSchema:  json.RawMessage(projected.SpecProjectedLookupTool.Payload.Schema),
+		Name:         "projected_lookup_tool",
+		OutputSchema: json.RawMessage(projected.SpecProjectedLookupTool.Result.Schema),
+		Title:        "Projected Lookup Tool",
+	}, adapter.sdkToolHandler(requestContext))
+	server.AddTool(&mcpsdk.Tool{
+		Description:  "Return projected runtime status",
+		InputSchema:  json.RawMessage(projected.SpecProjectedStatusTool.Payload.Schema),
+		Name:         "projected_status_tool",
+		OutputSchema: json.RawMessage(projected.SpecProjectedStatusTool.Result.Schema),
+		Title:        "Projected Status Tool",
 	}, adapter.sdkToolHandler(requestContext))
 	return nil
 }

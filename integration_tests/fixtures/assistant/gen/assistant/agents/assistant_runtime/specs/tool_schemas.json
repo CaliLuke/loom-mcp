@@ -1,0 +1,82 @@
+{
+  "tools": [
+    {
+      "id": "projected.projected_lookup_tool",
+      "service": "assistant",
+      "toolset": "assistant.projected",
+      "title": "Projected Lookup Tool",
+      "description": "Lookup projected runtime tool data",
+      "payload": {
+        "name": "ProjectedLookupToolPayload",
+        "schema": {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "type": "object",
+          "properties": {
+            "query": {
+              "type": "string",
+              "description": "Projected lookup query",
+              "example": "Vel suscipit vero optio ea molestiae quia."
+            }
+          },
+          "required": [
+            "query"
+          ]
+        }
+      },
+      "result": {
+        "name": "ProjectedLookupToolResult",
+        "schema": {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "type": "object",
+          "properties": {
+            "answer": {
+              "type": "string",
+              "description": "Projected lookup answer",
+              "example": "Iste consequatur."
+            },
+            "source": {
+              "type": "string",
+              "description": "Projected lookup source",
+              "example": "Dolor delectus eos qui."
+            }
+          },
+          "required": [
+            "answer",
+            "source"
+          ]
+        }
+      }
+    },
+    {
+      "id": "projected.projected_status_tool",
+      "service": "assistant",
+      "toolset": "assistant.projected",
+      "title": "Projected Status Tool",
+      "description": "Return projected runtime status",
+      "payload": {
+        "name": "ProjectedStatusToolPayload",
+        "schema": {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "type": "object"
+        }
+      },
+      "result": {
+        "name": "ProjectedStatusToolResult",
+        "schema": {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "type": "object",
+          "properties": {
+            "status": {
+              "type": "string",
+              "description": "Projected runtime status",
+              "example": "Pariatur est iusto sapiente iusto explicabo doloribus."
+            }
+          },
+          "required": [
+            "status"
+          ]
+        }
+      }
+    }
+  ]
+}

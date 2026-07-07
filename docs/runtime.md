@@ -640,6 +640,20 @@ reg := helpers.NewHelpersToolsetRegistration(serviceClient)
 rt.RegisterToolset(reg)
 ```
 
+For method-backed toolset tools, codegen emits a shared
+`Dispatch<Tool>Method(ctx, meta, raw, labels, opts)` helper in the owning
+toolset package. Runtime service executors call that dispatcher instead of
+duplicating the default `BindTo(...)` path. The dispatcher owns payload decode,
+tool-to-method transform, label and metadata injection, interceptor wrapping,
+method invocation, method-to-tool transform, retry hints, bounds projection, and
+server-data projection.
+
+When a method-backed toolset tool is also exposed to MCP with
+`Expose(AgentRuntime, MCPSurface)` and `MCPPlacement(...)`, generated MCP
+adapters call the same dispatcher. Design-time exposure only permits the
+surface; runtime deployment still controls toolset registration and MCP server
+construction separately.
+
 ### Registry-Routed Provider Execution (Service-Side)
 
 Loom MCP supports cross-process tool invocation via the **Internal Tool Registry**. In this mode:
@@ -2181,6 +2195,13 @@ compatibility escape hatch, while SDK-backed servers reject that option at
 construction because unregistered SDK tools cannot preserve compact authoritative
 discovery. Synthetic name collisions and unknown `AlwaysVisible` pins fail fast
 during adapter construction.
+
+Toolset tools projected into MCP participate in the same generated catalog as
+method-level MCP tools. Their `ToolInfo` schemas come from the generated toolset
+`tools.ToolSpec` payload and result schemas, and their `tools/call` cases route
+through the shared method-backed dispatcher. Compact discovery treats projected
+tools like any other real tool: they may be pinned with `AlwaysVisible`, found
+through `search_tools`, and invoked through `call_tool`.
 
 ### Server-initiated events (Broadcaster)
 

@@ -7,6 +7,7 @@ import (
 	"testing"
 	"time"
 
+	projected "example.com/assistant/gen/assistant/toolsets/projected"
 	mcpruntime "github.com/CaliLuke/loom-mcp/runtime/mcp"
 	sdkmcp "github.com/modelcontextprotocol/go-sdk/mcp"
 	"github.com/stretchr/testify/assert"
@@ -126,6 +127,74 @@ func TestGeneratedSDKServerAdvertisesUnionToolSchema(t *testing.T) {
 	createValueProperties := createValueSchema["properties"].(map[string]any)
 	assert.Contains(t, createValueProperties, "name")
 	assert.Equal(t, []any{"name"}, createValueSchema["required"])
+}
+
+func TestProjectedToolRuntimeAndMCPSchemasMatch(t *testing.T) {
+	t.Parallel()
+
+	session := connectSDKSessionToServer(t, newGeneratedSDKServerURL(t), nil)
+	defer func() {
+		require.NoError(t, session.Close())
+	}()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	toolsResult, err := session.ListTools(ctx, nil)
+	require.NoError(t, err)
+	lookup := findToolByName(t, toolsResult.Tools, "projected_lookup_tool")
+	status := findToolByName(t, toolsResult.Tools, "projected_status_tool")
+
+	assertSDKSchemaJSONEq(t, projected.SpecProjectedLookupTool.Payload.Schema, lookup.InputSchema)
+	assertSDKSchemaJSONEq(t, projected.SpecProjectedLookupTool.Result.Schema, lookup.OutputSchema)
+	assert.Equal(t, "Lookup projected runtime tool data", lookup.Description)
+
+	assertSDKSchemaJSONEq(t, projected.SpecProjectedStatusTool.Payload.Schema, status.InputSchema)
+	assertSDKSchemaJSONEq(t, projected.SpecProjectedStatusTool.Result.Schema, status.OutputSchema)
+	assert.Equal(t, "Return projected runtime status", status.Description)
+}
+
+func TestProjectedToolMCPCallUsesSharedDispatcher(t *testing.T) {
+	t.Parallel()
+
+	jsonrpcServer := newGeneratedJSONRPCServer(t)
+	defer jsonrpcServer.Close()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	caller := newGeneratedCallerFromServer(t, jsonrpcServer.URL)
+	resp, err := caller.CallTool(ctx, mcpruntime.CallRequest{
+		Tool:    "projected_lookup_tool",
+		Payload: json.RawMessage(`{"query":"loom"}`),
+	})
+	require.NoError(t, err)
+	require.JSONEq(t, `{"answer":"projected:loom","source":"runtime-toolset"}`, string(resp.Result))
+	assert.Contains(t, string(resp.Structured), "Fields: answer, source")
+}
+
+func TestProjectedToolMCPCallSupportsNoPayloadMethod(t *testing.T) {
+	t.Parallel()
+
+	jsonrpcServer := newGeneratedJSONRPCServer(t)
+	defer jsonrpcServer.Close()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	caller := newGeneratedCallerFromServer(t, jsonrpcServer.URL)
+	resp, err := caller.CallTool(ctx, mcpruntime.CallRequest{
+		Tool: "projected_status_tool",
+	})
+	require.NoError(t, err)
+	require.JSONEq(t, `{"status":"ready"}`, string(resp.Result))
+}
+
+func assertSDKSchemaJSONEq(t *testing.T, want []byte, got any) {
+	t.Helper()
+
+	require.NotNil(t, got)
+	gotJSON, err := json.Marshal(got)
+	require.NoError(t, err)
+	require.JSONEq(t, string(want), string(gotJSON))
 }
 
 func newGeneratedSDKServerURL(t *testing.T) string {

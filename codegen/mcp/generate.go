@@ -8,7 +8,9 @@ import (
 	"sort"
 	"strings"
 
+	agentcodegen "github.com/CaliLuke/loom-mcp/codegen/agent"
 	"github.com/CaliLuke/loom-mcp/codegen/shared"
+	agentsexpr "github.com/CaliLuke/loom-mcp/expr/agent"
 	mcpexpr "github.com/CaliLuke/loom-mcp/expr/mcp"
 	"github.com/CaliLuke/loom-mcp/internal/upstreampaths"
 	"github.com/CaliLuke/loom/codegen"
@@ -56,7 +58,11 @@ func Generate(genpkg string, roots []eval.Root, files []*codegen.File) ([]*codeg
 
 		// Build mapping and adapter data early so we can customize generated clients
 		mapping := exprBuilder.BuildServiceMapping()
-		adapterGen := newAdapterGenerator(genpkg, svc, mcp, mapping)
+		projected, err := ProjectedToolInventory(genpkg, roots, svc.Name, mcp.Name)
+		if err != nil {
+			return nil, fmt.Errorf("build projected tool inventory for %s.%s: %w", svc.Name, mcp.Name, err)
+		}
+		adapterGen := newAdapterGenerator(genpkg, svc, mcp, mapping, projected)
 		adapterData, err := adapterGen.buildAdapterData()
 		if err != nil {
 			return nil, fmt.Errorf("build adapter data for %s: %w", svc.Name, err)
@@ -81,6 +87,69 @@ func Generate(genpkg string, roots []eval.Root, files []*codegen.File) ([]*codeg
 	}
 
 	return files, nil
+}
+
+// ProjectedToolInventory returns method-backed toolset tools placed into a generated MCP server.
+func ProjectedToolInventory(genpkg string, roots []eval.Root, serviceName string, mcpServer string) ([]*ProjectedToolAdapter, error) {
+	if !hasAgentRoot(roots) {
+		return nil, nil
+	}
+	tools, err := agentcodegen.ProjectedMCPTools(genpkg, roots, serviceName, mcpServer)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]*ProjectedToolAdapter, 0, len(tools))
+	for _, tool := range tools {
+		inputSchema := ""
+		if tool.Args != nil {
+			schema, err := shared.ToJSONSchema(tool.Args)
+			if err != nil {
+				return nil, fmt.Errorf("build projected input schema for %q: %w", tool.QualifiedName, err)
+			}
+			inputSchema = schema
+		}
+		outputSchema := ""
+		if tool.Return != nil {
+			schema, err := shared.ToJSONSchema(tool.Return)
+			if err != nil {
+				return nil, fmt.Errorf("build projected output schema for %q: %w", tool.QualifiedName, err)
+			}
+			outputSchema = schema
+		}
+		out = append(out, &ProjectedToolAdapter{
+			SourceToolset:       tool.Toolset.Name,
+			SourceTool:          tool.Name,
+			Description:         tool.Description,
+			Title:               tool.Title,
+			PlacementService:    tool.MCPPlacementService,
+			PlacementMCPServer:  tool.MCPPlacementServer,
+			SpecsPackageName:    tool.Toolset.SpecsPackageName,
+			SpecsImportPath:     tool.Toolset.SpecsImportPath,
+			SpecName:            "Spec" + tool.ConstName,
+			BoundService:        tool.Toolset.SourceServiceName,
+			BoundMethod:         tool.MethodGoName,
+			MethodPayloadType:   tool.MethodPayloadTypeRef,
+			RuntimeToolName:     tool.QualifiedName,
+			DispatcherFuncName:  "Dispatch" + tool.ConstName + "Method",
+			DispatchOptionsName: tool.ConstName + "DispatchOptions",
+			QualifiedSourceTool: tool.QualifiedName,
+			HasPayload:          tool.Args != nil && tool.Args.Type != expr.Empty,
+			HasResult:           tool.HasResult,
+			InputSchema:         inputSchema,
+			OutputSchema:        outputSchema,
+			ExampleArguments:    buildExampleJSON(tool.Args),
+		})
+	}
+	return out, nil
+}
+
+func hasAgentRoot(roots []eval.Root) bool {
+	for _, root := range roots {
+		if _, ok := root.(*agentsexpr.RootExpr); ok {
+			return true
+		}
+	}
+	return false
 }
 
 // generateMCPServiceCode generates the MCP service layer and JSON-RPC transport
@@ -425,7 +494,39 @@ func adapterImports(genpkg string, svc *expr.ServiceExpr, svcName string, data *
 			Name: "mcpskills",
 		})
 	}
+	if adapterDataHasProjectedTools(data) {
+		imports = append(imports, &codegen.ImportSpec{
+			Path: "github.com/CaliLuke/loom-mcp/runtime/agent/runtime",
+			Name: "agentruntime",
+		})
+		seenProjectedImports := map[string]struct{}{}
+		for _, tool := range data.Tools {
+			if tool == nil || tool.Projected == nil || tool.Projected.SpecsImportPath == "" {
+				continue
+			}
+			if _, ok := seenProjectedImports[tool.Projected.SpecsImportPath]; ok {
+				continue
+			}
+			seenProjectedImports[tool.Projected.SpecsImportPath] = struct{}{}
+			imports = append(imports, &codegen.ImportSpec{
+				Path: tool.Projected.SpecsImportPath,
+				Name: tool.Projected.SpecsPackageName,
+			})
+		}
+	}
 	return append(imports, adapterAttributeImports(genpkg, svc, imports)...)
+}
+
+func adapterDataHasProjectedTools(data *AdapterData) bool {
+	if data == nil {
+		return false
+	}
+	for _, tool := range data.Tools {
+		if tool != nil && tool.Projected != nil {
+			return true
+		}
+	}
+	return false
 }
 
 func adapterAttributeImports(genpkg string, svc *expr.ServiceExpr, imports []*codegen.ImportSpec) []*codegen.ImportSpec {

@@ -313,6 +313,34 @@ var _ = Service("assistant", func() {
 		Tool("dispatch_command", "Dispatch a command using a non-value branch-key union")
 		JSONRPC(func() {})
 	})
+
+	Method("projected_lookup", func() {
+		Description("Lookup projected runtime tool data")
+		Payload(ProjectedLookupPayload)
+		Result(ProjectedLookupResult)
+	})
+	Method("projected_status", func() {
+		Description("Return projected runtime status without a payload")
+		Result(ProjectedStatusResult)
+	})
+
+	Agent("assistant_runtime", "Runtime agent that owns projected tools", func() {
+		Use("projected", func() {
+			Tool("projected_lookup_tool", "Lookup projected runtime tool data", func() {
+				Args(ProjectedLookupToolPayload)
+				Return(ProjectedLookupToolResult)
+				BindTo("assistant", "projected_lookup")
+				Expose(AgentRuntime, MCPSurface)
+				MCPPlacement("assistant", "assistant-mcp")
+			})
+			Tool("projected_status_tool", "Return projected runtime status", func() {
+				Return(ProjectedStatusResult)
+				BindTo("assistant", "projected_status")
+				Expose(AgentRuntime, MCPSurface)
+				MCPPlacement("assistant", "assistant-mcp")
+			})
+		})
+	})
 })
 
 // ---- Shared Types (subset sufficient for integration tests) ----
@@ -381,6 +409,33 @@ var BarCmd = Type("BarCmd", func() {
 	Meta("oneof:type:tag", "bar")
 	Attribute("count", Int, "Bar count")
 	Required("count")
+})
+
+var ProjectedLookupPayload = Type("ProjectedLookupPayload", func() {
+	Attribute("query", String, "Projected lookup query")
+	Required("query")
+})
+
+var ProjectedLookupResult = Type("ProjectedLookupResult", func() {
+	Attribute("answer", String, "Projected lookup answer")
+	Attribute("source", String, "Projected lookup source")
+	Required("answer", "source")
+})
+
+var ProjectedLookupToolPayload = Type("ProjectedLookupToolPayload", func() {
+	Attribute("query", String, "Projected lookup query")
+	Required("query")
+})
+
+var ProjectedLookupToolResult = Type("ProjectedLookupToolResult", func() {
+	Attribute("answer", String, "Projected lookup answer")
+	Attribute("source", String, "Projected lookup source")
+	Required("answer", "source")
+})
+
+var ProjectedStatusResult = Type("ProjectedStatusResult", func() {
+	Attribute("status", String, "Projected runtime status")
+	Required("status")
 })
 
 var DPISpec = Type("DPISpec", func() {

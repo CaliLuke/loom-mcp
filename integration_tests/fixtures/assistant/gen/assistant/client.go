@@ -32,11 +32,13 @@ type Client struct {
 	GenerateDpiSpecEndpoint                loom.Endpoint
 	DispatchActionEndpoint                 loom.Endpoint
 	DispatchCommandEndpoint                loom.Endpoint
+	ProjectedLookupEndpoint                loom.Endpoint
+	ProjectedStatusEndpoint                loom.Endpoint
 }
 
 // NewClient initializes a "assistant" service client given the endpoints.
-func NewClient(listDocuments, systemInfo, conversationHistory, figmaDesignSystem, generatePrompts, buildFigmaImplementationPrompt, sendNotification, analyzeSentiment, extractKeywords, summarizeText, search, executeCode, processBatch, multiContent, generateDpiSpec, dispatchAction, dispatchCommand loom.Endpoint) *Client {
-	return &Client{ListDocumentsEndpoint: listDocuments, SystemInfoEndpoint: systemInfo, ConversationHistoryEndpoint: conversationHistory, FigmaDesignSystemEndpoint: figmaDesignSystem, GeneratePromptsEndpoint: generatePrompts, BuildFigmaImplementationPromptEndpoint: buildFigmaImplementationPrompt, SendNotificationEndpoint: sendNotification, AnalyzeSentimentEndpoint: analyzeSentiment, ExtractKeywordsEndpoint: extractKeywords, SummarizeTextEndpoint: summarizeText, SearchEndpoint: search, ExecuteCodeEndpoint: executeCode, ProcessBatchEndpoint: processBatch, MultiContentEndpoint: multiContent, GenerateDpiSpecEndpoint: generateDpiSpec, DispatchActionEndpoint: dispatchAction, DispatchCommandEndpoint: dispatchCommand}
+func NewClient(listDocuments, systemInfo, conversationHistory, figmaDesignSystem, generatePrompts, buildFigmaImplementationPrompt, sendNotification, analyzeSentiment, extractKeywords, summarizeText, search, executeCode, processBatch, multiContent, generateDpiSpec, dispatchAction, dispatchCommand, projectedLookup, projectedStatus loom.Endpoint) *Client {
+	return &Client{ListDocumentsEndpoint: listDocuments, SystemInfoEndpoint: systemInfo, ConversationHistoryEndpoint: conversationHistory, FigmaDesignSystemEndpoint: figmaDesignSystem, GeneratePromptsEndpoint: generatePrompts, BuildFigmaImplementationPromptEndpoint: buildFigmaImplementationPrompt, SendNotificationEndpoint: sendNotification, AnalyzeSentimentEndpoint: analyzeSentiment, ExtractKeywordsEndpoint: extractKeywords, SummarizeTextEndpoint: summarizeText, SearchEndpoint: search, ExecuteCodeEndpoint: executeCode, ProcessBatchEndpoint: processBatch, MultiContentEndpoint: multiContent, GenerateDpiSpecEndpoint: generateDpiSpec, DispatchActionEndpoint: dispatchAction, DispatchCommandEndpoint: dispatchCommand, ProjectedLookupEndpoint: projectedLookup, ProjectedStatusEndpoint: projectedStatus}
 }
 
 // ListDocuments calls the "list_documents" endpoint of the "assistant" service.
@@ -213,4 +215,26 @@ func (c *Client) DispatchCommand(ctx context.Context, p *DispatchCommandPayload)
 		return
 	}
 	return ires.(*DispatchCommandResult), nil
+}
+
+// ProjectedLookup calls the "projected_lookup" endpoint of the "assistant"
+// service.
+func (c *Client) ProjectedLookup(ctx context.Context, p *ProjectedLookupPayload) (res *ProjectedLookupResult, err error) {
+	var ires any
+	ires, err = c.ProjectedLookupEndpoint(ctx, p)
+	if err != nil {
+		return
+	}
+	return ires.(*ProjectedLookupResult), nil
+}
+
+// ProjectedStatus calls the "projected_status" endpoint of the "assistant"
+// service.
+func (c *Client) ProjectedStatus(ctx context.Context) (res *ProjectedStatusResult, err error) {
+	var ires any
+	ires, err = c.ProjectedStatusEndpoint(ctx, nil)
+	if err != nil {
+		return
+	}
+	return ires.(*ProjectedStatusResult), nil
 }

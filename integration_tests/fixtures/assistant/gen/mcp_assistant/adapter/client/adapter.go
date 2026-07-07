@@ -500,6 +500,74 @@ func NewEndpoints(scheme string, host string, doer goahttp.Doer, enc func(*http.
 		return decodeOriginalJSONRPCResult(enc, req3, toolResp.Result, decode)
 	}
 
+	// Tool: projected_lookup_tool -> ProjectedLookup
+	e.ProjectedLookup = func(ctx context.Context, v any) (any, error) {
+		var payload any
+		payload = v.(*assistant.ProjectedLookupPayload)
+		args, err := encodeOriginalPayload(ctx, enc, payload)
+		if err != nil {
+			return nil, err
+		}
+		toolResp, err := mcpCaller.CallTool(ctx, mcpruntime.CallRequest{
+			Payload: args,
+			Tool:    "projected_lookup_tool",
+		})
+		if err != nil {
+			prompt := retry.BuildRepairPrompt("tools/call:projected_lookup_tool", err.Error(), "{\"query\":\"abc123\"}", "{\"type\":\"object\",\"required\":[\"query\"],\"properties\":{\"query\":{\"type\":\"string\",\"description\":\"Projected lookup query\"}},\"additionalProperties\":false}")
+			return nil, &retry.RetryableError{
+				Cause:  err,
+				Prompt: prompt,
+			}
+		}
+		if len(toolResp.Result) == 0 {
+			prompt := retry.BuildRepairPrompt("tools/call:projected_lookup_tool", "empty MCP tool response", "{\"query\":\"abc123\"}", "{\"type\":\"object\",\"required\":[\"query\"],\"properties\":{\"query\":{\"type\":\"string\",\"description\":\"Projected lookup query\"}},\"additionalProperties\":false}")
+			return nil, &retry.RetryableError{
+				Cause:  fmt.Errorf("empty MCP tool response for projected_lookup_tool"),
+				Prompt: prompt,
+			}
+		}
+		req3, err := origC.BuildProjectedLookupRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		decode := assistantjsonrpcc.DecodeProjectedLookupResponse(dec, false)
+		return decodeOriginalJSONRPCResult(enc, req3, toolResp.Result, decode)
+	}
+
+	// Tool: projected_status_tool -> ProjectedStatus
+	e.ProjectedStatus = func(ctx context.Context, v any) (any, error) {
+		var payload any
+		payload = struct{}{}
+		args, err := encodeOriginalPayload(ctx, enc, payload)
+		if err != nil {
+			return nil, err
+		}
+		toolResp, err := mcpCaller.CallTool(ctx, mcpruntime.CallRequest{
+			Payload: args,
+			Tool:    "projected_status_tool",
+		})
+		if err != nil {
+			prompt := retry.BuildRepairPrompt("tools/call:projected_status_tool", err.Error(), "{}", "{\"type\":\"object\",\"additionalProperties\":false}")
+			return nil, &retry.RetryableError{
+				Cause:  err,
+				Prompt: prompt,
+			}
+		}
+		if len(toolResp.Result) == 0 {
+			prompt := retry.BuildRepairPrompt("tools/call:projected_status_tool", "empty MCP tool response", "{}", "{\"type\":\"object\",\"additionalProperties\":false}")
+			return nil, &retry.RetryableError{
+				Cause:  fmt.Errorf("empty MCP tool response for projected_status_tool"),
+				Prompt: prompt,
+			}
+		}
+		req3, err := origC.BuildProjectedStatusRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		decode := assistantjsonrpcc.DecodeProjectedStatusResponse(dec, false)
+		return decodeOriginalJSONRPCResult(enc, req3, toolResp.Result, decode)
+	}
+
 	// Resource: doc://list -> ListDocuments
 	e.ListDocuments = func(ctx context.Context, v any) (any, error) {
 		uri := "doc://list"
@@ -679,5 +747,5 @@ func NewEndpoints(scheme string, host string, doer goahttp.Doer, enc func(*http.
 // NewClient returns *assistant.Client using MCP-backed endpoints.
 func NewClient(scheme string, host string, doer goahttp.Doer, enc func(*http.Request) goahttp.Encoder, dec func(*http.Response) goahttp.Decoder, restore bool) *assistant.Client {
 	e := NewEndpoints(scheme, host, doer, enc, dec, restore)
-	return assistant.NewClient(e.ListDocuments, e.SystemInfo, e.ConversationHistory, e.FigmaDesignSystem, e.GeneratePrompts, e.BuildFigmaImplementationPrompt, e.SendNotification, e.AnalyzeSentiment, e.ExtractKeywords, e.SummarizeText, e.Search, e.ExecuteCode, e.ProcessBatch, e.MultiContent, e.GenerateDpiSpec, e.DispatchAction, e.DispatchCommand)
+	return assistant.NewClient(e.ListDocuments, e.SystemInfo, e.ConversationHistory, e.FigmaDesignSystem, e.GeneratePrompts, e.BuildFigmaImplementationPrompt, e.SendNotification, e.AnalyzeSentiment, e.ExtractKeywords, e.SummarizeText, e.Search, e.ExecuteCode, e.ProcessBatch, e.MultiContent, e.GenerateDpiSpec, e.DispatchAction, e.DispatchCommand, e.ProjectedLookup, e.ProjectedStatus)
 }

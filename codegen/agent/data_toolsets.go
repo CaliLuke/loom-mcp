@@ -267,6 +267,12 @@ func newToolData(ts *ToolsetData, expr *agentsExpr.ToolExpr, servicesData *servi
 		Bounds:             boundsData(expr.Bounds, expr.Method),
 		TerminalRun:        expr.TerminalRun,
 		ResultReminder:     expr.ResultReminder,
+		Surfaces:           slices.Clone(expr.Surfaces),
+		MCPProjected:       expr.ExposesSurface(agentsExpr.ToolSurfaceMCP),
+	}
+	if expr.MCPPlacement != nil {
+		tool.MCPPlacementService = expr.MCPPlacement.Service
+		tool.MCPPlacementServer = expr.MCPPlacement.MCPServer
 	}
 	tool.ServerData = serverDataData(expr.ServerData, qualified)
 	if expr.Confirmation != nil {

@@ -129,6 +129,18 @@ func TestGeneratedAdapterToolSearchCompactsPublicCatalog(t *testing.T) {
 	assert.Equal(t, []string{"search_tools", "call_tool", "search"}, toolNames(result.Tools))
 }
 
+func TestGeneratedAdapterToolSearchAlwaysVisibleProjectedTool(t *testing.T) {
+	t.Parallel()
+
+	adapter := newToolSearchAdapter(t, &mcpassistant.ToolSearchOptions{
+		AlwaysVisible: []string{"projected_lookup_tool"},
+	})
+
+	result, err := adapter.ToolsList(context.Background(), &mcpassistant.ToolsListPayload{})
+	require.NoError(t, err)
+	assert.Equal(t, []string{"search_tools", "call_tool", "projected_lookup_tool"}, toolNames(result.Tools))
+}
+
 func TestGeneratedAdapterToolSearchRejectsUnknownAlwaysVisibleTool(t *testing.T) {
 	t.Parallel()
 
@@ -207,6 +219,21 @@ func TestGeneratedAdapterToolSearchMatchesNaturalLanguageTokenQuery(t *testing.T
 	assert.Equal(t, []string{"search"}, toolSearchDescriptorNames(result.Tools))
 	require.Len(t, result.Tools, 1)
 	assert.NotEmpty(t, result.Tools[0].WhyMatched)
+}
+
+func TestGeneratedAdapterToolSearchFindsProjectedTool(t *testing.T) {
+	t.Parallel()
+
+	adapter := newToolSearchAdapter(t, &mcpassistant.ToolSearchOptions{MaxResults: 1})
+	result := callToolSearch(t, adapter, `{"query":"projected lookup","include_schemas":true}`)
+
+	assert.Equal(t, []string{"projected_lookup_tool"}, toolSearchDescriptorNames(result.Tools))
+	require.Len(t, result.Tools, 1)
+	assert.NotEmpty(t, result.Tools[0].InputSchema)
+	assert.NotEmpty(t, result.Tools[0].OutputSchema)
+	assert.Equal(t, "call_tool", result.Tools[0].CallToolName)
+	assert.Contains(t, result.Tools[0].CallToolJSON, `"name": "projected_lookup_tool"`)
+	assert.Contains(t, result.Tools[0].CallToolJSON, `"query": "<string>"`)
 }
 
 func TestGeneratedAdapterToolSearchExactNameSuppressesWeakMatches(t *testing.T) {
@@ -631,6 +658,25 @@ func TestGeneratedAdapterToolSearchCallToolInvokesHiddenTool(t *testing.T) {
 	require.NoError(t, json.Unmarshal(stream.events[0].StructuredContent, &result))
 	require.NotNil(t, result.Sentiment)
 	assert.Equal(t, "positive", *result.Sentiment)
+}
+
+func TestGeneratedAdapterToolSearchCallToolInvokesProjectedTool(t *testing.T) {
+	t.Parallel()
+
+	adapter := newToolSearchAdapter(t, &mcpassistant.ToolSearchOptions{})
+	stream := &capturedToolsCallStream{}
+
+	err := adapter.ToolsCall(context.Background(), &mcpassistant.ToolsCallPayload{
+		Name:      "call_tool",
+		Arguments: json.RawMessage(`{"name":"projected_lookup_tool","arguments":{"query":"loom"}}`),
+	}, stream)
+	require.NoError(t, err)
+	require.Len(t, stream.events, 1)
+
+	var result assistant.ProjectedLookupToolResult
+	require.NoError(t, json.Unmarshal(stream.events[0].StructuredContent, &result))
+	assert.Equal(t, "projected:loom", result.Answer)
+	assert.Equal(t, "runtime-toolset", result.Source)
 }
 
 func TestGeneratedAdapterToolSearchCallToolInvokesHiddenToolDespiteDirectHiddenGate(t *testing.T) {
