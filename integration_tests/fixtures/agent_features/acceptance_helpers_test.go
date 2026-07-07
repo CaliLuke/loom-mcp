@@ -30,6 +30,7 @@ type featureRuntime struct {
 	recorder  *hookRecorder
 	audit     *auditInterceptor
 	memory    memory.Store
+	longTerm  memory.Service
 	artifacts artifact.Store
 	stream    *streamRecorder
 }
@@ -111,6 +112,7 @@ func (e *recordingWorkflowExecutor) toolNames() []tools.Ident {
 type namedInterceptorPlanner struct {
 	t             *testing.T
 	wantPreloaded string
+	wantLongTerm  string
 }
 
 func (p namedInterceptorPlanner) PlanStart(ctx context.Context, input *planner.PlanInput) (*planner.PlanResult, error) {
@@ -118,6 +120,11 @@ func (p namedInterceptorPlanner) PlanStart(ctx context.Context, input *planner.P
 		encoded, err := json.Marshal(input.PreloadedMemory)
 		require.NoError(p.t, err)
 		require.Contains(p.t, string(encoded), p.wantPreloaded)
+	}
+	if p.wantLongTerm != "" {
+		encoded, err := json.Marshal(input.PreloadedMemoryEntries)
+		require.NoError(p.t, err)
+		require.Contains(p.t, string(encoded), p.wantLongTerm)
 	}
 	client, ok := input.Agent.ModelClient("test-model")
 	if !ok {
@@ -278,6 +285,7 @@ func newFeatureRuntime(t *testing.T, opts ...agentsruntime.RuntimeOption) *featu
 	_, err := bus.Register(recorder)
 	require.NoError(t, err)
 	mem := memoryinmem.New()
+	longTerm := memoryinmem.NewService()
 	artifacts := artifact.NewMemoryStore()
 	streams := &streamRecorder{}
 	audit := &auditInterceptor{}
@@ -286,6 +294,14 @@ func newFeatureRuntime(t *testing.T, opts ...agentsruntime.RuntimeOption) *featu
 		agentsruntime.WithSessionStore(sessioninmem.New()),
 		agentsruntime.WithRunEventStore(runloginmem.New()),
 		agentsruntime.WithMemoryStore(mem),
+		agentsruntime.WithMemoryService(longTerm),
+		agentsruntime.WithMemoryScopeResolver(memory.ScopeResolverFunc(func(_ context.Context, input memory.ScopeInput) (memory.Scope, error) {
+			return memory.Scope{
+				Namespace:  "agent:" + input.AgentID,
+				UserID:     "fixture-user",
+				Visibility: input.Visibility,
+			}, nil
+		})),
 		agentsruntime.WithArtifactStore(artifacts),
 		agentsruntime.WithHooks(bus),
 		agentsruntime.WithStream(streams),
@@ -299,6 +315,7 @@ func newFeatureRuntime(t *testing.T, opts ...agentsruntime.RuntimeOption) *featu
 		recorder:  recorder,
 		audit:     audit,
 		memory:    mem,
+		longTerm:  longTerm,
 		artifacts: artifacts,
 		stream:    streams,
 	}

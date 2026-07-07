@@ -239,6 +239,9 @@ func agentRegistryFile(agent *AgentData) *codegen.File {
 			&codegen.ImportSpec{Path: "github.com/CaliLuke/loom-mcp/runtime/agent/planner"},
 		)
 	}
+	if needsMemoryImport(agent) {
+		imports = append(imports, &codegen.ImportSpec{Path: "github.com/CaliLuke/loom-mcp/runtime/agent/memory"})
+	}
 	// Import toolset packages that have method-backed tools so we can call their registration helpers.
 	for _, ts := range agent.AllToolsets {
 		// Import for method-backed (app-supplied executor) or external MCP (local executor)
@@ -395,6 +398,21 @@ func needsTimeImport(agent *AgentData) bool {
 		return true
 	}
 	return agentActivitiesNeedTimeImport(agent)
+}
+
+func needsMemoryImport(agent *AgentData) bool {
+	if agent.RunPolicy.PreloadLongTermMemory != nil {
+		return true
+	}
+	for _, ts := range agent.UsedToolsets {
+		if !isMemoryBackedToolset(ts) || ts.Expr == nil || ts.Expr.Provider == nil {
+			continue
+		}
+		if len(ts.Expr.Provider.MemorySources) > 0 || ts.Expr.Provider.MemoryVisibility != "" {
+			return true
+		}
+	}
+	return false
 }
 
 func agentToolsFiles(agent *AgentData) []*codegen.File {

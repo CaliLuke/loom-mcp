@@ -88,6 +88,10 @@ type (
 		Memory memory.Store
 		// MemorySearcher provides indexed or cross-run memory lookup.
 		MemorySearcher memory.Searcher
+		// MemoryService stores and searches long-term entry memory.
+		MemoryService memory.Service
+		// MemoryScopeResolver derives tenant/user scope for runtime-owned memory calls.
+		MemoryScopeResolver memory.ScopeResolver
 		// ArtifactStore persists tool-produced run artifacts.
 		ArtifactStore artifact.Store
 		// PromptRegistry resolves prompt specs and optional scoped overrides.
@@ -184,6 +188,10 @@ type (
 		MemoryStore memory.Store
 		// MemorySearcher provides indexed or cross-run memory lookup.
 		MemorySearcher memory.Searcher
+		// MemoryService stores and searches long-term entry memory.
+		MemoryService memory.Service
+		// MemoryScopeResolver derives tenant/user scope for runtime-owned memory calls.
+		MemoryScopeResolver memory.ScopeResolver
 		// ArtifactStore persists tool-produced run artifacts.
 		ArtifactStore artifact.Store
 		// PromptStore resolves scoped prompt overrides. When nil, prompt rendering
@@ -425,6 +433,10 @@ type (
 		// PreloadMemory injects bounded memory snippets into planner inputs before
 		// each planning turn. Nil preserves the default no-preload behavior.
 		PreloadMemory *MemoryPreloadPolicy
+
+		// PreloadLongTermMemory injects bounded long-term memory entries into
+		// planner inputs before each planning turn.
+		PreloadLongTermMemory *LongTermMemoryPreloadPolicy
 	}
 
 	// MemoryScope identifies which memory backing source a query should use.
@@ -435,6 +447,14 @@ type (
 		// Scope selects the memory source.
 		Scope MemoryScope
 		// MaxResults caps the number of memory events injected into planner input.
+		MaxResults int
+	}
+
+	// LongTermMemoryPreloadPolicy configures bounded planner-input long-term memory preload.
+	LongTermMemoryPreloadPolicy struct {
+		// Visibility selects user or shared long-term memory.
+		Visibility memory.Visibility
+		// MaxResults caps the number of entries injected into planner input.
 		MaxResults int
 	}
 

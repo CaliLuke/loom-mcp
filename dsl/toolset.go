@@ -229,6 +229,8 @@ type MemoryProviderOption interface {
 }
 
 type memoryMaxResultsOption int
+type memorySourceOption agentsexpr.MemoryToolSource
+type memoryVisibilityOption agentsexpr.MemoryVisibility
 
 // FromMemory configures a toolset to expose bounded memory lookup tools.
 func FromMemory(opts ...MemoryProviderOption) *agentsexpr.ProviderExpr {
@@ -248,6 +250,39 @@ func MemoryMaxResults(n int) memoryMaxResultsOption {
 
 func (o memoryMaxResultsOption) applyMemoryProvider(provider *agentsexpr.ProviderExpr) {
 	provider.MemoryMaxResults = int(o)
+}
+
+// MemoryTranscript exposes current-run transcript memory from FromMemory.
+func MemoryTranscript() MemoryProviderOption {
+	return memorySourceOption(agentsexpr.MemoryToolSourceTranscript)
+}
+
+// MemoryIndexedTranscript exposes indexed transcript memory from FromMemory.
+func MemoryIndexedTranscript() MemoryProviderOption {
+	return memorySourceOption(agentsexpr.MemoryToolSourceIndexedTranscript)
+}
+
+// MemoryLongTerm exposes long-term entry memory from FromMemory.
+func MemoryLongTerm() MemoryProviderOption {
+	return memorySourceOption(agentsexpr.MemoryToolSourceLongTerm)
+}
+
+// MemoryVisibilityUser scopes long-term memory to the resolved user.
+func MemoryVisibilityUser() memoryVisibilityOption {
+	return memoryVisibilityOption(agentsexpr.MemoryVisibilityUser)
+}
+
+// MemoryVisibilityShared scopes long-term memory to explicitly shared knowledge.
+func MemoryVisibilityShared() memoryVisibilityOption {
+	return memoryVisibilityOption(agentsexpr.MemoryVisibilityShared)
+}
+
+func (o memorySourceOption) applyMemoryProvider(provider *agentsexpr.ProviderExpr) {
+	provider.MemorySources = append(provider.MemorySources, agentsexpr.MemoryToolSource(o))
+}
+
+func (o memoryVisibilityOption) applyMemoryProvider(provider *agentsexpr.ProviderExpr) {
+	provider.MemoryVisibility = agentsexpr.MemoryVisibility(o)
 }
 
 // FromRegistry configures a toolset to be sourced from a registry. Use

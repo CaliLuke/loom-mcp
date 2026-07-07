@@ -152,6 +152,16 @@ func Register{{ .StructName }}(ctx context.Context, rt *agentsruntime.Runtime, c
                 MaxResults: {{ .RunPolicy.PreloadMemory.MaxResults }},
             },
 {{- end }}
+{{- if .RunPolicy.PreloadLongTermMemory }}
+            PreloadLongTermMemory: &agentsruntime.LongTermMemoryPreloadPolicy{
+            {{- if eq .RunPolicy.PreloadLongTermMemory.Visibility "shared" }}
+                Visibility: memory.VisibilityShared,
+            {{- else }}
+                Visibility: memory.VisibilityUser,
+            {{- end }}
+                MaxResults: {{ .RunPolicy.PreloadLongTermMemory.MaxResults }},
+            },
+{{- end }}
         },
 {{- if .RunPolicy.RetryAndReflect }}
         Interceptors: []agentsruntime.Interceptor{
@@ -294,7 +304,21 @@ func RegisterUsedToolsets(ctx context.Context, rt *agentsruntime.Runtime, opts .
         reg := agentsruntime.NewMemoryToolsetRegistration(agentsruntime.MemoryToolsetConfig{
             Store: rt.Memory,
             Searcher: rt.MemorySearcher,
+            {{- if memoryToolsetUsesLongTerm . }}
+            Service: rt.MemoryService,
+            ScopeResolver: rt.MemoryScopeResolver,
+            {{- end }}
             Name: {{ printf "%q" .QualifiedName }},
+            {{- if .Expr.Provider.MemorySources }}
+            Sources: []memory.ToolSource{
+            {{- range .Expr.Provider.MemorySources }}
+                {{ memoryToolSourceRef . }},
+            {{- end }}
+            },
+            {{- end }}
+            {{- if .Expr.Provider.MemoryVisibility }}
+            Visibility: {{ memoryVisibilityRef .Expr.Provider.MemoryVisibility }},
+            {{- end }}
             MaxResults: {{ .Expr.Provider.MemoryMaxResults }},
         })
         if err := rt.RegisterToolset(reg); err != nil {

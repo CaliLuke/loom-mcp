@@ -58,10 +58,23 @@ Use this file for current loom-mcp runtime behavior in this repo. Prefer it over
   to `runtime.WithMemoryStore(...)`, while `scope:"indexed"` requires
   `runtime.WithMemorySearcher(...)` and otherwise returns an
   `unsupported_operation` retry hint.
+- Long-term memory is a separate `memory.Service` contract with entry-shaped
+  `PutEntry`, `IngestRun`, `IngestEvents`, and `Search` operations. Generated
+  `FromMemory(MemoryLongTerm(), ...)` registrations pass
+  `rt.MemoryService` and `rt.MemoryScopeResolver`, expose `search_memory`, and
+  accept only query/filter payload fields from the model. Visibility and scope
+  are design/runtime-owned and must not be controlled by tool payloads. Tool
+  results use model-facing hits and must not expose raw scope, source
+  references, or metadata from stored entries.
 - Planner-input memory preload is opt-in through generated
   `RunPolicy.PreloadMemory`. It fills `planner.PlanInput.PreloadedMemory` and
   `planner.PlanResumeInput.PreloadedMemory` with bounded snippets without
   changing default transcript/history behavior.
+- Long-term preload is opt-in through generated
+  `RunPolicy.PreloadLongTermMemory`. It searches with the latest
+  history-filtered user text and fills `PreloadedMemoryEntries`, leaving raw
+  transcript event preload unchanged. Planners that want prompt text should use
+  `memory.FormatEntriesForPrompt(...)` rather than inventing ad hoc formatting.
 
 ## Interceptors
 

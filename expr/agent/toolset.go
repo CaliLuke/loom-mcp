@@ -179,6 +179,23 @@ func (t *ToolsetExpr) validateMemoryProvider(verr *eval.ValidationErrors) {
 	if t.Provider.MemoryMaxResults < 0 {
 		verr.Add(t, "MemoryMaxResults must be non-negative")
 	}
+	seenSources := make(map[MemoryToolSource]struct{}, len(t.Provider.MemorySources))
+	for _, source := range t.Provider.MemorySources {
+		switch source {
+		case MemoryToolSourceTranscript, MemoryToolSourceIndexedTranscript, MemoryToolSourceLongTerm:
+			if _, ok := seenSources[source]; ok {
+				verr.Add(t, "duplicate memory source %q", source)
+			}
+			seenSources[source] = struct{}{}
+		default:
+			verr.Add(t, "unknown memory source %q", source)
+		}
+	}
+	switch t.Provider.MemoryVisibility {
+	case "", MemoryVisibilityUser, MemoryVisibilityShared:
+	default:
+		verr.Add(t, "unknown memory visibility %q", t.Provider.MemoryVisibility)
+	}
 	if len(t.Tools) > 0 {
 		verr.Add(t, "FromMemory toolsets cannot declare inline tools")
 	}

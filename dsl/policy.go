@@ -179,6 +179,11 @@ type PreloadMemoryOption interface {
 	applyPreloadMemory(*expragents.MemoryPreloadExpr)
 }
 
+// PreloadLongTermMemoryOption configures bounded long-term memory preload.
+type PreloadLongTermMemoryOption interface {
+	applyPreloadLongTermMemory(*expragents.LongTermMemoryPreloadExpr)
+}
+
 type memoryScopeOption expragents.MemoryScope
 
 // RetryAndReflectOption configures RetryAndReflect policy behavior.
@@ -217,6 +222,30 @@ func PreloadMemory(opts ...PreloadMemoryOption) {
 	}
 }
 
+// PreloadLongTermMemory enables bounded long-term memory entries in planner inputs.
+//
+// PreloadLongTermMemory must appear in a RunPolicy expression.
+func PreloadLongTermMemory(opts ...PreloadLongTermMemoryOption) {
+	policy, ok := eval.Current().(*expragents.RunPolicyExpr)
+	if !ok {
+		eval.IncompatibleDSL()
+		return
+	}
+	preload := policy.PreloadLongTermMemory
+	if preload == nil {
+		preload = &expragents.LongTermMemoryPreloadExpr{
+			Policy:     policy,
+			Visibility: expragents.MemoryVisibilityUser,
+		}
+		policy.PreloadLongTermMemory = preload
+	}
+	for _, opt := range opts {
+		if opt != nil {
+			opt.applyPreloadLongTermMemory(preload)
+		}
+	}
+}
+
 // MemoryScopeCurrentRun selects current-run memory for preload.
 func MemoryScopeCurrentRun() memoryScopeOption {
 	return memoryScopeOption(expragents.MemoryScopeCurrentRun)
@@ -233,6 +262,14 @@ func (o memoryScopeOption) applyPreloadMemory(preload *expragents.MemoryPreloadE
 
 func (o memoryMaxResultsOption) applyPreloadMemory(preload *expragents.MemoryPreloadExpr) {
 	preload.MaxResults = int(o)
+}
+
+func (o memoryMaxResultsOption) applyPreloadLongTermMemory(preload *expragents.LongTermMemoryPreloadExpr) {
+	preload.MaxResults = int(o)
+}
+
+func (o memoryVisibilityOption) applyPreloadLongTermMemory(preload *expragents.LongTermMemoryPreloadExpr) {
+	preload.Visibility = expragents.MemoryVisibility(o)
 }
 
 // RetryAndReflect enables tool-error reflection. When a tool executor returns

@@ -15,6 +15,8 @@ var ArtifactTools = Toolset("artifacts", FromArtifacts(MaxArtifactBytes(65536), 
 
 var MemoryTools = Toolset("memory", FromMemory(MemoryMaxResults(20)))
 
+var LongTermMemoryTools = Toolset("long_term_memory", FromMemory(MemoryLongTerm(), MemoryVisibilityUser(), MemoryMaxResults(20)))
+
 var SkillTools = Toolset("skills", FromSkills(".agents/skills", SkillPreload(SkillPreloadOnStart), SkillReload(SkillReloadPerCall)))
 
 var TopicPayload = Type("TopicPayload", func() {
@@ -39,6 +41,7 @@ var _ = Service("features", func() {
 	Agent("coordinator", "Generated acceptance agent", func() {
 		Use(ArtifactTools)
 		Use(MemoryTools)
+		Use(LongTermMemoryTools)
 		Use(SkillTools)
 		Use("workflow", func() {
 			Tool("draft", "Draft a response", func() {
@@ -68,6 +71,7 @@ var _ = Service("features", func() {
 			Interceptors("audit")
 			RetryAndReflect(MaxRetries(1), ErrorIfRetryExceeded(true))
 			PreloadMemory(MemoryScopeCurrentRun(), MemoryMaxResults(5))
+			PreloadLongTermMemory(MemoryVisibilityUser(), MemoryMaxResults(5))
 		})
 		Workflow(func() {
 			Parallel(func() {

@@ -247,6 +247,7 @@ func (e *toolBatchExec) dispatchActivityToolCall(ctx context.Context, wfCtx engi
 		ToolCallID:       call.ToolCallID,
 		Payload:          call.Payload,
 		SessionID:        call.SessionID,
+		Labels:           call.Labels,
 		TurnID:           call.TurnID,
 		ParentToolCallID: call.ParentToolCallID,
 	}

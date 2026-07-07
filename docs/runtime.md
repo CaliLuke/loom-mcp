@@ -1533,8 +1533,13 @@ derives a non-global namespace from the agent ID and reads reserved run labels
 `memory.namespace` and `memory.user_id`; production runtimes should provide
 `runtime.WithMemoryScopeResolver(...)` for account/project/user routing.
 
-Use `FromMemory(MemoryLongTerm(), ...)` to expose `search_memory`. A
-user-scoped toolset cannot be widened to shared memory by model payload.
+Use `FromMemory(MemoryLongTerm(), ...)` to expose `search_memory`. The
+model-facing payload accepts `query`, optional `labels`, and optional `limit`;
+visibility and scope are owned by the design/runtime configuration, not by model
+arguments. `MemoryVisibilityUser()` is the default, and
+`MemoryVisibilityShared()` is explicit opt-in for shared memory. Results are
+model-facing hits with content, author, public labels, score, and snippet; raw
+scope, source references, and metadata stay inside the runtime service.
 
 Run policy can also opt into bounded planner-input preload:
 
@@ -1550,6 +1555,8 @@ Preloaded memory appears on `planner.PlanInput.PreloadedMemory` and
 on `PreloadedMemoryEntries`, so planners can distinguish raw transcript events
 from durable extracted entries. Nil policy preserves the default no-preload
 behavior; planners should use explicit memory tools for follow-up lookup.
+Planners that need prompt text can render long-term entries with
+`memory.FormatEntriesForPrompt(...)`.
 
 ### Run event store (runlog.Store)
 

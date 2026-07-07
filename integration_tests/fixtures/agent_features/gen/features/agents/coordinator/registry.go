@@ -16,6 +16,7 @@ import (
 	specs "example.com/agentfeatures/gen/features/agents/coordinator/specs"
 	workflow "example.com/agentfeatures/gen/features/toolsets/workflow"
 	"github.com/CaliLuke/loom-mcp/runtime/agent/engine"
+	"github.com/CaliLuke/loom-mcp/runtime/agent/memory"
 	"github.com/CaliLuke/loom-mcp/runtime/agent/planner"
 	agentsruntime "github.com/CaliLuke/loom-mcp/runtime/agent/runtime"
 )
@@ -75,6 +76,10 @@ func RegisterCoordinatorAgent(ctx context.Context, rt *agentsruntime.Runtime, cf
 				Scope:      agentsruntime.MemoryScopeCurrentRun,
 				MaxResults: 5,
 			},
+			PreloadLongTermMemory: &agentsruntime.LongTermMemoryPreloadPolicy{
+				Visibility: memory.VisibilityUser,
+				MaxResults: 5,
+			},
 		},
 		Interceptors: []agentsruntime.Interceptor{
 			agentsruntime.NewRetryAndReflectInterceptor(agentsruntime.RetryAndReflectConfig{
@@ -117,6 +122,23 @@ func RegisterUsedToolsets(ctx context.Context, rt *agentsruntime.Runtime, opts .
 			Name:             "features.artifacts",
 			MaxArtifactBytes: 65536,
 			MaxArtifacts:     50,
+		})
+		if err := rt.RegisterToolset(reg); err != nil {
+			return err
+		}
+	}
+	{
+		reg := agentsruntime.NewMemoryToolsetRegistration(agentsruntime.MemoryToolsetConfig{
+			Store:         rt.Memory,
+			Searcher:      rt.MemorySearcher,
+			Service:       rt.MemoryService,
+			ScopeResolver: rt.MemoryScopeResolver,
+			Name:          "features.long_term_memory",
+			Sources: []memory.ToolSource{
+				memory.ToolSourceLongTerm,
+			},
+			Visibility: memory.VisibilityUser,
+			MaxResults: 20,
 		})
 		if err := rt.RegisterToolset(reg); err != nil {
 			return err

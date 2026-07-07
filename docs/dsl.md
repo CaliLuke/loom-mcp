@@ -782,10 +782,13 @@ Agent("assistant", "Memory-aware assistant", func() {
 memory store. `scope:"indexed"` requires `runtime.WithMemorySearcher(...)`; otherwise the
 tool returns a structured `unsupported_operation` retry hint.
 
-`memory.search_memory` accepts `query`, optional `labels`, optional
-`visibility`, and optional `limit`, and returns long-term memory `hits`.
-User-scoped toolsets require a resolved user ID and cannot be widened to shared
-memory by payload.
+`memory.search_memory` accepts `query`, optional `labels`, and optional `limit`,
+and returns model-facing long-term memory `hits` with content, author, public
+labels, score, and snippet. Visibility and scope are owned by the design/runtime
+configuration, not by model payloads. Raw scope, source references, and metadata
+are not returned to the model. User-scoped toolsets require a resolved user ID;
+shared memory requires explicit
+`MemoryVisibilityShared()`.
 
 ### Generated Feature Acceptance Fixture
 
@@ -1238,7 +1241,8 @@ planner should ask for additional memory.
 
 `PreloadLongTermMemory` searches the configured long-term memory service with
 the latest history-filtered user text and injects durable entries into
-`PreloadedMemoryEntries`.
+`PreloadedMemoryEntries`. Planners that want prompt text can render these
+entries with `memory.FormatEntriesForPrompt(...)`.
 
 ```go
 RunPolicy(func() {

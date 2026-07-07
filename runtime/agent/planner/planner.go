@@ -622,6 +622,11 @@ type PlanInput struct {
 	// Defaults to empty; planners should use explicit memory tools for follow-up
 	// lookup instead of assuming broad transcript availability here.
 	PreloadedMemory []memory.Event
+
+	// PreloadedMemoryEntries contains bounded long-term memory entries requested
+	// by run policy. It is separate from PreloadedMemory so planners can
+	// distinguish extracted durable entries from raw transcript events.
+	PreloadedMemoryEntries []memory.Entry
 }
 
 // PlanResumeInput carries messages plus execution history into PlanResume.
@@ -658,6 +663,11 @@ type PlanResumeInput struct {
 	// Defaults to empty; planners should use explicit memory tools for follow-up
 	// lookup instead of assuming broad transcript availability here.
 	PreloadedMemory []memory.Event
+
+	// PreloadedMemoryEntries contains bounded long-term memory entries requested
+	// by run policy. It is separate from PreloadedMemory so planners can
+	// distinguish extracted durable entries from raw transcript events.
+	PreloadedMemoryEntries []memory.Entry
 }
 
 // PlanResult is the planner's decision for the next step.

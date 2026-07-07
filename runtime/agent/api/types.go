@@ -395,6 +395,9 @@ type (
 		// SessionID is the logical session identifier (for example, a chat conversation).
 		SessionID string
 
+		// Labels carries runtime-owned routing and policy labels for this tool call.
+		Labels map[string]string
+
 		// TurnID identifies the conversational turn that produced this tool call.
 		TurnID string
 

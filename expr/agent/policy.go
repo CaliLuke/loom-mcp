@@ -43,6 +43,8 @@ type (
 		Interceptors []string
 		// PreloadMemory configures bounded planner-input memory preload.
 		PreloadMemory *MemoryPreloadExpr
+		// PreloadLongTermMemory configures bounded long-term memory preload.
+		PreloadLongTermMemory *LongTermMemoryPreloadExpr
 	}
 
 	// MemoryScope identifies the memory source used by preload policy.
@@ -57,6 +59,18 @@ type (
 		// Scope selects the memory source.
 		Scope MemoryScope
 		// MaxResults caps the number of memory events injected into planner input.
+		MaxResults int
+	}
+
+	// LongTermMemoryPreloadExpr captures design-time long-term memory preload policy.
+	LongTermMemoryPreloadExpr struct {
+		eval.DSLFunc
+
+		// Policy is the run policy expression this preload configuration belongs to.
+		Policy *RunPolicyExpr
+		// Visibility selects user or shared long-term memory.
+		Visibility MemoryVisibility
+		// MaxResults caps the number of entries injected into planner input.
 		MaxResults int
 	}
 
@@ -157,10 +171,25 @@ func (r *RunPolicyExpr) Validate() error {
 	r.validateRetryAndReflect(verr)
 	r.validateInterceptors(verr)
 	r.validatePreloadMemory(verr)
+	r.validatePreloadLongTermMemory(verr)
 	if len(verr.Errors) == 0 {
 		return nil
 	}
 	return verr
+}
+
+func (r *RunPolicyExpr) validatePreloadLongTermMemory(verr *eval.ValidationErrors) {
+	if r.PreloadLongTermMemory == nil {
+		return
+	}
+	switch r.PreloadLongTermMemory.Visibility {
+	case "", MemoryVisibilityUser, MemoryVisibilityShared:
+	default:
+		verr.Add(r.PreloadLongTermMemory, "unknown PreloadLongTermMemory visibility %q", r.PreloadLongTermMemory.Visibility)
+	}
+	if r.PreloadLongTermMemory.MaxResults < 0 {
+		verr.Add(r.PreloadLongTermMemory, "PreloadLongTermMemory MaxResults must be non-negative")
+	}
 }
 
 func (r *RunPolicyExpr) validateInterceptors(verr *eval.ValidationErrors) {
@@ -297,4 +326,12 @@ func (m *MemoryPreloadExpr) EvalName() string {
 		return "memory preload policy"
 	}
 	return fmt.Sprintf("memory preload policy for agent %q", m.Policy.Agent.Name)
+}
+
+// EvalName returns a descriptive identifier for error reporting.
+func (m *LongTermMemoryPreloadExpr) EvalName() string {
+	if m == nil || m.Policy == nil || m.Policy.Agent == nil {
+		return "long-term memory preload policy"
+	}
+	return fmt.Sprintf("long-term memory preload policy for agent %q", m.Policy.Agent.Name)
 }

@@ -1,6 +1,7 @@
 package runtime
 
 import (
+	"context"
 	"errors"
 	"time"
 
@@ -70,6 +71,16 @@ func WithMemoryStore(m memory.Store) RuntimeOption { return func(o *Options) { o
 // WithMemorySearcher sets the indexed or cross-run memory searcher.
 func WithMemorySearcher(s memory.Searcher) RuntimeOption {
 	return func(o *Options) { o.MemorySearcher = s }
+}
+
+// WithMemoryService sets the long-term memory service.
+func WithMemoryService(s memory.Service) RuntimeOption {
+	return func(o *Options) { o.MemoryService = s }
+}
+
+// WithMemoryScopeResolver sets the long-term memory scope resolver.
+func WithMemoryScopeResolver(r memory.ScopeResolver) RuntimeOption {
+	return func(o *Options) { o.MemoryScopeResolver = r }
 }
 
 // WithArtifactStore sets the artifact store.
@@ -171,6 +182,8 @@ func newFromOptions(opts Options) *Runtime {
 		Engine:               eng,
 		Memory:               opts.MemoryStore,
 		MemorySearcher:       opts.MemorySearcher,
+		MemoryService:        opts.MemoryService,
+		MemoryScopeResolver:  resolveMemoryScopeResolver(opts.MemoryScopeResolver),
 		ArtifactStore:        opts.ArtifactStore,
 		PromptRegistry:       prompt.NewRegistry(opts.PromptStore),
 		SessionStore:         sessionStore,
@@ -200,6 +213,29 @@ func newFromOptions(opts Options) *Runtime {
 	rt.PromptRegistry.SetObserver(rt.onPromptRendered)
 	rt.installRuntimeSubscribers(bus)
 	return rt
+}
+
+func resolveMemoryScopeResolver(resolver memory.ScopeResolver) memory.ScopeResolver {
+	if resolver != nil {
+		return resolver
+	}
+	return memory.ScopeResolverFunc(defaultResolveMemoryScope)
+}
+
+func defaultResolveMemoryScope(_ context.Context, input memory.ScopeInput) (memory.Scope, error) {
+	visibility := input.Visibility
+	if visibility == "" {
+		visibility = memory.VisibilityUser
+	}
+	namespace := input.Labels[memoryNamespaceLabel]
+	if namespace == "" && input.AgentID != "" {
+		namespace = "agent:" + input.AgentID
+	}
+	return memory.Scope{
+		Namespace:  namespace,
+		UserID:     input.Labels[memoryUserIDLabel],
+		Visibility: visibility,
+	}, nil
 }
 
 func cloneNamedInterceptors(in map[string]Interceptor) map[string]Interceptor {

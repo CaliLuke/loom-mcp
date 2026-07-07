@@ -33,16 +33,7 @@ func (r *Runtime) ExecuteToolActivity(ctx context.Context, req *ToolInput) (*Too
 	if out != nil {
 		return out, nil
 	}
-	call := planner.ToolRequest{
-		Name:             req.ToolName,
-		Payload:          raw,
-		RunID:            req.RunID,
-		AgentID:          req.AgentID,
-		SessionID:        req.SessionID,
-		TurnID:           req.TurnID,
-		ParentToolCallID: req.ParentToolCallID,
-		ToolCallID:       req.ToolCallID,
-	}
+	call := toolActivityRequest(req, raw)
 	interceptors := r.interceptorsForAgent(req.AgentID)
 	call, interceptedResult, err := runBeforeToolInterceptors(ctx, interceptors, call)
 	if err != nil {
@@ -82,6 +73,20 @@ func (r *Runtime) interceptorsForAgent(agentID agent.Ident) []Interceptor {
 		return interceptors
 	}
 	return append(interceptors, reg.Interceptors...)
+}
+
+func toolActivityRequest(req *ToolInput, raw rawjson.Message) planner.ToolRequest {
+	return planner.ToolRequest{
+		Name:             req.ToolName,
+		Payload:          raw,
+		RunID:            req.RunID,
+		AgentID:          req.AgentID,
+		SessionID:        req.SessionID,
+		Labels:           req.Labels,
+		TurnID:           req.TurnID,
+		ParentToolCallID: req.ParentToolCallID,
+		ToolCallID:       req.ToolCallID,
+	}
 }
 
 func applyToolActivityTelemetry(
@@ -125,13 +130,7 @@ func (r *Runtime) prepareToolActivity(ctx context.Context, req *ToolInput) (Tool
 	if err != nil {
 		return ToolsetRegistration{}, nil, ToolCallMeta{}, nil, err
 	}
-	meta := toolCallMeta(planner.ToolRequest{
-		RunID:            req.RunID,
-		SessionID:        req.SessionID,
-		TurnID:           req.TurnID,
-		ToolCallID:       req.ToolCallID,
-		ParentToolCallID: req.ParentToolCallID,
-	})
+	meta := toolCallMeta(toolActivityRequest(req, req.Payload))
 	raw, out := r.adaptAndValidateToolPayload(ctx, reg, req, meta)
 	return reg, raw, meta, out, nil
 }

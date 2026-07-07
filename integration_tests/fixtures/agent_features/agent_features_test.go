@@ -37,6 +37,7 @@ func TestGeneratedFeatureFixtureRegistersRuntimeSurface(t *testing.T) {
 	toolsets := rt.ListToolsets()
 	require.Contains(t, toolsets, "features.artifacts")
 	require.Contains(t, toolsets, "features.memory")
+	require.Contains(t, toolsets, "features.long_term_memory")
 	require.Contains(t, toolsets, "features.skills")
 	require.Contains(t, toolsets, "features.workflow")
 	require.ElementsMatch(t, []tools.Ident{
@@ -188,6 +189,28 @@ func TestGeneratedFeatureRunPersistsArtifactsMemorySkillsAndDebugState(t *testin
 	require.Equal(t, []memory.EventType{memory.EventUserMessage}, indexedQuery.Types)
 	require.Equal(t, 20, indexedQuery.Limit)
 
+	_, err = fx.longTerm.PutEntry(ctx, memory.PutEntryInput{
+		Scope: memory.Scope{
+			Namespace:  "agent:" + string(coordinator.AgentID),
+			UserID:     "fixture-user",
+			Visibility: memory.VisibilityUser,
+		},
+		Content: "long-term fixture memory",
+		Author:  "user",
+		Labels:  map[string]string{"tenant": "acme"},
+	})
+	require.NoError(t, err)
+	longTermMemory, err := rt.ExecuteToolActivity(ctx, &agentsruntime.ToolInput{
+		AgentID:    coordinator.AgentID,
+		RunID:      runID,
+		SessionID:  "sess-state",
+		ToolName:   "features.long_term_memory.search_memory",
+		ToolCallID: "search-memory",
+		Payload:    rawjson.Message([]byte(`{"query":"fixture memory","labels":{"tenant":"acme"},"limit":50}`)),
+	})
+	require.NoError(t, err)
+	require.Contains(t, string(longTermMemory.Payload), "long-term fixture memory")
+
 	listSkills, err := rt.ExecuteToolActivity(ctx, &agentsruntime.ToolInput{
 		AgentID:    coordinator.AgentID,
 		RunID:      runID,
@@ -272,10 +295,20 @@ func TestGeneratedFeatureRunAppliesNamedInterceptorsAndRetryReflect(t *testing.T
 	require.NoError(t, fx.memory.AppendEvents(ctx, string(coordinator.AgentID), "run-interceptors",
 		memory.NewEvent(time.Unix(40, 0), memory.UserMessageData{Message: "preload memory"}, nil),
 	))
+	_, err := fx.longTerm.PutEntry(ctx, memory.PutEntryInput{
+		Scope: memory.Scope{
+			Namespace:  "agent:" + string(coordinator.AgentID),
+			UserID:     "fixture-user",
+			Visibility: memory.VisibilityUser,
+		},
+		Content: "check interceptors long-term entry",
+		Author:  "user",
+	})
+	require.NoError(t, err)
 	require.NoError(t, coordinator.RegisterCoordinatorAgent(ctx, rt, coordinator.CoordinatorAgentConfig{
-		Planner: namedInterceptorPlanner{t: t, wantPreloaded: "preload memory"},
+		Planner: namedInterceptorPlanner{t: t, wantPreloaded: "preload memory", wantLongTerm: "long-term entry"},
 	}))
-	_, err := rt.CreateSession(ctx, "sess-interceptors")
+	_, err = rt.CreateSession(ctx, "sess-interceptors")
 	require.NoError(t, err)
 
 	retryOut, err := rt.ExecuteToolActivity(ctx, &agentsruntime.ToolInput{

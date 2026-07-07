@@ -18,6 +18,7 @@ Here’s a map of what loom-mcp just built for you based on your `design/*.go` f
         * **Mission:** *Generated acceptance agent*
         * **Uses Toolsets:**
             * `features.artifacts`
+            * `features.long_term_memory`
             * `features.memory`
             * `features.skills`
             * `features.workflow`
@@ -324,6 +325,7 @@ cfg := <agentpkg>.<AgentConfig>{
 
 * **Tools this agent can USE:**
 * **`features.artifacts`** 
+* **`features.long_term_memory`**
 * **`features.memory`** 
 * **`features.skills`** 
 * **`features.workflow`** 

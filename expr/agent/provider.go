@@ -3,6 +3,12 @@ package agent
 import "fmt"
 
 type (
+	// MemoryToolSource selects a runtime memory source for FromMemory toolsets.
+	MemoryToolSource string
+
+	// MemoryVisibility selects user or shared long-term memory.
+	MemoryVisibility string
+
 	// SkillPreloadMode controls generated model-facing skill preload behavior.
 	SkillPreloadMode string
 
@@ -105,7 +111,26 @@ type ProviderExpr struct {
 	// MemoryMaxResults caps memory tool responses.
 	// Used when Kind is ProviderMemory.
 	MemoryMaxResults int
+	// MemorySources selects explicit memory sources. Empty preserves transcript
+	// plus indexed transcript compatibility.
+	MemorySources []MemoryToolSource
+	// MemoryVisibility selects the widest long-term memory visibility.
+	MemoryVisibility MemoryVisibility
 }
+
+const (
+	// MemoryToolSourceTranscript exposes current-run transcript memory.
+	MemoryToolSourceTranscript MemoryToolSource = "transcript"
+	// MemoryToolSourceIndexedTranscript exposes indexed transcript memory.
+	MemoryToolSourceIndexedTranscript MemoryToolSource = "indexed_transcript"
+	// MemoryToolSourceLongTerm exposes long-term entry memory.
+	MemoryToolSourceLongTerm MemoryToolSource = "long_term"
+
+	// MemoryVisibilityUser scopes long-term memory to one user.
+	MemoryVisibilityUser MemoryVisibility = "user"
+	// MemoryVisibilityShared scopes long-term memory to shared knowledge.
+	MemoryVisibilityShared MemoryVisibility = "shared"
+)
 
 // EvalName returns a descriptive identifier for error reporting.
 func (p *ProviderExpr) EvalName() string {

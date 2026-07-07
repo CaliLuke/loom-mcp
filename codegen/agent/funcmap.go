@@ -125,6 +125,39 @@ func templateFuncMap() map[string]any {
 		"isArtifactsBacked": isArtifactsBackedToolset,
 		// isMemoryBacked reports whether the given toolset is backed by runtime memory tools.
 		"isMemoryBacked": isMemoryBackedToolset,
+		"memoryToolsetUsesLongTerm": func(ts *ToolsetData) bool {
+			if ts == nil || ts.Expr == nil || ts.Expr.Provider == nil {
+				return false
+			}
+			for _, source := range ts.Expr.Provider.MemorySources {
+				if source == agentsExpr.MemoryToolSourceLongTerm {
+					return true
+				}
+			}
+			return false
+		},
+		"memoryToolSourceRef": func(source agentsExpr.MemoryToolSource) string {
+			switch source {
+			case agentsExpr.MemoryToolSourceTranscript:
+				return "memory.ToolSourceTranscript"
+			case agentsExpr.MemoryToolSourceIndexedTranscript:
+				return "memory.ToolSourceIndexedTranscript"
+			case agentsExpr.MemoryToolSourceLongTerm:
+				return "memory.ToolSourceLongTerm"
+			default:
+				return "memory.ToolSourceTranscript"
+			}
+		},
+		"memoryVisibilityRef": func(visibility agentsExpr.MemoryVisibility) string {
+			switch visibility {
+			case agentsExpr.MemoryVisibilityShared:
+				return "memory.VisibilityShared"
+			case agentsExpr.MemoryVisibilityUser, "":
+				return "memory.VisibilityUser"
+			default:
+				return "memory.VisibilityUser"
+			}
+		},
 		// needsExecutorBackedRegistration reports whether RegisterUsedToolsets
 		// should ask application code for an executor for this toolset.
 		"needsExecutorBackedRegistration": needsExecutorBackedRegistration,

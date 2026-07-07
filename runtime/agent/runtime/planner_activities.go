@@ -78,13 +78,19 @@ func (r *Runtime) startPlanInput(
 	if err != nil {
 		return nil, err
 	}
+	messages := r.applyHistoryPolicy(ctx, reg, input.Messages)
+	preloadedEntries, err := r.preloadLongTermMemory(ctx, reg.Policy.PreloadLongTermMemory, string(input.AgentID), input.RunContext, messages)
+	if err != nil {
+		return nil, err
+	}
 	return &planner.PlanInput{
-		Messages:        r.applyHistoryPolicy(ctx, reg, input.Messages),
-		RunContext:      input.RunContext,
-		Agent:           agentCtx,
-		Events:          events,
-		Reminders:       r.reminderSnapshot(input.RunID),
-		PreloadedMemory: preloadedMemory,
+		Messages:               messages,
+		RunContext:             input.RunContext,
+		Agent:                  agentCtx,
+		Events:                 events,
+		Reminders:              r.reminderSnapshot(input.RunID),
+		PreloadedMemory:        preloadedMemory,
+		PreloadedMemoryEntries: preloadedEntries,
 	}, nil
 }
 
@@ -154,16 +160,22 @@ func (r *Runtime) resumePlanInput(
 	if err != nil {
 		return nil, err
 	}
+	messages := r.applyHistoryPolicy(ctx, reg, input.Messages)
+	preloadedEntries, err := r.preloadLongTermMemory(ctx, reg.Policy.PreloadLongTermMemory, string(input.AgentID), input.RunContext, messages)
+	if err != nil {
+		return nil, err
+	}
 	return &planner.PlanResumeInput{
-		Messages:        r.applyHistoryPolicy(ctx, reg, input.Messages),
-		RunContext:      input.RunContext,
-		Agent:           agentCtx,
-		Events:          events,
-		ToolOutputs:     toolOutputs,
-		TypedInputs:     cloneTypedInputOutputs(input.TypedInputs),
-		Finalize:        input.Finalize,
-		Reminders:       r.reminderSnapshot(input.RunID),
-		PreloadedMemory: preloadedMemory,
+		Messages:               messages,
+		RunContext:             input.RunContext,
+		Agent:                  agentCtx,
+		Events:                 events,
+		ToolOutputs:            toolOutputs,
+		TypedInputs:            cloneTypedInputOutputs(input.TypedInputs),
+		Finalize:               input.Finalize,
+		Reminders:              r.reminderSnapshot(input.RunID),
+		PreloadedMemory:        preloadedMemory,
+		PreloadedMemoryEntries: preloadedEntries,
 	}, nil
 }
 

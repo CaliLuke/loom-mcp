@@ -280,6 +280,8 @@ type (
 		NamedInterceptors []string
 		// PreloadMemory captures bounded planner-input memory preload policy.
 		PreloadMemory *MemoryPreloadData
+		// PreloadLongTermMemory captures bounded planner-input long-term memory preload policy.
+		PreloadLongTermMemory *LongTermMemoryPreloadData
 	}
 
 	// RetryAndReflectData represents generated retry reflection policy.
@@ -296,6 +298,14 @@ type (
 		// Scope selects the runtime memory source.
 		Scope string
 		// MaxResults bounds the number of events injected into planner input.
+		MaxResults int
+	}
+
+	// LongTermMemoryPreloadData represents generated long-term memory preload policy.
+	LongTermMemoryPreloadData struct {
+		// Visibility selects user or shared long-term memory.
+		Visibility string
+		// MaxResults bounds the number of entries injected into planner input.
 		MaxResults int
 	}
 

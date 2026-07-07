@@ -60,6 +60,12 @@ func newRunPolicyData(expr *agentsExpr.RunPolicyExpr) RunPolicyData {
 			MaxResults: expr.PreloadMemory.MaxResults,
 		}
 	}
+	if expr.PreloadLongTermMemory != nil {
+		rp.PreloadLongTermMemory = &LongTermMemoryPreloadData{
+			Visibility: string(expr.PreloadLongTermMemory.Visibility),
+			MaxResults: expr.PreloadLongTermMemory.MaxResults,
+		}
+	}
 	if expr.DefaultCaps != nil {
 		rp.Caps = CapsData{
 			MaxToolCalls:                  expr.DefaultCaps.MaxToolCalls,
