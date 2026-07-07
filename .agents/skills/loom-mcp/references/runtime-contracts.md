@@ -39,9 +39,12 @@ Use this file for current loom-mcp runtime behavior in this repo. Prefer it over
 - Provider packages live under `features/model/*`; runtime helpers construct
   Bedrock, OpenAI, Gemini/Vertex, and local Ollama clients.
 - The Ollama adapter uses the local `/api/chat` endpoint for text, image,
-  streaming, function-tool, and structured-output requests. It should keep tool
-  calls as `model.ToolCall` values so the runtime, not the provider adapter,
-  owns tool execution and unknown-tool recovery.
+  streaming, function-tool, native thinking, and structured-output requests. It
+  maps `model.Request.Thinking` to Ollama's top-level `think` flag and surfaces
+  `message.thinking` as typed `model.ThinkingPart` / `ChunkTypeThinking`, never
+  as assistant text or structured-output content. It should keep tool calls as
+  `model.ToolCall` values so the runtime, not the provider adapter, owns tool
+  execution and unknown-tool recovery.
 
 ## Tool Execution Contracts
 

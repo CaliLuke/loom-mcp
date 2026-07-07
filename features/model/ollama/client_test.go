@@ -83,6 +83,7 @@ func TestClientCompleteEncodesToolsAndDecodesToolCalls(t *testing.T) {
 
 	require.Equal(t, "llama3.1", captured["model"])
 	require.Equal(t, false, captured["stream"])
+	require.NotContains(t, captured, "think")
 	require.Len(t, captured["tools"], 1)
 	options := captured["options"].(map[string]any)
 	require.EqualValues(t, 128, options["num_predict"])
@@ -93,7 +94,102 @@ func TestClientCompleteEncodesToolsAndDecodesToolCalls(t *testing.T) {
 	require.NotEmpty(t, messages[2].(map[string]any)["tool_calls"])
 }
 
-func TestClientStreamEmitsTextToolCallUsageAndStop(t *testing.T) {
+func TestClientCompleteEncodesThinkingOption(t *testing.T) {
+	tests := []struct {
+		name     string
+		thinking *model.ThinkingOptions
+		want     any
+	}{
+		{
+			name:     "enabled",
+			thinking: &model.ThinkingOptions{Enable: true},
+			want:     true,
+		},
+		{
+			name:     "explicit disabled",
+			thinking: &model.ThinkingOptions{Enable: false},
+			want:     false,
+		},
+		{
+			name:     "omitted",
+			thinking: nil,
+			want:     nil,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var captured map[string]any
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				if err := json.NewDecoder(r.Body).Decode(&captured); err != nil {
+					t.Errorf("decode request: %v", err)
+					return
+				}
+				if err := json.NewEncoder(w).Encode(map[string]any{
+					"model": "gemma4",
+					"done":  true,
+					"message": map[string]any{
+						"role":    "assistant",
+						"content": "ok",
+					},
+				}); err != nil {
+					t.Errorf("encode response: %v", err)
+				}
+			}))
+			defer server.Close()
+
+			client, err := ollamamodel.New(ollamamodel.Options{ServerURL: server.URL, DefaultModel: "gemma4"})
+			require.NoError(t, err)
+			_, err = client.Complete(context.Background(), &model.Request{
+				Messages: []*model.Message{{Role: model.ConversationRoleUser, Parts: []model.Part{model.TextPart{Text: "ping"}}}},
+				Thinking: tt.thinking,
+			})
+			require.NoError(t, err)
+
+			if tt.want == nil {
+				require.NotContains(t, captured, "think")
+				return
+			}
+			require.Equal(t, tt.want, captured["think"])
+		})
+	}
+}
+
+func TestClientCompleteDecodesThinkingAndTextParts(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if err := json.NewEncoder(w).Encode(map[string]any{
+			"model": "gemma4",
+			"done":  true,
+			"message": map[string]any{
+				"role":     "assistant",
+				"thinking": "I should reason privately.",
+				"content":  "Final answer.",
+			},
+		}); err != nil {
+			t.Errorf("encode response: %v", err)
+		}
+	}))
+	defer server.Close()
+
+	client, err := ollamamodel.New(ollamamodel.Options{ServerURL: server.URL, DefaultModel: "gemma4"})
+	require.NoError(t, err)
+	resp, err := client.Complete(context.Background(), &model.Request{
+		Messages: []*model.Message{{Role: model.ConversationRoleUser, Parts: []model.Part{model.TextPart{Text: "ping"}}}},
+	})
+	require.NoError(t, err)
+
+	require.Len(t, resp.Content, 1)
+	require.Len(t, resp.Content[0].Parts, 2)
+	thinking, ok := resp.Content[0].Parts[0].(model.ThinkingPart)
+	require.True(t, ok)
+	require.Equal(t, "I should reason privately.", thinking.Text)
+	require.True(t, thinking.Final)
+	text, ok := resp.Content[0].Parts[1].(model.TextPart)
+	require.True(t, ok)
+	require.Equal(t, "Final answer.", text.Text)
+}
+
+func TestClientStreamEmitsThinkingTextToolCallUsageAndStop(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		flusher, ok := w.(http.Flusher)
 		if !ok {
@@ -101,6 +197,8 @@ func TestClientStreamEmitsTextToolCallUsageAndStop(t *testing.T) {
 			return
 		}
 		w.Header().Set("Content-Type", "application/x-ndjson")
+		_, _ = w.Write([]byte(`{"model":"llama3.1","message":{"role":"assistant","thinking":"Considering tools."}}` + "\n"))
+		flusher.Flush()
 		_, _ = w.Write([]byte(`{"model":"llama3.1","message":{"role":"assistant","content":"Hel"}}` + "\n"))
 		flusher.Flush()
 		_, _ = w.Write([]byte(`{"model":"llama3.1","message":{"role":"assistant","content":"lo"}}` + "\n"))
@@ -121,18 +219,21 @@ func TestClientStreamEmitsTextToolCallUsageAndStop(t *testing.T) {
 	}()
 
 	chunks := collectStreamChunks(t, streamer)
-	require.Len(t, chunks, 5)
-	require.Equal(t, model.ChunkTypeText, chunks[0].Type)
-	require.Equal(t, "Hel", chunks[0].Message.Parts[0].(model.TextPart).Text)
+	require.Len(t, chunks, 6)
+	require.Equal(t, model.ChunkTypeThinking, chunks[0].Type)
+	require.Equal(t, "Considering tools.", chunks[0].Thinking)
+	require.Equal(t, "Considering tools.", chunks[0].Message.Parts[0].(model.ThinkingPart).Text)
 	require.Equal(t, model.ChunkTypeText, chunks[1].Type)
-	require.Equal(t, "lo", chunks[1].Message.Parts[0].(model.TextPart).Text)
-	require.Equal(t, model.ChunkTypeToolCall, chunks[2].Type)
-	require.Equal(t, tools.Ident("lookup"), chunks[2].ToolCall.Name)
-	require.JSONEq(t, `{"query":"docs"}`, string(chunks[2].ToolCall.Payload))
-	require.Equal(t, model.ChunkTypeUsage, chunks[3].Type)
-	require.Equal(t, 15, chunks[3].UsageDelta.TotalTokens)
-	require.Equal(t, model.ChunkTypeStop, chunks[4].Type)
-	require.Equal(t, "stop", chunks[4].StopReason)
+	require.Equal(t, "Hel", chunks[1].Message.Parts[0].(model.TextPart).Text)
+	require.Equal(t, model.ChunkTypeText, chunks[2].Type)
+	require.Equal(t, "lo", chunks[2].Message.Parts[0].(model.TextPart).Text)
+	require.Equal(t, model.ChunkTypeToolCall, chunks[3].Type)
+	require.Equal(t, tools.Ident("lookup"), chunks[3].ToolCall.Name)
+	require.JSONEq(t, `{"query":"docs"}`, string(chunks[3].ToolCall.Payload))
+	require.Equal(t, model.ChunkTypeUsage, chunks[4].Type)
+	require.Equal(t, 15, chunks[4].UsageDelta.TotalTokens)
+	require.Equal(t, model.ChunkTypeStop, chunks[5].Type)
+	require.Equal(t, "stop", chunks[5].StopReason)
 }
 
 func TestClientStreamStructuredOutput(t *testing.T) {
@@ -165,6 +266,40 @@ func TestClientStreamStructuredOutput(t *testing.T) {
 	require.Equal(t, "draft", chunks[1].Completion.Name)
 	require.JSONEq(t, `{"answer":"ok"}`, string(chunks[1].Completion.Payload))
 	require.Equal(t, model.ChunkTypeStop, chunks[2].Type)
+}
+
+func TestClientStreamStructuredOutputExcludesThinking(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write([]byte(`{"model":"gemma4","message":{"role":"assistant","thinking":"Draft JSON privately."}}` + "\n"))
+		_, _ = w.Write([]byte(`{"model":"gemma4","message":{"role":"assistant","content":"{\"answer\":\"ok\"}"}}` + "\n"))
+		_, _ = w.Write([]byte(`{"model":"gemma4","done":true,"done_reason":"stop"}` + "\n"))
+	}))
+	defer server.Close()
+
+	client, err := ollamamodel.New(ollamamodel.Options{ServerURL: server.URL, DefaultModel: "gemma4"})
+	require.NoError(t, err)
+	streamer, err := client.Stream(context.Background(), &model.Request{
+		Messages: []*model.Message{{Role: model.ConversationRoleUser, Parts: []model.Part{model.TextPart{Text: "ping"}}}},
+		StructuredOutput: &model.StructuredOutput{
+			Name:   "draft",
+			Schema: []byte(`{"type":"object","required":["answer"],"properties":{"answer":{"type":"string"}}}`),
+		},
+		Thinking: &model.ThinkingOptions{Enable: true},
+	})
+	require.NoError(t, err)
+	defer func() {
+		require.NoError(t, streamer.Close())
+	}()
+
+	chunks := collectStreamChunks(t, streamer)
+	require.Len(t, chunks, 4)
+	require.Equal(t, model.ChunkTypeThinking, chunks[0].Type)
+	require.Equal(t, "Draft JSON privately.", chunks[0].Thinking)
+	require.Equal(t, model.ChunkTypeCompletionDelta, chunks[1].Type)
+	require.JSONEq(t, `{"answer":"ok"}`, chunks[1].CompletionDelta.Delta)
+	require.Equal(t, model.ChunkTypeCompletion, chunks[2].Type)
+	require.JSONEq(t, `{"answer":"ok"}`, string(chunks[2].Completion.Payload))
+	require.Equal(t, model.ChunkTypeStop, chunks[3].Type)
 }
 
 func TestClientValidation(t *testing.T) {

@@ -167,6 +167,19 @@ func (s *ollamaStreamer) handleLine(line string) error {
 }
 
 func (s *ollamaStreamer) enqueueMessage(msg ollamaMessage) error {
+	if msg.Thinking != "" {
+		s.queue = append(s.queue, model.Chunk{
+			Type:     model.ChunkTypeThinking,
+			Thinking: msg.Thinking,
+			Message: &model.Message{
+				Role: model.ConversationRoleAssistant,
+				Parts: []model.Part{model.ThinkingPart{
+					Text:  msg.Thinking,
+					Final: false,
+				}},
+			},
+		})
+	}
 	if msg.Content != "" {
 		s.text.WriteString(msg.Content)
 		if s.output != nil {

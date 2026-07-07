@@ -63,6 +63,7 @@ type ollamaChatRequest struct {
 	Model    string          `json:"model"`
 	Messages []ollamaMessage `json:"messages"`
 	Stream   bool            `json:"stream"`
+	Think    *bool           `json:"think,omitempty"`
 	Tools    []ollamaTool    `json:"tools,omitempty"`
 	Options  map[string]any  `json:"options,omitempty"`
 	Format   any             `json:"format,omitempty"`
@@ -70,6 +71,7 @@ type ollamaChatRequest struct {
 
 type ollamaMessage struct {
 	Role      string           `json:"role"`
+	Thinking  string           `json:"thinking,omitempty"`
 	Content   string           `json:"content,omitempty"`
 	Images    []string         `json:"images,omitempty"`
 	ToolCalls []ollamaToolCall `json:"tool_calls,omitempty"`
@@ -181,6 +183,7 @@ func (c *Client) buildChatRequest(req *model.Request, stream bool) (ollamaChatRe
 		Model:    modelID,
 		Messages: messages,
 		Stream:   stream,
+		Think:    encodeThinking(req.Thinking),
 		Tools:    tools,
 		Options:  c.requestOptions(req),
 		Format:   format,
@@ -226,6 +229,14 @@ func (c *Client) requestOptions(req *model.Request) map[string]any {
 		return nil
 	}
 	return options
+}
+
+func encodeThinking(thinking *model.ThinkingOptions) *bool {
+	if thinking == nil {
+		return nil
+	}
+	enabled := thinking.Enable
+	return &enabled
 }
 
 func (c *Client) doJSON(ctx context.Context, chatReq ollamaChatRequest, out *ollamaChatResponse) error {
@@ -445,10 +456,17 @@ func translateChatResponse(resp ollamaChatResponse, output *model.StructuredOutp
 
 func translateMessage(msg ollamaMessage) ([]model.Message, []model.ToolCall, error) {
 	content := make([]model.Message, 0, 1)
-	if msg.Content != "" {
+	if msg.Thinking != "" || msg.Content != "" {
+		parts := make([]model.Part, 0, 2)
+		if msg.Thinking != "" {
+			parts = append(parts, model.ThinkingPart{Text: msg.Thinking, Final: true})
+		}
+		if msg.Content != "" {
+			parts = append(parts, model.TextPart{Text: msg.Content})
+		}
 		content = append(content, model.Message{
 			Role:  model.ConversationRoleAssistant,
-			Parts: []model.Part{model.TextPart{Text: msg.Content}},
+			Parts: parts,
 		})
 	}
 	toolCalls := make([]model.ToolCall, 0, len(msg.ToolCalls))

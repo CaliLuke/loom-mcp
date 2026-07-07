@@ -1733,7 +1733,11 @@ client, err := rt.NewOpenAIModelClient(runtime.OpenAIConfig{
 
 Create a local Ollama chat client through the runtime helper. Ollama uses the
 `/api/chat` endpoint and supports text, images, streaming text, function tools,
-and schema-backed structured output for models that support those features:
+native thinking output, and schema-backed structured output for models that
+support those features. When `model.Request.Thinking` is set, the adapter maps
+it to Ollama's top-level `think` flag and surfaces `message.thinking` as typed
+`model.ThinkingPart` / `model.ChunkTypeThinking` content instead of assistant
+text:
 
 ```go
 client, err := rt.NewOllamaModelClient(runtime.OllamaConfig{
