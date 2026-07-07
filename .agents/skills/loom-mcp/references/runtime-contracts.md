@@ -42,9 +42,12 @@ Use this file for current loom-mcp runtime behavior in this repo. Prefer it over
   streaming, function-tool, native thinking, and structured-output requests. It
   maps `model.Request.Thinking` to Ollama's top-level `think` flag and surfaces
   `message.thinking` as typed `model.ThinkingPart` / `ChunkTypeThinking`, never
-  as assistant text or structured-output content. It should keep tool calls as
-  `model.ToolCall` values so the runtime, not the provider adapter, owns tool
-  execution and unknown-tool recovery.
+  as assistant text or structured-output content. Some Gemma 4 variants,
+  including MLX builds, also require the model-level `<|think|>` control token at
+  the start of the system prompt to activate thinking; keep that prompt concern
+  separate from the adapter's response-side typed thinking contract. It should
+  keep tool calls as `model.ToolCall` values so the runtime, not the provider
+  adapter, owns tool execution and unknown-tool recovery.
 
 ## Tool Execution Contracts
 

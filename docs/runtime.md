@@ -1737,7 +1737,10 @@ native thinking output, and schema-backed structured output for models that
 support those features. When `model.Request.Thinking` is set, the adapter maps
 it to Ollama's top-level `think` flag and surfaces `message.thinking` as typed
 `model.ThinkingPart` / `model.ChunkTypeThinking` content instead of assistant
-text:
+text. Some Gemma 4 variants, including MLX builds, also require the model-level
+`<|think|>` control token at the start of the system prompt to activate
+thinking; keep that prompt concern separate from the adapter's response-side
+typed thinking contract:
 
 ```go
 client, err := rt.NewOllamaModelClient(runtime.OllamaConfig{

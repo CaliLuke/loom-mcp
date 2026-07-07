@@ -114,6 +114,12 @@ func TestLocalOllamaStreamThinking(t *testing.T) {
 			{
 				Role: model.ConversationRoleSystem,
 				Parts: []model.Part{model.TextPart{
+					// Gemma 4 MLX variants require both Ollama's native
+					// think flag and the model-level control token to reliably
+					// activate thinking. The adapter contract remains
+					// response-side: native thinking must arrive as
+					// message.thinking and stream as ChunkTypeThinking, never
+					// as assistant text.
 					Text: "<|think|>",
 				}},
 			},
