@@ -29,6 +29,7 @@ import (
 	goahttp "github.com/CaliLuke/loom/http"
 	loom "github.com/CaliLuke/loom/pkg"
 	mcpauth "github.com/modelcontextprotocol/go-sdk/auth"
+	"github.com/sahilm/fuzzy"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/codes"
@@ -98,10 +99,30 @@ func (i *toolCallInterceptorInfo) RawArguments() json.RawMessage {
 	return i.rawArgs
 }
 
+// ToolSearchWeights customizes progressive discovery ranking weights. Zero values use generated defaults.
+type ToolSearchWeights struct {
+	Name        int
+	Title       int
+	Metadata    int
+	Description int
+	Parameters  int
+	FuzzyName   int
+}
+
 // ToolSearchOptions enables large-catalog tool discovery through synthetic search_tools and call_tool tools.
 type ToolSearchOptions struct {
 	// MaxResults limits search results. Values <= 0 use the generated default.
 	MaxResults int
+	// MinScore suppresses matches below this ranking score. Values <= 0 use the generated default.
+	MinScore int
+	// ExactMatchMode controls exact name/title behavior: narrow, boost, or off. Empty uses the generated default.
+	ExactMatchMode string
+	// FuzzyNameMatching toggles fuzzy matching for tool names and titles. Nil uses the generated default.
+	FuzzyNameMatching *bool
+	// BroadFallback toggles weaker metadata, description, parameter, and schema matches. Nil uses the generated default.
+	BroadFallback *bool
+	// Weights overrides generated ranking weights. Nil or zero fields use generated defaults.
+	Weights *ToolSearchWeights
 	// AlwaysVisible keeps selected real tool names in tools/list alongside the synthetic tools.
 	AlwaysVisible []string
 	// SearchToolName overrides the synthetic search tool name. Default: search_tools.
@@ -916,6 +937,19 @@ type toolSearchCandidate struct {
 	score int
 	order int
 }
+type toolSearchSettings struct {
+	maxResults        int
+	minScore          int
+	exactMatchMode    string
+	fuzzyNameMatching bool
+	broadFallback     bool
+	nameWeight        int
+	titleWeight       int
+	metadataWeight    int
+	descriptionWeight int
+	parameterWeight   int
+	fuzzyNameWeight   int
+}
 
 func (a *MCPAdapter) generatedToolCatalog() []*ToolInfo {
 	return []*ToolInfo{&ToolInfo{
@@ -1064,6 +1098,23 @@ func validateToolSearchOptions(opts *MCPAdapterOptions) {
 	if searchName == callName {
 		panic(fmt.Sprintf("MCP ToolSearch synthetic tool names must be distinct: %q", searchName))
 	}
+	if opts.ToolSearch.MaxResults < 0 {
+		panic("MCP ToolSearch MaxResults must be non-negative")
+	}
+	if opts.ToolSearch.MinScore < 0 {
+		panic("MCP ToolSearch MinScore must be non-negative")
+	}
+	switch opts.ToolSearch.ExactMatchMode {
+	case "", "narrow", "boost", "off":
+	default:
+		panic(fmt.Sprintf("MCP ToolSearch ExactMatchMode must be narrow, boost, or off: %q", opts.ToolSearch.ExactMatchMode))
+	}
+	if opts.ToolSearch.Weights != nil {
+		weights := opts.ToolSearch.Weights
+		if weights.Name < 0 || weights.Title < 0 || weights.Metadata < 0 || weights.Description < 0 || weights.Parameters < 0 || weights.FuzzyName < 0 {
+			panic("MCP ToolSearch weights must be non-negative")
+		}
+	}
 	if isGeneratedToolName(searchName) {
 		panic(fmt.Sprintf("MCP ToolSearch search tool name %q collides with a generated tool", searchName))
 	}
@@ -1082,11 +1133,59 @@ func validateToolSearchOptions(opts *MCPAdapterOptions) {
 		}
 	}
 }
-func (a *MCPAdapter) toolSearchMaxResults() int {
-	if a.toolSearchEnabled() && a.opts.ToolSearch.MaxResults > 0 {
-		return a.opts.ToolSearch.MaxResults
+func (a *MCPAdapter) toolSearchSettings() toolSearchSettings {
+	settings := toolSearchSettings{
+		broadFallback:     true,
+		descriptionWeight: 250,
+		exactMatchMode:    "narrow",
+		fuzzyNameMatching: true,
+		fuzzyNameWeight:   600,
+		maxResults:        10,
+		metadataWeight:    400,
+		minScore:          0,
+		nameWeight:        1000,
+		parameterWeight:   100,
+		titleWeight:       900,
 	}
-	return 5
+	if a.toolSearchEnabled() {
+		opts := a.opts.ToolSearch
+		if opts.MaxResults > 0 {
+			settings.maxResults = opts.MaxResults
+		}
+		if opts.MinScore > 0 {
+			settings.minScore = opts.MinScore
+		}
+		if opts.ExactMatchMode != "" {
+			settings.exactMatchMode = opts.ExactMatchMode
+		}
+		if opts.FuzzyNameMatching != nil {
+			settings.fuzzyNameMatching = *opts.FuzzyNameMatching
+		}
+		if opts.BroadFallback != nil {
+			settings.broadFallback = *opts.BroadFallback
+		}
+		if opts.Weights != nil {
+			if opts.Weights.Name > 0 {
+				settings.nameWeight = opts.Weights.Name
+			}
+			if opts.Weights.Title > 0 {
+				settings.titleWeight = opts.Weights.Title
+			}
+			if opts.Weights.Metadata > 0 {
+				settings.metadataWeight = opts.Weights.Metadata
+			}
+			if opts.Weights.Description > 0 {
+				settings.descriptionWeight = opts.Weights.Description
+			}
+			if opts.Weights.Parameters > 0 {
+				settings.parameterWeight = opts.Weights.Parameters
+			}
+			if opts.Weights.FuzzyName > 0 {
+				settings.fuzzyNameWeight = opts.Weights.FuzzyName
+			}
+		}
+	}
+	return settings
 }
 func (a *MCPAdapter) visibleToolCatalog(tools []*ToolInfo) []*ToolInfo {
 	if !a.toolSearchEnabled() {
@@ -1205,7 +1304,7 @@ func toolDiscoveryMetadata(tool *ToolInfo) (string, []string, []string) {
 	discovery := meta["com.github.caliluke.loom-mcp/discovery"]
 	return discovery.Category, discovery.Tags, discovery.Keywords
 }
-func toolSearchDescriptorFor(tool *ToolInfo, includeSchemas bool, callName string, query string, score int) toolSearchDescriptor {
+func toolSearchDescriptorFor(tool *ToolInfo, includeSchemas bool, callName string, query string, score int, settings toolSearchSettings) toolSearchDescriptor {
 	category, tags, keywords := toolDiscoveryMetadata(tool)
 	callArguments := toolCallArgumentsExample(tool)
 	callArgumentsJSON, _ := marshalToolSearchJSON(callArguments)
@@ -1217,7 +1316,7 @@ func toolSearchDescriptorFor(tool *ToolInfo, includeSchemas bool, callName strin
 		Keywords:          keywords,
 		Name:              tool.Name,
 		Tags:              tags,
-		WhyMatched:        toolSearchWhyMatched(tool, query, score),
+		WhyMatched:        toolSearchWhyMatched(tool, query, score, settings),
 	}
 	if tool.Title != nil {
 		descriptor.Title = *tool.Title
@@ -1322,6 +1421,9 @@ func toolSearchTokenOverlap(tool *ToolInfo, query string) (int, int) {
 		return 0, 0
 	}
 	documentTokens := toolSearchTokens(toolSearchHaystack(tool))
+	return toolSearchTokenOverlapForText(queryTokens, documentTokens), len(queryTokens)
+}
+func toolSearchTokenOverlapForText(queryTokens []string, documentTokens []string) int {
 	matched := 0
 	for _, queryToken := range queryTokens {
 		for _, documentToken := range documentTokens {
@@ -1331,12 +1433,54 @@ func toolSearchTokenOverlap(tool *ToolInfo, query string) (int, int) {
 			}
 		}
 	}
-	return matched, len(queryTokens)
+	return matched
 }
-func toolSearchWhyMatched(tool *ToolInfo, query string, score int) []string {
+func toolSearchFuzzyScore(query string, candidates []string) int {
+	matches := fuzzy.Find(query, candidates)
+	if len(matches) == 0 {
+		return 0
+	}
+	return matches[0].Score
+}
+func toolSearchWhyMatched(tool *ToolInfo, query string, score int, settings toolSearchSettings) []string {
 	query = strings.TrimSpace(query)
 	if query == "" || score < 0 {
 		return nil
+	}
+	lowerQuery := strings.ToLower(query)
+	normalizedQuery := strings.Join(toolSearchTokens(query), " ")
+	name := strings.ToLower(tool.Name)
+	normalizedName := strings.Join(toolSearchTokens(tool.Name), " ")
+	if name == lowerQuery || normalizedName == normalizedQuery {
+		return []string{"exact tool name match"}
+	}
+	if tool.Title != nil {
+		title := strings.ToLower(*tool.Title)
+		normalizedTitle := strings.Join(toolSearchTokens(*tool.Title), " ")
+		if title == lowerQuery || normalizedTitle == normalizedQuery {
+			return []string{"exact title match"}
+		}
+		if strings.HasPrefix(title, lowerQuery) || strings.HasPrefix(normalizedTitle, normalizedQuery) {
+			return []string{"prefix title match"}
+		}
+	}
+	if strings.HasPrefix(name, lowerQuery) || strings.HasPrefix(normalizedName, normalizedQuery) {
+		return []string{"prefix tool name match"}
+	}
+	if settings.fuzzyNameMatching && score >= settings.fuzzyNameWeight*10 {
+		return []string{"fuzzy tool name/title match"}
+	}
+	category, tags, keywords := toolDiscoveryMetadata(tool)
+	metadata := category + " " + strings.Join(tags, " ") + " " + strings.Join(keywords, " ")
+	queryTokens := toolSearchTokens(query)
+	if toolSearchTokenOverlapForText(queryTokens, toolSearchTokens(metadata)) > 0 {
+		return []string{"matched discovery metadata token"}
+	}
+	if tool.Description != nil && toolSearchTokenOverlapForText(queryTokens, toolSearchTokens(*tool.Description)) > 0 {
+		return []string{"matched description token"}
+	}
+	if toolSearchTokenOverlapForText(queryTokens, toolSearchTokens(toolInputParameterText(tool))) > 0 {
+		return []string{"matched parameter/schema token"}
 	}
 	matched, total := toolSearchTokenOverlap(tool, query)
 	if total > 0 && matched > 0 {
@@ -1402,43 +1546,75 @@ func toolCallArgumentsExample(tool *ToolInfo) map[string]any {
 	example["arguments"] = arguments
 	return example
 }
-func toolSearchRank(tool *ToolInfo, query string) int {
-	query = strings.ToLower(strings.TrimSpace(query))
+func toolSearchRank(tool *ToolInfo, query string, settings toolSearchSettings) int {
+	query = strings.TrimSpace(query)
 	if query == "" {
 		return 0
 	}
+	lowerQuery := strings.ToLower(query)
+	normalizedQuery := strings.Join(toolSearchTokens(query), " ")
 	name := strings.ToLower(tool.Name)
-	if name == query {
-		return 1000
+	normalizedName := strings.Join(toolSearchTokens(tool.Name), " ")
+	title := ""
+	normalizedTitle := ""
+	if tool.Title != nil {
+		title = strings.ToLower(*tool.Title)
+		normalizedTitle = strings.Join(toolSearchTokens(*tool.Title), " ")
 	}
-	if strings.HasPrefix(name, query) {
-		return 900
+	if settings.exactMatchMode != "off" {
+		if name == lowerQuery || normalizedName == normalizedQuery {
+			return settings.nameWeight * 10
+		}
+		if title != "" && (title == lowerQuery || normalizedTitle == normalizedQuery) {
+			return settings.titleWeight * 10
+		}
 	}
-	if strings.Contains(name, query) {
-		return 800
+	if strings.HasPrefix(name, lowerQuery) || strings.HasPrefix(normalizedName, normalizedQuery) {
+		return settings.nameWeight * 8
 	}
-	if tool.Title != nil && strings.Contains(strings.ToLower(*tool.Title), query) {
-		return 700
+	if title != "" && (strings.HasPrefix(title, lowerQuery) || strings.HasPrefix(normalizedTitle, normalizedQuery)) {
+		return settings.titleWeight * 8
+	}
+	if strings.Contains(name, lowerQuery) || strings.Contains(normalizedName, normalizedQuery) {
+		return settings.nameWeight * 7
+	}
+	if title != "" && (strings.Contains(title, lowerQuery) || strings.Contains(normalizedTitle, normalizedQuery)) {
+		return settings.titleWeight * 7
+	}
+	if settings.fuzzyNameMatching {
+		candidates := []string{tool.Name}
+		if tool.Title != nil {
+			candidates = append(candidates, *tool.Title)
+		}
+		fuzzyScore := toolSearchFuzzyScore(query, candidates)
+		if fuzzyScore > 0 {
+			score := settings.fuzzyNameWeight*10 + fuzzyScore
+			return score
+		}
+	}
+	if !settings.broadFallback {
+		return -1
 	}
 	category, tags, keywords := toolDiscoveryMetadata(tool)
 	metadata := strings.ToLower(category + " " + strings.Join(tags, " ") + " " + strings.Join(keywords, " "))
-	if strings.Contains(metadata, query) {
-		return 600
+	if strings.Contains(metadata, lowerQuery) {
+		return settings.metadataWeight * 5
 	}
-	if tool.Description != nil && strings.Contains(strings.ToLower(*tool.Description), query) {
-		return 500
+	if tool.Description != nil && strings.Contains(strings.ToLower(*tool.Description), lowerQuery) {
+		return settings.descriptionWeight * 5
 	}
-	if strings.Contains(strings.ToLower(toolInputParameterText(tool)), query) {
-		return 400
+	if strings.Contains(strings.ToLower(toolInputParameterText(tool)), lowerQuery) {
+		return settings.parameterWeight * 5
 	}
-	if strings.Contains(strings.ToLower(toolSearchHaystack(tool)), query) {
-		return 300
+	if strings.Contains(strings.ToLower(toolSearchHaystack(tool)), lowerQuery) {
+		return settings.descriptionWeight * 3
 	}
 	matchedTokens, totalTokens := toolSearchTokenOverlap(tool, query)
 	if matchedTokens > 0 {
-		score := 100 + matchedTokens*50
+		averageBroadWeight := (settings.metadataWeight + settings.descriptionWeight + settings.parameterWeight) / 3
+		score := averageBroadWeight * matchedTokens / totalTokens
 		if matchedTokens == totalTokens {
-			score += 100
+			score += averageBroadWeight / 2
 		}
 		return score
 	}
@@ -1466,7 +1642,8 @@ func (a *MCPAdapter) handleSearchTools(ctx context.Context, p *ToolsCallPayload,
 		}
 		re = compiled
 	}
-	limit := a.toolSearchMaxResults()
+	settings := a.toolSearchSettings()
+	limit := settings.maxResults
 	if payload.MaxResults != nil && *payload.MaxResults > 0 {
 		limit = *payload.MaxResults
 	}
@@ -1485,8 +1662,8 @@ func (a *MCPAdapter) handleSearchTools(ctx context.Context, p *ToolsCallPayload,
 		matched := query == "" && pattern == ""
 		score := 0
 		if query != "" {
-			score = toolSearchRank(tool, query)
-			matched = score >= 0
+			score = toolSearchRank(tool, query, settings)
+			matched = score >= settings.minScore
 		}
 		if re != nil {
 			matched = re.MatchString(haystack)
@@ -1505,6 +1682,15 @@ func (a *MCPAdapter) handleSearchTools(ctx context.Context, p *ToolsCallPayload,
 		}
 		return matches[i].order < matches[j].order
 	})
+	if query != "" && settings.exactMatchMode == "narrow" && len(matches) > 0 && matches[0].score >= settings.titleWeight*8 {
+		filtered := matches[:0]
+		for _, match := range matches {
+			if match.score >= settings.titleWeight*8 {
+				filtered = append(filtered, match)
+			}
+		}
+		matches = filtered
+	}
 	totalMatches := len(matches)
 	truncated := totalMatches > limit
 	if truncated {
@@ -1515,7 +1701,7 @@ func (a *MCPAdapter) handleSearchTools(ctx context.Context, p *ToolsCallPayload,
 	_, callName := a.toolSearchNames()
 	lines = append(lines, fmt.Sprintf("Found %d of %d matching tool(s).", len(matches), totalMatches))
 	for _, match := range matches {
-		descriptor := toolSearchDescriptorFor(match.tool, payload.IncludeSchemas, callName, query, match.score)
+		descriptor := toolSearchDescriptorFor(match.tool, payload.IncludeSchemas, callName, query, match.score, settings)
 		descriptors = append(descriptors, descriptor)
 		lines = append(lines, fmt.Sprintf("Tool: %s", descriptor.Name), fmt.Sprintf("Call this tool through %s. Do not call %s directly.", callName, descriptor.Name), fmt.Sprintf("Tool: %s", callName), "Arguments:", descriptor.CallToolJSON)
 	}

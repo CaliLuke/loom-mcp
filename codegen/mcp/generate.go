@@ -399,6 +399,7 @@ func adapterImports(genpkg string, svc *expr.ServiceExpr, svcName string, data *
 		{Path: "net/http"},
 		{Path: "net/url"},
 		{Path: "path"},
+		{Path: "regexp"},
 		{Path: "sort"},
 		{Path: "strconv"},
 		{Path: "strings"},
@@ -415,14 +416,14 @@ func adapterImports(genpkg string, svc *expr.ServiceExpr, svcName string, data *
 		{Path: upstreampaths.LoomMCPHTTPImportPath, Name: "goahttp"},
 		{Path: upstreampaths.LoomPkgImportPath, Name: "loom"},
 	}...)
+	if len(data.Tools) > 0 {
+		imports = append(imports, &codegen.ImportSpec{Path: "github.com/sahilm/fuzzy"})
+	}
 	if len(data.SkillDirectories) > 0 {
 		imports = append(imports, &codegen.ImportSpec{
 			Path: "github.com/CaliLuke/loom-mcp/runtime/mcp/skills",
 			Name: "mcpskills",
 		})
-	}
-	if len(data.Tools) > 0 {
-		imports = append(imports, &codegen.ImportSpec{Path: "regexp"})
 	}
 	return append(imports, adapterAttributeImports(genpkg, svc, imports)...)
 }

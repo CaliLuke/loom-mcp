@@ -172,6 +172,38 @@ func TestMCPToolDiscoveryMetadataOptions(t *testing.T) {
 	require.NoError(t, tool.Validate())
 }
 
+func TestMCPToolSearchPolicyValidation(t *testing.T) {
+	enabled := true
+	nameWeight := 10
+	search := &ToolSearchExpr{
+		DefaultMaxResults: 5,
+		MinScore:          100,
+		ExactMatchMode:    ToolSearchExactMatchNarrow,
+		FuzzyNameMatching: &enabled,
+		BroadFallback:     &enabled,
+		Weights: ToolSearchWeightsExpr{
+			Name: &nameWeight,
+		},
+	}
+	require.NoError(t, search.Validate())
+
+	search.DefaultMaxResults = -1
+	require.ErrorContains(t, search.Validate(), "DefaultMaxResults must be non-negative")
+	search.DefaultMaxResults = 5
+
+	search.MinScore = -1
+	require.ErrorContains(t, search.Validate(), "MinScore must be non-negative")
+	search.MinScore = 100
+
+	search.ExactMatchMode = "surprising"
+	require.ErrorContains(t, search.Validate(), "ExactMatchMode must be narrow, boost, or off")
+	search.ExactMatchMode = ToolSearchExactMatchNarrow
+
+	negative := -1
+	search.Weights.Title = &negative
+	require.ErrorContains(t, search.Validate(), "Title weight must be non-negative")
+}
+
 func TestResourceExpr_Validate(t *testing.T) {
 	tests := []struct {
 		name     string

@@ -61,6 +61,7 @@ type (
 		Register     *RegisterData
 		ClientCaller *ClientCallerData
 		OAuth        *OAuthData
+		ToolSearch   *ToolSearchData
 	}
 
 	// OAuthData carries the OAuth protected-resource configuration into
@@ -78,6 +79,21 @@ type (
 		// directly by clients must not trust forwarded headers because
 		// an attacker could otherwise control the PRM `resource` field.
 		TrustProxyHeaders bool
+	}
+
+	// ToolSearchData carries generated progressive discovery ranking defaults.
+	ToolSearchData struct {
+		DefaultMaxResults int
+		MinScore          int
+		ExactMatchMode    string
+		FuzzyNameMatching bool
+		BroadFallback     bool
+		NameWeight        int
+		TitleWeight       int
+		MetadataWeight    int
+		DescriptionWeight int
+		ParameterWeight   int
+		FuzzyNameWeight   int
 	}
 
 	// OAuthScopeData describes one scope advertised by the protected
@@ -282,6 +298,14 @@ const (
 	resourceQueryFormatUint    = "uint"
 	resourceQueryFormatFloat32 = "float32"
 	resourceQueryFormatFloat64 = "float64"
+
+	defaultToolSearchMaxResults        = 10
+	defaultToolSearchNameWeight        = 1000
+	defaultToolSearchTitleWeight       = 900
+	defaultToolSearchMetadataWeight    = 400
+	defaultToolSearchDescriptionWeight = 250
+	defaultToolSearchParameterWeight   = 100
+	defaultToolSearchFuzzyNameWeight   = 600
 )
 
 // newAdapterGenerator creates a new adapter generator
@@ -329,6 +353,7 @@ func (g *adapterGenerator) newAdapterData(tools []*ToolAdapter, resources []*Res
 		MCPDescription:      g.mcp.Description,
 		WebsiteURL:          g.mcp.WebsiteURL,
 		OAuth:               oauthDataFromExpr(g.mcp.OAuth),
+		ToolSearch:          toolSearchDataFromExpr(g.mcp.ToolSearch),
 		Icons:               iconDataFromExprs(g.mcp.Icons),
 		ProtocolVersion:     g.mcp.ProtocolVersion,
 		Package:             codegen.SnakeCase(g.originalService.Name),
@@ -359,6 +384,51 @@ func (g *adapterGenerator) populateAdapterDataFlags(data *AdapterData) {
 func (g *adapterGenerator) populateAdapterHelperData(data *AdapterData) {
 	data.Register = g.buildRegisterData(data)
 	data.ClientCaller = g.buildClientCallerData(data, g.genpkg)
+}
+
+func toolSearchDataFromExpr(search *mcpexpr.ToolSearchExpr) *ToolSearchData {
+	data := &ToolSearchData{
+		DefaultMaxResults: defaultToolSearchMaxResults,
+		ExactMatchMode:    mcpexpr.ToolSearchExactMatchNarrow,
+		FuzzyNameMatching: true,
+		BroadFallback:     true,
+		NameWeight:        defaultToolSearchNameWeight,
+		TitleWeight:       defaultToolSearchTitleWeight,
+		MetadataWeight:    defaultToolSearchMetadataWeight,
+		DescriptionWeight: defaultToolSearchDescriptionWeight,
+		ParameterWeight:   defaultToolSearchParameterWeight,
+		FuzzyNameWeight:   defaultToolSearchFuzzyNameWeight,
+	}
+	if search == nil {
+		return data
+	}
+	if search.DefaultMaxResults > 0 {
+		data.DefaultMaxResults = search.DefaultMaxResults
+	}
+	data.MinScore = search.MinScore
+	if search.ExactMatchMode != "" {
+		data.ExactMatchMode = search.ExactMatchMode
+	}
+	if search.FuzzyNameMatching != nil {
+		data.FuzzyNameMatching = *search.FuzzyNameMatching
+	}
+	if search.BroadFallback != nil {
+		data.BroadFallback = *search.BroadFallback
+	}
+	data.NameWeight = toolSearchWeightValue(search.Weights.Name, data.NameWeight)
+	data.TitleWeight = toolSearchWeightValue(search.Weights.Title, data.TitleWeight)
+	data.MetadataWeight = toolSearchWeightValue(search.Weights.Metadata, data.MetadataWeight)
+	data.DescriptionWeight = toolSearchWeightValue(search.Weights.Description, data.DescriptionWeight)
+	data.ParameterWeight = toolSearchWeightValue(search.Weights.Parameters, data.ParameterWeight)
+	data.FuzzyNameWeight = toolSearchWeightValue(search.Weights.FuzzyName, data.FuzzyNameWeight)
+	return data
+}
+
+func toolSearchWeightValue(value *int, fallback int) int {
+	if value == nil {
+		return fallback
+	}
+	return *value
 }
 
 func (g *adapterGenerator) buildRegisterData(data *AdapterData) *RegisterData {

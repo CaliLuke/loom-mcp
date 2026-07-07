@@ -378,6 +378,54 @@ func TestMCPToolDiscoveryMetadataOptions(t *testing.T) {
 	require.Equal(t, []string{"lookup", "documents"}, tool.DiscoveryKeywords)
 }
 
+func TestMCPToolSearchPolicyOptions(t *testing.T) {
+	runMCPDSL(t, func() {
+		API("test", func() {})
+		Service("assistant", func() {
+			MCP("assistant", "1.0.0",
+				ToolSearch(
+					ToolSearchMaxResults(3),
+					ToolSearchMinScore(7000),
+					ToolSearchExactMatch(ToolSearchExactMatchBoost),
+					ToolSearchFuzzyNameMatching(false),
+					ToolSearchBroadFallback(false),
+					ToolSearchWeights(
+						ToolSearchNameWeight(12),
+						ToolSearchTitleWeight(11),
+						ToolSearchMetadataWeight(4),
+						ToolSearchDescriptionWeight(2),
+						ToolSearchParameterWeight(1),
+						ToolSearchFuzzyNameWeight(6),
+					),
+				),
+			)
+		})
+	})
+
+	mcp := mcpexpr.Root.MCPServers["assistant"]
+	require.NotNil(t, mcp)
+	require.NotNil(t, mcp.ToolSearch)
+	require.Equal(t, 3, mcp.ToolSearch.DefaultMaxResults)
+	require.Equal(t, 7000, mcp.ToolSearch.MinScore)
+	require.Equal(t, mcpexpr.ToolSearchExactMatchBoost, mcp.ToolSearch.ExactMatchMode)
+	require.NotNil(t, mcp.ToolSearch.FuzzyNameMatching)
+	require.False(t, *mcp.ToolSearch.FuzzyNameMatching)
+	require.NotNil(t, mcp.ToolSearch.BroadFallback)
+	require.False(t, *mcp.ToolSearch.BroadFallback)
+	require.NotNil(t, mcp.ToolSearch.Weights.Name)
+	require.Equal(t, 12, *mcp.ToolSearch.Weights.Name)
+	require.NotNil(t, mcp.ToolSearch.Weights.Title)
+	require.Equal(t, 11, *mcp.ToolSearch.Weights.Title)
+	require.NotNil(t, mcp.ToolSearch.Weights.Metadata)
+	require.Equal(t, 4, *mcp.ToolSearch.Weights.Metadata)
+	require.NotNil(t, mcp.ToolSearch.Weights.Description)
+	require.Equal(t, 2, *mcp.ToolSearch.Weights.Description)
+	require.NotNil(t, mcp.ToolSearch.Weights.Parameters)
+	require.Equal(t, 1, *mcp.ToolSearch.Weights.Parameters)
+	require.NotNil(t, mcp.ToolSearch.Weights.FuzzyName)
+	require.Equal(t, 6, *mcp.ToolSearch.Weights.FuzzyName)
+}
+
 func runMCPDSL(t *testing.T, dsl func()) {
 	t.Helper()
 

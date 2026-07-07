@@ -138,10 +138,30 @@ func emitToolCallInterceptorTypes(stmt *jen.Statement) {
 }
 
 func emitToolSearchOptions(stmt *jen.Statement) {
+	stmt.Comment("ToolSearchWeights customizes progressive discovery ranking weights. Zero values use generated defaults.").Line()
+	stmt.Type().Id("ToolSearchWeights").Struct(
+		jen.Id("Name").Int(),
+		jen.Id("Title").Int(),
+		jen.Id("Metadata").Int(),
+		jen.Id("Description").Int(),
+		jen.Id("Parameters").Int(),
+		jen.Id("FuzzyName").Int(),
+	)
+	stmt.Line()
 	stmt.Comment("ToolSearchOptions enables large-catalog tool discovery through synthetic search_tools and call_tool tools.").Line()
 	stmt.Type().Id("ToolSearchOptions").Struct(
 		jen.Comment("MaxResults limits search results. Values <= 0 use the generated default."),
 		jen.Id("MaxResults").Int(),
+		jen.Comment("MinScore suppresses matches below this ranking score. Values <= 0 use the generated default."),
+		jen.Id("MinScore").Int(),
+		jen.Comment("ExactMatchMode controls exact name/title behavior: narrow, boost, or off. Empty uses the generated default."),
+		jen.Id("ExactMatchMode").String(),
+		jen.Comment("FuzzyNameMatching toggles fuzzy matching for tool names and titles. Nil uses the generated default."),
+		jen.Id("FuzzyNameMatching").Op("*").Bool(),
+		jen.Comment("BroadFallback toggles weaker metadata, description, parameter, and schema matches. Nil uses the generated default."),
+		jen.Id("BroadFallback").Op("*").Bool(),
+		jen.Comment("Weights overrides generated ranking weights. Nil or zero fields use generated defaults."),
+		jen.Id("Weights").Op("*").Id("ToolSearchWeights"),
 		jen.Comment("AlwaysVisible keeps selected real tool names in tools/list alongside the synthetic tools."),
 		jen.Id("AlwaysVisible").Index().String(),
 		jen.Comment("SearchToolName overrides the synthetic search tool name. Default: search_tools."),

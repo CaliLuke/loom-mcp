@@ -187,6 +187,71 @@ func TestGeneratedAdapterToolSearchMatchesNaturalLanguageTokenQuery(t *testing.T
 	assert.NotEmpty(t, result.Tools[0].WhyMatched)
 }
 
+func TestGeneratedAdapterToolSearchExactNameSuppressesWeakMatches(t *testing.T) {
+	t.Parallel()
+
+	adapter := newToolSearchAdapter(t, &mcpassistant.ToolSearchOptions{MaxResults: 10})
+	stream := &capturedToolsCallStream{}
+
+	err := adapter.ToolsCall(context.Background(), &mcpassistant.ToolsCallPayload{
+		Name:      "search_tools",
+		Arguments: json.RawMessage(`{"query":"summarize_text"}`),
+	}, stream)
+	require.NoError(t, err)
+	require.Len(t, stream.events, 1)
+
+	var result toolSearchResult
+	require.NoError(t, json.Unmarshal(stream.events[0].StructuredContent, &result))
+	assert.Equal(t, []string{"summarize_text"}, toolSearchDescriptorNames(result.Tools))
+	assert.Equal(t, 1, result.TotalMatches)
+	require.Len(t, result.Tools, 1)
+	assert.Contains(t, result.Tools[0].WhyMatched, "exact tool name match")
+}
+
+func TestGeneratedAdapterToolSearchExactTitleSuppressesWeakMatches(t *testing.T) {
+	t.Parallel()
+
+	adapter := newToolSearchAdapter(t, &mcpassistant.ToolSearchOptions{MaxResults: 10})
+	stream := &capturedToolsCallStream{}
+
+	err := adapter.ToolsCall(context.Background(), &mcpassistant.ToolsCallPayload{
+		Name:      "search_tools",
+		Arguments: json.RawMessage(`{"query":"Search Knowledge Base"}`),
+	}, stream)
+	require.NoError(t, err)
+	require.Len(t, stream.events, 1)
+
+	var result toolSearchResult
+	require.NoError(t, json.Unmarshal(stream.events[0].StructuredContent, &result))
+	assert.Equal(t, []string{"search"}, toolSearchDescriptorNames(result.Tools))
+	assert.Equal(t, 1, result.TotalMatches)
+	require.Len(t, result.Tools, 1)
+	assert.Contains(t, result.Tools[0].WhyMatched, "exact title match")
+}
+
+func TestGeneratedAdapterToolSearchBroadNaturalLanguageStillReturnsRelevantTools(t *testing.T) {
+	t.Parallel()
+
+	adapter := newToolSearchAdapter(t, &mcpassistant.ToolSearchOptions{MaxResults: 10})
+	stream := &capturedToolsCallStream{}
+
+	err := adapter.ToolsCall(context.Background(), &mcpassistant.ToolsCallPayload{
+		Name:      "search_tools",
+		Arguments: json.RawMessage(`{"query":"text analysis keywords sentiment"}`),
+	}, stream)
+	require.NoError(t, err)
+	require.Len(t, stream.events, 1)
+
+	var result toolSearchResult
+	require.NoError(t, json.Unmarshal(stream.events[0].StructuredContent, &result))
+	names := toolSearchDescriptorNames(result.Tools)
+	assert.Contains(t, names, "analyze_sentiment")
+	assert.Contains(t, names, "extract_keywords")
+	assert.GreaterOrEqual(t, result.TotalMatches, 2)
+	require.NotEmpty(t, result.Tools)
+	assert.NotContains(t, result.Tools[0].WhyMatched, "exact tool name match")
+}
+
 func TestGeneratedAdapterToolSearchAcceptsOmittedArguments(t *testing.T) {
 	t.Parallel()
 

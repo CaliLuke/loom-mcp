@@ -1494,9 +1494,14 @@ store is configured.
 
 ### Memory Search And Tools
 
-Memory search is optional and separate from transcript persistence. `runtime.WithMemoryStore(...)`
-enables current-run snapshots. `runtime.WithMemorySearcher(...)` enables indexed or cross-run
-queries through the `memory.Searcher` contract:
+Memory search has two surfaces:
+
+- transcript/event search, backed by `memory.Store` and `memory.Searcher`;
+- long-term entry search, backed by `memory.Service`.
+
+`runtime.WithMemoryStore(...)` enables current-run snapshots.
+`runtime.WithMemorySearcher(...)` enables indexed or cross-run event queries
+through the `memory.Searcher` contract:
 
 ```go
 type Searcher interface {
@@ -1508,22 +1513,43 @@ Generated memory-backed toolsets use `runtime.NewMemoryToolsetRegistration(...)`
 The model-facing `memory.load_memory` tool accepts `scope`, `event_types`, `labels`, and
 `limit`, and returns `events`, `truncated`, and `scope`.
 
-- `scope:"current_run"` uses the configured searcher when present, otherwise it falls back to
-  `MemoryStore.LoadRun`.
+- `scope:"current_run"` uses `MemoryStore.LoadRun`.
 - `scope:"indexed"` requires `WithMemorySearcher`; without it, the tool returns a structured
   tool error with retry hint reason `unsupported_operation`.
+
+`runtime.WithMemoryService(...)` enables long-term entry memory through:
+
+```go
+type Service interface {
+    IngestRun(ctx context.Context, input memory.IngestRunInput) (memory.IngestResult, error)
+    IngestEvents(ctx context.Context, input memory.IngestEventsInput) (memory.IngestResult, error)
+    PutEntry(ctx context.Context, input memory.PutEntryInput) (memory.Entry, error)
+    Search(ctx context.Context, query memory.SearchQuery) (memory.SearchResult, error)
+}
+```
+
+Long-term memory calls require a resolved `memory.Scope`. The default resolver
+derives a non-global namespace from the agent ID and reads reserved run labels
+`memory.namespace` and `memory.user_id`; production runtimes should provide
+`runtime.WithMemoryScopeResolver(...)` for account/project/user routing.
+
+Use `FromMemory(MemoryLongTerm(), ...)` to expose `search_memory`. A
+user-scoped toolset cannot be widened to shared memory by model payload.
 
 Run policy can also opt into bounded planner-input preload:
 
 ```go
 RunPolicy(func() {
     PreloadMemory(MemoryScopeCurrentRun(), MemoryMaxResults(5))
+    PreloadLongTermMemory(MemoryVisibilityUser(), MemoryMaxResults(5))
 })
 ```
 
 Preloaded memory appears on `planner.PlanInput.PreloadedMemory` and
-`planner.PlanResumeInput.PreloadedMemory`. Nil policy preserves the default no-preload behavior;
-planners should use explicit memory tools for follow-up lookup.
+`planner.PlanResumeInput.PreloadedMemory`. Long-term preload appears separately
+on `PreloadedMemoryEntries`, so planners can distinguish raw transcript events
+from durable extracted entries. Nil policy preserves the default no-preload
+behavior; planners should use explicit memory tools for follow-up lookup.
 
 ### Run event store (runlog.Store)
 
@@ -2098,10 +2124,21 @@ real tools named in `ToolSearchOptions.AlwaysVisible`.
 `search_tools` accepts either a plain `query` or a case-insensitive regex
 `pattern`, never both. It also accepts `category`, `tags`, `max_results`, and
 `include_schemas`. Plain query matching normalizes snake_case names into words,
-singularizes simple plurals, drops common instruction words, and ranks token
-overlap before limiting. Exact or partial name, title, discovery metadata,
-description, input parameter names and descriptions, and schema text all
-contribute to ranking.
+singularizes simple plurals, drops common instruction words, and ranks matches
+before limiting. The default policy prioritizes exact and normalized tool-name
+or title matches, then prefix/contains name and title matches, then fuzzy
+name/title matches using generated token scoring, then broader discovery
+metadata, description, parameter, and schema matches. In the default `narrow`
+exact-match mode, high-confidence name/title matches suppress weaker broad
+matches so an exact `get_graph_summary` query does not return an unrelated
+graph-tool set.
+
+Products can tune generated defaults in the MCP DSL with
+`ToolSearch(...)`: `ToolSearchMaxResults`, `ToolSearchMinScore`,
+`ToolSearchExactMatch(ToolSearchExactMatchNarrow|ToolSearchExactMatchBoost|ToolSearchExactMatchOff)`,
+`ToolSearchFuzzyNameMatching`, `ToolSearchBroadFallback`, and
+`ToolSearchWeights(...)`. Generated `ToolSearchOptions` expose the same runtime
+knobs for deployment-specific overrides.
 
 The result includes model-readable text with exact `call_tool` JSON examples,
 not only a prose invocation hint. Structured content includes `tools`,

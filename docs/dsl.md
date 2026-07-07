@@ -748,18 +748,31 @@ the same artifact references in run outputs and events.
 
 ### Memory-Backed Toolsets
 
-`FromMemory` exposes bounded memory lookup as a model-facing `load_memory` tool. The generated
-agent package registers the toolset through the runtime; application code should configure
-`runtime.WithMemoryStore(...)` for current-run lookup and may configure
-`runtime.WithMemorySearcher(...)` for indexed lookup.
+`FromMemory` exposes bounded memory lookup as model-facing tools. With no source
+option it preserves the existing transcript behavior and exposes
+`load_memory` for current-run and indexed event lookup. Explicit source options
+replace that default:
+
+- `MemoryTranscript()` exposes current-run transcript events.
+- `MemoryIndexedTranscript()` exposes indexed transcript events.
+- `MemoryLongTerm()` exposes long-term entries through `search_memory`.
+
+The generated agent package registers the toolset through the runtime;
+application code should configure `runtime.WithMemoryStore(...)` for
+current-run lookup, `runtime.WithMemorySearcher(...)` for indexed lookup, and
+`runtime.WithMemoryService(...)` plus `runtime.WithMemoryScopeResolver(...)`
+for long-term memory.
 
 ```go
 var Memory = Toolset("memory", FromMemory(MemoryMaxResults(20)))
+var PersonalMemory = Toolset("personal_memory", FromMemory(MemoryLongTerm(), MemoryVisibilityUser(), MemoryMaxResults(20)))
 
 Agent("assistant", "Memory-aware assistant", func() {
     Use(Memory)
+    Use(PersonalMemory)
     RunPolicy(func() {
         PreloadMemory(MemoryScopeCurrentRun(), MemoryMaxResults(5))
+        PreloadLongTermMemory(MemoryVisibilityUser(), MemoryMaxResults(5))
     })
 })
 ```
@@ -768,6 +781,11 @@ Agent("assistant", "Memory-aware assistant", func() {
 `events`, `truncated`, and `scope`. `scope:"current_run"` can fall back to the configured
 memory store. `scope:"indexed"` requires `runtime.WithMemorySearcher(...)`; otherwise the
 tool returns a structured `unsupported_operation` retry hint.
+
+`memory.search_memory` accepts `query`, optional `labels`, optional
+`visibility`, and optional `limit`, and returns long-term memory `hits`.
+User-scoped toolsets require a resolved user ID and cannot be widened to shared
+memory by payload.
 
 ### Generated Feature Acceptance Fixture
 
@@ -1212,13 +1230,20 @@ Application runtime wiring provides the concrete implementations with
 `runtime.WithNamedInterceptors(...)`; generated code does not instantiate policy-specific
 interceptors itself.
 
-`PreloadMemory` is opt-in. It injects only bounded snippets into `planner.PlanInput` and
-`planner.PlanResumeInput`; default transcript/history behavior is unchanged. Use explicit
-`Toolset("memory", FromMemory(...))` tools when the planner should ask for additional memory.
+`PreloadMemory` is opt-in. It injects only bounded transcript/event snippets
+into `planner.PlanInput.PreloadedMemory` and
+`planner.PlanResumeInput.PreloadedMemory`; default transcript/history behavior
+is unchanged. Use explicit `Toolset("memory", FromMemory(...))` tools when the
+planner should ask for additional memory.
+
+`PreloadLongTermMemory` searches the configured long-term memory service with
+the latest history-filtered user text and injects durable entries into
+`PreloadedMemoryEntries`.
 
 ```go
 RunPolicy(func() {
     PreloadMemory(MemoryScopeCurrentRun(), MemoryMaxResults(5))
+    PreloadLongTermMemory(MemoryVisibilityUser(), MemoryMaxResults(5))
 })
 ```
 
@@ -1449,6 +1474,39 @@ the skill ID, display name, description, allowed tools, preload mode, and reload
 mode. Generated MCP servers list `skill://<skill>/SKILL.md` and
 `skill://<skill>/_manifest`; clients may also read supporting files with
 `skill://<skill>/<path>` when the path stays inside the skill directory.
+
+### Progressive Tool Discovery Policy
+
+Generated adapters can expose a compact MCP tool catalog by setting
+`MCPAdapterOptions.ToolSearch` at runtime. The MCP DSL can also declare the
+generated ranking defaults used by that compact search:
+
+```go
+MCP("assistant", "1.0.0",
+    ToolSearch(
+        ToolSearchMaxResults(5),
+        ToolSearchExactMatch(ToolSearchExactMatchNarrow),
+        ToolSearchFuzzyNameMatching(true),
+        ToolSearchBroadFallback(true),
+        ToolSearchWeights(
+            ToolSearchNameWeight(1000),
+            ToolSearchTitleWeight(900),
+            ToolSearchMetadataWeight(400),
+            ToolSearchDescriptionWeight(250),
+            ToolSearchParameterWeight(100),
+            ToolSearchFuzzyNameWeight(600),
+        ),
+    ),
+)
+```
+
+The default policy favors agent actionability: exact and normalized tool-name or
+title matches rank above prefix/contains matches, fuzzy name/title matches use
+generated token scoring, and broad metadata/description/parameter/schema
+matches are only fallback signals. `ToolSearchExactMatchNarrow` suppresses weak
+matches when a query clearly names a tool; `ToolSearchExactMatchBoost` keeps
+weaker matches eligible; `ToolSearchExactMatchOff` disables exact-match special
+handling.
 
 ### MCP Capabilities
 

@@ -16,6 +16,17 @@ var (
 	errResourceIdentifierFragment = errors.New("must not contain a fragment")
 )
 
+const (
+	// ToolSearchExactMatchNarrow suppresses weaker matches when a query exactly
+	// matches a tool name or title.
+	ToolSearchExactMatchNarrow = "narrow"
+	// ToolSearchExactMatchBoost ranks exact matches highly but keeps lower
+	// confidence matches eligible.
+	ToolSearchExactMatchBoost = "boost"
+	// ToolSearchExactMatchOff disables exact-match special handling.
+	ToolSearchExactMatchOff = "off"
+)
+
 func urlParse(raw string) (*url.URL, error) {
 	return url.Parse(raw)
 }
@@ -87,9 +98,44 @@ type (
 		// WWW-Authenticate challenge. When nil, the server does not
 		// advertise OAuth discovery.
 		OAuth *OAuthExpr
+		// ToolSearch is the optional design-time default policy for generated
+		// progressive tool discovery.
+		ToolSearch *ToolSearchExpr
 		// Service is the Goa service expression this MCP server is
 		// bound to.
 		Service *expr.ServiceExpr
+	}
+
+	// ToolSearchExpr configures generated progressive discovery ranking
+	// defaults for an MCP server.
+	ToolSearchExpr struct {
+		eval.Expression
+
+		// DefaultMaxResults caps search results when runtime options and
+		// request payloads do not set a positive max.
+		DefaultMaxResults int
+		// MinScore suppresses matches below this generated ranking score.
+		MinScore int
+		// ExactMatchMode controls what happens when a query exactly matches a
+		// tool name or title.
+		ExactMatchMode string
+		// FuzzyNameMatching enables fuzzy ranking against tool names and titles.
+		FuzzyNameMatching *bool
+		// BroadFallback allows weaker metadata, description, parameter, and
+		// schema matches when no strong name/title match exists.
+		BroadFallback *bool
+		// Weights customizes field weighting for generated ranking.
+		Weights ToolSearchWeightsExpr
+	}
+
+	// ToolSearchWeightsExpr configures generated search ranking weights.
+	ToolSearchWeightsExpr struct {
+		Name        *int
+		Title       *int
+		Metadata    *int
+		Description *int
+		Parameters  *int
+		FuzzyName   *int
 	}
 
 	// OAuthExpr describes the OAuth 2.0 protected-resource configuration
@@ -385,6 +431,9 @@ func (m *MCPExpr) Validate() error {
 	if m.OAuth != nil {
 		mergeValidationError(verr, m.OAuth.Validate())
 	}
+	if m.ToolSearch != nil {
+		mergeValidationError(verr, m.ToolSearch.Validate())
+	}
 	if len(verr.Errors) > 0 {
 		return verr
 	}
@@ -467,6 +516,43 @@ func validateResourceIdentifier(id string) error {
 		return errResourceIdentifierFragment
 	}
 	return nil
+}
+
+// EvalName returns the expression name used in validation errors.
+func (t *ToolSearchExpr) EvalName() string {
+	return "MCP ToolSearch"
+}
+
+// Validate validates the progressive tool discovery search policy.
+func (t *ToolSearchExpr) Validate() error {
+	verr := new(eval.ValidationErrors)
+	if t.DefaultMaxResults < 0 {
+		verr.Add(t, "ToolSearch DefaultMaxResults must be non-negative")
+	}
+	if t.MinScore < 0 {
+		verr.Add(t, "ToolSearch MinScore must be non-negative")
+	}
+	switch t.ExactMatchMode {
+	case "", ToolSearchExactMatchNarrow, ToolSearchExactMatchBoost, ToolSearchExactMatchOff:
+	default:
+		verr.Add(t, "ToolSearch ExactMatchMode must be narrow, boost, or off; got %q", t.ExactMatchMode)
+	}
+	validateToolSearchWeight(verr, t, "Name", t.Weights.Name)
+	validateToolSearchWeight(verr, t, "Title", t.Weights.Title)
+	validateToolSearchWeight(verr, t, "Metadata", t.Weights.Metadata)
+	validateToolSearchWeight(verr, t, "Description", t.Weights.Description)
+	validateToolSearchWeight(verr, t, "Parameters", t.Weights.Parameters)
+	validateToolSearchWeight(verr, t, "FuzzyName", t.Weights.FuzzyName)
+	if len(verr.Errors) > 0 {
+		return verr
+	}
+	return nil
+}
+
+func validateToolSearchWeight(verr *eval.ValidationErrors, expr eval.Expression, name string, weight *int) {
+	if weight != nil && *weight < 0 {
+		verr.Add(expr, "ToolSearch %s weight must be non-negative", name)
+	}
 }
 
 // Validate validates a tool expression

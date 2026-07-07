@@ -118,6 +118,10 @@ surface as JSON-RPC adapters: SDK `tools/list` registers synthetic
 `search_tools` and `call_tool` entries plus real tools pinned in
 `ToolSearchOptions.AlwaysVisible`. Hidden real tools are not registered directly;
 clients discover them through `search_tools` and invoke them through `call_tool`.
+Search ranking uses the same generated DSL defaults and runtime
+`ToolSearchOptions` knobs as the JSON-RPC adapter, including exact-match
+narrowing, fuzzy name/title matching, broad fallback control, score cutoff, and
+field weights.
 
 `ToolSearchOptions.AllowDirectHiddenCalls` is unsupported for SDK-backed compact
 mode. `NewSDKServer` fails construction when that option is true because the SDK

@@ -68,11 +68,29 @@ func ProtocolVersion(version string) func(*exprmcp.MCPExpr) {
 	return func(m *exprmcp.MCPExpr) { m.ProtocolVersion = version }
 }
 
+// ToolSearchExactMatchNarrow suppresses weaker matches when a query exactly
+// matches a generated tool name or title.
+const ToolSearchExactMatchNarrow = exprmcp.ToolSearchExactMatchNarrow
+
+// ToolSearchExactMatchBoost ranks exact matches highly but keeps weaker
+// matches eligible.
+const ToolSearchExactMatchBoost = exprmcp.ToolSearchExactMatchBoost
+
+// ToolSearchExactMatchOff disables exact-match special handling.
+const ToolSearchExactMatchOff = exprmcp.ToolSearchExactMatchOff
+
 // IconThemeLight marks an icon as designed for light backgrounds.
 const IconThemeLight = exprmcp.IconThemeLight
 
 // IconThemeDark marks an icon as designed for dark backgrounds.
 const IconThemeDark = exprmcp.IconThemeDark
+
+// ToolSearchOption customizes generated progressive tool discovery search.
+type ToolSearchOption func(*exprmcp.ToolSearchExpr)
+
+// ToolSearchWeightOption customizes generated progressive discovery ranking
+// weights.
+type ToolSearchWeightOption func(*exprmcp.ToolSearchWeightsExpr)
 
 // IconOption customizes one MCP icon metadata entry.
 type IconOption func(*exprmcp.IconExpr)
@@ -113,6 +131,111 @@ func IconTheme(theme string) IconOption {
 func WebsiteURL(rawURL string) func(*exprmcp.MCPExpr) {
 	return func(m *exprmcp.MCPExpr) {
 		m.WebsiteURL = strings.TrimSpace(rawURL)
+	}
+}
+
+// ToolSearch configures generated progressive discovery ranking defaults for
+// an MCP server. Runtime adapter options can still override operational fields.
+func ToolSearch(opts ...ToolSearchOption) func(*exprmcp.MCPExpr) {
+	return func(m *exprmcp.MCPExpr) {
+		search := &exprmcp.ToolSearchExpr{}
+		for _, opt := range opts {
+			if opt != nil {
+				opt(search)
+			}
+		}
+		m.ToolSearch = search
+	}
+}
+
+// ToolSearchMaxResults sets the generated default search result cap.
+func ToolSearchMaxResults(n int) ToolSearchOption {
+	return func(search *exprmcp.ToolSearchExpr) {
+		search.DefaultMaxResults = n
+	}
+}
+
+// ToolSearchMinScore sets the generated minimum ranking score.
+func ToolSearchMinScore(score int) ToolSearchOption {
+	return func(search *exprmcp.ToolSearchExpr) {
+		search.MinScore = score
+	}
+}
+
+// ToolSearchExactMatch sets exact-name/title behavior. Use
+// ToolSearchExactMatchNarrow, ToolSearchExactMatchBoost, or
+// ToolSearchExactMatchOff.
+func ToolSearchExactMatch(mode string) ToolSearchOption {
+	return func(search *exprmcp.ToolSearchExpr) {
+		search.ExactMatchMode = strings.TrimSpace(mode)
+	}
+}
+
+// ToolSearchFuzzyNameMatching toggles fuzzy matching for tool names and titles.
+func ToolSearchFuzzyNameMatching(enabled bool) ToolSearchOption {
+	return func(search *exprmcp.ToolSearchExpr) {
+		search.FuzzyNameMatching = boolPtr(enabled)
+	}
+}
+
+// ToolSearchBroadFallback toggles weaker metadata, description, parameter, and
+// schema matching when no strong name/title match exists.
+func ToolSearchBroadFallback(enabled bool) ToolSearchOption {
+	return func(search *exprmcp.ToolSearchExpr) {
+		search.BroadFallback = boolPtr(enabled)
+	}
+}
+
+// ToolSearchWeights configures generated ranking weights.
+func ToolSearchWeights(opts ...ToolSearchWeightOption) ToolSearchOption {
+	return func(search *exprmcp.ToolSearchExpr) {
+		for _, opt := range opts {
+			if opt != nil {
+				opt(&search.Weights)
+			}
+		}
+	}
+}
+
+// ToolSearchNameWeight sets the tool-name ranking weight.
+func ToolSearchNameWeight(weight int) ToolSearchWeightOption {
+	return func(weights *exprmcp.ToolSearchWeightsExpr) {
+		weights.Name = intPtr(weight)
+	}
+}
+
+// ToolSearchTitleWeight sets the tool-title ranking weight.
+func ToolSearchTitleWeight(weight int) ToolSearchWeightOption {
+	return func(weights *exprmcp.ToolSearchWeightsExpr) {
+		weights.Title = intPtr(weight)
+	}
+}
+
+// ToolSearchMetadataWeight sets the category/tag/keyword ranking weight.
+func ToolSearchMetadataWeight(weight int) ToolSearchWeightOption {
+	return func(weights *exprmcp.ToolSearchWeightsExpr) {
+		weights.Metadata = intPtr(weight)
+	}
+}
+
+// ToolSearchDescriptionWeight sets the description ranking weight.
+func ToolSearchDescriptionWeight(weight int) ToolSearchWeightOption {
+	return func(weights *exprmcp.ToolSearchWeightsExpr) {
+		weights.Description = intPtr(weight)
+	}
+}
+
+// ToolSearchParameterWeight sets the parameter/schema ranking weight.
+func ToolSearchParameterWeight(weight int) ToolSearchWeightOption {
+	return func(weights *exprmcp.ToolSearchWeightsExpr) {
+		weights.Parameters = intPtr(weight)
+	}
+}
+
+// ToolSearchFuzzyNameWeight sets the fuzzy name/title ranking weight.
+func ToolSearchFuzzyNameWeight(weight int) ToolSearchWeightOption {
+	return func(weights *exprmcp.ToolSearchWeightsExpr) {
+		weights.FuzzyName = intPtr(weight)
 	}
 }
 
@@ -542,6 +665,14 @@ func cleanStrings(values []string) []string {
 		out = append(out, trimmed)
 	}
 	return out
+}
+
+func boolPtr(value bool) *bool {
+	return &value
+}
+
+func intPtr(value int) *int {
+	return &value
 }
 
 // Notification marks the current method as an MCP notification sender. The

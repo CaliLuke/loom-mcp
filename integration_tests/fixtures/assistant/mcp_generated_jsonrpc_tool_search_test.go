@@ -152,6 +152,32 @@ func TestGeneratedJSONRPCToolSearchMatchesNaturalLanguageTokenQuery(t *testing.T
 	assert.NotEmpty(t, list.Tools[0].WhyMatched)
 }
 
+func TestGeneratedJSONRPCToolSearchExactNameSuppressesWeakMatches(t *testing.T) {
+	t.Parallel()
+
+	server := newGeneratedJSONRPCServerWithAdapterOptions(t, &mcpassistant.MCPAdapterOptions{
+		ToolSearch: &mcpassistant.ToolSearchOptions{MaxResults: 10},
+	})
+	defer server.Close()
+	client := newToolSearchJSONRPCClient(t, server.URL)
+
+	raw, err := client.ToolsCall()(context.Background(), &mcpassistant.ToolsCallPayload{
+		Name:      "search_tools",
+		Arguments: json.RawMessage(`{"query":"summarize_text"}`),
+	})
+	require.NoError(t, err)
+	stream := raw.(*mcpAssistantjsonrpcc.ToolsCallClientStream)
+	result, err := stream.Recv(context.Background())
+	require.NoError(t, err)
+
+	var list toolSearchResult
+	require.NoError(t, json.Unmarshal(result.StructuredContent, &list))
+	assert.Equal(t, []string{"summarize_text"}, toolSearchDescriptorNames(list.Tools))
+	assert.Equal(t, 1, list.TotalMatches)
+	require.Len(t, list.Tools, 1)
+	assert.Contains(t, list.Tools[0].WhyMatched, "exact tool name match")
+}
+
 func TestGeneratedJSONRPCToolSearchAcceptsOmittedArguments(t *testing.T) {
 	t.Parallel()
 

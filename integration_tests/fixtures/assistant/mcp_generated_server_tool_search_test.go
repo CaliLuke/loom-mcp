@@ -139,6 +139,34 @@ func TestGeneratedSDKServerToolSearchReturnsCallToolExample(t *testing.T) {
 	assert.Contains(t, tool["call_tool_json"], `"name": "search"`)
 }
 
+func TestGeneratedSDKServerToolSearchExactNameSuppressesWeakMatches(t *testing.T) {
+	t.Parallel()
+
+	session := newToolSearchSDKSession(t, &mcpassistant.ToolSearchOptions{MaxResults: 10})
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	result, err := session.CallTool(ctx, &sdkmcp.CallToolParams{
+		Name: "search_tools",
+		Arguments: map[string]any{
+			"query": "summarize_text",
+		},
+	})
+	require.NoError(t, err)
+	assert.False(t, result.IsError)
+	structured, ok := result.StructuredContent.(map[string]any)
+	require.True(t, ok)
+	tools, ok := structured["tools"].([]any)
+	require.True(t, ok)
+	require.Len(t, tools, 1)
+	tool, ok := tools[0].(map[string]any)
+	require.True(t, ok)
+	assert.Equal(t, "summarize_text", tool["name"])
+	whyMatched, ok := tool["why_matched"].([]any)
+	require.True(t, ok)
+	assert.Contains(t, whyMatched, "exact tool name match")
+}
+
 func sdkToolNames(tools []*sdkmcp.Tool) []string {
 	names := make([]string, 0, len(tools))
 	for _, tool := range tools {

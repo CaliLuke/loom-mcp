@@ -484,6 +484,40 @@ func TestGeneratedSearchToolsHasOutputSchema(t *testing.T) {
 	require.Contains(t, adapterSource, `\"truncated\"`)
 }
 
+func TestGeneratedSearchToolsRendersDesignSearchPolicy(t *testing.T) {
+	files := generateToolDiscoveryFixture(t)
+	adapterFile := findGeneratedFile(t, files, filepath.Join(gcodegen.Gendir, "mcp_assistant", "adapter_server.go"))
+	adapterSource := renderGeneratedFile(t, adapterFile)
+
+	require.Contains(t, adapterSource, "type ToolSearchWeights struct")
+	require.Contains(t, adapterSource, "ExactMatchMode string")
+	require.Contains(t, adapterSource, "FuzzyNameMatching *bool")
+	require.Contains(t, adapterSource, "BroadFallback *bool")
+}
+
+func TestToolSearchDataFromExprAppliesDesignDefaults(t *testing.T) {
+	data := toolSearchDataFromExpr(&mcpexpr.ToolSearchExpr{
+		DefaultMaxResults: 3,
+		MinScore:          50,
+		ExactMatchMode:    mcpexpr.ToolSearchExactMatchBoost,
+		FuzzyNameMatching: boolPtr(false),
+		BroadFallback:     boolPtr(false),
+		Weights: mcpexpr.ToolSearchWeightsExpr{
+			Name:      intPtr(1200),
+			FuzzyName: intPtr(700),
+		},
+	})
+
+	require.Equal(t, 3, data.DefaultMaxResults)
+	require.Equal(t, 50, data.MinScore)
+	require.Equal(t, mcpexpr.ToolSearchExactMatchBoost, data.ExactMatchMode)
+	require.False(t, data.FuzzyNameMatching)
+	require.False(t, data.BroadFallback)
+	require.Equal(t, 1200, data.NameWeight)
+	require.Equal(t, defaultToolSearchTitleWeight, data.TitleWeight)
+	require.Equal(t, 700, data.FuzzyNameWeight)
+}
+
 func TestGenerateSDKServerRendersToolSearchSyntheticTools(t *testing.T) {
 	files := generateToolDiscoveryFixture(t)
 	sdkFile := findGeneratedFile(t, files, filepath.Join(gcodegen.Gendir, "mcp_assistant", "sdk_server.go"))
@@ -699,6 +733,17 @@ func TestGenerate_ActualMCPServerMountIncludesPolicyWrapper(t *testing.T) {
 	mcpexpr.Root.RegisterMCP(svc, &mcpexpr.MCPExpr{
 		Name:    "assistant-mcp",
 		Version: "1.0.0",
+		ToolSearch: &mcpexpr.ToolSearchExpr{
+			DefaultMaxResults: 3,
+			MinScore:          50,
+			ExactMatchMode:    mcpexpr.ToolSearchExactMatchBoost,
+			FuzzyNameMatching: boolPtr(false),
+			BroadFallback:     boolPtr(false),
+			Weights: mcpexpr.ToolSearchWeightsExpr{
+				Name:      intPtr(1200),
+				FuzzyName: intPtr(700),
+			},
+		},
 		Tools: []*mcpexpr.ToolExpr{
 			{Name: "analyze_sentiment", Method: methods["analyze_sentiment"]},
 		},
@@ -1193,6 +1238,14 @@ func generateToolDiscoveryFixture(t *testing.T) []*gcodegen.File {
 	files, err := Generate("example.com/assistant/gen", []eval.Root{root}, nil)
 	require.NoError(t, err)
 	return files
+}
+
+func boolPtr(value bool) *bool {
+	return &value
+}
+
+func intPtr(value int) *int {
+	return &value
 }
 
 func testService(name string, methodNames ...string) (*expr.ServiceExpr, map[string]*expr.MethodExpr) {
