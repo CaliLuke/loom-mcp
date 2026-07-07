@@ -110,12 +110,20 @@ func TestLocalOllamaStreamThinking(t *testing.T) {
 	defer cancel()
 
 	streamer, err := client.Stream(ctx, &model.Request{
-		Messages: []*model.Message{{
-			Role: model.ConversationRoleUser,
-			Parts: []model.Part{model.TextPart{
-				Text: "Think briefly, then answer with this exact marker: OLLAMA_THINKING_LIVE_OK",
-			}},
-		}},
+		Messages: []*model.Message{
+			{
+				Role: model.ConversationRoleSystem,
+				Parts: []model.Part{model.TextPart{
+					Text: "<|think|>",
+				}},
+			},
+			{
+				Role: model.ConversationRoleUser,
+				Parts: []model.Part{model.TextPart{
+					Text: "Think briefly, then answer with this exact marker: OLLAMA_THINKING_LIVE_OK",
+				}},
+			},
+		},
 		Thinking:  &model.ThinkingOptions{Enable: true},
 		MaxTokens: 256,
 	})
@@ -215,11 +223,6 @@ func selectLocalOllamaThinkingModel(ctx context.Context, serverURL string) (stri
 	models, err := localOllamaModels(ctx, serverURL)
 	if err != nil {
 		return "", err
-	}
-	for _, candidate := range models {
-		if isLocalThinkingCandidate(candidate) && !strings.Contains(candidate.Name, "-mlx") {
-			return candidate.Name, nil
-		}
 	}
 	for _, candidate := range models {
 		if isLocalThinkingCandidate(candidate) {
