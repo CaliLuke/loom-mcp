@@ -1610,7 +1610,7 @@ func toolSearchRank(tool *ToolInfo, query string, settings toolSearchSettings) i
 		return settings.descriptionWeight * 3
 	}
 	matchedTokens, totalTokens := toolSearchTokenOverlap(tool, query)
-	if matchedTokens > 0 {
+	if matchedTokens > 0 && (totalTokens == 1 || matchedTokens > 1) {
 		averageBroadWeight := (settings.metadataWeight + settings.descriptionWeight + settings.parameterWeight) / 3
 		score := averageBroadWeight * matchedTokens / totalTokens
 		if matchedTokens == totalTokens {

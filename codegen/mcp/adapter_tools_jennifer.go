@@ -1041,7 +1041,7 @@ func emitToolSearchDescriptorHelpers(stmt *jen.Statement) {
 			jen.If(jen.Qual("strings", "Contains").Call(jen.Qual("strings", "ToLower").Call(jen.Id("toolInputParameterText").Call(jen.Id("tool"))), jen.Id("lowerQuery"))).Block(jen.Return(jen.Id("settings").Dot("parameterWeight").Op("*").Lit(5))),
 			jen.If(jen.Qual("strings", "Contains").Call(jen.Qual("strings", "ToLower").Call(jen.Id("toolSearchHaystack").Call(jen.Id("tool"))), jen.Id("lowerQuery"))).Block(jen.Return(jen.Id("settings").Dot("descriptionWeight").Op("*").Lit(3))),
 			jen.List(jen.Id("matchedTokens"), jen.Id("totalTokens")).Op(":=").Id("toolSearchTokenOverlap").Call(jen.Id("tool"), jen.Id("query")),
-			jen.If(jen.Id("matchedTokens").Op(">").Lit(0)).Block(
+			jen.If(jen.Id("matchedTokens").Op(">").Lit(0).Op("&&").Parens(jen.Id("totalTokens").Op("==").Lit(1).Op("||").Id("matchedTokens").Op(">").Lit(1))).Block(
 				jen.Id("averageBroadWeight").Op(":=").Parens(jen.Id("settings").Dot("metadataWeight").Op("+").Id("settings").Dot("descriptionWeight").Op("+").Id("settings").Dot("parameterWeight")).Op("/").Lit(3),
 				jen.Id("score").Op(":=").Id("averageBroadWeight").Op("*").Id("matchedTokens").Op("/").Id("totalTokens"),
 				jen.If(jen.Id("matchedTokens").Op("==").Id("totalTokens")).Block(

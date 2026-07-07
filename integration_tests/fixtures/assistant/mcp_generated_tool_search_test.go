@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -43,7 +44,7 @@ type toolSearchDescriptor struct {
 	CallToolJSON      string          `json:"call_tool_json,omitempty"`
 }
 
-func newToolSearchAdapter(t *testing.T, opts *mcpassistant.ToolSearchOptions) *mcpassistant.MCPAdapter {
+func newToolSearchAdapter(t testing.TB, opts *mcpassistant.ToolSearchOptions) *mcpassistant.MCPAdapter {
 	t.Helper()
 
 	adapter := mcpassistant.NewMCPAdapter(NewAssistant(), promptProvider{}, &mcpassistant.MCPAdapterOptions{
@@ -76,6 +77,27 @@ func toolSearchDescriptorNames(tools []toolSearchDescriptor) []string {
 		names = append(names, tool.Name)
 	}
 	return names
+}
+
+func boolValue(v bool) *bool {
+	return &v
+}
+
+func callToolSearch(t testing.TB, adapter *mcpassistant.MCPAdapter, arguments string) toolSearchResult {
+	t.Helper()
+
+	stream := &capturedToolsCallStream{}
+	err := adapter.ToolsCall(context.Background(), &mcpassistant.ToolsCallPayload{
+		Name:      "search_tools",
+		Arguments: json.RawMessage(arguments),
+	}, stream)
+	require.NoError(t, err)
+	require.Len(t, stream.events, 1)
+	require.NotNil(t, stream.events[0].StructuredContent)
+
+	var result toolSearchResult
+	require.NoError(t, json.Unmarshal(stream.events[0].StructuredContent, &result))
+	return result
 }
 
 func TestGeneratedAdapterToolSearchListsFullCatalogWhenDisabled(t *testing.T) {
@@ -250,6 +272,181 @@ func TestGeneratedAdapterToolSearchBroadNaturalLanguageStillReturnsRelevantTools
 	assert.GreaterOrEqual(t, result.TotalMatches, 2)
 	require.NotEmpty(t, result.Tools)
 	assert.NotContains(t, result.Tools[0].WhyMatched, "exact tool name match")
+}
+
+func TestGeneratedAdapterToolSearchRankingQualityMatrix(t *testing.T) {
+	t.Parallel()
+
+	adapter := newToolSearchAdapter(t, &mcpassistant.ToolSearchOptions{MaxResults: 10})
+	cases := []struct {
+		name        string
+		query       string
+		wantTop     string
+		wantNames   []string
+		maxResults  int
+		wantWhyPart string
+	}{
+		{
+			name:        "exact snake case name",
+			query:       "summarize_text",
+			wantTop:     "summarize_text",
+			wantNames:   []string{"summarize_text"},
+			maxResults:  1,
+			wantWhyPart: "exact tool name match",
+		},
+		{
+			name:        "normalized name words",
+			query:       "summarize text",
+			wantTop:     "summarize_text",
+			wantNames:   []string{"summarize_text"},
+			maxResults:  1,
+			wantWhyPart: "exact tool name match",
+		},
+		{
+			name:        "exact human title",
+			query:       "Search Knowledge Base",
+			wantTop:     "search",
+			wantNames:   []string{"search"},
+			maxResults:  1,
+			wantWhyPart: "exact title match",
+		},
+		{
+			name:        "natural language metadata intent",
+			query:       "document lookup",
+			wantTop:     "search",
+			wantNames:   []string{"search"},
+			maxResults:  1,
+			wantWhyPart: "matched discovery metadata token",
+		},
+		{
+			name:        "typo fuzzy name intent",
+			query:       "sumarize txt",
+			wantTop:     "summarize_text",
+			wantNames:   []string{"summarize_text"},
+			maxResults:  1,
+			wantWhyPart: "fuzzy tool name/title match",
+		},
+		{
+			name:       "broad text analysis intent",
+			query:      "text analysis keywords sentiment",
+			wantTop:    "analyze_sentiment",
+			wantNames:  []string{"analyze_sentiment", "extract_keywords"},
+			maxResults: 4,
+		},
+	}
+
+	for _, tc := range cases {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			result := callToolSearch(t, adapter, `{"query":`+strconv.Quote(tc.query)+`}`)
+			names := toolSearchDescriptorNames(result.Tools)
+			require.NotEmpty(t, names)
+			assert.Equal(t, tc.wantTop, names[0])
+			for _, want := range tc.wantNames {
+				assert.Contains(t, names, want)
+			}
+			if tc.maxResults > 0 {
+				assert.LessOrEqual(t, len(names), tc.maxResults)
+			}
+			if tc.wantWhyPart != "" {
+				require.NotEmpty(t, result.Tools[0].WhyMatched)
+				assert.Contains(t, result.Tools[0].WhyMatched, tc.wantWhyPart)
+			}
+			for _, tool := range result.Tools {
+				assert.NotEmpty(t, tool.CallToolJSON)
+				assert.Equal(t, "call_tool", tool.CallToolName)
+			}
+		})
+	}
+}
+
+func TestGeneratedAdapterToolSearchTuningControlsRankingBreadth(t *testing.T) {
+	t.Parallel()
+
+	t.Run("fuzzy can be disabled", func(t *testing.T) {
+		t.Parallel()
+
+		adapter := newToolSearchAdapter(t, &mcpassistant.ToolSearchOptions{
+			MaxResults:        10,
+			FuzzyNameMatching: boolValue(false),
+			BroadFallback:     boolValue(false),
+			ExactMatchMode:    "narrow",
+		})
+
+		result := callToolSearch(t, adapter, `{"query":"sumarize txt"}`)
+		assert.Empty(t, result.Tools)
+		assert.Equal(t, 0, result.TotalMatches)
+	})
+
+	t.Run("fuzzy can recover typo intent", func(t *testing.T) {
+		t.Parallel()
+
+		adapter := newToolSearchAdapter(t, &mcpassistant.ToolSearchOptions{
+			MaxResults:        10,
+			FuzzyNameMatching: boolValue(true),
+			BroadFallback:     boolValue(false),
+		})
+
+		result := callToolSearch(t, adapter, `{"query":"sumarize txt"}`)
+		assert.Equal(t, []string{"summarize_text"}, toolSearchDescriptorNames(result.Tools))
+		require.Len(t, result.Tools, 1)
+		assert.Contains(t, result.Tools[0].WhyMatched, "fuzzy tool name/title match")
+	})
+
+	t.Run("broad fallback can be disabled", func(t *testing.T) {
+		t.Parallel()
+
+		adapter := newToolSearchAdapter(t, &mcpassistant.ToolSearchOptions{
+			MaxResults:        10,
+			FuzzyNameMatching: boolValue(false),
+			BroadFallback:     boolValue(false),
+		})
+
+		result := callToolSearch(t, adapter, `{"query":"document lookup"}`)
+		assert.Empty(t, result.Tools)
+		assert.Equal(t, 0, result.TotalMatches)
+	})
+
+	t.Run("min score suppresses weak broad matches", func(t *testing.T) {
+		t.Parallel()
+
+		adapter := newToolSearchAdapter(t, &mcpassistant.ToolSearchOptions{
+			MaxResults:        10,
+			MinScore:          10_000,
+			FuzzyNameMatching: boolValue(false),
+		})
+
+		result := callToolSearch(t, adapter, `{"query":"document lookup"}`)
+		assert.Empty(t, result.Tools)
+		assert.Equal(t, 0, result.TotalMatches)
+	})
+
+	t.Run("exact off broadens without losing top exact result", func(t *testing.T) {
+		t.Parallel()
+
+		adapter := newToolSearchAdapter(t, &mcpassistant.ToolSearchOptions{
+			MaxResults:     10,
+			ExactMatchMode: "off",
+		})
+
+		result := callToolSearch(t, adapter, `{"query":"summarize_text"}`)
+		names := toolSearchDescriptorNames(result.Tools)
+		require.NotEmpty(t, names)
+		assert.Equal(t, "summarize_text", names[0])
+		assert.GreaterOrEqual(t, result.TotalMatches, len(names))
+	})
+}
+
+func TestGeneratedAdapterToolSearchAllocationBudget(t *testing.T) {
+	adapter := newToolSearchAdapter(t, &mcpassistant.ToolSearchOptions{MaxResults: 10})
+
+	allocs := testing.AllocsPerRun(20, func() {
+		_ = callToolSearch(t, adapter, `{"query":"text analysis keywords sentiment"}`)
+	})
+
+	assert.Less(t, allocs, float64(2_000), "tool search should stay within the public adapter allocation budget")
 }
 
 func TestGeneratedAdapterToolSearchAcceptsOmittedArguments(t *testing.T) {
@@ -629,6 +826,25 @@ func TestGeneratedAdapterToolSearchProxyPreservesToolContext(t *testing.T) {
 	}, stream)
 	require.NoError(t, err)
 	assert.Equal(t, []string{"call_tool", "analyze_sentiment"}, seen)
+}
+
+func BenchmarkGeneratedAdapterToolSearch(b *testing.B) {
+	adapter := newToolSearchAdapter(b, &mcpassistant.ToolSearchOptions{MaxResults: 10})
+	queries := []string{
+		"summarize_text",
+		"summarize text",
+		"Search Knowledge Base",
+		"document lookup",
+		"sumarize txt",
+		"text analysis keywords sentiment",
+	}
+
+	b.ReportAllocs()
+	for b.Loop() {
+		for _, query := range queries {
+			_ = callToolSearch(b, adapter, `{"query":`+strconv.Quote(query)+`}`)
+		}
+	}
 }
 
 func TestGeneratedAdapterToolSearchProxyPreservesValidationErrors(t *testing.T) {
