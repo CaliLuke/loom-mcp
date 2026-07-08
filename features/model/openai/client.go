@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"net/http"
 	"strings"
 
 	openai "github.com/openai/openai-go"
@@ -270,7 +271,26 @@ func (c *Client) Stream(ctx context.Context, req *model.Request) (model.Streamer
 	if stream == nil {
 		return nil, errors.New("openai: stream is nil")
 	}
+	if err := stream.Err(); err != nil {
+		_ = stream.Close()
+		return nil, wrapResponsesStreamError(err)
+	}
 	return newOpenAIStreamer(ctx, stream, codec, c.resolveModelID(req), req.StructuredOutput), nil
+}
+
+func wrapResponsesStreamError(err error) error {
+	if isRateLimited(err) {
+		return fmt.Errorf("%w: %w", model.ErrRateLimited, err)
+	}
+	return fmt.Errorf("openai responses stream: %w", err)
+}
+
+func isRateLimited(err error) bool {
+	if errors.Is(err, model.ErrRateLimited) {
+		return true
+	}
+	var apiErr *openai.Error
+	return errors.As(err, &apiErr) && apiErr.StatusCode == http.StatusTooManyRequests
 }
 
 func encodeTools(defs []*model.ToolDefinition) ([]responses.ToolUnionParam, *openAIToolCodec, error) {

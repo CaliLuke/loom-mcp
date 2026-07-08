@@ -134,7 +134,7 @@ func (s *openAIStreamer) run(processor *openAIChunkProcessor) {
 		}
 		if !s.stream.Next() {
 			if err := s.stream.Err(); err != nil {
-				s.setErr(fmt.Errorf("openai responses stream: %w", err))
+				s.setErr(wrapResponsesStreamError(err))
 				return
 			}
 			if !processor.completed {

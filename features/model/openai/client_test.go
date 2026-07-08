@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"io"
+	"net/http"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -11,6 +12,7 @@ import (
 	openaimodel "github.com/CaliLuke/loom-mcp/features/model/openai"
 	"github.com/CaliLuke/loom-mcp/runtime/agent/model"
 	"github.com/CaliLuke/loom-mcp/runtime/agent/tools"
+	openai "github.com/openai/openai-go"
 	"github.com/openai/openai-go/option"
 	"github.com/openai/openai-go/packages/ssestream"
 	"github.com/openai/openai-go/responses"
@@ -366,6 +368,74 @@ func TestClientRequiresDefaultModel(t *testing.T) {
 	require.Error(t, err)
 }
 
+func TestClientStreamReturnsNewStreamingError(t *testing.T) {
+	streamErr := errors.New("auth failed")
+	decoder := &mockStreamDecoder{}
+	mock := &mockResponsesClient{
+		stream: ssestream.NewStream[responses.ResponseStreamEventUnion](decoder, streamErr),
+	}
+	client, err := openaimodel.New(openaimodel.Options{Client: mock, DefaultModel: "gpt-4o"})
+	require.NoError(t, err)
+
+	streamer, err := client.Stream(context.Background(), &model.Request{
+		Messages: []*model.Message{{
+			Role:  model.ConversationRoleUser,
+			Parts: []model.Part{model.TextPart{Text: "Ping"}},
+		}},
+	})
+	require.Nil(t, streamer)
+	require.ErrorIs(t, err, streamErr)
+	require.ErrorContains(t, err, "openai responses stream")
+	require.True(t, decoder.closed)
+}
+
+func TestClientStreamReturnsRateLimitedNewStreamingError(t *testing.T) {
+	streamErr := newOpenAIAPIError(t, http.StatusTooManyRequests)
+	mock := &mockResponsesClient{
+		stream: newMockOpenAIStreamError(streamErr),
+	}
+	client, err := openaimodel.New(openaimodel.Options{Client: mock, DefaultModel: "gpt-4o"})
+	require.NoError(t, err)
+
+	streamer, err := client.Stream(context.Background(), &model.Request{
+		Messages: []*model.Message{{
+			Role:  model.ConversationRoleUser,
+			Parts: []model.Part{model.TextPart{Text: "Ping"}},
+		}},
+	})
+	require.Nil(t, streamer)
+	require.ErrorIs(t, err, model.ErrRateLimited)
+
+	var apiErr *openai.Error
+	require.ErrorAs(t, err, &apiErr)
+	require.Equal(t, http.StatusTooManyRequests, apiErr.StatusCode)
+}
+
+func TestClientStreamReturnsRateLimitedRecvError(t *testing.T) {
+	streamErr := newOpenAIAPIError(t, http.StatusTooManyRequests)
+	mock := &mockResponsesClient{
+		stream: newMockOpenAIStreamReadError(streamErr),
+	}
+	client, err := openaimodel.New(openaimodel.Options{Client: mock, DefaultModel: "gpt-4o"})
+	require.NoError(t, err)
+
+	streamer, err := client.Stream(context.Background(), &model.Request{
+		Messages: []*model.Message{{
+			Role:  model.ConversationRoleUser,
+			Parts: []model.Part{model.TextPart{Text: "Ping"}},
+		}},
+	})
+	require.NoError(t, err)
+
+	_, err = streamer.Recv()
+	require.ErrorIs(t, err, model.ErrRateLimited)
+
+	var apiErr *openai.Error
+	require.ErrorAs(t, err, &apiErr)
+	require.Equal(t, http.StatusTooManyRequests, apiErr.StatusCode)
+	require.NoError(t, streamer.Close())
+}
+
 func TestClientStreamEmitsTextToolCallsUsageAndStop(t *testing.T) {
 	mock := &mockResponsesClient{
 		stream: newMockOpenAIStream(
@@ -575,6 +645,8 @@ func (m *mockResponsesClient) NewStreaming(ctx context.Context, request response
 type mockStreamDecoder struct {
 	events []ssestream.Event
 	idx    int
+	err    error
+	closed bool
 }
 
 func newMockOpenAIStream(raws ...string) *ssestream.Stream[responses.ResponseStreamEventUnion] {
@@ -583,6 +655,28 @@ func newMockOpenAIStream(raws ...string) *ssestream.Stream[responses.ResponseStr
 		events = append(events, ssestream.Event{Data: []byte(raw)})
 	}
 	return ssestream.NewStream[responses.ResponseStreamEventUnion](&mockStreamDecoder{events: events}, nil)
+}
+
+func newMockOpenAIStreamError(err error) *ssestream.Stream[responses.ResponseStreamEventUnion] {
+	return ssestream.NewStream[responses.ResponseStreamEventUnion](&mockStreamDecoder{}, err)
+}
+
+func newMockOpenAIStreamReadError(err error) *ssestream.Stream[responses.ResponseStreamEventUnion] {
+	return ssestream.NewStream[responses.ResponseStreamEventUnion](&mockStreamDecoder{err: err}, nil)
+}
+
+func newOpenAIAPIError(t *testing.T, statusCode int) *openai.Error {
+	t.Helper()
+	req, err := http.NewRequestWithContext(context.Background(), http.MethodPost, "https://api.openai.test/v1/responses", nil)
+	require.NoError(t, err)
+	return &openai.Error{
+		StatusCode: statusCode,
+		Request:    req,
+		Response: &http.Response{
+			StatusCode: statusCode,
+			Request:    req,
+		},
+	}
 }
 
 func (d *mockStreamDecoder) Event() ssestream.Event {
@@ -601,11 +695,12 @@ func (d *mockStreamDecoder) Next() bool {
 }
 
 func (d *mockStreamDecoder) Close() error {
+	d.closed = true
 	return nil
 }
 
 func (d *mockStreamDecoder) Err() error {
-	return nil
+	return d.err
 }
 
 func collectStreamChunks(t *testing.T, streamer model.Streamer) []model.Chunk {
