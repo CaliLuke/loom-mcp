@@ -7,6 +7,8 @@ package mongo
 import (
 	"context"
 	"errors"
+	"slices"
+	"strings"
 	"time"
 
 	"go.mongodb.org/mongo-driver/v2/bson"
@@ -54,14 +56,22 @@ type (
 		CreatedAt       time.Time         `bson:"created_at"`
 		Metadata        map[string]string `bson:"metadata,omitempty"`
 	}
+
+	resolveQuery struct {
+		filter bson.M
+		limit  int64
+	}
 )
 
 const (
-	defaultCollection = "prompt_overrides"
-	defaultTimeout    = 5 * time.Second
-	clientName        = "prompt-mongo"
-	fieldPromptID     = "prompt_id"
-	fieldCreatedAt    = "created_at"
+	defaultCollection    = "prompt_overrides"
+	defaultTimeout       = 5 * time.Second
+	clientName           = "prompt-mongo"
+	fieldPromptID        = "prompt_id"
+	fieldScopeSession    = "scope_session"
+	fieldScopeLabels     = "scope_labels"
+	fieldScopeLabelCount = "scope_label_count"
+	fieldCreatedAt       = "created_at"
 )
 
 // New returns a Client backed by the provided MongoDB client.
@@ -96,9 +106,24 @@ func (c *client) Resolve(ctx context.Context, promptID prompt.Ident, scope promp
 	ctx, cancel := c.withTimeout(ctx)
 	defer cancel()
 
-	cur, err := c.coll.Find(ctx, bson.M{fieldPromptID: promptID.String()}, options.Find().SetSort(bson.D{
-		{Key: fieldCreatedAt, Value: -1},
-	}))
+	for _, query := range resolveQueries(promptID, scope) {
+		override, err := c.findLatestMatchingOverride(ctx, query, scope)
+		if err != nil {
+			return nil, err
+		}
+		if override != nil {
+			return override, nil
+		}
+	}
+	return nil, nil
+}
+
+func (c *client) findLatestMatchingOverride(ctx context.Context, query resolveQuery, scope prompt.Scope) (*prompt.Override, error) {
+	opts := options.Find().SetSort(bson.D{{Key: fieldCreatedAt, Value: -1}})
+	if query.limit > 0 {
+		opts.SetLimit(query.limit)
+	}
+	cur, err := c.coll.Find(ctx, query.filter, opts)
 	if err != nil {
 		return nil, err
 	}
@@ -109,22 +134,81 @@ func (c *client) Resolve(ctx context.Context, promptID prompt.Ident, scope promp
 	if err != nil {
 		return nil, err
 	}
-
-	var (
-		best      *prompt.Override
-		bestLevel = -1
-	)
 	for _, override := range overrides {
-		if !prompt.ScopeMatches(override.Scope, scope) {
-			continue
-		}
-		level := prompt.ScopePrecedence(override.Scope)
-		if best == nil || level > bestLevel || (level == bestLevel && override.CreatedAt.After(best.CreatedAt)) {
-			best = override
-			bestLevel = level
+		if prompt.ScopeMatches(override.Scope, scope) {
+			return override, nil
 		}
 	}
-	return best, nil
+	return nil, nil
+}
+
+func resolveQueries(promptID prompt.Ident, scope prompt.Scope) []resolveQuery {
+	labelFilters := scopeLabelCandidateFilters(scope.Labels)
+	queries := make([]resolveQuery, 0, len(labelFilters)*2)
+	if scope.SessionID != "" {
+		for _, labelFilter := range labelFilters {
+			queries = append(queries, resolveQueryFor(promptID, scope.SessionID, labelFilter))
+		}
+	}
+	for _, labelFilter := range labelFilters {
+		queries = append(queries, resolveQueryFor(promptID, "", labelFilter))
+	}
+	return queries
+}
+
+func resolveQueryFor(promptID prompt.Ident, sessionID string, labelFilter bson.M) resolveQuery {
+	filter := bson.M{
+		fieldPromptID:     promptID.String(),
+		fieldScopeSession: sessionID,
+	}
+	for key, val := range labelFilter {
+		filter[key] = val
+	}
+	limit := int64(0)
+	if isExactLabelFilter(labelFilter) {
+		limit = 1
+	}
+	return resolveQuery{filter: filter, limit: limit}
+}
+
+func scopeLabelCandidateFilters(labels map[string]string) []bson.M {
+	candidates := make([]bson.M, 0, len(labels)+1)
+	if len(labels) == 0 {
+		return []bson.M{{fieldScopeLabelCount: 0}}
+	}
+
+	keys := make([]string, 0, len(labels))
+	for key := range labels {
+		keys = append(keys, key)
+	}
+	slices.Sort(keys)
+	candidates = append(candidates, labelFilterForKeys(keys, labels))
+	for count := len(keys) - 1; count > 0; count-- {
+		filter := bson.M{fieldScopeLabelCount: count}
+		candidates = append(candidates, filter)
+	}
+	candidates = append(candidates, bson.M{fieldScopeLabelCount: 0})
+	return candidates
+}
+
+func labelFilterForKeys(keys []string, labels map[string]string) bson.M {
+	filter := bson.M{fieldScopeLabelCount: len(keys)}
+	for _, key := range keys {
+		if !mongoPathSafeLabelKey(key) {
+			return filter
+		}
+		filter[fieldScopeLabels+"."+key] = labels[key]
+	}
+	return filter
+}
+
+func mongoPathSafeLabelKey(key string) bool {
+	return key != "" && !strings.ContainsAny(key, ".$")
+}
+
+func isExactLabelFilter(filter bson.M) bool {
+	count, ok := filter[fieldScopeLabelCount].(int)
+	return ok && len(filter) == count+1
 }
 
 func (c *client) Set(ctx context.Context, promptID prompt.Ident, scope prompt.Scope, template string, metadata map[string]string) error {
@@ -230,8 +314,8 @@ func ensureIndexes(ctx context.Context, coll collection) error {
 	lookup := mongodriver.IndexModel{
 		Keys: bson.D{
 			{Key: fieldPromptID, Value: 1},
-			{Key: "scope_session", Value: 1},
-			{Key: "scope_label_count", Value: -1},
+			{Key: fieldScopeSession, Value: 1},
+			{Key: fieldScopeLabelCount, Value: -1},
 			{Key: fieldCreatedAt, Value: -1},
 		},
 	}

@@ -3,6 +3,7 @@ package mongo
 import (
 	"context"
 	"errors"
+	"fmt"
 	"sort"
 	"sync"
 	"testing"
@@ -133,6 +134,66 @@ func TestResolveReturnsNilWhenMissing(t *testing.T) {
 	require.Nil(t, override)
 }
 
+func TestResolveQueriesGrowLinearlyWithLabels(t *testing.T) {
+	t.Parallel()
+
+	labels := make(map[string]string)
+	for i := range 32 {
+		labels[fmt.Sprintf("label_%02d", i)] = "value"
+	}
+	queries := resolveQueries("example.agent.system", prompt.Scope{
+		SessionID: "sess_1",
+		Labels:    labels,
+	})
+
+	require.Len(t, queries, (len(labels)+1)*2)
+}
+
+func TestResolveUsesQueryPrecedenceWithLimit(t *testing.T) {
+	t.Parallel()
+
+	client := mustNewTestClient()
+	fc := client.coll.(*fakeCollection)
+	ctx := context.Background()
+	id := prompt.Ident("example.agent.system")
+	fc.docs = []overrideDocument{
+		{PromptID: id.String(), Template: "newer-global", CreatedAt: time.Unix(3, 0).UTC(), ScopeLabelCount: 0},
+		{PromptID: id.String(), ScopeSession: "sess_1", Template: "older-session", CreatedAt: time.Unix(1, 0).UTC(), ScopeLabelCount: 0},
+		{PromptID: id.String(), ScopeSession: "sess_1", Template: "newer-session", CreatedAt: time.Unix(2, 0).UTC(), ScopeLabelCount: 0},
+	}
+
+	override, err := client.Resolve(ctx, id, prompt.Scope{
+		SessionID: "sess_1",
+	})
+
+	require.NoError(t, err)
+	require.NotNil(t, override)
+	require.Equal(t, "newer-session", override.Template)
+	require.Equal(t, []int{1}, fc.findLimits())
+}
+
+func TestResolveSupportsMongoPathUnsafeLabelKeys(t *testing.T) {
+	t.Parallel()
+
+	client := mustNewTestClient()
+	fc := client.coll.(*fakeCollection)
+	ctx := context.Background()
+	id := prompt.Ident("example.agent.system")
+	fc.docs = []overrideDocument{
+		{PromptID: id.String(), Template: "global", CreatedAt: time.Unix(2, 0).UTC(), ScopeLabelCount: 0},
+		{PromptID: id.String(), Template: "unsafe-label", CreatedAt: time.Unix(1, 0).UTC(), ScopeLabels: map[string]string{"env.name": "prod"}, ScopeLabelCount: 1},
+	}
+
+	override, err := client.Resolve(ctx, id, prompt.Scope{
+		Labels: map[string]string{"env.name": "prod"},
+	})
+
+	require.NoError(t, err)
+	require.NotNil(t, override)
+	require.Equal(t, "unsafe-label", override.Template)
+	require.Equal(t, []int{0}, fc.findLimits())
+}
+
 func TestHistoryAndListNewestFirst(t *testing.T) {
 	t.Parallel()
 
@@ -199,9 +260,10 @@ func mustNewTestClient() *client {
 }
 
 type fakeCollection struct {
-	mu      sync.Mutex
-	indexes []mongodriver.IndexModel
-	docs    []overrideDocument
+	mu          sync.Mutex
+	indexes     []mongodriver.IndexModel
+	docs        []overrideDocument
+	findOptions []options.FindOptions
 }
 
 func newFakeCollection() *fakeCollection {
@@ -232,7 +294,45 @@ func (c *fakeCollection) Find(ctx context.Context, filter any, opts ...options.L
 	sort.Slice(matches, func(i, j int) bool {
 		return matches[i].CreatedAt.After(matches[j].CreatedAt)
 	})
+	findOpts, err := mergeFindOptions(opts...)
+	if err != nil {
+		return nil, err
+	}
+	c.findOptions = append(c.findOptions, findOpts)
+	if findOpts.Limit != nil && *findOpts.Limit >= 0 && int(*findOpts.Limit) < len(matches) {
+		matches = matches[:int(*findOpts.Limit)]
+	}
 	return &fakeCursor{docs: matches, idx: -1}, nil
+}
+
+func (c *fakeCollection) findLimits() []int {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	limits := make([]int, 0, len(c.findOptions))
+	for _, opts := range c.findOptions {
+		if opts.Limit == nil {
+			limits = append(limits, 0)
+			continue
+		}
+		limits = append(limits, int(*opts.Limit))
+	}
+	return limits
+}
+
+func mergeFindOptions(opts ...options.Lister[options.FindOptions]) (options.FindOptions, error) {
+	var out options.FindOptions
+	for _, opt := range opts {
+		if opt == nil {
+			continue
+		}
+		for _, set := range opt.List() {
+			if err := set(&out); err != nil {
+				return options.FindOptions{}, err
+			}
+		}
+	}
+	return out, nil
 }
 
 func (c *fakeCollection) InsertOne(ctx context.Context, document any, opts ...options.Lister[options.InsertOneOptions]) (*mongodriver.InsertOneResult, error) {
@@ -266,19 +366,82 @@ func (c *fakeCollection) match(filter any) []overrideDocument {
 func matchesFilter(doc overrideDocument, filter bson.M) bool {
 	for key, val := range filter {
 		switch key {
-		case "prompt_id":
+		case "$or":
+			if !matchesAnyFilter(doc, val) {
+				return false
+			}
+		case fieldPromptID:
 			if doc.PromptID != val {
 				return false
 			}
-		case "scope_session":
-			if doc.ScopeSession != val {
+		case fieldScopeSession:
+			if !matchesStringCondition(doc.ScopeSession, val) {
+				return false
+			}
+		case fieldScopeLabelCount:
+			if doc.ScopeLabelCount != val {
 				return false
 			}
 		default:
-			return false
+			if !matchesDottedLabel(doc, key, val) {
+				return false
+			}
 		}
 	}
 	return true
+}
+
+func matchesAnyFilter(doc overrideDocument, val any) bool {
+	switch filters := val.(type) {
+	case []bson.M:
+		for _, filter := range filters {
+			if matchesFilter(doc, filter) {
+				return true
+			}
+		}
+	case bson.A:
+		for _, raw := range filters {
+			filter, ok := raw.(bson.M)
+			if !ok {
+				continue
+			}
+			if matchesFilter(doc, filter) {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+func matchesStringCondition(got string, condition any) bool {
+	switch cond := condition.(type) {
+	case string:
+		return got == cond
+	case bson.M:
+		in, ok := cond["$in"]
+		if !ok {
+			return false
+		}
+		values, ok := in.([]string)
+		if !ok {
+			return false
+		}
+		for _, value := range values {
+			if got == value {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+func matchesDottedLabel(doc overrideDocument, key string, val any) bool {
+	const prefix = fieldScopeLabels + "."
+	if len(key) <= len(prefix) || key[:len(prefix)] != prefix {
+		return false
+	}
+	label := key[len(prefix):]
+	return doc.ScopeLabels[label] == val
 }
 
 type fakeSingleResult struct {

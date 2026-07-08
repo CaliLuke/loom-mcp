@@ -24,6 +24,8 @@ type (
 	}
 )
 
+const maxCompiledSchemaCacheEntries = 128
+
 func newSchemaValidator() *schemaValidator {
 	return &schemaValidator{
 		compiled: make(map[string]*jsonschema.Schema),
@@ -137,6 +139,9 @@ func (v *schemaValidator) compiledSchema(schemaBytes []byte) (*jsonschema.Schema
 	if cached := v.compiled[digest]; cached != nil {
 		v.mu.Unlock()
 		return cached, nil
+	}
+	if len(v.compiled) >= maxCompiledSchemaCacheEntries {
+		v.compiled = make(map[string]*jsonschema.Schema)
 	}
 	v.compiled[digest] = compiled
 	v.mu.Unlock()
