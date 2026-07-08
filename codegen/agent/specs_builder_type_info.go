@@ -149,8 +149,15 @@ func (b *toolSpecBuilder) buildTypeInfo(tool *ToolData, att *goaexpr.AttributeEx
 
 	// JSON schema from transport attribute
 	schemaAttr := transportAttr
+	advertisedAttr := schemaAttr
 	var err error
-	schemaBytes, err := schemaForAttribute(schemaAttr)
+	if usage == usagePayload && len(tool.InjectedFields) > 0 {
+		advertisedAttr, err = advertisedPayloadAttribute(schemaAttr, tool.InjectedFields)
+		if err != nil {
+			return nil, err
+		}
+	}
+	schemaBytes, err := schemaForAttribute(advertisedAttr)
 	if err != nil {
 		return nil, err
 	}
@@ -174,9 +181,9 @@ func (b *toolSpecBuilder) buildTypeInfo(tool *ToolData, att *goaexpr.AttributeEx
 		// Prefer an explicit top-level Example(...) from the original DSL
 		// attribute. If none exists, synthesize the minimal example from the
 		// transport schema attribute.
-		exampleBytes = authoredExampleForAttribute(att, schemaAttr)
+		exampleBytes = authoredExampleForAttribute(att, advertisedAttr)
 		if len(exampleBytes) == 0 {
-			exampleBytes = exampleForAttribute(schemaAttr)
+			exampleBytes = exampleForAttribute(advertisedAttr)
 		}
 	}
 
@@ -307,6 +314,58 @@ func (b *toolSpecBuilder) buildTypeInfo(tool *ToolData, att *goaexpr.AttributeEx
 // NOTE: The reserved `server_data` payload field is added by the runtime, not by
 // the generated tool schema. Tool payload schemas remain stable and do not
 // include runtime-reserved controls.
+
+func advertisedPayloadAttribute(att *goaexpr.AttributeExpr, injected []string) (*goaexpr.AttributeExpr, error) {
+	if len(injected) == 0 || att == nil {
+		return att, nil
+	}
+	out := goaexpr.DupAtt(att)
+	if ut, ok := out.Type.(goaexpr.UserType); ok {
+		inner := goaexpr.DupAtt(ut.Attribute())
+		out.Type = inner.Type
+		if out.Validation == nil {
+			out.Validation = inner.Validation
+		}
+	}
+	obj := goaexpr.AsObject(out.Type)
+	if obj == nil {
+		return nil, fmt.Errorf("injected fields require object payload, got %T", out.Type)
+	}
+	for _, field := range injected {
+		if !removeObjectField(obj, field) {
+			return nil, fmt.Errorf("injected field %q not found in payload", field)
+		}
+		removeRequiredField(out, field)
+	}
+	return out, nil
+}
+
+func removeObjectField(obj *goaexpr.Object, field string) bool {
+	if obj == nil {
+		return false
+	}
+	for i, nat := range *obj {
+		if nat != nil && nat.Name == field {
+			*obj = append((*obj)[:i], (*obj)[i+1:]...)
+			return true
+		}
+	}
+	return false
+}
+
+func removeRequiredField(att *goaexpr.AttributeExpr, field string) {
+	if att == nil || att.Validation == nil || len(att.Validation.Required) == 0 {
+		return
+	}
+	required := att.Validation.Required
+	for i, name := range required {
+		if name == field {
+			required = append(required[:i], required[i+1:]...)
+			att.Validation.Required = required
+			return
+		}
+	}
+}
 
 func exampleInputGoExpr(exampleJSON []byte) (string, bool) {
 	trimmed := bytes.TrimSpace(exampleJSON)

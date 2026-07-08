@@ -71,6 +71,11 @@ Use this file when editing DSL, generators, generated helpers, or MCP codegen be
   server-data projection, retry hints, or tool-error mapping. Registry provider
   loops still use their generated provider adapter path unless that path is
   explicitly unified in a later milestone.
+- Generated tool specs must keep transport/public payload shapes distinct from
+  advertised model-facing shapes. `Inject(...)` fields remain in generated
+  public payload structs, codecs, validation, and method dispatch payloads, but
+  must be removed from `ToolSpec.Payload.Schema`, `ExampleJSON`, and
+  `ExampleInput`, including the advertised `required` list.
 - Projected MCP `ToolInfo` schemas must come from the generated toolset
   `tools.ToolSpec` payload and result schemas, not from service-method-only
   schema extraction. This keeps runtime specs, JSON-RPC adapters, and SDK

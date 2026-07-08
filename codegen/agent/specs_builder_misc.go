@@ -263,6 +263,10 @@ func canonicalizeUnionExamples(att *goaexpr.AttributeExpr, example any) any {
 		}
 		for k, v := range m {
 			child := att.Find(k)
+			if child == nil {
+				delete(m, k)
+				continue
+			}
 			m[k] = canonicalizeUnionExamples(child, v)
 		}
 		return m

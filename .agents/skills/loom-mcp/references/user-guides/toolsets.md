@@ -89,7 +89,10 @@ Tool("list_devices", "List devices with pagination", func() {
 
 ## Injected Fields
 
-`Inject(fields...)` hides fields from LLM and lets runtime supply values via interceptor.
+`Inject(fields...)` marks fields as server-owned. Generated public payload
+structs and codecs keep those fields so runtime injection can populate service
+method payloads, but generated `ToolSpec.Payload.Schema`, `ExampleJSON`, and
+`ExampleInput` omit them from the model-facing contract.
 
 ```go
 Tool("get_user_data", "Get user data", func() {

@@ -66,6 +66,10 @@ Use this skill for `loom-mcp` work in this repo. Keep `AGENTS.md` short and keep
 - Projected MCP tools use generated toolset specs for MCP `ToolInfo` schemas
   and generated `Dispatch<Tool>Method(...)` for execution. Do not duplicate
   `BindTo(...)` transforms in MCP adapters.
+- `Inject(...)` fields are server-owned: generated public payload structs and
+  codecs keep them for runtime injection, while generated
+  `ToolSpec.Payload.Schema`, `ExampleJSON`, and `ExampleInput` hide them and
+  remove them from model-facing `required`.
 - Unified tool-surface projection v1 rejects projected tools that use
   `Confirmation(...)`, `Inject(...)`, `ServerData(...)`,
   `ResultReminder(...)`, or `BoundedResult(...)`; treat those as validation
