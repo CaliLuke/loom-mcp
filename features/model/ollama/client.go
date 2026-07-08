@@ -44,7 +44,8 @@ type Options struct {
 	// is unset.
 	Temperature float32
 
-	// Timeout configures the default HTTP client timeout when HTTPClient is nil.
+	// Timeout configures the response header timeout when HTTPClient is nil.
+	// Request lifetime deadlines should be owned by the request context.
 	Timeout time.Duration
 }
 
@@ -108,7 +109,10 @@ type ollamaChatResponse struct {
 	Error           json.RawMessage `json:"error,omitempty"`
 }
 
-const toolExecutionFailed = "tool execution failed"
+const (
+	defaultResponseHeaderTimeout = 30 * time.Second
+	toolExecutionFailed          = "tool execution failed"
+)
 
 // New builds an Ollama-backed model client from the provided options.
 func New(opts Options) (*Client, error) {
@@ -121,11 +125,7 @@ func New(opts Options) (*Client, error) {
 	}
 	httpClient := opts.HTTPClient
 	if httpClient == nil {
-		timeout := opts.Timeout
-		if timeout == 0 {
-			timeout = 30 * time.Second
-		}
-		httpClient = &http.Client{Timeout: timeout}
+		httpClient = newDefaultHTTPClient(opts.Timeout)
 	}
 	return &Client{
 		httpClient:   httpClient,
@@ -149,6 +149,15 @@ func (c *Client) Complete(ctx context.Context, req *model.Request) (*model.Respo
 		return nil, err
 	}
 	return translateChatResponse(out, req.StructuredOutput)
+}
+
+func newDefaultHTTPClient(timeout time.Duration) *http.Client {
+	if timeout == 0 {
+		timeout = defaultResponseHeaderTimeout
+	}
+	transport := http.DefaultTransport.(*http.Transport).Clone()
+	transport.ResponseHeaderTimeout = timeout
+	return &http.Client{Transport: transport}
 }
 
 func (c *Client) buildChatRequest(req *model.Request, stream bool) (ollamaChatRequest, error) {

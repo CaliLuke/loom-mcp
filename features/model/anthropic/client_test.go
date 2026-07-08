@@ -101,6 +101,61 @@ func TestComplete_TextOnly(t *testing.T) {
 	}
 }
 
+func TestComplete_ThinkingBlocks(t *testing.T) {
+	stub := &stubMessagesClient{}
+	cl, err := New(stub, Options{
+		DefaultModel: "claude-3.5-sonnet",
+		MaxTokens:    128,
+	})
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+
+	stub.resp = &sdk.Message{
+		Content: []sdk.ContentBlockUnion{
+			mustContentBlock(t, `{"type":"thinking","thinking":"private reasoning","signature":"sig"}`),
+			mustContentBlock(t, `{"type":"redacted_thinking","data":"opaque-redacted"}`),
+			mustContentBlock(t, `{"type":"text","text":"done"}`),
+		},
+	}
+
+	resp, err := cl.Complete(context.Background(), &model.Request{
+		Messages: []*model.Message{
+			{Role: model.ConversationRoleUser, Parts: []model.Part{model.TextPart{Text: "hello"}}},
+		},
+	})
+	if err != nil {
+		t.Fatalf("Complete: %v", err)
+	}
+	if len(resp.Content) != 1 {
+		t.Fatalf("content message count = %d, want 1", len(resp.Content))
+	}
+	if len(resp.Content[0].Parts) != 3 {
+		t.Fatalf("content part count = %d, want 3", len(resp.Content[0].Parts))
+	}
+	thinking, ok := resp.Content[0].Parts[0].(model.ThinkingPart)
+	if !ok {
+		t.Fatalf("first content part = %T, want ThinkingPart", resp.Content[0].Parts[0])
+	}
+	if thinking.Text != "private reasoning" || thinking.Signature != "sig" || !thinking.Final {
+		t.Fatalf("signed thinking = %+v, want text/signature/final", thinking)
+	}
+	redacted, ok := resp.Content[0].Parts[1].(model.ThinkingPart)
+	if !ok {
+		t.Fatalf("second content part = %T, want ThinkingPart", resp.Content[0].Parts[1])
+	}
+	if string(redacted.Redacted) != "opaque-redacted" || !redacted.Final {
+		t.Fatalf("redacted thinking = %+v, want redacted/final", redacted)
+	}
+	text, ok := resp.Content[0].Parts[2].(model.TextPart)
+	if !ok {
+		t.Fatalf("third content part = %T, want TextPart", resp.Content[0].Parts[2])
+	}
+	if text.Text != "done" {
+		t.Fatalf("text = %q, want done", text.Text)
+	}
+}
+
 func TestComplete_ToolUse(t *testing.T) {
 	stub := &stubMessagesClient{}
 	cl, err := New(stub, Options{
@@ -174,6 +229,13 @@ func TestComplete_ToolUse(t *testing.T) {
 	if string(call.Payload) != `{"x":1}` {
 		t.Fatalf("unexpected payload %s", string(call.Payload))
 	}
+}
+
+func mustContentBlock(t *testing.T, raw string) sdk.ContentBlockUnion {
+	t.Helper()
+	var block sdk.ContentBlockUnion
+	require.NoError(t, json.Unmarshal([]byte(raw), &block))
+	return block
 }
 
 func TestComplete_RateLimited(t *testing.T) {

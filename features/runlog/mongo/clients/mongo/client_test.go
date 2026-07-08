@@ -175,6 +175,64 @@ func TestClientAppendReturnsExistingIDForDuplicateEventKey(t *testing.T) {
 	require.Equal(t, oid.Hex(), dup.ID)
 }
 
+func TestClientAppendReturnsExistingIDForDuplicateEventKeyWithSubMillisecondTimestamp(t *testing.T) {
+	t.Parallel()
+
+	oid := mustOID(t, "000000000000000000000001")
+	coll := &fakeCollection{
+		insertedID: oid,
+	}
+	c := &client{coll: coll}
+
+	timestamp := time.Unix(1, int64(123*time.Millisecond+456*time.Microsecond+789*time.Nanosecond)).UTC()
+	e := &runlog.Event{
+		RunID:     testRunID,
+		AgentID:   testAgentID,
+		SessionID: testSessionID,
+		TurnID:    testTurnID,
+		Type:      hooks.RunStarted,
+		Payload:   []byte(`{"ok":true}`),
+		Timestamp: timestamp,
+		EventKey:  testEventKey,
+	}
+	first, err := c.Append(context.Background(), e)
+	require.NoError(t, err)
+	require.True(t, first.Inserted)
+
+	coll.insertErr = mongodriver.WriteException{
+		WriteErrors: []mongodriver.WriteError{
+			{Code: 11000, Message: "duplicate key"},
+		},
+	}
+	coll.findOneDoc = eventDocument{
+		ID:        oid,
+		RunID:     testRunID,
+		AgentID:   testAgentID,
+		SessionID: testSessionID,
+		TurnID:    testTurnID,
+		Type:      string(hooks.RunStarted),
+		Payload:   []byte(`{"ok":true}`),
+		Timestamp: timestamp.UTC().Truncate(time.Millisecond),
+		EventKey:  testEventKey,
+	}
+
+	dup := &runlog.Event{
+		RunID:     testRunID,
+		AgentID:   testAgentID,
+		SessionID: testSessionID,
+		TurnID:    testTurnID,
+		Type:      hooks.RunStarted,
+		Payload:   []byte(`{"ok":true}`),
+		Timestamp: timestamp,
+		EventKey:  testEventKey,
+	}
+	second, err := c.Append(context.Background(), dup)
+	require.NoError(t, err)
+	require.False(t, second.Inserted)
+	require.Equal(t, oid.Hex(), second.ID)
+	require.Equal(t, oid.Hex(), dup.ID)
+}
+
 func fakeEventDocuments(runID string, n int) []eventDocument {
 	docs := make([]eventDocument, 0, n)
 	for i := 1; i <= n; i++ {

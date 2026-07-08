@@ -164,7 +164,7 @@ func runlogEventDocument(e *runlog.Event) eventDocument {
 		TurnID:    e.TurnID,
 		Type:      string(e.Type),
 		Payload:   append([]byte(nil), e.Payload...),
-		Timestamp: e.Timestamp.UTC(),
+		Timestamp: mongoTimestamp(e.Timestamp),
 	}
 }
 
@@ -314,4 +314,8 @@ func sameEventDocument(existing eventDocument, candidate eventDocument) bool {
 		existing.Type == candidate.Type &&
 		existing.Timestamp.Equal(candidate.Timestamp) &&
 		bytes.Equal(existing.Payload, candidate.Payload)
+}
+
+func mongoTimestamp(t time.Time) time.Time {
+	return t.UTC().Truncate(time.Millisecond)
 }

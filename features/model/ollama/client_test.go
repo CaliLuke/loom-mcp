@@ -254,6 +254,51 @@ func TestClientStreamEmitsThinkingTextToolCallUsageAndStop(t *testing.T) {
 	require.Equal(t, "stop", chunks[5].StopReason)
 }
 
+func TestClientStreamTimeoutDoesNotLimitBodyLifetime(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		flusher, ok := w.(http.Flusher)
+		if !ok {
+			t.Errorf("response writer does not implement http.Flusher")
+			return
+		}
+		w.Header().Set("Content-Type", "application/x-ndjson")
+		_, _ = w.Write([]byte(`{"model":"llama3.1","message":{"role":"assistant","content":"first"}}` + "\n"))
+		flusher.Flush()
+		time.Sleep(50 * time.Millisecond)
+		_, _ = w.Write([]byte(`{"model":"llama3.1","message":{"role":"assistant","content":"second"}}` + "\n"))
+		_, _ = w.Write([]byte(`{"model":"llama3.1","done":true,"done_reason":"stop"}` + "\n"))
+	}))
+	defer server.Close()
+
+	client, err := ollamamodel.New(ollamamodel.Options{
+		ServerURL:    server.URL,
+		DefaultModel: "llama3.1",
+		Timeout:      10 * time.Millisecond,
+	})
+	require.NoError(t, err)
+	streamer, err := client.Stream(context.Background(), &model.Request{
+		Messages: []*model.Message{{Role: model.ConversationRoleUser, Parts: []model.Part{model.TextPart{Text: "ping"}}}},
+	})
+	require.NoError(t, err)
+	defer func() {
+		require.NoError(t, streamer.Close())
+	}()
+
+	chunk, err := streamer.Recv()
+	require.NoError(t, err)
+	require.Equal(t, model.ChunkTypeText, chunk.Type)
+	require.Equal(t, "first", chunk.Message.Parts[0].(model.TextPart).Text)
+
+	chunk, err = streamer.Recv()
+	require.NoError(t, err)
+	require.Equal(t, model.ChunkTypeText, chunk.Type)
+	require.Equal(t, "second", chunk.Message.Parts[0].(model.TextPart).Text)
+
+	chunk, err = streamer.Recv()
+	require.NoError(t, err)
+	require.Equal(t, model.ChunkTypeStop, chunk.Type)
+}
+
 func TestClientStreamStructuredOutput(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		_, _ = w.Write([]byte(`{"model":"llama3.1","message":{"role":"assistant","content":"{\"answer\":\"ok\"}"}}` + "\n"))

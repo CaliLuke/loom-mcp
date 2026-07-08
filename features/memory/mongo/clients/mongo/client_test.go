@@ -62,6 +62,50 @@ func TestAppendAndLoadRun(t *testing.T) {
 	require.Equal(t, "assistant", snap.Events[1].Labels["kind"])
 }
 
+func TestLoadRunNormalizesBSONEventDataForMemoryDecoders(t *testing.T) {
+	fc := newFakeCollection()
+	client, err := newClientWithCollection(nil, fc, time.Second)
+	require.NoError(t, err)
+
+	ts := time.Date(2024, 1, 2, 12, 0, 0, 0, time.UTC)
+	fc.docs["agent|run"] = &runDocument{
+		AgentID: "agent",
+		RunID:   "run",
+		Events: []eventDocument{
+			{
+				Type:      memory.EventToolCall,
+				Timestamp: ts,
+				Data: bson.D{
+					{Key: "tool_call_id", Value: "tc-1"},
+					{Key: "tool_name", Value: "svc.tool"},
+					{Key: "payload", Value: bson.D{
+						{Key: "query", Value: "memory"},
+						{Key: "filters", Value: bson.A{
+							bson.D{{Key: "field", Value: "tenant"}, {Key: "value", Value: "acme"}},
+						}},
+					}},
+				},
+			},
+		},
+	}
+
+	snap, err := client.LoadRun(context.Background(), "agent", "run")
+	require.NoError(t, err)
+	require.Len(t, snap.Events, 1)
+	require.IsType(t, map[string]any{}, snap.Events[0].Data)
+
+	decoded, err := memory.DecodeToolCallData(snap.Events[0])
+	require.NoError(t, err)
+	input, err := decoded.Input()
+	require.NoError(t, err)
+	require.Equal(t, map[string]any{
+		"query": "memory",
+		"filters": []any{
+			map[string]any{"field": "tenant", "value": "acme"},
+		},
+	}, input)
+}
+
 func TestAppendEventsRequiresIdentifiers(t *testing.T) {
 	client := mustNewTestClient()
 	err := client.AppendEvents(context.Background(), "", "run", []memory.Event{{Type: memory.EventPlannerNote}})

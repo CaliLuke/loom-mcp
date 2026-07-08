@@ -137,6 +137,125 @@ func TestAnthropicStreamer_TextAndToolCall(t *testing.T) {
 	}
 }
 
+func TestAnthropicStreamer_ThinkingBlocks(t *testing.T) {
+	thinkingStart := sdk.MessageStreamEventUnion{}
+	if err := json.Unmarshal([]byte(`{
+  "type": "content_block_start",
+  "index": 0,
+  "content_block": { "type": "thinking", "thinking": "" }
+}`), &thinkingStart); err != nil {
+		t.Fatalf("unmarshal thinking start: %v", err)
+	}
+
+	thinkingDelta := sdk.MessageStreamEventUnion{}
+	if err := json.Unmarshal([]byte(`{
+  "type": "content_block_delta",
+  "index": 0,
+  "delta": { "type": "thinking_delta", "thinking": "private reasoning" }
+}`), &thinkingDelta); err != nil {
+		t.Fatalf("unmarshal thinking delta: %v", err)
+	}
+
+	signatureDelta := sdk.MessageStreamEventUnion{}
+	if err := json.Unmarshal([]byte(`{
+  "type": "content_block_delta",
+  "index": 0,
+  "delta": { "type": "signature_delta", "signature": "sig" }
+}`), &signatureDelta); err != nil {
+		t.Fatalf("unmarshal signature delta: %v", err)
+	}
+
+	thinkingStop := sdk.MessageStreamEventUnion{}
+	if err := json.Unmarshal([]byte(`{
+  "type": "content_block_stop",
+  "index": 0
+}`), &thinkingStop); err != nil {
+		t.Fatalf("unmarshal thinking stop: %v", err)
+	}
+
+	redactedStart := sdk.MessageStreamEventUnion{}
+	if err := json.Unmarshal([]byte(`{
+  "type": "content_block_start",
+  "index": 1,
+  "content_block": { "type": "redacted_thinking", "data": "opaque-redacted" }
+}`), &redactedStart); err != nil {
+		t.Fatalf("unmarshal redacted start: %v", err)
+	}
+
+	redactedStop := sdk.MessageStreamEventUnion{}
+	if err := json.Unmarshal([]byte(`{
+  "type": "content_block_stop",
+  "index": 1
+}`), &redactedStop); err != nil {
+		t.Fatalf("unmarshal redacted stop: %v", err)
+	}
+
+	stop := sdk.MessageStreamEventUnion{}
+	if err := json.Unmarshal([]byte(`{
+  "type": "message_stop"
+}`), &stop); err != nil {
+		t.Fatalf("unmarshal message stop: %v", err)
+	}
+
+	events := []ssestream.Event{
+		{Type: "content_block_start", Data: mustJSON(thinkingStart)},
+		{Type: "content_block_delta", Data: mustJSON(thinkingDelta)},
+		{Type: "content_block_delta", Data: mustJSON(signatureDelta)},
+		{Type: "content_block_stop", Data: mustJSON(thinkingStop)},
+		{Type: "content_block_start", Data: mustJSON(redactedStart)},
+		{Type: "content_block_stop", Data: mustJSON(redactedStop)},
+		{Type: "message_stop", Data: mustJSON(stop)},
+	}
+
+	stream := ssestream.NewStream[sdk.MessageStreamEventUnion](&testDecoder{events: events}, nil)
+	s := newAnthropicStreamer(context.Background(), stream, nil)
+	defer func() {
+		_ = s.Close()
+	}()
+
+	var thinkingDeltas int
+	var finalSigned, finalRedacted *model.ThinkingPart
+	for {
+		ch, err := s.Recv()
+		if err != nil {
+			if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+				t.Fatalf("unexpected context error: %v", err)
+			}
+			break
+		}
+		if ch.Type != model.ChunkTypeThinking || ch.Message == nil || len(ch.Message.Parts) == 0 {
+			continue
+		}
+		part, ok := ch.Message.Parts[0].(model.ThinkingPart)
+		if !ok {
+			t.Fatalf("thinking chunk part = %T, want ThinkingPart", ch.Message.Parts[0])
+		}
+		if !part.Final {
+			thinkingDeltas++
+			continue
+		}
+		if part.Signature != "" {
+			cp := part
+			finalSigned = &cp
+			continue
+		}
+		if len(part.Redacted) > 0 {
+			cp := part
+			finalRedacted = &cp
+		}
+	}
+
+	if thinkingDeltas != 1 {
+		t.Fatalf("thinking delta count = %d, want 1", thinkingDeltas)
+	}
+	if finalSigned == nil || finalSigned.Text != "private reasoning" || finalSigned.Signature != "sig" {
+		t.Fatalf("final signed thinking = %+v, want text/signature", finalSigned)
+	}
+	if finalRedacted == nil || string(finalRedacted.Redacted) != "opaque-redacted" {
+		t.Fatalf("final redacted thinking = %+v, want redacted data", finalRedacted)
+	}
+}
+
 func mustJSON(v any) []byte {
 	data, err := json.Marshal(v)
 	if err != nil {

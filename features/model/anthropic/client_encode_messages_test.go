@@ -1,6 +1,7 @@
 package anthropic
 
 import (
+	"encoding/json"
 	"strings"
 	"testing"
 
@@ -70,6 +71,42 @@ func TestEncodeMessages_EncodesImagePart(t *testing.T) {
 	mediaType := source.GetMediaType()
 	if mediaType == nil || *mediaType != "image/png" {
 		t.Fatalf("encoded image media type = %v, want image/png", mediaType)
+	}
+}
+
+func TestEncodeMessages_EncodesThinkingParts(t *testing.T) {
+	messages, _, err := encodeMessages([]*model.Message{
+		{
+			Role: model.ConversationRoleAssistant,
+			Parts: []model.Part{
+				model.ThinkingPart{Text: "private reasoning", Signature: "sig"},
+				model.ThinkingPart{Redacted: []byte("opaque-redacted")},
+			},
+		},
+	}, nil)
+	if err != nil {
+		t.Fatalf("encodeMessages error: %v", err)
+	}
+	if len(messages) != 1 {
+		t.Fatalf("encoded message count = %d, want 1", len(messages))
+	}
+	if len(messages[0].Content) != 2 {
+		t.Fatalf("encoded content block count = %d, want 2", len(messages[0].Content))
+	}
+
+	data, err := json.Marshal(messages[0].Content)
+	if err != nil {
+		t.Fatalf("marshal content: %v", err)
+	}
+	got := string(data)
+	if !strings.Contains(got, `"type":"thinking"`) ||
+		!strings.Contains(got, `"thinking":"private reasoning"`) ||
+		!strings.Contains(got, `"signature":"sig"`) {
+		t.Fatalf("encoded thinking block = %s, want signed thinking", got)
+	}
+	if !strings.Contains(got, `"type":"redacted_thinking"`) ||
+		!strings.Contains(got, `"data":"opaque-redacted"`) {
+		t.Fatalf("encoded redacted thinking block = %s, want redacted data", got)
 	}
 }
 

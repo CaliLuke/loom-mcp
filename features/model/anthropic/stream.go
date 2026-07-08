@@ -224,16 +224,40 @@ func (p *anthropicChunkProcessor) Handle(event sdk.MessageStreamEventUnion) erro
 }
 
 func (p *anthropicChunkProcessor) handleContentBlockStart(ev sdk.ContentBlockStartEvent) error {
-	toolUse, ok := ev.ContentBlock.AsAny().(sdk.ToolUseBlock)
-	if !ok {
-		return nil
+	switch block := ev.ContentBlock.AsAny().(type) {
+	case sdk.ToolUseBlock:
+		tb, err := p.newToolBuffer(block)
+		if err != nil {
+			return err
+		}
+		p.toolBlocks[int(ev.Index)] = tb
+	case sdk.ThinkingBlock:
+		p.recordThinkingBlockStart(int(ev.Index), block)
+	case sdk.RedactedThinkingBlock:
+		p.recordRedactedThinkingBlockStart(int(ev.Index), block)
 	}
-	tb, err := p.newToolBuffer(toolUse)
-	if err != nil {
-		return err
-	}
-	p.toolBlocks[int(ev.Index)] = tb
 	return nil
+}
+
+func (p *anthropicChunkProcessor) recordThinkingBlockStart(idx int, block sdk.ThinkingBlock) {
+	if block.Thinking == "" && block.Signature == "" {
+		return
+	}
+	tb := p.ensureThinkingBuffer(idx)
+	if block.Thinking != "" {
+		tb.text.WriteString(block.Thinking)
+	}
+	if block.Signature != "" {
+		tb.signature = block.Signature
+	}
+}
+
+func (p *anthropicChunkProcessor) recordRedactedThinkingBlockStart(idx int, block sdk.RedactedThinkingBlock) {
+	if block.Data == "" {
+		return
+	}
+	tb := p.ensureThinkingBuffer(idx)
+	tb.redacted = []byte(block.Data)
 }
 
 func (p *anthropicChunkProcessor) newToolBuffer(toolUse sdk.ToolUseBlock) (*toolBuffer, error) {

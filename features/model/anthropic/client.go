@@ -376,6 +376,10 @@ func anthropicMessageBlock(role model.ConversationRole, part model.Part, nameMap
 		}
 		return sdk.NewTextBlock(v.Text), true, nil
 	}
+	if v, ok := part.(model.ThinkingPart); ok {
+		block, ok := anthropicThinkingBlock(v)
+		return block, ok, nil
+	}
 	if v, ok := part.(model.ToolUsePart); ok {
 		block, err := anthropicToolUseBlock(v, nameMap)
 		return block, err == nil, err
@@ -389,6 +393,16 @@ func anthropicMessageBlock(role model.ConversationRole, part model.Part, nameMap
 		return block, err == nil, err
 	}
 	return sdk.ContentBlockParamUnion{}, false, fmt.Errorf("anthropic: unsupported message part %T", part)
+}
+
+func anthropicThinkingBlock(v model.ThinkingPart) (sdk.ContentBlockParamUnion, bool) {
+	if v.Signature != "" && v.Text != "" {
+		return sdk.NewThinkingBlock(v.Signature, v.Text), true
+	}
+	if len(v.Redacted) > 0 {
+		return sdk.NewRedactedThinkingBlock(string(v.Redacted)), true
+	}
+	return sdk.ContentBlockParamUnion{}, false
 }
 
 func anthropicImageBlock(role model.ConversationRole, v model.ImagePart) (sdk.ContentBlockParamUnion, error) {
@@ -673,24 +687,53 @@ func translateResponse(msg *sdk.Message, nameMap map[string]string) (*model.Resp
 
 func translateResponseContent(blocks []sdk.ContentBlockUnion, nameMap map[string]string) *model.Response {
 	resp := &model.Response{}
+	parts := make([]model.Part, 0, len(blocks))
 	for _, block := range blocks {
 		switch block.Type {
 		case "text":
-			appendAnthropicText(resp, block.Text)
+			appendAnthropicText(&parts, block.Text)
+		case "thinking":
+			appendAnthropicThinking(&parts, block.AsThinking())
+		case "redacted_thinking":
+			appendAnthropicRedactedThinking(&parts, block.AsRedactedThinking())
 		case "tool_use":
 			resp.ToolCalls = append(resp.ToolCalls, anthropicToolCall(block, nameMap))
 		}
 	}
+	if len(parts) > 0 {
+		resp.Content = append(resp.Content, model.Message{
+			Role:  model.ConversationRoleAssistant,
+			Parts: parts,
+		})
+	}
 	return resp
 }
 
-func appendAnthropicText(resp *model.Response, text string) {
+func appendAnthropicText(parts *[]model.Part, text string) {
 	if text == "" {
 		return
 	}
-	resp.Content = append(resp.Content, model.Message{
-		Role:  model.ConversationRoleAssistant,
-		Parts: []model.Part{model.TextPart{Text: text}},
+	*parts = append(*parts, model.TextPart{Text: text})
+}
+
+func appendAnthropicThinking(parts *[]model.Part, block sdk.ThinkingBlock) {
+	if block.Thinking == "" || block.Signature == "" {
+		return
+	}
+	*parts = append(*parts, model.ThinkingPart{
+		Text:      block.Thinking,
+		Signature: block.Signature,
+		Final:     true,
+	})
+}
+
+func appendAnthropicRedactedThinking(parts *[]model.Part, block sdk.RedactedThinkingBlock) {
+	if block.Data == "" {
+		return
+	}
+	*parts = append(*parts, model.ThinkingPart{
+		Redacted: []byte(block.Data),
+		Final:    true,
 	})
 }
 
