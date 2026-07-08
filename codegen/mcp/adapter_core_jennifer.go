@@ -13,6 +13,7 @@ func adapterCoreSection(data *AdapterData) codegen.Section {
 		emitToolSearchOptions(stmt)
 		emitAdapterOptions(stmt)
 		emitAdapterConstructor(stmt, data)
+		emitBroadcasterHelpers(stmt)
 		emitProtocolVersionHelpers(stmt)
 		emitParseQueryParamsToJSON(stmt)
 		emitSessionHelpers(stmt)
@@ -200,7 +201,8 @@ func emitAdapterOptions(stmt *jen.Statement) {
 		jen.Comment("Pluggable broadcaster, else default channel broadcaster"),
 		jen.Id("Broadcaster").Id("mcpruntime").Dot("Broadcaster"),
 		jen.Id("BroadcastBuffer").Int(),
-		jen.Id("DropIfSlow").Bool(),
+		jen.Comment("DropIfSlow controls whether slow subscribers drop events. It accepts bool or *bool; nil defaults to true."),
+		jen.Id("DropIfSlow").Any(),
 	)
 	stmt.Line()
 }
@@ -246,9 +248,7 @@ func emitAdapterConstructor(stmt *jen.Statement, data *AdapterData) {
 				jen.If(jen.Id("opts").Dot("BroadcastBuffer").Op(">").Lit(0)).Block(
 					jen.Id("buf").Op("=").Id("opts").Dot("BroadcastBuffer"),
 				),
-				jen.If(jen.Id("opts").Dot("DropIfSlow").Op("==").False()).Block(
-					jen.Id("drop").Op("=").False(),
-				),
+				jen.Id("drop").Op("=").Id("defaultMCPAdapterDropIfSlow").Call(jen.Id("opts").Dot("DropIfSlow")),
 			)
 			eg.Id("bc").Op("=").Id("mcpruntime").Dot("NewChannelBroadcaster").Call(jen.Id("buf"), jen.Id("drop"))
 		})
@@ -284,6 +284,29 @@ func emitAdapterConstructor(stmt *jen.Statement, data *AdapterData) {
 			vals.Id("resourceNameToURI").Op(":").Id("nameToURI")
 		}))
 	})
+	stmt.Line()
+}
+
+func emitBroadcasterHelpers(stmt *jen.Statement) {
+	stmt.Func().Id("defaultMCPAdapterDropIfSlow").Params(jen.Id("value").Any()).Bool().Block(
+		jen.Switch(jen.Id("v").Op(":=").Id("value").Assert(jen.Type())).Block(
+			jen.Case(jen.Nil()).Block(
+				jen.Return(jen.True()),
+			),
+			jen.Case(jen.Bool()).Block(
+				jen.Return(jen.Id("v")),
+			),
+			jen.Case(jen.Op("*").Bool()).Block(
+				jen.If(jen.Id("v").Op("==").Nil()).Block(
+					jen.Return(jen.True()),
+				),
+				jen.Return(jen.Op("*").Id("v")),
+			),
+			jen.Default().Block(
+				jen.Return(jen.True()),
+			),
+		),
+	)
 	stmt.Line()
 }
 

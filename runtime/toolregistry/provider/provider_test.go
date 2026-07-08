@@ -566,6 +566,78 @@ func TestServe_DoesNotExitOnPongFailure(t *testing.T) {
 	}
 }
 
+func TestServe_ReturnsWhenSubscriptionCloses(t *testing.T) {
+	t.Parallel()
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	const toolset = "test.toolset"
+	harness := newProviderHarness(t, toolset)
+	handler := &recordingHandler{
+		seen: make(chan string, 1),
+	}
+
+	errc := make(chan error, 1)
+	go func() {
+		errc <- Serve(ctx, harness.client, toolset, handler, Options{
+			Pong: func(_ context.Context, _ string) error { return nil },
+		})
+	}()
+
+	close(harness.events)
+	err := waitForServeReturn(t, errc)
+	require.EqualError(t, err, "toolset stream subscription closed")
+}
+
+func TestServe_ReturnsOnAckFailure(t *testing.T) {
+	t.Parallel()
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	const toolset = "test.toolset"
+	toolsetStreamID := toolregistry.ToolsetStreamID(toolset)
+	eventsCh := make(chan *streaming.Event, 1)
+	ackErr := errors.New("ack failed")
+
+	sink := mockpulse.NewSink(t)
+	sink.SetSubscribe(func() <-chan *streaming.Event { return eventsCh })
+	sink.SetAck(func(_ context.Context, _ *streaming.Event) error { return ackErr })
+	sink.SetClose(func(_ context.Context) {})
+
+	toolsetStream := mockpulse.NewStream(t)
+	toolsetStream.SetNewSink(func(_ context.Context, _ string, _ ...streamopts.Sink) (pulse.Sink, error) {
+		return sink, nil
+	})
+
+	client := mockpulse.NewClient(t)
+	client.SetStream(func(name string, _ ...streamopts.Stream) (pulse.Stream, error) {
+		require.Equal(t, toolsetStreamID, name)
+		return toolsetStream, nil
+	})
+
+	handler := &recordingHandler{
+		seen: make(chan string, 1),
+	}
+
+	errc := make(chan error, 1)
+	go func() {
+		errc <- Serve(ctx, client, toolset, handler, Options{
+			Pong: func(_ context.Context, _ string) error { return nil },
+		})
+	}()
+
+	ping := toolregistry.NewPingMessage("ping_1")
+	pingPayload, err := json.Marshal(ping)
+	require.NoError(t, err)
+	eventsCh <- &streaming.Event{ID: "1-0", EventName: "ping", Payload: pingPayload}
+
+	err = waitForServeReturn(t, errc)
+	require.ErrorIs(t, err, ackErr)
+	require.ErrorContains(t, err, "ack ping toolset event")
+}
+
 type outputDeltaHandler struct {
 	errc chan error
 }
@@ -759,6 +831,18 @@ func waitForToolUses(t *testing.T, seen <-chan string, count int) map[string]boo
 		}
 	}
 	return got
+}
+
+func waitForServeReturn(t *testing.T, errc <-chan error) error {
+	t.Helper()
+
+	select {
+	case err := <-errc:
+		return err
+	case <-time.After(2 * time.Second):
+		t.Fatal("Serve did not stop")
+	}
+	return nil
 }
 
 func currentStreamID() string {

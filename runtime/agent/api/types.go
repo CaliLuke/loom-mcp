@@ -633,9 +633,12 @@ const (
 // implementations). This keeps workflows resilient to legacy payloads.
 func (o *PlanActivityOutput) UnmarshalJSON(data []byte) error {
 	type alias struct {
-		Result     *planner.PlanResult `json:"Result"`     //nolint:tagliatelle
-		Transcript []json.RawMessage   `json:"Transcript"` //nolint:tagliatelle
-		Usage      model.TokenUsage    `json:"Usage"`      //nolint:tagliatelle
+		Result           *planner.PlanResult `json:"Result"`           //nolint:tagliatelle
+		Transcript       []json.RawMessage   `json:"Transcript"`       //nolint:tagliatelle
+		Usage            model.TokenUsage    `json:"Usage"`            //nolint:tagliatelle
+		ToolPolicyActive bool                `json:"ToolPolicyActive"` //nolint:tagliatelle
+		AllowedTools     []tools.Ident       `json:"AllowedTools"`     //nolint:tagliatelle
+		PolicyCaps       policy.CapsState    `json:"PolicyCaps"`       //nolint:tagliatelle
 	}
 	var tmp alias
 	if err := json.Unmarshal(data, &tmp); err != nil {
@@ -644,6 +647,9 @@ func (o *PlanActivityOutput) UnmarshalJSON(data []byte) error {
 
 	o.Result = tmp.Result
 	o.Usage = tmp.Usage
+	o.ToolPolicyActive = tmp.ToolPolicyActive
+	o.AllowedTools = tmp.AllowedTools
+	o.PolicyCaps = tmp.PolicyCaps
 	if len(tmp.Transcript) == 0 {
 		o.Transcript = nil
 		return nil

@@ -3,6 +3,7 @@ package runtime
 import (
 	"context"
 	"errors"
+	"fmt"
 
 	agent "github.com/CaliLuke/loom-mcp/runtime/agent"
 	"github.com/CaliLuke/loom-mcp/runtime/agent/model"
@@ -56,6 +57,9 @@ func (c *modelInterceptedClient) Stream(ctx context.Context, req *model.Request)
 		closeErr := st.Close()
 		return nil, errors.Join(err, closeErr)
 	}
+	if err == nil && st == nil {
+		return nil, fmt.Errorf("model stream contract violation: nil streamer with nil error")
+	}
 	return st, err
 }
 
@@ -84,6 +88,19 @@ func (c *modelInterceptedClient) beforeModel(ctx context.Context, req *model.Req
 }
 
 func (c *modelInterceptedClient) afterModel(ctx context.Context, req *model.Request, resp *model.Response, callErr error) (*model.Response, error) {
+	currentResp, currentErr := c.applyAfterModel(ctx, req, resp, callErr)
+	if currentErr == nil && currentResp == nil {
+		return nil, fmt.Errorf("model complete contract violation: nil response with nil error")
+	}
+	return currentResp, currentErr
+}
+
+func (c *modelInterceptedClient) afterModelStream(ctx context.Context, req *model.Request, callErr error) error {
+	_, err := c.applyAfterModel(ctx, req, nil, callErr)
+	return err
+}
+
+func (c *modelInterceptedClient) applyAfterModel(ctx context.Context, req *model.Request, resp *model.Response, callErr error) (*model.Response, error) {
 	currentResp := resp
 	currentErr := callErr
 	for _, interceptor := range c.interceptors {
@@ -100,15 +117,14 @@ func (c *modelInterceptedClient) afterModel(ctx context.Context, req *model.Requ
 		}
 		if decision.Response != nil {
 			currentResp = decision.Response
+			currentErr = decision.Err
+			continue
 		}
-		currentErr = decision.Err
+		if decision.Err != nil {
+			currentErr = decision.Err
+		}
 	}
 	return currentResp, currentErr
-}
-
-func (c *modelInterceptedClient) afterModelStream(ctx context.Context, req *model.Request, callErr error) error {
-	_, err := c.afterModel(ctx, req, nil, callErr)
-	return err
 }
 
 func (c *modelInterceptedClient) beforeInput(req *model.Request) *BeforeModelInput {

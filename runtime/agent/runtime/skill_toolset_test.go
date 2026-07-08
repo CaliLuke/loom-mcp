@@ -4,6 +4,7 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"sync"
 	"testing"
 
 	"github.com/CaliLuke/loom-mcp/runtime/agent/rawjson"
@@ -80,4 +81,55 @@ func TestSkillToolsetHonorsPerSkillReloadMetadata(t *testing.T) {
 	require.NoError(t, err)
 	require.Contains(t, string(second.Payload), "# Second")
 	require.Contains(t, string(second.Payload), `"reloaded":true`)
+}
+
+func TestSkillToolsetCacheSupportsConcurrentListAndLoad(t *testing.T) {
+	root := t.TempDir()
+	skillDir := filepath.Join(root, "code-review")
+	require.NoError(t, os.MkdirAll(skillDir, 0o750))
+	require.NoError(t, os.WriteFile(filepath.Join(skillDir, "SKILL.md"), []byte("# Code Review\n"), 0o600))
+
+	rt := New()
+	reg := NewSkillToolsetRegistration(SkillToolsetConfig{
+		Name:   "assistant.skills",
+		Roots:  []string{root},
+		Reload: SkillReloadNever,
+	})
+	require.NoError(t, rt.RegisterToolset(reg))
+
+	ctx := context.Background()
+	start := make(chan struct{})
+	errs := make(chan error, 128)
+	var wg sync.WaitGroup
+	for i := 0; i < 64; i++ {
+		wg.Add(2)
+		go func() {
+			defer wg.Done()
+			<-start
+			_, err := rt.ExecuteToolActivity(ctx, &ToolInput{
+				ToolsetName: "assistant.skills",
+				ToolName:    tools.Ident("assistant.skills.list_skills"),
+				ToolCallID:  "call-list",
+				Payload:     rawjson.Message([]byte(`{}`)),
+			})
+			errs <- err
+		}()
+		go func() {
+			defer wg.Done()
+			<-start
+			_, err := rt.ExecuteToolActivity(ctx, &ToolInput{
+				ToolsetName: "assistant.skills",
+				ToolName:    tools.Ident("assistant.skills.load_skill"),
+				ToolCallID:  "call-load",
+				Payload:     rawjson.Message([]byte(`{"skill":"code-review"}`)),
+			})
+			errs <- err
+		}()
+	}
+	close(start)
+	wg.Wait()
+	close(errs)
+	for err := range errs {
+		require.NoError(t, err)
+	}
 }

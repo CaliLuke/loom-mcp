@@ -404,6 +404,8 @@ const (
 	RuntimePromptRoleTool = "tool"
 	// RuntimePromptRoleSynthesis identifies runtime synthesis prompts.
 	RuntimePromptRoleSynthesis = "synthesis"
+
+	promptRoleAssistant = "assistant"
 )
 
 // Finalize finalizes the MCP expression
@@ -856,7 +858,7 @@ func (p *PromptExpr) Validate() error {
 func (m *MessageExpr) Validate() error {
 	verr := new(eval.ValidationErrors)
 	switch m.Role {
-	case "user", "assistant":
+	case RuntimePromptRoleUser, promptRoleAssistant:
 	default:
 		verr.Add(m, "prompt message role must be user or assistant")
 	}

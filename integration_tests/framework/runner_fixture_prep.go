@@ -62,14 +62,15 @@ func cloneExampleRoot(exampleRoot string) (string, error) {
 		if d.IsDir() {
 			return os.MkdirAll(target, info.Mode())
 		}
-		data, err := os.ReadFile(path) // #nosec G304 -- path comes from walking a trusted fixture tree
+		//nolint:gosec // Path comes from walking a trusted fixture tree.
+		data, err := os.ReadFile(path)
 		if err != nil {
 			return err
 		}
 		if err := os.MkdirAll(filepath.Dir(target), 0o750); err != nil {
 			return err
 		}
-		return os.WriteFile(target, data, info.Mode())
+		return os.WriteFile(target, data, info.Mode()) //nolint:gosec // Test helper copies trusted fixture files.
 	})
 	if walkErr != nil {
 		_ = os.RemoveAll(tmpRoot)

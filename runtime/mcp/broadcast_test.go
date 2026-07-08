@@ -56,11 +56,57 @@ func TestChannelBroadcasterPublishSessionScopesEvents(t *testing.T) {
 	requireNoEvent(t, two.C())
 }
 
+func TestChannelBroadcasterCloseUnblocksPublishToSlowSubscriber(t *testing.T) {
+	b := NewChannelBroadcaster(0, false)
+	sub, err := b.Subscribe(context.Background())
+	require.NoError(t, err)
+
+	published := make(chan struct{})
+	go func() {
+		b.Publish("blocked")
+		close(published)
+	}()
+
+	requireNoSignal(t, published)
+	require.NoError(t, b.Close())
+	requireClosed(t, published)
+	requireClosedChannel(t, sub.C())
+}
+
+func TestChannelBroadcasterSubscriptionCloseUnblocksPublishToDepartedSubscriber(t *testing.T) {
+	b := NewChannelBroadcaster(0, false)
+	sub, err := b.Subscribe(context.Background())
+	require.NoError(t, err)
+
+	published := make(chan struct{})
+	go func() {
+		b.Publish("blocked")
+		close(published)
+	}()
+
+	requireNoSignal(t, published)
+	require.NoError(t, sub.Close())
+	requireClosed(t, published)
+	requireClosedChannel(t, sub.C())
+	require.NoError(t, b.Close())
+}
+
 func requireClosed(t *testing.T, ch <-chan struct{}) {
 	t.Helper()
 
 	select {
 	case <-ch:
+	case <-time.After(100 * time.Millisecond):
+		t.Fatal("channel did not close")
+	}
+}
+
+func requireClosedChannel(t *testing.T, ch <-chan any) {
+	t.Helper()
+
+	select {
+	case _, ok := <-ch:
+		require.False(t, ok, "channel delivered a value instead of closing")
 	case <-time.After(100 * time.Millisecond):
 		t.Fatal("channel did not close")
 	}
@@ -72,6 +118,16 @@ func requireNoEvent(t *testing.T, ch <-chan any) {
 	select {
 	case ev := <-ch:
 		t.Fatalf("received unexpected event %v", ev)
+	case <-time.After(50 * time.Millisecond):
+	}
+}
+
+func requireNoSignal(t *testing.T, ch <-chan struct{}) {
+	t.Helper()
+
+	select {
+	case <-ch:
+		t.Fatal("received unexpected signal")
 	case <-time.After(50 * time.Millisecond):
 	}
 }

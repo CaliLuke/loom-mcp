@@ -8,6 +8,7 @@ import (
 	"github.com/CaliLuke/loom-mcp/runtime/agent/api"
 	"github.com/CaliLuke/loom-mcp/runtime/agent/model"
 	"github.com/CaliLuke/loom-mcp/runtime/agent/planner"
+	"github.com/CaliLuke/loom-mcp/runtime/agent/policy"
 	"github.com/CaliLuke/loom-mcp/runtime/agent/rawjson"
 	"github.com/CaliLuke/loom-mcp/runtime/agent/run"
 	"github.com/CaliLuke/loom-mcp/runtime/agent/tools"
@@ -71,6 +72,24 @@ func TestNewAgentDataConverter_RoundTripsPlanActivityInputToolOutputs(t *testing
 				ServerData: rawjson.Message([]byte(`[{"kind":"evidence"}]`)),
 			},
 		},
+		TypedInputs: []planner.TypedInputOutput{
+			{
+				ID:      "approval",
+				Payload: rawjson.Message([]byte(`{"approved":true}`)),
+			},
+		},
+		Finalize: &planner.Termination{
+			Reason:  planner.TerminationReasonToolCap,
+			Message: "tool budget exhausted",
+		},
+		ToolPolicyActive: true,
+		AllowedTools:     []tools.Ident{"test.tool", "memory.lookup"},
+		PolicyCaps: policy.CapsState{
+			MaxToolCalls:                        5,
+			RemainingToolCalls:                  3,
+			MaxConsecutiveFailedToolCalls:       2,
+			RemainingConsecutiveFailedToolCalls: 1,
+		},
 	})
 	require.NoError(t, err)
 
@@ -83,6 +102,20 @@ func TestNewAgentDataConverter_RoundTripsPlanActivityInputToolOutputs(t *testing
 	require.JSONEq(t, `{"input":"ok"}`, string(decoded.ToolOutputs[0].Payload))
 	require.JSONEq(t, `{"output":"ok"}`, string(decoded.ToolOutputs[0].Result))
 	require.JSONEq(t, `[{"kind":"evidence"}]`, string(decoded.ToolOutputs[0].ServerData))
+	require.Len(t, decoded.TypedInputs, 1)
+	require.Equal(t, "approval", decoded.TypedInputs[0].ID)
+	require.JSONEq(t, `{"approved":true}`, string(decoded.TypedInputs[0].Payload))
+	require.NotNil(t, decoded.Finalize)
+	require.Equal(t, planner.TerminationReasonToolCap, decoded.Finalize.Reason)
+	require.Equal(t, "tool budget exhausted", decoded.Finalize.Message)
+	require.True(t, decoded.ToolPolicyActive)
+	require.Equal(t, []tools.Ident{"test.tool", "memory.lookup"}, decoded.AllowedTools)
+	require.Equal(t, policy.CapsState{
+		MaxToolCalls:                        5,
+		RemainingToolCalls:                  3,
+		MaxConsecutiveFailedToolCalls:       2,
+		RemainingConsecutiveFailedToolCalls: 1,
+	}, decoded.PolicyCaps)
 }
 
 func TestNewAgentDataConverter_RejectsJSONStringifiedToolResult(t *testing.T) {

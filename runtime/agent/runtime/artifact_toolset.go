@@ -50,8 +50,9 @@ type (
 )
 
 const (
-	artifactToolList = "list_artifacts"
-	artifactToolLoad = "load_artifact"
+	artifactDefaultToolsetName = "artifacts"
+	artifactToolList           = "list_artifacts"
+	artifactToolLoad           = "load_artifact"
 
 	// DefaultArtifactListLimit bounds listed artifact refs when MaxArtifacts is unset.
 	DefaultArtifactListLimit = 100
@@ -64,7 +65,7 @@ const (
 func NewArtifactToolsetRegistration(cfg ArtifactToolsetConfig) ToolsetRegistration {
 	name := strings.TrimSpace(cfg.Name)
 	if name == "" {
-		name = "artifacts"
+		name = artifactDefaultToolsetName
 	}
 	var specs []tools.ToolSpec
 	if cfg.Store != nil {

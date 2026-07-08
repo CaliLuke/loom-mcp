@@ -163,7 +163,8 @@ type MCPAdapterOptions struct {
 	// Pluggable broadcaster, else default channel broadcaster
 	Broadcaster     mcpruntime.Broadcaster
 	BroadcastBuffer int
-	DropIfSlow      bool
+	// DropIfSlow controls whether slow subscribers drop events. It accepts bool or *bool; nil defaults to true.
+	DropIfSlow any
 }
 
 func NewMCPAdapter(service assistant.Service, promptProvider PromptProvider, opts *MCPAdapterOptions) *MCPAdapter {
@@ -200,9 +201,7 @@ func NewMCPAdapter(service assistant.Service, promptProvider PromptProvider, opt
 			if opts.BroadcastBuffer > 0 {
 				buf = opts.BroadcastBuffer
 			}
-			if opts.DropIfSlow == false {
-				drop = false
-			}
+			drop = defaultMCPAdapterDropIfSlow(opts.DropIfSlow)
 		}
 		bc = mcpruntime.NewChannelBroadcaster(buf, drop)
 	}
@@ -212,6 +211,21 @@ func NewMCPAdapter(service assistant.Service, promptProvider PromptProvider, opt
 	// Build name->URI map from generated resources
 	nameToURI := map[string]string{"documents": "doc://list", "system_info": "system://info", "conversation_history": "conversation://history", "figma_design_system": "figma://design-system/mobile-checkout"}
 	return &MCPAdapter{service: service, initializedSessions: make(map[string]struct{}), sessionPrincipals: make(map[string]string), opts: opts, tracer: tracer, callCounter: callCounter, errorCounter: errorCounter, durationHistogram: durationHistogram, promptProvider: promptProvider, subs: make(map[string]int), broadcaster: bc, resourceNameToURI: nameToURI}
+}
+func defaultMCPAdapterDropIfSlow(value any) bool {
+	switch v := value.(type) {
+	case nil:
+		return true
+	case bool:
+		return v
+	case *bool:
+		if v == nil {
+			return true
+		}
+		return *v
+	default:
+		return true
+	}
 }
 
 // mcpProtocolVersion resolves the protocol version from options or default.

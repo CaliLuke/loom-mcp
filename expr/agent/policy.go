@@ -7,6 +7,8 @@ import (
 	"github.com/CaliLuke/loom/eval"
 )
 
+const missingFieldsAwaitClarification = "await_clarification"
+
 type (
 	// RunPolicyExpr defines runtime execution and resource constraints for a
 	// single agent.
@@ -237,12 +239,12 @@ func (r *RunPolicyExpr) validateInterceptors(verr *eval.ValidationErrors) {
 func (r *RunPolicyExpr) validateMissingFields(verr *eval.ValidationErrors) {
 	if r.OnMissingFields != "" {
 		switch r.OnMissingFields {
-		case "finalize", "await_clarification", "resume":
+		case "finalize", missingFieldsAwaitClarification, "resume":
 			// ok
 		default:
 			verr.Add(r, "invalid OnMissingFields value %q (allowed: finalize, await_clarification, resume)", r.OnMissingFields)
 		}
-		if r.OnMissingFields == "await_clarification" && !r.InterruptsAllowed {
+		if r.OnMissingFields == missingFieldsAwaitClarification && !r.InterruptsAllowed {
 			verr.Add(r, "OnMissingFields(\"await_clarification\") requires InterruptsAllowed(true)")
 		}
 	}

@@ -67,6 +67,21 @@ func (s *closeCountingModelStream) Close() error {
 }
 func (s *closeCountingModelStream) Metadata() map[string]any { return nil }
 
+type contractModelClient struct {
+	completeResp *model.Response
+	completeErr  error
+	streamer     model.Streamer
+	streamErr    error
+}
+
+func (c contractModelClient) Complete(context.Context, *model.Request) (*model.Response, error) {
+	return c.completeResp, c.completeErr
+}
+
+func (c contractModelClient) Stream(context.Context, *model.Request) (model.Streamer, error) {
+	return c.streamer, c.streamErr
+}
+
 func TestModelInterceptorsMutateRequestAndResponseOnce(t *testing.T) {
 	var calls []string
 	rt := New(WithInterceptors(RuntimeInterceptorFuncs{
@@ -256,6 +271,122 @@ func TestModelInterceptorStreamAfterErrorClosesOpenedStreamer(t *testing.T) {
 	require.ErrorIs(t, err, afterErr)
 	require.Nil(t, streamer)
 	require.Equal(t, 1, opened.closeCount)
+}
+
+func TestModelInterceptorAfterModelEmptyDecisionCannotClearModelError(t *testing.T) {
+	modelErr := errors.New("provider failed")
+	rt := New(WithInterceptors(RuntimeInterceptorFuncs{
+		AfterModelFunc: func(context.Context, *AfterModelInput) (*AfterModelDecision, error) {
+			return &AfterModelDecision{}, nil
+		},
+	}))
+	rt.models["default"] = contractModelClient{completeErr: modelErr}
+	ctx := newAgentContext(agentContextOptions{
+		runtime: rt,
+		agentID: "svc.agent",
+		runID:   "run-1",
+		turnID:  "turn-1",
+	})
+	client, ok := ctx.ModelClient("default")
+	require.True(t, ok)
+
+	resp, err := client.Complete(context.Background(), &model.Request{Model: "test"})
+	require.ErrorIs(t, err, modelErr)
+	require.Nil(t, resp)
+}
+
+func TestModelInterceptorAfterModelReplacementResponseClearsModelError(t *testing.T) {
+	modelErr := errors.New("provider failed")
+	rt := New(WithInterceptors(RuntimeInterceptorFuncs{
+		AfterModelFunc: func(context.Context, *AfterModelInput) (*AfterModelDecision, error) {
+			return &AfterModelDecision{
+				Response: &model.Response{
+					Content: []model.Message{{
+						Role:  model.ConversationRoleAssistant,
+						Parts: []model.Part{model.TextPart{Text: "replacement"}},
+					}},
+				},
+			}, nil
+		},
+	}))
+	rt.models["default"] = contractModelClient{completeErr: modelErr}
+	ctx := newAgentContext(agentContextOptions{
+		runtime: rt,
+		agentID: "svc.agent",
+		runID:   "run-1",
+		turnID:  "turn-1",
+	})
+	client, ok := ctx.ModelClient("default")
+	require.True(t, ok)
+
+	resp, err := client.Complete(context.Background(), &model.Request{Model: "test"})
+	require.NoError(t, err)
+	require.NotNil(t, resp)
+	require.Equal(t, "replacement", resp.Content[0].Parts[0].(model.TextPart).Text)
+}
+
+func TestModelInterceptorAfterModelEnforcesNonNilResponseContract(t *testing.T) {
+	rt := New(WithInterceptors(RuntimeInterceptorFuncs{
+		AfterModelFunc: func(context.Context, *AfterModelInput) (*AfterModelDecision, error) {
+			return nil, nil
+		},
+	}))
+	rt.models["default"] = contractModelClient{}
+	ctx := newAgentContext(agentContextOptions{
+		runtime: rt,
+		agentID: "svc.agent",
+		runID:   "run-1",
+		turnID:  "turn-1",
+	})
+	client, ok := ctx.ModelClient("default")
+	require.True(t, ok)
+
+	resp, err := client.Complete(context.Background(), &model.Request{Model: "test"})
+	require.ErrorContains(t, err, "model complete contract violation")
+	require.Nil(t, resp)
+}
+
+func TestModelInterceptorAfterModelStreamCannotClearModelError(t *testing.T) {
+	modelErr := errors.New("stream failed")
+	rt := New(WithInterceptors(RuntimeInterceptorFuncs{
+		AfterModelFunc: func(context.Context, *AfterModelInput) (*AfterModelDecision, error) {
+			return &AfterModelDecision{}, nil
+		},
+	}))
+	rt.models["default"] = contractModelClient{streamErr: modelErr}
+	ctx := newAgentContext(agentContextOptions{
+		runtime: rt,
+		agentID: "svc.agent",
+		runID:   "run-1",
+		turnID:  "turn-1",
+	})
+	client, ok := ctx.ModelClient("default")
+	require.True(t, ok)
+
+	streamer, err := client.Stream(context.Background(), &model.Request{Model: "test"})
+	require.ErrorIs(t, err, modelErr)
+	require.Nil(t, streamer)
+}
+
+func TestModelInterceptorAfterModelStreamEnforcesNonNilStreamerContract(t *testing.T) {
+	rt := New(WithInterceptors(RuntimeInterceptorFuncs{
+		AfterModelFunc: func(context.Context, *AfterModelInput) (*AfterModelDecision, error) {
+			return nil, nil
+		},
+	}))
+	rt.models["default"] = contractModelClient{}
+	ctx := newAgentContext(agentContextOptions{
+		runtime: rt,
+		agentID: "svc.agent",
+		runID:   "run-1",
+		turnID:  "turn-1",
+	})
+	client, ok := ctx.ModelClient("default")
+	require.True(t, ok)
+
+	streamer, err := client.Stream(context.Background(), &model.Request{Model: "test"})
+	require.ErrorContains(t, err, "model stream contract violation")
+	require.Nil(t, streamer)
 }
 
 func TestRunInterceptorsOrderAndErrorShortCircuit(t *testing.T) {

@@ -275,6 +275,7 @@ func runProviderLoop(
 }
 
 func finishProviderServe(state *providerServeState, ackWG *sync.WaitGroup, err error) error {
+	state.cancel()
 	state.wg.Wait()
 	ackWG.Wait()
 	return err

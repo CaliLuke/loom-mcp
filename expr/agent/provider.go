@@ -19,6 +19,8 @@ type (
 const (
 	providerLocalString   = "local"
 	providerLocalEvalName = "local provider"
+	providerMCPString     = string(ToolSurfaceMCP)
+	providerRegistryName  = "registry"
 	providerArtifactsName = "artifacts"
 	providerMemoryName    = "memory"
 	providerSkillsName    = "skills"
@@ -61,9 +63,9 @@ func (k ProviderKind) String() string {
 	case ProviderLocal:
 		return providerLocalString
 	case ProviderMCP:
-		return "mcp"
+		return providerMCPString
 	case ProviderRegistry:
-		return "registry"
+		return providerRegistryName
 	case ProviderSkills:
 		return providerSkillsName
 	case ProviderArtifacts:

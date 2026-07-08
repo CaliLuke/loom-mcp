@@ -8,6 +8,7 @@ import (
 	"github.com/CaliLuke/loom-mcp/runtime/agent/api"
 	"github.com/CaliLuke/loom-mcp/runtime/agent/model"
 	"github.com/CaliLuke/loom-mcp/runtime/agent/planner"
+	"github.com/CaliLuke/loom-mcp/runtime/agent/policy"
 	"github.com/CaliLuke/loom-mcp/runtime/agent/run"
 	aitools "github.com/CaliLuke/loom-mcp/runtime/agent/tools"
 	commonpb "go.temporal.io/api/common/v1"
@@ -48,7 +49,12 @@ type (
 		Messages    []*model.Message
 		RunContext  run.Context
 		ToolOutputs []*api.ToolCallOutput
+		TypedInputs []planner.TypedInputOutput
 		Finalize    *planner.Termination
+
+		ToolPolicyActive bool
+		AllowedTools     []aitools.Ident
+		PolicyCaps       policy.CapsState
 	}
 
 	runOutputWire struct {
@@ -209,7 +215,11 @@ func decodePlanActivityInput(p *commonpb.Payload, valuePtr any) error {
 	dst.Messages = w.Messages
 	dst.RunContext = w.RunContext
 	dst.ToolOutputs = w.ToolOutputs
+	dst.TypedInputs = w.TypedInputs
 	dst.Finalize = w.Finalize
+	dst.ToolPolicyActive = w.ToolPolicyActive
+	dst.AllowedTools = w.AllowedTools
+	dst.PolicyCaps = w.PolicyCaps
 	return nil
 }
 
@@ -255,7 +265,12 @@ func encodePlanActivityInputWire(in *api.PlanActivityInput) (*planActivityInputW
 		Messages:    in.Messages,
 		RunContext:  in.RunContext,
 		ToolOutputs: in.ToolOutputs,
+		TypedInputs: in.TypedInputs,
 		Finalize:    in.Finalize,
+
+		ToolPolicyActive: in.ToolPolicyActive,
+		AllowedTools:     in.AllowedTools,
+		PolicyCaps:       in.PolicyCaps,
 	}, nil
 }
 

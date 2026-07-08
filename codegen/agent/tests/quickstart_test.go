@@ -167,7 +167,7 @@ func copyDir(src, dst string) error {
 		if err := os.MkdirAll(filepath.Dir(target), 0o750); err != nil {
 			return err
 		}
-		return os.WriteFile(target, data, info.Mode())
+		return os.WriteFile(target, data, info.Mode()) //nolint:gosec // Test helper copies trusted fixture files.
 	})
 }
 
@@ -214,13 +214,13 @@ func rewriteQuickstartGoMod(repoRoot string, quickstartDir string) error {
 		}
 	}
 
-	return os.WriteFile(modPath, []byte(updated), 0o600)
+	return os.WriteFile(modPath, []byte(updated), 0o600) //nolint:gosec // Test helper rewrites a trusted temporary go.mod.
 }
 
 func runCommand(t *testing.T, ctx context.Context, dir string, args ...string) []byte {
 	t.Helper()
 
-	cmd := exec.CommandContext(ctx, "go", args...)
+	cmd := exec.CommandContext(ctx, "go", args...) //nolint:gosec // Test helper launches go with test-controlled arguments.
 	cmd.Dir = dir
 	out, err := cmd.CombinedOutput()
 	if err != nil {
@@ -235,7 +235,7 @@ func runStartableCommand(t *testing.T, dir string, name string, args ...string) 
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
 
-	cmd := exec.CommandContext(ctx, name, args...)
+	cmd := exec.CommandContext(ctx, name, args...) //nolint:gosec // Test helper launches a test-controlled binary.
 	cmd.Dir = dir
 
 	stdout, err := cmd.StdoutPipe()

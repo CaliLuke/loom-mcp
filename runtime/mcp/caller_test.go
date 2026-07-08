@@ -25,6 +25,20 @@ func init() {
 	otel.SetTextMapPropagator(propagation.TraceContext{})
 }
 
+func TestDefaultMCPHTTPClientUsesPhaseTimeoutsWithoutExchangeTimeout(t *testing.T) {
+	t.Parallel()
+
+	client := mcpHTTPClient(nil)
+
+	require.Zero(t, client.Timeout)
+	transport, ok := client.Transport.(*http.Transport)
+	require.True(t, ok)
+	require.Equal(t, defaultMCPHTTPHeaderTimeout, transport.ResponseHeaderTimeout)
+	require.Equal(t, defaultMCPHTTPTLSHandshake, transport.TLSHandshakeTimeout)
+	require.Equal(t, defaultMCPHTTPExpectContinue, transport.ExpectContinueTimeout)
+	require.NotNil(t, transport.DialContext)
+}
+
 func TestCallToolAcrossProtocols(t *testing.T) {
 	t.Parallel()
 

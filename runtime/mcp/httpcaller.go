@@ -3,6 +3,7 @@ package mcp
 import (
 	"context"
 	"fmt"
+	"net"
 	"net/http"
 	"time"
 
@@ -10,9 +11,14 @@ import (
 )
 
 const (
-	defaultMCPClientName    = "loom-mcp"
-	defaultMCPClientVersion = "dev"
-	defaultMCPHTTPTimeout   = 30 * time.Second
+	defaultMCPClientName          = "loom-mcp"
+	defaultMCPClientVersion       = "dev"
+	defaultMCPHTTPHeaderTimeout   = 30 * time.Second
+	defaultMCPHTTPDialTimeout     = 30 * time.Second
+	defaultMCPHTTPKeepAlive       = 30 * time.Second
+	defaultMCPHTTPTLSHandshake    = 10 * time.Second
+	defaultMCPHTTPExpectContinue  = time.Second
+	defaultMCPHTTPIdleConnTimeout = 90 * time.Second
 )
 
 // HTTPOptions configures the HTTP Caller.
@@ -75,7 +81,16 @@ func mcpHTTPClient(httpClient *http.Client) *http.Client {
 	if httpClient != nil {
 		return httpClient
 	}
+	transport := http.DefaultTransport.(*http.Transport).Clone()
+	transport.DialContext = (&net.Dialer{
+		Timeout:   defaultMCPHTTPDialTimeout,
+		KeepAlive: defaultMCPHTTPKeepAlive,
+	}).DialContext
+	transport.TLSHandshakeTimeout = defaultMCPHTTPTLSHandshake
+	transport.ResponseHeaderTimeout = defaultMCPHTTPHeaderTimeout
+	transport.ExpectContinueTimeout = defaultMCPHTTPExpectContinue
+	transport.IdleConnTimeout = defaultMCPHTTPIdleConnTimeout
 	return &http.Client{
-		Timeout: defaultMCPHTTPTimeout,
+		Transport: transport,
 	}
 }

@@ -740,6 +740,19 @@ func TestGeneratedSearchToolsRendersDesignSearchPolicy(t *testing.T) {
 	require.Contains(t, adapterSource, "BroadFallback *bool")
 }
 
+func TestGeneratedMCPAdapterDropIfSlowDefaultsToDroppingSlowSubscribers(t *testing.T) {
+	files := generateToolDiscoveryFixture(t)
+	adapterFile := findGeneratedFile(t, files, filepath.Join(gcodegen.Gendir, "mcp_assistant", "adapter_server.go"))
+	adapterSource := renderGeneratedFile(t, adapterFile)
+
+	require.Contains(t, adapterSource, "DropIfSlow any")
+	require.Contains(t, adapterSource, "drop := true")
+	require.Contains(t, adapterSource, "drop = defaultMCPAdapterDropIfSlow(opts.DropIfSlow)")
+	require.Contains(t, adapterSource, "case bool:")
+	require.Contains(t, adapterSource, "case *bool:")
+	require.NotContains(t, adapterSource, "if opts.DropIfSlow == false")
+}
+
 func TestGeneratedToolDiscoveryCallTemplateArguments(t *testing.T) {
 	restore := resetMCPCodegenState(t)
 	defer restore()

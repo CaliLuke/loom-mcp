@@ -7,6 +7,8 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/CaliLuke/loom-mcp/runtime/agent/model"
+	"github.com/CaliLuke/loom-mcp/runtime/agent/policy"
+	"github.com/CaliLuke/loom-mcp/runtime/agent/tools"
 )
 
 func TestPlanActivityOutput_UnmarshalJSON(t *testing.T) {
@@ -78,5 +80,31 @@ func TestPlanActivityOutput_UnmarshalJSON(t *testing.T) {
 		tu, ok := msg.Parts[0].(model.ToolUsePart)
 		require.True(t, ok, "expected first part to be ToolUsePart")
 		require.Equal(t, map[string]any{"q": "old"}, tu.Input)
+	})
+
+	t.Run("policy fields", func(t *testing.T) {
+		const payload = `{
+			"Result": null,
+			"Transcript": [],
+			"ToolPolicyActive": true,
+			"AllowedTools": ["search.web", "memory.lookup"],
+			"PolicyCaps": {
+				"MaxToolCalls": 5,
+				"RemainingToolCalls": 3,
+				"MaxConsecutiveFailedToolCalls": 2,
+				"RemainingConsecutiveFailedToolCalls": 1
+			}
+		}`
+
+		var out PlanActivityOutput
+		require.NoError(t, json.Unmarshal([]byte(payload), &out))
+		require.True(t, out.ToolPolicyActive)
+		require.Equal(t, []tools.Ident{"search.web", "memory.lookup"}, out.AllowedTools)
+		require.Equal(t, policy.CapsState{
+			MaxToolCalls:                        5,
+			RemainingToolCalls:                  3,
+			MaxConsecutiveFailedToolCalls:       2,
+			RemainingConsecutiveFailedToolCalls: 1,
+		}, out.PolicyCaps)
 	})
 }

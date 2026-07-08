@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"strings"
+	"sync"
 
 	mcpskills "github.com/CaliLuke/loom-mcp/runtime/mcp/skills"
 
@@ -63,6 +64,7 @@ type (
 		sources []mcpskills.Source
 		preload mcpskills.PreloadMode
 		reload  mcpskills.ReloadMode
+		mu      sync.RWMutex
 		cache   map[string]*mcpskills.Content
 	}
 )
@@ -134,7 +136,9 @@ func (e *skillToolExecutor) preloadSkills(ctx context.Context) {
 		}
 		content, err := mcpskills.Read(ctx, e.sources, resource.URI)
 		if err == nil {
+			e.mu.Lock()
 			e.cache[resource.URI] = content
+			e.mu.Unlock()
 		}
 	}
 }
@@ -175,7 +179,7 @@ func (e *skillToolExecutor) executeListSkills(ctx context.Context, call *planner
 			Description: resource.Description,
 			URI:         resource.URI,
 			Metadata:    resource.Metadata,
-			Preloaded:   e.cache[resource.URI] != nil,
+			Preloaded:   e.cached(resource.URI) != nil,
 		}
 		if resource.Metadata != nil {
 			item.ID = resource.Metadata.ID
@@ -212,7 +216,7 @@ func (e *skillToolExecutor) executeLoadSkill(ctx context.Context, call *planner.
 }
 
 func (e *skillToolExecutor) readSkillContent(ctx context.Context, uri string) (*mcpskills.Content, bool, error) {
-	if content := e.cache[uri]; content != nil && e.reload != mcpskills.ReloadPerCall {
+	if content := e.cached(uri); content != nil && e.reload != mcpskills.ReloadPerCall {
 		if content.Metadata == nil || content.Metadata.Reload != mcpskills.ReloadPerCall {
 			return content, false, nil
 		}
@@ -223,9 +227,17 @@ func (e *skillToolExecutor) readSkillContent(ctx context.Context, uri string) (*
 	}
 	perCall := e.reload == mcpskills.ReloadPerCall || (content.Metadata != nil && content.Metadata.Reload == mcpskills.ReloadPerCall)
 	if !perCall {
+		e.mu.Lock()
 		e.cache[uri] = content
+		e.mu.Unlock()
 	}
 	return content, perCall, nil
+}
+
+func (e *skillToolExecutor) cached(uri string) *mcpskills.Content {
+	e.mu.RLock()
+	defer e.mu.RUnlock()
+	return e.cache[uri]
 }
 
 func decodeSkillPayload(call *planner.ToolRequest, out any) error {
