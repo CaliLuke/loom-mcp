@@ -27,6 +27,21 @@ func TestMCPBasicConfiguration(t *testing.T) {
 	require.Equal(t, "calculator", mcp.Service.Name)
 }
 
+func TestMCPDuplicateDeclarationDSLValidation(t *testing.T) {
+	err := runInvalidMCPDSL(t, func() {
+		API("test", func() {})
+		Service("calculator", func() {
+			MCP("calc", "1.0.0")
+			MCP("calc-v2", "2.0.0")
+		})
+	})
+
+	require.Contains(t, err, `duplicate MCP declaration for service "calculator"`)
+	mcp := mcpexpr.Root.MCPServers["calculator"]
+	require.NotNil(t, mcp)
+	require.Equal(t, "calc", mcp.Name)
+}
+
 func TestMCPWithProtocolVersion(t *testing.T) {
 	runMCPDSL(t, func() {
 		API("test", func() {})
@@ -312,6 +327,25 @@ func TestMCPSubscription(t *testing.T) {
 	sub := mcp.Subscriptions[0]
 	require.Equal(t, "status", sub.ResourceName)
 	require.NotNil(t, sub.Method)
+}
+
+func TestMCPSubscriptionRequiresWatchableResourceDSLValidation(t *testing.T) {
+	err := runInvalidMCPDSL(t, func() {
+		API("test", func() {})
+		Service("status", func() {
+			MCP("status-server", "1.0")
+			Method("system_status", func() {
+				Result(String)
+				Resource("status", "status://system", "application/json")
+			})
+			Method("subscribe_status", func() {
+				Result(String)
+				Subscription("status")
+			})
+		})
+	})
+
+	require.Contains(t, err, `subscription resource "status" must reference a watchable resource`)
 }
 
 func TestMCPSubscriptionMonitor(t *testing.T) {

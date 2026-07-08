@@ -119,6 +119,9 @@ func (w *WorkflowExpr) Validate() error {
 	if len(w.Steps) == 0 && len(w.GraphNodes) == 0 {
 		verr.Add(w, "workflow requires at least one step")
 	}
+	if len(w.Steps) > 0 && len(w.GraphNodes) > 0 {
+		verr.Add(w, "workflow cannot mix sequential Step declarations with graph constructs")
+	}
 	w.validateSequential(verr)
 	w.validateGraph(verr)
 	if len(verr.Errors) == 0 {

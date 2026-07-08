@@ -2,6 +2,7 @@ package agent
 
 import (
 	"fmt"
+	"text/template"
 
 	"github.com/CaliLuke/loom-mcp/boundedresult"
 	"github.com/CaliLuke/loom/codegen"
@@ -201,6 +202,24 @@ var runtimeMetaFieldNames = map[string]struct{}{
 	"ParentToolCallID": {},
 }
 
+var hintTemplateValidationFuncs = template.FuncMap{
+	"join": func([]string, string) string {
+		return ""
+	},
+	"count": func(any) int {
+		return 0
+	},
+	"humanTime": func(any) string {
+		return ""
+	},
+	"since": func(any, any) int64 {
+		return 0
+	},
+	"truncate": func(string, int) string {
+		return ""
+	},
+}
+
 // AddMeta adds metadata to the tool expression.
 //
 // This method exists so Goa's standard Meta DSL helper can attach metadata to
@@ -297,6 +316,7 @@ func (t *ToolExpr) Validate() error {
 	t.defaultSurfaces()
 	verr := new(eval.ValidationErrors)
 	validateToolSurfaces(t, verr)
+	validateHintTemplates(t, verr)
 	if t.bindMethodName == "" {
 		validateInjectedFields(t, injectTargets(t, nil), verr)
 		if err := t.validateShapes(); err != nil {
@@ -335,6 +355,30 @@ func (t *ToolExpr) Validate() error {
 	}
 	verr.Add(t, "service method %q not found in service %q", t.bindMethodName, svc.Name)
 	return verr
+}
+
+func validateHintTemplates(t *ToolExpr, verr *eval.ValidationErrors) {
+	if t == nil || verr == nil {
+		return
+	}
+	if t.CallHintTemplate != "" {
+		if err := validateHintTemplate("CallHintTemplate", t.CallHintTemplate); err != nil {
+			verr.Add(t, "invalid CallHintTemplate: %v", err)
+		}
+	}
+	if t.ResultHintTemplate != "" {
+		if err := validateHintTemplate("ResultHintTemplate", t.ResultHintTemplate); err != nil {
+			verr.Add(t, "invalid ResultHintTemplate: %v", err)
+		}
+	}
+}
+
+func validateHintTemplate(name string, src string) error {
+	_, err := template.New(name).
+		Option("missingkey=error").
+		Funcs(hintTemplateValidationFuncs).
+		Parse(src)
+	return err
 }
 
 func (t *ToolExpr) defaultSurfaces() {

@@ -58,3 +58,54 @@ func TestWorkflowBranchTargetsShareBranchDependency(t *testing.T) {
 	require.Equal(t, []string{"route"}, workflow.GraphNodes[3].DependsOn)
 	require.Equal(t, []string{"publish", "revise"}, workflow.GraphNodes[4].DependsOn)
 }
+
+func TestWorkflowDSLRejectsMixedSequentialAndGraphConstructs(t *testing.T) {
+	cases := []struct {
+		name  string
+		graph func()
+	}{
+		{
+			name: "parallel",
+			graph: func() {
+				Parallel(func() {
+					Step("review", "reviewer.review", `{}`)
+				})
+			},
+		},
+		{
+			name: "request input",
+			graph: func() {
+				RequestInput("approval", "Approval", `{"type":"object"}`)
+			},
+		},
+		{
+			name: "loop",
+			graph: func() {
+				Loop("retry", "worker.retry", `{}`, MaxIterations(2))
+			},
+		},
+		{
+			name: "branch",
+			graph: func() {
+				Branch("route", "draft", BranchDefault("publish"))
+				Step("publish", "publisher.publish", `{}`)
+			},
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			runDSLExpectError(t, func() {
+				API("alpha", func() {})
+				Service("alpha", func() {
+					Agent("assistant", "Assistant", func() {
+						Workflow(func() {
+							Step("draft", "writer.draft", `{}`)
+							tc.graph()
+						})
+					})
+				})
+			}, "workflow cannot mix sequential Step declarations with graph constructs")
+		})
+	}
+}

@@ -242,6 +242,35 @@ func TestFromRegistryWithVersion(t *testing.T) {
 	require.Equal(t, "1.2.3", ts.Provider.Version)
 }
 
+func TestFromRegistryVersionOverlayDoesNotMutateSharedToolset(t *testing.T) {
+	runDSL(t, func() {
+		API("test", func() {})
+		reg := Registry("corp-registry", func() {
+			URL("https://registry.corp.internal")
+		})
+		shared := Toolset(FromRegistry(reg, "data-tools"))
+		Service("svc", func() {
+			Agent("first", "First", func() {
+				Use(shared, func() {
+					Version("1.2.3")
+				})
+			})
+			Agent("second", "Second", func() {
+				Use(shared)
+			})
+		})
+	})
+
+	require.Len(t, agentsexpr.Root.Toolsets, 1)
+	require.Empty(t, agentsexpr.Root.Toolsets[0].Provider.Version)
+	require.Len(t, agentsexpr.Root.Agents, 2)
+	first := agentsexpr.Root.Agents[0].Used.Toolsets[0]
+	second := agentsexpr.Root.Agents[1].Used.Toolsets[0]
+	require.Equal(t, "1.2.3", first.Provider.Version)
+	require.Empty(t, second.Provider.Version)
+	require.Empty(t, first.Origin.Provider.Version)
+}
+
 // TestPublishToInExport verifies PublishTo works inside Export.
 func TestPublishToInExport(t *testing.T) {
 	runDSL(t, func() {

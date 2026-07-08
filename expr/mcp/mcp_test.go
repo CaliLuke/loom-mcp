@@ -237,6 +237,139 @@ func TestMCPToolSearchPolicyValidation(t *testing.T) {
 	require.ErrorContains(t, search.Validate(), "Title weight must be non-negative")
 }
 
+func TestMCPEventExprValidation(t *testing.T) {
+	tests := []struct {
+		name   string
+		mcp    *MCPExpr
+		errMsg string
+	}{
+		{
+			name: "valid event expressions",
+			mcp: &MCPExpr{
+				Name:    "events",
+				Version: "1.0.0",
+				Resources: []*ResourceExpr{
+					{Name: "status", URI: "status://system", Watchable: true},
+				},
+				Notifications: []*NotificationExpr{
+					{Name: "status_update"},
+				},
+				Subscriptions: []*SubscriptionExpr{
+					{ResourceName: "status"},
+				},
+				SubscriptionMonitors: []*SubscriptionMonitorExpr{
+					{Name: "subscriptions"},
+				},
+			},
+		},
+		{
+			name: "missing notification name",
+			mcp: &MCPExpr{
+				Name:    "events",
+				Version: "1.0.0",
+				Notifications: []*NotificationExpr{
+					{Name: " "},
+				},
+			},
+			errMsg: "notification name is required",
+		},
+		{
+			name: "missing subscription resource name",
+			mcp: &MCPExpr{
+				Name:    "events",
+				Version: "1.0.0",
+				Subscriptions: []*SubscriptionExpr{
+					{ResourceName: " "},
+				},
+			},
+			errMsg: "subscription resource name is required",
+		},
+		{
+			name: "missing subscription resource",
+			mcp: &MCPExpr{
+				Name:    "events",
+				Version: "1.0.0",
+				Subscriptions: []*SubscriptionExpr{
+					{ResourceName: "status"},
+				},
+			},
+			errMsg: `subscription resource "status" does not match a declared resource`,
+		},
+		{
+			name: "subscription resource is not watchable",
+			mcp: &MCPExpr{
+				Name:    "events",
+				Version: "1.0.0",
+				Resources: []*ResourceExpr{
+					{Name: "status", URI: "status://system"},
+				},
+				Subscriptions: []*SubscriptionExpr{
+					{ResourceName: "status"},
+				},
+			},
+			errMsg: `subscription resource "status" must reference a watchable resource`,
+		},
+		{
+			name: "missing subscription monitor name",
+			mcp: &MCPExpr{
+				Name:    "events",
+				Version: "1.0.0",
+				SubscriptionMonitors: []*SubscriptionMonitorExpr{
+					{Name: " "},
+				},
+			},
+			errMsg: "subscription monitor name is required",
+		},
+		{
+			name: "duplicate notification name",
+			mcp: &MCPExpr{
+				Name:    "events",
+				Version: "1.0.0",
+				Notifications: []*NotificationExpr{
+					{Name: "status_update"},
+					{Name: "status_update"},
+				},
+			},
+			errMsg: `notification name "status_update" duplicates`,
+		},
+		{
+			name: "duplicate subscription resource name",
+			mcp: &MCPExpr{
+				Name:    "events",
+				Version: "1.0.0",
+				Subscriptions: []*SubscriptionExpr{
+					{ResourceName: "status"},
+					{ResourceName: "status"},
+				},
+			},
+			errMsg: `subscription resource name "status" duplicates`,
+		},
+		{
+			name: "duplicate subscription monitor name",
+			mcp: &MCPExpr{
+				Name:    "events",
+				Version: "1.0.0",
+				SubscriptionMonitors: []*SubscriptionMonitorExpr{
+					{Name: "subscriptions"},
+					{Name: "subscriptions"},
+				},
+			},
+			errMsg: `subscription monitor name "subscriptions" duplicates`,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := tt.mcp.Validate()
+			if tt.errMsg == "" {
+				require.NoError(t, err)
+				return
+			}
+			require.ErrorContains(t, err, tt.errMsg)
+		})
+	}
+}
+
 func TestResourceExpr_Validate(t *testing.T) {
 	tests := []struct {
 		name     string

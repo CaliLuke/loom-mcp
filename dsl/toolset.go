@@ -4,7 +4,6 @@ import (
 	"strings"
 
 	"github.com/CaliLuke/loom/eval"
-	goaexpr "github.com/CaliLuke/loom/expr"
 
 	agentsexpr "github.com/CaliLuke/loom-mcp/expr/agent"
 )
@@ -362,8 +361,13 @@ func cloneToolset(origin *agentsexpr.ToolsetExpr, agent *agentsexpr.AgentExpr, o
 		Description: origin.Description,
 		Tags:        append([]string(nil), origin.Tags...),
 		Agent:       agent,
-		Provider:    origin.Provider,
-		Origin:      origin,
+		Provider:    cloneProvider(origin.Provider),
+	}
+	if origin.AgentToolset != nil && origin.Origin == nil {
+		ref := *origin.AgentToolset
+		dup.AgentToolset = &ref
+	} else {
+		dup.Origin = origin
 	}
 	switch {
 	case origin.DSLFunc != nil && overlay != nil:
@@ -377,6 +381,16 @@ func cloneToolset(origin *agentsexpr.ToolsetExpr, agent *agentsexpr.AgentExpr, o
 		dup.DSLFunc = origin.DSLFunc
 	}
 	return dup
+}
+
+func cloneProvider(origin *agentsexpr.ProviderExpr) *agentsexpr.ProviderExpr {
+	if origin == nil {
+		return nil
+	}
+	dup := *origin
+	dup.SkillRoots = append([]string(nil), origin.SkillRoots...)
+	dup.MemorySources = append([]agentsexpr.MemoryToolSource(nil), origin.MemorySources...)
+	return &dup
 }
 
 func instantiateToolset(value any, overlay func(), agent *agentsexpr.AgentExpr) *agentsexpr.ToolsetExpr {
@@ -427,29 +441,14 @@ func AgentToolset(service, agent, toolset string) *agentsexpr.ToolsetExpr {
 		eval.ReportError("AgentToolset requires non-empty service, agent, and toolset")
 		return nil
 	}
-	svc := goaexpr.Root.Service(service)
-	if svc == nil {
-		eval.ReportError("AgentToolset could not resolve service %q", service)
-		return nil
+	return &agentsexpr.ToolsetExpr{
+		Name: toolset,
+		AgentToolset: &agentsexpr.AgentToolsetReferenceExpr{
+			Service: service,
+			Agent:   agent,
+			Toolset: toolset,
+		},
 	}
-	var originAgent *agentsexpr.AgentExpr
-	for _, a := range agentsexpr.Root.Agents {
-		if a != nil && a.Service == svc && a.Name == agent {
-			originAgent = a
-			break
-		}
-	}
-	if originAgent == nil || originAgent.Exported == nil {
-		eval.ReportError("AgentToolset could not find exported toolsets for %q.%q", service, agent)
-		return nil
-	}
-	for _, ts := range originAgent.Exported.Toolsets {
-		if ts != nil && ts.Name == toolset {
-			return ts
-		}
-	}
-	eval.ReportError("AgentToolset could not resolve toolset %q exported by agent %q.%q", toolset, service, agent)
-	return nil
 }
 
 // UseAgentToolset is an alias for AgentToolset. Prefer AgentToolset in new

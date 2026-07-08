@@ -6,6 +6,7 @@ package mcp
 import (
 	"errors"
 	"net/url"
+	"strings"
 
 	"github.com/CaliLuke/loom/eval"
 	"github.com/CaliLuke/loom/expr"
@@ -434,6 +435,13 @@ func (m *MCPExpr) Validate() error {
 	mergeChildErrors(verr, m.Resources, resourceValidator)
 	mergeChildErrors(verr, m.SkillDirectories, skillDirectoryValidator)
 	mergeChildErrors(verr, m.Prompts, promptValidator)
+	mergeChildErrors(verr, m.Notifications, notificationValidator)
+	mergeChildErrors(verr, m.Subscriptions, subscriptionValidator)
+	mergeChildErrors(verr, m.SubscriptionMonitors, subscriptionMonitorValidator)
+	validateUniqueNotificationNames(verr, m.Notifications)
+	validateSubscriptionResources(verr, m.Resources, m.Subscriptions)
+	validateUniqueSubscriptionResourceNames(verr, m.Subscriptions)
+	validateUniqueSubscriptionMonitorNames(verr, m.SubscriptionMonitors)
 	if m.OAuth != nil {
 		mergeValidationError(verr, m.OAuth.Validate())
 	}
@@ -450,8 +458,83 @@ func iconValidator(icon *IconExpr) error      { return icon.Validate() }
 func toolValidator(t *ToolExpr) error         { return t.Validate() }
 func resourceValidator(r *ResourceExpr) error { return r.Validate() }
 func promptValidator(p *PromptExpr) error     { return p.Validate() }
+func notificationValidator(n *NotificationExpr) error {
+	return n.Validate()
+}
+func subscriptionValidator(s *SubscriptionExpr) error {
+	return s.Validate()
+}
+func subscriptionMonitorValidator(s *SubscriptionMonitorExpr) error {
+	return s.Validate()
+}
 func skillDirectoryValidator(s *SkillDirectoryExpr) error {
 	return s.Validate()
+}
+
+func validateUniqueNotificationNames(verr *eval.ValidationErrors, notifications []*NotificationExpr) {
+	seen := make(map[string]*NotificationExpr, len(notifications))
+	for _, notification := range notifications {
+		if strings.TrimSpace(notification.Name) == "" {
+			continue
+		}
+		if other, dup := seen[notification.Name]; dup {
+			verr.Add(notification, "notification name %q duplicates a notification declared in %s", notification.Name, other.EvalName())
+			continue
+		}
+		seen[notification.Name] = notification
+	}
+}
+
+func validateUniqueSubscriptionResourceNames(verr *eval.ValidationErrors, subscriptions []*SubscriptionExpr) {
+	seen := make(map[string]*SubscriptionExpr, len(subscriptions))
+	for _, subscription := range subscriptions {
+		if strings.TrimSpace(subscription.ResourceName) == "" {
+			continue
+		}
+		if other, dup := seen[subscription.ResourceName]; dup {
+			verr.Add(subscription, "subscription resource name %q duplicates a subscription declared in %s", subscription.ResourceName, other.EvalName())
+			continue
+		}
+		seen[subscription.ResourceName] = subscription
+	}
+}
+
+func validateSubscriptionResources(verr *eval.ValidationErrors, resources []*ResourceExpr, subscriptions []*SubscriptionExpr) {
+	watchable := make(map[string]bool, len(resources))
+	declared := make(map[string]struct{}, len(resources))
+	for _, resource := range resources {
+		if resource == nil || strings.TrimSpace(resource.Name) == "" {
+			continue
+		}
+		declared[resource.Name] = struct{}{}
+		watchable[resource.Name] = resource.Watchable
+	}
+	for _, subscription := range subscriptions {
+		if subscription == nil || strings.TrimSpace(subscription.ResourceName) == "" {
+			continue
+		}
+		if _, ok := declared[subscription.ResourceName]; !ok {
+			verr.Add(subscription, "subscription resource %q does not match a declared resource", subscription.ResourceName)
+			continue
+		}
+		if !watchable[subscription.ResourceName] {
+			verr.Add(subscription, "subscription resource %q must reference a watchable resource", subscription.ResourceName)
+		}
+	}
+}
+
+func validateUniqueSubscriptionMonitorNames(verr *eval.ValidationErrors, monitors []*SubscriptionMonitorExpr) {
+	seen := make(map[string]*SubscriptionMonitorExpr, len(monitors))
+	for _, monitor := range monitors {
+		if strings.TrimSpace(monitor.Name) == "" {
+			continue
+		}
+		if other, dup := seen[monitor.Name]; dup {
+			verr.Add(monitor, "subscription monitor name %q duplicates a subscription monitor declared in %s", monitor.Name, other.EvalName())
+			continue
+		}
+		seen[monitor.Name] = monitor
+	}
 }
 
 func mergeChildErrors[T any](dst *eval.ValidationErrors, items []T, validate func(T) error) {
@@ -693,6 +776,42 @@ func (r *RuntimePromptExpr) Validate() error {
 	case RuntimePromptRoleSystem, RuntimePromptRoleUser, RuntimePromptRoleTool, RuntimePromptRoleSynthesis:
 	default:
 		verr.Add(r, "runtime prompt role must be system, user, tool, or synthesis")
+	}
+	if len(verr.Errors) > 0 {
+		return verr
+	}
+	return nil
+}
+
+// Validate validates a notification expression.
+func (n *NotificationExpr) Validate() error {
+	verr := new(eval.ValidationErrors)
+	if strings.TrimSpace(n.Name) == "" {
+		verr.Add(n, "notification name is required")
+	}
+	if len(verr.Errors) > 0 {
+		return verr
+	}
+	return nil
+}
+
+// Validate validates a subscription expression.
+func (s *SubscriptionExpr) Validate() error {
+	verr := new(eval.ValidationErrors)
+	if strings.TrimSpace(s.ResourceName) == "" {
+		verr.Add(s, "subscription resource name is required")
+	}
+	if len(verr.Errors) > 0 {
+		return verr
+	}
+	return nil
+}
+
+// Validate validates a subscription monitor expression.
+func (s *SubscriptionMonitorExpr) Validate() error {
+	verr := new(eval.ValidationErrors)
+	if strings.TrimSpace(s.Name) == "" {
+		verr.Add(s, "subscription monitor name is required")
 	}
 	if len(verr.Errors) > 0 {
 		return verr

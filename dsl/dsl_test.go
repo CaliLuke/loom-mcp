@@ -334,11 +334,72 @@ func TestAgentToolsetCrossServiceReference(t *testing.T) {
 	require.Equal(t, exported, ts.Origin)
 }
 
+func TestAgentToolsetCrossServiceReferenceIsDeclarationOrderIndependent(t *testing.T) {
+	cases := []struct {
+		name          string
+		providerFirst bool
+	}{
+		{name: "provider first", providerFirst: true},
+		{name: "consumer first", providerFirst: false},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			provider := func() {
+				Service("svcA", func() {
+					Agent("agentA", "desc", func() {
+						Export("exported", func() {
+							Tool("t1", "tool one", func() {})
+						})
+					})
+				})
+			}
+			consumer := func() {
+				Service("svcB", func() {
+					Agent("agentB", "desc", func() {
+						Use(AgentToolset("svcA", "agentA", "exported"))
+					})
+				})
+			}
+
+			runDSL(t, func() {
+				API("test", func() {})
+				if tc.providerFirst {
+					provider()
+					consumer()
+					return
+				}
+				consumer()
+				provider()
+			})
+
+			var consumerAgent, providerAgent *agentsexpr.AgentExpr
+			for _, agent := range agentsexpr.Root.Agents {
+				switch {
+				case agent.Service.Name == "svcA" && agent.Name == "agentA":
+					providerAgent = agent
+				case agent.Service.Name == "svcB" && agent.Name == "agentB":
+					consumerAgent = agent
+				}
+			}
+			require.NotNil(t, providerAgent)
+			require.NotNil(t, consumerAgent)
+			require.NotNil(t, providerAgent.Exported)
+			require.NotNil(t, consumerAgent.Used)
+			require.Len(t, consumerAgent.Used.Toolsets, 1)
+			require.Equal(t, providerAgent.Exported.Toolsets[0], consumerAgent.Used.Toolsets[0].Origin)
+			require.Len(t, consumerAgent.Used.Toolsets[0].Tools, 1)
+			require.Equal(t, "t1", consumerAgent.Used.Toolsets[0].Tools[0].Name)
+		})
+	}
+}
+
 func TestProviderInference_LocalAndMCP(t *testing.T) {
 	runDSL(t, func() {
 		API("test", func() {})
 		var SearchSuite = Toolset(FromMCP("svc", "search"))
 		Service("svc", func() {
+			MCP("search", "1.0.0")
 			Agent("a", "desc", func() {
 				Use("local", func() { Tool("x", "", func() {}) })
 				Use(SearchSuite)

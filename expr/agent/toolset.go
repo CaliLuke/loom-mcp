@@ -3,6 +3,7 @@ package agent
 import (
 	"fmt"
 
+	exprmcp "github.com/CaliLuke/loom-mcp/expr/mcp"
 	"github.com/CaliLuke/loom/eval"
 	goaexpr "github.com/CaliLuke/loom/expr"
 )
@@ -49,6 +50,20 @@ type (
 		// is a reference/alias (e.g., consumed under Uses or via AgentToolset).
 		// When nil, this toolset is the defining origin.
 		Origin *ToolsetExpr
+
+		// AgentToolset references an exported agent toolset by design coordinates.
+		// It is resolved after DSL execution so Service declaration order does not
+		// affect valid cross-agent references.
+		AgentToolset *AgentToolsetReferenceExpr
+
+		version string
+	}
+
+	// AgentToolsetReferenceExpr identifies a toolset exported by an agent.
+	AgentToolsetReferenceExpr struct {
+		Service string
+		Agent   string
+		Toolset string
 	}
 )
 
@@ -86,11 +101,9 @@ func (t *ToolsetExpr) SetDescription(d string) {
 // function to set the toolset version. Version is only valid for
 // registry-backed toolsets.
 func (t *ToolsetExpr) SetVersion(v string) {
+	t.version = v
 	if t.Provider == nil || t.Provider.Kind != ProviderRegistry {
-		// Validation will catch this; just store it for now
-		if t.Provider == nil {
-			t.Provider = &ProviderExpr{}
-		}
+		return
 	}
 	t.Provider.Version = v
 }
@@ -103,6 +116,9 @@ func (t *ToolsetExpr) WalkSets(walk eval.SetWalker) {
 // Validate performs semantic checks on the toolset expression.
 func (t *ToolsetExpr) Validate() error {
 	verr := new(eval.ValidationErrors)
+	if t.version != "" && (t.Provider == nil || t.Provider.Kind != ProviderRegistry) {
+		verr.Add(t, "Version is only valid for FromRegistry toolsets")
+	}
 	if t.Provider != nil {
 		t.validateProvider(verr)
 	}
@@ -113,6 +129,9 @@ func (t *ToolsetExpr) Validate() error {
 }
 
 func (t *ToolsetExpr) validateProvider(verr *eval.ValidationErrors) {
+	if t.Provider.Kind != ProviderRegistry && t.Provider.Version != "" {
+		verr.Add(t, "Version is only valid for FromRegistry toolsets")
+	}
 	switch t.Provider.Kind {
 	case ProviderMCP:
 		t.validateMCPProvider(verr)
@@ -149,8 +168,15 @@ func (t *ToolsetExpr) validateMCPProvider(verr *eval.ValidationErrors) {
 	if t.Provider.MCPToolset == "" {
 		verr.Add(t, "MCP server name is required; set it via FromMCP(service, toolset)")
 	}
-	if t.Provider.MCPService != "" && goaexpr.Root.Service(t.Provider.MCPService) == nil {
+	var svc *goaexpr.ServiceExpr
+	if t.Provider.MCPService != "" {
+		svc = goaexpr.Root.Service(t.Provider.MCPService)
+	}
+	if t.Provider.MCPService != "" && svc == nil {
 		verr.Add(t, "FromMCP could not resolve service %q", t.Provider.MCPService)
+	}
+	if svc != nil && exprmcp.Root.HasMCP(svc) && t.Provider.MCPToolset != "" && exprmcp.Root.ServiceMCP(t.Provider.MCPService, t.Provider.MCPToolset) == nil {
+		verr.Add(t, "FromMCP could not resolve service %q MCP server %q", t.Provider.MCPService, t.Provider.MCPToolset)
 	}
 }
 

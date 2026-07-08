@@ -71,6 +71,15 @@ func (r *RootExpr) Packages() []string {
 	return []string{"github.com/CaliLuke/loom-mcp/dsl"}
 }
 
+// Prepare resolves deferred design references that require a complete view of
+// the evaluated Goa and agent roots.
+func (r *RootExpr) Prepare() {
+	if r == nil {
+		return
+	}
+	r.resolveAgentToolsetReferences()
+}
+
 // WalkSets exposes the nested expressions to the eval engine.
 func (r *RootExpr) WalkSets(walk eval.SetWalker) {
 	// Walk registries first since toolsets may reference them.
@@ -81,6 +90,10 @@ func (r *RootExpr) WalkSets(walk eval.SetWalker) {
 	groups := expressionGroups(r.Agents, r.ServiceExports)
 	if len(groups) > 0 {
 		walk(groups)
+	}
+	workflows := gatheredWorkflows(r.Agents)
+	if len(workflows) > 0 {
+		walk(eval.ToExpressionSet(workflows))
 	}
 	toolsets := gatheredToolsets(r.Agents, r.ServiceExports, r.Toolsets)
 	if len(toolsets) > 0 {
@@ -128,6 +141,16 @@ func gatheredToolsets(agents []*AgentExpr, serviceExports []*ServiceExportsExpr,
 	return append(toolsets, topLevel...)
 }
 
+func gatheredWorkflows(agents []*AgentExpr) []*WorkflowExpr {
+	var workflows []*WorkflowExpr
+	for _, agent := range agents {
+		if agent != nil && agent.Workflow != nil {
+			workflows = append(workflows, agent.Workflow)
+		}
+	}
+	return workflows
+}
+
 func gatheredTools(toolsets []*ToolsetExpr) []*ToolExpr {
 	total := 0
 	for _, ts := range toolsets {
@@ -151,6 +174,7 @@ func gatheredTools(toolsets []*ToolsetExpr) []*ToolExpr {
 func (r *RootExpr) Validate() error {
 	verr := new(eval.ValidationErrors)
 	r.validateSanitizedAgentSlugs(verr)
+	r.validateAgentToolsetReferences(verr)
 	r.validateUniqueRegistries(verr)
 	r.validateToolsets(verr)
 	r.validateOwnerScopedToolsetSlugs(verr)
@@ -160,6 +184,121 @@ func (r *RootExpr) Validate() error {
 		return nil
 	}
 	return verr
+}
+
+func (r *RootExpr) resolveAgentToolsetReferences() {
+	for _, ts := range gatheredToolsets(r.Agents, r.ServiceExports, r.Toolsets) {
+		r.resolveAgentToolsetReference(ts)
+	}
+}
+
+func (r *RootExpr) resolveAgentToolsetReference(ts *ToolsetExpr) {
+	if ts == nil || ts.AgentToolset == nil || ts.Origin != nil {
+		return
+	}
+	origin := r.agentToolsetReferenceOrigin(ts.AgentToolset)
+	if origin == nil {
+		return
+	}
+	ts.Name = origin.Name
+	ts.Description = origin.Description
+	ts.Tags = append([]string(nil), origin.Tags...)
+	ts.Meta = cloneMeta(origin.Meta)
+	ts.Provider = cloneProvider(origin.Provider)
+	ts.Origin = origin
+	ts.AgentToolset = nil
+	if len(ts.Tools) == 0 {
+		ts.Tools = cloneToolsForToolset(origin.Tools, ts)
+	}
+}
+
+func (r *RootExpr) validateAgentToolsetReferences(verr *eval.ValidationErrors) {
+	for _, ts := range gatheredToolsets(r.Agents, r.ServiceExports, r.Toolsets) {
+		if ts == nil || ts.AgentToolset == nil || ts.Origin != nil {
+			continue
+		}
+		ref := ts.AgentToolset
+		verr.Add(ts, "AgentToolset could not resolve toolset %q exported by agent %q.%q", ref.Toolset, ref.Service, ref.Agent)
+	}
+}
+
+func (r *RootExpr) agentToolsetReferenceOrigin(ref *AgentToolsetReferenceExpr) *ToolsetExpr {
+	if ref == nil {
+		return nil
+	}
+	for _, agent := range r.Agents {
+		if agent == nil || agent.Service == nil || agent.Exported == nil {
+			continue
+		}
+		if agent.Service.Name != ref.Service || agent.Name != ref.Agent {
+			continue
+		}
+		for _, ts := range agent.Exported.Toolsets {
+			if ts != nil && ts.Name == ref.Toolset {
+				return ts
+			}
+		}
+		return nil
+	}
+	return nil
+}
+
+func cloneMeta(meta goaexpr.MetaExpr) goaexpr.MetaExpr {
+	if len(meta) == 0 {
+		return nil
+	}
+	clone := make(goaexpr.MetaExpr, len(meta))
+	for name, values := range meta {
+		clone[name] = append([]string(nil), values...)
+	}
+	return clone
+}
+
+func cloneProvider(origin *ProviderExpr) *ProviderExpr {
+	if origin == nil {
+		return nil
+	}
+	dup := *origin
+	dup.SkillRoots = append([]string(nil), origin.SkillRoots...)
+	dup.MemorySources = append([]MemoryToolSource(nil), origin.MemorySources...)
+	return &dup
+}
+
+func cloneToolsForToolset(tools []*ToolExpr, toolset *ToolsetExpr) []*ToolExpr {
+	if len(tools) == 0 {
+		return nil
+	}
+	clones := make([]*ToolExpr, 0, len(tools))
+	for _, tool := range tools {
+		if tool == nil {
+			continue
+		}
+		clone := *tool
+		clone.Tags = append([]string(nil), tool.Tags...)
+		clone.Meta = cloneMeta(tool.Meta)
+		clone.ServerData = cloneServerDataForTool(tool.ServerData, &clone)
+		clone.InjectedFields = append([]string(nil), tool.InjectedFields...)
+		clone.Surfaces = append([]ToolSurface(nil), tool.Surfaces...)
+		clone.Toolset = toolset
+		clones = append(clones, &clone)
+	}
+	return clones
+}
+
+func cloneServerDataForTool(serverData []*ServerDataExpr, tool *ToolExpr) []*ServerDataExpr {
+	if len(serverData) == 0 {
+		return nil
+	}
+	clones := make([]*ServerDataExpr, 0, len(serverData))
+	for _, data := range serverData {
+		if data == nil {
+			continue
+		}
+		clone := *data
+		clone.Tool = tool
+		clones = append(clones, &clone)
+	}
+	return clones
 }
 
 func (r *RootExpr) validateMCPProjections(verr *eval.ValidationErrors) {

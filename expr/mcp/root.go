@@ -26,14 +26,16 @@ type RootExpr struct {
 	MCPServers map[string]*MCPExpr
 	// DynamicPrompts maps service names to their dynamic prompt
 	// expressions.
-	DynamicPrompts map[string][]*DynamicPromptExpr
+	DynamicPrompts      map[string][]*DynamicPromptExpr
+	duplicateMCPServers map[string][]*MCPExpr
 }
 
 // NewRoot creates a new plugin root expression
 func NewRoot() *RootExpr {
 	return &RootExpr{
-		MCPServers:     make(map[string]*MCPExpr),
-		DynamicPrompts: make(map[string][]*DynamicPromptExpr),
+		MCPServers:          make(map[string]*MCPExpr),
+		DynamicPrompts:      make(map[string][]*DynamicPromptExpr),
+		duplicateMCPServers: make(map[string][]*MCPExpr),
 	}
 }
 
@@ -63,6 +65,25 @@ func (r *RootExpr) WalkSets(walk eval.SetWalker) {
 	walk(prompts)
 	walk(messages)
 	walk(dynamicPromptSet(r.DynamicPrompts))
+}
+
+// Validate enforces MCP root-level invariants.
+func (r *RootExpr) Validate() error {
+	verr := new(eval.ValidationErrors)
+	r.validateDuplicateMCPServers(verr)
+	if len(verr.Errors) > 0 {
+		return verr
+	}
+	return nil
+}
+
+func (r *RootExpr) validateDuplicateMCPServers(verr *eval.ValidationErrors) {
+	for _, service := range sortedServiceNames(r.duplicateMCPServers) {
+		duplicates := r.duplicateMCPServers[service]
+		for _, duplicate := range duplicates {
+			verr.Add(duplicate, "duplicate MCP declaration for service %q; MCP() may only be called once per service", service)
+		}
+	}
 }
 
 func mcpServersSet(servers map[string]*MCPExpr) eval.ExpressionSet {
@@ -144,6 +165,16 @@ func sortedServiceNames[V any](items map[string]V) []string {
 // RegisterMCP registers an MCP server configuration for a service
 func (r *RootExpr) RegisterMCP(svc *expr.ServiceExpr, mcp *MCPExpr) {
 	mcp.Service = svc
+	if r.MCPServers == nil {
+		r.MCPServers = make(map[string]*MCPExpr)
+	}
+	if _, exists := r.MCPServers[svc.Name]; exists {
+		if r.duplicateMCPServers == nil {
+			r.duplicateMCPServers = make(map[string][]*MCPExpr)
+		}
+		r.duplicateMCPServers[svc.Name] = append(r.duplicateMCPServers[svc.Name], mcp)
+		return
+	}
 	r.MCPServers[svc.Name] = mcp
 }
 

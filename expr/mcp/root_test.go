@@ -46,6 +46,30 @@ func TestRootExprWalkSetsUsesServiceNameOrder(t *testing.T) {
 	}, sets)
 }
 
+func TestRootExprValidateRejectsDuplicateMCPDeclarations(t *testing.T) {
+	root := NewRoot()
+	svc := &expr.ServiceExpr{Name: "assistant"}
+	first := &MCPExpr{
+		Name:    "assistant-mcp",
+		Version: "1.0.0",
+		OAuth: &OAuthExpr{
+			AuthorizationServers: []string{"https://auth.example.com"},
+		},
+	}
+	second := &MCPExpr{
+		Name:    "assistant-mcp-v2",
+		Version: "2.0.0",
+	}
+
+	root.RegisterMCP(svc, first)
+	root.RegisterMCP(svc, second)
+
+	require.Same(t, first, root.GetMCP(svc))
+	require.Equal(t, "assistant", first.Service.Name)
+	err := root.Validate()
+	require.ErrorContains(t, err, `duplicate MCP declaration for service "assistant"`)
+}
+
 func testMCPServer(service string) *MCPExpr {
 	return &MCPExpr{
 		Name:    service + "-mcp",

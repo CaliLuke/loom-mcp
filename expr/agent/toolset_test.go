@@ -3,6 +3,7 @@ package agent
 import (
 	"testing"
 
+	exprmcp "github.com/CaliLuke/loom-mcp/expr/mcp"
 	"github.com/CaliLuke/loom/eval"
 	goaexpr "github.com/CaliLuke/loom/expr"
 	"github.com/stretchr/testify/require"
@@ -19,6 +20,10 @@ func TestToolsetExpr_Validate_ProviderMCP(t *testing.T) {
 	goaexpr.Root = new(goaexpr.RootExpr)
 	goaexpr.Root.Services = []*goaexpr.ServiceExpr{
 		{Name: "existing-service"},
+	}
+	exprmcp.Root = exprmcp.NewRoot()
+	exprmcp.Root.MCPServers["existing-service"] = &exprmcp.MCPExpr{
+		Name: "mcp-server",
 	}
 
 	t.Run("valid MCP provider", func(t *testing.T) {
@@ -60,6 +65,35 @@ func TestToolsetExpr_Validate_ProviderMCP(t *testing.T) {
 		err := ts.Validate()
 		require.Error(t, err)
 		require.Contains(t, err.Error(), "FromMCP could not resolve service")
+	})
+
+	t.Run("MCP provider with non-existent server", func(t *testing.T) {
+		ts := &ToolsetExpr{
+			Name: "mcp-tools",
+			Provider: &ProviderExpr{
+				Kind:       ProviderMCP,
+				MCPService: "existing-service",
+				MCPToolset: "missing-server",
+			},
+		}
+		err := ts.Validate()
+		require.Error(t, err)
+		require.Contains(t, err.Error(), `FromMCP could not resolve service "existing-service" MCP server "missing-server"`)
+	})
+
+	t.Run("external MCP provider with inline schemas", func(t *testing.T) {
+		goaexpr.Root.Services = append(goaexpr.Root.Services, &goaexpr.ServiceExpr{Name: "external-service"})
+		ts := &ToolsetExpr{
+			Name: "external-tools",
+			Provider: &ProviderExpr{
+				Kind:       ProviderMCP,
+				MCPService: "external-service",
+				MCPToolset: "remote",
+			},
+			Tools: []*ToolExpr{{Name: "search"}},
+		}
+		err := ts.Validate()
+		require.NoError(t, err)
 	})
 }
 
@@ -126,6 +160,117 @@ func TestToolsetExpr_Validate_ProviderLocal(t *testing.T) {
 		err := ts.Validate()
 		require.NoError(t, err)
 	})
+}
+
+func TestToolsetExprValidateVersionRequiresRegistryProvider(t *testing.T) {
+	sharedMCPProvider := &ProviderExpr{
+		Kind:       ProviderMCP,
+		MCPService: "assistant",
+		MCPToolset: "assistant-mcp",
+	}
+
+	cases := []struct {
+		name     string
+		toolset  *ToolsetExpr
+		provider *ProviderExpr
+	}{
+		{
+			name:    "nil provider remains local",
+			toolset: &ToolsetExpr{Name: "local"},
+		},
+		{
+			name: "explicit local provider",
+			toolset: &ToolsetExpr{
+				Name:     "local",
+				Provider: &ProviderExpr{Kind: ProviderLocal},
+			},
+		},
+		{
+			name: "mcp provider",
+			toolset: &ToolsetExpr{
+				Name:     "mcp",
+				Provider: sharedMCPProvider,
+			},
+			provider: sharedMCPProvider,
+		},
+		{
+			name: "skills provider",
+			toolset: &ToolsetExpr{
+				Name: "skills",
+				Provider: &ProviderExpr{
+					Kind:       ProviderSkills,
+					SkillRoots: []string{".agents/skills"},
+				},
+			},
+		},
+		{
+			name: "artifacts provider",
+			toolset: &ToolsetExpr{
+				Name:     "artifacts",
+				Provider: &ProviderExpr{Kind: ProviderArtifacts},
+			},
+		},
+		{
+			name: "memory provider",
+			toolset: &ToolsetExpr{
+				Name:     "memory",
+				Provider: &ProviderExpr{Kind: ProviderMemory},
+			},
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			tc.toolset.SetVersion("1.2.3")
+
+			require.ErrorContains(t, tc.toolset.Validate(), "Version is only valid for FromRegistry toolsets")
+			if tc.provider != nil {
+				require.Empty(t, tc.provider.Version)
+			}
+			if tc.toolset.Provider == nil {
+				require.Nil(t, tc.toolset.Provider)
+			} else {
+				require.Empty(t, tc.toolset.Provider.Version)
+			}
+		})
+	}
+}
+
+func TestToolsetExprSetVersionDoesNotMutateSharedNonRegistryProvider(t *testing.T) {
+	sharedMCPProvider := &ProviderExpr{
+		Kind:       ProviderMCP,
+		MCPService: "assistant",
+		MCPToolset: "assistant-mcp",
+	}
+	origin := &ToolsetExpr{
+		Name:     "assistant-mcp",
+		Provider: sharedMCPProvider,
+	}
+	reference := &ToolsetExpr{
+		Name:     "assistant-mcp",
+		Provider: sharedMCPProvider,
+		Origin:   origin,
+	}
+
+	reference.SetVersion("1.2.3")
+
+	require.Empty(t, sharedMCPProvider.Version)
+	require.Empty(t, origin.Provider.Version)
+	require.ErrorContains(t, reference.Validate(), "Version is only valid for FromRegistry toolsets")
+}
+
+func TestToolsetExprValidateRejectsVersionOnNonRegistryProviderField(t *testing.T) {
+	ts := &ToolsetExpr{
+		Name: "mcp",
+		Provider: &ProviderExpr{
+			Kind:       ProviderMCP,
+			MCPService: "assistant",
+			MCPToolset: "assistant-mcp",
+			Version:    "1.2.3",
+		},
+	}
+
+	require.ErrorContains(t, ts.Validate(), "Version is only valid for FromRegistry toolsets")
 }
 
 func TestToolsetExprValidateSkillsProviderModes(t *testing.T) {
