@@ -143,6 +143,8 @@ func parseToolArgs(args []any) (string, func(), []func(*mcpexpr.ToolExpr)) {
 			dslf = actual
 		case func(*mcpexpr.ToolExpr):
 			mcpOpts = append(mcpOpts, actual)
+		default:
+			eval.InvalidArgError("description, DSL function, or MCP tool option", arg)
 		}
 	}
 

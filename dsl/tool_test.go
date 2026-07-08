@@ -49,7 +49,24 @@ func TestToolSurfaceProjectionDSL(t *testing.T) {
 	require.Empty(t, mcpTool.MCPPlacementServer)
 }
 
-func runProjectionDSL(t *testing.T, dsl func()) {
+func TestToolReportsInvalidArgumentType(t *testing.T) {
+	setupProjectionDSL(t)
+
+	require.True(t, eval.Execute(func() {
+		API("test", func() {})
+		Service("assistant", func() {
+			MCP("assistant-mcp", "1.0.0")
+			Method("lookup", func() {
+				Tool("lookup", 42)
+			})
+		})
+	}, nil), eval.Context.Error())
+
+	err := eval.RunDSL()
+	require.ErrorContains(t, err, "cannot use 42 (type int) as type description, DSL function, or MCP tool option")
+}
+
+func setupProjectionDSL(t *testing.T) {
 	t.Helper()
 
 	eval.Reset()
@@ -64,6 +81,12 @@ func runProjectionDSL(t *testing.T, dsl func()) {
 
 	goaexpr.Root.API = goaexpr.NewAPIExpr("test", func() {})
 	goaexpr.Root.API.Servers = []*goaexpr.ServerExpr{goaexpr.Root.API.DefaultServer()}
+}
+
+func runProjectionDSL(t *testing.T, dsl func()) {
+	t.Helper()
+
+	setupProjectionDSL(t)
 
 	require.True(t, eval.Execute(dsl, nil), eval.Context.Error())
 	require.NoError(t, eval.RunDSL())
