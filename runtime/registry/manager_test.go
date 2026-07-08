@@ -545,6 +545,33 @@ func TestFederationFiltering(t *testing.T) {
 			t.Error("experimental/beta should be excluded")
 		}
 	})
+
+	t.Run("bare wildcard exclude fails closed", func(t *testing.T) {
+		m := NewManager()
+
+		cfg := &FederationConfig{
+			Exclude: []string{"*"},
+		}
+
+		if m.shouldInclude("stable-tool", cfg) {
+			t.Error("stable-tool should be excluded by bare wildcard")
+		}
+	})
+
+	t.Run("mid wildcard exclude fails closed", func(t *testing.T) {
+		m := NewManager()
+
+		cfg := &FederationConfig{
+			Exclude: []string{"internal/*secret*"},
+		}
+
+		if m.shouldInclude("internal/tool-secret-beta", cfg) {
+			t.Error("internal/tool-secret-beta should be excluded by mid-pattern wildcard")
+		}
+		if !m.shouldInclude("internal/public/tool-secret", cfg) {
+			t.Error("internal/public/tool-secret should not match a single-segment exclude")
+		}
+	})
 }
 
 // TestMatchGlob tests the glob matching function.
@@ -562,6 +589,10 @@ func TestMatchGlob(t *testing.T) {
 		{"**", "anything", true},
 		{"**", "nested/path", true},
 
+		// Bare * matches one complete segment
+		{"*", "anything", true},
+		{"*", "nested/path", false},
+
 		// Trailing /* matches direct children
 		{"prefix/*", "prefix/child", true},
 		{"prefix/*", "prefix/nested/child", false},
@@ -576,6 +607,18 @@ func TestMatchGlob(t *testing.T) {
 		{"web-*", "web-search", true},
 		{"web-*", "code-search", false},
 		{"code-*", "code-execution", true},
+
+		// Leading and mid-pattern wildcards
+		{"*suffix", "tool-suffix", true},
+		{"*suffix", "tool-suffix-extra", false},
+		{"internal/*secret*", "internal/secret-tool", true},
+		{"internal/*secret*", "internal/tool-secret-beta", true},
+		{"internal/*secret*", "internal/public/tool-secret", false},
+
+		// Segment wildcards
+		{"org/*/tools", "org/team/tools", true},
+		{"org/*/tools", "org/team/nested/tools", false},
+		{"org/*/tools", "org/tools", false},
 	}
 
 	for _, tt := range tests {

@@ -3,6 +3,7 @@ package mcp
 import (
 	"context"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/require"
 )
@@ -60,4 +61,66 @@ func TestStreamableHTTPSessionsRejectsLateRegistration(t *testing.T) {
 
 	_, err := store.RegisterListener("sess-1", func() {})
 	require.ErrorIs(t, err, ErrSessionTerminated)
+}
+
+func TestStreamableHTTPSessionsExpiresIssuedSessions(t *testing.T) {
+	t.Parallel()
+
+	now := time.Unix(100, 0)
+	store := newStreamableHTTPSessions(streamableHTTPSessionConfig{
+		issuedTTL: time.Minute,
+		now: func() time.Time {
+			return now
+		},
+	})
+
+	store.Issue("sess-1")
+	require.NoError(t, store.Validate("sess-1"))
+
+	now = now.Add(time.Minute)
+	require.ErrorIs(t, store.Validate("sess-1"), ErrInvalidSessionID)
+	require.False(t, store.HasIssued())
+}
+
+func TestStreamableHTTPSessionsEvictsOldestIssuedSessionWhenBounded(t *testing.T) {
+	t.Parallel()
+
+	now := time.Unix(100, 0)
+	store := newStreamableHTTPSessions(streamableHTTPSessionConfig{
+		maxIssued: 2,
+		now: func() time.Time {
+			return now
+		},
+	})
+
+	store.Issue("sess-1")
+	now = now.Add(time.Second)
+	store.Issue("sess-2")
+	now = now.Add(time.Second)
+	store.Issue("sess-3")
+
+	require.ErrorIs(t, store.Validate("sess-1"), ErrInvalidSessionID)
+	require.NoError(t, store.Validate("sess-2"))
+	require.NoError(t, store.Validate("sess-3"))
+}
+
+func TestStreamableHTTPSessionsPrunesTerminatedTombstones(t *testing.T) {
+	t.Parallel()
+
+	now := time.Unix(100, 0)
+	store := newStreamableHTTPSessions(streamableHTTPSessionConfig{
+		terminatedTTL: time.Minute,
+		now: func() time.Time {
+			return now
+		},
+	})
+
+	store.Issue("sess-1")
+	require.NoError(t, store.Terminate("sess-1"))
+	require.ErrorIs(t, store.Validate("sess-1"), ErrSessionTerminated)
+
+	now = now.Add(time.Minute)
+	require.ErrorIs(t, store.Validate("sess-1"), ErrInvalidSessionID)
+	require.ErrorIs(t, store.Terminate("sess-1"), ErrInvalidSessionID)
+	require.Empty(t, store.terminated)
 }

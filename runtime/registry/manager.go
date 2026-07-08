@@ -5,6 +5,7 @@ package registry
 import (
 	"context"
 	"path"
+	"strings"
 	"sync"
 	"time"
 
@@ -253,49 +254,52 @@ func (noopCache) Delete(context.Context, string) error {
 	return nil
 }
 
-// matchGlob performs simple glob matching supporting * and ** wildcards.
-// * matches any sequence of non-separator characters.
-// ** matches any sequence including separators.
-//
-//nolint:cyclop // Pattern cases are explicit and intentionally local.
+// matchGlob matches slash-separated registry names against glob patterns.
+// * matches any sequence within one path segment; ** spans zero or more segments.
 func matchGlob(pattern, name string) bool {
-	// Handle exact match
-	if pattern == name {
-		return true
-	}
+	return matchGlobSegments(strings.Split(pattern, "/"), strings.Split(name, "/"))
+}
 
-	// Handle ** (match everything)
-	if pattern == "**" {
-		return true
+func matchGlobSegments(pattern, name []string) bool {
+	if len(pattern) == 0 {
+		return len(name) == 0
 	}
-
-	// Handle trailing /* (match direct children)
-	if len(pattern) > 2 && pattern[len(pattern)-2:] == "/*" {
-		prefix := pattern[:len(pattern)-2]
-		// Check if name starts with prefix and has no more slashes
-		if len(name) > len(prefix) && name[:len(prefix)] == prefix {
-			rest := name[len(prefix)+1:]
-			for i := 0; i < len(rest); i++ {
-				if rest[i] == '/' {
-					return false
-				}
-			}
-			return true
-		}
+	if pattern[0] == "**" {
+		return matchGlobSegments(pattern[1:], name) || len(name) > 0 && matchGlobSegments(pattern, name[1:])
+	}
+	if len(name) == 0 {
 		return false
 	}
+	return matchGlobSegment(pattern[0], name[0]) && matchGlobSegments(pattern[1:], name[1:])
+}
 
-	// Handle trailing /** (match all descendants)
-	if len(pattern) > 3 && pattern[len(pattern)-3:] == "/**" {
-		prefix := pattern[:len(pattern)-3]
-		return len(name) >= len(prefix) && name[:len(prefix)] == prefix
+func matchGlobSegment(pattern, name string) bool {
+	patternIndex := 0
+	nameIndex := 0
+	starIndex := -1
+	starNameIndex := 0
+
+	for nameIndex < len(name) {
+		if patternIndex < len(pattern) && pattern[patternIndex] == '*' {
+			starIndex = patternIndex
+			patternIndex++
+			starNameIndex = nameIndex
+			continue
+		}
+		if patternIndex < len(pattern) && pattern[patternIndex] == name[nameIndex] {
+			patternIndex++
+			nameIndex++
+			continue
+		}
+		if starIndex == -1 {
+			return false
+		}
+		patternIndex = starIndex + 1
+		starNameIndex++
+		nameIndex = starNameIndex
 	}
-
-	// Handle prefix/* pattern
-	if len(pattern) > 1 && pattern[len(pattern)-1] == '*' {
-		prefix := pattern[:len(pattern)-1]
-		return len(name) >= len(prefix) && name[:len(prefix)] == prefix
+	for patternIndex < len(pattern) && pattern[patternIndex] == '*' {
+		patternIndex++
 	}
-
-	return false
+	return patternIndex == len(pattern)
 }

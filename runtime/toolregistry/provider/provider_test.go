@@ -4,18 +4,20 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
+	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
 	pulse "github.com/CaliLuke/loom-mcp/features/stream/pulse/clients/pulse"
 	mockpulse "github.com/CaliLuke/loom-mcp/features/stream/pulse/clients/pulse/mocks"
+	"github.com/CaliLuke/loom-mcp/runtime/agent/telemetry"
 	"github.com/CaliLuke/loom-mcp/runtime/agent/tools"
 	"github.com/CaliLuke/loom-mcp/runtime/toolregistry"
 	"github.com/CaliLuke/loom/pulse/streaming"
 	streamopts "github.com/CaliLuke/loom/pulse/streaming/options"
 	"github.com/stretchr/testify/require"
-
-	"sync/atomic"
 )
 
 type blockingHandler struct {
@@ -26,12 +28,57 @@ type blockingHandler struct {
 
 const pulseAddEventID = "0-0"
 
+type recordingHandler struct {
+	blockFirst bool
+	started    chan struct{}
+	unblock    chan struct{}
+	seen       chan string
+	once       sync.Once
+}
+
+func (h *recordingHandler) HandleToolCall(ctx context.Context, msg toolregistry.ToolCallMessage) (toolregistry.ToolResultMessage, error) {
+	h.seen <- msg.ToolUseID
+	if h.blockFirst {
+		h.once.Do(func() {
+			close(h.started)
+			<-h.unblock
+		})
+	}
+	return toolregistry.NewToolResultMessage(msg.ToolUseID, json.RawMessage(`{"ok":true}`)), nil
+}
+
 func (h *blockingHandler) HandleToolCall(ctx context.Context, msg toolregistry.ToolCallMessage) (toolregistry.ToolResultMessage, error) {
 	if !h.callSeen.Swap(true) {
 		close(h.started)
 	}
 	<-h.unblock
 	return toolregistry.NewToolResultMessage(msg.ToolUseID, json.RawMessage(`{"ok":true}`)), nil
+}
+
+func TestDrainPending_PreservesCapacity(t *testing.T) {
+	t.Parallel()
+
+	work := make(chan workItem, 2)
+	acks := make(chan *streaming.Event, 1)
+	pending := make([]workItem, 0, 3)
+	for i := 1; i <= 3; i++ {
+		pending = append(pending, workItem{
+			ev:  &streaming.Event{ID: fmt.Sprintf("%d-0", i)},
+			msg: toolregistry.ToolCallMessage{ToolUseID: fmt.Sprintf("tooluse_%d", i)},
+		})
+	}
+
+	got, err := drainPending(context.Background(), work, acks, pending, 0, time.Now(), telemetry.NewNoopLogger())
+	require.NoError(t, err)
+	require.Len(t, got, 1)
+	require.Equal(t, cap(pending), cap(got))
+	require.Equal(t, "tooluse_3", got[0].msg.ToolUseID)
+
+	<-work
+	got, err = drainPending(context.Background(), work, acks, got, 0, time.Now(), telemetry.NewNoopLogger())
+	require.NoError(t, err)
+	require.Empty(t, got)
+	require.Equal(t, cap(pending), cap(got))
 }
 
 func TestServe_RespondsToPingWhileToolCallInFlight(t *testing.T) {
@@ -282,6 +329,117 @@ func TestServe_RespondsToPingWhenQueueIsFull(t *testing.T) {
 	}
 }
 
+func TestServe_DrainsPendingWhenStreamQuiet(t *testing.T) {
+	t.Parallel()
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	const toolset = "test.toolset"
+	harness := newProviderHarness(t, toolset)
+	handler := &recordingHandler{
+		blockFirst: true,
+		started:    make(chan struct{}),
+		unblock:    make(chan struct{}),
+		seen:       make(chan string, 8),
+	}
+
+	errc := make(chan error, 1)
+	go func() {
+		errc <- Serve(ctx, harness.client, toolset, handler, Options{
+			MaxConcurrentToolCalls: 1,
+			MaxQueuedToolCalls:     1,
+			Pong:                   func(_ context.Context, _ string) error { return nil },
+		})
+	}()
+
+	harness.events <- makeToolCallEvent(t, currentStreamID(), "tooluse_1")
+	select {
+	case <-handler.started:
+	case <-time.After(2 * time.Second):
+		t.Fatal("handler did not start")
+	}
+
+	harness.events <- makeToolCallEvent(t, currentStreamID(), "tooluse_2")
+	harness.events <- makeToolCallEvent(t, currentStreamID(), "tooluse_3")
+	close(handler.unblock)
+
+	seen := waitForToolUses(t, handler.seen, 3)
+	require.Contains(t, seen, "tooluse_1")
+	require.Contains(t, seen, "tooluse_2")
+	require.Contains(t, seen, "tooluse_3")
+
+	cancel()
+	select {
+	case <-time.After(2 * time.Second):
+		t.Fatal("Serve did not stop")
+	case <-errc:
+	}
+}
+
+func TestServe_DropsStalePendingAfterAckGrace(t *testing.T) {
+	t.Parallel()
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	const toolset = "test.toolset"
+	harness := newProviderHarness(t, toolset)
+	handler := &recordingHandler{
+		blockFirst: true,
+		started:    make(chan struct{}),
+		unblock:    make(chan struct{}),
+		seen:       make(chan string, 8),
+	}
+
+	errc := make(chan error, 1)
+	go func() {
+		errc <- Serve(ctx, harness.client, toolset, handler, Options{
+			SinkAckGracePeriod:     20 * time.Millisecond,
+			MaxConcurrentToolCalls: 1,
+			MaxQueuedToolCalls:     1,
+			Pong:                   func(_ context.Context, _ string) error { return nil },
+		})
+	}()
+
+	harness.events <- makeToolCallEvent(t, currentStreamID(), "tooluse_1")
+	select {
+	case <-handler.started:
+	case <-time.After(2 * time.Second):
+		t.Fatal("handler did not start")
+	}
+
+	staleID := streamIDFromTime(time.Now().Add(-time.Minute))
+	harness.events <- makeToolCallEvent(t, currentStreamID(), "tooluse_2")
+	harness.events <- makeToolCallEvent(t, staleID, "tooluse_3")
+
+	select {
+	case got := <-harness.acked:
+		require.Equal(t, staleID, got)
+	case <-time.After(2 * time.Second):
+		t.Fatal("expected stale pending event to be acked")
+	}
+
+	close(handler.unblock)
+	seen := waitForToolUses(t, handler.seen, 2)
+	require.Contains(t, seen, "tooluse_1")
+	require.Contains(t, seen, "tooluse_2")
+	require.NotContains(t, seen, "tooluse_3")
+
+	select {
+	case got := <-handler.seen:
+		t.Fatalf("stale pending item executed unexpectedly: %s", got)
+	case <-time.After(100 * time.Millisecond):
+	}
+
+	cancel()
+	select {
+	case <-time.After(2 * time.Second):
+		t.Fatal("Serve did not stop")
+	case <-errc:
+	}
+}
+
 func TestServe_DoesNotExitOnPongFailure(t *testing.T) {
 	t.Parallel()
 
@@ -519,4 +677,94 @@ func TestServe_PublishesOutputDeltaToResultStream(t *testing.T) {
 		t.Fatal("Serve did not stop")
 	case <-errc:
 	}
+}
+
+type providerHarness struct {
+	events chan *streaming.Event
+	acked  chan string
+	client pulse.Client
+	adds   *atomic.Int64
+}
+
+func newProviderHarness(t *testing.T, toolset string) providerHarness {
+	t.Helper()
+
+	toolsetStreamID := toolregistry.ToolsetStreamID(toolset)
+	eventsCh := make(chan *streaming.Event, 10)
+	acked := make(chan string, 10)
+
+	sink := mockpulse.NewSink(t)
+	sink.SetSubscribe(func() <-chan *streaming.Event { return eventsCh })
+	sink.SetAck(func(_ context.Context, ev *streaming.Event) error {
+		acked <- ev.ID
+		return nil
+	})
+	sink.SetClose(func(_ context.Context) {})
+
+	toolsetStream := mockpulse.NewStream(t)
+	toolsetStream.SetNewSink(func(_ context.Context, _ string, _ ...streamopts.Sink) (pulse.Sink, error) {
+		return sink, nil
+	})
+
+	adds := &atomic.Int64{}
+	resultStream := mockpulse.NewStream(t)
+	resultStream.SetAdd(func(_ context.Context, _ string, _ []byte) (string, error) {
+		adds.Add(1)
+		return pulseAddEventID, nil
+	})
+
+	client := mockpulse.NewClient(t)
+	client.SetStream(func(name string, _ ...streamopts.Stream) (pulse.Stream, error) {
+		switch name {
+		case toolsetStreamID:
+			return toolsetStream, nil
+		default:
+			return resultStream, nil
+		}
+	})
+
+	return providerHarness{
+		events: eventsCh,
+		acked:  acked,
+		client: client,
+		adds:   adds,
+	}
+}
+
+func makeToolCallEvent(t *testing.T, eventID string, toolUseID string) *streaming.Event {
+	t.Helper()
+
+	call := toolregistry.NewToolCallMessage(
+		toolUseID,
+		tools.Ident("toolset.tool"),
+		json.RawMessage(`{"x":1}`),
+		&toolregistry.ToolCallMeta{RunID: "r1", SessionID: "s1"},
+	)
+	payload, err := json.Marshal(call)
+	require.NoError(t, err)
+	return &streaming.Event{ID: eventID, EventName: "call", Payload: payload}
+}
+
+func waitForToolUses(t *testing.T, seen <-chan string, count int) map[string]bool {
+	t.Helper()
+
+	got := make(map[string]bool, count)
+	deadline := time.After(2 * time.Second)
+	for len(got) < count {
+		select {
+		case toolUseID := <-seen:
+			got[toolUseID] = true
+		case <-deadline:
+			t.Fatalf("timed out waiting for %d tool calls, saw=%v", count, got)
+		}
+	}
+	return got
+}
+
+func currentStreamID() string {
+	return streamIDFromTime(time.Now())
+}
+
+func streamIDFromTime(t time.Time) string {
+	return fmt.Sprintf("%d-0", t.UnixMilli())
 }

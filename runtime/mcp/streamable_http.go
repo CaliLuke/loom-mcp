@@ -4,6 +4,40 @@ import (
 	"context"
 	"errors"
 	"sync"
+	"time"
+)
+
+// StreamableHTTPSessions tracks issued MCP session IDs and active long-lived
+// listeners for generated streamable HTTP transports.
+type StreamableHTTPSessions struct {
+	mu         sync.RWMutex
+	issued     map[string]streamableHTTPSessionEntry
+	terminated map[string]streamableHTTPSessionEntry
+	listeners  map[string]map[*streamListener]struct{}
+	cfg        streamableHTTPSessionConfig
+}
+
+type streamableHTTPSessionConfig struct {
+	issuedTTL     time.Duration
+	terminatedTTL time.Duration
+	maxIssued     int
+	maxTerminated int
+	now           func() time.Time
+}
+
+type streamableHTTPSessionEntry struct {
+	expiresAt time.Time
+}
+
+type streamListener struct {
+	cancel context.CancelFunc
+}
+
+const (
+	defaultStreamableHTTPSessionIssuedTTL     = 24 * time.Hour
+	defaultStreamableHTTPSessionTerminatedTTL = 5 * time.Minute
+	defaultStreamableHTTPSessionMaxIssued     = 4096
+	defaultStreamableHTTPSessionMaxTerminated = 4096
 )
 
 var (
@@ -11,27 +45,10 @@ var (
 	ErrSessionTerminated = errors.New("session terminated")
 )
 
-// StreamableHTTPSessions tracks issued MCP session IDs and active long-lived
-// listeners for generated streamable HTTP transports.
-type StreamableHTTPSessions struct {
-	mu         sync.RWMutex
-	issued     map[string]struct{}
-	terminated map[string]struct{}
-	listeners  map[string]map[*streamListener]struct{}
-}
-
-type streamListener struct {
-	cancel context.CancelFunc
-}
-
 // NewStreamableHTTPSessions creates a store for issued sessions and active
 // stream listeners.
 func NewStreamableHTTPSessions() *StreamableHTTPSessions {
-	return &StreamableHTTPSessions{
-		issued:     make(map[string]struct{}),
-		terminated: make(map[string]struct{}),
-		listeners:  make(map[string]map[*streamListener]struct{}),
-	}
+	return newStreamableHTTPSessions(defaultStreamableHTTPSessionConfig())
 }
 
 // Issue records a session ID as valid for future requests.
@@ -41,8 +58,11 @@ func (s *StreamableHTTPSessions) Issue(sessionID string) {
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	s.issued[sessionID] = struct{}{}
+	now := s.now()
+	s.pruneLocked(now)
+	s.issued[sessionID] = streamableHTTPSessionEntry{expiresAt: now.Add(s.cfg.issuedTTL)}
 	delete(s.terminated, sessionID)
+	s.pruneToMaxLocked(s.issued, s.cfg.maxIssued, s.listeners)
 }
 
 // HasIssued reports whether the store has any active issued sessions.
@@ -50,8 +70,9 @@ func (s *StreamableHTTPSessions) HasIssued() bool {
 	if s == nil {
 		return false
 	}
-	s.mu.RLock()
-	defer s.mu.RUnlock()
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.pruneLocked(s.now())
 	return len(s.issued) > 0
 }
 
@@ -60,8 +81,9 @@ func (s *StreamableHTTPSessions) Validate(sessionID string) error {
 	if s == nil || sessionID == "" {
 		return ErrInvalidSessionID
 	}
-	s.mu.RLock()
-	defer s.mu.RUnlock()
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.pruneLocked(s.now())
 	if _, ok := s.terminated[sessionID]; ok {
 		return ErrSessionTerminated
 	}
@@ -78,6 +100,7 @@ func (s *StreamableHTTPSessions) RegisterListener(sessionID string, cancel conte
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	s.pruneLocked(s.now())
 	if _, ok := s.terminated[sessionID]; ok {
 		return nil, ErrSessionTerminated
 	}
@@ -107,6 +130,8 @@ func (s *StreamableHTTPSessions) Terminate(sessionID string) error {
 		return ErrInvalidSessionID
 	}
 	s.mu.Lock()
+	now := s.now()
+	s.pruneLocked(now)
 	if _, ok := s.issued[sessionID]; !ok {
 		if _, terminated := s.terminated[sessionID]; terminated {
 			s.mu.Unlock()
@@ -115,10 +140,11 @@ func (s *StreamableHTTPSessions) Terminate(sessionID string) error {
 		s.mu.Unlock()
 		return ErrInvalidSessionID
 	}
-	s.terminated[sessionID] = struct{}{}
+	s.terminated[sessionID] = streamableHTTPSessionEntry{expiresAt: now.Add(s.cfg.terminatedTTL)}
 	delete(s.issued, sessionID)
 	listeners := s.listeners[sessionID]
 	delete(s.listeners, sessionID)
+	s.pruneToMaxLocked(s.terminated, s.cfg.maxTerminated, nil)
 	s.mu.Unlock()
 
 	for listener := range listeners {
@@ -127,4 +153,84 @@ func (s *StreamableHTTPSessions) Terminate(sessionID string) error {
 		}
 	}
 	return nil
+}
+
+func newStreamableHTTPSessions(cfg streamableHTTPSessionConfig) *StreamableHTTPSessions {
+	cfg = normalizeStreamableHTTPSessionConfig(cfg)
+	return &StreamableHTTPSessions{
+		issued:     make(map[string]streamableHTTPSessionEntry),
+		terminated: make(map[string]streamableHTTPSessionEntry),
+		listeners:  make(map[string]map[*streamListener]struct{}),
+		cfg:        cfg,
+	}
+}
+
+func defaultStreamableHTTPSessionConfig() streamableHTTPSessionConfig {
+	return streamableHTTPSessionConfig{
+		issuedTTL:     defaultStreamableHTTPSessionIssuedTTL,
+		terminatedTTL: defaultStreamableHTTPSessionTerminatedTTL,
+		maxIssued:     defaultStreamableHTTPSessionMaxIssued,
+		maxTerminated: defaultStreamableHTTPSessionMaxTerminated,
+		now:           time.Now,
+	}
+}
+
+func normalizeStreamableHTTPSessionConfig(cfg streamableHTTPSessionConfig) streamableHTTPSessionConfig {
+	defaults := defaultStreamableHTTPSessionConfig()
+	if cfg.issuedTTL <= 0 {
+		cfg.issuedTTL = defaults.issuedTTL
+	}
+	if cfg.terminatedTTL <= 0 {
+		cfg.terminatedTTL = defaults.terminatedTTL
+	}
+	if cfg.maxIssued <= 0 {
+		cfg.maxIssued = defaults.maxIssued
+	}
+	if cfg.maxTerminated <= 0 {
+		cfg.maxTerminated = defaults.maxTerminated
+	}
+	if cfg.now == nil {
+		cfg.now = defaults.now
+	}
+	return cfg
+}
+
+func (s *StreamableHTTPSessions) now() time.Time {
+	return s.cfg.now()
+}
+
+func (s *StreamableHTTPSessions) pruneLocked(now time.Time) {
+	s.pruneExpiredLocked(s.issued, now, s.listeners)
+	s.pruneExpiredLocked(s.terminated, now, nil)
+}
+
+func (s *StreamableHTTPSessions) pruneExpiredLocked(entries map[string]streamableHTTPSessionEntry, now time.Time, protected map[string]map[*streamListener]struct{}) {
+	for sessionID, entry := range entries {
+		if len(protected[sessionID]) > 0 {
+			continue
+		}
+		if !entry.expiresAt.After(now) {
+			delete(entries, sessionID)
+		}
+	}
+}
+
+func (s *StreamableHTTPSessions) pruneToMaxLocked(entries map[string]streamableHTTPSessionEntry, max int, protected map[string]map[*streamListener]struct{}) {
+	for len(entries) > max {
+		var oldestID string
+		var oldestExpiresAt time.Time
+		for sessionID, entry := range entries {
+			if len(protected[sessionID]) > 0 {
+				continue
+			}
+			if oldestID == "" || entry.expiresAt.Before(oldestExpiresAt) {
+				oldestID = sessionID
+				oldestExpiresAt = entry.expiresAt
+			}
+		}
+		if oldestID == "" {
+			return
+		}
+		delete(entries, oldestID)
+	}
 }

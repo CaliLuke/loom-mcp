@@ -3,6 +3,7 @@ package mcp
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
@@ -101,6 +102,102 @@ func TestCallToolAcrossProtocols(t *testing.T) {
 			require.NoError(t, traceCaller.Close())
 		})
 	}
+}
+
+func TestConnectSessionDetachesLiveContextCancellationAndPreservesValues(t *testing.T) {
+	t.Parallel()
+
+	type contextKey struct{}
+	parent, parentCancel := context.WithCancel(context.WithValue(context.Background(), contextKey{}, "trace-value"))
+	var connectedCtx context.Context
+	caller, err := connectSession(parent, 0, func(sessionCtx context.Context) (*sdkmcp.ClientSession, error) {
+		require.Equal(t, "trace-value", sessionCtx.Value(contextKey{}))
+		require.NoError(t, sessionCtx.Err())
+		connectedCtx = sessionCtx
+		return nil, nil
+	})
+	require.NoError(t, err)
+	require.NotNil(t, caller)
+	parentCancel()
+	require.NoError(t, connectedCtx.Err())
+	require.NoError(t, caller.Close())
+}
+
+func TestConnectSessionInitializationRespectsCallerCancellationWithoutTimeout(t *testing.T) {
+	t.Parallel()
+
+	ctx, cancel := context.WithCancel(context.Background())
+	started := make(chan struct{})
+	done := make(chan struct{})
+	connectErr := make(chan error, 1)
+
+	caller, err := connectSession(ctx, 0, func(sessionCtx context.Context) (*sdkmcp.ClientSession, error) {
+		close(started)
+		cancel()
+		select {
+		case <-sessionCtx.Done():
+			connectErr <- sessionCtx.Err()
+			close(done)
+			return nil, sessionCtx.Err()
+		case <-time.After(time.Second):
+			close(done)
+			return nil, errors.New("connect was not canceled")
+		}
+	})
+
+	require.Nil(t, caller)
+	require.ErrorIs(t, err, context.Canceled)
+	requireReceive(t, started)
+	requireReceive(t, done)
+	require.ErrorIs(t, requireReceive(t, connectErr), context.Canceled)
+}
+
+func TestConnectSessionClosesLateSessionAfterTimeout(t *testing.T) {
+	t.Parallel()
+
+	server := httptest.NewServer(sdkmcp.NewStreamableHTTPHandler(func(*http.Request) *sdkmcp.Server {
+		return newSDKTestServer()
+	}, &sdkmcp.StreamableHTTPOptions{
+		DisableLocalhostProtection: true,
+	}))
+	t.Cleanup(server.Close)
+
+	release := make(chan struct{})
+	lateSession := make(chan *sdkmcp.ClientSession, 1)
+	client := sdkmcp.NewClient(&sdkmcp.Implementation{
+		Name:    "late-client",
+		Version: "1.0.0",
+	}, nil)
+	transport := &sdkmcp.StreamableClientTransport{
+		Endpoint: server.URL,
+	}
+
+	caller, err := connectSession(context.Background(), time.Millisecond, func(context.Context) (*sdkmcp.ClientSession, error) {
+		<-release
+		session, connectErr := client.Connect(context.Background(), transport, nil)
+		if connectErr == nil {
+			lateSession <- session
+		}
+		return session, connectErr
+	})
+	require.Error(t, err)
+	require.Nil(t, caller)
+	require.ErrorContains(t, err, "mcp initialize timed out")
+
+	close(release)
+	session := requireReceive(t, lateSession)
+	waitDone := make(chan error, 1)
+	go func() {
+		waitDone <- session.Wait()
+	}()
+	require.Eventually(t, func() bool {
+		select {
+		case <-waitDone:
+			return true
+		default:
+			return false
+		}
+	}, time.Second, 10*time.Millisecond)
 }
 
 func TestNormalizeSDKToolResultConcatenatesTextAcrossAllContentItems(t *testing.T) {
@@ -343,4 +440,17 @@ func runSDKStdioServerProcess() {
 		os.Exit(1)
 	}
 	os.Exit(0)
+}
+
+func requireReceive[T any](t *testing.T, ch <-chan T) T {
+	t.Helper()
+
+	select {
+	case value := <-ch:
+		return value
+	case <-time.After(time.Second):
+		var zero T
+		require.Fail(t, "timed out waiting for channel receive")
+		return zero
+	}
 }

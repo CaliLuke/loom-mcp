@@ -170,6 +170,11 @@ type SessionCaller struct {
 	cancel  context.CancelFunc
 }
 
+type connectResult struct {
+	session *mcp.ClientSession
+	err     error
+}
+
 // NewSessionCaller returns a new SessionCaller wrapping the provided SDK session.
 func NewSessionCaller(session *mcp.ClientSession, cancel context.CancelFunc) *SessionCaller {
 	return &SessionCaller{
@@ -252,24 +257,22 @@ func connectSession(
 	initTimeout time.Duration,
 	connect func(context.Context) (*mcp.ClientSession, error),
 ) (*SessionCaller, error) {
-	sessionCtx, cancel := context.WithCancel(ctx)
+	sessionCtx, sessionCancel := context.WithCancel(context.WithoutCancel(ctx))
+	initCtx, stopInit := initializationContext(ctx, sessionCtx)
+	defer stopInit()
 	if initTimeout <= 0 {
-		session, err := connect(sessionCtx)
+		session, err := connect(initCtx)
 		if err != nil {
-			cancel()
+			closeSession(session)
+			sessionCancel()
 			return nil, err
 		}
-		return NewSessionCaller(session, cancel), nil
-	}
-
-	type connectResult struct {
-		session *mcp.ClientSession
-		err     error
+		return NewSessionCaller(session, sessionCancel), nil
 	}
 
 	resultCh := make(chan connectResult, 1)
 	go func() {
-		session, err := connect(sessionCtx)
+		session, err := connect(initCtx)
 		resultCh <- connectResult{session: session, err: err}
 	}()
 
@@ -278,16 +281,50 @@ func connectSession(
 
 	select {
 	case <-ctx.Done():
-		cancel()
+		sessionCancel()
+		drainLateConnectResult(resultCh, sessionCancel)
 		return nil, ctx.Err()
 	case <-timer.C:
-		cancel()
+		sessionCancel()
+		drainLateConnectResult(resultCh, sessionCancel)
 		return nil, fmt.Errorf("mcp initialize timed out after %s", initTimeout)
 	case result := <-resultCh:
 		if result.err != nil {
-			cancel()
+			closeSession(result.session)
+			sessionCancel()
 			return nil, result.err
 		}
-		return NewSessionCaller(result.session, cancel), nil
+		return NewSessionCaller(result.session, sessionCancel), nil
+	}
+}
+
+func initializationContext(parent context.Context, sessionCtx context.Context) (context.Context, context.CancelFunc) {
+	initCtx, cancelInit := context.WithCancel(sessionCtx)
+	stop := make(chan struct{})
+	go func() {
+		select {
+		case <-parent.Done():
+			cancelInit()
+		case <-sessionCtx.Done():
+			cancelInit()
+		case <-stop:
+		}
+	}()
+	return initCtx, func() {
+		close(stop)
+	}
+}
+
+func drainLateConnectResult(resultCh <-chan connectResult, cancel context.CancelFunc) {
+	go func() {
+		result := <-resultCh
+		closeSession(result.session)
+		cancel()
+	}()
+}
+
+func closeSession(session *mcp.ClientSession) {
+	if session != nil {
+		_ = session.Close()
 	}
 }

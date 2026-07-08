@@ -7,6 +7,8 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"strconv"
+	"strings"
 	"sync"
 	"time"
 
@@ -120,10 +122,13 @@ type (
 		logger          telemetry.Logger
 		tracer          telemetry.Tracer
 		pongTimeout     time.Duration
+		ackGrace        time.Duration
 		maxConcurrent   int
 		maxQueued       int
 	}
 )
+
+const providerPendingDrainInterval = 10 * time.Millisecond
 
 func (p *pulseOutputDeltaPublisher) PublishToolOutputDelta(ctx context.Context, stream string, delta string) error {
 	msg := toolregistry.NewToolOutputDeltaMessage(p.toolUseID, stream, delta)
@@ -230,17 +235,30 @@ func runProviderLoop(
 	ackWG *sync.WaitGroup,
 	pending []workItem,
 ) error {
+	drainTicker := time.NewTicker(providerPendingDrainInterval)
+	defer drainTicker.Stop()
+
 	for {
 		select {
 		case <-state.ctx.Done():
 			return finishProviderServe(state, ackWG, state.ctx.Err())
 		case err := <-state.errc:
 			return finishProviderServe(state, ackWG, err)
+		case <-drainTicker.C:
+			var err error
+			pending, err = drainPending(state.ctx, state.work, state.acks, pending, cfg.ackGrace, time.Now(), cfg.logger)
+			if err != nil {
+				return finishProviderServe(state, ackWG, err)
+			}
 		case ev, ok := <-events:
 			if !ok {
 				return finishProviderServe(state, ackWG, fmt.Errorf("toolset stream subscription closed"))
 			}
-			pending = drainPending(state.work, pending)
+			var err error
+			pending, err = drainPending(state.ctx, state.work, state.acks, pending, cfg.ackGrace, time.Now(), cfg.logger)
+			if err != nil {
+				return finishProviderServe(state, ackWG, err)
+			}
 			if _, err := handleSubscribedEvent(state.ctx, sink, ev, pendingDeps{
 				opts:     opts,
 				cfg:      cfg,
@@ -304,6 +322,7 @@ func providerConfigFromOptions(pulse pulseclients.Client, toolset string, handle
 		logger:          opts.Logger,
 		tracer:          opts.Tracer,
 		pongTimeout:     opts.PongTimeout,
+		ackGrace:        opts.SinkAckGracePeriod,
 		maxConcurrent:   opts.MaxConcurrentToolCalls,
 		maxQueued:       opts.MaxQueuedToolCalls,
 	}
@@ -469,16 +488,79 @@ func publishToolResult(
 	}
 }
 
-func drainPending(work chan<- workItem, pending []workItem) []workItem {
-	for len(pending) > 0 {
+func drainPending(
+	ctx context.Context,
+	work chan<- workItem,
+	acks chan<- *streaming.Event,
+	pending []workItem,
+	ackGrace time.Duration,
+	now time.Time,
+	logger telemetry.Logger,
+) ([]workItem, error) {
+	write := 0
+	for _, item := range pending {
+		if pendingItemExpired(item, ackGrace, now) {
+			if err := ackStalePending(ctx, acks, item); err != nil {
+				return pending[:write], err
+			}
+			logger.Debug(
+				ctx,
+				"dropped stale pending tool call",
+				"component", "tool-registry-provider",
+				"tool_use_id", item.msg.ToolUseID,
+				"tool", item.msg.Tool,
+				"event_id", item.ev.ID,
+				"ack_grace", ackGrace.String(),
+			)
+			continue
+		}
 		select {
-		case work <- pending[0]:
-			pending = pending[1:]
+		case work <- item:
+			continue
 		default:
-			return pending
+			pending[write] = item
+			write++
 		}
 	}
-	return pending
+	clear(pending[write:])
+	return pending[:write], nil
+}
+
+func ackStalePending(ctx context.Context, acks chan<- *streaming.Event, item workItem) error {
+	if item.ev == nil {
+		return nil
+	}
+	select {
+	case acks <- item.ev:
+		return nil
+	case <-ctx.Done():
+		return nil
+	default:
+		return fmt.Errorf("ack queue full")
+	}
+}
+
+func pendingItemExpired(item workItem, ackGrace time.Duration, now time.Time) bool {
+	if ackGrace <= 0 || item.ev == nil {
+		return false
+	}
+	eventTime, ok := eventIDTime(item.ev.ID)
+	if !ok {
+		return false
+	}
+	return now.Sub(eventTime) > ackGrace
+}
+
+func eventIDTime(id string) (time.Time, bool) {
+	msPart, _, ok := strings.Cut(id, "-")
+	if !ok || msPart == "" {
+		return time.Time{}, false
+	}
+	ms, err := strconv.ParseInt(msPart, 10, 64)
+	if err != nil || ms <= 0 {
+		return time.Time{}, false
+	}
+	return time.UnixMilli(ms), true
 }
 
 func handleSubscribedEvent(ctx context.Context, sink pulseclients.Sink, ev *streaming.Event, deps pendingDeps) (bool, error) {
