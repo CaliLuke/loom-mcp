@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"sync/atomic"
 	"time"
 
 	streamopts "github.com/CaliLuke/loom/pulse/streaming/options"
@@ -34,10 +35,11 @@ type (
 	// a Pulse sink (consumer group) and decodes incoming payloads into stream.Event
 	// values.
 	Subscriber struct {
-		client clientspulse.Client
-		buffer int
-		name   string
-		decode EnvelopeDecoder
+		client  clientspulse.Client
+		buffer  int
+		name    string
+		decode  EnvelopeDecoder
+		dropped atomic.Uint64
 	}
 	// decodedEvent implements stream.Event for Pulse-decoded envelopes.
 	decodedEvent struct {
@@ -87,6 +89,14 @@ func NewSubscriber(opts SubscriberOptions) (*Subscriber, error) {
 // payloads, and emits stream events. The returned cancel function stops
 // consumption, closes the sink, and closes both channels.
 //
+// Errs channel contract: errs has a buffer of one and error delivery never
+// blocks event consumption, so draining errs is optional. Non-terminal decode
+// errors are offered best-effort and dropped when the buffer is full; drops
+// are counted and exposed via DroppedErrors. Terminal errors (ack failures)
+// evict any pending undelivered decode error so the terminal cause is always
+// delivered, after which both channels are closed — a consumer that only
+// ranges over events still observes termination.
+//
 // Usage:
 //
 //	events, errs, cancel, err := sub.Subscribe(ctx, "session/abc123")
@@ -120,12 +130,21 @@ func (s *Subscriber) Subscribe(
 	return events, errs, cancelFunc, nil
 }
 
+// DroppedErrors reports how many errors were dropped because the errs channel
+// buffer was full at delivery time. The count aggregates across all
+// subscriptions opened from this Subscriber and only ever grows.
+func (s *Subscriber) DroppedErrors() uint64 {
+	return s.dropped.Load()
+}
+
 // consume reads events from the Pulse sink channel, decodes them, and emits them
 // on the out channel. It acks each event after successful emission, and also
 // acks undecodable poison messages so one bad payload cannot halt the stream.
 // Closes both channels when ctx is canceled or when the sink channel closes.
-// Ack failures are terminal because the sink cannot safely advance.
-func (s *Subscriber) consume(ctx context.Context, sink clientspulse.Sink, out chan<- stream.Event, errs chan<- error, done chan<- struct{}) {
+// Ack failures are terminal because the sink cannot safely advance. Error
+// delivery never blocks, so consumers that only drain the out channel keep
+// receiving events even when errs is never read.
+func (s *Subscriber) consume(ctx context.Context, sink clientspulse.Sink, out chan<- stream.Event, errs chan error, done chan<- struct{}) {
 	defer close(done)
 	defer close(out)
 	defer close(errs)
@@ -141,12 +160,10 @@ func (s *Subscriber) consume(ctx context.Context, sink clientspulse.Sink, out ch
 			decoded, err := s.decode(evt.Payload)
 			if err != nil {
 				if ackErr := sink.Ack(ctx, evt); ackErr != nil {
-					reportConsumeError(ctx, errs, fmt.Errorf("pulse ack: %w", ackErr))
+					s.reportTerminalError(errs, fmt.Errorf("pulse ack: %w", ackErr))
 					return
 				}
-				if !reportConsumeError(ctx, errs, fmt.Errorf("pulse decode payload: %w", err)) {
-					return
-				}
+				s.reportDecodeError(errs, fmt.Errorf("pulse decode payload: %w", err))
 				continue
 			}
 			select {
@@ -155,20 +172,40 @@ func (s *Subscriber) consume(ctx context.Context, sink clientspulse.Sink, out ch
 				return
 			}
 			if ackErr := sink.Ack(ctx, evt); ackErr != nil {
-				reportConsumeError(ctx, errs, fmt.Errorf("pulse ack: %w", ackErr))
+				s.reportTerminalError(errs, fmt.Errorf("pulse ack: %w", ackErr))
 				return
 			}
 		}
 	}
 }
 
-func reportConsumeError(ctx context.Context, errs chan<- error, err error) bool {
+// reportDecodeError offers a non-terminal decode error on errs without ever
+// blocking consumption. When the buffer is full the error is dropped and
+// counted so droppage stays observable via DroppedErrors.
+func (s *Subscriber) reportDecodeError(errs chan<- error, err error) {
 	select {
 	case errs <- err:
-		return true
-	case <-ctx.Done():
-		return false
+	default:
+		s.dropped.Add(1)
 	}
+}
+
+// reportTerminalError delivers a terminal error on errs without blocking. If
+// the buffer is full it evicts the pending undelivered error (counting it as
+// dropped) so the terminal cause always reaches the consumer. The consume
+// goroutine is the sole sender, so after eviction the send cannot block.
+func (s *Subscriber) reportTerminalError(errs chan error, err error) {
+	select {
+	case errs <- err:
+		return
+	default:
+	}
+	select {
+	case <-errs:
+		s.dropped.Add(1)
+	default:
+	}
+	errs <- err
 }
 
 // decodeEnvelope deserializes the default JSON envelope format and extracts the

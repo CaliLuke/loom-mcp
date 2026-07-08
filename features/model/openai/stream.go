@@ -268,7 +268,7 @@ func (p *openAIChunkProcessor) emitToolCallDelta(buffer *streamToolBuffer, delta
 	return p.emit(model.Chunk{
 		Type: model.ChunkTypeToolCallDelta,
 		ToolCallDelta: &model.ToolCallDelta{
-			Name:  tools.Ident(buffer.name),
+			Name:  tools.Ident(p.codec.canonicalName(buffer.name)),
 			ID:    buffer.callID,
 			Delta: delta,
 		},

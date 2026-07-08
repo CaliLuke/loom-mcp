@@ -118,7 +118,7 @@ func NewFromAPIKey(apiKey, defaultModel string) (*Client, error) {
 // Complete issues a non-streaming Messages.New request and translates the
 // response into planner-friendly structures (assistant messages + tool calls).
 func (c *Client) Complete(ctx context.Context, req *model.Request) (*model.Response, error) {
-	params, provToCanon, err := c.prepareRequest(ctx, req)
+	params, provToCanon, toolUseIDs, err := c.prepareRequest(ctx, req)
 	if err != nil {
 		return nil, err
 	}
@@ -129,13 +129,13 @@ func (c *Client) Complete(ctx context.Context, req *model.Request) (*model.Respo
 		}
 		return nil, fmt.Errorf("anthropic messages.new: %w", err)
 	}
-	return translateResponse(msg, provToCanon)
+	return translateResponse(msg, provToCanon, toolUseIDs)
 }
 
 // Stream invokes Messages.NewStreaming and adapts incremental events into
 // model.Chunks so planners can surface partial responses.
 func (c *Client) Stream(ctx context.Context, req *model.Request) (model.Streamer, error) {
-	params, provToCanon, err := c.prepareRequest(ctx, req)
+	params, provToCanon, toolUseIDs, err := c.prepareRequest(ctx, req)
 	if err != nil {
 		return nil, err
 	}
@@ -146,33 +146,34 @@ func (c *Client) Stream(ctx context.Context, req *model.Request) (model.Streamer
 		}
 		return nil, fmt.Errorf("anthropic messages.new stream: %w", err)
 	}
-	return newAnthropicStreamer(ctx, stream, provToCanon), nil
+	return newAnthropicStreamer(ctx, stream, provToCanon, toolUseIDs), nil
 }
 
-func (c *Client) prepareRequest(ctx context.Context, req *model.Request) (*sdk.MessageNewParams, map[string]string, error) {
+func (c *Client) prepareRequest(ctx context.Context, req *model.Request) (*sdk.MessageNewParams, map[string]string, *toolUseIDCodec, error) {
 	if req.StructuredOutput != nil {
-		return nil, nil, fmt.Errorf("anthropic: structured output is not supported: %w", model.ErrStructuredOutputUnsupported)
+		return nil, nil, nil, fmt.Errorf("anthropic: structured output is not supported: %w", model.ErrStructuredOutputUnsupported)
 	}
 	modelID, maxTokens, err := c.validateRequestInputs(req)
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, nil, err
 	}
 	tools, canonToProv, provToCanon, err := encodeTools(ctx, req.Tools)
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, nil, err
 	}
-	msgs, system, err := encodeMessages(req.Messages, canonToProv)
+	toolUseIDs := newToolUseIDCodec()
+	msgs, system, err := encodeMessages(req.Messages, canonToProv, toolUseIDs)
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, nil, err
 	}
 	params := c.newMessageParams(ctx, modelID, maxTokens, msgs, system, tools, req.Temperature)
 	if err := c.applyThinkingConfig(&params, req, maxTokens); err != nil {
-		return nil, nil, err
+		return nil, nil, nil, err
 	}
 	if err := applyAnthropicToolChoice(&params, req, canonToProv); err != nil {
-		return nil, nil, err
+		return nil, nil, nil, err
 	}
-	return &params, provToCanon, nil
+	return &params, provToCanon, toolUseIDs, nil
 }
 
 func (c *Client) validateRequestInputs(req *model.Request) (string, int, error) {
@@ -295,7 +296,7 @@ func (c *Client) effectiveTemperature(requested float32) float64 {
 	return c.temp
 }
 
-func encodeMessages(msgs []*model.Message, nameMap map[string]string) ([]sdk.MessageParam, []sdk.TextBlockParam, error) {
+func encodeMessages(msgs []*model.Message, nameMap map[string]string, toolUseIDs *toolUseIDCodec) ([]sdk.MessageParam, []sdk.TextBlockParam, error) {
 	conversation := make([]sdk.MessageParam, 0, len(msgs))
 	system := make([]sdk.TextBlockParam, 0, len(msgs))
 
@@ -311,7 +312,7 @@ func encodeMessages(msgs []*model.Message, nameMap map[string]string) ([]sdk.Mes
 			system = append(system, blocks...)
 			continue
 		}
-		blocks, err := anthropicMessageBlocks(m.Role, m.Parts, nameMap)
+		blocks, err := anthropicMessageBlocks(m.Role, m.Parts, nameMap, toolUseIDs)
 		if err != nil {
 			return nil, nil, err
 		}
@@ -342,6 +343,10 @@ func systemTextBlocks(parts []model.Part) ([]sdk.TextBlockParam, error) {
 			if v.Text != "" {
 				blocks = append(blocks, sdk.TextBlockParam{Text: v.Text})
 			}
+		case model.CacheCheckpointPart:
+			// This adapter has no prompt-caching support; the CacheCheckpointPart
+			// contract requires such providers to ignore the part.
+			continue
 		default:
 			return nil, fmt.Errorf("anthropic: unsupported system message part %T", p)
 		}
@@ -349,10 +354,10 @@ func systemTextBlocks(parts []model.Part) ([]sdk.TextBlockParam, error) {
 	return blocks, nil
 }
 
-func anthropicMessageBlocks(role model.ConversationRole, parts []model.Part, nameMap map[string]string) ([]sdk.ContentBlockParamUnion, error) {
+func anthropicMessageBlocks(role model.ConversationRole, parts []model.Part, nameMap map[string]string, toolUseIDs *toolUseIDCodec) ([]sdk.ContentBlockParamUnion, error) {
 	blocks := make([]sdk.ContentBlockParamUnion, 0, len(parts))
 	for _, part := range parts {
-		block, ok, err := anthropicMessageBlock(role, part, nameMap)
+		block, ok, err := anthropicMessageBlock(role, part, nameMap, toolUseIDs)
 		if err != nil {
 			return nil, err
 		}
@@ -363,7 +368,7 @@ func anthropicMessageBlocks(role model.ConversationRole, parts []model.Part, nam
 	return blocks, nil
 }
 
-func anthropicMessageBlock(role model.ConversationRole, part model.Part, nameMap map[string]string) (sdk.ContentBlockParamUnion, bool, error) {
+func anthropicMessageBlock(role model.ConversationRole, part model.Part, nameMap map[string]string, toolUseIDs *toolUseIDCodec) (sdk.ContentBlockParamUnion, bool, error) {
 	if v, ok := part.(model.TextPart); ok {
 		if v.Text == "" {
 			return sdk.ContentBlockParamUnion{}, false, nil
@@ -381,16 +386,21 @@ func anthropicMessageBlock(role model.ConversationRole, part model.Part, nameMap
 		return block, ok, nil
 	}
 	if v, ok := part.(model.ToolUsePart); ok {
-		block, err := anthropicToolUseBlock(v, nameMap)
+		block, err := anthropicToolUseBlock(v, nameMap, toolUseIDs)
 		return block, err == nil, err
 	}
 	if v, ok := part.(model.ToolResultPart); ok {
-		block, err := encodeToolResult(v)
+		block, err := encodeToolResult(v, toolUseIDs)
 		return block, err == nil, err
 	}
 	if v, ok := part.(model.ImagePart); ok {
 		block, err := anthropicImageBlock(role, v)
 		return block, err == nil, err
+	}
+	if _, ok := part.(model.CacheCheckpointPart); ok {
+		// This adapter has no prompt-caching support; the CacheCheckpointPart
+		// contract requires such providers to ignore the part.
+		return sdk.ContentBlockParamUnion{}, false, nil
 	}
 	return sdk.ContentBlockParamUnion{}, false, fmt.Errorf("anthropic: unsupported message part %T", part)
 }
@@ -434,18 +444,19 @@ func anthropicImageMIMEType(format model.ImageFormat) (string, error) {
 	}
 }
 
-func anthropicToolUseBlock(v model.ToolUsePart, nameMap map[string]string) (sdk.ContentBlockParamUnion, error) {
+func anthropicToolUseBlock(v model.ToolUsePart, nameMap map[string]string, toolUseIDs *toolUseIDCodec) (sdk.ContentBlockParamUnion, error) {
 	if v.Name == "" {
 		return sdk.ContentBlockParamUnion{}, errors.New("anthropic: tool_use part missing name")
 	}
+	id := toolUseIDs.encode(v.ID)
 	if sanitized, ok := nameMap[v.Name]; ok && sanitized != "" {
-		return sdk.NewToolUseBlock(v.ID, v.Input, sanitized), nil
+		return sdk.NewToolUseBlock(id, v.Input, sanitized), nil
 	}
 	sanitized, err := anthropicUnavailableToolName(nameMap, v.Name)
 	if err != nil {
 		return sdk.ContentBlockParamUnion{}, err
 	}
-	return sdk.NewToolUseBlock(v.ID, map[string]any{
+	return sdk.NewToolUseBlock(id, map[string]any{
 		"requested_tool":    v.Name,
 		"requested_payload": v.Input,
 	}, sanitized), nil
@@ -474,7 +485,7 @@ func anthropicConversationMessage(role model.ConversationRole, blocks []sdk.Cont
 	}
 }
 
-func encodeToolResult(v model.ToolResultPart) (sdk.ContentBlockParamUnion, error) {
+func encodeToolResult(v model.ToolResultPart, toolUseIDs *toolUseIDCodec) (sdk.ContentBlockParamUnion, error) {
 	var content string
 	switch c := v.Content.(type) {
 	case nil:
@@ -490,7 +501,7 @@ func encodeToolResult(v model.ToolResultPart) (sdk.ContentBlockParamUnion, error
 		}
 		content = string(data)
 	}
-	return sdk.NewToolResultBlock(v.ToolUseID, content, v.IsError), nil
+	return sdk.NewToolResultBlock(toolUseIDs.encode(v.ToolUseID), content, v.IsError), nil
 }
 
 func encodeTools(ctx context.Context, defs []*model.ToolDefinition) ([]sdk.ToolUnionParam, map[string]string, map[string]string, error) {
@@ -675,17 +686,17 @@ func isRateLimited(err error) bool {
 	return errors.As(err, &apiErr) && apiErr.StatusCode == http.StatusTooManyRequests
 }
 
-func translateResponse(msg *sdk.Message, nameMap map[string]string) (*model.Response, error) {
+func translateResponse(msg *sdk.Message, nameMap map[string]string, toolUseIDs *toolUseIDCodec) (*model.Response, error) {
 	if msg == nil {
 		return nil, errors.New("anthropic: response message is nil")
 	}
-	resp := translateResponseContent(msg.Content, nameMap)
+	resp := translateResponseContent(msg.Content, nameMap, toolUseIDs)
 	resp.Usage = anthropicUsage(msg.Usage)
 	resp.StopReason = string(msg.StopReason)
 	return resp, nil
 }
 
-func translateResponseContent(blocks []sdk.ContentBlockUnion, nameMap map[string]string) *model.Response {
+func translateResponseContent(blocks []sdk.ContentBlockUnion, nameMap map[string]string, toolUseIDs *toolUseIDCodec) *model.Response {
 	resp := &model.Response{}
 	parts := make([]model.Part, 0, len(blocks))
 	for _, block := range blocks {
@@ -697,7 +708,7 @@ func translateResponseContent(blocks []sdk.ContentBlockUnion, nameMap map[string
 		case "redacted_thinking":
 			appendAnthropicRedactedThinking(&parts, block.AsRedactedThinking())
 		case "tool_use":
-			resp.ToolCalls = append(resp.ToolCalls, anthropicToolCall(block, nameMap))
+			resp.ToolCalls = append(resp.ToolCalls, anthropicToolCall(block, nameMap, toolUseIDs))
 		}
 	}
 	if len(parts) > 0 {
@@ -737,11 +748,11 @@ func appendAnthropicRedactedThinking(parts *[]model.Part, block sdk.RedactedThin
 	})
 }
 
-func anthropicToolCall(block sdk.ContentBlockUnion, nameMap map[string]string) model.ToolCall {
+func anthropicToolCall(block sdk.ContentBlockUnion, nameMap map[string]string, toolUseIDs *toolUseIDCodec) model.ToolCall {
 	return model.ToolCall{
 		Name:    tools.Ident(resolveAnthropicToolName(block.Name, nameMap)),
 		Payload: rawjson.Message(block.Input),
-		ID:      block.ID,
+		ID:      toolUseIDs.decode(block.ID),
 	}
 }
 

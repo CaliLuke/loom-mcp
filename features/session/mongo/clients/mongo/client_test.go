@@ -95,7 +95,9 @@ func TestUpsertAndLoad(t *testing.T) {
 	require.Equal(t, run.Status, stored.Status)
 	require.Equal(t, "demo", stored.Labels["org"])
 	require.Equal(t, []prompt.PromptRef{{ID: prompt.Ident("prompt.a"), Version: "v1"}}, stored.PromptRefs)
-	require.Equal(t, []string{testRunTwo, testRunThree}, stored.ChildRunIDs)
+	// child_run_ids is exclusively managed by LinkChildRun; UpsertRun must
+	// ignore caller-provided ChildRunIDs.
+	require.Empty(t, stored.ChildRunIDs)
 
 	run.Status = session.RunStatusCompleted
 	err = client.UpsertRun(context.Background(), run)
@@ -138,6 +140,69 @@ func TestLinkChildRun(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, testChildAgent, child.AgentID)
 	require.Equal(t, session.RunStatusPending, child.Status)
+}
+
+func TestUpsertRunDoesNotClobberLinkedChildren(t *testing.T) {
+	client := mustNewTestClient()
+	now := time.Now().UTC()
+	require.NoError(t, client.UpsertRun(context.Background(), session.RunMeta{
+		RunID:     "run-parent",
+		AgentID:   "agent.parent",
+		SessionID: testSessionID,
+		Status:    session.RunStatusRunning,
+		StartedAt: now,
+		UpdatedAt: now,
+	}))
+
+	// Simulate a hook handler's load-modify-write: it loads the parent before
+	// any child is linked...
+	stale, err := client.LoadRun(context.Background(), "run-parent")
+	require.NoError(t, err)
+	require.Empty(t, stale.ChildRunIDs)
+
+	// ...then LinkChildRun commits a child concurrently...
+	require.NoError(t, client.LinkChildRun(context.Background(), "run-parent", session.RunMeta{
+		RunID:     testChildRun,
+		AgentID:   testChildAgent,
+		SessionID: testSessionID,
+		Status:    session.RunStatusPending,
+	}))
+
+	// ...and the hook writes back its stale snapshot. The link must survive.
+	stale.Status = session.RunStatusCompleted
+	require.NoError(t, client.UpsertRun(context.Background(), stale))
+
+	parent, err := client.LoadRun(context.Background(), "run-parent")
+	require.NoError(t, err)
+	require.Equal(t, session.RunStatusCompleted, parent.Status)
+	require.Equal(t, []string{testChildRun}, parent.ChildRunIDs)
+}
+
+func TestLinkChildRunIsIdempotent(t *testing.T) {
+	client := mustNewTestClient()
+	now := time.Now().UTC()
+	require.NoError(t, client.UpsertRun(context.Background(), session.RunMeta{
+		RunID:     "run-parent",
+		AgentID:   "agent.parent",
+		SessionID: testSessionID,
+		Status:    session.RunStatusRunning,
+		StartedAt: now,
+		UpdatedAt: now,
+	}))
+
+	child := session.RunMeta{
+		RunID:     testChildRun,
+		AgentID:   testChildAgent,
+		SessionID: testSessionID,
+		Status:    session.RunStatusPending,
+	}
+	for range 3 {
+		require.NoError(t, client.LinkChildRun(context.Background(), "run-parent", child))
+	}
+
+	parent, err := client.LoadRun(context.Background(), "run-parent")
+	require.NoError(t, err)
+	require.Equal(t, []string{testChildRun}, parent.ChildRunIDs)
 }
 
 func TestLinkChildRunValidationError(t *testing.T) {
@@ -296,12 +361,21 @@ func (c *fakeRunsCollection) UpdateOne(ctx context.Context, filter any, update a
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	runID := filter.(bson.M)["run_id"].(string)
+	updateOpts, err := applyTestOptions[options.UpdateOneOptions](opts...)
+	if err != nil {
+		return nil, err
+	}
+	upsert := updateOpts.Upsert != nil && *updateOpts.Upsert
 	doc, ok := c.docs[runID]
 	if !ok {
+		if !upsert {
+			return &mongodriver.UpdateResult{MatchedCount: 0}, nil
+		}
 		doc = runDocument{}
 	}
 	up := update.(bson.M)
 	switch set := up["$set"].(type) {
+	case nil:
 	case runDocument:
 		doc = set
 	case bson.M:
@@ -335,6 +409,13 @@ func (c *fakeRunsCollection) UpdateOne(ctx context.Context, filter any, update a
 	default:
 		return nil, errors.New("unsupported $set payload")
 	}
+	if add, ok := up["$addToSet"].(bson.M); ok {
+		v, ok := add["child_run_ids"].(string)
+		if !ok {
+			return nil, errors.New("unsupported $addToSet payload")
+		}
+		doc.ChildRunIDs = addUniqueChildRunID(doc.ChildRunIDs, v)
+	}
 	if soi, ok := up["$setOnInsert"].(bson.M); ok && doc.StartedAt.IsZero() {
 		if ts, ok := soi["started_at"].(time.Time); ok {
 			doc.StartedAt = ts
@@ -342,6 +423,17 @@ func (c *fakeRunsCollection) UpdateOne(ctx context.Context, filter any, update a
 	}
 	c.docs[runID] = doc
 	return &mongodriver.UpdateResult{MatchedCount: 1}, nil
+}
+
+// addUniqueChildRunID mirrors Mongo $addToSet semantics for the fake runs
+// collection: the value is appended only when not already present.
+func addUniqueChildRunID(runIDs []string, runID string) []string {
+	for _, current := range runIDs {
+		if current == runID {
+			return runIDs
+		}
+	}
+	return append(runIDs, runID)
 }
 
 func (c *fakeRunsCollection) Indexes() indexView {

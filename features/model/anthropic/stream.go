@@ -33,9 +33,10 @@ type anthropicStreamer struct {
 	metadata map[string]any
 
 	toolNameMap map[string]string
+	toolUseIDs  *toolUseIDCodec
 }
 
-func newAnthropicStreamer(ctx context.Context, stream *ssestream.Stream[sdk.MessageStreamEventUnion], nameMap map[string]string) model.Streamer {
+func newAnthropicStreamer(ctx context.Context, stream *ssestream.Stream[sdk.MessageStreamEventUnion], nameMap map[string]string, toolUseIDs *toolUseIDCodec) model.Streamer {
 	cctx, cancel := context.WithCancel(ctx)
 	as := &anthropicStreamer{
 		ctx:         cctx,
@@ -43,6 +44,7 @@ func newAnthropicStreamer(ctx context.Context, stream *ssestream.Stream[sdk.Mess
 		stream:      stream,
 		chunks:      make(chan model.Chunk, 32),
 		toolNameMap: nameMap,
+		toolUseIDs:  toolUseIDs,
 	}
 	go as.run()
 	return as
@@ -101,7 +103,7 @@ func (s *anthropicStreamer) run() {
 		}
 	}()
 
-	processor := newAnthropicChunkProcessor(s.emitChunk, s.recordUsage, s.toolNameMap)
+	processor := newAnthropicChunkProcessor(s.emitChunk, s.recordUsage, s.toolNameMap, s.toolUseIDs)
 
 	for {
 		select {
@@ -171,17 +173,19 @@ type anthropicChunkProcessor struct {
 	thinkingBlocks map[int]*thinkingBuffer
 
 	toolNameMap map[string]string
+	toolUseIDs  *toolUseIDCodec
 
 	stopReason string
 }
 
-func newAnthropicChunkProcessor(emit func(model.Chunk) error, recordUsage func(model.TokenUsage), nameMap map[string]string) *anthropicChunkProcessor {
+func newAnthropicChunkProcessor(emit func(model.Chunk) error, recordUsage func(model.TokenUsage), nameMap map[string]string, toolUseIDs *toolUseIDCodec) *anthropicChunkProcessor {
 	return &anthropicChunkProcessor{
 		emit:           emit,
 		recordUsage:    recordUsage,
 		toolBlocks:     make(map[int]*toolBuffer),
 		thinkingBlocks: make(map[int]*thinkingBuffer),
 		toolNameMap:    nameMap,
+		toolUseIDs:     toolUseIDs,
 	}
 }
 
@@ -267,7 +271,7 @@ func (p *anthropicChunkProcessor) newToolBuffer(toolUse sdk.ToolUseBlock) (*tool
 	if toolUse.Name == "" {
 		return nil, fmt.Errorf("anthropic stream: tool use block %q missing name", toolUse.ID)
 	}
-	tb := &toolBuffer{id: toolUse.ID}
+	tb := &toolBuffer{id: p.toolUseIDs.decode(toolUse.ID)}
 	if canonical, ok := p.toolNameMap[toolUse.Name]; ok {
 		tb.name = canonical
 	} else {

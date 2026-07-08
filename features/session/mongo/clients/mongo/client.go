@@ -25,6 +25,7 @@ const (
 	defaultOpTimeout          = 5 * time.Second
 	sessionClientName         = "session-mongo"
 	fieldAgentID              = "agent_id"
+	fieldChildRunIDs          = "child_run_ids"
 	fieldRunID                = "run_id"
 	fieldSessionID            = "session_id"
 	fieldStatus               = "status"
@@ -182,6 +183,13 @@ func (c *client) EndSession(ctx context.Context, sessionID string, endedAt time.
 	return c.LoadSession(ctx, sessionID)
 }
 
+// UpsertRun inserts or updates run metadata.
+//
+// child_run_ids is intentionally excluded from the update: parent-child links
+// are exclusively managed by LinkChildRun via $addToSet, so callers doing
+// load-modify-write (for example runtime hook handlers) can never erase links
+// committed concurrently by LinkChildRun. Any RunMeta.ChildRunIDs value passed
+// here is ignored; no caller creates runs with pre-populated child links.
 func (c *client) UpsertRun(ctx context.Context, run session.RunMeta) error {
 	if run.RunID == "" {
 		return errors.New("run id is required")
@@ -204,15 +212,14 @@ func (c *client) UpsertRun(ctx context.Context, run session.RunMeta) error {
 	filter := bson.M{fieldRunID: run.RunID}
 	update := bson.M{
 		"$set": bson.M{
-			fieldRunID:      doc.RunID,
-			fieldAgentID:    doc.AgentID,
-			fieldSessionID:  doc.SessionID,
-			fieldStatus:     doc.Status,
-			fieldUpdatedAt:  doc.UpdatedAt,
-			"labels":        doc.Labels,
-			"prompt_refs":   doc.PromptRefs,
-			"child_run_ids": doc.ChildRunIDs,
-			"metadata":      doc.Metadata,
+			fieldRunID:     doc.RunID,
+			fieldAgentID:   doc.AgentID,
+			fieldSessionID: doc.SessionID,
+			fieldStatus:    doc.Status,
+			fieldUpdatedAt: doc.UpdatedAt,
+			"labels":       doc.Labels,
+			"prompt_refs":  doc.PromptRefs,
+			"metadata":     doc.Metadata,
 		},
 		"$setOnInsert": bson.M{
 			"started_at": doc.StartedAt,
@@ -248,6 +255,8 @@ func (c *client) LinkChildRun(ctx context.Context, parentRunID string, child ses
 //   - Parent run must already exist.
 //   - Parent and child runs must belong to the same session.
 //   - Child run materialization and parent-child linkage are both persisted.
+//   - The parent link is applied with $addToSet, so linking is idempotent and
+//     never rewrites the full child_run_ids array.
 func (c *client) linkChildRun(ctx context.Context, parentRunID string, child session.RunMeta) error {
 	parent, err := c.LoadRun(ctx, parentRunID)
 	if err != nil {
@@ -274,8 +283,28 @@ func (c *client) linkChildRun(ctx context.Context, parentRunID string, child ses
 		return err
 	}
 
-	parent.ChildRunIDs = appendUniqueRunID(parent.ChildRunIDs, child.RunID)
-	return c.UpsertRun(ctx, parent)
+	return c.addChildRunLink(ctx, parentRunID, child.RunID)
+}
+
+// addChildRunLink appends childRunID to the parent's child_run_ids atomically
+// via $addToSet. It fails with session.ErrRunNotFound when the parent run no
+// longer exists.
+func (c *client) addChildRunLink(ctx context.Context, parentRunID, childRunID string) error {
+	ctx, cancel := c.withTimeout(ctx)
+	defer cancel()
+	filter := bson.M{fieldRunID: parentRunID}
+	update := bson.M{
+		"$addToSet": bson.M{fieldChildRunIDs: childRunID},
+		"$set":      bson.M{fieldUpdatedAt: time.Now().UTC()},
+	}
+	res, err := c.runs.UpdateOne(ctx, filter, update)
+	if err != nil {
+		return err
+	}
+	if res.MatchedCount == 0 {
+		return session.ErrRunNotFound
+	}
+	return nil
 }
 
 func (c *client) LoadRun(ctx context.Context, runID string) (session.RunMeta, error) {
@@ -434,15 +463,6 @@ func cloneChildRunIDs(src []string) []string {
 	dst := make([]string, len(src))
 	copy(dst, src)
 	return dst
-}
-
-func appendUniqueRunID(runIDs []string, runID string) []string {
-	for _, current := range runIDs {
-		if current == runID {
-			return runIDs
-		}
-	}
-	return append(runIDs, runID)
 }
 
 func ensureIndexes(ctx context.Context, sessionsColl, runsColl collection) error {

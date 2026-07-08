@@ -5,6 +5,9 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+
 	"github.com/CaliLuke/loom-mcp/runtime/agent/model"
 	"github.com/CaliLuke/loom-mcp/runtime/agent/tools"
 )
@@ -22,7 +25,7 @@ func TestEncodeMessages_EncodesCitationsPartText(t *testing.T) {
 				},
 			},
 		},
-	}, nil)
+	}, nil, newToolUseIDCodec())
 	if err != nil {
 		t.Fatalf("encodeMessages error: %v", err)
 	}
@@ -49,7 +52,7 @@ func TestEncodeMessages_EncodesImagePart(t *testing.T) {
 				model.ImagePart{Format: model.ImageFormatPNG, Bytes: []byte("png")},
 			},
 		},
-	}, nil)
+	}, nil, newToolUseIDCodec())
 	if err != nil {
 		t.Fatalf("encodeMessages error: %v", err)
 	}
@@ -83,7 +86,7 @@ func TestEncodeMessages_EncodesThinkingParts(t *testing.T) {
 				model.ThinkingPart{Redacted: []byte("opaque-redacted")},
 			},
 		},
-	}, nil)
+	}, nil, newToolUseIDCodec())
 	if err != nil {
 		t.Fatalf("encodeMessages error: %v", err)
 	}
@@ -110,6 +113,130 @@ func TestEncodeMessages_EncodesThinkingParts(t *testing.T) {
 	}
 }
 
+func TestEncodeMessages_PartSkipContract(t *testing.T) {
+	tests := []struct {
+		name             string
+		messages         []*model.Message
+		wantConversation int
+		wantBlocks       int
+		wantSystem       int
+		wantErr          string
+	}{
+		{
+			name: "user cache checkpoint is ignored",
+			messages: []*model.Message{
+				{
+					Role: model.ConversationRoleUser,
+					Parts: []model.Part{
+						model.TextPart{Text: "hi"},
+						model.CacheCheckpointPart{},
+					},
+				},
+			},
+			wantConversation: 1,
+			wantBlocks:       1,
+		},
+		{
+			name: "checkpoint-only message is dropped",
+			messages: []*model.Message{
+				{
+					Role:  model.ConversationRoleUser,
+					Parts: []model.Part{model.CacheCheckpointPart{}},
+				},
+				{
+					Role:  model.ConversationRoleUser,
+					Parts: []model.Part{model.TextPart{Text: "hi"}},
+				},
+			},
+			wantConversation: 1,
+			wantBlocks:       1,
+		},
+		{
+			name: "system cache checkpoint is ignored",
+			messages: []*model.Message{
+				{
+					Role: model.ConversationRoleSystem,
+					Parts: []model.Part{
+						model.TextPart{Text: "be brief"},
+						model.CacheCheckpointPart{},
+					},
+				},
+				{
+					Role:  model.ConversationRoleUser,
+					Parts: []model.Part{model.TextPart{Text: "hi"}},
+				},
+			},
+			wantConversation: 1,
+			wantBlocks:       1,
+			wantSystem:       1,
+		},
+		{
+			name: "signed thinking survives alongside checkpoint",
+			messages: []*model.Message{
+				{
+					Role: model.ConversationRoleAssistant,
+					Parts: []model.Part{
+						model.ThinkingPart{Text: "private reasoning", Signature: "sig"},
+						model.CacheCheckpointPart{},
+						model.TextPart{Text: "answer"},
+					},
+				},
+			},
+			wantConversation: 1,
+			wantBlocks:       2,
+		},
+		{
+			name: "unsupported part still errors",
+			messages: []*model.Message{
+				{
+					Role: model.ConversationRoleUser,
+					Parts: []model.Part{
+						model.CacheCheckpointPart{},
+						model.DocumentPart{Name: "spec", Format: model.DocumentFormatTXT, Text: "hello"},
+					},
+				},
+			},
+			wantErr: "anthropic: unsupported message part model.DocumentPart",
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			conversation, system, err := encodeMessages(tt.messages, nil, newToolUseIDCodec())
+			if tt.wantErr != "" {
+				require.Error(t, err)
+				assert.Contains(t, err.Error(), tt.wantErr)
+				return
+			}
+			require.NoError(t, err)
+			require.Len(t, conversation, tt.wantConversation)
+			assert.Len(t, conversation[0].Content, tt.wantBlocks)
+			assert.Len(t, system, tt.wantSystem)
+		})
+	}
+}
+
+func TestEncodeMessages_SignedThinkingRoundTripsWithCheckpoint(t *testing.T) {
+	conversation, _, err := encodeMessages([]*model.Message{
+		{
+			Role: model.ConversationRoleAssistant,
+			Parts: []model.Part{
+				model.ThinkingPart{Text: "private reasoning", Signature: "sig"},
+				model.CacheCheckpointPart{},
+			},
+		},
+	}, nil, newToolUseIDCodec())
+	require.NoError(t, err)
+	require.Len(t, conversation, 1)
+	require.Len(t, conversation[0].Content, 1)
+
+	data, err := json.Marshal(conversation[0].Content)
+	require.NoError(t, err)
+	got := string(data)
+	assert.Contains(t, got, `"type":"thinking"`)
+	assert.Contains(t, got, `"thinking":"private reasoning"`)
+	assert.Contains(t, got, `"signature":"sig"`)
+}
+
 func TestEncodeMessages_RejectsDocumentPart(t *testing.T) {
 	_, _, err := encodeMessages([]*model.Message{
 		{
@@ -118,7 +245,7 @@ func TestEncodeMessages_RejectsDocumentPart(t *testing.T) {
 				model.DocumentPart{Name: "spec", Format: model.DocumentFormatTXT, Text: "hello"},
 			},
 		},
-	}, nil)
+	}, nil, newToolUseIDCodec())
 	if err == nil {
 		t.Fatal("encodeMessages returned nil error")
 	}
@@ -139,7 +266,7 @@ func TestEncodeMessages_RejectsUnsupportedSystemPart(t *testing.T) {
 			Role:  model.ConversationRoleUser,
 			Parts: []model.Part{model.TextPart{Text: "hi"}},
 		},
-	}, nil)
+	}, nil, newToolUseIDCodec())
 	if err == nil {
 		t.Fatal("encodeMessages returned nil error")
 	}
@@ -173,7 +300,7 @@ func TestEncodeMessages_RewritesUnknownToolUseToToolUnavailable(t *testing.T) {
 				},
 			},
 		},
-	}, nameMap)
+	}, nameMap, newToolUseIDCodec())
 	if err != nil {
 		t.Fatalf("encodeMessages error: %v", err)
 	}
@@ -190,7 +317,7 @@ func TestEncodeMessages_ReturnsToolResultMarshalError(t *testing.T) {
 				},
 			},
 		},
-	}, nil)
+	}, nil, newToolUseIDCodec())
 	if err == nil {
 		t.Fatal("encodeMessages returned nil error")
 	}

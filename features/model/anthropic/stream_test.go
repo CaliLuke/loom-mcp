@@ -93,7 +93,7 @@ func TestAnthropicStreamer_TextAndToolCall(t *testing.T) {
 	stream := ssestream.NewStream[sdk.MessageStreamEventUnion](dec, nil)
 	nameMap := map[string]string{"tool_a": "toolset.tool"}
 
-	s := newAnthropicStreamer(context.Background(), stream, nameMap)
+	s := newAnthropicStreamer(context.Background(), stream, nameMap, newToolUseIDCodec())
 	defer func() {
 		_ = s.Close()
 	}()
@@ -208,7 +208,7 @@ func TestAnthropicStreamer_ThinkingBlocks(t *testing.T) {
 	}
 
 	stream := ssestream.NewStream[sdk.MessageStreamEventUnion](&testDecoder{events: events}, nil)
-	s := newAnthropicStreamer(context.Background(), stream, nil)
+	s := newAnthropicStreamer(context.Background(), stream, nil, newToolUseIDCodec())
 	defer func() {
 		_ = s.Close()
 	}()

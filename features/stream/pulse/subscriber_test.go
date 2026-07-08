@@ -113,11 +113,7 @@ func TestSubscribeDecoderErrorAcksAndContinues(t *testing.T) {
 		return sinkMock, nil
 	})
 	sinkMock.AddSubscribe(func() <-chan *streaming.Event { return eventCh })
-	sinkMock.AddAck(func(ctx context.Context, evt *streaming.Event) error {
-		ackedIDs <- evt.ID
-		return nil
-	})
-	sinkMock.AddAck(func(ctx context.Context, evt *streaming.Event) error {
+	sinkMock.SetAck(func(ctx context.Context, evt *streaming.Event) error {
 		ackedIDs <- evt.ID
 		return nil
 	})
@@ -141,10 +137,114 @@ func TestSubscribeDecoderErrorAcksAndContinues(t *testing.T) {
 	eventCh <- &streaming.Event{ID: "2-0", Payload: []byte(`{"chunk":"hi"}`)}
 	close(eventCh)
 
-	require.EqualError(t, <-errs, "pulse decode payload: decode error")
+	// Do NOT drain errs first: valid events must flow even when the error
+	// channel is never read (issue #142).
 	event := <-events
 	require.Equal(t, stream.EventAssistantReply, event.Type())
 	require.JSONEq(t, `{"chunk":"hi"}`, string(event.Payload().(json.RawMessage)))
 	require.Equal(t, "1-0", <-ackedIDs)
 	require.Equal(t, "2-0", <-ackedIDs)
+	require.EqualError(t, <-errs, "pulse decode payload: decode error")
+	require.Zero(t, sub.DroppedErrors())
+}
+
+func TestSubscribeConsecutivePoisonMessagesThenValidEvent(t *testing.T) {
+	client := mockpulse.NewClient(t)
+	streamMock := mockpulse.NewStream(t)
+	sinkMock := mockpulse.NewSink(t)
+	eventCh := make(chan *streaming.Event, 3)
+	ackedIDs := make(chan string, 3)
+
+	client.AddStream(func(name string, _ ...streamopts.Stream) (clientspulse.Stream, error) { return streamMock, nil })
+	streamMock.AddNewSink(func(ctx context.Context, name string, opts ...streamopts.Sink) (clientspulse.Sink, error) {
+		return sinkMock, nil
+	})
+	sinkMock.AddSubscribe(func() <-chan *streaming.Event { return eventCh })
+	sinkMock.SetAck(func(ctx context.Context, evt *streaming.Event) error {
+		ackedIDs <- evt.ID
+		return nil
+	})
+	sinkMock.AddClose(func(ctx context.Context) {})
+
+	sub, err := NewSubscriber(SubscriberOptions{
+		Client: client,
+		Decoder: func(payload []byte) (stream.Event, error) {
+			if string(payload) == "bad" {
+				return nil, errors.New("decode error")
+			}
+			return stream.NewBase(stream.EventAssistantReply, "run-1", "session-1", json.RawMessage(payload)), nil
+		},
+	})
+	require.NoError(t, err)
+
+	events, errs, cancel, err := sub.Subscribe(context.Background(), "session/session-1")
+	require.NoError(t, err)
+	defer cancel()
+	eventCh <- &streaming.Event{ID: "1-0", Payload: []byte("bad")}
+	eventCh <- &streaming.Event{ID: "2-0", Payload: []byte("bad")}
+	eventCh <- &streaming.Event{ID: "3-0", Payload: []byte(`{"chunk":"hi"}`)}
+	close(eventCh)
+
+	// errs is never drained before the valid event: the second poison message
+	// must not block consumption.
+	event := <-events
+	require.Equal(t, stream.EventAssistantReply, event.Type())
+	require.JSONEq(t, `{"chunk":"hi"}`, string(event.Payload().(json.RawMessage)))
+	require.Equal(t, "1-0", <-ackedIDs)
+	require.Equal(t, "2-0", <-ackedIDs)
+	require.Equal(t, "3-0", <-ackedIDs)
+	// The first decode error is buffered; the second was dropped and counted.
+	require.EqualError(t, <-errs, "pulse decode payload: decode error")
+	require.Equal(t, uint64(1), sub.DroppedErrors())
+}
+
+func TestSubscribeAckFailureEvictsPendingDecodeError(t *testing.T) {
+	client := mockpulse.NewClient(t)
+	streamMock := mockpulse.NewStream(t)
+	sinkMock := mockpulse.NewSink(t)
+	eventCh := make(chan *streaming.Event, 2)
+
+	client.AddStream(func(name string, _ ...streamopts.Stream) (clientspulse.Stream, error) { return streamMock, nil })
+	streamMock.AddNewSink(func(ctx context.Context, name string, opts ...streamopts.Sink) (clientspulse.Sink, error) {
+		return sinkMock, nil
+	})
+	sinkMock.AddSubscribe(func() <-chan *streaming.Event { return eventCh })
+	sinkMock.AddAck(func(ctx context.Context, evt *streaming.Event) error {
+		return nil
+	})
+	sinkMock.AddAck(func(ctx context.Context, evt *streaming.Event) error {
+		return errors.New("ack failed")
+	})
+	sinkMock.AddClose(func(ctx context.Context) {})
+
+	sub, err := NewSubscriber(SubscriberOptions{
+		Client: client,
+		Decoder: func(payload []byte) (stream.Event, error) {
+			if string(payload) == "bad" {
+				return nil, errors.New("decode error")
+			}
+			return stream.NewBase(stream.EventAssistantReply, "run-1", "session-1", json.RawMessage(payload)), nil
+		},
+	})
+	require.NoError(t, err)
+
+	events, errs, cancel, err := sub.Subscribe(context.Background(), "session/session-1")
+	require.NoError(t, err)
+	defer cancel()
+	eventCh <- &streaming.Event{ID: "1-0", Payload: []byte("bad")}
+	eventCh <- &streaming.Event{ID: "2-0", Payload: []byte(`{"chunk":"hi"}`)}
+	close(eventCh)
+
+	// The decode error fills the errs buffer and is never drained. The
+	// terminal ack failure must still be delivered, and both channels must
+	// close so a consumer ranging over events observes termination.
+	event, ok := <-events
+	require.True(t, ok)
+	require.Equal(t, stream.EventAssistantReply, event.Type())
+	_, ok = <-events
+	require.False(t, ok, "events must be closed after a terminal ack failure")
+	require.EqualError(t, <-errs, "pulse ack: ack failed")
+	_, ok = <-errs
+	require.False(t, ok, "errs must be closed after a terminal ack failure")
+	require.Equal(t, uint64(1), sub.DroppedErrors())
 }

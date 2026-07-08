@@ -5,6 +5,7 @@ package middleware
 import (
 	"context"
 	"errors"
+	"fmt"
 	"strconv"
 	"sync"
 	"time"
@@ -59,6 +60,13 @@ type (
 	}
 )
 
+// ErrRequestTooLarge is returned when a single request's estimated input-token
+// cost exceeds the limiter's maximum tokens-per-minute capacity. Such a request
+// can never be admitted no matter how long it waits, so the limiter fails fast
+// with this error instead of blocking. Callers should raise the limiter's max
+// TPM or reduce the request size.
+var ErrRequestTooLarge = errors.New("model middleware: request exceeds rate limiter capacity")
+
 // NewAdaptiveRateLimiter constructs an AdaptiveRateLimiter with a
 // tokens-per-minute budget. When m and key are set, it coordinates capacity
 // across processes using a Pulse replicated map; otherwise it operates as a
@@ -78,6 +86,12 @@ func NewAdaptiveRateLimiter(ctx context.Context, m *rmap.Map, key string, initia
 //
 // initialTPM and maxTPM are expressed in tokens per minute. When maxTPM is
 // zero or less than initialTPM, it is clamped to initialTPM.
+//
+// The bucket burst is pinned at maxTPM for the lifetime of the limiter;
+// backoff and probing adjust only the refill rate. This guarantees that any
+// request estimated at or below maxTPM tokens can always be admitted by
+// waiting for refill, even after repeated backoffs shrink the effective
+// budget. Requests estimated above maxTPM fail fast with ErrRequestTooLarge.
 func newAdaptiveRateLimiter(initialTPM, maxTPM float64) *AdaptiveRateLimiter {
 	if initialTPM <= 0 {
 		// Default to a conservative budget when callers do not provide one.
@@ -94,7 +108,14 @@ func newAdaptiveRateLimiter(initialTPM, maxTPM float64) *AdaptiveRateLimiter {
 	if recoveryRate < 1 {
 		recoveryRate = 1
 	}
-	lim := rate.NewLimiter(rate.Limit(initialTPM/60.0), int(initialTPM))
+	// Pin the burst at the maximum budget so shrinking the effective TPM never
+	// makes in-range requests permanently unadmittable; only the refill rate
+	// adapts (see backoff, probe, and replaceTPM).
+	burst := int(maxTPM)
+	if burst < 1 {
+		burst = 1
+	}
+	lim := rate.NewLimiter(rate.Limit(initialTPM/60.0), burst)
 
 	return &AdaptiveRateLimiter{
 		limiter:      lim,
@@ -154,6 +175,15 @@ func (l *AdaptiveRateLimiter) wait(ctx context.Context, req *model.Request) erro
 	if err != nil {
 		return err
 	}
+	// The burst is fixed at construction time, so a request that exceeds it can
+	// never be admitted. Fail fast with an actionable diagnostic instead of the
+	// raw x/time/rate "exceeds limiter's burst" error.
+	if burst := l.limiter.Burst(); count.InputTokens > burst {
+		return fmt.Errorf(
+			"%w: estimated %d input tokens exceeds the maximum burst capacity of %d tokens (max TPM); raise the limiter's max TPM or reduce the request size",
+			ErrRequestTooLarge, count.InputTokens, burst,
+		)
+	}
 	return l.limiter.WaitN(ctx, count.InputTokens)
 }
 
@@ -179,8 +209,9 @@ func (l *AdaptiveRateLimiter) backoff() {
 		return
 	}
 	l.currentTPM = newTPM
+	// Adjust only the refill rate; the burst stays pinned at maxTPM so large
+	// in-range requests remain admittable after backoff.
 	l.limiter.SetLimit(rate.Limit(newTPM / 60.0))
-	l.limiter.SetBurst(int(newTPM))
 
 	cb := l.onBackoff
 
@@ -204,7 +235,6 @@ func (l *AdaptiveRateLimiter) probe() {
 	}
 	l.currentTPM = newTPM
 	l.limiter.SetLimit(rate.Limit(newTPM / 60.0))
-	l.limiter.SetBurst(int(newTPM))
 
 	cb := l.onProbe
 
@@ -231,7 +261,6 @@ func (l *AdaptiveRateLimiter) replaceTPM(tpm float64) {
 	}
 	l.currentTPM = tpm
 	l.limiter.SetLimit(rate.Limit(tpm / 60.0))
-	l.limiter.SetBurst(int(tpm))
 	l.mu.Unlock()
 }
 

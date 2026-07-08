@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"testing"
 
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	openaimodel "github.com/CaliLuke/loom-mcp/features/model/openai"
@@ -780,6 +781,183 @@ func TestClientStreamStructuredOutput(t *testing.T) {
 	require.Equal(t, model.ChunkTypeCompletion, chunks[1].Type)
 	require.Equal(t, "draft", chunks[1].Completion.Name)
 	require.JSONEq(t, `{"answer":"ok"}`, string(chunks[1].Completion.Payload))
+	require.Equal(t, model.ChunkTypeStop, chunks[2].Type)
+}
+
+func TestClientCompleteTranslatesDottedToolNames(t *testing.T) {
+	mock := &mockResponsesClient{}
+	client, err := openaimodel.New(openaimodel.Options{Client: mock, DefaultModel: "gpt-4o"})
+	require.NoError(t, err)
+
+	mock.response = &responses.Response{
+		Status: responses.ResponseStatusCompleted,
+		Model:  "gpt-4o",
+		Output: []responses.ResponseOutputItemUnion{{
+			Type:      "function_call",
+			Name:      "toolset_lookup",
+			Arguments: `{"query":"docs"}`,
+			CallID:    "call-1",
+		}},
+	}
+
+	resp, err := client.Complete(context.Background(), &model.Request{
+		Messages: []*model.Message{
+			{
+				Role:  model.ConversationRoleUser,
+				Parts: []model.Part{model.TextPart{Text: "ping"}},
+			},
+			{
+				Role: model.ConversationRoleAssistant,
+				Parts: []model.Part{
+					model.ToolUsePart{ID: "tool-1", Name: "toolset.lookup", Input: map[string]any{"query": "old"}},
+					model.ToolUsePart{ID: "tool-2", Name: "runtime.tool_unavailable", Input: map[string]any{"requested": "gone"}},
+				},
+			},
+			{
+				Role: model.ConversationRoleUser,
+				Parts: []model.Part{
+					model.ToolResultPart{ToolUseID: "tool-1", Content: map[string]any{"hits": 2}},
+					model.ToolResultPart{ToolUseID: "tool-2", Content: map[string]any{"error": "unavailable"}},
+				},
+			},
+		},
+		Tools: []*model.ToolDefinition{{
+			Name:        "toolset.lookup",
+			Description: "Search",
+			InputSchema: map[string]any{"type": "object"},
+		}},
+		ToolChoice: &model.ToolChoice{
+			Mode: model.ToolChoiceModeTool,
+			Name: "toolset.lookup",
+		},
+	})
+	require.NoError(t, err)
+
+	req := mock.captured
+	require.Len(t, req.Tools, 1)
+	functionTool := req.Tools[0].OfFunction
+	require.NotNil(t, functionTool)
+	assert.Equal(t, "toolset_lookup", functionTool.Name)
+
+	require.NotNil(t, req.ToolChoice.OfFunctionTool)
+	assert.Equal(t, "toolset_lookup", req.ToolChoice.OfFunctionTool.Name)
+
+	require.Len(t, req.Input.OfInputItemList, 5)
+	replayed := req.Input.OfInputItemList[1].OfFunctionCall
+	require.NotNil(t, replayed)
+	assert.Equal(t, "toolset_lookup", replayed.Name)
+	unmapped := req.Input.OfInputItemList[2].OfFunctionCall
+	require.NotNil(t, unmapped)
+	assert.Equal(t, "runtime_tool_unavailable", unmapped.Name)
+
+	require.Len(t, resp.ToolCalls, 1)
+	assert.Equal(t, tools.Ident("toolset.lookup"), resp.ToolCalls[0].Name)
+	assert.Equal(t, "call-1", resp.ToolCalls[0].ID)
+	assert.JSONEq(t, `{"query":"docs"}`, string(resp.ToolCalls[0].Payload))
+}
+
+func TestClientCompleteRejectsCollidingToolNames(t *testing.T) {
+	mock := &mockResponsesClient{}
+	client, err := openaimodel.New(openaimodel.Options{Client: mock, DefaultModel: "gpt-4o"})
+	require.NoError(t, err)
+
+	_, err = client.Complete(context.Background(), &model.Request{
+		Messages: []*model.Message{{
+			Role:  model.ConversationRoleUser,
+			Parts: []model.Part{model.TextPart{Text: "ping"}},
+		}},
+		Tools: []*model.ToolDefinition{
+			{
+				Name:        "toolset.lookup",
+				Description: "Search",
+				InputSchema: map[string]any{"type": "object"},
+			},
+			{
+				Name:        "toolset_lookup",
+				Description: "Search twin",
+				InputSchema: map[string]any{"type": "object"},
+			},
+		},
+	})
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "collides")
+}
+
+func TestClientStreamTranslatesDottedToolNames(t *testing.T) {
+	mock := &mockResponsesClient{
+		stream: newMockOpenAIStream(
+			`{
+				"type":"response.output_item.added",
+				"sequence_number":1,
+				"output_index":0,
+				"item":{
+					"id":"fc_1",
+					"type":"function_call",
+					"call_id":"call_1",
+					"name":"toolset_lookup",
+					"arguments":"",
+					"status":"in_progress"
+				}
+			}`,
+			`{
+				"type":"response.function_call_arguments.delta",
+				"sequence_number":2,
+				"item_id":"fc_1",
+				"output_index":0,
+				"delta":"{\"query\":\"docs\"}"
+			}`,
+			`{
+				"type":"response.completed",
+				"sequence_number":3,
+				"response":{
+					"model":"gpt-4o",
+					"status":"completed",
+					"output":[
+						{
+							"id":"fc_1",
+							"type":"function_call",
+							"call_id":"call_1",
+							"name":"toolset_lookup",
+							"arguments":"{\"query\":\"docs\"}",
+							"status":"completed"
+						}
+					]
+				}
+			}`,
+		),
+	}
+	client, err := openaimodel.New(openaimodel.Options{Client: mock, DefaultModel: "gpt-4o"})
+	require.NoError(t, err)
+
+	streamer, err := client.Stream(context.Background(), &model.Request{
+		Messages: []*model.Message{{
+			Role:  model.ConversationRoleUser,
+			Parts: []model.Part{model.TextPart{Text: "Ping"}},
+		}},
+		Tools: []*model.ToolDefinition{{
+			Name:        "toolset.lookup",
+			Description: "Search",
+			InputSchema: map[string]any{"type": "object"},
+		}},
+	})
+	require.NoError(t, err)
+	defer func() {
+		require.NoError(t, streamer.Close())
+	}()
+
+	require.Len(t, mock.streamCaptured.Tools, 1)
+	functionTool := mock.streamCaptured.Tools[0].OfFunction
+	require.NotNil(t, functionTool)
+	assert.Equal(t, "toolset_lookup", functionTool.Name)
+
+	chunks := collectStreamChunks(t, streamer)
+	require.Len(t, chunks, 3)
+	require.Equal(t, model.ChunkTypeToolCallDelta, chunks[0].Type)
+	assert.Equal(t, tools.Ident("toolset.lookup"), chunks[0].ToolCallDelta.Name)
+	assert.Equal(t, "call_1", chunks[0].ToolCallDelta.ID)
+	require.Equal(t, model.ChunkTypeToolCall, chunks[1].Type)
+	assert.Equal(t, tools.Ident("toolset.lookup"), chunks[1].ToolCall.Name)
+	assert.JSONEq(t, `{"query":"docs"}`, string(chunks[1].ToolCall.Payload))
 	require.Equal(t, model.ChunkTypeStop, chunks[2].Type)
 }
 

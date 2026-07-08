@@ -30,10 +30,6 @@ type ResponseClient interface {
 	NewStreaming(ctx context.Context, body responses.ResponseNewParams, opts ...option.RequestOption) *ssestream.Stream[responses.ResponseStreamEventUnion]
 }
 
-type openAIToolCodec struct {
-	schemas map[string]rawjson.Message
-}
-
 // Options configures the OpenAI adapter.
 type Options struct {
 	Client       ResponseClient
@@ -105,11 +101,11 @@ func (c *Client) buildResponseRequest(req *model.Request) (responses.ResponseNew
 	if req.StructuredOutput != nil && (len(req.Tools) > 0 || req.ToolChoice != nil) {
 		return responses.ResponseNewParams{}, nil, errors.New("openai: structured output cannot be combined with tools")
 	}
-	input, err := encodeInput(req.Messages)
+	tools, codec, err := encodeTools(req.Tools)
 	if err != nil {
 		return responses.ResponseNewParams{}, nil, err
 	}
-	tools, codec, err := encodeTools(req.Tools)
+	input, err := encodeInput(req.Messages, codec)
 	if err != nil {
 		return responses.ResponseNewParams{}, nil, err
 	}
@@ -133,7 +129,7 @@ func (c *Client) buildResponseRequest(req *model.Request) (responses.ResponseNew
 	if textConfig != (responses.ResponseTextConfigParam{}) {
 		request.Text = textConfig
 	}
-	toolChoice, err := buildOpenAIToolChoice(req.ToolChoice, req.Tools)
+	toolChoice, err := buildOpenAIToolChoice(req.ToolChoice, req.Tools, codec)
 	if err != nil {
 		return responses.ResponseNewParams{}, nil, err
 	}
@@ -162,7 +158,7 @@ func (c *Client) resolveModelID(req *model.Request) string {
 	return c.model
 }
 
-func encodeInput(messages []*model.Message) (responses.ResponseInputParam, error) {
+func encodeInput(messages []*model.Message, codec *openAIToolCodec) (responses.ResponseInputParam, error) {
 	items := make(responses.ResponseInputParam, 0, len(messages))
 	for _, msg := range messages {
 		if msg == nil {
@@ -180,7 +176,7 @@ func encodeInput(messages []*model.Message) (responses.ResponseInputParam, error
 				},
 			})
 		}
-		partItems, err := encodeMessageParts(msg)
+		partItems, err := encodeMessageParts(msg, codec)
 		if err != nil {
 			return nil, err
 		}
@@ -190,47 +186,73 @@ func encodeInput(messages []*model.Message) (responses.ResponseInputParam, error
 }
 
 func encodeMessageContent(msg *model.Message) (responses.EasyInputMessageContentUnionParam, bool, error) {
-	content := make(responses.ResponseInputMessageContentListParam, 0, len(msg.Parts))
-	var text strings.Builder
-	flushText := func() {
-		if text.Len() == 0 {
-			return
-		}
-		content = append(content, responses.ResponseInputContentUnionParam{
-			OfInputText: &responses.ResponseInputTextParam{Text: text.String()},
-		})
-		text.Reset()
+	builder := messageContentBuilder{
+		content: make(responses.ResponseInputMessageContentListParam, 0, len(msg.Parts)),
 	}
 	for _, part := range msg.Parts {
-		switch p := part.(type) {
-		case model.TextPart:
-			text.WriteString(p.Text)
-		case model.CitationsPart:
-			text.WriteString(p.Text)
-		case model.ImagePart:
-			flushText()
-			image, err := encodeImageContent(msg.Role, p)
-			if err != nil {
-				return responses.EasyInputMessageContentUnionParam{}, false, err
-			}
-			content = append(content, image)
-		case model.ToolUsePart, model.ToolResultPart:
-			continue
-		default:
-			return responses.EasyInputMessageContentUnionParam{}, false, fmt.Errorf("openai responses: unsupported message part %T", part)
+		if err := builder.add(msg.Role, part); err != nil {
+			return responses.EasyInputMessageContentUnionParam{}, false, err
 		}
 	}
-	flushText()
-	if len(content) == 0 {
+	return builder.union()
+}
+
+// messageContentBuilder accumulates OpenAI Responses content items, coalescing
+// consecutive text-bearing parts into a single input_text item.
+type messageContentBuilder struct {
+	content responses.ResponseInputMessageContentListParam
+	text    strings.Builder
+}
+
+func (b *messageContentBuilder) add(role model.ConversationRole, part model.Part) error {
+	switch p := part.(type) {
+	case model.TextPart:
+		b.text.WriteString(p.Text)
+	case model.CitationsPart:
+		b.text.WriteString(p.Text)
+	case model.ImagePart:
+		b.flushText()
+		image, err := encodeImageContent(role, p)
+		if err != nil {
+			return err
+		}
+		b.content = append(b.content, image)
+	case model.ToolUsePart, model.ToolResultPart:
+		// Encoded separately as response items, not message content.
+		return nil
+	case model.CacheCheckpointPart, model.ThinkingPart:
+		// Cache checkpoints are ignored because this adapter has no prompt
+		// caching; replayed thinking parts from other providers cannot be
+		// sent to the Responses API and are dropped.
+		return nil
+	default:
+		return fmt.Errorf("openai responses: unsupported message part %T", part)
+	}
+	return nil
+}
+
+func (b *messageContentBuilder) flushText() {
+	if b.text.Len() == 0 {
+		return
+	}
+	b.content = append(b.content, responses.ResponseInputContentUnionParam{
+		OfInputText: &responses.ResponseInputTextParam{Text: b.text.String()},
+	})
+	b.text.Reset()
+}
+
+func (b *messageContentBuilder) union() (responses.EasyInputMessageContentUnionParam, bool, error) {
+	b.flushText()
+	if len(b.content) == 0 {
 		return responses.EasyInputMessageContentUnionParam{}, false, nil
 	}
-	if len(content) == 1 && content[0].OfInputText != nil {
+	if len(b.content) == 1 && b.content[0].OfInputText != nil {
 		return responses.EasyInputMessageContentUnionParam{
-			OfString: openai.String(content[0].OfInputText.Text),
+			OfString: openai.String(b.content[0].OfInputText.Text),
 		}, true, nil
 	}
 	return responses.EasyInputMessageContentUnionParam{
-		OfInputItemContentList: content,
+		OfInputItemContentList: b.content,
 	}, true, nil
 }
 
@@ -268,7 +290,7 @@ func openAIImageMIMEType(format model.ImageFormat) (string, error) {
 	}
 }
 
-func encodeMessageParts(msg *model.Message) ([]responses.ResponseInputItemUnionParam, error) {
+func encodeMessageParts(msg *model.Message, codec *openAIToolCodec) ([]responses.ResponseInputItemUnionParam, error) {
 	items := make([]responses.ResponseInputItemUnionParam, 0, len(msg.Parts))
 	for _, part := range msg.Parts {
 		switch p := part.(type) {
@@ -285,7 +307,7 @@ func encodeMessageParts(msg *model.Message) ([]responses.ResponseInputItemUnionP
 			}
 			items = append(items, responses.ResponseInputItemUnionParam{
 				OfFunctionCall: &responses.ResponseFunctionToolCallParam{
-					Name:      p.Name,
+					Name:      codec.wireName(p.Name),
 					CallID:    p.ID,
 					Arguments: string(args),
 				},
@@ -306,6 +328,11 @@ func encodeMessageParts(msg *model.Message) ([]responses.ResponseInputItemUnionP
 			})
 		case model.TextPart, model.CitationsPart, model.ImagePart:
 			continue
+		case model.CacheCheckpointPart, model.ThinkingPart:
+			// Cache checkpoints are ignored because this adapter has no prompt
+			// caching; replayed thinking parts from other providers cannot be
+			// sent to the Responses API and are dropped.
+			continue
 		default:
 			return nil, fmt.Errorf("openai responses: unsupported message part %T", part)
 		}
@@ -313,7 +340,7 @@ func encodeMessageParts(msg *model.Message) ([]responses.ResponseInputItemUnionP
 	return items, nil
 }
 
-func buildOpenAIToolChoice(choice *model.ToolChoice, defs []*model.ToolDefinition) (responses.ResponseNewParamsToolChoiceUnion, error) {
+func buildOpenAIToolChoice(choice *model.ToolChoice, defs []*model.ToolDefinition, codec *openAIToolCodec) (responses.ResponseNewParamsToolChoiceUnion, error) {
 	if choice == nil {
 		return responses.ResponseNewParamsToolChoiceUnion{}, nil
 	}
@@ -327,7 +354,7 @@ func buildOpenAIToolChoice(choice *model.ToolChoice, defs []*model.ToolDefinitio
 			OfToolChoiceMode: param.NewOpt(responses.ToolChoiceOptionsNone),
 		}, nil
 	case model.ToolChoiceModeTool:
-		return namedOpenAIToolChoice(choice, defs)
+		return namedOpenAIToolChoice(choice, defs, codec)
 	case model.ToolChoiceModeAny:
 		return responses.ResponseNewParamsToolChoiceUnion{
 			OfToolChoiceMode: param.NewOpt(responses.ToolChoiceOptionsRequired),
@@ -337,7 +364,7 @@ func buildOpenAIToolChoice(choice *model.ToolChoice, defs []*model.ToolDefinitio
 	}
 }
 
-func namedOpenAIToolChoice(choice *model.ToolChoice, defs []*model.ToolDefinition) (responses.ResponseNewParamsToolChoiceUnion, error) {
+func namedOpenAIToolChoice(choice *model.ToolChoice, defs []*model.ToolDefinition, codec *openAIToolCodec) (responses.ResponseNewParamsToolChoiceUnion, error) {
 	if choice.Name == "" {
 		return responses.ResponseNewParamsToolChoiceUnion{}, fmt.Errorf("openai: tool choice mode %q requires a tool name", choice.Mode)
 	}
@@ -345,7 +372,7 @@ func namedOpenAIToolChoice(choice *model.ToolChoice, defs []*model.ToolDefinitio
 		return responses.ResponseNewParamsToolChoiceUnion{}, fmt.Errorf("openai: tool choice name %q does not match any tool", choice.Name)
 	}
 	return responses.ResponseNewParamsToolChoiceUnion{
-		OfFunctionTool: &responses.ToolChoiceFunctionParam{Name: choice.Name},
+		OfFunctionTool: &responses.ToolChoiceFunctionParam{Name: codec.wireName(choice.Name)},
 	}, nil
 }
 
@@ -398,28 +425,42 @@ func encodeTools(defs []*model.ToolDefinition) ([]responses.ToolUnionParam, *ope
 		return nil, nil, nil
 	}
 	tools := make([]responses.ToolUnionParam, 0, len(defs))
-	codec := &openAIToolCodec{schemas: make(map[string]rawjson.Message, len(defs))}
+	codec := &openAIToolCodec{
+		schemas:    make(map[string]rawjson.Message, len(defs)),
+		canonToSan: make(map[string]string, len(defs)),
+		sanToCanon: make(map[string]string, len(defs)),
+	}
 	for _, def := range defs {
 		if def == nil {
 			continue
 		}
-		schema, err := schemaMessage(def.Name, def.InputSchema)
+		canonical := def.Name
+		sanitized := sanitizeOpenAIToolName(canonical)
+		if prev, ok := codec.sanToCanon[sanitized]; ok && prev != canonical {
+			return nil, nil, fmt.Errorf(
+				"openai: tool name %q sanitizes to %q which collides with %q",
+				canonical, sanitized, prev,
+			)
+		}
+		schema, err := schemaMessage(canonical, def.InputSchema)
 		if err != nil {
 			return nil, nil, err
 		}
 		parameters, err := projectStrictSchema(schema)
 		if err != nil {
-			return nil, nil, fmt.Errorf("openai: tool %q schema: %w", def.Name, err)
+			return nil, nil, fmt.Errorf("openai: tool %q schema: %w", canonical, err)
 		}
 		tools = append(tools, responses.ToolUnionParam{
 			OfFunction: &responses.FunctionToolParam{
-				Name:        def.Name,
+				Name:        sanitized,
 				Description: openai.String(def.Description),
 				Parameters:  parameters,
 				Strict:      openai.Bool(true),
 			},
 		})
-		codec.schemas[def.Name] = schema
+		codec.schemas[canonical] = schema
+		codec.canonToSan[canonical] = sanitized
+		codec.sanToCanon[sanitized] = canonical
 	}
 	return tools, codec, nil
 }
@@ -499,8 +540,9 @@ func translateFunctionCall(item responses.ResponseOutputItemUnion, codec *openAI
 	if err != nil {
 		return model.ToolCall{}, fmt.Errorf("openai responses: tool call %q payload: %w", item.CallID, err)
 	}
+	canonical := codec.canonicalName(item.Name)
 	if codec != nil {
-		if schema := codec.schemas[item.Name]; len(schema) > 0 {
+		if schema := codec.schemas[canonical]; len(schema) > 0 {
 			payload, err = canonicalizeStrictPayload(schema, payload)
 			if err != nil {
 				return model.ToolCall{}, fmt.Errorf("openai responses: tool call %q payload: %w", item.CallID, err)
@@ -512,7 +554,7 @@ func translateFunctionCall(item responses.ResponseOutputItemUnion, codec *openAI
 		toolCallID = item.ID
 	}
 	return model.ToolCall{
-		Name:    tools.Ident(item.Name),
+		Name:    tools.Ident(canonical),
 		Payload: payload,
 		ID:      toolCallID,
 	}, nil
