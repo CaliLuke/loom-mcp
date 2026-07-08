@@ -1456,11 +1456,11 @@ func emitToolCase(g *jen.Group, tool *ToolAdapter) {
 			g.Id("s").Op(":=").String().Call(jen.Id("result"))
 			g.Id("structuredContent").Op(":=").Qual("encoding/json", "RawMessage").Call(jen.Nil())
 		} else {
-			g.Id("s").Op(":=").Id("formatToolSuccessText").Call(jen.Id("result"))
 			g.List(jen.Id("structuredContent"), jen.Id("serr")).Op(":=").Qual("encoding/json", "Marshal").Call(jen.Id("result"))
 			g.If(jen.Id("serr").Op("!=").Nil()).Block(
 				jen.Return(jen.False(), jen.Id("serr")),
 			)
+			g.Id("s").Op(":=").String().Call(jen.Id("structuredContent"))
 		}
 		g.Id("final").Op(":=").Op("&").Id("ToolsCallResult").Values(jen.Dict{
 			jen.Id("Content"): jen.Index().Op("*").Id("ContentItem").Values(
@@ -1573,11 +1573,11 @@ func emitProjectedToolCase(g *jen.Group, tool *ToolAdapter) {
 		jen.Return(jen.True(), jen.Id("a").Dot("sendToolError").Call(jen.Id("ctx"), jen.Id("stream"), jen.Id("p").Dot("Name"), jen.Id("toolResult").Dot("Error"))),
 	)
 	if tool.HasResult {
-		g.Id("s").Op(":=").Id("formatToolSuccessText").Call(jen.Id("toolResult").Dot("Result"))
 		g.List(jen.Id("structuredContent"), jen.Id("serr")).Op(":=").Qual("encoding/json", "Marshal").Call(jen.Id("toolResult").Dot("Result"))
 		g.If(jen.Id("serr").Op("!=").Nil()).Block(
 			jen.Return(jen.False(), jen.Id("serr")),
 		)
+		g.Id("s").Op(":=").String().Call(jen.Id("structuredContent"))
 		g.Id("final").Op(":=").Op("&").Id("ToolsCallResult").Values(jen.Dict{
 			jen.Id("Content"): jen.Index().Op("*").Id("ContentItem").Values(
 				jen.Id("buildContentItem").Call(jen.Id("a"), jen.Id("s")),

@@ -18,7 +18,6 @@ import (
 	"net/url"
 	"regexp"
 	"sort"
-	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -557,150 +556,6 @@ func missingFieldFromMessage(message string) string {
 		return ""
 	}
 	return strings.TrimSpace(strings.TrimPrefix(message, prefix))
-}
-func formatToolSuccessText(v any) string {
-	switch value := v.(type) {
-	case nil:
-		return "OK"
-	case string:
-		if strings.TrimSpace(value) == "" {
-			return "OK"
-		}
-		return value
-	case *string:
-		if value == nil || strings.TrimSpace(*value) == "" {
-			return "OK"
-		}
-		return *value
-	case bool:
-		if value {
-			return "true"
-		}
-		return "false"
-	case *bool:
-		if value == nil {
-			return "OK"
-		}
-		if *value {
-			return "true"
-		}
-		return "false"
-	}
-	normalized, ok := normalizeToolSuccessValue(v)
-	if !ok {
-		return fmt.Sprint(v)
-	}
-	return summarizeToolSuccessValue(normalized)
-}
-func normalizeToolSuccessValue(v any) (any, bool) {
-	if v == nil {
-		return nil, false
-	}
-	raw, err := json.Marshal(v)
-	if err != nil {
-		return nil, false
-	}
-	var normalized any
-	if err := json.Unmarshal(raw, &normalized); err != nil {
-		return nil, false
-	}
-	return normalized, true
-}
-func summarizeToolSuccessValue(v any) string {
-	switch value := v.(type) {
-	case nil:
-		return "OK"
-	case string:
-		if strings.TrimSpace(value) == "" {
-			return "OK"
-		}
-		return value
-	case bool:
-		if value {
-			return "true"
-		}
-		return "false"
-	case float64:
-		return strconv.FormatFloat(value, 'f', -1, 64)
-	case []any:
-		return summarizeToolSuccessList(value)
-	case map[string]any:
-		return summarizeToolSuccessMap(value)
-	default:
-		return fmt.Sprint(value)
-	}
-}
-func summarizeToolSuccessList(items []any) string {
-	if len(items) == 0 {
-		return "No items."
-	}
-	parts := make([]string, 0, min(len(items), 5))
-	for _, item := range items {
-		part := strings.TrimSpace(summarizeToolSuccessValue(item))
-		if part == "" {
-			continue
-		}
-		parts = append(parts, part)
-		if len(parts) == 5 {
-			break
-		}
-	}
-	if len(parts) == 0 {
-		return fmt.Sprintf("%d items.", len(items))
-	}
-	if len(items) > len(parts) {
-		parts = append(parts, fmt.Sprintf("... (%d total)", len(items)))
-	}
-	return strings.Join(parts, "\n")
-}
-func summarizeToolSuccessMap(fields map[string]any) string {
-	preferredScalars := []string{"result", "output", "summary", "message", "value", "name", "ack", "sentiment", "status"}
-	for _, key := range preferredScalars {
-		if scalar, ok := scalarToolSuccessText(fields[key]); ok {
-			return scalar
-		}
-	}
-	preferredLists := []string{"items", "results", "keywords", "templates", "documents"}
-	for _, key := range preferredLists {
-		if list, ok := fields[key].([]any); ok {
-			return summarizeToolSuccessList(list)
-		}
-	}
-	if len(fields) == 1 {
-		for _, value := range fields {
-			return summarizeToolSuccessValue(value)
-		}
-	}
-	if name, ok := scalarToolSuccessText(fields["name"]); ok {
-		if version, ok := scalarToolSuccessText(fields["version"]); ok {
-			return strings.TrimSpace(name + " " + version)
-		}
-	}
-	keys := make([]string, 0, len(fields))
-	for key := range fields {
-		keys = append(keys, key)
-	}
-	sort.Strings(keys)
-	if len(keys) > 4 {
-		keys = keys[:4]
-	}
-	return fmt.Sprintf("Fields: %s", strings.Join(keys, ", "))
-}
-func scalarToolSuccessText(v any) (string, bool) {
-	switch value := v.(type) {
-	case string:
-		trimmed := strings.TrimSpace(value)
-		return trimmed, trimmed != ""
-	case bool:
-		if value {
-			return "true", true
-		}
-		return "false", true
-	case float64:
-		return strconv.FormatFloat(value, 'f', -1, 64), true
-	default:
-		return "", false
-	}
 }
 
 // Initialize handles the MCP initialize request.
@@ -2090,11 +1945,11 @@ func (a *MCPAdapter) executeRealTool(ctx context.Context, p *ToolsCallPayload, s
 		if err != nil {
 			return true, a.sendToolError(ctx, stream, p.Name, err)
 		}
-		s := formatToolSuccessText(result)
 		structuredContent, serr := json.Marshal(result)
 		if serr != nil {
 			return false, serr
 		}
+		s := string(structuredContent)
 		final := &ToolsCallResult{
 			Content:           []*ContentItem{buildContentItem(a, s)},
 			StructuredContent: structuredContent,
@@ -2128,11 +1983,11 @@ func (a *MCPAdapter) executeRealTool(ctx context.Context, p *ToolsCallPayload, s
 		if err != nil {
 			return true, a.sendToolError(ctx, stream, p.Name, err)
 		}
-		s := formatToolSuccessText(result)
 		structuredContent, serr := json.Marshal(result)
 		if serr != nil {
 			return false, serr
 		}
+		s := string(structuredContent)
 		final := &ToolsCallResult{
 			Content:           []*ContentItem{buildContentItem(a, s)},
 			StructuredContent: structuredContent,
@@ -2166,11 +2021,11 @@ func (a *MCPAdapter) executeRealTool(ctx context.Context, p *ToolsCallPayload, s
 		if err != nil {
 			return true, a.sendToolError(ctx, stream, p.Name, err)
 		}
-		s := formatToolSuccessText(result)
 		structuredContent, serr := json.Marshal(result)
 		if serr != nil {
 			return false, serr
 		}
+		s := string(structuredContent)
 		final := &ToolsCallResult{
 			Content:           []*ContentItem{buildContentItem(a, s)},
 			StructuredContent: structuredContent,
@@ -2204,11 +2059,11 @@ func (a *MCPAdapter) executeRealTool(ctx context.Context, p *ToolsCallPayload, s
 		if err != nil {
 			return true, a.sendToolError(ctx, stream, p.Name, err)
 		}
-		s := formatToolSuccessText(result)
 		structuredContent, serr := json.Marshal(result)
 		if serr != nil {
 			return false, serr
 		}
+		s := string(structuredContent)
 		final := &ToolsCallResult{
 			Content:           []*ContentItem{buildContentItem(a, s)},
 			StructuredContent: structuredContent,
@@ -2250,11 +2105,11 @@ func (a *MCPAdapter) executeRealTool(ctx context.Context, p *ToolsCallPayload, s
 		if err != nil {
 			return true, a.sendToolError(ctx, stream, p.Name, err)
 		}
-		s := formatToolSuccessText(result)
 		structuredContent, serr := json.Marshal(result)
 		if serr != nil {
 			return false, serr
 		}
+		s := string(structuredContent)
 		final := &ToolsCallResult{
 			Content:           []*ContentItem{buildContentItem(a, s)},
 			StructuredContent: structuredContent,
@@ -2288,11 +2143,11 @@ func (a *MCPAdapter) executeRealTool(ctx context.Context, p *ToolsCallPayload, s
 		if err != nil {
 			return true, a.sendToolError(ctx, stream, p.Name, err)
 		}
-		s := formatToolSuccessText(result)
 		structuredContent, serr := json.Marshal(result)
 		if serr != nil {
 			return false, serr
 		}
+		s := string(structuredContent)
 		final := &ToolsCallResult{
 			Content:           []*ContentItem{buildContentItem(a, s)},
 			StructuredContent: structuredContent,
@@ -2311,11 +2166,11 @@ func (a *MCPAdapter) executeRealTool(ctx context.Context, p *ToolsCallPayload, s
 		if err != nil {
 			return true, a.sendToolError(ctx, stream, p.Name, err)
 		}
-		s := formatToolSuccessText(result)
 		structuredContent, serr := json.Marshal(result)
 		if serr != nil {
 			return false, serr
 		}
+		s := string(structuredContent)
 		final := &ToolsCallResult{
 			Content:           []*ContentItem{buildContentItem(a, s)},
 			StructuredContent: structuredContent,
@@ -2366,11 +2221,11 @@ func (a *MCPAdapter) executeRealTool(ctx context.Context, p *ToolsCallPayload, s
 		if err != nil {
 			return true, a.sendToolError(ctx, stream, p.Name, err)
 		}
-		s := formatToolSuccessText(result)
 		structuredContent, serr := json.Marshal(result)
 		if serr != nil {
 			return false, serr
 		}
+		s := string(structuredContent)
 		final := &ToolsCallResult{
 			Content:           []*ContentItem{buildContentItem(a, s)},
 			StructuredContent: structuredContent,
@@ -2389,11 +2244,11 @@ func (a *MCPAdapter) executeRealTool(ctx context.Context, p *ToolsCallPayload, s
 		if err != nil {
 			return true, a.sendToolError(ctx, stream, p.Name, err)
 		}
-		s := formatToolSuccessText(result)
 		structuredContent, serr := json.Marshal(result)
 		if serr != nil {
 			return false, serr
 		}
+		s := string(structuredContent)
 		final := &ToolsCallResult{
 			Content:           []*ContentItem{buildContentItem(a, s)},
 			StructuredContent: structuredContent,
@@ -2412,11 +2267,11 @@ func (a *MCPAdapter) executeRealTool(ctx context.Context, p *ToolsCallPayload, s
 		if err != nil {
 			return true, a.sendToolError(ctx, stream, p.Name, err)
 		}
-		s := formatToolSuccessText(result)
 		structuredContent, serr := json.Marshal(result)
 		if serr != nil {
 			return false, serr
 		}
+		s := string(structuredContent)
 		final := &ToolsCallResult{
 			Content:           []*ContentItem{buildContentItem(a, s)},
 			StructuredContent: structuredContent,
@@ -2440,11 +2295,11 @@ func (a *MCPAdapter) executeRealTool(ctx context.Context, p *ToolsCallPayload, s
 		if toolResult.Error != nil {
 			return true, a.sendToolError(ctx, stream, p.Name, toolResult.Error)
 		}
-		s := formatToolSuccessText(toolResult.Result)
 		structuredContent, serr := json.Marshal(toolResult.Result)
 		if serr != nil {
 			return false, serr
 		}
+		s := string(structuredContent)
 		final := &ToolsCallResult{
 			Content:           []*ContentItem{buildContentItem(a, s)},
 			StructuredContent: structuredContent,
@@ -2468,11 +2323,11 @@ func (a *MCPAdapter) executeRealTool(ctx context.Context, p *ToolsCallPayload, s
 		if toolResult.Error != nil {
 			return true, a.sendToolError(ctx, stream, p.Name, toolResult.Error)
 		}
-		s := formatToolSuccessText(toolResult.Result)
 		structuredContent, serr := json.Marshal(toolResult.Result)
 		if serr != nil {
 			return false, serr
 		}
+		s := string(structuredContent)
 		final := &ToolsCallResult{
 			Content:           []*ContentItem{buildContentItem(a, s)},
 			StructuredContent: structuredContent,

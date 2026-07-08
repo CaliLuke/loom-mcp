@@ -135,6 +135,9 @@ func TestGeneratedJSONRPCToolSearchCallToolInvokesProjectedTool(t *testing.T) {
 	stream := raw.(*mcpAssistantjsonrpcc.ToolsCallClientStream)
 	result, err := stream.Recv(context.Background())
 	require.NoError(t, err)
+	require.Len(t, result.Content, 1)
+	require.NotNil(t, result.Content[0].Text)
+	require.JSONEq(t, string(result.StructuredContent), *result.Content[0].Text)
 
 	var projected assistant.ProjectedLookupToolResult
 	require.NoError(t, json.Unmarshal(result.StructuredContent, &projected))

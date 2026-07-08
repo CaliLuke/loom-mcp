@@ -618,6 +618,9 @@ func TestGeneratedAdapterToolSearchAllowsDirectHiddenCallsWhenCompatEnabled(t *t
 	}, stream)
 	require.NoError(t, err)
 	require.Len(t, stream.events, 1)
+	require.Len(t, stream.events[0].Content, 1)
+	require.NotNil(t, stream.events[0].Content[0].Text)
+	require.JSONEq(t, string(stream.events[0].StructuredContent), *stream.events[0].Content[0].Text)
 
 	var result assistant.AnalyzeSentimentResult
 	require.NoError(t, json.Unmarshal(stream.events[0].StructuredContent, &result))
@@ -672,6 +675,9 @@ func TestGeneratedAdapterToolSearchCallToolInvokesProjectedTool(t *testing.T) {
 	}, stream)
 	require.NoError(t, err)
 	require.Len(t, stream.events, 1)
+	require.Len(t, stream.events[0].Content, 1)
+	require.NotNil(t, stream.events[0].Content[0].Text)
+	require.JSONEq(t, string(stream.events[0].StructuredContent), *stream.events[0].Content[0].Text)
 
 	var result assistant.ProjectedLookupToolResult
 	require.NoError(t, json.Unmarshal(stream.events[0].StructuredContent, &result))

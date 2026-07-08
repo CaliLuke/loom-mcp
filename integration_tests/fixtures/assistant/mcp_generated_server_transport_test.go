@@ -131,9 +131,14 @@ func TestGeneratedJSONRPCServerToolsCallUsesCompactTextAndStructuredContent(t *t
 	require.NoError(t, err)
 	require.Len(t, result.Content, 1)
 	require.NotNil(t, result.Content[0].Text)
-	assert.Equal(t, "positive", *result.Content[0].Text)
 	require.NotNil(t, result.StructuredContent)
 	structuredJSON, err := json.Marshal(result.StructuredContent)
 	require.NoError(t, err)
 	assert.Contains(t, string(structuredJSON), `"sentiment":"positive"`)
+
+	var textContent map[string]any
+	require.NoError(t, json.Unmarshal([]byte(*result.Content[0].Text), &textContent))
+	var structuredContent map[string]any
+	require.NoError(t, json.Unmarshal(structuredJSON, &structuredContent))
+	assert.Equal(t, structuredContent, textContent)
 }
