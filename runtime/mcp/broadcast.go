@@ -41,7 +41,7 @@ type Subscription interface {
 
 type channelBroadcaster struct {
 	mu     sync.RWMutex
-	subs   map[chan any]struct{}
+	subs   map[*channelSub]struct{}
 	buf    int
 	drop   bool
 	closed bool
@@ -58,28 +58,36 @@ type channelBroadcaster struct {
 //     buffer space, applying back-pressure to publishers.
 func NewChannelBroadcaster(buf int, drop bool) Broadcaster {
 	return &channelBroadcaster{
-		subs: make(map[chan any]struct{}),
+		subs: make(map[*channelSub]struct{}),
 		buf:  buf,
 		drop: drop,
 	}
 }
 
 func (b *channelBroadcaster) Subscribe(ctx context.Context) (Subscription, error) {
-	ch := make(chan any, b.buf)
+	sub := &channelSub{
+		ch:     make(chan any, b.buf),
+		parent: b,
+		done:   make(chan struct{}),
+	}
 	b.mu.Lock()
 	if b.closed {
 		b.mu.Unlock()
-		close(ch)
-		return &channelSub{ch: ch, parent: b}, nil
+		close(sub.ch)
+		sub.closeDone()
+		return sub, nil
 	}
-	b.subs[ch] = struct{}{}
+	b.subs[sub] = struct{}{}
 	b.mu.Unlock()
-	// Auto-unsubscribe on context cancellation
+
 	go func() {
-		<-ctx.Done()
-		_ = (&channelSub{ch: ch, parent: b}).Close()
+		select {
+		case <-ctx.Done():
+			_ = sub.Close()
+		case <-sub.done:
+		}
 	}()
-	return &channelSub{ch: ch, parent: b}, nil
+	return sub, nil
 }
 
 func (b *channelBroadcaster) Publish(ev any) {
@@ -88,13 +96,13 @@ func (b *channelBroadcaster) Publish(ev any) {
 	if b.closed {
 		return
 	}
-	for ch := range b.subs {
+	for sub := range b.subs {
 		select {
-		case ch <- ev:
+		case sub.ch <- ev:
 		default:
 			if !b.drop {
 				// block until space is available
-				ch <- ev
+				sub.ch <- ev
 			}
 		}
 	}
@@ -107,9 +115,10 @@ func (b *channelBroadcaster) Close() error {
 		return nil
 	}
 	b.closed = true
-	for ch := range b.subs {
-		close(ch)
-		delete(b.subs, ch)
+	for sub := range b.subs {
+		close(sub.ch)
+		sub.closeDone()
+		delete(b.subs, sub)
 	}
 	b.mu.Unlock()
 	return nil
@@ -118,6 +127,8 @@ func (b *channelBroadcaster) Close() error {
 type channelSub struct {
 	ch     chan any
 	parent *channelBroadcaster
+	done   chan struct{}
+	once   sync.Once
 }
 
 func (s *channelSub) C() <-chan any { return s.ch }
@@ -127,10 +138,17 @@ func (s *channelSub) Close() error {
 		return nil
 	}
 	s.parent.mu.Lock()
-	if _, ok := s.parent.subs[s.ch]; ok {
+	if _, ok := s.parent.subs[s]; ok {
 		close(s.ch)
-		delete(s.parent.subs, s.ch)
+		delete(s.parent.subs, s)
 	}
 	s.parent.mu.Unlock()
+	s.closeDone()
 	return nil
+}
+
+func (s *channelSub) closeDone() {
+	s.once.Do(func() {
+		close(s.done)
+	})
 }

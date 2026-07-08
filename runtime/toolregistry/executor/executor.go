@@ -49,6 +49,8 @@ type (
 		sinkName       string
 		resultEventKey string
 		outputDeltaKey string
+		resultWait     time.Duration
+		cleanupTimeout time.Duration
 		streamSink     aistream.Sink
 
 		logger telemetry.Logger
@@ -75,6 +77,10 @@ type (
 	}
 )
 
+const (
+	defaultCleanupTimeout = 5 * time.Second
+)
+
 // WithSinkName sets the Pulse sink/consumer-group name used when subscribing to
 // per-call result streams. Callers should use a stable name across restarts so
 // pending entries are not orphaned in Redis.
@@ -89,6 +95,16 @@ func WithSinkName(name string) Option {
 func WithResultEventKey(key string) Option {
 	return func(e *Executor) {
 		e.resultEventKey = key
+	}
+}
+
+// WithResultWaitTimeout sets the maximum time an executor waits for a registry
+// provider to publish the canonical result for a tool call. A non-positive
+// timeout disables the executor-local wait limit and uses only the caller
+// context.
+func WithResultWaitTimeout(timeout time.Duration) Option {
+	return func(e *Executor) {
+		e.resultWait = timeout
 	}
 }
 
@@ -126,6 +142,7 @@ func New(client Client, pulse pulsec.Client, specs SpecLookup, opts ...Option) *
 		sinkName:       "agent",
 		resultEventKey: toolregistry.ResultEventKey,
 		outputDeltaKey: toolregistry.OutputDeltaEventKey,
+		cleanupTimeout: defaultCleanupTimeout,
 		logger:         telemetry.NewNoopLogger(),
 		tracer:         telemetry.NewNoopTracer(),
 	}
@@ -160,11 +177,14 @@ func (e *Executor) Execute(ctx context.Context, meta *runtime.ToolCallMeta, call
 
 	stream, sink, err := e.subscribeResultStream(ctx, span, meta, call, toolsetID, toolUseID, resultStreamID)
 	if err != nil {
+		if stream != nil {
+			e.destroyResultStreamBestEffort(context.WithoutCancel(ctx), stream, span, resultStreamID, toolUseID, call.Name)
+		}
 		return nil, err
 	}
-	defer sink.Close(ctx)
+	defer e.cleanupResultStream(ctx, stream, sink, span, resultStreamID, toolUseID, call.Name)
 	span.AddEvent("toolregistry.result_subscribed", "toolregistry.result_stream_id", resultStreamID)
-	return e.awaitToolResult(ctx, span, stream, sink, spec, meta, call, toolUseID, resultStreamID)
+	return e.awaitToolResult(ctx, span, sink, spec, meta, call, toolUseID, resultStreamID)
 }
 
 func (e *Executor) prepareExecution(call *planner.ToolRequest, meta *runtime.ToolCallMeta) (*tools.ToolSpec, string, *planner.ToolResult) {
@@ -244,7 +264,7 @@ func (e *Executor) subscribeResultStream(
 	}
 	sink, err := stream.NewSink(ctx, e.sinkName, options.WithSinkStartAtOldest())
 	if err != nil {
-		return nil, nil, e.handleSinkCreateFailure(ctx, span, meta, call, toolsetID, toolUseID, resultStreamID, err)
+		return stream, nil, e.handleSinkCreateFailure(ctx, span, meta, call, toolsetID, toolUseID, resultStreamID, err)
 	}
 	return stream, sink, nil
 }
@@ -311,7 +331,6 @@ func (e *Executor) handleSinkCreateFailure(
 func (e *Executor) awaitToolResult(
 	ctx context.Context,
 	span telemetry.Span,
-	stream pulsec.Stream,
 	sink pulsec.Sink,
 	spec *tools.ToolSpec,
 	meta *runtime.ToolCallMeta,
@@ -319,13 +338,20 @@ func (e *Executor) awaitToolResult(
 	toolUseID string,
 	resultStreamID string,
 ) (*planner.ToolResult, error) {
+	waitCtx := ctx
+	var cancel context.CancelFunc
+	if e.resultWait > 0 {
+		waitCtx, cancel = context.WithTimeout(ctx, e.resultWait)
+		defer cancel()
+	}
 	events := sink.Subscribe()
 	for {
 		select {
-		case <-ctx.Done():
-			span.RecordError(ctx.Err())
+		case <-waitCtx.Done():
+			err := waitCtx.Err()
+			span.RecordError(err)
 			span.SetStatus(codes.Error, "tool result wait canceled")
-			return nil, ctx.Err()
+			return nil, err
 		case ev, ok := <-events:
 			if !ok {
 				err := fmt.Errorf("tool result stream subscription closed")
@@ -333,7 +359,7 @@ func (e *Executor) awaitToolResult(
 				span.SetStatus(codes.Error, "tool result stream subscription closed")
 				return nil, err
 			}
-			done, result, err := e.handleResultStreamEvent(ctx, span, stream, sink, spec, meta, call, toolUseID, resultStreamID, ev)
+			done, result, err := e.handleResultStreamEvent(waitCtx, span, sink, spec, meta, call, toolUseID, resultStreamID, ev)
 			if err != nil || done {
 				return result, err
 			}
@@ -344,7 +370,6 @@ func (e *Executor) awaitToolResult(
 func (e *Executor) handleResultStreamEvent(
 	ctx context.Context,
 	span telemetry.Span,
-	stream pulsec.Stream,
 	sink pulsec.Sink,
 	spec *tools.ToolSpec,
 	meta *runtime.ToolCallMeta,
@@ -364,7 +389,7 @@ func (e *Executor) handleResultStreamEvent(
 		}
 		return false, nil, nil
 	}
-	return e.handleResultEvent(ctx, span, stream, sink, spec, meta, call, toolUseID, resultStreamID, ev)
+	return e.handleResultEvent(ctx, span, sink, spec, meta, call, toolUseID, resultStreamID, ev)
 }
 
 func (e *Executor) handleOutputDeltaEvent(
@@ -431,7 +456,6 @@ func (e *Executor) forwardOutputDelta(
 func (e *Executor) handleResultEvent(
 	ctx context.Context,
 	span telemetry.Span,
-	stream pulsec.Stream,
 	sink pulsec.Sink,
 	spec *tools.ToolSpec,
 	meta *runtime.ToolCallMeta,
@@ -453,7 +477,6 @@ func (e *Executor) handleResultEvent(
 		span.SetStatus(codes.Error, "ack tool result message failed")
 		return true, nil, err
 	}
-	e.destroyResultStreamBestEffort(ctx, stream, span, resultStreamID, toolUseID, call.Name)
 	span.AddEvent(
 		"toolregistry.result_received",
 		"toolregistry.tool_use_id", toolUseID,
@@ -504,6 +527,13 @@ func (e *Executor) decodeToolResult(spec *tools.ToolSpec, call *planner.ToolRequ
 	return out
 }
 
+func (e *Executor) cleanupResultStream(ctx context.Context, stream pulsec.Stream, sink pulsec.Sink, span telemetry.Span, resultStreamID, toolUseID string, toolName tools.Ident) {
+	cleanupCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), e.cleanupTimeout)
+	defer cancel()
+	sink.Close(cleanupCtx)
+	e.destroyResultStreamBestEffort(cleanupCtx, stream, span, resultStreamID, toolUseID, toolName)
+}
+
 func (e *Executor) destroyResultStreamBestEffort(ctx context.Context, stream pulsec.Stream, span telemetry.Span, resultStreamID, toolUseID string, toolName tools.Ident) {
 	if err := stream.Destroy(ctx); err != nil {
 		span.RecordError(err)
@@ -515,7 +545,7 @@ func (e *Executor) destroyResultStreamBestEffort(ctx context.Context, stream pul
 		)
 		e.logger.Warn(
 			ctx,
-			"toolregistry result stream destroy failed after result acknowledgment",
+			"toolregistry result stream destroy failed",
 			"component", "tool-registry-executor",
 			"tool_use_id", toolUseID,
 			"tool", toolName,

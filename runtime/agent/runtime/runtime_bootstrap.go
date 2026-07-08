@@ -203,6 +203,7 @@ func newFromOptions(opts Options) *Runtime {
 		models:               make(map[string]model.Client),
 		runHandles:           make(map[string]engine.WorkflowHandle),
 		agentToolSpecs:       make(map[agent.Ident][]tools.ToolSpec),
+		endedStreamSessions:  make(map[string]struct{}),
 		workers:              opts.Workers,
 		reminders:            reminder.NewEngine(),
 		toolConfirmation:     opts.ToolConfirmation,

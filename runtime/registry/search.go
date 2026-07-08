@@ -247,7 +247,11 @@ func (s *SearchClient) searchRegistry(ctx context.Context, name string, entry *r
 // This is the fallback when semantic search is not available or fails.
 func (s *SearchClient) keywordSearch(ctx context.Context, client RegistryClient, query string) ([]*SearchResult, error) {
 	// Use the standard Search method which performs keyword search
-	return client.Search(ctx, query)
+	results, err := client.Search(ctx, query)
+	if err != nil {
+		return nil, err
+	}
+	return EnhanceResultsWithRelevance(query, results), nil
 }
 
 // filterResults applies post-processing filters to search results.
@@ -303,7 +307,7 @@ func hasMatchingTag(resultTags, filterTags []string) bool {
 
 // ParseSearchResults parses search results from a registry response.
 // This helper ensures all required fields are present and properly formatted.
-// Results without an ID are skipped rather than causing an error.
+// Results without an ID use Name as the stable identifier when present.
 func ParseSearchResults(results []*SearchResult) []*SearchResult {
 	if len(results) == 0 {
 		return results
@@ -311,14 +315,17 @@ func ParseSearchResults(results []*SearchResult) []*SearchResult {
 
 	parsed := make([]*SearchResult, 0, len(results))
 	for _, r := range results {
-		// Validate required fields per Requirements 4.2
-		if r.ID == "" {
-			continue // Skip results without ID
+		id := r.ID
+		if id == "" {
+			id = r.Name
+		}
+		if id == "" {
+			continue
 		}
 
 		// Ensure all required fields are present
 		result := &SearchResult{
-			ID:             r.ID,
+			ID:             id,
 			Name:           r.Name,
 			Description:    r.Description,
 			Type:           r.Type,

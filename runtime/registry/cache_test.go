@@ -106,6 +106,36 @@ func TestMemoryCacheTTLExpiration(t *testing.T) {
 	}
 }
 
+func TestMemoryCacheExpiredDeleteDoesNotRemoveRefreshedEntry(t *testing.T) {
+	cache := NewMemoryCache()
+	key := "refreshing-key"
+	expired := &cacheEntry{
+		schema:    &ToolsetSchema{ID: "old", Name: "old"},
+		expiresAt: time.Now().Add(-time.Second),
+		ttl:       time.Second,
+	}
+	fresh := &cacheEntry{
+		schema:    &ToolsetSchema{ID: "new", Name: "new"},
+		expiresAt: time.Now().Add(time.Hour),
+		ttl:       time.Hour,
+	}
+	cache.entries[key] = expired
+	cache.entries[key] = fresh
+
+	cache.deleteExpiredEntry(key, expired)
+
+	got, err := cache.Get(context.Background(), key)
+	if err != nil {
+		t.Fatalf("Get failed: %v", err)
+	}
+	if got == nil {
+		t.Fatal("fresh entry was deleted")
+	}
+	if got.ID != "new" {
+		t.Errorf("Get returned %q, want %q", got.ID, "new")
+	}
+}
+
 // TestMemoryCacheClear tests the Clear method.
 // **Validates: Requirements 8.1**
 func TestMemoryCacheClear(t *testing.T) {

@@ -68,6 +68,7 @@ func (r *Runtime) RegisterAgent(ctx context.Context, reg AgentRegistration) erro
 		return err
 	}
 	reg = resolved
+	reg.mergedInterceptors = mergeAgentInterceptors(r.interceptors, reg.Interceptors)
 	if err := r.registerAgentWithEngine(ctx, reg); err != nil {
 		return err
 	}
@@ -88,6 +89,16 @@ func (r *Runtime) resolveNamedAgentInterceptors(reg AgentRegistration) (AgentReg
 	}
 	reg.Interceptors = append(resolved, reg.Interceptors...)
 	return reg, nil
+}
+
+func mergeAgentInterceptors(runtimeInterceptors, agentInterceptors []Interceptor) []Interceptor {
+	if len(runtimeInterceptors) == 0 && len(agentInterceptors) == 0 {
+		return nil
+	}
+	merged := make([]Interceptor, 0, len(runtimeInterceptors)+len(agentInterceptors))
+	merged = append(merged, runtimeInterceptors...)
+	merged = append(merged, agentInterceptors...)
+	return merged
 }
 
 func (r *Runtime) ensureHookActivityRegistered(ctx context.Context) error {

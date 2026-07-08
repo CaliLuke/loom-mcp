@@ -64,15 +64,17 @@ func (r *Runtime) ExecuteToolActivity(ctx context.Context, req *ToolInput) (*Too
 }
 
 func (r *Runtime) interceptorsForAgent(agentID agent.Ident) []Interceptor {
-	interceptors := append([]Interceptor(nil), r.interceptors...)
 	if agentID == "" {
-		return interceptors
+		return r.interceptors
 	}
 	reg, ok := r.agentByID(agentID)
-	if !ok || len(reg.Interceptors) == 0 {
-		return interceptors
+	if !ok {
+		return r.interceptors
 	}
-	return append(interceptors, reg.Interceptors...)
+	if reg.mergedInterceptors != nil {
+		return reg.mergedInterceptors
+	}
+	return mergeAgentInterceptors(r.interceptors, reg.Interceptors)
 }
 
 func toolActivityRequest(req *ToolInput, raw rawjson.Message) planner.ToolRequest {

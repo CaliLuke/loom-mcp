@@ -64,6 +64,7 @@ func convertToolsetInfoList(pbToolsets []*registrypb.ToolsetInfo) []*ToolsetInfo
 	result := make([]*ToolsetInfo, len(pbToolsets))
 	for i, pb := range pbToolsets {
 		result[i] = &ToolsetInfo{
+			ID:          pb.GetName(),
 			Name:        pb.GetName(),
 			Description: pb.GetDescription(),
 			Version:     pb.GetVersion(),
@@ -102,6 +103,7 @@ func convertSearchResults(pbToolsets []*registrypb.ToolsetInfo) []*SearchResult 
 	result := make([]*SearchResult, len(pbToolsets))
 	for i, pb := range pbToolsets {
 		result[i] = &SearchResult{
+			ID:          pb.GetName(),
 			Name:        pb.GetName(),
 			Description: pb.GetDescription(),
 			Type:        searchResultTypeToolset,

@@ -89,10 +89,7 @@ func (c *MemoryCache) Get(_ context.Context, key string) (*ToolsetSchema, error)
 
 	now := time.Now()
 	if now.After(entry.expiresAt) {
-		// Entry expired, delete it
-		c.mu.Lock()
-		delete(c.entries, key)
-		c.mu.Unlock()
+		c.deleteExpiredEntry(key, entry)
 		return nil, nil
 	}
 
@@ -240,6 +237,14 @@ func (c *MemoryCache) storeRefreshedEntry(key string, ttl time.Duration, schema 
 		schema:    schema,
 		expiresAt: time.Now().Add(ttl),
 		ttl:       ttl,
+	}
+	c.mu.Unlock()
+}
+
+func (c *MemoryCache) deleteExpiredEntry(key string, expired *cacheEntry) {
+	c.mu.Lock()
+	if current, ok := c.entries[key]; ok && current == expired {
+		delete(c.entries, key)
 	}
 	c.mu.Unlock()
 }

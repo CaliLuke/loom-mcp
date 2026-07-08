@@ -157,6 +157,10 @@ type (
 		// been registered with the engine.
 		hookActivityRegistered bool
 
+		// endedStreamSessions caches sessions already observed as terminal so
+		// hook stream publishing can skip repeated session-store lookups.
+		endedStreamSessions map[string]struct{}
+
 		// hookActivityTimeout overrides the StartToClose timeout used for the
 		// hook publishing activity (`runtime.publish_hook`). Zero means use the
 		// runtime default.
@@ -297,6 +301,8 @@ type (
 		// Interceptors configures agent-scoped tool middleware. These run after
 		// runtime-level interceptors for tool calls issued by this agent.
 		Interceptors []Interceptor
+
+		mergedInterceptors []Interceptor
 	}
 
 	// DispatchMode selects how the runtime executes tool calls for a given

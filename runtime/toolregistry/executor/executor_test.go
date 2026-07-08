@@ -3,7 +3,9 @@ package executor
 import (
 	"context"
 	"encoding/json"
+	"sync"
 	"testing"
+	"time"
 
 	"github.com/CaliLuke/loom-mcp/features/stream/pulse/clients/pulse"
 	"github.com/CaliLuke/loom-mcp/runtime/agent"
@@ -178,6 +180,219 @@ func TestExecutorReturnsResultWhenStreamDestroyFails(t *testing.T) {
 	require.NoError(t, err)
 	assert.NotNil(t, res)
 	assert.Equal(t, tools.Ident("todos.update_todos"), res.Name)
+}
+
+func TestExecutorCleansResultStreamWithDetachedContextWhenCanceled(t *testing.T) {
+	t.Parallel()
+
+	const (
+		toolUseID = "tooluse-cancel-123"
+		toolName  = tools.Ident("todos.update_todos")
+	)
+
+	specs := fakeSpecs{
+		spec: &tools.ToolSpec{
+			Name:    toolName,
+			Toolset: "todos.todos",
+			Result:  tools.TypeSpec{},
+			Payload: tools.TypeSpec{},
+		},
+	}
+	sink := &fakeSink{subscribe: make(chan *streaming.Event)}
+	stream := &fakeStream{
+		t:             t,
+		requiredStart: "0",
+		sink:          sink,
+	}
+	pc := fakePulseClient{
+		streamID: toolregistry.ResultStreamID(toolUseID),
+		stream:   stream,
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	exec := New(fakeRegistryClient{
+		toolUseID: toolUseID,
+	}, pc, specs)
+
+	res, err := exec.Execute(ctx, &agentsruntime.ToolCallMeta{
+		RunID:     "run",
+		SessionID: "sess",
+	}, &planner.ToolRequest{
+		Name:    toolName,
+		Payload: []byte(`{}`),
+	})
+
+	require.ErrorIs(t, err, context.Canceled)
+	assert.Nil(t, res)
+	assert.True(t, sink.closed())
+	require.NoError(t, sink.closeContextErr())
+	assert.True(t, stream.destroyed())
+	assert.NoError(t, stream.destroyContextErr())
+}
+
+func TestExecutorResultWaitTimesOutAndCleansResultStream(t *testing.T) {
+	t.Parallel()
+
+	const (
+		toolUseID = "tooluse-timeout-123"
+		toolName  = tools.Ident("todos.update_todos")
+	)
+
+	specs := fakeSpecs{
+		spec: &tools.ToolSpec{
+			Name:    toolName,
+			Toolset: "todos.todos",
+			Result:  tools.TypeSpec{},
+			Payload: tools.TypeSpec{},
+		},
+	}
+	sink := &fakeSink{subscribe: make(chan *streaming.Event)}
+	stream := &fakeStream{
+		t:             t,
+		requiredStart: "0",
+		sink:          sink,
+	}
+	pc := fakePulseClient{
+		streamID: toolregistry.ResultStreamID(toolUseID),
+		stream:   stream,
+	}
+	exec := New(
+		fakeRegistryClient{
+			toolUseID: toolUseID,
+		},
+		pc,
+		specs,
+		WithResultWaitTimeout(10*time.Millisecond),
+	)
+
+	res, err := exec.Execute(context.Background(), &agentsruntime.ToolCallMeta{
+		RunID:     "run",
+		SessionID: "sess",
+	}, &planner.ToolRequest{
+		Name:    toolName,
+		Payload: []byte(`{}`),
+	})
+
+	require.ErrorIs(t, err, context.DeadlineExceeded)
+	assert.Nil(t, res)
+	assert.True(t, sink.closed())
+	require.NoError(t, sink.closeContextErr())
+	assert.True(t, stream.destroyed())
+	assert.NoError(t, stream.destroyContextErr())
+}
+
+func TestExecutorCleansResultStreamWhenResultAckFails(t *testing.T) {
+	t.Parallel()
+
+	const (
+		toolUseID       = "tooluse-ack-fails-123"
+		toolName        = tools.Ident("todos.update_todos")
+		resultEventName = toolregistry.ResultEventKey
+	)
+
+	specs := fakeSpecs{
+		spec: &tools.ToolSpec{
+			Name:    toolName,
+			Toolset: "todos.todos",
+			Result:  tools.TypeSpec{},
+			Payload: tools.TypeSpec{},
+		},
+	}
+	sink := &fakeSink{
+		events: []*streaming.Event{
+			{
+				ID:        "1-0",
+				EventName: resultEventName,
+				Payload: mustJSON(t, toolregistry.ToolResultMessage{
+					ToolUseID: toolUseID,
+					Result:    json.RawMessage(`{}`),
+				}),
+			},
+		},
+		ackErr: assert.AnError,
+	}
+	stream := &fakeStream{
+		t:             t,
+		requiredStart: "0",
+		sink:          sink,
+	}
+	pc := fakePulseClient{
+		streamID: toolregistry.ResultStreamID(toolUseID),
+		stream:   stream,
+	}
+	exec := New(
+		fakeRegistryClient{
+			toolUseID: toolUseID,
+		},
+		pc,
+		specs,
+		WithResultEventKey(resultEventName),
+	)
+
+	res, err := exec.Execute(context.Background(), &agentsruntime.ToolCallMeta{
+		RunID:     "run",
+		SessionID: "sess",
+	}, &planner.ToolRequest{
+		Name:    toolName,
+		Payload: []byte(`{}`),
+	})
+
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "ack tool result message")
+	assert.Nil(t, res)
+	assert.True(t, sink.closed())
+	require.NoError(t, sink.closeContextErr())
+	assert.True(t, stream.destroyed())
+	assert.NoError(t, stream.destroyContextErr())
+}
+
+func TestExecutorCleansResultStreamWhenSinkCreateFails(t *testing.T) {
+	t.Parallel()
+
+	const (
+		toolUseID = "tooluse-sink-fails-123"
+		toolName  = tools.Ident("todos.update_todos")
+	)
+
+	specs := fakeSpecs{
+		spec: &tools.ToolSpec{
+			Name:    toolName,
+			Toolset: "todos.todos",
+			Result:  tools.TypeSpec{},
+			Payload: tools.TypeSpec{},
+		},
+	}
+	stream := &fakeStream{
+		t:             t,
+		requiredStart: "0",
+		sinkErr:       assert.AnError,
+	}
+	pc := fakePulseClient{
+		streamID: toolregistry.ResultStreamID(toolUseID),
+		stream:   stream,
+	}
+	exec := New(
+		fakeRegistryClient{
+			toolUseID: toolUseID,
+		},
+		pc,
+		specs,
+	)
+
+	res, err := exec.Execute(context.Background(), &agentsruntime.ToolCallMeta{
+		RunID:     "run",
+		SessionID: "sess",
+	}, &planner.ToolRequest{
+		Name:    toolName,
+		Payload: []byte(`{}`),
+	})
+
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "create sink")
+	assert.Nil(t, res)
+	assert.True(t, stream.destroyed())
+	require.NoError(t, stream.destroyContextErr())
 }
 
 type captureSink struct {
@@ -387,7 +602,12 @@ type fakeStream struct {
 	t             *testing.T
 	requiredStart string
 	destroyErr    error
+	sinkErr       error
 	events        []*streaming.Event
+	sink          *fakeSink
+	mu            sync.Mutex
+	destroyCalled bool
+	destroyCtxErr error
 }
 
 func (s *fakeStream) Add(ctx context.Context, event string, payload []byte) (string, error) {
@@ -397,18 +617,48 @@ func (s *fakeStream) Add(ctx context.Context, event string, payload []byte) (str
 func (s *fakeStream) NewSink(ctx context.Context, name string, opts ...streamopts.Sink) (pulse.Sink, error) {
 	o := streamopts.ParseSinkOptions(opts...)
 	assert.Equal(s.t, s.requiredStart, o.LastEventID)
+	if s.sinkErr != nil {
+		return nil, s.sinkErr
+	}
+	if s.sink != nil {
+		return s.sink, nil
+	}
 	return &fakeSink{events: s.events}, nil
 }
 
 func (s *fakeStream) Destroy(ctx context.Context) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.destroyCalled = true
+	s.destroyCtxErr = ctx.Err()
 	return s.destroyErr
 }
 
+func (s *fakeStream) destroyed() bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.destroyCalled
+}
+
+func (s *fakeStream) destroyContextErr() error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.destroyCtxErr
+}
+
 type fakeSink struct {
-	events []*streaming.Event
+	events      []*streaming.Event
+	subscribe   <-chan *streaming.Event
+	ackErr      error
+	mu          sync.Mutex
+	closeCalled bool
+	closeCtxErr error
 }
 
 func (s *fakeSink) Subscribe() <-chan *streaming.Event {
+	if s.subscribe != nil {
+		return s.subscribe
+	}
 	ch := make(chan *streaming.Event, len(s.events))
 	for _, ev := range s.events {
 		ch <- ev
@@ -418,10 +668,30 @@ func (s *fakeSink) Subscribe() <-chan *streaming.Event {
 }
 
 func (s *fakeSink) Ack(ctx context.Context, ev *streaming.Event) error {
+	if s.ackErr != nil {
+		return s.ackErr
+	}
 	return nil
 }
 
-func (s *fakeSink) Close(ctx context.Context) {}
+func (s *fakeSink) Close(ctx context.Context) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.closeCalled = true
+	s.closeCtxErr = ctx.Err()
+}
+
+func (s *fakeSink) closed() bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.closeCalled
+}
+
+func (s *fakeSink) closeContextErr() error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.closeCtxErr
+}
 
 func mustJSON(t *testing.T, v any) []byte {
 	t.Helper()

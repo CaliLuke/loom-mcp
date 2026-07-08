@@ -154,16 +154,20 @@ func TestParseSearchResultsValidatesRequiredFields(t *testing.T) {
 	parameters.MinSuccessfulTests = 100
 	properties := gopter.NewProperties(parameters)
 
-	properties.Property("ParseSearchResults filters out results without ID", prop.ForAll(
+	properties.Property("ParseSearchResults falls back to name when ID is missing", prop.ForAll(
 		func(results []*SearchResult) bool {
 			// Mix in some results without ID
 			mixedResults := make([]*SearchResult, 0, len(results)*2)
 			for _, r := range results {
 				mixedResults = append(mixedResults, r)
+				name := r.Name
+				if name == "" {
+					name = "name-" + r.ID
+				}
 				// Add a result without ID
 				mixedResults = append(mixedResults, &SearchResult{
 					ID:             "", // Missing ID
-					Name:           r.Name,
+					Name:           name,
 					Description:    r.Description,
 					SchemaRef:      r.SchemaRef,
 					RelevanceScore: r.RelevanceScore,
@@ -179,9 +183,8 @@ func TestParseSearchResultsValidatesRequiredFields(t *testing.T) {
 				}
 			}
 
-			// Property: Results without ID should be filtered out
-			// So parsed length should equal original results length
-			return len(parsed) == len(results)
+			// Property: Results without ID but with names should survive.
+			return len(parsed) == len(mixedResults)
 		},
 		genSearchResultsWithRequiredFields(),
 	))

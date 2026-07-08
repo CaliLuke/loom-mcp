@@ -14,22 +14,26 @@ const (
 // TestParseSearchResults tests the ParseSearchResults helper function.
 // **Validates: Requirements 4.2**
 func TestParseSearchResults(t *testing.T) {
-	t.Run("filters out results without ID", func(t *testing.T) {
+	t.Run("uses name when ID is missing", func(t *testing.T) {
 		results := []*SearchResult{
 			{ID: "tool-1", Name: "Valid Tool", Description: "A valid tool"},
-			{ID: "", Name: "Invalid Tool", Description: "Missing ID"},
+			{ID: "", Name: "Name Only Tool", Description: "Missing ID"},
+			{ID: "", Name: "", Description: "Missing ID and name"},
 			{ID: "tool-2", Name: "Another Valid", Description: "Another valid tool"},
 		}
 
 		parsed := ParseSearchResults(results)
 
-		if len(parsed) != 2 {
-			t.Errorf("expected 2 results, got %d", len(parsed))
+		if len(parsed) != 3 {
+			t.Errorf("expected 3 results, got %d", len(parsed))
 		}
 		for _, r := range parsed {
 			if r.ID == "" {
 				t.Error("parsed result has empty ID")
 			}
+		}
+		if parsed[1].ID != "Name Only Tool" {
+			t.Errorf("ID: got %q, want %q", parsed[1].ID, "Name Only Tool")
 		}
 	})
 
@@ -360,6 +364,33 @@ func TestSearchClientKeywordFallback(t *testing.T) {
 		}
 		if results[0].Name != "keyword result" {
 			t.Errorf("expected keyword result, got %q", results[0].Name)
+		}
+	})
+
+	t.Run("enhances keyword results before relevance filtering", func(t *testing.T) {
+		manager := NewManager()
+
+		client := &mockKeywordOnlyClient{
+			results: []*SearchResult{
+				{ID: "tool-1", Name: "search assistant", Description: "Finds matching toolsets"},
+			},
+		}
+
+		manager.AddRegistry("keyword-relevance-registry", client, RegistryConfig{})
+
+		searchClient := NewSearchClient(manager)
+		results, err := searchClient.Search(ctx, "search", SearchOptions{
+			MinRelevance: 0.1,
+		})
+
+		if err != nil {
+			t.Fatalf("Search failed: %v", err)
+		}
+		if len(results) != 1 {
+			t.Fatalf("expected 1 result, got %d", len(results))
+		}
+		if results[0].RelevanceScore <= 0 {
+			t.Errorf("expected computed relevance, got %f", results[0].RelevanceScore)
 		}
 	})
 }

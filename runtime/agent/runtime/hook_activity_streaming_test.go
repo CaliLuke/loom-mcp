@@ -3,6 +3,7 @@ package runtime
 import (
 	"context"
 	"errors"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -95,5 +96,41 @@ func TestHookActivity_StreamFailureNoopAfterSessionEnded(t *testing.T) {
 	require.Equal(t, hooks.PlannerNote, rl.events[0].Type)
 }
 
+func TestPublishHookStreamEventCachesEndedSession(t *testing.T) {
+	t.Parallel()
+
+	store := &countingSessionStore{Store: sessioninmem.New()}
+	sub, err := stream.NewSubscriber(failingStreamSink{})
+	require.NoError(t, err)
+
+	rt := &Runtime{
+		SessionStore:     store,
+		streamSubscriber: sub,
+		logger:           telemetry.NoopLogger{},
+	}
+
+	now := time.Now().UTC()
+	_, err = store.CreateSession(context.Background(), "sess-1", now)
+	require.NoError(t, err)
+	_, err = store.EndSession(context.Background(), "sess-1", now.Add(time.Second))
+	require.NoError(t, err)
+
+	evt := hooks.NewPlannerNoteEvent("run-1", "svc.agent", "sess-1", "note", nil)
+	rt.publishHookStreamEvent(context.Background(), "sess-1", evt)
+	rt.publishHookStreamEvent(context.Background(), "sess-1", evt)
+
+	require.Equal(t, int64(1), store.loadCalls.Load())
+}
+
 var _ runlog.Store = (*recordingRunlog)(nil)
 var _ session.Store = (*sessioninmem.Store)(nil)
+
+type countingSessionStore struct {
+	session.Store
+	loadCalls atomic.Int64
+}
+
+func (s *countingSessionStore) LoadSession(ctx context.Context, sessionID string) (session.Session, error) {
+	s.loadCalls.Add(1)
+	return s.Store.LoadSession(ctx, sessionID)
+}

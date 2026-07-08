@@ -82,6 +82,9 @@ func TestGRPCClientAdapter_ListToolsets(t *testing.T) {
 		if toolsets[0].Name != testToolsetName {
 			t.Errorf("Name: got %q, want %q", toolsets[0].Name, testToolsetName)
 		}
+		if toolsets[0].ID != testToolsetName {
+			t.Errorf("ID: got %q, want %q", toolsets[0].ID, testToolsetName)
+		}
 		if toolsets[0].Description != desc {
 			t.Errorf("Description: got %q, want %q", toolsets[0].Description, desc)
 		}
@@ -212,6 +215,9 @@ func TestGRPCClientAdapter_Search(t *testing.T) {
 		}
 		if results[0].Name != "matching-toolset" {
 			t.Errorf("Name: got %q, want %q", results[0].Name, "matching-toolset")
+		}
+		if results[0].ID != "matching-toolset" {
+			t.Errorf("ID: got %q, want %q", results[0].ID, "matching-toolset")
 		}
 		if results[0].Type != "toolset" {
 			t.Errorf("Type: got %q, want %q", results[0].Type, "toolset")

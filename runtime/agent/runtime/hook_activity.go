@@ -115,17 +115,37 @@ func (r *Runtime) publishHookStreamEvent(ctx context.Context, sessionID string, 
 	if sessionID == "" || r.streamSubscriber == nil {
 		return
 	}
+	if r.streamSessionEnded(sessionID) {
+		return
+	}
 	sess, err := r.SessionStore.LoadSession(ctx, sessionID)
 	if err != nil {
 		r.logWarn(ctx, "stream session lookup failed", err, "session_id", sessionID, "event", string(evt.Type()))
 		return
 	}
 	if sess.Status == session.StatusEnded {
+		r.markStreamSessionEnded(sessionID)
 		return
 	}
 	if err := r.streamSubscriber.HandleEvent(ctx, evt); err != nil {
 		r.logWarn(ctx, "stream subscriber failed", err, "session_id", sessionID, "event", string(evt.Type()))
 	}
+}
+
+func (r *Runtime) streamSessionEnded(sessionID string) bool {
+	r.mu.RLock()
+	_, ok := r.endedStreamSessions[sessionID]
+	r.mu.RUnlock()
+	return ok
+}
+
+func (r *Runtime) markStreamSessionEnded(sessionID string) {
+	r.mu.Lock()
+	if r.endedStreamSessions == nil {
+		r.endedStreamSessions = make(map[string]struct{})
+	}
+	r.endedStreamSessions[sessionID] = struct{}{}
+	r.mu.Unlock()
 }
 
 // publishHookBusEvent forwards evt to every bus subscriber and returns the

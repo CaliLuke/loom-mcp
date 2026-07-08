@@ -130,6 +130,24 @@ func TestExecuteToolActivityRunsAgentInterceptors(t *testing.T) {
 	require.JSONEq(t, `{"text":"agent"}`, string(out.Payload))
 }
 
+func TestInterceptorsForAgentReturnsPrecomputedMergedSlice(t *testing.T) {
+	global := ToolInterceptorFuncs{}
+	local := ToolInterceptorFuncs{}
+	rt := New(WithInterceptors(global))
+	rt.agents["svc.agent"] = AgentRegistration{
+		ID:                 "svc.agent",
+		Interceptors:       []Interceptor{local},
+		mergedInterceptors: []Interceptor{global, local},
+	}
+
+	first := rt.interceptorsForAgent("svc.agent")
+	second := rt.interceptorsForAgent("svc.agent")
+
+	require.Len(t, first, 2)
+	require.Same(t, &first[0], &second[0])
+	require.Same(t, &first[1], &second[1])
+}
+
 func TestExecuteToolActivityEmptyAfterToolDecisionPreservesExecutorError(t *testing.T) {
 	execErr := errors.New("backend down")
 	rt := New(WithInterceptors(ToolInterceptorFuncs{
