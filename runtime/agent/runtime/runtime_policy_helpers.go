@@ -27,19 +27,18 @@ func toPolicyRetryHint(hint *planner.RetryHint) *policy.RetryHint {
 }
 
 // applyHistoryPolicy applies the agent's history policy to the given messages.
-func (r *Runtime) applyHistoryPolicy(ctx context.Context, reg *AgentRegistration, msgs []*model.Message) []*model.Message {
+func (r *Runtime) applyHistoryPolicy(ctx context.Context, reg *AgentRegistration, msgs []*model.Message) ([]*model.Message, error) {
 	if reg.Policy.History == nil || len(msgs) == 0 {
-		return msgs
+		return msgs, nil
 	}
 	out, err := reg.Policy.History(ctx, msgs, toolDefinitionsForHistory(reg.Specs))
 	if err != nil {
-		r.logWarn(ctx, "history policy failed", err, "agent_id", reg.ID)
-		return msgs
+		return nil, err
 	}
 	if len(out) == 0 {
-		return msgs
+		return msgs, nil
 	}
-	return out
+	return out, nil
 }
 
 func toolDefinitionsForHistory(specs []tools.ToolSpec) []*model.ToolDefinition {

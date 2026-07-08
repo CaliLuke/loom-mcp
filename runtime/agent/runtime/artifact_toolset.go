@@ -18,9 +18,11 @@ type (
 		Name string
 		// Store is the artifact store used by the generated tools.
 		Store artifact.Store
-		// MaxArtifactBytes caps load_artifact responses. Zero means no configured cap.
+		// MaxArtifactBytes caps load_artifact responses. Zero uses DefaultArtifactLoadMaxBytes.
+		// Set UnlimitedToolsetLimit to disable the runtime ceiling.
 		MaxArtifactBytes int
-		// MaxArtifacts caps list_artifacts responses. Zero means no configured cap.
+		// MaxArtifacts caps list_artifacts responses. Zero uses DefaultArtifactListLimit.
+		// Set UnlimitedToolsetLimit to disable the runtime ceiling.
 		MaxArtifacts int
 	}
 
@@ -50,6 +52,11 @@ type (
 const (
 	artifactToolList = "list_artifacts"
 	artifactToolLoad = "load_artifact"
+
+	// DefaultArtifactListLimit bounds listed artifact refs when MaxArtifacts is unset.
+	DefaultArtifactListLimit = 100
+	// DefaultArtifactLoadMaxBytes bounds loaded artifact content when MaxArtifactBytes is unset.
+	DefaultArtifactLoadMaxBytes = 256 * 1024
 )
 
 // NewArtifactToolsetRegistration exposes persisted run artifacts as ordinary
@@ -95,10 +102,7 @@ func executeArtifactTool(ctx context.Context, cfg ArtifactToolsetConfig, call *p
 }
 
 func executeListArtifacts(ctx context.Context, cfg ArtifactToolsetConfig, call *planner.ToolRequest, payload artifactListPayload) (*ToolExecutionResult, error) {
-	limit := payload.Limit
-	if cfg.MaxArtifacts > 0 && (limit <= 0 || limit > cfg.MaxArtifacts) {
-		limit = cfg.MaxArtifacts
-	}
+	limit := artifactListLimit(payload.Limit, cfg.MaxArtifacts)
 	refs, err := cfg.Store.List(ctx, artifact.ListQuery{
 		AgentID:  string(call.AgentID),
 		RunID:    call.RunID,
@@ -120,10 +124,7 @@ func executeLoadArtifact(ctx context.Context, cfg ArtifactToolsetConfig, call *p
 	if strings.TrimSpace(payload.ID) == "" {
 		return nil, fmt.Errorf("artifact id is required")
 	}
-	maxBytes := payload.MaxBytes
-	if cfg.MaxArtifactBytes > 0 && (maxBytes <= 0 || maxBytes > cfg.MaxArtifactBytes) {
-		maxBytes = cfg.MaxArtifactBytes
-	}
+	maxBytes := artifactLoadMaxBytes(payload.MaxBytes, cfg.MaxArtifactBytes)
 	content, err := cfg.Store.Load(ctx, artifact.LoadQuery{
 		AgentID:  string(call.AgentID),
 		RunID:    call.RunID,
@@ -143,6 +144,28 @@ func executeLoadArtifact(ctx context.Context, cfg ArtifactToolsetConfig, call *p
 			SizeBytes: content.SizeBytes,
 		},
 	}), nil
+}
+
+func artifactListLimit(requested, configured int) int {
+	return toolsetLimit(requested, configured, DefaultArtifactListLimit)
+}
+
+func artifactLoadMaxBytes(requested, configured int) int {
+	return toolsetLimit(requested, configured, DefaultArtifactLoadMaxBytes)
+}
+
+func toolsetLimit(requested, configured, defaultLimit int) int {
+	if configured == UnlimitedToolsetLimit {
+		return requested
+	}
+	ceiling := defaultLimit
+	if configured > 0 {
+		ceiling = configured
+	}
+	if requested <= 0 || requested > ceiling {
+		return ceiling
+	}
+	return requested
 }
 
 func decodeArtifactPayload(call *planner.ToolRequest, out any) error {

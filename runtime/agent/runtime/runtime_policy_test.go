@@ -156,3 +156,71 @@ func TestPlanStartActivityFiltersModelVisibleTools(t *testing.T) {
 	require.True(t, out.ToolPolicyActive)
 	require.Equal(t, []tools.Ident{tools.Ident("allowed")}, out.AllowedTools)
 }
+
+func TestPlanStartActivityReturnsHistoryPolicyError(t *testing.T) {
+	sentinel := errors.New("history policy unavailable")
+	rt := &Runtime{
+		agents: map[agent.Ident]AgentRegistration{
+			"svc.agent": {
+				ID:      "svc.agent",
+				Planner: &stubPlanner{},
+				Policy: RunPolicy{
+					History: func(context.Context, []*model.Message, []*model.ToolDefinition) ([]*model.Message, error) {
+						return nil, sentinel
+					},
+				},
+			},
+		},
+		Bus:           hooks.NewBus(),
+		logger:        telemetry.NoopLogger{},
+		metrics:       telemetry.NoopMetrics{},
+		tracer:        telemetry.NoopTracer{},
+		RunEventStore: runloginmem.New(),
+	}
+
+	_, err := rt.PlanStartActivity(context.Background(), &PlanActivityInput{
+		AgentID:    "svc.agent",
+		RunID:      "run-1",
+		RunContext: run.Context{RunID: "run-1"},
+		Messages: []*model.Message{{
+			Role:  model.ConversationRoleUser,
+			Parts: []model.Part{model.TextPart{Text: "hello"}},
+		}},
+	})
+
+	require.ErrorIs(t, err, sentinel)
+}
+
+func TestPlanResumeActivityReturnsHistoryPolicyError(t *testing.T) {
+	sentinel := errors.New("history policy unavailable")
+	rt := &Runtime{
+		agents: map[agent.Ident]AgentRegistration{
+			"svc.agent": {
+				ID:      "svc.agent",
+				Planner: &stubPlanner{},
+				Policy: RunPolicy{
+					History: func(context.Context, []*model.Message, []*model.ToolDefinition) ([]*model.Message, error) {
+						return nil, sentinel
+					},
+				},
+			},
+		},
+		Bus:           hooks.NewBus(),
+		logger:        telemetry.NoopLogger{},
+		metrics:       telemetry.NoopMetrics{},
+		tracer:        telemetry.NoopTracer{},
+		RunEventStore: runloginmem.New(),
+	}
+
+	_, err := rt.PlanResumeActivity(context.Background(), &PlanActivityInput{
+		AgentID:    "svc.agent",
+		RunID:      "run-1",
+		RunContext: run.Context{RunID: "run-1"},
+		Messages: []*model.Message{{
+			Role:  model.ConversationRoleUser,
+			Parts: []model.Part{model.TextPart{Text: "hello"}},
+		}},
+	})
+
+	require.ErrorIs(t, err, sentinel)
+}

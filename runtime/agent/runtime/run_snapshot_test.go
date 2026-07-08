@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/CaliLuke/loom-mcp/runtime/agent"
+	"github.com/CaliLuke/loom-mcp/runtime/agent/engine"
 	"github.com/CaliLuke/loom-mcp/runtime/agent/hooks"
 	"github.com/CaliLuke/loom-mcp/runtime/agent/run"
 	"github.com/CaliLuke/loom-mcp/runtime/agent/runlog"
@@ -88,4 +89,42 @@ func TestGetRunSnapshotReadsThroughStore(t *testing.T) {
 
 	_, err = rt.GetRunSnapshot(context.Background(), "run-1")
 	require.NoError(t, err)
+}
+
+func TestListRunEventsSkipsSnapshotReplayForActiveRun(t *testing.T) {
+	t.Parallel()
+
+	inner := runloginmem.New()
+	_, err := inner.Append(context.Background(), &runlog.Event{
+		EventKey:  "evt-1",
+		RunID:     "run-1",
+		AgentID:   agent.Ident("svc.agent"),
+		SessionID: "sess-1",
+		TurnID:    "turn-1",
+		Type:      hooks.RunPhaseChanged,
+		Payload:   []byte(`{"phase":"planning"}`),
+		Timestamp: time.Unix(1, 0).UTC(),
+	})
+	require.NoError(t, err)
+
+	store := &countingRunEventStore{Store: inner}
+	rt := &Runtime{
+		Engine:        &stubEngine{runStatus: engine.RunStatusRunning},
+		RunEventStore: store,
+	}
+
+	page, err := rt.ListRunEvents(context.Background(), "run-1", "", 10)
+	require.NoError(t, err)
+	require.Len(t, page.Events, 1)
+	require.Equal(t, 1, store.listCalls)
+}
+
+type countingRunEventStore struct {
+	runlog.Store
+	listCalls int
+}
+
+func (s *countingRunEventStore) List(ctx context.Context, runID string, cursor string, limit int) (runlog.Page, error) {
+	s.listCalls++
+	return s.Store.List(ctx, runID, cursor, limit)
 }

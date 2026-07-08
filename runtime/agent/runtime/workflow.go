@@ -75,10 +75,12 @@ func (r *Runtime) ExecuteWorkflow(wfCtx engine.WorkflowContext, input *RunInput)
 	defer func() {
 		afterOut, afterErr := runAfterRunInterceptors(wfCtx.Context(), r.interceptorsForAgent(input.AgentID), *input, runCtx, out, finalErr)
 		out = afterOut
-		if afterErr != nil {
-			finalErr = afterErr
-			retErr = afterErr
+		finalErr = afterErr
+		retErr = afterErr
+		if finalErr != nil {
 			finalStatus = runStatusFailed
+		} else if finalStatus != runStatusSuccess {
+			finalStatus = runStatusSuccess
 		}
 		r.publishWorkflowCompletion(wfCtx, input, turnID, &finalStatus, &finalErr)
 	}()

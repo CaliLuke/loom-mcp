@@ -802,6 +802,7 @@ type stubEngine struct {
 	registeredHookActivityOptions    map[string]engine.ActivityOptions
 	registeredPlannerActivityOptions map[string]engine.ActivityOptions
 	registeredExecuteActivityOptions map[string]engine.ActivityOptions
+	runStatus                        engine.RunStatus
 	sealCalls                        int
 	sealErrors                       []error
 }
@@ -834,6 +835,9 @@ func (s *stubEngine) StartWorkflow(ctx context.Context, req engine.WorkflowStart
 }
 
 func (s *stubEngine) QueryRunStatus(context.Context, string) (engine.RunStatus, error) {
+	if s.runStatus != "" {
+		return s.runStatus, nil
+	}
 	return engine.RunStatusCompleted, nil
 }
 

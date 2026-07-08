@@ -415,8 +415,12 @@ func (r *Runtime) ListRunEvents(ctx context.Context, runID, cursor string, limit
 	if !runEventPageNeedsTerminalRepair(page) {
 		return page, nil
 	}
-	if err := r.repairTerminalRunCompletion(ctx, runID); err != nil {
+	repairedRun, err := r.repairTerminalRunCompletion(ctx, runID)
+	if err != nil {
 		r.logWarn(ctx, "run completion repair skipped for event read", err, "run_id", runID)
+		return page, nil
+	}
+	if !repairedRun {
 		return page, nil
 	}
 	repaired, err := r.RunEventStore.List(ctx, runID, cursor, limit)
@@ -446,8 +450,12 @@ func (r *Runtime) GetRunSnapshot(ctx context.Context, runID string) (*run.Snapsh
 	snapshot, err := r.loadRunSnapshot(ctx, runID)
 	if err != nil {
 		if errors.Is(err, run.ErrNotFound) {
-			if repairErr := r.repairTerminalRunCompletion(ctx, runID); repairErr != nil {
+			repairedRun, repairErr := r.repairTerminalRunCompletion(ctx, runID)
+			if repairErr != nil {
 				r.logWarn(ctx, "run completion repair skipped for missing snapshot", repairErr, "run_id", runID)
+				return nil, err
+			}
+			if !repairedRun {
 				return nil, err
 			}
 			return r.loadRunSnapshot(ctx, runID)
@@ -459,8 +467,12 @@ func (r *Runtime) GetRunSnapshot(ctx context.Context, runID string) (*run.Snapsh
 		snapshot.Status == run.StatusCanceled {
 		return snapshot, nil
 	}
-	if err := r.repairTerminalRunCompletion(ctx, runID); err != nil {
+	repairedRun, err := r.repairTerminalRunCompletion(ctx, runID)
+	if err != nil {
 		r.logWarn(ctx, "run completion repair skipped for snapshot read", err, "run_id", runID)
+		return snapshot, nil
+	}
+	if !repairedRun {
 		return snapshot, nil
 	}
 	return r.loadRunSnapshot(ctx, runID)

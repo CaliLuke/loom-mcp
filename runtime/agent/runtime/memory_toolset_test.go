@@ -116,6 +116,68 @@ func TestMemoryToolsetLoadMemoryUsesConfiguredSearcher(t *testing.T) {
 	require.Contains(t, string(encoded), `"scope":"indexed"`)
 }
 
+func TestMemoryToolsetLoadMemoryAppliesDefaultConfiguredAndUnlimitedLimits(t *testing.T) {
+	store := memoryinmem.New()
+	ctx := context.Background()
+	events := make([]memory.Event, 0, DefaultMemoryToolResultLimit+1)
+	for i := range DefaultMemoryToolResultLimit + 1 {
+		events = append(events, memory.NewEvent(time.Unix(int64(i), 0), memory.UserMessageData{Message: "event"}, nil))
+	}
+	require.NoError(t, store.AppendEvents(ctx, "svc.agent", "run-1", events...))
+
+	tests := []struct {
+		name      string
+		configMax int
+		payload   string
+		wantCount int
+		wantTrunc bool
+	}{
+		{
+			name:      "default cap",
+			payload:   `{"scope":"current_run"}`,
+			wantCount: DefaultMemoryToolResultLimit,
+			wantTrunc: true,
+		},
+		{
+			name:      "configured cap overrides default",
+			configMax: 2,
+			payload:   `{"scope":"current_run","limit":20}`,
+			wantCount: 2,
+			wantTrunc: true,
+		},
+		{
+			name:      "explicit unlimited",
+			configMax: UnlimitedToolsetLimit,
+			payload:   `{"scope":"current_run"}`,
+			wantCount: DefaultMemoryToolResultLimit + 1,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			reg := NewMemoryToolsetRegistration(MemoryToolsetConfig{
+				Name:       "memory",
+				Store:      store,
+				MaxResults: tt.configMax,
+			})
+			result, err := reg.Execute(ctx, &planner.ToolRequest{
+				Name:       "memory.load_memory",
+				AgentID:    "svc.agent",
+				RunID:      "run-1",
+				ToolCallID: "memory-1",
+				Payload:    rawjson.Message([]byte(tt.payload)),
+			})
+			require.NoError(t, err)
+			require.Nil(t, result.ToolResult.Error)
+
+			got, ok := result.ToolResult.Result.(loadMemoryResult)
+			require.True(t, ok)
+			require.Len(t, got.Events, tt.wantCount)
+			require.Equal(t, tt.wantTrunc, got.Truncated)
+		})
+	}
+}
+
 func TestMemoryToolsetCurrentRunUsesStoreWhenSearcherConfigured(t *testing.T) {
 	store := memoryinmem.New()
 	ctx := context.Background()

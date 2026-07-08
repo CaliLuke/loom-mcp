@@ -6,8 +6,10 @@ import (
 	"errors"
 	"testing"
 
+	"github.com/CaliLuke/loom-mcp/runtime/agent/hooks"
 	"github.com/CaliLuke/loom-mcp/runtime/agent/planner"
 	"github.com/CaliLuke/loom-mcp/runtime/agent/rawjson"
+	runloginmem "github.com/CaliLuke/loom-mcp/runtime/agent/runlog/inmem"
 	"github.com/CaliLuke/loom-mcp/runtime/agent/tools"
 	"github.com/stretchr/testify/require"
 )
@@ -126,6 +128,123 @@ func TestExecuteToolActivityRunsAgentInterceptors(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, []string{"global-before", "agent-before", "execute", "agent-after"}, calls)
 	require.JSONEq(t, `{"text":"agent"}`, string(out.Payload))
+}
+
+func TestExecuteToolActivityEmptyAfterToolDecisionPreservesExecutorError(t *testing.T) {
+	execErr := errors.New("backend down")
+	rt := New(WithInterceptors(ToolInterceptorFuncs{
+		AfterToolFunc: func(ctx context.Context, input *AfterToolInput) (*AfterToolDecision, error) {
+			require.ErrorIs(t, input.Err, execErr)
+			return &AfterToolDecision{}, nil
+		},
+	}))
+	rt.toolsets["svc.tools"] = ToolsetRegistration{
+		Name: "svc.tools",
+		Execute: func(ctx context.Context, call *planner.ToolRequest) (*ToolExecutionResult, error) {
+			return nil, execErr
+		},
+	}
+	rt.toolSpecs["svc.tools.search"] = tools.ToolSpec{
+		Name:    "svc.tools.search",
+		Toolset: "svc.tools",
+		Payload: tools.TypeSpec{Codec: tools.AnyJSONCodec},
+		Result:  tools.TypeSpec{Codec: tools.AnyJSONCodec},
+	}
+
+	out, err := rt.ExecuteToolActivity(context.Background(), &ToolInput{
+		ToolsetName: "svc.tools",
+		ToolName:    "svc.tools.search",
+		ToolCallID:  "call-1",
+		Payload:     rawjson.Message([]byte(`{"query":"loom"}`)),
+	})
+
+	require.Nil(t, out)
+	require.ErrorIs(t, err, execErr)
+}
+
+func TestExecuteWorkflowAfterRunInterceptorCanClearError(t *testing.T) {
+	planErr := errors.New("planner unavailable")
+	afterOut := &RunOutput{
+		AgentID: "svc.agent",
+		RunID:   "run-1",
+	}
+	rt := New(WithInterceptors(RuntimeInterceptorFuncs{
+		AfterRunFunc: func(ctx context.Context, input *AfterRunInput) (*AfterRunDecision, error) {
+			require.ErrorIs(t, input.Err, planErr)
+			return &AfterRunDecision{Output: afterOut}, nil
+		},
+	}))
+	rt.agents["svc.agent"] = AgentRegistration{
+		ID:                  "svc.agent",
+		PlanActivityName:    "plan",
+		ExecuteToolActivity: "execute",
+		ResumeActivityName:  "resume",
+	}
+	wfCtx := &routeWorkflowContext{
+		ctx: context.Background(),
+		plannerRoutes: map[string]func(context.Context, *PlanActivityInput) (*PlanActivityOutput, error){
+			"plan": func(context.Context, *PlanActivityInput) (*PlanActivityOutput, error) {
+				return &PlanActivityOutput{}, planErr
+			},
+		},
+	}
+
+	out, err := rt.ExecuteWorkflow(wfCtx, &RunInput{
+		AgentID: "svc.agent",
+		RunID:   "run-1",
+		TurnID:  "turn-1",
+	})
+
+	require.NoError(t, err)
+	require.Same(t, afterOut, out)
+}
+
+func TestExecuteWorkflowAfterRunInterceptorClearsCanceledStatus(t *testing.T) {
+	recorder := &recordingHooks{}
+	rt := New(WithHooks(recorder), WithInterceptors(RuntimeInterceptorFuncs{
+		AfterRunFunc: func(ctx context.Context, input *AfterRunInput) (*AfterRunDecision, error) {
+			require.ErrorIs(t, input.Err, context.Canceled)
+			return &AfterRunDecision{
+				Output: &RunOutput{
+					AgentID: input.Input.AgentID,
+					RunID:   input.Input.RunID,
+				},
+			}, nil
+		},
+	}))
+	rt.agents["svc.agent"] = AgentRegistration{
+		ID:                  "svc.agent",
+		PlanActivityName:    "plan",
+		ExecuteToolActivity: "execute",
+		ResumeActivityName:  "resume",
+	}
+	rt.RunEventStore = runloginmem.New()
+	wfCtx := &routeWorkflowContext{
+		ctx:         context.Background(),
+		hookRuntime: rt,
+		plannerRoutes: map[string]func(context.Context, *PlanActivityInput) (*PlanActivityOutput, error){
+			"plan": func(context.Context, *PlanActivityInput) (*PlanActivityOutput, error) {
+				return &PlanActivityOutput{}, context.Canceled
+			},
+		},
+	}
+
+	out, err := rt.ExecuteWorkflow(wfCtx, &RunInput{
+		AgentID: "svc.agent",
+		RunID:   "run-1",
+		TurnID:  "turn-1",
+	})
+
+	require.NoError(t, err)
+	require.NotNil(t, out)
+	var completed *hooks.RunCompletedEvent
+	for _, evt := range recorder.events {
+		if e, ok := evt.(*hooks.RunCompletedEvent); ok {
+			completed = e
+		}
+	}
+	require.NotNil(t, completed)
+	require.Equal(t, runStatusSuccess, completed.Status)
 }
 
 func TestRetryAndReflectInterceptorConvertsToolErrorToRetryHint(t *testing.T) {

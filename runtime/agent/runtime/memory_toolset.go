@@ -28,7 +28,8 @@ type (
 		Sources []memory.ToolSource
 		// Visibility is the widest long-term memory visibility allowed by this toolset.
 		Visibility memory.Visibility
-		// MaxResults caps memory responses. Zero means no configured cap.
+		// MaxResults caps memory responses. Zero uses DefaultMemoryToolResultLimit.
+		// Set UnlimitedToolsetLimit to disable the runtime ceiling.
 		MaxResults int
 	}
 
@@ -72,6 +73,11 @@ const (
 	memoryPayloadQueryKey    = "query"
 	memoryNamespaceLabel     = "memory.namespace"
 	memoryUserIDLabel        = "memory.user_id"
+
+	// DefaultMemoryToolResultLimit bounds memory tool results when MaxResults is unset.
+	DefaultMemoryToolResultLimit = 100
+	// UnlimitedToolsetLimit disables built-in runtime ceilings for toolset limits.
+	UnlimitedToolsetLimit = -1
 )
 
 // NewMemoryToolsetRegistration exposes memory lookup as ordinary model tools.
@@ -262,10 +268,7 @@ func unsupportedMemorySource(call *planner.ToolRequest, message string) *ToolExe
 }
 
 func memoryResultLimit(requested, configured int) int {
-	if configured > 0 && (requested <= 0 || requested > configured) {
-		return configured
-	}
-	return requested
+	return toolsetLimit(requested, configured, DefaultMemoryToolResultLimit)
 }
 
 func decodeMemoryPayload(call *planner.ToolRequest, out any) error {

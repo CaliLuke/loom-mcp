@@ -329,7 +329,11 @@ func runAfterToolInterceptors(
 		if decision == nil {
 			continue
 		}
-		current, currentErr = applyAfterToolDecision(current, decision)
+		var decisionErr error
+		current, decisionErr = applyAfterToolDecision(current, decision)
+		if decisionErr != nil || decision.Execution != nil || decision.Result != nil {
+			currentErr = decisionErr
+		}
 	}
 	if currentErr != nil {
 		return nil, currentErr

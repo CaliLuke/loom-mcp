@@ -126,41 +126,48 @@ func (r *Runtime) repairObservedTerminalRunCompletion(ctx context.Context, runID
 // repairTerminalRunCompletion blocks only when the workflow is already terminal
 // in the engine but the canonical run log still lacks RunCompleted. This keeps
 // repair lazy for long-lived runs while still converging snapshots on demand.
-func (r *Runtime) repairTerminalRunCompletion(ctx context.Context, runID string) error {
+func (r *Runtime) repairTerminalRunCompletion(ctx context.Context, runID string) (bool, error) {
 	if ctx == nil {
 		ctx = context.Background()
 	}
-	terminal, err := r.runHasTerminalSnapshot(ctx, runID)
-	if err != nil {
-		return err
-	}
-	if terminal {
-		return nil
-	}
 	if r.Engine == nil {
-		return nil
+		terminal, err := r.runHasTerminalSnapshot(ctx, runID)
+		if err != nil {
+			return false, err
+		}
+		if terminal {
+			return false, nil
+		}
+		return false, nil
 	}
 	status, err := r.Engine.QueryRunStatus(ctx, runID)
 	if err != nil {
 		if errors.Is(err, engine.ErrWorkflowNotFound) {
-			return nil
+			return false, nil
 		}
-		return err
+		return false, err
 	}
 	if !isTerminalRunStatus(status) {
-		return nil
+		return false, nil
+	}
+	terminal, err := r.runHasTerminalSnapshot(ctx, runID)
+	if err != nil {
+		return false, err
+	}
+	if terminal {
+		return false, nil
 	}
 	if handle, ok := r.workflowHandle(runID); ok {
 		if observed, ok := handle.(*observedWorkflowHandle); ok {
 			repairCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
 			defer cancel()
-			return observed.Repair(repairCtx)
+			return true, observed.Repair(repairCtx)
 		}
 	}
 	if querier, ok := r.Engine.(engine.CompletionQuerier); ok {
-		return r.repairQueriedTerminalRunCompletion(ctx, runID, querier)
+		return true, r.repairQueriedTerminalRunCompletion(ctx, runID, querier)
 	}
-	return r.withSerializedTerminalRepair(ctx, runID, func(ctx context.Context) error {
+	return true, r.withSerializedTerminalRepair(ctx, runID, func(ctx context.Context) error {
 		return r.synthesizeTerminalRunCompletion(ctx, runID, status)
 	})
 }

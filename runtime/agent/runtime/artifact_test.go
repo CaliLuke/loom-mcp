@@ -3,6 +3,7 @@ package runtime
 import (
 	"context"
 	"encoding/json"
+	"strings"
 	"testing"
 
 	"github.com/CaliLuke/loom-mcp/runtime/agent/api"
@@ -112,6 +113,132 @@ func TestArtifactToolsetListsAndLoadsArtifacts(t *testing.T) {
 	loadBytes, err := json.Marshal(loadResult.ToolResult.Result)
 	require.NoError(t, err)
 	require.JSONEq(t, `{"content":"hello","mime_type":"text/plain","truncated":true,"size_bytes":11}`, string(loadBytes))
+}
+
+func TestArtifactToolsetLoadAppliesDefaultConfiguredAndUnlimitedLimits(t *testing.T) {
+	store := artifact.NewMemoryStore()
+	body := strings.Repeat("x", DefaultArtifactLoadMaxBytes+1)
+	ref, err := store.Save(context.Background(), artifact.SaveInput{
+		AgentID:  "svc.agent",
+		RunID:    "run-1",
+		Name:     "large.txt",
+		MimeType: "text/plain",
+		Body:     []byte(body),
+	})
+	require.NoError(t, err)
+
+	tests := []struct {
+		name      string
+		configMax int
+		payload   string
+		wantBytes int
+		wantTrunc bool
+	}{
+		{
+			name:      "default cap",
+			payload:   `{"id":"` + ref.ID + `"}`,
+			wantBytes: DefaultArtifactLoadMaxBytes,
+			wantTrunc: true,
+		},
+		{
+			name:      "configured cap overrides default",
+			configMax: 5,
+			payload:   `{"id":"` + ref.ID + `","max_bytes":20}`,
+			wantBytes: 5,
+			wantTrunc: true,
+		},
+		{
+			name:      "explicit unlimited",
+			configMax: UnlimitedToolsetLimit,
+			payload:   `{"id":"` + ref.ID + `"}`,
+			wantBytes: DefaultArtifactLoadMaxBytes + 1,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			reg := NewArtifactToolsetRegistration(ArtifactToolsetConfig{
+				Store:            store,
+				Name:             "artifacts",
+				MaxArtifactBytes: tt.configMax,
+			})
+			result, err := reg.Execute(context.Background(), &planner.ToolRequest{
+				Name:       "artifacts.load_artifact",
+				AgentID:    "svc.agent",
+				RunID:      "run-1",
+				ToolCallID: "artifact-load",
+				Payload:    rawjson.Message([]byte(tt.payload)),
+			})
+			require.NoError(t, err)
+			require.Nil(t, result.ToolResult.Error)
+
+			got, ok := result.ToolResult.Result.(artifactLoadResult)
+			require.True(t, ok)
+			require.Len(t, got.Content, tt.wantBytes)
+			require.Equal(t, tt.wantTrunc, got.Truncated)
+			require.Equal(t, int64(DefaultArtifactLoadMaxBytes+1), got.SizeBytes)
+		})
+	}
+}
+
+func TestArtifactToolsetListAppliesDefaultConfiguredAndUnlimitedLimits(t *testing.T) {
+	store := artifact.NewMemoryStore()
+	for range DefaultArtifactListLimit + 1 {
+		_, err := store.Save(context.Background(), artifact.SaveInput{
+			AgentID: "svc.agent",
+			RunID:   "run-1",
+			Body:    []byte("body"),
+		})
+		require.NoError(t, err)
+	}
+
+	tests := []struct {
+		name      string
+		configMax int
+		payload   string
+		wantCount int
+	}{
+		{
+			name:      "default cap",
+			payload:   `{}`,
+			wantCount: DefaultArtifactListLimit,
+		},
+		{
+			name:      "configured cap overrides default",
+			configMax: 2,
+			payload:   `{"limit":20}`,
+			wantCount: 2,
+		},
+		{
+			name:      "explicit unlimited",
+			configMax: UnlimitedToolsetLimit,
+			payload:   `{}`,
+			wantCount: DefaultArtifactListLimit + 1,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			reg := NewArtifactToolsetRegistration(ArtifactToolsetConfig{
+				Store:        store,
+				Name:         "artifacts",
+				MaxArtifacts: tt.configMax,
+			})
+			result, err := reg.Execute(context.Background(), &planner.ToolRequest{
+				Name:       "artifacts.list_artifacts",
+				AgentID:    "svc.agent",
+				RunID:      "run-1",
+				ToolCallID: "artifact-list",
+				Payload:    rawjson.Message([]byte(tt.payload)),
+			})
+			require.NoError(t, err)
+			require.Nil(t, result.ToolResult.Error)
+
+			got, ok := result.ToolResult.Result.(artifactListResult)
+			require.True(t, ok)
+			require.Len(t, got.Artifacts, tt.wantCount)
+		})
+	}
 }
 
 func TestProvidedToolResultArtifactRefsRejectForeignScope(t *testing.T) {
