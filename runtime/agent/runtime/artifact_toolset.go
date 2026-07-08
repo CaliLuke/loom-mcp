@@ -66,22 +66,29 @@ func NewArtifactToolsetRegistration(cfg ArtifactToolsetConfig) ToolsetRegistrati
 	if name == "" {
 		name = "artifacts"
 	}
+	var specs []tools.ToolSpec
+	if cfg.Store != nil {
+		specs = []tools.ToolSpec{
+			artifactToolSpec(name, artifactToolList, "List persisted artifacts for the current run."),
+			artifactToolSpec(name, artifactToolLoad, "Load bounded content from a persisted artifact."),
+		}
+	}
 	return ToolsetRegistration{
 		Name:        name,
 		Description: "Model-facing tools for listing and loading persisted run artifacts.",
 		Execute: func(ctx context.Context, call *planner.ToolRequest) (*ToolExecutionResult, error) {
 			return executeArtifactTool(ctx, cfg, call)
 		},
-		Specs: []tools.ToolSpec{
-			artifactToolSpec(name, artifactToolList, "List persisted artifacts for the current run."),
-			artifactToolSpec(name, artifactToolLoad, "Load bounded content from a persisted artifact."),
-		},
+		Specs: specs,
 	}
 }
 
 func executeArtifactTool(ctx context.Context, cfg ArtifactToolsetConfig, call *planner.ToolRequest) (*ToolExecutionResult, error) {
+	if call == nil {
+		return nil, fmt.Errorf("artifact tool request is nil")
+	}
 	if cfg.Store == nil {
-		return nil, fmt.Errorf("artifact store is required")
+		return unsupportedArtifactStore(call), nil
 	}
 	switch call.Name.Tool() {
 	case artifactToolList:
@@ -99,6 +106,21 @@ func executeArtifactTool(ctx context.Context, cfg ArtifactToolsetConfig, call *p
 	default:
 		return nil, fmt.Errorf("unknown artifact tool %q", call.Name)
 	}
+}
+
+func unsupportedArtifactStore(call *planner.ToolRequest) *ToolExecutionResult {
+	message := "Configure runtime.WithArtifactStore to enable artifact listing and loading."
+	return Executed(&planner.ToolResult{
+		Name:       call.Name,
+		ToolCallID: call.ToolCallID,
+		Error:      planner.NewToolError(message),
+		RetryHint: &planner.RetryHint{
+			Reason:         planner.RetryReasonUnsupportedOperation,
+			Tool:           call.Name,
+			RestrictToTool: true,
+			Message:        message,
+		},
+	})
 }
 
 func executeListArtifacts(ctx context.Context, cfg ArtifactToolsetConfig, call *planner.ToolRequest, payload artifactListPayload) (*ToolExecutionResult, error) {

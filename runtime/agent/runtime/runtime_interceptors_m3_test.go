@@ -44,6 +44,29 @@ func (emptyModelStream) Recv() (model.Chunk, error) { return model.Chunk{}, io.E
 func (emptyModelStream) Close() error               { return nil }
 func (emptyModelStream) Metadata() map[string]any   { return nil }
 
+type closeCountingModelClient struct {
+	stream *closeCountingModelStream
+}
+
+func (c closeCountingModelClient) Complete(context.Context, *model.Request) (*model.Response, error) {
+	return nil, errors.New("complete unsupported")
+}
+
+func (c closeCountingModelClient) Stream(context.Context, *model.Request) (model.Streamer, error) {
+	return c.stream, nil
+}
+
+type closeCountingModelStream struct {
+	closeCount int
+}
+
+func (s *closeCountingModelStream) Recv() (model.Chunk, error) { return model.Chunk{}, io.EOF }
+func (s *closeCountingModelStream) Close() error {
+	s.closeCount++
+	return nil
+}
+func (s *closeCountingModelStream) Metadata() map[string]any { return nil }
+
 func TestModelInterceptorsMutateRequestAndResponseOnce(t *testing.T) {
 	var calls []string
 	rt := New(WithInterceptors(RuntimeInterceptorFuncs{
@@ -209,6 +232,30 @@ func TestModelInterceptorStreamShortCircuitResponseDoesNotReturnNilStreamer(t *t
 	require.ErrorContains(t, err, "model response short-circuit is unsupported for streaming")
 	require.Nil(t, streamer)
 	require.Empty(t, calls)
+}
+
+func TestModelInterceptorStreamAfterErrorClosesOpenedStreamer(t *testing.T) {
+	afterErr := errors.New("after blocked")
+	opened := &closeCountingModelStream{}
+	rt := New(WithInterceptors(RuntimeInterceptorFuncs{
+		AfterModelFunc: func(context.Context, *AfterModelInput) (*AfterModelDecision, error) {
+			return nil, afterErr
+		},
+	}))
+	rt.models["default"] = closeCountingModelClient{stream: opened}
+	ctx := newAgentContext(agentContextOptions{
+		runtime: rt,
+		agentID: "svc.agent",
+		runID:   "run-1",
+		turnID:  "turn-1",
+	})
+	client, ok := ctx.ModelClient("default")
+	require.True(t, ok)
+
+	streamer, err := client.Stream(context.Background(), &model.Request{Model: "test"})
+	require.ErrorIs(t, err, afterErr)
+	require.Nil(t, streamer)
+	require.Equal(t, 1, opened.closeCount)
 }
 
 func TestRunInterceptorsOrderAndErrorShortCircuit(t *testing.T) {

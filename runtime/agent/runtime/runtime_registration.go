@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 
 	"github.com/CaliLuke/loom-mcp/runtime/agent/engine"
 	rthints "github.com/CaliLuke/loom-mcp/runtime/agent/runtime/hints"
@@ -160,6 +161,47 @@ func (r *Runtime) validateAgentRegistration(reg AgentRegistration) error {
 	if r.Engine == nil {
 		return ErrEngineNotConfigured
 	}
+	if err := r.validateMemoryPreloadPolicy(reg); err != nil {
+		return err
+	}
+	if err := r.validateLongTermMemoryPreloadPolicy(reg); err != nil {
+		return err
+	}
+	if err := r.validateRegisteredAgentToolsets(reg.Toolsets); err != nil {
+		return err
+	}
+	return nil
+}
+
+func (r *Runtime) validateMemoryPreloadPolicy(reg AgentRegistration) error {
+	policy := reg.Policy.PreloadMemory
+	if policy == nil {
+		return nil
+	}
+	switch policy.Scope {
+	case MemoryScopeCurrentRun:
+		if r.Memory == nil {
+			return fmt.Errorf("%w: agent %q PreloadMemory scope %q requires runtime.WithMemoryStore", ErrInvalidConfig, reg.ID, policy.Scope)
+		}
+	case MemoryScopeIndexed:
+		if r.MemorySearcher == nil {
+			return fmt.Errorf("%w: agent %q PreloadMemory scope %q requires runtime.WithMemorySearcher", ErrInvalidConfig, reg.ID, policy.Scope)
+		}
+	case "":
+		return fmt.Errorf("%w: agent %q PreloadMemory requires a scope", ErrInvalidConfig, reg.ID)
+	default:
+		return fmt.Errorf("%w: agent %q has unknown PreloadMemory scope %q", ErrInvalidConfig, reg.ID, policy.Scope)
+	}
+	return nil
+}
+
+func (r *Runtime) validateLongTermMemoryPreloadPolicy(reg AgentRegistration) error {
+	if reg.Policy.PreloadLongTermMemory == nil {
+		return nil
+	}
+	if r.MemoryService == nil {
+		return fmt.Errorf("%w: agent %q PreloadLongTermMemory requires runtime.WithMemoryService", ErrInvalidConfig, reg.ID)
+	}
 	return nil
 }
 
@@ -277,6 +319,15 @@ func validateRegisteredAgentToolsets(toolsets []ToolsetRegistration) error {
 	return nil
 }
 
+func (r *Runtime) validateRegisteredAgentToolsets(toolsets []ToolsetRegistration) error {
+	for _, ts := range toolsets {
+		if err := validateAgentToolsetSpecs(ts); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 func validateToolsetRegistration(ts ToolsetRegistration) error {
 	if ts.Name == "" {
 		return errors.New("toolset name is required")
@@ -335,5 +386,41 @@ func validateAgentToolsetSpecs(ts ToolsetRegistration) error {
 		}
 		return fmt.Errorf("%w: agent toolset %q requires tool specs/codecs", ErrInvalidConfig, ts.Name)
 	}
+	if err := validateAgentToolsetRoute(ts); err != nil {
+		return err
+	}
 	return nil
+}
+
+func validateAgentToolsetRoute(ts ToolsetRegistration) error {
+	route := ts.AgentTool.Route
+	var missing []string
+	if route.ID == "" {
+		missing = append(missing, "agent id")
+	}
+	if route.WorkflowName == "" {
+		missing = append(missing, "workflow name")
+	}
+	if route.DefaultTaskQueue == "" {
+		missing = append(missing, "default task queue")
+	}
+	if len(missing) == 0 {
+		return nil
+	}
+	agentID := ts.AgentTool.AgentID
+	if agentID == "" {
+		agentID = route.ID
+	}
+	tool := "unknown"
+	if len(ts.Specs) > 0 {
+		tool = string(ts.Specs[0].Name)
+	}
+	return fmt.Errorf(
+		"%w: agent toolset %q tool %q (agent=%s) has incomplete route: missing %s",
+		ErrInvalidConfig,
+		ts.Name,
+		tool,
+		agentID,
+		strings.Join(missing, ", "),
+	)
 }

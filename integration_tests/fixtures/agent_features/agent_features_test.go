@@ -28,6 +28,14 @@ func TestGeneratedFeatureFixtureRegistersRuntimeSurface(t *testing.T) {
 	ctx := context.Background()
 	rt := agentsruntime.New(
 		agentsruntime.WithMemoryStore(memoryinmem.New()),
+		agentsruntime.WithMemoryService(memoryinmem.NewService()),
+		agentsruntime.WithMemoryScopeResolver(memory.ScopeResolverFunc(func(_ context.Context, input memory.ScopeInput) (memory.Scope, error) {
+			return memory.Scope{
+				Namespace:  "agent:" + input.AgentID,
+				UserID:     "fixture-user",
+				Visibility: input.Visibility,
+			}, nil
+		})),
 		agentsruntime.WithArtifactStore(artifact.NewMemoryStore()),
 		agentsruntime.WithNamedInterceptors(map[string]agentsruntime.Interceptor{
 			"audit": &auditInterceptor{},

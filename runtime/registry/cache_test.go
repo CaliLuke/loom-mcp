@@ -3,6 +3,7 @@ package registry
 import (
 	"context"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 )
@@ -441,6 +442,101 @@ func TestMemoryCacheRefreshNotStarted(t *testing.T) {
 	if refreshCalled {
 		t.Error("Refresh was called even though StartRefresh was not called")
 	}
+}
+
+func TestMemoryCacheStartRefreshIdempotent(t *testing.T) {
+	ctx := context.Background()
+
+	var refreshCount atomic.Int32
+	refreshFunc := func(_ context.Context, _ string) (*ToolsetSchema, error) {
+		refreshCount.Add(1)
+		return &ToolsetSchema{ID: "refreshed", Name: "refreshed"}, nil
+	}
+
+	cache := NewMemoryCache(
+		WithRefreshFunc(refreshFunc),
+		WithRefreshCooldown(time.Hour),
+	)
+	cache.StartRefresh(ctx)
+	cache.StartRefresh(ctx)
+	cache.StartRefresh(ctx)
+	defer cache.StopRefresh()
+
+	schema := &ToolsetSchema{ID: "original", Name: "original"}
+	if err := cache.Set(ctx, "idempotent-key", schema, 200*time.Millisecond); err != nil {
+		t.Fatalf("Set failed: %v", err)
+	}
+
+	waitForCondition(t, func() bool {
+		cache.mu.RLock()
+		entry, ok := cache.entries["idempotent-key"]
+		cache.mu.RUnlock()
+		if !ok {
+			return false
+		}
+		return time.Now().After(entry.expiresAt.Add(-entry.ttl / 5))
+	}, "expected idempotent-key to enter refresh window")
+
+	for range 20 {
+		_, _ = cache.Get(ctx, "idempotent-key")
+	}
+
+	waitForCondition(t, func() bool {
+		return refreshCount.Load() > 0
+	}, "expected refresh to run")
+
+	time.Sleep(50 * time.Millisecond)
+	if got := refreshCount.Load(); got != 1 {
+		t.Errorf("Refresh called %d times, want 1", got)
+	}
+}
+
+func TestMemoryCacheRefreshLifecycleRaceFree(t *testing.T) {
+	ctx := context.Background()
+
+	refreshFunc := func(ctx context.Context, key string) (*ToolsetSchema, error) {
+		select {
+		case <-ctx.Done():
+			return nil, ctx.Err()
+		default:
+			return &ToolsetSchema{ID: "refreshed-" + key, Name: "refreshed"}, nil
+		}
+	}
+
+	cache := NewMemoryCache(
+		WithRefreshFunc(refreshFunc),
+		WithRefreshCooldown(time.Nanosecond),
+	)
+	schema := &ToolsetSchema{ID: "original", Name: "original"}
+	if err := cache.Set(ctx, "race-key", schema, time.Hour); err != nil {
+		t.Fatalf("Set failed: %v", err)
+	}
+
+	var wg sync.WaitGroup
+	for range 8 {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			for range 100 {
+				cache.StartRefresh(ctx)
+				cache.StopRefresh()
+			}
+		}()
+	}
+	for range 8 {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			for range 100 {
+				cache.StartRefresh(ctx)
+				cache.triggerRefresh("race-key")
+				_, _ = cache.Get(ctx, "race-key")
+			}
+		}()
+	}
+
+	wg.Wait()
+	cache.StopRefresh()
 }
 
 // TestNoopCacheImplementsInterface tests that noopCache implements Cache interface.

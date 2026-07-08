@@ -115,6 +115,33 @@ func TestArtifactToolsetListsAndLoadsArtifacts(t *testing.T) {
 	require.JSONEq(t, `{"content":"hello","mime_type":"text/plain","truncated":true,"size_bytes":11}`, string(loadBytes))
 }
 
+func TestArtifactToolsetStoreUnavailableReturnsStructuredToolError(t *testing.T) {
+	reg := NewArtifactToolsetRegistration(ArtifactToolsetConfig{Name: "artifacts"})
+	result, err := reg.Execute(context.Background(), &planner.ToolRequest{
+		Name:       "artifacts.list_artifacts",
+		AgentID:    "svc.agent",
+		RunID:      "run-1",
+		ToolCallID: "artifact-list",
+		Payload:    rawjson.Message([]byte(`{"limit":5}`)),
+	})
+	require.NoError(t, err)
+	require.NotNil(t, result.ToolResult.Error)
+	require.NotNil(t, result.ToolResult.RetryHint)
+	require.Equal(t, planner.RetryReasonUnsupportedOperation, result.ToolResult.RetryHint.Reason)
+	require.Contains(t, result.ToolResult.RetryHint.Message, "runtime.WithArtifactStore")
+}
+
+func TestArtifactToolsetWithoutStoreDoesNotAdvertiseArtifactTools(t *testing.T) {
+	rt := New()
+	reg := NewArtifactToolsetRegistration(ArtifactToolsetConfig{Name: "artifacts"})
+	require.Empty(t, reg.Specs)
+
+	err := rt.RegisterToolset(reg)
+	require.NoError(t, err)
+	_, ok := rt.ToolSpec("artifacts.list_artifacts")
+	require.False(t, ok)
+}
+
 func TestArtifactToolsetLoadAppliesDefaultConfiguredAndUnlimitedLimits(t *testing.T) {
 	store := artifact.NewMemoryStore()
 	body := strings.Repeat("x", DefaultArtifactLoadMaxBytes+1)

@@ -724,6 +724,90 @@ func TestSealRetriesAfterActivationFailure(t *testing.T) {
 	require.Equal(t, 2, eng.sealCalls)
 }
 
+func TestRegisterAgentRejectsIncompleteAgentToolsetRoute(t *testing.T) {
+	rt := New()
+	reg := NewAgentToolsetRegistration(rt, AgentToolConfig{
+		AgentID: "svc.child",
+		Name:    "svc.child_tools",
+		Route: AgentRoute{
+			ID:               "svc.child",
+			DefaultTaskQueue: "default",
+		},
+	})
+	reg.Specs = []tools.ToolSpec{newAnyJSONSpec("svc.child_tools.ask", "svc.child_tools")}
+
+	err := rt.RegisterAgent(context.Background(), AgentRegistration{
+		ID:                  "svc.parent",
+		Planner:             &stubPlanner{},
+		Workflow:            engine.WorkflowDefinition{Name: "svc.parent.workflow", Handler: func(engine.WorkflowContext, *RunInput) (*RunOutput, error) { return &RunOutput{}, nil }},
+		PlanActivityName:    "plan",
+		ResumeActivityName:  "resume",
+		ExecuteToolActivity: "execute",
+		Toolsets:            []ToolsetRegistration{reg},
+	})
+	require.Error(t, err)
+	require.ErrorIs(t, err, ErrInvalidConfig)
+	require.Contains(t, err.Error(), `agent toolset "svc.child_tools" tool "svc.child_tools.ask"`)
+	require.Contains(t, err.Error(), "missing workflow name")
+}
+
+func TestRegisterAgentRejectsUnknownPreloadMemoryScope(t *testing.T) {
+	rt := New()
+
+	err := rt.RegisterAgent(context.Background(), AgentRegistration{
+		ID:                  "svc.agent",
+		Planner:             &stubPlanner{},
+		Workflow:            engine.WorkflowDefinition{Name: "svc.agent.workflow", Handler: func(engine.WorkflowContext, *RunInput) (*RunOutput, error) { return &RunOutput{}, nil }},
+		PlanActivityName:    "plan",
+		ResumeActivityName:  "resume",
+		ExecuteToolActivity: "execute",
+		Policy: RunPolicy{
+			PreloadMemory: &MemoryPreloadPolicy{Scope: MemoryScope("elsewhere"), MaxResults: 3},
+		},
+	})
+	require.Error(t, err)
+	require.ErrorIs(t, err, ErrInvalidConfig)
+	require.Contains(t, err.Error(), `unknown PreloadMemory scope "elsewhere"`)
+}
+
+func TestRegisterAgentRejectsPreloadMemoryWithoutBackend(t *testing.T) {
+	rt := New()
+
+	err := rt.RegisterAgent(context.Background(), AgentRegistration{
+		ID:                  "svc.agent",
+		Planner:             &stubPlanner{},
+		Workflow:            engine.WorkflowDefinition{Name: "svc.agent.workflow", Handler: func(engine.WorkflowContext, *RunInput) (*RunOutput, error) { return &RunOutput{}, nil }},
+		PlanActivityName:    "plan",
+		ResumeActivityName:  "resume",
+		ExecuteToolActivity: "execute",
+		Policy: RunPolicy{
+			PreloadMemory: &MemoryPreloadPolicy{Scope: MemoryScopeIndexed, MaxResults: 3},
+		},
+	})
+	require.Error(t, err)
+	require.ErrorIs(t, err, ErrInvalidConfig)
+	require.Contains(t, err.Error(), "requires runtime.WithMemorySearcher")
+}
+
+func TestRegisterAgentRejectsLongTermMemoryPreloadWithoutBackend(t *testing.T) {
+	rt := New()
+
+	err := rt.RegisterAgent(context.Background(), AgentRegistration{
+		ID:                  "svc.agent",
+		Planner:             &stubPlanner{},
+		Workflow:            engine.WorkflowDefinition{Name: "svc.agent.workflow", Handler: func(engine.WorkflowContext, *RunInput) (*RunOutput, error) { return &RunOutput{}, nil }},
+		PlanActivityName:    "plan",
+		ResumeActivityName:  "resume",
+		ExecuteToolActivity: "execute",
+		Policy: RunPolicy{
+			PreloadLongTermMemory: &LongTermMemoryPreloadPolicy{MaxResults: 3},
+		},
+	})
+	require.Error(t, err)
+	require.ErrorIs(t, err, ErrInvalidConfig)
+	require.Contains(t, err.Error(), "requires runtime.WithMemoryService")
+}
+
 func TestTimeBudgetExceeded(t *testing.T) {
 	rt := &Runtime{
 		toolsets: map[string]ToolsetRegistration{"svc.ts": {Execute: func(ctx context.Context, call *planner.ToolRequest) (*ToolExecutionResult, error) {

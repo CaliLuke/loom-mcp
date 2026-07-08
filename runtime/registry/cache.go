@@ -24,8 +24,9 @@ type RefreshFunc func(ctx context.Context, key string) (*ToolsetSchema, error)
 // MemoryCache is an in-memory cache implementation with TTL support
 // and optional background refresh.
 type MemoryCache struct {
-	mu      sync.RWMutex
-	entries map[string]*cacheEntry
+	mu                 sync.RWMutex
+	refreshLifecycleMu sync.Mutex
+	entries            map[string]*cacheEntry
 
 	// Background refresh configuration
 	refreshFunc     RefreshFunc
@@ -106,15 +107,19 @@ func (c *MemoryCache) Get(_ context.Context, key string) (*ToolsetSchema, error)
 
 // triggerRefresh sends a key to the refresh channel for background processing.
 func (c *MemoryCache) triggerRefresh(key string) {
-	// Only trigger if refresh loop is running
-	if c.refreshCtx == nil {
+	c.mu.RLock()
+	ctx := c.refreshCtx
+	c.mu.RUnlock()
+
+	// Only trigger if refresh loop is running.
+	if ctx == nil {
 		return
 	}
 
 	select {
 	case c.refreshCh <- key:
 		// Queued for refresh
-	case <-c.refreshCtx.Done():
+	case <-ctx.Done():
 		// Refresh loop stopped
 	default:
 		// Channel full, skip this refresh
@@ -166,22 +171,47 @@ func (c *MemoryCache) StartRefresh(ctx context.Context) {
 		return
 	}
 
-	c.refreshCtx, c.refreshCancel = context.WithCancel(ctx)
+	c.refreshLifecycleMu.Lock()
+	defer c.refreshLifecycleMu.Unlock()
+
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	if c.refreshCancel != nil {
+		return
+	}
+
+	refreshCtx, refreshCancel := context.WithCancel(ctx)
+	c.refreshCtx = refreshCtx
+	c.refreshCancel = refreshCancel
 	c.refreshWg.Add(1)
-	go c.refreshLoop()
+	go c.refreshLoop(refreshCtx)
 }
 
 // StopRefresh stops the background refresh loop.
 func (c *MemoryCache) StopRefresh() {
-	if c.refreshCancel != nil {
-		c.refreshCancel()
-		c.refreshWg.Wait()
+	c.refreshLifecycleMu.Lock()
+	defer c.refreshLifecycleMu.Unlock()
+
+	c.mu.Lock()
+	cancel := c.refreshCancel
+	c.refreshCtx = nil
+	c.mu.Unlock()
+
+	if cancel != nil {
+		cancel()
+	}
+	c.refreshWg.Wait()
+
+	c.mu.Lock()
+	if c.refreshCtx == nil {
 		c.refreshCancel = nil
 	}
+	c.mu.Unlock()
 }
 
 // refreshLoop processes refresh requests from the channel.
-func (c *MemoryCache) refreshLoop() {
+func (c *MemoryCache) refreshLoop(ctx context.Context) {
 	defer c.refreshWg.Done()
 
 	// Track recently refreshed keys to avoid duplicate refreshes
@@ -189,7 +219,7 @@ func (c *MemoryCache) refreshLoop() {
 
 	for {
 		select {
-		case <-c.refreshCtx.Done():
+		case <-ctx.Done():
 			return
 		case key := <-c.refreshCh:
 			if c.shouldSkipRefresh(refreshed, key) {
@@ -199,7 +229,7 @@ func (c *MemoryCache) refreshLoop() {
 			if !exists {
 				continue
 			}
-			schema, err := c.refreshFunc(c.refreshCtx, key)
+			schema, err := c.refreshFunc(ctx, key)
 			if err != nil {
 				continue
 			}

@@ -87,10 +87,10 @@ func NewMemoryToolsetRegistration(cfg MemoryToolsetConfig) ToolsetRegistration {
 		name = defaultMemoryToolsetName
 	}
 	specs := make([]tools.ToolSpec, 0, 2)
-	if memorySourcesAllow(cfg.Sources, memory.ToolSourceTranscript) || memorySourcesAllow(cfg.Sources, memory.ToolSourceIndexedTranscript) {
+	if memoryToolsetCanLoadMemory(cfg) {
 		specs = append(specs, memoryToolSpec(name, memoryToolLoad, "Load bounded memory events for the current run or indexed memory."))
 	}
-	if memorySourcesAllow(cfg.Sources, memory.ToolSourceLongTerm) {
+	if memorySourcesAllow(cfg.Sources, memory.ToolSourceLongTerm) && cfg.Service != nil {
 		specs = append(specs, memoryToolSpec(name, memoryToolSearch, "Search bounded long-term memory entries."))
 	}
 	return ToolsetRegistration{
@@ -172,7 +172,7 @@ func executeCurrentRunMemory(ctx context.Context, cfg MemoryToolsetConfig, call 
 		return memory.QueryResult{}, unsupportedMemorySource(call, "current-run transcript memory is not enabled for this toolset"), nil
 	}
 	if cfg.Store == nil {
-		return memory.QueryResult{}, nil, fmt.Errorf("memory store is required")
+		return memory.QueryResult{}, unsupportedMemorySource(call, "Configure runtime.WithMemoryStore to enable current-run memory loading."), nil
 	}
 	snapshot, err := cfg.Store.LoadRun(ctx, string(call.AgentID), call.RunID)
 	if err != nil {
@@ -299,6 +299,11 @@ func memorySourcesAllow(sources []memory.ToolSource, source memory.ToolSource) b
 		}
 	}
 	return false
+}
+
+func memoryToolsetCanLoadMemory(cfg MemoryToolsetConfig) bool {
+	return memorySourcesAllow(cfg.Sources, memory.ToolSourceTranscript) && cfg.Store != nil ||
+		memorySourcesAllow(cfg.Sources, memory.ToolSourceIndexedTranscript) && cfg.Searcher != nil
 }
 
 func defaultLoadMemoryScope(sources []memory.ToolSource) MemoryScope {

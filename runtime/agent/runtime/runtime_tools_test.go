@@ -406,6 +406,25 @@ func TestRegisterToolset_RejectsAgentToolsetWithoutSpecs(t *testing.T) {
 	require.Contains(t, err.Error(), "requires tool specs")
 }
 
+func TestRegisterToolset_RejectsAgentToolsetWithIncompleteRoute(t *testing.T) {
+	rt := New()
+	reg := NewAgentToolsetRegistration(rt, AgentToolConfig{
+		AgentID: "svc.agent",
+		Name:    "svc.tools",
+		Route: AgentRoute{
+			ID:           "svc.agent",
+			WorkflowName: "wf",
+		},
+	})
+	reg.Specs = []tools.ToolSpec{newAnyJSONSpec("svc.tools.do", "svc.tools")}
+
+	err := rt.RegisterToolset(reg)
+	require.Error(t, err)
+	require.ErrorIs(t, err, ErrInvalidConfig)
+	require.Contains(t, err.Error(), `agent toolset "svc.tools" tool "svc.tools.do"`)
+	require.Contains(t, err.Error(), "missing default task queue")
+}
+
 func TestToolsetTaskQueueOverrideUsed(t *testing.T) {
 	rt := &Runtime{toolsets: map[string]ToolsetRegistration{"svc.export": {TaskQueue: "q1", Execute: func(ctx context.Context, call *planner.ToolRequest) (*ToolExecutionResult, error) {
 		return Executed(&planner.ToolResult{

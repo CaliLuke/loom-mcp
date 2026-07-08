@@ -233,6 +233,39 @@ func TestMemoryToolsetIndexedSearchUnavailableReturnsStructuredToolError(t *test
 	require.Equal(t, planner.RetryReasonUnsupportedOperation, result.ToolResult.RetryHint.Reason)
 }
 
+func TestMemoryToolsetCurrentRunStoreUnavailableReturnsStructuredToolError(t *testing.T) {
+	reg := NewMemoryToolsetRegistration(MemoryToolsetConfig{
+		Name:    "memory",
+		Sources: []memory.ToolSource{memory.ToolSourceTranscript},
+	})
+	result, err := reg.Execute(context.Background(), &planner.ToolRequest{
+		Name:       "memory.load_memory",
+		AgentID:    "svc.agent",
+		RunID:      "run-1",
+		ToolCallID: "memory-1",
+		Payload:    rawjson.Message([]byte(`{"scope":"current_run","limit":5}`)),
+	})
+	require.NoError(t, err)
+	require.NotNil(t, result.ToolResult.Error)
+	require.NotNil(t, result.ToolResult.RetryHint)
+	require.Equal(t, planner.RetryReasonUnsupportedOperation, result.ToolResult.RetryHint.Reason)
+	require.Contains(t, result.ToolResult.RetryHint.Message, "runtime.WithMemoryStore")
+}
+
+func TestMemoryToolsetWithoutBackendDoesNotAdvertiseLoadMemory(t *testing.T) {
+	rt := New()
+	reg := NewMemoryToolsetRegistration(MemoryToolsetConfig{
+		Name:    "memory",
+		Sources: []memory.ToolSource{memory.ToolSourceTranscript},
+	})
+	require.Empty(t, reg.Specs)
+
+	err := rt.RegisterToolset(reg)
+	require.NoError(t, err)
+	_, ok := rt.ToolSpec("memory.load_memory")
+	require.False(t, ok)
+}
+
 func TestMemoryToolsetSearchMemoryUsesResolvedUserScope(t *testing.T) {
 	ctx := context.Background()
 	service := memoryinmem.NewService()

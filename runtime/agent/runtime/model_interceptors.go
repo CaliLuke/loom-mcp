@@ -52,6 +52,10 @@ func (c *modelInterceptedClient) Stream(ctx context.Context, req *model.Request)
 	}
 	st, err := c.inner.Stream(ctx, currentReq)
 	err = c.afterModelStream(ctx, currentReq, err)
+	if err != nil && st != nil {
+		closeErr := st.Close()
+		return nil, errors.Join(err, closeErr)
+	}
 	return st, err
 }
 
