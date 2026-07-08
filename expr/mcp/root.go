@@ -4,6 +4,8 @@
 package mcp
 
 import (
+	"sort"
+
 	"github.com/CaliLuke/loom/eval"
 	"github.com/CaliLuke/loom/expr"
 )
@@ -65,15 +67,16 @@ func (r *RootExpr) WalkSets(walk eval.SetWalker) {
 
 func mcpServersSet(servers map[string]*MCPExpr) eval.ExpressionSet {
 	set := make(eval.ExpressionSet, 0, len(servers))
-	for _, mcp := range servers {
-		set = append(set, mcp)
+	for _, service := range sortedServiceNames(servers) {
+		set = append(set, servers[service])
 	}
 	return set
 }
 
 func mcpCapabilitiesSet(servers map[string]*MCPExpr) eval.ExpressionSet {
 	var set eval.ExpressionSet
-	for _, m := range servers {
+	for _, service := range sortedServiceNames(servers) {
+		m := servers[service]
 		if m.Capabilities != nil {
 			set = append(set, m.Capabilities)
 		}
@@ -83,7 +86,8 @@ func mcpCapabilitiesSet(servers map[string]*MCPExpr) eval.ExpressionSet {
 
 func mcpToolsSet(servers map[string]*MCPExpr) eval.ExpressionSet {
 	var set eval.ExpressionSet
-	for _, m := range servers {
+	for _, service := range sortedServiceNames(servers) {
+		m := servers[service]
 		for _, t := range m.Tools {
 			set = append(set, t)
 		}
@@ -93,7 +97,8 @@ func mcpToolsSet(servers map[string]*MCPExpr) eval.ExpressionSet {
 
 func mcpResourcesSet(servers map[string]*MCPExpr) eval.ExpressionSet {
 	var set eval.ExpressionSet
-	for _, m := range servers {
+	for _, service := range sortedServiceNames(servers) {
+		m := servers[service]
 		for _, rsrc := range m.Resources {
 			set = append(set, rsrc)
 		}
@@ -104,7 +109,8 @@ func mcpResourcesSet(servers map[string]*MCPExpr) eval.ExpressionSet {
 func mcpPromptSets(servers map[string]*MCPExpr) (eval.ExpressionSet, eval.ExpressionSet) {
 	var prompts eval.ExpressionSet
 	var messages eval.ExpressionSet
-	for _, m := range servers {
+	for _, service := range sortedServiceNames(servers) {
+		m := servers[service]
 		for _, p := range m.Prompts {
 			prompts = append(prompts, p)
 			for _, msg := range p.Messages {
@@ -117,12 +123,22 @@ func mcpPromptSets(servers map[string]*MCPExpr) (eval.ExpressionSet, eval.Expres
 
 func dynamicPromptSet(prompts map[string][]*DynamicPromptExpr) eval.ExpressionSet {
 	var set eval.ExpressionSet
-	for _, ps := range prompts {
+	for _, service := range sortedServiceNames(prompts) {
+		ps := prompts[service]
 		for _, p := range ps {
 			set = append(set, p)
 		}
 	}
 	return set
+}
+
+func sortedServiceNames[V any](items map[string]V) []string {
+	names := make([]string, 0, len(items))
+	for name := range items {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+	return names
 }
 
 // RegisterMCP registers an MCP server configuration for a service
