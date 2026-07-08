@@ -404,6 +404,8 @@ func (h *healthTracker) syncWithCatalog() {
 		}
 	}
 
+	h.streamManager.RemoveStreamsNotInCatalog(registered)
+
 	h.mu.Lock()
 	defer h.mu.Unlock()
 
@@ -524,6 +526,7 @@ func (h *healthTracker) sendPing(ctx context.Context, toolset string) {
 
 	pingID := newPingID(registrationToken)
 	msg := toolregistry.NewPingMessage(pingID)
+	defer h.removeStreamIfRegistrationChanged(ctx, toolset, registrationToken)
 	if err := h.streamManager.PublishToolCall(ctx, toolset, msg); err != nil {
 		h.logger.Error(
 			context.Background(),
@@ -534,6 +537,28 @@ func (h *healthTracker) sendPing(ctx context.Context, toolset string) {
 			"ping_id", pingID,
 			"err", err,
 		)
+	}
+}
+
+func (h *healthTracker) removeStreamIfRegistrationChanged(ctx context.Context, toolset string, expectedToken string) {
+	registrationToken, err := h.registrationToken(ctx, toolset)
+	if err != nil {
+		if errors.Is(err, errToolsetNotFound) {
+			h.streamManager.RemoveStream(toolset)
+			return
+		}
+		h.logger.Error(
+			context.Background(),
+			"resolve post-publish registration token failed",
+			"event", "resolve_post_publish_registration_token_failed",
+			"component", "tool-registry-health",
+			"toolset", toolset,
+			"err", err,
+		)
+		return
+	}
+	if registrationToken != expectedToken {
+		h.streamManager.RemoveStream(toolset)
 	}
 }
 

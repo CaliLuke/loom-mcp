@@ -62,6 +62,24 @@ func TestEngineRemovesUnavailableTool(t *testing.T) {
 	require.Equal(t, []tools.Ident{tools.Ident("svc.alpha.tool")}, decision.AllowedTools)
 }
 
+func TestEngineSortsImplicitCandidates(t *testing.T) {
+	engine, err := basic.New(basic.Options{})
+	require.NoError(t, err)
+	decision, err := engine.Decide(context.Background(), policy.Input{
+		Tools: []policy.ToolMetadata{
+			{ID: "svc.zeta.tool"},
+			{ID: "svc.alpha.tool"},
+			{ID: "svc.middle.tool"},
+		},
+	})
+	require.NoError(t, err)
+	require.Equal(t, []tools.Ident{
+		tools.Ident("svc.alpha.tool"),
+		tools.Ident("svc.middle.tool"),
+		tools.Ident("svc.zeta.tool"),
+	}, decision.AllowedTools)
+}
+
 func TestEngineEmitsMetadata(t *testing.T) {
 	engine, err := basic.New(basic.Options{Label: "custom"})
 	require.NoError(t, err)

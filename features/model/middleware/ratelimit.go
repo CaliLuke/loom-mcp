@@ -51,6 +51,7 @@ type (
 		SetIfNotExists(ctx context.Context, key, value string) (bool, error)
 		TestAndSet(ctx context.Context, key, test, value string) (string, error)
 		Subscribe() <-chan rmap.EventKind
+		Unsubscribe(ch <-chan rmap.EventKind)
 	}
 
 	rmapClusterMap struct {
@@ -257,6 +258,10 @@ func (m *rmapClusterMap) Subscribe() <-chan rmap.EventKind {
 	return m.m.Subscribe()
 }
 
+func (m *rmapClusterMap) Unsubscribe(ch <-chan rmap.EventKind) {
+	m.m.Unsubscribe(ch)
+}
+
 func newClusterAdaptiveRateLimiter(ctx context.Context, m clusterMap, key string, initialTPM, maxTPM float64) *AdaptiveRateLimiter {
 	if key == "" || m == nil {
 		return newAdaptiveRateLimiter(initialTPM, maxTPM)
@@ -267,7 +272,7 @@ func newClusterAdaptiveRateLimiter(ctx context.Context, m clusterMap, key string
 	sharedTPM := loadSharedTPM(m, key, initialTPM)
 	l := newAdaptiveRateLimiter(sharedTPM, maxTPM)
 	configureClusterCallbacks(l, m, key)
-	watchSharedTPM(m, key, l)
+	watchSharedTPM(ctx, m, key, l)
 	return l
 }
 
@@ -305,16 +310,35 @@ func configureClusterCallbacks(l *AdaptiveRateLimiter, m clusterMap, key string)
 	)
 }
 
-func watchSharedTPM(m clusterMap, key string, l *AdaptiveRateLimiter) {
+func watchSharedTPM(ctx context.Context, m clusterMap, key string, l *AdaptiveRateLimiter) <-chan struct{} {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+
 	ch := m.Subscribe()
+	done := make(chan struct{})
 	go func() {
-		for range ch {
+		defer close(done)
+		if ch == nil {
+			return
+		}
+		defer m.Unsubscribe(ch)
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case _, ok := <-ch:
+				if !ok {
+					return
+				}
+			}
 			v, ok := parseSharedTPM(m, key)
 			if ok {
 				l.replaceTPM(v)
 			}
 		}
 	}()
+	return done
 }
 
 func parseSharedTPM(m clusterMap, key string) (float64, bool) {

@@ -6,6 +6,7 @@ package basic
 
 import (
 	"context"
+	"slices"
 
 	"github.com/CaliLuke/loom-mcp/runtime/agent/policy"
 	"github.com/CaliLuke/loom-mcp/runtime/agent/tools"
@@ -165,6 +166,7 @@ func candidateHandles(input policy.Input, meta map[tools.Ident]policy.ToolMetada
 	for id := range meta {
 		handles = append(handles, id)
 	}
+	slices.Sort(handles)
 	return handles
 }
 

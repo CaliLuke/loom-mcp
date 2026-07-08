@@ -44,6 +44,14 @@ import (
 	"github.com/redis/go-redis/v9"
 )
 
+const (
+	defaultRegistryAddress     = ":9090"
+	defaultRegistryName        = "registry"
+	defaultRedisURL            = "localhost:6379"
+	defaultPingInterval        = 10 * time.Second
+	defaultMissedPingThreshold = 3
+)
+
 func main() {
 	if err := run(); err != nil {
 		log.Fatal(err)
@@ -54,12 +62,18 @@ func run() error {
 	ctx := context.Background()
 
 	// Load configuration from environment.
-	addr := envOr("REGISTRY_ADDR", ":9090")
-	name := envOr("REGISTRY_NAME", "registry")
-	redisURL := envOr("REDIS_URL", "localhost:6379")
+	addr := envOr("REGISTRY_ADDR", defaultRegistryAddress)
+	name := envOr("REGISTRY_NAME", defaultRegistryName)
+	redisURL := envOr("REDIS_URL", defaultRedisURL)
 	redisPassword := os.Getenv("REDIS_PASSWORD")
-	pingInterval := envDurationOr("PING_INTERVAL", 10*time.Second)
-	missedPingThreshold := envIntOr("MISSED_PING_THRESHOLD", 3)
+	pingInterval, err := envPingInterval()
+	if err != nil {
+		return err
+	}
+	missedPingThreshold, err := envMissedPingThreshold()
+	if err != nil {
+		return err
+	}
 
 	// Connect to Redis.
 	rdb := redis.NewClient(&redis.Options{
@@ -105,22 +119,30 @@ func envOr(key, defaultVal string) string {
 	return defaultVal
 }
 
-// envIntOr returns the environment variable as int or a default.
-func envIntOr(key string, defaultVal int) int {
-	if v := os.Getenv(key); v != "" {
-		if i, err := strconv.Atoi(v); err == nil {
-			return i
-		}
+// envMissedPingThreshold returns the configured missed-ping threshold.
+func envMissedPingThreshold() (int, error) {
+	const key = "MISSED_PING_THRESHOLD"
+	v := os.Getenv(key)
+	if v == "" {
+		return defaultMissedPingThreshold, nil
 	}
-	return defaultVal
+	i, err := strconv.Atoi(v)
+	if err != nil {
+		return 0, fmt.Errorf("invalid %s value %q: %w", key, v, err)
+	}
+	return i, nil
 }
 
-// envDurationOr returns the environment variable as duration or a default.
-func envDurationOr(key string, defaultVal time.Duration) time.Duration {
-	if v := os.Getenv(key); v != "" {
-		if d, err := time.ParseDuration(v); err == nil {
-			return d
-		}
+// envPingInterval returns the configured ping interval.
+func envPingInterval() (time.Duration, error) {
+	const key = "PING_INTERVAL"
+	v := os.Getenv(key)
+	if v == "" {
+		return defaultPingInterval, nil
 	}
-	return defaultVal
+	d, err := time.ParseDuration(v)
+	if err != nil {
+		return 0, fmt.Errorf("invalid %s value %q: %w", key, v, err)
+	}
+	return d, nil
 }

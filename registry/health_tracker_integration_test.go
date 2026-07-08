@@ -866,6 +866,8 @@ func (m *pingCountingStreamManager) GetStream(toolset string) clientspulse.Strea
 
 func (m *pingCountingStreamManager) RemoveStream(toolset string) {}
 
+func (m *pingCountingStreamManager) RemoveStreamsNotInCatalog(registered map[string]bool) {}
+
 func (m *pingCountingStreamManager) PublishToolCall(ctx context.Context, toolset string, msg toolregistry.ToolCallMessage) error {
 	if msg.Type == toolregistry.MessageTypePing {
 		m.mu.Lock()

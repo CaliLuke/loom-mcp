@@ -12,9 +12,11 @@ import (
 	clientspulse "github.com/CaliLuke/loom-mcp/features/stream/pulse/clients/pulse"
 	mockpulse "github.com/CaliLuke/loom-mcp/features/stream/pulse/clients/pulse/mocks"
 	genregistry "github.com/CaliLuke/loom-mcp/registry/gen/registry"
+	"github.com/CaliLuke/loom-mcp/runtime/agent/telemetry"
 	"github.com/CaliLuke/loom-mcp/runtime/toolregistry"
 	"github.com/CaliLuke/loom/pulse/pool"
 	"github.com/CaliLuke/loom/pulse/rmap"
+	streamopts "github.com/CaliLuke/loom/pulse/streaming/options"
 	"github.com/leanovate/gopter"
 	"github.com/leanovate/gopter/gen"
 	"github.com/leanovate/gopter/prop"
@@ -333,6 +335,95 @@ func TestReregisterWithCollidingRegistrationTimestampsRejectsStalePong(t *testin
 	require.False(t, health.Healthy)
 }
 
+func TestSyncWithCatalogRemovesStreamHandlesForAbsentToolsets(t *testing.T) {
+	rdb := getRedis(t)
+	ctx := context.Background()
+
+	healthMap, err := rmap.Join(ctx, "health-sync-streams-"+t.Name(), rdb)
+	require.NoError(t, err)
+	t.Cleanup(func() {
+		healthMap.Close()
+	})
+
+	registryMap, err := rmap.Join(ctx, "registry-sync-streams-"+t.Name(), rdb)
+	require.NoError(t, err)
+	t.Cleanup(func() {
+		registryMap.Close()
+	})
+
+	catalog := newToolsetCatalog(registryMap)
+	require.NoError(t, catalog.SaveToolset(ctx, &genregistry.Toolset{
+		Name:         "registered-toolset",
+		RegisteredAt: "registration-1",
+	}))
+
+	node, err := pool.AddNode(ctx, "health-sync-streams-pool-"+t.Name(), rdb, testNodeOpts()...)
+	require.NoError(t, err)
+	t.Cleanup(func() {
+		require.NoError(t, node.Close(ctx))
+	})
+
+	pulseClient := mockpulse.NewClient(t)
+	pulseClient.SetStream(func(name string, opts ...streamopts.Stream) (clientspulse.Stream, error) {
+		return mockpulse.NewStream(t), nil
+	})
+	streams := NewStreamManager(pulseClient)
+	tracker, err := NewHealthTracker(
+		streams,
+		healthMap,
+		registryMap,
+		node,
+		WithPingInterval(time.Hour),
+		WithMissedPingThreshold(2),
+	)
+	require.NoError(t, err)
+	t.Cleanup(func() {
+		require.NoError(t, tracker.Close())
+	})
+
+	_, _, err = streams.GetOrCreateStream(ctx, "registered-toolset")
+	require.NoError(t, err)
+	_, _, err = streams.GetOrCreateStream(ctx, "stale-toolset")
+	require.NoError(t, err)
+
+	tracker.(*healthTracker).syncWithCatalog()
+
+	require.NotNil(t, streams.GetStream("registered-toolset"))
+	require.Nil(t, streams.GetStream("stale-toolset"))
+}
+
+func TestSendPingRemovesStreamHandleWhenRegistrationDisappearsDuringPublish(t *testing.T) {
+	rdb := getRedis(t)
+	ctx := context.Background()
+
+	registryMap, err := rmap.Join(ctx, "registry-stale-ping-"+t.Name(), rdb)
+	require.NoError(t, err)
+	t.Cleanup(func() {
+		registryMap.Close()
+	})
+
+	catalog := newToolsetCatalog(registryMap)
+	require.NoError(t, catalog.SaveToolset(ctx, &genregistry.Toolset{
+		Name:         "racing-toolset",
+		RegisteredAt: "registration-1",
+	}))
+
+	streams := &catalogDeletingStreamManager{
+		onPublish: func() {
+			require.NoError(t, catalog.DeleteToolset(ctx, "racing-toolset"))
+		},
+	}
+	tracker := &healthTracker{
+		streamManager: streams,
+		catalog:       catalog,
+		logger:        telemetry.NewNoopLogger(),
+	}
+
+	tracker.sendPing(ctx, "racing-toolset")
+
+	require.Equal(t, []string{"racing-toolset"}, streams.removedToolsets())
+}
+
 // newPongTestService builds a registry service backed by a real health tracker
 // so Pong tests exercise the full health admission path.
 func newPongTestService(t *testing.T) (*Service, HealthTracker, *toolsetCatalog, *rmap.Map, *rmap.Map) {
@@ -439,11 +530,46 @@ func (m *mockStreamManager) GetStream(toolset string) clientspulse.Stream {
 
 func (m *mockStreamManager) RemoveStream(toolset string) {}
 
+func (m *mockStreamManager) RemoveStreamsNotInCatalog(registered map[string]bool) {}
+
 func (m *mockStreamManager) PublishToolCall(ctx context.Context, toolset string, msg toolregistry.ToolCallMessage) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	m.messages[toolset] = append(m.messages[toolset], msg)
 	return nil
+}
+
+type catalogDeletingStreamManager struct {
+	mu        sync.Mutex
+	onPublish func()
+	removed   []string
+}
+
+func (m *catalogDeletingStreamManager) GetOrCreateStream(ctx context.Context, toolset string) (clientspulse.Stream, string, error) {
+	return nil, "mock-stream:" + toolset, nil
+}
+
+func (m *catalogDeletingStreamManager) GetStream(toolset string) clientspulse.Stream {
+	return nil
+}
+
+func (m *catalogDeletingStreamManager) RemoveStream(toolset string) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.removed = append(m.removed, toolset)
+}
+
+func (m *catalogDeletingStreamManager) RemoveStreamsNotInCatalog(registered map[string]bool) {}
+
+func (m *catalogDeletingStreamManager) PublishToolCall(ctx context.Context, toolset string, msg toolregistry.ToolCallMessage) error {
+	m.onPublish()
+	return nil
+}
+
+func (m *catalogDeletingStreamManager) removedToolsets() []string {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return append([]string(nil), m.removed...)
 }
 
 func genHealthyToolsetName() gopter.Gen {
@@ -461,3 +587,4 @@ func genMissedPingThreshold() gopter.Gen {
 }
 
 var _ StreamManager = (*mockStreamManager)(nil)
+var _ StreamManager = (*catalogDeletingStreamManager)(nil)

@@ -32,6 +32,10 @@ type StreamManager interface {
 	// This does not destroy the underlying Pulse stream.
 	RemoveStream(toolset string)
 
+	// RemoveStreamsNotInCatalog removes stream tracking for toolsets absent
+	// from the current catalog snapshot.
+	RemoveStreamsNotInCatalog(registered map[string]bool)
+
 	// PublishToolCall publishes a tool call message to the toolset's stream.
 	PublishToolCall(ctx context.Context, toolset string, msg toolregistry.ToolCallMessage) error
 }
@@ -92,6 +96,18 @@ func (m *streamManager) RemoveStream(toolset string) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	delete(m.streams, toolset)
+}
+
+// RemoveStreamsNotInCatalog removes stream tracking for toolsets absent from
+// the current catalog snapshot.
+func (m *streamManager) RemoveStreamsNotInCatalog(registered map[string]bool) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	for toolset := range m.streams {
+		if !registered[toolset] {
+			delete(m.streams, toolset)
+		}
+	}
 }
 
 // PublishToolCall publishes a tool call message to the toolset's stream.

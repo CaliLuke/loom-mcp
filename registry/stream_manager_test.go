@@ -1,16 +1,42 @@
 package registry
 
 import (
+	"context"
 	"encoding/json"
 	"testing"
 
+	clientspulse "github.com/CaliLuke/loom-mcp/features/stream/pulse/clients/pulse"
+	mockpulse "github.com/CaliLuke/loom-mcp/features/stream/pulse/clients/pulse/mocks"
 	"github.com/CaliLuke/loom-mcp/runtime/agent/tools"
 	"github.com/CaliLuke/loom-mcp/runtime/toolregistry"
+	streamopts "github.com/CaliLuke/loom/pulse/streaming/options"
 
 	"github.com/leanovate/gopter"
 	"github.com/leanovate/gopter/gen"
 	"github.com/leanovate/gopter/prop"
+	"github.com/stretchr/testify/require"
 )
+
+func TestStreamManagerRemovesStreamsAbsentFromCatalog(t *testing.T) {
+	ctx := context.Background()
+	client := mockpulse.NewClient(t)
+	client.SetStream(func(name string, opts ...streamopts.Stream) (clientspulse.Stream, error) {
+		return mockpulse.NewStream(t), nil
+	})
+
+	manager := NewStreamManager(client)
+	_, _, err := manager.GetOrCreateStream(ctx, "registered-toolset")
+	require.NoError(t, err)
+	_, _, err = manager.GetOrCreateStream(ctx, "stale-toolset")
+	require.NoError(t, err)
+
+	manager.RemoveStreamsNotInCatalog(map[string]bool{
+		"registered-toolset": true,
+	})
+
+	require.NotNil(t, manager.GetStream("registered-toolset"))
+	require.Nil(t, manager.GetStream("stale-toolset"))
+}
 
 // TestToolCallMessageStructure verifies Property 13: Tool call message structure.
 // **Feature: internal-tool-registry, Property 13: Tool call message structure**

@@ -12,15 +12,18 @@ import (
 )
 
 type fakeClusterMap struct {
-	mu     sync.Mutex
-	values map[string]string
-	ch     chan rmap.EventKind
+	mu           sync.Mutex
+	values       map[string]string
+	ch           chan rmap.EventKind
+	unsubscribed chan struct{}
+	unsubOnce    sync.Once
 }
 
 func newFakeClusterMap() *fakeClusterMap {
 	return &fakeClusterMap{
-		values: make(map[string]string),
-		ch:     make(chan rmap.EventKind, 1),
+		values:       make(map[string]string),
+		ch:           make(chan rmap.EventKind, 1),
+		unsubscribed: make(chan struct{}),
 	}
 }
 
@@ -64,10 +67,21 @@ func (m *fakeClusterMap) Subscribe() <-chan rmap.EventKind {
 	return m.ch
 }
 
+func (m *fakeClusterMap) Unsubscribe(ch <-chan rmap.EventKind) {
+	if ch != m.ch {
+		return
+	}
+	m.unsubOnce.Do(func() {
+		close(m.unsubscribed)
+	})
+}
+
 func TestClusterLimiter_BackoffUpdatesSharedMap(t *testing.T) {
 	t.Helper()
 
-	ctx := context.Background()
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
 	m := newFakeClusterMap()
 	const key = "model"
 
@@ -108,5 +122,31 @@ func TestClusterLimiter_BackoffUpdatesSharedMap(t *testing.T) {
 	}
 	if cur >= 80000 {
 		t.Fatalf("expected shared TPM to decrease, got %d", cur)
+	}
+}
+
+func TestWatchSharedTPMStopsWhenContextCanceled(t *testing.T) {
+	t.Helper()
+
+	ctx, cancel := context.WithCancel(context.Background())
+	m := newFakeClusterMap()
+	const key = "model"
+	m.values[key] = strconv.Itoa(80000)
+
+	lim := newAdaptiveRateLimiter(80000, 80000)
+	done := watchSharedTPM(ctx, m, key, lim)
+
+	cancel()
+
+	select {
+	case <-done:
+	case <-time.After(time.Second):
+		t.Fatal("expected shared TPM watcher to stop after context cancellation")
+	}
+
+	select {
+	case <-m.unsubscribed:
+	default:
+		t.Fatal("expected shared TPM watcher to unsubscribe")
 	}
 }

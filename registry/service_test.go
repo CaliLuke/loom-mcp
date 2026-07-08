@@ -578,6 +578,8 @@ func (m *mockStreamManagerForService) GetStream(toolset string) clientspulse.Str
 
 func (m *mockStreamManagerForService) RemoveStream(toolset string) {}
 
+func (m *mockStreamManagerForService) RemoveStreamsNotInCatalog(registered map[string]bool) {}
+
 func (m *mockStreamManagerForService) PublishToolCall(ctx context.Context, toolset string, msg toolregistry.ToolCallMessage) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
