@@ -153,7 +153,7 @@ func NewEndpoints(scheme string, host string, doer goahttp.Doer, enc func(*http.
 				Name:    "loom-mcp-adapter",
 				Version: "dev",
 			},
-			ProtocolVersion: "2025-06-18",
+			ProtocolVersion: mcpAssistant.DefaultProtocolVersion,
 		})
 		return err
 	}

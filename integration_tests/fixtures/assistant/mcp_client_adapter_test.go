@@ -10,6 +10,7 @@ import (
 	"testing"
 
 	assistant "example.com/assistant/gen/assistant"
+	mcpAssistant "example.com/assistant/gen/mcp_assistant"
 	mcpAssistantadapter "example.com/assistant/gen/mcp_assistant/adapter/client"
 	goahttp "github.com/CaliLuke/loom/http"
 	"github.com/CaliLuke/loom/jsonrpc"
@@ -85,6 +86,7 @@ func TestMCPClientAdapterReturnsRetryPromptOnInvalidToolResponse(t *testing.T) {
 		switch req.Method {
 		case "initialize":
 			initializeCalls++
+			assertInitializeProtocolVersion(t, req)
 			writeJSONRPCBody(t, w, map[string]any{
 				"jsonrpc": "2.0",
 				"result": map[string]any{
@@ -141,6 +143,7 @@ func newMCPAdapterTestServer(t *testing.T, toolResult map[string]any) *httptest.
 		switch req.Method {
 		case "initialize":
 			initializeCalls++
+			assertInitializeProtocolVersion(t, req)
 			response = map[string]any{
 				"jsonrpc": "2.0",
 				"result": map[string]any{
@@ -181,6 +184,17 @@ func newMCPAdapterTestServer(t *testing.T, toolResult map[string]any) *httptest.
 	})
 
 	return server
+}
+
+func assertInitializeProtocolVersion(t *testing.T, req jsonrpc.Request) {
+	t.Helper()
+
+	params, err := json.Marshal(req.Params)
+	require.NoError(t, err)
+
+	var payload mcpAssistant.InitializePayload
+	require.NoError(t, json.Unmarshal(params, &payload))
+	assert.Equal(t, mcpAssistant.DefaultProtocolVersion, payload.ProtocolVersion)
 }
 
 func newAdapterEndpoints(t *testing.T, server *httptest.Server) *assistant.Endpoints {

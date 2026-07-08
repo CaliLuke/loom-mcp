@@ -297,7 +297,7 @@ func emitClientAdapterNewEndpoints(stmt *jen.Statement, data *clientAdapterFileD
 						jen.List(jen.Id("_"), jen.Id("err")).Op(":=").Id("mcpC").Dot("Initialize").Call().Call(
 							jen.Id("ctx"),
 							jen.Op("&").Id(data.MCPPkgAlias).Dot("InitializePayload").Values(jen.Dict{
-								jen.Id("ProtocolVersion"): jen.Lit("2025-06-18"),
+								jen.Id("ProtocolVersion"): jen.Id(data.MCPPkgAlias).Dot("DefaultProtocolVersion"),
 								jen.Id("ClientInfo"): jen.Op("&").Id(data.MCPPkgAlias).Dot("ClientInfo").Values(jen.Dict{
 									jen.Id("Name"):    jen.Lit("loom-mcp-adapter"),
 									jen.Id("Version"): jen.Lit("dev"),
