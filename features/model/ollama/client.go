@@ -99,12 +99,13 @@ type ollamaFunctionCall struct {
 }
 
 type ollamaChatResponse struct {
-	Model           string        `json:"model"`
-	Message         ollamaMessage `json:"message"`
-	Done            bool          `json:"done"`
-	DoneReason      string        `json:"done_reason"`
-	PromptEvalCount int           `json:"prompt_eval_count"`
-	EvalCount       int           `json:"eval_count"`
+	Model           string          `json:"model"`
+	Message         ollamaMessage   `json:"message"`
+	Done            bool            `json:"done"`
+	DoneReason      string          `json:"done_reason"`
+	PromptEvalCount int             `json:"prompt_eval_count"`
+	EvalCount       int             `json:"eval_count"`
+	Error           json.RawMessage `json:"error,omitempty"`
 }
 
 const toolExecutionFailed = "tool execution failed"
@@ -263,7 +264,29 @@ func (c *Client) doJSON(ctx context.Context, chatReq ollamaChatRequest, out *oll
 	if err := json.NewDecoder(resp.Body).Decode(out); err != nil {
 		return fmt.Errorf("ollama chat: decode response: %w", err)
 	}
+	if err := ollamaProviderError(out.Error); err != nil {
+		return fmt.Errorf("ollama chat: %w", err)
+	}
 	return nil
+}
+
+func ollamaProviderError(raw json.RawMessage) error {
+	if len(raw) == 0 || string(raw) == "null" {
+		return nil
+	}
+	var message string
+	if err := json.Unmarshal(raw, &message); err == nil {
+		message = strings.TrimSpace(message)
+		if message == "" {
+			return nil
+		}
+		return fmt.Errorf("provider error: %s", message)
+	}
+	compact := strings.TrimSpace(string(raw))
+	if compact == "" {
+		return nil
+	}
+	return fmt.Errorf("provider error: %s", compact)
 }
 
 func encodeMessages(messages []*model.Message) ([]ollamaMessage, error) {

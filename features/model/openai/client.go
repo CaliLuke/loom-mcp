@@ -5,6 +5,7 @@ package openai
 
 import (
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -89,6 +90,9 @@ func (c *Client) Complete(ctx context.Context, req *model.Request) (*model.Respo
 	}
 	response, err := c.resp.New(ctx, request)
 	if err != nil {
+		if isRateLimited(err) {
+			return nil, fmt.Errorf("%w: %w", model.ErrRateLimited, err)
+		}
 		return nil, fmt.Errorf("openai responses: %w", err)
 	}
 	return translateResponse(response, codec, req.StructuredOutput)
@@ -114,8 +118,10 @@ func (c *Client) buildResponseRequest(req *model.Request) (responses.ResponseNew
 		Input: responses.ResponseNewParamsInputUnion{
 			OfInputItemList: input,
 		},
-		Tools:       tools,
-		Temperature: openai.Float(float64(req.Temperature)),
+		Tools: tools,
+	}
+	if req.Temperature > 0 {
+		request.Temperature = openai.Float(float64(req.Temperature))
 	}
 	if req.MaxTokens > 0 {
 		request.MaxOutputTokens = openai.Int(int64(req.MaxTokens))
@@ -162,12 +168,15 @@ func encodeInput(messages []*model.Message) (responses.ResponseInputParam, error
 		if msg == nil {
 			continue
 		}
-		text := messageTextContent(msg)
-		if text != "" {
+		content, ok, err := encodeMessageContent(msg)
+		if err != nil {
+			return nil, err
+		}
+		if ok {
 			items = append(items, responses.ResponseInputItemUnionParam{
 				OfMessage: &responses.EasyInputMessageParam{
 					Role:    responses.EasyInputMessageRole(msg.Role),
-					Content: responses.EasyInputMessageContentUnionParam{OfString: openai.String(text)},
+					Content: content,
 				},
 			})
 		}
@@ -180,23 +189,83 @@ func encodeInput(messages []*model.Message) (responses.ResponseInputParam, error
 	return items, nil
 }
 
-func messageTextContent(m *model.Message) string {
-	var text string
-	for _, p := range m.Parts {
-		switch tp := p.(type) {
+func encodeMessageContent(msg *model.Message) (responses.EasyInputMessageContentUnionParam, bool, error) {
+	content := make(responses.ResponseInputMessageContentListParam, 0, len(msg.Parts))
+	var text strings.Builder
+	flushText := func() {
+		if text.Len() == 0 {
+			return
+		}
+		content = append(content, responses.ResponseInputContentUnionParam{
+			OfInputText: &responses.ResponseInputTextParam{Text: text.String()},
+		})
+		text.Reset()
+	}
+	for _, part := range msg.Parts {
+		switch p := part.(type) {
 		case model.TextPart:
-			if tp.Text == "" {
-				continue
-			}
-			text += tp.Text
+			text.WriteString(p.Text)
 		case model.CitationsPart:
-			if tp.Text == "" {
-				continue
+			text.WriteString(p.Text)
+		case model.ImagePart:
+			flushText()
+			image, err := encodeImageContent(msg.Role, p)
+			if err != nil {
+				return responses.EasyInputMessageContentUnionParam{}, false, err
 			}
-			text += tp.Text
+			content = append(content, image)
+		case model.ToolUsePart, model.ToolResultPart:
+			continue
+		default:
+			return responses.EasyInputMessageContentUnionParam{}, false, fmt.Errorf("openai responses: unsupported message part %T", part)
 		}
 	}
-	return text
+	flushText()
+	if len(content) == 0 {
+		return responses.EasyInputMessageContentUnionParam{}, false, nil
+	}
+	if len(content) == 1 && content[0].OfInputText != nil {
+		return responses.EasyInputMessageContentUnionParam{
+			OfString: openai.String(content[0].OfInputText.Text),
+		}, true, nil
+	}
+	return responses.EasyInputMessageContentUnionParam{
+		OfInputItemContentList: content,
+	}, true, nil
+}
+
+func encodeImageContent(role model.ConversationRole, part model.ImagePart) (responses.ResponseInputContentUnionParam, error) {
+	if role != model.ConversationRoleUser {
+		return responses.ResponseInputContentUnionParam{}, fmt.Errorf("openai responses: image parts are only supported in user messages (role=%s)", role)
+	}
+	mimeType, err := openAIImageMIMEType(part.Format)
+	if err != nil {
+		return responses.ResponseInputContentUnionParam{}, err
+	}
+	if len(part.Bytes) == 0 {
+		return responses.ResponseInputContentUnionParam{}, errors.New("openai responses: image bytes are required")
+	}
+	return responses.ResponseInputContentUnionParam{
+		OfInputImage: &responses.ResponseInputImageParam{
+			Detail:   responses.ResponseInputImageDetailAuto,
+			ImageURL: openai.String("data:" + mimeType + ";base64," + base64.StdEncoding.EncodeToString(part.Bytes)),
+		},
+	}, nil
+}
+
+func openAIImageMIMEType(format model.ImageFormat) (string, error) {
+	switch format {
+	case model.ImageFormatPNG:
+		return "image/png", nil
+	case model.ImageFormatJPEG:
+		return "image/jpeg", nil
+	case model.ImageFormatWEBP:
+		return "image/webp", nil
+	case model.ImageFormatGIF:
+		return "image/gif", nil
+	default:
+		return "", fmt.Errorf("openai responses: unsupported image format %q", format)
+	}
 }
 
 func encodeMessageParts(msg *model.Message) ([]responses.ResponseInputItemUnionParam, error) {
@@ -235,6 +304,10 @@ func encodeMessageParts(msg *model.Message) ([]responses.ResponseInputItemUnionP
 					Output: string(output),
 				},
 			})
+		case model.TextPart, model.CitationsPart, model.ImagePart:
+			continue
+		default:
+			return nil, fmt.Errorf("openai responses: unsupported message part %T", part)
 		}
 	}
 	return items, nil

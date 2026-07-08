@@ -131,6 +131,9 @@ func (s *ollamaStreamer) handleLine(line string) error {
 	if err := json.Unmarshal([]byte(line), &resp); err != nil {
 		return fmt.Errorf("ollama: decode stream chunk: %w", err)
 	}
+	if err := ollamaProviderError(resp.Error); err != nil {
+		return fmt.Errorf("ollama chat stream: %w", err)
+	}
 	if resp.Model != "" {
 		s.modelID = resp.Model
 	}

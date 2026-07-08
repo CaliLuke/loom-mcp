@@ -2,6 +2,8 @@ package gateway
 
 import (
 	"context"
+	"errors"
+	"io"
 
 	"github.com/CaliLuke/loom-mcp/runtime/agent/model"
 )
@@ -124,6 +126,9 @@ func NewServer(opts ...Option) (*Server, error) {
 		for {
 			ch, err := st.Recv()
 			if err != nil {
+				if errors.Is(err, io.EOF) {
+					return nil
+				}
 				return err
 			}
 			if err := send(ch); err != nil {

@@ -7,9 +7,11 @@ package anthropic
 
 import (
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"net/http"
 	"strings"
 
 	sdk "github.com/anthropics/anthropic-sdk-go"
@@ -302,10 +304,14 @@ func encodeMessages(msgs []*model.Message, nameMap map[string]string) ([]sdk.Mes
 			continue
 		}
 		if m.Role == model.ConversationRoleSystem {
-			system = append(system, systemTextBlocks(m.Parts)...)
+			blocks, err := systemTextBlocks(m.Parts)
+			if err != nil {
+				return nil, nil, err
+			}
+			system = append(system, blocks...)
 			continue
 		}
-		blocks, err := anthropicMessageBlocks(m.Parts, nameMap)
+		blocks, err := anthropicMessageBlocks(m.Role, m.Parts, nameMap)
 		if err != nil {
 			return nil, nil, err
 		}
@@ -324,20 +330,29 @@ func encodeMessages(msgs []*model.Message, nameMap map[string]string) ([]sdk.Mes
 	return conversation, system, nil
 }
 
-func systemTextBlocks(parts []model.Part) []sdk.TextBlockParam {
+func systemTextBlocks(parts []model.Part) ([]sdk.TextBlockParam, error) {
 	blocks := make([]sdk.TextBlockParam, 0, len(parts))
 	for _, p := range parts {
-		if v, ok := p.(model.TextPart); ok && v.Text != "" {
-			blocks = append(blocks, sdk.TextBlockParam{Text: v.Text})
+		switch v := p.(type) {
+		case model.TextPart:
+			if v.Text != "" {
+				blocks = append(blocks, sdk.TextBlockParam{Text: v.Text})
+			}
+		case model.CitationsPart:
+			if v.Text != "" {
+				blocks = append(blocks, sdk.TextBlockParam{Text: v.Text})
+			}
+		default:
+			return nil, fmt.Errorf("anthropic: unsupported system message part %T", p)
 		}
 	}
-	return blocks
+	return blocks, nil
 }
 
-func anthropicMessageBlocks(parts []model.Part, nameMap map[string]string) ([]sdk.ContentBlockParamUnion, error) {
+func anthropicMessageBlocks(role model.ConversationRole, parts []model.Part, nameMap map[string]string) ([]sdk.ContentBlockParamUnion, error) {
 	blocks := make([]sdk.ContentBlockParamUnion, 0, len(parts))
 	for _, part := range parts {
-		block, ok, err := anthropicMessageBlock(part, nameMap)
+		block, ok, err := anthropicMessageBlock(role, part, nameMap)
 		if err != nil {
 			return nil, err
 		}
@@ -348,7 +363,7 @@ func anthropicMessageBlocks(parts []model.Part, nameMap map[string]string) ([]sd
 	return blocks, nil
 }
 
-func anthropicMessageBlock(part model.Part, nameMap map[string]string) (sdk.ContentBlockParamUnion, bool, error) {
+func anthropicMessageBlock(role model.ConversationRole, part model.Part, nameMap map[string]string) (sdk.ContentBlockParamUnion, bool, error) {
 	if v, ok := part.(model.TextPart); ok {
 		if v.Text == "" {
 			return sdk.ContentBlockParamUnion{}, false, nil
@@ -369,7 +384,40 @@ func anthropicMessageBlock(part model.Part, nameMap map[string]string) (sdk.Cont
 		block, err := encodeToolResult(v)
 		return block, err == nil, err
 	}
-	return sdk.ContentBlockParamUnion{}, false, nil
+	if v, ok := part.(model.ImagePart); ok {
+		block, err := anthropicImageBlock(role, v)
+		return block, err == nil, err
+	}
+	return sdk.ContentBlockParamUnion{}, false, fmt.Errorf("anthropic: unsupported message part %T", part)
+}
+
+func anthropicImageBlock(role model.ConversationRole, v model.ImagePart) (sdk.ContentBlockParamUnion, error) {
+	if role != model.ConversationRoleUser {
+		return sdk.ContentBlockParamUnion{}, fmt.Errorf("anthropic: image parts are only supported in user messages (role=%s)", role)
+	}
+	mimeType, err := anthropicImageMIMEType(v.Format)
+	if err != nil {
+		return sdk.ContentBlockParamUnion{}, err
+	}
+	if len(v.Bytes) == 0 {
+		return sdk.ContentBlockParamUnion{}, errors.New("anthropic: image bytes are required")
+	}
+	return sdk.NewImageBlockBase64(mimeType, base64.StdEncoding.EncodeToString(v.Bytes)), nil
+}
+
+func anthropicImageMIMEType(format model.ImageFormat) (string, error) {
+	switch format {
+	case model.ImageFormatPNG:
+		return "image/png", nil
+	case model.ImageFormatJPEG:
+		return "image/jpeg", nil
+	case model.ImageFormatWEBP:
+		return "image/webp", nil
+	case model.ImageFormatGIF:
+		return "image/gif", nil
+	default:
+		return "", fmt.Errorf("anthropic: unsupported image format %q", format)
+	}
 }
 
 func anthropicToolUseBlock(v model.ToolUsePart, nameMap map[string]string) (sdk.ContentBlockParamUnion, error) {
@@ -606,7 +654,11 @@ func isProviderSafeToolName(name string) bool {
 }
 
 func isRateLimited(err error) bool {
-	return err != nil && errors.Is(err, model.ErrRateLimited)
+	if errors.Is(err, model.ErrRateLimited) {
+		return true
+	}
+	var apiErr *sdk.Error
+	return errors.As(err, &apiErr) && apiErr.StatusCode == http.StatusTooManyRequests
 }
 
 func translateResponse(msg *sdk.Message, nameMap map[string]string) (*model.Response, error) {

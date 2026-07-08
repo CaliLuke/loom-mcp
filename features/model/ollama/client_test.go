@@ -94,6 +94,24 @@ func TestClientCompleteEncodesToolsAndDecodesToolCalls(t *testing.T) {
 	require.NotEmpty(t, messages[2].(map[string]any)["tool_calls"])
 }
 
+func TestClientCompleteReturnsEmbeddedProviderError(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		assert.NoError(t, json.NewEncoder(w).Encode(map[string]any{
+			"error": "model runner crashed",
+		}))
+	}))
+	defer server.Close()
+
+	client, err := ollamamodel.New(ollamamodel.Options{ServerURL: server.URL, DefaultModel: "llama3.1"})
+	require.NoError(t, err)
+
+	resp, err := client.Complete(context.Background(), &model.Request{
+		Messages: []*model.Message{{Role: model.ConversationRoleUser, Parts: []model.Part{model.TextPart{Text: "ping"}}}},
+	})
+	require.Nil(t, resp)
+	require.ErrorContains(t, err, "ollama chat: provider error: model runner crashed")
+}
+
 func TestClientCompleteEncodesThinkingOption(t *testing.T) {
 	tests := []struct {
 		name     string
@@ -266,6 +284,26 @@ func TestClientStreamStructuredOutput(t *testing.T) {
 	require.Equal(t, "draft", chunks[1].Completion.Name)
 	require.JSONEq(t, `{"answer":"ok"}`, string(chunks[1].Completion.Payload))
 	require.Equal(t, model.ChunkTypeStop, chunks[2].Type)
+}
+
+func TestClientStreamReturnsEmbeddedProviderError(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte(`{"error":"out of memory"}` + "\n"))
+	}))
+	defer server.Close()
+
+	client, err := ollamamodel.New(ollamamodel.Options{ServerURL: server.URL, DefaultModel: "llama3.1"})
+	require.NoError(t, err)
+	streamer, err := client.Stream(context.Background(), &model.Request{
+		Messages: []*model.Message{{Role: model.ConversationRoleUser, Parts: []model.Part{model.TextPart{Text: "ping"}}}},
+	})
+	require.NoError(t, err)
+	defer func() {
+		require.NoError(t, streamer.Close())
+	}()
+
+	_, err = streamer.Recv()
+	require.ErrorContains(t, err, "ollama chat stream: provider error: out of memory")
 }
 
 func TestClientStreamStructuredOutputExcludesThinking(t *testing.T) {

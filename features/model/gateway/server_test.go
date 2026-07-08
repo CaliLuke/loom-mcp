@@ -3,6 +3,7 @@ package gateway
 import (
 	"context"
 	"errors"
+	"io"
 	"testing"
 
 	"github.com/CaliLuke/loom-mcp/runtime/agent/model"
@@ -10,7 +11,7 @@ import (
 
 type stubStreamer struct{ meta map[string]any }
 
-func (s *stubStreamer) Recv() (model.Chunk, error) { return model.Chunk{}, errors.New("eof") }
+func (s *stubStreamer) Recv() (model.Chunk, error) { return model.Chunk{}, io.EOF }
 func (s *stubStreamer) Close() error               { return nil }
 func (s *stubStreamer) Metadata() map[string]any   { return s.meta }
 
@@ -49,8 +50,8 @@ func TestNewServer_BuildsChains(t *testing.T) {
 	if _, err := srv.Complete(context.Background(), &model.Request{Model: "m"}); err != nil {
 		t.Fatalf("Complete error: %v", err)
 	}
-	if err := srv.Stream(context.Background(), &model.Request{Model: "m"}, func(model.Chunk) error { return errors.New("eof") }); err == nil {
-		t.Fatal("expected error from stream")
+	if err := srv.Stream(context.Background(), &model.Request{Model: "m"}, func(model.Chunk) error { return nil }); err != nil {
+		t.Fatalf("Stream error: %v", err)
 	}
 
 	if !calledUnary {
@@ -60,3 +61,43 @@ func TestNewServer_BuildsChains(t *testing.T) {
 		t.Fatal("stream middleware not invoked")
 	}
 }
+
+func TestServerStreamReturnsSendError(t *testing.T) {
+	sendErr := errors.New("send failed")
+	srv, err := NewServer(WithProvider(chunkProvider{}))
+	if err != nil {
+		t.Fatalf("NewServer error: %v", err)
+	}
+
+	err = srv.Stream(context.Background(), &model.Request{Model: "m"}, func(model.Chunk) error {
+		return sendErr
+	})
+	if !errors.Is(err, sendErr) {
+		t.Fatalf("Stream error = %v, want %v", err, sendErr)
+	}
+}
+
+type chunkProvider struct{}
+
+func (chunkProvider) Complete(context.Context, *model.Request) (*model.Response, error) {
+	return nil, nil
+}
+
+func (chunkProvider) Stream(context.Context, *model.Request) (model.Streamer, error) {
+	return &singleChunkStreamer{}, nil
+}
+
+type singleChunkStreamer struct {
+	sent bool
+}
+
+func (s *singleChunkStreamer) Recv() (model.Chunk, error) {
+	if s.sent {
+		return model.Chunk{}, io.EOF
+	}
+	s.sent = true
+	return model.Chunk{Type: model.ChunkTypeText}, nil
+}
+
+func (s *singleChunkStreamer) Close() error             { return nil }
+func (s *singleChunkStreamer) Metadata() map[string]any { return nil }

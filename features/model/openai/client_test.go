@@ -185,6 +185,80 @@ func TestClientCompleteResolvesModelClass(t *testing.T) {
 	}
 }
 
+func TestClientCompleteOmitsZeroTemperature(t *testing.T) {
+	mock := &mockResponsesClient{response: &responses.Response{}}
+	client, err := openaimodel.New(openaimodel.Options{Client: mock, DefaultModel: "gpt-4o"})
+	require.NoError(t, err)
+
+	_, err = client.Complete(context.Background(), &model.Request{
+		Messages: []*model.Message{{
+			Role:  model.ConversationRoleUser,
+			Parts: []model.Part{model.TextPart{Text: "ping"}},
+		}},
+	})
+	require.NoError(t, err)
+	require.False(t, mock.captured.Temperature.Valid())
+}
+
+func TestClientCompleteSendsNonZeroTemperature(t *testing.T) {
+	mock := &mockResponsesClient{response: &responses.Response{}}
+	client, err := openaimodel.New(openaimodel.Options{Client: mock, DefaultModel: "gpt-4o"})
+	require.NoError(t, err)
+
+	_, err = client.Complete(context.Background(), &model.Request{
+		Temperature: 0.3,
+		Messages: []*model.Message{{
+			Role:  model.ConversationRoleUser,
+			Parts: []model.Part{model.TextPart{Text: "ping"}},
+		}},
+	})
+	require.NoError(t, err)
+	require.True(t, mock.captured.Temperature.Valid())
+	require.InEpsilon(t, 0.3, mock.captured.Temperature.Value, 0.0001)
+}
+
+func TestClientCompleteEncodesImagePart(t *testing.T) {
+	mock := &mockResponsesClient{response: &responses.Response{}}
+	client, err := openaimodel.New(openaimodel.Options{Client: mock, DefaultModel: "gpt-4o"})
+	require.NoError(t, err)
+
+	_, err = client.Complete(context.Background(), &model.Request{
+		Messages: []*model.Message{{
+			Role: model.ConversationRoleUser,
+			Parts: []model.Part{
+				model.TextPart{Text: "look"},
+				model.ImagePart{Format: model.ImageFormatPNG, Bytes: []byte("png")},
+			},
+		}},
+	})
+	require.NoError(t, err)
+
+	first := mock.captured.Input.OfInputItemList[0].OfMessage
+	require.NotNil(t, first)
+	content := first.Content.OfInputItemContentList
+	require.Len(t, content, 2)
+	require.Equal(t, "look", content[0].OfInputText.Text)
+	require.Equal(t, responses.ResponseInputImageDetailAuto, content[1].OfInputImage.Detail)
+	require.Equal(t, "data:image/png;base64,cG5n", content[1].OfInputImage.ImageURL.Value)
+}
+
+func TestClientCompleteRejectsUnsupportedDocumentPart(t *testing.T) {
+	mock := &mockResponsesClient{response: &responses.Response{}}
+	client, err := openaimodel.New(openaimodel.Options{Client: mock, DefaultModel: "gpt-4o"})
+	require.NoError(t, err)
+
+	_, err = client.Complete(context.Background(), &model.Request{
+		Messages: []*model.Message{{
+			Role: model.ConversationRoleUser,
+			Parts: []model.Part{
+				model.DocumentPart{Name: "spec", Format: model.DocumentFormatTXT, Text: "hello"},
+			},
+		}},
+	})
+	require.ErrorContains(t, err, "openai responses: unsupported message part model.DocumentPart")
+	require.Empty(t, mock.captured.Model)
+}
+
 func TestClientCompleteWithToolChoiceTool(t *testing.T) {
 	mock := &mockResponsesClient{}
 	client, err := openaimodel.New(openaimodel.Options{
@@ -453,6 +527,26 @@ func TestClientStreamReturnsNewStreamingError(t *testing.T) {
 	require.True(t, decoder.closed)
 }
 
+func TestClientCompleteReturnsRateLimitedAPIError(t *testing.T) {
+	apiErr := newOpenAIAPIError(t, http.StatusTooManyRequests)
+	mock := &mockResponsesClient{err: apiErr}
+	client, err := openaimodel.New(openaimodel.Options{Client: mock, DefaultModel: "gpt-4o"})
+	require.NoError(t, err)
+
+	resp, err := client.Complete(context.Background(), &model.Request{
+		Messages: []*model.Message{{
+			Role:  model.ConversationRoleUser,
+			Parts: []model.Part{model.TextPart{Text: "Ping"}},
+		}},
+	})
+	require.Nil(t, resp)
+	require.ErrorIs(t, err, model.ErrRateLimited)
+
+	var got *openai.Error
+	require.ErrorAs(t, err, &got)
+	require.Equal(t, http.StatusTooManyRequests, got.StatusCode)
+}
+
 func TestClientStreamReturnsRateLimitedNewStreamingError(t *testing.T) {
 	streamErr := newOpenAIAPIError(t, http.StatusTooManyRequests)
 	mock := &mockResponsesClient{
@@ -691,6 +785,7 @@ func TestClientStreamStructuredOutput(t *testing.T) {
 
 type mockResponsesClient struct {
 	response       *responses.Response
+	err            error
 	stream         *ssestream.Stream[responses.ResponseStreamEventUnion]
 	captured       responses.ResponseNewParams
 	streamCaptured responses.ResponseNewParams
@@ -698,7 +793,7 @@ type mockResponsesClient struct {
 
 func (m *mockResponsesClient) New(ctx context.Context, request responses.ResponseNewParams, _ ...option.RequestOption) (*responses.Response, error) {
 	m.captured = request
-	return m.response, nil
+	return m.response, m.err
 }
 
 func (m *mockResponsesClient) NewStreaming(ctx context.Context, request responses.ResponseNewParams, _ ...option.RequestOption) *ssestream.Stream[responses.ResponseStreamEventUnion] {

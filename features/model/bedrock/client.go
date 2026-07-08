@@ -236,7 +236,10 @@ func (c *Client) Stream(ctx context.Context, req *model.Request) (model.Streamer
 }
 
 func (c *Client) prepareRequest(ctx context.Context, req *model.Request) (*requestParts, error) {
-	merged := c.mergedRequestMessages(ctx, req)
+	merged, err := c.mergedRequestMessages(ctx, req)
+	if err != nil {
+		return nil, err
+	}
 	if err := validateBedrockRequestMessages(merged); err != nil {
 		return nil, err
 	}
@@ -269,17 +272,21 @@ func (c *Client) prepareRequest(ctx context.Context, req *model.Request) (*reque
 	return buildRequestParts(modelID, req.ModelClass, messages, system, toolConfig, outputConfig, canonToSan, sanToCanon), nil
 }
 
-func (c *Client) mergedRequestMessages(ctx context.Context, req *model.Request) []*model.Message {
+func (c *Client) mergedRequestMessages(ctx context.Context, req *model.Request) ([]*model.Message, error) {
 	var merged []*model.Message
 	if c.ledger != nil && req.RunID != "" {
-		if msgs, err := c.ledger.Messages(ctx, req.RunID); err == nil && len(msgs) > 0 {
+		msgs, err := c.ledger.Messages(ctx, req.RunID)
+		if err != nil {
+			return nil, fmt.Errorf("bedrock: merge ledger messages for run %s: %w", req.RunID, err)
+		}
+		if len(msgs) > 0 {
 			merged = append(merged, msgs...)
 		}
 	}
 	if len(req.Messages) > 0 {
 		merged = append(merged, req.Messages...)
 	}
-	return merged
+	return merged, nil
 }
 
 func validateBedrockRequestMessages(messages []*model.Message) error {

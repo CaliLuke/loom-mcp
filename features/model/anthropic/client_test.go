@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"net/http"
 	"testing"
 
 	sdk "github.com/anthropics/anthropic-sdk-go"
@@ -204,6 +205,60 @@ func TestComplete_RateLimited(t *testing.T) {
 	}
 }
 
+func TestComplete_RateLimitedAPIError(t *testing.T) {
+	stub := &stubMessagesClient{
+		err: newAnthropicAPIError(t, http.StatusTooManyRequests),
+	}
+	cl, err := New(stub, Options{
+		DefaultModel: "claude-3.5-sonnet",
+		MaxTokens:    64,
+	})
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+
+	_, err = cl.Complete(context.Background(), &model.Request{
+		Messages: []*model.Message{
+			{
+				Role: model.ConversationRoleUser,
+				Parts: []model.Part{
+					model.TextPart{Text: "hi"},
+				},
+			},
+		},
+	})
+	if !errors.Is(err, model.ErrRateLimited) {
+		t.Fatalf("expected ErrRateLimited, got %v", err)
+	}
+}
+
+func TestStream_RateLimitedAPIError(t *testing.T) {
+	stub := &stubMessagesClient{
+		stream: ssestream.NewStream[sdk.MessageStreamEventUnion](&noopDecoder{}, newAnthropicAPIError(t, http.StatusTooManyRequests)),
+	}
+	cl, err := New(stub, Options{
+		DefaultModel: "claude-3.5-sonnet",
+		MaxTokens:    64,
+	})
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+
+	_, err = cl.Stream(context.Background(), &model.Request{
+		Messages: []*model.Message{
+			{
+				Role: model.ConversationRoleUser,
+				Parts: []model.Part{
+					model.TextPart{Text: "hi"},
+				},
+			},
+		},
+	})
+	if !errors.Is(err, model.ErrRateLimited) {
+		t.Fatalf("expected ErrRateLimited, got %v", err)
+	}
+}
+
 func TestComplete_SendsTemperatureWhenClaudeSupportsIt(t *testing.T) {
 	stub := &stubMessagesClient{resp: &sdk.Message{}}
 	cl, err := New(stub, Options{
@@ -292,5 +347,19 @@ func TestComplete_RejectsStructuredOutput(t *testing.T) {
 	})
 	if !errors.Is(err, model.ErrStructuredOutputUnsupported) {
 		t.Fatalf("expected ErrStructuredOutputUnsupported, got %v", err)
+	}
+}
+
+func newAnthropicAPIError(t *testing.T, statusCode int) *sdk.Error {
+	t.Helper()
+	req, err := http.NewRequestWithContext(context.Background(), http.MethodPost, "https://api.anthropic.test/v1/messages", nil)
+	require.NoError(t, err)
+	return &sdk.Error{
+		StatusCode: statusCode,
+		Request:    req,
+		Response: &http.Response{
+			StatusCode: statusCode,
+			Request:    req,
+		},
 	}
 }
