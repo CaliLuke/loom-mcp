@@ -154,8 +154,12 @@ func parseToolArgs(args []any) (string, func(), []func(*mcpexpr.ToolExpr)) {
 // Expose declares the generated surfaces for the current toolset tool or returns
 // a method-level MCP tool option.
 func Expose(surfaces ...ToolSurface) func(*mcpexpr.ToolExpr) {
-	if tool, ok := eval.Current().(*agentsexpr.ToolExpr); ok {
+	switch tool := eval.Current().(type) {
+	case *agentsexpr.ToolExpr:
 		tool.Surfaces = append([]agentsexpr.ToolSurface(nil), surfaces...)
+	case *goaexpr.MethodExpr:
+	default:
+		eval.IncompatibleDSL()
 	}
 	return func(tool *mcpexpr.ToolExpr) {
 		tool.ExposedSurfaces = toolSurfacesAsStrings(surfaces)
@@ -167,11 +171,15 @@ func Expose(surfaces ...ToolSurface) func(*mcpexpr.ToolExpr) {
 func MCPPlacement(service string, mcpServer string) func(*mcpexpr.ToolExpr) {
 	service = strings.TrimSpace(service)
 	mcpServer = strings.TrimSpace(mcpServer)
-	if tool, ok := eval.Current().(*agentsexpr.ToolExpr); ok {
+	switch tool := eval.Current().(type) {
+	case *agentsexpr.ToolExpr:
 		tool.MCPPlacement = &agentsexpr.ToolMCPPlacementExpr{
 			Service:   service,
 			MCPServer: mcpServer,
 		}
+	case *goaexpr.MethodExpr:
+	default:
+		eval.IncompatibleDSL()
 	}
 	return func(tool *mcpexpr.ToolExpr) {
 		tool.MCPPlacementService = service

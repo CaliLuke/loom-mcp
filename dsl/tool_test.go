@@ -66,6 +66,28 @@ func TestToolReportsInvalidArgumentType(t *testing.T) {
 	require.ErrorContains(t, err, "cannot use 42 (type int) as type description, DSL function, or MCP tool option")
 }
 
+func TestExposeRejectsToolsetBlockContext(t *testing.T) {
+	err := runInvalidProjectionDSL(t, func() {
+		API("test", func() {})
+		Toolset("bad-tools", func() {
+			Expose(MCPSurface)
+		})
+	})
+
+	require.Contains(t, err, "invalid use of <unknown> in toolset \"bad-tools\"")
+}
+
+func TestMCPPlacementRejectsToolsetBlockContext(t *testing.T) {
+	err := runInvalidProjectionDSL(t, func() {
+		API("test", func() {})
+		Toolset("bad-tools", func() {
+			MCPPlacement("assistant", "assistant-mcp")
+		})
+	})
+
+	require.Contains(t, err, "invalid use of <unknown> in toolset \"bad-tools\"")
+}
+
 func setupProjectionDSL(t *testing.T) {
 	t.Helper()
 
@@ -90,4 +112,14 @@ func runProjectionDSL(t *testing.T, dsl func()) {
 
 	require.True(t, eval.Execute(dsl, nil), eval.Context.Error())
 	require.NoError(t, eval.RunDSL())
+}
+
+func runInvalidProjectionDSL(t *testing.T, dsl func()) string {
+	t.Helper()
+
+	setupProjectionDSL(t)
+
+	require.True(t, eval.Execute(dsl, nil), eval.Context.Error())
+	require.Error(t, eval.RunDSL())
+	return eval.Context.Error()
 }
