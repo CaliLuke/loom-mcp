@@ -249,6 +249,45 @@ func TestGenerateMCPAdapter_RendersExperimentalEventsCapability(t *testing.T) {
 	require.Contains(t, rendered, `"notifications": []string{"notify_status_update"}`)
 }
 
+func TestGenerateMCPAdapter_RejectsNonEmptyListCursors(t *testing.T) {
+	restore := resetMCPCodegenState(t)
+	defer restore()
+
+	svc, methods := testService("assistant", "search", "read_document")
+	root := testRootExpr([]*expr.ServiceExpr{svc}, []*expr.HTTPServiceExpr{
+		jsonrpcService(svc, "/rpc"),
+	})
+	mcpexpr.Root.RegisterMCP(svc, &mcpexpr.MCPExpr{
+		Name:    "assistant-mcp",
+		Version: "1.0.0",
+		Tools: []*mcpexpr.ToolExpr{
+			{Name: "search", Method: methods["search"]},
+		},
+		Resources: []*mcpexpr.ResourceExpr{
+			{Name: "documents", URI: "doc://list", Method: methods["read_document"]},
+		},
+		Prompts: []*mcpexpr.PromptExpr{
+			{
+				Name: "code_review",
+				Messages: []*mcpexpr.MessageExpr{
+					{Role: "user", Content: "Review this code."},
+				},
+			},
+		},
+	})
+
+	files, err := Generate("example.com/assistant/gen", []eval.Root{root}, nil)
+	require.NoError(t, err)
+	adapterFile := findGeneratedFile(t, files, filepath.Join(gcodegen.Gendir, "mcp_assistant", "adapter_server.go"))
+	rendered := renderGeneratedFile(t, adapterFile)
+
+	require.Equal(t, 3, strings.Count(rendered, `if p != nil && p.Cursor != nil && *p.Cursor != "" {`))
+	require.Equal(t, 3, strings.Count(rendered, `return nil, loom.PermanentError("invalid_params", "%s pagination is not implemented; cursor must be empty",`))
+	require.Contains(t, rendered, `"tools/list")`)
+	require.Contains(t, rendered, `"resources/list")`)
+	require.Contains(t, rendered, `"prompts/list")`)
+}
+
 func TestGenerateMCPClientAdapter_RendersOriginalClientForResourceResults(t *testing.T) {
 	restore := resetMCPCodegenState(t)
 	defer restore()

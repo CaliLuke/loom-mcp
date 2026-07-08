@@ -1230,6 +1230,7 @@ func emitToolsList(stmt *jen.Statement) {
 			g.If(jen.Op("!").Id("a").Dot("isInitialized").Call(jen.Id("ctx"))).Block(
 				jen.Return(jen.Nil(), jen.Id("loom").Dot("PermanentError").Call(jen.Lit("invalid_params"), jen.Lit("Not initialized"))),
 			)
+			emitUnsupportedListCursorCheck(g, "tools/list")
 			g.Id("a").Dot("log").Call(jen.Id("ctx"), jen.Lit("request"), jen.Map(jen.String()).Any().Values(jen.Dict{
 				jen.Lit("method"): jen.Lit("tools/list"),
 			}))

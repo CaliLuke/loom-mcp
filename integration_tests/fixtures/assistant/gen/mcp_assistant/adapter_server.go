@@ -1635,6 +1635,9 @@ func (a *MCPAdapter) ToolsList(ctx context.Context, p *ToolsListPayload) (res *T
 	if !a.isInitialized(ctx) {
 		return nil, loom.PermanentError("invalid_params", "Not initialized")
 	}
+	if p != nil && p.Cursor != nil && *p.Cursor != "" {
+		return nil, loom.PermanentError("invalid_params", "%s pagination is not implemented; cursor must be empty", "tools/list")
+	}
 	a.log(ctx, "request", map[string]any{"method": "tools/list"})
 	tools := a.generatedToolCatalog()
 	if a.toolSearchEnabled() {
@@ -2347,6 +2350,9 @@ func (a *MCPAdapter) ResourcesList(ctx context.Context, p *ResourcesListPayload)
 	if !a.isInitialized(ctx) {
 		return nil, loom.PermanentError("invalid_params", "Not initialized")
 	}
+	if p != nil && p.Cursor != nil && *p.Cursor != "" {
+		return nil, loom.PermanentError("invalid_params", "%s pagination is not implemented; cursor must be empty", "resources/list")
+	}
 	a.log(ctx, "request", map[string]any{"method": "resources/list"})
 	resources := []*ResourceInfo{&ResourceInfo{
 		Description: stringPtr("List available documents"),
@@ -2606,6 +2612,9 @@ func (a *MCPAdapter) ResourcesUnsubscribe(ctx context.Context, p *ResourcesUnsub
 func (a *MCPAdapter) PromptsList(ctx context.Context, p *PromptsListPayload) (*PromptsListResult, error) {
 	if !a.isInitialized(ctx) {
 		return nil, loom.PermanentError("invalid_params", "Not initialized")
+	}
+	if p != nil && p.Cursor != nil && *p.Cursor != "" {
+		return nil, loom.PermanentError("invalid_params", "%s pagination is not implemented; cursor must be empty", "prompts/list")
 	}
 	a.log(ctx, "request", map[string]any{"method": "prompts/list"})
 	prompts := []*PromptInfo{&PromptInfo{

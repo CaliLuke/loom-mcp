@@ -244,6 +244,7 @@ func emitResourcesList(stmt *jen.Statement, data *AdapterData) {
 			g.If(jen.Op("!").Id("a").Dot("isInitialized").Call(jen.Id("ctx"))).Block(
 				jen.Return(jen.Nil(), jen.Id("loom").Dot("PermanentError").Call(jen.Lit("invalid_params"), jen.Lit("Not initialized"))),
 			)
+			emitUnsupportedListCursorCheck(g, "resources/list")
 			g.Id("a").Dot("log").Call(jen.Id("ctx"), jen.Lit("request"), jen.Map(jen.String()).Any().Values(jen.Dict{
 				jen.Lit("method"): jen.Lit("resources/list"),
 			}))
@@ -573,6 +574,7 @@ func emitPromptsList(stmt *jen.Statement, data *AdapterData) {
 			g.If(jen.Op("!").Id("a").Dot("isInitialized").Call(jen.Id("ctx"))).Block(
 				jen.Return(jen.Nil(), jen.Id("loom").Dot("PermanentError").Call(jen.Lit("invalid_params"), jen.Lit("Not initialized"))),
 			)
+			emitUnsupportedListCursorCheck(g, "prompts/list")
 			g.Id("a").Dot("log").Call(jen.Id("ctx"), jen.Lit("request"), jen.Map(jen.String()).Any().Values(jen.Dict{
 				jen.Lit("method"): jen.Lit("prompts/list"),
 			}))
@@ -593,6 +595,23 @@ func emitPromptsList(stmt *jen.Statement, data *AdapterData) {
 			g.Return(jen.Id("res"), jen.Nil())
 		})
 	stmt.Line()
+}
+
+func emitUnsupportedListCursorCheck(g *jen.Group, method string) {
+	g.If(
+		jen.Id("p").Op("!=").Nil().Op("&&").
+			Id("p").Dot("Cursor").Op("!=").Nil().Op("&&").
+			Op("*").Id("p").Dot("Cursor").Op("!=").Lit(""),
+	).Block(
+		jen.Return(
+			jen.Nil(),
+			jen.Id("loom").Dot("PermanentError").Call(
+				jen.Lit("invalid_params"),
+				jen.Lit("%s pagination is not implemented; cursor must be empty"),
+				jen.Lit(method),
+			),
+		),
+	)
 }
 
 func emitPromptsGet(stmt *jen.Statement, data *AdapterData) {
