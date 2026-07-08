@@ -139,6 +139,62 @@ func TestExecuteToolCalls_ExplicitActivityDispatchIgnoresLegacyInlineFlag(t *tes
 	require.Equal(t, "execute", wfCtx.lastToolCall.Name)
 }
 
+func TestExecuteToolCalls_RequestErrorPublishesFailureWithoutDispatch(t *testing.T) {
+	recorder := &recordingHooks{}
+	rt := &Runtime{
+		Bus:           recorder,
+		RunEventStore: runloginmem.New(),
+		logger:        telemetry.NoopLogger{},
+		metrics:       telemetry.NoopMetrics{},
+		tracer:        telemetry.NoopTracer{},
+		toolsets: map[string]ToolsetRegistration{
+			"svc.tools": {},
+		},
+		toolSpecs: map[tools.Ident]tools.ToolSpec{
+			tools.Ident("svc.tools.encode"): newAnyJSONSpec("svc.tools.encode", "svc.tools"),
+		},
+	}
+
+	call := planner.ToolRequest{
+		Name:       tools.Ident("svc.tools.encode"),
+		RunID:      "run-1",
+		SessionID:  "sess-1",
+		TurnID:     "turn-1",
+		ToolCallID: "call-encode",
+		Error:      planner.NewToolError("encode payload: unsupported value"),
+	}
+	wfCtx := &testWorkflowContext{
+		ctx:         context.Background(),
+		hookRuntime: rt,
+	}
+
+	results, timedOut, err := rt.executeToolCalls(wfCtx, "execute", engine.ActivityOptions{}, agent.Ident("agent-1"), &run.Context{RunID: "run-1", SessionID: "sess-1", TurnID: "turn-1"}, nil, []planner.ToolRequest{call}, 0, nil, time.Time{})
+	require.NoError(t, err)
+	require.False(t, timedOut)
+	require.Len(t, results, 1)
+	require.Equal(t, call.ToolCallID, results[0].ToolResult.ToolCallID)
+	require.NotNil(t, results[0].ToolResult.Error)
+	require.Equal(t, "encode payload: unsupported value", results[0].ToolResult.Error.Message)
+	require.Empty(t, wfCtx.lastToolCall.Name)
+
+	var starts []*hooks.ToolCallScheduledEvent
+	var ends []*hooks.ToolResultReceivedEvent
+	for _, evt := range recorder.events {
+		switch e := evt.(type) {
+		case *hooks.ToolCallScheduledEvent:
+			starts = append(starts, e)
+		case *hooks.ToolResultReceivedEvent:
+			ends = append(ends, e)
+		}
+	}
+	require.Len(t, starts, 1)
+	require.Equal(t, call.ToolCallID, starts[0].ToolCallID)
+	require.Len(t, ends, 1)
+	require.Equal(t, call.ToolCallID, ends[0].ToolCallID)
+	require.NotNil(t, ends[0].Error)
+	require.Equal(t, "encode payload: unsupported value", ends[0].Error.Message)
+}
+
 func TestExecuteToolCalls_ServiceToolErrorDoesNotAbortRun(t *testing.T) {
 	recorder := &recordingHooks{}
 	rt := &Runtime{

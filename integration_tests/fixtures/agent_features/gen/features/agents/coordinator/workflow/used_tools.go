@@ -99,15 +99,18 @@ func WithToolCallID(id string) CallOption {
 // NewDraftCall builds a planner.ToolRequest for workflow.draft.
 func NewDraftCall(args *DraftPayload, opts ...CallOption) planner.ToolRequest {
 	var payload []byte
+	var toolErr *planner.ToolError
 	if args != nil {
 		// Encode typed payloads into canonical JSON using the generated codec.
 		b, err := DraftPayloadCodec.ToJSON(args)
 		if err != nil {
-			panic(err)
+			toolErr = planner.ToolErrorFromError(err)
+		} else {
+			payload = b
 		}
-		payload = b
 	}
 	req := planner.ToolRequest{
+		Error:   toolErr,
 		Name:    Draft,
 		Payload: payload,
 	}
@@ -122,15 +125,18 @@ func NewDraftCall(args *DraftPayload, opts ...CallOption) planner.ToolRequest {
 // NewMethodEchoCall builds a planner.ToolRequest for workflow.method_echo.
 func NewMethodEchoCall(args *MethodEchoPayload, opts ...CallOption) planner.ToolRequest {
 	var payload []byte
+	var toolErr *planner.ToolError
 	if args != nil {
 		// Encode typed payloads into canonical JSON using the generated codec.
 		b, err := MethodEchoPayloadCodec.ToJSON(args)
 		if err != nil {
-			panic(err)
+			toolErr = planner.ToolErrorFromError(err)
+		} else {
+			payload = b
 		}
-		payload = b
 	}
 	req := planner.ToolRequest{
+		Error:   toolErr,
 		Name:    MethodEcho,
 		Payload: payload,
 	}
@@ -145,15 +151,18 @@ func NewMethodEchoCall(args *MethodEchoPayload, opts ...CallOption) planner.Tool
 // NewPublishCall builds a planner.ToolRequest for workflow.publish.
 func NewPublishCall(args *PublishPayload, opts ...CallOption) planner.ToolRequest {
 	var payload []byte
+	var toolErr *planner.ToolError
 	if args != nil {
 		// Encode typed payloads into canonical JSON using the generated codec.
 		b, err := PublishPayloadCodec.ToJSON(args)
 		if err != nil {
-			panic(err)
+			toolErr = planner.ToolErrorFromError(err)
+		} else {
+			payload = b
 		}
-		payload = b
 	}
 	req := planner.ToolRequest{
+		Error:   toolErr,
 		Name:    Publish,
 		Payload: payload,
 	}
@@ -168,15 +177,18 @@ func NewPublishCall(args *PublishPayload, opts ...CallOption) planner.ToolReques
 // NewRetryCall builds a planner.ToolRequest for workflow.retry.
 func NewRetryCall(args *RetryPayload, opts ...CallOption) planner.ToolRequest {
 	var payload []byte
+	var toolErr *planner.ToolError
 	if args != nil {
 		// Encode typed payloads into canonical JSON using the generated codec.
 		b, err := RetryPayloadCodec.ToJSON(args)
 		if err != nil {
-			panic(err)
+			toolErr = planner.ToolErrorFromError(err)
+		} else {
+			payload = b
 		}
-		payload = b
 	}
 	req := planner.ToolRequest{
+		Error:   toolErr,
 		Name:    Retry,
 		Payload: payload,
 	}
@@ -191,15 +203,18 @@ func NewRetryCall(args *RetryPayload, opts ...CallOption) planner.ToolRequest {
 // NewReviewCall builds a planner.ToolRequest for workflow.review.
 func NewReviewCall(args *ReviewPayload, opts ...CallOption) planner.ToolRequest {
 	var payload []byte
+	var toolErr *planner.ToolError
 	if args != nil {
 		// Encode typed payloads into canonical JSON using the generated codec.
 		b, err := ReviewPayloadCodec.ToJSON(args)
 		if err != nil {
-			panic(err)
+			toolErr = planner.ToolErrorFromError(err)
+		} else {
+			payload = b
 		}
-		payload = b
 	}
 	req := planner.ToolRequest{
+		Error:   toolErr,
 		Name:    Review,
 		Payload: payload,
 	}
@@ -214,15 +229,18 @@ func NewReviewCall(args *ReviewPayload, opts ...CallOption) planner.ToolRequest 
 // NewReviseCall builds a planner.ToolRequest for workflow.revise.
 func NewReviseCall(args *RevisePayload, opts ...CallOption) planner.ToolRequest {
 	var payload []byte
+	var toolErr *planner.ToolError
 	if args != nil {
 		// Encode typed payloads into canonical JSON using the generated codec.
 		b, err := RevisePayloadCodec.ToJSON(args)
 		if err != nil {
-			panic(err)
+			toolErr = planner.ToolErrorFromError(err)
+		} else {
+			payload = b
 		}
-		payload = b
 	}
 	req := planner.ToolRequest{
+		Error:   toolErr,
 		Name:    Revise,
 		Payload: payload,
 	}

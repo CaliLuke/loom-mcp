@@ -64,15 +64,18 @@ func WithToolCallID(id string) CallOption {
 // projected.projected_lookup_tool.
 func NewProjectedLookupToolCall(args *ProjectedLookupToolPayload, opts ...CallOption) planner.ToolRequest {
 	var payload []byte
+	var toolErr *planner.ToolError
 	if args != nil {
 		// Encode typed payloads into canonical JSON using the generated codec.
 		b, err := ProjectedLookupToolPayloadCodec.ToJSON(args)
 		if err != nil {
-			panic(err)
+			toolErr = planner.ToolErrorFromError(err)
+		} else {
+			payload = b
 		}
-		payload = b
 	}
 	req := planner.ToolRequest{
+		Error:   toolErr,
 		Name:    ProjectedLookupTool,
 		Payload: payload,
 	}
@@ -88,15 +91,18 @@ func NewProjectedLookupToolCall(args *ProjectedLookupToolPayload, opts ...CallOp
 // projected.projected_status_tool.
 func NewProjectedStatusToolCall(args *ProjectedStatusToolPayload, opts ...CallOption) planner.ToolRequest {
 	var payload []byte
+	var toolErr *planner.ToolError
 	if args != nil {
 		// Encode typed payloads into canonical JSON using the generated codec.
 		b, err := ProjectedStatusToolPayloadCodec.ToJSON(args)
 		if err != nil {
-			panic(err)
+			toolErr = planner.ToolErrorFromError(err)
+		} else {
+			payload = b
 		}
-		payload = b
 	}
 	req := planner.ToolRequest{
+		Error:   toolErr,
 		Name:    ProjectedStatusTool,
 		Payload: payload,
 	}

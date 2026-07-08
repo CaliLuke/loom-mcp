@@ -254,17 +254,20 @@ func emitUsedToolsBuilders(stmt *jen.Statement, data agentToolsetFileData) {
 			Id("planner").Dot("ToolRequest").
 			Block(
 				jen.Var().Id("payload").Index().Byte(),
+				jen.Var().Id("toolErr").Op("*").Id("planner").Dot("ToolError"),
 				jen.If(jen.Id("args").Op("!=").Nil()).Block(
 					jen.Comment("Encode typed payloads into canonical JSON using the generated codec."),
 					jen.List(jen.Id("b"), jen.Id("err")).Op(":=").Id(tool.GoName+"PayloadCodec").Dot("ToJSON").Call(jen.Id("args")),
 					jen.If(jen.Id("err").Op("!=").Nil()).Block(
-						jen.Panic(jen.Id("err")),
+						jen.Id("toolErr").Op("=").Id("planner").Dot("ToolErrorFromError").Call(jen.Id("err")),
+					).Else().Block(
+						jen.Id("payload").Op("=").Id("b"),
 					),
-					jen.Id("payload").Op("=").Id("b"),
 				),
 				jen.Id("req").Op(":=").Id("planner").Dot("ToolRequest").Values(jen.Dict{
 					jen.Id("Name"):    jen.Id(tool.ConstName),
 					jen.Id("Payload"): jen.Id("payload"),
+					jen.Id("Error"):   jen.Id("toolErr"),
 				}),
 				jen.For(jen.List(jen.Id("_"), jen.Id("o")).Op(":=").Range().Id("opts")).Block(
 					jen.If(jen.Id("o").Op("!=").Nil()).Block(
@@ -377,14 +380,17 @@ func emitAgentToolCallBuilders(stmt *jen.Statement, data agentToolsetFileData) {
 			Id("planner").Dot("ToolRequest").
 			Block(
 				jen.Var().Id("payload").Index().Byte(),
+				jen.Var().Id("toolErr").Op("*").Id("planner").Dot("ToolError"),
 				jen.If(jen.Id("args").Op("!=").Nil()).Block(
 					jen.List(jen.Id("b"), jen.Id("err")).Op(":=").Id(gocodegen.Goify(tool.Name, true)+"PayloadCodec").Dot("ToJSON").Call(jen.Id("args")),
 					jen.If(jen.Id("err").Op("!=").Nil()).Block(
-						jen.Panic(jen.Id("err")),
+						jen.Id("toolErr").Op("=").Id("planner").Dot("ToolErrorFromError").Call(jen.Id("err")),
+					).Else().Block(
+						jen.Id("payload").Op("=").Id("b"),
 					),
-					jen.Id("payload").Op("=").Id("b"),
 				),
 				jen.Id("req").Op(":=").Id("planner").Dot("ToolRequest").Values(jen.Dict{
+					jen.Id("Error"):   jen.Id("toolErr"),
 					jen.Id("Name"):    jen.Id(tool.ConstName),
 					jen.Id("Payload"): jen.Id("payload"),
 				}),

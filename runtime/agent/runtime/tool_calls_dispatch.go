@@ -47,6 +47,15 @@ func newToolCallBatch(calls []planner.ToolRequest) *toolCallBatch {
 func (e *toolBatchExec) prepareToolDispatch(ctx context.Context, b *toolCallBatch, call planner.ToolRequest, i int) (*planner.ToolRequest, error) {
 	call = e.normalizeToolCall(call, i)
 	b.calls[i] = call
+	if call.Error != nil {
+		if err := e.publishToolCallScheduled(ctx, call, e.toolQueue(call.Name)); err != nil {
+			return nil, err
+		}
+		if err := e.dispatchToolRequestError(ctx, b, call); err != nil {
+			return nil, err
+		}
+		return nil, nil
+	}
 	if _, hasSpec := e.r.toolSpec(call.Name); hasSpec {
 		if err := e.publishToolCallScheduled(ctx, call, e.toolQueue(call.Name)); err != nil {
 			return nil, err
@@ -57,6 +66,28 @@ func (e *toolBatchExec) prepareToolDispatch(ctx context.Context, b *toolCallBatc
 		return nil, err
 	}
 	return nil, nil
+}
+
+func (e *toolBatchExec) dispatchToolRequestError(ctx context.Context, b *toolCallBatch, call planner.ToolRequest) error {
+	tr := &planner.ToolResult{
+		Name:       call.Name,
+		ToolCallID: call.ToolCallID,
+		Error:      call.Error,
+	}
+	var resultJSON rawjson.Message
+	if _, ok := e.r.toolSpec(call.Name); ok {
+		var err error
+		resultJSON, err = e.r.materializeToolResult(ctx, call, tr)
+		if err != nil {
+			return err
+		}
+	}
+	if err := e.publishToolResultReceived(ctx, call, tr, resultJSON, 0); err != nil {
+		return err
+	}
+	b.inlineByID[call.ToolCallID] = Executed(tr)
+	e.recordDiscoveredToolCall(b, call.ToolCallID)
+	return nil
 }
 
 func (e *toolBatchExec) dispatchResolvedToolCall(ctx context.Context, wfCtx engine.WorkflowContext, b *toolCallBatch, call planner.ToolRequest, index int) error {

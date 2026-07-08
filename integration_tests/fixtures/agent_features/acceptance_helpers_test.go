@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"example.com/agentfeatures/gen/features"
+	agentworkflow "example.com/agentfeatures/gen/features/agents/coordinator/workflow"
 	"example.com/agentfeatures/gen/features/toolsets/workflow"
 	"github.com/CaliLuke/loom-mcp/runtime/agent/api"
 	"github.com/CaliLuke/loom-mcp/runtime/agent/artifact"
@@ -100,6 +101,27 @@ func (e *recordingWorkflowExecutor) Execute(ctx context.Context, meta *agentsrun
 		}}
 	}
 	return agentsruntime.Executed(toolResult), nil
+}
+
+func TestGeneratedToolCallBuilderReturnsCodecError(t *testing.T) {
+	original := agentworkflow.DraftPayloadCodec
+	t.Cleanup(func() {
+		agentworkflow.DraftPayloadCodec = original
+	})
+	agentworkflow.DraftPayloadCodec = tools.JSONCodec[*agentworkflow.DraftPayload]{
+		ToJSON: func(*agentworkflow.DraftPayload) ([]byte, error) {
+			return nil, errors.New("encode draft payload")
+		},
+		FromJSON: original.FromJSON,
+	}
+
+	require.NotPanics(t, func() {
+		call := agentworkflow.NewDraftCall(&agentworkflow.DraftPayload{Topic: "draft"})
+		require.Equal(t, agentworkflow.Draft, call.Name)
+		require.Empty(t, call.Payload)
+		require.NotNil(t, call.Error)
+		require.Equal(t, "encode draft payload", call.Error.Message)
+	})
 }
 
 func (e *recordingWorkflowExecutor) toolCallIDs() []string {

@@ -145,14 +145,17 @@ func WithToolCallID(id string) CallOption {
 // NewFindCall builds a planner.ToolRequest for the search.find tool.
 func NewFindCall(args *FindPayload, opts ...CallOption) planner.ToolRequest {
 	var payload []byte
+	var toolErr *planner.ToolError
 	if args != nil {
 		b, err := FindPayloadCodec.ToJSON(args)
 		if err != nil {
-			panic(err)
+			toolErr = planner.ToolErrorFromError(err)
+		} else {
+			payload = b
 		}
-		payload = b
 	}
 	req := planner.ToolRequest{
+		Error:   toolErr,
 		Name:    Find,
 		Payload: payload,
 	}

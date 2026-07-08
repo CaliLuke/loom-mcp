@@ -170,6 +170,10 @@ type ToolRequest struct {
 	// Payload is the canonical JSON payload for the tool call.
 	Payload rawjson.Message
 
+	// Error records a request-construction failure. The runtime publishes a
+	// tool failure result for this request without executing the tool.
+	Error *ToolError
+
 	// AgentID is the identifier of the agent that issued this tool request.
 	AgentID agent.Ident
 
