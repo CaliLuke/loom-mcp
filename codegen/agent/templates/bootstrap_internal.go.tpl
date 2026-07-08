@@ -44,9 +44,13 @@ func New(ctx context.Context) (*agentsruntime.Runtime, func(), error) {
         if err := {{ .Alias }}.Register{{ .Agent.StructName }}(ctx, rt, cfg); err != nil {
             return nil, nil, err
         }
-        {{- range .Toolsets }}
+        {{- if .Toolsets }}
         // Register method-backed toolsets with default executors.
-        if err := {{ .Alias }}.Register(ctx, rt); err != nil {
+        if err := {{ .Alias }}.RegisterUsedToolsets(ctx, rt,
+            {{- range .Toolsets }}
+            {{ $a.Alias }}.With{{ goify .Toolset.PathName true }}Executor(agentsruntime.ToolCallExecutorFunc({{ .Alias }}.Execute)),
+            {{- end }}
+        ); err != nil {
             return nil, nil, err
         }
         {{- end }}

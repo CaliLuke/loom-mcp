@@ -55,6 +55,9 @@ func GenerateExample(genpkg string, roots []eval.Root, files []*codegen.File) ([
 			}
 			// Internal executor stubs under internal/agents/<agent>/toolsets/<toolset>/
 			for _, ts := range ag.AllToolsets {
+				if !needsExecutorBackedRegistration(ts) {
+					continue
+				}
 				var has bool
 				for _, t := range ts.Tools {
 					if t.IsMethodBacked {
@@ -101,7 +104,10 @@ func emitInternalBootstrap(svc *ServiceAgentsData, moduleBase string) *codegen.F
 		imports = append(imports, &codegen.ImportSpec{Name: "mcpruntime", Path: "github.com/CaliLuke/loom-mcp/runtime/mcp"})
 	}
 	// Import generated agent registration packages and per-agent planner packages.
-	type toolsetImport struct{ Alias, Path string }
+	type toolsetImport struct {
+		Alias, Path string
+		Toolset     *ToolsetData
+	}
 	type agentImport struct {
 		Alias, Path, PlannerAlias, PlannerPath string
 		Toolsets                               []toolsetImport
@@ -116,10 +122,13 @@ func emitInternalBootstrap(svc *ServiceAgentsData, moduleBase string) *codegen.F
 		// Import internal toolset executor packages for method-backed toolsets.
 		var tsImports []toolsetImport
 		for _, ts := range ag.MethodBackedToolsets {
+			if !needsExecutorBackedRegistration(ts) {
+				continue
+			}
 			tpath := filepath.ToSlash(filepath.Join(moduleBase, "internal", "agents", ag.PathName, "toolsets", ts.PathName))
 			talias := "toolset" + ag.PathName + ts.PathName
 			imports = append(imports, &codegen.ImportSpec{Path: tpath, Name: talias})
-			tsImports = append(tsImports, toolsetImport{Alias: talias, Path: tpath})
+			tsImports = append(tsImports, toolsetImport{Alias: talias, Path: tpath, Toolset: ts})
 		}
 		agents = append(agents, agentImport{
 			Alias:        ag.PackageName,
@@ -188,7 +197,7 @@ func emitExecutorInternalStub(ag *AgentData, ts *ToolsetData) *codegen.File {
 
 	// Build tool switch metadata.
 	type execTool struct {
-		ID               string
+		ConstName        string
 		GoName           string
 		PayloadUnmarshal string
 		PayloadType      string
@@ -206,7 +215,7 @@ func emitExecutorInternalStub(ag *AgentData, ts *ToolsetData) *codegen.File {
 		}
 		g := codegen.Goify(t.Name, true)
 		tools = append(tools, execTool{
-			ID:               t.Name,
+			ConstName:        t.ConstName,
 			GoName:           g,
 			PayloadUnmarshal: "Unmarshal" + g + "Payload",
 			PayloadType:      g + "Payload",

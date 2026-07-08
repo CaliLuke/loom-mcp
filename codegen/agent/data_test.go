@@ -6,6 +6,7 @@ import (
 	"time"
 
 	codegen "github.com/CaliLuke/loom-mcp/codegen/agent"
+	"github.com/CaliLuke/loom-mcp/codegen/testhelpers"
 	. "github.com/CaliLuke/loom-mcp/dsl"
 	agentsExpr "github.com/CaliLuke/loom-mcp/expr/agent"
 	mcpexpr "github.com/CaliLuke/loom-mcp/expr/mcp"
@@ -143,7 +144,23 @@ func TestBuildGeneratorData_AliasedMCPToolsetUsesDefinitionNameForArtifacts(t *t
 	require.Equal(t, "github.com/CaliLuke/loom-mcp/calc/toolsets/calc_remote", used.SpecsImportPath)
 	require.Len(t, used.Tools, 1)
 	require.Equal(t, "add", used.Tools[0].Name)
+	require.Equal(t, "Add", used.Tools[0].ConstName)
 	require.Equal(t, "calc-remote.add", used.Tools[0].QualifiedName)
+	require.True(t, used.Tools[0].HasResult)
+}
+
+func TestGenerateRealMCPToolsetAggregatorUsesPopulatedToolIdentifiers(t *testing.T) {
+	roots := runAliasedMCPDesign(t)
+	files, err := codegen.Generate("github.com/CaliLuke/loom-mcp", roots, nil)
+	require.NoError(t, err)
+
+	toolsetSpecs := testhelpers.FileContent(t, files, "gen/calc/toolsets/calc_remote/specs.go")
+	require.Contains(t, toolsetSpecs, `Add tools.Ident = "calc-remote.add"`)
+	require.Contains(t, toolsetSpecs, `SpecAdd = tools.ToolSpec{`)
+
+	agentSpecs := testhelpers.FileContent(t, files, "gen/alpha/agents/scribe/specs/specs.go")
+	require.Contains(t, agentSpecs, `calc_remote.SpecAdd`)
+	require.NotContains(t, agentSpecs, `calc_remote.Spec,`)
 }
 
 func TestBuildGeneratorData_AliasedMCPToolsetsUseDistinctConstNames(t *testing.T) {

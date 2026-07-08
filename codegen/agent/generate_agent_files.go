@@ -11,7 +11,7 @@ import (
 )
 
 // agentFiles collects all files generated for a single agent.
-func agentFiles(agent *AgentData, specsCache *toolSpecsDataCache) []*codegen.File {
+func agentFiles(agent *AgentData, specsCache *toolSpecsDataCache) ([]*codegen.File, error) {
 	files := []*codegen.File{
 		agentImplFile(agent),
 		agentConfigFile(agent),
@@ -22,15 +22,27 @@ func agentFiles(agent *AgentData, specsCache *toolSpecsDataCache) []*codegen.Fil
 	if agg := agentSpecsAggregatorFile(agent); agg != nil {
 		files = append(files, agg)
 	}
-	if jsonFile := agentSpecsJSONFile(agent, specsCache); jsonFile != nil {
+	jsonFile, err := agentSpecsJSONFile(agent, specsCache)
+	if err != nil {
+		return nil, err
+	}
+	if jsonFile != nil {
 		files = append(files, jsonFile)
 	}
-	files = append(files, agentToolsFiles(agent, specsCache)...)
+	agentToolFiles, err := agentToolsFiles(agent, specsCache)
+	if err != nil {
+		return nil, err
+	}
+	files = append(files, agentToolFiles...)
 	files = append(files, agentToolsConsumerFiles(agent)...)
 	// Do not emit service toolset registrations; executors map tool payloads to service methods.
 	files = append(files, mcpExecutorFiles(agent)...)
 	// Emit typed helpers for Used toolsets (method-backed) to align planner UX.
-	files = append(files, usedToolsFiles(agent, specsCache)...)
+	usedToolFiles, err := usedToolsFiles(agent, specsCache)
+	if err != nil {
+		return nil, err
+	}
+	files = append(files, usedToolFiles...)
 	// Emit default service executor factories for method-backed Used toolsets.
 	files = append(files, serviceExecutorFiles(agent)...)
 
@@ -40,7 +52,7 @@ func agentFiles(agent *AgentData, specsCache *toolSpecsDataCache) []*codegen.Fil
 			filtered = append(filtered, f)
 		}
 	}
-	return filtered
+	return filtered, nil
 }
 
 // agentRouteRegisterFile emits Register<Agent>Route(ctx, rt) so caller processes can
@@ -85,7 +97,7 @@ func agentFiles(agent *AgentData, specsCache *toolSpecsDataCache) []*codegen.Fil
 // Schemas are emitted only when available; tools without payload, result, or
 // sidecar schemas still appear with name metadata so callers can rely on a
 // stable catalogue.
-func agentSpecsJSONFile(agent *AgentData, specsCache *toolSpecsDataCache) *codegen.File {
+func agentSpecsJSONFile(agent *AgentData, specsCache *toolSpecsDataCache) (*codegen.File, error) {
 	data := &toolSpecsData{}
 	seenTools := make(map[string]struct{}, len(agent.Tools))
 	for _, ts := range agent.AllToolsets {
@@ -97,7 +109,7 @@ func agentSpecsJSONFile(agent *AgentData, specsCache *toolSpecsDataCache) *codeg
 			// Schema generation failures indicate a broken design or codegen bug and
 			// must surface loudly so callers do not observe partial or drifting
 			// tool catalogues. Fail generation instead of silently omitting schemas.
-			panic(fmt.Errorf("loom-mcp: tool schema generation failed for agent %q: %w", agent.Name, err))
+			return nil, fmt.Errorf("loom-mcp: tool schema generation failed for agent %q: %w", agent.Name, err)
 		}
 		if specs == nil {
 			continue
@@ -117,7 +129,7 @@ func agentSpecsJSONFile(agent *AgentData, specsCache *toolSpecsDataCache) *codeg
 		return strings.Compare(a.Name, b.Name)
 	})
 	if len(data.tools) == 0 {
-		return nil
+		return nil, nil
 	}
 
 	type typeSchema struct {
@@ -241,12 +253,12 @@ func agentSpecsJSONFile(agent *AgentData, specsCache *toolSpecsDataCache) *codeg
 	}
 
 	if len(out.Tools) == 0 {
-		return nil
+		return nil, nil
 	}
 
 	payload, err := json.MarshalIndent(out, "", "  ")
 	if err != nil {
-		return nil
+		return nil, fmt.Errorf("loom-mcp: marshal tool schemas for agent %q: %w", agent.Name, err)
 	}
 	// Ensure a trailing newline for POSIX-friendly files and cleaner diffs.
 	payload = append(payload, '\n')
@@ -262,5 +274,5 @@ func agentSpecsJSONFile(agent *AgentData, specsCache *toolSpecsDataCache) *codeg
 	return &codegen.File{
 		Path:             path,
 		SectionTemplates: sections,
-	}
+	}, nil
 }

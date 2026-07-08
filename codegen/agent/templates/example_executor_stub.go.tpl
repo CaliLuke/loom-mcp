@@ -14,13 +14,15 @@ func Register(ctx context.Context, rt *runtime.Runtime) error {
     if rt == nil {
         return errors.New("runtime is required")
     }
-    reg := {{ $.AgentImport.Name }}.New{{ $.Agent.GoName }}{{ goify $.Toolset.PathName true }}ToolsetRegistration(runtime.ToolCallExecutorFunc(Execute))
-    return rt.RegisterToolset(reg)
+    return {{ $.AgentImport.Name }}.RegisterUsedToolsets(ctx, rt,
+        {{ $.AgentImport.Name }}.With{{ goify $.Toolset.PathName true }}Executor(runtime.ToolCallExecutorFunc(Execute)),
+    )
 }
 
 // Execute demonstrates per-tool branching with typed decode. Replace placeholders
 // with client calls and optional transforms from the specs package (transforms.go).
 func Execute(ctx context.Context, meta *runtime.ToolCallMeta, call *planner.ToolRequest) (*runtime.ToolExecutionResult, error) {
+    _ = ctx
     if call == nil {
         return runtime.Executed(&planner.ToolResult{Error: planner.NewToolError("tool request is nil")}), nil
     }
@@ -29,7 +31,7 @@ func Execute(ctx context.Context, meta *runtime.ToolCallMeta, call *planner.Tool
     }
     switch call.Name {
     {{- range .Tools }}
-    case "{{ .ID }}":
+    case {{ $.SpecsAlias }}.{{ .ConstName }}:
         // Decode typed payload
         args, err := {{ $.SpecsAlias }}.{{ .PayloadUnmarshal }}(call.Payload)
         if err != nil {
@@ -37,6 +39,7 @@ func Execute(ctx context.Context, meta *runtime.ToolCallMeta, call *planner.Tool
 				Error: planner.NewToolError("invalid payload"),
 			}), nil
         }
+        _ = args
         // Optional: transform to method payload if compatible
         // mp, _ := {{ $.SpecsAlias }}.ToMethodPayload_{{ .GoName }}(args)
         // TODO: Call your service client with mp (or args), map result back:

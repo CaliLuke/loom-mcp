@@ -66,7 +66,11 @@ func Generate(genpkg string, roots []eval.Root, files []*codegen.File) ([]*codeg
 	specsCache := newToolSpecsDataCache()
 
 	// Emit owner-scoped toolset specs/codecs once per defining toolset.
-	generated = append(generated, toolsetSpecsFiles(data, specsCache)...)
+	specFiles, err := toolsetSpecsFiles(data, specsCache)
+	if err != nil {
+		return nil, err
+	}
+	generated = append(generated, specFiles...)
 
 	for _, svc := range data.Services {
 		// Emit registry client packages for declared registries.
@@ -75,7 +79,10 @@ func Generate(genpkg string, roots []eval.Root, files []*codegen.File) ([]*codeg
 		}
 
 		for _, agent := range svc.Agents {
-			afiles := agentFiles(agent, specsCache)
+			afiles, err := agentFiles(agent, specsCache)
+			if err != nil {
+				return nil, err
+			}
 			generated = append(generated, afiles...)
 		}
 	}
@@ -416,9 +423,9 @@ func needsMemoryImport(agent *AgentData) bool {
 	return false
 }
 
-func agentToolsFiles(agent *AgentData, specsCache *toolSpecsDataCache) []*codegen.File {
+func agentToolsFiles(agent *AgentData, specsCache *toolSpecsDataCache) ([]*codegen.File, error) {
 	if len(agent.ExportedToolsets) == 0 {
-		return nil
+		return nil, nil
 	}
 	files := make([]*codegen.File, 0, len(agent.ExportedToolsets))
 	for _, ts := range agent.ExportedToolsets {
@@ -429,6 +436,9 @@ func agentToolsFiles(agent *AgentData, specsCache *toolSpecsDataCache) []*codege
 		// decisions as specs generation.
 		specs, err := specsCache.specsForToolset(agent.Genpkg, ts)
 		if err != nil {
+			return nil, fmt.Errorf("agent codegen: build exported toolset specs for agent %q toolset %q: %w", agent.Name, ts.QualifiedName, err)
+		}
+		if specs == nil {
 			continue
 		}
 		data := agentToolsetFileData{
@@ -457,7 +467,7 @@ func agentToolsFiles(agent *AgentData, specsCache *toolSpecsDataCache) []*codege
 		path := filepath.Join(ts.AgentToolsDir, "helpers.go")
 		files = append(files, &codegen.File{Path: path, Sections: sections})
 	}
-	return files
+	return files, nil
 }
 
 // agentToolsConsumerFiles emits thin helpers in the consumer agent package that
@@ -535,9 +545,9 @@ func mcpExecutorFiles(agent *AgentData) []*codegen.File {
 
 // usedToolsFiles emits typed call builders and type aliases for method-backed Used toolsets
 // to align UX with agent-as-tool helpers.
-func usedToolsFiles(agent *AgentData, specsCache *toolSpecsDataCache) []*codegen.File {
+func usedToolsFiles(agent *AgentData, specsCache *toolSpecsDataCache) ([]*codegen.File, error) {
 	if len(agent.MethodBackedToolsets) == 0 {
-		return nil
+		return nil, nil
 	}
 	files := make([]*codegen.File, 0, len(agent.MethodBackedToolsets))
 	for _, ts := range agent.MethodBackedToolsets {
@@ -547,6 +557,9 @@ func usedToolsFiles(agent *AgentData, specsCache *toolSpecsDataCache) []*codegen
 		}
 		specs, err := specsCache.specsForToolset(agent.Genpkg, ts)
 		if err != nil {
+			return nil, fmt.Errorf("agent codegen: build used toolset specs for agent %q toolset %q: %w", agent.Name, ts.QualifiedName, err)
+		}
+		if specs == nil {
 			continue
 		}
 		data := agentToolsetFileData{PackageName: ts.PackageName, Toolset: ts, Tools: specs.tools}
@@ -563,7 +576,7 @@ func usedToolsFiles(agent *AgentData, specsCache *toolSpecsDataCache) []*codegen
 		path := filepath.Join(ts.Dir, "used_tools.go")
 		files = append(files, &codegen.File{Path: path, Sections: sections})
 	}
-	return files
+	return files, nil
 }
 
 // serviceExecutorFiles emits per-toolset service executors that adapt runtime

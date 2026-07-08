@@ -37,15 +37,21 @@ func TestBadUnionPayloadExampleReportsToolAndPath(t *testing.T) {
 	genpkg, roots := testhelpers.RunDesign(t, testscenarios.BadUnionPayloadExample())
 
 	var recovered any
+	var genErr error
 	func() {
 		defer func() {
 			recovered = recover()
 		}()
-		_, _ = agentcodegen.Generate(genpkg, roots, nil)
+		_, genErr = agentcodegen.Generate(genpkg, roots, nil)
 	}()
 
-	err, ok := recovered.(error)
-	require.Truef(t, ok, "expected generator panic with error, got %T", recovered)
+	err := genErr
+	if recovered != nil {
+		var ok bool
+		err, ok = recovered.(error)
+		require.Truef(t, ok, "expected generator panic with error, got %T", recovered)
+	}
+	require.Error(t, err)
 	require.ErrorContains(t, err, `agent "scribe"`)
 	require.ErrorContains(t, err, "helpers.bad_union_example")
 	require.ErrorContains(t, err, "payload.value")

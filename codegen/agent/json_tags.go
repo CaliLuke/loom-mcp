@@ -37,9 +37,20 @@ func cloneWithJSONTags(att *goaexpr.AttributeExpr) *goaexpr.AttributeExpr {
 //     locally, and
 //   - ensures object fields carry json:name tags matching the DSL field names.
 func normalizeTransportAttrRecursive(att *goaexpr.AttributeExpr) {
+	normalizeTransportAttrRecursiveSeen(att, make(map[*goaexpr.AttributeExpr]struct{}))
+}
+
+// normalizeTransportAttrRecursiveSeen preserves one normalization pass per
+// attribute node so recursive user types terminate while shared nested fields
+// still receive their edge-level JSON tags from the parent object walk.
+func normalizeTransportAttrRecursiveSeen(att *goaexpr.AttributeExpr, seen map[*goaexpr.AttributeExpr]struct{}) {
 	if att == nil || att.Type == nil || att.Type == goaexpr.Empty {
 		return
 	}
+	if _, ok := seen[att]; ok {
+		return
+	}
+	seen[att] = struct{}{}
 
 	if len(att.Meta) > 0 {
 		for k := range att.Meta {
@@ -56,18 +67,18 @@ func normalizeTransportAttrRecursive(att *goaexpr.AttributeExpr) {
 	if obj == nil {
 		switch dt := att.Type.(type) {
 		case goaexpr.UserType:
-			normalizeTransportAttrRecursive(dt.Attribute())
+			normalizeTransportAttrRecursiveSeen(dt.Attribute(), seen)
 		case *goaexpr.Array:
-			normalizeTransportAttrRecursive(dt.ElemType)
+			normalizeTransportAttrRecursiveSeen(dt.ElemType, seen)
 		case *goaexpr.Map:
-			normalizeTransportAttrRecursive(dt.KeyType)
-			normalizeTransportAttrRecursive(dt.ElemType)
+			normalizeTransportAttrRecursiveSeen(dt.KeyType, seen)
+			normalizeTransportAttrRecursiveSeen(dt.ElemType, seen)
 		case *goaexpr.Union:
 			for _, nat := range dt.Values {
 				if nat == nil {
 					continue
 				}
-				normalizeTransportAttrRecursive(nat.Attribute)
+				normalizeTransportAttrRecursiveSeen(nat.Attribute, seen)
 			}
 		}
 		return
@@ -91,6 +102,6 @@ func normalizeTransportAttrRecursive(att *goaexpr.AttributeExpr) {
 				nat.Attribute.Meta["struct:tag:json:name"] = []string{nat.Name}
 			}
 		}
-		normalizeTransportAttrRecursive(nat.Attribute)
+		normalizeTransportAttrRecursiveSeen(nat.Attribute, seen)
 	}
 }

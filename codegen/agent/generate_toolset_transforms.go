@@ -22,19 +22,22 @@ import (
 // This file is emitted only for method-backed tools whose shapes are compatible
 // for transformation via Goa's `codegen.GoTransform`. When no transforms are
 // needed/possible, the function returns nil.
-func toolsetAdapterTransformsFile(genpkg string, ts *ToolsetData, specsCache *toolSpecsDataCache) *codegen.File {
+func toolsetAdapterTransformsFile(genpkg string, ts *ToolsetData, specsCache *toolSpecsDataCache) (*codegen.File, error) {
 	if ts == nil || ts.SpecsDir == "" || len(ts.Tools) == 0 {
-		return nil
+		return nil, nil
 	}
 	svc := ts.SourceService
 	if svc == nil {
-		return nil
+		return nil, nil
 	}
 
 	// Build data from specs to find tool-local payload/result type names.
 	specs, err := specsCache.specsForToolset(genpkg, ts)
-	if err != nil || specs == nil {
-		return nil
+	if err != nil {
+		return nil, fmt.Errorf("agent codegen: build transform specs for toolset %q: %w", ts.QualifiedName, err)
+	}
+	if specs == nil {
+		return nil, nil
 	}
 
 	scope := specs.Scope
@@ -248,7 +251,7 @@ func toolsetAdapterTransformsFile(genpkg string, ts *ToolsetData, specsCache *to
 	}
 
 	if len(fns) == 0 {
-		return nil
+		return nil, nil
 	}
 
 	// Assemble imports: service and any additional referenced packages.
@@ -297,7 +300,7 @@ func toolsetAdapterTransformsFile(genpkg string, ts *ToolsetData, specsCache *to
 	return &codegen.File{
 		Path:     filepath.Join(ts.SpecsDir, "transforms.go"),
 		Sections: sections,
-	}
+	}, nil
 }
 
 func uniqueImportAlias(used map[string]struct{}, base string) string {

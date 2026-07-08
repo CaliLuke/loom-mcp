@@ -1,9 +1,12 @@
 package tests
 
 import (
+	"go/parser"
+	"go/token"
 	"testing"
 
 	"github.com/CaliLuke/loom-mcp/codegen/agent/tests/testscenarios"
+	"github.com/stretchr/testify/require"
 )
 
 func TestGolden_Args_Primitive(t *testing.T) {
@@ -54,4 +57,14 @@ func TestGolden_Args_UnionSumTypes(t *testing.T) {
 	assertGoldenGo(t, "args_union_sum_types", "unions.go.golden", unions)
 	assertGoldenGo(t, "args_union_sum_types", "codecs.go.golden", codecs)
 	assertGoldenGo(t, "args_union_sum_types", "specs.go.golden", specs)
+}
+
+func TestGolden_Args_RecursiveUserTypes(t *testing.T) {
+	files := buildAndGenerate(t, testscenarios.RecursiveToolTypes())
+	types := fileContent(t, files, "gen/alpha/toolsets/graph/types.go")
+
+	_, err := parser.ParseFile(token.NewFileSet(), "types.go", types, parser.AllErrors)
+	require.NoError(t, err)
+	require.Contains(t, types, "Node = struct")
+	require.Contains(t, types, "Next *Node `json:\"next,omitempty\"`")
 }

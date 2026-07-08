@@ -33,7 +33,9 @@ func New(ctx context.Context) (*agentsruntime.Runtime, func(), error) {
 			return nil, nil, err
 		}
 		// Register method-backed toolsets with default executors.
-		if err := toolsetscribeprofiles.Register(ctx, rt); err != nil {
+		if err := scribe.RegisterUsedToolsets(ctx, rt,
+			scribe.WithProfilesExecutor(agentsruntime.ToolCallExecutorFunc(toolsetscribeprofiles.Execute)),
+		); err != nil {
 			return nil, nil, err
 		}
 	}

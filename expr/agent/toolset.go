@@ -122,6 +122,7 @@ func (t *ToolsetExpr) Validate() error {
 	if t.Provider != nil {
 		t.validateProvider(verr)
 	}
+	t.validateSingleBoundService(verr)
 	if len(verr.Errors) == 0 {
 		return nil
 	}
@@ -186,6 +187,31 @@ func (t *ToolsetExpr) validateRegistryProvider(verr *eval.ValidationErrors) {
 	}
 	if t.Provider.ToolsetName == "" {
 		verr.Add(t, "toolset name is required for FromRegistry provider")
+	}
+}
+
+func (t *ToolsetExpr) validateSingleBoundService(verr *eval.ValidationErrors) {
+	var firstTool string
+	var firstService string
+	for _, tool := range t.Tools {
+		if tool == nil || tool.bindMethodName == "" {
+			continue
+		}
+		service := tool.bindServiceName
+		if service == "" && t.Agent != nil && t.Agent.Service != nil {
+			service = t.Agent.Service.Name
+		}
+		if service == "" {
+			continue
+		}
+		if firstService == "" {
+			firstTool = tool.Name
+			firstService = service
+			continue
+		}
+		if service != firstService {
+			verr.Add(t, "toolset %q cannot mix BindTo target services: tool %q binds to service %q, while tool %q binds to service %q", t.Name, firstTool, firstService, tool.Name, service)
+		}
 	}
 }
 

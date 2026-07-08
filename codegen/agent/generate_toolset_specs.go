@@ -43,9 +43,9 @@ type toolProviderFileData struct {
 // (registry adapters provide the codec and execution wiring).
 //
 // The function returns nil when there are no services or no eligible toolsets.
-func toolsetSpecsFiles(data *GeneratorData, specsCache *toolSpecsDataCache) []*codegen.File {
+func toolsetSpecsFiles(data *GeneratorData, specsCache *toolSpecsDataCache) ([]*codegen.File, error) {
 	if data == nil || len(data.Services) == 0 {
-		return nil
+		return nil, nil
 	}
 
 	type specCandidate struct {
@@ -108,7 +108,13 @@ func toolsetSpecsFiles(data *GeneratorData, specsCache *toolSpecsDataCache) []*c
 			continue
 		}
 		specsData, err := specsCache.specsForToolset(data.Genpkg, ts)
-		if err != nil || specsData == nil {
+		if err != nil {
+			if cands[0].agent != nil {
+				return nil, fmt.Errorf("agent codegen: build toolset specs for toolset %q (agent %q): %w", ts.QualifiedName, cands[0].agent.Name, err)
+			}
+			return nil, fmt.Errorf("agent codegen: build toolset specs for toolset %q: %w", ts.QualifiedName, err)
+		}
+		if specsData == nil {
 			continue
 		}
 
@@ -220,7 +226,11 @@ func toolsetSpecsFiles(data *GeneratorData, specsCache *toolSpecsDataCache) []*c
 			out = append(out, f)
 		}
 
-		if f := toolsetAdapterTransformsFile(data.Genpkg, ts, specsCache); f != nil {
+		f, err := toolsetAdapterTransformsFile(data.Genpkg, ts, specsCache)
+		if err != nil {
+			return nil, err
+		}
+		if f != nil {
 			out = append(out, f)
 		}
 		if f := toolsetProviderFile(data.Genpkg, ts); f != nil {
@@ -228,7 +238,7 @@ func toolsetSpecsFiles(data *GeneratorData, specsCache *toolSpecsDataCache) []*c
 		}
 	}
 
-	return out
+	return out, nil
 }
 
 func toolsetProviderFile(genpkg string, ts *ToolsetData) *codegen.File {

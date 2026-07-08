@@ -7,6 +7,7 @@ import (
 	"github.com/CaliLuke/loom-mcp/codegen/naming"
 	agentsExpr "github.com/CaliLuke/loom-mcp/expr/agent"
 	mcpexpr "github.com/CaliLuke/loom-mcp/expr/mcp"
+	"github.com/CaliLuke/loom/codegen"
 	goaexpr "github.com/CaliLuke/loom/expr"
 )
 
@@ -49,13 +50,15 @@ func populateMCPToolset(ts *ToolsetData) bool {
 		}
 		td := &ToolData{
 			Name:        tool.Name,
+			ConstName:   codegen.Goify(tool.Name, true),
 			Description: tool.Description,
 			Args:        payload,
 			Return:      result,
 			Toolset:     ts,
 		}
 		td.Title = naming.HumanizeTitle(tool.Name)
-		td.QualifiedName = fmt.Sprintf("%s.%s", ts.Name, tool.Name)
+		td.QualifiedName = fmt.Sprintf("%s.%s", ts.QualifiedName, tool.Name)
+		td.HasResult = result != nil && result.Type != goaexpr.Empty
 		ts.Tools = append(ts.Tools, td)
 	}
 	sort.Slice(ts.Tools, func(i, j int) bool {

@@ -273,6 +273,36 @@ func TestToolsetExprValidateRejectsVersionOnNonRegistryProviderField(t *testing.
 	require.ErrorContains(t, ts.Validate(), "Version is only valid for FromRegistry toolsets")
 }
 
+func TestToolsetExprValidateRejectsMixedBindToServices(t *testing.T) {
+	search := &ToolExpr{Name: "search"}
+	search.RecordBinding("catalog", "Search")
+	charge := &ToolExpr{Name: "charge"}
+	charge.RecordBinding("billing", "Charge")
+	ts := &ToolsetExpr{
+		Name:  "ops",
+		Tools: []*ToolExpr{search, charge},
+	}
+
+	err := ts.Validate()
+
+	require.ErrorContains(t, err, `toolset "ops" cannot mix BindTo target services`)
+	require.ErrorContains(t, err, `tool "search" binds to service "catalog"`)
+	require.ErrorContains(t, err, `tool "charge" binds to service "billing"`)
+}
+
+func TestToolsetExprValidateAllowsSingleBindToService(t *testing.T) {
+	search := &ToolExpr{Name: "search"}
+	search.RecordBinding("catalog", "Search")
+	update := &ToolExpr{Name: "update"}
+	update.RecordBinding("catalog", "Update")
+	ts := &ToolsetExpr{
+		Name:  "ops",
+		Tools: []*ToolExpr{search, update},
+	}
+
+	require.NoError(t, ts.Validate())
+}
+
 func TestToolsetExprValidateSkillsProviderModes(t *testing.T) {
 	t.Run("valid", func(t *testing.T) {
 		ts := &ToolsetExpr{

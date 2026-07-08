@@ -31,13 +31,15 @@ func Register(ctx context.Context, rt *runtime.Runtime) error {
 	if rt == nil {
 		return errors.New("runtime is required")
 	}
-	reg := scribe.NewScribeProfilesToolsetRegistration(runtime.ToolCallExecutorFunc(Execute))
-	return rt.RegisterToolset(reg)
+	return scribe.RegisterUsedToolsets(ctx, rt,
+		scribe.WithProfilesExecutor(runtime.ToolCallExecutorFunc(Execute)),
+	)
 }
 
 // Execute demonstrates per-tool branching with typed decode. Replace placeholders
 // with client calls and optional transforms from the specs package (transforms.go).
 func Execute(ctx context.Context, meta *runtime.ToolCallMeta, call *planner.ToolRequest) (*runtime.ToolExecutionResult, error) {
+	_ = ctx
 	if call == nil {
 		return runtime.Executed(&planner.ToolResult{Error: planner.NewToolError("tool request is nil")}), nil
 	}
@@ -45,7 +47,7 @@ func Execute(ctx context.Context, meta *runtime.ToolCallMeta, call *planner.Tool
 		return runtime.Executed(&planner.ToolResult{Error: planner.NewToolError("tool call meta is nil")}), nil
 	}
 	switch call.Name {
-	case "upsert":
+	case profilesspecs.Upsert:
 		// Decode typed payload
 		args, err := profilesspecs.UnmarshalUpsertPayload(call.Payload)
 		if err != nil {
@@ -53,6 +55,7 @@ func Execute(ctx context.Context, meta *runtime.ToolCallMeta, call *planner.Tool
 				Error: planner.NewToolError("invalid payload"),
 			}), nil
 		}
+		_ = args
 		// Optional: transform to method payload if compatible
 		// mp, _ := profilesspecs.ToMethodPayload_Upsert(args)
 		// TODO: Call your service client with mp (or args), map result back:
