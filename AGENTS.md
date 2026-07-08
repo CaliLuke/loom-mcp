@@ -50,12 +50,12 @@ Within each section, place main logic first and helpers last.
 - User-facing DSL, runtime, or codegen changes must also update the repo docs under `docs/` and any corresponding external docs set that publishes this project.
 - The upstream Model Context Protocol reference lives in the submodule at `third_party/modelcontextprotocol`; the canonical spec folder for this repo is `third_party/modelcontextprotocol/docs/specification`.
 - Keep repo-local skills current with the product. Update the skill files directly rather than adding sidecar delta documents.
-- When bumping the forked `github.com/CaliLuke/loom` replace, do not assume `main` or the default branch. This repo is currently tracking the fork branch `openapi-3.1`. Resolve the freshest relevant fork commit from actual refs and timestamps, then pin that exact pseudo-version in `go.mod`.
+- When bumping the forked `github.com/CaliLuke/loom`, pin a release tag (`vX.Y.Z`), not a branch. The fork cuts releases from its checkout via `make release VERSION=...`; resolve the freshest tag from actual refs (`git ls-remote --tags`, `gh release view`), update `REMOTE_VERSION` in `scripts/loom_core_mode.sh`, and run `make loom-remote` so root, fixture, and quickstart modules move together (bump `integration_tests/fixtures/agent_features` separately).
 - Do not use web search to verify whether a release exists. Check releases, tags, or published module versions from the authoritative source directly, such as `git ls-remote`, `gh release view`, or `go list -m -versions`.
 - Use local Loom checkout mode for iterative development and the pinned remote fork for CI. The standard toggle is `make loom-local` for local iteration and `make loom-remote` before CI-facing verification or commits. `make loom-status` shows the current mode.
 - After switching to local mode, use `make verify-mcp-local` for the default MCP fixture/framework verification ladder.
 - Use `make regen-assistant-fixture` when the assistant MCP fixture design changes so generated churn is intentional and reproducible.
-- The canonical local core checkout for this repo is `/Users/luca/code/loom-mono/loom`. If local mode points somewhere else, treat that as drift and correct it before interpreting test results.
+- The canonical local core checkout for this repo is the peer folder `../loom` (loom-mono layout); `scripts/loom_core_mode.sh` resolves it relative to the repo root and honors a `LOOM_DIR` override. If local mode points somewhere else, treat that as drift and correct it before interpreting test results.
 - Do not compensate in `loom-mcp` for upstream `loom` regressions. Bump, verify, and if the new upstream commit breaks this repo, stop and return concrete upstream tickets instead of shipping local workarounds.
 
 ## Testing
