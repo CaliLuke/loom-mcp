@@ -63,9 +63,10 @@ func Generate(genpkg string, roots []eval.Root, files []*codegen.File) ([]*codeg
 	}
 
 	var generated []*codegen.File
+	specsCache := newToolSpecsDataCache()
 
 	// Emit owner-scoped toolset specs/codecs once per defining toolset.
-	generated = append(generated, toolsetSpecsFiles(data)...)
+	generated = append(generated, toolsetSpecsFiles(data, specsCache)...)
 
 	for _, svc := range data.Services {
 		// Emit registry client packages for declared registries.
@@ -74,7 +75,7 @@ func Generate(genpkg string, roots []eval.Root, files []*codegen.File) ([]*codeg
 		}
 
 		for _, agent := range svc.Agents {
-			afiles := agentFiles(agent)
+			afiles := agentFiles(agent, specsCache)
 			generated = append(generated, afiles...)
 		}
 	}
@@ -415,7 +416,7 @@ func needsMemoryImport(agent *AgentData) bool {
 	return false
 }
 
-func agentToolsFiles(agent *AgentData) []*codegen.File {
+func agentToolsFiles(agent *AgentData, specsCache *toolSpecsDataCache) []*codegen.File {
 	if len(agent.ExportedToolsets) == 0 {
 		return nil
 	}
@@ -426,11 +427,7 @@ func agentToolsFiles(agent *AgentData) []*codegen.File {
 		}
 		// Build tool entries so templates can reuse the same type/codec naming
 		// decisions as specs generation.
-		svc := ts.SourceService
-		if svc == nil {
-			svc = agent.Service
-		}
-		specs, err := buildToolSpecsDataFor(agent.Genpkg, svc, ts.Tools)
+		specs, err := specsCache.specsForToolset(agent.Genpkg, ts)
 		if err != nil {
 			continue
 		}
@@ -538,7 +535,7 @@ func mcpExecutorFiles(agent *AgentData) []*codegen.File {
 
 // usedToolsFiles emits typed call builders and type aliases for method-backed Used toolsets
 // to align UX with agent-as-tool helpers.
-func usedToolsFiles(agent *AgentData) []*codegen.File {
+func usedToolsFiles(agent *AgentData, specsCache *toolSpecsDataCache) []*codegen.File {
 	if len(agent.MethodBackedToolsets) == 0 {
 		return nil
 	}
@@ -548,11 +545,7 @@ func usedToolsFiles(agent *AgentData) []*codegen.File {
 		if ts.SpecsImportPath == "" || len(ts.Tools) == 0 {
 			continue
 		}
-		svc := ts.SourceService
-		if svc == nil {
-			svc = agent.Service
-		}
-		specs, err := buildToolSpecsDataFor(agent.Genpkg, svc, ts.Tools)
+		specs, err := specsCache.specsForToolset(agent.Genpkg, ts)
 		if err != nil {
 			continue
 		}

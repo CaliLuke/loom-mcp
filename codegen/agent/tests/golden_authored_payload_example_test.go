@@ -4,7 +4,9 @@ import (
 	"encoding/json"
 	"testing"
 
+	agentcodegen "github.com/CaliLuke/loom-mcp/codegen/agent"
 	"github.com/CaliLuke/loom-mcp/codegen/agent/tests/testscenarios"
+	"github.com/CaliLuke/loom-mcp/codegen/testhelpers"
 	"github.com/stretchr/testify/require"
 )
 
@@ -29,6 +31,25 @@ func TestInjectedPayloadFieldsHiddenFromAdvertisedToolSpecs(t *testing.T) {
 	require.Contains(t, providerSrc, "payload.SessionID = meta.SessionID")
 	require.Contains(t, providerSrc, "methodIn.SessionID = msg.Meta.SessionID")
 	require.Contains(t, providerSrc, "methodOut, err := p.svc.Lookup(ctx, methodIn)")
+}
+
+func TestBadUnionPayloadExampleReportsToolAndPath(t *testing.T) {
+	genpkg, roots := testhelpers.RunDesign(t, testscenarios.BadUnionPayloadExample())
+
+	var recovered any
+	func() {
+		defer func() {
+			recovered = recover()
+		}()
+		_, _ = agentcodegen.Generate(genpkg, roots, nil)
+	}()
+
+	err, ok := recovered.(error)
+	require.Truef(t, ok, "expected generator panic with error, got %T", recovered)
+	require.ErrorContains(t, err, `agent "scribe"`)
+	require.ErrorContains(t, err, "helpers.bad_union_example")
+	require.ErrorContains(t, err, "payload.value")
+	require.ErrorContains(t, err, "does not match any variant")
 }
 
 func toolSpecLiteral(t *testing.T, specsSrc string, field string) string {

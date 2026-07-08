@@ -80,17 +80,21 @@ type (
 
 const authLocationHeader = "header"
 
-// registryClientFiles generates the registry client files for all declared
-// registries. Each registry produces a client package under
+// registryClientFiles generates registry client files for registries referenced
+// by the service's agents. Each referenced registry produces a client package under
 // gen/<service>/registry/<name>/.
 func registryClientFiles(genpkg string, svc *ServiceAgentsData) []*codegen.File {
 	if svc == nil || svc.Service == nil {
 		return nil
 	}
+	referenced := referencedRegistryNames(svc)
+	if len(referenced) == 0 {
+		return nil
+	}
 
 	var files []*codegen.File
 	for _, reg := range agentsExpr.Root.Registries {
-		if reg == nil {
+		if reg == nil || !referenced[reg.Name] {
 			continue
 		}
 		data := newRegistryClientData(genpkg, svc.Service.PathName, reg)
@@ -111,6 +115,25 @@ func registryClientFiles(genpkg string, svc *ServiceAgentsData) []*codegen.File 
 		}
 	}
 	return files
+}
+
+func referencedRegistryNames(svc *ServiceAgentsData) map[string]bool {
+	if svc == nil {
+		return nil
+	}
+	names := make(map[string]bool)
+	for _, agent := range svc.Agents {
+		if agent == nil {
+			continue
+		}
+		for _, meta := range agent.RegistryToolsets {
+			if meta == nil || meta.RegistryName == "" {
+				continue
+			}
+			names[meta.RegistryName] = true
+		}
+	}
+	return names
 }
 
 // newRegistryClientData transforms a RegistryExpr into template-ready data.
@@ -440,7 +463,7 @@ func emitRegistryClientMethods(stmt *jen.Statement) {
 		Params(jen.Id("ctx").Qual("context", "Context"), jen.Id("name").String()).
 		Params(jen.Op("*").Id("ToolsetSchema"), jen.Error()).
 		Block(
-			jen.Id("u").Op(":=").Id("c").Dot("endpoint").Op("+").Id("pathToolsets").Op("+").Lit("/").Op("+").Id("name"),
+			jen.Id("u").Op(":=").Id("c").Dot("endpoint").Op("+").Id("pathToolsets").Op("+").Lit("/").Op("+").Qual("net/url", "PathEscape").Call(jen.Id("name")),
 			jen.Var().Id("result").Id("ToolsetSchema"),
 			jen.If(jen.Id("err").Op(":=").Id("c").Dot("doRequest").Call(jen.Id("ctx"), jen.Qual("net/http", "MethodGet"), jen.Id("u"), jen.Nil(), jen.Op("&").Id("result")), jen.Id("err").Op("!=").Nil()).Block(
 				jen.Return(jen.Nil(), jen.Id("err")),
@@ -556,9 +579,18 @@ func emitRegistryClientPrivateMethods(stmt *jen.Statement) {
 					jen.Return(jen.Nil()),
 				),
 				jen.Id("lastErr").Op("=").Id("err"),
-				jen.Comment("Don't retry on context cancellation or client errors"),
+				jen.Comment("Don't retry on context cancellation or deterministic client errors"),
 				jen.If(jen.Id("ctx").Dot("Err").Call().Op("!=").Nil()).Block(
 					jen.Return(jen.Id("ctx").Dot("Err").Call()),
+				),
+				jen.Var().Id("regErr").Op("*").Id("RegistryError"),
+				jen.If(
+					jen.Qual("errors", "As").Call(jen.Id("err"), jen.Op("&").Id("regErr")).
+						Op("&&").Id("regErr").Dot("StatusCode").Op(">=").Qual("net/http", "StatusBadRequest").
+						Op("&&").Id("regErr").Dot("StatusCode").Op("<").Qual("net/http", "StatusInternalServerError").
+						Op("&&").Id("regErr").Dot("StatusCode").Op("!=").Qual("net/http", "StatusTooManyRequests"),
+				).Block(
+					jen.Return(jen.Id("err")),
 				),
 			),
 			jen.Return(jen.Id("lastErr")),

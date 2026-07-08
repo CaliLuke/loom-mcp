@@ -181,9 +181,16 @@ func (b *toolSpecBuilder) buildTypeInfo(tool *ToolData, att *goaexpr.AttributeEx
 		// Prefer an explicit top-level Example(...) from the original DSL
 		// attribute. If none exists, synthesize the minimal example from the
 		// transport schema attribute.
-		exampleBytes = authoredExampleForAttribute(att, advertisedAttr)
+		examplePath := string(usage)
+		exampleBytes, err = authoredExampleForAttribute(att, advertisedAttr, examplePath)
+		if err != nil {
+			return nil, fmt.Errorf("generate example for %s %s: %w", tool.QualifiedName, usage, err)
+		}
 		if len(exampleBytes) == 0 {
-			exampleBytes = exampleForAttribute(advertisedAttr)
+			exampleBytes, err = exampleForAttribute(advertisedAttr, examplePath)
+			if err != nil {
+				return nil, fmt.Errorf("generate example for %s %s: %w", tool.QualifiedName, usage, err)
+			}
 		}
 	}
 

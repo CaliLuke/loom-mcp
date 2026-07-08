@@ -43,7 +43,7 @@ type toolProviderFileData struct {
 // (registry adapters provide the codec and execution wiring).
 //
 // The function returns nil when there are no services or no eligible toolsets.
-func toolsetSpecsFiles(data *GeneratorData) []*codegen.File {
+func toolsetSpecsFiles(data *GeneratorData, specsCache *toolSpecsDataCache) []*codegen.File {
 	if data == nil || len(data.Services) == 0 {
 		return nil
 	}
@@ -107,8 +107,7 @@ func toolsetSpecsFiles(data *GeneratorData) []*codegen.File {
 		if len(ts.Tools) == 0 {
 			continue
 		}
-		svc := ts.SourceService
-		specsData, err := buildToolSpecsDataFor(data.Genpkg, svc, ts.Tools)
+		specsData, err := specsCache.specsForToolset(data.Genpkg, ts)
 		if err != nil || specsData == nil {
 			continue
 		}
@@ -221,7 +220,7 @@ func toolsetSpecsFiles(data *GeneratorData) []*codegen.File {
 			out = append(out, f)
 		}
 
-		if f := toolsetAdapterTransformsFile(data.Genpkg, ts); f != nil {
+		if f := toolsetAdapterTransformsFile(data.Genpkg, ts, specsCache); f != nil {
 			out = append(out, f)
 		}
 		if f := toolsetProviderFile(data.Genpkg, ts); f != nil {

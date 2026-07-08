@@ -317,11 +317,15 @@ func TestHealThinkingGapsSkipsNilMessages(t *testing.T) {
 	if msgs[2] != nil {
 		t.Fatal("expected last message to remain nil")
 	}
-	if len(msgs[1].Parts) != 3 {
-		t.Fatalf("expected assistant parts count 3, got %d", len(msgs[1].Parts))
+	assistant := msgs[1]
+	if assistant == nil {
+		t.Fatal("expected assistant message to remain present")
 	}
-	if _, ok := msgs[1].Parts[0].(model.ThinkingPart); !ok {
-		t.Fatalf("expected ThinkingPart first, got %T", msgs[1].Parts[0])
+	if len(assistant.Parts) != 3 {
+		t.Fatalf("expected assistant parts count 3, got %d", len(assistant.Parts))
+	}
+	if _, ok := assistant.Parts[0].(model.ThinkingPart); !ok {
+		t.Fatalf("expected ThinkingPart first, got %T", assistant.Parts[0])
 	}
 }
 

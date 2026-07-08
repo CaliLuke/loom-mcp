@@ -8,6 +8,7 @@ import (
 	. "github.com/CaliLuke/loom-mcp/dsl"
 	"github.com/CaliLuke/loom-mcp/testutil"
 	goadsl "github.com/CaliLuke/loom/dsl"
+	"github.com/stretchr/testify/require"
 )
 
 // TestRegistryClientGeneratesCorrectMethods verifies that the generated registry
@@ -213,4 +214,35 @@ func TestRegistryClientDataTypes(t *testing.T) {
 
 	clientContent := testhelpers.FileContent(t, files, "gen/types_test/registry/test_registry/client.go")
 	testutil.AssertGo(t, filepath.Join("testdata", "golden", "registry_client_types", "client.go.golden"), clientContent)
+}
+
+func TestRegistryClientOnlyEmitsReferencedRegistries(t *testing.T) {
+	design := func() {
+		goadsl.API("referenced_registry_test", func() {})
+
+		usedRegistry := Registry("used-registry", func() {
+			goadsl.URL("https://registry.used.internal")
+		})
+		Registry("unused-registry", func() {
+			goadsl.URL("https://registry.unused.internal")
+		})
+		registryTools := Toolset(FromRegistry(usedRegistry, "data-tools"))
+
+		goadsl.Service("uses_registry", func() {
+			Agent("registry-agent", "Uses registry", func() {
+				Use(registryTools)
+			})
+		})
+
+		goadsl.Service("plain_agent", func() {
+			Agent("plain-agent", "Does not use registry", func() {})
+		})
+	}
+
+	files := testhelpers.BuildAndGenerateWithPkg(t, "example.com/referenced_registry", design)
+
+	require.True(t, testhelpers.FileExists(files, "gen/uses_registry/registry/used_registry/client.go"))
+	require.False(t, testhelpers.FileExists(files, "gen/uses_registry/registry/unused_registry/client.go"))
+	require.False(t, testhelpers.FileExists(files, "gen/plain_agent/registry/used_registry/client.go"))
+	require.False(t, testhelpers.FileExists(files, "gen/plain_agent/registry/unused_registry/client.go"))
 }

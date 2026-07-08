@@ -171,7 +171,7 @@ func (c *Client) ListToolsets(ctx context.Context) ([]*ToolsetInfo, error) {
 
 // GetToolset retrieves the full schema for a specific toolset.
 func (c *Client) GetToolset(ctx context.Context, name string) (*ToolsetSchema, error) {
-	u := c.endpoint + pathToolsets + "/" + name
+	u := c.endpoint + pathToolsets + "/" + url.PathEscape(name)
 	var result ToolsetSchema
 	if err := c.doRequest(ctx, http.MethodGet, u, nil, &result); err != nil {
 		return nil, err
@@ -263,9 +263,13 @@ func (c *Client) doRequest(ctx context.Context, method string, reqURL string, bo
 			return nil
 		}
 		lastErr = err
-		// Don't retry on context cancellation or client errors
+		// Don't retry on context cancellation or deterministic client errors
 		if ctx.Err() != nil {
 			return ctx.Err()
+		}
+		var regErr *RegistryError
+		if errors.As(err, &regErr) && regErr.StatusCode >= http.StatusBadRequest && regErr.StatusCode < http.StatusInternalServerError && regErr.StatusCode != http.StatusTooManyRequests {
+			return err
 		}
 	}
 	return lastErr

@@ -22,7 +22,7 @@ import (
 // This file is emitted only for method-backed tools whose shapes are compatible
 // for transformation via Goa's `codegen.GoTransform`. When no transforms are
 // needed/possible, the function returns nil.
-func toolsetAdapterTransformsFile(genpkg string, ts *ToolsetData) *codegen.File {
+func toolsetAdapterTransformsFile(genpkg string, ts *ToolsetData, specsCache *toolSpecsDataCache) *codegen.File {
 	if ts == nil || ts.SpecsDir == "" || len(ts.Tools) == 0 {
 		return nil
 	}
@@ -32,7 +32,7 @@ func toolsetAdapterTransformsFile(genpkg string, ts *ToolsetData) *codegen.File 
 	}
 
 	// Build data from specs to find tool-local payload/result type names.
-	specs, err := buildToolSpecsDataFor(genpkg, svc, ts.Tools)
+	specs, err := specsCache.specsForToolset(genpkg, ts)
 	if err != nil || specs == nil {
 		return nil
 	}

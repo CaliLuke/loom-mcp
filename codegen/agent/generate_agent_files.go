@@ -4,12 +4,14 @@ import (
 	"encoding/json"
 	"fmt"
 	"path/filepath"
+	"slices"
+	"strings"
 
 	"github.com/CaliLuke/loom/codegen"
 )
 
 // agentFiles collects all files generated for a single agent.
-func agentFiles(agent *AgentData) []*codegen.File {
+func agentFiles(agent *AgentData, specsCache *toolSpecsDataCache) []*codegen.File {
 	files := []*codegen.File{
 		agentImplFile(agent),
 		agentConfigFile(agent),
@@ -20,15 +22,15 @@ func agentFiles(agent *AgentData) []*codegen.File {
 	if agg := agentSpecsAggregatorFile(agent); agg != nil {
 		files = append(files, agg)
 	}
-	if jsonFile := agentSpecsJSONFile(agent); jsonFile != nil {
+	if jsonFile := agentSpecsJSONFile(agent, specsCache); jsonFile != nil {
 		files = append(files, jsonFile)
 	}
-	files = append(files, agentToolsFiles(agent)...)
+	files = append(files, agentToolsFiles(agent, specsCache)...)
 	files = append(files, agentToolsConsumerFiles(agent)...)
 	// Do not emit service toolset registrations; executors map tool payloads to service methods.
 	files = append(files, mcpExecutorFiles(agent)...)
 	// Emit typed helpers for Used toolsets (method-backed) to align planner UX.
-	files = append(files, usedToolsFiles(agent)...)
+	files = append(files, usedToolsFiles(agent, specsCache)...)
 	// Emit default service executor factories for method-backed Used toolsets.
 	files = append(files, serviceExecutorFiles(agent)...)
 
@@ -83,17 +85,37 @@ func agentFiles(agent *AgentData) []*codegen.File {
 // Schemas are emitted only when available; tools without payload, result, or
 // sidecar schemas still appear with name metadata so callers can rely on a
 // stable catalogue.
-func agentSpecsJSONFile(agent *AgentData) *codegen.File {
-	data, err := buildToolSpecsData(agent)
-	if err != nil {
-		// Schema generation failures indicate a broken design or codegen bug and
-		// must surface loudly so callers do not observe partial or drifting
-		// tool catalogues. Fail generation instead of silently omitting schemas.
-		panic(fmt.Errorf("loom-mcp: tool schema generation failed for agent %q: %w", agent.Name, err))
+func agentSpecsJSONFile(agent *AgentData, specsCache *toolSpecsDataCache) *codegen.File {
+	data := &toolSpecsData{}
+	seenTools := make(map[string]struct{}, len(agent.Tools))
+	for _, ts := range agent.AllToolsets {
+		if ts == nil || len(ts.Tools) == 0 {
+			continue
+		}
+		specs, err := specsCache.specsForToolset(agent.Genpkg, ts)
+		if err != nil {
+			// Schema generation failures indicate a broken design or codegen bug and
+			// must surface loudly so callers do not observe partial or drifting
+			// tool catalogues. Fail generation instead of silently omitting schemas.
+			panic(fmt.Errorf("loom-mcp: tool schema generation failed for agent %q: %w", agent.Name, err))
+		}
+		if specs == nil {
+			continue
+		}
+		for _, tool := range specs.tools {
+			if tool == nil {
+				continue
+			}
+			if _, ok := seenTools[tool.Name]; ok {
+				continue
+			}
+			seenTools[tool.Name] = struct{}{}
+			data.tools = append(data.tools, tool)
+		}
 	}
-	if data == nil {
-		return nil
-	}
+	slices.SortFunc(data.tools, func(a, b *toolEntry) int {
+		return strings.Compare(a.Name, b.Name)
+	})
 	if len(data.tools) == 0 {
 		return nil
 	}

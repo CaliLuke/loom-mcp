@@ -157,26 +157,7 @@ func schemaForAttribute(att *goaexpr.AttributeExpr) ([]byte, error) {
 		}
 		if tname != "" {
 			if def, ok := openapi.Definitions[tname]; ok && def != nil {
-				// Build a new definitions map excluding the root to avoid
-				// self-referential cycles during JSON marshaling.
-				if len(openapi.Definitions) > 0 {
-					defs := make(map[string]*openapi.Schema, len(openapi.Definitions))
-					for k, v := range openapi.Definitions {
-						if k == tname {
-							continue
-						}
-						defs[k] = v
-					}
-					if len(defs) > 0 {
-						def.Defs = defs
-					}
-				}
-				// Marshal schema JSON directly (Goa emits 2020-12 + $defs).
-				b, err := def.JSON()
-				if err != nil {
-					return b, nil
-				}
-				return b, nil
+				return rootDefinitionJSON(def, tname, openapi.Definitions)
 			}
 		}
 	}
@@ -187,59 +168,87 @@ func schemaForAttribute(att *goaexpr.AttributeExpr) ([]byte, error) {
 	return b, nil
 }
 
+func rootDefinitionJSON(def *openapi.Schema, tname string, definitions map[string]*openapi.Schema) ([]byte, error) {
+	// Build a new definitions map excluding the root to avoid self-referential
+	// cycles during JSON marshaling.
+	if len(definitions) > 0 {
+		defs := make(map[string]*openapi.Schema, len(definitions))
+		for k, v := range definitions {
+			if k == tname {
+				continue
+			}
+			defs[k] = v
+		}
+		if len(defs) > 0 {
+			def.Defs = defs
+		}
+	}
+	// Marshal schema JSON directly (Goa emits 2020-12 + $defs).
+	return def.JSON()
+}
+
 // authoredExampleForAttribute returns the last explicit Example(...) declared on
 // the source attribute, normalized to the canonical JSON contract of target.
-func authoredExampleForAttribute(source, target *goaexpr.AttributeExpr) []byte {
+func authoredExampleForAttribute(source, target *goaexpr.AttributeExpr, path string) ([]byte, error) {
 	if source == nil {
-		return nil
+		return nil, nil
 	}
 	examples := source.ExtractUserExamples()
 	if len(examples) == 0 {
-		return nil
+		return nil, nil
 	}
-	return normalizeExampleValue(target, examples[len(examples)-1].Value)
+	return normalizeExampleValue(target, examples[len(examples)-1].Value, path)
 }
 
 // exampleForAttribute produces a minimal JSON example for the given attribute
 // using Goa's example generator. When no meaningful example can be derived it
 // returns nil so callers can distinguish between "no example" and an empty
 // object.
-func exampleForAttribute(att *goaexpr.AttributeExpr) []byte {
+func exampleForAttribute(att *goaexpr.AttributeExpr, path string) ([]byte, error) {
 	if att == nil || att.Type == nil || att.Type == goaexpr.Empty {
-		return nil
+		return nil, nil
 	}
 	gen := &goaexpr.ExampleGenerator{Randomizer: goaexpr.NewDeterministicRandomizer()}
 	v := att.Example(gen)
 	if v == nil {
-		return nil
+		return nil, nil
 	}
-	return normalizeExampleValue(att, v)
+	return normalizeExampleValue(att, v, path)
 }
 
 // normalizeExampleValue canonicalizes one example value into JSON-native shapes
 // and rewrites union nodes to the canonical {type,value} encoding.
-func normalizeExampleValue(att *goaexpr.AttributeExpr, v any) []byte {
+func normalizeExampleValue(att *goaexpr.AttributeExpr, v any, path string) ([]byte, error) {
 	// Normalize to JSON-native shapes (map[string]any, []any, float64, string, bool)
 	// so downstream rewriting logic doesn't have to handle typed maps/slices that
 	// Goa's example generator may produce for single-field objects.
 	raw, err := json.Marshal(v)
-	if err != nil || len(raw) == 0 {
-		return nil
+	if err != nil {
+		return nil, err
+	}
+	if len(raw) == 0 {
+		return nil, nil
 	}
 	var normalized any
 	if err := json.Unmarshal(raw, &normalized); err != nil {
-		return nil
+		return nil, err
 	}
-	normalized = canonicalizeUnionExamples(att, normalized)
+	normalized, err = canonicalizeUnionExamples(att, normalized, path)
+	if err != nil {
+		return nil, err
+	}
 	data, err := json.Marshal(normalized)
-	if err != nil || len(data) == 0 {
-		return nil
+	if err != nil {
+		return nil, err
+	}
+	if len(data) == 0 {
+		return nil, nil
 	}
 	// Treat "{}" as a non-informative example and omit it.
 	if string(data) == "{}" {
-		return nil
+		return nil, nil
 	}
-	return data
+	return data, nil
 }
 
 // canonicalizeUnionExamples rewrites Goa's "flattened" union examples into the
@@ -249,17 +258,17 @@ func normalizeExampleValue(att *goaexpr.AttributeExpr, v any) []byte {
 // for documentation but misleading for tool specs where the runtime decoder
 // expects explicit discriminators. This helper preserves the structure produced
 // by the standard example generator and wraps only union nodes.
-func canonicalizeUnionExamples(att *goaexpr.AttributeExpr, example any) any {
+func canonicalizeUnionExamples(att *goaexpr.AttributeExpr, example any, path string) (any, error) {
 	if att == nil || att.Type == nil || att.Type == goaexpr.Empty {
-		return example
+		return example, nil
 	}
 	switch dt := att.Type.(type) {
 	case goaexpr.UserType:
-		return canonicalizeUnionExamples(dt.Attribute(), example)
+		return canonicalizeUnionExamples(dt.Attribute(), example, path)
 	case *goaexpr.Object:
 		m, ok := example.(map[string]any)
 		if !ok {
-			return example
+			return example, nil
 		}
 		for k, v := range m {
 			child := att.Find(k)
@@ -267,36 +276,51 @@ func canonicalizeUnionExamples(att *goaexpr.AttributeExpr, example any) any {
 				delete(m, k)
 				continue
 			}
-			m[k] = canonicalizeUnionExamples(child, v)
+			childPath := joinExamplePath(path, k)
+			var err error
+			m[k], err = canonicalizeUnionExamples(child, v, childPath)
+			if err != nil {
+				return nil, err
+			}
 		}
-		return m
+		return m, nil
 	case *goaexpr.Array:
 		s, ok := example.([]any)
 		if !ok {
-			return example
+			return example, nil
 		}
 		for i, v := range s {
-			s[i] = canonicalizeUnionExamples(dt.ElemType, v)
+			itemPath := fmt.Sprintf("%s[%d]", path, i)
+			var err error
+			s[i], err = canonicalizeUnionExamples(dt.ElemType, v, itemPath)
+			if err != nil {
+				return nil, err
+			}
 		}
-		return s
+		return s, nil
 	case *goaexpr.Map:
 		m, ok := example.(map[string]any)
 		if !ok {
-			return example
+			return example, nil
 		}
 		for k, v := range m {
-			m[k] = canonicalizeUnionExamples(dt.ElemType, v)
+			itemPath := joinExamplePath(path, k)
+			var err error
+			m[k], err = canonicalizeUnionExamples(dt.ElemType, v, itemPath)
+			if err != nil {
+				return nil, err
+			}
 		}
-		return m
+		return m, nil
 	case *goaexpr.Union:
 		if example == nil || len(dt.Values) == 0 {
-			return example
+			return example, nil
 		}
 
 		var chosen *goaexpr.NamedAttributeExpr
 		chosen = pickUnionVariantForExample(dt, example)
 		if chosen == nil {
-			panic(fmt.Sprintf("agent/specs_builder: union example does not match any variant (type=%q)", dt.TypeName))
+			return nil, fmt.Errorf("union example at %s does not match any variant for %q", path, dt.TypeName)
 		}
 
 		typeKey := dt.GetTypeKey()
@@ -308,13 +332,25 @@ func canonicalizeUnionExamples(att *goaexpr.AttributeExpr, example any) any {
 			valueKey = "value"
 		}
 
+		value, err := canonicalizeUnionExamples(chosen.Attribute, example, joinExamplePath(path, valueKey))
+		if err != nil {
+			return nil, err
+		}
+
 		return map[string]any{
 			typeKey:  chosen.Name,
-			valueKey: canonicalizeUnionExamples(chosen.Attribute, example),
-		}
+			valueKey: value,
+		}, nil
 	default:
-		return example
+		return example, nil
 	}
+}
+
+func joinExamplePath(parent, child string) string {
+	if parent == "" {
+		return child
+	}
+	return parent + "." + child
 }
 
 func pickUnionVariantForExample(u *goaexpr.Union, example any) *goaexpr.NamedAttributeExpr {
