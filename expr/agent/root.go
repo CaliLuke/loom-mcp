@@ -77,8 +77,7 @@ func (r *RootExpr) Prepare() {
 	if r == nil {
 		return
 	}
-	r.resolveAgentToolsetReferences()
-	r.resolveOriginToolsetTools()
+	r.resolveToolsets()
 }
 
 // WalkSets exposes the nested expressions to the eval engine.
@@ -201,40 +200,38 @@ func (r *RootExpr) Validate() error {
 	return verr
 }
 
-func (r *RootExpr) resolveAgentToolsetReferences() {
+// resolveToolsets materializes tools and metadata for every toolset that
+// references an origin, resolving pending AgentToolset references on demand.
+// Origins are always resolved before their consumers so service declaration
+// order never affects valid cross-agent references.
+func (r *RootExpr) resolveToolsets() {
+	visiting := make(map[*ToolsetExpr]struct{})
 	for _, ts := range gatheredToolsets(r.Agents, r.ServiceExports, r.Toolsets) {
-		r.resolveAgentToolsetReference(ts)
+		r.resolveToolsetFor(ts, visiting)
 	}
 }
 
-func (r *RootExpr) resolveAgentToolsetReference(ts *ToolsetExpr) {
-	if ts == nil || ts.AgentToolset == nil || ts.Origin != nil {
+// resolveToolsetFor materializes ts from its origin chain. The origin is
+// resolved recursively first, including any pending AgentToolset reference it
+// carries, so a consumer never clones tools from a not-yet-resolved clone.
+// visiting tracks the toolsets on the current resolution path; revisiting one
+// means the design declared a reference cycle, which is reported as a DSL
+// error via eval.ReportError.
+func (r *RootExpr) resolveToolsetFor(ts *ToolsetExpr, visiting map[*ToolsetExpr]struct{}) {
+	if ts == nil || ts.originToolsResolved {
 		return
 	}
-	origin := r.agentToolsetReferenceOrigin(ts.AgentToolset)
-	if origin == nil {
+	if _, cycling := visiting[ts]; cycling {
+		eval.ReportError("toolset %q participates in a cross-agent toolset reference cycle; break the cycle so each reference resolves to a defining toolset", ts.Name)
 		return
 	}
-	ts.Name = origin.Name
-	ts.Description = origin.Description
-	ts.Tags = append([]string(nil), origin.Tags...)
-	ts.Meta = cloneMeta(origin.Meta)
-	ts.Provider = cloneProvider(origin.Provider)
-	ts.Origin = origin
-	ts.AgentToolset = nil
-	r.resolveOriginToolsetToolsFor(ts)
-}
-
-func (r *RootExpr) resolveOriginToolsetTools() {
-	for _, ts := range gatheredToolsets(r.Agents, r.ServiceExports, r.Toolsets) {
-		r.resolveOriginToolsetToolsFor(ts)
-	}
-}
-
-func (r *RootExpr) resolveOriginToolsetToolsFor(ts *ToolsetExpr) {
-	if ts == nil || ts.Origin == nil || ts.originToolsResolved {
+	r.resolveAgentToolsetReference(ts)
+	if ts.Origin == nil {
 		return
 	}
+	visiting[ts] = struct{}{}
+	r.resolveToolsetFor(ts.Origin, visiting)
+	delete(visiting, ts)
 	syncOriginToolsetMetadata(ts)
 	inlineTools := ts.Tools
 	if len(ts.ToolSelections) == 0 {
@@ -245,6 +242,23 @@ func (r *RootExpr) resolveOriginToolsetToolsFor(ts *ToolsetExpr) {
 	selected := cloneSelectedToolsForToolset(ts.Origin.Tools, ts.ToolSelections, ts)
 	ts.Tools = append(append([]*ToolExpr(nil), selected...), inlineTools...)
 	ts.originToolsResolved = true
+}
+
+// resolveAgentToolsetReference rewrites a pending AgentToolset reference into
+// a regular origin link. Metadata and tools are materialized afterwards by
+// resolveToolsetFor once the full origin chain is resolved. Unresolvable
+// references are left pending for validateAgentToolsetReferences to report.
+func (r *RootExpr) resolveAgentToolsetReference(ts *ToolsetExpr) {
+	if ts == nil || ts.AgentToolset == nil || ts.Origin != nil {
+		return
+	}
+	origin := r.agentToolsetReferenceOrigin(ts.AgentToolset)
+	if origin == nil {
+		return
+	}
+	ts.Name = origin.Name
+	ts.Origin = origin
+	ts.AgentToolset = nil
 }
 
 func syncOriginToolsetMetadata(ts *ToolsetExpr) {
