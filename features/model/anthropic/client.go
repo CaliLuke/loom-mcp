@@ -355,6 +355,12 @@ func anthropicMessageBlock(part model.Part, nameMap map[string]string) (sdk.Cont
 		}
 		return sdk.NewTextBlock(v.Text), true, nil
 	}
+	if v, ok := part.(model.CitationsPart); ok {
+		if v.Text == "" {
+			return sdk.ContentBlockParamUnion{}, false, nil
+		}
+		return sdk.NewTextBlock(v.Text), true, nil
+	}
 	if v, ok := part.(model.ToolUsePart); ok {
 		block, err := anthropicToolUseBlock(v, nameMap)
 		return block, err == nil, err

@@ -78,6 +78,11 @@ func (s *messageEncodeState) encodePart(role model.ConversationRole, part model.
 			return nil, nil
 		}
 		return &brtypes.ContentBlockMemberText{Value: v.Text}, nil
+	case model.CitationsPart:
+		if v.Text == "" {
+			return nil, nil
+		}
+		return &brtypes.ContentBlockMemberText{Value: v.Text}, nil
 	case model.ImagePart:
 		return encodeImagePart(role, v)
 	case model.DocumentPart:

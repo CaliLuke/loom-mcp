@@ -8,6 +8,38 @@ import (
 	"github.com/CaliLuke/loom-mcp/runtime/agent/tools"
 )
 
+func TestEncodeMessages_EncodesCitationsPartText(t *testing.T) {
+	messages, _, err := encodeMessages([]*model.Message{
+		{
+			Role: model.ConversationRoleAssistant,
+			Parts: []model.Part{
+				model.CitationsPart{
+					Text: "The answer cites the source.",
+					Citations: []model.Citation{
+						{Title: "source.pdf", Source: "doc-1"},
+					},
+				},
+			},
+		},
+	}, nil)
+	if err != nil {
+		t.Fatalf("encodeMessages error: %v", err)
+	}
+	if len(messages) != 1 {
+		t.Fatalf("encoded message count = %d, want 1", len(messages))
+	}
+	if len(messages[0].Content) != 1 {
+		t.Fatalf("encoded content block count = %d, want 1", len(messages[0].Content))
+	}
+	text := messages[0].Content[0].GetText()
+	if text == nil {
+		t.Fatal("encoded content block is not text")
+	}
+	if *text != "The answer cites the source." {
+		t.Fatalf("encoded text = %q, want citations text", *text)
+	}
+}
+
 func TestEncodeMessages_RewritesUnknownToolUseToToolUnavailable(t *testing.T) {
 	nameMap := map[string]string{
 		tools.ToolUnavailable.String(): sanitizeToolName(tools.ToolUnavailable.String()),

@@ -72,6 +72,47 @@ func TestEncodeMessages_ReencodeTranscriptOrder(t *testing.T) {
 	}
 }
 
+func TestEncodeMessages_ReencodesCitationsPartAsText(t *testing.T) {
+	ctx := context.Background()
+	msgs := []*model.Message{
+		{
+			Role: model.ConversationRoleAssistant,
+			Parts: []model.Part{
+				model.CitationsPart{
+					Text: "The pressure rose after the pump restarted.",
+					Citations: []model.Citation{
+						{Title: "pump-log"},
+					},
+				},
+			},
+		},
+	}
+
+	conv, system, err := encodeMessages(ctx, msgs, map[string]string{}, false, nil)
+	if err != nil {
+		t.Fatalf("encodeMessages error: %v", err)
+	}
+	if len(system) != 0 {
+		t.Fatalf("expected no system blocks, got %d", len(system))
+	}
+	if len(conv) != 1 {
+		t.Fatalf("expected 1 message, got %d", len(conv))
+	}
+	if conv[0].Role != brtypes.ConversationRoleAssistant {
+		t.Fatalf("message role = %s, want assistant", conv[0].Role)
+	}
+	if len(conv[0].Content) != 1 {
+		t.Fatalf("expected 1 content block, got %d", len(conv[0].Content))
+	}
+	text, ok := conv[0].Content[0].(*brtypes.ContentBlockMemberText)
+	if !ok {
+		t.Fatalf("content block = %T, want text", conv[0].Content[0])
+	}
+	if text.Value != "The pressure rose after the pump restarted." {
+		t.Fatalf("text block = %q, want citation text", text.Value)
+	}
+}
+
 func TestEncodeMessages_SkipsNilMessages(t *testing.T) {
 	ctx := context.Background()
 	msgs := []*model.Message{
