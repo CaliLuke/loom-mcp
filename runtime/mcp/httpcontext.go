@@ -15,6 +15,8 @@ type (
 	sessionIDKey      struct{}
 	requestHeadersKey struct{}
 	responseWriterKey struct{}
+	allowedNamesKey   struct{}
+	deniedNamesKey    struct{}
 )
 
 // WithSessionID stores the MCP session ID in ctx.
@@ -57,6 +59,42 @@ func RequestHeadersFromContext(ctx context.Context) http.Header {
 		}
 	}
 	return nil
+}
+
+// WithAllowedResourceNames stores request-scoped allowed MCP resource names in ctx.
+func WithAllowedResourceNames(ctx context.Context, names string) context.Context {
+	return context.WithValue(ctx, allowedNamesKey{}, names)
+}
+
+// AllowedResourceNamesFromContext returns request-scoped allowed MCP resource names.
+func AllowedResourceNamesFromContext(ctx context.Context) string {
+	if ctx == nil {
+		return ""
+	}
+	if v := ctx.Value(allowedNamesKey{}); v != nil {
+		if s, ok := v.(string); ok {
+			return s
+		}
+	}
+	return ""
+}
+
+// WithDeniedResourceNames stores request-scoped denied MCP resource names in ctx.
+func WithDeniedResourceNames(ctx context.Context, names string) context.Context {
+	return context.WithValue(ctx, deniedNamesKey{}, names)
+}
+
+// DeniedResourceNamesFromContext returns request-scoped denied MCP resource names.
+func DeniedResourceNamesFromContext(ctx context.Context) string {
+	if ctx == nil {
+		return ""
+	}
+	if v := ctx.Value(deniedNamesKey{}); v != nil {
+		if s, ok := v.(string); ok {
+			return s
+		}
+	}
+	return ""
 }
 
 // WithResponseWriter stores the active HTTP response writer in ctx.

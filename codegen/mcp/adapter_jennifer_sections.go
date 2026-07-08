@@ -411,7 +411,7 @@ func emitResourcesRead(stmt *jen.Statement, data *AdapterData) {
 					})
 				}
 				sw.Default().Block(
-					jen.Return(jen.Nil(), jen.Id("loom").Dot("PermanentError").Call(jen.Lit("method_not_found"), jen.Lit("Unknown resource: %s"), jen.Id("p").Dot("URI"))),
+					jen.Return(jen.Nil(), jen.Id("loom").Dot("PermanentError").Call(jen.Lit("resource_not_found"), jen.Lit("Unknown resource: %s"), jen.Id("p").Dot("URI"))),
 				)
 			})
 		})
@@ -451,8 +451,8 @@ func emitAssertResourceURIAllowed(stmt *jen.Statement) {
 			jen.Var().Id("extraAllowURIs").Index().String(),
 			jen.Var().Id("extraDenyURIs").Index().String(),
 			jen.If(jen.Id("ctx").Op("!=").Nil()).Block(
-				appendResourceURIsFromContextValue("mcp_allow_names", "extraAllowURIs"),
-				appendResourceURIsFromContextValue("mcp_deny_names", "extraDenyURIs"),
+				appendResourceURIsFromContextValue(jen.Id("mcpruntime").Dot("AllowedResourceNamesFromContext").Call(jen.Id("ctx")), "extraAllowURIs"),
+				appendResourceURIsFromContextValue(jen.Id("mcpruntime").Dot("DeniedResourceNamesFromContext").Call(jen.Id("ctx")), "extraDenyURIs"),
 			),
 			jen.Var().Id("denied").Index().String(),
 			jen.If(jen.Id("a").Dot("opts").Op("!=").Nil()).Block(
@@ -480,13 +480,11 @@ func emitAssertResourceURIAllowed(stmt *jen.Statement) {
 	stmt.Line()
 }
 
-func appendResourceURIsFromContextValue(ctxKey, targetSlice string) jen.Code {
-	return jen.If(jen.Id("v").Op(":=").Id("ctx").Dot("Value").Call(jen.Lit(ctxKey)), jen.Id("v").Op("!=").Nil()).Block(
-		jen.If(jen.List(jen.Id("s"), jen.Id("ok")).Op(":=").Id("v").Assert(jen.String()), jen.Id("ok")).Block(
-			jen.For(jen.List(jen.Id("_"), jen.Id("n")).Op(":=").Range().Qual("strings", "Split").Call(jen.Id("s"), jen.Lit(","))).Block(
-				jen.If(jen.List(jen.Id("u"), jen.Id("ok2")).Op(":=").Id("a").Dot("resourceNameToURI").Index(jen.Id("n")), jen.Id("ok2")).Block(
-					jen.Id(targetSlice).Op("=").Append(jen.Id(targetSlice), jen.Id("u")),
-				),
+func appendResourceURIsFromContextValue(resourceNames jen.Code, targetSlice string) jen.Code {
+	return jen.If(jen.Id("s").Op(":=").Add(resourceNames), jen.Id("s").Op("!=").Lit("")).Block(
+		jen.For(jen.List(jen.Id("_"), jen.Id("n")).Op(":=").Range().Qual("strings", "Split").Call(jen.Id("s"), jen.Lit(","))).Block(
+			jen.If(jen.List(jen.Id("u"), jen.Id("ok")).Op(":=").Id("a").Dot("resourceNameToURI").Index(jen.Id("n")), jen.Id("ok")).Block(
+				jen.Id(targetSlice).Op("=").Append(jen.Id(targetSlice), jen.Id("u")),
 			),
 		),
 	)
@@ -517,7 +515,7 @@ func emitResourcesSubscribe(stmt *jen.Statement, data *AdapterData) {
 					)
 				}
 				sw.Default().Block(
-					jen.Return(jen.Id("loom").Dot("PermanentError").Call(jen.Lit("method_not_found"), jen.Lit("Unknown resource: %s"), jen.Id("p").Dot("URI"))),
+					jen.Return(jen.Id("loom").Dot("PermanentError").Call(jen.Lit("resource_not_found"), jen.Lit("Unknown resource: %s"), jen.Id("p").Dot("URI"))),
 				)
 			})
 		})
@@ -555,7 +553,7 @@ func emitResourcesUnsubscribe(stmt *jen.Statement, data *AdapterData) {
 					)
 				}
 				sw.Default().Block(
-					jen.Return(jen.Id("loom").Dot("PermanentError").Call(jen.Lit("method_not_found"), jen.Lit("Unknown resource: %s"), jen.Id("p").Dot("URI"))),
+					jen.Return(jen.Id("loom").Dot("PermanentError").Call(jen.Lit("resource_not_found"), jen.Lit("Unknown resource: %s"), jen.Id("p").Dot("URI"))),
 				)
 			})
 		})
@@ -647,7 +645,7 @@ func emitPromptsGet(stmt *jen.Statement, data *AdapterData) {
 					}
 				})
 			}
-			g.Return(jen.Nil(), jen.Id("loom").Dot("PermanentError").Call(jen.Lit("method_not_found"), jen.Lit("Unknown prompt: %s"), jen.Id("p").Dot("Name")))
+			g.Return(jen.Nil(), jen.Id("loom").Dot("PermanentError").Call(jen.Lit("invalid_params"), jen.Lit("Unknown prompt: %s"), jen.Id("p").Dot("Name")))
 		})
 	stmt.Line()
 }
@@ -736,7 +734,7 @@ func dynamicPromptCase(prompt *DynamicPromptAdapter) []jen.Code {
 			if arg.Required {
 				codes = append(codes,
 					jen.If(jen.List(jen.Id("_"), jen.Id("ok")).Op(":=").Id("args").Index(jen.Lit(arg.Name)), jen.Op("!").Id("ok")).Block(
-						jen.Return(jen.Nil(), jen.Id("loom").Dot("PermanentError").Call(jen.Lit("invalid_params"), jen.Lit("Missing required argument: "+arg.Name))),
+						jen.Return(jen.Nil(), jen.Id("loom").Dot("PermanentError").Call(jen.Lit("invalid_params"), jen.Lit("Missing required argument: %s"), jen.Lit(arg.Name))),
 					),
 				)
 			}

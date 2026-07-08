@@ -13,7 +13,7 @@ func (b *mcpExprBuilder) buildMCPTypes() {
 	b.getOrCreateType("Icon", b.buildIconType)
 	b.getOrCreateType("ClientInfo", b.buildClientInfoType)
 	b.getOrCreateType("ServerInfo", b.buildServerInfoType)
-	b.getOrCreateType("Capabilities", b.buildCapabilitiesType)
+	b.getOrCreateType("ServerCapabilities", b.buildCapabilitiesType)
 
 	// Tool types
 	if len(b.mcp.Tools) > 0 {
@@ -177,31 +177,29 @@ func (b *mcpExprBuilder) buildCapabilitiesType() *expr.AttributeExpr {
 
 	// Client-side capabilities removed: SamplingCapability, RootsCapability
 
-	// Create ServerCapabilities type with references to capability types
+	// Create ServerCapabilities type with references to capability types.
 	types := b.Types()
-	return b.getOrCreateType("ServerCapabilities", func() *expr.AttributeExpr {
-		return &expr.AttributeExpr{
-			Type: &expr.Object{
-				{Name: "tools", Attribute: &expr.AttributeExpr{
-					Type:        types["ToolsCapability"],
-					Description: "Tool capabilities",
-				}},
-				{Name: "resources", Attribute: &expr.AttributeExpr{
-					Type:        types["ResourcesCapability"],
-					Description: "Resource capabilities",
-				}},
-				{Name: "prompts", Attribute: &expr.AttributeExpr{
-					Type:        types["PromptsCapability"],
-					Description: "Prompt capabilities",
-				}},
-				{Name: "experimental", Attribute: &expr.AttributeExpr{
-					Type:        expr.Any,
-					Description: "Experimental server capabilities",
-				}},
-				// sampling, roots removed
-			},
-		}
-	}).AttributeExpr
+	return &expr.AttributeExpr{
+		Type: &expr.Object{
+			{Name: "tools", Attribute: &expr.AttributeExpr{
+				Type:        types["ToolsCapability"],
+				Description: "Tool capabilities",
+			}},
+			{Name: "resources", Attribute: &expr.AttributeExpr{
+				Type:        types["ResourcesCapability"],
+				Description: "Resource capabilities",
+			}},
+			{Name: "prompts", Attribute: &expr.AttributeExpr{
+				Type:        types["PromptsCapability"],
+				Description: "Prompt capabilities",
+			}},
+			{Name: "experimental", Attribute: &expr.AttributeExpr{
+				Type:        expr.Any,
+				Description: "Experimental server capabilities",
+			}},
+			// sampling, roots removed
+		},
+	}
 }
 
 func (b *mcpExprBuilder) buildPingResultType() *expr.AttributeExpr {

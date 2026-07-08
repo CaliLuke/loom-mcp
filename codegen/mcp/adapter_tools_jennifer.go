@@ -15,7 +15,6 @@ func adapterToolsSection(data *AdapterData) codegen.Section {
 
 		stmt.Comment("Tools handling").Line()
 		emitDecodeMCPPayloadStrict(stmt)
-		emitTopLevelJSONFieldSet(stmt)
 		emitDecodeMCPPayloadFields(stmt)
 		emitValidateMCPPayloadRequired(stmt)
 		emitValidateMCPPayloadEnum(stmt)
@@ -157,27 +156,6 @@ func emitDecodeMCPPayloadStrict(stmt *jen.Statement) {
 				jen.Return(jen.Id("err")),
 			),
 			jen.Return(jen.Nil()),
-		)
-	stmt.Line()
-}
-
-func emitTopLevelJSONFieldSet(stmt *jen.Statement) {
-	stmt.Func().Id("topLevelJSONFieldSet").
-		Params(jen.Id("raw").Qual("encoding/json", "RawMessage")).
-		Params(jen.Map(jen.String()).Struct(), jen.Error()).
-		Block(
-			jen.Id("fields").Op(":=").Make(jen.Map(jen.String()).Struct()),
-			jen.If(jen.Len(jen.Qual("bytes", "TrimSpace").Call(jen.Id("raw"))).Op("==").Lit(0)).Block(
-				jen.Return(jen.Id("fields"), jen.Nil()),
-			),
-			jen.Var().Id("payload").Map(jen.String()).Qual("encoding/json", "RawMessage"),
-			jen.If(jen.Id("err").Op(":=").Qual("encoding/json", "Unmarshal").Call(jen.Id("raw"), jen.Op("&").Id("payload")), jen.Id("err").Op("!=").Nil()).Block(
-				jen.Return(jen.Nil(), jen.Id("err")),
-			),
-			jen.For(jen.Id("name").Op(":=").Range().Id("payload")).Block(
-				jen.Id("fields").Index(jen.Id("name")).Op("=").Struct().Values(),
-			),
-			jen.Return(jen.Id("fields"), jen.Nil()),
 		)
 	stmt.Line()
 }
@@ -1378,7 +1356,7 @@ func emitToolsCallHandler(stmt *jen.Statement, data *AdapterData) {
 				jen.Return(jen.Id("a").Dot("handleCallToolProxy").Call(jen.Id("ctx"), jen.Id("p"), jen.Id("stream"))),
 			)
 			g.If(jen.Id("a").Dot("toolSearchEnabled").Call().Op("&&").Op("!").Id("a").Dot("opts").Dot("ToolSearch").Dot("AllowDirectHiddenCalls").Op("&&").Id("isGeneratedToolName").Call(jen.Id("name")).Op("&&").Op("!").Id("a").Dot("isAlwaysVisibleToolName").Call(jen.Id("name"))).Block(
-				jen.Return(jen.False(), jen.Id("loom").Dot("PermanentError").Call(jen.Lit("method_not_found"), jen.Lit("Unknown tool: %s"), jen.Id("name"))),
+				jen.Return(jen.False(), jen.Id("loom").Dot("PermanentError").Call(jen.Lit("invalid_params"), jen.Lit("Unknown tool: %s"), jen.Id("name"))),
 			)
 			g.Return(jen.Id("a").Dot("executeRealTool").Call(jen.Id("ctx"), jen.Id("p"), jen.Id("stream")))
 		})
@@ -1400,7 +1378,7 @@ func emitToolsCallHandler(stmt *jen.Statement, data *AdapterData) {
 					})
 				}
 				sw.Default().Block(
-					jen.Return(jen.False(), jen.Id("loom").Dot("PermanentError").Call(jen.Lit("method_not_found"), jen.Lit("Unknown tool: %s"), jen.Id("p").Dot("Name"))),
+					jen.Return(jen.False(), jen.Id("loom").Dot("PermanentError").Call(jen.Lit("invalid_params"), jen.Lit("Unknown tool: %s"), jen.Id("p").Dot("Name"))),
 				)
 			})
 		})
@@ -1415,16 +1393,10 @@ func emitToolCase(g *jen.Group, tool *ToolAdapter) {
 	if tool.HasPayload {
 		g.Var().Id("payload").Add(rawExpr(tool.PayloadType))
 		if len(tool.DefaultFields) > 0 || len(tool.RequiredFields) > 0 || len(tool.EnumFields) > 0 {
-			g.List(jen.Id("fields"), jen.Id("ferr")).Op(":=").Id("topLevelJSONFieldSet").Call(jen.Id("p").Dot("Arguments"))
-			g.If(jen.Id("ferr").Op("!=").Nil()).Block(
-				jen.Return(jen.True(), jen.Id("a").Dot("sendToolError").Call(jen.Id("ctx"), jen.Id("stream"), jen.Id("p").Dot("Name"), jen.Id("toolCallError").Call(jen.Id("ferr"), jen.Lit("invalid_params"), jen.Id(toolRecoveryFuncName(tool)).Call(jen.Id("ferr"), jen.Id("p").Dot("Arguments"))))),
-			)
 			g.List(jen.Id("rawFields"), jen.Id("err")).Op(":=").Id("decodeMCPPayloadFields").Call(jen.Id("p").Dot("Arguments"))
 			g.If(jen.Id("err").Op("!=").Nil()).Block(
 				jen.Return(jen.True(), jen.Id("a").Dot("sendToolError").Call(jen.Id("ctx"), jen.Id("stream"), jen.Id("p").Dot("Name"), jen.Id("toolCallError").Call(jen.Id("err"), jen.Lit("invalid_params"), jen.Id(toolRecoveryFuncName(tool)).Call(jen.Id("err"), jen.Id("p").Dot("Arguments"))))),
 			)
-			g.Id("_").Op("=").Id("fields")
-			g.Id("_").Op("=").Id("rawFields")
 		}
 		g.If(jen.Id("err").Op(":=").Id("decodeMCPPayloadStrict").Call(jen.Id("p").Dot("Arguments"), jen.Op("&").Id("payload")), jen.Id("err").Op("!=").Nil()).Block(
 			jen.Return(jen.True(), jen.Id("a").Dot("sendToolError").Call(jen.Id("ctx"), jen.Id("stream"), jen.Id("p").Dot("Name"), jen.Id("toolCallError").Call(jen.Id("err"), jen.Lit("invalid_params"), jen.Id(toolRecoveryFuncName(tool)).Call(jen.Id("err"), jen.Id("p").Dot("Arguments"))))),
@@ -1502,7 +1474,7 @@ func emitToolDefaultAssignments(g *jen.Group, tool *ToolAdapter) {
 	}
 	g.BlockFunc(func(block *jen.Group) {
 		for _, field := range tool.DefaultFields {
-			block.If(jen.List(jen.Id("_"), jen.Id("ok")).Op(":=").Id("fields").Index(jen.Lit(field.Name)), jen.Op("!").Id("ok")).Block(
+			block.If(jen.List(jen.Id("_"), jen.Id("ok")).Op(":=").Id("rawFields").Index(jen.Lit(field.Name)), jen.Op("!").Id("ok")).Block(
 				jen.Id("payload").Dot(field.GoName).Op("=").Add(rawExpr(field.Literal)),
 			)
 		}

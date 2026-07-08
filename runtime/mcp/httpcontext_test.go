@@ -18,6 +18,27 @@ func TestSessionIDFromContext(t *testing.T) {
 	}
 }
 
+func TestPolicyResourceNamesFromContext(t *testing.T) {
+	ctx := context.Background()
+
+	if got := AllowedResourceNamesFromContext(ctx); got != "" {
+		t.Fatalf("expected empty allowed resource names, got %q", got)
+	}
+	if got := DeniedResourceNamesFromContext(ctx); got != "" {
+		t.Fatalf("expected empty denied resource names, got %q", got)
+	}
+
+	ctx = WithAllowedResourceNames(ctx, "documents,notes")
+	ctx = WithDeniedResourceNames(ctx, "private")
+
+	if got := AllowedResourceNamesFromContext(ctx); got != "documents,notes" {
+		t.Fatalf("expected allowed resource names, got %q", got)
+	}
+	if got := DeniedResourceNamesFromContext(ctx); got != "private" {
+		t.Fatalf("expected denied resource names, got %q", got)
+	}
+}
+
 func TestEnsureSessionIDWritesResponseHeader(t *testing.T) {
 	rec := httptest.NewRecorder()
 	ctx := WithResponseWriter(context.Background(), rec)

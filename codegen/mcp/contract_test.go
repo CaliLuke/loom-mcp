@@ -85,6 +85,31 @@ func TestGenerate_AcceptsMCPToolMethodsWithoutMethodLevelJSONRPC(t *testing.T) {
 	require.NoError(t, err)
 }
 
+func TestMCPExprBuilder_EmitsServerCapabilitiesWithoutDuplicateCapabilitiesType(t *testing.T) {
+	restore := resetMCPCodegenState(t)
+	defer restore()
+
+	svc, methods := testService("assistant", "analyze")
+	mcp := &mcpexpr.MCPExpr{
+		Name:    "assistant-mcp",
+		Version: "1.0.0",
+		Tools: []*mcpexpr.ToolExpr{
+			{Name: "analyze", Method: methods["analyze"]},
+		},
+	}
+	builder := newMCPExprBuilder(svc, mcp, nil)
+
+	builder.buildMCPTypes()
+
+	userTypes := builder.CollectUserTypes()
+	typeNames := make([]string, 0, len(userTypes))
+	for _, typ := range userTypes {
+		typeNames = append(typeNames, typ.Name())
+	}
+	require.Contains(t, typeNames, "ServerCapabilities")
+	require.NotContains(t, typeNames, "Capabilities")
+}
+
 func TestPrepareServices_SynthesizesJSONRPCEndpointsForPureMCPMethods(t *testing.T) {
 	restore := resetMCPCodegenState(t)
 	defer restore()
@@ -286,6 +311,34 @@ func TestGenerateMCPAdapter_RejectsNonEmptyListCursors(t *testing.T) {
 	require.Contains(t, rendered, `"tools/list")`)
 	require.Contains(t, rendered, `"resources/list")`)
 	require.Contains(t, rendered, `"prompts/list")`)
+}
+
+func TestGenerateMCPAdapter_DynamicPromptRequiredArgumentNameIsNotFormatString(t *testing.T) {
+	restore := resetMCPCodegenState(t)
+	defer restore()
+
+	svc, methods := testService("assistant", "generate_prompt")
+	methods["generate_prompt"].Payload = &expr.AttributeExpr{Type: &expr.Object{
+		{Name: "topic%s", Attribute: &expr.AttributeExpr{Type: expr.String}},
+	}, Validation: &expr.ValidationExpr{Required: []string{"topic%s"}}}
+	root := testRootExpr([]*expr.ServiceExpr{svc}, []*expr.HTTPServiceExpr{
+		jsonrpcService(svc, "/rpc"),
+	})
+	mcpexpr.Root.RegisterMCP(svc, &mcpexpr.MCPExpr{
+		Name:    "assistant-mcp",
+		Version: "1.0.0",
+	})
+	mcpexpr.Root.DynamicPrompts[svc.Name] = []*mcpexpr.DynamicPromptExpr{
+		{Name: "assistant_prompt", Method: methods["generate_prompt"]},
+	}
+
+	files, err := Generate("example.com/assistant/gen", []eval.Root{root}, nil)
+	require.NoError(t, err)
+	adapterFile := findGeneratedFile(t, files, filepath.Join(gcodegen.Gendir, "mcp_assistant", "adapter_server.go"))
+	rendered := renderGeneratedFile(t, adapterFile)
+
+	require.Contains(t, rendered, `loom.PermanentError("invalid_params", "Missing required argument: %s", "topic%s")`)
+	require.NotContains(t, rendered, `loom.PermanentError("invalid_params", "Missing required argument: topic%s")`)
 }
 
 func TestGenerateMCPClientAdapter_RendersOriginalClientForResourceResults(t *testing.T) {
@@ -660,11 +713,64 @@ func TestBuildAdapterData_DefaultedEnumFieldsStayScalarAndReapplyDefaults(t *tes
 	}
 	require.NotNil(t, adapterFile)
 	rendered := renderGeneratedFile(t, adapterFile)
-	require.Contains(t, rendered, "fields, ferr := topLevelJSONFieldSet(p.Arguments)")
-	require.Contains(t, rendered, `if _, ok := fields["workflow_id"]; !ok {`)
+	require.NotContains(t, rendered, "topLevelJSONFieldSet")
+	require.Contains(t, rendered, "rawFields, err := decodeMCPPayloadFields(p.Arguments)")
+	require.Contains(t, rendered, `if _, ok := rawFields["workflow_id"]; !ok {`)
 	require.Contains(t, rendered, `payload.WorkflowID = "prd-generation"`)
 	require.NotContains(t, rendered, "payload.WorkflowID != nil")
 	require.NotContains(t, rendered, "*payload.WorkflowID")
+}
+
+func TestGenerateMCPTransport_UnknownEntitiesUseMCPErrorNames(t *testing.T) {
+	restore := resetMCPCodegenState(t)
+	defer restore()
+
+	svc, methods := testService("assistant", "get_workflow", "read_document")
+	methods["get_workflow"].Payload = &expr.AttributeExpr{
+		Type: &expr.Object{
+			{Name: "workflow_id", Attribute: &expr.AttributeExpr{Type: expr.String}},
+		},
+		Validation: &expr.ValidationExpr{Required: []string{"workflow_id"}},
+	}
+	methods["read_document"].Payload = testResourceQueryPayload()
+	mcp := &mcpexpr.MCPExpr{
+		Name:    "assistant-mcp",
+		Version: "1.0.0",
+		Tools: []*mcpexpr.ToolExpr{
+			{Name: "get_workflow", Method: methods["get_workflow"]},
+		},
+		Resources: []*mcpexpr.ResourceExpr{
+			{Name: "documents", URI: "doc://list", Method: methods["read_document"]},
+		},
+		Prompts: []*mcpexpr.PromptExpr{
+			{
+				Name:        "summarize",
+				Description: "Summarize a workflow",
+				Messages: []*mcpexpr.MessageExpr{
+					{Role: "user", Content: "Summarize"},
+				},
+			},
+		},
+	}
+	data, err := newAdapterGenerator(
+		"example.com/assistant/gen",
+		svc,
+		mcp,
+		newMCPExprBuilder(svc, mcp, nil).BuildServiceMapping(),
+		nil,
+	).buildAdapterData()
+
+	require.NoError(t, err)
+	files := generateMCPTransport("example.com/assistant/gen", svc, data)
+	adapterFile := findGeneratedFile(t, files, "gen/mcp_assistant/adapter_server.go")
+	rendered := renderGeneratedFile(t, adapterFile)
+
+	require.Contains(t, rendered, `loom.PermanentError("invalid_params", "Unknown tool: %s"`)
+	require.Contains(t, rendered, `loom.PermanentError("resource_not_found", "Unknown resource: %s"`)
+	require.Contains(t, rendered, `loom.PermanentError("invalid_params", "Unknown prompt: %s"`)
+	require.NotContains(t, rendered, `loom.PermanentError("method_not_found", "Unknown tool: %s"`)
+	require.NotContains(t, rendered, `loom.PermanentError("method_not_found", "Unknown resource: %s"`)
+	require.NotContains(t, rendered, `loom.PermanentError("method_not_found", "Unknown prompt: %s"`)
 }
 
 func TestGenerateMCPClientAdapter_SpecializesResourceQueryConstruction(t *testing.T) {
@@ -740,13 +846,17 @@ func (s *Server) MountAssistant(mux goahttp.Muxer) {
 		},
 	}
 
-	applyMCPPolicyHeadersToJSONRPCMount([]*gcodegen.File{file})
+	require.NoError(t, applyMCPPolicyHeadersToJSONRPCMount([]*gcodegen.File{file}))
 
 	rendered := renderGeneratedFile(t, file)
 	require.Contains(t, rendered, `mux.Handle("POST", "/rpc", withMCPPolicyHeaders(h.ServeHTTP))`)
 	require.Contains(t, rendered, `mux.Handle("GET", "/rpc", withMCPPolicyHeaders(h.ServeHTTP))`)
 	require.Contains(t, rendered, `mux.Handle("DELETE", "/rpc", withMCPPolicyHeaders(h.ServeHTTP))`)
 	require.Contains(t, rendered, "func withMCPPolicyHeaders(next http.HandlerFunc) http.HandlerFunc {")
+	require.Contains(t, rendered, `ctx = mcpruntime.WithAllowedResourceNames(ctx, allow)`)
+	require.Contains(t, rendered, `ctx = mcpruntime.WithDeniedResourceNames(ctx, deny)`)
+	require.NotContains(t, rendered, `context.WithValue(ctx, "mcp_allow_names", allow)`)
+	require.NotContains(t, rendered, `context.WithValue(ctx, "mcp_deny_names", deny)`)
 	require.Contains(t, rendered, `ctx = mcpruntime.WithResponseWriter(ctx, w)`)
 }
 
@@ -767,12 +877,14 @@ func MountAssistant(mux goahttp.Muxer, h *Server) {
 		},
 	}
 
-	applyMCPPolicyHeadersToJSONRPCMount([]*gcodegen.File{file})
+	require.NoError(t, applyMCPPolicyHeadersToJSONRPCMount([]*gcodegen.File{file}))
 
 	rendered := renderGeneratedFile(t, file)
 	require.Contains(t, rendered, `mux.Handle("POST", "/rpc", withMCPPolicyHeaders(h.ServeHTTP))`)
 	require.Contains(t, rendered, `mux.Handle("GET", "/rpc", withMCPPolicyHeaders(h.ServeHTTP))`)
 	require.Contains(t, rendered, "func withMCPPolicyHeaders(next http.HandlerFunc) http.HandlerFunc {")
+	require.Contains(t, rendered, `ctx = mcpruntime.WithAllowedResourceNames(ctx, allow)`)
+	require.Contains(t, rendered, `ctx = mcpruntime.WithDeniedResourceNames(ctx, deny)`)
 }
 
 func TestApplyMCPPolicyHeadersToJSONRPCMount_RewritesJenniferMountSection(t *testing.T) {
@@ -797,19 +909,76 @@ func TestApplyMCPPolicyHeadersToJSONRPCMount_RewritesJenniferMountSection(t *tes
 		},
 	}
 
-	applyMCPPolicyHeadersToJSONRPCMount([]*gcodegen.File{file})
+	require.NoError(t, applyMCPPolicyHeadersToJSONRPCMount([]*gcodegen.File{file}))
 
 	rendered := renderGeneratedFile(t, file)
 	require.Contains(t, rendered, `mux.Handle("POST", "/rpc", withMCPPolicyHeaders(h.ServeHTTP))`)
 	require.Contains(t, rendered, `mux.Handle("GET", "/rpc", withMCPPolicyHeaders(h.ServeHTTP))`)
 	require.Contains(t, rendered, "func withMCPPolicyHeaders(next http.HandlerFunc) http.HandlerFunc {")
+	require.Contains(t, rendered, `ctx = mcpruntime.WithAllowedResourceNames(ctx, allow)`)
+	require.Contains(t, rendered, `ctx = mcpruntime.WithDeniedResourceNames(ctx, deny)`)
+}
+
+func TestApplyMCPPolicyHeadersToJSONRPCMount_FailsWhenMountShapeIsUnwrapped(t *testing.T) {
+	header := gcodegen.Header("JSON-RPC server", "server", nil)
+	file := &gcodegen.File{
+		Path: "gen/jsonrpc/assistant/server/server.go",
+		Sections: []gcodegen.Section{
+			header,
+			gcodegen.NewRawSection("jsonrpc-server-mount", `
+// MountAssistant configures the mux to serve the JSON-RPC assistant service methods.
+func MountAssistant(mux goahttp.Muxer, h *Server) {
+	mux.Handle("POST", "/rpc", h.Serve)
+}
+`),
+		},
+	}
+
+	err := applyMCPPolicyHeadersToJSONRPCMount([]*gcodegen.File{file})
+
+	require.Error(t, err)
+	require.ErrorContains(t, err, "upstream JSON-RPC mount shape changed")
+	require.ErrorContains(t, err, "jsonrpc-server-mount")
+}
+
+func TestApplyMCPJSONRPCErrorCodes_MapsResourceNotFound(t *testing.T) {
+	header := gcodegen.Header("JSON-RPC server", "server", nil)
+	file := &gcodegen.File{
+		Path: "gen/jsonrpc/mcp_assistant/server/server.go",
+		Sections: []gcodegen.Section{
+			header,
+			gcodegen.NewRawSection("server-handlers", `
+switch en.LoomErrorName() {
+case "invalid_params":
+	encodeJSONRPCError(ctx, w, req, jsonrpc.InvalidParams, loom.ErrorSafeMessage(err), jsonrpc.NewErrorData(err), encoder, errhandler)
+case "method_not_found":
+	encodeJSONRPCError(ctx, w, req, jsonrpc.MethodNotFound, loom.ErrorSafeMessage(err), jsonrpc.NewErrorData(err), encoder, errhandler)
+}
+switch en.LoomErrorName() {
+case "invalid_params":
+	return strm.sendError(ctx, jsonrpc.IDToString(req.ID), jsonrpc.InvalidParams, loom.ErrorSafeMessage(err), jsonrpc.NewErrorData(err))
+case "method_not_found":
+	return strm.sendError(ctx, jsonrpc.IDToString(req.ID), jsonrpc.MethodNotFound, loom.ErrorSafeMessage(err), jsonrpc.NewErrorData(err))
+}
+`),
+		},
+	}
+
+	err := applyMCPJSONRPCErrorCodes([]*gcodegen.File{file})
+
+	require.NoError(t, err)
+	rendered := renderGeneratedFile(t, file)
+	require.Contains(t, rendered, `case "resource_not_found":`)
+	require.Contains(t, rendered, `encodeJSONRPCError(ctx, w, req, jsonrpc.Code(-32002), loom.ErrorSafeMessage(err), jsonrpc.NewErrorData(err), encoder, errhandler)`)
+	require.Contains(t, rendered, `return strm.sendError(ctx, jsonrpc.IDToString(req.ID), jsonrpc.Code(-32002), loom.ErrorSafeMessage(err), jsonrpc.NewErrorData(err))`)
 }
 
 func TestGenerate_ActualMCPServerMountIncludesPolicyWrapper(t *testing.T) {
 	restore := resetMCPCodegenState(t)
 	defer restore()
 
-	svc, methods := testService("assistant", "analyze_sentiment")
+	svc, methods := testService("assistant", "analyze_sentiment", "read_document")
+	methods["read_document"].Payload = testResourceQueryPayload()
 	root := testRootExpr([]*expr.ServiceExpr{svc}, []*expr.HTTPServiceExpr{
 		jsonrpcService(svc, "/rpc"),
 	})
@@ -830,24 +999,39 @@ func TestGenerate_ActualMCPServerMountIncludesPolicyWrapper(t *testing.T) {
 		Tools: []*mcpexpr.ToolExpr{
 			{Name: "analyze_sentiment", Method: methods["analyze_sentiment"]},
 		},
+		Resources: []*mcpexpr.ResourceExpr{
+			{Name: "documents", URI: "doc://list", Method: methods["read_document"]},
+		},
 	})
 
 	files, err := Generate("example.com/assistant/gen", []eval.Root{root}, nil)
 	require.NoError(t, err)
 
 	var rendered string
+	var adapterRendered string
 	for _, file := range files {
 		if file.Path == "gen/jsonrpc/mcp_assistant/server/server.go" {
 			rendered = renderGeneratedFile(t, file)
-			break
+		}
+		if file.Path == "gen/mcp_assistant/adapter_server.go" {
+			adapterRendered = renderGeneratedFile(t, file)
 		}
 	}
 
 	require.NotEmpty(t, rendered)
+	require.NotEmpty(t, adapterRendered)
 	require.Contains(t, rendered, `mux.Handle("POST", "/rpc", withMCPPolicyHeaders(h.ServeHTTP))`)
 	require.Contains(t, rendered, `mux.Handle("GET", "/rpc", withMCPPolicyHeaders(h.ServeHTTP))`)
 	require.Contains(t, rendered, "func withMCPPolicyHeaders(next http.HandlerFunc) http.HandlerFunc {")
+	require.Contains(t, rendered, `ctx = mcpruntime.WithAllowedResourceNames(ctx, allow)`)
+	require.Contains(t, rendered, `ctx = mcpruntime.WithDeniedResourceNames(ctx, deny)`)
+	require.NotContains(t, rendered, `context.WithValue(ctx, "mcp_allow_names", allow)`)
+	require.NotContains(t, rendered, `context.WithValue(ctx, "mcp_deny_names", deny)`)
 	require.Contains(t, rendered, `ctx = mcpruntime.WithResponseWriter(ctx, w)`)
+	require.Contains(t, adapterRendered, `AllowedResourceNamesFromContext(ctx)`)
+	require.Contains(t, adapterRendered, `DeniedResourceNamesFromContext(ctx)`)
+	require.NotContains(t, adapterRendered, `ctx.Value("mcp_allow_names")`)
+	require.NotContains(t, adapterRendered, `ctx.Value("mcp_deny_names")`)
 }
 
 func TestPrepareServices_RejectsNonPostJSONRPCPath(t *testing.T) {

@@ -696,20 +696,6 @@ func decodeMCPPayloadStrict(data []byte, payload any) error {
 	}
 	return nil
 }
-func topLevelJSONFieldSet(raw json.RawMessage) (map[string]struct{}, error) {
-	fields := make(map[string]struct{})
-	if len(bytes.TrimSpace(raw)) == 0 {
-		return fields, nil
-	}
-	var payload map[string]json.RawMessage
-	if err := json.Unmarshal(raw, &payload); err != nil {
-		return nil, err
-	}
-	for name := range payload {
-		fields[name] = struct{}{}
-	}
-	return fields, nil
-}
 func decodeMCPPayloadFields(data []byte) (map[string]json.RawMessage, error) {
 	var fields map[string]json.RawMessage
 	if err := json.Unmarshal(data, &fields); err != nil {
@@ -1918,7 +1904,7 @@ func (a *MCPAdapter) toolsCallHandler(ctx context.Context, p *ToolsCallPayload, 
 		return a.handleCallToolProxy(ctx, p, stream)
 	}
 	if a.toolSearchEnabled() && !a.opts.ToolSearch.AllowDirectHiddenCalls && isGeneratedToolName(name) && !a.isAlwaysVisibleToolName(name) {
-		return false, loom.PermanentError("method_not_found", "Unknown tool: %s", name)
+		return false, loom.PermanentError("invalid_params", "Unknown tool: %s", name)
 	}
 	return a.executeRealTool(ctx, p, stream)
 }
@@ -1926,16 +1912,10 @@ func (a *MCPAdapter) executeRealTool(ctx context.Context, p *ToolsCallPayload, s
 	switch p.Name {
 	case "analyze_sentiment":
 		var payload *assistant.AnalyzeSentimentPayload
-		fields, ferr := topLevelJSONFieldSet(p.Arguments)
-		if ferr != nil {
-			return true, a.sendToolError(ctx, stream, p.Name, toolCallError(ferr, "invalid_params", analyzeSentimentInputRecovery(ferr, p.Arguments)))
-		}
 		rawFields, err := decodeMCPPayloadFields(p.Arguments)
 		if err != nil {
 			return true, a.sendToolError(ctx, stream, p.Name, toolCallError(err, "invalid_params", analyzeSentimentInputRecovery(err, p.Arguments)))
 		}
-		_ = fields
-		_ = rawFields
 		if err := decodeMCPPayloadStrict(p.Arguments, &payload); err != nil {
 			return true, a.sendToolError(ctx, stream, p.Name, toolCallError(err, "invalid_params", analyzeSentimentInputRecovery(err, p.Arguments)))
 		}
@@ -1964,16 +1944,10 @@ func (a *MCPAdapter) executeRealTool(ctx context.Context, p *ToolsCallPayload, s
 		return false, stream.SendAndClose(ctx, final)
 	case "extract_keywords":
 		var payload *assistant.ExtractKeywordsPayload
-		fields, ferr := topLevelJSONFieldSet(p.Arguments)
-		if ferr != nil {
-			return true, a.sendToolError(ctx, stream, p.Name, toolCallError(ferr, "invalid_params", extractKeywordsInputRecovery(ferr, p.Arguments)))
-		}
 		rawFields, err := decodeMCPPayloadFields(p.Arguments)
 		if err != nil {
 			return true, a.sendToolError(ctx, stream, p.Name, toolCallError(err, "invalid_params", extractKeywordsInputRecovery(err, p.Arguments)))
 		}
-		_ = fields
-		_ = rawFields
 		if err := decodeMCPPayloadStrict(p.Arguments, &payload); err != nil {
 			return true, a.sendToolError(ctx, stream, p.Name, toolCallError(err, "invalid_params", extractKeywordsInputRecovery(err, p.Arguments)))
 		}
@@ -2002,16 +1976,10 @@ func (a *MCPAdapter) executeRealTool(ctx context.Context, p *ToolsCallPayload, s
 		return false, stream.SendAndClose(ctx, final)
 	case "summarize_text":
 		var payload *assistant.SummarizeTextPayload
-		fields, ferr := topLevelJSONFieldSet(p.Arguments)
-		if ferr != nil {
-			return true, a.sendToolError(ctx, stream, p.Name, toolCallError(ferr, "invalid_params", summarizeTextInputRecovery(ferr, p.Arguments)))
-		}
 		rawFields, err := decodeMCPPayloadFields(p.Arguments)
 		if err != nil {
 			return true, a.sendToolError(ctx, stream, p.Name, toolCallError(err, "invalid_params", summarizeTextInputRecovery(err, p.Arguments)))
 		}
-		_ = fields
-		_ = rawFields
 		if err := decodeMCPPayloadStrict(p.Arguments, &payload); err != nil {
 			return true, a.sendToolError(ctx, stream, p.Name, toolCallError(err, "invalid_params", summarizeTextInputRecovery(err, p.Arguments)))
 		}
@@ -2040,16 +2008,10 @@ func (a *MCPAdapter) executeRealTool(ctx context.Context, p *ToolsCallPayload, s
 		return false, stream.SendAndClose(ctx, final)
 	case "search":
 		var payload *assistant.SearchPayload
-		fields, ferr := topLevelJSONFieldSet(p.Arguments)
-		if ferr != nil {
-			return true, a.sendToolError(ctx, stream, p.Name, toolCallError(ferr, "invalid_params", searchInputRecovery(ferr, p.Arguments)))
-		}
 		rawFields, err := decodeMCPPayloadFields(p.Arguments)
 		if err != nil {
 			return true, a.sendToolError(ctx, stream, p.Name, toolCallError(err, "invalid_params", searchInputRecovery(err, p.Arguments)))
 		}
-		_ = fields
-		_ = rawFields
 		if err := decodeMCPPayloadStrict(p.Arguments, &payload); err != nil {
 			return true, a.sendToolError(ctx, stream, p.Name, toolCallError(err, "invalid_params", searchInputRecovery(err, p.Arguments)))
 		}
@@ -2078,16 +2040,10 @@ func (a *MCPAdapter) executeRealTool(ctx context.Context, p *ToolsCallPayload, s
 		return false, stream.SendAndClose(ctx, final)
 	case "execute_code":
 		var payload *assistant.ExecuteCodePayload
-		fields, ferr := topLevelJSONFieldSet(p.Arguments)
-		if ferr != nil {
-			return true, a.sendToolError(ctx, stream, p.Name, toolCallError(ferr, "invalid_params", executeCodeInputRecovery(ferr, p.Arguments)))
-		}
 		rawFields, err := decodeMCPPayloadFields(p.Arguments)
 		if err != nil {
 			return true, a.sendToolError(ctx, stream, p.Name, toolCallError(err, "invalid_params", executeCodeInputRecovery(err, p.Arguments)))
 		}
-		_ = fields
-		_ = rawFields
 		if err := decodeMCPPayloadStrict(p.Arguments, &payload); err != nil {
 			return true, a.sendToolError(ctx, stream, p.Name, toolCallError(err, "invalid_params", executeCodeInputRecovery(err, p.Arguments)))
 		}
@@ -2124,16 +2080,10 @@ func (a *MCPAdapter) executeRealTool(ctx context.Context, p *ToolsCallPayload, s
 		return false, stream.SendAndClose(ctx, final)
 	case "process_batch":
 		var payload *assistant.ProcessBatchPayload
-		fields, ferr := topLevelJSONFieldSet(p.Arguments)
-		if ferr != nil {
-			return true, a.sendToolError(ctx, stream, p.Name, toolCallError(ferr, "invalid_params", processBatchInputRecovery(ferr, p.Arguments)))
-		}
 		rawFields, err := decodeMCPPayloadFields(p.Arguments)
 		if err != nil {
 			return true, a.sendToolError(ctx, stream, p.Name, toolCallError(err, "invalid_params", processBatchInputRecovery(err, p.Arguments)))
 		}
-		_ = fields
-		_ = rawFields
 		if err := decodeMCPPayloadStrict(p.Arguments, &payload); err != nil {
 			return true, a.sendToolError(ctx, stream, p.Name, toolCallError(err, "invalid_params", processBatchInputRecovery(err, p.Arguments)))
 		}
@@ -2185,16 +2135,10 @@ func (a *MCPAdapter) executeRealTool(ctx context.Context, p *ToolsCallPayload, s
 		return false, stream.SendAndClose(ctx, final)
 	case "generate_dpi_spec":
 		var payload *assistant.GenerateDpiSpecPayload
-		fields, ferr := topLevelJSONFieldSet(p.Arguments)
-		if ferr != nil {
-			return true, a.sendToolError(ctx, stream, p.Name, toolCallError(ferr, "invalid_params", generateDpiSpecInputRecovery(ferr, p.Arguments)))
-		}
 		rawFields, err := decodeMCPPayloadFields(p.Arguments)
 		if err != nil {
 			return true, a.sendToolError(ctx, stream, p.Name, toolCallError(err, "invalid_params", generateDpiSpecInputRecovery(err, p.Arguments)))
 		}
-		_ = fields
-		_ = rawFields
 		if err := decodeMCPPayloadStrict(p.Arguments, &payload); err != nil {
 			return true, a.sendToolError(ctx, stream, p.Name, toolCallError(err, "invalid_params", generateDpiSpecInputRecovery(err, p.Arguments)))
 		}
@@ -2341,7 +2285,7 @@ func (a *MCPAdapter) executeRealTool(ctx context.Context, p *ToolsCallPayload, s
 		})
 		return false, stream.SendAndClose(ctx, final)
 	default:
-		return false, loom.PermanentError("method_not_found", "Unknown tool: %s", p.Name)
+		return false, loom.PermanentError("invalid_params", "Unknown tool: %s", p.Name)
 	}
 }
 
@@ -2531,7 +2475,7 @@ func (a *MCPAdapter) ResourcesRead(ctx context.Context, p *ResourcesReadPayload)
 		})
 		return res, nil
 	default:
-		return nil, loom.PermanentError("method_not_found", "Unknown resource: %s", p.URI)
+		return nil, loom.PermanentError("resource_not_found", "Unknown resource: %s", p.URI)
 	}
 }
 func skillSources() []mcpskills.Source {
@@ -2547,21 +2491,17 @@ func (a *MCPAdapter) assertResourceURIAllowed(ctx context.Context, pURI string) 
 	var extraAllowURIs []string
 	var extraDenyURIs []string
 	if ctx != nil {
-		if v := ctx.Value("mcp_allow_names"); v != nil {
-			if s, ok := v.(string); ok {
-				for _, n := range strings.Split(s, ",") {
-					if u, ok2 := a.resourceNameToURI[n]; ok2 {
-						extraAllowURIs = append(extraAllowURIs, u)
-					}
+		if s := mcpruntime.AllowedResourceNamesFromContext(ctx); s != "" {
+			for _, n := range strings.Split(s, ",") {
+				if u, ok := a.resourceNameToURI[n]; ok {
+					extraAllowURIs = append(extraAllowURIs, u)
 				}
 			}
 		}
-		if v := ctx.Value("mcp_deny_names"); v != nil {
-			if s, ok := v.(string); ok {
-				for _, n := range strings.Split(s, ",") {
-					if u, ok2 := a.resourceNameToURI[n]; ok2 {
-						extraDenyURIs = append(extraDenyURIs, u)
-					}
+		if s := mcpruntime.DeniedResourceNamesFromContext(ctx); s != "" {
+			for _, n := range strings.Split(s, ",") {
+				if u, ok := a.resourceNameToURI[n]; ok {
+					extraDenyURIs = append(extraDenyURIs, u)
 				}
 			}
 		}
@@ -2595,7 +2535,7 @@ func (a *MCPAdapter) ResourcesSubscribe(ctx context.Context, p *ResourcesSubscri
 	}
 	switch p.URI {
 	default:
-		return loom.PermanentError("method_not_found", "Unknown resource: %s", p.URI)
+		return loom.PermanentError("resource_not_found", "Unknown resource: %s", p.URI)
 	}
 }
 func (a *MCPAdapter) ResourcesUnsubscribe(ctx context.Context, p *ResourcesUnsubscribePayload) error {
@@ -2604,7 +2544,7 @@ func (a *MCPAdapter) ResourcesUnsubscribe(ctx context.Context, p *ResourcesUnsub
 	}
 	switch p.URI {
 	default:
-		return loom.PermanentError("method_not_found", "Unknown resource: %s", p.URI)
+		return loom.PermanentError("resource_not_found", "Unknown resource: %s", p.URI)
 	}
 }
 
@@ -2717,10 +2657,10 @@ func (a *MCPAdapter) PromptsGet(ctx context.Context, p *PromptsGetPayload) (*Pro
 			}
 		}
 		if _, ok := args["context"]; !ok {
-			return nil, loom.PermanentError("invalid_params", "Missing required argument: context")
+			return nil, loom.PermanentError("invalid_params", "Missing required argument: %s", "context")
 		}
 		if _, ok := args["task"]; !ok {
-			return nil, loom.PermanentError("invalid_params", "Missing required argument: task")
+			return nil, loom.PermanentError("invalid_params", "Missing required argument: %s", "task")
 		}
 		if a.promptProvider == nil {
 			return nil, loom.PermanentError("invalid_params", "No prompt provider configured for dynamic prompts")
@@ -2742,16 +2682,16 @@ func (a *MCPAdapter) PromptsGet(ctx context.Context, p *PromptsGetPayload) (*Pro
 			}
 		}
 		if _, ok := args["screen_title"]; !ok {
-			return nil, loom.PermanentError("invalid_params", "Missing required argument: screen_title")
+			return nil, loom.PermanentError("invalid_params", "Missing required argument: %s", "screen_title")
 		}
 		if _, ok := args["framework"]; !ok {
-			return nil, loom.PermanentError("invalid_params", "Missing required argument: framework")
+			return nil, loom.PermanentError("invalid_params", "Missing required argument: %s", "framework")
 		}
 		if _, ok := args["design_tokens_uri"]; !ok {
-			return nil, loom.PermanentError("invalid_params", "Missing required argument: design_tokens_uri")
+			return nil, loom.PermanentError("invalid_params", "Missing required argument: %s", "design_tokens_uri")
 		}
 		if _, ok := args["dpi_json"]; !ok {
-			return nil, loom.PermanentError("invalid_params", "Missing required argument: dpi_json")
+			return nil, loom.PermanentError("invalid_params", "Missing required argument: %s", "dpi_json")
 		}
 		if a.promptProvider == nil {
 			return nil, loom.PermanentError("invalid_params", "No prompt provider configured for dynamic prompts")
@@ -2766,7 +2706,7 @@ func (a *MCPAdapter) PromptsGet(ctx context.Context, p *PromptsGetPayload) (*Pro
 		})
 		return res, nil
 	}
-	return nil, loom.PermanentError("method_not_found", "Unknown prompt: %s", p.Name)
+	return nil, loom.PermanentError("invalid_params", "Unknown prompt: %s", p.Name)
 }
 
 // Notifications and events stream
