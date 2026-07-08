@@ -518,7 +518,7 @@ type ToolsetInfo struct {
 	// Tags for categorization
 	Tags []string `protobuf:"bytes,4,rep,name=tags,proto3" json:"tags,omitempty"`
 	// Number of tools in the toolset
-	ToolCount int32 `protobuf:"zigzag32,5,opt,name=tool_count,json=toolCount,proto3" json:"tool_count,omitempty"`
+	ToolCount int64 `protobuf:"zigzag64,5,opt,name=tool_count,json=toolCount,proto3" json:"tool_count,omitempty"`
 	// ISO 8601 registration timestamp
 	RegisteredAt  string `protobuf:"bytes,6,opt,name=registered_at,json=registeredAt,proto3" json:"registered_at,omitempty"`
 	unknownFields protoimpl.UnknownFields
@@ -583,7 +583,7 @@ func (x *ToolsetInfo) GetTags() []string {
 	return nil
 }
 
-func (x *ToolsetInfo) GetToolCount() int32 {
+func (x *ToolsetInfo) GetToolCount() int64 {
 	if x != nil {
 		return x.ToolCount
 	}
@@ -1068,7 +1068,7 @@ const file_loomgen_registry_registry_proto_rawDesc = "" +
 	"\aversion\x18\x03 \x01(\tH\x01R\aversion\x88\x01\x01\x12\x12\n" +
 	"\x04tags\x18\x04 \x03(\tR\x04tags\x12\x1d\n" +
 	"\n" +
-	"tool_count\x18\x05 \x01(\x11R\ttoolCount\x12#\n" +
+	"tool_count\x18\x05 \x01(\x12R\ttoolCount\x12#\n" +
 	"\rregistered_at\x18\x06 \x01(\tR\fregisteredAtB\x0e\n" +
 	"\f_descriptionB\n" +
 	"\n" +

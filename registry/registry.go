@@ -97,6 +97,10 @@ type (
 	}
 )
 
+// registryCloseTimeout bounds resource cleanup when Run shuts down after its
+// context is already canceled.
+const registryCloseTimeout = 30 * time.Second
+
 // New creates a new Registry with all components wired together.
 // The registry connects to Redis for Pulse stream operations and creates
 // replicated maps for cross-node state synchronization.
@@ -197,7 +201,7 @@ func buildRegistryParts(ctx context.Context, cfg Config) (*registryParts, error)
 
 func buildRegistryService(cfg Config, parts *registryParts) (*Service, error) {
 	return newService(serviceOptions{
-		catalog:         newToolsetCatalog(parts.registryMap),
+		catalog:         newToolsetCatalogWithLogger(parts.registryMap, cfg.Logger),
 		StreamManager:   parts.streamManager,
 		HealthTracker:   parts.healthTracker,
 		PulseClient:     parts.pulseClient,
@@ -336,8 +340,12 @@ func (r *Registry) Run(ctx context.Context, addr string, opts ...grpc.ServerOpti
 	// Graceful shutdown: stop accepting new connections and drain existing ones.
 	grpcServer.GracefulStop()
 
-	// Close registry resources.
-	if err := r.Close(ctx); err != nil {
+	// Close registry resources with a fresh bounded context: on the ctx-cancel
+	// shutdown path the run context is already dead and would abort the Redis
+	// cleanup performed by Close (job requeue, worker-map and node removal).
+	closeCtx, cancel := context.WithTimeout(context.Background(), registryCloseTimeout)
+	defer cancel()
+	if err := r.Close(closeCtx); err != nil {
 		return fmt.Errorf("close registry: %w", err)
 	}
 

@@ -8,6 +8,7 @@
 package server
 
 import (
+	"regexp"
 	"unicode/utf8"
 
 	registrypb "github.com/CaliLuke/loom-mcp/registry/gen/grpc/registry/pb"
@@ -28,9 +29,7 @@ func NewRegisterPayload(message *registrypb.RegisterRequest) *registry.RegisterP
 	}
 	if message.Tags != nil {
 		v.Tags = make([]string, len(message.Tags))
-		for i, val := range message.Tags {
-			v.Tags[i] = val
-		}
+		copy(v.Tags, message.Tags)
 	}
 	if message.Tools != nil {
 		v.Tools = make([]*registry.ToolSchema, len(message.Tools))
@@ -44,9 +43,7 @@ func NewRegisterPayload(message *registrypb.RegisterRequest) *registry.RegisterP
 			}
 			if val.Tags != nil {
 				v.Tools[i].Tags = make([]string, len(val.Tags))
-				for j, val := range val.Tags {
-					v.Tools[i].Tags[j] = val
-				}
+				copy(v.Tools[i].Tags, val.Tags)
 			}
 		}
 	}
@@ -101,9 +98,7 @@ func NewListToolsetsPayload(message *registrypb.ListToolsetsRequest) *registry.L
 	v := &registry.ListToolsetsPayload{}
 	if message.Tags != nil {
 		v.Tags = make([]string, len(message.Tags))
-		for i, val := range message.Tags {
-			v.Tags[i] = val
-		}
+		copy(v.Tags, message.Tags)
 	}
 	return v
 }
@@ -118,7 +113,7 @@ func NewProtoListToolsetsResponse(result *registry.ListToolsetsResult) *registry
 			message.Toolsets[i] = &registrypb.ToolsetInfo{
 				Name:         val.Name,
 				Description:  val.Description,
-				ToolCount:    int32(val.ToolCount),
+				ToolCount:    int64(val.ToolCount),
 				RegisteredAt: val.RegisteredAt,
 			}
 			if val.Version != nil {
@@ -127,9 +122,7 @@ func NewProtoListToolsetsResponse(result *registry.ListToolsetsResult) *registry
 			}
 			if val.Tags != nil {
 				message.Toolsets[i].Tags = make([]string, len(val.Tags))
-				for j, val := range val.Tags {
-					message.Toolsets[i].Tags[j] = val
-				}
+				copy(message.Toolsets[i].Tags, val.Tags)
 			}
 		}
 	}
@@ -159,9 +152,7 @@ func NewProtoGetToolsetResponse(result *registry.Toolset) *registrypb.GetToolset
 	}
 	if result.Tags != nil {
 		message.Tags = make([]string, len(result.Tags))
-		for i, val := range result.Tags {
-			message.Tags[i] = val
-		}
+		copy(message.Tags, result.Tags)
 	}
 	if result.Tools != nil {
 		message.Tools = make([]*registrypb.ToolSchema, len(result.Tools))
@@ -175,9 +166,7 @@ func NewProtoGetToolsetResponse(result *registry.Toolset) *registrypb.GetToolset
 			}
 			if val.Tags != nil {
 				message.Tools[i].Tags = make([]string, len(val.Tags))
-				for j, val := range val.Tags {
-					message.Tools[i].Tags[j] = val
-				}
+				copy(message.Tools[i].Tags, val.Tags)
 			}
 		}
 	}
@@ -203,7 +192,7 @@ func NewProtoSearchResponse(result *registry.SearchResult) *registrypb.SearchRes
 			message.Toolsets[i] = &registrypb.ToolsetInfo{
 				Name:         val.Name,
 				Description:  val.Description,
-				ToolCount:    int32(val.ToolCount),
+				ToolCount:    int64(val.ToolCount),
 				RegisteredAt: val.RegisteredAt,
 			}
 			if val.Version != nil {
@@ -212,9 +201,7 @@ func NewProtoSearchResponse(result *registry.SearchResult) *registrypb.SearchRes
 			}
 			if val.Tags != nil {
 				message.Toolsets[i].Tags = make([]string, len(val.Tags))
-				for j, val := range val.Tags {
-					message.Toolsets[i].Tags[j] = val
-				}
+				copy(message.Toolsets[i].Tags, val.Tags)
 			}
 		}
 	}
@@ -261,7 +248,7 @@ func ValidateRegisterRequest(message *registrypb.RegisterRequest) (err error) {
 		}
 	}
 	if message.Version != nil {
-		err = loom.MergeErrors(err, loom.ValidatePattern("message.version", string(*message.Version), "^v?\\d+\\.\\d+\\.\\d+(-[a-zA-Z0-9.]+)?$"))
+		err = loom.MergeErrors(err, loom.ValidatePatternCompiled("message.version", string(*message.Version), loomPattern0))
 	}
 	for _, e := range message.Tools {
 		if e != nil {
@@ -402,16 +389,4 @@ func protobufRegistrypbToolCallMetaToRegistryToolCallMeta(v *registrypb.ToolCall
 	return res
 }
 
-// svcRegistryToolCallMetaToRegistrypbToolCallMeta builds a value of type
-// *registrypb.ToolCallMeta from a value of type *registry.ToolCallMeta.
-func svcRegistryToolCallMetaToRegistrypbToolCallMeta(v *registry.ToolCallMeta) *registrypb.ToolCallMeta {
-	res := &registrypb.ToolCallMeta{
-		RunId:            v.RunID,
-		SessionId:        v.SessionID,
-		TurnId:           v.TurnID,
-		ToolCallId:       v.ToolCallID,
-		ParentToolCallId: v.ParentToolCallID,
-	}
-
-	return res
-}
+var loomPattern0 = regexp.MustCompile("^v?\\d+\\.\\d+\\.\\d+(-[a-zA-Z0-9.]+)?$")

@@ -137,6 +137,62 @@ func TestToolsetCatalogSearchToolsetsMatchesNameDescriptionAndTags(t *testing.T)
 	})
 }
 
+func TestToolsetCatalogListAndSearchSkipConcurrentlyDeletedEntries(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	backing := newTestCatalogMap()
+	cat := newToolsetCatalog(&phantomKeyCatalogMap{
+		testCatalogMap: backing,
+		phantomKey:     toolsetCatalogKey("vanished.read"),
+	})
+	require.NoError(t, cat.SaveToolset(ctx, testCatalogToolset("atlas.read", "Readable data", []string{"data"})))
+
+	listed, err := cat.ListToolsets(ctx, nil)
+	require.NoError(t, err)
+	assert.Equal(t, []string{"atlas.read"}, catalogToolsetNames(listed))
+
+	searched, err := cat.SearchToolsets(ctx, "read")
+	require.NoError(t, err)
+	assert.Equal(t, []string{"atlas.read"}, catalogToolsetNames(searched))
+}
+
+func TestToolsetCatalogListAndSearchSkipUndecodableEntries(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	backing := newTestCatalogMap()
+	cat := newToolsetCatalog(backing)
+	require.NoError(t, cat.SaveToolset(ctx, testCatalogToolset("atlas.read", "Readable data", []string{"data"})))
+
+	corrupt := []struct {
+		name string
+		body string
+	}{
+		{name: "corrupt.json", body: `{not json`},
+		{name: "corrupt.token", body: `{"toolset":{"name":"corrupt.token","registered_at":"2026-03-16T12:00:00Z"}}`},
+	}
+	for _, entry := range corrupt {
+		_, err := backing.Set(ctx, toolsetCatalogKey(entry.name), entry.body)
+		require.NoError(t, err)
+	}
+
+	listed, err := cat.ListToolsets(ctx, nil)
+	require.NoError(t, err)
+	assert.Equal(t, []string{"atlas.read"}, catalogToolsetNames(listed))
+
+	searched, err := cat.SearchToolsets(ctx, "corrupt")
+	require.NoError(t, err)
+	assert.Empty(t, searched)
+
+	// Direct reads stay fail-fast on undecodable entries.
+	for _, entry := range corrupt {
+		_, err := cat.GetToolset(ctx, entry.name)
+		require.Error(t, err)
+		assert.NotErrorIs(t, err, errToolsetNotFound)
+	}
+}
+
 type testCatalogMap struct {
 	mu     sync.RWMutex
 	values map[string]string
@@ -177,6 +233,18 @@ func (m *testCatalogMap) Set(ctx context.Context, key, value string) (string, er
 	prev := m.values[key]
 	m.values[key] = value
 	return prev, nil
+}
+
+// phantomKeyCatalogMap reports one extra key from Keys() that Get never
+// resolves, simulating an entry deleted by another node between the Keys()
+// snapshot and the per-key read.
+type phantomKeyCatalogMap struct {
+	*testCatalogMap
+	phantomKey string
+}
+
+func (m *phantomKeyCatalogMap) Keys() []string {
+	return append(m.testCatalogMap.Keys(), m.phantomKey)
 }
 
 func testCatalogToolset(name string, description string, tags []string) *genregistry.Toolset {

@@ -402,15 +402,24 @@ func TestSendPingRemovesStreamHandleWhenRegistrationDisappearsDuringPublish(t *t
 		registryMap.Close()
 	})
 
+	registryEvents := registryMap.Subscribe()
+	defer registryMap.Unsubscribe(registryEvents)
+
 	catalog := newToolsetCatalog(registryMap)
 	require.NoError(t, catalog.SaveToolset(ctx, &genregistry.Toolset{
 		Name:         "racing-toolset",
 		RegisteredAt: "registration-1",
 	}))
+	// The replicated map applies writes to the local replica asynchronously;
+	// wait for the save to land before sendPing resolves the registration.
+	awaitMapEvent(registryEvents)
 
 	streams := &catalogDeletingStreamManager{
 		onPublish: func() {
 			require.NoError(t, catalog.DeleteToolset(ctx, "racing-toolset"))
+			// Wait until the local replica observes the deletion so the
+			// post-publish registration check reads the deleted state.
+			awaitMapEvent(registryEvents)
 		},
 	}
 	tracker := &healthTracker{
@@ -470,6 +479,95 @@ func TestHealthTrackerClosePreventsCatalogSyncRestart(t *testing.T) {
 
 	err = tracker.StartPingLoop(ctx, "closed-toolset")
 	require.Error(t, err)
+}
+
+// TestNewHealthTrackerFailsWhenCatalogMapStopped verifies that constructing a
+// tracker over an already-stopped catalog map fails loudly instead of leaving
+// the watch goroutine blocked forever on a nil subscription channel.
+func TestNewHealthTrackerFailsWhenCatalogMapStopped(t *testing.T) {
+	rdb := getRedis(t)
+	ctx := context.Background()
+
+	healthMap, err := rmap.Join(ctx, "health-stopped-catalog-"+t.Name(), rdb)
+	require.NoError(t, err)
+	t.Cleanup(func() {
+		healthMap.Close()
+	})
+
+	registryMap, err := rmap.Join(ctx, "registry-stopped-catalog-"+t.Name(), rdb)
+	require.NoError(t, err)
+	registryMap.Close()
+
+	node, err := pool.AddNode(ctx, "health-stopped-catalog-pool-"+t.Name(), rdb, testNodeOpts()...)
+	require.NoError(t, err)
+	t.Cleanup(func() {
+		require.NoError(t, node.Close(ctx))
+	})
+
+	tracker, err := NewHealthTracker(
+		newMockStreamManager(),
+		healthMap,
+		registryMap,
+		node,
+		WithPingInterval(time.Hour),
+		WithMissedPingThreshold(2),
+	)
+	require.ErrorContains(t, err, "subscribe to catalog map")
+	require.Nil(t, tracker)
+}
+
+// TestWatchCatalogChangesExitsWhenEventsChannelCloses verifies that the catalog
+// watch goroutine returns when the subscription channel is closed (the catalog
+// map was stopped) instead of busy-spinning on closed-channel receives.
+func TestWatchCatalogChangesExitsWhenEventsChannelCloses(t *testing.T) {
+	rdb := getRedis(t)
+	ctx := context.Background()
+
+	healthMap, err := rmap.Join(ctx, "health-watch-close-"+t.Name(), rdb)
+	require.NoError(t, err)
+	t.Cleanup(func() {
+		healthMap.Close()
+	})
+
+	registryMap, err := rmap.Join(ctx, "registry-watch-close-"+t.Name(), rdb)
+	require.NoError(t, err)
+	t.Cleanup(func() {
+		registryMap.Close()
+	})
+
+	node, err := pool.AddNode(ctx, "health-watch-close-pool-"+t.Name(), rdb, testNodeOpts()...)
+	require.NoError(t, err)
+	t.Cleanup(func() {
+		require.NoError(t, node.Close(ctx))
+	})
+
+	tracker, err := NewHealthTracker(
+		newMockStreamManager(),
+		healthMap,
+		registryMap,
+		node,
+		WithPingInterval(time.Hour),
+		WithMissedPingThreshold(2),
+	)
+	require.NoError(t, err)
+	t.Cleanup(func() {
+		require.NoError(t, tracker.Close())
+	})
+
+	events := make(chan rmap.EventKind, 1)
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		tracker.(*healthTracker).watchCatalogChanges(events)
+	}()
+
+	close(events)
+
+	select {
+	case <-done:
+	case <-time.After(5 * time.Second):
+		t.Fatal("watchCatalogChanges did not exit after the events channel closed")
+	}
 }
 
 // newPongTestService builds a registry service backed by a real health tracker

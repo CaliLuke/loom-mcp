@@ -101,7 +101,7 @@ message ToolsetInfo {
 	// Tags for categorization
 	repeated string tags = 4;
 	// Number of tools in the toolset
-	sint32 tool_count = 5;
+	sint64 tool_count = 5;
 	// ISO 8601 registration timestamp
 	string registered_at = 6;
 }

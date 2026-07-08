@@ -102,7 +102,12 @@ type (
 		mu      sync.RWMutex
 		tickers map[string]*pool.Ticker
 		cancels map[string]context.CancelFunc
-		closed  bool
+		// tickerTokens records the catalog registration token observed when each
+		// local ticker was created. Reconciliation compares it against the current
+		// catalog token to detect unregister→re-register cycles that remotely
+		// stopped the old shared ticker entry.
+		tickerTokens map[string]string
+		closed       bool
 
 		stateMu              sync.Mutex
 		lastObservedHealthy  map[string]bool
@@ -118,6 +123,23 @@ type (
 	healthRecord struct {
 		RegistrationToken string `json:"registration_token"`
 		LastPongUnixNano  int64  `json:"last_pong_unix_nano"`
+	}
+
+	// tickerDetachment pairs a detached local ticker with its loop cancel func
+	// so reconciliation can release both outside the tracker lock.
+	tickerDetachment struct {
+		cancel context.CancelFunc
+		ticker *pool.Ticker
+	}
+
+	// tickerReconcilePlan captures the local ticker changes computed under the
+	// tracker lock during catalog reconciliation. Rotated tickers are closed
+	// locally (preserving the recreated shared entry) and started again;
+	// stopped tickers are removed cluster-wide.
+	tickerReconcilePlan struct {
+		start  []string
+		rotate []tickerDetachment
+		stop   []tickerDetachment
 	}
 )
 
@@ -166,9 +188,12 @@ func NewHealthTracker(streamManager StreamManager, healthMap, catalogMap *rmap.M
 	}
 	options := resolveHealthTrackerOptions(opts)
 	catalogEvents := catalogMap.Subscribe()
+	if catalogEvents == nil {
+		return nil, fmt.Errorf("subscribe to catalog map: map is already stopped")
+	}
 	h := &healthTracker{
 		streamManager:        streamManager,
-		catalog:              newToolsetCatalog(catalogMap),
+		catalog:              newToolsetCatalogWithLogger(catalogMap, options.logger),
 		healthMap:            healthMap,
 		catalogMap:           catalogMap,
 		poolNode:             node,
@@ -178,6 +203,7 @@ func NewHealthTracker(streamManager StreamManager, healthMap, catalogMap *rmap.M
 		logger:               options.logger,
 		tickers:              make(map[string]*pool.Ticker),
 		cancels:              make(map[string]context.CancelFunc),
+		tickerTokens:         make(map[string]string),
 		lastObservedHealthy:  make(map[string]bool),
 		lastObservedPongNano: make(map[string]int64),
 		closeCh:              make(chan struct{}),
@@ -308,6 +334,14 @@ func (h *healthTracker) IsHealthy(toolset string) bool {
 
 // StartPingLoop implements HealthTracker.
 func (h *healthTracker) StartPingLoop(ctx context.Context, toolset string) error {
+	registrationToken, err := h.registrationToken(ctx, toolset)
+	if err != nil {
+		if !errors.Is(err, errToolsetNotFound) {
+			return fmt.Errorf("resolve registration token: %w", err)
+		}
+		registrationToken = ""
+	}
+
 	h.mu.Lock()
 	if h.closed {
 		h.mu.Unlock()
@@ -326,7 +360,7 @@ func (h *healthTracker) StartPingLoop(ctx context.Context, toolset string) error
 	h.mu.Unlock()
 
 	cancelAndCloseLocalTicker(cancel, ticker)
-	return h.startLocalTicker(ctx, toolset)
+	return h.startLocalTicker(ctx, toolset, registrationToken)
 }
 
 // StopPingLoop implements HealthTracker.
@@ -356,6 +390,7 @@ func (h *healthTracker) Close() error {
 		cancels, tickers := h.detachAllLocalTickersLocked()
 		h.tickers = make(map[string]*pool.Ticker)
 		h.cancels = make(map[string]context.CancelFunc)
+		h.tickerTokens = make(map[string]string)
 		h.mu.Unlock()
 
 		for _, cancel := range cancels {
@@ -381,7 +416,12 @@ func (h *healthTracker) watchCatalogChanges(events <-chan rmap.EventKind) {
 		select {
 		case <-h.closeCh:
 			return
-		case <-events:
+		case _, ok := <-events:
+			if !ok {
+				// The catalog map was stopped and closed the subscriber channel.
+				// Exit instead of busy-spinning on a closed channel.
+				return
+			}
 			h.syncWithCatalog()
 		}
 	}
@@ -398,55 +438,101 @@ func (h *healthTracker) syncWithCatalog() {
 		return
 	}
 
-	registered := h.registeredCatalogToolsets()
+	registered, tokens := h.catalogTickerState()
 	h.streamManager.RemoveStreamsNotInCatalog(registered)
-	h.reconcileCatalogTickers(registered)
+	h.reconcileCatalogTickers(registered, tokens)
 }
 
-func (h *healthTracker) registeredCatalogToolsets() map[string]bool {
+// catalogTickerState snapshots catalog membership and the current registration
+// token per toolset. Entries deleted between Keys() and the read are dropped;
+// undecodable entries stay registered but carry no token so reconciliation
+// neither stops nor churns their tickers.
+func (h *healthTracker) catalogTickerState() (map[string]bool, map[string]string) {
 	registered := make(map[string]bool)
+	tokens := make(map[string]string)
 	for _, key := range h.catalogMap.Keys() {
 		toolset := toolsetFromCatalogKey(key)
-		if toolset != "" {
-			registered[toolset] = true
+		if toolset == "" {
+			continue
 		}
+		token, err := h.registrationToken(context.Background(), toolset)
+		if err != nil {
+			if errors.Is(err, errToolsetNotFound) {
+				continue
+			}
+			h.logger.Error(
+				context.Background(),
+				"resolve catalog registration token failed",
+				"event", "resolve_catalog_registration_token_failed",
+				"component", "tool-registry-health",
+				"toolset", toolset,
+				"err", err,
+			)
+			registered[toolset] = true
+			continue
+		}
+		registered[toolset] = true
+		tokens[toolset] = token
 	}
-	return registered
+	return registered, tokens
 }
 
-func (h *healthTracker) reconcileCatalogTickers(registered map[string]bool) {
-	h.mu.Lock()
-	if h.closed {
-		h.mu.Unlock()
+func (h *healthTracker) reconcileCatalogTickers(registered map[string]bool, tokens map[string]string) {
+	plan, ok := h.planCatalogTickerChanges(registered, tokens)
+	if !ok {
 		return
 	}
 
-	var startToolsets []string
-	for toolset := range registered {
-		if _, ok := h.tickers[toolset]; !ok {
-			startToolsets = append(startToolsets, toolset)
-		}
+	for _, detached := range plan.rotate {
+		cancelAndCloseLocalTicker(detached.cancel, detached.ticker)
 	}
-
-	var stopCancels []context.CancelFunc
-	var stopTickers []*pool.Ticker
-	for toolset := range h.tickers {
-		if !registered[toolset] {
-			cancel, ticker := h.detachLocalTickerLocked(toolset)
-			stopCancels = append(stopCancels, cancel)
-			stopTickers = append(stopTickers, ticker)
-		}
+	for _, detached := range plan.stop {
+		cancelAndStopLocalTicker(detached.cancel, detached.ticker)
 	}
-	h.mu.Unlock()
-
-	for i, cancel := range stopCancels {
-		cancelAndStopLocalTicker(cancel, stopTickers[i])
-	}
-	for _, toolset := range startToolsets {
-		if err := h.startLocalTicker(context.Background(), toolset); err != nil {
+	for _, toolset := range plan.start {
+		if err := h.startLocalTicker(context.Background(), toolset, tokens[toolset]); err != nil {
 			h.logger.Error(context.Background(), "start ticker failed", "event", "start_ticker_failed", "toolset", toolset, "err", err)
 		}
 	}
+}
+
+// planCatalogTickerChanges computes, under the tracker lock, which local
+// tickers to start, rotate, or stop for the given catalog snapshot. It returns
+// false when the tracker is closed.
+func (h *healthTracker) planCatalogTickerChanges(registered map[string]bool, tokens map[string]string) (tickerReconcilePlan, bool) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	if h.closed {
+		return tickerReconcilePlan{}, false
+	}
+
+	var plan tickerReconcilePlan
+	for toolset := range registered {
+		if _, ok := h.tickers[toolset]; !ok {
+			plan.start = append(plan.start, toolset)
+			continue
+		}
+		token, ok := tokens[toolset]
+		if !ok || token == h.tickerTokens[toolset] {
+			continue
+		}
+		// The registration epoch rotated since this local ticker was created
+		// (unregister→re-register). The unregister remotely deleted the shared
+		// ticker entry and permanently stopped this local ticker, so detach it
+		// (Close, not Stop, to preserve the recreated shared entry) and join the
+		// new registration with a fresh ticker.
+		cancel, ticker := h.detachLocalTickerLocked(toolset)
+		plan.rotate = append(plan.rotate, tickerDetachment{cancel: cancel, ticker: ticker})
+		plan.start = append(plan.start, toolset)
+	}
+
+	for toolset := range h.tickers {
+		if !registered[toolset] {
+			cancel, ticker := h.detachLocalTickerLocked(toolset)
+			plan.stop = append(plan.stop, tickerDetachment{cancel: cancel, ticker: ticker})
+		}
+	}
+	return plan, true
 }
 
 func (h *healthTracker) isClosed() bool {
@@ -457,7 +543,9 @@ func (h *healthTracker) isClosed() bool {
 
 // startLocalTicker creates this node's distributed ticker participant and
 // launches the long-lived ping loop for the toolset when the tracker is open.
-func (h *healthTracker) startLocalTicker(ctx context.Context, toolset string) error {
+// registrationToken is the catalog registration token observed by the caller;
+// it is recorded so reconciliation can detect epoch rotation later.
+func (h *healthTracker) startLocalTicker(ctx context.Context, toolset string, registrationToken string) error {
 	h.mu.RLock()
 	if h.closed {
 		h.mu.RUnlock()
@@ -497,6 +585,7 @@ func (h *healthTracker) startLocalTicker(ctx context.Context, toolset string) er
 	}
 	h.tickers[toolset] = ticker
 	h.cancels[toolset] = cancel
+	h.tickerTokens[toolset] = registrationToken
 	h.mu.Unlock()
 
 	go h.runPingLoop(loopCtx, toolset, ticker)
@@ -524,6 +613,7 @@ func (h *healthTracker) detachLocalTickerLocked(toolset string) (context.CancelF
 		ticker = found
 		delete(h.tickers, toolset)
 	}
+	delete(h.tickerTokens, toolset)
 	return cancel, ticker
 }
 

@@ -38,9 +38,7 @@ func BuildRegisterPayload(registryRegisterMessage string) (*registry.RegisterPay
 	}
 	if message.Tags != nil {
 		v.Tags = make([]string, len(message.Tags))
-		for i, val := range message.Tags {
-			v.Tags[i] = val
-		}
+		copy(v.Tags, message.Tags)
 	}
 	if message.Tools != nil {
 		v.Tools = make([]*registry.ToolSchema, len(message.Tools))
@@ -54,9 +52,7 @@ func BuildRegisterPayload(registryRegisterMessage string) (*registry.RegisterPay
 			}
 			if val.Tags != nil {
 				v.Tools[i].Tags = make([]string, len(val.Tags))
-				for j, val := range val.Tags {
-					v.Tools[i].Tags[j] = val
-				}
+				copy(v.Tools[i].Tags, val.Tags)
 			}
 		}
 	}
@@ -115,9 +111,7 @@ func BuildListToolsetsPayload(registryListToolsetsMessage string) (*registry.Lis
 	v := &registry.ListToolsetsPayload{}
 	if message.Tags != nil {
 		v.Tags = make([]string, len(message.Tags))
-		for i, val := range message.Tags {
-			v.Tags[i] = val
-		}
+		copy(v.Tags, message.Tags)
 	}
 
 	return v, nil
@@ -180,4 +174,16 @@ func BuildCallToolPayload(registryCallToolMessage string) (*registry.CallToolPay
 	}
 
 	return v, nil
+} // protobufRegistrypbToolCallMetaToRegistryToolCallMeta builds a value of type
+// *registry.ToolCallMeta from a value of type *registrypb.ToolCallMeta.
+func protobufRegistrypbToolCallMetaToRegistryToolCallMeta(v *registrypb.ToolCallMeta) *registry.ToolCallMeta {
+	res := &registry.ToolCallMeta{
+		RunID:            v.RunId,
+		SessionID:        v.SessionId,
+		TurnID:           v.TurnId,
+		ToolCallID:       v.ToolCallId,
+		ParentToolCallID: v.ParentToolCallId,
+	}
+
+	return res
 }

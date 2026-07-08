@@ -72,3 +72,57 @@ func TestRegistryGracefulShutdown(t *testing.T) {
 	// Calling Close again should be safe (idempotent health tracker close).
 	// Note: Other components may error on double-close, but that's expected.
 }
+
+// TestRunCleansUpAfterContextCancel verifies that Run performs shutdown
+// cleanup with a live context after its run context is canceled.
+//
+// Regression: Run passed its own already-canceled context to Close, so pool
+// node cleanup (job requeue, node stream destroy) silently failed inside loom
+// and stale Pulse state was left behind in Redis.
+func TestRunCleansUpAfterContextCancel(t *testing.T) {
+	rdb := getRedis(t)
+	ctx := context.Background()
+
+	reg, err := New(ctx, Config{
+		Redis:               rdb,
+		Name:                "run-test-" + t.Name(),
+		PingInterval:        50 * time.Millisecond,
+		MissedPingThreshold: 2,
+		PoolNodeOptions:     testNodeOpts(),
+	})
+	if err != nil {
+		t.Fatalf("failed to create registry: %v", err)
+	}
+
+	runCtx, cancelRun := context.WithCancel(ctx)
+	defer cancelRun()
+
+	runErr := make(chan error, 1)
+	go func() {
+		runErr <- reg.Run(runCtx, "127.0.0.1:0")
+	}()
+
+	// Let the server reach its serving state, then trigger the documented
+	// ctx-cancel shutdown path.
+	time.Sleep(100 * time.Millisecond)
+	cancelRun()
+
+	select {
+	case err := <-runErr:
+		if err != nil {
+			t.Fatalf("Run returned error on canceled-context shutdown: %v", err)
+		}
+	case <-time.After(60 * time.Second):
+		t.Fatal("Run did not return after context cancellation")
+	}
+
+	// The pool node stream must be destroyed during shutdown; a canceled
+	// cleanup context leaves it behind in Redis.
+	keys, err := rdb.Keys(ctx, "pulse:stream:*:node:*").Result()
+	if err != nil {
+		t.Fatalf("failed to list node stream keys: %v", err)
+	}
+	if len(keys) != 0 {
+		t.Errorf("expected node stream cleanup during Run shutdown, found stale keys: %v", keys)
+	}
+}

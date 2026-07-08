@@ -12,6 +12,7 @@ import (
 	"strings"
 
 	genregistry "github.com/CaliLuke/loom-mcp/registry/gen/registry"
+	"github.com/CaliLuke/loom-mcp/runtime/agent/telemetry"
 	"github.com/google/uuid"
 )
 
@@ -37,7 +38,8 @@ type (
 	// Entries are JSON encoded so every read returns a fresh value detached from
 	// caller-owned memory and durable across process restarts.
 	toolsetCatalog struct {
-		m catalogMap
+		m      catalogMap
+		logger telemetry.Logger
 	}
 )
 
@@ -48,7 +50,17 @@ var errToolsetNotFound = errors.New("toolset not found")
 // newToolsetCatalog constructs the canonical registry catalog over the provided
 // replicated map. The caller owns the map lifecycle.
 func newToolsetCatalog(m catalogMap) *toolsetCatalog {
-	return &toolsetCatalog{m: m}
+	return newToolsetCatalogWithLogger(m, nil)
+}
+
+// newToolsetCatalogWithLogger constructs the catalog with an explicit logger
+// for skipped-entry diagnostics during list-style reads. A nil logger falls
+// back to a no-op logger.
+func newToolsetCatalogWithLogger(m catalogMap, logger telemetry.Logger) *toolsetCatalog {
+	if logger == nil {
+		logger = telemetry.NewNoopLogger()
+	}
+	return &toolsetCatalog{m: m, logger: logger}
 }
 
 // SaveToolset stores or replaces a toolset entry under its deterministic catalog key.
@@ -119,9 +131,12 @@ func (c *toolsetCatalog) ListToolsets(ctx context.Context, tags []string) ([]*ge
 		if !strings.HasPrefix(key, toolsetCatalogKeyPrefix) {
 			continue
 		}
-		toolset, err := c.GetToolset(ctx, strings.TrimPrefix(key, toolsetCatalogKeyPrefix))
+		toolset, err := c.getToolsetForScan(ctx, strings.TrimPrefix(key, toolsetCatalogKeyPrefix))
 		if err != nil {
 			return nil, err
+		}
+		if toolset == nil {
+			continue
 		}
 		if catalogMatchesTags(toolset.Tags, tags) {
 			toolsets = append(toolsets, toolset)
@@ -145,9 +160,12 @@ func (c *toolsetCatalog) SearchToolsets(ctx context.Context, query string) ([]*g
 		if !strings.HasPrefix(key, toolsetCatalogKeyPrefix) {
 			continue
 		}
-		toolset, err := c.GetToolset(ctx, strings.TrimPrefix(key, toolsetCatalogKeyPrefix))
+		toolset, err := c.getToolsetForScan(ctx, strings.TrimPrefix(key, toolsetCatalogKeyPrefix))
 		if err != nil {
 			return nil, err
+		}
+		if toolset == nil {
+			continue
 		}
 		if catalogMatchesQuery(toolset, lowerQuery) {
 			toolsets = append(toolsets, toolset)
@@ -155,6 +173,31 @@ func (c *toolsetCatalog) SearchToolsets(ctx context.Context, query string) ([]*g
 	}
 	sortToolsetsByName(toolsets)
 	return toolsets, nil
+}
+
+// getToolsetForScan loads one toolset during a catalog-wide scan (List/Search).
+// It returns a nil toolset without error when the entry vanished between
+// Keys() and Get (concurrent unregister on another node) or when the stored
+// record does not decode, so one deleted or corrupt entry cannot fail the
+// whole scan. Direct GetToolset reads stay fail-fast. Context errors still
+// abort the scan.
+func (c *toolsetCatalog) getToolsetForScan(ctx context.Context, name string) (*genregistry.Toolset, error) {
+	toolset, err := c.GetToolset(ctx, name)
+	if err == nil {
+		return toolset, nil
+	}
+	if errors.Is(err, errToolsetNotFound) {
+		return nil, nil
+	}
+	if ctxErr := ctx.Err(); ctxErr != nil {
+		return nil, ctxErr
+	}
+	c.logger.Error(ctx, "skipping undecodable catalog entry",
+		"component", "tool-registry-catalog",
+		"toolset", name,
+		"err", err,
+	)
+	return nil, nil
 }
 
 // entry loads and validates the canonical persisted catalog record for a toolset.

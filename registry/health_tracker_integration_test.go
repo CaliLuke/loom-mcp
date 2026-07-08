@@ -366,6 +366,23 @@ func TestMultiNodeUnregistrationSync(t *testing.T) {
 	healthEvents := healthMap.Subscribe()
 	defer healthMap.Unsubscribe(healthEvents)
 
+	// Seed a shared health record so unregistration has health state to clean
+	// up. Deleting a key that never existed publishes no map event, which would
+	// make the cleanup wait below hang.
+	catalog := newToolsetCatalog(registryMap)
+	registrationToken, err := catalog.RegistrationToken(ctx, "test-toolset")
+	if err != nil {
+		t.Fatalf("failed to resolve registration token: %v", err)
+	}
+	if err := setHealthRecordForTest(ctx, healthMap, "test-toolset", registrationToken, time.Now()); err != nil {
+		t.Fatalf("failed to seed health record: %v", err)
+	}
+	select {
+	case <-healthEvents:
+	case <-time.After(5 * time.Second):
+		t.Fatal("timeout waiting for seeded health record event")
+	}
+
 	// Unregister on node 2 (different node than registration).
 	unregisterCatalogToolset(t, ctx, registryMap, tracker2, "test-toolset")
 
