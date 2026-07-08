@@ -265,6 +265,60 @@ func TestExecuteWorkflowAfterRunInterceptorClearsCanceledStatus(t *testing.T) {
 	require.Equal(t, runStatusSuccess, completed.Status)
 }
 
+func TestExecuteWorkflowEmptyAfterRunDecisionPreservesRunError(t *testing.T) {
+	planErr := errors.New("planner unavailable")
+	var observed error
+	rt := New(WithInterceptors(RuntimeInterceptorFuncs{
+		AfterRunFunc: func(ctx context.Context, input *AfterRunInput) (*AfterRunDecision, error) {
+			observed = input.Err
+			return &AfterRunDecision{}, nil
+		},
+	}))
+	rt.agents["svc.agent"] = AgentRegistration{
+		ID:                  "svc.agent",
+		PlanActivityName:    "plan",
+		ExecuteToolActivity: "execute",
+		ResumeActivityName:  "resume",
+	}
+	wfCtx := &routeWorkflowContext{
+		ctx: context.Background(),
+		plannerRoutes: map[string]func(context.Context, *PlanActivityInput) (*PlanActivityOutput, error){
+			"plan": func(context.Context, *PlanActivityInput) (*PlanActivityOutput, error) {
+				return &PlanActivityOutput{}, planErr
+			},
+		},
+	}
+
+	out, err := rt.ExecuteWorkflow(wfCtx, &RunInput{
+		AgentID: "svc.agent",
+		RunID:   "run-1",
+		TurnID:  "turn-1",
+	})
+
+	require.ErrorIs(t, err, planErr)
+	require.Nil(t, out)
+	require.ErrorIs(t, observed, planErr)
+}
+
+func TestHookActivityEmptyAfterEventDecisionPreservesAppendError(t *testing.T) {
+	appendErr := errors.New("append failed")
+	var observed error
+	rt := New(WithInterceptors(RuntimeInterceptorFuncs{
+		AfterEventFunc: func(ctx context.Context, input *AfterEventInput) (*AfterEventDecision, error) {
+			observed = input.Err
+			return &AfterEventDecision{}, nil
+		},
+	}))
+	rt.RunEventStore = &recordingRunlog{err: appendErr}
+
+	input, err := hooks.EncodeToHookInput(hooks.NewPlannerNoteEvent("run-1", "svc.agent", "", "note", nil), "turn-1")
+	require.NoError(t, err)
+
+	err = rt.hookActivity(context.Background(), input)
+	require.ErrorIs(t, err, appendErr)
+	require.ErrorIs(t, observed, appendErr)
+}
+
 func TestRetryAndReflectInterceptorConvertsToolErrorToRetryHint(t *testing.T) {
 	rt := New(WithInterceptors(NewRetryAndReflectInterceptor(RetryAndReflectConfig{MaxRetries: 2})))
 	rt.toolsets["svc.tools"] = ToolsetRegistration{

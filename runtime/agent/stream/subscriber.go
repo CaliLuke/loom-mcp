@@ -17,6 +17,10 @@ const (
 	completionStatusCanceled = "canceled"
 )
 
+// pausedPhase is the WorkflowPayload.Phase value emitted when the run is
+// suspended awaiting external action (derived from hooks.RunPausedEvent).
+const pausedPhase = "paused"
+
 type (
 	// Subscriber receives runtime events and forwards certain ones to a
 	// stream.Sink, such as a WebSocket, SSE, or message bus. It acts as a
@@ -34,9 +38,17 @@ type (
 	//   - ToolCallScheduled     → EventToolStart
 	//   - ToolCallUpdated       → EventToolUpdate
 	//   - ToolResultReceived    → EventToolEnd
+	//   - AwaitClarification    → EventAwaitClarification
+	//   - AwaitConfirmation     → EventAwaitConfirmation
+	//   - AwaitQuestions        → EventAwaitQuestions
+	//   - AwaitTypedInput       → EventAwaitTypedInput
+	//   - AwaitExternalTools    → EventAwaitExternalTools
+	//   - RunCompleted          → EventWorkflow + EventRunStreamEnd
+	//   - RunPhaseChanged       → EventWorkflow (non-terminal phases)
+	//   - RunPaused             → EventWorkflow (phase "paused")
 	//
-	// All other (internal) events, such as workflow lifecycle changes, are
-	// ignored and not sent to clients.
+	// All other (internal) events, such as policy decisions and memory
+	// operations, are ignored and not sent to clients.
 	Subscriber struct {
 		sink    Sink
 		profile StreamProfile
@@ -88,6 +100,11 @@ func NewSubscriberWithProfile(sink Sink, profile StreamProfile) (*Subscriber, er
 //   - ToolCallScheduled → EventToolStart
 //   - ToolCallUpdated → EventToolUpdate
 //   - ToolResultReceived → EventToolEnd
+//   - AwaitClarification/AwaitConfirmation/AwaitQuestions/AwaitTypedInput/
+//     AwaitExternalTools → the corresponding EventAwait* stream event
+//   - RunCompleted → EventWorkflow followed by EventRunStreamEnd
+//   - RunPhaseChanged → EventWorkflow (non-terminal phases only)
+//   - RunPaused → EventWorkflow with phase "paused" and the pause reason
 //   - All other event types are ignored (return nil)
 //
 // If the sink returns an error, HandleEvent propagates it to the bus, which
@@ -136,6 +153,8 @@ func (s *Subscriber) handleAwaitEvent(ctx context.Context, event hooks.Event) (e
 		return s.sendAwaitConfirmation(ctx, evt), true
 	case *hooks.AwaitQuestionsEvent:
 		return s.sendAwaitQuestions(ctx, evt), true
+	case *hooks.AwaitTypedInputEvent:
+		return s.sendAwaitTypedInput(ctx, evt), true
 	case *hooks.AwaitExternalToolsEvent:
 		return s.sendAwaitExternalTools(ctx, evt), true
 	case *hooks.ToolAuthorizationEvent:
@@ -233,6 +252,21 @@ func buildAwaitQuestionOptions(options []hooks.AwaitQuestionOption) []AwaitQuest
 		out = append(out, AwaitQuestionOptionPayload{ID: o.ID, Label: o.Label})
 	}
 	return out
+}
+
+func (s *Subscriber) sendAwaitTypedInput(ctx context.Context, evt *hooks.AwaitTypedInputEvent) error {
+	if !s.profile.AwaitTypedInput {
+		return nil
+	}
+	payload := AwaitTypedInputPayload{
+		ID:     evt.ID,
+		Title:  evt.Title,
+		Schema: append(rawjson.Message(nil), evt.Schema...),
+	}
+	return s.sink.Send(ctx, AwaitTypedInput{
+		Base: newBaseFromHook(evt, EventAwaitTypedInput, payload),
+		Data: payload,
+	})
 }
 
 func (s *Subscriber) sendAwaitExternalTools(ctx context.Context, evt *hooks.AwaitExternalToolsEvent) error {
@@ -476,6 +510,18 @@ func (s *Subscriber) handleWorkflowEvent(ctx context.Context, event hooks.Event)
 			return nil, true
 		}
 		payload := WorkflowPayload{Phase: string(evt.Phase)}
+		return s.sink.Send(ctx, Workflow{
+			Base: newBaseFromHook(evt, EventWorkflow, payload),
+			Data: payload,
+		}), true
+	case *hooks.RunPausedEvent:
+		if !s.profile.Workflow {
+			return nil, true
+		}
+		payload := WorkflowPayload{
+			Phase:  pausedPhase,
+			Reason: evt.Reason,
+		}
 		return s.sink.Send(ctx, Workflow{
 			Base: newBaseFromHook(evt, EventWorkflow, payload),
 			Data: payload,

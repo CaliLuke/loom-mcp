@@ -94,8 +94,13 @@ func normalizeJSONValue(v reflect.Value) (any, error) {
 		return v.Interface(), nil
 	case reflect.Invalid:
 		return nil, nil
+	case reflect.Interface, reflect.Pointer:
+		// Nil pointers/interfaces are short-circuited by normalizeMarshaledValue,
+		// so recursing on the element keeps canonical normalization (snake_case
+		// fallback, nil-field omission, map-key fail-fast) for pointer values.
+		return normalizeJSONValue(v.Elem())
 	case reflect.Complex64, reflect.Complex128,
-		reflect.Chan, reflect.Func, reflect.Interface, reflect.Pointer, reflect.UnsafePointer:
+		reflect.Chan, reflect.Func, reflect.UnsafePointer:
 		return v.Interface(), nil
 	case reflect.Slice:
 		if v.Type().Elem().Kind() == reflect.Uint8 {

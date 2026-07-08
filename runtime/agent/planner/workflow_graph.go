@@ -214,6 +214,19 @@ func (p *GraphWorkflowPlanner) graphProgress(completed map[string]struct{}, outp
 	virtualCompleted := make(map[string]struct{})
 	selectedTargets := make(map[string]struct{})
 	skippedTargets := make(map[string]struct{})
+	for {
+		p.resolveVirtualNodes(completed, outputs, typedInputs, virtualCompleted, selectedTargets, skippedTargets)
+		if !p.propagateSkippedBranchTargets(selectedTargets, skippedTargets) {
+			return virtualCompleted, selectedTargets, skippedTargets
+		}
+	}
+}
+
+// resolveVirtualNodes advances join and branch nodes to a fixpoint. Nodes in
+// skippedTargets sit on unselected branch paths and never resolve, so a
+// skipped branch cannot select or schedule its own targets. A later selection
+// of a skipped node removes it from skippedTargets and resolves it normally.
+func (p *GraphWorkflowPlanner) resolveVirtualNodes(completed map[string]struct{}, outputs []*ToolOutput, typedInputs []TypedInputOutput, virtualCompleted, selectedTargets, skippedTargets map[string]struct{}) {
 	changed := true
 	for changed {
 		changed = false
@@ -223,6 +236,9 @@ func (p *GraphWorkflowPlanner) graphProgress(completed map[string]struct{}, outp
 				continue
 			}
 			if _, ok := virtualCompleted[node.ID]; ok {
+				continue
+			}
+			if _, ok := skippedTargets[node.ID]; ok {
 				continue
 			}
 			if !nodeDepsComplete(node.DependsOn, completed, virtualOrSkipped) {
@@ -244,16 +260,45 @@ func (p *GraphWorkflowPlanner) graphProgress(completed map[string]struct{}, outp
 					if _, selected := selectedTargets[branchTarget]; selected {
 						continue
 					}
-					if _, skipped := skippedTargets[branchTarget]; !skipped {
-						skippedTargets[branchTarget] = struct{}{}
-					}
+					skippedTargets[branchTarget] = struct{}{}
 				}
 			}
 			virtualCompleted[node.ID] = struct{}{}
 			changed = true
 		}
 	}
-	return virtualCompleted, selectedTargets, skippedTargets
+}
+
+// propagateSkippedBranchTargets marks every target of a skipped branch node as
+// skipped so entire unselected paths stay inert, and reports whether any new
+// node was skipped. Targets selected by another branch are never skipped: a
+// node reachable from both a selected and a skipped path still runs.
+func (p *GraphWorkflowPlanner) propagateSkippedBranchTargets(selectedTargets, skippedTargets map[string]struct{}) bool {
+	changed := false
+	progress := true
+	for progress {
+		progress = false
+		for _, node := range p.nodes {
+			if node.Kind != WorkflowNodeBranch {
+				continue
+			}
+			if _, skipped := skippedTargets[node.ID]; !skipped {
+				continue
+			}
+			for target := range branchConfigTargets(node.Branch) {
+				if _, selected := selectedTargets[target]; selected {
+					continue
+				}
+				if _, alreadySkipped := skippedTargets[target]; alreadySkipped {
+					continue
+				}
+				skippedTargets[target] = struct{}{}
+				progress = true
+				changed = true
+			}
+		}
+	}
+	return changed
 }
 
 func (p *GraphWorkflowPlanner) finalResult() *PlanResult {

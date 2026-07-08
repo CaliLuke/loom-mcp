@@ -11,6 +11,9 @@ import (
 // StartSync starts the background sync loop for all registries.
 // Each registry is synced at its configured SyncInterval.
 func (m *Manager) StartSync(ctx context.Context) error {
+	m.syncLifecycleMu.Lock()
+	defer m.syncLifecycleMu.Unlock()
+
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
@@ -18,21 +21,27 @@ func (m *Manager) StartSync(ctx context.Context) error {
 		return fmt.Errorf("sync loop already running")
 	}
 
-	m.syncCtx, m.syncCancel = context.WithCancel(ctx)
+	syncCtx, syncCancel := context.WithCancel(ctx)
+	m.syncCancel = syncCancel
 	for name, entry := range m.registries {
 		if entry.syncInterval <= 0 {
 			continue
 		}
 		m.syncWg.Add(1)
-		go m.syncRegistry(name, entry)
+		go m.syncRegistry(syncCtx, name, entry)
 	}
 
 	m.obs.LogSyncLifecycle(ctx, "started")
 	return nil
 }
 
-// StopSync stops the background sync loop.
+// StopSync stops the background sync loop and waits for all sync goroutines
+// to exit. It is safe to call concurrently with StartSync: the lifecycle
+// mutex serializes the full stop sequence (cancel + wait) against restarts.
 func (m *Manager) StopSync() {
+	m.syncLifecycleMu.Lock()
+	defer m.syncLifecycleMu.Unlock()
+
 	m.mu.Lock()
 	cancel := m.syncCancel
 	m.syncCancel = nil
@@ -46,35 +55,31 @@ func (m *Manager) StopSync() {
 	m.obs.LogSyncLifecycle(context.Background(), "stopped")
 }
 
-// syncRegistry runs the sync loop for a single registry.
-func (m *Manager) syncRegistry(name string, entry *registryEntry) {
+// syncRegistry runs the sync loop for a single registry until ctx is canceled.
+func (m *Manager) syncRegistry(ctx context.Context, name string, entry *registryEntry) {
 	defer m.syncWg.Done()
 
 	ticker := time.NewTicker(entry.syncInterval)
 	defer ticker.Stop()
 
-	m.doSync(name, entry)
+	m.doSync(ctx, name, entry)
 	for {
 		select {
-		case <-m.syncCtx.Done():
+		case <-ctx.Done():
 			return
 		case <-ticker.C:
-			m.doSync(name, entry)
+			m.doSync(ctx, name, entry)
 		}
 	}
 }
 
 // doSync performs a single sync operation for a registry.
-func (m *Manager) doSync(name string, entry *registryEntry) {
+func (m *Manager) doSync(ctx context.Context, name string, entry *registryEntry) {
 	var (
 		outcome     OperationOutcome
 		opErr       error
 		resultCount int
 	)
-	ctx := m.syncCtx
-	if ctx == nil {
-		ctx = context.Background()
-	}
 	obs := m.observeOperation(
 		ctx,
 		OperationEvent{

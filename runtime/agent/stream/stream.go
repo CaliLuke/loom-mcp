@@ -319,6 +319,14 @@ type (
 		Data AwaitQuestionsPayload
 	}
 
+	// AwaitTypedInput streams a schema-typed human input request that must be
+	// answered out-of-band before the run can resume. The run remains blocked
+	// until the caller resumes it via ProvideTypedInput.
+	AwaitTypedInput struct {
+		Base
+		Data AwaitTypedInputPayload
+	}
+
 	// AwaitExternalTools streams a request for external tool execution.
 	AwaitExternalTools struct {
 		Base
@@ -511,6 +519,18 @@ type (
 		Label string `json:"label"`
 	}
 
+	// AwaitTypedInputPayload describes a schema-typed human input request that
+	// must be answered out-of-band (typically by a UI) and resumed via
+	// ProvideTypedInput.
+	AwaitTypedInputPayload struct {
+		// ID correlates this await with a subsequent ProvideTypedInput call.
+		ID string `json:"id"`
+		// Title is an optional display title for the input UI.
+		Title string `json:"title,omitempty"`
+		// Schema is the JSON schema describing the expected answer payload.
+		Schema rawjson.Message `json:"schema,omitempty"`
+	}
+
 	// AwaitExternalToolsPayload describes external tool requests to be provided by callers.
 	AwaitExternalToolsPayload struct {
 		// ID correlates this await with a subsequent provide_tool_results
@@ -601,8 +621,14 @@ type (
 	WorkflowPayload struct {
 		// Name is an optional human-readable workflow name.
 		Name string `json:"name,omitempty"`
-		// Phase is the lifecycle phase, e.g., "completed", "failed", "canceled".
+		// Phase is the lifecycle phase, e.g., "completed", "failed", "canceled",
+		// or "paused" when the run is suspended awaiting external action.
 		Phase string `json:"phase"`
+		// Reason explains why the run entered the current phase when the
+		// producer supplied one. It is populated on "paused" updates derived
+		// from RunPausedEvent (for example, "await_queue" or
+		// "await_clarification") and empty otherwise.
+		Reason string `json:"reason,omitempty"`
 		// Status is the coarse-grained terminal status when known
 		// (typically "success", "failed", or "canceled"). It is populated
 		// on terminal updates derived from RunCompletedEvent and may be
@@ -672,6 +698,8 @@ type (
 		AwaitConfirmation bool
 		// AwaitQuestions controls emission of await_questions events.
 		AwaitQuestions bool
+		// AwaitTypedInput controls emission of await_typed_input events.
+		AwaitTypedInput bool
 		// AwaitExternalTools controls emission of await_external_tools events.
 		AwaitExternalTools bool
 		// ToolAuthorization controls emission of tool_authorization events.
@@ -701,6 +729,7 @@ func DefaultProfile() StreamProfile {
 		AwaitClarification: true,
 		AwaitConfirmation:  true,
 		AwaitQuestions:     true,
+		AwaitTypedInput:    true,
 		AwaitExternalTools: true,
 		ToolAuthorization:  true,
 		Usage:              true,
@@ -797,6 +826,10 @@ const (
 
 	// EventAwaitQuestions streams when a planner requests structured multiple-choice input.
 	EventAwaitQuestions EventType = "await_questions"
+
+	// EventAwaitTypedInput streams when a planner requests schema-typed human input.
+	// The run stays blocked until the input is provided via ProvideTypedInput.
+	EventAwaitTypedInput EventType = "await_typed_input"
 
 	// EventAwaitExternalTools streams when a planner requests external tool execution.
 	EventAwaitExternalTools EventType = "await_external_tools"

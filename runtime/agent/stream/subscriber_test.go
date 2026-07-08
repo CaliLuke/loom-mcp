@@ -295,6 +295,70 @@ func TestStreamSubscriber_WorkflowFromRunCompleted_CanceledHasNoError(t *testing
 	require.Equal(t, EventRunStreamEnd, sink.events[1].Type())
 }
 
+func TestStreamSubscriber_AwaitTypedInput(t *testing.T) {
+	sink := &mockSink{}
+	sub, err := NewSubscriber(sink)
+	require.NoError(t, err)
+	ctx := context.Background()
+
+	schema := rawjson.Message([]byte(`{"type":"object","properties":{"approved":{"type":"boolean"}}}`))
+	evt := hooks.NewAwaitTypedInputEvent("r1", agent.Ident("agent1"), "session-1", "approval", "Approval", schema)
+	require.NoError(t, sub.HandleEvent(ctx, evt))
+
+	require.Len(t, sink.events, 1)
+	require.Equal(t, EventAwaitTypedInput, sink.events[0].Type())
+	got, ok := sink.events[0].(AwaitTypedInput)
+	require.True(t, ok)
+	require.Equal(t, "r1", got.RunID())
+	require.Equal(t, "session-1", got.SessionID())
+	require.Equal(t, "approval", got.Data.ID)
+	require.Equal(t, "Approval", got.Data.Title)
+	require.JSONEq(t, string(schema), string(got.Data.Schema))
+}
+
+func TestStreamSubscriber_AwaitTypedInputRespectsProfileToggle(t *testing.T) {
+	sink := &mockSink{}
+	profile := DefaultProfile()
+	profile.AwaitTypedInput = false
+	sub, err := NewSubscriberWithProfile(sink, profile)
+	require.NoError(t, err)
+
+	evt := hooks.NewAwaitTypedInputEvent("r1", agent.Ident("agent1"), "session-1", "approval", "Approval", rawjson.Message([]byte(`{"type":"object"}`)))
+	require.NoError(t, sub.HandleEvent(context.Background(), evt))
+	require.Empty(t, sink.events)
+}
+
+func TestStreamSubscriber_WorkflowFromRunPaused(t *testing.T) {
+	sink := &mockSink{}
+	sub, err := NewSubscriber(sink)
+	require.NoError(t, err)
+	ctx := context.Background()
+
+	evt := hooks.NewRunPausedEvent("r1", agent.Ident("agent1"), "session-1", "await_queue", "runtime", nil, nil)
+	require.NoError(t, sub.HandleEvent(ctx, evt))
+
+	require.Len(t, sink.events, 1)
+	wf, ok := sink.events[0].(Workflow)
+	require.True(t, ok)
+	require.Equal(t, EventWorkflow, wf.Type())
+	require.Equal(t, "r1", wf.RunID())
+	require.Equal(t, "paused", wf.Data.Phase)
+	require.Equal(t, "await_queue", wf.Data.Reason)
+	require.Empty(t, wf.Data.Status)
+}
+
+func TestStreamSubscriber_RunPausedRespectsWorkflowProfileToggle(t *testing.T) {
+	sink := &mockSink{}
+	profile := DefaultProfile()
+	profile.Workflow = false
+	sub, err := NewSubscriberWithProfile(sink, profile)
+	require.NoError(t, err)
+
+	evt := hooks.NewRunPausedEvent("r1", agent.Ident("agent1"), "session-1", "await_queue", "runtime", nil, nil)
+	require.NoError(t, sub.HandleEvent(context.Background(), evt))
+	require.Empty(t, sink.events)
+}
+
 func TestStreamSubscriber_WorkflowFromRunPhaseChanged(t *testing.T) {
 	sink := &mockSink{}
 	sub, err := NewSubscriber(sink)

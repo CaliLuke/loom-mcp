@@ -91,6 +91,11 @@ func (r *Runtime) applyPolicy(
 	toolPolicy toolPolicyEnvelope,
 ) (policyApplicationResult, error) {
 	if toolPolicy.Active {
+		// An active envelope is authoritative: only calls on the allowlist may
+		// execute, and an empty allowlist means no tool is allowed (for example
+		// after a DisableTools policy decision). Planners that emit tool calls
+		// despite the envelope have those calls dropped here; when nothing
+		// survives, the caller fails the turn.
 		allowedCalls := filterToolCalls(candidates, toolPolicy.Allowed)
 		return policyApplicationResult{
 			AllowedCalls: r.capAllowedCalls(allowedCalls, input, caps),

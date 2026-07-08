@@ -49,9 +49,7 @@ func TestFederationOriginTaggingProperty(t *testing.T) {
 			entry := manager.registries[cfg.registryName]
 			manager.mu.RUnlock()
 
-			// Set up sync context
-			manager.syncCtx = context.Background()
-			manager.doSync(cfg.registryName, entry)
+			manager.doSync(context.Background(), cfg.registryName, entry)
 
 			// Verify all cached toolsets have origin set
 			ctx := context.Background()
@@ -230,8 +228,7 @@ func TestFederationFilteringPreservesOriginProperty(t *testing.T) {
 			entry := manager.registries[cfg.registryName]
 			manager.mu.RUnlock()
 
-			manager.syncCtx = context.Background()
-			manager.doSync(cfg.registryName, entry)
+			manager.doSync(context.Background(), cfg.registryName, entry)
 
 			ctx := context.Background()
 

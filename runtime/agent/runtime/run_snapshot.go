@@ -87,11 +87,19 @@ func applySnapshotEvent(snapshot *run.Snapshot, toolCalls map[string]*run.ToolCa
 		return applyAwaitClarification(snapshot, event)
 	case hooks.AwaitConfirmation:
 		return applyAwaitConfirmation(snapshot, event)
+	case hooks.AwaitQuestions:
+		return applyAwaitQuestions(snapshot, event)
+	case hooks.AwaitTypedInput:
+		return applyAwaitTypedInput(snapshot, event)
 	case hooks.AwaitExternalTools:
 		return applyAwaitExternalTools(snapshot, event)
 	case hooks.RunPhaseChanged:
 		return applyRunPhaseChanged(snapshot, event)
+	case hooks.RunPaused:
+		snapshot.Status = run.StatusPaused
+		return nil
 	case hooks.RunResumed:
+		snapshot.Status = run.StatusRunning
 		snapshot.Await = nil
 		return nil
 	case hooks.AssistantMessage:
@@ -149,6 +157,37 @@ func applyAwaitConfirmation(snapshot *run.Snapshot, event *runlog.Event) error {
 		ToolCallID: payload.ToolCallID,
 		Title:      payload.Title,
 		Prompt:     payload.Prompt,
+	}
+	return nil
+}
+
+func applyAwaitQuestions(snapshot *run.Snapshot, event *runlog.Event) error {
+	var payload hooks.AwaitQuestionsEvent
+	if err := decodeSnapshotPayload(event, &payload); err != nil {
+		return err
+	}
+	await := &run.AwaitSnapshot{
+		Kind:       string(hooks.AwaitQuestions),
+		ID:         payload.ID,
+		ToolName:   payload.ToolName,
+		ToolCallID: payload.ToolCallID,
+	}
+	if payload.Title != nil {
+		await.Title = *payload.Title
+	}
+	snapshot.Await = await
+	return nil
+}
+
+func applyAwaitTypedInput(snapshot *run.Snapshot, event *runlog.Event) error {
+	var payload hooks.AwaitTypedInputEvent
+	if err := decodeSnapshotPayload(event, &payload); err != nil {
+		return err
+	}
+	snapshot.Await = &run.AwaitSnapshot{
+		Kind:  string(hooks.AwaitTypedInput),
+		ID:    payload.ID,
+		Title: payload.Title,
 	}
 	return nil
 }

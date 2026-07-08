@@ -49,6 +49,11 @@ type (
 		// ToolPolicy is the canonical model-visible and execution-visible allowlist
 		// for the current planner turn.
 		ToolPolicy toolPolicyEnvelope
+
+		// turnTranscriptRecorded reports whether the streamed transcript for the
+		// current planner turn has already been appended to the provider
+		// conversation via recordAssistantTurn.
+		turnTranscriptRecorded bool
 	}
 )
 
@@ -62,4 +67,24 @@ func newRunLoopState(result *planner.PlanResult, transcriptMsgs []*model.Message
 		Ledger:      transcript.FromModelMessages(transcriptMsgs),
 		ToolPolicy:  cloneToolPolicyEnvelope(toolPolicy),
 	}
+}
+
+// setTurnTranscript installs the streamed provider transcript for a new
+// planner turn and re-arms the once-per-turn recording gate.
+func (st *runLoopState) setTurnTranscript(msgs []*model.Message) {
+	st.Transcript = msgs
+	st.turnTranscriptRecorded = false
+}
+
+// takeTurnTranscript returns the streamed transcript for the current planner
+// turn exactly once. Subsequent calls within the same turn return nil so a
+// turn that records multiple tool_use batches (immediate execution,
+// confirmations, await handshakes) never duplicates the assistant
+// thinking/text in the provider conversation.
+func (st *runLoopState) takeTurnTranscript() []*model.Message {
+	if st.turnTranscriptRecorded {
+		return nil
+	}
+	st.turnTranscriptRecorded = true
+	return st.Transcript
 }

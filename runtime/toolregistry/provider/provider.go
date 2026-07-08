@@ -7,8 +7,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"strconv"
-	"strings"
 	"sync"
 	"time"
 
@@ -52,6 +50,13 @@ type (
 		// Pulse may reclaim and re-deliver the call while it is still in flight.
 		// Deployments should set this high enough to cover worst-case tool
 		// execution time.
+		//
+		// The provider also uses this value to shed locally buffered tool
+		// calls: a call held in the overflow buffer for longer than the grace
+		// period since it was received is dropped without acking, because
+		// Pulse may already be redelivering it to another consumer. The
+		// un-acked event remains pending on the sink and is redelivered, so
+		// shedding never loses the call.
 		SinkAckGracePeriod time.Duration
 
 		// Pong acknowledges health pings emitted by the registry gateway.
@@ -114,6 +119,13 @@ type (
 	workItem struct {
 		ev  *streaming.Event
 		msg toolregistry.ToolCallMessage
+
+		// receivedAt records when this provider received the event from the
+		// sink subscription. It approximates the Pulse PEL delivery time and
+		// is the reference clock for pendingItemExpired; the event ID's
+		// add-time must not be used for staleness because backlog events can
+		// be arbitrarily old on first delivery.
+		receivedAt time.Time
 	}
 
 	providerConfig struct {
@@ -245,20 +257,12 @@ func runProviderLoop(
 		case err := <-state.errc:
 			return finishProviderServe(state, ackWG, err)
 		case <-drainTicker.C:
-			var err error
-			pending, err = drainPending(state.ctx, state.work, state.acks, pending, cfg.ackGrace, time.Now(), cfg.logger)
-			if err != nil {
-				return finishProviderServe(state, ackWG, err)
-			}
+			pending = drainPending(state.ctx, state.work, pending, cfg.ackGrace, time.Now(), cfg.logger)
 		case ev, ok := <-events:
 			if !ok {
 				return finishProviderServe(state, ackWG, fmt.Errorf("toolset stream subscription closed"))
 			}
-			var err error
-			pending, err = drainPending(state.ctx, state.work, state.acks, pending, cfg.ackGrace, time.Now(), cfg.logger)
-			if err != nil {
-				return finishProviderServe(state, ackWG, err)
-			}
+			pending = drainPending(state.ctx, state.work, pending, cfg.ackGrace, time.Now(), cfg.logger)
 			if _, err := handleSubscribedEvent(state.ctx, sink, ev, pendingDeps{
 				opts:     opts,
 				cfg:      cfg,
@@ -492,21 +496,21 @@ func publishToolResult(
 func drainPending(
 	ctx context.Context,
 	work chan<- workItem,
-	acks chan<- *streaming.Event,
 	pending []workItem,
 	ackGrace time.Duration,
 	now time.Time,
 	logger telemetry.Logger,
-) ([]workItem, error) {
+) []workItem {
 	write := 0
 	for _, item := range pending {
 		if pendingItemExpired(item, ackGrace, now) {
-			if err := ackStalePending(ctx, acks, item); err != nil {
-				return pending[:write], err
-			}
+			// Drop the local copy WITHOUT acking. The event stays in the
+			// sink's pending entries list, so Pulse's claim machinery owns
+			// redelivery and the call is never silently lost. Acking here
+			// would permanently discard a call that never executed.
 			logger.Debug(
 				ctx,
-				"dropped stale pending tool call",
+				"shed stale pending tool call for redelivery",
 				"component", "tool-registry-provider",
 				"tool_use_id", item.msg.ToolUseID,
 				"tool", item.msg.Tool,
@@ -524,44 +528,27 @@ func drainPending(
 		}
 	}
 	clear(pending[write:])
-	return pending[:write], nil
+	return pending[:write]
 }
 
-func ackStalePending(ctx context.Context, acks chan<- *streaming.Event, item workItem) error {
-	if item.ev == nil {
-		return nil
-	}
-	select {
-	case acks <- item.ev:
-		return nil
-	case <-ctx.Done():
-		return nil
-	default:
-		return fmt.Errorf("ack queue full")
-	}
-}
-
+// pendingItemExpired reports whether a locally buffered tool call has been
+// held past the sink ack grace period since this provider received it.
+//
+// Contract:
+//   - Staleness is measured from item.receivedAt, the local receipt time,
+//     because Pulse reclaims on PEL idle time (time since last delivery) with
+//     MinIdle equal to the ack grace period. An event's ID encodes its
+//     stream add-time, which says nothing about delivery: a first-delivery
+//     backlog item can be arbitrarily old by add-time yet must still execute.
+//   - Once the grace period elapses after receipt, Pulse may reclaim and
+//     redeliver the event to another consumer. Shedding the local copy then
+//     avoids duplicate execution; the un-acked event is redelivered by the
+//     sink's claim machinery, so shedding never loses the call.
 func pendingItemExpired(item workItem, ackGrace time.Duration, now time.Time) bool {
-	if ackGrace <= 0 || item.ev == nil {
+	if ackGrace <= 0 || item.ev == nil || item.receivedAt.IsZero() {
 		return false
 	}
-	eventTime, ok := eventIDTime(item.ev.ID)
-	if !ok {
-		return false
-	}
-	return now.Sub(eventTime) > ackGrace
-}
-
-func eventIDTime(id string) (time.Time, bool) {
-	msPart, _, ok := strings.Cut(id, "-")
-	if !ok || msPart == "" {
-		return time.Time{}, false
-	}
-	ms, err := strconv.ParseInt(msPart, 10, 64)
-	if err != nil || ms <= 0 {
-		return time.Time{}, false
-	}
-	return time.UnixMilli(ms), true
+	return now.Sub(item.receivedAt) > ackGrace
 }
 
 func handleSubscribedEvent(ctx context.Context, sink pulseclients.Sink, ev *streaming.Event, deps pendingDeps) (bool, error) {
@@ -576,7 +563,7 @@ func handleSubscribedEvent(ctx context.Context, sink pulseclients.Sink, ev *stre
 	if msg.ToolUseID == "" {
 		return true, ackEvent(ctx, sink, ev, "ack tool call missing tool_use_id")
 	}
-	queueWorkItem(ctx, workItem{ev: ev, msg: msg}, deps)
+	queueWorkItem(ctx, workItem{ev: ev, msg: msg, receivedAt: time.Now()}, deps)
 	return false, nil
 }
 

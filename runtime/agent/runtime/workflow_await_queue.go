@@ -22,7 +22,6 @@ import (
 	"github.com/CaliLuke/loom-mcp/runtime/agent/interrupt"
 	"github.com/CaliLuke/loom-mcp/runtime/agent/planner"
 	"github.com/CaliLuke/loom-mcp/runtime/agent/rawjson"
-	"github.com/CaliLuke/loom-mcp/runtime/agent/transcript"
 )
 
 const awaitReasonQueue = "await_queue"
@@ -58,8 +57,9 @@ func (r *Runtime) waitAwaitConfirmation(
 
 	// Confirmation gates tool execution. We represent both approval and denial as
 	// a provider-visible tool_use + tool_result pair so planners see a deterministic
-	// outcome for the tool call they requested.
-	r.recordAssistantTurn(base, st.Transcript, []planner.ToolRequest{it.call}, st.Ledger)
+	// outcome for the tool call they requested. The streamed thinking/text for the
+	// turn is consumed at most once across all recordings in the same turn.
+	r.recordAssistantTurn(base, st.takeTurnTranscript(), []planner.ToolRequest{it.call}, st.Ledger)
 
 	if !dec.Approved {
 		res, err := r.handleDeniedConfirmation(ctx, base, st, turnID, expectedChildren, it)
@@ -226,7 +226,7 @@ func (r *Runtime) handleAwaitPostProcessing(ctx context.Context, wfCtx engine.Wo
 	if err := r.publishAwaitResume(ctx, input, base, turnID, confirmations, items); err != nil {
 		return nil, err
 	}
-	return r.resumeAfterAwait(wfCtx, reg, input, base, st, resumeOpts, deadlines)
+	return r.resumeAfterAwait(wfCtx, reg, input, base, st, resumeOpts, deadlines, turnID)
 }
 
 func (r *Runtime) finalizeProtectedAwaitRun(ctx context.Context, wfCtx engine.WorkflowContext, reg AgentRegistration, input *RunInput, base *planner.PlanInput, st *runLoopState, turnID string, deadlines *runDeadlines, allToolResults []*planner.ToolResult) (*RunOutput, error) {
@@ -240,23 +240,12 @@ func (r *Runtime) finalizeProtectedAwaitRun(ctx context.Context, wfCtx engine.Wo
 	return r.finalizeWithPlanner(wfCtx, reg, input, base, st.ToolEvents, st.ToolOutputs, st.AggUsage, st.NextAttempt, turnID, planner.TerminationReasonFailureCap, deadlines.Hard)
 }
 
-func (r *Runtime) resumeAfterAwait(wfCtx engine.WorkflowContext, reg AgentRegistration, input *RunInput, base *planner.PlanInput, st *runLoopState, resumeOpts engine.ActivityOptions, deadlines *runDeadlines) (*RunOutput, error) {
-	resumeReq, err := r.buildNextResumeRequest(input.AgentID, base, st.ToolOutputs, st.TypedInputs, &st.NextAttempt)
-	if err != nil {
-		return nil, err
-	}
-	resOutput, err := r.runPlanActivity(wfCtx, reg.ResumeActivityName, resumeOpts, resumeReq, deadlines.Budget)
-	if err != nil {
-		return nil, err
-	}
-	if resOutput == nil || resOutput.Result == nil {
-		return nil, fmt.Errorf("plan resume activity returned nil result after await")
-	}
-	st.AggUsage = addTokenUsage(st.AggUsage, resOutput.Usage)
-	st.Result = resOutput.Result
-	st.Transcript = resOutput.Transcript
-	st.Ledger = transcript.FromModelMessages(st.Transcript)
-	return nil, nil
+// resumeAfterAwait resumes planning after the await queue is fully satisfied.
+// It shares the tool-turn resume path so the policy engine is re-consulted at
+// this boundary and the resume request carries a fresh tool-policy envelope
+// (allowlist, caps, labels) instead of the stale pre-await state.
+func (r *Runtime) resumeAfterAwait(wfCtx engine.WorkflowContext, reg AgentRegistration, input *RunInput, base *planner.PlanInput, st *runLoopState, resumeOpts engine.ActivityOptions, deadlines *runDeadlines, turnID string) (*RunOutput, error) {
+	return nil, r.resumeAfterToolTurn(wfCtx, reg, input, base, st, resumeOpts, deadlines, turnID)
 }
 
 func (r *Runtime) applyAwaitFailurePolicy(wfCtx engine.WorkflowContext, reg AgentRegistration, input *RunInput, base *planner.PlanInput, st *runLoopState, allToolResults []*planner.ToolResult, turnID string, ctrl *interrupt.Controller, deadlines *runDeadlines) (*RunOutput, error) {

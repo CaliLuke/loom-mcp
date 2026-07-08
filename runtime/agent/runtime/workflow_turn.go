@@ -268,7 +268,7 @@ func (r *Runtime) resumeAfterToolTurn(
 	}
 	st.AggUsage = addTokenUsage(st.AggUsage, resOutput.Usage)
 	st.Result = resOutput.Result
-	st.Transcript = resOutput.Transcript
+	st.setTurnTranscript(resOutput.Transcript)
 	st.Ledger = transcript.FromModelMessages(st.Transcript)
 	st.ToolPolicy = toolPolicyEnvelope{
 		Active:  resOutput.ToolPolicyActive,
@@ -334,7 +334,7 @@ func (r *Runtime) prepareToolTurnCalls(
 		return nil, nil, nil, nil, fmt.Errorf("confirmation required but interrupts are not available")
 	}
 	if len(toExecute) > 0 {
-		r.recordAssistantTurn(base, st.Transcript, toExecute, st.Ledger)
+		r.recordAssistantTurn(base, st.takeTurnTranscript(), toExecute, st.Ledger)
 	}
 	return allowed, toExecute, confirmations, ensureToolCallIDs(base, toExecute), nil
 }

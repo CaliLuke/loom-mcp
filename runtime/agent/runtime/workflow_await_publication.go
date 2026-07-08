@@ -86,7 +86,7 @@ func (r *Runtime) publishAwaitQuestions(ctx context.Context, input *RunInput, ba
 		return err
 	}
 	call := planner.ToolRequest{Name: q.ToolName, ToolCallID: q.ToolCallID, Payload: q.Payload}
-	r.recordAssistantTurn(base, st.Transcript, []planner.ToolRequest{call}, st.Ledger)
+	r.recordAssistantTurn(base, st.takeTurnTranscript(), []planner.ToolRequest{call}, st.Ledger)
 	if q.ToolCallID == "" {
 		return errors.New("await_questions: missing tool_call_id")
 	}
@@ -133,7 +133,7 @@ func (r *Runtime) publishAwaitExternalTools(ctx context.Context, input *RunInput
 	), turnID); err != nil {
 		return err
 	}
-	r.recordAssistantTurn(base, st.Transcript, awaitCalls, st.Ledger)
+	r.recordAssistantTurn(base, st.takeTurnTranscript(), awaitCalls, st.Ledger)
 	return publishAwaitScheduledToolCalls(ctx, r, input, base, turnID, awaitCalls)
 }
 

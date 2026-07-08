@@ -187,10 +187,9 @@ func (r *Runtime) toolMetadata(calls []planner.ToolRequest) []policy.ToolMetadat
 }
 
 // filterToolCalls filters tool calls to only those present in the allowed list.
+// An empty allowed list permits nothing. Callers that treat "no allowlist" as
+// unrestricted (see allowedPolicyCalls) must handle that case before calling.
 func filterToolCalls(calls []planner.ToolRequest, allowed []tools.Ident) []planner.ToolRequest {
-	if len(allowed) == 0 {
-		return calls
-	}
 	allow := make(map[tools.Ident]struct{}, len(allowed))
 	for _, id := range allowed {
 		allow[id] = struct{}{}

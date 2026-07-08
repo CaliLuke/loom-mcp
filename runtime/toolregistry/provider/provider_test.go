@@ -17,6 +17,7 @@ import (
 	"github.com/CaliLuke/loom-mcp/runtime/toolregistry"
 	"github.com/CaliLuke/loom/pulse/streaming"
 	streamopts "github.com/CaliLuke/loom/pulse/streaming/options"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
@@ -59,26 +60,77 @@ func TestDrainPending_PreservesCapacity(t *testing.T) {
 	t.Parallel()
 
 	work := make(chan workItem, 2)
-	acks := make(chan *streaming.Event, 1)
 	pending := make([]workItem, 0, 3)
 	for i := 1; i <= 3; i++ {
 		pending = append(pending, workItem{
-			ev:  &streaming.Event{ID: fmt.Sprintf("%d-0", i)},
-			msg: toolregistry.ToolCallMessage{ToolUseID: fmt.Sprintf("tooluse_%d", i)},
+			ev:         &streaming.Event{ID: fmt.Sprintf("%d-0", i)},
+			msg:        toolregistry.ToolCallMessage{ToolUseID: fmt.Sprintf("tooluse_%d", i)},
+			receivedAt: time.Now(),
 		})
 	}
 
-	got, err := drainPending(context.Background(), work, acks, pending, 0, time.Now(), telemetry.NewNoopLogger())
-	require.NoError(t, err)
+	got := drainPending(context.Background(), work, pending, 0, time.Now(), telemetry.NewNoopLogger())
 	require.Len(t, got, 1)
 	require.Equal(t, cap(pending), cap(got))
 	require.Equal(t, "tooluse_3", got[0].msg.ToolUseID)
 
 	<-work
-	got, err = drainPending(context.Background(), work, acks, got, 0, time.Now(), telemetry.NewNoopLogger())
-	require.NoError(t, err)
+	got = drainPending(context.Background(), work, got, 0, time.Now(), telemetry.NewNoopLogger())
 	require.Empty(t, got)
 	require.Equal(t, cap(pending), cap(got))
+}
+
+func TestPendingItemExpired(t *testing.T) {
+	t.Parallel()
+
+	now := time.Now()
+	grace := 100 * time.Millisecond
+	oldAddTimeID := streamIDFromTime(now.Add(-time.Hour))
+
+	tests := []struct {
+		name     string
+		item     workItem
+		ackGrace time.Duration
+		want     bool
+	}{
+		{
+			name:     "zero ack grace never expires",
+			item:     workItem{ev: &streaming.Event{ID: "1-0"}, receivedAt: now.Add(-time.Hour)},
+			ackGrace: 0,
+			want:     false,
+		},
+		{
+			name:     "nil event never expires",
+			item:     workItem{receivedAt: now.Add(-time.Hour)},
+			ackGrace: grace,
+			want:     false,
+		},
+		{
+			name:     "zero receivedAt never expires",
+			item:     workItem{ev: &streaming.Event{ID: oldAddTimeID}},
+			ackGrace: grace,
+			want:     false,
+		},
+		{
+			name:     "old add-time with fresh receipt does not expire",
+			item:     workItem{ev: &streaming.Event{ID: oldAddTimeID}, receivedAt: now},
+			ackGrace: grace,
+			want:     false,
+		},
+		{
+			name:     "held locally past grace expires",
+			item:     workItem{ev: &streaming.Event{ID: currentStreamID()}, receivedAt: now.Add(-2 * grace)},
+			ackGrace: grace,
+			want:     true,
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			assert.Equal(t, tc.want, pendingItemExpired(tc.item, tc.ackGrace, now))
+		})
+	}
 }
 
 func TestServe_RespondsToPingWhileToolCallInFlight(t *testing.T) {
@@ -336,7 +388,7 @@ func TestServe_DrainsPendingWhenStreamQuiet(t *testing.T) {
 	defer cancel()
 
 	const toolset = "test.toolset"
-	harness := newProviderHarness(t, toolset)
+	harness := newProviderHarness(t)
 	handler := &recordingHandler{
 		blockFirst: true,
 		started:    make(chan struct{}),
@@ -377,14 +429,14 @@ func TestServe_DrainsPendingWhenStreamQuiet(t *testing.T) {
 	}
 }
 
-func TestServe_DropsStalePendingAfterAckGrace(t *testing.T) {
+func TestServe_ShedsPendingHeldPastAckGraceWithoutAck(t *testing.T) {
 	t.Parallel()
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
 	const toolset = "test.toolset"
-	harness := newProviderHarness(t, toolset)
+	harness := newProviderHarness(t)
 	handler := &recordingHandler{
 		blockFirst: true,
 		started:    make(chan struct{}),
@@ -402,22 +454,26 @@ func TestServe_DropsStalePendingAfterAckGrace(t *testing.T) {
 		})
 	}()
 
-	harness.events <- makeToolCallEvent(t, currentStreamID(), "tooluse_1")
+	harness.events <- makeToolCallEvent(t, "1-0", "tooluse_1")
 	select {
 	case <-handler.started:
 	case <-time.After(2 * time.Second):
 		t.Fatal("handler did not start")
 	}
 
-	staleID := streamIDFromTime(time.Now().Add(-time.Minute))
-	harness.events <- makeToolCallEvent(t, currentStreamID(), "tooluse_2")
-	harness.events <- makeToolCallEvent(t, staleID, "tooluse_3")
+	// With one blocked worker and a work queue of one, the third call lands
+	// in the pending overflow buffer and is held there past the ack grace.
+	harness.events <- makeToolCallEvent(t, "2-0", "tooluse_2")
+	harness.events <- makeToolCallEvent(t, "3-0", "tooluse_3")
 
+	// Hold the worker blocked well past the grace period so the pending item
+	// is shed. It must be dropped WITHOUT acking: acking would permanently
+	// discard a never-executed call, while the un-acked event stays on the
+	// sink for redelivery.
 	select {
 	case got := <-harness.acked:
-		require.Equal(t, staleID, got)
-	case <-time.After(2 * time.Second):
-		t.Fatal("expected stale pending event to be acked")
+		t.Fatalf("no event should be acked while the worker is blocked, got %s", got)
+	case <-time.After(150 * time.Millisecond):
 	}
 
 	close(handler.unblock)
@@ -428,9 +484,82 @@ func TestServe_DropsStalePendingAfterAckGrace(t *testing.T) {
 
 	select {
 	case got := <-handler.seen:
-		t.Fatalf("stale pending item executed unexpectedly: %s", got)
+		t.Fatalf("shed pending item executed unexpectedly: %s", got)
 	case <-time.After(100 * time.Millisecond):
 	}
+
+	acked := waitForAcks(t, harness.acked, 2)
+	require.Contains(t, acked, "1-0")
+	require.Contains(t, acked, "2-0")
+
+	select {
+	case got := <-harness.acked:
+		t.Fatalf("shed pending event must not be acked, got ack for %s", got)
+	case <-time.After(100 * time.Millisecond):
+	}
+
+	cancel()
+	select {
+	case <-time.After(2 * time.Second):
+		t.Fatal("Serve did not stop")
+	case <-errc:
+	}
+}
+
+func TestServe_ExecutesFirstDeliveryBacklogOlderThanAckGrace(t *testing.T) {
+	t.Parallel()
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	const toolset = "test.toolset"
+	harness := newProviderHarness(t)
+	handler := &recordingHandler{
+		blockFirst: true,
+		started:    make(chan struct{}),
+		unblock:    make(chan struct{}),
+		seen:       make(chan string, 8),
+	}
+
+	errc := make(chan error, 1)
+	go func() {
+		errc <- Serve(ctx, harness.client, toolset, handler, Options{
+			SinkAckGracePeriod:     2 * time.Second,
+			MaxConcurrentToolCalls: 1,
+			MaxQueuedToolCalls:     1,
+			Pong:                   func(_ context.Context, _ string) error { return nil },
+		})
+	}()
+
+	harness.events <- makeToolCallEvent(t, "1-0", "tooluse_1")
+	select {
+	case <-handler.started:
+	case <-time.After(2 * time.Second):
+		t.Fatal("handler did not start")
+	}
+
+	// The backlog event's add-time is far older than the ack grace period,
+	// but this is its FIRST delivery: it must be buffered and executed, not
+	// dropped or acked. Staleness is measured from local receipt, mirroring
+	// Pulse's PEL idle clock, so add-time age is irrelevant.
+	staleID := streamIDFromTime(time.Now().Add(-time.Minute))
+	harness.events <- makeToolCallEvent(t, "2-0", "tooluse_2")
+	harness.events <- makeToolCallEvent(t, staleID, "tooluse_3")
+
+	select {
+	case got := <-harness.acked:
+		t.Fatalf("backlog event must not be acked before execution, got ack for %s", got)
+	case <-time.After(150 * time.Millisecond):
+	}
+
+	close(handler.unblock)
+	seen := waitForToolUses(t, handler.seen, 3)
+	require.Contains(t, seen, "tooluse_1")
+	require.Contains(t, seen, "tooluse_2")
+	require.Contains(t, seen, "tooluse_3")
+
+	acked := waitForAcks(t, harness.acked, 3)
+	require.Contains(t, acked, staleID)
 
 	cancel()
 	select {
@@ -573,7 +702,7 @@ func TestServe_ReturnsWhenSubscriptionCloses(t *testing.T) {
 	defer cancel()
 
 	const toolset = "test.toolset"
-	harness := newProviderHarness(t, toolset)
+	harness := newProviderHarness(t)
 	handler := &recordingHandler{
 		seen: make(chan string, 1),
 	}
@@ -758,10 +887,14 @@ type providerHarness struct {
 	adds   *atomic.Int64
 }
 
-func newProviderHarness(t *testing.T, toolset string) providerHarness {
+// providerTestToolset is the single toolset name the provider harness serves;
+// tests asserting on names should use their own local constant equal to it.
+const providerTestToolset = "test.toolset"
+
+func newProviderHarness(t *testing.T) providerHarness {
 	t.Helper()
 
-	toolsetStreamID := toolregistry.ToolsetStreamID(toolset)
+	toolsetStreamID := toolregistry.ToolsetStreamID(providerTestToolset)
 	eventsCh := make(chan *streaming.Event, 10)
 	acked := make(chan string, 10)
 
@@ -828,6 +961,22 @@ func waitForToolUses(t *testing.T, seen <-chan string, count int) map[string]boo
 			got[toolUseID] = true
 		case <-deadline:
 			t.Fatalf("timed out waiting for %d tool calls, saw=%v", count, got)
+		}
+	}
+	return got
+}
+
+func waitForAcks(t *testing.T, acked <-chan string, count int) map[string]bool {
+	t.Helper()
+
+	got := make(map[string]bool, count)
+	deadline := time.After(2 * time.Second)
+	for len(got) < count {
+		select {
+		case id := <-acked:
+			got[id] = true
+		case <-deadline:
+			t.Fatalf("timed out waiting for %d acks, saw=%v", count, got)
 		}
 	}
 	return got

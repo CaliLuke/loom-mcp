@@ -24,10 +24,12 @@ type (
 		tracer     telemetry.Tracer
 		obs        *Observability
 
-		// Sync loop control
-		syncCtx    context.Context
-		syncCancel context.CancelFunc
-		syncWg     sync.WaitGroup
+		// Sync loop control. syncLifecycleMu serializes StartSync/StopSync so
+		// a restart cannot overlap a stop sequence (cancel + Wait); syncCancel
+		// is additionally guarded by mu for cheap "is running" checks.
+		syncLifecycleMu sync.Mutex
+		syncCancel      context.CancelFunc
+		syncWg          sync.WaitGroup
 	}
 
 	// registryEntry holds a registry client and its configuration.

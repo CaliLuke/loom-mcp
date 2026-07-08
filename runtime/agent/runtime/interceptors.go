@@ -86,7 +86,11 @@ type (
 		RunContext run.Context
 	}
 
-	// AfterRunDecision changes the run outcome.
+	// AfterRunDecision changes the run outcome. Set Output to replace the run
+	// output; when Output is set the decision's Err (including nil) also
+	// replaces the current run error. A decision with nil Output and nil Err
+	// is an observer no-op and leaves the current outcome, including any run
+	// error, unchanged.
 	AfterRunDecision struct {
 		Output *RunOutput
 		Err    error
@@ -181,7 +185,10 @@ type (
 		Err     error
 	}
 
-	// AfterEventDecision changes the event publication error.
+	// AfterEventDecision changes the event publication error. Only a non-nil
+	// Err is adopted; an empty decision is an observer no-op that preserves
+	// the current publication error, so canonical run-log append failures
+	// cannot be cleared by observer interceptors.
 	AfterEventDecision struct {
 		Err error
 	}
@@ -392,7 +399,9 @@ func runAfterRunInterceptors(ctx context.Context, interceptors []Interceptor, in
 		if decision.Output != nil {
 			currentOut = decision.Output
 		}
-		currentErr = decision.Err
+		if decision.Output != nil || decision.Err != nil {
+			currentErr = decision.Err
+		}
 	}
 	return currentOut, currentErr
 }
@@ -444,7 +453,7 @@ func runAfterEventInterceptors(ctx context.Context, interceptors []Interceptor, 
 		if err != nil {
 			return err
 		}
-		if decision != nil {
+		if decision != nil && decision.Err != nil {
 			currentErr = decision.Err
 		}
 	}

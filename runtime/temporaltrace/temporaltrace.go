@@ -69,7 +69,13 @@ const (
 // WithOriginTraceParent returns a derived context carrying the origin
 // traceparent string. This value is used to link durable execution traces back
 // to the initiating request trace.
+//
+// Invalid traceparent values are dropped and ctx is returned unchanged:
+// trace-linking is observability metadata and must never fail the workload.
 func WithOriginTraceParent(ctx context.Context, traceparent string) context.Context {
+	if _, err := ParseTraceParent(traceparent); err != nil {
+		return ctx
+	}
 	return context.WithValue(ctx, originTraceParentKey{}, traceparent)
 }
 
@@ -187,9 +193,17 @@ func (a *activityInbound) ExecuteActivity(ctx context.Context, in *interceptor.E
 	if traceparent, ok := OriginTraceParent(ctx); ok && traceparent != "" {
 		origin, err := ParseTraceParent(traceparent)
 		if err != nil {
-			return nil, err
+			// A malformed origin traceparent is an observability artifact, not a
+			// workload failure. Record it and run the activity without the link;
+			// returning the error here would permanently fail every retry.
+			activity.GetLogger(ctx).Warn(
+				"temporaltrace: ignoring invalid origin traceparent",
+				"traceparent", traceparent,
+				"error", err,
+			)
+		} else {
+			links = append(links, trace.Link{SpanContext: origin})
 		}
-		links = append(links, trace.Link{SpanContext: origin})
 	}
 
 	opts := []trace.SpanStartOption{

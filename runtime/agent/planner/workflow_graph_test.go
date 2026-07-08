@@ -361,6 +361,102 @@ func TestGraphWorkflowPlannerBranchSkipsUnselectedTargetsForLaterDependencies(t 
 	require.Equal(t, []string{"notify"}, toolCallIDs(next.ToolCalls))
 }
 
+func TestGraphWorkflowPlannerNestedBranchOnUnselectedPathDoesNotFire(t *testing.T) {
+	// Shared graph: "route" picks "publish" or the nested branch "escalate".
+	// "escalate" picks the loop "retry", the shared tool "notify", or "stop".
+	// "alert" independently picks "notify" (shared with "escalate") or "quiet".
+	nodes := []WorkflowNode{
+		{ID: "approval", Kind: WorkflowNodeTypedInput, Schema: rawjson.Message([]byte(`{"type":"object"}`))},
+		{ID: "route", Kind: WorkflowNodeBranch, DependsOn: []string{"approval"}, Branch: &WorkflowBranchConfig{
+			FromStep: "approval",
+			Cases:    []WorkflowBranchCase{{Path: "$.approved", Equals: "true", Target: "publish"}},
+			Default:  "escalate",
+		}},
+		{ID: "publish", Kind: WorkflowNodeTool, Tool: "publisher.publish", Payload: rawjson.Message([]byte(`{}`)), DependsOn: []string{"route"}},
+		{ID: "escalate", Kind: WorkflowNodeBranch, DependsOn: []string{"route"}, Branch: &WorkflowBranchConfig{
+			FromStep: "approval",
+			Cases: []WorkflowBranchCase{
+				{Path: "$.retry", Equals: "true", Target: "retry"},
+				{Path: "$.alert", Equals: "true", Target: "notify"},
+			},
+			Default: "stop",
+		}},
+		{ID: "retry", Kind: WorkflowNodeLoop, DependsOn: []string{"escalate"}, Loop: &WorkflowLoopConfig{
+			Tool:          "worker.retry",
+			Payload:       rawjson.Message([]byte(`{}`)),
+			MaxIterations: 2,
+		}},
+		{ID: "stop", Kind: WorkflowNodeTool, Tool: "publisher.stop", Payload: rawjson.Message([]byte(`{}`)), DependsOn: []string{"escalate"}},
+		{ID: "alert", Kind: WorkflowNodeBranch, DependsOn: []string{"approval"}, Branch: &WorkflowBranchConfig{
+			FromStep: "approval",
+			Cases:    []WorkflowBranchCase{{Path: "$.alert", Equals: "true", Target: "notify"}},
+			Default:  "quiet",
+		}},
+		{ID: "notify", Kind: WorkflowNodeTool, Tool: "publisher.notify", Payload: rawjson.Message([]byte(`{}`)), DependsOn: []string{"alert"}},
+		{ID: "quiet", Kind: WorkflowNodeTool, Tool: "publisher.quiet", Payload: rawjson.Message([]byte(`{}`)), DependsOn: []string{"alert"}},
+	}
+
+	cases := []struct {
+		name              string
+		approval          string
+		wantCalls         []string
+		completionOutputs []*ToolOutput
+	}{
+		{
+			name:     "nested branch on unselected path never fires",
+			approval: `{"approved":true}`,
+			// "escalate" is skipped, so its own default "stop" and case
+			// targets "retry"/"notify" must never be scheduled.
+			wantCalls: []string{"publish", "quiet"},
+			completionOutputs: []*ToolOutput{
+				{ToolCallID: "publish", Result: rawjson.Message([]byte(`{"ok":true}`))},
+				{ToolCallID: "quiet", Result: rawjson.Message([]byte(`{"ok":true}`))},
+			},
+		},
+		{
+			name:     "nested branch on selected path still fires",
+			approval: `{"retry":true}`,
+			// "route" defaults to "escalate", which selects the "retry" loop.
+			wantCalls: []string{"retry#1", "quiet"},
+			completionOutputs: []*ToolOutput{
+				{ToolCallID: "retry#1", Result: rawjson.Message([]byte(`{"ok":true}`))},
+				{ToolCallID: "retry#2", Result: rawjson.Message([]byte(`{"ok":true}`))},
+				{ToolCallID: "quiet", Result: rawjson.Message([]byte(`{"ok":true}`))},
+			},
+		},
+		{
+			name:     "diamond target of skipped and selected branch still runs",
+			approval: `{"approved":true,"alert":true}`,
+			// "escalate" is skipped but "alert" selects "notify"; the shared
+			// target must run while "retry" and "stop" stay skipped.
+			wantCalls: []string{"publish", "notify"},
+			completionOutputs: []*ToolOutput{
+				{ToolCallID: "publish", Result: rawjson.Message([]byte(`{"ok":true}`))},
+				{ToolCallID: "notify", Result: rawjson.Message([]byte(`{"ok":true}`))},
+			},
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			p := NewGraphWorkflowPlanner(WorkflowGraphConfig{Nodes: nodes, FinalMessage: "done"})
+			typedInputs := []TypedInputOutput{{ID: "approval", Payload: rawjson.Message([]byte(tc.approval))}}
+
+			next, err := p.PlanResume(context.Background(), &PlanResumeInput{TypedInputs: typedInputs})
+			require.NoError(t, err)
+			require.ElementsMatch(t, tc.wantCalls, toolCallIDs(next.ToolCalls))
+
+			final, err := p.PlanResume(context.Background(), &PlanResumeInput{
+				TypedInputs: typedInputs,
+				ToolOutputs: tc.completionOutputs,
+			})
+			require.NoError(t, err)
+			require.Empty(t, toolCallIDs(final.ToolCalls))
+			require.NotNil(t, final.FinalResponse)
+		})
+	}
+}
+
 func TestGraphWorkflowPlannerLoopUntilUsesLatestLoopIterationOutput(t *testing.T) {
 	p := NewGraphWorkflowPlanner(WorkflowGraphConfig{
 		Nodes: []WorkflowNode{

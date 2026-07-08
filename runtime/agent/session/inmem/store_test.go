@@ -50,3 +50,70 @@ func TestLinkChildRunReturnsSessionMismatchError(t *testing.T) {
 	})
 	require.ErrorIs(t, err, session.ErrRunSessionMismatch)
 }
+
+func TestUpsertRunDoesNotClobberLinkedChildren(t *testing.T) {
+	t.Parallel()
+
+	store := New()
+	now := time.Now().UTC()
+	require.NoError(t, store.UpsertRun(context.Background(), session.RunMeta{
+		RunID:     "run-parent",
+		AgentID:   "agent.parent",
+		SessionID: "sess-1",
+		Status:    session.RunStatusRunning,
+		StartedAt: now,
+		UpdatedAt: now,
+	}))
+
+	// Simulate a hook handler's load-modify-write: it loads the parent before
+	// any child is linked...
+	stale, err := store.LoadRun(context.Background(), "run-parent")
+	require.NoError(t, err)
+	require.Empty(t, stale.ChildRunIDs)
+
+	// ...then LinkChildRun commits a child concurrently...
+	require.NoError(t, store.LinkChildRun(context.Background(), "run-parent", session.RunMeta{
+		RunID:     "run-child",
+		AgentID:   "agent.child",
+		SessionID: "sess-1",
+		Status:    session.RunStatusPending,
+	}))
+
+	// ...and the hook writes back its stale snapshot. The link must survive.
+	stale.Status = session.RunStatusCompleted
+	require.NoError(t, store.UpsertRun(context.Background(), stale))
+
+	parent, err := store.LoadRun(context.Background(), "run-parent")
+	require.NoError(t, err)
+	require.Equal(t, session.RunStatusCompleted, parent.Status)
+	require.Equal(t, []string{"run-child"}, parent.ChildRunIDs)
+}
+
+func TestLinkChildRunIsIdempotent(t *testing.T) {
+	t.Parallel()
+
+	store := New()
+	now := time.Now().UTC()
+	require.NoError(t, store.UpsertRun(context.Background(), session.RunMeta{
+		RunID:     "run-parent",
+		AgentID:   "agent.parent",
+		SessionID: "sess-1",
+		Status:    session.RunStatusRunning,
+		StartedAt: now,
+		UpdatedAt: now,
+	}))
+
+	child := session.RunMeta{
+		RunID:     "run-child",
+		AgentID:   "agent.child",
+		SessionID: "sess-1",
+		Status:    session.RunStatusPending,
+	}
+	for range 3 {
+		require.NoError(t, store.LinkChildRun(context.Background(), "run-parent", child))
+	}
+
+	parent, err := store.LoadRun(context.Background(), "run-parent")
+	require.NoError(t, err)
+	require.Equal(t, []string{"run-child"}, parent.ChildRunIDs)
+}

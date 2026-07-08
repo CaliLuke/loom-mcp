@@ -15,6 +15,11 @@ import (
 
 // recordAssistantTurn merges streamed transcript parts with the declared tool calls
 // and appends the resulting assistant messages to the conversation state.
+//
+// Callers must source transcriptMsgs from runLoopState.takeTurnTranscript so the
+// streamed thinking/text of a planner turn is appended exactly once even when the
+// turn records multiple tool_use batches (immediate execution, confirmations, and
+// await handshakes each declare their own batch).
 func (r *Runtime) recordAssistantTurn(base *planner.PlanInput, transcriptMsgs []*model.Message, allowed []planner.ToolRequest, led *transcript.Ledger) {
 	if led == nil {
 		led = transcript.NewLedger()

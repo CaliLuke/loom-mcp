@@ -20,56 +20,64 @@ func TestResolvePromptRefsIncludesChildRuns(t *testing.T) {
 	_, err := store.CreateSession(context.Background(), "sess-1", now)
 	require.NoError(t, err)
 
-	require.NoError(t, store.UpsertRun(context.Background(), session.RunMeta{
-		AgentID:   "svc.parent",
-		RunID:     "run-1",
-		SessionID: "sess-1",
-		Status:    session.RunStatusCompleted,
-		StartedAt: now,
-		UpdatedAt: now,
-		PromptRefs: []prompt.PromptRef{
-			{ID: prompt.Ident("prompt.a"), Version: "v1"},
-			{ID: prompt.Ident("prompt.b"), Version: "v1"},
+	runs := []session.RunMeta{
+		{
+			AgentID:   "svc.parent",
+			RunID:     "run-1",
+			SessionID: "sess-1",
+			Status:    session.RunStatusCompleted,
+			StartedAt: now,
+			UpdatedAt: now,
+			PromptRefs: []prompt.PromptRef{
+				{ID: prompt.Ident("prompt.a"), Version: "v1"},
+				{ID: prompt.Ident("prompt.b"), Version: "v1"},
+			},
 		},
-		ChildRunIDs: []string{"run-2", "run-3"},
-	}))
-	require.NoError(t, store.UpsertRun(context.Background(), session.RunMeta{
-		AgentID:   "svc.child",
-		RunID:     "run-2",
-		SessionID: "sess-1",
-		Status:    session.RunStatusCompleted,
-		StartedAt: now,
-		UpdatedAt: now,
-		PromptRefs: []prompt.PromptRef{
-			{ID: prompt.Ident("prompt.c"), Version: "v1"},
-			{ID: prompt.Ident("prompt.a"), Version: "v1"},
+		{
+			AgentID:   "svc.child",
+			RunID:     "run-2",
+			SessionID: "sess-1",
+			Status:    session.RunStatusCompleted,
+			StartedAt: now,
+			UpdatedAt: now,
+			PromptRefs: []prompt.PromptRef{
+				{ID: prompt.Ident("prompt.c"), Version: "v1"},
+				{ID: prompt.Ident("prompt.a"), Version: "v1"},
+			},
 		},
-		ChildRunIDs: []string{"run-4"},
-	}))
-	require.NoError(t, store.UpsertRun(context.Background(), session.RunMeta{
-		AgentID:   "svc.child",
-		RunID:     "run-3",
-		SessionID: "sess-1",
-		Status:    session.RunStatusCompleted,
-		StartedAt: now,
-		UpdatedAt: now,
-		PromptRefs: []prompt.PromptRef{
-			{ID: prompt.Ident("prompt.d"), Version: "v1"},
+		{
+			AgentID:   "svc.child",
+			RunID:     "run-3",
+			SessionID: "sess-1",
+			Status:    session.RunStatusCompleted,
+			StartedAt: now,
+			UpdatedAt: now,
+			PromptRefs: []prompt.PromptRef{
+				{ID: prompt.Ident("prompt.d"), Version: "v1"},
+			},
 		},
-	}))
-	require.NoError(t, store.UpsertRun(context.Background(), session.RunMeta{
-		AgentID:   "svc.child",
-		RunID:     "run-4",
-		SessionID: "sess-1",
-		Status:    session.RunStatusCompleted,
-		StartedAt: now,
-		UpdatedAt: now,
-		PromptRefs: []prompt.PromptRef{
-			{ID: prompt.Ident("prompt.e"), Version: "v2"},
+		{
+			AgentID:   "svc.child",
+			RunID:     "run-4",
+			SessionID: "sess-1",
+			Status:    session.RunStatusCompleted,
+			StartedAt: now,
+			UpdatedAt: now,
+			PromptRefs: []prompt.PromptRef{
+				{ID: prompt.Ident("prompt.e"), Version: "v2"},
+			},
 		},
-		// Cycle to validate traversal remains bounded.
-		ChildRunIDs: []string{"run-1"},
-	}))
+	}
+	for _, run := range runs {
+		require.NoError(t, store.UpsertRun(context.Background(), run))
+	}
+
+	// Child links are exclusively managed by LinkChildRun.
+	require.NoError(t, store.LinkChildRun(context.Background(), "run-1", runs[1]))
+	require.NoError(t, store.LinkChildRun(context.Background(), "run-1", runs[2]))
+	require.NoError(t, store.LinkChildRun(context.Background(), "run-2", runs[3]))
+	// Cycle to validate traversal remains bounded.
+	require.NoError(t, store.LinkChildRun(context.Background(), "run-4", runs[0]))
 
 	refs, err := session.ResolvePromptRefs(context.Background(), store, "run-1")
 	require.NoError(t, err)

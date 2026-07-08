@@ -105,6 +105,12 @@ func (s *Store) EndSession(_ context.Context, sessionID string, endedAt time.Tim
 }
 
 // UpsertRun implements session.Store.
+//
+// ChildRunIDs is intentionally excluded from the update: parent-child links
+// are exclusively managed by LinkChildRun, so callers doing load-modify-write
+// (for example runtime hook handlers) can never erase links committed
+// concurrently by LinkChildRun. Any RunMeta.ChildRunIDs value passed here is
+// ignored and the stored links are preserved.
 func (s *Store) UpsertRun(_ context.Context, run session.RunMeta) error {
 	if run.RunID == "" {
 		return errors.New("run id is required")
@@ -132,11 +138,19 @@ func (s *Store) UpsertRun(_ context.Context, run session.RunMeta) error {
 	}
 	run.UpdatedAt = now
 
+	// Child links are owned by LinkChildRun; keep the committed links and
+	// drop whatever the caller passed.
+	run.ChildRunIDs = existing.ChildRunIDs
+
 	s.runs[run.RunID] = cloneRunMeta(run)
 	return nil
 }
 
 // LinkChildRun implements session.Store.
+//
+// Linking is idempotent: the child run ID is appended to the parent's
+// ChildRunIDs only if it is not already present, so repeated links never
+// duplicate entries.
 func (s *Store) LinkChildRun(_ context.Context, parentRunID string, child session.RunMeta) error {
 	if err := session.ValidateChildRunLink(parentRunID, child); err != nil {
 		return err
@@ -166,6 +180,9 @@ func (s *Store) LinkChildRun(_ context.Context, parentRunID string, child sessio
 			child.StartedAt = now
 		}
 		child.UpdatedAt = now
+		// New runs start without child links; links are added via
+		// LinkChildRun only, matching the UpsertRun contract.
+		child.ChildRunIDs = nil
 		s.runs[child.RunID] = cloneRunMeta(child)
 	}
 
