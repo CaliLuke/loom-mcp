@@ -579,6 +579,12 @@ Agent("orchestrator", "Main coordinator", func() {
 })
 ```
 
+Cross-agent references resolve after the whole design is evaluated, so service
+declaration order never affects `Use(AgentToolset(...))` or `Use(handle)`
+references — including references to `Export(handle)` clones of shared
+toolsets. Cross-agent toolset references must be acyclic; a cycle of
+`AgentToolset` references fails design evaluation with a DSL error.
+
 ### Passthrough
 
 `Passthrough` defines deterministic forwarding for an exported tool to a service method.
@@ -1566,9 +1572,12 @@ handling.
 | `Subscription(...)`          | Subscription handlers                                  |
 | `SubscriptionMonitor(...)`   | SSE subscription monitors                              |
 
-Generated MCP initialize results advertise the non-standard events surface under
-`capabilities.experimental["loom-mcp"].events`, including `events/stream` and
-generated notification method names.
+Generated JSON-RPC transport servers advertise the non-standard events surface
+under `capabilities.experimental["loom-mcp"].events` in their initialize
+results, including `events/stream` and generated notification method names.
+SDK-mode servers do not advertise it: the upstream SDK streamable HTTP
+transport owns the GET SSE channel, so the `events/stream` method is not
+routable there.
 
 Generated adapters also support runtime-configured progressive discovery for
 large MCP catalogs. Set `MCPAdapterOptions.ToolSearch` (or

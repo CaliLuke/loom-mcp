@@ -37,8 +37,9 @@ http.ListenAndServe(":8080", mux)
 ```
 
 `server.Handler` is a standard `http.Handler`. It accepts both POST (the
-MCP streamable-HTTP JSON-RPC channel) and GET (the `events/stream` SSE
-listener) on the same path.
+MCP streamable-HTTP JSON-RPC channel) and GET (the upstream SDK's standalone
+SSE listener) on the same path. The loom-specific `events/stream` method is a
+JSON-RPC-transport feature and is not routed (nor advertised) in SDK mode.
 
 ## SDKServerOptions
 

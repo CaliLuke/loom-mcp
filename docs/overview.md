@@ -1083,6 +1083,7 @@ type MySink struct{}
 func (s *MySink) Send(ctx context.Context, event stream.Event) error {
     // Handle: assistant_reply, planner_thought, tool_start,
     //         tool_update, tool_end, await_clarification,
+    //         await_confirmation, await_questions, await_typed_input,
     //         await_external_tools, usage, workflow, child_run_linked
     return nil
 }

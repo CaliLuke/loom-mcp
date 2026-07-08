@@ -451,6 +451,9 @@ join barriers, typed human-input nodes, branch targets, and bounded loops. It
 derives tool completion from stable node/tool-call IDs in accumulated
 `ToolOutputs`, and typed-input completion from `PlanResumeInput.TypedInputs`, so
 resuming after partial parallel completion schedules only the remaining ready nodes.
+Branch selection deactivates the entire unselected path: a nested branch on a
+not-taken path never resolves, and its own targets are skipped transitively,
+while a node that is also the target of a selected branch still runs.
 
 Typed human-input nodes emit `AwaitTypedInput` and resume through
 `Runtime.ProvideTypedInput`; typed answers are kept separate from tool execution
@@ -777,6 +780,13 @@ Key mutation rules:
 - `BeforeEvent` runs in `runtime.publish_hook` before runlog append, stream
   publish, and hook-bus publish. Returning `Drop` makes the event absent from all
   three surfaces.
+- Empty `After*` decisions are observer no-ops. `AfterTool`, `AfterRun`, and
+  `AfterModel` adopt the decision's `Err` (including a nil `Err`, which clears
+  the current error) only when the decision also replaces the result
+  (`Execution`/`Result`, `Output`, or `Response`) or carries a non-nil `Err`.
+  `AfterEvent` adopts only a non-nil `Err`; observer interceptors can never
+  clear an event publication error, so a failed canonical run-log append still
+  fails the run.
 - Interceptor errors short-circuit the active path.
 
 `runtime.NewRetryAndReflectInterceptor(...)` implements the tool path to convert
@@ -1176,7 +1186,11 @@ return &planner.PlanResult{
 }
 ```
 
-The runtime emits an `AwaitTypedInput` hook event. Callers resume with:
+The runtime emits an `AwaitTypedInput` hook event, which the stream subscriber
+forwards to clients as an `await_typed_input` stream event (`AwaitTypedInputPayload`
+with `id`, `title`, and `schema`) alongside a `workflow` event with
+`phase="paused"`, so UIs can render an input form instead of showing the run as
+hung. Callers resume with:
 
 ```go
 err := rt.ProvideTypedInput(ctx, &api.TypedInputAnswer{
@@ -1356,6 +1370,9 @@ type Sink interface {
 | `assistant_reply`      | `AssistantReplyPayload` (text)                                               |
 | `planner_thought`      | `PlannerThoughtPayload` (note, thinking blocks)                              |
 | `await_clarification`  | `AwaitClarificationPayload`                                                  |
+| `await_confirmation`   | `AwaitConfirmationPayload`                                                   |
+| `await_questions`      | `AwaitQuestionsPayload`                                                      |
+| `await_typed_input`    | `AwaitTypedInputPayload` (`id`, `title`, `schema`)                           |
 | `await_external_tools` | `AwaitExternalToolsPayload`                                                  |
 | `usage`                | `UsagePayload` (input_tokens, output_tokens)                                 |
 | `workflow`             | `WorkflowPayload` (phase, status, error_kind, retryable, error, debug_error) |
@@ -1384,11 +1401,13 @@ stream.MetricsProfile()
 The runtime emits:
 
 - `RunPhaseChanged` hook events for **non-terminal** phase transitions (`planning`, `executing_tools`, `synthesizing`, etc.)
+- `RunPaused` hook events when execution is suspended awaiting external action (awaits, manual pause)
 - a single `RunCompleted` hook event per run for the **terminal** lifecycle state
 
 The stream subscriber translates these into `workflow` stream events:
 
 - **Non-terminal updates** (from `RunPhaseChanged`): `phase` only.
+- **Pause updates** (from `RunPaused`): `phase="paused"` plus `reason` (for example, `await_queue` or `await_clarification`). The stream does not end; the run resumes when the awaited input arrives.
 - **Terminal update** (from `RunCompleted`): `status` + terminal `phase`.
 
 Terminal status mapping:
@@ -1588,6 +1607,12 @@ The runtime exposes:
 
 - `Runtime.ListRunEvents(ctx, runID, cursor, limit)` for cursor-paginated listing
 - `Runtime.GetRunSnapshot(ctx, runID)` for a compact snapshot derived from replaying the run log
+
+The snapshot projects every await variant (`await_clarification`,
+`await_confirmation`, `await_questions`, `await_typed_input`,
+`await_external_tools`) into `Snapshot.Await`, and maps `run_paused` /
+`run_resumed` events to `Status` `"paused"` / `"running"`. A resumed or
+completed run always reports `Await == nil`.
 
 Configure the store via `runtime.WithRunEventStore(...)`. If not set, the runtime
 defaults to an in-memory implementation (`runtime/agent/runlog/inmem`).
@@ -1819,6 +1844,11 @@ Gemini and OpenAI adapters.
 The OpenAI adapter projects tool and structured-output schemas into the
 provider's strict-mode JSON Schema subset and canonicalizes strict-mode `null`
 omissions back to absent fields before returning tool or structured payloads.
+Like the Anthropic and Bedrock adapters, it also translates canonical dotted
+tool identifiers (`toolset.tool`) into provider-safe function names
+(`[a-zA-Z0-9_-]`, at most 64 characters) on the wire and maps returned
+function-call names back to canonical identifiers, failing fast when two tool
+names sanitize to the same provider name.
 
 When planners render prompts through `RenderPrompt`, copy prompt provenance into model requests:
 
@@ -2163,6 +2193,23 @@ The same package also exposes canonical JSON helpers used at MCP boundaries.
 Those helpers accept string-keyed maps, including named string aliases, and
 fail fast on unsupported map key kinds instead of silently dropping entries.
 
+### Generated JSON-RPC transport conformance
+
+Generated JSON-RPC clients satisfy the MCP streamable HTTP transport contract
+without hand-written wrappers: every request carries
+`Accept: application/json, text/event-stream`, the `Mcp-Session-Id` returned by
+`initialize` is captured and replayed on all subsequent requests, and the
+negotiated protocol version is sent alongside the session id.
+
+Generated JSON-RPC servers accept requests that omit optional params (for
+example `tools/list` without a `params` key), emit the final streamed
+`tools/call` response as a default `message` SSE event, and validate the
+`Origin` header against DNS rebinding through the exported
+`MCPCrossOriginProtection` variable in the generated server package. The
+default is `net/http.NewCrossOriginProtection()` (same-origin plus non-browser
+requests), matching the SDK transport default; call `AddTrustedOrigin` on it or
+set it to `nil` before mounting to change the policy.
+
 ### Generated MCP tool search
 
 Generated MCP adapters can opt into progressive discovery with
@@ -2455,7 +2502,13 @@ rt.RegisterModel("bedrock", limitedClient)
 ```
 
 The rate limiter automatically adjusts throughput based on provider responses and
-handles 429 (rate limited) errors with exponential backoff.
+handles 429 (rate limited) errors with exponential backoff. Backoff and recovery
+adjust only the bucket's refill rate; the burst capacity stays pinned at the
+configured max TPM, so a request whose estimated cost fits within max TPM always
+waits for capacity rather than being rejected after backoffs shrink the budget.
+A request estimated above max TPM can never be admitted and fails fast with
+`middleware.ErrRequestTooLarge`; raise the limiter's max TPM or reduce the
+request size.
 
 ---
 
@@ -2495,6 +2548,13 @@ defer cancel()
 
 // Consume until you observe `type=="run_stream_end"` for the active run ID.
 ```
+
+The `errs` channel is best-effort and never blocks event delivery, so draining
+it is optional. Decode errors that arrive while its one-slot buffer is full are
+dropped and counted (see `Subscriber.DroppedErrors`). Terminal errors (ack
+failures) evict any pending decode error so the terminal cause is always
+delivered, then both channels close — ranging over `events` alone is enough to
+observe termination.
 
 ### Custom Tool Executor
 
