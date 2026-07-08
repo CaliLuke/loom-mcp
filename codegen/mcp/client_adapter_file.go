@@ -282,11 +282,11 @@ func emitClientAdapterNewEndpoints(stmt *jen.Statement, data *clientAdapterFileD
 		).
 		Op("*").Id(data.ServicePkg).Dot("Endpoints").
 		BlockFunc(func(g *jen.Group) {
-			g.Id("sessionDoer").Op(":=").Op("&").Id("sessionAwareDoer").Values(jen.Dict{
-				jen.Id("base"):            jen.Id("doer"),
-				jen.Id("protocolVersion"): jen.Id(data.MCPPkgAlias).Dot("DefaultProtocolVersion"),
-			})
 			if data.NeedsMCPClient {
+				g.Id("sessionDoer").Op(":=").Op("&").Id("sessionAwareDoer").Values(jen.Dict{
+					jen.Id("base"):            jen.Id("doer"),
+					jen.Id("protocolVersion"): jen.Id(data.MCPPkgAlias).Dot("DefaultProtocolVersion"),
+				})
 				g.Id("mcpC").Op(":=").Id(data.MCPJSONRPCCAlias).Dot("NewClient").Call(
 					jen.Id("scheme"),
 					jen.Id("host"),

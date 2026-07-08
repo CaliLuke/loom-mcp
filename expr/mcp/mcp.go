@@ -438,6 +438,11 @@ func (m *MCPExpr) Validate() error {
 	mergeChildErrors(verr, m.Notifications, notificationValidator)
 	mergeChildErrors(verr, m.Subscriptions, subscriptionValidator)
 	mergeChildErrors(verr, m.SubscriptionMonitors, subscriptionMonitorValidator)
+	validateUniqueToolNames(verr, m.Tools)
+	validateSingleToolPerMethod(verr, m.Tools)
+	validateUniqueResourceNames(verr, m.Resources)
+	validateUniqueResourceURIs(verr, m.Resources)
+	validateUniquePromptNames(verr, m.Prompts)
 	validateUniqueNotificationNames(verr, m.Notifications)
 	validateSubscriptionResources(verr, m.Resources, m.Subscriptions)
 	validateUniqueSubscriptionResourceNames(verr, m.Subscriptions)
@@ -469,6 +474,76 @@ func subscriptionMonitorValidator(s *SubscriptionMonitorExpr) error {
 }
 func skillDirectoryValidator(s *SkillDirectoryExpr) error {
 	return s.Validate()
+}
+
+func validateUniqueToolNames(verr *eval.ValidationErrors, tools []*ToolExpr) {
+	seen := make(map[string]*ToolExpr, len(tools))
+	for _, tool := range tools {
+		if tool == nil || strings.TrimSpace(tool.Name) == "" {
+			continue
+		}
+		if other, dup := seen[tool.Name]; dup {
+			verr.Add(tool, "tool name %q duplicates tool %q declared for method %q", tool.Name, other.Name, methodName(other.Method))
+			continue
+		}
+		seen[tool.Name] = tool
+	}
+}
+
+func validateSingleToolPerMethod(verr *eval.ValidationErrors, tools []*ToolExpr) {
+	seen := make(map[string]*ToolExpr, len(tools))
+	for _, tool := range tools {
+		if tool == nil || tool.Method == nil || strings.TrimSpace(tool.Method.Name) == "" {
+			continue
+		}
+		if other, dup := seen[tool.Method.Name]; dup {
+			verr.Add(tool, "method %q declares multiple MCP tools that generate helper collisions: %q and %q", tool.Method.Name, other.Name, tool.Name)
+			continue
+		}
+		seen[tool.Method.Name] = tool
+	}
+}
+
+func validateUniqueResourceNames(verr *eval.ValidationErrors, resources []*ResourceExpr) {
+	seen := make(map[string]*ResourceExpr, len(resources))
+	for _, resource := range resources {
+		if resource == nil || strings.TrimSpace(resource.Name) == "" {
+			continue
+		}
+		if other, dup := seen[resource.Name]; dup {
+			verr.Add(resource, "resource name %q duplicates resource declared for method %q", resource.Name, methodName(other.Method))
+			continue
+		}
+		seen[resource.Name] = resource
+	}
+}
+
+func validateUniqueResourceURIs(verr *eval.ValidationErrors, resources []*ResourceExpr) {
+	seen := make(map[string]*ResourceExpr, len(resources))
+	for _, resource := range resources {
+		if resource == nil || strings.TrimSpace(resource.URI) == "" {
+			continue
+		}
+		if other, dup := seen[resource.URI]; dup {
+			verr.Add(resource, "resource URI %q duplicates resource %q declared for method %q", resource.URI, other.Name, methodName(other.Method))
+			continue
+		}
+		seen[resource.URI] = resource
+	}
+}
+
+func validateUniquePromptNames(verr *eval.ValidationErrors, prompts []*PromptExpr) {
+	seen := make(map[string]*PromptExpr, len(prompts))
+	for _, prompt := range prompts {
+		if prompt == nil || strings.TrimSpace(prompt.Name) == "" {
+			continue
+		}
+		if other, dup := seen[prompt.Name]; dup {
+			verr.Add(prompt, "prompt name %q duplicates prompt declared in %s", prompt.Name, other.EvalName())
+			continue
+		}
+		seen[prompt.Name] = prompt
+	}
 }
 
 func validateUniqueNotificationNames(verr *eval.ValidationErrors, notifications []*NotificationExpr) {
@@ -535,6 +610,13 @@ func validateUniqueSubscriptionMonitorNames(verr *eval.ValidationErrors, monitor
 		}
 		seen[monitor.Name] = monitor
 	}
+}
+
+func methodName(method *expr.MethodExpr) string {
+	if method == nil {
+		return "<unknown>"
+	}
+	return method.Name
 }
 
 func mergeChildErrors[T any](dst *eval.ValidationErrors, items []T, validate func(T) error) {

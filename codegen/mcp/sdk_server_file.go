@@ -89,6 +89,7 @@ func sdkServerTypesSection(data *AdapterData) codegen.Section {
 		)
 		stmt.Line()
 		stmt.Type().Id("sdkToolCallCollector").Struct(
+			jen.Id("adapter").Op("*").Id("MCPAdapter"),
 			jen.Id("parts").Index().Op("*").Id("ToolsCallResult"),
 			jen.Id("final").Op("*").Id("ToolsCallResult"),
 			jen.Id("streamErr").Error(),
@@ -852,7 +853,7 @@ func sdkServerHandlerSection(data *AdapterData) codegen.Section {
 							jen.Id("payload").Dot("Arguments").Op("=").Id("req").Dot("Params").Dot("Arguments"),
 						),
 						jen.Id("ctx").Op("=").Id("a").Dot("sdkRequestContext").Call(jen.Id("ctx"), jen.Id("req").Dot("GetSession").Call(), jen.Id("req").Dot("GetExtra").Call(), jen.Id("requestContext")),
-						jen.Id("stream").Op(":=").Op("&").Id("sdkToolCallCollector").Values(),
+						jen.Id("stream").Op(":=").Op("&").Id("sdkToolCallCollector").Values(jen.Dict{jen.Id("adapter"): jen.Id("a")}),
 						jen.If(jen.Id("err").Op(":=").Id("a").Dot("ToolsCall").Call(jen.Id("ctx"), jen.Id("payload"), jen.Id("stream")), jen.Id("err").Op("!=").Nil()).Block(
 							jen.Return(jen.Nil(), jen.Id("err")),
 						),
@@ -1126,9 +1127,16 @@ func emitSDKCollectorMethods(stmt *jen.Statement) {
 				jen.Return(jen.Op("&").Id("ToolsCallResult").Values()),
 			),
 			jen.If(jen.Id("c").Dot("streamErr").Op("!=").Nil()).Block(
+				jen.Id("mapped").Op(":=").Id("c").Dot("streamErr"),
+				jen.If(jen.Id("c").Dot("adapter").Op("!=").Nil()).Block(
+					jen.Id("mapped").Op("=").Id("c").Dot("adapter").Dot("mapError").Call(jen.Id("c").Dot("streamErr")),
+				),
+				jen.If(jen.Id("mapped").Op("==").Nil()).Block(
+					jen.Id("mapped").Op("=").Id("c").Dot("streamErr"),
+				),
 				jen.Id("item").Op(":=").Op("&").Id("ContentItem").Values(jen.Dict{
 					jen.Id("Type"): jen.Lit("text"),
-					jen.Id("Text"): jen.Id("stringPtr").Call(jen.Id("c").Dot("streamErr").Dot("Error").Call()),
+					jen.Id("Text"): jen.Id("stringPtr").Call(jen.Id("formatToolErrorText").Call(jen.Id("mapped"))),
 				}),
 				jen.Return(jen.Op("&").Id("ToolsCallResult").Values(jen.Dict{
 					jen.Id("Content"): jen.Index().Op("*").Id("ContentItem").Values(jen.Id("item")),

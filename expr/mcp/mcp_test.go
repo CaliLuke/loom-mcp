@@ -64,6 +64,60 @@ func TestMCPExpr_Validate(t *testing.T) {
 	}
 }
 
+func TestMCPExpr_ValidateRejectsDuplicateToolNames(t *testing.T) {
+	mcp := validMCPExpr()
+	mcp.Tools = []*ToolExpr{
+		{Name: "lookup", Description: "Lookup one", Method: &expr.MethodExpr{Name: "lookup_one"}},
+		{Name: "lookup", Description: "Lookup two", Method: &expr.MethodExpr{Name: "lookup_two"}},
+	}
+
+	err := mcp.Validate()
+
+	require.ErrorContains(t, err, `tool name "lookup" duplicates`)
+	require.ErrorContains(t, err, `method "lookup_one"`)
+}
+
+func TestMCPExpr_ValidateRejectsMultipleToolsOnOneMethod(t *testing.T) {
+	method := &expr.MethodExpr{Name: "lookup"}
+	mcp := validMCPExpr()
+	mcp.Tools = []*ToolExpr{
+		{Name: "lookup_fast", Description: "Lookup quickly", Method: method},
+		{Name: "lookup_deep", Description: "Lookup deeply", Method: method},
+	}
+
+	err := mcp.Validate()
+
+	require.ErrorContains(t, err, `method "lookup" declares multiple MCP tools that generate helper collisions`)
+	require.ErrorContains(t, err, `"lookup_fast" and "lookup_deep"`)
+}
+
+func TestMCPExpr_ValidateRejectsDuplicatePromptNames(t *testing.T) {
+	mcp := validMCPExpr()
+	mcp.Prompts = []*PromptExpr{
+		{Name: "summarize", Messages: []*MessageExpr{{Role: "user", Content: "Summarize this"}}},
+		{Name: "summarize", Messages: []*MessageExpr{{Role: "user", Content: "Summarize that"}}},
+	}
+
+	err := mcp.Validate()
+
+	require.ErrorContains(t, err, `prompt name "summarize" duplicates`)
+}
+
+func TestMCPExpr_ValidateRejectsDuplicateResourceNamesAndURIs(t *testing.T) {
+	mcp := validMCPExpr()
+	mcp.Resources = []*ResourceExpr{
+		{Name: "document", URI: "doc://one", Method: &expr.MethodExpr{Name: "read_one"}},
+		{Name: "document", URI: "doc://two", Method: &expr.MethodExpr{Name: "read_two"}},
+		{Name: "archive", URI: "doc://one", Method: &expr.MethodExpr{Name: "read_archive"}},
+	}
+
+	err := mcp.Validate()
+
+	require.ErrorContains(t, err, `resource name "document" duplicates`)
+	require.ErrorContains(t, err, `method "read_one"`)
+	require.ErrorContains(t, err, `resource URI "doc://one" duplicates`)
+}
+
 func TestMCPExpr_Finalize(t *testing.T) {
 	t.Run("sets default transport", func(t *testing.T) {
 		m := &MCPExpr{
@@ -107,6 +161,14 @@ func TestMCPExpr_Finalize(t *testing.T) {
 		require.True(t, m.Capabilities.EnableResources)
 		require.True(t, m.Capabilities.EnablePrompts)
 	})
+}
+
+func validMCPExpr() *MCPExpr {
+	return &MCPExpr{
+		Name:    "test-server",
+		Version: "1.0.0",
+		Service: &expr.ServiceExpr{Name: "test-service"},
+	}
 }
 
 func TestToolExpr_Validate(t *testing.T) {

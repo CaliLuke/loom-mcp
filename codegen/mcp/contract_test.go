@@ -408,6 +408,42 @@ func TestGenerateMCPClientAdapter_RendersOriginalClientForDynamicPrompts(t *test
 	require.Contains(t, rendered, "origC.BuildGeneratePromptRequest")
 }
 
+func TestGenerateMCPClientAdapter_StaticPromptsOnlyDoesNotDeclareSessionDoer(t *testing.T) {
+	restore := resetMCPCodegenState(t)
+	defer restore()
+
+	svc, _ := testService("assistant")
+	mcp := &mcpexpr.MCPExpr{
+		Name:    "assistant-mcp",
+		Version: "1.0.0",
+		Prompts: []*mcpexpr.PromptExpr{
+			{
+				Name: "summarize",
+				Messages: []*mcpexpr.MessageExpr{
+					{Role: "user", Content: "Summarize"},
+				},
+			},
+		},
+	}
+	data, err := newAdapterGenerator(
+		"example.com/assistant/gen",
+		svc,
+		mcp,
+		newMCPExprBuilder(svc, mcp, nil).BuildServiceMapping(),
+		nil,
+	).buildAdapterData()
+
+	require.NoError(t, err)
+	require.False(t, data.NeedsMCPClient)
+	files := generateMCPClientAdapter("example.com/assistant/gen", svc, data)
+
+	require.Len(t, files, 1)
+	rendered := renderGeneratedFile(t, files[0])
+	require.NotContains(t, rendered, "sessionDoer :=")
+	require.NotContains(t, rendered, "mcpC :=")
+	require.Contains(t, rendered, "e := &assistant.Endpoints{}")
+}
+
 func TestGeneratePromptProvider_RendersRuntimePromptRegistrar(t *testing.T) {
 	restore := resetMCPCodegenState(t)
 	defer restore()
@@ -476,6 +512,13 @@ func TestGenerateAdapter_RendersSkillResourceProvider(t *testing.T) {
 	require.Contains(t, rendered, `skillResources, err := mcpskills.List(ctx, skillSources)`)
 	require.Contains(t, rendered, `if strings.HasPrefix(baseURI, "skill://") {`)
 	require.Contains(t, rendered, `content, err := mcpskills.Read(ctx, skillSources, baseURI)`)
+	require.Contains(t, rendered, `a.log(ctx, "error", map[string]any{`)
+	require.Contains(t, rendered, `"error":  err.Error(),`)
+	require.Contains(t, rendered, `if errors.Is(err, mcpskills.ErrInvalidURI) {`)
+	require.Contains(t, rendered, `} else if errors.Is(err, mcpskills.ErrNotFound) {`)
+	require.Contains(t, rendered, `message := fmt.Sprintf("Unable to read skill resource: %s", baseURI)`)
+	require.Contains(t, rendered, `return nil, a.safeMCPError(loom.PermanentError(code, "%s", message), code, message)`)
+	require.NotContains(t, rendered, `loom.PermanentError("invalid_params", "%s", err.Error())`)
 }
 
 func TestGenerateAdapter_RendersSessionScopedEventPublishing(t *testing.T) {
@@ -555,6 +598,43 @@ func TestGenerateSDKServer_MergesContextRequestHeadersIntoSyntheticRequest(t *te
 	extraLoopIdx := strings.Index(rendered, "for key, values := range extra.Header")
 	require.GreaterOrEqual(t, extraLoopIdx, 0, "synthetic request must overlay extra.Header values")
 	require.Greater(t, extraLoopIdx, ctxLoopIdx, "extra.Header overlay must come after the RequestHeadersFromContext copy so per-call headers win over the ctx-bridged values")
+}
+
+func TestGenerateSDKServer_SanitizesCollectedToolStreamErrors(t *testing.T) {
+	restore := resetMCPCodegenState(t)
+	defer restore()
+
+	svc, methods := testService("assistant", "system_info")
+	methods["system_info"].Result = &expr.AttributeExpr{Type: expr.Empty}
+	root := testRootExpr([]*expr.ServiceExpr{svc}, []*expr.HTTPServiceExpr{
+		jsonrpcService(svc, "/rpc"),
+	})
+	mcp := &mcpexpr.MCPExpr{
+		Name:    "assistant-mcp",
+		Version: "1.0.0",
+		Tools: []*mcpexpr.ToolExpr{
+			{Name: "system_info", Method: methods["system_info"]},
+		},
+	}
+	mcpexpr.Root.RegisterMCP(svc, mcp)
+
+	files, err := Generate("example.com/assistant/gen", []eval.Root{root}, nil)
+	require.NoError(t, err)
+
+	var rendered string
+	for _, file := range files {
+		if filepath.Base(file.Path) == "sdk_server.go" {
+			rendered = renderGeneratedFile(t, file)
+			break
+		}
+	}
+
+	require.NotEmpty(t, rendered)
+	require.Contains(t, rendered, `adapter *MCPAdapter`)
+	require.Contains(t, rendered, `stream := &sdkToolCallCollector{adapter: a}`)
+	require.Contains(t, rendered, `mapped = c.adapter.mapError(c.streamErr)`)
+	require.Contains(t, rendered, `Text: stringPtr(formatToolErrorText(mapped))`)
+	require.NotContains(t, rendered, `streamErr.Error()`)
 }
 
 func TestGenerateSDKServer_CompletionTotalCountsAllMatchesBeforeTruncation(t *testing.T) {
@@ -752,6 +832,64 @@ func TestBuildAdapterData_DefaultedEnumFieldsStayScalarAndReapplyDefaults(t *tes
 	require.NotContains(t, rendered, "*payload.WorkflowID")
 }
 
+func TestGenerateMCPTransport_EnumValidationTreatsOptionalPointerNullAsAbsent(t *testing.T) {
+	restore := resetMCPCodegenState(t)
+	defer restore()
+
+	svc, methods := testService("assistant", "get_workflow")
+	methods["get_workflow"].Payload = &expr.AttributeExpr{
+		Type: &expr.Object{
+			{
+				Name: "mode",
+				Attribute: &expr.AttributeExpr{
+					Type: expr.String,
+					Validation: &expr.ValidationExpr{
+						Values: []any{"draft", "final"},
+					},
+				},
+			},
+			{
+				Name: "tone",
+				Attribute: &expr.AttributeExpr{
+					Type: expr.String,
+					Validation: &expr.ValidationExpr{
+						Values: []any{"brief", "detailed"},
+					},
+				},
+			},
+		},
+		Validation: &expr.ValidationExpr{Required: []string{"tone"}},
+	}
+	mcp := &mcpexpr.MCPExpr{
+		Name:    "assistant-mcp",
+		Version: "1.0.0",
+		Tools: []*mcpexpr.ToolExpr{
+			{Name: "get_workflow", Method: methods["get_workflow"]},
+		},
+	}
+	data, err := newAdapterGenerator(
+		"example.com/assistant/gen",
+		svc,
+		mcp,
+		newMCPExprBuilder(svc, mcp, nil).BuildServiceMapping(),
+		nil,
+	).buildAdapterData()
+
+	require.NoError(t, err)
+	require.Len(t, data.Tools, 1)
+	require.True(t, data.Tools[0].EnumFieldsPtr["mode"])
+	require.False(t, data.Tools[0].EnumFieldsPtr["tone"])
+
+	files := generateMCPTransport("example.com/assistant/gen", svc, data)
+	adapterFile := findGeneratedFile(t, files, filepath.Join(gcodegen.Gendir, "mcp_assistant", "adapter_server.go"))
+	rendered := renderGeneratedFile(t, adapterFile)
+
+	require.Contains(t, rendered, "func validateMCPPayloadEnum(fields map[string]json.RawMessage, field string, optional bool, allowed ...string) error")
+	require.Contains(t, rendered, `if optional && bytes.Equal(trimmed, []byte("null")) {`)
+	require.Contains(t, rendered, `validateMCPPayloadEnum(rawFields, "mode", true, "draft", "final")`)
+	require.Contains(t, rendered, `validateMCPPayloadEnum(rawFields, "tone", false, "brief", "detailed")`)
+}
+
 func TestGenerateMCPTransport_UnknownEntitiesUseMCPErrorNames(t *testing.T) {
 	restore := resetMCPCodegenState(t)
 	defer restore()
@@ -802,6 +940,54 @@ func TestGenerateMCPTransport_UnknownEntitiesUseMCPErrorNames(t *testing.T) {
 	require.NotContains(t, rendered, `loom.PermanentError("method_not_found", "Unknown tool: %s"`)
 	require.NotContains(t, rendered, `loom.PermanentError("method_not_found", "Unknown resource: %s"`)
 	require.NotContains(t, rendered, `loom.PermanentError("method_not_found", "Unknown prompt: %s"`)
+}
+
+func TestGenerateAdapter_RendersSafeResourceAndPromptErrors(t *testing.T) {
+	restore := resetMCPCodegenState(t)
+	defer restore()
+
+	svc, methods := testService("assistant", "read_document")
+	methods["read_document"].Payload = testResourceQueryPayload()
+	mcp := &mcpexpr.MCPExpr{
+		Name:    "assistant-mcp",
+		Version: "1.0.0",
+		Resources: []*mcpexpr.ResourceExpr{
+			{Name: "documents", URI: "doc://list", Method: methods["read_document"]},
+		},
+		Prompts: []*mcpexpr.PromptExpr{
+			{
+				Name:        "summarize",
+				Description: "Summarize a workflow",
+				Messages: []*mcpexpr.MessageExpr{
+					{Role: "user", Content: "Summarize"},
+				},
+			},
+		},
+	}
+	data, err := newAdapterGenerator(
+		"example.com/assistant/gen",
+		svc,
+		mcp,
+		newMCPExprBuilder(svc, mcp, nil).BuildServiceMapping(),
+		nil,
+	).buildAdapterData()
+	require.NoError(t, err)
+
+	files := generateMCPTransport("example.com/assistant/gen", svc, data)
+	adapterFile := findGeneratedFile(t, files, "gen/mcp_assistant/adapter_server.go")
+	rendered := renderGeneratedFile(t, adapterFile)
+
+	require.Contains(t, rendered, `func (a *MCPAdapter) safeMCPError(err error, defaultCode string, fallbackMessage string) error {`)
+	require.Contains(t, rendered, `remedy := loom.ExtractErrorRemedy(mapped)`)
+	require.Contains(t, rendered, `return nil, a.safeMCPError(aerr, "invalid_params", "Invalid resource request.")`)
+	require.Contains(t, rendered, `return nil, a.safeMCPError(err, "invalid_params", "Invalid resource request.")`)
+	require.Contains(t, rendered, `return nil, a.safeMCPError(err, "internal_error", "Resource read failed.")`)
+	require.Contains(t, rendered, `return nil, a.safeMCPError(serr, "internal_error", "Resource read failed.")`)
+	require.Contains(t, rendered, `return nil, a.safeMCPError(err, "internal_error", "Prompt retrieval failed.")`)
+	require.NotContains(t, rendered, `} else if err != nil {
+				return nil, err
+			}`)
+	require.NotContains(t, rendered, `loom.PermanentError("invalid_params", "%s", err.Error())`)
 }
 
 func TestGenerateMCPClientAdapter_SpecializesResourceQueryConstruction(t *testing.T) {

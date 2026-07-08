@@ -70,6 +70,48 @@ func TestRootExprValidateRejectsDuplicateMCPDeclarations(t *testing.T) {
 	require.ErrorContains(t, err, `duplicate MCP declaration for service "assistant"`)
 }
 
+func TestRootExprValidateRejectsStaticAndDynamicPromptNameCollision(t *testing.T) {
+	root := NewRoot()
+	svc := &expr.ServiceExpr{Name: "assistant"}
+	root.RegisterMCP(svc, &MCPExpr{
+		Name:    "assistant-mcp",
+		Version: "1.0.0",
+		Prompts: []*PromptExpr{
+			{
+				Name: "summarize",
+				Messages: []*MessageExpr{
+					{Role: "user", Content: "Summarize"},
+				},
+			},
+		},
+	})
+	root.RegisterDynamicPrompt(svc, &DynamicPromptExpr{
+		Name:   "summarize",
+		Method: &expr.MethodExpr{Name: "build_summary_prompt"},
+	})
+
+	err := root.Validate()
+
+	require.ErrorContains(t, err, `dynamic prompt name "summarize" for service "assistant" duplicates MCP prompt summarize`)
+}
+
+func TestRootExprValidateRejectsDuplicateDynamicPromptNames(t *testing.T) {
+	root := NewRoot()
+	svc := &expr.ServiceExpr{Name: "assistant"}
+	root.RegisterDynamicPrompt(svc, &DynamicPromptExpr{
+		Name:   "summarize",
+		Method: &expr.MethodExpr{Name: "build_summary_prompt"},
+	})
+	root.RegisterDynamicPrompt(svc, &DynamicPromptExpr{
+		Name:   "summarize",
+		Method: &expr.MethodExpr{Name: "build_other_summary_prompt"},
+	})
+
+	err := root.Validate()
+
+	require.ErrorContains(t, err, `dynamic prompt name "summarize" for service "assistant" duplicates MCP dynamic prompt summarize`)
+}
+
 func testMCPServer(service string) *MCPExpr {
 	return &MCPExpr{
 		Name:    service + "-mcp",

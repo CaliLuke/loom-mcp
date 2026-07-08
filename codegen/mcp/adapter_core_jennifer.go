@@ -22,6 +22,7 @@ func adapterCoreSection(data *AdapterData) codegen.Section {
 		emitStringPtrAndBuildContentItem(stmt)
 		emitSendToolError(stmt)
 		emitFormatToolErrorText(stmt)
+		emitSafeMCPError(stmt)
 		emitToolCallError(stmt)
 		emitMissingFieldFromMessage(stmt)
 		emitInitializeHandler(stmt, data)
@@ -747,19 +748,7 @@ func emitFormatToolErrorText(stmt *jen.Statement) {
 				),
 			),
 			jen.If(jen.Id("code").Op("==").Lit("")).Block(
-				jen.If(jen.List(jen.Id("status"), jen.Id("ok")).Op(":=").Id("loom").Dot("ErrorStatusCode").Call(jen.Id("err")), jen.Id("ok")).Block(
-					jen.Switch(jen.Id("status")).Block(
-						jen.Case(jen.Qual("net/http", "StatusBadRequest")).Block(
-							jen.Id("code").Op("=").Lit("invalid_params"),
-						),
-						jen.Case(jen.Qual("net/http", "StatusNotFound")).Block(
-							jen.Id("code").Op("=").Lit("not_found"),
-						),
-						jen.Default().Block(
-							jen.Id("code").Op("=").Lit("internal_error"),
-						),
-					),
-				),
+				mcpStatusCodeFallback(jen.Id("err"), jen.Lit("not_found")),
 			),
 			jen.If(jen.Id("code").Op("==").Lit("")).Block(
 				jen.Id("code").Op("=").Lit("internal_error"),
@@ -775,6 +764,70 @@ func emitFormatToolErrorText(stmt *jen.Statement) {
 			jen.Return(jen.Qual("fmt", "Sprintf").Call(jen.Lit("[%s] %s\nRecovery: %s"), jen.Id("code"), jen.Id("message"), jen.Id("recovery"))),
 		)
 	stmt.Line()
+}
+
+// emitSafeMCPError generates safeMCPError.
+func emitSafeMCPError(stmt *jen.Statement) {
+	stmt.Func().Params(jen.Id("a").Op("*").Id("MCPAdapter")).
+		Id("safeMCPError").Params(jen.Id("err").Error(), jen.Id("defaultCode").String(), jen.Id("fallbackMessage").String()).Error().
+		Block(
+			jen.If(jen.Id("err").Op("==").Nil()).Block(
+				jen.Return(jen.Id("loom").Dot("WithErrorRemedy").Call(
+					jen.Id("loom").Dot("PermanentError").Call(jen.Id("defaultCode"), jen.Lit("%s"), jen.Id("fallbackMessage")),
+					jen.Op("&").Id("loom").Dot("ErrorRemedy").Values(jen.Dict{
+						jen.Id("Code"):        jen.Id("defaultCode"),
+						jen.Id("SafeMessage"): jen.Id("fallbackMessage"),
+					}),
+				)),
+			),
+			jen.Id("mapped").Op(":=").Id("a").Dot("mapError").Call(jen.Id("err")),
+			jen.If(jen.Id("mapped").Op("==").Nil()).Block(
+				jen.Id("mapped").Op("=").Id("err"),
+			),
+			jen.Id("code").Op(":=").Qual("strings", "TrimSpace").Call(jen.Id("loom").Dot("ErrorRemedyCode").Call(jen.Id("mapped"))),
+			jen.If(jen.Id("code").Op("==").Lit("")).Block(
+				jen.Var().Id("namer").Id("loom").Dot("LoomErrorNamer"),
+				jen.If(jen.Qual("errors", "As").Call(jen.Id("mapped"), jen.Op("&").Id("namer"))).Block(
+					jen.Id("code").Op("=").Qual("strings", "TrimSpace").Call(jen.Id("namer").Dot("LoomErrorName").Call()),
+				),
+			),
+			jen.If(jen.Id("code").Op("==").Lit("")).Block(
+				mcpStatusCodeFallback(jen.Id("mapped"), jen.Id("defaultCode")),
+			),
+			jen.If(jen.Id("code").Op("==").Lit("")).Block(
+				jen.Id("code").Op("=").Id("defaultCode"),
+			),
+			jen.Id("message").Op(":=").Qual("strings", "TrimSpace").Call(jen.Id("fallbackMessage")),
+			jen.If(jen.Id("remedy").Op(":=").Id("loom").Dot("ExtractErrorRemedy").Call(jen.Id("mapped")), jen.Id("remedy").Op("!=").Nil()).Block(
+				jen.If(jen.Id("safe").Op(":=").Qual("strings", "TrimSpace").Call(jen.Id("remedy").Dot("SafeMessage")), jen.Id("safe").Op("!=").Lit("")).Block(
+					jen.Id("message").Op("=").Id("safe"),
+				),
+			),
+			jen.Return(jen.Id("loom").Dot("WithErrorRemedy").Call(
+				jen.Id("loom").Dot("PermanentError").Call(jen.Id("code"), jen.Lit("%s"), jen.Id("message")),
+				jen.Op("&").Id("loom").Dot("ErrorRemedy").Values(jen.Dict{
+					jen.Id("Code"):        jen.Id("code"),
+					jen.Id("SafeMessage"): jen.Id("message"),
+				}),
+			)),
+		)
+	stmt.Line()
+}
+
+func mcpStatusCodeFallback(err jen.Code, notFoundCode jen.Code) jen.Code {
+	return jen.If(jen.List(jen.Id("status"), jen.Id("ok")).Op(":=").Id("loom").Dot("ErrorStatusCode").Call(err), jen.Id("ok")).Block(
+		jen.Switch(jen.Id("status")).Block(
+			jen.Case(jen.Qual("net/http", "StatusBadRequest")).Block(
+				jen.Id("code").Op("=").Lit("invalid_params"),
+			),
+			jen.Case(jen.Qual("net/http", "StatusNotFound")).Block(
+				jen.Id("code").Op("=").Add(notFoundCode),
+			),
+			jen.Default().Block(
+				jen.Id("code").Op("=").Lit("internal_error"),
+			),
+		),
+	)
 }
 
 // emitToolCallError generates the toolCallError function.

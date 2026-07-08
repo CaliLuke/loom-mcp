@@ -221,12 +221,17 @@ func emitValidateMCPPayloadEnum(stmt *jen.Statement) {
 		Params(
 			jen.Id("fields").Map(jen.String()).Qual("encoding/json", "RawMessage"),
 			jen.Id("field").String(),
+			jen.Id("optional").Bool(),
 			jen.Id("allowed").Op("...").String(),
 		).
 		Error().
 		Block(
 			jen.List(jen.Id("raw"), jen.Id("ok")).Op(":=").Id("fields").Index(jen.Id("field")),
 			jen.If(jen.Op("!").Id("ok")).Block(
+				jen.Return(jen.Nil()),
+			),
+			jen.Id("trimmed").Op(":=").Qual("bytes", "TrimSpace").Call(jen.Id("raw")),
+			jen.If(jen.Id("optional").Op("&&").Qual("bytes", "Equal").Call(jen.Id("trimmed"), jen.Index().Byte().Call(jen.Lit("null")))).Block(
 				jen.Return(jen.Nil()),
 			),
 			jen.Var().Id("value").Any(),
@@ -1500,8 +1505,8 @@ func emitToolEnumChecks(g *jen.Group, tool *ToolAdapter) {
 	}
 	g.BlockFunc(func(block *jen.Group) {
 		for field, vals := range tool.EnumFields {
-			args := make([]jen.Code, 0, 2+len(vals))
-			args = append(args, jen.Id("rawFields"), jen.Lit(field))
+			args := make([]jen.Code, 0, 3+len(vals))
+			args = append(args, jen.Id("rawFields"), jen.Lit(field), jen.Lit(tool.EnumFieldsPtr[field]))
 			for _, val := range vals {
 				args = append(args, jen.Lit(val))
 			}

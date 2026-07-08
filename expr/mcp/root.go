@@ -5,6 +5,7 @@ package mcp
 
 import (
 	"sort"
+	"strings"
 
 	"github.com/CaliLuke/loom/eval"
 	"github.com/CaliLuke/loom/expr"
@@ -71,6 +72,7 @@ func (r *RootExpr) WalkSets(walk eval.SetWalker) {
 func (r *RootExpr) Validate() error {
 	verr := new(eval.ValidationErrors)
 	r.validateDuplicateMCPServers(verr)
+	r.validatePromptNameCollisions(verr)
 	if len(verr.Errors) > 0 {
 		return verr
 	}
@@ -82,6 +84,32 @@ func (r *RootExpr) validateDuplicateMCPServers(verr *eval.ValidationErrors) {
 		duplicates := r.duplicateMCPServers[service]
 		for _, duplicate := range duplicates {
 			verr.Add(duplicate, "duplicate MCP declaration for service %q; MCP() may only be called once per service", service)
+		}
+	}
+}
+
+func (r *RootExpr) validatePromptNameCollisions(verr *eval.ValidationErrors) {
+	for _, service := range sortedPromptServiceNames(r.MCPServers, r.DynamicPrompts) {
+		seen := make(map[string]eval.Expression)
+		if m := r.MCPServers[service]; m != nil {
+			for _, prompt := range m.Prompts {
+				if prompt == nil || strings.TrimSpace(prompt.Name) == "" {
+					continue
+				}
+				if _, exists := seen[prompt.Name]; !exists {
+					seen[prompt.Name] = prompt
+				}
+			}
+		}
+		for _, prompt := range r.DynamicPrompts[service] {
+			if prompt == nil || strings.TrimSpace(prompt.Name) == "" {
+				continue
+			}
+			if other, exists := seen[prompt.Name]; exists {
+				verr.Add(prompt, "dynamic prompt name %q for service %q duplicates %s", prompt.Name, service, other.EvalName())
+				continue
+			}
+			seen[prompt.Name] = prompt
 		}
 	}
 }
@@ -160,6 +188,17 @@ func sortedServiceNames[V any](items map[string]V) []string {
 	}
 	sort.Strings(names)
 	return names
+}
+
+func sortedPromptServiceNames(servers map[string]*MCPExpr, prompts map[string][]*DynamicPromptExpr) []string {
+	services := make(map[string]struct{}, len(servers)+len(prompts))
+	for service := range servers {
+		services[service] = struct{}{}
+	}
+	for service := range prompts {
+		services[service] = struct{}{}
+	}
+	return sortedServiceNames(services)
 }
 
 // RegisterMCP registers an MCP server configuration for a service
