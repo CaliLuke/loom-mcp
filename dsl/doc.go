@@ -74,13 +74,42 @@
 //   - [Agent] declares an LLM agent within a service
 //   - [Use] declares toolset consumption
 //   - [Export] declares toolset export for agent-as-tool
+//   - [Workflow] defines a deterministic workflow planner
 //   - [DisableAgentDocs] opts out of AGENTS_QUICKSTART.md generation
 //   - [Passthrough] forwards exported tools to service methods
+//   - [AgentToolset] references an exported toolset by coordinates
+//   - [UseAgentToolset] references and consumes an exported agent toolset
+//
+// Workflow Functions:
+//   - [Step] adds a deterministic tool-call node
+//   - [FinalMessage] sets the completion message
+//   - [Parallel] marks enclosed steps as concurrently ready
+//   - [Join] declares a dependency barrier
+//   - [RequestInput] declares a schema-typed human input node
+//   - [Loop] declares a bounded repeated tool node
+//   - [MaxIterations] caps loop iterations
+//   - [UntilJSONPath] stops a loop when a JSONPath value matches
+//   - [Branch] declares deterministic branch selection
+//   - [Case] adds a branch case
+//   - [BranchDefault] adds the fallback branch target
 //
 // Toolset Functions:
 //   - [Toolset] defines a provider-owned tool collection
 //   - [FromMCP] configures an MCP-backed toolset provider
 //   - [FromRegistry] configures a registry-backed toolset provider
+//   - [FromSkills] configures a local skill-backed model tool provider
+//   - [SkillPreload] configures skill instruction preload behavior
+//   - [SkillReload] configures skill file reload behavior
+//   - [FromArtifacts] configures persisted run artifact tools
+//   - [MaxArtifactBytes] caps loaded artifact content bytes
+//   - [MaxArtifacts] caps listed artifacts
+//   - [FromMemory] configures bounded memory lookup tools
+//   - [MemoryMaxResults] caps memory lookup results
+//   - [MemoryTranscript] exposes current-run transcript memory
+//   - [MemoryIndexedTranscript] exposes indexed transcript memory
+//   - [MemoryLongTerm] exposes long-term memory
+//   - [MemoryVisibilityUser] scopes long-term memory to the resolved user
+//   - [MemoryVisibilityShared] scopes long-term memory to shared knowledge
 //   - [AgentToolset] references an exported toolset by coordinates
 //   - [Tags] attaches metadata labels to tools or toolsets
 //
@@ -88,7 +117,12 @@
 //   - [Tool] declares a callable tool
 //   - [Args] defines input parameter schema
 //   - [Return] defines output result schema
-//   - [Artifact] defines typed artifact data (not sent to model)
+//   - [ServerData] defines typed server-only data emitted alongside results
+//   - [FromMethodResultField] sources server data from a bound method result field
+//   - [Audience] configures the server-data audience
+//   - [AudienceTimeline] marks server data for timeline/UI rendering
+//   - [AudienceInternal] marks server data for internal composition only
+//   - [AudienceEvidence] marks server data as provenance evidence
 //   - [BindTo] binds a tool to a service method
 //   - [Inject] marks fields as server-injected (hidden from LLM)
 //   - [CallHintTemplate] configures call display hint template
@@ -96,7 +130,14 @@
 //   - [BoundedResult] marks result as a bounded view over larger data
 //   - [Cursor] declares which payload field carries a paging cursor (optional)
 //   - [NextCursor] declares which result field carries the next-page cursor (optional)
+//   - [ResultReminder] configures a static post-result system reminder
+//   - [TerminalRun] completes the run immediately after tool execution
 //   - [Confirmation] declares that a tool must be confirmed out-of-band before execution
+//   - [PromptTemplate] configures the confirmation prompt template
+//   - [DeniedResultTemplate] configures the result returned when confirmation is denied
+//   - [Expose] declares generated tool surfaces
+//   - [MCPPlacement] places a projected toolset tool in an MCP server
+//   - [Idempotent] marks an MCP method as safe to retry
 //
 // Policy Functions:
 //   - [RunPolicy] configures execution constraints
@@ -104,6 +145,14 @@
 //   - [TimeBudget] sets maximum execution duration
 //   - [InterruptsAllowed] enables user interruption handling
 //   - [OnMissingFields] configures validation behavior
+//   - [Interceptors] attaches runtime interceptor identifiers
+//   - [PreloadMemory] preloads transcript memory into planner context
+//   - [PreloadLongTermMemory] preloads long-term memory into planner context
+//   - [MemoryScopeCurrentRun] selects current-run transcript preload
+//   - [MemoryScopeIndexed] selects indexed transcript preload
+//   - [RetryAndReflect] configures planner retry/reflection behavior
+//   - [MaxRetries] caps retry/reflection attempts
+//   - [ErrorIfRetryExceeded] controls retry exhaustion behavior
 //   - [History] configures conversation history management
 //   - [Cache] configures prompt caching hints
 //
@@ -115,7 +164,10 @@
 //
 // History Functions (inside History):
 //   - [KeepRecentTurns] configures sliding window retention
-//   - [Compress] configures model-assisted summarization
+//   - [CompressAtTurns] configures model-assisted summarization by turn count
+//   - [CompressAtMaxInputTokens] configures model-assisted summarization by input tokens
+//   - [KeepMaxTurns] caps retained turns after summarization
+//   - [KeepMaxInputTokens] caps retained input tokens after summarization
 //
 // Cache Functions (inside Cache):
 //   - [AfterSystem] places cache checkpoint after system messages
@@ -124,10 +176,47 @@
 // MCP Functions:
 //   - [MCP] enables MCP protocol for a service
 //   - [ProtocolVersion] configures MCP protocol version
+//   - [WebsiteURL] configures the MCP implementation website URL
+//   - [Icon] builds MCP icon metadata
+//   - [IconMIMEType] sets icon MIME type metadata
+//   - [IconSizes] sets supported icon sizes
+//   - [IconTheme] sets icon theme metadata
+//   - [ServerIcons] attaches implementation icons to an MCP server
+//   - [ToolIcons] attaches icon metadata to an MCP tool
+//   - [ToolTitle] sets the MCP tool display title
+//   - [ToolDiscoveryCategory] sets the progressive discovery category
+//   - [ToolDiscoveryTags] sets progressive discovery tags
+//   - [ToolDiscoveryKeywords] sets progressive discovery keywords
+//   - [ToolSearch] configures progressive discovery search defaults
+//   - [ToolSearchMaxResults] sets the search result cap
+//   - [ToolSearchMinScore] sets the minimum search score
+//   - [ToolSearchExactMatch] sets exact-match behavior
+//   - [ToolSearchFuzzyNameMatching] toggles fuzzy name matching
+//   - [ToolSearchBroadFallback] toggles broad fallback matching
+//   - [ToolSearchWeights] configures search ranking weights
+//   - [ToolSearchNameWeight] sets the name ranking weight
+//   - [ToolSearchTitleWeight] sets the title ranking weight
+//   - [ToolSearchMetadataWeight] sets the metadata ranking weight
+//   - [ToolSearchDescriptionWeight] sets the description ranking weight
+//   - [ToolSearchParameterWeight] sets the parameter ranking weight
+//   - [ToolSearchFuzzyNameWeight] sets the fuzzy-name ranking weight
+//   - [OAuth] declares OAuth protected-resource metadata
+//   - [AuthorizationServer] adds an OAuth authorization server
+//   - [OAuthScope] documents an OAuth scope
+//   - [ResourceIdentifier] pins the protected-resource identifier
+//   - [BearerMethodsSupported] lists supported bearer-token methods
+//   - [ResourceDocumentationURL] sets the protected-resource docs URL
+//   - [TrustProxyHeaders] opts into trusted proxy header handling
 //   - [Resource] marks a method as an MCP resource
 //   - [WatchableResource] marks a method as a subscribable MCP resource
+//   - [ResourceIcons] attaches icon metadata to an MCP resource
+//   - [SkillDirectory] exposes local agent skill roots as MCP resources
 //   - [StaticPrompt] defines a static MCP prompt template
+//   - [PromptIcons] attaches icon metadata to a static MCP prompt
+//   - [RuntimePrompt] generates a runtime prompt spec from a static MCP prompt
+//   - [RuntimePromptVersion] sets the runtime prompt spec version
 //   - [DynamicPrompt] marks a method as a dynamic prompt generator
+//   - [DynamicPromptIcons] attaches icon metadata to a dynamic MCP prompt
 //   - [Notification] marks a method as an MCP notification sender
 //   - [Subscription] defines a subscription handler
 //   - [SubscriptionMonitor] defines an SSE subscription monitor
