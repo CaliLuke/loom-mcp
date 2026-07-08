@@ -24,7 +24,10 @@ import (
 // mcp_assistant initialize endpoint.
 func EncodeInitializeResponse(encoder func(context.Context, http.ResponseWriter) loomhttp.Encoder) func(context.Context, http.ResponseWriter, any) error {
 	return func(ctx context.Context, w http.ResponseWriter, v any) error {
-		res, _ := v.(*mcpassistant.InitializeResult)
+		res, ok := v.(*mcpassistant.InitializeResult)
+		if !ok {
+			return loomhttp.ErrInvalidType("mcp_assistant", "initialize", "*mcpassistant.InitializeResult", v)
+		}
 		enc := encoder(ctx, w)
 		body := NewInitializeResponseBody(res)
 		w.WriteHeader(http.StatusOK)
@@ -51,7 +54,7 @@ func DecodeInitializeRequest(mux loomhttp.Muxer, decoder func(*http.Request) loo
 			if errors.As(err, &gerr) {
 				return payload, gerr
 			}
-			return payload, loom.DecodePayloadError(err.Error())
+			return payload, loom.DecodePayloadError(loomhttp.SafeDecodePayloadMessage(err))
 		}
 		err = ValidateInitializeRequestBody(&body)
 		if err != nil {
@@ -67,7 +70,10 @@ func DecodeInitializeRequest(mux loomhttp.Muxer, decoder func(*http.Request) loo
 // mcp_assistant ping endpoint.
 func EncodePingResponse(encoder func(context.Context, http.ResponseWriter) loomhttp.Encoder) func(context.Context, http.ResponseWriter, any) error {
 	return func(ctx context.Context, w http.ResponseWriter, v any) error {
-		res, _ := v.(*mcpassistant.PingResult)
+		res, ok := v.(*mcpassistant.PingResult)
+		if !ok {
+			return loomhttp.ErrInvalidType("mcp_assistant", "ping", "*mcpassistant.PingResult", v)
+		}
 		enc := encoder(ctx, w)
 		body := NewPingResponseBody(res)
 		w.WriteHeader(http.StatusOK)
@@ -79,7 +85,10 @@ func EncodePingResponse(encoder func(context.Context, http.ResponseWriter) loomh
 // mcp_assistant tools/list endpoint.
 func EncodeToolsListResponse(encoder func(context.Context, http.ResponseWriter) loomhttp.Encoder) func(context.Context, http.ResponseWriter, any) error {
 	return func(ctx context.Context, w http.ResponseWriter, v any) error {
-		res, _ := v.(*mcpassistant.ToolsListResult)
+		res, ok := v.(*mcpassistant.ToolsListResult)
+		if !ok {
+			return loomhttp.ErrInvalidType("mcp_assistant", "tools/list", "*mcpassistant.ToolsListResult", v)
+		}
 		enc := encoder(ctx, w)
 		body := NewToolsListResponseBody(res)
 		w.WriteHeader(http.StatusOK)
@@ -106,7 +115,7 @@ func DecodeToolsListRequest(mux loomhttp.Muxer, decoder func(*http.Request) loom
 			if errors.As(err, &gerr) {
 				return payload, gerr
 			}
-			return payload, loom.DecodePayloadError(err.Error())
+			return payload, loom.DecodePayloadError(loomhttp.SafeDecodePayloadMessage(err))
 		}
 		payload = NewToolsListPayload(&body)
 
@@ -118,7 +127,10 @@ func DecodeToolsListRequest(mux loomhttp.Muxer, decoder func(*http.Request) loom
 // mcp_assistant tools/call endpoint.
 func EncodeToolsCallResponse(encoder func(context.Context, http.ResponseWriter) loomhttp.Encoder) func(context.Context, http.ResponseWriter, any) error {
 	return func(ctx context.Context, w http.ResponseWriter, v any) error {
-		res, _ := v.(*mcpassistant.ToolsCallResult)
+		res, ok := v.(*mcpassistant.ToolsCallResult)
+		if !ok {
+			return loomhttp.ErrInvalidType("mcp_assistant", "tools/call", "*mcpassistant.ToolsCallResult", v)
+		}
 		enc := encoder(ctx, w)
 		body := NewToolsCallResponseBody(res)
 		w.WriteHeader(http.StatusOK)
@@ -145,7 +157,7 @@ func DecodeToolsCallRequest(mux loomhttp.Muxer, decoder func(*http.Request) loom
 			if errors.As(err, &gerr) {
 				return payload, gerr
 			}
-			return payload, loom.DecodePayloadError(err.Error())
+			return payload, loom.DecodePayloadError(loomhttp.SafeDecodePayloadMessage(err))
 		}
 		err = ValidateToolsCallRequestBody(&body)
 		if err != nil {
@@ -161,7 +173,10 @@ func DecodeToolsCallRequest(mux loomhttp.Muxer, decoder func(*http.Request) loom
 // mcp_assistant resources/list endpoint.
 func EncodeResourcesListResponse(encoder func(context.Context, http.ResponseWriter) loomhttp.Encoder) func(context.Context, http.ResponseWriter, any) error {
 	return func(ctx context.Context, w http.ResponseWriter, v any) error {
-		res, _ := v.(*mcpassistant.ResourcesListResult)
+		res, ok := v.(*mcpassistant.ResourcesListResult)
+		if !ok {
+			return loomhttp.ErrInvalidType("mcp_assistant", "resources/list", "*mcpassistant.ResourcesListResult", v)
+		}
 		enc := encoder(ctx, w)
 		body := NewResourcesListResponseBody(res)
 		w.WriteHeader(http.StatusOK)
@@ -188,7 +203,7 @@ func DecodeResourcesListRequest(mux loomhttp.Muxer, decoder func(*http.Request) 
 			if errors.As(err, &gerr) {
 				return payload, gerr
 			}
-			return payload, loom.DecodePayloadError(err.Error())
+			return payload, loom.DecodePayloadError(loomhttp.SafeDecodePayloadMessage(err))
 		}
 		payload = NewResourcesListPayload(&body)
 
@@ -200,7 +215,10 @@ func DecodeResourcesListRequest(mux loomhttp.Muxer, decoder func(*http.Request) 
 // mcp_assistant resources/read endpoint.
 func EncodeResourcesReadResponse(encoder func(context.Context, http.ResponseWriter) loomhttp.Encoder) func(context.Context, http.ResponseWriter, any) error {
 	return func(ctx context.Context, w http.ResponseWriter, v any) error {
-		res, _ := v.(*mcpassistant.ResourcesReadResult)
+		res, ok := v.(*mcpassistant.ResourcesReadResult)
+		if !ok {
+			return loomhttp.ErrInvalidType("mcp_assistant", "resources/read", "*mcpassistant.ResourcesReadResult", v)
+		}
 		enc := encoder(ctx, w)
 		body := NewResourcesReadResponseBody(res)
 		w.WriteHeader(http.StatusOK)
@@ -227,7 +245,7 @@ func DecodeResourcesReadRequest(mux loomhttp.Muxer, decoder func(*http.Request) 
 			if errors.As(err, &gerr) {
 				return payload, gerr
 			}
-			return payload, loom.DecodePayloadError(err.Error())
+			return payload, loom.DecodePayloadError(loomhttp.SafeDecodePayloadMessage(err))
 		}
 		err = ValidateResourcesReadRequestBody(&body)
 		if err != nil {
@@ -267,7 +285,7 @@ func DecodeResourcesSubscribeRequest(mux loomhttp.Muxer, decoder func(*http.Requ
 			if errors.As(err, &gerr) {
 				return payload, gerr
 			}
-			return payload, loom.DecodePayloadError(err.Error())
+			return payload, loom.DecodePayloadError(loomhttp.SafeDecodePayloadMessage(err))
 		}
 		err = ValidateResourcesSubscribeRequestBody(&body)
 		if err != nil {
@@ -307,7 +325,7 @@ func DecodeResourcesUnsubscribeRequest(mux loomhttp.Muxer, decoder func(*http.Re
 			if errors.As(err, &gerr) {
 				return payload, gerr
 			}
-			return payload, loom.DecodePayloadError(err.Error())
+			return payload, loom.DecodePayloadError(loomhttp.SafeDecodePayloadMessage(err))
 		}
 		err = ValidateResourcesUnsubscribeRequestBody(&body)
 		if err != nil {
@@ -323,7 +341,10 @@ func DecodeResourcesUnsubscribeRequest(mux loomhttp.Muxer, decoder func(*http.Re
 // mcp_assistant prompts/list endpoint.
 func EncodePromptsListResponse(encoder func(context.Context, http.ResponseWriter) loomhttp.Encoder) func(context.Context, http.ResponseWriter, any) error {
 	return func(ctx context.Context, w http.ResponseWriter, v any) error {
-		res, _ := v.(*mcpassistant.PromptsListResult)
+		res, ok := v.(*mcpassistant.PromptsListResult)
+		if !ok {
+			return loomhttp.ErrInvalidType("mcp_assistant", "prompts/list", "*mcpassistant.PromptsListResult", v)
+		}
 		enc := encoder(ctx, w)
 		body := NewPromptsListResponseBody(res)
 		w.WriteHeader(http.StatusOK)
@@ -350,7 +371,7 @@ func DecodePromptsListRequest(mux loomhttp.Muxer, decoder func(*http.Request) lo
 			if errors.As(err, &gerr) {
 				return payload, gerr
 			}
-			return payload, loom.DecodePayloadError(err.Error())
+			return payload, loom.DecodePayloadError(loomhttp.SafeDecodePayloadMessage(err))
 		}
 		payload = NewPromptsListPayload(&body)
 
@@ -362,7 +383,10 @@ func DecodePromptsListRequest(mux loomhttp.Muxer, decoder func(*http.Request) lo
 // mcp_assistant prompts/get endpoint.
 func EncodePromptsGetResponse(encoder func(context.Context, http.ResponseWriter) loomhttp.Encoder) func(context.Context, http.ResponseWriter, any) error {
 	return func(ctx context.Context, w http.ResponseWriter, v any) error {
-		res, _ := v.(*mcpassistant.PromptsGetResult)
+		res, ok := v.(*mcpassistant.PromptsGetResult)
+		if !ok {
+			return loomhttp.ErrInvalidType("mcp_assistant", "prompts/get", "*mcpassistant.PromptsGetResult", v)
+		}
 		enc := encoder(ctx, w)
 		body := NewPromptsGetResponseBody(res)
 		w.WriteHeader(http.StatusOK)
@@ -389,7 +413,7 @@ func DecodePromptsGetRequest(mux loomhttp.Muxer, decoder func(*http.Request) loo
 			if errors.As(err, &gerr) {
 				return payload, gerr
 			}
-			return payload, loom.DecodePayloadError(err.Error())
+			return payload, loom.DecodePayloadError(loomhttp.SafeDecodePayloadMessage(err))
 		}
 		err = ValidatePromptsGetRequestBody(&body)
 		if err != nil {
@@ -429,7 +453,7 @@ func DecodeNotifyStatusUpdateRequest(mux loomhttp.Muxer, decoder func(*http.Requ
 			if errors.As(err, &gerr) {
 				return payload, gerr
 			}
-			return payload, loom.DecodePayloadError(err.Error())
+			return payload, loom.DecodePayloadError(loomhttp.SafeDecodePayloadMessage(err))
 		}
 		err = ValidateNotifyStatusUpdateRequestBody(&body)
 		if err != nil {
@@ -445,7 +469,10 @@ func DecodeNotifyStatusUpdateRequest(mux loomhttp.Muxer, decoder func(*http.Requ
 // mcp_assistant events/stream endpoint.
 func EncodeEventsStreamResponse(encoder func(context.Context, http.ResponseWriter) loomhttp.Encoder) func(context.Context, http.ResponseWriter, any) error {
 	return func(ctx context.Context, w http.ResponseWriter, v any) error {
-		res, _ := v.(*mcpassistant.EventsStreamResult)
+		res, ok := v.(*mcpassistant.EventsStreamResult)
+		if !ok {
+			return loomhttp.ErrInvalidType("mcp_assistant", "events/stream", "*mcpassistant.EventsStreamResult", v)
+		}
 		enc := encoder(ctx, w)
 		body := NewEventsStreamResponseBody(res)
 		w.WriteHeader(http.StatusOK)

@@ -89,16 +89,7 @@ func Tool(name string, args ...any) {
 
 	switch parent := eval.Current().(type) {
 	case *agentsexpr.ToolsetExpr:
-		if len(mcpOpts) > 0 {
-			eval.ReportError("MCP tool metadata options may only be used when Tool is declared inside a Method")
-			return
-		}
-		parent.Tools = append(parent.Tools, &agentsexpr.ToolExpr{
-			Name:        name,
-			Description: description,
-			Toolset:     parent,
-			DSLFunc:     dslf,
-		})
+		addToolsetTool(parent, name, description, dslf, mcpOpts)
 	case *goaexpr.MethodExpr:
 		svc := parent.Service
 		var mcp *mcpexpr.MCPExpr
@@ -128,6 +119,23 @@ func Tool(name string, args ...any) {
 		eval.IncompatibleDSL()
 		return
 	}
+}
+
+func addToolsetTool(parent *agentsexpr.ToolsetExpr, name string, description string, dslf func(), mcpOpts []func(*mcpexpr.ToolExpr)) {
+	if len(mcpOpts) > 0 {
+		eval.ReportError("MCP tool metadata options may only be used when Tool is declared inside a Method")
+		return
+	}
+	if (parent.Origin != nil || parent.AgentToolset != nil) && description == "" && dslf == nil {
+		parent.SelectOriginTool(name)
+		return
+	}
+	parent.Tools = append(parent.Tools, &agentsexpr.ToolExpr{
+		Name:        name,
+		Description: description,
+		Toolset:     parent,
+		DSLFunc:     dslf,
+	})
 }
 
 func parseToolArgs(args []any) (string, func(), []func(*mcpexpr.ToolExpr)) {

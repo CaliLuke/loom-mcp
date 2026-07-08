@@ -78,6 +78,7 @@ func (r *RootExpr) Prepare() {
 		return
 	}
 	r.resolveAgentToolsetReferences()
+	r.resolveOriginToolsetTools()
 }
 
 // WalkSets exposes the nested expressions to the eval engine.
@@ -90,6 +91,10 @@ func (r *RootExpr) WalkSets(walk eval.SetWalker) {
 	groups := expressionGroups(r.Agents, r.ServiceExports)
 	if len(groups) > 0 {
 		walk(groups)
+	}
+	runPolicies := gatheredRunPolicies(r.Agents)
+	if len(runPolicies) > 0 {
+		walk(eval.ToExpressionSet(runPolicies))
 	}
 	workflows := gatheredWorkflows(r.Agents)
 	if len(workflows) > 0 {
@@ -139,6 +144,16 @@ func gatheredToolsets(agents []*AgentExpr, serviceExports []*ServiceExportsExpr,
 		}
 	}
 	return append(toolsets, topLevel...)
+}
+
+func gatheredRunPolicies(agents []*AgentExpr) []*RunPolicyExpr {
+	var runPolicies []*RunPolicyExpr
+	for _, agent := range agents {
+		if agent != nil && agent.RunPolicy != nil {
+			runPolicies = append(runPolicies, agent.RunPolicy)
+		}
+	}
+	return runPolicies
 }
 
 func gatheredWorkflows(agents []*AgentExpr) []*WorkflowExpr {
@@ -207,9 +222,80 @@ func (r *RootExpr) resolveAgentToolsetReference(ts *ToolsetExpr) {
 	ts.Provider = cloneProvider(origin.Provider)
 	ts.Origin = origin
 	ts.AgentToolset = nil
-	if len(ts.Tools) == 0 {
-		ts.Tools = cloneToolsForToolset(origin.Tools, ts)
+	r.resolveOriginToolsetToolsFor(ts)
+}
+
+func (r *RootExpr) resolveOriginToolsetTools() {
+	for _, ts := range gatheredToolsets(r.Agents, r.ServiceExports, r.Toolsets) {
+		r.resolveOriginToolsetToolsFor(ts)
 	}
+}
+
+func (r *RootExpr) resolveOriginToolsetToolsFor(ts *ToolsetExpr) {
+	if ts == nil || ts.Origin == nil || ts.originToolsResolved {
+		return
+	}
+	syncOriginToolsetMetadata(ts)
+	inlineTools := ts.Tools
+	if len(ts.ToolSelections) == 0 {
+		ts.Tools = append(cloneToolsForToolset(ts.Origin.Tools, ts), inlineTools...)
+		ts.originToolsResolved = true
+		return
+	}
+	selected := cloneSelectedToolsForToolset(ts.Origin.Tools, ts.ToolSelections, ts)
+	ts.Tools = append(append([]*ToolExpr(nil), selected...), inlineTools...)
+	ts.originToolsResolved = true
+}
+
+func syncOriginToolsetMetadata(ts *ToolsetExpr) {
+	explicitVersion := ts.version
+	if ts.Description == "" {
+		ts.Description = ts.Origin.Description
+	}
+	ts.Tags = mergeStringSlices(ts.Origin.Tags, ts.Tags)
+	ts.Meta = mergeMeta(ts.Origin.Meta, ts.Meta)
+	ts.Provider = cloneProvider(ts.Origin.Provider)
+	if explicitVersion != "" {
+		ts.version = explicitVersion
+		if ts.Provider != nil && ts.Provider.Kind == ProviderRegistry {
+			ts.Provider.Version = explicitVersion
+		}
+		return
+	}
+	ts.version = ts.Origin.version
+}
+
+func mergeStringSlices(first []string, second []string) []string {
+	if len(first) == 0 {
+		return append([]string(nil), second...)
+	}
+	if len(second) == 0 {
+		return append([]string(nil), first...)
+	}
+	seen := make(map[string]struct{}, len(first)+len(second))
+	merged := make([]string, 0, len(first)+len(second))
+	for _, value := range append(append([]string(nil), first...), second...) {
+		if _, ok := seen[value]; ok {
+			continue
+		}
+		seen[value] = struct{}{}
+		merged = append(merged, value)
+	}
+	return merged
+}
+
+func mergeMeta(origin goaexpr.MetaExpr, overlay goaexpr.MetaExpr) goaexpr.MetaExpr {
+	merged := cloneMeta(origin)
+	if len(overlay) == 0 {
+		return merged
+	}
+	if merged == nil {
+		merged = make(goaexpr.MetaExpr, len(overlay))
+	}
+	for name, values := range overlay {
+		merged[name] = append(merged[name], values...)
+	}
+	return merged
 }
 
 func (r *RootExpr) validateAgentToolsetReferences(verr *eval.ValidationErrors) {
@@ -281,6 +367,25 @@ func cloneToolsForToolset(tools []*ToolExpr, toolset *ToolsetExpr) []*ToolExpr {
 		clone.Surfaces = append([]ToolSurface(nil), tool.Surfaces...)
 		clone.Toolset = toolset
 		clones = append(clones, &clone)
+	}
+	return clones
+}
+
+func cloneSelectedToolsForToolset(tools []*ToolExpr, selections []string, toolset *ToolsetExpr) []*ToolExpr {
+	if len(tools) == 0 || len(selections) == 0 {
+		return nil
+	}
+	byName := make(map[string]*ToolExpr, len(tools))
+	for _, tool := range tools {
+		if tool != nil && tool.Name != "" {
+			byName[tool.Name] = tool
+		}
+	}
+	clones := make([]*ToolExpr, 0, len(selections))
+	for _, name := range selections {
+		if tool := byName[name]; tool != nil {
+			clones = append(clones, cloneToolsForToolset([]*ToolExpr{tool}, toolset)...)
+		}
 	}
 	return clones
 }

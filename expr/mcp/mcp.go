@@ -4,6 +4,7 @@
 package mcp
 
 import (
+	"encoding/json"
 	"errors"
 	"net/url"
 	"strings"
@@ -248,6 +249,9 @@ type (
 		// DiscoveryKeywords are optional extra search terms used by
 		// generated progressive discovery search metadata.
 		DiscoveryKeywords []string
+		// DiscoveryCallTemplateArgs are optional exemplar arguments included in
+		// progressive discovery call_tool templates without changing validation.
+		DiscoveryCallTemplateArgs map[string]any
 		// Method is the Goa service method that implements this tool.
 		Method *expr.MethodExpr
 		// InputSchema defines the parameter schema for this tool.
@@ -640,7 +644,7 @@ func mergeValidationError(dst *eval.ValidationErrors, err error) {
 func (o *OAuthExpr) Validate() error {
 	verr := new(eval.ValidationErrors)
 	if len(o.AuthorizationServers) == 0 {
-		verr.Add(nil, "OAuth requires at least one AuthorizationServer")
+		verr.Add(o, "OAuth requires at least one AuthorizationServer")
 	}
 	seenScope := make(map[string]struct{}, len(o.Scopes))
 	for _, scope := range o.Scopes {
@@ -648,11 +652,11 @@ func (o *OAuthExpr) Validate() error {
 			continue
 		}
 		if scope.Name == "" {
-			verr.Add(nil, "OAuth scope name is required")
+			verr.Add(o, "OAuth scope name is required")
 			continue
 		}
 		if _, dup := seenScope[scope.Name]; dup {
-			verr.Add(nil, "OAuth scope %q declared more than once", scope.Name)
+			verr.Add(o, "OAuth scope %q declared more than once", scope.Name)
 			continue
 		}
 		seenScope[scope.Name] = struct{}{}
@@ -661,18 +665,23 @@ func (o *OAuthExpr) Validate() error {
 		switch method {
 		case "header", "body", "query":
 		default:
-			verr.Add(nil, "OAuth BearerMethodsSupported must be header, body, or query; got %q", method)
+			verr.Add(o, "OAuth BearerMethodsSupported must be header, body, or query; got %q", method)
 		}
 	}
 	if id := o.ResourceIdentifier; id != "" {
 		if err := validateResourceIdentifier(id); err != nil {
-			verr.Add(nil, "OAuth ResourceIdentifier invalid: %s", err.Error())
+			verr.Add(o, "OAuth ResourceIdentifier invalid: %s", err.Error())
 		}
 	}
 	if len(verr.Errors) > 0 {
 		return verr
 	}
 	return nil
+}
+
+// EvalName returns the expression name used in validation errors.
+func (o *OAuthExpr) EvalName() string {
+	return "MCP OAuth configuration"
 }
 
 func validateResourceIdentifier(id string) error {
@@ -734,6 +743,15 @@ func (t *ToolExpr) Validate() error {
 	}
 	if t.Description == "" {
 		verr.Add(t, "tool description is required")
+	}
+	for name, value := range t.DiscoveryCallTemplateArgs {
+		if strings.TrimSpace(name) == "" {
+			verr.Add(t, "ToolDiscoveryCallTemplateArg field name must be non-empty")
+			continue
+		}
+		if _, err := json.Marshal(value); err != nil {
+			verr.Add(t, "ToolDiscoveryCallTemplateArg %q must be JSON-marshalable: %v", name, err)
+		}
 	}
 	for _, icon := range t.Icons {
 		if err := icon.Validate(); err != nil {

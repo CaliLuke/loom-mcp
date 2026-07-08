@@ -2198,7 +2198,9 @@ descriptors preserve MCP Tool-shaped fields including `inputSchema`,
 default and included only when `include_schemas` is true. Each descriptor also
 includes `why_matched`, `call_tool_name`, `call_tool_arguments`, and
 `call_tool_json` so clients and models can invoke the hidden target through the
-wrapper without guessing the schema.
+wrapper without guessing the schema. Tool declarations can use
+`ToolDiscoveryCallTemplateArg` to include useful optional arguments in those
+examples without changing payload validation.
 
 `call_tool` invokes a discovered real tool by name with an `arguments` object. It
 rejects synthetic targets and unknown real tool names as tool errors. In compact

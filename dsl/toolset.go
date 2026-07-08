@@ -369,17 +369,7 @@ func cloneToolset(origin *agentsexpr.ToolsetExpr, agent *agentsexpr.AgentExpr, o
 	} else {
 		dup.Origin = origin
 	}
-	switch {
-	case origin.DSLFunc != nil && overlay != nil:
-		dup.DSLFunc = func() {
-			origin.DSLFunc()
-			overlay()
-		}
-	case overlay != nil:
-		dup.DSLFunc = overlay
-	default:
-		dup.DSLFunc = origin.DSLFunc
-	}
+	dup.DSLFunc = overlay
 	return dup
 }
 

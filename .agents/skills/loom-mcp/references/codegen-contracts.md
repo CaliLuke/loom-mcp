@@ -89,11 +89,12 @@ Use this file when editing DSL, generators, generated helpers, or MCP codegen be
   name/title fuzzy tier, support DSL/runtime tuning through `ToolSearch(...)`
   and generated `ToolSearchOptions`, explain `why_matched`, and include exact
   `call_tool` JSON examples in both text guidance and structured descriptor
-  fields. Exact or near-exact name/title matches should suppress weak broad
-  matches by default. Hidden real tools are called through `call_tool`; direct
-  hidden JSON-RPC calls require `AllowDirectHiddenCalls`, and SDK compact mode
-  must reject that option because unregistered SDK tools cannot be directly
-  invoked. Projected MCP tools must follow the same `AlwaysVisible`,
+  fields. `ToolDiscoveryCallTemplateArg` may add exemplar optional arguments to
+  those examples, but must not change validation semantics. Exact or near-exact
+  name/title matches should suppress weak broad matches by default. Hidden real
+  tools are called through `call_tool`; direct hidden JSON-RPC calls require
+  `AllowDirectHiddenCalls`, and SDK compact mode must reject that option because
+  unregistered SDK tools cannot be directly invoked. Projected MCP tools must follow the same `AlwaysVisible`,
   `search_tools`, and `call_tool` behavior as method-level MCP tools.
 
 ## Validation And Contracts

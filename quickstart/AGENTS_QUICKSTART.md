@@ -320,7 +320,7 @@ cfg := <agentpkg>.<AgentConfig>{
 ### Agent `chat` Toolsets
 
 * **Tools this agent can USE:**
-* **`orchestrator.helpers`** 
+* **`orchestrator.helpers`**
 * **Tool: `helpers.answer`**
 * *Answer a simple question*
 * **Tools this agent EXPORTS for others to use:**
@@ -357,17 +357,17 @@ if err := rt.RegisterToolset(reg); err != nil { panic(err) }
 * **Asynchronous Runs:** Use `client.Start()` to get a workflow handle. This is great for long-running tasks, cancellation, and non-interactive integrations.
 * **Interrupts (Human-in-the-Loop):** If your policy allows it, you can pause and resume agent runs with `rt.PauseRun()` and `rt.ResumeRun()`.
 * **Policies & Caps:** The `RunPolicy` in your design (max tool calls, time budgets) is automatically enforced by the runtime.
-* **Persistence & Observability:** The `runtime.New` function accepts `runtime.Options` to configure production-grade components like a Temporal engine, MongoDB for memory, and telemetry hooks.
+* **Persistence & Observability:** The `runtime.New` function accepts functional options such as `runtime.WithEngine(...)`, `runtime.WithMemoryStore(...)`, `runtime.WithStream(...)`, and `runtime.WithHooks(...)` to configure production-grade components.
 * **Temporal DataConverter (required):** When you use the Temporal engine, configure the Temporal client with `temporal.NewAgentDataConverter(...)` to enforce goa‑ai's boundary contract: tool results and artifacts cross workflow boundaries as canonical JSON bytes (`api.ToolEvent` / `api.ToolArtifact`), and `planner.ToolResult` is rejected if it ever tries to cross a Temporal boundary.
 * **Registries & Discovery:** When you declare registries and `FromRegistry(...)` toolsets in your DSL, loom-mcp generates typed registry HTTP clients under `gen/<svc>/registry/<name>/` plus per-toolset specs helpers (with `DiscoverAndPopulate`, `Specs`, and `RegistryToolsetID`) so you can discover tools at runtime and register executors using `runtime.ToolsetRegistration`.
 
 ```go
 // Example of production-ready runtime options
-rt := runtime.New(runtime.Options{
-    // Engine: myTemporalEngine,
-    // MemoryStore: myMongoMemoryStore,
-    // Stream: myEventStreamSink,
-})
+rt := runtime.New(
+    runtime.WithEngine(myTemporalEngine),
+    runtime.WithMemoryStore(myMongoMemoryStore),
+    runtime.WithStream(myEventStreamSink),
+)
 ```
 
 Example: constructing a Temporal engine with the required DataConverter:
@@ -382,7 +382,7 @@ import (
     specs "<module>/gen/<service>/agents/<agent>/specs"
 )
 
-eng, err := temporal.New(temporal.Options{
+eng, err := temporal.NewWorker(temporal.Options{
     ClientOptions: &client.Options{
         HostPort:      "127.0.0.1:7233",
         Namespace:     "default",
@@ -398,6 +398,9 @@ if err != nil {
     panic(err)
 }
 defer eng.Close()
+
+// In caller-only processes, use temporal.NewClient(...) with the same ClientOptions
+// and pass it to runtime.New(runtime.WithEngine(eng)).
 ```
 
 ---

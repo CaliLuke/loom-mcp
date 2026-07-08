@@ -131,6 +131,19 @@ type SearchRequestBody struct {
 // HTTP response body.
 type SearchResponseBody SearchResponseBodyResponseBody
 
+// SearchRecordsRequestBody is the type of the "assistant" service
+// "search_records" endpoint HTTP request body.
+type SearchRecordsRequestBody struct {
+	// Search query
+	Query *string `form:"query,omitempty" json:"query,omitempty" xml:"query,omitempty"`
+	// Maximum number of records
+	Limit *int `form:"limit,omitempty" json:"limit,omitempty" xml:"limit,omitempty"`
+}
+
+// SearchRecordsResponseBody is the type of the "assistant" service
+// "search_records" endpoint HTTP response body.
+type SearchRecordsResponseBody SearchRecordsResponseBodyResponseBody
+
 // ExecuteCodeRequestBody is the type of the "assistant" service "execute_code"
 // endpoint HTTP request body.
 type ExecuteCodeRequestBody struct {
@@ -325,6 +338,13 @@ type SummarizeTextResponseBodyResponseBody struct {
 // types.
 type SearchResponseBodyResponseBody struct {
 	// Search results
+	Results []string `form:"results,omitempty" json:"results,omitempty" xml:"results,omitempty"`
+}
+
+// SearchRecordsResponseBodyResponseBody is used to define fields on response
+// body types.
+type SearchRecordsResponseBodyResponseBody struct {
+	// Record results
 	Results []string `form:"results,omitempty" json:"results,omitempty" xml:"results,omitempty"`
 }
 
@@ -994,6 +1014,19 @@ func NewSearchResponseBody(res *assistant.SearchResult) *SearchResponseBody {
 	return body
 }
 
+// NewSearchRecordsResponseBody builds the HTTP response body from the result
+// of the "search_records" endpoint of the "assistant" service.
+func NewSearchRecordsResponseBody(res *assistant.SearchRecordsResult) *SearchRecordsResponseBody {
+	body := &SearchRecordsResponseBody{}
+	if res.Results != nil {
+		body.Results = make([]string, len(res.Results))
+		for i, val := range res.Results {
+			body.Results[i] = val
+		}
+	}
+	return body
+}
+
 // NewExecuteCodeResponseBody builds the HTTP response body from the result of
 // the "execute_code" endpoint of the "assistant" service.
 func NewExecuteCodeResponseBody(res *assistant.ExecuteCodeResult) *ExecuteCodeResponseBody {
@@ -1183,6 +1216,17 @@ func NewSummarizeTextPayload(body *SummarizeTextRequestBody) *assistant.Summariz
 func NewSearchPayload(body *SearchRequestBody) *assistant.SearchPayload {
 	v := &assistant.SearchPayload{
 		Query: *body.Query,
+		Limit: body.Limit,
+	}
+
+	return v
+}
+
+// NewSearchRecordsPayload builds a assistant service search_records endpoint
+// payload.
+func NewSearchRecordsPayload(body *SearchRecordsRequestBody) *assistant.SearchRecordsPayload {
+	v := &assistant.SearchRecordsPayload{
+		Query: body.Query,
 		Limit: body.Limit,
 	}
 

@@ -142,6 +142,7 @@ func (c *Client) ToolsCall() loom.Endpoint {
 		if err := encodeRequest(req, v); err != nil {
 			return nil, err
 		}
+		req.Header.Set("Accept", "text/event-stream")
 		resp, err := c.Doer.Do(req)
 		if err != nil {
 			return nil, loomhttp.ErrRequestError("mcp_assistant", "tools/call", err)
@@ -335,6 +336,7 @@ func (c *Client) EventsStream() loom.Endpoint {
 		if err := encodeRequest(req, v); err != nil {
 			return nil, err
 		}
+		req.Header.Set("Accept", "text/event-stream")
 		resp, err := c.Doer.Do(req)
 		if err != nil {
 			return nil, loomhttp.ErrRequestError("mcp_assistant", "events/stream", err)

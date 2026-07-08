@@ -118,6 +118,30 @@ func TestMCPExpr_ValidateRejectsDuplicateResourceNamesAndURIs(t *testing.T) {
 	require.ErrorContains(t, err, `resource URI "doc://one" duplicates`)
 }
 
+func TestOAuthExprValidateReportsDiagnostics(t *testing.T) {
+	oauth := &OAuthExpr{
+		Scopes: []*ScopeExpr{
+			{Name: "read"},
+			{Name: "read"},
+			{},
+		},
+		BearerMethodsSupported: []string{"cookie"},
+		ResourceIdentifier:     "https://api.example.com/resource#fragment",
+	}
+
+	err := oauth.Validate()
+
+	require.Error(t, err)
+	require.NotPanics(t, func() {
+		_ = err.Error()
+	})
+	require.ErrorContains(t, err, "MCP OAuth configuration: OAuth requires at least one AuthorizationServer")
+	require.ErrorContains(t, err, `OAuth scope "read" declared more than once`)
+	require.ErrorContains(t, err, "OAuth scope name is required")
+	require.ErrorContains(t, err, `OAuth BearerMethodsSupported must be header, body, or query; got "cookie"`)
+	require.ErrorContains(t, err, "OAuth ResourceIdentifier invalid: must not contain a fragment")
+}
+
 func TestMCPExpr_Finalize(t *testing.T) {
 	t.Run("sets default transport", func(t *testing.T) {
 		m := &MCPExpr{

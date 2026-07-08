@@ -38,6 +38,10 @@ type (
 		// Tools is the collection of tool expressions in this toolset.
 		Tools []*ToolExpr
 
+		// ToolSelections records origin tool names selected by a referenced
+		// toolset overlay via Tool("name").
+		ToolSelections []string
+
 		// Provider configures the source/executor for this toolset.
 		// When nil, the toolset is local with inline schemas.
 		Provider *ProviderExpr
@@ -56,7 +60,8 @@ type (
 		// affect valid cross-agent references.
 		AgentToolset *AgentToolsetReferenceExpr
 
-		version string
+		version             string
+		originToolsResolved bool
 	}
 
 	// AgentToolsetReferenceExpr identifies a toolset exported by an agent.
@@ -119,6 +124,7 @@ func (t *ToolsetExpr) Validate() error {
 	if t.version != "" && (t.Provider == nil || t.Provider.Kind != ProviderRegistry) {
 		verr.Add(t, "Version is only valid for FromRegistry toolsets")
 	}
+	t.validateOriginToolSelections(verr)
 	if t.Provider != nil {
 		t.validateProvider(verr)
 	}
@@ -127,6 +133,39 @@ func (t *ToolsetExpr) Validate() error {
 		return nil
 	}
 	return verr
+}
+
+// SelectOriginTool records that this referenced toolset should consume the
+// named tool from its origin.
+func (t *ToolsetExpr) SelectOriginTool(name string) {
+	t.ToolSelections = append(t.ToolSelections, name)
+}
+
+func (t *ToolsetExpr) validateOriginToolSelections(verr *eval.ValidationErrors) {
+	if len(t.ToolSelections) == 0 {
+		return
+	}
+	if t.Origin == nil {
+		verr.Add(t, "toolset %q cannot select origin tools without an origin", t.Name)
+		return
+	}
+	originTools := make(map[string]struct{}, len(t.Origin.Tools))
+	for _, tool := range t.Origin.Tools {
+		if tool != nil && tool.Name != "" {
+			originTools[tool.Name] = struct{}{}
+		}
+	}
+	seen := make(map[string]struct{}, len(t.ToolSelections))
+	for _, name := range t.ToolSelections {
+		if _, dup := seen[name]; dup {
+			verr.Add(t, "toolset %q selects origin tool %q more than once", t.Name, name)
+			continue
+		}
+		seen[name] = struct{}{}
+		if _, ok := originTools[name]; !ok {
+			verr.Add(t, "toolset %q selects unknown origin tool %q from toolset %q", t.Name, name, t.Origin.Name)
+		}
+	}
 }
 
 func (t *ToolsetExpr) validateProvider(verr *eval.ValidationErrors) {

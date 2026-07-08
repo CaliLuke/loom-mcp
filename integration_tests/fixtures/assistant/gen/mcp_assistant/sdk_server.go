@@ -43,6 +43,7 @@ type sdkResponseObserver struct {
 	statusCode int
 }
 type sdkToolCallCollector struct {
+	adapter   *MCPAdapter
 	parts     []*ToolsCallResult
 	final     *ToolsCallResult
 	streamErr error
@@ -401,6 +402,14 @@ func registerSDKTools(server *mcpsdk.Server, adapter *MCPAdapter, requestContext
 		Title:        "Search Knowledge Base",
 	}, adapter.sdkToolHandler(requestContext))
 	server.AddTool(&mcpsdk.Tool{
+		Description:  "Search records with an optional query",
+		InputSchema:  sdkToolInputSchema("{\"type\":\"object\",\"properties\":{\"limit\":{\"type\":\"integer\",\"description\":\"Maximum number of records\"},\"query\":{\"type\":\"string\",\"description\":\"Search query\"}},\"additionalProperties\":false}"),
+		Meta:         sdkMeta(json.RawMessage([]byte("{\"com.github.caliluke.loom-mcp/discovery\":{\"call_template_arguments\":{\"query\":\"login\"},\"category\":\"records\",\"keywords\":[\"lookup\",\"records\"],\"tags\":[\"search\",\"records\"]}}"))),
+		Name:         "search_records",
+		OutputSchema: sdkToolInputSchema("{\"type\":\"object\",\"properties\":{\"results\":{\"type\":\"array\",\"description\":\"Record results\",\"items\":{\"type\":\"string\"}}},\"additionalProperties\":false}"),
+		Title:        "Search Records",
+	}, adapter.sdkToolHandler(requestContext))
+	server.AddTool(&mcpsdk.Tool{
 		Description:  "Execute code",
 		InputSchema:  sdkToolInputSchema("{\"type\":\"object\",\"required\":[\"language\",\"code\"],\"properties\":{\"code\":{\"type\":\"string\",\"description\":\"Code to execute\"},\"language\":{\"type\":\"string\",\"description\":\"Language to execute\",\"enum\":[\"python\",\"javascript\"]}},\"additionalProperties\":false}"),
 		Name:         "execute_code",
@@ -613,7 +622,7 @@ func (a *MCPAdapter) sdkToolHandler(requestContext func(context.Context, *http.R
 			payload.Arguments = req.Params.Arguments
 		}
 		ctx = a.sdkRequestContext(ctx, req.GetSession(), req.GetExtra(), requestContext)
-		stream := &sdkToolCallCollector{}
+		stream := &sdkToolCallCollector{adapter: a}
 		if err := a.ToolsCall(ctx, payload, stream); err != nil {
 			return nil, err
 		}
@@ -772,8 +781,15 @@ func (c *sdkToolCallCollector) result() *ToolsCallResult {
 		return &ToolsCallResult{}
 	}
 	if c.streamErr != nil {
+		mapped := c.streamErr
+		if c.adapter != nil {
+			mapped = c.adapter.mapError(c.streamErr)
+		}
+		if mapped == nil {
+			mapped = c.streamErr
+		}
 		item := &ContentItem{
-			Text: stringPtr(c.streamErr.Error()),
+			Text: stringPtr(formatToolErrorText(mapped)),
 			Type: "text",
 		}
 		return &ToolsCallResult{

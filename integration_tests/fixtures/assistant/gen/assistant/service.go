@@ -41,6 +41,8 @@ type Service interface {
 	SummarizeText(context.Context, *SummarizeTextPayload) (res *SummarizeTextResult, err error)
 	// Search knowledge base
 	Search(context.Context, *SearchPayload) (res *SearchResult, err error)
+	// Search records with an optional query
+	SearchRecords(context.Context, *SearchRecordsPayload) (res *SearchRecordsResult, err error)
 	// Execute code
 	ExecuteCode(context.Context, *ExecuteCodePayload) (res *ExecuteCodeResult, err error)
 	// Process batch of items
@@ -74,7 +76,7 @@ const ServiceName = "assistant"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [19]string{"list_documents", "system_info", "conversation_history", "figma_design_system", "generate_prompts", "build_figma_implementation_prompt", "send_notification", "analyze_sentiment", "extract_keywords", "summarize_text", "search", "execute_code", "process_batch", "multi_content", "generate_dpi_spec", "dispatch_action", "dispatch_command", "projected_lookup", "projected_status"}
+var MethodNames = [20]string{"list_documents", "system_info", "conversation_history", "figma_design_system", "generate_prompts", "build_figma_implementation_prompt", "send_notification", "analyze_sentiment", "extract_keywords", "summarize_text", "search", "search_records", "execute_code", "process_batch", "multi_content", "generate_dpi_spec", "dispatch_action", "dispatch_command", "projected_lookup", "projected_status"}
 
 // AnalyzeSentimentPayload is the payload type of the assistant service
 // analyze_sentiment method.
@@ -380,6 +382,22 @@ type SearchPayload struct {
 	Query string `json:"query"`
 	// Maximum number of results
 	Limit *int `json:"limit,omitempty"`
+}
+
+// SearchRecordsPayload is the payload type of the assistant service
+// search_records method.
+type SearchRecordsPayload struct {
+	// Search query
+	Query *string `json:"query,omitempty"`
+	// Maximum number of records
+	Limit *int `json:"limit,omitempty"`
+}
+
+// SearchRecordsResult is the result type of the assistant service
+// search_records method.
+type SearchRecordsResult struct {
+	// Record results
+	Results []string `json:"results,omitempty"`
 }
 
 // SearchResult is the result type of the assistant service search method.

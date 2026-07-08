@@ -1582,8 +1582,11 @@ This is an adapter option, not a DSL declaration: the design still owns the real
 tool contracts, while deployment code decides whether to expose the full catalog
 up front or require on-demand discovery. Tool declarations can improve discovery
 with MCP options such as `ToolTitle`, `ToolDiscoveryCategory`,
-`ToolDiscoveryTags`, and `ToolDiscoveryKeywords`; generated `search_tools`
-descriptors include that metadata and can filter by category or tags.
+`ToolDiscoveryTags`, `ToolDiscoveryKeywords`, and
+`ToolDiscoveryCallTemplateArg`; generated `search_tools` descriptors include
+that metadata and can filter by category or tags. `ToolDiscoveryCallTemplateArg`
+adds exemplar optional arguments to generated `call_tool` examples only; it does
+not make those fields required at runtime.
 Projected toolset tools participate in the same catalog and compact-discovery
 path as method-level MCP tools: they can be pinned with `AlwaysVisible`, found
 through hidden search, and invoked through `call_tool`. Their MCP `ToolInfo`

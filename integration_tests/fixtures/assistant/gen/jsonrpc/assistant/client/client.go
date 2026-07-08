@@ -290,6 +290,28 @@ func (c *Client) Search() loom.Endpoint {
 		}
 		return decodeResponse(resp)
 	}
+} // SearchRecords returns an endpoint that makes JSON-RPC requests to the
+// assistant service search_records method.
+func (c *Client) SearchRecords() loom.Endpoint {
+	var (
+		encodeRequest  = EncodeSearchRecordsRequest(c.encoder)
+		decodeResponse = DecodeSearchRecordsResponse(c.decoder, c.RestoreResponseBody)
+	)
+
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildSearchRecordsRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		if err := encodeRequest(req, v); err != nil {
+			return nil, err
+		}
+		resp, err := c.Doer.Do(req)
+		if err != nil {
+			return nil, loomhttp.ErrRequestError("assistant", "search_records", err)
+		}
+		return decodeResponse(resp)
+	}
 } // ExecuteCode returns an endpoint that makes JSON-RPC requests to the
 // assistant service execute_code method.
 func (c *Client) ExecuteCode() loom.Endpoint {

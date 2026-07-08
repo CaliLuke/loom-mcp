@@ -701,6 +701,27 @@ func emitToolSearchDescriptorHelpers(stmt *jen.Statement) {
 		)
 	stmt.Line()
 
+	stmt.Func().Id("toolDiscoveryCallTemplateArguments").Params(jen.Id("tool").Op("*").Id("ToolInfo")).Map(jen.String()).Any().
+		Block(
+			jen.If(jen.Id("tool").Op("==").Nil()).Block(jen.Return(jen.Nil())),
+			jen.Id("raw").Op(":=").Id("toolRawJSON").Call(jen.Id("tool").Dot("Meta")),
+			jen.If(jen.Len(jen.Id("raw")).Op("==").Lit(0)).Block(jen.Return(jen.Nil())),
+			jen.Var().Id("meta").Map(jen.String()).Struct(
+				jen.Id("CallTemplateArguments").Map(jen.String()).Any().Tag(map[string]string{"json": "call_template_arguments"}),
+			),
+			jen.If(jen.Qual("encoding/json", "Unmarshal").Call(jen.Id("raw"), jen.Op("&").Id("meta")).Op("!=").Nil()).Block(
+				jen.Return(jen.Nil()),
+			),
+			jen.Id("discovery").Op(":=").Id("meta").Index(jen.Lit("com.github.caliluke.loom-mcp/discovery")),
+			jen.If(jen.Len(jen.Id("discovery").Dot("CallTemplateArguments")).Op("==").Lit(0)).Block(jen.Return(jen.Nil())),
+			jen.Id("out").Op(":=").Make(jen.Map(jen.String()).Any(), jen.Len(jen.Id("discovery").Dot("CallTemplateArguments"))),
+			jen.For(jen.List(jen.Id("name"), jen.Id("value")).Op(":=").Range().Id("discovery").Dot("CallTemplateArguments")).Block(
+				jen.Id("out").Index(jen.Id("name")).Op("=").Id("value"),
+			),
+			jen.Return(jen.Id("out")),
+		)
+	stmt.Line()
+
 	stmt.Func().Id("toolSearchDescriptorFor").Params(jen.Id("tool").Op("*").Id("ToolInfo"), jen.Id("includeSchemas").Bool(), jen.Id("callName").String(), jen.Id("query").String(), jen.Id("score").Int(), jen.Id("settings").Id("toolSearchSettings")).Id("toolSearchDescriptor").
 		Block(
 			jen.Id("category").Op(",").Id("tags").Op(",").Id("keywords").Op(":=").Id("toolDiscoveryMetadata").Call(jen.Id("tool")),
@@ -975,6 +996,10 @@ func emitToolSearchDescriptorHelpers(stmt *jen.Statement) {
 			jen.Id("arguments").Op(":=").Map(jen.String()).Any().Values(),
 			jen.For(jen.List(jen.Id("_"), jen.Id("name")).Op(":=").Range().Id("schema").Dot("Required")).Block(
 				jen.Id("arguments").Index(jen.Id("name")).Op("=").Id("toolExampleValue").Call(jen.Id("schema").Dot("Properties").Index(jen.Id("name"))),
+			),
+			jen.For(jen.List(jen.Id("name"), jen.Id("value")).Op(":=").Range().Id("toolDiscoveryCallTemplateArguments").Call(jen.Id("tool"))).Block(
+				jen.If(jen.List(jen.Id("_"), jen.Id("ok")).Op(":=").Id("schema").Dot("Properties").Index(jen.Id("name")), jen.Op("!").Id("ok")).Block(jen.Continue()),
+				jen.Id("arguments").Index(jen.Id("name")).Op("=").Id("value"),
 			),
 			jen.Id("example").Index(jen.Lit("arguments")).Op("=").Id("arguments"),
 			jen.Return(jen.Id("example")),
@@ -1504,10 +1529,10 @@ func emitToolEnumChecks(g *jen.Group, tool *ToolAdapter) {
 		return
 	}
 	g.BlockFunc(func(block *jen.Group) {
-		for field, vals := range tool.EnumFields {
-			args := make([]jen.Code, 0, 3+len(vals))
-			args = append(args, jen.Id("rawFields"), jen.Lit(field), jen.Lit(tool.EnumFieldsPtr[field]))
-			for _, val := range vals {
+		for _, field := range tool.EnumFields {
+			args := make([]jen.Code, 0, 3+len(field.Values))
+			args = append(args, jen.Id("rawFields"), jen.Lit(field.Name), jen.Lit(field.Pointer))
+			for _, val := range field.Values {
 				args = append(args, jen.Lit(val))
 			}
 			block.If(jen.Id("err").Op(":=").Id("validateMCPPayloadEnum").Call(args...), jen.Id("err").Op("!=").Nil()).Block(

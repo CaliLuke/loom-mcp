@@ -14,6 +14,19 @@ func TestToolsetExpr_EvalName(t *testing.T) {
 	require.Equal(t, `toolset "my-toolset"`, ts.EvalName())
 }
 
+func TestToolsetExprValidateRejectsUnknownOriginToolSelection(t *testing.T) {
+	ts := &ToolsetExpr{
+		Name:           "shared-tools",
+		Origin:         &ToolsetExpr{Name: "shared-tools", Tools: []*ToolExpr{{Name: "search"}}},
+		ToolSelections: []string{"missing"},
+	}
+
+	err := ts.Validate()
+
+	require.Error(t, err)
+	require.ErrorContains(t, err, `selects unknown origin tool "missing" from toolset "shared-tools"`)
+}
+
 func TestToolsetExpr_Validate_ProviderMCP(t *testing.T) {
 	// Set up Goa root with a service for MCP provider validation
 	eval.Reset()

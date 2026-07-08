@@ -140,6 +140,13 @@ func (s *assistantsrvc) Search(ctx context.Context, p *assistant.SearchPayload) 
 	return
 }
 
+// Search records with an optional query
+func (s *assistantsrvc) SearchRecords(ctx context.Context, p *assistant.SearchRecordsPayload) (res *assistant.SearchRecordsResult, err error) {
+	res = &assistant.SearchRecordsResult{Results: []string{"login-event.json", "profile-update.json"}}
+	log.Printf(ctx, "assistant.search_records")
+	return
+}
+
 // Execute code
 func (s *assistantsrvc) ExecuteCode(ctx context.Context, p *assistant.ExecuteCodePayload) (res *assistant.ExecuteCodeResult, err error) {
 	output := "ok"

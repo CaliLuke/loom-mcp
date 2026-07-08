@@ -89,8 +89,7 @@ func DecodeInitializeResponse(decoder func(*http.Response) loomhttp.Decoder, res
 		if jresp.Error != nil {
 			switch jresp.Error.Code {
 			default:
-				body, _ := io.ReadAll(resp.Body)
-				return nil, loomhttp.ErrInvalidResponse("mcp_assistant", "initialize", resp.StatusCode, string(body))
+				return nil, jresp.Error
 			}
 		}
 
@@ -155,8 +154,7 @@ func DecodePingResponse(decoder func(*http.Response) loomhttp.Decoder, restoreBo
 		if jresp.Error != nil {
 			switch jresp.Error.Code {
 			default:
-				body, _ := io.ReadAll(resp.Body)
-				return nil, loomhttp.ErrInvalidResponse("mcp_assistant", "ping", resp.StatusCode, string(body))
+				return nil, jresp.Error
 			}
 		}
 
@@ -245,8 +243,7 @@ func DecodeToolsListResponse(decoder func(*http.Response) loomhttp.Decoder, rest
 		if jresp.Error != nil {
 			switch jresp.Error.Code {
 			default:
-				body, _ := io.ReadAll(resp.Body)
-				return nil, loomhttp.ErrInvalidResponse("mcp_assistant", "tools/list", resp.StatusCode, string(body))
+				return nil, jresp.Error
 			}
 		}
 
@@ -335,8 +332,7 @@ func DecodeToolsCallResponse(decoder func(*http.Response) loomhttp.Decoder, rest
 		if jresp.Error != nil {
 			switch jresp.Error.Code {
 			default:
-				body, _ := io.ReadAll(resp.Body)
-				return nil, loomhttp.ErrInvalidResponse("mcp_assistant", "tools/call", resp.StatusCode, string(body))
+				return nil, jresp.Error
 			}
 		}
 
@@ -425,8 +421,7 @@ func DecodeResourcesListResponse(decoder func(*http.Response) loomhttp.Decoder, 
 		if jresp.Error != nil {
 			switch jresp.Error.Code {
 			default:
-				body, _ := io.ReadAll(resp.Body)
-				return nil, loomhttp.ErrInvalidResponse("mcp_assistant", "resources/list", resp.StatusCode, string(body))
+				return nil, jresp.Error
 			}
 		}
 
@@ -515,8 +510,7 @@ func DecodeResourcesReadResponse(decoder func(*http.Response) loomhttp.Decoder, 
 		if jresp.Error != nil {
 			switch jresp.Error.Code {
 			default:
-				body, _ := io.ReadAll(resp.Body)
-				return nil, loomhttp.ErrInvalidResponse("mcp_assistant", "resources/read", resp.StatusCode, string(body))
+				return nil, jresp.Error
 			}
 		}
 
@@ -606,8 +600,7 @@ func DecodeResourcesSubscribeResponse(decoder func(*http.Response) loomhttp.Deco
 		if jresp.Error != nil {
 			switch jresp.Error.Code {
 			default:
-				body, _ := io.ReadAll(resp.Body)
-				return nil, loomhttp.ErrInvalidResponse("mcp_assistant", "resources/subscribe", resp.StatusCode, string(body))
+				return nil, jresp.Error
 			}
 		}
 
@@ -685,8 +678,7 @@ func DecodeResourcesUnsubscribeResponse(decoder func(*http.Response) loomhttp.De
 		if jresp.Error != nil {
 			switch jresp.Error.Code {
 			default:
-				body, _ := io.ReadAll(resp.Body)
-				return nil, loomhttp.ErrInvalidResponse("mcp_assistant", "resources/unsubscribe", resp.StatusCode, string(body))
+				return nil, jresp.Error
 			}
 		}
 
@@ -762,8 +754,7 @@ func DecodePromptsListResponse(decoder func(*http.Response) loomhttp.Decoder, re
 		if jresp.Error != nil {
 			switch jresp.Error.Code {
 			default:
-				body, _ := io.ReadAll(resp.Body)
-				return nil, loomhttp.ErrInvalidResponse("mcp_assistant", "prompts/list", resp.StatusCode, string(body))
+				return nil, jresp.Error
 			}
 		}
 
@@ -852,8 +843,7 @@ func DecodePromptsGetResponse(decoder func(*http.Response) loomhttp.Decoder, res
 		if jresp.Error != nil {
 			switch jresp.Error.Code {
 			default:
-				body, _ := io.ReadAll(resp.Body)
-				return nil, loomhttp.ErrInvalidResponse("mcp_assistant", "prompts/get", resp.StatusCode, string(body))
+				return nil, jresp.Error
 			}
 		}
 
@@ -943,8 +933,7 @@ func DecodeNotifyStatusUpdateResponse(decoder func(*http.Response) loomhttp.Deco
 		if jresp.Error != nil {
 			switch jresp.Error.Code {
 			default:
-				body, _ := io.ReadAll(resp.Body)
-				return nil, loomhttp.ErrInvalidResponse("mcp_assistant", "notify_status_update", resp.StatusCode, string(body))
+				return nil, jresp.Error
 			}
 		}
 
@@ -996,8 +985,7 @@ func DecodeEventsStreamResponse(decoder func(*http.Response) loomhttp.Decoder, r
 		if jresp.Error != nil {
 			switch jresp.Error.Code {
 			default:
-				body, _ := io.ReadAll(resp.Body)
-				return nil, loomhttp.ErrInvalidResponse("mcp_assistant", "events/stream", resp.StatusCode, string(body))
+				return nil, jresp.Error
 			}
 		}
 

@@ -62,6 +62,11 @@ func SearchAssistantPath() string {
 	return "/rpc"
 }
 
+// SearchRecordsAssistantPath returns the URL path to the assistant service search_records HTTP endpoint.
+func SearchRecordsAssistantPath() string {
+	return "/rpc"
+}
+
 // ExecuteCodeAssistantPath returns the URL path to the assistant service execute_code HTTP endpoint.
 func ExecuteCodeAssistantPath() string {
 	return "/rpc"

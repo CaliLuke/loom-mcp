@@ -65,8 +65,7 @@ func DecodeListDocumentsResponse(decoder func(*http.Response) loomhttp.Decoder, 
 		if jresp.Error != nil {
 			switch jresp.Error.Code {
 			default:
-				body, _ := io.ReadAll(resp.Body)
-				return nil, loomhttp.ErrInvalidResponse("assistant", "list_documents", resp.StatusCode, string(body))
+				return nil, jresp.Error
 			}
 		}
 
@@ -131,8 +130,7 @@ func DecodeSystemInfoResponse(decoder func(*http.Response) loomhttp.Decoder, res
 		if jresp.Error != nil {
 			switch jresp.Error.Code {
 			default:
-				body, _ := io.ReadAll(resp.Body)
-				return nil, loomhttp.ErrInvalidResponse("assistant", "system_info", resp.StatusCode, string(body))
+				return nil, jresp.Error
 			}
 		}
 
@@ -218,8 +216,7 @@ func DecodeConversationHistoryResponse(decoder func(*http.Response) loomhttp.Dec
 		if jresp.Error != nil {
 			switch jresp.Error.Code {
 			default:
-				body, _ := io.ReadAll(resp.Body)
-				return nil, loomhttp.ErrInvalidResponse("assistant", "conversation_history", resp.StatusCode, string(body))
+				return nil, jresp.Error
 			}
 		}
 
@@ -280,8 +277,7 @@ func DecodeFigmaDesignSystemResponse(decoder func(*http.Response) loomhttp.Decod
 		if jresp.Error != nil {
 			switch jresp.Error.Code {
 			default:
-				body, _ := io.ReadAll(resp.Body)
-				return nil, loomhttp.ErrInvalidResponse("assistant", "figma_design_system", resp.StatusCode, string(body))
+				return nil, jresp.Error
 			}
 		}
 
@@ -370,8 +366,7 @@ func DecodeGeneratePromptsResponse(decoder func(*http.Response) loomhttp.Decoder
 		if jresp.Error != nil {
 			switch jresp.Error.Code {
 			default:
-				body, _ := io.ReadAll(resp.Body)
-				return nil, loomhttp.ErrInvalidResponse("assistant", "generate_prompts", resp.StatusCode, string(body))
+				return nil, jresp.Error
 			}
 		}
 
@@ -462,8 +457,7 @@ func DecodeBuildFigmaImplementationPromptResponse(decoder func(*http.Response) l
 		if jresp.Error != nil {
 			switch jresp.Error.Code {
 			default:
-				body, _ := io.ReadAll(resp.Body)
-				return nil, loomhttp.ErrInvalidResponse("assistant", "build_figma_implementation_prompt", resp.StatusCode, string(body))
+				return nil, jresp.Error
 			}
 		}
 
@@ -552,8 +546,7 @@ func DecodeSendNotificationResponse(decoder func(*http.Response) loomhttp.Decode
 		if jresp.Error != nil {
 			switch jresp.Error.Code {
 			default:
-				body, _ := io.ReadAll(resp.Body)
-				return nil, loomhttp.ErrInvalidResponse("assistant", "send_notification", resp.StatusCode, string(body))
+				return nil, jresp.Error
 			}
 		}
 
@@ -629,8 +622,7 @@ func DecodeAnalyzeSentimentResponse(decoder func(*http.Response) loomhttp.Decode
 		if jresp.Error != nil {
 			switch jresp.Error.Code {
 			default:
-				body, _ := io.ReadAll(resp.Body)
-				return nil, loomhttp.ErrInvalidResponse("assistant", "analyze_sentiment", resp.StatusCode, string(body))
+				return nil, jresp.Error
 			}
 		}
 
@@ -715,8 +707,7 @@ func DecodeExtractKeywordsResponse(decoder func(*http.Response) loomhttp.Decoder
 		if jresp.Error != nil {
 			switch jresp.Error.Code {
 			default:
-				body, _ := io.ReadAll(resp.Body)
-				return nil, loomhttp.ErrInvalidResponse("assistant", "extract_keywords", resp.StatusCode, string(body))
+				return nil, jresp.Error
 			}
 		}
 
@@ -801,8 +792,7 @@ func DecodeSummarizeTextResponse(decoder func(*http.Response) loomhttp.Decoder, 
 		if jresp.Error != nil {
 			switch jresp.Error.Code {
 			default:
-				body, _ := io.ReadAll(resp.Body)
-				return nil, loomhttp.ErrInvalidResponse("assistant", "summarize_text", resp.StatusCode, string(body))
+				return nil, jresp.Error
 			}
 		}
 
@@ -887,8 +877,7 @@ func DecodeSearchResponse(decoder func(*http.Response) loomhttp.Decoder, restore
 		if jresp.Error != nil {
 			switch jresp.Error.Code {
 			default:
-				body, _ := io.ReadAll(resp.Body)
-				return nil, loomhttp.ErrInvalidResponse("assistant", "search", resp.StatusCode, string(body))
+				return nil, jresp.Error
 			}
 		}
 
@@ -902,6 +891,91 @@ func DecodeSearchResponse(decoder func(*http.Response) loomhttp.Decoder, restore
 			return nil, loomhttp.ErrDecodingError("assistant", "search", err)
 		}
 		res := NewSearchResultOK(&body)
+		return res, nil
+	}
+} // BuildSearchRecordsRequest instantiates a HTTP request object with method and
+// path set to call the "assistant" service "search_records" endpoint
+func (c *Client) BuildSearchRecordsRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: SearchRecordsAssistantPath()}
+	req, err := http.NewRequest("POST", u.String(), nil)
+	if err != nil {
+		return nil, loomhttp.ErrInvalidURL("assistant", "search_records", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeSearchRecordsRequest returns an encoder for requests sent to the
+// assistant search_records server.
+func EncodeSearchRecordsRequest(encoder func(*http.Request) loomhttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*assistant.SearchRecordsPayload)
+		if !ok {
+			return loomhttp.ErrInvalidType("assistant", "search_records", "*assistant.SearchRecordsPayload", v)
+		}
+		b := NewSearchRecordsRequestBody(p)
+		body := &jsonrpc.Request{
+			JSONRPC: "2.0",
+			Method:  "search_records",
+			Params:  b,
+		}
+		// No ID field in payload - always send as a request with generated ID
+		id := uuid.New().String()
+		body.ID = id
+		if err := encoder(req).Encode(&body); err != nil {
+			return loomhttp.ErrEncodingError("assistant", "search_records", err)
+		}
+		return nil
+	}
+}
+
+// DecodeSearchRecordsResponse returns a decoder for responses returned by the
+// assistant service search_records JSON-RPC method. restoreBody controls
+// whether the response body should be restored after having been read.
+func DecodeSearchRecordsResponse(decoder func(*http.Response) loomhttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		}
+		defer resp.Body.Close()
+
+		if resp.StatusCode != http.StatusOK {
+			body, _ := io.ReadAll(resp.Body)
+			return nil, loomhttp.ErrInvalidResponse("assistant", "search_records", resp.StatusCode, string(body))
+		}
+
+		var jresp jsonrpc.RawResponse
+		if err := decoder(resp).Decode(&jresp); err != nil {
+			return nil, loomhttp.ErrDecodingError("assistant", "search_records", err)
+		}
+
+		if jresp.Error != nil {
+			switch jresp.Error.Code {
+			default:
+				return nil, jresp.Error
+			}
+		}
+
+		resp.Body = io.NopCloser(bytes.NewBuffer(jresp.Result))
+		var (
+			body SearchRecordsResponseBody
+			err  error
+		)
+		err = decoder(resp).Decode(&body)
+		if err != nil {
+			return nil, loomhttp.ErrDecodingError("assistant", "search_records", err)
+		}
+		res := NewSearchRecordsResultOK(&body)
 		return res, nil
 	}
 } // BuildExecuteCodeRequest instantiates a HTTP request object with method and
@@ -973,8 +1047,7 @@ func DecodeExecuteCodeResponse(decoder func(*http.Response) loomhttp.Decoder, re
 		if jresp.Error != nil {
 			switch jresp.Error.Code {
 			default:
-				body, _ := io.ReadAll(resp.Body)
-				return nil, loomhttp.ErrInvalidResponse("assistant", "execute_code", resp.StatusCode, string(body))
+				return nil, jresp.Error
 			}
 		}
 
@@ -1059,8 +1132,7 @@ func DecodeProcessBatchResponse(decoder func(*http.Response) loomhttp.Decoder, r
 		if jresp.Error != nil {
 			switch jresp.Error.Code {
 			default:
-				body, _ := io.ReadAll(resp.Body)
-				return nil, loomhttp.ErrInvalidResponse("assistant", "process_batch", resp.StatusCode, string(body))
+				return nil, jresp.Error
 			}
 		}
 
@@ -1145,8 +1217,7 @@ func DecodeMultiContentResponse(decoder func(*http.Response) loomhttp.Decoder, r
 		if jresp.Error != nil {
 			switch jresp.Error.Code {
 			default:
-				body, _ := io.ReadAll(resp.Body)
-				return nil, loomhttp.ErrInvalidResponse("assistant", "multi_content", resp.StatusCode, string(body))
+				return nil, jresp.Error
 			}
 		}
 
@@ -1231,8 +1302,7 @@ func DecodeGenerateDpiSpecResponse(decoder func(*http.Response) loomhttp.Decoder
 		if jresp.Error != nil {
 			switch jresp.Error.Code {
 			default:
-				body, _ := io.ReadAll(resp.Body)
-				return nil, loomhttp.ErrInvalidResponse("assistant", "generate_dpi_spec", resp.StatusCode, string(body))
+				return nil, jresp.Error
 			}
 		}
 
@@ -1321,8 +1391,7 @@ func DecodeDispatchActionResponse(decoder func(*http.Response) loomhttp.Decoder,
 		if jresp.Error != nil {
 			switch jresp.Error.Code {
 			default:
-				body, _ := io.ReadAll(resp.Body)
-				return nil, loomhttp.ErrInvalidResponse("assistant", "dispatch_action", resp.StatusCode, string(body))
+				return nil, jresp.Error
 			}
 		}
 
@@ -1411,8 +1480,7 @@ func DecodeDispatchCommandResponse(decoder func(*http.Response) loomhttp.Decoder
 		if jresp.Error != nil {
 			switch jresp.Error.Code {
 			default:
-				body, _ := io.ReadAll(resp.Body)
-				return nil, loomhttp.ErrInvalidResponse("assistant", "dispatch_command", resp.StatusCode, string(body))
+				return nil, jresp.Error
 			}
 		}
 
@@ -1501,8 +1569,7 @@ func DecodeProjectedLookupResponse(decoder func(*http.Response) loomhttp.Decoder
 		if jresp.Error != nil {
 			switch jresp.Error.Code {
 			default:
-				body, _ := io.ReadAll(resp.Body)
-				return nil, loomhttp.ErrInvalidResponse("assistant", "projected_lookup", resp.StatusCode, string(body))
+				return nil, jresp.Error
 			}
 		}
 
@@ -1567,8 +1634,7 @@ func DecodeProjectedStatusResponse(decoder func(*http.Response) loomhttp.Decoder
 		if jresp.Error != nil {
 			switch jresp.Error.Code {
 			default:
-				body, _ := io.ReadAll(resp.Body)
-				return nil, loomhttp.ErrInvalidResponse("assistant", "projected_status", resp.StatusCode, string(body))
+				return nil, jresp.Error
 			}
 		}
 

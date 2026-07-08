@@ -228,6 +228,52 @@ func TestToolsetReferenceReuse(t *testing.T) {
 	require.Equal(t, "shared-tools", agent.Used.Toolsets[0].Name)
 }
 
+func TestToolsetReferenceSubsetSelectsOriginTools(t *testing.T) {
+	runDSL(t, func() {
+		API("test", func() {})
+		shared := Toolset("shared-tools", func() {
+			Tool("ping", "Ping helper", func() {
+				Args(func() {
+					Attribute("message", String)
+					Required("message")
+				})
+			})
+			Tool("pong", "Pong helper", func() {})
+		})
+		Service("ops", func() {
+			Agent("watcher", "Watches", func() {
+				Use(shared, func() {
+					Tool("ping")
+				})
+			})
+		})
+	})
+
+	require.Len(t, agentsexpr.Root.Agents, 1)
+	used := agentsexpr.Root.Agents[0].Used.Toolsets[0]
+	require.Equal(t, "shared-tools", used.Name)
+	require.Len(t, used.Tools, 1)
+	require.Equal(t, "ping", used.Tools[0].Name)
+	require.Equal(t, "Ping helper", used.Tools[0].Description)
+	require.NotNil(t, used.Tools[0].Args)
+}
+
+func TestToolsetReferenceSubsetRejectsUnknownOriginTool(t *testing.T) {
+	runDSLExpectError(t, func() {
+		API("test", func() {})
+		shared := Toolset("shared-tools", func() {
+			Tool("ping", "Ping helper", func() {})
+		})
+		Service("ops", func() {
+			Agent("watcher", "Watches", func() {
+				Use(shared, func() {
+					Tool("missing")
+				})
+			})
+		})
+	}, `selects unknown origin tool "missing" from toolset "shared-tools"`)
+}
+
 func TestBindToSelfServiceMethod(t *testing.T) {
 	runDSL(t, func() {
 		API("test", func() {})
@@ -672,6 +718,7 @@ func TestOnMissingFields(t *testing.T) {
 		Service("svc", func() {
 			Agent("agent", "desc", func() {
 				RunPolicy(func() {
+					InterruptsAllowed(true)
 					OnMissingFields("await_clarification")
 				})
 			})

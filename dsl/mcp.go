@@ -387,6 +387,22 @@ func ToolDiscoveryKeywords(keywords ...string) func(*exprmcp.ToolExpr) {
 	}
 }
 
+// ToolDiscoveryCallTemplateArg adds an exemplar argument to progressive
+// discovery call_tool templates. The argument remains optional unless the
+// payload schema itself marks it required.
+func ToolDiscoveryCallTemplateArg(name string, value any) func(*exprmcp.ToolExpr) {
+	return func(tool *exprmcp.ToolExpr) {
+		name = strings.TrimSpace(name)
+		if name == "" {
+			return
+		}
+		if tool.DiscoveryCallTemplateArgs == nil {
+			tool.DiscoveryCallTemplateArgs = make(map[string]any)
+		}
+		tool.DiscoveryCallTemplateArgs[name] = value
+	}
+}
+
 // ResourceIcons attaches icon metadata to an MCP resource.
 func ResourceIcons(icons ...*exprmcp.IconExpr) func(*exprmcp.ResourceExpr) {
 	return func(resource *exprmcp.ResourceExpr) {

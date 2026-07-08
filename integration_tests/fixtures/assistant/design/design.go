@@ -224,6 +224,22 @@ var _ = Service("assistant", func() {
 		JSONRPC(func() {})
 	})
 
+	Method("search_records", func() {
+		Description("Search records with an optional query")
+		Payload(func() {
+			Attribute("query", String, "Search query")
+			Attribute("limit", Int, "Maximum number of records")
+		})
+		Result(func() { Attribute("results", ArrayOf(String), "Record results") })
+		Tool("search_records", "Search records with an optional query",
+			ToolDiscoveryCategory("records"),
+			ToolDiscoveryTags("search", "records"),
+			ToolDiscoveryKeywords("lookup", "records"),
+			ToolDiscoveryCallTemplateArg("query", "login"),
+		)
+		JSONRPC(func() {})
+	})
+
 	Method("execute_code", func() {
 		Description("Execute code")
 		Payload(func() {

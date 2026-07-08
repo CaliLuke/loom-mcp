@@ -528,6 +528,50 @@ func formatToolErrorText(err error) string {
 	}
 	return fmt.Sprintf("[%s] %s\nRecovery: %s", code, message, recovery)
 }
+func (a *MCPAdapter) safeMCPError(err error, defaultCode string, fallbackMessage string) error {
+	if err == nil {
+		return loom.WithErrorRemedy(loom.PermanentError(defaultCode, "%s", fallbackMessage), &loom.ErrorRemedy{
+			Code:        defaultCode,
+			SafeMessage: fallbackMessage,
+		})
+	}
+	mapped := a.mapError(err)
+	if mapped == nil {
+		mapped = err
+	}
+	code := strings.TrimSpace(loom.ErrorRemedyCode(mapped))
+	if code == "" {
+		var namer loom.LoomErrorNamer
+		if errors.As(mapped, &namer) {
+			code = strings.TrimSpace(namer.LoomErrorName())
+		}
+	}
+	if code == "" {
+		if status, ok := loom.ErrorStatusCode(mapped); ok {
+			switch status {
+			case http.StatusBadRequest:
+				code = "invalid_params"
+			case http.StatusNotFound:
+				code = defaultCode
+			default:
+				code = "internal_error"
+			}
+		}
+	}
+	if code == "" {
+		code = defaultCode
+	}
+	message := strings.TrimSpace(fallbackMessage)
+	if remedy := loom.ExtractErrorRemedy(mapped); remedy != nil {
+		if safe := strings.TrimSpace(remedy.SafeMessage); safe != "" {
+			message = safe
+		}
+	}
+	return loom.WithErrorRemedy(loom.PermanentError(code, "%s", message), &loom.ErrorRemedy{
+		Code:        code,
+		SafeMessage: message,
+	})
+}
 func toolCallError(err error, defaultCode string, defaultRecovery string) error {
 	if err == nil {
 		err = loom.PermanentError(defaultCode, "Tool execution failed.")
@@ -742,9 +786,13 @@ func validateMCPPayloadRequired(fields map[string]json.RawMessage, field string)
 	}
 	return nil
 }
-func validateMCPPayloadEnum(fields map[string]json.RawMessage, field string, allowed ...string) error {
+func validateMCPPayloadEnum(fields map[string]json.RawMessage, field string, optional bool, allowed ...string) error {
 	raw, ok := fields[field]
 	if !ok {
+		return nil
+	}
+	trimmed := bytes.TrimSpace(raw)
+	if optional && bytes.Equal(trimmed, []byte("null")) {
 		return nil
 	}
 	var value any
@@ -852,6 +900,13 @@ func (a *MCPAdapter) generatedToolCatalog() []*ToolInfo {
 		OutputSchema: json.RawMessage([]byte("{\"type\":\"object\",\"properties\":{\"results\":{\"type\":\"array\",\"description\":\"Search results\",\"items\":{\"type\":\"string\"}}},\"additionalProperties\":false}")),
 		Title:        stringPtr("Search Knowledge Base"),
 	}, &ToolInfo{
+		Description:  stringPtr("Search records with an optional query"),
+		InputSchema:  json.RawMessage([]byte("{\"type\":\"object\",\"properties\":{\"limit\":{\"type\":\"integer\",\"description\":\"Maximum number of records\"},\"query\":{\"type\":\"string\",\"description\":\"Search query\"}},\"additionalProperties\":false}")),
+		Meta:         json.RawMessage([]byte("{\"com.github.caliluke.loom-mcp/discovery\":{\"call_template_arguments\":{\"query\":\"login\"},\"category\":\"records\",\"keywords\":[\"lookup\",\"records\"],\"tags\":[\"search\",\"records\"]}}")),
+		Name:         "search_records",
+		OutputSchema: json.RawMessage([]byte("{\"type\":\"object\",\"properties\":{\"results\":{\"type\":\"array\",\"description\":\"Record results\",\"items\":{\"type\":\"string\"}}},\"additionalProperties\":false}")),
+		Title:        stringPtr("Search Records"),
+	}, &ToolInfo{
 		Description:  stringPtr("Execute code"),
 		InputSchema:  json.RawMessage([]byte("{\"type\":\"object\",\"required\":[\"language\",\"code\"],\"properties\":{\"code\":{\"type\":\"string\",\"description\":\"Code to execute\"},\"language\":{\"type\":\"string\",\"description\":\"Language to execute\",\"enum\":[\"python\",\"javascript\"]}},\"additionalProperties\":false}")),
 		Name:         "execute_code",
@@ -934,6 +989,8 @@ func isGeneratedToolName(name string) bool {
 	case "summarize_text":
 		return true
 	case "search":
+		return true
+	case "search_records":
 		return true
 	case "execute_code":
 		return true
@@ -1187,6 +1244,30 @@ func toolDiscoveryMetadata(tool *ToolInfo) (string, []string, []string) {
 	discovery := meta["com.github.caliluke.loom-mcp/discovery"]
 	return discovery.Category, discovery.Tags, discovery.Keywords
 }
+func toolDiscoveryCallTemplateArguments(tool *ToolInfo) map[string]any {
+	if tool == nil {
+		return nil
+	}
+	raw := toolRawJSON(tool.Meta)
+	if len(raw) == 0 {
+		return nil
+	}
+	var meta map[string]struct {
+		CallTemplateArguments map[string]any `json:"call_template_arguments"`
+	}
+	if json.Unmarshal(raw, &meta) != nil {
+		return nil
+	}
+	discovery := meta["com.github.caliluke.loom-mcp/discovery"]
+	if len(discovery.CallTemplateArguments) == 0 {
+		return nil
+	}
+	out := make(map[string]any, len(discovery.CallTemplateArguments))
+	for name, value := range discovery.CallTemplateArguments {
+		out[name] = value
+	}
+	return out
+}
 func toolSearchDescriptorFor(tool *ToolInfo, includeSchemas bool, callName string, query string, score int, settings toolSearchSettings) toolSearchDescriptor {
 	category, tags, keywords := toolDiscoveryMetadata(tool)
 	callArguments := toolCallArgumentsExample(tool)
@@ -1425,6 +1506,12 @@ func toolCallArgumentsExample(tool *ToolInfo) map[string]any {
 	arguments := map[string]any{}
 	for _, name := range schema.Required {
 		arguments[name] = toolExampleValue(schema.Properties[name])
+	}
+	for name, value := range toolDiscoveryCallTemplateArguments(tool) {
+		if _, ok := schema.Properties[name]; !ok {
+			continue
+		}
+		arguments[name] = value
 	}
 	example["arguments"] = arguments
 	return example
@@ -1706,6 +1793,21 @@ func searchInputRecovery(err error, raw json.RawMessage) string {
 	}
 	_ = raw
 	example := "{\"query\":\"example\"}"
+	if field := missingFieldFromMessage(message); field != "" {
+		return fmt.Sprintf("Include required field %q. Example: %s", field, example)
+	}
+	if strings.Contains(message, "unexpected end of JSON input") || strings.Contains(message, "unexpected EOF") {
+		return "Provide complete JSON arguments. Example: " + example
+	}
+	return "Provide valid tool arguments. Example: " + example
+}
+func searchRecordsInputRecovery(err error, raw json.RawMessage) string {
+	message := strings.TrimSpace(loom.ErrorSafeMessage(err))
+	if message == "" {
+		message = strings.TrimSpace(err.Error())
+	}
+	_ = raw
+	example := "{}"
 	if field := missingFieldFromMessage(message); field != "" {
 		return fmt.Sprintf("Include required field %q. Example: %s", field, example)
 	}
@@ -2057,6 +2159,29 @@ func (a *MCPAdapter) executeRealTool(ctx context.Context, p *ToolsCallPayload, s
 			"name":   p.Name,
 		})
 		return false, stream.SendAndClose(ctx, final)
+	case "search_records":
+		var payload *assistant.SearchRecordsPayload
+		if err := decodeMCPPayloadStrict(p.Arguments, &payload); err != nil {
+			return true, a.sendToolError(ctx, stream, p.Name, toolCallError(err, "invalid_params", searchRecordsInputRecovery(err, p.Arguments)))
+		}
+		result, err := a.service.SearchRecords(ctx, payload)
+		if err != nil {
+			return true, a.sendToolError(ctx, stream, p.Name, err)
+		}
+		structuredContent, serr := json.Marshal(result)
+		if serr != nil {
+			return false, serr
+		}
+		s := string(structuredContent)
+		final := &ToolsCallResult{
+			Content:           []*ContentItem{buildContentItem(a, s)},
+			StructuredContent: structuredContent,
+		}
+		a.log(ctx, "response", map[string]any{
+			"method": "tools/call",
+			"name":   p.Name,
+		})
+		return false, stream.SendAndClose(ctx, final)
 	case "execute_code":
 		var payload *assistant.ExecuteCodePayload
 		rawFields, err := decodeMCPPayloadFields(p.Arguments)
@@ -2075,7 +2200,7 @@ func (a *MCPAdapter) executeRealTool(ctx context.Context, p *ToolsCallPayload, s
 			}
 		}
 		{
-			if err := validateMCPPayloadEnum(rawFields, "language", "python", "javascript"); err != nil {
+			if err := validateMCPPayloadEnum(rawFields, "language", false, "python", "javascript"); err != nil {
 				return true, a.sendToolError(ctx, stream, p.Name, toolCallError(err, "invalid_params", executeCodeInputRecovery(err, p.Arguments)))
 			}
 		}
@@ -2107,7 +2232,7 @@ func (a *MCPAdapter) executeRealTool(ctx context.Context, p *ToolsCallPayload, s
 			return true, a.sendToolError(ctx, stream, p.Name, toolCallError(err, "invalid_params", processBatchInputRecovery(err, p.Arguments)))
 		}
 		{
-			if err := validateMCPPayloadEnum(rawFields, "format", "json", "text", "blob", "uri"); err != nil {
+			if err := validateMCPPayloadEnum(rawFields, "format", true, "json", "text", "blob", "uri"); err != nil {
 				return true, a.sendToolError(ctx, stream, p.Name, toolCallError(err, "invalid_params", processBatchInputRecovery(err, p.Arguments)))
 			}
 		}
@@ -2176,10 +2301,10 @@ func (a *MCPAdapter) executeRealTool(ctx context.Context, p *ToolsCallPayload, s
 			}
 		}
 		{
-			if err := validateMCPPayloadEnum(rawFields, "density", "compact", "comfortable"); err != nil {
+			if err := validateMCPPayloadEnum(rawFields, "platform", false, "ios", "web"); err != nil {
 				return true, a.sendToolError(ctx, stream, p.Name, toolCallError(err, "invalid_params", generateDpiSpecInputRecovery(err, p.Arguments)))
 			}
-			if err := validateMCPPayloadEnum(rawFields, "platform", "ios", "web"); err != nil {
+			if err := validateMCPPayloadEnum(rawFields, "density", false, "compact", "comfortable"); err != nil {
 				return true, a.sendToolError(ctx, stream, p.Name, toolCallError(err, "invalid_params", generateDpiSpecInputRecovery(err, p.Arguments)))
 			}
 		}
@@ -2377,7 +2502,19 @@ func (a *MCPAdapter) ResourcesRead(ctx context.Context, p *ResourcesReadPayload)
 		skillSources := skillSources()
 		content, err := mcpskills.Read(ctx, skillSources, baseURI)
 		if err != nil {
-			return nil, loom.PermanentError("invalid_params", "%s", err.Error())
+			a.log(ctx, "error", map[string]any{
+				"error":  err.Error(),
+				"method": "resources/read",
+				"uri":    baseURI,
+			})
+			code := "internal_error"
+			if errors.Is(err, mcpskills.ErrInvalidURI) {
+				code = "invalid_params"
+			} else if errors.Is(err, mcpskills.ErrNotFound) {
+				code = "resource_not_found"
+			}
+			message := fmt.Sprintf("Unable to read skill resource: %s", baseURI)
+			return nil, a.safeMCPError(loom.PermanentError(code, "%s", message), code, message)
 		}
 		res := &ResourcesReadResult{Contents: []*ResourceContent{&ResourceContent{
 			Blob:     content.Blob,
@@ -2395,15 +2532,15 @@ func (a *MCPAdapter) ResourcesRead(ctx context.Context, p *ResourcesReadPayload)
 	switch baseURI {
 	case "doc://list":
 		if err := a.assertResourceURIAllowed(ctx, p.URI); err != nil {
-			return nil, loom.PermanentError("invalid_params", "%s", err.Error())
+			return nil, a.safeMCPError(err, "invalid_params", "Resource URI is not allowed.")
 		}
 		result, err := a.service.ListDocuments(ctx)
 		if err != nil {
-			return nil, a.mapError(err)
+			return nil, a.safeMCPError(err, "internal_error", "Resource read failed.")
 		}
 		s, serr := mcpruntime.EncodeJSONToString(ctx, goahttp.ResponseEncoder, result)
 		if serr != nil {
-			return nil, loom.PermanentError("invalid_params", "%s", serr.Error())
+			return nil, a.safeMCPError(serr, "internal_error", "Resource read failed.")
 		}
 		res := &ResourcesReadResult{Contents: []*ResourceContent{&ResourceContent{
 			MimeType: stringPtr("application/json"),
@@ -2417,15 +2554,15 @@ func (a *MCPAdapter) ResourcesRead(ctx context.Context, p *ResourcesReadPayload)
 		return res, nil
 	case "system://info":
 		if err := a.assertResourceURIAllowed(ctx, p.URI); err != nil {
-			return nil, loom.PermanentError("invalid_params", "%s", err.Error())
+			return nil, a.safeMCPError(err, "invalid_params", "Resource URI is not allowed.")
 		}
 		result, err := a.service.SystemInfo(ctx)
 		if err != nil {
-			return nil, a.mapError(err)
+			return nil, a.safeMCPError(err, "internal_error", "Resource read failed.")
 		}
 		s, serr := mcpruntime.EncodeJSONToString(ctx, goahttp.ResponseEncoder, result)
 		if serr != nil {
-			return nil, loom.PermanentError("invalid_params", "%s", serr.Error())
+			return nil, a.safeMCPError(serr, "internal_error", "Resource read failed.")
 		}
 		res := &ResourcesReadResult{Contents: []*ResourceContent{&ResourceContent{
 			MimeType: stringPtr("application/json"),
@@ -2439,11 +2576,11 @@ func (a *MCPAdapter) ResourcesRead(ctx context.Context, p *ResourcesReadPayload)
 		return res, nil
 	case "conversation://history":
 		if err := a.assertResourceURIAllowed(ctx, p.URI); err != nil {
-			return nil, loom.PermanentError("invalid_params", "%s", err.Error())
+			return nil, a.safeMCPError(err, "invalid_params", "Resource URI is not allowed.")
 		}
 		args, aerr := parseQueryParamsToJSON(p.URI)
 		if aerr != nil {
-			return nil, loom.PermanentError("invalid_params", "%s", aerr.Error())
+			return nil, a.safeMCPError(aerr, "invalid_params", "Invalid resource request.")
 		}
 		req := &http.Request{
 			Body:   io.NopCloser(bytes.NewReader(args)),
@@ -2451,15 +2588,15 @@ func (a *MCPAdapter) ResourcesRead(ctx context.Context, p *ResourcesReadPayload)
 		}
 		var payload *assistant.ConversationHistoryPayload
 		if err := goahttp.RequestDecoder(req).Decode(&payload); err != nil {
-			return nil, loom.PermanentError("invalid_params", "%s", err.Error())
+			return nil, a.safeMCPError(err, "invalid_params", "Invalid resource request.")
 		}
 		result, err := a.service.ConversationHistory(ctx, payload)
 		if err != nil {
-			return nil, a.mapError(err)
+			return nil, a.safeMCPError(err, "internal_error", "Resource read failed.")
 		}
 		s, serr := mcpruntime.EncodeJSONToString(ctx, goahttp.ResponseEncoder, result)
 		if serr != nil {
-			return nil, loom.PermanentError("invalid_params", "%s", serr.Error())
+			return nil, a.safeMCPError(serr, "internal_error", "Resource read failed.")
 		}
 		res := &ResourcesReadResult{Contents: []*ResourceContent{&ResourceContent{
 			MimeType: stringPtr("application/json"),
@@ -2473,15 +2610,15 @@ func (a *MCPAdapter) ResourcesRead(ctx context.Context, p *ResourcesReadPayload)
 		return res, nil
 	case "figma://design-system/mobile-checkout":
 		if err := a.assertResourceURIAllowed(ctx, p.URI); err != nil {
-			return nil, loom.PermanentError("invalid_params", "%s", err.Error())
+			return nil, a.safeMCPError(err, "invalid_params", "Resource URI is not allowed.")
 		}
 		result, err := a.service.FigmaDesignSystem(ctx)
 		if err != nil {
-			return nil, a.mapError(err)
+			return nil, a.safeMCPError(err, "internal_error", "Resource read failed.")
 		}
 		s, serr := mcpruntime.EncodeJSONToString(ctx, goahttp.ResponseEncoder, result)
 		if serr != nil {
-			return nil, loom.PermanentError("invalid_params", "%s", serr.Error())
+			return nil, a.safeMCPError(serr, "internal_error", "Resource read failed.")
 		}
 		res := &ResourcesReadResult{Contents: []*ResourceContent{&ResourceContent{
 			MimeType: stringPtr("application/json"),
@@ -2647,7 +2784,7 @@ func (a *MCPAdapter) PromptsGet(ctx context.Context, p *PromptsGetPayload) (*Pro
 				})
 				return res, nil
 			} else if err != nil {
-				return nil, err
+				return nil, a.safeMCPError(err, "internal_error", "Prompt retrieval failed.")
 			}
 		}
 		msgs := []*PromptMessage{&PromptMessage{
@@ -2672,7 +2809,7 @@ func (a *MCPAdapter) PromptsGet(ctx context.Context, p *PromptsGetPayload) (*Pro
 		var args map[string]any
 		if len(p.Arguments) > 0 {
 			if err := json.Unmarshal(p.Arguments, &args); err != nil {
-				return nil, loom.PermanentError("invalid_params", "%s", err.Error())
+				return nil, a.safeMCPError(err, "invalid_params", "Invalid prompt arguments.")
 			}
 		}
 		if _, ok := args["context"]; !ok {
@@ -2686,7 +2823,7 @@ func (a *MCPAdapter) PromptsGet(ctx context.Context, p *PromptsGetPayload) (*Pro
 		}
 		res, err := a.promptProvider.GetContextualPromptsPrompt(ctx, p.Arguments)
 		if err != nil {
-			return nil, a.mapError(err)
+			return nil, a.safeMCPError(err, "internal_error", "Prompt retrieval failed.")
 		}
 		a.log(ctx, "response", map[string]any{
 			"method": "prompts/get",
@@ -2697,7 +2834,7 @@ func (a *MCPAdapter) PromptsGet(ctx context.Context, p *PromptsGetPayload) (*Pro
 		var args map[string]any
 		if len(p.Arguments) > 0 {
 			if err := json.Unmarshal(p.Arguments, &args); err != nil {
-				return nil, loom.PermanentError("invalid_params", "%s", err.Error())
+				return nil, a.safeMCPError(err, "invalid_params", "Invalid prompt arguments.")
 			}
 		}
 		if _, ok := args["screen_title"]; !ok {
@@ -2717,7 +2854,7 @@ func (a *MCPAdapter) PromptsGet(ctx context.Context, p *PromptsGetPayload) (*Pro
 		}
 		res, err := a.promptProvider.GetFigmaImplementationPromptPrompt(ctx, p.Arguments)
 		if err != nil {
-			return nil, a.mapError(err)
+			return nil, a.safeMCPError(err, "internal_error", "Prompt retrieval failed.")
 		}
 		a.log(ctx, "response", map[string]any{
 			"method": "prompts/get",

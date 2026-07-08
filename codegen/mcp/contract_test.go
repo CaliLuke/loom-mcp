@@ -740,6 +740,42 @@ func TestGeneratedSearchToolsRendersDesignSearchPolicy(t *testing.T) {
 	require.Contains(t, adapterSource, "BroadFallback *bool")
 }
 
+func TestGeneratedToolDiscoveryCallTemplateArguments(t *testing.T) {
+	restore := resetMCPCodegenState(t)
+	defer restore()
+
+	svc, methods := testService("assistant", "search_records")
+	methods["search_records"].Payload = &expr.AttributeExpr{Type: &expr.Object{
+		{Name: "query", Attribute: &expr.AttributeExpr{Type: expr.String, Description: "Search query"}},
+		{Name: "limit", Attribute: &expr.AttributeExpr{Type: expr.Int, Description: "Maximum results"}},
+	}}
+	root := testRootExpr([]*expr.ServiceExpr{svc}, []*expr.HTTPServiceExpr{
+		jsonrpcService(svc, "/rpc"),
+	})
+	mcpexpr.Root.RegisterMCP(svc, &mcpexpr.MCPExpr{
+		Name:    "assistant-mcp",
+		Version: "1.0.0",
+		Tools: []*mcpexpr.ToolExpr{
+			{
+				Name:                      "search_records",
+				Description:               "Search records",
+				DiscoveryCallTemplateArgs: map[string]any{"query": "login"},
+				Method:                    methods["search_records"],
+			},
+		},
+	})
+
+	files, err := Generate("example.com/assistant/gen", []eval.Root{root}, nil)
+	require.NoError(t, err)
+	adapterFile := findGeneratedFile(t, files, filepath.Join(gcodegen.Gendir, "mcp_assistant", "adapter_server.go"))
+	adapterSource := renderGeneratedFile(t, adapterFile)
+
+	require.Contains(t, adapterSource, "call_template_arguments")
+	require.Contains(t, adapterSource, `\"query\":\"login\"`)
+	require.Contains(t, adapterSource, "toolDiscoveryCallTemplateArguments")
+	require.Contains(t, adapterSource, `for name, value := range toolDiscoveryCallTemplateArguments(tool)`)
+}
+
 func TestToolSearchDataFromExprAppliesDesignDefaults(t *testing.T) {
 	data := toolSearchDataFromExpr(&mcpexpr.ToolSearchExpr{
 		DefaultMaxResults: 3,
@@ -811,7 +847,7 @@ func TestBuildAdapterData_DefaultedEnumFieldsStayScalarAndReapplyDefaults(t *tes
 
 	require.NoError(t, err)
 	require.Len(t, data.Tools, 1)
-	require.False(t, data.Tools[0].EnumFieldsPtr["workflow_id"])
+	require.Equal(t, []EnumField{{Name: "workflow_id", Values: []string{"prd-generation", "technical-design"}, Pointer: false}}, data.Tools[0].EnumFields)
 	require.Len(t, data.Tools[0].DefaultFields, 1)
 
 	files := generateMCPTransport("example.com/assistant/gen", svc, data)
@@ -877,8 +913,10 @@ func TestGenerateMCPTransport_EnumValidationTreatsOptionalPointerNullAsAbsent(t 
 
 	require.NoError(t, err)
 	require.Len(t, data.Tools, 1)
-	require.True(t, data.Tools[0].EnumFieldsPtr["mode"])
-	require.False(t, data.Tools[0].EnumFieldsPtr["tone"])
+	require.Equal(t, []EnumField{
+		{Name: "mode", Values: []string{"draft", "final"}, Pointer: true},
+		{Name: "tone", Values: []string{"brief", "detailed"}, Pointer: false},
+	}, data.Tools[0].EnumFields)
 
 	files := generateMCPTransport("example.com/assistant/gen", svc, data)
 	adapterFile := findGeneratedFile(t, files, filepath.Join(gcodegen.Gendir, "mcp_assistant", "adapter_server.go"))
@@ -888,6 +926,10 @@ func TestGenerateMCPTransport_EnumValidationTreatsOptionalPointerNullAsAbsent(t 
 	require.Contains(t, rendered, `if optional && bytes.Equal(trimmed, []byte("null")) {`)
 	require.Contains(t, rendered, `validateMCPPayloadEnum(rawFields, "mode", true, "draft", "final")`)
 	require.Contains(t, rendered, `validateMCPPayloadEnum(rawFields, "tone", false, "brief", "detailed")`)
+	require.Less(t,
+		strings.Index(rendered, `validateMCPPayloadEnum(rawFields, "mode", true, "draft", "final")`),
+		strings.Index(rendered, `validateMCPPayloadEnum(rawFields, "tone", false, "brief", "detailed")`),
+	)
 }
 
 func TestGenerateMCPTransport_UnknownEntitiesUseMCPErrorNames(t *testing.T) {

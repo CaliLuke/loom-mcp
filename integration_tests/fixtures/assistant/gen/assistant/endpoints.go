@@ -26,6 +26,7 @@ type Endpoints struct {
 	ExtractKeywords                loom.Endpoint
 	SummarizeText                  loom.Endpoint
 	Search                         loom.Endpoint
+	SearchRecords                  loom.Endpoint
 	ExecuteCode                    loom.Endpoint
 	ProcessBatch                   loom.Endpoint
 	MultiContent                   loom.Endpoint
@@ -50,6 +51,7 @@ func NewEndpoints(s Service) *Endpoints {
 		ExtractKeywords:                NewExtractKeywordsEndpoint(s),
 		SummarizeText:                  NewSummarizeTextEndpoint(s),
 		Search:                         NewSearchEndpoint(s),
+		SearchRecords:                  NewSearchRecordsEndpoint(s),
 		ExecuteCode:                    NewExecuteCodeEndpoint(s),
 		ProcessBatch:                   NewProcessBatchEndpoint(s),
 		MultiContent:                   NewMultiContentEndpoint(s),
@@ -74,6 +76,7 @@ func (e *Endpoints) Use(m func(loom.Endpoint) loom.Endpoint) {
 	e.ExtractKeywords = m(e.ExtractKeywords)
 	e.SummarizeText = m(e.SummarizeText)
 	e.Search = m(e.Search)
+	e.SearchRecords = m(e.SearchRecords)
 	e.ExecuteCode = m(e.ExecuteCode)
 	e.ProcessBatch = m(e.ProcessBatch)
 	e.MultiContent = m(e.MultiContent)
@@ -177,6 +180,15 @@ func NewSearchEndpoint(s Service) loom.Endpoint {
 	return func(ctx context.Context, req any) (any, error) {
 		p := req.(*SearchPayload)
 		return s.Search(ctx, p)
+	}
+}
+
+// NewSearchRecordsEndpoint returns an endpoint function that calls the method
+// "search_records" of service "assistant".
+func NewSearchRecordsEndpoint(s Service) loom.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*SearchRecordsPayload)
+		return s.SearchRecords(ctx, p)
 	}
 }
 

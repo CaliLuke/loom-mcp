@@ -327,3 +327,57 @@ func TestGeneratedJSONRPCToolSearchReturnsStructuredDescriptors(t *testing.T) {
 	require.NotNil(t, result.Content[0].Text)
 	assert.Contains(t, *result.Content[0].Text, "Call this tool through call_tool. Do not call analyze_sentiment directly.")
 }
+
+func TestGeneratedJSONRPCToolSearchIncludesOptionalCallTemplateArguments(t *testing.T) {
+	t.Parallel()
+
+	server := newGeneratedJSONRPCServerWithAdapterOptions(t, &mcpassistant.MCPAdapterOptions{
+		ToolSearch: &mcpassistant.ToolSearchOptions{MaxResults: 1},
+	})
+	defer server.Close()
+	client := newToolSearchJSONRPCClient(t, server.URL)
+
+	raw, err := client.ToolsCall()(context.Background(), &mcpassistant.ToolsCallPayload{
+		Name:      "search_tools",
+		Arguments: json.RawMessage(`{"query":"records"}`),
+	})
+	require.NoError(t, err)
+	stream := raw.(*mcpAssistantjsonrpcc.ToolsCallClientStream)
+	result, err := stream.Recv(context.Background())
+	require.NoError(t, err)
+
+	var list toolSearchResult
+	require.NoError(t, json.Unmarshal(result.StructuredContent, &list))
+	require.Len(t, list.Tools, 1)
+	assert.Equal(t, "search_records", list.Tools[0].Name)
+	assert.Contains(t, list.Tools[0].CallToolJSON, `"query": "login"`)
+	require.JSONEq(t, list.Tools[0].CallToolJSON, string(list.Tools[0].CallToolArguments))
+	require.Len(t, result.Content, 1)
+	require.NotNil(t, result.Content[0].Text)
+	assert.Contains(t, *result.Content[0].Text, `"query": "login"`)
+}
+
+func TestGeneratedJSONRPCToolSearchKeepsEmptyArgumentsWhenNoTemplateDeclared(t *testing.T) {
+	t.Parallel()
+
+	server := newGeneratedJSONRPCServerWithAdapterOptions(t, &mcpassistant.MCPAdapterOptions{
+		ToolSearch: &mcpassistant.ToolSearchOptions{MaxResults: 1},
+	})
+	defer server.Close()
+	client := newToolSearchJSONRPCClient(t, server.URL)
+
+	raw, err := client.ToolsCall()(context.Background(), &mcpassistant.ToolsCallPayload{
+		Name:      "search_tools",
+		Arguments: json.RawMessage(`{"query":"projected status"}`),
+	})
+	require.NoError(t, err)
+	stream := raw.(*mcpAssistantjsonrpcc.ToolsCallClientStream)
+	result, err := stream.Recv(context.Background())
+	require.NoError(t, err)
+
+	var list toolSearchResult
+	require.NoError(t, json.Unmarshal(result.StructuredContent, &list))
+	require.Len(t, list.Tools, 1)
+	assert.Equal(t, "projected_status_tool", list.Tools[0].Name)
+	assert.Contains(t, list.Tools[0].CallToolJSON, `"arguments": {}`)
+}

@@ -187,6 +187,7 @@
 //   - [ToolDiscoveryCategory] sets the progressive discovery category
 //   - [ToolDiscoveryTags] sets progressive discovery tags
 //   - [ToolDiscoveryKeywords] sets progressive discovery keywords
+//   - [ToolDiscoveryCallTemplateArg] adds optional arguments to generated call_tool examples
 //   - [ToolSearch] configures progressive discovery search defaults
 //   - [ToolSearchMaxResults] sets the search result cap
 //   - [ToolSearchMinScore] sets the minimum search score

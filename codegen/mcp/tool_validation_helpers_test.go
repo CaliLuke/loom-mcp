@@ -44,13 +44,13 @@ func TestCollectTopLevelValidations(t *testing.T) {
 		},
 	}
 
-	required, enums, enumPtr, defaults := collectTopLevelValidations(attr)
+	required, enums, defaults := collectTopLevelValidations(attr)
 
 	assert.Equal(t, []string{"status"}, required)
-	assert.Equal(t, []string{"open", "closed"}, enums["status"])
-	assert.Equal(t, []string{"prd-generation", "technical-design"}, enums["workflow_id"])
-	assert.False(t, enumPtr["status"])
-	assert.False(t, enumPtr["workflow_id"])
+	if assert.Len(t, enums, 2) {
+		assert.Equal(t, EnumField{Name: "status", Values: []string{"open", "closed"}, Pointer: false}, enums[0])
+		assert.Equal(t, EnumField{Name: "workflow_id", Values: []string{"prd-generation", "technical-design"}, Pointer: false}, enums[1])
+	}
 	if assert.Len(t, defaults, 1) {
 		assert.Equal(t, DefaultField{
 			Name:    "workflow_id",
@@ -59,4 +59,22 @@ func TestCollectTopLevelValidations(t *testing.T) {
 			Kind:    "string",
 		}, defaults[0])
 	}
+}
+
+func TestCollectTopLevelValidationsPreservesEnumDeclarationOrder(t *testing.T) {
+	t.Parallel()
+
+	attr := &expr.AttributeExpr{
+		Type: &expr.Object{
+			{Name: "second", Attribute: &expr.AttributeExpr{Type: expr.String, Validation: &expr.ValidationExpr{Values: []any{"b"}}}},
+			{Name: "first", Attribute: &expr.AttributeExpr{Type: expr.String, Validation: &expr.ValidationExpr{Values: []any{"a"}}}},
+		},
+	}
+
+	_, enums, _ := collectTopLevelValidations(attr)
+
+	assert.Equal(t, []EnumField{
+		{Name: "second", Values: []string{"b"}, Pointer: true},
+		{Name: "first", Values: []string{"a"}, Pointer: true},
+	}, enums)
 }

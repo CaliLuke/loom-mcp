@@ -154,8 +154,7 @@ type (
 		StreamEventType    string
 		// Simple validations (top-level only)
 		RequiredFields []string
-		EnumFields     map[string][]string
-		EnumFieldsPtr  map[string]bool
+		EnumFields     []EnumField
 		DefaultFields  []DefaultField
 		// ExampleArguments contains a minimal valid JSON for tool arguments
 		ExampleArguments string
@@ -204,6 +203,13 @@ type (
 		GoName  string
 		Literal string
 		Kind    string
+	}
+
+	// EnumField describes a top-level payload enum validation in declaration order.
+	EnumField struct {
+		Name    string
+		Values  []string
+		Pointer bool
 	}
 
 	// ResourceAdapter represents a resource adapter
@@ -657,10 +663,9 @@ func (g *adapterGenerator) populateToolPayloadData(adapter *ToolAdapter, tool *m
 		return fmt.Errorf("build schema for tool %q: %w", tool.Name, err)
 	}
 	adapter.InputSchema = schema
-	req, enums, enumPtr, defaults := collectTopLevelValidations(payload)
+	req, enums, defaults := collectTopLevelValidations(payload)
 	adapter.RequiredFields = req
 	adapter.EnumFields = enums
-	adapter.EnumFieldsPtr = enumPtr
 	adapter.DefaultFields = defaults
 	adapter.ExampleArguments = buildExampleJSON(payload)
 	adapter.CanonicalExampleJSON = synthesizeCanonicalExample(payload)
@@ -705,6 +710,9 @@ func mcpDiscoveryMetaJSON(tool *mcpexpr.ToolExpr) string {
 	if len(tool.DiscoveryKeywords) > 0 {
 		discovery["keywords"] = append([]string(nil), tool.DiscoveryKeywords...)
 	}
+	if len(tool.DiscoveryCallTemplateArgs) > 0 {
+		discovery["call_template_arguments"] = cloneJSONMap(tool.DiscoveryCallTemplateArgs)
+	}
 	if len(discovery) == 0 {
 		return ""
 	}
@@ -716,6 +724,14 @@ func mcpDiscoveryMetaJSON(tool *mcpexpr.ToolExpr) string {
 		return ""
 	}
 	return string(raw)
+}
+
+func cloneJSONMap(in map[string]any) map[string]any {
+	out := make(map[string]any, len(in))
+	for key, value := range in {
+		out[key] = value
+	}
+	return out
 }
 
 func isObjectBackedAttribute(attr *expr.AttributeExpr) bool {

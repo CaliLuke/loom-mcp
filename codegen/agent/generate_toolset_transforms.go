@@ -19,9 +19,8 @@ import (
 //   - tool payload/result types (local aliases in the specs package), and
 //   - the bound Goa method payload/result types (qualified via the owning service).
 //
-// This file is emitted only for method-backed tools whose shapes are compatible
-// for transformation via Goa's `codegen.GoTransform`. When no transforms are
-// needed/possible, the function returns nil.
+// This file is emitted for method-backed tools that need transforms between
+// distinct tool and method shapes. Incompatible shapes fail generation.
 func toolsetAdapterTransformsFile(genpkg string, ts *ToolsetData, specsCache *toolSpecsDataCache) (*codegen.File, error) {
 	if ts == nil || ts.SpecsDir == "" || len(ts.Tools) == 0 {
 		return nil, nil
@@ -73,49 +72,54 @@ func toolsetAdapterTransformsFile(genpkg string, ts *ToolsetData, specsCache *to
 
 		// Init<GoName>MethodPayload: tool payload (specs, public type) -> service method payload
 		if toolPayload != nil && toolPayload.PublicType != nil && t.Args != nil && t.Args.Type != expr.Empty && t.MethodPayloadAttr != nil && t.MethodPayloadAttr.Type != expr.Empty {
-			if err := codegen.IsCompatible(t.Args.Type, t.MethodPayloadAttr.Type, "in", "out"); err == nil {
-				for _, im := range shared.GatherAttributeImports(genpkg, t.MethodPayloadAttr) {
-					if im != nil && im.Path != "" {
-						extraImports[im.Path] = im
-					}
-				}
-				for _, im := range shared.GatherAttributeImports(genpkg, toolPayload.PublicType) {
-					if im != nil && im.Path != "" {
-						extraImports[im.Path] = im
-					}
-				}
-
-				localArgAttr := toolPayload.PublicType
-				// Both the tool payload and service payload are service-level shapes.
-				srcCtx := codegen.NewAttributeContextForConversion(false, false, true, "", scope)
-				tgtCtx := codegen.NewAttributeContextForConversion(false, false, true, svcAlias, scope)
-				body, helpers, err := codegen.GoTransform(localArgAttr, t.MethodPayloadAttr, "in", "out", srcCtx, tgtCtx, "", false)
-				if err == nil && body != "" {
-					for _, h := range helpers {
-						if h == nil {
-							continue
-						}
-						key := h.Name + "|" + h.ParamTypeRef + "|" + h.ResultTypeRef
-						if _, ok := helperKeys[key]; ok {
-							continue
-						}
-						helperKeys[key] = struct{}{}
-						fileHelpers = append(fileHelpers, h)
-					}
-					paramRef := scope.GoFullTypeRef(localArgAttr, "")
-					serviceRef := t.MethodPayloadTypeRef
-					if serviceRef == "" {
-						panic(fmt.Sprintf("agent codegen: missing MethodPayloadTypeRef for method-backed tool %q", t.QualifiedName))
-					}
-					fns = append(fns, transformFuncData{
-						Name:          "Init" + codegen.Goify(t.Name, true) + "MethodPayload",
-						ParamTypeRef:  paramRef,
-						ResultTypeRef: serviceRef,
-						Body:          body,
-						Helpers:       nil,
-					})
+			if err := codegen.IsCompatible(t.Args.Type, t.MethodPayloadAttr.Type, "in", "out"); err != nil {
+				return nil, transformCompatibilityError(t, "payload", t.Args, t.MethodPayloadAttr, err)
+			}
+			for _, im := range shared.GatherAttributeImports(genpkg, t.MethodPayloadAttr) {
+				if im != nil && im.Path != "" {
+					extraImports[im.Path] = im
 				}
 			}
+			for _, im := range shared.GatherAttributeImports(genpkg, toolPayload.PublicType) {
+				if im != nil && im.Path != "" {
+					extraImports[im.Path] = im
+				}
+			}
+
+			localArgAttr := toolPayload.PublicType
+			// Both the tool payload and service payload are service-level shapes.
+			srcCtx := codegen.NewAttributeContextForConversion(false, false, true, "", scope)
+			tgtCtx := codegen.NewAttributeContextForConversion(false, false, true, svcAlias, scope)
+			body, helpers, err := codegen.GoTransform(localArgAttr, t.MethodPayloadAttr, "in", "out", srcCtx, tgtCtx, "", false)
+			if err != nil {
+				return nil, transformBuildError(t, "payload", t.Args, t.MethodPayloadAttr, err)
+			}
+			if body == "" {
+				return nil, transformBuildError(t, "payload", t.Args, t.MethodPayloadAttr, fmt.Errorf("empty transform body"))
+			}
+			for _, h := range helpers {
+				if h == nil {
+					continue
+				}
+				key := h.Name + "|" + h.ParamTypeRef + "|" + h.ResultTypeRef
+				if _, ok := helperKeys[key]; ok {
+					continue
+				}
+				helperKeys[key] = struct{}{}
+				fileHelpers = append(fileHelpers, h)
+			}
+			paramRef := scope.GoFullTypeRef(localArgAttr, "")
+			serviceRef := t.MethodPayloadTypeRef
+			if serviceRef == "" {
+				panic(fmt.Sprintf("agent codegen: missing MethodPayloadTypeRef for method-backed tool %q", t.QualifiedName))
+			}
+			fns = append(fns, transformFuncData{
+				Name:          "Init" + codegen.Goify(t.Name, true) + "MethodPayload",
+				ParamTypeRef:  paramRef,
+				ResultTypeRef: serviceRef,
+				Body:          body,
+				Helpers:       nil,
+			})
 		}
 
 		// Init<GoName>ToolResult: service method result -> tool result (specs, public type)
@@ -128,49 +132,54 @@ func toolsetAdapterTransformsFile(genpkg string, ts *ToolsetData, specsCache *to
 			} else {
 				baseAttr = t.Return
 			}
-			if err := codegen.IsCompatible(t.MethodResultAttr.Type, baseAttr.Type, "in", "out"); err == nil {
-				for _, im := range shared.GatherAttributeImports(genpkg, t.MethodResultAttr) {
-					if im != nil && im.Path != "" {
-						extraImports[im.Path] = im
-					}
-				}
-				for _, im := range shared.GatherAttributeImports(genpkg, t.Return) {
-					if im != nil && im.Path != "" {
-						extraImports[im.Path] = im
-					}
-				}
-
-				srcCtx := codegen.NewAttributeContextForConversion(false, false, true, svcAlias, scope)
-				targetAttr := toolResult.PublicType
-				tgtCtx := codegen.NewAttributeContextForConversion(false, false, true, "", scope)
-				body, helpers, err := codegen.GoTransform(t.MethodResultAttr, targetAttr, "in", "out", srcCtx, tgtCtx, "", false)
-				if err == nil && body != "" {
-					for _, h := range helpers {
-						if h == nil {
-							continue
-						}
-						key := h.Name + "|" + h.ParamTypeRef + "|" + h.ResultTypeRef
-						if _, ok := helperKeys[key]; ok {
-							continue
-						}
-						helperKeys[key] = struct{}{}
-						fileHelpers = append(fileHelpers, h)
-					}
-					resRef := scope.GoFullTypeRef(targetAttr, "")
-
-					serviceResRef := t.MethodResultTypeRef
-					if serviceResRef == "" {
-						panic(fmt.Sprintf("agent codegen: missing MethodResultTypeRef for method-backed tool %q", t.QualifiedName))
-					}
-					fns = append(fns, transformFuncData{
-						Name:          "Init" + codegen.Goify(t.Name, true) + "ToolResult",
-						ParamTypeRef:  serviceResRef,
-						ResultTypeRef: resRef,
-						Body:          body,
-						Helpers:       nil,
-					})
+			if err := codegen.IsCompatible(t.MethodResultAttr.Type, baseAttr.Type, "in", "out"); err != nil {
+				return nil, transformCompatibilityError(t, "result", t.MethodResultAttr, t.Return, err)
+			}
+			for _, im := range shared.GatherAttributeImports(genpkg, t.MethodResultAttr) {
+				if im != nil && im.Path != "" {
+					extraImports[im.Path] = im
 				}
 			}
+			for _, im := range shared.GatherAttributeImports(genpkg, t.Return) {
+				if im != nil && im.Path != "" {
+					extraImports[im.Path] = im
+				}
+			}
+
+			srcCtx := codegen.NewAttributeContextForConversion(false, false, true, svcAlias, scope)
+			targetAttr := toolResult.PublicType
+			tgtCtx := codegen.NewAttributeContextForConversion(false, false, true, "", scope)
+			body, helpers, err := codegen.GoTransform(t.MethodResultAttr, targetAttr, "in", "out", srcCtx, tgtCtx, "", false)
+			if err != nil {
+				return nil, transformBuildError(t, "result", t.MethodResultAttr, t.Return, err)
+			}
+			if body == "" {
+				return nil, transformBuildError(t, "result", t.MethodResultAttr, t.Return, fmt.Errorf("empty transform body"))
+			}
+			for _, h := range helpers {
+				if h == nil {
+					continue
+				}
+				key := h.Name + "|" + h.ParamTypeRef + "|" + h.ResultTypeRef
+				if _, ok := helperKeys[key]; ok {
+					continue
+				}
+				helperKeys[key] = struct{}{}
+				fileHelpers = append(fileHelpers, h)
+			}
+			resRef := scope.GoFullTypeRef(targetAttr, "")
+
+			serviceResRef := t.MethodResultTypeRef
+			if serviceResRef == "" {
+				panic(fmt.Sprintf("agent codegen: missing MethodResultTypeRef for method-backed tool %q", t.QualifiedName))
+			}
+			fns = append(fns, transformFuncData{
+				Name:          "Init" + codegen.Goify(t.Name, true) + "ToolResult",
+				ParamTypeRef:  serviceResRef,
+				ResultTypeRef: resRef,
+				Body:          body,
+				Helpers:       nil,
+			})
 		}
 		// Init<GoName><Kind>ServerData: method result field -> server_data type.
 		for _, serverData := range t.ServerData {
@@ -315,6 +324,44 @@ func uniqueImportAlias(used map[string]struct{}, base string) string {
 		}
 		alias = fmt.Sprintf("%s%d", base, i)
 	}
+}
+
+func transformCompatibilityError(tool *ToolData, direction string, source *expr.AttributeExpr, target *expr.AttributeExpr, err error) error {
+	return fmt.Errorf(
+		"agent codegen: method-backed tool %q in toolset %q has incompatible %s transform from %s to %s: %w",
+		tool.QualifiedName,
+		toolsetQualifiedName(tool),
+		direction,
+		attrTypeName(source),
+		attrTypeName(target),
+		err,
+	)
+}
+
+func transformBuildError(tool *ToolData, direction string, source *expr.AttributeExpr, target *expr.AttributeExpr, err error) error {
+	return fmt.Errorf(
+		"agent codegen: failed to build %s transform for method-backed tool %q in toolset %q from %s to %s: %w",
+		direction,
+		tool.QualifiedName,
+		toolsetQualifiedName(tool),
+		attrTypeName(source),
+		attrTypeName(target),
+		err,
+	)
+}
+
+func toolsetQualifiedName(tool *ToolData) string {
+	if tool == nil || tool.Toolset == nil {
+		return "<unknown>"
+	}
+	return tool.Toolset.QualifiedName
+}
+
+func attrTypeName(attr *expr.AttributeExpr) string {
+	if attr == nil || attr.Type == nil {
+		return "<nil>"
+	}
+	return attr.Type.Name()
 }
 
 func findToolTypeAttribute(specs *toolSpecsData, typeName string) *expr.AttributeExpr {

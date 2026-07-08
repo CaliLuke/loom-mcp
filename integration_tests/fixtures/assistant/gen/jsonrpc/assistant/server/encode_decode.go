@@ -24,7 +24,10 @@ import (
 // assistant list_documents endpoint.
 func EncodeListDocumentsResponse(encoder func(context.Context, http.ResponseWriter) loomhttp.Encoder) func(context.Context, http.ResponseWriter, any) error {
 	return func(ctx context.Context, w http.ResponseWriter, v any) error {
-		res, _ := v.(*assistant.Documents)
+		res, ok := v.(*assistant.Documents)
+		if !ok {
+			return loomhttp.ErrInvalidType("assistant", "list_documents", "*assistant.Documents", v)
+		}
 		enc := encoder(ctx, w)
 		body := NewListDocumentsResponseBody(res)
 		w.WriteHeader(http.StatusOK)
@@ -36,7 +39,10 @@ func EncodeListDocumentsResponse(encoder func(context.Context, http.ResponseWrit
 // assistant system_info endpoint.
 func EncodeSystemInfoResponse(encoder func(context.Context, http.ResponseWriter) loomhttp.Encoder) func(context.Context, http.ResponseWriter, any) error {
 	return func(ctx context.Context, w http.ResponseWriter, v any) error {
-		res, _ := v.(*assistant.SystemInfoResult)
+		res, ok := v.(*assistant.SystemInfoResult)
+		if !ok {
+			return loomhttp.ErrInvalidType("assistant", "system_info", "*assistant.SystemInfoResult", v)
+		}
 		enc := encoder(ctx, w)
 		body := NewSystemInfoResponseBody(res)
 		w.WriteHeader(http.StatusOK)
@@ -48,7 +54,10 @@ func EncodeSystemInfoResponse(encoder func(context.Context, http.ResponseWriter)
 // by the assistant conversation_history endpoint.
 func EncodeConversationHistoryResponse(encoder func(context.Context, http.ResponseWriter) loomhttp.Encoder) func(context.Context, http.ResponseWriter, any) error {
 	return func(ctx context.Context, w http.ResponseWriter, v any) error {
-		res, _ := v.(*assistant.ConversationHistoryResult)
+		res, ok := v.(*assistant.ConversationHistoryResult)
+		if !ok {
+			return loomhttp.ErrInvalidType("assistant", "conversation_history", "*assistant.ConversationHistoryResult", v)
+		}
 		enc := encoder(ctx, w)
 		body := NewConversationHistoryResponseBody(res)
 		w.WriteHeader(http.StatusOK)
@@ -75,7 +84,7 @@ func DecodeConversationHistoryRequest(mux loomhttp.Muxer, decoder func(*http.Req
 			if errors.As(err, &gerr) {
 				return payload, gerr
 			}
-			return payload, loom.DecodePayloadError(err.Error())
+			return payload, loom.DecodePayloadError(loomhttp.SafeDecodePayloadMessage(err))
 		}
 		payload = NewConversationHistoryPayload(&body)
 
@@ -87,7 +96,10 @@ func DecodeConversationHistoryRequest(mux loomhttp.Muxer, decoder func(*http.Req
 // the assistant figma_design_system endpoint.
 func EncodeFigmaDesignSystemResponse(encoder func(context.Context, http.ResponseWriter) loomhttp.Encoder) func(context.Context, http.ResponseWriter, any) error {
 	return func(ctx context.Context, w http.ResponseWriter, v any) error {
-		res, _ := v.(*assistant.DesignSystem)
+		res, ok := v.(*assistant.DesignSystem)
+		if !ok {
+			return loomhttp.ErrInvalidType("assistant", "figma_design_system", "*assistant.DesignSystem", v)
+		}
 		enc := encoder(ctx, w)
 		body := NewFigmaDesignSystemResponseBody(res)
 		w.WriteHeader(http.StatusOK)
@@ -99,7 +111,10 @@ func EncodeFigmaDesignSystemResponse(encoder func(context.Context, http.Response
 // the assistant generate_prompts endpoint.
 func EncodeGeneratePromptsResponse(encoder func(context.Context, http.ResponseWriter) loomhttp.Encoder) func(context.Context, http.ResponseWriter, any) error {
 	return func(ctx context.Context, w http.ResponseWriter, v any) error {
-		res, _ := v.(*assistant.PromptTemplates)
+		res, ok := v.(*assistant.PromptTemplates)
+		if !ok {
+			return loomhttp.ErrInvalidType("assistant", "generate_prompts", "*assistant.PromptTemplates", v)
+		}
 		enc := encoder(ctx, w)
 		body := NewGeneratePromptsResponseBody(res)
 		w.WriteHeader(http.StatusOK)
@@ -126,7 +141,7 @@ func DecodeGeneratePromptsRequest(mux loomhttp.Muxer, decoder func(*http.Request
 			if errors.As(err, &gerr) {
 				return payload, gerr
 			}
-			return payload, loom.DecodePayloadError(err.Error())
+			return payload, loom.DecodePayloadError(loomhttp.SafeDecodePayloadMessage(err))
 		}
 		err = ValidateGeneratePromptsRequestBody(&body)
 		if err != nil {
@@ -143,7 +158,10 @@ func DecodeGeneratePromptsRequest(mux loomhttp.Muxer, decoder func(*http.Request
 // endpoint.
 func EncodeBuildFigmaImplementationPromptResponse(encoder func(context.Context, http.ResponseWriter) loomhttp.Encoder) func(context.Context, http.ResponseWriter, any) error {
 	return func(ctx context.Context, w http.ResponseWriter, v any) error {
-		res, _ := v.(*assistant.PromptTemplates)
+		res, ok := v.(*assistant.PromptTemplates)
+		if !ok {
+			return loomhttp.ErrInvalidType("assistant", "build_figma_implementation_prompt", "*assistant.PromptTemplates", v)
+		}
 		enc := encoder(ctx, w)
 		body := NewBuildFigmaImplementationPromptResponseBody(res)
 		w.WriteHeader(http.StatusOK)
@@ -170,7 +188,7 @@ func DecodeBuildFigmaImplementationPromptRequest(mux loomhttp.Muxer, decoder fun
 			if errors.As(err, &gerr) {
 				return payload, gerr
 			}
-			return payload, loom.DecodePayloadError(err.Error())
+			return payload, loom.DecodePayloadError(loomhttp.SafeDecodePayloadMessage(err))
 		}
 		err = ValidateBuildFigmaImplementationPromptRequestBody(&body)
 		if err != nil {
@@ -210,7 +228,7 @@ func DecodeSendNotificationRequest(mux loomhttp.Muxer, decoder func(*http.Reques
 			if errors.As(err, &gerr) {
 				return payload, gerr
 			}
-			return payload, loom.DecodePayloadError(err.Error())
+			return payload, loom.DecodePayloadError(loomhttp.SafeDecodePayloadMessage(err))
 		}
 		err = ValidateSendNotificationRequestBody(&body)
 		if err != nil {
@@ -226,7 +244,10 @@ func DecodeSendNotificationRequest(mux loomhttp.Muxer, decoder func(*http.Reques
 // the assistant analyze_sentiment endpoint.
 func EncodeAnalyzeSentimentResponse(encoder func(context.Context, http.ResponseWriter) loomhttp.Encoder) func(context.Context, http.ResponseWriter, any) error {
 	return func(ctx context.Context, w http.ResponseWriter, v any) error {
-		res, _ := v.(*assistant.AnalyzeSentimentResult)
+		res, ok := v.(*assistant.AnalyzeSentimentResult)
+		if !ok {
+			return loomhttp.ErrInvalidType("assistant", "analyze_sentiment", "*assistant.AnalyzeSentimentResult", v)
+		}
 		enc := encoder(ctx, w)
 		body := NewAnalyzeSentimentResponseBody(res)
 		w.WriteHeader(http.StatusOK)
@@ -253,7 +274,7 @@ func DecodeAnalyzeSentimentRequest(mux loomhttp.Muxer, decoder func(*http.Reques
 			if errors.As(err, &gerr) {
 				return payload, gerr
 			}
-			return payload, loom.DecodePayloadError(err.Error())
+			return payload, loom.DecodePayloadError(loomhttp.SafeDecodePayloadMessage(err))
 		}
 		err = ValidateAnalyzeSentimentRequestBody(&body)
 		if err != nil {
@@ -269,7 +290,10 @@ func DecodeAnalyzeSentimentRequest(mux loomhttp.Muxer, decoder func(*http.Reques
 // the assistant extract_keywords endpoint.
 func EncodeExtractKeywordsResponse(encoder func(context.Context, http.ResponseWriter) loomhttp.Encoder) func(context.Context, http.ResponseWriter, any) error {
 	return func(ctx context.Context, w http.ResponseWriter, v any) error {
-		res, _ := v.(*assistant.ExtractKeywordsResult)
+		res, ok := v.(*assistant.ExtractKeywordsResult)
+		if !ok {
+			return loomhttp.ErrInvalidType("assistant", "extract_keywords", "*assistant.ExtractKeywordsResult", v)
+		}
 		enc := encoder(ctx, w)
 		body := NewExtractKeywordsResponseBody(res)
 		w.WriteHeader(http.StatusOK)
@@ -296,7 +320,7 @@ func DecodeExtractKeywordsRequest(mux loomhttp.Muxer, decoder func(*http.Request
 			if errors.As(err, &gerr) {
 				return payload, gerr
 			}
-			return payload, loom.DecodePayloadError(err.Error())
+			return payload, loom.DecodePayloadError(loomhttp.SafeDecodePayloadMessage(err))
 		}
 		err = ValidateExtractKeywordsRequestBody(&body)
 		if err != nil {
@@ -312,7 +336,10 @@ func DecodeExtractKeywordsRequest(mux loomhttp.Muxer, decoder func(*http.Request
 // assistant summarize_text endpoint.
 func EncodeSummarizeTextResponse(encoder func(context.Context, http.ResponseWriter) loomhttp.Encoder) func(context.Context, http.ResponseWriter, any) error {
 	return func(ctx context.Context, w http.ResponseWriter, v any) error {
-		res, _ := v.(*assistant.SummarizeTextResult)
+		res, ok := v.(*assistant.SummarizeTextResult)
+		if !ok {
+			return loomhttp.ErrInvalidType("assistant", "summarize_text", "*assistant.SummarizeTextResult", v)
+		}
 		enc := encoder(ctx, w)
 		body := NewSummarizeTextResponseBody(res)
 		w.WriteHeader(http.StatusOK)
@@ -339,7 +366,7 @@ func DecodeSummarizeTextRequest(mux loomhttp.Muxer, decoder func(*http.Request) 
 			if errors.As(err, &gerr) {
 				return payload, gerr
 			}
-			return payload, loom.DecodePayloadError(err.Error())
+			return payload, loom.DecodePayloadError(loomhttp.SafeDecodePayloadMessage(err))
 		}
 		err = ValidateSummarizeTextRequestBody(&body)
 		if err != nil {
@@ -355,7 +382,10 @@ func DecodeSummarizeTextRequest(mux loomhttp.Muxer, decoder func(*http.Request) 
 // assistant search endpoint.
 func EncodeSearchResponse(encoder func(context.Context, http.ResponseWriter) loomhttp.Encoder) func(context.Context, http.ResponseWriter, any) error {
 	return func(ctx context.Context, w http.ResponseWriter, v any) error {
-		res, _ := v.(*assistant.SearchResult)
+		res, ok := v.(*assistant.SearchResult)
+		if !ok {
+			return loomhttp.ErrInvalidType("assistant", "search", "*assistant.SearchResult", v)
+		}
 		enc := encoder(ctx, w)
 		body := NewSearchResponseBody(res)
 		w.WriteHeader(http.StatusOK)
@@ -382,7 +412,7 @@ func DecodeSearchRequest(mux loomhttp.Muxer, decoder func(*http.Request) loomhtt
 			if errors.As(err, &gerr) {
 				return payload, gerr
 			}
-			return payload, loom.DecodePayloadError(err.Error())
+			return payload, loom.DecodePayloadError(loomhttp.SafeDecodePayloadMessage(err))
 		}
 		err = ValidateSearchRequestBody(&body)
 		if err != nil {
@@ -394,11 +424,56 @@ func DecodeSearchRequest(mux loomhttp.Muxer, decoder func(*http.Request) loomhtt
 	}
 }
 
+// EncodeSearchRecordsResponse returns an encoder for responses returned by the
+// assistant search_records endpoint.
+func EncodeSearchRecordsResponse(encoder func(context.Context, http.ResponseWriter) loomhttp.Encoder) func(context.Context, http.ResponseWriter, any) error {
+	return func(ctx context.Context, w http.ResponseWriter, v any) error {
+		res, ok := v.(*assistant.SearchRecordsResult)
+		if !ok {
+			return loomhttp.ErrInvalidType("assistant", "search_records", "*assistant.SearchRecordsResult", v)
+		}
+		enc := encoder(ctx, w)
+		body := NewSearchRecordsResponseBody(res)
+		w.WriteHeader(http.StatusOK)
+		return enc.Encode(body)
+	}
+}
+
+// DecodeSearchRecordsRequest returns a decoder for requests sent to the
+// assistant search_records endpoint.
+func DecodeSearchRecordsRequest(mux loomhttp.Muxer, decoder func(*http.Request) loomhttp.Decoder) func(*http.Request, *jsonrpc.RawRequest) (*assistant.SearchRecordsPayload, error) {
+	return func(r *http.Request, req *jsonrpc.RawRequest) (*assistant.SearchRecordsPayload, error) {
+		r.Body = io.NopCloser(bytes.NewReader(req.Params))
+		var payload *assistant.SearchRecordsPayload
+		var (
+			body SearchRecordsRequestBody
+			err  error
+		)
+		err = decoder(r).Decode(&body)
+		if err != nil {
+			if errors.Is(err, io.EOF) {
+				return payload, loom.MissingPayloadError()
+			}
+			var gerr *loom.ServiceError
+			if errors.As(err, &gerr) {
+				return payload, gerr
+			}
+			return payload, loom.DecodePayloadError(loomhttp.SafeDecodePayloadMessage(err))
+		}
+		payload = NewSearchRecordsPayload(&body)
+
+		return payload, nil
+	}
+}
+
 // EncodeExecuteCodeResponse returns an encoder for responses returned by the
 // assistant execute_code endpoint.
 func EncodeExecuteCodeResponse(encoder func(context.Context, http.ResponseWriter) loomhttp.Encoder) func(context.Context, http.ResponseWriter, any) error {
 	return func(ctx context.Context, w http.ResponseWriter, v any) error {
-		res, _ := v.(*assistant.ExecuteCodeResult)
+		res, ok := v.(*assistant.ExecuteCodeResult)
+		if !ok {
+			return loomhttp.ErrInvalidType("assistant", "execute_code", "*assistant.ExecuteCodeResult", v)
+		}
 		enc := encoder(ctx, w)
 		body := NewExecuteCodeResponseBody(res)
 		w.WriteHeader(http.StatusOK)
@@ -425,7 +500,7 @@ func DecodeExecuteCodeRequest(mux loomhttp.Muxer, decoder func(*http.Request) lo
 			if errors.As(err, &gerr) {
 				return payload, gerr
 			}
-			return payload, loom.DecodePayloadError(err.Error())
+			return payload, loom.DecodePayloadError(loomhttp.SafeDecodePayloadMessage(err))
 		}
 		err = ValidateExecuteCodeRequestBody(&body)
 		if err != nil {
@@ -441,7 +516,10 @@ func DecodeExecuteCodeRequest(mux loomhttp.Muxer, decoder func(*http.Request) lo
 // assistant process_batch endpoint.
 func EncodeProcessBatchResponse(encoder func(context.Context, http.ResponseWriter) loomhttp.Encoder) func(context.Context, http.ResponseWriter, any) error {
 	return func(ctx context.Context, w http.ResponseWriter, v any) error {
-		res, _ := v.(*assistant.ProcessBatchResult)
+		res, ok := v.(*assistant.ProcessBatchResult)
+		if !ok {
+			return loomhttp.ErrInvalidType("assistant", "process_batch", "*assistant.ProcessBatchResult", v)
+		}
 		enc := encoder(ctx, w)
 		body := NewProcessBatchResponseBody(res)
 		w.WriteHeader(http.StatusOK)
@@ -468,7 +546,7 @@ func DecodeProcessBatchRequest(mux loomhttp.Muxer, decoder func(*http.Request) l
 			if errors.As(err, &gerr) {
 				return payload, gerr
 			}
-			return payload, loom.DecodePayloadError(err.Error())
+			return payload, loom.DecodePayloadError(loomhttp.SafeDecodePayloadMessage(err))
 		}
 		err = ValidateProcessBatchRequestBody(&body)
 		if err != nil {
@@ -484,7 +562,10 @@ func DecodeProcessBatchRequest(mux loomhttp.Muxer, decoder func(*http.Request) l
 // assistant multi_content endpoint.
 func EncodeMultiContentResponse(encoder func(context.Context, http.ResponseWriter) loomhttp.Encoder) func(context.Context, http.ResponseWriter, any) error {
 	return func(ctx context.Context, w http.ResponseWriter, v any) error {
-		res, _ := v.(*assistant.MultiContentResult)
+		res, ok := v.(*assistant.MultiContentResult)
+		if !ok {
+			return loomhttp.ErrInvalidType("assistant", "multi_content", "*assistant.MultiContentResult", v)
+		}
 		enc := encoder(ctx, w)
 		body := NewMultiContentResponseBody(res)
 		w.WriteHeader(http.StatusOK)
@@ -511,7 +592,7 @@ func DecodeMultiContentRequest(mux loomhttp.Muxer, decoder func(*http.Request) l
 			if errors.As(err, &gerr) {
 				return payload, gerr
 			}
-			return payload, loom.DecodePayloadError(err.Error())
+			return payload, loom.DecodePayloadError(loomhttp.SafeDecodePayloadMessage(err))
 		}
 		err = ValidateMultiContentRequestBody(&body)
 		if err != nil {
@@ -527,7 +608,10 @@ func DecodeMultiContentRequest(mux loomhttp.Muxer, decoder func(*http.Request) l
 // the assistant generate_dpi_spec endpoint.
 func EncodeGenerateDpiSpecResponse(encoder func(context.Context, http.ResponseWriter) loomhttp.Encoder) func(context.Context, http.ResponseWriter, any) error {
 	return func(ctx context.Context, w http.ResponseWriter, v any) error {
-		res, _ := v.(*assistant.DPISpec)
+		res, ok := v.(*assistant.DPISpec)
+		if !ok {
+			return loomhttp.ErrInvalidType("assistant", "generate_dpi_spec", "*assistant.DPISpec", v)
+		}
 		enc := encoder(ctx, w)
 		body := NewGenerateDpiSpecResponseBody(res)
 		w.WriteHeader(http.StatusOK)
@@ -554,7 +638,7 @@ func DecodeGenerateDpiSpecRequest(mux loomhttp.Muxer, decoder func(*http.Request
 			if errors.As(err, &gerr) {
 				return payload, gerr
 			}
-			return payload, loom.DecodePayloadError(err.Error())
+			return payload, loom.DecodePayloadError(loomhttp.SafeDecodePayloadMessage(err))
 		}
 		err = ValidateGenerateDpiSpecRequestBody(&body)
 		if err != nil {
@@ -570,7 +654,10 @@ func DecodeGenerateDpiSpecRequest(mux loomhttp.Muxer, decoder func(*http.Request
 // the assistant dispatch_action endpoint.
 func EncodeDispatchActionResponse(encoder func(context.Context, http.ResponseWriter) loomhttp.Encoder) func(context.Context, http.ResponseWriter, any) error {
 	return func(ctx context.Context, w http.ResponseWriter, v any) error {
-		res, _ := v.(*assistant.DispatchActionResult)
+		res, ok := v.(*assistant.DispatchActionResult)
+		if !ok {
+			return loomhttp.ErrInvalidType("assistant", "dispatch_action", "*assistant.DispatchActionResult", v)
+		}
 		enc := encoder(ctx, w)
 		body := NewDispatchActionResponseBody(res)
 		w.WriteHeader(http.StatusOK)
@@ -597,7 +684,7 @@ func DecodeDispatchActionRequest(mux loomhttp.Muxer, decoder func(*http.Request)
 			if errors.As(err, &gerr) {
 				return payload, gerr
 			}
-			return payload, loom.DecodePayloadError(err.Error())
+			return payload, loom.DecodePayloadError(loomhttp.SafeDecodePayloadMessage(err))
 		}
 		err = ValidateDispatchActionRequestBody(&body)
 		if err != nil {
@@ -613,7 +700,10 @@ func DecodeDispatchActionRequest(mux loomhttp.Muxer, decoder func(*http.Request)
 // the assistant dispatch_command endpoint.
 func EncodeDispatchCommandResponse(encoder func(context.Context, http.ResponseWriter) loomhttp.Encoder) func(context.Context, http.ResponseWriter, any) error {
 	return func(ctx context.Context, w http.ResponseWriter, v any) error {
-		res, _ := v.(*assistant.DispatchCommandResult)
+		res, ok := v.(*assistant.DispatchCommandResult)
+		if !ok {
+			return loomhttp.ErrInvalidType("assistant", "dispatch_command", "*assistant.DispatchCommandResult", v)
+		}
 		enc := encoder(ctx, w)
 		body := NewDispatchCommandResponseBody(res)
 		w.WriteHeader(http.StatusOK)
@@ -640,7 +730,7 @@ func DecodeDispatchCommandRequest(mux loomhttp.Muxer, decoder func(*http.Request
 			if errors.As(err, &gerr) {
 				return payload, gerr
 			}
-			return payload, loom.DecodePayloadError(err.Error())
+			return payload, loom.DecodePayloadError(loomhttp.SafeDecodePayloadMessage(err))
 		}
 		err = ValidateDispatchCommandRequestBody(&body)
 		if err != nil {
@@ -656,7 +746,10 @@ func DecodeDispatchCommandRequest(mux loomhttp.Muxer, decoder func(*http.Request
 // the assistant projected_lookup endpoint.
 func EncodeProjectedLookupResponse(encoder func(context.Context, http.ResponseWriter) loomhttp.Encoder) func(context.Context, http.ResponseWriter, any) error {
 	return func(ctx context.Context, w http.ResponseWriter, v any) error {
-		res, _ := v.(*assistant.ProjectedLookupResult)
+		res, ok := v.(*assistant.ProjectedLookupResult)
+		if !ok {
+			return loomhttp.ErrInvalidType("assistant", "projected_lookup", "*assistant.ProjectedLookupResult", v)
+		}
 		enc := encoder(ctx, w)
 		body := NewProjectedLookupResponseBody(res)
 		w.WriteHeader(http.StatusOK)
@@ -683,7 +776,7 @@ func DecodeProjectedLookupRequest(mux loomhttp.Muxer, decoder func(*http.Request
 			if errors.As(err, &gerr) {
 				return payload, gerr
 			}
-			return payload, loom.DecodePayloadError(err.Error())
+			return payload, loom.DecodePayloadError(loomhttp.SafeDecodePayloadMessage(err))
 		}
 		err = ValidateProjectedLookupRequestBody(&body)
 		if err != nil {
@@ -699,7 +792,10 @@ func DecodeProjectedLookupRequest(mux loomhttp.Muxer, decoder func(*http.Request
 // the assistant projected_status endpoint.
 func EncodeProjectedStatusResponse(encoder func(context.Context, http.ResponseWriter) loomhttp.Encoder) func(context.Context, http.ResponseWriter, any) error {
 	return func(ctx context.Context, w http.ResponseWriter, v any) error {
-		res, _ := v.(*assistant.ProjectedStatusResult)
+		res, ok := v.(*assistant.ProjectedStatusResult)
+		if !ok {
+			return loomhttp.ErrInvalidType("assistant", "projected_status", "*assistant.ProjectedStatusResult", v)
+		}
 		enc := encoder(ctx, w)
 		body := NewProjectedStatusResponseBody(res)
 		w.WriteHeader(http.StatusOK)

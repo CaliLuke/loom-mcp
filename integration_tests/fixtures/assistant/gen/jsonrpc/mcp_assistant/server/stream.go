@@ -9,6 +9,7 @@ package server
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net/http"
 	"sync"
@@ -33,6 +34,8 @@ type ToolsCallServerStream struct {
 	r *http.Request
 	// requestID is the JSON-RPC request ID for sending final response
 	requestID any
+	// requestHasID records whether the JSON-RPC request included an ID.
+	requestHasID bool
 	// closed indicates if the stream has been closed via SendAndClose
 	closed bool
 	// mu protects the closed flag
@@ -87,8 +90,8 @@ func (s *ToolsCallServerStream) Send(ctx context.Context, event mcpassistant.Too
 
 // SendAndClose sends a final JSON-RPC response to the client and closes the
 // stream.
-// The response will include the original request ID unless the result has an
-// ID field populated.
+// The response includes the original request ID. Notifications are closed
+// without a final response.
 // After calling this method, no more events can be sent on this stream.
 func (s *ToolsCallServerStream) SendAndClose(ctx context.Context, event mcpassistant.ToolsCallEvent) error {
 	// Check if stream is already closed
@@ -108,6 +111,9 @@ func (s *ToolsCallServerStream) SendAndClose(ctx context.Context, event mcpassis
 
 	// Determine the ID to use for the response
 	var id any = s.requestID
+	if !s.requestHasID {
+		return nil
+	}
 	// Convert to response body type for proper JSON encoding
 	body := NewToolsCallResponseBody(result)
 	// Send as response with ID
@@ -124,8 +130,9 @@ func (s *ToolsCallServerStream) SendAndClose(ctx context.Context, event mcpassis
 func (s *ToolsCallServerStream) SendError(ctx context.Context, id string, err error) error {
 	// No custom errors defined - check if it's a validation error, otherwise use internal error
 	code := jsonrpc.InternalError
-	if _, ok := err.(*loom.ServiceError); ok {
-		code = jsonrpc.InvalidParams
+	var serviceError *loom.ServiceError
+	if errors.As(err, &serviceError) {
+		code = jsonrpcErrorCodeForServiceError(serviceError)
 	}
 	return s.sendError(ctx, id, code, loom.ErrorSafeMessage(err), jsonrpc.NewErrorData(err))
 }
@@ -164,6 +171,8 @@ type EventsStreamServerStream struct {
 	r *http.Request
 	// requestID is the JSON-RPC request ID for sending final response
 	requestID any
+	// requestHasID records whether the JSON-RPC request included an ID.
+	requestHasID bool
 	// closed indicates if the stream has been closed via SendAndClose
 	closed bool
 	// mu protects the closed flag
@@ -218,8 +227,8 @@ func (s *EventsStreamServerStream) Send(ctx context.Context, event mcpassistant.
 
 // SendAndClose sends a final JSON-RPC response to the client and closes the
 // stream.
-// The response will include the original request ID unless the result has an
-// ID field populated.
+// The response includes the original request ID. Notifications are closed
+// without a final response.
 // After calling this method, no more events can be sent on this stream.
 func (s *EventsStreamServerStream) SendAndClose(ctx context.Context, event mcpassistant.EventsStreamEvent) error {
 	// Check if stream is already closed
@@ -239,6 +248,9 @@ func (s *EventsStreamServerStream) SendAndClose(ctx context.Context, event mcpas
 
 	// Determine the ID to use for the response
 	var id any = s.requestID
+	if !s.requestHasID {
+		return nil
+	}
 	// Convert to response body type for proper JSON encoding
 	body := NewEventsStreamResponseBody(result)
 	// Send as response with ID
@@ -255,8 +267,9 @@ func (s *EventsStreamServerStream) SendAndClose(ctx context.Context, event mcpas
 func (s *EventsStreamServerStream) SendError(ctx context.Context, id string, err error) error {
 	// No custom errors defined - check if it's a validation error, otherwise use internal error
 	code := jsonrpc.InternalError
-	if _, ok := err.(*loom.ServiceError); ok {
-		code = jsonrpc.InvalidParams
+	var serviceError *loom.ServiceError
+	if errors.As(err, &serviceError) {
+		code = jsonrpcErrorCodeForServiceError(serviceError)
 	}
 	return s.sendError(ctx, id, code, loom.ErrorSafeMessage(err), jsonrpc.NewErrorData(err))
 }

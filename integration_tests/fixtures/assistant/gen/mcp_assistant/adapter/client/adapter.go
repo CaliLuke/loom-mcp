@@ -303,6 +303,40 @@ func NewEndpoints(scheme string, host string, doer goahttp.Doer, enc func(*http.
 		return decodeOriginalJSONRPCResult(enc, req3, toolResp.Result, decode)
 	}
 
+	// Tool: search_records -> SearchRecords
+	e.SearchRecords = func(ctx context.Context, v any) (any, error) {
+		var payload any
+		payload = v.(*assistant.SearchRecordsPayload)
+		args, err := encodeOriginalPayload(ctx, enc, payload)
+		if err != nil {
+			return nil, err
+		}
+		toolResp, err := mcpCaller.CallTool(ctx, mcpruntime.CallRequest{
+			Payload: args,
+			Tool:    "search_records",
+		})
+		if err != nil {
+			prompt := retry.BuildRepairPrompt("tools/call:search_records", err.Error(), "{\"limit\":1,\"query\":\"abc123\"}", "{\"type\":\"object\",\"properties\":{\"limit\":{\"type\":\"integer\",\"description\":\"Maximum number of records\"},\"query\":{\"type\":\"string\",\"description\":\"Search query\"}},\"additionalProperties\":false}")
+			return nil, &retry.RetryableError{
+				Cause:  err,
+				Prompt: prompt,
+			}
+		}
+		if len(toolResp.Result) == 0 {
+			prompt := retry.BuildRepairPrompt("tools/call:search_records", "empty MCP tool response", "{\"limit\":1,\"query\":\"abc123\"}", "{\"type\":\"object\",\"properties\":{\"limit\":{\"type\":\"integer\",\"description\":\"Maximum number of records\"},\"query\":{\"type\":\"string\",\"description\":\"Search query\"}},\"additionalProperties\":false}")
+			return nil, &retry.RetryableError{
+				Cause:  fmt.Errorf("empty MCP tool response for search_records"),
+				Prompt: prompt,
+			}
+		}
+		req3, err := origC.BuildSearchRecordsRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		decode := assistantjsonrpcc.DecodeSearchRecordsResponse(dec, false)
+		return decodeOriginalJSONRPCResult(enc, req3, toolResp.Result, decode)
+	}
+
 	// Tool: execute_code -> ExecuteCode
 	e.ExecuteCode = func(ctx context.Context, v any) (any, error) {
 		var payload any
@@ -754,5 +788,5 @@ func NewEndpoints(scheme string, host string, doer goahttp.Doer, enc func(*http.
 // NewClient returns *assistant.Client using MCP-backed endpoints.
 func NewClient(scheme string, host string, doer goahttp.Doer, enc func(*http.Request) goahttp.Encoder, dec func(*http.Response) goahttp.Decoder, restore bool) *assistant.Client {
 	e := NewEndpoints(scheme, host, doer, enc, dec, restore)
-	return assistant.NewClient(e.ListDocuments, e.SystemInfo, e.ConversationHistory, e.FigmaDesignSystem, e.GeneratePrompts, e.BuildFigmaImplementationPrompt, e.SendNotification, e.AnalyzeSentiment, e.ExtractKeywords, e.SummarizeText, e.Search, e.ExecuteCode, e.ProcessBatch, e.MultiContent, e.GenerateDpiSpec, e.DispatchAction, e.DispatchCommand, e.ProjectedLookup, e.ProjectedStatus)
+	return assistant.NewClient(e.ListDocuments, e.SystemInfo, e.ConversationHistory, e.FigmaDesignSystem, e.GeneratePrompts, e.BuildFigmaImplementationPrompt, e.SendNotification, e.AnalyzeSentiment, e.ExtractKeywords, e.SummarizeText, e.Search, e.SearchRecords, e.ExecuteCode, e.ProcessBatch, e.MultiContent, e.GenerateDpiSpec, e.DispatchAction, e.DispatchCommand, e.ProjectedLookup, e.ProjectedStatus)
 }

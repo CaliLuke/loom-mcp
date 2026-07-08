@@ -8,19 +8,18 @@ import (
 )
 
 // collectTopLevelValidations extracts required fields and enum values for a top-level object payload.
-func collectTopLevelValidations(attr *expr.AttributeExpr) ([]string, map[string][]string, map[string]bool, []DefaultField) {
+func collectTopLevelValidations(attr *expr.AttributeExpr) ([]string, []EnumField, []DefaultField) {
 	if attr == nil || attr.Type == nil || attr.Type == expr.Empty {
-		return nil, nil, nil, nil
+		return nil, nil, nil
 	}
 	if ut, ok := attr.Type.(expr.UserType); ok {
 		return collectTopLevelValidations(ut.Attribute())
 	}
 	obj, ok := attr.Type.(*expr.Object)
 	if !ok {
-		return nil, nil, nil, nil
+		return nil, nil, nil
 	}
 	req := []string{}
-	enumPtr := map[string]bool{}
 	fields, enums, defaults := collectTopLevelValidationFields(obj)
 	if attr.Validation != nil && len(attr.Validation.Required) > 0 {
 		for _, name := range attr.Validation.Required {
@@ -37,17 +36,17 @@ func collectTopLevelValidations(attr *expr.AttributeExpr) ([]string, map[string]
 			reqSet[n] = struct{}{}
 		}
 	}
-	for n := range enums {
-		_, isReq := reqSet[n]
-		hasDefault := fields[n] != nil && fields[n].DefaultValue != nil
-		enumPtr[n] = !isReq && !hasDefault
+	for i := range enums {
+		_, isReq := reqSet[enums[i].Name]
+		hasDefault := fields[enums[i].Name] != nil && fields[enums[i].Name].DefaultValue != nil
+		enums[i].Pointer = !isReq && !hasDefault
 	}
-	return req, enums, enumPtr, defaults
+	return req, enums, defaults
 }
 
-func collectTopLevelValidationFields(obj *expr.Object) (map[string]*expr.AttributeExpr, map[string][]string, []DefaultField) {
+func collectTopLevelValidationFields(obj *expr.Object) (map[string]*expr.AttributeExpr, []EnumField, []DefaultField) {
 	fields := map[string]*expr.AttributeExpr{}
-	enums := map[string][]string{}
+	enums := []EnumField{}
 	defaults := []DefaultField{}
 	for _, nat := range *obj {
 		fields[nat.Name] = nat.Attribute
@@ -57,7 +56,7 @@ func collectTopLevelValidationFields(obj *expr.Object) (map[string]*expr.Attribu
 			}
 		}
 		if vals := collectEnumValues(nat.Attribute); len(vals) > 0 {
-			enums[nat.Name] = vals
+			enums = append(enums, EnumField{Name: nat.Name, Values: vals})
 		}
 	}
 	return fields, enums, defaults
