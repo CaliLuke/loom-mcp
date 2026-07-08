@@ -211,6 +211,44 @@ func TestGenerateMCPClientAdapter_RendersNotificationEndpoints(t *testing.T) {
 	require.Contains(t, rendered, "notificationPayload.Message =")
 }
 
+func TestGenerateMCPAdapter_RendersExperimentalEventsCapability(t *testing.T) {
+	restore := resetMCPCodegenState(t)
+	defer restore()
+
+	svc, methods := testService("assistant", "send_notification")
+	methods["send_notification"].Payload = testNotificationPayload()
+	methods["send_notification"].Result = &expr.AttributeExpr{Type: expr.Empty}
+	mcp := &mcpexpr.MCPExpr{
+		Name:    "assistant-mcp",
+		Version: "1.0.0",
+		Notifications: []*mcpexpr.NotificationExpr{
+			{
+				Name:   "status_update",
+				Method: methods["send_notification"],
+			},
+		},
+	}
+	data, err := newAdapterGenerator(
+		"example.com/assistant/gen",
+		svc,
+		mcp,
+		newMCPExprBuilder(svc, mcp, nil).BuildServiceMapping(),
+		nil,
+	).buildAdapterData()
+	require.NoError(t, err)
+
+	files := generateMCPTransport("example.com/assistant/gen", svc, data)
+	adapterFile := findGeneratedFile(t, files, filepath.Join(gcodegen.Gendir, "mcp_assistant", "adapter_server.go"))
+	rendered := renderGeneratedFile(t, adapterFile)
+
+	require.Contains(t, rendered, `capabilities.Experimental = map[string]any{`)
+	require.Contains(t, rendered, `"loom-mcp": map[string]any{`)
+	require.Contains(t, rendered, `"events": map[string]any{`)
+	require.Contains(t, rendered, `"method":        "events/stream"`)
+	require.Contains(t, rendered, `"stream":        true`)
+	require.Contains(t, rendered, `"notifications": []string{"notify_status_update"}`)
+}
+
 func TestGenerateMCPClientAdapter_RendersOriginalClientForResourceResults(t *testing.T) {
 	restore := resetMCPCodegenState(t)
 	defer restore()

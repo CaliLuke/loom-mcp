@@ -1566,6 +1566,10 @@ handling.
 | `Subscription(...)`          | Subscription handlers                                  |
 | `SubscriptionMonitor(...)`   | SSE subscription monitors                              |
 
+Generated MCP initialize results advertise the non-standard events surface under
+`capabilities.experimental["loom-mcp"].events`, including `events/stream` and
+generated notification method names.
+
 Generated adapters also support runtime-configured progressive discovery for
 large MCP catalogs. Set `MCPAdapterOptions.ToolSearch` (or
 `SDKServerOptions.Adapter.ToolSearch`) to replace the default `tools/list`

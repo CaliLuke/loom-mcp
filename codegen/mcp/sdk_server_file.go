@@ -138,6 +138,7 @@ func sdkServerConstructorSection(data *AdapterData) codegen.Section {
 				} else {
 					g.Id("adapter").Op(":=").Id("NewMCPAdapter").Call(jen.Id("service"), jen.Id("adapterOpts"))
 				}
+				g.Id("serverOpts").Op("=").Id("sdkServerOptionsWithEvents").Call(jen.Id("serverOpts"))
 				g.Id("server").Op(":=").Id("mcpsdk").Dot("NewServer").Call(
 					jen.Op("&").Id("mcpsdk").Dot("Implementation").Values(sdkImplementationDict(data)),
 					jen.Id("serverOpts"),
@@ -185,6 +186,8 @@ func sdkServerConstructorSection(data *AdapterData) codegen.Section {
 			stmt.Line()
 		}
 
+		emitSDKServerOptionsWithEvents(stmt, data)
+
 		stmt.Func().Params(jen.Id("w").Op("*").Id("sdkResponseObserver")).
 			Id("WriteHeader").
 			Params(jen.Id("statusCode").Int()).
@@ -205,6 +208,46 @@ func sdkServerConstructorSection(data *AdapterData) codegen.Section {
 			)
 		stmt.Line()
 	})
+}
+
+func emitSDKServerOptionsWithEvents(stmt *jen.Statement, data *AdapterData) {
+	stmt.Func().Id("sdkServerOptionsWithEvents").
+		Params(jen.Id("opts").Op("*").Id("mcpsdk").Dot("ServerOptions")).
+		Op("*").Id("mcpsdk").Dot("ServerOptions").
+		BlockFunc(func(g *jen.Group) {
+			g.If(jen.Id("opts").Op("==").Nil()).Block(
+				jen.Id("opts").Op("=").Op("&").Id("mcpsdk").Dot("ServerOptions").Values(),
+			).Else().Block(
+				jen.Id("copied").Op(":=").Op("*").Id("opts"),
+				jen.Id("opts").Op("=").Op("&").Id("copied"),
+			)
+			g.If(jen.Id("opts").Dot("Capabilities").Op("==").Nil()).Block(
+				jen.Id("opts").Dot("Capabilities").Op("=").Op("&").Id("mcpsdk").Dot("ServerCapabilities").Values(jen.Dict{
+					jen.Id("Logging"): jen.Op("&").Id("mcpsdk").Dot("LoggingCapabilities").Values(),
+				}),
+			).Else().Block(
+				jen.Id("capabilities").Op(":=").Op("*").Id("opts").Dot("Capabilities"),
+				jen.Id("opts").Dot("Capabilities").Op("=").Op("&").Id("capabilities"),
+			)
+			g.Id("experimental").Op(":=").Make(jen.Map(jen.String()).Any(), jen.Len(jen.Id("opts").Dot("Capabilities").Dot("Experimental")).Op("+").Lit(1))
+			g.For(jen.List(jen.Id("key"), jen.Id("value")).Op(":=").Range().Id("opts").Dot("Capabilities").Dot("Experimental")).Block(
+				jen.Id("experimental").Index(jen.Id("key")).Op("=").Id("value"),
+			)
+			g.Id("experimental").Index(jen.Lit("loom-mcp")).Op("=").Map(jen.String()).Any().Values(jen.Dict{
+				jen.Lit("events"): jen.Map(jen.String()).Any().Values(jen.Dict{
+					jen.Lit("stream"): jen.True(),
+					jen.Lit("method"): jen.Lit("events/stream"),
+					jen.Lit("notifications"): jen.Index().String().ValuesFunc(func(v *jen.Group) {
+						for _, notification := range data.Notifications {
+							v.Lit("notify_" + notification.Name)
+						}
+					}),
+				}),
+			})
+			g.Id("opts").Dot("Capabilities").Dot("Experimental").Op("=").Id("experimental")
+			g.Return(jen.Id("opts"))
+		})
+	stmt.Line()
 }
 
 func sdkImplementationDict(data *AdapterData) jen.Dict {

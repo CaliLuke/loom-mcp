@@ -417,6 +417,8 @@ type ServerCapabilities struct {
 	Resources *ResourcesCapability `json:"resources,omitempty"`
 	// Prompt capabilities
 	Prompts *PromptsCapability `json:"prompts,omitempty"`
+	// Experimental server capabilities
+	Experimental any `json:"experimental,omitempty"`
 }
 
 type ServerInfo struct {

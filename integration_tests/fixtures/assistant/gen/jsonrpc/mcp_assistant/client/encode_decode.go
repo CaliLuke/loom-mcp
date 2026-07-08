@@ -1117,7 +1117,9 @@ func unmarshalServerCapabilitiesResponseBodyToMcpassistantServerCapabilities(v *
 	if v == nil {
 		return nil
 	}
-	res := &mcpassistant.ServerCapabilities{}
+	res := &mcpassistant.ServerCapabilities{
+		Experimental: v.Experimental,
+	}
 	if v.Tools != nil {
 		res.Tools = unmarshalToolsCapabilityResponseBodyToMcpassistantToolsCapability(v.Tools)
 	}

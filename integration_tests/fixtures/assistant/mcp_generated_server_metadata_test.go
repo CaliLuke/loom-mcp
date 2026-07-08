@@ -92,6 +92,14 @@ func TestGeneratedJSONRPCServerExposesSEP973MetadataOnWire(t *testing.T) {
 	serverIcons := nestedSlice(t, serverInfo, "icons")
 	require.Len(t, serverIcons, 2)
 
+	capabilities := nestedMap(t, initResult, "capabilities")
+	experimental := nestedMap(t, capabilities, "experimental")
+	loomMCP := nestedMap(t, experimental, "loom-mcp")
+	events := nestedMap(t, loomMCP, "events")
+	assert.Equal(t, true, events["stream"])
+	assert.Equal(t, "events/stream", events["method"])
+	assert.Equal(t, []any{"notify_status_update"}, nestedSlice(t, events, "notifications"))
+
 	toolsResult := rawJSONRPCResult(t, ctx, server.URL+"/rpc", sessionID, "tools/list", map[string]any{})
 	tools := nestedSlice(t, toolsResult, "tools")
 	tool := findMapByStringField(t, tools, "name", "analyze_sentiment")

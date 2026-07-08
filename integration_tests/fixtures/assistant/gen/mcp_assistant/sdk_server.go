@@ -69,6 +69,7 @@ func NewSDKServer(service assistant.Service, opts *SDKServerOptions) (*SDKServer
 	}
 	adapter := NewMCPAdapter(service, promptProvider, adapterOpts)
 	serverOpts = sdkServerOptionsWithCompletion(serverOpts, adapter.sdkCompletionHandler(requestContext))
+	serverOpts = sdkServerOptionsWithEvents(serverOpts)
 	server := mcpsdk.NewServer(&mcpsdk.Implementation{
 		Icons: []mcpsdk.Icon{mcpsdk.Icon{
 			MIMEType: "image/png",
@@ -110,6 +111,31 @@ func sdkServerOptionsWithCompletion(opts *mcpsdk.ServerOptions, handler func(con
 	if opts.CompletionHandler == nil {
 		opts.CompletionHandler = handler
 	}
+	return opts
+}
+func sdkServerOptionsWithEvents(opts *mcpsdk.ServerOptions) *mcpsdk.ServerOptions {
+	if opts == nil {
+		opts = &mcpsdk.ServerOptions{}
+	} else {
+		copied := *opts
+		opts = &copied
+	}
+	if opts.Capabilities == nil {
+		opts.Capabilities = &mcpsdk.ServerCapabilities{Logging: &mcpsdk.LoggingCapabilities{}}
+	} else {
+		capabilities := *opts.Capabilities
+		opts.Capabilities = &capabilities
+	}
+	experimental := make(map[string]any, len(opts.Capabilities.Experimental)+1)
+	for key, value := range opts.Capabilities.Experimental {
+		experimental[key] = value
+	}
+	experimental["loom-mcp"] = map[string]any{"events": map[string]any{
+		"method":        "events/stream",
+		"notifications": []string{"notify_status_update"},
+		"stream":        true,
+	}}
+	opts.Capabilities.Experimental = experimental
 	return opts
 }
 func (w *sdkResponseObserver) WriteHeader(statusCode int) {

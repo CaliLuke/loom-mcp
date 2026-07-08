@@ -194,6 +194,10 @@ func (b *mcpExprBuilder) buildCapabilitiesType() *expr.AttributeExpr {
 					Type:        types["PromptsCapability"],
 					Description: "Prompt capabilities",
 				}},
+				{Name: "experimental", Attribute: &expr.AttributeExpr{
+					Type:        expr.Any,
+					Description: "Experimental server capabilities",
+				}},
 				// sampling, roots removed
 			},
 		}

@@ -1090,6 +1090,19 @@ func emitInitializeHandler(stmt *jen.Statement, data *AdapterData) {
 			if len(data.StaticPrompts) > 0 || len(data.DynamicPrompts) > 0 {
 				g.Id("capabilities").Dot("Prompts").Op("=").Op("&").Id("PromptsCapability").Values()
 			}
+			g.Id("capabilities").Dot("Experimental").Op("=").Map(jen.String()).Any().Values(jen.Dict{
+				jen.Lit("loom-mcp"): jen.Map(jen.String()).Any().Values(jen.Dict{
+					jen.Lit("events"): jen.Map(jen.String()).Any().Values(jen.Dict{
+						jen.Lit("stream"): jen.True(),
+						jen.Lit("method"): jen.Lit("events/stream"),
+						jen.Lit("notifications"): jen.Index().String().ValuesFunc(func(v *jen.Group) {
+							for _, notification := range data.Notifications {
+								v.Lit("notify_" + notification.Name)
+							}
+						}),
+					}),
+				}),
+			})
 
 			g.Id("res").Op("=").Op("&").Id("InitializeResult").Values(jen.Dict{
 				jen.Id("ProtocolVersion"): jen.Id("negotiatedVersion"),

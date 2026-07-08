@@ -506,7 +506,9 @@ func unmarshalIconRequestBodyRequestBodyRequestBodyRequestBodyToMcpassistantIcon
 // a value of type *ServerCapabilitiesResponseBody from a value of type
 // *mcpassistant.ServerCapabilities.
 func marshalMcpassistantServerCapabilitiesToServerCapabilitiesResponseBody(v *mcpassistant.ServerCapabilities) *ServerCapabilitiesResponseBody {
-	res := &ServerCapabilitiesResponseBody{}
+	res := &ServerCapabilitiesResponseBody{
+		Experimental: v.Experimental,
+	}
 	if v.Tools != nil {
 		res.Tools = marshalMcpassistantToolsCapabilityToToolsCapabilityResponseBody(v.Tools)
 	}

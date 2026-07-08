@@ -178,6 +178,8 @@ type ServerCapabilitiesResponseBody struct {
 	Resources *ResourcesCapabilityResponseBody `form:"resources,omitempty" json:"resources,omitempty" xml:"resources,omitempty"`
 	// Prompt capabilities
 	Prompts *PromptsCapabilityResponseBody `form:"prompts,omitempty" json:"prompts,omitempty" xml:"prompts,omitempty"`
+	// Experimental server capabilities
+	Experimental any `form:"experimental,omitempty" json:"experimental,omitempty" xml:"experimental,omitempty"`
 }
 
 // ToolsCapabilityResponseBody is used to define fields on response body types.

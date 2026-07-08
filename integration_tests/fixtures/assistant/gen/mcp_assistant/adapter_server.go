@@ -772,6 +772,11 @@ func (a *MCPAdapter) Initialize(ctx context.Context, p *InitializePayload) (res 
 	capabilities.Tools = &ToolsCapability{}
 	capabilities.Resources = &ResourcesCapability{}
 	capabilities.Prompts = &PromptsCapability{}
+	capabilities.Experimental = map[string]any{"loom-mcp": map[string]any{"events": map[string]any{
+		"method":        "events/stream",
+		"notifications": []string{"notify_status_update"},
+		"stream":        true,
+	}}}
 	res = &InitializeResult{
 		Capabilities:    capabilities,
 		ProtocolVersion: negotiatedVersion,
