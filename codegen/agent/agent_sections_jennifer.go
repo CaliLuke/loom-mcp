@@ -6,13 +6,13 @@ import (
 )
 
 func agentToolsConsumerSection(data agentToolsetConsumerFileData) gocodegen.Section {
-	return gocodegen.MustJenniferSection("agent-tools-consumer", func(stmt *jen.Statement) {
+	return gocodegen.NewJenniferSection("agent-tools-consumer", func(stmt *jen.Statement) {
 		emitAgentToolsConsumerRegistration(stmt, data)
 	})
 }
 
 func agentToolsSection(data agentToolsetFileData) gocodegen.Section {
-	return gocodegen.MustJenniferSection("agent-tools", func(stmt *jen.Statement) {
+	return gocodegen.NewJenniferSection("agent-tools", func(stmt *jen.Statement) {
 		emitAgentToolsConstants(stmt, data)
 		emitAgentToolsAliases(stmt, data)
 		emitAgentToolsetRegistration(stmt, data)
@@ -24,20 +24,20 @@ func agentToolsSection(data agentToolsetFileData) gocodegen.Section {
 }
 
 func mcpExecutorSection(data serviceToolsetFileData) gocodegen.Section {
-	return gocodegen.MustJenniferSection("mcp-executor", func(stmt *jen.Statement) {
+	return gocodegen.NewJenniferSection("mcp-executor", func(stmt *jen.Statement) {
 		emitMCPExecutorConstructor(stmt, data)
 	})
 }
 
 func toolSpecsAggregateSection(data toolSpecsAggregateData) gocodegen.Section {
-	return gocodegen.MustJenniferSection("tool-specs-aggregate", func(stmt *jen.Statement) {
+	return gocodegen.NewJenniferSection("tool-specs-aggregate", func(stmt *jen.Statement) {
 		emitToolSpecsAggregateVars(stmt, data)
 		emitToolSpecsAggregateFuncs(stmt, data)
 	})
 }
 
 func usedToolsSection(data agentToolsetFileData) gocodegen.Section {
-	return gocodegen.MustJenniferSection("used-tools", func(stmt *jen.Statement) {
+	return gocodegen.NewJenniferSection("used-tools", func(stmt *jen.Statement) {
 		emitUsedToolsConstants(stmt, data)
 		emitUsedToolsAliases(stmt, data)
 		emitUsedToolsOptions(stmt)
@@ -46,7 +46,7 @@ func usedToolsSection(data agentToolsetFileData) gocodegen.Section {
 }
 
 func toolProviderSection(data toolProviderFileData) gocodegen.Section {
-	return gocodegen.MustJenniferSection("tool-provider", func(stmt *jen.Statement) {
+	return gocodegen.NewJenniferSection("tool-provider", func(stmt *jen.Statement) {
 		emitToolProviderTypes(stmt, data)
 		emitToolProviderDispatchers(stmt, data)
 		emitToolProviderHelpers(stmt)
@@ -511,17 +511,21 @@ func emitToolProviderDispatchers(stmt *jen.Statement, data toolProviderFileData)
 						jen.Id("Error"): jen.Id("planner").Dot("NewToolError").Call(jen.Lit("method dispatcher missing Call")),
 					}), jen.Nil()),
 				)
-				g.Var().Id("toolArgs").Any()
-				g.If(jen.Len(jen.Id("raw")).Op(">").Lit(0)).Block(
-					jen.List(jen.Id("value"), jen.Id("err")).Op(":=").Id(tool.ConstName+"PayloadCodec").Dot("FromJSON").Call(jen.Id("raw")),
-					jen.If(jen.Id("err").Op("!=").Nil()).Block(
-						jen.Return(jen.Op("&").Id("planner").Dot("ToolResult").Values(jen.Dict{
-							jen.Id("Name"):  jen.Id(tool.ConstName),
-							jen.Id("Error"): jen.Id("planner").Dot("ToolErrorFromError").Call(jen.Id("err")),
-						}), jen.Nil()),
-					),
-					jen.Id("toolArgs").Op("=").Id("value"),
+				g.If(jen.Len(jen.Id("raw")).Op("==").Lit(0)).Block(
+					jen.Comment("Tool arguments may legally be omitted (for example MCP tools/call"),
+					jen.Comment("without \"arguments\"). Decode an empty object so required-field"),
+					jen.Comment("validation applies and dispatch never sees a nil payload."),
+					jen.Id("raw").Op("=").Qual("encoding/json", "RawMessage").Call(jen.Lit("{}")),
 				)
+				g.Var().Id("toolArgs").Any()
+				g.List(jen.Id("decodedArgs"), jen.Id("err")).Op(":=").Id(tool.ConstName + "PayloadCodec").Dot("FromJSON").Call(jen.Id("raw"))
+				g.If(jen.Id("err").Op("!=").Nil()).Block(
+					jen.Return(jen.Op("&").Id("planner").Dot("ToolResult").Values(jen.Dict{
+						jen.Id("Name"):  jen.Id(tool.ConstName),
+						jen.Id("Error"): jen.Id("planner").Dot("ToolErrorFromError").Call(jen.Id("err")),
+					}), jen.Nil()),
+				)
+				g.Id("toolArgs").Op("=").Id("decodedArgs")
 				g.Var().Id("methodIn").Any()
 				g.If(jen.Id("opts").Dot("MapPayload").Op("!=").Nil()).Block(
 					jen.List(jen.Id("value"), jen.Id("err")).Op(":=").Id("opts").Dot("MapPayload").Call(jen.Id(tool.ConstName), jen.Id("toolArgs"), jen.Id("meta")),
@@ -922,15 +926,35 @@ func emitMCPExecutorConstructor(stmt *jen.Statement, data serviceToolsetFileData
 								),
 							),
 							jen.Id("full").Op(":=").Id("call").Dot("Name"),
-							jen.Id("tool").Op(":=").Id("full"),
+							jen.Id("name").Op(":=").String().Parens(jen.Id("full")),
+							jen.Id("tool").Op(":=").Id("name"),
 							jen.If(jen.Qual("strings", "HasPrefix").Call(jen.Id("tool"), jen.Id("prefix"))).Block(
 								jen.Id("tool").Op("=").Id("tool").Index(jen.Len(jen.Id("prefix")).Op(":")),
 							),
 							jen.If(
-								jen.List(jen.Id("pc"), jen.Id("ok")).Op(":=").Id(data.Toolset.SpecsPackageName).Dot("PayloadCodec").Call(jen.Id("full")),
+								jen.List(jen.Id("pc"), jen.Id("ok")).Op(":=").Id(data.Toolset.SpecsPackageName).Dot("PayloadCodec").Call(jen.Id("name")),
 								jen.Id("ok"),
 							).Block(
-								jen.List(jen.Id("payload"), jen.Id("err")).Op(":=").Id("pc").Dot("ToJSON").Call(jen.Id("call").Dot("Payload")),
+								jen.Comment("Decode (and validate) the raw payload before forwarding it so"),
+								jen.Comment("invalid tool calls fail with a typed validation error instead of"),
+								jen.Comment("reaching the MCP server. Omitted arguments decode as an empty object."),
+								jen.Id("raw").Op(":=").Index().Byte().Parens(jen.Id("call").Dot("Payload")),
+								jen.If(jen.Len(jen.Id("raw")).Op("==").Lit(0)).Block(
+									jen.Id("raw").Op("=").Index().Byte().Parens(jen.Lit("{}")),
+								),
+								jen.List(jen.Id("decoded"), jen.Id("err")).Op(":=").Id("pc").Dot("FromJSON").Call(jen.Id("raw")),
+								jen.If(jen.Id("err").Op("!=").Nil()).Block(
+									jen.Return(
+										jen.Id("runtime").Dot("Executed").Call(
+											jen.Op("&").Id("planner").Dot("ToolResult").Values(jen.Dict{
+												jen.Id("Name"):  jen.Id("full"),
+												jen.Id("Error"): jen.Id("planner").Dot("ToolErrorFromError").Call(jen.Id("err")),
+											}),
+										),
+										jen.Nil(),
+									),
+								),
+								jen.List(jen.Id("payload"), jen.Id("err")).Op(":=").Id("pc").Dot("ToJSON").Call(jen.Id("decoded")),
 								jen.If(jen.Id("err").Op("!=").Nil()).Block(
 									jen.Return(
 										jen.Id("runtime").Dot("Executed").Call(
@@ -964,7 +988,7 @@ func emitMCPExecutorConstructor(stmt *jen.Statement, data serviceToolsetFileData
 								jen.Var().Id("value").Any(),
 								jen.If(jen.Len(jen.Id("resp").Dot("Result")).Op(">").Lit(0)).Block(
 									jen.If(
-										jen.List(jen.Id("rc"), jen.Id("ok")).Op(":=").Id(data.Toolset.SpecsPackageName).Dot("ResultCodec").Call(jen.Id("full")),
+										jen.List(jen.Id("rc"), jen.Id("ok")).Op(":=").Id(data.Toolset.SpecsPackageName).Dot("ResultCodec").Call(jen.Id("name")),
 										jen.Id("ok"),
 									).Block(
 										jen.List(jen.Id("v"), jen.Id("err")).Op(":=").Id("rc").Dot("FromJSON").Call(jen.Id("resp").Dot("Result")),

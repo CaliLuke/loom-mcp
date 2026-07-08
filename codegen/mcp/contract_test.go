@@ -97,7 +97,7 @@ func TestMCPExprBuilder_EmitsServerCapabilitiesWithoutDuplicateCapabilitiesType(
 			{Name: "analyze", Method: methods["analyze"]},
 		},
 	}
-	builder := newMCPExprBuilder(svc, mcp, nil)
+	builder := newMCPExprBuilder(svc, mcp, nil, 0)
 
 	builder.buildMCPTypes()
 
@@ -187,7 +187,7 @@ func TestGenerateMCPClientAdapter_DoesNotRenderOriginalClientFallback(t *testing
 		"example.com/calc/gen",
 		svc,
 		mcp,
-		newMCPExprBuilder(svc, mcp, nil).BuildServiceMapping(),
+		newMCPExprBuilder(svc, mcp, nil, 0).BuildServiceMapping(),
 		nil,
 	).buildAdapterData()
 
@@ -219,7 +219,7 @@ func TestGenerateMCPClientAdapter_RendersNotificationEndpoints(t *testing.T) {
 		"example.com/assistant/gen",
 		svc,
 		mcp,
-		newMCPExprBuilder(svc, mcp, nil).BuildServiceMapping(),
+		newMCPExprBuilder(svc, mcp, nil, 0).BuildServiceMapping(),
 		nil,
 	).buildAdapterData()
 
@@ -257,7 +257,7 @@ func TestGenerateMCPAdapter_RendersExperimentalEventsCapability(t *testing.T) {
 		"example.com/assistant/gen",
 		svc,
 		mcp,
-		newMCPExprBuilder(svc, mcp, nil).BuildServiceMapping(),
+		newMCPExprBuilder(svc, mcp, nil, 0).BuildServiceMapping(),
 		nil,
 	).buildAdapterData()
 	require.NoError(t, err)
@@ -362,7 +362,7 @@ func TestGenerateMCPClientAdapter_RendersOriginalClientForResourceResults(t *tes
 		"example.com/assistant/gen",
 		svc,
 		mcp,
-		newMCPExprBuilder(svc, mcp, nil).BuildServiceMapping(),
+		newMCPExprBuilder(svc, mcp, nil, 0).BuildServiceMapping(),
 		nil,
 	).buildAdapterData()
 
@@ -395,7 +395,7 @@ func TestGenerateMCPClientAdapter_RendersOriginalClientForDynamicPrompts(t *test
 		"example.com/assistant/gen",
 		svc,
 		mcp,
-		newMCPExprBuilder(svc, mcp, collectSourceSnapshot([]eval.Root{root})).BuildServiceMapping(),
+		newMCPExprBuilder(svc, mcp, collectSourceSnapshot([]eval.Root{root}), 0).BuildServiceMapping(),
 		nil,
 	).buildAdapterData()
 
@@ -429,7 +429,7 @@ func TestGenerateMCPClientAdapter_StaticPromptsOnlyDoesNotDeclareSessionDoer(t *
 		"example.com/assistant/gen",
 		svc,
 		mcp,
-		newMCPExprBuilder(svc, mcp, nil).BuildServiceMapping(),
+		newMCPExprBuilder(svc, mcp, nil, 0).BuildServiceMapping(),
 		nil,
 	).buildAdapterData()
 
@@ -704,17 +704,40 @@ func TestGeneratedToolInfoIncludesMCPDiscoveryFields(t *testing.T) {
 
 func TestGeneratedToolInfoConversionsPreserveDiscoveryFields(t *testing.T) {
 	files := generateToolDiscoveryFixture(t)
-	serverFile := findGeneratedFile(t, files, filepath.Join(gcodegen.Gendir, "jsonrpc", "mcp_assistant", "server", "types.go"))
-	clientFile := findGeneratedFile(t, files, filepath.Join(gcodegen.Gendir, "jsonrpc", "mcp_assistant", "client", "types.go"))
+	// loom >= v1.3.0 splits large transport type files (types.go ->
+	// types_*.go), so collect every types file in the package directory.
+	serverSource := renderGeneratedTypesFiles(t, files, filepath.Join(gcodegen.Gendir, "jsonrpc", "mcp_assistant", "server"))
+	clientSource := renderGeneratedTypesFiles(t, files, filepath.Join(gcodegen.Gendir, "jsonrpc", "mcp_assistant", "client"))
 
-	for _, file := range []*gcodegen.File{serverFile, clientFile} {
-		source := renderGeneratedFile(t, file)
+	for _, source := range []string{serverSource, clientSource} {
 		require.Contains(t, source, "json:\"title,omitempty\"")
 		require.Contains(t, source, "json:\"outputSchema,omitempty\"")
 		require.Contains(t, source, "json:\"_meta,omitempty\"")
 	}
-	require.Contains(t, renderGeneratedFile(t, serverFile), "marshalMcpassistantToolInfoToToolInfoResponseBody")
-	require.Contains(t, renderGeneratedFile(t, clientFile), "unmarshalToolInfoResponseBodyToMcpassistantToolInfo")
+	require.Contains(t, serverSource, "marshalMcpassistantToolInfoToToolInfoResponseBody")
+	require.Contains(t, clientSource, "unmarshalToolInfoResponseBodyToMcpassistantToolInfo")
+}
+
+// renderGeneratedTypesFiles concatenates the rendered sources of every
+// types*.go file generated in dir. loom < v1.3.0 emitted a single types.go;
+// v1.3.0 split large transport type files into types_*.go.
+func renderGeneratedTypesFiles(t *testing.T, files []*gcodegen.File, dir string) string {
+	t.Helper()
+	wantDir := filepath.ToSlash(dir)
+	var sources []string
+	for _, file := range files {
+		path := filepath.ToSlash(file.Path)
+		if filepath.ToSlash(filepath.Dir(path)) != wantDir {
+			continue
+		}
+		base := filepath.Base(path)
+		if base != "types.go" && !strings.HasPrefix(base, "types_") {
+			continue
+		}
+		sources = append(sources, renderGeneratedFile(t, file))
+	}
+	require.NotEmptyf(t, sources, "no generated types files found in %s", wantDir)
+	return strings.Join(sources, "\n")
 }
 
 func TestGeneratedSearchToolsHasOutputSchema(t *testing.T) {
@@ -854,7 +877,7 @@ func TestBuildAdapterData_DefaultedEnumFieldsStayScalarAndReapplyDefaults(t *tes
 		"example.com/assistant/gen",
 		svc,
 		mcp,
-		newMCPExprBuilder(svc, mcp, nil).BuildServiceMapping(),
+		newMCPExprBuilder(svc, mcp, nil, 0).BuildServiceMapping(),
 		nil,
 	).buildAdapterData()
 
@@ -920,7 +943,7 @@ func TestGenerateMCPTransport_EnumValidationTreatsOptionalPointerNullAsAbsent(t 
 		"example.com/assistant/gen",
 		svc,
 		mcp,
-		newMCPExprBuilder(svc, mcp, nil).BuildServiceMapping(),
+		newMCPExprBuilder(svc, mcp, nil, 0).BuildServiceMapping(),
 		nil,
 	).buildAdapterData()
 
@@ -980,7 +1003,7 @@ func TestGenerateMCPTransport_UnknownEntitiesUseMCPErrorNames(t *testing.T) {
 		"example.com/assistant/gen",
 		svc,
 		mcp,
-		newMCPExprBuilder(svc, mcp, nil).BuildServiceMapping(),
+		newMCPExprBuilder(svc, mcp, nil, 0).BuildServiceMapping(),
 		nil,
 	).buildAdapterData()
 
@@ -1023,7 +1046,7 @@ func TestGenerateAdapter_RendersSafeResourceAndPromptErrors(t *testing.T) {
 		"example.com/assistant/gen",
 		svc,
 		mcp,
-		newMCPExprBuilder(svc, mcp, nil).BuildServiceMapping(),
+		newMCPExprBuilder(svc, mcp, nil, 0).BuildServiceMapping(),
 		nil,
 	).buildAdapterData()
 	require.NoError(t, err)
@@ -1066,7 +1089,7 @@ func TestGenerateMCPClientAdapter_SpecializesResourceQueryConstruction(t *testin
 		"example.com/assistant/gen",
 		svc,
 		mcp,
-		newMCPExprBuilder(svc, mcp, nil).BuildServiceMapping(),
+		newMCPExprBuilder(svc, mcp, nil, 0).BuildServiceMapping(),
 		nil,
 	).buildAdapterData()
 
@@ -1607,7 +1630,7 @@ func TestPrepareServices_AcceptedPureMCPServiceAssignsEveryOriginalEndpoint(t *t
 		"example.com/assistant/gen",
 		svc,
 		mcp,
-		newMCPExprBuilder(svc, mcp, nil).BuildServiceMapping(),
+		newMCPExprBuilder(svc, mcp, nil, 0).BuildServiceMapping(),
 		nil,
 	).buildAdapterData()
 	require.NoError(t, err)

@@ -58,7 +58,7 @@ func clientAdapterFile(genpkg string, svc *expr.ServiceExpr, data *AdapterData) 
 		Path: filepath.Join(codegen.Gendir, "mcp_"+svcName, "adapter", "client", "adapter.go"),
 		Sections: []codegen.Section{
 			codegen.Header("MCP client adapter exposing original service endpoints", fileData.MCPPkgAlias+"adapter", imports),
-			codegen.MustJenniferSection("mcp-client-adapter", func(stmt *jen.Statement) {
+			codegen.NewJenniferSection("mcp-client-adapter", func(stmt *jen.Statement) {
 				emitClientAdapterHelpers(stmt, fileData)
 				emitClientAdapterNewEndpoints(stmt, fileData)
 				emitClientAdapterNewClient(stmt, fileData)

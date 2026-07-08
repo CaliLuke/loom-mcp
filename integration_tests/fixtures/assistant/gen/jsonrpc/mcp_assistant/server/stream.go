@@ -116,18 +116,18 @@ func (s *ToolsCallServerStream) SendAndClose(ctx context.Context, event mcpassis
 	}
 	// Convert to response body type for proper JSON encoding
 	body := NewToolsCallResponseBody(result)
-	// Send as response with ID
+	// Send as a JSON-RPC response message with ID
 	message := map[string]any{
 		"jsonrpc": "2.0",
 		"id":      id,
 		"result":  body,
 	}
 
-	return s.sendSSEEvent("response", message)
+	return s.sendSSEEvent("message", message)
 }
 
 // SendError sends a JSON-RPC error response.
-func (s *ToolsCallServerStream) SendError(ctx context.Context, id string, err error) error {
+func (s *ToolsCallServerStream) SendError(ctx context.Context, id any, err error) error {
 	// No custom errors defined - check if it's a validation error, otherwise use internal error
 	code := jsonrpc.InternalError
 	var serviceError *loom.ServiceError
@@ -253,18 +253,18 @@ func (s *EventsStreamServerStream) SendAndClose(ctx context.Context, event mcpas
 	}
 	// Convert to response body type for proper JSON encoding
 	body := NewEventsStreamResponseBody(result)
-	// Send as response with ID
+	// Send as a JSON-RPC response message with ID
 	message := map[string]any{
 		"jsonrpc": "2.0",
 		"id":      id,
 		"result":  body,
 	}
 
-	return s.sendSSEEvent("response", message)
+	return s.sendSSEEvent("message", message)
 }
 
 // SendError sends a JSON-RPC error response.
-func (s *EventsStreamServerStream) SendError(ctx context.Context, id string, err error) error {
+func (s *EventsStreamServerStream) SendError(ctx context.Context, id any, err error) error {
 	// No custom errors defined - check if it's a validation error, otherwise use internal error
 	code := jsonrpc.InternalError
 	var serviceError *loom.ServiceError

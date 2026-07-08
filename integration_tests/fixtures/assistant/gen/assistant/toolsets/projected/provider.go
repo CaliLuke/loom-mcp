@@ -50,17 +50,21 @@ func DispatchProjectedLookupToolMethod(ctx context.Context, meta *runtime.ToolCa
 			Name:  ProjectedLookupTool,
 		}, nil
 	}
-	var toolArgs any
-	if len(raw) > 0 {
-		value, err := ProjectedLookupToolPayloadCodec.FromJSON(raw)
-		if err != nil {
-			return &planner.ToolResult{
-				Error: planner.ToolErrorFromError(err),
-				Name:  ProjectedLookupTool,
-			}, nil
-		}
-		toolArgs = value
+	if len(raw) == 0 {
+		// Tool arguments may legally be omitted (for example MCP tools/call
+		// without "arguments"). Decode an empty object so required-field
+		// validation applies and dispatch never sees a nil payload.
+		raw = json.RawMessage("{}")
 	}
+	var toolArgs any
+	decodedArgs, err := ProjectedLookupToolPayloadCodec.FromJSON(raw)
+	if err != nil {
+		return &planner.ToolResult{
+			Error: planner.ToolErrorFromError(err),
+			Name:  ProjectedLookupTool,
+		}, nil
+	}
+	toolArgs = decodedArgs
 	var methodIn any
 	if opts.MapPayload != nil {
 		value, err := opts.MapPayload(ProjectedLookupTool, toolArgs, meta)
@@ -136,17 +140,21 @@ func DispatchProjectedStatusToolMethod(ctx context.Context, meta *runtime.ToolCa
 			Name:  ProjectedStatusTool,
 		}, nil
 	}
-	var toolArgs any
-	if len(raw) > 0 {
-		value, err := ProjectedStatusToolPayloadCodec.FromJSON(raw)
-		if err != nil {
-			return &planner.ToolResult{
-				Error: planner.ToolErrorFromError(err),
-				Name:  ProjectedStatusTool,
-			}, nil
-		}
-		toolArgs = value
+	if len(raw) == 0 {
+		// Tool arguments may legally be omitted (for example MCP tools/call
+		// without "arguments"). Decode an empty object so required-field
+		// validation applies and dispatch never sees a nil payload.
+		raw = json.RawMessage("{}")
 	}
+	var toolArgs any
+	decodedArgs, err := ProjectedStatusToolPayloadCodec.FromJSON(raw)
+	if err != nil {
+		return &planner.ToolResult{
+			Error: planner.ToolErrorFromError(err),
+			Name:  ProjectedStatusTool,
+		}, nil
+	}
+	toolArgs = decodedArgs
 	var methodIn any
 	if opts.MapPayload != nil {
 		value, err := opts.MapPayload(ProjectedStatusTool, toolArgs, meta)

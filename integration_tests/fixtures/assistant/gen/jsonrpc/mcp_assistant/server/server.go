@@ -83,7 +83,7 @@ func New(endpoints *mcpassistant.Endpoints, mux loomhttp.Muxer, decoder func(*ht
 		errhandler:           errhandler,
 	}
 	// Mixed HTTP/SSE services negotiate transports in ServeHTTP
-	s.Handler = http.HandlerFunc(s.ServeHTTP)
+	s.Handler = http.NewCrossOriginProtection().Handler(http.HandlerFunc(s.ServeHTTP))
 	return s
 }
 
@@ -100,42 +100,6 @@ func (s *Server) Use(m func(http.Handler) http.Handler) {
 // MethodNames returns the methods served.
 func (s *Server) MethodNames() []string {
 	return mcpassistant.MethodNames[:]
-}
-
-type jsonrpcResponseCapture struct {
-	header     http.Header
-	body       bytes.Buffer
-	statusCode int
-}
-
-func (c *jsonrpcResponseCapture) Header() http.Header {
-	if c.header == nil {
-		c.header = make(http.Header)
-	}
-	return c.header
-}
-func (c *jsonrpcResponseCapture) Write(data []byte) (int, error) {
-	if c.statusCode == 0 {
-		c.statusCode = http.StatusOK
-	}
-	return c.body.Write(data)
-}
-func (c *jsonrpcResponseCapture) WriteHeader(statusCode int) {
-	if c.statusCode != 0 {
-		return
-	}
-	c.statusCode = statusCode
-}
-func copyJSONRPCResponseMetadata(dst http.ResponseWriter, src *jsonrpcResponseCapture) {
-	for key, vals := range src.Header() {
-		switch http.CanonicalHeaderKey(key) {
-		case "Content-Length", "Content-Type", "Transfer-Encoding":
-			continue
-		}
-		for _, val := range vals {
-			dst.Header().Add(key, val)
-		}
-	}
 }
 
 // ServeHTTP handles JSON-RPC requests with content negotiation for mixed HTTP/SSE transports.
@@ -447,7 +411,9 @@ func (s *Server) handleSSE(w http.ResponseWriter, r *http.Request) {
 			r:       r,
 			w:       w,
 		}
-		stream.sendError(ctx, nil, jsonrpc.ParseError, "Parse error", nil)
+		if err := stream.sendError(ctx, nil, jsonrpc.ParseError, "Parse error", nil); err != nil {
+			s.errhandler(ctx, w, err)
+		}
 		return
 	}
 
@@ -462,7 +428,9 @@ func (s *Server) handleSSE(w http.ResponseWriter, r *http.Request) {
 			r:       r,
 			w:       w,
 		}
-		stream.sendError(ctx, req.ID, jsonrpc.InvalidRequest, "Invalid request", nil)
+		if err := stream.sendError(ctx, req.ID, jsonrpc.InvalidRequest, "Invalid request", nil); err != nil {
+			s.errhandler(ctx, w, err)
+		}
 		return
 	}
 
@@ -477,7 +445,9 @@ func (s *Server) handleSSE(w http.ResponseWriter, r *http.Request) {
 			r:       r,
 			w:       w,
 		}
-		stream.sendError(ctx, req.ID, jsonrpc.InvalidRequest, "Invalid request", nil)
+		if err := stream.sendError(ctx, req.ID, jsonrpc.InvalidRequest, "Invalid request", nil); err != nil {
+			s.errhandler(ctx, w, err)
+		}
 		return
 	}
 
@@ -492,7 +462,9 @@ func (s *Server) handleSSE(w http.ResponseWriter, r *http.Request) {
 			r:       r,
 			w:       w,
 		}
-		stream.sendError(ctx, req.ID, jsonrpc.InvalidRequest, "Invalid request", nil)
+		if err := stream.sendError(ctx, req.ID, jsonrpc.InvalidRequest, "Invalid request", nil); err != nil {
+			s.errhandler(ctx, w, err)
+		}
 		return
 	}
 
@@ -513,7 +485,9 @@ func (s *Server) handleSSE(w http.ResponseWriter, r *http.Request) {
 			r:       r,
 			w:       w,
 		}
-		stream.sendError(ctx, req.ID, jsonrpc.MethodNotFound, "Method not found", nil)
+		if err := stream.sendError(ctx, req.ID, jsonrpc.MethodNotFound, "Method not found", nil); err != nil {
+			s.errhandler(ctx, w, err)
+		}
 		return
 	}
 
@@ -522,19 +496,29 @@ func (s *Server) handleSSE(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	switch req.Method {
-	}
 } // Mount configures the mux to serve the JSON-RPC mcp_assistant service methods.
 func Mount(mux loomhttp.Muxer, h *Server) {
 	// Mixed transports: mount unified handler that negotiates HTTP vs SSE by Accept header and JSON-RPC method
 	mux.Handle("POST", "/rpc", withMCPPolicyHeaders(h.ServeHTTP))
 	mux.Handle("GET", "/rpc", withMCPPolicyHeaders(h.ServeHTTP))
+	mux.Handle("DELETE", "/rpc", withMCPPolicyHeaders(h.ServeHTTP))
 }
 
 // Mount configures the mux to serve the JSON-RPC mcp_assistant service methods.
 func (s *Server) Mount(mux loomhttp.Muxer) {
 	Mount(mux, s)
 }
+
+// MCPCrossOriginProtection validates the Origin header on the generated MCP
+// JSON-RPC transport to protect against DNS rebinding attacks, as required by
+// the MCP streamable HTTP transport specification (2025-11-25, Security
+// Warning: servers MUST validate Origin and respond 403 when it is present
+// and invalid). The default allows same-origin and non-browser requests only,
+// mirroring the http.NewCrossOriginProtection default that the generated SDK
+// transport applies through mcpsdk.StreamableHTTPOptions.CrossOriginProtection.
+// Call AddTrustedOrigin to allow additional origins, or set the variable to
+// nil to disable the check, before mounting the server.
+var MCPCrossOriginProtection = http.NewCrossOriginProtection()
 
 // withMCPPolicyHeaders propagates MCP policy header values into the request context.
 //
@@ -546,10 +530,19 @@ func (s *Server) Mount(mux loomhttp.Muxer) {
 //   - x-mcp-allow-names
 //   - x-mcp-deny-names
 //
+// It also enforces the MCP transport Origin validation through
+// MCPCrossOriginProtection before any request processing.
+//
 // It is installed by the JSON-RPC Mount functions so consumers do not need
 // to patch example servers or wire middleware manually.
 func withMCPPolicyHeaders(next http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
+		if MCPCrossOriginProtection != nil {
+			if err := MCPCrossOriginProtection.Check(r); err != nil {
+				http.Error(w, "origin not allowed", http.StatusForbidden)
+				return
+			}
+		}
 		if err := validateMCPProtocolVersionHeader(r); err != nil {
 			w.Header().Set("Content-Type", "application/json")
 			w.WriteHeader(http.StatusBadRequest)
@@ -867,6 +860,7 @@ func NewToolsListHandler(endpoint loom.Endpoint, mux loomhttp.Muxer, decoder fun
 } // NewToolsCallHandler creates a JSON-RPC handler which calls the
 // "mcp_assistant" service "tools/call" endpoint.
 func NewToolsCallHandler(endpoint loom.Endpoint, mux loomhttp.Muxer, decoder func(*http.Request) loomhttp.Decoder, encoder func(context.Context, http.ResponseWriter) loomhttp.Encoder, errhandler func(context.Context, http.ResponseWriter, error)) func(ctx context.Context, r *http.Request, req *jsonrpc.RawRequest, w http.ResponseWriter) error {
+	decodeParams := DecodeToolsCallRequest(mux, decoder)
 	return func(ctx context.Context, r *http.Request, req *jsonrpc.RawRequest, w http.ResponseWriter) error {
 		ctx = context.WithValue(ctx, loom.MethodKey, "tools/call")
 		ctx = context.WithValue(ctx, loom.ServiceKey, "mcp_assistant")
@@ -883,7 +877,6 @@ func NewToolsCallHandler(endpoint loom.Endpoint, mux loomhttp.Muxer, decoder fun
 				return err
 			}
 		}
-		decodeParams := DecodeToolsCallRequest(mux, decoder)
 		params, err := decodeParams(r, req)
 		if err != nil {
 			if req.HasID {

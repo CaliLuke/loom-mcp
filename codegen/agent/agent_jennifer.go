@@ -8,7 +8,7 @@ import (
 const historyModeCompress = "compress"
 
 func agentImplSection(agent *AgentData) codegen.Section {
-	return codegen.MustJenniferSection("agent-impl", func(stmt *jen.Statement) {
+	return codegen.NewJenniferSection("agent-impl", func(stmt *jen.Statement) {
 		emitAgentConstants(stmt, agent)
 		emitAgentStruct(stmt, agent)
 		emitAgentConstructor(stmt, agent)
@@ -19,7 +19,7 @@ func agentImplSection(agent *AgentData) codegen.Section {
 }
 
 func agentConfigSection(agent *AgentData) codegen.Section {
-	return codegen.MustJenniferSection("agent-config", func(stmt *jen.Statement) {
+	return codegen.NewJenniferSection("agent-config", func(stmt *jen.Statement) {
 		emitAgentConfigConstants(stmt, agent)
 		emitAgentConfigStruct(stmt, agent)
 		emitAgentConfigValidate(stmt, agent)

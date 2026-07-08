@@ -37,7 +37,7 @@ func oauthDiscoveryFile(data *AdapterData) *codegen.File {
 		Path: path,
 		Sections: []codegen.Section{
 			codegen.Header("MCP OAuth protected-resource discovery", data.MCPPackage, imports),
-			codegen.MustJenniferSection("mcp-oauth-discovery", func(stmt *jen.Statement) {
+			codegen.NewJenniferSection("mcp-oauth-discovery", func(stmt *jen.Statement) {
 				emitOAuthConstants(stmt, data.OAuth)
 				emitOAuthMetadataType(stmt)
 				emitOAuthHandlers(stmt)

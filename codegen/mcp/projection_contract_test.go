@@ -54,6 +54,37 @@ func TestUnifiedToolSurfaceNoExposureCompatibility(t *testing.T) {
 	require.NotContains(t, rendered, "ProjectedTool", "no-exposure generation should not introduce projected tool code")
 }
 
+func TestUnifiedToolSurfaceProjectedOnlyGeneratesToolMethods(t *testing.T) {
+	roots := runProjectedOnlyJSONRPCCodegenDesign(t)
+
+	files, err := mcpcodegen.Generate("example.com/project/gen", roots, nil)
+	require.NoError(t, err)
+
+	// The MCP service layer must define the tool surface even though the
+	// design declares no method-level MCP tools: the projected toolset tool
+	// is the only tool and the adapter references these types.
+	service := findProjectionGeneratedFile(t, files, filepath.Join(gcodegen.Gendir, "mcp_assistant", "service.go"))
+	serviceSource := renderProjectionGeneratedFile(t, service)
+	require.Contains(t, serviceSource, "ToolsCallPayload")
+	require.Contains(t, serviceSource, "ToolsListPayload")
+	require.Contains(t, serviceSource, "ToolInfo")
+
+	// The JSON-RPC transport must route tools/list and tools/call.
+	encodeDecode := findProjectionGeneratedFile(t, files, filepath.Join(gcodegen.Gendir, "jsonrpc", "mcp_assistant", "server", "encode_decode.go"))
+	encodeDecodeSource := renderProjectionGeneratedFile(t, encodeDecode)
+	require.Contains(t, encodeDecodeSource, "func DecodeToolsListRequest")
+	require.Contains(t, encodeDecodeSource, "func DecodeToolsCallRequest")
+
+	adapter := findProjectionGeneratedFile(t, files, filepath.Join(gcodegen.Gendir, "mcp_assistant", "adapter_server.go"))
+	adapterSource := renderProjectionGeneratedFile(t, adapter)
+	require.Contains(t, adapterSource, `case "projected_lookup_tool":`)
+	// Omitted tools/call arguments must be normalized to {} before dispatch
+	// so the toolset dispatcher never receives empty raw JSON.
+	require.Contains(t, adapterSource, "args := p.Arguments")
+	require.Contains(t, adapterSource, `args = json.RawMessage("{}")`)
+	require.Contains(t, adapterSource, "DispatchProjectedLookupToolMethod(ctx, meta, args, nil,")
+}
+
 func findProjectionGeneratedFile(t *testing.T, files []*gcodegen.File, path string) *gcodegen.File {
 	t.Helper()
 	want := filepath.ToSlash(path)
@@ -100,6 +131,60 @@ func runProjectionCodegenDesign(t *testing.T) []eval.Root {
 		})
 		Service("assistant", func() {
 			MCP("assistant-mcp", "1.0.0")
+			Method("projected_lookup", func() {
+				Payload(payload)
+				Result(result)
+			})
+			Agent("planner", "Planner", func() {
+				Use("lookup_tools", func() {
+					Tool("projected_lookup_tool", "Lookup through runtime and MCP", func() {
+						Args(payload)
+						Return(result)
+						BindTo("assistant", "projected_lookup")
+						Expose(AgentRuntime, MCPSurface)
+						MCPPlacement("assistant", "assistant-mcp")
+					})
+				})
+			})
+		})
+	}
+
+	require.True(t, eval.Execute(design, nil), eval.Context.Error())
+	require.NoError(t, eval.RunDSL())
+	return []eval.Root{goaexpr.Root, agentsexpr.Root, mcpexpr.Root}
+}
+
+// runProjectedOnlyJSONRPCCodegenDesign evaluates a design whose MCP server has
+// no method-level MCP tools: its only tool arrives via MCPPlacement projection.
+// The JSON-RPC route makes the design valid for full Generate runs.
+func runProjectedOnlyJSONRPCCodegenDesign(t *testing.T) []eval.Root {
+	t.Helper()
+
+	eval.Reset()
+	goaexpr.Root = new(goaexpr.RootExpr)
+	goaexpr.GeneratedResultTypes = new(goaexpr.ResultTypesRoot)
+	require.NoError(t, eval.Register(goaexpr.Root))
+	require.NoError(t, eval.Register(goaexpr.GeneratedResultTypes))
+	agentsexpr.Root = &agentsexpr.RootExpr{}
+	require.NoError(t, eval.Register(agentsexpr.Root))
+	mcpexpr.Root = mcpexpr.NewRoot()
+	require.NoError(t, eval.Register(mcpexpr.Root))
+
+	design := func() {
+		API("projection", func() {})
+		payload := Type("LookupPayload", func() {
+			Attribute("query", String)
+			Required("query")
+		})
+		result := Type("LookupResult", func() {
+			Attribute("answer", String)
+			Required("answer")
+		})
+		Service("assistant", func() {
+			MCP("assistant-mcp", "1.0.0")
+			JSONRPC(func() {
+				POST("/rpc")
+			})
 			Method("projected_lookup", func() {
 				Payload(payload)
 				Result(result)

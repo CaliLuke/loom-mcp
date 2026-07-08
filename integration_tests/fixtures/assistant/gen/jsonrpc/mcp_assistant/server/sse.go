@@ -76,50 +76,22 @@ func (s *mcpAssistantSSEStream) Send(ctx context.Context, event mcpassistant.Eve
 	switch v := event.(type) {
 	case *mcpassistant.ToolsCallResult:
 		body := NewToolsCallResponseBody(v)
-		var id string
-		var isResponse bool
 		var message map[string]any
-		var eventType string
-		if isResponse {
-			resp := jsonrpc.MakeSuccessResponse(id, body)
-			message = map[string]any{
-				"id":      resp.ID,
-				"jsonrpc": resp.JSONRPC,
-				"result":  resp.Result,
-			}
-			eventType = "response"
-		} else {
-			message = map[string]any{
-				"jsonrpc": "2.0",
-				"method":  "tools/call",
-				"params":  body,
-			}
-			eventType = "message"
+		message = map[string]any{
+			"jsonrpc": "2.0",
+			"method":  "tools/call",
+			"params":  body,
 		}
-		return s.sendSSEEvent(eventType, message)
+		return s.sendSSEEvent("message", message)
 	case *mcpassistant.EventsStreamResult:
 		body := NewEventsStreamResponseBody(v)
-		var id string
-		var isResponse bool
 		var message map[string]any
-		var eventType string
-		if isResponse {
-			resp := jsonrpc.MakeSuccessResponse(id, body)
-			message = map[string]any{
-				"id":      resp.ID,
-				"jsonrpc": resp.JSONRPC,
-				"result":  resp.Result,
-			}
-			eventType = "response"
-		} else {
-			message = map[string]any{
-				"jsonrpc": "2.0",
-				"method":  "events/stream",
-				"params":  body,
-			}
-			eventType = "message"
+		message = map[string]any{
+			"jsonrpc": "2.0",
+			"method":  "events/stream",
+			"params":  body,
 		}
-		return s.sendSSEEvent(eventType, message)
+		return s.sendSSEEvent("message", message)
 	default:
 		return fmt.Errorf("unknown event type: %T", event)
 	}

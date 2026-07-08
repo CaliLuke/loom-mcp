@@ -17,13 +17,15 @@ func buildMCPSDKServerFile(genpkg string, svc *expr.ServiceExpr, data *AdapterDa
 		{Path: "fmt"},
 		{Path: "net/http"},
 		{Path: "net/url"},
-		{Path: "strings"},
-		{Path: "time"},
 		{Path: genpkg + "/" + svcName, Name: svcName},
 		{Path: "github.com/modelcontextprotocol/go-sdk/auth", Name: "mcpauth"},
 		{Path: "github.com/modelcontextprotocol/go-sdk/mcp", Name: "mcpsdk"},
 		{Path: "github.com/CaliLuke/loom-mcp/runtime/mcp", Name: "mcpruntime"},
 		{Path: "github.com/CaliLuke/loom/observability/transport"},
+	}
+	if len(data.StaticPrompts) > 0 || len(data.DynamicPrompts) > 0 {
+		// strings is only referenced by the prompt completion helpers.
+		sdkServerImports = append(sdkServerImports, &codegen.ImportSpec{Path: "strings"})
 	}
 	if len(data.SkillDirectories) > 0 {
 		sdkServerImports = append(sdkServerImports, &codegen.ImportSpec{
@@ -65,7 +67,7 @@ func buildMCPSDKServerFile(genpkg string, svc *expr.ServiceExpr, data *AdapterDa
 }
 
 func sdkServerTypesSection(data *AdapterData) codegen.Section {
-	return codegen.MustJenniferSection("mcp-sdk-server-types", func(stmt *jen.Statement) {
+	return codegen.NewJenniferSection("mcp-sdk-server-types", func(stmt *jen.Statement) {
 		stmt.Comment("SDK-backed MCP streamable HTTP server.").Line()
 		stmt.Type().Id("SDKServer").Struct(
 			jen.Id("Handler").Qual("net/http", "Handler"),
@@ -103,7 +105,7 @@ func sdkServerTypesSection(data *AdapterData) codegen.Section {
 }
 
 func sdkServerConstructorSection(data *AdapterData) codegen.Section {
-	return codegen.MustJenniferSection("mcp-sdk-server-constructor", func(stmt *jen.Statement) {
+	return codegen.NewJenniferSection("mcp-sdk-server-constructor", func(stmt *jen.Statement) {
 		stmt.Func().Id("NewSDKServer").
 			Params(
 				jen.Id("service").Id(data.Package).Dot("Service"),
@@ -139,7 +141,7 @@ func sdkServerConstructorSection(data *AdapterData) codegen.Section {
 				} else {
 					g.Id("adapter").Op(":=").Id("NewMCPAdapter").Call(jen.Id("service"), jen.Id("adapterOpts"))
 				}
-				g.Id("serverOpts").Op("=").Id("sdkServerOptionsWithEvents").Call(jen.Id("serverOpts"))
+				g.Id("serverOpts").Op("=").Id("sdkServerOptionsWithDefaults").Call(jen.Id("serverOpts"))
 				g.Id("server").Op(":=").Id("mcpsdk").Dot("NewServer").Call(
 					jen.Op("&").Id("mcpsdk").Dot("Implementation").Values(sdkImplementationDict(data)),
 					jen.Id("serverOpts"),
@@ -187,7 +189,7 @@ func sdkServerConstructorSection(data *AdapterData) codegen.Section {
 			stmt.Line()
 		}
 
-		emitSDKServerOptionsWithEvents(stmt, data)
+		emitSDKServerOptionsWithDefaults(stmt)
 
 		stmt.Func().Params(jen.Id("w").Op("*").Id("sdkResponseObserver")).
 			Id("WriteHeader").
@@ -211,8 +213,15 @@ func sdkServerConstructorSection(data *AdapterData) codegen.Section {
 	})
 }
 
-func emitSDKServerOptionsWithEvents(stmt *jen.Statement, data *AdapterData) {
-	stmt.Func().Id("sdkServerOptionsWithEvents").
+// emitSDKServerOptionsWithDefaults emits the helper that applies default SDK
+// server capabilities (logging) without mutating caller-provided options.
+//
+// SDK mode deliberately does not advertise the loom-mcp experimental
+// events/stream capability: the SDK streamable HTTP handler owns the GET SSE
+// channel, so the JSON-RPC-transport events/stream method has no route here
+// and advertising it would be dishonest (see loom-mcp issue #131).
+func emitSDKServerOptionsWithDefaults(stmt *jen.Statement) {
+	stmt.Func().Id("sdkServerOptionsWithDefaults").
 		Params(jen.Id("opts").Op("*").Id("mcpsdk").Dot("ServerOptions")).
 		Op("*").Id("mcpsdk").Dot("ServerOptions").
 		BlockFunc(func(g *jen.Group) {
@@ -230,22 +239,6 @@ func emitSDKServerOptionsWithEvents(stmt *jen.Statement, data *AdapterData) {
 				jen.Id("capabilities").Op(":=").Op("*").Id("opts").Dot("Capabilities"),
 				jen.Id("opts").Dot("Capabilities").Op("=").Op("&").Id("capabilities"),
 			)
-			g.Id("experimental").Op(":=").Make(jen.Map(jen.String()).Any(), jen.Len(jen.Id("opts").Dot("Capabilities").Dot("Experimental")).Op("+").Lit(1))
-			g.For(jen.List(jen.Id("key"), jen.Id("value")).Op(":=").Range().Id("opts").Dot("Capabilities").Dot("Experimental")).Block(
-				jen.Id("experimental").Index(jen.Id("key")).Op("=").Id("value"),
-			)
-			g.Id("experimental").Index(jen.Lit("loom-mcp")).Op("=").Map(jen.String()).Any().Values(jen.Dict{
-				jen.Lit("events"): jen.Map(jen.String()).Any().Values(jen.Dict{
-					jen.Lit("stream"): jen.True(),
-					jen.Lit("method"): jen.Lit("events/stream"),
-					jen.Lit("notifications"): jen.Index().String().ValuesFunc(func(v *jen.Group) {
-						for _, notification := range data.Notifications {
-							v.Lit("notify_" + notification.Name)
-						}
-					}),
-				}),
-			})
-			g.Id("opts").Dot("Capabilities").Dot("Experimental").Op("=").Id("experimental")
 			g.Return(jen.Id("opts"))
 		})
 	stmt.Line()
@@ -266,7 +259,7 @@ func sdkImplementationDict(data *AdapterData) jen.Dict {
 }
 
 func sdkServerHTTPSection() codegen.Section {
-	return codegen.MustJenniferSection("mcp-sdk-server-http", func(stmt *jen.Statement) {
+	return codegen.NewJenniferSection("mcp-sdk-server-http", func(stmt *jen.Statement) {
 		stmt.Func().Id("newSDKHandler").
 			Params(
 				jen.Id("server").Op("*").Id("mcpsdk").Dot("Server"),
@@ -335,217 +328,11 @@ func sdkServerHTTPSection() codegen.Section {
 				jen.Return(jen.Op("&").Id("configured")),
 			)
 		stmt.Line()
-
-		stmt.Func().Id("serveSDKEventsStream").
-			Params(
-				jen.Id("server").Op("*").Id("mcpsdk").Dot("Server"),
-				jen.Id("adapter").Op("*").Id("MCPAdapter"),
-				jen.Id("w").Qual("net/http", "ResponseWriter"),
-				jen.Id("r").Op("*").Qual("net/http", "Request"),
-			).
-			Block(
-				jen.Id("sessionID").Op(":=").Id("r").Dot("Header").Dot("Get").Call(jen.Lit("Mcp-Session-Id")),
-				jen.Id("streamObs").Op(":=").Qual("github.com/CaliLuke/loom/observability/transport", "BeginRequest").Call(
-					jen.Id("r").Dot("Context").Call(),
-					jen.Qual("github.com/CaliLuke/loom/observability/transport", "TransportMCP"),
-					jen.Lit("mcp"),
-					jen.Lit("events/stream"),
-				),
-				jen.Defer().Id("streamObs").Dot("End").Call(),
-				jen.Id("streamObs").Dot("SetSession").Call(jen.Id("sessionID")),
-				jen.Id("adapter").Dot("log").Call(jen.Id("r").Dot("Context").Call(), jen.Lit("events_stream_open"), jen.Map(jen.String()).Any().Values(jen.Dict{
-					jen.Lit("session_id"): jen.Id("sessionID"),
-					jen.Lit("has_accept"): jen.Qual("strings", "TrimSpace").Call(jen.Id("r").Dot("Header").Dot("Get").Call(jen.Lit("Accept"))).Op("!=").Lit(""),
-					jen.Lit("accept"):     jen.Id("r").Dot("Header").Dot("Get").Call(jen.Lit("Accept")),
-				})),
-				jen.If(jen.Id("sessionID").Op("==").Lit("")).Block(
-					jen.Id("streamObs").Dot("Fail").Call(jen.Qual("github.com/CaliLuke/loom/observability/transport", "ReasonMCPSessionMissing")),
-					jen.Id("adapter").Dot("log").Call(jen.Id("r").Dot("Context").Call(), jen.Lit("events_stream_rejected"), jen.Map(jen.String()).Any().Values(jen.Dict{
-						jen.Lit("reason"): jen.Lit("missing_session_id"),
-					})),
-					jen.Qual("net/http", "Error").Call(jen.Id("w"), jen.Lit("Missing session ID"), jen.Qual("net/http", "StatusBadRequest")),
-					jen.Return(),
-				),
-				jen.If(jen.Id("sdkSessionByID").Call(jen.Id("server"), jen.Id("sessionID")).Op("==").Nil()).Block(
-					jen.Id("streamObs").Dot("Fail").Call(jen.Qual("github.com/CaliLuke/loom/observability/transport", "ReasonMCPSessionNotFound")),
-					jen.Id("adapter").Dot("clearSessionPrincipal").Call(jen.Id("sessionID")),
-					jen.Id("adapter").Dot("log").Call(jen.Id("r").Dot("Context").Call(), jen.Lit("events_stream_rejected"), jen.Map(jen.String()).Any().Values(jen.Dict{
-						jen.Lit("session_id"): jen.Id("sessionID"),
-						jen.Lit("reason"):     jen.Lit("session_not_found"),
-					})),
-					jen.Qual("net/http", "Error").Call(jen.Id("w"), jen.Lit("session not found"), jen.Qual("net/http", "StatusNotFound")),
-					jen.Return(),
-				),
-				jen.If(jen.Id("err").Op(":=").Id("adapter").Dot("assertSessionPrincipal").Call(jen.Id("r").Dot("Context").Call(), jen.Id("sessionID")), jen.Id("err").Op("!=").Nil()).Block(
-					jen.Id("streamObs").Dot("Fail").Call(jen.Qual("github.com/CaliLuke/loom/observability/transport", "ReasonMCPSessionPrincipalMismatch")),
-					jen.Id("adapter").Dot("log").Call(jen.Id("r").Dot("Context").Call(), jen.Lit("events_stream_rejected"), jen.Map(jen.String()).Any().Values(jen.Dict{
-						jen.Lit("session_id"): jen.Id("sessionID"),
-						jen.Lit("reason"):     jen.Lit("session_principal_mismatch"),
-						jen.Lit("error"):      jen.Id("err").Dot("Error").Call(),
-					})),
-					jen.Qual("net/http", "Error").Call(jen.Id("w"), jen.Id("err").Dot("Error").Call(), jen.Qual("net/http", "StatusForbidden")),
-					jen.Return(),
-				),
-				jen.Id("adapter").Dot("markInitializedSession").Call(jen.Id("sessionID")),
-				jen.Id("adapter").Dot("captureSessionPrincipal").Call(jen.Id("r").Dot("Context").Call(), jen.Id("sessionID")),
-				jen.List(jen.Id("sub"), jen.Id("err")).Op(":=").Id("adapter").Dot("broadcaster").Dot("Subscribe").Call(jen.Id("r").Dot("Context").Call()),
-				jen.If(jen.Id("err").Op("!=").Nil()).Block(
-					jen.Qual("net/http", "Error").Call(jen.Id("w"), jen.Qual("fmt", "Sprintf").Call(jen.Lit("failed to subscribe to events: %v"), jen.Id("err")), jen.Qual("net/http", "StatusInternalServerError")),
-					jen.Return(),
-				),
-				jen.Defer().Id("sub").Dot("Close").Call(),
-				jen.Id("w").Dot("Header").Call().Dot("Set").Call(jen.Lit("Content-Type"), jen.Lit("text/event-stream")),
-				jen.Id("w").Dot("Header").Call().Dot("Set").Call(jen.Lit("Cache-Control"), jen.Lit("no-cache")),
-				jen.Id("w").Dot("Header").Call().Dot("Set").Call(jen.Lit("Connection"), jen.Lit("keep-alive")),
-				jen.Id("w").Dot("Header").Call().Dot("Set").Call(jen.Lit("X-Accel-Buffering"), jen.Lit("no")),
-				jen.List(jen.Id("flusher"), jen.Id("_")).Op(":=").Id("w").Assert(jen.Qual("net/http", "Flusher")),
-				jen.Id("w").Dot("WriteHeader").Call(jen.Qual("net/http", "StatusOK")),
-				jen.If(jen.Id("flusher").Op("!=").Nil()).Block(
-					jen.Id("flusher").Dot("Flush").Call(),
-				),
-				jen.Id("adapter").Dot("log").Call(jen.Id("r").Dot("Context").Call(), jen.Lit("events_stream_connected"), jen.Map(jen.String()).Any().Values(jen.Dict{
-					jen.Lit("session_id"): jen.Id("sessionID"),
-					jen.Lit("flushed"):    jen.Id("flusher").Op("!=").Nil(),
-				})),
-				jen.Id("ticker").Op(":=").Qual("time", "NewTicker").Call(jen.Lit(250).Op("*").Qual("time", "Millisecond")),
-				jen.Defer().Id("ticker").Dot("Stop").Call(),
-				jen.For().Block(
-					jen.Select().Block(
-						jen.Case(jen.Op("<-").Id("r").Dot("Context").Call().Dot("Done").Call()).Block(
-							jen.Id("adapter").Dot("log").Call(jen.Id("r").Dot("Context").Call(), jen.Lit("events_stream_closed"), jen.Map(jen.String()).Any().Values(jen.Dict{
-								jen.Lit("session_id"): jen.Id("sessionID"),
-								jen.Lit("reason"):     jen.Lit("request_context_done"),
-							})),
-							jen.Return(),
-						),
-						jen.Case(jen.Op("<-").Id("ticker").Dot("C")).Block(
-							jen.If(jen.Id("sdkSessionByID").Call(jen.Id("server"), jen.Id("sessionID")).Op("==").Nil()).Block(
-								jen.Id("adapter").Dot("clearSessionPrincipal").Call(jen.Id("sessionID")),
-								jen.Id("adapter").Dot("log").Call(jen.Id("r").Dot("Context").Call(), jen.Lit("events_stream_closed"), jen.Map(jen.String()).Any().Values(jen.Dict{
-									jen.Lit("session_id"): jen.Id("sessionID"),
-									jen.Lit("reason"):     jen.Lit("session_not_found"),
-								})),
-								jen.Return(),
-							),
-						),
-						jen.Case(jen.List(jen.Id("ev"), jen.Id("ok")).Op(":=").Op("<-").Id("sub").Dot("C").Call()).Block(
-							jen.If(jen.Op("!").Id("ok")).Block(
-								jen.Id("adapter").Dot("log").Call(jen.Id("r").Dot("Context").Call(), jen.Lit("events_stream_closed"), jen.Map(jen.String()).Any().Values(jen.Dict{
-									jen.Lit("session_id"): jen.Id("sessionID"),
-									jen.Lit("reason"):     jen.Lit("broadcaster_closed"),
-								})),
-								jen.Return(),
-							),
-							jen.List(jen.Id("res"), jen.Id("ok")).Op(":=").Id("ev").Assert(jen.Op("*").Id("EventsStreamResult")),
-							jen.If(jen.Op("!").Id("ok")).Block(
-								jen.Id("adapter").Dot("log").Call(jen.Id("r").Dot("Context").Call(), jen.Lit("events_stream_skipped_event"), jen.Map(jen.String()).Any().Values(jen.Dict{
-									jen.Lit("session_id"): jen.Id("sessionID"),
-								})),
-								jen.Continue(),
-							),
-							jen.If(jen.Id("err").Op(":=").Id("writeSDKNotificationEvent").Call(jen.Id("w"), jen.Lit("events/stream"), jen.Id("sdkEventsStreamParams").Call(jen.Id("res"))), jen.Id("err").Op("!=").Nil()).Block(
-								jen.Id("streamObs").Dot("Fail").Call(jen.Qual("github.com/CaliLuke/loom/observability/transport", "ReasonMCPEventsStreamWriteFailed")),
-								jen.Id("adapter").Dot("log").Call(jen.Id("r").Dot("Context").Call(), jen.Lit("events_stream_closed"), jen.Map(jen.String()).Any().Values(jen.Dict{
-									jen.Lit("session_id"): jen.Id("sessionID"),
-									jen.Lit("reason"):     jen.Lit("write_error"),
-									jen.Lit("error"):      jen.Id("err").Dot("Error").Call(),
-								})),
-								jen.Return(),
-							),
-							jen.If(jen.Id("flusher").Op("!=").Nil()).Block(
-								jen.Id("flusher").Dot("Flush").Call(),
-							),
-						),
-					),
-				),
-			)
-		stmt.Line()
-
-		stmt.Func().Id("sdkSessionByID").
-			Params(jen.Id("server").Op("*").Id("mcpsdk").Dot("Server"), jen.Id("sessionID").String()).
-			Op("*").Id("mcpsdk").Dot("ServerSession").
-			Block(
-				jen.If(jen.Id("server").Op("==").Nil().Op("||").Id("sessionID").Op("==").Lit("")).Block(
-					jen.Return(jen.Nil()),
-				),
-				jen.For(jen.Id("session").Op(":=").Range().Id("server").Dot("Sessions").Call()).Block(
-					jen.If(jen.Id("session").Op("!=").Nil().Op("&&").Id("session").Dot("ID").Call().Op("==").Id("sessionID")).Block(
-						jen.Return(jen.Id("session")),
-					),
-				),
-				jen.Return(jen.Nil()),
-			)
-		stmt.Line()
-
-		stmt.Func().Id("writeSDKNotificationEvent").
-			Params(jen.Id("w").Qual("net/http", "ResponseWriter"), jen.Id("method").String(), jen.Id("params").Any()).
-			Error().
-			Block(
-				jen.List(jen.Id("message"), jen.Id("err")).Op(":=").Qual("encoding/json", "Marshal").Call(
-					jen.Map(jen.String()).Any().Values(jen.Dict{
-						jen.Lit("jsonrpc"): jen.Lit("2.0"),
-						jen.Lit("method"):  jen.Id("method"),
-						jen.Lit("params"):  jen.Id("params"),
-					}),
-				),
-				jen.If(jen.Id("err").Op("!=").Nil()).Block(
-					jen.Return(jen.Id("err")),
-				),
-				jen.If(jen.List(jen.Id("_"), jen.Id("err")).Op(":=").Qual("fmt", "Fprintf").Call(jen.Id("w"), jen.Lit("event: notification\ndata: %s\n\n"), jen.Id("message")), jen.Id("err").Op("!=").Nil()).Block(
-					jen.Return(jen.Id("err")),
-				),
-				jen.Return(jen.Nil()),
-			)
-		stmt.Line()
-
-		stmt.Func().Id("sdkEventsStreamParams").
-			Params(jen.Id("res").Op("*").Id("EventsStreamResult")).
-			Map(jen.String()).Any().
-			Block(
-				jen.Id("params").Op(":=").Map(jen.String()).Any().Values(jen.Dict{
-					jen.Lit("content"): jen.Index().Map(jen.String()).Any().Values(),
-				}),
-				jen.If(jen.Id("res").Op("==").Nil()).Block(
-					jen.Return(jen.Id("params")),
-				),
-				jen.If(jen.Id("res").Dot("IsError").Op("!=").Nil()).Block(
-					jen.Id("params").Index(jen.Lit("isError")).Op("=").Op("*").Id("res").Dot("IsError"),
-				),
-				jen.If(jen.Len(jen.Id("res").Dot("Content")).Op("==").Lit(0)).Block(
-					jen.Return(jen.Id("params")),
-				),
-				jen.Id("content").Op(":=").Make(jen.Index().Map(jen.String()).Any(), jen.Lit(0), jen.Len(jen.Id("res").Dot("Content"))),
-				jen.For(jen.List(jen.Id("_"), jen.Id("item")).Op(":=").Range().Id("res").Dot("Content")).Block(
-					jen.If(jen.Id("item").Op("==").Nil()).Block(
-						jen.Id("content").Op("=").Append(jen.Id("content"), jen.Nil()),
-						jen.Continue(),
-					),
-					jen.Id("entry").Op(":=").Map(jen.String()).Any().Values(jen.Dict{
-						jen.Lit("type"): jen.Id("item").Dot("Type"),
-					}),
-					jen.If(jen.Id("item").Dot("Text").Op("!=").Nil()).Block(
-						jen.Id("entry").Index(jen.Lit("text")).Op("=").Op("*").Id("item").Dot("Text"),
-					),
-					jen.If(jen.Id("item").Dot("Data").Op("!=").Nil()).Block(
-						jen.Id("entry").Index(jen.Lit("data")).Op("=").Op("*").Id("item").Dot("Data"),
-					),
-					jen.If(jen.Id("item").Dot("MimeType").Op("!=").Nil()).Block(
-						jen.Id("entry").Index(jen.Lit("mimeType")).Op("=").Op("*").Id("item").Dot("MimeType"),
-					),
-					jen.If(jen.Id("item").Dot("URI").Op("!=").Nil()).Block(
-						jen.Id("entry").Index(jen.Lit("uri")).Op("=").Op("*").Id("item").Dot("URI"),
-					),
-					jen.Id("content").Op("=").Append(jen.Id("content"), jen.Id("entry")),
-				),
-				jen.Id("params").Index(jen.Lit("content")).Op("=").Id("content"),
-				jen.Return(jen.Id("params")),
-			)
-		stmt.Line()
 	})
 }
 
 func sdkServerRegistrationSection(data *AdapterData) codegen.Section {
-	return codegen.MustJenniferSection("mcp-sdk-server-registration", func(stmt *jen.Statement) {
+	return codegen.NewJenniferSection("mcp-sdk-server-registration", func(stmt *jen.Statement) {
 		emitSDKRegisterTools(stmt, data)
 		emitSDKRegisterResources(stmt, data)
 		emitSDKRegisterPrompts(stmt, data)
@@ -837,7 +624,7 @@ func sdkPromptArgumentsValue(args []PromptArg) jen.Code {
 }
 
 func sdkServerHandlerSection(data *AdapterData) codegen.Section {
-	return codegen.MustJenniferSection("mcp-sdk-server-handlers", func(stmt *jen.Statement) {
+	return codegen.NewJenniferSection("mcp-sdk-server-handlers", func(stmt *jen.Statement) {
 		stmt.Func().Params(jen.Id("a").Op("*").Id("MCPAdapter")).
 			Id("sdkToolHandler").
 			Params(jen.Id("requestContext").Func().Params(jen.Qual("context", "Context"), jen.Op("*").Qual("net/http", "Request")).Qual("context", "Context")).
@@ -1073,7 +860,7 @@ func sdkServerHandlerSection(data *AdapterData) codegen.Section {
 }
 
 func sdkServerConversionSection(data *AdapterData) codegen.Section {
-	return codegen.MustJenniferSection("mcp-sdk-server-conversions", func(stmt *jen.Statement) {
+	return codegen.NewJenniferSection("mcp-sdk-server-conversions", func(stmt *jen.Statement) {
 		emitSDKCollectorMethods(stmt)
 		emitSDKCallToolResult(stmt)
 		if len(data.StaticPrompts) > 0 || len(data.DynamicPrompts) > 0 {
@@ -1113,7 +900,7 @@ func emitSDKCollectorMethods(stmt *jen.Statement) {
 	stmt.Line()
 	stmt.Func().Params(jen.Id("c").Op("*").Id("sdkToolCallCollector")).
 		Id("SendError").
-		Params(jen.Id("_").Qual("context", "Context"), jen.Id("_").String(), jen.Id("err").Error()).
+		Params(jen.Id("_").Qual("context", "Context"), jen.Id("_").Any(), jen.Id("err").Error()).
 		Error().
 		Block(
 			jen.Id("c").Dot("streamErr").Op("=").Id("err"),

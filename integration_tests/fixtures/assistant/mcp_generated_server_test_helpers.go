@@ -33,11 +33,6 @@ type testHeaderRoundTripper struct {
 	headers map[string]string
 }
 
-type testSessionDoer struct {
-	base      *http.Client
-	sessionID string
-}
-
 func initializeJSONRPCSession(ctx context.Context, rawURL string) (string, error) {
 	req := map[string]any{
 		"jsonrpc": "2.0",
@@ -221,21 +216,13 @@ func newGeneratedCallerFromServer(t *testing.T, rawURL string) mcpruntime.Caller
 	u, err := url.Parse(rawURL)
 	require.NoError(t, err)
 
-	doer := &testSessionDoer{
-		base: &http.Client{
-			Timeout: 10 * time.Second,
-			Transport: testHeaderRoundTripper{
-				base: http.DefaultTransport,
-				headers: map[string]string{
-					"Accept": "text/event-stream",
-				},
-			},
-		},
-	}
+	// The generated JSON-RPC client owns the MCP transport obligations
+	// (Accept header, Mcp-Session-Id capture/replay, protocol version), so a
+	// plain HTTP client suffices here.
 	client := mcpAssistantjsonrpcc.NewClient(
 		u.Scheme,
 		u.Host,
-		doer,
+		&http.Client{Timeout: 10 * time.Second},
 		goahttp.RequestEncoder,
 		goahttp.ResponseDecoder,
 		false,
@@ -338,41 +325,4 @@ func (rt testHeaderRoundTripper) RoundTrip(req *http.Request) (*http.Response, e
 		cloned.Header.Set(key, value)
 	}
 	return base.RoundTrip(cloned)
-}
-
-func (d *testSessionDoer) Do(req *http.Request) (*http.Response, error) {
-	if d.base == nil {
-		d.base = &http.Client{Timeout: 10 * time.Second}
-	}
-	method := jsonRPCMethodName(req)
-	req.Header.Set(mcpruntime.HeaderKeyProtocolVersion, mcpassistant.DefaultProtocolVersion)
-	if method != "initialize" && d.sessionID != "" {
-		req.Header.Set(mcpruntime.HeaderKeySessionID, d.sessionID)
-	}
-	resp, err := d.base.Do(req)
-	if err != nil {
-		return nil, err
-	}
-	if sessionID := resp.Header.Get(mcpruntime.HeaderKeySessionID); sessionID != "" {
-		d.sessionID = sessionID
-	}
-	return resp, nil
-}
-
-func jsonRPCMethodName(req *http.Request) string {
-	if req == nil || req.Body == nil {
-		return ""
-	}
-	body, err := io.ReadAll(req.Body)
-	if err != nil {
-		return ""
-	}
-	req.Body = io.NopCloser(strings.NewReader(string(body)))
-	var envelope struct {
-		Method string `json:"method"`
-	}
-	if err := json.Unmarshal(body, &envelope); err != nil {
-		return ""
-	}
-	return envelope.Method
 }

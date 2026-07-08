@@ -211,7 +211,7 @@ scenarios:
         stream_expect:
           min_events: 1
           events:
-            - event: response
+            - event: message
               data:
                 result:
                   isError: true
@@ -254,7 +254,7 @@ scenarios:
         stream_expect:
           min_events: 1
           events:
-            - event: response
+            - event: message
               data:
                 result:
                   isError: true
@@ -277,7 +277,7 @@ scenarios:
         stream_expect:
           min_events: 1
           events:
-            - event: response
+            - event: message
               data:
                 result:
                   isError: true
@@ -300,7 +300,7 @@ scenarios:
         stream_expect:
           min_events: 1
           events:
-            - event: response
+            - event: message
               data:
                 result:
                   isError: true
@@ -323,7 +323,7 @@ scenarios:
         stream_expect:
           min_events: 1
           events:
-            - event: response
+            - event: message
               data:
                 result:
                   isError: true
@@ -346,7 +346,7 @@ scenarios:
         stream_expect:
           min_events: 1
           events:
-            - event: response
+            - event: message
               data:
                 result:
                   isError: true
@@ -432,7 +432,7 @@ scenarios:
         stream_expect:
           min_events: 1
           events:
-            - event: response
+            - event: message
 
 
   - name: tool_process_batch_stream_error

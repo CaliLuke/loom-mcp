@@ -14,8 +14,8 @@ func (b *mcpExprBuilder) buildMethods() []*expr.MethodExpr {
 		b.buildPingMethod(),
 	)
 
-	// Add tool methods if tools are defined
-	if len(b.mcp.Tools) > 0 {
+	// Add tool methods if tools are defined (method-level or projected)
+	if b.hasTools() {
 		methods = append(methods, b.buildToolsListMethod(), b.buildToolsCallMethod())
 	}
 
@@ -205,6 +205,13 @@ func (b *mcpExprBuilder) buildEventsStreamMethod() *expr.MethodExpr {
 	m.Stream = expr.ServerStreamKind
 	m.StreamingResult = b.userTypeAttr("EventsStreamResult", b.buildEventsStreamResultType)
 	return m
+}
+
+// hasTools reports whether the MCP server exposes any tools, counting both
+// method-level MCP Tool declarations and agent toolset tools projected into
+// this server via MCPPlacement.
+func (b *mcpExprBuilder) hasTools() bool {
+	return len(b.mcp.Tools) > 0 || b.projectedToolCount > 0
 }
 
 // hasPrompts checks if there are any prompts defined

@@ -15,7 +15,7 @@
             "topic": {
               "type": "string",
               "description": "Topic to process",
-              "example": "Qui aut magnam illum inventore possimus asperiores."
+              "example": "Molestiae aut omnis eum voluptatibus corporis maiores."
             }
           },
           "required": [
@@ -32,7 +32,7 @@
             "approved": {
               "type": "boolean",
               "description": "Whether the operation was approved",
-              "example": false
+              "example": true
             },
             "ok": {
               "type": "boolean",
@@ -61,7 +61,7 @@
             "topic": {
               "type": "string",
               "description": "Topic to send to the service method",
-              "example": "Labore cupiditate praesentium."
+              "example": "In ducimus laudantium consequatur libero."
             }
           },
           "required": [
@@ -78,7 +78,7 @@
             "message": {
               "type": "string",
               "description": "Message returned to the agent runtime",
-              "example": "Facere occaecati ut."
+              "example": "Ut voluptatem rem et natus nihil."
             },
             "ok": {
               "type": "boolean",
@@ -115,12 +115,12 @@
             "approved": {
               "type": "boolean",
               "description": "Whether the operation was approved",
-              "example": true
+              "example": false
             },
             "ok": {
               "type": "boolean",
               "description": "Whether the operation succeeded",
-              "example": true
+              "example": false
             }
           },
           "required": [
@@ -151,7 +151,7 @@
             "approved": {
               "type": "boolean",
               "description": "Whether the operation was approved",
-              "example": true
+              "example": false
             },
             "ok": {
               "type": "boolean",
@@ -202,7 +202,7 @@
             "ok": {
               "type": "boolean",
               "description": "Whether the operation succeeded",
-              "example": false
+              "example": true
             }
           },
           "required": [

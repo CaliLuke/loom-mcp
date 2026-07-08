@@ -22,13 +22,11 @@ func newToolSearchJSONRPCClient(t *testing.T, serverURL string) *mcpAssistantjso
 	u, err := url.Parse(serverURL)
 	require.NoError(t, err)
 
-	doer := &testSessionDoer{
-		base: &http.Client{Timeout: 10 * time.Second},
-	}
+	// The generated JSON-RPC client owns MCP session and header handling.
 	client := mcpAssistantjsonrpcc.NewClient(
 		u.Scheme,
 		u.Host,
-		doer,
+		&http.Client{Timeout: 10 * time.Second},
 		goahttp.RequestEncoder,
 		goahttp.ResponseDecoder,
 		false,

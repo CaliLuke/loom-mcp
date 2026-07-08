@@ -11,6 +11,7 @@ import (
 	"bufio"
 	"bytes"
 	"context"
+	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
@@ -41,14 +42,10 @@ type Client struct {
 	decoder func(*http.Response) loomhttp.Decoder
 }
 
-// bufferPool is a pool of bytes.Buffers for encoding requests.
-var bufferPool = sync.Pool{New: func() any {
-	return new(bytes.Buffer)
-}}
-
 // NewClient instantiates HTTP clients for all the mcp_assistant service
 // servers.
 func NewClient(scheme string, host string, doer loomhttp.Doer, enc func(*http.Request) loomhttp.Encoder, dec func(*http.Response) loomhttp.Decoder, restoreBody bool) *Client {
+	doer = &mcpClientDoer{next: doer}
 	return &Client{
 		Doer:                doer,
 		EventsStreamDoer:    doer,
@@ -142,7 +139,7 @@ func (c *Client) ToolsCall() loom.Endpoint {
 		if err := encodeRequest(req, v); err != nil {
 			return nil, err
 		}
-		req.Header.Set("Accept", "text/event-stream")
+		req.Header.Set("Accept", "application/json, text/event-stream")
 		resp, err := c.Doer.Do(req)
 		if err != nil {
 			return nil, loomhttp.ErrRequestError("mcp_assistant", "tools/call", err)
@@ -336,7 +333,7 @@ func (c *Client) EventsStream() loom.Endpoint {
 		if err := encodeRequest(req, v); err != nil {
 			return nil, err
 		}
-		req.Header.Set("Accept", "text/event-stream")
+		req.Header.Set("Accept", "application/json, text/event-stream")
 		resp, err := c.Doer.Do(req)
 		if err != nil {
 			return nil, loomhttp.ErrRequestError("mcp_assistant", "events/stream", err)
@@ -361,4 +358,117 @@ func (c *Client) EventsStream() loom.Endpoint {
 		}
 		return stream, nil
 	}
+}
+
+// mcpClientDoer decorates the transport Doer so every generated JSON-RPC
+// request satisfies the MCP streamable HTTP client requirements:
+//   - every request carries "Accept: application/json, text/event-stream"
+//   - the Mcp-Session-Id returned by initialize is replayed on all
+//     subsequent requests
+//   - the negotiated MCP protocol version accompanies the session id
+//
+// NewClient installs this decorator so generated clients are protocol
+// conformant without hand-written transport wrappers.
+type mcpClientDoer struct {
+	next interface {
+		Do(*http.Request) (*http.Response, error)
+	}
+
+	mu              sync.Mutex
+	sessionID       string
+	protocolVersion string
+}
+
+// Do implements the transport Doer contract for mcpClientDoer.
+func (d *mcpClientDoer) Do(req *http.Request) (*http.Response, error) {
+	method, requestedVersion, err := mcpJSONRPCRequestInfo(req)
+	if err != nil {
+		return nil, err
+	}
+	if req.Header.Get("Accept") == "" {
+		req.Header.Set("Accept", "application/json, text/event-stream")
+	}
+	if method != "initialize" {
+		d.mu.Lock()
+		sessionID, protocolVersion := d.sessionID, d.protocolVersion
+		d.mu.Unlock()
+		if sessionID != "" && req.Header.Get("Mcp-Session-Id") == "" {
+			req.Header.Set("Mcp-Session-Id", sessionID)
+		}
+		if protocolVersion != "" && req.Header.Get("MCP-Protocol-Version") == "" {
+			req.Header.Set("MCP-Protocol-Version", protocolVersion)
+		}
+	}
+	resp, err := d.next.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	d.mu.Lock()
+	if sessionID := resp.Header.Get("Mcp-Session-Id"); sessionID != "" {
+		d.sessionID = sessionID
+	}
+	if method == "initialize" {
+		if negotiated := mcpNegotiatedProtocolVersion(resp); negotiated != "" {
+			d.protocolVersion = negotiated
+		} else if requestedVersion != "" {
+			d.protocolVersion = requestedVersion
+		}
+	}
+	d.mu.Unlock()
+	return resp, nil
+}
+
+// mcpJSONRPCRequestInfo peeks at the JSON-RPC request envelope without
+// consuming the request body.
+func mcpJSONRPCRequestInfo(req *http.Request) (string, string, error) {
+	if req == nil || req.Body == nil {
+		return "", "", nil
+	}
+	body, err := io.ReadAll(req.Body)
+	if err != nil {
+		return "", "", err
+	}
+	req.Body = io.NopCloser(bytes.NewReader(body))
+	if len(body) == 0 {
+		return "", "", nil
+	}
+	var envelope struct {
+		Method string `json:"method"`
+		Params struct {
+			ProtocolVersion string `json:"protocolVersion"`
+		} `json:"params"`
+	}
+	if err := json.Unmarshal(body, &envelope); err != nil {
+		return "", "", nil
+	}
+	return envelope.Method, envelope.Params.ProtocolVersion, nil
+}
+
+// mcpNegotiatedProtocolVersion extracts result.protocolVersion from an
+// initialize response while restoring the body for downstream decoding.
+func mcpNegotiatedProtocolVersion(resp *http.Response) string {
+	if resp == nil || resp.Body == nil {
+		return ""
+	}
+	if contentType := resp.Header.Get("Content-Type"); !strings.Contains(contentType, "application/json") {
+		return ""
+	}
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return ""
+	}
+	if closeErr := resp.Body.Close(); closeErr != nil {
+		resp.Body = io.NopCloser(bytes.NewReader(body))
+		return ""
+	}
+	resp.Body = io.NopCloser(bytes.NewReader(body))
+	var envelope struct {
+		Result struct {
+			ProtocolVersion string `json:"protocolVersion"`
+		} `json:"result"`
+	}
+	if err := json.Unmarshal(body, &envelope); err != nil {
+		return ""
+	}
+	return envelope.Result.ProtocolVersion
 }

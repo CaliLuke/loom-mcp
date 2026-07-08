@@ -49,17 +49,21 @@ func DispatchMethodEchoMethod(ctx context.Context, meta *runtime.ToolCallMeta, r
 			Name:  MethodEcho,
 		}, nil
 	}
-	var toolArgs any
-	if len(raw) > 0 {
-		value, err := MethodEchoPayloadCodec.FromJSON(raw)
-		if err != nil {
-			return &planner.ToolResult{
-				Error: planner.ToolErrorFromError(err),
-				Name:  MethodEcho,
-			}, nil
-		}
-		toolArgs = value
+	if len(raw) == 0 {
+		// Tool arguments may legally be omitted (for example MCP tools/call
+		// without "arguments"). Decode an empty object so required-field
+		// validation applies and dispatch never sees a nil payload.
+		raw = json.RawMessage("{}")
 	}
+	var toolArgs any
+	decodedArgs, err := MethodEchoPayloadCodec.FromJSON(raw)
+	if err != nil {
+		return &planner.ToolResult{
+			Error: planner.ToolErrorFromError(err),
+			Name:  MethodEcho,
+		}, nil
+	}
+	toolArgs = decodedArgs
 	var methodIn any
 	if opts.MapPayload != nil {
 		value, err := opts.MapPayload(MethodEcho, toolArgs, meta)

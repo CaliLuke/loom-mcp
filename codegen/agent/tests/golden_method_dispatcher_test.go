@@ -20,6 +20,23 @@ func TestGeneratedMethodBackedDispatcher(t *testing.T) {
 	require.Contains(t, provider, "func DispatchByIDMethod(ctx context.Context, meta *runtime.ToolCallMeta, raw json.RawMessage, labels map[string]string, opts ByIDDispatchOptions) (*planner.ToolResult, error)")
 }
 
+// TestGeneratedMethodBackedDispatcherDecodesOmittedArguments verifies that the
+// generated dispatcher decodes an empty JSON object when the raw arguments are
+// omitted (legal per MCP) instead of type-asserting a nil interface, so
+// required-field validation errors surface as tool errors rather than panics.
+func TestGeneratedMethodBackedDispatcherDecodesOmittedArguments(t *testing.T) {
+	files := buildAndGenerate(t, testscenarios.ServiceToolsetBindSelf())
+
+	provider := fileContent(t, files, "gen/alpha/toolsets/lookup/provider.go")
+
+	require.Contains(t, provider, "if len(raw) == 0 {")
+	require.Contains(t, provider, `raw = json.RawMessage("{}")`)
+	require.Contains(t, provider, "decodedArgs, err := ByIDPayloadCodec.FromJSON(raw)")
+	require.Contains(t, provider, "toolArgs = decodedArgs")
+	require.NotContains(t, provider, "if len(raw) > 0 {",
+		"payload decode must be unconditional so toolArgs is never a nil interface")
+}
+
 func TestGeneratedMethodBackedDispatcherPreservesExecutorHooks(t *testing.T) {
 	files := buildAndGenerate(t, testscenarios.ServiceToolsetBindSelf())
 

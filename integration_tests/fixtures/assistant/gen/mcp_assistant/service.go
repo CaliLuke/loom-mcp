@@ -80,7 +80,7 @@ type ToolsCallServerStream interface {
 	// request ID.
 	SendAndClose(context.Context, ToolsCallEvent) error
 	// SendError sends a JSON-RPC error response.
-	SendError(context.Context, string, error) error
+	SendError(context.Context, any, error) error
 }
 
 // ToolsCallClientStream allows streaming instances of *ToolsCallResult to the
@@ -117,7 +117,7 @@ type EventsStreamServerStream interface {
 	// request ID.
 	SendAndClose(context.Context, EventsStreamEvent) error
 	// SendError sends a JSON-RPC error response.
-	SendError(context.Context, string, error) error
+	SendError(context.Context, any, error) error
 }
 
 // EventsStreamClientStream allows streaming instances of *EventsStreamResult

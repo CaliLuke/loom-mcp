@@ -30,7 +30,7 @@ func registerFile(data *AdapterData) *codegen.File {
 		Path: path,
 		Sections: []codegen.Section{
 			codegen.Header("MCP runtime registration helpers", data.Register.Package, imports),
-			codegen.MustJenniferSection("mcp-register", func(stmt *jen.Statement) {
+			codegen.NewJenniferSection("mcp-register", func(stmt *jen.Statement) {
 				emitRegisterToolSpecs(stmt, data.Register)
 				emitRegisterHelper(stmt, data.Register)
 				emitRegisterHandleError(stmt, data.Register)

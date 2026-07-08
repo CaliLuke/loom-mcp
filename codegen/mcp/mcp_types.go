@@ -15,8 +15,8 @@ func (b *mcpExprBuilder) buildMCPTypes() {
 	b.getOrCreateType("ServerInfo", b.buildServerInfoType)
 	b.getOrCreateType("ServerCapabilities", b.buildCapabilitiesType)
 
-	// Tool types
-	if len(b.mcp.Tools) > 0 {
+	// Tool types (method-level or projected)
+	if b.hasTools() {
 		b.getOrCreateType("ToolInfo", b.buildToolInfoType)
 		b.getOrCreateType("ContentItem", b.buildContentItemType)
 	}

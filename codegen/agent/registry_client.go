@@ -263,7 +263,7 @@ func registryClientOptionsFile(data *RegistryClientData) *codegen.File {
 }
 
 func registryClientSection(data *RegistryClientData) codegen.Section {
-	return codegen.MustJenniferSection("registry-client", func(stmt *jen.Statement) {
+	return codegen.NewJenniferSection("registry-client", func(stmt *jen.Statement) {
 		emitRegistryClientTypes(stmt, data)
 		emitRegistryClientConstants(stmt, data)
 		emitRegistryClientConstructor(stmt, data)
@@ -273,7 +273,7 @@ func registryClientSection(data *RegistryClientData) codegen.Section {
 }
 
 func registryClientOptionsSection(data *RegistryClientData) codegen.Section {
-	return codegen.MustJenniferSection("registry-client-options", func(stmt *jen.Statement) {
+	return codegen.NewJenniferSection("registry-client-options", func(stmt *jen.Statement) {
 		emitRegistryClientOptionTypes(stmt, data)
 		emitRegistryClientOptionFuncs(stmt, data)
 		emitRegistryClientAuthMethods(stmt, data)

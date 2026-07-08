@@ -8,7 +8,7 @@ import (
 )
 
 func serviceExecutorSection(data serviceToolsetFileData) codegen.Section {
-	return codegen.MustRenderSection("service-executor", func() string {
+	return codegen.NewRenderSection("service-executor", func() string {
 		tpl := template.Must(template.New("service-executor").Funcs(templateFuncMap()).Parse(serviceExecutorTemplateSource))
 		var buf bytes.Buffer
 		if err := tpl.Execute(&buf, data); err != nil {

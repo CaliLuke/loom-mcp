@@ -8,10 +8,8 @@
 package client
 
 import (
-	"bytes"
 	"context"
 	"net/http"
-	"sync"
 
 	loomhttp "github.com/CaliLuke/loom/http"
 	loom "github.com/CaliLuke/loom/pkg"
@@ -30,11 +28,6 @@ type Client struct {
 	encoder func(*http.Request) loomhttp.Encoder
 	decoder func(*http.Response) loomhttp.Decoder
 }
-
-// bufferPool is a pool of bytes.Buffers for encoding requests.
-var bufferPool = sync.Pool{New: func() any {
-	return new(bytes.Buffer)
-}}
 
 // NewClient instantiates HTTP clients for all the assistant service servers.
 func NewClient(scheme string, host string, doer loomhttp.Doer, enc func(*http.Request) loomhttp.Encoder, dec func(*http.Response) loomhttp.Decoder, restoreBody bool) *Client {

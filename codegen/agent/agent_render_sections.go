@@ -8,7 +8,7 @@ import (
 )
 
 func toolTypesSection(data toolTypesFileData) gocodegen.Section {
-	return gocodegen.MustRenderSection("tool-spec-types", func() string {
+	return gocodegen.NewRenderSection("tool-spec-types", func() string {
 		var b strings.Builder
 		b.WriteString("type (\n")
 		wrote := false
@@ -29,7 +29,7 @@ func toolTypesSection(data toolTypesFileData) gocodegen.Section {
 }
 
 func toolTransportTypesSection(data toolTransportTypesFileData) gocodegen.Section {
-	return gocodegen.MustRenderSection("tool-transport-types", func() string {
+	return gocodegen.NewRenderSection("tool-transport-types", func() string {
 		var b strings.Builder
 		b.WriteString("type (\n")
 		wrote := false
@@ -53,7 +53,7 @@ func toolTransportTypesSection(data toolTransportTypesFileData) gocodegen.Sectio
 }
 
 func toolTransportValidateSection(data toolTransportTypesFileData) gocodegen.Section {
-	return gocodegen.MustRenderSection("tool-transport-validate", func() string {
+	return gocodegen.NewRenderSection("tool-transport-validate", func() string {
 		var b strings.Builder
 		for _, t := range data.Types {
 			if t == nil || len(t.TransportValidationSrc) == 0 {
@@ -78,7 +78,7 @@ func toolTransportValidateSection(data toolTransportTypesFileData) gocodegen.Sec
 }
 
 func toolTransformsSection(data transformsFileData) gocodegen.Section {
-	return gocodegen.MustRenderSection("tool-transforms", func() string {
+	return gocodegen.NewRenderSection("tool-transforms", func() string {
 		var b strings.Builder
 		for _, fn := range data.Functions {
 			fmt.Fprintf(&b, "// %s converts %s to %s.\n", fn.Name, fn.ParamTypeRef, fn.ResultTypeRef)
@@ -108,7 +108,7 @@ func toolTransformsSection(data transformsFileData) gocodegen.Section {
 }
 
 func toolUnionTypesSection(data toolUnionTypesFileData) gocodegen.Section {
-	return gocodegen.MustRenderSection("tool-spec-union-types", func() string {
+	return gocodegen.NewRenderSection("tool-spec-union-types", func() string {
 		var b strings.Builder
 		for i, u := range data.Unions {
 			if u == nil {
@@ -176,7 +176,7 @@ func toolUnionTypesSection(data toolUnionTypesFileData) gocodegen.Section {
 }
 
 func toolSpecsSection(data toolSpecFileData) gocodegen.Section {
-	return gocodegen.MustRenderSection("tool-specs", func() string {
+	return gocodegen.NewRenderSection("tool-specs", func() string {
 		var b strings.Builder
 		b.WriteString("// Tool IDs for this toolset.\nconst (\n")
 		for _, tool := range data.Tools {

@@ -11,7 +11,7 @@ func agentRegistrySection(data struct {
 	*AgentData
 	HasExternalMCP bool
 }) codegen.Section {
-	return codegen.MustRenderSection("agent-registry", func() string {
+	return codegen.NewRenderSection("agent-registry", func() string {
 		tpl := template.Must(template.New("agent-registry").Funcs(templateFuncMap()).Parse(agentRegistryTemplateSource))
 		var buf bytes.Buffer
 		if err := tpl.Execute(&buf, data); err != nil {

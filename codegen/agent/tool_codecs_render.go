@@ -8,7 +8,7 @@ import (
 )
 
 func toolCodecsSection(data toolCodecsFileData) codegen.Section {
-	return codegen.MustRenderSection("tool-spec-codecs", func() string {
+	return codegen.NewRenderSection("tool-spec-codecs", func() string {
 		tpl := template.Must(template.New("tool-codecs").Parse(toolCodecsTemplateSource))
 		var buf bytes.Buffer
 		if err := tpl.Execute(&buf, data); err != nil {

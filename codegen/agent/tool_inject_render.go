@@ -37,7 +37,7 @@ func toolsetNeedsInject(ts *ToolsetData) bool {
 }
 
 func toolInjectSection(data toolInjectFileData) codegen.Section {
-	return codegen.MustRenderSection("tool-inject", func() string {
+	return codegen.NewRenderSection("tool-inject", func() string {
 		tpl := template.Must(template.New("tool-inject").Funcs(templateFuncMap()).Parse(toolInjectTemplateSource))
 		var buf bytes.Buffer
 		if err := tpl.Execute(&buf, data); err != nil {

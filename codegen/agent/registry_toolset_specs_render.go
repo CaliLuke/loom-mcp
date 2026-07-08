@@ -8,7 +8,7 @@ import (
 )
 
 func registryToolsetSpecsSection(data registryToolsetSpecsFileData) codegen.Section {
-	return codegen.MustRenderSection("registry-toolset-specs", func() string {
+	return codegen.NewRenderSection("registry-toolset-specs", func() string {
 		source := registryToolsetSpecsTemplateSource
 		versionBlock := ""
 		if data.Registry != nil && data.Registry.Version != "" {

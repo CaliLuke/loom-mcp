@@ -6,7 +6,7 @@ import (
 )
 
 func adapterBroadcastSection() codegen.Section {
-	return codegen.MustJenniferSection("mcp-adapter-broadcast", func(stmt *jen.Statement) {
+	return codegen.NewJenniferSection("mcp-adapter-broadcast", func(stmt *jen.Statement) {
 		stmt.Comment("Broadcaster and publish helpers for server-initiated events").Line()
 
 		stmt.Comment("Publish sends an event to all event stream subscribers.").Line()
@@ -85,7 +85,7 @@ func adapterBroadcastSection() codegen.Section {
 }
 
 func adapterNotificationsSection() codegen.Section {
-	return codegen.MustJenniferSection("mcp-adapter-notifications", func(stmt *jen.Statement) {
+	return codegen.NewJenniferSection("mcp-adapter-notifications", func(stmt *jen.Statement) {
 		stmt.Comment("Notifications and events stream").Line()
 
 		stmt.Func().Params(jen.Id("a").Op("*").Id("MCPAdapter")).
@@ -203,7 +203,7 @@ func adapterNotificationsSection() codegen.Section {
 }
 
 func adapterSubscriptionsSection(data *AdapterData) codegen.Section {
-	return codegen.MustJenniferSection("mcp-adapter-subscriptions", func(stmt *jen.Statement) {
+	return codegen.NewJenniferSection("mcp-adapter-subscriptions", func(stmt *jen.Statement) {
 		if len(data.Subscriptions) == 0 {
 			return
 		}
@@ -242,7 +242,7 @@ func subscriptionHandler(name, payloadType, resultType, method string) jen.Code 
 }
 
 func adapterPromptsSection(data *AdapterData) codegen.Section {
-	return codegen.MustJenniferSection("mcp-adapter-prompts", func(stmt *jen.Statement) {
+	return codegen.NewJenniferSection("mcp-adapter-prompts", func(stmt *jen.Statement) {
 		if len(data.StaticPrompts) == 0 && len(data.DynamicPrompts) == 0 {
 			return
 		}
@@ -254,7 +254,7 @@ func adapterPromptsSection(data *AdapterData) codegen.Section {
 }
 
 func adapterResourcesSection(data *AdapterData) codegen.Section {
-	return codegen.MustJenniferSection("mcp-adapter-resources", func(stmt *jen.Statement) {
+	return codegen.NewJenniferSection("mcp-adapter-resources", func(stmt *jen.Statement) {
 		if len(data.Resources) == 0 && len(data.SkillDirectories) == 0 {
 			return
 		}
@@ -842,7 +842,7 @@ func iconSliceValue(icons []*IconData) jen.Code {
 }
 
 func promptProviderSection(data *AdapterData) codegen.Section {
-	return codegen.MustJenniferSection("mcp-prompt-provider", func(stmt *jen.Statement) {
+	return codegen.NewJenniferSection("mcp-prompt-provider", func(stmt *jen.Statement) {
 		if len(data.StaticPrompts) == 0 && len(data.DynamicPrompts) == 0 {
 			return
 		}

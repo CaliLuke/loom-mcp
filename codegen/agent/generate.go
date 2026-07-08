@@ -100,11 +100,22 @@ func Generate(genpkg string, roots []eval.Root, files []*codegen.File) ([]*codeg
 // agentSpecsAggregatorFile emits specs/specs.go that aggregates Specs and metadata
 // from all specs/<toolset> packages into a single package for convenience.
 func agentSpecsAggregatorFile(agent *AgentData) *codegen.File {
-	// Build import list: runtime + per-toolset packages
-	// Always alias runtime tools to avoid conflicts with toolsets named "tools"
+	// Build import list: runtime + per-toolset packages.
 	imports := []*codegen.ImportSpec{
 		{Path: "github.com/CaliLuke/loom-mcp/runtime/agent/policy"},
 		{Path: "github.com/CaliLuke/loom-mcp/runtime/agent/tools", Name: "tools"},
+	}
+	// Claim every fixed import identifier in an alias scope so toolset specs
+	// packages named after runtime packages (for example "tools" or "policy")
+	// and toolsets whose slugs sanitize identically under different owners all
+	// receive unique aliases.
+	aliasScope := codegen.NewNameScope()
+	for _, imp := range imports {
+		name := imp.Name
+		if name == "" {
+			name = path.Base(imp.Path)
+		}
+		aliasScope.Unique(name)
 	}
 	added := make(map[string]struct{})
 	toolsets := make([]*ToolsetData, 0, len(agent.AllToolsets))
@@ -115,11 +126,7 @@ func agentSpecsAggregatorFile(agent *AgentData) *codegen.File {
 		if _, ok := added[ts.SpecsImportPath]; ok {
 			continue
 		}
-		// Alias toolset package to avoid conflicts with runtime tools package
-		alias := ts.SpecsPackageName
-		if alias == "tools" {
-			alias = ts.SpecsPackageName + "specs"
-		}
+		alias := aliasScope.Unique(ts.SpecsPackageName, "specs")
 		imports = append(imports, &codegen.ImportSpec{Path: ts.SpecsImportPath, Name: alias})
 		added[ts.SpecsImportPath] = struct{}{}
 		// Update toolset data with the alias for template use

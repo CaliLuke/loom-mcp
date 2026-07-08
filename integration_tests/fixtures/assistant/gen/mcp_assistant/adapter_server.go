@@ -2387,8 +2387,12 @@ func (a *MCPAdapter) executeRealTool(ctx context.Context, p *ToolsCallPayload, s
 		})
 		return false, stream.SendAndClose(ctx, final)
 	case "projected_lookup_tool":
+		args := p.Arguments
+		if len(args) == 0 {
+			args = json.RawMessage("{}")
+		}
 		meta := &agentruntime.ToolCallMeta{}
-		toolResult, err := projected.DispatchProjectedLookupToolMethod(ctx, meta, p.Arguments, nil, projected.ProjectedLookupToolDispatchOptions{Call: func(ctx context.Context, args any) (any, error) {
+		toolResult, err := projected.DispatchProjectedLookupToolMethod(ctx, meta, args, nil, projected.ProjectedLookupToolDispatchOptions{Call: func(ctx context.Context, args any) (any, error) {
 			return a.service.ProjectedLookup(ctx, args.(*assistant.ProjectedLookupPayload))
 		}})
 		if err != nil {
@@ -2415,8 +2419,12 @@ func (a *MCPAdapter) executeRealTool(ctx context.Context, p *ToolsCallPayload, s
 		})
 		return false, stream.SendAndClose(ctx, final)
 	case "projected_status_tool":
+		args := p.Arguments
+		if len(args) == 0 {
+			args = json.RawMessage("{}")
+		}
 		meta := &agentruntime.ToolCallMeta{}
-		toolResult, err := projected.DispatchProjectedStatusToolMethod(ctx, meta, p.Arguments, nil, projected.ProjectedStatusToolDispatchOptions{Call: func(ctx context.Context, args any) (any, error) {
+		toolResult, err := projected.DispatchProjectedStatusToolMethod(ctx, meta, args, nil, projected.ProjectedStatusToolDispatchOptions{Call: func(ctx context.Context, args any) (any, error) {
 			return a.service.ProjectedStatus(ctx)
 		}})
 		if err != nil {

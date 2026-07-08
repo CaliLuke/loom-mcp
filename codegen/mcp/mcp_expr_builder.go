@@ -18,6 +18,11 @@ type mcpExprBuilder struct {
 	source          *sourceSnapshot
 	mcpService      *expr.ServiceExpr
 	root            *expr.RootExpr
+	// projectedToolCount counts agent toolset tools projected into this MCP
+	// server via MCPPlacement. Those tools reach AdapterData.Tools through
+	// buildToolAdapters, so tools/list + tools/call methods and their types
+	// must be emitted even when the DSL declares no method-level MCP tools.
+	projectedToolCount int
 }
 
 // mcpHTTPServiceConfig carries the resolved JSON-RPC path into the shared HTTP
@@ -29,12 +34,16 @@ type mcpHTTPServiceConfig struct {
 
 // newMCPExprBuilder creates a new MCP expression builder for the given
 // original service and its associated MCP expression configuration.
-func newMCPExprBuilder(svc *expr.ServiceExpr, mcp *mcpexpr.MCPExpr, source *sourceSnapshot) *mcpExprBuilder {
+// projectedToolCount reports how many agent toolset tools are projected into
+// this MCP server via MCPPlacement so the tool surface is generated even when
+// the design declares no method-level MCP tools.
+func newMCPExprBuilder(svc *expr.ServiceExpr, mcp *mcpexpr.MCPExpr, source *sourceSnapshot, projectedToolCount int) *mcpExprBuilder {
 	return &mcpExprBuilder{
 		ProtocolExprBuilderBase: shared.NewProtocolExprBuilderBase(),
 		originalService:         svc,
 		mcp:                     mcp,
 		source:                  source,
+		projectedToolCount:      projectedToolCount,
 	}
 }
 

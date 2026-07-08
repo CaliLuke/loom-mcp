@@ -41,7 +41,7 @@ func (s *capturedToolsCallStream) SendAndClose(ctx context.Context, ev mcpassist
 	return s.Send(ctx, ev)
 }
 
-func (s *capturedToolsCallStream) SendError(ctx context.Context, method string, err error) error {
+func (s *capturedToolsCallStream) SendError(ctx context.Context, id any, err error) error {
 	s.sendErrorCalled = true
 	return nil
 }

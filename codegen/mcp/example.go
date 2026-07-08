@@ -19,7 +19,7 @@ import (
 // includes the MCP JSON-RPC server without manual cmd edits. It runs the same
 // pure-MCP contract validation as Generate so example scaffolding cannot mask
 // invalid MCP mappings.
-func PrepareExample(_ string, roots []eval.Root) error {
+func PrepareExample(genpkg string, roots []eval.Root) error {
 	source := collectSourceSnapshot(roots)
 	for _, root := range roots {
 		r, ok := root.(*expr.RootExpr)
@@ -34,7 +34,11 @@ func PrepareExample(_ string, roots []eval.Root) error {
 			if err := validatePureMCPService(svc, mcp, source); err != nil {
 				return err
 			}
-			builder := newMCPExprBuilder(svc, mcp, source)
+			projected, err := ProjectedToolInventory(genpkg, roots, svc.Name, mcp.Name)
+			if err != nil {
+				return fmt.Errorf("build projected tool inventory for %s.%s: %w", svc.Name, mcp.Name, err)
+			}
+			builder := newMCPExprBuilder(svc, mcp, source, len(projected))
 			mcpService := builder.BuildServiceExpr()
 
 			// Build and validate a temporary MCP root to finalize types
@@ -477,7 +481,7 @@ func renderCLIDoJSONRPC(services []cliServiceTemplateData) string {
 	if len(services) == 0 {
 		return ""
 	}
-	section := codegen.MustJenniferSection("cli-dojsonrpc", func(stmt *jen.Statement) {
+	section := codegen.NewJenniferSection("cli-dojsonrpc", func(stmt *jen.Statement) {
 		emitCLIDoJSONRPC(stmt, services)
 	})
 	var buf bytes.Buffer

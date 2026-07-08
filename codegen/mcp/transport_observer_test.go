@@ -4,7 +4,6 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
-	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -15,9 +14,13 @@ import (
 // contract on the checked-in fixture so that a future regeneration that
 // drops an emission site or shifts the alias would fail here.
 //
-// The plan also requires the existing 10 adapter.log calls to remain
-// unchanged; if a deliberate logging-contract change happens, the expected
-// count below must be updated in the same review that justifies it.
+// Contract history: the SDK server previously carried session-validation and
+// events-stream emissions (TransportMCP, ReasonMCPSession*,
+// ReasonMCPEventsStreamWriteFailed, BeginRequest, and 10 adapter.log calls).
+// All of them lived inside the dead events/stream helpers removed for issue
+// #131 (the SDK transport advertised a capability whose handler was
+// unreachable), so they were dead logging and were removed with the dead
+// code. The surviving SDK-server emission is the HTTP request span.
 func TestMCPTransportObserverEmissions(t *testing.T) {
 	_, thisFile, _, ok := runtime.Caller(0)
 	require.True(t, ok)
@@ -29,18 +32,16 @@ func TestMCPTransportObserverEmissions(t *testing.T) {
 
 	for _, needle := range []string{
 		`"github.com/CaliLuke/loom/observability/transport"`,
-		"transport.TransportMCP",
-		"transport.ReasonMCPSessionMissing",
-		"transport.ReasonMCPSessionNotFound",
-		"transport.ReasonMCPSessionPrincipalMismatch",
-		"transport.ReasonMCPEventsStreamWriteFailed",
 		"transport.BeginHTTPRequest(",
-		"transport.BeginRequest(",
 	} {
 		require.Containsf(t, src, needle, "regenerated assistant sdk_server.go must contain %q", needle)
 	}
 
-	const expectedAdapterLogCalls = 10
-	got := strings.Count(src, "adapter.log(")
-	require.Equalf(t, expectedAdapterLogCalls, got, "adapter.log( call count drifted; update expectedAdapterLogCalls only with a reviewed logging-contract change")
+	for _, gone := range []string{
+		"serveSDKEventsStream",
+		"sdkSessionByID",
+		"writeSDKNotificationEvent",
+	} {
+		require.NotContainsf(t, src, gone, "dead events/stream helper %q must stay removed from the SDK server (issue #131)", gone)
+	}
 }

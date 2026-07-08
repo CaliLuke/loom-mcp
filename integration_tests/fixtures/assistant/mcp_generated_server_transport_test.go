@@ -91,21 +91,12 @@ func TestGeneratedJSONRPCServerToolsCallUsesCompactTextAndStructuredContent(t *t
 	u, err := url.Parse(server.URL)
 	require.NoError(t, err)
 
-	doer := &testSessionDoer{
-		base: &http.Client{
-			Timeout: 10 * time.Second,
-			Transport: testHeaderRoundTripper{
-				base: http.DefaultTransport,
-				headers: map[string]string{
-					"Accept": "text/event-stream",
-				},
-			},
-		},
-	}
+	// The generated JSON-RPC client owns the MCP transport obligations
+	// (Accept header, Mcp-Session-Id capture/replay, protocol version).
 	client := mcpAssistantjsonrpcc.NewClient(
 		u.Scheme,
 		u.Host,
-		doer,
+		&http.Client{Timeout: 10 * time.Second},
 		goahttp.RequestEncoder,
 		goahttp.ResponseDecoder,
 		false,

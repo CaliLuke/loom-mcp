@@ -6,7 +6,7 @@ import (
 )
 
 func adapterCoreSection(data *AdapterData) codegen.Section {
-	return codegen.MustJenniferSection("mcp-adapter-core", func(stmt *jen.Statement) {
+	return codegen.NewJenniferSection("mcp-adapter-core", func(stmt *jen.Statement) {
 		stmt.Comment("MCPAdapter core: types, options, constructor, helpers").Line()
 		emitAdapterStruct(stmt, data)
 		emitToolCallInterceptorTypes(stmt)

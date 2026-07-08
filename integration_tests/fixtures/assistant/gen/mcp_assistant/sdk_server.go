@@ -15,7 +15,6 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
-	"time"
 
 	assistant "example.com/assistant/gen/assistant"
 	projected "example.com/assistant/gen/assistant/toolsets/projected"
@@ -70,7 +69,7 @@ func NewSDKServer(service assistant.Service, opts *SDKServerOptions) (*SDKServer
 	}
 	adapter := NewMCPAdapter(service, promptProvider, adapterOpts)
 	serverOpts = sdkServerOptionsWithCompletion(serverOpts, adapter.sdkCompletionHandler(requestContext))
-	serverOpts = sdkServerOptionsWithEvents(serverOpts)
+	serverOpts = sdkServerOptionsWithDefaults(serverOpts)
 	server := mcpsdk.NewServer(&mcpsdk.Implementation{
 		Icons: []mcpsdk.Icon{mcpsdk.Icon{
 			MIMEType: "image/png",
@@ -114,7 +113,7 @@ func sdkServerOptionsWithCompletion(opts *mcpsdk.ServerOptions, handler func(con
 	}
 	return opts
 }
-func sdkServerOptionsWithEvents(opts *mcpsdk.ServerOptions) *mcpsdk.ServerOptions {
+func sdkServerOptionsWithDefaults(opts *mcpsdk.ServerOptions) *mcpsdk.ServerOptions {
 	if opts == nil {
 		opts = &mcpsdk.ServerOptions{}
 	} else {
@@ -127,16 +126,6 @@ func sdkServerOptionsWithEvents(opts *mcpsdk.ServerOptions) *mcpsdk.ServerOption
 		capabilities := *opts.Capabilities
 		opts.Capabilities = &capabilities
 	}
-	experimental := make(map[string]any, len(opts.Capabilities.Experimental)+1)
-	for key, value := range opts.Capabilities.Experimental {
-		experimental[key] = value
-	}
-	experimental["loom-mcp"] = map[string]any{"events": map[string]any{
-		"method":        "events/stream",
-		"notifications": []string{"notify_status_update"},
-		"stream":        true,
-	}}
-	opts.Capabilities.Experimental = experimental
 	return opts
 }
 func (w *sdkResponseObserver) WriteHeader(statusCode int) {
@@ -187,170 +176,6 @@ func sdkStreamableHTTPOptions(opts *mcpsdk.StreamableHTTPOptions) *mcpsdk.Stream
 		configured.CrossOriginProtection = http.NewCrossOriginProtection()
 	}
 	return &configured
-}
-func serveSDKEventsStream(server *mcpsdk.Server, adapter *MCPAdapter, w http.ResponseWriter, r *http.Request) {
-	sessionID := r.Header.Get("Mcp-Session-Id")
-	streamObs := transport.BeginRequest(r.Context(), transport.TransportMCP, "mcp", "events/stream")
-	defer streamObs.End()
-	streamObs.SetSession(sessionID)
-	adapter.log(r.Context(), "events_stream_open", map[string]any{
-		"accept":     r.Header.Get("Accept"),
-		"has_accept": strings.TrimSpace(r.Header.Get("Accept")) != "",
-		"session_id": sessionID,
-	})
-	if sessionID == "" {
-		streamObs.Fail(transport.ReasonMCPSessionMissing)
-		adapter.log(r.Context(), "events_stream_rejected", map[string]any{"reason": "missing_session_id"})
-		http.Error(w, "Missing session ID", http.StatusBadRequest)
-		return
-	}
-	if sdkSessionByID(server, sessionID) == nil {
-		streamObs.Fail(transport.ReasonMCPSessionNotFound)
-		adapter.clearSessionPrincipal(sessionID)
-		adapter.log(r.Context(), "events_stream_rejected", map[string]any{
-			"reason":     "session_not_found",
-			"session_id": sessionID,
-		})
-		http.Error(w, "session not found", http.StatusNotFound)
-		return
-	}
-	if err := adapter.assertSessionPrincipal(r.Context(), sessionID); err != nil {
-		streamObs.Fail(transport.ReasonMCPSessionPrincipalMismatch)
-		adapter.log(r.Context(), "events_stream_rejected", map[string]any{
-			"error":      err.Error(),
-			"reason":     "session_principal_mismatch",
-			"session_id": sessionID,
-		})
-		http.Error(w, err.Error(), http.StatusForbidden)
-		return
-	}
-	adapter.markInitializedSession(sessionID)
-	adapter.captureSessionPrincipal(r.Context(), sessionID)
-	sub, err := adapter.broadcaster.Subscribe(r.Context())
-	if err != nil {
-		http.Error(w, fmt.Sprintf("failed to subscribe to events: %v", err), http.StatusInternalServerError)
-		return
-	}
-	defer sub.Close()
-	w.Header().Set("Content-Type", "text/event-stream")
-	w.Header().Set("Cache-Control", "no-cache")
-	w.Header().Set("Connection", "keep-alive")
-	w.Header().Set("X-Accel-Buffering", "no")
-	flusher, _ := w.(http.Flusher)
-	w.WriteHeader(http.StatusOK)
-	if flusher != nil {
-		flusher.Flush()
-	}
-	adapter.log(r.Context(), "events_stream_connected", map[string]any{
-		"flushed":    flusher != nil,
-		"session_id": sessionID,
-	})
-	ticker := time.NewTicker(250 * time.Millisecond)
-	defer ticker.Stop()
-	for {
-		select {
-		case <-r.Context().Done():
-			adapter.log(r.Context(), "events_stream_closed", map[string]any{
-				"reason":     "request_context_done",
-				"session_id": sessionID,
-			})
-			return
-		case <-ticker.C:
-			if sdkSessionByID(server, sessionID) == nil {
-				adapter.clearSessionPrincipal(sessionID)
-				adapter.log(r.Context(), "events_stream_closed", map[string]any{
-					"reason":     "session_not_found",
-					"session_id": sessionID,
-				})
-				return
-			}
-		case ev, ok := <-sub.C():
-			if !ok {
-				adapter.log(r.Context(), "events_stream_closed", map[string]any{
-					"reason":     "broadcaster_closed",
-					"session_id": sessionID,
-				})
-				return
-			}
-			res, ok := ev.(*EventsStreamResult)
-			if !ok {
-				adapter.log(r.Context(), "events_stream_skipped_event", map[string]any{"session_id": sessionID})
-				continue
-			}
-			if err := writeSDKNotificationEvent(w, "events/stream", sdkEventsStreamParams(res)); err != nil {
-				streamObs.Fail(transport.ReasonMCPEventsStreamWriteFailed)
-				adapter.log(r.Context(), "events_stream_closed", map[string]any{
-					"error":      err.Error(),
-					"reason":     "write_error",
-					"session_id": sessionID,
-				})
-				return
-			}
-			if flusher != nil {
-				flusher.Flush()
-			}
-		}
-	}
-}
-func sdkSessionByID(server *mcpsdk.Server, sessionID string) *mcpsdk.ServerSession {
-	if server == nil || sessionID == "" {
-		return nil
-	}
-	for session := range server.Sessions() {
-		if session != nil && session.ID() == sessionID {
-			return session
-		}
-	}
-	return nil
-}
-func writeSDKNotificationEvent(w http.ResponseWriter, method string, params any) error {
-	message, err := json.Marshal(map[string]any{
-		"jsonrpc": "2.0",
-		"method":  method,
-		"params":  params,
-	})
-	if err != nil {
-		return err
-	}
-	if _, err := fmt.Fprintf(w, "event: notification\ndata: %s\n\n", message); err != nil {
-		return err
-	}
-	return nil
-}
-func sdkEventsStreamParams(res *EventsStreamResult) map[string]any {
-	params := map[string]any{"content": []map[string]any{}}
-	if res == nil {
-		return params
-	}
-	if res.IsError != nil {
-		params["isError"] = *res.IsError
-	}
-	if len(res.Content) == 0 {
-		return params
-	}
-	content := make([]map[string]any, 0, len(res.Content))
-	for _, item := range res.Content {
-		if item == nil {
-			content = append(content, nil)
-			continue
-		}
-		entry := map[string]any{"type": item.Type}
-		if item.Text != nil {
-			entry["text"] = *item.Text
-		}
-		if item.Data != nil {
-			entry["data"] = *item.Data
-		}
-		if item.MimeType != nil {
-			entry["mimeType"] = *item.MimeType
-		}
-		if item.URI != nil {
-			entry["uri"] = *item.URI
-		}
-		content = append(content, entry)
-	}
-	params["content"] = content
-	return params
 }
 func registerSDKTools(server *mcpsdk.Server, adapter *MCPAdapter, requestContext func(context.Context, *http.Request) context.Context) error {
 	if adapter.toolSearchEnabled() {
@@ -772,7 +597,7 @@ func (c *sdkToolCallCollector) SendAndClose(_ context.Context, event ToolsCallEv
 	c.final = res
 	return nil
 }
-func (c *sdkToolCallCollector) SendError(_ context.Context, _ string, err error) error {
+func (c *sdkToolCallCollector) SendError(_ context.Context, _ any, err error) error {
 	c.streamErr = err
 	return nil
 }

@@ -25,7 +25,7 @@ func clientCallerFile(data *AdapterData, svcName string) *codegen.File {
 		Path: path,
 		Sections: []codegen.Section{
 			codegen.Header("MCP JSON-RPC client caller", "client", imports),
-			codegen.MustJenniferSection("mcp-client-caller", func(stmt *jen.Statement) {
+			codegen.NewJenniferSection("mcp-client-caller", func(stmt *jen.Statement) {
 				emitCallerType(stmt)
 				emitCallerConstructor(stmt)
 				emitCallerCallTool(stmt)

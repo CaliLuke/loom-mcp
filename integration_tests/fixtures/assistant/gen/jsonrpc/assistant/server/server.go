@@ -9,7 +9,6 @@ package server
 
 import (
 	"bufio"
-	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -106,7 +105,7 @@ func New(endpoints *assistant.Endpoints, mux loomhttp.Muxer, decoder func(*http.
 		errhandler:                     errhandler,
 	}
 	// Plain HTTP JSON-RPC
-	s.Handler = http.HandlerFunc(s.ServeHTTP)
+	s.Handler = http.NewCrossOriginProtection().Handler(http.HandlerFunc(s.ServeHTTP))
 	return s
 }
 
@@ -123,42 +122,6 @@ func (s *Server) Use(m func(http.Handler) http.Handler) {
 // MethodNames returns the methods served.
 func (s *Server) MethodNames() []string {
 	return assistant.MethodNames[:]
-}
-
-type jsonrpcResponseCapture struct {
-	header     http.Header
-	body       bytes.Buffer
-	statusCode int
-}
-
-func (c *jsonrpcResponseCapture) Header() http.Header {
-	if c.header == nil {
-		c.header = make(http.Header)
-	}
-	return c.header
-}
-func (c *jsonrpcResponseCapture) Write(data []byte) (int, error) {
-	if c.statusCode == 0 {
-		c.statusCode = http.StatusOK
-	}
-	return c.body.Write(data)
-}
-func (c *jsonrpcResponseCapture) WriteHeader(statusCode int) {
-	if c.statusCode != 0 {
-		return
-	}
-	c.statusCode = statusCode
-}
-func copyJSONRPCResponseMetadata(dst http.ResponseWriter, src *jsonrpcResponseCapture) {
-	for key, vals := range src.Header() {
-		switch http.CanonicalHeaderKey(key) {
-		case "Content-Length", "Content-Type", "Transfer-Encoding":
-			continue
-		}
-		for _, val := range vals {
-			dst.Header().Add(key, val)
-		}
-	}
 }
 
 // ServeHTTP handles JSON-RPC requests.
@@ -411,7 +374,7 @@ func (rb *batchWriter) Write(data []byte) (int, error) {
 // Mount configures the mux to serve the JSON-RPC assistant service methods.
 func Mount(mux loomhttp.Muxer, h *Server) {
 	// HTTP only
-	mux.Handle("POST", "/rpc", h.ServeHTTP)
+	mux.Handle("POST", "/rpc", h.Handler.ServeHTTP)
 }
 
 // Mount configures the mux to serve the JSON-RPC assistant service methods.

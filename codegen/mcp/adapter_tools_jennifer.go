@@ -8,7 +8,7 @@ import (
 )
 
 func adapterToolsSection(data *AdapterData) codegen.Section {
-	return codegen.MustJenniferSection("mcp-adapter-tools", func(stmt *jen.Statement) {
+	return codegen.NewJenniferSection("mcp-adapter-tools", func(stmt *jen.Statement) {
 		if len(data.Tools) == 0 {
 			return
 		}
@@ -1285,7 +1285,7 @@ func emitToolStreamBridges(stmt *jen.Statement, data *AdapterData) {
 			Id("SendError").
 			Params(
 				jen.Id("ctx").Qual("context", "Context"),
-				jen.Id("id").String(),
+				jen.Id("id").Any(),
 				jen.Id("err").Error(),
 			).
 			Error().
@@ -1556,11 +1556,19 @@ func serviceMethodCall(tool *ToolAdapter, receiver *jen.Statement, ctx jen.Code,
 func emitProjectedToolCase(g *jen.Group, tool *ToolAdapter) {
 	projected := tool.Projected
 	specs := jen.Id(projected.SpecsPackageName)
+	// MCP tools/call arguments are optional; official clients omit the key
+	// entirely. Normalize absent arguments to the empty JSON object so the
+	// toolset dispatcher never receives empty raw bytes (which would fail or
+	// panic downstream when decoded as a nil value).
+	g.Id("args").Op(":=").Id("p").Dot("Arguments")
+	g.If(jen.Len(jen.Id("args")).Op("==").Lit(0)).Block(
+		jen.Id("args").Op("=").Qual("encoding/json", "RawMessage").Call(jen.Lit("{}")),
+	)
 	g.Id("meta").Op(":=").Op("&").Id("agentruntime").Dot("ToolCallMeta").Values()
 	g.List(jen.Id("toolResult"), jen.Id("err")).Op(":=").Id(projected.SpecsPackageName).Dot(projected.DispatcherFuncName).Call(
 		jen.Id("ctx"),
 		jen.Id("meta"),
-		jen.Id("p").Dot("Arguments"),
+		jen.Id("args"),
 		jen.Nil(),
 		specs.Dot(projected.DispatchOptionsName).Values(jen.Dict{
 			jen.Id("Call"): projectedServiceCallFunc(projected),

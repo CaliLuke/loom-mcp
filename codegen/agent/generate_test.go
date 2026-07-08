@@ -1,11 +1,17 @@
 package codegen
 
 import (
+	"bytes"
+	"go/parser"
+	"go/token"
+	"path"
 	"path/filepath"
+	"strconv"
 	"testing"
 
 	agentsExpr "github.com/CaliLuke/loom-mcp/expr/agent"
 	"github.com/CaliLuke/loom/codegen/service"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
@@ -53,6 +59,111 @@ func TestMCPExecutorFiles_DeduplicatesSameOriginToolsets(t *testing.T) {
 
 	require.Len(t, files, 1)
 	require.Equal(t, filepath.Join(used.Dir, "mcp_executor.go"), files[0].Path)
+}
+
+func TestAgentSpecsAggregatorUniquesImportAliases(t *testing.T) {
+	newToolset := func(name, pkg, importPath string) *ToolsetData {
+		return &ToolsetData{
+			Name:             name,
+			QualifiedName:    name,
+			SpecsPackageName: pkg,
+			SpecsImportPath:  importPath,
+			Tools: []*ToolData{
+				{Name: "ping", ConstName: "Ping", QualifiedName: name + ".ping"},
+			},
+		}
+	}
+
+	cases := []struct {
+		name        string
+		toolsets    []*ToolsetData
+		wantAliases map[string]string
+	}{
+		{
+			name: "toolset named policy avoids runtime policy import",
+			toolsets: []*ToolsetData{
+				newToolset("policy", "policy", "example.com/gen/alpha/toolsets/policy"),
+			},
+			wantAliases: map[string]string{
+				"example.com/gen/alpha/toolsets/policy": "policyspecs",
+			},
+		},
+		{
+			name: "toolset named tools avoids runtime tools import",
+			toolsets: []*ToolsetData{
+				newToolset("tools", "tools", "example.com/gen/alpha/toolsets/tools"),
+			},
+			wantAliases: map[string]string{
+				"example.com/gen/alpha/toolsets/tools": "toolsspecs",
+			},
+		},
+		{
+			name: "identical slugs under different owners stay distinct",
+			toolsets: []*ToolsetData{
+				newToolset("shared-tools", "shared_tools", "example.com/gen/one/toolsets/shared_tools"),
+				newToolset("shared.tools", "shared_tools", "example.com/gen/two/toolsets/shared_tools"),
+			},
+			wantAliases: map[string]string{
+				"example.com/gen/one/toolsets/shared_tools": "shared_tools",
+				"example.com/gen/two/toolsets/shared_tools": "shared_toolsspecs",
+			},
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			agent := &AgentData{
+				StructName:  "HelperAgent",
+				Dir:         filepath.Join("gen", "alpha", "agents", "helper"),
+				AllToolsets: tc.toolsets,
+			}
+
+			file := agentSpecsAggregatorFile(agent)
+			require.NotNil(t, file)
+
+			var buf bytes.Buffer
+			for _, s := range file.AllSections() {
+				require.NoError(t, s.Write(&buf))
+			}
+			aliases := importAliasesByPath(t, buf.String())
+			for importPath, want := range tc.wantAliases {
+				assert.Equalf(t, want, aliases[importPath], "alias for %s", importPath)
+			}
+			assertDistinctValues(t, aliases)
+		})
+	}
+}
+
+// importAliasesByPath parses source and returns the effective package
+// identifier bound by each import path.
+func importAliasesByPath(t *testing.T, src string) map[string]string {
+	t.Helper()
+	fset := token.NewFileSet()
+	parsed, err := parser.ParseFile(fset, "specs.go", src, parser.ImportsOnly)
+	require.NoError(t, err)
+	require.NotEmpty(t, parsed.Imports)
+	out := make(map[string]string, len(parsed.Imports))
+	for _, imp := range parsed.Imports {
+		importPath, err := strconv.Unquote(imp.Path.Value)
+		require.NoError(t, err)
+		name := path.Base(importPath)
+		if imp.Name != nil {
+			name = imp.Name.Name
+		}
+		out[importPath] = name
+	}
+	return out
+}
+
+// assertDistinctValues requires that no two imports bind the same identifier.
+func assertDistinctValues(t *testing.T, aliases map[string]string) {
+	t.Helper()
+	seen := make(map[string]string, len(aliases))
+	for importPath, alias := range aliases {
+		prev, dup := seen[alias]
+		require.Falsef(t, dup, "import identifier %q bound by both %q and %q", alias, prev, importPath)
+		seen[alias] = importPath
+	}
 }
 
 func TestToolSpecsDataCacheMemoizesByGenerateTuple(t *testing.T) {

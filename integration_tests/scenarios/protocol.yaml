@@ -17,7 +17,7 @@ scenarios:
         stream_expect:
           min_events: 1
           events:
-            - event: response
+            - event: message
               data:
                 result:
                   isError: true
