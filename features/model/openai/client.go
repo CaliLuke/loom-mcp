@@ -37,12 +37,22 @@ type openAIToolCodec struct {
 type Options struct {
 	Client       ResponseClient
 	DefaultModel string
+
+	// HighModel is used when Request.ModelClass is high-reasoning and
+	// Request.Model is empty.
+	HighModel string
+
+	// SmallModel is used when Request.ModelClass is small and Request.Model is
+	// empty.
+	SmallModel string
 }
 
 // Client implements model.Client via the OpenAI Responses API.
 type Client struct {
-	resp  ResponseClient
-	model string
+	resp       ResponseClient
+	model      string
+	highModel  string
+	smallModel string
 }
 
 // New builds an OpenAI-backed model client from the provided options.
@@ -54,7 +64,12 @@ func New(opts Options) (*Client, error) {
 	if modelID == "" {
 		return nil, errors.New("default model is required")
 	}
-	return &Client{resp: opts.Client, model: modelID}, nil
+	return &Client{
+		resp:       opts.Client,
+		model:      modelID,
+		highModel:  opts.HighModel,
+		smallModel: opts.SmallModel,
+	}, nil
 }
 
 // NewFromAPIKey constructs a client using the official openai-go HTTP client.
@@ -125,6 +140,18 @@ func (c *Client) buildResponseRequest(req *model.Request) (responses.ResponseNew
 func (c *Client) resolveModelID(req *model.Request) string {
 	if req.Model != "" {
 		return req.Model
+	}
+	switch req.ModelClass {
+	case "", model.ModelClassDefault:
+		return c.model
+	case model.ModelClassHighReasoning:
+		if c.highModel != "" {
+			return c.highModel
+		}
+	case model.ModelClassSmall:
+		if c.smallModel != "" {
+			return c.smallModel
+		}
 	}
 	return c.model
 }

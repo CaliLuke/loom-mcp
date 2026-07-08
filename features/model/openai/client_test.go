@@ -121,6 +121,70 @@ func TestClientComplete(t *testing.T) {
 	require.JSONEq(t, `{"hits":2}`, third.Output)
 }
 
+func TestClientCompleteResolvesModelClass(t *testing.T) {
+	tests := []struct {
+		name       string
+		req        model.Request
+		smallModel string
+		wantModel  string
+	}{
+		{
+			name: "explicit model wins",
+			req: model.Request{
+				Model:      "gpt-explicit",
+				ModelClass: model.ModelClassHighReasoning,
+			},
+			smallModel: "gpt-small",
+			wantModel:  "gpt-explicit",
+		},
+		{
+			name: "high reasoning uses configured high model",
+			req: model.Request{
+				ModelClass: model.ModelClassHighReasoning,
+			},
+			smallModel: "gpt-small",
+			wantModel:  "gpt-high",
+		},
+		{
+			name: "small uses configured small model",
+			req: model.Request{
+				ModelClass: model.ModelClassSmall,
+			},
+			smallModel: "gpt-small",
+			wantModel:  "gpt-small",
+		},
+		{
+			name: "missing class model falls back to default",
+			req: model.Request{
+				ModelClass: model.ModelClassSmall,
+			},
+			wantModel: "gpt-default",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			mock := &mockResponsesClient{response: &responses.Response{}}
+			opts := openaimodel.Options{
+				Client:       mock,
+				DefaultModel: "gpt-default",
+				HighModel:    "gpt-high",
+				SmallModel:   tt.smallModel,
+			}
+			client, err := openaimodel.New(opts)
+			require.NoError(t, err)
+
+			req := tt.req
+			req.Messages = []*model.Message{
+				{Role: model.ConversationRoleUser, Parts: []model.Part{model.TextPart{Text: "ping"}}},
+			}
+			_, err = client.Complete(context.Background(), &req)
+			require.NoError(t, err)
+			require.Equal(t, tt.wantModel, mock.captured.Model)
+		})
+	}
+}
+
 func TestClientCompleteWithToolChoiceTool(t *testing.T) {
 	mock := &mockResponsesClient{}
 	client, err := openaimodel.New(openaimodel.Options{

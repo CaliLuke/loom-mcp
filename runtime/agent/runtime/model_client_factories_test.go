@@ -27,6 +27,8 @@ func TestNewOpenAIModelClientBuildsSDKClient(t *testing.T) {
 	client, err := rt.NewOpenAIModelClient(OpenAIConfig{
 		APIKey:       "sk-test",
 		DefaultModel: "gpt-4o",
+		HighModel:    "gpt-4.1",
+		SmallModel:   "gpt-4.1-mini",
 	})
 	require.NoError(t, err)
 
@@ -34,6 +36,8 @@ func TestNewOpenAIModelClientBuildsSDKClient(t *testing.T) {
 	require.True(t, ok)
 	value := reflect.ValueOf(openaiClient).Elem()
 	require.Equal(t, "gpt-4o", value.FieldByName("model").String())
+	require.Equal(t, "gpt-4.1", value.FieldByName("highModel").String())
+	require.Equal(t, "gpt-4.1-mini", value.FieldByName("smallModel").String())
 }
 
 func TestNewOllamaModelClientValidates(t *testing.T) {

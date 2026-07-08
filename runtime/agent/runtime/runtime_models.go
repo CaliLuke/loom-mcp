@@ -35,6 +35,8 @@ type OpenAIConfig struct {
 	APIKey       string
 	BaseURL      string
 	DefaultModel string
+	HighModel    string
+	SmallModel   string
 }
 
 // OllamaConfig configures the local Ollama-backed model client created by the runtime.
@@ -141,6 +143,8 @@ func (r *Runtime) NewOpenAIModelClient(cfg OpenAIConfig) (model.Client, error) {
 	return openaifeature.New(openaifeature.Options{
 		Client:       &client.Responses,
 		DefaultModel: cfg.DefaultModel,
+		HighModel:    cfg.HighModel,
+		SmallModel:   cfg.SmallModel,
 	})
 }
 

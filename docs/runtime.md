@@ -1728,8 +1728,15 @@ Create an OpenAI Responses client through the runtime helper:
 client, err := rt.NewOpenAIModelClient(runtime.OpenAIConfig{
     APIKey:       os.Getenv("OPENAI_API_KEY"),
     DefaultModel: "gpt-4.1",
+    HighModel:    "gpt-4.1",
+    SmallModel:   "gpt-4.1-mini",
 })
 ```
+
+Explicit `model.Request.Model` values take precedence over class routing; when
+the request leaves `Model` empty, `ModelClass` selects `HighModel` or
+`SmallModel`, falling back to `DefaultModel` when no class-specific model is
+configured.
 
 Create a local Ollama chat client through the runtime helper. Ollama uses the
 `/api/chat` endpoint and supports text, images, streaming text, function tools,
