@@ -89,6 +89,7 @@ func postJSONRPC(ctx context.Context, endpoint string, sessionID string, payload
 	req.Header.Set("Content-Type", "application/json")
 	if sessionID != "" {
 		req.Header.Set(mcpruntime.HeaderKeySessionID, sessionID)
+		req.Header.Set(mcpruntime.HeaderKeyProtocolVersion, mcpassistant.DefaultProtocolVersion)
 	}
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
@@ -109,6 +110,7 @@ func openRawEventsStream(t *testing.T, ctx context.Context, server *httptest.Ser
 	require.NoError(t, err)
 	req.Header.Set("Accept", "text/event-stream")
 	req.Header.Set(mcpruntime.HeaderKeySessionID, sessionID)
+	req.Header.Set(mcpruntime.HeaderKeyProtocolVersion, mcpassistant.DefaultProtocolVersion)
 
 	resultCh := make(chan string, 1)
 	readyCh := make(chan struct{})
@@ -343,6 +345,7 @@ func (d *testSessionDoer) Do(req *http.Request) (*http.Response, error) {
 		d.base = &http.Client{Timeout: 10 * time.Second}
 	}
 	method := jsonRPCMethodName(req)
+	req.Header.Set(mcpruntime.HeaderKeyProtocolVersion, mcpassistant.DefaultProtocolVersion)
 	if method != "initialize" && d.sessionID != "" {
 		req.Header.Set(mcpruntime.HeaderKeySessionID, d.sessionID)
 	}

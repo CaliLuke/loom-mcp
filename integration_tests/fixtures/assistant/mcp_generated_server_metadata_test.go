@@ -3,11 +3,14 @@ package assistantapi
 import (
 	"context"
 	"encoding/json"
+	"io"
 	"net/http"
 	"strings"
 	"testing"
 	"time"
 
+	mcpassistant "example.com/assistant/gen/mcp_assistant"
+	mcpruntime "github.com/CaliLuke/loom-mcp/runtime/mcp"
 	sdkmcp "github.com/modelcontextprotocol/go-sdk/mcp"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -131,6 +134,133 @@ func TestGeneratedJSONRPCServerExposesSEP973MetadataOnWire(t *testing.T) {
 	require.Len(t, nestedSlice(t, prompt, "icons"), 1)
 }
 
+func TestGeneratedJSONRPCServerValidatesProtocolVersionHeader(t *testing.T) {
+	t.Parallel()
+
+	server := newGeneratedJSONRPCServer(t)
+	defer server.Close()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	sessionID, _ := rawInitializeResult(t, ctx, server.URL)
+	require.NotEmpty(t, sessionID)
+
+	for _, tc := range []struct {
+		name    string
+		header  string
+		message string
+	}{
+		{
+			name:    "missing",
+			message: "Missing MCP-Protocol-Version header",
+		},
+		{
+			name:    "unsupported",
+			header:  "2099-01-01",
+			message: `Unsupported MCP-Protocol-Version header "2099-01-01"`,
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			body, err := json.Marshal(map[string]any{
+				"jsonrpc": "2.0",
+				"id":      tc.name + "-1",
+				"method":  "tools/list",
+				"params":  map[string]any{},
+			})
+			require.NoError(t, err)
+
+			req, err := http.NewRequestWithContext(ctx, http.MethodPost, server.URL+"/rpc", strings.NewReader(string(body)))
+			require.NoError(t, err)
+			req.Header.Set("Content-Type", "application/json")
+			req.Header.Set(mcpruntime.HeaderKeySessionID, sessionID)
+			if tc.header != "" {
+				req.Header.Set(mcpruntime.HeaderKeyProtocolVersion, tc.header)
+			}
+
+			resp, err := http.DefaultClient.Do(req)
+			require.NoError(t, err)
+			defer resp.Body.Close()
+			require.Equal(t, http.StatusBadRequest, resp.StatusCode)
+
+			var envelope struct {
+				Error struct {
+					Code    int    `json:"code"`
+					Message string `json:"message"`
+				} `json:"error"`
+			}
+			require.NoError(t, json.NewDecoder(resp.Body).Decode(&envelope))
+			assert.Equal(t, -32602, envelope.Error.Code)
+			assert.Equal(t, tc.message, envelope.Error.Message)
+		})
+	}
+}
+
+func TestGeneratedJSONRPCServerAcceptsNotificationsAndResponses(t *testing.T) {
+	t.Parallel()
+
+	server := newGeneratedJSONRPCServer(t)
+	defer server.Close()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	sessionID, _ := rawInitializeResult(t, ctx, server.URL)
+	require.NotEmpty(t, sessionID)
+
+	for _, tc := range []struct {
+		name string
+		body map[string]any
+	}{
+		{
+			name: "initialized notification",
+			body: map[string]any{
+				"jsonrpc": "2.0",
+				"method":  "notifications/initialized",
+			},
+		},
+		{
+			name: "cancelled notification",
+			body: map[string]any{
+				"jsonrpc": "2.0",
+				"method":  "notifications/cancelled",
+				"params": map[string]any{
+					"requestId": "tool-1",
+					"reason":    "client cancelled",
+				},
+			},
+		},
+		{
+			name: "response",
+			body: map[string]any{
+				"jsonrpc": "2.0",
+				"id":      "server-request-1",
+				"result":  map[string]any{},
+			},
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			body, err := json.Marshal(tc.body)
+			require.NoError(t, err)
+
+			req, err := http.NewRequestWithContext(ctx, http.MethodPost, server.URL+"/rpc", strings.NewReader(string(body)))
+			require.NoError(t, err)
+			req.Header.Set("Content-Type", "application/json")
+			req.Header.Set(mcpruntime.HeaderKeySessionID, sessionID)
+			req.Header.Set(mcpruntime.HeaderKeyProtocolVersion, mcpassistant.DefaultProtocolVersion)
+
+			resp, err := http.DefaultClient.Do(req)
+			require.NoError(t, err)
+			defer resp.Body.Close()
+			require.Equal(t, http.StatusAccepted, resp.StatusCode)
+
+			data, err := io.ReadAll(resp.Body)
+			require.NoError(t, err)
+			assert.Empty(t, data)
+		})
+	}
+}
+
 func rawInitializeResult(t *testing.T, ctx context.Context, rawURL string) (string, map[string]any) {
 	t.Helper()
 
@@ -191,7 +321,8 @@ func rawJSONRPCResult(t *testing.T, ctx context.Context, endpoint, sessionID, me
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint, strings.NewReader(string(body)))
 	require.NoError(t, err)
 	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("Mcp-Session-Id", sessionID)
+	req.Header.Set(mcpruntime.HeaderKeySessionID, sessionID)
+	req.Header.Set(mcpruntime.HeaderKeyProtocolVersion, mcpassistant.DefaultProtocolVersion)
 
 	resp, err := http.DefaultClient.Do(req)
 	require.NoError(t, err)

@@ -158,8 +158,12 @@ func newSDKHandler(server *mcpsdk.Server, adapter *MCPAdapter, requestContext fu
 			r = r.WithContext(requestContext(r.Context(), r))
 		}
 		if r.Method == http.MethodGet {
-			serveSDKEventsStream(server, adapter, w, r)
-			return
+			if sessionID := r.Header.Get(mcpruntime.HeaderKeySessionID); sessionID != "" {
+				if err := adapter.assertSessionPrincipal(r.Context(), sessionID); err != nil {
+					http.Error(w, err.Error(), http.StatusForbidden)
+					return
+				}
+			}
 		}
 		transportObs, transportW := transport.BeginHTTPRequest(r.Context(), w, "mcp", r.Method, r)
 		defer transportObs.End()

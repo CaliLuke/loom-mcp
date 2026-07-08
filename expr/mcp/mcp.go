@@ -636,6 +636,14 @@ func (p *PromptExpr) Validate() error {
 	if len(p.Messages) == 0 {
 		verr.Add(p, "prompt must have at least one message")
 	}
+	for _, message := range p.Messages {
+		if err := message.Validate(); err != nil {
+			var ve *eval.ValidationErrors
+			if errors.As(err, &ve) {
+				verr.Merge(ve)
+			}
+		}
+	}
 	for _, icon := range p.Icons {
 		if err := icon.Validate(); err != nil {
 			var ve *eval.ValidationErrors
@@ -654,6 +662,20 @@ func (p *PromptExpr) Validate() error {
 		if len(p.Messages) != 1 {
 			verr.Add(p, "runtime prompt %q must have exactly one message", p.Name)
 		}
+	}
+	if len(verr.Errors) > 0 {
+		return verr
+	}
+	return nil
+}
+
+// Validate validates a static prompt message expression.
+func (m *MessageExpr) Validate() error {
+	verr := new(eval.ValidationErrors)
+	switch m.Role {
+	case "user", "assistant":
+	default:
+		verr.Add(m, "prompt message role must be user or assistant")
 	}
 	if len(verr.Errors) > 0 {
 		return verr

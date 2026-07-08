@@ -667,6 +667,25 @@ func (a *MCPAdapter) Publish(ev *EventsStreamResult) {
 	a.broadcaster.Publish(ev)
 }
 
+// PublishSession sends an event to subscribers for one MCP session.
+func (a *MCPAdapter) PublishSession(sessionID string, ev *EventsStreamResult) {
+	if a == nil || a.broadcaster == nil {
+		return
+	}
+	if sessionID != "" {
+		if scoped, ok := a.broadcaster.(mcpruntime.SessionBroadcaster); ok {
+			scoped.PublishSession(sessionID, ev)
+			return
+		}
+	}
+	a.broadcaster.Publish(ev)
+}
+
+// PublishContext sends an event to subscribers for the MCP session in ctx.
+func (a *MCPAdapter) PublishContext(ctx context.Context, ev *EventsStreamResult) {
+	a.PublishSession(mcpruntime.SessionIDFromContext(ctx), ev)
+}
+
 // PublishStatus is a convenience to publish a status_update message.
 func (a *MCPAdapter) PublishStatus(ctx context.Context, typ string, message string, data any) {
 	n := &mcpruntime.Notification{
@@ -678,7 +697,7 @@ func (a *MCPAdapter) PublishStatus(ctx context.Context, typ string, message stri
 	if err != nil {
 		return
 	}
-	a.Publish(&EventsStreamResult{Content: []*ContentItem{buildContentItem(a, s)}})
+	a.PublishContext(ctx, &EventsStreamResult{Content: []*ContentItem{buildContentItem(a, s)}})
 }
 
 // Tools handling
@@ -2157,10 +2176,10 @@ func (a *MCPAdapter) executeRealTool(ctx context.Context, p *ToolsCallPayload, s
 			}
 		}
 		{
-			if err := validateMCPPayloadEnum(rawFields, "platform", "ios", "web"); err != nil {
+			if err := validateMCPPayloadEnum(rawFields, "density", "compact", "comfortable"); err != nil {
 				return true, a.sendToolError(ctx, stream, p.Name, toolCallError(err, "invalid_params", generateDpiSpecInputRecovery(err, p.Arguments)))
 			}
-			if err := validateMCPPayloadEnum(rawFields, "density", "compact", "comfortable"); err != nil {
+			if err := validateMCPPayloadEnum(rawFields, "platform", "ios", "web"); err != nil {
 				return true, a.sendToolError(ctx, stream, p.Name, toolCallError(err, "invalid_params", generateDpiSpecInputRecovery(err, p.Arguments)))
 			}
 		}
@@ -2636,7 +2655,7 @@ func (a *MCPAdapter) PromptsGet(ctx context.Context, p *PromptsGetPayload) (*Pro
 				Text: stringPtr("Review the provided code and suggest improvements."),
 				Type: "text",
 			},
-			Role: "system",
+			Role: "user",
 		}}
 		res := &PromptsGetResult{
 			Description: stringPtr("Simple code review prompt"),
@@ -2727,7 +2746,7 @@ func (a *MCPAdapter) NotifyStatusUpdate(ctx context.Context, n *mcpruntime.Notif
 		return err
 	}
 	ev := &EventsStreamResult{Content: []*ContentItem{buildContentItem(a, s)}}
-	a.Publish(ev)
+	a.PublishContext(ctx, ev)
 	a.log(ctx, "response", map[string]any{
 		"method": "notify_status_update",
 		"type":   n.Type,
@@ -2742,7 +2761,14 @@ func (a *MCPAdapter) EventsStream(ctx context.Context, stream EventsStreamServer
 		"method":     "events/stream",
 		"session_id": mcpruntime.SessionIDFromContext(ctx),
 	})
-	sub, err := a.broadcaster.Subscribe(ctx)
+	sessionID := mcpruntime.SessionIDFromContext(ctx)
+	var sub mcpruntime.Subscription
+	var err error
+	if scoped, ok := a.broadcaster.(mcpruntime.SessionBroadcaster); ok && sessionID != "" {
+		sub, err = scoped.SubscribeSession(ctx, sessionID)
+	} else {
+		sub, err = a.broadcaster.Subscribe(ctx)
+	}
 	if err != nil {
 		return loom.PermanentError("internal_error", "Failed to subscribe to events: %v", err)
 	}

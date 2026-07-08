@@ -555,15 +555,15 @@ func SkillDirectory(root string) func(*exprmcp.MCPExpr) {
 // StaticPrompt takes a name, description, and a list of role-content pairs:
 //   - name: the prompt identifier
 //   - description: human-readable prompt description
-//   - messages: alternating role and content strings (e.g., "user", "text", "system", "text")
+//   - messages: alternating role and content strings (e.g., "user", "text", "assistant", "text")
 //
 // Example:
 //
 //	Service("assistant", func() {
 //	    MCP("assistant", "1.0")
 //	    StaticPrompt("greeting", "Friendly greeting",
-//	        "system", "You are a helpful assistant",
-//	        "user", "Hello!")
+//	        "user", "Hello!",
+//	        "assistant", "How can I help?")
 //	})
 func StaticPrompt(name, description string, args ...any) {
 	var mcp *exprmcp.MCPExpr

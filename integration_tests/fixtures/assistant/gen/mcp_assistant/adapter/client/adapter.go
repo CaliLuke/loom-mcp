@@ -61,12 +61,13 @@ func decodeOriginalJSONRPCResult(enc func(*http.Request) goahttp.Encoder, req *h
 }
 
 type sessionAwareDoer struct {
-	base        goahttp.Doer
-	bootstrap   func(context.Context) error
-	initMu      sync.Mutex
-	sessionMu   sync.Mutex
-	sessionID   string
-	initialized bool
+	base            goahttp.Doer
+	bootstrap       func(context.Context) error
+	protocolVersion string
+	initMu          sync.Mutex
+	sessionMu       sync.Mutex
+	sessionID       string
+	initialized     bool
 }
 
 func (d *sessionAwareDoer) Do(req *http.Request) (*http.Response, error) {
@@ -76,6 +77,9 @@ func (d *sessionAwareDoer) Do(req *http.Request) (*http.Response, error) {
 	method, err := jsonRPCMethod(req)
 	if err != nil {
 		return nil, err
+	}
+	if method != "initialize" && d.protocolVersion != "" {
+		req.Header.Set(mcpruntime.HeaderKeyProtocolVersion, d.protocolVersion)
 	}
 	if method != "" && method != "initialize" {
 		if err := d.ensureInitialized(req.Context()); err != nil {
@@ -145,7 +149,10 @@ func jsonRPCMethod(req *http.Request) (string, error) {
 
 // NewEndpoints creates endpoints that expose the original service API while routing mapped methods through MCP.
 func NewEndpoints(scheme string, host string, doer goahttp.Doer, enc func(*http.Request) goahttp.Encoder, dec func(*http.Response) goahttp.Decoder, restore bool) *assistant.Endpoints {
-	sessionDoer := &sessionAwareDoer{base: doer}
+	sessionDoer := &sessionAwareDoer{
+		base:            doer,
+		protocolVersion: mcpAssistant.DefaultProtocolVersion,
+	}
 	mcpC := mcpAssistantjsonrpcc.NewClient(scheme, host, sessionDoer, enc, dec, restore)
 	sessionDoer.bootstrap = func(ctx context.Context) error {
 		_, err := mcpC.Initialize()(ctx, &mcpAssistant.InitializePayload{

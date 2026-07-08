@@ -8,8 +8,13 @@ import (
 	"net/http"
 )
 
-// HeaderKeySessionID is the MCP streamable HTTP session header.
-const HeaderKeySessionID = "Mcp-Session-Id"
+const (
+	// HeaderKeySessionID is the MCP streamable HTTP session header.
+	HeaderKeySessionID = "Mcp-Session-Id"
+
+	// HeaderKeyProtocolVersion is the MCP streamable HTTP protocol version header.
+	HeaderKeyProtocolVersion = "MCP-Protocol-Version"
+)
 
 type (
 	sessionIDKey      struct{}

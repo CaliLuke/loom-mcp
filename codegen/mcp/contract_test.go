@@ -478,6 +478,33 @@ func TestGenerateAdapter_RendersSkillResourceProvider(t *testing.T) {
 	require.Contains(t, rendered, `content, err := mcpskills.Read(ctx, skillSources, baseURI)`)
 }
 
+func TestGenerateAdapter_RendersSessionScopedEventPublishing(t *testing.T) {
+	restore := resetMCPCodegenState(t)
+	defer restore()
+
+	svc, _ := testService("assistant")
+	root := testRootExpr([]*expr.ServiceExpr{svc}, []*expr.HTTPServiceExpr{
+		jsonrpcService(svc, "/rpc"),
+	})
+	mcpexpr.Root.RegisterMCP(svc, &mcpexpr.MCPExpr{
+		Name:    "assistant",
+		Version: "0.1.0",
+	})
+
+	files, err := Generate("example.com/assistant/gen", []eval.Root{root}, nil)
+	require.NoError(t, err)
+
+	file := findGeneratedFile(t, files, filepath.Join(gcodegen.Gendir, "mcp_assistant", "adapter_server.go"))
+	rendered := renderGeneratedFile(t, file)
+
+	require.Contains(t, rendered, `func (a *MCPAdapter) PublishSession(sessionID string, ev *EventsStreamResult)`)
+	require.Contains(t, rendered, `scoped.PublishSession(sessionID, ev)`)
+	require.Contains(t, rendered, `func (a *MCPAdapter) PublishContext(ctx context.Context, ev *EventsStreamResult)`)
+	require.Contains(t, rendered, `a.PublishContext(ctx, ev)`)
+	require.Contains(t, rendered, `sessionID := mcpruntime.SessionIDFromContext(ctx)`)
+	require.Contains(t, rendered, `sub, err = scoped.SubscribeSession(ctx, sessionID)`)
+}
+
 func TestGenerateSDKServer_MergesContextRequestHeadersIntoSyntheticRequest(t *testing.T) {
 	restore := resetMCPCodegenState(t)
 	defer restore()
@@ -509,6 +536,10 @@ func TestGenerateSDKServer_MergesContextRequestHeadersIntoSyntheticRequest(t *te
 
 	require.NotEmpty(t, rendered)
 	require.Contains(t, rendered, "r = r.WithContext(mcpruntime.WithRequestHeaders(r.Context(), r.Header))")
+	require.NotContains(t, rendered, "serveSDKEventsStream(server, adapter, w, r)")
+	require.Contains(t, rendered, "if r.Method == http.MethodGet {")
+	require.Contains(t, rendered, "adapter.assertSessionPrincipal(r.Context(), sessionID)")
+	require.Contains(t, rendered, "http.Error(w, err.Error(), http.StatusForbidden)")
 	require.Contains(t, rendered, "sdkSyntheticHTTPRequest(ctx, extra)")
 	require.Contains(t, rendered, "for key, values := range mcpruntime.RequestHeadersFromContext(ctx)")
 
@@ -810,6 +841,10 @@ func TestGenerateMCPClientAdapter_SpecializesResourceQueryConstruction(t *testin
 	require.NotContains(t, rendered, "encodeMCPQueryValue")
 	require.Contains(t, rendered, "query := url.Values{}")
 	require.Contains(t, rendered, "type sessionAwareDoer struct")
+	require.Contains(t, rendered, "protocolVersion string")
+	require.Contains(t, rendered, `if method != "initialize" && d.protocolVersion != "" {`)
+	require.Contains(t, rendered, "req.Header.Set(mcpruntime.HeaderKeyProtocolVersion, d.protocolVersion)")
+	require.Contains(t, rendered, "protocolVersion: mcpAssistant.DefaultProtocolVersion")
 	require.Contains(t, rendered, "func jsonRPCMethod(req *http.Request) (string, error)")
 	require.Contains(t, rendered, `query.Add("cursor", payload.Cursor)`)
 	require.Contains(t, rendered, "if payload.Offset != nil {")
@@ -823,6 +858,15 @@ func TestGenerateMCPClientAdapter_SpecializesResourceQueryConstruction(t *testin
 	require.Contains(t, rendered, "for _, value := range payload.Tags {")
 	require.Contains(t, rendered, `query.Add("tags", value)`)
 	require.Contains(t, rendered, `query.Add("tenant", payload.Tenant)`)
+}
+
+func TestBuildMCPProtocolVersionFileKeepsConfiguredDefault(t *testing.T) {
+	file := buildMCPProtocolVersionFile("mcpdemo", "demo", "2025-06-18")
+	rendered := renderGeneratedFile(t, file)
+
+	require.Contains(t, rendered, `const DefaultProtocolVersion = "2025-06-18"`)
+	require.Contains(t, rendered, `"2025-11-25",`)
+	require.Contains(t, rendered, `"2025-06-18",`)
 }
 
 func TestApplyMCPPolicyHeadersToJSONRPCMount_RewritesRawMountSection(t *testing.T) {
@@ -846,18 +890,27 @@ func (s *Server) MountAssistant(mux goahttp.Muxer) {
 		},
 	}
 
-	require.NoError(t, applyMCPPolicyHeadersToJSONRPCMount([]*gcodegen.File{file}))
+	require.NoError(t, applyMCPPolicyHeadersToJSONRPCMount([]*gcodegen.File{file}, "2025-06-18"))
 
 	rendered := renderGeneratedFile(t, file)
 	require.Contains(t, rendered, `mux.Handle("POST", "/rpc", withMCPPolicyHeaders(h.ServeHTTP))`)
 	require.Contains(t, rendered, `mux.Handle("GET", "/rpc", withMCPPolicyHeaders(h.ServeHTTP))`)
 	require.Contains(t, rendered, `mux.Handle("DELETE", "/rpc", withMCPPolicyHeaders(h.ServeHTTP))`)
 	require.Contains(t, rendered, "func withMCPPolicyHeaders(next http.HandlerFunc) http.HandlerFunc {")
+	require.Contains(t, rendered, "func validateMCPProtocolVersionHeader(r *http.Request) error {")
+	require.Contains(t, rendered, `if method == "initialize" {`)
+	require.Contains(t, rendered, `if r.Header.Get(mcpruntime.HeaderKeySessionID) == "" {`)
+	require.Contains(t, rendered, `return fmt.Errorf("Missing %s header", mcpruntime.HeaderKeyProtocolVersion)`)
+	require.Contains(t, rendered, `for _, supported := range []string{"2025-11-25", "2025-06-18", "2025-03-26", "2024-11-05"} {`)
+	require.Contains(t, rendered, `return fmt.Errorf("Unsupported %s header %q", mcpruntime.HeaderKeyProtocolVersion, version)`)
 	require.Contains(t, rendered, `ctx = mcpruntime.WithAllowedResourceNames(ctx, allow)`)
 	require.Contains(t, rendered, `ctx = mcpruntime.WithDeniedResourceNames(ctx, deny)`)
 	require.NotContains(t, rendered, `context.WithValue(ctx, "mcp_allow_names", allow)`)
 	require.NotContains(t, rendered, `context.WithValue(ctx, "mcp_deny_names", deny)`)
 	require.Contains(t, rendered, `ctx = mcpruntime.WithResponseWriter(ctx, w)`)
+	require.Contains(t, rendered, `if acceptedMCPJSONRPCNotificationOrResponse(r) {`)
+	require.Contains(t, rendered, `w.WriteHeader(http.StatusAccepted)`)
+	require.Contains(t, rendered, `case "notifications/initialized", "notifications/cancelled", "notifications/progress", "notifications/roots/list_changed":`)
 }
 
 func TestApplyMCPPolicyHeadersToJSONRPCMount_RewritesRawMountSectionBySourceShape(t *testing.T) {
@@ -877,7 +930,7 @@ func MountAssistant(mux goahttp.Muxer, h *Server) {
 		},
 	}
 
-	require.NoError(t, applyMCPPolicyHeadersToJSONRPCMount([]*gcodegen.File{file}))
+	require.NoError(t, applyMCPPolicyHeadersToJSONRPCMount([]*gcodegen.File{file}, "2025-06-18"))
 
 	rendered := renderGeneratedFile(t, file)
 	require.Contains(t, rendered, `mux.Handle("POST", "/rpc", withMCPPolicyHeaders(h.ServeHTTP))`)
@@ -909,7 +962,7 @@ func TestApplyMCPPolicyHeadersToJSONRPCMount_RewritesJenniferMountSection(t *tes
 		},
 	}
 
-	require.NoError(t, applyMCPPolicyHeadersToJSONRPCMount([]*gcodegen.File{file}))
+	require.NoError(t, applyMCPPolicyHeadersToJSONRPCMount([]*gcodegen.File{file}, "2025-06-18"))
 
 	rendered := renderGeneratedFile(t, file)
 	require.Contains(t, rendered, `mux.Handle("POST", "/rpc", withMCPPolicyHeaders(h.ServeHTTP))`)
@@ -934,7 +987,7 @@ func MountAssistant(mux goahttp.Muxer, h *Server) {
 		},
 	}
 
-	err := applyMCPPolicyHeadersToJSONRPCMount([]*gcodegen.File{file})
+	err := applyMCPPolicyHeadersToJSONRPCMount([]*gcodegen.File{file}, "2025-06-18")
 
 	require.Error(t, err)
 	require.ErrorContains(t, err, "upstream JSON-RPC mount shape changed")

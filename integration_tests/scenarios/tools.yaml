@@ -236,7 +236,7 @@ scenarios:
           events:
             - event: message
               data:
-                error: { code: -32601 }
+                error: { code: -32602 }
 
   - name: tool_call_missing_args
     defaults:
@@ -450,4 +450,4 @@ scenarios:
           arguments: {}
         expect:
           status: error
-          error: { code: -32601 }
+          error: { code: -32602 }

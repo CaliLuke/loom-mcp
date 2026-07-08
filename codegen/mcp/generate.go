@@ -75,7 +75,7 @@ func Generate(genpkg string, roots []eval.Root, files []*codegen.File) ([]*codeg
 		}
 
 		// Generate MCP service code using Goa's standard generators (with retry hooks)
-		mcpFiles, err := generateMCPServiceCode(genpkg, mcpRoot, mcpService)
+		mcpFiles, err := generateMCPServiceCode(genpkg, mcpRoot, mcpService, adapterData.ProtocolVersion)
 		if err != nil {
 			return nil, err
 		}
@@ -157,7 +157,7 @@ func hasAgentRoot(roots []eval.Root) bool {
 
 // generateMCPServiceCode generates the MCP service layer and JSON-RPC transport
 // using Goa's built-in generators.
-func generateMCPServiceCode(genpkg string, root *expr.RootExpr, mcpService *expr.ServiceExpr) ([]*codegen.File, error) {
+func generateMCPServiceCode(genpkg string, root *expr.RootExpr, mcpService *expr.ServiceExpr, protocolVersion string) ([]*codegen.File, error) {
 	files := make([]*codegen.File, 0, 16)
 
 	// Create services data from temporary MCP root
@@ -188,7 +188,7 @@ func generateMCPServiceCode(genpkg string, root *expr.RootExpr, mcpService *expr
 	files = append(files, jsonrpccodegen.ClientTypeFiles(genpkg, httpServices)...)
 	files = append(files, jsonrpccodegen.ClientFiles(genpkg, httpServices)...)
 
-	if err := applyMCPPolicyHeadersToJSONRPCMount(files); err != nil {
+	if err := applyMCPPolicyHeadersToJSONRPCMount(files, protocolVersion); err != nil {
 		return nil, err
 	}
 	if err := applyMCPJSONRPCErrorCodes(files); err != nil {
@@ -204,7 +204,7 @@ func generateMCPServiceCode(genpkg string, root *expr.RootExpr, mcpService *expr
 // This avoids any string-based patching while ensuring header-driven allow/deny
 // policy can be enforced by MCP adapters without requiring example/server wiring
 // changes.
-func applyMCPPolicyHeadersToJSONRPCMount(files []*codegen.File) error {
+func applyMCPPolicyHeadersToJSONRPCMount(files []*codegen.File, protocolVersion string) error {
 	for _, f := range files {
 		if f == nil {
 			continue
@@ -212,7 +212,7 @@ func applyMCPPolicyHeadersToJSONRPCMount(files []*codegen.File) error {
 		if filepath.Base(filepath.Dir(filepath.ToSlash(f.Path))) != "server" || filepath.Base(f.Path) != "server.go" {
 			continue
 		}
-		rewritten, err := rewriteJSONRPCServerFile(f)
+		rewritten, err := rewriteJSONRPCServerFile(f, protocolVersion)
 		if err != nil {
 			return err
 		}
@@ -220,14 +220,17 @@ func applyMCPPolicyHeadersToJSONRPCMount(files []*codegen.File) error {
 			return fmt.Errorf("upstream JSON-RPC mount shape changed in %s: expected to wrap at least one mount handler with MCP policy headers", filepath.ToSlash(f.Path))
 		}
 		if header := f.HeaderTemplate(); header != nil {
+			codegen.AddImport(header, &codegen.ImportSpec{Path: "bytes"})
 			codegen.AddImport(header, &codegen.ImportSpec{Path: "encoding/json"})
+			codegen.AddImport(header, &codegen.ImportSpec{Path: "fmt"})
+			codegen.AddImport(header, &codegen.ImportSpec{Path: "io"})
 			codegen.AddImport(header, &codegen.ImportSpec{Path: "github.com/CaliLuke/loom-mcp/runtime/mcp", Name: "mcpruntime"})
 		}
 	}
 	return nil
 }
 
-func rewriteJSONRPCServerFile(file *codegen.File) (bool, error) {
+func rewriteJSONRPCServerFile(file *codegen.File, protocolVersion string) (bool, error) {
 	sections := file.AllSections()
 	if len(sections) == 0 {
 		return false, nil
@@ -235,7 +238,7 @@ func rewriteJSONRPCServerFile(file *codegen.File) (bool, error) {
 	updated := make([]codegen.Section, 0, len(sections))
 	rewritten := false
 	for _, section := range sections {
-		next, ok, err := rewriteJSONRPCServerSection(section)
+		next, ok, err := rewriteJSONRPCServerSection(section, protocolVersion)
 		if err != nil {
 			return false, err
 		}
@@ -246,29 +249,29 @@ func rewriteJSONRPCServerFile(file *codegen.File) (bool, error) {
 	return rewritten, nil
 }
 
-func rewriteJSONRPCServerSection(section codegen.Section) (codegen.Section, bool, error) {
+func rewriteJSONRPCServerSection(section codegen.Section, protocolVersion string) (codegen.Section, bool, error) {
 	switch sec := section.(type) {
 	case *codegen.SectionTemplate:
 		if sec == nil {
 			return nil, false, nil
 		}
-		if rewritten, ok, err := rewriteJSONRPCSectionByRenderedSource(sec); ok || err != nil {
+		if rewritten, ok, err := rewriteJSONRPCSectionByRenderedSource(sec, protocolVersion); ok || err != nil {
 			return rewritten, ok, err
 		}
 		return sec, false, nil
 	case *codegen.RawSection, *codegen.JenniferSection:
-		if rewritten, ok, err := rewriteJSONRPCSectionByRenderedSource(sec); ok || err != nil {
+		if rewritten, ok, err := rewriteJSONRPCSectionByRenderedSource(sec, protocolVersion); ok || err != nil {
 			return rewritten, ok, err
 		}
 	default:
-		if rewritten, ok, err := rewriteJSONRPCSectionByRenderedSource(section); ok || err != nil {
+		if rewritten, ok, err := rewriteJSONRPCSectionByRenderedSource(section, protocolVersion); ok || err != nil {
 			return rewritten, ok, err
 		}
 	}
 	return section, false, nil
 }
 
-func rewriteJSONRPCSectionByRenderedSource(section codegen.Section) (codegen.Section, bool, error) {
+func rewriteJSONRPCSectionByRenderedSource(section codegen.Section, protocolVersion string) (codegen.Section, bool, error) {
 	if section == nil {
 		return nil, false, nil
 	}
@@ -279,7 +282,7 @@ func rewriteJSONRPCSectionByRenderedSource(section codegen.Section) (codegen.Sec
 	if section.SectionName() != jsonrpcServerMountSectionName && !isJSONRPCMountSource(source) {
 		return nil, false, nil
 	}
-	rewritten, ok := rewriteJSONRPCServerMountSource(source)
+	rewritten, ok := rewriteJSONRPCServerMountSource(source, protocolVersion)
 	if !ok {
 		return nil, false, fmt.Errorf("upstream JSON-RPC mount shape changed in section %q: could not wrap any mount handler with MCP policy headers", section.SectionName())
 	}
@@ -303,7 +306,7 @@ func isJSONRPCMountSource(source string) bool {
 		(strings.Contains(source, "h.ServeHTTP") || strings.Contains(source, "h.handleSSE"))
 }
 
-func rewriteJSONRPCServerMountSource(source string) (string, bool) {
+func rewriteJSONRPCServerMountSource(source string, protocolVersion string) (string, bool) {
 	if source == "" {
 		return source, false
 	}
@@ -321,7 +324,7 @@ func rewriteJSONRPCServerMountSource(source string) (string, bool) {
 	if strings.Contains(updated, "func withMCPPolicyHeaders(") {
 		return updated, true
 	}
-	return strings.TrimRight(updated, "\n") + jsonrpcServerMountHelperSource, true
+	return strings.TrimRight(updated, "\n") + jsonrpcServerMountHelperSource(protocolVersion), true
 }
 
 func addMixedTransportSessionRoutes(source string) string {
@@ -485,7 +488,8 @@ case "method_not_found":
 	return updated, true
 }
 
-const jsonrpcServerMountHelperSource = `
+func jsonrpcServerMountHelperSource(protocolVersion string) string {
+	return fmt.Sprintf(`
 
 // withMCPPolicyHeaders propagates MCP policy header values into the request context.
 //
@@ -501,6 +505,22 @@ const jsonrpcServerMountHelperSource = `
 // to patch example servers or wire middleware manually.
 func withMCPPolicyHeaders(next http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
+		if err := validateMCPProtocolVersionHeader(r); err != nil {
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusBadRequest)
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"jsonrpc": "2.0",
+				"error": map[string]any{
+					"code":    -32602,
+					"message": err.Error(),
+				},
+			})
+			return
+		}
+		if acceptedMCPJSONRPCNotificationOrResponse(r) {
+			w.WriteHeader(http.StatusAccepted)
+			return
+		}
 		ctx := r.Context()
 		if allow := r.Header.Get("x-mcp-allow-names"); allow != "" {
 			ctx = mcpruntime.WithAllowedResourceNames(ctx, allow)
@@ -515,7 +535,112 @@ func withMCPPolicyHeaders(next http.HandlerFunc) http.HandlerFunc {
 		next(w, r.WithContext(ctx))
 	}
 }
-`
+
+func validateMCPProtocolVersionHeader(r *http.Request) error {
+	if r == nil {
+		return nil
+	}
+	method := ""
+	if r.Method == http.MethodPost {
+		parsed, err := jsonRPCRequestMethod(r)
+		if err != nil {
+			return err
+		}
+		method = parsed
+	}
+	if method == "initialize" {
+		return nil
+	}
+	version := r.Header.Get(mcpruntime.HeaderKeyProtocolVersion)
+	if version == "" {
+		if r.Header.Get(mcpruntime.HeaderKeySessionID) == "" {
+			return nil
+		}
+		return fmt.Errorf("Missing %%s header", mcpruntime.HeaderKeyProtocolVersion)
+	}
+	for _, supported := range []string{%s} {
+		if version == supported {
+			return nil
+		}
+	}
+	return fmt.Errorf("Unsupported %%s header %%q", mcpruntime.HeaderKeyProtocolVersion, version)
+}
+
+func jsonRPCRequestMethod(r *http.Request) (string, error) {
+	if r == nil || r.Body == nil {
+		return "", nil
+	}
+	body, err := io.ReadAll(r.Body)
+	if err != nil {
+		return "", err
+	}
+	r.Body = io.NopCloser(bytes.NewReader(body))
+	if len(body) == 0 {
+		return "", nil
+	}
+	var envelope map[string]any
+	if err := json.Unmarshal(body, &envelope); err != nil {
+		return "", nil
+	}
+	method, _ := envelope["method"].(string)
+	return method, nil
+}
+
+func acceptedMCPJSONRPCNotificationOrResponse(r *http.Request) bool {
+	if r == nil || r.Method != http.MethodPost || r.Body == nil {
+		return false
+	}
+	body, err := io.ReadAll(r.Body)
+	if err != nil {
+		return false
+	}
+	r.Body = io.NopCloser(bytes.NewReader(body))
+	if len(body) == 0 {
+		return false
+	}
+	var envelope map[string]any
+	if err := json.Unmarshal(body, &envelope); err != nil {
+		return false
+	}
+	if envelope["jsonrpc"] != "2.0" {
+		return false
+	}
+	method, _ := envelope["method"].(string)
+	if method == "" {
+		_, hasResult := envelope["result"]
+		_, hasError := envelope["error"]
+		return hasResult || hasError
+	}
+	if _, hasID := envelope["id"]; hasID {
+		return false
+	}
+	switch method {
+	case "notifications/initialized", "notifications/cancelled", "notifications/progress", "notifications/roots/list_changed":
+		return true
+	default:
+		return false
+	}
+}
+`, supportedProtocolVersionLiterals(protocolVersion))
+}
+
+func supportedProtocolVersionLiterals(protocolVersion string) string {
+	supported := supportedProtocolVersions(protocolVersion)
+	quoted := make([]string, 0, len(supported))
+	for _, version := range supported {
+		quoted = append(quoted, fmt.Sprintf("%q", version))
+	}
+	return strings.Join(quoted, ", ")
+}
+
+func supportedProtocolVersions(protocolVersion string) []string {
+	pv := defaultProtocolVersion(protocolVersion)
+	supported := []string{"2025-11-25", "2025-06-18", "2025-03-26", "2024-11-05"}
+	if !slices.Contains(supported, pv) {
+		supported = append([]string{pv}, supported...)
+	}
+	return supported
+}
 
 // generateMCPTransport generates adapter and prompt provider files that adapt
 // MCP protocol methods to the original service implementation.
@@ -674,14 +799,8 @@ func addAttributeImports(target map[string]*codegen.ImportSpec, genpkg string, a
 }
 
 func buildMCPProtocolVersionFile(pkgName, svcName, protocolVersion string) *codegen.File {
-	pv := protocolVersion
-	if pv == "" {
-		pv = "2025-11-25"
-	}
-	supported := []string{"2025-11-25", "2025-06-18", "2025-03-26", "2024-11-05"}
-	if !slices.Contains(supported, pv) {
-		supported = append([]string{pv}, supported...)
-	}
+	supported := supportedProtocolVersions(protocolVersion)
+	pv := defaultProtocolVersion(protocolVersion)
 	var list strings.Builder
 	for _, v := range supported {
 		fmt.Fprintf(&list, "\t%q,\n", v)
@@ -694,6 +813,13 @@ func buildMCPProtocolVersionFile(pkgName, svcName, protocolVersion string) *code
 			{Name: "mcp-protocol-version", Source: source},
 		},
 	}
+}
+
+func defaultProtocolVersion(protocolVersion string) string {
+	if protocolVersion != "" {
+		return protocolVersion
+	}
+	return "2025-11-25"
 }
 
 func buildMCPPromptProviderFile(genpkg string, svc *expr.ServiceExpr, data *AdapterData, svcName, pkgName string) *codegen.File {

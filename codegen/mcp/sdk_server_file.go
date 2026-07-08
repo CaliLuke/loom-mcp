@@ -289,8 +289,12 @@ func sdkServerHTTPSection() codegen.Section {
 								jen.Id("r").Op("=").Id("r").Dot("WithContext").Call(jen.Id("requestContext").Call(jen.Id("r").Dot("Context").Call(), jen.Id("r"))),
 							),
 							jen.If(jen.Id("r").Dot("Method").Op("==").Qual("net/http", "MethodGet")).Block(
-								jen.Id("serveSDKEventsStream").Call(jen.Id("server"), jen.Id("adapter"), jen.Id("w"), jen.Id("r")),
-								jen.Return(),
+								jen.If(jen.Id("sessionID").Op(":=").Id("r").Dot("Header").Dot("Get").Call(jen.Id("mcpruntime").Dot("HeaderKeySessionID")), jen.Id("sessionID").Op("!=").Lit("")).Block(
+									jen.If(jen.Id("err").Op(":=").Id("adapter").Dot("assertSessionPrincipal").Call(jen.Id("r").Dot("Context").Call(), jen.Id("sessionID")), jen.Id("err").Op("!=").Nil()).Block(
+										jen.Qual("net/http", "Error").Call(jen.Id("w"), jen.Id("err").Dot("Error").Call(), jen.Qual("net/http", "StatusForbidden")),
+										jen.Return(),
+									),
+								),
 							),
 							jen.List(jen.Id("transportObs"), jen.Id("transportW")).Op(":=").Qual("github.com/CaliLuke/loom/observability/transport", "BeginHTTPRequest").Call(
 								jen.Id("r").Dot("Context").Call(),

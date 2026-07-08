@@ -21,6 +21,33 @@ func adapterBroadcastSection() codegen.Section {
 			)
 		stmt.Line()
 
+		stmt.Comment("PublishSession sends an event to subscribers for one MCP session.").Line()
+		stmt.Func().Params(jen.Id("a").Op("*").Id("MCPAdapter")).
+			Id("PublishSession").
+			Params(jen.Id("sessionID").String(), jen.Id("ev").Op("*").Id("EventsStreamResult")).
+			Block(
+				jen.If(jen.Id("a").Op("==").Nil().Op("||").Id("a").Dot("broadcaster").Op("==").Nil()).Block(
+					jen.Return(),
+				),
+				jen.If(jen.Id("sessionID").Op("!=").Lit("")).Block(
+					jen.If(jen.List(jen.Id("scoped"), jen.Id("ok")).Op(":=").Id("a").Dot("broadcaster").Assert(jen.Id("mcpruntime").Dot("SessionBroadcaster")), jen.Id("ok")).Block(
+						jen.Id("scoped").Dot("PublishSession").Call(jen.Id("sessionID"), jen.Id("ev")),
+						jen.Return(),
+					),
+				),
+				jen.Id("a").Dot("broadcaster").Dot("Publish").Call(jen.Id("ev")),
+			)
+		stmt.Line()
+
+		stmt.Comment("PublishContext sends an event to subscribers for the MCP session in ctx.").Line()
+		stmt.Func().Params(jen.Id("a").Op("*").Id("MCPAdapter")).
+			Id("PublishContext").
+			Params(jen.Id("ctx").Qual("context", "Context"), jen.Id("ev").Op("*").Id("EventsStreamResult")).
+			Block(
+				jen.Id("a").Dot("PublishSession").Call(jen.Id("mcpruntime").Dot("SessionIDFromContext").Call(jen.Id("ctx")), jen.Id("ev")),
+			)
+		stmt.Line()
+
 		stmt.Comment("PublishStatus is a convenience to publish a status_update message.").Line()
 		stmt.Func().Params(jen.Id("a").Op("*").Id("MCPAdapter")).
 			Id("PublishStatus").
@@ -44,7 +71,8 @@ func adapterBroadcastSection() codegen.Section {
 				jen.If(jen.Id("err").Op("!=").Nil()).Block(
 					jen.Return(),
 				),
-				jen.Id("a").Dot("Publish").Call(
+				jen.Id("a").Dot("PublishContext").Call(
+					jen.Id("ctx"),
 					jen.Op("&").Id("EventsStreamResult").Values(jen.Dict{
 						jen.Id("Content"): jen.Index().Op("*").Id("ContentItem").Values(
 							jen.Id("buildContentItem").Call(jen.Id("a"), jen.Id("s")),
@@ -92,7 +120,7 @@ func adapterNotificationsSection() codegen.Section {
 						jen.Id("buildContentItem").Call(jen.Id("a"), jen.Id("s")),
 					),
 				}),
-				jen.Id("a").Dot("Publish").Call(jen.Id("ev")),
+				jen.Id("a").Dot("PublishContext").Call(jen.Id("ctx"), jen.Id("ev")),
 				jen.Id("a").Dot("log").Call(jen.Id("ctx"), jen.Lit("response"), jen.Map(jen.String()).Any().Values(jen.Dict{
 					jen.Lit("method"): jen.Lit("notify_status_update"),
 					jen.Lit("type"):   jen.Id("n").Dot("Type"),
@@ -116,7 +144,14 @@ func adapterNotificationsSection() codegen.Section {
 					jen.Lit("method"):     jen.Lit("events/stream"),
 					jen.Lit("session_id"): jen.Id("mcpruntime").Dot("SessionIDFromContext").Call(jen.Id("ctx")),
 				})),
-				jen.List(jen.Id("sub"), jen.Id("err")).Op(":=").Id("a").Dot("broadcaster").Dot("Subscribe").Call(jen.Id("ctx")),
+				jen.List(jen.Id("sessionID")).Op(":=").Id("mcpruntime").Dot("SessionIDFromContext").Call(jen.Id("ctx")),
+				jen.Var().Id("sub").Id("mcpruntime").Dot("Subscription"),
+				jen.Var().Id("err").Error(),
+				jen.If(jen.List(jen.Id("scoped"), jen.Id("ok")).Op(":=").Id("a").Dot("broadcaster").Assert(jen.Id("mcpruntime").Dot("SessionBroadcaster")), jen.Id("ok").Op("&&").Id("sessionID").Op("!=").Lit("")).Block(
+					jen.List(jen.Id("sub"), jen.Id("err")).Op("=").Id("scoped").Dot("SubscribeSession").Call(jen.Id("ctx"), jen.Id("sessionID")),
+				).Else().Block(
+					jen.List(jen.Id("sub"), jen.Id("err")).Op("=").Id("a").Dot("broadcaster").Dot("Subscribe").Call(jen.Id("ctx")),
+				),
 				jen.If(jen.Id("err").Op("!=").Nil()).Block(
 					jen.Return(jen.Id("loom").Dot("PermanentError").Call(jen.Lit("internal_error"), jen.Lit("Failed to subscribe to events: %v"), jen.Id("err"))),
 				),

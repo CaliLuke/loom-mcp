@@ -11,6 +11,7 @@ import (
 	"bufio"
 	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -478,6 +479,22 @@ func (s *Server) Mount(mux loomhttp.Muxer) {
 // to patch example servers or wire middleware manually.
 func withMCPPolicyHeaders(next http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
+		if err := validateMCPProtocolVersionHeader(r); err != nil {
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusBadRequest)
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"jsonrpc": "2.0",
+				"error": map[string]any{
+					"code":    -32602,
+					"message": err.Error(),
+				},
+			})
+			return
+		}
+		if acceptedMCPJSONRPCNotificationOrResponse(r) {
+			w.WriteHeader(http.StatusAccepted)
+			return
+		}
 		ctx := r.Context()
 		if allow := r.Header.Get("x-mcp-allow-names"); allow != "" {
 			ctx = mcpruntime.WithAllowedResourceNames(ctx, allow)
@@ -490,6 +507,92 @@ func withMCPPolicyHeaders(next http.HandlerFunc) http.HandlerFunc {
 		}
 		ctx = mcpruntime.WithResponseWriter(ctx, w)
 		next(w, r.WithContext(ctx))
+	}
+}
+
+func validateMCPProtocolVersionHeader(r *http.Request) error {
+	if r == nil {
+		return nil
+	}
+	method := ""
+	if r.Method == http.MethodPost {
+		parsed, err := jsonRPCRequestMethod(r)
+		if err != nil {
+			return err
+		}
+		method = parsed
+	}
+	if method == "initialize" {
+		return nil
+	}
+	version := r.Header.Get(mcpruntime.HeaderKeyProtocolVersion)
+	if version == "" {
+		if r.Header.Get(mcpruntime.HeaderKeySessionID) == "" {
+			return nil
+		}
+		return fmt.Errorf("Missing %s header", mcpruntime.HeaderKeyProtocolVersion)
+	}
+	for _, supported := range []string{"2025-11-25", "2025-06-18", "2025-03-26", "2024-11-05"} {
+		if version == supported {
+			return nil
+		}
+	}
+	return fmt.Errorf("Unsupported %s header %q", mcpruntime.HeaderKeyProtocolVersion, version)
+}
+
+func jsonRPCRequestMethod(r *http.Request) (string, error) {
+	if r == nil || r.Body == nil {
+		return "", nil
+	}
+	body, err := io.ReadAll(r.Body)
+	if err != nil {
+		return "", err
+	}
+	r.Body = io.NopCloser(bytes.NewReader(body))
+	if len(body) == 0 {
+		return "", nil
+	}
+	var envelope map[string]any
+	if err := json.Unmarshal(body, &envelope); err != nil {
+		return "", nil
+	}
+	method, _ := envelope["method"].(string)
+	return method, nil
+}
+
+func acceptedMCPJSONRPCNotificationOrResponse(r *http.Request) bool {
+	if r == nil || r.Method != http.MethodPost || r.Body == nil {
+		return false
+	}
+	body, err := io.ReadAll(r.Body)
+	if err != nil {
+		return false
+	}
+	r.Body = io.NopCloser(bytes.NewReader(body))
+	if len(body) == 0 {
+		return false
+	}
+	var envelope map[string]any
+	if err := json.Unmarshal(body, &envelope); err != nil {
+		return false
+	}
+	if envelope["jsonrpc"] != "2.0" {
+		return false
+	}
+	method, _ := envelope["method"].(string)
+	if method == "" {
+		_, hasResult := envelope["result"]
+		_, hasError := envelope["error"]
+		return hasResult || hasError
+	}
+	if _, hasID := envelope["id"]; hasID {
+		return false
+	}
+	switch method {
+	case "notifications/initialized", "notifications/cancelled", "notifications/progress", "notifications/roots/list_changed":
+		return true
+	default:
+		return false
 	}
 }
 

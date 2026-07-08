@@ -27,6 +27,14 @@ type Broadcaster interface {
 	Close() error
 }
 
+// SessionBroadcaster scopes subscriptions and publishes to an MCP session.
+type SessionBroadcaster interface {
+	// SubscribeSession registers a new subscriber for one session.
+	SubscribeSession(ctx context.Context, sessionID string) (Subscription, error)
+	// PublishSession delivers an event to subscribers for one session.
+	PublishSession(sessionID string, ev any)
+}
+
 // Subscription represents a live registration with a Broadcaster.
 //
 // The channel returned by C delivers events in publish order. The channel is
@@ -40,11 +48,12 @@ type Subscription interface {
 }
 
 type channelBroadcaster struct {
-	mu     sync.RWMutex
-	subs   map[*channelSub]struct{}
-	buf    int
-	drop   bool
-	closed bool
+	mu          sync.RWMutex
+	subs        map[*channelSub]struct{}
+	sessionSubs map[string]map[*channelSub]struct{}
+	buf         int
+	drop        bool
+	closed      bool
 }
 
 // NewChannelBroadcaster constructs an in-memory Broadcaster backed by buffered
@@ -58,17 +67,23 @@ type channelBroadcaster struct {
 //     buffer space, applying back-pressure to publishers.
 func NewChannelBroadcaster(buf int, drop bool) Broadcaster {
 	return &channelBroadcaster{
-		subs: make(map[*channelSub]struct{}),
-		buf:  buf,
-		drop: drop,
+		subs:        make(map[*channelSub]struct{}),
+		sessionSubs: make(map[string]map[*channelSub]struct{}),
+		buf:         buf,
+		drop:        drop,
 	}
 }
 
 func (b *channelBroadcaster) Subscribe(ctx context.Context) (Subscription, error) {
+	return b.SubscribeSession(ctx, "")
+}
+
+func (b *channelBroadcaster) SubscribeSession(ctx context.Context, sessionID string) (Subscription, error) {
 	sub := &channelSub{
-		ch:     make(chan any, b.buf),
-		parent: b,
-		done:   make(chan struct{}),
+		ch:        make(chan any, b.buf),
+		parent:    b,
+		done:      make(chan struct{}),
+		sessionID: sessionID,
 	}
 	b.mu.Lock()
 	if b.closed {
@@ -77,7 +92,16 @@ func (b *channelBroadcaster) Subscribe(ctx context.Context) (Subscription, error
 		sub.closeDone()
 		return sub, nil
 	}
-	b.subs[sub] = struct{}{}
+	if sessionID != "" {
+		sessionSubs := b.sessionSubs[sessionID]
+		if sessionSubs == nil {
+			sessionSubs = make(map[*channelSub]struct{})
+			b.sessionSubs[sessionID] = sessionSubs
+		}
+		sessionSubs[sub] = struct{}{}
+	} else {
+		b.subs[sub] = struct{}{}
+	}
 	b.mu.Unlock()
 
 	go func() {
@@ -96,16 +120,20 @@ func (b *channelBroadcaster) Publish(ev any) {
 	if b.closed {
 		return
 	}
-	for sub := range b.subs {
-		select {
-		case sub.ch <- ev:
-		default:
-			if !b.drop {
-				// block until space is available
-				sub.ch <- ev
-			}
-		}
+	b.publishLocked(b.subs, ev)
+}
+
+func (b *channelBroadcaster) PublishSession(sessionID string, ev any) {
+	b.mu.RLock()
+	defer b.mu.RUnlock()
+	if b.closed {
+		return
 	}
+	if sessionID == "" {
+		b.publishLocked(b.subs, ev)
+		return
+	}
+	b.publishLocked(b.sessionSubs[sessionID], ev)
 }
 
 func (b *channelBroadcaster) Close() error {
@@ -120,15 +148,30 @@ func (b *channelBroadcaster) Close() error {
 		sub.closeDone()
 		delete(b.subs, sub)
 	}
+	clear(b.sessionSubs)
 	b.mu.Unlock()
 	return nil
 }
 
+func (b *channelBroadcaster) publishLocked(subs map[*channelSub]struct{}, ev any) {
+	for sub := range subs {
+		select {
+		case sub.ch <- ev:
+		default:
+			if !b.drop {
+				// block until space is available
+				sub.ch <- ev
+			}
+		}
+	}
+}
+
 type channelSub struct {
-	ch     chan any
-	parent *channelBroadcaster
-	done   chan struct{}
-	once   sync.Once
+	ch        chan any
+	parent    *channelBroadcaster
+	done      chan struct{}
+	sessionID string
+	once      sync.Once
 }
 
 func (s *channelSub) C() <-chan any { return s.ch }
@@ -138,9 +181,17 @@ func (s *channelSub) Close() error {
 		return nil
 	}
 	s.parent.mu.Lock()
-	if _, ok := s.parent.subs[s]; ok {
+	if s.sessionID == "" {
+		if _, ok := s.parent.subs[s]; ok {
+			close(s.ch)
+			delete(s.parent.subs, s)
+		}
+	} else if _, ok := s.parent.sessionSubs[s.sessionID][s]; ok {
 		close(s.ch)
-		delete(s.parent.subs, s)
+		delete(s.parent.sessionSubs[s.sessionID], s)
+		if len(s.parent.sessionSubs[s.sessionID]) == 0 {
+			delete(s.parent.sessionSubs, s.sessionID)
+		}
 	}
 	s.parent.mu.Unlock()
 	s.closeDone()

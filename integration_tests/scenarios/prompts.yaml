@@ -76,7 +76,7 @@ scenarios:
         input: { name: non_existent_prompt, arguments: {} }
         expect:
           status: error
-          error: { code: -32601 }
+          error: { code: -32602 }
 
   - name: prompts_get_missing_name
     defaults:

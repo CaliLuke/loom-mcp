@@ -147,7 +147,7 @@ scenarios:
         input: { uri: "invalid://resource" }
         expect:
           status: error
-          error: { code: -32601 }
+          error: { code: -32002 }
 
   - name: resources_read_denied_uri
     defaults:
@@ -176,10 +176,10 @@ scenarios:
         input: { uri: "doc://list" }
         expect:
           status: error
-          error: { code: -32601 }
+          error: { code: -32002 }
       - name: unsubscribe
         op: ResourcesUnsubscribe
         input: { uri: "doc://list" }
         expect:
           status: error
-          error: { code: -32601 }
+          error: { code: -32002 }

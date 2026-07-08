@@ -156,6 +156,7 @@ func (r *Runner) executeSSE(
 	req, _ := http.NewRequestWithContext(context.Background(), http.MethodPost, r.baseURL.String()+"/rpc", bytes.NewReader(body))
 	if r.sessionID != "" {
 		req.Header.Set(mcpruntime.HeaderKeySessionID, r.sessionID)
+		req.Header.Set(mcpruntime.HeaderKeyProtocolVersion, "2025-06-18")
 	}
 	for key, value := range headers {
 		req.Header.Set(key, value)
@@ -413,6 +414,7 @@ func cliSubcommandNeedsBody(subcmd string) bool {
 func applyJSONRPCHeaders(req *http.Request, sessionID string, headers map[string]string) {
 	if sessionID != "" {
 		req.Header.Set(mcpruntime.HeaderKeySessionID, sessionID)
+		req.Header.Set(mcpruntime.HeaderKeyProtocolVersion, "2025-06-18")
 	}
 	for key, value := range headers {
 		if strings.HasPrefix(key, "MCP_") {

@@ -86,6 +86,7 @@ func TestMCPClientAdapterReturnsRetryPromptOnInvalidToolResponse(t *testing.T) {
 		switch req.Method {
 		case "initialize":
 			initializeCalls++
+			assert.Empty(t, r.Header.Get("MCP-Protocol-Version"))
 			assertInitializeProtocolVersion(t, req)
 			writeJSONRPCBody(t, w, map[string]any{
 				"jsonrpc": "2.0",
@@ -100,6 +101,7 @@ func TestMCPClientAdapterReturnsRetryPromptOnInvalidToolResponse(t *testing.T) {
 			})
 		case "tools/call":
 			toolCalls++
+			assert.Equal(t, mcpAssistant.DefaultProtocolVersion, r.Header.Get("MCP-Protocol-Version"))
 			writeSSEJSONRPCBody(t, w, map[string]any{
 				"jsonrpc": "2.0",
 				"error": map[string]any{
@@ -143,6 +145,7 @@ func newMCPAdapterTestServer(t *testing.T, toolResult map[string]any) *httptest.
 		switch req.Method {
 		case "initialize":
 			initializeCalls++
+			assert.Empty(t, r.Header.Get("MCP-Protocol-Version"))
 			assertInitializeProtocolVersion(t, req)
 			response = map[string]any{
 				"jsonrpc": "2.0",
@@ -161,6 +164,7 @@ func newMCPAdapterTestServer(t *testing.T, toolResult map[string]any) *httptest.
 			}
 		case "tools/call":
 			toolCalls++
+			assert.Equal(t, mcpAssistant.DefaultProtocolVersion, r.Header.Get("MCP-Protocol-Version"))
 			require.GreaterOrEqual(t, initializeCalls, 1, "tools/call must follow initialize")
 			response = map[string]any{
 				"jsonrpc": "2.0",

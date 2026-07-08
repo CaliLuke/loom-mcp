@@ -8,7 +8,6 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"strings"
-	"sync"
 	"testing"
 	"time"
 
@@ -19,26 +18,10 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestGeneratedSDKServerEventsStreamEnforcesSessionPrincipal(t *testing.T) {
+func TestGeneratedSDKServerGETEnforcesSessionPrincipal(t *testing.T) {
 	t.Parallel()
 
-	var (
-		logMu   sync.Mutex
-		logs    []string
-		sdkLogs []map[string]any
-	)
-	sdkServer, err := mcpassistant.NewSDKServer(NewAssistant(), &mcpassistant.SDKServerOptions{
-		Adapter: &mcpassistant.MCPAdapterOptions{
-			Logger: func(_ context.Context, event string, details any) {
-				logMu.Lock()
-				defer logMu.Unlock()
-				logs = append(logs, event)
-				if m, ok := details.(map[string]any); ok {
-					sdkLogs = append(sdkLogs, m)
-				}
-			},
-		},
-	})
+	sdkServer, err := mcpassistant.NewSDKServer(NewAssistant(), nil)
 	require.NoError(t, err)
 	mux := http.NewServeMux()
 	mux.Handle("/rpc", sdkServer.Handler)
@@ -63,42 +46,20 @@ func TestGeneratedSDKServerEventsStreamEnforcesSessionPrincipal(t *testing.T) {
 
 	sessionID := initializeProtectedSDKSession(t, ctx, protected.URL+"/rpc", "user-1")
 
-	streamCtx, streamCancel := context.WithTimeout(context.Background(), 2*time.Second)
-	defer streamCancel()
-
-	streamReq, err := http.NewRequestWithContext(streamCtx, http.MethodGet, protected.URL+"/rpc", nil)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, protected.URL+"/rpc", nil)
 	require.NoError(t, err)
-	streamReq.Header.Set("Accept", "text/event-stream")
-	streamReq.Header.Set("Authorization", "Bearer user-1")
-	streamReq.Header.Set(mcpruntime.HeaderKeySessionID, sessionID)
+	req.Header.Set("Accept", "text/event-stream")
+	req.Header.Set("Authorization", "Bearer user-2")
+	req.Header.Set(mcpruntime.HeaderKeySessionID, sessionID)
 
-	streamResp, err := http.DefaultClient.Do(streamReq)
+	resp, err := http.DefaultClient.Do(req)
 	require.NoError(t, err)
-	assert.Equal(t, http.StatusOK, streamResp.StatusCode)
-	assert.Equal(t, "text/event-stream", streamResp.Header.Get("Content-Type"))
-	require.NoError(t, streamResp.Body.Close())
+	defer resp.Body.Close()
 
-	wrongReq, err := http.NewRequestWithContext(ctx, http.MethodGet, protected.URL+"/rpc", nil)
+	body, err := io.ReadAll(resp.Body)
 	require.NoError(t, err)
-	wrongReq.Header.Set("Accept", "text/event-stream")
-	wrongReq.Header.Set("Authorization", "Bearer user-2")
-	wrongReq.Header.Set(mcpruntime.HeaderKeySessionID, sessionID)
-
-	wrongResp, err := http.DefaultClient.Do(wrongReq)
-	require.NoError(t, err)
-	defer wrongResp.Body.Close()
-
-	body, err := io.ReadAll(wrongResp.Body)
-	require.NoError(t, err)
-	assert.Equal(t, http.StatusForbidden, wrongResp.StatusCode)
+	assert.Equal(t, http.StatusForbidden, resp.StatusCode)
 	assert.Contains(t, string(body), "session user mismatch")
-
-	logMu.Lock()
-	defer logMu.Unlock()
-	assert.Contains(t, logs, "events_stream_open")
-	assert.Contains(t, logs, "events_stream_connected")
-	assert.Contains(t, logs, "events_stream_rejected")
-	assert.True(t, hasStreamLog(sdkLogs, "session_principal_mismatch"))
 }
 
 func initializeProtectedSDKSession(t *testing.T, ctx context.Context, endpoint string, token string) string {
@@ -136,16 +97,4 @@ func initializeProtectedSDKSession(t *testing.T, ctx context.Context, endpoint s
 	sessionID := resp.Header.Get(mcpruntime.HeaderKeySessionID)
 	require.NotEmpty(t, sessionID)
 	return sessionID
-}
-
-func hasStreamLog(entries []map[string]any, reason string) bool {
-	for _, entry := range entries {
-		if entry == nil {
-			continue
-		}
-		if got, _ := entry["reason"].(string); got == reason {
-			return true
-		}
-	}
-	return false
 }

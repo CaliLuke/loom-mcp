@@ -99,7 +99,7 @@ var _ = Service("assistant", func() {
 
 	// Static prompt for tests
 	StaticPrompt("code_review", "Simple code review prompt",
-		"system", "Review the provided code and suggest improvements.",
+		"user", "Review the provided code and suggest improvements.",
 		RuntimePrompt("assistant.chat", "system", RuntimePromptVersion("v1")),
 		PromptIcons(
 			Icon("https://assistant.example.com/icons/code-review.svg",

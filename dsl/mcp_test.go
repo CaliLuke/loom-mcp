@@ -147,8 +147,8 @@ func TestMCPStaticPrompt(t *testing.T) {
 		Service("assistant", func() {
 			MCP("assistant", "1.0")
 			StaticPrompt("greeting", "Friendly greeting",
-				"system", "You are a helpful assistant",
 				"user", "Hello!",
+				"assistant", "How can I help?",
 				PromptIcons(
 					Icon("https://example.com/icons/greeting.svg",
 						IconMIMEType("image/svg+xml"),
@@ -167,10 +167,10 @@ func TestMCPStaticPrompt(t *testing.T) {
 	require.Equal(t, "greeting", prompt.Name)
 	require.Equal(t, "Friendly greeting", prompt.Description)
 	require.Len(t, prompt.Messages, 2)
-	require.Equal(t, "system", prompt.Messages[0].Role)
-	require.Equal(t, "You are a helpful assistant", prompt.Messages[0].Content)
-	require.Equal(t, "user", prompt.Messages[1].Role)
-	require.Equal(t, "Hello!", prompt.Messages[1].Content)
+	require.Equal(t, "user", prompt.Messages[0].Role)
+	require.Equal(t, "Hello!", prompt.Messages[0].Content)
+	require.Equal(t, "assistant", prompt.Messages[1].Role)
+	require.Equal(t, "How can I help?", prompt.Messages[1].Content)
 	require.Len(t, prompt.Icons, 1)
 	require.Equal(t, "https://example.com/icons/greeting.svg", prompt.Icons[0].Source)
 }
@@ -181,7 +181,7 @@ func TestMCPStaticPromptRuntimePromptSpec(t *testing.T) {
 		Service("assistant", func() {
 			MCP("assistant", "1.0")
 			StaticPrompt("greeting", "Friendly greeting",
-				"system", "You are {{ .Name }}",
+				"user", "You are {{ .Name }}",
 				RuntimePrompt("assistant.chat", "system", RuntimePromptVersion("v1")),
 			)
 		})
@@ -203,13 +203,27 @@ func TestMCPStaticPromptRejectsOddRoleContentStrings(t *testing.T) {
 		Service("assistant", func() {
 			MCP("assistant", "1.0")
 			StaticPrompt("greeting", "Friendly greeting",
-				"system", "You are a helpful assistant",
+				"user", "You are a helpful assistant",
 				"user",
 			)
 		})
 	})
 
 	require.Contains(t, err, `StaticPrompt "greeting" requires role/content string pairs; missing content for role "user"`)
+}
+
+func TestMCPStaticPromptRejectsSystemRole(t *testing.T) {
+	err := runInvalidMCPDSL(t, func() {
+		API("test", func() {})
+		Service("assistant", func() {
+			MCP("assistant", "1.0")
+			StaticPrompt("greeting", "Friendly greeting",
+				"system", "You are a helpful assistant",
+			)
+		})
+	})
+
+	require.Contains(t, err, "prompt message role must be user or assistant")
 }
 
 func TestMCPDynamicPrompt(t *testing.T) {

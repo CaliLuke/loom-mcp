@@ -156,6 +156,7 @@ func emitClientAdapterHelpers(stmt *jen.Statement, data *clientAdapterFileData) 
 	stmt.Type().Id("sessionAwareDoer").Struct(
 		jen.Id("base").Id("goahttp").Dot("Doer"),
 		jen.Id("bootstrap").Func().Params(jen.Qual("context", "Context")).Error(),
+		jen.Id("protocolVersion").String(),
 		jen.Id("initMu").Qual("sync", "Mutex"),
 		jen.Id("sessionMu").Qual("sync", "Mutex"),
 		jen.Id("sessionID").String(),
@@ -174,6 +175,9 @@ func emitClientAdapterHelpers(stmt *jen.Statement, data *clientAdapterFileData) 
 			jen.List(jen.Id("method"), jen.Id("err")).Op(":=").Id("jsonRPCMethod").Call(jen.Id("req")),
 			jen.If(jen.Id("err").Op("!=").Nil()).Block(
 				jen.Return(jen.Nil(), jen.Id("err")),
+			),
+			jen.If(jen.Id("method").Op("!=").Lit("initialize").Op("&&").Id("d").Dot("protocolVersion").Op("!=").Lit("")).Block(
+				jen.Id("req").Dot("Header").Dot("Set").Call(jen.Id("mcpruntime").Dot("HeaderKeyProtocolVersion"), jen.Id("d").Dot("protocolVersion")),
 			),
 			jen.If(jen.Id("method").Op("!=").Lit("").Op("&&").Id("method").Op("!=").Lit("initialize")).Block(
 				jen.If(jen.Id("err").Op(":=").Id("d").Dot("ensureInitialized").Call(jen.Id("req").Dot("Context").Call()), jen.Id("err").Op("!=").Nil()).Block(
@@ -279,7 +283,8 @@ func emitClientAdapterNewEndpoints(stmt *jen.Statement, data *clientAdapterFileD
 		Op("*").Id(data.ServicePkg).Dot("Endpoints").
 		BlockFunc(func(g *jen.Group) {
 			g.Id("sessionDoer").Op(":=").Op("&").Id("sessionAwareDoer").Values(jen.Dict{
-				jen.Id("base"): jen.Id("doer"),
+				jen.Id("base"):            jen.Id("doer"),
+				jen.Id("protocolVersion"): jen.Id(data.MCPPkgAlias).Dot("DefaultProtocolVersion"),
 			})
 			if data.NeedsMCPClient {
 				g.Id("mcpC").Op(":=").Id(data.MCPJSONRPCCAlias).Dot("NewClient").Call(
