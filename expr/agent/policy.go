@@ -166,6 +166,8 @@ func (r *RunPolicyExpr) EvalName() string {
 // Validate enforces semantic constraints on the run policy.
 func (r *RunPolicyExpr) Validate() error {
 	verr := new(eval.ValidationErrors)
+	r.validateTiming(verr)
+	r.validateCaps(verr)
 	r.validateMissingFields(verr)
 	r.validateHistory(verr)
 	r.validateRetryAndReflect(verr)
@@ -176,6 +178,30 @@ func (r *RunPolicyExpr) Validate() error {
 		return nil
 	}
 	return verr
+}
+
+func (r *RunPolicyExpr) validateTiming(verr *eval.ValidationErrors) {
+	if r.TimeBudget < 0 {
+		verr.Add(r, "TimeBudget must be non-negative")
+	}
+	if r.PlanTimeout < 0 {
+		verr.Add(r, "PlanTimeout must be non-negative")
+	}
+	if r.ToolTimeout < 0 {
+		verr.Add(r, "ToolTimeout must be non-negative")
+	}
+}
+
+func (r *RunPolicyExpr) validateCaps(verr *eval.ValidationErrors) {
+	if r.DefaultCaps == nil {
+		return
+	}
+	if r.DefaultCaps.MaxToolCalls < 0 {
+		verr.Add(r.DefaultCaps, "MaxToolCalls must be non-negative")
+	}
+	if r.DefaultCaps.MaxConsecutiveFailedToolCall < 0 {
+		verr.Add(r.DefaultCaps, "MaxConsecutiveFailedToolCalls must be non-negative")
+	}
 }
 
 func (r *RunPolicyExpr) validatePreloadLongTermMemory(verr *eval.ValidationErrors) {
@@ -309,6 +335,9 @@ func (c *CacheExpr) EvalName() string {
 
 // EvalName returns a descriptive identifier for error reporting.
 func (c *CapsExpr) EvalName() string {
+	if c == nil || c.Policy == nil || c.Policy.Agent == nil {
+		return "caps"
+	}
 	return fmt.Sprintf("caps for agent %q", c.Policy.Agent.Name)
 }
 

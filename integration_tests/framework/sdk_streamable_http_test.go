@@ -98,7 +98,7 @@ func TestGeneratedServerSDKCallToolWorks(t *testing.T) {
 
 	firstText, ok := res.Content[0].(*mcp.TextContent)
 	require.True(t, ok)
-	assert.Equal(t, "positive", firstText.Text)
+	assert.JSONEq(t, `{"sentiment":"positive"}`, firstText.Text)
 
 	structured, err := json.Marshal(res.StructuredContent)
 	require.NoError(t, err)

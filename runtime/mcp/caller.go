@@ -110,12 +110,14 @@ func hasStructuredPayload(v any) bool {
 		return false
 	}
 	rv := reflect.ValueOf(v)
+	//nolint:exhaustive // Only nil-capable kinds need IsNil checks here.
 	switch rv.Kind() {
 	case reflect.Chan, reflect.Func, reflect.Interface, reflect.Map, reflect.Pointer, reflect.Slice:
 		if rv.IsNil() {
 			return false
 		}
 	}
+	//nolint:exhaustive // Other non-nil kinds are intentionally treated as structured payloads.
 	switch rv.Kind() {
 	case reflect.Array, reflect.Map, reflect.Slice, reflect.String:
 		return rv.Len() > 0
@@ -221,7 +223,7 @@ func normalizeSDKToolResult(res *mcp.CallToolResult) (CallResponse, error) {
 	}
 
 	textParts := make([]string, 0, len(res.Content))
-	var structured []any
+	structured := make([]any, 0, len(res.Content))
 
 	for _, item := range res.Content {
 		structured = append(structured, item)

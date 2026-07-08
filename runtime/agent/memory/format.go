@@ -13,7 +13,7 @@ const (
 
 // FormatEntriesForPrompt renders long-term memory entries into stable planner prompt text.
 func FormatEntriesForPrompt(entries []Entry) string {
-	var lines []string
+	lines := make([]string, 0, len(entries)*2)
 	for _, entry := range entries {
 		content := strings.TrimSpace(entry.Content)
 		if content == "" {

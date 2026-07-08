@@ -34,7 +34,6 @@ func findExampleRoot() string {
 	return ""
 }
 
-//nolint:gosec // Test fixture cloning preserves fixture modes and copies a known tree.
 func cloneExampleRoot(exampleRoot string) (string, error) {
 	tmpBase := filepath.Join(filepath.Dir(filepath.Dir(exampleRoot)), ".tmp")
 	if err := os.MkdirAll(tmpBase, 0o750); err != nil {

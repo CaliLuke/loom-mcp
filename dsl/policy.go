@@ -1,8 +1,6 @@
 package dsl
 
 import (
-	"time"
-
 	expragents "github.com/CaliLuke/loom-mcp/expr/agent"
 	"github.com/CaliLuke/loom/eval"
 )
@@ -109,9 +107,8 @@ func TimeBudget(duration string) {
 		eval.IncompatibleDSL()
 		return
 	}
-	dur, err := time.ParseDuration(duration)
-	if err != nil {
-		eval.ReportError("invalid duration %q: %w", duration, err)
+	dur, ok := parsePositiveDuration("TimeBudget", duration)
+	if !ok {
 		return
 	}
 	policy.TimeBudget = dur
@@ -321,6 +318,10 @@ func ErrorIfRetryExceeded(enabled bool) RetryAndReflectOption {
 //	DefaultCaps(MaxToolCalls(15))
 func MaxToolCalls(n int) CapsOption {
 	return func(c *expragents.CapsExpr) {
+		if n <= 0 {
+			eval.ReportError("MaxToolCalls requires n > 0, got %d", n)
+			return
+		}
 		c.MaxToolCalls = n
 	}
 }
@@ -337,6 +338,10 @@ func MaxToolCalls(n int) CapsOption {
 //	DefaultCaps(MaxConsecutiveFailedToolCalls(3))
 func MaxConsecutiveFailedToolCalls(n int) CapsOption {
 	return func(c *expragents.CapsExpr) {
+		if n <= 0 {
+			eval.ReportError("MaxConsecutiveFailedToolCalls requires n > 0, got %d", n)
+			return
+		}
 		c.MaxConsecutiveFailedToolCall = n
 	}
 }

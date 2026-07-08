@@ -76,9 +76,8 @@ func Budget(duration string) {
 		eval.IncompatibleDSL()
 		return
 	}
-	dur, err := time.ParseDuration(duration)
-	if err != nil {
-		eval.ReportError("invalid duration %q: %w", duration, err)
+	dur, ok := parsePositiveDuration("Budget", duration)
+	if !ok {
 		return
 	}
 	policy.TimeBudget = dur
@@ -108,9 +107,8 @@ func Plan(duration string) {
 		eval.IncompatibleDSL()
 		return
 	}
-	dur, err := time.ParseDuration(duration)
-	if err != nil {
-		eval.ReportError("invalid duration %q: %w", duration, err)
+	dur, ok := parsePositiveDuration("Plan", duration)
+	if !ok {
 		return
 	}
 	policy.PlanTimeout = dur
@@ -142,10 +140,22 @@ func Tools(duration string) {
 		eval.IncompatibleDSL()
 		return
 	}
-	dur, err := time.ParseDuration(duration)
-	if err != nil {
-		eval.ReportError("invalid duration %q: %w", duration, err)
+	dur, ok := parsePositiveDuration("Tools", duration)
+	if !ok {
 		return
 	}
 	policy.ToolTimeout = dur
+}
+
+func parsePositiveDuration(name string, duration string) (time.Duration, bool) {
+	dur, err := time.ParseDuration(duration)
+	if err != nil {
+		eval.ReportError("invalid duration %q: %w", duration, err)
+		return 0, false
+	}
+	if dur <= 0 {
+		eval.ReportError("%s requires duration > 0, got %q", name, duration)
+		return 0, false
+	}
+	return dur, true
 }

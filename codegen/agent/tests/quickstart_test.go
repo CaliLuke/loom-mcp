@@ -167,7 +167,6 @@ func copyDir(src, dst string) error {
 		if err := os.MkdirAll(filepath.Dir(target), 0o750); err != nil {
 			return err
 		}
-		//nolint:gosec // Test helper copies trusted fixture files into a temp workspace.
 		return os.WriteFile(target, data, info.Mode())
 	})
 }
@@ -215,14 +214,12 @@ func rewriteQuickstartGoMod(repoRoot string, quickstartDir string) error {
 		}
 	}
 
-	//nolint:gosec // Test helper rewrites a trusted copied fixture file inside t.TempDir().
 	return os.WriteFile(modPath, []byte(updated), 0o600)
 }
 
 func runCommand(t *testing.T, ctx context.Context, dir string, args ...string) []byte {
 	t.Helper()
 
-	//nolint:gosec // Test helper executes repo-controlled tooling commands.
 	cmd := exec.CommandContext(ctx, "go", args...)
 	cmd.Dir = dir
 	out, err := cmd.CombinedOutput()
@@ -238,7 +235,6 @@ func runStartableCommand(t *testing.T, dir string, name string, args ...string) 
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
 
-	//nolint:gosec // Test helper executes a binary built in the temp fixture workspace.
 	cmd := exec.CommandContext(ctx, name, args...)
 	cmd.Dir = dir
 

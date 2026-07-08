@@ -67,7 +67,7 @@ func collectUnionEnvelopes(payload *expr.AttributeExpr) []UnionEnvelopeMeta {
 	if obj == nil {
 		return nil
 	}
-	var out []UnionEnvelopeMeta
+	out := make([]UnionEnvelopeMeta, 0, len(*obj))
 	for _, nat := range *obj {
 		if nat == nil || nat.Attribute == nil {
 			continue

@@ -79,6 +79,91 @@ func TestRunPolicyDefaults(t *testing.T) {
 	require.Equal(t, 45*time.Second, policy.TimeBudget)
 }
 
+func TestRunPolicyRejectsNonPositiveCapsAndBudgets(t *testing.T) {
+	cases := []struct {
+		name string
+		dsl  func()
+		err  string
+	}{
+		{
+			name: "negative max tool calls",
+			dsl: func() {
+				DefaultCaps(MaxToolCalls(-5))
+			},
+			err: "MaxToolCalls requires n > 0",
+		},
+		{
+			name: "zero max tool calls",
+			dsl: func() {
+				DefaultCaps(MaxToolCalls(0))
+			},
+			err: "MaxToolCalls requires n > 0",
+		},
+		{
+			name: "negative max consecutive failed tool calls",
+			dsl: func() {
+				DefaultCaps(MaxConsecutiveFailedToolCalls(-1))
+			},
+			err: "MaxConsecutiveFailedToolCalls requires n > 0",
+		},
+		{
+			name: "zero max consecutive failed tool calls",
+			dsl: func() {
+				DefaultCaps(MaxConsecutiveFailedToolCalls(0))
+			},
+			err: "MaxConsecutiveFailedToolCalls requires n > 0",
+		},
+		{
+			name: "negative time budget",
+			dsl: func() {
+				TimeBudget("-3s")
+			},
+			err: "TimeBudget requires duration > 0",
+		},
+		{
+			name: "zero time budget",
+			dsl: func() {
+				TimeBudget("0s")
+			},
+			err: "TimeBudget requires duration > 0",
+		},
+		{
+			name: "negative budget",
+			dsl: func() {
+				Budget("-3s")
+			},
+			err: "Budget requires duration > 0",
+		},
+		{
+			name: "zero plan timeout",
+			dsl: func() {
+				Plan("0s")
+			},
+			err: "Plan requires duration > 0",
+		},
+		{
+			name: "negative tool timeout",
+			dsl: func() {
+				Tools("-3s")
+			},
+			err: "Tools requires duration > 0",
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			runDSLExpectError(t, func() {
+				API("test", func() {})
+				Service("tasks", func() {
+					Agent("planner", "Planner agent", func() {
+						RunPolicy(tc.dsl)
+					})
+				})
+			}, tc.err)
+		})
+	}
+}
+
 func TestRunPolicyRetryAndReflect(t *testing.T) {
 	runDSL(t, func() {
 		API("test", func() {})
@@ -293,6 +378,30 @@ func TestFromSkillsProvider(t *testing.T) {
 func runDSL(t *testing.T, dsl func()) {
 	t.Helper()
 
+	resetDSLRoots(t)
+
+	require.True(t, eval.Execute(dsl, nil), eval.Context.Error())
+	require.NoError(t, eval.RunDSL())
+}
+
+func runDSLExpectError(t *testing.T, dsl func(), want string) {
+	t.Helper()
+
+	resetDSLRoots(t)
+
+	executed := eval.Execute(dsl, nil)
+	err := eval.RunDSL()
+	if err != nil {
+		require.ErrorContains(t, err, want)
+		return
+	}
+	require.False(t, executed)
+	require.Contains(t, eval.Context.Error(), want)
+}
+
+func resetDSLRoots(t *testing.T) {
+	t.Helper()
+
 	eval.Reset()
 	goaexpr.Root = new(goaexpr.RootExpr)
 	goaexpr.GeneratedResultTypes = new(goaexpr.ResultTypesRoot)
@@ -305,9 +414,6 @@ func runDSL(t *testing.T, dsl func()) {
 
 	goaexpr.Root.API = goaexpr.NewAPIExpr("test", func() {})
 	goaexpr.Root.API.Servers = []*goaexpr.ServerExpr{goaexpr.Root.API.DefaultServer()}
-
-	require.True(t, eval.Execute(dsl, nil), eval.Context.Error())
-	require.NoError(t, eval.RunDSL())
 }
 
 // TestPassthroughWithServiceAndMethodNames verifies Passthrough works with
