@@ -197,6 +197,21 @@ func TestMCPStaticPromptRuntimePromptSpec(t *testing.T) {
 	require.Equal(t, "v1", prompt.Runtime.Version)
 }
 
+func TestMCPStaticPromptRejectsOddRoleContentStrings(t *testing.T) {
+	err := runInvalidMCPDSL(t, func() {
+		API("test", func() {})
+		Service("assistant", func() {
+			MCP("assistant", "1.0")
+			StaticPrompt("greeting", "Friendly greeting",
+				"system", "You are a helpful assistant",
+				"user",
+			)
+		})
+	})
+
+	require.Contains(t, err, `StaticPrompt "greeting" requires role/content string pairs; missing content for role "user"`)
+}
+
 func TestMCPDynamicPrompt(t *testing.T) {
 	runMCPDSL(t, func() {
 		API("test", func() {})
@@ -429,6 +444,25 @@ func TestMCPToolSearchPolicyOptions(t *testing.T) {
 func runMCPDSL(t *testing.T, dsl func()) {
 	t.Helper()
 
+	setupMCPDSL(t)
+
+	require.True(t, eval.Execute(dsl, nil), eval.Context.Error())
+	require.NoError(t, eval.RunDSL())
+}
+
+func runInvalidMCPDSL(t *testing.T, dsl func()) string {
+	t.Helper()
+
+	setupMCPDSL(t)
+
+	require.True(t, eval.Execute(dsl, nil), eval.Context.Error())
+	require.Error(t, eval.RunDSL())
+	return eval.Context.Error()
+}
+
+func setupMCPDSL(t *testing.T) {
+	t.Helper()
+
 	eval.Reset()
 	goaexpr.Root = new(goaexpr.RootExpr)
 	goaexpr.GeneratedResultTypes = new(goaexpr.ResultTypesRoot)
@@ -441,7 +475,4 @@ func runMCPDSL(t *testing.T, dsl func()) {
 
 	goaexpr.Root.API = goaexpr.NewAPIExpr("test", func() {})
 	goaexpr.Root.API.Servers = []*goaexpr.ServerExpr{goaexpr.Root.API.DefaultServer()}
-
-	require.True(t, eval.Execute(dsl, nil), eval.Context.Error())
-	require.NoError(t, eval.RunDSL())
 }

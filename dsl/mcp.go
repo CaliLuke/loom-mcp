@@ -589,10 +589,12 @@ func StaticPrompt(name, description string, args ...any) {
 			return
 		}
 	}
+	if len(messages)%2 != 0 {
+		eval.ReportError("StaticPrompt %q requires role/content string pairs; missing content for role %q", name, messages[len(messages)-1])
+		return
+	}
 	for i := 0; i < len(messages); i += 2 {
-		if i+1 < len(messages) {
-			prompt.Messages = append(prompt.Messages, &exprmcp.MessageExpr{Role: messages[i], Content: messages[i+1]})
-		}
+		prompt.Messages = append(prompt.Messages, &exprmcp.MessageExpr{Role: messages[i], Content: messages[i+1]})
 	}
 	mcp.Prompts = append(mcp.Prompts, prompt)
 }
