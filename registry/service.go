@@ -120,6 +120,9 @@ func (s *Service) Register(ctx context.Context, p *genregistry.RegisterPayload) 
 	if err := s.healthTracker.StartPingLoop(ctx, p.Name); err != nil {
 		return nil, fmt.Errorf("start health ping loop: %w", err)
 	}
+	if err := s.seedRegistrationHealth(ctx, p.Name); err != nil {
+		return nil, fmt.Errorf("seed registration health: %w", err)
+	}
 
 	return &genregistry.RegisterResult{
 		RegisteredAt: registeredAt,
@@ -283,6 +286,14 @@ func (s *Service) ensureToolsetHealthy(toolsetName string) error {
 		lastPong,
 		h.Age,
 	))
+}
+
+func (s *Service) seedRegistrationHealth(ctx context.Context, toolsetName string) error {
+	registrationToken, err := s.catalog.RegistrationToken(ctx, toolsetName)
+	if err != nil {
+		return err
+	}
+	return s.healthTracker.RecordPong(ctx, toolsetName, newPingID(registrationToken))
 }
 
 func (s *Service) initializeResultStream(ctx context.Context, toolUseID string) error {

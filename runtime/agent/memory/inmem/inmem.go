@@ -6,6 +6,7 @@ package inmem
 
 import (
 	"context"
+	"sort"
 	"sync"
 
 	"github.com/CaliLuke/loom-mcp/runtime/agent/memory"
@@ -83,13 +84,16 @@ func (s *Store) Query(_ context.Context, query memory.Query) (memory.QueryResult
 		if query.RunID != "" {
 			events = append(events, runs[query.RunID]...)
 		} else {
-			for _, runEvents := range runs {
+			for _, runID := range sortedRunIDs(runs) {
+				runEvents := runs[runID]
 				events = append(events, runEvents...)
 			}
 		}
 	} else {
-		for _, runs := range s.runs {
-			for _, runEvents := range runs {
+		for _, agentID := range sortedAgentIDs(s.runs) {
+			runs := s.runs[agentID]
+			for _, runID := range sortedRunIDs(runs) {
+				runEvents := runs[runID]
 				events = append(events, runEvents...)
 			}
 		}
@@ -104,4 +108,22 @@ func (s *Store) Reset() {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.runs = make(map[string]map[string][]memory.Event)
+}
+
+func sortedAgentIDs(runs map[string]map[string][]memory.Event) []string {
+	agentIDs := make([]string, 0, len(runs))
+	for agentID := range runs {
+		agentIDs = append(agentIDs, agentID)
+	}
+	sort.Strings(agentIDs)
+	return agentIDs
+}
+
+func sortedRunIDs(runs map[string][]memory.Event) []string {
+	runIDs := make([]string, 0, len(runs))
+	for runID := range runs {
+		runIDs = append(runIDs, runID)
+	}
+	sort.Strings(runIDs)
+	return runIDs
 }

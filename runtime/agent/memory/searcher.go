@@ -63,7 +63,7 @@ func QueryEvents(events []Event, query Query) QueryResult {
 		}
 		matches = append(matches, cloneEvent(event))
 	}
-	slices.SortFunc(matches, func(a, b Event) int {
+	slices.SortStableFunc(matches, func(a, b Event) int {
 		return compareEventTime(a.Timestamp, b.Timestamp)
 	})
 	truncated := false

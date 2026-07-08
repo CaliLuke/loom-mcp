@@ -105,6 +105,38 @@ func TestGraphWorkflowPlannerLoopDependentsWaitUntilLoopDone(t *testing.T) {
 	require.Equal(t, []string{"publish"}, toolCallIDs(next.ToolCalls))
 }
 
+func TestGraphWorkflowPlannerRetriesFailedLoopAttempt(t *testing.T) {
+	p := NewGraphWorkflowPlanner(WorkflowGraphConfig{
+		Nodes: []WorkflowNode{
+			{
+				ID:   "retry",
+				Kind: WorkflowNodeLoop,
+				Loop: &WorkflowLoopConfig{
+					Tool:          "worker.retry",
+					Payload:       rawjson.Message([]byte(`{}`)),
+					MaxIterations: 2,
+				},
+			},
+			{ID: "publish", Kind: WorkflowNodeTool, Tool: "publisher.publish", Payload: rawjson.Message([]byte(`{}`)), DependsOn: []string{"retry"}},
+		},
+	})
+
+	next, err := p.PlanResume(context.Background(), &PlanResumeInput{
+		ToolOutputs: []*ToolOutput{{ToolCallID: "retry#1", Error: NewToolError("try again")}},
+	})
+	require.NoError(t, err)
+	require.Equal(t, []string{"retry#2"}, toolCallIDs(next.ToolCalls))
+
+	final, err := p.PlanResume(context.Background(), &PlanResumeInput{
+		ToolOutputs: []*ToolOutput{
+			{ToolCallID: "retry#1", Error: NewToolError("try again")},
+			{ToolCallID: "retry#2", Result: rawjson.Message([]byte(`{"ok":true}`))},
+		},
+	})
+	require.NoError(t, err)
+	require.Equal(t, []string{"publish"}, toolCallIDs(final.ToolCalls))
+}
+
 func TestGraphWorkflowPlannerBranchAfterJoinSelectsTarget(t *testing.T) {
 	p := NewGraphWorkflowPlanner(WorkflowGraphConfig{
 		Nodes: []WorkflowNode{
@@ -173,6 +205,185 @@ func TestGraphWorkflowPlannerBranchCanUseTypedInputPayload(t *testing.T) {
 	})
 	require.NoError(t, err)
 	require.Equal(t, []string{"publish"}, toolCallIDs(next.ToolCalls))
+}
+
+func TestGraphWorkflowPlannerRejectsInvalidGraphConfig(t *testing.T) {
+	cases := []struct {
+		name    string
+		nodes   []WorkflowNode
+		message string
+	}{
+		{
+			name: "empty node id",
+			nodes: []WorkflowNode{
+				{Kind: WorkflowNodeTool, Tool: "worker.run", Payload: rawjson.Message([]byte(`{}`))},
+			},
+			message: "workflow graph node id is required",
+		},
+		{
+			name: "duplicate node id",
+			nodes: []WorkflowNode{
+				{ID: "draft", Kind: WorkflowNodeTool, Tool: "writer.draft", Payload: rawjson.Message([]byte(`{}`))},
+				{ID: "draft", Kind: WorkflowNodeTool, Tool: "writer.redraft", Payload: rawjson.Message([]byte(`{}`))},
+			},
+			message: `duplicate workflow graph node id "draft"`,
+		},
+		{
+			name: "missing dependency",
+			nodes: []WorkflowNode{
+				{ID: "publish", Kind: WorkflowNodeTool, Tool: "publisher.publish", Payload: rawjson.Message([]byte(`{}`)), DependsOn: []string{"review"}},
+			},
+			message: `workflow node "publish" dependency "review" does not exist`,
+		},
+		{
+			name: "missing branch source",
+			nodes: []WorkflowNode{
+				{ID: "route", Kind: WorkflowNodeBranch, Branch: &WorkflowBranchConfig{FromStep: "approval", Default: "stop"}},
+				{ID: "stop", Kind: WorkflowNodeTool, Tool: "publisher.stop", Payload: rawjson.Message([]byte(`{}`))},
+			},
+			message: `workflow branch "route" fromStep "approval" does not exist`,
+		},
+		{
+			name: "missing branch default target",
+			nodes: []WorkflowNode{
+				{ID: "approval", Kind: WorkflowNodeTypedInput, Schema: rawjson.Message([]byte(`{"type":"object"}`))},
+				{ID: "route", Kind: WorkflowNodeBranch, Branch: &WorkflowBranchConfig{FromStep: "approval", Default: "stop"}},
+			},
+			message: `workflow branch "route" default target "stop" does not exist`,
+		},
+		{
+			name: "missing branch case target",
+			nodes: []WorkflowNode{
+				{ID: "approval", Kind: WorkflowNodeTypedInput, Schema: rawjson.Message([]byte(`{"type":"object"}`))},
+				{ID: "stop", Kind: WorkflowNodeTool, Tool: "publisher.stop", Payload: rawjson.Message([]byte(`{}`))},
+				{ID: "route", Kind: WorkflowNodeBranch, Branch: &WorkflowBranchConfig{
+					FromStep: "approval",
+					Cases:    []WorkflowBranchCase{{Path: "$.approved", Equals: "true", Target: "publish"}},
+					Default:  "stop",
+				}},
+			},
+			message: `workflow branch "route" case target "publish" does not exist`,
+		},
+		{
+			name: "missing loop until step",
+			nodes: []WorkflowNode{
+				{ID: "retry", Kind: WorkflowNodeLoop, Loop: &WorkflowLoopConfig{
+					Tool:          "worker.retry",
+					Payload:       rawjson.Message([]byte(`{}`)),
+					MaxIterations: 2,
+					Until:         &WorkflowPredicateConfig{Step: "review", Path: "$.done", Equals: "true"},
+				}},
+			},
+			message: `workflow loop "retry" until step "review" does not exist`,
+		},
+		{
+			name: "unsupported jsonpath",
+			nodes: []WorkflowNode{
+				{ID: "approval", Kind: WorkflowNodeTypedInput, Schema: rawjson.Message([]byte(`{"type":"object"}`))},
+				{ID: "publish", Kind: WorkflowNodeTool, Tool: "publisher.publish", Payload: rawjson.Message([]byte(`{}`))},
+				{ID: "stop", Kind: WorkflowNodeTool, Tool: "publisher.stop", Payload: rawjson.Message([]byte(`{}`))},
+				{ID: "route", Kind: WorkflowNodeBranch, Branch: &WorkflowBranchConfig{
+					FromStep: "approval",
+					Cases:    []WorkflowBranchCase{{Path: "$.approval.status", Equals: "true", Target: "publish"}},
+					Default:  "stop",
+				}},
+			},
+			message: `workflow branch "route" case path "$.approval.status" is unsupported`,
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			p := NewGraphWorkflowPlanner(WorkflowGraphConfig{Nodes: tc.nodes})
+
+			result, err := p.PlanStart(context.Background(), &PlanInput{})
+
+			require.Nil(t, result)
+			require.ErrorContains(t, err, tc.message)
+		})
+	}
+}
+
+func TestGraphWorkflowPlannerStopsOnFailedToolOutput(t *testing.T) {
+	p := NewGraphWorkflowPlanner(WorkflowGraphConfig{
+		Nodes: []WorkflowNode{
+			{ID: "draft", Kind: WorkflowNodeTool, Tool: "writer.draft", Payload: rawjson.Message([]byte(`{}`))},
+			{ID: "publish", Kind: WorkflowNodeTool, Tool: "publisher.publish", Payload: rawjson.Message([]byte(`{}`)), DependsOn: []string{"draft"}},
+		},
+	})
+
+	result, err := p.PlanResume(context.Background(), &PlanResumeInput{
+		ToolOutputs: []*ToolOutput{{ToolCallID: "draft", Error: NewToolError("boom")}},
+	})
+
+	require.Nil(t, result)
+	require.ErrorContains(t, err, `workflow node "draft" failed at "draft": boom`)
+}
+
+func TestGraphWorkflowPlannerReportsStuckRequiredNodes(t *testing.T) {
+	p := NewGraphWorkflowPlanner(WorkflowGraphConfig{
+		Nodes: []WorkflowNode{
+			{ID: "alpha", Kind: WorkflowNodeTool, Tool: "worker.alpha", Payload: rawjson.Message([]byte(`{}`)), DependsOn: []string{"beta"}},
+			{ID: "beta", Kind: WorkflowNodeTool, Tool: "worker.beta", Payload: rawjson.Message([]byte(`{}`)), DependsOn: []string{"alpha"}},
+		},
+	})
+
+	result, err := p.PlanStart(context.Background(), &PlanInput{})
+
+	require.Nil(t, result)
+	require.ErrorContains(t, err, "workflow graph stuck; incomplete nodes: alpha, beta")
+}
+
+func TestGraphWorkflowPlannerBranchSkipsUnselectedTargetsForLaterDependencies(t *testing.T) {
+	p := NewGraphWorkflowPlanner(WorkflowGraphConfig{
+		Nodes: []WorkflowNode{
+			{ID: "approval", Kind: WorkflowNodeTypedInput, Schema: rawjson.Message([]byte(`{"type":"object"}`))},
+			{ID: "route", Kind: WorkflowNodeBranch, DependsOn: []string{"approval"}, Branch: &WorkflowBranchConfig{
+				FromStep: "approval",
+				Cases:    []WorkflowBranchCase{{Path: "$.approved", Equals: "true", Target: "publish"}},
+				Default:  "revise",
+			}},
+			{ID: "publish", Kind: WorkflowNodeTool, Tool: "publisher.publish", Payload: rawjson.Message([]byte(`{}`)), DependsOn: []string{"route"}},
+			{ID: "revise", Kind: WorkflowNodeTool, Tool: "publisher.revise", Payload: rawjson.Message([]byte(`{}`)), DependsOn: []string{"route"}},
+			{ID: "done", Kind: WorkflowNodeJoin, DependsOn: []string{"publish", "revise"}},
+			{ID: "notify", Kind: WorkflowNodeTool, Tool: "publisher.notify", Payload: rawjson.Message([]byte(`{}`)), DependsOn: []string{"done"}},
+		},
+	})
+
+	next, err := p.PlanResume(context.Background(), &PlanResumeInput{
+		TypedInputs: []TypedInputOutput{{ID: "approval", Payload: rawjson.Message([]byte(`{"approved":true}`))}},
+		ToolOutputs: []*ToolOutput{
+			{ToolCallID: "publish", Result: rawjson.Message([]byte(`{"ok":true}`))},
+		},
+	})
+
+	require.NoError(t, err)
+	require.Equal(t, []string{"notify"}, toolCallIDs(next.ToolCalls))
+}
+
+func TestGraphWorkflowPlannerLoopUntilUsesLatestLoopIterationOutput(t *testing.T) {
+	p := NewGraphWorkflowPlanner(WorkflowGraphConfig{
+		Nodes: []WorkflowNode{
+			{
+				ID:   "retry",
+				Kind: WorkflowNodeLoop,
+				Loop: &WorkflowLoopConfig{
+					Tool:          "worker.retry",
+					Payload:       rawjson.Message([]byte(`{}`)),
+					MaxIterations: 3,
+					Until:         &WorkflowPredicateConfig{Step: "retry", Path: "$.done", Equals: "true"},
+				},
+			},
+		},
+		FinalMessage: "done",
+	})
+
+	final, err := p.PlanResume(context.Background(), &PlanResumeInput{
+		ToolOutputs: []*ToolOutput{{ToolCallID: "retry#1", Result: rawjson.Message([]byte(`{"done":true}`))}},
+	})
+
+	require.NoError(t, err)
+	require.NotNil(t, final.FinalResponse)
 }
 
 func toolCallIDs(calls []ToolRequest) []string {

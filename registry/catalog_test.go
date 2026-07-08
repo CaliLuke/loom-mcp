@@ -89,6 +89,24 @@ func TestToolsetCatalogListToolsetsFiltersTags(t *testing.T) {
 	assert.Equal(t, "atlas.read", got[0].Name)
 }
 
+func TestToolsetCatalogListAndSearchToolsetsSortByName(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	cat := newToolsetCatalog(newTestCatalogMap())
+	require.NoError(t, cat.SaveToolset(ctx, testCatalogToolset("zulu.read", "Readable data", []string{"data"})))
+	require.NoError(t, cat.SaveToolset(ctx, testCatalogToolset("atlas.read", "Readable data", []string{"data"})))
+	require.NoError(t, cat.SaveToolset(ctx, testCatalogToolset("midgard.read", "Readable data", []string{"data"})))
+
+	listed, err := cat.ListToolsets(ctx, []string{"data"})
+	require.NoError(t, err)
+	assert.Equal(t, []string{"atlas.read", "midgard.read", "zulu.read"}, catalogToolsetNames(listed))
+
+	searched, err := cat.SearchToolsets(ctx, "read")
+	require.NoError(t, err)
+	assert.Equal(t, []string{"atlas.read", "midgard.read", "zulu.read"}, catalogToolsetNames(searched))
+}
+
 func TestToolsetCatalogSearchToolsetsMatchesNameDescriptionAndTags(t *testing.T) {
 	t.Parallel()
 
@@ -175,4 +193,12 @@ func testCatalogToolset(name string, description string, tags []string) *genregi
 			},
 		},
 	}
+}
+
+func catalogToolsetNames(toolsets []*genregistry.Toolset) []string {
+	names := make([]string, len(toolsets))
+	for i, toolset := range toolsets {
+		names[i] = toolset.Name
+	}
+	return names
 }

@@ -8,8 +8,11 @@ import (
 	"reflect"
 	"sync"
 	"testing"
+	"time"
 
 	loom "github.com/CaliLuke/loom/pkg"
+	"github.com/CaliLuke/loom/pulse/pool"
+	"github.com/CaliLuke/loom/pulse/rmap"
 	streamopts "github.com/CaliLuke/loom/pulse/streaming/options"
 	"github.com/leanovate/gopter"
 	"github.com/leanovate/gopter/gen"
@@ -427,6 +430,83 @@ func TestCallToolReusesLogicalToolCallIdentity(t *testing.T) {
 	require.Len(t, streams.messages["toolset-1"], 2)
 	require.Equal(t, toolCallID, streams.messages["toolset-1"][0].ToolUseID)
 	require.Equal(t, toolCallID, streams.messages["toolset-1"][1].ToolUseID)
+}
+
+func TestRegisterSeedsHealthForImmediateCallTool(t *testing.T) {
+	rdb := getRedis(t)
+	ctx := context.Background()
+
+	healthMap, err := rmap.Join(ctx, "health-register-seed-"+t.Name(), rdb)
+	require.NoError(t, err)
+	t.Cleanup(func() {
+		healthMap.Close()
+	})
+
+	registryMap, err := rmap.Join(ctx, "registry-register-seed-"+t.Name(), rdb)
+	require.NoError(t, err)
+	t.Cleanup(func() {
+		registryMap.Close()
+	})
+
+	node, err := pool.AddNode(ctx, "register-seed-pool-"+t.Name(), rdb, testNodeOpts()...)
+	require.NoError(t, err)
+	t.Cleanup(func() {
+		require.NoError(t, node.Close(ctx))
+	})
+
+	tracker, err := NewHealthTracker(
+		newMockStreamManager(),
+		healthMap,
+		registryMap,
+		node,
+		WithPingInterval(time.Hour),
+		WithMissedPingThreshold(2),
+	)
+	require.NoError(t, err)
+	t.Cleanup(func() {
+		require.NoError(t, tracker.Close())
+	})
+
+	pulseClient := mockpulse.NewClient(t)
+	resultStream := mockpulse.NewStream(t)
+	pulseClient.AddStream(func(name string, _ ...streamopts.Stream) (clientspulse.Stream, error) {
+		return resultStream, nil
+	})
+	resultStream.AddAdd(func(ctx context.Context, event string, payload []byte) (string, error) {
+		return "1-0", nil
+	})
+
+	streams := newMockStreamManagerForService()
+	svc, err := newService(serviceOptions{
+		catalog:       newToolsetCatalog(registryMap),
+		StreamManager: streams,
+		HealthTracker: tracker,
+		PulseClient:   pulseClient,
+	})
+	require.NoError(t, err)
+
+	payload := validRegisterPayloadForSchemaAdmission("seeded-toolset")
+	_, err = svc.Register(ctx, payload)
+	require.NoError(t, err)
+
+	health, err := tracker.Health(payload.Name)
+	require.NoError(t, err)
+	require.True(t, health.Healthy)
+
+	toolCallID := "seeded-call"
+	result, err := svc.CallTool(ctx, &genregistry.CallToolPayload{
+		Toolset:     payload.Name,
+		Tool:        payload.Tools[0].Name,
+		PayloadJSON: []byte(`{"query":"ok"}`),
+		Meta: &genregistry.ToolCallMeta{
+			RunID:      "run-1",
+			SessionID:  "session-1",
+			ToolCallID: &toolCallID,
+		},
+	})
+	require.NoError(t, err)
+	require.Equal(t, toolCallID, result.ToolUseID)
+	require.Len(t, streams.messages[payload.Name], 1)
 }
 
 // payloadValidationTestCase represents a test case for payload validation.

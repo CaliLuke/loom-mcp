@@ -42,3 +42,19 @@ func TestSequentialWorkflowPlannerRunsStepsInOrder(t *testing.T) {
 	require.Equal(t, model.ConversationRoleAssistant, final.FinalResponse.Message.Role)
 	require.Equal(t, []model.Part{model.TextPart{Text: "workflow complete"}}, final.FinalResponse.Message.Parts)
 }
+
+func TestSequentialWorkflowPlannerStopsOnFailedToolOutput(t *testing.T) {
+	p := NewSequentialWorkflowPlanner(SequentialWorkflowConfig{
+		Steps: []WorkflowStep{
+			{Name: "draft", Tool: "writer.draft", Payload: rawjson.Message([]byte(`{}`))},
+			{Name: "review", Tool: "reviewer.review", Payload: rawjson.Message([]byte(`{}`))},
+		},
+	})
+
+	result, err := p.PlanResume(context.Background(), &PlanResumeInput{
+		ToolOutputs: []*ToolOutput{{ToolCallID: "draft", Error: NewToolError("boom")}},
+	})
+
+	require.Nil(t, result)
+	require.ErrorContains(t, err, `workflow step "draft" failed: boom`)
+}

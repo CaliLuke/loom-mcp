@@ -36,3 +36,36 @@ func TestStoreQueryFiltersAppendedEvents(t *testing.T) {
 	require.Equal(t, memory.EventUserMessage, result.Events[0].Type)
 	require.Equal(t, memory.EventPlannerNote, result.Events[1].Type)
 }
+
+func TestStoreQueryOrdersEqualTimestampRunsDeterministically(t *testing.T) {
+	store := New()
+	ctx := context.Background()
+	timestamp := time.Unix(10, 0)
+
+	require.NoError(t, store.AppendEvents(ctx, "svc.agent", "run-b",
+		memory.NewEvent(timestamp, memory.PlannerNoteData{Note: "run-b"}, map[string]string{"tenant": "acme"}),
+	))
+	require.NoError(t, store.AppendEvents(ctx, "svc.agent", "run-a",
+		memory.NewEvent(timestamp, memory.PlannerNoteData{Note: "run-a"}, map[string]string{"tenant": "acme"}),
+	))
+
+	result, err := store.Query(ctx, memory.Query{
+		AgentID: "svc.agent",
+		Labels:  map[string]string{"tenant": "acme"},
+		Types:   []memory.EventType{memory.EventPlannerNote},
+	})
+	require.NoError(t, err)
+	require.Len(t, result.Events, 2)
+	require.Equal(t, []string{"run-a", "run-b"}, plannerNotes(t, result.Events))
+}
+
+func plannerNotes(t *testing.T, events []memory.Event) []string {
+	t.Helper()
+	notes := make([]string, 0, len(events))
+	for _, event := range events {
+		data, err := memory.DecodePlannerNoteData(event)
+		require.NoError(t, err)
+		notes = append(notes, data.Note)
+	}
+	return notes
+}

@@ -121,9 +121,10 @@ func (s *Subscriber) Subscribe(
 }
 
 // consume reads events from the Pulse sink channel, decodes them, and emits them
-// on the out channel. It acks each event after successful emission. Closes both
-// channels when ctx is canceled or when the sink channel closes. Sends errors
-// on the errs channel if decoding or acking fails, then returns.
+// on the out channel. It acks each event after successful emission, and also
+// acks undecodable poison messages so one bad payload cannot halt the stream.
+// Closes both channels when ctx is canceled or when the sink channel closes.
+// Ack failures are terminal because the sink cannot safely advance.
 func (s *Subscriber) consume(ctx context.Context, sink clientspulse.Sink, out chan<- stream.Event, errs chan<- error, done chan<- struct{}) {
 	defer close(done)
 	defer close(out)
@@ -139,8 +140,14 @@ func (s *Subscriber) consume(ctx context.Context, sink clientspulse.Sink, out ch
 			}
 			decoded, err := s.decode(evt.Payload)
 			if err != nil {
-				errs <- fmt.Errorf("pulse decode payload: %w", err)
-				return
+				if ackErr := sink.Ack(ctx, evt); ackErr != nil {
+					reportConsumeError(ctx, errs, fmt.Errorf("pulse ack: %w", ackErr))
+					return
+				}
+				if !reportConsumeError(ctx, errs, fmt.Errorf("pulse decode payload: %w", err)) {
+					return
+				}
+				continue
 			}
 			select {
 			case out <- decoded:
@@ -148,10 +155,19 @@ func (s *Subscriber) consume(ctx context.Context, sink clientspulse.Sink, out ch
 				return
 			}
 			if ackErr := sink.Ack(ctx, evt); ackErr != nil {
-				errs <- fmt.Errorf("pulse ack: %w", ackErr)
+				reportConsumeError(ctx, errs, fmt.Errorf("pulse ack: %w", ackErr))
 				return
 			}
 		}
+	}
+}
+
+func reportConsumeError(ctx context.Context, errs chan<- error, err error) bool {
+	select {
+	case errs <- err:
+		return true
+	case <-ctx.Done():
+		return false
 	}
 }
 

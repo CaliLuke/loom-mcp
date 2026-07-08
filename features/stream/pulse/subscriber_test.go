@@ -69,12 +69,17 @@ func TestSubscribeDecoderError(t *testing.T) {
 	streamMock := mockpulse.NewStream(t)
 	sinkMock := mockpulse.NewSink(t)
 	eventCh := make(chan *streaming.Event, 1)
+	ackedIDs := make(chan string, 1)
 
 	client.AddStream(func(name string, _ ...streamopts.Stream) (clientspulse.Stream, error) { return streamMock, nil })
 	streamMock.AddNewSink(func(ctx context.Context, name string, opts ...streamopts.Sink) (clientspulse.Sink, error) {
 		return sinkMock, nil
 	})
 	sinkMock.AddSubscribe(func() <-chan *streaming.Event { return eventCh })
+	sinkMock.AddAck(func(ctx context.Context, evt *streaming.Event) error {
+		ackedIDs <- evt.ID
+		return nil
+	})
 	sinkMock.AddClose(func(ctx context.Context) {})
 
 	sub, err := NewSubscriber(SubscriberOptions{
@@ -88,9 +93,58 @@ func TestSubscribeDecoderError(t *testing.T) {
 	events, errs, cancel, err := sub.Subscribe(context.Background(), "session/session-1")
 	require.NoError(t, err)
 	defer cancel()
-	eventCh <- &streaming.Event{Payload: []byte("{}")}
+	eventCh <- &streaming.Event{ID: "1-0", Payload: []byte("{}")}
 	close(eventCh)
 
 	require.Empty(t, events)
 	require.EqualError(t, <-errs, "pulse decode payload: decode error")
+	require.Equal(t, "1-0", <-ackedIDs)
+}
+
+func TestSubscribeDecoderErrorAcksAndContinues(t *testing.T) {
+	client := mockpulse.NewClient(t)
+	streamMock := mockpulse.NewStream(t)
+	sinkMock := mockpulse.NewSink(t)
+	eventCh := make(chan *streaming.Event, 2)
+	ackedIDs := make(chan string, 2)
+
+	client.AddStream(func(name string, _ ...streamopts.Stream) (clientspulse.Stream, error) { return streamMock, nil })
+	streamMock.AddNewSink(func(ctx context.Context, name string, opts ...streamopts.Sink) (clientspulse.Sink, error) {
+		return sinkMock, nil
+	})
+	sinkMock.AddSubscribe(func() <-chan *streaming.Event { return eventCh })
+	sinkMock.AddAck(func(ctx context.Context, evt *streaming.Event) error {
+		ackedIDs <- evt.ID
+		return nil
+	})
+	sinkMock.AddAck(func(ctx context.Context, evt *streaming.Event) error {
+		ackedIDs <- evt.ID
+		return nil
+	})
+	sinkMock.AddClose(func(ctx context.Context) {})
+
+	sub, err := NewSubscriber(SubscriberOptions{
+		Client: client,
+		Decoder: func(payload []byte) (stream.Event, error) {
+			if string(payload) == "bad" {
+				return nil, errors.New("decode error")
+			}
+			return stream.NewBase(stream.EventAssistantReply, "run-1", "session-1", json.RawMessage(payload)), nil
+		},
+	})
+	require.NoError(t, err)
+
+	events, errs, cancel, err := sub.Subscribe(context.Background(), "session/session-1")
+	require.NoError(t, err)
+	defer cancel()
+	eventCh <- &streaming.Event{ID: "1-0", Payload: []byte("bad")}
+	eventCh <- &streaming.Event{ID: "2-0", Payload: []byte(`{"chunk":"hi"}`)}
+	close(eventCh)
+
+	require.EqualError(t, <-errs, "pulse decode payload: decode error")
+	event := <-events
+	require.Equal(t, stream.EventAssistantReply, event.Type())
+	require.JSONEq(t, `{"chunk":"hi"}`, string(event.Payload().(json.RawMessage)))
+	require.Equal(t, "1-0", <-ackedIDs)
+	require.Equal(t, "2-0", <-ackedIDs)
 }

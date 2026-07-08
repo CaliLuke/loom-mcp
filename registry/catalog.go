@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"sort"
 	"strings"
 
 	genregistry "github.com/CaliLuke/loom-mcp/registry/gen/registry"
@@ -112,6 +113,7 @@ func (c *toolsetCatalog) ListToolsets(ctx context.Context, tags []string) ([]*ge
 		return nil, err
 	}
 	keys := c.m.Keys()
+	sort.Strings(keys)
 	toolsets := make([]*genregistry.Toolset, 0, len(keys))
 	for _, key := range keys {
 		if !strings.HasPrefix(key, toolsetCatalogKeyPrefix) {
@@ -125,6 +127,7 @@ func (c *toolsetCatalog) ListToolsets(ctx context.Context, tags []string) ([]*ge
 			toolsets = append(toolsets, toolset)
 		}
 	}
+	sortToolsetsByName(toolsets)
 	return toolsets, nil
 }
 
@@ -136,6 +139,7 @@ func (c *toolsetCatalog) SearchToolsets(ctx context.Context, query string) ([]*g
 	}
 	lowerQuery := strings.ToLower(query)
 	keys := c.m.Keys()
+	sort.Strings(keys)
 	toolsets := make([]*genregistry.Toolset, 0, len(keys))
 	for _, key := range keys {
 		if !strings.HasPrefix(key, toolsetCatalogKeyPrefix) {
@@ -149,6 +153,7 @@ func (c *toolsetCatalog) SearchToolsets(ctx context.Context, query string) ([]*g
 			toolsets = append(toolsets, toolset)
 		}
 	}
+	sortToolsetsByName(toolsets)
 	return toolsets, nil
 }
 
@@ -219,4 +224,10 @@ func catalogMatchesQuery(toolset *genregistry.Toolset, lowerQuery string) bool {
 		}
 	}
 	return false
+}
+
+func sortToolsetsByName(toolsets []*genregistry.Toolset) {
+	sort.Slice(toolsets, func(i, j int) bool {
+		return toolsets[i].Name < toolsets[j].Name
+	})
 }

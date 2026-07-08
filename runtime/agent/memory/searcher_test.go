@@ -57,3 +57,31 @@ func TestQueryEventsAppliesLimitAndChronologicalOrdering(t *testing.T) {
 	require.Equal(t, time.Unix(10, 0), result.Events[0].Timestamp)
 	require.Equal(t, time.Unix(20, 0), result.Events[1].Timestamp)
 }
+
+func TestQueryEventsPreservesInputOrderForEqualTimestamps(t *testing.T) {
+	timestamp := time.Unix(10, 0)
+	events := []Event{
+		NewEvent(timestamp, PlannerNoteData{Note: "first"}, map[string]string{"tenant": "acme"}),
+		NewEvent(timestamp, PlannerNoteData{Note: "second"}, map[string]string{"tenant": "acme"}),
+		NewEvent(timestamp, PlannerNoteData{Note: "third"}, map[string]string{"tenant": "acme"}),
+	}
+
+	result := QueryEvents(events, Query{
+		Labels: map[string]string{"tenant": "acme"},
+		Types:  []EventType{EventPlannerNote},
+	})
+
+	require.Len(t, result.Events, 3)
+	require.Equal(t, []string{"first", "second", "third"}, plannerNotes(t, result.Events))
+}
+
+func plannerNotes(t *testing.T, events []Event) []string {
+	t.Helper()
+	notes := make([]string, 0, len(events))
+	for _, event := range events {
+		data, err := DecodePlannerNoteData(event)
+		require.NoError(t, err)
+		notes = append(notes, data.Note)
+	}
+	return notes
+}

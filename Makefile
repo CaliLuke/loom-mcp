@@ -49,8 +49,8 @@ tools: ensure-golangci ensure-protoc-plugins protoc-check
 
 ensure-golangci:
 	@if [ -z "$(GOLANGCI_LINT)" ]; then \
-		echo "Installing golangci-lint v2.6.2..."; \
-		curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh | sh -s -- -b $(GOPATH)/bin v2.6.2; \
+		echo "Installing golangci-lint latest..."; \
+		$(GO) install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@latest; \
 	else \
 		echo "golangci-lint found: $(GOLANGCI_LINT)"; \
 	fi

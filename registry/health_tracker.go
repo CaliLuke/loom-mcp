@@ -102,6 +102,7 @@ type (
 		mu      sync.RWMutex
 		tickers map[string]*pool.Ticker
 		cancels map[string]context.CancelFunc
+		closed  bool
 
 		stateMu              sync.Mutex
 		lastObservedHealthy  map[string]bool
@@ -128,6 +129,8 @@ const (
 	DefaultMissedPingThreshold = 3
 
 	healthKeyPrefix = "registry:health:"
+
+	healthTrackerIOTimeout = 5 * time.Second
 )
 
 // WithPingInterval sets the interval between health check pings.
@@ -306,7 +309,10 @@ func (h *healthTracker) IsHealthy(toolset string) bool {
 // StartPingLoop implements HealthTracker.
 func (h *healthTracker) StartPingLoop(ctx context.Context, toolset string) error {
 	h.mu.Lock()
-	defer h.mu.Unlock()
+	if h.closed {
+		h.mu.Unlock()
+		return fmt.Errorf("health tracker is closed")
+	}
 	// (Re)start local ticker.
 	//
 	// In production we observed that a node can keep a stale *pool.Ticker in-memory
@@ -316,15 +322,11 @@ func (h *healthTracker) StartPingLoop(ctx context.Context, toolset string) error
 	//
 	// We solve this by explicitly closing the local ticker instance (without
 	// deleting the shared entry) and recreating it on every StartPingLoop.
-	if cancel, ok := h.cancels[toolset]; ok {
-		cancel()
-		delete(h.cancels, toolset)
-	}
-	if ticker, ok := h.tickers[toolset]; ok {
-		ticker.Close()
-		delete(h.tickers, toolset)
-	}
-	return h.startLocalTickerLocked(toolset)
+	cancel, ticker := h.detachLocalTickerLocked(toolset)
+	h.mu.Unlock()
+
+	cancelAndCloseLocalTicker(cancel, ticker)
+	return h.startLocalTicker(ctx, toolset)
 }
 
 // StopPingLoop implements HealthTracker.
@@ -350,23 +352,20 @@ func (h *healthTracker) Close() error {
 		close(h.closeCh)
 
 		h.mu.Lock()
-		defer h.mu.Unlock()
-
-		for _, cancel := range h.cancels {
-			cancel()
-		}
-		for _, ticker := range h.tickers {
-			// Close stops the ticker locally without deleting the shared
-			// ticker-map entry.
-			//
-			// This is critical for distributed tickers: on shutdown/restart (or
-			// rolling updates), a single node must not delete the shared entry
-			// since that would stop pings for all nodes and can leave the cluster
-			// with no active pinger.
-			ticker.Close()
-		}
+		h.closed = true
+		cancels, tickers := h.detachAllLocalTickersLocked()
 		h.tickers = make(map[string]*pool.Ticker)
 		h.cancels = make(map[string]context.CancelFunc)
+		h.mu.Unlock()
+
+		for _, cancel := range cancels {
+			cancel()
+		}
+		for _, ticker := range tickers {
+			// Close stops the ticker locally without deleting the shared ticker-map
+			// entry, preserving distributed ownership during node shutdown/restart.
+			ticker.Close()
+		}
 	})
 	return nil
 }
@@ -395,7 +394,16 @@ func (h *healthTracker) syncExistingToolsets() {
 
 // syncWithCatalog ensures local tickers match the catalog state.
 func (h *healthTracker) syncWithCatalog() {
-	// Get all registered toolsets from the catalog map.
+	if h.isClosed() {
+		return
+	}
+
+	registered := h.registeredCatalogToolsets()
+	h.streamManager.RemoveStreamsNotInCatalog(registered)
+	h.reconcileCatalogTickers(registered)
+}
+
+func (h *healthTracker) registeredCatalogToolsets() map[string]bool {
 	registered := make(map[string]bool)
 	for _, key := range h.catalogMap.Keys() {
 		toolset := toolsetFromCatalogKey(key)
@@ -403,36 +411,63 @@ func (h *healthTracker) syncWithCatalog() {
 			registered[toolset] = true
 		}
 	}
+	return registered
+}
 
-	h.streamManager.RemoveStreamsNotInCatalog(registered)
-
+func (h *healthTracker) reconcileCatalogTickers(registered map[string]bool) {
 	h.mu.Lock()
-	defer h.mu.Unlock()
+	if h.closed {
+		h.mu.Unlock()
+		return
+	}
 
-	// Start tickers for newly registered toolsets.
+	var startToolsets []string
 	for toolset := range registered {
 		if _, ok := h.tickers[toolset]; !ok {
-			// Use background context since this is triggered by map changes.
-			if err := h.startLocalTickerLocked(toolset); err != nil {
-				h.logger.Error(context.Background(), "start ticker failed", "event", "start_ticker_failed", "toolset", toolset, "err", err)
-			}
+			startToolsets = append(startToolsets, toolset)
 		}
 	}
 
-	// Stop tickers for unregistered toolsets.
+	var stopCancels []context.CancelFunc
+	var stopTickers []*pool.Ticker
 	for toolset := range h.tickers {
 		if !registered[toolset] {
-			h.stopLocalTickerLocked(toolset)
+			cancel, ticker := h.detachLocalTickerLocked(toolset)
+			stopCancels = append(stopCancels, cancel)
+			stopTickers = append(stopTickers, ticker)
+		}
+	}
+	h.mu.Unlock()
+
+	for i, cancel := range stopCancels {
+		cancelAndStopLocalTicker(cancel, stopTickers[i])
+	}
+	for _, toolset := range startToolsets {
+		if err := h.startLocalTicker(context.Background(), toolset); err != nil {
+			h.logger.Error(context.Background(), "start ticker failed", "event", "start_ticker_failed", "toolset", toolset, "err", err)
 		}
 	}
 }
 
-// startLocalTickerLocked creates this node's distributed ticker participant and
-// launches the long-lived ping loop for the toolset.
-func (h *healthTracker) startLocalTickerLocked(toolset string) error {
+func (h *healthTracker) isClosed() bool {
+	h.mu.RLock()
+	defer h.mu.RUnlock()
+	return h.closed
+}
+
+// startLocalTicker creates this node's distributed ticker participant and
+// launches the long-lived ping loop for the toolset when the tracker is open.
+func (h *healthTracker) startLocalTicker(ctx context.Context, toolset string) error {
+	h.mu.RLock()
+	if h.closed {
+		h.mu.RUnlock()
+		return fmt.Errorf("health tracker is closed")
+	}
 	if _, ok := h.tickers[toolset]; ok {
+		h.mu.RUnlock()
 		return nil
 	}
+	h.mu.RUnlock()
 
 	// Use a fresh context for the ping loop that's only cancelled when we explicitly stop.
 	// This ensures the loop survives even if the caller ctx (e.g., an RPC request context)
@@ -441,14 +476,29 @@ func (h *healthTracker) startLocalTickerLocked(toolset string) error {
 
 	// Create a distributed ticker - only one node in the pool will receive ticks.
 	tickerName := fmt.Sprintf("registry:ping:%s", toolset)
-	ticker, err := h.poolNode.NewTicker(loopCtx, tickerName, h.pingInterval)
+	tickerCtx, stopTickerCreate := boundedHealthTrackerContext(ctx)
+	ticker, err := h.poolNode.NewTicker(tickerCtx, tickerName, h.pingInterval)
+	stopTickerCreate()
 	if err != nil {
 		cancel()
 		return fmt.Errorf("create distributed ticker: %w", err)
 	}
 
+	h.mu.Lock()
+	if h.closed {
+		h.mu.Unlock()
+		cancelAndCloseLocalTicker(cancel, ticker)
+		return fmt.Errorf("health tracker is closed")
+	}
+	if _, ok := h.tickers[toolset]; ok {
+		h.mu.Unlock()
+		cancelAndCloseLocalTicker(cancel, ticker)
+		return nil
+	}
 	h.tickers[toolset] = ticker
 	h.cancels[toolset] = cancel
+	h.mu.Unlock()
+
 	go h.runPingLoop(loopCtx, toolset, ticker)
 
 	return nil
@@ -457,19 +507,66 @@ func (h *healthTracker) startLocalTickerLocked(toolset string) error {
 // stopLocalTicker stops the distributed ticker for a toolset on this node.
 func (h *healthTracker) stopLocalTicker(toolset string) {
 	h.mu.Lock()
-	defer h.mu.Unlock()
-	h.stopLocalTickerLocked(toolset)
+	cancel, ticker := h.detachLocalTickerLocked(toolset)
+	h.mu.Unlock()
+
+	cancelAndStopLocalTicker(cancel, ticker)
 }
 
-func (h *healthTracker) stopLocalTickerLocked(toolset string) {
-	if cancel, ok := h.cancels[toolset]; ok {
-		cancel()
+func (h *healthTracker) detachLocalTickerLocked(toolset string) (context.CancelFunc, *pool.Ticker) {
+	var cancel context.CancelFunc
+	if found, ok := h.cancels[toolset]; ok {
+		cancel = found
 		delete(h.cancels, toolset)
 	}
-	if ticker, ok := h.tickers[toolset]; ok {
-		ticker.Stop()
+	var ticker *pool.Ticker
+	if found, ok := h.tickers[toolset]; ok {
+		ticker = found
 		delete(h.tickers, toolset)
 	}
+	return cancel, ticker
+}
+
+func (h *healthTracker) detachAllLocalTickersLocked() ([]context.CancelFunc, []*pool.Ticker) {
+	cancels := make([]context.CancelFunc, 0, len(h.cancels))
+	for _, cancel := range h.cancels {
+		cancels = append(cancels, cancel)
+	}
+	tickers := make([]*pool.Ticker, 0, len(h.tickers))
+	for _, ticker := range h.tickers {
+		tickers = append(tickers, ticker)
+	}
+	return cancels, tickers
+}
+
+func cancelAndCloseLocalTicker(cancel context.CancelFunc, ticker *pool.Ticker) {
+	if cancel != nil {
+		cancel()
+	}
+	if ticker != nil {
+		// Close stops the ticker locally without deleting the shared ticker-map
+		// entry, preserving distributed ownership during node shutdown/restart.
+		ticker.Close()
+	}
+}
+
+func cancelAndStopLocalTicker(cancel context.CancelFunc, ticker *pool.Ticker) {
+	if cancel != nil {
+		cancel()
+	}
+	if ticker != nil {
+		ticker.Stop()
+	}
+}
+
+func boundedHealthTrackerContext(ctx context.Context) (context.Context, context.CancelFunc) {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	if _, ok := ctx.Deadline(); ok {
+		return context.WithCancel(ctx)
+	}
+	return context.WithTimeout(ctx, healthTrackerIOTimeout)
 }
 
 // healthKey returns the shared health-map key for a toolset.

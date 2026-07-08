@@ -424,6 +424,54 @@ func TestSendPingRemovesStreamHandleWhenRegistrationDisappearsDuringPublish(t *t
 	require.Equal(t, []string{"racing-toolset"}, streams.removedToolsets())
 }
 
+func TestHealthTrackerClosePreventsCatalogSyncRestart(t *testing.T) {
+	rdb := getRedis(t)
+	ctx := context.Background()
+
+	healthMap, err := rmap.Join(ctx, "health-close-sync-"+t.Name(), rdb)
+	require.NoError(t, err)
+	t.Cleanup(func() {
+		healthMap.Close()
+	})
+
+	registryMap, err := rmap.Join(ctx, "registry-close-sync-"+t.Name(), rdb)
+	require.NoError(t, err)
+	t.Cleanup(func() {
+		registryMap.Close()
+	})
+
+	node, err := pool.AddNode(ctx, "health-close-sync-pool-"+t.Name(), rdb, testNodeOpts()...)
+	require.NoError(t, err)
+	t.Cleanup(func() {
+		require.NoError(t, node.Close(ctx))
+	})
+
+	tracker, err := NewHealthTracker(
+		newMockStreamManager(),
+		healthMap,
+		registryMap,
+		node,
+		WithPingInterval(time.Hour),
+		WithMissedPingThreshold(2),
+	)
+	require.NoError(t, err)
+
+	require.NoError(t, tracker.Close())
+	require.NoError(t, newToolsetCatalog(registryMap).SaveToolset(ctx, testCatalogToolset("closed-toolset", "closed", []string{"closed"})))
+
+	ht := tracker.(*healthTracker)
+	ht.syncWithCatalog()
+
+	ht.mu.RLock()
+	require.True(t, ht.closed)
+	require.Empty(t, ht.tickers)
+	require.Empty(t, ht.cancels)
+	ht.mu.RUnlock()
+
+	err = tracker.StartPingLoop(ctx, "closed-toolset")
+	require.Error(t, err)
+}
+
 // newPongTestService builds a registry service backed by a real health tracker
 // so Pong tests exercise the full health admission path.
 func newPongTestService(t *testing.T) (*Service, HealthTracker, *toolsetCatalog, *rmap.Map, *rmap.Map) {
