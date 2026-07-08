@@ -360,7 +360,8 @@ func anthropicMessageBlock(part model.Part, nameMap map[string]string) (sdk.Cont
 		return block, err == nil, err
 	}
 	if v, ok := part.(model.ToolResultPart); ok {
-		return encodeToolResult(v), true, nil
+		block, err := encodeToolResult(v)
+		return block, err == nil, err
 	}
 	return sdk.ContentBlockParamUnion{}, false, nil
 }
@@ -405,7 +406,7 @@ func anthropicConversationMessage(role model.ConversationRole, blocks []sdk.Cont
 	}
 }
 
-func encodeToolResult(v model.ToolResultPart) sdk.ContentBlockParamUnion {
+func encodeToolResult(v model.ToolResultPart) (sdk.ContentBlockParamUnion, error) {
 	var content string
 	switch c := v.Content.(type) {
 	case nil:
@@ -415,11 +416,13 @@ func encodeToolResult(v model.ToolResultPart) sdk.ContentBlockParamUnion {
 	case []byte:
 		content = string(c)
 	default:
-		if data, err := json.Marshal(c); err == nil {
-			content = string(data)
+		data, err := json.Marshal(c)
+		if err != nil {
+			return sdk.ContentBlockParamUnion{}, fmt.Errorf("anthropic: encode tool result %q: %w", v.ToolUseID, err)
 		}
+		content = string(data)
 	}
-	return sdk.NewToolResultBlock(v.ToolUseID, content, v.IsError)
+	return sdk.NewToolResultBlock(v.ToolUseID, content, v.IsError), nil
 }
 
 func encodeTools(ctx context.Context, defs []*model.ToolDefinition) ([]sdk.ToolUnionParam, map[string]string, map[string]string, error) {

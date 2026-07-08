@@ -1,6 +1,7 @@
 package anthropic
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/CaliLuke/loom-mcp/runtime/agent/model"
@@ -35,5 +36,25 @@ func TestEncodeMessages_RewritesUnknownToolUseToToolUnavailable(t *testing.T) {
 	}, nameMap)
 	if err != nil {
 		t.Fatalf("encodeMessages error: %v", err)
+	}
+}
+
+func TestEncodeMessages_ReturnsToolResultMarshalError(t *testing.T) {
+	_, _, err := encodeMessages([]*model.Message{
+		{
+			Role: model.ConversationRoleUser,
+			Parts: []model.Part{
+				model.ToolResultPart{
+					ToolUseID: "tu1",
+					Content:   map[string]any{"bad": make(chan int)},
+				},
+			},
+		},
+	}, nil)
+	if err == nil {
+		t.Fatal("encodeMessages returned nil error")
+	}
+	if !strings.Contains(err.Error(), `anthropic: encode tool result "tu1"`) {
+		t.Fatalf("encodeMessages error = %q, want tool result context", err.Error())
 	}
 }
