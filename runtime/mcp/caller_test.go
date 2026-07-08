@@ -163,6 +163,47 @@ func TestNormalizeSDKToolResultFallsBackToStructuredItemWhenNoTextExists(t *test
 	assert.Equal(t, "image", structured[0]["type"])
 }
 
+func TestNormalizeSDKToolResultAcceptsStructuredContentWithEmptyContent(t *testing.T) {
+	t.Parallel()
+
+	resp, err := normalizeSDKToolResult(&sdkmcp.CallToolResult{
+		StructuredContent: map[string]any{"count": float64(3), "status": "ok"},
+	})
+	require.NoError(t, err)
+	require.JSONEq(t, `{"count":3,"status":"ok"}`, string(resp.Result))
+	assert.Empty(t, resp.Structured)
+}
+
+func TestNormalizeSDKToolResultRejectsEmptyStructuredContentWithEmptyContent(t *testing.T) {
+	t.Parallel()
+
+	for name, structured := range map[string]any{
+		"map":   map[string]any{},
+		"slice": []any{},
+	} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			_, err := normalizeSDKToolResult(&sdkmcp.CallToolResult{
+				StructuredContent: structured,
+			})
+			require.Error(t, err)
+			assert.Contains(t, err.Error(), "tool returned no content")
+		})
+	}
+}
+
+func TestNormalizeSDKToolResultStructuredOnlyErrorDoesNotPanic(t *testing.T) {
+	t.Parallel()
+
+	_, err := normalizeSDKToolResult(&sdkmcp.CallToolResult{
+		IsError:           true,
+		StructuredContent: map[string]any{"error": "bad"},
+	})
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), `"error":"bad"`)
+}
+
 func TestNormalizeSDKToolResultReturnsToolCallErrorForIsErrorResponses(t *testing.T) {
 	t.Parallel()
 

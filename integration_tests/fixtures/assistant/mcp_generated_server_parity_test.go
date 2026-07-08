@@ -169,7 +169,11 @@ func TestProjectedToolMCPCallUsesSharedDispatcher(t *testing.T) {
 	})
 	require.NoError(t, err)
 	require.JSONEq(t, `{"answer":"projected:loom","source":"runtime-toolset"}`, string(resp.Result))
-	assert.Contains(t, string(resp.Structured), "Fields: answer, source")
+	var structured []map[string]any
+	require.NoError(t, json.Unmarshal(resp.Structured, &structured))
+	require.Len(t, structured, 1)
+	assert.Equal(t, "text", structured[0]["type"])
+	require.JSONEq(t, `{"answer":"projected:loom","source":"runtime-toolset"}`, structured[0]["text"].(string))
 }
 
 func TestProjectedToolMCPCallSupportsNoPayloadMethod(t *testing.T) {

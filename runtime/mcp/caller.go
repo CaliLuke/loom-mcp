@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"reflect"
 	"strconv"
 	"strings"
 	"time"
@@ -58,7 +59,7 @@ func (e *ToolCallError) Error() string {
 // text is present, fallbackResult is marshaled into Result. Structured is
 // marshaled into Structured when non-nil.
 func NormalizeToolCallResponse(textParts []string, structured any, fallbackResult any) (CallResponse, error) {
-	if len(textParts) == 0 && fallbackResult == nil {
+	if len(textParts) == 0 && !hasStructuredPayload(fallbackResult) {
 		return CallResponse{}, errors.New("tool returned no content")
 	}
 
@@ -90,7 +91,7 @@ func NormalizeToolCallResponse(textParts []string, structured any, fallbackResul
 	}
 
 	var structuredPayload json.RawMessage
-	if structured != nil {
+	if hasStructuredPayload(structured) {
 		marshaled, err := json.Marshal(structured)
 		if err != nil {
 			return CallResponse{}, fmt.Errorf("failed to marshal structured content: %w", err)
@@ -102,6 +103,25 @@ func NormalizeToolCallResponse(textParts []string, structured any, fallbackResul
 		Result:     result,
 		Structured: structuredPayload,
 	}, nil
+}
+
+func hasStructuredPayload(v any) bool {
+	if v == nil {
+		return false
+	}
+	rv := reflect.ValueOf(v)
+	switch rv.Kind() {
+	case reflect.Chan, reflect.Func, reflect.Interface, reflect.Map, reflect.Pointer, reflect.Slice:
+		if rv.IsNil() {
+			return false
+		}
+	}
+	switch rv.Kind() {
+	case reflect.Array, reflect.Map, reflect.Slice, reflect.String:
+		return rv.Len() > 0
+	default:
+		return true
+	}
 }
 
 func shouldUseStructuredFallback(v any) bool {
@@ -196,7 +216,7 @@ func normalizeSDKToolResult(res *mcp.CallToolResult) (CallResponse, error) {
 	if res == nil {
 		return CallResponse{}, errors.New("empty MCP response")
 	}
-	if len(res.Content) == 0 {
+	if len(res.Content) == 0 && !hasStructuredPayload(res.StructuredContent) {
 		return CallResponse{}, errors.New("tool returned no content")
 	}
 
@@ -209,15 +229,15 @@ func normalizeSDKToolResult(res *mcp.CallToolResult) (CallResponse, error) {
 			textParts = append(textParts, textContent.Text)
 		}
 	}
-	if res.IsError {
-		return CallResponse{}, ToolCallErrorFromResponse(textParts, res.Content[0])
-	}
 	var fallback any
 	switch {
-	case res.StructuredContent != nil:
+	case hasStructuredPayload(res.StructuredContent):
 		fallback = res.StructuredContent
 	case len(textParts) == 0:
 		fallback = res.Content[0]
+	}
+	if res.IsError {
+		return CallResponse{}, ToolCallErrorFromResponse(textParts, fallback)
 	}
 
 	return NormalizeToolCallResponse(textParts, structured, fallback)

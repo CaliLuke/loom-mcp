@@ -75,7 +75,15 @@ func (c Caller) CallTool(ctx context.Context, req mcpruntime.CallRequest) (mcpru
 			merged.IsError = ev.IsError
 		}
 	}
-	if merged == nil || len(merged.Content) == 0 {
+	var hasStructured bool
+	if merged != nil {
+		_, ok, err := decodeStructuredContent(merged.StructuredContent)
+		if err != nil {
+			return mcpruntime.CallResponse{}, err
+		}
+		hasStructured = ok
+	}
+	if merged == nil || (len(merged.Content) == 0 && !hasStructured) {
 		return mcpruntime.CallResponse{}, fmt.Errorf("empty MCP response for suite %q tool %q: stream ended after %d events with no content", c.suite, req.Tool, eventCount)
 	} else {
 		return normalizeToolResult(merged)
@@ -89,11 +97,11 @@ func normalizeToolResult(last *mcppkg.ToolsCallResult) (mcpruntime.CallResponse,
 		}
 	}
 	var fallback any
-	if len(last.StructuredContent) > 0 {
-		var decoded any
-		if err := json.Unmarshal(last.StructuredContent, &decoded); err != nil {
-			return mcpruntime.CallResponse{}, fmt.Errorf("failed to decode structured content: %w", err)
-		}
+	decoded, hasStructured, err := decodeStructuredContent(last.StructuredContent)
+	if err != nil {
+		return mcpruntime.CallResponse{}, err
+	}
+	if hasStructured {
 		fallback = decoded
 	} else if len(last.Content) > 0 {
 		fallback = last.Content[0]
@@ -102,4 +110,28 @@ func normalizeToolResult(last *mcppkg.ToolsCallResult) (mcpruntime.CallResponse,
 		return mcpruntime.CallResponse{}, mcpruntime.ToolCallErrorFromResponse(textParts, fallback)
 	}
 	return mcpruntime.NormalizeToolCallResponse(textParts, last.Content, fallback)
+}
+func decodeStructuredContent(raw json.RawMessage) (any, bool, error) {
+	if len(raw) == 0 {
+		return nil, false, nil
+	}
+	var decoded any
+	if err := json.Unmarshal(raw, &decoded); err != nil {
+		return nil, false, fmt.Errorf("failed to decode structured content: %w", err)
+	}
+	return decoded, structuredContentHasPayload(decoded), nil
+}
+func structuredContentHasPayload(v any) bool {
+	switch value := v.(type) {
+	case nil:
+		return false
+	case map[string]any:
+		return len(value) > 0
+	case []any:
+		return len(value) > 0
+	case string:
+		return value != ""
+	default:
+		return true
+	}
 }

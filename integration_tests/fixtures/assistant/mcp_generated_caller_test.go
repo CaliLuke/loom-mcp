@@ -78,6 +78,52 @@ func TestGeneratedNewCallerFallsBackToStructuredContentWhenNoTextExists(t *testi
 	assert.Equal(t, "ZmFrZS1pbWFnZQ==", result["data"])
 }
 
+func TestGeneratedNewCallerAcceptsStructuredContentWithEmptyContent(t *testing.T) {
+	t.Parallel()
+
+	server := newGeneratedCallerTestServer(t, map[string]any{
+		"content":           []map[string]any{},
+		"structuredContent": map[string]any{"count": 3, "status": "ok"},
+	})
+	defer server.Close()
+
+	caller := newGeneratedCaller(t, server)
+	resp, err := caller.CallTool(context.Background(), mcpruntime.CallRequest{
+		Tool:    "multi_content",
+		Payload: json.RawMessage(`{"count":0}`),
+	})
+	require.NoError(t, err)
+	require.JSONEq(t, `{"count":3,"status":"ok"}`, string(resp.Result))
+	assert.Empty(t, resp.Structured)
+}
+
+func TestGeneratedNewCallerRejectsEmptyStructuredContentWithEmptyContent(t *testing.T) {
+	t.Parallel()
+
+	for name, structured := range map[string]any{
+		"map":   map[string]any{},
+		"slice": []any{},
+	} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			server := newGeneratedCallerTestServer(t, map[string]any{
+				"content":           []map[string]any{},
+				"structuredContent": structured,
+			})
+			defer server.Close()
+
+			caller := newGeneratedCaller(t, server)
+			_, err := caller.CallTool(context.Background(), mcpruntime.CallRequest{
+				Tool:    "multi_content",
+				Payload: json.RawMessage(`{"count":0}`),
+			})
+			require.Error(t, err)
+			assert.Contains(t, err.Error(), "empty MCP response")
+		})
+	}
+}
+
 func TestGeneratedNewCallerEmptyResponseIncludesToolContext(t *testing.T) {
 	t.Parallel()
 

@@ -30,6 +30,7 @@ func clientCallerFile(data *AdapterData, svcName string) *codegen.File {
 				emitCallerConstructor(stmt)
 				emitCallerCallTool(stmt)
 				emitCallerNormalizer(stmt)
+				emitCallerStructuredContentHelpers(stmt)
 			}),
 		},
 	}
@@ -95,11 +96,11 @@ func emitCallerNormalizer(stmt *jen.Statement) {
 				),
 			)
 			g.Var().Id("fallback").Any()
-			g.If(jen.Len(jen.Id("last").Dot("StructuredContent")).Op(">").Lit(0)).Block(
-				jen.Var().Id("decoded").Any(),
-				jen.If(jen.Id("err").Op(":=").Qual("encoding/json", "Unmarshal").Call(jen.Id("last").Dot("StructuredContent"), jen.Op("&").Id("decoded")), jen.Id("err").Op("!=").Nil()).Block(
-					jen.Return(jen.Id("mcpruntime").Dot("CallResponse").Values(), jen.Qual("fmt", "Errorf").Call(jen.Lit("failed to decode structured content: %w"), jen.Id("err"))),
-				),
+			g.List(jen.Id("decoded"), jen.Id("hasStructured"), jen.Id("err")).Op(":=").Id("decodeStructuredContent").Call(jen.Id("last").Dot("StructuredContent"))
+			g.If(jen.Id("err").Op("!=").Nil()).Block(
+				jen.Return(jen.Id("mcpruntime").Dot("CallResponse").Values(), jen.Id("err")),
+			)
+			g.If(jen.Id("hasStructured")).Block(
 				jen.Id("fallback").Op("=").Id("decoded"),
 			).Else().If(jen.Len(jen.Id("last").Dot("Content")).Op(">").Lit(0)).Block(
 				jen.Id("fallback").Op("=").Id("last").Dot("Content").Index(jen.Lit(0)),
@@ -121,6 +122,47 @@ func emitCallerNormalizer(stmt *jen.Statement) {
 				),
 			)
 		})
+	stmt.Line()
+}
+
+func emitCallerStructuredContentHelpers(stmt *jen.Statement) {
+	stmt.Func().Id("decodeStructuredContent").
+		Params(jen.Id("raw").Qual("encoding/json", "RawMessage")).
+		Params(jen.Any(), jen.Bool(), jen.Error()).
+		Block(
+			jen.If(jen.Len(jen.Id("raw")).Op("==").Lit(0)).Block(
+				jen.Return(jen.Nil(), jen.False(), jen.Nil()),
+			),
+			jen.Var().Id("decoded").Any(),
+			jen.If(jen.Id("err").Op(":=").Qual("encoding/json", "Unmarshal").Call(jen.Id("raw"), jen.Op("&").Id("decoded")), jen.Id("err").Op("!=").Nil()).Block(
+				jen.Return(jen.Nil(), jen.False(), jen.Qual("fmt", "Errorf").Call(jen.Lit("failed to decode structured content: %w"), jen.Id("err"))),
+			),
+			jen.Return(jen.Id("decoded"), jen.Id("structuredContentHasPayload").Call(jen.Id("decoded")), jen.Nil()),
+		)
+	stmt.Line()
+
+	stmt.Func().Id("structuredContentHasPayload").
+		Params(jen.Id("v").Any()).
+		Bool().
+		Block(
+			jen.Switch(jen.Id("value").Op(":=").Id("v").Assert(jen.Type())).Block(
+				jen.Case(jen.Nil()).Block(
+					jen.Return(jen.False()),
+				),
+				jen.Case(jen.Map(jen.String()).Any()).Block(
+					jen.Return(jen.Len(jen.Id("value")).Op(">").Lit(0)),
+				),
+				jen.Case(jen.Index().Any()).Block(
+					jen.Return(jen.Len(jen.Id("value")).Op(">").Lit(0)),
+				),
+				jen.Case(jen.String()).Block(
+					jen.Return(jen.Id("value").Op("!=").Lit("")),
+				),
+				jen.Default().Block(
+					jen.Return(jen.True()),
+				),
+			),
+		)
 	stmt.Line()
 }
 
@@ -180,7 +222,19 @@ func emitCallerMergeEvents(g *jen.Group) {
 }
 
 func emitCallerReturnMerged(g *jen.Group) {
-	g.If(jen.Id("merged").Op("==").Nil().Op("||").Len(jen.Id("merged").Dot("Content")).Op("==").Lit(0)).Block(
+	g.Var().Id("hasStructured").Bool()
+	g.If(jen.Id("merged").Op("!=").Nil()).Block(
+		jen.List(jen.Id("_"), jen.Id("ok"), jen.Id("err")).Op(":=").Id("decodeStructuredContent").Call(jen.Id("merged").Dot("StructuredContent")),
+		jen.If(jen.Id("err").Op("!=").Nil()).Block(
+			jen.Return(jen.Id("mcpruntime").Dot("CallResponse").Values(), jen.Id("err")),
+		),
+		jen.Id("hasStructured").Op("=").Id("ok"),
+	)
+	g.If(
+		jen.Id("merged").Op("==").Nil().Op("||").Parens(
+			jen.Len(jen.Id("merged").Dot("Content")).Op("==").Lit(0).Op("&&").Op("!").Id("hasStructured"),
+		),
+	).Block(
 		jen.Return(
 			jen.Id("mcpruntime").Dot("CallResponse").Values(),
 			jen.Qual("fmt", "Errorf").Call(
