@@ -293,6 +293,7 @@ func validateBedrockThinking(req *model.Request, modelID string, messages []*mod
 	if req.Thinking == nil || !req.Thinking.Enable || isAdaptiveThinkingModel(modelID) {
 		return nil
 	}
+	messages = nonNilMessages(messages)
 	healThinkingGaps(messages)
 	if err := transcript.ValidateBedrock(messages, true); err != nil {
 		return fmt.Errorf("bedrock: invalid message ordering with thinking enabled (run=%s, model=%s): %w", req.RunID, modelID, err)
@@ -631,6 +632,9 @@ func encodeMessages(ctx context.Context, msgs []*model.Message, nameMap map[stri
 	conversation := make([]brtypes.Message, 0, len(msgs))
 	system := make([]brtypes.SystemContentBlock, 0, len(msgs))
 	for _, m := range msgs {
+		if m == nil {
+			continue
+		}
 		if m.Role == "system" {
 			blocks, err := state.encodeSystemParts(m.Parts)
 			if err != nil {
@@ -1084,6 +1088,9 @@ func messagesHaveToolBlocks(msgs []*model.Message) bool {
 // the constraint without altering the semantic content of the message.
 func healThinkingGaps(msgs []*model.Message) {
 	for _, m := range msgs {
+		if m == nil {
+			continue
+		}
 		if m.Role != model.ConversationRoleAssistant {
 			continue
 		}
@@ -1106,6 +1113,16 @@ func healThinkingGaps(msgs []*model.Message) {
 			)
 		}
 	}
+}
+
+func nonNilMessages(msgs []*model.Message) []*model.Message {
+	out := make([]*model.Message, 0, len(msgs))
+	for _, msg := range msgs {
+		if msg != nil {
+			out = append(out, msg)
+		}
+	}
+	return out
 }
 
 func messagesWithoutThinking(msgs []*model.Message) []*model.Message {

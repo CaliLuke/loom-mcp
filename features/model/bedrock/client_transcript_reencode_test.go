@@ -72,6 +72,54 @@ func TestEncodeMessages_ReencodeTranscriptOrder(t *testing.T) {
 	}
 }
 
+func TestEncodeMessages_SkipsNilMessages(t *testing.T) {
+	ctx := context.Background()
+	msgs := []*model.Message{
+		nil,
+		{
+			Role: model.ConversationRoleSystem,
+			Parts: []model.Part{
+				model.TextPart{Text: "you are a helpful assistant"},
+			},
+		},
+		nil,
+		{
+			Role: model.ConversationRoleUser,
+			Parts: []model.Part{
+				model.TextPart{Text: "hello"},
+			},
+		},
+		nil,
+	}
+
+	conv, system, err := encodeMessages(ctx, msgs, map[string]string{}, false, nil)
+	if err != nil {
+		t.Fatalf("encodeMessages error: %v", err)
+	}
+	if len(conv) != 1 {
+		t.Fatalf("expected 1 non-system message, got %d", len(conv))
+	}
+	if conv[0].Role != brtypes.ConversationRoleUser {
+		t.Fatalf("message role = %s, want user", conv[0].Role)
+	}
+	if len(system) != 1 {
+		t.Fatalf("expected 1 system block, got %d", len(system))
+	}
+	if _, ok := system[0].(*brtypes.SystemContentBlockMemberText); !ok {
+		t.Fatalf("system block is not text")
+	}
+}
+
+func TestEncodeMessages_AllNilMessagesStillFail(t *testing.T) {
+	_, _, err := encodeMessages(context.Background(), []*model.Message{nil, nil}, map[string]string{}, false, nil)
+	if err == nil {
+		t.Fatal("encodeMessages returned nil error")
+	}
+	if !strings.Contains(err.Error(), "bedrock: at least one user/assistant message is required") {
+		t.Fatalf("encodeMessages error = %q, want missing conversation message error", err.Error())
+	}
+}
+
 // Ensures encodeMessages fails fast when a tool_use references a tool that is not in the
 // current tool configuration. This catches transcript contamination (e.g., ledger key
 // collision between agent runs) or missing tool definitions.
@@ -204,6 +252,64 @@ func TestEncodeMessages_AppendsSystemCacheCheckpoint(t *testing.T) {
 	}
 	if _, ok := system[1].(*brtypes.SystemContentBlockMemberCachePoint); !ok {
 		t.Fatalf("second system block is not cache checkpoint")
+	}
+}
+
+func TestHealThinkingGapsSkipsNilMessages(t *testing.T) {
+	msgs := []*model.Message{
+		nil,
+		{
+			Role: model.ConversationRoleAssistant,
+			Parts: []model.Part{
+				model.TextPart{Text: "calling tool"},
+				model.ToolUsePart{ID: "tu1", Name: "search"},
+			},
+		},
+		nil,
+	}
+
+	healThinkingGaps(msgs)
+
+	if msgs[0] != nil {
+		t.Fatal("expected first message to remain nil")
+	}
+	if msgs[2] != nil {
+		t.Fatal("expected last message to remain nil")
+	}
+	if len(msgs[1].Parts) != 3 {
+		t.Fatalf("expected assistant parts count 3, got %d", len(msgs[1].Parts))
+	}
+	if _, ok := msgs[1].Parts[0].(model.ThinkingPart); !ok {
+		t.Fatalf("expected ThinkingPart first, got %T", msgs[1].Parts[0])
+	}
+}
+
+func TestValidateBedrockThinkingSkipsNilMessages(t *testing.T) {
+	req := &model.Request{
+		RunID: "run-nil",
+		Thinking: &model.ThinkingOptions{
+			Enable: true,
+		},
+	}
+	msgs := []*model.Message{
+		{
+			Role: model.ConversationRoleAssistant,
+			Parts: []model.Part{
+				model.ThinkingPart{Text: "thinking", Signature: "sig"},
+				model.ToolUsePart{ID: "tu1", Name: "search"},
+			},
+		},
+		nil,
+		{
+			Role: model.ConversationRoleUser,
+			Parts: []model.Part{
+				model.ToolResultPart{ToolUseID: "tu1", Content: "ok"},
+			},
+		},
+	}
+	err := validateBedrockThinking(req, "anthropic.claude-3-5-sonnet-20240620-v1:0", msgs)
+	if err != nil {
+		t.Fatalf("validateBedrockThinking error: %v", err)
 	}
 }
 
