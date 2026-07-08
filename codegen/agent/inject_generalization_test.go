@@ -47,6 +47,6 @@ func TestInjectLabelBackedFieldPopulatesFromRunLabels(t *testing.T) {
 	require.Contains(t, content, `func InjectByHousehold(payload *ByHouseholdPayload, meta runtime.ToolCallMeta, labels map[string]string) error`)
 	require.Contains(t, content, `v, ok := labels["household_id"]`)
 	require.Contains(t, content, `missing required run label %q`)
-	require.Contains(t, content, `payload.HouseholdID = v`)
+	require.Contains(t, content, `payload.HouseholdID = &v`)
 	require.Contains(t, content, `func DecodeByHousehold(data []byte, meta runtime.ToolCallMeta, labels map[string]string) (*ByHouseholdPayload, error)`)
 }
