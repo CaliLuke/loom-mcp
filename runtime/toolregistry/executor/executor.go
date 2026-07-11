@@ -178,7 +178,9 @@ func (e *Executor) Execute(ctx context.Context, meta *runtime.ToolCallMeta, call
 	stream, sink, err := e.subscribeResultStream(ctx, span, meta, call, toolsetID, toolUseID, resultStreamID)
 	if err != nil {
 		if stream != nil {
-			e.destroyResultStreamBestEffort(context.WithoutCancel(ctx), stream, span, resultStreamID, toolUseID, call.Name)
+			cleanupCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), e.cleanupTimeout)
+			e.destroyResultStreamBestEffort(cleanupCtx, stream, span, resultStreamID, toolUseID, call.Name)
+			cancel()
 		}
 		return nil, err
 	}

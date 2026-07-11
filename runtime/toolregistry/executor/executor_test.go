@@ -231,6 +231,33 @@ func TestExecutorCleansResultStreamWithDetachedContextWhenCanceled(t *testing.T)
 	assert.NoError(t, stream.destroyContextErr())
 }
 
+func TestExecutorBoundsResultStreamDestroyWhenSinkCreationFails(t *testing.T) {
+	t.Parallel()
+
+	const toolUseID = "tooluse-sink-failure"
+	toolName := tools.Ident("todos.update_todos")
+	stream := &fakeStream{
+		t:             t,
+		requiredStart: "0",
+		sinkErr:       assert.AnError,
+		destroyWait:   250 * time.Millisecond,
+	}
+	exec := New(
+		fakeRegistryClient{toolUseID: toolUseID},
+		fakePulseClient{streamID: toolregistry.ResultStreamID(toolUseID), stream: stream},
+		fakeSpecs{spec: &tools.ToolSpec{Name: toolName, Toolset: "todos.todos"}},
+	)
+	exec.cleanupTimeout = 20 * time.Millisecond
+
+	start := time.Now()
+	result, err := exec.Execute(context.Background(), &agentsruntime.ToolCallMeta{ToolCallID: "call"}, &planner.ToolRequest{Name: toolName, Payload: []byte(`{}`)})
+
+	require.ErrorContains(t, err, "create sink")
+	require.Nil(t, result)
+	require.Less(t, time.Since(start), 150*time.Millisecond)
+	require.ErrorIs(t, stream.destroyContextErr(), context.DeadlineExceeded)
+}
+
 func TestExecutorResultWaitTimesOutAndCleansResultStream(t *testing.T) {
 	t.Parallel()
 
@@ -602,6 +629,7 @@ type fakeStream struct {
 	t             *testing.T
 	requiredStart string
 	destroyErr    error
+	destroyWait   time.Duration
 	sinkErr       error
 	events        []*streaming.Event
 	sink          *fakeSink
@@ -627,6 +655,12 @@ func (s *fakeStream) NewSink(ctx context.Context, name string, opts ...streamopt
 }
 
 func (s *fakeStream) Destroy(ctx context.Context) error {
+	if s.destroyWait > 0 {
+		select {
+		case <-ctx.Done():
+		case <-time.After(s.destroyWait):
+		}
+	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.destroyCalled = true
