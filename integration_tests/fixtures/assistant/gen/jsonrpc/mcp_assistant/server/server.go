@@ -498,11 +498,12 @@ func (s *Server) handleSSE(w http.ResponseWriter, r *http.Request) {
 
 } // Mount configures the mux to serve the JSON-RPC mcp_assistant service methods.
 func Mount(mux loomhttp.Muxer, h *Server) {
+	streamableHTTPSessions := mcpruntime.NewStreamableHTTPSessions()
 	requestCancellations := mcpruntime.NewRequestCancellationRegistry()
 	// Mixed transports: mount unified handler that negotiates HTTP vs SSE by Accept header and JSON-RPC method
-	mux.Handle("POST", "/rpc", withMCPPolicyHeaders(requestCancellations, h.ServeHTTP))
-	mux.Handle("GET", "/rpc", withMCPPolicyHeaders(requestCancellations, h.ServeHTTP))
-	mux.Handle("DELETE", "/rpc", withMCPPolicyHeaders(requestCancellations, h.ServeHTTP))
+	mux.Handle("POST", "/rpc", withMCPPolicyHeaders(streamableHTTPSessions, requestCancellations, h.ServeHTTP))
+	mux.Handle("GET", "/rpc", withMCPPolicyHeaders(streamableHTTPSessions, requestCancellations, h.ServeHTTP))
+	mux.Handle("DELETE", "/rpc", withMCPPolicyHeaders(streamableHTTPSessions, requestCancellations, h.ServeHTTP))
 }
 
 // Mount configures the mux to serve the JSON-RPC mcp_assistant service methods.
@@ -536,7 +537,7 @@ var MCPCrossOriginProtection = http.NewCrossOriginProtection()
 //
 // It is installed by the JSON-RPC Mount functions so consumers do not need
 // to patch example servers or wire middleware manually.
-func withMCPPolicyHeaders(requestCancellations *mcpruntime.RequestCancellationRegistry, next http.HandlerFunc) http.HandlerFunc {
+func withMCPPolicyHeaders(streamableHTTPSessions *mcpruntime.StreamableHTTPSessions, requestCancellations *mcpruntime.RequestCancellationRegistry, next http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if MCPCrossOriginProtection != nil {
 			if err := MCPCrossOriginProtection.Check(r); err != nil {
@@ -554,6 +555,19 @@ func withMCPPolicyHeaders(requestCancellations *mcpruntime.RequestCancellationRe
 					"message": err.Error(),
 				},
 			})
+			return
+		}
+		method, err := jsonRPCRequestMethod(r)
+		if err != nil {
+			http.Error(w, "failed to read request", http.StatusBadRequest)
+			return
+		}
+		if r.Method == http.MethodDelete {
+			handleMCPStreamableHTTPSessionDelete(streamableHTTPSessions, w, r)
+			return
+		}
+		if err := validateMCPStreamableHTTPSession(streamableHTTPSessions, r, method); err != nil {
+			writeMCPStreamableHTTPSessionError(w, r, err)
 			return
 		}
 		if acceptedMCPJSONRPCNotificationOrResponse(requestCancellations, r) {
@@ -578,9 +592,71 @@ func withMCPPolicyHeaders(requestCancellations *mcpruntime.RequestCancellationRe
 			defer cleanup()
 			ctx = requestCtx
 		}
+		if r.Method == http.MethodGet {
+			streamCtx, cancel := context.WithCancel(ctx)
+			cleanup, err := streamableHTTPSessions.RegisterListener(sessionID, cancel)
+			if err != nil {
+				cancel()
+				writeMCPStreamableHTTPSessionError(w, r, err)
+				return
+			}
+			defer cancel()
+			defer cleanup()
+			ctx = streamCtx
+		}
 		ctx = mcpruntime.WithResponseWriter(ctx, w)
 		next(w, r.WithContext(ctx))
+		if method == "initialize" {
+			if issuedSessionID := w.Header().Get(mcpruntime.HeaderKeySessionID); issuedSessionID != "" {
+				streamableHTTPSessions.Issue(issuedSessionID)
+			}
+		}
 	}
+}
+
+func validateMCPStreamableHTTPSession(sessions *mcpruntime.StreamableHTTPSessions, r *http.Request, method string) error {
+	if sessions == nil || r == nil {
+		panic("streamable HTTP session validation requires a store and request")
+	}
+	if method == "initialize" {
+		return nil
+	}
+	sessionID := r.Header.Get(mcpruntime.HeaderKeySessionID)
+	if sessionID == "" {
+		if !sessions.HasIssued() {
+			return nil
+		}
+		return mcpruntime.ErrInvalidSessionID
+	}
+	return sessions.Validate(sessionID)
+}
+
+func handleMCPStreamableHTTPSessionDelete(sessions *mcpruntime.StreamableHTTPSessions, w http.ResponseWriter, r *http.Request) {
+	if sessions == nil || r == nil {
+		panic("streamable HTTP session termination requires a store and request")
+	}
+	sessionID := r.Header.Get(mcpruntime.HeaderKeySessionID)
+	if sessionID == "" {
+		http.Error(w, "Missing session ID", http.StatusBadRequest)
+		return
+	}
+	if err := sessions.Terminate(sessionID); err != nil {
+		writeMCPStreamableHTTPSessionError(w, r, err)
+		return
+	}
+	w.WriteHeader(http.StatusOK)
+}
+
+func writeMCPStreamableHTTPSessionError(w http.ResponseWriter, r *http.Request, err error) {
+	if r == nil || r.Header.Get(mcpruntime.HeaderKeySessionID) == "" {
+		http.Error(w, "Missing session ID", http.StatusBadRequest)
+		return
+	}
+	if errors.Is(err, mcpruntime.ErrInvalidSessionID) || errors.Is(err, mcpruntime.ErrSessionTerminated) {
+		http.Error(w, "Invalid or expired session ID", http.StatusNotFound)
+		return
+	}
+	http.Error(w, "Invalid or expired session ID", http.StatusNotFound)
 }
 
 func validateMCPProtocolVersionHeader(r *http.Request) error {

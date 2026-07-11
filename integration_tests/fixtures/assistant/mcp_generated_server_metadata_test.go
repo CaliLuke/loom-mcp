@@ -425,6 +425,63 @@ func TestGeneratedJSONRPCServerCancellationStopsMatchingRequest(t *testing.T) {
 	}
 }
 
+func TestGeneratedJSONRPCServerEnforcesStreamableHTTPSessions(t *testing.T) {
+	t.Parallel()
+
+	server := newGeneratedJSONRPCServer(t)
+	defer server.Close()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	request := func(method string, sessionID string) (int, string) {
+		t.Helper()
+		var body io.Reader
+		if method == http.MethodPost {
+			body = strings.NewReader(`{"jsonrpc":"2.0","id":"list-1","method":"tools/list","params":{}}`)
+		}
+		req, err := http.NewRequestWithContext(ctx, method, server.URL+"/rpc", body)
+		require.NoError(t, err)
+		if method == http.MethodPost {
+			req.Header.Set("Content-Type", "application/json")
+		}
+		if sessionID != "" {
+			req.Header.Set(mcpruntime.HeaderKeySessionID, sessionID)
+			req.Header.Set(mcpruntime.HeaderKeyProtocolVersion, mcpassistant.DefaultProtocolVersion)
+		}
+		resp, err := http.DefaultClient.Do(req)
+		require.NoError(t, err)
+		defer resp.Body.Close()
+		responseBody, err := io.ReadAll(resp.Body)
+		require.NoError(t, err)
+		return resp.StatusCode, string(responseBody)
+	}
+
+	status, body := request(http.MethodPost, "stale-after-restart")
+	assert.Equal(t, http.StatusNotFound, status)
+	assert.Contains(t, body, "Invalid or expired session ID")
+
+	sessionID, _ := rawInitializeResult(t, ctx, server.URL)
+	require.NotEmpty(t, sessionID)
+
+	status, _ = request(http.MethodPost, sessionID)
+	assert.Equal(t, http.StatusOK, status)
+
+	status, body = request(http.MethodPost, "")
+	assert.Equal(t, http.StatusBadRequest, status)
+	assert.Contains(t, body, "Missing session ID")
+
+	status, _ = request(http.MethodDelete, sessionID)
+	assert.Equal(t, http.StatusOK, status)
+
+	status, body = request(http.MethodPost, sessionID)
+	assert.Equal(t, http.StatusNotFound, status)
+	assert.Contains(t, body, "Invalid or expired session ID")
+
+	status, _ = request(http.MethodDelete, sessionID)
+	assert.Equal(t, http.StatusNotFound, status)
+}
+
 func rawInitializeResult(t *testing.T, ctx context.Context, rawURL string) (string, map[string]any) {
 	t.Helper()
 

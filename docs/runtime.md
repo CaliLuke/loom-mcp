@@ -2217,6 +2217,13 @@ handlers to stop and release resources; requests in other sessions or with
 other IDs are unaffected. The cancellation notification itself receives the
 transport-required HTTP 202 response.
 
+The mount owns the streamable HTTP session lifecycle as well. Successful
+initialization records the emitted session ID, subsequent requests validate it
+before JSON-RPC routing, GET streams are tied to session termination, and
+DELETE terminates the session. A supplied unknown, expired, or terminated
+session ID receives HTTP 404 so conformant clients re-initialize; omitting the
+session header after the server has issued a session receives HTTP 400.
+
 Generated JSON-RPC servers accept requests that omit optional params (for
 example `tools/list` without a `params` key), emit the final streamed
 `tools/call` response as a default `message` SSE event, and validate the

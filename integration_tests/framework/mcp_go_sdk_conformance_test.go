@@ -27,6 +27,8 @@ import (
 //   - #129/#130: the generated client sends the mandatory Accept header and
 //     replays Mcp-Session-Id without wrapper Doers,
 //   - #128: the transport rejects untrusted Origins with 403.
+//   - #158: supplied unknown or stale session IDs receive transport-level 404
+//     so the official client can recover by initializing a new session.
 //
 // The test always exercises freshly generated output in a temp module, so it
 // does not depend on the (potentially stale) integration fixture gen/ trees.
@@ -270,6 +272,49 @@ func TestGoSDKClientAgainstGeneratedJSONRPCTransport(t *testing.T) {
 	}
 	if !strings.Contains(string(structured), "answer:ping") {
 		t.Fatalf("unexpected structured content: %s", structured)
+	}
+}
+
+// TestGeneratedJSONRPCTransportRejectsStaleSessions proves an unknown session
+// is rejected at the HTTP transport before JSON-RPC routing, after which the
+// official client can recover by initializing a fresh session.
+func TestGeneratedJSONRPCTransportRejectsStaleSessions(t *testing.T) {
+	server := newGeneratedServer(t)
+	defer server.Close()
+
+	body := ` + "`" + `{"jsonrpc":"2.0","id":"list-1","method":"tools/list","params":{}}` + "`" + `
+	req, err := http.NewRequest(http.MethodPost, server.URL+"/rpc", strings.NewReader(body))
+	if err != nil {
+		t.Fatalf("build stale-session request: %v", err)
+	}
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Mcp-Session-Id", "stale-after-restart")
+	req.Header.Set("MCP-Protocol-Version", "2025-06-18")
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("send stale-session request: %v", err)
+	}
+	if err := resp.Body.Close(); err != nil {
+		t.Fatalf("close stale-session response: %v", err)
+	}
+	if resp.StatusCode != http.StatusNotFound {
+		t.Fatalf("expected HTTP 404 for stale session, got %d", resp.StatusCode)
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	client := sdkmcp.NewClient(&sdkmcp.Implementation{Name: "recovery-client", Version: "1.0.0"}, nil)
+	session, err := client.Connect(ctx, &sdkmcp.StreamableClientTransport{
+		Endpoint:             server.URL + "/rpc",
+		HTTPClient:           &http.Client{Timeout: 10 * time.Second},
+		DisableStandaloneSSE: true,
+	}, nil)
+	if err != nil {
+		t.Fatalf("initialize fresh session after stale-session 404: %v", err)
+	}
+	defer session.Close()
+	if _, err := session.ListTools(ctx, nil); err != nil {
+		t.Fatalf("fresh session failed after stale-session recovery: %v", err)
 	}
 }
 

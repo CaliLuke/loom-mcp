@@ -69,6 +69,11 @@ Use this file when editing DSL, generators, generated helpers, or MCP codegen be
   mounted routes. In-flight request contexts are keyed by MCP session plus the
   canonical JSON-RPC request ID, and `notifications/cancelled` cancels only the
   matching request before the notification receives HTTP 202.
+- Generated JSON-RPC mounts also own one `StreamableHTTPSessions` store. A
+  successful initialize response issues its session, supplied unknown,
+  expired, or terminated session IDs receive HTTP 404 before JSON-RPC routing,
+  missing IDs receive HTTP 400 once sessions exist, GET listeners register for
+  termination, and DELETE terminates the matching session.
 - Method-backed toolset tools may project into MCP only when the evaluated
   design exposes both `AgentRuntime` and `MCPSurface` and places the tool with
   `MCPPlacement(service, mcpServer)`. Codegen should trust validation for
