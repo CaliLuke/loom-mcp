@@ -297,6 +297,12 @@ func agentRegistryFile(agent *AgentData) *codegen.File {
 			&codegen.ImportSpec{Path: "github.com/CaliLuke/loom-mcp/runtime/agent/runtime/hints", Name: "hints"},
 		)
 	}
+	if needsTimeImport(agent) {
+		imports = append(imports, &codegen.ImportSpec{Path: "time"})
+	}
+	if len(agent.Tools) > 0 {
+		imports = append(imports, &codegen.ImportSpec{Path: agent.ToolSpecsImportPath, Name: agent.ToolSpecsPackage})
+	}
 	usedAliases := make(map[string]struct{})
 	for _, imp := range imports {
 		alias := imp.Name
@@ -349,12 +355,6 @@ func agentRegistryFile(agent *AgentData) *codegen.File {
 			Name: alias,
 		})
 		usedSpecsImports[ts.SpecsImportPath] = struct{}{}
-	}
-	if needsTimeImport(agent) {
-		imports = append(imports, &codegen.ImportSpec{Path: "time"})
-	}
-	if len(agent.Tools) > 0 {
-		imports = append(imports, &codegen.ImportSpec{Path: agent.ToolSpecsImportPath, Name: agent.ToolSpecsPackage})
 	}
 	agentForRegistry := *agent
 	if len(usedSpecsAliases) > 0 {

@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"testing"
+	"time"
 
 	agentsExpr "github.com/CaliLuke/loom-mcp/expr/agent"
 	"github.com/CaliLuke/loom/codegen/service"
@@ -130,6 +131,68 @@ func TestAgentSpecsAggregatorUniquesImportAliases(t *testing.T) {
 				assert.Equalf(t, want, aliases[importPath], "alias for %s", importPath)
 			}
 			assertDistinctValues(t, aliases)
+		})
+	}
+}
+
+func TestAgentRegistryUniquesAliasesAgainstLateFixedImports(t *testing.T) {
+	tests := []struct {
+		name        string
+		agent       *AgentData
+		toolsetPath string
+		wantAlias   string
+		fixedPath   string
+		fixedAlias  string
+	}{
+		{
+			name: "specs toolset avoids aggregate specs import",
+			agent: &AgentData{
+				StructName:          "HelperAgent",
+				PackageName:         "helper",
+				Dir:                 filepath.Join("gen", "alpha", "agents", "helper"),
+				ToolSpecsImportPath: "example.com/gen/alpha/agents/helper/specs",
+				ToolSpecsPackage:    "specs",
+				Tools:               []*ToolData{{Name: "local"}},
+				UsedToolsets: []*ToolsetData{{
+					QualifiedName:    "specs",
+					SpecsPackageName: "specs",
+					SpecsImportPath:  "example.com/gen/alpha/toolsets/specs",
+				}},
+			},
+			toolsetPath: "example.com/gen/alpha/toolsets/specs",
+			wantAlias:   "specs2",
+			fixedPath:   "example.com/gen/alpha/agents/helper/specs",
+			fixedAlias:  "specs",
+		},
+		{
+			name: "time toolset avoids standard library import",
+			agent: &AgentData{
+				StructName:  "HelperAgent",
+				PackageName: "helper",
+				Dir:         filepath.Join("gen", "alpha", "agents", "helper"),
+				RunPolicy:   RunPolicyData{TimeBudget: time.Second},
+				UsedToolsets: []*ToolsetData{{
+					QualifiedName:    "time",
+					SpecsPackageName: "time",
+					SpecsImportPath:  "example.com/gen/alpha/toolsets/time",
+				}},
+			},
+			toolsetPath: "example.com/gen/alpha/toolsets/time",
+			wantAlias:   "time2",
+			fixedPath:   "time",
+			fixedAlias:  "time",
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			file := agentRegistryFile(test.agent)
+			require.NotNil(t, file)
+			var buf bytes.Buffer
+			require.NoError(t, file.AllSections()[0].Write(&buf))
+			aliases := importAliasesByPath(t, buf.String())
+			assert.Equal(t, test.wantAlias, aliases[test.toolsetPath])
+			assert.Equal(t, test.fixedAlias, aliases[test.fixedPath])
 		})
 	}
 }
