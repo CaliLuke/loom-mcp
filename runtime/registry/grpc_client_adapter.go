@@ -88,6 +88,7 @@ func convertGetToolsetResponse(pb *registrypb.GetToolsetResponse) *ToolsetSchema
 		}
 	}
 	return &ToolsetSchema{
+		ID:          pb.GetName(),
 		Name:        pb.GetName(),
 		Description: pb.GetDescription(),
 		Version:     pb.GetVersion(),

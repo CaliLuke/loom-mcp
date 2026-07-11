@@ -159,6 +159,9 @@ func TestGRPCClientAdapter_GetToolset(t *testing.T) {
 		if schema.Name != testToolsetName {
 			t.Errorf("Name: got %q, want %q", schema.Name, testToolsetName)
 		}
+		if schema.ID != testToolsetName {
+			t.Errorf("ID: got %q, want %q", schema.ID, testToolsetName)
+		}
 		if schema.Description != desc {
 			t.Errorf("Description: got %q, want %q", schema.Description, desc)
 		}
