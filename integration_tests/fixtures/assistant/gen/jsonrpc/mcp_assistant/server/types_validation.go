@@ -46,7 +46,7 @@ func ValidateResourcesReadRequestBody(body *ResourcesReadRequestBody) (err error
 		err = loom.MergeErrors(err, loom.MissingFieldError("uri", "body"))
 	}
 	if body.URI != nil {
-		err = loom.MergeErrors(err, loom.ValidatePatternCompiled("body.uri", *body.URI, loomPattern0))
+		err = loom.MergeErrors(err, loom.ValidatePatternCompiled("body.uri", *body.URI, loomPatternTypesValidation0))
 	}
 	return
 }
@@ -115,4 +115,4 @@ func ValidateIconRequestBodyRequestBodyRequestBodyRequestBody(body *IconRequestB
 	return
 }
 
-var loomPattern0 = regexp.MustCompile("^[a-zA-Z][a-zA-Z0-9+.-]*:.*")
+var loomPatternTypesValidation0 = regexp.MustCompile("^[a-zA-Z][a-zA-Z0-9+.-]*:.*")

@@ -92,7 +92,7 @@ func synthesizePureMCPJSONRPCEndpoints(root *expr.RootExpr, svc *expr.ServiceExp
 		endpoint := jsonrpcSvc.HTTPEndpoints[len(jsonrpcSvc.HTTPEndpoints)-1]
 		endpoint.Routes[0].Endpoint = endpoint
 		if method.Stream == expr.ServerStreamKind {
-			endpoint.SSE = &expr.HTTPSSEExpr{}
+			endpoint.SSE = &expr.HTTPSSEExpr{NotificationMethod: method.Name}
 		}
 	}
 	previousRoot := expr.Root

@@ -110,6 +110,38 @@ func TestMCPExprBuilder_EmitsServerCapabilitiesWithoutDuplicateCapabilitiesType(
 	require.NotContains(t, typeNames, "Capabilities")
 }
 
+func TestMCPExprBuilder_PreservesMCPStreamingNotificationMethods(t *testing.T) {
+	restore := resetMCPCodegenState(t)
+	defer restore()
+
+	svc, methods := testService("assistant", "analyze")
+	mcp := &mcpexpr.MCPExpr{
+		Name:    "assistant-mcp",
+		Version: "1.0.0",
+		Tools: []*mcpexpr.ToolExpr{
+			{Name: "analyze", Method: methods["analyze"]},
+		},
+	}
+	builder := newMCPExprBuilder(svc, mcp, &sourceSnapshot{
+		jsonrpcRoutes: map[string]sourceJSONRPCRoute{
+			"assistant": {method: http.MethodPost, path: "/rpc"},
+		},
+	}, 0)
+	mcpService := builder.BuildServiceExpr()
+	httpService := builder.buildHTTPService(mcpService)
+
+	methodsByName := make(map[string]string)
+	for _, endpoint := range httpService.HTTPEndpoints {
+		if endpoint.SSE != nil {
+			methodsByName[endpoint.MethodExpr.Name] = endpoint.SSE.NotificationMethod
+		}
+	}
+	require.Equal(t, map[string]string{
+		"events/stream": "events/stream",
+		"tools/call":    "tools/call",
+	}, methodsByName)
+}
+
 func TestPrepareServices_SynthesizesJSONRPCEndpointsForPureMCPMethods(t *testing.T) {
 	restore := resetMCPCodegenState(t)
 	defer restore()

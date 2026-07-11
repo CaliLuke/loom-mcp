@@ -248,7 +248,7 @@ func ValidateRegisterRequest(message *registrypb.RegisterRequest) (err error) {
 		}
 	}
 	if message.Version != nil {
-		err = loom.MergeErrors(err, loom.ValidatePatternCompiled("message.version", string(*message.Version), loomPattern0))
+		err = loom.MergeErrors(err, loom.ValidatePatternCompiled("message.version", string(*message.Version), loomPatternTypes0))
 	}
 	for _, e := range message.Tools {
 		if e != nil {
@@ -389,4 +389,4 @@ func protobufRegistrypbToolCallMetaToRegistryToolCallMeta(v *registrypb.ToolCall
 	return res
 }
 
-var loomPattern0 = regexp.MustCompile("^v?\\d+\\.\\d+\\.\\d+(-[a-zA-Z0-9.]+)?$")
+var loomPatternTypes0 = regexp.MustCompile("^v?\\d+\\.\\d+\\.\\d+(-[a-zA-Z0-9.]+)?$")

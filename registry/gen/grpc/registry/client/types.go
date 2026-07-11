@@ -262,7 +262,7 @@ func ValidateToolsetInfo(elem *registrypb.ToolsetInfo) (err error) {
 		err = loom.MergeErrors(err, loom.InvalidLengthError("elem.name", elem.Name, utf8.RuneCountInString(elem.Name), 256, false))
 	}
 	if elem.Version != nil {
-		err = loom.MergeErrors(err, loom.ValidatePatternCompiled("elem.version", string(*elem.Version), loomPattern0))
+		err = loom.MergeErrors(err, loom.ValidatePatternCompiled("elem.version", string(*elem.Version), loomPatternTypes0))
 	}
 	if elem.ToolCount < 0 {
 		err = loom.MergeErrors(err, loom.InvalidRangeError("elem.tool_count", elem.ToolCount, 0, true))
@@ -284,7 +284,7 @@ func ValidateGetToolsetResponse(message *registrypb.GetToolsetResponse) (err err
 		err = loom.MergeErrors(err, loom.InvalidLengthError("message.name", message.Name, utf8.RuneCountInString(message.Name), 256, false))
 	}
 	if message.Version != nil {
-		err = loom.MergeErrors(err, loom.ValidatePatternCompiled("message.version", string(*message.Version), loomPattern0))
+		err = loom.MergeErrors(err, loom.ValidatePatternCompiled("message.version", string(*message.Version), loomPatternTypes0))
 	}
 	for _, e := range message.Tools {
 		if e != nil {
@@ -334,4 +334,4 @@ func svcRegistryToolCallMetaToRegistrypbToolCallMeta(v *registry.ToolCallMeta) *
 	return res
 }
 
-var loomPattern0 = regexp.MustCompile("^v?\\d+\\.\\d+\\.\\d+(-[a-zA-Z0-9.]+)?$")
+var loomPatternTypes0 = regexp.MustCompile("^v?\\d+\\.\\d+\\.\\d+(-[a-zA-Z0-9.]+)?$")

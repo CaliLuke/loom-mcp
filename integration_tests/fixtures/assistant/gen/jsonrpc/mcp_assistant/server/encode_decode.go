@@ -39,7 +39,11 @@ func EncodeInitializeResponse(encoder func(context.Context, http.ResponseWriter)
 // mcp_assistant initialize endpoint.
 func DecodeInitializeRequest(mux loomhttp.Muxer, decoder func(*http.Request) loomhttp.Decoder) func(*http.Request, *jsonrpc.RawRequest) (*mcpassistant.InitializePayload, error) {
 	return func(r *http.Request, req *jsonrpc.RawRequest) (*mcpassistant.InitializePayload, error) {
-		r.Body = io.NopCloser(bytes.NewReader(req.Params))
+		params := req.Params
+		if len(params) == 0 {
+			params = []byte("{}")
+		}
+		r.Body = io.NopCloser(bytes.NewReader(params))
 		var payload *mcpassistant.InitializePayload
 		var (
 			body InitializeRequestBody
@@ -100,7 +104,11 @@ func EncodeToolsListResponse(encoder func(context.Context, http.ResponseWriter) 
 // mcp_assistant tools/list endpoint.
 func DecodeToolsListRequest(mux loomhttp.Muxer, decoder func(*http.Request) loomhttp.Decoder) func(*http.Request, *jsonrpc.RawRequest) (*mcpassistant.ToolsListPayload, error) {
 	return func(r *http.Request, req *jsonrpc.RawRequest) (*mcpassistant.ToolsListPayload, error) {
-		r.Body = io.NopCloser(bytes.NewReader(req.Params))
+		params := req.Params
+		if len(params) == 0 {
+			params = []byte("{}")
+		}
+		r.Body = io.NopCloser(bytes.NewReader(params))
 		var payload *mcpassistant.ToolsListPayload
 		var (
 			body ToolsListRequestBody
@@ -144,7 +152,11 @@ func EncodeToolsCallResponse(encoder func(context.Context, http.ResponseWriter) 
 // mcp_assistant tools/call endpoint.
 func DecodeToolsCallRequest(mux loomhttp.Muxer, decoder func(*http.Request) loomhttp.Decoder) func(*http.Request, *jsonrpc.RawRequest) (*mcpassistant.ToolsCallPayload, error) {
 	return func(r *http.Request, req *jsonrpc.RawRequest) (*mcpassistant.ToolsCallPayload, error) {
-		r.Body = io.NopCloser(bytes.NewReader(req.Params))
+		params := req.Params
+		if len(params) == 0 {
+			params = []byte("{}")
+		}
+		r.Body = io.NopCloser(bytes.NewReader(params))
 		var payload *mcpassistant.ToolsCallPayload
 		var (
 			body ToolsCallRequestBody
@@ -190,7 +202,11 @@ func EncodeResourcesListResponse(encoder func(context.Context, http.ResponseWrit
 // mcp_assistant resources/list endpoint.
 func DecodeResourcesListRequest(mux loomhttp.Muxer, decoder func(*http.Request) loomhttp.Decoder) func(*http.Request, *jsonrpc.RawRequest) (*mcpassistant.ResourcesListPayload, error) {
 	return func(r *http.Request, req *jsonrpc.RawRequest) (*mcpassistant.ResourcesListPayload, error) {
-		r.Body = io.NopCloser(bytes.NewReader(req.Params))
+		params := req.Params
+		if len(params) == 0 {
+			params = []byte("{}")
+		}
+		r.Body = io.NopCloser(bytes.NewReader(params))
 		var payload *mcpassistant.ResourcesListPayload
 		var (
 			body ResourcesListRequestBody
@@ -234,7 +250,11 @@ func EncodeResourcesReadResponse(encoder func(context.Context, http.ResponseWrit
 // mcp_assistant resources/read endpoint.
 func DecodeResourcesReadRequest(mux loomhttp.Muxer, decoder func(*http.Request) loomhttp.Decoder) func(*http.Request, *jsonrpc.RawRequest) (*mcpassistant.ResourcesReadPayload, error) {
 	return func(r *http.Request, req *jsonrpc.RawRequest) (*mcpassistant.ResourcesReadPayload, error) {
-		r.Body = io.NopCloser(bytes.NewReader(req.Params))
+		params := req.Params
+		if len(params) == 0 {
+			params = []byte("{}")
+		}
+		r.Body = io.NopCloser(bytes.NewReader(params))
 		var payload *mcpassistant.ResourcesReadPayload
 		var (
 			body ResourcesReadRequestBody
@@ -274,7 +294,11 @@ func EncodeResourcesSubscribeResponse(encoder func(context.Context, http.Respons
 // mcp_assistant resources/subscribe endpoint.
 func DecodeResourcesSubscribeRequest(mux loomhttp.Muxer, decoder func(*http.Request) loomhttp.Decoder) func(*http.Request, *jsonrpc.RawRequest) (*mcpassistant.ResourcesSubscribePayload, error) {
 	return func(r *http.Request, req *jsonrpc.RawRequest) (*mcpassistant.ResourcesSubscribePayload, error) {
-		r.Body = io.NopCloser(bytes.NewReader(req.Params))
+		params := req.Params
+		if len(params) == 0 {
+			params = []byte("{}")
+		}
+		r.Body = io.NopCloser(bytes.NewReader(params))
 		var payload *mcpassistant.ResourcesSubscribePayload
 		var (
 			body ResourcesSubscribeRequestBody
@@ -314,7 +338,11 @@ func EncodeResourcesUnsubscribeResponse(encoder func(context.Context, http.Respo
 // mcp_assistant resources/unsubscribe endpoint.
 func DecodeResourcesUnsubscribeRequest(mux loomhttp.Muxer, decoder func(*http.Request) loomhttp.Decoder) func(*http.Request, *jsonrpc.RawRequest) (*mcpassistant.ResourcesUnsubscribePayload, error) {
 	return func(r *http.Request, req *jsonrpc.RawRequest) (*mcpassistant.ResourcesUnsubscribePayload, error) {
-		r.Body = io.NopCloser(bytes.NewReader(req.Params))
+		params := req.Params
+		if len(params) == 0 {
+			params = []byte("{}")
+		}
+		r.Body = io.NopCloser(bytes.NewReader(params))
 		var payload *mcpassistant.ResourcesUnsubscribePayload
 		var (
 			body ResourcesUnsubscribeRequestBody
@@ -360,7 +388,11 @@ func EncodePromptsListResponse(encoder func(context.Context, http.ResponseWriter
 // mcp_assistant prompts/list endpoint.
 func DecodePromptsListRequest(mux loomhttp.Muxer, decoder func(*http.Request) loomhttp.Decoder) func(*http.Request, *jsonrpc.RawRequest) (*mcpassistant.PromptsListPayload, error) {
 	return func(r *http.Request, req *jsonrpc.RawRequest) (*mcpassistant.PromptsListPayload, error) {
-		r.Body = io.NopCloser(bytes.NewReader(req.Params))
+		params := req.Params
+		if len(params) == 0 {
+			params = []byte("{}")
+		}
+		r.Body = io.NopCloser(bytes.NewReader(params))
 		var payload *mcpassistant.PromptsListPayload
 		var (
 			body PromptsListRequestBody
@@ -404,7 +436,11 @@ func EncodePromptsGetResponse(encoder func(context.Context, http.ResponseWriter)
 // mcp_assistant prompts/get endpoint.
 func DecodePromptsGetRequest(mux loomhttp.Muxer, decoder func(*http.Request) loomhttp.Decoder) func(*http.Request, *jsonrpc.RawRequest) (*mcpassistant.PromptsGetPayload, error) {
 	return func(r *http.Request, req *jsonrpc.RawRequest) (*mcpassistant.PromptsGetPayload, error) {
-		r.Body = io.NopCloser(bytes.NewReader(req.Params))
+		params := req.Params
+		if len(params) == 0 {
+			params = []byte("{}")
+		}
+		r.Body = io.NopCloser(bytes.NewReader(params))
 		var payload *mcpassistant.PromptsGetPayload
 		var (
 			body PromptsGetRequestBody
@@ -444,7 +480,11 @@ func EncodeNotifyStatusUpdateResponse(encoder func(context.Context, http.Respons
 // mcp_assistant notify_status_update endpoint.
 func DecodeNotifyStatusUpdateRequest(mux loomhttp.Muxer, decoder func(*http.Request) loomhttp.Decoder) func(*http.Request, *jsonrpc.RawRequest) (*mcpassistant.SendNotificationPayload, error) {
 	return func(r *http.Request, req *jsonrpc.RawRequest) (*mcpassistant.SendNotificationPayload, error) {
-		r.Body = io.NopCloser(bytes.NewReader(req.Params))
+		params := req.Params
+		if len(params) == 0 {
+			params = []byte("{}")
+		}
+		r.Body = io.NopCloser(bytes.NewReader(params))
 		var payload *mcpassistant.SendNotificationPayload
 		var (
 			body NotifyStatusUpdateRequestBody

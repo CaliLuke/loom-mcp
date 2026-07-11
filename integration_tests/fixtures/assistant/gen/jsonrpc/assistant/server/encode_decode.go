@@ -69,7 +69,11 @@ func EncodeConversationHistoryResponse(encoder func(context.Context, http.Respon
 // assistant conversation_history endpoint.
 func DecodeConversationHistoryRequest(mux loomhttp.Muxer, decoder func(*http.Request) loomhttp.Decoder) func(*http.Request, *jsonrpc.RawRequest) (*assistant.ConversationHistoryPayload, error) {
 	return func(r *http.Request, req *jsonrpc.RawRequest) (*assistant.ConversationHistoryPayload, error) {
-		r.Body = io.NopCloser(bytes.NewReader(req.Params))
+		params := req.Params
+		if len(params) == 0 {
+			params = []byte("{}")
+		}
+		r.Body = io.NopCloser(bytes.NewReader(params))
 		var payload *assistant.ConversationHistoryPayload
 		var (
 			body ConversationHistoryRequestBody
@@ -126,7 +130,11 @@ func EncodeGeneratePromptsResponse(encoder func(context.Context, http.ResponseWr
 // assistant generate_prompts endpoint.
 func DecodeGeneratePromptsRequest(mux loomhttp.Muxer, decoder func(*http.Request) loomhttp.Decoder) func(*http.Request, *jsonrpc.RawRequest) (*assistant.GeneratePromptsPayload, error) {
 	return func(r *http.Request, req *jsonrpc.RawRequest) (*assistant.GeneratePromptsPayload, error) {
-		r.Body = io.NopCloser(bytes.NewReader(req.Params))
+		params := req.Params
+		if len(params) == 0 {
+			params = []byte("{}")
+		}
+		r.Body = io.NopCloser(bytes.NewReader(params))
 		var payload *assistant.GeneratePromptsPayload
 		var (
 			body GeneratePromptsRequestBody
@@ -173,7 +181,11 @@ func EncodeBuildFigmaImplementationPromptResponse(encoder func(context.Context, 
 // sent to the assistant build_figma_implementation_prompt endpoint.
 func DecodeBuildFigmaImplementationPromptRequest(mux loomhttp.Muxer, decoder func(*http.Request) loomhttp.Decoder) func(*http.Request, *jsonrpc.RawRequest) (*assistant.BuildFigmaImplementationPromptPayload, error) {
 	return func(r *http.Request, req *jsonrpc.RawRequest) (*assistant.BuildFigmaImplementationPromptPayload, error) {
-		r.Body = io.NopCloser(bytes.NewReader(req.Params))
+		params := req.Params
+		if len(params) == 0 {
+			params = []byte("{}")
+		}
+		r.Body = io.NopCloser(bytes.NewReader(params))
 		var payload *assistant.BuildFigmaImplementationPromptPayload
 		var (
 			body BuildFigmaImplementationPromptRequestBody
@@ -213,7 +225,11 @@ func EncodeSendNotificationResponse(encoder func(context.Context, http.ResponseW
 // assistant send_notification endpoint.
 func DecodeSendNotificationRequest(mux loomhttp.Muxer, decoder func(*http.Request) loomhttp.Decoder) func(*http.Request, *jsonrpc.RawRequest) (*assistant.SendNotificationPayload, error) {
 	return func(r *http.Request, req *jsonrpc.RawRequest) (*assistant.SendNotificationPayload, error) {
-		r.Body = io.NopCloser(bytes.NewReader(req.Params))
+		params := req.Params
+		if len(params) == 0 {
+			params = []byte("{}")
+		}
+		r.Body = io.NopCloser(bytes.NewReader(params))
 		var payload *assistant.SendNotificationPayload
 		var (
 			body SendNotificationRequestBody
@@ -259,7 +275,11 @@ func EncodeAnalyzeSentimentResponse(encoder func(context.Context, http.ResponseW
 // assistant analyze_sentiment endpoint.
 func DecodeAnalyzeSentimentRequest(mux loomhttp.Muxer, decoder func(*http.Request) loomhttp.Decoder) func(*http.Request, *jsonrpc.RawRequest) (*assistant.AnalyzeSentimentPayload, error) {
 	return func(r *http.Request, req *jsonrpc.RawRequest) (*assistant.AnalyzeSentimentPayload, error) {
-		r.Body = io.NopCloser(bytes.NewReader(req.Params))
+		params := req.Params
+		if len(params) == 0 {
+			params = []byte("{}")
+		}
+		r.Body = io.NopCloser(bytes.NewReader(params))
 		var payload *assistant.AnalyzeSentimentPayload
 		var (
 			body AnalyzeSentimentRequestBody
@@ -305,7 +325,11 @@ func EncodeExtractKeywordsResponse(encoder func(context.Context, http.ResponseWr
 // assistant extract_keywords endpoint.
 func DecodeExtractKeywordsRequest(mux loomhttp.Muxer, decoder func(*http.Request) loomhttp.Decoder) func(*http.Request, *jsonrpc.RawRequest) (*assistant.ExtractKeywordsPayload, error) {
 	return func(r *http.Request, req *jsonrpc.RawRequest) (*assistant.ExtractKeywordsPayload, error) {
-		r.Body = io.NopCloser(bytes.NewReader(req.Params))
+		params := req.Params
+		if len(params) == 0 {
+			params = []byte("{}")
+		}
+		r.Body = io.NopCloser(bytes.NewReader(params))
 		var payload *assistant.ExtractKeywordsPayload
 		var (
 			body ExtractKeywordsRequestBody
@@ -351,7 +375,11 @@ func EncodeSummarizeTextResponse(encoder func(context.Context, http.ResponseWrit
 // assistant summarize_text endpoint.
 func DecodeSummarizeTextRequest(mux loomhttp.Muxer, decoder func(*http.Request) loomhttp.Decoder) func(*http.Request, *jsonrpc.RawRequest) (*assistant.SummarizeTextPayload, error) {
 	return func(r *http.Request, req *jsonrpc.RawRequest) (*assistant.SummarizeTextPayload, error) {
-		r.Body = io.NopCloser(bytes.NewReader(req.Params))
+		params := req.Params
+		if len(params) == 0 {
+			params = []byte("{}")
+		}
+		r.Body = io.NopCloser(bytes.NewReader(params))
 		var payload *assistant.SummarizeTextPayload
 		var (
 			body SummarizeTextRequestBody
@@ -397,7 +425,11 @@ func EncodeSearchResponse(encoder func(context.Context, http.ResponseWriter) loo
 // search endpoint.
 func DecodeSearchRequest(mux loomhttp.Muxer, decoder func(*http.Request) loomhttp.Decoder) func(*http.Request, *jsonrpc.RawRequest) (*assistant.SearchPayload, error) {
 	return func(r *http.Request, req *jsonrpc.RawRequest) (*assistant.SearchPayload, error) {
-		r.Body = io.NopCloser(bytes.NewReader(req.Params))
+		params := req.Params
+		if len(params) == 0 {
+			params = []byte("{}")
+		}
+		r.Body = io.NopCloser(bytes.NewReader(params))
 		var payload *assistant.SearchPayload
 		var (
 			body SearchRequestBody
@@ -443,7 +475,11 @@ func EncodeSearchRecordsResponse(encoder func(context.Context, http.ResponseWrit
 // assistant search_records endpoint.
 func DecodeSearchRecordsRequest(mux loomhttp.Muxer, decoder func(*http.Request) loomhttp.Decoder) func(*http.Request, *jsonrpc.RawRequest) (*assistant.SearchRecordsPayload, error) {
 	return func(r *http.Request, req *jsonrpc.RawRequest) (*assistant.SearchRecordsPayload, error) {
-		r.Body = io.NopCloser(bytes.NewReader(req.Params))
+		params := req.Params
+		if len(params) == 0 {
+			params = []byte("{}")
+		}
+		r.Body = io.NopCloser(bytes.NewReader(params))
 		var payload *assistant.SearchRecordsPayload
 		var (
 			body SearchRecordsRequestBody
@@ -485,7 +521,11 @@ func EncodeExecuteCodeResponse(encoder func(context.Context, http.ResponseWriter
 // assistant execute_code endpoint.
 func DecodeExecuteCodeRequest(mux loomhttp.Muxer, decoder func(*http.Request) loomhttp.Decoder) func(*http.Request, *jsonrpc.RawRequest) (*assistant.ExecuteCodePayload, error) {
 	return func(r *http.Request, req *jsonrpc.RawRequest) (*assistant.ExecuteCodePayload, error) {
-		r.Body = io.NopCloser(bytes.NewReader(req.Params))
+		params := req.Params
+		if len(params) == 0 {
+			params = []byte("{}")
+		}
+		r.Body = io.NopCloser(bytes.NewReader(params))
 		var payload *assistant.ExecuteCodePayload
 		var (
 			body ExecuteCodeRequestBody
@@ -531,7 +571,11 @@ func EncodeProcessBatchResponse(encoder func(context.Context, http.ResponseWrite
 // assistant process_batch endpoint.
 func DecodeProcessBatchRequest(mux loomhttp.Muxer, decoder func(*http.Request) loomhttp.Decoder) func(*http.Request, *jsonrpc.RawRequest) (*assistant.ProcessBatchPayload, error) {
 	return func(r *http.Request, req *jsonrpc.RawRequest) (*assistant.ProcessBatchPayload, error) {
-		r.Body = io.NopCloser(bytes.NewReader(req.Params))
+		params := req.Params
+		if len(params) == 0 {
+			params = []byte("{}")
+		}
+		r.Body = io.NopCloser(bytes.NewReader(params))
 		var payload *assistant.ProcessBatchPayload
 		var (
 			body ProcessBatchRequestBody
@@ -577,7 +621,11 @@ func EncodeMultiContentResponse(encoder func(context.Context, http.ResponseWrite
 // assistant multi_content endpoint.
 func DecodeMultiContentRequest(mux loomhttp.Muxer, decoder func(*http.Request) loomhttp.Decoder) func(*http.Request, *jsonrpc.RawRequest) (*assistant.MultiContentPayload, error) {
 	return func(r *http.Request, req *jsonrpc.RawRequest) (*assistant.MultiContentPayload, error) {
-		r.Body = io.NopCloser(bytes.NewReader(req.Params))
+		params := req.Params
+		if len(params) == 0 {
+			params = []byte("{}")
+		}
+		r.Body = io.NopCloser(bytes.NewReader(params))
 		var payload *assistant.MultiContentPayload
 		var (
 			body MultiContentRequestBody
@@ -623,7 +671,11 @@ func EncodeGenerateDpiSpecResponse(encoder func(context.Context, http.ResponseWr
 // assistant generate_dpi_spec endpoint.
 func DecodeGenerateDpiSpecRequest(mux loomhttp.Muxer, decoder func(*http.Request) loomhttp.Decoder) func(*http.Request, *jsonrpc.RawRequest) (*assistant.GenerateDpiSpecPayload, error) {
 	return func(r *http.Request, req *jsonrpc.RawRequest) (*assistant.GenerateDpiSpecPayload, error) {
-		r.Body = io.NopCloser(bytes.NewReader(req.Params))
+		params := req.Params
+		if len(params) == 0 {
+			params = []byte("{}")
+		}
+		r.Body = io.NopCloser(bytes.NewReader(params))
 		var payload *assistant.GenerateDpiSpecPayload
 		var (
 			body GenerateDpiSpecRequestBody
@@ -669,7 +721,11 @@ func EncodeDispatchActionResponse(encoder func(context.Context, http.ResponseWri
 // assistant dispatch_action endpoint.
 func DecodeDispatchActionRequest(mux loomhttp.Muxer, decoder func(*http.Request) loomhttp.Decoder) func(*http.Request, *jsonrpc.RawRequest) (*assistant.DispatchActionPayload, error) {
 	return func(r *http.Request, req *jsonrpc.RawRequest) (*assistant.DispatchActionPayload, error) {
-		r.Body = io.NopCloser(bytes.NewReader(req.Params))
+		params := req.Params
+		if len(params) == 0 {
+			params = []byte("{}")
+		}
+		r.Body = io.NopCloser(bytes.NewReader(params))
 		var payload *assistant.DispatchActionPayload
 		var (
 			body DispatchActionRequestBody
@@ -715,7 +771,11 @@ func EncodeDispatchCommandResponse(encoder func(context.Context, http.ResponseWr
 // assistant dispatch_command endpoint.
 func DecodeDispatchCommandRequest(mux loomhttp.Muxer, decoder func(*http.Request) loomhttp.Decoder) func(*http.Request, *jsonrpc.RawRequest) (*assistant.DispatchCommandPayload, error) {
 	return func(r *http.Request, req *jsonrpc.RawRequest) (*assistant.DispatchCommandPayload, error) {
-		r.Body = io.NopCloser(bytes.NewReader(req.Params))
+		params := req.Params
+		if len(params) == 0 {
+			params = []byte("{}")
+		}
+		r.Body = io.NopCloser(bytes.NewReader(params))
 		var payload *assistant.DispatchCommandPayload
 		var (
 			body DispatchCommandRequestBody
@@ -761,7 +821,11 @@ func EncodeProjectedLookupResponse(encoder func(context.Context, http.ResponseWr
 // assistant projected_lookup endpoint.
 func DecodeProjectedLookupRequest(mux loomhttp.Muxer, decoder func(*http.Request) loomhttp.Decoder) func(*http.Request, *jsonrpc.RawRequest) (*assistant.ProjectedLookupPayload, error) {
 	return func(r *http.Request, req *jsonrpc.RawRequest) (*assistant.ProjectedLookupPayload, error) {
-		r.Body = io.NopCloser(bytes.NewReader(req.Params))
+		params := req.Params
+		if len(params) == 0 {
+			params = []byte("{}")
+		}
+		r.Body = io.NopCloser(bytes.NewReader(params))
 		var payload *assistant.ProjectedLookupPayload
 		var (
 			body ProjectedLookupRequestBody

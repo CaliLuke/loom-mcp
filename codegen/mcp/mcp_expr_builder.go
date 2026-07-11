@@ -147,7 +147,13 @@ func (b *mcpExprBuilder) buildHTTPService(mcpService *expr.ServiceExpr) *expr.HT
 		b.RecordValidationError(fmt.Errorf(missingJSONRPCRouteMessage, b.originalService.Name))
 		jsonrpcPath = "/rpc"
 	}
-	return shared.BuildHTTPServiceBase(mcpService, mcpHTTPServiceConfig{jsonrpcPath: jsonrpcPath})
+	httpService := shared.BuildHTTPServiceBase(mcpService, mcpHTTPServiceConfig{jsonrpcPath: jsonrpcPath})
+	for _, endpoint := range httpService.HTTPEndpoints {
+		if endpoint.SSE != nil {
+			endpoint.SSE.NotificationMethod = endpoint.MethodExpr.Name
+		}
+	}
+	return httpService
 }
 
 // BuildServiceMapping creates the mapping between MCP methods and original
