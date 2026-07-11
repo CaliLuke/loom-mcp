@@ -44,6 +44,32 @@ func TestRootExprPrepareMaterializesSelectedOriginTools(t *testing.T) {
 	require.Equal(t, used, used.Tools[0].Toolset)
 }
 
+func TestRootExprValidateRejectsReferencedToolsetOverlayDuplicate(t *testing.T) {
+	service := &goaexpr.ServiceExpr{Name: "assistant"}
+	agent := &AgentExpr{Name: "planner", Service: service}
+	origin := &ToolsetExpr{
+		Name: "shared-tools",
+		Tools: []*ToolExpr{
+			{Name: "ping", Description: "Origin ping"},
+			{Name: "pong", Description: "Origin pong"},
+		},
+	}
+	used := &ToolsetExpr{
+		Name:   "shared-tools",
+		Agent:  agent,
+		Origin: origin,
+		Tools:  []*ToolExpr{{Name: "ping", Description: "Overlay ping"}},
+	}
+	agent.Used = &ToolsetGroupExpr{Agent: agent, Toolsets: []*ToolsetExpr{used}}
+	root := &RootExpr{Agents: []*AgentExpr{agent}, Toolsets: []*ToolsetExpr{origin}}
+
+	root.Prepare()
+	err := root.Validate()
+
+	require.Error(t, err)
+	require.ErrorContains(t, err, `tool name "ping" duplicates a tool declared in tool "ping"`)
+}
+
 func TestRootExprPrepareSyncsOriginRegistryVersion(t *testing.T) {
 	service := &goaexpr.ServiceExpr{Name: "assistant"}
 	agent := &AgentExpr{Name: "planner", Service: service}

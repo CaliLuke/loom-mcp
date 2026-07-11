@@ -182,9 +182,9 @@ func gatheredTools(toolsets []*ToolsetExpr) []*ToolExpr {
 //   - Registry names must be globally unique.
 //   - Defining toolsets (Origin == nil) must use globally unique names so
 //     they can serve as stable identifiers.
-//   - Tool names must be unique within a defining toolset (Origin == nil)
-//     but may be reused across different toolsets. Qualified tool IDs are
-//     derived as "toolset.tool".
+//   - Tool names must be unique within every materialized toolset but may be
+//     reused across different toolsets. Qualified tool IDs are derived as
+//     "toolset.tool".
 func (r *RootExpr) Validate() error {
 	verr := new(eval.ValidationErrors)
 	r.validateSanitizedAgentSlugs(verr)
@@ -518,11 +518,11 @@ func (r *RootExpr) validateScopedToolsets(
 
 func (v *toolsetValidator) record(ts *ToolsetExpr, scopeKey, scopeLabel string) {
 	v.root.recordSanitizedToolsetSlug(v.verr, v.sanitizedToolsets, ts, scopeKey, scopeLabel)
+	v.recordToolNames(ts)
 	if ts.Origin != nil {
 		return
 	}
 	v.recordToolset(ts)
-	v.recordToolNames(ts)
 }
 
 func (v *toolsetValidator) recordToolset(ts *ToolsetExpr) {

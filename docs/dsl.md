@@ -540,6 +540,10 @@ An optional DSL function can:
 - Subset tools from a referenced provider toolset by name
 - Define ad-hoc tools local to this agent
 
+After origin tools are materialized, every tool name in the consumed toolset
+must be unique. An overlay may add distinctly named tools, but it cannot
+redefine an inherited tool name; select that origin tool by name instead.
+
 ```go
 // Reference existing toolset
 Use(CommonTools)
