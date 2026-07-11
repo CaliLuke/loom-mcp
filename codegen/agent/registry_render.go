@@ -331,9 +331,19 @@ func RegisterUsedToolsets(ctx context.Context, rt *agentsruntime.Runtime, opts .
     {
         const toolsetID = {{ printf "%q" .QualifiedName }}
         exec := execs[toolsetID]
+        {{- if isRegistryBacked . }}
+        resolvedSpecs, err := {{ .SpecsPackageName }}.FreezeSpecs()
+        if err != nil {
+            return fmt.Errorf("freeze registry specs for toolset %q: %w", toolsetID, err)
+        }
+        {{- end }}
         reg := agentsruntime.ToolsetRegistration{
             Name:  toolsetID,
+            {{- if isRegistryBacked . }}
+            Specs: resolvedSpecs,
+            {{- else }}
             Specs: {{ .SpecsPackageName }}.Specs,
+            {{- end }}
             Execute: func(ctx context.Context, call *planner.ToolRequest) (*agentsruntime.ToolExecutionResult, error) {
                 if call == nil {
                     return nil, fmt.Errorf("tool request is nil")

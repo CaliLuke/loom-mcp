@@ -79,6 +79,9 @@ Use this file when editing DSL, generators, generated helpers, or MCP codegen be
 - `toolEntry.ConstName` is the authoritative unique Go identifier for a tool
   after specs construction. Agent-level aggregators, typed aliases, codecs, and
   call builders must reuse it rather than recomputing `Goify(tool.Name)`.
+- Registry-backed generated specs are refreshable only before runtime
+  registration. `Specs()` returns a locked snapshot and `FreezeSpecs()` is the
+  mandatory registration boundary; discovery after freezing is an error.
 - Projected MCP `ToolInfo` schemas must come from the generated toolset
   `tools.ToolSpec` payload and result schemas, not from service-method-only
   schema extraction. This keeps runtime specs, JSON-RPC adapters, and SDK

@@ -70,23 +70,47 @@ const RegistryName = __REGISTRY_NAME__
 // ToolsetName is the name of the toolset in the registry.
 const ToolsetName = __TOOLSET_NAME__
 __VERSION_BLOCK__
-// Specs holds the tool specifications discovered from the registry.
-// This slice is populated at runtime via DiscoverAndPopulate.
-var Specs []tools.ToolSpec
-
 var (
+	specs     []tools.ToolSpec
 	specIndex = make(map[tools.Ident]*tools.ToolSpec)
 	metadata  []policy.ToolMetadata
+	populated bool
+	frozen    bool
 	mu        sync.RWMutex
 )
+
+// Specs returns a snapshot of the tool specifications discovered from the registry.
+func Specs() []tools.ToolSpec {
+	mu.RLock()
+	defer mu.RUnlock()
+	return append([]tools.ToolSpec(nil), specs...)
+}
+
+// FreezeSpecs returns the discovered specifications and prevents later refreshes.
+// Runtime registration calls this so its immutable catalog cannot drift.
+func FreezeSpecs() ([]tools.ToolSpec, error) {
+	mu.Lock()
+	defer mu.Unlock()
+	if !populated || len(specs) == 0 {
+		return nil, fmt.Errorf("registry toolset %q must be discovered before registration", RegistryToolsetID)
+	}
+	frozen = true
+	return append([]tools.ToolSpec(nil), specs...), nil
+}
 
 // DiscoverAndPopulate fetches tool schemas from the registry and populates
 // the Specs slice. This function should be called during agent initialization
 // before the agent starts processing requests.
 //
-// The function is safe to call multiple times; subsequent calls will refresh
-// the cached specifications.
+// The function may refresh the cached specifications until FreezeSpecs is
+// called during runtime registration. Refreshes after registration fail.
 func DiscoverAndPopulate(ctx context.Context, client RegistryClient) error {
+	mu.RLock()
+	isFrozen := frozen
+	mu.RUnlock()
+	if isFrozen {
+		return fmt.Errorf("registry toolset %q is frozen after registration", RegistryToolsetID)
+	}
 	toolset, err := client.GetToolset(ctx, ToolsetName)
 	if err != nil {
 		return fmt.Errorf("discover toolset %q from registry %q: %w", ToolsetName, RegistryName, err)
@@ -97,8 +121,11 @@ func DiscoverAndPopulate(ctx context.Context, client RegistryClient) error {
 
 	mu.Lock()
 	defer mu.Unlock()
+	if frozen {
+		return fmt.Errorf("registry toolset %q is frozen after registration", RegistryToolsetID)
+	}
 
-	Specs = make([]tools.ToolSpec, 0, len(toolset.Tools))
+	specs = make([]tools.ToolSpec, 0, len(toolset.Tools))
 	specIndex = make(map[tools.Ident]*tools.ToolSpec, len(toolset.Tools))
 	metadata = make([]policy.ToolMetadata, 0, len(toolset.Tools))
 
@@ -120,8 +147,8 @@ func DiscoverAndPopulate(ctx context.Context, client RegistryClient) error {
 				Codec:  tools.JSONCodec[any]{},
 			},
 		}
-		Specs = append(Specs, spec)
-		specIndex[spec.Name] = &Specs[len(Specs)-1]
+		specs = append(specs, spec)
+		specIndex[spec.Name] = &specs[len(specs)-1]
 		metadata = append(metadata, policy.ToolMetadata{
 			ID:          spec.Name,
 			Title:       tool.Title,
@@ -129,6 +156,7 @@ func DiscoverAndPopulate(ctx context.Context, client RegistryClient) error {
 			Tags:        tool.Tags,
 		})
 	}
+	populated = true
 
 	return nil
 }
@@ -154,7 +182,11 @@ func Spec(name tools.Ident) (*tools.ToolSpec, bool) {
 	defer mu.RUnlock()
 
 	spec, ok := specIndex[name]
-	return spec, ok
+	if !ok {
+		return nil, false
+	}
+	copy := *spec
+	return &copy, true
 }
 
 // PayloadSchema returns the JSON schema for the named tool payload.

@@ -167,6 +167,9 @@ func templateFuncMap() map[string]any {
 		// needsUsedToolsetRegistration reports whether RegisterUsedToolsets should
 		// emit any registration block for this used toolset.
 		"needsUsedToolsetRegistration": needsUsedToolsetRegistration,
+		"isRegistryBacked": func(ts *ToolsetData) bool {
+			return ts != nil && ts.IsRegistryBacked
+		},
 		// mcpService returns the MCP service name for an MCP-backed toolset.
 		"mcpService": func(ts *ToolsetData) string {
 			if ts == nil || ts.Expr == nil || ts.Expr.Provider == nil {

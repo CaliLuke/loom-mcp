@@ -691,6 +691,14 @@ var PinnedTools = Toolset(FromRegistry(CorpRegistry, "data-tools"), func() {
 })
 ```
 
+Generated registry specs must be discovered before `RegisterUsedToolsets`.
+Discovery may refresh the generated cache during startup; registration calls
+`FreezeSpecs`, takes an immutable snapshot, and rejects later refreshes. Use the
+race-safe generated `Specs()` accessor for startup inspection. Long-running
+catalog synchronization through `runtime/registry.Manager` affects registry
+discovery, but a running agent must be restarted and registered again to adopt
+new generated tool schemas.
+
 ### Skill-Backed Toolsets
 
 `FromSkills` exposes local skill directories as model-facing tools. The generated agent package

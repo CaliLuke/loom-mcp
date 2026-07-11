@@ -728,6 +728,10 @@ use the client-side components in `runtime/registry`:
 - `SearchClient`: cross-registry search with semantic-first + keyword fallback when supported
 
 These are client-side helpers. The standalone registry service implementation lives under `loom-mcp/registry`.
+Generated registry-backed agent registrations intentionally freeze their discovered tool specs at
+`RegisterUsedToolsets`: call the generated `DiscoverAndPopulate` during startup, inspect through
+`Specs()`, then register. Refresh attempts after registration fail so runtime schemas and codecs
+cannot drift while workflows are executing; restart and re-register the agent to adopt a newer catalog.
 
 **Inline tools** — Custom executor implementation:
 
