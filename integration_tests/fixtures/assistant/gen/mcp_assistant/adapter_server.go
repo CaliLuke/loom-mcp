@@ -730,13 +730,13 @@ func (a *MCPAdapter) PublishSession(sessionID string, ev *EventsStreamResult) {
 	if a == nil || a.broadcaster == nil {
 		return
 	}
-	if sessionID != "" {
-		if scoped, ok := a.broadcaster.(mcpruntime.SessionBroadcaster); ok {
-			scoped.PublishSession(sessionID, ev)
-			return
-		}
+	if sessionID == "" {
+		a.broadcaster.Publish(ev)
+		return
 	}
-	a.broadcaster.Publish(ev)
+	if scoped, ok := a.broadcaster.(mcpruntime.SessionBroadcaster); ok {
+		scoped.PublishSession(sessionID, ev)
+	}
 }
 
 // PublishContext sends an event to subscribers for the MCP session in ctx.

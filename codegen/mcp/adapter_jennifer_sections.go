@@ -29,13 +29,13 @@ func adapterBroadcastSection() codegen.Section {
 				jen.If(jen.Id("a").Op("==").Nil().Op("||").Id("a").Dot("broadcaster").Op("==").Nil()).Block(
 					jen.Return(),
 				),
-				jen.If(jen.Id("sessionID").Op("!=").Lit("")).Block(
-					jen.If(jen.List(jen.Id("scoped"), jen.Id("ok")).Op(":=").Id("a").Dot("broadcaster").Assert(jen.Id("mcpruntime").Dot("SessionBroadcaster")), jen.Id("ok")).Block(
-						jen.Id("scoped").Dot("PublishSession").Call(jen.Id("sessionID"), jen.Id("ev")),
-						jen.Return(),
-					),
+				jen.If(jen.Id("sessionID").Op("==").Lit("")).Block(
+					jen.Id("a").Dot("broadcaster").Dot("Publish").Call(jen.Id("ev")),
+					jen.Return(),
 				),
-				jen.Id("a").Dot("broadcaster").Dot("Publish").Call(jen.Id("ev")),
+				jen.If(jen.List(jen.Id("scoped"), jen.Id("ok")).Op(":=").Id("a").Dot("broadcaster").Assert(jen.Id("mcpruntime").Dot("SessionBroadcaster")), jen.Id("ok")).Block(
+					jen.Id("scoped").Dot("PublishSession").Call(jen.Id("sessionID"), jen.Id("ev")),
+				),
 			)
 		stmt.Line()
 

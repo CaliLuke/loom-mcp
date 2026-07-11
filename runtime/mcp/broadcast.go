@@ -115,7 +115,7 @@ func (b *channelBroadcaster) SubscribeSession(ctx context.Context, sessionID str
 }
 
 func (b *channelBroadcaster) Publish(ev any) {
-	subs := b.snapshotSubscribers("")
+	subs := b.snapshotAllSubscribers()
 	b.publish(subs, ev)
 }
 
@@ -139,6 +139,28 @@ func (b *channelBroadcaster) snapshotSubscribers(sessionID string) []*channelSub
 	subs := make([]*channelSub, 0, len(source))
 	for sub := range source {
 		subs = append(subs, sub)
+	}
+	return subs
+}
+
+func (b *channelBroadcaster) snapshotAllSubscribers() []*channelSub {
+	b.mu.RLock()
+	defer b.mu.RUnlock()
+	if b.closed {
+		return nil
+	}
+	subCount := len(b.subs)
+	for _, sessionSubs := range b.sessionSubs {
+		subCount += len(sessionSubs)
+	}
+	subs := make([]*channelSub, 0, subCount)
+	for sub := range b.subs {
+		subs = append(subs, sub)
+	}
+	for _, sessionSubs := range b.sessionSubs {
+		for sub := range sessionSubs {
+			subs = append(subs, sub)
+		}
 	}
 	return subs
 }

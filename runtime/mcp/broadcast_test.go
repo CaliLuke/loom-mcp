@@ -36,6 +36,9 @@ func TestChannelBroadcasterPublishSessionScopesEvents(t *testing.T) {
 	b := NewChannelBroadcaster(1, true)
 	scoped, ok := b.(SessionBroadcaster)
 	require.True(t, ok)
+	global, err := b.Subscribe(context.Background())
+	require.NoError(t, err)
+	t.Cleanup(func() { require.NoError(t, global.Close()) })
 
 	one, err := scoped.SubscribeSession(context.Background(), "one")
 	require.NoError(t, err)
@@ -47,13 +50,14 @@ func TestChannelBroadcasterPublishSessionScopesEvents(t *testing.T) {
 
 	scoped.PublishSession("one", "event")
 
-	require.Equal(t, "event", <-one.C())
+	requireEvent(t, one.C(), "event")
 	requireNoEvent(t, two.C())
 
 	b.Publish("global")
 
-	requireNoEvent(t, one.C())
-	requireNoEvent(t, two.C())
+	requireEvent(t, global.C(), "global")
+	requireEvent(t, one.C(), "global")
+	requireEvent(t, two.C(), "global")
 }
 
 func TestChannelBroadcasterCloseUnblocksPublishToSlowSubscriber(t *testing.T) {
@@ -119,6 +123,17 @@ func requireNoEvent(t *testing.T, ch <-chan any) {
 	case ev := <-ch:
 		t.Fatalf("received unexpected event %v", ev)
 	case <-time.After(50 * time.Millisecond):
+	}
+}
+
+func requireEvent(t *testing.T, ch <-chan any, expected any) {
+	t.Helper()
+
+	select {
+	case ev := <-ch:
+		require.Equal(t, expected, ev)
+	case <-time.After(100 * time.Millisecond):
+		t.Fatal("event was not delivered")
 	}
 }
 

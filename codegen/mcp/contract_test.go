@@ -573,7 +573,16 @@ func TestGenerateAdapter_RendersSessionScopedEventPublishing(t *testing.T) {
 	rendered := renderGeneratedFile(t, file)
 
 	require.Contains(t, rendered, `func (a *MCPAdapter) PublishSession(sessionID string, ev *EventsStreamResult)`)
+	require.Contains(t, rendered, `if sessionID == "" {
+		a.broadcaster.Publish(ev)
+		return
+	}`)
 	require.Contains(t, rendered, `scoped.PublishSession(sessionID, ev)`)
+	require.NotContains(t, rendered, `	}
+	a.broadcaster.Publish(ev)
+}
+
+// PublishContext sends an event`)
 	require.Contains(t, rendered, `func (a *MCPAdapter) PublishContext(ctx context.Context, ev *EventsStreamResult)`)
 	require.Contains(t, rendered, `a.PublishContext(ctx, ev)`)
 	require.Contains(t, rendered, `sessionID := mcpruntime.SessionIDFromContext(ctx)`)
