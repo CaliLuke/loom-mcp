@@ -347,6 +347,21 @@ func emitResourcesRead(stmt *jen.Statement, data *AdapterData) {
 			if len(data.SkillDirectories) > 0 {
 				g.If(jen.Qual("strings", "HasPrefix").Call(jen.Id("baseURI"), jen.Lit("skill://"))).Block(
 					jen.Id("skillSources").Op(":=").Id("skillSources").Call(),
+					jen.List(jen.Id("skillResources"), jen.Err()).Op(":=").Id("mcpskills").Dot("List").Call(jen.Id("ctx"), jen.Id("skillSources")),
+					jen.If(jen.Err().Op("!=").Nil()).Block(
+						jen.Return(jen.Nil(), jen.Id("a").Dot("safeMCPError").Call(jen.Err(), jen.Lit("internal_error"), jen.Lit("Unable to inspect skill resource policy."))),
+					),
+					jen.Id("skillNameToURI").Op(":=").Make(jen.Map(jen.String()).String(), jen.Len(jen.Id("skillResources"))),
+					jen.For(jen.List(jen.Id("_"), jen.Id("resource")).Op(":=").Range().Id("skillResources")).Block(
+						jen.Id("policyURI").Op(":=").Id("resource").Dot("URI"),
+						jen.If(jen.Qual("strings", "HasSuffix").Call(jen.Id("policyURI"), jen.Lit("/SKILL.md"))).Block(
+							jen.Id("policyURI").Op("=").Qual("strings", "TrimSuffix").Call(jen.Id("policyURI"), jen.Lit("SKILL.md")),
+						),
+						jen.Id("skillNameToURI").Index(jen.Id("resource").Dot("Name")).Op("=").Id("policyURI"),
+					),
+					jen.If(jen.Id("err").Op(":=").Id("a").Dot("assertResourceURIAllowed").Call(jen.Id("ctx"), jen.Id("p").Dot("URI"), jen.Id("skillNameToURI")), jen.Id("err").Op("!=").Nil()).Block(
+						jen.Return(jen.Nil(), jen.Id("a").Dot("safeMCPError").Call(jen.Id("err"), jen.Lit("invalid_params"), jen.Lit("Resource URI is not allowed."))),
+					),
 					jen.List(jen.Id("content"), jen.Err()).Op(":=").Id("mcpskills").Dot("Read").Call(jen.Id("ctx"), jen.Id("skillSources"), jen.Id("baseURI")),
 					jen.If(jen.Err().Op("!=").Nil()).Block(
 						jen.Id("a").Dot("log").Call(jen.Id("ctx"), jen.Lit("error"), jen.Map(jen.String()).Any().Values(jen.Dict{
@@ -388,7 +403,7 @@ func emitResourcesRead(stmt *jen.Statement, data *AdapterData) {
 			g.Switch(jen.Id("baseURI")).BlockFunc(func(sw *jen.Group) {
 				for _, resource := range data.Resources {
 					sw.Case(jen.Lit(resource.URI)).BlockFunc(func(caseg *jen.Group) {
-						caseg.If(jen.Id("err").Op(":=").Id("a").Dot("assertResourceURIAllowed").Call(jen.Id("ctx"), jen.Id("p").Dot("URI")), jen.Id("err").Op("!=").Nil()).Block(
+						caseg.If(jen.Id("err").Op(":=").Id("a").Dot("assertResourceURIAllowed").Call(jen.Id("ctx"), jen.Id("p").Dot("URI"), jen.Nil()), jen.Id("err").Op("!=").Nil()).Block(
 							jen.Return(jen.Nil(), jen.Id("a").Dot("safeMCPError").Call(jen.Id("err"), jen.Lit("invalid_params"), jen.Lit("Resource URI is not allowed."))),
 						)
 						if resource.HasPayload {
@@ -492,6 +507,7 @@ func emitAssertResourceURIAllowed(stmt *jen.Statement) {
 		Params(
 			jen.Id("ctx").Qual("context", "Context"),
 			jen.Id("pURI").String(),
+			jen.Id("extraNameToURI").Map(jen.String()).String(),
 		).
 		Error().
 		Block(
@@ -501,16 +517,24 @@ func emitAssertResourceURIAllowed(stmt *jen.Statement) {
 			),
 			jen.Var().Id("extraAllowURIs").Index().String(),
 			jen.Var().Id("extraDenyURIs").Index().String(),
-			jen.If(jen.Id("ctx").Op("!=").Nil()).Block(
-				appendResourceURIsFromContextValue(jen.Id("mcpruntime").Dot("AllowedResourceNamesFromContext").Call(jen.Id("ctx")), "extraAllowURIs"),
-				appendResourceURIsFromContextValue(jen.Id("mcpruntime").Dot("DeniedResourceNamesFromContext").Call(jen.Id("ctx")), "extraDenyURIs"),
+			jen.Var().Id("allowedNames").Index().String(),
+			jen.Var().Id("deniedNames").Index().String(),
+			jen.If(jen.Id("a").Dot("opts").Op("!=").Nil()).Block(
+				jen.Id("allowedNames").Op("=").Append(jen.Id("allowedNames"), jen.Id("a").Dot("opts").Dot("AllowedResourceNames").Op("...")),
+				jen.Id("deniedNames").Op("=").Append(jen.Id("deniedNames"), jen.Id("a").Dot("opts").Dot("DeniedResourceNames").Op("...")),
 			),
+			jen.If(jen.Id("ctx").Op("!=").Nil()).Block(
+				appendResourceNamesFromContextValue(jen.Id("mcpruntime").Dot("AllowedResourceNamesFromContext").Call(jen.Id("ctx")), "allowedNames"),
+				appendResourceNamesFromContextValue(jen.Id("mcpruntime").Dot("DeniedResourceNamesFromContext").Call(jen.Id("ctx")), "deniedNames"),
+			),
+			resolveNamedResourcePolicies("allowedNames", "extraAllowURIs"),
+			resolveNamedResourcePolicies("deniedNames", "extraDenyURIs"),
 			jen.Var().Id("denied").Index().String(),
 			jen.If(jen.Id("a").Dot("opts").Op("!=").Nil()).Block(
 				jen.Id("denied").Op("=").Id("a").Dot("opts").Dot("DeniedResourceURIs"),
 			),
 			jen.For(jen.List(jen.Id("_"), jen.Id("d")).Op(":=").Range().Append(jen.Id("denied"), jen.Id("extraDenyURIs").Op("..."))).Block(
-				jen.If(jen.Id("d").Op("==").Id("base")).Block(
+				jen.If(jen.Id("resourceURIMatchesPolicy").Call(jen.Id("base"), jen.Id("d"))).Block(
 					jen.Return(jen.Qual("fmt", "Errorf").Call(jen.Lit("resource URI denied: %s"), jen.Id("pURI"))),
 				),
 			),
@@ -518,25 +542,39 @@ func emitAssertResourceURIAllowed(stmt *jen.Statement) {
 			jen.If(jen.Id("a").Dot("opts").Op("!=").Nil()).Block(
 				jen.Id("allowed").Op("=").Id("a").Dot("opts").Dot("AllowedResourceURIs"),
 			),
-			jen.If(jen.Len(jen.Id("allowed")).Op("==").Lit(0).Op("&&").Len(jen.Id("extraAllowURIs")).Op("==").Lit(0)).Block(
+			jen.If(jen.Len(jen.Id("allowed")).Op("==").Lit(0).Op("&&").Len(jen.Id("allowedNames")).Op("==").Lit(0)).Block(
 				jen.Return(jen.Nil()),
 			),
 			jen.For(jen.List(jen.Id("_"), jen.Id("allow")).Op(":=").Range().Append(jen.Id("allowed"), jen.Id("extraAllowURIs").Op("..."))).Block(
-				jen.If(jen.Id("allow").Op("==").Id("base")).Block(
+				jen.If(jen.Id("resourceURIMatchesPolicy").Call(jen.Id("base"), jen.Id("allow"))).Block(
 					jen.Return(jen.Nil()),
 				),
 			),
 			jen.Return(jen.Qual("fmt", "Errorf").Call(jen.Lit("resource URI not allowed: %s"), jen.Id("pURI"))),
 		)
 	stmt.Line()
+	stmt.Func().Id("resourceURIMatchesPolicy").Params(jen.Id("uri").String(), jen.Id("policy").String()).Bool().Block(
+		jen.Id("policy").Op("=").Qual("strings", "TrimSpace").Call(jen.Id("policy")),
+		jen.Return(jen.Id("uri").Op("==").Id("policy").Op("||").Qual("strings", "HasSuffix").Call(jen.Id("policy"), jen.Lit("/")).Op("&&").Qual("strings", "HasPrefix").Call(jen.Id("uri"), jen.Id("policy"))),
+	)
+	stmt.Line()
 }
 
-func appendResourceURIsFromContextValue(resourceNames jen.Code, targetSlice string) jen.Code {
+func appendResourceNamesFromContextValue(resourceNames jen.Code, targetSlice string) jen.Code {
 	return jen.If(jen.Id("s").Op(":=").Add(resourceNames), jen.Id("s").Op("!=").Lit("")).Block(
-		jen.For(jen.List(jen.Id("_"), jen.Id("n")).Op(":=").Range().Qual("strings", "Split").Call(jen.Id("s"), jen.Lit(","))).Block(
-			jen.If(jen.List(jen.Id("u"), jen.Id("ok")).Op(":=").Id("a").Dot("resourceNameToURI").Index(jen.Id("n")), jen.Id("ok")).Block(
-				jen.Id(targetSlice).Op("=").Append(jen.Id(targetSlice), jen.Id("u")),
-			),
+		jen.Id(targetSlice).Op("=").Append(jen.Id(targetSlice), jen.Qual("strings", "Split").Call(jen.Id("s"), jen.Lit(",")).Op("...")),
+	)
+}
+
+func resolveNamedResourcePolicies(namesSlice, targetSlice string) jen.Code {
+	return jen.For(jen.List(jen.Id("_"), jen.Id("n")).Op(":=").Range().Id(namesSlice)).Block(
+		jen.Id("n").Op("=").Qual("strings", "TrimSpace").Call(jen.Id("n")),
+		jen.List(jen.Id("u"), jen.Id("ok")).Op(":=").Id("extraNameToURI").Index(jen.Id("n")),
+		jen.If(jen.Op("!").Id("ok")).Block(
+			jen.List(jen.Id("u"), jen.Id("ok")).Op("=").Id("a").Dot("resourceNameToURI").Index(jen.Id("n")),
+		),
+		jen.If(jen.Id("ok")).Block(
+			jen.Id(targetSlice).Op("=").Append(jen.Id(targetSlice), jen.Id("u")),
 		),
 	)
 }

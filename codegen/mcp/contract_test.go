@@ -541,8 +541,10 @@ func TestGenerateAdapter_RendersSkillResourceProvider(t *testing.T) {
 
 	require.Contains(t, rendered, `func skillSources() []mcpskills.Source {`)
 	require.Contains(t, rendered, `Root: ".agents/skills"`)
-	require.Contains(t, rendered, `skillResources, err := mcpskills.List(ctx, skillSources)`)
 	require.Contains(t, rendered, `if strings.HasPrefix(baseURI, "skill://") {`)
+	require.Contains(t, rendered, `skillResources, err := mcpskills.List(ctx, skillSources)`)
+	require.Contains(t, rendered, `skillNameToURI := make(map[string]string, len(skillResources))`)
+	require.Contains(t, rendered, `if err := a.assertResourceURIAllowed(ctx, p.URI, skillNameToURI); err != nil {`)
 	require.Contains(t, rendered, `content, err := mcpskills.Read(ctx, skillSources, baseURI)`)
 	require.Contains(t, rendered, `a.log(ctx, "error", map[string]any{`)
 	require.Contains(t, rendered, `"error":  err.Error(),`)

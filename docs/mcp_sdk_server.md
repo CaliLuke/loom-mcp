@@ -137,6 +137,18 @@ mode. `NewSDKServer` fails construction when that option is true because the SDK
 cannot directly call tools that were intentionally omitted from the registered
 public catalog.
 
+### Resource access policies include skills
+
+`MCPAdapterOptions.AllowedResourceURIs`, `DeniedResourceURIs`,
+`AllowedResourceNames`, and `DeniedResourceNames` apply to both DSL resources
+and `skill://` resources. URI entries are exact unless they end in `/`; a
+trailing slash authorizes or denies the full prefix, such as
+`skill://code-review/`. A skill's main resource name also maps to that prefix,
+so allowing or denying `code-review` covers `SKILL.md`, `_manifest`, and
+supporting files. Request-scoped `x-mcp-allow-names` and
+`x-mcp-deny-names` values use the same rules, with deny entries taking
+precedence.
+
 ### Ctx-Cached Values Can Be Stale — Read `r.Header` First
 
 The supplied `*http.Request` carries fresh per-call values. The supplied

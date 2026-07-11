@@ -58,17 +58,6 @@ func emitAdapterStruct(stmt *jen.Statement, data *AdapterData) {
 	stmt.Line()
 }
 
-func emitResolveNamedResourcePolicies(g *jen.Group, namesField, urisField, seenPrefix string) {
-	g.For(jen.List(jen.Id("_"), jen.Id("n")).Op(":=").Range().Id("opts").Dot(namesField)).Block(
-		jen.If(jen.List(jen.Id("u"), jen.Id("ok")).Op(":=").Id("nameToURI").Index(jen.Id("n")), jen.Id("ok")).Block(
-			jen.If(jen.List(jen.Id("_"), jen.Id("dup")).Op(":=").Id("seen").Index(jen.Lit(seenPrefix).Op("+").Id("u")), jen.Op("!").Id("dup")).Block(
-				jen.Id("opts").Dot(urisField).Op("=").Append(jen.Id("opts").Dot(urisField), jen.Id("u")),
-				jen.Id("seen").Index(jen.Lit(seenPrefix).Op("+").Id("u")).Op("=").Struct().Values(),
-			),
-		),
-	)
-}
-
 // emitToolCallInterceptorTypes generates the interceptor-related types and impls.
 func emitToolCallInterceptorTypes(stmt *jen.Statement) {
 	stmt.Type().Defs(
@@ -188,10 +177,9 @@ func emitAdapterOptions(stmt *jen.Statement) {
 		jen.Id("Tracer").Qual("go.opentelemetry.io/otel/trace", "Tracer"),
 		jen.Comment("Meter overrides the meter used by the generated MCP adapter."),
 		jen.Id("Meter").Qual("go.opentelemetry.io/otel/metric", "Meter"),
-		jen.Comment("Allowed/Deny lists for resource URIs; Denied takes precedence unless header allow overrides"),
+		jen.Comment("Resource URI and name policies. Denied entries take precedence; URI entries ending in / match prefixes."),
 		jen.Id("AllowedResourceURIs").Index().String(),
 		jen.Id("DeniedResourceURIs").Index().String(),
-		jen.Comment("Name-based policy resolved to URIs at construction"),
 		jen.Id("AllowedResourceNames").Index().String(),
 		jen.Id("DeniedResourceNames").Index().String(),
 		jen.Id("StructuredStreamJSON").Bool(),
@@ -221,20 +209,6 @@ func emitAdapterConstructor(stmt *jen.Statement, data *AdapterData) {
 
 	stmt.Func().Id("NewMCPAdapter").Params(params...).Op("*").Id("MCPAdapter").BlockFunc(func(g *jen.Group) {
 		g.Id("validateToolSearchOptions").Call(jen.Id("opts"))
-
-		// Resolve name-based policy to URIs
-		g.Comment("Resolve name-based policy to URIs")
-		g.If(jen.Id("opts").Op("!=").Nil().Op("&&").Parens(jen.Len(jen.Id("opts").Dot("AllowedResourceNames")).Op(">").Lit(0).Op("||").Len(jen.Id("opts").Dot("DeniedResourceNames")).Op(">").Lit(0))).BlockFunc(func(ig *jen.Group) {
-			ig.Id("nameToURI").Op(":=").Map(jen.String()).String().ValuesFunc(func(vals *jen.Group) {
-				for _, r := range data.Resources {
-					vals.Lit(r.Name).Op(":").Lit(r.URI)
-				}
-			})
-			ig.Id("seen").Op(":=").Map(jen.String()).Struct().Values()
-
-			emitResolveNamedResourcePolicies(ig, "AllowedResourceNames", "AllowedResourceURIs", "allow:")
-			emitResolveNamedResourcePolicies(ig, "DeniedResourceNames", "DeniedResourceURIs", "deny:")
-		})
 
 		// Broadcaster
 		g.Comment("Broadcaster")

@@ -78,6 +78,70 @@ func TestGeneratedSDKServerExposesSEP973Metadata(t *testing.T) {
 	assert.Equal(t, "https://assistant.example.com/icons/contextual-prompts.png", dynamicPrompt.Icons[0].Source)
 }
 
+func TestGeneratedAdapterEnforcesSkillResourcePolicy(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name      string
+		opts      *mcpassistant.MCPAdapterOptions
+		configure func(context.Context) context.Context
+		wantError bool
+	}{
+		{
+			name:      "unlisted skill URI is denied",
+			opts:      &mcpassistant.MCPAdapterOptions{AllowedResourceURIs: []string{"doc://list"}},
+			wantError: true,
+		},
+		{
+			name: "skill URI prefix allows supporting files",
+			opts: &mcpassistant.MCPAdapterOptions{AllowedResourceURIs: []string{"skill://code-review/"}},
+		},
+		{
+			name: "adapter skill name allows supporting files",
+			opts: &mcpassistant.MCPAdapterOptions{AllowedResourceNames: []string{"code-review"}},
+		},
+		{
+			name:      "adapter skill name deny takes precedence",
+			opts:      &mcpassistant.MCPAdapterOptions{DeniedResourceNames: []string{"code-review"}},
+			wantError: true,
+		},
+		{
+			name: "request skill name allows supporting files",
+			configure: func(ctx context.Context) context.Context {
+				return mcpruntime.WithAllowedResourceNames(ctx, "code-review")
+			},
+		},
+		{
+			name: "unknown request allow name denies skill",
+			configure: func(ctx context.Context) context.Context {
+				return mcpruntime.WithAllowedResourceNames(ctx, "documents")
+			},
+			wantError: true,
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			adapter := mcpassistant.NewMCPAdapter(NewAssistant(), promptProvider{}, test.opts)
+			ctx := context.Background()
+			if test.configure != nil {
+				ctx = test.configure(ctx)
+			}
+			_, err := adapter.Initialize(ctx, &mcpassistant.InitializePayload{ProtocolVersion: "2025-06-18"})
+			require.NoError(t, err)
+
+			result, err := adapter.ResourcesRead(ctx, &mcpassistant.ResourcesReadPayload{URI: "skill://code-review/reference.md"})
+			if test.wantError {
+				require.Error(t, err)
+				return
+			}
+			require.NoError(t, err)
+			require.Len(t, result.Contents, 1)
+			assert.Equal(t, "skill://code-review/reference.md", result.Contents[0].URI)
+		})
+	}
+}
+
 func TestGeneratedJSONRPCServerExposesSEP973MetadataOnWire(t *testing.T) {
 	t.Parallel()
 

@@ -150,10 +150,9 @@ type MCPAdapterOptions struct {
 	Tracer trace.Tracer
 	// Meter overrides the meter used by the generated MCP adapter.
 	Meter metric.Meter
-	// Allowed/Deny lists for resource URIs; Denied takes precedence unless header allow overrides
-	AllowedResourceURIs []string
-	DeniedResourceURIs  []string
-	// Name-based policy resolved to URIs at construction
+	// Resource URI and name policies. Denied entries take precedence; URI entries ending in / match prefixes.
+	AllowedResourceURIs     []string
+	DeniedResourceURIs      []string
 	AllowedResourceNames    []string
 	DeniedResourceNames     []string
 	StructuredStreamJSON    bool
@@ -169,27 +168,6 @@ type MCPAdapterOptions struct {
 
 func NewMCPAdapter(service assistant.Service, promptProvider PromptProvider, opts *MCPAdapterOptions) *MCPAdapter {
 	validateToolSearchOptions(opts)
-	// Resolve name-based policy to URIs
-	if opts != nil && (len(opts.AllowedResourceNames) > 0 || len(opts.DeniedResourceNames) > 0) {
-		nameToURI := map[string]string{"documents": "doc://list", "system_info": "system://info", "conversation_history": "conversation://history", "figma_design_system": "figma://design-system/mobile-checkout"}
-		seen := map[string]struct{}{}
-		for _, n := range opts.AllowedResourceNames {
-			if u, ok := nameToURI[n]; ok {
-				if _, dup := seen["allow:"+u]; !dup {
-					opts.AllowedResourceURIs = append(opts.AllowedResourceURIs, u)
-					seen["allow:"+u] = struct{}{}
-				}
-			}
-		}
-		for _, n := range opts.DeniedResourceNames {
-			if u, ok := nameToURI[n]; ok {
-				if _, dup := seen["deny:"+u]; !dup {
-					opts.DeniedResourceURIs = append(opts.DeniedResourceURIs, u)
-					seen["deny:"+u] = struct{}{}
-				}
-			}
-		}
-	}
 	// Broadcaster
 	var bc mcpruntime.Broadcaster
 	if opts != nil && opts.Broadcaster != nil {
@@ -2522,6 +2500,21 @@ func (a *MCPAdapter) ResourcesRead(ctx context.Context, p *ResourcesReadPayload)
 	}
 	if strings.HasPrefix(baseURI, "skill://") {
 		skillSources := skillSources()
+		skillResources, err := mcpskills.List(ctx, skillSources)
+		if err != nil {
+			return nil, a.safeMCPError(err, "internal_error", "Unable to inspect skill resource policy.")
+		}
+		skillNameToURI := make(map[string]string, len(skillResources))
+		for _, resource := range skillResources {
+			policyURI := resource.URI
+			if strings.HasSuffix(policyURI, "/SKILL.md") {
+				policyURI = strings.TrimSuffix(policyURI, "SKILL.md")
+			}
+			skillNameToURI[resource.Name] = policyURI
+		}
+		if err := a.assertResourceURIAllowed(ctx, p.URI, skillNameToURI); err != nil {
+			return nil, a.safeMCPError(err, "invalid_params", "Resource URI is not allowed.")
+		}
 		content, err := mcpskills.Read(ctx, skillSources, baseURI)
 		if err != nil {
 			a.log(ctx, "error", map[string]any{
@@ -2553,7 +2546,7 @@ func (a *MCPAdapter) ResourcesRead(ctx context.Context, p *ResourcesReadPayload)
 	}
 	switch baseURI {
 	case "doc://list":
-		if err := a.assertResourceURIAllowed(ctx, p.URI); err != nil {
+		if err := a.assertResourceURIAllowed(ctx, p.URI, nil); err != nil {
 			return nil, a.safeMCPError(err, "invalid_params", "Resource URI is not allowed.")
 		}
 		result, err := a.service.ListDocuments(ctx)
@@ -2575,7 +2568,7 @@ func (a *MCPAdapter) ResourcesRead(ctx context.Context, p *ResourcesReadPayload)
 		})
 		return res, nil
 	case "system://info":
-		if err := a.assertResourceURIAllowed(ctx, p.URI); err != nil {
+		if err := a.assertResourceURIAllowed(ctx, p.URI, nil); err != nil {
 			return nil, a.safeMCPError(err, "invalid_params", "Resource URI is not allowed.")
 		}
 		result, err := a.service.SystemInfo(ctx)
@@ -2597,7 +2590,7 @@ func (a *MCPAdapter) ResourcesRead(ctx context.Context, p *ResourcesReadPayload)
 		})
 		return res, nil
 	case "conversation://history":
-		if err := a.assertResourceURIAllowed(ctx, p.URI); err != nil {
+		if err := a.assertResourceURIAllowed(ctx, p.URI, nil); err != nil {
 			return nil, a.safeMCPError(err, "invalid_params", "Resource URI is not allowed.")
 		}
 		args, aerr := parseQueryParamsToJSON(p.URI)
@@ -2631,7 +2624,7 @@ func (a *MCPAdapter) ResourcesRead(ctx context.Context, p *ResourcesReadPayload)
 		})
 		return res, nil
 	case "figma://design-system/mobile-checkout":
-		if err := a.assertResourceURIAllowed(ctx, p.URI); err != nil {
+		if err := a.assertResourceURIAllowed(ctx, p.URI, nil); err != nil {
 			return nil, a.safeMCPError(err, "invalid_params", "Resource URI is not allowed.")
 		}
 		result, err := a.service.FigmaDesignSystem(ctx)
@@ -2661,27 +2654,45 @@ func skillSources() []mcpskills.Source {
 }
 
 // assertResourceURIAllowed verifies pURI passes allow/deny filters when configured.
-func (a *MCPAdapter) assertResourceURIAllowed(ctx context.Context, pURI string) error {
+func (a *MCPAdapter) assertResourceURIAllowed(ctx context.Context, pURI string, extraNameToURI map[string]string) error {
 	base := pURI
 	if i := strings.Index(base, "?"); i >= 0 {
 		base = base[0:i]
 	}
 	var extraAllowURIs []string
 	var extraDenyURIs []string
+	var allowedNames []string
+	var deniedNames []string
+	if a.opts != nil {
+		allowedNames = append(allowedNames, a.opts.AllowedResourceNames...)
+		deniedNames = append(deniedNames, a.opts.DeniedResourceNames...)
+	}
 	if ctx != nil {
 		if s := mcpruntime.AllowedResourceNamesFromContext(ctx); s != "" {
-			for _, n := range strings.Split(s, ",") {
-				if u, ok := a.resourceNameToURI[n]; ok {
-					extraAllowURIs = append(extraAllowURIs, u)
-				}
-			}
+			allowedNames = append(allowedNames, strings.Split(s, ",")...)
 		}
 		if s := mcpruntime.DeniedResourceNamesFromContext(ctx); s != "" {
-			for _, n := range strings.Split(s, ",") {
-				if u, ok := a.resourceNameToURI[n]; ok {
-					extraDenyURIs = append(extraDenyURIs, u)
-				}
-			}
+			deniedNames = append(deniedNames, strings.Split(s, ",")...)
+		}
+	}
+	for _, n := range allowedNames {
+		n = strings.TrimSpace(n)
+		u, ok := extraNameToURI[n]
+		if !ok {
+			u, ok = a.resourceNameToURI[n]
+		}
+		if ok {
+			extraAllowURIs = append(extraAllowURIs, u)
+		}
+	}
+	for _, n := range deniedNames {
+		n = strings.TrimSpace(n)
+		u, ok := extraNameToURI[n]
+		if !ok {
+			u, ok = a.resourceNameToURI[n]
+		}
+		if ok {
+			extraDenyURIs = append(extraDenyURIs, u)
 		}
 	}
 	var denied []string
@@ -2689,7 +2700,7 @@ func (a *MCPAdapter) assertResourceURIAllowed(ctx context.Context, pURI string) 
 		denied = a.opts.DeniedResourceURIs
 	}
 	for _, d := range append(denied, extraDenyURIs...) {
-		if d == base {
+		if resourceURIMatchesPolicy(base, d) {
 			return fmt.Errorf("resource URI denied: %s", pURI)
 		}
 	}
@@ -2697,15 +2708,19 @@ func (a *MCPAdapter) assertResourceURIAllowed(ctx context.Context, pURI string) 
 	if a.opts != nil {
 		allowed = a.opts.AllowedResourceURIs
 	}
-	if len(allowed) == 0 && len(extraAllowURIs) == 0 {
+	if len(allowed) == 0 && len(allowedNames) == 0 {
 		return nil
 	}
 	for _, allow := range append(allowed, extraAllowURIs...) {
-		if allow == base {
+		if resourceURIMatchesPolicy(base, allow) {
 			return nil
 		}
 	}
 	return fmt.Errorf("resource URI not allowed: %s", pURI)
+}
+func resourceURIMatchesPolicy(uri string, policy string) bool {
+	policy = strings.TrimSpace(policy)
+	return uri == policy || strings.HasSuffix(policy, "/") && strings.HasPrefix(uri, policy)
 }
 func (a *MCPAdapter) ResourcesSubscribe(ctx context.Context, p *ResourcesSubscribePayload) error {
 	if !a.isInitialized(ctx) {
