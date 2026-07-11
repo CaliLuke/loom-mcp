@@ -23,6 +23,25 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+func TestReconcileCatalogTickersForgetsDepartedToolsetObservations(t *testing.T) {
+	h := &healthTracker{
+		tickers:              map[string]*pool.Ticker{"departed": nil, "retained": nil},
+		cancels:              make(map[string]context.CancelFunc),
+		tickerTokens:         make(map[string]string),
+		lastObservedHealthy:  map[string]bool{"departed": false, "retained": true},
+		lastObservedPongNano: map[string]int64{"departed": 10, "retained": 20},
+	}
+
+	h.reconcileCatalogTickers(map[string]bool{"retained": true}, nil)
+
+	require.NotContains(t, h.lastObservedHealthy, "departed")
+	require.NotContains(t, h.lastObservedPongNano, "departed")
+	require.True(t, h.lastObservedHealthy["retained"])
+	require.Equal(t, int64(20), h.lastObservedPongNano["retained"])
+	require.NotContains(t, h.tickers, "departed")
+	require.Contains(t, h.tickers, "retained")
+}
+
 // iterCounter provides unique IDs for each property test iteration.
 var iterCounter atomic.Int64
 

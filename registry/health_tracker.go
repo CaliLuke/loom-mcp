@@ -137,9 +137,10 @@ type (
 	// locally (preserving the recreated shared entry) and started again;
 	// stopped tickers are removed cluster-wide.
 	tickerReconcilePlan struct {
-		start  []string
-		rotate []tickerDetachment
-		stop   []tickerDetachment
+		start              []string
+		rotate             []tickerDetachment
+		stop               []tickerDetachment
+		forgetObservations []string
 	}
 )
 
@@ -374,10 +375,7 @@ func (h *healthTracker) StopPingLoop(ctx context.Context, toolset string) {
 	// Stop local ticker (other nodes will do the same via watchRegistryChanges).
 	h.stopLocalTicker(toolset)
 
-	h.stateMu.Lock()
-	delete(h.lastObservedHealthy, toolset)
-	delete(h.lastObservedPongNano, toolset)
-	h.stateMu.Unlock()
+	h.forgetHealthObservations([]string{toolset})
 }
 
 // Close implements HealthTracker.
@@ -489,6 +487,7 @@ func (h *healthTracker) reconcileCatalogTickers(registered map[string]bool, toke
 	for _, detached := range plan.stop {
 		cancelAndStopLocalTicker(detached.cancel, detached.ticker)
 	}
+	h.forgetHealthObservations(plan.forgetObservations)
 	for _, toolset := range plan.start {
 		if err := h.startLocalTicker(context.Background(), toolset, tokens[toolset]); err != nil {
 			h.logger.Error(context.Background(), "start ticker failed", "event", "start_ticker_failed", "toolset", toolset, "err", err)
@@ -530,9 +529,22 @@ func (h *healthTracker) planCatalogTickerChanges(registered map[string]bool, tok
 		if !registered[toolset] {
 			cancel, ticker := h.detachLocalTickerLocked(toolset)
 			plan.stop = append(plan.stop, tickerDetachment{cancel: cancel, ticker: ticker})
+			plan.forgetObservations = append(plan.forgetObservations, toolset)
 		}
 	}
 	return plan, true
+}
+
+func (h *healthTracker) forgetHealthObservations(toolsets []string) {
+	if len(toolsets) == 0 {
+		return
+	}
+	h.stateMu.Lock()
+	defer h.stateMu.Unlock()
+	for _, toolset := range toolsets {
+		delete(h.lastObservedHealthy, toolset)
+		delete(h.lastObservedPongNano, toolset)
+	}
 }
 
 func (h *healthTracker) isClosed() bool {
