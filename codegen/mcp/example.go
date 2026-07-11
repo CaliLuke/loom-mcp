@@ -122,13 +122,22 @@ func PrepareExample(genpkg string, roots []eval.Root) error {
 			if !serviceInList(r.Services, mcpService.Name) {
 				r.Services = append(r.Services, mcpService)
 			}
-			// Only mount the MCP service on servers that originally exposed the
-			// source service. Example generation should preserve server ownership.
+			// Replace the source service with its MCP transport service on servers
+			// that originally exposed it. The generated MCP factory constructs the
+			// source implementation itself, so retaining the source service here
+			// produces an unused endpoint variable in prompt-only examples.
 			for _, srv := range r.API.Servers {
-				if !stringInList(srv.Services, svc.Name) || stringInList(srv.Services, mcpService.Name) {
+				if !stringInList(srv.Services, svc.Name) {
 					continue
 				}
-				srv.Services = append(srv.Services, mcpService.Name)
+				services := make([]string, 0, len(srv.Services))
+				for _, name := range srv.Services {
+					if name != svc.Name && name != mcpService.Name {
+						services = append(services, name)
+					}
+				}
+				services = append(services, mcpService.Name)
+				srv.Services = services
 			}
 		}
 	}
@@ -138,7 +147,7 @@ func PrepareExample(genpkg string, roots []eval.Root) error {
 // ModifyExampleFiles patches example CLI wiring to target the MCP adapter client
 // and replaces the default MCP stub factory to return the adapter-wrapped
 // service. It avoids touching HTTP server signatures or example mains.
-func ModifyExampleFiles(_ string, roots []eval.Root, files []*codegen.File) ([]*codegen.File, error) {
+func ModifyExampleFiles(genpkg string, roots []eval.Root, files []*codegen.File) ([]*codegen.File, error) {
 	r, ok := firstRootWithJSONRPC(roots)
 	if !ok {
 		return files, nil
@@ -150,7 +159,7 @@ func ModifyExampleFiles(_ string, roots []eval.Root, files []*codegen.File) ([]*
 	}
 
 	// Ensure example stub returns the adapter-backed service instead of zero-value stub
-	files = generateExampleAdapterStubs(mcpServices, files)
+	files = generateExampleAdapterStubs(genpkg, mcpServices, files)
 	servers := make(example.ServersData)
 
 	for _, svr := range r.API.Servers {
@@ -252,7 +261,7 @@ func patchCLIForServer(dir string, svr *expr.ServerExpr, mcpServices []*expr.Ser
 // patchExampleStubForMCP rewrites the generated example stub (mcp_<svc>.go)
 // to return the adapter that wraps the original service implementation, so the
 // server exposes proper MCP behavior.
-func generateExampleAdapterStubs(mcpServices []*expr.ServiceExpr, files []*codegen.File) []*codegen.File {
+func generateExampleAdapterStubs(genpkg string, mcpServices []*expr.ServiceExpr, files []*codegen.File) []*codegen.File {
 	if len(mcpServices) == 0 {
 		return files
 	}
@@ -308,11 +317,15 @@ func generateExampleAdapterStubs(mcpServices []*expr.ServiceExpr, files []*codeg
 			}
 		}
 		if mcpAlias == "" {
-			// Derive base module from any CLI header if available
-			base := deriveBaseModuleFromFiles(files)
-			if base != "" {
-				addHeaderImports(header, &codegen.ImportSpec{Path: base + "/gen/mcp_" + svcSnake, Name: codegen.Goify("mcp_"+svcSnake, false)})
+			mcpImportPath := ""
+			if genpkg != "" {
+				mcpImportPath = strings.TrimSuffix(genpkg, "/") + "/mcp_" + svcSnake
+			} else if base := deriveBaseModuleFromFiles(files); base != "" {
+				mcpImportPath = base + "/gen/mcp_" + svcSnake
+			}
+			if mcpImportPath != "" {
 				mcpAlias = codegen.Goify("mcp_"+svcSnake, false)
+				addHeaderImports(header, &codegen.ImportSpec{Path: mcpImportPath, Name: mcpAlias})
 			}
 		}
 		if mcpAlias == "" {

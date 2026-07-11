@@ -84,50 +84,57 @@ func adapterBroadcastSection() codegen.Section {
 	})
 }
 
-func adapterNotificationsSection() codegen.Section {
+func adapterNotificationsSection(data *AdapterData) codegen.Section {
 	return codegen.NewJenniferSection("mcp-adapter-notifications", func(stmt *jen.Statement) {
 		stmt.Comment("Notifications and events stream").Line()
 
-		stmt.Func().Params(jen.Id("a").Op("*").Id("MCPAdapter")).
-			Id("NotifyStatusUpdate").
-			Params(
-				jen.Id("ctx").Qual("context", "Context"),
-				jen.Id("n").Op("*").Id("mcpruntime").Dot("Notification"),
-			).
-			Error().
-			Block(
-				jen.If(jen.Op("!").Id("a").Dot("isInitialized").Call(jen.Id("ctx"))).Block(
-					jen.Return(jen.Id("loom").Dot("PermanentError").Call(jen.Lit("invalid_params"), jen.Lit("Not initialized"))),
-				),
-				jen.If(jen.Id("n").Op("==").Nil().Op("||").Id("n").Dot("Type").Op("==").Lit("")).Block(
-					jen.Return(jen.Id("loom").Dot("PermanentError").Call(jen.Lit("invalid_params"), jen.Lit("Missing notification type"))),
-				),
-				jen.Id("a").Dot("log").Call(jen.Id("ctx"), jen.Lit("request"), jen.Map(jen.String()).Any().Values(jen.Dict{
-					jen.Lit("method"):  jen.Lit("notify_status_update"),
-					jen.Lit("type"):    jen.Id("n").Dot("Type"),
-					jen.Lit("message"): jen.Id("n").Dot("Message"),
-				})),
-				jen.List(jen.Id("s"), jen.Id("err")).Op(":=").Id("mcpruntime").Dot("EncodeJSONToString").Call(
-					jen.Id("ctx"),
-					jen.Id("goahttp").Dot("ResponseEncoder"),
-					jen.Id("n"),
-				),
-				jen.If(jen.Id("err").Op("!=").Nil()).Block(
-					jen.Return(jen.Id("err")),
-				),
-				jen.Id("ev").Op(":=").Op("&").Id("EventsStreamResult").Values(jen.Dict{
-					jen.Id("Content"): jen.Index().Op("*").Id("ContentItem").Values(
-						jen.Id("buildContentItem").Call(jen.Id("a"), jen.Id("s")),
+		if len(data.Notifications) > 0 {
+			stmt.Func().Params(jen.Id("a").Op("*").Id("MCPAdapter")).
+				Id("NotifyStatusUpdate").
+				Params(
+					jen.Id("ctx").Qual("context", "Context"),
+					jen.Id("p").Op("*").Id("SendNotificationPayload"),
+				).
+				Error().
+				Block(
+					jen.If(jen.Op("!").Id("a").Dot("isInitialized").Call(jen.Id("ctx"))).Block(
+						jen.Return(jen.Id("loom").Dot("PermanentError").Call(jen.Lit("invalid_params"), jen.Lit("Not initialized"))),
 					),
-				}),
-				jen.Id("a").Dot("PublishContext").Call(jen.Id("ctx"), jen.Id("ev")),
-				jen.Id("a").Dot("log").Call(jen.Id("ctx"), jen.Lit("response"), jen.Map(jen.String()).Any().Values(jen.Dict{
-					jen.Lit("method"): jen.Lit("notify_status_update"),
-					jen.Lit("type"):   jen.Id("n").Dot("Type"),
-				})),
-				jen.Return(jen.Nil()),
-			)
-		stmt.Line()
+					jen.If(jen.Id("p").Op("==").Nil().Op("||").Id("p").Dot("Type").Op("==").Lit("")).Block(
+						jen.Return(jen.Id("loom").Dot("PermanentError").Call(jen.Lit("invalid_params"), jen.Lit("Missing notification type"))),
+					),
+					jen.Id("n").Op(":=").Op("&").Id("mcpruntime").Dot("Notification").Values(jen.Dict{
+						jen.Id("Type"):    jen.Id("p").Dot("Type"),
+						jen.Id("Message"): jen.Id("p").Dot("Message"),
+						jen.Id("Data"):    jen.Id("p").Dot("Data"),
+					}),
+					jen.Id("a").Dot("log").Call(jen.Id("ctx"), jen.Lit("request"), jen.Map(jen.String()).Any().Values(jen.Dict{
+						jen.Lit("method"):  jen.Lit("notify_status_update"),
+						jen.Lit("type"):    jen.Id("n").Dot("Type"),
+						jen.Lit("message"): jen.Id("n").Dot("Message"),
+					})),
+					jen.List(jen.Id("s"), jen.Id("err")).Op(":=").Id("mcpruntime").Dot("EncodeJSONToString").Call(
+						jen.Id("ctx"),
+						jen.Id("goahttp").Dot("ResponseEncoder"),
+						jen.Id("n"),
+					),
+					jen.If(jen.Id("err").Op("!=").Nil()).Block(
+						jen.Return(jen.Id("err")),
+					),
+					jen.Id("ev").Op(":=").Op("&").Id("EventsStreamResult").Values(jen.Dict{
+						jen.Id("Content"): jen.Index().Op("*").Id("ContentItem").Values(
+							jen.Id("buildContentItem").Call(jen.Id("a"), jen.Id("s")),
+						),
+					}),
+					jen.Id("a").Dot("PublishContext").Call(jen.Id("ctx"), jen.Id("ev")),
+					jen.Id("a").Dot("log").Call(jen.Id("ctx"), jen.Lit("response"), jen.Map(jen.String()).Any().Values(jen.Dict{
+						jen.Lit("method"): jen.Lit("notify_status_update"),
+						jen.Lit("type"):   jen.Id("n").Dot("Type"),
+					})),
+					jen.Return(jen.Nil()),
+				)
+			stmt.Line()
+		}
 
 		stmt.Func().Params(jen.Id("a").Op("*").Id("MCPAdapter")).
 			Id("EventsStream").
@@ -135,10 +142,10 @@ func adapterNotificationsSection() codegen.Section {
 				jen.Id("ctx").Qual("context", "Context"),
 				jen.Id("stream").Id("EventsStreamServerStream"),
 			).
-			Error().
+			Params(jen.Id("res").Op("*").Id("EventsStreamResult"), jen.Id("err").Error()).
 			Block(
 				jen.If(jen.Op("!").Id("a").Dot("isInitialized").Call(jen.Id("ctx"))).Block(
-					jen.Return(jen.Id("loom").Dot("PermanentError").Call(jen.Lit("internal_error"), jen.Lit("Not initialized"))),
+					jen.Return(jen.Nil(), jen.Id("loom").Dot("PermanentError").Call(jen.Lit("internal_error"), jen.Lit("Not initialized"))),
 				),
 				jen.Id("a").Dot("log").Call(jen.Id("ctx"), jen.Lit("request"), jen.Map(jen.String()).Any().Values(jen.Dict{
 					jen.Lit("method"):     jen.Lit("events/stream"),
@@ -146,14 +153,13 @@ func adapterNotificationsSection() codegen.Section {
 				})),
 				jen.List(jen.Id("sessionID")).Op(":=").Id("mcpruntime").Dot("SessionIDFromContext").Call(jen.Id("ctx")),
 				jen.Var().Id("sub").Id("mcpruntime").Dot("Subscription"),
-				jen.Var().Id("err").Error(),
 				jen.If(jen.List(jen.Id("scoped"), jen.Id("ok")).Op(":=").Id("a").Dot("broadcaster").Assert(jen.Id("mcpruntime").Dot("SessionBroadcaster")), jen.Id("ok").Op("&&").Id("sessionID").Op("!=").Lit("")).Block(
 					jen.List(jen.Id("sub"), jen.Id("err")).Op("=").Id("scoped").Dot("SubscribeSession").Call(jen.Id("ctx"), jen.Id("sessionID")),
 				).Else().Block(
 					jen.List(jen.Id("sub"), jen.Id("err")).Op("=").Id("a").Dot("broadcaster").Dot("Subscribe").Call(jen.Id("ctx")),
 				),
 				jen.If(jen.Id("err").Op("!=").Nil()).Block(
-					jen.Return(jen.Id("loom").Dot("PermanentError").Call(jen.Lit("internal_error"), jen.Lit("Failed to subscribe to events: %v"), jen.Id("err"))),
+					jen.Return(jen.Nil(), jen.Id("loom").Dot("PermanentError").Call(jen.Lit("internal_error"), jen.Lit("Failed to subscribe to events: %v"), jen.Id("err"))),
 				),
 				jen.Defer().Id("sub").Dot("Close").Call(),
 				jen.For().Block(
@@ -165,7 +171,7 @@ func adapterNotificationsSection() codegen.Section {
 								jen.Lit("closed"):     jen.True(),
 								jen.Lit("reason"):     jen.Id("ctx").Dot("Err").Call().Dot("Error").Call(),
 							})),
-							jen.Return(jen.Id("ctx").Dot("Err").Call()),
+							jen.Return(jen.Nil(), jen.Id("ctx").Dot("Err").Call()),
 						),
 						jen.Case(jen.List(jen.Id("ev"), jen.Id("ok")).Op(":=").Op("<-").Id("sub").Dot("C").Call()).Block(
 							jen.If(jen.Op("!").Id("ok")).Block(
@@ -175,7 +181,7 @@ func adapterNotificationsSection() codegen.Section {
 									jen.Lit("closed"):     jen.True(),
 									jen.Lit("reason"):     jen.Lit("broadcaster_closed"),
 								})),
-								jen.Return(jen.Nil()),
+								jen.Return(jen.Nil(), jen.Nil()),
 							),
 							jen.List(jen.Id("evt"), jen.Id("ok")).Op(":=").Id("ev").Assert(jen.Id("EventsStreamEvent")),
 							jen.If(jen.Op("!").Id("ok")).Block(
@@ -187,7 +193,7 @@ func adapterNotificationsSection() codegen.Section {
 								jen.Continue(),
 							),
 							jen.If(jen.Id("err").Op(":=").Id("stream").Dot("Send").Call(jen.Id("ctx"), jen.Id("evt")), jen.Id("err").Op("!=").Nil()).Block(
-								jen.Return(jen.Id("loom").Dot("PermanentError").Call(jen.Lit("internal_error"), jen.Lit("Failed to send event: %v"), jen.Id("err"))),
+								jen.Return(jen.Nil(), jen.Id("loom").Dot("PermanentError").Call(jen.Lit("internal_error"), jen.Lit("Failed to send event: %v"), jen.Id("err"))),
 							),
 							jen.Id("a").Dot("log").Call(jen.Id("ctx"), jen.Lit("response"), jen.Map(jen.String()).Any().Values(jen.Dict{
 								jen.Lit("method"):     jen.Lit("events/stream"),

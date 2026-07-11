@@ -422,7 +422,8 @@ func (m *MCPExpr) Finalize() {
 	if len(m.Resources) > 0 || len(m.SkillDirectories) > 0 {
 		m.Capabilities.EnableResources = true
 	}
-	if len(m.Prompts) > 0 {
+	hasDynamicPrompts := Root != nil && m.Service != nil && len(Root.DynamicPrompts[m.Service.Name]) > 0
+	if len(m.Prompts) > 0 || hasDynamicPrompts {
 		m.Capabilities.EnablePrompts = true
 	}
 }

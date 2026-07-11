@@ -72,7 +72,7 @@ func TestGeneratedAdapterToolsCallReturnsToolErrorResultForServiceErrors(t *test
 	require.NoError(t, err)
 
 	stream := &capturedToolsCallStream{}
-	err = adapter.ToolsCall(context.Background(), &mcpassistant.ToolsCallPayload{
+	_, err = adapter.ToolsCall(context.Background(), &mcpassistant.ToolsCallPayload{
 		Name:      "analyze_sentiment",
 		Arguments: json.RawMessage(`{"text":"boom"}`),
 	}, stream)
@@ -105,7 +105,7 @@ func TestGeneratedAdapterToolsCallReturnsToolErrorResultForInvalidPayload(t *tes
 	require.NoError(t, err)
 
 	stream := &capturedToolsCallStream{}
-	err = adapter.ToolsCall(context.Background(), &mcpassistant.ToolsCallPayload{
+	_, err = adapter.ToolsCall(context.Background(), &mcpassistant.ToolsCallPayload{
 		Name:      "analyze_sentiment",
 		Arguments: json.RawMessage(`{}`),
 	}, stream)
@@ -138,7 +138,7 @@ func TestGeneratedAdapterToolsCallReturnsSpecificRecoveryForNestedActionPayloads
 	require.NoError(t, err)
 
 	stream := &capturedToolsCallStream{}
-	err = adapter.ToolsCall(context.Background(), &mcpassistant.ToolsCallPayload{
+	_, err = adapter.ToolsCall(context.Background(), &mcpassistant.ToolsCallPayload{
 		Name:      "dispatch_action",
 		Arguments: json.RawMessage(`{"request":{"action":"list"}}`),
 	}, stream)
@@ -171,7 +171,7 @@ func TestGeneratedAdapterToolsCallSuggestsValidTagOnInvalidDiscriminator(t *test
 	require.NoError(t, err)
 
 	stream := &capturedToolsCallStream{}
-	err = adapter.ToolsCall(context.Background(), &mcpassistant.ToolsCallPayload{
+	_, err = adapter.ToolsCall(context.Background(), &mcpassistant.ToolsCallPayload{
 		Name:      "dispatch_action",
 		Arguments: json.RawMessage(`{"request":{"action":"GetActive","value":{}}}`),
 	}, stream)
@@ -204,7 +204,7 @@ func TestGeneratedAdapterToolsCallBranchKeyAwareRecovery(t *testing.T) {
 	require.NoError(t, err)
 
 	stream := &capturedToolsCallStream{}
-	err = adapter.ToolsCall(context.Background(), &mcpassistant.ToolsCallPayload{
+	_, err = adapter.ToolsCall(context.Background(), &mcpassistant.ToolsCallPayload{
 		Name:      "dispatch_command",
 		Arguments: json.RawMessage(`{"command":{"action":"NotARealTag","args":{}}}`),
 	}, stream)
@@ -247,7 +247,7 @@ func TestGeneratedAdapterToolsCallReusesCallerTagWhenInnerBranchIsMalformed(t *t
 	// is missing from the envelope. The recovery hint must preserve "create"
 	// rather than rewriting it to the first-declared tag, and must include
 	// the branch's required inner fields in the example.
-	err = adapter.ToolsCall(context.Background(), &mcpassistant.ToolsCallPayload{
+	_, err = adapter.ToolsCall(context.Background(), &mcpassistant.ToolsCallPayload{
 		Name:      "dispatch_action",
 		Arguments: json.RawMessage(`{"request":{"action":"create"}}`),
 	}, stream)

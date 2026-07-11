@@ -9,10 +9,6 @@ import (
 
 func adapterToolsSection(data *AdapterData) codegen.Section {
 	return codegen.NewJenniferSection("mcp-adapter-tools", func(stmt *jen.Statement) {
-		if len(data.Tools) == 0 {
-			return
-		}
-
 		stmt.Comment("Tools handling").Line()
 		emitDecodeMCPPayloadStrict(stmt)
 		emitDecodeMCPPayloadFields(stmt)
@@ -1329,7 +1325,7 @@ func emitToolsCall(stmt *jen.Statement) {
 			jen.Id("p").Op("*").Id("ToolsCallPayload"),
 			jen.Id("stream").Id("ToolsCallServerStream"),
 		).
-		Params(jen.Id("err").Error()).
+		Params(jen.Id("res").Op("*").Id("ToolsCallResult"), jen.Id("err").Error()).
 		Block(
 			jen.Id("attrs").Op(":=").Index().Qual("go.opentelemetry.io/otel/attribute", "KeyValue").Values(),
 			jen.If(jen.Id("p").Op("!=").Nil().Op("&&").Id("p").Dot("Name").Op("!=").Lit("")).Block(
@@ -1353,7 +1349,7 @@ func emitToolsCall(stmt *jen.Statement) {
 			jen.Id("info").Op(":=").Id("a").Dot("toolCallInfo").Call(jen.Id("p")),
 			jen.Id("handler").Op(":=").Id("a").Dot("wrapToolCallHandler").Call(jen.Id("info"), jen.Id("a").Dot("toolsCallHandler")),
 			jen.Id("toolErr").Op(",").Id("err").Op("=").Id("handler").Call(jen.Id("ctx"), jen.Id("p"), jen.Id("stream")),
-			jen.Return(jen.Id("err")),
+			jen.Return(jen.Nil(), jen.Id("err")),
 		)
 	stmt.Line()
 }

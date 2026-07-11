@@ -448,7 +448,7 @@ func (a *MCPAdapter) sdkToolHandler(requestContext func(context.Context, *http.R
 		}
 		ctx = a.sdkRequestContext(ctx, req.GetSession(), req.GetExtra(), requestContext)
 		stream := &sdkToolCallCollector{adapter: a}
-		if err := a.ToolsCall(ctx, payload, stream); err != nil {
+		if _, err := a.ToolsCall(ctx, payload, stream); err != nil {
 			return nil, err
 		}
 		return sdkCallToolResult(stream.result())

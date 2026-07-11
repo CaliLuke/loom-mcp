@@ -59,6 +59,9 @@ type MCPAdapter struct {
 	// resourceNameToURI holds DSL-derived mapping for policy and lookups
 	resourceNameToURI map[string]string
 }
+
+var _ Service = (*MCPAdapter)(nil)
+
 type (
 	// ToolCallInterceptorInfo describes a generated MCP tools/call invocation.
 	ToolCallInterceptorInfo interface {
@@ -1977,7 +1980,7 @@ func projectedLookupInputRecovery(err error, raw json.RawMessage) string {
 	}
 	return "Provide valid tool arguments. Example: " + example
 }
-func (a *MCPAdapter) ToolsCall(ctx context.Context, p *ToolsCallPayload, stream ToolsCallServerStream) (err error) {
+func (a *MCPAdapter) ToolsCall(ctx context.Context, p *ToolsCallPayload, stream ToolsCallServerStream) (res *ToolsCallResult, err error) {
 	attrs := []attribute.KeyValue{}
 	if p != nil && p.Name != "" {
 		attrs = append(attrs, attribute.String("mcp.tool", p.Name), attribute.String("tool", p.Name))
@@ -1996,7 +1999,7 @@ func (a *MCPAdapter) ToolsCall(ctx context.Context, p *ToolsCallPayload, stream 
 	info := a.toolCallInfo(p)
 	handler := a.wrapToolCallHandler(info, a.toolsCallHandler)
 	toolErr, err = handler(ctx, p, stream)
-	return err
+	return nil, err
 }
 func (a *MCPAdapter) toolsCallHandler(ctx context.Context, p *ToolsCallPayload, stream ToolsCallServerStream) (bool, error) {
 	if !a.isInitialized(ctx) {
@@ -2908,12 +2911,17 @@ func (a *MCPAdapter) PromptsGet(ctx context.Context, p *PromptsGetPayload) (*Pro
 }
 
 // Notifications and events stream
-func (a *MCPAdapter) NotifyStatusUpdate(ctx context.Context, n *mcpruntime.Notification) error {
+func (a *MCPAdapter) NotifyStatusUpdate(ctx context.Context, p *SendNotificationPayload) error {
 	if !a.isInitialized(ctx) {
 		return loom.PermanentError("invalid_params", "Not initialized")
 	}
-	if n == nil || n.Type == "" {
+	if p == nil || p.Type == "" {
 		return loom.PermanentError("invalid_params", "Missing notification type")
+	}
+	n := &mcpruntime.Notification{
+		Data:    p.Data,
+		Message: p.Message,
+		Type:    p.Type,
 	}
 	a.log(ctx, "request", map[string]any{
 		"message": n.Message,
@@ -2932,9 +2940,9 @@ func (a *MCPAdapter) NotifyStatusUpdate(ctx context.Context, n *mcpruntime.Notif
 	})
 	return nil
 }
-func (a *MCPAdapter) EventsStream(ctx context.Context, stream EventsStreamServerStream) error {
+func (a *MCPAdapter) EventsStream(ctx context.Context, stream EventsStreamServerStream) (res *EventsStreamResult, err error) {
 	if !a.isInitialized(ctx) {
-		return loom.PermanentError("internal_error", "Not initialized")
+		return nil, loom.PermanentError("internal_error", "Not initialized")
 	}
 	a.log(ctx, "request", map[string]any{
 		"method":     "events/stream",
@@ -2942,14 +2950,13 @@ func (a *MCPAdapter) EventsStream(ctx context.Context, stream EventsStreamServer
 	})
 	sessionID := mcpruntime.SessionIDFromContext(ctx)
 	var sub mcpruntime.Subscription
-	var err error
 	if scoped, ok := a.broadcaster.(mcpruntime.SessionBroadcaster); ok && sessionID != "" {
 		sub, err = scoped.SubscribeSession(ctx, sessionID)
 	} else {
 		sub, err = a.broadcaster.Subscribe(ctx)
 	}
 	if err != nil {
-		return loom.PermanentError("internal_error", "Failed to subscribe to events: %v", err)
+		return nil, loom.PermanentError("internal_error", "Failed to subscribe to events: %v", err)
 	}
 	defer sub.Close()
 	for {
@@ -2961,7 +2968,7 @@ func (a *MCPAdapter) EventsStream(ctx context.Context, stream EventsStreamServer
 				"reason":     ctx.Err().Error(),
 				"session_id": mcpruntime.SessionIDFromContext(ctx),
 			})
-			return ctx.Err()
+			return nil, ctx.Err()
 		case ev, ok := <-sub.C():
 			if !ok {
 				a.log(ctx, "response", map[string]any{
@@ -2970,7 +2977,7 @@ func (a *MCPAdapter) EventsStream(ctx context.Context, stream EventsStreamServer
 					"reason":     "broadcaster_closed",
 					"session_id": mcpruntime.SessionIDFromContext(ctx),
 				})
-				return nil
+				return nil, nil
 			}
 			evt, ok := ev.(EventsStreamEvent)
 			if !ok {
@@ -2982,7 +2989,7 @@ func (a *MCPAdapter) EventsStream(ctx context.Context, stream EventsStreamServer
 				continue
 			}
 			if err := stream.Send(ctx, evt); err != nil {
-				return loom.PermanentError("internal_error", "Failed to send event: %v", err)
+				return nil, loom.PermanentError("internal_error", "Failed to send event: %v", err)
 			}
 			a.log(ctx, "response", map[string]any{
 				"event_type": fmt.Sprintf("%T", evt),

@@ -172,24 +172,10 @@ func (demoService) Lookup(ctx context.Context, p *demo.LookupPayload) (*demo.Loo
 	return &demo.LookupResult{Answer: answer}, nil
 }
 
-// mcpShim adapts the generated adapter's streaming signatures to the
-// generated MCP service interface, exactly like the assistant fixture shim.
-type mcpShim struct {
-	*mcpdemo.MCPAdapter
-}
-
-func (s *mcpShim) ToolsCall(ctx context.Context, p *mcpdemo.ToolsCallPayload, stream mcpdemo.ToolsCallServerStream) (*mcpdemo.ToolsCallResult, error) {
-	return nil, s.MCPAdapter.ToolsCall(ctx, p, stream)
-}
-
-func (s *mcpShim) EventsStream(ctx context.Context, stream mcpdemo.EventsStreamServerStream) (*mcpdemo.EventsStreamResult, error) {
-	return nil, s.MCPAdapter.EventsStream(ctx, stream)
-}
-
 func newGeneratedServer(t *testing.T) *httptest.Server {
 	t.Helper()
 	adapter := mcpdemo.NewMCPAdapter(demoService{}, nil)
-	endpoints := mcpdemo.NewEndpoints(&mcpShim{MCPAdapter: adapter})
+	endpoints := mcpdemo.NewEndpoints(adapter)
 	mux := goahttp.NewMuxer()
 	server := demojssvr.New(
 		endpoints,

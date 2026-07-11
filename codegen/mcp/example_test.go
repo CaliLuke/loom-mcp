@@ -4,6 +4,7 @@ import (
 	"strings"
 	"testing"
 
+	mcpexpr "github.com/CaliLuke/loom-mcp/expr/mcp"
 	"github.com/CaliLuke/loom/codegen"
 	"github.com/CaliLuke/loom/expr"
 	"github.com/stretchr/testify/require"
@@ -69,7 +70,7 @@ func TestGenerateExampleAdapterStubs_ReplacesStub(t *testing.T) {
 	}
 	stub := &codegen.File{Path: "mcp_orchestrator.go", SectionTemplates: []*codegen.SectionTemplate{header, body}}
 
-	files := generateExampleAdapterStubs([]*expr.ServiceExpr{svc}, []*codegen.File{stub})
+	files := generateExampleAdapterStubs("example.com/assistant/gen", []*expr.ServiceExpr{svc}, []*codegen.File{stub})
 	require.Len(t, files, 1)
 	// Body should now contain a call to NewMCPAdapter(NewOrchestrator())
 	found := false
@@ -80,4 +81,44 @@ func TestGenerateExampleAdapterStubs_ReplacesStub(t *testing.T) {
 		}
 	}
 	require.True(t, found, "expected example adapter stub to be generated")
+}
+
+func TestGenerateExampleAdapterStubs_DynamicOnlyPromptUsesProviderConstructor(t *testing.T) {
+	previousRoot := mcpexpr.Root
+	mcpexpr.Root = mcpexpr.NewRoot()
+	t.Cleanup(func() {
+		mcpexpr.Root = previousRoot
+	})
+
+	svc := &expr.ServiceExpr{Name: "Orchestrator"}
+	mcp := &mcpexpr.MCPExpr{Name: "orchestrator", Version: "1.0.0"}
+	mcpexpr.Root.RegisterMCP(svc, mcp)
+	mcpexpr.Root.RegisterDynamicPrompt(svc, &mcpexpr.DynamicPromptExpr{Name: "dynamic"})
+	mcp.Finalize()
+
+	header := &codegen.SectionTemplate{
+		Name: headerSection,
+		Data: map[string]any{
+			"Imports": []*codegen.ImportSpec{
+				{Path: "example.com/assistant/gen/mcp_orchestrator", Name: "mcporchestrator"},
+			},
+		},
+	}
+	stub := &codegen.File{Path: "mcp_orchestrator.go", SectionTemplates: []*codegen.SectionTemplate{
+		header,
+		{Name: "body", Source: "func placeholder() {}"},
+	}}
+
+	files := generateExampleAdapterStubs("example.com/assistant/gen", []*expr.ServiceExpr{svc}, []*codegen.File{stub})
+	require.Len(t, files, 1)
+
+	var source string
+	//nolint:staticcheck // Tests still inspect the legacy section list while generators migrate to Section.
+	for _, section := range files[0].SectionTemplates {
+		if section.Name == exampleMCPStubSection {
+			source = section.Source
+			break
+		}
+	}
+	require.Contains(t, source, "NewMCPAdapter(NewOrchestrator(), nil, nil)")
 }

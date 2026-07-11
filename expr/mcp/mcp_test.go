@@ -185,6 +185,26 @@ func TestMCPExpr_Finalize(t *testing.T) {
 		require.True(t, m.Capabilities.EnableResources)
 		require.True(t, m.Capabilities.EnablePrompts)
 	})
+
+	t.Run("enables prompts for dynamic-only service", func(t *testing.T) {
+		previousRoot := Root
+		Root = NewRoot()
+		t.Cleanup(func() {
+			Root = previousRoot
+		})
+
+		svc := &expr.ServiceExpr{Name: "test-service"}
+		Root.DynamicPrompts[svc.Name] = []*DynamicPromptExpr{{Name: "dynamic-prompt"}}
+		m := &MCPExpr{
+			Name:    "test-server",
+			Version: "1.0.0",
+			Service: svc,
+		}
+
+		m.Finalize()
+
+		require.True(t, m.Capabilities.EnablePrompts)
+	})
 }
 
 func validMCPExpr() *MCPExpr {

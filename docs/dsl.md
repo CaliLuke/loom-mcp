@@ -1585,6 +1585,11 @@ handling.
 | `Subscription(...)`          | Subscription handlers                                  |
 | `SubscriptionMonitor(...)`   | SSE subscription monitors                              |
 
+Dynamic prompts enable the prompt capability even when a service declares no
+static prompts. Generated adapters and `loom example` scaffolds use the same
+prompt-provider constructor contract, so a dynamic-prompt-only MCP design can
+be generated, scaffolded, and compiled without manual transport shims.
+
 Generated JSON-RPC transport servers advertise the non-standard events surface
 under `capabilities.experimental["loom-mcp"].events` in their initialize
 results, including `events/stream` and generated notification method names.

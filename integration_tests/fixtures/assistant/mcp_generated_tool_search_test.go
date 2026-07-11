@@ -87,7 +87,7 @@ func callToolSearch(t testing.TB, adapter *mcpassistant.MCPAdapter, arguments st
 	t.Helper()
 
 	stream := &capturedToolsCallStream{}
-	err := adapter.ToolsCall(context.Background(), &mcpassistant.ToolsCallPayload{
+	_, err := adapter.ToolsCall(context.Background(), &mcpassistant.ToolsCallPayload{
 		Name:      "search_tools",
 		Arguments: json.RawMessage(arguments),
 	}, stream)
@@ -186,7 +186,7 @@ func TestGeneratedAdapterToolSearchSearchesQueryText(t *testing.T) {
 	adapter := newToolSearchAdapter(t, &mcpassistant.ToolSearchOptions{MaxResults: 1})
 	stream := &capturedToolsCallStream{}
 
-	err := adapter.ToolsCall(context.Background(), &mcpassistant.ToolsCallPayload{
+	_, err := adapter.ToolsCall(context.Background(), &mcpassistant.ToolsCallPayload{
 		Name:      "search_tools",
 		Arguments: json.RawMessage(`{"query":"sentiment"}`),
 	}, stream)
@@ -207,7 +207,7 @@ func TestGeneratedAdapterToolSearchMatchesNaturalLanguageTokenQuery(t *testing.T
 	adapter := newToolSearchAdapter(t, &mcpassistant.ToolSearchOptions{MaxResults: 1})
 	stream := &capturedToolsCallStream{}
 
-	err := adapter.ToolsCall(context.Background(), &mcpassistant.ToolsCallPayload{
+	_, err := adapter.ToolsCall(context.Background(), &mcpassistant.ToolsCallPayload{
 		Name:      "search_tools",
 		Arguments: json.RawMessage(`{"query":"document lookup"}`),
 	}, stream)
@@ -242,7 +242,7 @@ func TestGeneratedAdapterToolSearchExactNameSuppressesWeakMatches(t *testing.T) 
 	adapter := newToolSearchAdapter(t, &mcpassistant.ToolSearchOptions{MaxResults: 10})
 	stream := &capturedToolsCallStream{}
 
-	err := adapter.ToolsCall(context.Background(), &mcpassistant.ToolsCallPayload{
+	_, err := adapter.ToolsCall(context.Background(), &mcpassistant.ToolsCallPayload{
 		Name:      "search_tools",
 		Arguments: json.RawMessage(`{"query":"summarize_text"}`),
 	}, stream)
@@ -263,7 +263,7 @@ func TestGeneratedAdapterToolSearchExactTitleSuppressesWeakMatches(t *testing.T)
 	adapter := newToolSearchAdapter(t, &mcpassistant.ToolSearchOptions{MaxResults: 10})
 	stream := &capturedToolsCallStream{}
 
-	err := adapter.ToolsCall(context.Background(), &mcpassistant.ToolsCallPayload{
+	_, err := adapter.ToolsCall(context.Background(), &mcpassistant.ToolsCallPayload{
 		Name:      "search_tools",
 		Arguments: json.RawMessage(`{"query":"Search Knowledge Base"}`),
 	}, stream)
@@ -284,7 +284,7 @@ func TestGeneratedAdapterToolSearchBroadNaturalLanguageStillReturnsRelevantTools
 	adapter := newToolSearchAdapter(t, &mcpassistant.ToolSearchOptions{MaxResults: 10})
 	stream := &capturedToolsCallStream{}
 
-	err := adapter.ToolsCall(context.Background(), &mcpassistant.ToolsCallPayload{
+	_, err := adapter.ToolsCall(context.Background(), &mcpassistant.ToolsCallPayload{
 		Name:      "search_tools",
 		Arguments: json.RawMessage(`{"query":"text analysis keywords sentiment"}`),
 	}, stream)
@@ -482,7 +482,7 @@ func TestGeneratedAdapterToolSearchAcceptsOmittedArguments(t *testing.T) {
 	adapter := newToolSearchAdapter(t, &mcpassistant.ToolSearchOptions{MaxResults: 2})
 	stream := &capturedToolsCallStream{}
 
-	err := adapter.ToolsCall(context.Background(), &mcpassistant.ToolsCallPayload{
+	_, err := adapter.ToolsCall(context.Background(), &mcpassistant.ToolsCallPayload{
 		Name: "search_tools",
 	}, stream)
 	require.NoError(t, err)
@@ -500,7 +500,7 @@ func TestGeneratedAdapterToolSearchRanksBeforeLimiting(t *testing.T) {
 	adapter := newToolSearchAdapter(t, &mcpassistant.ToolSearchOptions{MaxResults: 1})
 	stream := &capturedToolsCallStream{}
 
-	err := adapter.ToolsCall(context.Background(), &mcpassistant.ToolsCallPayload{
+	_, err := adapter.ToolsCall(context.Background(), &mcpassistant.ToolsCallPayload{
 		Name:      "search_tools",
 		Arguments: json.RawMessage(`{"query":"text"}`),
 	}, stream)
@@ -519,7 +519,7 @@ func TestGeneratedAdapterToolSearchFiltersByCategory(t *testing.T) {
 	adapter := newToolSearchAdapter(t, &mcpassistant.ToolSearchOptions{})
 	stream := &capturedToolsCallStream{}
 
-	err := adapter.ToolsCall(context.Background(), &mcpassistant.ToolsCallPayload{
+	_, err := adapter.ToolsCall(context.Background(), &mcpassistant.ToolsCallPayload{
 		Name:      "search_tools",
 		Arguments: json.RawMessage(`{"category":"knowledge"}`),
 	}, stream)
@@ -539,7 +539,7 @@ func TestGeneratedAdapterToolSearchFiltersByTags(t *testing.T) {
 	adapter := newToolSearchAdapter(t, &mcpassistant.ToolSearchOptions{})
 	stream := &capturedToolsCallStream{}
 
-	err := adapter.ToolsCall(context.Background(), &mcpassistant.ToolsCallPayload{
+	_, err := adapter.ToolsCall(context.Background(), &mcpassistant.ToolsCallPayload{
 		Name:      "search_tools",
 		Arguments: json.RawMessage(`{"tags":["nlp"]}`),
 	}, stream)
@@ -557,7 +557,7 @@ func TestGeneratedAdapterToolSearchOmitsSchemasByDefault(t *testing.T) {
 	adapter := newToolSearchAdapter(t, &mcpassistant.ToolSearchOptions{})
 	stream := &capturedToolsCallStream{}
 
-	err := adapter.ToolsCall(context.Background(), &mcpassistant.ToolsCallPayload{
+	_, err := adapter.ToolsCall(context.Background(), &mcpassistant.ToolsCallPayload{
 		Name:      "search_tools",
 		Arguments: json.RawMessage(`{"query":"sentiment"}`),
 	}, stream)
@@ -577,7 +577,7 @@ func TestGeneratedAdapterToolSearchIncludesSchemasWhenRequested(t *testing.T) {
 	adapter := newToolSearchAdapter(t, &mcpassistant.ToolSearchOptions{})
 	stream := &capturedToolsCallStream{}
 
-	err := adapter.ToolsCall(context.Background(), &mcpassistant.ToolsCallPayload{
+	_, err := adapter.ToolsCall(context.Background(), &mcpassistant.ToolsCallPayload{
 		Name:      "search_tools",
 		Arguments: json.RawMessage(`{"query":"sentiment","include_schemas":true}`),
 	}, stream)
@@ -597,7 +597,7 @@ func TestGeneratedAdapterToolSearchRejectsDirectHiddenCallsByDefault(t *testing.
 	adapter := newToolSearchAdapter(t, &mcpassistant.ToolSearchOptions{})
 	stream := &capturedToolsCallStream{}
 
-	err := adapter.ToolsCall(context.Background(), &mcpassistant.ToolsCallPayload{
+	_, err := adapter.ToolsCall(context.Background(), &mcpassistant.ToolsCallPayload{
 		Name:      "analyze_sentiment",
 		Arguments: json.RawMessage(`{"text":"great"}`),
 	}, stream)
@@ -612,7 +612,7 @@ func TestGeneratedAdapterToolSearchAllowsDirectHiddenCallsWhenCompatEnabled(t *t
 	adapter := newToolSearchAdapter(t, &mcpassistant.ToolSearchOptions{AllowDirectHiddenCalls: true})
 	stream := &capturedToolsCallStream{}
 
-	err := adapter.ToolsCall(context.Background(), &mcpassistant.ToolsCallPayload{
+	_, err := adapter.ToolsCall(context.Background(), &mcpassistant.ToolsCallPayload{
 		Name:      "analyze_sentiment",
 		Arguments: json.RawMessage(`{"text":"great"}`),
 	}, stream)
@@ -636,7 +636,7 @@ func TestGeneratedAdapterToolSearchAlwaysVisibleToolRemainsDirectlyCallable(t *t
 	})
 	stream := &capturedToolsCallStream{}
 
-	err := adapter.ToolsCall(context.Background(), &mcpassistant.ToolsCallPayload{
+	_, err := adapter.ToolsCall(context.Background(), &mcpassistant.ToolsCallPayload{
 		Name:      "search",
 		Arguments: json.RawMessage(`{"query":"docs"}`),
 	}, stream)
@@ -650,7 +650,7 @@ func TestGeneratedAdapterToolSearchCallToolInvokesHiddenTool(t *testing.T) {
 	adapter := newToolSearchAdapter(t, &mcpassistant.ToolSearchOptions{})
 	stream := &capturedToolsCallStream{}
 
-	err := adapter.ToolsCall(context.Background(), &mcpassistant.ToolsCallPayload{
+	_, err := adapter.ToolsCall(context.Background(), &mcpassistant.ToolsCallPayload{
 		Name:      "call_tool",
 		Arguments: json.RawMessage(`{"name":"analyze_sentiment","arguments":{"text":"great"}}`),
 	}, stream)
@@ -669,7 +669,7 @@ func TestGeneratedAdapterToolSearchCallToolInvokesProjectedTool(t *testing.T) {
 	adapter := newToolSearchAdapter(t, &mcpassistant.ToolSearchOptions{})
 	stream := &capturedToolsCallStream{}
 
-	err := adapter.ToolsCall(context.Background(), &mcpassistant.ToolsCallPayload{
+	_, err := adapter.ToolsCall(context.Background(), &mcpassistant.ToolsCallPayload{
 		Name:      "call_tool",
 		Arguments: json.RawMessage(`{"name":"projected_lookup_tool","arguments":{"query":"loom"}}`),
 	}, stream)
@@ -690,14 +690,14 @@ func TestGeneratedAdapterToolSearchCallToolInvokesHiddenToolDespiteDirectHiddenG
 
 	adapter := newToolSearchAdapter(t, &mcpassistant.ToolSearchOptions{})
 	directStream := &capturedToolsCallStream{}
-	err := adapter.ToolsCall(context.Background(), &mcpassistant.ToolsCallPayload{
+	_, err := adapter.ToolsCall(context.Background(), &mcpassistant.ToolsCallPayload{
 		Name:      "analyze_sentiment",
 		Arguments: json.RawMessage(`{"text":"great"}`),
 	}, directStream)
 	require.Error(t, err)
 
 	proxyStream := &capturedToolsCallStream{}
-	err = adapter.ToolsCall(context.Background(), &mcpassistant.ToolsCallPayload{
+	_, err = adapter.ToolsCall(context.Background(), &mcpassistant.ToolsCallPayload{
 		Name:      "call_tool",
 		Arguments: json.RawMessage(`{"name":"analyze_sentiment","arguments":{"text":"great"}}`),
 	}, proxyStream)
@@ -711,7 +711,7 @@ func TestGeneratedAdapterToolSearchRejectsQueryAndPattern(t *testing.T) {
 	adapter := newToolSearchAdapter(t, &mcpassistant.ToolSearchOptions{})
 	stream := &capturedToolsCallStream{}
 
-	err := adapter.ToolsCall(context.Background(), &mcpassistant.ToolsCallPayload{
+	_, err := adapter.ToolsCall(context.Background(), &mcpassistant.ToolsCallPayload{
 		Name:      "search_tools",
 		Arguments: json.RawMessage(`{"query":"sentiment","pattern":"sentiment"}`),
 	}, stream)
@@ -727,7 +727,7 @@ func TestGeneratedAdapterToolSearchRejectsInvalidRegex(t *testing.T) {
 	adapter := newToolSearchAdapter(t, &mcpassistant.ToolSearchOptions{})
 	stream := &capturedToolsCallStream{}
 
-	err := adapter.ToolsCall(context.Background(), &mcpassistant.ToolsCallPayload{
+	_, err := adapter.ToolsCall(context.Background(), &mcpassistant.ToolsCallPayload{
 		Name:      "search_tools",
 		Arguments: json.RawMessage(`{"pattern":"["}`),
 	}, stream)
@@ -743,7 +743,7 @@ func TestGeneratedAdapterToolSearchReturnsModelReadableText(t *testing.T) {
 	adapter := newToolSearchAdapter(t, &mcpassistant.ToolSearchOptions{})
 	stream := &capturedToolsCallStream{}
 
-	err := adapter.ToolsCall(context.Background(), &mcpassistant.ToolsCallPayload{
+	_, err := adapter.ToolsCall(context.Background(), &mcpassistant.ToolsCallPayload{
 		Name:      "search_tools",
 		Arguments: json.RawMessage(`{"query":"sentiment"}`),
 	}, stream)
@@ -765,7 +765,7 @@ func TestGeneratedAdapterToolSearchReturnsStructuredDescriptors(t *testing.T) {
 	adapter := newToolSearchAdapter(t, &mcpassistant.ToolSearchOptions{})
 	stream := &capturedToolsCallStream{}
 
-	err := adapter.ToolsCall(context.Background(), &mcpassistant.ToolsCallPayload{
+	_, err := adapter.ToolsCall(context.Background(), &mcpassistant.ToolsCallPayload{
 		Name:      "search_tools",
 		Arguments: json.RawMessage(`{"query":"sentiment"}`),
 	}, stream)
@@ -814,7 +814,7 @@ func TestGeneratedAdapterToolSearchStructuredContentIncludesPattern(t *testing.T
 	adapter := newToolSearchAdapter(t, &mcpassistant.ToolSearchOptions{})
 	stream := &capturedToolsCallStream{}
 
-	err := adapter.ToolsCall(context.Background(), &mcpassistant.ToolsCallPayload{
+	_, err := adapter.ToolsCall(context.Background(), &mcpassistant.ToolsCallPayload{
 		Name:      "search_tools",
 		Arguments: json.RawMessage(`{"pattern":"keyword.*"}`),
 	}, stream)
@@ -845,7 +845,7 @@ func TestGeneratedAdapterToolSearchCallToolRejectsSyntheticTools(t *testing.T) {
 	adapter := newToolSearchAdapter(t, &mcpassistant.ToolSearchOptions{})
 	stream := &capturedToolsCallStream{}
 
-	err := adapter.ToolsCall(context.Background(), &mcpassistant.ToolsCallPayload{
+	_, err := adapter.ToolsCall(context.Background(), &mcpassistant.ToolsCallPayload{
 		Name:      "call_tool",
 		Arguments: json.RawMessage(`{"name":"call_tool","arguments":{"name":"search"}}`),
 	}, stream)
@@ -872,7 +872,7 @@ func TestGeneratedAdapterToolSearchProxyPreservesToolContext(t *testing.T) {
 	require.NoError(t, err)
 	stream := &capturedToolsCallStream{}
 
-	err = adapter.ToolsCall(context.Background(), &mcpassistant.ToolsCallPayload{
+	_, err = adapter.ToolsCall(context.Background(), &mcpassistant.ToolsCallPayload{
 		Name:      "call_tool",
 		Arguments: json.RawMessage(`{"name":"analyze_sentiment","arguments":{"text":"great"}}`),
 	}, stream)
@@ -905,7 +905,7 @@ func TestGeneratedAdapterToolSearchProxyPreservesValidationErrors(t *testing.T) 
 	adapter := newToolSearchAdapter(t, &mcpassistant.ToolSearchOptions{})
 	stream := &capturedToolsCallStream{}
 
-	err := adapter.ToolsCall(context.Background(), &mcpassistant.ToolsCallPayload{
+	_, err := adapter.ToolsCall(context.Background(), &mcpassistant.ToolsCallPayload{
 		Name:      "call_tool",
 		Arguments: json.RawMessage(`{"name":"analyze_sentiment","arguments":{}}`),
 	}, stream)
@@ -934,7 +934,7 @@ func TestGeneratedAdapterToolSearchProxyPreservesErrorMapping(t *testing.T) {
 	require.NoError(t, err)
 	stream := &capturedToolsCallStream{}
 
-	err = adapter.ToolsCall(context.Background(), &mcpassistant.ToolsCallPayload{
+	_, err = adapter.ToolsCall(context.Background(), &mcpassistant.ToolsCallPayload{
 		Name:      "call_tool",
 		Arguments: json.RawMessage(`{"name":"analyze_sentiment","arguments":{"text":"bad"}}`),
 	}, stream)
@@ -958,7 +958,7 @@ func TestGeneratedAdapterToolSearchProxyRecordsProxyAndTargetTelemetryAttributes
 	require.NoError(t, err)
 	stream := &capturedToolsCallStream{}
 
-	err = adapter.ToolsCall(context.Background(), &mcpassistant.ToolsCallPayload{
+	_, err = adapter.ToolsCall(context.Background(), &mcpassistant.ToolsCallPayload{
 		Name:      "call_tool",
 		Arguments: json.RawMessage(`{"name":"analyze_sentiment","arguments":{"text":"great"}}`),
 	}, stream)
@@ -998,7 +998,7 @@ func TestGeneratedAdapterToolSearchProxyPreservesRequestContext(t *testing.T) {
 	ctx := context.WithValue(context.Background(), contextKey, "preserved")
 	stream := &capturedToolsCallStream{}
 
-	err = adapter.ToolsCall(ctx, &mcpassistant.ToolsCallPayload{
+	_, err = adapter.ToolsCall(ctx, &mcpassistant.ToolsCallPayload{
 		Name:      "call_tool",
 		Arguments: json.RawMessage(`{"name":"analyze_sentiment","arguments":{"text":"great"}}`),
 	}, stream)
@@ -1020,7 +1020,7 @@ func TestGeneratedAdapterToolSearchResultTextMentionsTruncation(t *testing.T) {
 	adapter := newToolSearchAdapter(t, &mcpassistant.ToolSearchOptions{MaxResults: 1})
 	stream := &capturedToolsCallStream{}
 
-	err := adapter.ToolsCall(context.Background(), &mcpassistant.ToolsCallPayload{
+	_, err := adapter.ToolsCall(context.Background(), &mcpassistant.ToolsCallPayload{
 		Name:      "search_tools",
 		Arguments: json.RawMessage(`{"tags":["nlp"]}`),
 	}, stream)

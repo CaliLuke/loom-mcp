@@ -12,12 +12,11 @@ func (b *mcpExprBuilder) buildMethods() []*expr.MethodExpr {
 		// Core protocol methods
 		b.buildInitializeMethod(),
 		b.buildPingMethod(),
+		// Tool protocol methods are structural dependencies of the generated
+		// adapter and SDK server even when the public tool catalog is empty.
+		b.buildToolsListMethod(),
+		b.buildToolsCallMethod(),
 	)
-
-	// Add tool methods if tools are defined (method-level or projected)
-	if b.hasTools() {
-		methods = append(methods, b.buildToolsListMethod(), b.buildToolsCallMethod())
-	}
 
 	// Add resource methods if resources are defined
 	if len(b.mcp.Resources) > 0 {

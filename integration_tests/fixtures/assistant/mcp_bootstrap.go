@@ -6,7 +6,6 @@ import (
 
 	assistant "example.com/assistant/gen/assistant"
 	mcpassistant "example.com/assistant/gen/mcp_assistant"
-	mcpruntime "github.com/CaliLuke/loom-mcp/runtime/mcp"
 )
 
 // NewMcpAssistant returns an MCP server implementation for the assistant
@@ -56,8 +55,7 @@ func (s *mcpShim) ToolsCall(ctx context.Context, p *mcpassistant.ToolsCallPayloa
 			return nil, stream.SendAndClose(ctx, &mcpassistant.ToolsCallResult{Content: []*mcpassistant.ContentItem{imageContent("ZmFrZS1pbWFnZQ==", "image/png")}})
 		}
 	}
-	err := s.MCPAdapter.ToolsCall(ctx, p, stream)
-	return nil, err
+	return s.MCPAdapter.ToolsCall(ctx, p, stream)
 }
 
 // PromptsGet implements a minimal static prompt for tests and otherwise
@@ -110,19 +108,14 @@ func (s *mcpShim) PromptsList(ctx context.Context, p *mcpassistant.PromptsListPa
 	return s.MCPAdapter.PromptsList(ctx, p)
 }
 
-// NotifyStatusUpdate converts payload to runtime notification and delegates to the adapter.
+// NotifyStatusUpdate delegates to the adapter.
 func (s *mcpShim) NotifyStatusUpdate(ctx context.Context, p *mcpassistant.SendNotificationPayload) error {
-	if p == nil {
-		return nil
-	}
-	n := &mcpruntime.Notification{Type: p.Type, Message: p.Message, Data: p.Data}
-	return s.MCPAdapter.NotifyStatusUpdate(ctx, n)
+	return s.MCPAdapter.NotifyStatusUpdate(ctx, p)
 }
 
 // EventsStream delegates to the adapter.
 func (s *mcpShim) EventsStream(ctx context.Context, stream mcpassistant.EventsStreamServerStream) (*mcpassistant.EventsStreamResult, error) {
-	err := s.MCPAdapter.EventsStream(ctx, stream)
-	return nil, err
+	return s.MCPAdapter.EventsStream(ctx, stream)
 }
 
 // ToolsList delegates to the adapter.

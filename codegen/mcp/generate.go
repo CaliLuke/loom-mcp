@@ -1245,7 +1245,7 @@ func buildMCPAdapterFile(genpkg string, svc *expr.ServiceExpr, data *AdapterData
 			adapterToolsSection(data),
 			adapterResourcesSection(data),
 			adapterPromptsSection(data),
-			adapterNotificationsSection(),
+			adapterNotificationsSection(data),
 			adapterSubscriptionsSection(data),
 		},
 	}
@@ -1275,14 +1275,12 @@ func adapterImports(genpkg string, svc *expr.ServiceExpr, svcName string, data *
 		{Path: "go.opentelemetry.io/otel/codes"},
 		{Path: "go.opentelemetry.io/otel/metric"},
 		{Path: "go.opentelemetry.io/otel/trace"},
+		{Path: "github.com/sahilm/fuzzy"},
 		{Path: genpkg + "/" + svcName, Name: svcName},
 		{Path: "github.com/CaliLuke/loom-mcp/runtime/mcp", Name: "mcpruntime"},
 		{Path: upstreampaths.LoomMCPHTTPImportPath, Name: "goahttp"},
 		{Path: upstreampaths.LoomPkgImportPath, Name: "loom"},
 	}...)
-	if len(data.Tools) > 0 {
-		imports = append(imports, &codegen.ImportSpec{Path: "github.com/sahilm/fuzzy"})
-	}
 	if len(data.SkillDirectories) > 0 {
 		imports = append(imports, &codegen.ImportSpec{
 			Path: "github.com/CaliLuke/loom-mcp/runtime/mcp/skills",

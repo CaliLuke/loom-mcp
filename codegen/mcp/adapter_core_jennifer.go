@@ -56,6 +56,8 @@ func emitAdapterStruct(stmt *jen.Statement, data *AdapterData) {
 		g.Id("resourceNameToURI").Map(jen.String()).String()
 	})
 	stmt.Line()
+	stmt.Var().Id("_").Id("Service").Op("=").Params(jen.Op("*").Id("MCPAdapter")).Call(jen.Nil())
+	stmt.Line()
 }
 
 // emitToolCallInterceptorTypes generates the interceptor-related types and impls.

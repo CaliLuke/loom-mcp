@@ -77,6 +77,16 @@ Use this file when editing DSL, generators, generated helpers, or MCP codegen be
 - MCP intermediate SSE events use Loom's namespaced
   `<service>/stream.event` notification default. Never label an intermediate
   notification with the original request method such as `tools/call`.
+- Dynamic-only MCP prompt services enable prompt capabilities during expression
+  finalization so generated adapters and `loom example` scaffolds agree on the
+  prompt-provider constructor contract.
+- Generated MCP services retain their structural tools/list and tools/call
+  methods and empty-catalog adapter helpers even when no tools are declared;
+  prompt-only and resource-only servers must still compile without advertising
+  the tools capability.
+- Generated `MCPAdapter` types must satisfy their generated `Service` interface
+  directly. Keep streaming result/error signatures and notification payload
+  types aligned, and emit a compile-time interface assertion in the adapter.
 - Method-backed toolset tools may project into MCP only when the evaluated
   design exposes both `AgentRuntime` and `MCPSurface` and places the tool with
   `MCPPlacement(service, mcpServer)`. Codegen should trust validation for

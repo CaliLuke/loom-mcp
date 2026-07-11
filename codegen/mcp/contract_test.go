@@ -333,6 +333,9 @@ func TestGenerateMCPAdapter_RendersExperimentalEventsCapability(t *testing.T) {
 	require.Contains(t, rendered, `"method":        "events/stream"`)
 	require.Contains(t, rendered, `"stream":        true`)
 	require.Contains(t, rendered, `"notifications": []string{"notify_status_update"}`)
+	require.Contains(t, rendered, `var _ Service = (*MCPAdapter)(nil)`)
+	require.Contains(t, rendered, `func (a *MCPAdapter) NotifyStatusUpdate(ctx context.Context, p *SendNotificationPayload) error`)
+	require.Contains(t, rendered, `n := &mcpruntime.Notification{`)
 }
 
 func TestGenerateMCPAdapter_RejectsNonEmptyListCursors(t *testing.T) {
@@ -588,13 +591,18 @@ func TestGenerateAdapter_RendersSessionScopedEventPublishing(t *testing.T) {
 	restore := resetMCPCodegenState(t)
 	defer restore()
 
-	svc, _ := testService("assistant")
+	svc, methods := testService("assistant", "send_notification")
+	methods["send_notification"].Payload = testNotificationPayload()
+	methods["send_notification"].Result = &expr.AttributeExpr{Type: expr.Empty}
 	root := testRootExpr([]*expr.ServiceExpr{svc}, []*expr.HTTPServiceExpr{
 		jsonrpcService(svc, "/rpc"),
 	})
 	mcpexpr.Root.RegisterMCP(svc, &mcpexpr.MCPExpr{
 		Name:    "assistant",
 		Version: "0.1.0",
+		Notifications: []*mcpexpr.NotificationExpr{
+			{Name: "status_update", Method: methods["send_notification"]},
+		},
 	})
 
 	files, err := Generate("example.com/assistant/gen", []eval.Root{root}, nil)
@@ -1850,7 +1858,9 @@ func TestPrepareExample_OnlyMountsMCPOnOriginalServers(t *testing.T) {
 
 	require.NoError(t, err)
 	require.True(t, slices.Contains(root.API.Servers[0].Services, "mcp_alpha"))
+	require.False(t, slices.Contains(root.API.Servers[0].Services, "alpha"))
 	require.False(t, slices.Contains(root.API.Servers[1].Services, "mcp_alpha"))
+	require.True(t, slices.Contains(root.API.Servers[1].Services, "beta"))
 }
 
 func resetMCPCodegenState(t *testing.T) func() {
