@@ -2,11 +2,46 @@ package registry
 
 import (
 	"context"
+	"errors"
+	"os"
+	"os/exec"
+	"syscall"
 	"testing"
 	"time"
 
 	"github.com/CaliLuke/loom/pulse/pool"
 )
+
+func TestShutdownSignalsRestoreDefaultDisposition(t *testing.T) {
+	const helperEnv = "LOOM_MCP_SIGNAL_STOP_HELPER"
+	if os.Getenv(helperEnv) == "1" {
+		_, stop := shutdownSignals()
+		stop()
+		process, err := os.FindProcess(os.Getpid())
+		if err != nil {
+			os.Exit(2)
+		}
+		if err := process.Signal(syscall.SIGTERM); err != nil {
+			os.Exit(3)
+		}
+		time.Sleep(time.Second)
+		os.Exit(4)
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	cmd := exec.CommandContext(ctx, os.Args[0], "-test.run=^TestShutdownSignalsRestoreDefaultDisposition$") // #nosec G204,G702 -- fixed test binary and test name
+	cmd.Env = append(os.Environ(), helperEnv+"=1")
+	err := cmd.Run()
+	var exitErr *exec.ExitError
+	if !errors.As(err, &exitErr) {
+		t.Fatalf("helper error = %v, want signal exit", err)
+	}
+	status, ok := exitErr.Sys().(syscall.WaitStatus)
+	if !ok || !status.Signaled() || status.Signal() != syscall.SIGTERM {
+		t.Fatalf("helper status = %v, want SIGTERM", exitErr.Sys())
+	}
+}
 
 // TestNewRegistry verifies that the Registry constructor wires all components correctly.
 func TestNewRegistry(t *testing.T) {

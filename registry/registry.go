@@ -329,8 +329,8 @@ func (r *Registry) Run(ctx context.Context, addr string, opts ...grpc.ServerOpti
 	registrypb.RegisterRegistryServer(grpcServer, grpcserver.New(endpoints, nil))
 
 	// Set up signal handling for graceful shutdown.
-	sigCh := make(chan os.Signal, 1)
-	signal.Notify(sigCh, syscall.SIGINT, syscall.SIGTERM)
+	sigCh, stopSignals := shutdownSignals()
+	defer stopSignals()
 
 	// Channel to capture server errors.
 	errCh := make(chan error, 1)
@@ -363,4 +363,12 @@ func (r *Registry) Run(ctx context.Context, addr string, opts ...grpc.ServerOpti
 	}
 
 	return nil
+}
+
+func shutdownSignals() (<-chan os.Signal, func()) {
+	sigCh := make(chan os.Signal, 1)
+	signal.Notify(sigCh, syscall.SIGINT, syscall.SIGTERM)
+	return sigCh, func() {
+		signal.Stop(sigCh)
+	}
 }
