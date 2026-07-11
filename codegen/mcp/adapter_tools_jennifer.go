@@ -1401,6 +1401,11 @@ func emitToolsCallHandler(stmt *jen.Statement, data *AdapterData) {
 		).
 		Params(jen.Bool(), jen.Error()).
 		BlockFunc(func(g *jen.Group) {
+			g.If(jen.Len(jen.Qual("bytes", "TrimSpace").Call(jen.Id("p").Dot("Arguments"))).Op("==").Lit(0)).Block(
+				jen.Id("normalized").Op(":=").Op("*").Id("p"),
+				jen.Id("normalized").Dot("Arguments").Op("=").Qual("encoding/json", "RawMessage").Call(jen.Index().Byte().Call(jen.Lit(`{}`))),
+				jen.Id("p").Op("=").Op("&").Id("normalized"),
+			)
 			g.Switch(jen.Id("p").Dot("Name")).BlockFunc(func(sw *jen.Group) {
 				for _, tool := range data.Tools {
 					sw.Case(jen.Lit(tool.Name)).BlockFunc(func(caseg *jen.Group) {

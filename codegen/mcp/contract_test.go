@@ -85,6 +85,35 @@ func TestGenerate_AcceptsMCPToolMethodsWithoutMethodLevelJSONRPC(t *testing.T) {
 	require.NoError(t, err)
 }
 
+func TestGenerateAdapter_NormalizesOmittedToolArguments(t *testing.T) {
+	restore := resetMCPCodegenState(t)
+	defer restore()
+
+	svc, methods := testService("demo", "search")
+	methods["search"].Payload = &expr.AttributeExpr{Type: &expr.Object{
+		{Name: "query", Attribute: &expr.AttributeExpr{Type: expr.String}},
+	}}
+	root := testRootExpr([]*expr.ServiceExpr{svc}, []*expr.HTTPServiceExpr{
+		jsonrpcService(svc, "/rpc"),
+	})
+	mcpexpr.Root.RegisterMCP(svc, &mcpexpr.MCPExpr{
+		Name:    "demo",
+		Version: "0.1.0",
+		Tools:   []*mcpexpr.ToolExpr{{Name: "search", Method: methods["search"]}},
+	})
+
+	files, err := Generate("example.com/demo/gen", []eval.Root{root}, nil)
+	require.NoError(t, err)
+	file := findGeneratedFile(t, files, filepath.Join(gcodegen.Gendir, "mcp_demo", "adapter_server.go"))
+	rendered := renderGeneratedFile(t, file)
+
+	require.Contains(t, rendered, `if len(bytes.TrimSpace(p.Arguments)) == 0 {
+		normalized := *p
+		normalized.Arguments = json.RawMessage([]byte("{}"))
+		p = &normalized
+	}`)
+}
+
 func TestMCPExprBuilder_EmitsServerCapabilitiesWithoutDuplicateCapabilitiesType(t *testing.T) {
 	restore := resetMCPCodegenState(t)
 	defer restore()

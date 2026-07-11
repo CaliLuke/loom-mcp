@@ -16,6 +16,38 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+func TestGeneratedJSONRPCServerToolsCallAcceptsOmittedOptionalArguments(t *testing.T) {
+	t.Parallel()
+
+	server := newGeneratedJSONRPCServer(t)
+	defer server.Close()
+
+	u, err := url.Parse(server.URL)
+	require.NoError(t, err)
+	client := mcpAssistantjsonrpcc.NewClient(
+		u.Scheme,
+		u.Host,
+		&http.Client{Timeout: 10 * time.Second},
+		goahttp.RequestEncoder,
+		goahttp.ResponseDecoder,
+		false,
+	)
+	_, err = client.Initialize()(context.Background(), &mcpassistant.InitializePayload{
+		ProtocolVersion: "2025-06-18",
+		ClientInfo:      &mcpassistant.ClientInfo{Name: "omitted-arguments-proof", Version: "1.0.0"},
+	})
+	require.NoError(t, err)
+
+	stream, err := client.ToolsCall()(context.Background(), &mcpassistant.ToolsCallPayload{Name: "search_records"})
+	require.NoError(t, err)
+	result, err := stream.(*mcpAssistantjsonrpcc.ToolsCallClientStream).Recv(context.Background())
+	require.NoError(t, err)
+	if result.IsError != nil {
+		require.False(t, *result.IsError)
+	}
+	require.Len(t, result.Content, 1)
+}
+
 func TestGeneratedJSONRPCServerEventsStreamPublishesNotifications(t *testing.T) {
 	t.Parallel()
 

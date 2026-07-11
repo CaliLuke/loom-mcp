@@ -2022,6 +2022,11 @@ func (a *MCPAdapter) toolsCallHandler(ctx context.Context, p *ToolsCallPayload, 
 	return a.executeRealTool(ctx, p, stream)
 }
 func (a *MCPAdapter) executeRealTool(ctx context.Context, p *ToolsCallPayload, stream ToolsCallServerStream) (bool, error) {
+	if len(bytes.TrimSpace(p.Arguments)) == 0 {
+		normalized := *p
+		normalized.Arguments = json.RawMessage([]byte("{}"))
+		p = &normalized
+	}
 	switch p.Name {
 	case "analyze_sentiment":
 		var payload *assistant.AnalyzeSentimentPayload

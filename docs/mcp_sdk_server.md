@@ -64,6 +64,14 @@ compatible with older skills: the directory name becomes the ID and the first
 heading or text line becomes the description. Duplicate IDs and invalid
 metadata fail resource discovery.
 
+## Optional tool arguments
+
+MCP clients may omit `tools/call.arguments`. Generated adapters normalize an
+omitted or whitespace-only value to `{}` before decoding a real tool payload.
+Tools with all-optional payloads therefore execute normally, while tools with
+required fields return the generated missing-field validation error and repair
+hint.
+
 ## Request Context Callback
 
 `RequestContext` is the supported extension point for propagating
