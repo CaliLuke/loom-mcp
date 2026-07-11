@@ -139,7 +139,7 @@ func TestMCPExprBuilder_EmitsServerCapabilitiesWithoutDuplicateCapabilitiesType(
 	require.NotContains(t, typeNames, "Capabilities")
 }
 
-func TestMCPExprBuilder_PreservesMCPStreamingNotificationMethods(t *testing.T) {
+func TestMCPExprBuilder_UsesNamespacedStreamingNotificationDefaults(t *testing.T) {
 	restore := resetMCPCodegenState(t)
 	defer restore()
 
@@ -166,8 +166,8 @@ func TestMCPExprBuilder_PreservesMCPStreamingNotificationMethods(t *testing.T) {
 		}
 	}
 	require.Equal(t, map[string]string{
-		"events/stream": "events/stream",
-		"tools/call":    "tools/call",
+		"events/stream": "",
+		"tools/call":    "",
 	}, methodsByName)
 }
 

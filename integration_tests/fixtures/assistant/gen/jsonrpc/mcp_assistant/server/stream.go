@@ -81,7 +81,7 @@ func (s *ToolsCallServerStream) Send(ctx context.Context, event mcpassistant.Too
 	// Send as notification (no ID)
 	message := map[string]any{
 		"jsonrpc": "2.0",
-		"method":  "tools/call",
+		"method":  "mcp_assistant/stream.event",
 		"params":  body,
 	}
 
@@ -218,7 +218,7 @@ func (s *EventsStreamServerStream) Send(ctx context.Context, event mcpassistant.
 	// Send as notification (no ID)
 	message := map[string]any{
 		"jsonrpc": "2.0",
-		"method":  "events/stream",
+		"method":  "mcp_assistant/stream.event",
 		"params":  body,
 	}
 

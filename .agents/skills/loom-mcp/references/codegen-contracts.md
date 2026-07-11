@@ -74,6 +74,9 @@ Use this file when editing DSL, generators, generated helpers, or MCP codegen be
   expired, or terminated session IDs receive HTTP 404 before JSON-RPC routing,
   missing IDs receive HTTP 400 once sessions exist, GET listeners register for
   termination, and DELETE terminates the matching session.
+- MCP intermediate SSE events use Loom's namespaced
+  `<service>/stream.event` notification default. Never label an intermediate
+  notification with the original request method such as `tools/call`.
 - Method-backed toolset tools may project into MCP only when the evaluated
   design exposes both `AgentRuntime` and `MCPSurface` and places the tool with
   `MCPPlacement(service, mcpServer)`. Codegen should trust validation for

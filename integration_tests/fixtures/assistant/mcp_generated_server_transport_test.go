@@ -80,7 +80,7 @@ func TestGeneratedJSONRPCServerEventsStreamPublishesNotifications(t *testing.T) 
 	case data := <-stream.Result():
 		assert.NotContains(t, data, "ERROR:")
 		assert.NotContains(t, data, "STATUS:")
-		assert.Contains(t, data, `"method":"events/stream"`)
+		assert.Contains(t, data, `"method":"mcp_assistant/stream.event"`)
 		assert.Contains(t, data, message)
 	case <-ctx.Done():
 		t.Fatal("timed out waiting for events/stream notification")

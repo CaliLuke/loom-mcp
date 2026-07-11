@@ -80,6 +80,8 @@ type (
 	}
 )
 
+const anthropicContentTypeToolUse = "tool_use"
+
 // New builds an Anthropic-backed model client from the provided Anthropic
 // Messages client and configuration options.
 func New(msg MessagesClient, opts Options) (*Client, error) {
@@ -707,7 +709,7 @@ func translateResponseContent(blocks []sdk.ContentBlockUnion, nameMap map[string
 			appendAnthropicThinking(&parts, block.AsThinking())
 		case "redacted_thinking":
 			appendAnthropicRedactedThinking(&parts, block.AsRedactedThinking())
-		case "tool_use":
+		case anthropicContentTypeToolUse:
 			resp.ToolCalls = append(resp.ToolCalls, anthropicToolCall(block, nameMap, toolUseIDs))
 		}
 	}

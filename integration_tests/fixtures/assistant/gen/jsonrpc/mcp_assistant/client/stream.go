@@ -145,7 +145,7 @@ func (s *ToolsCallClientStream) Recv(ctx context.Context) (*mcpassistant.ToolsCa
 			if notification.JSONRPC != "2.0" {
 				return zero, fmt.Errorf("invalid JSON-RPC version: %s", notification.JSONRPC)
 			}
-			if notification.Method != "tools/call" {
+			if notification.Method != "mcp_assistant/stream.event" {
 				continue
 			}
 			result, err := s.decodeResult(notification.Params)
@@ -202,7 +202,7 @@ func (s *ToolsCallClientStream) Recv(ctx context.Context) (*mcpassistant.ToolsCa
 				if notification.JSONRPC != "2.0" {
 					return zero, fmt.Errorf("invalid JSON-RPC version: %s", notification.JSONRPC)
 				}
-				if notification.Method != "tools/call" {
+				if notification.Method != "mcp_assistant/stream.event" {
 					continue
 				}
 				result, err := s.decodeResult(notification.Params)
@@ -393,7 +393,7 @@ func (s *EventsStreamClientStream) Recv(ctx context.Context) (*mcpassistant.Even
 			if notification.JSONRPC != "2.0" {
 				return zero, fmt.Errorf("invalid JSON-RPC version: %s", notification.JSONRPC)
 			}
-			if notification.Method != "events/stream" {
+			if notification.Method != "mcp_assistant/stream.event" {
 				continue
 			}
 			result, err := s.decodeResult(notification.Params)
@@ -450,7 +450,7 @@ func (s *EventsStreamClientStream) Recv(ctx context.Context) (*mcpassistant.Even
 				if notification.JSONRPC != "2.0" {
 					return zero, fmt.Errorf("invalid JSON-RPC version: %s", notification.JSONRPC)
 				}
-				if notification.Method != "events/stream" {
+				if notification.Method != "mcp_assistant/stream.event" {
 					continue
 				}
 				result, err := s.decodeResult(notification.Params)

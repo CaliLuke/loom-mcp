@@ -30,6 +30,7 @@ const (
 	fieldSessionID            = "session_id"
 	fieldStatus               = "status"
 	fieldUpdatedAt            = "updated_at"
+	mongoSetOperator          = "$set"
 )
 
 // Client exposes Mongo-backed operations for session metadata.
@@ -171,7 +172,7 @@ func (c *client) EndSession(ctx context.Context, sessionID string, endedAt time.
 
 	filter := bson.M{fieldSessionID: sessionID}
 	update := bson.M{
-		"$set": bson.M{
+		mongoSetOperator: bson.M{
 			fieldStatus:    session.StatusEnded,
 			"ended_at":     endedAt.UTC(),
 			fieldUpdatedAt: now,
@@ -211,7 +212,7 @@ func (c *client) UpsertRun(ctx context.Context, run session.RunMeta) error {
 
 	filter := bson.M{fieldRunID: run.RunID}
 	update := bson.M{
-		"$set": bson.M{
+		mongoSetOperator: bson.M{
 			fieldRunID:     doc.RunID,
 			fieldAgentID:   doc.AgentID,
 			fieldSessionID: doc.SessionID,
@@ -294,8 +295,8 @@ func (c *client) addChildRunLink(ctx context.Context, parentRunID, childRunID st
 	defer cancel()
 	filter := bson.M{fieldRunID: parentRunID}
 	update := bson.M{
-		"$addToSet": bson.M{fieldChildRunIDs: childRunID},
-		"$set":      bson.M{fieldUpdatedAt: time.Now().UTC()},
+		"$addToSet":      bson.M{fieldChildRunIDs: childRunID},
+		mongoSetOperator: bson.M{fieldUpdatedAt: time.Now().UTC()},
 	}
 	res, err := c.runs.UpdateOne(ctx, filter, update)
 	if err != nil {

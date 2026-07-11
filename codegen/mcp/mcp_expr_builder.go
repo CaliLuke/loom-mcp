@@ -148,11 +148,6 @@ func (b *mcpExprBuilder) buildHTTPService(mcpService *expr.ServiceExpr) *expr.HT
 		jsonrpcPath = "/rpc"
 	}
 	httpService := shared.BuildHTTPServiceBase(mcpService, mcpHTTPServiceConfig{jsonrpcPath: jsonrpcPath})
-	for _, endpoint := range httpService.HTTPEndpoints {
-		if endpoint.SSE != nil {
-			endpoint.SSE.NotificationMethod = endpoint.MethodExpr.Name
-		}
-	}
 	return httpService
 }
 

@@ -2233,6 +2233,12 @@ default is `net/http.NewCrossOriginProtection()` (same-origin plus non-browser
 requests), matching the SDK transport default; call `AddTrustedOrigin` on it or
 set it to `nil` before mounting to change the policy.
 
+Intermediate SSE values use the namespaced
+`mcp_assistant/stream.event` JSON-RPC notification method (with the generated
+MCP service name as the prefix), never the request method name such as
+`tools/call`. This makes the stream extension explicit and prevents clients
+from mistaking a partial value for a protocol request.
+
 ### Generated MCP tool search
 
 Generated MCP adapters can opt into progressive discovery with

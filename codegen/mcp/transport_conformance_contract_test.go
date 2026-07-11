@@ -83,6 +83,15 @@ func TestGenerate_StreamFinalResponseUsesMessageEvent(t *testing.T) {
 	require.Contains(t, rendered, `sendSSEEvent("message", `)
 }
 
+func TestGenerate_IntermediateStreamsUseNamespacedNotificationMethod(t *testing.T) {
+	files := generateTransportConformanceFixture(t)
+	file := findGeneratedFile(t, files, filepath.Join(gcodegen.Gendir, "jsonrpc", "mcp_assistant", "server", "stream.go"))
+	rendered := renderGeneratedFile(t, file)
+
+	require.Contains(t, rendered, `"method":  "mcp_assistant/stream.event"`)
+	require.NotContains(t, rendered, `"method":  "tools/call"`)
+}
+
 func TestGenerate_JSONRPCMountValidatesOrigin(t *testing.T) {
 	files := generateTransportConformanceFixture(t)
 	file := findGeneratedFile(t, files, filepath.Join(gcodegen.Gendir, "jsonrpc", "mcp_assistant", "server", "server.go"))

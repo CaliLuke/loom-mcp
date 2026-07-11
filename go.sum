@@ -51,8 +51,8 @@ github.com/Azure/go-ansiterm v0.0.0-20250102033503-faa5f7b0171c h1:udKWzYgxTojEK
 github.com/Azure/go-ansiterm v0.0.0-20250102033503-faa5f7b0171c/go.mod h1:xomTg63KZ2rFqZQzSB4Vz2SUXa1BpHTVz9L5PTmPC4E=
 github.com/BurntSushi/toml v0.3.1/go.mod h1:xHWCNGjB5oqiDr8zfno3MHue2Ht5sIBksp03qcyfWMU=
 github.com/BurntSushi/xgb v0.0.0-20160522181843-27f122750802/go.mod h1:IVnqGOEym/WlBOVXweHU+Q+/VP0lqqI8lqeDx9IjBqo=
-github.com/CaliLuke/loom v1.3.2 h1:XyPnNI01nfmoSQ6R+ojnjNrG19YEH5ehspBdBh3podg=
-github.com/CaliLuke/loom v1.3.2/go.mod h1:eMMEQehr5bwyNwCUbUSDqmC3XOhSJodTypcK16ufe3s=
+github.com/CaliLuke/loom v1.4.0 h1:GRv5pOgddwQOePUPSWz8OUSEG40JPt/5u3HtZwxgcZs=
+github.com/CaliLuke/loom v1.4.0/go.mod h1:96iDgPo0+tpe7p2h2fabkuN99BdHP/raKrsZmOL9p0Q=
 github.com/Microsoft/go-winio v0.6.2 h1:F2VQgta7ecxGYO8k3ZZz3RS8fVIXVxONVUPlNERoyfY=
 github.com/Microsoft/go-winio v0.6.2/go.mod h1:yd8OoFMLzJbo9gZq8j5qaps8bJ9aShtEA8Ipt1oGCvU=
 github.com/anthropics/anthropic-sdk-go v1.52.0 h1:1TB9jt4DN87VMwS/hB1VK26tYzK0ipEOtqPaPGFtJQg=
@@ -354,8 +354,8 @@ github.com/opencontainers/image-spec v1.1.1/go.mod h1:qpqAh3Dmcf36wStyyWU+kCeDgr
 github.com/pascaldekloe/goe v0.0.0-20180627143212-57f6aae5913c/go.mod h1:lzWF7FIEvWOWxwDKqyGYQf6ZUaNfKdP144TG7ZOy1lc=
 github.com/pb33f/jsonpath v0.8.2 h1:Ou4C7zjYClBm97dfZjDCjdZGusJoynv/vrtiEKNfj2Y=
 github.com/pb33f/jsonpath v0.8.2/go.mod h1:zBV5LJW4OQOPatmQE2QdKpGQJvhDTlE5IEj6ASaRNTo=
-github.com/pb33f/libopenapi v0.38.4 h1:qtOr4/Ct3ZIy9YNY4xoTYegYhMozaotSsZ7lqr1FHso=
-github.com/pb33f/libopenapi v0.38.4/go.mod h1:8yHl64vr+ICrnzSgiwJmZ54heRqCqrhI/JL1ge+CPIY=
+github.com/pb33f/libopenapi v0.38.6 h1:rnLshOSCSLx3JmN/MnftyYcdN1FfaeRkbaBE/ZHdIXg=
+github.com/pb33f/libopenapi v0.38.6/go.mod h1:8yHl64vr+ICrnzSgiwJmZ54heRqCqrhI/JL1ge+CPIY=
 github.com/pb33f/ordered-map/v2 v2.3.1 h1:5319HDO0aw4DA4gzi+zv4FXU9UlSs3xGZ40wcP1nBjY=
 github.com/pb33f/ordered-map/v2 v2.3.1/go.mod h1:qxFQgd0PkVUtOMCkTapqotNgzRhMPL7VvaHKbd1HnmQ=
 github.com/pborman/getopt v0.0.0-20170112200414-7148bc3a4c30/go.mod h1:85jBQOZwpVEaDAr341tbn15RS4fCAsIst0qp7i8ex1o=

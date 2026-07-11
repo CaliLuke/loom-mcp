@@ -79,7 +79,7 @@ func (s *mcpAssistantSSEStream) Send(ctx context.Context, event mcpassistant.Eve
 		var message map[string]any
 		message = map[string]any{
 			"jsonrpc": "2.0",
-			"method":  "tools/call",
+			"method":  "mcp_assistant/stream.event",
 			"params":  body,
 		}
 		return s.sendSSEEvent("message", message)
@@ -88,7 +88,7 @@ func (s *mcpAssistantSSEStream) Send(ctx context.Context, event mcpassistant.Eve
 		var message map[string]any
 		message = map[string]any{
 			"jsonrpc": "2.0",
-			"method":  "events/stream",
+			"method":  "mcp_assistant/stream.event",
 			"params":  body,
 		}
 		return s.sendSSEEvent("message", message)
