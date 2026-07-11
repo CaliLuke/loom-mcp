@@ -34,6 +34,7 @@ func TestUnifiedToolSurfaceProjectionData(t *testing.T) {
 	require.Equal(t, "ProjectedLookup", tool.BoundMethod)
 	require.Equal(t, "lookup_tools.projected_lookup_tool", tool.RuntimeToolName)
 	require.Equal(t, "DispatchProjectedLookupToolMethod", tool.DispatcherFuncName)
+	require.JSONEq(t, `{"query":"example"}`, tool.ExampleArguments)
 }
 
 func TestUnifiedToolSurfaceNoExposureCompatibility(t *testing.T) {

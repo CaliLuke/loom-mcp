@@ -150,7 +150,7 @@ func ProjectedToolInventory(genpkg string, roots []eval.Root, serviceName string
 			HasResult:           tool.HasResult,
 			InputSchema:         inputSchema,
 			OutputSchema:        outputSchema,
-			ExampleArguments:    buildExampleJSON(tool.Args),
+			ExampleArguments:    synthesizeCanonicalExample(tool.Args),
 		})
 	}
 	return out, nil

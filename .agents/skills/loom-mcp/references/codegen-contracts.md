@@ -58,6 +58,9 @@ Use this file when editing DSL, generators, generated helpers, or MCP codegen be
   discriminators and missing nested union values. Invalid discriminators should
   use the allowed enum values; missing `value` envelopes should use the generated
   missing-field error path, not raw JSON decoder failures.
+- Generated retry and repair examples must use the same canonical union-aware
+  synthesizer as adapter recovery hints. Every emitted example must validate
+  against the input schema it accompanies, including discriminator envelopes.
 - Generated MCP `ToolInfo` surfaces must preserve MCP Tool fields across service,
   JSON-RPC server, JSON-RPC client, and SDK paths: `name`, `title`,
   `description`, `inputSchema`, `outputSchema`, `annotations`, `_meta`, and

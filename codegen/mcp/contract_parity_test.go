@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"slices"
+	"strconv"
 	"testing"
 	"text/template"
 
@@ -20,6 +21,7 @@ import (
 	"github.com/CaliLuke/loom/eval"
 	"github.com/CaliLuke/loom/expr"
 	openapi "github.com/CaliLuke/loom/http/codegen/openapi"
+	"github.com/santhosh-tekuri/jsonschema/v6"
 	"github.com/stretchr/testify/require"
 )
 
@@ -56,6 +58,39 @@ func TestUnionContractParityAcrossGeneratedSurfaces(t *testing.T) {
 	require.Equal(t, "action", inlineFacts.Discriminator)
 	require.Equal(t, "Action envelope", inlineFacts.WrapperDescription)
 	require.Equal(t, []string{"get_active", "list"}, inlineFacts.Tags)
+
+	example := mustMCPRepairExample(t)
+	validateExampleAgainstSchema(t, mustMCPInputSchema(t), []byte(example))
+}
+
+func mustMCPRepairExample(t *testing.T) string {
+	t.Helper()
+
+	files, err := mcpcodegen.Generate("example.com/parity", []eval.Root{expr.Root, expr.GeneratedResultTypes, mcpexpr.Root}, nil)
+	require.NoError(t, err)
+
+	adapterSource := renderedFileBySuffix(t, files, "adapter.go")
+	re := regexp.MustCompile(`BuildRepairPrompt\("tools/call:dispatch", [^,]+, ("(?:\\.|[^"])*")`)
+	match := re.FindStringSubmatch(adapterSource)
+	require.Len(t, match, 2, "expected generated client adapter to embed a dispatch repair example")
+	example, err := strconv.Unquote(match[1])
+	require.NoError(t, err)
+	return example
+}
+
+func validateExampleAgainstSchema(t *testing.T, schemaBytes, exampleBytes []byte) {
+	t.Helper()
+
+	var schemaDoc any
+	require.NoError(t, json.Unmarshal(schemaBytes, &schemaDoc))
+	var exampleDoc any
+	require.NoError(t, json.Unmarshal(exampleBytes, &exampleDoc))
+
+	compiler := jsonschema.NewCompiler()
+	require.NoError(t, compiler.AddResource("schema.json", schemaDoc))
+	schema, err := compiler.Compile("schema.json")
+	require.NoError(t, err)
+	require.NoError(t, schema.Validate(exampleDoc))
 }
 
 func TestFieldContractParityAcrossGeneratedSurfaces(t *testing.T) {

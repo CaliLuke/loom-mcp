@@ -180,14 +180,14 @@ func NewEndpoints(scheme string, host string, doer goahttp.Doer, enc func(*http.
 			Tool:    "analyze_sentiment",
 		})
 		if err != nil {
-			prompt := retry.BuildRepairPrompt("tools/call:analyze_sentiment", err.Error(), "{\"text\":\"abc123\"}", "{\"type\":\"object\",\"required\":[\"text\"],\"properties\":{\"text\":{\"type\":\"string\",\"description\":\"Input text to analyze\"}},\"additionalProperties\":false}")
+			prompt := retry.BuildRepairPrompt("tools/call:analyze_sentiment", err.Error(), "{\"text\":\"example\"}", "{\"type\":\"object\",\"required\":[\"text\"],\"properties\":{\"text\":{\"type\":\"string\",\"description\":\"Input text to analyze\"}},\"additionalProperties\":false}")
 			return nil, &retry.RetryableError{
 				Cause:  err,
 				Prompt: prompt,
 			}
 		}
 		if len(toolResp.Result) == 0 {
-			prompt := retry.BuildRepairPrompt("tools/call:analyze_sentiment", "empty MCP tool response", "{\"text\":\"abc123\"}", "{\"type\":\"object\",\"required\":[\"text\"],\"properties\":{\"text\":{\"type\":\"string\",\"description\":\"Input text to analyze\"}},\"additionalProperties\":false}")
+			prompt := retry.BuildRepairPrompt("tools/call:analyze_sentiment", "empty MCP tool response", "{\"text\":\"example\"}", "{\"type\":\"object\",\"required\":[\"text\"],\"properties\":{\"text\":{\"type\":\"string\",\"description\":\"Input text to analyze\"}},\"additionalProperties\":false}")
 			return nil, &retry.RetryableError{
 				Cause:  fmt.Errorf("empty MCP tool response for analyze_sentiment"),
 				Prompt: prompt,
@@ -214,14 +214,14 @@ func NewEndpoints(scheme string, host string, doer goahttp.Doer, enc func(*http.
 			Tool:    "extract_keywords",
 		})
 		if err != nil {
-			prompt := retry.BuildRepairPrompt("tools/call:extract_keywords", err.Error(), "{\"text\":\"abc123\"}", "{\"type\":\"object\",\"required\":[\"text\"],\"properties\":{\"text\":{\"type\":\"string\",\"description\":\"Input text\"}},\"additionalProperties\":false}")
+			prompt := retry.BuildRepairPrompt("tools/call:extract_keywords", err.Error(), "{\"text\":\"example\"}", "{\"type\":\"object\",\"required\":[\"text\"],\"properties\":{\"text\":{\"type\":\"string\",\"description\":\"Input text\"}},\"additionalProperties\":false}")
 			return nil, &retry.RetryableError{
 				Cause:  err,
 				Prompt: prompt,
 			}
 		}
 		if len(toolResp.Result) == 0 {
-			prompt := retry.BuildRepairPrompt("tools/call:extract_keywords", "empty MCP tool response", "{\"text\":\"abc123\"}", "{\"type\":\"object\",\"required\":[\"text\"],\"properties\":{\"text\":{\"type\":\"string\",\"description\":\"Input text\"}},\"additionalProperties\":false}")
+			prompt := retry.BuildRepairPrompt("tools/call:extract_keywords", "empty MCP tool response", "{\"text\":\"example\"}", "{\"type\":\"object\",\"required\":[\"text\"],\"properties\":{\"text\":{\"type\":\"string\",\"description\":\"Input text\"}},\"additionalProperties\":false}")
 			return nil, &retry.RetryableError{
 				Cause:  fmt.Errorf("empty MCP tool response for extract_keywords"),
 				Prompt: prompt,
@@ -248,14 +248,14 @@ func NewEndpoints(scheme string, host string, doer goahttp.Doer, enc func(*http.
 			Tool:    "summarize_text",
 		})
 		if err != nil {
-			prompt := retry.BuildRepairPrompt("tools/call:summarize_text", err.Error(), "{\"text\":\"abc123\"}", "{\"type\":\"object\",\"required\":[\"text\"],\"properties\":{\"text\":{\"type\":\"string\",\"description\":\"Input text to summarize\"}},\"additionalProperties\":false}")
+			prompt := retry.BuildRepairPrompt("tools/call:summarize_text", err.Error(), "{\"text\":\"example\"}", "{\"type\":\"object\",\"required\":[\"text\"],\"properties\":{\"text\":{\"type\":\"string\",\"description\":\"Input text to summarize\"}},\"additionalProperties\":false}")
 			return nil, &retry.RetryableError{
 				Cause:  err,
 				Prompt: prompt,
 			}
 		}
 		if len(toolResp.Result) == 0 {
-			prompt := retry.BuildRepairPrompt("tools/call:summarize_text", "empty MCP tool response", "{\"text\":\"abc123\"}", "{\"type\":\"object\",\"required\":[\"text\"],\"properties\":{\"text\":{\"type\":\"string\",\"description\":\"Input text to summarize\"}},\"additionalProperties\":false}")
+			prompt := retry.BuildRepairPrompt("tools/call:summarize_text", "empty MCP tool response", "{\"text\":\"example\"}", "{\"type\":\"object\",\"required\":[\"text\"],\"properties\":{\"text\":{\"type\":\"string\",\"description\":\"Input text to summarize\"}},\"additionalProperties\":false}")
 			return nil, &retry.RetryableError{
 				Cause:  fmt.Errorf("empty MCP tool response for summarize_text"),
 				Prompt: prompt,
@@ -282,14 +282,14 @@ func NewEndpoints(scheme string, host string, doer goahttp.Doer, enc func(*http.
 			Tool:    "search",
 		})
 		if err != nil {
-			prompt := retry.BuildRepairPrompt("tools/call:search", err.Error(), "{\"limit\":1,\"query\":\"abc123\"}", "{\"type\":\"object\",\"required\":[\"query\"],\"properties\":{\"limit\":{\"type\":\"integer\",\"description\":\"Maximum number of results\"},\"query\":{\"type\":\"string\",\"description\":\"Search query\"}},\"additionalProperties\":false}")
+			prompt := retry.BuildRepairPrompt("tools/call:search", err.Error(), "{\"query\":\"example\"}", "{\"type\":\"object\",\"required\":[\"query\"],\"properties\":{\"limit\":{\"type\":\"integer\",\"description\":\"Maximum number of results\"},\"query\":{\"type\":\"string\",\"description\":\"Search query\"}},\"additionalProperties\":false}")
 			return nil, &retry.RetryableError{
 				Cause:  err,
 				Prompt: prompt,
 			}
 		}
 		if len(toolResp.Result) == 0 {
-			prompt := retry.BuildRepairPrompt("tools/call:search", "empty MCP tool response", "{\"limit\":1,\"query\":\"abc123\"}", "{\"type\":\"object\",\"required\":[\"query\"],\"properties\":{\"limit\":{\"type\":\"integer\",\"description\":\"Maximum number of results\"},\"query\":{\"type\":\"string\",\"description\":\"Search query\"}},\"additionalProperties\":false}")
+			prompt := retry.BuildRepairPrompt("tools/call:search", "empty MCP tool response", "{\"query\":\"example\"}", "{\"type\":\"object\",\"required\":[\"query\"],\"properties\":{\"limit\":{\"type\":\"integer\",\"description\":\"Maximum number of results\"},\"query\":{\"type\":\"string\",\"description\":\"Search query\"}},\"additionalProperties\":false}")
 			return nil, &retry.RetryableError{
 				Cause:  fmt.Errorf("empty MCP tool response for search"),
 				Prompt: prompt,
@@ -316,14 +316,14 @@ func NewEndpoints(scheme string, host string, doer goahttp.Doer, enc func(*http.
 			Tool:    "search_records",
 		})
 		if err != nil {
-			prompt := retry.BuildRepairPrompt("tools/call:search_records", err.Error(), "{\"limit\":1,\"query\":\"abc123\"}", "{\"type\":\"object\",\"properties\":{\"limit\":{\"type\":\"integer\",\"description\":\"Maximum number of records\"},\"query\":{\"type\":\"string\",\"description\":\"Search query\"}},\"additionalProperties\":false}")
+			prompt := retry.BuildRepairPrompt("tools/call:search_records", err.Error(), "{}", "{\"type\":\"object\",\"properties\":{\"limit\":{\"type\":\"integer\",\"description\":\"Maximum number of records\"},\"query\":{\"type\":\"string\",\"description\":\"Search query\"}},\"additionalProperties\":false}")
 			return nil, &retry.RetryableError{
 				Cause:  err,
 				Prompt: prompt,
 			}
 		}
 		if len(toolResp.Result) == 0 {
-			prompt := retry.BuildRepairPrompt("tools/call:search_records", "empty MCP tool response", "{\"limit\":1,\"query\":\"abc123\"}", "{\"type\":\"object\",\"properties\":{\"limit\":{\"type\":\"integer\",\"description\":\"Maximum number of records\"},\"query\":{\"type\":\"string\",\"description\":\"Search query\"}},\"additionalProperties\":false}")
+			prompt := retry.BuildRepairPrompt("tools/call:search_records", "empty MCP tool response", "{}", "{\"type\":\"object\",\"properties\":{\"limit\":{\"type\":\"integer\",\"description\":\"Maximum number of records\"},\"query\":{\"type\":\"string\",\"description\":\"Search query\"}},\"additionalProperties\":false}")
 			return nil, &retry.RetryableError{
 				Cause:  fmt.Errorf("empty MCP tool response for search_records"),
 				Prompt: prompt,
@@ -350,14 +350,14 @@ func NewEndpoints(scheme string, host string, doer goahttp.Doer, enc func(*http.
 			Tool:    "execute_code",
 		})
 		if err != nil {
-			prompt := retry.BuildRepairPrompt("tools/call:execute_code", err.Error(), "{\"code\":\"abc123\",\"language\":\"javascript\"}", "{\"type\":\"object\",\"required\":[\"language\",\"code\"],\"properties\":{\"code\":{\"type\":\"string\",\"description\":\"Code to execute\"},\"language\":{\"type\":\"string\",\"description\":\"Language to execute\",\"enum\":[\"python\",\"javascript\"]}},\"additionalProperties\":false}")
+			prompt := retry.BuildRepairPrompt("tools/call:execute_code", err.Error(), "{\"code\":\"example\",\"language\":\"python\"}", "{\"type\":\"object\",\"required\":[\"language\",\"code\"],\"properties\":{\"code\":{\"type\":\"string\",\"description\":\"Code to execute\"},\"language\":{\"type\":\"string\",\"description\":\"Language to execute\",\"enum\":[\"python\",\"javascript\"]}},\"additionalProperties\":false}")
 			return nil, &retry.RetryableError{
 				Cause:  err,
 				Prompt: prompt,
 			}
 		}
 		if len(toolResp.Result) == 0 {
-			prompt := retry.BuildRepairPrompt("tools/call:execute_code", "empty MCP tool response", "{\"code\":\"abc123\",\"language\":\"javascript\"}", "{\"type\":\"object\",\"required\":[\"language\",\"code\"],\"properties\":{\"code\":{\"type\":\"string\",\"description\":\"Code to execute\"},\"language\":{\"type\":\"string\",\"description\":\"Language to execute\",\"enum\":[\"python\",\"javascript\"]}},\"additionalProperties\":false}")
+			prompt := retry.BuildRepairPrompt("tools/call:execute_code", "empty MCP tool response", "{\"code\":\"example\",\"language\":\"python\"}", "{\"type\":\"object\",\"required\":[\"language\",\"code\"],\"properties\":{\"code\":{\"type\":\"string\",\"description\":\"Code to execute\"},\"language\":{\"type\":\"string\",\"description\":\"Language to execute\",\"enum\":[\"python\",\"javascript\"]}},\"additionalProperties\":false}")
 			return nil, &retry.RetryableError{
 				Cause:  fmt.Errorf("empty MCP tool response for execute_code"),
 				Prompt: prompt,
@@ -384,14 +384,14 @@ func NewEndpoints(scheme string, host string, doer goahttp.Doer, enc func(*http.
 			Tool:    "process_batch",
 		})
 		if err != nil {
-			prompt := retry.BuildRepairPrompt("tools/call:process_batch", err.Error(), "{\"blob\":\"abc123\",\"format\":\"text\",\"items\":[\"abc123\"],\"mimeType\":\"abc123\",\"uri\":\"abc123\"}", "{\"type\":\"object\",\"required\":[\"items\"],\"properties\":{\"blob\":{\"type\":\"string\",\"description\":\"Base64 blob\"},\"format\":{\"type\":\"string\",\"description\":\"Output format\",\"enum\":[\"json\",\"text\",\"blob\",\"uri\"]},\"items\":{\"type\":\"array\",\"description\":\"Items to process\",\"items\":{\"type\":\"string\"}},\"mimeType\":{\"type\":\"string\",\"description\":\"MIME type\"},\"uri\":{\"type\":\"string\",\"description\":\"Resource URI\"}},\"additionalProperties\":false}")
+			prompt := retry.BuildRepairPrompt("tools/call:process_batch", err.Error(), "{\"items\":[]}", "{\"type\":\"object\",\"required\":[\"items\"],\"properties\":{\"blob\":{\"type\":\"string\",\"description\":\"Base64 blob\"},\"format\":{\"type\":\"string\",\"description\":\"Output format\",\"enum\":[\"json\",\"text\",\"blob\",\"uri\"]},\"items\":{\"type\":\"array\",\"description\":\"Items to process\",\"items\":{\"type\":\"string\"}},\"mimeType\":{\"type\":\"string\",\"description\":\"MIME type\"},\"uri\":{\"type\":\"string\",\"description\":\"Resource URI\"}},\"additionalProperties\":false}")
 			return nil, &retry.RetryableError{
 				Cause:  err,
 				Prompt: prompt,
 			}
 		}
 		if len(toolResp.Result) == 0 {
-			prompt := retry.BuildRepairPrompt("tools/call:process_batch", "empty MCP tool response", "{\"blob\":\"abc123\",\"format\":\"text\",\"items\":[\"abc123\"],\"mimeType\":\"abc123\",\"uri\":\"abc123\"}", "{\"type\":\"object\",\"required\":[\"items\"],\"properties\":{\"blob\":{\"type\":\"string\",\"description\":\"Base64 blob\"},\"format\":{\"type\":\"string\",\"description\":\"Output format\",\"enum\":[\"json\",\"text\",\"blob\",\"uri\"]},\"items\":{\"type\":\"array\",\"description\":\"Items to process\",\"items\":{\"type\":\"string\"}},\"mimeType\":{\"type\":\"string\",\"description\":\"MIME type\"},\"uri\":{\"type\":\"string\",\"description\":\"Resource URI\"}},\"additionalProperties\":false}")
+			prompt := retry.BuildRepairPrompt("tools/call:process_batch", "empty MCP tool response", "{\"items\":[]}", "{\"type\":\"object\",\"required\":[\"items\"],\"properties\":{\"blob\":{\"type\":\"string\",\"description\":\"Base64 blob\"},\"format\":{\"type\":\"string\",\"description\":\"Output format\",\"enum\":[\"json\",\"text\",\"blob\",\"uri\"]},\"items\":{\"type\":\"array\",\"description\":\"Items to process\",\"items\":{\"type\":\"string\"}},\"mimeType\":{\"type\":\"string\",\"description\":\"MIME type\"},\"uri\":{\"type\":\"string\",\"description\":\"Resource URI\"}},\"additionalProperties\":false}")
 			return nil, &retry.RetryableError{
 				Cause:  fmt.Errorf("empty MCP tool response for process_batch"),
 				Prompt: prompt,
@@ -418,14 +418,14 @@ func NewEndpoints(scheme string, host string, doer goahttp.Doer, enc func(*http.
 			Tool:    "multi_content",
 		})
 		if err != nil {
-			prompt := retry.BuildRepairPrompt("tools/call:multi_content", err.Error(), "{\"count\":1}", "{\"type\":\"object\",\"required\":[\"count\"],\"properties\":{\"count\":{\"type\":\"integer\",\"description\":\"Number of content items to return\"}},\"additionalProperties\":false}")
+			prompt := retry.BuildRepairPrompt("tools/call:multi_content", err.Error(), "{\"count\":0}", "{\"type\":\"object\",\"required\":[\"count\"],\"properties\":{\"count\":{\"type\":\"integer\",\"description\":\"Number of content items to return\"}},\"additionalProperties\":false}")
 			return nil, &retry.RetryableError{
 				Cause:  err,
 				Prompt: prompt,
 			}
 		}
 		if len(toolResp.Result) == 0 {
-			prompt := retry.BuildRepairPrompt("tools/call:multi_content", "empty MCP tool response", "{\"count\":1}", "{\"type\":\"object\",\"required\":[\"count\"],\"properties\":{\"count\":{\"type\":\"integer\",\"description\":\"Number of content items to return\"}},\"additionalProperties\":false}")
+			prompt := retry.BuildRepairPrompt("tools/call:multi_content", "empty MCP tool response", "{\"count\":0}", "{\"type\":\"object\",\"required\":[\"count\"],\"properties\":{\"count\":{\"type\":\"integer\",\"description\":\"Number of content items to return\"}},\"additionalProperties\":false}")
 			return nil, &retry.RetryableError{
 				Cause:  fmt.Errorf("empty MCP tool response for multi_content"),
 				Prompt: prompt,
@@ -452,14 +452,14 @@ func NewEndpoints(scheme string, host string, doer goahttp.Doer, enc func(*http.
 			Tool:    "generate_dpi_spec",
 		})
 		if err != nil {
-			prompt := retry.BuildRepairPrompt("tools/call:generate_dpi_spec", err.Error(), "{\"density\":\"comfortable\",\"include_dev_notes\":false,\"platform\":\"web\",\"primary_cta\":\"abc123\",\"screen_title\":\"abc123\",\"sections\":[\"abc123\"]}", "{\"type\":\"object\",\"required\":[\"screen_title\",\"platform\",\"density\",\"primary_cta\",\"sections\"],\"properties\":{\"density\":{\"type\":\"string\",\"description\":\"Layout density\",\"enum\":[\"compact\",\"comfortable\"]},\"include_dev_notes\":{\"type\":\"boolean\",\"description\":\"Whether to include implementation notes\"},\"platform\":{\"type\":\"string\",\"description\":\"Target platform\",\"enum\":[\"ios\",\"web\"]},\"primary_cta\":{\"type\":\"string\",\"description\":\"Primary call to action\"},\"screen_title\":{\"type\":\"string\",\"description\":\"Name of the frame or screen\"},\"sections\":{\"type\":\"array\",\"description\":\"Ordered screen sections\",\"items\":{\"type\":\"string\"}}},\"additionalProperties\":false}")
+			prompt := retry.BuildRepairPrompt("tools/call:generate_dpi_spec", err.Error(), "{\"density\":\"compact\",\"platform\":\"ios\",\"primary_cta\":\"example\",\"screen_title\":\"example\",\"sections\":[]}", "{\"type\":\"object\",\"required\":[\"screen_title\",\"platform\",\"density\",\"primary_cta\",\"sections\"],\"properties\":{\"density\":{\"type\":\"string\",\"description\":\"Layout density\",\"enum\":[\"compact\",\"comfortable\"]},\"include_dev_notes\":{\"type\":\"boolean\",\"description\":\"Whether to include implementation notes\"},\"platform\":{\"type\":\"string\",\"description\":\"Target platform\",\"enum\":[\"ios\",\"web\"]},\"primary_cta\":{\"type\":\"string\",\"description\":\"Primary call to action\"},\"screen_title\":{\"type\":\"string\",\"description\":\"Name of the frame or screen\"},\"sections\":{\"type\":\"array\",\"description\":\"Ordered screen sections\",\"items\":{\"type\":\"string\"}}},\"additionalProperties\":false}")
 			return nil, &retry.RetryableError{
 				Cause:  err,
 				Prompt: prompt,
 			}
 		}
 		if len(toolResp.Result) == 0 {
-			prompt := retry.BuildRepairPrompt("tools/call:generate_dpi_spec", "empty MCP tool response", "{\"density\":\"comfortable\",\"include_dev_notes\":false,\"platform\":\"web\",\"primary_cta\":\"abc123\",\"screen_title\":\"abc123\",\"sections\":[\"abc123\"]}", "{\"type\":\"object\",\"required\":[\"screen_title\",\"platform\",\"density\",\"primary_cta\",\"sections\"],\"properties\":{\"density\":{\"type\":\"string\",\"description\":\"Layout density\",\"enum\":[\"compact\",\"comfortable\"]},\"include_dev_notes\":{\"type\":\"boolean\",\"description\":\"Whether to include implementation notes\"},\"platform\":{\"type\":\"string\",\"description\":\"Target platform\",\"enum\":[\"ios\",\"web\"]},\"primary_cta\":{\"type\":\"string\",\"description\":\"Primary call to action\"},\"screen_title\":{\"type\":\"string\",\"description\":\"Name of the frame or screen\"},\"sections\":{\"type\":\"array\",\"description\":\"Ordered screen sections\",\"items\":{\"type\":\"string\"}}},\"additionalProperties\":false}")
+			prompt := retry.BuildRepairPrompt("tools/call:generate_dpi_spec", "empty MCP tool response", "{\"density\":\"compact\",\"platform\":\"ios\",\"primary_cta\":\"example\",\"screen_title\":\"example\",\"sections\":[]}", "{\"type\":\"object\",\"required\":[\"screen_title\",\"platform\",\"density\",\"primary_cta\",\"sections\"],\"properties\":{\"density\":{\"type\":\"string\",\"description\":\"Layout density\",\"enum\":[\"compact\",\"comfortable\"]},\"include_dev_notes\":{\"type\":\"boolean\",\"description\":\"Whether to include implementation notes\"},\"platform\":{\"type\":\"string\",\"description\":\"Target platform\",\"enum\":[\"ios\",\"web\"]},\"primary_cta\":{\"type\":\"string\",\"description\":\"Primary call to action\"},\"screen_title\":{\"type\":\"string\",\"description\":\"Name of the frame or screen\"},\"sections\":{\"type\":\"array\",\"description\":\"Ordered screen sections\",\"items\":{\"type\":\"string\"}}},\"additionalProperties\":false}")
 			return nil, &retry.RetryableError{
 				Cause:  fmt.Errorf("empty MCP tool response for generate_dpi_spec"),
 				Prompt: prompt,
@@ -486,14 +486,14 @@ func NewEndpoints(scheme string, host string, doer goahttp.Doer, enc func(*http.
 			Tool:    "dispatch_action",
 		})
 		if err != nil {
-			prompt := retry.BuildRepairPrompt("tools/call:dispatch_action", err.Error(), "{\"request\":{\"name\":\"abc123\"}}", "{\"type\":\"object\",\"required\":[\"request\"],\"properties\":{\"request\":{\"type\":\"object\",\"description\":\"Action envelope\",\"oneOf\":[{\"type\":\"object\",\"required\":[\"action\",\"value\"],\"properties\":{\"action\":{\"type\":\"string\",\"enum\":[\"list\"]},\"value\":{\"type\":\"object\",\"properties\":{\"limit\":{\"type\":\"integer\",\"description\":\"Maximum number of items to list\"}},\"additionalProperties\":false}},\"additionalProperties\":false},{\"type\":\"object\",\"required\":[\"action\",\"value\"],\"properties\":{\"action\":{\"type\":\"string\",\"enum\":[\"create\"]},\"value\":{\"type\":\"object\",\"required\":[\"name\"],\"properties\":{\"name\":{\"type\":\"string\",\"description\":\"Name to create\"}},\"additionalProperties\":false}},\"additionalProperties\":false}],\"discriminator\":{\"propertyName\":\"action\"}}},\"additionalProperties\":false}")
+			prompt := retry.BuildRepairPrompt("tools/call:dispatch_action", err.Error(), "{\"request\":{\"action\":\"list\",\"value\":{}}}", "{\"type\":\"object\",\"required\":[\"request\"],\"properties\":{\"request\":{\"type\":\"object\",\"description\":\"Action envelope\",\"oneOf\":[{\"type\":\"object\",\"required\":[\"action\",\"value\"],\"properties\":{\"action\":{\"type\":\"string\",\"enum\":[\"list\"]},\"value\":{\"type\":\"object\",\"properties\":{\"limit\":{\"type\":\"integer\",\"description\":\"Maximum number of items to list\"}},\"additionalProperties\":false}},\"additionalProperties\":false},{\"type\":\"object\",\"required\":[\"action\",\"value\"],\"properties\":{\"action\":{\"type\":\"string\",\"enum\":[\"create\"]},\"value\":{\"type\":\"object\",\"required\":[\"name\"],\"properties\":{\"name\":{\"type\":\"string\",\"description\":\"Name to create\"}},\"additionalProperties\":false}},\"additionalProperties\":false}],\"discriminator\":{\"propertyName\":\"action\"}}},\"additionalProperties\":false}")
 			return nil, &retry.RetryableError{
 				Cause:  err,
 				Prompt: prompt,
 			}
 		}
 		if len(toolResp.Result) == 0 {
-			prompt := retry.BuildRepairPrompt("tools/call:dispatch_action", "empty MCP tool response", "{\"request\":{\"name\":\"abc123\"}}", "{\"type\":\"object\",\"required\":[\"request\"],\"properties\":{\"request\":{\"type\":\"object\",\"description\":\"Action envelope\",\"oneOf\":[{\"type\":\"object\",\"required\":[\"action\",\"value\"],\"properties\":{\"action\":{\"type\":\"string\",\"enum\":[\"list\"]},\"value\":{\"type\":\"object\",\"properties\":{\"limit\":{\"type\":\"integer\",\"description\":\"Maximum number of items to list\"}},\"additionalProperties\":false}},\"additionalProperties\":false},{\"type\":\"object\",\"required\":[\"action\",\"value\"],\"properties\":{\"action\":{\"type\":\"string\",\"enum\":[\"create\"]},\"value\":{\"type\":\"object\",\"required\":[\"name\"],\"properties\":{\"name\":{\"type\":\"string\",\"description\":\"Name to create\"}},\"additionalProperties\":false}},\"additionalProperties\":false}],\"discriminator\":{\"propertyName\":\"action\"}}},\"additionalProperties\":false}")
+			prompt := retry.BuildRepairPrompt("tools/call:dispatch_action", "empty MCP tool response", "{\"request\":{\"action\":\"list\",\"value\":{}}}", "{\"type\":\"object\",\"required\":[\"request\"],\"properties\":{\"request\":{\"type\":\"object\",\"description\":\"Action envelope\",\"oneOf\":[{\"type\":\"object\",\"required\":[\"action\",\"value\"],\"properties\":{\"action\":{\"type\":\"string\",\"enum\":[\"list\"]},\"value\":{\"type\":\"object\",\"properties\":{\"limit\":{\"type\":\"integer\",\"description\":\"Maximum number of items to list\"}},\"additionalProperties\":false}},\"additionalProperties\":false},{\"type\":\"object\",\"required\":[\"action\",\"value\"],\"properties\":{\"action\":{\"type\":\"string\",\"enum\":[\"create\"]},\"value\":{\"type\":\"object\",\"required\":[\"name\"],\"properties\":{\"name\":{\"type\":\"string\",\"description\":\"Name to create\"}},\"additionalProperties\":false}},\"additionalProperties\":false}],\"discriminator\":{\"propertyName\":\"action\"}}},\"additionalProperties\":false}")
 			return nil, &retry.RetryableError{
 				Cause:  fmt.Errorf("empty MCP tool response for dispatch_action"),
 				Prompt: prompt,
@@ -520,14 +520,14 @@ func NewEndpoints(scheme string, host string, doer goahttp.Doer, enc func(*http.
 			Tool:    "dispatch_command",
 		})
 		if err != nil {
-			prompt := retry.BuildRepairPrompt("tools/call:dispatch_command", err.Error(), "{\"command\":{\"count\":1}}", "{\"type\":\"object\",\"required\":[\"command\"],\"properties\":{\"command\":{\"type\":\"object\",\"description\":\"Command envelope with custom branch key\",\"oneOf\":[{\"type\":\"object\",\"required\":[\"action\",\"args\"],\"properties\":{\"action\":{\"type\":\"string\",\"enum\":[\"foo\"]},\"args\":{\"type\":\"object\",\"properties\":{\"label\":{\"type\":\"string\",\"description\":\"Foo label\"}},\"additionalProperties\":false}},\"additionalProperties\":false},{\"type\":\"object\",\"required\":[\"action\",\"args\"],\"properties\":{\"action\":{\"type\":\"string\",\"enum\":[\"bar\"]},\"args\":{\"type\":\"object\",\"required\":[\"count\"],\"properties\":{\"count\":{\"type\":\"integer\",\"description\":\"Bar count\"}},\"additionalProperties\":false}},\"additionalProperties\":false}],\"discriminator\":{\"propertyName\":\"action\"}}},\"additionalProperties\":false}")
+			prompt := retry.BuildRepairPrompt("tools/call:dispatch_command", err.Error(), "{\"command\":{\"action\":\"foo\",\"args\":{}}}", "{\"type\":\"object\",\"required\":[\"command\"],\"properties\":{\"command\":{\"type\":\"object\",\"description\":\"Command envelope with custom branch key\",\"oneOf\":[{\"type\":\"object\",\"required\":[\"action\",\"args\"],\"properties\":{\"action\":{\"type\":\"string\",\"enum\":[\"foo\"]},\"args\":{\"type\":\"object\",\"properties\":{\"label\":{\"type\":\"string\",\"description\":\"Foo label\"}},\"additionalProperties\":false}},\"additionalProperties\":false},{\"type\":\"object\",\"required\":[\"action\",\"args\"],\"properties\":{\"action\":{\"type\":\"string\",\"enum\":[\"bar\"]},\"args\":{\"type\":\"object\",\"required\":[\"count\"],\"properties\":{\"count\":{\"type\":\"integer\",\"description\":\"Bar count\"}},\"additionalProperties\":false}},\"additionalProperties\":false}],\"discriminator\":{\"propertyName\":\"action\"}}},\"additionalProperties\":false}")
 			return nil, &retry.RetryableError{
 				Cause:  err,
 				Prompt: prompt,
 			}
 		}
 		if len(toolResp.Result) == 0 {
-			prompt := retry.BuildRepairPrompt("tools/call:dispatch_command", "empty MCP tool response", "{\"command\":{\"count\":1}}", "{\"type\":\"object\",\"required\":[\"command\"],\"properties\":{\"command\":{\"type\":\"object\",\"description\":\"Command envelope with custom branch key\",\"oneOf\":[{\"type\":\"object\",\"required\":[\"action\",\"args\"],\"properties\":{\"action\":{\"type\":\"string\",\"enum\":[\"foo\"]},\"args\":{\"type\":\"object\",\"properties\":{\"label\":{\"type\":\"string\",\"description\":\"Foo label\"}},\"additionalProperties\":false}},\"additionalProperties\":false},{\"type\":\"object\",\"required\":[\"action\",\"args\"],\"properties\":{\"action\":{\"type\":\"string\",\"enum\":[\"bar\"]},\"args\":{\"type\":\"object\",\"required\":[\"count\"],\"properties\":{\"count\":{\"type\":\"integer\",\"description\":\"Bar count\"}},\"additionalProperties\":false}},\"additionalProperties\":false}],\"discriminator\":{\"propertyName\":\"action\"}}},\"additionalProperties\":false}")
+			prompt := retry.BuildRepairPrompt("tools/call:dispatch_command", "empty MCP tool response", "{\"command\":{\"action\":\"foo\",\"args\":{}}}", "{\"type\":\"object\",\"required\":[\"command\"],\"properties\":{\"command\":{\"type\":\"object\",\"description\":\"Command envelope with custom branch key\",\"oneOf\":[{\"type\":\"object\",\"required\":[\"action\",\"args\"],\"properties\":{\"action\":{\"type\":\"string\",\"enum\":[\"foo\"]},\"args\":{\"type\":\"object\",\"properties\":{\"label\":{\"type\":\"string\",\"description\":\"Foo label\"}},\"additionalProperties\":false}},\"additionalProperties\":false},{\"type\":\"object\",\"required\":[\"action\",\"args\"],\"properties\":{\"action\":{\"type\":\"string\",\"enum\":[\"bar\"]},\"args\":{\"type\":\"object\",\"required\":[\"count\"],\"properties\":{\"count\":{\"type\":\"integer\",\"description\":\"Bar count\"}},\"additionalProperties\":false}},\"additionalProperties\":false}],\"discriminator\":{\"propertyName\":\"action\"}}},\"additionalProperties\":false}")
 			return nil, &retry.RetryableError{
 				Cause:  fmt.Errorf("empty MCP tool response for dispatch_command"),
 				Prompt: prompt,
@@ -554,14 +554,14 @@ func NewEndpoints(scheme string, host string, doer goahttp.Doer, enc func(*http.
 			Tool:    "projected_lookup_tool",
 		})
 		if err != nil {
-			prompt := retry.BuildRepairPrompt("tools/call:projected_lookup_tool", err.Error(), "{\"query\":\"abc123\"}", "{\"type\":\"object\",\"required\":[\"query\"],\"properties\":{\"query\":{\"type\":\"string\",\"description\":\"Projected lookup query\"}},\"additionalProperties\":false}")
+			prompt := retry.BuildRepairPrompt("tools/call:projected_lookup_tool", err.Error(), "{\"query\":\"example\"}", "{\"type\":\"object\",\"required\":[\"query\"],\"properties\":{\"query\":{\"type\":\"string\",\"description\":\"Projected lookup query\"}},\"additionalProperties\":false}")
 			return nil, &retry.RetryableError{
 				Cause:  err,
 				Prompt: prompt,
 			}
 		}
 		if len(toolResp.Result) == 0 {
-			prompt := retry.BuildRepairPrompt("tools/call:projected_lookup_tool", "empty MCP tool response", "{\"query\":\"abc123\"}", "{\"type\":\"object\",\"required\":[\"query\"],\"properties\":{\"query\":{\"type\":\"string\",\"description\":\"Projected lookup query\"}},\"additionalProperties\":false}")
+			prompt := retry.BuildRepairPrompt("tools/call:projected_lookup_tool", "empty MCP tool response", "{\"query\":\"example\"}", "{\"type\":\"object\",\"required\":[\"query\"],\"properties\":{\"query\":{\"type\":\"string\",\"description\":\"Projected lookup query\"}},\"additionalProperties\":false}")
 			return nil, &retry.RetryableError{
 				Cause:  fmt.Errorf("empty MCP tool response for projected_lookup_tool"),
 				Prompt: prompt,

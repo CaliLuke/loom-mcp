@@ -667,8 +667,8 @@ func (g *adapterGenerator) populateToolPayloadData(adapter *ToolAdapter, tool *m
 	adapter.RequiredFields = req
 	adapter.EnumFields = enums
 	adapter.DefaultFields = defaults
-	adapter.ExampleArguments = buildExampleJSON(payload)
-	adapter.CanonicalExampleJSON = synthesizeCanonicalExample(payload)
+	adapter.ExampleArguments = synthesizeCanonicalExample(payload)
+	adapter.CanonicalExampleJSON = adapter.ExampleArguments
 	adapter.UnionEnvelopes = collectUnionEnvelopes(payload)
 	return nil
 }

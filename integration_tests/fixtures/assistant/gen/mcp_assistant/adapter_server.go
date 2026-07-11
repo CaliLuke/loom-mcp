@@ -1971,7 +1971,7 @@ func projectedLookupInputRecovery(err error, raw json.RawMessage) string {
 		message = strings.TrimSpace(err.Error())
 	}
 	_ = raw
-	example := "{\"query\":\"abc123\"}"
+	example := "{\"query\":\"example\"}"
 	if field := missingFieldFromMessage(message); field != "" {
 		return fmt.Sprintf("Include required field %q. Example: %s", field, example)
 	}
