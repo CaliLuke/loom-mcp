@@ -52,9 +52,9 @@ func NewStreamableHTTPSessions() *StreamableHTTPSessions {
 }
 
 // Issue records a session ID as valid for future requests.
-func (s *StreamableHTTPSessions) Issue(sessionID string) {
+func (s *StreamableHTTPSessions) Issue(sessionID string) error {
 	if s == nil || sessionID == "" {
-		panic("streamable HTTP session issue requires non-empty session ID")
+		return ErrInvalidSessionID
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -62,7 +62,8 @@ func (s *StreamableHTTPSessions) Issue(sessionID string) {
 	s.pruneLocked(now)
 	s.issued[sessionID] = streamableHTTPSessionEntry{expiresAt: now.Add(s.cfg.issuedTTL)}
 	delete(s.terminated, sessionID)
-	s.pruneToMaxLocked(s.issued, s.cfg.maxIssued, s.listeners)
+	s.pruneToMaxLocked(s.issued, s.cfg.maxIssued, s.listeners, sessionID)
+	return nil
 }
 
 // HasIssued reports whether the store has any active issued sessions.
@@ -144,7 +145,7 @@ func (s *StreamableHTTPSessions) Terminate(sessionID string) error {
 	delete(s.issued, sessionID)
 	listeners := s.listeners[sessionID]
 	delete(s.listeners, sessionID)
-	s.pruneToMaxLocked(s.terminated, s.cfg.maxTerminated, nil)
+	s.pruneToMaxLocked(s.terminated, s.cfg.maxTerminated, nil, "")
 	s.mu.Unlock()
 
 	for listener := range listeners {
@@ -215,12 +216,12 @@ func (s *StreamableHTTPSessions) pruneExpiredLocked(entries map[string]streamabl
 	}
 }
 
-func (s *StreamableHTTPSessions) pruneToMaxLocked(entries map[string]streamableHTTPSessionEntry, max int, protected map[string]map[*streamListener]struct{}) {
+func (s *StreamableHTTPSessions) pruneToMaxLocked(entries map[string]streamableHTTPSessionEntry, max int, protected map[string]map[*streamListener]struct{}, preserveID string) {
 	for len(entries) > max {
 		var oldestID string
 		var oldestExpiresAt time.Time
 		for sessionID, entry := range entries {
-			if len(protected[sessionID]) > 0 {
+			if sessionID == preserveID || len(protected[sessionID]) > 0 {
 				continue
 			}
 			if oldestID == "" || entry.expiresAt.Before(oldestExpiresAt) {
@@ -229,8 +230,25 @@ func (s *StreamableHTTPSessions) pruneToMaxLocked(entries map[string]streamableH
 			}
 		}
 		if oldestID == "" {
+			for sessionID, entry := range entries {
+				if sessionID == preserveID {
+					continue
+				}
+				if oldestID == "" || entry.expiresAt.Before(oldestExpiresAt) {
+					oldestID = sessionID
+					oldestExpiresAt = entry.expiresAt
+				}
+			}
+		}
+		if oldestID == "" {
 			return
 		}
 		delete(entries, oldestID)
+		for listener := range protected[oldestID] {
+			if listener != nil && listener.cancel != nil {
+				listener.cancel()
+			}
+		}
+		delete(protected, oldestID)
 	}
 }

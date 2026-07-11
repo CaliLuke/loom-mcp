@@ -76,7 +76,8 @@ Use this file when editing DSL, generators, generated helpers, or MCP codegen be
   successful initialize response issues its session, supplied unknown,
   expired, or terminated session IDs receive HTTP 404 before JSON-RPC routing,
   missing IDs receive HTTP 400 once sessions exist, GET listeners register for
-  termination, and DELETE terminates the matching session.
+  termination, and DELETE terminates the matching session. Generated issuance
+  must handle the store's error return.
 - MCP intermediate SSE events use Loom's namespaced
   `<service>/stream.event` notification default. Never label an intermediate
   notification with the original request method such as `tools/call`.

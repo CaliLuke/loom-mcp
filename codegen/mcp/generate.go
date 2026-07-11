@@ -1012,7 +1012,10 @@ func withMCPPolicyHeaders(streamableHTTPSessions *mcpruntime.StreamableHTTPSessi
 		next(w, r.WithContext(ctx))
 		if method == "initialize" {
 			if issuedSessionID := w.Header().Get(mcpruntime.HeaderKeySessionID); issuedSessionID != "" {
-				streamableHTTPSessions.Issue(issuedSessionID)
+				if err := streamableHTTPSessions.Issue(issuedSessionID); err != nil {
+					writeMCPStreamableHTTPSessionError(w, r, err)
+					return
+				}
 			}
 		}
 	}

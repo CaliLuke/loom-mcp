@@ -1259,7 +1259,7 @@ func (s *Server) MountAssistant(mux goahttp.Muxer) {
 	require.Contains(t, rendered, `requestCancellations.Cancel(r.Header.Get(mcpruntime.HeaderKeySessionID), requestID)`)
 	require.Contains(t, rendered, `cleanup := requestCancellations.Register(sessionID, requestID, cancel)`)
 	require.Contains(t, rendered, `if err := validateMCPStreamableHTTPSession(streamableHTTPSessions, r, method); err != nil {`)
-	require.Contains(t, rendered, `streamableHTTPSessions.Issue(issuedSessionID)`)
+	require.Contains(t, rendered, `if err := streamableHTTPSessions.Issue(issuedSessionID); err != nil {`)
 	require.Contains(t, rendered, `cleanup, err := streamableHTTPSessions.RegisterListener(sessionID, cancel)`)
 	require.Contains(t, rendered, `if err := sessions.Terminate(sessionID); err != nil {`)
 	require.Contains(t, rendered, `http.Error(w, "Invalid or expired session ID", http.StatusNotFound)`)

@@ -149,6 +149,9 @@ Use this file for current loom-mcp runtime behavior in this repo. Prefer it over
   `mcp.SessionBroadcaster.PublishSession` delivers each message to exactly one
   live subscriber in the target session. Multiple overlapping SSE streams must
   not receive duplicate copies of one JSON-RPC message.
+- `mcp.StreamableHTTPSessions.Issue` returns `ErrInvalidSessionID` for invalid
+  receivers or IDs. Capacity pruning must never evict the ID just issued; if
+  every older session has a listener, evict and cancel the oldest older session.
 
 ## Debug Server
 

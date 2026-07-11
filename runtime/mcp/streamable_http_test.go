@@ -16,7 +16,7 @@ func TestStreamableHTTPSessionsLifecycle(t *testing.T) {
 	require.ErrorIs(t, store.Validate(""), ErrInvalidSessionID)
 	require.ErrorIs(t, store.Validate("missing"), ErrInvalidSessionID)
 
-	store.Issue("sess-1")
+	require.NoError(t, store.Issue("sess-1"))
 	require.True(t, store.HasIssued())
 	require.NoError(t, store.Validate("sess-1"))
 
@@ -42,7 +42,7 @@ func TestStreamableHTTPSessionsUnregisterListener(t *testing.T) {
 	t.Parallel()
 
 	store := NewStreamableHTTPSessions()
-	store.Issue("sess-1")
+	require.NoError(t, store.Issue("sess-1"))
 	ctx, cancel := context.WithCancel(context.Background())
 	unregister, err := store.RegisterListener("sess-1", cancel)
 	require.NoError(t, err)
@@ -56,7 +56,7 @@ func TestStreamableHTTPSessionsRejectsLateRegistration(t *testing.T) {
 	t.Parallel()
 
 	store := NewStreamableHTTPSessions()
-	store.Issue("sess-1")
+	require.NoError(t, store.Issue("sess-1"))
 	require.NoError(t, store.Terminate("sess-1"))
 
 	_, err := store.RegisterListener("sess-1", func() {})
@@ -74,7 +74,7 @@ func TestStreamableHTTPSessionsExpiresIssuedSessions(t *testing.T) {
 		},
 	})
 
-	store.Issue("sess-1")
+	require.NoError(t, store.Issue("sess-1"))
 	require.NoError(t, store.Validate("sess-1"))
 
 	now = now.Add(time.Minute)
@@ -93,15 +93,57 @@ func TestStreamableHTTPSessionsEvictsOldestIssuedSessionWhenBounded(t *testing.T
 		},
 	})
 
-	store.Issue("sess-1")
+	require.NoError(t, store.Issue("sess-1"))
 	now = now.Add(time.Second)
-	store.Issue("sess-2")
+	require.NoError(t, store.Issue("sess-2"))
 	now = now.Add(time.Second)
-	store.Issue("sess-3")
+	require.NoError(t, store.Issue("sess-3"))
 
 	require.ErrorIs(t, store.Validate("sess-1"), ErrInvalidSessionID)
 	require.NoError(t, store.Validate("sess-2"))
 	require.NoError(t, store.Validate("sess-3"))
+}
+
+func TestStreamableHTTPSessionsIssuePreservesNewSessionWhenOlderSessionsHaveListeners(t *testing.T) {
+	t.Parallel()
+
+	now := time.Unix(100, 0)
+	store := newStreamableHTTPSessions(streamableHTTPSessionConfig{
+		maxIssued: 2,
+		now: func() time.Time {
+			return now
+		},
+	})
+
+	require.NoError(t, store.Issue("sess-1"))
+	ctx1, cancel1 := context.WithCancel(context.Background())
+	defer cancel1()
+	_, err := store.RegisterListener("sess-1", cancel1)
+	require.NoError(t, err)
+
+	now = now.Add(time.Second)
+	require.NoError(t, store.Issue("sess-2"))
+	ctx2, cancel2 := context.WithCancel(context.Background())
+	defer cancel2()
+	_, err = store.RegisterListener("sess-2", cancel2)
+	require.NoError(t, err)
+
+	now = now.Add(time.Second)
+	require.NoError(t, store.Issue("sess-3"))
+
+	require.ErrorIs(t, store.Validate("sess-1"), ErrInvalidSessionID)
+	require.NoError(t, store.Validate("sess-2"))
+	require.NoError(t, store.Validate("sess-3"))
+	require.ErrorIs(t, ctx1.Err(), context.Canceled)
+	require.NoError(t, ctx2.Err())
+}
+
+func TestStreamableHTTPSessionsIssueRejectsInvalidReceiverAndID(t *testing.T) {
+	t.Parallel()
+
+	var nilStore *StreamableHTTPSessions
+	require.ErrorIs(t, nilStore.Issue("sess-1"), ErrInvalidSessionID)
+	require.ErrorIs(t, NewStreamableHTTPSessions().Issue(""), ErrInvalidSessionID)
 }
 
 func TestStreamableHTTPSessionsPrunesTerminatedTombstones(t *testing.T) {
@@ -115,7 +157,7 @@ func TestStreamableHTTPSessionsPrunesTerminatedTombstones(t *testing.T) {
 		},
 	})
 
-	store.Issue("sess-1")
+	require.NoError(t, store.Issue("sess-1"))
 	require.NoError(t, store.Terminate("sess-1"))
 	require.ErrorIs(t, store.Validate("sess-1"), ErrSessionTerminated)
 
