@@ -46,6 +46,25 @@ func TestNewRegistryRequiresRedis(t *testing.T) {
 	}
 }
 
+func TestNewRegistryRejectsNegativeHealthConfiguration(t *testing.T) {
+	tests := []struct {
+		name   string
+		config Config
+		want   string
+	}{
+		{name: "ping interval", config: Config{PingInterval: -time.Second}, want: "ping interval must not be negative"},
+		{name: "missed ping threshold", config: Config{MissedPingThreshold: -1}, want: "missed ping threshold must not be negative"},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			_, err := New(context.Background(), test.config)
+			if err == nil || err.Error() != test.want {
+				t.Fatalf("New() error = %v, want %q", err, test.want)
+			}
+		})
+	}
+}
+
 // TestRegistryGracefulShutdown verifies that Close properly cleans up resources.
 func TestRegistryGracefulShutdown(t *testing.T) {
 	rdb := getRedis(t)

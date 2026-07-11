@@ -107,6 +107,9 @@ const registryCloseTimeout = 30 * time.Second
 //
 // The caller is responsible for calling Close() when done to release resources.
 func New(ctx context.Context, cfg Config) (*Registry, error) {
+	if err := validateConfig(cfg); err != nil {
+		return nil, err
+	}
 	if cfg.Redis == nil {
 		return nil, fmt.Errorf("redis client is required")
 	}
@@ -120,6 +123,16 @@ func New(ctx context.Context, cfg Config) (*Registry, error) {
 		return nil, errors.Join(fmt.Errorf("create service: %w", err), closeErr)
 	}
 	return assembleRegistry(cfg.Redis, service, parts), nil
+}
+
+func validateConfig(cfg Config) error {
+	if cfg.PingInterval < 0 {
+		return fmt.Errorf("ping interval must not be negative")
+	}
+	if cfg.MissedPingThreshold < 0 {
+		return fmt.Errorf("missed ping threshold must not be negative")
+	}
+	return nil
 }
 
 func registryResourceNames(name string) (string, string, string) {

@@ -17,8 +17,8 @@
 //	REGISTRY_NAME          - Registry cluster name (default: "registry")
 //	REDIS_URL              - Redis connection URL (default: "localhost:6379")
 //	REDIS_PASSWORD         - Redis password (optional)
-//	PING_INTERVAL          - Health check ping interval (default: "10s")
-//	MISSED_PING_THRESHOLD  - Missed pings before unhealthy (default: 3)
+//	PING_INTERVAL          - Health check ping interval (default: "10s", minimum: "100ms")
+//	MISSED_PING_THRESHOLD  - Positive missed-ping count before unhealthy (default: 3)
 //
 // # Example
 //
@@ -50,6 +50,7 @@ const (
 	defaultRedisURL            = "localhost:6379"
 	defaultPingInterval        = 10 * time.Second
 	defaultMissedPingThreshold = 3
+	minimumPingInterval        = 100 * time.Millisecond
 )
 
 func main() {
@@ -130,6 +131,9 @@ func envMissedPingThreshold() (int, error) {
 	if err != nil {
 		return 0, fmt.Errorf("invalid %s value %q: %w", key, v, err)
 	}
+	if i <= 0 {
+		return 0, fmt.Errorf("invalid %s value %q: must be greater than zero", key, v)
+	}
 	return i, nil
 }
 
@@ -143,6 +147,9 @@ func envPingInterval() (time.Duration, error) {
 	d, err := time.ParseDuration(v)
 	if err != nil {
 		return 0, fmt.Errorf("invalid %s value %q: %w", key, v, err)
+	}
+	if d < minimumPingInterval {
+		return 0, fmt.Errorf("invalid %s value %q: must be at least %s", key, v, minimumPingInterval)
 	}
 	return d, nil
 }
