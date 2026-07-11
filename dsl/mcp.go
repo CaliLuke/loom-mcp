@@ -550,15 +550,22 @@ func WatchableResource(name, uri, mimeType string, opts ...func(*exprmcp.Resourc
 func SkillDirectory(root string) func(*exprmcp.MCPExpr) {
 	dir := &exprmcp.SkillDirectoryExpr{Root: strings.TrimSpace(root)}
 	var mcp *exprmcp.MCPExpr
-	if svc, ok := eval.Current().(*goaexpr.ServiceExpr); ok {
+	var svc *goaexpr.ServiceExpr
+	if current, ok := eval.Current().(*goaexpr.ServiceExpr); ok {
+		svc = current
 		if r := exprmcp.Root; r != nil {
 			mcp = r.GetMCP(svc)
 		}
 	}
 	if mcp != nil {
 		mcp.SkillDirectories = append(mcp.SkillDirectories, dir)
+	} else if svc != nil && exprmcp.Root != nil {
+		exprmcp.Root.DeferSkillDirectory(svc, dir)
 	}
 	return func(m *exprmcp.MCPExpr) {
+		if svc != nil && exprmcp.Root != nil {
+			exprmcp.Root.ConsumeDeferredSkillDirectory(svc, dir)
+		}
 		m.SkillDirectories = append(m.SkillDirectories, dir)
 	}
 }

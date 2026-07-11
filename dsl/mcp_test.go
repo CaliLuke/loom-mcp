@@ -130,6 +130,46 @@ func TestMCPSkillDirectory(t *testing.T) {
 	require.Equal(t, ".agents/skills", mcp.SkillDirectories[0].Root)
 }
 
+func TestMCPSkillDirectoryBeforeMCP(t *testing.T) {
+	runMCPDSL(t, func() {
+		API("test", func() {})
+		Service("docs", func() {
+			SkillDirectory(".agents/skills")
+			MCP("docs-server", "1.0")
+		})
+	})
+
+	mcp := mcpexpr.Root.MCPServers["docs"]
+	require.NotNil(t, mcp)
+	require.Len(t, mcp.SkillDirectories, 1)
+	require.Equal(t, ".agents/skills", mcp.SkillDirectories[0].Root)
+}
+
+func TestMCPSkillDirectoryOption(t *testing.T) {
+	runMCPDSL(t, func() {
+		API("test", func() {})
+		Service("docs", func() {
+			MCP("docs-server", "1.0", SkillDirectory(".agents/skills"))
+		})
+	})
+
+	mcp := mcpexpr.Root.MCPServers["docs"]
+	require.NotNil(t, mcp)
+	require.Len(t, mcp.SkillDirectories, 1)
+	require.Equal(t, ".agents/skills", mcp.SkillDirectories[0].Root)
+}
+
+func TestMCPSkillDirectoryWithoutMCP(t *testing.T) {
+	err := runInvalidMCPDSL(t, func() {
+		API("test", func() {})
+		Service("docs", func() {
+			SkillDirectory(".agents/skills")
+		})
+	})
+
+	require.Contains(t, err, `SkillDirectory requires MCP to be declared in service "docs"`)
+}
+
 func TestMCPWatchableResource(t *testing.T) {
 	runMCPDSL(t, func() {
 		API("test", func() {})

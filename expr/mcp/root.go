@@ -29,6 +29,7 @@ type RootExpr struct {
 	// expressions.
 	DynamicPrompts      map[string][]*DynamicPromptExpr
 	duplicateMCPServers map[string][]*MCPExpr
+	pendingSkillDirs    map[string][]*SkillDirectoryExpr
 }
 
 // NewRoot creates a new plugin root expression
@@ -37,6 +38,7 @@ func NewRoot() *RootExpr {
 		MCPServers:          make(map[string]*MCPExpr),
 		DynamicPrompts:      make(map[string][]*DynamicPromptExpr),
 		duplicateMCPServers: make(map[string][]*MCPExpr),
+		pendingSkillDirs:    make(map[string][]*SkillDirectoryExpr),
 	}
 }
 
@@ -62,6 +64,9 @@ func (r *RootExpr) WalkSets(walk eval.SetWalker) {
 	walk(mcpCapabilitiesSet(r.MCPServers))
 	walk(mcpToolsSet(r.MCPServers))
 	walk(mcpResourcesSet(r.MCPServers))
+	if len(r.pendingSkillDirs) > 0 {
+		walk(skillDirectorySet(r.pendingSkillDirs))
+	}
 	prompts, messages := mcpPromptSets(r.MCPServers)
 	walk(prompts)
 	walk(messages)
@@ -73,10 +78,19 @@ func (r *RootExpr) Validate() error {
 	verr := new(eval.ValidationErrors)
 	r.validateDuplicateMCPServers(verr)
 	r.validatePromptNameCollisions(verr)
+	r.validatePendingSkillDirectories(verr)
 	if len(verr.Errors) > 0 {
 		return verr
 	}
 	return nil
+}
+
+func (r *RootExpr) validatePendingSkillDirectories(verr *eval.ValidationErrors) {
+	for _, service := range sortedServiceNames(r.pendingSkillDirs) {
+		for _, dir := range r.pendingSkillDirs[service] {
+			verr.Add(dir, "SkillDirectory requires MCP to be declared in service %q", service)
+		}
+	}
 }
 
 func (r *RootExpr) validateDuplicateMCPServers(verr *eval.ValidationErrors) {
@@ -128,6 +142,16 @@ func mcpCapabilitiesSet(servers map[string]*MCPExpr) eval.ExpressionSet {
 		m := servers[service]
 		if m.Capabilities != nil {
 			set = append(set, m.Capabilities)
+		}
+	}
+	return set
+}
+
+func skillDirectorySet(pending map[string][]*SkillDirectoryExpr) eval.ExpressionSet {
+	var set eval.ExpressionSet
+	for _, service := range sortedServiceNames(pending) {
+		for _, dir := range pending[service] {
+			set = append(set, dir)
 		}
 	}
 	return set
@@ -214,7 +238,35 @@ func (r *RootExpr) RegisterMCP(svc *expr.ServiceExpr, mcp *MCPExpr) {
 		r.duplicateMCPServers[svc.Name] = append(r.duplicateMCPServers[svc.Name], mcp)
 		return
 	}
+	mcp.SkillDirectories = append(mcp.SkillDirectories, r.pendingSkillDirs[svc.Name]...)
+	delete(r.pendingSkillDirs, svc.Name)
 	r.MCPServers[svc.Name] = mcp
+}
+
+// DeferSkillDirectory records a service skill directory until MCP is registered.
+func (r *RootExpr) DeferSkillDirectory(svc *expr.ServiceExpr, dir *SkillDirectoryExpr) {
+	if r.pendingSkillDirs == nil {
+		r.pendingSkillDirs = make(map[string][]*SkillDirectoryExpr)
+	}
+	r.pendingSkillDirs[svc.Name] = append(r.pendingSkillDirs[svc.Name], dir)
+}
+
+// ConsumeDeferredSkillDirectory removes dir from the service's pending list.
+func (r *RootExpr) ConsumeDeferredSkillDirectory(svc *expr.ServiceExpr, dir *SkillDirectoryExpr) bool {
+	pending := r.pendingSkillDirs[svc.Name]
+	for i, candidate := range pending {
+		if candidate != dir {
+			continue
+		}
+		pending = append(pending[:i], pending[i+1:]...)
+		if len(pending) == 0 {
+			delete(r.pendingSkillDirs, svc.Name)
+		} else {
+			r.pendingSkillDirs[svc.Name] = pending
+		}
+		return true
+	}
+	return false
 }
 
 // RegisterDynamicPrompt registers a dynamic prompt for a service

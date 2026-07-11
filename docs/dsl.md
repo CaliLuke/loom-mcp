@@ -1540,6 +1540,9 @@ the skill ID, display name, description, allowed tools, preload mode, and reload
 mode. Generated MCP servers list `skill://<skill>/SKILL.md` and
 `skill://<skill>/_manifest`; clients may also read supporting files with
 `skill://<skill>/<path>` when the path stays inside the skill directory.
+It may be passed as an `MCP` option or written as a service statement before or
+after `MCP`; declaration order does not change the result. A service that uses
+`SkillDirectory` without declaring `MCP` fails design validation.
 
 ### Progressive Tool Discovery Policy
 
