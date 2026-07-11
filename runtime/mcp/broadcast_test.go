@@ -60,6 +60,32 @@ func TestChannelBroadcasterPublishSessionScopesEvents(t *testing.T) {
 	requireEvent(t, two.C(), "global")
 }
 
+func TestChannelBroadcasterPublishSessionDeliversEachEventToOneStream(t *testing.T) {
+	b := NewChannelBroadcaster(1, true)
+	scoped, ok := b.(SessionBroadcaster)
+	require.True(t, ok)
+
+	first, err := scoped.SubscribeSession(context.Background(), "one")
+	require.NoError(t, err)
+	t.Cleanup(func() { require.NoError(t, first.Close()) })
+	second, err := scoped.SubscribeSession(context.Background(), "one")
+	require.NoError(t, err)
+	t.Cleanup(func() { require.NoError(t, second.Close()) })
+
+	scoped.PublishSession("one", "event")
+
+	received := 0
+	for _, ch := range []<-chan any{first.C(), second.C()} {
+		select {
+		case event := <-ch:
+			require.Equal(t, "event", event)
+			received++
+		case <-time.After(50 * time.Millisecond):
+		}
+	}
+	require.Equal(t, 1, received)
+}
+
 func TestChannelBroadcasterCloseUnblocksPublishToSlowSubscriber(t *testing.T) {
 	b := NewChannelBroadcaster(0, false)
 	sub, err := b.Subscribe(context.Background())

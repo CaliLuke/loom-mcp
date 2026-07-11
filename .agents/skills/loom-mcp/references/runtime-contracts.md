@@ -140,6 +140,13 @@ Use this file for current loom-mcp runtime behavior in this repo. Prefer it over
   registrations wire `runtime.NewSkillToolsetRegistration(...)`; model-facing
   `list_skills` and `load_skill*` results include parsed metadata.
 
+## MCP Event Delivery
+
+- `mcp.Broadcaster.Publish` is a global broadcast, while
+  `mcp.SessionBroadcaster.PublishSession` delivers each message to exactly one
+  live subscriber in the target session. Multiple overlapping SSE streams must
+  not receive duplicate copies of one JSON-RPC message.
+
 ## Debug Server
 
 - `runtime/agent/debug` is opt-in application code, not a DSL or generated API

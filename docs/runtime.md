@@ -2300,6 +2300,11 @@ sub, _ := b.Subscribe(ctx)
 defer sub.Close()
 ```
 
+Global `Publish` broadcasts to every subscriber. Session-scoped
+`PublishSession` follows the MCP multiple-connections rule and delivers each
+message to exactly one live stream in that session, even when reconnect overlap
+temporarily leaves several streams connected.
+
 ### Repair prompts for invalid params (retry.RetryableError)
 
 When an MCP server reports invalid parameters and a structured repair prompt is available, generated

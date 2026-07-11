@@ -31,7 +31,7 @@ type Broadcaster interface {
 type SessionBroadcaster interface {
 	// SubscribeSession registers a new subscriber for one session.
 	SubscribeSession(ctx context.Context, sessionID string) (Subscription, error)
-	// PublishSession delivers an event to subscribers for one session.
+	// PublishSession delivers an event to exactly one subscriber for one session.
 	PublishSession(sessionID string, ev any)
 }
 
@@ -121,7 +121,10 @@ func (b *channelBroadcaster) Publish(ev any) {
 
 func (b *channelBroadcaster) PublishSession(sessionID string, ev any) {
 	subs := b.snapshotSubscribers(sessionID)
-	b.publish(subs, ev)
+	if len(subs) == 0 {
+		return
+	}
+	b.publish(subs[:1], ev)
 }
 
 func (b *channelBroadcaster) snapshotSubscribers(sessionID string) []*channelSub {
