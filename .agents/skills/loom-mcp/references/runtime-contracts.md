@@ -119,6 +119,9 @@ Use this file for current loom-mcp runtime behavior in this repo. Prefer it over
   `ToolOutputs`, not from `len(ToolOutputs)`.
 - Parallel resume must schedule only unfinished ready nodes. Joins are virtual
   dependency barriers. Loops must be bounded by `MaxIterations`.
+- Workflow dependencies must be acyclic, and dependency, branch source/target,
+  and loop predicate step IDs must resolve to declared graph nodes. Enforce the
+  cycle contract in both design validation and runtime planner construction.
 - `RequestInput` emits `AwaitTypedInput`; answers resume via
   `Runtime.ProvideTypedInput` and enter `PlanResumeInput.TypedInputs`, not
   `ToolOutputs`.

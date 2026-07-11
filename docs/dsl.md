@@ -1434,8 +1434,8 @@ Workflow(func() {
         "properties":{"approved":{"type":"boolean"}},
         "required":["approved"]
     }`)
-    Loop("revise", "release.notes.revise", `{}`, MaxIterations(2), UntilJSONPath("revise#1", "$.done", "true"))
-    Branch("route", "revise#1",
+    Loop("revise", "release.notes.revise", `{}`, MaxIterations(2), UntilJSONPath("revise", "$.done", "true"))
+    Branch("route", "revise",
         Case("$.approved", "true", "publish"),
         BranchDefault("review"),
     )
@@ -1448,6 +1448,10 @@ Workflow(func() {
 The answer resumes through `Runtime.ProvideTypedInput` and is available to the
 generated graph planner as `PlanResumeInput.TypedInputs`; it does not enter
 `ToolOutputs`.
+
+Workflow graph dependencies must be acyclic. Dependency IDs, branch source and
+target IDs, and loop `UntilJSONPath` step IDs must all name declared graph
+nodes; invalid graphs fail during design validation rather than at runtime.
 
 `BranchDefault` is named to avoid colliding with Goa's `Default` DSL helper when both DSL packages
 are dot-imported.

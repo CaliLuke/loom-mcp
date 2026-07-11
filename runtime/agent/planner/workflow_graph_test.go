@@ -236,6 +236,14 @@ func TestGraphWorkflowPlannerRejectsInvalidGraphConfig(t *testing.T) {
 			message: `workflow node "publish" dependency "review" does not exist`,
 		},
 		{
+			name: "dependency cycle",
+			nodes: []WorkflowNode{
+				{ID: "barrier", Kind: WorkflowNodeJoin, DependsOn: []string{"later"}},
+				{ID: "later", Kind: WorkflowNodeTool, Tool: "worker.later", Payload: rawjson.Message([]byte(`{}`)), DependsOn: []string{"barrier"}},
+			},
+			message: "workflow dependency cycle: barrier -> later -> barrier",
+		},
+		{
 			name: "missing branch source",
 			nodes: []WorkflowNode{
 				{ID: "route", Kind: WorkflowNodeBranch, Branch: &WorkflowBranchConfig{FromStep: "approval", Default: "stop"}},
@@ -320,7 +328,7 @@ func TestGraphWorkflowPlannerStopsOnFailedToolOutput(t *testing.T) {
 	require.ErrorContains(t, err, `workflow node "draft" failed at "draft": boom`)
 }
 
-func TestGraphWorkflowPlannerReportsStuckRequiredNodes(t *testing.T) {
+func TestGraphWorkflowPlannerRejectsDependencyCyclesBeforePlanning(t *testing.T) {
 	p := NewGraphWorkflowPlanner(WorkflowGraphConfig{
 		Nodes: []WorkflowNode{
 			{ID: "alpha", Kind: WorkflowNodeTool, Tool: "worker.alpha", Payload: rawjson.Message([]byte(`{}`)), DependsOn: []string{"beta"}},
@@ -331,7 +339,7 @@ func TestGraphWorkflowPlannerReportsStuckRequiredNodes(t *testing.T) {
 	result, err := p.PlanStart(context.Background(), &PlanInput{})
 
 	require.Nil(t, result)
-	require.ErrorContains(t, err, "workflow graph stuck; incomplete nodes: alpha, beta")
+	require.ErrorContains(t, err, "workflow dependency cycle: alpha -> beta -> alpha")
 }
 
 func TestGraphWorkflowPlannerBranchSkipsUnselectedTargetsForLaterDependencies(t *testing.T) {

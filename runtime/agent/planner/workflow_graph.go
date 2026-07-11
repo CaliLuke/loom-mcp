@@ -564,6 +564,7 @@ func (p *GraphWorkflowPlanner) validateConfig() error {
 		return errors.New("workflow graph requires at least one node")
 	}
 	ids := make(map[string]struct{}, len(p.nodes))
+	nodes := make(map[string]WorkflowNode, len(p.nodes))
 	for _, node := range p.nodes {
 		if node.ID == "" {
 			return errors.New("workflow graph node id is required")
@@ -572,10 +573,52 @@ func (p *GraphWorkflowPlanner) validateConfig() error {
 			return fmt.Errorf("duplicate workflow graph node id %q", node.ID)
 		}
 		ids[node.ID] = struct{}{}
+		nodes[node.ID] = node
 	}
 	for _, node := range p.nodes {
 		if err := validateGraphNodeConfig(node, ids); err != nil {
 			return err
+		}
+	}
+	return validateWorkflowDependencyCycles(p.nodes, nodes)
+}
+
+func validateWorkflowDependencyCycles(ordered []WorkflowNode, nodes map[string]WorkflowNode) error {
+	const (
+		unvisited uint8 = iota
+		visiting
+		visited
+	)
+	state := make(map[string]uint8, len(nodes))
+	stack := make([]string, 0, len(nodes))
+	positions := make(map[string]int, len(nodes))
+	var visit func(string) []string
+	visit = func(id string) []string {
+		state[id] = visiting
+		positions[id] = len(stack)
+		stack = append(stack, id)
+		for _, dep := range nodes[id].DependsOn {
+			switch state[dep] {
+			case unvisited:
+				if cycle := visit(dep); len(cycle) > 0 {
+					return cycle
+				}
+			case visiting:
+				cycle := append([]string(nil), stack[positions[dep]:]...)
+				return append(cycle, dep)
+			}
+		}
+		stack = stack[:len(stack)-1]
+		delete(positions, id)
+		state[id] = visited
+		return nil
+	}
+	for _, node := range ordered {
+		if state[node.ID] != unvisited {
+			continue
+		}
+		if cycle := visit(node.ID); len(cycle) > 0 {
+			return fmt.Errorf("workflow dependency cycle: %s", strings.Join(cycle, " -> "))
 		}
 	}
 	return nil

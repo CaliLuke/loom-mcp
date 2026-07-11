@@ -3,6 +3,7 @@ package agent
 import (
 	"encoding/json"
 	"fmt"
+	"strings"
 
 	"github.com/CaliLuke/loom/eval"
 )
@@ -132,6 +133,7 @@ func (w *WorkflowExpr) Validate() error {
 
 func (w *WorkflowExpr) validateGraph(verr *eval.ValidationErrors) {
 	ids := make(map[string]struct{}, len(w.GraphNodes))
+	nodes := make(map[string]*WorkflowNodeExpr, len(w.GraphNodes))
 	for _, node := range w.GraphNodes {
 		if node == nil {
 			continue
@@ -144,12 +146,60 @@ func (w *WorkflowExpr) validateGraph(verr *eval.ValidationErrors) {
 			verr.Add(w, "duplicate workflow node id %q", node.ID)
 		}
 		ids[node.ID] = struct{}{}
+		if _, exists := nodes[node.ID]; !exists {
+			nodes[node.ID] = node
+		}
 	}
 	for _, node := range w.GraphNodes {
 		if node == nil {
 			continue
 		}
 		w.validateGraphNode(verr, node, ids)
+	}
+	w.validateGraphCycles(verr, nodes)
+}
+
+func (w *WorkflowExpr) validateGraphCycles(verr *eval.ValidationErrors, nodes map[string]*WorkflowNodeExpr) {
+	const (
+		unvisited uint8 = iota
+		visiting
+		visited
+	)
+	state := make(map[string]uint8, len(nodes))
+	stack := make([]string, 0, len(nodes))
+	positions := make(map[string]int, len(nodes))
+	var visit func(string) []string
+	visit = func(id string) []string {
+		state[id] = visiting
+		positions[id] = len(stack)
+		stack = append(stack, id)
+		for _, dep := range nodes[id].DependsOn {
+			if _, exists := nodes[dep]; !exists {
+				continue
+			}
+			switch state[dep] {
+			case unvisited:
+				if cycle := visit(dep); len(cycle) > 0 {
+					return cycle
+				}
+			case visiting:
+				cycle := append([]string(nil), stack[positions[dep]:]...)
+				return append(cycle, dep)
+			}
+		}
+		stack = stack[:len(stack)-1]
+		delete(positions, id)
+		state[id] = visited
+		return nil
+	}
+	for _, node := range w.GraphNodes {
+		if node == nil || node.ID == "" || state[node.ID] != unvisited {
+			continue
+		}
+		if cycle := visit(node.ID); len(cycle) > 0 {
+			verr.Add(w, "workflow dependency cycle: %s", strings.Join(cycle, " -> "))
+			return
+		}
 	}
 }
 
@@ -174,7 +224,7 @@ func (w *WorkflowExpr) validateGraphNode(verr *eval.ValidationErrors, node *Work
 	case WorkflowNodeBranch:
 		w.validateBranchNode(verr, node, ids)
 	case WorkflowNodeLoop:
-		w.validateLoopNode(verr, node)
+		w.validateLoopNode(verr, node, ids)
 	case WorkflowNodeTypedInput:
 		w.validateTypedInputNode(verr, node)
 	default:
@@ -199,6 +249,8 @@ func (w *WorkflowExpr) validateBranchNode(verr *eval.ValidationErrors, node *Wor
 	}
 	if node.Branch.FromStep == "" {
 		verr.Add(w, "Branch %q requires source step", node.ID)
+	} else if _, ok := ids[node.Branch.FromStep]; !ok {
+		verr.Add(w, "unresolved branch source step %q", node.Branch.FromStep)
 	}
 	if node.Branch.Default == "" {
 		verr.Add(w, "Branch %q requires Default", node.ID)
@@ -216,7 +268,7 @@ func (w *WorkflowExpr) validateBranchNode(verr *eval.ValidationErrors, node *Wor
 	}
 }
 
-func (w *WorkflowExpr) validateLoopNode(verr *eval.ValidationErrors, node *WorkflowNodeExpr) {
+func (w *WorkflowExpr) validateLoopNode(verr *eval.ValidationErrors, node *WorkflowNodeExpr, ids map[string]struct{}) {
 	if node.Loop == nil {
 		verr.Add(w, "Loop %q requires loop config", node.ID)
 		return
@@ -229,6 +281,13 @@ func (w *WorkflowExpr) validateLoopNode(verr *eval.ValidationErrors, node *Workf
 	}
 	if node.Loop.MaxIterations <= 0 {
 		verr.Add(w, "Loop requires MaxIterations")
+	}
+	if node.Loop.Until != nil {
+		if node.Loop.Until.Step == "" {
+			verr.Add(w, "Loop %q until step is required", node.ID)
+		} else if _, ok := ids[node.Loop.Until.Step]; !ok {
+			verr.Add(w, "unresolved loop until step %q", node.Loop.Until.Step)
+		}
 	}
 }
 

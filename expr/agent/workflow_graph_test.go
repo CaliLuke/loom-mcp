@@ -60,6 +60,38 @@ func TestWorkflowExprValidateGraph(t *testing.T) {
 			err: "unresolved workflow dependency",
 		},
 		{
+			name: "dependency cycle",
+			workflow: &WorkflowExpr{
+				Agent: &AgentExpr{Name: "assistant"},
+				GraphNodes: []*WorkflowNodeExpr{
+					{ID: "barrier", Kind: WorkflowNodeJoin, DependsOn: []string{"later"}},
+					{ID: "later", Kind: WorkflowNodeTool, Tool: "worker.later", Payload: `{}`, DependsOn: []string{"barrier"}},
+				},
+			},
+			err: "workflow dependency cycle: barrier -> later -> barrier",
+		},
+		{
+			name: "unresolved branch source",
+			workflow: &WorkflowExpr{
+				Agent: &AgentExpr{Name: "assistant"},
+				GraphNodes: []*WorkflowNodeExpr{
+					{ID: "route", Kind: WorkflowNodeBranch, Branch: &WorkflowBranchExpr{FromStep: "missing", Default: "publish"}},
+					{ID: "publish", Kind: WorkflowNodeTool, Tool: "publisher.publish", Payload: `{}`},
+				},
+			},
+			err: `unresolved branch source step "missing"`,
+		},
+		{
+			name: "unresolved loop until step",
+			workflow: &WorkflowExpr{
+				Agent: &AgentExpr{Name: "assistant"},
+				GraphNodes: []*WorkflowNodeExpr{
+					{ID: "retry", Kind: WorkflowNodeLoop, Loop: &WorkflowLoopExpr{Tool: "worker.retry", Payload: `{}`, MaxIterations: 2, Until: &WorkflowPredicateExpr{Step: "missing", Path: "$.done", Equals: "true"}}},
+				},
+			},
+			err: `unresolved loop until step "missing"`,
+		},
+		{
 			name: "unbounded loop",
 			workflow: &WorkflowExpr{
 				Agent: &AgentExpr{Name: "assistant"},
