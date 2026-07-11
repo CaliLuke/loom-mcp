@@ -253,7 +253,7 @@ func runProviderLoop(
 	for {
 		select {
 		case <-state.ctx.Done():
-			return finishProviderServe(state, ackWG, state.ctx.Err())
+			return finishProviderServe(state, ackWG, providerServeCause(state))
 		case err := <-state.errc:
 			return finishProviderServe(state, ackWG, err)
 		case <-drainTicker.C:
@@ -275,6 +275,15 @@ func runProviderLoop(
 				return finishProviderServe(state, ackWG, err)
 			}
 		}
+	}
+}
+
+func providerServeCause(state *providerServeState) error {
+	select {
+	case err := <-state.errc:
+		return err
+	default:
+		return state.ctx.Err()
 	}
 }
 

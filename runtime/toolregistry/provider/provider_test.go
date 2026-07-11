@@ -767,6 +767,17 @@ func TestServe_ReturnsOnAckFailure(t *testing.T) {
 	require.ErrorContains(t, err, "ack ping toolset event")
 }
 
+func TestProviderServeCausePrefersSignaledRootError(t *testing.T) {
+	rootErr := errors.New("publish result failed")
+	for range 1000 {
+		state := newProviderServeState(context.Background(), providerConfig{maxQueued: 1})
+		state.signalErr(rootErr)
+
+		require.ErrorIs(t, providerServeCause(state), rootErr)
+		state.cancel()
+	}
+}
+
 type outputDeltaHandler struct {
 	errc chan error
 }
