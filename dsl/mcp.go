@@ -650,15 +650,17 @@ func DynamicPrompt(name, description string, opts ...func(*exprmcp.DynamicPrompt
 		return
 	}
 	svc := method.Service
+	if exprmcp.Root == nil || exprmcp.Root.GetMCP(svc) == nil {
+		eval.IncompatibleDSL()
+		return
+	}
 	prompt := &exprmcp.DynamicPromptExpr{Name: name, Description: description, Method: method}
 	for _, opt := range opts {
 		if opt != nil {
 			opt(prompt)
 		}
 	}
-	if r := exprmcp.Root; r != nil {
-		r.RegisterDynamicPrompt(svc, prompt)
-	}
+	exprmcp.Root.RegisterDynamicPrompt(svc, prompt)
 }
 
 func cloneIcons(icons []*exprmcp.IconExpr) []*exprmcp.IconExpr {

@@ -316,6 +316,21 @@ func TestMCPDynamicPrompt(t *testing.T) {
 	require.Equal(t, "https://example.com/icons/code-review.png", prompt.Icons[0].Source)
 }
 
+func TestMCPDynamicPromptRequiresMCP(t *testing.T) {
+	err := runInvalidMCPDSL(t, func() {
+		API("test", func() {})
+		Service("assistant", func() {
+			Method("code_review", func() {
+				Result(ArrayOf(String))
+				DynamicPrompt("code_review", "Generate code review prompt")
+			})
+		})
+	})
+
+	require.Contains(t, err, `invalid use of <unknown> in service "assistant" method "code_review"`)
+	require.Empty(t, mcpexpr.Root.DynamicPrompts["assistant"])
+}
+
 func TestMCPNotification(t *testing.T) {
 	runMCPDSL(t, func() {
 		API("test", func() {})
