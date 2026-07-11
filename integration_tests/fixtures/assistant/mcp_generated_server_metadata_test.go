@@ -213,15 +213,17 @@ func TestGeneratedJSONRPCServerValidatesProtocolVersionHeader(t *testing.T) {
 	for _, tc := range []struct {
 		name    string
 		header  string
+		status  int
 		message string
 	}{
 		{
-			name:    "missing",
-			message: "Missing MCP-Protocol-Version header",
+			name:   "missing uses compatibility fallback",
+			status: http.StatusOK,
 		},
 		{
 			name:    "unsupported",
 			header:  "2099-01-01",
+			status:  http.StatusBadRequest,
 			message: `Unsupported MCP-Protocol-Version header "2099-01-01"`,
 		},
 	} {
@@ -245,7 +247,10 @@ func TestGeneratedJSONRPCServerValidatesProtocolVersionHeader(t *testing.T) {
 			resp, err := http.DefaultClient.Do(req)
 			require.NoError(t, err)
 			defer resp.Body.Close()
-			require.Equal(t, http.StatusBadRequest, resp.StatusCode)
+			require.Equal(t, tc.status, resp.StatusCode)
+			if tc.status == http.StatusOK {
+				return
+			}
 
 			var envelope struct {
 				Error struct {

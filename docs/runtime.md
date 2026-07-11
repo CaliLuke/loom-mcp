@@ -2205,6 +2205,11 @@ without hand-written wrappers: every request carries
 `initialize` is captured and replayed on all subsequent requests, and the
 negotiated protocol version is sent alongside the session id.
 
+Servers also accept post-initialize requests that omit `MCP-Protocol-Version`,
+as required for clients predating the `2025-06-18` header. In that case the
+transport uses the MCP `2025-03-26` compatibility assumption; an explicitly
+present but unsupported version remains a bad request.
+
 Generated JSON-RPC servers accept requests that omit optional params (for
 example `tools/list` without a `params` key), emit the final streamed
 `tools/call` response as a default `message` SSE event, and validate the

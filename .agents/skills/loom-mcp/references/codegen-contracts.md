@@ -62,6 +62,9 @@ Use this file when editing DSL, generators, generated helpers, or MCP codegen be
   JSON-RPC server, JSON-RPC client, and SDK paths: `name`, `title`,
   `description`, `inputSchema`, `outputSchema`, `annotations`, `_meta`, and
   `icons`.
+- Generated streamable-HTTP servers accept a missing `MCP-Protocol-Version`
+  header using the spec's `2025-03-26` compatibility assumption. Present but
+  unsupported versions remain transport errors.
 - Method-backed toolset tools may project into MCP only when the evaluated
   design exposes both `AgentRuntime` and `MCPSurface` and places the tool with
   `MCPPlacement(service, mcpServer)`. Codegen should trust validation for

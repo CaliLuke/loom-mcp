@@ -591,10 +591,10 @@ func validateMCPProtocolVersionHeader(r *http.Request) error {
 	}
 	version := r.Header.Get(mcpruntime.HeaderKeyProtocolVersion)
 	if version == "" {
-		if r.Header.Get(mcpruntime.HeaderKeySessionID) == "" {
-			return nil
-		}
-		return fmt.Errorf("Missing %s header", mcpruntime.HeaderKeyProtocolVersion)
+		// MCP clients using protocol versions before 2025-06-18 do not send this
+		// header. The transport specification requires servers to assume the
+		// 2025-03-26 compatibility version when no negotiated version is available.
+		return nil
 	}
 	for _, supported := range []string{"2025-11-25", "2025-06-18", "2025-03-26", "2024-11-05"} {
 		if version == supported {
