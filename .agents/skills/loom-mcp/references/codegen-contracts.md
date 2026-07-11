@@ -76,6 +76,9 @@ Use this file when editing DSL, generators, generated helpers, or MCP codegen be
   public payload structs, codecs, validation, and method dispatch payloads, but
   must be removed from `ToolSpec.Payload.Schema`, `ExampleJSON`, and
   `ExampleInput`, including the advertised `required` list.
+- `toolEntry.ConstName` is the authoritative unique Go identifier for a tool
+  after specs construction. Agent-level aggregators, typed aliases, codecs, and
+  call builders must reuse it rather than recomputing `Goify(tool.Name)`.
 - Projected MCP `ToolInfo` schemas must come from the generated toolset
   `tools.ToolSpec` payload and result schemas, not from service-method-only
   schema extraction. This keeps runtime specs, JSON-RPC adapters, and SDK

@@ -144,6 +144,37 @@ func agentSpecsAggregatorFile(agent *AgentData) *codegen.File {
 	return &codegen.File{Path: filepath.Join(agent.Dir, "specs", "specs.go"), Sections: sections}
 }
 
+func resolvedAgentSpecsAggregatorFile(agent *AgentData, specsCache *toolSpecsDataCache) (*codegen.File, error) {
+	resolved := *agent
+	resolved.AllToolsets = make([]*ToolsetData, 0, len(agent.AllToolsets))
+	for _, ts := range agent.AllToolsets {
+		if ts == nil || len(ts.Tools) == 0 || ts.SpecsImportPath == "" {
+			continue
+		}
+		specs, err := specsCache.specsForToolset(agent.Genpkg, ts)
+		if err != nil {
+			return nil, fmt.Errorf("agent codegen: build aggregated specs for agent %q toolset %q: %w", agent.Name, ts.QualifiedName, err)
+		}
+		entries := make(map[string]*toolEntry, len(specs.tools))
+		for _, entry := range specs.tools {
+			entries[entry.Name] = entry
+		}
+		resolvedToolset := *ts
+		resolvedToolset.Tools = make([]*ToolData, 0, len(ts.Tools))
+		for _, tool := range ts.Tools {
+			entry, ok := entries[tool.QualifiedName]
+			if !ok {
+				return nil, fmt.Errorf("agent codegen: missing aggregated spec entry for tool %q", tool.QualifiedName)
+			}
+			resolvedTool := *tool
+			resolvedTool.ConstName = entry.ConstName
+			resolvedToolset.Tools = append(resolvedToolset.Tools, &resolvedTool)
+		}
+		resolved.AllToolsets = append(resolved.AllToolsets, &resolvedToolset)
+	}
+	return agentSpecsAggregatorFile(&resolved), nil
+}
+
 func agentImplFile(agent *AgentData) *codegen.File {
 	imports := []*codegen.ImportSpec{
 		{Path: "errors"},

@@ -19,7 +19,11 @@ func agentFiles(agent *AgentData, specsCache *toolSpecsDataCache) ([]*codegen.Fi
 	}
 	// Emit agent-level aggregator and embedded schemas; toolset specs/codecs are
 	// generated separately once per owning toolset.
-	if agg := agentSpecsAggregatorFile(agent); agg != nil {
+	agg, err := resolvedAgentSpecsAggregatorFile(agent, specsCache)
+	if err != nil {
+		return nil, err
+	}
+	if agg != nil {
 		files = append(files, agg)
 	}
 	jsonFile, err := agentSpecsJSONFile(agent, specsCache)

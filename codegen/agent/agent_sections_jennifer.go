@@ -195,13 +195,13 @@ func emitAgentToolsAliases(stmt *jen.Statement, data agentToolsetFileData) {
 	stmt.Comment("Type aliases and codec re-exports for convenience. These aliases preserve exact").Line()
 	stmt.Comment("type identity while allowing callers to avoid importing the specs package.").Line()
 	for _, tool := range data.Tools {
-		stmt.Type().Id(tool.GoName + "Payload").Op("=").Id(data.Toolset.SpecsPackageName + "specs").Dot(tool.Payload.TypeName)
+		stmt.Type().Id(tool.ConstName + "Payload").Op("=").Id(data.Toolset.SpecsPackageName + "specs").Dot(tool.Payload.TypeName)
 		stmt.Line()
-		stmt.Type().Id(tool.GoName + "Result").Op("=").Id(data.Toolset.SpecsPackageName + "specs").Dot(tool.Result.TypeName)
+		stmt.Type().Id(tool.ConstName + "Result").Op("=").Id(data.Toolset.SpecsPackageName + "specs").Dot(tool.Result.TypeName)
 		stmt.Line()
-		stmt.Var().Id(tool.GoName + "PayloadCodec").Op("=").Id(data.Toolset.SpecsPackageName + "specs").Dot(tool.Payload.ExportedCodec)
+		stmt.Var().Id(tool.ConstName + "PayloadCodec").Op("=").Id(data.Toolset.SpecsPackageName + "specs").Dot(tool.Payload.ExportedCodec)
 		stmt.Line()
-		stmt.Var().Id(tool.GoName + "ResultCodec").Op("=").Id(data.Toolset.SpecsPackageName + "specs").Dot(tool.Result.ExportedCodec)
+		stmt.Var().Id(tool.ConstName + "ResultCodec").Op("=").Id(data.Toolset.SpecsPackageName + "specs").Dot(tool.Result.ExportedCodec)
 		stmt.Line()
 	}
 	stmt.Line()
@@ -210,14 +210,14 @@ func emitAgentToolsAliases(stmt *jen.Statement, data agentToolsetFileData) {
 func emitUsedToolsAliases(stmt *jen.Statement, data agentToolsetFileData) {
 	stmt.Comment("Type aliases and codec re-exports for convenience.").Line()
 	for _, tool := range data.Tools {
-		stmt.Type().Id(tool.GoName + "Payload").Op("=").Id(data.Toolset.SpecsPackageName + "specs").Dot(tool.Payload.TypeName)
+		stmt.Type().Id(tool.ConstName + "Payload").Op("=").Id(data.Toolset.SpecsPackageName + "specs").Dot(tool.Payload.TypeName)
 		stmt.Line()
-		stmt.Var().Id(tool.GoName + "PayloadCodec").Op("=").Id(data.Toolset.SpecsPackageName + "specs").Dot(tool.Payload.ExportedCodec)
+		stmt.Var().Id(tool.ConstName + "PayloadCodec").Op("=").Id(data.Toolset.SpecsPackageName + "specs").Dot(tool.Payload.ExportedCodec)
 		stmt.Line()
 		if tool.Result != nil {
-			stmt.Type().Id(tool.GoName + "Result").Op("=").Id(data.Toolset.SpecsPackageName + "specs").Dot(tool.Result.TypeName)
+			stmt.Type().Id(tool.ConstName + "Result").Op("=").Id(data.Toolset.SpecsPackageName + "specs").Dot(tool.Result.TypeName)
 			stmt.Line()
-			stmt.Var().Id(tool.GoName + "ResultCodec").Op("=").Id(data.Toolset.SpecsPackageName + "specs").Dot(tool.Result.ExportedCodec)
+			stmt.Var().Id(tool.ConstName + "ResultCodec").Op("=").Id(data.Toolset.SpecsPackageName + "specs").Dot(tool.Result.ExportedCodec)
 			stmt.Line()
 		}
 	}
@@ -248,16 +248,16 @@ func emitUsedToolsBuilders(stmt *jen.Statement, data agentToolsetFileData) {
 	stmt.Comment("Typed tool-call helpers (one per tool). These ensure use of the generated tool ID").Line()
 	stmt.Comment("and accept typed payloads matching tool schemas.").Line()
 	for _, tool := range data.Tools {
-		gocodegen.Doc(stmt, "New"+tool.GoName+"Call builds a planner.ToolRequest for "+tool.Name+".")
-		stmt.Func().Id("New"+tool.GoName+"Call").
-			Params(jen.Id("args").Op("*").Id(tool.GoName+"Payload"), jen.Id("opts").Op("...").Id("CallOption")).
+		gocodegen.Doc(stmt, "New"+tool.ConstName+"Call builds a planner.ToolRequest for "+tool.Name+".")
+		stmt.Func().Id("New"+tool.ConstName+"Call").
+			Params(jen.Id("args").Op("*").Id(tool.ConstName+"Payload"), jen.Id("opts").Op("...").Id("CallOption")).
 			Id("planner").Dot("ToolRequest").
 			Block(
 				jen.Var().Id("payload").Index().Byte(),
 				jen.Var().Id("toolErr").Op("*").Id("planner").Dot("ToolError"),
 				jen.If(jen.Id("args").Op("!=").Nil()).Block(
 					jen.Comment("Encode typed payloads into canonical JSON using the generated codec."),
-					jen.List(jen.Id("b"), jen.Id("err")).Op(":=").Id(tool.GoName+"PayloadCodec").Dot("ToJSON").Call(jen.Id("args")),
+					jen.List(jen.Id("b"), jen.Id("err")).Op(":=").Id(tool.ConstName+"PayloadCodec").Dot("ToJSON").Call(jen.Id("args")),
 					jen.If(jen.Id("err").Op("!=").Nil()).Block(
 						jen.Id("toolErr").Op("=").Id("planner").Dot("ToolErrorFromError").Call(jen.Id("err")),
 					).Else().Block(
@@ -373,16 +373,16 @@ func emitAgentToolCallBuilders(stmt *jen.Statement, data agentToolsetFileData) {
 	stmt.Comment("Typed tool-call helpers for each tool in this exported toolset. These helpers").Line()
 	stmt.Comment("enforce use of the generated tool identifier and accept a typed payload that").Line()
 	stmt.Comment("matches the tool schema.").Line()
-	for _, tool := range data.Toolset.Tools {
-		gocodegen.Doc(stmt, "New"+gocodegen.Goify(tool.Name, true)+"Call builds a planner.ToolRequest for the "+tool.QualifiedName+" tool.")
-		stmt.Func().Id("New"+gocodegen.Goify(tool.Name, true)+"Call").
-			Params(jen.Id("args").Op("*").Id(gocodegen.Goify(tool.Name, true)+"Payload"), jen.Id("opts").Op("...").Id("CallOption")).
+	for _, tool := range data.Tools {
+		gocodegen.Doc(stmt, "New"+tool.ConstName+"Call builds a planner.ToolRequest for the "+tool.Name+" tool.")
+		stmt.Func().Id("New"+tool.ConstName+"Call").
+			Params(jen.Id("args").Op("*").Id(tool.ConstName+"Payload"), jen.Id("opts").Op("...").Id("CallOption")).
 			Id("planner").Dot("ToolRequest").
 			Block(
 				jen.Var().Id("payload").Index().Byte(),
 				jen.Var().Id("toolErr").Op("*").Id("planner").Dot("ToolError"),
 				jen.If(jen.Id("args").Op("!=").Nil()).Block(
-					jen.List(jen.Id("b"), jen.Id("err")).Op(":=").Id(gocodegen.Goify(tool.Name, true)+"PayloadCodec").Dot("ToJSON").Call(jen.Id("args")),
+					jen.List(jen.Id("b"), jen.Id("err")).Op(":=").Id(tool.ConstName+"PayloadCodec").Dot("ToJSON").Call(jen.Id("args")),
 					jen.If(jen.Id("err").Op("!=").Nil()).Block(
 						jen.Id("toolErr").Op("=").Id("planner").Dot("ToolErrorFromError").Call(jen.Id("err")),
 					).Else().Block(

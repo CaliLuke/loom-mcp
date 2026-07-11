@@ -11,7 +11,9 @@ import (
 	"time"
 
 	agentsExpr "github.com/CaliLuke/loom-mcp/expr/agent"
+	gocodegen "github.com/CaliLuke/loom/codegen"
 	"github.com/CaliLuke/loom/codegen/service"
+	"github.com/dave/jennifer/jen"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -133,6 +135,68 @@ func TestAgentSpecsAggregatorUniquesImportAliases(t *testing.T) {
 			assertDistinctValues(t, aliases)
 		})
 	}
+}
+
+func TestAgentGeneratedSurfacesUseCachedUniqueToolNames(t *testing.T) {
+	rawTools := []*ToolData{
+		{Name: "get_x", QualifiedName: "helpers.get_x", ConstName: "GetX"},
+		{Name: "getX", QualifiedName: "helpers.getX", ConstName: "GetX"},
+	}
+	entries := []*toolEntry{
+		{
+			Name:      "helpers.get_x",
+			GoName:    "GetX",
+			ConstName: "GetX",
+			Payload:   &typeData{TypeName: "GetXPayload", ExportedCodec: "GetXPayloadCodec"},
+			Result:    &typeData{TypeName: "GetXResult", ExportedCodec: "GetXResultCodec"},
+		},
+		{
+			Name:      "helpers.getX",
+			GoName:    "GetX",
+			ConstName: "GetX2",
+			Payload:   &typeData{TypeName: "GetX2Payload", ExportedCodec: "GetX2PayloadCodec"},
+			Result:    &typeData{TypeName: "GetX2Result", ExportedCodec: "GetX2ResultCodec"},
+		},
+	}
+	toolset := &ToolsetData{
+		Name:             "helpers",
+		QualifiedName:    "helpers",
+		SpecsPackageName: "helpers",
+		SpecsImportPath:  "example.com/gen/alpha/toolsets/helpers",
+		Tools:            rawTools,
+	}
+	agent := &AgentData{
+		Name:        "assistant",
+		StructName:  "Assistant",
+		Dir:         filepath.Join("gen", "alpha", "agents", "assistant"),
+		AllToolsets: []*ToolsetData{toolset},
+	}
+	cache := newToolSpecsDataCache()
+	cache.build = func(string, *service.Data, []*ToolData) (*toolSpecsData, error) {
+		return &toolSpecsData{tools: entries}, nil
+	}
+
+	file, err := resolvedAgentSpecsAggregatorFile(agent, cache)
+	require.NoError(t, err)
+	require.NotNil(t, file)
+	var aggregate bytes.Buffer
+	for _, section := range file.AllSections() {
+		require.NoError(t, section.Write(&aggregate))
+	}
+	require.Contains(t, aggregate.String(), "helpers.SpecGetX")
+	require.Contains(t, aggregate.String(), "helpers.SpecGetX2")
+	require.Contains(t, aggregate.String(), "helpers.GetX2")
+
+	section := gocodegen.NewJenniferSection("collision-safe-agent-tools", func(stmt *jen.Statement) {
+		data := agentToolsetFileData{Toolset: toolset, Tools: entries}
+		emitAgentToolsAliases(stmt, data)
+		emitAgentToolCallBuilders(stmt, data)
+	})
+	var helpers bytes.Buffer
+	require.NoError(t, section.Write(&helpers))
+	require.Contains(t, helpers.String(), "type GetX2Payload = helpersspecs.GetX2Payload")
+	require.Contains(t, helpers.String(), "func NewGetX2Call(")
+	require.Contains(t, helpers.String(), "GetX2PayloadCodec.ToJSON(args)")
 }
 
 func TestAgentRegistryUniquesAliasesAgainstLateFixedImports(t *testing.T) {
