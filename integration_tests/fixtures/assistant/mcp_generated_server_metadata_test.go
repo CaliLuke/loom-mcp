@@ -330,6 +330,101 @@ func TestGeneratedJSONRPCServerAcceptsNotificationsAndResponses(t *testing.T) {
 	}
 }
 
+func TestGeneratedJSONRPCServerCancellationStopsMatchingRequest(t *testing.T) {
+	t.Parallel()
+
+	started := make(chan struct{})
+	canceled := make(chan error, 1)
+	server := newGeneratedJSONRPCServerWithAdapterOptions(t, &mcpassistant.MCPAdapterOptions{
+		ToolCallInterceptors: []mcpassistant.ToolCallInterceptor{
+			func(ctx context.Context, _ mcpassistant.ToolCallInterceptorInfo, _ *mcpassistant.ToolsCallPayload, _ mcpassistant.ToolsCallServerStream, _ mcpassistant.ToolCallHandler) (bool, error) {
+				close(started)
+				<-ctx.Done()
+				canceled <- ctx.Err()
+				return true, ctx.Err()
+			},
+		},
+	})
+	defer server.Close()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	sessionID, _ := rawInitializeResult(t, ctx, server.URL)
+	require.NotEmpty(t, sessionID)
+
+	toolBody, err := json.Marshal(map[string]any{
+		"jsonrpc": "2.0",
+		"id":      7,
+		"method":  "tools/call",
+		"params": map[string]any{
+			"name":      "search_records",
+			"arguments": map[string]any{},
+		},
+	})
+	require.NoError(t, err)
+	toolReq, err := http.NewRequestWithContext(ctx, http.MethodPost, server.URL+"/rpc", strings.NewReader(string(toolBody)))
+	require.NoError(t, err)
+	toolReq.Header.Set("Accept", "application/json, text/event-stream")
+	toolReq.Header.Set("Content-Type", "application/json")
+	toolReq.Header.Set(mcpruntime.HeaderKeySessionID, sessionID)
+	toolReq.Header.Set(mcpruntime.HeaderKeyProtocolVersion, mcpassistant.DefaultProtocolVersion)
+
+	toolDone := make(chan error, 1)
+	go func() {
+		resp, doErr := http.DefaultClient.Do(toolReq)
+		if doErr == nil {
+			_, readErr := io.ReadAll(resp.Body)
+			closeErr := resp.Body.Close()
+			doErr = readErr
+			if doErr == nil {
+				doErr = closeErr
+			}
+		}
+		toolDone <- doErr
+	}()
+
+	select {
+	case <-started:
+	case <-ctx.Done():
+		t.Fatal("timed out waiting for tools/call to start")
+	}
+
+	cancelBody, err := json.Marshal(map[string]any{
+		"jsonrpc": "2.0",
+		"method":  "notifications/cancelled",
+		"params": map[string]any{
+			"requestId": 7,
+			"reason":    "client cancelled",
+		},
+	})
+	require.NoError(t, err)
+	cancelReq, err := http.NewRequestWithContext(ctx, http.MethodPost, server.URL+"/rpc", strings.NewReader(string(cancelBody)))
+	require.NoError(t, err)
+	cancelReq.Header.Set("Content-Type", "application/json")
+	cancelReq.Header.Set(mcpruntime.HeaderKeySessionID, sessionID)
+	cancelReq.Header.Set(mcpruntime.HeaderKeyProtocolVersion, mcpassistant.DefaultProtocolVersion)
+
+	cancelResp, err := http.DefaultClient.Do(cancelReq)
+	require.NoError(t, err)
+	defer cancelResp.Body.Close()
+	require.Equal(t, http.StatusAccepted, cancelResp.StatusCode)
+
+	select {
+	case err := <-canceled:
+		assert.ErrorIs(t, err, context.Canceled)
+	case <-ctx.Done():
+		t.Fatal("timed out waiting for notifications/cancelled to cancel tools/call")
+	}
+
+	select {
+	case err := <-toolDone:
+		require.NoError(t, err)
+	case <-ctx.Done():
+		t.Fatal("timed out waiting for cancelled tools/call to return")
+	}
+}
+
 func rawInitializeResult(t *testing.T, ctx context.Context, rawURL string) (string, map[string]any) {
 	t.Helper()
 

@@ -2210,6 +2210,13 @@ as required for clients predating the `2025-06-18` header. In that case the
 transport uses the MCP `2025-03-26` compatibility assumption; an explicitly
 present but unsupported version remains a bad request.
 
+Each generated JSON-RPC mount also tracks in-flight requests by session and
+JSON-RPC request ID. A client `notifications/cancelled` message cancels the
+matching request context, allowing long-running tools and other cooperative
+handlers to stop and release resources; requests in other sessions or with
+other IDs are unaffected. The cancellation notification itself receives the
+transport-required HTTP 202 response.
+
 Generated JSON-RPC servers accept requests that omit optional params (for
 example `tools/list` without a `params` key), emit the final streamed
 `tools/call` response as a default `message` SSE event, and validate the

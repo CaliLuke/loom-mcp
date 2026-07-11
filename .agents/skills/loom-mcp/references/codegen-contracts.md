@@ -65,6 +65,10 @@ Use this file when editing DSL, generators, generated helpers, or MCP codegen be
 - Generated streamable-HTTP servers accept a missing `MCP-Protocol-Version`
   header using the spec's `2025-03-26` compatibility assumption. Present but
   unsupported versions remain transport errors.
+- Generated JSON-RPC mounts own a request-cancellation registry shared by all
+  mounted routes. In-flight request contexts are keyed by MCP session plus the
+  canonical JSON-RPC request ID, and `notifications/cancelled` cancels only the
+  matching request before the notification receives HTTP 202.
 - Method-backed toolset tools may project into MCP only when the evaluated
   design exposes both `AgentRuntime` and `MCPSurface` and places the tool with
   `MCPPlacement(service, mcpServer)`. Codegen should trust validation for

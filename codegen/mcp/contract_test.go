@@ -1229,10 +1229,11 @@ func (s *Server) MountAssistant(mux goahttp.Muxer) {
 	require.NoError(t, applyMCPPolicyHeadersToJSONRPCMount([]*gcodegen.File{file}, "2025-06-18"))
 
 	rendered := renderGeneratedFile(t, file)
-	require.Contains(t, rendered, `mux.Handle("POST", "/rpc", withMCPPolicyHeaders(h.ServeHTTP))`)
-	require.Contains(t, rendered, `mux.Handle("GET", "/rpc", withMCPPolicyHeaders(h.ServeHTTP))`)
-	require.Contains(t, rendered, `mux.Handle("DELETE", "/rpc", withMCPPolicyHeaders(h.ServeHTTP))`)
-	require.Contains(t, rendered, "func withMCPPolicyHeaders(next http.HandlerFunc) http.HandlerFunc {")
+	require.Contains(t, rendered, `requestCancellations := mcpruntime.NewRequestCancellationRegistry()`)
+	require.Contains(t, rendered, `mux.Handle("POST", "/rpc", withMCPPolicyHeaders(requestCancellations, h.ServeHTTP))`)
+	require.Contains(t, rendered, `mux.Handle("GET", "/rpc", withMCPPolicyHeaders(requestCancellations, h.ServeHTTP))`)
+	require.Contains(t, rendered, `mux.Handle("DELETE", "/rpc", withMCPPolicyHeaders(requestCancellations, h.ServeHTTP))`)
+	require.Contains(t, rendered, "func withMCPPolicyHeaders(requestCancellations *mcpruntime.RequestCancellationRegistry, next http.HandlerFunc) http.HandlerFunc {")
 	require.Contains(t, rendered, "func validateMCPProtocolVersionHeader(r *http.Request) error {")
 	require.Contains(t, rendered, `if method == "initialize" {`)
 	require.Contains(t, rendered, `// 2025-03-26 compatibility version when no negotiated version is available.`)
@@ -1244,9 +1245,12 @@ func (s *Server) MountAssistant(mux goahttp.Muxer) {
 	require.NotContains(t, rendered, `context.WithValue(ctx, "mcp_allow_names", allow)`)
 	require.NotContains(t, rendered, `context.WithValue(ctx, "mcp_deny_names", deny)`)
 	require.Contains(t, rendered, `ctx = mcpruntime.WithResponseWriter(ctx, w)`)
-	require.Contains(t, rendered, `if acceptedMCPJSONRPCNotificationOrResponse(r) {`)
+	require.Contains(t, rendered, `if acceptedMCPJSONRPCNotificationOrResponse(requestCancellations, r) {`)
 	require.Contains(t, rendered, `w.WriteHeader(http.StatusAccepted)`)
-	require.Contains(t, rendered, `case "notifications/initialized", "notifications/cancelled", "notifications/progress", "notifications/roots/list_changed":`)
+	require.Contains(t, rendered, `requestCancellations.Cancel(r.Header.Get(mcpruntime.HeaderKeySessionID), requestID)`)
+	require.Contains(t, rendered, `cleanup := requestCancellations.Register(sessionID, requestID, cancel)`)
+	require.Contains(t, rendered, `case "notifications/cancelled":`)
+	require.Contains(t, rendered, `case "notifications/initialized", "notifications/progress", "notifications/roots/list_changed":`)
 }
 
 func TestApplyMCPPolicyHeadersToJSONRPCMount_RewritesRawMountSectionBySourceShape(t *testing.T) {
@@ -1269,9 +1273,9 @@ func MountAssistant(mux goahttp.Muxer, h *Server) {
 	require.NoError(t, applyMCPPolicyHeadersToJSONRPCMount([]*gcodegen.File{file}, "2025-06-18"))
 
 	rendered := renderGeneratedFile(t, file)
-	require.Contains(t, rendered, `mux.Handle("POST", "/rpc", withMCPPolicyHeaders(h.ServeHTTP))`)
-	require.Contains(t, rendered, `mux.Handle("GET", "/rpc", withMCPPolicyHeaders(h.ServeHTTP))`)
-	require.Contains(t, rendered, "func withMCPPolicyHeaders(next http.HandlerFunc) http.HandlerFunc {")
+	require.Contains(t, rendered, `mux.Handle("POST", "/rpc", withMCPPolicyHeaders(requestCancellations, h.ServeHTTP))`)
+	require.Contains(t, rendered, `mux.Handle("GET", "/rpc", withMCPPolicyHeaders(requestCancellations, h.ServeHTTP))`)
+	require.Contains(t, rendered, "func withMCPPolicyHeaders(requestCancellations *mcpruntime.RequestCancellationRegistry, next http.HandlerFunc) http.HandlerFunc {")
 	require.Contains(t, rendered, `ctx = mcpruntime.WithAllowedResourceNames(ctx, allow)`)
 	require.Contains(t, rendered, `ctx = mcpruntime.WithDeniedResourceNames(ctx, deny)`)
 }
@@ -1301,9 +1305,9 @@ func TestApplyMCPPolicyHeadersToJSONRPCMount_RewritesJenniferMountSection(t *tes
 	require.NoError(t, applyMCPPolicyHeadersToJSONRPCMount([]*gcodegen.File{file}, "2025-06-18"))
 
 	rendered := renderGeneratedFile(t, file)
-	require.Contains(t, rendered, `mux.Handle("POST", "/rpc", withMCPPolicyHeaders(h.ServeHTTP))`)
-	require.Contains(t, rendered, `mux.Handle("GET", "/rpc", withMCPPolicyHeaders(h.ServeHTTP))`)
-	require.Contains(t, rendered, "func withMCPPolicyHeaders(next http.HandlerFunc) http.HandlerFunc {")
+	require.Contains(t, rendered, `mux.Handle("POST", "/rpc", withMCPPolicyHeaders(requestCancellations, h.ServeHTTP))`)
+	require.Contains(t, rendered, `mux.Handle("GET", "/rpc", withMCPPolicyHeaders(requestCancellations, h.ServeHTTP))`)
+	require.Contains(t, rendered, "func withMCPPolicyHeaders(requestCancellations *mcpruntime.RequestCancellationRegistry, next http.HandlerFunc) http.HandlerFunc {")
 	require.Contains(t, rendered, `ctx = mcpruntime.WithAllowedResourceNames(ctx, allow)`)
 	require.Contains(t, rendered, `ctx = mcpruntime.WithDeniedResourceNames(ctx, deny)`)
 }
@@ -1409,9 +1413,9 @@ func TestGenerate_ActualMCPServerMountIncludesPolicyWrapper(t *testing.T) {
 
 	require.NotEmpty(t, rendered)
 	require.NotEmpty(t, adapterRendered)
-	require.Contains(t, rendered, `mux.Handle("POST", "/rpc", withMCPPolicyHeaders(h.ServeHTTP))`)
-	require.Contains(t, rendered, `mux.Handle("GET", "/rpc", withMCPPolicyHeaders(h.ServeHTTP))`)
-	require.Contains(t, rendered, "func withMCPPolicyHeaders(next http.HandlerFunc) http.HandlerFunc {")
+	require.Contains(t, rendered, `mux.Handle("POST", "/rpc", withMCPPolicyHeaders(requestCancellations, h.ServeHTTP))`)
+	require.Contains(t, rendered, `mux.Handle("GET", "/rpc", withMCPPolicyHeaders(requestCancellations, h.ServeHTTP))`)
+	require.Contains(t, rendered, "func withMCPPolicyHeaders(requestCancellations *mcpruntime.RequestCancellationRegistry, next http.HandlerFunc) http.HandlerFunc {")
 	require.Contains(t, rendered, `ctx = mcpruntime.WithAllowedResourceNames(ctx, allow)`)
 	require.Contains(t, rendered, `ctx = mcpruntime.WithDeniedResourceNames(ctx, deny)`)
 	require.NotContains(t, rendered, `context.WithValue(ctx, "mcp_allow_names", allow)`)

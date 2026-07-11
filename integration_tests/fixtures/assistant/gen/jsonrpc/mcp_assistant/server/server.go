@@ -498,10 +498,11 @@ func (s *Server) handleSSE(w http.ResponseWriter, r *http.Request) {
 
 } // Mount configures the mux to serve the JSON-RPC mcp_assistant service methods.
 func Mount(mux loomhttp.Muxer, h *Server) {
+	requestCancellations := mcpruntime.NewRequestCancellationRegistry()
 	// Mixed transports: mount unified handler that negotiates HTTP vs SSE by Accept header and JSON-RPC method
-	mux.Handle("POST", "/rpc", withMCPPolicyHeaders(h.ServeHTTP))
-	mux.Handle("GET", "/rpc", withMCPPolicyHeaders(h.ServeHTTP))
-	mux.Handle("DELETE", "/rpc", withMCPPolicyHeaders(h.ServeHTTP))
+	mux.Handle("POST", "/rpc", withMCPPolicyHeaders(requestCancellations, h.ServeHTTP))
+	mux.Handle("GET", "/rpc", withMCPPolicyHeaders(requestCancellations, h.ServeHTTP))
+	mux.Handle("DELETE", "/rpc", withMCPPolicyHeaders(requestCancellations, h.ServeHTTP))
 }
 
 // Mount configures the mux to serve the JSON-RPC mcp_assistant service methods.
@@ -535,7 +536,7 @@ var MCPCrossOriginProtection = http.NewCrossOriginProtection()
 //
 // It is installed by the JSON-RPC Mount functions so consumers do not need
 // to patch example servers or wire middleware manually.
-func withMCPPolicyHeaders(next http.HandlerFunc) http.HandlerFunc {
+func withMCPPolicyHeaders(requestCancellations *mcpruntime.RequestCancellationRegistry, next http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if MCPCrossOriginProtection != nil {
 			if err := MCPCrossOriginProtection.Check(r); err != nil {
@@ -555,7 +556,7 @@ func withMCPPolicyHeaders(next http.HandlerFunc) http.HandlerFunc {
 			})
 			return
 		}
-		if acceptedMCPJSONRPCNotificationOrResponse(r) {
+		if acceptedMCPJSONRPCNotificationOrResponse(requestCancellations, r) {
 			w.WriteHeader(http.StatusAccepted)
 			return
 		}
@@ -566,8 +567,16 @@ func withMCPPolicyHeaders(next http.HandlerFunc) http.HandlerFunc {
 		if deny := r.Header.Get("x-mcp-deny-names"); deny != "" {
 			ctx = mcpruntime.WithDeniedResourceNames(ctx, deny)
 		}
-		if sessionID := r.Header.Get(mcpruntime.HeaderKeySessionID); sessionID != "" {
+		sessionID := r.Header.Get(mcpruntime.HeaderKeySessionID)
+		if sessionID != "" {
 			ctx = mcpruntime.WithSessionID(ctx, sessionID)
+		}
+		if requestID, ok := mcpJSONRPCRequestID(r); ok && sessionID != "" {
+			requestCtx, cancel := context.WithCancel(ctx)
+			cleanup := requestCancellations.Register(sessionID, requestID, cancel)
+			defer cancel()
+			defer cleanup()
+			ctx = requestCtx
 		}
 		ctx = mcpruntime.WithResponseWriter(ctx, w)
 		next(w, r.WithContext(ctx))
@@ -605,55 +614,92 @@ func validateMCPProtocolVersionHeader(r *http.Request) error {
 }
 
 func jsonRPCRequestMethod(r *http.Request) (string, error) {
-	if r == nil || r.Body == nil {
-		return "", nil
-	}
-	body, err := io.ReadAll(r.Body)
-	if err != nil {
+	envelope, err := mcpJSONRPCEnvelopeFromRequest(r)
+	if err != nil || envelope == nil {
 		return "", err
 	}
-	r.Body = io.NopCloser(bytes.NewReader(body))
-	if len(body) == 0 {
-		return "", nil
-	}
-	var envelope map[string]any
-	if err := json.Unmarshal(body, &envelope); err != nil {
-		return "", nil
-	}
-	method, _ := envelope["method"].(string)
-	return method, nil
+	return envelope.Method, nil
 }
 
-func acceptedMCPJSONRPCNotificationOrResponse(r *http.Request) bool {
-	if r == nil || r.Method != http.MethodPost || r.Body == nil {
-		return false
+type mcpJSONRPCEnvelope struct {
+	JSONRPC string          `json:"jsonrpc"`
+	ID      json.RawMessage `json:"id"`
+	Method  string          `json:"method"`
+	Params  json.RawMessage `json:"params"`
+	Result  json.RawMessage `json:"result"`
+	Error   json.RawMessage `json:"error"`
+}
+
+func mcpJSONRPCEnvelopeFromRequest(r *http.Request) (*mcpJSONRPCEnvelope, error) {
+	if r == nil || r.Body == nil {
+		return nil, nil
 	}
 	body, err := io.ReadAll(r.Body)
 	if err != nil {
-		return false
+		return nil, err
 	}
 	r.Body = io.NopCloser(bytes.NewReader(body))
 	if len(body) == 0 {
-		return false
+		return nil, nil
 	}
-	var envelope map[string]any
+	var envelope mcpJSONRPCEnvelope
 	if err := json.Unmarshal(body, &envelope); err != nil {
+		return nil, nil
+	}
+	return &envelope, nil
+}
+
+func mcpJSONRPCRequestID(r *http.Request) (string, bool) {
+	if r == nil || r.Method != http.MethodPost {
+		return "", false
+	}
+	envelope, err := mcpJSONRPCEnvelopeFromRequest(r)
+	if err != nil || envelope == nil || envelope.Method == "" {
+		return "", false
+	}
+	return canonicalMCPJSONRPCRequestID(envelope.ID)
+}
+
+func canonicalMCPJSONRPCRequestID(raw json.RawMessage) (string, bool) {
+	if len(raw) == 0 || bytes.Equal(bytes.TrimSpace(raw), []byte("null")) {
+		return "", false
+	}
+	var compact bytes.Buffer
+	if err := json.Compact(&compact, raw); err != nil {
+		return "", false
+	}
+	return compact.String(), true
+}
+
+func acceptedMCPJSONRPCNotificationOrResponse(requestCancellations *mcpruntime.RequestCancellationRegistry, r *http.Request) bool {
+	if r == nil || r.Method != http.MethodPost {
 		return false
 	}
-	if envelope["jsonrpc"] != "2.0" {
+	envelope, err := mcpJSONRPCEnvelopeFromRequest(r)
+	if err != nil || envelope == nil {
 		return false
 	}
-	method, _ := envelope["method"].(string)
-	if method == "" {
-		_, hasResult := envelope["result"]
-		_, hasError := envelope["error"]
-		return hasResult || hasError
-	}
-	if _, hasID := envelope["id"]; hasID {
+	if envelope.JSONRPC != "2.0" {
 		return false
 	}
-	switch method {
-	case "notifications/initialized", "notifications/cancelled", "notifications/progress", "notifications/roots/list_changed":
+	if envelope.Method == "" {
+		return len(envelope.Result) > 0 || len(envelope.Error) > 0
+	}
+	if len(envelope.ID) > 0 {
+		return false
+	}
+	switch envelope.Method {
+	case "notifications/cancelled":
+		var params struct {
+			RequestID json.RawMessage `json:"requestId"`
+		}
+		if err := json.Unmarshal(envelope.Params, &params); err == nil {
+			if requestID, ok := canonicalMCPJSONRPCRequestID(params.RequestID); ok {
+				requestCancellations.Cancel(r.Header.Get(mcpruntime.HeaderKeySessionID), requestID)
+			}
+		}
+		return true
+	case "notifications/initialized", "notifications/progress", "notifications/roots/list_changed":
 		return true
 	default:
 		return false
