@@ -34,6 +34,8 @@ func TestGeneratedAgentUnionUsesExplicitVariantTags(t *testing.T) {
 		})
 		var Request = goadsl.Type("Request", func() {
 			goadsl.OneOf("value", func() {
+				goadsl.Meta("oneof:type:field", "action")
+				goadsl.Meta("oneof:value:field", "payload")
 				goadsl.Attribute("list_branch", ListPayload, func() {
 					goadsl.Meta("oneof:type:tag", "list")
 				})
@@ -70,4 +72,8 @@ func TestGeneratedAgentUnionUsesExplicitVariantTags(t *testing.T) {
 	require.NotContains(t, unions, `= "GetActivePayload"`)
 	require.Contains(t, unions, `case string(`)
 	require.Contains(t, unions, "get_active")
+	require.Contains(t, unions, "InvalidEnumValueError(\"action\"")
+	require.Contains(t, unions, "Type string `json:\"action\"`")
+	require.Contains(t, unions, "Value any `json:\"payload\"`")
+	require.Contains(t, unions, "Value json.RawMessage `json:\"payload\"`")
 }

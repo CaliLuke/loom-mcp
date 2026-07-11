@@ -51,6 +51,9 @@ Use this file when editing DSL, generators, generated helpers, or MCP codegen be
   `Meta("oneof:type:tag", "...")` across MCP schemas, agent tool schemas,
   and generated union helpers. Do not fall back to derived type names when an
   explicit tag is present.
+- Preserve custom union envelope keys from `Meta("oneof:type:field", "...")`
+  and `Meta("oneof:value:field", "...")` in schemas, examples, validation,
+  and generated marshal/unmarshal methods.
 - Generated union decoders must return structured validation errors for invalid
   discriminators and missing nested union values. Invalid discriminators should
   use the allowed enum values; missing `value` envelopes should use the generated

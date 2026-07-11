@@ -143,7 +143,7 @@ func toolUnionTypesSection(data toolUnionTypesFileData) gocodegen.Section {
 				fmt.Fprintf(&b, "// Set%s sets the %s branch of the union.\n", f.FieldName, f.Name)
 				fmt.Fprintf(&b, "func (u *%s) Set%s(v %s) {\n\tu.kind = %s\n\tu.%s = v\n}\n\n", u.Name, f.FieldName, f.FieldType, f.KindConst, f.FieldName)
 			}
-			fmt.Fprintf(&b, "// Validate ensures the union discriminant is valid.\nfunc (u %s) Validate() error {\n\tswitch u.kind {\n\tcase \"\":\n\t\treturn loom.InvalidEnumValueError(\"type\", \"\", []any{\n", u.Name)
+			fmt.Fprintf(&b, "// Validate ensures the union discriminant is valid.\nfunc (u %s) Validate() error {\n\tswitch u.kind {\n\tcase \"\":\n\t\treturn loom.InvalidEnumValueError(%q, \"\", []any{\n", u.Name, u.TypeKey)
 			for _, f := range u.Fields {
 				fmt.Fprintf(&b, "\t\t\tstring(%s),\n", f.KindConst)
 			}
@@ -151,20 +151,20 @@ func toolUnionTypesSection(data toolUnionTypesFileData) gocodegen.Section {
 			for _, f := range u.Fields {
 				fmt.Fprintf(&b, "\tcase %s:\n\t\treturn nil\n", f.KindConst)
 			}
-			b.WriteString("\tdefault:\n\t\treturn loom.InvalidEnumValueError(\"type\", u.kind, []any{\n")
+			fmt.Fprintf(&b, "\tdefault:\n\t\treturn loom.InvalidEnumValueError(%q, u.kind, []any{\n", u.TypeKey)
 			for _, f := range u.Fields {
 				fmt.Fprintf(&b, "\t\t\tstring(%s),\n", f.KindConst)
 			}
 			b.WriteString("\t\t})\n\t}\n}\n\n")
-			fmt.Fprintf(&b, "// MarshalJSON marshals the union into the canonical {type,value} JSON shape.\nfunc (u %s) MarshalJSON() ([]byte, error) {\n", u.Name)
+			fmt.Fprintf(&b, "// MarshalJSON marshals the union into its canonical discriminated JSON shape.\nfunc (u %s) MarshalJSON() ([]byte, error) {\n", u.Name)
 			b.WriteString("\tif err := u.Validate(); err != nil {\n\t\treturn nil, err\n\t}\n\tvar (\n\t\tvalue any\n\t)\n\tswitch u.kind {\n")
 			for _, f := range u.Fields {
 				fmt.Fprintf(&b, "\tcase %s:\n\t\tvalue = u.%s\n", f.KindConst, f.FieldName)
 			}
 			fmt.Fprintf(&b, "\tdefault:\n\t\treturn nil, fmt.Errorf(\"unexpected %s discriminant %%q\", u.kind)\n\t}\n", u.Name)
-			b.WriteString("\treturn json.Marshal(struct {\n\t\tType string `json:\"type\"`\n\t\tValue any `json:\"value\"`\n\t}{\n\t\tType: string(u.kind),\n\t\tValue: value,\n\t})\n}\n\n")
-			fmt.Fprintf(&b, "// UnmarshalJSON unmarshals the union from the canonical {type,value} JSON shape.\nfunc (u *%s) UnmarshalJSON(data []byte) error {\n", u.Name)
-			b.WriteString("\tvar raw struct {\n\t\tType string `json:\"type\"`\n\t\tValue json.RawMessage `json:\"value\"`\n\t}\n")
+			fmt.Fprintf(&b, "\treturn json.Marshal(struct {\n\t\tType string `json:\"%s\"`\n\t\tValue any `json:\"%s\"`\n\t}{\n\t\tType: string(u.kind),\n\t\tValue: value,\n\t})\n}\n\n", u.TypeKey, u.ValueKey)
+			fmt.Fprintf(&b, "// UnmarshalJSON unmarshals the union from its canonical discriminated JSON shape.\nfunc (u *%s) UnmarshalJSON(data []byte) error {\n", u.Name)
+			fmt.Fprintf(&b, "\tvar raw struct {\n\t\tType string `json:\"%s\"`\n\t\tValue json.RawMessage `json:\"%s\"`\n\t}\n", u.TypeKey, u.ValueKey)
 			b.WriteString("\tif err := json.Unmarshal(data, &raw); err != nil {\n\t\treturn err\n\t}\n\tswitch raw.Type {\n")
 			for _, f := range u.Fields {
 				fmt.Fprintf(&b, "\tcase string(%s):\n\t\tvar v %s\n\t\tif err := json.Unmarshal(raw.Value, &v); err != nil {\n\t\t\treturn err\n\t\t}\n\t\tu.kind = %s\n\t\tu.%s = v\n", f.KindConst, f.FieldType, f.KindConst, f.FieldName)

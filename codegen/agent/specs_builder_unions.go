@@ -142,5 +142,7 @@ func buildUnionTypeData(u *goaexpr.Union, scope *codegen.NameScope) *service.Uni
 		Name:     name,
 		KindName: kindName,
 		Fields:   fields,
+		TypeKey:  u.GetTypeKey(),
+		ValueKey: u.GetValueKey(),
 	}
 }

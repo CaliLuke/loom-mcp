@@ -888,6 +888,11 @@ the MCP schema, agent tool schemas, and related generated contracts rather than
 falling back to derived type names. This is the schema clients receive from
 `tools/list`.
 
+Custom envelope keys declared with `Meta("oneof:type:field", "action")` and
+`Meta("oneof:value:field", "payload")` are also authoritative. Generated
+schemas, examples, validation errors, and JSON marshal/unmarshal methods all use
+`action`/`payload` instead of the default `type`/`value` keys.
+
 Generated union decoders use the same contract at call time. An unknown
 discriminator value is reported as a validation error with the allowed enum
 values, and a present discriminator with a missing nested `value` object is
