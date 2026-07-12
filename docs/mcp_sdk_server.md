@@ -255,6 +255,26 @@ supports text messages and text results; image, audio, and sampling tool-use
 content require a richer future contract. Calling `mcpruntime.Sample` outside
 an MCP SDK request context returns `mcpruntime.ErrSamplerUnavailable`.
 
+## Client Roots
+
+Generated SDK request contexts can retrieve filesystem roots exposed by the
+connected MCP client:
+
+```go
+roots, err := mcpruntime.ListRoots(ctx)
+for _, root := range roots {
+    fmt.Printf("%s (%s)\n", root.Name, root.URI)
+}
+```
+
+The shared SDK adapter sends `roots/list` through the active
+`ServerSession` and maps the response to transport-neutral `mcpruntime.Root`
+values. Calling `ListRoots` outside an MCP SDK request context returns
+`mcpruntime.ErrRootListerUnavailable`. Applications can observe client root
+changes through `SDKServerOptions.Server.RootsListChangedHandler`; the official
+SDK invokes it for `notifications/roots/list_changed` when the client advertises
+`roots.listChanged`.
+
 ## Session and Response Writer Helpers
 
 The generated handler also exposes the MCP session id and the active HTTP

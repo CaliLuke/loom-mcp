@@ -156,6 +156,26 @@ func TestGeneratedServerSDKToolCanSampleThroughClient(t *testing.T) {
 	assert.JSONEq(t, `{"model":"fixture-model","stop_reason":"endTurn","text":"sampled response"}`, string(structured))
 }
 
+func TestGeneratedServerSDKToolCanListClientRoots(t *testing.T) {
+	t.Parallel()
+
+	session := newIntegrationSDKSessionWithClient(t, "itest-roots", nil, func(client *mcp.Client) {
+		client.AddRoots(&mcp.Root{URI: "file:///workspace/project", Name: "Project"})
+	})
+	defer func() {
+		require.NoError(t, session.Close())
+	}()
+
+	ctx, cancel := sdkTestContext(t)
+	defer cancel()
+	result, err := session.CallTool(ctx, &mcp.CallToolParams{Name: "list_client_roots"})
+	require.NoError(t, err)
+
+	structured, err := json.Marshal(result.StructuredContent)
+	require.NoError(t, err)
+	assert.JSONEq(t, `{"roots":[{"name":"Project","uri":"file:///workspace/project"}]}`, string(structured))
+}
+
 func TestGeneratedServerSDKReadResourceAndGetPrompt(t *testing.T) {
 	t.Parallel()
 
@@ -279,6 +299,10 @@ func newIntegrationSDKSession(t *testing.T, clientName string) *mcp.ClientSessio
 }
 
 func newIntegrationSDKSessionWithOptions(t *testing.T, clientName string, opts *mcp.ClientOptions) *mcp.ClientSession {
+	return newIntegrationSDKSessionWithClient(t, clientName, opts, nil)
+}
+
+func newIntegrationSDKSessionWithClient(t *testing.T, clientName string, opts *mcp.ClientOptions, configure func(*mcp.Client)) *mcp.ClientSession {
 	t.Helper()
 
 	if !SupportsServer() {
@@ -290,10 +314,10 @@ func newIntegrationSDKSessionWithOptions(t *testing.T, clientName string, opts *
 	require.NoError(t, r.startServer(t))
 	t.Cleanup(r.stopServer)
 
-	return connectSDKSessionWithOptions(t, r.baseURL.String()+"/rpc", clientName, opts)
+	return connectSDKSessionWithOptions(t, r.baseURL.String()+"/rpc", clientName, opts, configure)
 }
 
-func connectSDKSessionWithOptions(t *testing.T, endpoint string, clientName string, opts *mcp.ClientOptions) *mcp.ClientSession {
+func connectSDKSessionWithOptions(t *testing.T, endpoint string, clientName string, opts *mcp.ClientOptions, configure func(*mcp.Client)) *mcp.ClientSession {
 	t.Helper()
 
 	ctx, cancel := sdkTestContext(t)
@@ -303,6 +327,9 @@ func connectSDKSessionWithOptions(t *testing.T, endpoint string, clientName stri
 		Name:    clientName,
 		Version: "1.0.0",
 	}, opts)
+	if configure != nil {
+		configure(client)
+	}
 	session, err := client.Connect(ctx, &mcp.StreamableClientTransport{
 		Endpoint: endpoint,
 		HTTPClient: &http.Client{

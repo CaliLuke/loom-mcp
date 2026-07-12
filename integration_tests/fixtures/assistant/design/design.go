@@ -285,6 +285,16 @@ var _ = Service("assistant", func() {
 		JSONRPC(func() {})
 	})
 
+	Method("list_client_roots", func() {
+		Description("List filesystem roots exposed by the connected MCP client")
+		Result(func() {
+			Attribute("roots", ArrayOf(ClientRoot), "Client filesystem roots")
+			Required("roots")
+		})
+		Tool("list_client_roots", "List filesystem roots exposed by the connected MCP client")
+		JSONRPC(func() {})
+	})
+
 	Method("multi_content", func() {
 		Description("Return multiple content items")
 		Payload(func() {
@@ -382,6 +392,12 @@ var _ = Service("assistant", func() {
 var Documents = Type("Documents", func() {
 	Attribute("items", ArrayOf(String), "Document entries")
 	Required("items")
+})
+
+var ClientRoot = Type("ClientRoot", func() {
+	Attribute("uri", String, "Root file URI")
+	Attribute("name", String, "Optional display name")
+	Required("uri")
 })
 
 var PromptTemplates = Type("PromptTemplates", func() {

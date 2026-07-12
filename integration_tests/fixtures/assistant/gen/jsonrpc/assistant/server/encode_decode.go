@@ -652,6 +652,21 @@ func DecodeSampleTextRequest(mux loomhttp.Muxer, decoder func(*http.Request) loo
 	}
 }
 
+// EncodeListClientRootsResponse returns an encoder for responses returned by
+// the assistant list_client_roots endpoint.
+func EncodeListClientRootsResponse(encoder func(context.Context, http.ResponseWriter) loomhttp.Encoder) func(context.Context, http.ResponseWriter, any) error {
+	return func(ctx context.Context, w http.ResponseWriter, v any) error {
+		res, ok := v.(*assistant.ListClientRootsResult)
+		if !ok {
+			return loomhttp.ErrInvalidType("assistant", "list_client_roots", "*assistant.ListClientRootsResult", v)
+		}
+		enc := encoder(ctx, w)
+		body := NewListClientRootsResponseBody(res)
+		w.WriteHeader(http.StatusOK)
+		return enc.Encode(body)
+	}
+}
+
 // EncodeMultiContentResponse returns an encoder for responses returned by the
 // assistant multi_content endpoint.
 func EncodeMultiContentResponse(encoder func(context.Context, http.ResponseWriter) loomhttp.Encoder) func(context.Context, http.ResponseWriter, any) error {
@@ -945,6 +960,17 @@ func marshalAssistantDesignTokenGroupToDesignTokenGroupResponseBody(v *assistant
 		}
 	} else {
 		res.Typography = []string{}
+	}
+
+	return res
+}
+
+// marshalAssistantClientRootToClientRootResponseBody builds a value of type
+// *ClientRootResponseBody from a value of type *assistant.ClientRoot.
+func marshalAssistantClientRootToClientRootResponseBody(v *assistant.ClientRoot) *ClientRootResponseBody {
+	res := &ClientRootResponseBody{
+		URI:  v.URI,
+		Name: v.Name,
 	}
 
 	return res

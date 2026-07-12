@@ -71,8 +71,9 @@ Use this file when editing DSL, generators, generated helpers, or MCP codegen be
   a readable request ID or explicitly uses `null` when none is available.
 - Generated SDK request contexts install the shared
   `runtime/mcp/sdkclient.WithClientFeatures` adapter so service code can issue
-  elicitation and text sampling requests through the active official SDK
-  session. Do not duplicate SDK request/response conversion in generated code.
+  elicitation, text sampling, and roots/list requests through the active
+  official SDK session. Do not duplicate SDK request/response conversion in
+  generated code.
 - Generated SDK response-writer observers must implement `Unwrap() http.ResponseWriter`
   so `http.ResponseController` can reach flushing and other optional transport
   capabilities required by nested server-to-client requests.

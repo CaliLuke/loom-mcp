@@ -63,6 +63,10 @@ type ProcessBatchResponseBody ProcessBatchResponseBodyResponseBody
 // endpoint HTTP response body.
 type SampleTextResponseBody SampleTextResponseBodyResponseBody
 
+// ListClientRootsResponseBody is the type of the "assistant" service
+// "list_client_roots" endpoint HTTP response body.
+type ListClientRootsResponseBody ListClientRootsResponseBodyResponseBody
+
 // MultiContentResponseBody is the type of the "assistant" service
 // "multi_content" endpoint HTTP response body.
 type MultiContentResponseBody MultiContentResponseBodyResponseBody

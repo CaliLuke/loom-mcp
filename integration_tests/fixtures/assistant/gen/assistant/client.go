@@ -30,6 +30,7 @@ type Client struct {
 	ExecuteCodeEndpoint                    loom.Endpoint
 	ProcessBatchEndpoint                   loom.Endpoint
 	SampleTextEndpoint                     loom.Endpoint
+	ListClientRootsEndpoint                loom.Endpoint
 	MultiContentEndpoint                   loom.Endpoint
 	GenerateDpiSpecEndpoint                loom.Endpoint
 	DispatchActionEndpoint                 loom.Endpoint
@@ -39,8 +40,8 @@ type Client struct {
 }
 
 // NewClient initializes a "assistant" service client given the endpoints.
-func NewClient(listDocuments, systemInfo, conversationHistory, figmaDesignSystem, generatePrompts, buildFigmaImplementationPrompt, sendNotification, analyzeSentiment, extractKeywords, summarizeText, search, searchRecords, executeCode, processBatch, sampleText, multiContent, generateDpiSpec, dispatchAction, dispatchCommand, projectedLookup, projectedStatus loom.Endpoint) *Client {
-	return &Client{ListDocumentsEndpoint: listDocuments, SystemInfoEndpoint: systemInfo, ConversationHistoryEndpoint: conversationHistory, FigmaDesignSystemEndpoint: figmaDesignSystem, GeneratePromptsEndpoint: generatePrompts, BuildFigmaImplementationPromptEndpoint: buildFigmaImplementationPrompt, SendNotificationEndpoint: sendNotification, AnalyzeSentimentEndpoint: analyzeSentiment, ExtractKeywordsEndpoint: extractKeywords, SummarizeTextEndpoint: summarizeText, SearchEndpoint: search, SearchRecordsEndpoint: searchRecords, ExecuteCodeEndpoint: executeCode, ProcessBatchEndpoint: processBatch, SampleTextEndpoint: sampleText, MultiContentEndpoint: multiContent, GenerateDpiSpecEndpoint: generateDpiSpec, DispatchActionEndpoint: dispatchAction, DispatchCommandEndpoint: dispatchCommand, ProjectedLookupEndpoint: projectedLookup, ProjectedStatusEndpoint: projectedStatus}
+func NewClient(listDocuments, systemInfo, conversationHistory, figmaDesignSystem, generatePrompts, buildFigmaImplementationPrompt, sendNotification, analyzeSentiment, extractKeywords, summarizeText, search, searchRecords, executeCode, processBatch, sampleText, listClientRoots, multiContent, generateDpiSpec, dispatchAction, dispatchCommand, projectedLookup, projectedStatus loom.Endpoint) *Client {
+	return &Client{ListDocumentsEndpoint: listDocuments, SystemInfoEndpoint: systemInfo, ConversationHistoryEndpoint: conversationHistory, FigmaDesignSystemEndpoint: figmaDesignSystem, GeneratePromptsEndpoint: generatePrompts, BuildFigmaImplementationPromptEndpoint: buildFigmaImplementationPrompt, SendNotificationEndpoint: sendNotification, AnalyzeSentimentEndpoint: analyzeSentiment, ExtractKeywordsEndpoint: extractKeywords, SummarizeTextEndpoint: summarizeText, SearchEndpoint: search, SearchRecordsEndpoint: searchRecords, ExecuteCodeEndpoint: executeCode, ProcessBatchEndpoint: processBatch, SampleTextEndpoint: sampleText, ListClientRootsEndpoint: listClientRoots, MultiContentEndpoint: multiContent, GenerateDpiSpecEndpoint: generateDpiSpec, DispatchActionEndpoint: dispatchAction, DispatchCommandEndpoint: dispatchCommand, ProjectedLookupEndpoint: projectedLookup, ProjectedStatusEndpoint: projectedStatus}
 }
 
 // ListDocuments calls the "list_documents" endpoint of the "assistant" service.
@@ -194,6 +195,17 @@ func (c *Client) SampleText(ctx context.Context, p *SampleTextPayload) (res *Sam
 		return
 	}
 	return ires.(*SampleTextResult), nil
+}
+
+// ListClientRoots calls the "list_client_roots" endpoint of the "assistant"
+// service.
+func (c *Client) ListClientRoots(ctx context.Context) (res *ListClientRootsResult, err error) {
+	var ires any
+	ires, err = c.ListClientRootsEndpoint(ctx, nil)
+	if err != nil {
+		return
+	}
+	return ires.(*ListClientRootsResult), nil
 }
 
 // MultiContent calls the "multi_content" endpoint of the "assistant" service.

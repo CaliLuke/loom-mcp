@@ -49,6 +49,8 @@ type Service interface {
 	ProcessBatch(context.Context, *ProcessBatchPayload) (res *ProcessBatchResult, err error)
 	// Request text generation from the connected MCP client
 	SampleText(context.Context, *SampleTextPayload) (res *SampleTextResult, err error)
+	// List filesystem roots exposed by the connected MCP client
+	ListClientRoots(context.Context) (res *ListClientRootsResult, err error)
 	// Return multiple content items
 	MultiContent(context.Context, *MultiContentPayload) (res *MultiContentResult, err error)
 	// Generate a deterministic implementation-ready DPI spec from a fake Figma
@@ -78,7 +80,7 @@ const ServiceName = "assistant"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [21]string{"list_documents", "system_info", "conversation_history", "figma_design_system", "generate_prompts", "build_figma_implementation_prompt", "send_notification", "analyze_sentiment", "extract_keywords", "summarize_text", "search", "search_records", "execute_code", "process_batch", "sample_text", "multi_content", "generate_dpi_spec", "dispatch_action", "dispatch_command", "projected_lookup", "projected_status"}
+var MethodNames = [22]string{"list_documents", "system_info", "conversation_history", "figma_design_system", "generate_prompts", "build_figma_implementation_prompt", "send_notification", "analyze_sentiment", "extract_keywords", "summarize_text", "search", "search_records", "execute_code", "process_batch", "sample_text", "list_client_roots", "multi_content", "generate_dpi_spec", "dispatch_action", "dispatch_command", "projected_lookup", "projected_status"}
 
 // AnalyzeSentimentPayload is the payload type of the assistant service
 // analyze_sentiment method.
@@ -110,6 +112,13 @@ type BuildFigmaImplementationPromptPayload struct {
 	DesignTokensURI string `json:"design_tokens_uri"`
 	// Serialized DPI spec JSON
 	DpiJSON string `json:"dpi_json"`
+}
+
+type ClientRoot struct {
+	// Root file URI
+	URI string `json:"uri"`
+	// Optional display name
+	Name *string `json:"name,omitempty"`
 }
 
 // ConversationHistoryPayload is the payload type of the assistant service
@@ -298,6 +307,13 @@ type GeneratePromptsPayload struct {
 type ListAction struct {
 	// Maximum number of items to list
 	Limit *int `json:"limit,omitempty"`
+}
+
+// ListClientRootsResult is the result type of the assistant service
+// list_client_roots method.
+type ListClientRootsResult struct {
+	// Client filesystem roots
+	Roots []*ClientRoot `json:"roots"`
 }
 
 // MultiContentPayload is the payload type of the assistant service

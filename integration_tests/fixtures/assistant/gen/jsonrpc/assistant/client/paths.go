@@ -82,6 +82,11 @@ func SampleTextAssistantPath() string {
 	return "/rpc"
 }
 
+// ListClientRootsAssistantPath returns the URL path to the assistant service list_client_roots HTTP endpoint.
+func ListClientRootsAssistantPath() string {
+	return "/rpc"
+}
+
 // MultiContentAssistantPath returns the URL path to the assistant service multi_content HTTP endpoint.
 func MultiContentAssistantPath() string {
 	return "/rpc"

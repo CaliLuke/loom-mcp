@@ -439,6 +439,40 @@ func NewEndpoints(scheme string, host string, doer goahttp.Doer, enc func(*http.
 		return decodeOriginalJSONRPCResult(enc, req3, toolResp.Result, decode)
 	}
 
+	// Tool: list_client_roots -> ListClientRoots
+	e.ListClientRoots = func(ctx context.Context, v any) (any, error) {
+		var payload any
+		payload = struct{}{}
+		args, err := encodeOriginalPayload(ctx, enc, payload)
+		if err != nil {
+			return nil, err
+		}
+		toolResp, err := mcpCaller.CallTool(ctx, mcpruntime.CallRequest{
+			Payload: args,
+			Tool:    "list_client_roots",
+		})
+		if err != nil {
+			prompt := retry.BuildRepairPrompt("tools/call:list_client_roots", err.Error(), "{}", "")
+			return nil, &retry.RetryableError{
+				Cause:  err,
+				Prompt: prompt,
+			}
+		}
+		if len(toolResp.Result) == 0 {
+			prompt := retry.BuildRepairPrompt("tools/call:list_client_roots", "empty MCP tool response", "{}", "")
+			return nil, &retry.RetryableError{
+				Cause:  fmt.Errorf("empty MCP tool response for list_client_roots"),
+				Prompt: prompt,
+			}
+		}
+		req3, err := origC.BuildListClientRootsRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		decode := assistantjsonrpcc.DecodeListClientRootsResponse(dec, false)
+		return decodeOriginalJSONRPCResult(enc, req3, toolResp.Result, decode)
+	}
+
 	// Tool: multi_content -> MultiContent
 	e.MultiContent = func(ctx context.Context, v any) (any, error) {
 		var payload any
@@ -822,5 +856,5 @@ func NewEndpoints(scheme string, host string, doer goahttp.Doer, enc func(*http.
 // NewClient returns *assistant.Client using MCP-backed endpoints.
 func NewClient(scheme string, host string, doer goahttp.Doer, enc func(*http.Request) goahttp.Encoder, dec func(*http.Response) goahttp.Decoder, restore bool) *assistant.Client {
 	e := NewEndpoints(scheme, host, doer, enc, dec, restore)
-	return assistant.NewClient(e.ListDocuments, e.SystemInfo, e.ConversationHistory, e.FigmaDesignSystem, e.GeneratePrompts, e.BuildFigmaImplementationPrompt, e.SendNotification, e.AnalyzeSentiment, e.ExtractKeywords, e.SummarizeText, e.Search, e.SearchRecords, e.ExecuteCode, e.ProcessBatch, e.SampleText, e.MultiContent, e.GenerateDpiSpec, e.DispatchAction, e.DispatchCommand, e.ProjectedLookup, e.ProjectedStatus)
+	return assistant.NewClient(e.ListDocuments, e.SystemInfo, e.ConversationHistory, e.FigmaDesignSystem, e.GeneratePrompts, e.BuildFigmaImplementationPrompt, e.SendNotification, e.AnalyzeSentiment, e.ExtractKeywords, e.SummarizeText, e.Search, e.SearchRecords, e.ExecuteCode, e.ProcessBatch, e.SampleText, e.ListClientRoots, e.MultiContent, e.GenerateDpiSpec, e.DispatchAction, e.DispatchCommand, e.ProjectedLookup, e.ProjectedStatus)
 }

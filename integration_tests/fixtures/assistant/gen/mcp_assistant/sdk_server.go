@@ -257,6 +257,13 @@ func registerSDKTools(server *mcpsdk.Server, adapter *MCPAdapter, requestContext
 		Title:        "Sample Text",
 	}, adapter.sdkToolHandler(requestContext))
 	server.AddTool(&mcpsdk.Tool{
+		Description:  "List filesystem roots exposed by the connected MCP client",
+		InputSchema:  sdkToolInputSchema(""),
+		Name:         "list_client_roots",
+		OutputSchema: sdkToolInputSchema("{\"type\":\"object\",\"required\":[\"roots\"],\"properties\":{\"roots\":{\"type\":\"array\",\"description\":\"Client filesystem roots\",\"items\":{\"type\":\"object\",\"required\":[\"uri\"],\"properties\":{\"name\":{\"type\":\"string\",\"description\":\"Optional display name\"},\"uri\":{\"type\":\"string\",\"description\":\"Root file URI\"}},\"additionalProperties\":false}}},\"additionalProperties\":false}"),
+		Title:        "List Client Roots",
+	}, adapter.sdkToolHandler(requestContext))
+	server.AddTool(&mcpsdk.Tool{
 		Description:  "Return multiple content items",
 		InputSchema:  sdkToolInputSchema("{\"type\":\"object\",\"required\":[\"count\"],\"properties\":{\"count\":{\"type\":\"integer\",\"description\":\"Number of content items to return\"}},\"additionalProperties\":false}"),
 		Name:         "multi_content",

@@ -119,9 +119,10 @@ Use this skill for `loom-mcp` work in this repo. Keep `AGENTS.md` short and keep
   and `call_tool` invocation through `MCPAdapter.ToolsCall`.
 - Generated SDK-backed MCP servers expose prompt argument completion for
   enum-backed dynamic prompt arguments and place runtime client-feature
-  adapters in request contexts so service code can call `runtime/mcp.Elicit`
-  and text `runtime/mcp.Sample` during MCP calls. Keep official-SDK conversion
-  in `runtime/mcp/sdkclient`, not duplicated in generated files.
+  adapters in request contexts so service code can call `runtime/mcp.Elicit`,
+  text `runtime/mcp.Sample`, and `runtime/mcp.ListRoots` during MCP calls. Keep
+  official-SDK conversion in `runtime/mcp/sdkclient`, not duplicated in
+  generated files.
 - Codegen should use partial evaluation and `NameScope` helpers rather than string surgery or runtime branching over static structure.
 - DSL/codegen/runtime internals should trust evaluated design invariants and fail fast instead of adding speculative fallback paths.
 

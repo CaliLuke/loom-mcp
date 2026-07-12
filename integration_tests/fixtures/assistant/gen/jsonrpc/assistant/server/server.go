@@ -59,6 +59,8 @@ type Server struct {
 	ProcessBatch func(context.Context, *http.Request, *jsonrpc.RawRequest, http.ResponseWriter) error
 	// SampleText is the handler for the sample_text method.
 	SampleText func(context.Context, *http.Request, *jsonrpc.RawRequest, http.ResponseWriter) error
+	// ListClientRoots is the handler for the list_client_roots method.
+	ListClientRoots func(context.Context, *http.Request, *jsonrpc.RawRequest, http.ResponseWriter) error
 	// MultiContent is the handler for the multi_content method.
 	MultiContent func(context.Context, *http.Request, *jsonrpc.RawRequest, http.ResponseWriter) error
 	// GenerateDpiSpec is the handler for the generate_dpi_spec method.
@@ -91,8 +93,9 @@ func New(endpoints *assistant.Endpoints, mux loomhttp.Muxer, decoder func(*http.
 		FigmaDesignSystem:              NewFigmaDesignSystemHandler(endpoints.FigmaDesignSystem, mux, decoder, encoder, errhandler),
 		GenerateDpiSpec:                NewGenerateDpiSpecHandler(endpoints.GenerateDpiSpec, mux, decoder, encoder, errhandler),
 		GeneratePrompts:                NewGeneratePromptsHandler(endpoints.GeneratePrompts, mux, decoder, encoder, errhandler),
+		ListClientRoots:                NewListClientRootsHandler(endpoints.ListClientRoots, mux, decoder, encoder, errhandler),
 		ListDocuments:                  NewListDocumentsHandler(endpoints.ListDocuments, mux, decoder, encoder, errhandler),
-		Methods:                        []string{"list_documents", "system_info", "conversation_history", "figma_design_system", "generate_prompts", "build_figma_implementation_prompt", "send_notification", "analyze_sentiment", "extract_keywords", "summarize_text", "search", "search_records", "execute_code", "process_batch", "sample_text", "multi_content", "generate_dpi_spec", "dispatch_action", "dispatch_command", "projected_lookup", "projected_status"},
+		Methods:                        []string{"list_documents", "system_info", "conversation_history", "figma_design_system", "generate_prompts", "build_figma_implementation_prompt", "send_notification", "analyze_sentiment", "extract_keywords", "summarize_text", "search", "search_records", "execute_code", "process_batch", "sample_text", "list_client_roots", "multi_content", "generate_dpi_spec", "dispatch_action", "dispatch_command", "projected_lookup", "projected_status"},
 		MultiContent:                   NewMultiContentHandler(endpoints.MultiContent, mux, decoder, encoder, errhandler),
 		ProcessBatch:                   NewProcessBatchHandler(endpoints.ProcessBatch, mux, decoder, encoder, errhandler),
 		ProjectedLookup:                NewProjectedLookupHandler(endpoints.ProjectedLookup, mux, decoder, encoder, errhandler),
@@ -312,6 +315,11 @@ func (s *Server) processRequest(ctx context.Context, r *http.Request, req *jsonr
 		if err := s.SampleText(ctx, r, req, w); err != nil {
 			loomtransport.RequestObserverFromContext(ctx).Fail(loomtransport.ReasonHandlerError)
 			s.errhandler(ctx, w, fmt.Errorf("handler error for sample_text: %w", err))
+		}
+	case "list_client_roots":
+		if err := s.ListClientRoots(ctx, r, req, w); err != nil {
+			loomtransport.RequestObserverFromContext(ctx).Fail(loomtransport.ReasonHandlerError)
+			s.errhandler(ctx, w, fmt.Errorf("handler error for list_client_roots: %w", err))
 		}
 	case "multi_content":
 		if err := s.MultiContent(ctx, r, req, w); err != nil {
@@ -1366,6 +1374,59 @@ func NewSampleTextHandler(endpoint loom.Endpoint, mux loomhttp.Muxer, decoder fu
 		}
 		// Convert result to response body with proper JSON tags
 		body := NewSampleTextResponseBody(res.(*assistant.SampleTextResult))
+		response := jsonrpc.MakeSuccessResponse(id, body)
+		if err := encoder(ctx, w).Encode(response); err != nil {
+			loomtransport.RequestObserverFromContext(ctx).Fail(loomtransport.ReasonResponseWriteFailed)
+			errhandler(ctx, w, fmt.Errorf("failed to encode JSON-RPC response: %w", err))
+		}
+		return nil
+	}
+} // NewListClientRootsHandler creates a JSON-RPC handler which calls the
+// "assistant" service "list_client_roots" endpoint.
+func NewListClientRootsHandler(endpoint loom.Endpoint, mux loomhttp.Muxer, decoder func(*http.Request) loomhttp.Decoder, encoder func(context.Context, http.ResponseWriter) loomhttp.Encoder, errhandler func(context.Context, http.ResponseWriter, error)) func(ctx context.Context, r *http.Request, req *jsonrpc.RawRequest, w http.ResponseWriter) error {
+	return func(ctx context.Context, r *http.Request, req *jsonrpc.RawRequest, w http.ResponseWriter) error {
+		ctx = context.WithValue(ctx, loom.MethodKey, "list_client_roots")
+		ctx = context.WithValue(ctx, loom.ServiceKey, "assistant")
+
+		res, err := endpoint(ctx, nil)
+		if err != nil {
+			loomtransport.RequestObserverFromContext(ctx).Fail(loomtransport.ReasonHandlerError)
+			if req.HasID {
+				var en loom.LoomErrorNamer
+				if !errors.As(err, &en) {
+					code := jsonrpc.InternalError
+					var serviceError *loom.ServiceError
+					if errors.As(err, &serviceError) {
+						code = jsonrpcErrorCodeForServiceError(serviceError)
+					}
+					encodeJSONRPCError(ctx, w, req, code, loom.ErrorSafeMessage(err), jsonrpc.NewErrorData(err), encoder, errhandler)
+					return nil
+				}
+				switch en.LoomErrorName() {
+				case "invalid_params":
+					encodeJSONRPCError(ctx, w, req, jsonrpc.InvalidParams, loom.ErrorSafeMessage(err), jsonrpc.NewErrorData(err), encoder, errhandler)
+				case "method_not_found":
+					encodeJSONRPCError(ctx, w, req, jsonrpc.MethodNotFound, loom.ErrorSafeMessage(err), jsonrpc.NewErrorData(err), encoder, errhandler)
+				default:
+					code := jsonrpc.InternalError
+					var serviceError *loom.ServiceError
+					if errors.As(err, &serviceError) {
+						code = jsonrpcErrorCodeForServiceError(serviceError)
+					}
+					encodeJSONRPCError(ctx, w, req, code, loom.ErrorSafeMessage(err), jsonrpc.NewErrorData(err), encoder, errhandler)
+				}
+			} else {
+				errhandler(ctx, w, fmt.Errorf("endpoint error: %w", err))
+			}
+			return nil
+		}
+
+		id := req.ID
+		if !req.HasID {
+			return nil
+		}
+		// Convert result to response body with proper JSON tags
+		body := NewListClientRootsResponseBody(res.(*assistant.ListClientRootsResult))
 		response := jsonrpc.MakeSuccessResponse(id, body)
 		if err := encoder(ctx, w).Encode(response); err != nil {
 			loomtransport.RequestObserverFromContext(ctx).Fail(loomtransport.ReasonResponseWriteFailed)

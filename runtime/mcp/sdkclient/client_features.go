@@ -17,7 +17,8 @@ func WithClientFeatures(ctx context.Context, session *mcp.ServerSession) context
 		return ctx
 	}
 	ctx = mcpruntime.WithElicitor(ctx, sessionElicitor{session: session})
-	return mcpruntime.WithSampler(ctx, sessionSampler{session: session})
+	ctx = mcpruntime.WithSampler(ctx, sessionSampler{session: session})
+	return mcpruntime.WithRootLister(ctx, sessionRootLister{session: session})
 }
 
 type sessionElicitor struct {
@@ -25,6 +26,10 @@ type sessionElicitor struct {
 }
 
 type sessionSampler struct {
+	session *mcp.ServerSession
+}
+
+type sessionRootLister struct {
 	session *mcp.ServerSession
 }
 
@@ -86,4 +91,25 @@ func (s sessionSampler) Sample(ctx context.Context, req mcpruntime.SampleRequest
 		Model:      result.Model,
 		StopReason: result.StopReason,
 	}, nil
+}
+
+func (l sessionRootLister) ListRoots(ctx context.Context) ([]mcpruntime.Root, error) {
+	if l.session == nil {
+		return nil, mcpruntime.ErrRootListerUnavailable
+	}
+	result, err := l.session.ListRoots(ctx, nil)
+	if err != nil {
+		return nil, err
+	}
+	if result == nil {
+		return []mcpruntime.Root{}, nil
+	}
+	roots := make([]mcpruntime.Root, 0, len(result.Roots))
+	for _, root := range result.Roots {
+		if root == nil {
+			continue
+		}
+		roots = append(roots, mcpruntime.Root{URI: root.URI, Name: root.Name})
+	}
+	return roots, nil
 }

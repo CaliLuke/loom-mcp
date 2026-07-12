@@ -910,6 +910,12 @@ func (a *MCPAdapter) generatedToolCatalog() []*ToolInfo {
 		OutputSchema: json.RawMessage([]byte("{\"type\":\"object\",\"required\":[\"text\",\"model\",\"stop_reason\"],\"properties\":{\"model\":{\"type\":\"string\",\"description\":\"Model selected by the client\"},\"stop_reason\":{\"type\":\"string\",\"description\":\"Reason sampling stopped\"},\"text\":{\"type\":\"string\",\"description\":\"Sampled text\"}},\"additionalProperties\":false}")),
 		Title:        stringPtr("Sample Text"),
 	}, &ToolInfo{
+		Description:  stringPtr("List filesystem roots exposed by the connected MCP client"),
+		InputSchema:  json.RawMessage([]byte("{\"type\":\"object\",\"properties\":{},\"additionalProperties\":false}")),
+		Name:         "list_client_roots",
+		OutputSchema: json.RawMessage([]byte("{\"type\":\"object\",\"required\":[\"roots\"],\"properties\":{\"roots\":{\"type\":\"array\",\"description\":\"Client filesystem roots\",\"items\":{\"type\":\"object\",\"required\":[\"uri\"],\"properties\":{\"name\":{\"type\":\"string\",\"description\":\"Optional display name\"},\"uri\":{\"type\":\"string\",\"description\":\"Root file URI\"}},\"additionalProperties\":false}}},\"additionalProperties\":false}")),
+		Title:        stringPtr("List Client Roots"),
+	}, &ToolInfo{
 		Description:  stringPtr("Return multiple content items"),
 		InputSchema:  json.RawMessage([]byte("{\"type\":\"object\",\"required\":[\"count\"],\"properties\":{\"count\":{\"type\":\"integer\",\"description\":\"Number of content items to return\"}},\"additionalProperties\":false}")),
 		Name:         "multi_content",
@@ -988,6 +994,8 @@ func isGeneratedToolName(name string) bool {
 	case "process_batch":
 		return true
 	case "sample_text":
+		return true
+	case "list_client_roots":
 		return true
 	case "multi_content":
 		return true
@@ -2282,6 +2290,25 @@ func (a *MCPAdapter) executeRealTool(ctx context.Context, p *ToolsCallPayload, s
 			}
 		}
 		result, err := a.service.SampleText(ctx, payload)
+		if err != nil {
+			return true, a.sendToolError(ctx, stream, p.Name, err)
+		}
+		structuredContent, serr := json.Marshal(result)
+		if serr != nil {
+			return false, serr
+		}
+		s := string(structuredContent)
+		final := &ToolsCallResult{
+			Content:           []*ContentItem{buildContentItem(a, s)},
+			StructuredContent: structuredContent,
+		}
+		a.log(ctx, "response", map[string]any{
+			"method": "tools/call",
+			"name":   p.Name,
+		})
+		return false, stream.SendAndClose(ctx, final)
+	case "list_client_roots":
+		result, err := a.service.ListClientRoots(ctx)
 		if err != nil {
 			return true, a.sendToolError(ctx, stream, p.Name, err)
 		}

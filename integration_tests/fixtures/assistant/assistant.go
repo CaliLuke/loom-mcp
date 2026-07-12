@@ -154,6 +154,20 @@ func (s *assistantsrvc) SampleText(ctx context.Context, p *assistant.SampleTextP
 	}, nil
 }
 
+// List filesystem roots exposed by the connected MCP client.
+func (s *assistantsrvc) ListClientRoots(ctx context.Context) (*assistant.ListClientRootsResult, error) {
+	roots, err := mcpruntime.ListRoots(ctx)
+	if err != nil {
+		return nil, err
+	}
+	result := &assistant.ListClientRootsResult{Roots: make([]*assistant.ClientRoot, 0, len(roots))}
+	for _, root := range roots {
+		name := root.Name
+		result.Roots = append(result.Roots, &assistant.ClientRoot{URI: root.URI, Name: &name})
+	}
+	return result, nil
+}
+
 // Search knowledge base
 func (s *assistantsrvc) Search(ctx context.Context, p *assistant.SearchPayload) (res *assistant.SearchResult, err error) {
 	res = &assistant.SearchResult{Results: []string{"checkout-screen.md", "design-system.md"}}

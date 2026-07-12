@@ -131,6 +131,21 @@ type SampleTextResponseBodyResponseBody struct {
 	StopReason *string `form:"stop_reason,omitempty" json:"stop_reason,omitempty" xml:"stop_reason,omitempty"`
 }
 
+// ListClientRootsResponseBodyResponseBody is used to define fields on response
+// body types.
+type ListClientRootsResponseBodyResponseBody struct {
+	// Client filesystem roots
+	Roots []*ClientRootResponseBody `form:"roots,omitempty" json:"roots,omitempty" xml:"roots,omitempty"`
+}
+
+// ClientRootResponseBody is used to define fields on response body types.
+type ClientRootResponseBody struct {
+	// Root file URI
+	URI *string `form:"uri,omitempty" json:"uri,omitempty" xml:"uri,omitempty"`
+	// Optional display name
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+}
+
 // MultiContentResponseBodyResponseBody is used to define fields on response
 // body types.
 type MultiContentResponseBodyResponseBody struct {
@@ -618,6 +633,22 @@ func NewSampleTextResultOK(body *SampleTextResponseBody) *assistant.SampleTextRe
 		Text:       *body.Text,
 		Model:      *body.Model,
 		StopReason: *body.StopReason,
+	}
+
+	return v
+}
+
+// NewListClientRootsResultOK builds a "assistant" service "list_client_roots"
+// endpoint result from a HTTP "OK" response.
+func NewListClientRootsResultOK(body *ListClientRootsResponseBody) *assistant.ListClientRootsResult {
+	v := &assistant.ListClientRootsResult{}
+	v.Roots = make([]*assistant.ClientRoot, len(body.Roots))
+	for i, val := range body.Roots {
+		if val == nil {
+			v.Roots[i] = nil
+			continue
+		}
+		v.Roots[i] = unmarshalClientRootResponseBodyToAssistantClientRoot(val)
 	}
 
 	return v

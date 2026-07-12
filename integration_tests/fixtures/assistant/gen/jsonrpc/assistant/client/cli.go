@@ -23,7 +23,7 @@ func BuildConversationHistoryPayload(assistantConversationHistoryBody string) (*
 	{
 		err = json.Unmarshal([]byte(assistantConversationHistoryBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"flag\": false,\n      \"limit\": 9042657523440458523,\n      \"nums\": [\n         0.7832817593067992,\n         0.6323736566189988\n      ]\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"flag\": false,\n      \"limit\": 2425083957263293585,\n      \"nums\": [\n         0.006621423747813566,\n         0.9103062493372978,\n         0.07492398785059712\n      ]\n   }'")
 		}
 	}
 	v := &assistant.ConversationHistoryPayload{
@@ -46,7 +46,7 @@ func BuildGeneratePromptsPayload(assistantGeneratePromptsBody string) (*assistan
 	{
 		err = json.Unmarshal([]byte(assistantGeneratePromptsBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"context\": \"Id quasi eius ut omnis omnis qui.\",\n      \"task\": \"Quod itaque rerum ea nobis itaque et.\"\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"context\": \"Laudantium enim quos repudiandae ea.\",\n      \"task\": \"Illum blanditiis commodi impedit doloribus.\"\n   }'")
 		}
 	}
 	v := &assistant.GeneratePromptsPayload{
@@ -63,7 +63,7 @@ func BuildBuildFigmaImplementationPromptPayload(assistantBuildFigmaImplementatio
 	{
 		err = json.Unmarshal([]byte(assistantBuildFigmaImplementationPromptBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"design_tokens_uri\": \"Omnis ad tempora dolorum.\",\n      \"dpi_json\": \"Laudantium enim quos repudiandae ea.\",\n      \"framework\": \"jetpack-compose\",\n      \"screen_title\": \"Voluptatem accusamus quibusdam suscipit officiis error.\"\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"design_tokens_uri\": \"Mollitia tempore voluptatem accusantium maxime sint.\",\n      \"dpi_json\": \"In delectus ipsum dolorem adipisci.\",\n      \"framework\": \"jetpack-compose\",\n      \"screen_title\": \"Consequatur optio illum quidem autem deleniti voluptates.\"\n   }'")
 		}
 		if !(body.Framework == "react" || body.Framework == "swiftui" || body.Framework == "jetpack-compose") {
 			err = loom.MergeErrors(err, loom.InvalidEnumValueError("body.framework", body.Framework, []any{"react", "swiftui", "jetpack-compose"}))
@@ -88,7 +88,7 @@ func BuildSendNotificationPayload(assistantSendNotificationBody string) (*assist
 	{
 		err = json.Unmarshal([]byte(assistantSendNotificationBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"data\": \"Aut ducimus alias velit in magni accusamus.\",\n      \"message\": \"Dolorem adipisci.\",\n      \"type\": \"Maxime sint quibusdam in delectus.\"\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"data\": \"Non qui magnam.\",\n      \"message\": \"Ut magni saepe eveniet.\",\n      \"type\": \"Explicabo dolores ea non.\"\n   }'")
 		}
 	}
 	v := &assistant.SendNotificationPayload{
@@ -106,7 +106,7 @@ func BuildAnalyzeSentimentPayload(assistantAnalyzeSentimentBody string) (*assist
 	{
 		err = json.Unmarshal([]byte(assistantAnalyzeSentimentBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"text\": \"Sint odio eum.\"\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"text\": \"Modi rerum nihil vitae voluptate inventore.\"\n   }'")
 		}
 	}
 	v := &assistant.AnalyzeSentimentPayload{
@@ -122,7 +122,7 @@ func BuildExtractKeywordsPayload(assistantExtractKeywordsBody string) (*assistan
 	{
 		err = json.Unmarshal([]byte(assistantExtractKeywordsBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"text\": \"Ut magni saepe eveniet.\"\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"text\": \"Sit officia quia pariatur.\"\n   }'")
 		}
 	}
 	v := &assistant.ExtractKeywordsPayload{
@@ -138,7 +138,7 @@ func BuildSummarizeTextPayload(assistantSummarizeTextBody string) (*assistant.Su
 	{
 		err = json.Unmarshal([]byte(assistantSummarizeTextBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"text\": \"Officia quia pariatur doloribus quis qui.\"\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"text\": \"Nihil saepe quia magnam eos accusamus sed.\"\n   }'")
 		}
 	}
 	v := &assistant.SummarizeTextPayload{
@@ -154,7 +154,7 @@ func BuildSearchPayload(assistantSearchBody string) (*assistant.SearchPayload, e
 	{
 		err = json.Unmarshal([]byte(assistantSearchBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"limit\": 3307900884704318930,\n      \"query\": \"Voluptatum aut quae expedita delectus vero.\"\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"limit\": 4806484344068634072,\n      \"query\": \"Temporibus et.\"\n   }'")
 		}
 	}
 	v := &assistant.SearchPayload{
@@ -171,7 +171,7 @@ func BuildSearchRecordsPayload(assistantSearchRecordsBody string) (*assistant.Se
 	{
 		err = json.Unmarshal([]byte(assistantSearchRecordsBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"limit\": 6796685280326878956,\n      \"query\": \"Omnis id quis perferendis sit.\"\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"limit\": 3152654371715043705,\n      \"query\": \"Eum molestias omnis error sequi et sint.\"\n   }'")
 		}
 	}
 	v := &assistant.SearchRecordsPayload{
@@ -188,7 +188,7 @@ func BuildExecuteCodePayload(assistantExecuteCodeBody string) (*assistant.Execut
 	{
 		err = json.Unmarshal([]byte(assistantExecuteCodeBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"code\": \"Neque et qui architecto placeat.\",\n      \"language\": \"javascript\"\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"code\": \"Occaecati quis molestias dignissimos.\",\n      \"language\": \"javascript\"\n   }'")
 		}
 		if !(body.Language == "python" || body.Language == "javascript") {
 			err = loom.MergeErrors(err, loom.InvalidEnumValueError("body.language", body.Language, []any{"python", "javascript"}))
@@ -211,7 +211,7 @@ func BuildProcessBatchPayload(assistantProcessBatchBody string) (*assistant.Proc
 	{
 		err = json.Unmarshal([]byte(assistantProcessBatchBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"blob\": \"Omnis mollitia.\",\n      \"format\": \"json\",\n      \"items\": [\n         \"Occaecati quis molestias dignissimos.\",\n         \"Officiis dignissimos placeat.\"\n      ],\n      \"mimeType\": \"Dolore aut perferendis perferendis ad dolorem quo.\",\n      \"uri\": \"Iste ut.\"\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"blob\": \"Quam eveniet mollitia.\",\n      \"format\": \"text\",\n      \"items\": [\n         \"Omnis mollitia.\",\n         \"Iste ut.\",\n         \"Dolore aut perferendis perferendis ad dolorem quo.\"\n      ],\n      \"mimeType\": \"Non dolorum cupiditate consequuntur voluptatem eos ipsam.\",\n      \"uri\": \"Sunt voluptas minus aut.\"\n   }'")
 		}
 		if body.Items == nil {
 			err = loom.MergeErrors(err, loom.MissingFieldError("items", "body"))
@@ -249,7 +249,7 @@ func BuildSampleTextPayload(assistantSampleTextBody string) (*assistant.SampleTe
 	{
 		err = json.Unmarshal([]byte(assistantSampleTextBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"max_tokens\": 2008723910822965449,\n      \"prompt\": \"Quam eveniet mollitia.\",\n      \"system_prompt\": \"Sunt voluptas minus aut.\"\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"max_tokens\": 2166755631438416665,\n      \"prompt\": \"Incidunt quaerat quasi aspernatur.\",\n      \"system_prompt\": \"Ratione unde aut eum necessitatibus.\"\n   }'")
 		}
 	}
 	v := &assistant.SampleTextPayload{
@@ -267,7 +267,7 @@ func BuildMultiContentPayload(assistantMultiContentBody string) (*assistant.Mult
 	{
 		err = json.Unmarshal([]byte(assistantMultiContentBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"count\": 3813929642902452342\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"count\": 6644203216228748672\n   }'")
 		}
 	}
 	v := &assistant.MultiContentPayload{
@@ -283,7 +283,7 @@ func BuildGenerateDpiSpecPayload(assistantGenerateDpiSpecBody string) (*assistan
 	{
 		err = json.Unmarshal([]byte(assistantGenerateDpiSpecBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"density\": \"compact\",\n      \"include_dev_notes\": false,\n      \"platform\": \"ios\",\n      \"primary_cta\": \"Doloribus omnis dolore atque.\",\n      \"screen_title\": \"Vel aspernatur accusamus.\",\n      \"sections\": [\n         \"Ipsam esse magnam iusto.\",\n         \"Molestiae autem hic vitae dolore maiores vero.\"\n      ]\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"density\": \"compact\",\n      \"include_dev_notes\": true,\n      \"platform\": \"ios\",\n      \"primary_cta\": \"Voluptatum rerum voluptas eum saepe.\",\n      \"screen_title\": \"Quam delectus enim.\",\n      \"sections\": [\n         \"Sed ut distinctio et porro sunt repellat.\",\n         \"Non ducimus deleniti et minus tempora.\"\n      ]\n   }'")
 		}
 		if body.Sections == nil {
 			err = loom.MergeErrors(err, loom.MissingFieldError("sections", "body"))
@@ -323,7 +323,7 @@ func BuildDispatchActionPayload(assistantDispatchActionBody string) (*assistant.
 	{
 		err = json.Unmarshal([]byte(assistantDispatchActionBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"request\": {\n         \"name\": \"Quidem quod.\"\n      }\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"request\": {\n         \"limit\": 2731652833477942728\n      }\n   }'")
 		}
 		if body.Request.Kind() == "" {
 			err = loom.MergeErrors(err, loom.MissingFieldError("request", "body"))
@@ -362,7 +362,7 @@ func BuildDispatchCommandPayload(assistantDispatchCommandBody string) (*assistan
 	{
 		err = json.Unmarshal([]byte(assistantDispatchCommandBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"command\": {\n         \"label\": \"Occaecati aut consectetur cum eos quia.\"\n      }\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"command\": {\n         \"count\": 8633211502288624226\n      }\n   }'")
 		}
 		if body.Command.Kind() == "" {
 			err = loom.MergeErrors(err, loom.MissingFieldError("command", "body"))
@@ -401,7 +401,7 @@ func BuildProjectedLookupPayload(assistantProjectedLookupBody string) (*assistan
 	{
 		err = json.Unmarshal([]byte(assistantProjectedLookupBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"query\": \"Vero optio ea molestiae quia perferendis iste.\"\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"query\": \"Officia vel.\"\n   }'")
 		}
 	}
 	v := &assistant.ProjectedLookupPayload{

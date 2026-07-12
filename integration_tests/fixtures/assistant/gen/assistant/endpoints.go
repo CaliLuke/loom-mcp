@@ -30,6 +30,7 @@ type Endpoints struct {
 	ExecuteCode                    loom.Endpoint
 	ProcessBatch                   loom.Endpoint
 	SampleText                     loom.Endpoint
+	ListClientRoots                loom.Endpoint
 	MultiContent                   loom.Endpoint
 	GenerateDpiSpec                loom.Endpoint
 	DispatchAction                 loom.Endpoint
@@ -56,6 +57,7 @@ func NewEndpoints(s Service) *Endpoints {
 		ExecuteCode:                    NewExecuteCodeEndpoint(s),
 		ProcessBatch:                   NewProcessBatchEndpoint(s),
 		SampleText:                     NewSampleTextEndpoint(s),
+		ListClientRoots:                NewListClientRootsEndpoint(s),
 		MultiContent:                   NewMultiContentEndpoint(s),
 		GenerateDpiSpec:                NewGenerateDpiSpecEndpoint(s),
 		DispatchAction:                 NewDispatchActionEndpoint(s),
@@ -82,6 +84,7 @@ func (e *Endpoints) Use(m func(loom.Endpoint) loom.Endpoint) {
 	e.ExecuteCode = m(e.ExecuteCode)
 	e.ProcessBatch = m(e.ProcessBatch)
 	e.SampleText = m(e.SampleText)
+	e.ListClientRoots = m(e.ListClientRoots)
 	e.MultiContent = m(e.MultiContent)
 	e.GenerateDpiSpec = m(e.GenerateDpiSpec)
 	e.DispatchAction = m(e.DispatchAction)
@@ -219,6 +222,14 @@ func NewSampleTextEndpoint(s Service) loom.Endpoint {
 	return func(ctx context.Context, req any) (any, error) {
 		p := req.(*SampleTextPayload)
 		return s.SampleText(ctx, p)
+	}
+}
+
+// NewListClientRootsEndpoint returns an endpoint function that calls the
+// method "list_client_roots" of service "assistant".
+func NewListClientRootsEndpoint(s Service) loom.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		return s.ListClientRoots(ctx)
 	}
 }
 

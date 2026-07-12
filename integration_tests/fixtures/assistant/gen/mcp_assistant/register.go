@@ -376,6 +376,50 @@ var AssistantAssistantMcpToolsetToolSpecs = []tools.ToolSpec{tools.ToolSpec{
 	Service: "assistant",
 	Toolset: "assistant.assistant-mcp",
 }, tools.ToolSpec{
+	Description: "List filesystem roots exposed by the connected MCP client",
+	Meta:        nil,
+	Name:        "list_client_roots",
+	Payload: tools.TypeSpec{
+		Codec: tools.JSONCodec[any]{
+			FromJSON: func(data []byte) (any, error) {
+				if len(data) == 0 {
+					return nil, nil
+				}
+				var out any
+				if err := json.Unmarshal(data, &out); err != nil {
+					return nil, err
+				}
+				return out, nil
+			},
+			ToJSON: func(v any) ([]byte, error) {
+				return json.Marshal(v)
+			},
+		},
+		Name:   "any",
+		Schema: []byte("{}"),
+	},
+	Result: tools.TypeSpec{
+		Codec: tools.JSONCodec[any]{
+			FromJSON: func(data []byte) (any, error) {
+				if len(data) == 0 {
+					return nil, nil
+				}
+				var out any
+				if err := json.Unmarshal(data, &out); err != nil {
+					return nil, err
+				}
+				return out, nil
+			},
+			ToJSON: func(v any) ([]byte, error) {
+				return json.Marshal(v)
+			},
+		},
+		Name:   "*assistant.ListClientRootsResult",
+		Schema: nil,
+	},
+	Service: "assistant",
+	Toolset: "assistant.assistant-mcp",
+}, tools.ToolSpec{
 	Description: "Return multiple content items",
 	Meta:        nil,
 	Name:        "multi_content",
@@ -764,6 +808,9 @@ func AssistantAssistantMcpToolsetRetryHint(toolName tools.Ident, err error) *pla
 			case "sample_text":
 				schemaJSON = "{\"type\":\"object\",\"required\":[\"prompt\",\"max_tokens\"],\"properties\":{\"max_tokens\":{\"type\":\"integer\",\"description\":\"Maximum number of tokens\"},\"prompt\":{\"type\":\"string\",\"description\":\"User prompt to sample\"},\"system_prompt\":{\"type\":\"string\",\"description\":\"Optional system prompt\"}},\"additionalProperties\":false}"
 				example = "{\"max_tokens\":0,\"prompt\":\"example\"}"
+			case "list_client_roots":
+				schemaJSON = "{}"
+				example = "{}"
 			case "multi_content":
 				schemaJSON = "{\"type\":\"object\",\"required\":[\"count\"],\"properties\":{\"count\":{\"type\":\"integer\",\"description\":\"Number of content items to return\"}},\"additionalProperties\":false}"
 				example = "{\"count\":0}"

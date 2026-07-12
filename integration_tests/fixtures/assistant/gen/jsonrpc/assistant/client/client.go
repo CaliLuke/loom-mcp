@@ -371,6 +371,28 @@ func (c *Client) SampleText() loom.Endpoint {
 		}
 		return decodeResponse(resp)
 	}
+} // ListClientRoots returns an endpoint that makes JSON-RPC requests to the
+// assistant service list_client_roots method.
+func (c *Client) ListClientRoots() loom.Endpoint {
+	var (
+		encodeRequest  = EncodeListClientRootsRequest(c.encoder)
+		decodeResponse = DecodeListClientRootsResponse(c.decoder, c.RestoreResponseBody)
+	)
+
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildListClientRootsRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		if err := encodeRequest(req, v); err != nil {
+			return nil, err
+		}
+		resp, err := c.Doer.Do(req)
+		if err != nil {
+			return nil, loomhttp.ErrRequestError("assistant", "list_client_roots", err)
+		}
+		return decodeResponse(resp)
+	}
 } // MultiContent returns an endpoint that makes JSON-RPC requests to the
 // assistant service multi_content method.
 func (c *Client) MultiContent() loom.Endpoint {

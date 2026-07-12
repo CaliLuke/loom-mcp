@@ -131,6 +131,21 @@ type SampleTextResponseBodyResponseBody struct {
 	StopReason string `form:"stop_reason" json:"stop_reason" xml:"stop_reason"`
 }
 
+// ListClientRootsResponseBodyResponseBody is used to define fields on response
+// body types.
+type ListClientRootsResponseBodyResponseBody struct {
+	// Client filesystem roots
+	Roots []*ClientRootResponseBody `form:"roots" json:"roots" xml:"roots"`
+}
+
+// ClientRootResponseBody is used to define fields on response body types.
+type ClientRootResponseBody struct {
+	// Root file URI
+	URI string `form:"uri" json:"uri" xml:"uri"`
+	// Optional display name
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+}
+
 // MultiContentResponseBodyResponseBody is used to define fields on response
 // body types.
 type MultiContentResponseBodyResponseBody struct {
@@ -390,6 +405,25 @@ func NewSampleTextResponseBody(res *assistant.SampleTextResult) *SampleTextRespo
 		Text:       res.Text,
 		Model:      res.Model,
 		StopReason: res.StopReason,
+	}
+	return body
+}
+
+// NewListClientRootsResponseBody builds the HTTP response body from the result
+// of the "list_client_roots" endpoint of the "assistant" service.
+func NewListClientRootsResponseBody(res *assistant.ListClientRootsResult) *ListClientRootsResponseBody {
+	body := &ListClientRootsResponseBody{}
+	if res.Roots != nil {
+		body.Roots = make([]*ClientRootResponseBody, len(res.Roots))
+		for i, val := range res.Roots {
+			if val == nil {
+				body.Roots[i] = nil
+				continue
+			}
+			body.Roots[i] = marshalAssistantClientRootToClientRootResponseBody(val)
+		}
+	} else {
+		body.Roots = []*ClientRootResponseBody{}
 	}
 	return body
 }

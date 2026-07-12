@@ -13,6 +13,8 @@ func TestWithClientFeaturesIgnoresNilSession(t *testing.T) {
 
 	_, hasElicitor := mcpruntime.ElicitorFromContext(ctx)
 	_, hasSampler := mcpruntime.SamplerFromContext(ctx)
+	_, hasRootLister := mcpruntime.RootListerFromContext(ctx)
 	require.False(t, hasElicitor)
 	require.False(t, hasSampler)
+	require.False(t, hasRootLister)
 }

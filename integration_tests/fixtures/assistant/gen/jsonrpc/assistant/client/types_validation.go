@@ -76,6 +76,22 @@ func ValidateSampleTextResponseBody(body *SampleTextResponseBody) (err error) {
 	return
 }
 
+// ValidateListClientRootsResponseBody runs the validations defined on
+// list_client_roots_response_body
+func ValidateListClientRootsResponseBody(body *ListClientRootsResponseBody) (err error) {
+	if body.Roots == nil {
+		err = loom.MergeErrors(err, loom.MissingFieldError("roots", "body"))
+	}
+	for _, e := range body.Roots {
+		if e != nil {
+			if err2 := ValidateClientRootResponseBody(e); err2 != nil {
+				err = loom.MergeErrors(err, err2)
+			}
+		}
+	}
+	return
+}
+
 // ValidateGenerateDpiSpecResponseBody runs the validations defined on
 // generate_dpi_spec_response_body
 func ValidateGenerateDpiSpecResponseBody(body *GenerateDpiSpecResponseBody) (err error) {
@@ -257,6 +273,31 @@ func ValidateSampleTextResponseBodyResponseBody(body *SampleTextResponseBodyResp
 	}
 	if body.StopReason == nil {
 		err = loom.MergeErrors(err, loom.MissingFieldError("stop_reason", "body"))
+	}
+	return
+}
+
+// ValidateListClientRootsResponseBodyResponseBody runs the validations defined
+// on list_client_roots_response_bodyResponseBody
+func ValidateListClientRootsResponseBodyResponseBody(body *ListClientRootsResponseBodyResponseBody) (err error) {
+	if body.Roots == nil {
+		err = loom.MergeErrors(err, loom.MissingFieldError("roots", "body"))
+	}
+	for _, e := range body.Roots {
+		if e != nil {
+			if err2 := ValidateClientRootResponseBody(e); err2 != nil {
+				err = loom.MergeErrors(err, err2)
+			}
+		}
+	}
+	return
+}
+
+// ValidateClientRootResponseBody runs the validations defined on
+// ClientRootResponseBody
+func ValidateClientRootResponseBody(body *ClientRootResponseBody) (err error) {
+	if body.URI == nil {
+		err = loom.MergeErrors(err, loom.MissingFieldError("uri", "body"))
 	}
 	return
 }
