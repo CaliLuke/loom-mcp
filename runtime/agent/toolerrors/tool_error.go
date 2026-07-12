@@ -31,8 +31,12 @@ func New(message string) *ToolError {
 // converted into a ToolError chain so error metadata survives serialization while still
 // supporting errors.Is/As through Unwrap.
 func NewWithCause(message string, cause error) *ToolError {
-	if message == "" && cause != nil {
-		message = cause.Error()
+	if message == "" {
+		if cause != nil {
+			message = cause.Error()
+		} else {
+			message = "tool error"
+		}
 	}
 	return &ToolError{
 		Message: message,
@@ -45,8 +49,9 @@ func FromError(err error) *ToolError {
 	if err == nil {
 		return nil
 	}
-	var te *ToolError
-	if errors.As(err, &te) {
+	// A direct assertion is intentional: errors.As would skip wrapper messages and
+	// discard the diagnostic context this conversion is required to preserve.
+	if te, ok := err.(*ToolError); ok { //nolint:errorlint
 		return te
 	}
 	return &ToolError{
