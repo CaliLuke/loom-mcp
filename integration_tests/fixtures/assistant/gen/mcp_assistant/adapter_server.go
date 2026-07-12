@@ -51,9 +51,6 @@ type MCPAdapter struct {
 	errorCounter        metric.Int64Counter
 	durationHistogram   metric.Float64Histogram
 	promptProvider      PromptProvider
-	// Minimal subscription registry keyed by resource URI
-	subs   map[string]int
-	subsMu sync.Mutex
 	// Broadcaster for server-initiated events (notifications/resources)
 	broadcaster mcpruntime.Broadcaster
 	// resourceNameToURI holds DSL-derived mapping for policy and lookups
@@ -190,7 +187,7 @@ func NewMCPAdapter(service assistant.Service, promptProvider PromptProvider, opt
 	callCounter, errorCounter, durationHistogram := defaultMCPAdapterMetrics(opts, telemetryName)
 	// Build name->URI map from generated resources
 	nameToURI := map[string]string{"documents": "doc://list", "system_info": "system://info", "conversation_history": "conversation://history", "figma_design_system": "figma://design-system/mobile-checkout"}
-	return &MCPAdapter{service: service, initializedSessions: make(map[string]struct{}), sessionPrincipals: make(map[string]string), opts: opts, tracer: tracer, callCounter: callCounter, errorCounter: errorCounter, durationHistogram: durationHistogram, promptProvider: promptProvider, subs: make(map[string]int), broadcaster: bc, resourceNameToURI: nameToURI}
+	return &MCPAdapter{service: service, initializedSessions: make(map[string]struct{}), sessionPrincipals: make(map[string]string), opts: opts, tracer: tracer, callCounter: callCounter, errorCounter: errorCounter, durationHistogram: durationHistogram, promptProvider: promptProvider, broadcaster: bc, resourceNameToURI: nameToURI}
 }
 func defaultMCPAdapterDropIfSlow(value any) bool {
 	switch v := value.(type) {

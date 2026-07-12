@@ -200,6 +200,7 @@ func generateMCPServiceCode(genpkg string, root *expr.RootExpr, mcpService *expr
 	// Add client-side JSON-RPC for MCP service so adapters can depend on it
 	files = append(files, jsonrpccodegen.ClientTypeFiles(genpkg, httpServices)...)
 	files = append(files, jsonrpccodegen.ClientFiles(genpkg, httpServices)...)
+	files = pruneMCPJSONRPCMixedServerDeadCode(files)
 
 	if err := applyMCPPolicyHeadersToJSONRPCMount(files, protocolVersion); err != nil {
 		return nil, err
@@ -220,6 +221,65 @@ func generateMCPServiceCode(genpkg string, root *expr.RootExpr, mcpService *expr
 		return nil, err
 	}
 	return files, nil
+}
+
+func pruneMCPJSONRPCMixedServerDeadCode(files []*codegen.File) []*codegen.File {
+	mixed := false
+	for _, file := range files {
+		if file == nil || filepath.Base(filepath.Dir(filepath.ToSlash(file.Path))) != "server" || filepath.Base(file.Path) != "server.go" {
+			continue
+		}
+		for _, section := range file.AllSections() {
+			if section.SectionName() == "jsonrpc-mixed-server-handler" {
+				mixed = true
+				break
+			}
+		}
+	}
+	if !mixed {
+		return files
+	}
+
+	const impossibleToolOpen = `		if r.Method == http.MethodGet && req.Method == "events/stream" {
+			if err := strm.open(); err != nil {
+				return err
+			}
+		}
+`
+	pruned := make([]*codegen.File, 0, len(files))
+	for _, file := range files {
+		if file == nil {
+			continue
+		}
+		serverDir := filepath.Base(filepath.Dir(filepath.ToSlash(file.Path))) == "server"
+		if serverDir && filepath.Base(file.Path) == "sse.go" {
+			continue
+		}
+		if !serverDir || filepath.Base(file.Path) != "server.go" {
+			pruned = append(pruned, file)
+			continue
+		}
+
+		sections := file.AllSections()
+		updated := make([]codegen.Section, 0, len(sections))
+		for _, section := range sections {
+			if section.SectionName() == "jsonrpc-sse-server-handler" {
+				continue
+			}
+			source, ok := renderedSectionSource(section)
+			if !ok || !strings.Contains(source, "func NewToolsCallHandler(") {
+				updated = append(updated, section)
+				continue
+			}
+			updated = append(updated, &codegen.RawSection{
+				Name:   section.SectionName(),
+				Source: strings.Replace(source, impossibleToolOpen, "", 1),
+			})
+		}
+		file.SetSections(updated)
+		pruned = append(pruned, file)
+	}
+	return pruned
 }
 
 // applyMCPPolicyHeadersToJSONRPCMount replaces the JSON-RPC server mount section

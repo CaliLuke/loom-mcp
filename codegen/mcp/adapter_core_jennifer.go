@@ -47,9 +47,11 @@ func emitAdapterStruct(stmt *jen.Statement, data *AdapterData) {
 		if len(data.StaticPrompts) > 0 || len(data.DynamicPrompts) > 0 {
 			g.Id("promptProvider").Id("PromptProvider")
 		}
-		g.Comment("Minimal subscription registry keyed by resource URI")
-		g.Id("subs").Map(jen.String()).Int()
-		g.Id("subsMu").Qual("sync", "Mutex")
+		if data.HasWatchableResources {
+			g.Comment("Minimal subscription registry keyed by resource URI")
+			g.Id("subs").Map(jen.String()).Int()
+			g.Id("subsMu").Qual("sync", "Mutex")
+		}
 		g.Comment("Broadcaster for server-initiated events (notifications/resources)")
 		g.Id("broadcaster").Id("mcpruntime").Dot("Broadcaster")
 		g.Comment("resourceNameToURI holds DSL-derived mapping for policy and lookups")
@@ -254,7 +256,9 @@ func emitAdapterConstructor(stmt *jen.Statement, data *AdapterData) {
 			if hasPrompts {
 				vals.Id("promptProvider").Op(":").Id("promptProvider")
 			}
-			vals.Id("subs").Op(":").Make(jen.Map(jen.String()).Int())
+			if data.HasWatchableResources {
+				vals.Id("subs").Op(":").Make(jen.Map(jen.String()).Int())
+			}
 			vals.Id("broadcaster").Op(":").Id("bc")
 			vals.Id("resourceNameToURI").Op(":").Id("nameToURI")
 		}))

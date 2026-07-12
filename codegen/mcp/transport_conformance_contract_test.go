@@ -1,6 +1,7 @@
 package codegen
 
 import (
+	"bytes"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -75,6 +76,10 @@ func TestGenerate_ListDecodersAcceptOmittedParams(t *testing.T) {
 
 func TestGenerate_StreamFinalResponseUsesMessageEvent(t *testing.T) {
 	files := generateTransportConformanceFixture(t)
+	for _, generated := range files {
+		require.NotEqual(t, filepath.Join(gcodegen.Gendir, "jsonrpc", "mcp_assistant", "server", "sse.go"), generated.Path,
+			"mixed MCP transports must not retain the unreachable standalone SSE implementation")
+	}
 	file := findGeneratedFile(t, files, filepath.Join(gcodegen.Gendir, "jsonrpc", "mcp_assistant", "server", "stream.go"))
 	rendered := renderGeneratedFile(t, file)
 
@@ -84,6 +89,17 @@ func TestGenerate_StreamFinalResponseUsesMessageEvent(t *testing.T) {
 	require.Contains(t, rendered, `fmt.Fprintf(s.w, "id: %s\ndata:\n\n", mcpruntime.NewSessionID())`)
 	require.Equal(t, 2, strings.Count(rendered, `fmt.Fprint(s.w, "event: retry\nretry: 1000\ndata:\n\n")`),
 		"each generated endpoint stream must publish the reconnect delay")
+
+	serverFile := findGeneratedFile(t, files, filepath.Join(gcodegen.Gendir, "jsonrpc", "mcp_assistant", "server", "server.go"))
+	server := renderGeneratedFile(t, serverFile)
+	require.NotContains(t, server, "func (s *Server) handleSSE(")
+	require.Equal(t, 1, strings.Count(server, `r.Method == http.MethodGet && req.Method == "events/stream"`),
+		"only the live events/stream handler may open a GET stream")
+
+	adapterFile := findGeneratedFile(t, files, filepath.Join(gcodegen.Gendir, "mcp_assistant", "adapter_server.go"))
+	adapter := renderGeneratedFile(t, adapterFile)
+	require.NotContains(t, adapter, "subs map[string]int")
+	require.NotContains(t, adapter, "subsMu sync.Mutex")
 }
 
 func TestGenerate_IntermediateStreamsUseNamespacedNotificationMethod(t *testing.T) {
@@ -93,6 +109,18 @@ func TestGenerate_IntermediateStreamsUseNamespacedNotificationMethod(t *testing.
 
 	require.Contains(t, rendered, `"method":  "mcp_assistant/stream.event"`)
 	require.NotContains(t, rendered, `"method":  "tools/call"`)
+}
+
+func TestGenerate_WatchableResourcesRetainSubscriptionRegistry(t *testing.T) {
+	var rendered bytes.Buffer
+	err := adapterCoreSection(&AdapterData{
+		Package:               "servicepkg",
+		HasWatchableResources: true,
+	}).Write(&rendered)
+	require.NoError(t, err)
+	require.Contains(t, rendered.String(), "subs   map[string]int")
+	require.Contains(t, rendered.String(), "subsMu sync.Mutex")
+	require.Contains(t, rendered.String(), "subs: make(map[string]int)")
 }
 
 func TestGenerate_JSONRPCMountValidatesOrigin(t *testing.T) {
