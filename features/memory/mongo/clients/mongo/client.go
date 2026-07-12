@@ -122,7 +122,6 @@ func (c *client) AppendEvents(ctx context.Context, agentID, runID string, events
 		"$setOnInsert": bson.M{
 			fieldAgentID: agentID,
 			fieldRunID:   runID,
-			"events":     []eventDocument{},
 		},
 		"$set": bson.M{
 			"updated_at": now,

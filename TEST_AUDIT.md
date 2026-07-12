@@ -77,11 +77,11 @@ Finding IDs continue the `679fb76` numbering; each carries a status vs that base
 - **Impact:** The concrete adapter gaps from the audit are closed. The remaining risk is drift because the same observable contracts are distributed across provider-specific tests.
 - **Recommendation:** Replace this finding with a maintained provider checklist or shared case model before declaring Phase 5 complete; keep SDK-specific fixtures local to each adapter.
 
-### C-8: Mongo query syntax for prompt/memory stores never executes against real Mongo
-- **Severity:** medium · **Status:** still open (delta improved decode-side coverage only)
+### C-8: Prompt and memory Mongo contracts execute against real Mongo
+- **Severity:** medium · **Status:** resolved
 - **Confidence:** measured
-- **Evidence:** All four `clients/mongo/client_test.go` still fake-only (hand-rolled `fakeCollection`/`match()`); the only real-server test still covers runlog-append + session-transaction and skips without Docker (`clientinfra/mongo_driver_integration_test.go:122`). `features/runlog/mongo/store.go` still has zero tests. Delta improvement: `66b47c1` added a **real** `bson.Marshal/Unmarshal` round-trip test (`session/.../client_test.go:111-135`) and `NormalizeBSONValue` unit tests with real `bson.D`/`bson.A` — metadata normalization would now catch a real-BSON regression; query *filter* execution remains untested.
-- **Impact/Recommendation:** Unchanged.
+- **Evidence:** The Mongo 7 replica-set integration package now executes four real driver-v2 contracts: runlog append/dedup, session child-link transaction, prompt override precedence (session, label subset, global fallback, metadata/history), and memory append/load with nested BSON normalization. CI uses the existing LOOM_MCP_REQUIRE_DOCKER_TESTS switch so container startup failure is fatal rather than a skip. All four pass against Colima under race/shuffle in 11.1 s. The first memory run exposed C-23: Mongo rejected simultaneous setOnInsert and push updates to events; removing the redundant initialization fixed the real server contract.
+- **Impact/Recommendation:** Complete. Keep fast fake tests for branch detail and the real Mongo suite for query/update validity; any new Mongo-backed store must add at least one real round trip.
 
 ### C-9: Generated registry gRPC server/client adapter contract
 - **Severity:** medium · **Status:** resolved
@@ -373,6 +373,7 @@ Exit criterion: warm unit wall at or below 20 seconds, integration wall at or be
 
 | Finding | Exposing test | Root cause | Fix commit | Status |
 |---|---|---|---|---|
+| C-23 | TestMongoDriverV2MemoryRoundTrip | memory upsert updated events through both setOnInsert and push, which real Mongo rejects as a conflicting path | this change | fixed; four Mongo 7 contracts race/shuffle green |
 | C-22 | TestAnthropicStreamerRejectsEOFBeforeMessageStop | Anthropic stream EOF was treated as success without observing the required message_stop event | this change | fixed; partial streams fail closed |
 | C-21 | TestConsumeStreamErrorsAndAlwaysCloses | ConsumeStream discarded Streamer.Close errors on both EOF and receive-error paths | this change | fixed; close and receive errors remain discoverable |
 | C-20 | TestConsumeStreamAggregatesChunksAndEvents | planner usage aggregation omitted cache read/write token fields | this change | fixed; all numeric usage fields aggregate |

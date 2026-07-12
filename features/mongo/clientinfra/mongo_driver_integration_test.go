@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"os"
 	"strings"
 	"testing"
 	"time"
@@ -14,9 +15,13 @@ import (
 	mongodriver "go.mongodb.org/mongo-driver/v2/mongo"
 	"go.mongodb.org/mongo-driver/v2/mongo/options"
 
+	memoryclient "github.com/CaliLuke/loom-mcp/features/memory/mongo/clients/mongo"
+	promptclient "github.com/CaliLuke/loom-mcp/features/prompt/mongo/clients/mongo"
 	runlogclient "github.com/CaliLuke/loom-mcp/features/runlog/mongo/clients/mongo"
 	sessionclient "github.com/CaliLuke/loom-mcp/features/session/mongo/clients/mongo"
 	"github.com/CaliLuke/loom-mcp/runtime/agent/hooks"
+	"github.com/CaliLuke/loom-mcp/runtime/agent/memory"
+	"github.com/CaliLuke/loom-mcp/runtime/agent/prompt"
 	"github.com/CaliLuke/loom-mcp/runtime/agent/runlog"
 	"github.com/CaliLuke/loom-mcp/runtime/agent/session"
 )
@@ -103,6 +108,79 @@ func TestMongoDriverV2SessionLinkChildRunTransaction(t *testing.T) {
 	require.Equal(t, child.SessionID, storedChild.SessionID)
 }
 
+func TestMongoDriverV2PromptResolutionRoundTrip(t *testing.T) {
+	mongoClient, database := newMongoIntegrationClient(t)
+	client, err := promptclient.New(promptclient.Options{
+		Client:   mongoClient,
+		Database: database,
+		Timeout:  10 * time.Second,
+	})
+	require.NoError(t, err)
+
+	ctx := context.Background()
+	promptID := prompt.Ident("assistant.system")
+	require.NoError(t, client.Set(ctx, promptID, prompt.Scope{}, "global", map[string]string{"source": "global"}))
+	require.NoError(t, client.Set(ctx, promptID, prompt.Scope{Labels: map[string]string{"env": "prod"}}, "production", nil))
+	require.NoError(t, client.Set(ctx, promptID, prompt.Scope{SessionID: integrationSessionID, Labels: map[string]string{"env": "prod"}}, "session", nil))
+
+	override, err := client.Resolve(ctx, promptID, prompt.Scope{
+		SessionID: integrationSessionID,
+		Labels:    map[string]string{"env": "prod", "region": "us"},
+	})
+	require.NoError(t, err)
+	require.NotNil(t, override)
+	require.Equal(t, "session", override.Template)
+
+	override, err = client.Resolve(ctx, promptID, prompt.Scope{Labels: map[string]string{"env": "prod", "region": "us"}})
+	require.NoError(t, err)
+	require.NotNil(t, override)
+	require.Equal(t, "production", override.Template)
+
+	override, err = client.Resolve(ctx, promptID, prompt.Scope{})
+	require.NoError(t, err)
+	require.NotNil(t, override)
+	require.Equal(t, "global", override.Template)
+	require.Equal(t, "global", override.Metadata["source"])
+
+	history, err := client.History(ctx, promptID)
+	require.NoError(t, err)
+	require.Len(t, history, 3)
+}
+
+func TestMongoDriverV2MemoryRoundTrip(t *testing.T) {
+	mongoClient, database := newMongoIntegrationClient(t)
+	client, err := memoryclient.New(memoryclient.Options{
+		Client:   mongoClient,
+		Database: database,
+		Timeout:  10 * time.Second,
+	})
+	require.NoError(t, err)
+
+	ctx := context.Background()
+	firstAt := time.Unix(2, 0).UTC()
+	require.NoError(t, client.AppendEvents(ctx, "assistant", "run-1", []memory.Event{{
+		Type:      memory.EventUserMessage,
+		Timestamp: firstAt,
+		Data:      map[string]any{"text": "hello", "position": 1},
+		Labels:    map[string]string{"role": "user"},
+	}}))
+	require.NoError(t, client.AppendEvents(ctx, "assistant", "run-1", []memory.Event{{
+		Type: memory.EventPlannerNote,
+		Data: map[string]any{"nested": map[string]any{"ok": true}},
+	}}))
+
+	snapshot, err := client.LoadRun(ctx, "assistant", "run-1")
+	require.NoError(t, err)
+	require.Equal(t, "assistant", snapshot.AgentID)
+	require.Equal(t, "run-1", snapshot.RunID)
+	require.Len(t, snapshot.Events, 2)
+	require.Equal(t, firstAt, snapshot.Events[0].Timestamp)
+	require.Equal(t, map[string]string{"role": "user"}, snapshot.Events[0].Labels)
+	require.Equal(t, map[string]any{"text": "hello", "position": int32(1)}, snapshot.Events[0].Data)
+	require.Equal(t, map[string]any{"nested": map[string]any{"ok": true}}, snapshot.Events[1].Data)
+	require.False(t, snapshot.Events[1].Timestamp.IsZero())
+}
+
 func newMongoIntegrationClient(t *testing.T) (*mongodriver.Client, string) {
 	t.Helper()
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
@@ -119,10 +197,13 @@ func newMongoIntegrationClient(t *testing.T) (*mongodriver.Client, string) {
 		Started:          true,
 	})
 	if err != nil {
+		if os.Getenv("LOOM_MCP_REQUIRE_DOCKER_TESTS") == "1" {
+			require.NoError(t, err, "Mongo testcontainer is required")
+		}
 		t.Skipf("Mongo testcontainer unavailable: %v", err)
 	}
 	t.Cleanup(func() {
-		_ = container.Terminate(context.Background())
+		require.NoError(t, container.Terminate(context.Background()))
 	})
 
 	initMongoReplicaSet(ctx, t, container)
@@ -136,13 +217,13 @@ func newMongoIntegrationClient(t *testing.T) (*mongodriver.Client, string) {
 	client, err := mongodriver.Connect(options.Client().ApplyURI(uri).SetServerSelectionTimeout(10 * time.Second))
 	require.NoError(t, err)
 	t.Cleanup(func() {
-		_ = client.Disconnect(context.Background())
+		require.NoError(t, client.Disconnect(context.Background()))
 	})
 	require.NoError(t, client.Ping(ctx, nil))
 
 	database := "loom_mcp_" + sanitizeDatabaseName(t.Name())
 	t.Cleanup(func() {
-		_ = client.Database(database).Drop(context.Background())
+		require.NoError(t, client.Database(database).Drop(context.Background()))
 	})
 	return client, database
 }
@@ -159,7 +240,8 @@ func initMongoReplicaSet(ctx context.Context, t *testing.T, container testcontai
 	exitCode, output, err := container.Exec(ctx, []string{"mongosh", "--quiet", "--eval", initScript})
 	require.NoError(t, err)
 	if exitCode != 0 {
-		body, _ := io.ReadAll(output)
+		body, readErr := io.ReadAll(output)
+		require.NoError(t, readErr)
 		t.Fatalf("failed to initiate Mongo replica set: exit %d: %s", exitCode, body)
 	}
 
@@ -173,7 +255,8 @@ while (!db.hello().isWritablePrimary) {
 	exitCode, output, err = container.Exec(ctx, []string{"mongosh", "--quiet", "--eval", waitScript})
 	require.NoError(t, err)
 	if exitCode != 0 {
-		body, _ := io.ReadAll(output)
+		body, readErr := io.ReadAll(output)
+		require.NoError(t, readErr)
 		t.Fatalf("Mongo replica set did not become primary: exit %d: %s", exitCode, body)
 	}
 }
