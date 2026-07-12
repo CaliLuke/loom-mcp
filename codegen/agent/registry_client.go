@@ -526,27 +526,19 @@ func emitRegistryClientMethods(stmt *jen.Statement) {
 	stmt.Line()
 
 	codegen.Doc(stmt, "Capabilities returns the search capabilities of this registry.\nThis queries the registry's capabilities endpoint to determine\nwhat search features are supported.")
-	stmt.Func().Params(jen.Id("c").Op("*").Id("Client")).Id("Capabilities").Params().Id("SearchCapabilities").Block(
-		jen.Comment("Default capabilities - all registries support keyword search"),
-		jen.Id("caps").Op(":=").Id("SearchCapabilities").Values(jen.Dict{
-			jen.Id("KeywordSearch"):  jen.True(),
-			jen.Id("SemanticSearch"): jen.False(),
-			jen.Id("TagFiltering"):   jen.True(),
-			jen.Id("TypeFiltering"):  jen.True(),
-		}),
-		jen.Comment("Try to fetch capabilities from the registry"),
-		jen.List(jen.Id("ctx"), jen.Id("cancel")).Op(":=").Qual("context", "WithTimeout").Call(jen.Qual("context", "Background").Call(), jen.Lit(5).Op("*").Qual("time", "Second")),
-		jen.Defer().Id("cancel").Call(),
-		jen.Id("u").Op(":=").Id("c").Dot("endpoint").Op("+").Id("pathCapabilities"),
-		jen.Var().Id("remoteCaps").Id("SearchCapabilities"),
-		jen.If(jen.Id("err").Op(":=").Id("c").Dot("doRequest").Call(jen.Id("ctx"), jen.Qual("net/http", "MethodGet"), jen.Id("u"), jen.Nil(), jen.Op("&").Id("remoteCaps")), jen.Id("err").Op("!=").Nil()).Block(
-			jen.Comment("If capabilities endpoint doesn't exist, return defaults"),
-			jen.Return(jen.Id("caps")),
-		),
-		jen.Comment("Merge remote capabilities (keyword search is always true)"),
-		jen.Id("remoteCaps").Dot("KeywordSearch").Op("=").True(),
-		jen.Return(jen.Id("remoteCaps")),
-	)
+	stmt.Func().Params(jen.Id("c").Op("*").Id("Client")).Id("Capabilities").
+		Params(jen.Id("ctx").Qual("context", "Context")).
+		Params(jen.Id("SearchCapabilities"), jen.Error()).
+		Block(
+			jen.Id("u").Op(":=").Id("c").Dot("endpoint").Op("+").Id("pathCapabilities"),
+			jen.Var().Id("remoteCaps").Id("SearchCapabilities"),
+			jen.If(jen.Id("err").Op(":=").Id("c").Dot("doRequest").Call(jen.Id("ctx"), jen.Qual("net/http", "MethodGet"), jen.Id("u"), jen.Nil(), jen.Op("&").Id("remoteCaps")), jen.Id("err").Op("!=").Nil()).Block(
+				jen.Return(jen.Id("SearchCapabilities").Values(), jen.Id("err")),
+			),
+			jen.Comment("Merge remote capabilities (keyword search is always true)"),
+			jen.Id("remoteCaps").Dot("KeywordSearch").Op("=").True(),
+			jen.Return(jen.Id("remoteCaps"), jen.Nil()),
+		)
 	stmt.Line()
 }
 

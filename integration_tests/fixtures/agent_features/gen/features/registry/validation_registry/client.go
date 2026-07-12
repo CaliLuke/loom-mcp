@@ -225,26 +225,15 @@ func (c *Client) SemanticSearch(ctx context.Context, query string, opts Semantic
 // Capabilities returns the search capabilities of this registry.
 // This queries the registry's capabilities endpoint to determine
 // what search features are supported.
-func (c *Client) Capabilities() SearchCapabilities {
-	// Default capabilities - all registries support keyword search
-	caps := SearchCapabilities{
-		KeywordSearch:  true,
-		SemanticSearch: false,
-		TagFiltering:   true,
-		TypeFiltering:  true,
-	}
-	// Try to fetch capabilities from the registry
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
+func (c *Client) Capabilities(ctx context.Context) (SearchCapabilities, error) {
 	u := c.endpoint + pathCapabilities
 	var remoteCaps SearchCapabilities
 	if err := c.doRequest(ctx, http.MethodGet, u, nil, &remoteCaps); err != nil {
-		// If capabilities endpoint doesn't exist, return defaults
-		return caps
+		return SearchCapabilities{}, err
 	}
 	// Merge remote capabilities (keyword search is always true)
 	remoteCaps.KeywordSearch = true
-	return remoteCaps
+	return remoteCaps, nil
 }
 
 // doRequest performs an HTTP request with retry logic.

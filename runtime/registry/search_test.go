@@ -307,6 +307,26 @@ func TestSearchClientKeywordFallback(t *testing.T) {
 		}
 	})
 
+	t.Run("falls back to keyword when capability discovery fails", func(t *testing.T) {
+		manager := NewManager()
+		client := &mockSemanticClientWithFallback{
+			capabilitiesErr: errors.New("capabilities unavailable"),
+			keywordResults: []*SearchResult{
+				{ID: "tool-1", Name: "capability fallback", RelevanceScore: 0.7},
+			},
+		}
+
+		manager.AddRegistry("capability-fallback-registry", client, RegistryConfig{})
+		results, err := NewSearchClient(manager).Search(ctx, "test query", SearchOptions{PreferSemantic: true})
+
+		if err != nil {
+			t.Fatalf("Search failed: %v", err)
+		}
+		if len(results) != 1 || results[0].Name != "capability fallback" {
+			t.Fatalf("expected capability fallback result, got %#v", results)
+		}
+	})
+
 	t.Run("uses semantic search when available and preferred", func(t *testing.T) {
 		manager := NewManager()
 
@@ -622,6 +642,7 @@ func (m *mockKeywordOnlyClient) Search(_ context.Context, _ string) ([]*SearchRe
 type mockSemanticClientWithFallback struct {
 	semanticResults []*SearchResult
 	semanticErr     error
+	capabilitiesErr error
 	keywordResults  []*SearchResult
 }
 
@@ -644,9 +665,9 @@ func (m *mockSemanticClientWithFallback) SemanticSearch(_ context.Context, _ str
 	return m.semanticResults, nil
 }
 
-func (m *mockSemanticClientWithFallback) Capabilities() SearchCapabilities {
+func (m *mockSemanticClientWithFallback) Capabilities(context.Context) (SearchCapabilities, error) {
 	return SearchCapabilities{
 		SemanticSearch: true,
 		KeywordSearch:  true,
-	}
+	}, m.capabilitiesErr
 }

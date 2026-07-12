@@ -39,6 +39,7 @@ func TestRegistryClientGeneratesCorrectMethods(t *testing.T) {
 	files := testhelpers.BuildAndGenerateWithPkg(t, "example.com/client_methods", design)
 
 	clientContent := testhelpers.FileContent(t, files, "gen/client_methods_test/registry/corp_registry/client.go")
+	require.Contains(t, clientContent, "func (c *Client) Capabilities(ctx context.Context) (SearchCapabilities, error)")
 	testutil.AssertGo(t, filepath.Join("testdata", "golden", "registry_client", "client.go.golden"), clientContent)
 }
 

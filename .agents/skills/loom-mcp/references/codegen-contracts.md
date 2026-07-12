@@ -118,6 +118,10 @@ Use this file when editing DSL, generators, generated helpers, or MCP codegen be
   references against the root schema, fail closed on unsupported or unresolved
   references, and apply `minLength`/`maxLength` to Unicode code points rather
   than UTF-8 bytes.
+- Generated registry clients expose
+  `Capabilities(context.Context) (SearchCapabilities, error)`, preserve caller
+  cancellation and trace context, and never conflate transport failures with
+  remote capability values.
 - Projected MCP `ToolInfo` schemas must come from the generated toolset
   `tools.ToolSpec` payload and result schemas, not from service-method-only
   schema extraction. This keeps runtime specs, JSON-RPC adapters, and SDK

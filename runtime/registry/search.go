@@ -61,7 +61,7 @@ type (
 		// SemanticSearch performs a semantic/vector search on the registry.
 		SemanticSearch(ctx context.Context, query string, opts SemanticSearchOptions) ([]*SearchResult, error)
 		// Capabilities returns the search capabilities of this registry.
-		Capabilities() SearchCapabilities
+		Capabilities(ctx context.Context) (SearchCapabilities, error)
 	}
 
 	// SemanticSearchOptions configures semantic search behavior.
@@ -204,8 +204,8 @@ func (s *SearchClient) searchRegistry(ctx context.Context, name string, entry *r
 	semanticClient, hasSemanticSearch := entry.client.(SemanticSearchClient)
 
 	if opts.PreferSemantic && hasSemanticSearch {
-		caps := semanticClient.Capabilities()
-		if caps.SemanticSearch {
+		caps, capsErr := semanticClient.Capabilities(ctx)
+		if capsErr == nil && caps.SemanticSearch {
 			// Try semantic search first
 			semanticOpts := SemanticSearchOptions{
 				Types:      opts.Types,
