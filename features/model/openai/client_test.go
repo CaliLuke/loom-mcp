@@ -3,7 +3,6 @@ package openai_test
 import (
 	"context"
 	"errors"
-	"io"
 	"net/http"
 	"testing"
 
@@ -13,6 +12,7 @@ import (
 	openaimodel "github.com/CaliLuke/loom-mcp/features/model/openai"
 	"github.com/CaliLuke/loom-mcp/runtime/agent/model"
 	"github.com/CaliLuke/loom-mcp/runtime/agent/tools"
+	"github.com/CaliLuke/loom-mcp/testutil"
 	openai "github.com/openai/openai-go"
 	"github.com/openai/openai-go/option"
 	"github.com/openai/openai-go/packages/ssestream"
@@ -741,7 +741,7 @@ func TestClientStreamEmitsTextToolCallsUsageAndStop(t *testing.T) {
 		require.NoError(t, streamer.Close())
 	}()
 
-	chunks := collectStreamChunks(t, streamer)
+	chunks := testutil.CollectStreamChunks(t, streamer)
 	require.Len(t, chunks, 7)
 	require.Equal(t, model.ChunkTypeText, chunks[0].Type)
 	require.Equal(t, "Hel", chunks[0].Message.Parts[0].(model.TextPart).Text)
@@ -818,7 +818,7 @@ func TestClientStreamStructuredOutput(t *testing.T) {
 		require.NoError(t, streamer.Close())
 	}()
 
-	chunks := collectStreamChunks(t, streamer)
+	chunks := testutil.CollectStreamChunks(t, streamer)
 	require.Len(t, chunks, 3)
 	require.Equal(t, model.ChunkTypeCompletionDelta, chunks[0].Type)
 	require.Equal(t, "draft", chunks[0].CompletionDelta.Name)
@@ -995,7 +995,7 @@ func TestClientStreamTranslatesDottedToolNames(t *testing.T) {
 	require.NotNil(t, functionTool)
 	assert.Equal(t, "toolset_lookup", functionTool.Name)
 
-	chunks := collectStreamChunks(t, streamer)
+	chunks := testutil.CollectStreamChunks(t, streamer)
 	require.Len(t, chunks, 3)
 	require.Equal(t, model.ChunkTypeToolCallDelta, chunks[0].Type)
 	assert.Equal(t, tools.Ident("toolset.lookup"), chunks[0].ToolCallDelta.Name)
@@ -1087,17 +1087,4 @@ func (d *mockStreamDecoder) Close() error {
 
 func (d *mockStreamDecoder) Err() error {
 	return d.err
-}
-
-func collectStreamChunks(t *testing.T, streamer model.Streamer) []model.Chunk {
-	t.Helper()
-	var chunks []model.Chunk
-	for {
-		chunk, err := streamer.Recv()
-		if errors.Is(err, io.EOF) {
-			return chunks
-		}
-		require.NoError(t, err)
-		chunks = append(chunks, chunk)
-	}
 }

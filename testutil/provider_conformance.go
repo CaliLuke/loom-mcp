@@ -1,6 +1,14 @@
 package testutil
 
-import "testing"
+import (
+	"errors"
+	"io"
+	"testing"
+
+	"github.com/stretchr/testify/require"
+
+	"github.com/CaliLuke/loom-mcp/runtime/agent/model"
+)
 
 // ProviderConformanceCase proves one observable model-provider contract.
 type ProviderConformanceCase func(t *testing.T)
@@ -62,6 +70,21 @@ func RunProviderConformance(t *testing.T, suite ProviderConformanceSuite) {
 		t.Run(tc.name, tc.run)
 	}
 	runStreamingConformance(t, suite.Streaming)
+}
+
+// CollectStreamChunks drains a provider-neutral model stream through EOF and
+// fails the test on any other receive error.
+func CollectStreamChunks(t *testing.T, streamer model.Streamer) []model.Chunk {
+	t.Helper()
+	var chunks []model.Chunk
+	for {
+		chunk, err := streamer.Recv()
+		if errors.Is(err, io.EOF) {
+			return chunks
+		}
+		require.NoError(t, err)
+		chunks = append(chunks, chunk)
+	}
 }
 
 func validateStreamingConformance(t *testing.T, provider string, streaming ProviderStreamingConformance) {

@@ -2,13 +2,13 @@
 
 Audited: 2026-07-12 (refresh + ongoing remediation) · Baseline commit: `4f2c262` (main) · Auditor: test-suite-audit skill
 Baseline: prior audit at `679fb76` earlier the same day; this refresh and the subsequent remediation commits re-measure each finding at the current tree.
-Recent remediation continued through `bd6c9bc` (mandatory CLI scenarios), including generated-output compilation, runtime boundaries, provider failures, real Mongo contracts, and integration artifact ownership. See the defect ledger for the individual regression commits.
+Recent remediation continues through the current tree, including generated-output compilation, runtime boundaries, provider failures, real Mongo contracts, integration artifact ownership, provider conformance, and deterministic ordering. See the defect ledger for the individual regression commits.
 
 Remediation progress: **S-2 is resolved; C-1/C-2 are locally repaired and fully verified, with only an actual hosted Actions run pending; C-3 and C-4 have achieved their planned targets.** Validation now covers 49/59 DSL error sites and more than 37/46 `ToolExpr.Validate` conditions. Five materially different agent designs are freshly rendered and compiled. That compile matrix immediately exposed three current generator defects: cross-package named payloads were forwarded without conversion (C-16), required injected strings were assigned pointers (C-17), and result-less methods were called as two-result functions (C-18); all are fixed by the matrix change.
 
 ## 1. Executive summary
 
-The suite now contains 331 test files and 1,518 top-level test functions (plus one benchmark). Regression discipline remains strong: every audited fix has landed with a test, and the remediation tests have already exposed twenty-one additional product defects (C-15–C-35). Shuffle is enforced, design-validation targets are met, a five-design compile matrix rejects invalid generated package graphs, high-fan-in runtime and ordering boundaries are directly synchronized, all five provider adapters execute one shared behavioral conformance matrix, real Mongo contracts run through Colima, and sampling, client roots, and progress have real client-vs-generated-framework contracts. The CI configuration repair is implemented locally: its toolchain matches the modules, repository make targets own the commands, `make itest` reaches all integration clusters plus the quickstart, and Docker-backed registry coverage fails closed in CI. **An actual green Actions run remains the immediate blocker** because these commits have not yet produced a hosted run. The unit critical path is 25 % faster; integration server startup and fixture duplication remain open. Integration fixture artifacts now have process-level owners and are removed after every test binary; a measured run left zero prepared clones and zero cached server binaries after an earlier audit session had accumulated 93 clones (125 MB) and 218 binaries (8.2 GB).
+The suite now contains 331 test files and 1,518 top-level test functions (plus one benchmark). Regression discipline remains strong: every audited fix has landed with a test, and the remediation tests have already exposed twenty-one additional product defects (C-15–C-35). Shuffle is enforced, design-validation targets are met, a five-design compile matrix rejects invalid generated package graphs, high-fan-in runtime and ordering boundaries are directly synchronized, all five provider adapters execute one shared behavioral conformance matrix, real Mongo contracts run through Colima, and sampling, client roots, and progress have real client-vs-generated-framework contracts. The CI configuration repair is implemented locally: its toolchain matches the modules, repository make targets own the commands, `make itest` reaches all integration clusters plus the quickstart, and Docker-backed registry coverage fails closed in CI. **An actual green Actions run remains the immediate blocker** because these commits have not yet produced a hosted run. The warm unit critical path is 27 % faster and fixture duplication has been resolved or reclassified; integration server startup and the final 1.84 seconds of the unit target remain open. Integration fixture artifacts now have process-level owners and are removed after every test binary; a measured run left zero prepared clones and zero cached server binaries after an earlier audit session had accumulated 93 clones (125 MB) and 218 binaries (8.2 GB).
 
 ## 2. Inventory (cross-repo baseline metrics)
 
@@ -18,8 +18,8 @@ The suite now contains 331 test files and 1,518 top-level test functions (plus o
 | Test runner(s) | `go test` via `make test` (`-shuffle=on`) / `make itest` / `make verify-mcp-local`; testify, gopter, testcontainers (Redis, Mongo) |
 | Test files / test cases | 331 files, 1,518 `func Test` plus 1 benchmark; latest full gate counts are refreshed after each remediation phase |
 | Layer split (unit / integration / e2e) | 1,345 unit funcs; 172 integration-cluster funcs (framework 31, tests 7, assistant 125, agent_features 9); 1 e2e quickstart in the integration target |
-| Total wall time (local) / (CI pipeline) | Unit (`-short -race -covermode=atomic`): **22.5 s fully warm** (59.7 s CPU), down from 30.1 s; first post-edit build was 41.8 s. Latest expanded `make itest`: quickstart 8.7 s, framework 18.3 s, scenarios 180.6 s (critical path), all green. CI: **never executed** (`gh api …/actions/runs` → `total_count: 0`) |
-| Parallelism today | Unit packages use package/test parallelism; **2.7 of 10 cores** warm (59.7 s CPU / 22.5 s wall). The integration framework now honors its safe `t.Parallel()` declarations; stateful YAML scenarios remain serial within their package. |
+| Total wall time (local) / (CI pipeline) | Unit (`-short -race -covermode=atomic`): **21.84 s fully warm** (59.05 s CPU), down from 30.1 s; first post-edit build was 41.8 s. Latest expanded `make itest`: quickstart 8.7 s, framework 18.3 s, scenarios 180.6 s (critical path), all green. CI: **never executed** (`gh api …/actions/runs` → `total_count: 0`) |
+| Parallelism today | Unit packages use package/test parallelism; **2.7 of 10 cores** warm (59.05 s CPU / 21.84 s wall). The integration framework now honors its safe `t.Parallel()` declarations; stateful YAML scenarios remain serial within their package. |
 | Coverage (line / branch) | **62.8 %** statements; branch N/A (Go). registry/ remains understated by Docker skips; 3 zero-coverage package groups remain attribution artifacts (C-12) |
 | Skipped/disabled tests | Docker-backed tests may skip only outside strict CI mode; 0 permanent legacy skips; the CLI scenario is canonical in make itest |
 | Snapshot tests (count / size on disk) | 53 `.golden` / 276 KB / 18 > 100 lines (net zero new goldens in delta; 2 modified) |
@@ -127,10 +127,11 @@ Finding IDs continue the `679fb76` numbering; each carries a status vs that base
 - **Impact:** A parallel test could close or disrupt a shared connection pool during another SDK client's initialize handshake, making a correct server appear flaky.
 - **Recommendation:** Complete; keep parallel clients transport-isolated and treat any recurrence as a separate lifecycle bug.
 
-### V-1: Assistant-fixture consolidation — tool-search 65 funcs / OAuth 12 funcs across 7 files
-- **Severity:** medium · **Status:** still open (counts re-verified at HEAD: 41+10+14 tool-search, 5+3+3+1 OAuth)
-- **Confidence:** measured
-- **Recommendation:** Unchanged — table-drive during other fixture work.
+### V-1: Assistant-fixture consolidation — apparent duplication is intentional contract layering
+- **Severity:** medium · **Status:** resolved by contract inventory; no consolidation warranted
+- **Confidence:** code-inspected
+- **Evidence:** The tool-search files exercise three different owners: adapter ranking/configuration and proxy semantics, raw generated JSON-RPC encoding/error behavior, and SDK transport behavior. OAuth likewise separates audience-verifier policy, protected-resource discovery/cache headers, and HTTP challenge/forwarded-host construction. Similar scenario names across those files are deliberate cross-layer conformance checks, not repeated setup around one implementation seam.
+- **Recommendation:** Keep the layer-specific tests independently selectable. Share only transport/session construction helpers; do not table-drive across adapter, JSON-RPC, and SDK boundaries because a combined case would obscure which public layer regressed.
 
 ### V-2: codegen/mcp re-runs full `Generate` redundantly
 - **Severity:** medium · **Status:** resolved for the audited redundancies
@@ -139,9 +140,10 @@ Finding IDs continue the `679fb76` numbering; each carries a status vs that base
 - **Recommendation:** Complete for V-2. Keep generation inputs isolated; do not add process-global fixture caching merely to optimize unrelated designs.
 
 ### V-3: Parametrization candidates across four clusters
-- **Severity:** low · **Status:** still open (spot-verified: dsl registry-security ×5 and from-registry ×4 intact; subscriber profile-toggle ×4 at same lines; `collectStreamChunks` still byte-identical in ollama:413/openai:1043; cache_property ×4)
-- **Confidence:** measured
-- **Recommendation:** Unchanged — fold into C-3/C-7 work.
+- **Severity:** low · **Status:** resolved
+- **Confidence:** code-inspected and targeted tests
+- **Evidence:** The byte-identical Ollama/OpenAI stream drain is now the provider-neutral `testutil.CollectStreamChunks` helper. The other candidates are intentionally separate behavioral contracts: registry security covers different Goa security-holder types and multiplicity; FromRegistry covers derived naming, explicit naming, version overlay, and shared-expression immutability; subscriber toggles construct different hook event types and profile fields; cache properties use different generators and prove fallback identity, full-field preservation, expiry, and repeatability. Their shared outer setup is small, while combining them would require untyped callbacks or branch-heavy assertions.
+- **Recommendation:** Complete. Parameterize data variants within one contract, but keep independently named tests for different DSL evaluation, hook-event, and property invariants.
 
 ### V-4: Tautological/echo tests removed
 - **Severity:** low · **Status:** resolved
@@ -158,7 +160,7 @@ Finding IDs continue the `679fb76` numbering; each carries a status vs that base
 ### S-1: Top 5 % of tests = 95 % of summed test time; but warm wall is now the real story
 - **Severity:** high (as dev-loop finding, reframed) · **Status:** substantially resolved; 20 s target narrowly open
 - **Confidence:** measured
-- **Evidence:** `make test` now uses short mode and `make itest` explicitly owns the race-enabled quickstart, so no e2e contract disappeared. FileOrder is 13→3, the transport fixture generates once, and the TTL property keeps 100 cases while moving deadlines deterministically; `TestMemoryCacheTTLExpiration` retains real clock-passage coverage. Focused times are 0.9 s for the codegen pair and 0.48 s for the property. The fully warm canonical unit gate is **22.5 s wall / 59.7 s CPU**, down 25 % from 30.1 s / 69.7 s; codegen/mcp is now 12.7 s, agent/tests 2.9 s, and runtime/registry 5.0 s.
+- **Evidence:** `make test` now uses short mode and `make itest` explicitly owns the race-enabled quickstart, so no e2e contract disappeared. FileOrder is 13→3, the transport fixture generates once, and the TTL property keeps 100 cases while moving deadlines deterministically; `TestMemoryCacheTTLExpiration` retains real clock-passage coverage. Focused times are 0.9 s for the codegen pair and 0.48 s for the property. The fully warm canonical unit gate is **21.84 s wall / 59.05 s CPU**, down 27 % from 30.1 s / 69.7 s; the remaining gap to the target is 1.84 s.
 - **Impact:** The three avoidable test-time multipliers no longer dominate local feedback. Compile and the remaining codegen package chain now set the critical path.
 - **Recommendation:** Treat the quick-win slice as complete. Reach the final ≤20 s target through S-5-safe package/test parallelism or further immutable fixture ownership, not fewer assertions or weaker race/coverage flags.
 
@@ -181,7 +183,7 @@ Finding IDs continue the `679fb76` numbering; each carries a status vs that base
 - **Recommendation:** Cleanup is complete. Preserve scenario isolation until the fixture server supports independent client state; reduce startup cost through a protocol-correct isolation mechanism rather than sharing stateful servers.
 
 ### S-5: Core utilization 2.7/10; global expr roots serialize the expensive packages
-- **Severity:** medium · **Status:** still open (utilization re-measured warm: 59.7 s CPU / 22.5 s wall)
+- **Severity:** medium · **Status:** still open (utilization re-measured warm: 59.05 s CPU / 21.84 s wall)
 - **Confidence:** measured
 - **Recommendation:** Unchanged: mechanical `t.Parallel` for the verified-safe packages after S-2 hygiene.
 
@@ -202,7 +204,7 @@ Finding IDs continue the `679fb76` numbering; each carries a status vs that base
 Phase 1 — Value (`value.md`):
 - 1.1 Tautological tests — **found, minor** (V-4: echo tests now 3+1 subtests; assert-true equivalents 0 hits; zero-assertion tests 0; commented-out 0 — all greps re-run at HEAD).
 - 1.2 Implementation-coupled — **found, contained**: delta reproduced the string-assertion pattern at the codegen layer (C-4) while fixture/runtime tests stayed behavioral; adapter echo ratios unchanged (C-7).
-- 1.3 Duplicates/near-duplicates — **found** (V-3 all clusters re-verified; `collectStreamChunks` byte-identical diff-confirmed; cross-root layering unchanged — no new test roots in delta).
+- 1.3 Duplicates/near-duplicates — **resolved** (the only byte-identical provider helper is shared; superficially similar fixture, DSL, subscriber, and cache tests were inventoried as distinct contracts).
 - 1.4 Snapshot/golden audit — **found, moderate**: 53 / 276 KB / 18 > 100 lines; delta added 0, modified 2 goldens alongside their generator change (disciplined).
 - 1.5 Testing someone else's code — **not found** (no new SDK-behavior tests in delta).
 - 1.6a Test roots & selection mapping — **remediated locally**: the canonical targets select all 172 integration-cluster functions plus the quickstart; hosted proof remains C-1.
@@ -240,7 +242,7 @@ Rank positions are preserved for traceability. Rank 2 is complete; the other opp
 | 5 | **Completed:** compile-the-output matrix with five generated designs | C-4, C-16, C-17, C-18 | complete | done | Three current generator defects found and fixed |
 | 6 | **Partially completed:** `TestMain` cleanup stops leaks and the process-global env channel is gone; find protocol-correct server isolation | S-3, S-4 | structural | days | 8.2 GB observed leak removed; framework 38.9 s → 18.1 s; scenario startup remains |
 | 7 | **Completed:** shared adapter conformance matrix plus real Mongo prompt/memory integration | C-7, C-8 | complete | done | Five adapters uniformly gated; seven provider/persistence defects exposed |
-| 8 | **Partially completed:** echo tests and stale skips removed; DSL setters/bridge reclassified; fixture consolidation remains | V-1, V-4, V-5 | cleanup | days | Dead weight removed without deleting public contracts |
+| 8 | **Completed:** echo tests and stale skips removed; DSL setters/bridge and layered fixture contracts reclassified | V-1, V-4, V-5 | cleanup | days | Dead weight removed without deleting public contracts |
 | 9 | **Completed:** tools codec/ident, interrupts, ConsumeStream, Clue telemetry, bufconn registry, double-Finalize | C-6, C-9, C-10 | complete | done | Highest-fan-in plumbing has direct behavioral proof |
 
 ## 6. Suggested refactoring sequence
@@ -358,7 +360,7 @@ Only after the correctness phases are green:
 - retain the completed `TestMain` cleanup and design a server-reuse boundary that preserves fresh initialization state per scenario;
 - preserve the completed 3-run file-order contract, single conformance generation, deterministic TTL property, and explicit integration-only quickstart;
 - preserve event/readiness synchronization; no blind ordering sleeps remain;
-- consolidate tool-search/OAuth fixture cases while preserving behavior assertions.
+- preserve tool-search/OAuth layer isolation; share only transport/session mechanics when identical.
 
 Exit criterion: warm unit wall at or below 20 seconds, integration wall at or below 90 seconds, no leaked prepared fixture directories after a run, and no reduction in the contract matrix or assertion strength.
 

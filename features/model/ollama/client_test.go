@@ -3,8 +3,6 @@ package ollama_test
 import (
 	"context"
 	"encoding/json"
-	"errors"
-	"io"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -17,6 +15,7 @@ import (
 	ollamamodel "github.com/CaliLuke/loom-mcp/features/model/ollama"
 	"github.com/CaliLuke/loom-mcp/runtime/agent/model"
 	"github.com/CaliLuke/loom-mcp/runtime/agent/tools"
+	"github.com/CaliLuke/loom-mcp/testutil"
 )
 
 func TestClientCompleteEncodesToolsAndDecodesToolCalls(t *testing.T) {
@@ -237,7 +236,7 @@ func TestClientStreamEmitsThinkingTextToolCallUsageAndStop(t *testing.T) {
 		require.NoError(t, streamer.Close())
 	}()
 
-	chunks := collectStreamChunks(t, streamer)
+	chunks := testutil.CollectStreamChunks(t, streamer)
 	require.Len(t, chunks, 6)
 	require.Equal(t, model.ChunkTypeThinking, chunks[0].Type)
 	require.Equal(t, "Considering tools.", chunks[0].Thinking)
@@ -321,7 +320,7 @@ func TestClientStreamStructuredOutput(t *testing.T) {
 		require.NoError(t, streamer.Close())
 	}()
 
-	chunks := collectStreamChunks(t, streamer)
+	chunks := testutil.CollectStreamChunks(t, streamer)
 	require.Len(t, chunks, 3)
 	require.Equal(t, model.ChunkTypeCompletionDelta, chunks[0].Type)
 	require.Equal(t, "draft", chunks[0].CompletionDelta.Name)
@@ -424,7 +423,7 @@ func TestClientStreamStructuredOutputExcludesThinking(t *testing.T) {
 		require.NoError(t, streamer.Close())
 	}()
 
-	chunks := collectStreamChunks(t, streamer)
+	chunks := testutil.CollectStreamChunks(t, streamer)
 	require.Len(t, chunks, 4)
 	require.Equal(t, model.ChunkTypeThinking, chunks[0].Type)
 	require.Equal(t, "Draft JSON privately.", chunks[0].Thinking)
@@ -458,19 +457,6 @@ func TestClientRejectsUnsupportedToolChoice(t *testing.T) {
 		ToolChoice: &model.ToolChoice{Mode: model.ToolChoiceModeAny},
 	})
 	require.ErrorContains(t, err, "tool choice mode")
-}
-
-func collectStreamChunks(t *testing.T, streamer model.Streamer) []model.Chunk {
-	t.Helper()
-	var chunks []model.Chunk
-	for {
-		chunk, err := streamer.Recv()
-		if errors.Is(err, io.EOF) {
-			return chunks
-		}
-		require.NoError(t, err)
-		chunks = append(chunks, chunk)
-	}
 }
 
 func newTestStreamer(t *testing.T, serverURL string) model.Streamer {
