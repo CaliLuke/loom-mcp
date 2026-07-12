@@ -423,7 +423,14 @@ func (h *temporalChildHandle) Cancel(_ context.Context) error {
 }
 
 func (h *temporalChildHandle) RunID() string {
-	// Child run IDs are not always exposed synchronously; return the cached value.
+	if h.runID != "" {
+		return h.runID
+	}
+	var execution workflow.Execution
+	if err := h.future.GetChildWorkflowExecution().Get(h.ctx, &execution); err != nil {
+		return ""
+	}
+	h.runID = execution.RunID
 	return h.runID
 }
 
