@@ -1391,6 +1391,41 @@ case "method_not_found":
 	require.Contains(t, rendered, `return strm.sendError(ctx, jsonrpc.IDToString(req.ID), jsonrpc.Code(-32002), loom.ErrorSafeMessage(err), jsonrpc.NewErrorData(err))`)
 }
 
+func TestApplyMCPJSONRPCErrorDataUsesClientSafeMetadataForHTTPAndSSE(t *testing.T) {
+	files := []*gcodegen.File{
+		{
+			Path: "gen/jsonrpc/mcp_assistant/server/server.go",
+			Sections: []gcodegen.Section{gcodegen.NewRawSection("server-handler", `
+encodeJSONRPCError(ctx, w, req, code, loom.ErrorSafeMessage(err), jsonrpc.NewErrorData(err), encoder, errhandler)
+`)},
+		},
+		{
+			Path: "gen/jsonrpc/mcp_assistant/server/stream.go",
+			Sections: []gcodegen.Section{gcodegen.NewRawSection("stream-handler", `
+return strm.sendError(ctx, req.ID, code, loom.ErrorSafeMessage(err), jsonrpc.NewErrorData(err))
+`)},
+		},
+	}
+
+	require.NoError(t, applyMCPJSONRPCErrorData(files))
+	for _, file := range files {
+		rendered := renderGeneratedFile(t, file)
+		require.Contains(t, rendered, "mcpruntime.NewErrorData(err)")
+		require.NotContains(t, rendered, "jsonrpc.NewErrorData(err)")
+	}
+}
+
+func TestApplyMCPJSONRPCErrorDataFailsWhenUpstreamShapeChanges(t *testing.T) {
+	file := &gcodegen.File{
+		Path:     "gen/jsonrpc/mcp_assistant/server/server.go",
+		Sections: []gcodegen.Section{gcodegen.NewRawSection("server-handler", "return nil")},
+	}
+
+	err := applyMCPJSONRPCErrorData([]*gcodegen.File{file})
+
+	require.ErrorContains(t, err, "upstream JSON-RPC error data shape changed")
+}
+
 func TestGenerate_ActualMCPServerMountIncludesPolicyWrapper(t *testing.T) {
 	restore := resetMCPCodegenState(t)
 	defer restore()

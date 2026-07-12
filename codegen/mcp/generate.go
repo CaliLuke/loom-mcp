@@ -2,6 +2,7 @@ package codegen
 
 import (
 	"bytes"
+	"errors"
 	"fmt"
 	"path/filepath"
 	"regexp"
@@ -206,6 +207,9 @@ func generateMCPServiceCode(genpkg string, root *expr.RootExpr, mcpService *expr
 		return nil, err
 	}
 	if err := applyMCPJSONRPCErrorCodes(files); err != nil {
+		return nil, err
+	}
+	if err := applyMCPJSONRPCErrorData(files); err != nil {
 		return nil, err
 	}
 	if err := applyMCPJSONRPCOptionalParamsDecoding(files, mcpService); err != nil {
@@ -619,6 +623,41 @@ case "method_not_found":
 		return source, false
 	}
 	return updated, true
+}
+
+func applyMCPJSONRPCErrorData(files []*codegen.File) error {
+	rewritten := 0
+	for _, file := range files {
+		if file == nil || filepath.Base(filepath.Dir(filepath.ToSlash(file.Path))) != "server" {
+			continue
+		}
+		name := filepath.Base(file.Path)
+		if name != "server.go" && name != "stream.go" {
+			continue
+		}
+
+		sections := file.AllSections()
+		updated := make([]codegen.Section, 0, len(sections))
+		for _, section := range sections {
+			source, ok := renderedSectionSource(section)
+			if !ok {
+				updated = append(updated, section)
+				continue
+			}
+			sanitized := strings.ReplaceAll(source, "jsonrpc.NewErrorData(err)", "mcpruntime.NewErrorData(err)")
+			if sanitized == source {
+				updated = append(updated, section)
+				continue
+			}
+			rewritten += strings.Count(source, "jsonrpc.NewErrorData(err)")
+			updated = append(updated, &codegen.RawSection{Name: section.SectionName(), Source: sanitized})
+		}
+		file.SetSections(updated)
+	}
+	if rewritten == 0 {
+		return errors.New("upstream JSON-RPC error data shape changed: expected MCP server error metadata")
+	}
+	return nil
 }
 
 // applyMCPJSONRPCOptionalParamsDecoding rewrites generated JSON-RPC request

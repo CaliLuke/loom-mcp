@@ -51,6 +51,42 @@ func TestGeneratedJSONRPCServerToolsCallAcceptsOmittedOptionalArguments(t *testi
 	require.Len(t, result.Content, 1)
 }
 
+func TestGeneratedJSONRPCServerErrorDataDoesNotExposeServiceErrorID(t *testing.T) {
+	t.Parallel()
+
+	server := newGeneratedJSONRPCServer(t)
+	defer server.Close()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	sessionID, err := initializeJSONRPCSession(ctx, server.URL)
+	require.NoError(t, err)
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, server.URL+"/rpc", strings.NewReader(
+		`{"jsonrpc":"2.0","id":"missing-resource","method":"resources/read","params":{"uri":"fixture://missing"}}`,
+	))
+	require.NoError(t, err)
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set(mcpruntime.HeaderKeySessionID, sessionID)
+	req.Header.Set(mcpruntime.HeaderKeyProtocolVersion, mcpassistant.DefaultProtocolVersion)
+
+	resp, err := server.Client().Do(req)
+	require.NoError(t, err)
+	defer resp.Body.Close()
+	require.Equal(t, http.StatusOK, resp.StatusCode)
+
+	var envelope struct {
+		Error struct {
+			Code int            `json:"code"`
+			Data map[string]any `json:"data"`
+		} `json:"error"`
+	}
+	require.NoError(t, json.NewDecoder(resp.Body).Decode(&envelope))
+	require.Equal(t, -32002, envelope.Error.Code)
+	require.Equal(t, "resource_not_found", envelope.Error.Data["name"])
+	require.NotContains(t, envelope.Error.Data, "id")
+}
+
 func TestGeneratedJSONRPCServerEventsStreamPublishesNotifications(t *testing.T) {
 	t.Parallel()
 

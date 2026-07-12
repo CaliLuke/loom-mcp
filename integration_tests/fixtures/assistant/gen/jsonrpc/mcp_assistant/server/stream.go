@@ -138,7 +138,7 @@ func (s *ToolsCallServerStream) SendError(ctx context.Context, id any, err error
 	if errors.As(err, &serviceError) {
 		code = jsonrpcErrorCodeForServiceError(serviceError)
 	}
-	return s.sendError(ctx, id, code, loom.ErrorSafeMessage(err), jsonrpc.NewErrorData(err))
+	return s.sendError(ctx, id, code, loom.ErrorSafeMessage(err), mcpruntime.NewErrorData(err))
 }
 
 // sendError sends a JSON-RPC error response via SSE.
@@ -281,7 +281,7 @@ func (s *EventsStreamServerStream) SendError(ctx context.Context, id any, err er
 	if errors.As(err, &serviceError) {
 		code = jsonrpcErrorCodeForServiceError(serviceError)
 	}
-	return s.sendError(ctx, id, code, loom.ErrorSafeMessage(err), jsonrpc.NewErrorData(err))
+	return s.sendError(ctx, id, code, loom.ErrorSafeMessage(err), mcpruntime.NewErrorData(err))
 }
 
 // sendError sends a JSON-RPC error response via SSE.

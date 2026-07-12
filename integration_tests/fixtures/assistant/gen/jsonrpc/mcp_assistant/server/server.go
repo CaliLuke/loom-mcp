@@ -769,7 +769,7 @@ func NewInitializeHandler(endpoint loom.Endpoint, mux loomhttp.Muxer, decoder fu
 				if errors.As(err, &serviceError) {
 					code = jsonrpcErrorCodeForServiceError(serviceError)
 				}
-				encodeJSONRPCError(ctx, w, req, code, loom.ErrorSafeMessage(err), jsonrpc.NewErrorData(err), encoder, errhandler)
+				encodeJSONRPCError(ctx, w, req, code, loom.ErrorSafeMessage(err), mcpruntime.NewErrorData(err), encoder, errhandler)
 			} else {
 				errhandler(ctx, w, fmt.Errorf("failed to decode parameters: %w", err))
 			}
@@ -786,23 +786,23 @@ func NewInitializeHandler(endpoint loom.Endpoint, mux loomhttp.Muxer, decoder fu
 					if errors.As(err, &serviceError) {
 						code = jsonrpcErrorCodeForServiceError(serviceError)
 					}
-					encodeJSONRPCError(ctx, w, req, code, loom.ErrorSafeMessage(err), jsonrpc.NewErrorData(err), encoder, errhandler)
+					encodeJSONRPCError(ctx, w, req, code, loom.ErrorSafeMessage(err), mcpruntime.NewErrorData(err), encoder, errhandler)
 					return nil
 				}
 				switch en.LoomErrorName() {
 				case "invalid_params":
-					encodeJSONRPCError(ctx, w, req, jsonrpc.InvalidParams, loom.ErrorSafeMessage(err), jsonrpc.NewErrorData(err), encoder, errhandler)
+					encodeJSONRPCError(ctx, w, req, jsonrpc.InvalidParams, loom.ErrorSafeMessage(err), mcpruntime.NewErrorData(err), encoder, errhandler)
 				case "resource_not_found":
-					encodeJSONRPCError(ctx, w, req, jsonrpc.Code(-32002), loom.ErrorSafeMessage(err), jsonrpc.NewErrorData(err), encoder, errhandler)
+					encodeJSONRPCError(ctx, w, req, jsonrpc.Code(-32002), loom.ErrorSafeMessage(err), mcpruntime.NewErrorData(err), encoder, errhandler)
 				case "method_not_found":
-					encodeJSONRPCError(ctx, w, req, jsonrpc.MethodNotFound, loom.ErrorSafeMessage(err), jsonrpc.NewErrorData(err), encoder, errhandler)
+					encodeJSONRPCError(ctx, w, req, jsonrpc.MethodNotFound, loom.ErrorSafeMessage(err), mcpruntime.NewErrorData(err), encoder, errhandler)
 				default:
 					code := jsonrpc.InternalError
 					var serviceError *loom.ServiceError
 					if errors.As(err, &serviceError) {
 						code = jsonrpcErrorCodeForServiceError(serviceError)
 					}
-					encodeJSONRPCError(ctx, w, req, code, loom.ErrorSafeMessage(err), jsonrpc.NewErrorData(err), encoder, errhandler)
+					encodeJSONRPCError(ctx, w, req, code, loom.ErrorSafeMessage(err), mcpruntime.NewErrorData(err), encoder, errhandler)
 				}
 			} else {
 				errhandler(ctx, w, fmt.Errorf("endpoint error: %w", err))
@@ -841,23 +841,23 @@ func NewPingHandler(endpoint loom.Endpoint, mux loomhttp.Muxer, decoder func(*ht
 					if errors.As(err, &serviceError) {
 						code = jsonrpcErrorCodeForServiceError(serviceError)
 					}
-					encodeJSONRPCError(ctx, w, req, code, loom.ErrorSafeMessage(err), jsonrpc.NewErrorData(err), encoder, errhandler)
+					encodeJSONRPCError(ctx, w, req, code, loom.ErrorSafeMessage(err), mcpruntime.NewErrorData(err), encoder, errhandler)
 					return nil
 				}
 				switch en.LoomErrorName() {
 				case "invalid_params":
-					encodeJSONRPCError(ctx, w, req, jsonrpc.InvalidParams, loom.ErrorSafeMessage(err), jsonrpc.NewErrorData(err), encoder, errhandler)
+					encodeJSONRPCError(ctx, w, req, jsonrpc.InvalidParams, loom.ErrorSafeMessage(err), mcpruntime.NewErrorData(err), encoder, errhandler)
 				case "resource_not_found":
-					encodeJSONRPCError(ctx, w, req, jsonrpc.Code(-32002), loom.ErrorSafeMessage(err), jsonrpc.NewErrorData(err), encoder, errhandler)
+					encodeJSONRPCError(ctx, w, req, jsonrpc.Code(-32002), loom.ErrorSafeMessage(err), mcpruntime.NewErrorData(err), encoder, errhandler)
 				case "method_not_found":
-					encodeJSONRPCError(ctx, w, req, jsonrpc.MethodNotFound, loom.ErrorSafeMessage(err), jsonrpc.NewErrorData(err), encoder, errhandler)
+					encodeJSONRPCError(ctx, w, req, jsonrpc.MethodNotFound, loom.ErrorSafeMessage(err), mcpruntime.NewErrorData(err), encoder, errhandler)
 				default:
 					code := jsonrpc.InternalError
 					var serviceError *loom.ServiceError
 					if errors.As(err, &serviceError) {
 						code = jsonrpcErrorCodeForServiceError(serviceError)
 					}
-					encodeJSONRPCError(ctx, w, req, code, loom.ErrorSafeMessage(err), jsonrpc.NewErrorData(err), encoder, errhandler)
+					encodeJSONRPCError(ctx, w, req, code, loom.ErrorSafeMessage(err), mcpruntime.NewErrorData(err), encoder, errhandler)
 				}
 			} else {
 				errhandler(ctx, w, fmt.Errorf("endpoint error: %w", err))
@@ -895,7 +895,7 @@ func NewToolsListHandler(endpoint loom.Endpoint, mux loomhttp.Muxer, decoder fun
 				if errors.As(err, &serviceError) {
 					code = jsonrpcErrorCodeForServiceError(serviceError)
 				}
-				encodeJSONRPCError(ctx, w, req, code, loom.ErrorSafeMessage(err), jsonrpc.NewErrorData(err), encoder, errhandler)
+				encodeJSONRPCError(ctx, w, req, code, loom.ErrorSafeMessage(err), mcpruntime.NewErrorData(err), encoder, errhandler)
 			} else {
 				errhandler(ctx, w, fmt.Errorf("failed to decode parameters: %w", err))
 			}
@@ -912,23 +912,23 @@ func NewToolsListHandler(endpoint loom.Endpoint, mux loomhttp.Muxer, decoder fun
 					if errors.As(err, &serviceError) {
 						code = jsonrpcErrorCodeForServiceError(serviceError)
 					}
-					encodeJSONRPCError(ctx, w, req, code, loom.ErrorSafeMessage(err), jsonrpc.NewErrorData(err), encoder, errhandler)
+					encodeJSONRPCError(ctx, w, req, code, loom.ErrorSafeMessage(err), mcpruntime.NewErrorData(err), encoder, errhandler)
 					return nil
 				}
 				switch en.LoomErrorName() {
 				case "invalid_params":
-					encodeJSONRPCError(ctx, w, req, jsonrpc.InvalidParams, loom.ErrorSafeMessage(err), jsonrpc.NewErrorData(err), encoder, errhandler)
+					encodeJSONRPCError(ctx, w, req, jsonrpc.InvalidParams, loom.ErrorSafeMessage(err), mcpruntime.NewErrorData(err), encoder, errhandler)
 				case "resource_not_found":
-					encodeJSONRPCError(ctx, w, req, jsonrpc.Code(-32002), loom.ErrorSafeMessage(err), jsonrpc.NewErrorData(err), encoder, errhandler)
+					encodeJSONRPCError(ctx, w, req, jsonrpc.Code(-32002), loom.ErrorSafeMessage(err), mcpruntime.NewErrorData(err), encoder, errhandler)
 				case "method_not_found":
-					encodeJSONRPCError(ctx, w, req, jsonrpc.MethodNotFound, loom.ErrorSafeMessage(err), jsonrpc.NewErrorData(err), encoder, errhandler)
+					encodeJSONRPCError(ctx, w, req, jsonrpc.MethodNotFound, loom.ErrorSafeMessage(err), mcpruntime.NewErrorData(err), encoder, errhandler)
 				default:
 					code := jsonrpc.InternalError
 					var serviceError *loom.ServiceError
 					if errors.As(err, &serviceError) {
 						code = jsonrpcErrorCodeForServiceError(serviceError)
 					}
-					encodeJSONRPCError(ctx, w, req, code, loom.ErrorSafeMessage(err), jsonrpc.NewErrorData(err), encoder, errhandler)
+					encodeJSONRPCError(ctx, w, req, code, loom.ErrorSafeMessage(err), mcpruntime.NewErrorData(err), encoder, errhandler)
 				}
 			} else {
 				errhandler(ctx, w, fmt.Errorf("endpoint error: %w", err))
@@ -972,7 +972,7 @@ func NewToolsCallHandler(endpoint loom.Endpoint, mux loomhttp.Muxer, decoder fun
 				if errors.As(err, &serviceError) {
 					code = jsonrpcErrorCodeForServiceError(serviceError)
 				}
-				return strm.sendError(ctx, req.ID, code, loom.ErrorSafeMessage(err), jsonrpc.NewErrorData(err))
+				return strm.sendError(ctx, req.ID, code, loom.ErrorSafeMessage(err), mcpruntime.NewErrorData(err))
 			}
 			return nil
 		}
@@ -986,9 +986,9 @@ func NewToolsCallHandler(endpoint loom.Endpoint, mux loomhttp.Muxer, decoder fun
 				if errors.As(err, &en) {
 					switch en.LoomErrorName() {
 					case "invalid_params":
-						return strm.sendError(ctx, req.ID, jsonrpc.InvalidParams, loom.ErrorSafeMessage(err), jsonrpc.NewErrorData(err))
+						return strm.sendError(ctx, req.ID, jsonrpc.InvalidParams, loom.ErrorSafeMessage(err), mcpruntime.NewErrorData(err))
 					case "method_not_found":
-						return strm.sendError(ctx, req.ID, jsonrpc.MethodNotFound, loom.ErrorSafeMessage(err), jsonrpc.NewErrorData(err))
+						return strm.sendError(ctx, req.ID, jsonrpc.MethodNotFound, loom.ErrorSafeMessage(err), mcpruntime.NewErrorData(err))
 					}
 				}
 				code := jsonrpc.InternalError
@@ -996,7 +996,7 @@ func NewToolsCallHandler(endpoint loom.Endpoint, mux loomhttp.Muxer, decoder fun
 				if errors.As(err, &serviceError) {
 					code = jsonrpcErrorCodeForServiceError(serviceError)
 				}
-				return strm.sendError(ctx, req.ID, code, loom.ErrorSafeMessage(err), jsonrpc.NewErrorData(err))
+				return strm.sendError(ctx, req.ID, code, loom.ErrorSafeMessage(err), mcpruntime.NewErrorData(err))
 			}
 			return nil
 		}
@@ -1019,7 +1019,7 @@ func NewResourcesListHandler(endpoint loom.Endpoint, mux loomhttp.Muxer, decoder
 				if errors.As(err, &serviceError) {
 					code = jsonrpcErrorCodeForServiceError(serviceError)
 				}
-				encodeJSONRPCError(ctx, w, req, code, loom.ErrorSafeMessage(err), jsonrpc.NewErrorData(err), encoder, errhandler)
+				encodeJSONRPCError(ctx, w, req, code, loom.ErrorSafeMessage(err), mcpruntime.NewErrorData(err), encoder, errhandler)
 			} else {
 				errhandler(ctx, w, fmt.Errorf("failed to decode parameters: %w", err))
 			}
@@ -1036,23 +1036,23 @@ func NewResourcesListHandler(endpoint loom.Endpoint, mux loomhttp.Muxer, decoder
 					if errors.As(err, &serviceError) {
 						code = jsonrpcErrorCodeForServiceError(serviceError)
 					}
-					encodeJSONRPCError(ctx, w, req, code, loom.ErrorSafeMessage(err), jsonrpc.NewErrorData(err), encoder, errhandler)
+					encodeJSONRPCError(ctx, w, req, code, loom.ErrorSafeMessage(err), mcpruntime.NewErrorData(err), encoder, errhandler)
 					return nil
 				}
 				switch en.LoomErrorName() {
 				case "invalid_params":
-					encodeJSONRPCError(ctx, w, req, jsonrpc.InvalidParams, loom.ErrorSafeMessage(err), jsonrpc.NewErrorData(err), encoder, errhandler)
+					encodeJSONRPCError(ctx, w, req, jsonrpc.InvalidParams, loom.ErrorSafeMessage(err), mcpruntime.NewErrorData(err), encoder, errhandler)
 				case "resource_not_found":
-					encodeJSONRPCError(ctx, w, req, jsonrpc.Code(-32002), loom.ErrorSafeMessage(err), jsonrpc.NewErrorData(err), encoder, errhandler)
+					encodeJSONRPCError(ctx, w, req, jsonrpc.Code(-32002), loom.ErrorSafeMessage(err), mcpruntime.NewErrorData(err), encoder, errhandler)
 				case "method_not_found":
-					encodeJSONRPCError(ctx, w, req, jsonrpc.MethodNotFound, loom.ErrorSafeMessage(err), jsonrpc.NewErrorData(err), encoder, errhandler)
+					encodeJSONRPCError(ctx, w, req, jsonrpc.MethodNotFound, loom.ErrorSafeMessage(err), mcpruntime.NewErrorData(err), encoder, errhandler)
 				default:
 					code := jsonrpc.InternalError
 					var serviceError *loom.ServiceError
 					if errors.As(err, &serviceError) {
 						code = jsonrpcErrorCodeForServiceError(serviceError)
 					}
-					encodeJSONRPCError(ctx, w, req, code, loom.ErrorSafeMessage(err), jsonrpc.NewErrorData(err), encoder, errhandler)
+					encodeJSONRPCError(ctx, w, req, code, loom.ErrorSafeMessage(err), mcpruntime.NewErrorData(err), encoder, errhandler)
 				}
 			} else {
 				errhandler(ctx, w, fmt.Errorf("endpoint error: %w", err))
@@ -1090,7 +1090,7 @@ func NewResourcesReadHandler(endpoint loom.Endpoint, mux loomhttp.Muxer, decoder
 				if errors.As(err, &serviceError) {
 					code = jsonrpcErrorCodeForServiceError(serviceError)
 				}
-				encodeJSONRPCError(ctx, w, req, code, loom.ErrorSafeMessage(err), jsonrpc.NewErrorData(err), encoder, errhandler)
+				encodeJSONRPCError(ctx, w, req, code, loom.ErrorSafeMessage(err), mcpruntime.NewErrorData(err), encoder, errhandler)
 			} else {
 				errhandler(ctx, w, fmt.Errorf("failed to decode parameters: %w", err))
 			}
@@ -1107,23 +1107,23 @@ func NewResourcesReadHandler(endpoint loom.Endpoint, mux loomhttp.Muxer, decoder
 					if errors.As(err, &serviceError) {
 						code = jsonrpcErrorCodeForServiceError(serviceError)
 					}
-					encodeJSONRPCError(ctx, w, req, code, loom.ErrorSafeMessage(err), jsonrpc.NewErrorData(err), encoder, errhandler)
+					encodeJSONRPCError(ctx, w, req, code, loom.ErrorSafeMessage(err), mcpruntime.NewErrorData(err), encoder, errhandler)
 					return nil
 				}
 				switch en.LoomErrorName() {
 				case "invalid_params":
-					encodeJSONRPCError(ctx, w, req, jsonrpc.InvalidParams, loom.ErrorSafeMessage(err), jsonrpc.NewErrorData(err), encoder, errhandler)
+					encodeJSONRPCError(ctx, w, req, jsonrpc.InvalidParams, loom.ErrorSafeMessage(err), mcpruntime.NewErrorData(err), encoder, errhandler)
 				case "resource_not_found":
-					encodeJSONRPCError(ctx, w, req, jsonrpc.Code(-32002), loom.ErrorSafeMessage(err), jsonrpc.NewErrorData(err), encoder, errhandler)
+					encodeJSONRPCError(ctx, w, req, jsonrpc.Code(-32002), loom.ErrorSafeMessage(err), mcpruntime.NewErrorData(err), encoder, errhandler)
 				case "method_not_found":
-					encodeJSONRPCError(ctx, w, req, jsonrpc.MethodNotFound, loom.ErrorSafeMessage(err), jsonrpc.NewErrorData(err), encoder, errhandler)
+					encodeJSONRPCError(ctx, w, req, jsonrpc.MethodNotFound, loom.ErrorSafeMessage(err), mcpruntime.NewErrorData(err), encoder, errhandler)
 				default:
 					code := jsonrpc.InternalError
 					var serviceError *loom.ServiceError
 					if errors.As(err, &serviceError) {
 						code = jsonrpcErrorCodeForServiceError(serviceError)
 					}
-					encodeJSONRPCError(ctx, w, req, code, loom.ErrorSafeMessage(err), jsonrpc.NewErrorData(err), encoder, errhandler)
+					encodeJSONRPCError(ctx, w, req, code, loom.ErrorSafeMessage(err), mcpruntime.NewErrorData(err), encoder, errhandler)
 				}
 			} else {
 				errhandler(ctx, w, fmt.Errorf("endpoint error: %w", err))
@@ -1161,7 +1161,7 @@ func NewResourcesSubscribeHandler(endpoint loom.Endpoint, mux loomhttp.Muxer, de
 				if errors.As(err, &serviceError) {
 					code = jsonrpcErrorCodeForServiceError(serviceError)
 				}
-				encodeJSONRPCError(ctx, w, req, code, loom.ErrorSafeMessage(err), jsonrpc.NewErrorData(err), encoder, errhandler)
+				encodeJSONRPCError(ctx, w, req, code, loom.ErrorSafeMessage(err), mcpruntime.NewErrorData(err), encoder, errhandler)
 			} else {
 				errhandler(ctx, w, fmt.Errorf("failed to decode parameters: %w", err))
 			}
@@ -1178,23 +1178,23 @@ func NewResourcesSubscribeHandler(endpoint loom.Endpoint, mux loomhttp.Muxer, de
 					if errors.As(err, &serviceError) {
 						code = jsonrpcErrorCodeForServiceError(serviceError)
 					}
-					encodeJSONRPCError(ctx, w, req, code, loom.ErrorSafeMessage(err), jsonrpc.NewErrorData(err), encoder, errhandler)
+					encodeJSONRPCError(ctx, w, req, code, loom.ErrorSafeMessage(err), mcpruntime.NewErrorData(err), encoder, errhandler)
 					return nil
 				}
 				switch en.LoomErrorName() {
 				case "invalid_params":
-					encodeJSONRPCError(ctx, w, req, jsonrpc.InvalidParams, loom.ErrorSafeMessage(err), jsonrpc.NewErrorData(err), encoder, errhandler)
+					encodeJSONRPCError(ctx, w, req, jsonrpc.InvalidParams, loom.ErrorSafeMessage(err), mcpruntime.NewErrorData(err), encoder, errhandler)
 				case "resource_not_found":
-					encodeJSONRPCError(ctx, w, req, jsonrpc.Code(-32002), loom.ErrorSafeMessage(err), jsonrpc.NewErrorData(err), encoder, errhandler)
+					encodeJSONRPCError(ctx, w, req, jsonrpc.Code(-32002), loom.ErrorSafeMessage(err), mcpruntime.NewErrorData(err), encoder, errhandler)
 				case "method_not_found":
-					encodeJSONRPCError(ctx, w, req, jsonrpc.MethodNotFound, loom.ErrorSafeMessage(err), jsonrpc.NewErrorData(err), encoder, errhandler)
+					encodeJSONRPCError(ctx, w, req, jsonrpc.MethodNotFound, loom.ErrorSafeMessage(err), mcpruntime.NewErrorData(err), encoder, errhandler)
 				default:
 					code := jsonrpc.InternalError
 					var serviceError *loom.ServiceError
 					if errors.As(err, &serviceError) {
 						code = jsonrpcErrorCodeForServiceError(serviceError)
 					}
-					encodeJSONRPCError(ctx, w, req, code, loom.ErrorSafeMessage(err), jsonrpc.NewErrorData(err), encoder, errhandler)
+					encodeJSONRPCError(ctx, w, req, code, loom.ErrorSafeMessage(err), mcpruntime.NewErrorData(err), encoder, errhandler)
 				}
 			} else {
 				errhandler(ctx, w, fmt.Errorf("endpoint error: %w", err))
@@ -1228,7 +1228,7 @@ func NewResourcesUnsubscribeHandler(endpoint loom.Endpoint, mux loomhttp.Muxer, 
 				if errors.As(err, &serviceError) {
 					code = jsonrpcErrorCodeForServiceError(serviceError)
 				}
-				encodeJSONRPCError(ctx, w, req, code, loom.ErrorSafeMessage(err), jsonrpc.NewErrorData(err), encoder, errhandler)
+				encodeJSONRPCError(ctx, w, req, code, loom.ErrorSafeMessage(err), mcpruntime.NewErrorData(err), encoder, errhandler)
 			} else {
 				errhandler(ctx, w, fmt.Errorf("failed to decode parameters: %w", err))
 			}
@@ -1245,23 +1245,23 @@ func NewResourcesUnsubscribeHandler(endpoint loom.Endpoint, mux loomhttp.Muxer, 
 					if errors.As(err, &serviceError) {
 						code = jsonrpcErrorCodeForServiceError(serviceError)
 					}
-					encodeJSONRPCError(ctx, w, req, code, loom.ErrorSafeMessage(err), jsonrpc.NewErrorData(err), encoder, errhandler)
+					encodeJSONRPCError(ctx, w, req, code, loom.ErrorSafeMessage(err), mcpruntime.NewErrorData(err), encoder, errhandler)
 					return nil
 				}
 				switch en.LoomErrorName() {
 				case "invalid_params":
-					encodeJSONRPCError(ctx, w, req, jsonrpc.InvalidParams, loom.ErrorSafeMessage(err), jsonrpc.NewErrorData(err), encoder, errhandler)
+					encodeJSONRPCError(ctx, w, req, jsonrpc.InvalidParams, loom.ErrorSafeMessage(err), mcpruntime.NewErrorData(err), encoder, errhandler)
 				case "resource_not_found":
-					encodeJSONRPCError(ctx, w, req, jsonrpc.Code(-32002), loom.ErrorSafeMessage(err), jsonrpc.NewErrorData(err), encoder, errhandler)
+					encodeJSONRPCError(ctx, w, req, jsonrpc.Code(-32002), loom.ErrorSafeMessage(err), mcpruntime.NewErrorData(err), encoder, errhandler)
 				case "method_not_found":
-					encodeJSONRPCError(ctx, w, req, jsonrpc.MethodNotFound, loom.ErrorSafeMessage(err), jsonrpc.NewErrorData(err), encoder, errhandler)
+					encodeJSONRPCError(ctx, w, req, jsonrpc.MethodNotFound, loom.ErrorSafeMessage(err), mcpruntime.NewErrorData(err), encoder, errhandler)
 				default:
 					code := jsonrpc.InternalError
 					var serviceError *loom.ServiceError
 					if errors.As(err, &serviceError) {
 						code = jsonrpcErrorCodeForServiceError(serviceError)
 					}
-					encodeJSONRPCError(ctx, w, req, code, loom.ErrorSafeMessage(err), jsonrpc.NewErrorData(err), encoder, errhandler)
+					encodeJSONRPCError(ctx, w, req, code, loom.ErrorSafeMessage(err), mcpruntime.NewErrorData(err), encoder, errhandler)
 				}
 			} else {
 				errhandler(ctx, w, fmt.Errorf("endpoint error: %w", err))
@@ -1295,7 +1295,7 @@ func NewPromptsListHandler(endpoint loom.Endpoint, mux loomhttp.Muxer, decoder f
 				if errors.As(err, &serviceError) {
 					code = jsonrpcErrorCodeForServiceError(serviceError)
 				}
-				encodeJSONRPCError(ctx, w, req, code, loom.ErrorSafeMessage(err), jsonrpc.NewErrorData(err), encoder, errhandler)
+				encodeJSONRPCError(ctx, w, req, code, loom.ErrorSafeMessage(err), mcpruntime.NewErrorData(err), encoder, errhandler)
 			} else {
 				errhandler(ctx, w, fmt.Errorf("failed to decode parameters: %w", err))
 			}
@@ -1312,23 +1312,23 @@ func NewPromptsListHandler(endpoint loom.Endpoint, mux loomhttp.Muxer, decoder f
 					if errors.As(err, &serviceError) {
 						code = jsonrpcErrorCodeForServiceError(serviceError)
 					}
-					encodeJSONRPCError(ctx, w, req, code, loom.ErrorSafeMessage(err), jsonrpc.NewErrorData(err), encoder, errhandler)
+					encodeJSONRPCError(ctx, w, req, code, loom.ErrorSafeMessage(err), mcpruntime.NewErrorData(err), encoder, errhandler)
 					return nil
 				}
 				switch en.LoomErrorName() {
 				case "invalid_params":
-					encodeJSONRPCError(ctx, w, req, jsonrpc.InvalidParams, loom.ErrorSafeMessage(err), jsonrpc.NewErrorData(err), encoder, errhandler)
+					encodeJSONRPCError(ctx, w, req, jsonrpc.InvalidParams, loom.ErrorSafeMessage(err), mcpruntime.NewErrorData(err), encoder, errhandler)
 				case "resource_not_found":
-					encodeJSONRPCError(ctx, w, req, jsonrpc.Code(-32002), loom.ErrorSafeMessage(err), jsonrpc.NewErrorData(err), encoder, errhandler)
+					encodeJSONRPCError(ctx, w, req, jsonrpc.Code(-32002), loom.ErrorSafeMessage(err), mcpruntime.NewErrorData(err), encoder, errhandler)
 				case "method_not_found":
-					encodeJSONRPCError(ctx, w, req, jsonrpc.MethodNotFound, loom.ErrorSafeMessage(err), jsonrpc.NewErrorData(err), encoder, errhandler)
+					encodeJSONRPCError(ctx, w, req, jsonrpc.MethodNotFound, loom.ErrorSafeMessage(err), mcpruntime.NewErrorData(err), encoder, errhandler)
 				default:
 					code := jsonrpc.InternalError
 					var serviceError *loom.ServiceError
 					if errors.As(err, &serviceError) {
 						code = jsonrpcErrorCodeForServiceError(serviceError)
 					}
-					encodeJSONRPCError(ctx, w, req, code, loom.ErrorSafeMessage(err), jsonrpc.NewErrorData(err), encoder, errhandler)
+					encodeJSONRPCError(ctx, w, req, code, loom.ErrorSafeMessage(err), mcpruntime.NewErrorData(err), encoder, errhandler)
 				}
 			} else {
 				errhandler(ctx, w, fmt.Errorf("endpoint error: %w", err))
@@ -1366,7 +1366,7 @@ func NewPromptsGetHandler(endpoint loom.Endpoint, mux loomhttp.Muxer, decoder fu
 				if errors.As(err, &serviceError) {
 					code = jsonrpcErrorCodeForServiceError(serviceError)
 				}
-				encodeJSONRPCError(ctx, w, req, code, loom.ErrorSafeMessage(err), jsonrpc.NewErrorData(err), encoder, errhandler)
+				encodeJSONRPCError(ctx, w, req, code, loom.ErrorSafeMessage(err), mcpruntime.NewErrorData(err), encoder, errhandler)
 			} else {
 				errhandler(ctx, w, fmt.Errorf("failed to decode parameters: %w", err))
 			}
@@ -1383,23 +1383,23 @@ func NewPromptsGetHandler(endpoint loom.Endpoint, mux loomhttp.Muxer, decoder fu
 					if errors.As(err, &serviceError) {
 						code = jsonrpcErrorCodeForServiceError(serviceError)
 					}
-					encodeJSONRPCError(ctx, w, req, code, loom.ErrorSafeMessage(err), jsonrpc.NewErrorData(err), encoder, errhandler)
+					encodeJSONRPCError(ctx, w, req, code, loom.ErrorSafeMessage(err), mcpruntime.NewErrorData(err), encoder, errhandler)
 					return nil
 				}
 				switch en.LoomErrorName() {
 				case "invalid_params":
-					encodeJSONRPCError(ctx, w, req, jsonrpc.InvalidParams, loom.ErrorSafeMessage(err), jsonrpc.NewErrorData(err), encoder, errhandler)
+					encodeJSONRPCError(ctx, w, req, jsonrpc.InvalidParams, loom.ErrorSafeMessage(err), mcpruntime.NewErrorData(err), encoder, errhandler)
 				case "resource_not_found":
-					encodeJSONRPCError(ctx, w, req, jsonrpc.Code(-32002), loom.ErrorSafeMessage(err), jsonrpc.NewErrorData(err), encoder, errhandler)
+					encodeJSONRPCError(ctx, w, req, jsonrpc.Code(-32002), loom.ErrorSafeMessage(err), mcpruntime.NewErrorData(err), encoder, errhandler)
 				case "method_not_found":
-					encodeJSONRPCError(ctx, w, req, jsonrpc.MethodNotFound, loom.ErrorSafeMessage(err), jsonrpc.NewErrorData(err), encoder, errhandler)
+					encodeJSONRPCError(ctx, w, req, jsonrpc.MethodNotFound, loom.ErrorSafeMessage(err), mcpruntime.NewErrorData(err), encoder, errhandler)
 				default:
 					code := jsonrpc.InternalError
 					var serviceError *loom.ServiceError
 					if errors.As(err, &serviceError) {
 						code = jsonrpcErrorCodeForServiceError(serviceError)
 					}
-					encodeJSONRPCError(ctx, w, req, code, loom.ErrorSafeMessage(err), jsonrpc.NewErrorData(err), encoder, errhandler)
+					encodeJSONRPCError(ctx, w, req, code, loom.ErrorSafeMessage(err), mcpruntime.NewErrorData(err), encoder, errhandler)
 				}
 			} else {
 				errhandler(ctx, w, fmt.Errorf("endpoint error: %w", err))
@@ -1437,7 +1437,7 @@ func NewNotifyStatusUpdateHandler(endpoint loom.Endpoint, mux loomhttp.Muxer, de
 				if errors.As(err, &serviceError) {
 					code = jsonrpcErrorCodeForServiceError(serviceError)
 				}
-				encodeJSONRPCError(ctx, w, req, code, loom.ErrorSafeMessage(err), jsonrpc.NewErrorData(err), encoder, errhandler)
+				encodeJSONRPCError(ctx, w, req, code, loom.ErrorSafeMessage(err), mcpruntime.NewErrorData(err), encoder, errhandler)
 			} else {
 				errhandler(ctx, w, fmt.Errorf("failed to decode parameters: %w", err))
 			}
@@ -1454,23 +1454,23 @@ func NewNotifyStatusUpdateHandler(endpoint loom.Endpoint, mux loomhttp.Muxer, de
 					if errors.As(err, &serviceError) {
 						code = jsonrpcErrorCodeForServiceError(serviceError)
 					}
-					encodeJSONRPCError(ctx, w, req, code, loom.ErrorSafeMessage(err), jsonrpc.NewErrorData(err), encoder, errhandler)
+					encodeJSONRPCError(ctx, w, req, code, loom.ErrorSafeMessage(err), mcpruntime.NewErrorData(err), encoder, errhandler)
 					return nil
 				}
 				switch en.LoomErrorName() {
 				case "invalid_params":
-					encodeJSONRPCError(ctx, w, req, jsonrpc.InvalidParams, loom.ErrorSafeMessage(err), jsonrpc.NewErrorData(err), encoder, errhandler)
+					encodeJSONRPCError(ctx, w, req, jsonrpc.InvalidParams, loom.ErrorSafeMessage(err), mcpruntime.NewErrorData(err), encoder, errhandler)
 				case "resource_not_found":
-					encodeJSONRPCError(ctx, w, req, jsonrpc.Code(-32002), loom.ErrorSafeMessage(err), jsonrpc.NewErrorData(err), encoder, errhandler)
+					encodeJSONRPCError(ctx, w, req, jsonrpc.Code(-32002), loom.ErrorSafeMessage(err), mcpruntime.NewErrorData(err), encoder, errhandler)
 				case "method_not_found":
-					encodeJSONRPCError(ctx, w, req, jsonrpc.MethodNotFound, loom.ErrorSafeMessage(err), jsonrpc.NewErrorData(err), encoder, errhandler)
+					encodeJSONRPCError(ctx, w, req, jsonrpc.MethodNotFound, loom.ErrorSafeMessage(err), mcpruntime.NewErrorData(err), encoder, errhandler)
 				default:
 					code := jsonrpc.InternalError
 					var serviceError *loom.ServiceError
 					if errors.As(err, &serviceError) {
 						code = jsonrpcErrorCodeForServiceError(serviceError)
 					}
-					encodeJSONRPCError(ctx, w, req, code, loom.ErrorSafeMessage(err), jsonrpc.NewErrorData(err), encoder, errhandler)
+					encodeJSONRPCError(ctx, w, req, code, loom.ErrorSafeMessage(err), mcpruntime.NewErrorData(err), encoder, errhandler)
 				}
 			} else {
 				errhandler(ctx, w, fmt.Errorf("endpoint error: %w", err))
@@ -1513,9 +1513,9 @@ func NewEventsStreamHandler(endpoint loom.Endpoint, mux loomhttp.Muxer, decoder 
 				if errors.As(err, &en) {
 					switch en.LoomErrorName() {
 					case "invalid_params":
-						return strm.sendError(ctx, req.ID, jsonrpc.InvalidParams, loom.ErrorSafeMessage(err), jsonrpc.NewErrorData(err))
+						return strm.sendError(ctx, req.ID, jsonrpc.InvalidParams, loom.ErrorSafeMessage(err), mcpruntime.NewErrorData(err))
 					case "method_not_found":
-						return strm.sendError(ctx, req.ID, jsonrpc.MethodNotFound, loom.ErrorSafeMessage(err), jsonrpc.NewErrorData(err))
+						return strm.sendError(ctx, req.ID, jsonrpc.MethodNotFound, loom.ErrorSafeMessage(err), mcpruntime.NewErrorData(err))
 					}
 				}
 				code := jsonrpc.InternalError
@@ -1523,7 +1523,7 @@ func NewEventsStreamHandler(endpoint loom.Endpoint, mux loomhttp.Muxer, decoder 
 				if errors.As(err, &serviceError) {
 					code = jsonrpcErrorCodeForServiceError(serviceError)
 				}
-				return strm.sendError(ctx, req.ID, code, loom.ErrorSafeMessage(err), jsonrpc.NewErrorData(err))
+				return strm.sendError(ctx, req.ID, code, loom.ErrorSafeMessage(err), mcpruntime.NewErrorData(err))
 			}
 			return nil
 		}

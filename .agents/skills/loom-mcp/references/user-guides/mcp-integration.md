@@ -328,7 +328,7 @@ Generated helpers adapt JSON-RPC errors into planner.RetryHint values:
 
 - Validation errors → RetryHint with guidance for planners
 - Network errors → Retry hints with backoff recommendations
-- Server errors → Error details preserved in tool results
+- Server errors → Client-safe metadata preserved without internal service error instance IDs
 
 This allows planners to recover from MCP errors using the same retry patterns as native toolsets.
 

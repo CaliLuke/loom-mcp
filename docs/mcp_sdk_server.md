@@ -78,6 +78,10 @@ Tools with all-optional payloads therefore execute normally, while tools with
 required fields return the generated missing-field validation error and repair
 hint.
 
+Generated MCP JSON-RPC errors expose client-safe metadata such as the Loom error
+name, retry flags, and remediation guidance. Internal Loom service error instance
+IDs are retained for server-side logging and omitted from the wire `error.data`.
+
 ## Request Context Callback
 
 `RequestContext` is the supported extension point for propagating
