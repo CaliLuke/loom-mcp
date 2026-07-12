@@ -116,3 +116,73 @@ func TestEncodeOutputConfigRejectsAdditionalPropertiesSchema(t *testing.T) {
 	require.ErrorContains(t, err, "additionalProperties")
 	require.ErrorContains(t, err, "$")
 }
+
+func TestEncodeOutputConfigPreservesEnumAndConstDataValues(t *testing.T) {
+	cfg, err := encodeOutputConfig(&model.StructuredOutput{
+		Schema: []byte(`{
+			"type": "object",
+			"properties": {
+				"salutation": {
+					"enum": [{
+						"title": "Mr",
+						"default": true,
+						"type": "object",
+						"pattern": "literal",
+						"minimum": 1
+					}]
+				},
+				"fixed": {
+					"const": {
+						"title": "fixed",
+						"default": false,
+						"type": "object"
+					}
+				},
+				"choice": {
+					"oneOf": [{
+						"type": "object",
+						"title": "branch",
+						"properties": {
+							"value": {"type": "string", "pattern": "schema-only"}
+						}
+					}]
+				}
+			}
+		}`),
+	})
+	require.NoError(t, err)
+
+	member, ok := cfg.TextFormat.Structure.(*brtypes.OutputFormatStructureMemberJsonSchema)
+	require.True(t, ok)
+	require.JSONEq(t, `{
+		"type": "object",
+		"properties": {
+			"salutation": {
+				"enum": [{
+					"title": "Mr",
+					"default": true,
+					"type": "object",
+					"pattern": "literal",
+					"minimum": 1
+				}]
+			},
+			"fixed": {
+				"const": {
+					"title": "fixed",
+					"default": false,
+					"type": "object"
+				}
+			},
+			"choice": {
+				"oneOf": [{
+					"type": "object",
+					"properties": {
+						"value": {"type": "string"}
+					},
+					"additionalProperties": false
+				}]
+			}
+		},
+		"additionalProperties": false
+	}`, *member.Value.Schema)
+}

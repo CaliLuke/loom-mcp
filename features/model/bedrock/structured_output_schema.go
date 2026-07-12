@@ -64,6 +64,24 @@ var (
 		"patternProperties": {},
 		"$defs":             {},
 		"definitions":       {},
+		"dependentSchemas":  {},
+	}
+
+	bedrockSchemaSingleKeywords = map[string]struct{}{
+		"items":         {},
+		"contains":      {},
+		"not":           {},
+		"if":            {},
+		"then":          {},
+		"else":          {},
+		"propertyNames": {},
+	}
+
+	bedrockSchemaListKeywords = map[string]struct{}{
+		"allOf":       {},
+		"anyOf":       {},
+		"oneOf":       {},
+		"prefixItems": {},
 	}
 )
 
@@ -118,6 +136,11 @@ func normalizeBedrockSchemaNode(node any, path string) error {
 						return err
 					}
 				}
+				continue
+			}
+			_, singleSchema := bedrockSchemaSingleKeywords[key]
+			_, schemaList := bedrockSchemaListKeywords[key]
+			if !singleSchema && !schemaList {
 				continue
 			}
 			if err := normalizeBedrockSchemaNode(child, path+"."+key); err != nil {
