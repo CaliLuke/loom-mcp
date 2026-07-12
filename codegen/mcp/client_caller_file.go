@@ -68,8 +68,8 @@ func emitCallerCallTool(stmt *jen.Statement) {
 			jen.Id("req").Id("mcpruntime").Dot("CallRequest"),
 		).
 		Params(
-			jen.Id("mcpruntime").Dot("CallResponse"),
-			jen.Error(),
+			jen.Id("response").Id("mcpruntime").Dot("CallResponse"),
+			jen.Id("err").Error(),
 		).
 		BlockFunc(func(g *jen.Group) {
 			emitCallerRequireClient(g)
@@ -195,6 +195,11 @@ func emitCallerCallStream(g *jen.Group) {
 			jen.Qual("errors", "New").Call(jen.Lit("invalid tools/call stream type")),
 		),
 	)
+	g.Defer().Func().Params().Block(
+		jen.If(jen.Id("closeErr").Op(":=").Id("clientStream").Dot("Close").Call(), jen.Id("closeErr").Op("!=").Nil()).Block(
+			jen.Id("err").Op("=").Qual("errors", "Join").Call(jen.Id("err"), jen.Id("closeErr")),
+		),
+	).Call()
 }
 
 func emitCallerMergeEvents(g *jen.Group) {

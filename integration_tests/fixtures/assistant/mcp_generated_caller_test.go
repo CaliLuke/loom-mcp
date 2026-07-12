@@ -8,6 +8,7 @@ import (
 	"net/http/httptest"
 	"net/url"
 	"testing"
+	"time"
 
 	mcpAssistantjsonrpcc "example.com/assistant/gen/jsonrpc/mcp_assistant/client"
 	mcpassistant "example.com/assistant/gen/mcp_assistant"
@@ -140,6 +141,57 @@ func TestGeneratedNewCallerEmptyResponseIncludesToolContext(t *testing.T) {
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), `suite "assistant-mcp"`)
 	assert.Contains(t, err.Error(), `tool "multi_content"`)
+}
+
+func TestGeneratedNewCallerClosesStreamAfterDecodeFailure(t *testing.T) {
+	t.Parallel()
+
+	bodyReleased := make(chan struct{})
+	releaseHandler := make(chan struct{})
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var req jsonrpc.Request
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+
+		if req.Method == "initialize" {
+			w.Header().Set("Content-Type", "application/json")
+			if _, err := fmt.Fprint(w, `{"jsonrpc":"2.0","result":{"protocolVersion":"2025-06-18","capabilities":{},"serverInfo":{"name":"assistant-mcp","version":"1.0.0"}}}`); err != nil {
+				return
+			}
+			return
+		}
+
+		w.Header().Set("Content-Type", "text/event-stream")
+		if _, err := fmt.Fprint(w, "event: response\ndata: {\"jsonrpc\":\"2.0\",\"result\":{\"content\":\"invalid\"}}\n\n"); err != nil {
+			return
+		}
+		if flusher, ok := w.(http.Flusher); ok {
+			flusher.Flush()
+		}
+
+		select {
+		case <-r.Context().Done():
+			close(bodyReleased)
+		case <-releaseHandler:
+		}
+	}))
+	defer server.Close()
+	defer close(releaseHandler)
+
+	caller := newGeneratedCaller(t, server)
+	_, err := caller.CallTool(context.Background(), mcpruntime.CallRequest{
+		Tool:    "multi_content",
+		Payload: json.RawMessage(`{"count":1}`),
+	})
+	require.Error(t, err)
+
+	select {
+	case <-bodyReleased:
+	case <-time.After(time.Second):
+		t.Fatal("generated caller did not close the tools/call response body after a decode failure")
+	}
 }
 
 func newGeneratedCaller(t *testing.T, server *httptest.Server) mcpruntime.Caller {

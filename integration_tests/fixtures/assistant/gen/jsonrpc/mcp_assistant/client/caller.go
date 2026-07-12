@@ -33,7 +33,7 @@ func NewCaller(client *Client, suite string) mcpruntime.Caller {
 }
 
 // CallTool invokes tools/call via the generated JSON-RPC client and normalizes the response.
-func (c Caller) CallTool(ctx context.Context, req mcpruntime.CallRequest) (mcpruntime.CallResponse, error) {
+func (c Caller) CallTool(ctx context.Context, req mcpruntime.CallRequest) (response mcpruntime.CallResponse, err error) {
 	if c.client == nil {
 		return mcpruntime.CallResponse{}, errors.New("mcp client not configured")
 	}
@@ -50,6 +50,11 @@ func (c Caller) CallTool(ctx context.Context, req mcpruntime.CallRequest) (mcpru
 	if !ok {
 		return mcpruntime.CallResponse{}, errors.New("invalid tools/call stream type")
 	}
+	defer func() {
+		if closeErr := clientStream.Close(); closeErr != nil {
+			err = errors.Join(err, closeErr)
+		}
+	}()
 	var merged *mcppkg.ToolsCallResult
 	eventCount := 0
 	for {
