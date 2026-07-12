@@ -21,7 +21,7 @@ The suite grew slightly (303 test files, 1,439 top-level test functions, +37 sin
 | Total wall time (local) / (CI pipeline) | Unit (`-race -covermode=atomic`): **30.1 s fully warm** (69.7 s CPU), ~29.6 s test phase + ~3 min compile after the 30-commit delta (cold build). Integration (itest + assistant fixture, warm): 212 s, all green. CI: **never executed** (`gh api …/actions/runs` → `total_count: 0`) |
 | Parallelism today | Package-level only; **2.3 of 10 cores** warm (69.7 s CPU / 30.1 s wall). `t.Parallel()` at 386 sites (+10). `make itest` still forces `-parallel 1` |
 | Coverage (line / branch) | **59.7 %** statements (+0.3); branch N/A (Go). registry/ 34 % (understated by Docker skips); 4 zero-coverage packages remain attribution artifacts (C-12) |
-| Skipped/disabled tests | 39 runtime skips (29 Docker-gated registry funcs — was 28 — + Mongo clientinfra + helpers); 2 permanent `t.Skip` now aged ~7.5 months; `MCP_CLI_TESTS` suite still dark |
+| Skipped/disabled tests | Docker-backed tests may skip only outside strict CI mode; 0 permanent legacy skips; the CLI scenario is canonical in make itest |
 | Snapshot tests (count / size on disk) | 53 `.golden` / 276 KB / 18 > 100 lines (net zero new goldens in delta; 2 modified) |
 | Sleeps in tests (count / summed literal seconds) | 13 sites / ≈1.35 s literal (≈0.35 s effective: the new 1 s sleep at `registry/registry_test.go:27` is a subprocess fail-safe that normally never elapses). Integration tests: 0 sleeps |
 | Bug-fix commits with tests (sampled ratio) | **30/30** in the delta (measured, not sampled); cumulative 45/45 |
@@ -67,8 +67,8 @@ Finding IDs continue the `679fb76` numbering; each carries a status vs that base
 ### C-6: High-fan-in runtime gaps — all live owners covered
 - **Severity:** medium · **Status:** resolved for live code (4 owners complete; dead bridge tracked for deletion decision)
 - **Confidence:** measured
-- **Evidence at HEAD:** runtime/agent/tools has 96.4 % direct coverage; planner.ConsumeStream lifts planner to 85.7 %; runtime/agent/interrupt is 94.1 %. Clue metrics and tracing now execute against real in-memory OpenTelemetry providers, while logger and attribute conversion edges are exercised directly; telemetry package coverage rose from 8.5 % to 45.7 %. The stream tests exposed and fixed C-19–C-21. The only original sub-item left is runtime/agent/stream/bridge, which still has no production importer and is therefore dead-weight, not a live untested boundary.
-- **Impact/Recommendation:** Treat the live-runtime coverage finding as resolved. Resolve stream/bridge under V-5 by either establishing a real owner or deleting it; do not manufacture coverage for unused code.
+- **Evidence at HEAD:** runtime/agent/tools has 96.4 % direct coverage; planner.ConsumeStream lifts planner to 85.7 %; runtime/agent/interrupt is 94.1 %. Clue metrics and tracing execute against real in-memory OpenTelemetry providers, while logger and attribute conversion edges are exercised directly; telemetry package coverage rose from 8.5 % to 45.7 %. The stream tests exposed and fixed C-19–C-21. runtime/agent/stream/bridge is an intentional public convenience façade used by the package's runnable examples; its underlying subscriber behavior is covered at the stream owner.
+- **Impact/Recommendation:** Complete. Keep bridge behavior thin and delegated; move it only if a public API cleanup intentionally changes the documented example surface.
 
 ### C-7: Model-adapter error/streaming matrix holes
 - **Severity:** medium · **Status:** audited adapter gaps resolved; shared checklist pending
@@ -149,11 +149,11 @@ Finding IDs continue the `679fb76` numbering; each carries a status vs that base
 - **Evidence:** The three ToolsetExpr provider-resolution subtests only constructed structs and asserted the same assigned fields; they are deleted. The nearby MCP ToolExpr validation and EvalName cases invoke behavior and remain. Repo-wide greps still show no assert-true equivalents, zero-assertion tests, or commented-out tests.
 - **Recommendation:** Complete; prefer DSL evaluation, validation, generated output, or runtime behavior over struct field echoes.
 
-### V-5: Dead weight — unchanged
-- **Severity:** low · **Status:** still open
+### V-5: Dead-weight inventory resolved
+- **Severity:** low · **Status:** resolved
 - **Confidence:** measured
-- **Evidence:** Both legacy skips intact (`codegen/agent/default_adapters_test.go:23`, `service_toolset_test.go:24`, now ~7.5 months old). `DeleteMeta`/`SetDescription`/`SetTitle` still 0 callers repo-wide. `stream/bridge` still 0 production importers. `MCP_CLI_TESTS` still set nowhere (`integration_tests/tests/mcp_integration_test.go:78-79`).
-- **Recommendation:** Unchanged.
+- **Evidence:** The two permanently skipped legacy codegen test files are deleted. make itest now sets MCP_CLI_TESTS=true; the CLI prompt scenario passes locally in 12.3 s. DeleteMeta, SetDescription, and SetTitle are not dead: they satisfy Goa metadata/description/title holder interfaces consumed dynamically by standard DSL helpers. runtime/agent/stream/bridge is a documented public façade used by runnable examples rather than internal production wiring.
+- **Recommendation:** Complete. Keep the CLI scenario canonical and do not classify interface implementations as dead solely from static call counts.
 
 ### S-1: Top 5 % of tests = 95 % of summed test time; but warm wall is now the real story
 - **Severity:** high (as dev-loop finding, reframed) · **Status:** still open, magnitudes updated
@@ -207,7 +207,7 @@ Phase 1 — Value (`value.md`):
 - 1.4 Snapshot/golden audit — **found, moderate**: 53 / 276 KB / 18 > 100 lines; delta added 0, modified 2 goldens alongside their generator change (disciplined).
 - 1.5 Testing someone else's code — **not found** (no new SDK-behavior tests in delta).
 - 1.6a Test roots & selection mapping — **found (major, unchanged)**: same roots; C-1 mapping audit re-verified at HEAD; 158/164 unreachable.
-- 1.6 Dead weight — **found**: V-5 unchanged (2 permanent skips, dead setters, bridge, dark CLI suite); duplicate CI executions N/A (CI runs nothing).
+- 1.6 Dead weight — **remediated**: permanent skips removed, dynamic DSL interface methods reclassified, bridge ownership documented, CLI scenario canonical.
 
 Phase 2 — Completeness (`completeness.md`):
 - 2.1 Criticality ranking — re-done at HEAD (top churn: `codegen/mcp/generate.go` 40, `runtime.go` 38, `workflow.go` 34, `bedrock/client.go` 34 …).
@@ -215,7 +215,7 @@ Phase 2 — Completeness (`completeness.md`):
 - 2.3 Untested public surface — top-20 churn files crossed with per-file coverage (hooks/events.go 29 %, tool.go 33 %, subscriber.go 51 %); C-6 sweeps re-verified.
 - 2.4 Error paths — **found**: C-3 remediated to target (49/59 DSL sites), C-7 (provider shapes), C-13 (delta residuals).
 - 2.5 Boundaries/edge inputs — **partially remediated** (C-3 target achieved; runtime/provider boundaries remain).
-- 2.6 Structural gaps — DB-only-mocked: found (C-8, decode-side improved); concurrency: found (C-10, with strong delta counterexamples); migrations N/A; flags: `MCP_CLI_TESTS` still dark; property-based present; protocol-layer e2e holes: C-5 (no scenario changes in 30 commits).
+- 2.6 Structural gaps — real Mongo contracts added (C-8 resolved); concurrency remains C-10; migrations N/A; CLI flag canonical; property-based present; protocol-layer e2e holes remain C-5.
 - 2.7 Regression discipline — **measured 30/30 on the full delta** (C-11).
 - 2.8 Assertion strength — spot-read 5 delta fix tests (behavioral); no mutation tooling (none configured).
 
@@ -241,7 +241,7 @@ Rank positions are preserved for traceability. Rank 2 is complete; the other opp
 | 5 | **Completed:** compile-the-output matrix with five generated designs | C-4, C-16, C-17, C-18 | complete | done | Three current generator defects found and fixed |
 | 6 | Replace `os.Setenv` header channel → drop `-parallel 1`; one server per YAML; `TestMain` cleanup | S-3, S-4 | structural | days | Integration ~60–90 s; stops the 103 MB leak |
 | 7 | Shared adapter conformance table (+ Gemini/Bedrock error shapes, bedrock keyword table, Mongo prompt/memory integration) | C-7, C-8, V-3 | structural | days | Provider-regression class covered once, uniformly |
-| 8 | Deletions & consolidation: echo tests, 2 stale skips, dead setters, bridge decision, tool-search/OAuth table-driving | V-1, V-4, V-5 | quick win | days | ~40–60 fewer funcs in the biggest bucket |
+| 8 | **Partially completed:** echo tests and stale skips removed; DSL setters/bridge reclassified; fixture consolidation remains | V-1, V-4, V-5 | cleanup | days | Dead weight removed without deleting public contracts |
 | 9 | **Completed:** tools codec/ident, interrupts, ConsumeStream, Clue telemetry, bufconn registry, double-Finalize | C-6, C-9, C-10 | complete | done | Highest-fan-in plumbing has direct behavioral proof |
 
 ## 6. Suggested refactoring sequence
@@ -280,7 +280,7 @@ Commit-sized work:
 1. **Implemented locally:** CI uses Go `1.26.1`, Loom `v1.4.0`, and repository make targets.
 2. **Implemented locally:** `make itest` owns all three integration clusters, including the assistant fixture.
 3. **Implemented locally:** registry Docker coverage fails closed in CI and remains skippable without Docker locally.
-4. Enable `MCP_CLI_TESTS` only after its server/CLI prerequisites are made hermetic; otherwise delete the dead flag path rather than advertising false coverage.
+4. **Implemented:** make itest enables MCP_CLI_TESTS and the hermetic CLI prompt scenario passes.
 5. Verify an actual GitHub Actions run. If the run count remains zero, stop: repository Actions permissions require owner/admin intervention and cannot be repaired in code.
 
 Local proof complete: `actionlint`, `make lint`, `make test`, uncached `make itest`, `make verify-mcp-local`, and the strict Colima-backed registry suite are green. Remaining proof: the first green Actions run with zero unexpected skips. Do not call C-1 complete until hosted execution is observed.
@@ -333,7 +333,7 @@ Add deterministic tests at their owning packages:
 
 Proof: targeted race tests for each owner, then `make lint`, `make test`, `make itest`, and `make verify-mcp-local`.
 
-Progress: **Phase 4 concrete test list complete.** runtime/agent/tools is 96.4 %, runtime/agent/planner is 85.7 %, runtime/agent/interrupt is 94.1 %, and telemetry rose from 8.5 % to 45.7 % under race/shuffle. ConsumeStream now preserves all token usage and error paths. The generated registry gRPC server/client/adapter chain is covered through bufconn. stream/bridge moves to the dead-code decision in V-5; broader sleep-based concurrency cleanup remains tracked by C-10/S-7.
+Progress: **Phase 4 concrete test list complete.** runtime/agent/tools is 96.4 %, runtime/agent/planner is 85.7 %, runtime/agent/interrupt is 94.1 %, and telemetry rose from 8.5 % to 45.7 % under race/shuffle. ConsumeStream preserves all token usage and error paths. The generated registry gRPC server/client/adapter chain is covered through bufconn. The stream bridge is retained as a documented public façade; broader sleep-based concurrency cleanup remains tracked by C-10/S-7.
 
 ### Phase 5 — provider conformance and persistence reality
 
