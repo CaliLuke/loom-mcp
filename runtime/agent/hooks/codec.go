@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"reflect"
 	"time"
 
 	"github.com/CaliLuke/loom-mcp/runtime/agent"
@@ -64,6 +65,9 @@ type (
 // EncodeToHookInput creates a hook activity input envelope from a hook event for
 // serialization and transport to the hook activity.
 func EncodeToHookInput(evt Event, turnID string) (*ActivityInput, error) {
+	if isNilEvent(evt) {
+		return nil, errors.New("event is required")
+	}
 	payload, err := encodeHookPayload(evt)
 	if err != nil {
 		return nil, err
@@ -138,6 +142,9 @@ func marshalHookPayload(label string, payload any) (rawjson.Message, error) {
 
 // DecodeFromHookInput reconstructs a hooks.Event from the serialized hook input.
 func DecodeFromHookInput(input *ActivityInput) (Event, error) {
+	if input == nil {
+		return nil, errors.New("input is required")
+	}
 	evt, handled, err := decodeRunEvent(input)
 	if err != nil {
 		return nil, err
@@ -369,7 +376,9 @@ func decodeToolCallScheduledEvent(input *ActivityInput) (Event, bool, error) {
 	if err := decodeHookPayload(input, &p); err != nil {
 		return nil, false, err
 	}
-	return NewToolCallScheduledEvent(input.RunID, input.AgentID, input.SessionID, p.ToolName, p.ToolCallID, p.Payload, p.Queue, p.ParentToolCallID, p.ExpectedChildrenTotal), true, nil
+	evt := NewToolCallScheduledEvent(input.RunID, input.AgentID, input.SessionID, p.ToolName, p.ToolCallID, p.Payload, p.Queue, p.ParentToolCallID, p.ExpectedChildrenTotal)
+	evt.DisplayHint = p.DisplayHint
+	return evt, true, nil
 }
 
 func decodeToolCallUpdatedEvent(input *ActivityInput) (Event, bool, error) {
@@ -480,4 +489,12 @@ func stampTimestamp(evt Event, timestampMS int64) {
 
 func stampEventKey(evt Event, eventKey string) {
 	evt.(eventKeySetter).SetEventKey(eventKey)
+}
+
+func isNilEvent(evt Event) bool {
+	if evt == nil {
+		return true
+	}
+	value := reflect.ValueOf(evt)
+	return value.Kind() == reflect.Pointer && value.IsNil()
 }
