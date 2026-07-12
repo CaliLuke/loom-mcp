@@ -143,11 +143,11 @@ Finding IDs continue the `679fb76` numbering; each carries a status vs that base
 - **Confidence:** measured
 - **Recommendation:** Unchanged — fold into C-3/C-7 work.
 
-### V-4: Tautological/echo tests — rare, unchanged (one grew)
-- **Severity:** low · **Status:** still open
+### V-4: Tautological/echo tests removed
+- **Severity:** low · **Status:** resolved
 - **Confidence:** measured
-- **Evidence:** `expr/agent/toolset_test.go:358-397` echo test now **3** subtests (was 2 — the delta added "registry provider" echo); `expr/mcp/mcp_test.go:264-279` unchanged. Repo-wide greps at HEAD: assert-true equivalents 0, commented-out tests 0.
-- **Recommendation:** Delete the echo subtests.
+- **Evidence:** The three ToolsetExpr provider-resolution subtests only constructed structs and asserted the same assigned fields; they are deleted. The nearby MCP ToolExpr validation and EvalName cases invoke behavior and remain. Repo-wide greps still show no assert-true equivalents, zero-assertion tests, or commented-out tests.
+- **Recommendation:** Complete; prefer DSL evaluation, validation, generated output, or runtime behavior over struct field echoes.
 
 ### V-5: Dead weight — unchanged
 - **Severity:** low · **Status:** still open

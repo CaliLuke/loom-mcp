@@ -357,47 +357,6 @@ func TestToolsetExprValidateSkillsProviderModes(t *testing.T) {
 	})
 }
 
-func TestToolsetExpr_ProviderResolution(t *testing.T) {
-	t.Run("toolset without provider is local", func(t *testing.T) {
-		ts := &ToolsetExpr{Name: "local"}
-		// Provider is nil, which means local toolset with inline schemas
-		require.Nil(t, ts.Provider)
-	})
-
-	t.Run("toolset with MCP provider", func(t *testing.T) {
-		ts := &ToolsetExpr{
-			Name: "mcp-backed",
-			Provider: &ProviderExpr{
-				Kind:       ProviderMCP,
-				MCPService: "svc",
-				MCPToolset: "mcp-server",
-			},
-		}
-		require.NotNil(t, ts.Provider)
-		require.Equal(t, ProviderMCP, ts.Provider.Kind)
-		require.Equal(t, "svc", ts.Provider.MCPService)
-		require.Equal(t, "mcp-server", ts.Provider.MCPToolset)
-	})
-
-	t.Run("toolset with registry provider", func(t *testing.T) {
-		reg := &RegistryExpr{Name: "corp-registry", URL: "https://registry.corp.internal"}
-		ts := &ToolsetExpr{
-			Name: "registry-backed",
-			Provider: &ProviderExpr{
-				Kind:        ProviderRegistry,
-				Registry:    reg,
-				ToolsetName: "enterprise-tools",
-				Version:     "1.2.3",
-			},
-		}
-		require.NotNil(t, ts.Provider)
-		require.Equal(t, ProviderRegistry, ts.Provider.Kind)
-		require.Equal(t, reg, ts.Provider.Registry)
-		require.Equal(t, "enterprise-tools", ts.Provider.ToolsetName)
-		require.Equal(t, "1.2.3", ts.Provider.Version)
-	})
-}
-
 func TestToolsetExpr_WalkSets(t *testing.T) {
 	tool1 := &ToolExpr{Name: "tool1"}
 	tool2 := &ToolExpr{Name: "tool2"}
