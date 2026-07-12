@@ -275,7 +275,7 @@ func (h *healthTracker) RecordPong(ctx context.Context, toolset string, pingID s
 	if err != nil {
 		return fmt.Errorf("marshal health record: %w", err)
 	}
-	_, err = h.healthMap.Set(ctx, key, string(payload))
+	_, err = h.healthMap.SetAndWait(ctx, key, string(payload))
 	if err != nil {
 		return fmt.Errorf("record pong: %w", err)
 	}

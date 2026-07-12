@@ -24,6 +24,7 @@ type (
 		Get(key string) (string, bool)
 		Keys() []string
 		Set(ctx context.Context, key, value string) (string, error)
+		SetAndWait(ctx context.Context, key, value string) (string, error)
 	}
 
 	// catalogEntry is the canonical persisted registry record.
@@ -76,7 +77,7 @@ func (c *toolsetCatalog) SaveToolset(ctx context.Context, toolset *genregistry.T
 	if err != nil {
 		return fmt.Errorf("marshal toolset %q: %w", toolset.Name, err)
 	}
-	if _, err := c.m.Set(ctx, toolsetCatalogKey(toolset.Name), string(body)); err != nil {
+	if _, err := c.m.SetAndWait(ctx, toolsetCatalogKey(toolset.Name), string(body)); err != nil {
 		return fmt.Errorf("store toolset %q: %w", toolset.Name, err)
 	}
 	return nil

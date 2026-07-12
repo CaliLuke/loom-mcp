@@ -235,6 +235,10 @@ func (m *testCatalogMap) Set(ctx context.Context, key, value string) (string, er
 	return prev, nil
 }
 
+func (m *testCatalogMap) SetAndWait(ctx context.Context, key, value string) (string, error) {
+	return m.Set(ctx, key, value)
+}
+
 // phantomKeyCatalogMap reports one extra key from Keys() that Get never
 // resolves, simulating an entry deleted by another node between the Keys()
 // snapshot and the per-key read.
