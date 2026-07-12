@@ -44,6 +44,42 @@ func TestNewAgentDataConverter_DecodesToolResultsSetIntoSinglePointer(t *testing
 	require.JSONEq(t, `{"value":"ok"}`, string(decoded.Results[0].Result))
 }
 
+func TestNewAgentDataConverterRoundTripsRunOutput(t *testing.T) {
+	t.Parallel()
+
+	dc := NewAgentDataConverter(nil)
+	want := &api.RunOutput{
+		AgentID: "test.agent",
+		RunID:   "run-123",
+		Final: &model.Message{
+			Role:  model.ConversationRoleAssistant,
+			Parts: []model.Part{model.TextPart{Text: "done"}},
+		},
+		FinalToolResult: &api.ToolEvent{Name: "test.final", Result: rawjson.Message(`{"ok":true}`)},
+		ToolEvents:      []*api.ToolEvent{{Name: "test.tool", Result: rawjson.Message(`{"value":1}`)}},
+		Notes:           []*planner.PlannerAnnotation{{Text: "note"}},
+		Usage:           &model.TokenUsage{InputTokens: 3, OutputTokens: 5},
+	}
+	payload, err := dc.ToPayload(want)
+	require.NoError(t, err)
+	var got *api.RunOutput
+	require.NoError(t, dc.FromPayload(payload, &got))
+	require.Equal(t, want, got)
+}
+
+func TestAgentDataConverterWireHelpersRejectNilBoundaryValues(t *testing.T) {
+	t.Parallel()
+
+	_, err := encodeRunOutputWire(nil)
+	require.ErrorContains(t, err, "run output is nil")
+	_, err = encodePlanActivityInputWire(nil)
+	require.ErrorContains(t, err, "plan activity input is nil")
+	_, err = encodeToolResultsSetWire(nil)
+	require.ErrorContains(t, err, "tool results set is nil")
+	var decoded *api.RunOutput
+	require.ErrorContains(t, decodeRunOutput(nil, &decoded), "payload is nil")
+}
+
 func TestNewAgentDataConverter_RoundTripsPlanActivityInputToolOutputs(t *testing.T) {
 	t.Parallel()
 

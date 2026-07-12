@@ -30,7 +30,7 @@ func (h *workflowHandle) Signal(ctx context.Context, name string, payload any) e
 }
 
 func (h *workflowHandle) Cancel(ctx context.Context) error {
-	return h.client.CancelWorkflow(ctx, h.run.GetID(), h.run.GetRunID())
+	return mapSignalError(h.client.CancelWorkflow(ctx, h.run.GetID(), h.run.GetRunID()))
 }
 
 // SignalByID sends a signal to a workflow by workflow ID and optional run ID.
