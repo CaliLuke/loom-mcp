@@ -4,11 +4,11 @@ Audited: 2026-07-12 (refresh + ongoing remediation) · Baseline commit: `4f2c262
 Baseline: prior audit at `679fb76` earlier the same day; this refresh and the subsequent remediation commits re-measure each finding at the current tree.
 Recent remediation continues through the current tree, including generated-output compilation, runtime boundaries, provider failures, real Mongo contracts, integration artifact ownership, provider conformance, and deterministic ordering. See the defect ledger for the individual regression commits.
 
-Remediation progress: **S-2 and C-2 are resolved; C-1 has reached hosted execution and is awaiting a green rerun after exposing C-36 and C-37; C-3 and C-4 achieved their planned targets.** Validation now covers 49/59 DSL error sites and more than 37/46 `ToolExpr.Validate` conditions. Five materially different agent designs are freshly rendered and compiled. That compile matrix immediately exposed three current generator defects: cross-package named payloads were forwarded without conversion (C-16), required injected strings were assigned pointers (C-17), and result-less methods were called as two-result functions (C-18); all are fixed by the matrix change.
+Remediation progress: **All local findings and hosted execution findings C-36/C-37 are resolved; hosted run 29202009227 is fully green.** Validation covers 49/59 DSL error sites and more than 37/46 `ToolExpr.Validate` conditions. Five materially different agent designs are freshly rendered and compiled. The compile matrix exposed and now prevents invalid cross-package payload conversion, required injected-pointer assignment, and result-less method invocation (C-16–C-18).
 
 ## 1. Executive summary
 
-The suite now contains 331 test files and 1,519 top-level test functions (plus one benchmark). Regression discipline remains strong: every audited fix has landed with a test, and the remediation has exposed twenty-three additional product defects (C-15–C-37). Shuffle is enforced, design-validation targets are met, a five-design compile matrix rejects invalid generated package graphs, high-fan-in runtime and ordering boundaries are directly synchronized, all five provider adapters execute one shared behavioral conformance matrix, real Mongo contracts run through Colima, and sampling, client roots, and progress have real client-vs-generated-framework contracts. Hosted Actions proved the full integration job and Docker-backed registry execution, then exposed C-36's host-dependent Markdown MIME classification and C-37's asynchronous replicated-map visibility after registration. **A green rerun remains the immediate blocker** while both hosted findings are verified. The warm unit critical path is 27 % faster, fixture duplication has been resolved or reclassified, and protocol-safe scenario-file parallelism reduced the integration critical path below 90 seconds; all local performance targets are met. Integration fixture artifacts now have process-level owners and are removed after every test binary; a measured run left zero prepared clones and zero cached server binaries after an earlier audit session had accumulated 93 clones (125 MB) and 218 binaries (8.2 GB).
+The suite now contains 331 test files and 1,519 top-level test functions (plus one benchmark). Regression discipline remains strong: every audited fix has landed with a test, and remediation exposed twenty-three additional product defects (C-15–C-37). Shuffle is enforced, design-validation targets are met, a five-design compile matrix rejects invalid generated package graphs, high-fan-in runtime and ordering boundaries are synchronized, all five provider adapters execute one behavioral conformance matrix, real Mongo contracts run through containers, and sampling, client roots, and progress have real client-vs-generated-framework contracts. Hosted Actions exposed C-36's host-dependent Markdown MIME classification and C-37's asynchronous replicated-map visibility, then passed both jobs after their fixes. The warm unit critical path is 27 % faster, duplication is resolved or reclassified, and protocol-safe scenario-file parallelism reduced the local integration critical path below 90 seconds. Integration fixture artifacts have process-level owners and are removed after every test binary; a measured run left zero prepared clones and zero cached server binaries after an earlier session had accumulated 93 clones (125 MB) and 218 binaries (8.2 GB).
 
 ## 2. Inventory (cross-repo baseline metrics)
 
@@ -17,8 +17,8 @@ The suite now contains 331 test files and 1,519 top-level test functions (plus o
 | Languages / frameworks | Go 1.26 (arm64); Goa/Loom DSL+codegen; MCP go-sdk v1.6.1; loom fork v1.4.0 (remote mode) |
 | Test runner(s) | `go test` via `make test` (`-shuffle=on`) / `make itest` / `make verify-mcp-local`; testify, gopter, testcontainers (Redis, Mongo) |
 | Test files / test cases | 331 files, 1,519 `func Test` plus 1 benchmark; latest full gate counts are refreshed after each remediation phase |
-| Layer split (unit / integration / e2e) | 1,345 unit funcs; 172 integration-cluster funcs (framework 31, tests 7, assistant 125, agent_features 9); 1 e2e quickstart in the integration target |
-| Total wall time (local) / (CI pipeline) | Unit (`-short -race -covermode=atomic`): **21.84 s fully warm** (59.05 s CPU), down from 30.1 s. Latest local scenarios: 72.1–73.8 s. Hosted run 29201229885: integration green in 5m39s; unit failed after 6m54s on C-36 after Docker-backed packages passed. |
+| Layer split (unit / integration / e2e) | 1,346 unit funcs; 172 integration-cluster funcs (framework 31, tests 7, assistant 125, agent_features 9); 1 e2e quickstart in the integration target |
+| Total wall time (local) / (CI pipeline) | Unit (`-short -race -covermode=atomic`): **21.84 s fully warm** (59.05 s CPU), down from 30.1 s. Latest local scenarios: 72.1–75.4 s. Hosted run **29202009227 green**: integration 2m14s; strict build/lint/unit/coverage 7m42s. |
 | Parallelism today | Unit packages use package/test parallelism; **2.7 of 10 cores** warm (59.05 s CPU / 21.84 s wall). The integration framework honors its safe `t.Parallel()` declarations; six independent scenario-file groups run concurrently while stateful scenarios remain serial within each YAML file. |
 | Coverage (line / branch) | **62.8 %** statements in the normal local gate; **63.9 %** with strict Docker-backed packages through Colima; branch N/A (Go). Three zero-coverage package groups remain attribution artifacts (C-12) |
 | Skipped/disabled tests | Docker-backed tests may skip only outside strict CI mode; 0 permanent legacy skips; the CLI scenario is canonical in make itest |
@@ -31,12 +31,11 @@ The suite now contains 331 test files and 1,519 top-level test functions (plus o
 
 Finding IDs continue the `679fb76` numbering; each carries a status vs that baseline.
 
-### C-1: CI executes the full contract; green rerun pending after C-36
-- **Severity:** blocker · **Status:** hosted execution reached; product-fix rerun pending
+### C-1: CI executes the full contract locally and hosted
+- **Severity:** blocker · **Status:** resolved
 - **Confidence:** measured
-- **Evidence:** Hosted history remains `0` runs. Locally, `.github/workflows/ci.yml` installs Go `1.26.1` in both jobs, pins Loom `v1.4.0`, runs `make build`, `make lint`, `make test`, and `make itest`, and caches all fixture module sums. `Makefile.itest` owns assistant (125 funcs), agent_features (9), framework (31), tests (7), and the quickstart: all 172 integration-cluster functions plus the e2e bootstrap are selected with `-count=1`. Unit coverage now fails below 62.0 % instead of only writing `cover.out`; CI preserves that report for 14 days, has read-only token permissions, cancels superseded runs, and bounds both jobs at 30 minutes. The exact build-job command passed locally with `CI=true`, Docker fail-closed mode, and Colima's host/socket override, producing 63.9 % coverage; the latest full integration ladder is green with scenarios at 73.8 s.
-- **Impact:** Selection, runner startup, Docker availability, and integration execution are proven. Reassurance remains incomplete until the C-36 fix produces a fully green hosted run.
-- **Recommendation:** Finish local gates, commit, and verify the first actual Actions run. If the run count remains zero after the commit reaches GitHub, repository owner/admin intervention is required.
+- **Evidence:** `.github/workflows/ci.yml` installs Go `1.26.1`, pins Loom `v1.4.0`, runs repository make targets, caches every module, fails closed on missing Docker coverage, enforces 62.0 % aggregate coverage, preserves `cover.out`, uses read-only permissions, cancels superseded runs, and bounds jobs at 30 minutes. `make itest` selects all 172 integration functions plus the quickstart with uncached execution. Manual hosted run [29202009227](https://github.com/CaliLuke/loom-mcp/actions/runs/29202009227) passed both jobs on `7120e44`: integration in 2m14s and strict build/lint/unit/coverage in 7m42s.
+- **Impact/Recommendation:** Complete. Preserve `workflow_dispatch` as an operator recovery path and the push/PR triggers as the normal enforcement path.
 
 ### C-2: Docker-gated registry tests fail closed and execute in hosted CI
 - **Severity:** high · **Status:** resolved locally and hosted
@@ -208,7 +207,7 @@ Phase 1 — Value (`value.md`):
 - 1.3 Duplicates/near-duplicates — **resolved** (the only byte-identical provider helper is shared; superficially similar fixture, DSL, subscriber, and cache tests were inventoried as distinct contracts).
 - 1.4 Snapshot/golden audit — **found, moderate**: 53 / 276 KB / 18 > 100 lines; delta added 0, modified 2 goldens alongside their generator change (disciplined).
 - 1.5 Testing someone else's code — **not found** (no new SDK-behavior tests in delta).
-- 1.6a Test roots & selection mapping — **remediated locally**: the canonical targets select all 172 integration-cluster functions plus the quickstart; hosted proof remains C-1.
+- 1.6a Test roots & selection mapping — **resolved locally and hosted**: canonical targets select all 172 integration-cluster functions plus the quickstart.
 - 1.6 Dead weight — **remediated**: permanent skips removed, dynamic DSL interface methods reclassified, bridge ownership documented, CLI scenario canonical.
 
 Phase 2 — Completeness (`completeness.md`):
@@ -222,21 +221,21 @@ Phase 2 — Completeness (`completeness.md`):
 - 2.8 Assertion strength — spot-read 5 delta fix tests (behavioral); no mutation tooling (none configured).
 
 Phase 3 — Speed (`performance.md`):
-- 3.1 Baseline — post-remediation canonical runs measured at 41.8 s after recompilation and 21.24–24.05 s fully warm, with the same race/shuffle/coverage flags plus short mode; CI history remains 0 runs.
+- 3.1 Baseline — post-remediation canonical runs measured at 41.8 s after recompilation and 21.24–24.05 s fully warm, with the same race/shuffle/coverage flags plus short mode; hosted CI is green.
 - 3.2 Usual suspects — fixtures: V-2 generation duplication and S-4 cleanup/concurrency resolved; blind ordering sleeps eliminated (S-7); real I/O: quickstart is explicitly integration-only; retries: none; lint-in-suite: none.
 - 3.2b Flake hunt — baseline: 2 unit runs + 2 shuffle seeds reproduced deterministic S-2 coupling, not flakes. Remediation: both fixed seeds and a race-enabled random-seed unit run are now green.
 - 3.2c Fixture architecture — **keep**; process-scoped cache ownership and cleanup are explicit and verified, and isolated scenario-file concurrency meets the integration target.
 - 3.3 Parallelization readiness — package concurrency is active; global expression roots correctly keep generation tests serial. Framework tests and six isolated scenario-file groups run in parallel while scenarios retain fresh servers. No safe high-yield unit candidate remains (S-5 resolved).
-- 3.4 CI-level structure — C-1 unchanged; hook latency: hooks remain lint-only on staged files (read, not timed — no test latency to measure).
+- 3.4 CI-level structure — C-1 resolved by a full green hosted run; hooks remain lint-only on staged files (read, not timed — no test latency to measure).
 - 3.5 Achievable target — warm unit wall improved 30.1→21.24–24.05 s and meets the revised ≤25 s guardrail; integration improved 180.6→72.1–73.8 s and meets ≤90 s.
 
 ## 5. Top opportunities (ranked)
 
-Rank positions are preserved for traceability. All local opportunities are complete or evidence-based reclassifications; only hosted CI proof remains.
+Rank positions are preserved for traceability. Every opportunity is complete or an evidence-based reclassification.
 
 | Rank | Opportunity | Findings | Type | Effort | Expected payoff |
 |---|---|---|---|---|---|
-| 1 | **In progress:** repaired CI selection/toolchain and Docker fail-closed behavior; verify hosted run | C-1, C-2 | blocker | hours | 172 integration funcs + quickstart + 29 registry tests become a real gate |
+| 1 | **Completed:** repaired CI selection/toolchain and Docker fail-closed behavior; hosted run green | C-1, C-2 | complete | done | 172 integration funcs + quickstart + 29 registry tests are a real gate |
 | 2 | **Completed:** fix `resetDSLRoots`, restore roots with `t.Cleanup`, enforce `-shuffle=on` | S-2 | complete | done | Order-coupling class eliminated; unlocks parallelism work |
 | 3 | **Completed:** quickstart integration-only, FileOrder 13→3, one conformance generation, deterministic 100-case TTL property | S-1, V-2 | complete | done | Warm wall 30.1→21.24–24.05 s; ≤25 s guardrail met |
 | 4 | **Completed:** DSL/expr validation tables (49/59 DSL; ToolExpr target achieved) | C-3, C-13, C-14 | complete | done | Both coverage targets met; one current panic fixed |
@@ -267,7 +266,7 @@ Coverage percentages are guardrails, not the objective. Defect yield is tracked 
 
 ### Phase 1 — make every existing test unavoidable
 
-**Findings:** C-1, C-2, V-5. **Expected defect yield:** immediate configuration failures plus failures formerly hidden in 158 dark integration functions and 29 Docker-gated registry tests; local selection/execution is now proven, hosted execution is next.
+**Findings:** C-1, C-2, V-5. **Expected defect yield:** immediate configuration failures plus failures formerly hidden in 158 dark integration functions and 29 Docker-gated registry tests; local and hosted selection/execution are proven.
 
 Current contract inventory after the local repair:
 
@@ -275,7 +274,7 @@ Current contract inventory after the local repair:
 - CI pins Loom `v1.4.0`, matching `scripts/loom_core_mode.sh`;
 - `make itest` selects assistant, agent_features, framework, and scenario tests and forces uncached execution;
 - `registry.TestMain` preserves local no-Docker skips but CI requires the 29 Docker-backed tests to be available;
-- hosted execution remains unverified because the repository still has no Actions run history.
+- hosted execution is verified by green run 29202009227; the prior two hosted runs exposed C-36 and C-37 before the final green rerun.
 
 Commit-sized work:
 
@@ -283,9 +282,9 @@ Commit-sized work:
 2. **Implemented locally:** `make itest` owns all three integration clusters, including the assistant fixture.
 3. **Implemented locally:** registry Docker coverage fails closed in CI and remains skippable without Docker locally.
 4. **Implemented:** make itest enables MCP_CLI_TESTS and the hermetic CLI prompt scenario passes.
-5. Verify an actual GitHub Actions run. If the run count remains zero, stop: repository Actions permissions require owner/admin intervention and cannot be repaired in code.
+5. **Completed:** hosted run 29202009227 passes both jobs with strict Docker execution and retained coverage.
 
-Local proof complete: `actionlint`, `make lint`, `make test`, uncached `make itest`, `make verify-mcp-local`, and the strict Colima-backed registry suite are green. Remaining proof: the first green Actions run with zero unexpected skips. Do not call C-1 complete until hosted execution is observed.
+Proof complete: `make lint`, `make test`, uncached `make itest`, `make verify-mcp-local`, the strict Colima-backed unit suite, and hosted run 29202009227 are green.
 
 ### Phase 2 — attack design validation first
 
@@ -401,8 +400,8 @@ Exit criterion: warm unit wall at or below 25 seconds, integration wall at or be
 | C-16 | method-backed projection compile case | alias detection compared schema/user-type names but ignored that tool and service types are distinct named Go types in different packages | this change | fixed; generated module compiles |
 | C-15 | full make itest + repeated assistant fixture | parallel SDK clients shared the global HTTP transport, allowing cross-test connection-pool lifecycle interference | `614d111` | fixed; 20× fixture + 50× race stress green |
 | S-2 | shuffled `dsl` suite, seeds `101` and `202` | `resetDSLRoots` omitted `mcpexpr.Root`; three `expr/agent` tests leaked replaced globals | `2752473` | fixed |
-| C-1 | CI contract inventory + uncached `make itest` | workflow used Go `1.25.x`, Loom `@latest`, selected only 6 integration functions, and allowed cached scenario passes | this change | all 172 integration funcs plus quickstart selected locally; hosted run pending |
-| C-2 | strict no-socket probe + full Colima registry suite | `TestMain` converted every Docker/container failure into skips even in CI | this change | 29 tests green locally; hosted run pending |
+| C-1 | CI contract inventory + uncached `make itest` | workflow used Go `1.25.x`, Loom `@latest`, selected only 6 integration functions, and allowed cached scenario passes | this change | all 172 integration funcs plus quickstart green locally and hosted |
+| C-2 | strict no-socket probe + full Colima registry suite | `TestMain` converted every Docker/container failure into skips even in CI | this change | 29 tests green locally and hosted |
 | C-14 | nil-result ServerData validation regression | `validateServerDataShapes` dereferenced `t.Method.Result` before checking it | `5dce735` | fixed |
 
 ## 7. Method notes
@@ -414,4 +413,4 @@ Exit criterion: warm unit wall at or below 25 seconds, integration wall at or be
 - **Artifact-cleanup probe:** before remediation, exact generated prefixes accounted for 93 prepared fixture roots (125 MB) and 218 temporary server binaries (8.2 GB). After removing that historical debris, a real `MCP_CLI_TESTS=true` scenario process exited green and left 0/0 artifacts. A one-server-per-YAML experiment was rejected after the protocol group correctly failed initialization-isolation cases; per-scenario servers remain the current correctness boundary.
 - **Integration parallelism probe:** removing the ineffective `MCP_*` parent-environment mutation and `-parallel 1` cap kept the full race-enabled command green in 178.2 s. The framework package fell from 38.9 s to 18.1 s and now overlaps the 177.3 s stateful scenario package; scenario startup, not framework serialization, is the remaining critical path.
 - **Baseline integration:** all green — agent_features 0.6 s, framework 37.6 s, scenario suite (`./integration_tests/...` with itest flags) 172.5 s, assistant fixture 1.1 s. The baseline audit's working-tree WIP (which broke `make itest` at the time) landed as the delta commits and its scenario failures are gone. Scenario wall (172.5 s vs 203.5 s cold at baseline) reflects warm codegen/build caches, consistent with S-4's per-scenario boot cost dominating.
-- **CI-remediation verification:** workflow YAML parses; `make build`, `make lint`, shuffled race-enabled `make test`, uncached expanded `make itest`, and `make verify-mcp-local` are green. The latest scenario package ran in 73.4 s and framework verification in 14.4 s. With Colima exported through `DOCKER_HOST` and `TESTCONTAINERS_DOCKER_SOCKET_OVERRIDE`, the complete `CI=true LOOM_MCP_REQUIRE_DOCKER_TESTS=1 make test` gate passed at 63.9 % coverage; without a discoverable/mountable socket, the strict switch failed closed as designed.
+- **CI-remediation verification:** workflow YAML parses; `make build`, `make lint`, shuffled race-enabled `make test`, uncached expanded `make itest`, and `make verify-mcp-local` are green. Local scenarios ran in 72.1–75.4 s. With Colima exported through `DOCKER_HOST` and `TESTCONTAINERS_DOCKER_SOCKET_OVERRIDE`, the complete strict unit gate passed at 63.9 % coverage; without a discoverable/mountable socket, it failed closed. Hosted run 29202009227 passed integration in 2m14s and strict build/lint/unit/coverage in 7m42s.
