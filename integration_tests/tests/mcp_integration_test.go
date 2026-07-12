@@ -23,83 +23,43 @@ func requireCLI(t *testing.T) {
 }
 
 func TestMCPProtocol(t *testing.T) {
-	requireServer(t)
-	scenarios, err := framework.LoadScenarios("../scenarios/protocol.yaml")
-	require.NoError(t, err)
-	for _, sc := range scenarios {
-		scenario := sc
-		t.Run(scenario.Name, func(t *testing.T) {
-			r := framework.NewRunner()
-			require.NoError(t, r.Run(t, []framework.Scenario{scenario}))
-		})
-	}
+	runScenarioFile(t, "../scenarios/protocol.yaml")
 }
 
 func TestMCPTools(t *testing.T) {
-	requireServer(t)
-	scenarios, err := framework.LoadScenarios("../scenarios/tools.yaml")
-	require.NoError(t, err)
-	for _, sc := range scenarios {
-		scenario := sc
-		t.Run(scenario.Name, func(t *testing.T) {
-			r := framework.NewRunner()
-			require.NoError(t, r.Run(t, []framework.Scenario{scenario}))
-		})
-	}
+	runScenarioFile(t, "../scenarios/tools.yaml")
 }
 
 func TestMCPResources(t *testing.T) {
-	requireServer(t)
-	scenarios, err := framework.LoadScenarios("../scenarios/resources.yaml")
-	require.NoError(t, err)
-	for _, sc := range scenarios {
-		scenario := sc
-		t.Run(scenario.Name, func(t *testing.T) {
-			r := framework.NewRunner()
-			require.NoError(t, r.Run(t, []framework.Scenario{scenario}))
-		})
-	}
+	runScenarioFile(t, "../scenarios/resources.yaml")
 }
 
 func TestMCPPrompts(t *testing.T) {
-	requireServer(t)
-	scenarios, err := framework.LoadScenarios("../scenarios/prompts.yaml")
-	require.NoError(t, err)
-	for _, sc := range scenarios {
-		scenario := sc
-		t.Run(scenario.Name, func(t *testing.T) {
-			r := framework.NewRunner()
-			require.NoError(t, r.Run(t, []framework.Scenario{scenario}))
-		})
-	}
+	runScenarioFile(t, "../scenarios/prompts.yaml")
 }
 
 func TestMCPPromptsCLI(t *testing.T) {
 	if os.Getenv("MCP_CLI_TESTS") != "true" {
 		t.Skip("CLI tests disabled; set MCP_CLI_TESTS=true to enable")
 	}
-	requireServer(t)
 	requireCLI(t)
-	scenarios, err := framework.LoadScenarios("../scenarios/prompts_cli.yaml")
-	require.NoError(t, err)
-	for _, sc := range scenarios {
-		scenario := sc
-		t.Run(scenario.Name, func(t *testing.T) {
-			r := framework.NewRunner()
-			require.NoError(t, r.Run(t, []framework.Scenario{scenario}))
-		})
-	}
+	runScenarioFile(t, "../scenarios/prompts_cli.yaml")
 }
 
 func TestMCPNotifications(t *testing.T) {
+	runScenarioFile(t, "../scenarios/notifications.yaml")
+}
+
+func runScenarioFile(t *testing.T, path string) {
+	t.Helper()
 	requireServer(t)
-	scenarios, err := framework.LoadScenarios("../scenarios/notifications.yaml")
+	scenarios, err := framework.LoadScenarios(path)
 	require.NoError(t, err)
 	for _, sc := range scenarios {
 		scenario := sc
 		t.Run(scenario.Name, func(t *testing.T) {
-			r := framework.NewRunner()
-			require.NoError(t, r.Run(t, []framework.Scenario{scenario}))
+			runner := framework.NewRunner()
+			require.NoError(t, runner.Run(t, []framework.Scenario{scenario}))
 		})
 	}
 }

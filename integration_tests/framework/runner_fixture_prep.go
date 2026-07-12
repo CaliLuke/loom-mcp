@@ -472,6 +472,41 @@ func ensurePreparedExampleRoot(t *testing.T, exampleRoot string) (string, error)
 	return preparedRoot, nil
 }
 
+// CleanupTestArtifacts removes process-scoped prepared fixture roots and
+// compiled server binaries, then resets both caches. Test binaries that use the
+// framework must call it from TestMain after m.Run so cache reuse remains
+// available throughout the suite without leaking temporary artifacts.
+func CleanupTestArtifacts() error {
+	codegenMu.Lock()
+	prepared := preparedExampleCache
+	preparedExampleCache = map[string]preparedExample{}
+	codegenMu.Unlock()
+
+	serverBinMu.Lock()
+	binaries := serverBinCache
+	serverBinCache = map[string]serverBinaryBuild{}
+	serverBinMu.Unlock()
+
+	var cleanupErr error
+	for _, cached := range prepared {
+		if cached.root == "" {
+			continue
+		}
+		if err := os.RemoveAll(cached.root); err != nil {
+			cleanupErr = errors.Join(cleanupErr, fmt.Errorf("remove prepared fixture root %q: %w", cached.root, err))
+		}
+	}
+	for _, cached := range binaries {
+		if cached.path == "" {
+			continue
+		}
+		if err := os.Remove(cached.path); err != nil && !errors.Is(err, os.ErrNotExist) {
+			cleanupErr = errors.Join(cleanupErr, fmt.Errorf("remove cached server binary %q: %w", cached.path, err))
+		}
+	}
+	return cleanupErr
+}
+
 // cleanGeneratedExampleArtifacts removes generated example artifacts that can interfere
 // with repeated Loom generation in tests.
 func cleanGeneratedExampleArtifacts(exampleRoot string) error {
