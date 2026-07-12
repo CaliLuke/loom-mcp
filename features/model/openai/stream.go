@@ -41,9 +41,10 @@ type openAIChunkProcessor struct {
 
 	toolCalls map[string]*streamToolBuffer
 
-	codec   *openAIToolCodec
-	modelID string
-	output  *model.StructuredOutput
+	codec      *openAIToolCodec
+	modelID    string
+	modelClass model.ModelClass
+	output     *model.StructuredOutput
 
 	completed bool
 	sawText   bool
@@ -56,7 +57,7 @@ type streamToolBuffer struct {
 	pending []string
 }
 
-func newOpenAIStreamer(ctx context.Context, stream responseStream, codec *openAIToolCodec, modelID string, output *model.StructuredOutput) model.Streamer {
+func newOpenAIStreamer(ctx context.Context, stream responseStream, codec *openAIToolCodec, modelID string, modelClass model.ModelClass, output *model.StructuredOutput) model.Streamer {
 	cctx, cancel := context.WithCancel(ctx)
 	streamer := &openAIStreamer{
 		ctx:    cctx,
@@ -70,6 +71,7 @@ func newOpenAIStreamer(ctx context.Context, stream responseStream, codec *openAI
 		toolCalls:   make(map[string]*streamToolBuffer),
 		codec:       codec,
 		modelID:     modelID,
+		modelClass:  modelClass,
 		output:      output,
 	}
 	go streamer.run(processor)
@@ -329,7 +331,7 @@ func (p *openAIChunkProcessor) handleCompleted(resp responses.Response) error {
 	if resp.Model != "" {
 		p.modelID = resp.Model
 	}
-	translated, err := translateResponse(&resp, p.codec, p.output)
+	translated, err := translateResponse(&resp, p.codec, p.modelClass, p.output)
 	if err != nil {
 		return err
 	}

@@ -91,7 +91,7 @@ func (c *Client) Complete(ctx context.Context, req *model.Request) (*model.Respo
 		}
 		return nil, fmt.Errorf("openai responses: %w", err)
 	}
-	return translateResponse(response, codec, req.StructuredOutput)
+	return translateResponse(response, codec, req.ModelClass, req.StructuredOutput)
 }
 
 func (c *Client) buildResponseRequest(req *model.Request) (responses.ResponseNewParams, *openAIToolCodec, error) {
@@ -402,7 +402,7 @@ func (c *Client) Stream(ctx context.Context, req *model.Request) (model.Streamer
 		_ = stream.Close()
 		return nil, wrapResponsesStreamError(err)
 	}
-	return newOpenAIStreamer(ctx, stream, codec, c.resolveModelID(req), req.StructuredOutput), nil
+	return newOpenAIStreamer(ctx, stream, codec, c.resolveModelID(req), req.ModelClass, req.StructuredOutput), nil
 }
 
 func wrapResponsesStreamError(err error) error {
@@ -495,7 +495,7 @@ func encodeStructuredOutput(output *model.StructuredOutput) (responses.ResponseT
 	}, nil
 }
 
-func translateResponse(resp *responses.Response, codec *openAIToolCodec, output *model.StructuredOutput) (*model.Response, error) {
+func translateResponse(resp *responses.Response, codec *openAIToolCodec, modelClass model.ModelClass, output *model.StructuredOutput) (*model.Response, error) {
 	if resp == nil {
 		return &model.Response{}, nil
 	}
@@ -522,6 +522,7 @@ func translateResponse(resp *responses.Response, codec *openAIToolCodec, output 
 	}
 	usage := model.TokenUsage{
 		Model:           resp.Model,
+		ModelClass:      modelClass,
 		InputTokens:     int(resp.Usage.InputTokens),
 		OutputTokens:    int(resp.Usage.OutputTokens),
 		TotalTokens:     int(resp.Usage.TotalTokens),

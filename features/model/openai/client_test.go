@@ -529,7 +529,7 @@ func TestClientStreamReturnsNewStreamingError(t *testing.T) {
 }
 
 func TestClientCompleteReturnsRateLimitedAPIError(t *testing.T) {
-	apiErr := newOpenAIAPIError(t, http.StatusTooManyRequests)
+	apiErr := newOpenAIRateLimitError(t)
 	mock := &mockResponsesClient{err: apiErr}
 	client, err := openaimodel.New(openaimodel.Options{Client: mock, DefaultModel: "gpt-4o"})
 	require.NoError(t, err)
@@ -549,7 +549,7 @@ func TestClientCompleteReturnsRateLimitedAPIError(t *testing.T) {
 }
 
 func TestClientStreamReturnsRateLimitedNewStreamingError(t *testing.T) {
-	streamErr := newOpenAIAPIError(t, http.StatusTooManyRequests)
+	streamErr := newOpenAIRateLimitError(t)
 	mock := &mockResponsesClient{
 		stream: newMockOpenAIStreamError(streamErr),
 	}
@@ -571,7 +571,7 @@ func TestClientStreamReturnsRateLimitedNewStreamingError(t *testing.T) {
 }
 
 func TestClientStreamReturnsRateLimitedRecvError(t *testing.T) {
-	streamErr := newOpenAIAPIError(t, http.StatusTooManyRequests)
+	streamErr := newOpenAIRateLimitError(t)
 	mock := &mockResponsesClient{
 		stream: newMockOpenAIStreamReadError(streamErr),
 	}
@@ -1010,12 +1010,16 @@ type mockResponsesClient struct {
 	response       *responses.Response
 	err            error
 	stream         *ssestream.Stream[responses.ResponseStreamEventUnion]
+	newFunc        func(context.Context) (*responses.Response, error)
 	captured       responses.ResponseNewParams
 	streamCaptured responses.ResponseNewParams
 }
 
 func (m *mockResponsesClient) New(ctx context.Context, request responses.ResponseNewParams, _ ...option.RequestOption) (*responses.Response, error) {
 	m.captured = request
+	if m.newFunc != nil {
+		return m.newFunc(ctx)
+	}
 	return m.response, m.err
 }
 
@@ -1047,15 +1051,15 @@ func newMockOpenAIStreamReadError(err error) *ssestream.Stream[responses.Respons
 	return ssestream.NewStream[responses.ResponseStreamEventUnion](&mockStreamDecoder{err: err}, nil)
 }
 
-func newOpenAIAPIError(t *testing.T, statusCode int) *openai.Error {
+func newOpenAIRateLimitError(t *testing.T) *openai.Error {
 	t.Helper()
 	req, err := http.NewRequestWithContext(context.Background(), http.MethodPost, "https://api.openai.test/v1/responses", nil)
 	require.NoError(t, err)
 	return &openai.Error{
-		StatusCode: statusCode,
+		StatusCode: http.StatusTooManyRequests,
 		Request:    req,
 		Response: &http.Response{
-			StatusCode: statusCode,
+			StatusCode: http.StatusTooManyRequests,
 			Request:    req,
 		},
 	}
