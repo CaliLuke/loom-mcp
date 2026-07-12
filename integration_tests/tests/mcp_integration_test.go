@@ -23,22 +23,27 @@ func requireCLI(t *testing.T) {
 }
 
 func TestMCPProtocol(t *testing.T) {
+	t.Parallel()
 	runScenarioFile(t, "../scenarios/protocol.yaml")
 }
 
 func TestMCPTools(t *testing.T) {
+	t.Parallel()
 	runScenarioFile(t, "../scenarios/tools.yaml")
 }
 
 func TestMCPResources(t *testing.T) {
+	t.Parallel()
 	runScenarioFile(t, "../scenarios/resources.yaml")
 }
 
 func TestMCPPrompts(t *testing.T) {
+	t.Parallel()
 	runScenarioFile(t, "../scenarios/prompts.yaml")
 }
 
 func TestMCPPromptsCLI(t *testing.T) {
+	t.Parallel()
 	if os.Getenv("MCP_CLI_TESTS") != "true" {
 		t.Skip("CLI tests disabled; set MCP_CLI_TESTS=true to enable")
 	}
@@ -47,6 +52,7 @@ func TestMCPPromptsCLI(t *testing.T) {
 }
 
 func TestMCPNotifications(t *testing.T) {
+	t.Parallel()
 	runScenarioFile(t, "../scenarios/notifications.yaml")
 }
 
