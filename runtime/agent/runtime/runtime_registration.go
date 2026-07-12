@@ -2,6 +2,7 @@ package runtime
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"strings"
@@ -299,6 +300,7 @@ func (r *Runtime) storeRegisteredAgent(reg AgentRegistration) error {
 	}
 	r.mu.Lock()
 	defer r.mu.Unlock()
+	reg.Specs = cloneToolSpecs(reg.Specs)
 	r.agents[reg.ID] = reg
 	r.addToolSpecsLocked(reg.Specs)
 	if len(reg.Specs) > 0 {
@@ -358,9 +360,89 @@ func (r *Runtime) hookActivityRegistrationOptions() engine.ActivityOptions {
 }
 
 func cloneToolSpecs(specs []tools.ToolSpec) []tools.ToolSpec {
+	if len(specs) == 0 {
+		return nil
+	}
 	cp := make([]tools.ToolSpec, len(specs))
-	copy(cp, specs)
+	for i := range specs {
+		cp[i] = cloneToolSpec(specs[i])
+	}
 	return cp
+}
+
+func cloneToolSpec(spec tools.ToolSpec) tools.ToolSpec {
+	out := spec
+	out.Tags = append([]string(nil), spec.Tags...)
+	if len(spec.Meta) > 0 {
+		out.Meta = make(map[string][]string, len(spec.Meta))
+		for key, values := range spec.Meta {
+			out.Meta[key] = append([]string(nil), values...)
+		}
+	}
+	if spec.Bounds != nil {
+		bounds := *spec.Bounds
+		if spec.Bounds.Paging != nil {
+			paging := *spec.Bounds.Paging
+			bounds.Paging = &paging
+		}
+		out.Bounds = &bounds
+	}
+	if len(spec.ServerData) > 0 {
+		out.ServerData = make([]*tools.ServerDataSpec, len(spec.ServerData))
+		for i, serverData := range spec.ServerData {
+			if serverData == nil {
+				continue
+			}
+			cloned := *serverData
+			cloned.Type = cloneToolTypeSpec(serverData.Type)
+			out.ServerData[i] = &cloned
+		}
+	}
+	if spec.Confirmation != nil {
+		confirmation := *spec.Confirmation
+		out.Confirmation = &confirmation
+	}
+	out.Payload = cloneToolTypeSpec(spec.Payload)
+	out.Result = cloneToolTypeSpec(spec.Result)
+	return out
+}
+
+func cloneToolTypeSpec(spec tools.TypeSpec) tools.TypeSpec {
+	out := spec
+	out.Schema = append([]byte(nil), spec.Schema...)
+	out.ExampleJSON = append([]byte(nil), spec.ExampleJSON...)
+	out.ExampleInput = cloneToolJSONMap(spec.ExampleInput)
+	return out
+}
+
+func cloneToolJSONMap(value map[string]any) map[string]any {
+	if len(value) == 0 {
+		return nil
+	}
+	out := make(map[string]any, len(value))
+	for key, item := range value {
+		out[key] = cloneToolJSONValue(item)
+	}
+	return out
+}
+
+func cloneToolJSONValue(value any) any {
+	switch typed := value.(type) {
+	case map[string]any:
+		return cloneToolJSONMap(typed)
+	case []any:
+		out := make([]any, len(typed))
+		for i, item := range typed {
+			out[i] = cloneToolJSONValue(item)
+		}
+		return out
+	case json.RawMessage:
+		return append(json.RawMessage(nil), typed...)
+	case []byte:
+		return append([]byte(nil), typed...)
+	default:
+		return typed
+	}
 }
 
 func registerToolsetHints(ts ToolsetRegistration) {

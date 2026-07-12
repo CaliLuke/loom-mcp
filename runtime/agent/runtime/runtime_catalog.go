@@ -2,6 +2,7 @@ package runtime
 
 import (
 	"encoding/json"
+	"slices"
 
 	agent "github.com/CaliLuke/loom-mcp/runtime/agent"
 	"github.com/CaliLuke/loom-mcp/runtime/agent/engine"
@@ -14,6 +15,7 @@ import (
 // time so dispatch code can branch on a single explicit field. Caller must hold r.mu.
 func (r *Runtime) addToolsetLocked(ts ToolsetRegistration) {
 	ts.DispatchMode = resolveToolsetDispatchMode(ts)
+	ts.Specs = cloneToolSpecs(ts.Specs)
 	r.toolsets[ts.Name] = ts
 	r.addToolSpecsLocked(ts.Specs)
 }
@@ -22,7 +24,8 @@ func (r *Runtime) addToolsetLocked(ts ToolsetRegistration) {
 // Caller must hold r.mu.
 func (r *Runtime) addToolSpecsLocked(specs []tools.ToolSpec) {
 	for _, spec := range specs {
-		r.toolSpecs[spec.Name] = spec
+		cloned := cloneToolSpec(spec)
+		r.toolSpecs[cloned.Name] = cloned
 	}
 }
 
@@ -45,6 +48,7 @@ func (r *Runtime) ListAgents() []agent.Ident {
 	for id := range r.agents {
 		out = append(out, id)
 	}
+	slices.Sort(out)
 	return out
 }
 
@@ -59,12 +63,17 @@ func (r *Runtime) ListToolsets() []string {
 	for id := range r.toolsets {
 		out = append(out, id)
 	}
+	slices.Sort(out)
 	return out
 }
 
 // ToolSpec returns the registered ToolSpec for the given tool name.
 func (r *Runtime) ToolSpec(name tools.Ident) (tools.ToolSpec, bool) {
-	return r.toolSpec(name)
+	spec, ok := r.toolSpec(name)
+	if !ok {
+		return tools.ToolSpec{}, false
+	}
+	return cloneToolSpec(spec), true
 }
 
 // ToolSpecsForAgent returns the ToolSpecs registered by the given agent.
@@ -75,9 +84,7 @@ func (r *Runtime) ToolSpecsForAgent(agentID agent.Ident) []tools.ToolSpec {
 	if len(specs) == 0 {
 		return nil
 	}
-	out := make([]tools.ToolSpec, len(specs))
-	copy(out, specs)
-	return out
+	return cloneToolSpecs(specs)
 }
 
 // addReminder registers a reminder for the given run. It is a no-op when the reminders engine is not configured.
