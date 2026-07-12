@@ -10,9 +10,17 @@ env:
   GO_VERSION: '1.26.1'
   LOOM_VERSION: 'v1.4.0'
 
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   build:
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -49,8 +57,18 @@ jobs:
           LOOM_MCP_REQUIRE_DOCKER_TESTS: '1'
         run: make test
 
+      - name: Preserve coverage report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: unit-coverage-${{ github.sha }}
+          path: cover.out
+          if-no-files-found: warn
+          retention-days: 14
+
   integration-tests:
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     steps:
       - name: Checkout
         uses: actions/checkout@v4

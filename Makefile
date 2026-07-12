@@ -6,6 +6,7 @@ LOOM_CORE_MODULE ?= github.com/CaliLuke/loom
 LOOM_MCP_MODULE ?= $(LOOM_CORE_MODULE)
 LOOM_CLI_PACKAGE ?= $(LOOM_CORE_MODULE)/cmd/loom
 MCP_GO_SDK_VERSION ?= v1.6.1
+COVERAGE_MIN ?= 62.0
 
 GOPATH ?= $(shell go env GOPATH)
 GOLANGCI_LINT := $(shell command -v golangci-lint 2>/dev/null)
@@ -13,7 +14,7 @@ PROTOC := $(shell command -v protoc 2>/dev/null)
 PROTOC_GEN_GO := protoc-gen-go
 PROTOC_GEN_GO_GRPC := protoc-gen-go-grpc
 
-.PHONY: all build lint lint-pre-commit lint-install-hook test itest ci tools ensure-golangci ensure-protoc-plugins protoc-check run-example example-gen loom-local loom-remote loom-status update-mcp-go-sdk verify-mcp-local regen-assistant-fixture regen-agent-feature-fixture verify-agent-feature-fixture
+.PHONY: all build lint lint-pre-commit lint-install-hook test coverage-check itest ci tools ensure-golangci ensure-protoc-plugins protoc-check run-example example-gen loom-local loom-remote loom-status update-mcp-go-sdk verify-mcp-local regen-assistant-fixture regen-agent-feature-fixture verify-agent-feature-fixture
 
 all: build lint test
 
@@ -37,6 +38,21 @@ lint-install-hook:
 
 test: tools
 	$(GO) test -short -race -shuffle=on -covermode=atomic -coverprofile=cover.out `$(GO) list ./... | grep -v '/integration_tests'`
+	$(MAKE) coverage-check
+
+coverage-check:
+	@coverage=$$($(GO) tool cover -func=cover.out | awk '/^total:/ { gsub("%", "", $$3); print $$3 }'); \
+	if [ -z "$$coverage" ]; then \
+		echo "coverage total missing from cover.out"; \
+		exit 1; \
+	fi; \
+	awk -v actual="$$coverage" -v minimum="$(COVERAGE_MIN)" 'BEGIN { \
+		if (actual + 0 < minimum + 0) { \
+			printf "coverage %.1f%% is below required %.1f%%\n", actual, minimum; \
+			exit 1; \
+		} \
+		printf "coverage %.1f%% meets required %.1f%%\n", actual, minimum; \
+	}'
 
 # Run integration tests (scenarios under integration_tests/)
 itest: tools
