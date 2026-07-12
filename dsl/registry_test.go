@@ -344,6 +344,41 @@ func TestRegistryMinimalConfiguration(t *testing.T) {
 	require.Nil(t, reg.Federation)
 }
 
+func TestRegistryDSLRejectsInvalidDurations(t *testing.T) {
+	cases := []struct {
+		name string
+		dsl  func()
+		want string
+	}{
+		{
+			name: "retry backoff",
+			dsl:  func() { Retry(3, "eventually") },
+			want: `invalid retry backoff duration "eventually"`,
+		},
+		{
+			name: "sync interval",
+			dsl:  func() { SyncInterval("often") },
+			want: `invalid sync interval duration "often"`,
+		},
+		{
+			name: "cache TTL",
+			dsl:  func() { CacheTTL("later") },
+			want: `invalid cache TTL duration "later"`,
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			runDSLExpectError(t, func() {
+				Registry("corp", func() {
+					URL("https://registry.example.com")
+					tc.dsl()
+				})
+			}, tc.want)
+		})
+	}
+}
+
 // TestFederationIncludeOnly verifies Federation with only Include patterns.
 func TestFederationIncludeOnly(t *testing.T) {
 	runDSL(t, func() {
