@@ -25,17 +25,17 @@ The suite now contains 359 test files and 1,636 top-level test functions (plus o
 | Snapshot tests (count / size on disk) | 53 `.golden` / 276 KB / 18 > 100 lines (net zero new goldens in delta; 2 modified) |
 | Sleeps in tests (count / purpose) | 4 sites: subprocess signal fail-safe, real cache TTL, Ollama response-body lifetime, and configurable hook delay. No blind ordering sleeps; integration tests: 0 sleeps |
 | Bug-fix commits with tests (sampled ratio) | **52/52** in the remediation delta (measured, not sampled); cumulative 67/67 |
-| Sampling performed | 5 cluster subagents re-verified every prior finding + read the full delta; every mandatory grep re-run repo-wide at HEAD; 2 measured unit runs + 2-seed shuffle probe + integration ladder executed; ≥1 citation per subagent spot-checked in main context |
+| Sampling performed | 5 cluster subagents re-verified every prior finding + read the full delta; every mandatory grep re-run repo-wide at HEAD; measured unit runs plus final-tree fixed seeds `20260712` and `7302026`, random shuffle, and the integration ladder executed; ≥1 citation per subagent spot-checked in main context |
 
 ## 3. Findings
 
 Finding IDs continue the `679fb76` numbering; each carries a status vs that baseline.
 
 ### C-1: CI executes the full contract locally and hosted
-- **Severity:** blocker · **Status:** resolved
+- **Severity:** blocker · **Status:** resolved to the user-approved local-parity criterion; hosted manual execution proven
 - **Confidence:** measured
-- **Evidence:** `.github/workflows/ci.yml` installs Go `1.26.1`, pins Loom `v1.4.0`, runs repository make targets, caches every module, fails closed on missing Docker coverage, enforces 62.0 % aggregate coverage, preserves `cover.out`, uses read-only permissions, cancels superseded runs, and bounds jobs at 30 minutes. `make itest` selects all 172 integration functions plus the quickstart with uncached execution. Manual hosted run [29202009227](https://github.com/CaliLuke/loom-mcp/actions/runs/29202009227) passed both jobs on `7120e44`: integration in 2m14s and strict build/lint/unit/coverage in 7m42s.
-- **Impact/Recommendation:** Complete. Preserve `workflow_dispatch` as an operator recovery path and the push/PR triggers as the normal enforcement path.
+- **Evidence:** `.github/workflows/ci.yml` installs Go `1.26.1`, pins Loom `v1.4.0`, runs repository make targets, caches every module, fails closed on missing Docker coverage, enforces 62.0 % aggregate coverage, preserves `cover.out`, uses read-only permissions, cancels superseded runs, and bounds jobs at 30 minutes. Its declared triggers are manual dispatch, pushes to `main`, and pull requests targeting `main`; the remote workflow is active with Actions enabled. `make itest` selects all 172 integration functions plus the quickstart with uncached execution. Manual hosted run [29202009227](https://github.com/CaliLuke/loom-mcp/actions/runs/29202009227) passed both jobs on `7120e44`: integration in 2m14s and strict build/lint/unit/coverage in 7m42s. GitHub currently reports no push-event runs despite the newer direct pushes, so automatic event delivery is not claimed as proven; the exact workflow commands are green locally on `b28d663`, which the user explicitly accepted as the completion criterion.
+- **Impact/Recommendation:** The test-suite blocker is complete. Preserve manual dispatch and the declared push/PR triggers. Treat absent GitHub push-event delivery as a repository-operations follow-up, not as missing local test coverage or permission to manufacture a run with an unrelated change.
 
 ### C-2: Docker-gated registry tests fail closed and execute in hosted CI
 - **Severity:** high · **Status:** resolved locally and hosted
@@ -289,7 +289,7 @@ Current contract inventory after the local repair:
 - CI pins Loom `v1.4.0`, matching `scripts/loom_core_mode.sh`;
 - `make itest` selects assistant, agent_features, framework, and scenario tests and forces uncached execution;
 - `registry.TestMain` preserves local no-Docker skips but CI requires the 29 Docker-backed tests to be available;
-- hosted execution is verified by green run 29202009227; the prior two hosted runs exposed C-36 and C-37 before the final green rerun.
+- hosted execution is verified by manual green run 29202009227; the prior two hosted runs exposed C-36 and C-37 before the final green rerun. The configured push trigger has not produced a recorded push-event run, while the user-approved local-parity path is green at the final tree.
 
 Commit-sized work:
 
@@ -297,9 +297,9 @@ Commit-sized work:
 2. **Implemented locally:** `make itest` owns all three integration clusters, including the assistant fixture.
 3. **Implemented locally:** registry Docker coverage fails closed in CI and remains skippable without Docker locally.
 4. **Implemented:** make itest enables MCP_CLI_TESTS and the hermetic CLI prompt scenario passes.
-5. **Completed:** hosted run 29202009227 passes both jobs with strict Docker execution and retained coverage.
+5. **Completed to current scope:** hosted manual run 29202009227 passes both jobs with strict Docker execution and retained coverage; final-tree parity is proven locally without manufacturing an unrelated trigger commit.
 
-Proof complete: `make lint`, `make test`, uncached `make itest`, `make verify-mcp-local`, the strict Colima-backed unit suite, and hosted run 29202009227 are green.
+Proof complete: `make build`, `make lint`, `make test`, fixed-seed full race suites, uncached `make itest`, `make verify-mcp-local`, the strict Colima-backed unit suite, and hosted manual run 29202009227 are green.
 
 ### Phase 2 — attack design validation first
 
@@ -459,10 +459,10 @@ Exit criterion: warm unit wall at or below 25 seconds, integration wall at or be
 ## 7. Method notes
 
 - **This is a refresh audit.** Baseline `TEST_AUDIT.md` was produced earlier today at `679fb76`; every subsequent remediation slice updates its affected evidence and measurements in place. The original refresh re-ran every mandatory repo-wide grep and used focused cluster reviews across dsl/expr, codegen, features, runtime+registry, and integration tests.
-- **Executed:** 2 full unit runs (`-race -covermode=atomic -count=1`; run 1 cold-build under subagent load with JSON per-test timings; run 2 fully warm on idle machine with `time -l`), 2-seed full-suite shuffle probe, coverage aggregation, per-fix-commit test-presence checks, repeated integration ladders, strict Redis and Mongo 7 runs through Colima, and focused process-exit artifact checks. Machine: 10-core arm64 mac, Go 1.26, loom mode = remote (v1.4.0).
+- **Executed:** repeated full unit runs (`-race -covermode=atomic -count=1`), final-tree full-suite race runs with fixed shuffle seeds `20260712` and `7302026`, random shuffle, coverage aggregation, per-fix-commit test-presence checks, repeated integration ladders, strict Redis and Mongo 7 runs through Colima, and focused process-exit artifact checks. Machine: 10-core arm64 mac, Go 1.26, loom mode = remote (v1.4.0).
 - **Timing discipline:** the original refresh's run 1 included ~3 min of delta-induced recompilation and subagent load. The throughput slice was re-measured with its canonical flags: 41.8 s after recompilation, then 21.24–24.05 s fully warm. Older 98–111 s figures are not comparable because their subprocess/build caches differed (S-6).
 - **Not run:** multi-process shard experiment, mutation tooling (none configured), hook timing (hooks are lint-only). Both Docker-backed Redis and Mongo contracts omitted from the baseline were run during remediation via Colima.
 - **Artifact-cleanup probe:** before remediation, exact generated prefixes accounted for 93 prepared fixture roots (125 MB) and 218 temporary server binaries (8.2 GB). After removing that historical debris, a real `MCP_CLI_TESTS=true` scenario process exited green and left 0/0 artifacts. A one-server-per-YAML experiment was rejected after the protocol group correctly failed initialization-isolation cases; per-scenario servers remain the current correctness boundary.
 - **Integration parallelism probe:** removing the ineffective `MCP_*` parent-environment mutation and `-parallel 1` cap kept the full race-enabled command green in 178.2 s. The framework package fell from 38.9 s to 18.1 s and now overlaps the 177.3 s stateful scenario package; scenario startup, not framework serialization, is the remaining critical path.
 - **Baseline integration:** all green — agent_features 0.6 s, framework 37.6 s, scenario suite (`./integration_tests/...` with itest flags) 172.5 s, assistant fixture 1.1 s. The baseline audit's working-tree WIP (which broke `make itest` at the time) landed as the delta commits and its scenario failures are gone. Scenario wall (172.5 s vs 203.5 s cold at baseline) reflects warm codegen/build caches, consistent with S-4's per-scenario boot cost dominating.
-- **CI-remediation verification:** workflow YAML parses; `make build`, `make lint`, shuffled race-enabled `make test`, uncached expanded `make itest`, and `make verify-mcp-local` are green. The latest local scenarios ran in 74.4 s. With Colima exported through `DOCKER_HOST` and `TESTCONTAINERS_DOCKER_SOCKET_OVERRIDE`, the complete strict unit gate passed at 69.7 % coverage; without a discoverable/mountable socket, it failed closed. Hosted run 29202009227 passed integration in 2m14s and strict build/lint/unit/coverage in 7m42s; all commits newer than that hosted run pass the same repository commands locally.
+- **CI-remediation verification:** workflow YAML parses; `make build`, `make lint`, shuffled race-enabled `make test`, fixed-seed full race suites (`20260712`, `7302026`), uncached expanded `make itest`, and `make verify-mcp-local` are green. The latest local scenarios ran in 74.4 s. With Colima exported through `DOCKER_HOST` and `TESTCONTAINERS_DOCKER_SOCKET_OVERRIDE`, the complete strict unit gate passed at 69.7 % coverage; without a discoverable/mountable socket, it failed closed. Hosted manual run 29202009227 passed integration in 2m14s and strict build/lint/unit/coverage in 7m42s; all commits newer than that hosted run pass the same repository commands locally. The active remote workflow declares push/PR/manual triggers, but GitHub reports no push-event run for the direct pushes, so automatic event delivery remains explicitly unclaimed.
