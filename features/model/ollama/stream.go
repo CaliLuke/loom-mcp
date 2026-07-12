@@ -15,10 +15,11 @@ import (
 )
 
 type ollamaStreamer struct {
-	body    io.Closer
-	scanner *bufio.Scanner
-	output  *model.StructuredOutput
-	modelID string
+	body       io.Closer
+	scanner    *bufio.Scanner
+	output     *model.StructuredOutput
+	modelID    string
+	modelClass model.ModelClass
 
 	queue    []model.Chunk
 	text     strings.Builder
@@ -52,15 +53,16 @@ func (c *Client) Stream(ctx context.Context, req *model.Request) (model.Streamer
 			_ = resp.Body.Close()
 		}()
 		body, _ := io.ReadAll(io.LimitReader(resp.Body, 4096))
-		return nil, fmt.Errorf("ollama chat stream: status %d: %s", resp.StatusCode, strings.TrimSpace(string(body)))
+		return nil, ollamaHTTPStatusError("ollama chat stream", resp.StatusCode, strings.TrimSpace(string(body)))
 	}
 	scanner := bufio.NewScanner(resp.Body)
 	scanner.Buffer(make([]byte, 64*1024), 4*1024*1024)
 	return &ollamaStreamer{
-		body:    resp.Body,
-		scanner: scanner,
-		output:  req.StructuredOutput,
-		modelID: chatReq.Model,
+		body:       resp.Body,
+		scanner:    scanner,
+		output:     req.StructuredOutput,
+		modelID:    chatReq.Model,
+		modelClass: req.ModelClass,
 	}, nil
 }
 
@@ -158,7 +160,7 @@ func (s *ollamaStreamer) handleLine(line string) error {
 				},
 			})
 		}
-		usage := responseUsage(resp)
+		usage := responseUsage(resp, s.modelClass)
 		usage.Model = s.modelID
 		if usage.TotalTokens > 0 {
 			s.metadata = map[string]any{"usage": usage}

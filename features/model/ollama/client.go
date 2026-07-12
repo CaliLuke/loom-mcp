@@ -148,7 +148,7 @@ func (c *Client) Complete(ctx context.Context, req *model.Request) (*model.Respo
 	if err := c.doJSON(ctx, chatReq, &out); err != nil {
 		return nil, err
 	}
-	return translateChatResponse(out, req.StructuredOutput)
+	return translateChatResponse(out, req.ModelClass, req.StructuredOutput)
 }
 
 func newDefaultHTTPClient(timeout time.Duration) *http.Client {
@@ -268,7 +268,7 @@ func (c *Client) doJSON(ctx context.Context, chatReq ollamaChatRequest, out *oll
 	}()
 	if resp.StatusCode != http.StatusOK {
 		body, _ := io.ReadAll(io.LimitReader(resp.Body, 4096))
-		return fmt.Errorf("ollama chat: status %d: %s", resp.StatusCode, strings.TrimSpace(string(body)))
+		return ollamaHTTPStatusError("ollama chat", resp.StatusCode, strings.TrimSpace(string(body)))
 	}
 	if err := json.NewDecoder(resp.Body).Decode(out); err != nil {
 		return fmt.Errorf("ollama chat: decode response: %w", err)
@@ -469,7 +469,7 @@ func encodeStructuredOutput(output *model.StructuredOutput, tools []ollamaTool) 
 	return schema, nil
 }
 
-func translateChatResponse(resp ollamaChatResponse, output *model.StructuredOutput) (*model.Response, error) {
+func translateChatResponse(resp ollamaChatResponse, modelClass model.ModelClass, output *model.StructuredOutput) (*model.Response, error) {
 	content, toolCalls, err := translateMessage(resp.Message)
 	if err != nil {
 		return nil, err
@@ -481,7 +481,7 @@ func translateChatResponse(resp ollamaChatResponse, output *model.StructuredOutp
 	return &model.Response{
 		Content:    content,
 		ToolCalls:  toolCalls,
-		Usage:      responseUsage(resp),
+		Usage:      responseUsage(resp, modelClass),
 		StopReason: stopReason(resp),
 	}, nil
 }
@@ -570,14 +570,22 @@ func extractAssistantText(content []model.Message) string {
 	return text.String()
 }
 
-func responseUsage(resp ollamaChatResponse) model.TokenUsage {
+func responseUsage(resp ollamaChatResponse, modelClass model.ModelClass) model.TokenUsage {
 	total := resp.PromptEvalCount + resp.EvalCount
 	return model.TokenUsage{
 		Model:        resp.Model,
+		ModelClass:   modelClass,
 		InputTokens:  resp.PromptEvalCount,
 		OutputTokens: resp.EvalCount,
 		TotalTokens:  total,
 	}
+}
+
+func ollamaHTTPStatusError(operation string, status int, body string) error {
+	if status == http.StatusTooManyRequests {
+		return fmt.Errorf("%s: %w: status %d: %s", operation, model.ErrRateLimited, status, body)
+	}
+	return fmt.Errorf("%s: status %d: %s", operation, status, body)
 }
 
 func stopReason(resp ollamaChatResponse) string {
