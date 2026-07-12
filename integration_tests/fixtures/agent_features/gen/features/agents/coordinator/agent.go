@@ -69,7 +69,7 @@ func NewCoordinatorAgent(cfg CoordinatorAgentConfig) (*CoordinatorAgent, error) 
 				DependsOn: []string{"reviewed"},
 				ID:        "approval",
 				Kind:      planner.WorkflowNodeTypedInput,
-				Schema:    rawjson.Message([]byte("{\"type\":\"object\",\"properties\":{\"approved\":{\"type\":\"boolean\"}},\"required\":[\"approved\"]}")),
+				Schema:    rawjson.Message([]byte("{\"type\":\"object\",\"properties\":{\"content-type\":{\"type\":\"string\"}},\"required\":[\"content-type\"]}")),
 				Title:     "Approval",
 			}, {
 				DependsOn: []string{"approval"},
@@ -83,8 +83,8 @@ func NewCoordinatorAgent(cfg CoordinatorAgentConfig) (*CoordinatorAgent, error) 
 			}, {
 				Branch: &planner.WorkflowBranchConfig{
 					Cases: []planner.WorkflowBranchCase{{
-						Equals: "true",
-						Path:   "$.approved",
+						Equals: "application/json",
+						Path:   "$.content-type",
 						Target: "publish",
 					}},
 					Default:  "revise",

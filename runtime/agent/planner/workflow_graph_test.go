@@ -192,7 +192,7 @@ func TestGraphWorkflowPlannerBranchCanUseTypedInputPayload(t *testing.T) {
 			{ID: "approval", Kind: WorkflowNodeTypedInput, Schema: rawjson.Message([]byte(`{"type":"object"}`))},
 			{ID: "route", Kind: WorkflowNodeBranch, DependsOn: []string{"approval"}, Branch: &WorkflowBranchConfig{
 				FromStep: "approval",
-				Cases:    []WorkflowBranchCase{{Path: "$.approved", Equals: "true", Target: "publish"}},
+				Cases:    []WorkflowBranchCase{{Path: "$.content-type", Equals: "application/json", Target: "publish"}},
 				Default:  "stop",
 			}},
 			{ID: "publish", Kind: WorkflowNodeTool, Tool: "publisher.publish", Payload: rawjson.Message([]byte(`{}`)), DependsOn: []string{"route"}},
@@ -201,10 +201,37 @@ func TestGraphWorkflowPlannerBranchCanUseTypedInputPayload(t *testing.T) {
 	})
 
 	next, err := p.PlanResume(context.Background(), &PlanResumeInput{
-		TypedInputs: []TypedInputOutput{{ID: "approval", Payload: rawjson.Message([]byte(`{"approved":true}`))}},
+		TypedInputs: []TypedInputOutput{{ID: "approval", Payload: rawjson.Message([]byte(`{"content-type":"application/json"}`))}},
 	})
 	require.NoError(t, err)
 	require.Equal(t, []string{"publish"}, toolCallIDs(next.ToolCalls))
+}
+
+func TestValidateWorkflowJSONPath(t *testing.T) {
+	cases := []struct {
+		name    string
+		path    string
+		wantErr string
+	}{
+		{name: "identifier", path: "$.approved"},
+		{name: "kebab case", path: "$.content-type"},
+		{name: "space", path: "$.content type"},
+		{name: "missing prefix", path: "approved", wantErr: "expected $.field"},
+		{name: "empty field", path: "$.", wantErr: "field is required"},
+		{name: "nested field", path: "$.approval.status", wantErr: "only top-level fields are supported"},
+		{name: "bracket notation", path: "$.[approval]", wantErr: "only top-level fields are supported"},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			err := validateWorkflowJSONPath(tc.path)
+			if tc.wantErr == "" {
+				require.NoError(t, err)
+				return
+			}
+			require.ErrorContains(t, err, tc.wantErr)
+		})
+	}
 }
 
 func TestGraphWorkflowPlannerRejectsInvalidGraphConfig(t *testing.T) {
@@ -475,7 +502,7 @@ func TestGraphWorkflowPlannerLoopUntilUsesLatestLoopIterationOutput(t *testing.T
 					Tool:          "worker.retry",
 					Payload:       rawjson.Message([]byte(`{}`)),
 					MaxIterations: 3,
-					Until:         &WorkflowPredicateConfig{Step: "retry", Path: "$.done", Equals: "true"},
+					Until:         &WorkflowPredicateConfig{Step: "retry", Path: "$.next-cursor", Equals: "complete"},
 				},
 			},
 		},
@@ -483,7 +510,7 @@ func TestGraphWorkflowPlannerLoopUntilUsesLatestLoopIterationOutput(t *testing.T
 	})
 
 	final, err := p.PlanResume(context.Background(), &PlanResumeInput{
-		ToolOutputs: []*ToolOutput{{ToolCallID: "retry#1", Result: rawjson.Message([]byte(`{"done":true}`))}},
+		ToolOutputs: []*ToolOutput{{ToolCallID: "retry#1", Result: rawjson.Message([]byte(`{"next-cursor":"complete"}`))}},
 	})
 
 	require.NoError(t, err)

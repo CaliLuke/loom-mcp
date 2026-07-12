@@ -110,7 +110,7 @@ func TestGeneratedFeatureRunPublishesAwaitAndResumesWithTypedInput(t *testing.T)
 	err = rt.ProvideTypedInput(ctx, &api.TypedInputAnswer{
 		RunID:   runID,
 		ID:      "approval",
-		Payload: rawjson.Message([]byte(`{"approved":true}`)),
+		Payload: rawjson.Message([]byte(`{"content-type":"application/json"}`)),
 	})
 	require.NoError(t, err)
 	out, err := handle.Wait(ctx)
@@ -166,7 +166,7 @@ func TestGeneratedFeatureRunPersistsArtifactsMemorySkillsAndDebugState(t *testin
 	require.NoError(t, rt.ProvideTypedInput(ctx, &api.TypedInputAnswer{
 		RunID:   runID,
 		ID:      "approval",
-		Payload: rawjson.Message([]byte(`{"approved":true}`)),
+		Payload: rawjson.Message([]byte(`{"content-type":"application/json"}`)),
 	}))
 	out, err := handle.Wait(ctx)
 	require.NoError(t, err)
@@ -277,7 +277,7 @@ func TestGeneratedFeatureRunPersistsArtifactsMemorySkillsAndDebugState(t *testin
 	for path, want := range map[string][]string{
 		"/runs/" + runID + "/await": {
 			`"ID":"approval"`,
-			`"approved"`,
+			`"content-type"`,
 		},
 		"/runs/" + runID + "/memory": {
 			"seed memory",
@@ -373,7 +373,7 @@ func TestGeneratedFeatureRunAppliesNamedInterceptorsAndRetryReflect(t *testing.T
 	require.GreaterOrEqual(t, audit.beforeEventCount(), 1)
 }
 
-func TestGeneratedFeatureRunBranchesToReviseWhenApprovalFalse(t *testing.T) {
+func TestGeneratedFeatureRunBranchesToReviseWhenCaseDoesNotMatch(t *testing.T) {
 	ctx := context.Background()
 	fx := newFeatureRuntime(t)
 	rt := fx.rt
@@ -398,7 +398,7 @@ func TestGeneratedFeatureRunBranchesToReviseWhenApprovalFalse(t *testing.T) {
 	err = rt.ProvideTypedInput(ctx, &api.TypedInputAnswer{
 		RunID:   runID,
 		ID:      "approval",
-		Payload: rawjson.Message([]byte(`{"approved":false}`)),
+		Payload: rawjson.Message([]byte(`{"content-type":"text/plain"}`)),
 	})
 	require.NoError(t, err)
 	_, err = handle.Wait(ctx)

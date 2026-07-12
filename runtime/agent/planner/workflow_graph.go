@@ -714,18 +714,8 @@ func validateWorkflowJSONPath(path string) error {
 	if field == "" {
 		return errors.New("field is required")
 	}
-	for idx, r := range field {
-		if isWorkflowJSONPathLetter(r) || r == '_' {
-			continue
-		}
-		if idx > 0 && r >= '0' && r <= '9' {
-			continue
-		}
-		return errors.New("only top-level identifier fields are supported")
+	if strings.ContainsAny(field, ".[") {
+		return errors.New("only top-level fields are supported")
 	}
 	return nil
-}
-
-func isWorkflowJSONPathLetter(r rune) bool {
-	return (r >= 'A' && r <= 'Z') || (r >= 'a' && r <= 'z')
 }

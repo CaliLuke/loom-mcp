@@ -1452,6 +1452,8 @@ generated graph planner as `PlanResumeInput.TypedInputs`; it does not enter
 Workflow graph dependencies must be acyclic. Dependency IDs, branch source and
 target IDs, and loop `UntilJSONPath` step IDs must all name declared graph
 nodes; invalid graphs fail during design validation rather than at runtime.
+Branch and loop predicates support flat object keys in `$.<key>` form, including
+keys such as `$.content-type`; nested (`$.a.b`) and bracket paths are unsupported.
 
 `BranchDefault` is named to avoid colliding with Goa's `Default` DSL helper when both DSL packages
 are dot-imported.
