@@ -64,11 +64,11 @@ Finding IDs continue the `679fb76` numbering; each carries a status vs that base
 - **Evidence:** Re-grepped at HEAD: 0 hits for sampling/roots/progress across `integration_tests/scenarios/*.yaml`, framework, and fixture tests. `git diff --stat 679fb76..HEAD -- integration_tests/scenarios/` → empty (no scenario changes in 30 commits despite 13 MCP-runtime fix commits). Scenario counts unchanged: tools 24, protocol 18, resources 11, prompts 7, notifications 4, prompts_cli 1 (= 65).
 - **Impact/Recommendation:** Unchanged; also note the delta's MCP fixes (protocol-version alignment, id-less inputs, SSE reconnect) were tested at fixture level, not as scenarios — the scenario layer is drifting from the runtime's actual behavior surface.
 
-### C-6: High-fan-in runtime gaps — tools, ConsumeStream, and interrupts resolved
-- **Severity:** medium · **Status:** partially resolved (3 of 5 sub-items complete)
+### C-6: High-fan-in runtime gaps — all live owners covered
+- **Severity:** medium · **Status:** resolved for live code (4 owners complete; dead bridge tracked for deletion decision)
 - **Confidence:** measured
-- **Evidence at HEAD:** runtime/agent/tools now has direct race/shuffle coverage for identifier splitting, malformed boundaries, idempotency tag conflicts, unknown scopes, and AnyJSONCodec failures; package coverage is 96.4 %. planner.ConsumeStream now has direct text/thinking/tool/delta/usage/metadata/EOF/receive/close/nil-input coverage; planner package coverage rose to 85.7 %. runtime/agent/interrupt now exercises every signal receiver, blocking and timeout routing, asynchronous pause polling, cancellation, and deadline propagation at 94.1 % coverage. The stream tests exposed and fixed C-19–C-21. Remaining: telemetry Clue implementations remain unreferenced; stream/bridge still has no production importer.
-- **Impact/Recommendation:** Cover the telemetry owner next; decide whether stream/bridge should gain a production consumer or be deleted rather than adding tests to dead code.
+- **Evidence at HEAD:** runtime/agent/tools has 96.4 % direct coverage; planner.ConsumeStream lifts planner to 85.7 %; runtime/agent/interrupt is 94.1 %. Clue metrics and tracing now execute against real in-memory OpenTelemetry providers, while logger and attribute conversion edges are exercised directly; telemetry package coverage rose from 8.5 % to 45.7 %. The stream tests exposed and fixed C-19–C-21. The only original sub-item left is runtime/agent/stream/bridge, which still has no production importer and is therefore dead-weight, not a live untested boundary.
+- **Impact/Recommendation:** Treat the live-runtime coverage finding as resolved. Resolve stream/bridge under V-5 by either establishing a real owner or deleting it; do not manufacture coverage for unused code.
 
 ### C-7: Model-adapter error/streaming matrix holes; Gemini worst — plus a new bedrock gap
 - **Severity:** medium · **Status:** still open, one new sub-gap
@@ -332,7 +332,7 @@ Add deterministic tests at their owning packages:
 
 Proof: targeted race tests for each owner, then `make lint`, `make test`, `make itest`, and `make verify-mcp-local`.
 
-Progress: runtime/agent/tools is 96.4 %, runtime/agent/planner is 85.7 %, and runtime/agent/interrupt is 94.1 % covered under race/shuffle. ConsumeStream now preserves cache read/write usage, ignores malformed nil final tool-call chunks, reports close failures, and joins receive/close failures while retaining the partial summary. Remaining Phase 4 work: telemetry clues and the Docker-free registry adapter contract.
+Progress: runtime/agent/tools is 96.4 %, runtime/agent/planner is 85.7 %, runtime/agent/interrupt is 94.1 %, and telemetry rose from 8.5 % to 45.7 % under race/shuffle. ConsumeStream now preserves cache read/write usage, ignores malformed nil final tool-call chunks, reports close failures, and joins receive/close failures while retaining the partial summary. Remaining Phase 4 work: the Docker-free registry adapter contract; stream/bridge moves to the dead-code decision in V-5.
 
 ### Phase 5 — provider conformance and persistence reality
 
