@@ -112,6 +112,25 @@ func TestRootExprValidateRejectsDuplicateDynamicPromptNames(t *testing.T) {
 	require.ErrorContains(t, err, `dynamic prompt name "summarize" for service "assistant" duplicates MCP dynamic prompt summarize`)
 }
 
+func TestRootExprConsumeDeferredSkillDirectory(t *testing.T) {
+	root := NewRoot()
+	svc := &expr.ServiceExpr{Name: "assistant"}
+	first := &SkillDirectoryExpr{Root: "first"}
+	middle := &SkillDirectoryExpr{Root: "middle"}
+	last := &SkillDirectoryExpr{Root: "last"}
+	missing := &SkillDirectoryExpr{Root: "missing"}
+	root.DeferSkillDirectory(svc, first)
+	root.DeferSkillDirectory(svc, middle)
+	root.DeferSkillDirectory(svc, last)
+
+	require.False(t, root.ConsumeDeferredSkillDirectory(svc, missing))
+	require.True(t, root.ConsumeDeferredSkillDirectory(svc, middle))
+	require.Equal(t, []*SkillDirectoryExpr{first, last}, root.pendingSkillDirs[svc.Name])
+	require.True(t, root.ConsumeDeferredSkillDirectory(svc, first))
+	require.True(t, root.ConsumeDeferredSkillDirectory(svc, last))
+	require.NotContains(t, root.pendingSkillDirs, svc.Name)
+}
+
 func testMCPServer(service string) *MCPExpr {
 	return &MCPExpr{
 		Name:    service + "-mcp",

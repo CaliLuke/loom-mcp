@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/CaliLuke/loom/pulse/pool"
+	"github.com/stretchr/testify/require"
 )
 
 func TestShutdownSignalsRestoreDefaultDisposition(t *testing.T) {
@@ -98,6 +99,10 @@ func TestNewRegistryRejectsNegativeHealthConfiguration(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestValidateConfigAllowsZeroHealthDefaults(t *testing.T) {
+	require.NoError(t, validateConfig(Config{}))
 }
 
 // TestRegistryGracefulShutdown verifies that Close properly cleans up resources.

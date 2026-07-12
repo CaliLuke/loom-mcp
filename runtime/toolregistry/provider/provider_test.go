@@ -778,6 +778,13 @@ func TestProviderServeCausePrefersSignaledRootError(t *testing.T) {
 	}
 }
 
+func TestProviderServeCauseFallsBackToContextError(t *testing.T) {
+	state := newProviderServeState(context.Background(), providerConfig{maxQueued: 1})
+	state.cancel()
+
+	require.ErrorIs(t, providerServeCause(state), context.Canceled)
+}
+
 type outputDeltaHandler struct {
 	errc chan error
 }

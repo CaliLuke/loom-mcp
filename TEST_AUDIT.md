@@ -108,10 +108,10 @@ Finding IDs continue the `679fb76` numbering; each carries a status vs that base
 
 ### C-13 (new): Residual untested branches introduced by the delta's own fixes
 - **Severity:** low
+- **Status:** resolved
 - **Confidence:** measured
-- **Evidence:** (a) `providerServeCause` (`runtime/toolregistry/provider/provider.go:278`): new test exercises only the `errc`-ready branch, not the `default → ctx.Err()` fallback. (b) `15bcc4b` codifies a validation split: programmatic `registry.New()` rejects only *negative* health config; zero/`<100ms` rejection lives solely in `cmd/registry/main.go` env parsing — `New()` accepts a zero interval. (c) `ConsumeDeferredSkillDirectory` (`expr/mcp/root.go:255`): return-false/mid-slice-removal path untested. (d) `markLastContentBlockCached` (`anthropic/client.go:426-436`): "no cacheable preceding block" silent-drop path unasserted. (e) New global-mutation coupling: `mcp_generated_server_metadata_test.go:358-361` mutates `MCPMaxRequestBodyBytes` (correctly restored via `t.Cleanup`, correctly not parallel — but it is new shared-global test coupling).
-- **Impact:** Individually low; collectively the delta's fix-test pairs cover the fixed branch but not the neighboring branches the fix created.
-- **Recommendation:** Fold into the C-3/C-7 table work; add a `New()`-level zero-interval rejection (or a test documenting the intended split).
+- **Evidence:** providerServeCause now covers both a signaled root error and the context-error fallback. ConsumeDeferredSkillDirectory covers missing entries, middle removal, final deletion, and order preservation. validateConfig explicitly documents zero health values as accepted programmatic defaults while rejecting negatives. Anthropic's existing checkpoint-only message case already proves that a checkpoint with no cacheable preceding block is dropped safely. The MCP request-size global mutation remains non-parallel and cleanup-restored.
+- **Impact/Recommendation:** Complete. Preserve these neighboring-branch tests and keep the global-mutating metadata test serialized until the configuration becomes instance-owned.
 
 ### C-14 (found and fixed): ServerData validation panicked on a bound method with no result
 - **Severity:** medium · **Status:** resolved in this change
