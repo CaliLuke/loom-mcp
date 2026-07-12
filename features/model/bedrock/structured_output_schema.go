@@ -15,6 +15,7 @@ const (
 	bedrockSchemaTypeArray  = "array"
 	bedrockSchemaTypeObject = "object"
 	bedrockSchemaTypeString = "string"
+	bedrockSchemaProperties = "properties"
 )
 
 var (
@@ -60,11 +61,11 @@ var (
 	}
 
 	bedrockSchemaNameMapKeywords = map[string]struct{}{
-		"properties":        {},
-		"patternProperties": {},
-		"$defs":             {},
-		"definitions":       {},
-		"dependentSchemas":  {},
+		bedrockSchemaProperties: {},
+		"patternProperties":     {},
+		"$defs":                 {},
+		"definitions":           {},
+		"dependentSchemas":      {},
 	}
 
 	bedrockSchemaSingleKeywords = map[string]struct{}{
