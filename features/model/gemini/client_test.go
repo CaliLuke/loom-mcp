@@ -3,6 +3,7 @@ package gemini_test
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"reflect"
 	"testing"
 
@@ -377,8 +378,45 @@ func TestNewFromVertexValidatesRequiredFields(t *testing.T) {
 	require.Contains(t, err.Error(), "default model is required")
 }
 
+func TestClientProviderErrorsAndStreamingContract(t *testing.T) {
+	mock := &mockModelsClient{}
+	client, err := geminimodel.New(geminimodel.Options{
+		Client:       mock,
+		DefaultModel: "gemini-2.5-flash",
+	})
+	require.NoError(t, err)
+	request := &model.Request{Messages: []*model.Message{{
+		Role:  model.ConversationRoleUser,
+		Parts: []model.Part{model.TextPart{Text: "hello"}},
+	}}}
+
+	t.Run("SDK rate limit", func(t *testing.T) {
+		mock.generateErr = genai.APIError{Code: 429, Message: "quota exceeded"}
+		response, err := client.Complete(context.Background(), request)
+		require.Nil(t, response)
+		require.ErrorIs(t, err, model.ErrRateLimited)
+		require.ErrorContains(t, err, "quota exceeded")
+	})
+
+	t.Run("ordinary provider error", func(t *testing.T) {
+		providerErr := errors.New("provider unavailable")
+		mock.generateErr = providerErr
+		response, err := client.Complete(context.Background(), request)
+		require.Nil(t, response)
+		require.ErrorIs(t, err, providerErr)
+		require.ErrorContains(t, err, "gemini generate_content")
+	})
+
+	t.Run("streaming unsupported", func(t *testing.T) {
+		stream, err := client.Stream(context.Background(), request)
+		require.Nil(t, stream)
+		require.ErrorIs(t, err, model.ErrStreamingUnsupported)
+	})
+}
+
 type mockModelsClient struct {
 	response      *genai.GenerateContentResponse
+	generateErr   error
 	countResponse *genai.CountTokensResponse
 	countErr      error
 	model         string
@@ -393,7 +431,7 @@ func (m *mockModelsClient) GenerateContent(_ context.Context, model string, cont
 	m.model = model
 	m.contents = contents
 	m.config = config
-	return m.response, nil
+	return m.response, m.generateErr
 }
 
 func (m *mockModelsClient) CountTokens(_ context.Context, model string, contents []*genai.Content, config *genai.CountTokensConfig) (*genai.CountTokensResponse, error) {

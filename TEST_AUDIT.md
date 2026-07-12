@@ -70,12 +70,12 @@ Finding IDs continue the `679fb76` numbering; each carries a status vs that base
 - **Evidence at HEAD:** runtime/agent/tools has 96.4 % direct coverage; planner.ConsumeStream lifts planner to 85.7 %; runtime/agent/interrupt is 94.1 %. Clue metrics and tracing now execute against real in-memory OpenTelemetry providers, while logger and attribute conversion edges are exercised directly; telemetry package coverage rose from 8.5 % to 45.7 %. The stream tests exposed and fixed C-19–C-21. The only original sub-item left is runtime/agent/stream/bridge, which still has no production importer and is therefore dead-weight, not a live untested boundary.
 - **Impact/Recommendation:** Treat the live-runtime coverage finding as resolved. Resolve stream/bridge under V-5 by either establishing a real owner or deleting it; do not manufacture coverage for unused code.
 
-### C-7: Model-adapter error/streaming matrix holes; Gemini worst
-- **Severity:** medium · **Status:** in progress (Bedrock schema recursion resolved)
+### C-7: Model-adapter error/streaming matrix holes
+- **Severity:** medium · **Status:** in progress (Gemini and Bedrock schema gaps resolved)
 - **Confidence:** measured
-- **Evidence:** Gemini remains the widest gap: its mock returns response/nil unconditionally, while isRateLimited and Stream remain unexercised. Bedrock's real smithy throttle shapes are still not covered. Malformed SSE/NDJSON branches remain dark across adapters. The structured-output recursion gap is now closed by a table covering if/then/else, propertyNames, dependentSchemas, prefixItems, contains, not, allOf, and anyOf; every case proves unsupported nested constraints are removed and nested objects are closed.
+- **Evidence:** Gemini now injects real GenerateContent failures: an SDK APIError with HTTP 429 must classify as model.ErrRateLimited, ordinary provider errors remain discoverable through wrapping, and Stream explicitly returns model.ErrStreamingUnsupported. Gemini coverage rose from 62.1 % to 64.0 %. Bedrock's structured-output recursion gap is closed by a table covering if/then/else, propertyNames, dependentSchemas, prefixItems, contains, not, allOf, and anyOf. Bedrock's real smithy throttle shapes are still not covered, and malformed SSE/NDJSON branches remain dark across streaming adapters.
 - **Impact:** Provider error classification and byte-stream decoding change most across SDK bumps; real SDK throttle shapes and malformed frames could still regress silently.
-- **Recommendation:** Fill Gemini error/streaming first, then Bedrock smithy errors and malformed Ollama/OpenAI/Anthropic stream frames.
+- **Recommendation:** Continue with Bedrock smithy errors and malformed Ollama/OpenAI/Anthropic stream frames, then consolidate the observable contracts into a shared provider checklist.
 
 ### C-8: Mongo query syntax for prompt/memory stores never executes against real Mongo
 - **Severity:** medium · **Status:** still open (delta improved decode-side coverage only)
