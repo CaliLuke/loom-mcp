@@ -2,9 +2,9 @@
 
 Audited: 2026-07-11 (refresh + first remediation) · Baseline commit: `4f2c262` (main) · Auditor: test-suite-audit skill
 Baseline: prior audit at `679fb76` earlier the same day; this refresh re-measured everything at HEAD (30 commits, 116 files, +4,227/−1,438 later) and re-verified every prior finding.
-Last remediation commit: `2752473` (`test: enforce shuffled order hygiene`).
+Recent remediation commits: `2752473` (shuffled order hygiene), `3392ddd` (complete CI verification selection).
 
-Remediation progress: **S-2 is resolved; C-1/C-2 are locally repaired and fully verified, with only an actual hosted Actions run pending.** The shared DSL harness now recreates and registers `mcpexpr.Root`, all `expr/agent` tests that replace Goa/MCP global roots restore them with `t.Cleanup`, and the normal unit target runs with `-shuffle=on`. CI now uses Go `1.26.1`, pins Loom `v1.4.0`, calls repository make targets, includes all three integration clusters with uncached execution, and requires Docker-backed registry tests instead of silently accepting their skips. `actionlint`, all four repository gates, and the strict Colima-backed registry suite are green.
+Remediation progress: **S-2 is resolved; C-1/C-2 are locally repaired and fully verified, with only an actual hosted Actions run pending; C-3 is now 16/59 at the DSL layer.** The shared DSL harness now recreates and registers `mcpexpr.Root`, all `expr/agent` tests that replace Goa/MCP global roots restore them with `t.Cleanup`, and the normal unit target runs with `-shuffle=on`. CI now uses Go `1.26.1`, pins Loom `v1.4.0`, calls repository make targets, includes all three integration clusters with uncached execution, and requires Docker-backed registry tests instead of silently accepting their skips. The formerly dark `dsl/history.go` error surface is now 10/10 directly asserted, with matching `RunPolicyExpr` history invariant tables.
 
 ## 1. Executive summary
 
@@ -44,12 +44,12 @@ Finding IDs continue the `679fb76` numbering; each carries a status vs that base
 - **Evidence:** The same 29 functions still use the shared Redis testcontainer. `registry.TestMain` now separates setup/cleanup, reports cleanup failures, and honors `LOOM_MCP_REQUIRE_DOCKER_TESTS=1`; CI sets that switch for `make test`, turning Docker/container startup failure into exit 1 instead of 29 skips. The switch has a focused table test, a no-socket strict probe failed closed with the expected message, and the full registry package passed against Colima/Redis under `-race -shuffle=on -count=1` in 71.8 s using the explicit Colima Docker socket.
 - **Impact/Recommendation:** Verify all 29 execute on the hosted runner. Continue extracting hermetic sync logic where practical, but do not weaken the fail-closed CI contract.
 
-### C-3: DSL/expr validation — the declared product surface — still largely untested
-- **Severity:** high · **Status:** still open (same gap, wider absolute)
+### C-3: DSL/expr validation — history complete, remaining surface still largely untested
+- **Severity:** high · **Status:** in progress (DSL error sites 6/59 → 16/59)
 - **Confidence:** measured
-- **Evidence:** 59 `eval.ReportError`/`InvalidArgError` sites in `dsl/*.go`; **6 tested** (verified message-by-message; the tested six: `registry.go:268`, `mcp.go:616`, `tool.go:155`, `policy.go:322`, `policy.go:342`, `timing.go:157`). Whole files still zero: `dsl/history.go` (10 sites, no `history_test.go`; `:130` "only one history policy" — 0 hits in any test), `dsl/bounds.go` (2), `dsl/registry.go` duration parsing (`:122,151,177`), `dsl/agent.go` Passthrough (5 branches, happy-path tests only). `expr/agent/tool.go`: 46 `verr.Add` conditions, **7 tested, ~39 untested** — the entire Inject block (`:530-618`, 11 conditions), ServerData (`:664-678`), paging/bounds (`:694-785`, 13 conditions). Positive delta signal: all three new DSL validations landed **with** tests (`41ca3cd` → `registry_test.go:274` asserting the full message; `515306d` → `mcp_test.go:319`, weak/generic assertion; `ec20560` → `mcp_test.go:30`, behavioral).
+- **Evidence:** 59 `eval.ReportError`/`InvalidArgError` sites exist in `dsl/*.go`; **16 are now tested message-by-message**. New `dsl/history_test.go` and `history_internal_test.go` cover all 10 history/cache error sites: duplicate policies, empty mode, every non-positive argument, strategy conflicts in both orders, missing compression trigger/retention, invalid threshold relationships, and the internal unknown-mode branch. `expr/agent/policy_test.go` now independently covers every `validateHistory`/`validateCompress` error plus valid recent/turn/token modes. Remaining whole-file gaps include `dsl/bounds.go` (2) and registry duration parsing (`dsl/registry.go:122,151,177`); `dsl/agent.go` Passthrough still has happy-path-only branches. `expr/agent/tool.go` remains 7/~46 tested, with Inject, ServerData, paging, and bounds next.
 - **Impact:** Per CLAUDE.md, validations belong in the DSL; a regression in history-mode exclusivity or duration parsing ships silently. The delta proves the team writes these tests when adding validations — the backlog is the historical 53 sites.
-- **Recommendation:** Unchanged: table-driven `runDSLExpectError` cases per site (harness at `dsl/dsl_test.go:494`), `dsl/history.go` first; direct `ToolExpr.Validate()` struct-literal tests for Inject/bounds.
+- **Recommendation:** History is complete. Continue with `dsl/bounds.go`, registry durations, Passthrough, then direct `ToolExpr.Validate()` struct-literal tables for Inject/ServerData/paging/bounds.
 
 ### C-4: Only 2 files / 3 funcs of 231 codegen tests compile the generated output
 - **Severity:** high · **Status:** still open (pattern reconfirmed in the delta)
@@ -222,7 +222,7 @@ Rank positions are preserved for traceability. Rank 2 is complete; the other opp
 | 1 | **In progress:** repaired CI selection/toolchain and Docker fail-closed behavior; verify hosted run | C-1, C-2 | blocker | hours | 164 integration funcs + 29 registry tests become a real gate |
 | 2 | **Completed:** fix `resetDSLRoots`, restore roots with `t.Cleanup`, enforce `-shuffle=on` | S-2 | complete | done | Order-coupling class eliminated; unlocks parallelism work |
 | 3 | Unit-suite critical path: quickstart out of `make test`, FileOrder 13→3, memoize conformance fixture, tune gopter TTL | S-1, V-2 | quick win | hours | Warm wall 30 s → ~15 s; cold-cache worst case shrinks 40–100 s |
-| 4 | DSL/expr validation error tables (history.go first; tool.go Inject/bounds) | C-3, C-13 | structural | days | Closes the biggest defect-risk gap on the repo's own core surface (53 untested sites) |
+| 4 | **In progress:** DSL/expr validation tables (history complete; tool Inject/bounds next) | C-3, C-13 | structural | days | 10 historical sites closed; 43 DSL sites plus expression branches remain |
 | 5 | Compile-the-output design table on `writeGeneratedModule` | C-4 | structural | days | Kills the string-tests-pass-on-broken-output mode the delta just re-demonstrated |
 | 6 | Replace `os.Setenv` header channel → drop `-parallel 1`; one server per YAML; `TestMain` cleanup | S-3, S-4 | structural | days | Integration ~60–90 s; stops the 103 MB leak |
 | 7 | Shared adapter conformance table (+ Gemini/Bedrock error shapes, bedrock keyword table, Mongo prompt/memory integration) | C-7, C-8, V-3 | structural | days | Provider-regression class covered once, uniformly |
@@ -284,7 +284,7 @@ Owners and tests:
 
 Work red-green by validation cluster. Assert the exact stable message and the resulting expression state; do not merely assert `err != nil`. Proof after each cluster: targeted `go test -shuffle=on ./dsl ./expr/agent ./expr/mcp`, followed by all four repository gates because these packages are design/codegen inputs.
 
-Exit criterion: at least 48/59 DSL error sites and 37/46 `ToolExpr.Validate` conditions have direct tests, with every defect discovered recorded before moving to codegen.
+Progress: 16/59 DSL error sites and the full history expression invariant set have direct tests. Exit criterion remains at least 48/59 DSL error sites and 37/46 `ToolExpr.Validate` conditions, with every defect discovered recorded before moving to codegen.
 
 ### Phase 3 — compile generated contracts
 
