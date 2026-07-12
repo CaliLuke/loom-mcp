@@ -78,7 +78,11 @@ type (
 )
 
 const (
-	defaultCleanupTimeout = 5 * time.Second
+	defaultCleanupTimeout     = 5 * time.Second
+	errorCodeInvalidArguments = "invalid_arguments"
+	fieldQuery                = "query"
+	fieldRequestedSignals     = "requested_signals"
+	issueConstraintMissing    = "missing_field"
 )
 
 // WithSinkName sets the Pulse sink/consumer-group name used when subscribing to
@@ -208,6 +212,9 @@ func (e *Executor) prepareExecution(call *planner.ToolRequest, meta *runtime.Too
 	spec, ok := e.specs.Spec(call.Name)
 	if !ok {
 		return nil, "", &planner.ToolResult{Name: call.Name, Error: planner.NewToolError(fmt.Sprintf("unknown tool %q", call.Name))}
+	}
+	if spec == nil {
+		return nil, "", &planner.ToolResult{Name: call.Name, Error: planner.NewToolError(fmt.Sprintf("tool %q has nil spec", call.Name))}
 	}
 	if spec.Toolset == "" {
 		return nil, "", &planner.ToolResult{Name: call.Name, Error: planner.NewToolError(fmt.Sprintf("tool %q missing toolset routing id", call.Name))}
@@ -380,6 +387,12 @@ func (e *Executor) handleResultStreamEvent(
 	resultStreamID string,
 	ev *streaming.Event,
 ) (bool, *planner.ToolResult, error) {
+	if ev == nil {
+		err := errors.New("tool result stream delivered nil event")
+		span.RecordError(err)
+		span.SetStatus(codes.Error, "nil tool result stream event")
+		return true, nil, err
+	}
 	if ev.EventName == e.outputDeltaKey {
 		return e.handleOutputDeltaEvent(ctx, span, sink, meta, call, toolUseID, ev)
 	}
@@ -614,7 +627,7 @@ func retryHintFromToolErrorCode(tool tools.Ident, code string) *planner.RetryHin
 			Reason: planner.RetryReasonInvalidArguments,
 			Tool:   tool,
 		}
-	case "invalid_arguments":
+	case errorCodeInvalidArguments:
 		// Tool-codec validation errors are surfaced by providers as invalid_arguments.
 		// These are always user-actionable: they indicate the payload did not satisfy
 		// the tool schema (missing fields, enum violations, range constraints, etc.).
@@ -642,7 +655,7 @@ func buildRetryHintFromIssues(toolName tools.Ident, spec *tools.ToolSpec, issues
 			continue
 		}
 		fields = append(fields, is.Field)
-		if is.Constraint == "missing_field" {
+		if is.Constraint == issueConstraintMissing {
 			missing = append(missing, is.Field)
 		}
 	}
@@ -657,7 +670,7 @@ func buildRetryHintFromIssues(toolName tools.Ident, spec *tools.ToolSpec, issues
 	question := buildClarifyingQuestion(toolName, missing, fields)
 	var example map[string]any
 	if spec != nil && len(spec.Payload.ExampleInput) > 0 {
-		example = spec.Payload.ExampleInput
+		example = cloneExampleInput(spec)
 	}
 	reason := planner.RetryReasonInvalidArguments
 	if len(missing) > 0 {
@@ -673,7 +686,7 @@ func buildRetryHintFromIssues(toolName tools.Ident, spec *tools.ToolSpec, issues
 }
 
 func buildClarifyingQuestion(toolName tools.Ident, missing, fields []string) string {
-	if len(missing) == 2 && missing[0] == "query" && missing[1] == "requested_signals" {
+	if len(missing) == 2 && missing[0] == fieldQuery && missing[1] == fieldRequestedSignals {
 		return "I need additional information to run " + toolName.String() + ". Please provide either `query` (a short description) or `requested_signals` (a non-empty list of signal names) and resend the tool call."
 	}
 	if len(missing) > 0 {
