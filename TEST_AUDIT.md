@@ -2,12 +2,13 @@
 
 Audited: 2026-07-11 (refresh + first remediation) · Baseline commit: `4f2c262` (main) · Auditor: test-suite-audit skill
 Baseline: prior audit at `679fb76` earlier the same day; this refresh re-measured everything at HEAD (30 commits, 116 files, +4,227/−1,438 later) and re-verified every prior finding.
+Last remediation commit: `2752473` (`test: enforce shuffled order hygiene`).
 
 Remediation progress: **S-2 is resolved.** The shared DSL harness now recreates and registers `mcpexpr.Root`, all `expr/agent` tests that replace Goa/MCP global roots restore them with `t.Cleanup`, and the normal unit target runs with `-shuffle=on`. Both complete non-integration package sets pass with fixed seeds `101` and `202`; `make lint`, the race-enabled shuffled `make test`, and `make itest` are green.
 
 ## 1. Executive summary
 
-The suite grew slightly (303 test files, 1,439 top-level test functions, +37 since `679fb76`) and every one of the 30 delta fix commits landed with tests — regression discipline is now 45/45 across both audit passes, and the new runtime/registry tests are genuinely behavior-asserting (bounded-cache eviction, race-hardened error precedence, subprocess signal handling). The first structural remediation is now complete: the DSL order-coupling defect is fixed and shuffle is enforced by `make test`. The 9 high/medium completeness findings, all 5 value findings, and the remaining serialization speed findings are still open. CI has still never executed (0 GitHub Actions runs), and the dark-test problem got slightly worse: 158 of 164 integration test functions are now unreachable from any automated gate (was 148/154), Docker-gated registry tests grew to 29, and the `.tmp` fixture leak nearly doubled to 77 dirs / 103 MB. One genuinely new completeness gap appeared: the bedrock structured-schema fix (`c5f293a`) introduced ~11 keyword-classification branches and tested 1. Unit wall time measured 30.1 s fully warm / ~3.5 min after a 30-commit cold build — the "suite is slow" experience is almost entirely build-cache invalidation, not test time. Most important number: **158 of 164 integration test functions run in no automated environment.**
+The suite grew slightly (303 test files, 1,439 top-level test functions, +37 since `679fb76`) and every one of the 30 delta fix commits landed with tests — regression discipline is now 45/45 across both audit passes, and the new runtime/registry tests are genuinely behavior-asserting (bounded-cache eviction, race-hardened error precedence, subprocess signal handling). The first structural remediation is now complete: the DSL order-coupling defect is fixed and shuffle is enforced by `make test`. The 9 high/medium completeness findings, all 5 value findings, and the remaining serialization speed findings are still open. **CI repair is the immediate blocker and the next commit:** Actions still installs Go `1.25.x` despite every module requiring `1.26.1`, has never executed (0 runs), and its integration job reaches only 6 of 164 functions. The dark-test problem therefore remains severe: 158 integration functions are unreachable from any automated gate, Docker-gated registry tests grew to 29, and the `.tmp` fixture leak nearly doubled to 77 dirs / 103 MB. One genuinely new completeness gap appeared: the bedrock structured-schema fix (`c5f293a`) introduced ~11 keyword-classification branches and tested 1. Unit wall time measured 30.1 s fully warm / ~3.5 min after a 30-commit cold build — the "suite is slow" experience is almost entirely build-cache invalidation, not test time.
 
 ## 2. Inventory (cross-repo baseline metrics)
 
@@ -30,10 +31,10 @@ The suite grew slightly (303 test files, 1,439 top-level test functions, +37 sin
 
 Finding IDs continue the `679fb76` numbering; each carries a status vs that baseline.
 
-### C-1: CI has never run, and its config would gate almost nothing if it did
-- **Severity:** high · **Status:** still open (slightly worse)
+### C-1: CI has never run, uses the wrong Go version, and would gate almost nothing
+- **Severity:** blocker · **Status:** next fix
 - **Confidence:** measured
-- **Evidence:** `gh api repos/CaliLuke/loom-mcp/actions/runs --jq '.total_count'` → `0` at HEAD. `.github/workflows/ci.yml:89-92` integration job still runs only `go test -v ./tests` (6 funcs). `Makefile:38-39` unit target still excludes `integration_tests`; `Makefile:44` itest still misses `fixtures/assistant` (124 funcs, +7). `.githooks/pre-commit` still gofmt+lint only, no tests. Integration funcs at HEAD: framework 25 + tests 6 + assistant 124 + agent_features 9 = 164; CI would reach 6.
+- **Evidence:** `gh api repos/CaliLuke/loom-mcp/actions/runs --jq '.total_count'` → `0` at HEAD. All three modules declare Go `1.26.1`, while both CI jobs install `1.25.x`. `.github/workflows/ci.yml:89-92` integration still runs only `go test -v ./tests` (6 funcs). `Makefile:38-39` unit excludes `integration_tests`; `Makefile:44` itest misses `fixtures/assistant` (124 funcs, +7). `.githooks/pre-commit` remains gofmt+lint only. Integration funcs at HEAD: framework 25 + tests 6 + assistant 124 + agent_features 9 = 164; CI would reach 6 even if enabled.
 - **Impact:** **158/164 integration funcs unreachable from any automated gate** (was 148/154). The delta added 10 new integration tests (SSE reconnect, oversized-body rejection, error-ID hiding, dynamic-prompt compile, registry capabilities/validation) — all born dark.
 - **Recommendation:** Enable Actions; make the integration job run itest + the assistant fixture; pin the loom CLI. The unit job already inherits `-shuffle=on` through `make test` after the S-2 remediation.
 
@@ -230,12 +231,130 @@ Rank positions are preserved for traceability. Rank 2 is complete; the other opp
 
 ## 6. Suggested refactoring sequence
 
-Updated after the first remediation; rank 2 is complete:
+The execution order below is intentionally different from the original opportunity ranking. The goal is not maximum line coverage or minimum runtime; it is to expose existing defects at contract boundaries and then make those checks unavoidable for every future change. Each phase is a separately verified commit on `main`. If a new test exposes a product bug, the regression test and root-cause fix land together so the branch remains green.
 
-1. **Week 1 — make the suite real (ranks 1–3).** S-2 and shuffled unit gating are complete. Enable CI next, then make the speed cuts. Re-measure: warm unit wall (target ≤ 20 s) and CI green including the Redis job.
-2. **Weeks 2–3 — close the two documented risk gaps (ranks 4–5).** Pure additions on existing harnesses. Re-measure: DSL error sites tested (target ≥ 80 % of 59; currently 6), compile-table designs ≥ 4.
-3. **Weeks 3–4 — integration throughput (rank 6).** Re-measure scenario wall (≤ 90 s) and `.tmp` emptiness after runs (currently 77 dirs / 103 MB).
-4. **Ongoing — coverage and consolidation (ranks 7–9).** Fold table-driving into the adapter/coverage PRs. Re-run the coverage × churn table after; `expr/agent/tool.go` (33 %) and `hooks/events.go` (29 %) should move above 60 %.
+### Target state
+
+The testing setup is reassuring enough to resume normal feature work when all of the following are true:
+
+- one canonical CI workflow runs the race-enabled shuffled unit suite, all three integration clusters (`framework/tests`, `fixtures/assistant`, and `fixtures/agent_features`), and the Docker-backed registry tests without silently skipping them;
+- at least 80 % of the DSL error sites and `ToolExpr.Validate` branches identified by C-3 have direct message-level assertions;
+- at least four materially different generated designs are rendered and compiled, not merely checked as strings;
+- the highest-fan-in untested runtime boundaries (`planner.ConsumeStream`, interrupt waits, tool identifiers/idempotency, registry gRPC adaptation, and repeated finalization) have deterministic behavioral and error-path tests;
+- provider adapters share a minimum behavioral matrix for rate limits, malformed tool calls, stream errors, cancellation, structured output, usage, and terminal events;
+- the MCP scenario layer covers sampling, roots, and progress or explicitly records the missing framework/spec implementation found by the required red test;
+- no critical, non-generated package remains below 60 % statement coverage, and the high-churn DSL/expr/runtime/codegen owners are at or above 70 %;
+- two fixed shuffle seeds, `make lint`, `make test`, `make itest`, and `make verify-mcp-local` are green before the testing campaign is considered complete.
+
+Coverage percentages are guardrails, not the objective. Defect yield is tracked separately: every test that fails against current production code records the finding ID, failing contract, root cause, and fixing commit in this audit. If the DSL + compile + runtime phases find fewer than three distinct defects, perform deliberate fault-seeding against one validation, one generator, and one runtime error path; surviving faults mean the corresponding tests are too implementation-coupled and must be strengthened before moving on.
+
+### Phase 1 — make every existing test unavoidable
+
+**Findings:** C-1, C-2, V-5. **Expected defect yield:** immediate configuration failures plus any failures currently hidden in 158 dark integration functions and 29 Docker-gated registry tests.
+
+Current contract inventory:
+
+- `.github/workflows/ci.yml` installs Go `1.25.x`, while the root, assistant, and agent-feature modules all declare Go `1.26.1`;
+- the CI integration job runs only `integration_tests/tests` (6 functions);
+- `Makefile.itest` owns `fixtures/agent_features` plus `integration_tests/...`, but omits `fixtures/assistant`;
+- `registry.TestMain` starts one Redis testcontainer and silently converts any Docker/startup failure into 29 skips;
+- `scripts/loom_core_mode.sh` pins Loom `v1.4.0`, while CI installs `@latest`.
+
+Commit-sized work:
+
+1. **Next commit:** change CI to Go `1.26.1`, install Loom `v1.4.0`, and call repository `make` targets instead of duplicating partial commands.
+2. In that same gate-repair commit, make `make itest` the canonical owner of all three integration clusters by adding `go test -C ./integration_tests/fixtures/assistant ./... -count=1`.
+3. Add a CI-only fail-fast switch to `registry.TestMain` so unavailable Redis/Docker fails instead of skipping; keep local no-Docker skips ergonomic.
+4. Enable `MCP_CLI_TESTS` only after its server/CLI prerequisites are made hermetic; otherwise delete the dead flag path rather than advertising false coverage.
+5. Verify an actual GitHub Actions run. If the run count remains zero, stop: repository Actions permissions require owner/admin intervention and cannot be repaired in code.
+
+Proof: `make lint`, `make test`, `make itest`, then the green Actions run with zero unexpected skips. Do not proceed to coverage expansion while CI is not executing the same commands as local development.
+
+### Phase 2 — attack design validation first
+
+**Findings:** C-3, C-10, C-13. **Expected defect yield:** high; these are executable product contracts with roughly 53 historical error branches lacking assertions.
+
+Owners and tests:
+
+- add `dsl/history_test.go` using `runDSLExpectError` for duplicate `History`, non-positive values, `KeepRecentTurns`/compression conflicts, and invalid placement;
+- extend DSL tables for `dsl/bounds.go`, registry duration parsing, and `Passthrough` resolution;
+- add direct `ToolExpr.Validate()` tables in `expr/agent/tool_validation_test.go` for `Inject`, `ServerData`, paging, and bounded-result shapes;
+- extend `expr/mcp/mcp_test.go` and agent expression tests so `Finalize()` is called twice and produces the same evaluated contract without duplication or panic;
+- cover C-13 neighboring branches while the relevant tables are open.
+
+Work red-green by validation cluster. Assert the exact stable message and the resulting expression state; do not merely assert `err != nil`. Proof after each cluster: targeted `go test -shuffle=on ./dsl ./expr/agent ./expr/mcp`, followed by all four repository gates because these packages are design/codegen inputs.
+
+Exit criterion: at least 48/59 DSL error sites and 37/46 `ToolExpr.Validate` conditions have direct tests, with every defect discovered recorded before moving to codegen.
+
+### Phase 3 — compile generated contracts
+
+**Finding:** C-4. **Expected defect yield:** high; current string assertions can pass while emitted Go is uncompilable.
+
+Extend `codegen/agent/mcp_executor_compile_test.go` so `writeGeneratedModule` drives a table of evaluated designs and runs `go build ./...` for each:
+
+1. existing `FromMCP` toolset baseline;
+2. local method-backed toolset projected through `Expose(AgentRuntime, MCPSurface)` and `MCPPlacement`;
+3. registry-backed toolset with refresh/freeze specs and local JSON Pointer schema references;
+4. prompt/resource-only MCP service with no declared tools;
+5. injected-field payload shape, ensuring generated public codecs retain the field while advertised schemas hide it.
+
+The design packages own these contracts; never patch emitted `gen/` files. Any generator fix must update the relevant golden and regenerate affected fixtures intentionally. Proof: targeted `go test ./codegen/agent ./codegen/mcp`, compile matrix green, `make regen-assistant-fixture` or `make regen-agent-feature-fixture` when their designs change, then the four repository gates.
+
+Exit criterion: at least four distinct designs compile from freshly rendered output, and each high-risk string-only assertion identified by C-4 is paired with compile or behavioral proof.
+
+### Phase 4 — cover high-fan-in runtime and concurrency boundaries
+
+**Findings:** C-6, C-9, C-10. **Expected defect yield:** medium to high because these paths fan into most agent executions but currently have little or no direct isolation.
+
+Add deterministic tests at their owning packages:
+
+- `runtime/agent/planner/stream_test.go`: `ConsumeStream` text/thinking/tool-call deltas, usage aggregation, metadata usage, EOF, receive errors, cancellation, and nil inputs using a raw model streamer only;
+- `runtime/agent/interrupt/controller_test.go`: every wait operation, matching signal delivery, timeout/cancellation, and cross-signal isolation using an in-memory workflow context;
+- `runtime/agent/tools/ident_test.go` and `idempotency_test.go`: malformed/empty identifiers, namespace splits, tag conflicts, and stable scope selection;
+- `runtime/registry/grpc_client_adapter_test.go`: add a Docker-free `bufconn` generated-server contract instead of testing only a handwritten client mock;
+- concurrency/reentrancy cases for repeated finalization and shared stream/session state, always under `-race`.
+
+Proof: targeted race tests for each owner, then `make lint`, `make test`, `make itest`, and `make verify-mcp-local`.
+
+### Phase 5 — provider conformance and persistence reality
+
+**Findings:** C-7, C-8, V-3. **Expected defect yield:** medium; Gemini and persistence encode/decode boundaries are the least uniformly covered.
+
+Define one provider-neutral conformance case model, while keeping SDK-specific stubs in each adapter package. Every supported adapter must prove: rate-limit classification; ordinary provider errors; malformed tool input; stream setup and receive errors; context cancellation; structured-output/tool-choice compatibility; usage accounting; and exactly one terminal event. Fill Gemini first, then Bedrock keyword normalization, then Anthropic/Ollama/OpenAI gaps. Reuse helpers only for observable model contracts, never SDK internals.
+
+Add testcontainer round trips for Mongo prompt and memory stores covering encode + persist + retrieve + decode, with a CI fail-fast switch matching Redis. Keep fast codec unit tests for local feedback.
+
+Exit criterion: every provider passes the common matrix or documents an intentional unsupported capability with a tested error; both Mongo stores have at least one real round trip in CI.
+
+### Phase 6 — protocol scenarios, then suite throughput
+
+**Findings:** C-5, S-1, S-3, S-4, S-5, S-7, V-1, V-2. **Expected defect yield:** protocol work medium; speed work is confidence-enabling rather than directly bug-finding.
+
+Start sampling, roots, and progress as real client-vs-framework validation tests in `integration_tests/framework` or scenario YAML. If a test proves the protocol surface is absent, treat it as MCP feature work and follow the repo's `new-mcp-feature-development` red-green workflow rather than weakening the test.
+
+Only after the correctness phases are green:
+
+- replace process-global `os.Setenv` scenario headers so `-parallel 1` can be removed;
+- boot one server per YAML group and add `TestMain` cleanup for prepared fixture clones;
+- reduce `TestGenerate_FileOrderIsStableAcrossRuns` from 13 to 3 runs, memoize immutable conformance generation, and move the quickstart subprocess behind an explicit integration/slow gate;
+- replace ordering sleeps with readiness/event synchronization;
+- consolidate tool-search/OAuth fixture cases while preserving behavior assertions.
+
+Exit criterion: warm unit wall at or below 20 seconds, integration wall at or below 90 seconds, no leaked prepared fixture directories after a run, and no reduction in the contract matrix or assertion strength.
+
+### Commit and review discipline
+
+- Work directly on `main` as requested, one coherent phase slice per commit.
+- Before every commit run targeted red-green checks and the proportionate repository gates; framework-scale changes require all four gates.
+- Never commit a red tree, bypass hooks, hand-edit generated files, or mix an exposed bug with unrelated cleanup.
+- Update this audit in the same commit that changes a finding's status. Record newly exposed bugs in a remediation ledger directly below this plan.
+- After Phases 2, 3, and 4, pause for a defect-yield review. Reorder remaining work using actual failures found, not coverage percentage alone.
+
+### Remediation ledger
+
+| Finding | Exposing test | Root cause | Fix commit | Status |
+|---|---|---|---|---|
+| S-2 | shuffled `dsl` suite, seeds `101` and `202` | `resetDSLRoots` omitted `mcpexpr.Root`; three `expr/agent` tests leaked replaced globals | `2752473` | fixed |
 
 ## 7. Method notes
 
