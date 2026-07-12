@@ -7,6 +7,7 @@ import (
 	"reflect"
 	"time"
 
+	"go.mongodb.org/mongo-driver/v2/bson"
 	mongodriver "go.mongodb.org/mongo-driver/v2/mongo"
 	"go.mongodb.org/mongo-driver/v2/mongo/readpref"
 )
@@ -74,6 +75,37 @@ func WithTimeout(ctx context.Context, timeout time.Duration, normalizeNil bool) 
 	return context.WithTimeout(ctx, timeout)
 }
 
+// NormalizeBSONValue recursively converts BSON document and array containers to
+// their standard Go map and slice equivalents after decoding.
+func NormalizeBSONValue(value any) any {
+	switch typed := value.(type) {
+	case bson.D:
+		dst := make(map[string]any, len(typed))
+		for _, elem := range typed {
+			dst[elem.Key] = NormalizeBSONValue(elem.Value)
+		}
+		return dst
+	case bson.M:
+		dst := make(map[string]any, len(typed))
+		for key, elem := range typed {
+			dst[key] = NormalizeBSONValue(elem)
+		}
+		return dst
+	case map[string]any:
+		dst := make(map[string]any, len(typed))
+		for key, elem := range typed {
+			dst[key] = NormalizeBSONValue(elem)
+		}
+		return dst
+	case bson.A:
+		return normalizeBSONArray(typed)
+	case []any:
+		return normalizeBSONArray(typed)
+	default:
+		return value
+	}
+}
+
 func isNil(v any) bool {
 	if v == nil {
 		return true
@@ -89,4 +121,12 @@ func isNil(v any) bool {
 		return rv.IsNil()
 	}
 	return false
+}
+
+func normalizeBSONArray(values []any) []any {
+	dst := make([]any, len(values))
+	for i, value := range values {
+		dst[i] = NormalizeBSONValue(value)
+	}
+	return dst
 }

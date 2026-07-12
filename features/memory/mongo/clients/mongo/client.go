@@ -182,7 +182,7 @@ func fromEventDocuments(events []eventDocument) []memory.Event {
 		result[i] = memory.Event{
 			Type:      evt.Type,
 			Timestamp: evt.Timestamp,
-			Data:      normalizeBSONValue(evt.Data),
+			Data:      clientinfra.NormalizeBSONValue(evt.Data),
 			Labels:    cloneLabels(evt.Labels),
 		}
 	}
@@ -206,44 +206,7 @@ func cloneMeta(src map[string]any) map[string]any {
 	}
 	dst := make(map[string]any, len(src))
 	for k, v := range src {
-		dst[k] = normalizeBSONValue(v)
-	}
-	return dst
-}
-
-func normalizeBSONValue(value any) any {
-	switch typed := value.(type) {
-	case bson.D:
-		dst := make(map[string]any, len(typed))
-		for _, elem := range typed {
-			dst[elem.Key] = normalizeBSONValue(elem.Value)
-		}
-		return dst
-	case bson.M:
-		dst := make(map[string]any, len(typed))
-		for key, elem := range typed {
-			dst[key] = normalizeBSONValue(elem)
-		}
-		return dst
-	case map[string]any:
-		dst := make(map[string]any, len(typed))
-		for key, elem := range typed {
-			dst[key] = normalizeBSONValue(elem)
-		}
-		return dst
-	case bson.A:
-		return normalizeBSONArray(typed)
-	case []any:
-		return normalizeBSONArray(typed)
-	default:
-		return value
-	}
-}
-
-func normalizeBSONArray(values []any) []any {
-	dst := make([]any, len(values))
-	for i, value := range values {
-		dst[i] = normalizeBSONValue(value)
+		dst[k] = clientinfra.NormalizeBSONValue(v)
 	}
 	return dst
 }

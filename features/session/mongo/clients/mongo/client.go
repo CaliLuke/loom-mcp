@@ -442,7 +442,7 @@ func cloneMetadata(src map[string]any) map[string]any {
 	}
 	dst := make(map[string]any, len(src))
 	for k, v := range src {
-		dst[k] = v
+		dst[k] = clientinfra.NormalizeBSONValue(v)
 	}
 	return dst
 }

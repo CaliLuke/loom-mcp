@@ -108,6 +108,31 @@ func TestUpsertAndLoad(t *testing.T) {
 	require.True(t, updated.UpdatedAt.After(updated.StartedAt) || updated.UpdatedAt.Equal(updated.StartedAt))
 }
 
+func TestRunDocumentMetadataBSONRoundTripPreservesGoContainerTypes(t *testing.T) {
+	doc := runDocument{
+		RunID: "run-1",
+		Metadata: map[string]any{
+			"error": map[string]any{
+				"details": []any{
+					map[string]any{"field": "tenant", "value": "acme"},
+				},
+			},
+		},
+	}
+
+	encoded, err := bson.Marshal(doc)
+	require.NoError(t, err)
+	var decoded runDocument
+	require.NoError(t, bson.Unmarshal(encoded, &decoded))
+
+	run := decoded.toRunMeta()
+	require.Equal(t, doc.Metadata, run.Metadata)
+	require.IsType(t, map[string]any{}, run.Metadata["error"])
+	details := run.Metadata["error"].(map[string]any)["details"]
+	require.IsType(t, []any{}, details)
+	require.IsType(t, map[string]any{}, details.([]any)[0])
+}
+
 func TestLinkChildRun(t *testing.T) {
 	client := mustNewTestClient()
 	now := time.Now().UTC()

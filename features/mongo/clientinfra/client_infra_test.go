@@ -7,6 +7,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"go.mongodb.org/mongo-driver/v2/bson"
 	mongodriver "go.mongodb.org/mongo-driver/v2/mongo"
 )
 
@@ -73,4 +74,18 @@ func TestWithTimeoutPreservesNilContextBehaviorWhenNormalizationDisabled(t *test
 	assert.Panics(t, func() {
 		_, _ = WithTimeout(nilCtx, time.Second, false)
 	})
+}
+
+func TestNormalizeBSONValueRecursivelyNormalizesContainers(t *testing.T) {
+	t.Parallel()
+
+	value := bson.D{
+		{Key: "document", Value: bson.M{"nested": bson.D{{Key: "value", Value: "ok"}}}},
+		{Key: "array", Value: bson.A{bson.D{{Key: "item", Value: "first"}}}},
+	}
+
+	assert.Equal(t, map[string]any{
+		"document": map[string]any{"nested": map[string]any{"value": "ok"}},
+		"array":    []any{map[string]any{"item": "first"}},
+	}, NormalizeBSONValue(value))
 }
