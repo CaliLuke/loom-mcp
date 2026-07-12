@@ -2210,6 +2210,13 @@ as required for clients predating the `2025-06-18` header. In that case the
 transport uses the MCP `2025-03-26` compatibility assumption; an explicitly
 present but unsupported version remains a bad request.
 
+Protocol-version error responses echo a readable JSON-RPC request ID (and use
+an explicit `null` ID when none can be determined). The mount inspects each
+POST body once, restores it for the generated decoder, and bounds that
+inspection with the exported `MCPMaxRequestBodyBytes` value. The default is 32
+MiB; set a different positive value before mounting, or a non-positive value to
+disable the middleware limit.
+
 Each generated JSON-RPC mount also tracks in-flight requests by session and
 JSON-RPC request ID. A client `notifications/cancelled` message cancels the
 matching request context, allowing long-running tools and other cooperative

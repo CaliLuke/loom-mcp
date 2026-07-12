@@ -511,6 +511,11 @@ func (s *Server) Mount(mux loomhttp.Muxer) {
 	Mount(mux, s)
 }
 
+// MCPMaxRequestBodyBytes limits JSON-RPC request bodies before middleware
+// inspection. Set it to a positive number before mounting the server to choose
+// a different bound; non-positive values disable the limit.
+var MCPMaxRequestBodyBytes int64 = 32 << 20
+
 // MCPCrossOriginProtection validates the Origin header on the generated MCP
 // JSON-RPC transport to protect against DNS rebinding attacks, as required by
 // the MCP streamable HTTP transport specification (2025-11-25, Security
@@ -545,11 +550,22 @@ func withMCPPolicyHeaders(streamableHTTPSessions *mcpruntime.StreamableHTTPSessi
 				return
 			}
 		}
-		if err := validateMCPProtocolVersionHeader(r); err != nil {
+		envelope, err := mcpJSONRPCEnvelopeFromRequest(w, r)
+		if err != nil {
+			var maxBytesErr *http.MaxBytesError
+			if errors.As(err, &maxBytesErr) {
+				http.Error(w, "request body too large", http.StatusRequestEntityTooLarge)
+				return
+			}
+			http.Error(w, "failed to read request", http.StatusBadRequest)
+			return
+		}
+		if err := validateMCPProtocolVersionHeader(r, envelope); err != nil {
 			w.Header().Set("Content-Type", "application/json")
 			w.WriteHeader(http.StatusBadRequest)
 			_ = json.NewEncoder(w).Encode(map[string]any{
 				"jsonrpc": "2.0",
+				"id":      mcpJSONRPCResponseID(envelope),
 				"error": map[string]any{
 					"code":    -32602,
 					"message": err.Error(),
@@ -557,11 +573,7 @@ func withMCPPolicyHeaders(streamableHTTPSessions *mcpruntime.StreamableHTTPSessi
 			})
 			return
 		}
-		method, err := jsonRPCRequestMethod(r)
-		if err != nil {
-			http.Error(w, "failed to read request", http.StatusBadRequest)
-			return
-		}
+		method := jsonRPCRequestMethod(envelope)
 		if r.Method == http.MethodDelete {
 			handleMCPStreamableHTTPSessionDelete(streamableHTTPSessions, w, r)
 			return
@@ -570,7 +582,7 @@ func withMCPPolicyHeaders(streamableHTTPSessions *mcpruntime.StreamableHTTPSessi
 			writeMCPStreamableHTTPSessionError(w, r, err)
 			return
 		}
-		if acceptedMCPJSONRPCNotificationOrResponse(requestCancellations, r) {
+		if acceptedMCPJSONRPCNotificationOrResponse(requestCancellations, r, envelope) {
 			w.WriteHeader(http.StatusAccepted)
 			return
 		}
@@ -585,7 +597,7 @@ func withMCPPolicyHeaders(streamableHTTPSessions *mcpruntime.StreamableHTTPSessi
 		if sessionID != "" {
 			ctx = mcpruntime.WithSessionID(ctx, sessionID)
 		}
-		if requestID, ok := mcpJSONRPCRequestID(r); ok && sessionID != "" {
+		if requestID, ok := mcpJSONRPCRequestID(envelope); ok && sessionID != "" {
 			requestCtx, cancel := context.WithCancel(ctx)
 			cleanup := requestCancellations.Register(sessionID, requestID, cancel)
 			defer cancel()
@@ -662,17 +674,13 @@ func writeMCPStreamableHTTPSessionError(w http.ResponseWriter, r *http.Request, 
 	http.Error(w, "Invalid or expired session ID", http.StatusNotFound)
 }
 
-func validateMCPProtocolVersionHeader(r *http.Request) error {
+func validateMCPProtocolVersionHeader(r *http.Request, envelope *mcpJSONRPCEnvelope) error {
 	if r == nil {
 		return nil
 	}
 	method := ""
 	if r.Method == http.MethodPost {
-		parsed, err := jsonRPCRequestMethod(r)
-		if err != nil {
-			return err
-		}
-		method = parsed
+		method = jsonRPCRequestMethod(envelope)
 	}
 	if method == "initialize" {
 		return nil
@@ -692,12 +700,11 @@ func validateMCPProtocolVersionHeader(r *http.Request) error {
 	return fmt.Errorf("Unsupported %s header %q", mcpruntime.HeaderKeyProtocolVersion, version)
 }
 
-func jsonRPCRequestMethod(r *http.Request) (string, error) {
-	envelope, err := mcpJSONRPCEnvelopeFromRequest(r)
-	if err != nil || envelope == nil {
-		return "", err
+func jsonRPCRequestMethod(envelope *mcpJSONRPCEnvelope) string {
+	if envelope == nil {
+		return ""
 	}
-	return envelope.Method, nil
+	return envelope.Method
 }
 
 type mcpJSONRPCEnvelope struct {
@@ -709,13 +716,21 @@ type mcpJSONRPCEnvelope struct {
 	Error   json.RawMessage `json:"error"`
 }
 
-func mcpJSONRPCEnvelopeFromRequest(r *http.Request) (*mcpJSONRPCEnvelope, error) {
-	if r == nil || r.Body == nil {
+func mcpJSONRPCEnvelopeFromRequest(w http.ResponseWriter, r *http.Request) (*mcpJSONRPCEnvelope, error) {
+	if r == nil || r.Method != http.MethodPost || r.Body == nil {
 		return nil, nil
 	}
-	body, err := io.ReadAll(r.Body)
+	reader := r.Body
+	if MCPMaxRequestBodyBytes > 0 {
+		reader = http.MaxBytesReader(w, r.Body, MCPMaxRequestBodyBytes)
+	}
+	body, err := io.ReadAll(reader)
+	closeErr := reader.Close()
 	if err != nil {
 		return nil, err
+	}
+	if closeErr != nil {
+		return nil, closeErr
 	}
 	r.Body = io.NopCloser(bytes.NewReader(body))
 	if len(body) == 0 {
@@ -728,15 +743,18 @@ func mcpJSONRPCEnvelopeFromRequest(r *http.Request) (*mcpJSONRPCEnvelope, error)
 	return &envelope, nil
 }
 
-func mcpJSONRPCRequestID(r *http.Request) (string, bool) {
-	if r == nil || r.Method != http.MethodPost {
-		return "", false
-	}
-	envelope, err := mcpJSONRPCEnvelopeFromRequest(r)
-	if err != nil || envelope == nil || envelope.Method == "" {
+func mcpJSONRPCRequestID(envelope *mcpJSONRPCEnvelope) (string, bool) {
+	if envelope == nil || envelope.Method == "" {
 		return "", false
 	}
 	return canonicalMCPJSONRPCRequestID(envelope.ID)
+}
+
+func mcpJSONRPCResponseID(envelope *mcpJSONRPCEnvelope) any {
+	if envelope == nil || len(envelope.ID) == 0 || bytes.Equal(bytes.TrimSpace(envelope.ID), []byte("null")) {
+		return nil
+	}
+	return json.RawMessage(envelope.ID)
 }
 
 func canonicalMCPJSONRPCRequestID(raw json.RawMessage) (string, bool) {
@@ -750,12 +768,11 @@ func canonicalMCPJSONRPCRequestID(raw json.RawMessage) (string, bool) {
 	return compact.String(), true
 }
 
-func acceptedMCPJSONRPCNotificationOrResponse(requestCancellations *mcpruntime.RequestCancellationRegistry, r *http.Request) bool {
+func acceptedMCPJSONRPCNotificationOrResponse(requestCancellations *mcpruntime.RequestCancellationRegistry, r *http.Request, envelope *mcpJSONRPCEnvelope) bool {
 	if r == nil || r.Method != http.MethodPost {
 		return false
 	}
-	envelope, err := mcpJSONRPCEnvelopeFromRequest(r)
-	if err != nil || envelope == nil {
+	if envelope == nil {
 		return false
 	}
 	if envelope.JSONRPC != "2.0" {

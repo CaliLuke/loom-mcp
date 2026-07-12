@@ -9,6 +9,7 @@ import (
 	"testing"
 	"time"
 
+	mcpjsonrpcserver "example.com/assistant/gen/jsonrpc/mcp_assistant/server"
 	mcpassistant "example.com/assistant/gen/mcp_assistant"
 	mcpruntime "github.com/CaliLuke/loom-mcp/runtime/mcp"
 	sdkmcp "github.com/modelcontextprotocol/go-sdk/mcp"
@@ -253,16 +254,50 @@ func TestGeneratedJSONRPCServerValidatesProtocolVersionHeader(t *testing.T) {
 			}
 
 			var envelope struct {
+				ID    json.RawMessage `json:"id"`
 				Error struct {
 					Code    int    `json:"code"`
 					Message string `json:"message"`
 				} `json:"error"`
 			}
 			require.NoError(t, json.NewDecoder(resp.Body).Decode(&envelope))
+			require.JSONEq(t, `"`+tc.name+`-1"`, string(envelope.ID),
+				"MCP protocol-version errors must echo the readable JSON-RPC request ID")
 			assert.Equal(t, -32602, envelope.Error.Code)
 			assert.Equal(t, tc.message, envelope.Error.Message)
 		})
 	}
+}
+
+func TestGeneratedJSONRPCServerRejectsOversizedRequestBody(t *testing.T) {
+	previousLimit := mcpjsonrpcserver.MCPMaxRequestBodyBytes
+	mcpjsonrpcserver.MCPMaxRequestBodyBytes = 256
+	t.Cleanup(func() {
+		mcpjsonrpcserver.MCPMaxRequestBodyBytes = previousLimit
+	})
+
+	server := newGeneratedJSONRPCServer(t)
+	defer server.Close()
+
+	body, err := json.Marshal(map[string]any{
+		"jsonrpc": "2.0",
+		"id":      "oversized-1",
+		"method":  "tools/list",
+		"params":  map[string]any{"padding": strings.Repeat("x", 512)},
+	})
+	require.NoError(t, err)
+	req, err := http.NewRequestWithContext(context.Background(), http.MethodPost, server.URL+"/rpc", strings.NewReader(string(body)))
+	require.NoError(t, err)
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := http.DefaultClient.Do(req)
+	require.NoError(t, err)
+	defer resp.Body.Close()
+	require.Equal(t, http.StatusRequestEntityTooLarge, resp.StatusCode)
+
+	responseBody, err := io.ReadAll(resp.Body)
+	require.NoError(t, err)
+	require.Contains(t, string(responseBody), "request body too large")
 }
 
 func TestGeneratedJSONRPCServerAcceptsNotificationsAndResponses(t *testing.T) {

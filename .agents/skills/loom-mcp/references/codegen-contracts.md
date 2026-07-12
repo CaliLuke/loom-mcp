@@ -67,7 +67,12 @@ Use this file when editing DSL, generators, generated helpers, or MCP codegen be
   `icons`.
 - Generated streamable-HTTP servers accept a missing `MCP-Protocol-Version`
   header using the spec's `2025-03-26` compatibility assumption. Present but
-  unsupported versions remain transport errors.
+  unsupported versions remain transport errors whose JSON-RPC envelope echoes
+  a readable request ID or explicitly uses `null` when none is available.
+- Generated JSON-RPC mounts inspect each POST envelope once before routing and
+  restore it for the generated decoder. `MCPMaxRequestBodyBytes` bounds this
+  inspection to 32 MiB by default; positive overrides change the bound and
+  non-positive values disable it.
 - Generated JSON-RPC mounts own a request-cancellation registry shared by all
   mounted routes. In-flight request contexts are keyed by MCP session plus the
   canonical JSON-RPC request ID, and `notifications/cancelled` cancels only the
