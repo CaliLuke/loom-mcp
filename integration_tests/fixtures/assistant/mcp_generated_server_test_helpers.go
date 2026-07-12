@@ -251,7 +251,7 @@ func newGeneratedJSONRPCTransportClient(t *testing.T, rawURL string, headers map
 		&http.Client{
 			Timeout: 10 * time.Second,
 			Transport: testHeaderRoundTripper{
-				base:    http.DefaultTransport,
+				base:    newTestHTTPTransport(t),
 				headers: headers,
 			},
 		},
@@ -276,7 +276,7 @@ func connectSDKSessionToServer(t *testing.T, rawURL string, headers map[string]s
 		HTTPClient: &http.Client{
 			Timeout: 10 * time.Second,
 			Transport: testHeaderRoundTripper{
-				base:    http.DefaultTransport,
+				base:    newTestHTTPTransport(t),
 				headers: headers,
 			},
 		},
@@ -313,6 +313,14 @@ func (s *rawEventsStream) Close() {
 
 func (s *rawEventsStream) Result() <-chan string {
 	return s.resultCh
+}
+
+func newTestHTTPTransport(t *testing.T) *http.Transport {
+	t.Helper()
+
+	transport := http.DefaultTransport.(*http.Transport).Clone()
+	t.Cleanup(transport.CloseIdleConnections)
+	return transport
 }
 
 func (rt testHeaderRoundTripper) RoundTrip(req *http.Request) (*http.Response, error) {

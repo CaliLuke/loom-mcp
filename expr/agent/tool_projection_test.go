@@ -87,6 +87,34 @@ func TestToolSurfaceProjectionValidation(t *testing.T) {
 			},
 			err: "Confirmation is not supported",
 		},
+		{
+			name: "inject unsupported",
+			mutate: func(tool *ToolExpr) {
+				tool.InjectedFields = []string{"session_id"}
+			},
+			err: "Inject is not supported",
+		},
+		{
+			name: "server data unsupported",
+			mutate: func(tool *ToolExpr) {
+				tool.ServerData = []*ServerDataExpr{{Kind: "evidence", Schema: &goaexpr.AttributeExpr{Type: goaexpr.String}}}
+			},
+			err: "ServerData is not supported",
+		},
+		{
+			name: "result reminder unsupported",
+			mutate: func(tool *ToolExpr) {
+				tool.ResultReminder = "Summarize the result"
+			},
+			err: "ResultReminder is not supported",
+		},
+		{
+			name: "bounded result unsupported",
+			mutate: func(tool *ToolExpr) {
+				tool.Bounds = &ToolBoundsExpr{}
+			},
+			err: "BoundedResult is not supported",
+		},
 	}
 
 	for _, tc := range cases {
