@@ -27,6 +27,33 @@ func TestMCPBasicConfiguration(t *testing.T) {
 	require.Equal(t, "calculator", mcp.Service.Name)
 }
 
+func TestMCPDescriptionsUseFinalizedServiceAndMethods(t *testing.T) {
+	runMCPDSL(t, func() {
+		API("test", func() {})
+		Service("catalog", func() {
+			MCP("catalog-mcp", "1.0.0")
+			Description("Catalog service description")
+			Method("read_document", func() {
+				Resource("document", "doc://document", "text/plain")
+				Description("Document resource description")
+				Result(String)
+			})
+			Method("read_status", func() {
+				WatchableResource("status", "status://current", "application/json")
+				Description("Status resource description")
+				Result(String)
+			})
+		})
+	})
+
+	mcp := mcpexpr.Root.MCPServers["catalog"]
+	require.NotNil(t, mcp)
+	require.Equal(t, "Catalog service description", mcp.Description)
+	require.Len(t, mcp.Resources, 2)
+	require.Equal(t, "Document resource description", mcp.Resources[0].Description)
+	require.Equal(t, "Status resource description", mcp.Resources[1].Description)
+}
+
 func TestMCPDuplicateDeclarationDSLValidation(t *testing.T) {
 	err := runInvalidMCPDSL(t, func() {
 		API("test", func() {})

@@ -410,6 +410,14 @@ const (
 
 // Finalize finalizes the MCP expression
 func (m *MCPExpr) Finalize() {
+	if m.Service != nil {
+		m.Description = m.Service.Description
+	}
+	for _, resource := range m.Resources {
+		if resource != nil && resource.Method != nil {
+			resource.Description = resource.Method.Description
+		}
+	}
 	if m.Transport == "" {
 		m.Transport = "jsonrpc"
 	}
