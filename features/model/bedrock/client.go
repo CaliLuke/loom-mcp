@@ -300,9 +300,8 @@ func validateBedrockThinking(req *model.Request, modelID string, messages []*mod
 	if req.Thinking == nil || !req.Thinking.Enable || isAdaptiveThinkingModel(modelID) {
 		return nil
 	}
-	messages = nonNilMessages(messages)
 	healThinkingGaps(messages)
-	if err := transcript.ValidateBedrock(messages, true); err != nil {
+	if err := transcript.ValidateBedrock(nonNilMessages(messages), true); err != nil {
 		return fmt.Errorf("bedrock: invalid message ordering with thinking enabled (run=%s, model=%s): %w", req.RunID, modelID, err)
 	}
 	return nil
@@ -1105,7 +1104,8 @@ func messagesHaveToolBlocks(msgs []*model.Message) bool {
 // contract. This function inserts a minimal redacted placeholder to satisfy
 // the constraint without altering the semantic content of the message.
 func healThinkingGaps(msgs []*model.Message) {
-	for _, m := range msgs {
+	for i := 0; i < len(msgs); i++ {
+		m := msgs[i]
 		if m == nil {
 			continue
 		}
@@ -1122,13 +1122,15 @@ func healThinkingGaps(msgs []*model.Message) {
 			}
 		}
 		if hasToolUse && !hasThinking {
-			m.Parts = append(
+			copied := *m
+			copied.Parts = append(
 				[]model.Part{model.ThinkingPart{
 					Redacted: []byte("redacted"),
 					Final:    true,
 				}},
 				m.Parts...,
 			)
+			msgs[i] = &copied
 		}
 	}
 }

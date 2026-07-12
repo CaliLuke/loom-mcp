@@ -329,6 +329,72 @@ func TestHealThinkingGapsSkipsNilMessages(t *testing.T) {
 	}
 }
 
+func TestHealThinkingGapsCopiesHealedMessages(t *testing.T) {
+	original := &model.Message{
+		Role: model.ConversationRoleAssistant,
+		Parts: []model.Part{
+			model.TextPart{Text: "calling tool"},
+			model.ToolUsePart{ID: "tu1", Name: "search"},
+		},
+	}
+	msgs := []*model.Message{original}
+
+	healThinkingGaps(msgs)
+
+	if msgs[0] == original {
+		t.Fatal("expected healed message to be copied")
+	}
+	if len(original.Parts) != 2 {
+		t.Fatalf("expected original parts count 2, got %d", len(original.Parts))
+	}
+	if len(msgs[0].Parts) != 3 {
+		t.Fatalf("expected healed parts count 3, got %d", len(msgs[0].Parts))
+	}
+	if _, ok := msgs[0].Parts[0].(model.ThinkingPart); !ok {
+		t.Fatalf("expected ThinkingPart first, got %T", msgs[0].Parts[0])
+	}
+}
+
+func TestPrepareRequestHealsThinkingWithoutMutatingCallerMessages(t *testing.T) {
+	original := &model.Message{
+		Role: model.ConversationRoleAssistant,
+		Parts: []model.Part{
+			model.ToolUsePart{ID: "tu1", Name: "search"},
+		},
+	}
+	req := &model.Request{
+		Thinking: &model.ThinkingOptions{Enable: true},
+		Messages: []*model.Message{
+			original,
+			{
+				Role:  model.ConversationRoleUser,
+				Parts: []model.Part{model.ToolResultPart{ToolUseID: "tu1", Content: "ok"}},
+			},
+		},
+		Tools: []*model.ToolDefinition{{
+			Name:        "search",
+			Description: "Search records.",
+			InputSchema: map[string]any{"type": "object"},
+		}},
+	}
+	client := &Client{defaultModel: "anthropic.claude-3-5-sonnet-20240620-v1:0"}
+
+	parts, err := client.prepareRequest(context.Background(), req)
+	if err != nil {
+		t.Fatalf("prepareRequest error: %v", err)
+	}
+
+	if len(original.Parts) != 1 {
+		t.Fatalf("expected caller parts count 1, got %d", len(original.Parts))
+	}
+	if len(parts.messages) != 2 {
+		t.Fatalf("expected encoded message count 2, got %d", len(parts.messages))
+	}
+	if _, ok := parts.messages[0].Content[0].(*brtypes.ContentBlockMemberReasoningContent); !ok {
+		t.Fatalf("expected healed ReasoningContent first, got %T", parts.messages[0].Content[0])
+	}
+}
+
 func TestValidateBedrockThinkingSkipsNilMessages(t *testing.T) {
 	req := &model.Request{
 		RunID: "run-nil",
