@@ -90,7 +90,8 @@ func TestGeneratedJSONRPCServerErrorDataDoesNotExposeServiceErrorID(t *testing.T
 func TestGeneratedJSONRPCServerEventsStreamPublishesNotifications(t *testing.T) {
 	t.Parallel()
 
-	server := newGeneratedJSONRPCServer(t)
+	broadcaster := newSubscriptionReadyBroadcaster()
+	server := newGeneratedJSONRPCServerWithAdapterOptions(t, &mcpassistant.MCPAdapterOptions{Broadcaster: broadcaster})
 	defer server.Close()
 
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
@@ -101,6 +102,12 @@ func TestGeneratedJSONRPCServerEventsStreamPublishesNotifications(t *testing.T) 
 
 	stream := openRawEventsStream(t, ctx, server, sessionID)
 	defer stream.Close()
+
+	select {
+	case <-broadcaster.ready:
+	case <-ctx.Done():
+		t.Fatal("timed out waiting for events/stream subscription")
+	}
 
 	message := "status from generated sdk server"
 	notifyReq := map[string]any{

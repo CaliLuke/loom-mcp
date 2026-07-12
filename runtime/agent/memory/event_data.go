@@ -229,6 +229,7 @@ func (d UserMessageData) ToMap() map[string]any {
 func (d *UserMessageData) FromMap(data any) error {
 	if typed, ok := data.(UserMessageData); ok {
 		*d = typed
+		d.Structured = cloneJSONCompatible(typed.Structured)
 		return nil
 	}
 	if typed, ok := data.(*UserMessageData); ok {
@@ -236,6 +237,7 @@ func (d *UserMessageData) FromMap(data any) error {
 			return fmt.Errorf("memory: %s data is nil", EventUserMessage)
 		}
 		*d = *typed
+		d.Structured = cloneJSONCompatible(typed.Structured)
 		return nil
 	}
 	m, err := requireEventMap(EventUserMessage, data)
@@ -246,7 +248,7 @@ func (d *UserMessageData) FromMap(data any) error {
 	if err != nil {
 		return err
 	}
-	d.Structured = m[eventFieldStructured]
+	d.Structured = cloneJSONCompatible(m[eventFieldStructured])
 	return nil
 }
 
@@ -264,6 +266,7 @@ func (d AssistantMessageData) ToMap() map[string]any {
 func (d *AssistantMessageData) FromMap(data any) error {
 	if typed, ok := data.(AssistantMessageData); ok {
 		*d = typed
+		d.Structured = cloneJSONCompatible(typed.Structured)
 		return nil
 	}
 	if typed, ok := data.(*AssistantMessageData); ok {
@@ -271,6 +274,7 @@ func (d *AssistantMessageData) FromMap(data any) error {
 			return fmt.Errorf("memory: %s data is nil", EventAssistantMessage)
 		}
 		*d = *typed
+		d.Structured = cloneJSONCompatible(typed.Structured)
 		return nil
 	}
 	m, err := requireEventMap(EventAssistantMessage, data)
@@ -281,7 +285,7 @@ func (d *AssistantMessageData) FromMap(data any) error {
 	if err != nil {
 		return err
 	}
-	d.Structured = m[eventFieldStructured]
+	d.Structured = cloneJSONCompatible(m[eventFieldStructured])
 	return nil
 }
 
@@ -598,7 +602,7 @@ func messageDataMap(message string, structured any) map[string]any {
 		m[eventFieldMessage] = message
 	}
 	if structured != nil {
-		m[eventFieldStructured] = structured
+		m[eventFieldStructured] = cloneJSONCompatible(structured)
 	}
 	return m
 }
@@ -863,6 +867,14 @@ func cloneBounds(bounds *agent.Bounds) *agent.Bounds {
 		return nil
 	}
 	cloned := *bounds
+	if bounds.Total != nil {
+		total := *bounds.Total
+		cloned.Total = &total
+	}
+	if bounds.NextCursor != nil {
+		nextCursor := *bounds.NextCursor
+		cloned.NextCursor = &nextCursor
+	}
 	return &cloned
 }
 
@@ -924,7 +936,7 @@ func cloneToolTelemetry(value *telemetry.ToolTelemetry) *telemetry.ToolTelemetry
 		return nil
 	}
 	cloned := *value
-	cloned.Extra = maps.Clone(value.Extra)
+	cloned.Extra = cloneJSONMap(value.Extra)
 	return &cloned
 }
 
@@ -934,7 +946,35 @@ func cloneRetryHint(value *RetryHintData) *RetryHintData {
 	}
 	cloned := *value
 	cloned.MissingFields = append([]string(nil), value.MissingFields...)
-	cloned.ExampleInput = maps.Clone(value.ExampleInput)
-	cloned.PriorInput = maps.Clone(value.PriorInput)
+	cloned.ExampleInput = cloneJSONMap(value.ExampleInput)
+	cloned.PriorInput = cloneJSONMap(value.PriorInput)
 	return &cloned
+}
+
+func cloneJSONMap(value map[string]any) map[string]any {
+	if len(value) == 0 {
+		return nil
+	}
+	cloned := make(map[string]any, len(value))
+	for key, item := range value {
+		cloned[key] = cloneJSONCompatible(item)
+	}
+	return cloned
+}
+
+func cloneJSONCompatible(value any) any {
+	switch typed := value.(type) {
+	case map[string]any:
+		return cloneJSONMap(typed)
+	case []any:
+		cloned := make([]any, len(typed))
+		for i, item := range typed {
+			cloned[i] = cloneJSONCompatible(item)
+		}
+		return cloned
+	case []byte:
+		return append([]byte(nil), typed...)
+	default:
+		return value
+	}
 }

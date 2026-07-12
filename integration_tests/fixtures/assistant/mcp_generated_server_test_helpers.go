@@ -10,6 +10,7 @@ import (
 	"net/http/httptest"
 	"net/url"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -26,6 +27,47 @@ import (
 type rawEventsStream struct {
 	resultCh chan string
 	cancel   context.CancelFunc
+}
+
+type subscriptionReadyBroadcaster struct {
+	mcpruntime.Broadcaster
+	ready chan struct{}
+	once  sync.Once
+}
+
+func newSubscriptionReadyBroadcaster() *subscriptionReadyBroadcaster {
+	return &subscriptionReadyBroadcaster{
+		Broadcaster: mcpruntime.NewChannelBroadcaster(32, true),
+		ready:       make(chan struct{}),
+	}
+}
+
+func (b *subscriptionReadyBroadcaster) Subscribe(ctx context.Context) (mcpruntime.Subscription, error) {
+	sub, err := b.Broadcaster.Subscribe(ctx)
+	if err == nil {
+		b.once.Do(func() { close(b.ready) })
+	}
+	return sub, err
+}
+
+func (b *subscriptionReadyBroadcaster) SubscribeSession(ctx context.Context, sessionID string) (mcpruntime.Subscription, error) {
+	scoped, ok := b.Broadcaster.(mcpruntime.SessionBroadcaster)
+	if !ok {
+		return nil, fmt.Errorf("broadcaster does not support session subscriptions")
+	}
+	sub, err := scoped.SubscribeSession(ctx, sessionID)
+	if err == nil {
+		b.once.Do(func() { close(b.ready) })
+	}
+	return sub, err
+}
+
+func (b *subscriptionReadyBroadcaster) PublishSession(sessionID string, event any) {
+	scoped, ok := b.Broadcaster.(mcpruntime.SessionBroadcaster)
+	if !ok {
+		return
+	}
+	scoped.PublishSession(sessionID, event)
 }
 
 type testHeaderRoundTripper struct {
