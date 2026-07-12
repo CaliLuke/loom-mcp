@@ -185,7 +185,6 @@ func emitAdapterOptions(stmt *jen.Statement) {
 		jen.Id("AllowedResourceNames").Index().String(),
 		jen.Id("DeniedResourceNames").Index().String(),
 		jen.Id("StructuredStreamJSON").Bool(),
-		jen.Id("ProtocolVersionOverride").String(),
 		jen.Comment("SessionPrincipal extracts a stable auth/session owner identity from ctx."),
 		jen.Id("SessionPrincipal").Func().Params(jen.Qual("context", "Context")).String(),
 		jen.Comment("Pluggable broadcaster, else default channel broadcaster"),
@@ -289,13 +288,10 @@ func emitBroadcasterHelpers(stmt *jen.Statement) {
 // emitProtocolVersionHelpers generates mcpProtocolVersion, supportsProtocolVersion, validMCPProtocolVersionDate.
 func emitProtocolVersionHelpers(stmt *jen.Statement) {
 	// mcpProtocolVersion
-	stmt.Comment("mcpProtocolVersion resolves the protocol version from options or default.").Line()
+	stmt.Comment("mcpProtocolVersion returns the design-configured protocol version.").Line()
 	stmt.Func().Params(jen.Id("a").Op("*").Id("MCPAdapter")).
 		Id("mcpProtocolVersion").Params().String().
 		Block(
-			jen.If(jen.Id("a").Op("!=").Nil().Op("&&").Id("a").Dot("opts").Op("!=").Nil().Op("&&").Id("a").Dot("opts").Dot("ProtocolVersionOverride").Op("!=").Lit("")).Block(
-				jen.Return(jen.Id("a").Dot("opts").Dot("ProtocolVersionOverride")),
-			),
 			jen.Return(jen.Id("DefaultProtocolVersion")),
 		)
 	stmt.Line()
@@ -304,9 +300,6 @@ func emitProtocolVersionHelpers(stmt *jen.Statement) {
 	stmt.Func().Params(jen.Id("a").Op("*").Id("MCPAdapter")).
 		Id("supportsProtocolVersion").Params(jen.Id("requested").String()).Bool().
 		Block(
-			jen.If(jen.Id("a").Op("!=").Nil().Op("&&").Id("a").Dot("opts").Op("!=").Nil().Op("&&").Id("a").Dot("opts").Dot("ProtocolVersionOverride").Op("!=").Lit("")).Block(
-				jen.Return(jen.Id("requested").Op("==").Id("a").Dot("opts").Dot("ProtocolVersionOverride")),
-			),
 			jen.For(jen.List(jen.Id("_"), jen.Id("v")).Op(":=").Range().Id("SupportedProtocolVersions")).Block(
 				jen.If(jen.Id("v").Op("==").Id("requested")).Block(
 					jen.Return(jen.True()),

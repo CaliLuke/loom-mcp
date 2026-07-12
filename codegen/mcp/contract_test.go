@@ -1205,12 +1205,16 @@ func TestGenerateMCPClientAdapter_SpecializesResourceQueryConstruction(t *testin
 }
 
 func TestBuildMCPProtocolVersionFileKeepsConfiguredDefault(t *testing.T) {
-	file := buildMCPProtocolVersionFile("mcpdemo", "demo", "2025-06-18")
+	file := buildMCPProtocolVersionFile("mcpdemo", "demo", "2099-01-01")
 	rendered := renderGeneratedFile(t, file)
 
-	require.Contains(t, rendered, `const DefaultProtocolVersion = "2025-06-18"`)
+	require.Contains(t, rendered, `const DefaultProtocolVersion = "2099-01-01"`)
+	require.Contains(t, rendered, `"2099-01-01",`)
 	require.Contains(t, rendered, `"2025-11-25",`)
 	require.Contains(t, rendered, `"2025-06-18",`)
+
+	transport := jsonrpcServerMountHelperSource("2099-01-01")
+	require.Contains(t, transport, `for _, supported := range []string{"2099-01-01", "2025-11-25", "2025-06-18", "2025-03-26", "2024-11-05"}`)
 }
 
 func TestApplyMCPPolicyHeadersToJSONRPCMount_RewritesRawMountSection(t *testing.T) {

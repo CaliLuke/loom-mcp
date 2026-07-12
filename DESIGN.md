@@ -116,7 +116,8 @@ The generated `MCPAdapterOptions` provides configuration hooks:
 - ErrorMapper: `func(error) error` to normalize errors to JSON-RPC codes.
 - AllowedResourceURIs, DeniedResourceURIs: simple allow/deny lists for resource URIs.
 - StructuredStreamJSON: when true, stream events are emitted as `resource` items with `application/json`.
-- ProtocolVersionOverride: override `DefaultProtocolVersion` at construction time.
+- Protocol versions are design-owned through `ProtocolVersion(...)`; generated
+  negotiation and transport validation use the same configured version set.
 
 ### Client-side caller architecture
 

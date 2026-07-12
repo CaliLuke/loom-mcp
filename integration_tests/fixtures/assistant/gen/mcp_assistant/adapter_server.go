@@ -154,12 +154,11 @@ type MCPAdapterOptions struct {
 	// Meter overrides the meter used by the generated MCP adapter.
 	Meter metric.Meter
 	// Resource URI and name policies. Denied entries take precedence; URI entries ending in / match prefixes.
-	AllowedResourceURIs     []string
-	DeniedResourceURIs      []string
-	AllowedResourceNames    []string
-	DeniedResourceNames     []string
-	StructuredStreamJSON    bool
-	ProtocolVersionOverride string
+	AllowedResourceURIs  []string
+	DeniedResourceURIs   []string
+	AllowedResourceNames []string
+	DeniedResourceNames  []string
+	StructuredStreamJSON bool
 	// SessionPrincipal extracts a stable auth/session owner identity from ctx.
 	SessionPrincipal func(context.Context) string
 	// Pluggable broadcaster, else default channel broadcaster
@@ -209,17 +208,11 @@ func defaultMCPAdapterDropIfSlow(value any) bool {
 	}
 }
 
-// mcpProtocolVersion resolves the protocol version from options or default.
+// mcpProtocolVersion returns the design-configured protocol version.
 func (a *MCPAdapter) mcpProtocolVersion() string {
-	if a != nil && a.opts != nil && a.opts.ProtocolVersionOverride != "" {
-		return a.opts.ProtocolVersionOverride
-	}
 	return DefaultProtocolVersion
 }
 func (a *MCPAdapter) supportsProtocolVersion(requested string) bool {
-	if a != nil && a.opts != nil && a.opts.ProtocolVersionOverride != "" {
-		return requested == a.opts.ProtocolVersionOverride
-	}
 	for _, v := range SupportedProtocolVersions {
 		if v == requested {
 			return true

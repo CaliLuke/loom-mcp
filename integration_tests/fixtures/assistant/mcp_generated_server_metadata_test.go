@@ -302,6 +302,11 @@ func TestGeneratedJSONRPCServerValidatesProtocolVersionHeader(t *testing.T) {
 			status: http.StatusOK,
 		},
 		{
+			name:   "design configured default",
+			header: mcpassistant.DefaultProtocolVersion,
+			status: http.StatusOK,
+		},
+		{
 			name:    "unsupported",
 			header:  "2099-01-01",
 			status:  http.StatusBadRequest,
