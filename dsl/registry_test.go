@@ -271,9 +271,8 @@ func TestFromRegistryVersionOverlayDoesNotMutateSharedToolset(t *testing.T) {
 	require.Empty(t, first.Origin.Provider.Version)
 }
 
-// TestPublishToInExport verifies PublishTo works inside Export.
-func TestPublishToInExport(t *testing.T) {
-	runDSL(t, func() {
+func TestPublishToRejectsUnsupportedPublication(t *testing.T) {
+	runDSLExpectError(t, func() {
 		API("test", func() {})
 
 		reg := Registry("corp-registry", func() {
@@ -292,52 +291,7 @@ func TestPublishToInExport(t *testing.T) {
 				})
 			})
 		})
-	})
-
-	require.Len(t, agentsexpr.Root.Agents, 1)
-	agent := agentsexpr.Root.Agents[0]
-	require.NotNil(t, agent.Exported)
-	require.Len(t, agent.Exported.Toolsets, 1)
-	exported := agent.Exported.Toolsets[0]
-	require.Len(t, exported.PublishTo, 1)
-	require.Equal(t, "corp-registry", exported.PublishTo[0].Name)
-}
-
-// TestPublishToMultipleRegistries verifies PublishTo can target multiple registries.
-func TestPublishToMultipleRegistries(t *testing.T) {
-	runDSL(t, func() {
-		API("test", func() {})
-
-		corpReg := Registry("corp-registry", func() {
-			URL("https://registry.corp.internal")
-		})
-		publicReg := Registry("public-registry", func() {
-			URL("https://registry.public.io")
-		})
-
-		localTools := Toolset("utils", func() {
-			Tool("summarize", "Summarize text", func() {})
-		})
-
-		Service("data-svc", func() {
-			Agent("data-agent", "Data processing agent", func() {
-				Use(localTools)
-				Export(localTools, func() {
-					PublishTo(corpReg)
-					PublishTo(publicReg)
-				})
-			})
-		})
-	})
-
-	require.Len(t, agentsexpr.Root.Agents, 1)
-	agent := agentsexpr.Root.Agents[0]
-	require.NotNil(t, agent.Exported)
-	require.Len(t, agent.Exported.Toolsets, 1)
-	exported := agent.Exported.Toolsets[0]
-	require.Len(t, exported.PublishTo, 2)
-	require.Equal(t, "corp-registry", exported.PublishTo[0].Name)
-	require.Equal(t, "public-registry", exported.PublishTo[1].Name)
+	}, "PublishTo is not supported; register exported toolsets with the registry client explicitly")
 }
 
 // TestFromMCPProviderExpr verifies FromMCP creates a provider expression.

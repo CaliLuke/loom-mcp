@@ -231,7 +231,7 @@
 //   - [Federation] configures external registry imports
 //   - [Include] specifies namespaces to import
 //   - [Exclude] specifies namespaces to skip
-//   - [PublishTo] configures registry publication for exports
+//   - [PublishTo] rejects unsupported automatic registry publication
 //
 // # Generated Artifacts
 //

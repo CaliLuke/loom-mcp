@@ -77,7 +77,7 @@ Registry Functions | |
 `Federation` | Registry | Configures external registry imports
 `Include` | Federation | Glob patterns to import
 `Exclude` | Federation | Glob patterns to skip
-`PublishTo` | Export | Configures registry publication
+`PublishTo` | Export | Deprecated; reports unsupported automatic publication
 `Version` | Toolset | Pins registry toolset version
 Schema Functions | |
 `Attribute` | Args, Return, ServerData | Defines schema field (general use)
@@ -330,7 +330,7 @@ Configure MCP protocol version.
 
 Define registry sources and federation.
 
-### `FromRegistry`, `Version`, `PublishTo`
+### `FromRegistry`, `Version`
 
-Pin and publish registry-backed toolsets.
-
+Discover and pin registry-backed toolsets. Automatic publication is not implemented;
+the deprecated `PublishTo` DSL reports an error and toolsets must be registered explicitly.

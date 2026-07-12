@@ -46,10 +46,6 @@ type (
 		// When nil, the toolset is local with inline schemas.
 		Provider *ProviderExpr
 
-		// PublishTo specifies registries where this toolset should be
-		// published when exported.
-		PublishTo []*RegistryExpr
-
 		// Origin references the original defining toolset when this toolset
 		// is a reference/alias (e.g., consumed under Uses or via AgentToolset).
 		// When nil, this toolset is the defining origin.

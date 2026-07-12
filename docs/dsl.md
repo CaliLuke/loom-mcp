@@ -500,7 +500,7 @@ mux.HandleFunc(mcpassistant.OAuthMetadataPath(""), mcpassistant.HandleProtectedR
 | `Federation(dsl)`            | Inside `Registry`                      | Configures external registry imports           |
 | `Include(patterns...)`       | Inside `Federation`                    | Glob patterns for namespaces to import         |
 | `Exclude(patterns...)`       | Inside `Federation`                    | Glob patterns for namespaces to skip           |
-| `PublishTo(registry)`        | Inside `Toolset` (in `Export`)         | Configures registry publication                |
+| `PublishTo(registry)`        | Inside `Toolset` (in `Export`)         | Deprecated; reports unsupported publication    |
 | `Version(version)`           | Inside `Toolset` (with `FromRegistry`) | Pins toolset version                           |
 
 ---
@@ -1671,17 +1671,9 @@ var AnthropicRegistry = Registry("anthropic", func() {
 
 ### Publishing to Registries
 
-Use `PublishTo` inside an export to configure registry publication:
-
-```go
-Agent("data-agent", "Data processing agent", func() {
-    Use(LocalTools)
-    Export(LocalTools, func() {
-        PublishTo(CorpRegistry)
-        Tags("data", "etl")
-    })
-})
-```
+Automatic registry publication is not implemented. `PublishTo` is retained for source
+compatibility but fails DSL evaluation with an actionable error instead of silently doing
+nothing. Register exported toolsets explicitly with the registry client.
 
 ### Security for Registries
 

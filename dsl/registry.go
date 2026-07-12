@@ -255,43 +255,15 @@ func Exclude(patterns ...string) {
 	fed.Exclude = append(fed.Exclude, patterns...)
 }
 
-// PublishTo configures registry publication for an exported toolset. Use
-// PublishTo inside an Export DSL to specify which registries the toolset
-// should be published to.
+// PublishTo reports that automatic registry publication is unsupported.
+// Exported toolsets must be registered explicitly with a registry client.
 //
-// PublishTo must appear in a Toolset expression that is being exported.
-//
-// PublishTo takes a registry expression returned by Registry().
-//
-// Example:
-//
-//	var CorpRegistry = Registry("corp", func() {
-//	    URL("https://registry.corp.internal")
-//	})
-//
-//	var LocalTools = Toolset("utils", func() {
-//	    Tool("summarize", "Summarize text", func() {
-//	        Args(func() { Attribute("text", String) })
-//	        Return(func() { Attribute("summary", String) })
-//	    })
-//	})
-//
-//	Agent("data-agent", "Data processing agent", func() {
-//	    Use(LocalTools)
-//	    Export(LocalTools, func() {
-//	        PublishTo(CorpRegistry)
-//	        Tags("data", "etl")
-//	    })
-//	})
-func PublishTo(registry *agentsexpr.RegistryExpr) {
-	ts, ok := eval.Current().(*agentsexpr.ToolsetExpr)
+// Deprecated: automatic registry publication has no runtime implementation.
+func PublishTo(_ *agentsexpr.RegistryExpr) {
+	_, ok := eval.Current().(*agentsexpr.ToolsetExpr)
 	if !ok {
 		eval.IncompatibleDSL()
 		return
 	}
-	if registry == nil {
-		eval.ReportError("PublishTo requires a non-nil registry")
-		return
-	}
-	ts.PublishTo = append(ts.PublishTo, registry)
+	eval.ReportError("PublishTo is not supported; register exported toolsets with the registry client explicitly")
 }

@@ -524,7 +524,7 @@ policies, and MCP servers within Goa service designs.
 | `Federation(func())`         | Configure external registry import                  |
 | `Include(patterns...)`       | Glob patterns for namespaces to import              |
 | `Exclude(patterns...)`       | Glob patterns for namespaces to skip                |
-| `PublishTo(registry)`        | Configure registry publication for exported toolset |
+| `PublishTo(registry)`        | Deprecated; automatic publication is unsupported    |
 | `Timeout(duration)`          | Set HTTP request timeout                            |
 | `Security(scheme)`           | Reference Goa security scheme for auth              |
 
