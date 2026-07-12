@@ -184,10 +184,10 @@ func newGeneratedSDKServerWithAdapterOptions(t *testing.T, adapterOpts *mcpassis
 				return ctx
 			}
 			if allow := r.Header.Get("x-mcp-allow-names"); allow != "" {
-				ctx = context.WithValue(ctx, "mcp_allow_names", allow)
+				ctx = mcpruntime.WithAllowedResourceNames(ctx, allow)
 			}
 			if deny := r.Header.Get("x-mcp-deny-names"); deny != "" {
-				ctx = context.WithValue(ctx, "mcp_deny_names", deny)
+				ctx = mcpruntime.WithDeniedResourceNames(ctx, deny)
 			}
 			return ctx
 		},

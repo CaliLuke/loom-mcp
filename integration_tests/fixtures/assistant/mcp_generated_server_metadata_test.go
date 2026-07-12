@@ -143,6 +143,52 @@ func TestGeneratedAdapterEnforcesSkillResourcePolicy(t *testing.T) {
 	}
 }
 
+func TestGeneratedSDKServerTrimsResourcePolicyHeaderNames(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name      string
+		headers   map[string]string
+		wantError bool
+	}{
+		{
+			name:    "allow list resolves spaced name",
+			headers: map[string]string{"x-mcp-allow-names": "documents, code-review"},
+		},
+		{
+			name:      "deny list resolves spaced name",
+			headers:   map[string]string{"x-mcp-deny-names": "documents, code-review"},
+			wantError: true,
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+
+			_, sdkHTTPServer := newGeneratedSDKServer(t)
+			defer sdkHTTPServer.Close()
+
+			session := connectSDKSessionToServer(t, sdkHTTPServer.URL+"/rpc", test.headers)
+			defer func() {
+				require.NoError(t, session.Close())
+			}()
+
+			ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+			defer cancel()
+
+			result, err := session.ReadResource(ctx, &sdkmcp.ReadResourceParams{URI: "skill://code-review/SKILL.md"})
+			if test.wantError {
+				require.Error(t, err)
+				return
+			}
+			require.NoError(t, err)
+			require.Len(t, result.Contents, 1)
+			assert.Equal(t, "skill://code-review/SKILL.md", result.Contents[0].URI)
+		})
+	}
+}
+
 func TestGeneratedJSONRPCServerExposesSEP973MetadataOnWire(t *testing.T) {
 	t.Parallel()
 
