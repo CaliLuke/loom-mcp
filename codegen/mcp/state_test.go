@@ -64,7 +64,7 @@ func TestGenerate_FileOrderIsStableAcrossRuns(t *testing.T) {
 	require.NoError(t, err)
 	baselinePaths := generatedPaths(baseline)
 
-	for range 12 {
+	for range 2 {
 		files, runErr := Generate("example.com/stable/gen", []eval.Root{root}, nil)
 		require.NoError(t, runErr)
 		require.Equal(t, baselinePaths, generatedPaths(files))

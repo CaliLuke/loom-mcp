@@ -183,12 +183,9 @@ func TestCacheExpirationAfterTTLProperty(t *testing.T) {
 				Version:     tc.version,
 			})
 
-			// Use very short TTL for testing
-			shortTTL := 50 * time.Millisecond
-
 			manager := NewManager(WithCache(cache))
 			manager.AddRegistry(tc.registryName, client, RegistryConfig{
-				CacheTTL: shortTTL,
+				CacheTTL: time.Hour,
 			})
 
 			// Initial fetch
@@ -209,12 +206,18 @@ func TestCacheExpirationAfterTTLProperty(t *testing.T) {
 				return false
 			}
 
-			expired := false
-			waitForCondition(t, func() bool {
-				cached, cacheErr := cache.Get(ctx, cacheKey(tc.registryName, tc.toolsetName))
-				expired = cacheErr == nil && cached == nil
-				return expired
-			}, "expected cache entry to expire")
+			// Move the entry past its deadline without making every generated case
+			// wait on the wall clock. Real-time TTL passage is covered separately by
+			// TestMemoryCacheTTLExpiration.
+			key := cacheKey(tc.registryName, tc.toolsetName)
+			cache.mu.Lock()
+			entry := cache.entries[key]
+			if entry == nil {
+				cache.mu.Unlock()
+				return false
+			}
+			entry.expiresAt = time.Now().Add(-time.Nanosecond)
+			cache.mu.Unlock()
 
 			// Now fetch should fail since cache expired and registry unavailable
 			_, err = manager.DiscoverToolset(ctx, tc.registryName, tc.toolsetName)

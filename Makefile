@@ -36,10 +36,11 @@ lint-install-hook:
 	@echo "Installed repo hooks from .githooks"
 
 test: tools
-	$(GO) test -race -shuffle=on -covermode=atomic -coverprofile=cover.out `$(GO) list ./... | grep -v '/integration_tests'`
+	$(GO) test -short -race -shuffle=on -covermode=atomic -coverprofile=cover.out `$(GO) list ./... | grep -v '/integration_tests'`
 
 # Run integration tests (scenarios under integration_tests/)
 itest: tools
+	$(GO) test -race -count=1 ./codegen/agent/tests -run '^TestQuickstartGeneratesAndRuns$$'
 	$(GO) test -C ./integration_tests/fixtures/assistant ./... -count=1
 	$(GO) test -C ./integration_tests/fixtures/agent_features ./... -count=1
 	MCP_CLI_TESTS=true $(GO) test -race -vet=off -count=1 ./integration_tests/...
