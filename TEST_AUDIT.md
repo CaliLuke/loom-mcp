@@ -71,11 +71,11 @@ Finding IDs continue the `679fb76` numbering; each carries a status vs that base
 - **Impact/Recommendation:** Treat the live-runtime coverage finding as resolved. Resolve stream/bridge under V-5 by either establishing a real owner or deleting it; do not manufacture coverage for unused code.
 
 ### C-7: Model-adapter error/streaming matrix holes
-- **Severity:** medium · **Status:** in progress (Gemini and Bedrock gaps resolved)
+- **Severity:** medium · **Status:** audited adapter gaps resolved; shared checklist pending
 - **Confidence:** measured
-- **Evidence:** Gemini now injects real GenerateContent failures and proves rate-limit, ordinary-error, and streaming-unsupported behavior. Bedrock's structured-output recursion table covers all previously dark schema keywords, and rate limiting now uses real Smithy API/HTTP error shapes. Ollama has byte-level NDJSON tests for malformed JSON, EOF before done, and scanner overflow. OpenAI now rejects malformed SDK event JSON and EOF before response.completed, alongside its existing stream setup/receive/rate-limit cases. Comparable malformed event coverage remains to be confirmed for Anthropic.
-- **Impact:** Provider error classification and byte-stream decoding change most across SDK bumps; real SDK throttle shapes and malformed frames could still regress silently.
-- **Recommendation:** Complete Anthropic stream failures, then consolidate the observable contracts into a shared provider checklist.
+- **Evidence:** Gemini proves SDK rate-limit, ordinary-error, and streaming-unsupported behavior. Bedrock covers every previously dark structured-schema recursion keyword and real Smithy API/HTTP rate-limit shapes. Ollama covers malformed NDJSON, EOF before done, and scanner overflow. OpenAI rejects malformed SDK events and EOF before response.completed. Anthropic now rejects malformed SDK events and EOF before message_stop; the new terminal test exposed and fixed C-22, where partial responses were previously accepted as success.
+- **Impact:** The concrete adapter gaps from the audit are closed. The remaining risk is drift because the same observable contracts are distributed across provider-specific tests.
+- **Recommendation:** Replace this finding with a maintained provider checklist or shared case model before declaring Phase 5 complete; keep SDK-specific fixtures local to each adapter.
 
 ### C-8: Mongo query syntax for prompt/memory stores never executes against real Mongo
 - **Severity:** medium · **Status:** still open (delta improved decode-side coverage only)
@@ -373,6 +373,7 @@ Exit criterion: warm unit wall at or below 20 seconds, integration wall at or be
 
 | Finding | Exposing test | Root cause | Fix commit | Status |
 |---|---|---|---|---|
+| C-22 | TestAnthropicStreamerRejectsEOFBeforeMessageStop | Anthropic stream EOF was treated as success without observing the required message_stop event | this change | fixed; partial streams fail closed |
 | C-21 | TestConsumeStreamErrorsAndAlwaysCloses | ConsumeStream discarded Streamer.Close errors on both EOF and receive-error paths | this change | fixed; close and receive errors remain discoverable |
 | C-20 | TestConsumeStreamAggregatesChunksAndEvents | planner usage aggregation omitted cache read/write token fields | this change | fixed; all numeric usage fields aggregate |
 | C-19 | TestConsumeStreamAggregatesChunksAndEvents | a malformed ChunkTypeToolCall with nil ToolCall was dereferenced | this change | fixed; malformed chunk ignored |

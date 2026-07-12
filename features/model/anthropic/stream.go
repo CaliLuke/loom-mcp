@@ -117,6 +117,8 @@ func (s *anthropicStreamer) run() {
 				s.setErr(err)
 			} else if err := s.ctx.Err(); err != nil {
 				s.setErr(err)
+			} else if !processor.completed {
+				s.setErr(errors.New("anthropic: stream ended before message_stop"))
 			} else {
 				s.setErr(nil)
 			}
@@ -176,6 +178,7 @@ type anthropicChunkProcessor struct {
 	toolUseIDs  *toolUseIDCodec
 
 	stopReason string
+	completed  bool
 }
 
 func newAnthropicChunkProcessor(emit func(model.Chunk) error, recordUsage func(model.TokenUsage), nameMap map[string]string, toolUseIDs *toolUseIDCodec) *anthropicChunkProcessor {
@@ -216,6 +219,7 @@ func (p *anthropicChunkProcessor) Handle(event sdk.MessageStreamEventUnion) erro
 		}
 		return p.emit(model.Chunk{Type: model.ChunkTypeUsage, UsageDelta: &usage})
 	case sdk.MessageStopEvent:
+		p.completed = true
 		chunk := model.Chunk{Type: model.ChunkTypeStop}
 		if p.stopReason != "" {
 			chunk.StopReason = p.stopReason

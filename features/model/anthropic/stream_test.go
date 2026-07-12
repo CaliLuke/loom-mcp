@@ -137,6 +137,51 @@ func TestAnthropicStreamer_TextAndToolCall(t *testing.T) {
 	}
 }
 
+func TestAnthropicStreamerRejectsMalformedEventJSON(t *testing.T) {
+	stream := ssestream.NewStream[sdk.MessageStreamEventUnion](&testDecoder{
+		events: []ssestream.Event{{Type: "message_start", Data: []byte("{")}},
+	}, nil)
+	s := newAnthropicStreamer(context.Background(), stream, nil, newToolUseIDCodec())
+	defer func() {
+		if err := s.Close(); err != nil {
+			t.Fatalf("close stream: %v", err)
+		}
+	}()
+
+	_, err := s.Recv()
+	if err == nil {
+		t.Fatal("expected malformed event error")
+	}
+}
+
+func TestAnthropicStreamerRejectsEOFBeforeMessageStop(t *testing.T) {
+	textDelta := sdk.MessageStreamEventUnion{}
+	if err := json.Unmarshal([]byte("{\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"text_delta\",\"text\":\"partial\"}}"), &textDelta); err != nil {
+		t.Fatalf("unmarshal text delta: %v", err)
+	}
+	stream := ssestream.NewStream[sdk.MessageStreamEventUnion](&testDecoder{
+		events: []ssestream.Event{{Type: "content_block_delta", Data: mustJSON(textDelta)}},
+	}, nil)
+	s := newAnthropicStreamer(context.Background(), stream, nil, newToolUseIDCodec())
+	defer func() {
+		if err := s.Close(); err != nil {
+			t.Fatalf("close stream: %v", err)
+		}
+	}()
+
+	chunk, err := s.Recv()
+	if err != nil {
+		t.Fatalf("receive text: %v", err)
+	}
+	if chunk.Type != model.ChunkTypeText {
+		t.Fatalf("chunk type = %q, want %q", chunk.Type, model.ChunkTypeText)
+	}
+	_, err = s.Recv()
+	if err == nil || err.Error() != "anthropic: stream ended before message_stop" {
+		t.Fatalf("error = %v, want premature EOF error", err)
+	}
+}
+
 func TestAnthropicStreamer_ThinkingBlocks(t *testing.T) {
 	thinkingStart := sdk.MessageStreamEventUnion{}
 	if err := json.Unmarshal([]byte(`{
