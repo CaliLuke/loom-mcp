@@ -78,8 +78,10 @@ func TestComplete_TextOnly(t *testing.T) {
 		},
 		StopReason: sdk.StopReasonEndTurn,
 		Usage: sdk.Usage{
-			InputTokens:  10,
-			OutputTokens: 5,
+			InputTokens:              10,
+			OutputTokens:             5,
+			CacheReadInputTokens:     3,
+			CacheCreationInputTokens: 4,
 		},
 	}
 
@@ -96,9 +98,48 @@ func TestComplete_TextOnly(t *testing.T) {
 	if resp.StopReason != string(sdk.StopReasonEndTurn) {
 		t.Fatalf("unexpected stop reason %q", resp.StopReason)
 	}
-	if resp.Usage.InputTokens != 10 || resp.Usage.OutputTokens != 5 || resp.Usage.TotalTokens != 15 {
+	if resp.Usage.InputTokens != 10 || resp.Usage.OutputTokens != 5 || resp.Usage.TotalTokens != 15 ||
+		resp.Usage.CacheReadTokens != 3 || resp.Usage.CacheWriteTokens != 4 {
 		t.Fatalf("unexpected usage: %+v", resp.Usage)
 	}
+}
+
+func TestPrepareRequestAppliesCachePolicies(t *testing.T) {
+	client, err := New(&stubMessagesClient{}, Options{DefaultModel: "claude-sonnet", MaxTokens: 128})
+	require.NoError(t, err)
+
+	params, _, _, err := client.prepareRequest(context.Background(), &model.Request{
+		Messages: []*model.Message{
+			{Role: model.ConversationRoleSystem, Parts: []model.Part{model.TextPart{Text: "first"}, model.TextPart{Text: "second"}}},
+			{Role: model.ConversationRoleUser, Parts: []model.Part{model.TextPart{Text: "hello"}}},
+		},
+		Tools: []*model.ToolDefinition{
+			{Name: "test.first", Description: "first tool", InputSchema: json.RawMessage(`{"type":"object"}`)},
+			{Name: "test.second", Description: "second tool", InputSchema: json.RawMessage(`{"type":"object"}`)},
+		},
+		Cache: &model.CacheOptions{AfterSystem: true, AfterTools: true},
+	})
+	require.NoError(t, err)
+	require.Len(t, params.System, 2)
+	require.Empty(t, params.System[0].CacheControl.Type)
+	require.Equal(t, "ephemeral", string(params.System[1].CacheControl.Type))
+	require.Len(t, params.Tools, 2)
+	require.Empty(t, params.Tools[0].GetCacheControl().Type)
+	require.Equal(t, "ephemeral", string(params.Tools[1].GetCacheControl().Type))
+}
+
+func TestPrepareRequestCachePoliciesIgnoreAbsentSections(t *testing.T) {
+	client, err := New(&stubMessagesClient{}, Options{DefaultModel: "claude-sonnet", MaxTokens: 128})
+	require.NoError(t, err)
+
+	params, _, _, err := client.prepareRequest(context.Background(), &model.Request{
+		Messages: []*model.Message{{Role: model.ConversationRoleUser, Parts: []model.Part{model.TextPart{Text: "hello"}}}},
+		Cache:    &model.CacheOptions{AfterSystem: true, AfterTools: true},
+	})
+
+	require.NoError(t, err)
+	require.Empty(t, params.System)
+	require.Empty(t, params.Tools)
 }
 
 func TestComplete_ThinkingBlocks(t *testing.T) {

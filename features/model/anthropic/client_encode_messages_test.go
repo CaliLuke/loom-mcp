@@ -120,10 +120,11 @@ func TestEncodeMessages_PartSkipContract(t *testing.T) {
 		wantConversation int
 		wantBlocks       int
 		wantSystem       int
+		wantCacheBlocks  int
 		wantErr          string
 	}{
 		{
-			name: "user cache checkpoint is ignored",
+			name: "user cache checkpoint marks preceding block",
 			messages: []*model.Message{
 				{
 					Role: model.ConversationRoleUser,
@@ -135,6 +136,7 @@ func TestEncodeMessages_PartSkipContract(t *testing.T) {
 			},
 			wantConversation: 1,
 			wantBlocks:       1,
+			wantCacheBlocks:  1,
 		},
 		{
 			name: "checkpoint-only message is dropped",
@@ -152,7 +154,7 @@ func TestEncodeMessages_PartSkipContract(t *testing.T) {
 			wantBlocks:       1,
 		},
 		{
-			name: "system cache checkpoint is ignored",
+			name: "system cache checkpoint marks preceding block",
 			messages: []*model.Message{
 				{
 					Role: model.ConversationRoleSystem,
@@ -169,6 +171,7 @@ func TestEncodeMessages_PartSkipContract(t *testing.T) {
 			wantConversation: 1,
 			wantBlocks:       1,
 			wantSystem:       1,
+			wantCacheBlocks:  1,
 		},
 		{
 			name: "signed thinking survives alongside checkpoint",
@@ -211,8 +214,16 @@ func TestEncodeMessages_PartSkipContract(t *testing.T) {
 			require.Len(t, conversation, tt.wantConversation)
 			assert.Len(t, conversation[0].Content, tt.wantBlocks)
 			assert.Len(t, system, tt.wantSystem)
+			assert.Equal(t, tt.wantCacheBlocks, countCacheControls(t, conversation)+countCacheControls(t, system))
 		})
 	}
+}
+
+func countCacheControls(t *testing.T, value any) int {
+	t.Helper()
+	data, err := json.Marshal(value)
+	require.NoError(t, err)
+	return strings.Count(string(data), `"cache_control":{"type":"ephemeral"}`)
 }
 
 func TestEncodeMessages_SignedThinkingRoundTripsWithCheckpoint(t *testing.T) {

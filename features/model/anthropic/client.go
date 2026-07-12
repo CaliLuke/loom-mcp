@@ -168,6 +168,7 @@ func (c *Client) prepareRequest(ctx context.Context, req *model.Request) (*sdk.M
 	if err != nil {
 		return nil, nil, nil, err
 	}
+	applyAnthropicCachePolicy(req.Cache, system, tools)
 	params := c.newMessageParams(ctx, modelID, maxTokens, msgs, system, tools, req.Temperature)
 	if err := c.applyThinkingConfig(&params, req, maxTokens); err != nil {
 		return nil, nil, nil, err
@@ -346,8 +347,7 @@ func systemTextBlocks(parts []model.Part) ([]sdk.TextBlockParam, error) {
 				blocks = append(blocks, sdk.TextBlockParam{Text: v.Text})
 			}
 		case model.CacheCheckpointPart:
-			// This adapter has no prompt-caching support; the CacheCheckpointPart
-			// contract requires such providers to ignore the part.
+			markLastSystemBlockCached(blocks)
 			continue
 		default:
 			return nil, fmt.Errorf("anthropic: unsupported system message part %T", p)
@@ -359,6 +359,10 @@ func systemTextBlocks(parts []model.Part) ([]sdk.TextBlockParam, error) {
 func anthropicMessageBlocks(role model.ConversationRole, parts []model.Part, nameMap map[string]string, toolUseIDs *toolUseIDCodec) ([]sdk.ContentBlockParamUnion, error) {
 	blocks := make([]sdk.ContentBlockParamUnion, 0, len(parts))
 	for _, part := range parts {
+		if _, ok := part.(model.CacheCheckpointPart); ok {
+			markLastContentBlockCached(blocks)
+			continue
+		}
 		block, ok, err := anthropicMessageBlock(role, part, nameMap, toolUseIDs)
 		if err != nil {
 			return nil, err
@@ -400,11 +404,50 @@ func anthropicMessageBlock(role model.ConversationRole, part model.Part, nameMap
 		return block, err == nil, err
 	}
 	if _, ok := part.(model.CacheCheckpointPart); ok {
-		// This adapter has no prompt-caching support; the CacheCheckpointPart
-		// contract requires such providers to ignore the part.
 		return sdk.ContentBlockParamUnion{}, false, nil
 	}
 	return sdk.ContentBlockParamUnion{}, false, fmt.Errorf("anthropic: unsupported message part %T", part)
+}
+
+func applyAnthropicCachePolicy(cache *model.CacheOptions, system []sdk.TextBlockParam, tools []sdk.ToolUnionParam) {
+	if cache == nil {
+		return
+	}
+	if cache.AfterSystem {
+		markLastSystemBlockCached(system)
+	}
+	if cache.AfterTools {
+		markLastToolCached(tools)
+	}
+}
+
+func markLastSystemBlockCached(blocks []sdk.TextBlockParam) {
+	if len(blocks) == 0 {
+		return
+	}
+	blocks[len(blocks)-1].CacheControl = sdk.NewCacheControlEphemeralParam()
+}
+
+func markLastContentBlockCached(blocks []sdk.ContentBlockParamUnion) {
+	for i := len(blocks) - 1; i >= 0; i-- {
+		cache := blocks[i].GetCacheControl()
+		if cache == nil {
+			continue
+		}
+		*cache = sdk.NewCacheControlEphemeralParam()
+		return
+	}
+}
+
+func markLastToolCached(toolList []sdk.ToolUnionParam) {
+	for i := len(toolList) - 1; i >= 0; i-- {
+		cache := toolList[i].GetCacheControl()
+		if cache == nil {
+			continue
+		}
+		*cache = sdk.NewCacheControlEphemeralParam()
+		return
+	}
 }
 
 func anthropicThinkingBlock(v model.ThinkingPart) (sdk.ContentBlockParamUnion, bool) {

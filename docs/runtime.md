@@ -1702,7 +1702,10 @@ RunPolicy(func() {
 ```
 
 The runtime populates `model.Request.Cache` when planners don't set it explicitly.
-Providers that don't support caching ignore these options.
+The Anthropic and Bedrock adapters map `AfterSystem`, `AfterTools`, and explicit
+`model.CacheCheckpointPart` boundaries to their native ephemeral prompt-cache
+controls. Policy boundaries are omitted when the corresponding system or tool
+section is empty. Providers that don't support caching ignore these options.
 
 ---
 

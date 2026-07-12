@@ -308,6 +308,10 @@ Mark runtime-injected fields.
 
 ### `Cache(AfterSystem, AfterTools)`
 
+Anthropic and Bedrock translate these policy boundaries, plus explicit
+`model.CacheCheckpointPart` message markers, into native prompt-cache controls.
+An absent system or tools section produces no checkpoint.
+
 ### `InterruptsAllowed`
 
 ### `OnMissingFields`
