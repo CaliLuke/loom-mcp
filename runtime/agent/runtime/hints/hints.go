@@ -113,7 +113,7 @@ func CompileHintTemplates(raw map[tools.Ident]string, extra template.FuncMap) (m
 		if src == "" {
 			continue
 		}
-		tmpl, err := template.New(string(id)).Option("missingkey=error").Funcs(funcs).Parse(src)
+		tmpl, err := template.New(string(id)).Option("missingkey=zero").Funcs(funcs).Parse(src)
 		if err != nil {
 			return nil, fmt.Errorf("compile hint for %s: %w", id, err)
 		}
@@ -137,8 +137,19 @@ func hintTemplateFuncs(extra template.FuncMap) template.FuncMap {
 }
 
 func hintCount(v any) int {
-	if xs, ok := v.([]any); ok {
-		return len(xs)
+	value := reflect.ValueOf(v)
+	if !value.IsValid() {
+		return 0
+	}
+	for value.Kind() == reflect.Pointer {
+		if value.IsNil() {
+			return 0
+		}
+		value = value.Elem()
+	}
+	kind := value.Kind()
+	if kind == reflect.Array || kind == reflect.Chan || kind == reflect.Map || kind == reflect.Slice || kind == reflect.String {
+		return value.Len()
 	}
 	return 0
 }
@@ -167,10 +178,11 @@ func hintTruncate(s string, n int) string {
 	if n <= 0 {
 		return ""
 	}
-	if len(s) <= n {
+	runes := []rune(s)
+	if len(runes) <= n {
 		return s
 	}
-	return s[:n]
+	return string(runes[:n])
 }
 
 func parseTimestamp(v any) (time.Time, bool) {

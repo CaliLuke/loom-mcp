@@ -5,9 +5,64 @@ import (
 	"testing"
 	"text/template"
 	"time"
+	"unicode/utf8"
 
 	"github.com/CaliLuke/loom-mcp/runtime/agent/tools"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
+
+func TestHintRegistryFormatsCallAndResultTemplates(t *testing.T) {
+	t.Parallel()
+
+	callID := tools.Ident("hints.test.call")
+	resultID := tools.Ident("hints.test.result")
+	RegisterCallHint(callID, template.Must(template.New("call").Parse("Calling {{.Name}}")))
+	RegisterResultHints(map[tools.Ident]*template.Template{
+		resultID: template.Must(template.New("result").Parse("Found {{.Count}}")),
+		"":       template.Must(template.New("ignored").Parse("ignored")),
+	})
+
+	assert.Equal(t, "Calling loom", FormatCallHint(callID, map[string]any{"Name": "loom"}))
+	assert.Equal(t, "Found 2", FormatResultHint(resultID, map[string]any{"Count": 2}))
+	assert.Empty(t, FormatCallHint("hints.test.missing", nil))
+	assert.Empty(t, FormatResultHint("hints.test.missing", nil))
+
+	RegisterCallHints(map[tools.Ident]*template.Template{
+		"hints.test.render_error": template.Must(template.New("error").Option("missingkey=error").Parse("{{.Missing}}")),
+	})
+	assert.Empty(t, FormatCallHint("hints.test.render_error", map[string]any{}))
+}
+
+func TestCompileHintTemplatesSupportsOptionalFieldsTypedCountsAndUnicode(t *testing.T) {
+	t.Parallel()
+
+	compiled, err := CompileHintTemplates(map[tools.Ident]string{
+		"hints.test.helpers": `{{with .Optional}}{{.}}{{else}}fallback{{end}}|{{count .Items}}|{{truncate .Text 1}}`,
+	}, nil)
+	require.NoError(t, err)
+	RegisterCallHints(compiled)
+
+	got := FormatCallHint("hints.test.helpers", map[string]any{
+		"Items": []string{"one", "two"},
+		"Text":  "éclair",
+	})
+	require.True(t, utf8.ValidString(got))
+	assert.Equal(t, "fallback|2|é", got)
+}
+
+func TestCompileHintTemplatesValidation(t *testing.T) {
+	t.Parallel()
+
+	compiled, err := CompileHintTemplates(nil, nil)
+	require.NoError(t, err)
+	assert.Nil(t, compiled)
+	compiled, err = CompileHintTemplates(map[tools.Ident]string{"empty": ""}, nil)
+	require.NoError(t, err)
+	assert.Empty(t, compiled)
+	_, err = CompileHintTemplates(map[tools.Ident]string{"broken": "{{"}, nil)
+	require.ErrorContains(t, err, "compile hint for broken")
+}
 
 func TestCompileHintTemplates_Since(t *testing.T) {
 	t.Parallel()
