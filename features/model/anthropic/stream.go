@@ -34,9 +34,11 @@ type anthropicStreamer struct {
 
 	toolNameMap map[string]string
 	toolUseIDs  *toolUseIDCodec
+	modelID     string
+	modelClass  model.ModelClass
 }
 
-func newAnthropicStreamer(ctx context.Context, stream *ssestream.Stream[sdk.MessageStreamEventUnion], nameMap map[string]string, toolUseIDs *toolUseIDCodec) model.Streamer {
+func newAnthropicStreamer(ctx context.Context, stream *ssestream.Stream[sdk.MessageStreamEventUnion], modelID string, modelClass model.ModelClass, nameMap map[string]string, toolUseIDs *toolUseIDCodec) model.Streamer {
 	cctx, cancel := context.WithCancel(ctx)
 	as := &anthropicStreamer{
 		ctx:         cctx,
@@ -45,6 +47,8 @@ func newAnthropicStreamer(ctx context.Context, stream *ssestream.Stream[sdk.Mess
 		chunks:      make(chan model.Chunk, 32),
 		toolNameMap: nameMap,
 		toolUseIDs:  toolUseIDs,
+		modelID:     modelID,
+		modelClass:  modelClass,
 	}
 	go as.run()
 	return as
@@ -103,7 +107,7 @@ func (s *anthropicStreamer) run() {
 		}
 	}()
 
-	processor := newAnthropicChunkProcessor(s.emitChunk, s.recordUsage, s.toolNameMap, s.toolUseIDs)
+	processor := newAnthropicChunkProcessor(s.emitChunk, s.recordUsage, s.modelID, s.modelClass, s.toolNameMap, s.toolUseIDs)
 
 	for {
 		select {
@@ -176,12 +180,15 @@ type anthropicChunkProcessor struct {
 
 	toolNameMap map[string]string
 	toolUseIDs  *toolUseIDCodec
+	modelID     string
+	modelClass  model.ModelClass
+	usage       model.TokenUsage
 
 	stopReason string
 	completed  bool
 }
 
-func newAnthropicChunkProcessor(emit func(model.Chunk) error, recordUsage func(model.TokenUsage), nameMap map[string]string, toolUseIDs *toolUseIDCodec) *anthropicChunkProcessor {
+func newAnthropicChunkProcessor(emit func(model.Chunk) error, recordUsage func(model.TokenUsage), modelID string, modelClass model.ModelClass, nameMap map[string]string, toolUseIDs *toolUseIDCodec) *anthropicChunkProcessor {
 	return &anthropicChunkProcessor{
 		emit:           emit,
 		recordUsage:    recordUsage,
@@ -189,6 +196,8 @@ func newAnthropicChunkProcessor(emit func(model.Chunk) error, recordUsage func(m
 		thinkingBlocks: make(map[int]*thinkingBuffer),
 		toolNameMap:    nameMap,
 		toolUseIDs:     toolUseIDs,
+		modelID:        modelID,
+		modelClass:     modelClass,
 	}
 }
 
@@ -198,6 +207,10 @@ func (p *anthropicChunkProcessor) Handle(event sdk.MessageStreamEventUnion) erro
 		p.toolBlocks = make(map[int]*toolBuffer)
 		p.thinkingBlocks = make(map[int]*thinkingBuffer)
 		p.stopReason = ""
+		if ev.Message.Model != "" {
+			p.modelID = ev.Message.Model
+		}
+		p.usage = anthropicUsage(ev.Message.Usage, p.modelID, p.modelClass)
 		return nil
 	case sdk.ContentBlockStartEvent:
 		return p.handleContentBlockStart(ev)
@@ -207,13 +220,13 @@ func (p *anthropicChunkProcessor) Handle(event sdk.MessageStreamEventUnion) erro
 		return p.handleContentBlockStop(ev)
 	case sdk.MessageDeltaEvent:
 		p.stopReason = string(ev.Delta.StopReason)
-		usage := model.TokenUsage{
-			InputTokens:      int(ev.Usage.InputTokens),
-			OutputTokens:     int(ev.Usage.OutputTokens),
-			TotalTokens:      int(ev.Usage.InputTokens + ev.Usage.OutputTokens),
-			CacheReadTokens:  int(ev.Usage.CacheReadInputTokens),
-			CacheWriteTokens: int(ev.Usage.CacheCreationInputTokens),
-		}
+		p.mergeUsage(
+			ev.Usage.InputTokens,
+			ev.Usage.OutputTokens,
+			ev.Usage.CacheReadInputTokens,
+			ev.Usage.CacheCreationInputTokens,
+		)
+		usage := p.usage
 		if p.recordUsage != nil {
 			p.recordUsage(usage)
 		}
@@ -229,6 +242,24 @@ func (p *anthropicChunkProcessor) Handle(event sdk.MessageStreamEventUnion) erro
 		return p.emit(chunk)
 	}
 	return nil
+}
+
+func (p *anthropicChunkProcessor) mergeUsage(inputTokens, outputTokens, cacheReadTokens, cacheWriteTokens int64) {
+	if inputTokens != 0 {
+		p.usage.InputTokens = int(inputTokens)
+	}
+	if outputTokens != 0 {
+		p.usage.OutputTokens = int(outputTokens)
+	}
+	if cacheReadTokens != 0 {
+		p.usage.CacheReadTokens = int(cacheReadTokens)
+	}
+	if cacheWriteTokens != 0 {
+		p.usage.CacheWriteTokens = int(cacheWriteTokens)
+	}
+	p.usage.Model = p.modelID
+	p.usage.ModelClass = p.modelClass
+	p.usage.TotalTokens = p.usage.InputTokens + p.usage.OutputTokens
 }
 
 func (p *anthropicChunkProcessor) handleContentBlockStart(ev sdk.ContentBlockStartEvent) error {

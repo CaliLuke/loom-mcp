@@ -245,7 +245,7 @@ func TestAnthropicStreamer_RestoresCanonicalToolUseID(t *testing.T) {
 	stream := ssestream.NewStream[sdk.MessageStreamEventUnion](dec, nil)
 	nameMap := map[string]string{"tool_a": "toolset.tool"}
 
-	s := newAnthropicStreamer(context.Background(), stream, nameMap, codec)
+	s := newAnthropicStreamer(context.Background(), stream, "", "", nameMap, codec)
 	defer func() {
 		if err := s.Close(); err != nil {
 			t.Errorf("close streamer: %v", err)

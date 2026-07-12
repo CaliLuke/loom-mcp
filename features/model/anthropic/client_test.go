@@ -24,11 +24,15 @@ type stubMessagesClient struct {
 	resp       *sdk.Message
 	err        error
 
-	stream *ssestream.Stream[sdk.MessageStreamEventUnion]
+	stream  *ssestream.Stream[sdk.MessageStreamEventUnion]
+	newFunc func(context.Context) (*sdk.Message, error)
 }
 
-func (s *stubMessagesClient) New(_ context.Context, body sdk.MessageNewParams, _ ...option.RequestOption) (*sdk.Message, error) {
+func (s *stubMessagesClient) New(ctx context.Context, body sdk.MessageNewParams, _ ...option.RequestOption) (*sdk.Message, error) {
 	s.lastParams = body
+	if s.newFunc != nil {
+		return s.newFunc(ctx)
+	}
 	return s.resp, s.err
 }
 

@@ -131,7 +131,7 @@ func (c *Client) Complete(ctx context.Context, req *model.Request) (*model.Respo
 		}
 		return nil, fmt.Errorf("anthropic messages.new: %w", err)
 	}
-	return translateResponse(msg, provToCanon, toolUseIDs)
+	return translateResponse(msg, provToCanon, toolUseIDs, params.Model, req.ModelClass)
 }
 
 // Stream invokes Messages.NewStreaming and adapts incremental events into
@@ -148,7 +148,7 @@ func (c *Client) Stream(ctx context.Context, req *model.Request) (model.Streamer
 		}
 		return nil, fmt.Errorf("anthropic messages.new stream: %w", err)
 	}
-	return newAnthropicStreamer(ctx, stream, provToCanon, toolUseIDs), nil
+	return newAnthropicStreamer(ctx, stream, params.Model, req.ModelClass, provToCanon, toolUseIDs), nil
 }
 
 func (c *Client) prepareRequest(ctx context.Context, req *model.Request) (*sdk.MessageNewParams, map[string]string, *toolUseIDCodec, error) {
@@ -731,17 +731,23 @@ func isRateLimited(err error) bool {
 	return errors.As(err, &apiErr) && apiErr.StatusCode == http.StatusTooManyRequests
 }
 
-func translateResponse(msg *sdk.Message, nameMap map[string]string, toolUseIDs *toolUseIDCodec) (*model.Response, error) {
+func translateResponse(msg *sdk.Message, nameMap map[string]string, toolUseIDs *toolUseIDCodec, modelID string, modelClass model.ModelClass) (*model.Response, error) {
 	if msg == nil {
 		return nil, errors.New("anthropic: response message is nil")
 	}
-	resp := translateResponseContent(msg.Content, nameMap, toolUseIDs)
-	resp.Usage = anthropicUsage(msg.Usage)
+	resp, err := translateResponseContent(msg.Content, nameMap, toolUseIDs)
+	if err != nil {
+		return nil, err
+	}
+	if msg.Model != "" {
+		modelID = msg.Model
+	}
+	resp.Usage = anthropicUsage(msg.Usage, modelID, modelClass)
 	resp.StopReason = string(msg.StopReason)
 	return resp, nil
 }
 
-func translateResponseContent(blocks []sdk.ContentBlockUnion, nameMap map[string]string, toolUseIDs *toolUseIDCodec) *model.Response {
+func translateResponseContent(blocks []sdk.ContentBlockUnion, nameMap map[string]string, toolUseIDs *toolUseIDCodec) (*model.Response, error) {
 	resp := &model.Response{}
 	parts := make([]model.Part, 0, len(blocks))
 	for _, block := range blocks {
@@ -753,7 +759,11 @@ func translateResponseContent(blocks []sdk.ContentBlockUnion, nameMap map[string
 		case "redacted_thinking":
 			appendAnthropicRedactedThinking(&parts, block.AsRedactedThinking())
 		case anthropicContentTypeToolUse:
-			resp.ToolCalls = append(resp.ToolCalls, anthropicToolCall(block, nameMap, toolUseIDs))
+			call, err := anthropicToolCall(block, nameMap, toolUseIDs)
+			if err != nil {
+				return nil, err
+			}
+			resp.ToolCalls = append(resp.ToolCalls, call)
 		}
 	}
 	if len(parts) > 0 {
@@ -762,7 +772,7 @@ func translateResponseContent(blocks []sdk.ContentBlockUnion, nameMap map[string
 			Parts: parts,
 		})
 	}
-	return resp
+	return resp, nil
 }
 
 func appendAnthropicText(parts *[]model.Part, text string) {
@@ -793,12 +803,16 @@ func appendAnthropicRedactedThinking(parts *[]model.Part, block sdk.RedactedThin
 	})
 }
 
-func anthropicToolCall(block sdk.ContentBlockUnion, nameMap map[string]string, toolUseIDs *toolUseIDCodec) model.ToolCall {
+func anthropicToolCall(block sdk.ContentBlockUnion, nameMap map[string]string, toolUseIDs *toolUseIDCodec) (model.ToolCall, error) {
+	payload := rawjson.Message(block.Input)
+	if _, err := payload.MarshalJSON(); err != nil {
+		return model.ToolCall{}, fmt.Errorf("anthropic: tool call %q payload: %w", block.ID, err)
+	}
 	return model.ToolCall{
 		Name:    tools.Ident(resolveAnthropicToolName(block.Name, nameMap)),
-		Payload: rawjson.Message(block.Input),
+		Payload: payload,
 		ID:      toolUseIDs.decode(block.ID),
-	}
+	}, nil
 }
 
 func resolveAnthropicToolName(raw string, nameMap map[string]string) string {
@@ -811,11 +825,10 @@ func resolveAnthropicToolName(raw string, nameMap map[string]string) string {
 	return raw
 }
 
-func anthropicUsage(u sdk.Usage) model.TokenUsage {
-	if u.InputTokens == 0 && u.OutputTokens == 0 && u.CacheReadInputTokens == 0 && u.CacheCreationInputTokens == 0 {
-		return model.TokenUsage{}
-	}
+func anthropicUsage(u sdk.Usage, modelID string, modelClass model.ModelClass) model.TokenUsage {
 	return model.TokenUsage{
+		Model:            modelID,
+		ModelClass:       modelClass,
 		InputTokens:      int(u.InputTokens),
 		OutputTokens:     int(u.OutputTokens),
 		TotalTokens:      int(u.InputTokens + u.OutputTokens),

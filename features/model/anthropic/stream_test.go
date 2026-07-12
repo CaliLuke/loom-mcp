@@ -93,7 +93,7 @@ func TestAnthropicStreamer_TextAndToolCall(t *testing.T) {
 	stream := ssestream.NewStream[sdk.MessageStreamEventUnion](dec, nil)
 	nameMap := map[string]string{"tool_a": "toolset.tool"}
 
-	s := newAnthropicStreamer(context.Background(), stream, nameMap, newToolUseIDCodec())
+	s := newAnthropicStreamer(context.Background(), stream, "", "", nameMap, newToolUseIDCodec())
 	defer func() {
 		_ = s.Close()
 	}()
@@ -141,7 +141,7 @@ func TestAnthropicStreamerRejectsMalformedEventJSON(t *testing.T) {
 	stream := ssestream.NewStream[sdk.MessageStreamEventUnion](&testDecoder{
 		events: []ssestream.Event{{Type: "message_start", Data: []byte("{")}},
 	}, nil)
-	s := newAnthropicStreamer(context.Background(), stream, nil, newToolUseIDCodec())
+	s := newAnthropicStreamer(context.Background(), stream, "", "", nil, newToolUseIDCodec())
 	defer func() {
 		if err := s.Close(); err != nil {
 			t.Fatalf("close stream: %v", err)
@@ -162,7 +162,7 @@ func TestAnthropicStreamerRejectsEOFBeforeMessageStop(t *testing.T) {
 	stream := ssestream.NewStream[sdk.MessageStreamEventUnion](&testDecoder{
 		events: []ssestream.Event{{Type: "content_block_delta", Data: mustJSON(textDelta)}},
 	}, nil)
-	s := newAnthropicStreamer(context.Background(), stream, nil, newToolUseIDCodec())
+	s := newAnthropicStreamer(context.Background(), stream, "", "", nil, newToolUseIDCodec())
 	defer func() {
 		if err := s.Close(); err != nil {
 			t.Fatalf("close stream: %v", err)
@@ -253,7 +253,7 @@ func TestAnthropicStreamer_ThinkingBlocks(t *testing.T) {
 	}
 
 	stream := ssestream.NewStream[sdk.MessageStreamEventUnion](&testDecoder{events: events}, nil)
-	s := newAnthropicStreamer(context.Background(), stream, nil, newToolUseIDCodec())
+	s := newAnthropicStreamer(context.Background(), stream, "", "", nil, newToolUseIDCodec())
 	defer func() {
 		_ = s.Close()
 	}()
