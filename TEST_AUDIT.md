@@ -245,6 +245,18 @@ Rank positions are preserved for traceability. Every opportunity is complete or 
 | 8 | **Completed:** echo tests and stale skips removed; DSL setters/bridge and layered fixture contracts reclassified | V-1, V-4, V-5 | cleanup | days | Dead weight removed without deleting public contracts |
 | 9 | **Completed:** tools codec/ident, interrupts, ConsumeStream, Clue telemetry, bufconn registry, double-Finalize | C-6, C-9, C-10 | complete | done | Highest-fan-in plumbing has direct behavioral proof |
 
+### Next correctness plan after C-64
+
+The original ranked opportunities are complete. The remaining work is a risk-weighted second pass over live owners, not a blanket coverage chase:
+
+1. **Model middleware parity:** exercise `Stream`, optional `CountTokens` delegation/failure, the public clustered constructor, callback saturation, cancellation, and shared-map parse/update failures. The completion path is covered, but the equivalent streaming and capability-preservation contracts are still dark.
+2. **Durable memory event codecs:** complete the exported user/assistant/tool/artifact/thinking decode matrix, malformed optional fields, pointer/value forms, and deep-copy isolation. These payloads cross persistence and replay boundaries, so silent field loss has higher impact than their package percentage alone suggests.
+3. **Temporal workflow-context adapters:** use Temporal's test environment for planner/tool/hook activities, signals, timers, cancellation, child workflows, retry-policy merging, and future/channel wrappers. Keep pure delegation cases compact; prioritize error normalization and lifecycle ownership.
+4. **MCP canonical input boundaries:** cover `UnmarshalCanonicalJSON`, query coercion, JSON unmarshaler/numeric overflow/null behavior, field/index diagnostics, caller-function delegation, and retry prompt construction. These helpers fan into generated adapters and accept adversarial client input.
+5. **Mongo runlog production path:** add real Mongo constructor/index contracts plus append validation, duplicate resolution, cancellation, and ordered listing edges. Preserve the existing container fail-closed policy.
+
+Each slice must first run targeted race/shuffle stress and then `make lint`, Colima-backed `make test`, `make itest`, and `make verify-mcp-local`. Any exposed defect lands with its regression test and an audit-ledger entry in the same commit. Stop the second pass when these boundaries are behaviorally complete and remaining low percentages are generated, façade, SDK delegation, or unreachable defensive branches with documented ownership.
+
 ## 6. Suggested refactoring sequence
 
 The execution order below is intentionally different from the original opportunity ranking. The goal is not maximum line coverage or minimum runtime; it is to expose existing defects at contract boundaries and then make those checks unavoidable for every future change. Each phase is a separately verified commit on `main`. If a new test exposes a product bug, the regression test and root-cause fix land together so the branch remains green.
