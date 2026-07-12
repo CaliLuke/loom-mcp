@@ -83,10 +83,11 @@ Finding IDs continue the `679fb76` numbering; each carries a status vs that base
 - **Evidence:** All four `clients/mongo/client_test.go` still fake-only (hand-rolled `fakeCollection`/`match()`); the only real-server test still covers runlog-append + session-transaction and skips without Docker (`clientinfra/mongo_driver_integration_test.go:122`). `features/runlog/mongo/store.go` still has zero tests. Delta improvement: `66b47c1` added a **real** `bson.Marshal/Unmarshal` round-trip test (`session/.../client_test.go:111-135`) and `NormalizeBSONValue` unit tests with real `bson.D`/`bson.A` — metadata normalization would now catch a real-BSON regression; query *filter* execution remains untested.
 - **Impact/Recommendation:** Unchanged.
 
-### C-9: No hermetic contract test between registry gRPC server and client adapter
-- **Severity:** medium · **Status:** still open
-- **Confidence:** measured (upgraded from inferred: `grep -rln bufconn registry/ runtime/registry/` → 0; adapter tests use a hand-written `mockGRPCRegistryClient`, `grpc_client_adapter_test.go:14`)
-- **Impact/Recommendation:** Unchanged — `bufconn` contract test, Docker-free.
+### C-9: Generated registry gRPC server/client adapter contract
+- **Severity:** medium · **Status:** resolved
+- **Confidence:** measured
+- **Evidence:** TestGRPCClientAdapterGeneratedServerContract runs the generated registry endpoints and generated gRPC server on bufconn, connects the generated protobuf client, wraps it in GRPCClientAdapter, and proves ListToolsets, GetToolset, and Search request/response conversion including payload, result, and sidecar schemas. The test is race/shuffle green and requires no Docker service.
+- **Impact/Recommendation:** Complete. Keep the generated server in the path so protocol drift cannot be hidden by the older handwritten client mock tests.
 
 ### C-10: Concurrency under-exercised; Finalize idempotency resolved
 - **Severity:** medium · **Status:** partially resolved (both Finalize contracts covered; concurrency remains)
@@ -241,7 +242,7 @@ Rank positions are preserved for traceability. Rank 2 is complete; the other opp
 | 6 | Replace `os.Setenv` header channel → drop `-parallel 1`; one server per YAML; `TestMain` cleanup | S-3, S-4 | structural | days | Integration ~60–90 s; stops the 103 MB leak |
 | 7 | Shared adapter conformance table (+ Gemini/Bedrock error shapes, bedrock keyword table, Mongo prompt/memory integration) | C-7, C-8, V-3 | structural | days | Provider-regression class covered once, uniformly |
 | 8 | Deletions & consolidation: echo tests, 2 stale skips, dead setters, bridge decision, tool-search/OAuth table-driving | V-1, V-4, V-5 | quick win | days | ~40–60 fewer funcs in the biggest bucket |
-| 9 | Targeted unit tests: `tools` codec/ident, interrupt controller, `ConsumeStream`, telemetry Clue*, bufconn registry contract, double-Finalize | C-6, C-9, C-10 | structural | days–weeks | Direct coverage for the highest-fan-in plumbing |
+| 9 | **Completed:** tools codec/ident, interrupts, ConsumeStream, Clue telemetry, bufconn registry, double-Finalize | C-6, C-9, C-10 | complete | done | Highest-fan-in plumbing has direct behavioral proof |
 
 ## 6. Suggested refactoring sequence
 
@@ -332,7 +333,7 @@ Add deterministic tests at their owning packages:
 
 Proof: targeted race tests for each owner, then `make lint`, `make test`, `make itest`, and `make verify-mcp-local`.
 
-Progress: runtime/agent/tools is 96.4 %, runtime/agent/planner is 85.7 %, runtime/agent/interrupt is 94.1 %, and telemetry rose from 8.5 % to 45.7 % under race/shuffle. ConsumeStream now preserves cache read/write usage, ignores malformed nil final tool-call chunks, reports close failures, and joins receive/close failures while retaining the partial summary. Remaining Phase 4 work: the Docker-free registry adapter contract; stream/bridge moves to the dead-code decision in V-5.
+Progress: **Phase 4 concrete test list complete.** runtime/agent/tools is 96.4 %, runtime/agent/planner is 85.7 %, runtime/agent/interrupt is 94.1 %, and telemetry rose from 8.5 % to 45.7 % under race/shuffle. ConsumeStream now preserves all token usage and error paths. The generated registry gRPC server/client/adapter chain is covered through bufconn. stream/bridge moves to the dead-code decision in V-5; broader sleep-based concurrency cleanup remains tracked by C-10/S-7.
 
 ### Phase 5 — provider conformance and persistence reality
 
