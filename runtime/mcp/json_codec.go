@@ -330,16 +330,16 @@ func jsonStructFields(t reflect.Type) (map[string]int, map[int]string) {
 }
 
 func assignCanonicalSlice(raw any, dst reflect.Value) error {
-	arr, ok := raw.([]any)
-	if !ok {
-		return &json.UnmarshalTypeError{Value: jsonValueKind(raw), Type: dst.Type()}
-	}
 	if dst.Type().Elem().Kind() == reflect.Uint8 {
 		data, err := json.Marshal(raw)
 		if err != nil {
 			return err
 		}
 		return json.Unmarshal(data, dst.Addr().Interface())
+	}
+	arr, ok := raw.([]any)
+	if !ok {
+		return &json.UnmarshalTypeError{Value: jsonValueKind(raw), Type: dst.Type()}
 	}
 	slice := reflect.MakeSlice(dst.Type(), len(arr), len(arr))
 	for i, item := range arr {
@@ -378,7 +378,11 @@ func assignCanonicalMap(raw any, dst reflect.Value) error {
 		if err := assignCanonicalValue(val, elem); err != nil {
 			return wrapFieldError(key, err)
 		}
-		m.SetMapIndex(reflect.ValueOf(key), elem)
+		mapKey := reflect.ValueOf(key)
+		if mapKey.Type() != dst.Type().Key() {
+			mapKey = mapKey.Convert(dst.Type().Key())
+		}
+		m.SetMapIndex(mapKey, elem)
 	}
 	dst.Set(m)
 	return nil
