@@ -33,9 +33,6 @@ func ConsumeStream(ctx context.Context, streamer model.Streamer, ev PlannerEvent
 	if err := validateStreamInputs(streamer, ev); err != nil {
 		return summary, err
 	}
-	defer func() {
-		_ = streamer.Close()
-	}()
 
 	for {
 		chunk, err := streamer.Recv()
@@ -43,14 +40,14 @@ func ConsumeStream(ctx context.Context, streamer model.Streamer, ev PlannerEvent
 			if errors.Is(err, io.EOF) {
 				break
 			}
-			return summary, err
+			return summary, errors.Join(err, streamer.Close())
 		}
 		handleStreamChunk(ctx, ev, &summary, chunk)
 	}
 
 	applyStreamMetadataUsage(ctx, ev, &summary, streamer.Metadata())
 
-	return summary, nil
+	return summary, streamer.Close()
 }
 
 func validateStreamInputs(streamer model.Streamer, ev PlannerEvents) error {
@@ -114,7 +111,7 @@ func handleThinkingChunk(ctx context.Context, ev PlannerEvents, chunk model.Chun
 }
 
 func handleToolCallChunk(summary *StreamSummary, chunk model.Chunk) {
-	if chunk.ToolCall.Name == "" {
+	if chunk.ToolCall == nil || chunk.ToolCall.Name == "" {
 		return
 	}
 	summary.ToolCalls = append(summary.ToolCalls, ToolRequest{
@@ -153,8 +150,10 @@ func applyStreamMetadataUsage(ctx context.Context, ev PlannerEvents, summary *St
 
 func addUsage(current, delta model.TokenUsage) model.TokenUsage {
 	return model.TokenUsage{
-		InputTokens:  current.InputTokens + delta.InputTokens,
-		OutputTokens: current.OutputTokens + delta.OutputTokens,
-		TotalTokens:  current.TotalTokens + delta.TotalTokens,
+		InputTokens:      current.InputTokens + delta.InputTokens,
+		OutputTokens:     current.OutputTokens + delta.OutputTokens,
+		TotalTokens:      current.TotalTokens + delta.TotalTokens,
+		CacheReadTokens:  current.CacheReadTokens + delta.CacheReadTokens,
+		CacheWriteTokens: current.CacheWriteTokens + delta.CacheWriteTokens,
 	}
 }

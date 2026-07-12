@@ -64,11 +64,11 @@ Finding IDs continue the `679fb76` numbering; each carries a status vs that base
 - **Evidence:** Re-grepped at HEAD: 0 hits for sampling/roots/progress across `integration_tests/scenarios/*.yaml`, framework, and fixture tests. `git diff --stat 679fb76..HEAD -- integration_tests/scenarios/` → empty (no scenario changes in 30 commits despite 13 MCP-runtime fix commits). Scenario counts unchanged: tools 24, protocol 18, resources 11, prompts 7, notifications 4, prompts_cli 1 (= 65).
 - **Impact/Recommendation:** Unchanged; also note the delta's MCP fixes (protocol-version alignment, id-less inputs, SSE reconnect) were tested at fixture level, not as scenarios — the scenario layer is drifting from the runtime's actual behavior surface.
 
-### C-6: Live, high-fan-in runtime packages with zero direct tests
-- **Severity:** medium · **Status:** still open (all five sub-items re-verified)
+### C-6: High-fan-in runtime gaps — tools and ConsumeStream resolved
+- **Severity:** medium · **Status:** partially resolved (2 of 5 sub-items complete)
 - **Confidence:** measured
-- **Evidence at HEAD:** `runtime/agent/tools/` — still no `*_test.go`. `runtime/agent/interrupt/` — still none. `runtime/agent/telemetry` — `Clue*` implementations referenced by zero tests (`clue.go:40,47,56`). `runtime/agent/planner/stream.go:31 ConsumeStream` — still zero callers and zero tests. `runtime/agent/stream/bridge` — still zero production importers (sole importer is an example test). Hot-file coverage: `hooks/events.go` 29 %, `stream/subscriber.go` 51 % (12-month churn 25 and 30 commits respectively).
-- **Impact/Recommendation:** Unchanged.
+- **Evidence at HEAD:** runtime/agent/tools now has direct race/shuffle coverage for identifier splitting, malformed boundaries, idempotency tag conflicts, unknown scopes, and AnyJSONCodec failures; package coverage is 96.4 %. planner.ConsumeStream now has direct text/thinking/tool/delta/usage/metadata/EOF/receive/close/nil-input coverage; planner package coverage rose to 85.7 %. Those tests exposed and fixed a nil tool-call panic, dropped cache-token accounting, and discarded close errors (C-19–C-21). Remaining: runtime/agent/interrupt has no tests; telemetry Clue implementations remain unreferenced; stream/bridge still has no production importer.
+- **Impact/Recommendation:** Complete the interrupt and telemetry owners next; decide whether stream/bridge should gain a production consumer or be deleted rather than adding tests to dead code.
 
 ### C-7: Model-adapter error/streaming matrix holes; Gemini worst — plus a new bedrock gap
 - **Severity:** medium · **Status:** still open, one new sub-gap
@@ -332,6 +332,8 @@ Add deterministic tests at their owning packages:
 
 Proof: targeted race tests for each owner, then `make lint`, `make test`, `make itest`, and `make verify-mcp-local`.
 
+Progress: runtime/agent/tools is 96.4 % covered and runtime/agent/planner is 85.7 % covered under race/shuffle. ConsumeStream now preserves cache read/write usage, ignores malformed nil final tool-call chunks, reports close failures, and joins receive/close failures while retaining the partial summary. Remaining Phase 4 work: interrupt receivers, telemetry clues, and the Docker-free registry adapter contract.
+
 ### Phase 5 — provider conformance and persistence reality
 
 **Findings:** C-7, C-8, V-3. **Expected defect yield:** medium; Gemini and persistence encode/decode boundaries are the least uniformly covered.
@@ -370,6 +372,9 @@ Exit criterion: warm unit wall at or below 20 seconds, integration wall at or be
 
 | Finding | Exposing test | Root cause | Fix commit | Status |
 |---|---|---|---|---|
+| C-21 | TestConsumeStreamErrorsAndAlwaysCloses | ConsumeStream discarded Streamer.Close errors on both EOF and receive-error paths | this change | fixed; close and receive errors remain discoverable |
+| C-20 | TestConsumeStreamAggregatesChunksAndEvents | planner usage aggregation omitted cache read/write token fields | this change | fixed; all numeric usage fields aggregate |
+| C-19 | TestConsumeStreamAggregatesChunksAndEvents | a malformed ChunkTypeToolCall with nil ToolCall was dereferenced | this change | fixed; malformed chunk ignored |
 | C-18 | payload-only bound-method compile case | generated wrappers assumed every service method returned `(result, error)`; result-less Goa methods return only `error` | this change | fixed; generated module compiles |
 | C-17 | injected-payload compile case | `inject.go` assigned `*string` to required injected fields generated as `string` | this change | fixed; generated module compiles |
 | C-16 | method-backed projection compile case | alias detection compared schema/user-type names but ignored that tool and service types are distinct named Go types in different packages | this change | fixed; generated module compiles |
