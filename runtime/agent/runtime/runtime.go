@@ -159,7 +159,9 @@ type (
 
 		// endedStreamSessions caches sessions already observed as terminal so
 		// hook stream publishing can skip repeated session-store lookups.
-		endedStreamSessions map[string]struct{}
+		endedStreamSessions     map[string]struct{}
+		endedStreamSessionOrder []string
+		endedStreamSessionNext  int
 
 		// hookActivityTimeout overrides the StartToClose timeout used for the
 		// hook publishing activity (`runtime.publish_hook`). Zero means use the
@@ -480,6 +482,8 @@ type (
 )
 
 const (
+	maxEndedStreamSessions = 4096
+
 	// MemoryScopeCurrentRun scopes memory lookup to the current run snapshot.
 	MemoryScopeCurrentRun MemoryScope = "current_run"
 	// MemoryScopeIndexed scopes memory lookup to the configured memory searcher.

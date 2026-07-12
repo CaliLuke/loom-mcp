@@ -141,11 +141,23 @@ func (r *Runtime) streamSessionEnded(sessionID string) bool {
 
 func (r *Runtime) markStreamSessionEnded(sessionID string) {
 	r.mu.Lock()
+	defer r.mu.Unlock()
 	if r.endedStreamSessions == nil {
 		r.endedStreamSessions = make(map[string]struct{})
 	}
+	if _, exists := r.endedStreamSessions[sessionID]; exists {
+		return
+	}
+	if len(r.endedStreamSessionOrder) < maxEndedStreamSessions {
+		r.endedStreamSessionOrder = append(r.endedStreamSessionOrder, sessionID)
+		r.endedStreamSessions[sessionID] = struct{}{}
+		return
+	}
+	evicted := r.endedStreamSessionOrder[r.endedStreamSessionNext]
+	delete(r.endedStreamSessions, evicted)
+	r.endedStreamSessionOrder[r.endedStreamSessionNext] = sessionID
+	r.endedStreamSessionNext = (r.endedStreamSessionNext + 1) % maxEndedStreamSessions
 	r.endedStreamSessions[sessionID] = struct{}{}
-	r.mu.Unlock()
 }
 
 // publishHookBusEvent forwards evt to every bus subscriber and returns the

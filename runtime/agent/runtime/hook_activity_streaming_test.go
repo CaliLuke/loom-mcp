@@ -3,6 +3,8 @@ package runtime
 import (
 	"context"
 	"errors"
+	"fmt"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -120,6 +122,48 @@ func TestPublishHookStreamEventCachesEndedSession(t *testing.T) {
 	rt.publishHookStreamEvent(context.Background(), "sess-1", evt)
 
 	require.Equal(t, int64(1), store.loadCalls.Load())
+}
+
+func TestMarkStreamSessionEndedBoundsCacheAndEvictsOldest(t *testing.T) {
+	const cacheSize = 4096
+	rt := &Runtime{}
+
+	for i := 0; i <= cacheSize; i++ {
+		rt.markStreamSessionEnded(fmt.Sprintf("sess-%04d", i))
+	}
+
+	require.Len(t, rt.endedStreamSessions, cacheSize)
+	require.False(t, rt.streamSessionEnded("sess-0000"))
+	require.True(t, rt.streamSessionEnded("sess-0001"))
+	require.True(t, rt.streamSessionEnded(fmt.Sprintf("sess-%04d", cacheSize)))
+}
+
+func TestMarkStreamSessionEndedDoesNotDuplicateOrderEntries(t *testing.T) {
+	rt := &Runtime{}
+
+	rt.markStreamSessionEnded("sess-1")
+	rt.markStreamSessionEnded("sess-1")
+
+	require.Len(t, rt.endedStreamSessions, 1)
+	require.Equal(t, []string{"sess-1"}, rt.endedStreamSessionOrder)
+}
+
+func TestMarkStreamSessionEndedSupportsConcurrentWriters(t *testing.T) {
+	const sessions = 256
+	rt := &Runtime{}
+	var wg sync.WaitGroup
+
+	for i := 0; i < sessions; i++ {
+		wg.Add(1)
+		go func(sessionID string) {
+			defer wg.Done()
+			rt.markStreamSessionEnded(sessionID)
+		}(fmt.Sprintf("sess-%04d", i))
+	}
+	wg.Wait()
+
+	require.Len(t, rt.endedStreamSessions, sessions)
+	require.Len(t, rt.endedStreamSessionOrder, sessions)
 }
 
 var _ runlog.Store = (*recordingRunlog)(nil)
