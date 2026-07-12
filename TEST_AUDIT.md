@@ -4,11 +4,11 @@ Audited: 2026-07-11 (refresh + first remediation) · Baseline commit: `4f2c262` 
 Baseline: prior audit at `679fb76` earlier the same day; this refresh re-measured everything at HEAD (30 commits, 116 files, +4,227/−1,438 later) and re-verified every prior finding.
 Last remediation commit: `2752473` (`test: enforce shuffled order hygiene`).
 
-Remediation progress: **S-2 is resolved.** The shared DSL harness now recreates and registers `mcpexpr.Root`, all `expr/agent` tests that replace Goa/MCP global roots restore them with `t.Cleanup`, and the normal unit target runs with `-shuffle=on`. Both complete non-integration package sets pass with fixed seeds `101` and `202`; `make lint`, the race-enabled shuffled `make test`, and `make itest` are green.
+Remediation progress: **S-2 is resolved; C-1/C-2 are locally repaired and fully verified, with only an actual hosted Actions run pending.** The shared DSL harness now recreates and registers `mcpexpr.Root`, all `expr/agent` tests that replace Goa/MCP global roots restore them with `t.Cleanup`, and the normal unit target runs with `-shuffle=on`. CI now uses Go `1.26.1`, pins Loom `v1.4.0`, calls repository make targets, includes all three integration clusters with uncached execution, and requires Docker-backed registry tests instead of silently accepting their skips. `actionlint`, all four repository gates, and the strict Colima-backed registry suite are green.
 
 ## 1. Executive summary
 
-The suite grew slightly (303 test files, 1,439 top-level test functions, +37 since `679fb76`) and every one of the 30 delta fix commits landed with tests — regression discipline is now 45/45 across both audit passes, and the new runtime/registry tests are genuinely behavior-asserting (bounded-cache eviction, race-hardened error precedence, subprocess signal handling). The first structural remediation is now complete: the DSL order-coupling defect is fixed and shuffle is enforced by `make test`. The 9 high/medium completeness findings, all 5 value findings, and the remaining serialization speed findings are still open. **CI repair is the immediate blocker and the next commit:** Actions still installs Go `1.25.x` despite every module requiring `1.26.1`, has never executed (0 runs), and its integration job reaches only 6 of 164 functions. The dark-test problem therefore remains severe: 158 integration functions are unreachable from any automated gate, Docker-gated registry tests grew to 29, and the `.tmp` fixture leak nearly doubled to 77 dirs / 103 MB. One genuinely new completeness gap appeared: the bedrock structured-schema fix (`c5f293a`) introduced ~11 keyword-classification branches and tested 1. Unit wall time measured 30.1 s fully warm / ~3.5 min after a 30-commit cold build — the "suite is slow" experience is almost entirely build-cache invalidation, not test time.
+The suite grew slightly (303 test files, 1,439 top-level test functions, +37 since `679fb76`) and every one of the 30 delta fix commits landed with tests — regression discipline is now 45/45 across both audit passes, and the new runtime/registry tests are genuinely behavior-asserting (bounded-cache eviction, race-hardened error precedence, subprocess signal handling). The first structural remediation is complete: the DSL order-coupling defect is fixed and shuffle is enforced by `make test`. The CI configuration repair is now implemented locally: its toolchain matches the modules, repository make targets own the commands, `make itest` reaches all 164 integration functions, and Docker-backed registry coverage fails closed in CI. **An actual green Actions run remains the immediate blocker** because the repository still reports zero historical runs; code inspection cannot prove repository-level Actions permissions or hosted-run behavior. The other high/medium completeness and value findings remain open. The `.tmp` fixture leak is still 77 dirs / 103 MB, and the bedrock structured-schema fix (`c5f293a`) still has roughly 10 neighboring keyword branches without direct coverage.
 
 ## 2. Inventory (cross-repo baseline metrics)
 
@@ -31,18 +31,18 @@ The suite grew slightly (303 test files, 1,439 top-level test functions, +37 sin
 
 Finding IDs continue the `679fb76` numbering; each carries a status vs that baseline.
 
-### C-1: CI has never run, uses the wrong Go version, and would gate almost nothing
-- **Severity:** blocker · **Status:** next fix
+### C-1: CI has never run; local configuration is repaired, hosted execution unverified
+- **Severity:** blocker · **Status:** configuration fixed, Actions run pending
 - **Confidence:** measured
-- **Evidence:** `gh api repos/CaliLuke/loom-mcp/actions/runs --jq '.total_count'` → `0` at HEAD. All three modules declare Go `1.26.1`, while both CI jobs install `1.25.x`. `.github/workflows/ci.yml:89-92` integration still runs only `go test -v ./tests` (6 funcs). `Makefile:38-39` unit excludes `integration_tests`; `Makefile:44` itest misses `fixtures/assistant` (124 funcs, +7). `.githooks/pre-commit` remains gofmt+lint only. Integration funcs at HEAD: framework 25 + tests 6 + assistant 124 + agent_features 9 = 164; CI would reach 6 even if enabled.
-- **Impact:** **158/164 integration funcs unreachable from any automated gate** (was 148/154). The delta added 10 new integration tests (SSE reconnect, oversized-body rejection, error-ID hiding, dynamic-prompt compile, registry capabilities/validation) — all born dark.
-- **Recommendation:** Enable Actions; make the integration job run itest + the assistant fixture; pin the loom CLI. The unit job already inherits `-shuffle=on` through `make test` after the S-2 remediation.
+- **Evidence:** Hosted history remains `0` runs. Locally, `.github/workflows/ci.yml` now installs Go `1.26.1` in both jobs, pins Loom `v1.4.0`, runs `make build`, `make lint`, `make test`, and `make itest`, and caches all fixture module sums. `Makefile.itest` now owns assistant (124 funcs), agent_features (9), framework (25), and tests (6): 164/164 integration functions are selected by the canonical target, with `-count=1` preventing a cached scenario pass from masquerading as execution. `actionlint` and the complete local gate ladder pass; the uncached scenario package ran in 178.6 s.
+- **Impact:** The selection defect is fixed, but reassurance is still incomplete until GitHub executes the workflow successfully; hosted permissions, Docker availability, and runner-specific behavior remain unproven.
+- **Recommendation:** Finish local gates, commit, and verify the first actual Actions run. If the run count remains zero after the commit reaches GitHub, repository owner/admin intervention is required.
 
-### C-2: Docker-gated registry tests run in no environment — now 29 funcs
-- **Severity:** high · **Status:** still open (grew 28 → 29)
+### C-2: Docker-gated registry tests fail closed in CI and pass locally via Colima
+- **Severity:** high · **Status:** locally resolved, hosted confirmation pending
 - **Confidence:** measured
-- **Evidence:** Gate unchanged (`registry/health_tracker_integration_test.go:88-97`); 29 top-level funcs across the same 6 files call `getRedis(t)` (re-counted). Positive delta signal: all three new registry fixes (`36ee346`, `33f9f29`, `15bcc4b`) chose **hermetic** tests (in-memory `healthTracker`, subprocess signal probe, config table tests) rather than growing the gated cohort.
-- **Impact/Recommendation:** Unchanged — Redis service container in CI; keep extracting sync logic behind the hermetic catalog-map fake (the new `TestReconcileCatalogTickersForgetsDepartedToolsetObservations` shows the pattern works).
+- **Evidence:** The same 29 functions still use the shared Redis testcontainer. `registry.TestMain` now separates setup/cleanup, reports cleanup failures, and honors `LOOM_MCP_REQUIRE_DOCKER_TESTS=1`; CI sets that switch for `make test`, turning Docker/container startup failure into exit 1 instead of 29 skips. The switch has a focused table test, a no-socket strict probe failed closed with the expected message, and the full registry package passed against Colima/Redis under `-race -shuffle=on -count=1` in 71.8 s using the explicit Colima Docker socket.
+- **Impact/Recommendation:** Verify all 29 execute on the hosted runner. Continue extracting hermetic sync logic where practical, but do not weaken the fail-closed CI contract.
 
 ### C-3: DSL/expr validation — the declared product surface — still largely untested
 - **Severity:** high · **Status:** still open (same gap, wider absolute)
@@ -219,7 +219,7 @@ Rank positions are preserved for traceability. Rank 2 is complete; the other opp
 
 | Rank | Opportunity | Findings | Type | Effort | Expected payoff |
 |---|---|---|---|---|---|
-| 1 | Enable CI; integration job = itest + assistant fixture + Redis service job; pin loom CLI | C-1, C-2 | quick win | hours | 158 dark integration funcs + 29 never-run registry tests become a real gate; the delta's 10 new dark tests start protecting |
+| 1 | **In progress:** repaired CI selection/toolchain and Docker fail-closed behavior; verify hosted run | C-1, C-2 | blocker | hours | 164 integration funcs + 29 registry tests become a real gate |
 | 2 | **Completed:** fix `resetDSLRoots`, restore roots with `t.Cleanup`, enforce `-shuffle=on` | S-2 | complete | done | Order-coupling class eliminated; unlocks parallelism work |
 | 3 | Unit-suite critical path: quickstart out of `make test`, FileOrder 13→3, memoize conformance fixture, tune gopter TTL | S-1, V-2 | quick win | hours | Warm wall 30 s → ~15 s; cold-cache worst case shrinks 40–100 s |
 | 4 | DSL/expr validation error tables (history.go first; tool.go Inject/bounds) | C-3, C-13 | structural | days | Closes the biggest defect-risk gap on the repo's own core surface (53 untested sites) |
@@ -250,25 +250,25 @@ Coverage percentages are guardrails, not the objective. Defect yield is tracked 
 
 ### Phase 1 — make every existing test unavoidable
 
-**Findings:** C-1, C-2, V-5. **Expected defect yield:** immediate configuration failures plus any failures currently hidden in 158 dark integration functions and 29 Docker-gated registry tests.
+**Findings:** C-1, C-2, V-5. **Expected defect yield:** immediate configuration failures plus failures formerly hidden in 158 dark integration functions and 29 Docker-gated registry tests; local selection/execution is now proven, hosted execution is next.
 
-Current contract inventory:
+Current contract inventory after the local repair:
 
-- `.github/workflows/ci.yml` installs Go `1.25.x`, while the root, assistant, and agent-feature modules all declare Go `1.26.1`;
-- the CI integration job runs only `integration_tests/tests` (6 functions);
-- `Makefile.itest` owns `fixtures/agent_features` plus `integration_tests/...`, but omits `fixtures/assistant`;
-- `registry.TestMain` starts one Redis testcontainer and silently converts any Docker/startup failure into 29 skips;
-- `scripts/loom_core_mode.sh` pins Loom `v1.4.0`, while CI installs `@latest`.
+- both CI jobs use Go `1.26.1`, matching the root, assistant, and agent-feature modules;
+- CI pins Loom `v1.4.0`, matching `scripts/loom_core_mode.sh`;
+- `make itest` selects assistant, agent_features, framework, and scenario tests and forces uncached execution;
+- `registry.TestMain` preserves local no-Docker skips but CI requires the 29 Docker-backed tests to be available;
+- hosted execution remains unverified because the repository still has no Actions run history.
 
 Commit-sized work:
 
-1. **Next commit:** change CI to Go `1.26.1`, install Loom `v1.4.0`, and call repository `make` targets instead of duplicating partial commands.
-2. In that same gate-repair commit, make `make itest` the canonical owner of all three integration clusters by adding `go test -C ./integration_tests/fixtures/assistant ./... -count=1`.
-3. Add a CI-only fail-fast switch to `registry.TestMain` so unavailable Redis/Docker fails instead of skipping; keep local no-Docker skips ergonomic.
+1. **Implemented locally:** CI uses Go `1.26.1`, Loom `v1.4.0`, and repository make targets.
+2. **Implemented locally:** `make itest` owns all three integration clusters, including the assistant fixture.
+3. **Implemented locally:** registry Docker coverage fails closed in CI and remains skippable without Docker locally.
 4. Enable `MCP_CLI_TESTS` only after its server/CLI prerequisites are made hermetic; otherwise delete the dead flag path rather than advertising false coverage.
 5. Verify an actual GitHub Actions run. If the run count remains zero, stop: repository Actions permissions require owner/admin intervention and cannot be repaired in code.
 
-Proof: `make lint`, `make test`, `make itest`, then the green Actions run with zero unexpected skips. Do not proceed to coverage expansion while CI is not executing the same commands as local development.
+Local proof complete: `actionlint`, `make lint`, `make test`, uncached `make itest`, `make verify-mcp-local`, and the strict Colima-backed registry suite are green. Remaining proof: the first green Actions run with zero unexpected skips. Do not call C-1 complete until hosted execution is observed.
 
 ### Phase 2 — attack design validation first
 
@@ -355,11 +355,14 @@ Exit criterion: warm unit wall at or below 20 seconds, integration wall at or be
 | Finding | Exposing test | Root cause | Fix commit | Status |
 |---|---|---|---|---|
 | S-2 | shuffled `dsl` suite, seeds `101` and `202` | `resetDSLRoots` omitted `mcpexpr.Root`; three `expr/agent` tests leaked replaced globals | `2752473` | fixed |
+| C-1 | CI contract inventory + uncached `make itest` | workflow used Go `1.25.x`, Loom `@latest`, selected only 6/164 integration functions, and allowed cached scenario passes | this change | local gates green; hosted run pending |
+| C-2 | strict no-socket probe + full Colima registry suite | `TestMain` converted every Docker/container failure into skips even in CI | this change | 29 tests green locally; hosted run pending |
 
 ## 7. Method notes
 
 - **This is a refresh audit.** Baseline `TEST_AUDIT.md` was produced earlier today at `679fb76`; HEAD moved 30 commits (+4,227/−1,438, 116 files). Method: re-ran every mandatory repo-wide grep and every measurement at HEAD; dispatched 5 Explore subagents (dsl/expr, codegen, features, runtime+registry, integration_tests) to re-verify every prior finding with fresh file:line evidence and to read the full delta; spot-checked ≥1 citation per subagent in the main context (all passed; one correction: the string-only tests for `0dc4bce`/`0a0e261` are in `codegen/agent/`, not `codegen/mcp/`, and both commits also landed behavioral fixture-module tests the subagent initially under-credited).
 - **Executed:** 2 full unit runs (`-race -covermode=atomic -count=1`; run 1 cold-build under subagent load with JSON per-test timings; run 2 fully warm on idle machine with `time -l`), 2-seed full-suite shuffle probe, coverage aggregation (per-directory and per-hot-file), per-fix-commit test-presence check (30/30), integration ladder (`make itest` equivalent + assistant fixture) at HEAD. Machine: 10-core arm64 mac, Go 1.26, loom mode = remote (v1.4.0).
 - **Timing discipline:** run 1's wall includes ~3 min of delta-induced recompilation and subagent load — only its per-test relative distribution is used; all absolute wall/CPU claims come from run 2 (warm, idle, identical flags). The baseline audit's 98–111 s figures are not comparable to today's 30.1 s (different build-cache and subprocess-cache states), which is itself finding S-6.
-- **Not run:** multi-process shard experiment, mutation tooling (none configured), Docker-gated tests (Docker absent — findings C-2/C-8), hook timing (hooks are lint-only).
-- **Integration at HEAD:** all green — agent_features 0.6 s, framework 37.6 s, scenario suite (`./integration_tests/...` with itest flags) 172.5 s, assistant fixture 1.1 s. The baseline audit's working-tree WIP (which broke `make itest` at the time) landed as the delta commits and its scenario failures are gone. Scenario wall (172.5 s vs 203.5 s cold at baseline) reflects warm codegen/build caches, consistent with S-4's per-scenario boot cost dominating.
+- **Not run:** multi-process shard experiment, mutation tooling (none configured), hook timing (hooks are lint-only). The Docker-backed registry suite omitted from the baseline was run during remediation via Colima; Mongo integration remains separately gated per C-8.
+- **Baseline integration:** all green — agent_features 0.6 s, framework 37.6 s, scenario suite (`./integration_tests/...` with itest flags) 172.5 s, assistant fixture 1.1 s. The baseline audit's working-tree WIP (which broke `make itest` at the time) landed as the delta commits and its scenario failures are gone. Scenario wall (172.5 s vs 203.5 s cold at baseline) reflects warm codegen/build caches, consistent with S-4's per-scenario boot cost dominating.
+- **CI-remediation verification:** `actionlint` green; `make lint`, shuffled race-enabled `make test`, uncached expanded `make itest`, and `make verify-mcp-local` green. The scenario package ran in 178.6 s. With Colima's socket exported through `DOCKER_HOST` and `TESTCONTAINERS_DOCKER_SOCKET_OVERRIDE`, the strict 29-test registry package passed under race/shuffle in 71.8 s; without a discoverable socket, the strict switch failed closed as designed.

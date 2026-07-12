@@ -40,8 +40,9 @@ test: tools
 
 # Run integration tests (scenarios under integration_tests/)
 itest: tools
+	$(GO) test -C ./integration_tests/fixtures/assistant ./... -count=1
 	$(GO) test -C ./integration_tests/fixtures/agent_features ./... -count=1
-	$(GO) test -race -vet=off -parallel 1 ./integration_tests/...
+	$(GO) test -race -vet=off -parallel 1 -count=1 ./integration_tests/...
 
 ci: build lint test
 

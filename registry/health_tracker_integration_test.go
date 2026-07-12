@@ -2,6 +2,7 @@ package registry
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"sync"
@@ -13,9 +14,12 @@ import (
 	"github.com/CaliLuke/loom/pulse/pool"
 	"github.com/CaliLuke/loom/pulse/rmap"
 	"github.com/redis/go-redis/v9"
+	"github.com/stretchr/testify/assert"
 	"github.com/testcontainers/testcontainers-go"
 	"github.com/testcontainers/testcontainers-go/wait"
 )
+
+const requireDockerIntegrationEnv = "LOOM_MCP_REQUIRE_DOCKER_TESTS"
 
 var (
 	testRedisClient    *redis.Client
@@ -25,62 +29,96 @@ var (
 
 func TestMain(m *testing.M) {
 	ctx := context.Background()
-
-	// Start Redis container once for all tests.
-	var containerErr error
-	func() {
-		defer func() {
-			if r := recover(); r != nil {
-				containerErr = fmt.Errorf("docker not available: %v", r)
-			}
-		}()
-		req := testcontainers.ContainerRequest{
-			Image:        "redis:7-alpine",
-			ExposedPorts: []string{"6379/tcp"},
-			WaitingFor:   wait.ForLog("Ready to accept connections"),
-		}
-		testRedisContainer, containerErr = testcontainers.GenericContainer(ctx, testcontainers.GenericContainerRequest{
-			ContainerRequest: req,
-			Started:          true,
-		})
-	}()
-
-	if containerErr != nil {
-		fmt.Printf("Docker not available, integration tests will be skipped: %v\n", containerErr)
+	if err := setupTestRedis(ctx); err != nil {
 		skipIntegration = true
-	} else {
-		host, err := testRedisContainer.Host(ctx)
-		if err != nil {
-			fmt.Printf("Failed to get container host: %v\n", err)
-			skipIntegration = true
-		} else {
-			port, err := testRedisContainer.MappedPort(ctx, "6379")
-			if err != nil {
-				fmt.Printf("Failed to get container port: %v\n", err)
-				skipIntegration = true
-			} else {
-				testRedisClient = redis.NewClient(&redis.Options{
-					Addr: host + ":" + port.Port(),
-				})
-				if err := testRedisClient.Ping(ctx).Err(); err != nil {
-					fmt.Printf("Failed to ping redis: %v\n", err)
-					skipIntegration = true
-				}
+		if requireDockerIntegration() {
+			fmt.Fprintf(os.Stderr, "required Docker-backed registry tests unavailable: %v\n", err)
+			if cleanupErr := cleanupTestRedis(ctx); cleanupErr != nil {
+				fmt.Fprintf(os.Stderr, "registry test cleanup failed: %v\n", cleanupErr)
 			}
+			os.Exit(1)
 		}
+		fmt.Printf("Docker not available, integration tests will be skipped: %v\n", err)
 	}
 
 	code := m.Run()
+	if err := cleanupTestRedis(ctx); err != nil {
+		fmt.Fprintf(os.Stderr, "registry test cleanup failed: %v\n", err)
+		code = 1
+	}
+	os.Exit(code)
+}
 
-	// Cleanup.
+func setupTestRedis(ctx context.Context) (err error) {
+	defer func() {
+		if recovered := recover(); recovered != nil {
+			err = fmt.Errorf("start Redis testcontainer: %v", recovered)
+		}
+	}()
+
+	req := testcontainers.ContainerRequest{
+		Image:        "redis:7-alpine",
+		ExposedPorts: []string{"6379/tcp"},
+		WaitingFor:   wait.ForLog("Ready to accept connections"),
+	}
+	testRedisContainer, err = testcontainers.GenericContainer(ctx, testcontainers.GenericContainerRequest{
+		ContainerRequest: req,
+		Started:          true,
+	})
+	if err != nil {
+		return fmt.Errorf("start Redis testcontainer: %w", err)
+	}
+	host, err := testRedisContainer.Host(ctx)
+	if err != nil {
+		return fmt.Errorf("get Redis testcontainer host: %w", err)
+	}
+	port, err := testRedisContainer.MappedPort(ctx, "6379")
+	if err != nil {
+		return fmt.Errorf("get Redis testcontainer port: %w", err)
+	}
+	testRedisClient = redis.NewClient(&redis.Options{Addr: host + ":" + port.Port()})
+	if err := testRedisClient.Ping(ctx).Err(); err != nil {
+		return fmt.Errorf("ping Redis testcontainer: %w", err)
+	}
+	return nil
+}
+
+func cleanupTestRedis(ctx context.Context) error {
+	var errs []error
 	if testRedisClient != nil {
-		_ = testRedisClient.Close()
+		if err := testRedisClient.Close(); err != nil {
+			errs = append(errs, fmt.Errorf("close Redis client: %w", err))
+		}
+		testRedisClient = nil
 	}
 	if testRedisContainer != nil {
-		_ = testRedisContainer.Terminate(ctx)
+		if err := testRedisContainer.Terminate(ctx); err != nil {
+			errs = append(errs, fmt.Errorf("terminate Redis testcontainer: %w", err))
+		}
+		testRedisContainer = nil
 	}
+	return errors.Join(errs...)
+}
 
-	os.Exit(code)
+func requireDockerIntegration() bool {
+	return os.Getenv(requireDockerIntegrationEnv) == "1"
+}
+
+func TestRequireDockerIntegration(t *testing.T) {
+	for _, tc := range []struct {
+		name  string
+		value string
+		want  bool
+	}{
+		{name: "unset", want: false},
+		{name: "disabled", value: "0", want: false},
+		{name: "required", value: "1", want: true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Setenv(requireDockerIntegrationEnv, tc.value)
+			assert.Equal(t, tc.want, requireDockerIntegration())
+		})
+	}
 }
 
 // getRedis returns the shared Redis client and flushes the database for test isolation.
