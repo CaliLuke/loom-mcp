@@ -158,6 +158,17 @@ func TestMergeStepHeadersOverlaysStepHeaders(t *testing.T) {
 	assert.Equal(t, "default", headers["X-Test"])
 }
 
+func TestApplyJSONRPCHeadersDoesNotMutateProcessEnvironment(t *testing.T) {
+	t.Setenv("MCP_SCENARIO_HEADER", "parent")
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodPost, "http://localhost/rpc", nil)
+
+	applyJSONRPCHeaders(req, "session-1", map[string]string{"MCP_SCENARIO_HEADER": "scenario"})
+
+	assert.Equal(t, "scenario", req.Header.Get("MCP_SCENARIO_HEADER"))
+	assert.Equal(t, "parent", os.Getenv("MCP_SCENARIO_HEADER"))
+	assert.Equal(t, "session-1", req.Header.Get("Mcp-Session-Id"))
+}
+
 func TestIsStreamingStepUsesAcceptHeaderOrExpectation(t *testing.T) {
 	assert.True(t, isStreamingStep(Step{}, map[string]string{"Accept": "text/event-stream"}))
 	assert.True(t, isStreamingStep(Step{StreamExpect: &StreamExpect{}}, map[string]string{}))

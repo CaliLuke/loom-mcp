@@ -9,7 +9,6 @@ import (
 	"io"
 	"maps"
 	"net/http"
-	"os"
 	"os/exec"
 	"path/filepath"
 	"strconv"
@@ -421,10 +420,6 @@ func applyJSONRPCHeaders(req *http.Request, sessionID string, headers map[string
 		req.Header.Set(mcpruntime.HeaderKeyProtocolVersion, "2025-06-18")
 	}
 	for key, value := range headers {
-		if strings.HasPrefix(key, "MCP_") {
-			_ = os.Setenv(key, value)
-			continue
-		}
 		req.Header.Set(key, value)
 	}
 	if req.Header.Get("Content-Type") == "" {

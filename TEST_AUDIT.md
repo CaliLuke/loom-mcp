@@ -18,8 +18,8 @@ The suite now contains 321 test files and 1,501 top-level test functions. Regres
 | Test runner(s) | `go test` via `make test` (`-shuffle=on`) / `make itest` / `make verify-mcp-local`; testify, gopter, testcontainers (Redis, Mongo) |
 | Test files / test cases | 321 files, 1,501 `func Test`; latest full gate counts are refreshed after each remediation phase |
 | Layer split (unit / integration / e2e) | ~1,275 unit funcs; 164 integration-cluster funcs (framework 25, tests 6, assistant 124, agent_features 9; was 154); 1 e2e quickstart inside the unit target |
-| Total wall time (local) / (CI pipeline) | Unit (`-race -covermode=atomic`): **30.1 s fully warm** (69.7 s CPU), ~29.6 s test phase + ~3 min compile after the 30-commit delta (cold build). Integration (itest + assistant fixture, warm): 212 s, all green. CI: **never executed** (`gh api …/actions/runs` → `total_count: 0`) |
-| Parallelism today | Package-level only; **2.3 of 10 cores** warm (69.7 s CPU / 30.1 s wall). `t.Parallel()` at 386 sites (+10). `make itest` still forces `-parallel 1` |
+| Total wall time (local) / (CI pipeline) | Unit (`-race -covermode=atomic`): **30.1 s fully warm** (69.7 s CPU), ~29.6 s test phase + ~3 min compile after the 30-commit delta (cold build). Canonical integration scenario/framework command: **178.2 s** warm, all green; framework overlaps scenarios and fell from 38.9 s to 18.1 s after releasing safe parallelism. CI: **never executed** (`gh api …/actions/runs` → `total_count: 0`) |
+| Parallelism today | Unit packages use package/test parallelism; **2.3 of 10 cores** warm (69.7 s CPU / 30.1 s wall). The integration framework now honors its safe `t.Parallel()` declarations; stateful YAML scenarios remain serial within their package. |
 | Coverage (line / branch) | **59.7 %** statements (+0.3); branch N/A (Go). registry/ 34 % (understated by Docker skips); 4 zero-coverage packages remain attribution artifacts (C-12) |
 | Skipped/disabled tests | Docker-backed tests may skip only outside strict CI mode; 0 permanent legacy skips; the CLI scenario is canonical in make itest |
 | Snapshot tests (count / size on disk) | 53 `.golden` / 276 KB / 18 > 100 lines (net zero new goldens in delta; 2 modified) |
@@ -169,11 +169,11 @@ Finding IDs continue the `679fb76` numbering; each carries a status vs that base
 - **Evidence:** `resetDSLRoots` now recreates and registers `mcpexpr.Root`; the three `expr/agent` tests that replace Goa/MCP roots call `preserveGlobalRoots`, which restores both roots with `t.Cleanup`. The complete non-integration package set passes with `-shuffle=101` and `-shuffle=202`, and the race-enabled `make test` passes with randomized order. `Makefile` now includes `-shuffle=on` in the normal unit gate.
 - **Recommendation:** Complete. Keep shuffle in the canonical test target; the next parallelism blocker is S-3's process-global environment channel.
 
-### S-3: `os.Setenv` in the framework still forces `-parallel 1` for all integration tests
-- **Severity:** medium · **Status:** still open (file touched in delta, block untouched)
+### S-3: Process-global scenario environment channel removed
+- **Severity:** medium · **Status:** resolved
 - **Confidence:** measured
-- **Evidence:** `runner_transport.go:425` still `os.Setenv` for `MCP_`-prefixed scenario headers, zero `os.Unsetenv` in the package; `Makefile:44` still `-parallel 1`. 386 `t.Parallel` declarations sit neutralized behind it.
-- **Recommendation:** Unchanged.
+- **Evidence:** The `MCP_*` special case mutated the parent test environment when applying request headers, after the managed child server was already running, so it could neither configure that server nor restore the parent safely. Scenario `headers` now have one contract: they are HTTP headers. A regression test proves an `MCP_*` header reaches the request while the same-named process variable remains unchanged. The canonical integration target no longer forces `-parallel 1`; the race-enabled framework package is green and fell from 38.9 s to 18.1 s, while the complete framework/scenario command remained green in 178.2 s.
+- **Recommendation:** Complete. Keep child-process configuration explicit on `exec.Cmd.Env` if a future scenario needs it; never overload request headers as a process-global environment channel.
 
 ### S-4: Per-scenario server boot remains; prepared-clone/binary leak resolved
 - **Severity:** medium · **Status:** partially resolved
@@ -224,7 +224,7 @@ Phase 3 — Speed (`performance.md`):
 - 3.2 Usual suspects — fixtures: S-4 cleanup resolved, per-scenario boot open; sleeps: 13 sites re-inventoried per-site (S-7); real I/O: quickstart + compile tests only; retries: none; lint-in-suite: none.
 - 3.2b Flake hunt — baseline: 2 unit runs + 2 shuffle seeds reproduced deterministic S-2 coupling, not flakes. Remediation: both fixed seeds and a race-enabled random-seed unit run are now green.
 - 3.2c Fixture architecture — **keep**; process-scoped cache ownership and cleanup are now explicit and verified. Server isolation cost remains open.
-- 3.3 Parallelization readiness — utilization remains 2.3/10 warm; S-2 root hygiene is fixed and continuously gated by shuffled unit runs. Remaining blockers are S-3/S-5; multi-process shard experiment: not run (blocker list already concrete; noted as method limit).
+- 3.3 Parallelization readiness — utilization remains 2.3/10 warm for units; S-2 root hygiene and S-3 integration environment isolation are fixed. Framework `t.Parallel` now runs normally. Remaining unit blocker is S-5; stateful scenarios require a separate isolation design under S-4. Multi-process shard experiment: not run.
 - 3.4 CI-level structure — C-1 unchanged; hook latency: hooks remain lint-only on staged files (read, not timed — no test latency to measure).
 - 3.5 Achievable target — arithmetic updated in S-1 (~15 s warm unit critical path; integration unchanged ~60–90 s post S-4).
 
@@ -239,7 +239,7 @@ Rank positions are preserved for traceability. Rank 2 is complete; the other opp
 | 3 | Unit-suite critical path: quickstart out of `make test`, FileOrder 13→3, memoize conformance fixture, tune gopter TTL | S-1, V-2 | quick win | hours | Warm wall 30 s → ~15 s; cold-cache worst case shrinks 40–100 s |
 | 4 | **Completed:** DSL/expr validation tables (49/59 DSL; ToolExpr target achieved) | C-3, C-13, C-14 | complete | done | Both coverage targets met; one current panic fixed |
 | 5 | **Completed:** compile-the-output matrix with five generated designs | C-4, C-16, C-17, C-18 | complete | done | Three current generator defects found and fixed |
-| 6 | **Partially completed:** `TestMain` cleanup stops prepared-clone/binary leaks; replace `os.Setenv` and find protocol-correct server isolation | S-3, S-4 | structural | days | Removes 8.2 GB observed leak now; parallelism/startup work remains |
+| 6 | **Partially completed:** `TestMain` cleanup stops leaks and the process-global env channel is gone; find protocol-correct server isolation | S-3, S-4 | structural | days | 8.2 GB observed leak removed; framework 38.9 s → 18.1 s; scenario startup remains |
 | 7 | Shared adapter conformance table (+ Gemini/Bedrock error shapes, bedrock keyword table, Mongo prompt/memory integration) | C-7, C-8, V-3 | structural | days | Provider-regression class covered once, uniformly |
 | 8 | **Partially completed:** echo tests and stale skips removed; DSL setters/bridge reclassified; fixture consolidation remains | V-1, V-4, V-5 | cleanup | days | Dead weight removed without deleting public contracts |
 | 9 | **Completed:** tools codec/ident, interrupts, ConsumeStream, Clue telemetry, bufconn registry, double-Finalize | C-6, C-9, C-10 | complete | done | Highest-fan-in plumbing has direct behavioral proof |
@@ -353,7 +353,7 @@ Start sampling, roots, and progress as real client-vs-framework validation tests
 
 Only after the correctness phases are green:
 
-- replace process-global `os.Setenv` scenario headers so `-parallel 1` can be removed;
+- preserve the completed request-header/process-environment separation and uncapped framework parallelism;
 - retain the completed `TestMain` cleanup and design a server-reuse boundary that preserves fresh initialization state per scenario;
 - reduce `TestGenerate_FileOrderIsStableAcrossRuns` from 13 to 3 runs, memoize immutable conformance generation, and move the quickstart subprocess behind an explicit integration/slow gate;
 - replace ordering sleeps with readiness/event synchronization;
@@ -394,5 +394,6 @@ Exit criterion: warm unit wall at or below 20 seconds, integration wall at or be
 - **Timing discipline:** run 1's wall includes ~3 min of delta-induced recompilation and subagent load — only its per-test relative distribution is used; all absolute wall/CPU claims come from run 2 (warm, idle, identical flags). The baseline audit's 98–111 s figures are not comparable to today's 30.1 s (different build-cache and subprocess-cache states), which is itself finding S-6.
 - **Not run:** multi-process shard experiment, mutation tooling (none configured), hook timing (hooks are lint-only). Both Docker-backed Redis and Mongo contracts omitted from the baseline were run during remediation via Colima.
 - **Artifact-cleanup probe:** before remediation, exact generated prefixes accounted for 93 prepared fixture roots (125 MB) and 218 temporary server binaries (8.2 GB). After removing that historical debris, a real `MCP_CLI_TESTS=true` scenario process exited green and left 0/0 artifacts. A one-server-per-YAML experiment was rejected after the protocol group correctly failed initialization-isolation cases; per-scenario servers remain the current correctness boundary.
+- **Integration parallelism probe:** removing the ineffective `MCP_*` parent-environment mutation and `-parallel 1` cap kept the full race-enabled command green in 178.2 s. The framework package fell from 38.9 s to 18.1 s and now overlaps the 177.3 s stateful scenario package; scenario startup, not framework serialization, is the remaining critical path.
 - **Baseline integration:** all green — agent_features 0.6 s, framework 37.6 s, scenario suite (`./integration_tests/...` with itest flags) 172.5 s, assistant fixture 1.1 s. The baseline audit's working-tree WIP (which broke `make itest` at the time) landed as the delta commits and its scenario failures are gone. Scenario wall (172.5 s vs 203.5 s cold at baseline) reflects warm codegen/build caches, consistent with S-4's per-scenario boot cost dominating.
 - **CI-remediation verification:** `actionlint` green; `make lint`, shuffled race-enabled `make test`, uncached expanded `make itest`, and `make verify-mcp-local` green. The latest scenario package ran in 176.8 s and the complete gate ladder exited with 0 prepared roots / 0 cached binaries. With Colima's socket exported through `DOCKER_HOST` and `TESTCONTAINERS_DOCKER_SOCKET_OVERRIDE`, the strict 29-test registry package passed under race/shuffle in 71.8 s; without a discoverable socket, the strict switch failed closed as designed.

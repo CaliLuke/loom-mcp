@@ -42,7 +42,7 @@ test: tools
 itest: tools
 	$(GO) test -C ./integration_tests/fixtures/assistant ./... -count=1
 	$(GO) test -C ./integration_tests/fixtures/agent_features ./... -count=1
-	MCP_CLI_TESTS=true $(GO) test -race -vet=off -parallel 1 -count=1 ./integration_tests/...
+	MCP_CLI_TESTS=true $(GO) test -race -vet=off -count=1 ./integration_tests/...
 
 ci: build lint test
 
