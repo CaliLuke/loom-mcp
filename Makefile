@@ -36,7 +36,7 @@ lint-install-hook:
 	@echo "Installed repo hooks from .githooks"
 
 test: tools
-	$(GO) test -race -covermode=atomic -coverprofile=cover.out `$(GO) list ./... | grep -v '/integration_tests'`
+	$(GO) test -race -shuffle=on -covermode=atomic -coverprofile=cover.out `$(GO) list ./... | grep -v '/integration_tests'`
 
 # Run integration tests (scenarios under integration_tests/)
 itest: tools

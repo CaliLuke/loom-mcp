@@ -9,6 +9,8 @@ import (
 )
 
 func TestToolSurfaceProjectionValidation(t *testing.T) {
+	preserveGlobalRoots(t)
+
 	service := &goaexpr.ServiceExpr{Name: "assistant"}
 	method := &goaexpr.MethodExpr{Name: "lookup", Service: service}
 	service.Methods = []*goaexpr.MethodExpr{method}
@@ -97,6 +99,8 @@ func TestToolSurfaceProjectionValidation(t *testing.T) {
 }
 
 func TestToolSurfaceProjectionRootValidation(t *testing.T) {
+	preserveGlobalRoots(t)
+
 	service := &goaexpr.ServiceExpr{Name: "assistant"}
 	otherService := &goaexpr.ServiceExpr{Name: "other"}
 	method := &goaexpr.MethodExpr{Name: "lookup", Service: service}

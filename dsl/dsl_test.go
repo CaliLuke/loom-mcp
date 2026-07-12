@@ -6,6 +6,7 @@ import (
 
 	. "github.com/CaliLuke/loom-mcp/dsl"
 	agentsexpr "github.com/CaliLuke/loom-mcp/expr/agent"
+	mcpexpr "github.com/CaliLuke/loom-mcp/expr/mcp"
 	. "github.com/CaliLuke/loom/dsl"
 	"github.com/CaliLuke/loom/eval"
 	goaexpr "github.com/CaliLuke/loom/expr"
@@ -515,6 +516,9 @@ func resetDSLRoots(t *testing.T) {
 
 	require.NoError(t, eval.Register(goaexpr.Root))
 	require.NoError(t, eval.Register(goaexpr.GeneratedResultTypes))
+
+	mcpexpr.Root = mcpexpr.NewRoot()
+	require.NoError(t, eval.Register(mcpexpr.Root))
 
 	agentsexpr.Root = &agentsexpr.RootExpr{}
 	require.NoError(t, eval.Register(agentsexpr.Root))

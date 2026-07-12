@@ -28,6 +28,8 @@ func TestToolsetExprValidateRejectsUnknownOriginToolSelection(t *testing.T) {
 }
 
 func TestToolsetExpr_Validate_ProviderMCP(t *testing.T) {
+	preserveGlobalRoots(t)
+
 	// Set up Goa root with a service for MCP provider validation
 	eval.Reset()
 	goaexpr.Root = new(goaexpr.RootExpr)

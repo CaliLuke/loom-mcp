@@ -4,10 +4,22 @@ import (
 	"errors"
 	"testing"
 
+	exprmcp "github.com/CaliLuke/loom-mcp/expr/mcp"
 	"github.com/CaliLuke/loom/eval"
 	goaexpr "github.com/CaliLuke/loom/expr"
 	"github.com/stretchr/testify/require"
 )
+
+func preserveGlobalRoots(t *testing.T) {
+	t.Helper()
+
+	goaRoot := goaexpr.Root
+	mcpRoot := exprmcp.Root
+	t.Cleanup(func() {
+		goaexpr.Root = goaRoot
+		exprmcp.Root = mcpRoot
+	})
+}
 
 func TestRootExprPrepareMaterializesSelectedOriginTools(t *testing.T) {
 	service := &goaexpr.ServiceExpr{Name: "assistant"}
