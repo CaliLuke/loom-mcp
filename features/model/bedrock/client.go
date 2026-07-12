@@ -852,7 +852,9 @@ func translateResponse(output *bedrockruntime.ConverseOutput, nameMap map[string
 	resp := &model.Response{}
 	if msg, ok := output.Output.(*brtypes.ConverseOutputMemberMessage); ok {
 		for _, block := range msg.Value.Content {
-			appendBedrockResponseBlock(resp, block, nameMap)
+			if err := appendBedrockResponseBlock(resp, block, nameMap); err != nil {
+				return nil, err
+			}
 		}
 	}
 	resp.Usage = bedrockUsage(output.Usage, modelID, modelClass)
@@ -860,15 +862,20 @@ func translateResponse(output *bedrockruntime.ConverseOutput, nameMap map[string
 	return resp, nil
 }
 
-func appendBedrockResponseBlock(resp *model.Response, block brtypes.ContentBlock, nameMap map[string]string) {
+func appendBedrockResponseBlock(resp *model.Response, block brtypes.ContentBlock, nameMap map[string]string) error {
 	switch v := block.(type) {
 	case *brtypes.ContentBlockMemberText:
 		appendBedrockTextBlock(resp, v.Value)
 	case *brtypes.ContentBlockMemberCitationsContent:
 		appendBedrockCitationBlock(resp, v.Value)
 	case *brtypes.ContentBlockMemberToolUse:
-		resp.ToolCalls = append(resp.ToolCalls, bedrockToolCall(v.Value, nameMap))
+		toolCall, err := bedrockToolCall(v.Value, nameMap)
+		if err != nil {
+			return err
+		}
+		resp.ToolCalls = append(resp.ToolCalls, toolCall)
 	}
+	return nil
 }
 
 func appendBedrockTextBlock(resp *model.Response, text string) {
@@ -892,16 +899,20 @@ func appendBedrockCitationBlock(resp *model.Response, block brtypes.CitationsCon
 	})
 }
 
-func bedrockToolCall(toolUse brtypes.ToolUseBlock, nameMap map[string]string) model.ToolCall {
+func bedrockToolCall(toolUse brtypes.ToolUseBlock, nameMap map[string]string) (model.ToolCall, error) {
 	var id string
 	if toolUse.ToolUseId != nil {
 		id = *toolUse.ToolUseId
 	}
+	payload, err := decodeDocument(toolUse.Input)
+	if err != nil {
+		return model.ToolCall{}, fmt.Errorf("bedrock: marshal tool input: %w", err)
+	}
 	return model.ToolCall{
 		Name:    tools.Ident(resolveBedrockToolName(toolUse.Name, nameMap)),
-		Payload: decodeDocument(toolUse.Input),
+		Payload: payload,
 		ID:      id,
-	}
+	}, nil
 }
 
 func resolveBedrockToolName(raw *string, nameMap map[string]string) string {
@@ -930,18 +941,18 @@ func bedrockUsage(usage *brtypes.TokenUsage, modelID string, modelClass model.Mo
 	}
 }
 
-func decodeDocument(doc document.Interface) rawjson.Message {
+func decodeDocument(doc document.Interface) (rawjson.Message, error) {
 	if doc == nil {
-		return nil
+		return nil, nil
 	}
 	data, err := doc.MarshalSmithyDocument()
 	if err != nil {
-		return nil
+		return nil, err
 	}
 	if len(data) == 0 {
-		return nil
+		return nil, nil
 	}
-	return rawjson.Message(data)
+	return rawjson.Message(data), nil
 }
 
 func translateCitationsContent(block brtypes.CitationsContentBlock) model.CitationsPart {
