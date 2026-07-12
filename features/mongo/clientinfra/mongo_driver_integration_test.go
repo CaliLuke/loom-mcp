@@ -79,14 +79,18 @@ func TestMongoDriverV2SessionLinkChildRunTransaction(t *testing.T) {
 
 	ctx := context.Background()
 	now := time.Unix(1, 0).UTC()
-	require.NoError(t, client.UpsertRun(ctx, session.RunMeta{
+	parent := session.RunMeta{
 		RunID:     "run-parent",
 		AgentID:   "agent-parent",
 		SessionID: integrationSessionID,
 		Status:    session.RunStatusRunning,
 		StartedAt: now,
 		UpdatedAt: now,
-	}))
+	}
+	require.ErrorIs(t, client.UpsertRun(ctx, parent), session.ErrSessionNotFound)
+	_, err = client.CreateSession(ctx, integrationSessionID, now)
+	require.NoError(t, err)
+	require.NoError(t, client.UpsertRun(ctx, parent))
 
 	child := session.RunMeta{
 		RunID:     "run-child",
@@ -98,7 +102,7 @@ func TestMongoDriverV2SessionLinkChildRunTransaction(t *testing.T) {
 	}
 	require.NoError(t, client.LinkChildRun(ctx, "run-parent", child))
 
-	parent, err := client.LoadRun(ctx, "run-parent")
+	parent, err = client.LoadRun(ctx, "run-parent")
 	require.NoError(t, err)
 	require.Equal(t, []string{"run-child"}, parent.ChildRunIDs)
 
@@ -106,6 +110,14 @@ func TestMongoDriverV2SessionLinkChildRunTransaction(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, child.AgentID, storedChild.AgentID)
 	require.Equal(t, child.SessionID, storedChild.SessionID)
+
+	_, err = client.EndSession(ctx, integrationSessionID, now.Add(time.Hour))
+	require.NoError(t, err)
+	storedChild.Status = session.RunStatusCanceled
+	require.NoError(t, client.UpsertRun(ctx, storedChild))
+	newRun := child
+	newRun.RunID = "run-after-end"
+	require.ErrorIs(t, client.UpsertRun(ctx, newRun), session.ErrSessionEnded)
 }
 
 func TestMongoDriverV2PromptResolutionRoundTrip(t *testing.T) {

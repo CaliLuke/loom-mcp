@@ -73,7 +73,7 @@ func TestCreateSessionIsIdempotent(t *testing.T) {
 }
 
 func TestUpsertAndLoad(t *testing.T) {
-	client := mustNewTestClient()
+	client := mustNewTestClientWithSessions(t, testSessionID)
 	run := session.RunMeta{
 		RunID:       "run-1",
 		AgentID:     testAgentChat,
@@ -134,7 +134,7 @@ func TestRunDocumentMetadataBSONRoundTripPreservesGoContainerTypes(t *testing.T)
 }
 
 func TestLinkChildRun(t *testing.T) {
-	client := mustNewTestClient()
+	client := mustNewTestClientWithSessions(t, testSessionID)
 	now := time.Now().UTC()
 	require.NoError(t, client.UpsertRun(context.Background(), session.RunMeta{
 		RunID:     "run-parent",
@@ -168,7 +168,7 @@ func TestLinkChildRun(t *testing.T) {
 }
 
 func TestUpsertRunDoesNotClobberLinkedChildren(t *testing.T) {
-	client := mustNewTestClient()
+	client := mustNewTestClientWithSessions(t, testSessionID)
 	now := time.Now().UTC()
 	require.NoError(t, client.UpsertRun(context.Background(), session.RunMeta{
 		RunID:     "run-parent",
@@ -204,7 +204,7 @@ func TestUpsertRunDoesNotClobberLinkedChildren(t *testing.T) {
 }
 
 func TestLinkChildRunIsIdempotent(t *testing.T) {
-	client := mustNewTestClient()
+	client := mustNewTestClientWithSessions(t, testSessionID)
 	now := time.Now().UTC()
 	require.NoError(t, client.UpsertRun(context.Background(), session.RunMeta{
 		RunID:     "run-parent",
@@ -242,7 +242,7 @@ func TestLinkChildRunValidationError(t *testing.T) {
 }
 
 func TestLinkChildRunSessionMismatchError(t *testing.T) {
-	client := mustNewTestClient()
+	client := mustNewTestClientWithSessions(t, testSessionID)
 	now := time.Now().UTC()
 	require.NoError(t, client.UpsertRun(context.Background(), session.RunMeta{
 		RunID:     "run-parent",
@@ -263,7 +263,7 @@ func TestLinkChildRunSessionMismatchError(t *testing.T) {
 }
 
 func TestListRunsBySession(t *testing.T) {
-	client := mustNewTestClient()
+	client := mustNewTestClientWithSessions(t, testSessionID, "sess-2")
 	now := time.Now().UTC()
 	require.NoError(t, client.UpsertRun(context.Background(), session.RunMeta{
 		RunID:     "run-1",
@@ -306,6 +306,37 @@ func TestUpsertValidation(t *testing.T) {
 	require.EqualError(t, err, "session id is required")
 }
 
+func TestUpsertRunRequiresActiveSessionForNewRuns(t *testing.T) {
+	t.Parallel()
+
+	client := mustNewTestClient()
+	run := session.RunMeta{RunID: "run-1", AgentID: testAgentChat, SessionID: testSessionID, Status: session.RunStatusPending}
+	require.ErrorIs(t, client.UpsertRun(context.Background(), run), session.ErrSessionNotFound)
+
+	createdAt := time.Now().UTC()
+	_, err := client.CreateSession(context.Background(), testSessionID, createdAt)
+	require.NoError(t, err)
+	require.NoError(t, client.UpsertRun(context.Background(), run))
+	_, err = client.EndSession(context.Background(), testSessionID, createdAt.Add(time.Minute))
+	require.NoError(t, err)
+
+	run.Status = session.RunStatusCompleted
+	require.NoError(t, client.UpsertRun(context.Background(), run))
+	newRun := run
+	newRun.RunID = "run-2"
+	require.ErrorIs(t, client.UpsertRun(context.Background(), newRun), session.ErrSessionEnded)
+}
+
+func TestUpsertRunRejectsSessionReassignment(t *testing.T) {
+	t.Parallel()
+
+	client := mustNewTestClientWithSessions(t, testSessionID, "sess-2")
+	run := session.RunMeta{RunID: "run-1", AgentID: testAgentChat, SessionID: testSessionID, Status: session.RunStatusPending}
+	require.NoError(t, client.UpsertRun(context.Background(), run))
+	run.SessionID = "sess-2"
+	require.ErrorIs(t, client.UpsertRun(context.Background(), run), session.ErrRunSessionImmutable)
+}
+
 func TestLoadMissingReturnsNotFound(t *testing.T) {
 	client := mustNewTestClient()
 	_, err := client.LoadRun(context.Background(), "missing")
@@ -326,6 +357,16 @@ func mustNewTestClient() *client {
 		panic(err)
 	}
 	return cl
+}
+
+func mustNewTestClientWithSessions(t *testing.T, sessionIDs ...string) *client {
+	t.Helper()
+	client := mustNewTestClient()
+	for _, sessionID := range sessionIDs {
+		_, err := client.CreateSession(context.Background(), sessionID, time.Now().UTC())
+		require.NoError(t, err)
+	}
+	return client
 }
 
 type fakeRunsCollection struct {

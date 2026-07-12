@@ -82,6 +82,11 @@ type (
 		EndSession(ctx context.Context, sessionID string, endedAt time.Time) (Session, error)
 
 		// UpsertRun inserts or updates run metadata.
+		//
+		// New runs require an existing active session. Existing runs may receive
+		// terminal updates after their session ends, but their SessionID is immutable.
+		// Returns ErrSessionNotFound, ErrSessionEnded, or ErrRunSessionImmutable
+		// when those ownership invariants are violated.
 		UpsertRun(ctx context.Context, run RunMeta) error
 		// LinkChildRun links a child run to a parent run atomically.
 		//
@@ -147,6 +152,8 @@ var (
 	ErrChildStatusRequired = errors.New("child status is required")
 	// ErrRunSessionMismatch indicates parent and child runs belong to different sessions.
 	ErrRunSessionMismatch = errors.New("parent and child runs must belong to the same session")
+	// ErrRunSessionImmutable indicates an existing run was assigned to a different session.
+	ErrRunSessionImmutable = errors.New("run session id is immutable")
 )
 
 // ValidateChildRunLink validates required identifiers for Store.LinkChildRun input.

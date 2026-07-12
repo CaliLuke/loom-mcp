@@ -108,6 +108,8 @@ func TestOnPromptRenderedPublishesHookEvent(t *testing.T) {
 	t.Parallel()
 
 	rt := newFromOptions(Options{})
+	_, err := rt.CreateSession(context.Background(), "sess_1")
+	require.NoError(t, err)
 
 	var rendered *hooks.PromptRenderedEvent
 	sub, err := rt.Bus.Register(hooks.SubscriberFunc(func(ctx context.Context, evt hooks.Event) error {

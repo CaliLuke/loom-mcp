@@ -192,15 +192,43 @@ func (c *client) EndSession(ctx context.Context, sessionID string, endedAt time.
 // committed concurrently by LinkChildRun. Any RunMeta.ChildRunIDs value passed
 // here is ignored; no caller creates runs with pre-populated child links.
 func (c *client) UpsertRun(ctx context.Context, run session.RunMeta) error {
-	if run.RunID == "" {
-		return errors.New("run id is required")
+	if err := validateRunInput(run); err != nil {
+		return err
 	}
-	if run.AgentID == "" {
-		return errors.New("agent id is required")
+	if c.mongo == nil {
+		return c.upsertRun(ctx, run)
 	}
-	if run.SessionID == "" {
-		return errors.New("session id is required")
+	sessionCtx, err := c.mongo.StartSession()
+	if err != nil {
+		return err
 	}
+	defer sessionCtx.EndSession(ctx)
+	_, err = sessionCtx.WithTransaction(ctx, func(txCtx context.Context) (any, error) {
+		return nil, c.upsertRun(txCtx, run)
+	})
+	return err
+}
+
+// upsertRun applies one validated run mutation in the caller-owned transaction.
+func (c *client) upsertRun(ctx context.Context, run session.RunMeta) error {
+	existing, err := c.LoadRun(ctx, run.RunID)
+	switch {
+	case err == nil:
+		if existing.SessionID != run.SessionID {
+			return session.ErrRunSessionImmutable
+		}
+	case errors.Is(err, session.ErrRunNotFound):
+		owner, loadErr := c.LoadSession(ctx, run.SessionID)
+		if loadErr != nil {
+			return loadErr
+		}
+		if owner.Status == session.StatusEnded {
+			return session.ErrSessionEnded
+		}
+	default:
+		return err
+	}
+
 	now := time.Now().UTC()
 	if run.StartedAt.IsZero() {
 		run.StartedAt = now
@@ -226,7 +254,7 @@ func (c *client) UpsertRun(ctx context.Context, run session.RunMeta) error {
 			"started_at": doc.StartedAt,
 		},
 	}
-	_, err := c.runs.UpdateOne(ctx, filter, update, options.UpdateOne().SetUpsert(true))
+	_, err = c.runs.UpdateOne(ctx, filter, update, options.UpdateOne().SetUpsert(true))
 	return err
 }
 
@@ -266,6 +294,13 @@ func (c *client) linkChildRun(ctx context.Context, parentRunID string, child ses
 	if parent.SessionID != child.SessionID {
 		return session.ErrRunSessionMismatch
 	}
+	owner, err := c.LoadSession(ctx, parent.SessionID)
+	if err != nil {
+		return err
+	}
+	if owner.Status == session.StatusEnded {
+		return session.ErrSessionEnded
+	}
 
 	existingChild, err := c.LoadRun(ctx, child.RunID)
 	switch {
@@ -273,11 +308,11 @@ func (c *client) linkChildRun(ctx context.Context, parentRunID string, child ses
 		if existingChild.SessionID != parent.SessionID {
 			return session.ErrRunSessionMismatch
 		}
-		if err := c.UpsertRun(ctx, existingChild); err != nil {
+		if err := c.upsertRun(ctx, existingChild); err != nil {
 			return err
 		}
 	case errors.Is(err, session.ErrRunNotFound):
-		if err := c.UpsertRun(ctx, child); err != nil {
+		if err := c.upsertRun(ctx, child); err != nil {
 			return err
 		}
 	default:
@@ -518,6 +553,19 @@ func validateCreateSessionInput(sessionID string, createdAt time.Time) error {
 	}
 	if createdAt.IsZero() {
 		return errors.New("created_at is required")
+	}
+	return nil
+}
+
+func validateRunInput(run session.RunMeta) error {
+	if run.RunID == "" {
+		return errors.New("run id is required")
+	}
+	if run.AgentID == "" {
+		return errors.New("agent id is required")
+	}
+	if run.SessionID == "" {
+		return errors.New("session id is required")
 	}
 	return nil
 }

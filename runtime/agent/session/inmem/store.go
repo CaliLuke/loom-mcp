@@ -33,7 +33,10 @@ func New() *Store {
 }
 
 // CreateSession implements session.Store.
-func (s *Store) CreateSession(_ context.Context, sessionID string, createdAt time.Time) (session.Session, error) {
+func (s *Store) CreateSession(ctx context.Context, sessionID string, createdAt time.Time) (session.Session, error) {
+	if err := ctx.Err(); err != nil {
+		return session.Session{}, err
+	}
 	if sessionID == "" {
 		return session.Session{}, errors.New("session id is required")
 	}
@@ -63,7 +66,10 @@ func (s *Store) CreateSession(_ context.Context, sessionID string, createdAt tim
 }
 
 // LoadSession implements session.Store.
-func (s *Store) LoadSession(_ context.Context, sessionID string) (session.Session, error) {
+func (s *Store) LoadSession(ctx context.Context, sessionID string) (session.Session, error) {
+	if err := ctx.Err(); err != nil {
+		return session.Session{}, err
+	}
 	if sessionID == "" {
 		return session.Session{}, errors.New("session id is required")
 	}
@@ -79,7 +85,10 @@ func (s *Store) LoadSession(_ context.Context, sessionID string) (session.Sessio
 }
 
 // EndSession implements session.Store.
-func (s *Store) EndSession(_ context.Context, sessionID string, endedAt time.Time) (session.Session, error) {
+func (s *Store) EndSession(ctx context.Context, sessionID string, endedAt time.Time) (session.Session, error) {
+	if err := ctx.Err(); err != nil {
+		return session.Session{}, err
+	}
 	if sessionID == "" {
 		return session.Session{}, errors.New("session id is required")
 	}
@@ -111,7 +120,10 @@ func (s *Store) EndSession(_ context.Context, sessionID string, endedAt time.Tim
 // (for example runtime hook handlers) can never erase links committed
 // concurrently by LinkChildRun. Any RunMeta.ChildRunIDs value passed here is
 // ignored and the stored links are preserved.
-func (s *Store) UpsertRun(_ context.Context, run session.RunMeta) error {
+func (s *Store) UpsertRun(ctx context.Context, run session.RunMeta) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
 	if run.RunID == "" {
 		return errors.New("run id is required")
 	}
@@ -126,15 +138,12 @@ func (s *Store) UpsertRun(_ context.Context, run session.RunMeta) error {
 	defer s.mu.Unlock()
 
 	now := time.Now().UTC()
-	existing, ok := s.runs[run.RunID]
-	if ok && !existing.StartedAt.IsZero() {
-		if run.StartedAt.IsZero() {
-			run.StartedAt = existing.StartedAt
-		} else if !run.StartedAt.Equal(existing.StartedAt) {
-			return errors.New("started_at is immutable")
-		}
-	} else if run.StartedAt.IsZero() {
-		run.StartedAt = now
+	existing, exists := s.runs[run.RunID]
+	if err := s.validateRunOwnership(run, existing, exists); err != nil {
+		return err
+	}
+	if err := normalizeRunTimestamps(&run, existing, exists, now); err != nil {
+		return err
 	}
 	run.UpdatedAt = now
 
@@ -151,7 +160,10 @@ func (s *Store) UpsertRun(_ context.Context, run session.RunMeta) error {
 // Linking is idempotent: the child run ID is appended to the parent's
 // ChildRunIDs only if it is not already present, so repeated links never
 // duplicate entries.
-func (s *Store) LinkChildRun(_ context.Context, parentRunID string, child session.RunMeta) error {
+func (s *Store) LinkChildRun(ctx context.Context, parentRunID string, child session.RunMeta) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
 	if err := session.ValidateChildRunLink(parentRunID, child); err != nil {
 		return err
 	}
@@ -165,6 +177,13 @@ func (s *Store) LinkChildRun(_ context.Context, parentRunID string, child sessio
 	}
 	if parent.SessionID != child.SessionID {
 		return session.ErrRunSessionMismatch
+	}
+	owner, sessionExists := s.sessions[parent.SessionID]
+	if !sessionExists {
+		return session.ErrSessionNotFound
+	}
+	if owner.Status == session.StatusEnded {
+		return session.ErrSessionEnded
 	}
 
 	now := time.Now().UTC()
@@ -193,7 +212,10 @@ func (s *Store) LinkChildRun(_ context.Context, parentRunID string, child sessio
 }
 
 // LoadRun implements session.Store.
-func (s *Store) LoadRun(_ context.Context, runID string) (session.RunMeta, error) {
+func (s *Store) LoadRun(ctx context.Context, runID string) (session.RunMeta, error) {
+	if err := ctx.Err(); err != nil {
+		return session.RunMeta{}, err
+	}
 	if runID == "" {
 		return session.RunMeta{}, errors.New("run id is required")
 	}
@@ -207,7 +229,10 @@ func (s *Store) LoadRun(_ context.Context, runID string) (session.RunMeta, error
 }
 
 // ListRunsBySession implements session.Store.
-func (s *Store) ListRunsBySession(_ context.Context, sessionID string, statuses []session.RunStatus) ([]session.RunMeta, error) {
+func (s *Store) ListRunsBySession(ctx context.Context, sessionID string, statuses []session.RunStatus) ([]session.RunMeta, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
 	if sessionID == "" {
 		return nil, errors.New("session id is required")
 	}
@@ -276,4 +301,38 @@ func appendUniqueRunID(runIDs []string, runID string) []string {
 		}
 	}
 	return append(runIDs, runID)
+}
+
+func normalizeRunTimestamps(run *session.RunMeta, existing session.RunMeta, exists bool, now time.Time) error {
+	if !exists || existing.StartedAt.IsZero() {
+		if run.StartedAt.IsZero() {
+			run.StartedAt = now
+		}
+		return nil
+	}
+	if run.StartedAt.IsZero() {
+		run.StartedAt = existing.StartedAt
+		return nil
+	}
+	if !run.StartedAt.Equal(existing.StartedAt) {
+		return errors.New("started_at is immutable")
+	}
+	return nil
+}
+
+func (s *Store) validateRunOwnership(run, existing session.RunMeta, exists bool) error {
+	if exists {
+		if existing.SessionID != run.SessionID {
+			return session.ErrRunSessionImmutable
+		}
+		return nil
+	}
+	owner, sessionExists := s.sessions[run.SessionID]
+	if !sessionExists {
+		return session.ErrSessionNotFound
+	}
+	if owner.Status == session.StatusEnded {
+		return session.ErrSessionEnded
+	}
+	return nil
 }

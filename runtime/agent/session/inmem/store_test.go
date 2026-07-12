@@ -56,6 +56,8 @@ func TestUpsertRunDoesNotClobberLinkedChildren(t *testing.T) {
 
 	store := New()
 	now := time.Now().UTC()
+	_, err := store.CreateSession(context.Background(), "sess-1", now)
+	require.NoError(t, err)
 	require.NoError(t, store.UpsertRun(context.Background(), session.RunMeta{
 		RunID:     "run-parent",
 		AgentID:   "agent.parent",
@@ -94,6 +96,8 @@ func TestLinkChildRunIsIdempotent(t *testing.T) {
 
 	store := New()
 	now := time.Now().UTC()
+	_, err := store.CreateSession(context.Background(), "sess-1", now)
+	require.NoError(t, err)
 	require.NoError(t, store.UpsertRun(context.Background(), session.RunMeta{
 		RunID:     "run-parent",
 		AgentID:   "agent.parent",
