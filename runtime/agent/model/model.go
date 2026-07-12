@@ -809,27 +809,37 @@ func messageCharacterCount(msg *Message) int {
 	}
 	total := len(msg.Role)
 	for _, part := range msg.Parts {
-		switch v := part.(type) {
-		case TextPart:
-			total += len(v.Text)
-		case ImagePart:
-			total += len(v.Format) + len(v.Bytes)
-		case DocumentPart:
-			total += len(v.Name) + len(v.Format) + len(v.Bytes) + len(v.Text) + len(v.URI) + len(v.Context)
-			for _, chunk := range v.Chunks {
-				total += len(chunk)
-			}
-		case CitationsPart:
-			total += len(v.Text)
-		case ThinkingPart:
-			continue
-		case ToolUsePart:
-			total += len(v.ID) + len(v.Name) + marshaledLength(v.Input)
-		case ToolResultPart:
-			total += len(v.ToolUseID) + marshaledLength(v.Content)
-		}
+		total += messagePartCharacterCount(part)
 	}
 	return total
+}
+
+func messagePartCharacterCount(part Part) int {
+	normalized, err := normalizeMessagePart(part)
+	if err != nil {
+		return 0
+	}
+	switch v := normalized.(type) {
+	case TextPart:
+		return len(v.Text)
+	case ImagePart:
+		return len(v.Format) + len(v.Bytes)
+	case DocumentPart:
+		total := len(v.Name) + len(v.Format) + len(v.Bytes) + len(v.Text) + len(v.URI) + len(v.Context)
+		for _, chunk := range v.Chunks {
+			total += len(chunk)
+		}
+		return total
+	case CitationsPart:
+		return len(v.Text)
+	case ThinkingPart:
+		return 0
+	case ToolUsePart:
+		return len(v.ID) + len(v.Name) + marshaledLength(v.Input)
+	case ToolResultPart:
+		return len(v.ToolUseID) + marshaledLength(v.Content)
+	}
+	return 0
 }
 
 func toolDefinitionCharacterCount(def *ToolDefinition) int {

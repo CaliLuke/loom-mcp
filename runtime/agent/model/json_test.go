@@ -4,10 +4,150 @@ import (
 	"encoding/json"
 	"testing"
 
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	"github.com/CaliLuke/loom-mcp/runtime/agent/prompt"
 )
+
+func TestMessageJSONRoundTripPreservesEveryPartType(t *testing.T) {
+	documentLocation := &DocumentPageLocation{DocumentIndex: 2, Start: 4, End: 5}
+	original := Message{
+		Role: ConversationRoleAssistant,
+		Parts: []Part{
+			ThinkingPart{Text: "reason", Signature: "sig", Redacted: []byte{1, 2}, Index: 1, Final: true},
+			TextPart{Text: "answer"},
+			ImagePart{Format: ImageFormatPNG, Bytes: []byte{3, 4}},
+			DocumentPart{Name: "spec", Format: DocumentFormatMD, Chunks: []string{"one", "two"}, Context: "reference", Cite: true},
+			CitationsPart{Text: "supported", Citations: []Citation{{
+				Title: "spec", Source: "upload", Location: CitationLocation{DocumentPage: documentLocation}, SourceContent: []string{"quote"},
+			}}},
+			ToolUsePart{ID: "call-1", Name: "search", Input: map[string]any{"q": "loom", "exact": true}},
+			ToolResultPart{ToolUseID: "call-1", Content: map[string]any{"answer": "found"}, IsError: false},
+			CacheCheckpointPart{},
+		},
+		Meta: map[string]any{"trace": "trace-1"},
+	}
+
+	raw, err := json.Marshal(original)
+	require.NoError(t, err)
+
+	var decoded Message
+	require.NoError(t, json.Unmarshal(raw, &decoded))
+	assert.Equal(t, original, decoded)
+}
+
+func TestMessageMarshalAcceptsPointersToEveryPartType(t *testing.T) {
+	parts := []Part{
+		&ThinkingPart{Text: "reason"},
+		&TextPart{Text: "answer"},
+		&ImagePart{Format: ImageFormatJPEG, Bytes: []byte{1}},
+		&DocumentPart{Name: "doc", Text: "contents"},
+		&CitationsPart{Text: "cited"},
+		&ToolUsePart{Name: "search"},
+		&ToolResultPart{ToolUseID: "call-1"},
+		&CacheCheckpointPart{},
+	}
+
+	raw, err := json.Marshal(Message{Role: ConversationRoleUser, Parts: parts})
+	require.NoError(t, err)
+
+	var decoded Message
+	require.NoError(t, json.Unmarshal(raw, &decoded))
+	expected := []Part{
+		ThinkingPart{Text: "reason"},
+		TextPart{Text: "answer"},
+		ImagePart{Format: ImageFormatJPEG, Bytes: []byte{1}},
+		DocumentPart{Name: "doc", Text: "contents"},
+		CitationsPart{Text: "cited"},
+		ToolUsePart{Name: "search"},
+		ToolResultPart{ToolUseID: "call-1"},
+		CacheCheckpointPart{},
+	}
+	assert.Equal(t, expected, decoded.Parts)
+}
+
+func TestMessageMarshalRejectsInvalidParts(t *testing.T) {
+	cases := []struct {
+		name    string
+		part    Part
+		message string
+	}{
+		{name: "nil_thinking", part: (*ThinkingPart)(nil), message: "nil ThinkingPart"},
+		{name: "nil_text", part: (*TextPart)(nil), message: "nil TextPart"},
+		{name: "nil_image", part: (*ImagePart)(nil), message: "nil ImagePart"},
+		{name: "nil_document", part: (*DocumentPart)(nil), message: "nil DocumentPart"},
+		{name: "nil_citations", part: (*CitationsPart)(nil), message: "nil CitationsPart"},
+		{name: "nil_tool_use", part: (*ToolUsePart)(nil), message: "nil ToolUsePart"},
+		{name: "nil_tool_result", part: (*ToolResultPart)(nil), message: "nil ToolResultPart"},
+		{name: "nil_cache_checkpoint", part: (*CacheCheckpointPart)(nil), message: "nil CacheCheckpointPart"},
+		{name: "image_without_format", part: ImagePart{Bytes: []byte{1}}, message: "requires Format"},
+		{name: "image_without_bytes", part: ImagePart{Format: ImageFormatPNG}, message: "requires Bytes"},
+		{name: "document_without_name", part: DocumentPart{Text: "contents"}, message: "requires Name"},
+		{name: "document_without_source", part: DocumentPart{Name: "doc"}, message: "exactly one"},
+		{name: "document_with_multiple_sources", part: DocumentPart{Name: "doc", Text: "contents", URI: "s3://bucket/doc"}, message: "exactly one"},
+		{name: "document_with_empty_chunk", part: DocumentPart{Name: "doc", Chunks: []string{""}}, message: "non-empty Chunks[0]"},
+		{name: "tool_use_without_name", part: ToolUsePart{ID: "call-1"}, message: "requires Name"},
+		{name: "tool_result_without_id", part: ToolResultPart{Content: "result"}, message: "requires ToolUseID"},
+	}
+
+	for _, tt := range cases {
+		t.Run(tt.name, func(t *testing.T) {
+			_, err := json.Marshal(Message{Parts: []Part{tt.part}})
+			require.Error(t, err)
+			assert.Contains(t, err.Error(), tt.message)
+		})
+	}
+}
+
+func TestDecodeMessagePartSupportsLegacyShapes(t *testing.T) {
+	cases := []struct {
+		name     string
+		payload  string
+		expected Part
+	}{
+		{name: "raw_text", payload: `"hello"`, expected: TextPart{Text: "hello"}},
+		{name: "text_object", payload: `{"Text":"hello"}`, expected: TextPart{Text: "hello"}},
+		{name: "thinking", payload: `{"Text":"reason","Signature":"sig"}`, expected: ThinkingPart{Text: "reason", Signature: "sig"}},
+		{name: "tool_use", payload: `{"ID":"call-1","Name":"search","Args":{"q":"loom"}}`, expected: ToolUsePart{ID: "call-1", Name: "search", Input: map[string]any{"q": "loom"}}},
+		{name: "tool_result", payload: `{"ToolUseID":"call-1","Content":"found"}`, expected: ToolResultPart{ToolUseID: "call-1", Content: "found"}},
+	}
+
+	for _, tt := range cases {
+		t.Run(tt.name, func(t *testing.T) {
+			part, err := decodeMessagePart([]byte(tt.payload))
+			require.NoError(t, err)
+			assert.Equal(t, tt.expected, part)
+		})
+	}
+}
+
+func TestMessageUnmarshalRejectsMalformedParts(t *testing.T) {
+	cases := []struct {
+		name    string
+		part    string
+		message string
+	}{
+		{name: "null", part: `null`, message: "empty part payload"},
+		{name: "array", part: `[]`, message: "decode part object"},
+		{name: "unknown_shape", part: `{"Other":true}`, message: "unknown part shape"},
+		{name: "non_string_kind", part: `{"Kind":1}`, message: "decode Kind"},
+		{name: "unknown_kind", part: `{"Kind":"audio"}`, message: `unknown part kind "audio"`},
+		{name: "invalid_image", part: `{"Kind":"image","Format":"png"}`, message: "requires Bytes"},
+		{name: "invalid_document", part: `{"Kind":"document","Name":"doc"}`, message: "exactly one"},
+		{name: "invalid_tool_use", part: `{"Kind":"tool_use"}`, message: "requires Name"},
+		{name: "invalid_tool_result", part: `{"Kind":"tool_result"}`, message: "requires ToolUseID"},
+	}
+
+	for _, tt := range cases {
+		t.Run(tt.name, func(t *testing.T) {
+			var message Message
+			err := json.Unmarshal([]byte(`{"Role":"user","Parts":[`+tt.part+`]}`), &message)
+			require.Error(t, err)
+			assert.Contains(t, err.Error(), tt.message)
+		})
+	}
+}
 
 func TestPartMarshalJSONIncludesKind(t *testing.T) {
 	cases := []struct {

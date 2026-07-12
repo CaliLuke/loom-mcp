@@ -70,3 +70,49 @@ func TestTokenEstimatorCountsStructuredOutputSchema(t *testing.T) {
 
 	assert.Greater(t, schemaCount.InputTokens, baseCount.InputTokens)
 }
+
+func TestTokenEstimatorCountsPointerAndValuePartsEqually(t *testing.T) {
+	valueParts := []Part{
+		TextPart{Text: "hello"},
+		ImagePart{Format: ImageFormatPNG, Bytes: []byte{1, 2}},
+		DocumentPart{Name: "doc", Format: DocumentFormatTXT, Text: "contents", Context: "reference"},
+		CitationsPart{Text: "cited answer"},
+		ThinkingPart{Text: "excluded reasoning"},
+		ToolUsePart{ID: "call-1", Name: "search", Input: map[string]any{"q": "loom"}},
+		ToolResultPart{ToolUseID: "call-1", Content: map[string]any{"found": true}},
+		CacheCheckpointPart{},
+	}
+	pointerParts := []Part{
+		&TextPart{Text: "hello"},
+		&ImagePart{Format: ImageFormatPNG, Bytes: []byte{1, 2}},
+		&DocumentPart{Name: "doc", Format: DocumentFormatTXT, Text: "contents", Context: "reference"},
+		&CitationsPart{Text: "cited answer"},
+		&ThinkingPart{Text: "excluded reasoning"},
+		&ToolUsePart{ID: "call-1", Name: "search", Input: map[string]any{"q": "loom"}},
+		&ToolResultPart{ToolUseID: "call-1", Content: map[string]any{"found": true}},
+		&CacheCheckpointPart{},
+	}
+	estimator := TokenEstimator{CharactersPerToken: 1, OverheadTokens: 1}
+
+	values, err := estimator.CountTokens(context.Background(), &Request{Messages: []*Message{{Role: ConversationRoleUser, Parts: valueParts}}})
+	require.NoError(t, err)
+	pointers, err := estimator.CountTokens(context.Background(), &Request{Messages: []*Message{{Role: ConversationRoleUser, Parts: pointerParts}}})
+	require.NoError(t, err)
+
+	assert.Equal(t, values, pointers)
+}
+
+func TestTokenEstimatorMinimumAndCancellation(t *testing.T) {
+	count, err := (TokenEstimator{MinimumTokens: 17}).CountTokens(context.Background(), nil)
+	require.NoError(t, err)
+	assert.Equal(t, 17, count.InputTokens)
+
+	count, err = (TokenEstimator{}).CountTokens(context.Background(), nil)
+	require.NoError(t, err)
+	assert.Equal(t, 500, count.InputTokens)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	_, err = (TokenEstimator{}).CountTokens(ctx, nil)
+	assert.ErrorIs(t, err, context.Canceled)
+}

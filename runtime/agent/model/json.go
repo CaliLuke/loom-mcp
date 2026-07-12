@@ -85,26 +85,72 @@ func (m *Message) UnmarshalJSON(data []byte) error {
 }
 
 func encodeMessagePart(p Part) (any, error) {
-	switch v := p.(type) {
+	normalized, err := normalizeMessagePart(p)
+	if err != nil {
+		return nil, err
+	}
+	switch v := normalized.(type) {
 	case ThinkingPart:
 		return encodeThinkingPart(v), nil
 	case TextPart:
 		return encodeTextPart(v), nil
 	case ImagePart:
+		if err := validateImagePart(v); err != nil {
+			return nil, err
+		}
 		return encodeImagePart(v), nil
 	case DocumentPart:
+		if err := validateDocumentPart(v); err != nil {
+			return nil, err
+		}
 		return encodeDocumentPart(v), nil
 	case CitationsPart:
 		return encodeCitationsPart(v), nil
 	case ToolUsePart:
+		if err := validateToolUsePart(v); err != nil {
+			return nil, err
+		}
 		return encodeToolUsePart(v), nil
 	case ToolResultPart:
+		if err := validateToolResultPart(v); err != nil {
+			return nil, err
+		}
 		return encodeToolResultPart(v), nil
 	case CacheCheckpointPart:
 		return encodeCacheCheckpointPart(), nil
 	default:
-		return nil, fmt.Errorf("unknown part type %T", p)
+		return nil, fmt.Errorf("unknown part type %T", normalized)
 	}
+}
+
+func normalizeMessagePart(part Part) (Part, error) {
+	switch v := part.(type) {
+	case *ThinkingPart:
+		return dereferencePart(v, "ThinkingPart")
+	case *TextPart:
+		return dereferencePart(v, "TextPart")
+	case *ImagePart:
+		return dereferencePart(v, "ImagePart")
+	case *DocumentPart:
+		return dereferencePart(v, "DocumentPart")
+	case *CitationsPart:
+		return dereferencePart(v, "CitationsPart")
+	case *ToolUsePart:
+		return dereferencePart(v, "ToolUsePart")
+	case *ToolResultPart:
+		return dereferencePart(v, "ToolResultPart")
+	case *CacheCheckpointPart:
+		return dereferencePart(v, "CacheCheckpointPart")
+	default:
+		return part, nil
+	}
+}
+
+func dereferencePart[T Part](part *T, typeName string) (Part, error) {
+	if part == nil {
+		return nil, fmt.Errorf("nil %s", typeName)
+	}
+	return *part, nil
 }
 
 func encodeThinkingPart(v ThinkingPart) any {
@@ -197,11 +243,14 @@ func decodePartObject(raw json.RawMessage) (map[string]json.RawMessage, error) {
 }
 
 func decodeRawTextPart(raw json.RawMessage) (Part, bool) {
-	var text string
+	var text *string
 	if err := json.Unmarshal(raw, &text); err != nil {
 		return nil, false
 	}
-	return TextPart{Text: text}, true
+	if text == nil {
+		return nil, false
+	}
+	return TextPart{Text: *text}, true
 }
 
 func decodePartByKind(raw json.RawMessage, obj map[string]json.RawMessage, kindRaw json.RawMessage) (Part, error) {
@@ -251,13 +300,20 @@ func decodeImagePart(raw json.RawMessage) (Part, error) {
 	if err := json.Unmarshal(raw, &img); err != nil {
 		return nil, fmt.Errorf("decode ImagePart: %w", err)
 	}
-	if img.Format == "" {
-		return nil, errors.New("ImagePart requires Format")
-	}
-	if len(img.Bytes) == 0 {
-		return nil, errors.New("ImagePart requires Bytes")
+	if err := validateImagePart(img); err != nil {
+		return nil, err
 	}
 	return img, nil
+}
+
+func validateImagePart(img ImagePart) error {
+	if img.Format == "" {
+		return errors.New("ImagePart requires Format")
+	}
+	if len(img.Bytes) == 0 {
+		return errors.New("ImagePart requires Bytes")
+	}
+	return nil
 }
 
 func decodeDocumentPart(raw json.RawMessage) (Part, error) {
@@ -265,13 +321,17 @@ func decodeDocumentPart(raw json.RawMessage) (Part, error) {
 	if err := json.Unmarshal(raw, &doc); err != nil {
 		return nil, fmt.Errorf("decode DocumentPart: %w", err)
 	}
-	if doc.Name == "" {
-		return nil, errors.New("DocumentPart requires Name")
-	}
-	if err := validateDocumentSources(doc); err != nil {
+	if err := validateDocumentPart(doc); err != nil {
 		return nil, err
 	}
 	return doc, nil
+}
+
+func validateDocumentPart(doc DocumentPart) error {
+	if doc.Name == "" {
+		return errors.New("DocumentPart requires Name")
+	}
+	return validateDocumentSources(doc)
 }
 
 func validateDocumentSources(doc DocumentPart) error {
@@ -320,10 +380,17 @@ func decodeToolResultPart(raw json.RawMessage) (Part, error) {
 	if err := json.Unmarshal(raw, &result); err != nil {
 		return nil, fmt.Errorf("decode ToolResultPart: %w", err)
 	}
-	if result.ToolUseID == "" {
-		return nil, errors.New("ToolResultPart requires ToolUseID")
+	if err := validateToolResultPart(result); err != nil {
+		return nil, err
 	}
 	return result, nil
+}
+
+func validateToolResultPart(result ToolResultPart) error {
+	if result.ToolUseID == "" {
+		return errors.New("ToolResultPart requires ToolUseID")
+	}
+	return nil
 }
 
 func decodeToolUsePart(raw json.RawMessage, obj map[string]json.RawMessage) (Part, error) {
@@ -331,13 +398,20 @@ func decodeToolUsePart(raw json.RawMessage, obj map[string]json.RawMessage) (Par
 	if err := json.Unmarshal(raw, &use); err != nil {
 		return nil, fmt.Errorf("decode ToolUsePart: %w", err)
 	}
-	if use.Name == "" {
-		return nil, errors.New("ToolUsePart requires Name")
+	if err := validateToolUsePart(use); err != nil {
+		return nil, err
 	}
 	if err := applyToolUseArgsFallback(obj, &use); err != nil {
 		return nil, err
 	}
 	return use, nil
+}
+
+func validateToolUsePart(use ToolUsePart) error {
+	if use.Name == "" {
+		return errors.New("ToolUsePart requires Name")
+	}
+	return nil
 }
 
 func applyToolUseArgsFallback(obj map[string]json.RawMessage, use *ToolUsePart) error {
