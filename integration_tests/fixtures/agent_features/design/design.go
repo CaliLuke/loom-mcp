@@ -19,6 +19,12 @@ var LongTermMemoryTools = Toolset("long_term_memory", FromMemory(MemoryLongTerm(
 
 var SkillTools = Toolset("skills", FromSkills(".agents/skills", SkillPreload(SkillPreloadOnStart), SkillReload(SkillReloadPerCall)))
 
+var ValidationRegistry = Registry("validation-registry", func() {
+	URL("https://registry.fixture.invalid")
+})
+
+var RegistryValidationTools = Toolset("registry_validation", FromRegistry(ValidationRegistry, "validation-tools"))
+
 var TopicPayload = Type("TopicPayload", func() {
 	Attribute("topic", String, "Topic to process")
 	Required("topic")
@@ -117,5 +123,8 @@ var _ = Service("features", func() {
 			Step("revise", "workflow.revise", `{}`)
 			FinalMessage("generated workflow complete")
 		})
+	})
+	Agent("registry-validator", "Generated registry schema validation fixture", func() {
+		Use(RegistryValidationTools)
 	})
 })

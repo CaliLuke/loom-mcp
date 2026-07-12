@@ -28,6 +28,16 @@ Here’s a map of what loom-mcp just built for you based on your `design/*.go` f
             * Max Consecutive Failures: `2`
             * Time Budget: `30s`
             * Interrupts Allowed: `false`
+    * **Agent `registry-validator`** (ID: `features.registry_validator`):
+        * **Mission:** *Generated registry schema validation fixture*
+        * **Uses Toolsets:**
+            * `features.registry_validation`
+        * **Exports Toolsets:***none*
+        * **Run Policy:**
+            * Max Tool Calls: `0`
+            * Max Consecutive Failures: `0`
+            * Time Budget: `0s`
+            * Interrupts Allowed: `false`
 
 ---
 
@@ -70,6 +80,7 @@ import (
     // === Your Generated Agent Packages ===
     // (Goa generated these based on your design)
     coordinator "example.com/agentfeatures/gen/features/agents/coordinator"
+    registry_validator "example.com/agentfeatures/gen/features/agents/registry_validator"
 )
 
 // A simple "brain" for our agent. It just says hello for now.
@@ -109,6 +120,15 @@ func main() {
             // We'll add tool configurations here later on.
         }
         if err := coordinator.RegisterCoordinatorAgent(context.Background(), rt, cfg); err != nil {
+            panic(err)
+        }
+    }
+    {
+        cfg := registry_validator.RegistryValidatorAgentConfig{
+            Planner: &StubPlanner{},
+            // We'll add tool configurations here later on.
+        }
+        if err := registry_validator.RegisterRegistryValidatorAgent(context.Background(), rt, cfg); err != nil {
             panic(err)
         }
     }
@@ -170,6 +190,33 @@ Here are the detailed cheat sheets for each agent you designed.
 
 #### Minimal Configuration```go
 cfg := coordinator.CoordinatorAgentConfig{
+    Planner: myPlanner,
+}
+```
+</details>
+<details>
+<summary><strong>Agent: <code>registry-validator</code></strong> (ID: <code>features.registry_validator</code>)</summary>
+
+* **Package:** `example.com/agentfeatures/gen/features/agents/registry_validator`
+* **Directory:** `gen/features/agents/registry_validator`
+* **Config Struct:** `RegistryValidatorAgentConfig`
+* **Register Function:** `RegisterRegistryValidatorAgent(ctx, rt, cfg)`
+* **How to Run:**
+    * **Sessions are first-class:** call `rt.CreateSession(ctx, sessionID)` once before you start any runs under that session ID.
+    * **Synchronous (wait for result):**
+        ```go
+        client := registry_validator.NewClient(rt)
+        out, err := client.Run(ctx, sessionID, messages)
+        ```
+    * **Asynchronous (get a handle):**
+        ```go
+        client := registry_validator.NewClient(rt)
+        handle, err := client.Start(ctx, sessionID, messages)
+        ```
+* **Workflow Name:** `features.registry_validator.workflow` (Queue: `features_registry_validator_workflow`)
+
+#### Minimal Configuration```go
+cfg := registry_validator.RegistryValidatorAgentConfig{
     Planner: myPlanner,
 }
 ```
@@ -380,6 +427,13 @@ cfg := <agentpkg>.<AgentConfig>{
 * *Review the draft*
 * **Tool: `workflow.revise`**
 * *Revise the result*
+* **Tools this agent EXPORTS for others to use:**
+* *This agent does not export any toolsets.*
+
+### Agent `registry-validator` Toolsets
+
+* **Tools this agent can USE:**
+* **`features.registry_validation`**
 * **Tools this agent EXPORTS for others to use:**
 * *This agent does not export any toolsets.*
 </details>

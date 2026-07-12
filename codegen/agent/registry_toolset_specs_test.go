@@ -78,6 +78,8 @@ func TestRegistryToolsetSpecsStructure(t *testing.T) {
 	require.Contains(t, specsContent, "type RegistryClient interface")
 	require.Contains(t, specsContent, "func ValidatePayload")
 	require.Contains(t, specsContent, "func ValidateResult")
+	require.Contains(t, specsContent, "func resolveLocalSchemaRef")
+	require.Contains(t, specsContent, "utf8.RuneCountInString")
 
 	registryContent := testhelpers.FileContent(t, files, filepath.ToSlash("gen/registry_test/agents/data_agent/registry.go"))
 	require.Contains(t, registryContent, "resolvedSpecs, err := data_tools.FreezeSpecs()")

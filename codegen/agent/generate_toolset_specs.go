@@ -316,6 +316,7 @@ func toolsetRegistrySpecsFiles(ts *ToolsetData) []*codegen.File {
 		{Path: "sort"},
 		{Path: "strings"},
 		{Path: "sync"},
+		{Path: "unicode/utf8"},
 		{Path: "github.com/CaliLuke/loom-mcp/runtime/agent/policy"},
 		{Path: "github.com/CaliLuke/loom-mcp/runtime/agent/tools"},
 	}

@@ -114,6 +114,10 @@ Use this file when editing DSL, generators, generated helpers, or MCP codegen be
 - Registry-backed generated specs are refreshable only before runtime
   registration. `Specs()` returns a locked snapshot and `FreezeSpecs()` is the
   mandatory registration boundary; discovery after freezing is an error.
+- Registry-backed generated schema validators resolve local JSON Pointer
+  references against the root schema, fail closed on unsupported or unresolved
+  references, and apply `minLength`/`maxLength` to Unicode code points rather
+  than UTF-8 bytes.
 - Projected MCP `ToolInfo` schemas must come from the generated toolset
   `tools.ToolSpec` payload and result schemas, not from service-method-only
   schema extraction. This keeps runtime specs, JSON-RPC adapters, and SDK
