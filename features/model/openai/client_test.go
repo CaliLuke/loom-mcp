@@ -595,6 +595,51 @@ func TestClientStreamReturnsRateLimitedRecvError(t *testing.T) {
 	require.NoError(t, streamer.Close())
 }
 
+func TestClientStreamRejectsMalformedEventJSON(t *testing.T) {
+	mock := &mockResponsesClient{stream: newMockOpenAIStream("{")}
+	client, err := openaimodel.New(openaimodel.Options{Client: mock, DefaultModel: "gpt-4o"})
+	require.NoError(t, err)
+
+	streamer, err := client.Stream(context.Background(), &model.Request{
+		Messages: []*model.Message{{
+			Role:  model.ConversationRoleUser,
+			Parts: []model.Part{model.TextPart{Text: "Ping"}},
+		}},
+	})
+	require.NoError(t, err)
+	defer func() {
+		require.NoError(t, streamer.Close())
+	}()
+
+	_, err = streamer.Recv()
+	require.Error(t, err)
+}
+
+func TestClientStreamRejectsEOFBeforeCompletedEvent(t *testing.T) {
+	mock := &mockResponsesClient{stream: newMockOpenAIStream(
+		"{\"type\":\"response.output_text.delta\",\"sequence_number\":1,\"item_id\":\"msg_1\",\"output_index\":0,\"content_index\":0,\"delta\":\"partial\",\"logprobs\":[]}",
+	)}
+	client, err := openaimodel.New(openaimodel.Options{Client: mock, DefaultModel: "gpt-4o"})
+	require.NoError(t, err)
+
+	streamer, err := client.Stream(context.Background(), &model.Request{
+		Messages: []*model.Message{{
+			Role:  model.ConversationRoleUser,
+			Parts: []model.Part{model.TextPart{Text: "Ping"}},
+		}},
+	})
+	require.NoError(t, err)
+	defer func() {
+		require.NoError(t, streamer.Close())
+	}()
+
+	chunk, err := streamer.Recv()
+	require.NoError(t, err)
+	require.Equal(t, model.ChunkTypeText, chunk.Type)
+	_, err = streamer.Recv()
+	require.EqualError(t, err, "openai: stream ended before response.completed")
+}
+
 func TestClientStreamEmitsTextToolCallsUsageAndStop(t *testing.T) {
 	mock := &mockResponsesClient{
 		stream: newMockOpenAIStream(

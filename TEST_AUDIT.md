@@ -73,9 +73,9 @@ Finding IDs continue the `679fb76` numbering; each carries a status vs that base
 ### C-7: Model-adapter error/streaming matrix holes
 - **Severity:** medium · **Status:** in progress (Gemini and Bedrock gaps resolved)
 - **Confidence:** measured
-- **Evidence:** Gemini now injects real GenerateContent failures and proves rate-limit, ordinary-error, and streaming-unsupported behavior. Bedrock's structured-output recursion table covers all previously dark schema keywords, and rate limiting now uses real Smithy API/HTTP error shapes. Ollama now has byte-level NDJSON tests for malformed JSON, EOF before the required done record, and scanner token overflow; all three formerly dark stream error branches are covered. Comparable malformed transport/event coverage remains to be confirmed for OpenAI and Anthropic.
+- **Evidence:** Gemini now injects real GenerateContent failures and proves rate-limit, ordinary-error, and streaming-unsupported behavior. Bedrock's structured-output recursion table covers all previously dark schema keywords, and rate limiting now uses real Smithy API/HTTP error shapes. Ollama has byte-level NDJSON tests for malformed JSON, EOF before done, and scanner overflow. OpenAI now rejects malformed SDK event JSON and EOF before response.completed, alongside its existing stream setup/receive/rate-limit cases. Comparable malformed event coverage remains to be confirmed for Anthropic.
 - **Impact:** Provider error classification and byte-stream decoding change most across SDK bumps; real SDK throttle shapes and malformed frames could still regress silently.
-- **Recommendation:** Continue with OpenAI/Anthropic stream failures, then consolidate the observable contracts into a shared provider checklist.
+- **Recommendation:** Complete Anthropic stream failures, then consolidate the observable contracts into a shared provider checklist.
 
 ### C-8: Mongo query syntax for prompt/memory stores never executes against real Mongo
 - **Severity:** medium · **Status:** still open (delta improved decode-side coverage only)
