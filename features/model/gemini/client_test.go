@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"math"
 	"reflect"
 	"testing"
 
@@ -13,7 +14,111 @@ import (
 
 	geminimodel "github.com/CaliLuke/loom-mcp/features/model/gemini"
 	"github.com/CaliLuke/loom-mcp/runtime/agent/model"
+	"github.com/CaliLuke/loom-mcp/testutil"
 )
+
+func TestClientConformance(t *testing.T) {
+	request := func() *model.Request {
+		return &model.Request{Messages: []*model.Message{{
+			Role:  model.ConversationRoleUser,
+			Parts: []model.Part{model.TextPart{Text: "hello"}},
+		}}}
+	}
+	newClient := func(t *testing.T, mock *mockModelsClient) *geminimodel.Client {
+		t.Helper()
+		client, err := geminimodel.New(geminimodel.Options{
+			Client:       mock,
+			DefaultModel: "gemini-2.5-flash",
+			HighModel:    "gemini-2.5-pro",
+		})
+		require.NoError(t, err)
+		return client
+	}
+
+	testutil.RunProviderConformance(t, testutil.ProviderConformanceSuite{
+		Provider: "gemini",
+		OrdinaryProviderError: func(t *testing.T) {
+			providerErr := errors.New("provider unavailable")
+			response, err := newClient(t, &mockModelsClient{generateErr: providerErr}).Complete(context.Background(), request())
+			require.Nil(t, response)
+			require.ErrorIs(t, err, providerErr)
+			require.ErrorContains(t, err, "gemini generate_content")
+		},
+		RateLimit: func(t *testing.T) {
+			providerErr := genai.APIError{Code: 429, Message: "quota exceeded"}
+			response, err := newClient(t, &mockModelsClient{generateErr: providerErr}).Complete(context.Background(), request())
+			require.Nil(t, response)
+			require.ErrorIs(t, err, model.ErrRateLimited)
+			require.ErrorContains(t, err, "quota exceeded")
+		},
+		MalformedToolCall: func(t *testing.T) {
+			mock := &mockModelsClient{response: &genai.GenerateContentResponse{Candidates: []*genai.Candidate{{
+				Content: &genai.Content{Parts: []*genai.Part{{FunctionCall: &genai.FunctionCall{
+					Name: "lookup",
+					Args: map[string]any{"invalid": math.Inf(1)},
+				}}}},
+			}}}}
+			response, err := newClient(t, mock).Complete(context.Background(), request())
+			require.Nil(t, response)
+			require.ErrorContains(t, err, "gemini: decode tool call \"lookup\"")
+		},
+		Cancellation: func(t *testing.T) {
+			mock := &mockModelsClient{generateFunc: func(ctx context.Context) (*genai.GenerateContentResponse, error) {
+				return nil, ctx.Err()
+			}}
+			ctx, cancel := context.WithCancel(context.Background())
+			cancel()
+			response, err := newClient(t, mock).Complete(ctx, request())
+			require.Nil(t, response)
+			require.ErrorIs(t, err, context.Canceled)
+		},
+		StructuredOutputAndToolChoice: func(t *testing.T) {
+			mock := &mockModelsClient{response: &genai.GenerateContentResponse{}}
+			client := newClient(t, mock)
+			req := request()
+			req.Tools = []*model.ToolDefinition{{Name: "lookup", InputSchema: map[string]any{"type": "object"}}}
+			req.ToolChoice = &model.ToolChoice{Mode: model.ToolChoiceModeTool, Name: "lookup"}
+			_, err := client.Complete(context.Background(), req)
+			require.NoError(t, err)
+			require.Equal(t, []string{"lookup"}, mock.config.ToolConfig.FunctionCallingConfig.AllowedFunctionNames)
+
+			req.StructuredOutput = &model.StructuredOutput{Name: "draft", Schema: []byte(`{"type":"object"}`)}
+			_, err = client.Complete(context.Background(), req)
+			require.ErrorIs(t, err, model.ErrStructuredOutputUnsupported)
+		},
+		UsageAccounting: func(t *testing.T) {
+			mock := &mockModelsClient{response: &genai.GenerateContentResponse{
+				ModelVersion: "gemini-2.5-pro-001",
+				UsageMetadata: &genai.GenerateContentResponseUsageMetadata{
+					PromptTokenCount:        10,
+					ToolUsePromptTokenCount: 2,
+					CandidatesTokenCount:    5,
+					CachedContentTokenCount: 3,
+					TotalTokenCount:         17,
+				},
+			}}
+			req := request()
+			req.ModelClass = model.ModelClassHighReasoning
+			response, err := newClient(t, mock).Complete(context.Background(), req)
+			require.NoError(t, err)
+			require.Equal(t, model.TokenUsage{
+				Model:           "gemini-2.5-pro",
+				ModelClass:      model.ModelClassHighReasoning,
+				InputTokens:     12,
+				OutputTokens:    5,
+				TotalTokens:     17,
+				CacheReadTokens: 3,
+			}, response.Usage)
+		},
+		Streaming: testutil.ProviderStreamingConformance{
+			Unsupported: func(t *testing.T) {
+				stream, err := newClient(t, &mockModelsClient{}).Stream(context.Background(), request())
+				require.Nil(t, stream)
+				require.ErrorIs(t, err, model.ErrStreamingUnsupported)
+			},
+		},
+	})
+}
 
 func TestClientComplete(t *testing.T) {
 	mock := &mockModelsClient{}
@@ -425,12 +530,16 @@ type mockModelsClient struct {
 	countModel    string
 	countContents []*genai.Content
 	countConfig   *genai.CountTokensConfig
+	generateFunc  func(context.Context) (*genai.GenerateContentResponse, error)
 }
 
-func (m *mockModelsClient) GenerateContent(_ context.Context, model string, contents []*genai.Content, config *genai.GenerateContentConfig) (*genai.GenerateContentResponse, error) {
+func (m *mockModelsClient) GenerateContent(ctx context.Context, model string, contents []*genai.Content, config *genai.GenerateContentConfig) (*genai.GenerateContentResponse, error) {
 	m.model = model
 	m.contents = contents
 	m.config = config
+	if m.generateFunc != nil {
+		return m.generateFunc(ctx)
+	}
 	return m.response, m.generateErr
 }
 

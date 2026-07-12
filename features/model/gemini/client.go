@@ -205,7 +205,7 @@ func (c *Client) Complete(ctx context.Context, req *model.Request) (*model.Respo
 		}
 		return nil, fmt.Errorf("gemini generate_content: %w", err)
 	}
-	return translateResponse(modelID, resp)
+	return translateResponse(modelID, req.ModelClass, resp)
 }
 
 // CountTokens implements model.TokenCounter using Gemini's native counter.
@@ -708,7 +708,7 @@ func hasToolDefinition(defs []*model.ToolDefinition, name string) bool {
 	return false
 }
 
-func translateResponse(modelID string, resp *genai.GenerateContentResponse) (*model.Response, error) {
+func translateResponse(modelID string, modelClass model.ModelClass, resp *genai.GenerateContentResponse) (*model.Response, error) {
 	if resp == nil {
 		return &model.Response{}, nil
 	}
@@ -736,7 +736,7 @@ func translateResponse(modelID string, resp *genai.GenerateContentResponse) (*mo
 	return &model.Response{
 		Content:    messages,
 		ToolCalls:  toolCalls,
-		Usage:      translateUsage(modelID, resp.UsageMetadata),
+		Usage:      translateUsage(modelID, modelClass, resp.UsageMetadata),
 		StopReason: stopReason,
 	}, nil
 }
@@ -777,12 +777,13 @@ func translateCandidate(candidate *genai.Candidate) (model.Message, []model.Tool
 	return msg, toolCalls, nil
 }
 
-func translateUsage(modelID string, usage *genai.GenerateContentResponseUsageMetadata) model.TokenUsage {
+func translateUsage(modelID string, modelClass model.ModelClass, usage *genai.GenerateContentResponseUsageMetadata) model.TokenUsage {
 	if usage == nil {
-		return model.TokenUsage{Model: modelID}
+		return model.TokenUsage{Model: modelID, ModelClass: modelClass}
 	}
 	return model.TokenUsage{
 		Model:           modelID,
+		ModelClass:      modelClass,
 		InputTokens:     int(usage.PromptTokenCount + usage.ToolUsePromptTokenCount),
 		OutputTokens:    int(usage.CandidatesTokenCount),
 		TotalTokens:     int(usage.TotalTokenCount),
