@@ -71,11 +71,11 @@ Finding IDs continue the `679fb76` numbering; each carries a status vs that base
 - **Impact/Recommendation:** Treat the live-runtime coverage finding as resolved. Resolve stream/bridge under V-5 by either establishing a real owner or deleting it; do not manufacture coverage for unused code.
 
 ### C-7: Model-adapter error/streaming matrix holes
-- **Severity:** medium · **Status:** in progress (Gemini and Bedrock schema gaps resolved)
+- **Severity:** medium · **Status:** in progress (Gemini and Bedrock gaps resolved)
 - **Confidence:** measured
-- **Evidence:** Gemini now injects real GenerateContent failures: an SDK APIError with HTTP 429 must classify as model.ErrRateLimited, ordinary provider errors remain discoverable through wrapping, and Stream explicitly returns model.ErrStreamingUnsupported. Gemini coverage rose from 62.1 % to 64.0 %. Bedrock's structured-output recursion gap is closed by a table covering if/then/else, propertyNames, dependentSchemas, prefixItems, contains, not, allOf, and anyOf. Bedrock's real smithy throttle shapes are still not covered, and malformed SSE/NDJSON branches remain dark across streaming adapters.
+- **Evidence:** Gemini now injects real GenerateContent failures: an SDK APIError with HTTP 429 must classify as model.ErrRateLimited, ordinary provider errors remain discoverable through wrapping, and Stream explicitly returns model.ErrStreamingUnsupported. Gemini coverage rose from 62.1 % to 64.0 %. Bedrock's structured-output recursion table covers all previously dark schema keywords. Bedrock rate limiting now uses real Smithy GenericAPIError codes (ThrottlingException and TooManyRequestsException) plus HTTP ResponseError 429, with negative controls for validation and 500 errors. Malformed SSE/NDJSON branches remain dark across streaming adapters.
 - **Impact:** Provider error classification and byte-stream decoding change most across SDK bumps; real SDK throttle shapes and malformed frames could still regress silently.
-- **Recommendation:** Continue with Bedrock smithy errors and malformed Ollama/OpenAI/Anthropic stream frames, then consolidate the observable contracts into a shared provider checklist.
+- **Recommendation:** Continue with malformed Ollama/OpenAI/Anthropic stream frames, then consolidate the observable contracts into a shared provider checklist.
 
 ### C-8: Mongo query syntax for prompt/memory stores never executes against real Mongo
 - **Severity:** medium · **Status:** still open (delta improved decode-side coverage only)

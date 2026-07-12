@@ -2,13 +2,17 @@ package bedrock
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"net/http"
 	"testing"
 
 	"github.com/stretchr/testify/require"
 
 	"github.com/CaliLuke/loom-mcp/runtime/agent/model"
 	"github.com/aws/aws-sdk-go-v2/service/bedrockruntime"
+	"github.com/aws/smithy-go"
+	smithyhttp "github.com/aws/smithy-go/transport/http"
 )
 
 type errorRuntimeClient struct {
@@ -45,6 +49,50 @@ func TestIsRateLimited_IdempotentOnSentinel(t *testing.T) {
 
 	wrapped := fmt.Errorf("provider: %w", err)
 	require.True(t, isRateLimited(wrapped))
+}
+
+func TestIsRateLimitedRecognizesSmithyErrorShapes(t *testing.T) {
+	cases := []struct {
+		name string
+		err  error
+		want bool
+	}{
+		{
+			name: "throttling exception",
+			err:  &smithy.GenericAPIError{Code: "ThrottlingException", Message: "slow down"},
+			want: true,
+		},
+		{
+			name: "too many requests exception",
+			err:  &smithy.GenericAPIError{Code: "TooManyRequestsException", Message: "slow down"},
+			want: true,
+		},
+		{
+			name: "other API error",
+			err:  &smithy.GenericAPIError{Code: "ValidationException", Message: "invalid"},
+		},
+		{
+			name: "HTTP 429",
+			err: &smithyhttp.ResponseError{
+				Response: &smithyhttp.Response{Response: &http.Response{StatusCode: http.StatusTooManyRequests}},
+				Err:      errors.New("throttled"),
+			},
+			want: true,
+		},
+		{
+			name: "HTTP 500",
+			err: &smithyhttp.ResponseError{
+				Response: &smithyhttp.Response{Response: &http.Response{StatusCode: http.StatusInternalServerError}},
+				Err:      errors.New("failed"),
+			},
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			require.Equal(t, tc.want, isRateLimited(tc.err))
+		})
+	}
 }
 
 func TestComplete_WrapsRateLimitedErrors(t *testing.T) {
