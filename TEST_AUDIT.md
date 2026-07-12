@@ -73,9 +73,9 @@ Finding IDs continue the `679fb76` numbering; each carries a status vs that base
 ### C-7: Model-adapter error/streaming matrix holes
 - **Severity:** medium · **Status:** in progress (Gemini and Bedrock gaps resolved)
 - **Confidence:** measured
-- **Evidence:** Gemini now injects real GenerateContent failures: an SDK APIError with HTTP 429 must classify as model.ErrRateLimited, ordinary provider errors remain discoverable through wrapping, and Stream explicitly returns model.ErrStreamingUnsupported. Gemini coverage rose from 62.1 % to 64.0 %. Bedrock's structured-output recursion table covers all previously dark schema keywords. Bedrock rate limiting now uses real Smithy GenericAPIError codes (ThrottlingException and TooManyRequestsException) plus HTTP ResponseError 429, with negative controls for validation and 500 errors. Malformed SSE/NDJSON branches remain dark across streaming adapters.
+- **Evidence:** Gemini now injects real GenerateContent failures and proves rate-limit, ordinary-error, and streaming-unsupported behavior. Bedrock's structured-output recursion table covers all previously dark schema keywords, and rate limiting now uses real Smithy API/HTTP error shapes. Ollama now has byte-level NDJSON tests for malformed JSON, EOF before the required done record, and scanner token overflow; all three formerly dark stream error branches are covered. Comparable malformed transport/event coverage remains to be confirmed for OpenAI and Anthropic.
 - **Impact:** Provider error classification and byte-stream decoding change most across SDK bumps; real SDK throttle shapes and malformed frames could still regress silently.
-- **Recommendation:** Continue with malformed Ollama/OpenAI/Anthropic stream frames, then consolidate the observable contracts into a shared provider checklist.
+- **Recommendation:** Continue with OpenAI/Anthropic stream failures, then consolidate the observable contracts into a shared provider checklist.
 
 ### C-8: Mongo query syntax for prompt/memory stores never executes against real Mongo
 - **Severity:** medium · **Status:** still open (delta improved decode-side coverage only)

@@ -7,6 +7,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 
@@ -351,6 +352,55 @@ func TestClientStreamReturnsEmbeddedProviderError(t *testing.T) {
 	require.ErrorContains(t, err, "ollama chat stream: provider error: out of memory")
 }
 
+func TestClientStreamRejectsMalformedNDJSON(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte("{invalid\n"))
+	}))
+	defer server.Close()
+
+	streamer := newTestStreamer(t, server.URL)
+	defer func() {
+		require.NoError(t, streamer.Close())
+	}()
+
+	_, err := streamer.Recv()
+	require.ErrorContains(t, err, "ollama: decode stream chunk")
+}
+
+func TestClientStreamRejectsTruncatedResponseBeforeDone(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte("{\"message\":{\"role\":\"assistant\",\"content\":\"partial\"}}\n"))
+	}))
+	defer server.Close()
+
+	streamer := newTestStreamer(t, server.URL)
+	defer func() {
+		require.NoError(t, streamer.Close())
+	}()
+
+	chunk, err := streamer.Recv()
+	require.NoError(t, err)
+	require.Equal(t, model.ChunkTypeText, chunk.Type)
+	_, err = streamer.Recv()
+	require.EqualError(t, err, "ollama: stream ended before done")
+}
+
+func TestClientStreamReportsScannerFailure(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte(strings.Repeat("x", 4*1024*1024+1)))
+	}))
+	defer server.Close()
+
+	streamer := newTestStreamer(t, server.URL)
+	defer func() {
+		require.NoError(t, streamer.Close())
+	}()
+
+	_, err := streamer.Recv()
+	require.ErrorContains(t, err, "ollama chat stream")
+	require.ErrorContains(t, err, "token too long")
+}
+
 func TestClientStreamStructuredOutputExcludesThinking(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		_, _ = w.Write([]byte(`{"model":"gemma4","message":{"role":"assistant","thinking":"Draft JSON privately."}}` + "\n"))
@@ -421,4 +471,18 @@ func collectStreamChunks(t *testing.T, streamer model.Streamer) []model.Chunk {
 		require.NoError(t, err)
 		chunks = append(chunks, chunk)
 	}
+}
+
+func newTestStreamer(t *testing.T, serverURL string) model.Streamer {
+	t.Helper()
+	client, err := ollamamodel.New(ollamamodel.Options{ServerURL: serverURL, DefaultModel: "llama3.1"})
+	require.NoError(t, err)
+	streamer, err := client.Stream(context.Background(), &model.Request{
+		Messages: []*model.Message{{
+			Role:  model.ConversationRoleUser,
+			Parts: []model.Part{model.TextPart{Text: "ping"}},
+		}},
+	})
+	require.NoError(t, err)
+	return streamer
 }
