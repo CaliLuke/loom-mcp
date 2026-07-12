@@ -141,7 +141,11 @@ func genAIParts(parts []model.Part) []any {
 }
 
 func genAIPart(part model.Part) (any, bool) {
-	switch v := part.(type) {
+	normalized, ok := normalizeGenAIPart(part)
+	if !ok {
+		return nil, false
+	}
+	switch v := normalized.(type) {
 	case model.TextPart:
 		if v.Text == "" {
 			return nil, false
@@ -173,6 +177,36 @@ func genAIPart(part model.Part) (any, bool) {
 	default:
 		return map[string]any{genAIPartTypeKey: genAIUnknownPartType}, true
 	}
+}
+
+func normalizeGenAIPart(part model.Part) (model.Part, bool) {
+	switch v := part.(type) {
+	case *model.TextPart:
+		return dereferenceGenAIPart(v)
+	case *model.ToolUsePart:
+		return dereferenceGenAIPart(v)
+	case *model.ToolResultPart:
+		return dereferenceGenAIPart(v)
+	case *model.ThinkingPart:
+		return dereferenceGenAIPart(v)
+	case *model.ImagePart:
+		return dereferenceGenAIPart(v)
+	case *model.DocumentPart:
+		return dereferenceGenAIPart(v)
+	case *model.CitationsPart:
+		return dereferenceGenAIPart(v)
+	case *model.CacheCheckpointPart:
+		return dereferenceGenAIPart(v)
+	default:
+		return part, true
+	}
+}
+
+func dereferenceGenAIPart[T model.Part](part *T) (model.Part, bool) {
+	if part == nil {
+		return nil, false
+	}
+	return *part, true
 }
 
 func genAIDocumentPart(part model.DocumentPart) any {
