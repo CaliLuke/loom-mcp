@@ -126,3 +126,29 @@ func TestReadRejectsSymlinkEscape(t *testing.T) {
 	_, err := Read(context.Background(), []Source{{Root: root}}, "skill://safe/secret.txt")
 	require.ErrorIs(t, err, ErrInvalidURI)
 }
+
+func TestMIMETypeIsDeterministic(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name string
+		path string
+		data []byte
+		want string
+	}{
+		{name: "markdown", path: "reference.md", data: []byte("# Reference\n"), want: "text/markdown; charset=utf-8"},
+		{name: "long markdown extension", path: "reference.markdown", data: []byte("# Reference\n"), want: "text/markdown; charset=utf-8"},
+		{name: "json", path: "metadata.json", data: []byte(`{"name":"skill"}`), want: "application/json"},
+		{name: "yaml", path: "metadata.yaml", data: []byte("name: skill\n"), want: "application/yaml"},
+		{name: "unknown text", path: "notes.unknown", data: []byte("notes\n"), want: "text/plain; charset=utf-8"},
+		{name: "png", path: "diagram.png", data: []byte{0x89, 'P', 'N', 'G'}, want: "image/png"},
+		{name: "unknown binary", path: "payload.unknown", data: []byte{0xff, 0xfe, 0xfd}, want: "application/octet-stream"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			require.Equal(t, tt.want, mimeType(tt.path, tt.data))
+		})
+	}
+}

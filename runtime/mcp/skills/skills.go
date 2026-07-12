@@ -11,7 +11,6 @@ import (
 	"errors"
 	"fmt"
 	"io/fs"
-	"mime"
 	"net/url"
 	"os"
 	"path"
@@ -103,6 +102,10 @@ const (
 	ReloadNever ReloadMode = "never"
 	// ReloadPerCall reloads skill files from disk for every load request.
 	ReloadPerCall ReloadMode = "per_call"
+
+	mimeJSON     = "application/json"
+	mimeMarkdown = "text/markdown; charset=utf-8"
+	mimeText     = "text/plain; charset=utf-8"
 )
 
 var (
@@ -130,14 +133,14 @@ func List(ctx context.Context, sources []Source) ([]Resource, error) {
 				URI:         skillURI(skill.ID, "SKILL.md"),
 				Name:        skill.Name,
 				Description: skill.Description,
-				MimeType:    "text/markdown; charset=utf-8",
+				MimeType:    mimeMarkdown,
 				Metadata:    cloneMetadata(&skill.Metadata),
 			},
 			Resource{
 				URI:         skillURI(skill.ID, "_manifest"),
 				Name:        skill.Name + " manifest",
 				Description: "Skill file manifest",
-				MimeType:    "application/json",
+				MimeType:    mimeJSON,
 				Metadata:    cloneMetadata(&skill.Metadata),
 			},
 		)
@@ -208,7 +211,7 @@ func readManifestContent(s skill) (*Content, error) {
 	}
 	return &Content{
 		URI:      skillURI(s.ID, "_manifest"),
-		MimeType: "application/json",
+		MimeType: mimeJSON,
 		Text:     &text,
 		Metadata: cloneMetadata(&s.Metadata),
 	}, nil
@@ -550,13 +553,44 @@ func skillURI(skillName, rel string) string {
 }
 
 func mimeType(rel string, data []byte) string {
-	if ext := filepath.Ext(rel); ext != "" {
-		if detected := mime.TypeByExtension(ext); detected != "" {
-			return detected
-		}
+	switch strings.ToLower(filepath.Ext(rel)) {
+	case ".md", ".markdown":
+		return mimeMarkdown
+	case ".txt":
+		return mimeText
+	case ".json":
+		return mimeJSON
+	case ".yaml", ".yml":
+		return "application/yaml"
+	case ".csv":
+		return "text/csv; charset=utf-8"
+	case ".html", ".htm":
+		return "text/html; charset=utf-8"
+	case ".css":
+		return "text/css; charset=utf-8"
+	case ".js", ".mjs":
+		return "text/javascript; charset=utf-8"
+	case ".svg":
+		return "image/svg+xml"
+	case ".png":
+		return "image/png"
+	case ".jpg", ".jpeg":
+		return "image/jpeg"
+	case ".gif":
+		return "image/gif"
+	case ".webp":
+		return "image/webp"
+	case ".pdf":
+		return "application/pdf"
+	case ".zip":
+		return "application/zip"
+	case ".gz", ".gzip":
+		return "application/gzip"
+	case ".toml":
+		return "application/toml"
 	}
 	if utf8.Valid(data) {
-		return "text/plain; charset=utf-8"
+		return mimeText
 	}
 	return "application/octet-stream"
 }

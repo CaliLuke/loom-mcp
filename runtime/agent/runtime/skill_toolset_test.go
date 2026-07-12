@@ -44,7 +44,7 @@ func TestSkillToolsetRegistrationExposesSkillsAsModelTools(t *testing.T) {
 		Payload:     rawjson.Message([]byte(`{"skill":"code-review","path":"reference.md"}`)),
 	})
 	require.NoError(t, err)
-	require.JSONEq(t, `{"uri":"skill://code-review/reference.md","mime_type":"text/plain; charset=utf-8","text":"# Reference\n","metadata":{"id":"code-review","name":"Code Review","description":"Review code.","allowed_tools":["shell"],"preload":"on_start","reload":"per_call"},"reloaded":true}`, string(loadOut.Payload))
+	require.JSONEq(t, `{"uri":"skill://code-review/reference.md","mime_type":"text/markdown; charset=utf-8","text":"# Reference\n","metadata":{"id":"code-review","name":"Code Review","description":"Review code.","allowed_tools":["shell"],"preload":"on_start","reload":"per_call"},"reloaded":true}`, string(loadOut.Payload))
 }
 
 func TestSkillToolsetHonorsPerSkillReloadMetadata(t *testing.T) {
