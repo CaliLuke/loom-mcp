@@ -34,6 +34,7 @@ type (
 
 		// statuses tracks workflow status by run ID (inmem uses workflow ID as run ID).
 		statuses map[string]engine.RunStatus
+		handles  map[string]*handle
 	}
 
 	// wfCtx adapts context.Context plus in-memory signal channels into engine.WorkflowContext.
@@ -58,6 +59,7 @@ type (
 		err    error
 		result *api.RunOutput
 		wfCtx  *wfCtx
+		cancel context.CancelFunc
 	}
 
 	// childHandle adapts an in-memory WorkflowHandle to engine.ChildWorkflowHandle.
@@ -204,12 +206,20 @@ func (e *eng) StartWorkflow(ctx context.Context, req engine.WorkflowStartRequest
 	if err := validateWorkflowStartRequest(req); err != nil {
 		return nil, err
 	}
-	wctx := e.newWorkflowContext(ctx, req.ID)
-	h := &handle{done: make(chan struct{}), wfCtx: wctx}
-	e.markWorkflowRunning(req.ID)
+	runCtx, cancel := context.WithCancel(ctx)
+	wctx := e.newWorkflowContext(runCtx, req.ID)
+	h := &handle{done: make(chan struct{}), wfCtx: wctx, cancel: cancel}
+	if err := e.reserveWorkflowRun(req.ID, h); err != nil {
+		cancel()
+		return nil, err
+	}
 	go func() {
 		defer close(h.done)
 		res, err := def.Handler(wctx, req.Input)
+		if runErr := runCtx.Err(); runErr != nil {
+			res = nil
+			err = runErr
+		}
 		h.mu.Lock()
 		h.result = res
 		h.err = err
@@ -263,13 +273,21 @@ func (e *eng) newWorkflowContext(ctx context.Context, id string) *wfCtx {
 	}
 }
 
-func (e *eng) markWorkflowRunning(id string) {
+func (e *eng) reserveWorkflowRun(id string, h *handle) error {
 	e.mu.Lock()
+	defer e.mu.Unlock()
 	if e.statuses == nil {
 		e.statuses = make(map[string]engine.RunStatus)
 	}
+	if _, exists := e.statuses[id]; exists {
+		return fmt.Errorf("workflow ID %q already exists", id)
+	}
+	if e.handles == nil {
+		e.handles = make(map[string]*handle)
+	}
 	e.statuses[id] = engine.RunStatusRunning
-	e.mu.Unlock()
+	e.handles[id] = h
+	return nil
 }
 
 // QueryRunStatus returns the current lifecycle status for a workflow execution.
@@ -286,10 +304,20 @@ func (e *eng) QueryRunStatus(_ context.Context, workflowID string) (engine.RunSt
 	return status, nil
 }
 
-func (e *eng) CancelByID(_ context.Context, _ string) error {
-	// In-memory: best-effort cancellation is not wired. The runtime may use this
-	// in tests; returning nil preserves no-op semantics.
-	return nil
+func (e *eng) CancelByID(ctx context.Context, workflowID string) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	if workflowID == "" {
+		return errors.New("workflow id is required")
+	}
+	e.mu.RLock()
+	h, ok := e.handles[workflowID]
+	e.mu.RUnlock()
+	if !ok {
+		return engine.ErrWorkflowNotFound
+	}
+	return h.Cancel(ctx)
 }
 
 func (h *handle) Wait(ctx context.Context) (*api.RunOutput, error) {
@@ -370,10 +398,17 @@ func (h *handle) signalTypedInput(ctx context.Context, name string, payload any)
 	return sendSignal(ctx, h.done, h.wfCtx.typedInputCh, req)
 }
 
-func (h *handle) Cancel(_ context.Context) error {
-	// In-memory: best-effort cancellation via context cancellation is not wired.
-	// Return nil to match no-op behavior.
-	return nil
+func (h *handle) Cancel(ctx context.Context) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	select {
+	case <-h.done:
+		return engine.ErrWorkflowCompleted
+	default:
+		h.cancel()
+		return nil
+	}
 }
 
 func (c *childHandle) Get(ctx context.Context) (*api.RunOutput, error) {
@@ -397,6 +432,9 @@ func (c *childHandle) Cancel(ctx context.Context) error {
 }
 
 func (c *childHandle) RunID() string {
+	if h, ok := c.h.(*handle); ok {
+		return h.wfCtx.runID
+	}
 	return ""
 }
 
@@ -660,6 +698,11 @@ func (f *future[T]) IsReady() bool {
 }
 
 func sendSignal[T any](ctx context.Context, done <-chan struct{}, ch chan<- T, payload T) error {
+	select {
+	case <-done:
+		return engine.ErrWorkflowCompleted
+	default:
+	}
 	select {
 	case <-ctx.Done():
 		return ctx.Err()
