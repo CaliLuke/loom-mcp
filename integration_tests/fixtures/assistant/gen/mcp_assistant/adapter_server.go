@@ -2479,7 +2479,11 @@ func (a *MCPAdapter) ResourcesList(ctx context.Context, p *ResourcesListPayload)
 	skillSources := skillSources()
 	skillResources, err := mcpskills.List(ctx, skillSources)
 	if err != nil {
-		return nil, err
+		a.log(ctx, "error", map[string]any{
+			"error":  err.Error(),
+			"method": "resources/list",
+		})
+		return nil, a.safeMCPError(err, "internal_error", "Unable to list skill resources.")
 	}
 	for _, resource := range skillResources {
 		resources = append(resources, &ResourceInfo{

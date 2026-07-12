@@ -64,6 +64,12 @@ compatible with older skills: the directory name becomes the ID and the first
 heading or text line becomes the description. Duplicate IDs and invalid
 metadata fail resource discovery.
 
+The generated SDK server discovers and registers skill resources when
+`NewSDKServer` is called. Add or remove skills before constructing a new SDK
+server; an already-running SDK server keeps its registration snapshot. The
+generated adapter and JSON-RPC `resources/list` path scan configured roots for
+each list request.
+
 ## Optional tool arguments
 
 MCP clients may omit `tools/call.arguments`. Generated adapters normalize an

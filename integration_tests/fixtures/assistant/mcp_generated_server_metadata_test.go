@@ -5,6 +5,8 @@ import (
 	"encoding/json"
 	"io"
 	"net/http"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -12,6 +14,7 @@ import (
 	mcpjsonrpcserver "example.com/assistant/gen/jsonrpc/mcp_assistant/server"
 	mcpassistant "example.com/assistant/gen/mcp_assistant"
 	mcpruntime "github.com/CaliLuke/loom-mcp/runtime/mcp"
+	loom "github.com/CaliLuke/loom/pkg"
 	sdkmcp "github.com/modelcontextprotocol/go-sdk/mcp"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -187,6 +190,37 @@ func TestGeneratedSDKServerTrimsResourcePolicyHeaderNames(t *testing.T) {
 			assert.Equal(t, "skill://code-review/SKILL.md", result.Contents[0].URI)
 		})
 	}
+}
+
+func TestGeneratedAdapterSanitizesSkillListingFailures(t *testing.T) {
+	root := t.TempDir()
+	relativeSkillRoot := filepath.Join(".agents", "skills")
+	require.NoError(t, os.MkdirAll(filepath.Dir(filepath.Join(root, relativeSkillRoot)), 0o750))
+	require.NoError(t, os.WriteFile(filepath.Join(root, relativeSkillRoot), []byte("not a directory"), 0o600))
+	t.Chdir(root)
+
+	var loggedError string
+	adapter := mcpassistant.NewMCPAdapter(NewAssistant(), promptProvider{}, &mcpassistant.MCPAdapterOptions{
+		Logger: func(_ context.Context, event string, details any) {
+			if event != "error" {
+				return
+			}
+			fields, ok := details.(map[string]any)
+			if !ok {
+				return
+			}
+			loggedError, _ = fields["error"].(string)
+		},
+	})
+	ctx := context.Background()
+	_, err := adapter.Initialize(ctx, &mcpassistant.InitializePayload{ProtocolVersion: "2025-06-18"})
+	require.NoError(t, err)
+
+	_, err = adapter.ResourcesList(ctx, &mcpassistant.ResourcesListPayload{})
+	require.Error(t, err)
+	assert.Equal(t, "Unable to list skill resources.", loom.ErrorSafeMessage(err))
+	assert.NotContains(t, err.Error(), relativeSkillRoot)
+	assert.Contains(t, loggedError, relativeSkillRoot)
 }
 
 func TestGeneratedJSONRPCServerExposesSEP973MetadataOnWire(t *testing.T) {

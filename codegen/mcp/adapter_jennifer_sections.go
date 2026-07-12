@@ -307,7 +307,11 @@ func emitResourcesList(stmt *jen.Statement, data *AdapterData) {
 				g.Id("skillSources").Op(":=").Id("skillSources").Call()
 				g.List(jen.Id("skillResources"), jen.Err()).Op(":=").Id("mcpskills").Dot("List").Call(jen.Id("ctx"), jen.Id("skillSources"))
 				g.If(jen.Err().Op("!=").Nil()).Block(
-					jen.Return(jen.Nil(), jen.Err()),
+					jen.Id("a").Dot("log").Call(jen.Id("ctx"), jen.Lit("error"), jen.Map(jen.String()).Any().Values(jen.Dict{
+						jen.Lit("method"): jen.Lit("resources/list"),
+						jen.Lit("error"):  jen.Err().Dot("Error").Call(),
+					})),
+					jen.Return(jen.Nil(), jen.Id("a").Dot("safeMCPError").Call(jen.Err(), jen.Lit("internal_error"), jen.Lit("Unable to list skill resources."))),
 				)
 				g.For(jen.List(jen.Id("_"), jen.Id("resource")).Op(":=").Range().Id("skillResources")).Block(
 					jen.Id("resources").Op("=").Append(jen.Id("resources"), jen.Op("&").Id("ResourceInfo").Values(jen.Dict{
