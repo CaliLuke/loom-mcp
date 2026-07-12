@@ -161,9 +161,13 @@ func TestRunCleansUpAfterContextCancel(t *testing.T) {
 		runErr <- reg.Run(runCtx, "127.0.0.1:0")
 	}()
 
-	// Let the server reach its serving state, then trigger the documented
-	// ctx-cancel shutdown path.
-	time.Sleep(100 * time.Millisecond)
+	// Wait until the pool node owns a real Pulse stream, then trigger the
+	// documented ctx-cancel shutdown path. This proves cleanup after startup
+	// without relying on a scheduler delay.
+	require.Eventually(t, func() bool {
+		keys, keysErr := rdb.Keys(ctx, "pulse:stream:*:node:*").Result()
+		return keysErr == nil && len(keys) > 0
+	}, 10*time.Second, 10*time.Millisecond)
 	cancelRun()
 
 	select {

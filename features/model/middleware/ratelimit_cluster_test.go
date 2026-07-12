@@ -15,6 +15,7 @@ type fakeClusterMap struct {
 	mu           sync.Mutex
 	values       map[string]string
 	ch           chan rmap.EventKind
+	updated      chan struct{}
 	unsubscribed chan struct{}
 	unsubOnce    sync.Once
 }
@@ -23,6 +24,7 @@ func newFakeClusterMap() *fakeClusterMap {
 	return &fakeClusterMap{
 		values:       make(map[string]string),
 		ch:           make(chan rmap.EventKind, 1),
+		updated:      make(chan struct{}, 1),
 		unsubscribed: make(chan struct{}),
 	}
 }
@@ -56,6 +58,10 @@ func (m *fakeClusterMap) TestAndSet(_ context.Context, key, test, value string) 
 		return cur, nil
 	}
 	m.values[key] = value
+	select {
+	case m.updated <- struct{}{}:
+	default:
+	}
 	select {
 	case m.ch <- rmap.EventChange:
 	default:
@@ -109,8 +115,11 @@ func TestClusterLimiter_BackoffUpdatesSharedMap(t *testing.T) {
 
 	_, _ = wrapped.Complete(context.Background(), &req)
 
-	// Allow background callback to run.
-	time.Sleep(10 * time.Millisecond)
+	select {
+	case <-m.updated:
+	case <-time.After(time.Second):
+		t.Fatal("timed out waiting for shared TPM update")
+	}
 
 	v, ok := m.Get(key)
 	if !ok {

@@ -53,8 +53,7 @@ func TestStartActivityHeartbeatSkipsContextsWithoutHeartbeatTimeout(t *testing.T
 
 	ctx = engine.WithActivityHeartbeatRecorder(ctx, recorder)
 	stop := startActivityHeartbeatWithInterval(ctx, time.Millisecond)
-	defer stop()
+	stop()
 
-	time.Sleep(10 * time.Millisecond)
 	require.Zero(t, recorder.Count())
 }

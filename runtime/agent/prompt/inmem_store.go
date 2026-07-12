@@ -16,6 +16,7 @@ type (
 	InMemoryStore struct {
 		mu        sync.RWMutex
 		overrides []*Override
+		now       func() time.Time
 	}
 )
 
@@ -23,6 +24,7 @@ type (
 func NewInMemoryStore() *InMemoryStore {
 	return &InMemoryStore{
 		overrides: make([]*Override, 0),
+		now:       time.Now,
 	}
 }
 
@@ -76,17 +78,22 @@ func (s *InMemoryStore) Set(ctx context.Context, promptID Ident, scope Scope, te
 		return fmt.Errorf("set prompt override: template is required")
 	}
 
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	createdAt := s.currentTime().UTC()
+	if count := len(s.overrides); count > 0 && !createdAt.After(s.overrides[count-1].CreatedAt) {
+		createdAt = s.overrides[count-1].CreatedAt.Add(time.Nanosecond)
+	}
 	override := &Override{
 		PromptID:  promptID,
 		Scope:     cloneScope(scope),
 		Template:  template,
 		Version:   VersionFromTemplate(template),
-		CreatedAt: time.Now().UTC(),
+		CreatedAt: createdAt,
 		Metadata:  cloneMetadata(metadata),
 	}
 
-	s.mu.Lock()
-	defer s.mu.Unlock()
 	s.overrides = append(s.overrides, override)
 	return nil
 }
@@ -148,6 +155,13 @@ func cloneOverride(override *Override) *Override {
 		CreatedAt: override.CreatedAt,
 		Metadata:  cloneMetadata(override.Metadata),
 	}
+}
+
+func (s *InMemoryStore) currentTime() time.Time {
+	if s.now == nil {
+		return time.Now()
+	}
+	return s.now()
 }
 
 func cloneScope(scope Scope) Scope {

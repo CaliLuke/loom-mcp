@@ -402,9 +402,11 @@ func (f *testToolFuture) IsReady() bool {
 }
 
 type controlledToolFuture struct {
-	ready chan struct{}
-	out   *api.ToolOutput
-	err   error
+	ready        chan struct{}
+	out          *api.ToolOutput
+	err          error
+	observed     chan struct{}
+	observedOnce sync.Once
 }
 
 func (f *controlledToolFuture) Get(ctx context.Context) (*api.ToolOutput, error) {
@@ -415,6 +417,11 @@ func (f *controlledToolFuture) Get(ctx context.Context) (*api.ToolOutput, error)
 	case <-ctx.Done():
 		return nil, ctx.Err()
 	case <-f.ready:
+		if f.observed != nil {
+			f.observedOnce.Do(func() {
+				close(f.observed)
+			})
+		}
 		return f.out, f.err
 	}
 }

@@ -68,8 +68,12 @@ func TestSyncLifecycleConcurrentStartStop(t *testing.T) {
 // generation.
 func TestSyncLifecycleRestart(t *testing.T) {
 	var (
-		mu    sync.Mutex
-		calls int
+		mu             sync.Mutex
+		calls          int
+		firstCanceled  = make(chan struct{})
+		releaseFirst   = make(chan struct{})
+		callStarted    = make(chan int, 2)
+		cancelObserved sync.Once
 	)
 	countCalls := func() int {
 		mu.Lock()
@@ -78,10 +82,19 @@ func TestSyncLifecycleRestart(t *testing.T) {
 		return calls
 	}
 	client := &mockRegistryClientWithFuncs{
-		listToolsetsFunc: func(_ context.Context) ([]*ToolsetInfo, error) {
+		listToolsetsFunc: func(ctx context.Context) ([]*ToolsetInfo, error) {
 			mu.Lock()
 			calls++
+			call := calls
 			mu.Unlock()
+			callStarted <- call
+			if call == 1 {
+				<-ctx.Done()
+				cancelObserved.Do(func() {
+					close(firstCanceled)
+				})
+				<-releaseFirst
+			}
 			return []*ToolsetInfo{{ID: "ts-1", Name: "restart-toolset"}}, nil
 		},
 		getToolsetFunc: func(_ context.Context, _ string) (*ToolsetSchema, error) {
@@ -96,22 +109,27 @@ func TestSyncLifecycleRestart(t *testing.T) {
 	})
 
 	require.NoError(t, m.StartSync(context.Background()))
-	waitForCondition(t, func() bool {
-		return countCalls() >= 2
-	}, "first sync generation did not run")
+	require.Equal(t, 1, <-callStarted)
 
-	m.StopSync()
+	stopDone := make(chan struct{})
+	go func() {
+		m.StopSync()
+		close(stopDone)
+	}()
+	<-firstCanceled
+	select {
+	case <-stopDone:
+		t.Fatal("StopSync returned before the in-flight sync exited")
+	default:
+	}
+	close(releaseFirst)
+	<-stopDone
 
-	// StopSync waits on syncWg, so every goroutine of the old generation has
-	// exited; the call counter must stay frozen across several intervals.
 	stopped := countCalls()
-	time.Sleep(100 * time.Millisecond)
-	assert.Equal(t, stopped, countCalls(), "old sync goroutine kept running after StopSync")
+	assert.Equal(t, 1, stopped)
 
 	require.NoError(t, m.StartSync(context.Background()))
-	waitForCondition(t, func() bool {
-		return countCalls() > stopped
-	}, "restarted sync generation did not run")
+	require.Equal(t, stopped+1, <-callStarted)
 
 	m.StopSync()
 }

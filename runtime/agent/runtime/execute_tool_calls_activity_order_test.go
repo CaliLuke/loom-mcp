@@ -58,14 +58,13 @@ func TestExecuteToolCalls_ServiceToolsPublishResultsAsComplete(t *testing.T) {
 	outSlow := &ToolOutput{Payload: []byte("1")}
 	outFast := &ToolOutput{Payload: []byte("2")}
 	futSlow := &controlledToolFuture{ready: make(chan struct{}), out: outSlow}
-	futFast := &controlledToolFuture{ready: make(chan struct{}), out: outFast}
+	futFast := &controlledToolFuture{ready: make(chan struct{}), out: outFast, observed: make(chan struct{})}
 	wfCtx.toolFutures[callSlow.ToolCallID] = futSlow
 	wfCtx.toolFutures[callFast.ToolCallID] = futFast
 
 	go func() {
-		time.Sleep(10 * time.Millisecond)
 		close(futFast.ready)
-		time.Sleep(10 * time.Millisecond)
+		<-futFast.observed
 		close(futSlow.ready)
 	}()
 

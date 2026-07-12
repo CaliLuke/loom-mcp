@@ -505,13 +505,11 @@ func TestRunLoopPauseResumeEmitsEvents(t *testing.T) {
 		barrier:     make(chan struct{}, 1),
 	}
 	wfCtx.ensureSignals()
-	// Allow tests to enqueue pause/resume before async completes
-	go func() {
-		time.Sleep(5 * time.Millisecond)
-		wfCtx.pauseCh <- &api.PauseRequest{RunID: "run-1", Reason: "human"}
-		wfCtx.resumeCh <- &api.ResumeRequest{RunID: "run-1", Notes: "resume"}
-		wfCtx.barrier <- struct{}{}
-	}()
+	// Queue pause/resume before allowing async completion. The signal channels
+	// and barrier are buffered, so ordering is deterministic without a sleep.
+	wfCtx.pauseCh <- &api.PauseRequest{RunID: "run-1", Reason: "human"}
+	wfCtx.resumeCh <- &api.ResumeRequest{RunID: "run-1", Notes: "resume"}
+	wfCtx.barrier <- struct{}{}
 	wfCtx.hasPlanResult = true
 	wfCtx.planResult = &planner.PlanResult{FinalResponse: &planner.FinalResponse{Message: &model.Message{Role: "assistant", Parts: []model.Part{model.TextPart{Text: "ok"}}}}}
 	input := &RunInput{AgentID: "svc.agent", RunID: "run-1", SessionID: "sess-1", TurnID: "turn-1"}

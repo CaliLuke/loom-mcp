@@ -78,11 +78,12 @@ func TestInMemoryStoreHistoryNewestFirst(t *testing.T) {
 	t.Parallel()
 
 	store := NewInMemoryStore()
+	fixed := time.Date(2026, time.July, 12, 12, 0, 0, 0, time.UTC)
+	store.now = func() time.Time { return fixed }
 	id := Ident("example.agent.system")
 	if err := store.Set(context.Background(), id, Scope{}, "v1", nil); err != nil {
 		t.Fatalf("set v1: %v", err)
 	}
-	time.Sleep(time.Millisecond)
 	if err := store.Set(context.Background(), id, Scope{}, "v2", nil); err != nil {
 		t.Fatalf("set v2: %v", err)
 	}
@@ -96,5 +97,8 @@ func TestInMemoryStoreHistoryNewestFirst(t *testing.T) {
 	}
 	if history[0].Template != "v2" {
 		t.Fatalf("expected newest first, got %q", history[0].Template)
+	}
+	if !history[0].CreatedAt.After(history[1].CreatedAt) {
+		t.Fatalf("creation times are not monotonic: newest=%s previous=%s", history[0].CreatedAt, history[1].CreatedAt)
 	}
 }
