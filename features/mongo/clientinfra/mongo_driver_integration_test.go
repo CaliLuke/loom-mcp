@@ -36,6 +36,8 @@ func TestMongoDriverV2RunlogAppendRoundTrip(t *testing.T) {
 		Timeout:  10 * time.Second,
 	})
 	require.NoError(t, err)
+	require.Equal(t, "runlog-mongo", client.Name())
+	require.NoError(t, client.Ping(context.Background()))
 
 	ctx := context.Background()
 	event := &runlog.Event{
@@ -61,11 +63,40 @@ func TestMongoDriverV2RunlogAppendRoundTrip(t *testing.T) {
 	require.False(t, second.Inserted)
 	require.Equal(t, first.ID, second.ID)
 
-	page, err := client.List(ctx, event.RunID, "", 10)
+	conflict := *event
+	conflict.ID = ""
+	conflict.Payload = []byte(`{"ok":false}`)
+	_, err = client.Append(ctx, &conflict)
+	require.ErrorContains(t, err, "conflicts with existing event body")
+
+	for i := 2; i <= 4; i++ {
+		next := *event
+		next.ID = ""
+		next.EventKey = fmt.Sprintf("evt-%d", i)
+		next.Timestamp = time.Unix(int64(i), 0).UTC()
+		_, err = client.Append(ctx, &next)
+		require.NoError(t, err)
+	}
+
+	page, err := client.List(ctx, event.RunID, "", 2)
 	require.NoError(t, err)
-	require.Len(t, page.Events, 1)
+	require.Len(t, page.Events, 2)
 	require.Equal(t, first.ID, page.Events[0].ID)
 	require.Equal(t, event.Payload, page.Events[0].Payload)
+	require.NotEmpty(t, page.NextCursor)
+	require.Equal(t, "evt-2", page.Events[1].EventKey)
+
+	nextPage, err := client.List(ctx, event.RunID, page.NextCursor, 2)
+	require.NoError(t, err)
+	require.Len(t, nextPage.Events, 2)
+	require.Empty(t, nextPage.NextCursor)
+	require.Equal(t, "evt-3", nextPage.Events[0].EventKey)
+	require.Equal(t, "evt-4", nextPage.Events[1].EventKey)
+
+	canceled, cancel := context.WithCancel(ctx)
+	cancel()
+	_, err = client.List(canceled, event.RunID, "", 1)
+	require.ErrorIs(t, err, context.Canceled)
 }
 
 func TestMongoDriverV2SessionLinkChildRunTransaction(t *testing.T) {

@@ -28,7 +28,7 @@ const (
 func TestClientAppendAssignsID(t *testing.T) {
 	t.Parallel()
 
-	oid := mustOID(t, "000000000000000000000001")
+	oid := mustOID(t)
 	coll := &fakeCollection{
 		insertedID: oid,
 	}
@@ -121,7 +121,7 @@ func TestClientListNextCursor(t *testing.T) {
 func TestClientAppendReturnsExistingIDForDuplicateEventKey(t *testing.T) {
 	t.Parallel()
 
-	oid := mustOID(t, "000000000000000000000001")
+	oid := mustOID(t)
 	coll := &fakeCollection{
 		insertedID: oid,
 	}
@@ -178,7 +178,7 @@ func TestClientAppendReturnsExistingIDForDuplicateEventKey(t *testing.T) {
 func TestClientAppendReturnsExistingIDForDuplicateEventKeyWithSubMillisecondTimestamp(t *testing.T) {
 	t.Parallel()
 
-	oid := mustOID(t, "000000000000000000000001")
+	oid := mustOID(t)
 	coll := &fakeCollection{
 		insertedID: oid,
 	}
@@ -251,10 +251,10 @@ func fakeEventDocuments(runID string, n int) []eventDocument {
 	return docs
 }
 
-func mustOID(t *testing.T, hex string) bson.ObjectID {
+func mustOID(t *testing.T) bson.ObjectID {
 	t.Helper()
 
-	oid, err := bson.ObjectIDFromHex(hex)
+	oid, err := bson.ObjectIDFromHex("000000000000000000000001")
 	if !assert.NoError(t, err) {
 		t.FailNow()
 	}
@@ -262,10 +262,11 @@ func mustOID(t *testing.T, hex string) bson.ObjectID {
 }
 
 type fakeCollection struct {
-	insertedID bson.ObjectID
+	insertedID any
 	findDocs   []eventDocument
 	findOneDoc eventDocument
 	insertErr  error
+	indexView  indexView
 }
 
 func (c *fakeCollection) InsertOne(context.Context, any, ...options.Lister[options.InsertOneOptions]) (*mongodriver.InsertOneResult, error) {
@@ -287,7 +288,7 @@ func (c *fakeCollection) Find(_ context.Context, filter any, opts ...options.Lis
 
 	runID, _ := f["run_id"].(string)
 	var after bson.ObjectID
-	if id, ok := f["_id"].(bson.M); ok {
+	if id, ok := f[fieldID].(bson.M); ok {
 		if gt, ok := id["$gt"].(bson.ObjectID); ok {
 			after = gt
 		}
@@ -325,6 +326,9 @@ func (c *fakeCollection) Find(_ context.Context, filter any, opts ...options.Lis
 }
 
 func (c *fakeCollection) Indexes() indexView {
+	if c.indexView != nil {
+		return c.indexView
+	}
 	return fakeIndexView{}
 }
 

@@ -62,6 +62,8 @@ const (
 	defaultCollection = "agent_run_events"
 	defaultTimeout    = 5 * time.Second
 	clientName        = "runlog-mongo"
+	fieldEventKey     = "event_key"
+	fieldID           = "_id"
 	fieldRunID        = "run_id"
 )
 
@@ -116,7 +118,7 @@ func (c *client) List(ctx context.Context, runID string, cursor string, limit in
 	defer cancel()
 
 	cur, err := c.coll.Find(ctx, filter, options.Find().
-		SetSort(bson.D{{Key: "_id", Value: 1}}).
+		SetSort(bson.D{{Key: fieldID, Value: 1}}).
 		SetLimit(int64(limit+1)),
 	)
 	if err != nil {
@@ -204,7 +206,7 @@ func listRunlogFilter(runID, cursor string, limit int) (bson.M, error) {
 	if err != nil {
 		return nil, fmt.Errorf("invalid cursor %q: %w", cursor, err)
 	}
-	filter["_id"] = bson.M{"$gt": oid}
+	filter[fieldID] = bson.M{"$gt": oid}
 	return filter, nil
 }
 
@@ -251,7 +253,7 @@ func ensureIndexes(ctx context.Context, coll collection) error {
 	cursorIndex := mongodriver.IndexModel{
 		Keys: bson.D{
 			{Key: fieldRunID, Value: 1},
-			{Key: "_id", Value: 1},
+			{Key: fieldID, Value: 1},
 		},
 	}
 	if _, err := coll.Indexes().CreateOne(ctx, cursorIndex); err != nil {
@@ -260,7 +262,7 @@ func ensureIndexes(ctx context.Context, coll collection) error {
 	identityIndex := mongodriver.IndexModel{
 		Keys: bson.D{
 			{Key: fieldRunID, Value: 1},
-			{Key: "event_key", Value: 1},
+			{Key: fieldEventKey, Value: 1},
 		},
 		Options: options.Index().SetUnique(true),
 	}
@@ -296,8 +298,8 @@ type indexView = clientinfra.IndexCreator
 func (c *client) lookupEventByKey(ctx context.Context, runID string, eventKey string) (eventDocument, error) {
 	var doc eventDocument
 	err := c.coll.FindOne(ctx, bson.M{
-		fieldRunID:  runID,
-		"event_key": eventKey,
+		fieldRunID:    runID,
+		fieldEventKey: eventKey,
 	}).Decode(&doc)
 	if err != nil {
 		return eventDocument{}, err
