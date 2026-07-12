@@ -37,6 +37,7 @@ const (
 	bedrockConfigTypeKey  = "type"
 	bedrockConfigDisplay  = "display"
 	bedrockObjectType     = "object"
+	bedrockThrottlingCode = "ThrottlingException"
 )
 
 // RuntimeClient mirrors the subset of the AWS Bedrock runtime client required
@@ -57,6 +58,8 @@ type tokenCountingRuntimeClient interface {
 type StreamOutput interface {
 	GetStream() *bedrockruntime.ConverseStreamEventStream
 }
+
+type converseStreamFunc func(ctx context.Context, params *bedrockruntime.ConverseStreamInput, optFns ...func(*bedrockruntime.Options)) (StreamOutput, error)
 
 // Options configures the Bedrock client adapter.
 type Options struct {
@@ -92,15 +95,16 @@ type Options struct {
 
 // Client implements model.Client on top of AWS Bedrock Converse.
 type Client struct {
-	runtime      RuntimeClient
-	defaultModel string
-	highModel    string
-	smallModel   string
-	maxTok       int
-	temp         float32
-	think        int
-	ledger       ledgerSource
-	logger       telemetry.Logger
+	runtime        RuntimeClient
+	defaultModel   string
+	highModel      string
+	smallModel     string
+	maxTok         int
+	temp           float32
+	think          int
+	ledger         ledgerSource
+	logger         telemetry.Logger
+	converseStream converseStreamFunc
 }
 
 // ledgerSource provides provider-ready messages for a given run when available.
@@ -221,12 +225,20 @@ func (c *Client) Stream(ctx context.Context, req *model.Request) (model.Streamer
 	}
 	thinking := c.resolveThinking(req, parts)
 	input := c.buildConverseStreamInput(ctx, parts, req, thinking)
-	out, err := c.runtime.ConverseStream(ctx, input, c.streamOptions(thinking)...)
+	var out StreamOutput
+	if c.converseStream != nil {
+		out, err = c.converseStream(ctx, input, c.streamOptions(thinking)...)
+	} else {
+		out, err = c.runtime.ConverseStream(ctx, input, c.streamOptions(thinking)...)
+	}
 	if err != nil {
 		if isRateLimited(err) {
 			return nil, fmt.Errorf("%w: %w", model.ErrRateLimited, err)
 		}
 		return nil, wrapBedrockError("converse_stream", err)
+	}
+	if out == nil {
+		return nil, errors.New("bedrock: stream output is nil")
 	}
 	stream := out.GetStream()
 	if stream == nil {
@@ -567,7 +579,7 @@ func isRateLimited(err error) bool {
 	var apiErr smithy.APIError
 	if errors.As(err, &apiErr) {
 		switch apiErr.ErrorCode() {
-		case "ThrottlingException", "TooManyRequestsException":
+		case bedrockThrottlingCode, "TooManyRequestsException":
 			return true
 		}
 	}

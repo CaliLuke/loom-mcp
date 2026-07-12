@@ -59,7 +59,7 @@ func TestIsRateLimitedRecognizesSmithyErrorShapes(t *testing.T) {
 	}{
 		{
 			name: "throttling exception",
-			err:  &smithy.GenericAPIError{Code: "ThrottlingException", Message: "slow down"},
+			err:  &smithy.GenericAPIError{Code: bedrockThrottlingCode, Message: "slow down"},
 			want: true,
 		},
 		{
