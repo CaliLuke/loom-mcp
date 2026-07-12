@@ -292,14 +292,15 @@ func (m *rmapClusterMap) Unsubscribe(ch <-chan rmap.EventKind) {
 }
 
 func newClusterAdaptiveRateLimiter(ctx context.Context, m clusterMap, key string, initialTPM, maxTPM float64) *AdaptiveRateLimiter {
+	l := newAdaptiveRateLimiter(initialTPM, maxTPM)
 	if key == "" || m == nil {
-		return newAdaptiveRateLimiter(initialTPM, maxTPM)
+		return l
 	}
-	if !seedClusterRateLimit(ctx, m, key, initialTPM) {
-		return newAdaptiveRateLimiter(initialTPM, maxTPM)
+	if !seedClusterRateLimit(ctx, m, key, l.currentTPM) {
+		return l
 	}
-	sharedTPM := loadSharedTPM(m, key, initialTPM)
-	l := newAdaptiveRateLimiter(sharedTPM, maxTPM)
+	sharedTPM := loadSharedTPM(m, key, l.currentTPM)
+	l.replaceTPM(sharedTPM)
 	configureClusterCallbacks(l, m, key)
 	watchSharedTPM(ctx, m, key, l)
 	return l
