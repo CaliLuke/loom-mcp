@@ -125,26 +125,30 @@ func FromModelMessages(msgs []*model.Message) *Ledger {
 			continue
 		}
 		for _, p := range msg.Parts {
+			// Tool results are not part of assistant messages; they are
+			// reconstructed from events or planner results.
 			switch v := p.(type) {
 			case model.ThinkingPart:
-				cp := ThinkingPart{
-					Text:      v.Text,
-					Signature: v.Signature,
-					Index:     v.Index,
-					Final:     v.Final,
-				}
-				if len(v.Redacted) > 0 {
-					cp.Redacted = append([]byte(nil), v.Redacted...)
-				}
-				led.AppendThinking(cp)
+				led.AppendThinking(thinkingPartFromModel(v))
 			case model.TextPart:
 				led.AppendText(v.Text)
 			case model.ToolUsePart:
 				led.DeclareToolUse(v.ID, v.Name, v.Input)
-				// Tool results are not part of assistant messages; they are
-				// reconstructed from events or planner results.
+			case *model.ThinkingPart:
+				if v != nil {
+					led.AppendThinking(thinkingPartFromModel(*v))
+				}
+			case *model.TextPart:
+				if v != nil {
+					led.AppendText(v.Text)
+				}
+			case *model.ToolUsePart:
+				if v != nil {
+					led.DeclareToolUse(v.ID, v.Name, v.Input)
+				}
 			}
 		}
+		led.FlushAssistant()
 	}
 	return led
 }
@@ -411,6 +415,10 @@ func (l *Ledger) IsEmpty() bool {
 }
 
 func decodeLedgerPart(raw json.RawMessage) (Part, error) {
+	var legacyText string
+	if err := json.Unmarshal(raw, &legacyText); err == nil {
+		return TextPart{Text: legacyText}, nil
+	}
 	obj, err := decodeLedgerPartObject(raw)
 	if err != nil {
 		return nil, err
@@ -433,10 +441,6 @@ func decodeLedgerPart(raw json.RawMessage) (Part, error) {
 func decodeLedgerPartObject(raw json.RawMessage) (map[string]json.RawMessage, error) {
 	var obj map[string]json.RawMessage
 	if err := json.Unmarshal(raw, &obj); err != nil {
-		var text string
-		if errText := json.Unmarshal(raw, &text); errText == nil {
-			return map[string]json.RawMessage{"Text": raw}, nil
-		}
 		return nil, fmt.Errorf("decode part object: %w", err)
 	}
 	if len(obj) == 0 {
@@ -677,6 +681,19 @@ func (ThinkingPart) isPart()   {}
 func (TextPart) isPart()       {}
 func (ToolUsePart) isPart()    {}
 func (ToolResultPart) isPart() {}
+
+func thinkingPartFromModel(v model.ThinkingPart) ThinkingPart {
+	out := ThinkingPart{
+		Text:      v.Text,
+		Signature: v.Signature,
+		Index:     v.Index,
+		Final:     v.Final,
+	}
+	if len(v.Redacted) > 0 {
+		out.Redacted = append([]byte(nil), v.Redacted...)
+	}
+	return out
+}
 
 func (l *Ledger) flushAssistant() {
 	if l.current == nil || len(l.current.Parts) == 0 {
