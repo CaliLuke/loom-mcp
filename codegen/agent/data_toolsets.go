@@ -350,13 +350,6 @@ func newToolData(ts *ToolsetData, expr *agentsExpr.ToolExpr, servicesData *servi
 	}
 	// Derive HasResult from tool.Return or bound method result.
 	tool.HasResult = (tool.Return != nil && tool.Return.Type != goaexpr.Empty) || (tool.MethodResultAttr != nil && tool.MethodResultAttr.Type != goaexpr.Empty)
-	// Compute aliasing flags for payload and result against method types when bound.
-	if tool.IsMethodBacked {
-		tool.PayloadAliasesMethod = ToolAttrAliasesMethod(tool.Args, tool.MethodPayloadAttr)
-		if tool.HasResult {
-			tool.ResultAliasesMethod = ToolAttrAliasesMethod(tool.Return, tool.MethodResultAttr)
-		}
-	}
 	return tool
 }
 

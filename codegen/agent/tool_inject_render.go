@@ -58,13 +58,13 @@ func Inject{{ .ConstName }}(payload *{{ .ConstName }}Payload, meta runtime.ToolC
 		{{- range $i, $field := .InjectedFields }}
 		{{- if isMetaInject $field }}
 		{{ goify $field false }}Value := meta.{{ goify $field true }}
-		payload.{{ goify $field true }} = &{{ goify $field false }}Value
+		payload.{{ goify $field true }} = {{ goify $field false }}Value
 		{{- else }}
 		labelValue{{ $i }}, ok := labels[{{ printf "%q" $field }}]
 		if !ok || labelValue{{ $i }} == "" {
 			return fmt.Errorf("missing required run label %q for injected field %q", {{ printf "%q" $field }}, {{ printf "%q" $field }})
 		}
-		payload.{{ goify $field true }} = &labelValue{{ $i }}
+		payload.{{ goify $field true }} = labelValue{{ $i }}
 		{{- end }}
 		{{- end }}
 	return nil

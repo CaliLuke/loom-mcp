@@ -53,7 +53,7 @@ func toolsetAdapterTransformsFile(genpkg string, ts *ToolsetData, specsCache *to
 	helperKeys := make(map[string]struct{})
 
 	for _, t := range ts.Tools {
-		if t == nil || !t.IsMethodBacked || t.MethodPayloadAttr == nil || t.MethodResultAttr == nil {
+		if t == nil || !t.IsMethodBacked {
 			continue
 		}
 

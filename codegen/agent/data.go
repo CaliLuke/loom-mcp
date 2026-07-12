@@ -632,17 +632,6 @@ type (
 		// or is not a user type.
 		MethodResultLoc *codegen.Location
 
-		// PayloadAliasesMethod is true when the tool payload user type matches
-		// the bound method payload user type or any of its Extend bases. In this
-		// case the generated code bypasses the payload adapter and forwards the
-		// tool payload directly to the client.
-		PayloadAliasesMethod bool
-		// ResultAliasesMethod is true when the tool result user type matches the
-		// bound method result user type or any of its Extend bases. In this case the
-		// generated code bypasses the result adapter and returns the service result
-		// directly as the tool result.
-		ResultAliasesMethod bool
-
 		// Optional hint templates from DSL
 		CallHintTemplate   string
 		ResultHintTemplate string

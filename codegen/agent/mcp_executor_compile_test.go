@@ -10,24 +10,89 @@ import (
 
 	codegen "github.com/CaliLuke/loom-mcp/codegen/agent"
 	"github.com/CaliLuke/loom-mcp/codegen/testhelpers"
+	. "github.com/CaliLuke/loom-mcp/dsl"
+	agentsexpr "github.com/CaliLuke/loom-mcp/expr/agent"
+	mcpexpr "github.com/CaliLuke/loom-mcp/expr/mcp"
 	gcodegen "github.com/CaliLuke/loom/codegen"
+	loomgenerator "github.com/CaliLuke/loom/codegen/generator"
+	. "github.com/CaliLuke/loom/dsl"
+	"github.com/CaliLuke/loom/eval"
+	goaexpr "github.com/CaliLuke/loom/expr"
 	"github.com/stretchr/testify/require"
 )
 
-// TestGeneratedFromMCPToolsetCompiles runs the agent generator on a minimal
-// FromMCP design and compiles the full generated output with `go build` in a
-// throwaway module that resolves loom-mcp to this repository. This guards the
-// generated mcp_executor.go (and every other emitted file) against emitting
-// code that only fails at user compile time, such as tools.Ident/string
-// mismatches or codec misuse.
-func TestGeneratedFromMCPToolsetCompiles(t *testing.T) {
-	roots := runAliasedMCPDesign(t)
-	files, err := codegen.Generate("example.com/fmcp/gen", roots, nil)
-	require.NoError(t, err)
+// TestGeneratedAgentDesignsCompile renders and compiles materially different
+// agent designs. It guards against source-level assertions passing while the
+// complete generated package graph is not valid Go.
+func TestGeneratedAgentDesignsCompile(t *testing.T) {
+	cases := []struct {
+		name     string
+		generate func(*testing.T) []*gcodegen.File
+		verify   func(*testing.T, []*gcodegen.File)
+	}{
+		{
+			name: "FromMCP toolset",
+			generate: func(t *testing.T) []*gcodegen.File {
+				roots := runAliasedMCPDesign(t)
+				files, err := codegen.Generate("example.com/fmcp/gen", roots, nil)
+				require.NoError(t, err)
+				return files
+			},
+			verify: verifyFromMCPExecutor,
+		},
+		{
+			name:     "method-backed MCP projection",
+			generate: generateProjectedAgentDesign,
+			verify: func(t *testing.T, files []*gcodegen.File) {
+				require.NotEmpty(t, testhelpers.FileContent(t, files, "gen/assistant/agents/planner/lookup_tools/service_executor.go"))
+			},
+		},
+		{
+			name:     "registry-backed discovery",
+			generate: generateRegistryAgentDesign,
+			verify: func(t *testing.T, files []*gcodegen.File) {
+				specs := testhelpers.FileContent(t, files, "gen/assistant/toolsets/data_tools/specs.go")
+				require.Contains(t, specs, "func resolveLocalSchemaRef")
+				require.Contains(t, specs, "func FreezeSpecs")
+			},
+		},
+		{
+			name:     "injected payload field",
+			generate: generateInjectedAgentDesign,
+			verify: func(t *testing.T, files []*gcodegen.File) {
+				inject := testhelpers.FileContent(t, files, "gen/assistant/toolsets/lookup/inject.go")
+				specs := testhelpers.FileContent(t, files, "gen/assistant/toolsets/lookup/specs.go")
+				require.Contains(t, inject, "sessionIDValue := meta.SessionID")
+				require.NotContains(t, specs, `"session_id"`)
+			},
+		},
+		{
+			name:     "payload-only bound method",
+			generate: generatePayloadOnlyAgentDesign,
+			verify: func(t *testing.T, files []*gcodegen.File) {
+				transforms := testhelpers.FileContent(t, files, "gen/assistant/toolsets/notify/transforms.go")
+				require.Contains(t, transforms, "func InitNotifyMethodPayload")
+			},
+		},
+	}
 
-	// Sanity-check the executor contract before spending time on the build:
-	// tools.Ident is converted once, and the payload is decoded (validated)
-	// with the payload codec before being re-encoded for the MCP caller.
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			files := tc.generate(t)
+			tc.verify(t, files)
+			moduleDir := writeGeneratedModule(t, files)
+
+			build := exec.CommandContext(t.Context(), "go", "build", "./...")
+			build.Dir = moduleDir
+			build.Env = append(os.Environ(), "GOWORK=off", "GOFLAGS=-mod=mod")
+			out, err := build.CombinedOutput()
+			require.NoErrorf(t, err, "generated %s output does not compile:\n%s", tc.name, string(out))
+		})
+	}
+}
+
+func verifyFromMCPExecutor(t *testing.T, files []*gcodegen.File) {
+	t.Helper()
 	executor := testhelpers.FileContent(t, files, "gen/alpha/agents/scribe/calc_remote/mcp_executor.go")
 	require.Contains(t, executor, "name := string(full)")
 	require.Contains(t, executor, `raw = []byte("{}")`)
@@ -35,14 +100,150 @@ func TestGeneratedFromMCPToolsetCompiles(t *testing.T) {
 	require.Contains(t, executor, "payload, err := pc.ToJSON(decoded)")
 	require.NotContains(t, executor, "pc.ToJSON(call.Payload)",
 		"call.Payload is raw JSON and must not be passed to the typed encoder")
+}
 
-	moduleDir := writeGeneratedModule(t, files)
+func generateProjectedAgentDesign(t *testing.T) []*gcodegen.File {
+	t.Helper()
+	setupCompileEvalRoots(t, true)
+	design := func() {
+		API("assistant", func() {})
+		payload := Type("LookupPayload", func() {
+			Attribute("query", String)
+			Required("query")
+		})
+		result := Type("LookupResult", func() {
+			Attribute("answer", String)
+			Required("answer")
+		})
+		Service("assistant", func() {
+			MCP("assistant-mcp", "1.0.0")
+			Method("lookup", func() {
+				Payload(payload)
+				Result(result)
+			})
+			Agent("planner", "Planner", func() {
+				Use("lookup_tools", func() {
+					Tool("lookup", "Lookup", func() {
+						Args(payload)
+						Return(result)
+						BindTo("assistant", "lookup")
+						Expose(AgentRuntime, MCPSurface)
+						MCPPlacement("assistant", "assistant-mcp")
+					})
+				})
+			})
+		})
+	}
+	require.True(t, eval.Execute(design, nil), eval.Context.Error())
+	require.NoError(t, eval.RunDSL())
+	return generateAgentAndServiceFiles(t, []eval.Root{goaexpr.Root, agentsexpr.Root, mcpexpr.Root})
+}
 
-	build := exec.CommandContext(t.Context(), "go", "build", "./...")
-	build.Dir = moduleDir
-	build.Env = append(os.Environ(), "GOWORK=off", "GOFLAGS=-mod=mod")
-	out, err := build.CombinedOutput()
-	require.NoErrorf(t, err, "generated FromMCP output does not compile:\n%s", string(out))
+func generateRegistryAgentDesign(t *testing.T) []*gcodegen.File {
+	t.Helper()
+	return generateCompileDesign(t, false, func() {
+		API("assistant", func() {})
+		registry := Registry("corp", func() {
+			URL("https://registry.example.com")
+			SyncInterval("5m")
+			CacheTTL("1h")
+		})
+		tools := Toolset(FromRegistry(registry, "data-tools"))
+		Service("assistant", func() {
+			Agent("planner", "Planner", func() {
+				Use(tools)
+			})
+		})
+	})
+}
+
+func generateInjectedAgentDesign(t *testing.T) []*gcodegen.File {
+	t.Helper()
+	return generateCompileDesign(t, false, func() {
+		API("assistant", func() {})
+		payload := Type("LookupPayload", func() {
+			Attribute("session_id", String)
+			Attribute("query", String)
+			Required("session_id", "query")
+		})
+		Service("assistant", func() {
+			Method("lookup", func() {
+				Payload(payload)
+				Result(String)
+			})
+			Agent("chat", "Chat agent", func() {
+				Use("lookup", func() {
+					Tool("lookup", "Lookup", func() {
+						Args(payload)
+						Return(String)
+						BindTo("assistant", "lookup")
+						Inject("session_id")
+					})
+				})
+			})
+		})
+	})
+}
+
+func generatePayloadOnlyAgentDesign(t *testing.T) []*gcodegen.File {
+	t.Helper()
+	return generateCompileDesign(t, false, func() {
+		API("assistant", func() {})
+		payload := Type("NotifyPayload", func() {
+			Attribute("message", String)
+			Required("message")
+		})
+		Service("assistant", func() {
+			Method("notify", func() {
+				Payload(payload)
+			})
+			Agent("chat", "Chat agent", func() {
+				Use("notify", func() {
+					Tool("notify", "Notify", func() {
+						Args(payload)
+						BindTo("assistant", "notify")
+					})
+				})
+			})
+		})
+	})
+}
+
+func setupCompileEvalRoots(t *testing.T, withMCP bool) {
+	t.Helper()
+	eval.Reset()
+	goaexpr.Root = new(goaexpr.RootExpr)
+	goaexpr.GeneratedResultTypes = new(goaexpr.ResultTypesRoot)
+	require.NoError(t, eval.Register(goaexpr.Root))
+	require.NoError(t, eval.Register(goaexpr.GeneratedResultTypes))
+	agentsexpr.Root = &agentsexpr.RootExpr{}
+	require.NoError(t, eval.Register(agentsexpr.Root))
+	if withMCP {
+		mcpexpr.Root = mcpexpr.NewRoot()
+		require.NoError(t, eval.Register(mcpexpr.Root))
+	}
+}
+
+func generateAgentAndServiceFiles(t *testing.T, roots []eval.Root) []*gcodegen.File {
+	t.Helper()
+	const genpkg = "example.com/fmcp/gen"
+	files, err := loomgenerator.Service(genpkg, roots)
+	require.NoError(t, err)
+	files, err = codegen.Generate(genpkg, roots, files)
+	require.NoError(t, err)
+	return files
+}
+
+func generateCompileDesign(t *testing.T, withMCP bool, design func()) []*gcodegen.File {
+	t.Helper()
+	setupCompileEvalRoots(t, withMCP)
+	require.True(t, eval.Execute(design, nil), eval.Context.Error())
+	require.NoError(t, eval.RunDSL())
+	roots := []eval.Root{goaexpr.Root, agentsexpr.Root}
+	if withMCP {
+		roots = append(roots, mcpexpr.Root)
+	}
+	return generateAgentAndServiceFiles(t, roots)
 }
 
 // writeGeneratedModule materializes the generated .go files into a temp module

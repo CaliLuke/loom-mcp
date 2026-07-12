@@ -534,12 +534,9 @@ func emitToolProviderDispatchers(stmt *jen.Statement, data toolProviderFileData)
 					),
 					jen.Id("methodIn").Op("=").Id("value"),
 				).Else().BlockFunc(func(eg *jen.Group) {
-					switch {
-					case tool.MethodPayloadTypeRef == "":
+					if tool.MethodPayloadTypeRef == "" {
 						eg.Id("methodIn").Op("=").Nil()
-					case tool.PayloadAliasesMethod:
-						eg.Id("methodIn").Op("=").Id("toolArgs")
-					default:
+					} else {
 						eg.Id("methodIn").Op("=").Id("Init" + tool.ConstName + "MethodPayload").Call(jen.Id("toolArgs").Assert(jen.Op("*").Id(tool.ConstName + "Payload")))
 					}
 				})
@@ -571,7 +568,11 @@ func emitToolProviderDispatchers(stmt *jen.Statement, data toolProviderFileData)
 						}), jen.Nil()),
 					),
 				)
-				g.List(jen.Id("methodOut"), jen.Id("err")).Op(":=").Id("opts").Dot("Call").Call(jen.Id("ctx"), jen.Id("methodIn"))
+				if tool.HasResult {
+					g.List(jen.Id("methodOut"), jen.Id("err")).Op(":=").Id("opts").Dot("Call").Call(jen.Id("ctx"), jen.Id("methodIn"))
+				} else {
+					g.List(jen.Id("_"), jen.Id("err")).Op("=").Id("opts").Dot("Call").Call(jen.Id("ctx"), jen.Id("methodIn"))
+				}
 				g.If(jen.Id("err").Op("!=").Nil()).Block(
 					jen.Id("tr").Op(":=").Op("&").Id("planner").Dot("ToolResult").Values(jen.Dict{
 						jen.Id("Name"):  jen.Id(tool.ConstName),
@@ -603,14 +604,10 @@ func emitToolProviderDispatchers(stmt *jen.Statement, data toolProviderFileData)
 						),
 						jen.Id("result").Op("=").Id("value"),
 					).Else().BlockFunc(func(eg *jen.Group) {
-						if tool.ResultAliasesMethod {
-							eg.Id("result").Op("=").Id("methodOut")
+						if toolNeedsMethodResultProjection(tool) {
+							eg.Id("result").Op("=").Id("Init" + tool.ConstName + "ToolResult").Call(jen.Id("typedMethodOut"))
 						} else {
-							if toolNeedsMethodResultProjection(tool) {
-								eg.Id("result").Op("=").Id("Init" + tool.ConstName + "ToolResult").Call(jen.Id("typedMethodOut"))
-							} else {
-								eg.Id("result").Op("=").Id("Init" + tool.ConstName + "ToolResult").Call(jen.Id("methodOut").Assert(gocodegen.TypeRef(tool.MethodResultTypeRef)))
-							}
+							eg.Id("result").Op("=").Id("Init" + tool.ConstName + "ToolResult").Call(jen.Id("methodOut").Assert(gocodegen.TypeRef(tool.MethodResultTypeRef)))
 						}
 					})
 					resultFields := jen.Dict{
@@ -766,17 +763,21 @@ func emitToolProviderHandle(stmt *jen.Statement, data toolProviderFileData) {
 								),
 								jen.Return(jen.Id("toolregistry").Dot("NewToolResultErrorMessage").Call(jen.Id("msg").Dot("ToolUseID"), jen.Lit("invalid_arguments"), jen.Id("err").Dot("Error").Call()), jen.Nil()),
 							)
-							if tool.PayloadAliasesMethod {
-								cg.Id("methodIn").Op(":=").Id("args")
-							} else {
-								cg.Id("methodIn").Op(":=").Id("Init" + tool.ConstName + "MethodPayload").Call(jen.Id("args"))
-							}
+							cg.Id("methodIn").Op(":=").Id("Init" + tool.ConstName + "MethodPayload").Call(jen.Id("args"))
 							for _, field := range tool.InjectedFields {
 								cg.Id("methodIn").Dot(gocodegen.Goify(field, true)).Op("=").Id("msg").Dot("Meta").Dot(gocodegen.Goify(field, true))
 							}
-							cg.List(jen.Id("methodOut"), jen.Id("err")).Op(":=").Id("p").Dot("svc").Dot(tool.MethodGoName).Call(jen.Id("ctx"), jen.Id("methodIn"))
+							if tool.HasResult {
+								cg.List(jen.Id("methodOut"), jen.Id("err")).Op(":=").Id("p").Dot("svc").Dot(tool.MethodGoName).Call(jen.Id("ctx"), jen.Id("methodIn"))
+							} else {
+								cg.Id("err").Op("=").Id("p").Dot("svc").Dot(tool.MethodGoName).Call(jen.Id("ctx"), jen.Id("methodIn"))
+							}
 						} else {
-							cg.List(jen.Id("methodOut"), jen.Id("err")).Op(":=").Id("p").Dot("svc").Dot(tool.MethodGoName).Call(jen.Id("ctx"))
+							if tool.HasResult {
+								cg.List(jen.Id("methodOut"), jen.Id("err")).Op(":=").Id("p").Dot("svc").Dot(tool.MethodGoName).Call(jen.Id("ctx"))
+							} else {
+								cg.Id("err").Op(":=").Id("p").Dot("svc").Dot(tool.MethodGoName).Call(jen.Id("ctx"))
+							}
 						}
 						cg.If(jen.Id("err").Op("!=").Nil()).Block(
 							jen.If(jen.List(jen.Id("issues")).Op(":=").Id("toolregistry").Dot("ValidationIssues").Call(jen.Id("err")), jen.Len(jen.Id("issues")).Op(">").Lit(0)).Block(
@@ -785,12 +786,8 @@ func emitToolProviderHandle(stmt *jen.Statement, data toolProviderFileData) {
 							jen.Return(jen.Id("toolregistry").Dot("NewToolResultErrorMessage").Call(jen.Id("msg").Dot("ToolUseID"), jen.Id("toolErrorCode").Call(jen.Id("err")), jen.Id("err").Dot("Error").Call()), jen.Nil()),
 						)
 						if tool.HasResult {
-							if tool.ResultAliasesMethod {
-								cg.List(jen.Id("resultJSON"), jen.Id("err")).Op(":=").Qual("encoding/json", "Marshal").Call(jen.Id("methodOut"))
-							} else {
-								cg.Id("result").Op(":=").Id("Init" + tool.ConstName + "ToolResult").Call(jen.Id("methodOut"))
-								cg.List(jen.Id("resultJSON"), jen.Id("err")).Op(":=").Id(tool.ConstName + "ResultCodec").Dot("ToJSON").Call(jen.Id("result"))
-							}
+							cg.Id("result").Op(":=").Id("Init" + tool.ConstName + "ToolResult").Call(jen.Id("methodOut"))
+							cg.List(jen.Id("resultJSON"), jen.Id("err")).Op(":=").Id(tool.ConstName + "ResultCodec").Dot("ToJSON").Call(jen.Id("result"))
 							cg.If(jen.Id("err").Op("!=").Nil()).Block(
 								jen.Return(jen.Id("toolregistry").Dot("NewToolResultErrorMessage").Call(jen.Id("msg").Dot("ToolUseID"), jen.Lit("encode_failed"), jen.Id("err").Dot("Error").Call()), jen.Nil()),
 							)

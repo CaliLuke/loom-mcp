@@ -111,9 +111,17 @@ func WithClient(client *{{ .ServicePkgAlias }}.Client) ExecOpt {
         {{- if .IsMethodBacked }}
         c.callers[tools.Ident({{ printf "%q" .QualifiedName }})] = func(ctx context.Context, args any) (any, error) {
             {{- if .MethodPayloadTypeRef }}
+            {{- if .HasResult }}
             return client.{{ .MethodGoName }}(ctx, args.({{ .MethodPayloadTypeRef }}))
             {{- else }}
+            return nil, client.{{ .MethodGoName }}(ctx, args.({{ .MethodPayloadTypeRef }}))
+            {{- end }}
+            {{- else }}
+            {{- if .HasResult }}
             return client.{{ .MethodGoName }}(ctx)
+            {{- else }}
+            return nil, client.{{ .MethodGoName }}(ctx)
+            {{- end }}
             {{- end }}
         }
         {{- end }}

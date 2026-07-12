@@ -4,11 +4,11 @@ Audited: 2026-07-11 (refresh + first remediation) · Baseline commit: `4f2c262` 
 Baseline: prior audit at `679fb76` earlier the same day; this refresh re-measured everything at HEAD (30 commits, 116 files, +4,227/−1,438 later) and re-verified every prior finding.
 Recent remediation commits: `2752473` (shuffled order hygiene), `3392ddd` (complete CI selection), `fb333e2`/`93dd57c`/`49bfddd` (validation coverage), `5dce735` (nil-result validation), `614d111` (fixture transport isolation).
 
-Remediation progress: **S-2 is resolved; C-1/C-2 are locally repaired and fully verified, with only an actual hosted Actions run pending; C-3 has achieved both planned targets: 49/59 DSL error sites and more than 37/46 `ToolExpr.Validate` conditions.** CI uses the correct pinned toolchain and complete uncached gates. DSL statement coverage is now 73.3 %, `ToolExpr.Validate` is 93.9 % statement-covered, all unsupported MCP projection features are asserted, and both `ToolExpr.Finalize` and `MCPExpr.Finalize` are tested for idempotency. The validation campaign exposed and fixed C-14, a nil method-result panic in ServerData validation, and the full gate exposed and fixed C-15, cross-test HTTP transport interference in the assistant fixture.
+Remediation progress: **S-2 is resolved; C-1/C-2 are locally repaired and fully verified, with only an actual hosted Actions run pending; C-3 and C-4 have achieved their planned targets.** Validation now covers 49/59 DSL error sites and more than 37/46 `ToolExpr.Validate` conditions. Five materially different agent designs are freshly rendered and compiled. That compile matrix immediately exposed three current generator defects: cross-package named payloads were forwarded without conversion (C-16), required injected strings were assigned pointers (C-17), and result-less methods were called as two-result functions (C-18); all are fixed by the matrix change.
 
 ## 1. Executive summary
 
-The suite grew slightly (303 test files, 1,439 top-level test functions, +37 since `679fb76`) and every one of the 30 delta fix commits landed with tests — regression discipline is now 45/45 across both audit passes, and the new runtime/registry tests are genuinely behavior-asserting (bounded-cache eviction, race-hardened error precedence, subprocess signal handling). The first structural remediation is complete: the DSL order-coupling defect is fixed and shuffle is enforced by `make test`. The CI configuration repair is now implemented locally: its toolchain matches the modules, repository make targets own the commands, `make itest` reaches all 164 integration functions, and Docker-backed registry coverage fails closed in CI. **An actual green Actions run remains the immediate blocker** because the repository still reports zero historical runs; code inspection cannot prove repository-level Actions permissions or hosted-run behavior. The other high/medium completeness and value findings remain open. The `.tmp` fixture leak is still 77 dirs / 103 MB, and the bedrock structured-schema fix (`c5f293a`) still has roughly 10 neighboring keyword branches without direct coverage.
+The suite grew slightly (303 test files, 1,439 top-level test functions, +37 since `679fb76`) and every one of the 30 delta fix commits landed with tests — regression discipline is now 45/45 across both audit passes. The first two structural remediation phases are complete: shuffle is enforced, the design-validation targets are met, and a five-design compile matrix now rejects invalid generated package graphs. The CI configuration repair is implemented locally: its toolchain matches the modules, repository make targets own the commands, `make itest` reaches all 164 integration functions, and Docker-backed registry coverage fails closed in CI. **An actual green Actions run remains the immediate blocker** because the repository still reports zero historical runs; code inspection cannot prove repository-level Actions permissions or hosted-run behavior. Runtime, provider, persistence, protocol, and throughput findings remain open. The `.tmp` fixture leak is still 77 dirs / 103 MB, and the bedrock structured-schema fix (`c5f293a`) still has roughly 10 neighboring keyword branches without direct coverage.
 
 ## 2. Inventory (cross-repo baseline metrics)
 
@@ -51,12 +51,12 @@ Finding IDs continue the `679fb76` numbering; each carries a status vs that base
 - **Impact:** The central expression validator and the high-risk DSL authoring boundary are no longer major blind spots. Ten lower-priority DSL error sites remain and should be covered when their owning features change.
 - **Recommendation:** Preserve the matrices and exact-message assertions; fold the remaining ten sites into related feature work rather than blocking the higher-yield compile and runtime phases.
 
-### C-4: Only 2 files / 3 funcs of 231 codegen tests compile the generated output
-- **Severity:** high · **Status:** still open (pattern reconfirmed in the delta)
+### C-4: Generated-output compilation matrix reaches five agent designs
+- **Severity:** high · **Status:** resolved to target
 - **Confidence:** measured
-- **Evidence:** 231 `func Test` in `codegen/` at HEAD; real `go build` of generated output only in `codegen/agent/mcp_executor_compile_test.go:41` and `codegen/agent/tests/quickstart_test.go:223`. `projection_contract_test.go:58` still string-only. The delta reproduced the two-layer pattern exactly: `0dc4bce` and `0a0e261` added **string/signature-only** assertions at the codegen layer (`registry_toolset_specs_test.go:79-82` asserts the generated source *contains* `"func resolveLocalSchemaRef"`; `registry_client_test.go:42` asserts a method signature substring) while the real behavioral coverage went into the `agent_features` fixture module (+72/+64-line compiled tests) — which only runs via `make itest`, i.e. behind the C-1 gate.
-- **Impact:** Unchanged: string assertions pass on uncompilable output, and the compensating fixture tests are dark until CI exists.
-- **Recommendation:** Unchanged: extend the `writeGeneratedModule` harness with a design table (projected-only first).
+- **Evidence:** `TestGeneratedAgentDesignsCompile` now renders Loom service files plus agent-plugin files into isolated modules and runs `go build ./...` for five materially different designs: FromMCP, method-backed MCP projection, registry-backed discovery/specs, injected payload separation, and a payload-only bound method. Registry local-ref/freeze generation and injected-field hiding retain focused source assertions, but compilation is now the decisive contract. The first expanded run failed on three distinct current generator defects (C-16–C-18), demonstrating that the prior string-only tests could pass on invalid output.
+- **Impact:** The highest-risk agent generator shapes can no longer ship uncompilable merely because their source snippets look correct. Prompt/resource-only MCP generation remains a useful protocol-phase addition, but is not needed to satisfy this agent compile target.
+- **Recommendation:** Preserve the matrix and add a case whenever a new generated package boundary, provider kind, or method signature shape is introduced.
 
 ### C-5: MCP spec areas with zero coverage anywhere: sampling, roots, progress
 - **Severity:** medium · **Status:** still open (no delta movement)
@@ -237,7 +237,7 @@ Rank positions are preserved for traceability. Rank 2 is complete; the other opp
 | 2 | **Completed:** fix `resetDSLRoots`, restore roots with `t.Cleanup`, enforce `-shuffle=on` | S-2 | complete | done | Order-coupling class eliminated; unlocks parallelism work |
 | 3 | Unit-suite critical path: quickstart out of `make test`, FileOrder 13→3, memoize conformance fixture, tune gopter TTL | S-1, V-2 | quick win | hours | Warm wall 30 s → ~15 s; cold-cache worst case shrinks 40–100 s |
 | 4 | **Completed:** DSL/expr validation tables (49/59 DSL; ToolExpr target achieved) | C-3, C-13, C-14 | complete | done | Both coverage targets met; one current panic fixed |
-| 5 | Compile-the-output design table on `writeGeneratedModule` | C-4 | structural | days | Kills the string-tests-pass-on-broken-output mode the delta just re-demonstrated |
+| 5 | **Completed:** compile-the-output matrix with five generated designs | C-4, C-16, C-17, C-18 | complete | done | Three current generator defects found and fixed |
 | 6 | Replace `os.Setenv` header channel → drop `-parallel 1`; one server per YAML; `TestMain` cleanup | S-3, S-4 | structural | days | Integration ~60–90 s; stops the 103 MB leak |
 | 7 | Shared adapter conformance table (+ Gemini/Bedrock error shapes, bedrock keyword table, Mongo prompt/memory integration) | C-7, C-8, V-3 | structural | days | Provider-regression class covered once, uniformly |
 | 8 | Deletions & consolidation: echo tests, 2 stale skips, dead setters, bridge decision, tool-search/OAuth table-driving | V-1, V-4, V-5 | quick win | days | ~40–60 fewer funcs in the biggest bucket |
@@ -316,6 +316,8 @@ The design packages own these contracts; never patch emitted `gen/` files. Any g
 
 Exit criterion: at least four distinct designs compile from freshly rendered output, and each high-risk string-only assertion identified by C-4 is paired with compile or behavioral proof.
 
+Progress: **Phase 3 exit criteria achieved.** Five agent designs compile from freshly rendered service and plugin output. The new cases found and fixed three independent compile failures: named-type conversion bypass, invalid injected-field pointer assignment, and incorrect result-less service invocation. The prompt/resource-only MCP shape is deferred to the protocol phase, where it can be paired with real transport behavior rather than a vacuous agent-only build.
+
 ### Phase 4 — cover high-fan-in runtime and concurrency boundaries
 
 **Findings:** C-6, C-9, C-10. **Expected defect yield:** medium to high because these paths fan into most agent executions but currently have little or no direct isolation.
@@ -368,6 +370,9 @@ Exit criterion: warm unit wall at or below 20 seconds, integration wall at or be
 
 | Finding | Exposing test | Root cause | Fix commit | Status |
 |---|---|---|---|---|
+| C-18 | payload-only bound-method compile case | generated wrappers assumed every service method returned `(result, error)`; result-less Goa methods return only `error` | this change | fixed; generated module compiles |
+| C-17 | injected-payload compile case | `inject.go` assigned `*string` to required injected fields generated as `string` | this change | fixed; generated module compiles |
+| C-16 | method-backed projection compile case | alias detection compared schema/user-type names but ignored that tool and service types are distinct named Go types in different packages | this change | fixed; generated module compiles |
 | C-15 | full make itest + repeated assistant fixture | parallel SDK clients shared the global HTTP transport, allowing cross-test connection-pool lifecycle interference | `614d111` | fixed; 20× fixture + 50× race stress green |
 | S-2 | shuffled `dsl` suite, seeds `101` and `202` | `resetDSLRoots` omitted `mcpexpr.Root`; three `expr/agent` tests leaked replaced globals | `2752473` | fixed |
 | C-1 | CI contract inventory + uncached `make itest` | workflow used Go `1.25.x`, Loom `@latest`, selected only 6/164 integration functions, and allowed cached scenario passes | this change | local gates green; hosted run pending |
