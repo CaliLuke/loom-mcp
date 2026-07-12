@@ -203,6 +203,10 @@ func (r *Runner) executeSSE(
 		line = strings.TrimRight(line, "\r\n")
 		if line == "" {
 			if cur.Event != "" || len(cur.Data) > 0 {
+				if cur.Event == "retry" {
+					cur = sseEvent{}
+					continue
+				}
 				events = append(events, cur)
 				if code, msg, ok := sseErrorEnvelope(cur); ok {
 					sawErrorEvent = true

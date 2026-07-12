@@ -193,6 +193,28 @@ func TestExecuteSSERecognizesJSONRPCErrorEnvelope(t *testing.T) {
 	assert.Equal(t, "message", events[0].Event)
 }
 
+func TestExecuteSSESkipsRetryControlEvents(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
+		w.Header().Set("Content-Type", "text/event-stream")
+		if _, err := fmt.Fprint(w, "event: retry\nretry: 1000\ndata:\n\n"); err != nil {
+			return
+		}
+		if _, err := fmt.Fprint(w, "event: message\ndata: {\"jsonrpc\":\"2.0\",\"result\":{},\"id\":1}\n\n"); err != nil {
+			return
+		}
+	}))
+	t.Cleanup(server.Close)
+
+	runner := NewRunner()
+	runner.baseURL = mustParseURL(t, server.URL)
+
+	events, err := runner.executeSSE("tools/call", map[string]any{"name": "example"}, map[string]string{"Accept": "text/event-stream"}, nil)
+
+	require.NoError(t, err)
+	require.Len(t, events, 1)
+	assert.Equal(t, "message", events[0].Event)
+}
+
 func TestExecuteSSEReturnsErrorOnEmptyStream(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
 		w.Header().Set("Content-Type", "text/event-stream")

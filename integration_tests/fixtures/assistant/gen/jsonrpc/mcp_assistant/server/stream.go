@@ -15,6 +15,7 @@ import (
 	"sync"
 
 	mcpassistant "example.com/assistant/gen/mcp_assistant"
+	mcpruntime "github.com/CaliLuke/loom-mcp/runtime/mcp"
 	loomhttp "github.com/CaliLuke/loom/http"
 	"github.com/CaliLuke/loom/jsonrpc"
 	loomtransport "github.com/CaliLuke/loom/observability/transport"
@@ -56,6 +57,9 @@ func (s *ToolsCallServerStream) initSSEHeaders() {
 // open commits and flushes the SSE headers before the first application event.
 func (s *ToolsCallServerStream) open() error {
 	s.initSSEHeaders()
+	if _, err := fmt.Fprintf(s.w, "id: %s\ndata:\n\n", mcpruntime.NewSessionID()); err != nil {
+		return err
+	}
 	return http.NewResponseController(s.w).Flush()
 }
 
@@ -146,6 +150,9 @@ func (s *ToolsCallServerStream) sendError(ctx context.Context, id any, code json
 // sendSSEEvent sends a single SSE event.
 func (s *ToolsCallServerStream) sendSSEEvent(eventType string, v any) error {
 	s.initSSEHeaders()
+	if _, err := fmt.Fprint(s.w, "event: retry\nretry: 1000\ndata:\n\n"); err != nil {
+		return err
+	}
 	if err := loomhttp.WriteJSONSSEEvent(s.w, loomhttp.SSEMessage{Type: eventType}, v); err != nil {
 		loomtransport.Observe(s.r.Context(), loomtransport.Event{Kind: loomtransport.EventKindStreamFailure, Reason: loomtransport.ReasonStreamWriteFailed, Transport: loomtransport.TransportJSONRPC})
 		return err
@@ -193,6 +200,9 @@ func (s *EventsStreamServerStream) initSSEHeaders() {
 // open commits and flushes the SSE headers before the first application event.
 func (s *EventsStreamServerStream) open() error {
 	s.initSSEHeaders()
+	if _, err := fmt.Fprintf(s.w, "id: %s\ndata:\n\n", mcpruntime.NewSessionID()); err != nil {
+		return err
+	}
 	return http.NewResponseController(s.w).Flush()
 }
 
@@ -283,6 +293,9 @@ func (s *EventsStreamServerStream) sendError(ctx context.Context, id any, code j
 // sendSSEEvent sends a single SSE event.
 func (s *EventsStreamServerStream) sendSSEEvent(eventType string, v any) error {
 	s.initSSEHeaders()
+	if _, err := fmt.Fprint(s.w, "event: retry\nretry: 1000\ndata:\n\n"); err != nil {
+		return err
+	}
 	if err := loomhttp.WriteJSONSSEEvent(s.w, loomhttp.SSEMessage{Type: eventType}, v); err != nil {
 		loomtransport.Observe(s.r.Context(), loomtransport.Event{Kind: loomtransport.EventKindStreamFailure, Reason: loomtransport.ReasonStreamWriteFailed, Transport: loomtransport.TransportJSONRPC})
 		return err

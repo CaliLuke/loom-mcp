@@ -29,7 +29,10 @@ const jsonrpcServerMountSectionName = "jsonrpc-server-mount"
 // mcpDecoderPayloadVarPattern locates the payload variable declaration inside
 // generated JSON-RPC request decoders so rewrites can identify the decoded
 // payload type without depending on decoder function naming.
-var mcpDecoderPayloadVarPattern = regexp.MustCompile(`\bvar payload \*\w+\.(\w+)`)
+var (
+	mcpDecoderPayloadVarPattern = regexp.MustCompile(`\bvar payload \*\w+\.(\w+)`)
+	sseSendEventPattern         = regexp.MustCompile(`func \(s \*(\w+)\) sendSSEEvent\(`)
+)
 
 // Generate orchestrates MCP code generation for services that declare MCP
 // configuration in the DSL. It composes Goa service and JSON-RPC generators
@@ -208,6 +211,9 @@ func generateMCPServiceCode(genpkg string, root *expr.RootExpr, mcpService *expr
 		return nil, err
 	}
 	if err := applyMCPJSONRPCStreamFinalEventName(files); err != nil {
+		return nil, err
+	}
+	if err := applyMCPJSONRPCSSEReconnectHints(files); err != nil {
 		return nil, err
 	}
 	if err := applyMCPJSONRPCClientTransportDefaults(files); err != nil {
@@ -717,6 +723,99 @@ func applyMCPJSONRPCStreamFinalEventName(files []*codegen.File) error {
 		f.SetSections(updated)
 	}
 	return nil
+}
+
+// applyMCPJSONRPCSSEReconnectHints adds the MCP streamable HTTP reconnect
+// frames that the upstream JSON-RPC endpoint stream generator does not emit.
+func applyMCPJSONRPCSSEReconnectHints(files []*codegen.File) error {
+	const openReturn = `return http.NewResponseController(s.w).Flush()`
+	const primedOpenReturn = "if _, err := fmt.Fprintf(s.w, \"id: %s\\ndata:\\n\\n\", mcpruntime.NewSessionID()); err != nil {\n" +
+		"\t\treturn err\n" +
+		"\t}\n" +
+		"\treturn http.NewResponseController(s.w).Flush()"
+	for _, file := range files {
+		if file == nil || filepath.Base(filepath.Dir(filepath.ToSlash(file.Path))) != "server" || filepath.Base(file.Path) != "stream.go" {
+			continue
+		}
+
+		var openCount int
+		var terminalCount int
+		sections := file.AllSections()
+		updated := make([]codegen.Section, 0, len(sections))
+		for _, section := range sections {
+			source, ok := renderedSectionSource(section)
+			if !ok {
+				updated = append(updated, section)
+				continue
+			}
+
+			next, count := rewriteGeneratedMethodReturn(source, "open", openReturn, primedOpenReturn)
+			openCount += count
+
+			match := sseSendEventPattern.FindStringSubmatchIndex(next)
+			if match != nil {
+				const initCall = "s.initSSEHeaders()\n"
+				relInit := strings.Index(next[match[0]:], initCall)
+				if relInit >= 0 {
+					insertAt := match[0] + relInit + len(initCall)
+					retryWrite := "\tif _, err := fmt.Fprint(s.w, \"event: retry\\nretry: 1000\\ndata:\\n\\n\"); err != nil {\n" +
+						"\t\treturn err\n" +
+						"\t}\n"
+					next = next[:insertAt] + retryWrite + next[insertAt:]
+					terminalCount++
+				}
+			}
+
+			if next == source {
+				updated = append(updated, section)
+				continue
+			}
+			updated = append(updated, &codegen.RawSection{Name: section.SectionName(), Source: next})
+		}
+		if terminalCount == 0 {
+			return fmt.Errorf(
+				"upstream JSON-RPC stream shape changed in %s: reconnect hints matched open=%d retry=%d",
+				filepath.ToSlash(file.Path), openCount, terminalCount,
+			)
+		}
+		file.SetSections(updated)
+		if header := file.HeaderTemplate(); header != nil {
+			codegen.AddImport(header, &codegen.ImportSpec{Path: "github.com/CaliLuke/loom-mcp/runtime/mcp", Name: "mcpruntime"})
+		}
+	}
+	return nil
+}
+
+func rewriteGeneratedMethodReturn(source, methodName, oldReturn, newReturn string) (string, int) {
+	marker := ") " + methodName + "("
+	searchFrom := 0
+	rewritten := 0
+	for searchFrom < len(source) {
+		relMarker := strings.Index(source[searchFrom:], marker)
+		if relMarker < 0 {
+			break
+		}
+		markerIndex := searchFrom + relMarker
+		relEnd := strings.Index(source[markerIndex:], "\n}\n")
+		if relEnd < 0 {
+			relEnd = strings.Index(source[markerIndex:], "\n}")
+		}
+		if relEnd < 0 {
+			break
+		}
+		methodEnd := markerIndex + relEnd + len("\n}")
+		method := source[markerIndex:methodEnd]
+		returnIndex := strings.LastIndex(method, oldReturn)
+		if returnIndex < 0 {
+			searchFrom = methodEnd
+			continue
+		}
+		absoluteReturn := markerIndex + returnIndex
+		source = source[:absoluteReturn] + newReturn + source[absoluteReturn+len(oldReturn):]
+		rewritten++
+		searchFrom = absoluteReturn + len(newReturn)
+	}
+	return source, rewritten
 }
 
 // applyMCPJSONRPCClientTransportDefaults hardens the generated JSON-RPC client

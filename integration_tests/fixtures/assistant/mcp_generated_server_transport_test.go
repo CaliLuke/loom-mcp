@@ -1,10 +1,13 @@
 package assistantapi
 
 import (
+	"bufio"
 	"context"
 	"encoding/json"
+	"io"
 	"net/http"
 	"net/url"
+	"strings"
 	"testing"
 	"time"
 
@@ -85,6 +88,72 @@ func TestGeneratedJSONRPCServerEventsStreamPublishesNotifications(t *testing.T) 
 	case <-ctx.Done():
 		t.Fatal("timed out waiting for events/stream notification")
 	}
+}
+
+func TestGeneratedJSONRPCServerEventsStreamSendsPrimingEvent(t *testing.T) {
+	t.Parallel()
+
+	server := newGeneratedJSONRPCServer(t)
+	defer server.Close()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	sessionID, err := initializeJSONRPCSession(ctx, server.URL)
+	require.NoError(t, err)
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, server.URL+"/rpc", nil)
+	require.NoError(t, err)
+	req.Header.Set("Accept", "text/event-stream")
+	req.Header.Set(mcpruntime.HeaderKeySessionID, sessionID)
+	req.Header.Set(mcpruntime.HeaderKeyProtocolVersion, mcpassistant.DefaultProtocolVersion)
+
+	resp, err := server.Client().Do(req)
+	require.NoError(t, err)
+	defer resp.Body.Close()
+	require.Equal(t, http.StatusOK, resp.StatusCode)
+
+	reader := bufio.NewReader(resp.Body)
+	idLine, err := reader.ReadString('\n')
+	require.NoError(t, err)
+	assert.Regexp(t, `^id: [0-9a-f]{32}\n$`, idLine)
+	dataLine, err := reader.ReadString('\n')
+	require.NoError(t, err)
+	assert.Equal(t, "data:\n", dataLine)
+	separator, err := reader.ReadString('\n')
+	require.NoError(t, err)
+	assert.Equal(t, "\n", separator)
+}
+
+func TestGeneratedJSONRPCServerToolStreamSendsRetryBeforeClose(t *testing.T) {
+	t.Parallel()
+
+	server := newGeneratedJSONRPCServer(t)
+	defer server.Close()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	sessionID, err := initializeJSONRPCSession(ctx, server.URL)
+	require.NoError(t, err)
+	body := `{"jsonrpc":"2.0","id":"retry-proof","method":"tools/call","params":{"name":"multi_content","arguments":{"count":4}}}`
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, server.URL+"/rpc", strings.NewReader(body))
+	require.NoError(t, err)
+	req.Header.Set("Accept", "text/event-stream")
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set(mcpruntime.HeaderKeySessionID, sessionID)
+	req.Header.Set(mcpruntime.HeaderKeyProtocolVersion, mcpassistant.DefaultProtocolVersion)
+
+	resp, err := server.Client().Do(req)
+	require.NoError(t, err)
+	defer resp.Body.Close()
+	require.Equal(t, http.StatusOK, resp.StatusCode)
+	data, err := io.ReadAll(resp.Body)
+	require.NoError(t, err)
+	retryIndex := strings.LastIndex(string(data), "event: retry\nretry: 1000\ndata:\n\n")
+	responseIndex := strings.LastIndex(string(data), `"id":"retry-proof"`)
+	assert.GreaterOrEqual(t, retryIndex, 0, "terminal SSE response must carry a retry hint: %q", data)
+	assert.Less(t, retryIndex, responseIndex, "retry hint must be sent before the terminal SSE response: %q", data)
 }
 
 func TestGeneratedNewCallerAgainstGeneratedServerNormalizesMultiContent(t *testing.T) {

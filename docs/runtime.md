@@ -2249,6 +2249,11 @@ MCP service name as the prefix), never the request method name such as
 `tools/call`. This makes the stream extension explicit and prevents clients
 from mistaking a partial value for a protocol request.
 
+Long-lived generated SSE endpoints immediately flush a priming frame with a
+unique event ID and empty data. Active endpoint streams also publish a
+one-second standard SSE `retry` value before each message, so the final message
+always carries reconnect guidance before the transport closes.
+
 ### Generated MCP tool search
 
 Generated MCP adapters can opt into progressive discovery with
