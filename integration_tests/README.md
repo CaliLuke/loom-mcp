@@ -102,14 +102,13 @@ Tests MCP tools functionality:
 - **Tool Discovery**: `tools/list` endpoint
 - **Tool Invocation**: `tools/call` with various payloads
 - **Input Validation**: Schema validation for tool arguments
-- **Progress Tracking**: Progress notifications for long-running tools
+- **Progress Tracking**: planned coverage for progress tokens and notifications
 - **Error Handling**: Invalid tool names and arguments
 
 Example scenarios:
 - `tools_list` - List all available tools
 - `tool_analyze_text_sentiment` - Call sentiment analysis tool
 - `tool_execute_code_python` - Execute Python code
-- `tool_batch_with_progress` - Track batch processing progress
 
 ### 3. Resources Tests
 
@@ -283,14 +282,14 @@ TEST_SERVER_URL=http://localhost:8080 TEST_SKIP_GENERATION=true go test ./tests
 - Variable substitution
 
 ✅ **Notifications**
-- Progress updates
 - Status notifications
 - Resource change events
 
 ### Pending Features
 
-⏳ **Sampling** - Client LLM sampling requests
+✅ **Sampling** - Generated SDK tools request client text sampling over streamable HTTP
 ⏳ **Roots** - Filesystem/URI root discovery
+⏳ **Progress** - Progress-token propagation and notifications
 ⏳ **Logging** - Structured logging protocol
 ⏳ **Completion** - Autocomplete support
 

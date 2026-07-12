@@ -47,6 +47,8 @@ type Service interface {
 	ExecuteCode(context.Context, *ExecuteCodePayload) (res *ExecuteCodeResult, err error)
 	// Process batch of items
 	ProcessBatch(context.Context, *ProcessBatchPayload) (res *ProcessBatchResult, err error)
+	// Request text generation from the connected MCP client
+	SampleText(context.Context, *SampleTextPayload) (res *SampleTextResult, err error)
 	// Return multiple content items
 	MultiContent(context.Context, *MultiContentPayload) (res *MultiContentResult, err error)
 	// Generate a deterministic implementation-ready DPI spec from a fake Figma
@@ -76,7 +78,7 @@ const ServiceName = "assistant"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [20]string{"list_documents", "system_info", "conversation_history", "figma_design_system", "generate_prompts", "build_figma_implementation_prompt", "send_notification", "analyze_sentiment", "extract_keywords", "summarize_text", "search", "search_records", "execute_code", "process_batch", "multi_content", "generate_dpi_spec", "dispatch_action", "dispatch_command", "projected_lookup", "projected_status"}
+var MethodNames = [21]string{"list_documents", "system_info", "conversation_history", "figma_design_system", "generate_prompts", "build_figma_implementation_prompt", "send_notification", "analyze_sentiment", "extract_keywords", "summarize_text", "search", "search_records", "execute_code", "process_batch", "sample_text", "multi_content", "generate_dpi_spec", "dispatch_action", "dispatch_command", "projected_lookup", "projected_status"}
 
 // AnalyzeSentimentPayload is the payload type of the assistant service
 // analyze_sentiment method.
@@ -374,6 +376,28 @@ type ProjectedStatusResult struct {
 type PromptTemplates struct {
 	// Templates
 	Templates []string `json:"templates"`
+}
+
+// SampleTextPayload is the payload type of the assistant service sample_text
+// method.
+type SampleTextPayload struct {
+	// User prompt to sample
+	Prompt string `json:"prompt"`
+	// Optional system prompt
+	SystemPrompt *string `json:"system_prompt,omitempty"`
+	// Maximum number of tokens
+	MaxTokens int64 `json:"max_tokens"`
+}
+
+// SampleTextResult is the result type of the assistant service sample_text
+// method.
+type SampleTextResult struct {
+	// Sampled text
+	Text string `json:"text"`
+	// Model selected by the client
+	Model string `json:"model"`
+	// Reason sampling stopped
+	StopReason string `json:"stop_reason"`
 }
 
 // SearchPayload is the payload type of the assistant service search method.

@@ -602,6 +602,56 @@ func DecodeProcessBatchRequest(mux loomhttp.Muxer, decoder func(*http.Request) l
 	}
 }
 
+// EncodeSampleTextResponse returns an encoder for responses returned by the
+// assistant sample_text endpoint.
+func EncodeSampleTextResponse(encoder func(context.Context, http.ResponseWriter) loomhttp.Encoder) func(context.Context, http.ResponseWriter, any) error {
+	return func(ctx context.Context, w http.ResponseWriter, v any) error {
+		res, ok := v.(*assistant.SampleTextResult)
+		if !ok {
+			return loomhttp.ErrInvalidType("assistant", "sample_text", "*assistant.SampleTextResult", v)
+		}
+		enc := encoder(ctx, w)
+		body := NewSampleTextResponseBody(res)
+		w.WriteHeader(http.StatusOK)
+		return enc.Encode(body)
+	}
+}
+
+// DecodeSampleTextRequest returns a decoder for requests sent to the assistant
+// sample_text endpoint.
+func DecodeSampleTextRequest(mux loomhttp.Muxer, decoder func(*http.Request) loomhttp.Decoder) func(*http.Request, *jsonrpc.RawRequest) (*assistant.SampleTextPayload, error) {
+	return func(r *http.Request, req *jsonrpc.RawRequest) (*assistant.SampleTextPayload, error) {
+		params := req.Params
+		if len(params) == 0 {
+			params = []byte("{}")
+		}
+		r.Body = io.NopCloser(bytes.NewReader(params))
+		var payload *assistant.SampleTextPayload
+		var (
+			body SampleTextRequestBody
+			err  error
+		)
+		err = decoder(r).Decode(&body)
+		if err != nil {
+			if errors.Is(err, io.EOF) {
+				return payload, loom.MissingPayloadError()
+			}
+			var gerr *loom.ServiceError
+			if errors.As(err, &gerr) {
+				return payload, gerr
+			}
+			return payload, loom.DecodePayloadError(loomhttp.SafeDecodePayloadMessage(err))
+		}
+		err = ValidateSampleTextRequestBody(&body)
+		if err != nil {
+			return payload, err
+		}
+		payload = NewSampleTextPayload(&body)
+
+		return payload, nil
+	}
+}
+
 // EncodeMultiContentResponse returns an encoder for responses returned by the
 // assistant multi_content endpoint.
 func EncodeMultiContentResponse(encoder func(context.Context, http.ResponseWriter) loomhttp.Encoder) func(context.Context, http.ResponseWriter, any) error {

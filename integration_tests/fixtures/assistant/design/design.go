@@ -267,6 +267,24 @@ var _ = Service("assistant", func() {
 		JSONRPC(func() {})
 	})
 
+	Method("sample_text", func() {
+		Description("Request text generation from the connected MCP client")
+		Payload(func() {
+			Attribute("prompt", String, "User prompt to sample")
+			Attribute("system_prompt", String, "Optional system prompt")
+			Attribute("max_tokens", Int64, "Maximum number of tokens")
+			Required("prompt", "max_tokens")
+		})
+		Result(func() {
+			Attribute("text", String, "Sampled text")
+			Attribute("model", String, "Model selected by the client")
+			Attribute("stop_reason", String, "Reason sampling stopped")
+			Required("text", "model", "stop_reason")
+		})
+		Tool("sample_text", "Request text generation from the connected MCP client")
+		JSONRPC(func() {})
+	})
+
 	Method("multi_content", func() {
 		Description("Return multiple content items")
 		Payload(func() {

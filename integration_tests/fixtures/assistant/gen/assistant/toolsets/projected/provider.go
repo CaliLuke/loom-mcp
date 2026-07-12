@@ -204,7 +204,7 @@ func DispatchProjectedStatusToolMethod(ctx context.Context, meta *runtime.ToolCa
 		}
 		result = value
 	} else {
-		result = methodOut
+		result = InitProjectedStatusToolToolResult(methodOut.(*assistant.ProjectedStatusResult))
 	}
 	return &planner.ToolResult{
 		Name:   ProjectedStatusTool,
@@ -282,7 +282,8 @@ func (p *Provider) HandleToolCall(ctx context.Context, msg toolregistry.ToolCall
 			}
 			return toolregistry.NewToolResultErrorMessage(msg.ToolUseID, toolErrorCode(err), err.Error()), nil
 		}
-		resultJSON, err := json.Marshal(methodOut)
+		result := InitProjectedStatusToolToolResult(methodOut)
+		resultJSON, err := ProjectedStatusToolResultCodec.ToJSON(result)
 		if err != nil {
 			return toolregistry.NewToolResultErrorMessage(msg.ToolUseID, "encode_failed", err.Error()), nil
 		}

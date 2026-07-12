@@ -405,6 +405,40 @@ func NewEndpoints(scheme string, host string, doer goahttp.Doer, enc func(*http.
 		return decodeOriginalJSONRPCResult(enc, req3, toolResp.Result, decode)
 	}
 
+	// Tool: sample_text -> SampleText
+	e.SampleText = func(ctx context.Context, v any) (any, error) {
+		var payload any
+		payload = v.(*assistant.SampleTextPayload)
+		args, err := encodeOriginalPayload(ctx, enc, payload)
+		if err != nil {
+			return nil, err
+		}
+		toolResp, err := mcpCaller.CallTool(ctx, mcpruntime.CallRequest{
+			Payload: args,
+			Tool:    "sample_text",
+		})
+		if err != nil {
+			prompt := retry.BuildRepairPrompt("tools/call:sample_text", err.Error(), "{\"max_tokens\":0,\"prompt\":\"example\"}", "{\"type\":\"object\",\"required\":[\"prompt\",\"max_tokens\"],\"properties\":{\"max_tokens\":{\"type\":\"integer\",\"description\":\"Maximum number of tokens\"},\"prompt\":{\"type\":\"string\",\"description\":\"User prompt to sample\"},\"system_prompt\":{\"type\":\"string\",\"description\":\"Optional system prompt\"}},\"additionalProperties\":false}")
+			return nil, &retry.RetryableError{
+				Cause:  err,
+				Prompt: prompt,
+			}
+		}
+		if len(toolResp.Result) == 0 {
+			prompt := retry.BuildRepairPrompt("tools/call:sample_text", "empty MCP tool response", "{\"max_tokens\":0,\"prompt\":\"example\"}", "{\"type\":\"object\",\"required\":[\"prompt\",\"max_tokens\"],\"properties\":{\"max_tokens\":{\"type\":\"integer\",\"description\":\"Maximum number of tokens\"},\"prompt\":{\"type\":\"string\",\"description\":\"User prompt to sample\"},\"system_prompt\":{\"type\":\"string\",\"description\":\"Optional system prompt\"}},\"additionalProperties\":false}")
+			return nil, &retry.RetryableError{
+				Cause:  fmt.Errorf("empty MCP tool response for sample_text"),
+				Prompt: prompt,
+			}
+		}
+		req3, err := origC.BuildSampleTextRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		decode := assistantjsonrpcc.DecodeSampleTextResponse(dec, false)
+		return decodeOriginalJSONRPCResult(enc, req3, toolResp.Result, decode)
+	}
+
 	// Tool: multi_content -> MultiContent
 	e.MultiContent = func(ctx context.Context, v any) (any, error) {
 		var payload any
@@ -788,5 +822,5 @@ func NewEndpoints(scheme string, host string, doer goahttp.Doer, enc func(*http.
 // NewClient returns *assistant.Client using MCP-backed endpoints.
 func NewClient(scheme string, host string, doer goahttp.Doer, enc func(*http.Request) goahttp.Encoder, dec func(*http.Response) goahttp.Decoder, restore bool) *assistant.Client {
 	e := NewEndpoints(scheme, host, doer, enc, dec, restore)
-	return assistant.NewClient(e.ListDocuments, e.SystemInfo, e.ConversationHistory, e.FigmaDesignSystem, e.GeneratePrompts, e.BuildFigmaImplementationPrompt, e.SendNotification, e.AnalyzeSentiment, e.ExtractKeywords, e.SummarizeText, e.Search, e.SearchRecords, e.ExecuteCode, e.ProcessBatch, e.MultiContent, e.GenerateDpiSpec, e.DispatchAction, e.DispatchCommand, e.ProjectedLookup, e.ProjectedStatus)
+	return assistant.NewClient(e.ListDocuments, e.SystemInfo, e.ConversationHistory, e.FigmaDesignSystem, e.GeneratePrompts, e.BuildFigmaImplementationPrompt, e.SendNotification, e.AnalyzeSentiment, e.ExtractKeywords, e.SummarizeText, e.Search, e.SearchRecords, e.ExecuteCode, e.ProcessBatch, e.SampleText, e.MultiContent, e.GenerateDpiSpec, e.DispatchAction, e.DispatchCommand, e.ProjectedLookup, e.ProjectedStatus)
 }

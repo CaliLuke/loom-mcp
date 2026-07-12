@@ -124,6 +124,18 @@ func ValidateProcessBatchRequestBody(body *ProcessBatchRequestBody) (err error) 
 	return
 }
 
+// ValidateSampleTextRequestBody runs the validations defined on
+// sample_text_request_body
+func ValidateSampleTextRequestBody(body *SampleTextRequestBody) (err error) {
+	if body.Prompt == nil {
+		err = loom.MergeErrors(err, loom.MissingFieldError("prompt", "body"))
+	}
+	if body.MaxTokens == nil {
+		err = loom.MergeErrors(err, loom.MissingFieldError("max_tokens", "body"))
+	}
+	return
+}
+
 // ValidateMultiContentRequestBody runs the validations defined on
 // multi_content_request_body
 func ValidateMultiContentRequestBody(body *MultiContentRequestBody) (err error) {

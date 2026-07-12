@@ -232,6 +232,29 @@ advertise the `elicitation` capability. If service code calls
 `mcpruntime.Elicit` outside an MCP SDK request context, the runtime returns
 `mcpruntime.ErrElicitorUnavailable`.
 
+## Sampling
+
+Generated SDK servers also place an MCP sampler in the context passed to tool,
+resource, and prompt implementations. Service code can request text generation
+from the connected client:
+
+```go
+result, err := mcpruntime.Sample(ctx, mcpruntime.SampleRequest{
+    Messages: []mcpruntime.SampleMessage{
+        {Role: "user", Text: "Summarize the deployment plan."},
+    },
+    SystemPrompt: "Answer concisely.",
+    MaxTokens:    256,
+})
+```
+
+The generated server adapts this transport-neutral contract to the official Go
+SDK's `ServerSession.CreateMessage`, which sends `sampling/createMessage` to a
+client that advertises the `sampling` capability. The current runtime contract
+supports text messages and text results; image, audio, and sampling tool-use
+content require a richer future contract. Calling `mcpruntime.Sample` outside
+an MCP SDK request context returns `mcpruntime.ErrSamplerUnavailable`.
+
 ## Session and Response Writer Helpers
 
 The generated handler also exposes the MCP session id and the active HTTP

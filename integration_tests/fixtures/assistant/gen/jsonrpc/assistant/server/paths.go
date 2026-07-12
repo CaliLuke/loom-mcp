@@ -77,6 +77,11 @@ func ProcessBatchAssistantPath() string {
 	return "/rpc"
 }
 
+// SampleTextAssistantPath returns the URL path to the assistant service sample_text HTTP endpoint.
+func SampleTextAssistantPath() string {
+	return "/rpc"
+}
+
 // MultiContentAssistantPath returns the URL path to the assistant service multi_content HTTP endpoint.
 func MultiContentAssistantPath() string {
 	return "/rpc"

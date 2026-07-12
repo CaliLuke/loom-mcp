@@ -904,6 +904,12 @@ func (a *MCPAdapter) generatedToolCatalog() []*ToolInfo {
 		OutputSchema: json.RawMessage([]byte("{\"type\":\"object\",\"properties\":{\"ok\":{\"type\":\"boolean\",\"description\":\"Operation status\"}},\"additionalProperties\":false}")),
 		Title:        stringPtr("Process Batch"),
 	}, &ToolInfo{
+		Description:  stringPtr("Request text generation from the connected MCP client"),
+		InputSchema:  json.RawMessage([]byte("{\"type\":\"object\",\"required\":[\"prompt\",\"max_tokens\"],\"properties\":{\"max_tokens\":{\"type\":\"integer\",\"description\":\"Maximum number of tokens\"},\"prompt\":{\"type\":\"string\",\"description\":\"User prompt to sample\"},\"system_prompt\":{\"type\":\"string\",\"description\":\"Optional system prompt\"}},\"additionalProperties\":false}")),
+		Name:         "sample_text",
+		OutputSchema: json.RawMessage([]byte("{\"type\":\"object\",\"required\":[\"text\",\"model\",\"stop_reason\"],\"properties\":{\"model\":{\"type\":\"string\",\"description\":\"Model selected by the client\"},\"stop_reason\":{\"type\":\"string\",\"description\":\"Reason sampling stopped\"},\"text\":{\"type\":\"string\",\"description\":\"Sampled text\"}},\"additionalProperties\":false}")),
+		Title:        stringPtr("Sample Text"),
+	}, &ToolInfo{
 		Description:  stringPtr("Return multiple content items"),
 		InputSchema:  json.RawMessage([]byte("{\"type\":\"object\",\"required\":[\"count\"],\"properties\":{\"count\":{\"type\":\"integer\",\"description\":\"Number of content items to return\"}},\"additionalProperties\":false}")),
 		Name:         "multi_content",
@@ -980,6 +986,8 @@ func isGeneratedToolName(name string) bool {
 	case "execute_code":
 		return true
 	case "process_batch":
+		return true
+	case "sample_text":
 		return true
 	case "multi_content":
 		return true
@@ -1831,6 +1839,21 @@ func processBatchInputRecovery(err error, raw json.RawMessage) string {
 	}
 	return "Provide valid tool arguments. Example: " + example
 }
+func sampleTextInputRecovery(err error, raw json.RawMessage) string {
+	message := strings.TrimSpace(loom.ErrorSafeMessage(err))
+	if message == "" {
+		message = strings.TrimSpace(err.Error())
+	}
+	_ = raw
+	example := "{\"max_tokens\":0,\"prompt\":\"example\"}"
+	if field := missingFieldFromMessage(message); field != "" {
+		return fmt.Sprintf("Include required field %q. Example: %s", field, example)
+	}
+	if strings.Contains(message, "unexpected end of JSON input") || strings.Contains(message, "unexpected EOF") {
+		return "Provide complete JSON arguments. Example: " + example
+	}
+	return "Provide valid tool arguments. Example: " + example
+}
 func multiContentInputRecovery(err error, raw json.RawMessage) string {
 	message := strings.TrimSpace(loom.ErrorSafeMessage(err))
 	if message == "" {
@@ -2227,6 +2250,38 @@ func (a *MCPAdapter) executeRealTool(ctx context.Context, p *ToolsCallPayload, s
 			}
 		}
 		result, err := a.service.ProcessBatch(ctx, payload)
+		if err != nil {
+			return true, a.sendToolError(ctx, stream, p.Name, err)
+		}
+		structuredContent, serr := json.Marshal(result)
+		if serr != nil {
+			return false, serr
+		}
+		s := string(structuredContent)
+		final := &ToolsCallResult{
+			Content:           []*ContentItem{buildContentItem(a, s)},
+			StructuredContent: structuredContent,
+		}
+		a.log(ctx, "response", map[string]any{
+			"method": "tools/call",
+			"name":   p.Name,
+		})
+		return false, stream.SendAndClose(ctx, final)
+	case "sample_text":
+		var payload *assistant.SampleTextPayload
+		rawFields, err := decodeMCPPayloadFields(p.Arguments)
+		if err != nil {
+			return true, a.sendToolError(ctx, stream, p.Name, toolCallError(err, "invalid_params", sampleTextInputRecovery(err, p.Arguments)))
+		}
+		if err := decodeMCPPayloadStrict(p.Arguments, &payload); err != nil {
+			return true, a.sendToolError(ctx, stream, p.Name, toolCallError(err, "invalid_params", sampleTextInputRecovery(err, p.Arguments)))
+		}
+		{
+			if err := validateMCPPayloadRequired(rawFields, "prompt"); err != nil {
+				return true, a.sendToolError(ctx, stream, p.Name, toolCallError(err, "invalid_params", sampleTextInputRecovery(err, p.Arguments)))
+			}
+		}
+		result, err := a.service.SampleText(ctx, payload)
 		if err != nil {
 			return true, a.sendToolError(ctx, stream, p.Name, err)
 		}

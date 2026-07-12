@@ -28,4 +28,13 @@ func InitProjectedLookupToolToolResult(in *assistant.ProjectedLookupResult) *Pro
 	return out
 }
 
+// InitProjectedStatusToolToolResult converts *assistant.ProjectedStatusResult to *ProjectedStatusToolResult.
+func InitProjectedStatusToolToolResult(in *assistant.ProjectedStatusResult) *ProjectedStatusToolResult {
+	var out *ProjectedStatusToolResult
+	out = &ProjectedStatusToolResult{
+		Status: in.Status,
+	}
+	return out
+}
+
 // Helper transform functions

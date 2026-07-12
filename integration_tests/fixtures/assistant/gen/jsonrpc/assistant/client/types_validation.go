@@ -61,6 +61,21 @@ func ValidateBuildFigmaImplementationPromptResponseBody(body *BuildFigmaImplemen
 	return
 }
 
+// ValidateSampleTextResponseBody runs the validations defined on
+// sample_text_response_body
+func ValidateSampleTextResponseBody(body *SampleTextResponseBody) (err error) {
+	if body.Text == nil {
+		err = loom.MergeErrors(err, loom.MissingFieldError("text", "body"))
+	}
+	if body.Model == nil {
+		err = loom.MergeErrors(err, loom.MissingFieldError("model", "body"))
+	}
+	if body.StopReason == nil {
+		err = loom.MergeErrors(err, loom.MissingFieldError("stop_reason", "body"))
+	}
+	return
+}
+
 // ValidateGenerateDpiSpecResponseBody runs the validations defined on
 // generate_dpi_spec_response_body
 func ValidateGenerateDpiSpecResponseBody(body *GenerateDpiSpecResponseBody) (err error) {
@@ -227,6 +242,21 @@ func ValidateGeneratePromptsResponseBodyResponseBody(body *GeneratePromptsRespon
 func ValidateBuildFigmaImplementationPromptResponseBodyResponseBody(body *BuildFigmaImplementationPromptResponseBodyResponseBody) (err error) {
 	if body.Templates == nil {
 		err = loom.MergeErrors(err, loom.MissingFieldError("templates", "body"))
+	}
+	return
+}
+
+// ValidateSampleTextResponseBodyResponseBody runs the validations defined on
+// sample_text_response_bodyResponseBody
+func ValidateSampleTextResponseBodyResponseBody(body *SampleTextResponseBodyResponseBody) (err error) {
+	if body.Text == nil {
+		err = loom.MergeErrors(err, loom.MissingFieldError("text", "body"))
+	}
+	if body.Model == nil {
+		err = loom.MergeErrors(err, loom.MissingFieldError("model", "body"))
+	}
+	if body.StopReason == nil {
+		err = loom.MergeErrors(err, loom.MissingFieldError("stop_reason", "body"))
 	}
 	return
 }

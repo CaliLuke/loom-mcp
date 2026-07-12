@@ -159,6 +159,9 @@ func TestGenerate_SDKServerDoesNotAdvertiseDeadEventsCapability(t *testing.T) {
 	require.NotContains(t, rendered, `"loom-mcp"`,
 		"SDK mode must not advertise the events/stream capability: the SDK transport owns GET and the handler is unreachable")
 	require.Contains(t, rendered, "sdkServerOptionsWithDefaults")
+	require.Contains(t, rendered, "sdkclient.WithClientFeatures(ctx, serverSession)")
+	require.Contains(t, rendered, "func (w *sdkResponseObserver) Unwrap() http.ResponseWriter")
+	require.NotContains(t, rendered, "sdkSessionElicitor")
 }
 
 // decoderFunctionBody extracts the body of one generated top-level function so

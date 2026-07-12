@@ -69,6 +69,13 @@ Use this file when editing DSL, generators, generated helpers, or MCP codegen be
   header using the spec's `2025-03-26` compatibility assumption. Present but
   unsupported versions remain transport errors whose JSON-RPC envelope echoes
   a readable request ID or explicitly uses `null` when none is available.
+- Generated SDK request contexts install the shared
+  `runtime/mcp/sdkclient.WithClientFeatures` adapter so service code can issue
+  elicitation and text sampling requests through the active official SDK
+  session. Do not duplicate SDK request/response conversion in generated code.
+- Generated SDK response-writer observers must implement `Unwrap() http.ResponseWriter`
+  so `http.ResponseController` can reach flushing and other optional transport
+  capabilities required by nested server-to-client requests.
 - Generated JSON-RPC mounts inspect each POST envelope once before routing and
   restore it for the generated decoder. `MCPMaxRequestBodyBytes` bounds this
   inspection to 32 MiB by default; positive overrides change the bound and

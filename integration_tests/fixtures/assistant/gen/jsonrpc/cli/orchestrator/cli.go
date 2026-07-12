@@ -23,7 +23,7 @@ import (
 //
 //	command (subcommand1|subcommand2|...)
 func UsageCommands() []string {
-	return []string{"assistant (list-documents|system-info|conversation-history|figma-design-system|generate-prompts|build-figma-implementation-prompt|send-notification|analyze-sentiment|extract-keywords|summarize-text|search|search-records|execute-code|process-batch|multi-content|generate-dpi-spec|dispatch-action|dispatch-command|projected-lookup|projected-status)"}
+	return []string{"assistant (list-documents|system-info|conversation-history|figma-design-system|generate-prompts|build-figma-implementation-prompt|send-notification|analyze-sentiment|extract-keywords|summarize-text|search|search-records|execute-code|process-batch|sample-text|multi-content|generate-dpi-spec|dispatch-action|dispatch-command|projected-lookup|projected-status)"}
 } // UsageExamples produces an example of a valid invocation of the CLI tool.
 func UsageExamples() string {
 	return os.Args[0] + " assistant list-documents\\n"
@@ -67,6 +67,9 @@ type commandLine struct {
 		ProcessBatch struct {
 			Body string `help:"" name:"body" required:""`
 		} `cmd:"" help:"Process batch of items" name:"process-batch"`
+		SampleText struct {
+			Body string `help:"" name:"body" required:""`
+		} `cmd:"" help:"Request text generation from the connected MCP client" name:"sample-text"`
 		MultiContent struct {
 			Body string `help:"" name:"body" required:""`
 		} `cmd:"" help:"Return multiple content items" name:"multi-content"`
@@ -105,6 +108,7 @@ func ParseEndpoint(scheme string, host string, doer loomhttp.Doer, enc func(*htt
 		assistantSearchRecordsBodyFlag                  *string
 		assistantExecuteCodeBodyFlag                    *string
 		assistantProcessBatchBodyFlag                   *string
+		assistantSampleTextBodyFlag                     *string
 		assistantMultiContentBodyFlag                   *string
 		assistantGenerateDpiSpecBodyFlag                *string
 		assistantDispatchActionBodyFlag                 *string
@@ -131,6 +135,7 @@ func ParseEndpoint(scheme string, host string, doer loomhttp.Doer, enc func(*htt
 		assistantSearchRecordsBodyFlag = &command.Assistant.SearchRecords.Body
 		assistantExecuteCodeBodyFlag = &command.Assistant.ExecuteCode.Body
 		assistantProcessBatchBodyFlag = &command.Assistant.ProcessBatch.Body
+		assistantSampleTextBodyFlag = &command.Assistant.SampleText.Body
 		assistantMultiContentBodyFlag = &command.Assistant.MultiContent.Body
 		assistantGenerateDpiSpecBodyFlag = &command.Assistant.GenerateDpiSpec.Body
 		assistantDispatchActionBodyFlag = &command.Assistant.DispatchAction.Body
@@ -179,6 +184,9 @@ func ParseEndpoint(scheme string, host string, doer loomhttp.Doer, enc func(*htt
 		case "assistant process-batch":
 			svcn = "assistant"
 			epn = "process-batch"
+		case "assistant sample-text":
+			svcn = "assistant"
+			epn = "sample-text"
 		case "assistant multi-content":
 			svcn = "assistant"
 			epn = "multi-content"
@@ -249,6 +257,9 @@ func ParseEndpoint(scheme string, host string, doer loomhttp.Doer, enc func(*htt
 			case "process-batch":
 				endpoint = c.ProcessBatch()
 				data, err = assistantc.BuildProcessBatchPayload(*assistantProcessBatchBodyFlag)
+			case "sample-text":
+				endpoint = c.SampleText()
+				data, err = assistantc.BuildSampleTextPayload(*assistantSampleTextBodyFlag)
 			case "multi-content":
 				endpoint = c.MultiContent()
 				data, err = assistantc.BuildMultiContentPayload(*assistantMultiContentBodyFlag)
@@ -293,6 +304,7 @@ func assistantUsage() {
 	fmt.Fprintln(os.Stderr, "    search-records: Search records with an optional query")
 	fmt.Fprintln(os.Stderr, "    execute-code: Execute code")
 	fmt.Fprintln(os.Stderr, "    process-batch: Process batch of items")
+	fmt.Fprintln(os.Stderr, "    sample-text: Request text generation from the connected MCP client")
 	fmt.Fprintln(os.Stderr, "    multi-content: Return multiple content items")
 	fmt.Fprintln(os.Stderr, "    generate-dpi-spec: Generate a deterministic implementation-ready DPI spec from a fake Figma frame")
 	fmt.Fprintln(os.Stderr, "    dispatch-action: Dispatch an action encoded as a union payload")
@@ -348,7 +360,7 @@ func assistantConversationHistoryUsage() {
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "assistant conversation-history --body '{\n      \"flag\": true,\n      \"limit\": 8299759933466354515,\n      \"nums\": [\n         0.9351200666964514,\n         0.9616082574250511\n      ]\n   }'")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "assistant conversation-history --body '{\n      \"flag\": false,\n      \"limit\": 9042657523440458523,\n      \"nums\": [\n         0.7832817593067992,\n         0.6323736566189988\n      ]\n   }'")
 }
 func assistantFigmaDesignSystemUsage() {
 	// Header with flags
@@ -535,6 +547,23 @@ func assistantProcessBatchUsage() {
 	fmt.Fprintln(os.Stderr, "Example:")
 	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "assistant process-batch --body '{\n      \"blob\": \"Omnis mollitia.\",\n      \"format\": \"json\",\n      \"items\": [\n         \"Occaecati quis molestias dignissimos.\",\n         \"Officiis dignissimos placeat.\"\n      ],\n      \"mimeType\": \"Dolore aut perferendis perferendis ad dolorem quo.\",\n      \"uri\": \"Iste ut.\"\n   }'")
 }
+func assistantSampleTextUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] assistant sample-text", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Request text generation from the connected MCP client")
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, "    -body JSON: ")
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "assistant sample-text --body '{\n      \"max_tokens\": 2008723910822965449,\n      \"prompt\": \"Quam eveniet mollitia.\",\n      \"system_prompt\": \"Sunt voluptas minus aut.\"\n   }'")
+}
 func assistantMultiContentUsage() {
 	// Header with flags
 	fmt.Fprintf(os.Stderr, "%s [flags] assistant multi-content", os.Args[0])
@@ -550,7 +579,7 @@ func assistantMultiContentUsage() {
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "assistant multi-content --body '{\n      \"count\": 2702302496557251746\n   }'")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "assistant multi-content --body '{\n      \"count\": 3813929642902452342\n   }'")
 }
 func assistantGenerateDpiSpecUsage() {
 	// Header with flags
@@ -567,7 +596,7 @@ func assistantGenerateDpiSpecUsage() {
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "assistant generate-dpi-spec --body '{\n      \"density\": \"comfortable\",\n      \"include_dev_notes\": false,\n      \"platform\": \"ios\",\n      \"primary_cta\": \"Nihil sed incidunt quaerat quasi.\",\n      \"screen_title\": \"Minus aut inventore non dolorum cupiditate consequuntur.\",\n      \"sections\": [\n         \"Ratione unde aut eum necessitatibus.\",\n         \"Magnam architecto et aut reiciendis tenetur.\",\n         \"Vel aspernatur accusamus.\",\n         \"Architecto possimus doloribus.\"\n      ]\n   }'")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "assistant generate-dpi-spec --body '{\n      \"density\": \"compact\",\n      \"include_dev_notes\": false,\n      \"platform\": \"ios\",\n      \"primary_cta\": \"Doloribus omnis dolore atque.\",\n      \"screen_title\": \"Vel aspernatur accusamus.\",\n      \"sections\": [\n         \"Ipsam esse magnam iusto.\",\n         \"Molestiae autem hic vitae dolore maiores vero.\"\n      ]\n   }'")
 }
 func assistantDispatchActionUsage() {
 	// Header with flags
@@ -584,7 +613,7 @@ func assistantDispatchActionUsage() {
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "assistant dispatch-action --body '{\n      \"request\": {\n         \"limit\": 8614902686330987777\n      }\n   }'")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "assistant dispatch-action --body '{\n      \"request\": {\n         \"name\": \"Quidem quod.\"\n      }\n   }'")
 }
 func assistantDispatchCommandUsage() {
 	// Header with flags
@@ -601,7 +630,7 @@ func assistantDispatchCommandUsage() {
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "assistant dispatch-command --body '{\n      \"command\": {\n         \"label\": \"Quia ea ipsa.\"\n      }\n   }'")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "assistant dispatch-command --body '{\n      \"command\": {\n         \"label\": \"Occaecati aut consectetur cum eos quia.\"\n      }\n   }'")
 }
 func assistantProjectedLookupUsage() {
 	// Header with flags
@@ -618,7 +647,7 @@ func assistantProjectedLookupUsage() {
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "assistant projected-lookup --body '{\n      \"query\": \"Voluptas consectetur ipsum rerum.\"\n   }'")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "assistant projected-lookup --body '{\n      \"query\": \"Vero optio ea molestiae quia perferendis iste.\"\n   }'")
 }
 func assistantProjectedStatusUsage() {
 	// Header with flags

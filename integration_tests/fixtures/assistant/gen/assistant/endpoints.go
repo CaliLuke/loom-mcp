@@ -29,6 +29,7 @@ type Endpoints struct {
 	SearchRecords                  loom.Endpoint
 	ExecuteCode                    loom.Endpoint
 	ProcessBatch                   loom.Endpoint
+	SampleText                     loom.Endpoint
 	MultiContent                   loom.Endpoint
 	GenerateDpiSpec                loom.Endpoint
 	DispatchAction                 loom.Endpoint
@@ -54,6 +55,7 @@ func NewEndpoints(s Service) *Endpoints {
 		SearchRecords:                  NewSearchRecordsEndpoint(s),
 		ExecuteCode:                    NewExecuteCodeEndpoint(s),
 		ProcessBatch:                   NewProcessBatchEndpoint(s),
+		SampleText:                     NewSampleTextEndpoint(s),
 		MultiContent:                   NewMultiContentEndpoint(s),
 		GenerateDpiSpec:                NewGenerateDpiSpecEndpoint(s),
 		DispatchAction:                 NewDispatchActionEndpoint(s),
@@ -79,6 +81,7 @@ func (e *Endpoints) Use(m func(loom.Endpoint) loom.Endpoint) {
 	e.SearchRecords = m(e.SearchRecords)
 	e.ExecuteCode = m(e.ExecuteCode)
 	e.ProcessBatch = m(e.ProcessBatch)
+	e.SampleText = m(e.SampleText)
 	e.MultiContent = m(e.MultiContent)
 	e.GenerateDpiSpec = m(e.GenerateDpiSpec)
 	e.DispatchAction = m(e.DispatchAction)
@@ -207,6 +210,15 @@ func NewProcessBatchEndpoint(s Service) loom.Endpoint {
 	return func(ctx context.Context, req any) (any, error) {
 		p := req.(*ProcessBatchPayload)
 		return s.ProcessBatch(ctx, p)
+	}
+}
+
+// NewSampleTextEndpoint returns an endpoint function that calls the method
+// "sample_text" of service "assistant".
+func NewSampleTextEndpoint(s Service) loom.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*SampleTextPayload)
+		return s.SampleText(ctx, p)
 	}
 }
 

@@ -114,6 +114,17 @@ type ProcessBatchRequestBody struct {
 	MimeType *string `form:"mimeType,omitempty" json:"mimeType,omitempty" xml:"mimeType,omitempty"`
 }
 
+// SampleTextRequestBody is the type of the "assistant" service "sample_text"
+// endpoint HTTP request body.
+type SampleTextRequestBody struct {
+	// User prompt to sample
+	Prompt *string `form:"prompt,omitempty" json:"prompt,omitempty" xml:"prompt,omitempty"`
+	// Optional system prompt
+	SystemPrompt *string `form:"system_prompt,omitempty" json:"system_prompt,omitempty" xml:"system_prompt,omitempty"`
+	// Maximum number of tokens
+	MaxTokens *int64 `form:"max_tokens,omitempty" json:"max_tokens,omitempty" xml:"max_tokens,omitempty"`
+}
+
 // MultiContentRequestBody is the type of the "assistant" service
 // "multi_content" endpoint HTTP request body.
 type MultiContentRequestBody struct {

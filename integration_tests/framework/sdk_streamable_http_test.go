@@ -105,6 +105,57 @@ func TestGeneratedServerSDKCallToolWorks(t *testing.T) {
 	assert.JSONEq(t, `{"sentiment":"positive"}`, string(structured))
 }
 
+func TestGeneratedServerSDKToolCanSampleThroughClient(t *testing.T) {
+	t.Parallel()
+
+	received := make(chan *mcp.CreateMessageParams, 1)
+	session := newIntegrationSDKSessionWithOptions(t, "itest-sampling", &mcp.ClientOptions{
+		CreateMessageHandler: func(_ context.Context, req *mcp.CreateMessageRequest) (*mcp.CreateMessageResult, error) {
+			received <- req.Params
+			return &mcp.CreateMessageResult{
+				Content:    &mcp.TextContent{Text: "sampled response"},
+				Model:      "fixture-model",
+				Role:       mcp.Role("assistant"),
+				StopReason: "endTurn",
+			}, nil
+		},
+	})
+	defer func() {
+		require.NoError(t, session.Close())
+	}()
+
+	ctx, cancel := sdkTestContext(t)
+	defer cancel()
+	result, err := session.CallTool(ctx, &mcp.CallToolParams{
+		Name: "sample_text",
+		Arguments: map[string]any{
+			"prompt":        "Summarize the test contract",
+			"system_prompt": "Answer concisely",
+			"max_tokens":    64,
+		},
+	})
+	require.NoError(t, err)
+
+	var request *mcp.CreateMessageParams
+	select {
+	case request = <-received:
+	case <-ctx.Done():
+		t.Fatal("sampling/createMessage did not reach the SDK client")
+	}
+	require.NotNil(t, request)
+	require.Len(t, request.Messages, 1)
+	assert.Equal(t, mcp.Role("user"), request.Messages[0].Role)
+	message, ok := request.Messages[0].Content.(*mcp.TextContent)
+	require.True(t, ok)
+	assert.Equal(t, "Summarize the test contract", message.Text)
+	assert.Equal(t, "Answer concisely", request.SystemPrompt)
+	assert.Equal(t, int64(64), request.MaxTokens)
+
+	structured, err := json.Marshal(result.StructuredContent)
+	require.NoError(t, err)
+	assert.JSONEq(t, `{"model":"fixture-model","stop_reason":"endTurn","text":"sampled response"}`, string(structured))
+}
+
 func TestGeneratedServerSDKReadResourceAndGetPrompt(t *testing.T) {
 	t.Parallel()
 
@@ -224,6 +275,10 @@ func TestGeneratedServerSDKClosedLoopFigmaFlow(t *testing.T) {
 }
 
 func newIntegrationSDKSession(t *testing.T, clientName string) *mcp.ClientSession {
+	return newIntegrationSDKSessionWithOptions(t, clientName, nil)
+}
+
+func newIntegrationSDKSessionWithOptions(t *testing.T, clientName string, opts *mcp.ClientOptions) *mcp.ClientSession {
 	t.Helper()
 
 	if !SupportsServer() {
@@ -235,10 +290,10 @@ func newIntegrationSDKSession(t *testing.T, clientName string) *mcp.ClientSessio
 	require.NoError(t, r.startServer(t))
 	t.Cleanup(r.stopServer)
 
-	return connectSDKSession(t, r.baseURL.String()+"/rpc", clientName)
+	return connectSDKSessionWithOptions(t, r.baseURL.String()+"/rpc", clientName, opts)
 }
 
-func connectSDKSession(t *testing.T, endpoint string, clientName string) *mcp.ClientSession {
+func connectSDKSessionWithOptions(t *testing.T, endpoint string, clientName string, opts *mcp.ClientOptions) *mcp.ClientSession {
 	t.Helper()
 
 	ctx, cancel := sdkTestContext(t)
@@ -247,7 +302,7 @@ func connectSDKSession(t *testing.T, endpoint string, clientName string) *mcp.Cl
 	client := mcp.NewClient(&mcp.Implementation{
 		Name:    clientName,
 		Version: "1.0.0",
-	}, nil)
+	}, opts)
 	session, err := client.Connect(ctx, &mcp.StreamableClientTransport{
 		Endpoint: endpoint,
 		HTTPClient: &http.Client{

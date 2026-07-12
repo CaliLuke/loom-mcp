@@ -19,6 +19,7 @@ import (
 	assistant "example.com/assistant/gen/assistant"
 	projected "example.com/assistant/gen/assistant/toolsets/projected"
 	mcpruntime "github.com/CaliLuke/loom-mcp/runtime/mcp"
+	sdkclient "github.com/CaliLuke/loom-mcp/runtime/mcp/sdkclient"
 	mcpskills "github.com/CaliLuke/loom-mcp/runtime/mcp/skills"
 	"github.com/CaliLuke/loom/observability/transport"
 	mcpsdk "github.com/modelcontextprotocol/go-sdk/mcp"
@@ -46,9 +47,6 @@ type sdkToolCallCollector struct {
 	parts     []*ToolsCallResult
 	final     *ToolsCallResult
 	streamErr error
-}
-type sdkSessionElicitor struct {
-	session *mcpsdk.ServerSession
 }
 
 func NewSDKServer(service assistant.Service, opts *SDKServerOptions) (*SDKServer, error) {
@@ -127,6 +125,9 @@ func sdkServerOptionsWithDefaults(opts *mcpsdk.ServerOptions) *mcpsdk.ServerOpti
 		opts.Capabilities = &capabilities
 	}
 	return opts
+}
+func (w *sdkResponseObserver) Unwrap() http.ResponseWriter {
+	return w.ResponseWriter
 }
 func (w *sdkResponseObserver) WriteHeader(statusCode int) {
 	w.statusCode = statusCode
@@ -247,6 +248,13 @@ func registerSDKTools(server *mcpsdk.Server, adapter *MCPAdapter, requestContext
 		Name:         "process_batch",
 		OutputSchema: sdkToolInputSchema("{\"type\":\"object\",\"properties\":{\"ok\":{\"type\":\"boolean\",\"description\":\"Operation status\"}},\"additionalProperties\":false}"),
 		Title:        "Process Batch",
+	}, adapter.sdkToolHandler(requestContext))
+	server.AddTool(&mcpsdk.Tool{
+		Description:  "Request text generation from the connected MCP client",
+		InputSchema:  sdkToolInputSchema("{\"type\":\"object\",\"required\":[\"prompt\",\"max_tokens\"],\"properties\":{\"max_tokens\":{\"type\":\"integer\",\"description\":\"Maximum number of tokens\"},\"prompt\":{\"type\":\"string\",\"description\":\"User prompt to sample\"},\"system_prompt\":{\"type\":\"string\",\"description\":\"Optional system prompt\"}},\"additionalProperties\":false}"),
+		Name:         "sample_text",
+		OutputSchema: sdkToolInputSchema("{\"type\":\"object\",\"required\":[\"text\",\"model\",\"stop_reason\"],\"properties\":{\"model\":{\"type\":\"string\",\"description\":\"Model selected by the client\"},\"stop_reason\":{\"type\":\"string\",\"description\":\"Reason sampling stopped\"},\"text\":{\"type\":\"string\",\"description\":\"Sampled text\"}},\"additionalProperties\":false}"),
+		Title:        "Sample Text",
 	}, adapter.sdkToolHandler(requestContext))
 	server.AddTool(&mcpsdk.Tool{
 		Description:  "Return multiple content items",
@@ -527,7 +535,7 @@ func (a *MCPAdapter) sdkRequestContext(ctx context.Context, session mcpsdk.Sessi
 		a.markInitializedSession("")
 		return ctx
 	}
-	ctx = sdkContextWithElicitor(ctx, session)
+	ctx = sdkContextWithClientFeatures(ctx, session)
 	sessionID := session.ID()
 	if sessionID == "" {
 		a.markInitializedSession("")
@@ -536,34 +544,12 @@ func (a *MCPAdapter) sdkRequestContext(ctx context.Context, session mcpsdk.Sessi
 	a.markInitializedSession(sessionID)
 	return mcpruntime.WithSessionID(ctx, sessionID)
 }
-func sdkContextWithElicitor(ctx context.Context, session mcpsdk.Session) context.Context {
+func sdkContextWithClientFeatures(ctx context.Context, session mcpsdk.Session) context.Context {
 	serverSession, ok := session.(*mcpsdk.ServerSession)
 	if !ok || serverSession == nil {
 		return ctx
 	}
-	return mcpruntime.WithElicitor(ctx, sdkSessionElicitor{session: serverSession})
-}
-func (e sdkSessionElicitor) Elicit(ctx context.Context, req mcpruntime.ElicitRequest) (*mcpruntime.ElicitResult, error) {
-	if e.session == nil {
-		return nil, mcpruntime.ErrElicitorUnavailable
-	}
-	result, err := e.session.Elicit(ctx, &mcpsdk.ElicitParams{
-		ElicitationID:   req.ElicitationID,
-		Message:         req.Message,
-		Mode:            req.Mode,
-		RequestedSchema: req.RequestedSchema,
-		URL:             req.URL,
-	})
-	if err != nil {
-		return nil, err
-	}
-	if result == nil {
-		return &mcpruntime.ElicitResult{}, nil
-	}
-	return &mcpruntime.ElicitResult{
-		Action:  result.Action,
-		Content: result.Content,
-	}, nil
+	return sdkclient.WithClientFeatures(ctx, serverSession)
 }
 func sdkSyntheticHTTPRequest(ctx context.Context, extra *mcpsdk.RequestExtra) *http.Request {
 	req := &http.Request{

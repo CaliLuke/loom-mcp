@@ -133,6 +133,27 @@ func (s *assistantsrvc) SummarizeText(ctx context.Context, p *assistant.Summariz
 	return
 }
 
+// Sample text through the connected MCP client.
+func (s *assistantsrvc) SampleText(ctx context.Context, p *assistant.SampleTextPayload) (*assistant.SampleTextResult, error) {
+	systemPrompt := ""
+	if p.SystemPrompt != nil {
+		systemPrompt = *p.SystemPrompt
+	}
+	result, err := mcpruntime.Sample(ctx, mcpruntime.SampleRequest{
+		Messages:     []mcpruntime.SampleMessage{{Role: "user", Text: p.Prompt}},
+		SystemPrompt: systemPrompt,
+		MaxTokens:    p.MaxTokens,
+	})
+	if err != nil {
+		return nil, err
+	}
+	return &assistant.SampleTextResult{
+		Text:       result.Text,
+		Model:      result.Model,
+		StopReason: result.StopReason,
+	}, nil
+}
+
 // Search knowledge base
 func (s *assistantsrvc) Search(ctx context.Context, p *assistant.SearchPayload) (res *assistant.SearchResult, err error) {
 	res = &assistant.SearchResult{Results: []string{"checkout-screen.md", "design-system.md"}}

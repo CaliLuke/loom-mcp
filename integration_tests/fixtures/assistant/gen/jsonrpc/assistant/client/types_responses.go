@@ -59,6 +59,10 @@ type ExecuteCodeResponseBody ExecuteCodeResponseBodyResponseBody
 // "process_batch" endpoint HTTP response body.
 type ProcessBatchResponseBody ProcessBatchResponseBodyResponseBody
 
+// SampleTextResponseBody is the type of the "assistant" service "sample_text"
+// endpoint HTTP response body.
+type SampleTextResponseBody SampleTextResponseBodyResponseBody
+
 // MultiContentResponseBody is the type of the "assistant" service
 // "multi_content" endpoint HTTP response body.
 type MultiContentResponseBody MultiContentResponseBodyResponseBody

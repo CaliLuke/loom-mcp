@@ -120,6 +120,17 @@ type ProcessBatchResponseBodyResponseBody struct {
 	OK *bool `form:"ok,omitempty" json:"ok,omitempty" xml:"ok,omitempty"`
 }
 
+// SampleTextResponseBodyResponseBody is used to define fields on response body
+// types.
+type SampleTextResponseBodyResponseBody struct {
+	// Sampled text
+	Text string `form:"text" json:"text" xml:"text"`
+	// Model selected by the client
+	Model string `form:"model" json:"model" xml:"model"`
+	// Reason sampling stopped
+	StopReason string `form:"stop_reason" json:"stop_reason" xml:"stop_reason"`
+}
+
 // MultiContentResponseBodyResponseBody is used to define fields on response
 // body types.
 type MultiContentResponseBodyResponseBody struct {
@@ -372,6 +383,17 @@ func NewProcessBatchResponseBody(res *assistant.ProcessBatchResult) *ProcessBatc
 	return body
 }
 
+// NewSampleTextResponseBody builds the HTTP response body from the result of
+// the "sample_text" endpoint of the "assistant" service.
+func NewSampleTextResponseBody(res *assistant.SampleTextResult) *SampleTextResponseBody {
+	body := &SampleTextResponseBody{
+		Text:       res.Text,
+		Model:      res.Model,
+		StopReason: res.StopReason,
+	}
+	return body
+}
+
 // NewMultiContentResponseBody builds the HTTP response body from the result of
 // the "multi_content" endpoint of the "assistant" service.
 func NewMultiContentResponseBody(res *assistant.MultiContentResult) *MultiContentResponseBody {
@@ -583,6 +605,17 @@ func NewProcessBatchPayload(body *ProcessBatchRequestBody) *assistant.ProcessBat
 	v.Items = make([]string, len(body.Items))
 	for i, val := range body.Items {
 		v.Items[i] = val
+	}
+
+	return v
+}
+
+// NewSampleTextPayload builds a assistant service sample_text endpoint payload.
+func NewSampleTextPayload(body *SampleTextRequestBody) *assistant.SampleTextPayload {
+	v := &assistant.SampleTextPayload{
+		Prompt:       *body.Prompt,
+		SystemPrompt: body.SystemPrompt,
+		MaxTokens:    *body.MaxTokens,
 	}
 
 	return v

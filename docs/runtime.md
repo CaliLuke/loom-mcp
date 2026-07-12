@@ -2128,6 +2128,13 @@ The `runtime/mcp` package provides three caller implementations for different MC
 transports. Each constructor establishes an initialized MCP session and returns a
 caller that can be reused across multiple tool invocations.
 
+Generated SDK-backed MCP servers also expose server-to-client features through
+request context. `mcp.Elicit` requests structured user input, while `mcp.Sample`
+sends a text `sampling/createMessage` request to the connected client. Both fail
+closed with an unavailable error outside a generated SDK request context. See
+[`mcp_sdk_server.md`](mcp_sdk_server.md) for the generated-server contracts and
+examples.
+
 ### StdioCaller
 
 Spawns an MCP server as a subprocess and communicates via stdin/stdout:
