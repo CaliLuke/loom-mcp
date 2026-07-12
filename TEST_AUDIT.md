@@ -2,9 +2,9 @@
 
 Audited: 2026-07-11 (refresh + first remediation) · Baseline commit: `4f2c262` (main) · Auditor: test-suite-audit skill
 Baseline: prior audit at `679fb76` earlier the same day; this refresh re-measured everything at HEAD (30 commits, 116 files, +4,227/−1,438 later) and re-verified every prior finding.
-Recent remediation commits: `2752473` (shuffled order hygiene), `3392ddd` (complete CI verification selection).
+Recent remediation commits: `2752473` (shuffled order hygiene), `3392ddd` (complete CI selection), `fb333e2`/`93dd57c`/`49bfddd` (validation coverage).
 
-Remediation progress: **S-2 is resolved; C-1/C-2 are locally repaired and fully verified, with only an actual hosted Actions run pending; C-3 is now 26/59 at the DSL layer and ~16/46 in `ToolExpr.Validate`.** The shared DSL harness now recreates and registers `mcpexpr.Root`, all `expr/agent` tests that replace Goa/MCP global roots restore them with `t.Cleanup`, and the normal unit target runs with `-shuffle=on`. CI now uses Go `1.26.1`, pins Loom `v1.4.0`, calls repository make targets, includes all three integration clusters with uncached execution, and requires Docker-backed registry tests instead of silently accepting their skips. History/cache, bounds names, registry durations, Passthrough, and the full Inject validation block now have direct contract tests.
+Remediation progress: **S-2 is resolved; C-1/C-2 are locally repaired and fully verified, with only an actual hosted Actions run pending; C-3 is now 26/59 at the DSL layer and ~32/46 in `ToolExpr.Validate`.** CI uses the correct pinned toolchain and complete uncached gates. History/cache, bounds names, registry durations, Passthrough, Inject, ServerData, paging, and bounded-result validation now have direct contract tests. Those tests exposed and fixed C-14, a nil method-result panic in ServerData validation.
 
 ## 1. Executive summary
 
@@ -47,9 +47,9 @@ Finding IDs continue the `679fb76` numbering; each carries a status vs that base
 ### C-3: DSL/expr validation — focused DSL surfaces complete, tool validation remains
 - **Severity:** high · **Status:** in progress (DSL error sites 6/59 → 26/59)
 - **Confidence:** measured
-- **Evidence:** 59 `eval.ReportError`/`InvalidArgError` sites exist in `dsl/*.go`; **26 are now tested message-by-message**. History/cache contributes 10 newly covered sites with matching `RunPolicyExpr` invariant tables. Bounds, registry duration, and Passthrough error exits are directly covered. The full race-enabled unit run reports `dsl` at 67.5 % statement coverage (baseline 61.8 %). `expr/agent/tool.go` improved from roughly 7/46 to **~16/46** directly tested conditions: empty/duplicate Inject names, absent/non-object payloads, missing/optional/non-string fields, divergent tool/method payloads, forbidden bound label injection, and valid unbound/bound cases. Focused `expr/agent` coverage is 67.3 % (baseline 59.6 %); Inject helpers are 96–100 %. ServerData, paging, and bounds remain next.
+- **Evidence:** 59 `eval.ReportError`/`InvalidArgError` sites exist in `dsl/*.go`; **26 are tested message-by-message**. `expr/agent/tool.go` improved from roughly 7/46 to **~32/46** directly tested conditions. Inject is complete; ServerData tests cover empty kinds/schemas, binding requirements, missing and nil method results, and valid sources; paging tests cover declaration, empty/missing/wrong/required cursor fields; bounds tests cover every canonical tool-return field and the method-result existence/type/required/optional branches. Focused `expr/agent` statement coverage is now 74.8 % (baseline 59.6 %): paging, tool-return bounds, and method-result bounds helpers are 100 %, ServerData is 95.5 %, and Inject remains 96–100 %.
 - **Impact:** Per CLAUDE.md, validations belong in the DSL; a regression in history-mode exclusivity or duration parsing ships silently. The delta proves the team writes these tests when adding validations — the backlog is the historical 53 sites.
-- **Recommendation:** Inject is complete. Continue direct `ToolExpr.Validate()` tables for ServerData, paging, and bounds; fold remaining DSL sites in by owner while those tables are built.
+- **Recommendation:** Reach the 37/46 exit threshold with remaining shape/surface/finalization conditions, then return to the 33 untested DSL sites.
 
 ### C-4: Only 2 files / 3 funcs of 231 codegen tests compile the generated output
 - **Severity:** high · **Status:** still open (pattern reconfirmed in the delta)
@@ -111,6 +111,13 @@ Finding IDs continue the `679fb76` numbering; each carries a status vs that base
 - **Evidence:** (a) `providerServeCause` (`runtime/toolregistry/provider/provider.go:278`): new test exercises only the `errc`-ready branch, not the `default → ctx.Err()` fallback. (b) `15bcc4b` codifies a validation split: programmatic `registry.New()` rejects only *negative* health config; zero/`<100ms` rejection lives solely in `cmd/registry/main.go` env parsing — `New()` accepts a zero interval. (c) `ConsumeDeferredSkillDirectory` (`expr/mcp/root.go:255`): return-false/mid-slice-removal path untested. (d) `markLastContentBlockCached` (`anthropic/client.go:426-436`): "no cacheable preceding block" silent-drop path unasserted. (e) New global-mutation coupling: `mcp_generated_server_metadata_test.go:358-361` mutates `MCPMaxRequestBodyBytes` (correctly restored via `t.Cleanup`, correctly not parallel — but it is new shared-global test coupling).
 - **Impact:** Individually low; collectively the delta's fix-test pairs cover the fixed branch but not the neighboring branches the fix created.
 - **Recommendation:** Fold into the C-3/C-7 table work; add a `New()`-level zero-interval rejection (or a test documenting the intended split).
+
+### C-14 (found and fixed): ServerData validation panicked on a bound method with no result
+- **Severity:** medium · **Status:** resolved in this change
+- **Confidence:** reproduced by regression test
+- **Evidence:** `ToolExpr.Validate()` resolved the bound method and `validateServerDataShapes` called `t.Method.Result.Find(...)` without checking whether the method declared a result. `TestToolExprValidateServerDataRejectsNilBoundMethodResult` reproduced the nil-pointer panic. Validation now treats a nil result like a missing source field and returns the existing stable `FromMethodResultField(...) does not exist on method result` error.
+- **Impact:** A malformed or partially evaluated design could crash validation/code generation instead of producing a design error.
+- **Recommendation:** Complete; retain the non-panic regression and exact error assertion.
 
 ### V-1: Assistant-fixture consolidation — tool-search 65 funcs / OAuth 12 funcs across 7 files
 - **Severity:** medium · **Status:** still open (counts re-verified at HEAD: 41+10+14 tool-search, 5+3+3+1 OAuth)
@@ -222,7 +229,7 @@ Rank positions are preserved for traceability. Rank 2 is complete; the other opp
 | 1 | **In progress:** repaired CI selection/toolchain and Docker fail-closed behavior; verify hosted run | C-1, C-2 | blocker | hours | 164 integration funcs + 29 registry tests become a real gate |
 | 2 | **Completed:** fix `resetDSLRoots`, restore roots with `t.Cleanup`, enforce `-shuffle=on` | S-2 | complete | done | Order-coupling class eliminated; unlocks parallelism work |
 | 3 | Unit-suite critical path: quickstart out of `make test`, FileOrder 13→3, memoize conformance fixture, tune gopter TTL | S-1, V-2 | quick win | hours | Warm wall 30 s → ~15 s; cold-cache worst case shrinks 40–100 s |
-| 4 | **In progress:** DSL/expr validation tables (26/59 DSL; ~16/46 ToolExpr) | C-3, C-13 | structural | days | Inject complete; ServerData/paging/bounds remain |
+| 4 | **In progress:** DSL/expr validation tables (26/59 DSL; ~32/46 ToolExpr) | C-3, C-13, C-14 | structural | days | One current panic found/fixed; ToolExpr threshold is near |
 | 5 | Compile-the-output design table on `writeGeneratedModule` | C-4 | structural | days | Kills the string-tests-pass-on-broken-output mode the delta just re-demonstrated |
 | 6 | Replace `os.Setenv` header channel → drop `-parallel 1`; one server per YAML; `TestMain` cleanup | S-3, S-4 | structural | days | Integration ~60–90 s; stops the 103 MB leak |
 | 7 | Shared adapter conformance table (+ Gemini/Bedrock error shapes, bedrock keyword table, Mongo prompt/memory integration) | C-7, C-8, V-3 | structural | days | Provider-regression class covered once, uniformly |
@@ -284,7 +291,7 @@ Owners and tests:
 
 Work red-green by validation cluster. Assert the exact stable message and the resulting expression state; do not merely assert `err != nil`. Proof after each cluster: targeted `go test -shuffle=on ./dsl ./expr/agent ./expr/mcp`, followed by all four repository gates because these packages are design/codegen inputs.
 
-Progress: 26/59 DSL error sites, the full history expression invariant set, and roughly 16/46 `ToolExpr.Validate` conditions have direct tests. Exit criterion remains at least 48/59 DSL error sites and 37/46 `ToolExpr.Validate` conditions, with every defect discovered recorded before moving to codegen.
+Progress: 26/59 DSL error sites and roughly 32/46 `ToolExpr.Validate` conditions have direct tests; one current panic has been found and fixed. Exit criterion remains at least 48/59 DSL error sites and 37/46 `ToolExpr.Validate` conditions, with every defect discovered recorded before moving to codegen.
 
 ### Phase 3 — compile generated contracts
 
@@ -357,6 +364,7 @@ Exit criterion: warm unit wall at or below 20 seconds, integration wall at or be
 | S-2 | shuffled `dsl` suite, seeds `101` and `202` | `resetDSLRoots` omitted `mcpexpr.Root`; three `expr/agent` tests leaked replaced globals | `2752473` | fixed |
 | C-1 | CI contract inventory + uncached `make itest` | workflow used Go `1.25.x`, Loom `@latest`, selected only 6/164 integration functions, and allowed cached scenario passes | this change | local gates green; hosted run pending |
 | C-2 | strict no-socket probe + full Colima registry suite | `TestMain` converted every Docker/container failure into skips even in CI | this change | 29 tests green locally; hosted run pending |
+| C-14 | nil-result ServerData validation regression | `validateServerDataShapes` dereferenced `t.Method.Result` before checking it | this change | fixed |
 
 ## 7. Method notes
 

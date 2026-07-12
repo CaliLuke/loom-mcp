@@ -673,7 +673,10 @@ func validateServerDataShapes(t *ToolExpr, verr *eval.ValidationErrors, check fu
 				verr.Add(t, "ServerData(%q) with FromMethodResultField requires a bound method (BindTo)", sd.Kind)
 				continue
 			}
-			field := t.Method.Result.Find(sd.Source.MethodResultField)
+			var field *goaexpr.AttributeExpr
+			if t.Method.Result != nil {
+				field = t.Method.Result.Find(sd.Source.MethodResultField)
+			}
 			if field == nil || field.Type == nil || field.Type == goaexpr.Empty {
 				verr.Add(t, "ServerData(%q) FromMethodResultField(%q) does not exist on method result", sd.Kind, sd.Source.MethodResultField)
 			}
