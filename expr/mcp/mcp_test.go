@@ -207,6 +207,45 @@ func TestMCPExpr_Finalize(t *testing.T) {
 	})
 }
 
+func TestMCPExprFinalizeIsIdempotent(t *testing.T) {
+	previousRoot := Root
+	Root = NewRoot()
+	t.Cleanup(func() {
+		Root = previousRoot
+	})
+
+	service := &expr.ServiceExpr{Name: "test-service", Description: "Service description"}
+	method := &expr.MethodExpr{Name: "Read", Service: service, Description: "Method description"}
+	Root.DynamicPrompts[service.Name] = []*DynamicPromptExpr{{Name: "dynamic-prompt"}}
+	m := &MCPExpr{
+		Name:    "test-server",
+		Version: "1.0.0",
+		Service: service,
+		Tools:   []*ToolExpr{{Name: "tool1", Description: "A tool"}},
+		Resources: []*ResourceExpr{{
+			Name:   "resource1",
+			URI:    "file:///test",
+			Method: method,
+		}},
+		SkillDirectories: []*SkillDirectoryExpr{{Root: ".agents/skills"}},
+	}
+
+	m.Finalize()
+	capabilities := m.Capabilities
+	m.Finalize()
+
+	require.Same(t, capabilities, m.Capabilities)
+	require.Equal(t, "jsonrpc", m.Transport)
+	require.Equal(t, "Service description", m.Description)
+	require.Equal(t, "Method description", m.Resources[0].Description)
+	require.True(t, m.Capabilities.EnableTools)
+	require.True(t, m.Capabilities.EnableResources)
+	require.True(t, m.Capabilities.EnablePrompts)
+	require.Len(t, m.Tools, 1)
+	require.Len(t, m.Resources, 1)
+	require.Len(t, m.SkillDirectories, 1)
+}
+
 func validMCPExpr() *MCPExpr {
 	return &MCPExpr{
 		Name:    "test-server",

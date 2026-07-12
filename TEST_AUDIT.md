@@ -2,9 +2,9 @@
 
 Audited: 2026-07-11 (refresh + first remediation) · Baseline commit: `4f2c262` (main) · Auditor: test-suite-audit skill
 Baseline: prior audit at `679fb76` earlier the same day; this refresh re-measured everything at HEAD (30 commits, 116 files, +4,227/−1,438 later) and re-verified every prior finding.
-Recent remediation commits: `2752473` (shuffled order hygiene), `3392ddd` (complete CI selection), `fb333e2`/`93dd57c`/`49bfddd` (validation coverage).
+Recent remediation commits: `2752473` (shuffled order hygiene), `3392ddd` (complete CI selection), `fb333e2`/`93dd57c`/`49bfddd` (validation coverage), `5dce735` (nil-result validation), `614d111` (fixture transport isolation).
 
-Remediation progress: **S-2 is resolved; C-1/C-2 are locally repaired and fully verified, with only an actual hosted Actions run pending; C-3 is now 26/59 at the DSL layer and above its 37/46 `ToolExpr.Validate` target.** CI uses the correct pinned toolchain and complete uncached gates. `ToolExpr.Validate` is 93.9 % statement-covered, all unsupported MCP projection features are asserted, and `ToolExpr.Finalize` is tested for idempotency. The validation campaign exposed and fixed C-14, a nil method-result panic in ServerData validation.
+Remediation progress: **S-2 is resolved; C-1/C-2 are locally repaired and fully verified, with only an actual hosted Actions run pending; C-3 has achieved both planned targets: 49/59 DSL error sites and more than 37/46 `ToolExpr.Validate` conditions.** CI uses the correct pinned toolchain and complete uncached gates. DSL statement coverage is now 73.3 %, `ToolExpr.Validate` is 93.9 % statement-covered, all unsupported MCP projection features are asserted, and both `ToolExpr.Finalize` and `MCPExpr.Finalize` are tested for idempotency. The validation campaign exposed and fixed C-14, a nil method-result panic in ServerData validation, and the full gate exposed and fixed C-15, cross-test HTTP transport interference in the assistant fixture.
 
 ## 1. Executive summary
 
@@ -44,12 +44,12 @@ Finding IDs continue the `679fb76` numbering; each carries a status vs that base
 - **Evidence:** The same 29 functions still use the shared Redis testcontainer. `registry.TestMain` now separates setup/cleanup, reports cleanup failures, and honors `LOOM_MCP_REQUIRE_DOCKER_TESTS=1`; CI sets that switch for `make test`, turning Docker/container startup failure into exit 1 instead of 29 skips. The switch has a focused table test, a no-socket strict probe failed closed with the expected message, and the full registry package passed against Colima/Redis under `-race -shuffle=on -count=1` in 71.8 s using the explicit Colima Docker socket.
 - **Impact/Recommendation:** Verify all 29 execute on the hosted runner. Continue extracting hermetic sync logic where practical, but do not weaken the fail-closed CI contract.
 
-### C-3: DSL/expr validation — ToolExpr target achieved, DSL sites remain
-- **Severity:** high · **Status:** in progress (DSL error sites 6/59 → 26/59)
+### C-3: DSL/expr validation — planned coverage targets achieved
+- **Severity:** high · **Status:** resolved to target (DSL error sites 6/59 → 49/59)
 - **Confidence:** measured
-- **Evidence:** 59 `eval.ReportError`/`InvalidArgError` sites exist in `dsl/*.go`; **26 are tested message-by-message**. `expr/agent/tool.go` is now above the planned 37/46 direct-condition threshold: `Validate` is 93.9 % statement-covered; Inject, MCP unsupported features, paging, tool-return bounds, and method-result bounds helpers are 96–100 %; ServerData and shape validation are above 94 %. Binding resolution and unsupported data shapes have exact error tests. `ToolExpr.Finalize` is called twice after successful validation and preserves the resolved method and shape hashes.
-- **Impact:** The central expression validator is no longer a major blind spot. The remaining risk is concentrated in 33 DSL-level error sites that can reject or corrupt authored designs before expression validation.
-- **Recommendation:** Preserve the ToolExpr matrix and raise DSL message-level coverage from 26/59 to at least 48/59.
+- **Evidence:** 59 `eval.ReportError`/`InvalidArgError` sites exist in `dsl/*.go`; **49 are tested message-by-message**, exceeding the 48-site target. The added toolset, ServerData/audience, and workflow JSON tables cover 23 more stable diagnostics, and DSL statement coverage rose from 67.5 % to 73.3 %. `expr/agent/tool.go` remains above the planned 37/46 direct-condition threshold: `Validate` is 93.9 % statement-covered; Inject, MCP unsupported features, paging, tool-return bounds, and method-result bounds helpers are 96–100 %; ServerData and shape validation are above 94 %. Binding resolution and unsupported data shapes have exact error tests.
+- **Impact:** The central expression validator and the high-risk DSL authoring boundary are no longer major blind spots. Ten lower-priority DSL error sites remain and should be covered when their owning features change.
+- **Recommendation:** Preserve the matrices and exact-message assertions; fold the remaining ten sites into related feature work rather than blocking the higher-yield compile and runtime phases.
 
 ### C-4: Only 2 files / 3 funcs of 231 codegen tests compile the generated output
 - **Severity:** high · **Status:** still open (pattern reconfirmed in the delta)
@@ -88,11 +88,11 @@ Finding IDs continue the `679fb76` numbering; each carries a status vs that base
 - **Confidence:** measured (upgraded from inferred: `grep -rln bufconn registry/ runtime/registry/` → 0; adapter tests use a hand-written `mockGRPCRegistryClient`, `grpc_client_adapter_test.go:14`)
 - **Impact/Recommendation:** Unchanged — `bufconn` contract test, Docker-free.
 
-### C-10: Concurrency under-exercised; Finalize idempotency untested
-- **Severity:** medium · **Status:** partially resolved (`ToolExpr.Finalize` covered; MCP/concurrency remain)
+### C-10: Concurrency under-exercised; Finalize idempotency resolved
+- **Severity:** medium · **Status:** partially resolved (both Finalize contracts covered; concurrency remains)
 - **Confidence:** measured
-- **Evidence:** `TestToolExprFinalizeIsIdempotent` now validates a real method binding, calls `Finalize()` twice, and proves the method pointer plus Args/Return hashes remain stable. `MCPExpr.Finalize` is still called once per fresh object in its four subtests; sleep-choreographed ordering and broader concurrency gaps remain.
-- **Recommendation:** Add repeated MCP finalization next, then address the remaining race/ordering cases under their owning packages.
+- **Evidence:** `TestToolExprFinalizeIsIdempotent` validates a real method binding, calls `Finalize()` twice, and proves the method pointer plus Args/Return hashes remain stable. `TestMCPExprFinalizeIsIdempotent` now repeats MCP finalization and proves capability identity, inferred metadata, descriptions, and collection cardinality remain stable. Sleep-choreographed ordering and broader concurrency gaps remain.
+- **Recommendation:** Address the remaining race/ordering cases under their owning runtime packages.
 
 ### C-11 (positive): Regression discipline is excellent — now measured at 30/30 on the delta
 - **Severity:** low (positive) · **Status:** reconfirmed, stronger
@@ -212,8 +212,8 @@ Phase 2 — Completeness (`completeness.md`):
 - 2.1 Criticality ranking — re-done at HEAD (top churn: `codegen/mcp/generate.go` 40, `runtime.go` 38, `workflow.go` 34, `bedrock/client.go` 34 …).
 - 2.2 Coverage — re-measured via repo's own flags (59.7 %); per-directory × churn table rebuilt (worst hot dirs: registry 34 %/56 churn, codegen/agent 50 %/424, runtime/toolregistry 53 %/53, expr/agent 60 %/82, dsl 62 %/95); attribution artifacts re-confirmed (C-12); note `runtime/agent/runtime/runtime.go` and `planner/planner.go` legitimately contain few executable statements (facade files) — not attribution failures.
 - 2.3 Untested public surface — top-20 churn files crossed with per-file coverage (hooks/events.go 29 %, tool.go 33 %, subscriber.go 51 %); C-6 sweeps re-verified.
-- 2.4 Error paths — **found**: C-3 (6/59 DSL sites), C-7 (provider shapes), C-13 (delta residuals).
-- 2.5 Boundaries/edge inputs — **partially found**, unchanged (C-3 umbrella).
+- 2.4 Error paths — **found**: C-3 remediated to target (49/59 DSL sites), C-7 (provider shapes), C-13 (delta residuals).
+- 2.5 Boundaries/edge inputs — **partially remediated** (C-3 target achieved; runtime/provider boundaries remain).
 - 2.6 Structural gaps — DB-only-mocked: found (C-8, decode-side improved); concurrency: found (C-10, with strong delta counterexamples); migrations N/A; flags: `MCP_CLI_TESTS` still dark; property-based present; protocol-layer e2e holes: C-5 (no scenario changes in 30 commits).
 - 2.7 Regression discipline — **measured 30/30 on the full delta** (C-11).
 - 2.8 Assertion strength — spot-read 5 delta fix tests (behavioral); no mutation tooling (none configured).
@@ -236,7 +236,7 @@ Rank positions are preserved for traceability. Rank 2 is complete; the other opp
 | 1 | **In progress:** repaired CI selection/toolchain and Docker fail-closed behavior; verify hosted run | C-1, C-2 | blocker | hours | 164 integration funcs + 29 registry tests become a real gate |
 | 2 | **Completed:** fix `resetDSLRoots`, restore roots with `t.Cleanup`, enforce `-shuffle=on` | S-2 | complete | done | Order-coupling class eliminated; unlocks parallelism work |
 | 3 | Unit-suite critical path: quickstart out of `make test`, FileOrder 13→3, memoize conformance fixture, tune gopter TTL | S-1, V-2 | quick win | hours | Warm wall 30 s → ~15 s; cold-cache worst case shrinks 40–100 s |
-| 4 | **In progress:** DSL/expr validation tables (26/59 DSL; ToolExpr target achieved) | C-3, C-13, C-14 | structural | days | One current panic fixed; 22 more DSL sites needed |
+| 4 | **Completed:** DSL/expr validation tables (49/59 DSL; ToolExpr target achieved) | C-3, C-13, C-14 | complete | done | Both coverage targets met; one current panic fixed |
 | 5 | Compile-the-output design table on `writeGeneratedModule` | C-4 | structural | days | Kills the string-tests-pass-on-broken-output mode the delta just re-demonstrated |
 | 6 | Replace `os.Setenv` header channel → drop `-parallel 1`; one server per YAML; `TestMain` cleanup | S-3, S-4 | structural | days | Integration ~60–90 s; stops the 103 MB leak |
 | 7 | Shared adapter conformance table (+ Gemini/Bedrock error shapes, bedrock keyword table, Mongo prompt/memory integration) | C-7, C-8, V-3 | structural | days | Provider-regression class covered once, uniformly |
@@ -298,7 +298,7 @@ Owners and tests:
 
 Work red-green by validation cluster. Assert the exact stable message and the resulting expression state; do not merely assert `err != nil`. Proof after each cluster: targeted `go test -shuffle=on ./dsl ./expr/agent ./expr/mcp`, followed by all four repository gates because these packages are design/codegen inputs.
 
-Progress: 26/59 DSL error sites and more than 37/46 `ToolExpr.Validate` conditions have direct tests; the ToolExpr threshold is achieved and one current panic has been fixed. The remaining Phase 2 exit criterion is at least 48/59 DSL error sites, plus repeated MCP finalization, before moving to codegen.
+Progress: **Phase 2 exit criteria achieved.** 49/59 DSL error sites and more than 37/46 `ToolExpr.Validate` conditions have direct tests; DSL statement coverage is 73.3 %. Repeated `ToolExpr` and MCP finalization are covered. This phase found and fixed the C-14 nil-result panic; the ensuing full-gate run also exposed and fixed the C-15 assistant transport isolation defect. Move next to the generated-code compile matrix.
 
 ### Phase 3 — compile generated contracts
 
@@ -368,11 +368,11 @@ Exit criterion: warm unit wall at or below 20 seconds, integration wall at or be
 
 | Finding | Exposing test | Root cause | Fix commit | Status |
 |---|---|---|---|---|
-| C-15 | full make itest + repeated assistant fixture | parallel SDK clients shared the global HTTP transport, allowing cross-test connection-pool lifecycle interference | this change | fixed; 20× fixture + 50× race stress green |
+| C-15 | full make itest + repeated assistant fixture | parallel SDK clients shared the global HTTP transport, allowing cross-test connection-pool lifecycle interference | `614d111` | fixed; 20× fixture + 50× race stress green |
 | S-2 | shuffled `dsl` suite, seeds `101` and `202` | `resetDSLRoots` omitted `mcpexpr.Root`; three `expr/agent` tests leaked replaced globals | `2752473` | fixed |
 | C-1 | CI contract inventory + uncached `make itest` | workflow used Go `1.25.x`, Loom `@latest`, selected only 6/164 integration functions, and allowed cached scenario passes | this change | local gates green; hosted run pending |
 | C-2 | strict no-socket probe + full Colima registry suite | `TestMain` converted every Docker/container failure into skips even in CI | this change | 29 tests green locally; hosted run pending |
-| C-14 | nil-result ServerData validation regression | `validateServerDataShapes` dereferenced `t.Method.Result` before checking it | this change | fixed |
+| C-14 | nil-result ServerData validation regression | `validateServerDataShapes` dereferenced `t.Method.Result` before checking it | `5dce735` | fixed |
 
 ## 7. Method notes
 
