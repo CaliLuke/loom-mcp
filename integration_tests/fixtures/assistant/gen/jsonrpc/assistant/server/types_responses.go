@@ -67,6 +67,10 @@ type SampleTextResponseBody SampleTextResponseBodyResponseBody
 // "list_client_roots" endpoint HTTP response body.
 type ListClientRootsResponseBody ListClientRootsResponseBodyResponseBody
 
+// ReportProgressResponseBody is the type of the "assistant" service
+// "report_progress" endpoint HTTP response body.
+type ReportProgressResponseBody ReportProgressResponseBodyResponseBody
+
 // MultiContentResponseBody is the type of the "assistant" service
 // "multi_content" endpoint HTTP response body.
 type MultiContentResponseBody MultiContentResponseBodyResponseBody

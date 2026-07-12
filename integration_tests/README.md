@@ -289,7 +289,7 @@ TEST_SERVER_URL=http://localhost:8080 TEST_SKIP_GENERATION=true go test ./tests
 
 ✅ **Sampling** - Generated SDK tools request client text sampling over streamable HTTP
 ✅ **Roots** - Generated SDK tools list client roots and receive list-changed notifications
-⏳ **Progress** - Progress-token propagation and notifications
+✅ **Progress** - Generated SDK tools preserve progress tokens and emit monotonic notifications
 ⏳ **Logging** - Structured logging protocol
 ⏳ **Completion** - Autocomplete support
 

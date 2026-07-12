@@ -168,6 +168,20 @@ func (s *assistantsrvc) ListClientRoots(ctx context.Context) (*assistant.ListCli
 	return result, nil
 }
 
+// Report deterministic progress to the connected MCP client.
+func (s *assistantsrvc) ReportProgress(ctx context.Context) (*assistant.ReportProgressResult, error) {
+	for i, message := range []string{"started", "processing", "complete"} {
+		if err := mcpruntime.ReportProgress(ctx, mcpruntime.ProgressUpdate{
+			Progress: float64(i + 1),
+			Total:    3,
+			Message:  message,
+		}); err != nil {
+			return nil, err
+		}
+	}
+	return &assistant.ReportProgressResult{Completed: true}, nil
+}
+
 // Search knowledge base
 func (s *assistantsrvc) Search(ctx context.Context, p *assistant.SearchPayload) (res *assistant.SearchResult, err error) {
 	res = &assistant.SearchResult{Results: []string{"checkout-screen.md", "design-system.md"}}

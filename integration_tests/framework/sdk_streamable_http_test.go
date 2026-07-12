@@ -176,6 +176,39 @@ func TestGeneratedServerSDKToolCanListClientRoots(t *testing.T) {
 	assert.JSONEq(t, `{"roots":[{"name":"Project","uri":"file:///workspace/project"}]}`, string(structured))
 }
 
+func TestGeneratedServerSDKToolReportsProgressToClient(t *testing.T) {
+	t.Parallel()
+
+	notifications := make(chan *mcp.ProgressNotificationParams, 3)
+	session := newIntegrationSDKSessionWithOptions(t, "itest-progress", &mcp.ClientOptions{
+		ProgressNotificationHandler: func(_ context.Context, req *mcp.ProgressNotificationClientRequest) {
+			notifications <- req.Params
+		},
+	})
+	defer func() { require.NoError(t, session.Close()) }()
+
+	ctx, cancel := sdkTestContext(t)
+	defer cancel()
+	params := &mcp.CallToolParams{Name: "report_progress"}
+	params.SetProgressToken("progress-1")
+	result, err := session.CallTool(ctx, params)
+	require.NoError(t, err)
+	assert.Equal(t, map[string]any{"completed": true}, result.StructuredContent)
+
+	for i, message := range []string{"started", "processing", "complete"} {
+		select {
+		case notification := <-notifications:
+			require.NotNil(t, notification)
+			assert.Equal(t, "progress-1", notification.ProgressToken)
+			assert.InDelta(t, float64(i+1), notification.Progress, 0.000001)
+			assert.InDelta(t, float64(3), notification.Total, 0.000001)
+			assert.Equal(t, message, notification.Message)
+		case <-ctx.Done():
+			t.Fatalf("notification %d did not reach the SDK client", i+1)
+		}
+	}
+}
+
 func TestGeneratedServerSDKReadResourceAndGetPrompt(t *testing.T) {
 	t.Parallel()
 

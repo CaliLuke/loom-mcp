@@ -295,6 +295,16 @@ var _ = Service("assistant", func() {
 		JSONRPC(func() {})
 	})
 
+	Method("report_progress", func() {
+		Description("Report deterministic progress to the connected MCP client")
+		Result(func() {
+			Attribute("completed", Boolean, "Whether all progress updates were sent")
+			Required("completed")
+		})
+		Tool("report_progress", "Report deterministic progress to the connected MCP client")
+		JSONRPC(func() {})
+	})
+
 	Method("multi_content", func() {
 		Description("Return multiple content items")
 		Payload(func() {

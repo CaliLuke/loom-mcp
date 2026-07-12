@@ -1302,6 +1302,71 @@ func DecodeListClientRootsResponse(decoder func(*http.Response) loomhttp.Decoder
 		res := NewListClientRootsResultOK(&body)
 		return res, nil
 	}
+} // BuildReportProgressRequest instantiates a HTTP request object with method
+// and path set to call the "assistant" service "report_progress" endpoint
+func (c *Client) BuildReportProgressRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: ReportProgressAssistantPath()}
+	req, err := http.NewRequest("POST", u.String(), nil)
+	if err != nil {
+		return nil, loomhttp.ErrInvalidURL("assistant", "report_progress", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// DecodeReportProgressResponse returns a decoder for responses returned by the
+// assistant service report_progress JSON-RPC method. restoreBody controls
+// whether the response body should be restored after having been read.
+func DecodeReportProgressResponse(decoder func(*http.Response) loomhttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		}
+		defer resp.Body.Close()
+
+		if resp.StatusCode != http.StatusOK {
+			body, _ := io.ReadAll(resp.Body)
+			return nil, loomhttp.ErrInvalidResponse("assistant", "report_progress", resp.StatusCode, string(body))
+		}
+
+		var jresp jsonrpc.RawResponse
+		if err := decoder(resp).Decode(&jresp); err != nil {
+			return nil, loomhttp.ErrDecodingError("assistant", "report_progress", err)
+		}
+
+		if jresp.Error != nil {
+			switch jresp.Error.Code {
+			default:
+				return nil, jresp.Error
+			}
+		}
+
+		resp.Body = io.NopCloser(bytes.NewBuffer(jresp.Result))
+		var (
+			body ReportProgressResponseBody
+			err  error
+		)
+		err = decoder(resp).Decode(&body)
+		if err != nil {
+			return nil, loomhttp.ErrDecodingError("assistant", "report_progress", err)
+		}
+		err = ValidateReportProgressResponseBody(&body)
+		if err != nil {
+			return nil, loomhttp.ErrValidationError("assistant", "report_progress", err)
+		}
+		res := NewReportProgressResultOK(&body)
+		return res, nil
+	}
 } // BuildMultiContentRequest instantiates a HTTP request object with method and
 // path set to call the "assistant" service "multi_content" endpoint
 func (c *Client) BuildMultiContentRequest(ctx context.Context, v any) (*http.Request, error) {
@@ -2034,6 +2099,21 @@ func EncodeListClientRootsRequest(encoder func(*http.Request) loomhttp.Encoder) 
 		}
 		if err := encoder(req).Encode(body); err != nil {
 			return loomhttp.ErrEncodingError("assistant", "list_client_roots", err)
+		}
+		return nil
+	}
+} // EncodeReportProgressRequest returns an encoder for requests sent to the
+// assistant service report_progress JSON-RPC method.
+func EncodeReportProgressRequest(encoder func(*http.Request) loomhttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		id := uuid.New().String()
+		body := &jsonrpc.Request{
+			ID:      id,
+			JSONRPC: "2.0",
+			Method:  "report_progress",
+		}
+		if err := encoder(req).Encode(body); err != nil {
+			return loomhttp.ErrEncodingError("assistant", "report_progress", err)
 		}
 		return nil
 	}

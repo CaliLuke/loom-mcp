@@ -667,6 +667,21 @@ func EncodeListClientRootsResponse(encoder func(context.Context, http.ResponseWr
 	}
 }
 
+// EncodeReportProgressResponse returns an encoder for responses returned by
+// the assistant report_progress endpoint.
+func EncodeReportProgressResponse(encoder func(context.Context, http.ResponseWriter) loomhttp.Encoder) func(context.Context, http.ResponseWriter, any) error {
+	return func(ctx context.Context, w http.ResponseWriter, v any) error {
+		res, ok := v.(*assistant.ReportProgressResult)
+		if !ok {
+			return loomhttp.ErrInvalidType("assistant", "report_progress", "*assistant.ReportProgressResult", v)
+		}
+		enc := encoder(ctx, w)
+		body := NewReportProgressResponseBody(res)
+		w.WriteHeader(http.StatusOK)
+		return enc.Encode(body)
+	}
+}
+
 // EncodeMultiContentResponse returns an encoder for responses returned by the
 // assistant multi_content endpoint.
 func EncodeMultiContentResponse(encoder func(context.Context, http.ResponseWriter) loomhttp.Encoder) func(context.Context, http.ResponseWriter, any) error {

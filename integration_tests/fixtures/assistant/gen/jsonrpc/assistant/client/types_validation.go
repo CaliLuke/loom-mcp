@@ -92,6 +92,15 @@ func ValidateListClientRootsResponseBody(body *ListClientRootsResponseBody) (err
 	return
 }
 
+// ValidateReportProgressResponseBody runs the validations defined on
+// report_progress_response_body
+func ValidateReportProgressResponseBody(body *ReportProgressResponseBody) (err error) {
+	if body.Completed == nil {
+		err = loom.MergeErrors(err, loom.MissingFieldError("completed", "body"))
+	}
+	return
+}
+
 // ValidateGenerateDpiSpecResponseBody runs the validations defined on
 // generate_dpi_spec_response_body
 func ValidateGenerateDpiSpecResponseBody(body *GenerateDpiSpecResponseBody) (err error) {
@@ -298,6 +307,15 @@ func ValidateListClientRootsResponseBodyResponseBody(body *ListClientRootsRespon
 func ValidateClientRootResponseBody(body *ClientRootResponseBody) (err error) {
 	if body.URI == nil {
 		err = loom.MergeErrors(err, loom.MissingFieldError("uri", "body"))
+	}
+	return
+}
+
+// ValidateReportProgressResponseBodyResponseBody runs the validations defined
+// on report_progress_response_bodyResponseBody
+func ValidateReportProgressResponseBodyResponseBody(body *ReportProgressResponseBodyResponseBody) (err error) {
+	if body.Completed == nil {
+		err = loom.MergeErrors(err, loom.MissingFieldError("completed", "body"))
 	}
 	return
 }

@@ -267,7 +267,7 @@ func BuildMultiContentPayload(assistantMultiContentBody string) (*assistant.Mult
 	{
 		err = json.Unmarshal([]byte(assistantMultiContentBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"count\": 6644203216228748672\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"count\": 2512511310855334906\n   }'")
 		}
 	}
 	v := &assistant.MultiContentPayload{

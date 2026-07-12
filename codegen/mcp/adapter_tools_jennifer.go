@@ -1131,10 +1131,14 @@ func emitHandleSearchTools(stmt *jen.Statement) {
 				),
 				jen.Return(jen.Id("matches").Index(jen.Id("i")).Dot("order").Op("<").Id("matches").Index(jen.Id("j")).Dot("order")),
 			))
-			g.If(jen.Id("query").Op("!=").Lit("").Op("&&").Id("settings").Dot("exactMatchMode").Op("==").Lit("narrow").Op("&&").Len(jen.Id("matches")).Op(">").Lit(0).Op("&&").Id("matches").Index(jen.Lit(0)).Dot("score").Op(">=").Id("settings").Dot("titleWeight").Op("*").Lit(8)).Block(
+			g.Id("narrowThreshold").Op(":=").Id("settings").Dot("nameWeight").Op("*").Lit(7)
+			g.If(jen.Id("titleThreshold").Op(":=").Id("settings").Dot("titleWeight").Op("*").Lit(7), jen.Id("titleThreshold").Op("<").Id("narrowThreshold")).Block(
+				jen.Id("narrowThreshold").Op("=").Id("titleThreshold"),
+			)
+			g.If(jen.Id("query").Op("!=").Lit("").Op("&&").Id("settings").Dot("exactMatchMode").Op("==").Lit("narrow").Op("&&").Len(jen.Id("matches")).Op(">").Lit(0).Op("&&").Id("matches").Index(jen.Lit(0)).Dot("score").Op(">=").Id("narrowThreshold")).Block(
 				jen.Id("filtered").Op(":=").Id("matches").Index(jen.Empty(), jen.Lit(0)),
 				jen.For(jen.List(jen.Id("_"), jen.Id("match")).Op(":=").Range().Id("matches")).Block(
-					jen.If(jen.Id("match").Dot("score").Op(">=").Id("settings").Dot("titleWeight").Op("*").Lit(8)).Block(
+					jen.If(jen.Id("match").Dot("score").Op(">=").Id("narrowThreshold")).Block(
 						jen.Id("filtered").Op("=").Append(jen.Id("filtered"), jen.Id("match")),
 					),
 				),

@@ -109,8 +109,9 @@ Use this skill for `loom-mcp` work in this repo. Keep `AGENTS.md` short and keep
   Hidden real tools are invoked through `call_tool`; direct hidden `tools/call`
   is rejected by default, except for the explicit JSON-RPC compatibility option
   `AllowDirectHiddenCalls`. `search_tools` must support tokenized natural
-  language queries, fuzzy name/title matching, exact-match narrowing, and DSL
-  tuning through `ToolSearch(...)`; it must return exact `call_tool` JSON
+  language queries, fuzzy name/title matching, strong name/title match
+  narrowing (exact, normalized, prefix, and contains), and DSL tuning through
+  `ToolSearch(...)`; it must return exact `call_tool` JSON
   examples. `call_tool` schema text must require top-level `name` and
   `arguments` and warn not to use `args`. SDK compact mode must reject
   direct-hidden compatibility at construction.
@@ -120,9 +121,9 @@ Use this skill for `loom-mcp` work in this repo. Keep `AGENTS.md` short and keep
 - Generated SDK-backed MCP servers expose prompt argument completion for
   enum-backed dynamic prompt arguments and place runtime client-feature
   adapters in request contexts so service code can call `runtime/mcp.Elicit`,
-  text `runtime/mcp.Sample`, and `runtime/mcp.ListRoots` during MCP calls. Keep
-  official-SDK conversion in `runtime/mcp/sdkclient`, not duplicated in
-  generated files.
+  text `runtime/mcp.Sample`, `runtime/mcp.ListRoots`, and request-scoped
+  `runtime/mcp.ReportProgress` during MCP calls. Keep official-SDK conversion in
+  `runtime/mcp/sdkclient`, not duplicated in generated files.
 - Codegen should use partial evaluation and `NameScope` helpers rather than string surgery or runtime branching over static structure.
 - DSL/codegen/runtime internals should trust evaluated design invariants and fail fast instead of adding speculative fallback paths.
 

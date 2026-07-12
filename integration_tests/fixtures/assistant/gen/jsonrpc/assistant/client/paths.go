@@ -87,6 +87,11 @@ func ListClientRootsAssistantPath() string {
 	return "/rpc"
 }
 
+// ReportProgressAssistantPath returns the URL path to the assistant service report_progress HTTP endpoint.
+func ReportProgressAssistantPath() string {
+	return "/rpc"
+}
+
 // MultiContentAssistantPath returns the URL path to the assistant service multi_content HTTP endpoint.
 func MultiContentAssistantPath() string {
 	return "/rpc"

@@ -160,6 +160,7 @@ func TestGenerate_SDKServerDoesNotAdvertiseDeadEventsCapability(t *testing.T) {
 		"SDK mode must not advertise the events/stream capability: the SDK transport owns GET and the handler is unreachable")
 	require.Contains(t, rendered, "sdkServerOptionsWithDefaults")
 	require.Contains(t, rendered, "sdkclient.WithClientFeatures(ctx, serverSession)")
+	require.Contains(t, rendered, "mcpruntime.WithProgressToken(ctx, req.Params.GetProgressToken())")
 	require.Contains(t, rendered, "func (w *sdkResponseObserver) Unwrap() http.ResponseWriter")
 	require.NotContains(t, rendered, "sdkSessionElicitor")
 }

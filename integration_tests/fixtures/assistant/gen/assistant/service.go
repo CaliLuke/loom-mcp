@@ -51,6 +51,8 @@ type Service interface {
 	SampleText(context.Context, *SampleTextPayload) (res *SampleTextResult, err error)
 	// List filesystem roots exposed by the connected MCP client
 	ListClientRoots(context.Context) (res *ListClientRootsResult, err error)
+	// Report deterministic progress to the connected MCP client
+	ReportProgress(context.Context) (res *ReportProgressResult, err error)
 	// Return multiple content items
 	MultiContent(context.Context, *MultiContentPayload) (res *MultiContentResult, err error)
 	// Generate a deterministic implementation-ready DPI spec from a fake Figma
@@ -80,7 +82,7 @@ const ServiceName = "assistant"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [22]string{"list_documents", "system_info", "conversation_history", "figma_design_system", "generate_prompts", "build_figma_implementation_prompt", "send_notification", "analyze_sentiment", "extract_keywords", "summarize_text", "search", "search_records", "execute_code", "process_batch", "sample_text", "list_client_roots", "multi_content", "generate_dpi_spec", "dispatch_action", "dispatch_command", "projected_lookup", "projected_status"}
+var MethodNames = [23]string{"list_documents", "system_info", "conversation_history", "figma_design_system", "generate_prompts", "build_figma_implementation_prompt", "send_notification", "analyze_sentiment", "extract_keywords", "summarize_text", "search", "search_records", "execute_code", "process_batch", "sample_text", "list_client_roots", "report_progress", "multi_content", "generate_dpi_spec", "dispatch_action", "dispatch_command", "projected_lookup", "projected_status"}
 
 // AnalyzeSentimentPayload is the payload type of the assistant service
 // analyze_sentiment method.
@@ -392,6 +394,13 @@ type ProjectedStatusResult struct {
 type PromptTemplates struct {
 	// Templates
 	Templates []string `json:"templates"`
+}
+
+// ReportProgressResult is the result type of the assistant service
+// report_progress method.
+type ReportProgressResult struct {
+	// Whether all progress updates were sent
+	Completed bool `json:"completed"`
 }
 
 // SampleTextPayload is the payload type of the assistant service sample_text

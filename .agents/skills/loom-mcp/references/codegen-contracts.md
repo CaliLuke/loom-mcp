@@ -74,6 +74,9 @@ Use this file when editing DSL, generators, generated helpers, or MCP codegen be
   elicitation, text sampling, and roots/list requests through the active
   official SDK session. Do not duplicate SDK request/response conversion in
   generated code.
+- Generated SDK tool handlers preserve `_meta.progressToken` in request context
+  before invoking service code so `runtime/mcp.ReportProgress` can emit
+  `notifications/progress` with the original string or numeric token.
 - Generated SDK response-writer observers must implement `Unwrap() http.ResponseWriter`
   so `http.ResponseController` can reach flushing and other optional transport
   capabilities required by nested server-to-client requests.
@@ -148,9 +151,10 @@ Use this file when editing DSL, generators, generated helpers, or MCP codegen be
   name/title fuzzy tier, support DSL/runtime tuning through `ToolSearch(...)`
   and generated `ToolSearchOptions`, explain `why_matched`, and include exact
   `call_tool` JSON examples in both text guidance and structured descriptor
-  fields. `ToolDiscoveryCallTemplateArg` may add exemplar optional arguments to
-  those examples, but must not change validation semantics. Exact or near-exact
-  name/title matches should suppress weak broad matches by default. Hidden real
+  fields. Narrow mode must remove weak fuzzy candidates whenever an exact,
+  normalized, prefix, or contains name/title tier is present.
+  `ToolDiscoveryCallTemplateArg` may add exemplar optional arguments to those
+  examples, but must not change validation semantics. Hidden real
   tools are called through `call_tool`; direct hidden JSON-RPC calls require
   `AllowDirectHiddenCalls`, and SDK compact mode must reject that option because
   unregistered SDK tools cannot be directly invoked. Projected MCP tools must follow the same `AlwaysVisible`,

@@ -2131,8 +2131,9 @@ caller that can be reused across multiple tool invocations.
 Generated SDK-backed MCP servers also expose server-to-client features through
 request context. `mcp.Elicit` requests structured user input, `mcp.Sample`
 sends a text `sampling/createMessage` request, and `mcp.ListRoots` retrieves
-client filesystem boundaries. All fail closed with an unavailable error outside
-a generated SDK request context. See
+client filesystem boundaries. `mcp.ReportProgress` sends request-scoped progress
+notifications using the original client token. All fail closed with an
+unavailable error outside a generated SDK request context. See
 [`mcp_sdk_server.md`](mcp_sdk_server.md) for the generated-server contracts and
 examples.
 
@@ -2282,8 +2283,9 @@ or title matches, then prefix/contains name and title matches, then fuzzy
 name/title matches using generated token scoring, then broader discovery
 metadata, description, parameter, and schema matches. In the default `narrow`
 exact-match mode, high-confidence name/title matches suppress weaker broad
-matches so an exact `get_graph_summary` query does not return an unrelated
-graph-tool set.
+and fuzzy matches. High-confidence includes exact, normalized, prefix, and
+contains tiers, so a query such as `sentiment` does not retain an unrelated
+fuzzy subsequence candidate beside `analyze_sentiment`.
 
 Products can tune generated defaults in the MCP DSL with
 `ToolSearch(...)`: `ToolSearchMaxResults`, `ToolSearchMinScore`,

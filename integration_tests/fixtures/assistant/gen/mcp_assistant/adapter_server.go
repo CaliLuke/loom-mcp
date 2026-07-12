@@ -916,6 +916,12 @@ func (a *MCPAdapter) generatedToolCatalog() []*ToolInfo {
 		OutputSchema: json.RawMessage([]byte("{\"type\":\"object\",\"required\":[\"roots\"],\"properties\":{\"roots\":{\"type\":\"array\",\"description\":\"Client filesystem roots\",\"items\":{\"type\":\"object\",\"required\":[\"uri\"],\"properties\":{\"name\":{\"type\":\"string\",\"description\":\"Optional display name\"},\"uri\":{\"type\":\"string\",\"description\":\"Root file URI\"}},\"additionalProperties\":false}}},\"additionalProperties\":false}")),
 		Title:        stringPtr("List Client Roots"),
 	}, &ToolInfo{
+		Description:  stringPtr("Report deterministic progress to the connected MCP client"),
+		InputSchema:  json.RawMessage([]byte("{\"type\":\"object\",\"properties\":{},\"additionalProperties\":false}")),
+		Name:         "report_progress",
+		OutputSchema: json.RawMessage([]byte("{\"type\":\"object\",\"required\":[\"completed\"],\"properties\":{\"completed\":{\"type\":\"boolean\",\"description\":\"Whether all progress updates were sent\"}},\"additionalProperties\":false}")),
+		Title:        stringPtr("Report Progress"),
+	}, &ToolInfo{
 		Description:  stringPtr("Return multiple content items"),
 		InputSchema:  json.RawMessage([]byte("{\"type\":\"object\",\"required\":[\"count\"],\"properties\":{\"count\":{\"type\":\"integer\",\"description\":\"Number of content items to return\"}},\"additionalProperties\":false}")),
 		Name:         "multi_content",
@@ -996,6 +1002,8 @@ func isGeneratedToolName(name string) bool {
 	case "sample_text":
 		return true
 	case "list_client_roots":
+		return true
+	case "report_progress":
 		return true
 	case "multi_content":
 		return true
@@ -1653,10 +1661,14 @@ func (a *MCPAdapter) handleSearchTools(ctx context.Context, p *ToolsCallPayload,
 		}
 		return matches[i].order < matches[j].order
 	})
-	if query != "" && settings.exactMatchMode == "narrow" && len(matches) > 0 && matches[0].score >= settings.titleWeight*8 {
+	narrowThreshold := settings.nameWeight * 7
+	if titleThreshold := settings.titleWeight * 7; titleThreshold < narrowThreshold {
+		narrowThreshold = titleThreshold
+	}
+	if query != "" && settings.exactMatchMode == "narrow" && len(matches) > 0 && matches[0].score >= narrowThreshold {
 		filtered := matches[:0]
 		for _, match := range matches {
-			if match.score >= settings.titleWeight*8 {
+			if match.score >= narrowThreshold {
 				filtered = append(filtered, match)
 			}
 		}
@@ -2309,6 +2321,25 @@ func (a *MCPAdapter) executeRealTool(ctx context.Context, p *ToolsCallPayload, s
 		return false, stream.SendAndClose(ctx, final)
 	case "list_client_roots":
 		result, err := a.service.ListClientRoots(ctx)
+		if err != nil {
+			return true, a.sendToolError(ctx, stream, p.Name, err)
+		}
+		structuredContent, serr := json.Marshal(result)
+		if serr != nil {
+			return false, serr
+		}
+		s := string(structuredContent)
+		final := &ToolsCallResult{
+			Content:           []*ContentItem{buildContentItem(a, s)},
+			StructuredContent: structuredContent,
+		}
+		a.log(ctx, "response", map[string]any{
+			"method": "tools/call",
+			"name":   p.Name,
+		})
+		return false, stream.SendAndClose(ctx, final)
+	case "report_progress":
+		result, err := a.service.ReportProgress(ctx)
 		if err != nil {
 			return true, a.sendToolError(ctx, stream, p.Name, err)
 		}

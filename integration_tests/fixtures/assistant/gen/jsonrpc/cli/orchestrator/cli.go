@@ -23,7 +23,7 @@ import (
 //
 //	command (subcommand1|subcommand2|...)
 func UsageCommands() []string {
-	return []string{"assistant (list-documents|system-info|conversation-history|figma-design-system|generate-prompts|build-figma-implementation-prompt|send-notification|analyze-sentiment|extract-keywords|summarize-text|search|search-records|execute-code|process-batch|sample-text|list-client-roots|multi-content|generate-dpi-spec|dispatch-action|dispatch-command|projected-lookup|projected-status)"}
+	return []string{"assistant (list-documents|system-info|conversation-history|figma-design-system|generate-prompts|build-figma-implementation-prompt|send-notification|analyze-sentiment|extract-keywords|summarize-text|search|search-records|execute-code|process-batch|sample-text|list-client-roots|report-progress|multi-content|generate-dpi-spec|dispatch-action|dispatch-command|projected-lookup|projected-status)"}
 } // UsageExamples produces an example of a valid invocation of the CLI tool.
 func UsageExamples() string {
 	return os.Args[0] + " assistant list-documents\\n"
@@ -71,6 +71,7 @@ type commandLine struct {
 			Body string `help:"" name:"body" required:""`
 		} `cmd:"" help:"Request text generation from the connected MCP client" name:"sample-text"`
 		ListClientRoots struct{} `cmd:"" help:"List filesystem roots exposed by the connected MCP client" name:"list-client-roots"`
+		ReportProgress  struct{} `cmd:"" help:"Report deterministic progress to the connected MCP client" name:"report-progress"`
 		MultiContent    struct {
 			Body string `help:"" name:"body" required:""`
 		} `cmd:"" help:"Return multiple content items" name:"multi-content"`
@@ -191,6 +192,9 @@ func ParseEndpoint(scheme string, host string, doer loomhttp.Doer, enc func(*htt
 		case "assistant list-client-roots":
 			svcn = "assistant"
 			epn = "list-client-roots"
+		case "assistant report-progress":
+			svcn = "assistant"
+			epn = "report-progress"
 		case "assistant multi-content":
 			svcn = "assistant"
 			epn = "multi-content"
@@ -266,6 +270,8 @@ func ParseEndpoint(scheme string, host string, doer loomhttp.Doer, enc func(*htt
 				data, err = assistantc.BuildSampleTextPayload(*assistantSampleTextBodyFlag)
 			case "list-client-roots":
 				endpoint = c.ListClientRoots()
+			case "report-progress":
+				endpoint = c.ReportProgress()
 			case "multi-content":
 				endpoint = c.MultiContent()
 				data, err = assistantc.BuildMultiContentPayload(*assistantMultiContentBodyFlag)
@@ -312,6 +318,7 @@ func assistantUsage() {
 	fmt.Fprintln(os.Stderr, "    process-batch: Process batch of items")
 	fmt.Fprintln(os.Stderr, "    sample-text: Request text generation from the connected MCP client")
 	fmt.Fprintln(os.Stderr, "    list-client-roots: List filesystem roots exposed by the connected MCP client")
+	fmt.Fprintln(os.Stderr, "    report-progress: Report deterministic progress to the connected MCP client")
 	fmt.Fprintln(os.Stderr, "    multi-content: Return multiple content items")
 	fmt.Fprintln(os.Stderr, "    generate-dpi-spec: Generate a deterministic implementation-ready DPI spec from a fake Figma frame")
 	fmt.Fprintln(os.Stderr, "    dispatch-action: Dispatch an action encoded as a union payload")
@@ -586,6 +593,21 @@ func assistantListClientRootsUsage() {
 	fmt.Fprintln(os.Stderr, "Example:")
 	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "assistant list-client-roots")
 }
+func assistantReportProgressUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] assistant report-progress", os.Args[0])
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Report deterministic progress to the connected MCP client")
+
+	// Flags list
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "assistant report-progress")
+}
 func assistantMultiContentUsage() {
 	// Header with flags
 	fmt.Fprintf(os.Stderr, "%s [flags] assistant multi-content", os.Args[0])
@@ -601,7 +623,7 @@ func assistantMultiContentUsage() {
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "assistant multi-content --body '{\n      \"count\": 6644203216228748672\n   }'")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "assistant multi-content --body '{\n      \"count\": 2512511310855334906\n   }'")
 }
 func assistantGenerateDpiSpecUsage() {
 	// Header with flags

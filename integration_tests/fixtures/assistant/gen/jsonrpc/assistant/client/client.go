@@ -393,6 +393,28 @@ func (c *Client) ListClientRoots() loom.Endpoint {
 		}
 		return decodeResponse(resp)
 	}
+} // ReportProgress returns an endpoint that makes JSON-RPC requests to the
+// assistant service report_progress method.
+func (c *Client) ReportProgress() loom.Endpoint {
+	var (
+		encodeRequest  = EncodeReportProgressRequest(c.encoder)
+		decodeResponse = DecodeReportProgressResponse(c.decoder, c.RestoreResponseBody)
+	)
+
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildReportProgressRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		if err := encodeRequest(req, v); err != nil {
+			return nil, err
+		}
+		resp, err := c.Doer.Do(req)
+		if err != nil {
+			return nil, loomhttp.ErrRequestError("assistant", "report_progress", err)
+		}
+		return decodeResponse(resp)
+	}
 } // MultiContent returns an endpoint that makes JSON-RPC requests to the
 // assistant service multi_content method.
 func (c *Client) MultiContent() loom.Endpoint {

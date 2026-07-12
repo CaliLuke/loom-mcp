@@ -264,6 +264,13 @@ func registerSDKTools(server *mcpsdk.Server, adapter *MCPAdapter, requestContext
 		Title:        "List Client Roots",
 	}, adapter.sdkToolHandler(requestContext))
 	server.AddTool(&mcpsdk.Tool{
+		Description:  "Report deterministic progress to the connected MCP client",
+		InputSchema:  sdkToolInputSchema(""),
+		Name:         "report_progress",
+		OutputSchema: sdkToolInputSchema("{\"type\":\"object\",\"required\":[\"completed\"],\"properties\":{\"completed\":{\"type\":\"boolean\",\"description\":\"Whether all progress updates were sent\"}},\"additionalProperties\":false}"),
+		Title:        "Report Progress",
+	}, adapter.sdkToolHandler(requestContext))
+	server.AddTool(&mcpsdk.Tool{
 		Description:  "Return multiple content items",
 		InputSchema:  sdkToolInputSchema("{\"type\":\"object\",\"required\":[\"count\"],\"properties\":{\"count\":{\"type\":\"integer\",\"description\":\"Number of content items to return\"}},\"additionalProperties\":false}"),
 		Name:         "multi_content",
@@ -462,6 +469,9 @@ func (a *MCPAdapter) sdkToolHandler(requestContext func(context.Context, *http.R
 			payload.Arguments = req.Params.Arguments
 		}
 		ctx = a.sdkRequestContext(ctx, req.GetSession(), req.GetExtra(), requestContext)
+		if req != nil && req.Params != nil {
+			ctx = mcpruntime.WithProgressToken(ctx, req.Params.GetProgressToken())
+		}
 		stream := &sdkToolCallCollector{adapter: a}
 		if _, err := a.ToolsCall(ctx, payload, stream); err != nil {
 			return nil, err

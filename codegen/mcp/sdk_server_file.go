@@ -645,6 +645,9 @@ func sdkServerHandlerSection(data *AdapterData) codegen.Section {
 							jen.Id("payload").Dot("Arguments").Op("=").Id("req").Dot("Params").Dot("Arguments"),
 						),
 						jen.Id("ctx").Op("=").Id("a").Dot("sdkRequestContext").Call(jen.Id("ctx"), jen.Id("req").Dot("GetSession").Call(), jen.Id("req").Dot("GetExtra").Call(), jen.Id("requestContext")),
+						jen.If(jen.Id("req").Op("!=").Nil().Op("&&").Id("req").Dot("Params").Op("!=").Nil()).Block(
+							jen.Id("ctx").Op("=").Id("mcpruntime").Dot("WithProgressToken").Call(jen.Id("ctx"), jen.Id("req").Dot("Params").Dot("GetProgressToken").Call()),
+						),
 						jen.Id("stream").Op(":=").Op("&").Id("sdkToolCallCollector").Values(jen.Dict{jen.Id("adapter"): jen.Id("a")}),
 						jen.If(jen.List(jen.Id("_"), jen.Id("err")).Op(":=").Id("a").Dot("ToolsCall").Call(jen.Id("ctx"), jen.Id("payload"), jen.Id("stream")), jen.Id("err").Op("!=").Nil()).Block(
 							jen.Return(jen.Nil(), jen.Id("err")),

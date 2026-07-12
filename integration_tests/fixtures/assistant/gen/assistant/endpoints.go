@@ -31,6 +31,7 @@ type Endpoints struct {
 	ProcessBatch                   loom.Endpoint
 	SampleText                     loom.Endpoint
 	ListClientRoots                loom.Endpoint
+	ReportProgress                 loom.Endpoint
 	MultiContent                   loom.Endpoint
 	GenerateDpiSpec                loom.Endpoint
 	DispatchAction                 loom.Endpoint
@@ -58,6 +59,7 @@ func NewEndpoints(s Service) *Endpoints {
 		ProcessBatch:                   NewProcessBatchEndpoint(s),
 		SampleText:                     NewSampleTextEndpoint(s),
 		ListClientRoots:                NewListClientRootsEndpoint(s),
+		ReportProgress:                 NewReportProgressEndpoint(s),
 		MultiContent:                   NewMultiContentEndpoint(s),
 		GenerateDpiSpec:                NewGenerateDpiSpecEndpoint(s),
 		DispatchAction:                 NewDispatchActionEndpoint(s),
@@ -85,6 +87,7 @@ func (e *Endpoints) Use(m func(loom.Endpoint) loom.Endpoint) {
 	e.ProcessBatch = m(e.ProcessBatch)
 	e.SampleText = m(e.SampleText)
 	e.ListClientRoots = m(e.ListClientRoots)
+	e.ReportProgress = m(e.ReportProgress)
 	e.MultiContent = m(e.MultiContent)
 	e.GenerateDpiSpec = m(e.GenerateDpiSpec)
 	e.DispatchAction = m(e.DispatchAction)
@@ -230,6 +233,14 @@ func NewSampleTextEndpoint(s Service) loom.Endpoint {
 func NewListClientRootsEndpoint(s Service) loom.Endpoint {
 	return func(ctx context.Context, req any) (any, error) {
 		return s.ListClientRoots(ctx)
+	}
+}
+
+// NewReportProgressEndpoint returns an endpoint function that calls the method
+// "report_progress" of service "assistant".
+func NewReportProgressEndpoint(s Service) loom.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		return s.ReportProgress(ctx)
 	}
 }
 

@@ -18,7 +18,8 @@ func WithClientFeatures(ctx context.Context, session *mcp.ServerSession) context
 	}
 	ctx = mcpruntime.WithElicitor(ctx, sessionElicitor{session: session})
 	ctx = mcpruntime.WithSampler(ctx, sessionSampler{session: session})
-	return mcpruntime.WithRootLister(ctx, sessionRootLister{session: session})
+	ctx = mcpruntime.WithRootLister(ctx, sessionRootLister{session: session})
+	return mcpruntime.WithProgressReporter(ctx, sessionProgressReporter{session: session})
 }
 
 type sessionElicitor struct {
@@ -30,6 +31,10 @@ type sessionSampler struct {
 }
 
 type sessionRootLister struct {
+	session *mcp.ServerSession
+}
+
+type sessionProgressReporter struct {
 	session *mcp.ServerSession
 }
 
@@ -112,4 +117,16 @@ func (l sessionRootLister) ListRoots(ctx context.Context) ([]mcpruntime.Root, er
 		roots = append(roots, mcpruntime.Root{URI: root.URI, Name: root.Name})
 	}
 	return roots, nil
+}
+
+func (r sessionProgressReporter) ReportProgress(ctx context.Context, token any, update mcpruntime.ProgressUpdate) error {
+	if r.session == nil {
+		return mcpruntime.ErrProgressReporterUnavailable
+	}
+	return r.session.NotifyProgress(ctx, &mcp.ProgressNotificationParams{
+		ProgressToken: token,
+		Progress:      update.Progress,
+		Total:         update.Total,
+		Message:       update.Message,
+	})
 }

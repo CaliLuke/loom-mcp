@@ -146,6 +146,13 @@ type ClientRootResponseBody struct {
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 }
 
+// ReportProgressResponseBodyResponseBody is used to define fields on response
+// body types.
+type ReportProgressResponseBodyResponseBody struct {
+	// Whether all progress updates were sent
+	Completed bool `form:"completed" json:"completed" xml:"completed"`
+}
+
 // MultiContentResponseBodyResponseBody is used to define fields on response
 // body types.
 type MultiContentResponseBodyResponseBody struct {
@@ -424,6 +431,15 @@ func NewListClientRootsResponseBody(res *assistant.ListClientRootsResult) *ListC
 		}
 	} else {
 		body.Roots = []*ClientRootResponseBody{}
+	}
+	return body
+}
+
+// NewReportProgressResponseBody builds the HTTP response body from the result
+// of the "report_progress" endpoint of the "assistant" service.
+func NewReportProgressResponseBody(res *assistant.ReportProgressResult) *ReportProgressResponseBody {
+	body := &ReportProgressResponseBody{
+		Completed: res.Completed,
 	}
 	return body
 }

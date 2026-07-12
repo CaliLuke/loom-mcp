@@ -275,6 +275,27 @@ changes through `SDKServerOptions.Server.RootsListChangedHandler`; the official
 SDK invokes it for `notifications/roots/list_changed` when the client advertises
 `roots.listChanged`.
 
+## Progress Notifications
+
+For generated SDK tool calls, the server preserves the request's MCP
+`progressToken` in context. Service code can report progress without handling
+the session or token directly:
+
+```go
+err := mcpruntime.ReportProgress(ctx, mcpruntime.ProgressUpdate{
+    Progress: 2,
+    Total:    3,
+    Message:  "Processing",
+})
+```
+
+The shared SDK adapter sends `notifications/progress` through the active
+session with the original string or numeric token. `ReportProgress` returns
+`ErrProgressReporterUnavailable` outside an MCP SDK request and
+`ErrProgressTokenUnavailable` when the caller did not request progress.
+Applications are responsible for increasing `Progress` monotonically and
+stopping notifications when the operation completes.
+
 ## Session and Response Writer Helpers
 
 The generated handler also exposes the MCP session id and the active HTTP
