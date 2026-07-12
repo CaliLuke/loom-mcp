@@ -1021,7 +1021,16 @@ func withMCPPolicyHeaders(streamableHTTPSessions *mcpruntime.StreamableHTTPSessi
 			ctx = streamCtx
 		}
 		ctx = mcpruntime.WithResponseWriter(ctx, w)
-		next(w, r.WithContext(ctx))
+		responseWriter := w
+		var responseObserver *mcpHTTPResponseObserver
+		if mcpJSONRPCInputExpectsNoResponse(envelope) {
+			responseObserver = &mcpHTTPResponseObserver{ResponseWriter: w}
+			responseWriter = responseObserver
+		}
+		next(responseWriter, r.WithContext(ctx))
+		if responseObserver != nil && !responseObserver.wroteResponse {
+			w.WriteHeader(http.StatusAccepted)
+		}
 		if method == "initialize" {
 			if issuedSessionID := w.Header().Get(mcpruntime.HeaderKeySessionID); issuedSessionID != "" {
 				if err := streamableHTTPSessions.Issue(issuedSessionID); err != nil {
@@ -1118,6 +1127,26 @@ type mcpJSONRPCEnvelope struct {
 	Params  json.RawMessage `+"`json:\"params\"`"+`
 	Result  json.RawMessage `+"`json:\"result\"`"+`
 	Error   json.RawMessage `+"`json:\"error\"`"+`
+	Batch   []*mcpJSONRPCEnvelope `+"`json:\"-\"`"+`
+}
+
+type mcpHTTPResponseObserver struct {
+	http.ResponseWriter
+	wroteResponse bool
+}
+
+func (w *mcpHTTPResponseObserver) Unwrap() http.ResponseWriter {
+	return w.ResponseWriter
+}
+
+func (w *mcpHTTPResponseObserver) WriteHeader(statusCode int) {
+	w.wroteResponse = true
+	w.ResponseWriter.WriteHeader(statusCode)
+}
+
+func (w *mcpHTTPResponseObserver) Write(data []byte) (int, error) {
+	w.wroteResponse = true
+	return w.ResponseWriter.Write(data)
 }
 
 func mcpJSONRPCEnvelopeFromRequest(w http.ResponseWriter, r *http.Request) (*mcpJSONRPCEnvelope, error) {
@@ -1140,11 +1169,34 @@ func mcpJSONRPCEnvelopeFromRequest(w http.ResponseWriter, r *http.Request) (*mcp
 	if len(body) == 0 {
 		return nil, nil
 	}
+	trimmed := bytes.TrimSpace(body)
+	if len(trimmed) > 0 && trimmed[0] == '[' {
+		var batch []*mcpJSONRPCEnvelope
+		if err := json.Unmarshal(body, &batch); err != nil {
+			return nil, nil
+		}
+		return &mcpJSONRPCEnvelope{Batch: batch}, nil
+	}
 	var envelope mcpJSONRPCEnvelope
 	if err := json.Unmarshal(body, &envelope); err != nil {
 		return nil, nil
 	}
 	return &envelope, nil
+}
+
+func mcpJSONRPCInputExpectsNoResponse(envelope *mcpJSONRPCEnvelope) bool {
+	if envelope == nil {
+		return false
+	}
+	if len(envelope.Batch) > 0 {
+		for _, item := range envelope.Batch {
+			if !mcpJSONRPCInputExpectsNoResponse(item) {
+				return false
+			}
+		}
+		return true
+	}
+	return envelope.JSONRPC == "2.0" && envelope.Method != "" && len(envelope.ID) == 0
 }
 
 func mcpJSONRPCRequestID(envelope *mcpJSONRPCEnvelope) (string, bool) {

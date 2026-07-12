@@ -399,7 +399,7 @@ func TestGeneratedJSONRPCServerAcceptsNotificationsAndResponses(t *testing.T) {
 
 	for _, tc := range []struct {
 		name string
-		body map[string]any
+		body any
 	}{
 		{
 			name: "initialized notification",
@@ -425,6 +425,37 @@ func TestGeneratedJSONRPCServerAcceptsNotificationsAndResponses(t *testing.T) {
 				"jsonrpc": "2.0",
 				"id":      "server-request-1",
 				"result":  map[string]any{},
+			},
+		},
+		{
+			name: "unknown notification",
+			body: map[string]any{
+				"jsonrpc": "2.0",
+				"method":  "notifications/does_not_exist",
+			},
+		},
+		{
+			name: "design notification",
+			body: map[string]any{
+				"jsonrpc": "2.0",
+				"method":  "notify_status_update",
+				"params": map[string]any{
+					"type":    "info",
+					"message": "accepted without a response body",
+				},
+			},
+		},
+		{
+			name: "notification-only batch",
+			body: []map[string]any{
+				{
+					"jsonrpc": "2.0",
+					"method":  "notifications/does_not_exist",
+				},
+				{
+					"jsonrpc": "2.0",
+					"method":  "notifications/another_unknown",
+				},
 			},
 		},
 	} {

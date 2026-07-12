@@ -2222,7 +2222,10 @@ JSON-RPC request ID. A client `notifications/cancelled` message cancels the
 matching request context, allowing long-running tools and other cooperative
 handlers to stop and release resources; requests in other sessions or with
 other IDs are unaffected. The cancellation notification itself receives the
-transport-required HTTP 202 response.
+transport-required HTTP 202 response. Other id-less notifications, including
+design-defined methods and notification-only batches, still run through the
+JSON-RPC handler; when that handler correctly suppresses a JSON-RPC response,
+the transport returns HTTP 202 with an empty body.
 
 The mount owns the streamable HTTP session lifecycle as well. Successful
 initialization records the emitted session ID, subsequent requests validate it
