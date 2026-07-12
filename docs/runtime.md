@@ -1375,7 +1375,7 @@ type Sink interface {
 | `planner_thought`      | `PlannerThoughtPayload` (note, thinking blocks)                              |
 | `await_clarification`  | `AwaitClarificationPayload`                                                  |
 | `await_confirmation`   | `AwaitConfirmationPayload`                                                   |
-| `await_questions`      | `AwaitQuestionsPayload`                                                      |
+| `await_questions`      | `AwaitQuestionsPayload` (`tool_name`, `tool_call_id`, `payload`, `questions`) |
 | `await_typed_input`    | `AwaitTypedInputPayload` (`id`, `title`, `schema`)                           |
 | `await_external_tools` | `AwaitExternalToolsPayload`                                                  |
 | `usage`                | `UsagePayload` (input_tokens, output_tokens)                                 |

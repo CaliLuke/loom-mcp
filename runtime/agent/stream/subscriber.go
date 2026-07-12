@@ -208,7 +208,7 @@ func (s *Subscriber) sendAwaitConfirmation(ctx context.Context, evt *hooks.Await
 		Prompt:     evt.Prompt,
 		ToolName:   string(evt.ToolName),
 		ToolCallID: evt.ToolCallID,
-		Payload:    evt.Payload,
+		Payload:    append(rawjson.Message(nil), evt.Payload...),
 	}
 	return s.sink.Send(ctx, AwaitConfirmation{
 		Base: newBaseFromHook(evt, EventAwaitConfirmation, payload),
@@ -220,11 +220,17 @@ func (s *Subscriber) sendAwaitQuestions(ctx context.Context, evt *hooks.AwaitQue
 	if !s.profile.AwaitQuestions {
 		return nil
 	}
+	var title *string
+	if evt.Title != nil {
+		value := *evt.Title
+		title = &value
+	}
 	payload := AwaitQuestionsPayload{
 		ID:         evt.ID,
 		ToolName:   string(evt.ToolName),
 		ToolCallID: evt.ToolCallID,
-		Title:      evt.Title,
+		Payload:    append(rawjson.Message(nil), evt.Payload...),
+		Title:      title,
 		Questions:  buildAwaitQuestionPayloads(evt.Questions),
 	}
 	return s.sink.Send(ctx, AwaitQuestions{
@@ -286,7 +292,7 @@ func buildAwaitToolPayloads(items []hooks.AwaitToolItem) []AwaitToolPayload {
 		out = append(out, AwaitToolPayload{
 			ToolName:   string(it.ToolName),
 			ToolCallID: it.ToolCallID,
-			Payload:    it.Payload,
+			Payload:    append(rawjson.Message(nil), it.Payload...),
 		})
 	}
 	return out
@@ -334,7 +340,7 @@ func (s *Subscriber) sendToolStart(ctx context.Context, evt *hooks.ToolCallSched
 	payload := ToolStartPayload{
 		ToolCallID:            evt.ToolCallID,
 		ToolName:              string(evt.ToolName),
-		Payload:               evt.Payload,
+		Payload:               append(rawjson.Message(nil), evt.Payload...),
 		Queue:                 evt.Queue,
 		ParentToolCallID:      evt.ParentToolCallID,
 		ExpectedChildrenTotal: evt.ExpectedChildrenTotal,
@@ -360,7 +366,7 @@ func (s *Subscriber) sendToolEnd(ctx context.Context, evt *hooks.ToolResultRecei
 		ToolCallID:       evt.ToolCallID,
 		ParentToolCallID: evt.ParentToolCallID,
 		ToolName:         string(evt.ToolName),
-		Result:           evt.ResultJSON,
+		Result:           append(rawjson.Message(nil), evt.ResultJSON...),
 		Bounds:           evt.Bounds,
 		Duration:         evt.Duration,
 		Telemetry:        evt.Telemetry,
@@ -482,7 +488,7 @@ func (s *Subscriber) sendThinkingBlock(ctx context.Context, evt *hooks.ThinkingB
 	payload := PlannerThoughtPayload{
 		Text:         evt.Text,
 		Signature:    evt.Signature,
-		Redacted:     evt.Redacted,
+		Redacted:     append([]byte(nil), evt.Redacted...),
 		ContentIndex: evt.ContentIndex,
 		Final:        evt.Final,
 	}

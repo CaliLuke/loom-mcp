@@ -499,6 +499,8 @@ type (
 		ToolName string `json:"tool_name"`
 		// ToolCallID correlates the provided result with this requested call.
 		ToolCallID string `json:"tool_call_id"`
+		// Payload contains the canonical JSON arguments for the awaited tool call.
+		Payload rawjson.Message `json:"payload,omitempty"`
 		// Title is an optional display title for the questions UI.
 		Title *string `json:"title,omitempty"`
 		// Questions are the structured questions to present to the user.
