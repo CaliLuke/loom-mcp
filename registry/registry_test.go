@@ -29,7 +29,10 @@ func TestShutdownSignalsRestoreDefaultDisposition(t *testing.T) {
 		os.Exit(4)
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	// Race-enabled full-suite builds can delay helper process scheduling for
+	// several seconds. The helper still exits with status 4 after one second if
+	// SIGTERM is not restored, so this deadline only bounds startup failures.
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 	cmd := exec.CommandContext(ctx, os.Args[0], "-test.run=^TestShutdownSignalsRestoreDefaultDisposition$") // #nosec G204,G702 -- fixed test binary and test name
 	cmd.Env = append(os.Environ(), helperEnv+"=1")
