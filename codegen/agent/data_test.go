@@ -293,6 +293,9 @@ func runAliasedMCPDesign(t *testing.T) []eval.Root {
 		API("calc", func() {})
 		Service("calc", func() {
 			MCP("core", "1.0.0")
+			JSONRPC(func() {
+				POST("/rpc")
+			})
 			Method("add", func() {
 				Payload(func() {
 					Attribute("a", Int, "First operand")
@@ -314,7 +317,7 @@ func runAliasedMCPDesign(t *testing.T) []eval.Root {
 
 	require.True(t, eval.Execute(design, nil), eval.Context.Error())
 	require.NoError(t, eval.RunDSL())
-	return []eval.Root{goaexpr.Root, agentsExpr.Root}
+	return []eval.Root{goaexpr.Root, agentsExpr.Root, mcpexpr.Root}
 }
 
 func runDuplicateAliasedMCPDesign(t *testing.T) []eval.Root {

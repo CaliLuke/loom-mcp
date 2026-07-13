@@ -182,6 +182,7 @@ func runUnionContractParityDesign(t *testing.T) *expr.AttributeExpr {
 	ok := eval.Execute(design, nil)
 	require.True(t, ok, eval.Context.Error())
 	require.NoError(t, eval.RunDSL())
+	prepareParityGeneration(t)
 
 	return requestType.Attribute()
 }
@@ -238,6 +239,7 @@ func runFieldContractParityDesign(t *testing.T) *expr.AttributeExpr {
 	ok := eval.Execute(design, nil)
 	require.True(t, ok, eval.Context.Error())
 	require.NoError(t, eval.RunDSL())
+	prepareParityGeneration(t)
 
 	return requestType.Attribute()
 }
@@ -279,8 +281,16 @@ func runBoundedResultParityDesign(t *testing.T) *expr.AttributeExpr {
 	ok := eval.Execute(design, nil)
 	require.True(t, ok, eval.Context.Error())
 	require.NoError(t, eval.RunDSL())
+	prepareParityGeneration(t)
 
 	return resultType.Attribute()
+}
+
+func prepareParityGeneration(t *testing.T) {
+	t.Helper()
+	roots := []eval.Root{expr.Root, expr.GeneratedResultTypes, agentsExpr.Root, mcpexpr.Root}
+	require.NoError(t, agentcodegen.Prepare("example.com/parity", roots))
+	require.NoError(t, mcpcodegen.PrepareServices("example.com/parity", roots))
 }
 
 func setupParityRoots(t *testing.T) {

@@ -114,5 +114,11 @@ jobs:
           go install github.com/CaliLuke/loom/cmd/loom@${LOOM_VERSION}
           echo "$(go env GOPATH)/bin" >> $GITHUB_PATH
 
+      - name: Verify generated fixtures are current
+        run: |
+          make regen-assistant-fixture
+          make regen-agent-feature-fixture
+          git diff --exit-code -- integration_tests/fixtures/assistant integration_tests/fixtures/agent_features
+
       - name: Run integration tests
         run: make itest

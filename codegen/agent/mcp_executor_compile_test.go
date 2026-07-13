@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	codegen "github.com/CaliLuke/loom-mcp/codegen/agent"
+	mcpcodegen "github.com/CaliLuke/loom-mcp/codegen/mcp"
 	"github.com/CaliLuke/loom-mcp/codegen/testhelpers"
 	. "github.com/CaliLuke/loom-mcp/dsl"
 	agentsexpr "github.com/CaliLuke/loom-mcp/expr/agent"
@@ -35,10 +36,7 @@ func TestGeneratedAgentDesignsCompile(t *testing.T) {
 			name: "FromMCP toolset",
 			generate: func(t *testing.T) []*gcodegen.File {
 				roots := runAliasedMCPDesign(t)
-				require.NoError(t, codegen.Prepare("example.com/fmcp/gen", roots))
-				files, err := codegen.Generate("example.com/fmcp/gen", roots, nil)
-				require.NoError(t, err)
-				return files
+				return generateProductionFiles(t, roots, true)
 			},
 			verify: verifyFromMCPExecutor,
 		},
@@ -70,6 +68,18 @@ func TestGeneratedAgentDesignsCompile(t *testing.T) {
 				require.Contains(t, inject, "payload.TurnID = turnIDValue")
 				require.NotContains(t, specs, `"session_id"`)
 				require.NotContains(t, specs, `"turn_id"`)
+			},
+		},
+		{
+			name:       "label-injected payload field",
+			generate:   generateLabelInjectedAgentDesign,
+			moduleTest: labelInjectedPayloadRuntimeTest,
+			verify: func(t *testing.T, files []*gcodegen.File) {
+				inject := testhelpers.FileContent(t, files, "gen/assistant/toolsets/lookup/inject.go")
+				specs := testhelpers.FileContent(t, files, "gen/assistant/toolsets/lookup/specs.go")
+				require.Contains(t, inject, `labelValue0, ok := labels["household_id"]`)
+				require.Contains(t, inject, "payload.HouseholdID = &labelValue0")
+				require.NotContains(t, specs, `"household_id"`)
 			},
 		},
 		{
@@ -136,6 +146,9 @@ func generateProjectedAgentDesign(t *testing.T) []*gcodegen.File {
 		})
 		Service("assistant", func() {
 			MCP("assistant-mcp", "1.0.0")
+			JSONRPC(func() {
+				POST("/rpc")
+			})
 			Method("lookup", func() {
 				Payload(payload)
 				Result(result)
@@ -155,14 +168,12 @@ func generateProjectedAgentDesign(t *testing.T) []*gcodegen.File {
 	}
 	require.True(t, eval.Execute(design, nil), eval.Context.Error())
 	require.NoError(t, eval.RunDSL())
-	roots := []eval.Root{goaexpr.Root, agentsexpr.Root, mcpexpr.Root}
-	require.NoError(t, codegen.Prepare("example.com/fmcp/gen", roots))
-	return generateAgentAndServiceFiles(t, roots)
+	return generateProductionFiles(t, []eval.Root{goaexpr.Root, agentsexpr.Root, mcpexpr.Root}, true)
 }
 
 func generateRegistryAgentDesign(t *testing.T) []*gcodegen.File {
 	t.Helper()
-	return generateCompileDesign(t, false, func() {
+	return generateCompileDesign(t, func() {
 		API("assistant", func() {})
 		registry := Registry("corp", func() {
 			URL("https://registry.example.com")
@@ -180,7 +191,7 @@ func generateRegistryAgentDesign(t *testing.T) []*gcodegen.File {
 
 func generateInjectedAgentDesign(t *testing.T) []*gcodegen.File {
 	t.Helper()
-	return generateCompileDesign(t, false, func() {
+	return generateCompileDesign(t, func() {
 		API("assistant", func() {})
 		payload := Type("LookupPayload", func() {
 			Attribute("session_id", String)
@@ -236,9 +247,58 @@ func TestInjectedPayloadRuntime(t *testing.T) {
 }
 `
 
+func generateLabelInjectedAgentDesign(t *testing.T) []*gcodegen.File {
+	t.Helper()
+	return generateCompileDesign(t, func() {
+		API("assistant", func() {})
+		Service("assistant", func() {
+			Agent("chat", "Chat agent", func() {
+				Use("lookup", func() {
+					Tool("lookup", "Lookup", func() {
+						Args(func() {
+							Attribute("household_id", String)
+							Attribute("query", String)
+							Required("household_id", "query")
+						})
+						Return(String)
+						Inject("household_id")
+					})
+				})
+			})
+		})
+	})
+}
+
+const labelInjectedPayloadRuntimeTest = `package fmcp_test
+
+import (
+	"testing"
+
+	lookup "example.com/fmcp/gen/assistant/toolsets/lookup"
+	"github.com/CaliLuke/loom-mcp/runtime/agent/runtime"
+)
+
+func TestLabelInjectedPayloadRuntime(t *testing.T) {
+	payload, err := lookup.DecodeLookup(
+		[]byte("{\"query\":\"find me\"}"),
+		runtime.ToolCallMeta{},
+		map[string]string{"household_id": "house-1"},
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if payload.HouseholdID == nil || *payload.HouseholdID != "house-1" {
+		t.Fatalf("unexpected household ID: %#v", payload.HouseholdID)
+	}
+	if _, err := lookup.DecodeLookup([]byte("{\"query\":\"find me\"}"), runtime.ToolCallMeta{}, nil); err == nil {
+		t.Fatal("expected missing label error")
+	}
+}
+`
+
 func generatePayloadOnlyAgentDesign(t *testing.T) []*gcodegen.File {
 	t.Helper()
-	return generateCompileDesign(t, false, func() {
+	return generateCompileDesign(t, func() {
 		API("assistant", func() {})
 		payload := Type("NotifyPayload", func() {
 			Attribute("message", String)
@@ -290,8 +350,23 @@ func generateInheritedBoundMethodDesign(t *testing.T) []*gcodegen.File {
 	require.True(t, eval.Execute(design, nil), eval.Context.Error())
 	require.NoError(t, eval.RunDSL())
 	roots := []eval.Root{goaexpr.Root, agentsexpr.Root}
-	require.NoError(t, codegen.Prepare("example.com/fmcp/gen", roots))
-	return generateAgentAndServiceFiles(t, roots)
+	return generateProductionFiles(t, roots, false)
+}
+
+func generateProductionFiles(t *testing.T, roots []eval.Root, withMCP bool) []*gcodegen.File {
+	t.Helper()
+	const genpkg = "example.com/fmcp/gen"
+	require.NoError(t, codegen.Prepare(genpkg, roots))
+	if withMCP {
+		require.NoError(t, mcpcodegen.PrepareServices(genpkg, roots))
+	}
+	files := generateCoreAndAgentFiles(t, roots)
+	if withMCP {
+		var err error
+		files, err = mcpcodegen.Generate(genpkg, roots, files)
+		require.NoError(t, err)
+	}
+	return files
 }
 
 func setupCompileEvalRoots(t *testing.T, withMCP bool) {
@@ -309,27 +384,26 @@ func setupCompileEvalRoots(t *testing.T, withMCP bool) {
 	}
 }
 
-func generateAgentAndServiceFiles(t *testing.T, roots []eval.Root) []*gcodegen.File {
+func generateCoreAndAgentFiles(t *testing.T, roots []eval.Root) []*gcodegen.File {
 	t.Helper()
 	const genpkg = "example.com/fmcp/gen"
 	files, err := loomgenerator.Service(genpkg, roots)
 	require.NoError(t, err)
+	transportFiles, err := loomgenerator.Transport(genpkg, roots)
+	require.NoError(t, err)
+	files = append(files, transportFiles...)
 	files, err = codegen.Generate(genpkg, roots, files)
 	require.NoError(t, err)
 	return files
 }
 
-func generateCompileDesign(t *testing.T, withMCP bool, design func()) []*gcodegen.File {
+func generateCompileDesign(t *testing.T, design func()) []*gcodegen.File {
 	t.Helper()
-	setupCompileEvalRoots(t, withMCP)
+	setupCompileEvalRoots(t, false)
 	require.True(t, eval.Execute(design, nil), eval.Context.Error())
 	require.NoError(t, eval.RunDSL())
 	roots := []eval.Root{goaexpr.Root, agentsexpr.Root}
-	if withMCP {
-		roots = append(roots, mcpexpr.Root)
-	}
-	require.NoError(t, codegen.Prepare("example.com/fmcp/gen", roots))
-	return generateAgentAndServiceFiles(t, roots)
+	return generateProductionFiles(t, roots, false)
 }
 
 // writeGeneratedModule materializes the generated .go files into a temp module

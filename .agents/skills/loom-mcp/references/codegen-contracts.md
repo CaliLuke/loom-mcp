@@ -39,6 +39,11 @@ Use this file when editing DSL, generators, generated helpers, or MCP codegen be
 - Do not rely on example-specific aliases or hard-coded package names.
 - Use `codegen/pathutil.go` helpers for generated path rewrites.
 - Use `updateHeader`-style header/import rewrites instead of manual string surgery when moving generated transport code.
+- High-level generation contract tests must run preparation in production order
+  before rendering. Combined agent/MCP tests must also generate the core
+  transport files and both plugin outputs before claiming that generated code
+  compiles. Direct `Generate` calls are reserved for intentional generator-seam
+  tests.
 
 ## MCP Generator Rules
 

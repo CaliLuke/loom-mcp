@@ -5,6 +5,7 @@ import (
 	"path/filepath"
 	"testing"
 
+	agentcodegen "github.com/CaliLuke/loom-mcp/codegen/agent"
 	mcpcodegen "github.com/CaliLuke/loom-mcp/codegen/mcp"
 	. "github.com/CaliLuke/loom-mcp/dsl"
 	agentsexpr "github.com/CaliLuke/loom-mcp/expr/agent"
@@ -132,6 +133,9 @@ func runProjectionCodegenDesign(t *testing.T) []eval.Root {
 		})
 		Service("assistant", func() {
 			MCP("assistant-mcp", "1.0.0")
+			JSONRPC(func() {
+				POST("/rpc")
+			})
 			Method("projected_lookup", func() {
 				Payload(payload)
 				Result(result)
@@ -152,7 +156,7 @@ func runProjectionCodegenDesign(t *testing.T) []eval.Root {
 
 	require.True(t, eval.Execute(design, nil), eval.Context.Error())
 	require.NoError(t, eval.RunDSL())
-	return []eval.Root{goaexpr.Root, agentsexpr.Root, mcpexpr.Root}
+	return prepareProjectionGeneration(t)
 }
 
 // runProjectedOnlyJSONRPCCodegenDesign evaluates a design whose MCP server has
@@ -206,7 +210,7 @@ func runProjectedOnlyJSONRPCCodegenDesign(t *testing.T) []eval.Root {
 
 	require.True(t, eval.Execute(design, nil), eval.Context.Error())
 	require.NoError(t, eval.RunDSL())
-	return []eval.Root{goaexpr.Root, agentsexpr.Root, mcpexpr.Root}
+	return prepareProjectionGeneration(t)
 }
 
 func runNoExposureCodegenDesign(t *testing.T) []eval.Root {
@@ -257,5 +261,13 @@ func runNoExposureCodegenDesign(t *testing.T) []eval.Root {
 
 	require.True(t, eval.Execute(design, nil), eval.Context.Error())
 	require.NoError(t, eval.RunDSL())
-	return []eval.Root{goaexpr.Root, agentsexpr.Root, mcpexpr.Root}
+	return prepareProjectionGeneration(t)
+}
+
+func prepareProjectionGeneration(t *testing.T) []eval.Root {
+	t.Helper()
+	roots := []eval.Root{goaexpr.Root, agentsexpr.Root, mcpexpr.Root}
+	require.NoError(t, agentcodegen.Prepare("example.com/project/gen", roots))
+	require.NoError(t, mcpcodegen.PrepareServices("example.com/project/gen", roots))
+	return roots
 }
