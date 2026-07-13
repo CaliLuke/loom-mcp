@@ -19,8 +19,9 @@ type (
 	// runtime payload validation. Cache entries are keyed by schema digest so
 	// repeated registrations and tool calls share one compiled contract.
 	schemaValidator struct {
-		mu       sync.RWMutex
-		compiled map[string]*jsonschema.Schema
+		mu            sync.RWMutex
+		compiled      map[string]*jsonschema.Schema
+		compiledOrder []string
 	}
 )
 
@@ -28,7 +29,8 @@ const maxCompiledSchemaCacheEntries = 128
 
 func newSchemaValidator() *schemaValidator {
 	return &schemaValidator{
-		compiled: make(map[string]*jsonschema.Schema),
+		compiled:      make(map[string]*jsonschema.Schema),
+		compiledOrder: make([]string, 0, maxCompiledSchemaCacheEntries),
 	}
 }
 
@@ -141,9 +143,12 @@ func (v *schemaValidator) compiledSchema(schemaBytes []byte) (*jsonschema.Schema
 		return cached, nil
 	}
 	if len(v.compiled) >= maxCompiledSchemaCacheEntries {
-		v.compiled = make(map[string]*jsonschema.Schema)
+		oldest := v.compiledOrder[0]
+		delete(v.compiled, oldest)
+		v.compiledOrder = v.compiledOrder[1:]
 	}
 	v.compiled[digest] = compiled
+	v.compiledOrder = append(v.compiledOrder, digest)
 	v.mu.Unlock()
 	return compiled, nil
 }

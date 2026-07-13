@@ -104,6 +104,48 @@ func TestMessageJSONRejectsMalformedParts(t *testing.T) {
 	}
 }
 
+func TestLedgerJSONRoundTripsCommittedAndPendingMessages(t *testing.T) {
+	t.Parallel()
+
+	ledger := NewLedger()
+	ledger.AppendThinking(ThinkingPart{Text: "thinking", Signature: "sig", Index: 1, Final: true})
+	ledger.AppendText("calling")
+	ledger.DeclareToolUse("call-1", "svc.tool", map[string]any{"q": "loom"})
+	ledger.FlushAssistant()
+	ledger.AppendUserToolResults([]ToolResultSpec{{
+		ToolUseID: "call-1",
+		Content:   map[string]any{"ok": true},
+	}})
+	ledger.AppendText("pending")
+
+	raw, err := json.Marshal(ledger)
+	require.NoError(t, err)
+	require.JSONEq(t, `{
+		"messages": [
+			{"Role":"assistant","Parts":[
+				{"Text":"thinking","Signature":"sig","Redacted":null,"Index":1,"Final":true},
+				{"Text":"calling"},
+				{"ID":"call-1","Name":"svc.tool","Args":{"q":"loom"}}
+			],"Meta":null},
+			{"Role":"user","Parts":[
+				{"ToolUseID":"call-1","Content":{"ok":true},"IsError":false}
+			],"Meta":null}
+		],
+		"current":{"Role":"assistant","Parts":[{"Text":"pending"}],"Meta":null}
+	}`, string(raw))
+
+	var restored Ledger
+	require.NoError(t, json.Unmarshal(raw, &restored))
+	restored.AppendText(" response")
+	messages := restored.BuildMessages()
+	require.Len(t, messages, 3)
+	require.Len(t, messages[0].Parts, 3)
+	assert.IsType(t, model.ThinkingPart{}, messages[0].Parts[0])
+	assert.Equal(t, "loom", messages[0].Parts[2].(model.ToolUsePart).Input.(map[string]any)["q"])
+	assert.Equal(t, true, messages[1].Parts[0].(model.ToolResultPart).Content.(map[string]any)["ok"])
+	assert.Equal(t, "pending response", messages[2].Parts[0].(model.TextPart).Text)
+}
+
 func TestLedgerIsEmptyTracksPendingAndCommittedParts(t *testing.T) {
 	t.Parallel()
 

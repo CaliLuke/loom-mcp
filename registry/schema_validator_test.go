@@ -8,7 +8,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestSchemaValidatorCompiledSchemaCacheResetsAtLimit(t *testing.T) {
+func TestSchemaValidatorCompiledSchemaCacheEvictsOldestAtLimit(t *testing.T) {
 	validator := newSchemaValidator()
 
 	for i := range maxCompiledSchemaCacheEntries {
@@ -24,12 +24,13 @@ func TestSchemaValidatorCompiledSchemaCacheResetsAtLimit(t *testing.T) {
 	_, err := validator.compiledSchema(overflowSchema)
 	require.NoError(t, err)
 
-	require.Len(t, validator.compiled, 1)
+	require.Len(t, validator.compiled, maxCompiledSchemaCacheEntries)
 	assert.Nil(t, validator.compiled[firstDigest])
 	assert.NotNil(t, validator.compiled[overflowDigest])
+	assert.Equal(t, schemaDigest(uniqueObjectSchema(1)), validator.compiledOrder[0])
 }
 
-func TestSchemaValidatorValidatePayloadRecompilesAfterCacheReset(t *testing.T) {
+func TestSchemaValidatorValidatePayloadRecompilesAfterEviction(t *testing.T) {
 	validator := newSchemaValidator()
 	schemaBytes := uniqueObjectSchema(0)
 	payloadJSON := []byte(`{"value":0}`)
@@ -41,10 +42,12 @@ func TestSchemaValidatorValidatePayloadRecompilesAfterCacheReset(t *testing.T) {
 		require.NoError(t, err)
 	}
 
-	require.Len(t, validator.compiled, 1)
+	require.Len(t, validator.compiled, maxCompiledSchemaCacheEntries)
+	assert.Nil(t, validator.compiled[schemaDigest(schemaBytes)])
 
 	require.NoError(t, validator.ValidatePayload(schemaBytes, payloadJSON))
-	assert.Len(t, validator.compiled, 2)
+	assert.Len(t, validator.compiled, maxCompiledSchemaCacheEntries)
+	assert.NotNil(t, validator.compiled[schemaDigest(schemaBytes)])
 }
 
 func uniqueObjectSchema(value int) []byte {

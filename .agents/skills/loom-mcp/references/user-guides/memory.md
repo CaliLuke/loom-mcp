@@ -182,6 +182,27 @@ l.AppendUserToolResults([]transcript.ToolResultSpec{{
 messages := l.BuildMessages()
 --- END CODE ---
 
+Ledger Persistence
+------------------
+
+Ledger implements JSON marshaling and unmarshaling for workflow state. The
+serialized form includes committed messages and the pending assistant message,
+so restoring a ledger does not split or lose an in-progress thinking, text, or
+tool-use sequence:
+
+--- CODE ---
+state, err := json.Marshal(l)
+if err != nil {
+    return err
+}
+
+var restored transcript.Ledger
+if err := json.Unmarshal(state, &restored); err != nil {
+    return err
+}
+restored.AppendText(" continuing the same assistant turn")
+--- END CODE ---
+
 Note: Most users don’t need to interact with the ledger directly. The runtime automatically maintains the ledger through event capture and reconstruction. Use the ledger API only for advanced scenarios like custom planners or debugging tools.
 
 

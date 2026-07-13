@@ -224,6 +224,37 @@ func (m *Message) UnmarshalJSON(data []byte) error {
 	return nil
 }
 
+// MarshalJSON serializes committed messages and the pending assistant message
+// so a Ledger can be stored in workflow state without losing turn progress.
+func (l *Ledger) MarshalJSON() ([]byte, error) {
+	if l == nil {
+		return []byte("null"), nil
+	}
+	type ledgerJSON struct {
+		Messages []Message `json:"messages"`
+		Current  *Message  `json:"current,omitempty"`
+	}
+	return json.Marshal(ledgerJSON{
+		Messages: l.messages,
+		Current:  l.current,
+	})
+}
+
+// UnmarshalJSON restores committed messages and pending assistant progress.
+func (l *Ledger) UnmarshalJSON(data []byte) error {
+	type ledgerJSON struct {
+		Messages []Message `json:"messages"`
+		Current  *Message  `json:"current,omitempty"`
+	}
+	var decoded ledgerJSON
+	if err := json.Unmarshal(data, &decoded); err != nil {
+		return err
+	}
+	l.messages = decoded.Messages
+	l.current = decoded.Current
+	return nil
+}
+
 // AppendThinking records a structured thinking block and ensures it appears at
 // the head of the current assistant message. When a message is not yet open,
 // a new assistant message is started.

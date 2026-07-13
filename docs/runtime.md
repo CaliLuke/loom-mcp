@@ -1541,6 +1541,12 @@ assistant turn without flushing or otherwise mutating the ledger. Workflow query
 handlers such as `ledger_messages` can therefore inspect an in-progress turn
 without splitting later text and tool-use parts into separate messages.
 
+`Ledger` also implements `json.Marshaler` and `json.Unmarshaler`. Its JSON form
+preserves both committed messages and the pending assistant message, including
+typed thinking, text, tool-use, and tool-result parts. A workflow can therefore
+round-trip the ledger itself through JSON-backed state and continue appending to
+the same in-progress turn after restoration.
+
 ### Memory Search And Tools
 
 Memory search has two surfaces:
