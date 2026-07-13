@@ -446,6 +446,35 @@ func (p *MyPlanner) PlanStart(ctx context.Context, in *planner.PlanInput) (*plan
 --- END CODE ---
 
 
+In-Process Progressive Discovery
+--------------------------------
+
+When an MCP service and an agent share a Go process, progressive discovery does
+not require an MCP loopback transport. Construct the generated `MCPAdapter`
+with `ToolSearchOptions`, then create its local runtime registration:
+
+--- CODE ---
+adapter := mcpassistant.NewMCPAdapter(service, promptProvider,
+    &mcpassistant.MCPAdapterOptions{
+        ToolSearch: &mcpassistant.ToolSearchOptions{
+            AlwaysVisible: []string{"search"},
+        },
+    })
+localTools, err := mcpassistant.NewAssistantAssistantMcpLocalToolsetRegistration(adapter)
+if err != nil {
+    return err
+}
+if err := rt.RegisterToolset(localTools); err != nil {
+    return err
+}
+--- END CODE ---
+
+The registration exposes the same synthetic search/call tools and pinned real
+tools as compact `tools/list`. Search, hidden calls, and projected method-backed
+calls reuse the generated adapter catalog and dispatchers without HTTP,
+JSON-RPC, MCP initialization, or session state.
+
+
 Best Practices
 ==============
 

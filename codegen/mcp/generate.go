@@ -87,6 +87,9 @@ func Generate(genpkg string, roots []eval.Root, files []*codegen.File) ([]*codeg
 		if reg := registerFile(adapterData); reg != nil {
 			files = append(files, reg)
 		}
+		if provider := localProviderFile(adapterData); provider != nil {
+			files = append(files, provider)
+		}
 		if caller := clientCallerFile(adapterData, codegen.SnakeCase(svc.Name)); caller != nil {
 			files = append(files, caller)
 		}

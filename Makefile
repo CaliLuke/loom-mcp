@@ -127,6 +127,9 @@ verify-mcp-local:
 regen-assistant-fixture:
 	cd ./integration_tests/fixtures/assistant && $(GO) run $(LOOM_CLI_PACKAGE) gen example.com/assistant/design
 
+regen-progressive-discovery-fixture:
+	cd ./integration_tests/fixtures/assistant && $(GO) run $(LOOM_CLI_PACKAGE) gen example.com/assistant/progressive_discovery/design -o progressive_discovery
+
 regen-agent-feature-fixture:
 	cd ./integration_tests/fixtures/agent_features && $(GO) run $(LOOM_CLI_PACKAGE) gen example.com/agentfeatures/design
 

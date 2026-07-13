@@ -2361,6 +2361,32 @@ through the shared method-backed dispatcher. Compact discovery treats projected
 tools like any other real tool: they may be pinned with `AlwaysVisible`, found
 through `search_tools`, and invoked through `call_tool`.
 
+For agents in the same Go process, codegen also emits
+`New<Service><MCP>LocalToolsetRegistration(adapter)`. The returned
+`runtime.ToolsetRegistration` exposes the same synthetic tools and
+`AlwaysVisible` pins as the adapter's compact `tools/list`. Search and
+`call_tool` run directly through the adapter's catalog, interceptors, and
+generated method/projected dispatchers; they do not open an HTTP connection,
+construct JSON-RPC envelopes, initialize MCP, or create session state. The
+registration converts structured MCP results and tool errors into ordinary
+planner-visible tool results.
+
+```go
+adapter := mcpassistant.NewMCPAdapter(service, promptProvider,
+    &mcpassistant.MCPAdapterOptions{
+        ToolSearch: &mcpassistant.ToolSearchOptions{
+            AlwaysVisible: []string{"search"},
+        },
+    })
+localTools, err := mcpassistant.NewAssistantAssistantMcpLocalToolsetRegistration(adapter)
+if err != nil {
+    return err
+}
+if err := rt.RegisterToolset(localTools); err != nil {
+    return err
+}
+```
+
 ### Server-initiated events (Broadcaster)
 
 Generated MCP adapters can stream server-initiated events (notifications, resource updates) to multiple

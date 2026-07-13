@@ -188,6 +188,13 @@ Use this file when editing DSL, generators, generated helpers, or MCP codegen be
   `AllowDirectHiddenCalls`, and SDK compact mode must reject that option because
   unregistered SDK tools cannot be directly invoked. Projected MCP tools must follow the same `AlwaysVisible`,
   `search_tools`, and `call_tool` behavior as method-level MCP tools.
+- Generated MCP tool packages also emit an in-process progressive-discovery
+  `ToolsetRegistration` constructor. It derives compact tool specs from the
+  adapter's synthetic and visible catalogs, invokes search/proxy/real tools
+  through the adapter's existing helpers and interceptors, and converts final
+  structured/error results into planner-native results without protocol
+  initialization, session state, JSON-RPC, or transport DTO work in application
+  code.
 
 ## Validation And Contracts
 

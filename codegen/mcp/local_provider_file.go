@@ -1,0 +1,48 @@
+package codegen
+
+import (
+	"path/filepath"
+	"strings"
+
+	"github.com/CaliLuke/loom/codegen"
+)
+
+type localProviderData struct {
+	Package            string
+	ConstructorName    string
+	ServiceName        string
+	SuiteQualifiedName string
+	Description        string
+}
+
+func localProviderFile(data *AdapterData) *codegen.File {
+	if data == nil || data.Register == nil || len(data.Tools) == 0 {
+		return nil
+	}
+	baseName := strings.TrimSuffix(data.Register.HelperName, "Toolset")
+	templateData := localProviderData{
+		Package:            data.MCPPackage,
+		ConstructorName:    "New" + baseName + "LocalToolsetRegistration",
+		ServiceName:        data.Register.ServiceName,
+		SuiteQualifiedName: data.Register.SuiteQualifiedName,
+		Description:        data.Register.Description,
+	}
+	path := filepath.Join(codegen.Gendir, "mcp_"+codegen.SnakeCase(data.ServiceName), "local_provider.go")
+	imports := []*codegen.ImportSpec{
+		{Path: "bytes"},
+		{Path: "context"},
+		{Path: "encoding/json"},
+		{Path: "errors"},
+		{Path: "strings"},
+		{Path: "github.com/CaliLuke/loom-mcp/runtime/agent/planner"},
+		{Path: "github.com/CaliLuke/loom-mcp/runtime/agent/runtime", Name: "agentsruntime"},
+		{Path: "github.com/CaliLuke/loom-mcp/runtime/agent/tools"},
+	}
+	return &codegen.File{
+		Path: path,
+		Sections: []codegen.Section{
+			codegen.Header("MCP local progressive-discovery provider", templateData.Package, imports),
+			codegen.NewRawSection("mcp-local-progressive-discovery-provider", mcpTemplates.MustRender("local_provider", templateData)),
+		},
+	}
+}

@@ -1,0 +1,45 @@
+{
+  "tools": [
+    {
+      "id": "projected.projected_lookup",
+      "service": "catalog",
+      "toolset": "catalog.projected",
+      "title": "Projected Lookup",
+      "description": "Lookup a projected catalog entry",
+      "payload": {
+        "name": "ProjectedLookupPayload",
+        "schema": {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "type": "object",
+          "properties": {
+            "query": {
+              "type": "string",
+              "description": "Lookup query",
+              "example": "Omnis quisquam est neque maiores."
+            }
+          },
+          "required": [
+            "query"
+          ]
+        }
+      },
+      "result": {
+        "name": "ProjectedLookupResult",
+        "schema": {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "type": "object",
+          "properties": {
+            "value": {
+              "type": "string",
+              "description": "Lookup result",
+              "example": "Quis neque quas nemo autem et."
+            }
+          },
+          "required": [
+            "value"
+          ]
+        }
+      }
+    }
+  ]
+}

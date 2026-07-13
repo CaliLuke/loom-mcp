@@ -120,6 +120,10 @@ Use this skill for `loom-mcp` work in this repo. Keep `AGENTS.md` short and keep
 - Projected MCP tools must participate in compact discovery like method-level
   MCP tools: validated `AlwaysVisible` pins, hidden `search_tools` discovery,
   and `call_tool` invocation through `MCPAdapter.ToolsCall`.
+- Generated MCP packages with tools expose an in-process progressive-discovery
+  `ToolsetRegistration` built from the same `MCPAdapter`. Its compact specs,
+  search, visibility, interceptors, and method/projected dispatch must match
+  public MCP behavior without initialization, sessions, JSON-RPC, or HTTP.
 - Generated SDK-backed MCP servers expose prompt argument completion for
   enum-backed dynamic prompt arguments and place runtime client-feature
   adapters in request contexts so service code can call `runtime/mcp.Elicit`,

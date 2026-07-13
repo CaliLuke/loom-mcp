@@ -167,6 +167,12 @@ mode. `NewSDKServer` fails construction when that option is true because the SDK
 cannot directly call tools that were intentionally omitted from the registered
 public catalog.
 
+The same generated adapter can be registered with an in-process agent runtime
+through `New<Service><MCP>LocalToolsetRegistration(adapter)`. This local path
+uses the adapter's compact catalog, search ranking, synthetic names, visibility
+rules, interceptors, and real-tool dispatch directly. It does not use the SDK
+server, HTTP, JSON-RPC, initialization, or MCP sessions.
+
 ### Resource access policies include skills
 
 `MCPAdapterOptions.AllowedResourceURIs`, `DeniedResourceURIs`,
