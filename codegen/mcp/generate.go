@@ -81,6 +81,9 @@ func Generate(genpkg string, roots []eval.Root, files []*codegen.File) ([]*codeg
 		if err != nil {
 			return nil, fmt.Errorf("build adapter data for %s: %w", svc.Name, err)
 		}
+		if route, ok := source.jsonrpcRoute(svc.Name); ok && route.cors != nil {
+			adapterData.RuntimeCORS = route.cors.Runtime
+		}
 		if reg := registerFile(adapterData); reg != nil {
 			files = append(files, reg)
 		}
@@ -215,6 +218,10 @@ func generateMCPServiceCode(genpkg string, root *expr.RootExpr, mcpService *expr
 	if err := applyMCPJSONRPCOptionalParamsDecoding(files, mcpService); err != nil {
 		return nil, err
 	}
+	applyMCPJSONRPCEmptyResultObjects(files)
+	if err := applyMCPJSONRPCBatchBuffering(files); err != nil {
+		return nil, err
+	}
 	if err := applyMCPJSONRPCStreamFinalEventName(files); err != nil {
 		return nil, err
 	}
@@ -226,6 +233,152 @@ func generateMCPServiceCode(genpkg string, root *expr.RootExpr, mcpService *expr
 	}
 	return files, nil
 }
+
+// applyMCPJSONRPCEmptyResultObjects ensures successful methods with an empty
+// Goa result still emit the required JSON-RPC result member as an empty object.
+func applyMCPJSONRPCEmptyResultObjects(files []*codegen.File) {
+	for _, file := range files {
+		if file == nil || filepath.Base(filepath.Dir(filepath.ToSlash(file.Path))) != "server" || filepath.Base(file.Path) != "server.go" {
+			continue
+		}
+		sections := file.AllSections()
+		updated := make([]codegen.Section, 0, len(sections))
+		for _, section := range sections {
+			source, ok := renderedSectionSource(section)
+			if !ok {
+				updated = append(updated, section)
+				continue
+			}
+			count := strings.Count(source, "jsonrpc.MakeSuccessResponse(req.ID, nil)")
+			if count == 0 {
+				updated = append(updated, section)
+				continue
+			}
+			source = strings.ReplaceAll(source, "jsonrpc.MakeSuccessResponse(req.ID, nil)", "jsonrpc.MakeSuccessResponse(req.ID, struct{}{})")
+			updated = append(updated, &codegen.RawSection{Name: section.SectionName(), Source: source})
+		}
+		file.SetSections(updated)
+	}
+}
+
+// applyMCPJSONRPCBatchBuffering prevents streaming handlers from writing SSE
+// frames directly into the JSON array produced by the upstream batch writer.
+// Each batch item is buffered independently; for SSE handlers only the final
+// JSON-RPC response frame is appended to the batch.
+func applyMCPJSONRPCBatchBuffering(files []*codegen.File) error {
+	const oldCall = `s.processRequest(r.Context(), r, &req, writer)`
+	const newCall = `s.processBatchRequest(r.Context(), r, &req, writer)`
+	for _, file := range files {
+		if file == nil || filepath.Base(filepath.Dir(filepath.ToSlash(file.Path))) != "server" || filepath.Base(file.Path) != "server.go" {
+			continue
+		}
+		sections := file.AllSections()
+		updated := make([]codegen.Section, 0, len(sections)+1)
+		rewritten := false
+		for _, section := range sections {
+			source, ok := renderedSectionSource(section)
+			if !ok || !strings.Contains(source, oldCall) {
+				updated = append(updated, section)
+				continue
+			}
+			source = strings.Replace(source, oldCall, newCall, 1)
+			updated = append(updated, &codegen.RawSection{Name: section.SectionName(), Source: source})
+			rewritten = true
+		}
+		if !rewritten {
+			return fmt.Errorf("upstream JSON-RPC batch shape changed in %s", filepath.ToSlash(file.Path))
+		}
+		updated = append(updated, &codegen.RawSection{Name: "mcp-jsonrpc-batch-buffering", Source: mcpJSONRPCBatchBufferingSource})
+		file.SetSections(updated)
+	}
+	return nil
+}
+
+const mcpJSONRPCBatchBufferingSource = `
+
+type mcpBatchResponseWriter struct {
+	header     http.Header
+	body       bytes.Buffer
+	statusCode int
+}
+
+func (w *mcpBatchResponseWriter) Header() http.Header {
+	if w.header == nil {
+		w.header = make(http.Header)
+	}
+	return w.header
+}
+
+func (w *mcpBatchResponseWriter) WriteHeader(statusCode int) {
+	if w.statusCode == 0 {
+		w.statusCode = statusCode
+	}
+}
+
+func (w *mcpBatchResponseWriter) Write(data []byte) (int, error) {
+	if w.statusCode == 0 {
+		w.statusCode = http.StatusOK
+	}
+	return w.body.Write(data)
+}
+
+func (w *mcpBatchResponseWriter) Flush() {}
+
+func (s *Server) processBatchRequest(ctx context.Context, r *http.Request, req *jsonrpc.RawRequest, writer *batchWriter) {
+	buffer := &mcpBatchResponseWriter{}
+	s.processRequest(ctx, r, req, buffer)
+	body := bytes.TrimSpace(buffer.body.Bytes())
+	if len(body) == 0 {
+		return
+	}
+	if !strings.Contains(buffer.Header().Get("Content-Type"), "text/event-stream") {
+		if _, err := writer.Write(body); err != nil {
+			s.errhandler(ctx, writer, fmt.Errorf("failed to write buffered batch response: %w", err))
+		}
+		return
+	}
+	if response := finalMCPBatchSSEResponse(body); len(response) > 0 {
+		if _, err := writer.Write(response); err != nil {
+			s.errhandler(ctx, writer, fmt.Errorf("failed to write buffered batch stream response: %w", err))
+		}
+		return
+	}
+	if req.HasID {
+		response := jsonrpc.MakeErrorResponse(req.ID, jsonrpc.InternalError, "streaming method did not produce a final response", nil)
+		data, err := json.Marshal(response)
+		if err != nil {
+			s.errhandler(ctx, writer, fmt.Errorf("failed to encode buffered batch stream error: %w", err))
+			return
+		}
+		if _, err := writer.Write(data); err != nil {
+			s.errhandler(ctx, writer, fmt.Errorf("failed to write buffered batch stream error: %w", err))
+		}
+	}
+}
+
+func finalMCPBatchSSEResponse(body []byte) []byte {
+	var response []byte
+	for _, frame := range strings.Split(string(body), "\n\n") {
+		for _, line := range strings.Split(frame, "\n") {
+			if !strings.HasPrefix(line, "data:") {
+				continue
+			}
+			data := bytes.TrimSpace([]byte(strings.TrimPrefix(line, "data:")))
+			if len(data) == 0 {
+				continue
+			}
+			var envelope mcpJSONRPCEnvelope
+			if err := json.Unmarshal(data, &envelope); err != nil {
+				continue
+			}
+			if envelope.Method == "" && len(envelope.ID) > 0 && (len(envelope.Result) > 0 || len(envelope.Error) > 0) {
+				response = append(response[:0], data...)
+			}
+		}
+	}
+	return response
+}
+`
 
 func pruneMCPJSONRPCMixedServerDeadCode(files []*codegen.File) []*codegen.File {
 	mixed := false
@@ -327,8 +480,9 @@ func rewriteJSONRPCServerFile(file *codegen.File, protocolVersion string) (bool,
 	}
 	updated := make([]codegen.Section, 0, len(sections))
 	rewritten := false
+	preserveHandler := jsonrpcServerUsesCORS(sections)
 	for _, section := range sections {
-		next, ok, err := rewriteJSONRPCServerSection(section, protocolVersion)
+		next, ok, err := rewriteJSONRPCServerSection(section, protocolVersion, preserveHandler)
 		if err != nil {
 			return false, err
 		}
@@ -339,29 +493,39 @@ func rewriteJSONRPCServerFile(file *codegen.File, protocolVersion string) (bool,
 	return rewritten, nil
 }
 
-func rewriteJSONRPCServerSection(section codegen.Section, protocolVersion string) (codegen.Section, bool, error) {
+func jsonrpcServerUsesCORS(sections []codegen.Section) bool {
+	for _, section := range sections {
+		source, ok := renderedSectionSource(section)
+		if ok && strings.Contains(source, "loomhttp.CORSHandler(") {
+			return true
+		}
+	}
+	return false
+}
+
+func rewriteJSONRPCServerSection(section codegen.Section, protocolVersion string, preserveHandler bool) (codegen.Section, bool, error) {
 	switch sec := section.(type) {
 	case *codegen.SectionTemplate:
 		if sec == nil {
 			return nil, false, nil
 		}
-		if rewritten, ok, err := rewriteJSONRPCSectionByRenderedSource(sec, protocolVersion); ok || err != nil {
+		if rewritten, ok, err := rewriteJSONRPCSectionByRenderedSource(sec, protocolVersion, preserveHandler); ok || err != nil {
 			return rewritten, ok, err
 		}
 		return sec, false, nil
 	case *codegen.RawSection, *codegen.JenniferSection:
-		if rewritten, ok, err := rewriteJSONRPCSectionByRenderedSource(sec, protocolVersion); ok || err != nil {
+		if rewritten, ok, err := rewriteJSONRPCSectionByRenderedSource(sec, protocolVersion, preserveHandler); ok || err != nil {
 			return rewritten, ok, err
 		}
 	default:
-		if rewritten, ok, err := rewriteJSONRPCSectionByRenderedSource(section, protocolVersion); ok || err != nil {
+		if rewritten, ok, err := rewriteJSONRPCSectionByRenderedSource(section, protocolVersion, preserveHandler); ok || err != nil {
 			return rewritten, ok, err
 		}
 	}
 	return section, false, nil
 }
 
-func rewriteJSONRPCSectionByRenderedSource(section codegen.Section, protocolVersion string) (codegen.Section, bool, error) {
+func rewriteJSONRPCSectionByRenderedSource(section codegen.Section, protocolVersion string, preserveHandler bool) (codegen.Section, bool, error) {
 	if section == nil {
 		return nil, false, nil
 	}
@@ -372,7 +536,7 @@ func rewriteJSONRPCSectionByRenderedSource(section codegen.Section, protocolVers
 	if section.SectionName() != jsonrpcServerMountSectionName && !isJSONRPCMountSource(source) {
 		return nil, false, nil
 	}
-	rewritten, ok := rewriteJSONRPCServerMountSource(source, protocolVersion)
+	rewritten, ok := rewriteJSONRPCServerMountSource(source, protocolVersion, preserveHandler)
 	if !ok {
 		return nil, false, fmt.Errorf("upstream JSON-RPC mount shape changed in section %q: could not wrap any mount handler with MCP policy headers", section.SectionName())
 	}
@@ -396,7 +560,7 @@ func isJSONRPCMountSource(source string) bool {
 		(strings.Contains(source, "h.Handler.ServeHTTP") || strings.Contains(source, "h.ServeHTTP") || strings.Contains(source, "h.handleSSE"))
 }
 
-func rewriteJSONRPCServerMountSource(source string, protocolVersion string) (string, bool) {
+func rewriteJSONRPCServerMountSource(source string, protocolVersion string, preserveHandler bool) (string, bool) {
 	if source == "" {
 		return source, false
 	}
@@ -407,7 +571,11 @@ func rewriteJSONRPCServerMountSource(source string, protocolVersion string) (str
 	// ServeHTTP directly instead: withMCPPolicyHeaders already applies the
 	// configurable MCPCrossOriginProtection, and stacking the upstream layer
 	// would reject trusted cross-origin clients added via AddTrustedOrigin.
-	updated = strings.ReplaceAll(updated, ", h.Handler.ServeHTTP)\n", ", withMCPPolicyHeaders(streamableHTTPSessions, requestCancellations, h.ServeHTTP))\n")
+	handler := "h.ServeHTTP"
+	if preserveHandler {
+		handler = "h.Handler.ServeHTTP"
+	}
+	updated = strings.ReplaceAll(updated, ", h.Handler.ServeHTTP)\n", ", withMCPPolicyHeaders(streamableHTTPSessions, requestCancellations, "+handler+"))\n")
 	// loom < v1.3.0 mount shapes.
 	updated = strings.ReplaceAll(updated, ", h.ServeHTTP)\n", ", withMCPPolicyHeaders(streamableHTTPSessions, requestCancellations, h.ServeHTTP))\n")
 	updated = strings.ReplaceAll(updated, ", h.handleSSE)\n", ", withMCPPolicyHeaders(streamableHTTPSessions, requestCancellations, h.handleSSE))\n")

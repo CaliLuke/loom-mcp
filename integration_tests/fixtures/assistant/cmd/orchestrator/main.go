@@ -92,7 +92,9 @@ func main() {
 			} else if u.Port() == "" {
 				u.Host = net.JoinHostPort(u.Host, "80")
 			}
-			handleHTTPServer(ctx, u, mcpAssistantSvc, mcpAssistantEndpoints, &wg, errc, *dbgF)
+			if err := handleHTTPServer(ctx, u, mcpAssistantSvc, mcpAssistantEndpoints, &wg, errc, *dbgF); err != nil {
+				log.Fatal(ctx, err)
+			}
 		}
 
 	default:

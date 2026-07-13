@@ -12,14 +12,14 @@ import (
 
 func TestGeneratedSDKServerReceivesClientRootsListChanged(t *testing.T) {
 	notified := make(chan struct{}, 1)
-	server, err := mcpassistant.NewSDKServer(NewAssistant(), &mcpassistant.SDKServerOptions{
+	server, err := mcpassistant.NewSDKServer(NewAssistant(), withTestRuntimeCORS(t, &mcpassistant.SDKServerOptions{
 		PromptProvider: promptProvider{},
 		Server: &sdkmcp.ServerOptions{
 			RootsListChangedHandler: func(context.Context, *sdkmcp.RootsListChangedRequest) {
 				notified <- struct{}{}
 			},
 		},
-	})
+	}))
 	require.NoError(t, err)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)

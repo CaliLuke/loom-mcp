@@ -74,6 +74,15 @@ func TestGeneratedAgentDesignsCompile(t *testing.T) {
 				require.Contains(t, transforms, "func InitNotifyMethodPayload")
 			},
 		},
+		{
+			name:     "inherited bound method payload",
+			generate: generateInheritedBoundMethodDesign,
+			verify: func(t *testing.T, files []*gcodegen.File) {
+				provider := testhelpers.FileContent(t, files, "gen/assistant/toolsets/profile/provider.go")
+				require.Contains(t, provider, "methodIn := InitUpsertMethodPayload(args)")
+				require.NotContains(t, provider, "methodIn := args")
+			},
+		},
 	}
 
 	for _, tc := range cases {
@@ -207,6 +216,40 @@ func generatePayloadOnlyAgentDesign(t *testing.T) []*gcodegen.File {
 			})
 		})
 	})
+}
+
+func generateInheritedBoundMethodDesign(t *testing.T) []*gcodegen.File {
+	t.Helper()
+	setupCompileEvalRoots(t, false)
+	design := func() {
+		API("assistant", func() {})
+		profile := Type("Profile", func() {
+			Attribute("name", String)
+			Required("name")
+		})
+		result := Type("ProfileResult", func() {
+			Attribute("saved", Boolean)
+			Required("saved")
+		})
+		Service("assistant", func() {
+			Method("upsert", func() {
+				Payload(profile)
+				Result(result)
+			})
+			Agent("chat", "Chat agent", func() {
+				Use("profile", func() {
+					Tool("upsert", "Upsert profile", func() {
+						BindTo("assistant", "upsert")
+					})
+				})
+			})
+		})
+	}
+	require.True(t, eval.Execute(design, nil), eval.Context.Error())
+	require.NoError(t, eval.RunDSL())
+	roots := []eval.Root{goaexpr.Root, agentsexpr.Root}
+	require.NoError(t, codegen.Prepare("example.com/fmcp/gen", roots))
+	return generateAgentAndServiceFiles(t, roots)
 }
 
 func setupCompileEvalRoots(t *testing.T, withMCP bool) {

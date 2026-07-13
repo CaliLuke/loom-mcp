@@ -53,7 +53,7 @@ func TestRequestContextSeesPerCallHeaders(t *testing.T) {
 	// Use the same hook the generator exposes to applications, with a small
 	// wrapper that buckets the captured value by JSON-RPC method (recovered
 	// from the synthetic request path or any header we put on the request).
-	sdkServer, err := mcpassistant.NewSDKServer(NewAssistant(), &mcpassistant.SDKServerOptions{
+	sdkServer, err := mcpassistant.NewSDKServer(NewAssistant(), withTestRuntimeCORS(t, &mcpassistant.SDKServerOptions{
 		PromptProvider: promptProvider{},
 		RequestContext: func(ctx context.Context, r *http.Request) context.Context {
 			if r == nil {
@@ -66,7 +66,7 @@ func TestRequestContextSeesPerCallHeaders(t *testing.T) {
 			}
 			return ctx
 		},
-	})
+	}))
 	require.NoError(t, err)
 
 	mux := http.NewServeMux()

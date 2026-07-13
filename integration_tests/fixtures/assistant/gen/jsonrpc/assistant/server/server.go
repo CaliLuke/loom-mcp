@@ -26,6 +26,7 @@ import (
 // Server handles JSON-RPC requests for the assistant service.
 type Server struct {
 	http.Handler
+	corsPolicy loomhttp.RuntimeCORSPolicy
 	// Methods is the list of methods served by this server.
 	Methods []string
 	// ListDocuments is the handler for the list_documents method.
@@ -83,7 +84,7 @@ type Server struct {
 
 // New creates a JSON-RPC server which loads HTTP requests and calls the
 // "assistant" service methods.
-func New(endpoints *assistant.Endpoints, mux loomhttp.Muxer, decoder func(*http.Request) loomhttp.Decoder, encoder func(context.Context, http.ResponseWriter) loomhttp.Encoder, errhandler func(context.Context, http.ResponseWriter, error)) *Server {
+func New(endpoints *assistant.Endpoints, mux loomhttp.Muxer, decoder func(*http.Request) loomhttp.Decoder, encoder func(context.Context, http.ResponseWriter) loomhttp.Encoder, errhandler func(context.Context, http.ResponseWriter, error), corsPolicy loomhttp.RuntimeCORSPolicy) *Server {
 	s := &Server{
 		AnalyzeSentiment:               NewAnalyzeSentimentHandler(endpoints.AnalyzeSentiment, mux, decoder, encoder, errhandler),
 		BuildFigmaImplementationPrompt: NewBuildFigmaImplementationPromptHandler(endpoints.BuildFigmaImplementationPrompt, mux, decoder, encoder, errhandler),
@@ -109,12 +110,13 @@ func New(endpoints *assistant.Endpoints, mux loomhttp.Muxer, decoder func(*http.
 		SendNotification:               NewSendNotificationHandler(endpoints.SendNotification, mux, decoder, encoder, errhandler),
 		SummarizeText:                  NewSummarizeTextHandler(endpoints.SummarizeText, mux, decoder, encoder, errhandler),
 		SystemInfo:                     NewSystemInfoHandler(endpoints.SystemInfo, mux, decoder, encoder, errhandler),
+		corsPolicy:                     corsPolicy,
 		decoder:                        decoder,
 		encoder:                        encoder,
 		errhandler:                     errhandler,
 	}
 	// Plain HTTP JSON-RPC
-	s.Handler = http.NewCrossOriginProtection().Handler(http.HandlerFunc(s.ServeHTTP))
+	s.Handler = corsPolicy.Handler(http.HandlerFunc(s.serveHTTP))
 	return s
 }
 
@@ -133,8 +135,8 @@ func (s *Server) MethodNames() []string {
 	return assistant.MethodNames[:]
 }
 
-// ServeHTTP handles JSON-RPC requests.
-func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+// serveHTTP handles JSON-RPC requests before server middleware.
+func (s *Server) serveHTTP(w http.ResponseWriter, r *http.Request) {
 	s.handleHTTP(w, r)
 }
 
@@ -398,7 +400,10 @@ func (rb *batchWriter) Write(data []byte) (int, error) {
 // Mount configures the mux to serve the JSON-RPC assistant service methods.
 func Mount(mux loomhttp.Muxer, h *Server) {
 	// HTTP only
-	mux.Handle("POST", "/rpc", h.Handler.ServeHTTP)
+	mux.Handle("POST", "/rpc", h.ServeHTTP)
+	mux.Handle("OPTIONS", "/rpc", func(w http.ResponseWriter, r *http.Request) {
+		h.corsPolicy.HandlePreflight(w, r, []string{"POST"})
+	})
 }
 
 // Mount configures the mux to serve the JSON-RPC assistant service methods.

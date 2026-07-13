@@ -78,6 +78,25 @@ func TestLedger_MultipleToolUseSingleUserMessage(t *testing.T) {
 	}
 }
 
+func TestBuildMessages_DoesNotFlushCurrentAssistant(t *testing.T) {
+	l := NewLedger()
+	l.AppendText("working")
+
+	first := l.BuildMessages()
+	if len(first) != 1 {
+		t.Fatalf("expected current assistant message, got %d messages", len(first))
+	}
+
+	l.DeclareToolUse("tu1", "search", map[string]any{"q": "test"})
+	second := l.BuildMessages()
+	if len(second) != 1 {
+		t.Fatalf("query split the assistant turn: got %d messages", len(second))
+	}
+	if len(second[0].Parts) != 2 {
+		t.Fatalf("expected text and tool use in one assistant message, got %d parts", len(second[0].Parts))
+	}
+}
+
 func TestBuildMessagesFromEvents_ParentToolOnly(t *testing.T) {
 	events := []memory.Event{
 		memory.NewEvent(time.Now(), memory.ThinkingData{

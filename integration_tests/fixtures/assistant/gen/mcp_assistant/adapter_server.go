@@ -42,7 +42,7 @@ import (
 type MCPAdapter struct {
 	service             assistant.Service
 	initialized         bool
-	initializedSessions map[string]struct{}
+	initializedSessions map[string]time.Time
 	sessionPrincipals   map[string]string
 	mu                  sync.RWMutex
 	opts                *MCPAdapterOptions
@@ -56,6 +56,11 @@ type MCPAdapter struct {
 	// resourceNameToURI holds DSL-derived mapping for policy and lookups
 	resourceNameToURI map[string]string
 }
+
+const (
+	mcpSessionTTL  = 24 * time.Hour
+	mcpMaxSessions = 4096
+)
 
 var _ Service = (*MCPAdapter)(nil)
 
@@ -187,7 +192,7 @@ func NewMCPAdapter(service assistant.Service, promptProvider PromptProvider, opt
 	callCounter, errorCounter, durationHistogram := defaultMCPAdapterMetrics(opts, telemetryName)
 	// Build name->URI map from generated resources
 	nameToURI := map[string]string{"documents": "doc://list", "system_info": "system://info", "conversation_history": "conversation://history", "figma_design_system": "figma://design-system/mobile-checkout"}
-	return &MCPAdapter{service: service, initializedSessions: make(map[string]struct{}), sessionPrincipals: make(map[string]string), opts: opts, tracer: tracer, callCounter: callCounter, errorCounter: errorCounter, durationHistogram: durationHistogram, promptProvider: promptProvider, broadcaster: bc, resourceNameToURI: nameToURI}
+	return &MCPAdapter{service: service, initializedSessions: make(map[string]time.Time), sessionPrincipals: make(map[string]string), opts: opts, tracer: tracer, callCounter: callCounter, errorCounter: errorCounter, durationHistogram: durationHistogram, promptProvider: promptProvider, broadcaster: bc, resourceNameToURI: nameToURI}
 }
 func defaultMCPAdapterDropIfSlow(value any) bool {
 	switch v := value.(type) {
@@ -262,6 +267,29 @@ func parseQueryParamsToJSON(uri string) ([]byte, error) {
 	coerced := mcpruntime.CoerceQuery(m)
 	return json.Marshal(coerced)
 }
+func (a *MCPAdapter) pruneSessionsLocked(now time.Time) {
+	for sessionID, touchedAt := range a.initializedSessions {
+		if now.Sub(touchedAt) >= mcpSessionTTL {
+			delete(a.initializedSessions, sessionID)
+			delete(a.sessionPrincipals, sessionID)
+		}
+	}
+	for len(a.initializedSessions) >= mcpMaxSessions {
+		oldestID := ""
+		var oldestAt time.Time
+		for sessionID, touchedAt := range a.initializedSessions {
+			if oldestID == "" || touchedAt.Before(oldestAt) {
+				oldestID = sessionID
+				oldestAt = touchedAt
+			}
+		}
+		if oldestID == "" {
+			return
+		}
+		delete(a.initializedSessions, oldestID)
+		delete(a.sessionPrincipals, oldestID)
+	}
+}
 func (a *MCPAdapter) isInitialized(ctx context.Context) bool {
 	a.mu.RLock()
 	defer a.mu.RUnlock()
@@ -278,7 +306,11 @@ func (a *MCPAdapter) markInitializedSession(sessionID string) {
 		a.initialized = true
 		return
 	}
-	a.initializedSessions[sessionID] = struct{}{}
+	now := time.Now()
+	if _, ok := a.initializedSessions[sessionID]; !ok {
+		a.pruneSessionsLocked(now)
+	}
+	a.initializedSessions[sessionID] = now
 }
 func (a *MCPAdapter) captureSessionPrincipal(ctx context.Context, sessionID string) {
 	if a == nil || sessionID == "" {
@@ -298,12 +330,13 @@ func (a *MCPAdapter) captureSessionPrincipal(ctx context.Context, sessionID stri
 	}
 	a.sessionPrincipals[sessionID] = principal
 }
-func (a *MCPAdapter) clearSessionPrincipal(sessionID string) {
+func (a *MCPAdapter) clearSession(sessionID string) {
 	if a == nil || sessionID == "" {
 		return
 	}
 	a.mu.Lock()
 	defer a.mu.Unlock()
+	delete(a.initializedSessions, sessionID)
 	delete(a.sessionPrincipals, sessionID)
 }
 func (a *MCPAdapter) assertSessionPrincipal(ctx context.Context, sessionID string) error {
@@ -612,6 +645,7 @@ func (a *MCPAdapter) Initialize(ctx context.Context, p *InitializePayload) (res 
 		sessionID = mcpruntime.EnsureSessionID(ctx)
 	}
 	a.mu.Lock()
+	now := time.Now()
 	if sessionID == "" {
 		if a.initialized {
 			a.mu.Unlock()
@@ -626,6 +660,9 @@ func (a *MCPAdapter) Initialize(ctx context.Context, p *InitializePayload) (res 
 		}
 		a.initialized = true
 	} else {
+		if _, ok := a.initializedSessions[sessionID]; !ok {
+			a.pruneSessionsLocked(now)
+		}
 		if _, ok := a.initializedSessions[sessionID]; ok {
 			a.mu.Unlock()
 			err = loom.PermanentError("invalid_params", "Already initialized")
@@ -637,7 +674,7 @@ func (a *MCPAdapter) Initialize(ctx context.Context, p *InitializePayload) (res 
 			})
 			return nil, err
 		}
-		a.initializedSessions[sessionID] = struct{}{}
+		a.initializedSessions[sessionID] = now
 	}
 	a.mu.Unlock()
 	a.captureSessionPrincipal(ctx, sessionID)
@@ -2058,7 +2095,8 @@ func (a *MCPAdapter) toolsCallHandler(ctx context.Context, p *ToolsCallPayload, 
 	return a.executeRealTool(ctx, p, stream)
 }
 func (a *MCPAdapter) executeRealTool(ctx context.Context, p *ToolsCallPayload, stream ToolsCallServerStream) (bool, error) {
-	if len(bytes.TrimSpace(p.Arguments)) == 0 {
+	arguments := bytes.TrimSpace(p.Arguments)
+	if len(arguments) == 0 || bytes.Equal(arguments, []byte("null")) {
 		normalized := *p
 		normalized.Arguments = json.RawMessage([]byte("{}"))
 		p = &normalized

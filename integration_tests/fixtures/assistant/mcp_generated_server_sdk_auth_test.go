@@ -21,7 +21,7 @@ import (
 func TestGeneratedSDKServerGETEnforcesSessionPrincipal(t *testing.T) {
 	t.Parallel()
 
-	sdkServer, err := mcpassistant.NewSDKServer(NewAssistant(), nil)
+	sdkServer, err := mcpassistant.NewSDKServer(NewAssistant(), withTestRuntimeCORS(t, nil))
 	require.NoError(t, err)
 	mux := http.NewServeMux()
 	mux.Handle("/rpc", sdkServer.Handler)

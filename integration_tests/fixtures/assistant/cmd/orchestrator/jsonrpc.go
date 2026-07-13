@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"net/http"
 	"net/url"
 	"sync"
@@ -16,7 +17,7 @@ import (
 
 // handleHTTPServer starts configures and starts a HTTP server on the given
 // URL. It shuts down the server if any error is received in the error channel.
-func handleHTTPServer(ctx context.Context, u *url.URL, mcpAssistantSvc mcpassistant.Service, mcpAssistantEndpoints *mcpassistant.Endpoints, wg *sync.WaitGroup, errc chan error, dbg bool) {
+func handleHTTPServer(ctx context.Context, u *url.URL, mcpAssistantSvc mcpassistant.Service, mcpAssistantEndpoints *mcpassistant.Endpoints, wg *sync.WaitGroup, errc chan error, dbg bool) error {
 
 	// Provide the transport specific request decoder and response encoder.
 	// The goa http package has built-in support for JSON, XML and gob.
@@ -49,7 +50,11 @@ func handleHTTPServer(ctx context.Context, u *url.URL, mcpAssistantSvc mcpassist
 	)
 	{
 		eh := errorHandler(ctx)
-		mcpAssistantJSONRPCServer = mcpassistantjssvr.New(mcpAssistantEndpoints, mux, dec, enc, eh)
+		corsPolicy, err := goahttp.NewRuntimeCORSPolicy(goahttp.CORSPolicy{Origins: []goahttp.CORSOrigin{{Pattern: "*"}}})
+		if err != nil {
+			return fmt.Errorf("configure runtime CORS: %w", err)
+		}
+		mcpAssistantJSONRPCServer = mcpassistantjssvr.New(mcpAssistantEndpoints, mux, dec, enc, eh, corsPolicy)
 	}
 
 	// Configure the mux.
@@ -64,7 +69,7 @@ func handleHTTPServer(ctx context.Context, u *url.URL, mcpAssistantSvc mcpassist
 
 	// Start HTTP server using default configuration, change the code to
 	// configure the server as required by your service.
-	srv := &http.Server{Addr: u.Host, Handler: handler, ReadHeaderTimeout: time.Second * 60}
+	srv := newHTTPServer(u.Host, handler)
 	for _, m := range mcpAssistantJSONRPCServer.Methods {
 		log.Printf(ctx, "JSON-RPC method %q mounted on POST /rpc", m)
 	}
@@ -91,6 +96,18 @@ func handleHTTPServer(ctx context.Context, u *url.URL, mcpAssistantSvc mcpassist
 			log.Printf(ctx, "failed to shutdown: %v", err)
 		}
 	}()
+	return nil
+}
+
+func newHTTPServer(addr string, handler http.Handler) *http.Server {
+	return &http.Server{
+		Addr:              addr,
+		Handler:           handler,
+		ReadHeaderTimeout: time.Second * 60,
+		ReadTimeout:       time.Second * 15,
+		WriteTimeout:      0,
+		IdleTimeout:       time.Second * 60,
+	}
 }
 
 // errorHandler returns a function that writes and logs the given error.

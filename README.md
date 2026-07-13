@@ -33,7 +33,7 @@ Repo identity and module identity are now aligned.
 
 This repo currently targets:
 
-- `github.com/CaliLuke/loom v1.3.2`
+- `github.com/CaliLuke/loom v1.5.1`
 - `github.com/modelcontextprotocol/go-sdk v1.6.1`
 - Go `1.26.1`
 
@@ -43,7 +43,7 @@ Use `make update-mcp-go-sdk MCP_GO_SDK_VERSION=vX.Y.Z` when bumping the MCP Go S
 The standard CLI for generation is:
 
 ```bash
-go install github.com/CaliLuke/loom/cmd/loom@v1.3.2
+go install github.com/CaliLuke/loom/cmd/loom@v1.5.1
 ```
 
 ## Working in this repo

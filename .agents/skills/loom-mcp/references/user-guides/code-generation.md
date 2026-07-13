@@ -9,7 +9,7 @@ Goa's code generation transforms your design into production-ready code. Rather 
 ### Installation
 
 ```bash
-go install github.com/CaliLuke/loom/cmd/loom@v1.2.0
+go install github.com/CaliLuke/loom/cmd/loom@v1.5.1
 ```
 
 ### Commands

@@ -1,6 +1,7 @@
 package codegen
 
 import (
+	"github.com/CaliLuke/loom-mcp/codegen/shared"
 	mcpexpr "github.com/CaliLuke/loom-mcp/expr/mcp"
 	"github.com/CaliLuke/loom/eval"
 	"github.com/CaliLuke/loom/expr"
@@ -92,7 +93,7 @@ func synthesizePureMCPJSONRPCEndpoints(root *expr.RootExpr, svc *expr.ServiceExp
 		endpoint := jsonrpcSvc.HTTPEndpoints[len(jsonrpcSvc.HTTPEndpoints)-1]
 		endpoint.Routes[0].Endpoint = endpoint
 		if method.Stream == expr.ServerStreamKind {
-			endpoint.SSE = &expr.HTTPSSEExpr{}
+			endpoint.SSE = shared.NewJSONRPCSSE(svc.Name)
 		}
 	}
 	previousRoot := expr.Root

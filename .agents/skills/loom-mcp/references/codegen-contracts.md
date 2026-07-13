@@ -80,6 +80,9 @@ Use this file when editing DSL, generators, generated helpers, or MCP codegen be
 - Generated SDK response-writer observers must implement `Unwrap() http.ResponseWriter`
   so `http.ResponseController` can reach flushing and other optional transport
   capabilities required by nested server-to-client requests.
+- Generated `SDKServerOptions` expose `TransportObserver transport.Observer`;
+  when present, the generated constructor installs Loom's
+  `transport.HTTPMiddleware` around the SDK handler.
 - Generated JSON-RPC mounts inspect each POST envelope once before routing and
   restore it for the generated decoder. `MCPMaxRequestBodyBytes` bounds this
   inspection to 32 MiB by default; positive overrides change the bound and
@@ -93,10 +96,23 @@ Use this file when editing DSL, generators, generated helpers, or MCP codegen be
   expired, or terminated session IDs receive HTTP 404 before JSON-RPC routing,
   missing IDs receive HTTP 400 once sessions exist, GET listeners register for
   termination, and DELETE terminates the matching session. Generated issuance
-  must handle the store's error return.
-- MCP intermediate SSE events use Loom's namespaced
-  `<service>/stream.event` notification default. Never label an intermediate
+  must handle the store's error return. Adapter-side initialization/principal
+  maps must remain bounded and TTL-pruned, and SDK DELETE must clear the
+  matching adapter entry.
+- Generated JSON-RPC batch handling must buffer each request independently.
+  Streaming handlers may flush into their private buffer, but only their final
+  JSON-RPC response frame may be appended to the batch array; SSE retry and
+  notification frames must never reach the JSON body.
+- Generated successful empty-result handlers must encode `result: {}`, never
+  omit the JSON-RPC `result` member by passing a nil body.
+- MCP intermediate SSE endpoints explicitly declare the namespaced
+  `<service>/stream.event` notification method in their generated Loom
+  expressions. Never rely on Loom's default or label an intermediate
   notification with the original request method such as `tools/call`.
+- The source service's effective JSON-RPC CORS policy (service override or API
+  default) is deep-copied into the synthetic MCP HTTP service. Mount rewriting
+  must preserve Loom's generated `CORSHandler` while keeping
+  `MCPCrossOriginProtection` as the outer, independent origin check.
 - Dynamic-only MCP prompt services enable prompt capabilities during expression
   finalization so generated adapters and `loom example` scaffolds agree on the
   prompt-provider constructor contract.
@@ -104,6 +120,11 @@ Use this file when editing DSL, generators, generated helpers, or MCP codegen be
   methods and empty-catalog adapter helpers even when no tools are declared;
   prompt-only and resource-only servers must still compile without advertising
   the tools capability.
+- `SkillDirectory` alone is a resource surface. It must trigger resource
+  methods, resource types, initialize capabilities, adapter handlers, and SDK
+  result conversions even when no method-backed resource is declared.
+- Generated `tools/call` adapters normalize omitted, whitespace-only, and JSON
+  `null` arguments to `{}` before strict payload decoding.
 - Generated `MCPAdapter` types must satisfy their generated `Service` interface
   directly. Keep streaming result/error signatures and notification payload
   types aligned, and emit a compile-time interface assertion in the adapter.

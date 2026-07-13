@@ -137,9 +137,11 @@ func (b *mcpExprBuilder) BuildRootExpr(mcpService *expr.ServiceExpr) *expr.RootE
 func (b *mcpExprBuilder) buildHTTPService(mcpService *expr.ServiceExpr) *expr.HTTPServiceExpr {
 	// Get the JSONRPC path from the stored original configuration
 	jsonrpcPath := ""
+	var cors *expr.HTTPCORSExpr
 
-	if path, ok := b.source.jsonrpcPath(b.originalService.Name); ok && path != "" {
-		jsonrpcPath = path
+	if route, ok := b.source.jsonrpcRoute(b.originalService.Name); ok && route.path != "" {
+		jsonrpcPath = route.path
+		cors = route.cors.Dup()
 	} else {
 		// The shared pure-MCP contract validator should reject this before the
 		// builder runs. Keep the local error as a last-resort guard so direct
@@ -148,6 +150,7 @@ func (b *mcpExprBuilder) buildHTTPService(mcpService *expr.ServiceExpr) *expr.HT
 		jsonrpcPath = "/rpc"
 	}
 	httpService := shared.BuildHTTPServiceBase(mcpService, mcpHTTPServiceConfig{jsonrpcPath: jsonrpcPath})
+	httpService.CORS = cors
 	return httpService
 }
 

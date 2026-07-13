@@ -82,7 +82,7 @@ func RegisterChatAgent(ctx context.Context, rt *agentsruntime.Runtime, cfg ChatA
 }
 
 // RegisterUsedToolsets registers all non-MCP Used toolsets for this agent.
-// Provide executors via typed options for each required toolset.
+// Provide executors via typed options for each executor-backed toolset.
 //
 // Example:
 //

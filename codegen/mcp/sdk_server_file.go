@@ -34,6 +34,12 @@ func buildMCPSDKServerFile(genpkg string, svc *expr.ServiceExpr, data *AdapterDa
 			Name: "mcpskills",
 		})
 	}
+	if data.RuntimeCORS {
+		sdkServerImports = append(sdkServerImports, &codegen.ImportSpec{
+			Path: "github.com/CaliLuke/loom/http",
+			Name: "loomhttp",
+		})
+	}
 	projectedImports := make(map[string]string)
 	for _, tool := range data.Tools {
 		if tool == nil || tool.Projected == nil {
@@ -56,7 +62,7 @@ func buildMCPSDKServerFile(genpkg string, svc *expr.ServiceExpr, data *AdapterDa
 		codegen.Header("SDK-backed MCP server for "+svc.Name+" service", pkgName, sdkServerImports),
 		sdkServerTypesSection(data),
 		sdkServerConstructorSection(data),
-		sdkServerHTTPSection(),
+		sdkServerHTTPSection(data),
 		sdkServerRegistrationSection(data),
 		sdkServerHandlerSection(data),
 		sdkServerConversionSection(data),
@@ -79,6 +85,10 @@ func sdkServerTypesSection(data *AdapterData) codegen.Section {
 		stmt.Type().Id("SDKServerOptions").StructFunc(func(g *jen.Group) {
 			g.Id("Adapter").Op("*").Id("MCPAdapterOptions")
 			g.Id("RequestContext").Func().Params(jen.Qual("context", "Context"), jen.Op("*").Qual("net/http", "Request")).Qual("context", "Context")
+			g.Id("TransportObserver").Qual("github.com/CaliLuke/loom/observability/transport", "Observer")
+			if data.RuntimeCORS {
+				g.Id("RuntimeCORS").Op("*").Id("loomhttp").Dot("RuntimeCORSPolicy")
+			}
 			if len(data.StaticPrompts) > 0 || len(data.DynamicPrompts) > 0 {
 				g.Id("PromptProvider").Id("PromptProvider")
 			}
@@ -112,6 +122,10 @@ func sdkServerConstructorSection(data *AdapterData) codegen.Section {
 			BlockFunc(func(g *jen.Group) {
 				g.Var().Id("adapterOpts").Op("*").Id("MCPAdapterOptions")
 				g.Var().Id("requestContext").Func().Params(jen.Qual("context", "Context"), jen.Op("*").Qual("net/http", "Request")).Qual("context", "Context")
+				g.Var().Id("transportObserver").Qual("github.com/CaliLuke/loom/observability/transport", "Observer")
+				if data.RuntimeCORS {
+					g.Var().Id("runtimeCORS").Op("*").Id("loomhttp").Dot("RuntimeCORSPolicy")
+				}
 				if len(data.StaticPrompts) > 0 || len(data.DynamicPrompts) > 0 {
 					g.Var().Id("promptProvider").Id("PromptProvider")
 				}
@@ -120,12 +134,21 @@ func sdkServerConstructorSection(data *AdapterData) codegen.Section {
 				g.If(jen.Id("opts").Op("!=").Nil()).BlockFunc(func(ifg *jen.Group) {
 					ifg.Id("adapterOpts").Op("=").Id("opts").Dot("Adapter")
 					ifg.Id("requestContext").Op("=").Id("opts").Dot("RequestContext")
+					ifg.Id("transportObserver").Op("=").Id("opts").Dot("TransportObserver")
+					if data.RuntimeCORS {
+						ifg.Id("runtimeCORS").Op("=").Id("opts").Dot("RuntimeCORS")
+					}
 					if len(data.StaticPrompts) > 0 || len(data.DynamicPrompts) > 0 {
 						ifg.Id("promptProvider").Op("=").Id("opts").Dot("PromptProvider")
 					}
 					ifg.Id("serverOpts").Op("=").Id("opts").Dot("Server")
 					ifg.Id("streamableOpts").Op("=").Id("opts").Dot("StreamableHTTP")
 				})
+				if data.RuntimeCORS {
+					g.If(jen.Id("runtimeCORS").Op("==").Nil()).Block(
+						jen.Return(jen.Nil(), jen.Qual("fmt", "Errorf").Call(jen.Lit("runtime CORS policy is required by the MCP service design"))),
+					)
+				}
 				g.If(jen.Id("adapterOpts").Op("!=").Nil().Op("&&").Id("adapterOpts").Dot("ToolSearch").Op("!=").Nil().Op("&&").Id("adapterOpts").Dot("ToolSearch").Dot("AllowDirectHiddenCalls")).Block(
 					jen.Return(jen.Nil(), jen.Qual("fmt", "Errorf").Call(jen.Lit("SDK ToolSearch compact mode does not support AllowDirectHiddenCalls"))),
 				)
@@ -152,9 +175,16 @@ func sdkServerConstructorSection(data *AdapterData) codegen.Section {
 				g.If(jen.Id("err").Op(":=").Id("registerSDKPrompts").Call(jen.Id("server"), jen.Id("adapter"), jen.Id("requestContext")), jen.Id("err").Op("!=").Nil()).Block(
 					jen.Return(jen.Nil(), jen.Id("err")),
 				)
+				g.Id("handler").Op(":=").Id("newSDKHandler").Call(jen.Id("server"), jen.Id("adapter"), jen.Id("requestContext"), jen.Id("streamableOpts"))
+				g.If(jen.Id("transportObserver").Op("!=").Nil()).Block(
+					jen.Id("handler").Op("=").Id("transport").Dot("HTTPMiddleware").Call(jen.Id("transportObserver")).Call(jen.Id("handler")),
+				)
+				if data.RuntimeCORS {
+					g.Id("handler").Op("=").Id("sdkRuntimeCORSHandler").Call(jen.Id("handler"), jen.Op("*").Id("runtimeCORS"))
+				}
 				g.Return(
 					jen.Op("&").Id("SDKServer").Values(jen.Dict{
-						jen.Id("Handler"): jen.Id("newSDKHandler").Call(jen.Id("server"), jen.Id("adapter"), jen.Id("requestContext"), jen.Id("streamableOpts")),
+						jen.Id("Handler"): jen.Id("handler"),
 						jen.Id("Adapter"): jen.Id("adapter"),
 						jen.Id("Server"):  jen.Id("server"),
 					}),
@@ -263,7 +293,7 @@ func sdkImplementationDict(data *AdapterData) jen.Dict {
 	return dict
 }
 
-func sdkServerHTTPSection() codegen.Section {
+func sdkServerHTTPSection(data *AdapterData) codegen.Section {
 	return codegen.NewJenniferSection("mcp-sdk-server-http", func(stmt *jen.Statement) {
 		stmt.Func().Id("newSDKHandler").
 			Params(
@@ -305,6 +335,9 @@ func sdkServerHTTPSection() codegen.Section {
 							jen.Defer().Id("transportObs").Dot("End").Call(),
 							jen.Id("observer").Op(":=").Op("&").Id("sdkResponseObserver").Values(jen.Dict{jen.Id("ResponseWriter"): jen.Id("transportW")}),
 							jen.Id("base").Dot("ServeHTTP").Call(jen.Id("observer"), jen.Id("r")),
+							jen.If(jen.Id("r").Dot("Method").Op("==").Qual("net/http", "MethodDelete").Op("&&").Id("observer").Dot("statusCode").Op("<").Lit(400)).Block(
+								jen.Id("adapter").Dot("clearSession").Call(jen.Id("r").Dot("Header").Dot("Get").Call(jen.Id("mcpruntime").Dot("HeaderKeySessionID"))),
+							),
 							jen.If(jen.Id("observer").Dot("statusCode").Op(">=").Lit(400)).Block(
 								jen.Id("transportObs").Dot("Fail").Call(jen.Qual("github.com/CaliLuke/loom/observability/transport", "ReasonHandlerError")),
 							),
@@ -333,6 +366,38 @@ func sdkServerHTTPSection() codegen.Section {
 				jen.Return(jen.Op("&").Id("configured")),
 			)
 		stmt.Line()
+		if data.RuntimeCORS {
+			stmt.Func().Id("sdkRuntimeCORSHandler").
+				Params(
+					jen.Id("next").Qual("net/http", "Handler"),
+					jen.Id("policy").Id("loomhttp").Dot("RuntimeCORSPolicy"),
+				).
+				Qual("net/http", "Handler").
+				Block(
+					jen.Id("actual").Op(":=").Id("policy").Dot("Handler").Call(jen.Id("next").Dot("ServeHTTP")),
+					jen.Return(jen.Qual("net/http", "HandlerFunc").Call(
+						jen.Func().Params(
+							jen.Id("w").Qual("net/http", "ResponseWriter"),
+							jen.Id("r").Op("*").Qual("net/http", "Request"),
+						).Block(
+							jen.If(jen.Id("r").Dot("Method").Op("==").Qual("net/http", "MethodOptions")).Block(
+								jen.Id("policy").Dot("HandlePreflight").Call(
+									jen.Id("w"),
+									jen.Id("r"),
+									jen.Index().String().Values(
+										jen.Qual("net/http", "MethodDelete"),
+										jen.Qual("net/http", "MethodGet"),
+										jen.Qual("net/http", "MethodPost"),
+									),
+								),
+								jen.Return(),
+							),
+							jen.Id("actual").Call(jen.Id("w"), jen.Id("r")),
+						),
+					)),
+				)
+			stmt.Line()
+		}
 	})
 }
 
@@ -841,7 +906,7 @@ func sdkServerConversionSection(data *AdapterData) codegen.Section {
 		if len(data.StaticPrompts) > 0 || len(data.DynamicPrompts) > 0 {
 			emitSDKPromptConversion(stmt)
 		}
-		if len(data.Resources) > 0 {
+		if adapterDataHasResources(data) {
 			emitSDKReadResourceConversion(stmt)
 		}
 		if len(data.StaticPrompts) > 0 || len(data.DynamicPrompts) > 0 {

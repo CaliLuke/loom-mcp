@@ -9,7 +9,7 @@ on:
 
 env:
   GO_VERSION: '1.26.1'
-  LOOM_VERSION: 'v1.4.0'
+  LOOM_VERSION: 'v1.5.1'
 
 permissions:
   contents: read
@@ -24,10 +24,10 @@ jobs:
     timeout-minutes: 30
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Set up Go
-        uses: actions/setup-go@v5
+        uses: actions/setup-go@v6
         with:
           go-version: ${{ env.GO_VERSION }}
           cache: true
@@ -60,7 +60,7 @@ jobs:
 
       - name: Preserve coverage report
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: unit-coverage-${{ github.sha }}
           path: cover.out
@@ -72,10 +72,10 @@ jobs:
     timeout-minutes: 30
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Set up Go
-        uses: actions/setup-go@v5
+        uses: actions/setup-go@v6
         with:
           go-version: ${{ env.GO_VERSION }}
           cache: true

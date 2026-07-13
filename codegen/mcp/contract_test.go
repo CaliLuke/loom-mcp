@@ -107,11 +107,20 @@ func TestGenerateAdapter_NormalizesOmittedToolArguments(t *testing.T) {
 	file := findGeneratedFile(t, files, filepath.Join(gcodegen.Gendir, "mcp_demo", "adapter_server.go"))
 	rendered := renderGeneratedFile(t, file)
 
-	require.Contains(t, rendered, `if len(bytes.TrimSpace(p.Arguments)) == 0 {
+	require.Contains(t, rendered, `arguments := bytes.TrimSpace(p.Arguments)
+	if len(arguments) == 0 || bytes.Equal(arguments, []byte("null")) {
 		normalized := *p
 		normalized.Arguments = json.RawMessage([]byte("{}"))
 		p = &normalized
 	}`)
+	serverFile := findGeneratedFile(t, files, filepath.Join(gcodegen.Gendir, "jsonrpc", "mcp_demo", "server", "server.go"))
+	serverSource := renderGeneratedFile(t, serverFile)
+	require.Contains(t, serverSource, `s.processBatchRequest(r.Context(), r, &req, writer)`)
+	require.Contains(t, serverSource, `func finalMCPBatchSSEResponse(body []byte) []byte`)
+	require.Contains(t, serverSource, `func (w *mcpBatchResponseWriter) Flush() {}`)
+	sdkFile := findGeneratedFile(t, files, filepath.Join(gcodegen.Gendir, "mcp_demo", "sdk_server.go"))
+	sdkSource := renderGeneratedFile(t, sdkFile)
+	require.NotContains(t, sdkSource, "RuntimeCORS")
 }
 
 func TestMCPExprBuilder_EmitsServerCapabilitiesWithoutDuplicateCapabilitiesType(t *testing.T) {
@@ -139,7 +148,7 @@ func TestMCPExprBuilder_EmitsServerCapabilitiesWithoutDuplicateCapabilitiesType(
 	require.NotContains(t, typeNames, "Capabilities")
 }
 
-func TestMCPExprBuilder_UsesNamespacedStreamingNotificationDefaults(t *testing.T) {
+func TestMCPExprBuilder_DeclaresNamespacedStreamingNotificationMethods(t *testing.T) {
 	restore := resetMCPCodegenState(t)
 	defer restore()
 
@@ -166,9 +175,110 @@ func TestMCPExprBuilder_UsesNamespacedStreamingNotificationDefaults(t *testing.T
 		}
 	}
 	require.Equal(t, map[string]string{
-		"events/stream": "",
-		"tools/call":    "",
+		"events/stream": "mcp_assistant/stream.event",
+		"tools/call":    "mcp_assistant/stream.event",
 	}, methodsByName)
+}
+
+func TestMCPExprBuilder_PropagatesSourceJSONRPCCORS(t *testing.T) {
+	svc, _ := testService("assistant", "analyze")
+	mcp := &mcpexpr.MCPExpr{Name: "assistant-mcp", Version: "1.0.0"}
+	want := &expr.HTTPCORSExpr{Origins: []*expr.HTTPCORSOriginExpr{{
+		Pattern: "https://console.example.com",
+		Methods: []string{http.MethodPost},
+	}}}
+	builder := newMCPExprBuilder(svc, mcp, &sourceSnapshot{
+		jsonrpcRoutes: map[string]sourceJSONRPCRoute{
+			"assistant": {method: http.MethodPost, path: "/rpc", cors: want},
+		},
+	}, 0)
+
+	httpService := builder.buildHTTPService(builder.BuildServiceExpr())
+
+	require.Equal(t, want, httpService.CORS)
+	require.NotSame(t, want, httpService.CORS)
+}
+
+func TestGenerateMCPServiceCode_PreservesDesignedJSONRPCCORS(t *testing.T) {
+	svc, _ := testService("assistant", "analyze")
+	mcp := &mcpexpr.MCPExpr{Name: "assistant-mcp", Version: "1.0.0"}
+	builder := newMCPExprBuilder(svc, mcp, &sourceSnapshot{
+		jsonrpcRoutes: map[string]sourceJSONRPCRoute{
+			"assistant": {
+				method: http.MethodPost,
+				path:   "/rpc",
+				cors: &expr.HTTPCORSExpr{
+					Origins: []*expr.HTTPCORSOriginExpr{{
+						Pattern: "https://console.example.com",
+						Methods: []string{http.MethodPost},
+					}},
+				},
+			},
+		},
+	}, 0)
+	mcpService := builder.BuildServiceExpr()
+	root := builder.BuildRootExpr(mcpService)
+	require.NoError(t, builder.PrepareAndValidate(root))
+
+	files, err := generateMCPServiceCode("example.com/assistant/gen", root, mcpService, "2025-11-25")
+	require.NoError(t, err)
+	server := findGeneratedFile(t, files, filepath.Join(gcodegen.Gendir, "jsonrpc", "mcp_assistant", "server", "server.go"))
+	rendered := renderGeneratedFile(t, server)
+
+	require.Contains(t, rendered, "loomhttp.CORSHandler(")
+	require.Contains(t, rendered, `Pattern: "https://console.example.com"`)
+	require.Contains(t, rendered, `withMCPPolicyHeaders(streamableHTTPSessions, requestCancellations, h.ServeHTTP)`)
+	require.NotContains(t, rendered, "h.Handler.ServeHTTP")
+}
+
+func TestGenerateSDKServer_RequiresAndAppliesDesignedRuntimeCORS(t *testing.T) {
+	restore := resetMCPCodegenState(t)
+	defer restore()
+
+	svc, methods := testService("assistant", "analyze")
+	root := testRootExpr([]*expr.ServiceExpr{svc}, []*expr.HTTPServiceExpr{
+		jsonrpcService(svc, "/rpc"),
+	})
+	root.API.JSONRPC.Services[0].CORS = &expr.HTTPCORSExpr{Runtime: true}
+	mcpexpr.Root.RegisterMCP(svc, &mcpexpr.MCPExpr{
+		Name:    "assistant-mcp",
+		Version: "1.0.0",
+		Tools:   []*mcpexpr.ToolExpr{{Name: "analyze", Method: methods["analyze"]}},
+	})
+
+	files, err := Generate("example.com/assistant/gen", []eval.Root{root}, nil)
+	require.NoError(t, err)
+	sdkFile := findGeneratedFile(t, files, filepath.Join(gcodegen.Gendir, "mcp_assistant", "sdk_server.go"))
+	rendered := renderGeneratedFile(t, sdkFile)
+
+	require.Contains(t, rendered, `RuntimeCORS       *loomhttp.RuntimeCORSPolicy`)
+	require.Contains(t, rendered, `return nil, fmt.Errorf("runtime CORS policy is required by the MCP service design")`)
+	require.Contains(t, rendered, `handler = sdkRuntimeCORSHandler(handler, *runtimeCORS)`)
+	require.Contains(t, rendered, `policy.HandlePreflight(w, r, []string{http.MethodDelete, http.MethodGet, http.MethodPost})`)
+	require.Contains(t, rendered, `actual := policy.Handler(next.ServeHTTP)`)
+}
+
+func TestCollectSourceSnapshot_CapturesEffectiveJSONRPCCORS(t *testing.T) {
+	svc, _ := testService("assistant", "analyze")
+	root := testRootExpr([]*expr.ServiceExpr{svc}, []*expr.HTTPServiceExpr{
+		jsonrpcService(svc, "/rpc"),
+	})
+	apiCORS := &expr.HTTPCORSExpr{Origins: []*expr.HTTPCORSOriginExpr{{Pattern: "https://api.example.com"}}}
+	serviceCORS := &expr.HTTPCORSExpr{Origins: []*expr.HTTPCORSOriginExpr{{Pattern: "https://service.example.com"}}}
+	root.API.JSONRPC.CORS = apiCORS
+	root.API.JSONRPC.Service("assistant").CORS = serviceCORS
+
+	route, ok := collectSourceSnapshot([]eval.Root{root}).jsonrpcRoute("assistant")
+
+	require.True(t, ok)
+	require.Equal(t, serviceCORS, route.cors)
+	require.NotSame(t, serviceCORS, route.cors)
+
+	root.API.JSONRPC.Service("assistant").CORS = nil
+	route, ok = collectSourceSnapshot([]eval.Root{root}).jsonrpcRoute("assistant")
+	require.True(t, ok)
+	require.Equal(t, apiCORS, route.cors)
+	require.NotSame(t, apiCORS, route.cors)
 }
 
 func TestPrepareServices_SynthesizesJSONRPCEndpointsForPureMCPMethods(t *testing.T) {
@@ -199,6 +309,21 @@ func TestPrepareServices_SynthesizesJSONRPCEndpointsForPureMCPMethods(t *testing
 	require.NotNil(t, methods["ping"].Meta["jsonrpc"])
 	require.Len(t, jsonrpcSvc.HTTPEndpoints[0].Routes, 1)
 	require.Equal(t, "/rpc", jsonrpcSvc.HTTPEndpoints[0].Routes[0].Path)
+}
+
+func TestSynthesizePureMCPJSONRPCEndpoints_DeclaresStreamingNotificationMethod(t *testing.T) {
+	svc, methods := testService("demo", "watch")
+	methods["watch"].Stream = expr.ServerStreamKind
+	root := testRootExpr([]*expr.ServiceExpr{svc}, []*expr.HTTPServiceExpr{
+		jsonrpcService(svc, "/rpc"),
+	})
+
+	synthesizePureMCPJSONRPCEndpoints(root, svc)
+
+	jsonrpcSvc := root.API.JSONRPC.Service("demo")
+	require.Len(t, jsonrpcSvc.HTTPEndpoints, 1)
+	require.NotNil(t, jsonrpcSvc.HTTPEndpoints[0].SSE)
+	require.Equal(t, "demo/stream.event", jsonrpcSvc.HTTPEndpoints[0].SSE.NotificationMethod)
 }
 
 func TestPrepareServices_AllowsGenericTransportGenerationForPureMCPMethodsWithoutMethodLevelJSONRPC(t *testing.T) {
@@ -585,6 +710,27 @@ func TestGenerateAdapter_RendersSkillResourceProvider(t *testing.T) {
 	require.Contains(t, rendered, `message := fmt.Sprintf("Unable to read skill resource: %s", baseURI)`)
 	require.Contains(t, rendered, `return nil, a.safeMCPError(loom.PermanentError(code, "%s", message), code, message)`)
 	require.NotContains(t, rendered, `loom.PermanentError("invalid_params", "%s", err.Error())`)
+	require.Contains(t, rendered, `mcpSessionTTL  = 24 * time.Hour`)
+	require.Contains(t, rendered, `mcpMaxSessions = 4096`)
+	require.Contains(t, rendered, `func (a *MCPAdapter) pruneSessionsLocked(now time.Time)`)
+	require.Contains(t, rendered, `delete(a.initializedSessions, sessionID)`)
+	require.Contains(t, rendered, `func (a *MCPAdapter) clearSession(sessionID string)`)
+
+	serviceFile := findGeneratedFile(t, files, filepath.Join(gcodegen.Gendir, "mcp_assistant", "service.go"))
+	serviceSource := renderGeneratedFile(t, serviceFile)
+	require.Contains(t, serviceSource, `Resources *ResourcesCapability`)
+	require.Contains(t, serviceSource, `ResourcesList(context.Context, *ResourcesListPayload) (res *ResourcesListResult, err error)`)
+
+	sdkFile := findGeneratedFile(t, files, filepath.Join(gcodegen.Gendir, "mcp_assistant", "sdk_server.go"))
+	sdkSource := renderGeneratedFile(t, sdkFile)
+	require.Contains(t, sdkSource, `func sdkReadResourceResult(result *ResourcesReadResult) (*mcpsdk.ReadResourceResult, error)`)
+	require.Contains(t, sdkSource, `server.AddResource(`)
+	require.Contains(t, sdkSource, `adapter.clearSession(r.Header.Get(mcpruntime.HeaderKeySessionID))`)
+
+	serverFile := findGeneratedFile(t, files, filepath.Join(gcodegen.Gendir, "jsonrpc", "mcp_assistant", "server", "server.go"))
+	serverSource := renderGeneratedFile(t, serverFile)
+	require.Contains(t, serverSource, `jsonrpc.MakeSuccessResponse(req.ID, struct{}{})`)
+	require.NotContains(t, serverSource, `jsonrpc.MakeSuccessResponse(req.ID, nil)`)
 }
 
 func TestGenerateAdapter_RendersSessionScopedEventPublishing(t *testing.T) {
@@ -1276,6 +1422,34 @@ func (s *Server) MountAssistant(mux goahttp.Muxer) {
 	require.Contains(t, rendered, `http.Error(w, "Invalid or expired session ID", http.StatusNotFound)`)
 	require.Contains(t, rendered, `case "notifications/cancelled":`)
 	require.Contains(t, rendered, `case "notifications/initialized", "notifications/progress", "notifications/roots/list_changed":`)
+}
+
+func TestApplyMCPPolicyHeadersToJSONRPCMount_PreservesDesignedCORSHandler(t *testing.T) {
+	file := &gcodegen.File{
+		Path: "gen/jsonrpc/assistant/server/server.go",
+		Sections: []gcodegen.Section{
+			gcodegen.Header("JSON-RPC server", "server", nil),
+			gcodegen.NewRawSection("jsonrpc-server-init", `
+func New() *Server {
+	s := &Server{}
+	s.Handler = loomhttp.CORSHandler(loomhttp.CORSPolicy{})(http.HandlerFunc(s.ServeHTTP))
+	return s
+}
+`),
+			gcodegen.NewRawSection("jsonrpc-server-mount", `
+// MountAssistant configures the mux to serve the JSON-RPC assistant service methods.
+func MountAssistant(mux goahttp.Muxer, h *Server) {
+	mux.Handle("POST", "/rpc", h.Handler.ServeHTTP)
+}
+`),
+		},
+	}
+
+	require.NoError(t, applyMCPPolicyHeadersToJSONRPCMount([]*gcodegen.File{file}, "2025-11-25"))
+
+	rendered := renderGeneratedFile(t, file)
+	require.Contains(t, rendered, `withMCPPolicyHeaders(streamableHTTPSessions, requestCancellations, h.Handler.ServeHTTP)`)
+	require.Contains(t, rendered, `loomhttp.CORSHandler(loomhttp.CORSPolicy{})`)
 }
 
 func TestApplyMCPPolicyHeadersToJSONRPCMount_RewritesRawMountSectionBySourceShape(t *testing.T) {

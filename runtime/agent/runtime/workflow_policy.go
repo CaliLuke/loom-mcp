@@ -96,7 +96,8 @@ func (r *Runtime) applyPolicy(
 		// after a DisableTools policy decision). Planners that emit tool calls
 		// despite the envelope have those calls dropped here; when nothing
 		// survives, the caller fails the turn.
-		allowedCalls := filterToolCalls(candidates, toolPolicy.Allowed)
+		allowedTools := append(slices.Clone(toolPolicy.Allowed), tools.ToolUnavailable)
+		allowedCalls := filterToolCalls(candidates, allowedTools)
 		return policyApplicationResult{
 			AllowedCalls: r.capAllowedCalls(allowedCalls, input, caps),
 			Caps:         caps,
@@ -139,7 +140,6 @@ func (r *Runtime) preparePrePlanToolPolicy(
 			allowed = allowedPolicyCalls(candidates, decision.AllowedTools)
 		}
 		caps = mergeCaps(caps, decision.Caps)
-		allowed = r.capAllowedCalls(allowed, input, caps)
 		evt := hooks.NewPolicyDecisionEvent(
 			base.RunContext.RunID,
 			input.AgentID,
@@ -153,7 +153,6 @@ func (r *Runtime) preparePrePlanToolPolicy(
 			return prePlanPolicyResult{}, err
 		}
 	}
-	allowed = r.capAllowedCalls(allowed, input, caps)
 	return prePlanPolicyResult{
 		Envelope: toolPolicyEnvelope{
 			Active:  true,

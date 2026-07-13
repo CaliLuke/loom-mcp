@@ -128,6 +128,7 @@ func applyChildRunSummary(toolName tools.Ident, output *RunOutput, result *plann
 	}
 	summary := summarizeChildToolEvents(output.ToolEvents)
 	if summary.allFailed() {
+		result.Result = nil
 		result.Error = summary.asToolError(toolName)
 	}
 	if telemetry := summary.asTelemetry(); telemetry != nil {

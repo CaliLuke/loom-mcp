@@ -17,7 +17,7 @@ func BuildHTTPServiceBase(service *expr.ServiceExpr, config ProtocolConfig) *exp
 			Path:   jsonrpcPath,
 		},
 		Paths: []string{},
-		SSE:   &expr.HTTPSSEExpr{},
+		SSE:   NewJSONRPCSSE(service.Name),
 	}
 	// Ensure the JSONRPCRoute can compute full paths
 	httpService.JSONRPCRoute.Endpoint = &expr.HTTPEndpointExpr{Service: httpService}
@@ -44,11 +44,18 @@ func BuildHTTPServiceBase(service *expr.ServiceExpr, config ProtocolConfig) *exp
 
 		// For streaming methods, configure SSE
 		if method.Stream == expr.ServerStreamKind {
-			endpoint.SSE = &expr.HTTPSSEExpr{}
+			endpoint.SSE = NewJSONRPCSSE(service.Name)
 		}
 
 		httpService.HTTPEndpoints = append(httpService.HTTPEndpoints, endpoint)
 	}
 
 	return httpService
+}
+
+// NewJSONRPCSSE creates an SSE expression with an explicit, service-scoped
+// notification method. Keeping the method in the generated expression makes
+// the MCP wire contract independent from Loom's default naming behavior.
+func NewJSONRPCSSE(serviceName string) *expr.HTTPSSEExpr {
+	return &expr.HTTPSSEExpr{NotificationMethod: serviceName + "/stream.event"}
 }

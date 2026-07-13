@@ -90,6 +90,9 @@ func TestBuildHTTPServiceBase_ConfiguresStreamingEndpoints(t *testing.T) {
 	if httpService.HTTPEndpoints[0].SSE == nil {
 		t.Fatal("expected streaming endpoint SSE configuration")
 	}
+	if got := httpService.HTTPEndpoints[0].SSE.NotificationMethod; got != "test_service/stream.event" {
+		t.Fatalf("SSE.NotificationMethod = %q, want test_service/stream.event", got)
+	}
 }
 
 // genValidJSONRPCPath generates valid JSON-RPC paths.

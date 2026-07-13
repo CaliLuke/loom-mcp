@@ -33,6 +33,8 @@ func TestMCPTransportObserverEmissions(t *testing.T) {
 	for _, needle := range []string{
 		`"github.com/CaliLuke/loom/observability/transport"`,
 		"transport.BeginHTTPRequest(",
+		"TransportObserver transport.Observer",
+		"transport.HTTPMiddleware(transportObserver)(handler)",
 	} {
 		require.Containsf(t, src, needle, "regenerated assistant sdk_server.go must contain %q", needle)
 	}

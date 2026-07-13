@@ -5,7 +5,7 @@
 ```bash
 mkdir quickstart && cd quickstart
 go mod init quickstart
-go get github.com/CaliLuke/loom@v1.2.0 github.com/CaliLuke/loom-mcp@latest
+go get github.com/CaliLuke/loom@v1.5.1 github.com/CaliLuke/loom-mcp@latest
 ```
 
 Create `design/design.go`.

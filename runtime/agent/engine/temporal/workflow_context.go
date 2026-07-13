@@ -472,18 +472,38 @@ func (f immediateFuture[T]) IsReady() bool {
 
 // Receive blocks until a signal value is delivered and returns it.
 //
-// Temporal receives signals on the workflow context (not the provided ctx). We still
-// honor ctx cancellation before blocking so callers can enforce deadlines in a
-// deterministic way.
+// Temporal receives signals on the workflow context (not the provided ctx). The
+// selector also observes workflow cancellation so a blocked receive cannot keep a
+// canceled workflow alive.
 func (r *temporalReceiver[T]) Receive(ctx context.Context) (T, error) {
 	if err := ctx.Err(); err != nil {
 		var zero T
 		return zero, err
 	}
 
-	var out T
-	r.ch.Receive(r.ctx, &out)
-	return out, nil
+	var (
+		out      T
+		received bool
+		canceled bool
+	)
+	sel := workflow.NewSelector(r.ctx)
+	sel.AddReceive(r.ch, func(c workflow.ReceiveChannel, _ bool) {
+		c.Receive(r.ctx, &out)
+		received = true
+	})
+	sel.AddReceive(r.ctx.Done(), func(workflow.ReceiveChannel, bool) {
+		canceled = true
+	})
+	sel.Select(r.ctx)
+	if received {
+		return out, nil
+	}
+	if canceled {
+		var zero T
+		return zero, context.Canceled
+	}
+	var zero T
+	return zero, errors.New("temporal receiver: select returned without signal or cancellation")
 }
 
 // ReceiveWithTimeout blocks until a signal value is delivered or the timeout elapses.
@@ -504,6 +524,7 @@ func (r *temporalReceiver[T]) ReceiveWithTimeout(ctx context.Context, timeout ti
 		out      T
 		got      bool
 		timedOut bool
+		canceled bool
 	)
 
 	timerCtx, cancel := workflow.WithCancel(r.ctx)
@@ -517,6 +538,9 @@ func (r *temporalReceiver[T]) ReceiveWithTimeout(ctx context.Context, timeout ti
 	sel.AddFuture(timer, func(workflow.Future) {
 		timedOut = true
 	})
+	sel.AddReceive(r.ctx.Done(), func(workflow.ReceiveChannel, bool) {
+		canceled = true
+	})
 	sel.Select(r.ctx)
 	cancel()
 
@@ -527,9 +551,13 @@ func (r *temporalReceiver[T]) ReceiveWithTimeout(ctx context.Context, timeout ti
 		var zero T
 		return zero, context.DeadlineExceeded
 	}
+	if canceled {
+		var zero T
+		return zero, context.Canceled
+	}
 
 	var zero T
-	return zero, errors.New("temporal receiver: select returned without signal or timeout")
+	return zero, errors.New("temporal receiver: select returned without signal, timeout, or cancellation")
 }
 
 // ReceiveAsync attempts to receive a signal value without blocking.

@@ -78,7 +78,7 @@ func (r *Runtime) ExecuteWorkflow(wfCtx engine.WorkflowContext, input *RunInput)
 		finalErr = afterErr
 		retErr = afterErr
 		if finalErr != nil {
-			finalStatus = runStatusFailed
+			finalStatus = terminalRunStatusForError(finalErr)
 		} else if finalStatus != runStatusSuccess {
 			finalStatus = runStatusSuccess
 		}

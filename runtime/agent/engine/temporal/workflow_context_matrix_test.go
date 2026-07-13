@@ -149,6 +149,28 @@ func TestTemporalWorkflowContextReceivesAllSignalsAndTimesOut(t *testing.T) {
 	assert.True(t, timedOut)
 }
 
+func TestTemporalWorkflowContextReceiveStopsOnWorkflowCancellation(t *testing.T) {
+	var suite testsuite.WorkflowTestSuite
+	env := suite.NewTestWorkflowEnvironment()
+	eng := workflowContextTestEngine()
+	cancelWorkflow := func(ctx workflow.Context) (bool, error) {
+		wf := newTemporalWorkflowContext(eng, ctx)
+		cancelable, cancel := wf.WithCancel()
+		workflow.Go(ctx, func(ctx workflow.Context) {
+			_ = workflow.NewTimer(ctx, time.Second).Get(ctx, nil)
+			cancel()
+		})
+		_, err := cancelable.PauseRequests().Receive(context.Background())
+		return errors.Is(err, context.Canceled), nil
+	}
+
+	env.ExecuteWorkflow(cancelWorkflow)
+	require.NoError(t, env.GetWorkflowError())
+	var canceled bool
+	require.NoError(t, env.GetWorkflowResult(&canceled))
+	assert.True(t, canceled)
+}
+
 func TestTemporalWorkflowContextValidationAndImmediateFuture(t *testing.T) {
 	wf := &temporalWorkflowContext{}
 	require.EqualError(t, wf.PublishHook(context.Background(), engine.HookActivityCall{}), "hook activity name is required")

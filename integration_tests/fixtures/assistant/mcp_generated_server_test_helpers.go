@@ -197,6 +197,7 @@ func newGeneratedJSONRPCServerWithAdapterOptions(t *testing.T, opts *mcpassistan
 	svc := NewMcpAssistantWithOptions(opts)
 	endpoints := mcpassistant.NewEndpoints(svc)
 	mux := goahttp.NewMuxer()
+	corsPolicy := testRuntimeCORSPolicy(t)
 	server := mcpAssistantjssvr.New(
 		endpoints,
 		mux,
@@ -206,6 +207,7 @@ func newGeneratedJSONRPCServerWithAdapterOptions(t *testing.T, opts *mcpassistan
 			t.Helper()
 			t.Logf("generated-jsonrpc-server err=%v session_id=%s", err, mcpruntime.SessionIDFromContext(ctx))
 		},
+		corsPolicy,
 	)
 	mcpAssistantjssvr.Mount(mux, server)
 	return httptest.NewServer(mux)
@@ -218,9 +220,11 @@ func newGeneratedSDKServer(t *testing.T) (*mcpassistant.SDKServer, *httptest.Ser
 func newGeneratedSDKServerWithAdapterOptions(t *testing.T, adapterOpts *mcpassistant.MCPAdapterOptions) (*mcpassistant.SDKServer, *httptest.Server) {
 	t.Helper()
 
+	corsPolicy := testRuntimeCORSPolicy(t)
 	sdkServer, err := mcpassistant.NewSDKServer(NewAssistant(), &mcpassistant.SDKServerOptions{
 		PromptProvider: promptProvider{},
 		Adapter:        adapterOpts,
+		RuntimeCORS:    &corsPolicy,
 		RequestContext: func(ctx context.Context, r *http.Request) context.Context {
 			if r == nil {
 				return ctx
@@ -239,6 +243,30 @@ func newGeneratedSDKServerWithAdapterOptions(t *testing.T, adapterOpts *mcpassis
 	mux.Handle("/rpc", sdkServer.Handler)
 	mountOAuthDiscovery(mux, "/rpc")
 	return sdkServer, httptest.NewServer(mux)
+}
+
+func testRuntimeCORSPolicy(t *testing.T) goahttp.RuntimeCORSPolicy {
+	t.Helper()
+	policy, err := goahttp.NewRuntimeCORSPolicy(goahttp.CORSPolicy{Origins: []goahttp.CORSOrigin{{
+		Pattern:     "https://app.example.com",
+		Methods:     []string{http.MethodGet, http.MethodPost, http.MethodDelete},
+		Headers:     []string{"Authorization", "Content-Type", "Mcp-Session-Id", "MCP-Protocol-Version"},
+		Expose:      []string{"Mcp-Session-Id"},
+		MaxAge:      600,
+		Credentials: true,
+	}}})
+	require.NoError(t, err)
+	return policy
+}
+
+func withTestRuntimeCORS(t *testing.T, opts *mcpassistant.SDKServerOptions) *mcpassistant.SDKServerOptions {
+	t.Helper()
+	if opts == nil {
+		opts = new(mcpassistant.SDKServerOptions)
+	}
+	policy := testRuntimeCORSPolicy(t)
+	opts.RuntimeCORS = &policy
+	return opts
 }
 
 // mountOAuthDiscovery wires the generated OAuth protected-resource

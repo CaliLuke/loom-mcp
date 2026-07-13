@@ -19,7 +19,7 @@ func (b *mcpExprBuilder) buildMethods() []*expr.MethodExpr {
 	)
 
 	// Add resource methods if resources are defined
-	if len(b.mcp.Resources) > 0 {
+	if b.hasResources() {
 		methods = append(methods,
 			b.buildResourcesListMethod(),
 			b.buildResourcesReadMethod(),
@@ -211,6 +211,12 @@ func (b *mcpExprBuilder) buildEventsStreamMethod() *expr.MethodExpr {
 // this server via MCPPlacement.
 func (b *mcpExprBuilder) hasTools() bool {
 	return len(b.mcp.Tools) > 0 || b.projectedToolCount > 0
+}
+
+// hasResources reports whether the MCP server exposes method-backed resources
+// or filesystem-backed skill resources.
+func (b *mcpExprBuilder) hasResources() bool {
+	return len(b.mcp.Resources) > 0 || len(b.mcp.SkillDirectories) > 0
 }
 
 // hasPrompts checks if there are any prompts defined

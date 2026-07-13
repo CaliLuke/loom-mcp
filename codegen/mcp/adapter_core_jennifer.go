@@ -36,7 +36,7 @@ func emitAdapterStruct(stmt *jen.Statement, data *AdapterData) {
 	stmt.Type().Id("MCPAdapter").StructFunc(func(g *jen.Group) {
 		g.Id("service").Id(data.Package).Dot("Service")
 		g.Id("initialized").Bool()
-		g.Id("initializedSessions").Map(jen.String()).Struct()
+		g.Id("initializedSessions").Map(jen.String()).Qual("time", "Time")
 		g.Id("sessionPrincipals").Map(jen.String()).String()
 		g.Id("mu").Qual("sync", "RWMutex")
 		g.Id("opts").Op("*").Id("MCPAdapterOptions")
@@ -57,6 +57,11 @@ func emitAdapterStruct(stmt *jen.Statement, data *AdapterData) {
 		g.Comment("resourceNameToURI holds DSL-derived mapping for policy and lookups")
 		g.Id("resourceNameToURI").Map(jen.String()).String()
 	})
+	stmt.Line()
+	stmt.Const().Defs(
+		jen.Id("mcpSessionTTL").Op("=").Lit(24).Op("*").Qual("time", "Hour"),
+		jen.Id("mcpMaxSessions").Op("=").Lit(4096),
+	)
 	stmt.Line()
 	stmt.Var().Id("_").Id("Service").Op("=").Params(jen.Op("*").Id("MCPAdapter")).Call(jen.Nil())
 	stmt.Line()
@@ -246,7 +251,7 @@ func emitAdapterConstructor(stmt *jen.Statement, data *AdapterData) {
 		// Return
 		g.Return(jen.Op("&").Id("MCPAdapter").ValuesFunc(func(vals *jen.Group) {
 			vals.Id("service").Op(":").Id("service")
-			vals.Id("initializedSessions").Op(":").Make(jen.Map(jen.String()).Struct())
+			vals.Id("initializedSessions").Op(":").Make(jen.Map(jen.String()).Qual("time", "Time"))
 			vals.Id("sessionPrincipals").Op(":").Make(jen.Map(jen.String()).String())
 			vals.Id("opts").Op(":").Id("opts")
 			vals.Id("tracer").Op(":").Id("tracer")
@@ -376,6 +381,32 @@ func emitParseQueryParamsToJSON(stmt *jen.Statement) {
 
 // emitSessionHelpers generates session initialization and principal helpers.
 func emitSessionHelpers(stmt *jen.Statement) {
+	// pruneSessionsLocked
+	stmt.Func().Params(jen.Id("a").Op("*").Id("MCPAdapter")).
+		Id("pruneSessionsLocked").Params(jen.Id("now").Qual("time", "Time")).
+		Block(
+			jen.For(jen.List(jen.Id("sessionID"), jen.Id("touchedAt")).Op(":=").Range().Id("a").Dot("initializedSessions")).Block(
+				jen.If(jen.Id("now").Dot("Sub").Call(jen.Id("touchedAt")).Op(">=").Id("mcpSessionTTL")).Block(
+					jen.Delete(jen.Id("a").Dot("initializedSessions"), jen.Id("sessionID")),
+					jen.Delete(jen.Id("a").Dot("sessionPrincipals"), jen.Id("sessionID")),
+				),
+			),
+			jen.For(jen.Len(jen.Id("a").Dot("initializedSessions")).Op(">=").Id("mcpMaxSessions")).Block(
+				jen.Id("oldestID").Op(":=").Lit(""),
+				jen.Var().Id("oldestAt").Qual("time", "Time"),
+				jen.For(jen.List(jen.Id("sessionID"), jen.Id("touchedAt")).Op(":=").Range().Id("a").Dot("initializedSessions")).Block(
+					jen.If(jen.Id("oldestID").Op("==").Lit("").Op("||").Id("touchedAt").Dot("Before").Call(jen.Id("oldestAt"))).Block(
+						jen.Id("oldestID").Op("=").Id("sessionID"),
+						jen.Id("oldestAt").Op("=").Id("touchedAt"),
+					),
+				),
+				jen.If(jen.Id("oldestID").Op("==").Lit("")).Block(jen.Return()),
+				jen.Delete(jen.Id("a").Dot("initializedSessions"), jen.Id("oldestID")),
+				jen.Delete(jen.Id("a").Dot("sessionPrincipals"), jen.Id("oldestID")),
+			),
+		)
+	stmt.Line()
+
 	// isInitialized
 	stmt.Func().Params(jen.Id("a").Op("*").Id("MCPAdapter")).
 		Id("isInitialized").Params(jen.Id("ctx").Qual("context", "Context")).Bool().
@@ -400,7 +431,11 @@ func emitSessionHelpers(stmt *jen.Statement) {
 				jen.Id("a").Dot("initialized").Op("=").True(),
 				jen.Return(),
 			),
-			jen.Id("a").Dot("initializedSessions").Index(jen.Id("sessionID")).Op("=").Struct().Values(),
+			jen.Id("now").Op(":=").Qual("time", "Now").Call(),
+			jen.If(jen.List(jen.Id("_"), jen.Id("ok")).Op(":=").Id("a").Dot("initializedSessions").Index(jen.Id("sessionID")), jen.Op("!").Id("ok")).Block(
+				jen.Id("a").Dot("pruneSessionsLocked").Call(jen.Id("now")),
+			),
+			jen.Id("a").Dot("initializedSessions").Index(jen.Id("sessionID")).Op("=").Id("now"),
 		)
 	stmt.Line()
 
@@ -423,13 +458,14 @@ func emitSessionHelpers(stmt *jen.Statement) {
 		)
 	stmt.Line()
 
-	// clearSessionPrincipal
+	// clearSession
 	stmt.Func().Params(jen.Id("a").Op("*").Id("MCPAdapter")).
-		Id("clearSessionPrincipal").Params(jen.Id("sessionID").String()).
+		Id("clearSession").Params(jen.Id("sessionID").String()).
 		Block(
 			jen.If(jen.Id("a").Op("==").Nil().Op("||").Id("sessionID").Op("==").Lit("")).Block(jen.Return()),
 			jen.Id("a").Dot("mu").Dot("Lock").Call(),
 			jen.Defer().Id("a").Dot("mu").Dot("Unlock").Call(),
+			jen.Delete(jen.Id("a").Dot("initializedSessions"), jen.Id("sessionID")),
 			jen.Delete(jen.Id("a").Dot("sessionPrincipals"), jen.Id("sessionID")),
 		)
 	stmt.Line()
@@ -909,6 +945,7 @@ func emitInitializeHandler(stmt *jen.Statement, data *AdapterData) {
 
 			// Lock and check initialization
 			g.Id("a").Dot("mu").Dot("Lock").Call()
+			g.Id("now").Op(":=").Qual("time", "Now").Call()
 			alreadyInitBlock := []jen.Code{
 				jen.Id("a").Dot("mu").Dot("Unlock").Call(),
 				jen.Id("err").Op("=").Id("loom").Dot("PermanentError").Call(jen.Lit("invalid_params"), jen.Lit("Already initialized")),
@@ -924,8 +961,11 @@ func emitInitializeHandler(stmt *jen.Statement, data *AdapterData) {
 				jen.If(jen.Id("a").Dot("initialized")).Block(alreadyInitBlock...),
 				jen.Id("a").Dot("initialized").Op("=").True(),
 			).Else().Block(
+				jen.If(jen.List(jen.Id("_"), jen.Id("ok")).Op(":=").Id("a").Dot("initializedSessions").Index(jen.Id("sessionID")), jen.Op("!").Id("ok")).Block(
+					jen.Id("a").Dot("pruneSessionsLocked").Call(jen.Id("now")),
+				),
 				jen.If(jen.List(jen.Id("_"), jen.Id("ok")).Op(":=").Id("a").Dot("initializedSessions").Index(jen.Id("sessionID")), jen.Id("ok")).Block(alreadyInitBlock...),
-				jen.Id("a").Dot("initializedSessions").Index(jen.Id("sessionID")).Op("=").Struct().Values(),
+				jen.Id("a").Dot("initializedSessions").Index(jen.Id("sessionID")).Op("=").Id("now"),
 			)
 			g.Id("a").Dot("mu").Dot("Unlock").Call()
 			g.Id("a").Dot("captureSessionPrincipal").Call(jen.Id("ctx"), jen.Id("sessionID"))
@@ -950,7 +990,7 @@ func emitInitializeHandler(stmt *jen.Statement, data *AdapterData) {
 			if len(data.Tools) > 0 {
 				g.Id("capabilities").Dot("Tools").Op("=").Op("&").Id("ToolsCapability").Values()
 			}
-			if len(data.Resources) > 0 {
+			if adapterDataHasResources(data) {
 				g.Id("capabilities").Dot("Resources").Op("=").Op("&").Id("ResourcesCapability").Values()
 			}
 			if len(data.StaticPrompts) > 0 || len(data.DynamicPrompts) > 0 {

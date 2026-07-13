@@ -168,6 +168,49 @@ func TestApplyPolicyEnvelopeFiltersStrictly(t *testing.T) {
 	}
 }
 
+func TestApplyPolicyEnvelopePreservesToolUnavailable(t *testing.T) {
+	rt := &Runtime{logger: telemetry.NoopLogger{}}
+	base := &planner.PlanInput{RunContext: run.Context{RunID: "run-1"}}
+	input := &RunInput{AgentID: "svc.agent", RunID: "run-1"}
+	candidates := []planner.ToolRequest{
+		{Name: tools.Ident("allowed")},
+		{Name: tools.ToolUnavailable},
+	}
+
+	result, err := rt.applyPolicy(context.Background(), base, input, candidates, policy.CapsState{}, "turn-1", nil, toolPolicyEnvelope{
+		Active:  true,
+		Allowed: []tools.Ident{tools.Ident("allowed")},
+	})
+	require.NoError(t, err)
+	assert.Equal(t, []tools.Ident{tools.Ident("allowed"), tools.ToolUnavailable}, toolHandles(result.AllowedCalls))
+}
+
+func TestPreparePrePlanToolPolicyDoesNotCapAdvertisedTools(t *testing.T) {
+	rt := &Runtime{
+		Bus:           noopHooks{},
+		Policy:        &stubPolicyEngine{decision: policy.Decision{}},
+		RunEventStore: runloginmem.New(),
+		logger:        telemetry.NoopLogger{},
+		toolSpecs: map[tools.Ident]tools.ToolSpec{
+			tools.Ident("one"): newAnyJSONSpec("one", "svc.tools"),
+			tools.Ident("two"): newAnyJSONSpec("two", "svc.tools"),
+		},
+	}
+	input := &RunInput{
+		AgentID: "svc.agent",
+		RunID:   "run-1",
+		Policy:  &PolicyOverrides{PerTurnMaxToolCalls: 1},
+	}
+	base := &planner.PlanInput{RunContext: run.Context{RunID: input.RunID}}
+
+	result, err := rt.preparePrePlanToolPolicy(context.Background(), AgentRegistration{ID: input.AgentID}, input, base, policy.CapsState{
+		MaxToolCalls:       1,
+		RemainingToolCalls: 1,
+	}, "turn-1")
+	require.NoError(t, err)
+	assert.Equal(t, []tools.Ident{tools.Ident("one"), tools.Ident("two")}, result.Envelope.Allowed)
+}
+
 // TestDisableToolsPolicyBlocksToolExecution drives the workflow loop end to end
 // with a policy engine that returns DisableTools. The pre-plan policy envelope
 // must come back active with an empty allowlist, and a planner that emits tool

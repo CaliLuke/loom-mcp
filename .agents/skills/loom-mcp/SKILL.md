@@ -124,13 +124,23 @@ Use this skill for `loom-mcp` work in this repo. Keep `AGENTS.md` short and keep
   text `runtime/mcp.Sample`, `runtime/mcp.ListRoots`, and request-scoped
   `runtime/mcp.ReportProgress` during MCP calls. Keep official-SDK conversion in
   `runtime/mcp/sdkclient`, not duplicated in generated files.
+- Generated SDK servers expose Loom transport observability directly through
+  `SDKServerOptions.TransportObserver`; keep external middleware wrapping as an
+  application-wide alternative, not the only enablement path.
+- Preserve explicit source JSON-RPC CORS policies when building the synthetic
+  MCP transport. Loom's generated CORS handler and MCP origin validation are
+  independent layers: CORS controls browser response policy, while
+  `MCPCrossOriginProtection` remains the outer DNS-rebinding/CSRF check.
+- Non-generated HTTP server scaffolds must retain bounded read and idle
+  timeouts. Long-lived MCP SSE servers keep `WriteTimeout: 0` so a generic HTTP
+  deadline cannot terminate a healthy stream.
 - Codegen should use partial evaluation and `NameScope` helpers rather than string surgery or runtime branching over static structure.
 - DSL/codegen/runtime internals should trust evaluated design invariants and fail fast instead of adding speculative fallback paths.
 
 ## Command Reminders
 
 ```bash
-go install github.com/CaliLuke/loom/cmd/loom@v1.2.0
+go install github.com/CaliLuke/loom/cmd/loom@v1.5.1
 loom version
 loom gen <module-import-path>/design
 loom example <module-import-path>/design

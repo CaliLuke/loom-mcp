@@ -94,8 +94,11 @@ func (s *ToolsCallServerStream) Send(ctx context.Context, event mcpassistant.Too
 
 // SendAndClose sends a final JSON-RPC response to the client and closes the
 // stream.
-// The response includes the original request ID. Notifications are closed
-// without a final response.
+// The response includes the original request ID. ID-less streams (JSON-RPC
+// notifications and raw GET events/stream listeners) are closed without a
+// final response: the value is discarded and a
+// stream_final_response_suppressed transport event is emitted. Implementations
+// serving GET listeners should Send every value and close instead.
 // After calling this method, no more events can be sent on this stream.
 func (s *ToolsCallServerStream) SendAndClose(ctx context.Context, event mcpassistant.ToolsCallEvent) error {
 	// Check if stream is already closed
@@ -116,6 +119,11 @@ func (s *ToolsCallServerStream) SendAndClose(ctx context.Context, event mcpassis
 	// Determine the ID to use for the response
 	var id any = s.requestID
 	if !s.requestHasID {
+		// ID-less streams (JSON-RPC notifications and raw GET events/stream
+		// listeners) must not receive a final response, so the value is
+		// discarded; emit an observability event so the suppression is
+		// visible to implementations that call SendAndClose with data.
+		loomtransport.Observe(s.r.Context(), loomtransport.Event{Kind: loomtransport.EventKindStreamClose, Reason: loomtransport.ReasonStreamFinalResponseSuppressed, Transport: loomtransport.TransportJSONRPC})
 		return nil
 	}
 	// Convert to response body type for proper JSON encoding
@@ -237,8 +245,11 @@ func (s *EventsStreamServerStream) Send(ctx context.Context, event mcpassistant.
 
 // SendAndClose sends a final JSON-RPC response to the client and closes the
 // stream.
-// The response includes the original request ID. Notifications are closed
-// without a final response.
+// The response includes the original request ID. ID-less streams (JSON-RPC
+// notifications and raw GET events/stream listeners) are closed without a
+// final response: the value is discarded and a
+// stream_final_response_suppressed transport event is emitted. Implementations
+// serving GET listeners should Send every value and close instead.
 // After calling this method, no more events can be sent on this stream.
 func (s *EventsStreamServerStream) SendAndClose(ctx context.Context, event mcpassistant.EventsStreamEvent) error {
 	// Check if stream is already closed
@@ -259,6 +270,11 @@ func (s *EventsStreamServerStream) SendAndClose(ctx context.Context, event mcpas
 	// Determine the ID to use for the response
 	var id any = s.requestID
 	if !s.requestHasID {
+		// ID-less streams (JSON-RPC notifications and raw GET events/stream
+		// listeners) must not receive a final response, so the value is
+		// discarded; emit an observability event so the suppression is
+		// visible to implementations that call SendAndClose with data.
+		loomtransport.Observe(s.r.Context(), loomtransport.Event{Kind: loomtransport.EventKindStreamClose, Reason: loomtransport.ReasonStreamFinalResponseSuppressed, Transport: loomtransport.TransportJSONRPC})
 		return nil
 	}
 	// Convert to response body type for proper JSON encoding

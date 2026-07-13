@@ -85,6 +85,7 @@ func applySDKServerFixturePatch(exampleRoot string) error {
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/url"
 	"sync"
@@ -180,8 +181,14 @@ func handleHTTPServer(ctx context.Context, u *url.URL, _ mcpassistant.Service, _
 		debug.MountDebugLogEnabler(debug.Adapt(mux))
 	}
 
+	corsPolicy, err := goahttp.NewRuntimeCORSPolicy(goahttp.CORSPolicy{Origins: []goahttp.CORSOrigin{{Pattern: "*"}}})
+	if err != nil {
+		errc <- fmt.Errorf("configure runtime CORS: %w", err)
+		return
+	}
 	sdkServer, err := mcpassistant.NewSDKServer(sdkAssistantService{Service: assistantapi.NewAssistant()}, &mcpassistant.SDKServerOptions{
 		PromptProvider: sdkPromptProvider{},
+		RuntimeCORS:    &corsPolicy,
 		RequestContext: func(reqCtx context.Context, r *http.Request) context.Context {
 			if r == nil {
 				return reqCtx
@@ -290,7 +297,7 @@ func main() {
 
 	// Create channel used by both the signal handler and server goroutines
 	// to notify the main goroutine when to stop the server.
-	errc := make(chan error)
+	errc := make(chan error, 1)
 
 	// Setup interrupt handler. This optional step configures the process so
 	// that SIGINT and SIGTERM signals cause the services to stop gracefully.

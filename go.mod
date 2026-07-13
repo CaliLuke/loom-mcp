@@ -4,7 +4,7 @@ go 1.26.1
 
 require (
 	cloud.google.com/go/auth v0.20.0
-	github.com/CaliLuke/loom v1.4.0
+	github.com/CaliLuke/loom v1.5.1
 	github.com/anthropics/anthropic-sdk-go v1.52.0
 	github.com/aws/aws-sdk-go-v2 v1.42.0
 	github.com/aws/aws-sdk-go-v2/service/bedrockruntime v1.54.0
@@ -23,6 +23,7 @@ require (
 	go.opentelemetry.io/otel v1.44.0
 	go.opentelemetry.io/otel/metric v1.44.0
 	go.opentelemetry.io/otel/sdk v1.44.0
+	go.opentelemetry.io/otel/sdk/metric v1.44.0
 	go.opentelemetry.io/otel/trace v1.44.0
 	go.temporal.io/api v1.62.11
 	go.temporal.io/sdk v1.43.0

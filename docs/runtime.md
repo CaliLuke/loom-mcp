@@ -1481,6 +1481,13 @@ type CapsState struct {
 }
 ```
 
+Caps constrain the calls a planner selected; they do not truncate the tool
+catalog shown to the planner. The pre-plan policy envelope therefore carries
+the full policy allowlist, and per-turn or remaining-call caps are applied only
+after planning. The runtime-owned `tool_unavailable` recovery call remains
+executable under an active allowlist so rewritten unavailable calls can produce
+their structured recovery result.
+
 ### Per-Run Policy Overrides
 
 Callers can override policy for specific runs:
@@ -1528,6 +1535,11 @@ type Store interface {
 
 The runtime automatically subscribes to hooks and persists events when a memory
 store is configured.
+
+Transcript projection is read-only: `Ledger.BuildMessages` includes the current
+assistant turn without flushing or otherwise mutating the ledger. Workflow query
+handlers such as `ledger_messages` can therefore inspect an in-progress turn
+without splitting later text and tool-use parts into separate messages.
 
 ### Memory Search And Tools
 
@@ -1989,6 +2001,11 @@ type WorkflowContext interface {
 }
 ```
 
+Temporal signal receivers select between the signal channel and workflow
+cancellation. Canceling a workflow therefore releases a receiver blocked in
+`Receive` or `ReceiveWithTimeout`, and durable completion records the terminal
+status as `canceled` rather than `failed`.
+
 ### Available Engines
 
 **Temporal worker** — Production-grade durable execution:
@@ -2245,9 +2262,14 @@ before JSON-RPC routing, GET streams are tied to session termination, and
 DELETE terminates the session. A supplied unknown, expired, or terminated
 session ID receives HTTP 404 so conformant clients re-initialize; omitting the
 session header after the server has issued a session receives HTTP 400.
+Generated adapter session metadata is pruned after 24 hours and capped at 4096
+entries, and SDK DELETE requests clear adapter state when the upstream SDK
+terminates the session.
 
 Generated JSON-RPC servers accept requests that omit optional params (for
-example `tools/list` without a `params` key), emit the final streamed
+example `tools/list` without a `params` key), treat omitted or JSON `null`
+`tools/call.arguments` as `{}`, emit explicit `{}` results for successful
+empty-result methods, emit the final streamed
 `tools/call` response as a default `message` SSE event, and validate the
 `Origin` header against DNS rebinding through the exported
 `MCPCrossOriginProtection` variable in the generated server package. The
@@ -2255,11 +2277,21 @@ default is `net/http.NewCrossOriginProtection()` (same-origin plus non-browser
 requests), matching the SDK transport default; call `AddTrustedOrigin` on it or
 set it to `nil` before mounting to change the policy.
 
+When the source API or service declares JSON-RPC `CORS(...)`, the MCP generator
+copies the effective policy into its synthetic transport and preserves Loom's
+generated CORS handler. CORS and origin validation remain separate security
+layers: the CORS policy controls which browser origins receive cross-origin
+response headers, while `MCPCrossOriginProtection` still decides whether the
+request may execute. Configure trusted origins in both layers when intentionally
+serving a cross-origin browser MCP client.
+
 Intermediate SSE values use the namespaced
 `mcp_assistant/stream.event` JSON-RPC notification method (with the generated
 MCP service name as the prefix), never the request method name such as
 `tools/call`. This makes the stream extension explicit and prevents clients
-from mistaking a partial value for a protocol request.
+from mistaking a partial value for a protocol request. The MCP generator sets
+this method explicitly through Loom's SSE expression contract instead of
+depending on Loom's default naming behavior.
 
 Long-lived generated SSE endpoints immediately flush a priming frame with a
 unique event ID and empty data. Active endpoint streams also publish a

@@ -320,16 +320,26 @@ func (l *Ledger) AppendUserToolResults(results []ToolResultSpec) {
 	l.messages = append(l.messages, Message{Role: "user", Parts: parts})
 }
 
-// BuildMessages flushes the current assistant (if any) and converts the ledger
-// to provider‑agnostic model messages suitable for provider adapters.
+// BuildMessages converts the ledger, including the current assistant message,
+// to provider-agnostic model messages without mutating ledger state. This keeps
+// the method safe for workflow query handlers.
 func (l *Ledger) BuildMessages() []*model.Message {
-	l.flushAssistant()
-	if len(l.messages) == 0 {
+	messageCount := len(l.messages)
+	if l.current != nil && len(l.current.Parts) > 0 {
+		messageCount++
+	}
+	if messageCount == 0 {
 		return nil
 	}
-	out := make([]*model.Message, 0, len(l.messages))
+	out := make([]*model.Message, 0, messageCount)
 	for i := range l.messages {
 		msg := buildModelMessage(l.messages[i])
+		if len(msg.Parts) > 0 {
+			out = append(out, msg)
+		}
+	}
+	if l.current != nil && len(l.current.Parts) > 0 {
+		msg := buildModelMessage(*l.current)
 		if len(msg.Parts) > 0 {
 			out = append(out, msg)
 		}

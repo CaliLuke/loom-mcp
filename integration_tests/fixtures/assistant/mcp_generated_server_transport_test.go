@@ -51,6 +51,80 @@ func TestGeneratedJSONRPCServerToolsCallAcceptsOmittedOptionalArguments(t *testi
 	require.Len(t, result.Content, 1)
 }
 
+func TestGeneratedJSONRPCServerToolsCallAcceptsNullArguments(t *testing.T) {
+	t.Parallel()
+
+	server := newGeneratedJSONRPCServer(t)
+	defer server.Close()
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	sessionID, err := initializeJSONRPCSession(ctx, server.URL)
+	require.NoError(t, err)
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, server.URL+"/rpc", strings.NewReader(
+		`{"jsonrpc":"2.0","id":"null-arguments","method":"tools/call","params":{"name":"search_records","arguments":null}}`,
+	))
+	require.NoError(t, err)
+	req.Header.Set("Accept", "text/event-stream")
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set(mcpruntime.HeaderKeySessionID, sessionID)
+	req.Header.Set(mcpruntime.HeaderKeyProtocolVersion, mcpassistant.DefaultProtocolVersion)
+
+	resp, err := server.Client().Do(req)
+	require.NoError(t, err)
+	defer resp.Body.Close()
+	require.Equal(t, http.StatusOK, resp.StatusCode)
+	data, err := io.ReadAll(resp.Body)
+	require.NoError(t, err)
+	require.Contains(t, string(data), `"id":"null-arguments"`)
+	require.NotContains(t, string(data), `"error"`)
+}
+
+func TestGeneratedJSONRPCServerBatchBuffersToolsCallStream(t *testing.T) {
+	t.Parallel()
+
+	server := newGeneratedJSONRPCServer(t)
+	defer server.Close()
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	sessionID, err := initializeJSONRPCSession(ctx, server.URL)
+	require.NoError(t, err)
+
+	body := `[
+		{"jsonrpc":"2.0","id":2,"method":"ping"},
+		{"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"multi_content","arguments":{"count":2}}}
+	]`
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, server.URL+"/rpc", strings.NewReader(body))
+	require.NoError(t, err)
+	req.Header.Set("Accept", "application/json, text/event-stream")
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set(mcpruntime.HeaderKeySessionID, sessionID)
+	req.Header.Set(mcpruntime.HeaderKeyProtocolVersion, mcpassistant.DefaultProtocolVersion)
+
+	resp, err := server.Client().Do(req)
+	require.NoError(t, err)
+	defer resp.Body.Close()
+	require.Equal(t, http.StatusOK, resp.StatusCode)
+	data, err := io.ReadAll(resp.Body)
+	require.NoError(t, err)
+	require.NotContains(t, string(data), "event:")
+	require.NotContains(t, string(data), "retry:")
+
+	var responses []struct {
+		ID     int             `json:"id"`
+		Result json.RawMessage `json:"result"`
+		Error  json.RawMessage `json:"error"`
+	}
+	require.NoError(t, json.Unmarshal(data, &responses), "batch response must be valid JSON: %s", data)
+	require.Len(t, responses, 2)
+	require.Equal(t, 2, responses[0].ID)
+	require.NotEmpty(t, responses[0].Result)
+	require.Empty(t, responses[0].Error)
+	require.Equal(t, 3, responses[1].ID)
+	require.NotEmpty(t, responses[1].Result)
+	require.Empty(t, responses[1].Error)
+}
+
 func TestGeneratedJSONRPCServerErrorDataDoesNotExposeServiceErrorID(t *testing.T) {
 	t.Parallel()
 

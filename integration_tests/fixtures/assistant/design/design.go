@@ -48,6 +48,7 @@ var _ = Service("assistant", func() {
 	// Keep the design minimal; integration tests exercise MCP protocol handlers.
 	JSONRPC(func() {
 		POST("/rpc")
+		RuntimeCORS()
 	})
 
 	Method("list_documents", func() {

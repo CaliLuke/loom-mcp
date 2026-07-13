@@ -22,7 +22,7 @@ func (b *mcpExprBuilder) buildMCPTypes() {
 	}
 
 	// Resource types
-	if len(b.mcp.Resources) > 0 {
+	if b.hasResources() {
 		b.getOrCreateType("ResourceInfo", b.buildResourceInfoType)
 		b.getOrCreateType("ResourceContent", b.buildResourceContentType)
 	}

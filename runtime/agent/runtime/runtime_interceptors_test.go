@@ -265,6 +265,44 @@ func TestExecuteWorkflowAfterRunInterceptorClearsCanceledStatus(t *testing.T) {
 	require.Equal(t, runStatusSuccess, completed.Status)
 }
 
+func TestExecuteWorkflowPublishesCanceledStatus(t *testing.T) {
+	recorder := &recordingHooks{}
+	rt := New(WithHooks(recorder))
+	rt.agents["svc.agent"] = AgentRegistration{
+		ID:                  "svc.agent",
+		PlanActivityName:    "plan",
+		ExecuteToolActivity: "execute",
+		ResumeActivityName:  "resume",
+	}
+	rt.RunEventStore = runloginmem.New()
+	wfCtx := &routeWorkflowContext{
+		ctx:         context.Background(),
+		hookRuntime: rt,
+		plannerRoutes: map[string]func(context.Context, *PlanActivityInput) (*PlanActivityOutput, error){
+			"plan": func(context.Context, *PlanActivityInput) (*PlanActivityOutput, error) {
+				return &PlanActivityOutput{}, context.Canceled
+			},
+		},
+	}
+
+	out, err := rt.ExecuteWorkflow(wfCtx, &RunInput{
+		AgentID: "svc.agent",
+		RunID:   "run-1",
+		TurnID:  "turn-1",
+	})
+
+	require.ErrorIs(t, err, context.Canceled)
+	require.Nil(t, out)
+	var completed *hooks.RunCompletedEvent
+	for _, evt := range recorder.events {
+		if event, ok := evt.(*hooks.RunCompletedEvent); ok {
+			completed = event
+		}
+	}
+	require.NotNil(t, completed)
+	require.Equal(t, runStatusCanceled, completed.Status)
+}
+
 func TestExecuteWorkflowEmptyAfterRunDecisionPreservesRunError(t *testing.T) {
 	planErr := errors.New("planner unavailable")
 	var observed error

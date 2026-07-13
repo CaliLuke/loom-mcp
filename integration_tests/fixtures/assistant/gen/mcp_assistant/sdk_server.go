@@ -21,6 +21,7 @@ import (
 	mcpruntime "github.com/CaliLuke/loom-mcp/runtime/mcp"
 	sdkclient "github.com/CaliLuke/loom-mcp/runtime/mcp/sdkclient"
 	mcpskills "github.com/CaliLuke/loom-mcp/runtime/mcp/skills"
+	loomhttp "github.com/CaliLuke/loom/http"
 	"github.com/CaliLuke/loom/observability/transport"
 	mcpsdk "github.com/modelcontextprotocol/go-sdk/mcp"
 )
@@ -32,11 +33,13 @@ type SDKServer struct {
 	Server  *mcpsdk.Server
 }
 type SDKServerOptions struct {
-	Adapter        *MCPAdapterOptions
-	RequestContext func(context.Context, *http.Request) context.Context
-	PromptProvider PromptProvider
-	Server         *mcpsdk.ServerOptions
-	StreamableHTTP *mcpsdk.StreamableHTTPOptions
+	Adapter           *MCPAdapterOptions
+	RequestContext    func(context.Context, *http.Request) context.Context
+	TransportObserver transport.Observer
+	RuntimeCORS       *loomhttp.RuntimeCORSPolicy
+	PromptProvider    PromptProvider
+	Server            *mcpsdk.ServerOptions
+	StreamableHTTP    *mcpsdk.StreamableHTTPOptions
 }
 type sdkResponseObserver struct {
 	http.ResponseWriter
@@ -52,15 +55,22 @@ type sdkToolCallCollector struct {
 func NewSDKServer(service assistant.Service, opts *SDKServerOptions) (*SDKServer, error) {
 	var adapterOpts *MCPAdapterOptions
 	var requestContext func(context.Context, *http.Request) context.Context
+	var transportObserver transport.Observer
+	var runtimeCORS *loomhttp.RuntimeCORSPolicy
 	var promptProvider PromptProvider
 	var serverOpts *mcpsdk.ServerOptions
 	var streamableOpts *mcpsdk.StreamableHTTPOptions
 	if opts != nil {
 		adapterOpts = opts.Adapter
 		requestContext = opts.RequestContext
+		transportObserver = opts.TransportObserver
+		runtimeCORS = opts.RuntimeCORS
 		promptProvider = opts.PromptProvider
 		serverOpts = opts.Server
 		streamableOpts = opts.StreamableHTTP
+	}
+	if runtimeCORS == nil {
+		return nil, fmt.Errorf("runtime CORS policy is required by the MCP service design")
 	}
 	if adapterOpts != nil && adapterOpts.ToolSearch != nil && adapterOpts.ToolSearch.AllowDirectHiddenCalls {
 		return nil, fmt.Errorf("SDK ToolSearch compact mode does not support AllowDirectHiddenCalls")
@@ -93,9 +103,14 @@ func NewSDKServer(service assistant.Service, opts *SDKServerOptions) (*SDKServer
 	if err := registerSDKPrompts(server, adapter, requestContext); err != nil {
 		return nil, err
 	}
+	handler := newSDKHandler(server, adapter, requestContext, streamableOpts)
+	if transportObserver != nil {
+		handler = transport.HTTPMiddleware(transportObserver)(handler)
+	}
+	handler = sdkRuntimeCORSHandler(handler, *runtimeCORS)
 	return &SDKServer{
 		Adapter: adapter,
-		Handler: newSDKHandler(server, adapter, requestContext, streamableOpts),
+		Handler: handler,
 		Server:  server,
 	}, nil
 }
@@ -160,6 +175,9 @@ func newSDKHandler(server *mcpsdk.Server, adapter *MCPAdapter, requestContext fu
 		defer transportObs.End()
 		observer := &sdkResponseObserver{ResponseWriter: transportW}
 		base.ServeHTTP(observer, r)
+		if r.Method == http.MethodDelete && observer.statusCode < 400 {
+			adapter.clearSession(r.Header.Get(mcpruntime.HeaderKeySessionID))
+		}
 		if observer.statusCode >= 400 {
 			transportObs.Fail(transport.ReasonHandlerError)
 		}
@@ -177,6 +195,16 @@ func sdkStreamableHTTPOptions(opts *mcpsdk.StreamableHTTPOptions) *mcpsdk.Stream
 		configured.CrossOriginProtection = http.NewCrossOriginProtection()
 	}
 	return &configured
+}
+func sdkRuntimeCORSHandler(next http.Handler, policy loomhttp.RuntimeCORSPolicy) http.Handler {
+	actual := policy.Handler(next.ServeHTTP)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodOptions {
+			policy.HandlePreflight(w, r, []string{http.MethodDelete, http.MethodGet, http.MethodPost})
+			return
+		}
+		actual(w, r)
+	})
 }
 func registerSDKTools(server *mcpsdk.Server, adapter *MCPAdapter, requestContext func(context.Context, *http.Request) context.Context) error {
 	if adapter.toolSearchEnabled() {

@@ -52,6 +52,9 @@ type (
 		Subscriptions       []*SubscriptionAdapter
 		// Streaming flags derived from original service DSL
 		ToolsCallStreaming bool
+		// RuntimeCORS reports whether the source JSON-RPC service declares
+		// Loom's design-owned RuntimeCORS mode.
+		RuntimeCORS bool
 		// Derived flags
 		HasWatchableResources bool
 		NeedsMCPClient        bool
@@ -547,6 +550,10 @@ func adapterDataNeedsMCPClient(data *AdapterData) bool {
 		len(data.Resources) > 0 ||
 		len(data.DynamicPrompts) > 0 ||
 		len(data.Notifications) > 0
+}
+
+func adapterDataHasResources(data *AdapterData) bool {
+	return len(data.Resources) > 0 || len(data.SkillDirectories) > 0
 }
 
 func hasWatchableResources(resources []*ResourceAdapter) bool {

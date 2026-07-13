@@ -25,6 +25,7 @@ server, err := mcpassistant.NewSDKServer(
             // see "Request Context Callback" below
             return ctx
         },
+        TransportObserver: myTransportObserver,
     },
 )
 if err != nil {
@@ -47,6 +48,7 @@ JSON-RPC-transport feature and is not routed (nor advertised) in SDK mode.
 | ---------------- | -------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `PromptProvider` | yes      | Implementation that renders prompts declared with `StaticPrompt` and `DynamicPrompt`. Generated against the design.                                                    |
 | `RequestContext` | no       | Per-request hook called once per MCP RPC. Receives the inbound request context and a synthetic `*http.Request` carrying the live transport headers; returns a new ctx. |
+| `TransportObserver` | no    | Loom transport observer installed on the generated SDK handler. Request lifecycle events are delivered without external middleware wiring.                           |
 | `StreamableHTTP` | no       | `*mcpsdk.StreamableHTTPOptions` passed through to the upstream SDK. When `nil`, a default `net/http.NewCrossOriginProtection()` is applied.                            |
 
 ## Design-Declared Skill Resources
@@ -57,6 +59,10 @@ at startup, lists each child directory with a `SKILL.md` file as
 `skill://<skill>/SKILL.md`, and also publishes `skill://<skill>/_manifest`.
 `resources/read` can read `SKILL.md`, `_manifest`, and supporting files that
 stay inside the skill directory.
+
+A service may expose only `SkillDirectory` resources and no method-backed
+resources. Code generation still emits the complete resources capability,
+service methods, adapter implementation, and SDK conversions for that shape.
 
 `SKILL.md` may include structured YAML frontmatter (`id`, `name`,
 `description`, `allowed_tools`, `preload`, and `reload`). Missing frontmatter is
@@ -72,8 +78,9 @@ each list request.
 
 ## Optional tool arguments
 
-MCP clients may omit `tools/call.arguments`. Generated adapters normalize an
-omitted or whitespace-only value to `{}` before decoding a real tool payload.
+MCP clients may omit `tools/call.arguments` or send JSON `null`. Generated
+adapters normalize either form, as well as a whitespace-only value, to `{}`
+before decoding a real tool payload.
 Tools with all-optional payloads therefore execute normally, while tools with
 required fields return the generated missing-field validation error and repair
 hint.
@@ -81,6 +88,11 @@ hint.
 Generated MCP JSON-RPC errors expose client-safe metadata such as the Loom error
 name, retry flags, and remediation guidance. Internal Loom service error instance
 IDs are retained for server-side logging and omitted from the wire `error.data`.
+
+JSON-RPC batches are buffered one request at a time. Streaming `tools/call`
+entries contribute only their final JSON-RPC response to the enclosing JSON
+array; SSE retry and intermediate notification frames are never written into
+the batch body.
 
 ## Request Context Callback
 
@@ -314,18 +326,14 @@ generated handler is still composing the response.
 
 ## Transport Observability
 
-The generated handler emits classified events through the dependency-free
+The generated handler emits classified request lifecycle events through the dependency-free
 `github.com/CaliLuke/loom/observability/transport` contract from the
-upstream Loom module: request start/finish/failure for the streamable HTTP
-path, stream open/close/failure for the events stream, and
-`mcp_session_missing`, `mcp_session_not_found`,
-`mcp_session_principal_mismatch`, and `mcp_events_stream_write_failed`
-reasons for the events-stream rejection branches.
+upstream Loom module for the streamable HTTP path.
 
-Wire an observer at the HTTP layer with
-`transport.HTTPMiddleware(observer)` to receive these events. Generated
-constructor signatures stay unchanged regardless of whether an observer
-is attached; a missing observer is a cheap no-op. Generated code never
+Set `SDKServerOptions.TransportObserver` to receive these events directly.
+Applications that need one observer across multiple handlers may instead wrap
+the parent mux with `transport.HTTPMiddleware(observer)` and leave the option
+unset. A missing observer is a cheap no-op. Generated code never
 emits raw bodies, JSON-RPC params, MCP tool arguments, credentials, or
 result payloads — events carry only low-cardinality classification fields
 safe for metric labels and log enrichment. See the

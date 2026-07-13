@@ -29,6 +29,7 @@ import (
 // Server handles JSON-RPC requests for the mcp_assistant service.
 type Server struct {
 	http.Handler
+	corsPolicy loomhttp.RuntimeCORSPolicy
 	// Methods is the list of methods served by this server.
 	Methods []string
 	// Initialize is the handler for the initialize method.
@@ -63,7 +64,7 @@ type Server struct {
 
 // New creates a JSON-RPC server which loads HTTP requests and calls the
 // "mcp_assistant" service methods.
-func New(endpoints *mcpassistant.Endpoints, mux loomhttp.Muxer, decoder func(*http.Request) loomhttp.Decoder, encoder func(context.Context, http.ResponseWriter) loomhttp.Encoder, errhandler func(context.Context, http.ResponseWriter, error)) *Server {
+func New(endpoints *mcpassistant.Endpoints, mux loomhttp.Muxer, decoder func(*http.Request) loomhttp.Decoder, encoder func(context.Context, http.ResponseWriter) loomhttp.Encoder, errhandler func(context.Context, http.ResponseWriter, error), corsPolicy loomhttp.RuntimeCORSPolicy) *Server {
 	s := &Server{
 		EventsStream:         NewEventsStreamHandler(endpoints.EventsStream, mux, decoder, encoder, errhandler),
 		Initialize:           NewInitializeHandler(endpoints.Initialize, mux, decoder, encoder, errhandler),
@@ -78,12 +79,13 @@ func New(endpoints *mcpassistant.Endpoints, mux loomhttp.Muxer, decoder func(*ht
 		ResourcesUnsubscribe: NewResourcesUnsubscribeHandler(endpoints.ResourcesUnsubscribe, mux, decoder, encoder, errhandler),
 		ToolsCall:            NewToolsCallHandler(endpoints.ToolsCall, mux, decoder, encoder, errhandler),
 		ToolsList:            NewToolsListHandler(endpoints.ToolsList, mux, decoder, encoder, errhandler),
+		corsPolicy:           corsPolicy,
 		decoder:              decoder,
 		encoder:              encoder,
 		errhandler:           errhandler,
 	}
-	// Mixed HTTP/SSE services negotiate transports in ServeHTTP
-	s.Handler = http.NewCrossOriginProtection().Handler(http.HandlerFunc(s.ServeHTTP))
+	// Mixed HTTP/SSE services negotiate transports through the internal dispatcher
+	s.Handler = corsPolicy.Handler(http.HandlerFunc(s.serveHTTP))
 	return s
 }
 
@@ -102,8 +104,8 @@ func (s *Server) MethodNames() []string {
 	return mcpassistant.MethodNames[:]
 }
 
-// ServeHTTP handles JSON-RPC requests with content negotiation for mixed HTTP/SSE transports.
-func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+// serveHTTP handles mixed HTTP/SSE requests before server middleware.
+func (s *Server) serveHTTP(w http.ResponseWriter, r *http.Request) {
 	switch r.Method {
 	case http.MethodGet:
 		req := &jsonrpc.RawRequest{JSONRPC: "2.0", Method: "events/stream"}
@@ -272,7 +274,7 @@ func (s *Server) handleBatch(w http.ResponseWriter, r *http.Request) {
 			s.encodeJSONRPCError(r.Context(), writer, &jsonrpc.RawRequest{}, jsonrpc.InvalidRequest, "Invalid request", nil)
 			continue
 		}
-		s.processRequest(r.Context(), r, &req, writer)
+		s.processBatchRequest(r.Context(), r, &req, writer)
 	}
 	if writer.written {
 		writer.Writer.Write([]byte{byte(0x5d)})
@@ -401,6 +403,9 @@ func Mount(mux loomhttp.Muxer, h *Server) {
 	// Mixed transports: mount unified handler that negotiates HTTP vs SSE by Accept header and JSON-RPC method
 	mux.Handle("POST", "/rpc", withMCPPolicyHeaders(streamableHTTPSessions, requestCancellations, h.ServeHTTP))
 	mux.Handle("GET", "/rpc", withMCPPolicyHeaders(streamableHTTPSessions, requestCancellations, h.ServeHTTP))
+	mux.Handle("OPTIONS", "/rpc", func(w http.ResponseWriter, r *http.Request) {
+		h.corsPolicy.HandlePreflight(w, r, []string{"GET", "POST"})
+	})
 	mux.Handle("DELETE", "/rpc", withMCPPolicyHeaders(streamableHTTPSessions, requestCancellations, h.ServeHTTP))
 }
 
@@ -1205,7 +1210,7 @@ func NewResourcesSubscribeHandler(endpoint loom.Endpoint, mux loomhttp.Muxer, de
 		if !req.HasID {
 			return nil
 		}
-		response := jsonrpc.MakeSuccessResponse(req.ID, nil)
+		response := jsonrpc.MakeSuccessResponse(req.ID, struct{}{})
 		if err := encoder(ctx, w).Encode(response); err != nil {
 			errhandler(ctx, w, fmt.Errorf("failed to encode JSON-RPC response: %w", err))
 		}
@@ -1272,7 +1277,7 @@ func NewResourcesUnsubscribeHandler(endpoint loom.Endpoint, mux loomhttp.Muxer, 
 		if !req.HasID {
 			return nil
 		}
-		response := jsonrpc.MakeSuccessResponse(req.ID, nil)
+		response := jsonrpc.MakeSuccessResponse(req.ID, struct{}{})
 		if err := encoder(ctx, w).Encode(response); err != nil {
 			errhandler(ctx, w, fmt.Errorf("failed to encode JSON-RPC response: %w", err))
 		}
@@ -1481,7 +1486,7 @@ func NewNotifyStatusUpdateHandler(endpoint loom.Endpoint, mux loomhttp.Muxer, de
 		if !req.HasID {
 			return nil
 		}
-		response := jsonrpc.MakeSuccessResponse(req.ID, nil)
+		response := jsonrpc.MakeSuccessResponse(req.ID, struct{}{})
 		if err := encoder(ctx, w).Encode(response); err != nil {
 			errhandler(ctx, w, fmt.Errorf("failed to encode JSON-RPC response: %w", err))
 		}
@@ -1559,4 +1564,87 @@ func jsonrpcErrorCodeForServiceError(err *loom.ServiceError) jsonrpc.Code {
 	default:
 		return jsonrpc.InternalError
 	}
+}
+
+type mcpBatchResponseWriter struct {
+	header     http.Header
+	body       bytes.Buffer
+	statusCode int
+}
+
+func (w *mcpBatchResponseWriter) Header() http.Header {
+	if w.header == nil {
+		w.header = make(http.Header)
+	}
+	return w.header
+}
+
+func (w *mcpBatchResponseWriter) WriteHeader(statusCode int) {
+	if w.statusCode == 0 {
+		w.statusCode = statusCode
+	}
+}
+
+func (w *mcpBatchResponseWriter) Write(data []byte) (int, error) {
+	if w.statusCode == 0 {
+		w.statusCode = http.StatusOK
+	}
+	return w.body.Write(data)
+}
+
+func (w *mcpBatchResponseWriter) Flush() {}
+
+func (s *Server) processBatchRequest(ctx context.Context, r *http.Request, req *jsonrpc.RawRequest, writer *batchWriter) {
+	buffer := &mcpBatchResponseWriter{}
+	s.processRequest(ctx, r, req, buffer)
+	body := bytes.TrimSpace(buffer.body.Bytes())
+	if len(body) == 0 {
+		return
+	}
+	if !strings.Contains(buffer.Header().Get("Content-Type"), "text/event-stream") {
+		if _, err := writer.Write(body); err != nil {
+			s.errhandler(ctx, writer, fmt.Errorf("failed to write buffered batch response: %w", err))
+		}
+		return
+	}
+	if response := finalMCPBatchSSEResponse(body); len(response) > 0 {
+		if _, err := writer.Write(response); err != nil {
+			s.errhandler(ctx, writer, fmt.Errorf("failed to write buffered batch stream response: %w", err))
+		}
+		return
+	}
+	if req.HasID {
+		response := jsonrpc.MakeErrorResponse(req.ID, jsonrpc.InternalError, "streaming method did not produce a final response", nil)
+		data, err := json.Marshal(response)
+		if err != nil {
+			s.errhandler(ctx, writer, fmt.Errorf("failed to encode buffered batch stream error: %w", err))
+			return
+		}
+		if _, err := writer.Write(data); err != nil {
+			s.errhandler(ctx, writer, fmt.Errorf("failed to write buffered batch stream error: %w", err))
+		}
+	}
+}
+
+func finalMCPBatchSSEResponse(body []byte) []byte {
+	var response []byte
+	for _, frame := range strings.Split(string(body), "\n\n") {
+		for _, line := range strings.Split(frame, "\n") {
+			if !strings.HasPrefix(line, "data:") {
+				continue
+			}
+			data := bytes.TrimSpace([]byte(strings.TrimPrefix(line, "data:")))
+			if len(data) == 0 {
+				continue
+			}
+			var envelope mcpJSONRPCEnvelope
+			if err := json.Unmarshal(data, &envelope); err != nil {
+				continue
+			}
+			if envelope.Method == "" && len(envelope.ID) > 0 && (len(envelope.Result) > 0 || len(envelope.Error) > 0) {
+				response = append(response[:0], data...)
+			}
+		}
+	}
+	return response
 }
