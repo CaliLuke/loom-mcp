@@ -26,14 +26,16 @@ import (
 // complete generated package graph is not valid Go.
 func TestGeneratedAgentDesignsCompile(t *testing.T) {
 	cases := []struct {
-		name     string
-		generate func(*testing.T) []*gcodegen.File
-		verify   func(*testing.T, []*gcodegen.File)
+		name       string
+		generate   func(*testing.T) []*gcodegen.File
+		verify     func(*testing.T, []*gcodegen.File)
+		moduleTest string
 	}{
 		{
 			name: "FromMCP toolset",
 			generate: func(t *testing.T) []*gcodegen.File {
 				roots := runAliasedMCPDesign(t)
+				require.NoError(t, codegen.Prepare("example.com/fmcp/gen", roots))
 				files, err := codegen.Generate("example.com/fmcp/gen", roots, nil)
 				require.NoError(t, err)
 				return files
@@ -57,13 +59,17 @@ func TestGeneratedAgentDesignsCompile(t *testing.T) {
 			},
 		},
 		{
-			name:     "injected payload field",
-			generate: generateInjectedAgentDesign,
+			name:       "injected payload field",
+			generate:   generateInjectedAgentDesign,
+			moduleTest: injectedPayloadRuntimeTest,
 			verify: func(t *testing.T, files []*gcodegen.File) {
 				inject := testhelpers.FileContent(t, files, "gen/assistant/toolsets/lookup/inject.go")
 				specs := testhelpers.FileContent(t, files, "gen/assistant/toolsets/lookup/specs.go")
 				require.Contains(t, inject, "sessionIDValue := meta.SessionID")
+				require.Contains(t, inject, "payload.SessionID = &sessionIDValue")
+				require.Contains(t, inject, "payload.TurnID = turnIDValue")
 				require.NotContains(t, specs, `"session_id"`)
+				require.NotContains(t, specs, `"turn_id"`)
 			},
 		},
 		{
@@ -90,8 +96,12 @@ func TestGeneratedAgentDesignsCompile(t *testing.T) {
 			files := tc.generate(t)
 			tc.verify(t, files)
 			moduleDir := writeGeneratedModule(t, files)
+			if tc.moduleTest != "" {
+				err := os.WriteFile(filepath.Join(moduleDir, "injection_runtime_test.go"), []byte(tc.moduleTest), 0o600)
+				require.NoError(t, err)
+			}
 
-			build := exec.CommandContext(t.Context(), "go", "build", "./...")
+			build := exec.CommandContext(t.Context(), "go", "test", "./...")
 			build.Dir = moduleDir
 			build.Env = append(os.Environ(), "GOWORK=off", "GOFLAGS=-mod=mod")
 			out, err := build.CombinedOutput()
@@ -145,7 +155,9 @@ func generateProjectedAgentDesign(t *testing.T) []*gcodegen.File {
 	}
 	require.True(t, eval.Execute(design, nil), eval.Context.Error())
 	require.NoError(t, eval.RunDSL())
-	return generateAgentAndServiceFiles(t, []eval.Root{goaexpr.Root, agentsexpr.Root, mcpexpr.Root})
+	roots := []eval.Root{goaexpr.Root, agentsexpr.Root, mcpexpr.Root}
+	require.NoError(t, codegen.Prepare("example.com/fmcp/gen", roots))
+	return generateAgentAndServiceFiles(t, roots)
 }
 
 func generateRegistryAgentDesign(t *testing.T) []*gcodegen.File {
@@ -172,8 +184,11 @@ func generateInjectedAgentDesign(t *testing.T) []*gcodegen.File {
 		API("assistant", func() {})
 		payload := Type("LookupPayload", func() {
 			Attribute("session_id", String)
+			Attribute("turn_id", String, func() {
+				Default("fallback")
+			})
 			Attribute("query", String)
-			Required("session_id", "query")
+			Required("session_id", "turn_id", "query")
 		})
 		Service("assistant", func() {
 			Method("lookup", func() {
@@ -186,13 +201,40 @@ func generateInjectedAgentDesign(t *testing.T) []*gcodegen.File {
 						Args(payload)
 						Return(String)
 						BindTo("assistant", "lookup")
-						Inject("session_id")
+						Inject("session_id", "turn_id")
 					})
 				})
 			})
 		})
 	})
 }
+
+const injectedPayloadRuntimeTest = `package fmcp_test
+
+import (
+	"testing"
+
+	lookup "example.com/fmcp/gen/assistant/toolsets/lookup"
+	"github.com/CaliLuke/loom-mcp/runtime/agent/runtime"
+)
+
+func TestInjectedPayloadRuntime(t *testing.T) {
+	payload, err := lookup.DecodeLookup(
+		[]byte("{\"query\":\"find me\"}"),
+		runtime.ToolCallMeta{SessionID: "session-1", TurnID: "turn-1"},
+		nil,
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if payload.SessionID == nil || *payload.SessionID != "session-1" {
+		t.Fatalf("unexpected session ID: %#v", payload.SessionID)
+	}
+	if payload.TurnID != "turn-1" {
+		t.Fatalf("unexpected turn ID: %q", payload.TurnID)
+	}
+}
+`
 
 func generatePayloadOnlyAgentDesign(t *testing.T) []*gcodegen.File {
 	t.Helper()
@@ -286,6 +328,7 @@ func generateCompileDesign(t *testing.T, withMCP bool, design func()) []*gcodege
 	if withMCP {
 		roots = append(roots, mcpexpr.Root)
 	}
+	require.NoError(t, codegen.Prepare("example.com/fmcp/gen", roots))
 	return generateAgentAndServiceFiles(t, roots)
 }
 

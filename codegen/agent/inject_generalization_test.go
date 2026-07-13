@@ -38,7 +38,7 @@ func TestInjectLabelBackedFieldPopulatesFromRunLabels(t *testing.T) {
 	require.Contains(t, content, `func InjectByHousehold(payload *ByHouseholdPayload, meta runtime.ToolCallMeta, labels map[string]string) error`)
 	require.Contains(t, content, `labelValue0, ok := labels["household_id"]`)
 	require.Contains(t, content, `missing required run label %q`)
-	require.Contains(t, content, `payload.HouseholdID = labelValue0`)
+	require.Contains(t, content, `payload.HouseholdID = &labelValue0`)
 	require.Contains(t, content, `func DecodeByHousehold(data []byte, meta runtime.ToolCallMeta, labels map[string]string) (*ByHouseholdPayload, error)`)
 }
 
@@ -67,9 +67,9 @@ func TestInjectMultipleLabelBackedFieldsUsesDistinctLocals(t *testing.T) {
 	_, err := parser.ParseFile(token.NewFileSet(), "inject.go", content, parser.AllErrors)
 	require.NoError(t, err)
 	require.Contains(t, content, `labelValue0, ok := labels["household_id"]`)
-	require.Contains(t, content, `payload.HouseholdID = labelValue0`)
+	require.Contains(t, content, `payload.HouseholdID = &labelValue0`)
 	require.Contains(t, content, `labelValue1, ok := labels["account_id"]`)
-	require.Contains(t, content, `payload.AccountID = labelValue1`)
+	require.Contains(t, content, `payload.AccountID = &labelValue1`)
 	require.NotContains(t, content, `v, ok := labels`)
 }
 

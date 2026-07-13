@@ -1124,7 +1124,11 @@ custom executors can decode payload JSON and apply injection in one step.
 Generated codecs and public payload structs still include injected fields so
 the injection helpers can populate the bound service method payload after model
 input is decoded. Only the advertised model-facing schema and examples hide
-those fields and remove them from `required`.
+those fields and remove them from `required`. Because removing a required
+primitive may make its generated public field pointer-backed, generated
+`Inject<Tool>` and `Decode<Tool>` helpers derive each assignment from the final
+prepared Go field type. Fields that remain value-backed, including fields with
+defaults, continue to receive values directly.
 Registry-served bound tools should use metadata-backed names until registry
 tool-call messages carry run labels.
 

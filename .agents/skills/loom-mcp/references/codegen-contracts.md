@@ -144,7 +144,10 @@ Use this file when editing DSL, generators, generated helpers, or MCP codegen be
   advertised model-facing shapes. `Inject(...)` fields remain in generated
   public payload structs, codecs, validation, and method dispatch payloads, but
   must be removed from `ToolSpec.Payload.Schema`, `ExampleJSON`, and
-  `ExampleInput`, including the advertised `required` list.
+  `ExampleInput`, including the advertised `required` list. Generated injection
+  helpers must derive pointer-versus-value assignment from the prepared public
+  payload attribute using the same default semantics as public type generation;
+  tests for this contract must run `Prepare` before rendering.
 - `toolEntry.ConstName` is the authoritative unique Go identifier for a tool
   after specs construction. Agent-level aggregators, typed aliases, codecs, and
   call builders must reuse it rather than recomputing `Goify(tool.Name)`.

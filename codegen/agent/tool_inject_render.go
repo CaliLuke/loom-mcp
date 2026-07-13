@@ -38,7 +38,11 @@ func toolsetNeedsInject(ts *ToolsetData) bool {
 
 func toolInjectSection(data toolInjectFileData) codegen.Section {
 	return codegen.NewRenderSection("tool-inject", func() string {
-		tpl := template.Must(template.New("tool-inject").Funcs(templateFuncMap()).Parse(toolInjectTemplateSource))
+		funcs := templateFuncMap()
+		funcs["isInjectPointer"] = func(tool *ToolData, field string) bool {
+			return tool != nil && tool.Args != nil && tool.Args.IsPrimitivePointer(field, true)
+		}
+		tpl := template.Must(template.New("tool-inject").Funcs(funcs).Parse(toolInjectTemplateSource))
 		var buf bytes.Buffer
 		if err := tpl.Execute(&buf, data); err != nil {
 			panic(err)
@@ -50,6 +54,7 @@ func toolInjectSection(data toolInjectFileData) codegen.Section {
 const toolInjectTemplateSource = `
 {{- range .Tools }}
 {{- if .InjectedFields }}
+{{- $tool := . }}
 // Inject{{ .ConstName }} populates server-owned fields on {{ .ConstName }}Payload.
 func Inject{{ .ConstName }}(payload *{{ .ConstName }}Payload, meta runtime.ToolCallMeta, labels map[string]string) error {
 	if payload == nil {
@@ -58,13 +63,13 @@ func Inject{{ .ConstName }}(payload *{{ .ConstName }}Payload, meta runtime.ToolC
 		{{- range $i, $field := .InjectedFields }}
 		{{- if isMetaInject $field }}
 		{{ goify $field false }}Value := meta.{{ goify $field true }}
-		payload.{{ goify $field true }} = {{ goify $field false }}Value
+		payload.{{ goify $field true }} = {{ if isInjectPointer $tool $field }}&{{ end }}{{ goify $field false }}Value
 		{{- else }}
 		labelValue{{ $i }}, ok := labels[{{ printf "%q" $field }}]
 		if !ok || labelValue{{ $i }} == "" {
 			return fmt.Errorf("missing required run label %q for injected field %q", {{ printf "%q" $field }}, {{ printf "%q" $field }})
 		}
-		payload.{{ goify $field true }} = labelValue{{ $i }}
+		payload.{{ goify $field true }} = {{ if isInjectPointer $tool $field }}&{{ end }}labelValue{{ $i }}
 		{{- end }}
 		{{- end }}
 	return nil

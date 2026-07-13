@@ -69,7 +69,9 @@ Use this skill for `loom-mcp` work in this repo. Keep `AGENTS.md` short and keep
 - `Inject(...)` fields are server-owned: generated public payload structs and
   codecs keep them for runtime injection, while generated
   `ToolSpec.Payload.Schema`, `ExampleJSON`, and `ExampleInput` hide them and
-  remove them from model-facing `required`.
+  remove them from model-facing `required`. Injection renderers must inspect
+  the prepared public payload field and emit pointer or value assignments that
+  match its generated Go type.
 - Unified tool-surface projection v1 rejects projected tools that use
   `Confirmation(...)`, `Inject(...)`, `ServerData(...)`,
   `ResultReminder(...)`, or `BoundedResult(...)`; treat those as validation

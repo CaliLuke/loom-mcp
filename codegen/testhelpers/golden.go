@@ -37,23 +37,26 @@ func RunDesign(t *testing.T, design func()) (string, []eval.Root) {
 	return "github.com/CaliLuke/loom-mcp", []eval.Root{goaexpr.Root, agentsExpr.Root}
 }
 
-// BuildAndGenerate executes the DSL, runs codegen and returns generated files.
+// BuildAndGenerate executes the production DSL, prepare, and generation phases.
 func BuildAndGenerate(t *testing.T, design func()) []*gcodegen.File {
 	t.Helper()
 	genpkg, roots := RunDesign(t, design)
+	require.NoError(t, codegen.Prepare(genpkg, roots))
 	files, err := codegen.Generate(genpkg, roots, nil)
 	require.NoError(t, err)
 	return files
 }
 
-// BuildAndGenerateWithPkg executes the DSL with a custom package path.
+// BuildAndGenerateWithPkg executes the production generation phases with a custom package path.
 func BuildAndGenerateWithPkg(t *testing.T, genpkg string, design func()) []*gcodegen.File {
 	t.Helper()
 	SetupEvalRoots(t)
 	ok := eval.Execute(design, nil)
 	require.True(t, ok, eval.Context.Error())
 	require.NoError(t, eval.RunDSL())
-	files, err := codegen.Generate(genpkg, []eval.Root{goaexpr.Root, agentsExpr.Root}, nil)
+	roots := []eval.Root{goaexpr.Root, agentsExpr.Root}
+	require.NoError(t, codegen.Prepare(genpkg, roots))
+	files, err := codegen.Generate(genpkg, roots, nil)
 	require.NoError(t, err)
 	return files
 }
