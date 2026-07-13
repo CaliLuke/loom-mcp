@@ -23,7 +23,7 @@ Install the Goa packages and CLI tool:
 go get github.com/CaliLuke/loom/...
 
 # Install the Loom CLI
-go install github.com/CaliLuke/loom/cmd/loom@v1.6.1
+go install github.com/CaliLuke/loom/cmd/loom@v1.6.2
 
 # Verify the installation
 loom version
