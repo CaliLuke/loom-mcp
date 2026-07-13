@@ -74,7 +74,7 @@ func TestExposeRejectsToolsetBlockContext(t *testing.T) {
 		})
 	})
 
-	require.Contains(t, err, "invalid use of <unknown> in toolset \"bad-tools\"")
+	require.Contains(t, err, "invalid use of Expose in toolset \"bad-tools\"")
 }
 
 func TestMCPPlacementRejectsToolsetBlockContext(t *testing.T) {
@@ -85,7 +85,20 @@ func TestMCPPlacementRejectsToolsetBlockContext(t *testing.T) {
 		})
 	})
 
-	require.Contains(t, err, "invalid use of <unknown> in toolset \"bad-tools\"")
+	require.Contains(t, err, "invalid use of MCPPlacement in toolset \"bad-tools\"")
+}
+
+func TestToolRequiresMCPForMethodContext(t *testing.T) {
+	err := runInvalidProjectionDSL(t, func() {
+		API("test", func() {})
+		Service("assistant", func() {
+			Method("lookup", func() {
+				Tool("lookup", "Lookup")
+			})
+		})
+	})
+
+	require.Contains(t, err, `Tool requires service "assistant" to declare MCP in service "assistant" method "lookup"`)
 }
 
 func setupProjectionDSL(t *testing.T) {

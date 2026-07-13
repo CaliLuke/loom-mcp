@@ -17,7 +17,7 @@ import (
 func Confirmation(dsl func()) {
 	tool, ok := eval.Current().(*agentsexpr.ToolExpr)
 	if !ok {
-		eval.IncompatibleDSL()
+		incompatibleDSL("Confirmation")
 		return
 	}
 	tool.Confirmation = &agentsexpr.ToolConfirmationExpr{}
@@ -31,7 +31,7 @@ func Confirmation(dsl func()) {
 func PromptTemplate(tmpl string) {
 	c, ok := eval.Current().(*agentsexpr.ToolConfirmationExpr)
 	if !ok {
-		eval.IncompatibleDSL()
+		incompatibleDSL("PromptTemplate")
 		return
 	}
 	c.PromptTemplate = tmpl
@@ -43,7 +43,7 @@ func PromptTemplate(tmpl string) {
 func DeniedResultTemplate(tmpl string) {
 	c, ok := eval.Current().(*agentsexpr.ToolConfirmationExpr)
 	if !ok {
-		eval.IncompatibleDSL()
+		incompatibleDSL("DeniedResultTemplate")
 		return
 	}
 	c.DeniedResultTemplate = tmpl

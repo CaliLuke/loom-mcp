@@ -40,7 +40,7 @@ import (
 func MCP(name, version string, opts ...func(*exprmcp.MCPExpr)) {
 	svc, ok := eval.Current().(*goaexpr.ServiceExpr)
 	if !ok {
-		eval.IncompatibleDSL()
+		incompatibleDSL("MCP")
 		return
 	}
 	m := &exprmcp.MCPExpr{Service: svc, Name: name, Version: version, Description: svc.Description, Capabilities: &exprmcp.CapabilitiesExpr{}}
@@ -475,7 +475,7 @@ func Resource(name, uri, mimeType string, opts ...func(*exprmcp.ResourceExpr)) {
 	parent := eval.Current()
 	method, isMethod := parent.(*goaexpr.MethodExpr)
 	if !isMethod {
-		eval.IncompatibleDSL()
+		incompatibleDSL("Resource")
 		return
 	}
 	svc := method.Service
@@ -484,7 +484,7 @@ func Resource(name, uri, mimeType string, opts ...func(*exprmcp.ResourceExpr)) {
 		mcp = r.GetMCP(svc)
 	}
 	if mcp == nil {
-		eval.IncompatibleDSL()
+		mcpRequiredDSL("Resource", svc)
 		return
 	}
 	resource := &exprmcp.ResourceExpr{Name: name, Description: method.Description, URI: uri, MimeType: mimeType, Method: method}
@@ -521,7 +521,7 @@ func WatchableResource(name, uri, mimeType string, opts ...func(*exprmcp.Resourc
 	parent := eval.Current()
 	method, isMethod := parent.(*goaexpr.MethodExpr)
 	if !isMethod {
-		eval.IncompatibleDSL()
+		incompatibleDSL("WatchableResource")
 		return
 	}
 	svc := method.Service
@@ -530,7 +530,7 @@ func WatchableResource(name, uri, mimeType string, opts ...func(*exprmcp.Resourc
 		mcp = r.GetMCP(svc)
 	}
 	if mcp == nil {
-		eval.IncompatibleDSL()
+		mcpRequiredDSL("WatchableResource", svc)
 		return
 	}
 	resource := &exprmcp.ResourceExpr{Name: name, Description: method.Description, URI: uri, MimeType: mimeType, Method: method, Watchable: true}
@@ -589,14 +589,17 @@ func SkillDirectory(root string) func(*exprmcp.MCPExpr) {
 //	        "assistant", "How can I help?")
 //	})
 func StaticPrompt(name, description string, args ...any) {
+	svc, isService := eval.Current().(*goaexpr.ServiceExpr)
+	if !isService {
+		incompatibleDSL("StaticPrompt")
+		return
+	}
 	var mcp *exprmcp.MCPExpr
-	if svc, ok := eval.Current().(*goaexpr.ServiceExpr); ok {
-		if r := exprmcp.Root; r != nil {
-			mcp = r.GetMCP(svc)
-		}
+	if r := exprmcp.Root; r != nil {
+		mcp = r.GetMCP(svc)
 	}
 	if mcp == nil {
-		eval.IncompatibleDSL()
+		mcpRequiredDSL("StaticPrompt", svc)
 		return
 	}
 	prompt := &exprmcp.PromptExpr{Name: name, Description: description, Messages: make([]*exprmcp.MessageExpr, 0)}
@@ -646,12 +649,12 @@ func DynamicPrompt(name, description string, opts ...func(*exprmcp.DynamicPrompt
 	parent := eval.Current()
 	method, isMethod := parent.(*goaexpr.MethodExpr)
 	if !isMethod {
-		eval.IncompatibleDSL()
+		incompatibleDSL("DynamicPrompt")
 		return
 	}
 	svc := method.Service
 	if exprmcp.Root == nil || exprmcp.Root.GetMCP(svc) == nil {
-		eval.IncompatibleDSL()
+		mcpRequiredDSL("DynamicPrompt", svc)
 		return
 	}
 	prompt := &exprmcp.DynamicPromptExpr{Name: name, Description: description, Method: method}
@@ -724,7 +727,7 @@ func Notification(name, description string) {
 	parent := eval.Current()
 	method, isMethod := parent.(*goaexpr.MethodExpr)
 	if !isMethod {
-		eval.IncompatibleDSL()
+		incompatibleDSL("Notification")
 		return
 	}
 	svc := method.Service
@@ -733,7 +736,7 @@ func Notification(name, description string) {
 		mcp = r.GetMCP(svc)
 	}
 	if mcp == nil {
-		eval.IncompatibleDSL()
+		mcpRequiredDSL("Notification", svc)
 		return
 	}
 	notif := &exprmcp.NotificationExpr{Name: name, Description: description, Method: method}
@@ -762,7 +765,7 @@ func Subscription(resourceName string) {
 	parent := eval.Current()
 	method, isMethod := parent.(*goaexpr.MethodExpr)
 	if !isMethod {
-		eval.IncompatibleDSL()
+		incompatibleDSL("Subscription")
 		return
 	}
 	svc := method.Service
@@ -771,7 +774,7 @@ func Subscription(resourceName string) {
 		mcp = r.GetMCP(svc)
 	}
 	if mcp == nil {
-		eval.IncompatibleDSL()
+		mcpRequiredDSL("Subscription", svc)
 		return
 	}
 	sub := &exprmcp.SubscriptionExpr{ResourceName: resourceName, Method: method}
@@ -799,7 +802,7 @@ func SubscriptionMonitor(name string) {
 	parent := eval.Current()
 	method, isMethod := parent.(*goaexpr.MethodExpr)
 	if !isMethod {
-		eval.IncompatibleDSL()
+		incompatibleDSL("SubscriptionMonitor")
 		return
 	}
 	svc := method.Service
@@ -808,7 +811,7 @@ func SubscriptionMonitor(name string) {
 		mcp = r.GetMCP(svc)
 	}
 	if mcp == nil {
-		eval.IncompatibleDSL()
+		mcpRequiredDSL("SubscriptionMonitor", svc)
 		return
 	}
 	monitor := &exprmcp.SubscriptionMonitorExpr{Name: name, Method: method}

@@ -60,7 +60,7 @@ import (
 //   - Toolset(FromMCP(...), func()) - MCP-backed with additional config
 func Toolset(args ...any) *agentsexpr.ToolsetExpr {
 	if _, ok := eval.Current().(eval.TopExpr); !ok {
-		eval.IncompatibleDSL()
+		incompatibleDSL("Toolset")
 		return nil
 	}
 

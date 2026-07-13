@@ -60,7 +60,7 @@ func Agent(name, description string, dsl func()) *expragents.AgentExpr {
 	}
 	svc, ok := eval.Current().(*goaexpr.ServiceExpr)
 	if !ok {
-		eval.IncompatibleDSL()
+		incompatibleDSL("Agent")
 		return nil
 	}
 	agent := &expragents.AgentExpr{
@@ -105,7 +105,7 @@ func Agent(name, description string, dsl func()) *expragents.AgentExpr {
 func Use(value any, fn ...func()) *expragents.ToolsetExpr {
 	agent, ok := eval.Current().(*expragents.AgentExpr)
 	if !ok {
-		eval.IncompatibleDSL()
+		incompatibleDSL("Use")
 		return nil
 	}
 	var dsl func()
@@ -152,7 +152,7 @@ func Export(value any, fn ...func()) *expragents.ToolsetExpr {
 		se.Toolsets = append(se.Toolsets, ts)
 		return ts
 	default:
-		eval.IncompatibleDSL()
+		incompatibleDSL("Export")
 		return nil
 	}
 }
@@ -194,7 +194,7 @@ func DisableAgentDocs() {
 func Passthrough(toolName string, target any, methodNameOpt ...string) {
 	tool, ok := eval.Current().(*expragents.ToolExpr)
 	if !ok {
-		eval.IncompatibleDSL()
+		incompatibleDSL("Passthrough")
 		return
 	}
 	if tool.Name != toolName {

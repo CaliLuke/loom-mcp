@@ -12,7 +12,7 @@ import (
 func Workflow(fn func()) {
 	agent, ok := eval.Current().(*expragents.AgentExpr)
 	if !ok {
-		eval.IncompatibleDSL()
+		incompatibleDSL("Workflow")
 		return
 	}
 	workflow := agent.Workflow
@@ -29,7 +29,7 @@ func Workflow(fn func()) {
 func Step(name string, tool string, payloadJSON string) {
 	workflow, ok := eval.Current().(*expragents.WorkflowExpr)
 	if !ok {
-		eval.IncompatibleDSL()
+		incompatibleDSL("Step")
 		return
 	}
 	if !json.Valid([]byte(payloadJSON)) {
@@ -90,7 +90,7 @@ func advanceWorkflowStepDependsOn(workflow *expragents.WorkflowExpr, name string
 func FinalMessage(message string) {
 	workflow, ok := eval.Current().(*expragents.WorkflowExpr)
 	if !ok {
-		eval.IncompatibleDSL()
+		incompatibleDSL("FinalMessage")
 		return
 	}
 	workflow.FinalMessage = message
@@ -100,7 +100,7 @@ func FinalMessage(message string) {
 func Parallel(fn func()) {
 	workflow, ok := eval.Current().(*expragents.WorkflowExpr)
 	if !ok {
-		eval.IncompatibleDSL()
+		incompatibleDSL("Parallel")
 		return
 	}
 	workflow.GraphMode = true
@@ -123,7 +123,7 @@ func Parallel(fn func()) {
 func Join(name string, deps ...string) {
 	workflow, ok := eval.Current().(*expragents.WorkflowExpr)
 	if !ok {
-		eval.IncompatibleDSL()
+		incompatibleDSL("Join")
 		return
 	}
 	workflow.GraphMode = true
@@ -142,7 +142,7 @@ func Join(name string, deps ...string) {
 func RequestInput(name string, title string, schemaJSON string) {
 	workflow, ok := eval.Current().(*expragents.WorkflowExpr)
 	if !ok {
-		eval.IncompatibleDSL()
+		incompatibleDSL("RequestInput")
 		return
 	}
 	if !json.Valid([]byte(schemaJSON)) {
@@ -172,7 +172,7 @@ type BranchOption func(*expragents.WorkflowBranchExpr)
 func Loop(name string, tool string, payloadJSON string, opts ...LoopOption) {
 	workflow, ok := eval.Current().(*expragents.WorkflowExpr)
 	if !ok {
-		eval.IncompatibleDSL()
+		incompatibleDSL("Loop")
 		return
 	}
 	if !json.Valid([]byte(payloadJSON)) {
@@ -213,7 +213,7 @@ func UntilJSONPath(step, path, equals string) LoopOption {
 func Branch(name string, fromStep string, opts ...BranchOption) {
 	workflow, ok := eval.Current().(*expragents.WorkflowExpr)
 	if !ok {
-		eval.IncompatibleDSL()
+		incompatibleDSL("Branch")
 		return
 	}
 	branch := &expragents.WorkflowBranchExpr{FromStep: fromStep}

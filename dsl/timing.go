@@ -39,7 +39,7 @@ import (
 func Timing(fn func()) {
 	policy, ok := eval.Current().(*agentsexpr.RunPolicyExpr)
 	if !ok {
-		eval.IncompatibleDSL()
+		incompatibleDSL("Timing")
 		return
 	}
 	if fn != nil {
@@ -73,7 +73,7 @@ func Timing(fn func()) {
 func Budget(duration string) {
 	policy, ok := eval.Current().(*agentsexpr.RunPolicyExpr)
 	if !ok {
-		eval.IncompatibleDSL()
+		incompatibleDSL("Budget")
 		return
 	}
 	dur, ok := parsePositiveDuration("Budget", duration)
@@ -104,7 +104,7 @@ func Budget(duration string) {
 func Plan(duration string) {
 	policy, ok := eval.Current().(*agentsexpr.RunPolicyExpr)
 	if !ok {
-		eval.IncompatibleDSL()
+		incompatibleDSL("Plan")
 		return
 	}
 	dur, ok := parsePositiveDuration("Plan", duration)
@@ -137,7 +137,7 @@ func Plan(duration string) {
 func Tools(duration string) {
 	policy, ok := eval.Current().(*agentsexpr.RunPolicyExpr)
 	if !ok {
-		eval.IncompatibleDSL()
+		incompatibleDSL("Tools")
 		return
 	}
 	dur, ok := parsePositiveDuration("Tools", duration)

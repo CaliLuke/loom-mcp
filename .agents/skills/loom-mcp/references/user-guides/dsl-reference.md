@@ -109,6 +109,10 @@ Both `Field` and `Attribute` define schema fields:
 
 loom-mcp extends Goa’s DSL with functions for declaring agents, toolsets, and runtime policies. The DSL is evaluated by Goa’s eval engine, so normal Goa rules apply.
 
+Invalid-context diagnostics identify the exact loom-mcp DSL function instead
+of reporting `<unknown>`. MCP declarations used in a service or method without
+`MCP(...)` report that missing service contract explicitly.
+
 ## Import Path
 
 ```go

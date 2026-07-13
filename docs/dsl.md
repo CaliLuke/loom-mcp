@@ -19,6 +19,11 @@ The DSL is evaluated by the shared design `eval` engine, so the same rules apply
 standard service/transport DSL: expressions must be invoked in the proper context, and attribute
 definitions reuse the same type system (`Attribute`, `Field`, validations, examples, etc.).
 
+Context errors name the exact loom-mcp DSL function that was misplaced, for
+example `invalid use of Expose in toolset "internal"`. Method- or service-level
+MCP declarations distinguish a missing `MCP(...)` declaration from a general
+nesting error, for example `Tool requires service "assistant" to declare MCP`.
+
 ## Quickstart
 
 ```go

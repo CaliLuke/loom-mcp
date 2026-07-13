@@ -23,7 +23,7 @@ import (
 func Idempotent() {
 	tool, ok := eval.Current().(*agentsexpr.ToolExpr)
 	if !ok {
-		eval.IncompatibleDSL()
+		incompatibleDSL("Idempotent")
 		return
 	}
 	tool.Tags = append(tool.Tags, runtimetools.TagIdempotencyTranscript)

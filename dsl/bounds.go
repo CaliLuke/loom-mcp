@@ -11,7 +11,7 @@ import (
 func Cursor(field string) {
 	bounds, ok := eval.Current().(*agentsexpr.ToolBoundsExpr)
 	if !ok {
-		eval.IncompatibleDSL()
+		incompatibleDSL("Cursor")
 		return
 	}
 	if field == "" {
@@ -32,7 +32,7 @@ func Cursor(field string) {
 func NextCursor(field string) {
 	bounds, ok := eval.Current().(*agentsexpr.ToolBoundsExpr)
 	if !ok {
-		eval.IncompatibleDSL()
+		incompatibleDSL("NextCursor")
 		return
 	}
 	if field == "" {

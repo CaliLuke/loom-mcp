@@ -60,7 +60,7 @@ func Registry(name string, fn ...func()) *agentsexpr.RegistryExpr {
 		return nil
 	}
 	if _, ok := eval.Current().(eval.TopExpr); !ok {
-		eval.IncompatibleDSL()
+		incompatibleDSL("Registry")
 		return nil
 	}
 	var dsl func()
@@ -91,7 +91,7 @@ func Registry(name string, fn ...func()) *agentsexpr.RegistryExpr {
 func APIVersion(version string) {
 	reg, ok := eval.Current().(*agentsexpr.RegistryExpr)
 	if !ok {
-		eval.IncompatibleDSL()
+		incompatibleDSL("APIVersion")
 		return
 	}
 	reg.APIVersion = version
@@ -114,7 +114,7 @@ func APIVersion(version string) {
 func Retry(maxRetries int, backoff string) {
 	reg, ok := eval.Current().(*agentsexpr.RegistryExpr)
 	if !ok {
-		eval.IncompatibleDSL()
+		incompatibleDSL("Retry")
 		return
 	}
 	d, err := time.ParseDuration(backoff)
@@ -143,7 +143,7 @@ func Retry(maxRetries int, backoff string) {
 func SyncInterval(duration string) {
 	reg, ok := eval.Current().(*agentsexpr.RegistryExpr)
 	if !ok {
-		eval.IncompatibleDSL()
+		incompatibleDSL("SyncInterval")
 		return
 	}
 	d, err := time.ParseDuration(duration)
@@ -169,7 +169,7 @@ func SyncInterval(duration string) {
 func CacheTTL(duration string) {
 	reg, ok := eval.Current().(*agentsexpr.RegistryExpr)
 	if !ok {
-		eval.IncompatibleDSL()
+		incompatibleDSL("CacheTTL")
 		return
 	}
 	d, err := time.ParseDuration(duration)
@@ -202,7 +202,7 @@ func CacheTTL(duration string) {
 func Federation(fn func()) {
 	reg, ok := eval.Current().(*agentsexpr.RegistryExpr)
 	if !ok {
-		eval.IncompatibleDSL()
+		incompatibleDSL("Federation")
 		return
 	}
 	if reg.Federation == nil {
@@ -227,7 +227,7 @@ func Federation(fn func()) {
 func Include(patterns ...string) {
 	fed, ok := eval.Current().(*agentsexpr.FederationExpr)
 	if !ok {
-		eval.IncompatibleDSL()
+		incompatibleDSL("Include")
 		return
 	}
 	fed.Include = append(fed.Include, patterns...)
@@ -249,7 +249,7 @@ func Include(patterns ...string) {
 func Exclude(patterns ...string) {
 	fed, ok := eval.Current().(*agentsexpr.FederationExpr)
 	if !ok {
-		eval.IncompatibleDSL()
+		incompatibleDSL("Exclude")
 		return
 	}
 	fed.Exclude = append(fed.Exclude, patterns...)
@@ -262,7 +262,7 @@ func Exclude(patterns ...string) {
 func PublishTo(_ *agentsexpr.RegistryExpr) {
 	_, ok := eval.Current().(*agentsexpr.ToolsetExpr)
 	if !ok {
-		eval.IncompatibleDSL()
+		incompatibleDSL("PublishTo")
 		return
 	}
 	eval.ReportError("PublishTo is not supported; register exported toolsets with the registry client explicitly")

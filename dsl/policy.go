@@ -38,7 +38,7 @@ import (
 func RunPolicy(fn func()) {
 	agent, ok := eval.Current().(*expragents.AgentExpr)
 	if !ok {
-		eval.IncompatibleDSL()
+		incompatibleDSL("RunPolicy")
 		return
 	}
 	policy := agent.RunPolicy
@@ -73,7 +73,7 @@ func RunPolicy(fn func()) {
 func DefaultCaps(opts ...CapsOption) {
 	policy, ok := eval.Current().(*expragents.RunPolicyExpr)
 	if !ok {
-		eval.IncompatibleDSL()
+		incompatibleDSL("DefaultCaps")
 		return
 	}
 	caps := policy.DefaultCaps
@@ -104,7 +104,7 @@ func DefaultCaps(opts ...CapsOption) {
 func TimeBudget(duration string) {
 	policy, ok := eval.Current().(*expragents.RunPolicyExpr)
 	if !ok {
-		eval.IncompatibleDSL()
+		incompatibleDSL("TimeBudget")
 		return
 	}
 	dur, ok := parsePositiveDuration("TimeBudget", duration)
@@ -130,7 +130,7 @@ func TimeBudget(duration string) {
 func InterruptsAllowed(allowed bool) {
 	policy, ok := eval.Current().(*expragents.RunPolicyExpr)
 	if !ok {
-		eval.IncompatibleDSL()
+		incompatibleDSL("InterruptsAllowed")
 		return
 	}
 	policy.InterruptsAllowed = allowed
@@ -156,7 +156,7 @@ func InterruptsAllowed(allowed bool) {
 func OnMissingFields(action string) {
 	policy, ok := eval.Current().(*expragents.RunPolicyExpr)
 	if !ok {
-		eval.IncompatibleDSL()
+		incompatibleDSL("OnMissingFields")
 		return
 	}
 	switch action {
@@ -192,7 +192,7 @@ type RetryAndReflectOption func(*expragents.RetryAndReflectExpr)
 func Interceptors(ids ...string) {
 	policy, ok := eval.Current().(*expragents.RunPolicyExpr)
 	if !ok {
-		eval.IncompatibleDSL()
+		incompatibleDSL("Interceptors")
 		return
 	}
 	policy.Interceptors = append(policy.Interceptors, ids...)
@@ -204,7 +204,7 @@ func Interceptors(ids ...string) {
 func PreloadMemory(opts ...PreloadMemoryOption) {
 	policy, ok := eval.Current().(*expragents.RunPolicyExpr)
 	if !ok {
-		eval.IncompatibleDSL()
+		incompatibleDSL("PreloadMemory")
 		return
 	}
 	preload := policy.PreloadMemory
@@ -225,7 +225,7 @@ func PreloadMemory(opts ...PreloadMemoryOption) {
 func PreloadLongTermMemory(opts ...PreloadLongTermMemoryOption) {
 	policy, ok := eval.Current().(*expragents.RunPolicyExpr)
 	if !ok {
-		eval.IncompatibleDSL()
+		incompatibleDSL("PreloadLongTermMemory")
 		return
 	}
 	preload := policy.PreloadLongTermMemory
@@ -277,7 +277,7 @@ func (o memoryVisibilityOption) applyPreloadLongTermMemory(preload *expragents.L
 func RetryAndReflect(opts ...RetryAndReflectOption) {
 	policy, ok := eval.Current().(*expragents.RunPolicyExpr)
 	if !ok {
-		eval.IncompatibleDSL()
+		incompatibleDSL("RetryAndReflect")
 		return
 	}
 	retry := policy.RetryAndReflect

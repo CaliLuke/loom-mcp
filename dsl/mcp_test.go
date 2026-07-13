@@ -354,7 +354,7 @@ func TestMCPDynamicPromptRequiresMCP(t *testing.T) {
 		})
 	})
 
-	require.Contains(t, err, `invalid use of <unknown> in service "assistant" method "code_review"`)
+	require.Contains(t, err, `DynamicPrompt requires service "assistant" to declare MCP in service "assistant" method "code_review"`)
 	require.Empty(t, mcpexpr.Root.DynamicPrompts["assistant"])
 }
 

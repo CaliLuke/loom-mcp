@@ -30,7 +30,7 @@ import (
 func History(fn func()) {
 	policy, ok := eval.Current().(*expragents.RunPolicyExpr)
 	if !ok {
-		eval.IncompatibleDSL()
+		incompatibleDSL("History")
 		return
 	}
 	if policy.History != nil {
@@ -63,7 +63,7 @@ func History(fn func()) {
 func Cache(fn func()) {
 	policy, ok := eval.Current().(*expragents.RunPolicyExpr)
 	if !ok {
-		eval.IncompatibleDSL()
+		incompatibleDSL("Cache")
 		return
 	}
 	if policy.Cache != nil {
@@ -87,7 +87,7 @@ func Cache(fn func()) {
 func AfterSystem() {
 	cache, ok := eval.Current().(*expragents.CacheExpr)
 	if !ok {
-		eval.IncompatibleDSL()
+		incompatibleDSL("AfterSystem")
 		return
 	}
 	cache.AfterSystem = true
@@ -102,7 +102,7 @@ func AfterSystem() {
 func AfterTools() {
 	cache, ok := eval.Current().(*expragents.CacheExpr)
 	if !ok {
-		eval.IncompatibleDSL()
+		incompatibleDSL("AfterTools")
 		return
 	}
 	cache.AfterTools = true
@@ -123,7 +123,7 @@ func AfterTools() {
 func KeepRecentTurns(n int) {
 	h, ok := eval.Current().(*expragents.HistoryExpr)
 	if !ok {
-		eval.IncompatibleDSL()
+		incompatibleDSL("KeepRecentTurns")
 		return
 	}
 	if h.Mode != "" {
@@ -207,7 +207,7 @@ func KeepMaxInputTokens(n int) {
 func compressHistory(name string) *expragents.HistoryExpr {
 	h, ok := eval.Current().(*expragents.HistoryExpr)
 	if !ok {
-		eval.IncompatibleDSL()
+		incompatibleDSL(name)
 		return nil
 	}
 	switch h.Mode {

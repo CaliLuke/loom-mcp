@@ -138,6 +138,9 @@ Use this skill for `loom-mcp` work in this repo. Keep `AGENTS.md` short and keep
   deadline cannot terminate a healthy stream.
 - Codegen should use partial evaluation and `NameScope` helpers rather than string surgery or runtime branching over static structure.
 - DSL/codegen/runtime internals should trust evaluated design invariants and fail fast instead of adding speculative fallback paths.
+- loom-mcp DSL context failures must name the public DSL function explicitly;
+  declarations that require a service `MCP(...)` contract must report that
+  missing contract separately from general nesting errors.
 
 ## Command Reminders
 

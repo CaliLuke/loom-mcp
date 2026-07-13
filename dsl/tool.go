@@ -97,7 +97,7 @@ func Tool(name string, args ...any) {
 			mcp = r.GetMCP(svc)
 		}
 		if mcp == nil {
-			eval.IncompatibleDSL()
+			mcpRequiredDSL("Tool", svc)
 			return
 		}
 		tool := &mcpexpr.ToolExpr{
@@ -116,7 +116,7 @@ func Tool(name string, args ...any) {
 		tool.Expression = parent
 		mcp.Tools = append(mcp.Tools, tool)
 	default:
-		eval.IncompatibleDSL()
+		incompatibleDSL("Tool")
 		return
 	}
 }
@@ -167,7 +167,7 @@ func Expose(surfaces ...ToolSurface) func(*mcpexpr.ToolExpr) {
 		tool.Surfaces = append([]agentsexpr.ToolSurface(nil), surfaces...)
 	case *goaexpr.MethodExpr:
 	default:
-		eval.IncompatibleDSL()
+		incompatibleDSL("Expose")
 	}
 	return func(tool *mcpexpr.ToolExpr) {
 		tool.ExposedSurfaces = toolSurfacesAsStrings(surfaces)
@@ -187,7 +187,7 @@ func MCPPlacement(service string, mcpServer string) func(*mcpexpr.ToolExpr) {
 		}
 	case *goaexpr.MethodExpr:
 	default:
-		eval.IncompatibleDSL()
+		incompatibleDSL("MCPPlacement")
 	}
 	return func(tool *mcpexpr.ToolExpr) {
 		tool.MCPPlacementService = service
@@ -256,7 +256,7 @@ func Args(val any, args ...any) {
 	}
 	tool, ok := eval.Current().(*agentsexpr.ToolExpr)
 	if !ok {
-		eval.IncompatibleDSL()
+		incompatibleDSL("Args")
 		return
 	}
 	tool.Args = toolDSL(tool, "Args", val, args...)
@@ -315,7 +315,7 @@ func Return(val any, args ...any) {
 	}
 	tool, ok := eval.Current().(*agentsexpr.ToolExpr)
 	if !ok {
-		eval.IncompatibleDSL()
+		incompatibleDSL("Return")
 		return
 	}
 	tool.Return = toolDSL(tool, "Return", val, args...)
@@ -377,7 +377,7 @@ func ServerData(kind string, schema any, args ...any) {
 	}
 	tool, ok := eval.Current().(*agentsexpr.ToolExpr)
 	if !ok {
-		eval.IncompatibleDSL()
+		incompatibleDSL("ServerData")
 		return
 	}
 	sd := &agentsexpr.ServerDataExpr{
@@ -413,7 +413,7 @@ func FromMethodResultField(name string) {
 	}
 	sd, ok := eval.Current().(*agentsexpr.ServerDataExpr)
 	if !ok {
-		eval.IncompatibleDSL()
+		incompatibleDSL("FromMethodResultField")
 		return
 	}
 	sd.Source = &agentsexpr.ServerDataSourceExpr{
@@ -456,7 +456,7 @@ func Audience(value ServerDataAudience) {
 	}
 	sd, ok := eval.Current().(*agentsexpr.ServerDataExpr)
 	if !ok {
-		eval.IncompatibleDSL()
+		incompatibleDSL("Audience")
 		return
 	}
 	sd.Audience = string(value)
@@ -515,7 +515,7 @@ func Tags(values ...string) {
 	case *agentsexpr.ToolsetExpr:
 		cur.Tags = append(cur.Tags, values...)
 	default:
-		eval.IncompatibleDSL()
+		incompatibleDSL("Tags")
 		return
 	}
 }
@@ -588,7 +588,7 @@ func BindTo(args ...string) {
 	}
 	tool, ok := eval.Current().(*agentsexpr.ToolExpr)
 	if !ok {
-		eval.IncompatibleDSL()
+		incompatibleDSL("BindTo")
 		return
 	}
 	// Defer resolution to Prepare/Validate by recording the binding intent.
@@ -611,7 +611,7 @@ func BindTo(args ...string) {
 func Inject(names ...string) {
 	tool, ok := eval.Current().(*agentsexpr.ToolExpr)
 	if !ok {
-		eval.IncompatibleDSL()
+		incompatibleDSL("Inject")
 		return
 	}
 	tool.InjectedFields = append(tool.InjectedFields, names...)
@@ -638,7 +638,7 @@ func Inject(names ...string) {
 func CallHintTemplate(s string) {
 	tool, ok := eval.Current().(*agentsexpr.ToolExpr)
 	if !ok {
-		eval.IncompatibleDSL()
+		incompatibleDSL("CallHintTemplate")
 		return
 	}
 	tool.CallHintTemplate = s
@@ -670,7 +670,7 @@ func CallHintTemplate(s string) {
 func ResultHintTemplate(s string) {
 	tool, ok := eval.Current().(*agentsexpr.ToolExpr)
 	if !ok {
-		eval.IncompatibleDSL()
+		incompatibleDSL("ResultHintTemplate")
 		return
 	}
 	tool.ResultHintTemplate = s
@@ -711,7 +711,7 @@ func BoundedResult(fns ...func()) {
 	}
 	tool, ok := eval.Current().(*agentsexpr.ToolExpr)
 	if !ok {
-		eval.IncompatibleDSL()
+		incompatibleDSL("BoundedResult")
 		return
 	}
 	if tool.Bounds == nil {
@@ -749,7 +749,7 @@ func BoundedResult(fns ...func()) {
 func ResultReminder(s string) {
 	tool, ok := eval.Current().(*agentsexpr.ToolExpr)
 	if !ok {
-		eval.IncompatibleDSL()
+		incompatibleDSL("ResultReminder")
 		return
 	}
 	tool.ResultReminder = s
@@ -763,7 +763,7 @@ func ResultReminder(s string) {
 func TerminalRun() {
 	tool, ok := eval.Current().(*agentsexpr.ToolExpr)
 	if !ok {
-		eval.IncompatibleDSL()
+		incompatibleDSL("TerminalRun")
 		return
 	}
 	tool.TerminalRun = true
