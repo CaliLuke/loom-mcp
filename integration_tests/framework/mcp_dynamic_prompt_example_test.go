@@ -28,7 +28,7 @@ func TestLoomExample_DynamicOnlyPromptCompiles(t *testing.T) {
 go 1.26.1
 
 require (
-	github.com/CaliLuke/loom v1.6.0
+	github.com/CaliLuke/loom v1.6.1
 	github.com/CaliLuke/loom-mcp v0.0.0-00010101000000-000000000000
 )
 

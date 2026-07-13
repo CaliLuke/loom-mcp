@@ -5,7 +5,7 @@ Minimal, copy‑paste runnable example to go from zero → talking agent. Keep y
 ## Prerequisites
 
 - Go 1.24+
-- Loom CLI (`go install github.com/CaliLuke/loom/cmd/loom@v1.6.0`)
+- Loom CLI (`go install github.com/CaliLuke/loom/cmd/loom@v1.6.1`)
 - Temporal dev server (for workflow execution)
   - Easiest: Docker one‑liner below, or use Temporalite
 
@@ -14,7 +14,7 @@ Minimal, copy‑paste runnable example to go from zero → talking agent. Keep y
 ```
 mkdir -p $GOPATH/src/example.com/quickstart && cd $_
 go mod init example.com/quickstart
-go get github.com/CaliLuke/loom@v1.6.0
+go get github.com/CaliLuke/loom@v1.6.1
 go get github.com/CaliLuke/loom-mcp@latest
 ```
 
