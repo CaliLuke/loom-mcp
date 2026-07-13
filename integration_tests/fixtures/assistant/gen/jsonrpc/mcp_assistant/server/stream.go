@@ -11,6 +11,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"net/http"
 	"sync"
 
@@ -25,8 +26,8 @@ import (
 // ToolsCallServerStream implements the mcpassistant.ToolsCallServerStream
 // interface using Server-Sent Events.
 type ToolsCallServerStream struct {
-	// once ensures headers are written once
-	once sync.Once
+	// writer owns the serialized SSE response lifecycle
+	writer *loomhttp.SSEStreamWriter
 	// encoder is the SSE event encoder
 	encoder func(context.Context, http.ResponseWriter) loomhttp.Encoder
 	// w is the HTTP response writer
@@ -43,24 +44,17 @@ type ToolsCallServerStream struct {
 	mu sync.Mutex
 }
 
-// initSSEHeaders initializes the SSE response headers.
-func (s *ToolsCallServerStream) initSSEHeaders() {
-	s.once.Do(func() {
-		s.w.Header().Set("Content-Type", "text/event-stream")
-		s.w.Header().Set("Cache-Control", "no-cache")
-		s.w.Header().Set("Connection", "keep-alive")
-		s.w.Header().Set("X-Accel-Buffering", "no")
-		s.w.WriteHeader(http.StatusOK)
+// Open commits and flushes the SSE headers before the first application event.
+func (s *ToolsCallServerStream) Open(ctx context.Context) error {
+	return s.writer.WriteEvent(ctx, func(w io.Writer) error {
+		_, err := fmt.Fprintf(w, "id: %s\ndata:\n\n", mcpruntime.NewSessionID())
+		return err
 	})
 }
 
-// open commits and flushes the SSE headers before the first application event.
-func (s *ToolsCallServerStream) open() error {
-	s.initSSEHeaders()
-	if _, err := fmt.Fprintf(s.w, "id: %s\ndata:\n\n", mcpruntime.NewSessionID()); err != nil {
-		return err
-	}
-	return http.NewResponseController(s.w).Flush()
+// SendComment writes and flushes an SSE heartbeat comment.
+func (s *ToolsCallServerStream) SendComment(ctx context.Context, text string) error {
+	return s.writer.SendComment(ctx, text)
 }
 
 // Send sends a JSON-RPC notification to the client.
@@ -157,27 +151,19 @@ func (s *ToolsCallServerStream) sendError(ctx context.Context, id any, code json
 
 // sendSSEEvent sends a single SSE event.
 func (s *ToolsCallServerStream) sendSSEEvent(eventType string, v any) error {
-	s.initSSEHeaders()
-	if _, err := fmt.Fprint(s.w, "event: retry\nretry: 1000\ndata:\n\n"); err != nil {
-		return err
-	}
-	if err := loomhttp.WriteJSONSSEEvent(s.w, loomhttp.SSEMessage{Type: eventType}, v); err != nil {
-		loomtransport.Observe(s.r.Context(), loomtransport.Event{Kind: loomtransport.EventKindStreamFailure, Reason: loomtransport.ReasonStreamWriteFailed, Transport: loomtransport.TransportJSONRPC})
-		return err
-	}
-
-	if err := http.NewResponseController(s.w).Flush(); err != nil {
-		loomtransport.Observe(s.r.Context(), loomtransport.Event{Kind: loomtransport.EventKindStreamFailure, Reason: loomtransport.ReasonStreamFlushFailed, Transport: loomtransport.TransportJSONRPC})
-		return err
-	}
-	return nil
+	return s.writer.WriteEvent(s.r.Context(), func(w io.Writer) error {
+		if _, err := fmt.Fprint(w, "event: retry\nretry: 1000\ndata:\n\n"); err != nil {
+			return err
+		}
+		return loomhttp.WriteJSONSSEEvent(w, loomhttp.SSEMessage{Type: eventType}, v)
+	})
 }
 
 // EventsStreamServerStream implements the
 // mcpassistant.EventsStreamServerStream interface using Server-Sent Events.
 type EventsStreamServerStream struct {
-	// once ensures headers are written once
-	once sync.Once
+	// writer owns the serialized SSE response lifecycle
+	writer *loomhttp.SSEStreamWriter
 	// encoder is the SSE event encoder
 	encoder func(context.Context, http.ResponseWriter) loomhttp.Encoder
 	// w is the HTTP response writer
@@ -194,24 +180,17 @@ type EventsStreamServerStream struct {
 	mu sync.Mutex
 }
 
-// initSSEHeaders initializes the SSE response headers.
-func (s *EventsStreamServerStream) initSSEHeaders() {
-	s.once.Do(func() {
-		s.w.Header().Set("Content-Type", "text/event-stream")
-		s.w.Header().Set("Cache-Control", "no-cache")
-		s.w.Header().Set("Connection", "keep-alive")
-		s.w.Header().Set("X-Accel-Buffering", "no")
-		s.w.WriteHeader(http.StatusOK)
+// Open commits and flushes the SSE headers before the first application event.
+func (s *EventsStreamServerStream) Open(ctx context.Context) error {
+	return s.writer.WriteEvent(ctx, func(w io.Writer) error {
+		_, err := fmt.Fprintf(w, "id: %s\ndata:\n\n", mcpruntime.NewSessionID())
+		return err
 	})
 }
 
-// open commits and flushes the SSE headers before the first application event.
-func (s *EventsStreamServerStream) open() error {
-	s.initSSEHeaders()
-	if _, err := fmt.Fprintf(s.w, "id: %s\ndata:\n\n", mcpruntime.NewSessionID()); err != nil {
-		return err
-	}
-	return http.NewResponseController(s.w).Flush()
+// SendComment writes and flushes an SSE heartbeat comment.
+func (s *EventsStreamServerStream) SendComment(ctx context.Context, text string) error {
+	return s.writer.SendComment(ctx, text)
 }
 
 // Send sends a JSON-RPC notification to the client.
@@ -308,18 +287,10 @@ func (s *EventsStreamServerStream) sendError(ctx context.Context, id any, code j
 
 // sendSSEEvent sends a single SSE event.
 func (s *EventsStreamServerStream) sendSSEEvent(eventType string, v any) error {
-	s.initSSEHeaders()
-	if _, err := fmt.Fprint(s.w, "event: retry\nretry: 1000\ndata:\n\n"); err != nil {
-		return err
-	}
-	if err := loomhttp.WriteJSONSSEEvent(s.w, loomhttp.SSEMessage{Type: eventType}, v); err != nil {
-		loomtransport.Observe(s.r.Context(), loomtransport.Event{Kind: loomtransport.EventKindStreamFailure, Reason: loomtransport.ReasonStreamWriteFailed, Transport: loomtransport.TransportJSONRPC})
-		return err
-	}
-
-	if err := http.NewResponseController(s.w).Flush(); err != nil {
-		loomtransport.Observe(s.r.Context(), loomtransport.Event{Kind: loomtransport.EventKindStreamFailure, Reason: loomtransport.ReasonStreamFlushFailed, Transport: loomtransport.TransportJSONRPC})
-		return err
-	}
-	return nil
+	return s.writer.WriteEvent(s.r.Context(), func(w io.Writer) error {
+		if _, err := fmt.Fprint(w, "event: retry\nretry: 1000\ndata:\n\n"); err != nil {
+			return err
+		}
+		return loomhttp.WriteJSONSSEEvent(w, loomhttp.SSEMessage{Type: eventType}, v)
+	})
 }

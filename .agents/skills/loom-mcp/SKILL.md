@@ -149,7 +149,7 @@ Use this skill for `loom-mcp` work in this repo. Keep `AGENTS.md` short and keep
 ## Command Reminders
 
 ```bash
-go install github.com/CaliLuke/loom/cmd/loom@v1.5.1
+go install github.com/CaliLuke/loom/cmd/loom@v1.6.0
 loom version
 loom gen <module-import-path>/design
 loom example <module-import-path>/design

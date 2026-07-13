@@ -14,7 +14,7 @@ PROTOC := $(shell command -v protoc 2>/dev/null)
 PROTOC_GEN_GO := protoc-gen-go
 PROTOC_GEN_GO_GRPC := protoc-gen-go-grpc
 
-.PHONY: all build lint lint-pre-commit lint-install-hook test coverage-check itest ci tools ensure-golangci ensure-protoc-plugins protoc-check run-example example-gen loom-local loom-remote loom-status update-mcp-go-sdk verify-mcp-local regen-assistant-fixture regen-agent-feature-fixture verify-agent-feature-fixture
+.PHONY: all build lint lint-pre-commit lint-install-hook test coverage-check itest ci tools ensure-golangci ensure-protoc-plugins protoc-check run-example example-gen loom-local loom-remote loom-status update-mcp-go-sdk verify-mcp-local regen-quickstart regen-assistant-fixture regen-progressive-discovery-fixture regen-agent-feature-fixture verify-agent-feature-fixture
 
 all: build lint test
 
@@ -123,6 +123,9 @@ verify-mcp-local:
 	go test -C ./integration_tests/fixtures/assistant ./... -count=1
 	go test -C ./integration_tests/fixtures/agent_features ./... -count=1
 	go test ./integration_tests/framework -count=1
+
+regen-quickstart:
+	cd ./quickstart && GOWORK=off $(GO) run $(LOOM_CLI_PACKAGE) gen example.com/quickstart/design
 
 regen-assistant-fixture:
 	cd ./integration_tests/fixtures/assistant && $(GO) run $(LOOM_CLI_PACKAGE) gen example.com/assistant/design

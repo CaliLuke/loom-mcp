@@ -87,8 +87,9 @@ func TestGenerate_TransportConformance(t *testing.T) {
 		require.NotContains(t, rendered, `sendSSEEvent("response", `,
 			"final SSE responses must use the default \"message\" event so conformant clients process them")
 		require.Contains(t, rendered, `sendSSEEvent("message", `)
-		require.Contains(t, rendered, `fmt.Fprintf(s.w, "id: %s\ndata:\n\n", mcpruntime.NewSessionID())`)
-		require.Equal(t, 2, strings.Count(rendered, `fmt.Fprint(s.w, "event: retry\nretry: 1000\ndata:\n\n")`),
+		require.Contains(t, rendered, `return s.writer.WriteEvent(ctx, func(w io.Writer) error`)
+		require.Contains(t, rendered, `fmt.Fprintf(w, "id: %s\ndata:\n\n", mcpruntime.NewSessionID())`)
+		require.Equal(t, 2, strings.Count(rendered, `fmt.Fprint(w, "event: retry\nretry: 1000\ndata:\n\n")`),
 			"each generated endpoint stream must publish the reconnect delay")
 
 		serverFile := findGeneratedFile(t, files, filepath.Join(gcodegen.Gendir, "jsonrpc", "mcp_assistant", "server", "server.go"))

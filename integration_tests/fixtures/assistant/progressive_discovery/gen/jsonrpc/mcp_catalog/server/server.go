@@ -43,24 +43,32 @@ type Server struct {
 	// EventsStream is the handler for the events/stream method.
 	EventsStream func(context.Context, *http.Request, *jsonrpc.RawRequest, http.ResponseWriter) error
 
-	decoder    func(*http.Request) loomhttp.Decoder
-	encoder    func(context.Context, http.ResponseWriter) loomhttp.Encoder
-	errhandler func(context.Context, http.ResponseWriter, error)
+	decoder           func(*http.Request) loomhttp.Decoder
+	encoder           func(context.Context, http.ResponseWriter) loomhttp.Encoder
+	errhandler        func(context.Context, http.ResponseWriter, error)
+	streamWritePolicy loomhttp.StreamWritePolicy
 }
 
 // New creates a JSON-RPC server which loads HTTP requests and calls the
-// "mcp_catalog" service methods.
-func New(endpoints *mcpcatalog.Endpoints, mux loomhttp.Muxer, decoder func(*http.Request) loomhttp.Decoder, encoder func(context.Context, http.ResponseWriter) loomhttp.Encoder, errhandler func(context.Context, http.ResponseWriter, error)) *Server {
+// "mcp_catalog" service methods. An optional streamWritePolicy bounds each
+// server-stream network write and flush. Construct policies with
+// loomhttp.NewStreamWritePolicy.
+func New(endpoints *mcpcatalog.Endpoints, mux loomhttp.Muxer, decoder func(*http.Request) loomhttp.Decoder, encoder func(context.Context, http.ResponseWriter) loomhttp.Encoder, errhandler func(context.Context, http.ResponseWriter, error), streamWritePolicies ...loomhttp.StreamWritePolicy) *Server {
+	var streamWritePolicy loomhttp.StreamWritePolicy
+	if len(streamWritePolicies) > 0 {
+		streamWritePolicy = streamWritePolicies[0]
+	}
 	s := &Server{
-		EventsStream: NewEventsStreamHandler(endpoints.EventsStream, mux, decoder, encoder, errhandler),
-		Initialize:   NewInitializeHandler(endpoints.Initialize, mux, decoder, encoder, errhandler),
-		Methods:      []string{"initialize", "ping", "tools/list", "tools/call", "events/stream"},
-		Ping:         NewPingHandler(endpoints.Ping, mux, decoder, encoder, errhandler),
-		ToolsCall:    NewToolsCallHandler(endpoints.ToolsCall, mux, decoder, encoder, errhandler),
-		ToolsList:    NewToolsListHandler(endpoints.ToolsList, mux, decoder, encoder, errhandler),
-		decoder:      decoder,
-		encoder:      encoder,
-		errhandler:   errhandler,
+		EventsStream:      NewEventsStreamHandler(endpoints.EventsStream, mux, decoder, encoder, errhandler, streamWritePolicy),
+		Initialize:        NewInitializeHandler(endpoints.Initialize, mux, decoder, encoder, errhandler),
+		Methods:           []string{"initialize", "ping", "tools/list", "tools/call", "events/stream"},
+		Ping:              NewPingHandler(endpoints.Ping, mux, decoder, encoder, errhandler),
+		ToolsCall:         NewToolsCallHandler(endpoints.ToolsCall, mux, decoder, encoder, errhandler, streamWritePolicy),
+		ToolsList:         NewToolsListHandler(endpoints.ToolsList, mux, decoder, encoder, errhandler),
+		decoder:           decoder,
+		encoder:           encoder,
+		errhandler:        errhandler,
+		streamWritePolicy: streamWritePolicy,
 	}
 	// Mixed HTTP/SSE services negotiate transports through the internal dispatcher
 	s.Handler = http.NewCrossOriginProtection().Handler(http.HandlerFunc(s.serveHTTP))
@@ -255,7 +263,11 @@ func (s *Server) handleBatch(w http.ResponseWriter, r *http.Request) {
 		s.processBatchRequest(r.Context(), r, &req, writer)
 	}
 	if writer.written {
-		writer.Writer.Write([]byte{byte(0x5d)})
+		if _, err := writer.Writer.Write([]byte{byte(0x5d)}); err != nil {
+			loomtransport.RequestObserverFromContext(r.Context()).Fail(loomtransport.ReasonResponseWriteFailed)
+			s.errhandler(r.Context(), w, fmt.Errorf("failed to close JSON-RPC batch response: %w", err))
+			return
+		}
 	}
 }
 
@@ -312,9 +324,8 @@ func (s *Server) processRequest(ctx context.Context, r *http.Request, req *jsonr
 // batchWriter is a helper type that implements http.ResponseWriter for writing multiple JSON-RPC responses
 type batchWriter struct {
 	io.Writer
-	header     http.Header
-	statusCode int
-	written    bool
+	header  http.Header
+	written bool
 }
 
 func (rb *batchWriter) Header() http.Header {
@@ -323,19 +334,18 @@ func (rb *batchWriter) Header() http.Header {
 	}
 	return rb.header
 }
-func (rb *batchWriter) WriteHeader(statusCode int) {
-	if rb.written {
-		return
-	}
-	rb.statusCode = statusCode
+func (rb *batchWriter) WriteHeader(_ int) {
+	// JSON-RPC batch items do not control the outer HTTP status.
 }
 func (rb *batchWriter) Write(data []byte) (int, error) {
+	delimiter := byte(0x2c)
 	if !rb.written {
-		rb.written = true
-		rb.Writer.Write([]byte{byte(0x5b)})
-	} else {
-		rb.Writer.Write([]byte{byte(0x2c)})
+		delimiter = byte(0x5b)
 	}
+	if _, err := rb.Writer.Write([]byte{delimiter}); err != nil {
+		return 0, fmt.Errorf("write JSON-RPC batch delimiter: %w", err)
+	}
+	rb.written = true
 	return rb.Writer.Write(data)
 }
 
@@ -896,7 +906,7 @@ func NewToolsListHandler(endpoint loom.Endpoint, mux loomhttp.Muxer, decoder fun
 	}
 } // NewToolsCallHandler creates a JSON-RPC handler which calls the "mcp_catalog"
 // service "tools/call" endpoint.
-func NewToolsCallHandler(endpoint loom.Endpoint, mux loomhttp.Muxer, decoder func(*http.Request) loomhttp.Decoder, encoder func(context.Context, http.ResponseWriter) loomhttp.Encoder, errhandler func(context.Context, http.ResponseWriter, error)) func(ctx context.Context, r *http.Request, req *jsonrpc.RawRequest, w http.ResponseWriter) error {
+func NewToolsCallHandler(endpoint loom.Endpoint, mux loomhttp.Muxer, decoder func(*http.Request) loomhttp.Decoder, encoder func(context.Context, http.ResponseWriter) loomhttp.Encoder, errhandler func(context.Context, http.ResponseWriter, error), streamWritePolicy loomhttp.StreamWritePolicy) func(ctx context.Context, r *http.Request, req *jsonrpc.RawRequest, w http.ResponseWriter) error {
 	decodeParams := DecodeToolsCallRequest(mux, decoder)
 	return func(ctx context.Context, r *http.Request, req *jsonrpc.RawRequest, w http.ResponseWriter) error {
 		ctx = context.WithValue(ctx, loom.MethodKey, "tools/call")
@@ -908,6 +918,7 @@ func NewToolsCallHandler(endpoint loom.Endpoint, mux loomhttp.Muxer, decoder fun
 			requestHasID: req.HasID,
 			requestID:    req.ID,
 			w:            w,
+			writer:       loomhttp.NewSSEStreamWriter(w, r.Context(), loomtransport.TransportJSONRPC, streamWritePolicy),
 		}
 		params, err := decodeParams(r, req)
 		if err != nil {
@@ -949,7 +960,7 @@ func NewToolsCallHandler(endpoint loom.Endpoint, mux loomhttp.Muxer, decoder fun
 	}
 } // NewEventsStreamHandler creates a JSON-RPC handler which calls the
 // "mcp_catalog" service "events/stream" endpoint.
-func NewEventsStreamHandler(endpoint loom.Endpoint, mux loomhttp.Muxer, decoder func(*http.Request) loomhttp.Decoder, encoder func(context.Context, http.ResponseWriter) loomhttp.Encoder, errhandler func(context.Context, http.ResponseWriter, error)) func(ctx context.Context, r *http.Request, req *jsonrpc.RawRequest, w http.ResponseWriter) error {
+func NewEventsStreamHandler(endpoint loom.Endpoint, mux loomhttp.Muxer, decoder func(*http.Request) loomhttp.Decoder, encoder func(context.Context, http.ResponseWriter) loomhttp.Encoder, errhandler func(context.Context, http.ResponseWriter, error), streamWritePolicy loomhttp.StreamWritePolicy) func(ctx context.Context, r *http.Request, req *jsonrpc.RawRequest, w http.ResponseWriter) error {
 	return func(ctx context.Context, r *http.Request, req *jsonrpc.RawRequest, w http.ResponseWriter) error {
 		ctx = context.WithValue(ctx, loom.MethodKey, "events/stream")
 		ctx = context.WithValue(ctx, loom.ServiceKey, "mcp_catalog")
@@ -960,9 +971,10 @@ func NewEventsStreamHandler(endpoint loom.Endpoint, mux loomhttp.Muxer, decoder 
 			requestHasID: req.HasID,
 			requestID:    req.ID,
 			w:            w,
+			writer:       loomhttp.NewSSEStreamWriter(w, r.Context(), loomtransport.TransportJSONRPC, streamWritePolicy),
 		}
 		if r.Method == http.MethodGet && req.Method == "events/stream" {
-			if err := strm.open(); err != nil {
+			if err := strm.Open(r.Context()); err != nil {
 				return err
 			}
 		}

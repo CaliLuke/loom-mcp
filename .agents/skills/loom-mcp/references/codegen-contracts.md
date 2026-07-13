@@ -108,6 +108,10 @@ Use this file when editing DSL, generators, generated helpers, or MCP codegen be
   Streaming handlers may flush into their private buffer, but only their final
   JSON-RPC response frame may be appended to the batch array; SSE retry and
   notification frames must never reach the JSON body.
+- On Loom v1.6 and later, MCP reconnect priming and retry frames must be written
+  through the generated `loomhttp.SSEStreamWriter` callback. Do not bypass the
+  shared writer with direct `http.ResponseWriter` writes; doing so loses its
+  serialization, context cancellation, write policy, and observability.
 - Generated successful empty-result handlers must encode `result: {}`, never
   omit the JSON-RPC `result` member by passing a nil body.
 - MCP intermediate SSE endpoints explicitly declare the namespaced

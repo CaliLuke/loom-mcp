@@ -998,11 +998,16 @@ func applyMCPJSONRPCStreamFinalEventName(files []*codegen.File) error {
 // applyMCPJSONRPCSSEReconnectHints adds the MCP streamable HTTP reconnect
 // frames that the upstream JSON-RPC endpoint stream generator does not emit.
 func applyMCPJSONRPCSSEReconnectHints(files []*codegen.File) error {
-	const openReturn = `return http.NewResponseController(s.w).Flush()`
-	const primedOpenReturn = "if _, err := fmt.Fprintf(s.w, \"id: %s\\ndata:\\n\\n\", mcpruntime.NewSessionID()); err != nil {\n" +
+	const legacyOpenReturn = `return http.NewResponseController(s.w).Flush()`
+	const legacyPrimedOpenReturn = "if _, err := fmt.Fprintf(s.w, \"id: %s\\ndata:\\n\\n\", mcpruntime.NewSessionID()); err != nil {\n" +
 		"\t\treturn err\n" +
 		"\t}\n" +
 		"\treturn http.NewResponseController(s.w).Flush()"
+	const writerOpenReturn = `return s.writer.Open(ctx)`
+	const writerPrimedOpenReturn = "return s.writer.WriteEvent(ctx, func(w io.Writer) error {\n" +
+		"\t\t_, err := fmt.Fprintf(w, \"id: %s\\ndata:\\n\\n\", mcpruntime.NewSessionID())\n" +
+		"\t\treturn err\n" +
+		"\t})"
 	for _, file := range files {
 		if file == nil || filepath.Base(filepath.Dir(filepath.ToSlash(file.Path))) != "server" || filepath.Base(file.Path) != "stream.go" {
 			continue
@@ -1019,7 +1024,9 @@ func applyMCPJSONRPCSSEReconnectHints(files []*codegen.File) error {
 				continue
 			}
 
-			next, count := rewriteGeneratedMethodReturn(source, "open", openReturn, primedOpenReturn)
+			next, count := rewriteGeneratedMethodReturn(source, "open", legacyOpenReturn, legacyPrimedOpenReturn)
+			openCount += count
+			next, count = rewriteGeneratedMethodReturn(next, "Open", writerOpenReturn, writerPrimedOpenReturn)
 			openCount += count
 
 			match := sseSendEventPattern.FindStringSubmatchIndex(next)
@@ -1033,6 +1040,17 @@ func applyMCPJSONRPCSSEReconnectHints(files []*codegen.File) error {
 						"\t}\n"
 					next = next[:insertAt] + retryWrite + next[insertAt:]
 					terminalCount++
+				} else {
+					const writerEvent = "return loomhttp.WriteJSONSSEEvent(w,"
+					relWriterEvent := strings.Index(next[match[0]:], writerEvent)
+					if relWriterEvent >= 0 {
+						insertAt := match[0] + relWriterEvent
+						retryWrite := "\t\tif _, err := fmt.Fprint(w, \"event: retry\\nretry: 1000\\ndata:\\n\\n\"); err != nil {\n" +
+							"\t\t\treturn err\n" +
+							"\t\t}\n"
+						next = next[:insertAt] + retryWrite + next[insertAt:]
+						terminalCount++
+					}
 				}
 			}
 

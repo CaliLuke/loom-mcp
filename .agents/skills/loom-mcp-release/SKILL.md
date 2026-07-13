@@ -12,6 +12,8 @@ Use this skill when releasing `github.com/CaliLuke/loom-mcp`. Keep the workflow 
 - Never bypass hooks. If commit-time hooks fail, fix the underlying problem and retry.
 - Use `make loom-remote` before release verification and before the release commit so the repo is pinned to the published `github.com/CaliLuke/loom` dependency, not a local checkout.
 - If the release changed assistant fixture DSL or generated MCP output, run `make regen-assistant-fixture` before verification.
+- After a Loom dependency bump, run `make regen-quickstart` so its generated
+  version and code stay aligned with the updated module pin.
 - If the release changed user-facing DSL, codegen, runtime, or release workflow behavior, update the repo docs in `docs/`, any release-facing root docs, and the relevant repo-local skills in `.agents/skills/` before tagging.
 - Do not hand-edit generated `gen/` files.
 - Do not call the release published until `main`, the tag, and the GitHub Release object all exist remotely.
@@ -28,6 +30,7 @@ Use this skill when releasing `github.com/CaliLuke/loom-mcp`. Keep the workflow 
 2. Switch to remote Loom mode for release parity:
    - `make loom-remote`
 3. Regenerate only when required by the change:
+   - `make regen-quickstart` after a Loom dependency bump
    - `make regen-assistant-fixture` for assistant fixture DSL changes
    - any normal design/codegen regeneration already required by the change itself
 4. Update docs whenever shipped behavior or release workflow guidance changed:

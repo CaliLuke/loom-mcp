@@ -27,6 +27,7 @@ func TestLoomVersionReferencesStayAligned(t *testing.T) {
 		"quickstart/go.mod",
 		"integration_tests/fixtures/assistant/go.mod",
 		"integration_tests/fixtures/agent_features/go.mod",
+		"integration_tests/framework/mcp_dynamic_prompt_example_test.go",
 	} {
 		data := readRepoFile(t, repoRoot, name)
 		match := moduleVersionPattern.FindStringSubmatch(string(data))
