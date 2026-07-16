@@ -1,0 +1,4 @@
+interface:
+  display_name: "Loom Compatibility Release"
+  short_description: "Validate and release Loom with loom-mcp"
+  default_prompt: "Use $loom-compatibility-release to validate and publish compatible Loom and loom-mcp releases."

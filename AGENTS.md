@@ -92,6 +92,7 @@ Within each section, place main logic first and helpers last.
 ## Repo Skills
 
 - Use `.agents/skills/loom-mcp/SKILL.md` for `loom-mcp` runtime, codegen, MCP, planner, and agent-as-tool guidance.
+- Use `.agents/skills/loom-compatibility-release/SKILL.md` before releasing a Loom change that may affect loom-mcp, or when sequencing Loom and loom-mcp releases together.
 - For any new MCP protocol feature or spec catch-up work, use `.agents/skills/new-mcp-feature-development/SKILL.md` as the default workflow. MCP feature work must start with a real client-vs-framework validation test and proceed red-green until fully green.
 - Use `.agents/skills/loom-mcp-release/SKILL.md` when cutting, tagging, pushing, or verifying a `loom-mcp` release from finished code.
 - Use `.agents/skills/mcp-tool-design/SKILL.md` when shaping MCP-facing tool contracts.
