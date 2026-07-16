@@ -18,7 +18,6 @@ import (
 	catalog "example.com/assistant/progressive_discovery/gen/catalog"
 	loomhttp "github.com/CaliLuke/loom/http"
 	"github.com/CaliLuke/loom/jsonrpc"
-	"github.com/google/uuid"
 )
 
 // BuildLookupRequest instantiates a HTTP request object with method and path
@@ -51,7 +50,10 @@ func EncodeLookupRequest(encoder func(*http.Request) loomhttp.Encoder) func(*htt
 			Params:  b,
 		}
 		// No ID field in payload - always send as a request with generated ID
-		id := uuid.New().String()
+		id, err := jsonrpc.NewRequestID()
+		if err != nil {
+			return loomhttp.ErrEncodingError("catalog", "lookup", err)
+		}
 		body.ID = id
 		if err := encoder(req).Encode(&body); err != nil {
 			return loomhttp.ErrEncodingError("catalog", "lookup", err)
@@ -140,7 +142,10 @@ func EncodeProjectedLookupRequest(encoder func(*http.Request) loomhttp.Encoder) 
 			Params:  b,
 		}
 		// No ID field in payload - always send as a request with generated ID
-		id := uuid.New().String()
+		id, err := jsonrpc.NewRequestID()
+		if err != nil {
+			return loomhttp.ErrEncodingError("catalog", "projected_lookup", err)
+		}
 		body.ID = id
 		if err := encoder(req).Encode(&body); err != nil {
 			return loomhttp.ErrEncodingError("catalog", "projected_lookup", err)

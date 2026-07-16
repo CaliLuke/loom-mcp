@@ -3,7 +3,7 @@ module example.com/agentfeatures
 go 1.26.1
 
 require (
-	github.com/CaliLuke/loom v1.6.2
+	github.com/CaliLuke/loom v1.7.0
 	github.com/CaliLuke/loom-mcp v1.1.3
 	github.com/stretchr/testify v1.11.1
 )
@@ -24,6 +24,7 @@ require (
 	github.com/dimfeld/httppath v0.0.0-20170720192232-ee938bf73598 // indirect
 	github.com/facebookgo/clock v0.0.0-20150410010913-600d898af40a // indirect
 	github.com/felixge/httpsnoop v1.1.0 // indirect
+	github.com/go-chi/chi/v5 v5.3.1 // indirect
 	github.com/go-logr/logr v1.4.3 // indirect
 	github.com/go-logr/stdr v1.2.2 // indirect
 	github.com/gogo/protobuf v1.3.2 // indirect
@@ -48,6 +49,7 @@ require (
 	github.com/tidwall/match v1.2.0 // indirect
 	github.com/tidwall/pretty v1.2.1 // indirect
 	github.com/tidwall/sjson v1.2.5 // indirect
+	github.com/tmaxmax/go-sse v0.11.0 // indirect
 	go.opentelemetry.io/auto/sdk v1.2.1 // indirect
 	go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp v0.69.0 // indirect
 	go.opentelemetry.io/otel v1.44.0 // indirect
@@ -74,3 +76,5 @@ require (
 )
 
 replace github.com/CaliLuke/loom-mcp => ../../..
+
+replace github.com/CaliLuke/loom => /Users/luca/Documents/code/loom-mono/loom-mcp/../loom

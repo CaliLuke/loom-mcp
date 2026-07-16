@@ -5,6 +5,7 @@ import (
 	"net/http/httptest"
 	"sync"
 	"testing"
+	"time"
 
 	mcpassistant "example.com/assistant/gen/mcp_assistant"
 	loomtransport "github.com/CaliLuke/loom/observability/transport"
@@ -12,14 +13,22 @@ import (
 )
 
 type recordingTransportObserver struct {
-	mu     sync.Mutex
-	events []loomtransport.Event
+	mu           sync.Mutex
+	terminalOnce sync.Once
+	events       []loomtransport.Event
+	terminal     chan struct{}
 }
 
 func (o *recordingTransportObserver) ObserveEvent(_ context.Context, event loomtransport.Event) {
 	o.mu.Lock()
-	defer o.mu.Unlock()
 	o.events = append(o.events, event)
+	o.mu.Unlock()
+
+	if event.Kind == loomtransport.EventKindRequestFinish || event.Kind == loomtransport.EventKindRequestFailure {
+		o.terminalOnce.Do(func() {
+			close(o.terminal)
+		})
+	}
 }
 
 func (o *recordingTransportObserver) snapshot() []loomtransport.Event {
@@ -28,8 +37,17 @@ func (o *recordingTransportObserver) snapshot() []loomtransport.Event {
 	return append([]loomtransport.Event(nil), o.events...)
 }
 
+func (o *recordingTransportObserver) waitForTerminal(t *testing.T) {
+	t.Helper()
+	select {
+	case <-o.terminal:
+	case <-time.After(time.Second):
+		require.FailNow(t, "timed out waiting for terminal transport observer event")
+	}
+}
+
 func TestGeneratedSDKServerTransportObserverOption(t *testing.T) {
-	observer := new(recordingTransportObserver)
+	observer := &recordingTransportObserver{terminal: make(chan struct{})}
 	sdkServer, err := mcpassistant.NewSDKServer(NewAssistant(), withTestRuntimeCORS(t, &mcpassistant.SDKServerOptions{
 		PromptProvider:    promptProvider{},
 		TransportObserver: observer,
@@ -40,6 +58,7 @@ func TestGeneratedSDKServerTransportObserverOption(t *testing.T) {
 
 	response := postSDKInitializeWithOrigin(t, server.URL, server.URL)
 	require.Less(t, response.StatusCode, 400)
+	observer.waitForTerminal(t)
 
 	events := observer.snapshot()
 	require.NotEmpty(t, events)

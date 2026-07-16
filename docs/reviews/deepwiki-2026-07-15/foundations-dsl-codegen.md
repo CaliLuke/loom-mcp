@@ -63,7 +63,7 @@ Code evidence: directories `design/`, `dsl/`, `expr/`, `codegen/`, `runtime/`, `
 | MATCH | P3 | high | Directory responsibilities, design-first ownership, race-enabled tests, 62% coverage gate, golden codegen tests, and generated-fixture diff enforcement are accurate. |
 | DOC-GAP | P2 | high | DeepWiki usefully includes `features/`, but the primary repository map in `README.md:22-30` omits it even though it contains model, Mongo, policy, prompt, session, runlog, and Pulse adapters. Add it to “What lives here”; `.agents/skills/loom-mcp/references/repo-map.md` also omits it. |
 | DEEPWIKI-INACCURACY | P3 | high | Its final architecture diagram shortens owners to nonexistent `runtime/runtime.go` and `runtime/planner.go`. Current owners are under `runtime/agent/runtime/` and `runtime/agent/planner/`; local repo-map routing is correct. |
-| MATCH | P3 | high | `make loom-local`, `make loom-remote`, and `make loom-status` accurately reflect `scripts/loom_core_mode.sh:27-86`; remote mode pins `v1.6.2`. |
+| MATCH | P3 | high | `make loom-local`, `make loom-remote`, and `make loom-status` accurately reflect `scripts/loom_core_mode.sh:27-86`; remote mode pins `v1.7.0`. |
 
 ## 2. DSL & Design Layer
 

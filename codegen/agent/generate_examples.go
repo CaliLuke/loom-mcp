@@ -295,7 +295,6 @@ func emitCmdMain(svc *ServiceAgentsData, moduleBase string, files []*codegen.Fil
 	}
 
 	if file != nil {
-		//nolint:staticcheck // Existing example files are still rewritten through the legacy SectionTemplates field.
 		file.SectionTemplates = []*codegen.SectionTemplate{
 			codegen.Header("Example main for "+svc.Service.Name, "main", imports),
 			agentSection,

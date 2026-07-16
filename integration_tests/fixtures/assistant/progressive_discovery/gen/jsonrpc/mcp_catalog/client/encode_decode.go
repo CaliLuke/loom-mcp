@@ -18,7 +18,6 @@ import (
 	mcpcatalog "example.com/assistant/progressive_discovery/gen/mcp_catalog"
 	loomhttp "github.com/CaliLuke/loom/http"
 	"github.com/CaliLuke/loom/jsonrpc"
-	"github.com/google/uuid"
 )
 
 // BuildInitializeRequest instantiates a HTTP request object with method and
@@ -51,7 +50,10 @@ func EncodeInitializeRequest(encoder func(*http.Request) loomhttp.Encoder) func(
 			Params:  b,
 		}
 		// No ID field in payload - always send as a request with generated ID
-		id := uuid.New().String()
+		id, err := jsonrpc.NewRequestID()
+		if err != nil {
+			return loomhttp.ErrEncodingError("mcp_catalog", "initialize", err)
+		}
 		body.ID = id
 		if err := encoder(req).Encode(&body); err != nil {
 			return loomhttp.ErrEncodingError("mcp_catalog", "initialize", err)
@@ -205,7 +207,10 @@ func EncodeToolsListRequest(encoder func(*http.Request) loomhttp.Encoder) func(*
 			Params:  b,
 		}
 		// No ID field in payload - always send as a request with generated ID
-		id := uuid.New().String()
+		id, err := jsonrpc.NewRequestID()
+		if err != nil {
+			return loomhttp.ErrEncodingError("mcp_catalog", "tools/list", err)
+		}
 		body.ID = id
 		if err := encoder(req).Encode(&body); err != nil {
 			return loomhttp.ErrEncodingError("mcp_catalog", "tools/list", err)
@@ -294,7 +299,10 @@ func EncodeToolsCallRequest(encoder func(*http.Request) loomhttp.Encoder) func(*
 			Params:  b,
 		}
 		// No ID field in payload - always send as a request with generated ID
-		id := uuid.New().String()
+		id, err := jsonrpc.NewRequestID()
+		if err != nil {
+			return loomhttp.ErrEncodingError("mcp_catalog", "tools/call", err)
+		}
 		body.ID = id
 		if err := encoder(req).Encode(&body); err != nil {
 			return loomhttp.ErrEncodingError("mcp_catalog", "tools/call", err)
@@ -667,7 +675,10 @@ func unmarshalContentItemResponseBodyToMcpcatalogContentItem(v *ContentItemRespo
 // service ping JSON-RPC method.
 func EncodePingRequest(encoder func(*http.Request) loomhttp.Encoder) func(*http.Request, any) error {
 	return func(req *http.Request, v any) error {
-		id := uuid.New().String()
+		id, err := jsonrpc.NewRequestID()
+		if err != nil {
+			return loomhttp.ErrEncodingError("mcp_catalog", "ping", err)
+		}
 		body := &jsonrpc.Request{
 			ID:      id,
 			JSONRPC: "2.0",
@@ -682,7 +693,10 @@ func EncodePingRequest(encoder func(*http.Request) loomhttp.Encoder) func(*http.
 // mcp_catalog service events/stream JSON-RPC method.
 func EncodeEventsStreamRequest(encoder func(*http.Request) loomhttp.Encoder) func(*http.Request, any) error {
 	return func(req *http.Request, v any) error {
-		id := uuid.New().String()
+		id, err := jsonrpc.NewRequestID()
+		if err != nil {
+			return loomhttp.ErrEncodingError("mcp_catalog", "events/stream", err)
+		}
 		body := &jsonrpc.Request{
 			ID:      id,
 			JSONRPC: "2.0",

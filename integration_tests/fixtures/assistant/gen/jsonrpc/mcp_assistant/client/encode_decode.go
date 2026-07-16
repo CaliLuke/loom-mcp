@@ -17,7 +17,6 @@ import (
 	mcpassistant "example.com/assistant/gen/mcp_assistant"
 	loomhttp "github.com/CaliLuke/loom/http"
 	"github.com/CaliLuke/loom/jsonrpc"
-	"github.com/google/uuid"
 )
 
 // BuildInitializeRequest instantiates a HTTP request object with method and
@@ -50,7 +49,10 @@ func EncodeInitializeRequest(encoder func(*http.Request) loomhttp.Encoder) func(
 			Params:  b,
 		}
 		// No ID field in payload - always send as a request with generated ID
-		id := uuid.New().String()
+		id, err := jsonrpc.NewRequestID()
+		if err != nil {
+			return loomhttp.ErrEncodingError("mcp_assistant", "initialize", err)
+		}
 		body.ID = id
 		if err := encoder(req).Encode(&body); err != nil {
 			return loomhttp.ErrEncodingError("mcp_assistant", "initialize", err)
@@ -204,7 +206,10 @@ func EncodeToolsListRequest(encoder func(*http.Request) loomhttp.Encoder) func(*
 			Params:  b,
 		}
 		// No ID field in payload - always send as a request with generated ID
-		id := uuid.New().String()
+		id, err := jsonrpc.NewRequestID()
+		if err != nil {
+			return loomhttp.ErrEncodingError("mcp_assistant", "tools/list", err)
+		}
 		body.ID = id
 		if err := encoder(req).Encode(&body); err != nil {
 			return loomhttp.ErrEncodingError("mcp_assistant", "tools/list", err)
@@ -293,7 +298,10 @@ func EncodeToolsCallRequest(encoder func(*http.Request) loomhttp.Encoder) func(*
 			Params:  b,
 		}
 		// No ID field in payload - always send as a request with generated ID
-		id := uuid.New().String()
+		id, err := jsonrpc.NewRequestID()
+		if err != nil {
+			return loomhttp.ErrEncodingError("mcp_assistant", "tools/call", err)
+		}
 		body.ID = id
 		if err := encoder(req).Encode(&body); err != nil {
 			return loomhttp.ErrEncodingError("mcp_assistant", "tools/call", err)
@@ -382,7 +390,10 @@ func EncodeResourcesListRequest(encoder func(*http.Request) loomhttp.Encoder) fu
 			Params:  b,
 		}
 		// No ID field in payload - always send as a request with generated ID
-		id := uuid.New().String()
+		id, err := jsonrpc.NewRequestID()
+		if err != nil {
+			return loomhttp.ErrEncodingError("mcp_assistant", "resources/list", err)
+		}
 		body.ID = id
 		if err := encoder(req).Encode(&body); err != nil {
 			return loomhttp.ErrEncodingError("mcp_assistant", "resources/list", err)
@@ -471,7 +482,10 @@ func EncodeResourcesReadRequest(encoder func(*http.Request) loomhttp.Encoder) fu
 			Params:  b,
 		}
 		// No ID field in payload - always send as a request with generated ID
-		id := uuid.New().String()
+		id, err := jsonrpc.NewRequestID()
+		if err != nil {
+			return loomhttp.ErrEncodingError("mcp_assistant", "resources/read", err)
+		}
 		body.ID = id
 		if err := encoder(req).Encode(&body); err != nil {
 			return loomhttp.ErrEncodingError("mcp_assistant", "resources/read", err)
@@ -561,7 +575,10 @@ func EncodeResourcesSubscribeRequest(encoder func(*http.Request) loomhttp.Encode
 			Params:  b,
 		}
 		// No ID field in payload - always send as a request with generated ID
-		id := uuid.New().String()
+		id, err := jsonrpc.NewRequestID()
+		if err != nil {
+			return loomhttp.ErrEncodingError("mcp_assistant", "resources/subscribe", err)
+		}
 		body.ID = id
 		if err := encoder(req).Encode(&body); err != nil {
 			return loomhttp.ErrEncodingError("mcp_assistant", "resources/subscribe", err)
@@ -638,7 +655,10 @@ func EncodeResourcesUnsubscribeRequest(encoder func(*http.Request) loomhttp.Enco
 			Params:  b,
 		}
 		// No ID field in payload - always send as a request with generated ID
-		id := uuid.New().String()
+		id, err := jsonrpc.NewRequestID()
+		if err != nil {
+			return loomhttp.ErrEncodingError("mcp_assistant", "resources/unsubscribe", err)
+		}
 		body.ID = id
 		if err := encoder(req).Encode(&body); err != nil {
 			return loomhttp.ErrEncodingError("mcp_assistant", "resources/unsubscribe", err)
@@ -715,7 +735,10 @@ func EncodePromptsListRequest(encoder func(*http.Request) loomhttp.Encoder) func
 			Params:  b,
 		}
 		// No ID field in payload - always send as a request with generated ID
-		id := uuid.New().String()
+		id, err := jsonrpc.NewRequestID()
+		if err != nil {
+			return loomhttp.ErrEncodingError("mcp_assistant", "prompts/list", err)
+		}
 		body.ID = id
 		if err := encoder(req).Encode(&body); err != nil {
 			return loomhttp.ErrEncodingError("mcp_assistant", "prompts/list", err)
@@ -804,7 +827,10 @@ func EncodePromptsGetRequest(encoder func(*http.Request) loomhttp.Encoder) func(
 			Params:  b,
 		}
 		// No ID field in payload - always send as a request with generated ID
-		id := uuid.New().String()
+		id, err := jsonrpc.NewRequestID()
+		if err != nil {
+			return loomhttp.ErrEncodingError("mcp_assistant", "prompts/get", err)
+		}
 		body.ID = id
 		if err := encoder(req).Encode(&body); err != nil {
 			return loomhttp.ErrEncodingError("mcp_assistant", "prompts/get", err)
@@ -894,7 +920,10 @@ func EncodeNotifyStatusUpdateRequest(encoder func(*http.Request) loomhttp.Encode
 			Params:  b,
 		}
 		// No ID field in payload - always send as a request with generated ID
-		id := uuid.New().String()
+		id, err := jsonrpc.NewRequestID()
+		if err != nil {
+			return loomhttp.ErrEncodingError("mcp_assistant", "notify_status_update", err)
+		}
 		body.ID = id
 		if err := encoder(req).Encode(&body); err != nil {
 			return loomhttp.ErrEncodingError("mcp_assistant", "notify_status_update", err)
@@ -1383,7 +1412,10 @@ func unmarshalMessageContentResponseBodyToMcpassistantMessageContent(v *MessageC
 // service ping JSON-RPC method.
 func EncodePingRequest(encoder func(*http.Request) loomhttp.Encoder) func(*http.Request, any) error {
 	return func(req *http.Request, v any) error {
-		id := uuid.New().String()
+		id, err := jsonrpc.NewRequestID()
+		if err != nil {
+			return loomhttp.ErrEncodingError("mcp_assistant", "ping", err)
+		}
 		body := &jsonrpc.Request{
 			ID:      id,
 			JSONRPC: "2.0",
@@ -1398,7 +1430,10 @@ func EncodePingRequest(encoder func(*http.Request) loomhttp.Encoder) func(*http.
 // mcp_assistant service events/stream JSON-RPC method.
 func EncodeEventsStreamRequest(encoder func(*http.Request) loomhttp.Encoder) func(*http.Request, any) error {
 	return func(req *http.Request, v any) error {
-		id := uuid.New().String()
+		id, err := jsonrpc.NewRequestID()
+		if err != nil {
+			return loomhttp.ErrEncodingError("mcp_assistant", "events/stream", err)
+		}
 		body := &jsonrpc.Request{
 			ID:      id,
 			JSONRPC: "2.0",

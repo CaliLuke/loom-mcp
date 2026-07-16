@@ -17,7 +17,6 @@ import (
 	assistant "example.com/assistant/gen/assistant"
 	loomhttp "github.com/CaliLuke/loom/http"
 	"github.com/CaliLuke/loom/jsonrpc"
-	"github.com/google/uuid"
 )
 
 // BuildListDocumentsRequest instantiates a HTTP request object with method and
@@ -177,7 +176,10 @@ func EncodeConversationHistoryRequest(encoder func(*http.Request) loomhttp.Encod
 			Params:  b,
 		}
 		// No ID field in payload - always send as a request with generated ID
-		id := uuid.New().String()
+		id, err := jsonrpc.NewRequestID()
+		if err != nil {
+			return loomhttp.ErrEncodingError("assistant", "conversation_history", err)
+		}
 		body.ID = id
 		if err := encoder(req).Encode(&body); err != nil {
 			return loomhttp.ErrEncodingError("assistant", "conversation_history", err)
@@ -327,7 +329,10 @@ func EncodeGeneratePromptsRequest(encoder func(*http.Request) loomhttp.Encoder) 
 			Params:  b,
 		}
 		// No ID field in payload - always send as a request with generated ID
-		id := uuid.New().String()
+		id, err := jsonrpc.NewRequestID()
+		if err != nil {
+			return loomhttp.ErrEncodingError("assistant", "generate_prompts", err)
+		}
 		body.ID = id
 		if err := encoder(req).Encode(&body); err != nil {
 			return loomhttp.ErrEncodingError("assistant", "generate_prompts", err)
@@ -417,7 +422,10 @@ func EncodeBuildFigmaImplementationPromptRequest(encoder func(*http.Request) loo
 			Params:  b,
 		}
 		// No ID field in payload - always send as a request with generated ID
-		id := uuid.New().String()
+		id, err := jsonrpc.NewRequestID()
+		if err != nil {
+			return loomhttp.ErrEncodingError("assistant", "build_figma_implementation_prompt", err)
+		}
 		body.ID = id
 		if err := encoder(req).Encode(&body); err != nil {
 			return loomhttp.ErrEncodingError("assistant", "build_figma_implementation_prompt", err)
@@ -507,7 +515,10 @@ func EncodeSendNotificationRequest(encoder func(*http.Request) loomhttp.Encoder)
 			Params:  b,
 		}
 		// No ID field in payload - always send as a request with generated ID
-		id := uuid.New().String()
+		id, err := jsonrpc.NewRequestID()
+		if err != nil {
+			return loomhttp.ErrEncodingError("assistant", "send_notification", err)
+		}
 		body.ID = id
 		if err := encoder(req).Encode(&body); err != nil {
 			return loomhttp.ErrEncodingError("assistant", "send_notification", err)
@@ -583,7 +594,10 @@ func EncodeAnalyzeSentimentRequest(encoder func(*http.Request) loomhttp.Encoder)
 			Params:  b,
 		}
 		// No ID field in payload - always send as a request with generated ID
-		id := uuid.New().String()
+		id, err := jsonrpc.NewRequestID()
+		if err != nil {
+			return loomhttp.ErrEncodingError("assistant", "analyze_sentiment", err)
+		}
 		body.ID = id
 		if err := encoder(req).Encode(&body); err != nil {
 			return loomhttp.ErrEncodingError("assistant", "analyze_sentiment", err)
@@ -668,7 +682,10 @@ func EncodeExtractKeywordsRequest(encoder func(*http.Request) loomhttp.Encoder) 
 			Params:  b,
 		}
 		// No ID field in payload - always send as a request with generated ID
-		id := uuid.New().String()
+		id, err := jsonrpc.NewRequestID()
+		if err != nil {
+			return loomhttp.ErrEncodingError("assistant", "extract_keywords", err)
+		}
 		body.ID = id
 		if err := encoder(req).Encode(&body); err != nil {
 			return loomhttp.ErrEncodingError("assistant", "extract_keywords", err)
@@ -753,7 +770,10 @@ func EncodeSummarizeTextRequest(encoder func(*http.Request) loomhttp.Encoder) fu
 			Params:  b,
 		}
 		// No ID field in payload - always send as a request with generated ID
-		id := uuid.New().String()
+		id, err := jsonrpc.NewRequestID()
+		if err != nil {
+			return loomhttp.ErrEncodingError("assistant", "summarize_text", err)
+		}
 		body.ID = id
 		if err := encoder(req).Encode(&body); err != nil {
 			return loomhttp.ErrEncodingError("assistant", "summarize_text", err)
@@ -838,7 +858,10 @@ func EncodeSearchRequest(encoder func(*http.Request) loomhttp.Encoder) func(*htt
 			Params:  b,
 		}
 		// No ID field in payload - always send as a request with generated ID
-		id := uuid.New().String()
+		id, err := jsonrpc.NewRequestID()
+		if err != nil {
+			return loomhttp.ErrEncodingError("assistant", "search", err)
+		}
 		body.ID = id
 		if err := encoder(req).Encode(&body); err != nil {
 			return loomhttp.ErrEncodingError("assistant", "search", err)
@@ -923,7 +946,10 @@ func EncodeSearchRecordsRequest(encoder func(*http.Request) loomhttp.Encoder) fu
 			Params:  b,
 		}
 		// No ID field in payload - always send as a request with generated ID
-		id := uuid.New().String()
+		id, err := jsonrpc.NewRequestID()
+		if err != nil {
+			return loomhttp.ErrEncodingError("assistant", "search_records", err)
+		}
 		body.ID = id
 		if err := encoder(req).Encode(&body); err != nil {
 			return loomhttp.ErrEncodingError("assistant", "search_records", err)
@@ -1008,7 +1034,10 @@ func EncodeExecuteCodeRequest(encoder func(*http.Request) loomhttp.Encoder) func
 			Params:  b,
 		}
 		// No ID field in payload - always send as a request with generated ID
-		id := uuid.New().String()
+		id, err := jsonrpc.NewRequestID()
+		if err != nil {
+			return loomhttp.ErrEncodingError("assistant", "execute_code", err)
+		}
 		body.ID = id
 		if err := encoder(req).Encode(&body); err != nil {
 			return loomhttp.ErrEncodingError("assistant", "execute_code", err)
@@ -1093,7 +1122,10 @@ func EncodeProcessBatchRequest(encoder func(*http.Request) loomhttp.Encoder) fun
 			Params:  b,
 		}
 		// No ID field in payload - always send as a request with generated ID
-		id := uuid.New().String()
+		id, err := jsonrpc.NewRequestID()
+		if err != nil {
+			return loomhttp.ErrEncodingError("assistant", "process_batch", err)
+		}
 		body.ID = id
 		if err := encoder(req).Encode(&body); err != nil {
 			return loomhttp.ErrEncodingError("assistant", "process_batch", err)
@@ -1178,7 +1210,10 @@ func EncodeSampleTextRequest(encoder func(*http.Request) loomhttp.Encoder) func(
 			Params:  b,
 		}
 		// No ID field in payload - always send as a request with generated ID
-		id := uuid.New().String()
+		id, err := jsonrpc.NewRequestID()
+		if err != nil {
+			return loomhttp.ErrEncodingError("assistant", "sample_text", err)
+		}
 		body.ID = id
 		if err := encoder(req).Encode(&body); err != nil {
 			return loomhttp.ErrEncodingError("assistant", "sample_text", err)
@@ -1397,7 +1432,10 @@ func EncodeMultiContentRequest(encoder func(*http.Request) loomhttp.Encoder) fun
 			Params:  b,
 		}
 		// No ID field in payload - always send as a request with generated ID
-		id := uuid.New().String()
+		id, err := jsonrpc.NewRequestID()
+		if err != nil {
+			return loomhttp.ErrEncodingError("assistant", "multi_content", err)
+		}
 		body.ID = id
 		if err := encoder(req).Encode(&body); err != nil {
 			return loomhttp.ErrEncodingError("assistant", "multi_content", err)
@@ -1482,7 +1520,10 @@ func EncodeGenerateDpiSpecRequest(encoder func(*http.Request) loomhttp.Encoder) 
 			Params:  b,
 		}
 		// No ID field in payload - always send as a request with generated ID
-		id := uuid.New().String()
+		id, err := jsonrpc.NewRequestID()
+		if err != nil {
+			return loomhttp.ErrEncodingError("assistant", "generate_dpi_spec", err)
+		}
 		body.ID = id
 		if err := encoder(req).Encode(&body); err != nil {
 			return loomhttp.ErrEncodingError("assistant", "generate_dpi_spec", err)
@@ -1571,7 +1612,10 @@ func EncodeDispatchActionRequest(encoder func(*http.Request) loomhttp.Encoder) f
 			Params:  b,
 		}
 		// No ID field in payload - always send as a request with generated ID
-		id := uuid.New().String()
+		id, err := jsonrpc.NewRequestID()
+		if err != nil {
+			return loomhttp.ErrEncodingError("assistant", "dispatch_action", err)
+		}
 		body.ID = id
 		if err := encoder(req).Encode(&body); err != nil {
 			return loomhttp.ErrEncodingError("assistant", "dispatch_action", err)
@@ -1660,7 +1704,10 @@ func EncodeDispatchCommandRequest(encoder func(*http.Request) loomhttp.Encoder) 
 			Params:  b,
 		}
 		// No ID field in payload - always send as a request with generated ID
-		id := uuid.New().String()
+		id, err := jsonrpc.NewRequestID()
+		if err != nil {
+			return loomhttp.ErrEncodingError("assistant", "dispatch_command", err)
+		}
 		body.ID = id
 		if err := encoder(req).Encode(&body); err != nil {
 			return loomhttp.ErrEncodingError("assistant", "dispatch_command", err)
@@ -1749,7 +1796,10 @@ func EncodeProjectedLookupRequest(encoder func(*http.Request) loomhttp.Encoder) 
 			Params:  b,
 		}
 		// No ID field in payload - always send as a request with generated ID
-		id := uuid.New().String()
+		id, err := jsonrpc.NewRequestID()
+		if err != nil {
+			return loomhttp.ErrEncodingError("assistant", "projected_lookup", err)
+		}
 		body.ID = id
 		if err := encoder(req).Encode(&body); err != nil {
 			return loomhttp.ErrEncodingError("assistant", "projected_lookup", err)
@@ -2046,7 +2096,10 @@ func marshalBarCmdRequestBodyRequestBodyToAssistantBarCmd(v *BarCmdRequestBodyRe
 // assistant service list_documents JSON-RPC method.
 func EncodeListDocumentsRequest(encoder func(*http.Request) loomhttp.Encoder) func(*http.Request, any) error {
 	return func(req *http.Request, v any) error {
-		id := uuid.New().String()
+		id, err := jsonrpc.NewRequestID()
+		if err != nil {
+			return loomhttp.ErrEncodingError("assistant", "list_documents", err)
+		}
 		body := &jsonrpc.Request{
 			ID:      id,
 			JSONRPC: "2.0",
@@ -2061,7 +2114,10 @@ func EncodeListDocumentsRequest(encoder func(*http.Request) loomhttp.Encoder) fu
 // assistant service system_info JSON-RPC method.
 func EncodeSystemInfoRequest(encoder func(*http.Request) loomhttp.Encoder) func(*http.Request, any) error {
 	return func(req *http.Request, v any) error {
-		id := uuid.New().String()
+		id, err := jsonrpc.NewRequestID()
+		if err != nil {
+			return loomhttp.ErrEncodingError("assistant", "system_info", err)
+		}
 		body := &jsonrpc.Request{
 			ID:      id,
 			JSONRPC: "2.0",
@@ -2076,7 +2132,10 @@ func EncodeSystemInfoRequest(encoder func(*http.Request) loomhttp.Encoder) func(
 // assistant service figma_design_system JSON-RPC method.
 func EncodeFigmaDesignSystemRequest(encoder func(*http.Request) loomhttp.Encoder) func(*http.Request, any) error {
 	return func(req *http.Request, v any) error {
-		id := uuid.New().String()
+		id, err := jsonrpc.NewRequestID()
+		if err != nil {
+			return loomhttp.ErrEncodingError("assistant", "figma_design_system", err)
+		}
 		body := &jsonrpc.Request{
 			ID:      id,
 			JSONRPC: "2.0",
@@ -2091,7 +2150,10 @@ func EncodeFigmaDesignSystemRequest(encoder func(*http.Request) loomhttp.Encoder
 // assistant service list_client_roots JSON-RPC method.
 func EncodeListClientRootsRequest(encoder func(*http.Request) loomhttp.Encoder) func(*http.Request, any) error {
 	return func(req *http.Request, v any) error {
-		id := uuid.New().String()
+		id, err := jsonrpc.NewRequestID()
+		if err != nil {
+			return loomhttp.ErrEncodingError("assistant", "list_client_roots", err)
+		}
 		body := &jsonrpc.Request{
 			ID:      id,
 			JSONRPC: "2.0",
@@ -2106,7 +2168,10 @@ func EncodeListClientRootsRequest(encoder func(*http.Request) loomhttp.Encoder) 
 // assistant service report_progress JSON-RPC method.
 func EncodeReportProgressRequest(encoder func(*http.Request) loomhttp.Encoder) func(*http.Request, any) error {
 	return func(req *http.Request, v any) error {
-		id := uuid.New().String()
+		id, err := jsonrpc.NewRequestID()
+		if err != nil {
+			return loomhttp.ErrEncodingError("assistant", "report_progress", err)
+		}
 		body := &jsonrpc.Request{
 			ID:      id,
 			JSONRPC: "2.0",
@@ -2121,7 +2186,10 @@ func EncodeReportProgressRequest(encoder func(*http.Request) loomhttp.Encoder) f
 // assistant service projected_status JSON-RPC method.
 func EncodeProjectedStatusRequest(encoder func(*http.Request) loomhttp.Encoder) func(*http.Request, any) error {
 	return func(req *http.Request, v any) error {
-		id := uuid.New().String()
+		id, err := jsonrpc.NewRequestID()
+		if err != nil {
+			return loomhttp.ErrEncodingError("assistant", "projected_status", err)
+		}
 		body := &jsonrpc.Request{
 			ID:      id,
 			JSONRPC: "2.0",
