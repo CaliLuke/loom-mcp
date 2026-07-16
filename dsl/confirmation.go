@@ -11,9 +11,9 @@ import (
 //
 // Confirmation must appear inside a Tool DSL in a Toolset.
 //
-// The runtime enforces confirmation using the ask_question-style protocol:
-// a confirmation tool is invoked out-of-band via AwaitExternalTools, and the
-// tool is executed only after the user approves it.
+// The runtime emits AwaitConfirmation and pauses the tool call. Applications
+// resume it through ProvideConfirmation; the runtime records ToolAuthorization
+// and executes only approved calls. Denials return a schema-compliant result.
 func Confirmation(dsl func()) {
 	tool, ok := eval.Current().(*agentsexpr.ToolExpr)
 	if !ok {

@@ -79,16 +79,21 @@ type VertexConfig struct {
 }
 
 // RegisterModel registers a ModelClient by identifier for planner lookup.
+// Registration fails with ErrRegistrationClosed after the runtime is sealed or
+// its first run is submitted.
 func (r *Runtime) RegisterModel(id string, client model.Client) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if r.registrationClosed {
+		return ErrRegistrationClosed
+	}
 	if id == "" {
 		return errors.New("model id is required")
 	}
 	if client == nil {
 		return errors.New("model client is required")
 	}
-	r.mu.Lock()
 	r.models[id] = client
-	r.mu.Unlock()
 	return nil
 }
 

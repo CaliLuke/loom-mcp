@@ -273,25 +273,28 @@ Your agents can do useful work by calling other parts of your system. Here's how
 
 #### Local Service-Backed Tools (`BindTo`) — Executor-First
 
-When your tool maps to a service method (via `BindTo`), loom-mcp generates:
-- Typed tool specs/codecs under `gen/<svc>/agents/<agent>/specs/<toolset>/`
-- Transform helpers (when shapes are compatible): `transforms.go`
-- An application-owned executor stub under `internal/agents/<agent>/toolsets/<toolset>/execute.go`
+When your tool maps to a service method (via `BindTo`):
+- `loom gen` emits typed tool specs/codecs under the owner-scoped `gen/<service>/toolsets/<toolset>/` package
+- `loom gen` emits transform helpers in that package's `transforms.go` when the shapes are compatible
+- `loom example` emits an application-owned executor stub under `internal/agents/<agent>/toolsets/<toolset>/execute.go`
 
 Wire executors using the generated `RegisterUsedToolsets` helper:
 
 ```go
 // After registering the agent, wire the toolset executors
 err := <agentpkg>.RegisterUsedToolsets(ctx, rt,
-    <agentpkg>.With<ToolsetName>Executor(myExecutor),
+    <agentpkg>.With<ToolsetName>Executor(
+        runtime.ToolCallExecutorFunc(<toolsetpkg>.Execute),
+    ),
 )
 if err != nil { panic(err) }
 ```
 
 Implement the executor's `Execute` function to:
 - Switch on `call.Name` for each tool
+- Use the generated tool constant; canonical IDs have the form `<toolset>.<tool>` (without the service name)
 - Decode `call.Payload` to typed args using the generated codec
-- Optionally use `ToMethodPayload_<Tool>`/`ToToolReturn_<Tool>` transforms
+- Optionally use `Init<Tool>MethodPayload` / `Init<Tool>ToolResult` transforms
 - Call your service client and return a `planner.ToolResult`
 
 Minimal executor scaffold:
@@ -304,12 +307,12 @@ import (
     "context"
     "github.com/CaliLuke/loom-mcp/runtime/agent/planner"
     "github.com/CaliLuke/loom-mcp/runtime/agent/runtime"
-    specs "<module>/gen/<svc>/agents/<agent>/specs/<toolset>"
+    specs "<module>/gen/<service>/toolsets/<toolset>"
 )
 
 func Execute(ctx context.Context, meta *runtime.ToolCallMeta, call *planner.ToolRequest) (*runtime.ToolExecutionResult, error) {
     switch call.Name {
-    case "<svc>.<toolset>.<tool>":
+    case specs.<Tool>:
         // Decode payload using generated codec
         pc, ok := specs.PayloadCodec(string(call.Name))
         if !ok {
@@ -321,13 +324,14 @@ func Execute(ctx context.Context, meta *runtime.ToolCallMeta, call *planner.Tool
         }
         // Type-assert to the generated payload type:
         // typedArgs := args.(*specs.<ToolPayload>)
-        // Optionally use transforms: mp, _ := specs.ToMethodPayload_<Tool>(typedArgs)
-        // Call your service client, map result via specs.ToToolReturn_<Tool>
-        // Or build a typed tool return directly:
-        // res := &specs.<ToolReturn>{Status: "ok"}
+        // Optionally transform it: methodPayload := specs.Init<Tool>MethodPayload(typedArgs)
+        // Call your service client, then map its result:
+        // toolResult := specs.Init<Tool>ToolResult(methodResult)
+        // Or build a typed tool result directly:
+        // toolResult := &specs.<ToolResult>{Status: "ok"}
         return runtime.Executed(&planner.ToolResult{
 			Name:   call.Name,
-			Result: &specs.<ToolReturn>{
+			Result: &specs.<ToolResult>{
 				Status: "ok",
 			},
 		}), nil
@@ -379,18 +383,19 @@ Notes:
 
 #### Connecting to Remote Services (MCP)
 
-If your agent uses tools from another service via MCP (`Use(MCPToolset(...))`):
+If your agent uses a top-level MCP-backed toolset declared with
+`Toolset(FromMCP(...))` and referenced with `Use(...)`:
 
-1.  Get the generated Goa client for the remote service.
-2.  Wrap it in an `mcpruntime.Caller`.
+1.  Get the generated JSON-RPC MCP client for the remote service.
+2.  Wrap it with that generated client's `NewCaller(client, suite)` helper.
 3.  Pass it to your agent's config, using the generated constant for the key.
 
 ```go
-// 1. Get the generated Goa client for the remote service.
+// 1. Get the generated JSON-RPC MCP client for the remote service.
 remoteClient := <jsonrpc_client_pkg>.NewClient(/* your endpoints */)
 
-// 2. Wrap it in an MCP Caller.
-caller := mcpruntime.NewCaller(remoteClient)
+// 2. Wrap it in the generated MCP Caller adapter.
+caller := <jsonrpc_client_pkg>.NewCaller(remoteClient, "<mcp-suite>")
 
 // 3. Supply it in the agent config.
 cfg := <agentpkg>.<AgentConfig>{

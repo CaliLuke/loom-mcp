@@ -24,6 +24,7 @@ import (
 	"github.com/CaliLuke/loom/jsonrpc"
 	loomtransport "github.com/CaliLuke/loom/observability/transport"
 	loom "github.com/CaliLuke/loom/pkg"
+	mcpauth "github.com/modelcontextprotocol/go-sdk/auth"
 )
 
 // Server handles JSON-RPC requests for the mcp_assistant service.
@@ -406,22 +407,1017 @@ func (rb *batchWriter) Write(data []byte) (int, error) {
 	return rb.Writer.Write(data)
 }
 
+// mcpBatchResponseWriter buffers one batch item so SSE frames cannot corrupt the outer JSON array.
+type mcpBatchResponseWriter struct {
+	header     http.Header
+	body       bytes.Buffer
+	statusCode int
+}
+
+func (w *mcpBatchResponseWriter) Header() http.Header {
+	if w.header == nil {
+		w.header = make(http.Header)
+	}
+	return w.header
+}
+func (w *mcpBatchResponseWriter) WriteHeader(statusCode int) {
+	if w.statusCode == 0 {
+		w.statusCode = statusCode
+	}
+}
+func (w *mcpBatchResponseWriter) Write(data []byte) (int, error) {
+	if w.statusCode == 0 {
+		w.statusCode = http.StatusOK
+	}
+	return w.body.Write(data)
+}
+func (w *mcpBatchResponseWriter) Flush() {}
+func (s *Server) processBatchRequest(ctx context.Context, r *http.Request, req *jsonrpc.RawRequest, writer *batchWriter) {
+	buffer := &mcpBatchResponseWriter{}
+	s.processRequest(ctx, r, req, buffer)
+	body := bytes.TrimSpace(buffer.body.Bytes())
+	if len(body) == 0 {
+		return
+	}
+	if !strings.Contains(buffer.Header().Get("Content-Type"), "text/event-stream") {
+		if _, err := writer.Write(body); err != nil {
+			s.errhandler(ctx, writer, fmt.Errorf("failed to write buffered batch response: %w", err))
+		}
+		return
+	}
+	if response := finalMCPBatchSSEResponse(body); len(response) > 0 {
+		if _, err := writer.Write(response); err != nil {
+			s.errhandler(ctx, writer, fmt.Errorf("failed to write buffered batch stream response: %w", err))
+		}
+		return
+	}
+	if req.HasID {
+		response := jsonrpc.MakeErrorResponse(req.ID, jsonrpc.InternalError, "streaming method did not produce a final response", nil)
+		data, err := json.Marshal(response)
+		if err != nil {
+			s.errhandler(ctx, writer, fmt.Errorf("failed to encode buffered batch stream error: %w", err))
+			return
+		}
+		if _, err := writer.Write(data); err != nil {
+			s.errhandler(ctx, writer, fmt.Errorf("failed to write buffered batch stream error: %w", err))
+		}
+	}
+}
+func finalMCPBatchSSEResponse(body []byte) []byte {
+	var response []byte
+	for _, frame := range strings.Split(string(body), "\n\n") {
+		for _, line := range strings.Split(frame, "\n") {
+			if !strings.HasPrefix(line, "data:") {
+				continue
+			}
+			data := bytes.TrimSpace([]byte(strings.TrimPrefix(line, "data:")))
+			if len(data) == 0 {
+				continue
+			}
+			var envelope mcpJSONRPCEnvelope
+			if err := json.Unmarshal(data, &envelope); err != nil {
+				continue
+			}
+			if envelope.Method == "" && len(envelope.ID) > 0 && (len(envelope.Result) > 0 || len(envelope.Error) > 0) {
+				response = append(response[:0], data...)
+			}
+		}
+	}
+	return response
+}
+
 // Mount configures the mux to serve the JSON-RPC mcp_assistant service methods.
 func Mount(mux loomhttp.Muxer, h *Server) {
 	streamableHTTPSessions := mcpruntime.NewStreamableHTTPSessions()
 	requestCancellations := mcpruntime.NewRequestCancellationRegistry()
-	// Mixed transports: mount unified handler that negotiates HTTP vs SSE by Accept header and JSON-RPC method
-	mux.Handle("POST", "/rpc", withMCPPolicyHeaders(streamableHTTPSessions, requestCancellations, h.ServeHTTP))
-	mux.Handle("GET", "/rpc", withMCPPolicyHeaders(streamableHTTPSessions, requestCancellations, h.ServeHTTP))
+	// MCP streamable HTTP: all request methods share transport policy and session state
+	mux.Handle("DELETE", "/rpc", withMCPPolicyHeaders(streamableHTTPSessions, requestCancellations, h.Handler.ServeHTTP))
+	mux.Handle("GET", "/rpc", withMCPPolicyHeaders(streamableHTTPSessions, requestCancellations, h.Handler.ServeHTTP))
+	mux.Handle("POST", "/rpc", withMCPPolicyHeaders(streamableHTTPSessions, requestCancellations, h.Handler.ServeHTTP))
 	mux.Handle("OPTIONS", "/rpc", func(w http.ResponseWriter, r *http.Request) {
-		h.corsPolicy.HandlePreflight(w, r, []string{"GET", "POST"})
+		h.corsPolicy.HandlePreflight(w, r, []string{"DELETE", "GET", "POST"})
 	})
-	mux.Handle("DELETE", "/rpc", withMCPPolicyHeaders(streamableHTTPSessions, requestCancellations, h.ServeHTTP))
 }
 
 // Mount configures the mux to serve the JSON-RPC mcp_assistant service methods.
 func (s *Server) Mount(mux loomhttp.Muxer) {
 	Mount(mux, s)
+}
+
+// NewInitializeHandler creates a JSON-RPC handler which calls the
+// "mcp_assistant" service "initialize" endpoint.
+func NewInitializeHandler(endpoint loom.Endpoint, mux loomhttp.Muxer, decoder func(*http.Request) loomhttp.Decoder, encoder func(context.Context, http.ResponseWriter) loomhttp.Encoder, errhandler func(context.Context, http.ResponseWriter, error)) func(ctx context.Context, r *http.Request, req *jsonrpc.RawRequest, w http.ResponseWriter) error {
+	decodeParams := DecodeInitializeRequest(mux, decoder)
+	return func(ctx context.Context, r *http.Request, req *jsonrpc.RawRequest, w http.ResponseWriter) error {
+		ctx = context.WithValue(ctx, loom.MethodKey, "initialize")
+		ctx = context.WithValue(ctx, loom.ServiceKey, "mcp_assistant")
+
+		params, err := decodeParams(r, req)
+		if err != nil {
+			loomtransport.RequestObserverFromContext(ctx).Fail(loomtransport.ReasonInvalidJSONRPCParams)
+			if req.HasID {
+				code := jsonrpc.InternalError
+				var serviceError *loom.ServiceError
+				if errors.As(err, &serviceError) {
+					code = jsonrpcErrorCodeForServiceError(serviceError)
+					if serviceError.Name == "resource_not_found" {
+						code = jsonrpc.Code(-32002)
+					}
+				}
+				encodeJSONRPCError(ctx, w, req, code, loom.ErrorSafeMessage(err), mcpruntime.NewErrorData(err), encoder, errhandler)
+			} else {
+				errhandler(ctx, w, fmt.Errorf("failed to decode parameters: %w", err))
+			}
+			return nil
+		}
+		res, err := endpoint(ctx, params)
+		if err != nil {
+			loomtransport.RequestObserverFromContext(ctx).Fail(loomtransport.ReasonHandlerError)
+			if req.HasID {
+				var en loom.LoomErrorNamer
+				if !errors.As(err, &en) {
+					code := jsonrpc.InternalError
+					var serviceError *loom.ServiceError
+					if errors.As(err, &serviceError) {
+						code = jsonrpcErrorCodeForServiceError(serviceError)
+						if serviceError.Name == "resource_not_found" {
+							code = jsonrpc.Code(-32002)
+						}
+					}
+					encodeJSONRPCError(ctx, w, req, code, loom.ErrorSafeMessage(err), mcpruntime.NewErrorData(err), encoder, errhandler)
+					return nil
+				}
+				switch en.LoomErrorName() {
+				case "invalid_params":
+					encodeJSONRPCError(ctx, w, req, jsonrpc.InvalidParams, loom.ErrorSafeMessage(err), mcpruntime.NewErrorData(err), encoder, errhandler)
+				case "resource_not_found":
+					encodeJSONRPCError(ctx, w, req, jsonrpc.Code(-32002), loom.ErrorSafeMessage(err), mcpruntime.NewErrorData(err), encoder, errhandler)
+				case "method_not_found":
+					encodeJSONRPCError(ctx, w, req, jsonrpc.MethodNotFound, loom.ErrorSafeMessage(err), mcpruntime.NewErrorData(err), encoder, errhandler)
+				default:
+					code := jsonrpc.InternalError
+					var serviceError *loom.ServiceError
+					if errors.As(err, &serviceError) {
+						code = jsonrpcErrorCodeForServiceError(serviceError)
+						if serviceError.Name == "resource_not_found" {
+							code = jsonrpc.Code(-32002)
+						}
+					}
+					encodeJSONRPCError(ctx, w, req, code, loom.ErrorSafeMessage(err), mcpruntime.NewErrorData(err), encoder, errhandler)
+				}
+			} else {
+				errhandler(ctx, w, fmt.Errorf("endpoint error: %w", err))
+			}
+			return nil
+		}
+
+		id := req.ID
+		if !req.HasID {
+			return nil
+		}
+		// Convert result to response body with proper JSON tags
+		body := NewInitializeResponseBody(res.(*mcpassistant.InitializeResult))
+		response := jsonrpc.MakeSuccessResponse(id, body)
+		if err := encoder(ctx, w).Encode(response); err != nil {
+			loomtransport.RequestObserverFromContext(ctx).Fail(loomtransport.ReasonResponseWriteFailed)
+			errhandler(ctx, w, fmt.Errorf("failed to encode JSON-RPC response: %w", err))
+		}
+		return nil
+	}
+} // NewPingHandler creates a JSON-RPC handler which calls the "mcp_assistant"
+// service "ping" endpoint.
+func NewPingHandler(endpoint loom.Endpoint, mux loomhttp.Muxer, decoder func(*http.Request) loomhttp.Decoder, encoder func(context.Context, http.ResponseWriter) loomhttp.Encoder, errhandler func(context.Context, http.ResponseWriter, error)) func(ctx context.Context, r *http.Request, req *jsonrpc.RawRequest, w http.ResponseWriter) error {
+	return func(ctx context.Context, r *http.Request, req *jsonrpc.RawRequest, w http.ResponseWriter) error {
+		ctx = context.WithValue(ctx, loom.MethodKey, "ping")
+		ctx = context.WithValue(ctx, loom.ServiceKey, "mcp_assistant")
+
+		res, err := endpoint(ctx, nil)
+		if err != nil {
+			loomtransport.RequestObserverFromContext(ctx).Fail(loomtransport.ReasonHandlerError)
+			if req.HasID {
+				var en loom.LoomErrorNamer
+				if !errors.As(err, &en) {
+					code := jsonrpc.InternalError
+					var serviceError *loom.ServiceError
+					if errors.As(err, &serviceError) {
+						code = jsonrpcErrorCodeForServiceError(serviceError)
+						if serviceError.Name == "resource_not_found" {
+							code = jsonrpc.Code(-32002)
+						}
+					}
+					encodeJSONRPCError(ctx, w, req, code, loom.ErrorSafeMessage(err), mcpruntime.NewErrorData(err), encoder, errhandler)
+					return nil
+				}
+				switch en.LoomErrorName() {
+				case "invalid_params":
+					encodeJSONRPCError(ctx, w, req, jsonrpc.InvalidParams, loom.ErrorSafeMessage(err), mcpruntime.NewErrorData(err), encoder, errhandler)
+				case "resource_not_found":
+					encodeJSONRPCError(ctx, w, req, jsonrpc.Code(-32002), loom.ErrorSafeMessage(err), mcpruntime.NewErrorData(err), encoder, errhandler)
+				case "method_not_found":
+					encodeJSONRPCError(ctx, w, req, jsonrpc.MethodNotFound, loom.ErrorSafeMessage(err), mcpruntime.NewErrorData(err), encoder, errhandler)
+				default:
+					code := jsonrpc.InternalError
+					var serviceError *loom.ServiceError
+					if errors.As(err, &serviceError) {
+						code = jsonrpcErrorCodeForServiceError(serviceError)
+						if serviceError.Name == "resource_not_found" {
+							code = jsonrpc.Code(-32002)
+						}
+					}
+					encodeJSONRPCError(ctx, w, req, code, loom.ErrorSafeMessage(err), mcpruntime.NewErrorData(err), encoder, errhandler)
+				}
+			} else {
+				errhandler(ctx, w, fmt.Errorf("endpoint error: %w", err))
+			}
+			return nil
+		}
+
+		id := req.ID
+		if !req.HasID {
+			return nil
+		}
+		// Convert result to response body with proper JSON tags
+		body := NewPingResponseBody(res.(*mcpassistant.PingResult))
+		response := jsonrpc.MakeSuccessResponse(id, body)
+		if err := encoder(ctx, w).Encode(response); err != nil {
+			loomtransport.RequestObserverFromContext(ctx).Fail(loomtransport.ReasonResponseWriteFailed)
+			errhandler(ctx, w, fmt.Errorf("failed to encode JSON-RPC response: %w", err))
+		}
+		return nil
+	}
+} // NewToolsListHandler creates a JSON-RPC handler which calls the
+// "mcp_assistant" service "tools/list" endpoint.
+func NewToolsListHandler(endpoint loom.Endpoint, mux loomhttp.Muxer, decoder func(*http.Request) loomhttp.Decoder, encoder func(context.Context, http.ResponseWriter) loomhttp.Encoder, errhandler func(context.Context, http.ResponseWriter, error)) func(ctx context.Context, r *http.Request, req *jsonrpc.RawRequest, w http.ResponseWriter) error {
+	decodeParams := DecodeToolsListRequest(mux, decoder)
+	return func(ctx context.Context, r *http.Request, req *jsonrpc.RawRequest, w http.ResponseWriter) error {
+		ctx = context.WithValue(ctx, loom.MethodKey, "tools/list")
+		ctx = context.WithValue(ctx, loom.ServiceKey, "mcp_assistant")
+
+		params, err := decodeParams(r, req)
+		if err != nil {
+			loomtransport.RequestObserverFromContext(ctx).Fail(loomtransport.ReasonInvalidJSONRPCParams)
+			if req.HasID {
+				code := jsonrpc.InternalError
+				var serviceError *loom.ServiceError
+				if errors.As(err, &serviceError) {
+					code = jsonrpcErrorCodeForServiceError(serviceError)
+					if serviceError.Name == "resource_not_found" {
+						code = jsonrpc.Code(-32002)
+					}
+				}
+				encodeJSONRPCError(ctx, w, req, code, loom.ErrorSafeMessage(err), mcpruntime.NewErrorData(err), encoder, errhandler)
+			} else {
+				errhandler(ctx, w, fmt.Errorf("failed to decode parameters: %w", err))
+			}
+			return nil
+		}
+		res, err := endpoint(ctx, params)
+		if err != nil {
+			loomtransport.RequestObserverFromContext(ctx).Fail(loomtransport.ReasonHandlerError)
+			if req.HasID {
+				var en loom.LoomErrorNamer
+				if !errors.As(err, &en) {
+					code := jsonrpc.InternalError
+					var serviceError *loom.ServiceError
+					if errors.As(err, &serviceError) {
+						code = jsonrpcErrorCodeForServiceError(serviceError)
+						if serviceError.Name == "resource_not_found" {
+							code = jsonrpc.Code(-32002)
+						}
+					}
+					encodeJSONRPCError(ctx, w, req, code, loom.ErrorSafeMessage(err), mcpruntime.NewErrorData(err), encoder, errhandler)
+					return nil
+				}
+				switch en.LoomErrorName() {
+				case "invalid_params":
+					encodeJSONRPCError(ctx, w, req, jsonrpc.InvalidParams, loom.ErrorSafeMessage(err), mcpruntime.NewErrorData(err), encoder, errhandler)
+				case "resource_not_found":
+					encodeJSONRPCError(ctx, w, req, jsonrpc.Code(-32002), loom.ErrorSafeMessage(err), mcpruntime.NewErrorData(err), encoder, errhandler)
+				case "method_not_found":
+					encodeJSONRPCError(ctx, w, req, jsonrpc.MethodNotFound, loom.ErrorSafeMessage(err), mcpruntime.NewErrorData(err), encoder, errhandler)
+				default:
+					code := jsonrpc.InternalError
+					var serviceError *loom.ServiceError
+					if errors.As(err, &serviceError) {
+						code = jsonrpcErrorCodeForServiceError(serviceError)
+						if serviceError.Name == "resource_not_found" {
+							code = jsonrpc.Code(-32002)
+						}
+					}
+					encodeJSONRPCError(ctx, w, req, code, loom.ErrorSafeMessage(err), mcpruntime.NewErrorData(err), encoder, errhandler)
+				}
+			} else {
+				errhandler(ctx, w, fmt.Errorf("endpoint error: %w", err))
+			}
+			return nil
+		}
+
+		id := req.ID
+		if !req.HasID {
+			return nil
+		}
+		// Convert result to response body with proper JSON tags
+		body := NewToolsListResponseBody(res.(*mcpassistant.ToolsListResult))
+		response := jsonrpc.MakeSuccessResponse(id, body)
+		if err := encoder(ctx, w).Encode(response); err != nil {
+			loomtransport.RequestObserverFromContext(ctx).Fail(loomtransport.ReasonResponseWriteFailed)
+			errhandler(ctx, w, fmt.Errorf("failed to encode JSON-RPC response: %w", err))
+		}
+		return nil
+	}
+} // NewToolsCallHandler creates a JSON-RPC handler which calls the
+// "mcp_assistant" service "tools/call" endpoint.
+func NewToolsCallHandler(endpoint loom.Endpoint, mux loomhttp.Muxer, decoder func(*http.Request) loomhttp.Decoder, encoder func(context.Context, http.ResponseWriter) loomhttp.Encoder, errhandler func(context.Context, http.ResponseWriter, error), streamWritePolicy loomhttp.StreamWritePolicy) func(ctx context.Context, r *http.Request, req *jsonrpc.RawRequest, w http.ResponseWriter) error {
+	decodeParams := DecodeToolsCallRequest(mux, decoder)
+	return func(ctx context.Context, r *http.Request, req *jsonrpc.RawRequest, w http.ResponseWriter) error {
+		ctx = context.WithValue(ctx, loom.MethodKey, "tools/call")
+		ctx = context.WithValue(ctx, loom.ServiceKey, "mcp_assistant")
+
+		strm := &ToolsCallServerStream{
+			encoder:      encoder,
+			r:            r,
+			requestHasID: req.HasID,
+			requestID:    req.ID,
+			w:            w,
+			writer:       loomhttp.NewSSEStreamWriter(w, r.Context(), loomtransport.TransportJSONRPC, streamWritePolicy),
+		}
+		params, err := decodeParams(r, req)
+		if err != nil {
+			loomtransport.RequestObserverFromContext(ctx).Fail(loomtransport.ReasonInvalidJSONRPCParams)
+			if req.HasID {
+				code := jsonrpc.InternalError
+				var serviceError *loom.ServiceError
+				if errors.As(err, &serviceError) {
+					code = jsonrpcErrorCodeForServiceError(serviceError)
+					if serviceError.Name == "resource_not_found" {
+						code = jsonrpc.Code(-32002)
+					}
+				}
+				return strm.sendError(ctx, req.ID, code, loom.ErrorSafeMessage(err), mcpruntime.NewErrorData(err))
+			} else {
+			}
+			return nil
+		}
+		v := &mcpassistant.ToolsCallEndpointInput{
+			Payload: params,
+			Stream:  strm,
+		}
+		if _, err := endpoint(ctx, v); err != nil {
+			if req.HasID {
+				var en loom.LoomErrorNamer
+				if errors.As(err, &en) {
+					switch en.LoomErrorName() {
+					case "invalid_params":
+						return strm.sendError(ctx, req.ID, jsonrpc.InvalidParams, loom.ErrorSafeMessage(err), mcpruntime.NewErrorData(err))
+					case "resource_not_found":
+						return strm.sendError(ctx, req.ID, jsonrpc.Code(-32002), loom.ErrorSafeMessage(err), mcpruntime.NewErrorData(err))
+					case "method_not_found":
+						return strm.sendError(ctx, req.ID, jsonrpc.MethodNotFound, loom.ErrorSafeMessage(err), mcpruntime.NewErrorData(err))
+					}
+				}
+				code := jsonrpc.InternalError
+				var serviceError *loom.ServiceError
+				if errors.As(err, &serviceError) {
+					code = jsonrpcErrorCodeForServiceError(serviceError)
+					if serviceError.Name == "resource_not_found" {
+						code = jsonrpc.Code(-32002)
+					}
+				}
+				return strm.sendError(ctx, req.ID, code, loom.ErrorSafeMessage(err), mcpruntime.NewErrorData(err))
+			}
+			return nil
+		}
+		return nil
+	}
+} // NewResourcesListHandler creates a JSON-RPC handler which calls the
+// "mcp_assistant" service "resources/list" endpoint.
+func NewResourcesListHandler(endpoint loom.Endpoint, mux loomhttp.Muxer, decoder func(*http.Request) loomhttp.Decoder, encoder func(context.Context, http.ResponseWriter) loomhttp.Encoder, errhandler func(context.Context, http.ResponseWriter, error)) func(ctx context.Context, r *http.Request, req *jsonrpc.RawRequest, w http.ResponseWriter) error {
+	decodeParams := DecodeResourcesListRequest(mux, decoder)
+	return func(ctx context.Context, r *http.Request, req *jsonrpc.RawRequest, w http.ResponseWriter) error {
+		ctx = context.WithValue(ctx, loom.MethodKey, "resources/list")
+		ctx = context.WithValue(ctx, loom.ServiceKey, "mcp_assistant")
+
+		params, err := decodeParams(r, req)
+		if err != nil {
+			loomtransport.RequestObserverFromContext(ctx).Fail(loomtransport.ReasonInvalidJSONRPCParams)
+			if req.HasID {
+				code := jsonrpc.InternalError
+				var serviceError *loom.ServiceError
+				if errors.As(err, &serviceError) {
+					code = jsonrpcErrorCodeForServiceError(serviceError)
+					if serviceError.Name == "resource_not_found" {
+						code = jsonrpc.Code(-32002)
+					}
+				}
+				encodeJSONRPCError(ctx, w, req, code, loom.ErrorSafeMessage(err), mcpruntime.NewErrorData(err), encoder, errhandler)
+			} else {
+				errhandler(ctx, w, fmt.Errorf("failed to decode parameters: %w", err))
+			}
+			return nil
+		}
+		res, err := endpoint(ctx, params)
+		if err != nil {
+			loomtransport.RequestObserverFromContext(ctx).Fail(loomtransport.ReasonHandlerError)
+			if req.HasID {
+				var en loom.LoomErrorNamer
+				if !errors.As(err, &en) {
+					code := jsonrpc.InternalError
+					var serviceError *loom.ServiceError
+					if errors.As(err, &serviceError) {
+						code = jsonrpcErrorCodeForServiceError(serviceError)
+						if serviceError.Name == "resource_not_found" {
+							code = jsonrpc.Code(-32002)
+						}
+					}
+					encodeJSONRPCError(ctx, w, req, code, loom.ErrorSafeMessage(err), mcpruntime.NewErrorData(err), encoder, errhandler)
+					return nil
+				}
+				switch en.LoomErrorName() {
+				case "invalid_params":
+					encodeJSONRPCError(ctx, w, req, jsonrpc.InvalidParams, loom.ErrorSafeMessage(err), mcpruntime.NewErrorData(err), encoder, errhandler)
+				case "resource_not_found":
+					encodeJSONRPCError(ctx, w, req, jsonrpc.Code(-32002), loom.ErrorSafeMessage(err), mcpruntime.NewErrorData(err), encoder, errhandler)
+				case "method_not_found":
+					encodeJSONRPCError(ctx, w, req, jsonrpc.MethodNotFound, loom.ErrorSafeMessage(err), mcpruntime.NewErrorData(err), encoder, errhandler)
+				default:
+					code := jsonrpc.InternalError
+					var serviceError *loom.ServiceError
+					if errors.As(err, &serviceError) {
+						code = jsonrpcErrorCodeForServiceError(serviceError)
+						if serviceError.Name == "resource_not_found" {
+							code = jsonrpc.Code(-32002)
+						}
+					}
+					encodeJSONRPCError(ctx, w, req, code, loom.ErrorSafeMessage(err), mcpruntime.NewErrorData(err), encoder, errhandler)
+				}
+			} else {
+				errhandler(ctx, w, fmt.Errorf("endpoint error: %w", err))
+			}
+			return nil
+		}
+
+		id := req.ID
+		if !req.HasID {
+			return nil
+		}
+		// Convert result to response body with proper JSON tags
+		body := NewResourcesListResponseBody(res.(*mcpassistant.ResourcesListResult))
+		response := jsonrpc.MakeSuccessResponse(id, body)
+		if err := encoder(ctx, w).Encode(response); err != nil {
+			loomtransport.RequestObserverFromContext(ctx).Fail(loomtransport.ReasonResponseWriteFailed)
+			errhandler(ctx, w, fmt.Errorf("failed to encode JSON-RPC response: %w", err))
+		}
+		return nil
+	}
+} // NewResourcesReadHandler creates a JSON-RPC handler which calls the
+// "mcp_assistant" service "resources/read" endpoint.
+func NewResourcesReadHandler(endpoint loom.Endpoint, mux loomhttp.Muxer, decoder func(*http.Request) loomhttp.Decoder, encoder func(context.Context, http.ResponseWriter) loomhttp.Encoder, errhandler func(context.Context, http.ResponseWriter, error)) func(ctx context.Context, r *http.Request, req *jsonrpc.RawRequest, w http.ResponseWriter) error {
+	decodeParams := DecodeResourcesReadRequest(mux, decoder)
+	return func(ctx context.Context, r *http.Request, req *jsonrpc.RawRequest, w http.ResponseWriter) error {
+		ctx = context.WithValue(ctx, loom.MethodKey, "resources/read")
+		ctx = context.WithValue(ctx, loom.ServiceKey, "mcp_assistant")
+
+		params, err := decodeParams(r, req)
+		if err != nil {
+			loomtransport.RequestObserverFromContext(ctx).Fail(loomtransport.ReasonInvalidJSONRPCParams)
+			if req.HasID {
+				code := jsonrpc.InternalError
+				var serviceError *loom.ServiceError
+				if errors.As(err, &serviceError) {
+					code = jsonrpcErrorCodeForServiceError(serviceError)
+					if serviceError.Name == "resource_not_found" {
+						code = jsonrpc.Code(-32002)
+					}
+				}
+				encodeJSONRPCError(ctx, w, req, code, loom.ErrorSafeMessage(err), mcpruntime.NewErrorData(err), encoder, errhandler)
+			} else {
+				errhandler(ctx, w, fmt.Errorf("failed to decode parameters: %w", err))
+			}
+			return nil
+		}
+		res, err := endpoint(ctx, params)
+		if err != nil {
+			loomtransport.RequestObserverFromContext(ctx).Fail(loomtransport.ReasonHandlerError)
+			if req.HasID {
+				var en loom.LoomErrorNamer
+				if !errors.As(err, &en) {
+					code := jsonrpc.InternalError
+					var serviceError *loom.ServiceError
+					if errors.As(err, &serviceError) {
+						code = jsonrpcErrorCodeForServiceError(serviceError)
+						if serviceError.Name == "resource_not_found" {
+							code = jsonrpc.Code(-32002)
+						}
+					}
+					encodeJSONRPCError(ctx, w, req, code, loom.ErrorSafeMessage(err), mcpruntime.NewErrorData(err), encoder, errhandler)
+					return nil
+				}
+				switch en.LoomErrorName() {
+				case "invalid_params":
+					encodeJSONRPCError(ctx, w, req, jsonrpc.InvalidParams, loom.ErrorSafeMessage(err), mcpruntime.NewErrorData(err), encoder, errhandler)
+				case "resource_not_found":
+					encodeJSONRPCError(ctx, w, req, jsonrpc.Code(-32002), loom.ErrorSafeMessage(err), mcpruntime.NewErrorData(err), encoder, errhandler)
+				case "method_not_found":
+					encodeJSONRPCError(ctx, w, req, jsonrpc.MethodNotFound, loom.ErrorSafeMessage(err), mcpruntime.NewErrorData(err), encoder, errhandler)
+				default:
+					code := jsonrpc.InternalError
+					var serviceError *loom.ServiceError
+					if errors.As(err, &serviceError) {
+						code = jsonrpcErrorCodeForServiceError(serviceError)
+						if serviceError.Name == "resource_not_found" {
+							code = jsonrpc.Code(-32002)
+						}
+					}
+					encodeJSONRPCError(ctx, w, req, code, loom.ErrorSafeMessage(err), mcpruntime.NewErrorData(err), encoder, errhandler)
+				}
+			} else {
+				errhandler(ctx, w, fmt.Errorf("endpoint error: %w", err))
+			}
+			return nil
+		}
+
+		id := req.ID
+		if !req.HasID {
+			return nil
+		}
+		// Convert result to response body with proper JSON tags
+		body := NewResourcesReadResponseBody(res.(*mcpassistant.ResourcesReadResult))
+		response := jsonrpc.MakeSuccessResponse(id, body)
+		if err := encoder(ctx, w).Encode(response); err != nil {
+			loomtransport.RequestObserverFromContext(ctx).Fail(loomtransport.ReasonResponseWriteFailed)
+			errhandler(ctx, w, fmt.Errorf("failed to encode JSON-RPC response: %w", err))
+		}
+		return nil
+	}
+} // NewResourcesSubscribeHandler creates a JSON-RPC handler which calls the
+// "mcp_assistant" service "resources/subscribe" endpoint.
+func NewResourcesSubscribeHandler(endpoint loom.Endpoint, mux loomhttp.Muxer, decoder func(*http.Request) loomhttp.Decoder, encoder func(context.Context, http.ResponseWriter) loomhttp.Encoder, errhandler func(context.Context, http.ResponseWriter, error)) func(ctx context.Context, r *http.Request, req *jsonrpc.RawRequest, w http.ResponseWriter) error {
+	decodeParams := DecodeResourcesSubscribeRequest(mux, decoder)
+	return func(ctx context.Context, r *http.Request, req *jsonrpc.RawRequest, w http.ResponseWriter) error {
+		ctx = context.WithValue(ctx, loom.MethodKey, "resources/subscribe")
+		ctx = context.WithValue(ctx, loom.ServiceKey, "mcp_assistant")
+
+		params, err := decodeParams(r, req)
+		if err != nil {
+			loomtransport.RequestObserverFromContext(ctx).Fail(loomtransport.ReasonInvalidJSONRPCParams)
+			if req.HasID {
+				code := jsonrpc.InternalError
+				var serviceError *loom.ServiceError
+				if errors.As(err, &serviceError) {
+					code = jsonrpcErrorCodeForServiceError(serviceError)
+					if serviceError.Name == "resource_not_found" {
+						code = jsonrpc.Code(-32002)
+					}
+				}
+				encodeJSONRPCError(ctx, w, req, code, loom.ErrorSafeMessage(err), mcpruntime.NewErrorData(err), encoder, errhandler)
+			} else {
+				errhandler(ctx, w, fmt.Errorf("failed to decode parameters: %w", err))
+			}
+			return nil
+		}
+		_, err = endpoint(ctx, params)
+		if err != nil {
+			loomtransport.RequestObserverFromContext(ctx).Fail(loomtransport.ReasonHandlerError)
+			if req.HasID {
+				var en loom.LoomErrorNamer
+				if !errors.As(err, &en) {
+					code := jsonrpc.InternalError
+					var serviceError *loom.ServiceError
+					if errors.As(err, &serviceError) {
+						code = jsonrpcErrorCodeForServiceError(serviceError)
+						if serviceError.Name == "resource_not_found" {
+							code = jsonrpc.Code(-32002)
+						}
+					}
+					encodeJSONRPCError(ctx, w, req, code, loom.ErrorSafeMessage(err), mcpruntime.NewErrorData(err), encoder, errhandler)
+					return nil
+				}
+				switch en.LoomErrorName() {
+				case "invalid_params":
+					encodeJSONRPCError(ctx, w, req, jsonrpc.InvalidParams, loom.ErrorSafeMessage(err), mcpruntime.NewErrorData(err), encoder, errhandler)
+				case "resource_not_found":
+					encodeJSONRPCError(ctx, w, req, jsonrpc.Code(-32002), loom.ErrorSafeMessage(err), mcpruntime.NewErrorData(err), encoder, errhandler)
+				case "method_not_found":
+					encodeJSONRPCError(ctx, w, req, jsonrpc.MethodNotFound, loom.ErrorSafeMessage(err), mcpruntime.NewErrorData(err), encoder, errhandler)
+				default:
+					code := jsonrpc.InternalError
+					var serviceError *loom.ServiceError
+					if errors.As(err, &serviceError) {
+						code = jsonrpcErrorCodeForServiceError(serviceError)
+						if serviceError.Name == "resource_not_found" {
+							code = jsonrpc.Code(-32002)
+						}
+					}
+					encodeJSONRPCError(ctx, w, req, code, loom.ErrorSafeMessage(err), mcpruntime.NewErrorData(err), encoder, errhandler)
+				}
+			} else {
+				errhandler(ctx, w, fmt.Errorf("endpoint error: %w", err))
+			}
+			return nil
+		}
+
+		if !req.HasID {
+			return nil
+		}
+		response := jsonrpc.MakeSuccessResponse(req.ID, struct{}{})
+		if err := encoder(ctx, w).Encode(response); err != nil {
+			loomtransport.RequestObserverFromContext(ctx).Fail(loomtransport.ReasonResponseWriteFailed)
+			errhandler(ctx, w, fmt.Errorf("failed to encode JSON-RPC response: %w", err))
+		}
+		return nil
+	}
+} // NewResourcesUnsubscribeHandler creates a JSON-RPC handler which calls the
+// "mcp_assistant" service "resources/unsubscribe" endpoint.
+func NewResourcesUnsubscribeHandler(endpoint loom.Endpoint, mux loomhttp.Muxer, decoder func(*http.Request) loomhttp.Decoder, encoder func(context.Context, http.ResponseWriter) loomhttp.Encoder, errhandler func(context.Context, http.ResponseWriter, error)) func(ctx context.Context, r *http.Request, req *jsonrpc.RawRequest, w http.ResponseWriter) error {
+	decodeParams := DecodeResourcesUnsubscribeRequest(mux, decoder)
+	return func(ctx context.Context, r *http.Request, req *jsonrpc.RawRequest, w http.ResponseWriter) error {
+		ctx = context.WithValue(ctx, loom.MethodKey, "resources/unsubscribe")
+		ctx = context.WithValue(ctx, loom.ServiceKey, "mcp_assistant")
+
+		params, err := decodeParams(r, req)
+		if err != nil {
+			loomtransport.RequestObserverFromContext(ctx).Fail(loomtransport.ReasonInvalidJSONRPCParams)
+			if req.HasID {
+				code := jsonrpc.InternalError
+				var serviceError *loom.ServiceError
+				if errors.As(err, &serviceError) {
+					code = jsonrpcErrorCodeForServiceError(serviceError)
+					if serviceError.Name == "resource_not_found" {
+						code = jsonrpc.Code(-32002)
+					}
+				}
+				encodeJSONRPCError(ctx, w, req, code, loom.ErrorSafeMessage(err), mcpruntime.NewErrorData(err), encoder, errhandler)
+			} else {
+				errhandler(ctx, w, fmt.Errorf("failed to decode parameters: %w", err))
+			}
+			return nil
+		}
+		_, err = endpoint(ctx, params)
+		if err != nil {
+			loomtransport.RequestObserverFromContext(ctx).Fail(loomtransport.ReasonHandlerError)
+			if req.HasID {
+				var en loom.LoomErrorNamer
+				if !errors.As(err, &en) {
+					code := jsonrpc.InternalError
+					var serviceError *loom.ServiceError
+					if errors.As(err, &serviceError) {
+						code = jsonrpcErrorCodeForServiceError(serviceError)
+						if serviceError.Name == "resource_not_found" {
+							code = jsonrpc.Code(-32002)
+						}
+					}
+					encodeJSONRPCError(ctx, w, req, code, loom.ErrorSafeMessage(err), mcpruntime.NewErrorData(err), encoder, errhandler)
+					return nil
+				}
+				switch en.LoomErrorName() {
+				case "invalid_params":
+					encodeJSONRPCError(ctx, w, req, jsonrpc.InvalidParams, loom.ErrorSafeMessage(err), mcpruntime.NewErrorData(err), encoder, errhandler)
+				case "resource_not_found":
+					encodeJSONRPCError(ctx, w, req, jsonrpc.Code(-32002), loom.ErrorSafeMessage(err), mcpruntime.NewErrorData(err), encoder, errhandler)
+				case "method_not_found":
+					encodeJSONRPCError(ctx, w, req, jsonrpc.MethodNotFound, loom.ErrorSafeMessage(err), mcpruntime.NewErrorData(err), encoder, errhandler)
+				default:
+					code := jsonrpc.InternalError
+					var serviceError *loom.ServiceError
+					if errors.As(err, &serviceError) {
+						code = jsonrpcErrorCodeForServiceError(serviceError)
+						if serviceError.Name == "resource_not_found" {
+							code = jsonrpc.Code(-32002)
+						}
+					}
+					encodeJSONRPCError(ctx, w, req, code, loom.ErrorSafeMessage(err), mcpruntime.NewErrorData(err), encoder, errhandler)
+				}
+			} else {
+				errhandler(ctx, w, fmt.Errorf("endpoint error: %w", err))
+			}
+			return nil
+		}
+
+		if !req.HasID {
+			return nil
+		}
+		response := jsonrpc.MakeSuccessResponse(req.ID, struct{}{})
+		if err := encoder(ctx, w).Encode(response); err != nil {
+			loomtransport.RequestObserverFromContext(ctx).Fail(loomtransport.ReasonResponseWriteFailed)
+			errhandler(ctx, w, fmt.Errorf("failed to encode JSON-RPC response: %w", err))
+		}
+		return nil
+	}
+} // NewPromptsListHandler creates a JSON-RPC handler which calls the
+// "mcp_assistant" service "prompts/list" endpoint.
+func NewPromptsListHandler(endpoint loom.Endpoint, mux loomhttp.Muxer, decoder func(*http.Request) loomhttp.Decoder, encoder func(context.Context, http.ResponseWriter) loomhttp.Encoder, errhandler func(context.Context, http.ResponseWriter, error)) func(ctx context.Context, r *http.Request, req *jsonrpc.RawRequest, w http.ResponseWriter) error {
+	decodeParams := DecodePromptsListRequest(mux, decoder)
+	return func(ctx context.Context, r *http.Request, req *jsonrpc.RawRequest, w http.ResponseWriter) error {
+		ctx = context.WithValue(ctx, loom.MethodKey, "prompts/list")
+		ctx = context.WithValue(ctx, loom.ServiceKey, "mcp_assistant")
+
+		params, err := decodeParams(r, req)
+		if err != nil {
+			loomtransport.RequestObserverFromContext(ctx).Fail(loomtransport.ReasonInvalidJSONRPCParams)
+			if req.HasID {
+				code := jsonrpc.InternalError
+				var serviceError *loom.ServiceError
+				if errors.As(err, &serviceError) {
+					code = jsonrpcErrorCodeForServiceError(serviceError)
+					if serviceError.Name == "resource_not_found" {
+						code = jsonrpc.Code(-32002)
+					}
+				}
+				encodeJSONRPCError(ctx, w, req, code, loom.ErrorSafeMessage(err), mcpruntime.NewErrorData(err), encoder, errhandler)
+			} else {
+				errhandler(ctx, w, fmt.Errorf("failed to decode parameters: %w", err))
+			}
+			return nil
+		}
+		res, err := endpoint(ctx, params)
+		if err != nil {
+			loomtransport.RequestObserverFromContext(ctx).Fail(loomtransport.ReasonHandlerError)
+			if req.HasID {
+				var en loom.LoomErrorNamer
+				if !errors.As(err, &en) {
+					code := jsonrpc.InternalError
+					var serviceError *loom.ServiceError
+					if errors.As(err, &serviceError) {
+						code = jsonrpcErrorCodeForServiceError(serviceError)
+						if serviceError.Name == "resource_not_found" {
+							code = jsonrpc.Code(-32002)
+						}
+					}
+					encodeJSONRPCError(ctx, w, req, code, loom.ErrorSafeMessage(err), mcpruntime.NewErrorData(err), encoder, errhandler)
+					return nil
+				}
+				switch en.LoomErrorName() {
+				case "invalid_params":
+					encodeJSONRPCError(ctx, w, req, jsonrpc.InvalidParams, loom.ErrorSafeMessage(err), mcpruntime.NewErrorData(err), encoder, errhandler)
+				case "resource_not_found":
+					encodeJSONRPCError(ctx, w, req, jsonrpc.Code(-32002), loom.ErrorSafeMessage(err), mcpruntime.NewErrorData(err), encoder, errhandler)
+				case "method_not_found":
+					encodeJSONRPCError(ctx, w, req, jsonrpc.MethodNotFound, loom.ErrorSafeMessage(err), mcpruntime.NewErrorData(err), encoder, errhandler)
+				default:
+					code := jsonrpc.InternalError
+					var serviceError *loom.ServiceError
+					if errors.As(err, &serviceError) {
+						code = jsonrpcErrorCodeForServiceError(serviceError)
+						if serviceError.Name == "resource_not_found" {
+							code = jsonrpc.Code(-32002)
+						}
+					}
+					encodeJSONRPCError(ctx, w, req, code, loom.ErrorSafeMessage(err), mcpruntime.NewErrorData(err), encoder, errhandler)
+				}
+			} else {
+				errhandler(ctx, w, fmt.Errorf("endpoint error: %w", err))
+			}
+			return nil
+		}
+
+		id := req.ID
+		if !req.HasID {
+			return nil
+		}
+		// Convert result to response body with proper JSON tags
+		body := NewPromptsListResponseBody(res.(*mcpassistant.PromptsListResult))
+		response := jsonrpc.MakeSuccessResponse(id, body)
+		if err := encoder(ctx, w).Encode(response); err != nil {
+			loomtransport.RequestObserverFromContext(ctx).Fail(loomtransport.ReasonResponseWriteFailed)
+			errhandler(ctx, w, fmt.Errorf("failed to encode JSON-RPC response: %w", err))
+		}
+		return nil
+	}
+} // NewPromptsGetHandler creates a JSON-RPC handler which calls the
+// "mcp_assistant" service "prompts/get" endpoint.
+func NewPromptsGetHandler(endpoint loom.Endpoint, mux loomhttp.Muxer, decoder func(*http.Request) loomhttp.Decoder, encoder func(context.Context, http.ResponseWriter) loomhttp.Encoder, errhandler func(context.Context, http.ResponseWriter, error)) func(ctx context.Context, r *http.Request, req *jsonrpc.RawRequest, w http.ResponseWriter) error {
+	decodeParams := DecodePromptsGetRequest(mux, decoder)
+	return func(ctx context.Context, r *http.Request, req *jsonrpc.RawRequest, w http.ResponseWriter) error {
+		ctx = context.WithValue(ctx, loom.MethodKey, "prompts/get")
+		ctx = context.WithValue(ctx, loom.ServiceKey, "mcp_assistant")
+
+		params, err := decodeParams(r, req)
+		if err != nil {
+			loomtransport.RequestObserverFromContext(ctx).Fail(loomtransport.ReasonInvalidJSONRPCParams)
+			if req.HasID {
+				code := jsonrpc.InternalError
+				var serviceError *loom.ServiceError
+				if errors.As(err, &serviceError) {
+					code = jsonrpcErrorCodeForServiceError(serviceError)
+					if serviceError.Name == "resource_not_found" {
+						code = jsonrpc.Code(-32002)
+					}
+				}
+				encodeJSONRPCError(ctx, w, req, code, loom.ErrorSafeMessage(err), mcpruntime.NewErrorData(err), encoder, errhandler)
+			} else {
+				errhandler(ctx, w, fmt.Errorf("failed to decode parameters: %w", err))
+			}
+			return nil
+		}
+		res, err := endpoint(ctx, params)
+		if err != nil {
+			loomtransport.RequestObserverFromContext(ctx).Fail(loomtransport.ReasonHandlerError)
+			if req.HasID {
+				var en loom.LoomErrorNamer
+				if !errors.As(err, &en) {
+					code := jsonrpc.InternalError
+					var serviceError *loom.ServiceError
+					if errors.As(err, &serviceError) {
+						code = jsonrpcErrorCodeForServiceError(serviceError)
+						if serviceError.Name == "resource_not_found" {
+							code = jsonrpc.Code(-32002)
+						}
+					}
+					encodeJSONRPCError(ctx, w, req, code, loom.ErrorSafeMessage(err), mcpruntime.NewErrorData(err), encoder, errhandler)
+					return nil
+				}
+				switch en.LoomErrorName() {
+				case "invalid_params":
+					encodeJSONRPCError(ctx, w, req, jsonrpc.InvalidParams, loom.ErrorSafeMessage(err), mcpruntime.NewErrorData(err), encoder, errhandler)
+				case "resource_not_found":
+					encodeJSONRPCError(ctx, w, req, jsonrpc.Code(-32002), loom.ErrorSafeMessage(err), mcpruntime.NewErrorData(err), encoder, errhandler)
+				case "method_not_found":
+					encodeJSONRPCError(ctx, w, req, jsonrpc.MethodNotFound, loom.ErrorSafeMessage(err), mcpruntime.NewErrorData(err), encoder, errhandler)
+				default:
+					code := jsonrpc.InternalError
+					var serviceError *loom.ServiceError
+					if errors.As(err, &serviceError) {
+						code = jsonrpcErrorCodeForServiceError(serviceError)
+						if serviceError.Name == "resource_not_found" {
+							code = jsonrpc.Code(-32002)
+						}
+					}
+					encodeJSONRPCError(ctx, w, req, code, loom.ErrorSafeMessage(err), mcpruntime.NewErrorData(err), encoder, errhandler)
+				}
+			} else {
+				errhandler(ctx, w, fmt.Errorf("endpoint error: %w", err))
+			}
+			return nil
+		}
+
+		id := req.ID
+		if !req.HasID {
+			return nil
+		}
+		// Convert result to response body with proper JSON tags
+		body := NewPromptsGetResponseBody(res.(*mcpassistant.PromptsGetResult))
+		response := jsonrpc.MakeSuccessResponse(id, body)
+		if err := encoder(ctx, w).Encode(response); err != nil {
+			loomtransport.RequestObserverFromContext(ctx).Fail(loomtransport.ReasonResponseWriteFailed)
+			errhandler(ctx, w, fmt.Errorf("failed to encode JSON-RPC response: %w", err))
+		}
+		return nil
+	}
+} // NewNotifyStatusUpdateHandler creates a JSON-RPC handler which calls the
+// "mcp_assistant" service "notify_status_update" endpoint.
+func NewNotifyStatusUpdateHandler(endpoint loom.Endpoint, mux loomhttp.Muxer, decoder func(*http.Request) loomhttp.Decoder, encoder func(context.Context, http.ResponseWriter) loomhttp.Encoder, errhandler func(context.Context, http.ResponseWriter, error)) func(ctx context.Context, r *http.Request, req *jsonrpc.RawRequest, w http.ResponseWriter) error {
+	decodeParams := DecodeNotifyStatusUpdateRequest(mux, decoder)
+	return func(ctx context.Context, r *http.Request, req *jsonrpc.RawRequest, w http.ResponseWriter) error {
+		ctx = context.WithValue(ctx, loom.MethodKey, "notify_status_update")
+		ctx = context.WithValue(ctx, loom.ServiceKey, "mcp_assistant")
+
+		params, err := decodeParams(r, req)
+		if err != nil {
+			loomtransport.RequestObserverFromContext(ctx).Fail(loomtransport.ReasonInvalidJSONRPCParams)
+			if req.HasID {
+				code := jsonrpc.InternalError
+				var serviceError *loom.ServiceError
+				if errors.As(err, &serviceError) {
+					code = jsonrpcErrorCodeForServiceError(serviceError)
+					if serviceError.Name == "resource_not_found" {
+						code = jsonrpc.Code(-32002)
+					}
+				}
+				encodeJSONRPCError(ctx, w, req, code, loom.ErrorSafeMessage(err), mcpruntime.NewErrorData(err), encoder, errhandler)
+			} else {
+				errhandler(ctx, w, fmt.Errorf("failed to decode parameters: %w", err))
+			}
+			return nil
+		}
+		_, err = endpoint(ctx, params)
+		if err != nil {
+			loomtransport.RequestObserverFromContext(ctx).Fail(loomtransport.ReasonHandlerError)
+			if req.HasID {
+				var en loom.LoomErrorNamer
+				if !errors.As(err, &en) {
+					code := jsonrpc.InternalError
+					var serviceError *loom.ServiceError
+					if errors.As(err, &serviceError) {
+						code = jsonrpcErrorCodeForServiceError(serviceError)
+						if serviceError.Name == "resource_not_found" {
+							code = jsonrpc.Code(-32002)
+						}
+					}
+					encodeJSONRPCError(ctx, w, req, code, loom.ErrorSafeMessage(err), mcpruntime.NewErrorData(err), encoder, errhandler)
+					return nil
+				}
+				switch en.LoomErrorName() {
+				case "invalid_params":
+					encodeJSONRPCError(ctx, w, req, jsonrpc.InvalidParams, loom.ErrorSafeMessage(err), mcpruntime.NewErrorData(err), encoder, errhandler)
+				case "resource_not_found":
+					encodeJSONRPCError(ctx, w, req, jsonrpc.Code(-32002), loom.ErrorSafeMessage(err), mcpruntime.NewErrorData(err), encoder, errhandler)
+				case "method_not_found":
+					encodeJSONRPCError(ctx, w, req, jsonrpc.MethodNotFound, loom.ErrorSafeMessage(err), mcpruntime.NewErrorData(err), encoder, errhandler)
+				default:
+					code := jsonrpc.InternalError
+					var serviceError *loom.ServiceError
+					if errors.As(err, &serviceError) {
+						code = jsonrpcErrorCodeForServiceError(serviceError)
+						if serviceError.Name == "resource_not_found" {
+							code = jsonrpc.Code(-32002)
+						}
+					}
+					encodeJSONRPCError(ctx, w, req, code, loom.ErrorSafeMessage(err), mcpruntime.NewErrorData(err), encoder, errhandler)
+				}
+			} else {
+				errhandler(ctx, w, fmt.Errorf("endpoint error: %w", err))
+			}
+			return nil
+		}
+
+		if !req.HasID {
+			return nil
+		}
+		response := jsonrpc.MakeSuccessResponse(req.ID, struct{}{})
+		if err := encoder(ctx, w).Encode(response); err != nil {
+			loomtransport.RequestObserverFromContext(ctx).Fail(loomtransport.ReasonResponseWriteFailed)
+			errhandler(ctx, w, fmt.Errorf("failed to encode JSON-RPC response: %w", err))
+		}
+		return nil
+	}
+} // NewEventsStreamHandler creates a JSON-RPC handler which calls the
+// "mcp_assistant" service "events/stream" endpoint.
+func NewEventsStreamHandler(endpoint loom.Endpoint, mux loomhttp.Muxer, decoder func(*http.Request) loomhttp.Decoder, encoder func(context.Context, http.ResponseWriter) loomhttp.Encoder, errhandler func(context.Context, http.ResponseWriter, error), streamWritePolicy loomhttp.StreamWritePolicy) func(ctx context.Context, r *http.Request, req *jsonrpc.RawRequest, w http.ResponseWriter) error {
+	return func(ctx context.Context, r *http.Request, req *jsonrpc.RawRequest, w http.ResponseWriter) error {
+		ctx = context.WithValue(ctx, loom.MethodKey, "events/stream")
+		ctx = context.WithValue(ctx, loom.ServiceKey, "mcp_assistant")
+
+		strm := &EventsStreamServerStream{
+			encoder:      encoder,
+			r:            r,
+			requestHasID: req.HasID,
+			requestID:    req.ID,
+			w:            w,
+			writer:       loomhttp.NewSSEStreamWriter(w, r.Context(), loomtransport.TransportJSONRPC, streamWritePolicy),
+		}
+		if r.Method == http.MethodGet && req.Method == "events/stream" {
+			if err := strm.Open(r.Context()); err != nil {
+				return err
+			}
+		}
+		v := &mcpassistant.EventsStreamEndpointInput{Stream: strm}
+		if _, err := endpoint(ctx, v); err != nil {
+			if req.HasID {
+				var en loom.LoomErrorNamer
+				if errors.As(err, &en) {
+					switch en.LoomErrorName() {
+					case "invalid_params":
+						return strm.sendError(ctx, req.ID, jsonrpc.InvalidParams, loom.ErrorSafeMessage(err), mcpruntime.NewErrorData(err))
+					case "resource_not_found":
+						return strm.sendError(ctx, req.ID, jsonrpc.Code(-32002), loom.ErrorSafeMessage(err), mcpruntime.NewErrorData(err))
+					case "method_not_found":
+						return strm.sendError(ctx, req.ID, jsonrpc.MethodNotFound, loom.ErrorSafeMessage(err), mcpruntime.NewErrorData(err))
+					}
+				}
+				code := jsonrpc.InternalError
+				var serviceError *loom.ServiceError
+				if errors.As(err, &serviceError) {
+					code = jsonrpcErrorCodeForServiceError(serviceError)
+					if serviceError.Name == "resource_not_found" {
+						code = jsonrpc.Code(-32002)
+					}
+				}
+				return strm.sendError(ctx, req.ID, code, loom.ErrorSafeMessage(err), mcpruntime.NewErrorData(err))
+			}
+			return nil
+		}
+		return nil
+	}
+} // encodeJSONRPCError creates and sends a JSON-RPC error response (handles nil ID gracefully)
+func (s *Server) encodeJSONRPCError(ctx context.Context, w http.ResponseWriter, req *jsonrpc.RawRequest, code jsonrpc.Code, message string, data any) {
+	encodeJSONRPCError(ctx, w, req, code, message, data, s.encoder, s.errhandler)
+}
+
+// encodeJSONRPCError creates and sends a JSON-RPC error response (handles nil ID gracefully)
+func encodeJSONRPCError(ctx context.Context, w http.ResponseWriter, req *jsonrpc.RawRequest, code jsonrpc.Code, message string, data any, encoder func(context.Context, http.ResponseWriter) loomhttp.Encoder, errhandler func(context.Context, http.ResponseWriter, error)) {
+	if req.HasID || code == jsonrpc.InvalidRequest {
+		id := req.ID
+		if !req.HasID {
+			id = nil
+		}
+		response := jsonrpc.MakeErrorResponse(id, code, message, data)
+		if err := encoder(ctx, w).Encode(response); err != nil {
+			errhandler(ctx, w, fmt.Errorf("failed to encode JSON-RPC response: %w", err))
+		}
+	}
+}
+
+// jsonrpcErrorCodeForServiceError classifies framework validation errors as invalid params and all other service errors as internal errors.
+func jsonrpcErrorCodeForServiceError(err *loom.ServiceError) jsonrpc.Code {
+	if err == nil {
+		return jsonrpc.InternalError
+	}
+	switch err.Name {
+	case loom.InvalidFieldType, loom.MissingField, loom.InvalidEnumValue, loom.InvalidFormat, loom.InvalidPattern, loom.InvalidRange, loom.InvalidLength, loom.DecodePayload, loom.MissingPayload:
+		return jsonrpc.InvalidParams
+	default:
+		return jsonrpc.InternalError
+	}
 }
 
 // MCPMaxRequestBodyBytes limits JSON-RPC request bodies before middleware
@@ -439,6 +1435,16 @@ var MCPMaxRequestBodyBytes int64 = 32 << 20
 // Call AddTrustedOrigin to allow additional origins, or set the variable to
 // nil to disable the check, before mounting the server.
 var MCPCrossOriginProtection = http.NewCrossOriginProtection()
+
+// MCPSessionPrincipal extracts the authenticated owner of a streamable HTTP
+// session. Set it before mounting the server when application authentication
+// uses a principal source other than MCP SDK TokenInfo.
+var MCPSessionPrincipal = func(ctx context.Context) string {
+	if tokenInfo := mcpauth.TokenInfoFromContext(ctx); tokenInfo != nil {
+		return strings.TrimSpace(tokenInfo.UserID)
+	}
+	return ""
+}
 
 // withMCPPolicyHeaders propagates MCP policy header values into the request context.
 //
@@ -487,11 +1493,12 @@ func withMCPPolicyHeaders(streamableHTTPSessions *mcpruntime.StreamableHTTPSessi
 			return
 		}
 		method := jsonRPCRequestMethod(envelope)
+		principal := mcpSessionPrincipal(r.Context())
 		if r.Method == http.MethodDelete {
-			handleMCPStreamableHTTPSessionDelete(streamableHTTPSessions, w, r)
+			handleMCPStreamableHTTPSessionDelete(streamableHTTPSessions, w, r, principal)
 			return
 		}
-		if err := validateMCPStreamableHTTPSession(streamableHTTPSessions, r, method); err != nil {
+		if err := validateMCPStreamableHTTPSession(streamableHTTPSessions, r, method, principal); err != nil {
 			writeMCPStreamableHTTPSessionError(w, r, err)
 			return
 		}
@@ -519,7 +1526,7 @@ func withMCPPolicyHeaders(streamableHTTPSessions *mcpruntime.StreamableHTTPSessi
 		}
 		if r.Method == http.MethodGet {
 			streamCtx, cancel := context.WithCancel(ctx)
-			cleanup, err := streamableHTTPSessions.RegisterListener(sessionID, cancel)
+			cleanup, err := streamableHTTPSessions.RegisterListenerForPrincipal(sessionID, principal, cancel)
 			if err != nil {
 				cancel()
 				writeMCPStreamableHTTPSessionError(w, r, err)
@@ -542,7 +1549,7 @@ func withMCPPolicyHeaders(streamableHTTPSessions *mcpruntime.StreamableHTTPSessi
 		}
 		if method == "initialize" {
 			if issuedSessionID := w.Header().Get(mcpruntime.HeaderKeySessionID); issuedSessionID != "" {
-				if err := streamableHTTPSessions.Issue(issuedSessionID); err != nil {
+				if err := streamableHTTPSessions.IssueForPrincipal(issuedSessionID, principal); err != nil {
 					writeMCPStreamableHTTPSessionError(w, r, err)
 					return
 				}
@@ -551,24 +1558,38 @@ func withMCPPolicyHeaders(streamableHTTPSessions *mcpruntime.StreamableHTTPSessi
 	}
 }
 
-func validateMCPStreamableHTTPSession(sessions *mcpruntime.StreamableHTTPSessions, r *http.Request, method string) error {
+func mcpSessionPrincipal(ctx context.Context) string {
+	if MCPSessionPrincipal == nil {
+		return ""
+	}
+	return strings.TrimSpace(MCPSessionPrincipal(ctx))
+}
+
+func validateMCPStreamableHTTPSession(sessions *mcpruntime.StreamableHTTPSessions, r *http.Request, method string, principal string) error {
 	if sessions == nil || r == nil {
 		panic("streamable HTTP session validation requires a store and request")
 	}
-	if method == "initialize" {
-		return nil
-	}
 	sessionID := r.Header.Get(mcpruntime.HeaderKeySessionID)
+	if method == "initialize" {
+		// A fresh initialization must not supply a session ID. A repeated
+		// initialization may carry its already-issued session so the adapter can
+		// return the protocol-level "Already initialized" error. Validate that
+		// session first so foreign and attacker-chosen IDs fail at the transport.
+		if sessionID == "" {
+			return nil
+		}
+		return sessions.ValidateForPrincipal(sessionID, principal)
+	}
 	if sessionID == "" {
 		if !sessions.HasIssued() {
 			return nil
 		}
 		return mcpruntime.ErrInvalidSessionID
 	}
-	return sessions.Validate(sessionID)
+	return sessions.ValidateForPrincipal(sessionID, principal)
 }
 
-func handleMCPStreamableHTTPSessionDelete(sessions *mcpruntime.StreamableHTTPSessions, w http.ResponseWriter, r *http.Request) {
+func handleMCPStreamableHTTPSessionDelete(sessions *mcpruntime.StreamableHTTPSessions, w http.ResponseWriter, r *http.Request, principal string) {
 	if sessions == nil || r == nil {
 		panic("streamable HTTP session termination requires a store and request")
 	}
@@ -577,7 +1598,7 @@ func handleMCPStreamableHTTPSessionDelete(sessions *mcpruntime.StreamableHTTPSes
 		http.Error(w, "Missing session ID", http.StatusBadRequest)
 		return
 	}
-	if err := sessions.Terminate(sessionID); err != nil {
+	if err := sessions.TerminateForPrincipal(sessionID, principal); err != nil {
 		writeMCPStreamableHTTPSessionError(w, r, err)
 		return
 	}
@@ -591,6 +1612,10 @@ func writeMCPStreamableHTTPSessionError(w http.ResponseWriter, r *http.Request, 
 	}
 	if errors.Is(err, mcpruntime.ErrInvalidSessionID) || errors.Is(err, mcpruntime.ErrSessionTerminated) {
 		http.Error(w, "Invalid or expired session ID", http.StatusNotFound)
+		return
+	}
+	if errors.Is(err, mcpruntime.ErrSessionPrincipalBindingMissing) || errors.Is(err, mcpruntime.ErrSessionPrincipalMismatch) {
+		http.Error(w, err.Error(), http.StatusForbidden)
 		return
 	}
 	http.Error(w, "Invalid or expired session ID", http.StatusNotFound)
@@ -765,898 +1790,4 @@ func acceptedMCPJSONRPCNotificationOrResponse(requestCancellations *mcpruntime.R
 	default:
 		return false
 	}
-}
-
-// NewInitializeHandler creates a JSON-RPC handler which calls the
-// "mcp_assistant" service "initialize" endpoint.
-func NewInitializeHandler(endpoint loom.Endpoint, mux loomhttp.Muxer, decoder func(*http.Request) loomhttp.Decoder, encoder func(context.Context, http.ResponseWriter) loomhttp.Encoder, errhandler func(context.Context, http.ResponseWriter, error)) func(ctx context.Context, r *http.Request, req *jsonrpc.RawRequest, w http.ResponseWriter) error {
-	decodeParams := DecodeInitializeRequest(mux, decoder)
-	return func(ctx context.Context, r *http.Request, req *jsonrpc.RawRequest, w http.ResponseWriter) error {
-		ctx = context.WithValue(ctx, loom.MethodKey, "initialize")
-		ctx = context.WithValue(ctx, loom.ServiceKey, "mcp_assistant")
-
-		params, err := decodeParams(r, req)
-		if err != nil {
-			loomtransport.RequestObserverFromContext(ctx).Fail(loomtransport.ReasonInvalidJSONRPCParams)
-			if req.HasID {
-				code := jsonrpc.InternalError
-				var serviceError *loom.ServiceError
-				if errors.As(err, &serviceError) {
-					code = jsonrpcErrorCodeForServiceError(serviceError)
-				}
-				encodeJSONRPCError(ctx, w, req, code, loom.ErrorSafeMessage(err), mcpruntime.NewErrorData(err), encoder, errhandler)
-			} else {
-				errhandler(ctx, w, fmt.Errorf("failed to decode parameters: %w", err))
-			}
-			return nil
-		}
-		res, err := endpoint(ctx, params)
-		if err != nil {
-			loomtransport.RequestObserverFromContext(ctx).Fail(loomtransport.ReasonHandlerError)
-			if req.HasID {
-				var en loom.LoomErrorNamer
-				if !errors.As(err, &en) {
-					code := jsonrpc.InternalError
-					var serviceError *loom.ServiceError
-					if errors.As(err, &serviceError) {
-						code = jsonrpcErrorCodeForServiceError(serviceError)
-					}
-					encodeJSONRPCError(ctx, w, req, code, loom.ErrorSafeMessage(err), mcpruntime.NewErrorData(err), encoder, errhandler)
-					return nil
-				}
-				switch en.LoomErrorName() {
-				case "invalid_params":
-					encodeJSONRPCError(ctx, w, req, jsonrpc.InvalidParams, loom.ErrorSafeMessage(err), mcpruntime.NewErrorData(err), encoder, errhandler)
-				case "resource_not_found":
-					encodeJSONRPCError(ctx, w, req, jsonrpc.Code(-32002), loom.ErrorSafeMessage(err), mcpruntime.NewErrorData(err), encoder, errhandler)
-				case "method_not_found":
-					encodeJSONRPCError(ctx, w, req, jsonrpc.MethodNotFound, loom.ErrorSafeMessage(err), mcpruntime.NewErrorData(err), encoder, errhandler)
-				default:
-					code := jsonrpc.InternalError
-					var serviceError *loom.ServiceError
-					if errors.As(err, &serviceError) {
-						code = jsonrpcErrorCodeForServiceError(serviceError)
-					}
-					encodeJSONRPCError(ctx, w, req, code, loom.ErrorSafeMessage(err), mcpruntime.NewErrorData(err), encoder, errhandler)
-				}
-			} else {
-				errhandler(ctx, w, fmt.Errorf("endpoint error: %w", err))
-			}
-			return nil
-		}
-
-		id := req.ID
-		if !req.HasID {
-			return nil
-		}
-		// Convert result to response body with proper JSON tags
-		body := NewInitializeResponseBody(res.(*mcpassistant.InitializeResult))
-		response := jsonrpc.MakeSuccessResponse(id, body)
-		if err := encoder(ctx, w).Encode(response); err != nil {
-			loomtransport.RequestObserverFromContext(ctx).Fail(loomtransport.ReasonResponseWriteFailed)
-			errhandler(ctx, w, fmt.Errorf("failed to encode JSON-RPC response: %w", err))
-		}
-		return nil
-	}
-} // NewPingHandler creates a JSON-RPC handler which calls the "mcp_assistant"
-// service "ping" endpoint.
-func NewPingHandler(endpoint loom.Endpoint, mux loomhttp.Muxer, decoder func(*http.Request) loomhttp.Decoder, encoder func(context.Context, http.ResponseWriter) loomhttp.Encoder, errhandler func(context.Context, http.ResponseWriter, error)) func(ctx context.Context, r *http.Request, req *jsonrpc.RawRequest, w http.ResponseWriter) error {
-	return func(ctx context.Context, r *http.Request, req *jsonrpc.RawRequest, w http.ResponseWriter) error {
-		ctx = context.WithValue(ctx, loom.MethodKey, "ping")
-		ctx = context.WithValue(ctx, loom.ServiceKey, "mcp_assistant")
-
-		res, err := endpoint(ctx, nil)
-		if err != nil {
-			loomtransport.RequestObserverFromContext(ctx).Fail(loomtransport.ReasonHandlerError)
-			if req.HasID {
-				var en loom.LoomErrorNamer
-				if !errors.As(err, &en) {
-					code := jsonrpc.InternalError
-					var serviceError *loom.ServiceError
-					if errors.As(err, &serviceError) {
-						code = jsonrpcErrorCodeForServiceError(serviceError)
-					}
-					encodeJSONRPCError(ctx, w, req, code, loom.ErrorSafeMessage(err), mcpruntime.NewErrorData(err), encoder, errhandler)
-					return nil
-				}
-				switch en.LoomErrorName() {
-				case "invalid_params":
-					encodeJSONRPCError(ctx, w, req, jsonrpc.InvalidParams, loom.ErrorSafeMessage(err), mcpruntime.NewErrorData(err), encoder, errhandler)
-				case "resource_not_found":
-					encodeJSONRPCError(ctx, w, req, jsonrpc.Code(-32002), loom.ErrorSafeMessage(err), mcpruntime.NewErrorData(err), encoder, errhandler)
-				case "method_not_found":
-					encodeJSONRPCError(ctx, w, req, jsonrpc.MethodNotFound, loom.ErrorSafeMessage(err), mcpruntime.NewErrorData(err), encoder, errhandler)
-				default:
-					code := jsonrpc.InternalError
-					var serviceError *loom.ServiceError
-					if errors.As(err, &serviceError) {
-						code = jsonrpcErrorCodeForServiceError(serviceError)
-					}
-					encodeJSONRPCError(ctx, w, req, code, loom.ErrorSafeMessage(err), mcpruntime.NewErrorData(err), encoder, errhandler)
-				}
-			} else {
-				errhandler(ctx, w, fmt.Errorf("endpoint error: %w", err))
-			}
-			return nil
-		}
-
-		id := req.ID
-		if !req.HasID {
-			return nil
-		}
-		// Convert result to response body with proper JSON tags
-		body := NewPingResponseBody(res.(*mcpassistant.PingResult))
-		response := jsonrpc.MakeSuccessResponse(id, body)
-		if err := encoder(ctx, w).Encode(response); err != nil {
-			loomtransport.RequestObserverFromContext(ctx).Fail(loomtransport.ReasonResponseWriteFailed)
-			errhandler(ctx, w, fmt.Errorf("failed to encode JSON-RPC response: %w", err))
-		}
-		return nil
-	}
-} // NewToolsListHandler creates a JSON-RPC handler which calls the
-// "mcp_assistant" service "tools/list" endpoint.
-func NewToolsListHandler(endpoint loom.Endpoint, mux loomhttp.Muxer, decoder func(*http.Request) loomhttp.Decoder, encoder func(context.Context, http.ResponseWriter) loomhttp.Encoder, errhandler func(context.Context, http.ResponseWriter, error)) func(ctx context.Context, r *http.Request, req *jsonrpc.RawRequest, w http.ResponseWriter) error {
-	decodeParams := DecodeToolsListRequest(mux, decoder)
-	return func(ctx context.Context, r *http.Request, req *jsonrpc.RawRequest, w http.ResponseWriter) error {
-		ctx = context.WithValue(ctx, loom.MethodKey, "tools/list")
-		ctx = context.WithValue(ctx, loom.ServiceKey, "mcp_assistant")
-
-		params, err := decodeParams(r, req)
-		if err != nil {
-			loomtransport.RequestObserverFromContext(ctx).Fail(loomtransport.ReasonInvalidJSONRPCParams)
-			if req.HasID {
-				code := jsonrpc.InternalError
-				var serviceError *loom.ServiceError
-				if errors.As(err, &serviceError) {
-					code = jsonrpcErrorCodeForServiceError(serviceError)
-				}
-				encodeJSONRPCError(ctx, w, req, code, loom.ErrorSafeMessage(err), mcpruntime.NewErrorData(err), encoder, errhandler)
-			} else {
-				errhandler(ctx, w, fmt.Errorf("failed to decode parameters: %w", err))
-			}
-			return nil
-		}
-		res, err := endpoint(ctx, params)
-		if err != nil {
-			loomtransport.RequestObserverFromContext(ctx).Fail(loomtransport.ReasonHandlerError)
-			if req.HasID {
-				var en loom.LoomErrorNamer
-				if !errors.As(err, &en) {
-					code := jsonrpc.InternalError
-					var serviceError *loom.ServiceError
-					if errors.As(err, &serviceError) {
-						code = jsonrpcErrorCodeForServiceError(serviceError)
-					}
-					encodeJSONRPCError(ctx, w, req, code, loom.ErrorSafeMessage(err), mcpruntime.NewErrorData(err), encoder, errhandler)
-					return nil
-				}
-				switch en.LoomErrorName() {
-				case "invalid_params":
-					encodeJSONRPCError(ctx, w, req, jsonrpc.InvalidParams, loom.ErrorSafeMessage(err), mcpruntime.NewErrorData(err), encoder, errhandler)
-				case "resource_not_found":
-					encodeJSONRPCError(ctx, w, req, jsonrpc.Code(-32002), loom.ErrorSafeMessage(err), mcpruntime.NewErrorData(err), encoder, errhandler)
-				case "method_not_found":
-					encodeJSONRPCError(ctx, w, req, jsonrpc.MethodNotFound, loom.ErrorSafeMessage(err), mcpruntime.NewErrorData(err), encoder, errhandler)
-				default:
-					code := jsonrpc.InternalError
-					var serviceError *loom.ServiceError
-					if errors.As(err, &serviceError) {
-						code = jsonrpcErrorCodeForServiceError(serviceError)
-					}
-					encodeJSONRPCError(ctx, w, req, code, loom.ErrorSafeMessage(err), mcpruntime.NewErrorData(err), encoder, errhandler)
-				}
-			} else {
-				errhandler(ctx, w, fmt.Errorf("endpoint error: %w", err))
-			}
-			return nil
-		}
-
-		id := req.ID
-		if !req.HasID {
-			return nil
-		}
-		// Convert result to response body with proper JSON tags
-		body := NewToolsListResponseBody(res.(*mcpassistant.ToolsListResult))
-		response := jsonrpc.MakeSuccessResponse(id, body)
-		if err := encoder(ctx, w).Encode(response); err != nil {
-			loomtransport.RequestObserverFromContext(ctx).Fail(loomtransport.ReasonResponseWriteFailed)
-			errhandler(ctx, w, fmt.Errorf("failed to encode JSON-RPC response: %w", err))
-		}
-		return nil
-	}
-} // NewToolsCallHandler creates a JSON-RPC handler which calls the
-// "mcp_assistant" service "tools/call" endpoint.
-func NewToolsCallHandler(endpoint loom.Endpoint, mux loomhttp.Muxer, decoder func(*http.Request) loomhttp.Decoder, encoder func(context.Context, http.ResponseWriter) loomhttp.Encoder, errhandler func(context.Context, http.ResponseWriter, error), streamWritePolicy loomhttp.StreamWritePolicy) func(ctx context.Context, r *http.Request, req *jsonrpc.RawRequest, w http.ResponseWriter) error {
-	decodeParams := DecodeToolsCallRequest(mux, decoder)
-	return func(ctx context.Context, r *http.Request, req *jsonrpc.RawRequest, w http.ResponseWriter) error {
-		ctx = context.WithValue(ctx, loom.MethodKey, "tools/call")
-		ctx = context.WithValue(ctx, loom.ServiceKey, "mcp_assistant")
-
-		strm := &ToolsCallServerStream{
-			encoder:      encoder,
-			r:            r,
-			requestHasID: req.HasID,
-			requestID:    req.ID,
-			w:            w,
-			writer:       loomhttp.NewSSEStreamWriter(w, r.Context(), loomtransport.TransportJSONRPC, streamWritePolicy),
-		}
-		params, err := decodeParams(r, req)
-		if err != nil {
-			if req.HasID {
-				code := jsonrpc.InternalError
-				var serviceError *loom.ServiceError
-				if errors.As(err, &serviceError) {
-					code = jsonrpcErrorCodeForServiceError(serviceError)
-				}
-				return strm.sendError(ctx, req.ID, code, loom.ErrorSafeMessage(err), mcpruntime.NewErrorData(err))
-			}
-			return nil
-		}
-		v := &mcpassistant.ToolsCallEndpointInput{
-			Payload: params,
-			Stream:  strm,
-		}
-		if _, err := endpoint(ctx, v); err != nil {
-			if req.HasID {
-				var en loom.LoomErrorNamer
-				if errors.As(err, &en) {
-					switch en.LoomErrorName() {
-					case "invalid_params":
-						return strm.sendError(ctx, req.ID, jsonrpc.InvalidParams, loom.ErrorSafeMessage(err), mcpruntime.NewErrorData(err))
-					case "method_not_found":
-						return strm.sendError(ctx, req.ID, jsonrpc.MethodNotFound, loom.ErrorSafeMessage(err), mcpruntime.NewErrorData(err))
-					}
-				}
-				code := jsonrpc.InternalError
-				var serviceError *loom.ServiceError
-				if errors.As(err, &serviceError) {
-					code = jsonrpcErrorCodeForServiceError(serviceError)
-				}
-				return strm.sendError(ctx, req.ID, code, loom.ErrorSafeMessage(err), mcpruntime.NewErrorData(err))
-			}
-			return nil
-		}
-		return nil
-	}
-} // NewResourcesListHandler creates a JSON-RPC handler which calls the
-// "mcp_assistant" service "resources/list" endpoint.
-func NewResourcesListHandler(endpoint loom.Endpoint, mux loomhttp.Muxer, decoder func(*http.Request) loomhttp.Decoder, encoder func(context.Context, http.ResponseWriter) loomhttp.Encoder, errhandler func(context.Context, http.ResponseWriter, error)) func(ctx context.Context, r *http.Request, req *jsonrpc.RawRequest, w http.ResponseWriter) error {
-	decodeParams := DecodeResourcesListRequest(mux, decoder)
-	return func(ctx context.Context, r *http.Request, req *jsonrpc.RawRequest, w http.ResponseWriter) error {
-		ctx = context.WithValue(ctx, loom.MethodKey, "resources/list")
-		ctx = context.WithValue(ctx, loom.ServiceKey, "mcp_assistant")
-
-		params, err := decodeParams(r, req)
-		if err != nil {
-			loomtransport.RequestObserverFromContext(ctx).Fail(loomtransport.ReasonInvalidJSONRPCParams)
-			if req.HasID {
-				code := jsonrpc.InternalError
-				var serviceError *loom.ServiceError
-				if errors.As(err, &serviceError) {
-					code = jsonrpcErrorCodeForServiceError(serviceError)
-				}
-				encodeJSONRPCError(ctx, w, req, code, loom.ErrorSafeMessage(err), mcpruntime.NewErrorData(err), encoder, errhandler)
-			} else {
-				errhandler(ctx, w, fmt.Errorf("failed to decode parameters: %w", err))
-			}
-			return nil
-		}
-		res, err := endpoint(ctx, params)
-		if err != nil {
-			loomtransport.RequestObserverFromContext(ctx).Fail(loomtransport.ReasonHandlerError)
-			if req.HasID {
-				var en loom.LoomErrorNamer
-				if !errors.As(err, &en) {
-					code := jsonrpc.InternalError
-					var serviceError *loom.ServiceError
-					if errors.As(err, &serviceError) {
-						code = jsonrpcErrorCodeForServiceError(serviceError)
-					}
-					encodeJSONRPCError(ctx, w, req, code, loom.ErrorSafeMessage(err), mcpruntime.NewErrorData(err), encoder, errhandler)
-					return nil
-				}
-				switch en.LoomErrorName() {
-				case "invalid_params":
-					encodeJSONRPCError(ctx, w, req, jsonrpc.InvalidParams, loom.ErrorSafeMessage(err), mcpruntime.NewErrorData(err), encoder, errhandler)
-				case "resource_not_found":
-					encodeJSONRPCError(ctx, w, req, jsonrpc.Code(-32002), loom.ErrorSafeMessage(err), mcpruntime.NewErrorData(err), encoder, errhandler)
-				case "method_not_found":
-					encodeJSONRPCError(ctx, w, req, jsonrpc.MethodNotFound, loom.ErrorSafeMessage(err), mcpruntime.NewErrorData(err), encoder, errhandler)
-				default:
-					code := jsonrpc.InternalError
-					var serviceError *loom.ServiceError
-					if errors.As(err, &serviceError) {
-						code = jsonrpcErrorCodeForServiceError(serviceError)
-					}
-					encodeJSONRPCError(ctx, w, req, code, loom.ErrorSafeMessage(err), mcpruntime.NewErrorData(err), encoder, errhandler)
-				}
-			} else {
-				errhandler(ctx, w, fmt.Errorf("endpoint error: %w", err))
-			}
-			return nil
-		}
-
-		id := req.ID
-		if !req.HasID {
-			return nil
-		}
-		// Convert result to response body with proper JSON tags
-		body := NewResourcesListResponseBody(res.(*mcpassistant.ResourcesListResult))
-		response := jsonrpc.MakeSuccessResponse(id, body)
-		if err := encoder(ctx, w).Encode(response); err != nil {
-			loomtransport.RequestObserverFromContext(ctx).Fail(loomtransport.ReasonResponseWriteFailed)
-			errhandler(ctx, w, fmt.Errorf("failed to encode JSON-RPC response: %w", err))
-		}
-		return nil
-	}
-} // NewResourcesReadHandler creates a JSON-RPC handler which calls the
-// "mcp_assistant" service "resources/read" endpoint.
-func NewResourcesReadHandler(endpoint loom.Endpoint, mux loomhttp.Muxer, decoder func(*http.Request) loomhttp.Decoder, encoder func(context.Context, http.ResponseWriter) loomhttp.Encoder, errhandler func(context.Context, http.ResponseWriter, error)) func(ctx context.Context, r *http.Request, req *jsonrpc.RawRequest, w http.ResponseWriter) error {
-	decodeParams := DecodeResourcesReadRequest(mux, decoder)
-	return func(ctx context.Context, r *http.Request, req *jsonrpc.RawRequest, w http.ResponseWriter) error {
-		ctx = context.WithValue(ctx, loom.MethodKey, "resources/read")
-		ctx = context.WithValue(ctx, loom.ServiceKey, "mcp_assistant")
-
-		params, err := decodeParams(r, req)
-		if err != nil {
-			loomtransport.RequestObserverFromContext(ctx).Fail(loomtransport.ReasonInvalidJSONRPCParams)
-			if req.HasID {
-				code := jsonrpc.InternalError
-				var serviceError *loom.ServiceError
-				if errors.As(err, &serviceError) {
-					code = jsonrpcErrorCodeForServiceError(serviceError)
-				}
-				encodeJSONRPCError(ctx, w, req, code, loom.ErrorSafeMessage(err), mcpruntime.NewErrorData(err), encoder, errhandler)
-			} else {
-				errhandler(ctx, w, fmt.Errorf("failed to decode parameters: %w", err))
-			}
-			return nil
-		}
-		res, err := endpoint(ctx, params)
-		if err != nil {
-			loomtransport.RequestObserverFromContext(ctx).Fail(loomtransport.ReasonHandlerError)
-			if req.HasID {
-				var en loom.LoomErrorNamer
-				if !errors.As(err, &en) {
-					code := jsonrpc.InternalError
-					var serviceError *loom.ServiceError
-					if errors.As(err, &serviceError) {
-						code = jsonrpcErrorCodeForServiceError(serviceError)
-					}
-					encodeJSONRPCError(ctx, w, req, code, loom.ErrorSafeMessage(err), mcpruntime.NewErrorData(err), encoder, errhandler)
-					return nil
-				}
-				switch en.LoomErrorName() {
-				case "invalid_params":
-					encodeJSONRPCError(ctx, w, req, jsonrpc.InvalidParams, loom.ErrorSafeMessage(err), mcpruntime.NewErrorData(err), encoder, errhandler)
-				case "resource_not_found":
-					encodeJSONRPCError(ctx, w, req, jsonrpc.Code(-32002), loom.ErrorSafeMessage(err), mcpruntime.NewErrorData(err), encoder, errhandler)
-				case "method_not_found":
-					encodeJSONRPCError(ctx, w, req, jsonrpc.MethodNotFound, loom.ErrorSafeMessage(err), mcpruntime.NewErrorData(err), encoder, errhandler)
-				default:
-					code := jsonrpc.InternalError
-					var serviceError *loom.ServiceError
-					if errors.As(err, &serviceError) {
-						code = jsonrpcErrorCodeForServiceError(serviceError)
-					}
-					encodeJSONRPCError(ctx, w, req, code, loom.ErrorSafeMessage(err), mcpruntime.NewErrorData(err), encoder, errhandler)
-				}
-			} else {
-				errhandler(ctx, w, fmt.Errorf("endpoint error: %w", err))
-			}
-			return nil
-		}
-
-		id := req.ID
-		if !req.HasID {
-			return nil
-		}
-		// Convert result to response body with proper JSON tags
-		body := NewResourcesReadResponseBody(res.(*mcpassistant.ResourcesReadResult))
-		response := jsonrpc.MakeSuccessResponse(id, body)
-		if err := encoder(ctx, w).Encode(response); err != nil {
-			loomtransport.RequestObserverFromContext(ctx).Fail(loomtransport.ReasonResponseWriteFailed)
-			errhandler(ctx, w, fmt.Errorf("failed to encode JSON-RPC response: %w", err))
-		}
-		return nil
-	}
-} // NewResourcesSubscribeHandler creates a JSON-RPC handler which calls the
-// "mcp_assistant" service "resources/subscribe" endpoint.
-func NewResourcesSubscribeHandler(endpoint loom.Endpoint, mux loomhttp.Muxer, decoder func(*http.Request) loomhttp.Decoder, encoder func(context.Context, http.ResponseWriter) loomhttp.Encoder, errhandler func(context.Context, http.ResponseWriter, error)) func(ctx context.Context, r *http.Request, req *jsonrpc.RawRequest, w http.ResponseWriter) error {
-	decodeParams := DecodeResourcesSubscribeRequest(mux, decoder)
-	return func(ctx context.Context, r *http.Request, req *jsonrpc.RawRequest, w http.ResponseWriter) error {
-		ctx = context.WithValue(ctx, loom.MethodKey, "resources/subscribe")
-		ctx = context.WithValue(ctx, loom.ServiceKey, "mcp_assistant")
-
-		params, err := decodeParams(r, req)
-		if err != nil {
-			loomtransport.RequestObserverFromContext(ctx).Fail(loomtransport.ReasonInvalidJSONRPCParams)
-			if req.HasID {
-				code := jsonrpc.InternalError
-				var serviceError *loom.ServiceError
-				if errors.As(err, &serviceError) {
-					code = jsonrpcErrorCodeForServiceError(serviceError)
-				}
-				encodeJSONRPCError(ctx, w, req, code, loom.ErrorSafeMessage(err), mcpruntime.NewErrorData(err), encoder, errhandler)
-			} else {
-				errhandler(ctx, w, fmt.Errorf("failed to decode parameters: %w", err))
-			}
-			return nil
-		}
-		_, err = endpoint(ctx, params)
-		if err != nil {
-			loomtransport.RequestObserverFromContext(ctx).Fail(loomtransport.ReasonHandlerError)
-			if req.HasID {
-				var en loom.LoomErrorNamer
-				if !errors.As(err, &en) {
-					code := jsonrpc.InternalError
-					var serviceError *loom.ServiceError
-					if errors.As(err, &serviceError) {
-						code = jsonrpcErrorCodeForServiceError(serviceError)
-					}
-					encodeJSONRPCError(ctx, w, req, code, loom.ErrorSafeMessage(err), mcpruntime.NewErrorData(err), encoder, errhandler)
-					return nil
-				}
-				switch en.LoomErrorName() {
-				case "invalid_params":
-					encodeJSONRPCError(ctx, w, req, jsonrpc.InvalidParams, loom.ErrorSafeMessage(err), mcpruntime.NewErrorData(err), encoder, errhandler)
-				case "resource_not_found":
-					encodeJSONRPCError(ctx, w, req, jsonrpc.Code(-32002), loom.ErrorSafeMessage(err), mcpruntime.NewErrorData(err), encoder, errhandler)
-				case "method_not_found":
-					encodeJSONRPCError(ctx, w, req, jsonrpc.MethodNotFound, loom.ErrorSafeMessage(err), mcpruntime.NewErrorData(err), encoder, errhandler)
-				default:
-					code := jsonrpc.InternalError
-					var serviceError *loom.ServiceError
-					if errors.As(err, &serviceError) {
-						code = jsonrpcErrorCodeForServiceError(serviceError)
-					}
-					encodeJSONRPCError(ctx, w, req, code, loom.ErrorSafeMessage(err), mcpruntime.NewErrorData(err), encoder, errhandler)
-				}
-			} else {
-				errhandler(ctx, w, fmt.Errorf("endpoint error: %w", err))
-			}
-			return nil
-		}
-
-		if !req.HasID {
-			return nil
-		}
-		response := jsonrpc.MakeSuccessResponse(req.ID, struct{}{})
-		if err := encoder(ctx, w).Encode(response); err != nil {
-			errhandler(ctx, w, fmt.Errorf("failed to encode JSON-RPC response: %w", err))
-		}
-		return nil
-	}
-} // NewResourcesUnsubscribeHandler creates a JSON-RPC handler which calls the
-// "mcp_assistant" service "resources/unsubscribe" endpoint.
-func NewResourcesUnsubscribeHandler(endpoint loom.Endpoint, mux loomhttp.Muxer, decoder func(*http.Request) loomhttp.Decoder, encoder func(context.Context, http.ResponseWriter) loomhttp.Encoder, errhandler func(context.Context, http.ResponseWriter, error)) func(ctx context.Context, r *http.Request, req *jsonrpc.RawRequest, w http.ResponseWriter) error {
-	decodeParams := DecodeResourcesUnsubscribeRequest(mux, decoder)
-	return func(ctx context.Context, r *http.Request, req *jsonrpc.RawRequest, w http.ResponseWriter) error {
-		ctx = context.WithValue(ctx, loom.MethodKey, "resources/unsubscribe")
-		ctx = context.WithValue(ctx, loom.ServiceKey, "mcp_assistant")
-
-		params, err := decodeParams(r, req)
-		if err != nil {
-			loomtransport.RequestObserverFromContext(ctx).Fail(loomtransport.ReasonInvalidJSONRPCParams)
-			if req.HasID {
-				code := jsonrpc.InternalError
-				var serviceError *loom.ServiceError
-				if errors.As(err, &serviceError) {
-					code = jsonrpcErrorCodeForServiceError(serviceError)
-				}
-				encodeJSONRPCError(ctx, w, req, code, loom.ErrorSafeMessage(err), mcpruntime.NewErrorData(err), encoder, errhandler)
-			} else {
-				errhandler(ctx, w, fmt.Errorf("failed to decode parameters: %w", err))
-			}
-			return nil
-		}
-		_, err = endpoint(ctx, params)
-		if err != nil {
-			loomtransport.RequestObserverFromContext(ctx).Fail(loomtransport.ReasonHandlerError)
-			if req.HasID {
-				var en loom.LoomErrorNamer
-				if !errors.As(err, &en) {
-					code := jsonrpc.InternalError
-					var serviceError *loom.ServiceError
-					if errors.As(err, &serviceError) {
-						code = jsonrpcErrorCodeForServiceError(serviceError)
-					}
-					encodeJSONRPCError(ctx, w, req, code, loom.ErrorSafeMessage(err), mcpruntime.NewErrorData(err), encoder, errhandler)
-					return nil
-				}
-				switch en.LoomErrorName() {
-				case "invalid_params":
-					encodeJSONRPCError(ctx, w, req, jsonrpc.InvalidParams, loom.ErrorSafeMessage(err), mcpruntime.NewErrorData(err), encoder, errhandler)
-				case "resource_not_found":
-					encodeJSONRPCError(ctx, w, req, jsonrpc.Code(-32002), loom.ErrorSafeMessage(err), mcpruntime.NewErrorData(err), encoder, errhandler)
-				case "method_not_found":
-					encodeJSONRPCError(ctx, w, req, jsonrpc.MethodNotFound, loom.ErrorSafeMessage(err), mcpruntime.NewErrorData(err), encoder, errhandler)
-				default:
-					code := jsonrpc.InternalError
-					var serviceError *loom.ServiceError
-					if errors.As(err, &serviceError) {
-						code = jsonrpcErrorCodeForServiceError(serviceError)
-					}
-					encodeJSONRPCError(ctx, w, req, code, loom.ErrorSafeMessage(err), mcpruntime.NewErrorData(err), encoder, errhandler)
-				}
-			} else {
-				errhandler(ctx, w, fmt.Errorf("endpoint error: %w", err))
-			}
-			return nil
-		}
-
-		if !req.HasID {
-			return nil
-		}
-		response := jsonrpc.MakeSuccessResponse(req.ID, struct{}{})
-		if err := encoder(ctx, w).Encode(response); err != nil {
-			errhandler(ctx, w, fmt.Errorf("failed to encode JSON-RPC response: %w", err))
-		}
-		return nil
-	}
-} // NewPromptsListHandler creates a JSON-RPC handler which calls the
-// "mcp_assistant" service "prompts/list" endpoint.
-func NewPromptsListHandler(endpoint loom.Endpoint, mux loomhttp.Muxer, decoder func(*http.Request) loomhttp.Decoder, encoder func(context.Context, http.ResponseWriter) loomhttp.Encoder, errhandler func(context.Context, http.ResponseWriter, error)) func(ctx context.Context, r *http.Request, req *jsonrpc.RawRequest, w http.ResponseWriter) error {
-	decodeParams := DecodePromptsListRequest(mux, decoder)
-	return func(ctx context.Context, r *http.Request, req *jsonrpc.RawRequest, w http.ResponseWriter) error {
-		ctx = context.WithValue(ctx, loom.MethodKey, "prompts/list")
-		ctx = context.WithValue(ctx, loom.ServiceKey, "mcp_assistant")
-
-		params, err := decodeParams(r, req)
-		if err != nil {
-			loomtransport.RequestObserverFromContext(ctx).Fail(loomtransport.ReasonInvalidJSONRPCParams)
-			if req.HasID {
-				code := jsonrpc.InternalError
-				var serviceError *loom.ServiceError
-				if errors.As(err, &serviceError) {
-					code = jsonrpcErrorCodeForServiceError(serviceError)
-				}
-				encodeJSONRPCError(ctx, w, req, code, loom.ErrorSafeMessage(err), mcpruntime.NewErrorData(err), encoder, errhandler)
-			} else {
-				errhandler(ctx, w, fmt.Errorf("failed to decode parameters: %w", err))
-			}
-			return nil
-		}
-		res, err := endpoint(ctx, params)
-		if err != nil {
-			loomtransport.RequestObserverFromContext(ctx).Fail(loomtransport.ReasonHandlerError)
-			if req.HasID {
-				var en loom.LoomErrorNamer
-				if !errors.As(err, &en) {
-					code := jsonrpc.InternalError
-					var serviceError *loom.ServiceError
-					if errors.As(err, &serviceError) {
-						code = jsonrpcErrorCodeForServiceError(serviceError)
-					}
-					encodeJSONRPCError(ctx, w, req, code, loom.ErrorSafeMessage(err), mcpruntime.NewErrorData(err), encoder, errhandler)
-					return nil
-				}
-				switch en.LoomErrorName() {
-				case "invalid_params":
-					encodeJSONRPCError(ctx, w, req, jsonrpc.InvalidParams, loom.ErrorSafeMessage(err), mcpruntime.NewErrorData(err), encoder, errhandler)
-				case "resource_not_found":
-					encodeJSONRPCError(ctx, w, req, jsonrpc.Code(-32002), loom.ErrorSafeMessage(err), mcpruntime.NewErrorData(err), encoder, errhandler)
-				case "method_not_found":
-					encodeJSONRPCError(ctx, w, req, jsonrpc.MethodNotFound, loom.ErrorSafeMessage(err), mcpruntime.NewErrorData(err), encoder, errhandler)
-				default:
-					code := jsonrpc.InternalError
-					var serviceError *loom.ServiceError
-					if errors.As(err, &serviceError) {
-						code = jsonrpcErrorCodeForServiceError(serviceError)
-					}
-					encodeJSONRPCError(ctx, w, req, code, loom.ErrorSafeMessage(err), mcpruntime.NewErrorData(err), encoder, errhandler)
-				}
-			} else {
-				errhandler(ctx, w, fmt.Errorf("endpoint error: %w", err))
-			}
-			return nil
-		}
-
-		id := req.ID
-		if !req.HasID {
-			return nil
-		}
-		// Convert result to response body with proper JSON tags
-		body := NewPromptsListResponseBody(res.(*mcpassistant.PromptsListResult))
-		response := jsonrpc.MakeSuccessResponse(id, body)
-		if err := encoder(ctx, w).Encode(response); err != nil {
-			loomtransport.RequestObserverFromContext(ctx).Fail(loomtransport.ReasonResponseWriteFailed)
-			errhandler(ctx, w, fmt.Errorf("failed to encode JSON-RPC response: %w", err))
-		}
-		return nil
-	}
-} // NewPromptsGetHandler creates a JSON-RPC handler which calls the
-// "mcp_assistant" service "prompts/get" endpoint.
-func NewPromptsGetHandler(endpoint loom.Endpoint, mux loomhttp.Muxer, decoder func(*http.Request) loomhttp.Decoder, encoder func(context.Context, http.ResponseWriter) loomhttp.Encoder, errhandler func(context.Context, http.ResponseWriter, error)) func(ctx context.Context, r *http.Request, req *jsonrpc.RawRequest, w http.ResponseWriter) error {
-	decodeParams := DecodePromptsGetRequest(mux, decoder)
-	return func(ctx context.Context, r *http.Request, req *jsonrpc.RawRequest, w http.ResponseWriter) error {
-		ctx = context.WithValue(ctx, loom.MethodKey, "prompts/get")
-		ctx = context.WithValue(ctx, loom.ServiceKey, "mcp_assistant")
-
-		params, err := decodeParams(r, req)
-		if err != nil {
-			loomtransport.RequestObserverFromContext(ctx).Fail(loomtransport.ReasonInvalidJSONRPCParams)
-			if req.HasID {
-				code := jsonrpc.InternalError
-				var serviceError *loom.ServiceError
-				if errors.As(err, &serviceError) {
-					code = jsonrpcErrorCodeForServiceError(serviceError)
-				}
-				encodeJSONRPCError(ctx, w, req, code, loom.ErrorSafeMessage(err), mcpruntime.NewErrorData(err), encoder, errhandler)
-			} else {
-				errhandler(ctx, w, fmt.Errorf("failed to decode parameters: %w", err))
-			}
-			return nil
-		}
-		res, err := endpoint(ctx, params)
-		if err != nil {
-			loomtransport.RequestObserverFromContext(ctx).Fail(loomtransport.ReasonHandlerError)
-			if req.HasID {
-				var en loom.LoomErrorNamer
-				if !errors.As(err, &en) {
-					code := jsonrpc.InternalError
-					var serviceError *loom.ServiceError
-					if errors.As(err, &serviceError) {
-						code = jsonrpcErrorCodeForServiceError(serviceError)
-					}
-					encodeJSONRPCError(ctx, w, req, code, loom.ErrorSafeMessage(err), mcpruntime.NewErrorData(err), encoder, errhandler)
-					return nil
-				}
-				switch en.LoomErrorName() {
-				case "invalid_params":
-					encodeJSONRPCError(ctx, w, req, jsonrpc.InvalidParams, loom.ErrorSafeMessage(err), mcpruntime.NewErrorData(err), encoder, errhandler)
-				case "resource_not_found":
-					encodeJSONRPCError(ctx, w, req, jsonrpc.Code(-32002), loom.ErrorSafeMessage(err), mcpruntime.NewErrorData(err), encoder, errhandler)
-				case "method_not_found":
-					encodeJSONRPCError(ctx, w, req, jsonrpc.MethodNotFound, loom.ErrorSafeMessage(err), mcpruntime.NewErrorData(err), encoder, errhandler)
-				default:
-					code := jsonrpc.InternalError
-					var serviceError *loom.ServiceError
-					if errors.As(err, &serviceError) {
-						code = jsonrpcErrorCodeForServiceError(serviceError)
-					}
-					encodeJSONRPCError(ctx, w, req, code, loom.ErrorSafeMessage(err), mcpruntime.NewErrorData(err), encoder, errhandler)
-				}
-			} else {
-				errhandler(ctx, w, fmt.Errorf("endpoint error: %w", err))
-			}
-			return nil
-		}
-
-		id := req.ID
-		if !req.HasID {
-			return nil
-		}
-		// Convert result to response body with proper JSON tags
-		body := NewPromptsGetResponseBody(res.(*mcpassistant.PromptsGetResult))
-		response := jsonrpc.MakeSuccessResponse(id, body)
-		if err := encoder(ctx, w).Encode(response); err != nil {
-			loomtransport.RequestObserverFromContext(ctx).Fail(loomtransport.ReasonResponseWriteFailed)
-			errhandler(ctx, w, fmt.Errorf("failed to encode JSON-RPC response: %w", err))
-		}
-		return nil
-	}
-} // NewNotifyStatusUpdateHandler creates a JSON-RPC handler which calls the
-// "mcp_assistant" service "notify_status_update" endpoint.
-func NewNotifyStatusUpdateHandler(endpoint loom.Endpoint, mux loomhttp.Muxer, decoder func(*http.Request) loomhttp.Decoder, encoder func(context.Context, http.ResponseWriter) loomhttp.Encoder, errhandler func(context.Context, http.ResponseWriter, error)) func(ctx context.Context, r *http.Request, req *jsonrpc.RawRequest, w http.ResponseWriter) error {
-	decodeParams := DecodeNotifyStatusUpdateRequest(mux, decoder)
-	return func(ctx context.Context, r *http.Request, req *jsonrpc.RawRequest, w http.ResponseWriter) error {
-		ctx = context.WithValue(ctx, loom.MethodKey, "notify_status_update")
-		ctx = context.WithValue(ctx, loom.ServiceKey, "mcp_assistant")
-
-		params, err := decodeParams(r, req)
-		if err != nil {
-			loomtransport.RequestObserverFromContext(ctx).Fail(loomtransport.ReasonInvalidJSONRPCParams)
-			if req.HasID {
-				code := jsonrpc.InternalError
-				var serviceError *loom.ServiceError
-				if errors.As(err, &serviceError) {
-					code = jsonrpcErrorCodeForServiceError(serviceError)
-				}
-				encodeJSONRPCError(ctx, w, req, code, loom.ErrorSafeMessage(err), mcpruntime.NewErrorData(err), encoder, errhandler)
-			} else {
-				errhandler(ctx, w, fmt.Errorf("failed to decode parameters: %w", err))
-			}
-			return nil
-		}
-		_, err = endpoint(ctx, params)
-		if err != nil {
-			loomtransport.RequestObserverFromContext(ctx).Fail(loomtransport.ReasonHandlerError)
-			if req.HasID {
-				var en loom.LoomErrorNamer
-				if !errors.As(err, &en) {
-					code := jsonrpc.InternalError
-					var serviceError *loom.ServiceError
-					if errors.As(err, &serviceError) {
-						code = jsonrpcErrorCodeForServiceError(serviceError)
-					}
-					encodeJSONRPCError(ctx, w, req, code, loom.ErrorSafeMessage(err), mcpruntime.NewErrorData(err), encoder, errhandler)
-					return nil
-				}
-				switch en.LoomErrorName() {
-				case "invalid_params":
-					encodeJSONRPCError(ctx, w, req, jsonrpc.InvalidParams, loom.ErrorSafeMessage(err), mcpruntime.NewErrorData(err), encoder, errhandler)
-				case "resource_not_found":
-					encodeJSONRPCError(ctx, w, req, jsonrpc.Code(-32002), loom.ErrorSafeMessage(err), mcpruntime.NewErrorData(err), encoder, errhandler)
-				case "method_not_found":
-					encodeJSONRPCError(ctx, w, req, jsonrpc.MethodNotFound, loom.ErrorSafeMessage(err), mcpruntime.NewErrorData(err), encoder, errhandler)
-				default:
-					code := jsonrpc.InternalError
-					var serviceError *loom.ServiceError
-					if errors.As(err, &serviceError) {
-						code = jsonrpcErrorCodeForServiceError(serviceError)
-					}
-					encodeJSONRPCError(ctx, w, req, code, loom.ErrorSafeMessage(err), mcpruntime.NewErrorData(err), encoder, errhandler)
-				}
-			} else {
-				errhandler(ctx, w, fmt.Errorf("endpoint error: %w", err))
-			}
-			return nil
-		}
-
-		if !req.HasID {
-			return nil
-		}
-		response := jsonrpc.MakeSuccessResponse(req.ID, struct{}{})
-		if err := encoder(ctx, w).Encode(response); err != nil {
-			errhandler(ctx, w, fmt.Errorf("failed to encode JSON-RPC response: %w", err))
-		}
-		return nil
-	}
-} // NewEventsStreamHandler creates a JSON-RPC handler which calls the
-// "mcp_assistant" service "events/stream" endpoint.
-func NewEventsStreamHandler(endpoint loom.Endpoint, mux loomhttp.Muxer, decoder func(*http.Request) loomhttp.Decoder, encoder func(context.Context, http.ResponseWriter) loomhttp.Encoder, errhandler func(context.Context, http.ResponseWriter, error), streamWritePolicy loomhttp.StreamWritePolicy) func(ctx context.Context, r *http.Request, req *jsonrpc.RawRequest, w http.ResponseWriter) error {
-	return func(ctx context.Context, r *http.Request, req *jsonrpc.RawRequest, w http.ResponseWriter) error {
-		ctx = context.WithValue(ctx, loom.MethodKey, "events/stream")
-		ctx = context.WithValue(ctx, loom.ServiceKey, "mcp_assistant")
-
-		strm := &EventsStreamServerStream{
-			encoder:      encoder,
-			r:            r,
-			requestHasID: req.HasID,
-			requestID:    req.ID,
-			w:            w,
-			writer:       loomhttp.NewSSEStreamWriter(w, r.Context(), loomtransport.TransportJSONRPC, streamWritePolicy),
-		}
-		if r.Method == http.MethodGet && req.Method == "events/stream" {
-			if err := strm.Open(r.Context()); err != nil {
-				return err
-			}
-		}
-		v := &mcpassistant.EventsStreamEndpointInput{Stream: strm}
-		if _, err := endpoint(ctx, v); err != nil {
-			if req.HasID {
-				var en loom.LoomErrorNamer
-				if errors.As(err, &en) {
-					switch en.LoomErrorName() {
-					case "invalid_params":
-						return strm.sendError(ctx, req.ID, jsonrpc.InvalidParams, loom.ErrorSafeMessage(err), mcpruntime.NewErrorData(err))
-					case "method_not_found":
-						return strm.sendError(ctx, req.ID, jsonrpc.MethodNotFound, loom.ErrorSafeMessage(err), mcpruntime.NewErrorData(err))
-					}
-				}
-				code := jsonrpc.InternalError
-				var serviceError *loom.ServiceError
-				if errors.As(err, &serviceError) {
-					code = jsonrpcErrorCodeForServiceError(serviceError)
-				}
-				return strm.sendError(ctx, req.ID, code, loom.ErrorSafeMessage(err), mcpruntime.NewErrorData(err))
-			}
-			return nil
-		}
-		return nil
-	}
-} // encodeJSONRPCError creates and sends a JSON-RPC error response (handles nil ID gracefully)
-func (s *Server) encodeJSONRPCError(ctx context.Context, w http.ResponseWriter, req *jsonrpc.RawRequest, code jsonrpc.Code, message string, data any) {
-	encodeJSONRPCError(ctx, w, req, code, message, data, s.encoder, s.errhandler)
-}
-
-// encodeJSONRPCError creates and sends a JSON-RPC error response (handles nil ID gracefully)
-func encodeJSONRPCError(ctx context.Context, w http.ResponseWriter, req *jsonrpc.RawRequest, code jsonrpc.Code, message string, data any, encoder func(context.Context, http.ResponseWriter) loomhttp.Encoder, errhandler func(context.Context, http.ResponseWriter, error)) {
-	if req.HasID || code == jsonrpc.InvalidRequest {
-		id := req.ID
-		if !req.HasID {
-			id = nil
-		}
-		response := jsonrpc.MakeErrorResponse(id, code, message, data)
-		if err := encoder(ctx, w).Encode(response); err != nil {
-			errhandler(ctx, w, fmt.Errorf("failed to encode JSON-RPC response: %w", err))
-		}
-	}
-}
-
-// jsonrpcErrorCodeForServiceError classifies framework validation errors as invalid params and all other service errors as internal errors.
-func jsonrpcErrorCodeForServiceError(err *loom.ServiceError) jsonrpc.Code {
-	if err == nil {
-		return jsonrpc.InternalError
-	}
-	switch err.Name {
-	case loom.InvalidFieldType, loom.MissingField, loom.InvalidEnumValue, loom.InvalidFormat, loom.InvalidPattern, loom.InvalidRange, loom.InvalidLength, loom.DecodePayload, loom.MissingPayload:
-		return jsonrpc.InvalidParams
-	default:
-		return jsonrpc.InternalError
-	}
-}
-
-type mcpBatchResponseWriter struct {
-	header     http.Header
-	body       bytes.Buffer
-	statusCode int
-}
-
-func (w *mcpBatchResponseWriter) Header() http.Header {
-	if w.header == nil {
-		w.header = make(http.Header)
-	}
-	return w.header
-}
-
-func (w *mcpBatchResponseWriter) WriteHeader(statusCode int) {
-	if w.statusCode == 0 {
-		w.statusCode = statusCode
-	}
-}
-
-func (w *mcpBatchResponseWriter) Write(data []byte) (int, error) {
-	if w.statusCode == 0 {
-		w.statusCode = http.StatusOK
-	}
-	return w.body.Write(data)
-}
-
-func (w *mcpBatchResponseWriter) Flush() {}
-
-func (s *Server) processBatchRequest(ctx context.Context, r *http.Request, req *jsonrpc.RawRequest, writer *batchWriter) {
-	buffer := &mcpBatchResponseWriter{}
-	s.processRequest(ctx, r, req, buffer)
-	body := bytes.TrimSpace(buffer.body.Bytes())
-	if len(body) == 0 {
-		return
-	}
-	if !strings.Contains(buffer.Header().Get("Content-Type"), "text/event-stream") {
-		if _, err := writer.Write(body); err != nil {
-			s.errhandler(ctx, writer, fmt.Errorf("failed to write buffered batch response: %w", err))
-		}
-		return
-	}
-	if response := finalMCPBatchSSEResponse(body); len(response) > 0 {
-		if _, err := writer.Write(response); err != nil {
-			s.errhandler(ctx, writer, fmt.Errorf("failed to write buffered batch stream response: %w", err))
-		}
-		return
-	}
-	if req.HasID {
-		response := jsonrpc.MakeErrorResponse(req.ID, jsonrpc.InternalError, "streaming method did not produce a final response", nil)
-		data, err := json.Marshal(response)
-		if err != nil {
-			s.errhandler(ctx, writer, fmt.Errorf("failed to encode buffered batch stream error: %w", err))
-			return
-		}
-		if _, err := writer.Write(data); err != nil {
-			s.errhandler(ctx, writer, fmt.Errorf("failed to write buffered batch stream error: %w", err))
-		}
-	}
-}
-
-func finalMCPBatchSSEResponse(body []byte) []byte {
-	var response []byte
-	for _, frame := range strings.Split(string(body), "\n\n") {
-		for _, line := range strings.Split(frame, "\n") {
-			if !strings.HasPrefix(line, "data:") {
-				continue
-			}
-			data := bytes.TrimSpace([]byte(strings.TrimPrefix(line, "data:")))
-			if len(data) == 0 {
-				continue
-			}
-			var envelope mcpJSONRPCEnvelope
-			if err := json.Unmarshal(data, &envelope); err != nil {
-				continue
-			}
-			if envelope.Method == "" && len(envelope.ID) > 0 && (len(envelope.Result) > 0 || len(envelope.Error) > 0) {
-				response = append(response[:0], data...)
-			}
-		}
-	}
-	return response
 }

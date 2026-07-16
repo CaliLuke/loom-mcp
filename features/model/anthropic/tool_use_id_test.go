@@ -81,6 +81,56 @@ func TestToolUseIDCodec_StableMappingAndDistinctIDs(t *testing.T) {
 	assert.Equal(t, "unknown-id", codec.decode("unknown-id"), "unmapped ids pass through decode unchanged")
 }
 
+func TestEncodeMessages_ReservesPassThroughToolUseIDsBeforeSubstitution(t *testing.T) {
+	const unsafeID = "run-1/turn-1/attempt-0/tool/0"
+	codec := newToolUseIDCodec()
+	messages, _, err := encodeMessages([]*model.Message{
+		{
+			Role: model.ConversationRoleAssistant,
+			Parts: []model.Part{
+				model.ToolUsePart{ID: unsafeID, Name: "test.tool", Input: map[string]any{"n": 1}},
+			},
+		},
+		{
+			Role: model.ConversationRoleUser,
+			Parts: []model.Part{
+				model.ToolResultPart{ToolUseID: unsafeID, Content: "first"},
+			},
+		},
+		{
+			Role: model.ConversationRoleAssistant,
+			Parts: []model.Part{
+				model.ToolUsePart{ID: "t1", Name: "test.tool", Input: map[string]any{"n": 2}},
+			},
+		},
+		{
+			Role: model.ConversationRoleUser,
+			Parts: []model.Part{
+				model.ToolResultPart{ToolUseID: "t1", Content: "second"},
+			},
+		},
+	}, map[string]string{"test.tool": "tool"}, codec)
+	require.NoError(t, err)
+	require.Len(t, messages, 4)
+
+	firstUse := messages[0].Content[0].OfToolUse
+	firstResult := messages[1].Content[0].OfToolResult
+	secondUse := messages[2].Content[0].OfToolUse
+	secondResult := messages[3].Content[0].OfToolResult
+	require.NotNil(t, firstUse)
+	require.NotNil(t, firstResult)
+	require.NotNil(t, secondUse)
+	require.NotNil(t, secondResult)
+	assert.Equal(t, "t2", firstUse.ID)
+	assert.Equal(t, firstUse.ID, firstResult.ToolUseID)
+	assert.Equal(t, "t1", secondUse.ID)
+	assert.Equal(t, secondUse.ID, secondResult.ToolUseID)
+	assert.NotEqual(t, firstUse.ID, secondUse.ID)
+	assert.Equal(t, unsafeID, codec.decode(firstUse.ID))
+	assert.Equal(t, "t1", codec.decode(secondUse.ID))
+	assert.Equal(t, "provider-minted", codec.decode("provider-minted"))
+}
+
 func TestEncodeMessages_SanitizesToolUseIDsAndKeepsPairing(t *testing.T) {
 	tests := []struct {
 		name   string

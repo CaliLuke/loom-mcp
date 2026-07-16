@@ -9,10 +9,10 @@
 // builds a synthetic MCP service expression and lets Goa generate the JSON-RPC
 // transport/client code that MCP needs.
 //
-// Where MCP needs behavior beyond Goa's standard JSON-RPC generator
+// Where MCP needs behavior beyond Loom's standard JSON-RPC generator
 // (tool/resource/prompt adapters, MCP-specific clients, helper packages), this
-// package emits dedicated files around Goa's output. The generator still
-// rewrites a narrow set of example/CLI sections because Goa does not yet expose
-// smaller hooks for that scaffolding; the docs should stay honest about that
-// coupling until the underlying hook surface improves.
+// package emits dedicated files or replaces stable named sections using
+// evaluated generator data. Mount, handler, endpoint initialization, SSE, and
+// client-constructor ownership all enforce exact upstream cardinality. The
+// generator never inspects or rewrites rendered Go source.
 package codegen

@@ -98,16 +98,19 @@ func main() {
 
 ```go
 func main() {
-    // Temporal engine for durable execution
+    // Temporal engine for durable workflow execution
     temporalEng, _ := temporal.NewWorker(temporal.Options{
         ClientOptions: &client.Options{HostPort: "temporal:7233"},
         WorkerOptions: temporal.WorkerOptions{TaskQueue: "orchestrator.chat"},
     })
     defer temporalEng.Close()
 
-    // MongoDB stores for persistence
+    // MongoDB stores for persistence. Construct these with the adapters under
+    // features/{memory,runlog,session}/mongo.
     mongoClient := newMongoClient()
     memStore := memorymongo.New(mongoClient)
+    runlogStore := newMongoRunlogStore(mongoClient)
+    sessionStore := newMongoSessionStore(mongoClient)
 
     // Pulse sink for real-time streaming
     pulseSink, _ := pulse.NewSink(pulse.Options{Client: newPulseClient()})
@@ -116,6 +119,8 @@ func main() {
     rt := runtime.New(
         runtime.WithEngine(temporalEng),
         runtime.WithMemoryStore(memStore),
+        runtime.WithRunEventStore(runlogStore),
+        runtime.WithSessionStore(sessionStore),
         runtime.WithStream(pulseSink),
         runtime.WithPolicy(basicpolicy.New()),
         runtime.WithLogger(telemetry.NewClueLogger()),
@@ -138,14 +143,25 @@ func main() {
 }
 ```
 
+Temporal persists workflow history, including the live workflow ledger, but it
+does not persist the runtime's other stores. If `WithRunEventStore` and
+`WithSessionStore` are omitted, `runtime.New` uses process-local in-memory
+stores: workflow replay still works, while canonical run introspection and
+session/run metadata can disappear at process restart. Use shared persistent
+stores in every worker and client-only process that reads or writes those
+surfaces. Configure `memory.Store` and `stream.Sink` separately when their
+derived projection or delivery state must also survive worker replacement.
+
 ### Seal semantics
 
 `rt.Seal(ctx)` is a real activation boundary, not a pure no-op. On worker-mode
 engines it:
 
-- Closes registration so any later `RegisterAgent` / `RegisterToolset` call
-  fails with `ErrRegistrationClosed`. This happens even if activation later
-  fails, so partial bring-up cannot smuggle handlers onto a sealed runtime.
+- Closes registration so any later `RegisterAgent`, `RegisterToolset`, or
+  `RegisterModel` call fails with `ErrRegistrationClosed`. Register and replace
+  model clients before sealing; post-seal hot-swapping is intentionally not a
+  runtime contract. Closure happens even if activation later fails, so partial
+  bring-up cannot smuggle handlers or model clients onto a sealed runtime.
 - Activates every staged Temporal worker by calling `worker.Start()` with
   retries until activation succeeds or `ctx` ends.
 - Returns the activation error verbatim (queue-qualified) when `ctx` ends
@@ -226,8 +242,19 @@ mechanics on `temporal.Options.ActivityDefaults` when constructing the engine.
 The runtime always initializes `Runtime.PromptRegistry`. Prompt management has two layers:
 
 - **Baseline specs**: register immutable `prompt.PromptSpec` definitions in memory.
-- **Scoped overrides**: optionally resolve `org/facility/session` overrides through `prompt.Store`
-  (`runtime.WithPromptStore(...)`).
+- **Scoped overrides**: optionally resolve arbitrary label and session scopes
+  through `prompt.Store` (`runtime.WithPromptStore(...)`). Matching session
+  scopes outrank non-session scopes; more matching labels outrank fewer; equal
+  specificity uses the newest override.
+
+The Mongo adapter persists a versioned SHA-256 `scope_fingerprint` and performs
+at most one indexed session lookup plus one indexed global lookup, each limited
+to the most specific/newest record. Mongo scopes accept at most 15 labels so
+the exact matching-subset set remains bounded. On startup the Mongo client
+backfills missing `scope_fingerprint` values from `scope_labels` before creating
+the compound index; migration errors and legacy scopes above the bound fail
+construction rather than silently hiding overrides. Normal resolution remains
+index-only.
 
 This registry is the internal runtime prompt system Loom uses while executing planners and agents.
 Registering a prompt here makes it available to Loom runtime code. MCP clients see prompts declared
@@ -304,6 +331,12 @@ out, err := client.Run(ctx, "session-1", msgs)
 The generated `NewClient` function embeds the route (workflow name, task queue) so
 client-only processes can submit runs to remote workers.
 
+Worker and client-only runtimes do not share in-memory defaults. In a
+multi-process deployment, give both runtimes the same persistent
+`WithRunEventStore(...)` and `WithSessionStore(...)` implementations. Temporal
+history is the workflow-recovery authority; it is not a replacement for the
+runlog, session store, transcript projection, or client stream.
+
 ---
 
 ## The Plan → Execute → Resume Loop
@@ -368,6 +401,17 @@ type Planner interface {
 **PlanStart** receives the initial messages; **PlanResume** receives messages plus
 recent tool results. Both return a `PlanResult` containing tool calls, a final
 response, or an await request.
+
+`PlanStart` and `PlanResume` are workflow activities, so “one planner turn” does
+not imply one Go method invocation. Generated registrations use an infrastructure
+retry policy with up to three attempts by default. If an attempt fails after a
+model call, event hook, or other side effect, the engine may invoke the same
+planner method again with the same logical input. Planner implementations must be
+retry-safe: avoid direct non-idempotent side effects, or protect them with stable
+idempotency keys. A returned error fails the current activity attempt; the run
+fails only after the configured retries are exhausted or the error is
+non-retryable. `PlanResult.RetryHint` is successful planner output for recovering
+from tool failures and does not control activity retries.
 
 ### PlanInput and PlanResumeInput
 
@@ -726,6 +770,13 @@ use the client-side components in `runtime/registry`:
 - `GRPCClientAdapter`: wraps a generated gRPC registry client into a `RegistryClient` interface
 - `Manager`: multi-registry discovery with caching and periodic sync (`StartSync`/`StopSync`)
 - `SearchClient`: cross-registry search with semantic-first + keyword fallback when supported
+
+Both plain `Manager.Search` and the richer `SearchClient.Search` use the same
+concurrent fan-out and partial-failure contract: every selected registry starts
+independently, successful results are retained when only some registries fail,
+and the call fails only when every selected registry fails. `SearchClient`
+adds semantic fallback, filtering, relevance ordering, and result limits after
+that shared collection step.
 
 These are client-side helpers. The standalone registry service implementation lives under `loom-mcp/registry`.
 Generated registry-backed agent registrations intentionally freeze their discovered tool specs at
@@ -1324,17 +1375,22 @@ workflow thread. Activities and other non-workflow code publish directly.
 | ------------------------------------------- | --------------------------------------------------- |
 | `RunStarted`                                | Run begins                                          |
 | `RunCompleted`                              | Run finishes (success, failed, canceled)            |
-| `RunPaused` / `RunResumed`                  | Human-in-the-loop transitions                       |
+| `RunPaused` / `RunResumed`                  | Human-in-the-loop and await transitions              |
 | `RunPhaseChanged`                           | Phase transitions (planning, executing_tools, etc.) |
 | `PromptRendered`                            | Runtime resolves and renders a prompt spec          |
 | `ToolCallScheduled`                         | Tool activity scheduled                             |
 | `ToolResultReceived`                        | Tool completes                                      |
 | `ToolCallUpdated`                           | Parent tool discovers more children                 |
-| `AssistantMessage`                          | Final assistant response                            |
+| `ToolCallArgsDelta`                         | Best-effort streamed argument delta                 |
+| `AssistantMessage` / `AssistantTurnCommitted` | Assistant output and committed-turn boundary      |
 | `PlannerNote` / `ThinkingBlock`             | Planner reasoning                                   |
-| `AwaitClarification` / `AwaitExternalTools` | Pause requests                                      |
+| `AwaitClarification` / `AwaitQuestions`     | Clarification pause requests                        |
+| `AwaitTypedInput` / `AwaitExternalTools`    | Typed or externally executed work pause requests    |
+| `AwaitConfirmation` / `ToolAuthorization`   | Approval request and recorded decision              |
+| `RetryHintIssued` / `MemoryAppended`        | Derived retry and transcript projection events      |
 | `PolicyDecision`                            | Policy evaluation result                            |
 | `Usage`                                     | Token usage report                                  |
+| `HardProtectionTriggered`                   | Runtime hard-protection circuit activation          |
 | `ChildRunLinked`                            | Agent-as-tool child run link                        |
 
 ### Custom Subscribers
@@ -1371,16 +1427,22 @@ type Sink interface {
 | `tool_start`           | `ToolStartPayload` (tool_call_id, tool_name, payload)                        |
 | `tool_end`             | `ToolEndPayload` (result, error, duration, telemetry)                        |
 | `tool_update`          | `ToolUpdatePayload` (expected_children_total)                                |
+| `tool_call_args_delta` | Best-effort streamed model tool-argument delta                               |
+| `tool_output_delta`    | Incremental tool output                                                        |
 | `assistant_reply`      | `AssistantReplyPayload` (text)                                               |
+| `assistant_turn`       | Committed assistant-turn payload                                              |
 | `planner_thought`      | `PlannerThoughtPayload` (note, thinking blocks)                              |
 | `await_clarification`  | `AwaitClarificationPayload`                                                  |
 | `await_confirmation`   | `AwaitConfirmationPayload`                                                   |
 | `await_questions`      | `AwaitQuestionsPayload` (`tool_name`, `tool_call_id`, `payload`, `questions`) |
 | `await_typed_input`    | `AwaitTypedInputPayload` (`id`, `title`, `schema`)                           |
 | `await_external_tools` | `AwaitExternalToolsPayload`                                                  |
+| `tool_authorization`   | Recorded approval or denial for a tool call                                   |
 | `usage`                | `UsagePayload` (input_tokens, output_tokens)                                 |
 | `workflow`             | `WorkflowPayload` (phase, status, error_kind, retryable, error, debug_error) |
 | `child_run_linked`     | `ChildRunLinkedPayload` (child run link)                                     |
+| `session_stream_started` / `session_stream_end` | Session stream lifecycle                                  |
+| `run_stream_end`       | Run stream lifecycle boundary                                                 |
 
 ### Stream Profiles
 
@@ -1432,6 +1494,28 @@ Failures are structured:
   - `error`: **user-safe** message suitable for direct display
   - `debug_error`: raw error string for logs/diagnostics (not for UI)
 
+### Event reliability and authority
+
+Runtime event surfaces are related projections, not interchangeable durable
+logs:
+
+| Surface | Role | Failure behavior |
+| --- | --- | --- |
+| Workflow ledger | Live deterministic planner state for the active run | Owned by the workflow engine; not a general event subscription API |
+| `runlog.Store` | Canonical append-only hook event record | Append or run-metadata update failure fails the hook activity so the engine can retry or stop the run |
+| Session stream sink | Active-session client projection | Best effort; lookup/send failures are logged, ended sessions are skipped, and sessionless one-shot runs do not stream |
+| Hook bus | Local subscriber and derived-projection fanout | Built-in subscribers are best effort; explicitly critical subscribers may propagate an error and fail the hook activity |
+| `memory.Store` | Derived per-run transcript/event projection | The built-in memory subscriber is best effort and may be incomplete after a subscriber failure |
+| `memory.Service` | Explicit long-term entry store | Written only through its `PutEntry`/ingest contract; it is not the transcript or run log |
+
+`ToolCallArgsDelta` is intentionally excluded from the durable run event log and
+hook bus because it is a high-volume, best-effort UX signal. The finalized tool
+call remains canonical. `transcript.BuildMessagesFromEvents` consumes
+`memory.Event` values; it is not a direct runlog replay API. Applications that
+need a durable projector must install a critical subscriber or build from a
+separately defined durable contract rather than assuming stream or default
+memory delivery is complete.
+
 ## Policy Enforcement
 
 Policy engines decide which tools are available each turn and enforce caps.
@@ -1477,7 +1561,7 @@ type CapsState struct {
     RemainingToolCalls                  int
     MaxConsecutiveFailedToolCalls       int
     RemainingConsecutiveFailedToolCalls int
-    ExpiresAt                           time.Time
+    ExpiresAt                           time.Time // Deprecated; ignored by runtime
 }
 ```
 
@@ -1487,6 +1571,13 @@ the full policy allowlist, and per-turn or remaining-call caps are applied only
 after planning. The runtime-owned `tool_unavailable` recovery call remains
 executable under an active allowlist so rewritten unavailable calls can produce
 their structured recovery result.
+
+`CapsState` owns counter budgets only. Its legacy `ExpiresAt` field is retained
+for source compatibility but is not merged or enforced. Absolute wall-clock
+expiry would create a second deadline authority and would not preserve the
+runtime's paused-wait semantics. Configure active-work time through
+`RunPolicy.TimeBudget` or `runtime.WithRunTimeBudget(...)`; enforce an independent
+end-to-end wall-clock SLA at the caller or workflow boundary.
 
 ### Per-Run Policy Overrides
 
@@ -1515,13 +1606,28 @@ err := rt.OverridePolicy(agent.Ident("service.chat"), runtime.RunPolicy{
 })
 ```
 
+### Time budget and human waits
+
+`TimeBudget` and `WithRunTimeBudget` limit active runtime work, not total
+wall-clock age. Time spent waiting for clarification, confirmation, typed input,
+or external tool results pauses the budget: the runtime extends both its budget
+and hard deadlines by the measured wait duration. Manual human interaction can
+therefore make elapsed wall time greater than `TimeBudget`.
+
+`FinalizerGrace` and `WithRunFinalizerGrace` reserve a bounded interval after
+the active budget is exhausted so the planner can produce a tool-free final
+answer. The grace period is not additional normal planning or tool-execution
+time. Deployments with an end-to-end wall-clock SLA should enforce that SLA at
+the calling/workflow boundary in addition to configuring the runtime budget.
+
 ---
 
 ## Memory and Stores
 
 ### Memory Store
 
-Persists run transcripts for planner context and observability:
+Stores a derived per-run transcript/event projection for planner context and
+observability:
 
 ```go
 type Store interface {
@@ -1533,8 +1639,23 @@ type Store interface {
 **Event types:** `user_message`, `assistant_message`, `tool_call`, `tool_result`,
 `planner_note`, `thinking`.
 
-The runtime automatically subscribes to hooks and persists events when a memory
-store is configured.
+The runtime automatically installs a best-effort hook subscriber when a memory
+store is configured. A memory append failure is recorded but does not make the
+projection canonical or fail the run; use the run event log for the durable
+hook record and see "Event reliability and authority" above.
+
+The Mongo adapter writes each `AppendEvents` batch as a new immutable document
+in `agent_memory_events`; it never grows one run document with `$push`. During
+an upgrade it still reads the legacy `agent_memory` snapshot document, then
+loads event buckets in `created_at`, `_id` order. The combined snapshot is
+stable-sorted by event timestamp, preserving the `memory.Snapshot` chronological
+contract; equal timestamps retain legacy-before-new order and deterministic
+bucket order. Existing transcripts therefore remain visible without an offline
+migration. New writes go only to the events collection. If
+`Options.Collection` is customized, its default companion is
+`<collection>_events`; `Options.EventsCollection` can override it explicitly.
+Keep both collections through the compatibility window, and apply retention or
+deletion to both.
 
 Transcript projection is read-only: `Ledger.BuildMessages` includes the current
 assistant turn without flushing or otherwise mutating the ledger. Workflow query
@@ -1620,10 +1741,14 @@ introspection, audit/debug UIs, and deriving compact `run.Snapshot` values.
 
 ```go
 type Store interface {
-    Append(ctx context.Context, e *runlog.Event) error
+    Append(ctx context.Context, e *runlog.Event) (runlog.AppendResult, error)
     List(ctx context.Context, runID string, cursor string, limit int) (runlog.Page, error)
 }
 ```
+
+`AppendResult.Inserted` distinguishes a new append from an exact idempotent
+replay of the same `(run_id, event_key)`; conflicting bodies for one event key
+fail.
 
 The runtime exposes:
 
@@ -1759,7 +1884,8 @@ input.Agent.RemoveReminder("pending_todos")
 ### Registration
 
 ```go
-// Register model client
+// Register model clients before Seal. RegisterModel returns
+// ErrRegistrationClosed after Seal or the first submitted run.
 err := rt.RegisterModel("bedrock", bedrockClient)
 
 // Create Bedrock client via runtime helper
@@ -1771,6 +1897,10 @@ client, err := rt.NewBedrockModelClient(awsClient, runtime.BedrockConfig{
     ThinkingBudget: 10000,
 })
 ```
+
+Model lookup is immutable after registration closes. Loom does not define
+post-`Seal` credential/client rotation or in-flight hot-swap semantics; build a
+new runtime and move traffic to it when replacing a model client.
 
 Create an OpenAI Responses client through the runtime helper:
 
@@ -1860,11 +1990,35 @@ resp, err := modelClient.Complete(ctx, &model.Request{
 })
 ```
 
-Gemini, OpenAI, and Bedrock `Complete` map this to their native
-structured-output request fields. Anthropic and Bedrock streaming currently fail
-fast with `model.ErrStructuredOutputUnsupported` instead of silently ignoring
-the schema. Structured output cannot be combined with model tools in the current
-Gemini and OpenAI adapters.
+Gemini, OpenAI, Bedrock, and Ollama `Complete` map this to provider-native or
+provider-supported schema controls. Bedrock, OpenAI, and Ollama also support
+streamed structured output. Anthropic rejects structured output, and Gemini
+does not implement streaming. Structured output cannot be combined with model
+tools in the current Gemini, OpenAI, and Ollama adapters.
+
+### Provider capability matrix
+
+This table describes the adapter contract in this repository. Individual model
+families may impose additional provider-side restrictions.
+
+| Provider | Complete | Stream | Structured output | Tool choice | Cache checkpoints | Thinking/reasoning | Exact `TokenCounter` |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| Anthropic | yes | yes | no | yes | yes | typed thinking and redacted thinking | no |
+| Bedrock | yes | yes | unary and stream | yes | yes | typed thinking, including adaptive models | yes |
+| OpenAI Responses | yes | yes | unary and stream; not with tools | yes | ignored on replay | reasoning summaries become typed thinking | no |
+| Gemini / Vertex | yes | no (`ErrStreamingUnsupported`) | unary; not with tools | yes | no | yes | yes |
+| Ollama | yes | yes | unary and stream; not with tools | limited by local API/model | no | native typed thinking | no |
+
+Every provider runs `testutil.RunProviderConformance`, which verifies ordinary
+errors, rate limits, malformed tool calls, cancellation, structured-output and
+tool-choice behavior, usage accounting, and either the complete stream
+lifecycle or an explicit unsupported-stream contract.
+
+Bedrock normalizes structured-output schemas to its supported subset. It closes
+object schemas, removes unsupported keywords and formats, and rejects shapes
+whose `additionalProperties` semantics cannot be represented instead of
+silently weakening the schema. Its exact token counter uses the provider's
+count-tokens path and removes replayed thinking blocks before counting.
 
 The OpenAI adapter projects tool and structured-output schemas into the
 provider's strict-mode JSON Schema subset and canonicalizes strict-mode `null`
@@ -1874,6 +2028,28 @@ tool identifiers (`toolset.tool`) into provider-safe function names
 (`[a-zA-Z0-9_-]`, at most 64 characters) on the wire and maps returned
 function-call names back to canonical identifiers, failing fast when two tool
 names sanitize to the same provider name.
+
+Tool names and tool-use correlation IDs use separate request-scoped codecs.
+When Anthropic or Bedrock replays a transcript, provider-safe tool-use IDs pass
+through unchanged and reserve their wire values before unsafe internal IDs are
+assigned synthetic `tN` values. Synthetic allocation skips every occupied ID,
+so a safe `t1` cannot collide with a run-scoped ID that requires substitution;
+tool-use and tool-result blocks retain the same correlation ID.
+
+Construct the direct Anthropic adapter with the default SDK client or an
+application-owned Messages client:
+
+```go
+client, err := anthropic.NewFromAPIKey(
+    os.Getenv("ANTHROPIC_API_KEY"),
+    "claude-sonnet-4-20250514",
+)
+```
+
+Use `anthropic.New(messagesClient, anthropic.Options{...})` when the application
+owns SDK configuration. Anthropic supports tools, streaming, prompt-cache
+checkpoints, and thinking blocks, but not structured output or exact token
+counting.
 
 When planners render prompts through `RenderPrompt`, copy prompt provenance into model requests:
 
@@ -2102,6 +2278,37 @@ type Tracer interface {
 }
 ```
 
+`runtime.WithMetrics` and `runtime.WithTracer` drive semantic runtime
+instrumentation independently of the selected workflow engine. The stable core
+metrics are:
+
+| Metric | Kind | Dimensions | Meaning |
+| --- | --- | --- | --- |
+| `loom_mcp.runtime.run.started` | counter | `agent` | Canonical run-start events |
+| `loom_mcp.runtime.run.completed` | counter | `agent`, `status` | Canonical terminal run events |
+| `loom_mcp.runtime.planner.attempts` | counter | `agent`, `operation`, `status` | Planner activity attempts (`start` or `resume`) |
+| `loom_mcp.runtime.planner.duration` | timer | `agent`, `operation`, `status` | Planner attempt duration |
+| `loom_mcp.runtime.tool.completed` | counter | `agent`, `tool`, `status` | Canonical tool-result events |
+| `loom_mcp.runtime.tool.duration` | timer | `agent`, `tool`, `status` | Tool duration reported by the canonical result |
+
+Run and tool metrics are emitted only when the canonical run log inserts a new
+event key, so normal hook-activity retries do not double-count them. Planner
+metrics are deliberately attempt-level and may repeat when the workflow engine
+retries a planner activity. Metric dimensions are bounded registry/outcome
+values; run, session, turn, and tool-call IDs are trace attributes rather than
+metric dimensions.
+Unregistered or model-invented tool names use the metric value `unknown`; the
+raw name remains available on the corresponding span.
+
+Planner calls use `planner.plan_start` and `planner.plan_resume` spans. Every
+new canonical tool result also emits a `tool.execute` semantic span covering
+the result's reported execution interval, with `loom_mcp.agent_id`,
+`loom_mcp.run_id`, `loom_mcp.session_id`, `loom_mcp.turn_id`,
+`loom_mcp.tool.name`, and `loom_mcp.tool_call_id` attributes. Because this
+instrumentation runs at planner activity and canonical hook boundaries, it is
+the same for in-memory, Temporal, and custom engines. Nil telemetry options
+still resolve to no-op implementations.
+
 Model calls emit both Loom-specific correlation attributes (`loom_mcp.*`) and
 standard OpenTelemetry GenAI attributes (`gen_ai.*`) on `model.complete` and
 `model.stream` spans. Token usage, finish reasons, requested model, resolved
@@ -2122,6 +2329,26 @@ When enabled, model spans include `gen_ai.input.messages` and
 streamed text deltas are coalesced into one output message at stream end, and
 serialization failures are recorded as span events instead of failing the model
 call.
+
+### Temporal trace domains
+
+Temporal engine tracing and metrics are enabled by default. Set
+`temporal.InstrumentationOptions.DisableTracing` or `DisableMetrics` to opt out;
+`MetricsOptions` configures the Temporal OTEL metrics handler.
+
+Durable scheduling is a trace-domain boundary. Each Temporal activity starts a
+new root span with a new trace ID and attaches the originating request span as
+an OpenTelemetry link. Activities are therefore correlated with, but are not
+children in, one long request trace. This avoids treating queue and replay time
+as synchronous parent/child latency. `InstrumentationOptions.TracerOptions` is
+retained for source compatibility but is ignored by this trace-domain
+implementation.
+
+This engine instrumentation is separate from `runtime.WithTracer`, which owns
+runtime/model semantic spans, generated MCP adapter tracing, and the generated
+SDK `TransportObserver`. The local debug HTTP server, Pulse runtime stream sink,
+and generated MCP `events/stream` broadcaster are also separate surfaces; none
+enables or substitutes for the others.
 
 ---
 
@@ -2167,7 +2394,7 @@ Spawns an MCP server as a subprocess and communicates via stdin/stdout:
 ```go
 import "github.com/CaliLuke/loom-mcp/runtime/mcp"
 
-caller, err := mcp.NewStdioCaller(mcp.StdioOptions{
+caller, err := mcp.NewStdioCaller(ctx, mcp.StdioOptions{
     Command: "npx",
     Args:    []string{"-y", "@modelcontextprotocol/server-filesystem"},
     Env:     []string{"HOME=" + os.Getenv("HOME")},
@@ -2268,9 +2495,25 @@ before JSON-RPC routing, GET streams are tied to session termination, and
 DELETE terminates the session. A supplied unknown, expired, or terminated
 session ID receives HTTP 404 so conformant clients re-initialize; omitting the
 session header after the server has issued a session receives HTTP 400.
-Generated adapter session metadata is pruned after 24 hours and capped at 4096
-entries, and SDK DELETE requests clear adapter state when the upstream SDK
-terminates the session.
+Native JSON-RPC rejects an `initialize` request carrying an unknown session ID
+with HTTP 404 and rejects foreign owner-bound IDs with HTTP 403. A repeated
+initialize may carry its valid owner-bound ID so the adapter returns the
+protocol-level `Already initialized` error; fresh initialization starts without
+a client-supplied session ID.
+Generated SDK and native JSON-RPC transports also bind an initialized session
+to its verified principal and check that pair on every POST, GET, and DELETE.
+The SDK uses `MCPAdapterOptions.SessionPrincipal` or SDK TokenInfo's `UserID`;
+the native server exposes `MCPSessionPrincipal` with the same TokenInfo default.
+Authentication must wrap the generated handler so those resolvers see verified
+identity. Principal mismatches and missing authenticated bindings return HTTP
+403, including attempts to adopt an anonymously issued session. DELETE checks
+ownership before cleanup, so a rejected termination does not invalidate the
+owner's session.
+
+Session and principal metadata is pruned after 24 hours and capped at 4096
+entries. Expiry and capacity eviction remove both values together and fail
+closed. Anonymous sessions remain available only when both initialization and
+later requests resolve to no principal.
 
 Generated JSON-RPC servers accept requests that omit optional params (for
 example `tools/list` without a `params` key), treat omitted or JSON `null`
@@ -2387,6 +2630,27 @@ if err := rt.RegisterToolset(localTools); err != nil {
 }
 ```
 
+### MCP resource authorization boundaries
+
+Generated adapters apply `MCPAdapterOptions.AllowedResourceURIs`,
+`AllowedResourceNames`, `DeniedResourceURIs`, and `DeniedResourceNames` to DSL
+resources and `skill://` resources. Exact URI policies match one resource;
+policies ending in `/` match a URI prefix. A skill name resolves to its
+`skill://<name>/` prefix.
+
+Adapter allow policies are the server's maximum grant. Request-scoped allowed
+names, including client-supplied `x-mcp-allow-names` on the native JSON-RPC
+transport, are a separate narrowing constraint. When both exist, a resource
+must satisfy both. Request and adapter deny policies are additive and take
+precedence over every allow.
+
+Headers are untrusted input and do not authenticate a caller or create a
+grant. Applications must authenticate before the generated handler, derive any
+principal or tenant policy from verified credentials, and configure the
+adapter's maximum grant from trusted deployment policy. OAuth DSL declarations
+generate metadata, challenges, and audience helpers; they do not install this
+application authorization layer.
+
 ### Server-initiated events (Broadcaster)
 
 Generated MCP adapters can stream server-initiated events (notifications, resource updates) to multiple
@@ -2403,6 +2667,27 @@ Global `Publish` broadcasts to every subscriber. Session-scoped
 message to exactly one live stream in that session, even when reconnect overlap
 temporarily leaves several streams connected.
 
+Configure generated adapters with `MCPAdapterOptions.Broadcaster` to supply a
+custom implementation. Without one, `BroadcastBuffer` defaults to 32 and
+`DropIfSlow` defaults to true. Dropping prevents a slow subscriber from blocking
+the server but loses that subscriber's event. `DropIfSlow` is a `*bool`: nil
+selects the safe dropping default, while a pointer to false applies backpressure
+to publishers. Older generated adapters accepted `bool` through an untyped
+field; regenerate and pass a bool pointer when migrating rather than relying on
+the former silent fallback for invalid values.
+
+```go
+dropIfSlow := false
+adapter := mcpassistant.NewMCPAdapter(service, promptProvider,
+    &mcpassistant.MCPAdapterOptions{DropIfSlow: &dropIfSlow})
+```
+
+`MCPAdapterOptions.ToolCallInterceptors` wrap generated `tools/call` execution
+in declaration order, with the first interceptor outermost. Each interceptor
+may short-circuit or invoke `next` and receives the tool name plus raw arguments.
+Those arguments may contain credentials or user data; do not log them by
+default.
+
 ### Repair prompts for invalid params (retry.RetryableError)
 
 When an MCP server reports invalid parameters and a structured repair prompt is available, generated
@@ -2417,6 +2702,10 @@ When the MCP design declares `OAuth(...)`, loom-mcp generates spec-compliant
 discovery and challenge plumbing. Runtime helpers in `runtime/mcp/oauth.go`
 back that generated code. Consumers interact with three surfaces: the DSL,
 the generated helpers, and the runtime primitives below.
+
+Declared `OAuthScope` values populate protected-resource metadata and Bearer
+challenges. They do not implement per-operation scope authorization; enforce
+required scopes in the application's verifier or authorization middleware.
 
 ### Canonicalization
 
@@ -2472,6 +2761,12 @@ challenges are preserved verbatim, so consumer middleware can still override
 the default. The interceptor passes through `Flush()` so SSE streaming is
 unaffected.
 
+The middleware is error-agnostic. It cannot tell a missing token from an
+expired, revoked, or wrong-audience token, so it does not add
+`error="invalid_token"` automatically. Error-aware application auth middleware
+can use the generated `OAuthInvalidTokenChallengeHeader` or runtime
+`WriteInvalidToken` helper when that RFC 6750 distinction is required.
+
 ### Audience binding
 
 When the DSL declares `ResourceIdentifier(...)`, the generated package
@@ -2488,7 +2783,8 @@ The wrapper reads `TokenInfo.Extra["aud"]` and accepts `string`,
 a JWT `aud` array). Missing or wrong-typed claims fail closed — there is
 no silent admission path. Mismatches return `ErrAudienceMismatch`, which
 wraps `mcpauth.ErrInvalidToken` so `RequireBearerToken` responds 401 and
-`WithOAuthChallenge` emits the challenge automatically.
+`WithOAuthChallenge` adds the standard resource-metadata Bearer challenge. It
+does not add the `invalid_token` parameter automatically.
 
 Without `ResourceIdentifier(...)`, the framework cannot know the expected
 audience (it would be per-request), so `EnforceAudience` is not generated.
@@ -2577,7 +2873,8 @@ field-level feedback rather than a generic failure string.
 
 Loom MCP supports two complementary paths that produce `planner.RetryHint`:
 
-1. **Decode‑time validation (generated codecs)**  
+1. **Decode‑time validation (generated codecs)**
+
    The generated tool codec validates the tool JSON payload before execution.
    If validation fails, the codec returns a generated validation error that exposes
    structured issues (`Issues() []*tools.FieldIssue`) and descriptions. The runtime
@@ -2587,7 +2884,8 @@ Loom MCP supports two complementary paths that produce `planner.RetryHint`:
    MCP callers receive actionable retry guidance instead of transport-level JSON
    decoder failures.
 
-2. **Execution‑time validation (service / tool provider errors)**  
+2. **Execution‑time validation (service / tool provider errors)**
+
    When a tool provider calls a bound service method, the method may return a structured
    validation error (for example `loom.MissingFieldError`, `loom.InvalidLengthError`, …).
    Providers should surface these as **structured validation issues** in the tool result
@@ -2627,14 +2925,24 @@ limitedClient := rl.Middleware()(rawClient)
 rt.RegisterModel("bedrock", limitedClient)
 ```
 
-The rate limiter automatically adjusts throughput based on provider responses and
-handles 429 (rate limited) errors with exponential backoff. Backoff and recovery
-adjust only the bucket's refill rate; the burst capacity stays pinned at the
+The rate limiter adjusts throughput with additive-increase/multiplicative-
+decrease (AIMD) when provider calls report rate limits or successful probes. It
+does not retry the request or implement time-based exponential backoff.
+Capacity reduction and recovery adjust only the bucket's refill rate; the burst
+capacity stays pinned at the
 configured max TPM, so a request whose estimated cost fits within max TPM always
 waits for capacity rather than being rejected after backoffs shrink the budget.
 A request estimated above max TPM can never be admitted and fails fast with
 `middleware.ErrRequestTooLarge`; raise the limiter's max TPM or reduce the
 request size.
+
+Admission uses estimated input tokens and does not reserve output tokens. When
+the wrapped provider implements exact `model.TokenCounter`, the middleware
+preserves that capability for callers, but admission itself remains an input
+estimate. When the provider does not implement `model.TokenCounter`, the
+wrapped client does not implement it either; optional-interface checks remain
+truthful instead of failing only when `CountTokens` is called. Size initial and
+maximum TPM with expected output volume in mind.
 
 ---
 
@@ -2675,12 +2983,54 @@ defer cancel()
 // Consume until you observe `type=="run_stream_end"` for the active run ID.
 ```
 
+`Subscribe` is the UI/convenience API: it acknowledges each valid entry after
+placing it on the local event channel, and acknowledges malformed poison
+messages after reporting their decode error. This does not prove that a
+downstream database transaction or side effect committed.
+
+Durable consumers use manual deliveries and acknowledge only after committing
+their own work:
+
+```go
+deliveries, errs, cancel, err := sub.SubscribeManual(ctx, "session/session-123")
+if err != nil {
+    return err
+}
+defer cancel()
+
+for delivery := range deliveries {
+    if err := delivery.DecodeError(); err != nil {
+        if err := deadLetters.Put(ctx, delivery.PulseID(), delivery.RawPayload(), err); err != nil {
+            return err // unacked: retry dead-lettering after reclamation
+        }
+        if err := delivery.Ack(ctx); err != nil {
+            return err
+        }
+        continue
+    }
+    if err := projection.Apply(ctx, delivery.Event()); err != nil {
+        return err // unacked: remains pending for Pulse redelivery/claim
+    }
+    if err := delivery.Ack(ctx); err != nil {
+        return err // retry is safe until Ack succeeds
+    }
+}
+```
+
+Manual mode exposes malformed entries with `DecodeError`, `RawPayload`, and
+`PulseID`; it never acknowledges them automatically. Consumers can commit them
+to a dead-letter store and then acknowledge, or leave them pending for a
+reclamation policy. Pulse delivery is at least once: persist `EventKey()` (or
+another stable application key) with the projection to make reprocessing
+idempotent; manual acknowledgement alone is not exactly once.
+
 The `errs` channel is best-effort and never blocks event delivery, so draining
 it is optional. Decode errors that arrive while its one-slot buffer is full are
 dropped and counted (see `Subscriber.DroppedErrors`). Terminal errors (ack
 failures) evict any pending decode error so the terminal cause is always
-delivered, then both channels close — ranging over `events` alone is enough to
-observe termination.
+delivered, then both channels close in auto-ack mode — ranging over `events`
+alone is enough to observe termination. In manual mode, `Delivery.Ack` returns
+ack errors directly and may be retried; they are not sent through `errs`.
 
 ### Custom Tool Executor
 
@@ -2773,7 +3123,17 @@ var ErrRateLimited = errors.New("model: rate limited")
 | **Toolset**      | Collection of related tools with shared execution logic.                                           |
 | **Tool Spec**    | Metadata and JSON codecs for a tool (name, schema, codec functions).                               |
 | **Bounds**       | Metadata describing how a tool result was truncated or limited.                                    |
-| **Hook**         | Internal event emitted for observability (memory, streaming, telemetry).                           |
-| **Stream Event** | Client-facing event delivered via Sink (tool progress, assistant replies).                         |
+| **Engine**       | Workflow backend such as in-memory or Temporal; owns start, signal, query, and durable execution mechanics. |
+| **Hook**         | Internal runtime event. Most hooks are durably appended to the runlog before projection.           |
+| **Runlog**       | Canonical append-only hook event record for a run.                                                  |
+| **Transcript memory** | Derived per-run `memory.Event` projection used for planner history and event search.             |
+| **Long-term memory** | Durable `memory.Entry` values managed by `memory.Service`; separate from transcript events.       |
+| **Stream Event** | Client-facing, best-effort projection delivered through a runtime stream sink.                     |
+| **MCP server**   | Generated protocol surface exposing designed tools, resources, and prompts.                        |
+| **MCP caller**   | Runtime client-side adapter that consumes an external or generated MCP server.                     |
+| **Tool registry** | Catalog/search/execution infrastructure for tools; distinct from the prompt registry.              |
+| **Prompt registry** | Baseline prompt specs plus optional scoped overrides.                                              |
+| **MCP skill resource** | `SkillDirectory(...)` projection exposed as `skill://` MCP resources.                             |
+| **Model-facing skill tools** | `FromSkills(...)` toolset used by an agent to list and load local instruction packages.          |
 | **Finalizer**    | Aggregates child results into parent tool result for agent-as-tool (does not propagate artifacts). |
 | **Reminder**     | Structured backstage guidance injected into planner prompts.                                       |

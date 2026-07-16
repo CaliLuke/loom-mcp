@@ -94,7 +94,7 @@ func boundsReminder(tr *planner.ToolResult, cursorField string) string {
 	}
 
 	b := tr.Bounds
-	totalText := "unknown"
+	totalText := unknownID
 	if b.Total != nil {
 		totalText = strconv.Itoa(*b.Total)
 	}

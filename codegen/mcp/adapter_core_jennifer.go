@@ -13,7 +13,6 @@ func adapterCoreSection(data *AdapterData) codegen.Section {
 		emitToolSearchOptions(stmt)
 		emitAdapterOptions(stmt)
 		emitAdapterConstructor(stmt, data)
-		emitBroadcasterHelpers(stmt)
 		emitProtocolVersionHelpers(stmt)
 		emitParseQueryParamsToJSON(stmt)
 		emitSessionHelpers(stmt)
@@ -186,7 +185,7 @@ func emitAdapterOptions(stmt *jen.Statement) {
 		jen.Id("Tracer").Qual("go.opentelemetry.io/otel/trace", "Tracer"),
 		jen.Comment("Meter overrides the meter used by the generated MCP adapter."),
 		jen.Id("Meter").Qual("go.opentelemetry.io/otel/metric", "Meter"),
-		jen.Comment("Resource URI and name policies. Denied entries take precedence; URI entries ending in / match prefixes."),
+		jen.Comment("Resource URI and name policies define the server's maximum grant. Request-scoped allows may narrow it; denied entries take precedence. URI entries ending in / match prefixes."),
 		jen.Id("AllowedResourceURIs").Index().String(),
 		jen.Id("DeniedResourceURIs").Index().String(),
 		jen.Id("AllowedResourceNames").Index().String(),
@@ -197,8 +196,8 @@ func emitAdapterOptions(stmt *jen.Statement) {
 		jen.Comment("Pluggable broadcaster, else default channel broadcaster"),
 		jen.Id("Broadcaster").Id("mcpruntime").Dot("Broadcaster"),
 		jen.Id("BroadcastBuffer").Int(),
-		jen.Comment("DropIfSlow controls whether slow subscribers drop events. It accepts bool or *bool; nil defaults to true."),
-		jen.Id("DropIfSlow").Any(),
+		jen.Comment("DropIfSlow controls whether slow subscribers drop events. Nil defaults to true."),
+		jen.Id("DropIfSlow").Op("*").Bool(),
 	)
 	stmt.Line()
 }
@@ -230,7 +229,9 @@ func emitAdapterConstructor(stmt *jen.Statement, data *AdapterData) {
 				jen.If(jen.Id("opts").Dot("BroadcastBuffer").Op(">").Lit(0)).Block(
 					jen.Id("buf").Op("=").Id("opts").Dot("BroadcastBuffer"),
 				),
-				jen.Id("drop").Op("=").Id("defaultMCPAdapterDropIfSlow").Call(jen.Id("opts").Dot("DropIfSlow")),
+				jen.If(jen.Id("opts").Dot("DropIfSlow").Op("!=").Nil()).Block(
+					jen.Id("drop").Op("=").Op("*").Id("opts").Dot("DropIfSlow"),
+				),
 			)
 			eg.Id("bc").Op("=").Id("mcpruntime").Dot("NewChannelBroadcaster").Call(jen.Id("buf"), jen.Id("drop"))
 		})
@@ -268,29 +269,6 @@ func emitAdapterConstructor(stmt *jen.Statement, data *AdapterData) {
 			vals.Id("resourceNameToURI").Op(":").Id("nameToURI")
 		}))
 	})
-	stmt.Line()
-}
-
-func emitBroadcasterHelpers(stmt *jen.Statement) {
-	stmt.Func().Id("defaultMCPAdapterDropIfSlow").Params(jen.Id("value").Any()).Bool().Block(
-		jen.Switch(jen.Id("v").Op(":=").Id("value").Assert(jen.Type())).Block(
-			jen.Case(jen.Nil()).Block(
-				jen.Return(jen.True()),
-			),
-			jen.Case(jen.Bool()).Block(
-				jen.Return(jen.Id("v")),
-			),
-			jen.Case(jen.Op("*").Bool()).Block(
-				jen.If(jen.Id("v").Op("==").Nil()).Block(
-					jen.Return(jen.True()),
-				),
-				jen.Return(jen.Op("*").Id("v")),
-			),
-			jen.Default().Block(
-				jen.Return(jen.True()),
-			),
-		),
-	)
 	stmt.Line()
 }
 
@@ -383,7 +361,7 @@ func emitParseQueryParamsToJSON(stmt *jen.Statement) {
 func emitSessionHelpers(stmt *jen.Statement) {
 	// pruneSessionsLocked
 	stmt.Func().Params(jen.Id("a").Op("*").Id("MCPAdapter")).
-		Id("pruneSessionsLocked").Params(jen.Id("now").Qual("time", "Time")).
+		Id("pruneSessionsLocked").Params(jen.Id("now").Qual("time", "Time"), jen.Id("reserveSlot").Bool()).
 		Block(
 			jen.For(jen.List(jen.Id("sessionID"), jen.Id("touchedAt")).Op(":=").Range().Id("a").Dot("initializedSessions")).Block(
 				jen.If(jen.Id("now").Dot("Sub").Call(jen.Id("touchedAt")).Op(">=").Id("mcpSessionTTL")).Block(
@@ -391,7 +369,7 @@ func emitSessionHelpers(stmt *jen.Statement) {
 					jen.Delete(jen.Id("a").Dot("sessionPrincipals"), jen.Id("sessionID")),
 				),
 			),
-			jen.For(jen.Len(jen.Id("a").Dot("initializedSessions")).Op(">=").Id("mcpMaxSessions")).Block(
+			jen.For(jen.Len(jen.Id("a").Dot("initializedSessions")).Op(">").Id("mcpMaxSessions").Op("||").Id("reserveSlot").Op("&&").Len(jen.Id("a").Dot("initializedSessions")).Op(">=").Id("mcpMaxSessions")).Block(
 				jen.Id("oldestID").Op(":=").Lit(""),
 				jen.Var().Id("oldestAt").Qual("time", "Time"),
 				jen.For(jen.List(jen.Id("sessionID"), jen.Id("touchedAt")).Op(":=").Range().Id("a").Dot("initializedSessions")).Block(
@@ -433,7 +411,7 @@ func emitSessionHelpers(stmt *jen.Statement) {
 			),
 			jen.Id("now").Op(":=").Qual("time", "Now").Call(),
 			jen.If(jen.List(jen.Id("_"), jen.Id("ok")).Op(":=").Id("a").Dot("initializedSessions").Index(jen.Id("sessionID")), jen.Op("!").Id("ok")).Block(
-				jen.Id("a").Dot("pruneSessionsLocked").Call(jen.Id("now")),
+				jen.Id("a").Dot("pruneSessionsLocked").Call(jen.Id("now"), jen.True()),
 			),
 			jen.Id("a").Dot("initializedSessions").Index(jen.Id("sessionID")).Op("=").Id("now"),
 		)
@@ -448,6 +426,7 @@ func emitSessionHelpers(stmt *jen.Statement) {
 			jen.If(jen.Id("principal").Op("==").Lit("")).Block(jen.Return()),
 			jen.Id("a").Dot("mu").Dot("Lock").Call(),
 			jen.Defer().Id("a").Dot("mu").Dot("Unlock").Call(),
+			jen.If(jen.List(jen.Id("_"), jen.Id("ok")).Op(":=").Id("a").Dot("initializedSessions").Index(jen.Id("sessionID")), jen.Op("!").Id("ok")).Block(jen.Return()),
 			jen.If(jen.Id("a").Dot("sessionPrincipals").Op("==").Nil()).Block(
 				jen.Id("a").Dot("sessionPrincipals").Op("=").Make(jen.Map(jen.String()).String()),
 			),
@@ -475,11 +454,22 @@ func emitSessionHelpers(stmt *jen.Statement) {
 		Id("assertSessionPrincipal").Params(jen.Id("ctx").Qual("context", "Context"), jen.Id("sessionID").String()).Error().
 		Block(
 			jen.If(jen.Id("a").Op("==").Nil().Op("||").Id("sessionID").Op("==").Lit("")).Block(jen.Return(jen.Nil())),
-			jen.Id("a").Dot("mu").Dot("RLock").Call(),
-			jen.Id("expected").Op(":=").Qual("strings", "TrimSpace").Call(jen.Id("a").Dot("sessionPrincipals").Index(jen.Id("sessionID"))),
-			jen.Id("a").Dot("mu").Dot("RUnlock").Call(),
-			jen.If(jen.Id("expected").Op("==").Lit("")).Block(jen.Return(jen.Nil())),
 			jen.Id("actual").Op(":=").Id("a").Dot("sessionPrincipal").Call(jen.Id("ctx")),
+			jen.Id("principalRequired").Op(":=").Id("a").Dot("opts").Op("!=").Nil().Op("&&").Id("a").Dot("opts").Dot("SessionPrincipal").Op("!=").Nil(),
+			jen.Id("a").Dot("mu").Dot("Lock").Call(),
+			jen.Id("a").Dot("pruneSessionsLocked").Call(jen.Qual("time", "Now").Call(), jen.False()),
+			jen.List(jen.Id("_"), jen.Id("initialized")).Op(":=").Id("a").Dot("initializedSessions").Index(jen.Id("sessionID")),
+			jen.Id("expected").Op(":=").Qual("strings", "TrimSpace").Call(jen.Id("a").Dot("sessionPrincipals").Index(jen.Id("sessionID"))),
+			jen.Id("a").Dot("mu").Dot("Unlock").Call(),
+			jen.If(jen.Op("!").Id("initialized")).Block(
+				jen.Return(jen.Qual("errors", "New").Call(jen.Lit("session principal binding missing"))),
+			),
+			jen.If(jen.Id("expected").Op("==").Lit("")).Block(
+				jen.If(jen.Id("principalRequired").Op("||").Id("actual").Op("!=").Lit("")).Block(
+					jen.Return(jen.Qual("errors", "New").Call(jen.Lit("session principal binding missing"))),
+				),
+				jen.Return(jen.Nil()),
+			),
 			jen.If(jen.Id("actual").Op("==").Lit("").Op("||").Id("actual").Op("!=").Id("expected")).Block(
 				jen.Return(jen.Qual("errors", "New").Call(jen.Lit("session user mismatch"))),
 			),
@@ -962,7 +952,7 @@ func emitInitializeHandler(stmt *jen.Statement, data *AdapterData) {
 				jen.Id("a").Dot("initialized").Op("=").True(),
 			).Else().Block(
 				jen.If(jen.List(jen.Id("_"), jen.Id("ok")).Op(":=").Id("a").Dot("initializedSessions").Index(jen.Id("sessionID")), jen.Op("!").Id("ok")).Block(
-					jen.Id("a").Dot("pruneSessionsLocked").Call(jen.Id("now")),
+					jen.Id("a").Dot("pruneSessionsLocked").Call(jen.Id("now"), jen.True()),
 				),
 				jen.If(jen.List(jen.Id("_"), jen.Id("ok")).Op(":=").Id("a").Dot("initializedSessions").Index(jen.Id("sessionID")), jen.Id("ok")).Block(alreadyInitBlock...),
 				jen.Id("a").Dot("initializedSessions").Index(jen.Id("sessionID")).Op("=").Id("now"),

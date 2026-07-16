@@ -55,7 +55,7 @@ type (
 		// Tool identifies the fully-qualified tool name when this run is a nested
 		// agent-as-tool execution. For top-level runs (not invoked via a parent tool),
 		// Tool is empty. Planners may use this to select method-specific prompts.
-		// Format: "<service>.<toolset>.<tool>".
+		// Format: "<toolset>.<tool>".
 		Tool tools.Ident
 
 		// ToolArgs carries the original JSON arguments for the parent tool when this run
@@ -132,7 +132,7 @@ type (
 		// MaxConsecutiveFailedToolCalls caps the number of consecutive failing tool calls before finalizing.
 		MaxConsecutiveFailedToolCalls int
 
-		// TimeBudget caps the total wall-clock runtime budget for the run.
+		// TimeBudget caps active planner/tool work; human and external waits pause it.
 		TimeBudget time.Duration
 
 		// PlanTimeout overrides the per-turn plan/resume activity timeout.
@@ -197,7 +197,7 @@ type (
 	// - This is required for agent-as-tool: child workflow outputs cross a workflow boundary,
 	//   and `any` fields would otherwise rehydrate as map[string]any.
 	ToolEvent struct {
-		// Name is the fully-qualified tool identifier that produced this result.
+		// Name is the canonical <toolset>.<tool> identifier that produced this result.
 		Name tools.Ident
 
 		// Result is the canonical JSON result payload encoded using the tool result codec.
@@ -265,7 +265,7 @@ type (
 	// - This preserves the exact executed tool boundary for planners that need
 	//   authoritative execution history.
 	ToolCallOutput struct {
-		// Name is the fully-qualified tool identifier that was executed.
+		// Name is the canonical <toolset>.<tool> identifier that was executed.
 		Name tools.Ident
 
 		// ToolCallID is the correlation identifier for this tool invocation.
@@ -383,7 +383,7 @@ type (
 		// ToolsetName identifies the owning toolset when known; it may be empty when inferred by ToolName.
 		ToolsetName string
 
-		// ToolName is the fully-qualified tool identifier.
+		// ToolName is the canonical <toolset>.<tool> identifier.
 		ToolName tools.Ident
 
 		// ToolCallID uniquely identifies the tool invocation for correlation across events.
@@ -562,7 +562,7 @@ type (
 	//   canonical JSON, but server-only sidecars are never provided here; the
 	//   runtime materializes them after decoding.
 	ProvidedToolResult struct {
-		// Name is the fully-qualified tool identifier that produced this result.
+		// Name is the canonical <toolset>.<tool> identifier that produced this result.
 		Name tools.Ident
 
 		// ToolCallID correlates the result with the original awaited tool call.

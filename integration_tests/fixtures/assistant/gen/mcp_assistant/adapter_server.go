@@ -155,7 +155,7 @@ type MCPAdapterOptions struct {
 	Tracer trace.Tracer
 	// Meter overrides the meter used by the generated MCP adapter.
 	Meter metric.Meter
-	// Resource URI and name policies. Denied entries take precedence; URI entries ending in / match prefixes.
+	// Resource URI and name policies define the server's maximum grant. Request-scoped allows may narrow it; denied entries take precedence. URI entries ending in / match prefixes.
 	AllowedResourceURIs  []string
 	DeniedResourceURIs   []string
 	AllowedResourceNames []string
@@ -166,8 +166,8 @@ type MCPAdapterOptions struct {
 	// Pluggable broadcaster, else default channel broadcaster
 	Broadcaster     mcpruntime.Broadcaster
 	BroadcastBuffer int
-	// DropIfSlow controls whether slow subscribers drop events. It accepts bool or *bool; nil defaults to true.
-	DropIfSlow any
+	// DropIfSlow controls whether slow subscribers drop events. Nil defaults to true.
+	DropIfSlow *bool
 }
 
 func NewMCPAdapter(service assistant.Service, promptProvider PromptProvider, opts *MCPAdapterOptions) *MCPAdapter {
@@ -183,7 +183,9 @@ func NewMCPAdapter(service assistant.Service, promptProvider PromptProvider, opt
 			if opts.BroadcastBuffer > 0 {
 				buf = opts.BroadcastBuffer
 			}
-			drop = defaultMCPAdapterDropIfSlow(opts.DropIfSlow)
+			if opts.DropIfSlow != nil {
+				drop = *opts.DropIfSlow
+			}
 		}
 		bc = mcpruntime.NewChannelBroadcaster(buf, drop)
 	}
@@ -193,21 +195,6 @@ func NewMCPAdapter(service assistant.Service, promptProvider PromptProvider, opt
 	// Build name->URI map from generated resources
 	nameToURI := map[string]string{"documents": "doc://list", "system_info": "system://info", "conversation_history": "conversation://history", "figma_design_system": "figma://design-system/mobile-checkout"}
 	return &MCPAdapter{service: service, initializedSessions: make(map[string]time.Time), sessionPrincipals: make(map[string]string), opts: opts, tracer: tracer, callCounter: callCounter, errorCounter: errorCounter, durationHistogram: durationHistogram, promptProvider: promptProvider, broadcaster: bc, resourceNameToURI: nameToURI}
-}
-func defaultMCPAdapterDropIfSlow(value any) bool {
-	switch v := value.(type) {
-	case nil:
-		return true
-	case bool:
-		return v
-	case *bool:
-		if v == nil {
-			return true
-		}
-		return *v
-	default:
-		return true
-	}
 }
 
 // mcpProtocolVersion returns the design-configured protocol version.
@@ -267,14 +254,14 @@ func parseQueryParamsToJSON(uri string) ([]byte, error) {
 	coerced := mcpruntime.CoerceQuery(m)
 	return json.Marshal(coerced)
 }
-func (a *MCPAdapter) pruneSessionsLocked(now time.Time) {
+func (a *MCPAdapter) pruneSessionsLocked(now time.Time, reserveSlot bool) {
 	for sessionID, touchedAt := range a.initializedSessions {
 		if now.Sub(touchedAt) >= mcpSessionTTL {
 			delete(a.initializedSessions, sessionID)
 			delete(a.sessionPrincipals, sessionID)
 		}
 	}
-	for len(a.initializedSessions) >= mcpMaxSessions {
+	for len(a.initializedSessions) > mcpMaxSessions || reserveSlot && len(a.initializedSessions) >= mcpMaxSessions {
 		oldestID := ""
 		var oldestAt time.Time
 		for sessionID, touchedAt := range a.initializedSessions {
@@ -308,7 +295,7 @@ func (a *MCPAdapter) markInitializedSession(sessionID string) {
 	}
 	now := time.Now()
 	if _, ok := a.initializedSessions[sessionID]; !ok {
-		a.pruneSessionsLocked(now)
+		a.pruneSessionsLocked(now, true)
 	}
 	a.initializedSessions[sessionID] = now
 }
@@ -322,6 +309,9 @@ func (a *MCPAdapter) captureSessionPrincipal(ctx context.Context, sessionID stri
 	}
 	a.mu.Lock()
 	defer a.mu.Unlock()
+	if _, ok := a.initializedSessions[sessionID]; !ok {
+		return
+	}
 	if a.sessionPrincipals == nil {
 		a.sessionPrincipals = make(map[string]string)
 	}
@@ -343,13 +333,22 @@ func (a *MCPAdapter) assertSessionPrincipal(ctx context.Context, sessionID strin
 	if a == nil || sessionID == "" {
 		return nil
 	}
-	a.mu.RLock()
+	actual := a.sessionPrincipal(ctx)
+	principalRequired := a.opts != nil && a.opts.SessionPrincipal != nil
+	a.mu.Lock()
+	a.pruneSessionsLocked(time.Now(), false)
+	_, initialized := a.initializedSessions[sessionID]
 	expected := strings.TrimSpace(a.sessionPrincipals[sessionID])
-	a.mu.RUnlock()
+	a.mu.Unlock()
+	if !initialized {
+		return errors.New("session principal binding missing")
+	}
 	if expected == "" {
+		if principalRequired || actual != "" {
+			return errors.New("session principal binding missing")
+		}
 		return nil
 	}
-	actual := a.sessionPrincipal(ctx)
 	if actual == "" || actual != expected {
 		return errors.New("session user mismatch")
 	}
@@ -661,7 +660,7 @@ func (a *MCPAdapter) Initialize(ctx context.Context, p *InitializePayload) (res 
 		a.initialized = true
 	} else {
 		if _, ok := a.initializedSessions[sessionID]; !ok {
-			a.pruneSessionsLocked(now)
+			a.pruneSessionsLocked(now, true)
 		}
 		if _, ok := a.initializedSessions[sessionID]; ok {
 			a.mu.Unlock()
@@ -2812,30 +2811,42 @@ func (a *MCPAdapter) assertResourceURIAllowed(ctx context.Context, pURI string, 
 	if i := strings.Index(base, "?"); i >= 0 {
 		base = base[0:i]
 	}
-	var extraAllowURIs []string
+	var serverNameAllowURIs []string
+	var requestNameAllowURIs []string
 	var extraDenyURIs []string
-	var allowedNames []string
+	var serverAllowedNames []string
+	var requestAllowedNames []string
 	var deniedNames []string
 	if a.opts != nil {
-		allowedNames = append(allowedNames, a.opts.AllowedResourceNames...)
+		serverAllowedNames = append(serverAllowedNames, a.opts.AllowedResourceNames...)
 		deniedNames = append(deniedNames, a.opts.DeniedResourceNames...)
 	}
 	if ctx != nil {
 		if s := mcpruntime.AllowedResourceNamesFromContext(ctx); s != "" {
-			allowedNames = append(allowedNames, strings.Split(s, ",")...)
+			requestAllowedNames = append(requestAllowedNames, strings.Split(s, ",")...)
 		}
 		if s := mcpruntime.DeniedResourceNamesFromContext(ctx); s != "" {
 			deniedNames = append(deniedNames, strings.Split(s, ",")...)
 		}
 	}
-	for _, n := range allowedNames {
+	for _, n := range serverAllowedNames {
 		n = strings.TrimSpace(n)
 		u, ok := extraNameToURI[n]
 		if !ok {
 			u, ok = a.resourceNameToURI[n]
 		}
 		if ok {
-			extraAllowURIs = append(extraAllowURIs, u)
+			serverNameAllowURIs = append(serverNameAllowURIs, u)
+		}
+	}
+	for _, n := range requestAllowedNames {
+		n = strings.TrimSpace(n)
+		u, ok := extraNameToURI[n]
+		if !ok {
+			u, ok = a.resourceNameToURI[n]
+		}
+		if ok {
+			requestNameAllowURIs = append(requestNameAllowURIs, u)
 		}
 	}
 	for _, n := range deniedNames {
@@ -2861,15 +2872,28 @@ func (a *MCPAdapter) assertResourceURIAllowed(ctx context.Context, pURI string, 
 	if a.opts != nil {
 		allowed = a.opts.AllowedResourceURIs
 	}
-	if len(allowed) == 0 && len(allowedNames) == 0 {
-		return nil
+	serverAllowConfigured := len(allowed) > 0 || len(serverAllowedNames) > 0
+	serverAllowPolicies := append([]string{}, allowed...)
+	serverAllowPolicies = append(serverAllowPolicies, serverNameAllowURIs...)
+	if !resourceURIAllowedByPolicies(base, serverAllowConfigured, serverAllowPolicies) {
+		return fmt.Errorf("resource URI not allowed: %s", pURI)
 	}
-	for _, allow := range append(allowed, extraAllowURIs...) {
-		if resourceURIMatchesPolicy(base, allow) {
-			return nil
+	requestAllowConfigured := len(requestAllowedNames) > 0
+	if !resourceURIAllowedByPolicies(base, requestAllowConfigured, requestNameAllowURIs) {
+		return fmt.Errorf("resource URI not allowed: %s", pURI)
+	}
+	return nil
+}
+func resourceURIAllowedByPolicies(uri string, configured bool, policies []string) bool {
+	if !configured {
+		return true
+	}
+	for _, policy := range policies {
+		if resourceURIMatchesPolicy(uri, policy) {
+			return true
 		}
 	}
-	return fmt.Errorf("resource URI not allowed: %s", pURI)
+	return false
 }
 func resourceURIMatchesPolicy(uri string, policy string) bool {
 	policy = strings.TrimSpace(policy)

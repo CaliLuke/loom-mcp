@@ -120,17 +120,9 @@ func (s *SearchClient) collectSearchResults(
 	query string,
 	opts SearchOptions,
 ) ([]*SearchResult, []error) {
-	var allResults []*SearchResult
-	var searchErrors []error
-	for name, entry := range entries {
-		results, err := s.searchRegistry(ctx, name, entry, query, opts)
-		if err != nil {
-			searchErrors = append(searchErrors, fmt.Errorf("registry %q: %w", name, err))
-			continue
-		}
-		allResults = append(allResults, results...)
-	}
-	return allResults, searchErrors
+	return s.manager.collectRegistrySearchResults(ctx, entries, query, func(ctx context.Context, name string, entry *registryEntry) ([]*SearchResult, error) {
+		return s.searchRegistry(ctx, name, entry, query, opts)
+	})
 }
 
 func sortAndLimitSearchResults(results []*SearchResult, maxResults int) []*SearchResult {
@@ -214,13 +206,7 @@ func (s *SearchClient) searchRegistry(ctx context.Context, name string, entry *r
 			}
 			results, err := semanticClient.SemanticSearch(ctx, query, semanticOpts)
 			if err == nil {
-				// Tag results with origin
-				for _, r := range results {
-					if r.Origin == "" {
-						r.Origin = name
-					}
-				}
-				return results, nil
+				return tagSearchResults(name, results), nil
 			}
 			// Semantic search failed, fall back to keyword search
 			s.obs.LogSemanticFallback(ctx, name, query, err)
@@ -233,14 +219,7 @@ func (s *SearchClient) searchRegistry(ctx context.Context, name string, entry *r
 		return nil, err
 	}
 
-	// Tag results with origin
-	for _, r := range results {
-		if r.Origin == "" {
-			r.Origin = name
-		}
-	}
-
-	return results, nil
+	return tagSearchResults(name, results), nil
 }
 
 // keywordSearch performs a keyword-based search using the registry's Search method.

@@ -14,7 +14,7 @@ import (
 	generatorcodegen "github.com/CaliLuke/loom/codegen/generator"
 	"github.com/CaliLuke/loom/eval"
 	"github.com/CaliLuke/loom/expr"
-	"github.com/dave/jennifer/jen"
+	httpcodegen "github.com/CaliLuke/loom/http/codegen"
 	"github.com/stretchr/testify/require"
 )
 
@@ -227,8 +227,7 @@ func TestGenerateMCPServiceCode_PreservesDesignedJSONRPCCORS(t *testing.T) {
 
 	require.Contains(t, rendered, "loomhttp.CORSHandler(")
 	require.Contains(t, rendered, `Pattern: "https://console.example.com"`)
-	require.Contains(t, rendered, `withMCPPolicyHeaders(streamableHTTPSessions, requestCancellations, h.ServeHTTP)`)
-	require.NotContains(t, rendered, "h.Handler.ServeHTTP")
+	require.Contains(t, rendered, `withMCPPolicyHeaders(streamableHTTPSessions, requestCancellations, h.Handler.ServeHTTP)`)
 }
 
 func TestGenerateSDKServer_RequiresAndAppliesDesignedRuntimeCORS(t *testing.T) {
@@ -712,7 +711,7 @@ func TestGenerateAdapter_RendersSkillResourceProvider(t *testing.T) {
 	require.NotContains(t, rendered, `loom.PermanentError("invalid_params", "%s", err.Error())`)
 	require.Contains(t, rendered, `mcpSessionTTL  = 24 * time.Hour`)
 	require.Contains(t, rendered, `mcpMaxSessions = 4096`)
-	require.Contains(t, rendered, `func (a *MCPAdapter) pruneSessionsLocked(now time.Time)`)
+	require.Contains(t, rendered, `func (a *MCPAdapter) pruneSessionsLocked(now time.Time, reserveSlot bool)`)
 	require.Contains(t, rendered, `delete(a.initializedSessions, sessionID)`)
 	require.Contains(t, rendered, `func (a *MCPAdapter) clearSession(sessionID string)`)
 
@@ -806,8 +805,9 @@ func TestGenerateSDKServer_MergesContextRequestHeadersIntoSyntheticRequest(t *te
 	require.NotEmpty(t, rendered)
 	require.Contains(t, rendered, "r = r.WithContext(mcpruntime.WithRequestHeaders(r.Context(), r.Header))")
 	require.NotContains(t, rendered, "serveSDKEventsStream(server, adapter, w, r)")
-	require.Contains(t, rendered, "if r.Method == http.MethodGet {")
+	require.NotContains(t, rendered, "if r.Method == http.MethodGet {\n\t\tif sessionID")
 	require.Contains(t, rendered, "adapter.assertSessionPrincipal(r.Context(), sessionID)")
+	require.Contains(t, rendered, "adapter.markInitializedSession(sessionID)")
 	require.Contains(t, rendered, "http.Error(w, err.Error(), http.StatusForbidden)")
 	require.Contains(t, rendered, "sdkSyntheticHTTPRequest(ctx, extra)")
 	require.Contains(t, rendered, "for key, values := range mcpruntime.RequestHeadersFromContext(ctx)")
@@ -994,12 +994,12 @@ func TestGeneratedMCPAdapterDropIfSlowDefaultsToDroppingSlowSubscribers(t *testi
 	adapterFile := findGeneratedFile(t, files, filepath.Join(gcodegen.Gendir, "mcp_assistant", "adapter_server.go"))
 	adapterSource := renderGeneratedFile(t, adapterFile)
 
-	require.Contains(t, adapterSource, "DropIfSlow any")
+	require.Contains(t, adapterSource, "DropIfSlow *bool")
 	require.Contains(t, adapterSource, "drop := true")
-	require.Contains(t, adapterSource, "drop = defaultMCPAdapterDropIfSlow(opts.DropIfSlow)")
-	require.Contains(t, adapterSource, "case bool:")
-	require.Contains(t, adapterSource, "case *bool:")
-	require.NotContains(t, adapterSource, "if opts.DropIfSlow == false")
+	require.Contains(t, adapterSource, "if opts.DropIfSlow != nil")
+	require.Contains(t, adapterSource, "drop = *opts.DropIfSlow")
+	require.NotContains(t, adapterSource, "defaultMCPAdapterDropIfSlow")
+	require.NotContains(t, adapterSource, "DropIfSlow any")
 }
 
 func TestGeneratedToolDiscoveryCallTemplateArguments(t *testing.T) {
@@ -1363,241 +1363,103 @@ func TestBuildMCPProtocolVersionFileKeepsConfiguredDefault(t *testing.T) {
 	require.Contains(t, transport, `for _, supported := range []string{"2099-01-01", "2025-11-25", "2025-06-18", "2025-03-26", "2024-11-05"}`)
 }
 
-func TestApplyMCPPolicyHeadersToJSONRPCMount_RewritesRawMountSection(t *testing.T) {
-	header := gcodegen.Header("JSON-RPC server", "server", nil)
-	file := &gcodegen.File{
-		Path: "gen/jsonrpc/assistant/server/server.go",
-		Sections: []gcodegen.Section{
-			header,
-			gcodegen.NewRawSection("jsonrpc-server-mount", `
-// MountAssistant configures the mux to serve the JSON-RPC assistant service methods.
-func MountAssistant(mux goahttp.Muxer, h *Server) {
-	// Mixed transports: mount unified handler that negotiates HTTP vs SSE by Accept header and JSON-RPC method
-	mux.Handle("POST", "/rpc", h.ServeHTTP)
-}
+func TestMCPJSONRPCTransportExtensionsOwnStableSections(t *testing.T) {
+	files := generateToolDiscoveryFixture(t)
 
-// MountAssistant configures the mux to serve the JSON-RPC assistant service methods.
-func (s *Server) MountAssistant(mux goahttp.Muxer) {
-	MountAssistant(mux, s)
-}
-`),
-		},
+	server := findGeneratedFile(t, files, filepath.Join(gcodegen.Gendir, "jsonrpc", "mcp_assistant", "server", "server.go"))
+	var mountCount, policyCount int
+	for _, section := range server.AllSections() {
+		switch section.SectionName() {
+		case jsonrpcServerMountSectionName:
+			mountCount++
+		case "mcp-jsonrpc-transport-policy":
+			policyCount++
+		}
 	}
+	require.Equal(t, 1, mountCount)
+	require.Equal(t, 1, policyCount)
+	serverSource := renderGeneratedFile(t, server)
+	require.Contains(t, serverSource, "MCP streamable HTTP: all request methods share transport policy and session state")
+	require.Contains(t, serverSource, `mux.Handle("DELETE", "/rpc", withMCPPolicyHeaders(`)
+	require.Contains(t, serverSource, `mux.Handle("GET", "/rpc", withMCPPolicyHeaders(`)
+	require.Contains(t, serverSource, `mux.Handle("POST", "/rpc", withMCPPolicyHeaders(`)
 
-	require.NoError(t, applyMCPPolicyHeadersToJSONRPCMount([]*gcodegen.File{file}, "2025-06-18"))
-
-	rendered := renderGeneratedFile(t, file)
-	require.Contains(t, rendered, `streamableHTTPSessions := mcpruntime.NewStreamableHTTPSessions()`)
-	require.Contains(t, rendered, `requestCancellations := mcpruntime.NewRequestCancellationRegistry()`)
-	require.Contains(t, rendered, `mux.Handle("POST", "/rpc", withMCPPolicyHeaders(streamableHTTPSessions, requestCancellations, h.ServeHTTP))`)
-	require.Contains(t, rendered, `mux.Handle("GET", "/rpc", withMCPPolicyHeaders(streamableHTTPSessions, requestCancellations, h.ServeHTTP))`)
-	require.Contains(t, rendered, `mux.Handle("DELETE", "/rpc", withMCPPolicyHeaders(streamableHTTPSessions, requestCancellations, h.ServeHTTP))`)
-	require.Contains(t, rendered, "func withMCPPolicyHeaders(streamableHTTPSessions *mcpruntime.StreamableHTTPSessions, requestCancellations *mcpruntime.RequestCancellationRegistry, next http.HandlerFunc) http.HandlerFunc {")
-	require.Contains(t, rendered, `http.MaxBytesReader(w, r.Body, MCPMaxRequestBodyBytes)`)
-	require.Contains(t, rendered, `envelope, err := mcpJSONRPCEnvelopeFromRequest(w, r)`)
-	require.Contains(t, rendered, `"id":      mcpJSONRPCResponseID(envelope),`)
-	require.Contains(t, rendered, "func validateMCPProtocolVersionHeader(r *http.Request, envelope *mcpJSONRPCEnvelope) error {")
-	require.Contains(t, rendered, `if method == "initialize" {`)
-	require.Contains(t, rendered, `// 2025-03-26 compatibility version when no negotiated version is available.`)
-	require.NotContains(t, rendered, `return fmt.Errorf("Missing %s header", mcpruntime.HeaderKeyProtocolVersion)`)
-	require.Contains(t, rendered, `for _, supported := range []string{"2025-11-25", "2025-06-18", "2025-03-26", "2024-11-05"} {`)
-	require.Contains(t, rendered, `return fmt.Errorf("Unsupported %s header %q", mcpruntime.HeaderKeyProtocolVersion, version)`)
-	require.Contains(t, rendered, `ctx = mcpruntime.WithAllowedResourceNames(ctx, allow)`)
-	require.Contains(t, rendered, `ctx = mcpruntime.WithDeniedResourceNames(ctx, deny)`)
-	require.NotContains(t, rendered, `context.WithValue(ctx, "mcp_allow_names", allow)`)
-	require.NotContains(t, rendered, `context.WithValue(ctx, "mcp_deny_names", deny)`)
-	require.Contains(t, rendered, `ctx = mcpruntime.WithResponseWriter(ctx, w)`)
-	require.Contains(t, rendered, `if acceptedMCPJSONRPCNotificationOrResponse(requestCancellations, r, envelope) {`)
-	require.Contains(t, rendered, `w.WriteHeader(http.StatusAccepted)`)
-	require.Contains(t, rendered, `if mcpJSONRPCInputExpectsNoResponse(envelope) {`)
-	require.Contains(t, rendered, `if responseObserver != nil && !responseObserver.wroteResponse {`)
-	require.Contains(t, rendered, `type mcpHTTPResponseObserver struct {`)
-	require.Contains(t, rendered, `var batch []*mcpJSONRPCEnvelope`)
-	require.Contains(t, rendered, `requestCancellations.Cancel(r.Header.Get(mcpruntime.HeaderKeySessionID), requestID)`)
-	require.Contains(t, rendered, `cleanup := requestCancellations.Register(sessionID, requestID, cancel)`)
-	require.Contains(t, rendered, `if err := validateMCPStreamableHTTPSession(streamableHTTPSessions, r, method); err != nil {`)
-	require.Contains(t, rendered, `if err := streamableHTTPSessions.Issue(issuedSessionID); err != nil {`)
-	require.Contains(t, rendered, `cleanup, err := streamableHTTPSessions.RegisterListener(sessionID, cancel)`)
-	require.Contains(t, rendered, `if err := sessions.Terminate(sessionID); err != nil {`)
-	require.Contains(t, rendered, `http.Error(w, "Invalid or expired session ID", http.StatusNotFound)`)
-	require.Contains(t, rendered, `case "notifications/cancelled":`)
-	require.Contains(t, rendered, `case "notifications/initialized", "notifications/progress", "notifications/roots/list_changed":`)
-}
-
-func TestApplyMCPPolicyHeadersToJSONRPCMount_PreservesDesignedCORSHandler(t *testing.T) {
-	file := &gcodegen.File{
-		Path: "gen/jsonrpc/assistant/server/server.go",
-		Sections: []gcodegen.Section{
-			gcodegen.Header("JSON-RPC server", "server", nil),
-			gcodegen.NewRawSection("jsonrpc-server-init", `
-func New() *Server {
-	s := &Server{}
-	s.Handler = loomhttp.CORSHandler(loomhttp.CORSPolicy{})(http.HandlerFunc(s.ServeHTTP))
-	return s
-}
-`),
-			gcodegen.NewRawSection("jsonrpc-server-mount", `
-// MountAssistant configures the mux to serve the JSON-RPC assistant service methods.
-func MountAssistant(mux goahttp.Muxer, h *Server) {
-	mux.Handle("POST", "/rpc", h.Handler.ServeHTTP)
-}
-`),
-		},
+	client := findGeneratedFile(t, files, filepath.Join(gcodegen.Gendir, "jsonrpc", "mcp_assistant", "client", "client.go"))
+	var initCount, defaultsCount int
+	for _, section := range client.AllSections() {
+		switch section.SectionName() {
+		case "jsonrpc-client-init":
+			initCount++
+		case "mcp-client-transport-defaults":
+			defaultsCount++
+		}
 	}
-
-	require.NoError(t, applyMCPPolicyHeadersToJSONRPCMount([]*gcodegen.File{file}, "2025-11-25"))
-
-	rendered := renderGeneratedFile(t, file)
-	require.Contains(t, rendered, `withMCPPolicyHeaders(streamableHTTPSessions, requestCancellations, h.Handler.ServeHTTP)`)
-	require.Contains(t, rendered, `loomhttp.CORSHandler(loomhttp.CORSPolicy{})`)
+	require.Equal(t, 1, initCount)
+	require.Equal(t, 1, defaultsCount)
+	clientSource := renderGeneratedFile(t, client)
+	require.Contains(t, clientSource, "doer = &mcpClientDoer{next: doer}")
+	require.Contains(t, clientSource, `req.Header.Set("Accept", "application/json, text/event-stream")`)
+	require.NotContains(t, clientSource, `if req.Header.Get("Accept") == ""`)
 }
 
-func TestApplyMCPPolicyHeadersToJSONRPCMount_RewritesRawMountSectionBySourceShape(t *testing.T) {
-	header := gcodegen.Header("JSON-RPC server", "server", nil)
-	file := &gcodegen.File{
-		Path: "gen/jsonrpc/assistant/server/server.go",
-		Sections: []gcodegen.Section{
-			header,
-			gcodegen.NewRawSection("loom-jsonrpc-mount", `
-// MountAssistant configures the mux to serve the JSON-RPC assistant service methods.
-func MountAssistant(mux goahttp.Muxer, h *Server) {
-	// Mixed transports: mount unified handler that negotiates HTTP vs SSE by Accept header and JSON-RPC method
-	mux.Handle("POST", "/rpc", h.ServeHTTP)
-	mux.Handle("GET", "/rpc", h.ServeHTTP)
-}
-`),
-		},
-	}
-
-	require.NoError(t, applyMCPPolicyHeadersToJSONRPCMount([]*gcodegen.File{file}, "2025-06-18"))
-
-	rendered := renderGeneratedFile(t, file)
-	require.Contains(t, rendered, `mux.Handle("POST", "/rpc", withMCPPolicyHeaders(streamableHTTPSessions, requestCancellations, h.ServeHTTP))`)
-	require.Contains(t, rendered, `mux.Handle("GET", "/rpc", withMCPPolicyHeaders(streamableHTTPSessions, requestCancellations, h.ServeHTTP))`)
-	require.Contains(t, rendered, "func withMCPPolicyHeaders(streamableHTTPSessions *mcpruntime.StreamableHTTPSessions, requestCancellations *mcpruntime.RequestCancellationRegistry, next http.HandlerFunc) http.HandlerFunc {")
-	require.Contains(t, rendered, `ctx = mcpruntime.WithAllowedResourceNames(ctx, allow)`)
-	require.Contains(t, rendered, `ctx = mcpruntime.WithDeniedResourceNames(ctx, deny)`)
-}
-
-func TestApplyMCPPolicyHeadersToJSONRPCMount_RewritesJenniferMountSection(t *testing.T) {
-	header := gcodegen.Header("JSON-RPC server", "server", nil)
-	file := &gcodegen.File{
-		Path: "gen/jsonrpc/assistant/server/server.go",
-		Sections: []gcodegen.Section{
-			header,
-			gcodegen.NewJenniferSection("loom-jsonrpc-mount", func(stmt *jen.Statement) {
-				stmt.Comment("MountAssistant configures the mux to serve the JSON-RPC assistant service methods.").Line()
-				stmt.Func().Id("MountAssistant").
-					Params(
-						jen.Id("mux").Qual("github.com/CaliLuke/loom/http", "Muxer"),
-						jen.Id("h").Op("*").Id("Server"),
-					).
-					Block(
-						jen.Comment("Mixed transports: mount unified handler that negotiates HTTP vs SSE by Accept header and JSON-RPC method"),
-						jen.Id("mux").Dot("Handle").Call(jen.Lit("POST"), jen.Lit("/rpc"), jen.Id("h").Dot("ServeHTTP")),
-						jen.Id("mux").Dot("Handle").Call(jen.Lit("GET"), jen.Lit("/rpc"), jen.Id("h").Dot("ServeHTTP")),
-					)
-			}),
-		},
-	}
-
-	require.NoError(t, applyMCPPolicyHeadersToJSONRPCMount([]*gcodegen.File{file}, "2025-06-18"))
-
-	rendered := renderGeneratedFile(t, file)
-	require.Contains(t, rendered, `mux.Handle("POST", "/rpc", withMCPPolicyHeaders(streamableHTTPSessions, requestCancellations, h.ServeHTTP))`)
-	require.Contains(t, rendered, `mux.Handle("GET", "/rpc", withMCPPolicyHeaders(streamableHTTPSessions, requestCancellations, h.ServeHTTP))`)
-	require.Contains(t, rendered, "func withMCPPolicyHeaders(streamableHTTPSessions *mcpruntime.StreamableHTTPSessions, requestCancellations *mcpruntime.RequestCancellationRegistry, next http.HandlerFunc) http.HandlerFunc {")
-	require.Contains(t, rendered, `ctx = mcpruntime.WithAllowedResourceNames(ctx, allow)`)
-	require.Contains(t, rendered, `ctx = mcpruntime.WithDeniedResourceNames(ctx, deny)`)
-}
-
-func TestApplyMCPPolicyHeadersToJSONRPCMount_FailsWhenMountShapeIsUnwrapped(t *testing.T) {
-	header := gcodegen.Header("JSON-RPC server", "server", nil)
-	file := &gcodegen.File{
-		Path: "gen/jsonrpc/assistant/server/server.go",
-		Sections: []gcodegen.Section{
-			header,
-			gcodegen.NewRawSection("jsonrpc-server-mount", `
-// MountAssistant configures the mux to serve the JSON-RPC assistant service methods.
-func MountAssistant(mux goahttp.Muxer, h *Server) {
-	mux.Handle("POST", "/rpc", h.Serve)
-}
-`),
-		},
-	}
-
-	err := applyMCPPolicyHeadersToJSONRPCMount([]*gcodegen.File{file}, "2025-06-18")
-
-	require.Error(t, err)
-	require.ErrorContains(t, err, "upstream JSON-RPC mount shape changed")
-	require.ErrorContains(t, err, "jsonrpc-server-mount")
-}
-
-func TestApplyMCPJSONRPCErrorCodes_MapsResourceNotFound(t *testing.T) {
-	header := gcodegen.Header("JSON-RPC server", "server", nil)
-	file := &gcodegen.File{
-		Path: "gen/jsonrpc/mcp_assistant/server/server.go",
-		Sections: []gcodegen.Section{
-			header,
-			gcodegen.NewRawSection("server-handlers", `
-switch en.LoomErrorName() {
-case "invalid_params":
-	encodeJSONRPCError(ctx, w, req, jsonrpc.InvalidParams, loom.ErrorSafeMessage(err), jsonrpc.NewErrorData(err), encoder, errhandler)
-case "method_not_found":
-	encodeJSONRPCError(ctx, w, req, jsonrpc.MethodNotFound, loom.ErrorSafeMessage(err), jsonrpc.NewErrorData(err), encoder, errhandler)
-}
-switch en.LoomErrorName() {
-case "invalid_params":
-	return strm.sendError(ctx, jsonrpc.IDToString(req.ID), jsonrpc.InvalidParams, loom.ErrorSafeMessage(err), jsonrpc.NewErrorData(err))
-case "method_not_found":
-	return strm.sendError(ctx, jsonrpc.IDToString(req.ID), jsonrpc.MethodNotFound, loom.ErrorSafeMessage(err), jsonrpc.NewErrorData(err))
-}
-`),
-		},
-	}
-
-	err := applyMCPJSONRPCErrorCodes([]*gcodegen.File{file})
-
-	require.NoError(t, err)
-	rendered := renderGeneratedFile(t, file)
-	require.Contains(t, rendered, `case "resource_not_found":`)
-	require.Contains(t, rendered, `encodeJSONRPCError(ctx, w, req, jsonrpc.Code(-32002), loom.ErrorSafeMessage(err), jsonrpc.NewErrorData(err), encoder, errhandler)`)
-	require.Contains(t, rendered, `return strm.sendError(ctx, jsonrpc.IDToString(req.ID), jsonrpc.Code(-32002), loom.ErrorSafeMessage(err), jsonrpc.NewErrorData(err))`)
-}
-
-func TestApplyMCPJSONRPCErrorDataUsesClientSafeMetadataForHTTPAndSSE(t *testing.T) {
-	files := []*gcodegen.File{
+func TestMCPJSONRPCTransportExtensionsFailOnSectionDrift(t *testing.T) {
+	data := &httpcodegen.ServiceData{}
+	tests := []struct {
+		name     string
+		path     string
+		sections []gcodegen.Section
+		apply    func([]*gcodegen.File) error
+		want     string
+	}{
 		{
-			Path: "gen/jsonrpc/mcp_assistant/server/server.go",
-			Sections: []gcodegen.Section{gcodegen.NewRawSection("server-handler", `
-encodeJSONRPCError(ctx, w, req, code, loom.ErrorSafeMessage(err), jsonrpc.NewErrorData(err), encoder, errhandler)
-`)},
+			name:     "mount missing",
+			path:     "gen/jsonrpc/mcp_assistant/server/server.go",
+			sections: []gcodegen.Section{gcodegen.NewRawSection("changed-mount", "")},
+			apply: func(files []*gcodegen.File) error {
+				return applyMCPPolicyHeadersToJSONRPCMount(files, "2025-11-25", data)
+			},
+			want: `expected one "jsonrpc-server-mount" section, found 0`,
 		},
 		{
-			Path: "gen/jsonrpc/mcp_assistant/server/stream.go",
-			Sections: []gcodegen.Section{gcodegen.NewRawSection("stream-handler", `
-return strm.sendError(ctx, req.ID, code, loom.ErrorSafeMessage(err), jsonrpc.NewErrorData(err))
-`)},
+			name: "mount duplicate",
+			path: "gen/jsonrpc/mcp_assistant/server/server.go",
+			sections: []gcodegen.Section{
+				gcodegen.NewRawSection("jsonrpc-server-mount", ""),
+				gcodegen.NewRawSection("jsonrpc-server-mount", ""),
+			},
+			apply: func(files []*gcodegen.File) error {
+				return applyMCPPolicyHeadersToJSONRPCMount(files, "2025-11-25", data)
+			},
+			want: `expected one "jsonrpc-server-mount" section, found 2`,
+		},
+		{
+			name:     "client init missing",
+			path:     "gen/jsonrpc/mcp_assistant/client/client.go",
+			sections: []gcodegen.Section{gcodegen.NewRawSection("changed-client-init", "")},
+			apply: func(files []*gcodegen.File) error {
+				return applyMCPJSONRPCClientTransportDefaults(files, data)
+			},
+			want: `expected one "jsonrpc-client-init" section, found 0`,
+		},
+		{
+			name: "client init duplicate",
+			path: "gen/jsonrpc/mcp_assistant/client/client.go",
+			sections: []gcodegen.Section{
+				gcodegen.NewRawSection("jsonrpc-client-init", ""),
+				gcodegen.NewRawSection("jsonrpc-client-init", ""),
+			},
+			apply: func(files []*gcodegen.File) error {
+				return applyMCPJSONRPCClientTransportDefaults(files, data)
+			},
+			want: `expected one "jsonrpc-client-init" section, found 2`,
 		},
 	}
-
-	require.NoError(t, applyMCPJSONRPCErrorData(files))
-	for _, file := range files {
-		rendered := renderGeneratedFile(t, file)
-		require.Contains(t, rendered, "mcpruntime.NewErrorData(err)")
-		require.NotContains(t, rendered, "jsonrpc.NewErrorData(err)")
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := tt.apply([]*gcodegen.File{{Path: tt.path, Sections: tt.sections}})
+			require.ErrorContains(t, err, tt.want)
+		})
 	}
-}
-
-func TestApplyMCPJSONRPCErrorDataFailsWhenUpstreamShapeChanges(t *testing.T) {
-	file := &gcodegen.File{
-		Path:     "gen/jsonrpc/mcp_assistant/server/server.go",
-		Sections: []gcodegen.Section{gcodegen.NewRawSection("server-handler", "return nil")},
-	}
-
-	err := applyMCPJSONRPCErrorData([]*gcodegen.File{file})
-
-	require.ErrorContains(t, err, "upstream JSON-RPC error data shape changed")
 }
 
 func TestGenerate_ActualMCPServerMountIncludesPolicyWrapper(t *testing.T) {
@@ -1655,8 +1517,15 @@ func TestGenerate_ActualMCPServerMountIncludesPolicyWrapper(t *testing.T) {
 	require.NotContains(t, rendered, `context.WithValue(ctx, "mcp_allow_names", allow)`)
 	require.NotContains(t, rendered, `context.WithValue(ctx, "mcp_deny_names", deny)`)
 	require.Contains(t, rendered, `ctx = mcpruntime.WithResponseWriter(ctx, w)`)
+	require.Contains(t, rendered, `if method == "initialize" {`)
+	require.Contains(t, rendered, `if sessionID == "" {`)
+	require.Contains(t, rendered, `return sessions.ValidateForPrincipal(sessionID, principal)`)
 	require.Contains(t, adapterRendered, `AllowedResourceNamesFromContext(ctx)`)
 	require.Contains(t, adapterRendered, `DeniedResourceNamesFromContext(ctx)`)
+	require.Contains(t, adapterRendered, `serverAllowedNames`)
+	require.Contains(t, adapterRendered, `requestAllowedNames`)
+	require.Contains(t, adapterRendered, `resourceURIAllowedByPolicies(base, serverAllowConfigured, serverAllowPolicies)`)
+	require.Contains(t, adapterRendered, `resourceURIAllowedByPolicies(base, requestAllowConfigured, requestNameAllowURIs)`)
 	require.NotContains(t, adapterRendered, `ctx.Value("mcp_allow_names")`)
 	require.NotContains(t, adapterRendered, `ctx.Value("mcp_deny_names")`)
 }

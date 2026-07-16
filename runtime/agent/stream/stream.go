@@ -363,8 +363,8 @@ type (
 		// correlate subsequent ToolEnd events with the original ToolStart, enabling
 		// UIs to update progress indicators and display results for the correct tool call.
 		ToolCallID string `json:"tool_call_id"`
-		// ToolName is the fully qualified tool identifier (e.g., "weather.search.forecast").
-		// Format: <service>.<toolset>.<tool>. Clients can use this to display tool names
+		// ToolName is the canonical tool identifier (e.g., "weather.get_forecast").
+		// Format: <toolset>.<tool>. Clients can use this to display tool names
 		// or icons in progress indicators.
 		ToolName string `json:"tool_name"`
 		// Payload contains the structured tool arguments (JSON-serializable) for this call.
@@ -408,8 +408,8 @@ type (
 		// the corresponding ToolStart event. Clients use this to maintain tool call hierarchies
 		// and track which parent-child relationships have completed.
 		ParentToolCallID string `json:"parent_tool_call_id,omitempty"`
-		// ToolName is the fully qualified tool identifier that was executed (e.g.,
-		// "weather.search.forecast"). Matches the ToolName from ToolStart. Useful for
+		// ToolName is the canonical tool identifier that was executed (e.g.,
+		// "weather.get_forecast"). Matches the ToolName from ToolStart. Useful for
 		// displaying tool names in result summaries and correlating with tool metadata.
 		ToolName string `json:"tool_name"`
 		// Result contains the tool's output payload. This is the structured data
@@ -546,7 +546,7 @@ type (
 	// AwaitToolPayload describes a single external tool call to be satisfied.
 	AwaitToolPayload struct {
 		// ToolName is the fully qualified identifier of the external tool
-		// that must be executed (for example, "svc.read.get_time_series").
+		// that must be executed (for example, "read.get_time_series").
 		ToolName string `json:"tool_name"`
 		// ToolCallID optionally carries a caller-assigned identifier used
 		// to correlate the provided result with this request.

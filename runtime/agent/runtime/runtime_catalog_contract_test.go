@@ -90,6 +90,20 @@ func TestRuntimeCatalogToolSchemasAndModels(t *testing.T) {
 	assert.False(t, ok)
 }
 
+func TestRegisterModelFailsAfterSeal(t *testing.T) {
+	t.Parallel()
+
+	rt := New()
+	require.NoError(t, rt.RegisterModel("default", contractModelClient{}))
+	require.NoError(t, rt.Seal(t.Context()))
+
+	err := rt.RegisterModel("replacement", contractModelClient{})
+	require.ErrorIs(t, err, ErrRegistrationClosed)
+	require.ErrorIs(t, rt.RegisterModel("", nil), ErrRegistrationClosed)
+	_, ok := rt.ModelClient("replacement")
+	assert.False(t, ok)
+}
+
 func catalogToolSpec() tools.ToolSpec {
 	return tools.ToolSpec{
 		Name: "tools.search",

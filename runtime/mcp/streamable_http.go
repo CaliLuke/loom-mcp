@@ -27,6 +27,7 @@ type streamableHTTPSessionConfig struct {
 
 type streamableHTTPSessionEntry struct {
 	expiresAt time.Time
+	principal string
 }
 
 type streamListener struct {
@@ -43,6 +44,12 @@ const (
 var (
 	ErrInvalidSessionID  = errors.New("invalid session ID")
 	ErrSessionTerminated = errors.New("session terminated")
+	// ErrSessionPrincipalBindingMissing means an authenticated request tried to
+	// use a session that was issued without an authenticated principal.
+	ErrSessionPrincipalBindingMissing = errors.New("session principal binding missing")
+	// ErrSessionPrincipalMismatch means a request principal does not own the
+	// referenced session.
+	ErrSessionPrincipalMismatch = errors.New("session user mismatch")
 )
 
 // NewStreamableHTTPSessions creates a store for issued sessions and active
@@ -53,6 +60,13 @@ func NewStreamableHTTPSessions() *StreamableHTTPSessions {
 
 // Issue records a session ID as valid for future requests.
 func (s *StreamableHTTPSessions) Issue(sessionID string) error {
+	return s.IssueForPrincipal(sessionID, "")
+}
+
+// IssueForPrincipal records a session ID and its authenticated owner. An empty
+// principal deliberately creates an anonymous session that cannot later be
+// adopted by an authenticated request.
+func (s *StreamableHTTPSessions) IssueForPrincipal(sessionID, principal string) error {
 	if s == nil || sessionID == "" {
 		return ErrInvalidSessionID
 	}
@@ -60,7 +74,10 @@ func (s *StreamableHTTPSessions) Issue(sessionID string) error {
 	defer s.mu.Unlock()
 	now := s.now()
 	s.pruneLocked(now)
-	s.issued[sessionID] = streamableHTTPSessionEntry{expiresAt: now.Add(s.cfg.issuedTTL)}
+	s.issued[sessionID] = streamableHTTPSessionEntry{
+		expiresAt: now.Add(s.cfg.issuedTTL),
+		principal: principal,
+	}
 	delete(s.terminated, sessionID)
 	s.pruneToMaxLocked(s.issued, s.cfg.maxIssued, s.listeners, sessionID)
 	return nil
@@ -85,28 +102,41 @@ func (s *StreamableHTTPSessions) Validate(sessionID string) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.pruneLocked(s.now())
-	if _, ok := s.terminated[sessionID]; ok {
-		return ErrSessionTerminated
-	}
-	if _, ok := s.issued[sessionID]; !ok {
+	return s.validateLocked(sessionID, "", false)
+}
+
+// ValidateForPrincipal reports whether a session is valid and owned by
+// principal. Anonymous sessions accept only anonymous requests.
+func (s *StreamableHTTPSessions) ValidateForPrincipal(sessionID, principal string) error {
+	if s == nil || sessionID == "" {
 		return ErrInvalidSessionID
 	}
-	return nil
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.pruneLocked(s.now())
+	return s.validateLocked(sessionID, principal, true)
 }
 
 // RegisterListener atomically validates a session and associates a cancelable stream with it.
 func (s *StreamableHTTPSessions) RegisterListener(sessionID string, cancel context.CancelFunc) (func(), error) {
+	return s.registerListener(sessionID, "", cancel, false)
+}
+
+// RegisterListenerForPrincipal atomically validates session ownership and
+// associates a cancelable stream with the session.
+func (s *StreamableHTTPSessions) RegisterListenerForPrincipal(sessionID, principal string, cancel context.CancelFunc) (func(), error) {
+	return s.registerListener(sessionID, principal, cancel, true)
+}
+
+func (s *StreamableHTTPSessions) registerListener(sessionID, principal string, cancel context.CancelFunc, checkPrincipal bool) (func(), error) {
 	if s == nil || sessionID == "" || cancel == nil {
 		return nil, ErrInvalidSessionID
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.pruneLocked(s.now())
-	if _, ok := s.terminated[sessionID]; ok {
-		return nil, ErrSessionTerminated
-	}
-	if _, ok := s.issued[sessionID]; !ok {
-		return nil, ErrInvalidSessionID
+	if err := s.validateLocked(sessionID, principal, checkPrincipal); err != nil {
+		return nil, err
 	}
 	listener := &streamListener{cancel: cancel}
 	if s.listeners[sessionID] == nil {
@@ -127,19 +157,26 @@ func (s *StreamableHTTPSessions) RegisterListener(sessionID string, cancel conte
 
 // Terminate marks a session as terminated and cancels any active listeners.
 func (s *StreamableHTTPSessions) Terminate(sessionID string) error {
+	return s.terminate(sessionID, "", false)
+}
+
+// TerminateForPrincipal atomically validates session ownership before
+// terminating it, preventing a rejected caller from deleting another
+// principal's session.
+func (s *StreamableHTTPSessions) TerminateForPrincipal(sessionID, principal string) error {
+	return s.terminate(sessionID, principal, true)
+}
+
+func (s *StreamableHTTPSessions) terminate(sessionID, principal string, checkPrincipal bool) error {
 	if s == nil || sessionID == "" {
 		return ErrInvalidSessionID
 	}
 	s.mu.Lock()
 	now := s.now()
 	s.pruneLocked(now)
-	if _, ok := s.issued[sessionID]; !ok {
-		if _, terminated := s.terminated[sessionID]; terminated {
-			s.mu.Unlock()
-			return ErrSessionTerminated
-		}
+	if err := s.validateLocked(sessionID, principal, checkPrincipal); err != nil {
 		s.mu.Unlock()
-		return ErrInvalidSessionID
+		return err
 	}
 	s.terminated[sessionID] = streamableHTTPSessionEntry{expiresAt: now.Add(s.cfg.terminatedTTL)}
 	delete(s.issued, sessionID)
@@ -152,6 +189,29 @@ func (s *StreamableHTTPSessions) Terminate(sessionID string) error {
 		if listener != nil && listener.cancel != nil {
 			listener.cancel()
 		}
+	}
+	return nil
+}
+
+func (s *StreamableHTTPSessions) validateLocked(sessionID, principal string, checkPrincipal bool) error {
+	if _, ok := s.terminated[sessionID]; ok {
+		return ErrSessionTerminated
+	}
+	entry, ok := s.issued[sessionID]
+	if !ok {
+		return ErrInvalidSessionID
+	}
+	if !checkPrincipal {
+		return nil
+	}
+	if entry.principal == "" {
+		if principal != "" {
+			return ErrSessionPrincipalBindingMissing
+		}
+		return nil
+	}
+	if principal != entry.principal {
+		return ErrSessionPrincipalMismatch
 	}
 	return nil
 }

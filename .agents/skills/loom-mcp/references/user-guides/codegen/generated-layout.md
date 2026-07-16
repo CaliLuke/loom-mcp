@@ -1,30 +1,27 @@
-# Codegen: Generated Layout
+# Generated Layout
 
-Use this for understanding what Goa generates and where to implement custom logic.
-
-## Typical Layout
+Use `references/codegen-contracts.md` for invariants and inspect the generated
+package API for the exact evaluated design.
 
 ```text
-myservice/
-├── cmd/
-├── design/
-├── gen/
-│   ├── <service>/
-│   ├── http/
-│   └── grpc/
-└── <service>.go
+gen/
+├── <service>/
+│   ├── service.go, endpoints.go, client.go
+│   ├── agents/<agent>/
+│   │   ├── agent.go, config.go, registry.go
+│   │   └── specs/                    aggregate agent catalog
+│   └── toolsets/<toolset>/           owner specs/codecs/transforms/providers
+├── mcp_<service>/                    generated MCP protocol package
+├── jsonrpc/, http/, grpc/            transport packages
 ```
 
-## Important Areas
+Ownership rules:
 
-- `gen/<service>/service.go`: service interface, payload/result types, constants
-- `gen/<service>/endpoints.go`: transport-agnostic endpoint wrappers
-- `gen/<service>/client.go`: typed client over endpoints
-- `gen/http/<service>/...`: HTTP server/client adapters
-- `gen/grpc/<service>/...`: gRPC server/client/protobuf adapters
-
-## Ownership Rule
-
-- Do not edit `gen/`.
-- Put business logic in non-generated service files.
-- Treat `cmd/` example code as yours after scaffolding.
+- Never edit `gen/`.
+- Change `design/`, DSL, or generator code and regenerate.
+- Put business logic in application-owned service/planner/executor packages.
+- Treat `cmd/` and `internal/agents/` emitted by `loom example` as
+  application-owned scaffolding.
+- Agent aggregate specs do not own defining toolset types. Import the
+  owner-scoped `gen/<service>/toolsets/<toolset>` package when typed transforms
+  or specs are required.

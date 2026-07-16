@@ -139,9 +139,9 @@ type (
 		// construction time.
 		workers map[agent.Ident]WorkerConfig
 
-		// registrationClosed prevents late agent/toolset registration after the
-		// runtime has been explicitly sealed or the first run has been submitted,
-		// avoiding dynamic handler registration on active workers.
+		// registrationClosed prevents late agent/toolset/model registration
+		// after the runtime has been explicitly sealed or the first run has
+		// been submitted, avoiding dynamic handler registration on active workers.
 		registrationClosed bool
 
 		// activationComplete reports whether the runtime activation boundary has
@@ -408,9 +408,10 @@ type (
 		// MaxConsecutiveFailedToolCalls caps sequential failures before aborting (0 = unlimited).
 		MaxConsecutiveFailedToolCalls int
 
-		// TimeBudget is the semantic wall-clock budget for planner and tool work
-		// within the run (0 = unlimited). The runtime derives the engine run timeout
-		// from this budget plus finalizer reserve and a small engine headroom.
+		// TimeBudget is the active-work budget for planner and tool work within the
+		// run (0 = unlimited). External-input waits pause it. The runtime derives the
+		// engine run timeout from this budget plus finalizer reserve, wait allowance,
+		// and small engine headroom.
 		TimeBudget time.Duration
 
 		// FinalizerGrace reserves time to produce a last assistant message after the

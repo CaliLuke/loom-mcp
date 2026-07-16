@@ -26,25 +26,18 @@ import (
 // ToolsCallServerStream implements the mcpassistant.ToolsCallServerStream
 // interface using Server-Sent Events.
 type ToolsCallServerStream struct {
-	// writer owns the serialized SSE response lifecycle
-	writer *loomhttp.SSEStreamWriter
-	// encoder is the SSE event encoder
-	encoder func(context.Context, http.ResponseWriter) loomhttp.Encoder
-	// w is the HTTP response writer
-	w http.ResponseWriter
-	// r is the HTTP request
-	r *http.Request
-	// requestID is the JSON-RPC request ID for sending final response
-	requestID any
-	// requestHasID records whether the JSON-RPC request included an ID.
+	writer       *loomhttp.SSEStreamWriter
+	encoder      func(context.Context, http.ResponseWriter) loomhttp.Encoder
+	w            http.ResponseWriter
+	r            *http.Request
+	requestID    any
 	requestHasID bool
-	// closed indicates if the stream has been closed via SendAndClose
-	closed bool
-	// mu protects the closed flag
-	mu sync.Mutex
+	closed       bool
+	mu           sync.Mutex
 }
 
-// Open commits and flushes the SSE headers before the first application event.
+// Open commits the SSE response with an MCP reconnect cursor before the first
+// application event.
 func (s *ToolsCallServerStream) Open(ctx context.Context) error {
 	return s.writer.WriteEvent(ctx, func(w io.Writer) error {
 		_, err := fmt.Fprintf(w, "id: %s\ndata:\n\n", mcpruntime.NewSessionID())
@@ -57,45 +50,30 @@ func (s *ToolsCallServerStream) SendComment(ctx context.Context, text string) er
 	return s.writer.SendComment(ctx, text)
 }
 
-// Send sends a JSON-RPC notification to the client.
-// Notifications do not expect a response from the client.
+// Send emits a JSON-RPC notification for one stream event.
 func (s *ToolsCallServerStream) Send(ctx context.Context, event mcpassistant.ToolsCallEvent) error {
-	// Check if stream is closed
 	s.mu.Lock()
 	if s.closed {
 		s.mu.Unlock()
 		return fmt.Errorf("stream closed")
 	}
 	s.mu.Unlock()
-
-	// Type assert to the specific result type
 	result, ok := event.(*mcpassistant.ToolsCallResult)
 	if !ok {
 		return fmt.Errorf("unexpected event type: %T", event)
 	}
-
-	// Convert to response body type for proper JSON encoding
 	body := NewToolsCallResponseBody(result)
-	// Send as notification (no ID)
 	message := map[string]any{
 		"jsonrpc": "2.0",
 		"method":  "mcp_assistant/stream.event",
 		"params":  body,
 	}
-
 	return s.sendSSEEvent("message", message)
 }
 
-// SendAndClose sends a final JSON-RPC response to the client and closes the
-// stream.
-// The response includes the original request ID. ID-less streams (JSON-RPC
-// notifications and raw GET events/stream listeners) are closed without a
-// final response: the value is discarded and a
-// stream_final_response_suppressed transport event is emitted. Implementations
-// serving GET listeners should Send every value and close instead.
-// After calling this method, no more events can be sent on this stream.
+// SendAndClose emits the final JSON-RPC response and closes the stream;
+// ID-less streams suppress the response.
 func (s *ToolsCallServerStream) SendAndClose(ctx context.Context, event mcpassistant.ToolsCallEvent) error {
-	// Check if stream is already closed
 	s.mu.Lock()
 	if s.closed {
 		s.mu.Unlock()
@@ -103,53 +81,48 @@ func (s *ToolsCallServerStream) SendAndClose(ctx context.Context, event mcpassis
 	}
 	s.closed = true
 	s.mu.Unlock()
-
-	// Type assert to the specific result type
 	result, ok := event.(*mcpassistant.ToolsCallResult)
 	if !ok {
 		return fmt.Errorf("unexpected event type: %T", event)
 	}
-
-	// Determine the ID to use for the response
-	var id any = s.requestID
+	id := s.requestID
 	if !s.requestHasID {
-		// ID-less streams (JSON-RPC notifications and raw GET events/stream
-		// listeners) must not receive a final response, so the value is
-		// discarded; emit an observability event so the suppression is
-		// visible to implementations that call SendAndClose with data.
-		loomtransport.Observe(s.r.Context(), loomtransport.Event{Kind: loomtransport.EventKindStreamClose, Reason: loomtransport.ReasonStreamFinalResponseSuppressed, Transport: loomtransport.TransportJSONRPC})
+		loomtransport.Observe(s.r.Context(), loomtransport.Event{
+			Kind:      loomtransport.EventKindStreamClose,
+			Reason:    loomtransport.ReasonStreamFinalResponseSuppressed,
+			Transport: loomtransport.TransportJSONRPC,
+		})
 		return nil
 	}
-	// Convert to response body type for proper JSON encoding
 	body := NewToolsCallResponseBody(result)
-	// Send as a JSON-RPC response message with ID
 	message := map[string]any{
-		"jsonrpc": "2.0",
 		"id":      id,
+		"jsonrpc": "2.0",
 		"result":  body,
 	}
-
 	return s.sendSSEEvent("message", message)
 }
 
-// SendError sends a JSON-RPC error response.
+// SendError emits a client-safe JSON-RPC error response.
 func (s *ToolsCallServerStream) SendError(ctx context.Context, id any, err error) error {
-	// No custom errors defined - check if it's a validation error, otherwise use internal error
 	code := jsonrpc.InternalError
 	var serviceError *loom.ServiceError
 	if errors.As(err, &serviceError) {
 		code = jsonrpcErrorCodeForServiceError(serviceError)
+		if serviceError.Name == "resource_not_found" {
+			code = jsonrpc.Code(-32002)
+		}
 	}
 	return s.sendError(ctx, id, code, loom.ErrorSafeMessage(err), mcpruntime.NewErrorData(err))
 }
 
-// sendError sends a JSON-RPC error response via SSE.
+// sendError emits a JSON-RPC error response via SSE.
 func (s *ToolsCallServerStream) sendError(ctx context.Context, id any, code jsonrpc.Code, message string, data any) error {
 	response := jsonrpc.MakeErrorResponse(id, code, message, data)
 	return s.sendSSEEvent("message", response)
 }
 
-// sendSSEEvent sends a single SSE event.
+// sendSSEEvent emits an MCP reconnect hint followed by one JSON SSE event.
 func (s *ToolsCallServerStream) sendSSEEvent(eventType string, v any) error {
 	return s.writer.WriteEvent(s.r.Context(), func(w io.Writer) error {
 		if _, err := fmt.Fprint(w, "event: retry\nretry: 1000\ndata:\n\n"); err != nil {
@@ -162,25 +135,18 @@ func (s *ToolsCallServerStream) sendSSEEvent(eventType string, v any) error {
 // EventsStreamServerStream implements the
 // mcpassistant.EventsStreamServerStream interface using Server-Sent Events.
 type EventsStreamServerStream struct {
-	// writer owns the serialized SSE response lifecycle
-	writer *loomhttp.SSEStreamWriter
-	// encoder is the SSE event encoder
-	encoder func(context.Context, http.ResponseWriter) loomhttp.Encoder
-	// w is the HTTP response writer
-	w http.ResponseWriter
-	// r is the HTTP request
-	r *http.Request
-	// requestID is the JSON-RPC request ID for sending final response
-	requestID any
-	// requestHasID records whether the JSON-RPC request included an ID.
+	writer       *loomhttp.SSEStreamWriter
+	encoder      func(context.Context, http.ResponseWriter) loomhttp.Encoder
+	w            http.ResponseWriter
+	r            *http.Request
+	requestID    any
 	requestHasID bool
-	// closed indicates if the stream has been closed via SendAndClose
-	closed bool
-	// mu protects the closed flag
-	mu sync.Mutex
+	closed       bool
+	mu           sync.Mutex
 }
 
-// Open commits and flushes the SSE headers before the first application event.
+// Open commits the SSE response with an MCP reconnect cursor before the first
+// application event.
 func (s *EventsStreamServerStream) Open(ctx context.Context) error {
 	return s.writer.WriteEvent(ctx, func(w io.Writer) error {
 		_, err := fmt.Fprintf(w, "id: %s\ndata:\n\n", mcpruntime.NewSessionID())
@@ -193,45 +159,30 @@ func (s *EventsStreamServerStream) SendComment(ctx context.Context, text string)
 	return s.writer.SendComment(ctx, text)
 }
 
-// Send sends a JSON-RPC notification to the client.
-// Notifications do not expect a response from the client.
+// Send emits a JSON-RPC notification for one stream event.
 func (s *EventsStreamServerStream) Send(ctx context.Context, event mcpassistant.EventsStreamEvent) error {
-	// Check if stream is closed
 	s.mu.Lock()
 	if s.closed {
 		s.mu.Unlock()
 		return fmt.Errorf("stream closed")
 	}
 	s.mu.Unlock()
-
-	// Type assert to the specific result type
 	result, ok := event.(*mcpassistant.EventsStreamResult)
 	if !ok {
 		return fmt.Errorf("unexpected event type: %T", event)
 	}
-
-	// Convert to response body type for proper JSON encoding
 	body := NewEventsStreamResponseBody(result)
-	// Send as notification (no ID)
 	message := map[string]any{
 		"jsonrpc": "2.0",
 		"method":  "mcp_assistant/stream.event",
 		"params":  body,
 	}
-
 	return s.sendSSEEvent("message", message)
 }
 
-// SendAndClose sends a final JSON-RPC response to the client and closes the
-// stream.
-// The response includes the original request ID. ID-less streams (JSON-RPC
-// notifications and raw GET events/stream listeners) are closed without a
-// final response: the value is discarded and a
-// stream_final_response_suppressed transport event is emitted. Implementations
-// serving GET listeners should Send every value and close instead.
-// After calling this method, no more events can be sent on this stream.
+// SendAndClose emits the final JSON-RPC response and closes the stream;
+// ID-less streams suppress the response.
 func (s *EventsStreamServerStream) SendAndClose(ctx context.Context, event mcpassistant.EventsStreamEvent) error {
-	// Check if stream is already closed
 	s.mu.Lock()
 	if s.closed {
 		s.mu.Unlock()
@@ -239,53 +190,48 @@ func (s *EventsStreamServerStream) SendAndClose(ctx context.Context, event mcpas
 	}
 	s.closed = true
 	s.mu.Unlock()
-
-	// Type assert to the specific result type
 	result, ok := event.(*mcpassistant.EventsStreamResult)
 	if !ok {
 		return fmt.Errorf("unexpected event type: %T", event)
 	}
-
-	// Determine the ID to use for the response
-	var id any = s.requestID
+	id := s.requestID
 	if !s.requestHasID {
-		// ID-less streams (JSON-RPC notifications and raw GET events/stream
-		// listeners) must not receive a final response, so the value is
-		// discarded; emit an observability event so the suppression is
-		// visible to implementations that call SendAndClose with data.
-		loomtransport.Observe(s.r.Context(), loomtransport.Event{Kind: loomtransport.EventKindStreamClose, Reason: loomtransport.ReasonStreamFinalResponseSuppressed, Transport: loomtransport.TransportJSONRPC})
+		loomtransport.Observe(s.r.Context(), loomtransport.Event{
+			Kind:      loomtransport.EventKindStreamClose,
+			Reason:    loomtransport.ReasonStreamFinalResponseSuppressed,
+			Transport: loomtransport.TransportJSONRPC,
+		})
 		return nil
 	}
-	// Convert to response body type for proper JSON encoding
 	body := NewEventsStreamResponseBody(result)
-	// Send as a JSON-RPC response message with ID
 	message := map[string]any{
-		"jsonrpc": "2.0",
 		"id":      id,
+		"jsonrpc": "2.0",
 		"result":  body,
 	}
-
 	return s.sendSSEEvent("message", message)
 }
 
-// SendError sends a JSON-RPC error response.
+// SendError emits a client-safe JSON-RPC error response.
 func (s *EventsStreamServerStream) SendError(ctx context.Context, id any, err error) error {
-	// No custom errors defined - check if it's a validation error, otherwise use internal error
 	code := jsonrpc.InternalError
 	var serviceError *loom.ServiceError
 	if errors.As(err, &serviceError) {
 		code = jsonrpcErrorCodeForServiceError(serviceError)
+		if serviceError.Name == "resource_not_found" {
+			code = jsonrpc.Code(-32002)
+		}
 	}
 	return s.sendError(ctx, id, code, loom.ErrorSafeMessage(err), mcpruntime.NewErrorData(err))
 }
 
-// sendError sends a JSON-RPC error response via SSE.
+// sendError emits a JSON-RPC error response via SSE.
 func (s *EventsStreamServerStream) sendError(ctx context.Context, id any, code jsonrpc.Code, message string, data any) error {
 	response := jsonrpc.MakeErrorResponse(id, code, message, data)
 	return s.sendSSEEvent("message", response)
 }
 
-// sendSSEEvent sends a single SSE event.
+// sendSSEEvent emits an MCP reconnect hint followed by one JSON SSE event.
 func (s *EventsStreamServerStream) sendSSEEvent(eventType string, v any) error {
 	return s.writer.WriteEvent(s.r.Context(), func(w io.Writer) error {
 		if _, err := fmt.Fprint(w, "event: retry\nretry: 1000\ndata:\n\n"); err != nil {

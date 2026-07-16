@@ -7,8 +7,8 @@ package mongo
 import (
 	"context"
 	"errors"
+	"fmt"
 	"slices"
-	"strings"
 	"time"
 
 	"go.mongodb.org/mongo-driver/v2/bson"
@@ -47,14 +47,16 @@ type (
 	}
 
 	overrideDocument struct {
-		PromptID        string            `bson:"prompt_id"`
-		ScopeSession    string            `bson:"scope_session"`
-		ScopeLabels     map[string]string `bson:"scope_labels,omitempty"`
-		ScopeLabelCount int               `bson:"scope_label_count"`
-		Template        string            `bson:"template"`
-		Version         string            `bson:"version"`
-		CreatedAt       time.Time         `bson:"created_at"`
-		Metadata        map[string]string `bson:"metadata,omitempty"`
+		ID               bson.ObjectID     `bson:"_id,omitempty"`
+		PromptID         string            `bson:"prompt_id"`
+		ScopeSession     string            `bson:"scope_session"`
+		ScopeLabels      map[string]string `bson:"scope_labels,omitempty"`
+		ScopeLabelCount  int               `bson:"scope_label_count"`
+		ScopeFingerprint string            `bson:"scope_fingerprint"`
+		Template         string            `bson:"template"`
+		Version          string            `bson:"version"`
+		CreatedAt        time.Time         `bson:"created_at"`
+		Metadata         map[string]string `bson:"metadata,omitempty"`
 	}
 
 	resolveQuery struct {
@@ -64,14 +66,17 @@ type (
 )
 
 const (
-	defaultCollection    = "prompt_overrides"
-	defaultTimeout       = 5 * time.Second
-	clientName           = "prompt-mongo"
-	fieldPromptID        = "prompt_id"
-	fieldScopeSession    = "scope_session"
-	fieldScopeLabels     = "scope_labels"
-	fieldScopeLabelCount = "scope_label_count"
-	fieldCreatedAt       = "created_at"
+	defaultCollection     = "prompt_overrides"
+	defaultTimeout        = 5 * time.Second
+	clientName            = "prompt-mongo"
+	fieldPromptID         = "prompt_id"
+	fieldScopeSession     = "scope_session"
+	fieldScopeLabels      = "scope_labels"
+	fieldScopeLabelCount  = "scope_label_count"
+	fieldScopeFingerprint = "scope_fingerprint"
+	fieldCreatedAt        = "created_at"
+	maxIndexedScopeLabels = 15
+	fieldID               = "_id"
 )
 
 // New returns a Client backed by the provided MongoDB client.
@@ -84,6 +89,9 @@ func New(opts Options) (Client, error) {
 
 	wrapper := clientinfra.NewCollection(opts.Client, opts.Database, collection)
 	if err := clientinfra.EnsureIndexes(timeout, func(ctx context.Context) error {
+		if err := backfillScopeFingerprints(ctx, wrapper); err != nil {
+			return err
+		}
 		return ensureIndexes(ctx, wrapper)
 	}); err != nil {
 		return nil, err
@@ -103,11 +111,14 @@ func (c *client) Resolve(ctx context.Context, promptID prompt.Ident, scope promp
 	if promptID == "" {
 		return nil, errors.New("prompt id is required")
 	}
+	if err := validateIndexedScope(scope); err != nil {
+		return nil, err
+	}
 	ctx, cancel := c.withTimeout(ctx)
 	defer cancel()
 
 	for _, query := range resolveQueries(promptID, scope) {
-		override, err := c.findLatestMatchingOverride(ctx, query, scope)
+		override, err := c.findLatestMatchingOverride(ctx, query)
 		if err != nil {
 			return nil, err
 		}
@@ -118,8 +129,12 @@ func (c *client) Resolve(ctx context.Context, promptID prompt.Ident, scope promp
 	return nil, nil
 }
 
-func (c *client) findLatestMatchingOverride(ctx context.Context, query resolveQuery, scope prompt.Scope) (*prompt.Override, error) {
-	opts := options.Find().SetSort(bson.D{{Key: fieldCreatedAt, Value: -1}})
+func (c *client) findLatestMatchingOverride(ctx context.Context, query resolveQuery) (*prompt.Override, error) {
+	opts := options.Find().SetSort(bson.D{
+		{Key: fieldScopeLabelCount, Value: -1},
+		{Key: fieldCreatedAt, Value: -1},
+		{Key: fieldID, Value: -1},
+	})
 	if query.limit > 0 {
 		opts.SetLimit(query.limit)
 	}
@@ -134,81 +149,62 @@ func (c *client) findLatestMatchingOverride(ctx context.Context, query resolveQu
 	if err != nil {
 		return nil, err
 	}
-	for _, override := range overrides {
-		if prompt.ScopeMatches(override.Scope, scope) {
-			return override, nil
-		}
+	if len(overrides) > 0 {
+		return overrides[0], nil
 	}
 	return nil, nil
 }
 
 func resolveQueries(promptID prompt.Ident, scope prompt.Scope) []resolveQuery {
-	labelFilters := scopeLabelCandidateFilters(scope.Labels)
-	queries := make([]resolveQuery, 0, len(labelFilters)*2)
+	fingerprints := scopeCandidateFingerprints(scope.Labels)
+	queries := make([]resolveQuery, 0, 2)
 	if scope.SessionID != "" {
-		for _, labelFilter := range labelFilters {
-			queries = append(queries, resolveQueryFor(promptID, scope.SessionID, labelFilter))
-		}
+		queries = append(queries, resolveQueryFor(promptID, scope.SessionID, fingerprints))
 	}
-	for _, labelFilter := range labelFilters {
-		queries = append(queries, resolveQueryFor(promptID, "", labelFilter))
-	}
+	queries = append(queries, resolveQueryFor(promptID, "", fingerprints))
 	return queries
 }
 
-func resolveQueryFor(promptID prompt.Ident, sessionID string, labelFilter bson.M) resolveQuery {
-	filter := bson.M{
-		fieldPromptID:     promptID.String(),
-		fieldScopeSession: sessionID,
+func resolveQueryFor(promptID prompt.Ident, sessionID string, fingerprints []string) resolveQuery {
+	return resolveQuery{
+		filter: bson.M{
+			fieldPromptID:         promptID.String(),
+			fieldScopeSession:     sessionID,
+			fieldScopeFingerprint: bson.M{"$in": fingerprints},
+		},
+		limit: 1,
 	}
-	for key, val := range labelFilter {
-		filter[key] = val
-	}
-	limit := int64(0)
-	if isExactLabelFilter(labelFilter) {
-		limit = 1
-	}
-	return resolveQuery{filter: filter, limit: limit}
 }
 
-func scopeLabelCandidateFilters(labels map[string]string) []bson.M {
-	candidates := make([]bson.M, 0, len(labels)+1)
-	if len(labels) == 0 {
-		return []bson.M{{fieldScopeLabelCount: 0}}
-	}
-
+func scopeCandidateFingerprints(labels map[string]string) []string {
 	keys := make([]string, 0, len(labels))
 	for key := range labels {
 		keys = append(keys, key)
 	}
 	slices.Sort(keys)
-	candidates = append(candidates, labelFilterForKeys(keys, labels))
-	for count := len(keys) - 1; count > 0; count-- {
-		filter := bson.M{fieldScopeLabelCount: count}
-		candidates = append(candidates, filter)
+	candidates := make([]string, 0, 1<<len(keys))
+	scope := make(map[string]string, len(keys))
+	var addSubsets func(int)
+	addSubsets = func(index int) {
+		if index == len(keys) {
+			candidates = append(candidates, prompt.ScopeFingerprint(scope))
+			return
+		}
+		addSubsets(index + 1)
+		key := keys[index]
+		scope[key] = labels[key]
+		addSubsets(index + 1)
+		delete(scope, key)
 	}
-	candidates = append(candidates, bson.M{fieldScopeLabelCount: 0})
+	addSubsets(0)
 	return candidates
 }
 
-func labelFilterForKeys(keys []string, labels map[string]string) bson.M {
-	filter := bson.M{fieldScopeLabelCount: len(keys)}
-	for _, key := range keys {
-		if !mongoPathSafeLabelKey(key) {
-			return filter
-		}
-		filter[fieldScopeLabels+"."+key] = labels[key]
+func validateIndexedScope(scope prompt.Scope) error {
+	if len(scope.Labels) > maxIndexedScopeLabels {
+		return fmt.Errorf("prompt scope has %d labels; Mongo prompt scopes support at most %d", len(scope.Labels), maxIndexedScopeLabels)
 	}
-	return filter
-}
-
-func mongoPathSafeLabelKey(key string) bool {
-	return key != "" && !strings.ContainsAny(key, ".$")
-}
-
-func isExactLabelFilter(filter bson.M) bool {
-	count, ok := filter[fieldScopeLabelCount].(int)
-	return ok && len(filter) == count+1
+	return nil
 }
 
 func (c *client) Set(ctx context.Context, promptID prompt.Ident, scope prompt.Scope, template string, metadata map[string]string) error {
@@ -218,18 +214,22 @@ func (c *client) Set(ctx context.Context, promptID prompt.Ident, scope prompt.Sc
 	if template == "" {
 		return errors.New("template is required")
 	}
+	if err := validateIndexedScope(scope); err != nil {
+		return err
+	}
 	ctx, cancel := c.withTimeout(ctx)
 	defer cancel()
 
 	doc := overrideDocument{
-		PromptID:        promptID.String(),
-		ScopeSession:    scope.SessionID,
-		ScopeLabels:     cloneMetadata(scope.Labels),
-		ScopeLabelCount: len(scope.Labels),
-		Template:        template,
-		Version:         prompt.VersionFromTemplate(template),
-		CreatedAt:       time.Now().UTC(),
-		Metadata:        cloneMetadata(metadata),
+		PromptID:         promptID.String(),
+		ScopeSession:     scope.SessionID,
+		ScopeLabels:      cloneMetadata(scope.Labels),
+		ScopeLabelCount:  len(scope.Labels),
+		ScopeFingerprint: prompt.ScopeFingerprint(scope.Labels),
+		Template:         template,
+		Version:          prompt.VersionFromTemplate(template),
+		CreatedAt:        time.Now().UTC(),
+		Metadata:         cloneMetadata(metadata),
 	}
 	_, err := c.coll.InsertOne(ctx, doc)
 	return err
@@ -310,13 +310,52 @@ func cloneMetadata(src map[string]string) map[string]string {
 	return dst
 }
 
+func backfillScopeFingerprints(ctx context.Context, coll collection) (retErr error) {
+	cur, err := coll.Find(ctx, bson.M{
+		"$or": bson.A{
+			bson.M{fieldScopeFingerprint: bson.M{"$exists": false}},
+			bson.M{fieldScopeFingerprint: ""},
+		},
+	})
+	if err != nil {
+		return fmt.Errorf("find legacy prompt scopes: %w", err)
+	}
+	defer func() {
+		if err := cur.Close(ctx); err != nil && retErr == nil {
+			retErr = fmt.Errorf("close legacy prompt scope cursor: %w", err)
+		}
+	}()
+	for cur.Next(ctx) {
+		var doc overrideDocument
+		if err := cur.Decode(&doc); err != nil {
+			return fmt.Errorf("decode legacy prompt scope: %w", err)
+		}
+		if err := validateIndexedScope(prompt.Scope{Labels: doc.ScopeLabels}); err != nil {
+			return fmt.Errorf("backfill prompt %q: %w", doc.PromptID, err)
+		}
+		fingerprint := prompt.ScopeFingerprint(doc.ScopeLabels)
+		if _, err := coll.UpdateOne(ctx,
+			bson.M{fieldID: doc.ID},
+			bson.M{"$set": bson.M{fieldScopeFingerprint: fingerprint}},
+		); err != nil {
+			return fmt.Errorf("backfill prompt %q scope fingerprint: %w", doc.PromptID, err)
+		}
+	}
+	if err := cur.Err(); err != nil {
+		return fmt.Errorf("scan legacy prompt scopes: %w", err)
+	}
+	return nil
+}
+
 func ensureIndexes(ctx context.Context, coll collection) error {
 	lookup := mongodriver.IndexModel{
 		Keys: bson.D{
 			{Key: fieldPromptID, Value: 1},
 			{Key: fieldScopeSession, Value: 1},
+			{Key: fieldScopeFingerprint, Value: 1},
 			{Key: fieldScopeLabelCount, Value: -1},
 			{Key: fieldCreatedAt, Value: -1},
+			{Key: fieldID, Value: -1},
 		},
 	}
 	if _, err := coll.Indexes().CreateOne(ctx, lookup); err != nil {
@@ -350,6 +389,7 @@ type collection interface {
 	clientinfra.FindOneCollection
 	clientinfra.FindCollection
 	clientinfra.InsertOneCollection
+	clientinfra.UpdateOneCollection
 	clientinfra.IndexedCollection
 }
 

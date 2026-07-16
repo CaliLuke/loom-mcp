@@ -105,6 +105,29 @@ func TestGeneratedAdapterEnforcesSkillResourcePolicy(t *testing.T) {
 			opts: &mcpassistant.MCPAdapterOptions{AllowedResourceNames: []string{"code-review"}},
 		},
 		{
+			name: "request allow intersects matching adapter grant",
+			opts: &mcpassistant.MCPAdapterOptions{AllowedResourceNames: []string{"code-review"}},
+			configure: func(ctx context.Context) context.Context {
+				return mcpruntime.WithAllowedResourceNames(ctx, "code-review")
+			},
+		},
+		{
+			name: "request allow cannot broaden adapter grant",
+			opts: &mcpassistant.MCPAdapterOptions{AllowedResourceNames: []string{"documents"}},
+			configure: func(ctx context.Context) context.Context {
+				return mcpruntime.WithAllowedResourceNames(ctx, "code-review")
+			},
+			wantError: true,
+		},
+		{
+			name: "request allow can narrow adapter grant",
+			opts: &mcpassistant.MCPAdapterOptions{AllowedResourceNames: []string{"code-review"}},
+			configure: func(ctx context.Context) context.Context {
+				return mcpruntime.WithAllowedResourceNames(ctx, "documents")
+			},
+			wantError: true,
+		},
+		{
 			name:      "adapter skill name deny takes precedence",
 			opts:      &mcpassistant.MCPAdapterOptions{DeniedResourceNames: []string{"code-review"}},
 			wantError: true,
@@ -190,6 +213,35 @@ func TestGeneratedSDKServerTrimsResourcePolicyHeaderNames(t *testing.T) {
 			assert.Equal(t, "skill://code-review/SKILL.md", result.Contents[0].URI)
 		})
 	}
+}
+
+func TestGeneratedJSONRPCRequestAllowNamesCannotBroadenServerGrant(t *testing.T) {
+	t.Parallel()
+
+	server := newGeneratedJSONRPCServerWithAdapterOptions(t, &mcpassistant.MCPAdapterOptions{
+		AllowedResourceNames: []string{"documents"},
+	})
+	defer server.Close()
+
+	client := newGeneratedJSONRPCTransportClient(t, server.URL, map[string]string{
+		"x-mcp-allow-names": "code-review",
+	})
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	_, err := client.Initialize()(ctx, &mcpassistant.InitializePayload{
+		ProtocolVersion: "2025-06-18",
+		ClientInfo: &mcpassistant.ClientInfo{
+			Name:    "resource-policy-test-client",
+			Version: "1.0.0",
+		},
+	})
+	require.NoError(t, err)
+
+	_, err = client.ResourcesRead()(ctx, &mcpassistant.ResourcesReadPayload{
+		URI: "skill://code-review/SKILL.md",
+	})
+	require.Error(t, err)
 }
 
 func TestGeneratedAdapterSanitizesSkillListingFailures(t *testing.T) {

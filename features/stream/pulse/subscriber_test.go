@@ -64,6 +64,106 @@ func TestSubscribeEmitsEvents(t *testing.T) {
 	require.Empty(t, errs)
 }
 
+func TestSubscribeManualDoesNotAckBeforeDeliveryAck(t *testing.T) {
+	client := mockpulse.NewClient(t)
+	streamMock := mockpulse.NewStream(t)
+	sinkMock := mockpulse.NewSink(t)
+	eventCh := make(chan *streaming.Event, 1)
+	ackedIDs := make(chan string, 1)
+
+	client.AddStream(func(name string, _ ...streamopts.Stream) (clientspulse.Stream, error) {
+		return streamMock, nil
+	})
+	streamMock.AddNewSink(func(ctx context.Context, name string, opts ...streamopts.Sink) (clientspulse.Sink, error) {
+		return sinkMock, nil
+	})
+	sinkMock.AddSubscribe(func() <-chan *streaming.Event { return eventCh })
+	sinkMock.AddAck(func(ctx context.Context, evt *streaming.Event) error {
+		ackedIDs <- evt.ID
+		return nil
+	})
+	sinkMock.AddClose(func(ctx context.Context) {})
+
+	sub, err := NewSubscriber(SubscriberOptions{Client: client})
+	require.NoError(t, err)
+	deliveries, errs, cancel, err := sub.SubscribeManual(context.Background(), "session/session-1")
+	require.NoError(t, err)
+	defer cancel()
+
+	payload, err := json.Marshal(map[string]any{
+		"type":       "assistant_reply",
+		"run_id":     "run-1",
+		"session_id": "session-1",
+		"payload":    map[string]string{"chunk": "hi"},
+	})
+	require.NoError(t, err)
+	eventCh <- &streaming.Event{ID: "1-0", Payload: payload}
+
+	delivery := <-deliveries
+	require.Equal(t, "1-0", delivery.PulseID())
+	require.Equal(t, stream.EventAssistantReply, delivery.Event().Type())
+	select {
+	case id := <-ackedIDs:
+		t.Fatalf("delivery acknowledged before consumer commit: %s", id)
+	default:
+	}
+	require.NoError(t, delivery.Ack(context.Background()))
+	require.Equal(t, "1-0", <-ackedIDs)
+	close(eventCh)
+	require.Empty(t, errs)
+}
+
+func TestSubscribeManualExposesDecodeFailuresWithoutAck(t *testing.T) {
+	client := mockpulse.NewClient(t)
+	streamMock := mockpulse.NewStream(t)
+	sinkMock := mockpulse.NewSink(t)
+	eventCh := make(chan *streaming.Event, 1)
+
+	client.AddStream(func(name string, _ ...streamopts.Stream) (clientspulse.Stream, error) { return streamMock, nil })
+	streamMock.AddNewSink(func(ctx context.Context, name string, opts ...streamopts.Sink) (clientspulse.Sink, error) {
+		return sinkMock, nil
+	})
+	sinkMock.AddSubscribe(func() <-chan *streaming.Event { return eventCh })
+	sinkMock.AddClose(func(ctx context.Context) {})
+
+	sub, err := NewSubscriber(SubscriberOptions{
+		Client: client,
+		Decoder: func([]byte) (stream.Event, error) {
+			return nil, errors.New("decode error")
+		},
+	})
+	require.NoError(t, err)
+	deliveries, errs, cancel, err := sub.SubscribeManual(context.Background(), "session/session-1")
+	require.NoError(t, err)
+	defer cancel()
+	eventCh <- &streaming.Event{ID: "1-0", Payload: []byte("bad")}
+	close(eventCh)
+
+	delivery := <-deliveries
+	require.Equal(t, "1-0", delivery.PulseID())
+	require.Nil(t, delivery.Event())
+	require.EqualError(t, delivery.DecodeError(), "pulse decode payload: decode error")
+	require.Equal(t, []byte("bad"), delivery.RawPayload())
+	require.EqualError(t, <-errs, "pulse decode payload: decode error")
+}
+
+func TestDeliveryAckCanRetryFailureAndIsIdempotentAfterSuccess(t *testing.T) {
+	sinkMock := mockpulse.NewSink(t)
+	event := &streaming.Event{ID: "1-0"}
+	sinkMock.AddAck(func(context.Context, *streaming.Event) error {
+		return errors.New("redis unavailable")
+	})
+	sinkMock.AddAck(func(_ context.Context, got *streaming.Event) error {
+		require.Same(t, event, got)
+		return nil
+	})
+	delivery := &Delivery{sink: sinkMock, raw: event, pulseID: event.ID}
+
+	require.EqualError(t, delivery.Ack(context.Background()), "pulse ack: redis unavailable")
+	require.NoError(t, delivery.Ack(context.Background()))
+	require.NoError(t, delivery.Ack(context.Background()))
+}
+
 func TestSubscribeDecoderError(t *testing.T) {
 	client := mockpulse.NewClient(t)
 	streamMock := mockpulse.NewStream(t)

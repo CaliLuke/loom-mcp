@@ -5,9 +5,11 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"sync"
 	"sync/atomic"
 	"time"
 
+	"github.com/CaliLuke/loom/pulse/streaming"
 	streamopts "github.com/CaliLuke/loom/pulse/streaming/options"
 
 	clientspulse "github.com/CaliLuke/loom-mcp/features/stream/pulse/clients/pulse"
@@ -41,6 +43,20 @@ type (
 		decode  EnvelopeDecoder
 		dropped atomic.Uint64
 	}
+
+	// Delivery is one decoded Pulse event whose durable acknowledgement is
+	// controlled by the consumer. A successful Ack removes the underlying Pulse
+	// entry from the consumer group's pending list. Failed acknowledgements may
+	// be retried; acknowledgements after the first success are no-ops.
+	Delivery struct {
+		event     stream.Event
+		decodeErr error
+		pulseID   string
+		sink      clientspulse.Sink
+		raw       *streaming.Event
+		mu        sync.Mutex
+		acked     bool
+	}
 	// decodedEvent implements stream.Event for Pulse-decoded envelopes.
 	decodedEvent struct {
 		t   stream.EventType
@@ -50,6 +66,43 @@ type (
 		b   json.RawMessage
 	}
 )
+
+// Event returns the decoded runtime stream event.
+func (d *Delivery) Event() stream.Event {
+	return d.event
+}
+
+// DecodeError reports why the raw Pulse payload could not be decoded. Event
+// returns nil when DecodeError is non-nil. The consumer may dead-letter
+// RawPayload and then Ack, or omit Ack to leave the entry pending.
+func (d *Delivery) DecodeError() error {
+	return d.decodeErr
+}
+
+// RawPayload returns a detached copy of the underlying Pulse payload.
+func (d *Delivery) RawPayload() []byte {
+	return append([]byte(nil), d.raw.Payload...)
+}
+
+// PulseID returns the underlying Pulse stream entry ID.
+func (d *Delivery) PulseID() string {
+	return d.pulseID
+}
+
+// Ack acknowledges successful durable processing. It is safe to call Ack
+// concurrently. A failed acknowledgement is not cached and may be retried.
+func (d *Delivery) Ack(ctx context.Context) error {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	if d.acked {
+		return nil
+	}
+	if err := d.sink.Ack(ctx, d.raw); err != nil {
+		return fmt.Errorf("pulse ack: %w", err)
+	}
+	d.acked = true
+	return nil
+}
 
 func (e decodedEvent) Type() stream.EventType { return e.t }
 func (e decodedEvent) RunID() string          { return e.run }
@@ -130,6 +183,42 @@ func (s *Subscriber) Subscribe(
 	return events, errs, cancelFunc, nil
 }
 
+// SubscribeManual opens a Pulse sink and returns deliveries that remain in
+// the consumer group's pending list until the consumer calls Delivery.Ack.
+// This is the durable-consumer API: acknowledge only after the downstream
+// transaction or side effect has committed. Unlike Subscribe, malformed
+// payloads become deliveries with a DecodeError and are also reported on errs.
+// The consumer may dead-letter RawPayload and Ack, or leave the entry pending
+// for Pulse redelivery or an operator-owned reclamation policy.
+//
+// The returned cancel function stops consumption, waits for the consumer
+// goroutine, closes the sink, and closes both channels.
+func (s *Subscriber) SubscribeManual(
+	ctx context.Context,
+	streamID string,
+	opts ...streamopts.Sink,
+) (<-chan *Delivery, <-chan error, context.CancelFunc, error) {
+	str, err := s.client.Stream(streamID)
+	if err != nil {
+		return nil, nil, nil, err
+	}
+	sink, err := str.NewSink(ctx, s.name, opts...)
+	if err != nil {
+		return nil, nil, nil, err
+	}
+	deliveries := make(chan *Delivery, s.buffer)
+	errs := make(chan error, 1)
+	done := make(chan struct{})
+	runCtx, cancel := context.WithCancel(ctx)
+	go s.consumeManual(runCtx, sink, deliveries, errs, done)
+	cancelFunc := func() {
+		cancel()
+		<-done
+		sink.Close(context.Background())
+	}
+	return deliveries, errs, cancelFunc, nil
+}
+
 // DroppedErrors reports how many errors were dropped because the errs channel
 // buffer was full at delivery time. The count aggregates across all
 // subscriptions opened from this Subscriber and only ever grows.
@@ -173,6 +262,40 @@ func (s *Subscriber) consume(ctx context.Context, sink clientspulse.Sink, out ch
 			}
 			if ackErr := sink.Ack(ctx, evt); ackErr != nil {
 				s.reportTerminalError(errs, fmt.Errorf("pulse ack: %w", ackErr))
+				return
+			}
+		}
+	}
+}
+
+func (s *Subscriber) consumeManual(ctx context.Context, sink clientspulse.Sink, out chan<- *Delivery, errs chan error, done chan<- struct{}) {
+	defer close(done)
+	defer close(out)
+	defer close(errs)
+	ch := sink.Subscribe()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case evt, ok := <-ch:
+			if !ok {
+				return
+			}
+			decoded, decodeErr := s.decode(evt.Payload)
+			if decodeErr != nil {
+				decodeErr = fmt.Errorf("pulse decode payload: %w", decodeErr)
+				s.reportDecodeError(errs, decodeErr)
+			}
+			delivery := &Delivery{
+				event:     decoded,
+				decodeErr: decodeErr,
+				pulseID:   evt.ID,
+				sink:      sink,
+				raw:       evt,
+			}
+			select {
+			case out <- delivery:
+			case <-ctx.Done():
 				return
 			}
 		}

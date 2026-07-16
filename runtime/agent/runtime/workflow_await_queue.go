@@ -8,8 +8,9 @@ package runtime
 //   items (clarifications, questions, external tool handshakes).
 // - The runtime publishes all await events, pauses once, then waits for each
 //   item to be satisfied in order.
-// - The runtime resumes planning exactly once after the entire await queue is
-//   satisfied, so planners observe all user/external inputs together.
+// - The runtime schedules one logical planner resume after the entire await
+//   queue is satisfied, so planners observe all user/external inputs together.
+//   The resume activity itself remains retryable.
 
 import (
 	"context"

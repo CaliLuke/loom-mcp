@@ -8,7 +8,8 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// MCP DSL should emit the same registry/config scaffolding as MCPToolset.
+// MCP DSL should emit the registry/config scaffolding consumed by
+// Toolset(FromMCP(...)).
 func TestGolden_MCP_DSL(t *testing.T) {
 	files := buildAndGenerate(t, testscenarios.MCPDSL())
 	reg := fileContent(t, files, "gen/alpha/agents/scribe/registry.go")

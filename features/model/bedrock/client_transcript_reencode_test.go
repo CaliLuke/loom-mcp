@@ -72,6 +72,70 @@ func TestEncodeMessages_ReencodeTranscriptOrder(t *testing.T) {
 	}
 }
 
+func TestEncodeMessages_ReservesPassThroughToolUseIDsBeforeSubstitution(t *testing.T) {
+	const unsafeID = "run-1/turn-1/attempt-0/tool/0"
+	msgs := []*model.Message{
+		{
+			Role: model.ConversationRoleAssistant,
+			Parts: []model.Part{
+				model.ToolUsePart{ID: unsafeID, Name: "search_assets", Input: map[string]any{"n": 1}},
+			},
+		},
+		{
+			Role: model.ConversationRoleUser,
+			Parts: []model.Part{
+				model.ToolResultPart{ToolUseID: unsafeID, Content: "first"},
+			},
+		},
+		{
+			Role: model.ConversationRoleAssistant,
+			Parts: []model.Part{
+				model.ToolUsePart{ID: "t1", Name: "search_assets", Input: map[string]any{"n": 2}},
+			},
+		},
+		{
+			Role: model.ConversationRoleUser,
+			Parts: []model.Part{
+				model.ToolResultPart{ToolUseID: "t1", Content: "second"},
+			},
+		},
+	}
+
+	conversation, _, err := encodeMessages(
+		context.Background(),
+		msgs,
+		map[string]string{"search_assets": "search_assets"},
+		false,
+		nil,
+	)
+	if err != nil {
+		t.Fatalf("encodeMessages error: %v", err)
+	}
+	if len(conversation) != 4 {
+		t.Fatalf("conversation length = %d, want 4", len(conversation))
+	}
+
+	firstUse := conversation[0].Content[0].(*brtypes.ContentBlockMemberToolUse)
+	firstResult := conversation[1].Content[0].(*brtypes.ContentBlockMemberToolResult)
+	secondUse := conversation[2].Content[0].(*brtypes.ContentBlockMemberToolUse)
+	secondResult := conversation[3].Content[0].(*brtypes.ContentBlockMemberToolResult)
+	if got := *firstUse.Value.ToolUseId; got != "t2" {
+		t.Fatalf("first tool use ID = %q, want t2", got)
+	}
+	if got := *firstResult.Value.ToolUseId; got != *firstUse.Value.ToolUseId {
+		t.Fatalf("first tool result ID = %q, want %q", got, *firstUse.Value.ToolUseId)
+	}
+	if got := *secondUse.Value.ToolUseId; got != "t1" {
+		t.Fatalf("second tool use ID = %q, want t1", got)
+	}
+	if got := *secondResult.Value.ToolUseId; got != *secondUse.Value.ToolUseId {
+		t.Fatalf("second tool result ID = %q, want %q", got, *secondUse.Value.ToolUseId)
+	}
+	if *firstUse.Value.ToolUseId == *secondUse.Value.ToolUseId {
+		t.Fatalf("tool use IDs collide at %q", *firstUse.Value.ToolUseId)
+	}
+}
+
 func TestEncodeMessages_ReencodesCitationsPartAsText(t *testing.T) {
 	ctx := context.Background()
 	msgs := []*model.Message{

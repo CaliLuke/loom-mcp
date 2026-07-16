@@ -1,493 +1,136 @@
-MCP INTEGRATION
-===============
+# MCP Integration
 
-Integrate external MCP servers into your agents with generated wrappers and callers.
+This is a routing guide for the current MCP surface. Use `docs/dsl.md` for declarations and `docs/mcp_sdk_server.md` for the generated SDK/server lifecycle.
 
-MCP Integration
-===============
+## Declare an MCP server
 
-loom-mcp provides first-class support for integrating MCP (Model Context Protocol) servers into your agents. MCP toolsets allow agents to consume tools from external MCP servers through generated wrappers and callers.
+MCP belongs to a Goa service. The current DSL names are `MCP(...)` and method-level `Tool(...)`:
 
+```go
+Service("calculator", func() {
+    MCP("calculator-mcp", "1.0.0", ProtocolVersion("2025-06-18"))
 
-Overview
-========
-
-MCP integration follows this workflow:
-
-
-1. Service design: Declare the MCP server in your Loom design
-2. Agent design: Reference that suite with Use(MCPToolset("service", "suite"))
-3. Code generation: Produces the MCP JSON-RPC server (for generated services) plus runtime registration helpers and toolset-owned specs/codecs for the suite
-4. Runtime wiring: Instantiate an mcpruntime.Caller transport (HTTP/SSE/stdio). Generated helpers register the toolset and adapt JSON-RPC errors into planner.RetryHint values
-5. Planner execution: Planners simply enqueue tool calls with canonical JSON payloads; the runtime forwards them to the MCP caller, persists results via hooks, and surfaces structured telemetry
-
-For generated MCP servers, put the JSON-RPC route on the service with
-`JSONRPC(func() { POST("/rpc") })`. MCP-mapped methods inherit that transport shape;
-add method-level `JSONRPC(...)` only when a method needs explicit JSON-RPC options such
-as SSE, ID-field mapping, or method-specific error code responses.
-
-Metadata Surfaces
-=================
-
-loom-mcp can publish MCP metadata for implementations and list surfaces directly
-from the DSL.
-
-- `WebsiteURL(...)` and `ServerIcons(...)` attach metadata to the server
-  implementation returned from `initialize.serverInfo`.
-- `ToolIcons(...)` attaches icons to `tools/list`.
-- `ResourceIcons(...)` attaches icons to `resources/list`.
-- `PromptIcons(...)` and `DynamicPromptIcons(...)` attach icons to
-  `prompts/list`.
-
-Use `Icon(src, opts...)` to define icon entries. Supported icon helpers are:
-
-- `IconMIMEType(...)`
-- `IconSizes(...)`
-- `IconTheme(IconThemeLight|IconThemeDark)`
-
-Example:
-
---- CODE ---
-Service("assistant", func() {
-    MCP("assistant-mcp", "1.0.0",
-        ProtocolVersion("2025-06-18"),
-        WebsiteURL("https://assistant.example.com/docs"),
-        ServerIcons(
-            Icon("https://assistant.example.com/icons/server-light.png",
-                IconMIMEType("image/png"),
-                IconSizes("48x48"),
-                IconTheme(IconThemeLight)),
-        ),
-    )
-
-    Method("search", func() {
+    Method("add", func() {
         Payload(func() {
-            Attribute("query", String)
-            Required("query")
+            Attribute("a", Int)
+            Attribute("b", Int)
+            Required("a", "b")
         })
         Result(func() {
-            Attribute("results", ArrayOf(String))
-            Required("results")
+            Attribute("sum", Int)
+            Required("sum")
         })
-        Tool("search", "Search documents",
-            ToolIcons(
-                Icon("https://assistant.example.com/icons/search.png",
-                    IconMIMEType("image/png"),
-                    IconSizes("48x48")),
-            ),
-        )
+        Tool("add", "Add two numbers")
     })
 })
---- END CODE ---
+```
 
+Do not use the removed `MCPServer(...)` or `MCPTool(...)` forms.
 
-Declaring MCP Toolsets
-======================
+The same MCP declaration can define resources, subscriptions, prompts, skills, progressive tool discovery, icons, protocol/implementation metadata, and OAuth metadata. Keep those contracts in design so validation and code generation remain authoritative.
 
+## Consume a generated MCP suite as agent tools
 
-In Service Design
------------------
+Declare a toolset backed by a service and MCP suite:
 
-First, declare the MCP server in your service design:
+```go
+var CalculatorTools = Toolset(FromMCP("calculator", "calculator-mcp"))
 
---- CODE ---
-package design
-
-import (
-    . "github.com/CaliLuke/loom/dsl"
-    . "github.com/CaliLuke/loom-mcp/dsl"
-)
-
-var _ = Service("assistant", func() {
-    Description("MCP server for assistant tools")
-    
-    MCPServer("assistant", "1.0.0", ProtocolVersion("2025-06-18"))
-    
-    Method("search", func() {
-        Payload(func() {
-            Attribute("query", String, "Search query")
-            Required("query")
-        })
-        Result(func() {
-            Attribute("results", ArrayOf(String), "Search results")
-            Required("results")
-        })
-        MCPTool("search", "Search documents by query")
-    })
+Agent("assistant", "Uses calculator tools", func() {
+    Use(CalculatorTools)
 })
+```
 
---- END CODE ---
+Generated JSON-RPC code is owner-scoped under `gen/jsonrpc/<service>/...`. The generated caller constructor takes both the transport client and suite name:
 
+```go
+caller := calculatorclient.NewCaller(client, "calculator-mcp")
+```
 
-In Agent Design
----------------
+Then use the generated agent registration helper. Its exact name is emitted into the agent package; for the assistant fixture it is:
 
-Then reference the MCP suite in your agent:
+```go
+err := assistant.RegisterAssistantAssistantMcpToolset(ctx, rt, caller)
+```
 
---- CODE ---
-var AssistantSuite = MCPToolset("assistant", "assistant-mcp")
+Do not guess helper names. Read the generated `AGENTS_QUICKSTART.md` and package API after generation.
 
-var _ = Service("orchestrator", func() {
-    Agent("chat", "Conversational runner", func() {
-        Use(AssistantSuite)
-        RunPolicy(func() {
-            DefaultCaps(MaxToolCalls(8))
-            TimeBudget("2m")
-        })
-    })
+For a remote, non-generated MCP server, use the generic runtime caller appropriate to its transport and register it through the generated toolset helper. The caller owns JSON-RPC exchange; generated registration owns suite schemas and runtime tool specs.
+
+## Expose service-owned agent tools over MCP
+
+A method-backed tool can share one design contract between the agent runtime and an MCP surface:
+
+```go
+Tool("search", "Search documents", func() {
+    Args(SearchArgs)
+    Return(SearchResult)
+    BindTo("documents", "search")
+    Expose(AgentRuntime, MCPSurface)
+    MCPPlacement("documents", "documents-mcp")
 })
+```
 
---- END CODE ---
+The runtime tool spec remains the schema source of truth. Generated MCP calls use the same method dispatcher as runtime execution. The design rejects unsupported projected-tool features rather than silently dropping them.
 
+## Server lifecycle and delivery
 
-External MCP Servers with Inline Schemas
----------------------------------------
+Generated code owns the protocol adapter, JSON-RPC transport, and SDK-facing server construction. Application code supplies service implementations, resource/prompt/subscription handlers, authorization policy, broadcaster/session state, and lifecycle integration.
 
-For external MCP servers (not generated from your local service design), declare tools with inline schemas:
+Important delivery contracts:
 
---- CODE ---
-var RemoteSearch = MCPToolset("remote", "search", func() {
-    Tool("web_search", "Search the web", func() {
-        Args(func() { Attribute("query", String) })
-        Return(func() { Attribute("results", ArrayOf(String)) })
-    })
-})
+- `mcp.Broadcaster.Publish` is global broadcast.
+- `mcp.SessionBroadcaster.PublishSession` delivers a message once within the target session, even with overlapping SSE connections.
+- invalid or unknown session IDs return `ErrInvalidSessionID`.
+- interceptors execute in declared order and can short-circuit the request.
+- the generated telemetry boundary records MCP operations without requiring handlers to duplicate instrumentation.
 
-Agent("helper", "", func() {
-    Use(RemoteSearch)
-})
+## Resource authorization
 
---- END CODE ---
+`MCPAdapterOptions` URI/name allow policies define the server's maximum
+resource grant. Request-scoped allowed names may narrow that maximum but cannot
+broaden it; request and server denies are additive and take precedence. This
+also applies to `skill://` resources, where a skill name maps to its resource
+prefix.
 
+The native JSON-RPC transport accepts `x-mcp-allow-names` and
+`x-mcp-deny-names` as request narrowing input. Never treat those client-chosen
+headers as credentials or grant authority. Authenticate before the generated
+handler and derive principals and deployment grants from verified application
+policy.
 
-Runtime Wiring
-==============
+## Session identity
 
-At runtime, instantiate an MCP caller and register the toolset:
+Wrap generated handlers with authentication middleware so verified identity is
+available before MCP session processing. SDK servers use
+`MCPAdapterOptions.SessionPrincipal`, falling back to TokenInfo `UserID`;
+generated native JSON-RPC packages expose `MCPSessionPrincipal` with the same
+default for custom identity systems.
 
---- CODE ---
-import (
-    mcpruntime "github.com/CaliLuke/loom-mcp/runtime/mcp"
-    mcpassistant "example.com/assistant/gen/assistant/mcp_assistant"
-)
+An initialized session is bound to its resolved principal. Every later POST,
+GET, and DELETE must present the same principal. Missing authenticated bindings,
+mismatches, and authenticated adoption of anonymous sessions return HTTP 403.
+Unknown, expired, or terminated IDs return HTTP 404. Session/principal state is
+TTL-pruned and capacity-bounded together, and DELETE validates ownership before
+termination.
+Fresh native `initialize` requests omit `Mcp-Session-Id`. Unknown IDs return
+HTTP 404, foreign owner-bound IDs return HTTP 403, and a valid owner-bound ID
+may reach the adapter only to return the protocol-level `Already initialized`
+error. Callers cannot reserve adapter session state with a chosen ID.
 
-// Create an MCP caller (HTTP, SSE, or stdio)
-caller, err := mcpruntime.NewHTTPCaller(ctx, mcpruntime.HTTPOptions{
-    Endpoint: "https://assistant.example.com/mcp",
-})
-if err != nil {
-    log.Fatal(err)
-}
+## OAuth and HTTP
 
-// Register the MCP toolset
-if err := mcpassistant.RegisterAssistantAssistantMcpToolset(ctx, rt, caller); err != nil {
-    log.Fatal(err)
-}
---- END CODE ---
+Protected-resource metadata, authorization-server discovery, and OAuth scopes are design-owned. These declarations generate metadata, challenge, and audience-enforcement helpers; they do not install authentication or per-operation scope authorization. The application must verify tokens and enforce scopes before the generated handler. Use a dedicated `http.Client` for cross-origin protected-resource and authorization-server requests; do not rely on a same-origin client whose base URL or credentials are tied to the MCP server.
 
+Treat a resource-server `invalid_token` response as an authentication failure that may require token refresh/re-authorization. Do not reinterpret it as proof that the authorization server is unavailable.
 
-MCP Caller Types
-================
+## Verification
 
-loom-mcp supports multiple MCP transport types through the runtime/mcp package. All callers implement the Caller interface:
+After changing an MCP declaration:
 
---- CODE ---
-type Caller interface {
-    CallTool(ctx context.Context, req CallRequest) (CallResponse, error)
-}
---- END CODE ---
+1. Regenerate using the module import path, never a filesystem path.
+2. Inspect generated JSON-RPC, adapter, server, and quickstart output.
+3. Run focused MCP/codegen tests.
+4. Run `make verify-mcp-local`, then the full repository suite required by the repo-local skill.
 
-
-HTTP Caller
------------
-
-For MCP servers accessible via HTTP JSON-RPC:
-
---- CODE ---
-import mcpruntime "github.com/CaliLuke/loom-mcp/runtime/mcp"
-
-// Basic usage with defaults
-caller, err := mcpruntime.NewHTTPCaller(ctx, mcpruntime.HTTPOptions{
-    Endpoint: "https://assistant.example.com/mcp",
-})
-
-// Full configuration
-caller, err := mcpruntime.NewHTTPCaller(ctx, mcpruntime.HTTPOptions{
-    Endpoint:        "https://assistant.example.com/mcp",
-    Client:          customHTTPClient,        // Optional: custom *http.Client
-    ProtocolVersion: "2024-11-05",            // Optional: MCP protocol version
-    ClientName:      "my-agent",              // Optional: client name for handshake
-    ClientVersion:   "1.0.0",                 // Optional: client version
-    InitTimeout:     10 * time.Second,        // Optional: initialize handshake timeout
-})
---- END CODE ---
-
-The HTTP caller performs the MCP initialize handshake on creation and uses synchronous JSON-RPC over HTTP POST for tool calls.
-
-
-SSE Caller
-----------
-
-For MCP servers using Server-Sent Events streaming:
-
---- CODE ---
-import mcpruntime "github.com/CaliLuke/loom-mcp/runtime/mcp"
-
-// Basic usage
-caller, err := mcpruntime.NewSSECaller(ctx, mcpruntime.HTTPOptions{
-    Endpoint: "https://assistant.example.com/mcp",
-})
-
-// Full configuration (same options as HTTP)
-caller, err := mcpruntime.NewSSECaller(ctx, mcpruntime.HTTPOptions{
-    Endpoint:        "https://assistant.example.com/mcp",
-    Client:          customHTTPClient,
-    ProtocolVersion: "2024-11-05",
-    ClientName:      "my-agent",
-    ClientVersion:   "1.0.0",
-    InitTimeout:     10 * time.Second,
-})
---- END CODE ---
-
-
-Stdio Caller
-------------
-
-For MCP servers running as subprocesses communicating via stdin/stdout:
-
---- CODE ---
-import mcpruntime "github.com/CaliLuke/loom-mcp/runtime/mcp"
-
-// Basic usage
-caller, err := mcpruntime.NewStdioCaller(ctx, mcpruntime.StdioOptions{
-    Command: "mcp-server",
-})
-
-// Full configuration
-caller, err := mcpruntime.NewStdioCaller(ctx, mcpruntime.StdioOptions{
-    Command:         "mcp-server",
-    Args:            []string{"--config", "config.json"},
-    Env:             []string{"MCP_DEBUG=1"},  // Additional environment variables
-    Dir:             "/path/to/workdir",       // Working directory
-    ProtocolVersion: "2024-11-05",
-    ClientName:      "my-agent",
-    ClientVersion:   "1.0.0",
-    InitTimeout:     10 * time.Second,
-})
-defer caller.Close() // Clean up subprocess
---- END CODE ---
-
-The stdio caller launches the command as a subprocess, performs the MCP initialize handshake, and maintains the session across tool invocations. Call Close() to terminate the subprocess when done.
-
-
-CallerFunc Adapter
-------------------
-
-For custom caller implementations or testing:
-
---- CODE ---
-import mcpruntime "github.com/CaliLuke/loom-mcp/runtime/mcp"
-
-caller := mcpruntime.CallerFunc(func(ctx context.Context, req mcpruntime.CallRequest) (mcpruntime.CallResponse, error) {
-    // Custom implementation
-    result, err := myCustomMCPCall(ctx, req.Suite, req.Tool, req.Payload)
-    if err != nil {
-        return mcpruntime.CallResponse{}, err
-    }
-    return mcpruntime.CallResponse{Result: result}, nil
-})
---- END CODE ---
-
-
-Generated JSON-RPC Caller
------------------------------
-
-For generated MCP clients that wrap service methods:
-
---- CODE ---
-caller := mcpassistant.NewCaller(client) // Uses the generated typed client
---- END CODE ---
-
-
-Tool Execution Flow
-===================
-
-1. Planner returns tool calls referencing MCP tools (payload is json.RawMessage)
-2. Runtime detects MCP toolset registration
-3. Forwards canonical JSON payload to MCP caller
-4. Invokes MCP caller with tool name and payload
-5. MCP caller handles transport (HTTP/SSE/stdio) and JSON-RPC protocol
-6. Decodes result using generated codec
-7. Returns ToolResult to planner
-
-
-Error Handling
-==============
-
-Generated helpers adapt JSON-RPC errors into planner.RetryHint values:
-
-- Validation errors → RetryHint with guidance for planners
-- Network errors → Retry hints with backoff recommendations
-- Server errors → Client-safe metadata preserved without internal service error instance IDs
-
-This allows planners to recover from MCP errors using the same retry patterns as native toolsets.
-
-
-Complete Example
-================
-
-
-Design
-------
-
---- CODE ---
-package design
-
-import (
-    . "github.com/CaliLuke/loom/dsl"
-    . "github.com/CaliLuke/loom-mcp/dsl"
-)
-
-// MCP server service
-var _ = Service("assistant", func() {
-    Description("MCP server for assistant tools")
-    
-    MCPServer("assistant", "1.0.0", ProtocolVersion("2025-06-18"))
-    
-    Method("search", func() {
-        Payload(func() {
-            Attribute("query", String, "Search query")
-            Required("query")
-        })
-        Result(func() {
-            Attribute("results", ArrayOf(String), "Search results")
-            Required("results")
-        })
-        MCPTool("search", "Search documents by query")
-    })
-})
-
-// Agent that uses MCP tools
-var AssistantSuite = MCPToolset("assistant", "assistant-mcp")
-
-var _ = Service("orchestrator", func() {
-    Agent("chat", "Conversational runner", func() {
-        Use(AssistantSuite)
-        RunPolicy(func() {
-            DefaultCaps(MaxToolCalls(8))
-            TimeBudget("2m")
-        })
-    })
-})
---- END CODE ---
-
-
-Runtime
--------
-
---- CODE ---
-package main
-
-import (
-    "context"
-    "log"
-    
-    mcpruntime "github.com/CaliLuke/loom-mcp/runtime/mcp"
-    chat "example.com/assistant/gen/orchestrator/agents/chat"
-    mcpassistant "example.com/assistant/gen/assistant/mcp_assistant"
-    "github.com/CaliLuke/loom-mcp/runtime/agent/runtime"
-)
-
-func main() {
-    rt := runtime.New()
-    ctx := context.Background()
-    
-    // Wire MCP caller
-    caller, err := mcpruntime.NewHTTPCaller(ctx, mcpruntime.HTTPOptions{
-        Endpoint: "https://assistant.example.com/mcp",
-    })
-    if err != nil {
-        log.Fatal(err)
-    }
-    if err := mcpassistant.RegisterAssistantAssistantMcpToolset(ctx, rt, caller); err != nil {
-        log.Fatal(err)
-    }
-    
-    // Register agent
-    if err := chat.RegisterChatAgent(ctx, rt, chat.ChatAgentConfig{
-        Planner: &MyPlanner{},
-    }); err != nil {
-        log.Fatal(err)
-    }
-    
-    // Run agent
-    client := chat.NewClient(rt)
-    // ... use client ...
-}
---- END CODE ---
-
-
-Planner
--------
-
-Your planner can reference MCP tools just like native toolsets:
-
---- CODE ---
-func (p *MyPlanner) PlanStart(ctx context.Context, in *planner.PlanInput) (*planner.PlanResult, error) {
-    return &planner.PlanResult{
-        ToolCalls: []planner.ToolRequest{
-            {
-                Name:    "assistant.assistant-mcp.search",
-                Payload: []byte(`{"query": "golang tutorials"}`),
-            },
-        },
-    }, nil
-}
---- END CODE ---
-
-
-In-Process Progressive Discovery
---------------------------------
-
-When an MCP service and an agent share a Go process, progressive discovery does
-not require an MCP loopback transport. Construct the generated `MCPAdapter`
-with `ToolSearchOptions`, then create its local runtime registration:
-
---- CODE ---
-adapter := mcpassistant.NewMCPAdapter(service, promptProvider,
-    &mcpassistant.MCPAdapterOptions{
-        ToolSearch: &mcpassistant.ToolSearchOptions{
-            AlwaysVisible: []string{"search"},
-        },
-    })
-localTools, err := mcpassistant.NewAssistantAssistantMcpLocalToolsetRegistration(adapter)
-if err != nil {
-    return err
-}
-if err := rt.RegisterToolset(localTools); err != nil {
-    return err
-}
---- END CODE ---
-
-The registration exposes the same synthetic search/call tools and pinned real
-tools as compact `tools/list`. Search, hidden calls, and projected method-backed
-calls reuse the generated adapter catalog and dispatchers without HTTP,
-JSON-RPC, MCP initialization, or session state.
-
-
-Best Practices
-==============
-
-- Let codegen manage registration: Use the generated helper to register MCP toolsets; avoid hand-written glue so codecs and retry hints stay consistent
-- Use typed callers: Prefer generated JSON-RPC callers when available for type safety
-- Handle errors gracefully: Map MCP errors to RetryHint values to help planners recover
-- Monitor telemetry: MCP calls emit structured telemetry events; use them for observability
-- Choose the right transport: Use HTTP for simple request/response, SSE for streaming, stdio for subprocess-based servers
-
-
-Next Steps
-==========
-
-- Toolsets - Understand tool execution models
-- Memory & Sessions - Manage state with transcripts and memory stores
-- Production - Deploy with Temporal and streaming UI
+For new protocol surface or MCP spec catch-up, use the repo-local `new-mcp-feature-development` skill and begin with a real client-versus-framework validation test.

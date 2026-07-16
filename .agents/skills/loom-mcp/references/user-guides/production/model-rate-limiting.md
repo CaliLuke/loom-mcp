@@ -1,195 +1,81 @@
 # Model Rate Limiting
 
-Every model provider enforces rate limits. Exceed them and requests fail with 429 errors. In replica sets this is often amplified by independent token budgets.
+`features/model/middleware.AdaptiveRateLimiter` applies a token-estimating AIMD limiter at the provider-client boundary. Use one limiter per independently limited provider/model quota.
 
-## The Problem
+## Local usage
 
-Scenario: you deploy multiple replicas of your agent service. Each replica believes it has a generous local quota, so the aggregate exceeds provider limits.
-
-Without rate limiting:
-
-- Requests fail unpredictably with 429s.
-- Retry storms increase load and congestion.
-- User experience degrades under burst conditions.
-
-With adaptive rate limiting:
-
-- Replicas share a coordinated budget.
-- Requests queue until capacity is available.
-- Backoff is propagated across the cluster.
-- Traffic degrades gracefully under overload.
-
-## Overview
-
-Use the adaptive limiter in `features/model/middleware`. It estimates token cost, blocks until capacity is available, and adjusts the budget in response to rate-limit feedback.
-
-## AIMD Strategy
-
-The limiter uses an Additive Increase / Multiplicative Decrease strategy.
-
-| Event | Action | Formula |
-| --- | --- | --- |
-| Success | Probe (additive increase) | `TPM += recoveryRate (5% of initial)` |
-| ErrRateLimited | Backoff (multiplicative decrease) | `TPM *= 0.5` |
-
-Effective tokens-per-minute is bounded by:
-
-- Minimum: 10% of initial TPM (floor to avoid starvation)
-- Maximum: configured `maxTPM`
-
-## Basic Usage
-
-Create one limiter per process and wrap a model client:
-
---- CODE ---
-import (
-    "context"
-
-    "github.com/CaliLuke/loom-mcp/features/model/middleware"
-    "github.com/CaliLuke/loom-mcp/features/model/bedrock"
+```go
+limiter := middleware.NewAdaptiveRateLimiter(
+    ctx,
+    nil,    // no replicated map: process-local coordination
+    "",     // key is unused in local mode
+    60_000, // initial tokens per minute
+    120_000,
 )
 
-func main() {
-    ctx := context.Background()
+client := limiter.Middleware()(providerClient)
+```
 
-    // Create the adaptive rate limiter
-    // Parameters: context, rmap (nil for local), key, initialTPM, maxTPM
-    limiter := middleware.NewAdaptiveRateLimiter(
-        ctx,
-        nil,     // nil = process-local limiter
-        "",      // key (unused when rmap is nil)
-        60000,   // initial tokens per minute
-        120000,  // maximum tokens per minute
-    )
+Register the wrapped client with the runtime, not the underlying provider
+client. The middleware preserves `model.TokenCounter` when the provider
+implements it and preserves the absence of that optional interface otherwise.
+Admission always uses estimated input tokens; exact counting remains available
+to other runtime policies only when the provider supports it.
 
-    // Create your underlying model client
-    bedrockClient, err := bedrock.NewClient(bedrock.Options{
-        Region: "us-east-1",
-        Model:  "anthropic.claude-sonnet-4-20250514-v1:0",
-    })
-    if err != nil {
-        panic(err)
-    }
+If `initialTPM <= 0`, the limiter starts at 60,000 TPM. If `maxTPM` is zero or below the initial value, it is clamped to the initial value.
 
-    // Wrap with rate limiting middleware
-    rateLimitedClient := limiter.Middleware()(bedrockClient)
+## Cluster coordination
 
-    // Use rateLimitedClient with your runtime or planners
-    rt := runtime.New(
-        runtime.WithModelClient("claude", rateLimitedClient),
-    )
+Join one Pulse replicated map per coordination domain and share a stable key for replicas consuming the same quota:
+
+```go
+limits, err := rmap.Join(ctx, "model-rate-limits", redisClient)
+if err != nil {
+    return err
 }
---- END CODE ---
+defer limits.Close()
 
-## Cluster-Aware Rate Limiting
-
-Coordinate budgets across processes with a Pulse replicated map.
-
---- CODE ---
-import (
-    "context"
-
-    "github.com/CaliLuke/loom-mcp/features/model/middleware"
-    "goa.design/pulse/rmap"
+limiter := middleware.NewAdaptiveRateLimiter(
+    ctx,
+    limits,
+    "anthropic:production",
+    60_000,
+    120_000,
 )
+```
 
-func main() {
-    ctx := context.Background()
+Backoff/probe updates use compare-and-set operations on the shared value, and subscribers reconcile local refill rates from map updates. If the map or key is absent, the limiter remains process-local.
 
-    // Create a Pulse replicated map backed by Redis
-    rm, err := rmap.NewMap(ctx, "rate-limits", rmap.WithRedis(redisClient))
-    if err != nil {
-        panic(err)
-    }
+## Admission and adaptation
 
-    // Create cluster-aware limiter
-    // All processes sharing this map and key coordinate their budgets
-    limiter := middleware.NewAdaptiveRateLimiter(
-        ctx,
-        rm,
-        "claude-sonnet",  // shared key for this model
-        60000,            // initial TPM
-        120000,           // max TPM
-    )
+The limiter estimates input tokens with `model.TokenEstimator`, waits for capacity, and then calls the provider.
+It does not reserve output tokens, so size the TPM limits and burst for expected
+response volume as well as prompt size.
 
-    // Wrap your client as before
-    rateLimitedClient := limiter.Middleware()(bedrockClient)
-}
---- END CODE ---
+| Outcome | Adjustment |
+| --- | --- |
+| Successful `Complete` | Add 5% of initial TPM, capped at `maxTPM` |
+| `Complete` returns `model.ErrRateLimited` | Halve TPM, floored at 10% of initial (minimum 1) |
+| Stream setup returns `model.ErrRateLimited` | Back off immediately |
+| Stream reaches `io.EOF` | Probe once |
+| Stream `Recv` returns `model.ErrRateLimited` | Back off once |
+| Ordinary error or early `Close` | No adjustment |
 
-When cluster-aware:
+A successful stream setup is not proof that the provider completed the request. The wrapper observes only the first terminal `Recv` outcome, so a receive-time 429 is not misclassified as success and repeated terminal calls cannot adjust the budget twice.
 
-- backoff propagates globally
-- successful requests increase the shared budget
-- watchers reconcile limiter state when updates arrive
+The token-bucket burst stays pinned at `maxTPM`; adaptation changes only the refill rate. A request estimated above that burst can never be admitted and fails fast with `middleware.ErrRequestTooLarge`. Reduce the request or raise the configured maximum.
 
-## Token Estimation
+## Provider requirement
 
-Heuristic estimation:
+Adaptive backoff depends on providers normalizing quota failures to `model.ErrRateLimited`, including errors returned while receiving a stream. Provider conformance tests must cover both setup-time and receive-time rate limits. Preserve the underlying provider error in the chain for diagnostics.
 
-- count characters in text parts and string tool results
-- convert at roughly 3 chars/token
-- add 500-token provider/system overhead buffer
+## Operational guidance
 
-## Integration with Runtime
+- Start below the documented provider quota and leave recovery headroom in `maxTPM`.
+- Use separate keys for quotas that are actually independent; share a key across all replicas consuming one quota.
+- Bound request contexts so queued calls can be canceled.
+- Monitor admission wait time, `ErrRequestTooLarge`, provider rate-limit errors, and upstream request latency.
+- Treat the shared map as coordination state, not a billing or exact token-accounting ledger.
+- Close the replicated map and cancel the limiter context during shutdown.
 
-Register rate-limited clients on the runtime:
-
---- CODE ---
-// Create limiters for each model you use
-claudeLimiter := middleware.NewAdaptiveRateLimiter(ctx, nil, "", 60000, 120000)
-gptLimiter := middleware.NewAdaptiveRateLimiter(ctx, nil, "", 90000, 180000)
-
-// Wrap underlying clients
-claudeClient := claudeLimiter.Middleware()(bedrockClient)
-gptClient := gptLimiter.Middleware()(openaiClient)
-
-// Configure runtime with rate-limited clients
-rt := runtime.New(
-    runtime.WithEngine(temporalEng),
-    runtime.WithModelClient("claude", claudeClient),
-    runtime.WithModelClient("gpt-4", gptClient),
-)
---- END CODE ---
-
-## What Happens Under Load
-
-| Traffic Level | Without Limiter | With Limiter |
-| --- | --- | --- |
-| Below quota | Requests succeed | Requests succeed |
-| At quota | Random 429 failures | Requests queue, then succeed |
-| Burst above quota | Cascade of failures | Backoff absorbs burst, gradual recovery |
-| Sustained overload | All requests fail | Requests queue with bounded latency |
-
-## Tuning
-
-| Parameter | Default | Description |
-| --- | --- | --- |
-| initialTPM | (required) | Starting tokens/minute |
-| maxTPM | (required) | Ceiling for probing |
-| Floor | 10% of initial | Minimum budget |
-| Recovery rate | 5% of initial | Additive increase per success |
-| Backoff factor | 0.5 | Multiplicative decrease on 429 |
-
-Example with `initialTPM=60000`, `maxTPM=120000`:
-
-- Floor: `6000` TPM
-- Recovery: `+3000 TPM` per success
-- Backoff: halve current TPM on 429
-
-## Monitoring
-
-Track queue time, backoff frequency, and current TPM.
-
---- CODE ---
-// Example: export current capacity to Prometheus
-currentTPM := limiter.CurrentTPM()
---- END CODE ---
-
-## Best Practices
-
-- One limiter per model/provider.
-- Use realistic initial TPM estimates.
-- Enable cluster-aware limiting in production.
-- Emit metrics/logs on backoff events.
-- Set `maxTPM` above initial for probe headroom.
+Run `go test -race ./features/model/middleware` after middleware changes, followed by the repository verification ladder for framework work.

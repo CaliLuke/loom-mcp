@@ -7,11 +7,11 @@ import (
 	runtimetools "github.com/CaliLuke/loom-mcp/runtime/agent/tools"
 )
 
-// Idempotent marks a tool as idempotent within a run transcript.
+// Idempotent emits metadata declaring a tool idempotent within a run transcript.
 //
-// When set, orchestration layers may treat repeated tool calls with identical
-// arguments as redundant and avoid executing them once a successful result
-// already exists in the transcript.
+// The built-in runtime does not compare arguments, cache results, suppress
+// duplicate execution, or provide exactly-once delivery. External planners or
+// orchestrators may consume the metadata to implement their own replay policy.
 //
 // Use Idempotent only for tools whose result is a pure function of their
 // arguments *for the lifetime of a run transcript*. If a tool answers questions
@@ -19,7 +19,7 @@ import (
 // or version parameter, it is not transcript-idempotent and should not be
 // tagged.
 //
-// Default: tools are not idempotent across a transcript unless explicitly tagged.
+// Default: no transcript-idempotency metadata is emitted.
 func Idempotent() {
 	tool, ok := eval.Current().(*agentsexpr.ToolExpr)
 	if !ok {

@@ -16,7 +16,7 @@ code generation handle the infrastructure.
 | **Long‑running agents crash**        | Durable orchestration with automatic retries, time budgets, and deterministic replay            |
 | **Composing agents is messy**        | First‑class agent‑as‑tool composition, even across processes, with run trees and linked streams |
 | **Schema drift haunts you**          | Generated codecs and registries keep everything in sync—change the DSL, regenerate, done        |
-| **Observability is an afterthought** | Built‑in streaming, transcripts, logs, metrics, and traces from day one                         |
+| **Observability is an afterthought** | Built-in streams and transcripts, plus opt-in runtime, model, Temporal, MCP, and transport telemetry |
 | **MCP integration is manual**        | Generated wrappers turn MCP servers into typed toolsets automatically                           |
 
 ## The Mental Model
@@ -68,8 +68,11 @@ handling, retries, and tracing baked in.
 
 ### Full Observability (Streaming & Telemetry)
 
-Configure a memory store and stream sink once. The runtime automatically persists transcripts,
-publishes real‑time events, and instruments everything with OTEL‑aware logging, metrics, and traces.
+Configure the stores, stream sinks, and telemetry surfaces your deployment
+needs. The runtime records a canonical run event log, projects selected events
+to transcript memory and streams, traces model calls, and can combine Temporal,
+generated MCP, and transport instrumentation. These surfaces have different
+delivery guarantees; see the event reliability section in `docs/runtime.md`.
 
 For local development, applications may opt into `runtime/agent/debug`. The
 debug server binds to `127.0.0.1:0` by default and exposes run snapshots,
@@ -120,7 +123,7 @@ Each entry contains the canonical tool ID with full JSON Schemas:
 {
   "tools": [
     {
-      "id": "<service>.<toolset>.<tool>",
+      "id": "<toolset>.<tool>",
       "service": "orchestrator",
       "toolset": "helpers",
       "title": "Answer a simple question",
@@ -488,7 +491,7 @@ policies, and MCP servers within Goa service designs.
 | `DefaultCaps(opts...)`             | Configure resource limits                 |
 | `MaxToolCalls(n)`                  | Cap total tool invocations per run        |
 | `MaxConsecutiveFailedToolCalls(n)` | Cap sequential failures before aborting   |
-| `TimeBudget(duration)`             | Set maximum execution duration            |
+| `TimeBudget(duration)`             | Limit active execution time; external-input waits pause the budget |
 | `InterruptsAllowed(bool)`          | Enable/disable user interruptions         |
 | `OnMissingFields(action)`          | Configure validation behavior             |
 
@@ -598,9 +601,13 @@ err := rt.RegisterToolset(runtime.ToolsetRegistration{
     Specs:   toolSpecs,
 })
 
-// Register model client for planner use
+// Register model client for planner use before rt.Seal(ctx).
 err := rt.RegisterModel("default", bedrockClient)
 ```
+
+`Seal` (and the first submitted run) closes agent, toolset, and model
+registration. Later `RegisterModel` calls return `runtime.ErrRegistrationClosed`;
+replace model clients by constructing and sealing a new runtime.
 
 ### Agent Client
 
@@ -919,8 +926,8 @@ The `sessionID` argument is required and must be a non-empty, non-whitespace str
 | `WithSearchAttributes(map[string]any)` | Enable queries                 |
 | `WithPerTurnMaxToolCalls(int)`         | Override DSL defaults          |
 | `WithRunMaxToolCalls(int)`             | Cap total tool calls           |
-| `WithRunTimeBudget(duration)`          | Set time limits                |
-| `WithRunFinalizerGrace(duration)`      | Reserve time for final message |
+| `WithRunTimeBudget(duration)`          | Limit active run execution; awaits pause it |
+| `WithRunFinalizerGrace(duration)`      | Reserve post-budget finalization time       |
 | `WithRunInterruptsAllowed(bool)`       | Enable human-in-the-loop       |
 | `WithRestrictToTool(tools.Ident)`      | Limit available tools          |
 | `WithAllowedTags([]string)`            | Filter by tags                 |
@@ -1011,9 +1018,10 @@ as child workflows, enabling linked streams and run links.
 ### Generated Provider Helpers
 
 - **Tool IDs** (fully qualified) and type aliases for codecs
-- **`New<Agent>ToolsetRegistration(rt *runtime.Runtime)`** — creates registration with routing info
+- **`New<Agent>ToolsetRegistration(rt *runtime.Runtime)`** — low-level provider registration with routing info
 - **`NewRegistration(rt, systemPrompt, ...runtime.AgentToolOption)`** — configure per‑tool
   text/templates
+- **`New<ConsumerAgent><Export>AgentToolsetRegistration(...)`** — consumer-side helper that delegates to the exporting agent package
 - **Typed call builders** like `New<Tool>Call(args, ...CallOption)`
 
 ### Runtime Behavior
@@ -1054,7 +1062,8 @@ WithLogger, WithMetrics, WithTracer, WithWorker)`
 - `Register<Agent>(ctx, rt, Config)` — full registration
 - `NewWorker(...runtime.WorkerOption)` — worker configuration
 - `Route()` and `NewClient(rt)` — remote access
-- Per toolset: `New<Agent><Toolset>ToolsetRegistration`
+- `RegisterUsedToolsets(ctx, rt, With<Toolset>Executor(...))` for ordinary used toolsets
+- Consumer-side `New<Agent><Export>AgentToolsetRegistration(...)` helpers for agent-as-tool exports
 
 ### Runtime/Library
 
@@ -1140,6 +1149,7 @@ profile := stream.MetricsProfile()
 | --------------- | ---------------------------------------------------------- |
 | DSL reference   | `docs/dsl.md`                                              |
 | Runtime guide   | `docs/runtime.md`                                          |
+| Glossary        | `docs/glossary.md`                                         |
 | Quickstart      | `quickstart/README.md`                                     |
 | MCP integration | `codegen/mcp` and `runtime/mcp`                            |
 | Features        | `features/*` (memory, session, run, stream, model clients) |

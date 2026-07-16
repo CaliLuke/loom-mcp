@@ -257,7 +257,7 @@ func emitAgentConfigStruct(stmt *jen.Statement, agent *AgentData) {
 		}
 		if len(agent.MCPToolsets) > 0 {
 			g.Comment("MCPCallers maps MCP toolset IDs to the callers that invoke them. A caller must be")
-			g.Comment("provided for every toolset referenced via MCPToolset/Use.")
+			g.Comment("provided for every toolset referenced through Toolset(FromMCP(...)) and Use.")
 			g.Id("MCPCallers").Map(jen.String()).Id("mcpruntime").Dot("Caller")
 		}
 	})

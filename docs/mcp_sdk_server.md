@@ -49,7 +49,7 @@ JSON-RPC-transport feature and is not routed (nor advertised) in SDK mode.
 | `PromptProvider` | yes      | Implementation that renders prompts declared with `StaticPrompt` and `DynamicPrompt`. Generated against the design.                                                    |
 | `RequestContext` | no       | Per-request hook called once per MCP RPC. Receives the inbound request context and a synthetic `*http.Request` carrying the live transport headers; returns a new ctx. |
 | `TransportObserver` | no    | Loom transport observer installed on the generated SDK handler. Request lifecycle events are delivered without external middleware wiring.                           |
-| `StreamableHTTP` | no       | `*mcpsdk.StreamableHTTPOptions` passed through to the upstream SDK. When `nil`, a default `net/http.NewCrossOriginProtection()` is applied.                            |
+| `StreamableHTTP` | no       | `*mcpsdk.StreamableHTTPOptions` passed through to the upstream SDK. A default `net/http.NewCrossOriginProtection()` is applied when the options or their protection field are nil. |
 
 ## Design-Declared Skill Resources
 
@@ -137,11 +137,19 @@ RequestContext: func(ctx context.Context, r *http.Request) context.Context {
         ctx = context.WithValue(ctx, requestIDKey{}, rid)
     }
     if allow := r.Header.Get("X-Mcp-Allow-Names"); allow != "" {
-        ctx = context.WithValue(ctx, allowNamesKey{}, allow)
+        ctx = mcpruntime.WithAllowedResourceNames(ctx, allow)
     }
     return ctx
 }
 ```
+
+Treat inbound allow/deny headers as untrusted request input. The generated
+native JSON-RPC mount recognizes `x-mcp-allow-names` and
+`x-mcp-deny-names`, and an SDK application can opt into the same context
+helpers as above, but an allow header is never an authentication or grant
+mechanism. Derive principals and deployment grants in application-owned auth
+middleware from verified credentials. Use request allow values only to narrow
+that trusted maximum grant.
 
 `SDKServerOptions.Adapter.ToolSearch` passes through to the generated MCP
 adapter. When set, SDK-backed servers use the same compact public discovery
@@ -182,8 +190,17 @@ trailing slash authorizes or denies the full prefix, such as
 `skill://code-review/`. A skill's main resource name also maps to that prefix,
 so allowing or denying `code-review` covers `SKILL.md`, `_manifest`, and
 supporting files. Request-scoped `x-mcp-allow-names` and
-`x-mcp-deny-names` values use the same rules, with deny entries taking
-precedence.
+`x-mcp-deny-names` values use the same matching rules. Server allow policies
+and request allow policies are independent constraints: when both are present,
+the requested resource must match both. A request allow can therefore narrow
+`MCPAdapterOptions`, but cannot add a resource outside the server's maximum
+grant. Server and request denies are additive and always take precedence.
+
+If the server has no configured allow policy, its maximum is unrestricted and
+a request allow still narrows that surface. Do not mistake this narrowing for
+authorization: a client can choose its own raw header. Install authentication
+and authorization before the generated handler, and configure
+`MCPAdapterOptions` from trusted deployment policy.
 
 ### Ctx-Cached Values Can Be Stale — Read `r.Header` First
 
@@ -330,6 +347,38 @@ captured at request entry. `ResponseWriterFromContext` returns the active
 writer for the streamable-HTTP request; it is non-nil only while the
 generated handler is still composing the response.
 
+### Session principal binding
+
+Authentication middleware must wrap the generated handler so verified identity
+is present in the request context before MCP session handling. Generated SDK
+servers resolve the stable session owner with
+`MCPAdapterOptions.SessionPrincipal`; when that callback is nil, they use
+`mcpauth.TokenInfoFromContext(ctx).UserID`. Generated native JSON-RPC server
+packages expose `MCPSessionPrincipal`, with the same TokenInfo default, for
+applications that use a different verified principal source. Configure that
+variable before mounting or serving the generated server.
+
+When initialization returns a session ID, the transport binds that ID to the
+resolved principal. Every subsequent POST, GET, and DELETE carrying the session
+ID must resolve to the same principal. A mismatch, an absent principal for an
+authenticated session, or an authenticated attempt to adopt a session issued
+without a principal fails with HTTP 403. Unknown, expired, or terminated session
+IDs remain HTTP 404; a required but missing session header remains HTTP 400.
+A fresh `initialize` request must not carry `Mcp-Session-Id`; an unknown ID gets
+HTTP 404 so the client restarts initialization without a session header. A
+repeated initialize may carry its already-issued, owner-bound ID so the adapter
+can return the protocol-level `Already initialized` error. Foreign IDs fail
+ownership validation. This prevents caller-chosen IDs from consuming bounded
+adapter session state before the transport issues them.
+
+Session records are TTL-pruned after 24 hours and capped at 4096 entries.
+Expiry or capacity eviction removes the principal binding with the session, so
+a surviving upstream connection cannot fail open after its binding disappears.
+DELETE validates ownership before termination; a rejected DELETE leaves the
+rightful principal's session usable. Anonymous operation remains supported when
+no principal resolver is configured and both initialization and later requests
+resolve to an empty principal.
+
 ## Transport Observability
 
 The generated handler emits classified request lifecycle events through the dependency-free
@@ -349,13 +398,27 @@ the complete `Reason` enumeration.
 The observer integration is additive to the existing structured `adapter.log(...)`
 calls; both channels remain present in generated SDK server output.
 
+The generated `MCPAdapter` also exposes OpenTelemetry configuration through
+`MCPAdapterOptions.TelemetryName`, `Tracer`, and `Meter`. Its stable metrics are:
+
+| Metric | Unit | Meaning |
+| --- | --- | --- |
+| `loom_mcp.mcp.calls` | `{call}` | Total generated adapter calls |
+| `loom_mcp.mcp.errors` | `{call}` | Calls that completed with an error |
+| `loom_mcp.mcp.duration_ms` | `ms` | Generated adapter call duration |
+
+Adapter spans and metrics describe MCP methods. `TransportObserver` describes
+the lower-level HTTP request lifecycle; configuring one does not replace the
+other.
+
 ## Cross-Origin Protection
 
 When `SDKServerOptions.StreamableHTTP` is omitted, the generator wires
 `net/http.NewCrossOriginProtection()` into the streamable HTTP handler.
-Override `StreamableHTTP` to supply a custom protection policy or pass
-`&mcp.StreamableHTTPOptions{CrossOriginProtection: nil}` to disable it
-for trusted local-only deployments.
+Override `StreamableHTTP` to supply a custom protection policy. A nil
+`CrossOriginProtection` inside non-nil options is replaced with the same safe
+default; it is not a disable switch. Configure trusted origins on a custom
+policy when cross-origin browser access is intentional.
 
 ## Module Dependency
 

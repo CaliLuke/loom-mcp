@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"time"
 
 	"github.com/CaliLuke/loom-mcp/runtime/agent/model"
 	"github.com/CaliLuke/loom-mcp/runtime/agent/planner"
@@ -220,7 +221,10 @@ func (r *Runtime) planStart(ctx context.Context, reg *AgentRegistration, input *
 	}
 	ctx, span := tracer.Start(ctx, "planner.plan_start")
 	defer span.End()
-	return reg.Planner.PlanStart(ctx, input)
+	start := time.Now()
+	result, err := reg.Planner.PlanStart(ctx, input)
+	r.recordPlannerAttempt(span, reg.ID, "start", input.RunContext, time.Since(start), err)
+	return result, err
 }
 
 // planResume invokes the planner's PlanResume method with tracing.
@@ -237,7 +241,10 @@ func (r *Runtime) planResume(ctx context.Context, reg *AgentRegistration, input 
 	}
 	ctx, span := tracer.Start(ctx, "planner.plan_resume")
 	defer span.End()
-	return reg.Planner.PlanResume(ctx, input)
+	start := time.Now()
+	result, err := reg.Planner.PlanResume(ctx, input)
+	r.recordPlannerAttempt(span, reg.ID, "resume", input.RunContext, time.Since(start), err)
+	return result, err
 }
 
 // plannerContext constructs the agent registration and context needed for planner execution.

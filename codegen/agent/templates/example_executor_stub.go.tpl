@@ -41,9 +41,9 @@ func Execute(ctx context.Context, meta *runtime.ToolCallMeta, call *planner.Tool
         }
         _ = args
         // Optional: transform to method payload if compatible
-        // mp, _ := {{ $.SpecsAlias }}.ToMethodPayload_{{ .GoName }}(args)
+        // mp := {{ $.SpecsAlias }}.Init{{ .ConstName }}MethodPayload(args)
         // TODO: Call your service client with mp (or args), map result back:
-        // tr, _ := {{ $.SpecsAlias }}.ToToolReturn_{{ .GoName }}(methodRes)
+        // tr := {{ $.SpecsAlias }}.Init{{ .ConstName }}ToolResult(methodRes)
         return runtime.Executed(&planner.ToolResult{
 			Result: map[string]any{
 				"status": "ok",

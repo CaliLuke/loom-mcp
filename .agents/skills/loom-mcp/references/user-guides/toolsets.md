@@ -1,195 +1,95 @@
-# TOOLSETS
+# Toolsets
 
-Learn about toolset types, execution models, validation, retry hints, and tool catalogs in loom-mcp.
+Use this guide for the current toolset model. Confirm exact DSL and generated names in `docs/dsl.md` and the generated `AGENTS_QUICKSTART.md` for the service you are wiring.
 
-Toolsets are collections of tools that agents can use. loom-mcp supports several execution models.
+## Sources
 
-## Toolset Types
+| Source | Declaration | Execution |
+| --- | --- | --- |
+| Service-owned | `Toolset("name", func() { Tool(...) })` | Generated executor or generated method dispatcher for `BindTo(...)` |
+| MCP | `Toolset(FromMCP(service, suite))` | Generated MCP registration backed by an `mcpruntime.Caller` |
+| Internal registry | `Toolset("name", FromRegistry(registry, remoteToolset))` | Registry client/provider routing |
+| Agent-as-tool | `UseAgentToolset(service, agent, export)` | A real linked child run |
+| Skills | `Toolset(FromSkills(...))` | Generated `list_skills` and load tools |
+| Artifacts | `Toolset(FromArtifacts(...))` | Runtime artifact store |
+| Memory | `Toolset(FromMemory(...))` | Transcript, indexed transcript, or long-term memory service |
 
-### Service-Owned Toolsets (Method-Backed)
+An agent consumes a toolset with `Use(...)`; an agent publishes a toolset to other agents with `Export(...)`.
 
-Declared via `Toolset("name", func() { ... })`; tools may `BindTo` Goa service methods or be implemented by custom executors.
+## Generated ownership
 
-- Codegen emits per-toolset specs/types/codecs/transforms under `gen/<service>/toolsets/<toolset>/`.
-- Agents that `Use` these toolsets get typed builders and executor factories.
-- Applications register executors that decode typed args and call service clients or service logic.
+Service-owned toolset code lives under:
 
-### Agent-Implemented Toolsets (Agent-as-Tool)
+```text
+gen/<owner-service>/toolsets/<toolset>/
+```
 
-Defined in an agent `Export` block, consumed by other agents.
+Import that owner-scoped package. Do not invent an agent-scoped toolset path and never edit generated files manually.
 
-- Codegen emits provider-side export packages under `gen/<service>/agents/<agent>/exports/<export>`.
-- Execution happens inline from caller perspective while maintaining nested-agent child-run behavior.
-
-### MCP Toolsets
-
-Declared via `Toolset(FromMCP(service, suite))` and referenced with `Use(...)`.
-
-- Generated wrappers handle JSON schemas, transports, and retries.
-- Decoding uses MCP executor path with raw JSON input semantics.
-
-### Projected MCP Tools
-
-Method-backed service-owned toolset tools may be projected into a generated MCP
-server with `Expose(AgentRuntime, MCPSurface)` and
-`MCPPlacement(service, mcpServer)`.
-
-- Omitted `Expose(...)` means runtime-only `AgentRuntime`.
-- Projected MCP tools keep their runtime toolset specs as the schema source.
-- Generated MCP calls route through the same `Dispatch<Tool>Method(...)`
-  dispatcher used by runtime method-backed execution.
-- In v1, projected tools cannot use confirmation, injection, server-data,
-  result reminders, or bounded-result contracts.
-
-## BindTo vs Inline
-
-Use `BindTo` when calling existing Goa methods, using transforms and generated mapping.
-Use inline implementations when custom orchestration/computation is required.
-
-## Bounded Tool Results
-
-`BoundedResult()` marks bounded-list views and canonical bounds contract:
+Generated agent packages expose the authoritative wiring helper:
 
 ```go
-type Bounds struct {
-    Returned       int
-    Total          *int
-    Truncated      bool
-    RefinementHint string
+err := agentpkg.RegisterUsedToolsets(
+    ctx,
+    rt,
+    agentpkg.WithProjectedExecutor(exec),
+)
+```
+
+Use the generated `AGENTS_QUICKSTART.md` beside that package for the exact executor option names and transforms. Canonical tool IDs are `<toolset>.<tool>`; prefer generated constants over string literals.
+
+## Method-backed tools
+
+`BindTo(service, method)` keeps the tool schema in the agent design and maps it to a Goa service method. Code generation owns:
+
+- model-facing payload/result types and JSON schemas;
+- payload and result transforms;
+- dispatch to the bound method;
+- injection, server-data, confirmation, and bounded-result metadata where supported.
+
+Keep validation in the design. Application code should implement the service behavior, not repeat generated boundary validation.
+
+## Bounded results
+
+`BoundedResult()` declares out-of-band bounds metadata. The authored semantic result must not define the reserved canonical fields. Executors return them through `planner.ToolResult.Bounds`:
+
+```go
+&agent.Bounds{
+    Returned:       len(items),
+    Total:          &total,
+    Truncated:      truncated,
+    NextCursor:     nextCursor,
+    RefinementHint: "narrow the time range",
 }
 ```
 
-### Declaring Bounded Tools
+For cursor paging:
 
 ```go
-Tool("list_devices", "List devices with pagination", func() {
-    Args(func() {
-        Attribute("site_id", String, "Site identifier")
-        Attribute("status", String, "Filter by status", func() {
-            Enum("online", "offline", "unknown")
-        })
-        Attribute("limit", Int, "Maximum results", func() {
-            Default(50)
-            Maximum(500)
-        })
-        Required("site_id")
-    })
-    Return(func() {
-        Attribute("devices", ArrayOf(Device), "Matching devices")
-        Attribute("returned", Int, "Returned count")
-        Attribute("total", Int, "Total matching devices")
-        Attribute("truncated", Boolean, "Whether capped")
-        Attribute("refinement_hint", String, "How to narrow results")
-        Required("devices", "returned", "truncated")
-    })
-    BoundedResult()
-    BindTo("DeviceService", "ListDevices")
+BoundedResult(func() {
+    Cursor("cursor")
+    NextCursor("next_cursor")
 })
 ```
 
-## Injected Fields
+Cursors are opaque. A caller fetching the next page must keep all other arguments unchanged.
 
-`Inject(fields...)` marks fields as server-owned. Generated public payload
-structs and codecs keep those fields so runtime injection can populate service
-method payloads, but generated `ToolSpec.Payload.Schema`, `ExampleJSON`, and
-`ExampleInput` omit them from the model-facing contract. Generated injection
-helpers match the prepared public Go field type, including pointer-backed
-required primitives and value-backed fields with defaults.
+## Model-facing versus server-facing data
 
-```go
-Tool("get_user_data", "Get user data", func() {
-    Args(func() {
-        Attribute("session_id", String, "Current session ID")
-        Attribute("query", String, "Data query")
-        Required("session_id", "query")
-    })
-    Return(func() {
-        Attribute("data", ArrayOf(String), "Query results")
-        Required("data")
-    })
-    BindTo("UserService", "GetData")
-    Inject("session_id")
-})
-```
+- `Inject(...)` marks payload fields populated by the runtime/application and omitted from the model schema.
+- `ServerData(...)` carries observer-facing data separately from the model result.
+- `ResultHintTemplate(...)` adds a concise model-facing result hint.
+- `ResultReminder(...)` adds a runtime-owned system reminder after the result.
+- `Confirmation(...)` declares authorization requirements enforced by the runtime.
+- `Idempotent()` currently emits metadata only; it does not add replay suppression by itself.
 
-## Execution Models
+Projected MCP tools use `Expose(AgentRuntime, MCPSurface)` plus `MCPPlacement(...)`. The design rejects combinations unsupported by the v1 projected surface, including bounded results, confirmation, injection, server data, and result reminders.
 
-### Activity-Based Execution (Default)
+## Verification
 
-Planner returns tool calls, runtime schedules `ExecuteToolActivity`, decodes payload, calls executor, encodes result.
+After a toolset design change:
 
-### Inline Execution (Agent-as-Tool)
-
-Toolset marked inline runs provider agent as child run and returns consolidated `planner.ToolResult` with `RunLink`.
-
-### Executor-First Model
-
-Service toolsets expose generic registration:
-
-```go
-New<Agent><Toolset>ToolsetRegistration(exec runtime.ToolCallExecutor)
-```
-
-## Tool Call Metadata
-
-Executors receive explicit `ToolCallMeta` with:
-
-- `RunID`, `SessionID`, `TurnID`, `ToolCallID`, `ParentToolCallID`.
-
-This avoids hidden context and improves traceability.
-
-## Tool Validation and Retry Hints
-
-Validation failures at decode-time become retry hints and allow planners to recover.
-
-Core fields include:
-
-```go
-type RetryHint struct {
-    Reason             RetryReason
-    Tool               tools.Ident
-    RestrictToTool     bool
-    MissingFields      []string
-    ExampleInput       map[string]any
-    PriorInput         map[string]any
-    ClarifyingQuestion string
-    Message            string
-}
-```
-
-## Tool Catalogs and Schemas
-
-Generated runtime APIs expose:
-
-- `rt.ListAgents()`
-- `rt.ListToolsets()`
-- `rt.ToolSpec(toolID)`
-- `rt.ToolSchema(toolID)`
-- `rt.ToolSpecsForAgent(agentID)`
-
-`tool_schemas.json` contains canonical JSON schemas.
-
-## Server Data and UI Artifacts
-
-`ServerData` lets tools return observer-facing payloads separately from model result.
-
-Model-facing result stays bounded; full artifact can be projected into UI without token overhead.
-
-Artifact type:
-
-```go
-type Artifact struct {
-    Kind       string
-    Data       any
-    SourceTool tools.Ident
-    RunLink    *run.Handle
-}
-```
-
-## Best Practices
-
-- Put validations in design, not planners.
-- Return `ToolError + RetryHint` from executors.
-- Keep hints concise and actionable.
-- Avoid re-validating in services; assume boundary validation.
-- Use explicit tool IDs (`tools.Ident`) over string literals.
+1. Regenerate through the repository Make target or `loom gen <module-import-path>/design`.
+2. Inspect the generated quickstart and tool schemas.
+3. Run focused generator/runtime tests.
+4. Run the repository verification ladder from the repo-local skill.

@@ -207,6 +207,7 @@ overrides remain operational at the runtime/store layer.
 | `NextCursor(name)`                            | Inside `BoundedResult(func() { ... })` | Declares the projected result field name for the next-page cursor (optional)                        |
 | `ResultReminder(text)`                        | Inside `Tool`                          | Static system reminder injected after tool result                                                   |
 | `Confirmation(dsl)`                           | Inside `Tool`                          | Declares that tool execution must be explicitly approved out-of-band                                |
+| `Idempotent()`                                 | Inside `Tool`                          | Emits transcript-scoped idempotency metadata for planners/orchestrators                              |
 | `Expose(surfaces...)`                         | Inside toolset `Tool`                  | Declares design-time exposure permission; omitted means `AgentRuntime`                              |
 | `MCPPlacement(service, mcpServer)`             | Inside toolset `Tool`                  | Places a method-backed toolset tool into an existing service MCP server when `MCPSurface` is exposed |
 
@@ -312,6 +313,19 @@ Notes:
   can also require confirmation dynamically for additional tools via `runtime.WithToolConfirmation(...)`
   (see runtime docs).
 
+### Idempotency metadata
+
+`Idempotent()` adds the generated tag
+`loom-mcp.idempotency=transcript`. It declares that, for the lifetime of one run
+transcript, a successful result is a pure function of canonical arguments.
+Custom planners or orchestration layers may use that metadata to suppress a
+repeat call with identical arguments.
+
+The built-in runtime does not currently cache or de-duplicate calls from this
+tag. Do not rely on `Idempotent()` for exactly-once execution, cross-run
+deduplication, or side-effect safety. Use it only when a custom execution layer
+implements the corresponding transcript-local policy.
+
 ### Policy Functions
 
 | Function                           | Context                   | Purpose                                                                      |
@@ -320,7 +334,7 @@ Notes:
 | `DefaultCaps(opts...)`             | Inside `RunPolicy`        | Sets resource limits using option functions                                  |
 | `MaxToolCalls(n)`                  | Argument to `DefaultCaps` | Maximum total tool invocations                                               |
 | `MaxConsecutiveFailedToolCalls(n)` | Argument to `DefaultCaps` | Maximum consecutive failures before stopping                                 |
-| `TimeBudget(duration)`             | Inside `RunPolicy`        | Maximum wall-clock execution time (e.g., "5m")                               |
+| `TimeBudget(duration)`             | Inside `RunPolicy`        | Maximum active execution time; clarification, confirmation, typed-input, and external-tool waits pause the budget |
 | `InterruptsAllowed(bool)`          | Inside `RunPolicy`        | Enables user interruption handling                                           |
 | `OnMissingFields(action)`          | Inside `RunPolicy`        | Validation behavior: `""`, `"finalize"`, `"await_clarification"`, `"resume"` |
 | `Interceptors(ids...)`             | Inside `RunPolicy`        | Declares application-owned runtime interceptor IDs                           |
@@ -337,7 +351,7 @@ Notes:
 | Function           | Context                        | Purpose                                |
 | ------------------ | ------------------------------ | -------------------------------------- |
 | `Timing(dsl)`      | Inside `RunPolicy`             | Groups timing configuration            |
-| `Budget(duration)` | Inside `RunPolicy` or `Timing` | Total wall-clock budget for the run    |
+| `Budget(duration)` | Inside `RunPolicy` or `Timing` | Alias for `TimeBudget`; caps active work and pauses during external waits |
 | `Plan(duration)`   | Inside `RunPolicy` or `Timing` | Timeout for Plan and Resume activities |
 | `Tools(duration)`  | Inside `RunPolicy` or `Timing` | Default timeout for tool activities    |
 
@@ -422,13 +436,18 @@ The `OAuth(...)` block makes the generated server advertise OAuth 2.0
 discovery per RFC 9728 and emit spec-compliant `WWW-Authenticate` challenges
 per RFC 6750. Declaring it triggers generation of:
 
+`OAuthScope(...)` is advertised metadata, not authorization enforcement. The
+application's token verifier or authorization middleware must validate that a
+token carries the scopes required by the requested tool/resource operation.
+
 - `HandleProtectedResourceMetadata` — serves `/.well-known/oauth-protected-resource`
   and the path-suffixed form per RFC 9728 §3.1. Returns **400 Bad Request** on
   malformed forwarded headers rather than emitting a document with an
   attacker-influenced `resource` field.
 - `OAuthChallengeHeader(r, mountPath)` — formats the `Bearer` challenge.
 - `OAuthInvalidTokenChallengeHeader(r, mountPath, errorDescription)` — formats
-  the RFC 6750 §3.1 `invalid_token` challenge.
+  an RFC 6750 §3.1 `invalid_token` challenge when application auth middleware
+  can identify that failure class.
 - `OAuthMetadataPath(mountPath)` — returns the well-known URL to route to
   `HandleProtectedResourceMetadata`.
 - `ExpectedResourceIdentifier()` — returns the pinned identifier or empty
@@ -443,8 +462,11 @@ When `ResourceIdentifier(...)` is declared, two more helpers are generated:
   or `[]any` (matching how `encoding/json` decodes a JWT `aud` array).
   Missing or wrong-typed claims fail closed.
 - `ErrAudienceMismatch` — wraps `mcpauth.ErrInvalidToken` so
-  `mcpauth.RequireBearerToken` and `mcpruntime.WithOAuthChallenge` emit the
-  RFC 6750 `invalid_token` response automatically.
+  `mcpauth.RequireBearerToken` rejects the request. The current
+  `mcpruntime.WithOAuthChallenge` middleware is error-agnostic: it adds the
+  standard Bearer challenge but does not add `error="invalid_token"`
+  automatically. Emit `OAuthInvalidTokenChallengeHeader` from error-aware auth
+  middleware when that distinction is required.
 
 #### Forwarded-header trust posture
 
@@ -1097,8 +1119,11 @@ Tool("notify", "Send notification", func() {
 
 Codegen produces transform helpers when shapes are compatible:
 
-- `ToMethodPayload_<Tool>(in <ToolArgs>) (<MethodPayload>, error)`
-- `ToToolReturn_<Tool>(in <MethodResult>) (<ToolReturn>, error)`
+- `Init<Tool>MethodPayload(in *<Tool>Payload) *<MethodPayload>`
+- `Init<Tool>ToolResult(in *<MethodResult>) *<Tool>ToolResult`
+
+These helpers live in the owner-scoped
+`gen/<service>/toolsets/<toolset>/` package.
 
 ### Inject (Server-Side Fields)
 
@@ -1269,7 +1294,7 @@ RunPolicy(func() {
     // Timing
     TimeBudget("5m")
     Timing(func() {
-        Budget("10m")   // Total wall-clock
+        Budget("10m")   // Active work; external waits pause it
         Plan("45s")     // Planner activity timeout
         Tools("2m")     // Default tool timeout
     })
@@ -1393,7 +1418,7 @@ Fine-grained timeout control:
 ```go
 RunPolicy(func() {
     Timing(func() {
-        Budget("10m")  // Total wall-clock for the run
+        Budget("10m")  // Active work; external waits pause it
         Plan("45s")    // Timeout for Plan/Resume activities
         Tools("2m")    // Default timeout for tool activities
     })
@@ -1405,9 +1430,12 @@ attempt budget for planner and tool work once execution begins. They do not
 configure workflow-engine mechanics such as queue-wait timeouts or heartbeat
 liveness. Those deployment concerns belong in the selected engine adapter (for
 example `temporal.Options.ActivityDefaults` for the Temporal engine).
-`Budget(...)` sets the semantic wall-clock budget for the run; the runtime then
-derives an engine run timeout by adding finalizer reserve and small engine
-headroom so the final planner turn and terminal cleanup can still complete.
+`Budget(...)` is equivalent to `TimeBudget(...)`: it caps active planner/tool
+work and pauses while the run waits for clarification, confirmation, typed
+input, or an external tool. The runtime derives a larger engine hard timeout by
+adding finalizer reserve, wait allowance, and small engine headroom so the final
+planner turn and terminal cleanup can still complete. Enforce any end-to-end
+wall-clock SLA separately at the caller or workflow boundary.
 
 ---
 
@@ -1894,14 +1922,16 @@ Service("svc", func() {
 })
 ```
 
-Generated transforms in `specs/ts/transforms.go`:
+Generated transforms in `gen/svc/toolsets/ts/transforms.go`:
 
 ```go
 // In your executor stub:
-args := tspecs.UnmarshalSearchPayload(call.Payload)
-mp, _ := tspecs.ToMethodPayload_Search(args)
-result := yourClient.Search(ctx, mp)
-tr, _ := tspecs.ToToolReturn_Search(result)
+args, err := ts.UnmarshalSearchPayload(call.Payload)
+if err != nil { return nil, err }
+mp := ts.InitSearchMethodPayload(args)
+result, err := yourClient.Search(ctx, mp)
+if err != nil { return nil, err }
+tr := ts.InitSearchToolResult(result)
 return planner.ToolResult{Result: tr}, nil
 ```
 

@@ -50,7 +50,7 @@ go test ./codegen/agent/tests -run Quickstart_Renders_Minimal -update
 
 - Transforms – method-backed tools
   - DSL: `testscenarios.MethodSimpleCompatible()`
-  - Verifies: `gen/<service>/agents/<agent>/<toolset>/transforms.go` contains transform helpers
+  - Verifies: `gen/<service>/toolsets/<toolset>/transforms.go` contains transform helpers
   - Focus: presence of transform init helpers and header markers
 
 Planned additions (recommended next):
@@ -61,7 +61,7 @@ Planned additions (recommended next):
 - Deterministic user type imports (custom packages, alias stability)
 - RunPolicy (caps, time budget, interrupts) emitted into agent config/registry
 - Toolset reuse (top‑level `Toolset(...)` referenced in `Uses`) – no duplicate specs
-- MCP MCPToolset/Use (external toolset registration) – minimal compile‑time scaffolding
+- MCP `Toolset(FromMCP(...))`/`Use` (external toolset registration) – minimal compile-time scaffolding
 
 ### Authoring conventions
 

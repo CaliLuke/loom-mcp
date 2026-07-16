@@ -11,6 +11,7 @@ import "fmt"
 type toolUseIDCodec struct {
 	canonToProv map[string]string
 	provToCanon map[string]string
+	occupied    map[string]struct{}
 	next        int
 }
 
@@ -18,6 +19,16 @@ func newToolUseIDCodec() *toolUseIDCodec {
 	return &toolUseIDCodec{
 		canonToProv: make(map[string]string),
 		provToCanon: make(map[string]string),
+		occupied:    make(map[string]struct{}),
+	}
+}
+
+// reserve records a provider-safe canonical ID before substitutions are
+// allocated. Callers reserve the complete request transcript before encoding
+// so an earlier unsafe ID cannot claim a later pass-through ID such as t1.
+func (c *toolUseIDCodec) reserve(canonical string) {
+	if isProviderSafeToolUseID(canonical) {
+		c.occupied[canonical] = struct{}{}
 	}
 }
 
@@ -55,15 +66,23 @@ func (c *toolUseIDCodec) encode(canonical string) string {
 		return ""
 	}
 	if isProviderSafeToolUseID(canonical) {
+		c.occupied[canonical] = struct{}{}
 		return canonical
 	}
 	if id, ok := c.canonToProv[canonical]; ok {
 		return id
 	}
-	c.next++
-	id := fmt.Sprintf("t%d", c.next)
+	var id string
+	for {
+		c.next++
+		id = fmt.Sprintf("t%d", c.next)
+		if _, exists := c.occupied[id]; !exists {
+			break
+		}
+	}
 	c.canonToProv[canonical] = id
 	c.provToCanon[id] = canonical
+	c.occupied[id] = struct{}{}
 	return id
 }
 

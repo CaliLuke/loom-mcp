@@ -25,6 +25,7 @@ Repo identity and module identity are now aligned.
 - `dsl/`: agent, MCP, and registry DSL.
 - `codegen/`: generators for agents, MCP adapters, codecs, and registries.
 - `runtime/`: execution runtime, planners, engines, MCP callers, and streaming.
+- `features/`: production adapters for model providers, MongoDB stores, prompt overrides, policies, and Pulse streaming.
 - `registry/`: registry service implementation and generated transports.
 - `docs/`: in-repo technical documentation.
 - `quickstart/`: runnable starter project and generated walkthrough material.
@@ -70,6 +71,7 @@ Start here:
 - [`docs/overview.md`](docs/overview.md)
 - [`docs/dsl.md`](docs/dsl.md)
 - [`docs/runtime.md`](docs/runtime.md)
+- [`docs/glossary.md`](docs/glossary.md)
 - [`quickstart/README.md`](quickstart/README.md)
 - [`AGENTS.md`](AGENTS.md)
 

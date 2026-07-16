@@ -10,6 +10,19 @@ Use this file for current loom-mcp runtime behavior in this repo. Prefer it over
 - Use `planner.ConsumeStream` only with a raw `model.Client`.
 - Mixing the two paths double-emits thinking and assistant text events.
 
+## Planner Activity Retries
+
+- The runtime schedules one logical `PlanStart` or `PlanResume` turn, but the
+  engine may invoke its Go method multiple times when an activity attempt fails.
+- Generated registrations allow up to three activity attempts by default.
+- A late failure can repeat a completed model call or planner-owned side effect;
+  planners must be retry-safe and use stable idempotency keys for non-idempotent
+  external effects.
+- Planner errors fail the current activity attempt. The run fails only after the
+  configured activity retries are exhausted or the error is non-retryable.
+- `PlanResult.RetryHint` is successful planner output used to recover from tool
+  failures. It is separate from engine activity retries.
+
 ## Agent-As-Tool
 
 - Agent-as-tool runs as a real child workflow, not an inline local shortcut.
@@ -32,12 +45,51 @@ Use this file for current loom-mcp runtime behavior in this repo. Prefer it over
 - `Runtime.PromptRegistry` stores baseline prompt specs.
 - `runtime.WithPromptStore(...)` adds scoped overrides.
 - Planners should render prompts through `RenderPrompt(...)` so provenance flows into model requests.
+- Mongo prompt overrides persist a canonical SHA-256 label-scope fingerprint.
+  Resolution uses at most one session query plus one global query against the
+  fingerprint index, ordered by label specificity and creation time; it does
+  not scan same-specificity candidates in Go. Mongo client startup backfills
+  missing `scope_fingerprint` values before creating the compound index and
+  fails construction on migration errors.
+- The Mongo adapter accepts at most 15 labels per stored or requested scope so
+  the exact matching-subset fingerprint set remains bounded.
+
+## Registration Lifecycle
+
+- `Runtime.Seal(ctx)` closes agent, toolset, and model registration before
+  activating staged workers. The first submitted run closes the same registry.
+- `RegisterModel` returns `ErrRegistrationClosed` after that boundary. Loom does
+  not support post-seal model-client hot-swapping; replace the runtime instead.
+- Registration remains closed even when the first `Seal` activation attempt
+  fails. A later successful `Seal` retry is idempotent.
 
 ## Model Clients
 
 - Runtime model clients implement `runtime/agent/model.Client`.
 - Provider packages live under `features/model/*`; runtime helpers construct
   Bedrock, OpenAI, Gemini/Vertex, and local Ollama clients.
+- Provider changes must extend the shared conformance matrix for applicable
+  complete/streaming, multimodal, tool-call, structured-output, typed-thinking,
+  token-counting, cancellation, normalized-error, and name-codec behavior.
+- Setup-time and receive-time provider throttling must preserve
+  `model.ErrRateLimited` in the error chain. Adaptive rate limiting probes only
+  after a stream reaches `io.EOF`; a successful stream setup is not completion.
+- Gemini and Vertex support exact `model.TokenCounter` but their `Stream`
+  method returns `model.ErrStreamingUnsupported`; streaming is an explicit
+  provider capability despite being part of the shared client interface.
+- OpenAI Responses projects tool and structured-output schemas into the
+  provider strict-schema subset, rejects structured output combined with
+  tools, and round-trips canonical tool names through its request-local codec.
+- Canonical tool IDs may exceed provider name limits. Provider codecs must use
+  deterministic byte-bounded names with a stable hash suffix, retain the
+  request-scoped reverse mapping, and fail fast on collisions.
+- Tool-use correlation IDs have a separate request-scoped codec. Anthropic and
+  Bedrock must reserve every provider-safe replay ID before encoding, allocate
+  unsafe IDs from unoccupied synthetic `tN` values, and use the same mapping for
+  matching tool-use and tool-result blocks.
+- Model middleware must not invent optional interfaces. Adaptive rate limiting
+  implements `model.TokenCounter` only when the wrapped provider implements it;
+  providers without exact counting remain non-`TokenCounter` after wrapping.
 - The Ollama adapter uses the local `/api/chat` endpoint for text, image,
   streaming, function-tool, native thinking, and structured-output requests. It
   maps `model.Request.Thinking` to Ollama's top-level `think` flag and surfaces
@@ -55,6 +107,9 @@ Use this file for current loom-mcp runtime behavior in this repo. Prefer it over
 - Use generated `tool_specs.Specs` and codecs for payload/result schema and encoding needs.
 - Do not introspect `docs.json` at runtime.
 - Tool results and retry hints should stay structured; avoid best-effort coercion when contracts fail.
+- Generated `Idempotent()` tags are metadata only. Until an explicit runtime
+  replay contract exists, do not claim exactly-once execution or automatic
+  duplicate suppression.
 - Tool confirmation is runtime-owned. Design-time `Confirmation(...)` records
   `tools.ConfirmationSpec` on generated tool specs; runtime
   `WithToolConfirmation(...)` can require or override confirmation for specific
@@ -127,6 +182,67 @@ Use this file for current loom-mcp runtime behavior in this repo. Prefer it over
   `ToolOutputs`.
 - The branch default DSL helper is `BranchDefault` to avoid colliding with Goa's
   `Default` helper in dot-imported designs.
+
+## Time Budgets
+
+- `TimeBudget` and `runtime.WithRunTimeBudget(...)` bound active runtime work,
+  not total elapsed wall time.
+- Clarification, confirmation, typed-input, and external-tool waits pause the
+  active budget and resume it when work continues.
+- `policy.CapsState` tracks counter budgets only. Its legacy `ExpiresAt` field is
+  deprecated and ignored; do not create a second wall-clock deadline through a
+  policy decision.
+- Engine-specific queue/schedule timeouts are separate from semantic run,
+  planner, and tool budgets.
+
+## Runtime Observability
+
+- `runtime.WithMetrics` emits stable `loom_mcp.runtime.*` run, planner, and
+  tool counters/timers; `runtime.WithTracer` emits planner/model spans and the
+  canonical `tool.execute` semantic span.
+- Planner measurements are activity-attempt-level and may repeat on retry.
+  Run/tool measurements are emitted only for newly inserted canonical event
+  keys, preventing ordinary hook retry double-counting.
+- Keep run/session/turn/tool-call IDs on spans only. Metric dimensions are the
+  bounded `agent`, `operation`, `tool`, and `status` values documented in
+  `docs/runtime.md`.
+- These semantic signals are engine-neutral. Temporal infrastructure spans,
+  generated MCP adapter telemetry, SDK transport observation, Pulse streams,
+  the debug server, and MCP `events/stream` remain separate surfaces.
+
+## Event Authority And Reliability
+
+- Workflow state/ledger is the live deterministic execution authority.
+- `runlog.Store` is the canonical append-only introspection record. Run-log
+  append or metadata-update failure fails the hook activity so the engine can
+  retry or stop; it is not best-effort.
+- Stream sinks and the hook bus are observer projections with their own
+  delivery contracts. High-volume partial signals may be best-effort.
+- `memory.Store` is a derived raw-event projection; `memory.Searcher` indexes
+  those events; `memory.Service` stores separate entry-shaped long-term memory.
+- The Mongo `memory.Store` adapter appends immutable batch documents in its
+  companion events collection. Reads load the legacy single-run document and
+  new buckets in `created_at`, `_id` order, then stable-sort the combined events
+  by timestamp. Equal timestamps retain legacy-before-new and deterministic
+  bucket order. New code must not append back into the legacy document's
+  unbounded `events` array.
+- Pulse auto-ack subscription is suitable for ephemeral UI fanout only. Durable
+  consumers use manual `Delivery` values, make processing idempotent with the
+  stable event key, and acknowledge after their durable commit. Decode failures
+  are manual deliveries too: dead-letter the raw payload before acknowledging,
+  or leave the entry pending.
+- Temporal activities start new trace roots linked to the scheduling workflow
+  span. Do not model durable workflow-to-activity scheduling as ordinary
+  in-process parent/child span nesting.
+- `runtime.WithEngine(temporalEngine)` persists live workflow state through
+  Temporal history only. It does not change the process-local defaults for
+  `runlog.Store` or `session.Store`; production worker and client runtimes must
+  explicitly share persistent implementations when introspection and session
+  metadata must survive restart. `memory.Store` and `stream.Sink` remain
+  separate projections with their own persistence and delivery contracts.
+- Temporal replay does not make activity side effects exactly once. Activities
+  may retry after an external side effect when successful completion was not
+  recorded, so planner/tool effects must be retry-safe.
 
 ## Skills
 

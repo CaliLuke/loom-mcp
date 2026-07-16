@@ -1,523 +1,82 @@
-TESTING & TROUBLESHOOTING
-=========================
+# Testing loom-mcp Changes
 
-Learn how to test agents, planners, and tools, and troubleshoot common issues.
+Use fast contract tests close to the changed layer, then run the repository verification ladder. `integration_tests/README.md` is the canonical catalog for end-to-end scenarios and commands.
 
-Testing & Troubleshooting
-=========================
+## Choose the smallest authoritative test
 
-This guide covers testing strategies for loom-mcp agents and solutions to common issues.
+| Change | Start with |
+| --- | --- |
+| DSL validation/expression | `dsl/*_test.go`, `expr/**/*_test.go` |
+| Generator/template | `codegen/**/tests`, golden/contract tests |
+| Runtime planner/tool behavior | package tests under `runtime/agent/...` |
+| Model provider | provider tests plus shared conformance tests |
+| MCP protocol/transport | `runtime/mcp/...`, generated adapter tests, real client validation where required |
+| Registry/Pulse behavior | `registry/...` and runtime registry tests with Redis-backed integration coverage |
+| Cross-layer user behavior | `integration_tests/scenarios` and fixture tests |
 
+Prefer table-driven tests, deterministic inputs, explicit error assertions, and generated constants/types over stringly typed fixtures.
 
-Testing Agents
-==============
+## Generated-code changes
 
-Testing with the In-Memory Engine
----------------------------------
+Design packages and generator templates are authoritative; generated `gen/` files are not.
 
-The in-memory engine is ideal for testing because it:
+1. Add or update a focused generator contract/golden test.
+2. Change the design, expression, or generator source.
+3. Regenerate with the repository Make target or `loom gen <module-import-path>/design`.
+4. Confirm generated churn is intentional.
+5. Run the generated package and integration tests.
 
-- Requires no external dependencies (no Temporal)
-- Executes synchronously for predictable test behavior
-- Provides fast feedback during development
+Never edit `gen/` by hand. Run `loom example` only when new scaffold files are intentionally desired.
 
---- CODE ---
-func TestChatAgent(t *testing.T) {
-    // Create runtime with in-memory engine (default)
-    rt := runtime.New()
-    ctx := context.Background()
-    
-    // Register agent with test planner
-    err := chat.RegisterChatAgent(ctx, rt, chat.ChatAgentConfig{
-        Planner: &TestPlanner{},
-    })
-    require.NoError(t, err)
-    
-    // Run agent
-    client := chat.NewClient(rt)
-    out, err := client.Run(
-        ctx,
-        "test-session",
-        []*model.Message{{
-            Role:  model.ConversationRoleUser,
-            Parts: []model.Part{model.TextPart{Text: "Hello"}},
-        }},
-    )
-    require.NoError(t, err)
-    
-    // Assert on output
-    assert.NotEmpty(t, out.RunID)
-    assert.NotNil(t, out.Final)
-}
---- END CODE ---
+## Model providers
 
+Every provider must preserve the shared model contract, not merely compile against the interface. Provider work should cover the applicable matrix:
 
-Testing Planners with Mock Model Clients
-----------------------------------------
+- text and multimodal requests;
+- complete and streaming responses;
+- tool calls and structured output;
+- native thinking/reasoning representation;
+- token counting/capability reporting;
+- cancellation;
+- normalized provider errors, including `model.ErrRateLimited` on setup and receive-time failures;
+- provider-safe tool-name mapping with canonical round trips.
 
-Isolate planner logic by mocking the model client:
+Run the provider package with `-race`. Add or extend its conformance test instead of copying incomplete one-off assertions.
 
---- CODE ---
-type MockModelClient struct {
-    responses []*model.Message
-    callCount int
-}
+## Runtime event contracts
 
-func (m *MockModelClient) Generate(ctx context.Context, req *model.Request) (*model.Response, error) {
-    if m.callCount >= len(m.responses) {
-        return nil, fmt.Errorf("no more mock responses")
-    }
-    resp := &model.Response{
-        Message: m.responses[m.callCount],
-    }
-    m.callCount++
-    return resp, nil
-}
+When testing hooks, streams, run logs, or memory, assert the intended reliability boundary:
 
-func (m *MockModelClient) Stream(ctx context.Context, req *model.Request) (model.Streamer, error) {
-    // Return a mock streamer for streaming tests
-    return &MockStreamer{response: m.responses[m.callCount]}, nil
-}
+- workflow state is the live deterministic execution authority;
+- `runlog.Store` is the canonical append-only introspection log and is fail-closed;
+- stream/hook-bus delivery is live observability and may be best-effort unless the API explicitly promises acknowledgement;
+- `memory.Store` is a derived transcript projection and does not replace the run log.
 
-func TestPlannerWithMockClient(t *testing.T) {
-    mockClient := &MockModelClient{
-        responses: []*model.Message{
-            {
-                Role: model.ConversationRoleAssistant,
-                Parts: []model.Part{
-                    model.TextPart{Text: "I'll search for that."},
-                    model.ToolUsePart{
-                        ID:    "call-1",
-                        Name:  "search",
-                        Input: json.RawMessage(`{"query": "test"}`),
-                    },
-                },
-            },
-        },
-    }
-    
-    planner := &MyPlanner{client: mockClient}
-    
-    input := &planner.PlanInput{
-        Messages: []*model.Message{{
-            Role:  model.ConversationRoleUser,
-            Parts: []model.Part{model.TextPart{Text: "Search for test"}},
-        }},
-        Tools: []tools.ToolSpec{/* ... */},
-    }
-    
-    result, err := planner.PlanStart(context.Background(), input)
-    require.NoError(t, err)
-    
-    // Assert planner returned tool calls
-    assert.NotNil(t, result.ToolCalls)
-    assert.Len(t, result.ToolCalls, 1)
-    assert.Equal(t, "search", string(result.ToolCalls[0].Name))
-}
---- END CODE ---
+Test event identity/deduplication, ordering, audience/profile filtering, and failure behavior explicitly. Do not infer durable delivery from a successful publish call alone.
 
+## Verification ladder
 
-Testing Tools in Isolation
---------------------------
+For ordinary focused work, run the closest package tests first. Before calling framework, dependency, refactor, or integration work complete:
 
-Test tool executors independently from the agent:
+```bash
+make loom-local
+make verify-mcp-local
+make lint
+make test
+make itest
+```
 
---- CODE ---
-func TestSearchToolExecutor(t *testing.T) {
-    // Create executor with mock dependencies
-    mockSearchService := &MockSearchService{
-        results: []string{"doc1", "doc2", "doc3"},
-    }
-    executor := &SearchExecutor{searchService: mockSearchService}
-    
-    // Create test tool call
-    meta := &runtime.ToolCallMeta{
-        RunID:      "test-run",
-        SessionID:  "test-session",
-        TurnID:     "test-turn",
-        ToolCallID: "call-1",
-    }
-    
-    call := &planner.ToolRequest{
-        Name:    specs.Search,
-        Payload: json.RawMessage(`{"query": "test", "limit": 5}`),
-    }
-    
-    // Execute tool
-    result, err := executor.Execute(context.Background(), meta, call)
-    require.NoError(t, err)
-    
-    // Assert on result
-    assert.Nil(t, result.Error)
-    assert.NotNil(t, result.Result)
-    
-    // Unmarshal and verify typed result
-    searchResult, ok := result.Result.(*specs.SearchResult)
-    require.True(t, ok)
-    assert.Len(t, searchResult.Documents, 3)
-}
---- END CODE ---
+Regenerate affected registry or assistant fixture outputs before `make verify-mcp-local`:
 
+```bash
+make gen-registry
+make regen-assistant-fixture
+```
 
-Testing Tool Validation and Retry Hints
----------------------------------------
+Use only the targets relevant to the changed design, but never skip a red repository target. Before CI-facing verification or a commit, restore the pinned remote fork with `make loom-remote` as required by the repository rules.
 
-Verify that tools return proper errors and hints for invalid input:
+## Failure policy
 
---- CODE ---
-func TestToolValidationReturnsHint(t *testing.T) {
-    executor := &SearchExecutor{}
-    
-    // Invalid payload - missing required field
-    call := &planner.ToolRequest{
-        Name:    specs.Search,
-        Payload: json.RawMessage(`{"limit": 5}`), // missing "query"
-    }
-    
-    result, err := executor.Execute(context.Background(), &runtime.ToolCallMeta{}, call)
-    require.NoError(t, err) // Executor should not return error
-    
-    // Should return ToolError with RetryHint
-    assert.NotNil(t, result.Error)
-    assert.NotNil(t, result.RetryHint)
-    assert.Equal(t, planner.RetryReasonMissingFields, result.RetryHint.Reason)
-    assert.Contains(t, result.RetryHint.MissingFields, "query")
-}
---- END CODE ---
-
-
-Testing Agent Composition
--------------------------
-
-Test agent-as-tool scenarios:
-
---- CODE ---
-func TestAgentComposition(t *testing.T) {
-    rt := runtime.New()
-    ctx := context.Background()
-    
-    // Register provider agent
-    err := planner.RegisterPlannerAgent(ctx, rt, planner.PlannerAgentConfig{
-        Planner: &PlanningPlanner{},
-    })
-    require.NoError(t, err)
-    
-    // Register consumer agent that uses provider's tools
-    err = orchestrator.RegisterOrchestratorAgent(ctx, rt, orchestrator.OrchestratorAgentConfig{
-        Planner: &OrchestratorPlanner{},
-    })
-    require.NoError(t, err)
-    
-    // Run orchestrator - it should invoke planner agent as a tool
-    client := orchestrator.NewClient(rt)
-    out, err := client.Run(
-        ctx,
-        "test-session",
-        []*model.Message{{
-            Role:  model.ConversationRoleUser,
-            Parts: []model.Part{model.TextPart{Text: "Create a plan for X"}},
-        }},
-    )
-    require.NoError(t, err)
-    
-    // Verify child run was created
-    assert.Greater(t, out.ChildrenCount, 0)
-}
---- END CODE ---
-
-
-Generated Agent Feature Fixture
--------------------------------
-
-Use `integration_tests/fixtures/agent_features` when a change needs proof that
-DSL, codegen, generated registration, and runtime behavior work together for
-agent features. The fixture design includes runtime-backed artifact, memory,
-and skill toolsets; generated graph workflow nodes; typed input resume;
-retry/reflect policy; and named runtime interceptors.
-
-Regenerate with:
-
---- CODE ---
-cd integration_tests/fixtures/agent_features
-go run github.com/CaliLuke/loom/cmd/loom gen example.com/agentfeatures/design
---- END CODE ---
-
-Verify with:
-
---- CODE ---
-go test -C ./integration_tests/fixtures/agent_features ./... -count=1
---- END CODE ---
-
-Keep this fixture focused on generated agent runtime acceptance. Use the
-assistant fixture for MCP service/server protocol coverage.
-
-
-Troubleshooting
-===============
-
-
-Common Errors
--------------
-
-
-“registration closed” Error
----------------------------
-
-Symptom:
-
---- CODE ---
-error: registration closed: cannot register agent after runtime start
---- END CODE ---
-
-Cause: Attempting to register an agent after the runtime has started processing runs.
-
-Solution: Register all agents before starting any runs:
-
---- CODE ---
-rt := runtime.New()
-
-// ✓ Register all agents first
-chat.RegisterChatAgent(ctx, rt, chatConfig)
-planner.RegisterPlannerAgent(ctx, rt, plannerConfig)
-
-// ✓ Then start runs
-client := chat.NewClient(rt)
-out, err := client.Run(ctx, messages, opts...)
---- END CODE ---
-
-
-“missing session ID” Error
---------------------------
-
-Symptom:
-
---- CODE ---
-error: missing session ID: session ID is required for run
---- END CODE ---
-
-Cause: Starting a run without providing a session ID.
-
-Solution: Always provide a session ID as the required positional argument:
-
---- CODE ---
-// ✗ Wrong - no session ID
-out, err := client.Run(ctx, "", messages)
-
-// ✓ Correct - session ID provided
-out, err := client.Run(ctx, "session-123", messages)
---- END CODE ---
-
-Tip: For testing, use a fixed session ID. For production, generate unique session IDs per conversation.
-
-
-Policy Violation Errors
------------------------
-
-Symptom:
-
---- CODE ---
-error: policy violation: max tool calls exceeded (10/10)
---- END CODE ---
-
-Cause: The agent exceeded the configured MaxToolCalls limit.
-
-Solutions:
-
-1. Increase the limit if the use case legitimately requires more tool calls:
-
---- CODE ---
-RunPolicy(func() {
-    DefaultCaps(MaxToolCalls(20)) // Increase from default
-})
---- END CODE ---
-
-2. Improve planner efficiency to use fewer tool calls:
-   - Batch operations where possible
-   - Use more specific tool calls
-   - Improve prompt engineering
-3. Check for infinite loops in planner logic that repeatedly calls the same tool.
-
-Symptom:
-
---- CODE ---
-error: policy violation: max consecutive failed tool calls exceeded (3/3)
---- END CODE ---
-
-Cause: Multiple consecutive tool calls failed.
-
-Solutions:
-
-1. Fix the underlying tool errors - check tool executor logs
-2. Improve retry hints so the planner can self-correct
-3. Increase the limit if transient failures are expected:
-
---- CODE ---
-RunPolicy(func() {
-    DefaultCaps(MaxConsecutiveFailedToolCalls(5))
-})
---- END CODE ---
-
-Symptom:
-
---- CODE ---
-error: policy violation: time budget exceeded (2m0s)
---- END CODE ---
-
-Cause: The agent run exceeded the configured TimeBudget.
-
-Solutions:
-
-1. Increase the budget for long-running operations:
-
---- CODE ---
-RunPolicy(func() {
-    TimeBudget("10m")
-})
---- END CODE ---
-
-2. Use Timing for fine-grained control:
-
---- CODE ---
-RunPolicy(func() {
-    Timing(func() {
-        Budget("10m")  // Overall budget
-        Plan("1m")     // Per-plan timeout
-        Tools("2m")    // Per-tool timeout
-    })
-})
---- END CODE ---
-
-3. Optimize tool execution to complete faster.
-
-“unknown tool” Error
---------------------
-
-Symptom:
-
---- CODE ---
-error: unknown tool: orchestrator.helpers.search
---- END CODE ---
-
-Cause: The planner requested a tool that isn’t registered.
-
-Solutions:
-
-1. Verify toolset registration - ensure the toolset is registered with the agent:
-
---- CODE ---
-Agent("chat", "Chat agent", func() {
-    Use(HelpersToolset) // Make sure this is included
-})
---- END CODE ---
-
-2. Check tool name spelling - tool names are case-sensitive and use qualified names.
-3. Regenerate code after DSL changes:
-
---- CODE ---
-loom gen example.com/project/design
---- END CODE ---
-
-
-“invalid payload” Error
------------------------
-
-Symptom:
-
---- CODE ---
-error: invalid payload: json: cannot unmarshal string into Go struct field SearchPayload.limit of type int
---- END CODE ---
-
-Cause: The LLM provided a payload that doesn’t match the tool’s schema.
-
-Solutions:
-
-1. Return a RetryHint from the executor so the planner can self-correct:
-
---- CODE ---
-if err != nil {
-    return &planner.ToolResult{
-        Error: planner.NewToolError("invalid payload"),
-        RetryHint: &planner.RetryHint{
-            Reason:       planner.RetryReasonInvalidArguments,
-            Tool:         call.Name,
-            ExampleInput: map[string]any{"query": "example", "limit": 10},
-            Message:      "limit must be an integer",
-        },
-    }, nil
-}
---- END CODE ---
-
-2. Improve tool descriptions to clarify expected types.
-3. Add examples to the DSL:
-
---- CODE ---
-Args(func() {
-    Attribute("limit", Int, "Maximum results", func() {
-        Example(10)
-        Minimum(1)
-        Maximum(100)
-    })
-})
---- END CODE ---
-
-
-Debugging Tips
---------------
-
-Enable Debug Logging
---------------------
-
---- CODE ---
-import "github.com/CaliLuke/loom-mcp/runtime/agent/runtime"
-
-rt := runtime.New(
-    runtime.WithLogger(slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{
-        Level: slog.LevelDebug,
-    }))),
-)
---- END CODE ---
-
-
-Subscribe to Events for Debugging
----------------------------------
-
---- CODE ---
-type DebugSink struct{}
-
-func (s *DebugSink) Send(ctx context.Context, event stream.Event) error {
-    fmt.Printf("[%s] %s run=%s session=%s payload=%v\n",
-        time.Now().Format(time.RFC3339),
-        event.Type(),
-        event.RunID(),
-        event.SessionID(),
-        event.Payload(),
-    )
-    return nil
-}
-
-func (s *DebugSink) Close(ctx context.Context) error { return nil }
-
-// Wire the sink into the runtime to observe all stream events.
-rt := runtime.New(runtime.WithStream(&DebugSink{}))
---- END CODE ---
-
-
-Inspect Tool Specs at Runtime
------------------------------
-
---- CODE ---
-// List all registered tools
-for _, spec := range rt.ToolSpecsForAgent(chat.AgentID) {
-    fmt.Printf("Tool: %s\n", spec.Name)
-    fmt.Printf("  Description: %s\n", spec.Description)
-    fmt.Printf("  Payload Schema: %s\n", spec.Payload.Schema)
-}
---- END CODE ---
-
-
-Next Steps
-==========
-
-- DSL Reference - Complete DSL function reference
-- Runtime - Understand runtime architecture
-- Production - Deploy with Temporal and streaming UI
+- A red required target is blocking, even if the failure appears outside the edited package.
+- Do not bypass hooks or suppress failures.
+- If a confirmed upstream Loom regression breaks this repository, stop and capture an upstream ticket with exact failing scenarios; do not ship a local compatibility workaround.

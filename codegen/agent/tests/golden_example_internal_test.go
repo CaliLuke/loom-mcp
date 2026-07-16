@@ -26,7 +26,11 @@ func TestExampleInternal_MethodBacked(t *testing.T) {
 	require.Contains(t, exec, "scribe.RegisterUsedToolsets(ctx, rt,")
 	require.Contains(t, exec, "scribe.WithProfilesExecutor(runtime.ToolCallExecutorFunc(Execute))")
 	require.Contains(t, exec, "case profilesspecs.Upsert:")
+	require.Contains(t, exec, "profilesspecs.InitUpsertMethodPayload(args)")
+	require.Contains(t, exec, "profilesspecs.InitUpsertToolResult(methodRes)")
 	require.NotContains(t, exec, "NewScribeProfilesToolsetRegistration")
+	require.NotContains(t, exec, "ToMethodPayload_Upsert")
+	require.NotContains(t, exec, "ToToolReturn_Upsert")
 	require.NotContains(t, exec, `case "upsert":`)
 }
 

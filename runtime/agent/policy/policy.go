@@ -102,8 +102,8 @@ type (
 	// ToolMetadata describes a candidate tool available to the agent. The runtime
 	// provides this metadata to the policy engine for filtering and allowlist decisions.
 	ToolMetadata struct {
-		// ID is the fully qualified tool identifier (e.g., "weather.search.forecast").
-		// Format: <service>.<toolset>.<tool>.
+		// ID is the canonical tool identifier (e.g., "weather.get_forecast").
+		// Format: <toolset>.<tool>.
 		ID tools.Ident
 
 		// Title is a human-readable display title (e.g., "Get Weather Forecast").
@@ -121,9 +121,10 @@ type (
 		Tags []string
 	}
 
-	// CapsState tracks remaining execution budgets for a run. The runtime decrements
+	// CapsState tracks remaining counter budgets for a run. The runtime decrements
 	// these counters as tool calls execute and failures occur. When caps are exhausted,
-	// the runtime terminates the workflow or forces a final response.
+	// the runtime terminates the workflow or forces a final response. Active-time
+	// budgets are owned separately by runtime run deadlines.
 	CapsState struct {
 		// MaxToolCalls is the total allowed tool invocations for the run. Zero means
 		// unlimited. Configured per-agent in the design via RunPolicy.
@@ -144,9 +145,13 @@ type (
 		// run is terminated.
 		RemainingConsecutiveFailedToolCalls int
 
-		// ExpiresAt conveys when the run-level budgets expire (wall-clock deadline).
-		// Zero means no deadline. The runtime terminates the workflow if time.Now()
-		// exceeds this timestamp. Configured per-agent via RunPolicy.TimeBudget.
+		// ExpiresAt is retained for source compatibility and is ignored by the
+		// runtime. Use RunPolicy.TimeBudget or runtime.WithRunTimeBudget to set an
+		// active-work budget; those APIs use deterministic workflow time and pause
+		// while the run waits for external input.
+		//
+		// Deprecated: absolute wall-clock expiry duplicates the runtime deadline
+		// authority and cannot preserve active-time pause semantics.
 		ExpiresAt time.Time
 	}
 )

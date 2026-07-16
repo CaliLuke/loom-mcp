@@ -117,9 +117,7 @@ func DecodeToolsListRequest(mux loomhttp.Muxer, decoder func(*http.Request) loom
 		err = decoder(r).Decode(&body)
 		if err != nil {
 			if errors.Is(err, io.EOF) {
-				// MCP declares these params optional; official clients omit the
-				// "params" key entirely. Decode absence as {}.
-				return NewToolsListPayload(&body), nil
+				return payload, loom.MissingPayloadError()
 			}
 			var gerr *loom.ServiceError
 			if errors.As(err, &gerr) {
@@ -215,9 +213,7 @@ func DecodeResourcesListRequest(mux loomhttp.Muxer, decoder func(*http.Request) 
 		err = decoder(r).Decode(&body)
 		if err != nil {
 			if errors.Is(err, io.EOF) {
-				// MCP declares these params optional; official clients omit the
-				// "params" key entirely. Decode absence as {}.
-				return NewResourcesListPayload(&body), nil
+				return payload, loom.MissingPayloadError()
 			}
 			var gerr *loom.ServiceError
 			if errors.As(err, &gerr) {
@@ -401,9 +397,7 @@ func DecodePromptsListRequest(mux loomhttp.Muxer, decoder func(*http.Request) lo
 		err = decoder(r).Decode(&body)
 		if err != nil {
 			if errors.Is(err, io.EOF) {
-				// MCP declares these params optional; official clients omit the
-				// "params" key entirely. Decode absence as {}.
-				return NewPromptsListPayload(&body), nil
+				return payload, loom.MissingPayloadError()
 			}
 			var gerr *loom.ServiceError
 			if errors.As(err, &gerr) {

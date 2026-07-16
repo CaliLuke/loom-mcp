@@ -63,17 +63,19 @@ func TestGenerate_TransportConformance(t *testing.T) {
 		file := findGeneratedFile(t, files, filepath.Join(gcodegen.Gendir, "jsonrpc", "mcp_assistant", "server", "encode_decode.go"))
 		rendered := renderGeneratedFile(t, file)
 
-		// All-optional list params must decode absence as {} (spec-optional params).
-		require.Contains(t, rendered, "return NewToolsListPayload(&body), nil")
-		require.Contains(t, rendered, "return NewResourcesListPayload(&body), nil")
-		require.Contains(t, rendered, "return NewPromptsListPayload(&body), nil")
-
 		// Methods with required params keep the missing payload error mapping.
 		require.Contains(t, rendered, "loom.MissingPayloadError()")
 		toolsCall := decoderFunctionBody(t, rendered, "DecodeToolsCallRequest")
 		require.Contains(t, toolsCall, "loom.MissingPayloadError()")
-		toolsList := decoderFunctionBody(t, rendered, "DecodeToolsListRequest")
-		require.NotContains(t, toolsList, "loom.MissingPayloadError()")
+
+		// Loom normalizes an omitted JSON-RPC params member to {} before decode.
+		// Every all-optional list decoder must retain that upstream contract and
+		// must not translate the normalized body into a missing-payload error.
+		for _, decoder := range []string{"DecodeToolsListRequest", "DecodeResourcesListRequest", "DecodePromptsListRequest"} {
+			body := decoderFunctionBody(t, rendered, decoder)
+			require.Contains(t, body, "params := req.Params")
+			require.Contains(t, body, `params = []byte("{}")`)
+		}
 	})
 
 	t.Run("stream final response uses message event", func(t *testing.T) {
@@ -136,7 +138,7 @@ func TestGenerate_TransportConformance(t *testing.T) {
 		rendered := renderGeneratedFile(t, file)
 		require.Contains(t, rendered, "doer = &mcpClientDoer{next: doer}")
 		require.Contains(t, rendered, `req.Header.Set("Accept", "application/json, text/event-stream")`)
-		require.NotContains(t, rendered, `req.Header.Set("Accept", "text/event-stream")`)
+		require.NotContains(t, rendered, `if req.Header.Get("Accept") == ""`)
 		require.Contains(t, rendered, `resp.Header.Get("Mcp-Session-Id")`)
 		require.Contains(t, rendered, `req.Header.Set("Mcp-Session-Id", sessionID)`)
 		require.Contains(t, rendered, `req.Header.Set("MCP-Protocol-Version", protocolVersion)`)
@@ -156,6 +158,9 @@ func TestGenerate_TransportConformance(t *testing.T) {
 		require.Contains(t, rendered, "sdkclient.WithClientFeatures(ctx, serverSession)")
 		require.Contains(t, rendered, "mcpruntime.WithProgressToken(ctx, req.Params.GetProgressToken())")
 		require.Contains(t, rendered, "func (w *sdkResponseObserver) Unwrap() http.ResponseWriter")
+		require.Contains(t, rendered, "func (w *sdkResponseObserver) captureSession()")
+		require.Contains(t, rendered, "w.captureSession()")
+		require.Contains(t, rendered, "onSessionIssued: func(sessionID string)")
 		require.NotContains(t, rendered, "sdkSessionElicitor")
 	})
 }

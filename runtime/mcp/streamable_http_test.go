@@ -166,3 +166,30 @@ func TestStreamableHTTPSessionsPrunesTerminatedTombstones(t *testing.T) {
 	require.ErrorIs(t, store.Terminate("sess-1"), ErrInvalidSessionID)
 	require.Empty(t, store.terminated)
 }
+
+func TestStreamableHTTPSessionsPrincipalLifecycle(t *testing.T) {
+	t.Parallel()
+
+	store := NewStreamableHTTPSessions()
+	require.NoError(t, store.IssueForPrincipal("sess-1", "user-1"))
+	require.NoError(t, store.ValidateForPrincipal("sess-1", "user-1"))
+	require.ErrorIs(t, store.ValidateForPrincipal("sess-1", ""), ErrSessionPrincipalMismatch)
+	require.ErrorIs(t, store.ValidateForPrincipal("sess-1", "user-2"), ErrSessionPrincipalMismatch)
+	require.ErrorIs(t, store.TerminateForPrincipal("sess-1", "user-2"), ErrSessionPrincipalMismatch)
+	require.NoError(t, store.ValidateForPrincipal("sess-1", "user-1"))
+	require.NoError(t, store.TerminateForPrincipal("sess-1", "user-1"))
+	require.ErrorIs(t, store.ValidateForPrincipal("sess-1", "user-1"), ErrSessionTerminated)
+}
+
+func TestStreamableHTTPSessionsRejectsAuthenticatedAdoptionOfAnonymousSession(t *testing.T) {
+	t.Parallel()
+
+	store := NewStreamableHTTPSessions()
+	require.NoError(t, store.Issue("sess-1"))
+	require.NoError(t, store.ValidateForPrincipal("sess-1", ""))
+	require.ErrorIs(t, store.ValidateForPrincipal("sess-1", "user-1"), ErrSessionPrincipalBindingMissing)
+	_, err := store.RegisterListenerForPrincipal("sess-1", "user-1", func() {})
+	require.ErrorIs(t, err, ErrSessionPrincipalBindingMissing)
+	require.ErrorIs(t, store.TerminateForPrincipal("sess-1", "user-1"), ErrSessionPrincipalBindingMissing)
+	require.NoError(t, store.Validate("sess-1"), "a rejected adoption must not invalidate the session")
+}

@@ -1,11 +1,9 @@
 package codegen
 
 import (
-	"bytes"
 	"errors"
 	"fmt"
 	"path/filepath"
-	"regexp"
 	"slices"
 	"sort"
 	"strings"
@@ -26,14 +24,6 @@ import (
 const headerSection = "source-header"
 const exampleMCPStubSection = "example-mcp-stub"
 const jsonrpcServerMountSectionName = "jsonrpc-server-mount"
-
-// mcpDecoderPayloadVarPattern locates the payload variable declaration inside
-// generated JSON-RPC request decoders so rewrites can identify the decoded
-// payload type without depending on decoder function naming.
-var (
-	mcpDecoderPayloadVarPattern = regexp.MustCompile(`\bvar payload \*\w+\.(\w+)`)
-	sseSendEventPattern         = regexp.MustCompile(`func \(s \*(\w+)\) sendSSEEvent\(`)
-)
 
 // Generate orchestrates MCP code generation for services that declare MCP
 // configuration in the DSL. It composes Goa service and JSON-RPC generators
@@ -198,6 +188,10 @@ func generateMCPServiceCode(genpkg string, root *expr.RootExpr, mcpService *expr
 	// Generate JSON-RPC transport for MCP service only
 	httpServices := httpcodegen.NewServicesData(servicesData, &root.API.JSONRPC.HTTPExpr)
 	httpServices.Root = root
+	mcpHTTPService := httpServices.Get(mcpService.Name)
+	if mcpHTTPService == nil {
+		return nil, fmt.Errorf("build MCP JSON-RPC service data for %s", mcpService.Name)
+	}
 
 	// Generate both base and SSE server files.
 	files = append(files, jsonrpccodegen.ServerFiles(genpkg, httpServices)...)
@@ -207,903 +201,73 @@ func generateMCPServiceCode(genpkg string, root *expr.RootExpr, mcpService *expr
 	// Add client-side JSON-RPC for MCP service so adapters can depend on it
 	files = append(files, jsonrpccodegen.ClientTypeFiles(genpkg, httpServices)...)
 	files = append(files, jsonrpccodegen.ClientFiles(genpkg, httpServices)...)
-	files = pruneMCPJSONRPCMixedServerDeadCode(files)
-
-	if err := applyMCPPolicyHeadersToJSONRPCMount(files, protocolVersion); err != nil {
+	if err := applyMCPPolicyHeadersToJSONRPCMount(files, protocolVersion, mcpHTTPService); err != nil {
 		return nil, err
 	}
-	if err := applyMCPJSONRPCErrorCodes(files); err != nil {
+	if err := applyMCPJSONRPCBatchHandlerSection(files, mcpHTTPService); err != nil {
 		return nil, err
 	}
-	if err := applyMCPJSONRPCErrorData(files); err != nil {
+	if err := replaceMCPJSONRPCHandlerInitSections(files, mcpHTTPService); err != nil {
 		return nil, err
 	}
-	if err := applyMCPJSONRPCOptionalParamsDecoding(files, mcpService); err != nil {
+	if err := ownMCPJSONRPCSSEStreamSections(files, mcpHTTPService); err != nil {
 		return nil, err
 	}
-	applyMCPJSONRPCEmptyResultObjects(files)
-	if err := applyMCPJSONRPCBatchBuffering(files); err != nil {
-		return nil, err
-	}
-	if err := applyMCPJSONRPCStreamFinalEventName(files); err != nil {
-		return nil, err
-	}
-	if err := applyMCPJSONRPCSSEReconnectHints(files); err != nil {
-		return nil, err
-	}
-	if err := applyMCPJSONRPCClientTransportDefaults(files); err != nil {
+	if err := applyMCPJSONRPCClientTransportDefaults(files, mcpHTTPService); err != nil {
 		return nil, err
 	}
 	return files, nil
 }
 
-// applyMCPJSONRPCEmptyResultObjects ensures successful methods with an empty
-// Goa result still emit the required JSON-RPC result member as an empty object.
-func applyMCPJSONRPCEmptyResultObjects(files []*codegen.File) {
-	for _, file := range files {
-		if file == nil || filepath.Base(filepath.Dir(filepath.ToSlash(file.Path))) != "server" || filepath.Base(file.Path) != "server.go" {
-			continue
-		}
-		sections := file.AllSections()
-		updated := make([]codegen.Section, 0, len(sections))
-		for _, section := range sections {
-			source, ok := renderedSectionSource(section)
-			if !ok {
-				updated = append(updated, section)
-				continue
-			}
-			count := strings.Count(source, "jsonrpc.MakeSuccessResponse(req.ID, nil)")
-			if count == 0 {
-				updated = append(updated, section)
-				continue
-			}
-			source = strings.ReplaceAll(source, "jsonrpc.MakeSuccessResponse(req.ID, nil)", "jsonrpc.MakeSuccessResponse(req.ID, struct{}{})")
-			updated = append(updated, &codegen.RawSection{Name: section.SectionName(), Source: source})
-		}
-		file.SetSections(updated)
+// applyMCPPolicyHeadersToJSONRPCMount replaces Loom's stable mount section
+// with an MCP-owned Jennifer section built from evaluated HTTP service data.
+// The protocol helper is emitted as a separate owned section; no rendered
+// upstream source is parsed or rewritten.
+func applyMCPPolicyHeadersToJSONRPCMount(files []*codegen.File, protocolVersion string, data *httpcodegen.ServiceData) error {
+	if data == nil {
+		return errors.New("MCP JSON-RPC mount extension requires service data")
 	}
-}
-
-// applyMCPJSONRPCBatchBuffering prevents streaming handlers from writing SSE
-// frames directly into the JSON array produced by the upstream batch writer.
-// Each batch item is buffered independently; for SSE handlers only the final
-// JSON-RPC response frame is appended to the batch.
-func applyMCPJSONRPCBatchBuffering(files []*codegen.File) error {
-	const oldCall = `s.processRequest(r.Context(), r, &req, writer)`
-	const newCall = `s.processBatchRequest(r.Context(), r, &req, writer)`
+	matched := 0
 	for _, file := range files {
 		if file == nil || filepath.Base(filepath.Dir(filepath.ToSlash(file.Path))) != "server" || filepath.Base(file.Path) != "server.go" {
 			continue
 		}
 		sections := file.AllSections()
 		updated := make([]codegen.Section, 0, len(sections)+1)
-		rewritten := false
+		fileMatches := 0
 		for _, section := range sections {
-			source, ok := renderedSectionSource(section)
-			if !ok || !strings.Contains(source, oldCall) {
+			if section.SectionName() != jsonrpcServerMountSectionName {
 				updated = append(updated, section)
 				continue
 			}
-			source = strings.Replace(source, oldCall, newCall, 1)
-			updated = append(updated, &codegen.RawSection{Name: section.SectionName(), Source: source})
-			rewritten = true
+			fileMatches++
+			matched++
+			updated = append(updated, mcpJSONRPCServerMountSection(data))
 		}
-		if !rewritten {
-			return fmt.Errorf("upstream JSON-RPC batch shape changed in %s", filepath.ToSlash(file.Path))
+		if fileMatches != 1 {
+			return fmt.Errorf(
+				"upstream JSON-RPC mount extension contract changed in %s: expected one %q section, found %d",
+				filepath.ToSlash(file.Path),
+				jsonrpcServerMountSectionName,
+				fileMatches,
+			)
 		}
-		updated = append(updated, &codegen.RawSection{Name: "mcp-jsonrpc-batch-buffering", Source: mcpJSONRPCBatchBufferingSource})
+		updated = append(updated, codegen.NewRawSection("mcp-jsonrpc-transport-policy", jsonrpcServerMountHelperSource(protocolVersion)))
 		file.SetSections(updated)
-	}
-	return nil
-}
-
-const mcpJSONRPCBatchBufferingSource = `
-
-type mcpBatchResponseWriter struct {
-	header     http.Header
-	body       bytes.Buffer
-	statusCode int
-}
-
-func (w *mcpBatchResponseWriter) Header() http.Header {
-	if w.header == nil {
-		w.header = make(http.Header)
-	}
-	return w.header
-}
-
-func (w *mcpBatchResponseWriter) WriteHeader(statusCode int) {
-	if w.statusCode == 0 {
-		w.statusCode = statusCode
-	}
-}
-
-func (w *mcpBatchResponseWriter) Write(data []byte) (int, error) {
-	if w.statusCode == 0 {
-		w.statusCode = http.StatusOK
-	}
-	return w.body.Write(data)
-}
-
-func (w *mcpBatchResponseWriter) Flush() {}
-
-func (s *Server) processBatchRequest(ctx context.Context, r *http.Request, req *jsonrpc.RawRequest, writer *batchWriter) {
-	buffer := &mcpBatchResponseWriter{}
-	s.processRequest(ctx, r, req, buffer)
-	body := bytes.TrimSpace(buffer.body.Bytes())
-	if len(body) == 0 {
-		return
-	}
-	if !strings.Contains(buffer.Header().Get("Content-Type"), "text/event-stream") {
-		if _, err := writer.Write(body); err != nil {
-			s.errhandler(ctx, writer, fmt.Errorf("failed to write buffered batch response: %w", err))
-		}
-		return
-	}
-	if response := finalMCPBatchSSEResponse(body); len(response) > 0 {
-		if _, err := writer.Write(response); err != nil {
-			s.errhandler(ctx, writer, fmt.Errorf("failed to write buffered batch stream response: %w", err))
-		}
-		return
-	}
-	if req.HasID {
-		response := jsonrpc.MakeErrorResponse(req.ID, jsonrpc.InternalError, "streaming method did not produce a final response", nil)
-		data, err := json.Marshal(response)
-		if err != nil {
-			s.errhandler(ctx, writer, fmt.Errorf("failed to encode buffered batch stream error: %w", err))
-			return
-		}
-		if _, err := writer.Write(data); err != nil {
-			s.errhandler(ctx, writer, fmt.Errorf("failed to write buffered batch stream error: %w", err))
-		}
-	}
-}
-
-func finalMCPBatchSSEResponse(body []byte) []byte {
-	var response []byte
-	for _, frame := range strings.Split(string(body), "\n\n") {
-		for _, line := range strings.Split(frame, "\n") {
-			if !strings.HasPrefix(line, "data:") {
-				continue
-			}
-			data := bytes.TrimSpace([]byte(strings.TrimPrefix(line, "data:")))
-			if len(data) == 0 {
-				continue
-			}
-			var envelope mcpJSONRPCEnvelope
-			if err := json.Unmarshal(data, &envelope); err != nil {
-				continue
-			}
-			if envelope.Method == "" && len(envelope.ID) > 0 && (len(envelope.Result) > 0 || len(envelope.Error) > 0) {
-				response = append(response[:0], data...)
-			}
-		}
-	}
-	return response
-}
-`
-
-func pruneMCPJSONRPCMixedServerDeadCode(files []*codegen.File) []*codegen.File {
-	mixed := false
-	for _, file := range files {
-		if file == nil || filepath.Base(filepath.Dir(filepath.ToSlash(file.Path))) != "server" || filepath.Base(file.Path) != "server.go" {
-			continue
-		}
-		for _, section := range file.AllSections() {
-			if section.SectionName() == "jsonrpc-mixed-server-handler" {
-				mixed = true
-				break
-			}
-		}
-	}
-	if !mixed {
-		return files
-	}
-
-	const impossibleToolOpen = `		if r.Method == http.MethodGet && req.Method == "events/stream" {
-			if err := strm.open(); err != nil {
-				return err
-			}
-		}
-`
-	pruned := make([]*codegen.File, 0, len(files))
-	for _, file := range files {
-		if file == nil {
-			continue
-		}
-		serverDir := filepath.Base(filepath.Dir(filepath.ToSlash(file.Path))) == "server"
-		if serverDir && filepath.Base(file.Path) == "sse.go" {
-			continue
-		}
-		if !serverDir || filepath.Base(file.Path) != "server.go" {
-			pruned = append(pruned, file)
-			continue
-		}
-
-		sections := file.AllSections()
-		updated := make([]codegen.Section, 0, len(sections))
-		for _, section := range sections {
-			if section.SectionName() == "jsonrpc-sse-server-handler" {
-				continue
-			}
-			source, ok := renderedSectionSource(section)
-			if !ok || !strings.Contains(source, "func NewToolsCallHandler(") {
-				updated = append(updated, section)
-				continue
-			}
-			updated = append(updated, &codegen.RawSection{
-				Name:   section.SectionName(),
-				Source: strings.Replace(source, impossibleToolOpen, "", 1),
-			})
-		}
-		file.SetSections(updated)
-		pruned = append(pruned, file)
-	}
-	return pruned
-}
-
-// applyMCPPolicyHeadersToJSONRPCMount replaces the JSON-RPC server mount section
-// with a loom-mcp-owned template that propagates MCP policy headers into the
-// request context.
-//
-// This avoids any string-based patching while ensuring header-driven allow/deny
-// policy can be enforced by MCP adapters without requiring example/server wiring
-// changes.
-func applyMCPPolicyHeadersToJSONRPCMount(files []*codegen.File, protocolVersion string) error {
-	for _, f := range files {
-		if f == nil {
-			continue
-		}
-		if filepath.Base(filepath.Dir(filepath.ToSlash(f.Path))) != "server" || filepath.Base(f.Path) != "server.go" {
-			continue
-		}
-		rewritten, err := rewriteJSONRPCServerFile(f, protocolVersion)
-		if err != nil {
-			return err
-		}
-		if !rewritten {
-			return fmt.Errorf("upstream JSON-RPC mount shape changed in %s: expected to wrap at least one mount handler with MCP policy headers", filepath.ToSlash(f.Path))
-		}
-		if header := f.HeaderTemplate(); header != nil {
+		if header := file.HeaderTemplate(); header != nil {
 			codegen.AddImport(header, &codegen.ImportSpec{Path: "bytes"})
 			codegen.AddImport(header, &codegen.ImportSpec{Path: "encoding/json"})
 			codegen.AddImport(header, &codegen.ImportSpec{Path: "errors"})
 			codegen.AddImport(header, &codegen.ImportSpec{Path: "fmt"})
 			codegen.AddImport(header, &codegen.ImportSpec{Path: "io"})
 			codegen.AddImport(header, &codegen.ImportSpec{Path: "github.com/CaliLuke/loom-mcp/runtime/mcp", Name: "mcpruntime"})
+			codegen.AddImport(header, &codegen.ImportSpec{Path: "github.com/modelcontextprotocol/go-sdk/auth", Name: "mcpauth"})
 		}
+	}
+	if matched != 1 {
+		return fmt.Errorf("upstream JSON-RPC mount extension contract changed: expected one %q section, found %d", jsonrpcServerMountSectionName, matched)
 	}
 	return nil
-}
-
-func rewriteJSONRPCServerFile(file *codegen.File, protocolVersion string) (bool, error) {
-	sections := file.AllSections()
-	if len(sections) == 0 {
-		return false, nil
-	}
-	updated := make([]codegen.Section, 0, len(sections))
-	rewritten := false
-	preserveHandler := jsonrpcServerUsesCORS(sections)
-	for _, section := range sections {
-		next, ok, err := rewriteJSONRPCServerSection(section, protocolVersion, preserveHandler)
-		if err != nil {
-			return false, err
-		}
-		rewritten = rewritten || ok
-		updated = append(updated, next)
-	}
-	file.SetSections(updated)
-	return rewritten, nil
-}
-
-func jsonrpcServerUsesCORS(sections []codegen.Section) bool {
-	for _, section := range sections {
-		source, ok := renderedSectionSource(section)
-		if ok && strings.Contains(source, "loomhttp.CORSHandler(") {
-			return true
-		}
-	}
-	return false
-}
-
-func rewriteJSONRPCServerSection(section codegen.Section, protocolVersion string, preserveHandler bool) (codegen.Section, bool, error) {
-	switch sec := section.(type) {
-	case *codegen.SectionTemplate:
-		if sec == nil {
-			return nil, false, nil
-		}
-		if rewritten, ok, err := rewriteJSONRPCSectionByRenderedSource(sec, protocolVersion, preserveHandler); ok || err != nil {
-			return rewritten, ok, err
-		}
-		return sec, false, nil
-	case *codegen.RawSection, *codegen.JenniferSection:
-		if rewritten, ok, err := rewriteJSONRPCSectionByRenderedSource(sec, protocolVersion, preserveHandler); ok || err != nil {
-			return rewritten, ok, err
-		}
-	default:
-		if rewritten, ok, err := rewriteJSONRPCSectionByRenderedSource(section, protocolVersion, preserveHandler); ok || err != nil {
-			return rewritten, ok, err
-		}
-	}
-	return section, false, nil
-}
-
-func rewriteJSONRPCSectionByRenderedSource(section codegen.Section, protocolVersion string, preserveHandler bool) (codegen.Section, bool, error) {
-	if section == nil {
-		return nil, false, nil
-	}
-	source, ok := renderedSectionSource(section)
-	if !ok {
-		return nil, false, nil
-	}
-	if section.SectionName() != jsonrpcServerMountSectionName && !isJSONRPCMountSource(source) {
-		return nil, false, nil
-	}
-	rewritten, ok := rewriteJSONRPCServerMountSource(source, protocolVersion, preserveHandler)
-	if !ok {
-		return nil, false, fmt.Errorf("upstream JSON-RPC mount shape changed in section %q: could not wrap any mount handler with MCP policy headers", section.SectionName())
-	}
-	return &codegen.RawSection{
-		Name:   section.SectionName(),
-		Source: rewritten,
-	}, true, nil
-}
-
-func renderedSectionSource(section codegen.Section) (string, bool) {
-	var buf bytes.Buffer
-	if err := section.Write(&buf); err != nil {
-		return "", false
-	}
-	return buf.String(), true
-}
-
-func isJSONRPCMountSource(source string) bool {
-	return strings.Contains(source, "configures the mux to serve the JSON-RPC") &&
-		strings.Contains(source, "mux.Handle(") &&
-		(strings.Contains(source, "h.Handler.ServeHTTP") || strings.Contains(source, "h.ServeHTTP") || strings.Contains(source, "h.handleSSE"))
-}
-
-func rewriteJSONRPCServerMountSource(source string, protocolVersion string, preserveHandler bool) (string, bool) {
-	if source == "" {
-		return source, false
-	}
-
-	updated := source
-	// loom >= v1.3.0 mounts h.Handler.ServeHTTP, where Handler wraps ServeHTTP
-	// in an unconfigurable http.NewCrossOriginProtection. Mount the negotiating
-	// ServeHTTP directly instead: withMCPPolicyHeaders already applies the
-	// configurable MCPCrossOriginProtection, and stacking the upstream layer
-	// would reject trusted cross-origin clients added via AddTrustedOrigin.
-	handler := "h.ServeHTTP"
-	if preserveHandler {
-		handler = "h.Handler.ServeHTTP"
-	}
-	updated = strings.ReplaceAll(updated, ", h.Handler.ServeHTTP)\n", ", withMCPPolicyHeaders(streamableHTTPSessions, requestCancellations, "+handler+"))\n")
-	// loom < v1.3.0 mount shapes.
-	updated = strings.ReplaceAll(updated, ", h.ServeHTTP)\n", ", withMCPPolicyHeaders(streamableHTTPSessions, requestCancellations, h.ServeHTTP))\n")
-	updated = strings.ReplaceAll(updated, ", h.handleSSE)\n", ", withMCPPolicyHeaders(streamableHTTPSessions, requestCancellations, h.handleSSE))\n")
-	if updated == source {
-		return source, false
-	}
-	registered, ok := addMCPTransportState(updated)
-	if !ok {
-		return source, false
-	}
-	updated = registered
-
-	if strings.Contains(updated, "Mixed transports:") {
-		routed, ok := addMixedTransportSessionRoutes(updated)
-		if !ok {
-			// The mount function shape drifted (issue #148 was exactly this:
-			// the goahttp -> loomhttp rename silently disabled the session
-			// route insertion). Refuse to emit rather than lose the routes.
-			return source, false
-		}
-		updated = routed
-	}
-	if strings.Contains(updated, "func withMCPPolicyHeaders(") {
-		return updated, true
-	}
-	return strings.TrimRight(updated, "\n") + jsonrpcServerMountHelperSource(protocolVersion), true
-}
-
-// addMCPTransportState creates shared session and request-cancellation state
-// for all routes mounted by a generated MCP server.
-func addMCPTransportState(source string) (string, bool) {
-	lines := strings.Split(source, "\n")
-	for idx, line := range lines {
-		trimmed := strings.TrimSpace(line)
-		if !strings.HasPrefix(trimmed, "func Mount") || !strings.Contains(trimmed, "(mux ") || !strings.HasSuffix(trimmed, "{") {
-			continue
-		}
-		updated := make([]string, 0, len(lines)+2)
-		updated = append(updated, lines[:idx+1]...)
-		updated = append(updated,
-			"\tstreamableHTTPSessions := mcpruntime.NewStreamableHTTPSessions()",
-			"\trequestCancellations := mcpruntime.NewRequestCancellationRegistry()",
-		)
-		updated = append(updated, lines[idx+1:]...)
-		return strings.Join(updated, "\n"), true
-	}
-	return source, false
-}
-
-// addMixedTransportSessionRoutes inserts the streamable HTTP session routes
-// (currently DELETE for client session termination; GET on older templates)
-// that the upstream mixed-transport mount does not emit. It reports ok=false
-// when the mount function cannot be located, so callers fail fast instead of
-// silently shipping a server without session routes.
-func addMixedTransportSessionRoutes(source string) (string, bool) {
-	lines := strings.Split(source, "\n")
-	insertAt := -1
-	paths := make([]string, 0, 1)
-	seenPaths := make(map[string]struct{})
-	seenMethods := make(map[string]map[string]struct{})
-	inMount := false
-
-	for idx, line := range lines {
-		trimmed := strings.TrimSpace(line)
-		// Match the mount func regardless of the muxer package qualifier
-		// (loomhttp today, goahttp historically, http in hand-built sections).
-		if strings.HasPrefix(trimmed, "func ") && strings.Contains(trimmed, "(mux ") && strings.Contains(trimmed, ".Muxer, h *") {
-			inMount = true
-			continue
-		}
-		if !inMount {
-			continue
-		}
-		if trimmed == "}" {
-			insertAt = idx
-			break
-		}
-		method, path, ok := parseMuxHandleCall(trimmed)
-		if !ok {
-			continue
-		}
-		if _, ok := seenPaths[path]; !ok {
-			seenPaths[path] = struct{}{}
-			paths = append(paths, path)
-		}
-		if seenMethods[path] == nil {
-			seenMethods[path] = make(map[string]struct{})
-		}
-		seenMethods[path][method] = struct{}{}
-	}
-	if insertAt == -1 {
-		return source, false
-	}
-
-	extra := make([]string, 0, len(paths)*2)
-	for _, path := range paths {
-		for _, method := range []string{"GET", "DELETE"} {
-			if _, ok := seenMethods[path][method]; ok {
-				continue
-			}
-			extra = append(extra, fmt.Sprintf("\tmux.Handle(%q, %q, withMCPPolicyHeaders(streamableHTTPSessions, requestCancellations, h.ServeHTTP))", method, path))
-		}
-	}
-	if len(extra) == 0 {
-		return source, true
-	}
-
-	updated := make([]string, 0, len(lines)+len(extra))
-	updated = append(updated, lines[:insertAt]...)
-	updated = append(updated, extra...)
-	updated = append(updated, lines[insertAt:]...)
-	return strings.Join(updated, "\n"), true
-}
-
-func parseMuxHandleCall(line string) (method, path string, ok bool) {
-	if !strings.HasPrefix(line, "mux.Handle(") {
-		return "", "", false
-	}
-	rest := strings.TrimPrefix(line, "mux.Handle(")
-	parts := strings.SplitN(rest, ",", 3)
-	if len(parts) != 3 {
-		return "", "", false
-	}
-	method = strings.Trim(parts[0], " \t\"")
-	path = strings.Trim(parts[1], " \t\"")
-	if method == "" || path == "" {
-		return "", "", false
-	}
-	return method, path, true
-}
-
-func applyMCPJSONRPCErrorCodes(files []*codegen.File) error {
-	for _, f := range files {
-		if f == nil {
-			continue
-		}
-		if filepath.Base(filepath.Dir(filepath.ToSlash(f.Path))) != "server" || filepath.Base(f.Path) != "server.go" {
-			continue
-		}
-		rewritten := rewriteJSONRPCResourceNotFoundFile(f)
-		if !rewritten {
-			return fmt.Errorf("upstream JSON-RPC error mapping shape changed in %s: expected to add MCP resource_not_found mapping", filepath.ToSlash(f.Path))
-		}
-	}
-	return nil
-}
-
-func rewriteJSONRPCResourceNotFoundFile(file *codegen.File) bool {
-	sections := file.AllSections()
-	if len(sections) == 0 {
-		return false
-	}
-	updated := make([]codegen.Section, 0, len(sections))
-	rewritten := false
-	for _, section := range sections {
-		next, ok := rewriteJSONRPCResourceNotFoundSection(section)
-		rewritten = rewritten || ok
-		updated = append(updated, next)
-	}
-	file.SetSections(updated)
-	return rewritten
-}
-
-func rewriteJSONRPCResourceNotFoundSection(section codegen.Section) (codegen.Section, bool) {
-	source, ok := renderedSectionSource(section)
-	if !ok {
-		return section, false
-	}
-	rewritten, ok := rewriteJSONRPCResourceNotFoundSource(source)
-	if !ok {
-		return section, false
-	}
-	return &codegen.RawSection{
-		Name:   section.SectionName(),
-		Source: rewritten,
-	}, true
-}
-
-func rewriteJSONRPCResourceNotFoundSource(source string) (string, bool) {
-	if source == "" || strings.Contains(source, `case "resource_not_found":`) {
-		return source, false
-	}
-
-	updated := strings.ReplaceAll(source,
-		`case "method_not_found":
-					encodeJSONRPCError(ctx, w, req, jsonrpc.MethodNotFound, loom.ErrorSafeMessage(err), jsonrpc.NewErrorData(err), encoder, errhandler)`,
-		`case "resource_not_found":
-					encodeJSONRPCError(ctx, w, req, jsonrpc.Code(-32002), loom.ErrorSafeMessage(err), jsonrpc.NewErrorData(err), encoder, errhandler)
-				case "method_not_found":
-					encodeJSONRPCError(ctx, w, req, jsonrpc.MethodNotFound, loom.ErrorSafeMessage(err), jsonrpc.NewErrorData(err), encoder, errhandler)`)
-	updated = strings.ReplaceAll(updated,
-		`case "method_not_found":
-	encodeJSONRPCError(ctx, w, req, jsonrpc.MethodNotFound, loom.ErrorSafeMessage(err), jsonrpc.NewErrorData(err), encoder, errhandler)`,
-		`case "resource_not_found":
-	encodeJSONRPCError(ctx, w, req, jsonrpc.Code(-32002), loom.ErrorSafeMessage(err), jsonrpc.NewErrorData(err), encoder, errhandler)
-case "method_not_found":
-	encodeJSONRPCError(ctx, w, req, jsonrpc.MethodNotFound, loom.ErrorSafeMessage(err), jsonrpc.NewErrorData(err), encoder, errhandler)`)
-	updated = strings.ReplaceAll(updated,
-		`case "method_not_found":
-						return strm.sendError(ctx, jsonrpc.IDToString(req.ID), jsonrpc.MethodNotFound, loom.ErrorSafeMessage(err), jsonrpc.NewErrorData(err))`,
-		`case "resource_not_found":
-						return strm.sendError(ctx, jsonrpc.IDToString(req.ID), jsonrpc.Code(-32002), loom.ErrorSafeMessage(err), jsonrpc.NewErrorData(err))
-					case "method_not_found":
-						return strm.sendError(ctx, jsonrpc.IDToString(req.ID), jsonrpc.MethodNotFound, loom.ErrorSafeMessage(err), jsonrpc.NewErrorData(err))`)
-	updated = strings.ReplaceAll(updated,
-		`case "method_not_found":
-	return strm.sendError(ctx, jsonrpc.IDToString(req.ID), jsonrpc.MethodNotFound, loom.ErrorSafeMessage(err), jsonrpc.NewErrorData(err))`,
-		`case "resource_not_found":
-	return strm.sendError(ctx, jsonrpc.IDToString(req.ID), jsonrpc.Code(-32002), loom.ErrorSafeMessage(err), jsonrpc.NewErrorData(err))
-case "method_not_found":
-	return strm.sendError(ctx, jsonrpc.IDToString(req.ID), jsonrpc.MethodNotFound, loom.ErrorSafeMessage(err), jsonrpc.NewErrorData(err))`)
-	if updated == source {
-		return source, false
-	}
-	return updated, true
-}
-
-func applyMCPJSONRPCErrorData(files []*codegen.File) error {
-	rewritten := 0
-	for _, file := range files {
-		if file == nil || filepath.Base(filepath.Dir(filepath.ToSlash(file.Path))) != "server" {
-			continue
-		}
-		name := filepath.Base(file.Path)
-		if name != "server.go" && name != "stream.go" {
-			continue
-		}
-
-		sections := file.AllSections()
-		updated := make([]codegen.Section, 0, len(sections))
-		for _, section := range sections {
-			source, ok := renderedSectionSource(section)
-			if !ok {
-				updated = append(updated, section)
-				continue
-			}
-			sanitized := strings.ReplaceAll(source, "jsonrpc.NewErrorData(err)", "mcpruntime.NewErrorData(err)")
-			if sanitized == source {
-				updated = append(updated, section)
-				continue
-			}
-			rewritten += strings.Count(source, "jsonrpc.NewErrorData(err)")
-			updated = append(updated, &codegen.RawSection{Name: section.SectionName(), Source: sanitized})
-		}
-		file.SetSections(updated)
-	}
-	if rewritten == 0 {
-		return errors.New("upstream JSON-RPC error data shape changed: expected MCP server error metadata")
-	}
-	return nil
-}
-
-// applyMCPJSONRPCOptionalParamsDecoding rewrites generated JSON-RPC request
-// decoders so MCP methods whose params are entirely optional (tools/list,
-// resources/list, prompts/list, ...) accept requests that omit the "params"
-// key. The MCP specification declares those params optional and official
-// clients omit the key entirely, but the upstream loom jsonrpc server request
-// decoder template (loom/jsonrpc/codegen encode_decode sections) maps the
-// resulting io.EOF to loom.MissingPayloadError(), which surfaces as a -32602
-// invalid params error on the wire.
-func applyMCPJSONRPCOptionalParamsDecoding(files []*codegen.File, mcpService *expr.ServiceExpr) error {
-	targets := mcpAllOptionalPayloadTypeNames(mcpService)
-	if len(targets) == 0 {
-		return nil
-	}
-	remaining := make(map[string]struct{}, len(targets))
-	for name := range targets {
-		remaining[name] = struct{}{}
-	}
-	for _, f := range files {
-		if f == nil {
-			continue
-		}
-		if filepath.Base(filepath.Dir(filepath.ToSlash(f.Path))) != "server" || filepath.Base(f.Path) != "encode_decode.go" {
-			continue
-		}
-		sections := f.AllSections()
-		updated := make([]codegen.Section, 0, len(sections))
-		for _, section := range sections {
-			next, rewrittenType := rewriteMCPOptionalParamsSection(section, targets)
-			if rewrittenType != "" {
-				delete(remaining, rewrittenType)
-			}
-			updated = append(updated, next)
-		}
-		f.SetSections(updated)
-	}
-	if len(remaining) > 0 {
-		missing := make([]string, 0, len(remaining))
-		for name := range remaining {
-			missing = append(missing, name)
-		}
-		sort.Strings(missing)
-		return fmt.Errorf(
-			"upstream JSON-RPC decoder shape changed: could not rewrite optional params decoding for %s",
-			strings.Join(missing, ", "),
-		)
-	}
-	return nil
-}
-
-// mcpAllOptionalPayloadTypeNames returns the user type names of MCP method
-// payloads whose top-level object declares no required fields, i.e. payloads
-// that are spec-legal to omit entirely on the wire.
-func mcpAllOptionalPayloadTypeNames(mcpService *expr.ServiceExpr) map[string]struct{} {
-	names := make(map[string]struct{})
-	if mcpService == nil {
-		return names
-	}
-	for _, m := range mcpService.Methods {
-		if m == nil || m.Payload == nil || m.Payload.Type == nil || m.Payload.Type == expr.Empty {
-			continue
-		}
-		ut, ok := m.Payload.Type.(expr.UserType)
-		if !ok {
-			continue
-		}
-		att := ut.Attribute()
-		if att == nil || expr.AsObject(att.Type) == nil {
-			continue
-		}
-		if att.Validation != nil && len(att.Validation.Required) > 0 {
-			continue
-		}
-		names[ut.Name()] = struct{}{}
-	}
-	return names
-}
-
-// rewriteMCPOptionalParamsSection rewrites one decoder section when it decodes
-// an all-optional MCP payload. It returns the (possibly replaced) section and
-// the payload type name that was rewritten, or "" when the section was left
-// untouched.
-func rewriteMCPOptionalParamsSection(section codegen.Section, targets map[string]struct{}) (codegen.Section, string) {
-	source, ok := renderedSectionSource(section)
-	if !ok {
-		return section, ""
-	}
-	match := mcpDecoderPayloadVarPattern.FindStringSubmatch(source)
-	if match == nil {
-		return section, ""
-	}
-	typeName := match[1]
-	if _, ok := targets[typeName]; !ok {
-		return section, ""
-	}
-	const eofBlock = "\t\t\tif errors.Is(err, io.EOF) {\n" +
-		"\t\t\t\treturn payload, loom.MissingPayloadError()\n" +
-		"\t\t\t}"
-	if !strings.Contains(source, eofBlock) {
-		return section, ""
-	}
-	replacement := "\t\t\tif errors.Is(err, io.EOF) {\n" +
-		"\t\t\t\t// MCP declares these params optional; official clients omit the\n" +
-		"\t\t\t\t// \"params\" key entirely. Decode absence as {}.\n" +
-		"\t\t\t\treturn New" + typeName + "(&body), nil\n" +
-		"\t\t\t}"
-	return &codegen.RawSection{
-		Name:   section.SectionName(),
-		Source: strings.Replace(source, eofBlock, replacement, 1),
-	}, typeName
-}
-
-// applyMCPJSONRPCStreamFinalEventName renames the SSE event used for final
-// JSON-RPC responses on generated server streams from "response" to "message".
-// SSE consumers only process default/"message" events for MCP streamable HTTP
-// (the official go-sdk skips named events other than "message"), so emitting
-// the final tools/call result as "response" makes conformant clients hang.
-// Upstream origin: loom/jsonrpc/codegen/stream_sections.go (SendAndClose);
-// fixed upstream in loom v1.3.0 (a35fa2c), so on current loom this is a
-// verification pass: emitted streams that already use "message" are accepted
-// unchanged, and the rewrite only fires for older "response"-emitting
-// templates. A stream.go with neither pattern signals real template drift.
-func applyMCPJSONRPCStreamFinalEventName(files []*codegen.File) error {
-	for _, f := range files {
-		if f == nil {
-			continue
-		}
-		if filepath.Base(filepath.Dir(filepath.ToSlash(f.Path))) != "server" || filepath.Base(f.Path) != "stream.go" {
-			continue
-		}
-		sections := f.AllSections()
-		updated := make([]codegen.Section, 0, len(sections))
-		rewritten := false
-		conformant := false
-		for _, section := range sections {
-			source, ok := renderedSectionSource(section)
-			if ok && strings.Contains(source, `sendSSEEvent("message", `) {
-				conformant = true
-			}
-			if !ok || !strings.Contains(source, `sendSSEEvent("response", `) {
-				updated = append(updated, section)
-				continue
-			}
-			rewritten = true
-			updated = append(updated, &codegen.RawSection{
-				Name:   section.SectionName(),
-				Source: strings.ReplaceAll(source, `sendSSEEvent("response", `, `sendSSEEvent("message", `),
-			})
-		}
-		if !rewritten {
-			if conformant {
-				continue
-			}
-			return fmt.Errorf(
-				"upstream JSON-RPC stream shape changed in %s: expected SendAndClose to emit a %q or %q SSE event",
-				filepath.ToSlash(f.Path),
-				"message",
-				"response",
-			)
-		}
-		f.SetSections(updated)
-	}
-	return nil
-}
-
-// applyMCPJSONRPCSSEReconnectHints adds the MCP streamable HTTP reconnect
-// frames that the upstream JSON-RPC endpoint stream generator does not emit.
-func applyMCPJSONRPCSSEReconnectHints(files []*codegen.File) error {
-	const legacyOpenReturn = `return http.NewResponseController(s.w).Flush()`
-	const legacyPrimedOpenReturn = "if _, err := fmt.Fprintf(s.w, \"id: %s\\ndata:\\n\\n\", mcpruntime.NewSessionID()); err != nil {\n" +
-		"\t\treturn err\n" +
-		"\t}\n" +
-		"\treturn http.NewResponseController(s.w).Flush()"
-	const writerOpenReturn = `return s.writer.Open(ctx)`
-	const writerPrimedOpenReturn = "return s.writer.WriteEvent(ctx, func(w io.Writer) error {\n" +
-		"\t\t_, err := fmt.Fprintf(w, \"id: %s\\ndata:\\n\\n\", mcpruntime.NewSessionID())\n" +
-		"\t\treturn err\n" +
-		"\t})"
-	for _, file := range files {
-		if file == nil || filepath.Base(filepath.Dir(filepath.ToSlash(file.Path))) != "server" || filepath.Base(file.Path) != "stream.go" {
-			continue
-		}
-
-		var openCount int
-		var terminalCount int
-		sections := file.AllSections()
-		updated := make([]codegen.Section, 0, len(sections))
-		for _, section := range sections {
-			source, ok := renderedSectionSource(section)
-			if !ok {
-				updated = append(updated, section)
-				continue
-			}
-
-			next, count := rewriteGeneratedMethodReturn(source, "open", legacyOpenReturn, legacyPrimedOpenReturn)
-			openCount += count
-			next, count = rewriteGeneratedMethodReturn(next, "Open", writerOpenReturn, writerPrimedOpenReturn)
-			openCount += count
-
-			match := sseSendEventPattern.FindStringSubmatchIndex(next)
-			if match != nil {
-				const initCall = "s.initSSEHeaders()\n"
-				relInit := strings.Index(next[match[0]:], initCall)
-				if relInit >= 0 {
-					insertAt := match[0] + relInit + len(initCall)
-					retryWrite := "\tif _, err := fmt.Fprint(s.w, \"event: retry\\nretry: 1000\\ndata:\\n\\n\"); err != nil {\n" +
-						"\t\treturn err\n" +
-						"\t}\n"
-					next = next[:insertAt] + retryWrite + next[insertAt:]
-					terminalCount++
-				} else {
-					const writerEvent = "return loomhttp.WriteJSONSSEEvent(w,"
-					relWriterEvent := strings.Index(next[match[0]:], writerEvent)
-					if relWriterEvent >= 0 {
-						insertAt := match[0] + relWriterEvent
-						retryWrite := "\t\tif _, err := fmt.Fprint(w, \"event: retry\\nretry: 1000\\ndata:\\n\\n\"); err != nil {\n" +
-							"\t\t\treturn err\n" +
-							"\t\t}\n"
-						next = next[:insertAt] + retryWrite + next[insertAt:]
-						terminalCount++
-					}
-				}
-			}
-
-			if next == source {
-				updated = append(updated, section)
-				continue
-			}
-			updated = append(updated, &codegen.RawSection{Name: section.SectionName(), Source: next})
-		}
-		if terminalCount == 0 {
-			return fmt.Errorf(
-				"upstream JSON-RPC stream shape changed in %s: reconnect hints matched open=%d retry=%d",
-				filepath.ToSlash(file.Path), openCount, terminalCount,
-			)
-		}
-		file.SetSections(updated)
-		if header := file.HeaderTemplate(); header != nil {
-			codegen.AddImport(header, &codegen.ImportSpec{Path: "github.com/CaliLuke/loom-mcp/runtime/mcp", Name: "mcpruntime"})
-		}
-	}
-	return nil
-}
-
-func rewriteGeneratedMethodReturn(source, methodName, oldReturn, newReturn string) (string, int) {
-	marker := ") " + methodName + "("
-	searchFrom := 0
-	rewritten := 0
-	for searchFrom < len(source) {
-		relMarker := strings.Index(source[searchFrom:], marker)
-		if relMarker < 0 {
-			break
-		}
-		markerIndex := searchFrom + relMarker
-		relEnd := strings.Index(source[markerIndex:], "\n}\n")
-		if relEnd < 0 {
-			relEnd = strings.Index(source[markerIndex:], "\n}")
-		}
-		if relEnd < 0 {
-			break
-		}
-		methodEnd := markerIndex + relEnd + len("\n}")
-		method := source[markerIndex:methodEnd]
-		returnIndex := strings.LastIndex(method, oldReturn)
-		if returnIndex < 0 {
-			searchFrom = methodEnd
-			continue
-		}
-		absoluteReturn := markerIndex + returnIndex
-		source = source[:absoluteReturn] + newReturn + source[absoluteReturn+len(oldReturn):]
-		rewritten++
-		searchFrom = absoluteReturn + len(newReturn)
-	}
-	return source, rewritten
 }
 
 // applyMCPJSONRPCClientTransportDefaults hardens the generated JSON-RPC client
@@ -1116,64 +280,49 @@ func rewriteGeneratedMethodReturn(source, methodName, oldReturn, newReturn strin
 //   - the Mcp-Session-Id returned by initialize is captured and replayed on
 //     all subsequent requests, together with the negotiated protocol version.
 //
-// Upstream origin: loom jsonrpc client template (loom/jsonrpc/codegen client
-// files), which implements neither the Accept requirement nor session
-// tracking. NewClient is rewritten to wrap the caller-provided Doer with the
-// appended mcpClientDoer decorator.
-func applyMCPJSONRPCClientTransportDefaults(files []*codegen.File) error {
-	for _, f := range files {
-		if f == nil {
+// The stable upstream jsonrpc-client-init section is replaced with a
+// loom-mcp-owned Jennifer section that installs mcpClientDoer. Other upstream
+// client sections remain untouched.
+func applyMCPJSONRPCClientTransportDefaults(files []*codegen.File, data *httpcodegen.ServiceData) error {
+	if data == nil {
+		return errors.New("MCP JSON-RPC client extension requires service data")
+	}
+	if httpcodegen.HasWebSocket(data) {
+		return errors.New("MCP JSON-RPC client extension does not support WebSocket service data")
+	}
+	matched := 0
+	for _, file := range files {
+		if file == nil || filepath.Base(filepath.Dir(filepath.ToSlash(file.Path))) != "client" || filepath.Base(file.Path) != "client.go" {
 			continue
 		}
-		if filepath.Base(filepath.Dir(filepath.ToSlash(f.Path))) != "client" || filepath.Base(f.Path) != "client.go" {
-			continue
-		}
-		sections := f.AllSections()
+		sections := file.AllSections()
 		updated := make([]codegen.Section, 0, len(sections)+1)
-		wrapped := false
-		acceptRewritten := false
+		fileMatches := 0
 		for _, section := range sections {
-			source, ok := renderedSectionSource(section)
-			if !ok {
+			if section.SectionName() != "jsonrpc-client-init" {
 				updated = append(updated, section)
 				continue
 			}
-			next := source
-			if strings.Contains(next, `req.Header.Set("Accept", "text/event-stream")`) {
-				next = strings.ReplaceAll(next,
-					`req.Header.Set("Accept", "text/event-stream")`,
-					`req.Header.Set("Accept", "application/json, text/event-stream")`)
-				acceptRewritten = true
-			}
-			const newClientAnchor = ") *Client {\n\treturn &Client{"
-			if strings.Contains(next, "func NewClient(") && strings.Contains(next, "doer ") && strings.Contains(next, newClientAnchor) {
-				next = strings.Replace(next, newClientAnchor,
-					") *Client {\n\tdoer = &mcpClientDoer{next: doer}\n\treturn &Client{", 1)
-				wrapped = true
-			}
-			if next == source {
-				updated = append(updated, section)
-				continue
-			}
-			updated = append(updated, &codegen.RawSection{
-				Name:   section.SectionName(),
-				Source: next,
-			})
+			fileMatches++
+			matched++
+			updated = append(updated, mcpJSONRPCClientInitSection(data))
 		}
-		if !wrapped {
-			return fmt.Errorf("upstream JSON-RPC client shape changed in %s: could not wrap NewClient Doer with MCP transport defaults", filepath.ToSlash(f.Path))
+		if fileMatches != 1 {
+			return fmt.Errorf(
+				"upstream JSON-RPC client extension contract changed in %s: expected one %q section, found %d",
+				filepath.ToSlash(file.Path),
+				"jsonrpc-client-init",
+				fileMatches,
+			)
 		}
-		if !acceptRewritten {
-			return fmt.Errorf("upstream JSON-RPC client shape changed in %s: expected streaming Accept headers to rewrite", filepath.ToSlash(f.Path))
-		}
-		updated = append(updated, &codegen.RawSection{
-			Name:   "mcp-client-transport-defaults",
-			Source: mcpClientDoerSource,
-		})
-		f.SetSections(updated)
-		if header := f.HeaderTemplate(); header != nil {
+		updated = append(updated, codegen.NewRawSection("mcp-client-transport-defaults", mcpClientDoerSource))
+		file.SetSections(updated)
+		if header := file.HeaderTemplate(); header != nil {
 			codegen.AddImport(header, &codegen.ImportSpec{Path: "encoding/json"})
 		}
+	}
+	if matched != 1 {
+		return fmt.Errorf("upstream JSON-RPC client extension contract changed: expected one %q section, found %d", "jsonrpc-client-init", matched)
 	}
 	return nil
 }
@@ -1210,9 +359,7 @@ func (d *mcpClientDoer) Do(req *http.Request) (*http.Response, error) {
 	if err != nil {
 		return nil, err
 	}
-	if req.Header.Get("Accept") == "" {
-		req.Header.Set("Accept", "application/json, text/event-stream")
-	}
+	req.Header.Set("Accept", "application/json, text/event-stream")
 	if method != "initialize" {
 		d.mu.Lock()
 		sessionID, protocolVersion := d.sessionID, d.protocolVersion
@@ -1318,6 +465,16 @@ var MCPMaxRequestBodyBytes int64 = 32 << 20
 // nil to disable the check, before mounting the server.
 var MCPCrossOriginProtection = http.NewCrossOriginProtection()
 
+// MCPSessionPrincipal extracts the authenticated owner of a streamable HTTP
+// session. Set it before mounting the server when application authentication
+// uses a principal source other than MCP SDK TokenInfo.
+var MCPSessionPrincipal = func(ctx context.Context) string {
+	if tokenInfo := mcpauth.TokenInfoFromContext(ctx); tokenInfo != nil {
+		return strings.TrimSpace(tokenInfo.UserID)
+	}
+	return ""
+}
+
 // withMCPPolicyHeaders propagates MCP policy header values into the request context.
 //
 // The MCP adapter enforces resource allow/deny policies based on context values:
@@ -1365,11 +522,12 @@ func withMCPPolicyHeaders(streamableHTTPSessions *mcpruntime.StreamableHTTPSessi
 			return
 		}
 		method := jsonRPCRequestMethod(envelope)
+		principal := mcpSessionPrincipal(r.Context())
 		if r.Method == http.MethodDelete {
-			handleMCPStreamableHTTPSessionDelete(streamableHTTPSessions, w, r)
+			handleMCPStreamableHTTPSessionDelete(streamableHTTPSessions, w, r, principal)
 			return
 		}
-		if err := validateMCPStreamableHTTPSession(streamableHTTPSessions, r, method); err != nil {
+		if err := validateMCPStreamableHTTPSession(streamableHTTPSessions, r, method, principal); err != nil {
 			writeMCPStreamableHTTPSessionError(w, r, err)
 			return
 		}
@@ -1397,7 +555,7 @@ func withMCPPolicyHeaders(streamableHTTPSessions *mcpruntime.StreamableHTTPSessi
 		}
 		if r.Method == http.MethodGet {
 			streamCtx, cancel := context.WithCancel(ctx)
-			cleanup, err := streamableHTTPSessions.RegisterListener(sessionID, cancel)
+			cleanup, err := streamableHTTPSessions.RegisterListenerForPrincipal(sessionID, principal, cancel)
 			if err != nil {
 				cancel()
 				writeMCPStreamableHTTPSessionError(w, r, err)
@@ -1420,7 +578,7 @@ func withMCPPolicyHeaders(streamableHTTPSessions *mcpruntime.StreamableHTTPSessi
 		}
 		if method == "initialize" {
 			if issuedSessionID := w.Header().Get(mcpruntime.HeaderKeySessionID); issuedSessionID != "" {
-				if err := streamableHTTPSessions.Issue(issuedSessionID); err != nil {
+				if err := streamableHTTPSessions.IssueForPrincipal(issuedSessionID, principal); err != nil {
 					writeMCPStreamableHTTPSessionError(w, r, err)
 					return
 				}
@@ -1429,24 +587,38 @@ func withMCPPolicyHeaders(streamableHTTPSessions *mcpruntime.StreamableHTTPSessi
 	}
 }
 
-func validateMCPStreamableHTTPSession(sessions *mcpruntime.StreamableHTTPSessions, r *http.Request, method string) error {
+func mcpSessionPrincipal(ctx context.Context) string {
+	if MCPSessionPrincipal == nil {
+		return ""
+	}
+	return strings.TrimSpace(MCPSessionPrincipal(ctx))
+}
+
+func validateMCPStreamableHTTPSession(sessions *mcpruntime.StreamableHTTPSessions, r *http.Request, method string, principal string) error {
 	if sessions == nil || r == nil {
 		panic("streamable HTTP session validation requires a store and request")
 	}
-	if method == "initialize" {
-		return nil
-	}
 	sessionID := r.Header.Get(mcpruntime.HeaderKeySessionID)
+	if method == "initialize" {
+		// A fresh initialization must not supply a session ID. A repeated
+		// initialization may carry its already-issued session so the adapter can
+		// return the protocol-level "Already initialized" error. Validate that
+		// session first so foreign and attacker-chosen IDs fail at the transport.
+		if sessionID == "" {
+			return nil
+		}
+		return sessions.ValidateForPrincipal(sessionID, principal)
+	}
 	if sessionID == "" {
 		if !sessions.HasIssued() {
 			return nil
 		}
 		return mcpruntime.ErrInvalidSessionID
 	}
-	return sessions.Validate(sessionID)
+	return sessions.ValidateForPrincipal(sessionID, principal)
 }
 
-func handleMCPStreamableHTTPSessionDelete(sessions *mcpruntime.StreamableHTTPSessions, w http.ResponseWriter, r *http.Request) {
+func handleMCPStreamableHTTPSessionDelete(sessions *mcpruntime.StreamableHTTPSessions, w http.ResponseWriter, r *http.Request, principal string) {
 	if sessions == nil || r == nil {
 		panic("streamable HTTP session termination requires a store and request")
 	}
@@ -1455,7 +627,7 @@ func handleMCPStreamableHTTPSessionDelete(sessions *mcpruntime.StreamableHTTPSes
 		http.Error(w, "Missing session ID", http.StatusBadRequest)
 		return
 	}
-	if err := sessions.Terminate(sessionID); err != nil {
+	if err := sessions.TerminateForPrincipal(sessionID, principal); err != nil {
 		writeMCPStreamableHTTPSessionError(w, r, err)
 		return
 	}
@@ -1469,6 +641,10 @@ func writeMCPStreamableHTTPSessionError(w http.ResponseWriter, r *http.Request, 
 	}
 	if errors.Is(err, mcpruntime.ErrInvalidSessionID) || errors.Is(err, mcpruntime.ErrSessionTerminated) {
 		http.Error(w, "Invalid or expired session ID", http.StatusNotFound)
+		return
+	}
+	if errors.Is(err, mcpruntime.ErrSessionPrincipalBindingMissing) || errors.Is(err, mcpruntime.ErrSessionPrincipalMismatch) {
+		http.Error(w, err.Error(), http.StatusForbidden)
 		return
 	}
 	http.Error(w, "Invalid or expired session ID", http.StatusNotFound)

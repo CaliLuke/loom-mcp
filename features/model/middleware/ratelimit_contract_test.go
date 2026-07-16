@@ -3,6 +3,7 @@ package middleware
 import (
 	"context"
 	"errors"
+	"io"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -18,21 +19,55 @@ type countingClient struct {
 	countCalls int
 }
 
+type streamResult struct {
+	chunk model.Chunk
+	err   error
+}
+
+type scriptedStreamer struct {
+	results       []streamResult
+	metadata      map[string]any
+	closeErr      error
+	recvCalls     int
+	closeCalls    int
+	metadataCalls int
+}
+
 func (c *countingClient) CountTokens(context.Context, *model.Request) (model.TokenCount, error) {
 	c.countCalls++
 	return c.count, c.countErr
 }
 
-func TestAdaptiveRateLimiterStreamMatchesCompletionContract(t *testing.T) {
+func (s *scriptedStreamer) Recv() (model.Chunk, error) {
+	s.recvCalls++
+	if len(s.results) == 0 {
+		return model.Chunk{}, io.EOF
+	}
+	result := s.results[0]
+	s.results = s.results[1:]
+	return result.chunk, result.err
+}
+
+func (s *scriptedStreamer) Close() error {
+	s.closeCalls++
+	return s.closeErr
+}
+
+func (s *scriptedStreamer) Metadata() map[string]any {
+	s.metadataCalls++
+	return s.metadata
+}
+
+func TestAdaptiveRateLimiterStreamSetupContract(t *testing.T) {
 	cases := []struct {
 		name       string
 		streamErr  error
 		wantChange func(t *testing.T, before, after float64)
 	}{
 		{
-			name: "success_probes",
+			name: "success_does_not_probe",
 			wantChange: func(t *testing.T, before, after float64) {
-				assert.Greater(t, after, before)
+				assert.InDelta(t, before, after, 0)
 			},
 		},
 		{
@@ -54,20 +89,121 @@ func TestAdaptiveRateLimiterStreamMatchesCompletionContract(t *testing.T) {
 	for _, tt := range cases {
 		t.Run(tt.name, func(t *testing.T) {
 			limiter := newAdaptiveRateLimiter(60000, 120000)
-			client := &fakeClient{streamErr: tt.streamErr}
+			client := &fakeClient{
+				stream:    &scriptedStreamer{},
+				streamErr: tt.streamErr,
+			}
 			wrapped := limiter.Middleware()(client)
 			before := limiter.currentTPM
 
-			_, err := wrapped.Stream(context.Background(), &model.Request{})
+			stream, err := wrapped.Stream(context.Background(), &model.Request{})
 			if tt.streamErr == nil {
 				require.NoError(t, err)
+				require.NotNil(t, stream)
 			} else {
 				require.ErrorIs(t, err, tt.streamErr)
+				assert.Nil(t, stream)
 			}
 			assert.Equal(t, 1, client.streamCalls)
 			tt.wantChange(t, before, limiter.currentTPM)
 		})
 	}
+}
+
+func TestAdaptiveRateLimiterStreamObservesTerminalRecvOutcomeOnce(t *testing.T) {
+	terminalFailure := errors.New("provider stream failed")
+	tests := []struct {
+		name        string
+		terminalErr error
+		wantChange  func(t *testing.T, before, after float64)
+	}{
+		{
+			name:        "EOF probes",
+			terminalErr: io.EOF,
+			wantChange: func(t *testing.T, before, after float64) {
+				assert.Greater(t, after, before)
+			},
+		},
+		{
+			name:        "receive-time rate limit backs off",
+			terminalErr: model.ErrRateLimited,
+			wantChange: func(t *testing.T, before, after float64) {
+				assert.Less(t, after, before)
+			},
+		},
+		{
+			name:        "ordinary receive error does not adjust",
+			terminalErr: terminalFailure,
+			wantChange: func(t *testing.T, before, after float64) {
+				assert.InDelta(t, before, after, 0)
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			limiter := newAdaptiveRateLimiter(60000, 120000)
+			wantChunk := model.Chunk{
+				Type: model.ChunkTypeText,
+				Message: &model.Message{
+					Role:  model.ConversationRoleAssistant,
+					Parts: []model.Part{model.TextPart{Text: "partial"}},
+				},
+			}
+			providerStream := &scriptedStreamer{results: []streamResult{
+				{chunk: wantChunk},
+				{err: tt.terminalErr},
+			}}
+			wrapped := limiter.Middleware()(&fakeClient{stream: providerStream})
+			before := limiter.currentTPM
+
+			stream, err := wrapped.Stream(context.Background(), &model.Request{})
+			require.NoError(t, err)
+			assert.InDelta(t, before, limiter.currentTPM, 0, "setup must not adjust capacity")
+
+			chunk, err := stream.Recv()
+			require.NoError(t, err)
+			assert.Equal(t, wantChunk, chunk)
+			assert.InDelta(t, before, limiter.currentTPM, 0, "non-terminal chunks must not adjust capacity")
+
+			_, err = stream.Recv()
+			assert.Same(t, tt.terminalErr, err)
+			tt.wantChange(t, before, limiter.currentTPM)
+			afterTerminal := limiter.currentTPM
+
+			_, err = stream.Recv()
+			require.ErrorIs(t, err, io.EOF)
+			assert.InDelta(t, afterTerminal, limiter.currentTPM, 0,
+				"a later terminal receive must not adjust capacity twice")
+			assert.Equal(t, 3, providerStream.recvCalls)
+		})
+	}
+}
+
+func TestAdaptiveRateLimiterStreamDelegatesCloseAndMetadata(t *testing.T) {
+	closeErr := errors.New("provider close failed")
+	metadata := map[string]any{"provider": "test"}
+	providerStream := &scriptedStreamer{
+		metadata: metadata,
+		closeErr: closeErr,
+	}
+	limiter := newAdaptiveRateLimiter(60000, 120000)
+	wrapped := limiter.Middleware()(&fakeClient{stream: providerStream})
+	before := limiter.currentTPM
+
+	stream, err := wrapped.Stream(context.Background(), &model.Request{})
+	require.NoError(t, err)
+	gotMetadata := stream.Metadata()
+	assert.Equal(t, metadata, gotMetadata)
+	gotMetadata["delegated"] = true
+	assert.Equal(t, true, providerStream.metadata["delegated"], "metadata must not be copied")
+	assert.Equal(t, 1, providerStream.metadataCalls)
+
+	err = stream.Close()
+	assert.Same(t, closeErr, err)
+	assert.Equal(t, 1, providerStream.closeCalls)
+	assert.InDelta(t, before, limiter.currentTPM, 0,
+		"close without a terminal receive must not adjust capacity")
 }
 
 func TestAdaptiveRateLimiterPreservesTokenCounterCapability(t *testing.T) {
@@ -83,10 +219,8 @@ func TestAdaptiveRateLimiterPreservesTokenCounterCapability(t *testing.T) {
 	assert.Equal(t, 1, native.countCalls)
 
 	unsupported := newAdaptiveRateLimiter(60000, 60000).Middleware()(&fakeClient{})
-	counter, ok = unsupported.(model.TokenCounter)
-	require.True(t, ok)
-	_, err = counter.CountTokens(context.Background(), &model.Request{})
-	require.EqualError(t, err, "model middleware: wrapped client does not support token counting")
+	_, ok = unsupported.(model.TokenCounter)
+	require.False(t, ok, "middleware must preserve absence of optional token-counting capability")
 	assert.Nil(t, newAdaptiveRateLimiter(60000, 60000).Middleware()(nil))
 }
 

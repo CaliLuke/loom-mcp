@@ -525,19 +525,22 @@ func emitAssertResourceURIAllowed(stmt *jen.Statement) {
 			jen.If(jen.Id("i").Op(":=").Qual("strings", "Index").Call(jen.Id("base"), jen.Lit("?")), jen.Id("i").Op(">=").Lit(0)).Block(
 				jen.Id("base").Op("=").Id("base").Index(jen.Lit(0), jen.Id("i")),
 			),
-			jen.Var().Id("extraAllowURIs").Index().String(),
+			jen.Var().Id("serverNameAllowURIs").Index().String(),
+			jen.Var().Id("requestNameAllowURIs").Index().String(),
 			jen.Var().Id("extraDenyURIs").Index().String(),
-			jen.Var().Id("allowedNames").Index().String(),
+			jen.Var().Id("serverAllowedNames").Index().String(),
+			jen.Var().Id("requestAllowedNames").Index().String(),
 			jen.Var().Id("deniedNames").Index().String(),
 			jen.If(jen.Id("a").Dot("opts").Op("!=").Nil()).Block(
-				jen.Id("allowedNames").Op("=").Append(jen.Id("allowedNames"), jen.Id("a").Dot("opts").Dot("AllowedResourceNames").Op("...")),
+				jen.Id("serverAllowedNames").Op("=").Append(jen.Id("serverAllowedNames"), jen.Id("a").Dot("opts").Dot("AllowedResourceNames").Op("...")),
 				jen.Id("deniedNames").Op("=").Append(jen.Id("deniedNames"), jen.Id("a").Dot("opts").Dot("DeniedResourceNames").Op("...")),
 			),
 			jen.If(jen.Id("ctx").Op("!=").Nil()).Block(
-				appendResourceNamesFromContextValue(jen.Id("mcpruntime").Dot("AllowedResourceNamesFromContext").Call(jen.Id("ctx")), "allowedNames"),
+				appendResourceNamesFromContextValue(jen.Id("mcpruntime").Dot("AllowedResourceNamesFromContext").Call(jen.Id("ctx")), "requestAllowedNames"),
 				appendResourceNamesFromContextValue(jen.Id("mcpruntime").Dot("DeniedResourceNamesFromContext").Call(jen.Id("ctx")), "deniedNames"),
 			),
-			resolveNamedResourcePolicies("allowedNames", "extraAllowURIs"),
+			resolveNamedResourcePolicies("serverAllowedNames", "serverNameAllowURIs"),
+			resolveNamedResourcePolicies("requestAllowedNames", "requestNameAllowURIs"),
 			resolveNamedResourcePolicies("deniedNames", "extraDenyURIs"),
 			jen.Var().Id("denied").Index().String(),
 			jen.If(jen.Id("a").Dot("opts").Op("!=").Nil()).Block(
@@ -552,16 +555,34 @@ func emitAssertResourceURIAllowed(stmt *jen.Statement) {
 			jen.If(jen.Id("a").Dot("opts").Op("!=").Nil()).Block(
 				jen.Id("allowed").Op("=").Id("a").Dot("opts").Dot("AllowedResourceURIs"),
 			),
-			jen.If(jen.Len(jen.Id("allowed")).Op("==").Lit(0).Op("&&").Len(jen.Id("allowedNames")).Op("==").Lit(0)).Block(
-				jen.Return(jen.Nil()),
+			jen.Id("serverAllowConfigured").Op(":=").Len(jen.Id("allowed")).Op(">").Lit(0).Op("||").Len(jen.Id("serverAllowedNames")).Op(">").Lit(0),
+			jen.Id("serverAllowPolicies").Op(":=").Append(jen.Index().String().Values(), jen.Id("allowed").Op("...")),
+			jen.Id("serverAllowPolicies").Op("=").Append(jen.Id("serverAllowPolicies"), jen.Id("serverNameAllowURIs").Op("...")),
+			jen.If(jen.Op("!").Id("resourceURIAllowedByPolicies").Call(jen.Id("base"), jen.Id("serverAllowConfigured"), jen.Id("serverAllowPolicies"))).Block(
+				jen.Return(jen.Qual("fmt", "Errorf").Call(jen.Lit("resource URI not allowed: %s"), jen.Id("pURI"))),
 			),
-			jen.For(jen.List(jen.Id("_"), jen.Id("allow")).Op(":=").Range().Append(jen.Id("allowed"), jen.Id("extraAllowURIs").Op("..."))).Block(
-				jen.If(jen.Id("resourceURIMatchesPolicy").Call(jen.Id("base"), jen.Id("allow"))).Block(
-					jen.Return(jen.Nil()),
-				),
+			jen.Id("requestAllowConfigured").Op(":=").Len(jen.Id("requestAllowedNames")).Op(">").Lit(0),
+			jen.If(jen.Op("!").Id("resourceURIAllowedByPolicies").Call(jen.Id("base"), jen.Id("requestAllowConfigured"), jen.Id("requestNameAllowURIs"))).Block(
+				jen.Return(jen.Qual("fmt", "Errorf").Call(jen.Lit("resource URI not allowed: %s"), jen.Id("pURI"))),
 			),
-			jen.Return(jen.Qual("fmt", "Errorf").Call(jen.Lit("resource URI not allowed: %s"), jen.Id("pURI"))),
+			jen.Return(jen.Nil()),
 		)
+	stmt.Line()
+	stmt.Func().Id("resourceURIAllowedByPolicies").Params(
+		jen.Id("uri").String(),
+		jen.Id("configured").Bool(),
+		jen.Id("policies").Index().String(),
+	).Bool().Block(
+		jen.If(jen.Op("!").Id("configured")).Block(
+			jen.Return(jen.True()),
+		),
+		jen.For(jen.List(jen.Id("_"), jen.Id("policy")).Op(":=").Range().Id("policies")).Block(
+			jen.If(jen.Id("resourceURIMatchesPolicy").Call(jen.Id("uri"), jen.Id("policy"))).Block(
+				jen.Return(jen.True()),
+			),
+		),
+		jen.Return(jen.False()),
+	)
 	stmt.Line()
 	stmt.Func().Id("resourceURIMatchesPolicy").Params(jen.Id("uri").String(), jen.Id("policy").String()).Bool().Block(
 		jen.Id("policy").Op("=").Qual("strings", "TrimSpace").Call(jen.Id("policy")),

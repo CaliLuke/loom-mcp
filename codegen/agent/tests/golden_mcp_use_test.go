@@ -6,7 +6,7 @@ import (
 	"github.com/CaliLuke/loom-mcp/codegen/agent/tests/testscenarios"
 )
 
-// MCPToolset should emit registry calls and config additions.
+// Toolset(FromMCP(...)) should emit registry calls and config additions.
 func TestGolden_MCP_Use(t *testing.T) {
 	files := buildAndGenerate(t, testscenarios.MCPUse())
 	reg := fileContent(t, files, "gen/alpha/agents/scribe/registry.go")

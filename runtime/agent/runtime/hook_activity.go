@@ -52,14 +52,19 @@ func (r *Runtime) hookActivity(ctx context.Context, input *HookActivityInput) er
 		return runAfterEventInterceptors(ctx, interceptors, evt, true, nil)
 	}
 	eventType := evt.Type()
+	inserted := false
 	// Tool call argument deltas are best-effort UX signals. They are intentionally
 	// excluded from the canonical run event log to avoid bloating durable history.
 	//
 	// Consumers must treat ToolCallArgsDelta as optional; the canonical tool
 	// payload is still emitted via tool_start/tool_end and the finalized tool call.
 	if eventType != hooks.ToolCallArgsDelta {
-		if err := r.appendHookRunEvent(ctx, input, evt, payload); err != nil {
+		inserted, err = r.appendHookRunEvent(ctx, input, evt, payload)
+		if err != nil {
 			return runAfterEventInterceptors(ctx, interceptors, evt, false, err)
+		}
+		if inserted {
+			r.recordCanonicalEventTelemetry(ctx, evt)
 		}
 		if err := r.updateHookRunMeta(ctx, input.SessionID, evt); err != nil {
 			return runAfterEventInterceptors(ctx, interceptors, evt, false, err)
@@ -90,8 +95,8 @@ func (r *Runtime) decodeHookActivityEvent(ctx context.Context, input *HookActivi
 	return evt, payload, nil
 }
 
-func (r *Runtime) appendHookRunEvent(ctx context.Context, input *HookActivityInput, evt hooks.Event, payload []byte) error {
-	_, err := r.RunEventStore.Append(ctx, &runlog.Event{
+func (r *Runtime) appendHookRunEvent(ctx context.Context, input *HookActivityInput, evt hooks.Event, payload []byte) (bool, error) {
+	result, err := r.RunEventStore.Append(ctx, &runlog.Event{
 		EventKey:  input.EventKey,
 		RunID:     input.RunID,
 		AgentID:   input.AgentID,
@@ -101,7 +106,7 @@ func (r *Runtime) appendHookRunEvent(ctx context.Context, input *HookActivityInp
 		Payload:   payload,
 		Timestamp: time.UnixMilli(evt.Timestamp()).UTC(),
 	})
-	return err
+	return result.Inserted, err
 }
 
 func (r *Runtime) updateHookRunMeta(ctx context.Context, sessionID string, evt hooks.Event) error {

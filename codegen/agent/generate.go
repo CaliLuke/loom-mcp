@@ -15,18 +15,14 @@ import (
 // Generate is the code generation entry point for the agents plugin. It is called
 // by the Goa code generation framework during the `loom gen` command execution.
 //
-// The function scans the provided DSL roots for agent declarations, transforms them
-// into template-ready data structures, and generates all necessary Go files for each
-// agent. Generated artifacts include:
-//   - agent.go: agent struct and constructor
-//   - config.go: configuration types and validation
-//   - workflow.go: workflow definition and handler
-//   - activities.go: activity definitions (plan, resume, execute_tool)
-//   - registry.go: engine registration helpers
-//   - specs/<toolset>/: per-toolset specifications, types, and codecs
-//   - specs/specs.go: agent-level aggregator of all toolset specs
-//   - agenttools/: helpers for exported toolsets (agent-as-tool pattern)
-//   - (optional) service_toolset.go: executor-first registration for method-backed toolsets
+// The function scans the provided DSL roots for agent declarations, transforms
+// them into template-ready data, and emits the current owner-scoped layout:
+//   - gen/<service>/toolsets/<toolset>/: shared specs, codecs, transforms, and providers
+//   - gen/<service>/agents/<agent>/: agent, config, registry, and aggregate specs
+//   - gen/<service>/agents/<agent>/projected/: projected service execution helpers
+//   - gen/<service>/agents/<agent>/agenttools/: exported agent-as-tool helpers
+//   - gen/<service>/registries/<registry>/: declared registry clients
+//   - AGENTS_QUICKSTART.md: module-root generated wiring guide when enabled
 //
 // Parameters:
 //   - genpkg: Go import path to the generated code root (e.g., "myapp/gen")
@@ -40,16 +36,6 @@ import (
 //   - A service referenced by an agent is not found
 //   - Template rendering fails
 //   - Tool spec generation fails
-//
-// Generated files follow the structure:
-//
-//	gen/<service>/agents/<agent>/*.go
-//	gen/<service>/agents/<agent>/specs/<toolset>/*.go
-//	gen/<service>/agents/<agent>/specs/specs.go
-//	gen/<service>/agents/<agent>/agenttools/<toolset>/helpers.go
-//	# Note: service_toolset.go is not emitted in the current generator path; registrations
-//	# are built at application boundaries via runtime APIs. The template and builder remain
-//	# for potential future use.
 //
 // The function is safe to call multiple times during generation but expects DSL
 // evaluation to be complete before invocation.

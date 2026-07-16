@@ -87,7 +87,7 @@ type (
 		// Tool identifies the fully-qualified tool name when this run is a nested
 		// agent-as-tool execution. For top-level runs (not invoked via a parent tool),
 		// Tool is empty. Planners may use this to select method-specific prompts.
-		// Format: "<service>.<toolset>.<tool>".
+		// Format: "<toolset>.<tool>".
 		Tool tools.Ident
 
 		// ToolArgs carries the original JSON arguments for the parent tool when this run
@@ -102,7 +102,7 @@ type (
 		// Labels carries caller-provided metadata (account, priority, etc.).
 		Labels map[string]string
 
-		// MaxDuration encodes the wall-clock budget remaining (string form for prompts/telemetry).
+		// MaxDuration encodes the active-work budget remaining (string form for prompts/telemetry).
 		MaxDuration string
 	}
 

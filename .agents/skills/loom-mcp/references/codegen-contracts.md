@@ -39,6 +39,13 @@ Use this file when editing DSL, generators, generated helpers, or MCP codegen be
 - Do not rely on example-specific aliases or hard-coded package names.
 - Use `codegen/pathutil.go` helpers for generated path rewrites.
 - Use `updateHeader`-style header/import rewrites instead of manual string surgery when moving generated transport code.
+- Own every cross-generator behavior through stable section identifiers and
+  evaluated generator data. MCP mount, handler, endpoint initialization, SSE,
+  and client-constructor behavior are loom-mcp-owned sections with exact
+  cardinality checks. Missing or duplicate upstream sections must fail
+  generation.
+- Never inspect, parse, or mutate rendered Go source to extend another
+  generator. Replace a named section or emit a separate owned section instead.
 - High-level generation contract tests must run preparation in production order
   before rendering. Combined agent/MCP tests must also generate the core
   transport files and both plugin outputs before claiming that generated code
@@ -51,7 +58,8 @@ Use this file when editing DSL, generators, generated helpers, or MCP codegen be
 - Compose on the existing codegen pipeline rather than forking transport stacks.
 - Keep MCP file layout aligned with current repository conventions.
 - Reuse generated encoding/decoding for payload and result transforms.
-- Prefer minimal post-processing over handwritten alternative generators.
+- Prefer loom-mcp-owned sections around the upstream generator over
+  post-processing or handwritten alternative transport stacks.
 - For `OneOf(...)` unions, preserve explicit discriminator tags from
   `Meta("oneof:type:tag", "...")` across MCP schemas, agent tool schemas,
   and generated union helpers. Do not fall back to derived type names when an
@@ -100,10 +108,19 @@ Use this file when editing DSL, generators, generated helpers, or MCP codegen be
   successful initialize response issues its session, supplied unknown,
   expired, or terminated session IDs receive HTTP 404 before JSON-RPC routing,
   missing IDs receive HTTP 400 once sessions exist, GET listeners register for
-  termination, and DELETE terminates the matching session. Generated issuance
-  must handle the store's error return. Adapter-side initialization/principal
-  maps must remain bounded and TTL-pruned, and SDK DELETE must clear the
-  matching adapter entry.
+  termination, and DELETE terminates the matching session. Native initialization
+  validates supplied IDs before routing: unknown IDs receive HTTP 404, foreign
+  IDs receive HTTP 403, and a valid owner-bound duplicate reaches the adapter's
+  `Already initialized` error. Callers cannot seed adapter state with a chosen
+  ID. Generated issuance must handle the store's
+  error return. Initialization atomically binds the
+  session to the resolved authenticated principal; POST, GET, listener
+  registration, and DELETE validate the pair, while DELETE validates before
+  cleanup. Missing authenticated bindings, mismatches, and authenticated
+  adoption of anonymous sessions fail closed. Adapter-side
+  initialization/principal maps must remain bounded and TTL-pruned together,
+  and SDK DELETE must clear the matching adapter entry only after successful
+  ownership validation.
 - Generated JSON-RPC batch handling must buffer each request independently.
   Streaming handlers may flush into their private buffer, but only their final
   JSON-RPC response frame may be appended to the batch array; SSE retry and
@@ -119,8 +136,8 @@ Use this file when editing DSL, generators, generated helpers, or MCP codegen be
   expressions. Never rely on Loom's default or label an intermediate
   notification with the original request method such as `tools/call`.
 - The source service's effective JSON-RPC CORS policy (service override or API
-  default) is deep-copied into the synthetic MCP HTTP service. Mount rewriting
-  must preserve Loom's generated `CORSHandler` while keeping
+  default) is deep-copied into the synthetic MCP HTTP service. The MCP-owned
+  mount section must route through Loom's generated `CORSHandler` while keeping
   `MCPCrossOriginProtection` as the outer, independent origin check.
 - Dynamic-only MCP prompt services enable prompt capabilities during expression
   finalization so generated adapters and `loom example` scaffolds agree on the
@@ -132,6 +149,11 @@ Use this file when editing DSL, generators, generated helpers, or MCP codegen be
 - `SkillDirectory` alone is a resource surface. It must trigger resource
   methods, resource types, initialize capabilities, adapter handlers, and SDK
   result conversions even when no method-backed resource is declared.
+- Generated adapter options define the maximum resource grant. Request-scoped
+  allowed resource names are an independent narrowing predicate and must never
+  be unioned into that server grant. Server and request denies are additive and
+  take precedence. Generated raw policy headers remain untrusted transport
+  input, not proof of authentication or authorization.
 - Generated `tools/call` adapters normalize omitted, whitespace-only, and JSON
   `null` arguments to `{}` before strict payload decoding.
 - Generated `MCPAdapter` types must satisfy their generated `Service` interface

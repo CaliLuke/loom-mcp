@@ -65,6 +65,13 @@ Worker-only: register agents and run engine worker loop.
 4. `PlanResume` with tool results until final response or policy stop
 5. Hooks and stream events emitted for each step
 
+Each plan/resume step is one logical planner turn backed by a retryable workflow
+activity. Generated registrations allow up to three attempts by default, so a
+late attempt failure can repeat model calls or planner-owned side effects.
+Planners must be retry-safe and protect non-idempotent external effects with
+stable idempotency keys. `RetryHint` handles tool-failure recovery inside a
+successful planner result; it is not an activity-retry instruction.
+
 ## Run Phases
 
 `prompted`, `planning`, `executing_tools`, `synthesizing`, `completed`, `failed`, `canceled`
@@ -80,6 +87,10 @@ A typical successful progression:
 Design-time policy is configured in `RunPolicy(...)`.
 
 Runtime overrides with `rt.OverridePolicy(agentID, runtime.RunPolicy{...})` (local to process only).
+
+`policy.CapsState` carries tool-call and consecutive-failure counters. Its
+legacy `ExpiresAt` field is deprecated and ignored. Use `TimeBudget` for the
+deterministic active-work deadline; external waits pause that budget.
 
 ## Tool Execution
 

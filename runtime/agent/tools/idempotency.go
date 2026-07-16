@@ -1,7 +1,7 @@
 // Package tools defines runtime-facing tool metadata and helpers.
 //
-// This file defines the opt-in idempotency metadata used by planners to decide
-// whether repeated tool calls can be safely de-duplicated across a transcript.
+// This file defines opt-in idempotency metadata for planners and orchestrators.
+// The runtime does not implement replay suppression or result caching.
 package tools
 
 import (
@@ -12,16 +12,15 @@ import (
 // IdempotencyScope declares the semantic scope in which a tool call is considered
 // idempotent.
 //
-// When a tool is idempotent for a given scope, orchestration layers may treat
-// repeated calls with identical arguments as redundant and avoid executing them.
+// A scope is a semantic declaration only. Consumers that implement replay must
+// define canonical argument equality, success-only reuse, and failure behavior.
 //
 // Default: tools are not idempotent across a transcript unless explicitly tagged.
 type IdempotencyScope string
 
 const (
 	// IdempotencyScopeTranscript indicates the tool is idempotent across a run
-	// transcript: identical calls may be dropped once a successful result exists
-	// in the transcript.
+	// transcript. It does not enable built-in duplicate suppression.
 	IdempotencyScopeTranscript IdempotencyScope = "transcript"
 
 	// TagIdempotencyTranscript is the design-time tag emitted into ToolSpec.Tags

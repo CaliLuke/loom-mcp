@@ -133,9 +133,6 @@ func mergeCaps(current policy.CapsState, decision policy.CapsState) policy.CapsS
 	if decision.RemainingConsecutiveFailedToolCalls > 0 {
 		current.RemainingConsecutiveFailedToolCalls = decision.RemainingConsecutiveFailedToolCalls
 	}
-	if !decision.ExpiresAt.IsZero() {
-		current.ExpiresAt = decision.ExpiresAt
-	}
 	return current
 }
 

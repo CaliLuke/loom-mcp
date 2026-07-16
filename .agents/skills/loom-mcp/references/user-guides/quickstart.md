@@ -1,222 +1,71 @@
-# Quickstart
+# loom-mcp Quickstart
 
-Complete guide to installing Goa and building your first service - from setup to running a working HTTP endpoint.
-
-# Quickstart
-
-This guide walks you through installing Goa and creating your first service. By the end, you'll have a working HTTP API that you can extend and customize.
+Use the repository's `quickstart/README.md` as the canonical runnable guide.
+This reference is intentionally short so generated paths and APIs do not drift
+in two places.
 
 ## Prerequisites
 
-Before you begin, ensure your environment meets these requirements:
-
-- Go 1.18 or later - Goa leverages modern Go features
-- Go Modules enabled - This is the default in Go 1.16+, but verify with GO111MODULE=on if needed
-- curl or any HTTP client - For testing your service
-
-## Installation
-
-Install the Goa packages and CLI tool:
+- Go 1.26.1 or later.
+- Loom CLI pinned to the repository's supported release:
 
 ```bash
-# Pull the Goa packages
-go get github.com/CaliLuke/loom/...
-
-# Install the Loom CLI
 go install github.com/CaliLuke/loom/cmd/loom@v1.6.2
-
-# Verify the installation
 loom version
 ```
 
-You should see the current Goa version (e.g., v3.x.x). If the `goa` command isn't found, ensure your Go bin directory is in your `PATH`:
+Temporal is optional. Generated examples use the in-memory engine until the
+application explicitly configures `runtime/agent/engine/temporal`.
+
+## Project flow
+
+1. Initialize a Go module and add `github.com/CaliLuke/loom` plus
+   `github.com/CaliLuke/loom-mcp`.
+2. Author the Goa service and loom-mcp agent/MCP declarations under `design/`.
+3. Generate with a Go import path:
 
 ```bash
-export PATH=$PATH:$(go env GOPATH)/bin
+loom gen example.com/project/design
 ```
 
-## Create Your First Service
+4. Run `loom example example.com/project/design` only when application-owned
+   scaffolding is intentionally desired.
+5. Implement planners and service logic outside `gen/`.
+6. Register models, toolset executors, MCP callers, and agents before the first
+   run, then call `Runtime.Seal(ctx)` when the application wants startup
+   validation before serving traffic.
 
-Now let's build a simple "hello world" service that demonstrates Goa's design-first approach.
+## Generated ownership
 
-### 1. Project Setup
+- `gen/<service>/agents/<agent>/`: agent configuration and aggregate catalog.
+- `gen/<service>/toolsets/<toolset>/`: owner-scoped specs, codecs, transforms,
+  dispatchers, and provider helpers.
+- `gen/mcp_<service>/`: generated MCP adapter, SDK server, local registration,
+  and protocol helpers.
+- `internal/agents/`: application-owned output from `loom example`.
+- `AGENTS_QUICKSTART.md`: generated project-specific wiring guide.
 
-Create a new directory and initialize a Go module:
+Never edit generated `gen/` files. Change the design or generator and
+regenerate.
+
+## Verification
+
+In this repository use:
 
 ```bash
-mkdir hello-goa && cd hello-goa
-go mod init hello
+make loom-local
+make verify-mcp-local
+make lint
+make test
+make itest
 ```
 
-Note: We're using a simple module name `hello` for this guide. In real projects, you'd typically use a domain name like `github.com/yourusername/hello-goa`. The concepts work exactly the same way.
+For downstream projects, run their generated compile/tests plus the smallest
+end-to-end run that proves planner, registration, and tool execution wiring.
 
-### 2. Design Your API
+## Canonical references
 
-Goa uses a powerful DSL (Domain Specific Language) to describe your API. Create a design directory and file:
-
-```bash
-mkdir design
-```
-
-Create `design/design.go`:
-
-```go
-package design
-
-import (
-    . "github.com/CaliLuke/loom/dsl"
-)
-
-var _ = Service("hello", func() {
-    Description("A simple service that says hello.")
-
-    Method("sayHello", func() {
-        Payload(String, "Name to greet")
-        Result(String, "A greeting message")
-
-        HTTP(func() {
-            GET("/hello/{name}")
-        })
-    })
-})
-```
-
-Let's break down what this design does:
-
-- `Service("hello", ...)` - Defines a new service named "hello"
-- `Method("sayHello", ...)` - Defines a method within the service
-- `Payload(String, ...)` - Specifies the input: a string representing the name to greet
-- `Result(String, ...)` - Specifies the output: a greeting message
-- `HTTP(func() { GET("/hello/{name}") })` - Maps the method to an HTTP GET endpoint where `{name}` is automatically bound to the payload
-
-This declarative approach means you describe what your API does, and Goa handles the implementation details: parameter binding, routing, validation, and OpenAPI documentation.
-
-### 3. Generate Code
-
-Transform your design into a fully functional service structure:
-
-```bash
-loom gen hello/design
-```
-
-This creates a `gen` folder containing:
-
-- Service interfaces and endpoints
-- HTTP transport layer (handlers, encoders, decoders)
-- OpenAPI/Swagger specifications
-- Client code
-
-Now scaffold a working implementation:
-
-```bash
-loom example hello/design
-```
-
-Important: The `gen` command regenerates the `gen/` folder each time you run it. The `example` command creates starter implementation files that you own and customize. Goa won't overwrite them on subsequent runs.
-
-Your project structure now looks like this:
-
-```text
-hello-goa/
-├── cmd/
-│   ├── hello/           # Server executable
-│   │   ├── http.go
-│   │   └── main.go
-│   └── hello-cli/       # CLI client
-│       ├── http.go
-│       └── main.go
-├── design/
-│   └── design.go        # Your API design
-├── gen/                 # Generated code (don't edit)
-│   ├── hello/
-│   └── http/
-└── hello.go             # Your service implementation
-```
-
-### 4. Implement the Service
-
-Open `hello.go` and find the `SayHello` method. Replace it with your implementation:
-
-```go
-func (s *hellosrvc) SayHello(ctx context.Context, name string) (string, error) {
-    log.Printf(ctx, "hello.sayHello")
-    return fmt.Sprintf("Hello, %s!", name), nil
-}
-```
-
-That's all the business logic you need. Goa handles everything else.
-
-### 5. Run and Test
-
-First, download dependencies:
-
-```bash
-go mod tidy
-```
-
-Start the server:
-
-```bash
-go run ./cmd/hello --http-port=8080
-```
-
-You should see:
-
-```text
-INFO[0000] http-port=8080
-INFO[0000] msg=HTTP "SayHello" mounted on GET /hello/{name}
-INFO[0000] msg=HTTP server listening on "localhost:8080"
-```
-
-Test with `curl` in a new terminal:
-
-```bash
-curl http://localhost:8080/hello/Alice
-```
-
-Response:
-
-```text
-"Hello, Alice!"
-```
-
-Congratulations! You've built your first Goa service.
-
-#### Using the Generated CLI Client
-
-Goa also generated a command-line client. Try it:
-
-```bash
-go run ./cmd/hello-cli --url=http://localhost:8080 hello say-hello -p=Alice
-```
-
-Explore available commands:
-
-```bash
-go run ./cmd/hello-cli --help
-```
-
-## Ongoing Development
-
-As your service evolves, you'll modify the design and regenerate code:
-
-```bash
-# After updating design/design.go
-loom gen hello/design
-```
-
-Key points:
-
-- `gen/` folder - Regenerated each time; never edit these files directly
-- Your implementation files - Yours to customize; Goa won't overwrite them
-- New methods - Add to your design, regenerate, then implement the new method stubs
-
-## Next Steps
-
-You've learned the fundamentals of Goa's design-first approach. Continue your journey:
-
-- DSL Reference - Complete guide to Goa's design language
-- HTTP Guide - Deep dive into HTTP transport features
-- gRPC Guide - Build gRPC services with Goa
-- Error Handling - Define and handle errors properly
-- Code Generation - Understand what Goa generates and how to customize it
+- `quickstart/README.md`: runnable setup.
+- `docs/dsl.md`: complete DSL and generated-helper semantics.
+- `docs/runtime.md`: runtime, planner, memory, provider, and MCP caller contracts.
+- `docs/mcp_sdk_server.md`: generated MCP server behavior.

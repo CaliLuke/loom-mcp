@@ -1,35 +1,49 @@
 # Temporal Setup
 
-Durable production execution for loom-mcp runs.
+Temporal-backed workflow recovery for loom-mcp runs, with explicit persistence
+for the runtime state that is not part of Temporal workflow history.
 
 ## Overview
 
 Temporal backs agent runs as workflows and tool calls as activities:
 
 - workflow history is durable and replayable
-- tool calls use per-activity retry policies
-- a restarted worker resumes without repeating successful work
+- planner and tool activities use bounded attempt policies
+- a restarted worker replays workflow history and resumes outstanding work
+
+`runtime.WithEngine(temporalEng)` makes workflow execution durable. It does not
+make every runtime store durable. Without explicit options, `runtime.New`
+creates process-local in-memory `runlog.Store` and `session.Store` values. Those
+defaults are useful for development, but a restarted process loses its local
+run-introspection record and session metadata even though Temporal can still
+resume the workflow.
 
 ## How Durability Works
 
-| Component | Role | Durability |
+| Component | Role | Owner and durability |
 | --- | --- | --- |
-| Workflow | Agent run orchestration | Event-sourced; survives restarts |
-| Plan Activity | LLM inference | Retries transient failures |
-| Execute Tool Activity | Tool invocation | Per-tool retry policies |
-| State | Turn history, tool results | Persisted in workflow history |
+| Workflow state | Live run orchestration, ledger, awaits | Temporal event history; replayed after worker restart |
+| Planner/tool activity | Nondeterministic model or tool work | Temporal records completed attempts; failed or unacknowledged attempts may retry |
+| `runlog.Store` | Canonical append-only introspection record | In memory by default; use a shared persistent adapter such as `features/runlog/mongo` |
+| `session.Store` | Session lifecycle and run metadata | In memory by default; use a shared persistent adapter such as `features/session/mongo` |
+| `memory.Store` | Derived per-run transcript projection | Best-effort and in memory by default; configure separately when the projection must survive restart |
+| `stream.Sink` | Live client delivery | Separate delivery contract; Temporal history is not a replayable UI stream |
 
-Concrete example: if 3 tools are planned and one crashes, only that tool retries instead of replaying the entire run.
+Temporal does not make activity side effects exactly once. A completed activity
+recorded in history is not rerun during workflow replay, but an activity can be
+retried if the worker fails after the external side effect and before Temporal
+records successful completion. Tool implementations still need idempotency keys
+or another retry-safe contract for externally visible effects.
 
 ## What Survives Failures
 
-| Failure Scenario | Without Temporal | With Temporal |
+| Failure scenario | Temporal protects | Additional configuration required |
 | --- | --- | --- |
-| Worker process crashes | Run lost, restart from zero | Replay from history, continues |
-| Tool call timeout | Run fails | Automatic retry with backoff |
-| Rate limit 429 | Run fails | Backs off and retries |
-| Network partition | Partial progress lost | Resumes after reconnect |
-| Deploy during run | In-flight runs fail | Draining workers and resume |
+| Worker process crashes | Workflow state replays and outstanding work resumes | Persistent runlog/session stores preserve application-visible metadata |
+| Tool activity times out | The configured activity attempt policy applies | The tool's external side effects must be retry-safe |
+| Temporal connection is interrupted | The worker reconnects and replays history | Use normal Temporal deployment and worker-draining practices |
+| Worker is replaced during deploy | Another worker on the same task queue can continue | Deploy compatible workflow code and keep shared stores reachable |
+| UI consumer disconnects | Nothing: workflow execution continues | Use a stream implementation with the delivery/replay behavior your UI requires |
 
 ## Installation
 
@@ -65,18 +79,20 @@ In-memory:
 rt := runtime.New()
 --- END CODE ---
 
-Temporal:
+Temporal with process-local stores (workflow durability only):
 
 --- CODE ---
 import (
+    "log"
+
     runtimeTemporal "github.com/CaliLuke/loom-mcp/runtime/agent/engine/temporal"
     "go.temporal.io/sdk/client"
 
     // Generated specs package from the generated agent
-    specs "github.com/example/module/gen/agent/specs"
+    specs "github.com/example/module/gen/orchestrator/agents/chat/specs"
 )
 
-temporalEng, err := runtimeTemporal.New(runtimeTemporal.Options{
+temporalEng, err := runtimeTemporal.NewWorker(runtimeTemporal.Options{
     ClientOptions: &client.Options{
         HostPort:  "127.0.0.1:7233",
         Namespace: "default",
@@ -92,49 +108,188 @@ temporalEng, err := runtimeTemporal.New(runtimeTemporal.Options{
 if err != nil {
     panic(err)
 }
-defer temporalEng.Close()
+defer func() {
+    if err := temporalEng.Close(); err != nil {
+        log.Printf("close Temporal engine: %v", err)
+    }
+}()
 
+// Runlog and session data are process-local in this configuration.
 rt := runtime.New(runtime.WithEngine(temporalEng))
 --- END CODE ---
 
-## Configuring Activity Retries
+Use that form only when losing local introspection and session metadata at
+process restart is acceptable.
 
-Tune reliability per toolset in DSL:
+### Production worker with shared stores
+
+The following construction uses the repository's Mongo adapters for the two
+stores required by the runtime lifecycle. Replace the generated `specs` import
+with the aggregate specs package for the agent hosted by the worker.
 
 --- CODE ---
-Use("external_apis", func() {
-    ActivityOptions(engine.ActivityOptions{
-        Timeout: 30 * time.Second,
-        RetryPolicy: engine.RetryPolicy{
-            MaxAttempts:        5,
-            InitialInterval:    time.Second,
-            BackoffCoefficient: 2.0,
+import (
+    "context"
+    "errors"
+    "fmt"
+
+    runlogmongo "github.com/CaliLuke/loom-mcp/features/runlog/mongo"
+    runlogclient "github.com/CaliLuke/loom-mcp/features/runlog/mongo/clients/mongo"
+    sessionmongo "github.com/CaliLuke/loom-mcp/features/session/mongo"
+    sessionclient "github.com/CaliLuke/loom-mcp/features/session/mongo/clients/mongo"
+    runtimeTemporal "github.com/CaliLuke/loom-mcp/runtime/agent/engine/temporal"
+    "github.com/CaliLuke/loom-mcp/runtime/agent/runtime"
+    mongodriver "go.mongodb.org/mongo-driver/v2/mongo"
+    mongooptions "go.mongodb.org/mongo-driver/v2/mongo/options"
+    temporalclient "go.temporal.io/sdk/client"
+
+    specs "github.com/example/module/gen/orchestrator/agents/chat/specs"
+)
+
+func newProductionRuntime(ctx context.Context) (*runtime.Runtime, func(context.Context) error, error) {
+    rawMongo, err := mongodriver.Connect(
+        mongooptions.Client().ApplyURI("mongodb://127.0.0.1:27017"),
+    )
+    if err != nil {
+        return nil, nil, fmt.Errorf("connect to MongoDB: %w", err)
+    }
+    closeMongo := func() error {
+        return rawMongo.Disconnect(ctx)
+    }
+
+    runlogClient, err := runlogclient.New(runlogclient.Options{
+        Client:   rawMongo,
+        Database: "loom",
+    })
+    if err != nil {
+        return nil, nil, errors.Join(
+            fmt.Errorf("create runlog client: %w", err),
+            closeMongo(),
+        )
+    }
+    runlogStore, err := runlogmongo.NewStore(runlogClient)
+    if err != nil {
+        return nil, nil, errors.Join(
+            fmt.Errorf("create runlog store: %w", err),
+            closeMongo(),
+        )
+    }
+
+    sessionClient, err := sessionclient.New(sessionclient.Options{
+        Client:   rawMongo,
+        Database: "loom",
+    })
+    if err != nil {
+        return nil, nil, errors.Join(
+            fmt.Errorf("create session client: %w", err),
+            closeMongo(),
+        )
+    }
+    sessionStore, err := sessionmongo.NewStore(sessionClient)
+    if err != nil {
+        return nil, nil, errors.Join(
+            fmt.Errorf("create session store: %w", err),
+            closeMongo(),
+        )
+    }
+
+    temporalEng, err := runtimeTemporal.NewWorker(runtimeTemporal.Options{
+        ClientOptions: &temporalclient.Options{
+            HostPort:      "127.0.0.1:7233",
+            Namespace:     "default",
+            DataConverter: runtimeTemporal.NewAgentDataConverter(specs.Spec),
+        },
+        WorkerOptions: runtimeTemporal.WorkerOptions{
+            TaskQueue: "orchestrator.chat",
         },
     })
+    if err != nil {
+        return nil, nil, errors.Join(
+            fmt.Errorf("create Temporal worker: %w", err),
+            closeMongo(),
+        )
+    }
 
-    Tool("fetch_weather", "Get weather data", func() { /* ... */ })
-    Tool("query_database", "Query external DB", func() { /* ... */ })
-})
+    rt := runtime.New(
+        runtime.WithEngine(temporalEng),
+        runtime.WithRunEventStore(runlogStore),
+        runtime.WithSessionStore(sessionStore),
+    )
+    cleanup := func(ctx context.Context) error {
+        return errors.Join(temporalEng.Close(), rawMongo.Disconnect(ctx))
+    }
+    return rt, cleanup, nil
+}
+--- END CODE ---
 
-Use("local_compute", func() {
-    ActivityOptions(engine.ActivityOptions{
-        Timeout: 5 * time.Second,
-        RetryPolicy: engine.RetryPolicy{
-            MaxAttempts: 2,
-        },
+Register toolsets and agents on `rt`, then call `rt.Seal(ctx)` before accepting
+traffic. Every worker and client-only runtime that reads or writes session/run
+metadata must use the same persistent store deployment. A client-only process
+uses `runtimeTemporal.NewClient` instead of `NewWorker`, but should receive the
+same `WithRunEventStore` and `WithSessionStore` options.
+
+If the application relies on the derived `memory.Store` projection across
+processes or restarts, also construct `features/memory/mongo` and pass it with
+`runtime.WithMemoryStore`. Runlog persistence does not automatically rebuild
+that projection. Configure a shared stream separately when clients need
+cross-worker delivery; workflow history is not a substitute for stream replay.
+
+## Activity attempts and timeouts
+
+Generated planner and tool registrations carry bounded activity attempt
+policies. Configure semantic planner and tool timeouts in the agent DSL:
+
+--- CODE ---
+Agent("chat", "Chat agent", func() {
+    RunPolicy(func() {
+        Timing(func() {
+            Plan("45s")
+            Tools("2m")
+        })
     })
-
-    Tool("calculate", "Pure computation", func() { /* ... */ })
 })
 --- END CODE ---
+
+`temporal.Options.ActivityDefaults` configures Temporal-specific queue-wait and
+heartbeat-liveness limits; it does not replace the runtime's semantic attempt
+budgets. Treat every planner and tool activity as retryable.
 
 ## Worker Setup
 
 Workers poll task queues and execute workflows/activities for registered agents.
+Use `NewWorker`, register all local agents/toolsets, and call `Runtime.Seal` to
+start polling. Use `NewClient` only in processes that submit, query, signal, or
+cancel workflows without registering local workflow/activity implementations.
+
+## Restart and recovery verification
+
+Verify the complete deployment boundary, not only that Temporal reports a
+workflow as open:
+
+1. Start a run with a known run ID and a deliberately slow, retry-safe tool.
+2. Terminate the worker while the run is active, then start a fresh worker with
+   the same Temporal namespace/task queue and the same Mongo database.
+3. Confirm the run reaches a terminal Temporal status through
+   `rt.Engine.QueryRunStatus(ctx, runID)`.
+4. Read `rt.ListRunEvents(ctx, runID, "", limit)` from the restarted process and
+   confirm the canonical runlog contains the run lifecycle through completion.
+5. Read `rt.SessionStore.LoadRun(ctx, runID)` and
+   `rt.SessionStore.ListRunsBySession(...)` and confirm the run remains attached
+   to its session with the terminal status.
+6. If persistent memory or cross-worker streaming is configured, verify those
+   projections independently. Their success is not implied by Temporal or by a
+   complete runlog.
+
+A green recovery test proves different things at each layer: Temporal proves
+workflow continuation, Mongo runlog proves durable introspection, Mongo session
+storage proves durable session/run metadata, and the chosen stream or memory
+adapter proves only its own projection contract.
 
 ## Best Practices
 
 - Use separate environments (`dev`, `staging`, `prod`) for namespace scoping.
-- Configure retries based on service reliability.
+- Make planner and tool side effects retry-safe; do not assume exactly-once activity execution.
 - Balance activity timeout values for reliability vs. failure detection speed.
+- Share persistent runlog/session stores across workers and caller processes.
+- Test store availability and restart recovery before deploying workflow changes.
 - Use Temporal Cloud if you want hosted durability operations.

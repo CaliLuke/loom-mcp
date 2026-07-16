@@ -1,13 +1,13 @@
-# Goa‑AI Quickstart
+# loom-mcp Quickstart
 
 Minimal, copy‑paste runnable example to go from zero → talking agent. Keep your design in `design/`, never edit `gen/`.
 
 ## Prerequisites
 
-- Go 1.24+
+- Go 1.26.1+
 - Loom CLI (`go install github.com/CaliLuke/loom/cmd/loom@v1.6.2`)
-- Temporal dev server (for workflow execution)
-  - Easiest: Docker one‑liner below, or use Temporalite
+- Temporal is optional. The generated example uses the in-memory engine; a
+  Temporal server is needed only when you opt into durable execution in step 5.
 
 ## 1) Scaffold a fresh project
 
@@ -132,9 +132,9 @@ Edit `internal/agents/chat/planner/planner.go` to connect your LLM:
 func (p *examplePlanner) PlanStart(ctx context.Context, in *planner.PlanInput) (*planner.PlanResult, error) {
     // 1. Get LLM client from runtime
     // mc, _ := in.Agent.ModelClient("openai")
-    
+
     // 2. Build prompt from in.Messages
-    
+
     // 3. Decide: call tools or give final response
     return &planner.PlanResult{
         FinalResponse: &planner.FinalResponse{

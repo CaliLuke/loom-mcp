@@ -137,12 +137,12 @@
 //   - [DeniedResultTemplate] configures the result returned when confirmation is denied
 //   - [Expose] declares generated tool surfaces
 //   - [MCPPlacement] places a projected toolset tool in an MCP server
-//   - [Idempotent] marks an MCP method as safe to retry
+//   - [Idempotent] emits transcript-scoped idempotency metadata for planners/orchestrators
 //
 // Policy Functions:
 //   - [RunPolicy] configures execution constraints
 //   - [DefaultCaps] sets resource limits using [MaxToolCalls] and [MaxConsecutiveFailedToolCalls]
-//   - [TimeBudget] sets maximum execution duration
+//   - [TimeBudget] sets the active-work budget (human/external waits pause it)
 //   - [InterruptsAllowed] enables user interruption handling
 //   - [OnMissingFields] configures validation behavior
 //   - [Interceptors] attaches runtime interceptor identifiers
@@ -158,7 +158,7 @@
 //
 // Timing Functions (inside RunPolicy):
 //   - [Timing] groups timing configuration
-//   - [Budget] sets total wall-clock budget
+//   - [Budget] sets the active-work budget
 //   - [Plan] sets planner activity timeout
 //   - [Tools] sets default tool activity timeout
 //

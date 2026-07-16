@@ -16,6 +16,7 @@ import (
 
 type fakeClient struct {
 	completeErr error
+	stream      model.Streamer
 	streamErr   error
 
 	completeCalls int
@@ -29,7 +30,7 @@ func (f *fakeClient) Complete(_ context.Context, _ *model.Request) (*model.Respo
 
 func (f *fakeClient) Stream(_ context.Context, _ *model.Request) (model.Streamer, error) {
 	f.streamCalls++
-	return nil, f.streamErr
+	return f.stream, f.streamErr
 }
 
 func TestAdaptiveRateLimiter_BackoffOnRateLimited(t *testing.T) {

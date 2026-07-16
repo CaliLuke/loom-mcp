@@ -211,6 +211,19 @@ func TestPreparePrePlanToolPolicyDoesNotCapAdvertisedTools(t *testing.T) {
 	assert.Equal(t, []tools.Ident{tools.Ident("one"), tools.Ident("two")}, result.Envelope.Allowed)
 }
 
+func TestMergeCapsIgnoresDeprecatedExpiresAt(t *testing.T) {
+	current := policy.CapsState{MaxToolCalls: 5, RemainingToolCalls: 4}
+	decision := policy.CapsState{
+		RemainingToolCalls: 3,
+		ExpiresAt:          time.Date(2030, time.January, 2, 3, 4, 5, 0, time.UTC),
+	}
+
+	got := mergeCaps(current, decision)
+
+	assert.Equal(t, 3, got.RemainingToolCalls)
+	assert.True(t, got.ExpiresAt.IsZero(), "deprecated wall-clock expiry must not become a second runtime deadline") //nolint:staticcheck // Verify the legacy field remains inert.
+}
+
 // TestDisableToolsPolicyBlocksToolExecution drives the workflow loop end to end
 // with a policy engine that returns DisableTools. The pre-plan policy envelope
 // must come back active with an empty allowlist, and a planner that emits tool

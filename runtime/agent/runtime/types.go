@@ -121,7 +121,7 @@ type (
 	// Timing groups per-run timing overrides in a single structure.
 	// Zero values mean no override.
 	Timing struct {
-		// Budget sets the total wall-clock budget for this run.
+		// Budget caps active planner/tool work; human and external waits pause it.
 		Budget time.Duration
 		// Plan sets the Plan/Resume activity timeout for this run.
 		Plan time.Duration

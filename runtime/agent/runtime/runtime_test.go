@@ -658,6 +658,7 @@ func TestRegisterAgentAfterFirstRunIsRejected(t *testing.T) {
 		ExecuteToolActivity: "execute",
 	})
 	require.ErrorIs(t, err, ErrRegistrationClosed)
+	require.ErrorIs(t, rt.RegisterModel("replacement", contractModelClient{}), ErrRegistrationClosed)
 }
 
 func TestSealClosesRegistrationAndDelegatesToEngine(t *testing.T) {

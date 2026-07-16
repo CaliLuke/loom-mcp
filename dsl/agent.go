@@ -75,7 +75,8 @@ func Agent(name, description string, dsl func()) *expragents.AgentExpr {
 
 // Use declares that the current agent consumes the specified toolset.
 // The value may be either:
-//   - A *expragents.ToolsetExpr returned by Toolset or MCPToolset (provider-owned)
+//   - A *expragents.ToolsetExpr returned by Toolset, including
+//     Toolset(FromMCP(...)) (provider-owned)
 //   - A string name for an inline, agent-local toolset definition
 //
 // An optional DSL function can:
@@ -125,8 +126,8 @@ func Use(value any, fn ...func()) *expragents.ToolsetExpr {
 
 // Export declares that the current agent or service exports the specified
 // toolset for other agents to consume. Providers typically declare reusable
-// toolsets at the top level via Toolset or MCPToolset, then reference them from
-// agents or services with Export.
+// toolsets at the top level via Toolset, including Toolset(FromMCP(...)), then
+// reference them from agents or services with Export.
 func Export(value any, fn ...func()) *expragents.ToolsetExpr {
 	var dsl func()
 	if len(fn) > 0 {

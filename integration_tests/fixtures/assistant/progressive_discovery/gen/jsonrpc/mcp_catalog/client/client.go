@@ -139,7 +139,7 @@ func (c *Client) ToolsCall() loom.Endpoint {
 		if err := encodeRequest(req, v); err != nil {
 			return nil, err
 		}
-		req.Header.Set("Accept", "application/json, text/event-stream")
+		req.Header.Set("Accept", "text/event-stream")
 		resp, err := c.Doer.Do(req)
 		if err != nil {
 			return nil, loomhttp.ErrRequestError("mcp_catalog", "tools/call", err)
@@ -179,7 +179,7 @@ func (c *Client) EventsStream() loom.Endpoint {
 		if err := encodeRequest(req, v); err != nil {
 			return nil, err
 		}
-		req.Header.Set("Accept", "application/json, text/event-stream")
+		req.Header.Set("Accept", "text/event-stream")
 		resp, err := c.Doer.Do(req)
 		if err != nil {
 			return nil, loomhttp.ErrRequestError("mcp_catalog", "events/stream", err)
@@ -231,9 +231,7 @@ func (d *mcpClientDoer) Do(req *http.Request) (*http.Response, error) {
 	if err != nil {
 		return nil, err
 	}
-	if req.Header.Get("Accept") == "" {
-		req.Header.Set("Accept", "application/json, text/event-stream")
-	}
+	req.Header.Set("Accept", "application/json, text/event-stream")
 	if method != "initialize" {
 		d.mu.Lock()
 		sessionID, protocolVersion := d.sessionID, d.protocolVersion

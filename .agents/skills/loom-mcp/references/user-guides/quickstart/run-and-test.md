@@ -1,116 +1,31 @@
-# loom-mcp Quickstart — Step 2: Stub Planner Flow
+# loom-mcp quickstart — run and verify
 
-Create `main.go` and run a fully in-memory stub flow.
+Use `quickstart/README.md` as the canonical runnable walkthrough. Generated
+package names, config fields, and executor wiring are design-specific, so this
+skill reference intentionally does not duplicate a standalone application.
 
-```go
-package main
+The stable flow is:
 
-import (
-    "context"
-    "fmt"
+1. Generate from the module import path with `loom gen <module>/design`.
+2. Implement application-owned planners and tool executors outside `gen/`.
+3. Register models, agents, and generated toolset executors on one runtime.
+4. Create a session, then use the generated agent `NewClient(rt)` to submit the
+   run.
+5. Run the generated package tests and one end-to-end tool execution.
 
-    assistant "quickstart/gen/demo/agents/assistant"
-    "github.com/CaliLuke/loom-mcp/runtime/agent/model"
-    "github.com/CaliLuke/loom-mcp/runtime/agent/planner"
-    "github.com/CaliLuke/loom-mcp/runtime/agent/runtime"
-)
-
-type StubPlanner struct{}
-
-func (p *StubPlanner) PlanStart(ctx context.Context, in *planner.PlanInput) (*planner.PlanResult, error) {
-    return &planner.PlanResult{
-        ToolCalls: []*planner.ToolCall{{
-            Name:    "weather.get_weather",
-            Payload: []byte(`{"city": "Tokyo"}`),
-        }},
-    }, nil
-}
-
-func (p *StubPlanner) PlanResume(ctx context.Context, in *planner.PlanResumeInput) (*planner.PlanResult, error) {
-    return &planner.PlanResult{
-        FinalResponse: &planner.FinalResponse{
-            Message: &model.Message{
-                Role:  model.ConversationRoleAssistant,
-                Parts: []model.Part{model.TextPart{Text: "Tokyo is 22°C and sunny!"}},
-            },
-        },
-    }, nil
-}
-
-type StubExecutor struct{}
-
-func (e *StubExecutor) Execute(ctx context.Context, meta runtime.ToolCallMeta, req *planner.ToolRequest) (*planner.ToolResult, error) {
-    return &planner.ToolResult{
-        Name:   req.Name,
-        Result: map[string]any{"temperature": 22, "conditions": "Sunny"},
-    }, nil
-}
-
-func main() {
-    ctx := context.Background()
-
-    rt := runtime.New()
-    sessionID := "demo-session"
-    if _, err := rt.CreateSession(ctx, sessionID); err != nil {
-        panic(err)
-    }
-
-    err := assistant.RegisterAssistantAgent(ctx, rt, assistant.AssistantAgentConfig{
-        Planner:  &StubPlanner{},
-        Executor: &StubExecutor{},
-    })
-    if err != nil {
-        panic(err)
-    }
-
-    client := assistant.NewClient(rt)
-    out, err := client.Run(ctx, sessionID, []*model.Message{{
-        Role:  model.ConversationRoleUser,
-        Parts: []model.Part{model.TextPart{Text: "What's the weather?"}},
-    }})
-    if err != nil {
-        panic(err)
-    }
-
-    fmt.Println("RunID:", out.RunID)
-    if out.Final != nil {
-        for _, p := range out.Final.Parts {
-            if tp, ok := p.(model.TextPart); ok {
-                fmt.Println("Assistant:", tp.Text)
-            }
-        }
-    }
-}
-```
-
-Run:
+Inside this repository, use the checked-in quickstart and full verification
+ladder:
 
 ```bash
-go mod tidy && go run main.go
+make regen-quickstart
+go test -C ./quickstart ./... -count=1
+make verify-mcp-local
+make lint
+make test
+make itest
 ```
 
-Expected output:
-
-```bash
-RunID: demo.assistant-abc123
-Assistant: Tokyo is 22°C and sunny!
-```
-
-### Optional prompt store
-
-```go
-import (
-    promptmongo "github.com/CaliLuke/loom-mcp/features/prompt/mongo"
-    clientmongo "github.com/CaliLuke/loom-mcp/features/prompt/mongo/clients/mongo"
-)
-
-promptClient, _ := clientmongo.New(clientmongo.Options{
-    Client:   mongoClient,
-    Database: "quickstart",
-})
-promptStore, _ := promptmongo.NewStore(promptClient)
-
-rt := runtime.New(
-    runtime.WithPromptStore(promptStore),
-)
-```
+Do not invent generic generated imports such as `gen/demo/agents/assistant` or
+generic `Executor` config fields. Read the generated `AGENTS_QUICKSTART.md` and
+agent config for the current design; method-backed toolsets are wired through
+generated `RegisterUsedToolsets(..., With<Toolset>Executor(...))` helpers.

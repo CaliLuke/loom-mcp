@@ -27,9 +27,10 @@ func TestMultiService_GeneratesCLIAndStubs(t *testing.T) {
 		},
 	}
 	cliStart := &codegen.SectionTemplate{Name: "cli-http-start", Source: "// original"}
+	cliEnd := &codegen.SectionTemplate{Name: "cli-http-end", Source: "// original end"}
 	cliFile := &codegen.File{
-		Path:             "cmd/orchestrator-cli/jsonrpc.go",
-		SectionTemplates: []*codegen.SectionTemplate{cliHeader, cliStart},
+		Path:     "cmd/orchestrator-cli/jsonrpc.go",
+		Sections: []codegen.Section{cliHeader, cliStart, cliEnd},
 	}
 
 	// Existing example stubs (to be replaced)
@@ -41,8 +42,8 @@ func TestMultiService_GeneratesCLIAndStubs(t *testing.T) {
 		Source: "func NewMcpAlpha() mcpalpha.Service { return &mcpAlphasrvc{} }",
 	}
 	alphaStub := &codegen.File{
-		Path:             "mcp_alpha.go",
-		SectionTemplates: []*codegen.SectionTemplate{alphaHeader, alphaBody},
+		Path:     "mcp_alpha.go",
+		Sections: []codegen.Section{alphaHeader, alphaBody},
 	}
 
 	betaHeader := &codegen.SectionTemplate{Name: headerSection, Data: map[string]any{
@@ -52,15 +53,17 @@ func TestMultiService_GeneratesCLIAndStubs(t *testing.T) {
 		Name:   "body",
 		Source: "func NewMcpBeta() mcpbeta.Service { return &mcpBetasrvc{} }",
 	}
-	betaStub := &codegen.File{Path: "mcp_beta.go", SectionTemplates: []*codegen.SectionTemplate{betaHeader, betaBody}}
+	betaStub := &codegen.File{Path: "mcp_beta.go", Sections: []codegen.Section{betaHeader, betaBody}}
 
 	files := []*codegen.File{cliFile, alphaStub, betaStub}
 
 	// Patch CLI to use adapter clients for both services
-	files = patchCLIForServer("orchestrator", svr, []*expr.ServiceExpr{alpha, beta}, files)
+	files, err := patchCLIForServer("orchestrator", svr, []*expr.ServiceExpr{alpha, beta}, files)
+	require.NoError(t, err)
 
 	// Generate adapter stubs for both services and replace bodies
-	generateExampleAdapterStubs("example.com/assistant/gen", []*expr.ServiceExpr{alpha, beta}, files)
+	_, err = generateExampleAdapterStubs("example.com/assistant/gen", []*expr.ServiceExpr{alpha, beta}, files)
+	require.NoError(t, err)
 
 	// Validate CLI header contains both adapter client imports
 	var importPaths []string
@@ -75,22 +78,11 @@ func TestMultiService_GeneratesCLIAndStubs(t *testing.T) {
 	}
 	require.Contains(t, importPaths, "example.com/assistant/gen/mcp_alpha/adapter/client")
 	require.Contains(t, importPaths, "example.com/assistant/gen/mcp_beta/adapter/client")
-	require.NotEqual(t, "// original", cliStart.Source)
+	require.Len(t, cliFile.Section("cli-dojsonrpc"), 1)
+	require.Empty(t, cliFile.Section("cli-http-start"))
+	require.Empty(t, cliFile.Section("cli-http-end"))
 
 	// Validate stubs were replaced with template section
-	var alphaHasStub, betaHasStub bool
-	//nolint:staticcheck // Tests still inspect the legacy section list while generators migrate to Section.
-	for _, s := range alphaStub.SectionTemplates {
-		if s.Name == exampleMCPStubSection && s.Source != "" {
-			alphaHasStub = true
-		}
-	}
-	//nolint:staticcheck // Tests still inspect the legacy section list while generators migrate to Section.
-	for _, s := range betaStub.SectionTemplates {
-		if s.Name == exampleMCPStubSection && s.Source != "" {
-			betaHasStub = true
-		}
-	}
-	require.True(t, alphaHasStub, "alpha stub not generated")
-	require.True(t, betaHasStub, "beta stub not generated")
+	require.Len(t, alphaStub.Section(exampleMCPStubSection), 1)
+	require.Len(t, betaStub.Section(exampleMCPStubSection), 1)
 }

@@ -1,8 +1,6 @@
-//nolint:lll // example patchers include long string replacements for clarity
 package codegen
 
 import (
-	"bytes"
 	"fmt"
 	"path/filepath"
 	"strings"
@@ -159,12 +157,18 @@ func ModifyExampleFiles(genpkg string, roots []eval.Root, files []*codegen.File)
 	}
 
 	// Ensure example stub returns the adapter-backed service instead of zero-value stub
-	files = generateExampleAdapterStubs(genpkg, mcpServices, files)
+	files, err := generateExampleAdapterStubs(genpkg, mcpServices, files)
+	if err != nil {
+		return nil, err
+	}
 	servers := make(example.ServersData)
 
 	for _, svr := range r.API.Servers {
 		dir := servers.Get(svr, r).Dir
-		files = patchCLIForServer(dir, svr, mcpServices, files)
+		files, err = patchCLIForServer(dir, svr, mcpServices, files)
+		if err != nil {
+			return nil, err
+		}
 	}
 
 	return files, nil
@@ -193,22 +197,9 @@ func collectMCPServices(r *expr.RootExpr) []*expr.ServiceExpr {
 	return svcs
 }
 
-// patchCLIForServer locates the generated JSON-RPC CLI support file and rewrites it
-// to instantiate the MCP adapter client endpoints. It also adds required imports.
-func patchCLIForServer(dir string, svr *expr.ServerExpr, mcpServices []*expr.ServiceExpr, files []*codegen.File) []*codegen.File {
-	cliPath := filepath.Join("cmd", dir+"-cli", "jsonrpc.go")
-	var cliFile *codegen.File
-	for _, f := range files {
-		if f.Path != cliPath {
-			continue
-		}
-		cliFile = f
-		break
-	}
-	if cliFile == nil {
-		return files
-	}
-
+// patchCLIForServer replaces the generated JSON-RPC CLI ownership sections
+// with MCP adapter client endpoint wiring.
+func patchCLIForServer(dir string, svr *expr.ServerExpr, mcpServices []*expr.ServiceExpr, files []*codegen.File) ([]*codegen.File, error) {
 	svcMap := make(map[string]*expr.ServiceExpr, len(mcpServices))
 	for _, svc := range mcpServices {
 		svcMap[svc.Name] = svc
@@ -216,30 +207,34 @@ func patchCLIForServer(dir string, svr *expr.ServerExpr, mcpServices []*expr.Ser
 
 	var targetSvcs []*expr.ServiceExpr
 	for _, name := range svr.Services {
-		if svc := svcMap[name]; svc != nil {
+		if svc := svcMap[name]; svc != nil && len(svc.Methods) > 0 {
 			targetSvcs = append(targetSvcs, svc)
 		}
 	}
 	if len(targetSvcs) == 0 {
-		return files
+		return files, nil
 	}
 
-	header := findSection(cliFile, headerSection)
-	if header == nil {
-		return files
+	cliPath := filepath.Join("cmd", dir+"-cli", "jsonrpc.go")
+	cliFile, err := requireExampleFile(files, cliPath)
+	if err != nil {
+		return nil, err
+	}
+	header, err := requireExampleTemplateSection(cliFile, headerSection)
+	if err != nil {
+		return nil, err
+	}
+	if err := validateCLISectionOwnership(cliFile); err != nil {
+		return nil, err
 	}
 	baseModule := deriveBaseModuleFromHeader(header)
 	if baseModule == "" {
-		return files
+		return nil, fmt.Errorf("upstream example CLI import contract changed in %s: generated module import not found", filepath.ToSlash(cliFile.Path))
 	}
 
 	serviceData := buildCLIServiceData(targetSvcs, header, baseModule)
 	if len(serviceData) == 0 {
-		return files
-	}
-	replacement := renderCLIDoJSONRPC(serviceData)
-	if replacement == "" {
-		return files
+		return nil, fmt.Errorf("upstream example CLI service contract changed in %s: no MCP methods found", filepath.ToSlash(cliFile.Path))
 	}
 
 	addHeaderImports(header,
@@ -248,59 +243,39 @@ func patchCLIForServer(dir string, svr *expr.ServerExpr, mcpServices []*expr.Ser
 		&codegen.ImportSpec{Path: "strings"},
 	)
 
-	section := findSectionByName(cliFile, "cli-http-start")
-	if section != nil {
-		section.Source = replacement
+	sections := cliFile.AllSections()
+	updated := make([]codegen.Section, 0, len(sections)-1)
+	for _, section := range sections {
+		switch section.SectionName() {
+		case "cli-http-start":
+			updated = append(updated, cliDoJSONRPCSection(serviceData))
+		case "cli-http-end":
+			continue
+		default:
+			updated = append(updated, section)
+		}
 	}
-	if end := findSectionByName(cliFile, "cli-http-end"); end != nil {
-		end.Source = ""
-	}
-	return files
+	cliFile.SetSections(updated)
+	return files, nil
 }
 
-// patchExampleStubForMCP rewrites the generated example stub (mcp_<svc>.go)
-// to return the adapter that wraps the original service implementation, so the
-// server exposes proper MCP behavior.
-func generateExampleAdapterStubs(genpkg string, mcpServices []*expr.ServiceExpr, files []*codegen.File) []*codegen.File {
+// generateExampleAdapterStubs replaces each generated MCP example stub at its
+// stable path with an owned adapter factory section.
+func generateExampleAdapterStubs(genpkg string, mcpServices []*expr.ServiceExpr, files []*codegen.File) ([]*codegen.File, error) {
 	if len(mcpServices) == 0 {
-		return files
-	}
-	// Build lookup of files by path for quick replacement
-	byPath := make(map[string]*codegen.File, len(files))
-	for _, f := range files {
-		byPath[filepath.ToSlash(f.Path)] = f
+		return files, nil
 	}
 	for _, svc := range mcpServices {
 		svcGo := codegen.Goify(svc.Name, true)
 		svcSnake := codegen.SnakeCase(svc.Name)
-		// Locate existing stub file and header to copy package/import context
 		stubPath := filepath.ToSlash("mcp_" + svcSnake + ".go")
-		f := byPath[stubPath]
-		if f == nil {
-			// As a fallback, scan for any file declaring NewMcp<Service>()
-			for _, cf := range files {
-				for _, sec := range cf.AllSections() {
-					s, ok := sec.(*codegen.SectionTemplate)
-					if !ok || s.Name == headerSection {
-						continue
-					}
-					if strings.Contains(s.Source, "func NewMcp"+svcGo+"()") {
-						f = cf
-						break
-					}
-				}
-				if f != nil {
-					break
-				}
-			}
+		f, err := requireExampleFile(files, stubPath)
+		if err != nil {
+			return nil, err
 		}
-		if f == nil {
-			// No stub found; skip
-			continue
-		}
-		header := findSection(f, headerSection)
-		if header == nil {
-			continue
+		header, err := requireExampleTemplateSection(f, headerSection)
+		if err != nil {
+			return nil, err
 		}
 		// Ensure import for MCP service package exists and capture its alias
 		mcpAlias := ""
@@ -329,26 +304,76 @@ func generateExampleAdapterStubs(genpkg string, mcpServices []*expr.ServiceExpr,
 			}
 		}
 		if mcpAlias == "" {
-			// As a last resort keep using a conventional alias
-			mcpAlias = codegen.Goify("mcp_"+svcSnake, false)
+			return nil, fmt.Errorf("upstream example stub import contract changed in %s: MCP service import not found", stubPath)
 		}
 		// Determine whether prompts are enabled to decide constructor arity
 		hasPrompts := false
 		if m := mcpexpr.Root.GetMCP(svc); m != nil {
 			hasPrompts = m.Capabilities != nil && m.Capabilities.EnablePrompts
 		}
-		body := mcpTemplates.MustRender("example_mcp_stub", map[string]any{
-			"ServiceGo":  svcGo,
-			"MCPAlias":   mcpAlias,
-			"HasPrompts": hasPrompts,
-		})
-		// Replace file content except header with our body
-		stub := &codegen.SectionTemplate{Name: exampleMCPStubSection, Source: body}
-		f.Sections = []codegen.Section{header, stub}
-		//nolint:staticcheck // Existing example files are still rewritten through the legacy SectionTemplates field.
-		f.SectionTemplates = []*codegen.SectionTemplate{header, stub}
+		f.SetSections([]codegen.Section{header, exampleAdapterStubSection(svcGo, mcpAlias, hasPrompts)})
 	}
-	return files
+	return files, nil
+}
+
+func requireExampleFile(files []*codegen.File, path string) (*codegen.File, error) {
+	var matched *codegen.File
+	count := 0
+	for _, file := range files {
+		if file == nil || filepath.ToSlash(file.Path) != filepath.ToSlash(path) {
+			continue
+		}
+		matched = file
+		count++
+	}
+	if count != 1 {
+		return nil, fmt.Errorf("upstream example file contract changed: expected one %q file, found %d", filepath.ToSlash(path), count)
+	}
+	return matched, nil
+}
+
+func requireExampleTemplateSection(file *codegen.File, name string) (*codegen.SectionTemplate, error) {
+	sections := file.Section(name)
+	if len(sections) != 1 {
+		return nil, fmt.Errorf(
+			"upstream example section contract changed in %s: expected one %q section, found %d",
+			filepath.ToSlash(file.Path), name, len(sections),
+		)
+	}
+	template, ok := sections[0].(*codegen.SectionTemplate)
+	if !ok {
+		return nil, fmt.Errorf(
+			"upstream example section contract changed in %s: %q is not template-backed",
+			filepath.ToSlash(file.Path), name,
+		)
+	}
+	return template, nil
+}
+
+func validateCLISectionOwnership(file *codegen.File) error {
+	for _, name := range []string{"cli-http-start", "cli-http-end"} {
+		count := len(file.Section(name))
+		if count != 1 {
+			return fmt.Errorf(
+				"upstream example CLI section contract changed in %s: expected one %q section, found %d",
+				filepath.ToSlash(file.Path), name, count,
+			)
+		}
+	}
+	return nil
+}
+
+func exampleAdapterStubSection(serviceGo, mcpAlias string, hasPrompts bool) codegen.Section {
+	return codegen.NewJenniferSection(exampleMCPStubSection, func(stmt *jen.Statement) {
+		stmt.Comment("Example MCP stub: ensure NewMcp" + serviceGo + " returns the adapter-wrapped service.").Line()
+		stmt.Func().Id("NewMcp" + serviceGo).Params().Id(mcpAlias).Dot("Service").BlockFunc(func(g *jen.Group) {
+			args := []jen.Code{jen.Id("New" + serviceGo).Call(), jen.Nil()}
+			if hasPrompts {
+				args = append(args, jen.Nil())
+			}
+			g.Return(jen.Id(mcpAlias).Dot("NewMCPAdapter").Call(args...))
+		})
+	})
 }
 
 // deriveBaseModuleFromFiles attempts to locate the module import prefix by inspecting
@@ -432,16 +457,6 @@ func stringInList(list []string, name string) bool {
 	return false
 }
 
-func findSectionByName(f *codegen.File, name string) *codegen.SectionTemplate {
-	for _, sec := range f.AllSections() {
-		s, ok := sec.(*codegen.SectionTemplate)
-		if ok && s.Name == name {
-			return s
-		}
-	}
-	return nil
-}
-
 func buildCLIServiceData(
 	services []*expr.ServiceExpr,
 	header *codegen.SectionTemplate,
@@ -490,18 +505,10 @@ func addHeaderImports(header *codegen.SectionTemplate, specs ...*codegen.ImportS
 	}
 }
 
-func renderCLIDoJSONRPC(services []cliServiceTemplateData) string {
-	if len(services) == 0 {
-		return ""
-	}
-	section := codegen.NewJenniferSection("cli-dojsonrpc", func(stmt *jen.Statement) {
+func cliDoJSONRPCSection(services []cliServiceTemplateData) codegen.Section {
+	return codegen.NewJenniferSection("cli-dojsonrpc", func(stmt *jen.Statement) {
 		emitCLIDoJSONRPC(stmt, services)
 	})
-	var buf bytes.Buffer
-	if err := section.Write(&buf); err != nil {
-		panic(fmt.Sprintf("render cli doJSONRPC section: %v", err))
-	}
-	return buf.String()
 }
 
 func methodCommandName(name string) string {

@@ -13,19 +13,24 @@ Build intelligent agents, MCP servers, and registry-integrated toolsets from you
 
 For each service annotated with agents or MCP, the plugin:
 
-1. Derives service expressions from your DSL (see `expr/agent/` and `expr/mcp.go`).
+1. Derives service expressions from your DSL (see `expr/agent/` and `expr/mcp/`).
 2. Runs the standard Loom code generation pipeline:
    - Service layer via `codegen/service` (service, endpoints, client)
    - JSON-RPC transport via `jsonrpc/codegen` (server, client, types; SSE when streaming)
    - Agent workflows, activities, and tool specs via `codegen/agent`
-3. Applies small, deterministic transformations so files land under appropriate paths.
+3. Emits loom-mcp adapters and replaces stable named generator sections where
+   MCP requires transport behavior beyond the upstream defaults. Every
+   replacement is driven by evaluated generator data and fails on missing or
+   duplicate sections; rendered Go source is never inspected or rewritten.
 
-We compose on top of the shared Loom generation pipeline with minimal templates and predictable output.
+We compose on top of the shared Loom generation pipeline and keep the resulting
+output deterministic and covered by golden and compile tests.
 
 ## Layout
 
 - Agent packages: `gen/<svc>/agents/<agent>/`
-- Tool specs: `gen/<svc>/agents/<agent>/specs/`
+- Agent aggregate catalog: `gen/<svc>/agents/<agent>/specs/`
+- Toolset-owned specs, codecs, and transforms: `gen/<svc>/toolsets/<toolset>/`
 - MCP service: `gen/mcp_<service>/`
 - Registry clients: `gen/<svc>/registry/<name>/`
 
@@ -135,7 +140,10 @@ Both paths converge on the same runtime `Caller` contract and the same tool resu
 
 ## Streaming
 
-No custom streaming templates. When your methods stream, the JSON-RPC generator emits the SSE stack. We simply adjust paths/imports so it lives under the MCP tree.
+Streaming composes on Loom's generated JSON-RPC/SSE stack. loom-mcp adds MCP
+session, reconnect, cancellation, batch-isolation, and notification behavior
+around that generated transport. The official-SDK server separately exposes
+Streamable HTTP.
 
 ## Agent run lifecycle streaming contract
 
@@ -192,7 +200,7 @@ The adapter maps service errors with name `invalid_params` to JSON-RPC `-32602`,
 ## Contributing
 
 - Add agent concepts in `expr/agent/` and update the expression builders
-- Add MCP concepts in `expr/mcp.go` and update the MCP expression builder
+- Add MCP concepts in `expr/mcp/` and update the MCP expression builder
 - Add registry concepts in `expr/agent/registry.go`
 - Keep new templates small and transport-agnostic; compose on the existing JSON-RPC outputs
 

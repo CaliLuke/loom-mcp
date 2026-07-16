@@ -56,9 +56,75 @@ Use this skill for `loom-mcp` work in this repo. Keep `AGENTS.md` short and keep
 - Runtime planners have two streaming modes only:
   - use `PlannerContext.ModelClient(id)` and drain the decorated stream yourself, or
   - use `planner.ConsumeStream` with a raw client.
+- Runtime registration is immutable after `Runtime.Seal` or the first submitted
+  run. `RegisterModel`, `RegisterAgent`, and `RegisterToolset` all return
+  `ErrRegistrationClosed`; model-client hot-swapping requires a replacement
+  runtime.
+- Runtime registry plain and semantic search paths share concurrent fan-out and
+  partial-failure semantics. The Pulse replicated map is the catalog authority;
+  the removed registry memory/Mongo `Store` model must not be documented or
+  restored.
+- Mongo prompt override resolution uses canonical indexed label-scope
+  fingerprints, at most one session plus one global lookup, and a 15-label
+  bound. Client startup backfills missing fingerprints before index creation
+  and fails closed on migration errors.
+- Planner turns are workflow activities, not exactly-once method calls. Generated
+  registrations retry failed plan/resume activities up to three attempts by
+  default, so model calls and direct side effects can repeat after a late attempt
+  failure. Planner implementations must be retry-safe and protect non-idempotent
+  effects with stable idempotency keys.
+- `policy.CapsState` owns counter budgets only. Its deprecated `ExpiresAt` field
+  is ignored; active-time enforcement belongs to deterministic runtime deadlines
+  configured through `TimeBudget`, with external waits pausing that budget.
 - Agent-as-tool runs as a real child workflow. Parent and child are linked by `ChildRunLinked`, and parent tool results carry `RunLink`.
 - Stream visibility is profile-driven. Child runs are linked, not flattened, by default.
 - Runtime schemas come from generated `tool_specs.Specs` and codecs, not `docs.json`.
+- Workflow state is the live execution authority, while `runlog.Store` is the
+  canonical append-only introspection record and fails closed. Streams, the
+  hook bus, and `memory.Store` projections have distinct delivery guarantees;
+  never describe them as interchangeable durable transcripts.
+- Mongo transcript memory writes immutable append buckets to the companion
+  events collection and reads legacy single-run documents before those buckets.
+  Bucket queries use `created_at`, `_id` order and combined snapshots are
+  stable-sorted by event timestamp; equal timestamps retain legacy-before-new
+  and deterministic bucket order.
+  Do not restore `$push` growth on one run document, and retain both collections
+  through the legacy-read compatibility window.
+- Pulse `Subscriber.Subscribe` is an auto-ack UI convenience. Durable consumers
+  must use `SubscribeManual`, commit idempotently using `EventKey`, and call
+  `Delivery.Ack` only after the commit. Malformed manual deliveries expose the
+  raw payload and decode error, remain pending by default, and may be acked only
+  after an application-owned dead-letter commit.
+- Temporal persists workflow history, not the runtime's store defaults.
+  Production worker and client runtimes must explicitly share persistent
+  `runlog.Store` and `session.Store` implementations when run introspection and
+  session metadata must survive process replacement; configure memory and
+  stream projections independently.
+- `TimeBudget` measures active runtime work. Clarification, confirmation,
+  typed-input, and external-tool waits pause the budget, so elapsed wall time
+  may exceed the configured duration.
+- `Idempotent()` is generated metadata for planners/orchestrators. It does not
+  provide runtime replay suppression or exactly-once execution by itself.
+- Model providers must satisfy the shared conformance matrix for complete and
+  streaming calls, tools, structured output, typed thinking, token counting,
+  cancellation, normalized errors, and canonical/provider tool-name round
+  trips. Rate limits that surface during stream receive must still wrap
+  `model.ErrRateLimited`.
+- Gemini and Vertex implement exact `model.TokenCounter` but do not implement
+  streaming; `Stream` returns `model.ErrStreamingUnsupported`. Treat streaming
+  as a provider capability, not a universal consequence of `model.Client`.
+- Provider-safe tool names must be deterministic, byte-bounded, collision
+  checked, and reversible through the request-scoped canonical mapping. Do not
+  truncate long canonical IDs without a stable hash suffix.
+- Provider tool names and tool-use correlation IDs are separate codecs. For
+  Anthropic and Bedrock request encoding, reserve all provider-safe tool-use IDs
+  before assigning synthetic `tN` values to unsafe IDs, skip occupied values,
+  and keep replayed tool-use/result pairs correlated through one request-local
+  mapping.
+- Middleware must preserve optional model capabilities truthfully. In
+  particular, a wrapped client implements `model.TokenCounter` only when the
+  underlying provider does; do not replace interface absence with a runtime
+  unsupported error.
 - Toolset tools are runtime-only by default. Project a method-backed toolset
   tool into MCP only with `Expose(AgentRuntime, MCPSurface)` plus
   `MCPPlacement(service, mcpServer)`, and keep the placement on the same service
@@ -92,6 +158,21 @@ Use this skill for `loom-mcp` work in this repo. Keep `AGENTS.md` short and keep
 - MCP skill exposure is design-owned too: declare local agent skill roots with
   `SkillDirectory(...)`, then let generated JSON-RPC and SDK servers expose
   `skill://` entries through `resources/list` and `resources/read`.
+- MCP adapter allow policies define the server's maximum resource grant.
+  Request-scoped allowed names, including raw `x-mcp-allow-names`, may narrow
+  that grant but must never broaden it; request and server denies are additive.
+  Treat headers as untrusted input and keep authentication and grant derivation
+  in application-owned middleware backed by verified credentials.
+- MCP streamable-HTTP sessions bind the issued session ID to one verified
+  principal. Generated SDK and native JSON-RPC transports must check that pair
+  on every POST, GET, and DELETE, reject missing authenticated bindings and
+  anonymous-session adoption, and validate DELETE before cleanup. Authentication
+  middleware must run outside the generated handler; expiry and eviction remove
+  session and principal state together and fail closed. Fresh native
+  initialization omits a session ID. A supplied unknown ID fails with HTTP
+  404, a supplied foreign ID fails with HTTP 403, and a valid owner-bound ID
+  reaches the adapter so duplicate initialization returns the protocol-level
+  `Already initialized` error.
 - Model-facing skill exposure is design-owned through
   `Toolset(FromSkills(..., SkillPreload(...), SkillReload(...)))`; generated
   agent registration should wire these skills into `runtime/agent/runtime`
@@ -133,6 +214,11 @@ Use this skill for `loom-mcp` work in this repo. Keep `AGENTS.md` short and keep
 - Generated SDK servers expose Loom transport observability directly through
   `SDKServerOptions.TransportObserver`; keep external middleware wrapping as an
   application-wide alternative, not the only enablement path.
+- Runtime semantic telemetry is engine-neutral: stable
+  `loom_mcp.runtime.*` run/planner/tool metrics and `tool.execute` spans come
+  from planner activities and newly inserted canonical events. Planner metrics
+  count retryable attempts; run/tool events are event-key deduplicated. Keep
+  correlation IDs on spans rather than metric dimensions.
 - Preserve explicit source JSON-RPC CORS policies when building the synthetic
   MCP transport. Loom's generated CORS handler and MCP origin validation are
   independent layers: CORS controls browser response policy, while
@@ -140,7 +226,15 @@ Use this skill for `loom-mcp` work in this repo. Keep `AGENTS.md` short and keep
 - Non-generated HTTP server scaffolds must retain bounded read and idle
   timeouts. Long-lived MCP SSE servers keep `WriteTimeout: 0` so a generic HTTP
   deadline cannot terminate a healthy stream.
+- Generated `MCPAdapterOptions.DropIfSlow` is a typed `*bool`: nil keeps the
+  safe drop-on-overflow default and an explicit false pointer enables
+  backpressure. Do not restore untyped compatibility or silent fallback.
 - Codegen should use partial evaluation and `NameScope` helpers rather than string surgery or runtime branching over static structure.
+- Every MCP transport adaptation is owned through stable upstream section
+  identifiers and evaluated generator data. Missing or duplicate expected
+  sections must fail generation. Never inspect, parse, or rewrite rendered Go
+  source to extend an upstream generator; add or replace a named section and
+  enforce its exact cardinality instead.
 - DSL/codegen/runtime internals should trust evaluated design invariants and fail fast instead of adding speculative fallback paths.
 - loom-mcp DSL context failures must name the public DSL function explicitly;
   declarations that require a service `MCP(...)` contract must report that
@@ -166,7 +260,7 @@ loom example <module-import-path>/design
 - `references/user-guides/runtime.md`: broader runtime narrative and examples
 - `references/user-guides/toolsets.md`: toolset behavior, retry hints, injected fields, executors
 - `references/user-guides/composition.md`: agent composition and child-run UX
-- `references/user-guides/mcp-integration.md`: long-form MCP overview and caller examples
+- `references/user-guides/mcp-integration.md`: current MCP routing and caller examples
 - `references/user-guides/testing.md`: testing patterns
 - `references/user-guides/production.md`: production operations and deployment patterns
 

@@ -8,6 +8,7 @@ Use this map to choose the smallest authoritative source for the task at hand.
 - `DESIGN.md`: plugin architecture, generated surface, MCP/codegen intent, quickstart output.
 - `docs/runtime.md`: runtime contracts, plan/execute/resume loop, streaming, tool execution, prompt/runtime features.
 - `docs/dsl.md`: DSL surface and generated helper semantics.
+- `docs/glossary.md`: canonical distinctions for state, delivery, skills, MCP, registry, and generated ownership.
 - `quickstart/AGENTS_QUICKSTART.md`: generated developer quickstart and wiring examples.
 
 ## Source Directories
@@ -18,6 +19,9 @@ Use this map to choose the smallest authoritative source for the task at hand.
 - `runtime/agent/runtime/`: runtime orchestration, planner loop, agent-as-tool, result materialization.
 - `runtime/agent/stream/`: stream events and profiles.
 - `runtime/mcp/`: MCP callers and transport integration.
+- `features/model/`: model-provider adapters, conformance tests, and client middleware.
+- `features/memory/` and `features/runlog/`: production persistence adapters.
+- `features/stream/`: Pulse-backed streaming clients and integrations.
 - `registry/`: internal tool registry implementation.
 - `integration_tests/`: end-to-end scenarios and fixtures.
 
@@ -40,5 +44,6 @@ Use this map to choose the smallest authoritative source for the task at hand.
 ```bash
 rg -n "Agent\\(|Toolset\\(|FromMCP\\(|MCP\\(|Export\\(" dsl design docs README.md
 rg -n "ConsumeStream|ModelClient\\(|ChildRunLinked|StreamProfile|RegisterToolset|NewRegistration" runtime docs README.md quickstart
+rg -n "RunProviderConformance|ErrRateLimited|ToolName|TokenCounter" features/model runtime/agent/model docs/runtime.md
 rg -n "tool_specs\\.Specs|GoFullTypeRef|GoTransform|pathutil|updateHeader" codegen runtime dsl expr
 ```

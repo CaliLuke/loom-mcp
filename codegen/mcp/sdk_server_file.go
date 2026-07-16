@@ -17,6 +17,7 @@ func buildMCPSDKServerFile(genpkg string, svc *expr.ServiceExpr, data *AdapterDa
 		{Path: "fmt"},
 		{Path: "net/http"},
 		{Path: "net/url"},
+		{Path: "sync"},
 		{Path: genpkg + "/" + svcName, Name: svcName},
 		{Path: "github.com/modelcontextprotocol/go-sdk/auth", Name: "mcpauth"},
 		{Path: "github.com/modelcontextprotocol/go-sdk/mcp", Name: "mcpsdk"},
@@ -99,6 +100,8 @@ func sdkServerTypesSection(data *AdapterData) codegen.Section {
 		stmt.Type().Id("sdkResponseObserver").Struct(
 			jen.Qual("net/http", "ResponseWriter"),
 			jen.Id("statusCode").Int(),
+			jen.Id("onSessionIssued").Func().Params(jen.String()),
+			jen.Id("sessionOnce").Qual("sync", "Once"),
 		)
 		stmt.Line()
 		stmt.Type().Id("sdkToolCallCollector").Struct(
@@ -219,6 +222,22 @@ func sdkServerConstructorSection(data *AdapterData) codegen.Section {
 		emitSDKServerOptionsWithDefaults(stmt)
 
 		stmt.Func().Params(jen.Id("w").Op("*").Id("sdkResponseObserver")).
+			Id("captureSession").
+			Params().
+			Block(
+				jen.If(jen.Id("w").Op("==").Nil().Op("||").Id("w").Dot("onSessionIssued").Op("==").Nil()).Block(
+					jen.Return(),
+				),
+				jen.Id("sessionID").Op(":=").Id("w").Dot("Header").Call().Dot("Get").Call(jen.Id("mcpruntime").Dot("HeaderKeySessionID")),
+				jen.If(jen.Id("sessionID").Op("==").Lit("")).Block(
+					jen.Return(),
+				),
+				jen.Id("w").Dot("sessionOnce").Dot("Do").Call(jen.Func().Params().Block(
+					jen.Id("w").Dot("onSessionIssued").Call(jen.Id("sessionID")),
+				)),
+			)
+		stmt.Line()
+		stmt.Func().Params(jen.Id("w").Op("*").Id("sdkResponseObserver")).
 			Id("Unwrap").
 			Params().
 			Qual("net/http", "ResponseWriter").
@@ -231,6 +250,9 @@ func sdkServerConstructorSection(data *AdapterData) codegen.Section {
 			Params(jen.Id("statusCode").Int()).
 			Block(
 				jen.Id("w").Dot("statusCode").Op("=").Id("statusCode"),
+				jen.If(jen.Id("statusCode").Op("<").Qual("net/http", "StatusBadRequest")).Block(
+					jen.Id("w").Dot("captureSession").Call(),
+				),
 				jen.Id("w").Dot("ResponseWriter").Dot("WriteHeader").Call(jen.Id("statusCode")),
 			)
 		stmt.Line()
@@ -241,6 +263,9 @@ func sdkServerConstructorSection(data *AdapterData) codegen.Section {
 			Block(
 				jen.If(jen.Id("w").Dot("statusCode").Op("==").Lit(0)).Block(
 					jen.Id("w").Dot("statusCode").Op("=").Qual("net/http", "StatusOK"),
+				),
+				jen.If(jen.Id("w").Dot("statusCode").Op("<").Qual("net/http", "StatusBadRequest")).Block(
+					jen.Id("w").Dot("captureSession").Call(),
 				),
 				jen.Return(jen.Id("w").Dot("ResponseWriter").Dot("Write").Call(jen.Id("data"))),
 			)
@@ -317,12 +342,10 @@ func sdkServerHTTPSection(data *AdapterData) codegen.Section {
 							jen.If(jen.Id("requestContext").Op("!=").Nil()).Block(
 								jen.Id("r").Op("=").Id("r").Dot("WithContext").Call(jen.Id("requestContext").Call(jen.Id("r").Dot("Context").Call(), jen.Id("r"))),
 							),
-							jen.If(jen.Id("r").Dot("Method").Op("==").Qual("net/http", "MethodGet")).Block(
-								jen.If(jen.Id("sessionID").Op(":=").Id("r").Dot("Header").Dot("Get").Call(jen.Id("mcpruntime").Dot("HeaderKeySessionID")), jen.Id("sessionID").Op("!=").Lit("")).Block(
-									jen.If(jen.Id("err").Op(":=").Id("adapter").Dot("assertSessionPrincipal").Call(jen.Id("r").Dot("Context").Call(), jen.Id("sessionID")), jen.Id("err").Op("!=").Nil()).Block(
-										jen.Qual("net/http", "Error").Call(jen.Id("w"), jen.Id("err").Dot("Error").Call(), jen.Qual("net/http", "StatusForbidden")),
-										jen.Return(),
-									),
+							jen.If(jen.Id("sessionID").Op(":=").Id("r").Dot("Header").Dot("Get").Call(jen.Id("mcpruntime").Dot("HeaderKeySessionID")), jen.Id("sessionID").Op("!=").Lit("")).Block(
+								jen.If(jen.Id("err").Op(":=").Id("adapter").Dot("assertSessionPrincipal").Call(jen.Id("r").Dot("Context").Call(), jen.Id("sessionID")), jen.Id("err").Op("!=").Nil()).Block(
+									jen.Qual("net/http", "Error").Call(jen.Id("w"), jen.Id("err").Dot("Error").Call(), jen.Qual("net/http", "StatusForbidden")),
+									jen.Return(),
 								),
 							),
 							jen.List(jen.Id("transportObs"), jen.Id("transportW")).Op(":=").Qual("github.com/CaliLuke/loom/observability/transport", "BeginHTTPRequest").Call(
@@ -333,16 +356,22 @@ func sdkServerHTTPSection(data *AdapterData) codegen.Section {
 								jen.Id("r"),
 							),
 							jen.Defer().Id("transportObs").Dot("End").Call(),
-							jen.Id("observer").Op(":=").Op("&").Id("sdkResponseObserver").Values(jen.Dict{jen.Id("ResponseWriter"): jen.Id("transportW")}),
+							jen.Id("observer").Op(":=").Op("&").Id("sdkResponseObserver").Values(jen.Dict{
+								jen.Id("ResponseWriter"): jen.Id("transportW"),
+								jen.Id("onSessionIssued"): jen.Func().Params(jen.Id("sessionID").String()).Block(
+									jen.Id("adapter").Dot("markInitializedSession").Call(jen.Id("sessionID")),
+									jen.Id("adapter").Dot("captureSessionPrincipal").Call(jen.Id("r").Dot("Context").Call(), jen.Id("sessionID")),
+								),
+							}),
 							jen.Id("base").Dot("ServeHTTP").Call(jen.Id("observer"), jen.Id("r")),
+							jen.If(jen.Id("observer").Dot("statusCode").Op("<").Qual("net/http", "StatusBadRequest")).Block(
+								jen.Id("observer").Dot("captureSession").Call(),
+							),
 							jen.If(jen.Id("r").Dot("Method").Op("==").Qual("net/http", "MethodDelete").Op("&&").Id("observer").Dot("statusCode").Op("<").Lit(400)).Block(
 								jen.Id("adapter").Dot("clearSession").Call(jen.Id("r").Dot("Header").Dot("Get").Call(jen.Id("mcpruntime").Dot("HeaderKeySessionID"))),
 							),
 							jen.If(jen.Id("observer").Dot("statusCode").Op(">=").Lit(400)).Block(
 								jen.Id("transportObs").Dot("Fail").Call(jen.Qual("github.com/CaliLuke/loom/observability/transport", "ReasonHandlerError")),
-							),
-							jen.If(jen.Id("sessionID").Op(":=").Id("observer").Dot("Header").Call().Dot("Get").Call(jen.Id("mcpruntime").Dot("HeaderKeySessionID")), jen.Id("sessionID").Op("!=").Lit("")).Block(
-								jen.Id("adapter").Dot("captureSessionPrincipal").Call(jen.Id("r").Dot("Context").Call(), jen.Id("sessionID")),
 							),
 						),
 					),

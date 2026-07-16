@@ -15,6 +15,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
+	"sync"
 
 	catalog "example.com/assistant/progressive_discovery/gen/catalog"
 	projected "example.com/assistant/progressive_discovery/gen/catalog/toolsets/projected"
@@ -39,7 +40,9 @@ type SDKServerOptions struct {
 }
 type sdkResponseObserver struct {
 	http.ResponseWriter
-	statusCode int
+	statusCode      int
+	onSessionIssued func(string)
+	sessionOnce     sync.Once
 }
 type sdkToolCallCollector struct {
 	adapter   *MCPAdapter
@@ -104,16 +107,34 @@ func sdkServerOptionsWithDefaults(opts *mcpsdk.ServerOptions) *mcpsdk.ServerOpti
 	}
 	return opts
 }
+func (w *sdkResponseObserver) captureSession() {
+	if w == nil || w.onSessionIssued == nil {
+		return
+	}
+	sessionID := w.Header().Get(mcpruntime.HeaderKeySessionID)
+	if sessionID == "" {
+		return
+	}
+	w.sessionOnce.Do(func() {
+		w.onSessionIssued(sessionID)
+	})
+}
 func (w *sdkResponseObserver) Unwrap() http.ResponseWriter {
 	return w.ResponseWriter
 }
 func (w *sdkResponseObserver) WriteHeader(statusCode int) {
 	w.statusCode = statusCode
+	if statusCode < http.StatusBadRequest {
+		w.captureSession()
+	}
 	w.ResponseWriter.WriteHeader(statusCode)
 }
 func (w *sdkResponseObserver) Write(data []byte) (int, error) {
 	if w.statusCode == 0 {
 		w.statusCode = http.StatusOK
+	}
+	if w.statusCode < http.StatusBadRequest {
+		w.captureSession()
 	}
 	return w.ResponseWriter.Write(data)
 }
@@ -126,26 +147,30 @@ func newSDKHandler(server *mcpsdk.Server, adapter *MCPAdapter, requestContext fu
 		if requestContext != nil {
 			r = r.WithContext(requestContext(r.Context(), r))
 		}
-		if r.Method == http.MethodGet {
-			if sessionID := r.Header.Get(mcpruntime.HeaderKeySessionID); sessionID != "" {
-				if err := adapter.assertSessionPrincipal(r.Context(), sessionID); err != nil {
-					http.Error(w, err.Error(), http.StatusForbidden)
-					return
-				}
+		if sessionID := r.Header.Get(mcpruntime.HeaderKeySessionID); sessionID != "" {
+			if err := adapter.assertSessionPrincipal(r.Context(), sessionID); err != nil {
+				http.Error(w, err.Error(), http.StatusForbidden)
+				return
 			}
 		}
 		transportObs, transportW := transport.BeginHTTPRequest(r.Context(), w, "mcp", r.Method, r)
 		defer transportObs.End()
-		observer := &sdkResponseObserver{ResponseWriter: transportW}
+		observer := &sdkResponseObserver{
+			ResponseWriter: transportW,
+			onSessionIssued: func(sessionID string) {
+				adapter.markInitializedSession(sessionID)
+				adapter.captureSessionPrincipal(r.Context(), sessionID)
+			},
+		}
 		base.ServeHTTP(observer, r)
+		if observer.statusCode < http.StatusBadRequest {
+			observer.captureSession()
+		}
 		if r.Method == http.MethodDelete && observer.statusCode < 400 {
 			adapter.clearSession(r.Header.Get(mcpruntime.HeaderKeySessionID))
 		}
 		if observer.statusCode >= 400 {
 			transportObs.Fail(transport.ReasonHandlerError)
-		}
-		if sessionID := observer.Header().Get(mcpruntime.HeaderKeySessionID); sessionID != "" {
-			adapter.captureSessionPrincipal(r.Context(), sessionID)
 		}
 	})
 }

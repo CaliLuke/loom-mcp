@@ -3,7 +3,6 @@ package mongo
 import (
 	"context"
 	"errors"
-	"fmt"
 	"sort"
 	"sync"
 	"testing"
@@ -32,6 +31,34 @@ func TestEnsureIndexes(t *testing.T) {
 	err := ensureIndexes(context.Background(), fc)
 	require.NoError(t, err)
 	require.Len(t, fc.indexes, 2)
+	lookup, ok := fc.indexes[0].Keys.(bson.D)
+	require.True(t, ok)
+	require.Equal(t, bson.D{
+		{Key: fieldPromptID, Value: 1},
+		{Key: fieldScopeSession, Value: 1},
+		{Key: fieldScopeFingerprint, Value: 1},
+		{Key: fieldScopeLabelCount, Value: -1},
+		{Key: fieldCreatedAt, Value: -1},
+		{Key: fieldID, Value: -1},
+	}, lookup)
+}
+
+func TestBackfillScopeFingerprintsMigratesLegacyDocuments(t *testing.T) {
+	t.Parallel()
+
+	fc := newFakeCollection()
+	legacyID := bson.NewObjectID()
+	currentID := bson.NewObjectID()
+	labels := map[string]string{labelAccount: accountAcme}
+	fc.docs = []overrideDocument{
+		{ID: legacyID, PromptID: "legacy", ScopeLabels: labels, ScopeLabelCount: 1},
+		{ID: currentID, PromptID: "current", ScopeLabels: labels, ScopeLabelCount: 1, ScopeFingerprint: prompt.ScopeFingerprint(labels)},
+	}
+
+	require.NoError(t, backfillScopeFingerprints(t.Context(), fc))
+	require.Equal(t, prompt.ScopeFingerprint(labels), fc.docs[0].ScopeFingerprint)
+	require.Equal(t, prompt.ScopeFingerprint(labels), fc.docs[1].ScopeFingerprint)
+	require.Equal(t, 1, fc.updateCount)
 }
 
 func TestSetAndResolveByPrecedence(t *testing.T) {
@@ -134,19 +161,31 @@ func TestResolveReturnsNilWhenMissing(t *testing.T) {
 	require.Nil(t, override)
 }
 
-func TestResolveQueriesGrowLinearlyWithLabels(t *testing.T) {
+func TestResolveQueriesUseIndexedFingerprintsWithBoundedRoundTrips(t *testing.T) {
 	t.Parallel()
 
-	labels := make(map[string]string)
-	for i := range 32 {
-		labels[fmt.Sprintf("label_%02d", i)] = "value"
+	labels := map[string]string{
+		labelAccount: accountAcme,
+		labelRegion:  regionWest,
 	}
 	queries := resolveQueries("example.agent.system", prompt.Scope{
 		SessionID: "sess_1",
 		Labels:    labels,
 	})
 
-	require.Len(t, queries, (len(labels)+1)*2)
+	require.Len(t, queries, 2)
+	for _, query := range queries {
+		require.Equal(t, int64(1), query.limit)
+		fingerprints, ok := query.filter[fieldScopeFingerprint].(bson.M)["$in"].([]string)
+		require.True(t, ok)
+		require.ElementsMatch(t, []string{
+			prompt.ScopeFingerprint(nil),
+			prompt.ScopeFingerprint(map[string]string{labelAccount: accountAcme}),
+			prompt.ScopeFingerprint(map[string]string{labelRegion: regionWest}),
+			prompt.ScopeFingerprint(labels),
+		}, fingerprints)
+		require.NotContains(t, query.filter, fieldScopeLabels+"."+labelAccount)
+	}
 }
 
 func TestResolveUsesQueryPrecedenceWithLimit(t *testing.T) {
@@ -157,9 +196,9 @@ func TestResolveUsesQueryPrecedenceWithLimit(t *testing.T) {
 	ctx := context.Background()
 	id := prompt.Ident("example.agent.system")
 	fc.docs = []overrideDocument{
-		{PromptID: id.String(), Template: "newer-global", CreatedAt: time.Unix(3, 0).UTC(), ScopeLabelCount: 0},
-		{PromptID: id.String(), ScopeSession: "sess_1", Template: "older-session", CreatedAt: time.Unix(1, 0).UTC(), ScopeLabelCount: 0},
-		{PromptID: id.String(), ScopeSession: "sess_1", Template: "newer-session", CreatedAt: time.Unix(2, 0).UTC(), ScopeLabelCount: 0},
+		{PromptID: id.String(), Template: "newer-global", CreatedAt: time.Unix(3, 0).UTC(), ScopeLabelCount: 0, ScopeFingerprint: prompt.ScopeFingerprint(nil)},
+		{PromptID: id.String(), ScopeSession: "sess_1", Template: "older-session", CreatedAt: time.Unix(1, 0).UTC(), ScopeLabelCount: 0, ScopeFingerprint: prompt.ScopeFingerprint(nil)},
+		{PromptID: id.String(), ScopeSession: "sess_1", Template: "newer-session", CreatedAt: time.Unix(2, 0).UTC(), ScopeLabelCount: 0, ScopeFingerprint: prompt.ScopeFingerprint(nil)},
 	}
 
 	override, err := client.Resolve(ctx, id, prompt.Scope{
@@ -172,6 +211,51 @@ func TestResolveUsesQueryPrecedenceWithLimit(t *testing.T) {
 	require.Equal(t, []int{1}, fc.findLimits())
 }
 
+func TestResolveBreaksCreatedAtTiesByObjectID(t *testing.T) {
+	t.Parallel()
+
+	olderID, err := bson.ObjectIDFromHex("000000000000000000000001")
+	require.NoError(t, err)
+	newerID, err := bson.ObjectIDFromHex("000000000000000000000002")
+	require.NoError(t, err)
+	client := mustNewTestClient()
+	fc := client.coll.(*fakeCollection)
+	id := prompt.Ident("example.agent.system")
+	createdAt := time.Unix(1, 0).UTC()
+	fingerprint := prompt.ScopeFingerprint(nil)
+	fc.docs = []overrideDocument{
+		{ID: olderID, PromptID: id.String(), Template: "older", CreatedAt: createdAt, ScopeFingerprint: fingerprint},
+		{ID: newerID, PromptID: id.String(), Template: "newer", CreatedAt: createdAt, ScopeFingerprint: fingerprint},
+	}
+
+	override, err := client.Resolve(context.Background(), id, prompt.Scope{})
+
+	require.NoError(t, err)
+	require.NotNil(t, override)
+	require.Equal(t, "newer", override.Template)
+}
+
+func TestResolveUsesAtMostSessionAndGlobalQueries(t *testing.T) {
+	t.Parallel()
+
+	client := mustNewTestClient()
+	fc := client.coll.(*fakeCollection)
+	ctx := context.Background()
+	id := prompt.Ident("example.agent.system")
+	require.NoError(t, client.Set(ctx, id, prompt.Scope{}, "global", nil))
+	require.NoError(t, client.Set(ctx, id, prompt.Scope{
+		Labels: map[string]string{labelAccount: accountAcme},
+	}, "account", nil))
+
+	override, err := client.Resolve(ctx, id, prompt.Scope{
+		SessionID: missingSessionID,
+		Labels:    map[string]string{labelAccount: accountAcme},
+	})
+	require.NoError(t, err)
+	require.Equal(t, "account", override.Template)
+	require.Equal(t, []int{1, 1}, fc.findLimits())
+}
+
 func TestResolveSupportsMongoPathUnsafeLabelKeys(t *testing.T) {
 	t.Parallel()
 
@@ -180,8 +264,8 @@ func TestResolveSupportsMongoPathUnsafeLabelKeys(t *testing.T) {
 	ctx := context.Background()
 	id := prompt.Ident("example.agent.system")
 	fc.docs = []overrideDocument{
-		{PromptID: id.String(), Template: "global", CreatedAt: time.Unix(2, 0).UTC(), ScopeLabelCount: 0},
-		{PromptID: id.String(), Template: "unsafe-label", CreatedAt: time.Unix(1, 0).UTC(), ScopeLabels: map[string]string{"env.name": "prod"}, ScopeLabelCount: 1},
+		{PromptID: id.String(), Template: "global", CreatedAt: time.Unix(2, 0).UTC(), ScopeLabelCount: 0, ScopeFingerprint: prompt.ScopeFingerprint(nil)},
+		{PromptID: id.String(), Template: "unsafe-label", CreatedAt: time.Unix(1, 0).UTC(), ScopeLabels: map[string]string{"env.name": "prod"}, ScopeLabelCount: 1, ScopeFingerprint: prompt.ScopeFingerprint(map[string]string{"env.name": "prod"})},
 	}
 
 	override, err := client.Resolve(ctx, id, prompt.Scope{
@@ -191,7 +275,7 @@ func TestResolveSupportsMongoPathUnsafeLabelKeys(t *testing.T) {
 	require.NoError(t, err)
 	require.NotNil(t, override)
 	require.Equal(t, "unsafe-label", override.Template)
-	require.Equal(t, []int{0}, fc.findLimits())
+	require.Equal(t, []int{1}, fc.findLimits())
 }
 
 func TestHistoryAndListNewestFirst(t *testing.T) {
@@ -227,6 +311,14 @@ func TestSetValidation(t *testing.T) {
 	require.EqualError(t, err, "prompt id is required")
 	err = client.Set(ctx, "example.agent.system", prompt.Scope{}, "", nil)
 	require.EqualError(t, err, "template is required")
+	labels := make(map[string]string, maxIndexedScopeLabels+1)
+	for i := range maxIndexedScopeLabels + 1 {
+		labels[string(rune('a'+i))] = "value"
+	}
+	err = client.Set(ctx, "example.agent.system", prompt.Scope{Labels: labels}, "template", nil)
+	require.ErrorContains(t, err, "support at most")
+	_, err = client.Resolve(ctx, "example.agent.system", prompt.Scope{Labels: labels})
+	require.ErrorContains(t, err, "support at most")
 }
 
 func TestSetWritesDocumentDefaults(t *testing.T) {
@@ -245,6 +337,7 @@ func TestSetWritesDocumentDefaults(t *testing.T) {
 	require.Empty(t, doc.ScopeSession)
 	require.Nil(t, doc.ScopeLabels)
 	require.Equal(t, 0, doc.ScopeLabelCount)
+	require.Equal(t, prompt.ScopeFingerprint(nil), doc.ScopeFingerprint)
 	require.Equal(t, prompt.VersionFromTemplate(template), doc.Version)
 	require.False(t, doc.CreatedAt.IsZero())
 	require.Nil(t, doc.Metadata)
@@ -264,6 +357,7 @@ type fakeCollection struct {
 	indexes     []mongodriver.IndexModel
 	docs        []overrideDocument
 	findOptions []options.FindOptions
+	updateCount int
 }
 
 func newFakeCollection() *fakeCollection {
@@ -291,18 +385,49 @@ func (c *fakeCollection) Find(ctx context.Context, filter any, opts ...options.L
 	defer c.mu.Unlock()
 
 	matches := c.match(filter)
-	sort.Slice(matches, func(i, j int) bool {
-		return matches[i].CreatedAt.After(matches[j].CreatedAt)
-	})
 	findOpts, err := mergeFindOptions(opts...)
 	if err != nil {
 		return nil, err
 	}
+	sortFindMatches(matches, findOpts.Sort)
 	c.findOptions = append(c.findOptions, findOpts)
 	if findOpts.Limit != nil && *findOpts.Limit >= 0 && int(*findOpts.Limit) < len(matches) {
 		matches = matches[:int(*findOpts.Limit)]
 	}
 	return &fakeCursor{docs: matches, idx: -1}, nil
+}
+
+func sortFindMatches(matches []overrideDocument, rawSort any) {
+	fields, _ := rawSort.(bson.D)
+	sort.SliceStable(matches, func(i, j int) bool {
+		for _, field := range fields {
+			direction, _ := field.Value.(int)
+			switch field.Key {
+			case fieldScopeLabelCount:
+				if matches[i].ScopeLabelCount != matches[j].ScopeLabelCount {
+					if direction < 0 {
+						return matches[i].ScopeLabelCount > matches[j].ScopeLabelCount
+					}
+					return matches[i].ScopeLabelCount < matches[j].ScopeLabelCount
+				}
+			case fieldCreatedAt:
+				if !matches[i].CreatedAt.Equal(matches[j].CreatedAt) {
+					if direction < 0 {
+						return matches[i].CreatedAt.After(matches[j].CreatedAt)
+					}
+					return matches[i].CreatedAt.Before(matches[j].CreatedAt)
+				}
+			case fieldID:
+				if matches[i].ID != matches[j].ID {
+					if direction < 0 {
+						return matches[i].ID.Hex() > matches[j].ID.Hex()
+					}
+					return matches[i].ID.Hex() < matches[j].ID.Hex()
+				}
+			}
+		}
+		return false
+	})
 }
 
 func (c *fakeCollection) findLimits() []int {
@@ -347,6 +472,26 @@ func (c *fakeCollection) InsertOne(ctx context.Context, document any, opts ...op
 	return &mongodriver.InsertOneResult{InsertedID: "id"}, nil
 }
 
+func (c *fakeCollection) UpdateOne(ctx context.Context, filter any, update any, opts ...options.Lister[options.UpdateOneOptions]) (*mongodriver.UpdateResult, error) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	f, _ := filter.(bson.M)
+	id, _ := f[fieldID].(bson.ObjectID)
+	change, _ := update.(bson.M)
+	set, _ := change["$set"].(bson.M)
+	fingerprint, _ := set[fieldScopeFingerprint].(string)
+	for index := range c.docs {
+		if c.docs[index].ID != id {
+			continue
+		}
+		c.docs[index].ScopeFingerprint = fingerprint
+		c.updateCount++
+		return &mongodriver.UpdateResult{MatchedCount: 1, ModifiedCount: 1}, nil
+	}
+	return &mongodriver.UpdateResult{}, nil
+}
+
 func (c *fakeCollection) Indexes() indexView {
 	return fakeIndexView{parent: c}
 }
@@ -380,6 +525,14 @@ func matchesFilter(doc overrideDocument, filter bson.M) bool {
 			}
 		case fieldScopeLabelCount:
 			if doc.ScopeLabelCount != val {
+				return false
+			}
+		case fieldScopeFingerprint:
+			if !matchesStringCondition(doc.ScopeFingerprint, val) {
+				return false
+			}
+		case fieldID:
+			if doc.ID != val {
 				return false
 			}
 		default:

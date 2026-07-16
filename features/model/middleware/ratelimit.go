@@ -6,6 +6,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"strconv"
 	"sync"
 	"time"
@@ -44,6 +45,17 @@ type (
 	limitedClient struct {
 		next    model.Client
 		limiter *AdaptiveRateLimiter
+	}
+
+	tokenCountingLimitedClient struct {
+		*limitedClient
+		counter model.TokenCounter
+	}
+
+	limitedStreamer struct {
+		inner    model.Streamer
+		limiter  *AdaptiveRateLimiter
+		observed sync.Once
 	}
 
 	// clusterMap is the subset of rmap.Map used by the cluster-aware limiter.
@@ -133,10 +145,17 @@ func (l *AdaptiveRateLimiter) Middleware() func(model.Client) model.Client {
 		if next == nil {
 			return nil
 		}
-		return &limitedClient{
+		client := &limitedClient{
 			next:    next,
 			limiter: l,
 		}
+		if counter, ok := next.(model.TokenCounter); ok {
+			return &tokenCountingLimitedClient{
+				limitedClient: client,
+				counter:       counter,
+			}
+		}
+		return client
 	}
 }
 
@@ -150,24 +169,61 @@ func (c *limitedClient) Complete(ctx context.Context, req *model.Request) (*mode
 	return resp, err
 }
 
-// Stream enforces the limiter before delegating to the underlying client.
+// Stream enforces the limiter before delegating to the underlying client. A
+// successful setup is not treated as a successful request: the returned
+// streamer adjusts the limiter only after Recv reports its terminal outcome.
 func (c *limitedClient) Stream(ctx context.Context, req *model.Request) (model.Streamer, error) {
 	if err := c.limiter.wait(ctx, req); err != nil {
 		return nil, err
 	}
 	stream, err := c.next.Stream(ctx, req)
-	c.limiter.observe(err)
-	return stream, err
+	if err != nil {
+		c.limiter.observe(err)
+		return nil, err
+	}
+	return &limitedStreamer{
+		inner:   stream,
+		limiter: c.limiter,
+	}, nil
 }
 
-// CountTokens preserves the optional token-counting capability through the
-// middleware chain. Native counters are delegated so policy code sees the same
-// contract as the wrapped provider client.
-func (c *limitedClient) CountTokens(ctx context.Context, req *model.Request) (model.TokenCount, error) {
-	if counter, ok := c.next.(model.TokenCounter); ok {
-		return counter.CountTokens(ctx, req)
+// CountTokens preserves a wrapped provider's exact token-counting capability.
+func (c *tokenCountingLimitedClient) CountTokens(ctx context.Context, req *model.Request) (model.TokenCount, error) {
+	return c.counter.CountTokens(ctx, req)
+}
+
+// Recv delegates to the provider stream and observes its first terminal
+// outcome. EOF is the only successful terminal outcome; rate-limit failures
+// back off, while other failures leave the adaptive budget unchanged.
+func (s *limitedStreamer) Recv() (model.Chunk, error) {
+	chunk, err := s.inner.Recv()
+	if err == nil {
+		return chunk, nil
 	}
-	return model.TokenCount{}, errors.New("model middleware: wrapped client does not support token counting")
+
+	s.observed.Do(func() {
+		if errors.Is(err, model.ErrRateLimited) {
+			s.limiter.observe(err)
+			return
+		}
+		if errors.Is(err, io.EOF) {
+			s.limiter.observe(nil)
+			return
+		}
+		s.limiter.observe(err)
+	})
+	return chunk, err
+}
+
+// Close delegates resource cleanup without changing the adaptive budget. An
+// early close is not evidence that the provider completed the request.
+func (s *limitedStreamer) Close() error {
+	return s.inner.Close()
+}
+
+// Metadata delegates provider metadata without copying or transforming it.
+func (s *limitedStreamer) Metadata() map[string]any {
+	return s.inner.Metadata()
 }
 
 func (l *AdaptiveRateLimiter) wait(ctx context.Context, req *model.Request) error {

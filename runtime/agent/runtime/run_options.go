@@ -159,7 +159,8 @@ func WithRunMaxConsecutiveFailedToolCalls(n int) RunOption {
 	}
 }
 
-// WithRunTimeBudget sets the semantic wall-clock budget for planner and tool work in the run.
+// WithRunTimeBudget sets the active-work budget for planner and tool work in
+// the run. External-input waits pause this budget.
 func WithRunTimeBudget(d time.Duration) RunOption {
 	return func(in *RunInput) {
 		if in.Policy == nil {

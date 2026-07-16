@@ -647,6 +647,39 @@ func (c *Client) effectiveTemperature(requested float32) float32 {
 
 func encodeMessages(ctx context.Context, msgs []*model.Message, nameMap map[string]string, cacheAfterSystem bool, logger telemetry.Logger) ([]brtypes.Message, []brtypes.SystemContentBlock, error) {
 	state := newMessageEncodeState(ctx, nameMap, logger)
+	reserveTranscriptToolUseIDs(state.toolUseIDs, msgs)
+	conversation, system, err := encodeConversation(state, msgs)
+	if err != nil {
+		return nil, nil, err
+	}
+	if len(conversation) == 0 {
+		return nil, nil, errors.New("bedrock: at least one user/assistant message is required")
+	}
+	if cacheAfterSystem && len(system) > 0 {
+		system = append(system, &brtypes.SystemContentBlockMemberCachePoint{
+			Value: brtypes.CachePointBlock{Type: brtypes.CachePointTypeDefault},
+		})
+	}
+	return conversation, system, nil
+}
+
+func reserveTranscriptToolUseIDs(codec *toolUseIDCodec, msgs []*model.Message) {
+	for _, m := range msgs {
+		if m == nil {
+			continue
+		}
+		for _, part := range m.Parts {
+			switch v := part.(type) {
+			case model.ToolUsePart:
+				codec.reserve(v.ID)
+			case model.ToolResultPart:
+				codec.reserve(v.ToolUseID)
+			}
+		}
+	}
+}
+
+func encodeConversation(state *messageEncodeState, msgs []*model.Message) ([]brtypes.Message, []brtypes.SystemContentBlock, error) {
 	conversation := make([]brtypes.Message, 0, len(msgs))
 	system := make([]brtypes.SystemContentBlock, 0, len(msgs))
 	for _, m := range msgs {
@@ -671,15 +704,6 @@ func encodeMessages(ctx context.Context, msgs []*model.Message, nameMap map[stri
 		conversation = append(conversation, brtypes.Message{
 			Role:    conversationRole(m.Role),
 			Content: blocks,
-		})
-	}
-	if len(conversation) == 0 {
-		return nil, nil, errors.New("bedrock: at least one user/assistant message is required")
-	}
-	// Policy-driven: append a cache checkpoint after system messages when requested.
-	if cacheAfterSystem && len(system) > 0 {
-		system = append(system, &brtypes.SystemContentBlockMemberCachePoint{
-			Value: brtypes.CachePointBlock{Type: brtypes.CachePointTypeDefault},
 		})
 	}
 	return conversation, system, nil
@@ -752,22 +776,6 @@ func sanitizeDocumentName(in string) string {
 		}
 	}
 	return strings.TrimSpace(string(out))
-}
-
-func toolUseIDFor(canonical string, toolUseIDMap map[string]string, nextToolUseID *int) string {
-	if canonical == "" {
-		return ""
-	}
-	if isProviderSafeToolUseID(canonical) {
-		return canonical
-	}
-	if id, ok := toolUseIDMap[canonical]; ok {
-		return id
-	}
-	*nextToolUseID++
-	id := fmt.Sprintf("t%d", *nextToolUseID)
-	toolUseIDMap[canonical] = id
-	return id
 }
 
 func docNameFor(original string, docNameMap map[string]string, usedDocNames map[string]struct{}, nextDocNameID *int) string {

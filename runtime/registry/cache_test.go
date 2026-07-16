@@ -369,21 +369,15 @@ func TestMemoryCacheRefreshCooldown(t *testing.T) {
 	cache.StartRefresh(ctx)
 	defer cache.StopRefresh()
 
-	// Set entry with TTL that will trigger refresh
+	// Put the entry deterministically inside its refresh window. Sleeping until
+	// the final 20% of a 50 ms TTL made this test race expiration under load.
 	schema := &ToolsetSchema{ID: "original", Name: "original"}
-	if err := cache.Set(ctx, "cooldown-key", schema, 50*time.Millisecond); err != nil {
+	if err := cache.Set(ctx, "cooldown-key", schema, time.Minute); err != nil {
 		t.Fatalf("Set failed: %v", err)
 	}
-
-	waitForCondition(t, func() bool {
-		cache.mu.RLock()
-		entry, ok := cache.entries["cooldown-key"]
-		cache.mu.RUnlock()
-		if !ok {
-			return false
-		}
-		return time.Now().After(entry.expiresAt.Add(-entry.ttl / 5))
-	}, "expected cooldown-key to enter refresh window")
+	cache.mu.Lock()
+	cache.entries["cooldown-key"].expiresAt = time.Now().Add(time.Second)
+	cache.mu.Unlock()
 
 	// Multiple Gets should only trigger one refresh due to cooldown
 	for range 5 {

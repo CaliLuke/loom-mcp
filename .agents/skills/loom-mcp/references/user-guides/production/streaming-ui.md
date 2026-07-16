@@ -90,6 +90,15 @@ func (s *SSESink) Close(ctx context.Context) error {
 
 Consume `session/<session_id>` and stop when `run_stream_end` for active run arrives.
 
+Use `Subscriber.Subscribe` for ephemeral UI fanout. It auto-acknowledges after
+local channel delivery, before application processing is durable. Projectors,
+audit exporters, and other durable consumers must use
+`Subscriber.SubscribeManual`, persist with `Delivery.Event().EventKey()` as an
+idempotency key, then call `Delivery.Ack(ctx)` after the commit. Manual decode
+failures expose `DecodeError`, `RawPayload`, and `PulseID`; dead-letter them
+before acknowledging or leave them pending for reclamation. This is at-least-
+once delivery, not exactly once.
+
 ## Global Stream Sink
 
 Publish all runs by configuring runtime stream sink:

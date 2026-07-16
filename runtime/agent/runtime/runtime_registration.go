@@ -19,8 +19,9 @@ import (
 // succeeds or ctx ends.
 //
 // Successful Seal calls are idempotent. The first call closes registration so
-// later RegisterAgent/RegisterToolset calls fail fast even if activation later
-// fails. Callers may retry Seal after a context-limited activation failure.
+// later RegisterAgent/RegisterToolset/RegisterModel calls fail fast even if
+// activation later fails. Callers may retry Seal after a context-limited
+// activation failure.
 func (r *Runtime) Seal(ctx context.Context) error {
 	r.mu.Lock()
 	alreadyActivated := r.activationComplete
@@ -493,7 +494,7 @@ func validateAgentToolsetRoute(ts ToolsetRegistration) error {
 	if agentID == "" {
 		agentID = route.ID
 	}
-	tool := "unknown"
+	tool := unknownID
 	if len(ts.Specs) > 0 {
 		tool = string(ts.Specs[0].Name)
 	}

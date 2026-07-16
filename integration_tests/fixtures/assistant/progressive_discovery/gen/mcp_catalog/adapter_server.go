@@ -154,7 +154,7 @@ type MCPAdapterOptions struct {
 	Tracer trace.Tracer
 	// Meter overrides the meter used by the generated MCP adapter.
 	Meter metric.Meter
-	// Resource URI and name policies. Denied entries take precedence; URI entries ending in / match prefixes.
+	// Resource URI and name policies define the server's maximum grant. Request-scoped allows may narrow it; denied entries take precedence. URI entries ending in / match prefixes.
 	AllowedResourceURIs  []string
 	DeniedResourceURIs   []string
 	AllowedResourceNames []string
@@ -165,8 +165,8 @@ type MCPAdapterOptions struct {
 	// Pluggable broadcaster, else default channel broadcaster
 	Broadcaster     mcpruntime.Broadcaster
 	BroadcastBuffer int
-	// DropIfSlow controls whether slow subscribers drop events. It accepts bool or *bool; nil defaults to true.
-	DropIfSlow any
+	// DropIfSlow controls whether slow subscribers drop events. Nil defaults to true.
+	DropIfSlow *bool
 }
 
 func NewMCPAdapter(service catalog.Service, opts *MCPAdapterOptions) *MCPAdapter {
@@ -182,7 +182,9 @@ func NewMCPAdapter(service catalog.Service, opts *MCPAdapterOptions) *MCPAdapter
 			if opts.BroadcastBuffer > 0 {
 				buf = opts.BroadcastBuffer
 			}
-			drop = defaultMCPAdapterDropIfSlow(opts.DropIfSlow)
+			if opts.DropIfSlow != nil {
+				drop = *opts.DropIfSlow
+			}
 		}
 		bc = mcpruntime.NewChannelBroadcaster(buf, drop)
 	}
@@ -192,21 +194,6 @@ func NewMCPAdapter(service catalog.Service, opts *MCPAdapterOptions) *MCPAdapter
 	// Build name->URI map from generated resources
 	nameToURI := map[string]string{}
 	return &MCPAdapter{service: service, initializedSessions: make(map[string]time.Time), sessionPrincipals: make(map[string]string), opts: opts, tracer: tracer, callCounter: callCounter, errorCounter: errorCounter, durationHistogram: durationHistogram, broadcaster: bc, resourceNameToURI: nameToURI}
-}
-func defaultMCPAdapterDropIfSlow(value any) bool {
-	switch v := value.(type) {
-	case nil:
-		return true
-	case bool:
-		return v
-	case *bool:
-		if v == nil {
-			return true
-		}
-		return *v
-	default:
-		return true
-	}
 }
 
 // mcpProtocolVersion returns the design-configured protocol version.
@@ -266,14 +253,14 @@ func parseQueryParamsToJSON(uri string) ([]byte, error) {
 	coerced := mcpruntime.CoerceQuery(m)
 	return json.Marshal(coerced)
 }
-func (a *MCPAdapter) pruneSessionsLocked(now time.Time) {
+func (a *MCPAdapter) pruneSessionsLocked(now time.Time, reserveSlot bool) {
 	for sessionID, touchedAt := range a.initializedSessions {
 		if now.Sub(touchedAt) >= mcpSessionTTL {
 			delete(a.initializedSessions, sessionID)
 			delete(a.sessionPrincipals, sessionID)
 		}
 	}
-	for len(a.initializedSessions) >= mcpMaxSessions {
+	for len(a.initializedSessions) > mcpMaxSessions || reserveSlot && len(a.initializedSessions) >= mcpMaxSessions {
 		oldestID := ""
 		var oldestAt time.Time
 		for sessionID, touchedAt := range a.initializedSessions {
@@ -307,7 +294,7 @@ func (a *MCPAdapter) markInitializedSession(sessionID string) {
 	}
 	now := time.Now()
 	if _, ok := a.initializedSessions[sessionID]; !ok {
-		a.pruneSessionsLocked(now)
+		a.pruneSessionsLocked(now, true)
 	}
 	a.initializedSessions[sessionID] = now
 }
@@ -321,6 +308,9 @@ func (a *MCPAdapter) captureSessionPrincipal(ctx context.Context, sessionID stri
 	}
 	a.mu.Lock()
 	defer a.mu.Unlock()
+	if _, ok := a.initializedSessions[sessionID]; !ok {
+		return
+	}
 	if a.sessionPrincipals == nil {
 		a.sessionPrincipals = make(map[string]string)
 	}
@@ -342,13 +332,22 @@ func (a *MCPAdapter) assertSessionPrincipal(ctx context.Context, sessionID strin
 	if a == nil || sessionID == "" {
 		return nil
 	}
-	a.mu.RLock()
+	actual := a.sessionPrincipal(ctx)
+	principalRequired := a.opts != nil && a.opts.SessionPrincipal != nil
+	a.mu.Lock()
+	a.pruneSessionsLocked(time.Now(), false)
+	_, initialized := a.initializedSessions[sessionID]
 	expected := strings.TrimSpace(a.sessionPrincipals[sessionID])
-	a.mu.RUnlock()
+	a.mu.Unlock()
+	if !initialized {
+		return errors.New("session principal binding missing")
+	}
 	if expected == "" {
+		if principalRequired || actual != "" {
+			return errors.New("session principal binding missing")
+		}
 		return nil
 	}
-	actual := a.sessionPrincipal(ctx)
 	if actual == "" || actual != expected {
 		return errors.New("session user mismatch")
 	}
@@ -660,7 +659,7 @@ func (a *MCPAdapter) Initialize(ctx context.Context, p *InitializePayload) (res 
 		a.initialized = true
 	} else {
 		if _, ok := a.initializedSessions[sessionID]; !ok {
-			a.pruneSessionsLocked(now)
+			a.pruneSessionsLocked(now, true)
 		}
 		if _, ok := a.initializedSessions[sessionID]; ok {
 			a.mu.Unlock()

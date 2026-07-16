@@ -12,7 +12,6 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
-	"strings"
 
 	sdk "github.com/anthropics/anthropic-sdk-go"
 	"github.com/anthropics/anthropic-sdk-go/option"
@@ -300,6 +299,20 @@ func (c *Client) effectiveTemperature(requested float32) float64 {
 }
 
 func encodeMessages(msgs []*model.Message, nameMap map[string]string, toolUseIDs *toolUseIDCodec) ([]sdk.MessageParam, []sdk.TextBlockParam, error) {
+	for _, m := range msgs {
+		if m == nil {
+			continue
+		}
+		for _, part := range m.Parts {
+			switch v := part.(type) {
+			case model.ToolUsePart:
+				toolUseIDs.reserve(v.ID)
+			case model.ToolResultPart:
+				toolUseIDs.reserve(v.ToolUseID)
+			}
+		}
+	}
+
 	conversation := make([]sdk.MessageParam, 0, len(msgs))
 	system := make([]sdk.TextBlockParam, 0, len(msgs))
 
@@ -662,65 +675,6 @@ func hasToolDefinition(defs []*model.ToolDefinition, name string) bool {
 		}
 	}
 	return false
-}
-
-// sanitizeToolName maps a canonical tool identifier to characters allowed by
-// Anthropic tool naming constraints by replacing any disallowed rune with '_'.
-// Canonical tool identifiers follow the pattern "toolset.tool". To keep tool
-// names concise and avoid redundant prefixes in provider-facing configs, this
-// helper derives the base name from the segment after the final '.' and, when
-// present, strips a "<toolset_suffix>_" prefix.
-func sanitizeToolName(in string) string {
-	if in == "" {
-		return in
-	}
-	base := in
-	if idx := strings.LastIndex(in, "."); idx >= 0 && idx+1 < len(in) {
-		base = in[idx+1:]
-		if idx > 0 {
-			if lastDot := strings.LastIndex(in[:idx], "."); lastDot >= 0 && lastDot+1 < idx {
-				toolsetSuffix := in[lastDot+1 : idx]
-				prefix := toolsetSuffix + "_"
-				if strings.HasPrefix(base, prefix) && len(base) > len(prefix) {
-					base = base[len(prefix):]
-				}
-			}
-		}
-	}
-	if isProviderSafeToolName(base) {
-		return base
-	}
-	out := make([]rune, 0, len(base))
-	for _, r := range base {
-		if (r >= 'a' && r <= 'z') ||
-			(r >= 'A' && r <= 'Z') ||
-			(r >= '0' && r <= '9') ||
-			r == '_' || r == '-' {
-			out = append(out, r)
-		} else {
-			out = append(out, '_')
-		}
-	}
-	return string(out)
-}
-
-func isProviderSafeToolName(name string) bool {
-	if name == "" {
-		return false
-	}
-	if len(name) > 64 {
-		return false
-	}
-	for _, r := range name {
-		if (r >= 'a' && r <= 'z') ||
-			(r >= 'A' && r <= 'Z') ||
-			(r >= '0' && r <= '9') ||
-			r == '_' || r == '-' {
-			continue
-		}
-		return false
-	}
-	return true
 }
 
 func isRateLimited(err error) bool {

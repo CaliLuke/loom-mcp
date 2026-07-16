@@ -56,17 +56,28 @@ import (
 // storing per-run state in the Planner struct; use PlannerContext.State() for
 // ephemeral per-run data if needed.
 //
-// Error handling: Errors returned from PlanStart or PlanResume terminate the
-// run with a failed status. Use RetryHint in PlanResult to communicate
-// recoverable failures (like validation errors) without terminating.
+// Retry safety: PlanStart and PlanResume execute as workflow activities. The
+// engine may invoke either method more than once for one logical planner turn
+// when an activity attempt fails, including after a model call or another side
+// effect completed. Implementations must therefore be retry-safe: avoid direct
+// non-idempotent side effects or protect them with stable idempotency keys.
+//
+// Error handling: Errors returned from PlanStart or PlanResume fail the current
+// activity attempt. The engine applies its configured retry policy, and the run
+// fails only after retries are exhausted or the error is non-retryable. Use
+// RetryHint in a successful PlanResult to communicate recoverable tool failures
+// (like validation errors); RetryHint does not control activity retries.
 type Planner interface {
 	// PlanStart receives the initial messages and returns the first decision.
-	// This is called exactly once at the start of each run.
+	// The runtime schedules one logical start turn per run, but activity retries
+	// may invoke this method multiple times for that turn.
 	PlanStart(ctx context.Context, input *PlanInput) (*PlanResult, error)
 
 	// PlanResume receives messages plus tool results from the previous turn.
 	// This is called after each batch of tool executions until the planner
 	// returns a FinalResponse or the runtime terminates due to policy limits.
+	// Activity retries may invoke this method multiple times for one logical
+	// resume turn.
 	// When the runtime forces termination (caps exhausted, time budget expired),
 	// the Finalize field is set and the planner should produce a final response.
 	PlanResume(ctx context.Context, input *PlanResumeInput) (*PlanResult, error)
@@ -164,7 +175,7 @@ type PlannerEvents interface {
 
 // ToolRequest describes a tool invocation requested by the planner.
 type ToolRequest struct {
-	// Name is the fully-qualified tool identifier (for example, "svc.read.get_time_series").
+	// Name is the canonical tool identifier (for example, "read.get_time_series").
 	Name tools.Ident
 
 	// Payload is the canonical JSON payload for the tool call.
@@ -200,7 +211,7 @@ type ToolRequest struct {
 
 // ToolResult captures the outcome of a tool invocation.
 type ToolResult struct {
-	// Name is the fully-qualified tool identifier that produced this result.
+	// Name is the canonical <toolset>.<tool> identifier that produced this result.
 	Name tools.Ident
 
 	// Result is the decoded tool result value. Its concrete type depends on the
@@ -281,7 +292,7 @@ type ToolResult struct {
 //   - This type must remain workflow-boundary safe; it intentionally does not
 //     carry decoded `any` values.
 type ToolOutput struct {
-	// Name is the fully-qualified tool identifier that was executed.
+	// Name is the canonical <toolset>.<tool> identifier that was executed.
 	Name tools.Ident
 
 	// ToolCallID is the correlation identifier for this tool invocation.

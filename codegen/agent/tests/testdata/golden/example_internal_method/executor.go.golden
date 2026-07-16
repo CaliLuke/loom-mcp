@@ -57,9 +57,9 @@ func Execute(ctx context.Context, meta *runtime.ToolCallMeta, call *planner.Tool
 		}
 		_ = args
 		// Optional: transform to method payload if compatible
-		// mp, _ := profilesspecs.ToMethodPayload_Upsert(args)
+		// mp := profilesspecs.InitUpsertMethodPayload(args)
 		// TODO: Call your service client with mp (or args), map result back:
-		// tr, _ := profilesspecs.ToToolReturn_Upsert(methodRes)
+		// tr := profilesspecs.InitUpsertToolResult(methodRes)
 		return runtime.Executed(&planner.ToolResult{
 			Result: map[string]any{
 				"status": "ok",

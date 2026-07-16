@@ -3,7 +3,6 @@ package registry
 import (
 	"context"
 	"fmt"
-	"sync"
 
 	"go.opentelemetry.io/otel/attribute"
 )
@@ -36,7 +35,13 @@ func (m *Manager) Search(ctx context.Context, query string) ([]*SearchResult, er
 	}
 
 	obs.span.AddEvent("searching_registries", "registry_count", len(entries))
-	merged, errs := m.searchRegistries(ctx, entries, query)
+	merged, errs := m.collectRegistrySearchResults(ctx, entries, query, func(ctx context.Context, name string, entry *registryEntry) ([]*SearchResult, error) {
+		results, err := entry.client.Search(ctx, query)
+		if err != nil {
+			return nil, err
+		}
+		return tagSearchResults(name, results), nil
+	})
 	resultCount = len(merged)
 	if len(errs) > 0 && len(merged) > 0 {
 		obs.span.AddEvent("partial_failure", "error_count", len(errs), "result_count", len(merged))
@@ -62,10 +67,13 @@ func (m *Manager) snapshotRegistries() map[string]*registryEntry {
 	return entries
 }
 
-func (m *Manager) searchRegistries(
+type registrySearchFunc func(context.Context, string, *registryEntry) ([]*SearchResult, error)
+
+func (m *Manager) collectRegistrySearchResults(
 	ctx context.Context,
 	entries map[string]*registryEntry,
 	query string,
+	search registrySearchFunc,
 ) ([]*SearchResult, []error) {
 	type searchResult struct {
 		registry string
@@ -74,30 +82,24 @@ func (m *Manager) searchRegistries(
 	}
 
 	resultCh := make(chan searchResult, len(entries))
-	var wg sync.WaitGroup
 	for name, entry := range entries {
-		wg.Add(1)
 		go func(name string, entry *registryEntry) {
-			defer wg.Done()
-			results, err := entry.client.Search(ctx, query)
+			results, err := search(ctx, name, entry)
 			if err != nil {
 				m.obs.LogSearchFailure(ctx, name, query, err)
 				resultCh <- searchResult{registry: name, err: err}
 				return
 			}
-			resultCh <- searchResult{registry: name, results: tagSearchResults(name, results)}
+			resultCh <- searchResult{registry: name, results: results}
 		}(name, entry)
 	}
-	go func() {
-		wg.Wait()
-		close(resultCh)
-	}()
 
 	var (
 		merged []*SearchResult
 		errs   []error
 	)
-	for res := range resultCh {
+	for range entries {
+		res := <-resultCh
 		if res.err != nil {
 			errs = append(errs, fmt.Errorf("registry %q: %w", res.registry, res.err))
 			continue

@@ -141,7 +141,8 @@ type (
 		MethodBackedToolsets []*ToolsetData
 		// Tools flattens every tool declared across the agent's toolsets.
 		Tools []*ToolData
-		// MCPToolsets lists the distinct external MCP toolsets referenced via MCPToolset/Use.
+		// MCPToolsets lists external MCP toolsets referenced through
+		// Toolset(FromMCP(...)) and Use.
 		// Each entry captures the helper import/path information required to register
 		// the toolset with the runtime at agent registration time.
 		MCPToolsets []*MCPToolsetMeta
@@ -251,7 +252,7 @@ type (
 	// The policy is enforced by the agent runtime during workflow execution,
 	// not at code generation time.
 	RunPolicyData struct {
-		// TimeBudget is the maximum wall-clock time allocated to the run.
+		// TimeBudget caps active planner/tool work; external-input waits pause it.
 		TimeBudget time.Duration
 		// PlanTimeout applies to the Plan and Resume StartToClose timeouts when set.
 		PlanTimeout time.Duration

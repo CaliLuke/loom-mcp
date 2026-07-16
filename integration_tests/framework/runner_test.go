@@ -132,6 +132,26 @@ func TestFindServerCmdDirPrefersDirectoryWithHTTPGo(t *testing.T) {
 	assert.Equal(t, secondCmdDir, cmdDir)
 }
 
+func TestApplySDKServerFixturePatchCopiesCheckedInSources(t *testing.T) {
+	root := t.TempDir()
+	cmdDir := filepath.Join(root, "cmd", "assistant")
+	require.NoError(t, os.MkdirAll(cmdDir, 0o750))
+	require.NoError(t, os.WriteFile(filepath.Join(cmdDir, "main.go"), []byte("package main\n"), 0o600))
+	require.NoError(t, os.WriteFile(filepath.Join(cmdDir, "jsonrpc.go"), []byte("package main\n"), 0o600))
+
+	require.NoError(t, applySDKServerFixturePatch(root))
+
+	for _, name := range []string{"http.go", "main.go"} {
+		want, err := sdkServerPatchFS.ReadFile(filepath.Join("testdata", "sdk_server_patch", name))
+		require.NoError(t, err)
+		got, err := os.ReadFile(filepath.Join(cmdDir, name)) // #nosec G304 -- cmdDir is created by the test
+		require.NoError(t, err)
+		assert.Equal(t, want, got)
+	}
+	_, err := os.Stat(filepath.Join(cmdDir, "jsonrpc.go"))
+	require.ErrorIs(t, err, os.ErrNotExist)
+}
+
 func TestCloneExampleRootCopiesFiles(t *testing.T) {
 	root := t.TempDir()
 	nestedDir := filepath.Join(root, "cmd", "assistant")

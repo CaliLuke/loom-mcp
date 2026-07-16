@@ -18,11 +18,18 @@ type messageEncodeState struct {
 	ctx           context.Context
 	nameMap       map[string]string
 	logger        telemetry.Logger
-	toolUseIDMap  map[string]string
-	nextToolUseID int
+	toolUseIDs    *toolUseIDCodec
 	docNameMap    map[string]string
 	usedDocNames  map[string]struct{}
 	nextDocNameID int
+}
+
+// toolUseIDCodec maps canonical replay IDs to collision-free Bedrock wire IDs
+// for one request. The same mapping encodes matching tool-use/result blocks.
+type toolUseIDCodec struct {
+	canonicalToProvider map[string]string
+	occupied            map[string]struct{}
+	next                int
 }
 
 func newMessageEncodeState(ctx context.Context, nameMap map[string]string, logger telemetry.Logger) *messageEncodeState {
@@ -30,10 +37,50 @@ func newMessageEncodeState(ctx context.Context, nameMap map[string]string, logge
 		ctx:          ctx,
 		nameMap:      nameMap,
 		logger:       logger,
-		toolUseIDMap: make(map[string]string),
+		toolUseIDs:   newToolUseIDCodec(),
 		docNameMap:   make(map[string]string),
 		usedDocNames: make(map[string]struct{}),
 	}
+}
+
+func newToolUseIDCodec() *toolUseIDCodec {
+	return &toolUseIDCodec{
+		canonicalToProvider: make(map[string]string),
+		occupied:            make(map[string]struct{}),
+	}
+}
+
+// reserve claims a provider-safe pass-through value before synthetic IDs are
+// allocated. encodeMessages reserves the complete transcript up front.
+func (c *toolUseIDCodec) reserve(canonical string) {
+	if isProviderSafeToolUseID(canonical) {
+		c.occupied[canonical] = struct{}{}
+	}
+}
+
+// encode returns a provider-safe, request-unique wire ID for canonical.
+func (c *toolUseIDCodec) encode(canonical string) string {
+	if canonical == "" {
+		return ""
+	}
+	if isProviderSafeToolUseID(canonical) {
+		c.occupied[canonical] = struct{}{}
+		return canonical
+	}
+	if id, ok := c.canonicalToProvider[canonical]; ok {
+		return id
+	}
+	var id string
+	for {
+		c.next++
+		id = fmt.Sprintf("t%d", c.next)
+		if _, exists := c.occupied[id]; !exists {
+			break
+		}
+	}
+	c.canonicalToProvider[canonical] = id
+	c.occupied[id] = struct{}{}
+	return id
 }
 
 func (s *messageEncodeState) encodeSystemParts(parts []model.Part) ([]brtypes.SystemContentBlock, error) {
@@ -221,7 +268,7 @@ func (s *messageEncodeState) encodeToolUsePart(v model.ToolUsePart) (brtypes.Con
 		}
 	}
 	if v.ID != "" {
-		if id := toolUseIDFor(v.ID, s.toolUseIDMap, &s.nextToolUseID); id != "" {
+		if id := s.toolUseIDs.encode(v.ID); id != "" {
 			tb.ToolUseId = aws.String(id)
 		}
 	}
@@ -233,7 +280,7 @@ func (s *messageEncodeState) encodeToolUsePart(v model.ToolUsePart) (brtypes.Con
 
 func (s *messageEncodeState) encodeToolResultPart(v model.ToolResultPart) brtypes.ContentBlock {
 	tr := brtypes.ToolResultBlock{}
-	if id := toolUseIDFor(v.ToolUseID, s.toolUseIDMap, &s.nextToolUseID); id != "" {
+	if id := s.toolUseIDs.encode(v.ToolUseID); id != "" {
 		tr.ToolUseId = aws.String(id)
 	}
 	if text, ok := v.Content.(string); ok {
