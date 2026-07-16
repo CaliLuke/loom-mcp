@@ -807,8 +807,10 @@ func TestGenerateSDKServer_MergesContextRequestHeadersIntoSyntheticRequest(t *te
 	require.NotContains(t, rendered, "serveSDKEventsStream(server, adapter, w, r)")
 	require.NotContains(t, rendered, "if r.Method == http.MethodGet {\n\t\tif sessionID")
 	require.Contains(t, rendered, "adapter.assertSessionPrincipal(r.Context(), sessionID)")
+	require.Contains(t, rendered, "writeSDKSessionError(w, err)")
 	require.Contains(t, rendered, "adapter.markInitializedSession(sessionID)")
-	require.Contains(t, rendered, "http.Error(w, err.Error(), http.StatusForbidden)")
+	require.Contains(t, rendered, "errors.Is(err, mcpruntime.ErrInvalidSessionID)")
+	require.Contains(t, rendered, "http.Error(w, err.Error(), http.StatusNotFound)")
 	require.Contains(t, rendered, "sdkSyntheticHTTPRequest(ctx, extra)")
 	require.Contains(t, rendered, "for key, values := range mcpruntime.RequestHeadersFromContext(ctx)")
 

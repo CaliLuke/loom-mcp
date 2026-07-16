@@ -706,19 +706,14 @@ type (
 		NextCursorField string
 	}
 
-	// RuntimeData contains the workflow and activity artifacts generated for an agent,
-	// mapping DSL-level agent declarations to engine-level registrations. Each agent
-	// produces exactly one workflow handler and multiple activity handlers (planner,
-	// resume, tool execution).
-	//
-	// The Workflow field describes the generated workflow entry point (see workflow.go.tpl),
-	// which delegates to the runtime's ExecuteWorkflow logic. Activities enumerates all
-	// activity handlers to be registered with the engine before workers start.
-	//
-	// Specialized activity pointers (ExecuteTool, PlanActivity, ResumeActivity) provide
-	// direct access to the standard activities for templates that need to reference them
-	// by name or queue. These point into the Activities slice and are set during agent
-	// initialization (see newAgentData).
+	// RuntimeData maps DSL-level agent declarations to engine registration metadata.
+	// Generated agent.go and registry.go use this data to register the runtime-owned
+	// workflow handler and standard planner/tool activities. It does not describe a
+	// separate generated workflow or activity implementation file.
+//
+	// Specialized activity pointers (ExecuteTool, PlanActivity, ResumeActivity)
+	// reference entries in Activities and let the renderers use their names, queues,
+	// and retry settings consistently.
 	//
 	// All activities include retry policies and attempt timeout fields derived from
 	// DSL policy expressions or codegen defaults (for example defaultPlannerActivityTimeout).
@@ -735,14 +730,9 @@ type (
 		ResumeActivity *ActivityArtifact
 	}
 
-	// WorkflowArtifact describes the generated workflow entry point for an agent.
-	// Each agent produces exactly one workflow function that serves as the durable
-	// execution entry point.
-	//
-	// The workflow function (FuncName) is a thin wrapper that validates input and
-	// delegates to the runtime's ExecuteWorkflow logic (see workflow.go.tpl). The
-	// definition variable (DefinitionVar) is exported from the generated agent package
-	// and used during engine registration.
+	// WorkflowArtifact describes the runtime workflow registration for an agent.
+	// The generated registry binds this metadata to the runtime's ExecuteWorkflow
+	// handler; the generator does not emit a separate workflow function.
 	//
 	// Name is the logical identifier registered with the workflow engine (e.g.,
 	// "assistant_service.chat_assistant.workflow"), which must be unique across all
@@ -765,14 +755,14 @@ type (
 	// its identity, execution constraints, and implementation kind. Activities are
 	// short-lived, stateless tasks invoked from workflow handlers.
 	//
-	// Each agent generates three standard activities:
+	// Each agent registers three standard activities:
 	//   - Plan (ActivityKindPlan): wraps Planner.Start to initialize the planning loop
 	//   - Resume (ActivityKindResume): wraps Planner.Resume to continue after tool execution
 	//   - ExecuteTool (ActivityKindExecuteTool): generic tool executor shared across agents
 	//
-	// The Kind field determines the activity's behavior. Templates use Kind to generate
-	// appropriate handler logic (see activities.go.tpl). FuncName and DefinitionVar
-	// follow Goa naming conventions and are used during registration and invocation.
+	// The Kind field determines the runtime activity behavior. FuncName and
+	// DefinitionVar follow Goa naming conventions and are used during registration
+	// and invocation.
 	//
 	// RetryPolicy and timeout fields control resilience: Plan/Resume activities use
 	// plannerActivityRetryPolicy() with a 2-minute StartToClose timeout, while

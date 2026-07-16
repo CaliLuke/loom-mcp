@@ -462,16 +462,16 @@ func emitSessionHelpers(stmt *jen.Statement) {
 			jen.Id("expected").Op(":=").Qual("strings", "TrimSpace").Call(jen.Id("a").Dot("sessionPrincipals").Index(jen.Id("sessionID"))),
 			jen.Id("a").Dot("mu").Dot("Unlock").Call(),
 			jen.If(jen.Op("!").Id("initialized")).Block(
-				jen.Return(jen.Qual("errors", "New").Call(jen.Lit("session principal binding missing"))),
+				jen.Return(jen.Id("mcpruntime").Dot("ErrInvalidSessionID")),
 			),
 			jen.If(jen.Id("expected").Op("==").Lit("")).Block(
 				jen.If(jen.Id("principalRequired").Op("||").Id("actual").Op("!=").Lit("")).Block(
-					jen.Return(jen.Qual("errors", "New").Call(jen.Lit("session principal binding missing"))),
+					jen.Return(jen.Id("mcpruntime").Dot("ErrSessionPrincipalBindingMissing")),
 				),
 				jen.Return(jen.Nil()),
 			),
 			jen.If(jen.Id("actual").Op("==").Lit("").Op("||").Id("actual").Op("!=").Id("expected")).Block(
-				jen.Return(jen.Qual("errors", "New").Call(jen.Lit("session user mismatch"))),
+				jen.Return(jen.Id("mcpruntime").Dot("ErrSessionPrincipalMismatch")),
 			),
 			jen.Return(jen.Nil()),
 		)

@@ -1151,7 +1151,7 @@ profile := stream.MetricsProfile()
 | Runtime guide   | `docs/runtime.md`                                          |
 | Glossary        | `docs/glossary.md`                                         |
 | Quickstart      | `quickstart/README.md`                                     |
-| MCP integration | `codegen/mcp` and `runtime/mcp`                            |
+| MCP integration | [`docs/mcp_sdk_server.md`](mcp_sdk_server.md)                  |
 | Features        | `features/*` (memory, session, run, stream, model clients) |
 
 ### Feature Packages

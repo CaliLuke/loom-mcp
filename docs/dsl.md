@@ -1789,10 +1789,16 @@ For each service/agent combination, `loom gen` produces:
 
 ### Agent Package (`gen/<svc>/agents/<agent>/`)
 
-- `agent.go` — registers workflows/activities/toolsets; exports `const AgentID agent.Ident`
-- `workflow.go` — implements the durable run loop
-- `activities.go` — thin wrappers calling runtime activities
-- `config.go` — runtime options bundle; includes `MCPCallers` map when MCP toolsets are used
+- `agent.go` — agent identity, workflow/activity names, construction, worker
+  configuration, route, and client helpers
+- `config.go` — runtime options bundle; includes `MCPCallers` when MCP
+  toolsets are used
+- `registry.go` — registers the runtime's shared `ExecuteWorkflow` handler,
+  planner/activity metadata, policy, and aggregate specs
+
+The runtime owns the durable execution loop and activity implementations.
+Generation records their names, retry options, and registration in the agent
+package; it does not emit separate `workflow.go` or `activities.go` files.
 
 ### Toolset Owner Packages (`gen/<svc>/toolsets/<toolset>/`)
 

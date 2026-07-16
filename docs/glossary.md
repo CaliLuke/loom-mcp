@@ -24,6 +24,9 @@ remain authoritative for behavior and APIs.
 | MCP skill resource | A `SkillDirectory(...)` projection exposed as `skill://...` resources through MCP `resources/list` and `resources/read`. | [MCP SDK server](mcp_sdk_server.md) |
 | Model-facing skill tools | `Toolset(FromSkills(...))` discovery/load tools that place instruction packages in an agent's model context. They are not MCP resources. | [DSL](dsl.md) |
 | Registry service / runtime registry | The service publishes versioned toolsets; the runtime manager discovers and registers those toolsets for agents. Prompt overrides use a separate prompt registry. | [Runtime](runtime.md) |
+| `CapsState` / `TimeBudget` | `CapsState` owns counter budgets. The runtime-owned `TimeBudget` deadline measures active work and pauses for human or external waits; deprecated `CapsState.ExpiresAt` does not enforce time. | [Runtime](runtime.md) |
+| Streamable-HTTP session | A server-issued MCP session ID bound to a verified principal. Missing required IDs are 400, invalid/expired IDs are 404, and ownership failures are 403. | [MCP SDK server](mcp_sdk_server.md) |
+| Provider conformance | The shared adapter test contract for complete/streaming behavior, structured output, tool choice, thinking, counting, cancellation, and normalized errors. A provider may explicitly report streaming unsupported. | [Runtime](runtime.md) |
 | Generated owner | The service/toolset/agent package selected by codegen to own shared specs, codecs, dispatch, and registration helpers. Generated `gen/` files are never edited by hand. | [Overview](overview.md) |
 | `Idempotent()` | Transcript-scoped metadata for planners/orchestrators. The built-in runtime does not suppress duplicate calls or cache results. | [DSL](dsl.md) |
 

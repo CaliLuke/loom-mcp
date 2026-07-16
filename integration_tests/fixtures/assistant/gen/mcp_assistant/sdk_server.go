@@ -11,6 +11,7 @@ import (
 	"context"
 	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"net/url"
@@ -186,7 +187,7 @@ func newSDKHandler(server *mcpsdk.Server, adapter *MCPAdapter, requestContext fu
 		}
 		if sessionID := r.Header.Get(mcpruntime.HeaderKeySessionID); sessionID != "" {
 			if err := adapter.assertSessionPrincipal(r.Context(), sessionID); err != nil {
-				http.Error(w, err.Error(), http.StatusForbidden)
+				writeSDKSessionError(w, err)
 				return
 			}
 		}
@@ -230,6 +231,13 @@ func sdkRuntimeCORSHandler(next http.Handler, policy loomhttp.RuntimeCORSPolicy)
 		}
 		actual(w, r)
 	})
+}
+func writeSDKSessionError(w http.ResponseWriter, err error) {
+	if errors.Is(err, mcpruntime.ErrInvalidSessionID) || errors.Is(err, mcpruntime.ErrSessionTerminated) {
+		http.Error(w, err.Error(), http.StatusNotFound)
+		return
+	}
+	http.Error(w, err.Error(), http.StatusForbidden)
 }
 func registerSDKTools(server *mcpsdk.Server, adapter *MCPAdapter, requestContext func(context.Context, *http.Request) context.Context) error {
 	if adapter.toolSearchEnabled() {

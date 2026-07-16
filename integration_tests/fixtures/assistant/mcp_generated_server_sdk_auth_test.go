@@ -88,6 +88,25 @@ func TestGeneratedSDKServerEnforcesSessionPrincipalOnEverySessionRequest(t *test
 	assert.Equal(t, http.StatusOK, resp.StatusCode, "a rejected DELETE must not terminate the rightful principal's session")
 }
 
+func TestGeneratedSDKServerRejectsUnknownSessionIDWithNotFound(t *testing.T) {
+	t.Parallel()
+
+	sdkServer, err := mcpassistant.NewSDKServer(NewAssistant(), withTestRuntimeCORS(t, nil))
+	require.NoError(t, err)
+	server := httptest.NewServer(mcpauth.RequireBearerToken(testMCPTokenVerifier, nil)(sdkServer.Handler))
+	defer server.Close()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	resp := authenticatedSessionRequest(t, ctx, server.URL, http.MethodPost, "unknown-session", "user-1")
+	defer resp.Body.Close()
+	body, err := io.ReadAll(resp.Body)
+	require.NoError(t, err)
+	assert.Equal(t, http.StatusNotFound, resp.StatusCode, "body: %s", string(body))
+	assert.Contains(t, string(body), "invalid session ID")
+}
+
 func TestGeneratedJSONRPCServerEnforcesSessionPrincipalOnEverySessionRequest(t *testing.T) {
 	t.Parallel()
 

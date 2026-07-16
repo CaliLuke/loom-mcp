@@ -341,16 +341,16 @@ func (a *MCPAdapter) assertSessionPrincipal(ctx context.Context, sessionID strin
 	expected := strings.TrimSpace(a.sessionPrincipals[sessionID])
 	a.mu.Unlock()
 	if !initialized {
-		return errors.New("session principal binding missing")
+		return mcpruntime.ErrInvalidSessionID
 	}
 	if expected == "" {
 		if principalRequired || actual != "" {
-			return errors.New("session principal binding missing")
+			return mcpruntime.ErrSessionPrincipalBindingMissing
 		}
 		return nil
 	}
 	if actual == "" || actual != expected {
-		return errors.New("session user mismatch")
+		return mcpruntime.ErrSessionPrincipalMismatch
 	}
 	return nil
 }

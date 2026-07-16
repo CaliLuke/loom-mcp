@@ -14,6 +14,7 @@ func buildMCPSDKServerFile(genpkg string, svc *expr.ServiceExpr, data *AdapterDa
 		{Path: "context"},
 		{Path: "encoding/base64"},
 		{Path: "encoding/json"},
+		{Path: "errors"},
 		{Path: "fmt"},
 		{Path: "net/http"},
 		{Path: "net/url"},
@@ -64,6 +65,7 @@ func buildMCPSDKServerFile(genpkg string, svc *expr.ServiceExpr, data *AdapterDa
 		sdkServerTypesSection(data),
 		sdkServerConstructorSection(data),
 		sdkServerHTTPSection(data),
+		sdkServerSessionErrorSection(),
 		sdkServerRegistrationSection(data),
 		sdkServerHandlerSection(data),
 		sdkServerConversionSection(data),
@@ -344,7 +346,7 @@ func sdkServerHTTPSection(data *AdapterData) codegen.Section {
 							),
 							jen.If(jen.Id("sessionID").Op(":=").Id("r").Dot("Header").Dot("Get").Call(jen.Id("mcpruntime").Dot("HeaderKeySessionID")), jen.Id("sessionID").Op("!=").Lit("")).Block(
 								jen.If(jen.Id("err").Op(":=").Id("adapter").Dot("assertSessionPrincipal").Call(jen.Id("r").Dot("Context").Call(), jen.Id("sessionID")), jen.Id("err").Op("!=").Nil()).Block(
-									jen.Qual("net/http", "Error").Call(jen.Id("w"), jen.Id("err").Dot("Error").Call(), jen.Qual("net/http", "StatusForbidden")),
+									jen.Id("writeSDKSessionError").Call(jen.Id("w"), jen.Id("err")),
 									jen.Return(),
 								),
 							),
@@ -427,6 +429,25 @@ func sdkServerHTTPSection(data *AdapterData) codegen.Section {
 				)
 			stmt.Line()
 		}
+	})
+}
+
+func sdkServerSessionErrorSection() codegen.Section {
+	return codegen.NewJenniferSection("mcp-sdk-server-session-errors", func(stmt *jen.Statement) {
+		stmt.Func().Id("writeSDKSessionError").
+			Params(jen.Id("w").Qual("net/http", "ResponseWriter"), jen.Id("err").Error()).
+			Block(
+				jen.If(
+					jen.Qual("errors", "Is").Call(jen.Id("err"), jen.Id("mcpruntime").Dot("ErrInvalidSessionID")).
+						Op("||").
+						Qual("errors", "Is").Call(jen.Id("err"), jen.Id("mcpruntime").Dot("ErrSessionTerminated")),
+				).Block(
+					jen.Qual("net/http", "Error").Call(jen.Id("w"), jen.Id("err").Dot("Error").Call(), jen.Qual("net/http", "StatusNotFound")),
+					jen.Return(),
+				),
+				jen.Qual("net/http", "Error").Call(jen.Id("w"), jen.Id("err").Dot("Error").Call(), jen.Qual("net/http", "StatusForbidden")),
+			)
+		stmt.Line()
 	})
 }
 

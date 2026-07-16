@@ -190,7 +190,12 @@ trailing slash authorizes or denies the full prefix, such as
 `skill://code-review/`. A skill's main resource name also maps to that prefix,
 so allowing or denying `code-review` covers `SKILL.md`, `_manifest`, and
 supporting files. Request-scoped `x-mcp-allow-names` and
-`x-mcp-deny-names` values use the same matching rules. Server allow policies
+`x-mcp-deny-names` values use the same matching rules on the generated native
+JSON-RPC transport. SDK applications must derive trusted narrowing in their
+`RequestContext` callback and install it with
+`mcpruntime.WithAllowedResourceNames` and
+`mcpruntime.WithDeniedResourceNames`; the SDK handler intentionally does not
+treat raw client-chosen headers as authorization input. Server allow policies
 and request allow policies are independent constraints: when both are present,
 the requested resource must match both. A request allow can therefore narrow
 `MCPAdapterOptions`, but cannot add a resource outside the server's maximum

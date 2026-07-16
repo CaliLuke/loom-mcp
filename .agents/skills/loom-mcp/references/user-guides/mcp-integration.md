@@ -83,6 +83,8 @@ Important delivery contracts:
 - `mcp.SessionBroadcaster.PublishSession` delivers a message once within the target session, even with overlapping SSE connections.
 - invalid or unknown session IDs return `ErrInvalidSessionID`.
 - interceptors execute in declared order and can short-circuit the request.
+- Tool-call interceptors can receive raw model arguments. Treat them as
+  confidential and avoid logging them; see `docs/mcp_sdk_server.md`.
 - the generated telemetry boundary records MCP operations without requiring handlers to duplicate instrumentation.
 
 ## Resource authorization
@@ -98,6 +100,12 @@ The native JSON-RPC transport accepts `x-mcp-allow-names` and
 headers as credentials or grant authority. Authenticate before the generated
 handler and derive principals and deployment grants from verified application
 policy.
+
+The SDK transport passes request headers through for application inspection but
+does not automatically map those raw headers to resource-name policy. Apply
+trusted SDK narrowing in `SDKServerOptions.RequestContext` with
+`runtime/mcp.WithAllowedResourceNames` and
+`runtime/mcp.WithDeniedResourceNames`.
 
 ## Session identity
 
