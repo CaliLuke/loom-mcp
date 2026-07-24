@@ -710,7 +710,7 @@ type (
 	// Generated agent.go and registry.go use this data to register the runtime-owned
 	// workflow handler and standard planner/tool activities. It does not describe a
 	// separate generated workflow or activity implementation file.
-//
+	//
 	// Specialized activity pointers (ExecuteTool, PlanActivity, ResumeActivity)
 	// reference entries in Activities and let the renderers use their names, queues,
 	// and retry settings consistently.

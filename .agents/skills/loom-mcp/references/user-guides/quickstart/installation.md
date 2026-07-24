@@ -2,7 +2,7 @@
 
 ## Prerequisites
 
-Go 1.26.1+
+Go 1.26.5+
 
 ```bash
 go version
@@ -11,7 +11,7 @@ go version
 Install the Loom CLI:
 
 ```bash
-go install github.com/CaliLuke/loom/cmd/loom@v1.7.0
+go install github.com/CaliLuke/loom/cmd/loom@v1.7.1
 loom version
 ```
 
@@ -20,7 +20,7 @@ loom version
 ```bash
 mkdir quickstart && cd quickstart
 go mod init example.com/quickstart
-go get github.com/CaliLuke/loom@v1.7.0 github.com/CaliLuke/loom-mcp@latest
+go get github.com/CaliLuke/loom@v1.7.1 github.com/CaliLuke/loom-mcp@latest
 ```
 
 Temporal is optional for local development. The generated example starts with

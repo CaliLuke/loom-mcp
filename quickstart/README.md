@@ -4,8 +4,8 @@ Minimal, copy‑paste runnable example to go from zero → talking agent. Keep y
 
 ## Prerequisites
 
-- Go 1.26.1+
-- Loom CLI (`go install github.com/CaliLuke/loom/cmd/loom@v1.7.0`)
+- Go 1.26.5+
+- Loom CLI (`go install github.com/CaliLuke/loom/cmd/loom@v1.7.1`)
 - Temporal is optional. The generated example uses the in-memory engine; a
   Temporal server is needed only when you opt into durable execution in step 5.
 
@@ -14,7 +14,7 @@ Minimal, copy‑paste runnable example to go from zero → talking agent. Keep y
 ```
 mkdir -p $GOPATH/src/example.com/quickstart && cd $_
 go mod init example.com/quickstart
-go get github.com/CaliLuke/loom@v1.7.0
+go get github.com/CaliLuke/loom@v1.7.1
 go get github.com/CaliLuke/loom-mcp@latest
 ```
 

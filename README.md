@@ -34,9 +34,9 @@ Repo identity and module identity are now aligned.
 
 This repo currently targets:
 
-- `github.com/CaliLuke/loom v1.7.0`
+- `github.com/CaliLuke/loom v1.7.1`
 - `github.com/modelcontextprotocol/go-sdk v1.6.1`
-- Go `1.26.1`
+- Go `1.26.5`
 
 The workspace-level `go.work` file centralizes local multi-module overrides for dependencies that must stay in sync across the root module and integration fixtures.
 Use `make update-mcp-go-sdk MCP_GO_SDK_VERSION=vX.Y.Z` when bumping the MCP Go SDK.
@@ -44,7 +44,7 @@ Use `make update-mcp-go-sdk MCP_GO_SDK_VERSION=vX.Y.Z` when bumping the MCP Go S
 The standard CLI for generation is:
 
 ```bash
-go install github.com/CaliLuke/loom/cmd/loom@v1.7.0
+go install github.com/CaliLuke/loom/cmd/loom@v1.7.1
 ```
 
 ## Working in this repo

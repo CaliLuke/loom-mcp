@@ -26,7 +26,7 @@ func TestLoomGen_MCPPureServiceWithoutMethodLevelJSONRPC(t *testing.T) {
 
 	goMod := `module example.com/repro
 
-go 1.26.1
+go 1.26.5
 
 require (
 	github.com/CaliLuke/loom v1.0.7
