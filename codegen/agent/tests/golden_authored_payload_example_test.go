@@ -4,9 +4,9 @@ import (
 	"encoding/json"
 	"testing"
 
-	agentcodegen "github.com/CaliLuke/loom-mcp/codegen/agent"
-	"github.com/CaliLuke/loom-mcp/codegen/agent/tests/testscenarios"
-	"github.com/CaliLuke/loom-mcp/codegen/testhelpers"
+	agentcodegen "github.com/CaliLuke/loom-mcp/v2/codegen/agent"
+	"github.com/CaliLuke/loom-mcp/v2/codegen/agent/tests/testscenarios"
+	"github.com/CaliLuke/loom-mcp/v2/codegen/testhelpers"
 	"github.com/stretchr/testify/require"
 )
 

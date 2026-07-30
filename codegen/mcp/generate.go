@@ -4,15 +4,14 @@ import (
 	"errors"
 	"fmt"
 	"path/filepath"
-	"slices"
 	"sort"
 	"strings"
 
-	agentcodegen "github.com/CaliLuke/loom-mcp/codegen/agent"
-	"github.com/CaliLuke/loom-mcp/codegen/shared"
-	agentsexpr "github.com/CaliLuke/loom-mcp/expr/agent"
-	mcpexpr "github.com/CaliLuke/loom-mcp/expr/mcp"
-	"github.com/CaliLuke/loom-mcp/internal/upstreampaths"
+	agentcodegen "github.com/CaliLuke/loom-mcp/v2/codegen/agent"
+	"github.com/CaliLuke/loom-mcp/v2/codegen/shared"
+	agentsexpr "github.com/CaliLuke/loom-mcp/v2/expr/agent"
+	mcpexpr "github.com/CaliLuke/loom-mcp/v2/expr/mcp"
+	"github.com/CaliLuke/loom-mcp/v2/internal/upstreampaths"
 	"github.com/CaliLuke/loom/codegen"
 	"github.com/CaliLuke/loom/codegen/service"
 	"github.com/CaliLuke/loom/eval"
@@ -260,7 +259,7 @@ func applyMCPPolicyHeadersToJSONRPCMount(files []*codegen.File, protocolVersion 
 			codegen.AddImport(header, &codegen.ImportSpec{Path: "errors"})
 			codegen.AddImport(header, &codegen.ImportSpec{Path: "fmt"})
 			codegen.AddImport(header, &codegen.ImportSpec{Path: "io"})
-			codegen.AddImport(header, &codegen.ImportSpec{Path: "github.com/CaliLuke/loom-mcp/runtime/mcp", Name: "mcpruntime"})
+			codegen.AddImport(header, &codegen.ImportSpec{Path: "github.com/CaliLuke/loom-mcp/v2/runtime/mcp", Name: "mcpruntime"})
 			codegen.AddImport(header, &codegen.ImportSpec{Path: "github.com/modelcontextprotocol/go-sdk/auth", Name: "mcpauth"})
 		}
 	}
@@ -832,13 +831,8 @@ func supportedProtocolVersionLiterals(protocolVersion string) string {
 	return strings.Join(quoted, ", ")
 }
 
-func supportedProtocolVersions(protocolVersion string) []string {
-	pv := defaultProtocolVersion(protocolVersion)
-	supported := []string{"2025-11-25", "2025-06-18", "2025-03-26", "2024-11-05"}
-	if !slices.Contains(supported, pv) {
-		supported = append([]string{pv}, supported...)
-	}
-	return supported
+func supportedProtocolVersions(string) []string {
+	return mcpexpr.SupportedProtocolVersions()
 }
 
 // generateMCPTransport generates adapter and prompt provider files that adapt
@@ -912,19 +906,19 @@ func adapterImports(genpkg string, svc *expr.ServiceExpr, svcName string, data *
 		{Path: "go.opentelemetry.io/otel/trace"},
 		{Path: "github.com/sahilm/fuzzy"},
 		{Path: genpkg + "/" + svcName, Name: svcName},
-		{Path: "github.com/CaliLuke/loom-mcp/runtime/mcp", Name: "mcpruntime"},
+		{Path: "github.com/CaliLuke/loom-mcp/v2/runtime/mcp", Name: "mcpruntime"},
 		{Path: upstreampaths.LoomMCPHTTPImportPath, Name: "goahttp"},
 		{Path: upstreampaths.LoomPkgImportPath, Name: "loom"},
 	}...)
 	if len(data.SkillDirectories) > 0 {
 		imports = append(imports, &codegen.ImportSpec{
-			Path: "github.com/CaliLuke/loom-mcp/runtime/mcp/skills",
+			Path: "github.com/CaliLuke/loom-mcp/v2/runtime/mcp/skills",
 			Name: "mcpskills",
 		})
 	}
 	if adapterDataHasProjectedTools(data) {
 		imports = append(imports, &codegen.ImportSpec{
-			Path: "github.com/CaliLuke/loom-mcp/runtime/agent/runtime",
+			Path: "github.com/CaliLuke/loom-mcp/v2/runtime/agent/runtime",
 			Name: "agentruntime",
 		})
 		seenProjectedImports := map[string]struct{}{}
@@ -1016,7 +1010,7 @@ func defaultProtocolVersion(protocolVersion string) string {
 	if protocolVersion != "" {
 		return protocolVersion
 	}
-	return "2025-11-25"
+	return mcpexpr.DefaultProtocolVersion
 }
 
 func buildMCPPromptProviderFile(genpkg string, svc *expr.ServiceExpr, data *AdapterData, svcName, pkgName string) *codegen.File {
@@ -1030,7 +1024,7 @@ func buildMCPPromptProviderFile(genpkg string, svc *expr.ServiceExpr, data *Adap
 	}
 	if hasRuntimePrompts(data.StaticPrompts) {
 		imports = append(imports, &codegen.ImportSpec{
-			Path: "github.com/CaliLuke/loom-mcp/runtime/agent/prompt",
+			Path: "github.com/CaliLuke/loom-mcp/v2/runtime/agent/prompt",
 		})
 	}
 	return &codegen.File{

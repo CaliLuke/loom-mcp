@@ -21,6 +21,7 @@ server, err := mcpassistant.NewSDKServer(
     assistantapi.NewAssistant(), // your service implementation
     &mcpassistant.SDKServerOptions{
         PromptProvider: myPromptProvider{},
+        RequestStateKey: []byte(os.Getenv("MCP_REQUEST_STATE_KEY")),
         RequestContext: func(ctx context.Context, r *http.Request) context.Context {
             // see "Request Context Callback" below
             return ctx
@@ -42,12 +43,19 @@ MCP streamable-HTTP JSON-RPC channel) and GET (the upstream SDK's standalone
 SSE listener) on the same path. The loom-specific `events/stream` method is a
 JSON-RPC-transport feature and is not routed (nor advertised) in SDK mode.
 
+The design's `ProtocolVersion` configures the always-generated Loom-native
+JSON-RPC transport and is limited to the versions that transport implements,
+through `2025-11-25`. It does not prevent the SDK handler from negotiating MCP
+`2026-07-28` when `StreamableHTTP.Stateless` is enabled; the upstream SDK owns
+that modern sessionless transport contract.
+
 ## SDKServerOptions
 
 | Field            | Required | Description                                                                                                                                                            |
 | ---------------- | -------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `PromptProvider` | yes      | Implementation that renders prompts declared with `StaticPrompt` and `DynamicPrompt`. Generated against the design.                                                    |
 | `RequestContext` | no       | Per-request hook called once per MCP RPC. Receives the inbound request context and a synthetic `*http.Request` carrying the live transport headers; returns a new ctx. |
+| `RequestStateKey` | for elicitation | Stable 32-byte key used to AES-GCM encrypt and authenticate multi-round-trip `requestState`. All replicas serving an endpoint must share it. |
 | `TransportObserver` | no    | Loom transport observer installed on the generated SDK handler. Request lifecycle events are delivered without external middleware wiring.                           |
 | `StreamableHTTP` | no       | `*mcpsdk.StreamableHTTPOptions` passed through to the upstream SDK. A default `net/http.NewCrossOriginProtection()` is applied when the options or their protection field are nil. |
 
@@ -266,54 +274,50 @@ result, err := mcpruntime.Elicit(ctx, mcpruntime.ElicitRequest{
 })
 ```
 
-The generated server adapts that call to the official Go SDK's
-`ServerSession.Elicit`, which sends `elicitation/create` to clients that
-advertise the `elicitation` capability. If service code calls
-`mcpruntime.Elicit` outside an MCP SDK request context, the runtime returns
-`mcpruntime.ErrElicitorUnavailable`.
+The generated handler adapts that call to the official multi-round-trip request
+contract. It returns an `InputRequiredResult` whose `inputRequests` map contains
+`elicitation/create`. The client fulfills the request and retries the original
+tool, prompt, or resource call with `inputResponses`; Loom then re-enters the
+service implementation and returns the elicitation result at the same runtime
+call site.
 
-## Sampling
+This means implementation code before `mcpruntime.Elicit` can run more than
+once. Keep that prefix retry-safe and protect non-idempotent effects with stable
+idempotency keys. Loom carries earlier responses between multi-step retries in a
+bounded, versioned opaque `requestState`. Every elicitation round, including the
+first, returns AES-GCM encrypted and authenticated state bound to the original
+MCP method and logical parameters. Configure a stable 32-byte
+`SDKServerOptions.RequestStateKey`; all replicas serving the endpoint must share
+it so retries survive restarts and load balancing. Rotating the key invalidates
+in-flight retries. Responses without valid server-issued state, modified state,
+state replayed against another operation or payload, and response IDs or
+elicitation contracts not issued in the pending round are rejected as protocol
+errors rather than tool-level `isError` results.
 
-Generated SDK servers also place an MCP sampler in the context passed to tool,
-resource, and prompt implementations. Service code can request text generation
-from the connected client:
+The protected state contains client-supplied elicitation responses. Protection
+prevents disclosure and undetected modification while the state is in transit,
+but those responses remain client assertions and must never be used as
+authorization evidence or server-owned state.
 
-```go
-result, err := mcpruntime.Sample(ctx, mcpruntime.SampleRequest{
-    Messages: []mcpruntime.SampleMessage{
-        {Role: "user", Text: "Summarize the deployment plan."},
-    },
-    SystemPrompt: "Answer concisely.",
-    MaxTokens:    256,
-})
-```
+Each `mcpruntime.Elicit` call yields one input request, so N sequential
+elicitations require N protocol round trips. Multi-step elicitation requires an
+MCP `2026-07-28` client: the official SDK's legacy compatibility middleware
+re-enters a handler only once, so older clients support a single elicitation
+step only. Under the official Go SDK, `2026-07-28` streamable HTTP runs
+stateless: each retry is a separate POST and does not carry
+`Mcp-Session-Id`. Stateful streamable HTTP negotiates the legacy protocol
+instead.
 
-The generated server adapts this transport-neutral contract to the official Go
-SDK's `ServerSession.CreateMessage`, which sends `sampling/createMessage` to a
-client that advertises the `sampling` capability. The current runtime contract
-supports text messages and text results; image, audio, and sampling tool-use
-content require a richer future contract. Calling `mcpruntime.Sample` outside
-an MCP SDK request context returns `mcpruntime.ErrSamplerUnavailable`.
+Loom accepts only `ElicitResult` responses for its elicitation request IDs,
+requires an `accept`, `decline`, or `cancel` action, rejects content on
+non-accept actions, and bounds both carried response count and encoded state
+size. If service code calls `mcpruntime.Elicit` outside an MCP SDK request
+context, the runtime returns `mcpruntime.ErrElicitorUnavailable`.
 
-## Client Roots
-
-Generated SDK request contexts can retrieve filesystem roots exposed by the
-connected MCP client:
-
-```go
-roots, err := mcpruntime.ListRoots(ctx)
-for _, root := range roots {
-    fmt.Printf("%s (%s)\n", root.Name, root.URI)
-}
-```
-
-The shared SDK adapter sends `roots/list` through the active
-`ServerSession` and maps the response to transport-neutral `mcpruntime.Root`
-values. Calling `ListRoots` outside an MCP SDK request context returns
-`mcpruntime.ErrRootListerUnavailable`. Applications can observe client root
-changes through `SDKServerOptions.Server.RootsListChangedHandler`; the official
-SDK invokes it for `notifications/roots/list_changed` when the client advertises
-`roots.listChanged`.
+MCP `2026-07-28` deprecates sampling and roots. Loom does not expose the
+deprecation-window `sampling/createMessage` or `roots/list` compatibility APIs;
+servers should call model providers directly and accept paths through tool
+parameters, resource URIs, or configuration.
 
 ## Progress Notifications
 

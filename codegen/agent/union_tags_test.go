@@ -4,10 +4,10 @@ import (
 	"path/filepath"
 	"testing"
 
-	codegen "github.com/CaliLuke/loom-mcp/codegen/agent"
-	"github.com/CaliLuke/loom-mcp/codegen/testhelpers"
-	. "github.com/CaliLuke/loom-mcp/dsl"
-	agentsExpr "github.com/CaliLuke/loom-mcp/expr/agent"
+	codegen "github.com/CaliLuke/loom-mcp/v2/codegen/agent"
+	"github.com/CaliLuke/loom-mcp/v2/codegen/testhelpers"
+	. "github.com/CaliLuke/loom-mcp/v2/dsl"
+	agentsExpr "github.com/CaliLuke/loom-mcp/v2/expr/agent"
 	goadsl "github.com/CaliLuke/loom/dsl"
 	"github.com/CaliLuke/loom/eval"
 	goaexpr "github.com/CaliLuke/loom/expr"
@@ -61,7 +61,7 @@ func TestGeneratedAgentUnionUsesExplicitVariantTags(t *testing.T) {
 	require.True(t, eval.Execute(design, nil), eval.Context.Error())
 	require.NoError(t, eval.RunDSL())
 
-	files, err := codegen.Generate("github.com/CaliLuke/loom-mcp", []eval.Root{goaexpr.Root, agentsExpr.Root}, nil)
+	files, err := codegen.Generate("github.com/CaliLuke/loom-mcp/v2", []eval.Root{goaexpr.Root, agentsExpr.Root}, nil)
 	require.NoError(t, err)
 
 	unions := testhelpers.FileContent(t, files, filepath.ToSlash("gen/alpha/toolsets/ops/unions.go"))

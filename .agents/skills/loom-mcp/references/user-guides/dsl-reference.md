@@ -8,7 +8,7 @@ is a routing map plus the contracts most likely to affect implementation work.
 ```go
 import (
     . "github.com/CaliLuke/loom/dsl"
-    . "github.com/CaliLuke/loom-mcp/dsl"
+    . "github.com/CaliLuke/loom-mcp/v2/dsl"
 )
 ```
 
@@ -99,8 +99,8 @@ Use `MCP(name, version, opts...)` inside a service. Method-level MCP tools use
 
 Current MCP surfaces include:
 
-- protocol/implementation metadata: `ProtocolVersion`, `WebsiteURL`, server
-  and list-surface icons;
+- protocol/implementation metadata: `ProtocolVersion` (implemented native
+  versions through `2025-11-25`), `WebsiteURL`, server and list-surface icons;
 - tools plus compact discovery: `ToolSearch(...)`, discovery metadata, and
   call-template arguments;
 - resources, templates, subscriptions, and notifications;

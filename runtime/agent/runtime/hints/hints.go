@@ -11,7 +11,7 @@ import (
 	"text/template"
 	"time"
 
-	"github.com/CaliLuke/loom-mcp/runtime/agent/tools"
+	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/tools"
 )
 
 var (

@@ -9,8 +9,8 @@ package specs
 
 import (
 	projected "example.com/assistant/gen/assistant/toolsets/projected"
-	"github.com/CaliLuke/loom-mcp/runtime/agent/policy"
-	tools "github.com/CaliLuke/loom-mcp/runtime/agent/tools"
+	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/policy"
+	tools "github.com/CaliLuke/loom-mcp/v2/runtime/agent/tools"
 )
 
 var (

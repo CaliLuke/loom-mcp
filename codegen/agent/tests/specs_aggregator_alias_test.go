@@ -7,7 +7,7 @@ import (
 	"strconv"
 	"testing"
 
-	"github.com/CaliLuke/loom-mcp/codegen/agent/tests/testscenarios"
+	"github.com/CaliLuke/loom-mcp/v2/codegen/agent/tests/testscenarios"
 	"github.com/stretchr/testify/require"
 )
 
@@ -18,7 +18,7 @@ func TestSpecsAggregatorToolsetNamedPolicy(t *testing.T) {
 	files := buildAndGenerate(t, testscenarios.ToolsetNamedPolicy())
 
 	content := fileContent(t, files, "gen/alpha/agents/helper/specs/specs.go")
-	require.Contains(t, content, `"github.com/CaliLuke/loom-mcp/runtime/agent/policy"`,
+	require.Contains(t, content, `"github.com/CaliLuke/loom-mcp/v2/runtime/agent/policy"`,
 		"runtime policy import must be preserved")
 	require.Contains(t, content, `policyspecs "`,
 		"toolset named 'policy' must be aliased away from the runtime policy import")

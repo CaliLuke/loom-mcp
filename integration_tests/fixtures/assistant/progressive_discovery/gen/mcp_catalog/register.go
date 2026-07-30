@@ -14,12 +14,12 @@ import (
 	"errors"
 	"strings"
 
-	"github.com/CaliLuke/loom-mcp/runtime/agent/planner"
-	agentsruntime "github.com/CaliLuke/loom-mcp/runtime/agent/runtime"
-	"github.com/CaliLuke/loom-mcp/runtime/agent/telemetry"
-	"github.com/CaliLuke/loom-mcp/runtime/agent/tools"
-	mcpruntime "github.com/CaliLuke/loom-mcp/runtime/mcp"
-	"github.com/CaliLuke/loom-mcp/runtime/mcp/retry"
+	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/planner"
+	agentsruntime "github.com/CaliLuke/loom-mcp/v2/runtime/agent/runtime"
+	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/telemetry"
+	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/tools"
+	mcpruntime "github.com/CaliLuke/loom-mcp/v2/runtime/mcp"
+	"github.com/CaliLuke/loom-mcp/v2/runtime/mcp/retry"
 	"github.com/modelcontextprotocol/go-sdk/jsonrpc"
 )
 

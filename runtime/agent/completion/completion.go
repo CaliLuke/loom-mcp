@@ -11,8 +11,8 @@ import (
 	"io"
 	"strings"
 
-	"github.com/CaliLuke/loom-mcp/runtime/agent/model"
-	"github.com/CaliLuke/loom-mcp/runtime/agent/tools"
+	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/model"
+	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/tools"
 )
 
 type (

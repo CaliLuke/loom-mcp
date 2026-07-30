@@ -5,9 +5,9 @@ import (
 	"net"
 	"testing"
 
-	registrypb "github.com/CaliLuke/loom-mcp/registry/gen/grpc/registry/pb"
-	grpcserver "github.com/CaliLuke/loom-mcp/registry/gen/grpc/registry/server"
-	genregistry "github.com/CaliLuke/loom-mcp/registry/gen/registry"
+	registrypb "github.com/CaliLuke/loom-mcp/v2/registry/gen/grpc/registry/pb"
+	grpcserver "github.com/CaliLuke/loom-mcp/v2/registry/gen/grpc/registry/server"
+	genregistry "github.com/CaliLuke/loom-mcp/v2/registry/gen/registry"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc"

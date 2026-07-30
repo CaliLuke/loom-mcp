@@ -10,7 +10,7 @@ package chat
 import (
 	"errors"
 
-	"github.com/CaliLuke/loom-mcp/runtime/agent/planner"
+	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/planner"
 )
 
 // ChatAgentConfig configures the ChatAgent agent package.

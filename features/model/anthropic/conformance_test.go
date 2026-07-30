@@ -12,8 +12,8 @@ import (
 	"github.com/anthropics/anthropic-sdk-go/packages/ssestream"
 	"github.com/stretchr/testify/require"
 
-	"github.com/CaliLuke/loom-mcp/runtime/agent/model"
-	"github.com/CaliLuke/loom-mcp/testutil"
+	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/model"
+	"github.com/CaliLuke/loom-mcp/v2/testutil"
 )
 
 func TestClientConformance(t *testing.T) {

@@ -5,8 +5,8 @@ import (
 	"errors"
 	"testing"
 
-	"github.com/CaliLuke/loom-mcp/runtime/agent/api"
-	"github.com/CaliLuke/loom-mcp/runtime/agent/engine"
+	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/api"
+	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/engine"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"

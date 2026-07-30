@@ -27,6 +27,13 @@ type SystemInfoResponseBodyResponseBody struct {
 	Version *string `form:"version,omitempty" json:"version,omitempty" xml:"version,omitempty"`
 }
 
+// ElicitationContextResponseBodyResponseBody is used to define fields on
+// response body types.
+type ElicitationContextResponseBodyResponseBody struct {
+	// User-supplied context
+	Context *string `form:"context,omitempty" json:"context,omitempty" xml:"context,omitempty"`
+}
+
 // ConversationHistoryResponseBodyResponseBody is used to define fields on
 // response body types.
 type ConversationHistoryResponseBodyResponseBody struct {
@@ -118,32 +125,6 @@ type ExecuteCodeResponseBodyResponseBody struct {
 type ProcessBatchResponseBodyResponseBody struct {
 	// Operation status
 	OK *bool `form:"ok,omitempty" json:"ok,omitempty" xml:"ok,omitempty"`
-}
-
-// SampleTextResponseBodyResponseBody is used to define fields on response body
-// types.
-type SampleTextResponseBodyResponseBody struct {
-	// Sampled text
-	Text string `form:"text" json:"text" xml:"text"`
-	// Model selected by the client
-	Model string `form:"model" json:"model" xml:"model"`
-	// Reason sampling stopped
-	StopReason string `form:"stop_reason" json:"stop_reason" xml:"stop_reason"`
-}
-
-// ListClientRootsResponseBodyResponseBody is used to define fields on response
-// body types.
-type ListClientRootsResponseBodyResponseBody struct {
-	// Client filesystem roots
-	Roots []*ClientRootResponseBody `form:"roots" json:"roots" xml:"roots"`
-}
-
-// ClientRootResponseBody is used to define fields on response body types.
-type ClientRootResponseBody struct {
-	// Root file URI
-	URI string `form:"uri" json:"uri" xml:"uri"`
-	// Optional display name
-	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 }
 
 // ReportProgressResponseBodyResponseBody is used to define fields on response
@@ -268,6 +249,15 @@ func NewSystemInfoResponseBody(res *assistant.SystemInfoResult) *SystemInfoRespo
 	body := &SystemInfoResponseBody{
 		Name:    res.Name,
 		Version: res.Version,
+	}
+	return body
+}
+
+// NewElicitationContextResponseBody builds the HTTP response body from the
+// result of the "elicitation_context" endpoint of the "assistant" service.
+func NewElicitationContextResponseBody(res *assistant.ElicitationContextResult) *ElicitationContextResponseBody {
+	body := &ElicitationContextResponseBody{
+		Context: res.Context,
 	}
 	return body
 }
@@ -401,36 +391,6 @@ func NewExecuteCodeResponseBody(res *assistant.ExecuteCodeResult) *ExecuteCodeRe
 func NewProcessBatchResponseBody(res *assistant.ProcessBatchResult) *ProcessBatchResponseBody {
 	body := &ProcessBatchResponseBody{
 		OK: res.OK,
-	}
-	return body
-}
-
-// NewSampleTextResponseBody builds the HTTP response body from the result of
-// the "sample_text" endpoint of the "assistant" service.
-func NewSampleTextResponseBody(res *assistant.SampleTextResult) *SampleTextResponseBody {
-	body := &SampleTextResponseBody{
-		Text:       res.Text,
-		Model:      res.Model,
-		StopReason: res.StopReason,
-	}
-	return body
-}
-
-// NewListClientRootsResponseBody builds the HTTP response body from the result
-// of the "list_client_roots" endpoint of the "assistant" service.
-func NewListClientRootsResponseBody(res *assistant.ListClientRootsResult) *ListClientRootsResponseBody {
-	body := &ListClientRootsResponseBody{}
-	if res.Roots != nil {
-		body.Roots = make([]*ClientRootResponseBody, len(res.Roots))
-		for i, val := range res.Roots {
-			if val == nil {
-				body.Roots[i] = nil
-				continue
-			}
-			body.Roots[i] = marshalAssistantClientRootToClientRootResponseBody(val)
-		}
-	} else {
-		body.Roots = []*ClientRootResponseBody{}
 	}
 	return body
 }
@@ -655,17 +615,6 @@ func NewProcessBatchPayload(body *ProcessBatchRequestBody) *assistant.ProcessBat
 	v.Items = make([]string, len(body.Items))
 	for i, val := range body.Items {
 		v.Items[i] = val
-	}
-
-	return v
-}
-
-// NewSampleTextPayload builds a assistant service sample_text endpoint payload.
-func NewSampleTextPayload(body *SampleTextRequestBody) *assistant.SampleTextPayload {
-	v := &assistant.SampleTextPayload{
-		Prompt:       *body.Prompt,
-		SystemPrompt: body.SystemPrompt,
-		MaxTokens:    *body.MaxTokens,
 	}
 
 	return v

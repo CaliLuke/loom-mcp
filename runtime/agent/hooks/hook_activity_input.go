@@ -1,8 +1,8 @@
 package hooks
 
 import (
-	"github.com/CaliLuke/loom-mcp/runtime/agent"
-	"github.com/CaliLuke/loom-mcp/runtime/agent/rawjson"
+	"github.com/CaliLuke/loom-mcp/v2/runtime/agent"
+	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/rawjson"
 )
 
 // ActivityInput describes a hook event emitted from workflow code and published by the

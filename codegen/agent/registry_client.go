@@ -4,8 +4,8 @@ import (
 	"path/filepath"
 	"time"
 
-	"github.com/CaliLuke/loom-mcp/codegen/shared"
-	agentsExpr "github.com/CaliLuke/loom-mcp/expr/agent"
+	"github.com/CaliLuke/loom-mcp/v2/codegen/shared"
+	agentsExpr "github.com/CaliLuke/loom-mcp/v2/expr/agent"
 	"github.com/CaliLuke/loom/codegen"
 	loomexpr "github.com/CaliLuke/loom/expr"
 	"github.com/dave/jennifer/jen"
@@ -226,7 +226,7 @@ func registryClientFile(data *RegistryClientData) *codegen.File {
 		{Path: "net/http"},
 		{Path: "net/url"},
 		{Path: "time"},
-		{Path: "github.com/CaliLuke/loom-mcp/runtime/registry", Name: "registry"},
+		{Path: "github.com/CaliLuke/loom-mcp/v2/runtime/registry", Name: "registry"},
 	}
 
 	sections := []codegen.Section{
@@ -616,7 +616,7 @@ func emitRegistryClientPrivateMethods(stmt *jen.Statement) {
 			),
 			jen.Id("req").Dot("Header").Dot("Set").Call(jen.Lit("Accept"), jen.Lit("application/json")),
 			jen.Comment("Inject trace context for distributed tracing"),
-			jen.Qual("github.com/CaliLuke/loom-mcp/runtime/registry", "InjectTraceContext").Call(jen.Id("ctx"), jen.Id("req").Dot("Header")),
+			jen.Qual("github.com/CaliLuke/loom-mcp/v2/runtime/registry", "InjectTraceContext").Call(jen.Id("ctx"), jen.Id("req").Dot("Header")),
 			jen.If(jen.Id("c").Dot("auth").Op("!=").Nil()).Block(
 				jen.If(jen.Id("err").Op(":=").Id("c").Dot("auth").Dot("ApplyAuth").Call(jen.Id("req")), jen.Id("err").Op("!=").Nil()).Block(
 					jen.Return(jen.Qual("fmt", "Errorf").Call(jen.Lit("applying auth: %w"), jen.Id("err"))),

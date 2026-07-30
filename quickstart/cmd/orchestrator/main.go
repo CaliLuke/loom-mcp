@@ -14,7 +14,7 @@ import (
 
 	chat "example.com/quickstart/gen/orchestrator/agents/chat"
 	"example.com/quickstart/internal/agents/bootstrap"
-	model "github.com/CaliLuke/loom-mcp/runtime/agent/model"
+	model "github.com/CaliLuke/loom-mcp/v2/runtime/agent/model"
 )
 
 // This example main demonstrates running the agent using the generated bootstrap.

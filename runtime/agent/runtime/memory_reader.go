@@ -3,7 +3,7 @@ package runtime
 import (
 	"context"
 
-	"github.com/CaliLuke/loom-mcp/runtime/agent/memory"
+	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/memory"
 )
 
 // memoryReader returns a read-only view of the persisted memory for the given run.

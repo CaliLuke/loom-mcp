@@ -3,7 +3,7 @@ package dsl
 import (
 	"testing"
 
-	agentexpr "github.com/CaliLuke/loom-mcp/expr/agent"
+	agentexpr "github.com/CaliLuke/loom-mcp/v2/expr/agent"
 	"github.com/CaliLuke/loom/eval"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"

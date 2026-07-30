@@ -4,7 +4,7 @@ go 1.26.5
 
 require (
 	github.com/CaliLuke/loom v1.7.1
-	github.com/CaliLuke/loom-mcp v1.4.3
+	github.com/CaliLuke/loom-mcp/v2 v2.0.0
 )
 
 require (
@@ -76,4 +76,4 @@ require (
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 )
 
-replace github.com/CaliLuke/loom-mcp => ..
+replace github.com/CaliLuke/loom-mcp/v2 => ..

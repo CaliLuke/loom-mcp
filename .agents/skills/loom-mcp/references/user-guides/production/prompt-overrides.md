@@ -9,9 +9,9 @@ Production prompt management uses:
 
 --- CODE ---
 import (
-    promptmongo "github.com/CaliLuke/loom-mcp/features/prompt/mongo"
-    clientmongo "github.com/CaliLuke/loom-mcp/features/prompt/mongo/clients/mongo"
-    "github.com/CaliLuke/loom-mcp/runtime/agent/runtime"
+    promptmongo "github.com/CaliLuke/loom-mcp/v2/features/prompt/mongo"
+    clientmongo "github.com/CaliLuke/loom-mcp/v2/features/prompt/mongo/clients/mongo"
+    "github.com/CaliLuke/loom-mcp/v2/runtime/agent/runtime"
 )
 
 promptClient, err := clientmongo.New(clientmongo.Options{

@@ -5,8 +5,8 @@ import (
 	"context"
 	"errors"
 
-	clientsmongo "github.com/CaliLuke/loom-mcp/features/prompt/mongo/clients/mongo"
-	"github.com/CaliLuke/loom-mcp/runtime/agent/prompt"
+	clientsmongo "github.com/CaliLuke/loom-mcp/v2/features/prompt/mongo/clients/mongo"
+	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/prompt"
 )
 
 type (

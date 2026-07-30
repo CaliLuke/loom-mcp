@@ -4,7 +4,6 @@ go 1.26.5
 
 require (
 	github.com/CaliLuke/loom v1.7.1
-	github.com/CaliLuke/loom-mcp v1.4.3
 	github.com/stretchr/testify v1.11.1
 )
 
@@ -12,6 +11,7 @@ require (
 	cloud.google.com/go v0.123.0 // indirect
 	cloud.google.com/go/auth v0.22.0 // indirect
 	cloud.google.com/go/compute/metadata v0.9.0 // indirect
+	github.com/CaliLuke/loom-mcp/v2 v2.0.0
 	github.com/aws/aws-sdk-go-v2 v1.43.0 // indirect
 	github.com/aws/aws-sdk-go-v2/aws/protocol/eventstream v1.7.14 // indirect
 	github.com/aws/aws-sdk-go-v2/internal/configsources v1.4.31 // indirect
@@ -76,4 +76,4 @@ require (
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 )
 
-replace github.com/CaliLuke/loom-mcp => ../../..
+replace github.com/CaliLuke/loom-mcp/v2 => ../../..

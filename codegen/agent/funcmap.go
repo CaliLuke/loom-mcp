@@ -3,7 +3,7 @@ package codegen
 import (
 	"strings"
 
-	agentsExpr "github.com/CaliLuke/loom-mcp/expr/agent"
+	agentsExpr "github.com/CaliLuke/loom-mcp/v2/expr/agent"
 	goacodegen "github.com/CaliLuke/loom/codegen"
 	goaexpr "github.com/CaliLuke/loom/expr"
 )

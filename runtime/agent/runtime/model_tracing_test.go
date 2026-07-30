@@ -8,10 +8,10 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/CaliLuke/loom-mcp/runtime/agent/model"
-	"github.com/CaliLuke/loom-mcp/runtime/agent/rawjson"
-	"github.com/CaliLuke/loom-mcp/runtime/agent/telemetry"
-	"github.com/CaliLuke/loom-mcp/runtime/agent/tools"
+	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/model"
+	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/rawjson"
+	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/telemetry"
+	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/tools"
 	"github.com/stretchr/testify/require"
 
 	"go.opentelemetry.io/otel/attribute"

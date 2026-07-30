@@ -6,7 +6,7 @@
 
 package lookup
 
-import svc "github.com/CaliLuke/loom-mcp/gen/svc"
+import svc "github.com/CaliLuke/loom-mcp/v2/gen/svc"
 
 // ToMethodPayload_ByID converts *ByIDPayload to *svc.DoPayload.
 func ToMethodPayload_ByID(in *ByIDPayload) *svc.DoPayload {

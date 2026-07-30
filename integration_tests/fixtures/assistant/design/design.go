@@ -1,7 +1,7 @@
 package design
 
 import (
-	. "github.com/CaliLuke/loom-mcp/dsl"
+	. "github.com/CaliLuke/loom-mcp/v2/dsl"
 	. "github.com/CaliLuke/loom/dsl"
 )
 
@@ -74,6 +74,15 @@ var _ = Service("assistant", func() {
 			Attribute("version", String, "System version")
 		})
 		Resource("system_info", "system://info", "application/json")
+		JSONRPC(func() {})
+	})
+
+	Method("elicitation_context", func() {
+		Description("Return context supplied through MCP elicitation")
+		Result(func() {
+			Attribute("context", String, "User-supplied context")
+		})
+		Resource("elicitation_context", "elicitation://context", "application/json")
 		JSONRPC(func() {})
 	})
 
@@ -268,34 +277,6 @@ var _ = Service("assistant", func() {
 		JSONRPC(func() {})
 	})
 
-	Method("sample_text", func() {
-		Description("Request text generation from the connected MCP client")
-		Payload(func() {
-			Attribute("prompt", String, "User prompt to sample")
-			Attribute("system_prompt", String, "Optional system prompt")
-			Attribute("max_tokens", Int64, "Maximum number of tokens")
-			Required("prompt", "max_tokens")
-		})
-		Result(func() {
-			Attribute("text", String, "Sampled text")
-			Attribute("model", String, "Model selected by the client")
-			Attribute("stop_reason", String, "Reason sampling stopped")
-			Required("text", "model", "stop_reason")
-		})
-		Tool("sample_text", "Request text generation from the connected MCP client")
-		JSONRPC(func() {})
-	})
-
-	Method("list_client_roots", func() {
-		Description("List filesystem roots exposed by the connected MCP client")
-		Result(func() {
-			Attribute("roots", ArrayOf(ClientRoot), "Client filesystem roots")
-			Required("roots")
-		})
-		Tool("list_client_roots", "List filesystem roots exposed by the connected MCP client")
-		JSONRPC(func() {})
-	})
-
 	Method("report_progress", func() {
 		Description("Report deterministic progress to the connected MCP client")
 		Result(func() {
@@ -403,12 +384,6 @@ var _ = Service("assistant", func() {
 var Documents = Type("Documents", func() {
 	Attribute("items", ArrayOf(String), "Document entries")
 	Required("items")
-})
-
-var ClientRoot = Type("ClientRoot", func() {
-	Attribute("uri", String, "Root file URI")
-	Attribute("name", String, "Optional display name")
-	Required("uri")
 })
 
 var PromptTemplates = Type("PromptTemplates", func() {

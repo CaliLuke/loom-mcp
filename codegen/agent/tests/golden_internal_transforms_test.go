@@ -5,7 +5,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/CaliLuke/loom-mcp/codegen/agent/tests/testscenarios"
+	"github.com/CaliLuke/loom-mcp/v2/codegen/agent/tests/testscenarios"
 )
 
 // Verifies internal adapter transforms are emitted for method-backed tools and

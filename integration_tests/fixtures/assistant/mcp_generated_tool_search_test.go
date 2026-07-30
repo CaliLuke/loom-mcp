@@ -502,14 +502,14 @@ func TestGeneratedAdapterToolSearchRanksBeforeLimiting(t *testing.T) {
 
 	_, err := adapter.ToolsCall(context.Background(), &mcpassistant.ToolsCallPayload{
 		Name:      "search_tools",
-		Arguments: json.RawMessage(`{"query":"text"}`),
+		Arguments: json.RawMessage(`{"query":"search"}`),
 	}, stream)
 	require.NoError(t, err)
 	require.Len(t, stream.events, 1)
 
 	var result toolSearchResult
 	require.NoError(t, json.Unmarshal(stream.events[0].StructuredContent, &result))
-	assert.Equal(t, []string{"summarize_text"}, toolSearchDescriptorNames(result.Tools))
+	assert.Equal(t, []string{"search"}, toolSearchDescriptorNames(result.Tools))
 	assert.True(t, result.Truncated)
 }
 

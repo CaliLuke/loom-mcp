@@ -10,8 +10,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/CaliLuke/loom-mcp/runtime/agent/prompt"
-	"github.com/CaliLuke/loom-mcp/runtime/agent/session"
+	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/prompt"
+	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/session"
 )
 
 type (

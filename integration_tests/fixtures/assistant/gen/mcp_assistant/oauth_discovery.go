@@ -14,7 +14,7 @@ import (
 	"net/http"
 	"net/url"
 
-	mcpruntime "github.com/CaliLuke/loom-mcp/runtime/mcp"
+	mcpruntime "github.com/CaliLuke/loom-mcp/v2/runtime/mcp"
 	mcpauth "github.com/modelcontextprotocol/go-sdk/auth"
 )
 

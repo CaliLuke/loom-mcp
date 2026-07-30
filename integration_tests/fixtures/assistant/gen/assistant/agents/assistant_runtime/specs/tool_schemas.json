@@ -15,7 +15,7 @@
             "query": {
               "type": "string",
               "description": "Projected lookup query",
-              "example": "Quam necessitatibus est."
+              "example": "Omnis itaque sit debitis vel."
             }
           },
           "required": [
@@ -32,12 +32,12 @@
             "answer": {
               "type": "string",
               "description": "Projected lookup answer",
-              "example": "Autem alias ea rem facilis."
+              "example": "Quia ea ipsa."
             },
             "source": {
               "type": "string",
               "description": "Projected lookup source",
-              "example": "Expedita aut dolores."
+              "example": "Aut exercitationem sequi."
             }
           },
           "required": [
@@ -69,7 +69,7 @@
             "status": {
               "type": "string",
               "description": "Projected runtime status",
-              "example": "Itaque et omnis."
+              "example": "Voluptas consectetur ipsum rerum."
             }
           },
           "required": [

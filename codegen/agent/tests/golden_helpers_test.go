@@ -6,8 +6,8 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/CaliLuke/loom-mcp/codegen/testhelpers"
-	"github.com/CaliLuke/loom-mcp/testutil"
+	"github.com/CaliLuke/loom-mcp/v2/codegen/testhelpers"
+	"github.com/CaliLuke/loom-mcp/v2/testutil"
 	gcodegen "github.com/CaliLuke/loom/codegen"
 )
 

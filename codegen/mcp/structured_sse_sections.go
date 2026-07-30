@@ -52,7 +52,7 @@ func ownMCPJSONRPCSSEStreamSections(files []*codegen.File, data *httpcodegen.Ser
 		}
 		file.SetSections(updated)
 		if header := file.HeaderTemplate(); header != nil {
-			codegen.AddImport(header, &codegen.ImportSpec{Path: "github.com/CaliLuke/loom-mcp/runtime/mcp", Name: "mcpruntime"})
+			codegen.AddImport(header, &codegen.ImportSpec{Path: "github.com/CaliLuke/loom-mcp/v2/runtime/mcp", Name: "mcpruntime"})
 		}
 	}
 	if matchedFiles != 1 || matched != len(endpoints) {

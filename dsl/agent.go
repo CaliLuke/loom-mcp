@@ -1,12 +1,12 @@
 package dsl
 
 import (
-	expragents "github.com/CaliLuke/loom-mcp/expr/agent"
+	expragents "github.com/CaliLuke/loom-mcp/v2/expr/agent"
 	"github.com/CaliLuke/loom/eval"
 	goaexpr "github.com/CaliLuke/loom/expr"
 
 	// Import codegen package to ensure agent code generation plugin is registered
-	_ "github.com/CaliLuke/loom-mcp/codegen/agent"
+	_ "github.com/CaliLuke/loom-mcp/v2/codegen/agent"
 )
 
 // Agent defines an LLM-based agent associated with the current service.

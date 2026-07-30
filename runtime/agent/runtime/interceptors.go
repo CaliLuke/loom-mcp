@@ -5,12 +5,12 @@ import (
 	"errors"
 	"time"
 
-	agent "github.com/CaliLuke/loom-mcp/runtime/agent"
-	"github.com/CaliLuke/loom-mcp/runtime/agent/hooks"
-	"github.com/CaliLuke/loom-mcp/runtime/agent/model"
-	"github.com/CaliLuke/loom-mcp/runtime/agent/planner"
-	"github.com/CaliLuke/loom-mcp/runtime/agent/rawjson"
-	"github.com/CaliLuke/loom-mcp/runtime/agent/run"
+	agent "github.com/CaliLuke/loom-mcp/v2/runtime/agent"
+	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/hooks"
+	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/model"
+	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/planner"
+	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/rawjson"
+	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/run"
 )
 
 type (

@@ -15,7 +15,7 @@ import (
 	"go.temporal.io/sdk/worker"
 	"go.temporal.io/sdk/workflow"
 
-	"github.com/CaliLuke/loom-mcp/runtime/agent/telemetry"
+	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/telemetry"
 )
 
 // workerBundle owns one Temporal SDK worker for one task queue. Activation is

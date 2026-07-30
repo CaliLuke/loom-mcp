@@ -5,7 +5,7 @@ import (
 	"errors"
 	"testing"
 
-	registrypb "github.com/CaliLuke/loom-mcp/registry/gen/grpc/registry/pb"
+	registrypb "github.com/CaliLuke/loom-mcp/v2/registry/gen/grpc/registry/pb"
 	"google.golang.org/grpc"
 )
 

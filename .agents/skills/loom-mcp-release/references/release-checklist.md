@@ -109,7 +109,7 @@ Use `--notes-from-tag` instead of `--generate-notes` only when the annotated tag
 If the goal is "fully published" rather than only "git release pushed", also check module visibility:
 
 ```bash
-go list -m -versions github.com/CaliLuke/loom-mcp
+go list -m -versions github.com/CaliLuke/loom-mcp/v2
 ```
 
 If the new version is missing immediately after the push, report that Go proxy propagation can take a short time.

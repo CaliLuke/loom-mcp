@@ -3,8 +3,8 @@ package run
 import (
 	"time"
 
-	"github.com/CaliLuke/loom-mcp/runtime/agent"
-	"github.com/CaliLuke/loom-mcp/runtime/agent/tools"
+	"github.com/CaliLuke/loom-mcp/v2/runtime/agent"
+	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/tools"
 )
 
 type (

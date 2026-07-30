@@ -7,9 +7,9 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/CaliLuke/loom-mcp/runtime/agent/engine"
-	rthints "github.com/CaliLuke/loom-mcp/runtime/agent/runtime/hints"
-	"github.com/CaliLuke/loom-mcp/runtime/agent/tools"
+	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/engine"
+	rthints "github.com/CaliLuke/loom-mcp/v2/runtime/agent/runtime/hints"
+	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/tools"
 )
 
 // Seal closes the registration phase and activates engines that stage worker

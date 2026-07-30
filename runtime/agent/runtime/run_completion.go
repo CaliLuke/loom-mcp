@@ -12,12 +12,12 @@ import (
 
 	"go.temporal.io/sdk/temporal"
 
-	agent "github.com/CaliLuke/loom-mcp/runtime/agent"
-	"github.com/CaliLuke/loom-mcp/runtime/agent/api"
-	"github.com/CaliLuke/loom-mcp/runtime/agent/engine"
-	"github.com/CaliLuke/loom-mcp/runtime/agent/hooks"
-	"github.com/CaliLuke/loom-mcp/runtime/agent/run"
-	"github.com/CaliLuke/loom-mcp/runtime/agent/session"
+	agent "github.com/CaliLuke/loom-mcp/v2/runtime/agent"
+	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/api"
+	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/engine"
+	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/hooks"
+	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/run"
+	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/session"
 )
 
 type observedWorkflowHandle struct {

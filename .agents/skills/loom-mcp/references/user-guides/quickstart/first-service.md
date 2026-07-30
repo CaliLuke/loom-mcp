@@ -5,7 +5,7 @@
 ```bash
 mkdir quickstart && cd quickstart
 go mod init quickstart
-go get github.com/CaliLuke/loom@v1.7.1 github.com/CaliLuke/loom-mcp@latest
+go get github.com/CaliLuke/loom@v1.7.1 github.com/CaliLuke/loom-mcp/v2@latest
 ```
 
 Create `design/design.go`.
@@ -15,7 +15,7 @@ package design
 
 import (
     . "github.com/CaliLuke/loom/dsl"
-    . "github.com/CaliLuke/loom-mcp/dsl"
+    . "github.com/CaliLuke/loom-mcp/v2/dsl"
 )
 
 var _ = Service("demo", func() {

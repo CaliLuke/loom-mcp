@@ -6,7 +6,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	"github.com/CaliLuke/loom-mcp/runtime/agent/engine"
+	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/engine"
 )
 
 func TestTerminalRunStatusForEngineStatus(t *testing.T) {

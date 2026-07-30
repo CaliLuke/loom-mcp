@@ -18,12 +18,12 @@ func registerFile(data *AdapterData) *codegen.File {
 		{Path: "encoding/json"},
 		{Path: "errors"},
 		{Path: "strings"},
-		{Path: "github.com/CaliLuke/loom-mcp/runtime/agent/planner"},
-		{Path: "github.com/CaliLuke/loom-mcp/runtime/agent/runtime", Name: "agentsruntime"},
-		{Path: "github.com/CaliLuke/loom-mcp/runtime/agent/telemetry"},
-		{Path: "github.com/CaliLuke/loom-mcp/runtime/agent/tools"},
-		{Path: "github.com/CaliLuke/loom-mcp/runtime/mcp", Name: "mcpruntime"},
-		{Path: "github.com/CaliLuke/loom-mcp/runtime/mcp/retry"},
+		{Path: "github.com/CaliLuke/loom-mcp/v2/runtime/agent/planner"},
+		{Path: "github.com/CaliLuke/loom-mcp/v2/runtime/agent/runtime", Name: "agentsruntime"},
+		{Path: "github.com/CaliLuke/loom-mcp/v2/runtime/agent/telemetry"},
+		{Path: "github.com/CaliLuke/loom-mcp/v2/runtime/agent/tools"},
+		{Path: "github.com/CaliLuke/loom-mcp/v2/runtime/mcp", Name: "mcpruntime"},
+		{Path: "github.com/CaliLuke/loom-mcp/v2/runtime/mcp/retry"},
 		{Path: "github.com/modelcontextprotocol/go-sdk/jsonrpc"},
 	}
 	return &codegen.File{
@@ -42,7 +42,7 @@ func registerFile(data *AdapterData) *codegen.File {
 
 func emitRegisterToolSpecs(stmt *jen.Statement, reg *RegisterData) {
 	stmt.Commentf("%sToolSpecs contains the tool specifications for the %s toolset.", reg.HelperName, reg.SuiteName).Line()
-	stmt.Var().Id(reg.HelperName+"ToolSpecs").Op("=").Index().Qual("github.com/CaliLuke/loom-mcp/runtime/agent/tools", "ToolSpec").ValuesFunc(func(g *jen.Group) {
+	stmt.Var().Id(reg.HelperName+"ToolSpecs").Op("=").Index().Qual("github.com/CaliLuke/loom-mcp/v2/runtime/agent/tools", "ToolSpec").ValuesFunc(func(g *jen.Group) {
 		for _, tool := range reg.Tools {
 			g.Add(registerToolSpecValue(reg, tool))
 		}
@@ -79,10 +79,10 @@ func registerExecFunc(reg *RegisterData) jen.Code {
 	return jen.Func().
 		Params(
 			jen.Id("ctx").Qual("context", "Context"),
-			jen.Id("call").Qual("github.com/CaliLuke/loom-mcp/runtime/agent/planner", "ToolRequest"),
+			jen.Id("call").Qual("github.com/CaliLuke/loom-mcp/v2/runtime/agent/planner", "ToolRequest"),
 		).
 		Params(
-			jen.Qual("github.com/CaliLuke/loom-mcp/runtime/agent/planner", "ToolResult"),
+			jen.Qual("github.com/CaliLuke/loom-mcp/v2/runtime/agent/planner", "ToolResult"),
 			jen.Error(),
 		).
 		BlockFunc(func(fn *jen.Group) {
@@ -138,7 +138,7 @@ func emitRegisterExecDecodeResult(fn *jen.Group) {
 }
 
 func emitRegisterExecDecodeStructured(fn *jen.Group) {
-	fn.Var().Id("toolTelemetry").Op("*").Qual("github.com/CaliLuke/loom-mcp/runtime/agent/telemetry", "ToolTelemetry")
+	fn.Var().Id("toolTelemetry").Op("*").Qual("github.com/CaliLuke/loom-mcp/v2/runtime/agent/telemetry", "ToolTelemetry")
 	fn.If(jen.Len(jen.Id("resp").Dot("Structured")).Op(">").Lit(0)).Block(
 		jen.Var().Id("structured").Any(),
 		jen.If(
@@ -147,7 +147,7 @@ func emitRegisterExecDecodeStructured(fn *jen.Group) {
 		).Block(
 			jen.Return(registerErrorResultValue(), jen.Id("err")),
 		),
-		jen.Id("toolTelemetry").Op("=").Op("&").Qual("github.com/CaliLuke/loom-mcp/runtime/agent/telemetry", "ToolTelemetry").Values(jen.Dict{
+		jen.Id("toolTelemetry").Op("=").Op("&").Qual("github.com/CaliLuke/loom-mcp/v2/runtime/agent/telemetry", "ToolTelemetry").Values(jen.Dict{
 			jen.Id("Extra"): jen.Map(jen.String()).Any().Values(jen.Dict{
 				jen.Lit("structured"): jen.Id("structured"),
 			}),
@@ -169,7 +169,7 @@ func registerExecuteFunc() jen.Code {
 	return jen.Func().
 		Params(
 			jen.Id("ctx").Qual("context", "Context"),
-			jen.Id("call").Op("*").Qual("github.com/CaliLuke/loom-mcp/runtime/agent/planner", "ToolRequest"),
+			jen.Id("call").Op("*").Qual("github.com/CaliLuke/loom-mcp/v2/runtime/agent/planner", "ToolRequest"),
 		).
 		Params(
 			jen.Op("*").Id("agentsruntime").Dot("ToolExecutionResult"),
@@ -191,13 +191,13 @@ func registerExecuteFunc() jen.Code {
 }
 
 func registerErrorResultValue() jen.Code {
-	return jen.Qual("github.com/CaliLuke/loom-mcp/runtime/agent/planner", "ToolResult").Values(jen.Dict{
+	return jen.Qual("github.com/CaliLuke/loom-mcp/v2/runtime/agent/planner", "ToolResult").Values(jen.Dict{
 		jen.Id("Name"): jen.Id("fullName"),
 	})
 }
 
 func registerToolResultValue() jen.Code {
-	return jen.Qual("github.com/CaliLuke/loom-mcp/runtime/agent/planner", "ToolResult").Values(jen.Dict{
+	return jen.Qual("github.com/CaliLuke/loom-mcp/v2/runtime/agent/planner", "ToolResult").Values(jen.Dict{
 		jen.Id("Name"):      jen.Id("fullName"),
 		jen.Id("Result"):    jen.Id("value"),
 		jen.Id("Telemetry"): jen.Id("toolTelemetry"),
@@ -208,14 +208,14 @@ func emitRegisterHandleError(stmt *jen.Statement, reg *RegisterData) {
 	stmt.Commentf("%sHandleError converts an error into a tool result with appropriate retry hints.", reg.HelperName).Line()
 	stmt.Func().Id(reg.HelperName+"HandleError").
 		Params(
-			jen.Id("toolName").Qual("github.com/CaliLuke/loom-mcp/runtime/agent/tools", "Ident"),
+			jen.Id("toolName").Qual("github.com/CaliLuke/loom-mcp/v2/runtime/agent/tools", "Ident"),
 			jen.Id("err").Error(),
 		).
-		Qual("github.com/CaliLuke/loom-mcp/runtime/agent/planner", "ToolResult").
+		Qual("github.com/CaliLuke/loom-mcp/v2/runtime/agent/planner", "ToolResult").
 		Block(
-			jen.Id("result").Op(":=").Qual("github.com/CaliLuke/loom-mcp/runtime/agent/planner", "ToolResult").Values(jen.Dict{
+			jen.Id("result").Op(":=").Qual("github.com/CaliLuke/loom-mcp/v2/runtime/agent/planner", "ToolResult").Values(jen.Dict{
 				jen.Id("Name"):  jen.Id("toolName"),
-				jen.Id("Error"): jen.Qual("github.com/CaliLuke/loom-mcp/runtime/agent/planner", "ToolErrorFromError").Call(jen.Id("err")),
+				jen.Id("Error"): jen.Qual("github.com/CaliLuke/loom-mcp/v2/runtime/agent/planner", "ToolErrorFromError").Call(jen.Id("err")),
 			}),
 			jen.If(jen.Id("hint").Op(":=").Id(reg.HelperName+"RetryHint").Call(jen.Id("toolName"), jen.Id("err")), jen.Id("hint").Op("!=").Nil()).Block(
 				jen.Id("result").Dot("RetryHint").Op("=").Id("hint"),
@@ -229,16 +229,16 @@ func emitRegisterRetryHint(stmt *jen.Statement, reg *RegisterData) {
 	stmt.Commentf("%sRetryHint determines if an error should trigger a retry and returns appropriate hints.", reg.HelperName).Line()
 	stmt.Func().Id(reg.HelperName+"RetryHint").
 		Params(
-			jen.Id("toolName").Qual("github.com/CaliLuke/loom-mcp/runtime/agent/tools", "Ident"),
+			jen.Id("toolName").Qual("github.com/CaliLuke/loom-mcp/v2/runtime/agent/tools", "Ident"),
 			jen.Id("err").Error(),
 		).
-		Op("*").Qual("github.com/CaliLuke/loom-mcp/runtime/agent/planner", "RetryHint").
+		Op("*").Qual("github.com/CaliLuke/loom-mcp/v2/runtime/agent/planner", "RetryHint").
 		BlockFunc(func(g *jen.Group) {
 			g.Id("key").Op(":=").String().Call(jen.Id("toolName"))
-			g.Var().Id("retryErr").Op("*").Qual("github.com/CaliLuke/loom-mcp/runtime/mcp/retry", "RetryableError")
+			g.Var().Id("retryErr").Op("*").Qual("github.com/CaliLuke/loom-mcp/v2/runtime/mcp/retry", "RetryableError")
 			g.If(jen.Qual("errors", "As").Call(jen.Id("err"), jen.Op("&").Id("retryErr"))).Block(
-				jen.Return(jen.Op("&").Qual("github.com/CaliLuke/loom-mcp/runtime/agent/planner", "RetryHint").Values(jen.Dict{
-					jen.Id("Reason"):         jen.Qual("github.com/CaliLuke/loom-mcp/runtime/agent/planner", "RetryReasonInvalidArguments"),
+				jen.Return(jen.Op("&").Qual("github.com/CaliLuke/loom-mcp/v2/runtime/agent/planner", "RetryHint").Values(jen.Dict{
+					jen.Id("Reason"):         jen.Qual("github.com/CaliLuke/loom-mcp/v2/runtime/agent/planner", "RetryReasonInvalidArguments"),
 					jen.Id("Tool"):           jen.Id("toolName"),
 					jen.Id("Message"):        jen.Id("retryErr").Dot("Prompt"),
 					jen.Id("RestrictToTool"): jen.True(),
@@ -264,16 +264,16 @@ func emitRegisterRetryHint(stmt *jen.Statement, reg *RegisterData) {
 							jen.Id("example"),
 							jen.Id("schemaJSON"),
 						)
-						caseBlock.Return(jen.Op("&").Qual("github.com/CaliLuke/loom-mcp/runtime/agent/planner", "RetryHint").Values(jen.Dict{
-							jen.Id("Reason"):         jen.Qual("github.com/CaliLuke/loom-mcp/runtime/agent/planner", "RetryReasonInvalidArguments"),
+						caseBlock.Return(jen.Op("&").Qual("github.com/CaliLuke/loom-mcp/v2/runtime/agent/planner", "RetryHint").Values(jen.Dict{
+							jen.Id("Reason"):         jen.Qual("github.com/CaliLuke/loom-mcp/v2/runtime/agent/planner", "RetryReasonInvalidArguments"),
 							jen.Id("Tool"):           jen.Id("toolName"),
 							jen.Id("Message"):        jen.Id("prompt"),
 							jen.Id("RestrictToTool"): jen.True(),
 						}))
 					}),
 					jen.Case(jen.Qual("github.com/modelcontextprotocol/go-sdk/jsonrpc", "CodeMethodNotFound")).Block(
-						jen.Return(jen.Op("&").Qual("github.com/CaliLuke/loom-mcp/runtime/agent/planner", "RetryHint").Values(jen.Dict{
-							jen.Id("Reason"):  jen.Qual("github.com/CaliLuke/loom-mcp/runtime/agent/planner", "RetryReasonToolUnavailable"),
+						jen.Return(jen.Op("&").Qual("github.com/CaliLuke/loom-mcp/v2/runtime/agent/planner", "RetryHint").Values(jen.Dict{
+							jen.Id("Reason"):  jen.Qual("github.com/CaliLuke/loom-mcp/v2/runtime/agent/planner", "RetryReasonToolUnavailable"),
 							jen.Id("Tool"):    jen.Id("toolName"),
 							jen.Id("Message"): jen.Id("rpcErr").Dot("Message"),
 						})),
@@ -286,18 +286,18 @@ func emitRegisterRetryHint(stmt *jen.Statement, reg *RegisterData) {
 }
 
 func registerToolSpecValue(reg *RegisterData, tool RegisterTool) jen.Code {
-	return jen.Qual("github.com/CaliLuke/loom-mcp/runtime/agent/tools", "ToolSpec").Values(jen.Dict{
+	return jen.Qual("github.com/CaliLuke/loom-mcp/v2/runtime/agent/tools", "ToolSpec").Values(jen.Dict{
 		jen.Id("Name"):        jen.Lit(tool.ID),
 		jen.Id("Service"):     jen.Lit(reg.ServiceName),
 		jen.Id("Toolset"):     jen.Lit(reg.SuiteQualifiedName),
 		jen.Id("Description"): jen.Lit(tool.Description),
 		jen.Id("Meta"):        registerMetaValue(tool.Meta),
-		jen.Id("Payload"): jen.Qual("github.com/CaliLuke/loom-mcp/runtime/agent/tools", "TypeSpec").Values(jen.Dict{
+		jen.Id("Payload"): jen.Qual("github.com/CaliLuke/loom-mcp/v2/runtime/agent/tools", "TypeSpec").Values(jen.Dict{
 			jen.Id("Name"):   jen.Lit(tool.PayloadType),
 			jen.Id("Schema"): jen.Index().Byte().Call(jen.Lit(tool.InputSchema)),
 			jen.Id("Codec"):  jsonCodecValue(),
 		}),
-		jen.Id("Result"): jen.Qual("github.com/CaliLuke/loom-mcp/runtime/agent/tools", "TypeSpec").Values(jen.Dict{
+		jen.Id("Result"): jen.Qual("github.com/CaliLuke/loom-mcp/v2/runtime/agent/tools", "TypeSpec").Values(jen.Dict{
 			jen.Id("Name"):   jen.Lit(tool.ResultType),
 			jen.Id("Schema"): jen.Nil(),
 			jen.Id("Codec"):  jsonCodecValue(),
@@ -321,7 +321,7 @@ func registerMetaValue(entries []AnnotationMetaEntry) jen.Code {
 }
 
 func jsonCodecValue() jen.Code {
-	return jen.Qual("github.com/CaliLuke/loom-mcp/runtime/agent/tools", "JSONCodec").Types(jen.Any()).Values(jen.Dict{
+	return jen.Qual("github.com/CaliLuke/loom-mcp/v2/runtime/agent/tools", "JSONCodec").Types(jen.Any()).Values(jen.Dict{
 		jen.Id("ToJSON"): jen.Func().
 			Params(jen.Id("v").Any()).
 			Params(jen.Index().Byte(), jen.Error()).

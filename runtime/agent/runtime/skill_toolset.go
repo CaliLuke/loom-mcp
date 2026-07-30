@@ -7,10 +7,10 @@ import (
 	"strings"
 	"sync"
 
-	mcpskills "github.com/CaliLuke/loom-mcp/runtime/mcp/skills"
+	mcpskills "github.com/CaliLuke/loom-mcp/v2/runtime/mcp/skills"
 
-	"github.com/CaliLuke/loom-mcp/runtime/agent/planner"
-	"github.com/CaliLuke/loom-mcp/runtime/agent/tools"
+	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/planner"
+	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/tools"
 )
 
 type (

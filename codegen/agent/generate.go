@@ -6,8 +6,8 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/CaliLuke/loom-mcp/codegen/shared"
-	agentsExpr "github.com/CaliLuke/loom-mcp/expr/agent"
+	"github.com/CaliLuke/loom-mcp/v2/codegen/shared"
+	agentsExpr "github.com/CaliLuke/loom-mcp/v2/expr/agent"
 	"github.com/CaliLuke/loom/codegen"
 	"github.com/CaliLuke/loom/eval"
 )
@@ -88,8 +88,8 @@ func Generate(genpkg string, roots []eval.Root, files []*codegen.File) ([]*codeg
 func agentSpecsAggregatorFile(agent *AgentData) *codegen.File {
 	// Build import list: runtime + per-toolset packages.
 	imports := []*codegen.ImportSpec{
-		{Path: "github.com/CaliLuke/loom-mcp/runtime/agent/policy"},
-		{Path: "github.com/CaliLuke/loom-mcp/runtime/agent/tools", Name: "tools"},
+		{Path: "github.com/CaliLuke/loom-mcp/v2/runtime/agent/policy"},
+		{Path: "github.com/CaliLuke/loom-mcp/v2/runtime/agent/tools", Name: "tools"},
 	}
 	// Claim every fixed import identifier in an alias scope so toolset specs
 	// packages named after runtime packages (for example "tools" or "policy")
@@ -166,15 +166,15 @@ func agentImplFile(agent *AgentData) *codegen.File {
 		{Path: "errors"},
 		{Path: "strings"},
 		{Path: "context"},
-		{Path: "github.com/CaliLuke/loom-mcp/runtime/agent/engine"},
-		{Path: "github.com/CaliLuke/loom-mcp/runtime/agent", Name: "agent"},
-		{Path: "github.com/CaliLuke/loom-mcp/runtime/agent/runtime", Name: "runtime"},
-		{Path: "github.com/CaliLuke/loom-mcp/runtime/agent/planner"},
+		{Path: "github.com/CaliLuke/loom-mcp/v2/runtime/agent/engine"},
+		{Path: "github.com/CaliLuke/loom-mcp/v2/runtime/agent", Name: "agent"},
+		{Path: "github.com/CaliLuke/loom-mcp/v2/runtime/agent/runtime", Name: "runtime"},
+		{Path: "github.com/CaliLuke/loom-mcp/v2/runtime/agent/planner"},
 	}
 	if agent.Workflow != nil {
 		imports = append(imports,
-			&codegen.ImportSpec{Path: "github.com/CaliLuke/loom-mcp/runtime/agent/rawjson", Name: "rawjson"},
-			&codegen.ImportSpec{Path: "github.com/CaliLuke/loom-mcp/runtime/agent/tools", Name: "tools"},
+			&codegen.ImportSpec{Path: "github.com/CaliLuke/loom-mcp/v2/runtime/agent/rawjson", Name: "rawjson"},
+			&codegen.ImportSpec{Path: "github.com/CaliLuke/loom-mcp/v2/runtime/agent/tools", Name: "tools"},
 		)
 	}
 	sections := []codegen.Section{
@@ -186,7 +186,7 @@ func agentImplFile(agent *AgentData) *codegen.File {
 
 func agentConfigFile(agent *AgentData) *codegen.File {
 	imports := []*codegen.ImportSpec{
-		{Path: "github.com/CaliLuke/loom-mcp/runtime/agent/planner"},
+		{Path: "github.com/CaliLuke/loom-mcp/v2/runtime/agent/planner"},
 	}
 	if agent.Workflow == nil || (agent.RunPolicy.History != nil && agent.RunPolicy.History.Mode == "compress") {
 		imports = append(imports, &codegen.ImportSpec{Path: "errors"})
@@ -195,7 +195,7 @@ func agentConfigFile(agent *AgentData) *codegen.File {
 	// generated config can reference model.Client in the HistoryModel field.
 	if agent.RunPolicy.History != nil && agent.RunPolicy.History.Mode == "compress" {
 		imports = append(imports,
-			&codegen.ImportSpec{Path: "github.com/CaliLuke/loom-mcp/runtime/agent/model", Name: "model"},
+			&codegen.ImportSpec{Path: "github.com/CaliLuke/loom-mcp/v2/runtime/agent/model", Name: "model"},
 		)
 	}
 	// Determine whether fmt is needed. The config Validate() uses fmt.Errorf for
@@ -204,7 +204,7 @@ func agentConfigFile(agent *AgentData) *codegen.File {
 	if len(agent.MCPToolsets) > 0 {
 		needsFmt = true
 		imports = append(imports,
-			&codegen.ImportSpec{Name: "mcpruntime", Path: "github.com/CaliLuke/loom-mcp/runtime/mcp"},
+			&codegen.ImportSpec{Name: "mcpruntime", Path: "github.com/CaliLuke/loom-mcp/v2/runtime/mcp"},
 		)
 	}
 	// Scan toolsets to see if any tool is method-backed; if so, fmt is also required.
@@ -262,17 +262,17 @@ func agentRegistryFile(agent *AgentData) *codegen.File {
 	imports := []*codegen.ImportSpec{
 		{Path: "context"},
 		{Path: "errors"},
-		{Path: "github.com/CaliLuke/loom-mcp/runtime/agent/engine"},
-		{Path: "github.com/CaliLuke/loom-mcp/runtime/agent/runtime", Name: "agentsruntime"},
+		{Path: "github.com/CaliLuke/loom-mcp/v2/runtime/agent/engine"},
+		{Path: "github.com/CaliLuke/loom-mcp/v2/runtime/agent/runtime", Name: "agentsruntime"},
 	}
 	if hasExternal || hasExecutorBacked {
 		imports = append(imports,
 			&codegen.ImportSpec{Path: "fmt"},
-			&codegen.ImportSpec{Path: "github.com/CaliLuke/loom-mcp/runtime/agent/planner"},
+			&codegen.ImportSpec{Path: "github.com/CaliLuke/loom-mcp/v2/runtime/agent/planner"},
 		)
 	}
 	if needsMemoryImport(agent) {
-		imports = append(imports, &codegen.ImportSpec{Path: "github.com/CaliLuke/loom-mcp/runtime/agent/memory"})
+		imports = append(imports, &codegen.ImportSpec{Path: "github.com/CaliLuke/loom-mcp/v2/runtime/agent/memory"})
 	}
 	// Import toolset packages that have method-backed tools so we can call their registration helpers.
 	for _, ts := range agent.AllToolsets {
@@ -310,8 +310,8 @@ func agentRegistryFile(agent *AgentData) *codegen.File {
 	}
 	if needsTools {
 		imports = append(imports,
-			&codegen.ImportSpec{Path: "github.com/CaliLuke/loom-mcp/runtime/agent/tools"},
-			&codegen.ImportSpec{Path: "github.com/CaliLuke/loom-mcp/runtime/agent/runtime/hints", Name: "hints"},
+			&codegen.ImportSpec{Path: "github.com/CaliLuke/loom-mcp/v2/runtime/agent/tools"},
+			&codegen.ImportSpec{Path: "github.com/CaliLuke/loom-mcp/v2/runtime/agent/runtime/hints", Name: "hints"},
 		)
 	}
 	if needsTimeImport(agent) {
@@ -471,16 +471,16 @@ func agentToolsFiles(agent *AgentData, specsCache *toolSpecsDataCache) ([]*codeg
 			Tools:       specs.tools,
 		}
 		imports := []*codegen.ImportSpec{
-			{Path: "github.com/CaliLuke/loom-mcp/runtime/agent/runtime", Name: "runtime"},
-			{Path: "github.com/CaliLuke/loom-mcp/runtime/agent", Name: "agent"},
-			{Path: "github.com/CaliLuke/loom-mcp/runtime/agent/tools"},
-			{Path: "github.com/CaliLuke/loom-mcp/runtime/agent/planner"},
+			{Path: "github.com/CaliLuke/loom-mcp/v2/runtime/agent/runtime", Name: "runtime"},
+			{Path: "github.com/CaliLuke/loom-mcp/v2/runtime/agent", Name: "agent"},
+			{Path: "github.com/CaliLuke/loom-mcp/v2/runtime/agent/tools"},
+			{Path: "github.com/CaliLuke/loom-mcp/v2/runtime/agent/planner"},
 			// Per-toolset specs package for typed payloads
 			{Path: ts.SpecsImportPath, Name: ts.SpecsPackageName + "specs"},
 		}
 		if toolsetHasHintTemplates(ts) {
 			imports = append(imports, &codegen.ImportSpec{
-				Path: "github.com/CaliLuke/loom-mcp/runtime/agent/runtime/hints",
+				Path: "github.com/CaliLuke/loom-mcp/v2/runtime/agent/runtime/hints",
 				Name: "hints",
 			})
 		}
@@ -515,7 +515,7 @@ func agentToolsConsumerFiles(agent *AgentData) []*codegen.File {
 			ProviderAlias: ts.AgentToolsPackage,
 		}
 		imports := []*codegen.ImportSpec{
-			{Path: "github.com/CaliLuke/loom-mcp/runtime/agent/runtime", Name: "runtime"},
+			{Path: "github.com/CaliLuke/loom-mcp/v2/runtime/agent/runtime", Name: "runtime"},
 			{Path: ts.AgentToolsImportPath, Name: ts.AgentToolsPackage},
 		}
 		sections := []codegen.Section{
@@ -551,10 +551,10 @@ func mcpExecutorFiles(agent *AgentData) []*codegen.File {
 			{Path: "context"},
 			{Path: "encoding/json"},
 			{Path: "strings"},
-			{Path: "github.com/CaliLuke/loom-mcp/runtime/agent/planner"},
-			{Path: "github.com/CaliLuke/loom-mcp/runtime/agent/runtime", Name: "runtime"},
-			{Path: "github.com/CaliLuke/loom-mcp/runtime/agent/telemetry"},
-			{Path: "github.com/CaliLuke/loom-mcp/runtime/mcp", Name: "mcpruntime"},
+			{Path: "github.com/CaliLuke/loom-mcp/v2/runtime/agent/planner"},
+			{Path: "github.com/CaliLuke/loom-mcp/v2/runtime/agent/runtime", Name: "runtime"},
+			{Path: "github.com/CaliLuke/loom-mcp/v2/runtime/agent/telemetry"},
+			{Path: "github.com/CaliLuke/loom-mcp/v2/runtime/mcp", Name: "mcpruntime"},
 			// Per-toolset specs package (codecs + schemas)
 			{Path: ts.SpecsImportPath, Name: ts.SpecsPackageName},
 		}
@@ -588,8 +588,8 @@ func usedToolsFiles(agent *AgentData, specsCache *toolSpecsDataCache) ([]*codege
 		}
 		data := agentToolsetFileData{PackageName: ts.PackageName, Toolset: ts, Tools: specs.tools}
 		imports := []*codegen.ImportSpec{
-			{Path: "github.com/CaliLuke/loom-mcp/runtime/agent/tools"},
-			{Path: "github.com/CaliLuke/loom-mcp/runtime/agent/planner"},
+			{Path: "github.com/CaliLuke/loom-mcp/v2/runtime/agent/tools"},
+			{Path: "github.com/CaliLuke/loom-mcp/v2/runtime/agent/planner"},
 			// Per-toolset specs package for typed payloads
 			{Path: ts.SpecsImportPath, Name: ts.SpecsPackageName + "specs"},
 		}
@@ -686,9 +686,9 @@ func serviceExecutorFiles(agent *AgentData) []*codegen.File {
 			{Path: "encoding/json"},
 			{Path: "fmt"},
 			{Path: "strings"},
-			{Path: "github.com/CaliLuke/loom-mcp/runtime/agent/planner"},
-			{Path: "github.com/CaliLuke/loom-mcp/runtime/agent/runtime", Name: "runtime"},
-			{Path: "github.com/CaliLuke/loom-mcp/runtime/agent/tools"},
+			{Path: "github.com/CaliLuke/loom-mcp/v2/runtime/agent/planner"},
+			{Path: "github.com/CaliLuke/loom-mcp/v2/runtime/agent/runtime", Name: "runtime"},
+			{Path: "github.com/CaliLuke/loom-mcp/v2/runtime/agent/tools"},
 			{Path: ts.SpecsImportPath, Name: specsAlias},
 		}
 		if needsSharedTypes {

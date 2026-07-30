@@ -6,4 +6,4 @@ use (
 	./integration_tests/fixtures/assistant
 )
 
-replace github.com/modelcontextprotocol/go-sdk => github.com/modelcontextprotocol/go-sdk v1.6.1
+replace github.com/modelcontextprotocol/go-sdk => github.com/modelcontextprotocol/go-sdk v1.7.0

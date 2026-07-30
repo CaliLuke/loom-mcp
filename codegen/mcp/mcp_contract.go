@@ -6,7 +6,7 @@ import (
 	"sort"
 	"strings"
 
-	mcpexpr "github.com/CaliLuke/loom-mcp/expr/mcp"
+	mcpexpr "github.com/CaliLuke/loom-mcp/v2/expr/mcp"
 	"github.com/CaliLuke/loom/expr"
 )
 

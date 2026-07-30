@@ -17,9 +17,9 @@ import (
 	"go.temporal.io/sdk/worker"
 	"go.temporal.io/sdk/workflow"
 
-	"github.com/CaliLuke/loom-mcp/runtime/agent/api"
-	"github.com/CaliLuke/loom-mcp/runtime/agent/engine"
-	"github.com/CaliLuke/loom-mcp/runtime/agent/telemetry"
+	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/api"
+	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/engine"
+	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/telemetry"
 )
 
 // Options configures the Temporal engine adapter. Either a pre-configured Client

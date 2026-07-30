@@ -8,8 +8,8 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/CaliLuke/loom-mcp/boundedresult"
-	"github.com/CaliLuke/loom-mcp/codegen/shared"
+	"github.com/CaliLuke/loom-mcp/v2/boundedresult"
+	"github.com/CaliLuke/loom-mcp/v2/codegen/shared"
 	"github.com/CaliLuke/loom/codegen"
 	goaexpr "github.com/CaliLuke/loom/expr"
 )

@@ -8,9 +8,9 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/CaliLuke/loom-mcp/runtime/agent/planner"
-	"github.com/CaliLuke/loom-mcp/runtime/agent/prompt"
-	"github.com/CaliLuke/loom-mcp/runtime/agent/tools"
+	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/planner"
+	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/prompt"
+	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/tools"
 )
 
 func (r *Runtime) renderAgentToolUserContent(ctx context.Context, cfg *AgentToolConfig, call *planner.ToolRequest, promptPayload any) (string, error) {

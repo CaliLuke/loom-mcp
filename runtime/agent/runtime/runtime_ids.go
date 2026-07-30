@@ -9,8 +9,8 @@ import (
 	"strconv"
 	"strings"
 
-	agent "github.com/CaliLuke/loom-mcp/runtime/agent"
-	"github.com/CaliLuke/loom-mcp/runtime/agent/tools"
+	agent "github.com/CaliLuke/loom-mcp/v2/runtime/agent"
+	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/tools"
 )
 
 const (

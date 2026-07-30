@@ -17,12 +17,12 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/CaliLuke/loom-mcp/runtime/agent"
-	"github.com/CaliLuke/loom-mcp/runtime/agent/api"
-	"github.com/CaliLuke/loom-mcp/runtime/agent/artifact"
-	"github.com/CaliLuke/loom-mcp/runtime/agent/planner"
-	"github.com/CaliLuke/loom-mcp/runtime/agent/rawjson"
-	"github.com/CaliLuke/loom-mcp/runtime/agent/tools"
+	"github.com/CaliLuke/loom-mcp/v2/runtime/agent"
+	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/api"
+	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/artifact"
+	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/planner"
+	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/rawjson"
+	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/tools"
 )
 
 // materializeToolResult runs the registered typed result materializer, enforces

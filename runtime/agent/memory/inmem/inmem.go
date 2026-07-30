@@ -9,7 +9,7 @@ import (
 	"sort"
 	"sync"
 
-	"github.com/CaliLuke/loom-mcp/runtime/agent/memory"
+	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/memory"
 )
 
 // Store implements memory.Store using an in-process map keyed by agent ID

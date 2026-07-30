@@ -6,10 +6,10 @@ import (
 	"fmt"
 	"time"
 
-	agent "github.com/CaliLuke/loom-mcp/runtime/agent"
-	"github.com/CaliLuke/loom-mcp/runtime/agent/planner"
-	"github.com/CaliLuke/loom-mcp/runtime/agent/rawjson"
-	"github.com/CaliLuke/loom-mcp/runtime/agent/tools"
+	agent "github.com/CaliLuke/loom-mcp/v2/runtime/agent"
+	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/planner"
+	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/rawjson"
+	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/tools"
 )
 
 // ExecuteToolActivity runs a tool invocation as a workflow activity.

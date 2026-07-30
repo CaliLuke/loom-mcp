@@ -6,9 +6,9 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	clientsmongo "github.com/CaliLuke/loom-mcp/features/memory/mongo/clients/mongo"
-	mockmongo "github.com/CaliLuke/loom-mcp/features/memory/mongo/clients/mongo/mocks"
-	"github.com/CaliLuke/loom-mcp/runtime/agent/memory"
+	clientsmongo "github.com/CaliLuke/loom-mcp/v2/features/memory/mongo/clients/mongo"
+	mockmongo "github.com/CaliLuke/loom-mcp/v2/features/memory/mongo/clients/mongo/mocks"
+	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/memory"
 )
 
 func TestNewStoreRequiresClient(t *testing.T) {

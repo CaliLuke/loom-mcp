@@ -3,9 +3,9 @@ package tests
 import (
 	"testing"
 
-	agentcodegen "github.com/CaliLuke/loom-mcp/codegen/agent"
-	"github.com/CaliLuke/loom-mcp/codegen/testhelpers"
-	. "github.com/CaliLuke/loom-mcp/dsl"
+	agentcodegen "github.com/CaliLuke/loom-mcp/v2/codegen/agent"
+	"github.com/CaliLuke/loom-mcp/v2/codegen/testhelpers"
+	. "github.com/CaliLuke/loom-mcp/v2/dsl"
 	. "github.com/CaliLuke/loom/dsl"
 	"github.com/stretchr/testify/require"
 )

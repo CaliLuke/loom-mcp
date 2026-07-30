@@ -4,7 +4,7 @@ import (
 	"errors"
 	"testing"
 
-	exprmcp "github.com/CaliLuke/loom-mcp/expr/mcp"
+	exprmcp "github.com/CaliLuke/loom-mcp/v2/expr/mcp"
 	"github.com/CaliLuke/loom/eval"
 	goaexpr "github.com/CaliLuke/loom/expr"
 	"github.com/stretchr/testify/require"

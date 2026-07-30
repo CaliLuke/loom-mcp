@@ -4,8 +4,8 @@ import (
 	"context"
 	"testing"
 
-	"github.com/CaliLuke/loom-mcp/runtime/agent"
-	"github.com/CaliLuke/loom-mcp/runtime/agent/run"
+	"github.com/CaliLuke/loom-mcp/v2/runtime/agent"
+	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/run"
 	"github.com/stretchr/testify/require"
 )
 

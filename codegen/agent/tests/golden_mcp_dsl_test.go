@@ -3,8 +3,8 @@ package tests
 import (
 	"testing"
 
-	"github.com/CaliLuke/loom-mcp/codegen/agent/tests/testscenarios"
-	"github.com/CaliLuke/loom-mcp/testutil"
+	"github.com/CaliLuke/loom-mcp/v2/codegen/agent/tests/testscenarios"
+	"github.com/CaliLuke/loom-mcp/v2/testutil"
 	"github.com/stretchr/testify/require"
 )
 

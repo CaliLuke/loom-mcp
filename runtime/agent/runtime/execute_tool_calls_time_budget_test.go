@@ -7,13 +7,13 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	agent "github.com/CaliLuke/loom-mcp/runtime/agent"
-	"github.com/CaliLuke/loom-mcp/runtime/agent/engine"
-	"github.com/CaliLuke/loom-mcp/runtime/agent/planner"
-	"github.com/CaliLuke/loom-mcp/runtime/agent/run"
-	runloginmem "github.com/CaliLuke/loom-mcp/runtime/agent/runlog/inmem"
-	"github.com/CaliLuke/loom-mcp/runtime/agent/telemetry"
-	"github.com/CaliLuke/loom-mcp/runtime/agent/tools"
+	agent "github.com/CaliLuke/loom-mcp/v2/runtime/agent"
+	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/engine"
+	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/planner"
+	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/run"
+	runloginmem "github.com/CaliLuke/loom-mcp/v2/runtime/agent/runlog/inmem"
+	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/telemetry"
+	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/tools"
 )
 
 func TestExecuteToolCalls_CancelsInFlightToolsWhenTimeBudgetReached(t *testing.T) {

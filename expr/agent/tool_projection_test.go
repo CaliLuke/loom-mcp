@@ -3,7 +3,7 @@ package agent
 import (
 	"testing"
 
-	"github.com/CaliLuke/loom-mcp/expr/mcp"
+	"github.com/CaliLuke/loom-mcp/v2/expr/mcp"
 	goaexpr "github.com/CaliLuke/loom/expr"
 	"github.com/stretchr/testify/require"
 )

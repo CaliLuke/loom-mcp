@@ -7,7 +7,7 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/CaliLuke/loom-mcp/codegen/naming"
+	"github.com/CaliLuke/loom-mcp/v2/codegen/naming"
 	goacodegen "github.com/CaliLuke/loom/codegen"
 	"github.com/CaliLuke/loom/eval"
 )

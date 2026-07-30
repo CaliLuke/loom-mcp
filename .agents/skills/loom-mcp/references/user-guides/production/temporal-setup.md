@@ -85,7 +85,7 @@ Temporal with process-local stores (workflow durability only):
 import (
     "log"
 
-    runtimeTemporal "github.com/CaliLuke/loom-mcp/runtime/agent/engine/temporal"
+    runtimeTemporal "github.com/CaliLuke/loom-mcp/v2/runtime/agent/engine/temporal"
     "go.temporal.io/sdk/client"
 
     // Generated specs package from the generated agent
@@ -133,12 +133,12 @@ import (
     "errors"
     "fmt"
 
-    runlogmongo "github.com/CaliLuke/loom-mcp/features/runlog/mongo"
-    runlogclient "github.com/CaliLuke/loom-mcp/features/runlog/mongo/clients/mongo"
-    sessionmongo "github.com/CaliLuke/loom-mcp/features/session/mongo"
-    sessionclient "github.com/CaliLuke/loom-mcp/features/session/mongo/clients/mongo"
-    runtimeTemporal "github.com/CaliLuke/loom-mcp/runtime/agent/engine/temporal"
-    "github.com/CaliLuke/loom-mcp/runtime/agent/runtime"
+    runlogmongo "github.com/CaliLuke/loom-mcp/v2/features/runlog/mongo"
+    runlogclient "github.com/CaliLuke/loom-mcp/v2/features/runlog/mongo/clients/mongo"
+    sessionmongo "github.com/CaliLuke/loom-mcp/v2/features/session/mongo"
+    sessionclient "github.com/CaliLuke/loom-mcp/v2/features/session/mongo/clients/mongo"
+    runtimeTemporal "github.com/CaliLuke/loom-mcp/v2/runtime/agent/engine/temporal"
+    "github.com/CaliLuke/loom-mcp/v2/runtime/agent/runtime"
     mongodriver "go.mongodb.org/mongo-driver/v2/mongo"
     mongooptions "go.mongodb.org/mongo-driver/v2/mongo/options"
     temporalclient "go.temporal.io/sdk/client"

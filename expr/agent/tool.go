@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"text/template"
 
-	"github.com/CaliLuke/loom-mcp/boundedresult"
+	"github.com/CaliLuke/loom-mcp/v2/boundedresult"
 	"github.com/CaliLuke/loom/codegen"
 	"github.com/CaliLuke/loom/eval"
 	goaexpr "github.com/CaliLuke/loom/expr"

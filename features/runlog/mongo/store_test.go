@@ -8,7 +8,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/CaliLuke/loom-mcp/runtime/agent/runlog"
+	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/runlog"
 )
 
 func TestStoreRequiresClientAndDelegatesContracts(t *testing.T) {

@@ -5,7 +5,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/CaliLuke/loom-mcp/runtime/agent/runlog"
+	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/runlog"
 	"github.com/stretchr/testify/require"
 )
 

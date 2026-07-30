@@ -3,7 +3,7 @@
 // registry gRPC server
 //
 // Command:
-// $ loom gen github.com/CaliLuke/loom-mcp/registry/design -o registry
+// $ loom gen github.com/CaliLuke/loom-mcp/v2/registry/design -o registry
 
 package server
 
@@ -11,8 +11,8 @@ import (
 	"context"
 	"errors"
 
-	registrypb "github.com/CaliLuke/loom-mcp/registry/gen/grpc/registry/pb"
-	registry "github.com/CaliLuke/loom-mcp/registry/gen/registry"
+	registrypb "github.com/CaliLuke/loom-mcp/v2/registry/gen/grpc/registry/pb"
+	registry "github.com/CaliLuke/loom-mcp/v2/registry/gen/registry"
 	loomgrpc "github.com/CaliLuke/loom/grpc"
 	loom "github.com/CaliLuke/loom/pkg"
 	"google.golang.org/grpc/codes"

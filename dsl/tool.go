@@ -6,8 +6,8 @@ import (
 	"github.com/CaliLuke/loom/eval"
 	goaexpr "github.com/CaliLuke/loom/expr"
 
-	agentsexpr "github.com/CaliLuke/loom-mcp/expr/agent"
-	mcpexpr "github.com/CaliLuke/loom-mcp/expr/mcp"
+	agentsexpr "github.com/CaliLuke/loom-mcp/v2/expr/agent"
+	mcpexpr "github.com/CaliLuke/loom-mcp/v2/expr/mcp"
 )
 
 // ToolSurface identifies a generated surface a toolset tool may be exposed on.

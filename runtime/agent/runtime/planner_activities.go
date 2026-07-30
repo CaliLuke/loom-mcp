@@ -8,10 +8,10 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/CaliLuke/loom-mcp/runtime/agent/model"
-	"github.com/CaliLuke/loom-mcp/runtime/agent/planner"
-	"github.com/CaliLuke/loom-mcp/runtime/agent/reminder"
-	"github.com/CaliLuke/loom-mcp/runtime/agent/telemetry"
+	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/model"
+	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/planner"
+	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/reminder"
+	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/telemetry"
 )
 
 const plannerThoughtCodeKey = "code"

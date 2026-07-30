@@ -9,8 +9,8 @@
 package projected
 
 import (
-	"github.com/CaliLuke/loom-mcp/runtime/agent/policy"
-	"github.com/CaliLuke/loom-mcp/runtime/agent/tools"
+	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/policy"
+	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/tools"
 )
 
 // Tool IDs for this toolset.

@@ -95,13 +95,13 @@ func emitInternalBootstrap(svc *ServiceAgentsData, moduleBase string) *codegen.F
 	}
 	imports := []*codegen.ImportSpec{
 		{Path: "context"},
-		{Path: "github.com/CaliLuke/loom-mcp/runtime/agent/runtime", Name: "agentsruntime"},
+		{Path: "github.com/CaliLuke/loom-mcp/v2/runtime/agent/runtime", Name: "agentsruntime"},
 	}
 	needsMCP := svc.HasMCP
 	if needsMCP {
 		imports = append(imports, &codegen.ImportSpec{Path: "fmt"})
 		imports = append(imports, &codegen.ImportSpec{Path: "flag"})
-		imports = append(imports, &codegen.ImportSpec{Name: "mcpruntime", Path: "github.com/CaliLuke/loom-mcp/runtime/mcp"})
+		imports = append(imports, &codegen.ImportSpec{Name: "mcpruntime", Path: "github.com/CaliLuke/loom-mcp/v2/runtime/mcp"})
 	}
 	// Import generated agent registration packages and per-agent planner packages.
 	type toolsetImport struct {
@@ -163,8 +163,8 @@ func emitPlannerInternalStub(_ string, ag *AgentData) *codegen.File {
 	}
 	imports := []*codegen.ImportSpec{
 		{Path: "context"},
-		{Path: "github.com/CaliLuke/loom-mcp/runtime/agent/model", Name: "model"},
-		{Path: "github.com/CaliLuke/loom-mcp/runtime/agent/planner"},
+		{Path: "github.com/CaliLuke/loom-mcp/v2/runtime/agent/model", Name: "model"},
+		{Path: "github.com/CaliLuke/loom-mcp/v2/runtime/agent/planner"},
 	}
 	sections := []*codegen.SectionTemplate{
 		codegen.Header("Planner stub for "+ag.StructName, "planner", imports),
@@ -188,8 +188,8 @@ func emitExecutorInternalStub(ag *AgentData, ts *ToolsetData) *codegen.File {
 		codegen.SimpleImport("context"),
 		codegen.SimpleImport("errors"),
 		agentImport,
-		&codegen.ImportSpec{Path: "github.com/CaliLuke/loom-mcp/runtime/agent/runtime"},
-		&codegen.ImportSpec{Path: "github.com/CaliLuke/loom-mcp/runtime/agent/planner"},
+		&codegen.ImportSpec{Path: "github.com/CaliLuke/loom-mcp/v2/runtime/agent/runtime"},
+		&codegen.ImportSpec{Path: "github.com/CaliLuke/loom-mcp/v2/runtime/agent/planner"},
 	)
 	// Import specs package for typed payloads and transforms.
 	specsAlias := ts.SpecsPackageName + "specs"
@@ -281,7 +281,7 @@ func emitCmdMain(svc *ServiceAgentsData, moduleBase string, files []*codegen.Fil
 		{Path: "fmt"},
 		{Path: "log"},
 		{Path: filepath.ToSlash(filepath.Join(moduleBase, "internal", "agents", "bootstrap"))},
-		{Path: "github.com/CaliLuke/loom-mcp/runtime/agent/model", Name: "model"},
+		{Path: "github.com/CaliLuke/loom-mcp/v2/runtime/agent/model", Name: "model"},
 	}
 	for _, ag := range svc.Agents {
 		imports = append(imports, &codegen.ImportSpec{Path: ag.ImportPath, Name: ag.PackageName})

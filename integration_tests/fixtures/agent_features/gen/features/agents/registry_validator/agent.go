@@ -8,9 +8,9 @@
 package registry_validator
 
 import (
-	agent "github.com/CaliLuke/loom-mcp/runtime/agent"
-	"github.com/CaliLuke/loom-mcp/runtime/agent/planner"
-	runtime "github.com/CaliLuke/loom-mcp/runtime/agent/runtime"
+	agent "github.com/CaliLuke/loom-mcp/v2/runtime/agent"
+	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/planner"
+	runtime "github.com/CaliLuke/loom-mcp/v2/runtime/agent/runtime"
 )
 
 // AgentID is the fully-qualified identifier for this agent.

@@ -5,7 +5,7 @@ import (
 	"reflect"
 	"testing"
 
-	"github.com/CaliLuke/loom-mcp/codegen/shared"
+	"github.com/CaliLuke/loom-mcp/v2/codegen/shared"
 	"github.com/CaliLuke/loom/expr"
 	"github.com/leanovate/gopter"
 	"github.com/leanovate/gopter/gen"

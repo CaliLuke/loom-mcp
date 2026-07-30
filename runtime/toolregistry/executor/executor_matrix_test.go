@@ -9,12 +9,12 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/CaliLuke/loom-mcp/runtime/agent"
-	"github.com/CaliLuke/loom-mcp/runtime/agent/planner"
-	agentsruntime "github.com/CaliLuke/loom-mcp/runtime/agent/runtime"
-	"github.com/CaliLuke/loom-mcp/runtime/agent/telemetry"
-	"github.com/CaliLuke/loom-mcp/runtime/agent/tools"
-	"github.com/CaliLuke/loom-mcp/runtime/toolregistry"
+	"github.com/CaliLuke/loom-mcp/v2/runtime/agent"
+	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/planner"
+	agentsruntime "github.com/CaliLuke/loom-mcp/v2/runtime/agent/runtime"
+	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/telemetry"
+	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/tools"
+	"github.com/CaliLuke/loom-mcp/v2/runtime/toolregistry"
 	"github.com/CaliLuke/loom/pulse/streaming"
 )
 

@@ -31,8 +31,8 @@ import (
     "context"
 
     chat "example.com/assistant/gen/orchestrator/agents/chat"
-    "github.com/CaliLuke/loom-mcp/runtime/agent/model"
-    "github.com/CaliLuke/loom-mcp/runtime/agent/runtime"
+    "github.com/CaliLuke/loom-mcp/v2/runtime/agent/model"
+    "github.com/CaliLuke/loom-mcp/v2/runtime/agent/runtime"
 )
 
 func main() {

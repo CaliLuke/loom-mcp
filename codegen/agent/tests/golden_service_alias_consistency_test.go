@@ -3,7 +3,7 @@ package tests
 import (
 	"testing"
 
-	. "github.com/CaliLuke/loom-mcp/dsl"
+	. "github.com/CaliLuke/loom-mcp/v2/dsl"
 	. "github.com/CaliLuke/loom/dsl"
 )
 

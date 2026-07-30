@@ -10,7 +10,7 @@ package assistant_runtime
 import (
 	"errors"
 
-	"github.com/CaliLuke/loom-mcp/runtime/agent/planner"
+	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/planner"
 )
 
 // AssistantRuntimeAgentConfig configures the AssistantRuntimeAgent agent

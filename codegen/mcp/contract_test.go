@@ -9,7 +9,7 @@ import (
 	"testing"
 	"text/template"
 
-	mcpexpr "github.com/CaliLuke/loom-mcp/expr/mcp"
+	mcpexpr "github.com/CaliLuke/loom-mcp/v2/expr/mcp"
 	gcodegen "github.com/CaliLuke/loom/codegen"
 	generatorcodegen "github.com/CaliLuke/loom/codegen/generator"
 	"github.com/CaliLuke/loom/eval"
@@ -1284,6 +1284,9 @@ func TestGenerateAdapter_RendersSafeResourceAndPromptErrors(t *testing.T) {
 	rendered := renderGeneratedFile(t, adapterFile)
 
 	require.Contains(t, rendered, `func (a *MCPAdapter) safeMCPError(err error, defaultCode string, fallbackMessage string) error {`)
+	require.Contains(t, rendered, `if mcpruntime.IsInputRequired(err) {
+		return err
+	}`)
 	require.Contains(t, rendered, `remedy := loom.ExtractErrorRemedy(mapped)`)
 	require.Contains(t, rendered, `return nil, a.safeMCPError(aerr, "invalid_params", "Invalid resource request.")`)
 	require.Contains(t, rendered, `return nil, a.safeMCPError(err, "invalid_params", "Invalid resource request.")`)
@@ -1352,17 +1355,17 @@ func TestGenerateMCPClientAdapter_SpecializesResourceQueryConstruction(t *testin
 	require.Contains(t, rendered, `query.Add("tenant", payload.Tenant)`)
 }
 
-func TestBuildMCPProtocolVersionFileKeepsConfiguredDefault(t *testing.T) {
-	file := buildMCPProtocolVersionFile("mcpdemo", "demo", "2099-01-01")
+func TestBuildMCPProtocolVersionFileKeepsConfiguredSupportedDefault(t *testing.T) {
+	file := buildMCPProtocolVersionFile("mcpdemo", "demo", "2025-06-18")
 	rendered := renderGeneratedFile(t, file)
 
-	require.Contains(t, rendered, `const DefaultProtocolVersion = "2099-01-01"`)
-	require.Contains(t, rendered, `"2099-01-01",`)
+	require.Contains(t, rendered, `const DefaultProtocolVersion = "2025-06-18"`)
+	require.NotContains(t, rendered, `"2099-01-01",`)
 	require.Contains(t, rendered, `"2025-11-25",`)
 	require.Contains(t, rendered, `"2025-06-18",`)
 
-	transport := jsonrpcServerMountHelperSource("2099-01-01")
-	require.Contains(t, transport, `for _, supported := range []string{"2099-01-01", "2025-11-25", "2025-06-18", "2025-03-26", "2024-11-05"}`)
+	transport := jsonrpcServerMountHelperSource("2025-06-18")
+	require.Contains(t, transport, `for _, supported := range []string{"2025-11-25", "2025-06-18", "2025-03-26", "2024-11-05"}`)
 }
 
 func TestMCPJSONRPCTransportExtensionsOwnStableSections(t *testing.T) {

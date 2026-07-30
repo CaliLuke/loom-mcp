@@ -4,7 +4,7 @@ import (
 	"os"
 	"testing"
 
-	"github.com/CaliLuke/loom-mcp/integration_tests/framework"
+	"github.com/CaliLuke/loom-mcp/v2/integration_tests/framework"
 	"github.com/stretchr/testify/require"
 )
 

@@ -6,7 +6,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	"github.com/CaliLuke/loom-mcp/runtime/agent/rawjson"
+	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/rawjson"
 )
 
 func TestProjectStrictSchemaRequiresAllPropertiesAndClosesObjects(t *testing.T) {

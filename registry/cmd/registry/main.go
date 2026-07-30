@@ -40,7 +40,7 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/CaliLuke/loom-mcp/registry"
+	"github.com/CaliLuke/loom-mcp/v2/registry"
 	"github.com/redis/go-redis/v9"
 )
 

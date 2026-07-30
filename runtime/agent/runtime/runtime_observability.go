@@ -4,11 +4,11 @@ import (
 	"context"
 	"time"
 
-	agent "github.com/CaliLuke/loom-mcp/runtime/agent"
-	"github.com/CaliLuke/loom-mcp/runtime/agent/hooks"
-	"github.com/CaliLuke/loom-mcp/runtime/agent/run"
-	"github.com/CaliLuke/loom-mcp/runtime/agent/telemetry"
-	"github.com/CaliLuke/loom-mcp/runtime/agent/tools"
+	agent "github.com/CaliLuke/loom-mcp/v2/runtime/agent"
+	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/hooks"
+	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/run"
+	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/telemetry"
+	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/tools"
 
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/codes"

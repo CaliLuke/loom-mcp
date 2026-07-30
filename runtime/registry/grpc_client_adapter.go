@@ -8,13 +8,13 @@
 //   - Manager — coordinates multiple registry connections and tool discovery
 //
 // For the server-side registry implementation that runs as a standalone
-// service, see the registry package (github.com/CaliLuke/loom-mcp/registry).
+// service, see the registry package (github.com/CaliLuke/loom-mcp/v2/registry).
 package registry
 
 import (
 	"context"
 
-	registrypb "github.com/CaliLuke/loom-mcp/registry/gen/grpc/registry/pb"
+	registrypb "github.com/CaliLuke/loom-mcp/v2/registry/gen/grpc/registry/pb"
 )
 
 // GRPCClientAdapter wraps a generated gRPC registry client and implements

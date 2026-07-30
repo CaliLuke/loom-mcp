@@ -11,12 +11,12 @@ import (
 	"strings"
 	"time"
 
-	"github.com/CaliLuke/loom-mcp/runtime/agent/artifact"
-	"github.com/CaliLuke/loom-mcp/runtime/agent/engine"
-	"github.com/CaliLuke/loom-mcp/runtime/agent/hooks"
-	"github.com/CaliLuke/loom-mcp/runtime/agent/runlog"
-	agentsruntime "github.com/CaliLuke/loom-mcp/runtime/agent/runtime"
-	"github.com/CaliLuke/loom-mcp/runtime/agent/session"
+	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/artifact"
+	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/engine"
+	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/hooks"
+	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/runlog"
+	agentsruntime "github.com/CaliLuke/loom-mcp/v2/runtime/agent/runtime"
+	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/session"
 )
 
 type (

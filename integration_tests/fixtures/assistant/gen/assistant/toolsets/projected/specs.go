@@ -8,8 +8,8 @@
 package projected
 
 import (
-	"github.com/CaliLuke/loom-mcp/runtime/agent/policy"
-	"github.com/CaliLuke/loom-mcp/runtime/agent/tools"
+	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/policy"
+	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/tools"
 )
 
 // Tool IDs for this toolset.
@@ -30,8 +30,8 @@ var (
 		Toolset:     "assistant.projected",
 		Description: "Lookup projected runtime tool data",
 		Tags:        []string{},
-		Payload:     tools.TypeSpec{Name: "ProjectedLookupToolPayload", Schema: []byte("{\"$schema\":\"https://json-schema.org/draft/2020-12/schema\",\"type\":\"object\",\"properties\":{\"query\":{\"type\":\"string\",\"description\":\"Projected lookup query\",\"example\":\"Quam necessitatibus est.\"}},\"required\":[\"query\"]}"), ExampleJSON: []byte("{\"query\":\"abc123\"}"), ExampleInput: map[string]any{"query": "abc123"}, Codec: projectedLookupToolPayloadCodec},
-		Result:      tools.TypeSpec{Name: "ProjectedLookupToolResult", Schema: []byte("{\"$schema\":\"https://json-schema.org/draft/2020-12/schema\",\"type\":\"object\",\"properties\":{\"answer\":{\"type\":\"string\",\"description\":\"Projected lookup answer\",\"example\":\"Autem alias ea rem facilis.\"},\"source\":{\"type\":\"string\",\"description\":\"Projected lookup source\",\"example\":\"Expedita aut dolores.\"}},\"required\":[\"answer\",\"source\"]}"), Codec: projectedLookupToolResultCodec},
+		Payload:     tools.TypeSpec{Name: "ProjectedLookupToolPayload", Schema: []byte("{\"$schema\":\"https://json-schema.org/draft/2020-12/schema\",\"type\":\"object\",\"properties\":{\"query\":{\"type\":\"string\",\"description\":\"Projected lookup query\",\"example\":\"Omnis itaque sit debitis vel.\"}},\"required\":[\"query\"]}"), ExampleJSON: []byte("{\"query\":\"abc123\"}"), ExampleInput: map[string]any{"query": "abc123"}, Codec: projectedLookupToolPayloadCodec},
+		Result:      tools.TypeSpec{Name: "ProjectedLookupToolResult", Schema: []byte("{\"$schema\":\"https://json-schema.org/draft/2020-12/schema\",\"type\":\"object\",\"properties\":{\"answer\":{\"type\":\"string\",\"description\":\"Projected lookup answer\",\"example\":\"Quia ea ipsa.\"},\"source\":{\"type\":\"string\",\"description\":\"Projected lookup source\",\"example\":\"Aut exercitationem sequi.\"}},\"required\":[\"answer\",\"source\"]}"), Codec: projectedLookupToolResultCodec},
 	}
 	SpecProjectedStatusTool = tools.ToolSpec{
 		Name:        ProjectedStatusTool,
@@ -40,7 +40,7 @@ var (
 		Description: "Return projected runtime status",
 		Tags:        []string{},
 		Payload:     tools.TypeSpec{Name: "ProjectedStatusToolPayload", Schema: []byte("{\"$schema\":\"https://json-schema.org/draft/2020-12/schema\",\"type\":\"object\"}"), ExampleJSON: nil, ExampleInput: nil, Codec: projectedStatusToolPayloadCodec},
-		Result:      tools.TypeSpec{Name: "ProjectedStatusToolResult", Schema: []byte("{\"$schema\":\"https://json-schema.org/draft/2020-12/schema\",\"type\":\"object\",\"properties\":{\"status\":{\"type\":\"string\",\"description\":\"Projected runtime status\",\"example\":\"Itaque et omnis.\"}},\"required\":[\"status\"]}"), Codec: projectedStatusToolResultCodec},
+		Result:      tools.TypeSpec{Name: "ProjectedStatusToolResult", Schema: []byte("{\"$schema\":\"https://json-schema.org/draft/2020-12/schema\",\"type\":\"object\",\"properties\":{\"status\":{\"type\":\"string\",\"description\":\"Projected runtime status\",\"example\":\"Voluptas consectetur ipsum rerum.\"}},\"required\":[\"status\"]}"), Codec: projectedStatusToolResultCodec},
 	}
 )
 

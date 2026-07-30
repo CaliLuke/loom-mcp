@@ -61,37 +61,6 @@ func ValidateBuildFigmaImplementationPromptResponseBody(body *BuildFigmaImplemen
 	return
 }
 
-// ValidateSampleTextResponseBody runs the validations defined on
-// sample_text_response_body
-func ValidateSampleTextResponseBody(body *SampleTextResponseBody) (err error) {
-	if body.Text == nil {
-		err = loom.MergeErrors(err, loom.MissingFieldError("text", "body"))
-	}
-	if body.Model == nil {
-		err = loom.MergeErrors(err, loom.MissingFieldError("model", "body"))
-	}
-	if body.StopReason == nil {
-		err = loom.MergeErrors(err, loom.MissingFieldError("stop_reason", "body"))
-	}
-	return
-}
-
-// ValidateListClientRootsResponseBody runs the validations defined on
-// list_client_roots_response_body
-func ValidateListClientRootsResponseBody(body *ListClientRootsResponseBody) (err error) {
-	if body.Roots == nil {
-		err = loom.MergeErrors(err, loom.MissingFieldError("roots", "body"))
-	}
-	for _, e := range body.Roots {
-		if e != nil {
-			if err2 := ValidateClientRootResponseBody(e); err2 != nil {
-				err = loom.MergeErrors(err, err2)
-			}
-		}
-	}
-	return
-}
-
 // ValidateReportProgressResponseBody runs the validations defined on
 // report_progress_response_body
 func ValidateReportProgressResponseBody(body *ReportProgressResponseBody) (err error) {
@@ -267,46 +236,6 @@ func ValidateGeneratePromptsResponseBodyResponseBody(body *GeneratePromptsRespon
 func ValidateBuildFigmaImplementationPromptResponseBodyResponseBody(body *BuildFigmaImplementationPromptResponseBodyResponseBody) (err error) {
 	if body.Templates == nil {
 		err = loom.MergeErrors(err, loom.MissingFieldError("templates", "body"))
-	}
-	return
-}
-
-// ValidateSampleTextResponseBodyResponseBody runs the validations defined on
-// sample_text_response_bodyResponseBody
-func ValidateSampleTextResponseBodyResponseBody(body *SampleTextResponseBodyResponseBody) (err error) {
-	if body.Text == nil {
-		err = loom.MergeErrors(err, loom.MissingFieldError("text", "body"))
-	}
-	if body.Model == nil {
-		err = loom.MergeErrors(err, loom.MissingFieldError("model", "body"))
-	}
-	if body.StopReason == nil {
-		err = loom.MergeErrors(err, loom.MissingFieldError("stop_reason", "body"))
-	}
-	return
-}
-
-// ValidateListClientRootsResponseBodyResponseBody runs the validations defined
-// on list_client_roots_response_bodyResponseBody
-func ValidateListClientRootsResponseBodyResponseBody(body *ListClientRootsResponseBodyResponseBody) (err error) {
-	if body.Roots == nil {
-		err = loom.MergeErrors(err, loom.MissingFieldError("roots", "body"))
-	}
-	for _, e := range body.Roots {
-		if e != nil {
-			if err2 := ValidateClientRootResponseBody(e); err2 != nil {
-				err = loom.MergeErrors(err, err2)
-			}
-		}
-	}
-	return
-}
-
-// ValidateClientRootResponseBody runs the validations defined on
-// ClientRootResponseBody
-func ValidateClientRootResponseBody(body *ClientRootResponseBody) (err error) {
-	if body.URI == nil {
-		err = loom.MergeErrors(err, loom.MissingFieldError("uri", "body"))
 	}
 	return
 }

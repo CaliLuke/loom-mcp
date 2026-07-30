@@ -4,9 +4,9 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/CaliLuke/loom-mcp/codegen/agent/tests/testscenarios"
-	. "github.com/CaliLuke/loom-mcp/dsl"
-	"github.com/CaliLuke/loom-mcp/testutil"
+	"github.com/CaliLuke/loom-mcp/v2/codegen/agent/tests/testscenarios"
+	. "github.com/CaliLuke/loom-mcp/v2/dsl"
+	"github.com/CaliLuke/loom-mcp/v2/testutil"
 	goadsl "github.com/CaliLuke/loom/dsl"
 	"github.com/stretchr/testify/require"
 )

@@ -11,9 +11,9 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/CaliLuke/loom-mcp/features/stream/pulse/clients/pulse"
-	"github.com/CaliLuke/loom-mcp/runtime/agent/rawjson"
-	"github.com/CaliLuke/loom-mcp/runtime/agent/stream"
+	"github.com/CaliLuke/loom-mcp/v2/features/stream/pulse/clients/pulse"
+	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/rawjson"
+	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/stream"
 )
 
 type (

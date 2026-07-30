@@ -3,7 +3,7 @@ package codegen
 import (
 	"sort"
 
-	agentsexpr "github.com/CaliLuke/loom-mcp/expr/agent"
+	agentsexpr "github.com/CaliLuke/loom-mcp/v2/expr/agent"
 	"github.com/CaliLuke/loom/eval"
 	"github.com/CaliLuke/loom/expr"
 )

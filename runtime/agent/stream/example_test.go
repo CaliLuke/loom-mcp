@@ -4,11 +4,11 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/CaliLuke/loom-mcp/runtime/agent/hooks"
-	runloginmem "github.com/CaliLuke/loom-mcp/runtime/agent/runlog/inmem"
-	agentsruntime "github.com/CaliLuke/loom-mcp/runtime/agent/runtime"
-	"github.com/CaliLuke/loom-mcp/runtime/agent/stream"
-	streambridge "github.com/CaliLuke/loom-mcp/runtime/agent/stream/bridge"
+	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/hooks"
+	runloginmem "github.com/CaliLuke/loom-mcp/v2/runtime/agent/runlog/inmem"
+	agentsruntime "github.com/CaliLuke/loom-mcp/v2/runtime/agent/runtime"
+	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/stream"
+	streambridge "github.com/CaliLuke/loom-mcp/v2/runtime/agent/stream/bridge"
 )
 
 // collectSink is a simple in-memory sink used in examples to capture events.

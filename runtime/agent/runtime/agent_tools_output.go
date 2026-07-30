@@ -5,10 +5,10 @@ import (
 	"errors"
 	"fmt"
 
-	"github.com/CaliLuke/loom-mcp/runtime/agent/api"
-	"github.com/CaliLuke/loom-mcp/runtime/agent/planner"
-	"github.com/CaliLuke/loom-mcp/runtime/agent/rawjson"
-	"github.com/CaliLuke/loom-mcp/runtime/agent/run"
+	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/api"
+	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/planner"
+	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/rawjson"
+	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/run"
 )
 
 // attachRunLink stamps the parent tool result with a run handle linking to the nested agent run that produced it.

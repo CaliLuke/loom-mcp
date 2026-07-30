@@ -5,11 +5,11 @@ import (
 	"testing"
 	"time"
 
-	codegen "github.com/CaliLuke/loom-mcp/codegen/agent"
-	"github.com/CaliLuke/loom-mcp/codegen/testhelpers"
-	. "github.com/CaliLuke/loom-mcp/dsl"
-	agentsExpr "github.com/CaliLuke/loom-mcp/expr/agent"
-	mcpexpr "github.com/CaliLuke/loom-mcp/expr/mcp"
+	codegen "github.com/CaliLuke/loom-mcp/v2/codegen/agent"
+	"github.com/CaliLuke/loom-mcp/v2/codegen/testhelpers"
+	. "github.com/CaliLuke/loom-mcp/v2/dsl"
+	agentsExpr "github.com/CaliLuke/loom-mcp/v2/expr/agent"
+	mcpexpr "github.com/CaliLuke/loom-mcp/v2/expr/mcp"
 	. "github.com/CaliLuke/loom/dsl"
 	"github.com/CaliLuke/loom/eval"
 	goaexpr "github.com/CaliLuke/loom/expr"
@@ -20,7 +20,7 @@ const alphaServiceName = "alpha"
 
 func TestBuildGeneratorData(t *testing.T) {
 	roots := runAgentDesign(t)
-	data, err := codegen.BuildDataForTest("github.com/CaliLuke/loom-mcp", roots)
+	data, err := codegen.BuildDataForTest("github.com/CaliLuke/loom-mcp/v2", roots)
 	require.NoError(t, err)
 	require.NotNil(t, data)
 	require.Len(t, data.Services, 1)
@@ -103,7 +103,7 @@ func TestBuildGeneratorData(t *testing.T) {
 
 func TestGenerateProducesFiles(t *testing.T) {
 	roots := runAgentDesign(t)
-	files, err := codegen.Generate("github.com/CaliLuke/loom-mcp", roots, nil)
+	files, err := codegen.Generate("github.com/CaliLuke/loom-mcp/v2", roots, nil)
 	require.NoError(t, err)
 	require.NotEmpty(t, files)
 
@@ -121,7 +121,7 @@ func TestGenerateProducesFiles(t *testing.T) {
 
 func TestBuildGeneratorData_AliasedMCPToolsetUsesDefinitionNameForArtifacts(t *testing.T) {
 	roots := runAliasedMCPDesign(t)
-	data, err := codegen.BuildDataForTest("github.com/CaliLuke/loom-mcp", roots)
+	data, err := codegen.BuildDataForTest("github.com/CaliLuke/loom-mcp/v2", roots)
 	require.NoError(t, err)
 
 	var consumerAgent *codegen.AgentData
@@ -141,7 +141,7 @@ func TestBuildGeneratorData_AliasedMCPToolsetUsesDefinitionNameForArtifacts(t *t
 	require.Equal(t, "calc-remote", used.QualifiedName)
 	require.Equal(t, "calc_remote", used.PathName)
 	require.Equal(t, filepath.Join("gen", "calc", "toolsets", "calc_remote"), used.SpecsDir)
-	require.Equal(t, "github.com/CaliLuke/loom-mcp/calc/toolsets/calc_remote", used.SpecsImportPath)
+	require.Equal(t, "github.com/CaliLuke/loom-mcp/v2/calc/toolsets/calc_remote", used.SpecsImportPath)
 	require.Len(t, used.Tools, 1)
 	require.Equal(t, "add", used.Tools[0].Name)
 	require.Equal(t, "Add", used.Tools[0].ConstName)
@@ -151,7 +151,7 @@ func TestBuildGeneratorData_AliasedMCPToolsetUsesDefinitionNameForArtifacts(t *t
 
 func TestGenerateRealMCPToolsetAggregatorUsesPopulatedToolIdentifiers(t *testing.T) {
 	roots := runAliasedMCPDesign(t)
-	files, err := codegen.Generate("github.com/CaliLuke/loom-mcp", roots, nil)
+	files, err := codegen.Generate("github.com/CaliLuke/loom-mcp/v2", roots, nil)
 	require.NoError(t, err)
 
 	toolsetSpecs := testhelpers.FileContent(t, files, "gen/calc/toolsets/calc_remote/specs.go")
@@ -165,7 +165,7 @@ func TestGenerateRealMCPToolsetAggregatorUsesPopulatedToolIdentifiers(t *testing
 
 func TestBuildGeneratorData_AliasedMCPToolsetsUseDistinctConstNames(t *testing.T) {
 	roots := runDuplicateAliasedMCPDesign(t)
-	data, err := codegen.BuildDataForTest("github.com/CaliLuke/loom-mcp", roots)
+	data, err := codegen.BuildDataForTest("github.com/CaliLuke/loom-mcp/v2", roots)
 	require.NoError(t, err)
 
 	var consumerAgent *codegen.AgentData
@@ -184,7 +184,7 @@ func TestBuildGeneratorData_AliasedMCPToolsetsUseDistinctConstNames(t *testing.T
 
 func TestBuildGeneratorData_MCPToolsetConstNameDoesNotRepeatSuiteName(t *testing.T) {
 	roots := runDirectMCPUseDesign(t)
-	data, err := codegen.BuildDataForTest("github.com/CaliLuke/loom-mcp", roots)
+	data, err := codegen.BuildDataForTest("github.com/CaliLuke/loom-mcp/v2", roots)
 	require.NoError(t, err)
 
 	var consumerAgent *codegen.AgentData
@@ -203,7 +203,7 @@ func TestBuildGeneratorData_MCPToolsetConstNameDoesNotRepeatSuiteName(t *testing
 
 func TestBuildGeneratorData_MCPToolsetConstNamesStayDistinctAcrossProviderPartitions(t *testing.T) {
 	roots := runPartitionedMCPConstCollisionDesign(t)
-	data, err := codegen.BuildDataForTest("github.com/CaliLuke/loom-mcp", roots)
+	data, err := codegen.BuildDataForTest("github.com/CaliLuke/loom-mcp/v2", roots)
 	require.NoError(t, err)
 
 	var consumerAgent *codegen.AgentData

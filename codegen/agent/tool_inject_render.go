@@ -18,7 +18,7 @@ func toolsetInjectFile(ts *ToolsetData) *codegen.File {
 	}
 	imports := []*codegen.ImportSpec{
 		codegen.SimpleImport("fmt"),
-		codegen.SimpleImport("github.com/CaliLuke/loom-mcp/runtime/agent/runtime"),
+		codegen.SimpleImport("github.com/CaliLuke/loom-mcp/v2/runtime/agent/runtime"),
 	}
 	sections := []codegen.Section{
 		codegen.Header(ts.Name+" tool injection helpers", ts.SpecsPackageName, imports),

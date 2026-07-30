@@ -4,9 +4,9 @@ import (
 	"testing"
 	"time"
 
-	. "github.com/CaliLuke/loom-mcp/dsl"
-	agentsexpr "github.com/CaliLuke/loom-mcp/expr/agent"
-	mcpexpr "github.com/CaliLuke/loom-mcp/expr/mcp"
+	. "github.com/CaliLuke/loom-mcp/v2/dsl"
+	agentsexpr "github.com/CaliLuke/loom-mcp/v2/expr/agent"
+	mcpexpr "github.com/CaliLuke/loom-mcp/v2/expr/mcp"
 	. "github.com/CaliLuke/loom/dsl"
 	"github.com/CaliLuke/loom/eval"
 	goaexpr "github.com/CaliLuke/loom/expr"

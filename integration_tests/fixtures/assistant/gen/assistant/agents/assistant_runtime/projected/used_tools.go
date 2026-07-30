@@ -9,8 +9,8 @@ package projected
 
 import (
 	projectedspecs "example.com/assistant/gen/assistant/toolsets/projected"
-	"github.com/CaliLuke/loom-mcp/runtime/agent/planner"
-	"github.com/CaliLuke/loom-mcp/runtime/agent/tools"
+	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/planner"
+	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/tools"
 )
 
 // Used toolset typed helpers for projected

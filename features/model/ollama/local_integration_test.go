@@ -14,9 +14,9 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	ollamamodel "github.com/CaliLuke/loom-mcp/features/model/ollama"
-	"github.com/CaliLuke/loom-mcp/runtime/agent/model"
-	"github.com/CaliLuke/loom-mcp/runtime/agent/tools"
+	ollamamodel "github.com/CaliLuke/loom-mcp/v2/features/model/ollama"
+	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/model"
+	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/tools"
 )
 
 func TestLocalOllamaCompleteToolCall(t *testing.T) {

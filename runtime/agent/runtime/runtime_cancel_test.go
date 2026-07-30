@@ -5,8 +5,8 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/CaliLuke/loom-mcp/runtime/agent/engine"
-	engineinmem "github.com/CaliLuke/loom-mcp/runtime/agent/engine/inmem"
+	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/engine"
+	engineinmem "github.com/CaliLuke/loom-mcp/v2/runtime/agent/engine/inmem"
 	"github.com/stretchr/testify/require"
 )
 

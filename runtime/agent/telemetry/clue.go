@@ -45,7 +45,7 @@ func NewClueLogger() Logger {
 // Uses the global MeterProvider; configure it via otel.SetMeterProvider before
 // invoking runtime methods (typically done via clue.ConfigureOpenTelemetry).
 func NewClueMetrics() Metrics {
-	meter := otel.Meter("github.com/CaliLuke/loom-mcp/agents/runtime")
+	meter := otel.Meter("github.com/CaliLuke/loom-mcp/v2/agents/runtime")
 	return &ClueMetrics{meter: meter}
 }
 
@@ -54,7 +54,7 @@ func NewClueMetrics() Metrics {
 // invoking runtime methods (typically done via clue.ConfigureOpenTelemetry or
 // environment variables like OTEL_EXPORTER_OTLP_ENDPOINT).
 func NewClueTracer() Tracer {
-	tracer := otel.Tracer("github.com/CaliLuke/loom-mcp/agents/runtime")
+	tracer := otel.Tracer("github.com/CaliLuke/loom-mcp/v2/agents/runtime")
 	return &ClueTracer{tracer: tracer}
 }
 

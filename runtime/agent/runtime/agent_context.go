@@ -3,13 +3,13 @@ package runtime
 import (
 	"context"
 
-	agent "github.com/CaliLuke/loom-mcp/runtime/agent"
-	"github.com/CaliLuke/loom-mcp/runtime/agent/memory"
-	"github.com/CaliLuke/loom-mcp/runtime/agent/model"
-	"github.com/CaliLuke/loom-mcp/runtime/agent/planner"
-	"github.com/CaliLuke/loom-mcp/runtime/agent/prompt"
-	"github.com/CaliLuke/loom-mcp/runtime/agent/reminder"
-	"github.com/CaliLuke/loom-mcp/runtime/agent/telemetry"
+	agent "github.com/CaliLuke/loom-mcp/v2/runtime/agent"
+	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/memory"
+	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/model"
+	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/planner"
+	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/prompt"
+	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/reminder"
+	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/telemetry"
 )
 
 // agentContextOptions configures construction of a planner.PlannerContext.

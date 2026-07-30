@@ -8,7 +8,7 @@
 package coordinator
 
 import (
-	"github.com/CaliLuke/loom-mcp/runtime/agent/planner"
+	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/planner"
 )
 
 // CoordinatorAgentConfig configures the CoordinatorAgent agent package.

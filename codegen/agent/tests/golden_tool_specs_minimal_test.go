@@ -3,7 +3,7 @@ package tests
 import (
 	"testing"
 
-	"github.com/CaliLuke/loom-mcp/codegen/agent/tests/testscenarios"
+	"github.com/CaliLuke/loom-mcp/v2/codegen/agent/tests/testscenarios"
 )
 
 // Minimal tool specs for an agent with one toolset and one tool with simple args/return.

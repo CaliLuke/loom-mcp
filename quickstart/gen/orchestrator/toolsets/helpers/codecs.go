@@ -14,7 +14,7 @@ import (
 	"strings"
 
 	toolhttp "example.com/quickstart/gen/orchestrator/toolsets/helpers/http"
-	"github.com/CaliLuke/loom-mcp/runtime/agent/tools"
+	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/tools"
 	loom "github.com/CaliLuke/loom/pkg"
 )
 

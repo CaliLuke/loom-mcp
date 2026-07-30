@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"errors"
 	"net/url"
+	"slices"
 	"strings"
 
 	"github.com/CaliLuke/loom/eval"
@@ -19,6 +20,10 @@ var (
 )
 
 const (
+	// DefaultProtocolVersion is the newest protocol version implemented by all
+	// generated Loom MCP transports.
+	DefaultProtocolVersion = "2025-11-25"
+
 	// ToolSearchExactMatchNarrow suppresses weaker matches when a query exactly
 	// matches a tool name or title.
 	ToolSearchExactMatchNarrow = "narrow"
@@ -28,6 +33,25 @@ const (
 	// ToolSearchExactMatchOff disables exact-match special handling.
 	ToolSearchExactMatchOff = "off"
 )
+
+var supportedProtocolVersions = []string{
+	DefaultProtocolVersion,
+	"2025-06-18",
+	"2025-03-26",
+	"2024-11-05",
+}
+
+// SupportedProtocolVersions returns the protocol versions implemented by all
+// generated Loom MCP transports, newest first.
+func SupportedProtocolVersions() []string {
+	return slices.Clone(supportedProtocolVersions)
+}
+
+// SupportsProtocolVersion reports whether every generated Loom MCP transport
+// implements version.
+func SupportsProtocolVersion(version string) bool {
+	return slices.Contains(supportedProtocolVersions, version)
+}
 
 func urlParse(raw string) (*url.URL, error) {
 	return url.Parse(raw)
@@ -444,6 +468,14 @@ func (m *MCPExpr) Validate() error {
 	}
 	if m.Version == "" {
 		verr.Add(m, "MCP server version is required")
+	}
+	if m.ProtocolVersion != "" && !SupportsProtocolVersion(m.ProtocolVersion) {
+		verr.Add(
+			m,
+			"ProtocolVersion %q is not implemented by Loom's generated transport; supported versions: %s",
+			m.ProtocolVersion,
+			strings.Join(supportedProtocolVersions, ", "),
+		)
 	}
 	mergeChildErrors(verr, m.Icons, iconValidator)
 	mergeChildErrors(verr, m.Tools, toolValidator)

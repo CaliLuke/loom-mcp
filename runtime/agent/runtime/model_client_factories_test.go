@@ -6,9 +6,9 @@ import (
 	"testing"
 
 	"cloud.google.com/go/auth"
-	geminifeature "github.com/CaliLuke/loom-mcp/features/model/gemini"
-	ollamafeature "github.com/CaliLuke/loom-mcp/features/model/ollama"
-	openaifeature "github.com/CaliLuke/loom-mcp/features/model/openai"
+	geminifeature "github.com/CaliLuke/loom-mcp/v2/features/model/gemini"
+	ollamafeature "github.com/CaliLuke/loom-mcp/v2/features/model/ollama"
+	openaifeature "github.com/CaliLuke/loom-mcp/v2/features/model/openai"
 	"github.com/stretchr/testify/require"
 )
 

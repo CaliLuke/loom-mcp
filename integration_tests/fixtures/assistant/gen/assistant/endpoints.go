@@ -17,6 +17,7 @@ import (
 type Endpoints struct {
 	ListDocuments                  loom.Endpoint
 	SystemInfo                     loom.Endpoint
+	ElicitationContext             loom.Endpoint
 	ConversationHistory            loom.Endpoint
 	FigmaDesignSystem              loom.Endpoint
 	GeneratePrompts                loom.Endpoint
@@ -29,8 +30,6 @@ type Endpoints struct {
 	SearchRecords                  loom.Endpoint
 	ExecuteCode                    loom.Endpoint
 	ProcessBatch                   loom.Endpoint
-	SampleText                     loom.Endpoint
-	ListClientRoots                loom.Endpoint
 	ReportProgress                 loom.Endpoint
 	MultiContent                   loom.Endpoint
 	GenerateDpiSpec                loom.Endpoint
@@ -45,6 +44,7 @@ func NewEndpoints(s Service) *Endpoints {
 	return &Endpoints{
 		ListDocuments:                  NewListDocumentsEndpoint(s),
 		SystemInfo:                     NewSystemInfoEndpoint(s),
+		ElicitationContext:             NewElicitationContextEndpoint(s),
 		ConversationHistory:            NewConversationHistoryEndpoint(s),
 		FigmaDesignSystem:              NewFigmaDesignSystemEndpoint(s),
 		GeneratePrompts:                NewGeneratePromptsEndpoint(s),
@@ -57,8 +57,6 @@ func NewEndpoints(s Service) *Endpoints {
 		SearchRecords:                  NewSearchRecordsEndpoint(s),
 		ExecuteCode:                    NewExecuteCodeEndpoint(s),
 		ProcessBatch:                   NewProcessBatchEndpoint(s),
-		SampleText:                     NewSampleTextEndpoint(s),
-		ListClientRoots:                NewListClientRootsEndpoint(s),
 		ReportProgress:                 NewReportProgressEndpoint(s),
 		MultiContent:                   NewMultiContentEndpoint(s),
 		GenerateDpiSpec:                NewGenerateDpiSpecEndpoint(s),
@@ -73,6 +71,7 @@ func NewEndpoints(s Service) *Endpoints {
 func (e *Endpoints) Use(m func(loom.Endpoint) loom.Endpoint) {
 	e.ListDocuments = m(e.ListDocuments)
 	e.SystemInfo = m(e.SystemInfo)
+	e.ElicitationContext = m(e.ElicitationContext)
 	e.ConversationHistory = m(e.ConversationHistory)
 	e.FigmaDesignSystem = m(e.FigmaDesignSystem)
 	e.GeneratePrompts = m(e.GeneratePrompts)
@@ -85,8 +84,6 @@ func (e *Endpoints) Use(m func(loom.Endpoint) loom.Endpoint) {
 	e.SearchRecords = m(e.SearchRecords)
 	e.ExecuteCode = m(e.ExecuteCode)
 	e.ProcessBatch = m(e.ProcessBatch)
-	e.SampleText = m(e.SampleText)
-	e.ListClientRoots = m(e.ListClientRoots)
 	e.ReportProgress = m(e.ReportProgress)
 	e.MultiContent = m(e.MultiContent)
 	e.GenerateDpiSpec = m(e.GenerateDpiSpec)
@@ -109,6 +106,14 @@ func NewListDocumentsEndpoint(s Service) loom.Endpoint {
 func NewSystemInfoEndpoint(s Service) loom.Endpoint {
 	return func(ctx context.Context, req any) (any, error) {
 		return s.SystemInfo(ctx)
+	}
+}
+
+// NewElicitationContextEndpoint returns an endpoint function that calls the
+// method "elicitation_context" of service "assistant".
+func NewElicitationContextEndpoint(s Service) loom.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		return s.ElicitationContext(ctx)
 	}
 }
 
@@ -216,23 +221,6 @@ func NewProcessBatchEndpoint(s Service) loom.Endpoint {
 	return func(ctx context.Context, req any) (any, error) {
 		p := req.(*ProcessBatchPayload)
 		return s.ProcessBatch(ctx, p)
-	}
-}
-
-// NewSampleTextEndpoint returns an endpoint function that calls the method
-// "sample_text" of service "assistant".
-func NewSampleTextEndpoint(s Service) loom.Endpoint {
-	return func(ctx context.Context, req any) (any, error) {
-		p := req.(*SampleTextPayload)
-		return s.SampleText(ctx, p)
-	}
-}
-
-// NewListClientRootsEndpoint returns an endpoint function that calls the
-// method "list_client_roots" of service "assistant".
-func NewListClientRootsEndpoint(s Service) loom.Endpoint {
-	return func(ctx context.Context, req any) (any, error) {
-		return s.ListClientRoots(ctx)
 	}
 }
 

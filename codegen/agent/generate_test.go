@@ -10,7 +10,7 @@ import (
 	"testing"
 	"time"
 
-	agentsExpr "github.com/CaliLuke/loom-mcp/expr/agent"
+	agentsExpr "github.com/CaliLuke/loom-mcp/v2/expr/agent"
 	gocodegen "github.com/CaliLuke/loom/codegen"
 	"github.com/CaliLuke/loom/codegen/service"
 	"github.com/dave/jennifer/jen"

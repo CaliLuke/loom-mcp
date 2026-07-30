@@ -4,10 +4,10 @@ import (
 	"encoding/json"
 	"slices"
 
-	agent "github.com/CaliLuke/loom-mcp/runtime/agent"
-	"github.com/CaliLuke/loom-mcp/runtime/agent/engine"
-	"github.com/CaliLuke/loom-mcp/runtime/agent/reminder"
-	"github.com/CaliLuke/loom-mcp/runtime/agent/tools"
+	agent "github.com/CaliLuke/loom-mcp/v2/runtime/agent"
+	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/engine"
+	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/reminder"
+	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/tools"
 )
 
 // addToolsetLocked registers a toolset and its specs without acquiring the lock.

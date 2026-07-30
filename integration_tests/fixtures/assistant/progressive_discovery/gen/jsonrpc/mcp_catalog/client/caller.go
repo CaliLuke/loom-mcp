@@ -16,7 +16,7 @@ import (
 	"io"
 
 	mcppkg "example.com/assistant/progressive_discovery/gen/mcp_catalog"
-	mcpruntime "github.com/CaliLuke/loom-mcp/runtime/mcp"
+	mcpruntime "github.com/CaliLuke/loom-mcp/v2/runtime/mcp"
 )
 
 // Caller adapts the generated MCP JSON-RPC client to the runtime Caller interface.

@@ -28,7 +28,7 @@ package design
 
 import (
     . "github.com/CaliLuke/loom/dsl"
-    . "github.com/CaliLuke/loom-mcp/dsl"
+    . "github.com/CaliLuke/loom-mcp/v2/dsl"
 )
 
 var _ = API("orchestrator", func() {})
@@ -91,7 +91,7 @@ import (
     
     planner "example.com/tutorial/gen/orchestrator/agents/planner"
     orchestrator "example.com/tutorial/gen/orchestrator/agents/orchestrator"
-    "github.com/CaliLuke/loom-mcp/runtime/agent/runtime"
+    "github.com/CaliLuke/loom-mcp/v2/runtime/agent/runtime"
 )
 
 func main() {
@@ -253,7 +253,7 @@ Two critical events for UIs:
 Consumers subscribe once per session and close SSE/WebSocket when they observe run_stream_end for the run they are currently attached to.
 
 --- CODE ---
-import "github.com/CaliLuke/loom-mcp/runtime/agent/stream"
+import "github.com/CaliLuke/loom-mcp/v2/runtime/agent/stream"
 
 // events come from the session stream
 events, errs, cancel, err := sub.Subscribe(ctx, "session/session-123")
@@ -323,7 +323,7 @@ Wiring Profiles to Subscribers
 Apply profiles when creating stream subscribers:
 
 --- CODE ---
-import "github.com/CaliLuke/loom-mcp/runtime/agent/stream"
+import "github.com/CaliLuke/loom-mcp/v2/runtime/agent/stream"
 
 // Create a subscriber with the user chat profile
 chatSub, err := stream.NewSubscriberWithProfile(chatSink, stream.UserChatProfile())

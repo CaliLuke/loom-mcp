@@ -17,8 +17,8 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/CaliLuke/loom-mcp/runtime/agent/memory"
-	"github.com/CaliLuke/loom-mcp/runtime/agent/model"
+	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/memory"
+	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/model"
 )
 
 const (

@@ -7,7 +7,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	"github.com/CaliLuke/loom-mcp/runtime/agent/session"
+	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/session"
 )
 
 func TestLinkChildRunValidationErrors(t *testing.T) {

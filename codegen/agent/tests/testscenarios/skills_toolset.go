@@ -1,7 +1,7 @@
 package testscenarios
 
 import (
-	. "github.com/CaliLuke/loom-mcp/dsl"
+	. "github.com/CaliLuke/loom-mcp/v2/dsl"
 	. "github.com/CaliLuke/loom/dsl"
 )
 

@@ -8,7 +8,7 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/CaliLuke/loom-mcp/runtime/agent/rawjson"
+	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/rawjson"
 )
 
 const (

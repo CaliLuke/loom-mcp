@@ -17,6 +17,11 @@ func SystemInfoAssistantPath() string {
 	return "/rpc"
 }
 
+// ElicitationContextAssistantPath returns the URL path to the assistant service elicitation_context HTTP endpoint.
+func ElicitationContextAssistantPath() string {
+	return "/rpc"
+}
+
 // ConversationHistoryAssistantPath returns the URL path to the assistant service conversation_history HTTP endpoint.
 func ConversationHistoryAssistantPath() string {
 	return "/rpc"
@@ -74,16 +79,6 @@ func ExecuteCodeAssistantPath() string {
 
 // ProcessBatchAssistantPath returns the URL path to the assistant service process_batch HTTP endpoint.
 func ProcessBatchAssistantPath() string {
-	return "/rpc"
-}
-
-// SampleTextAssistantPath returns the URL path to the assistant service sample_text HTTP endpoint.
-func SampleTextAssistantPath() string {
-	return "/rpc"
-}
-
-// ListClientRootsAssistantPath returns the URL path to the assistant service list_client_roots HTTP endpoint.
-func ListClientRootsAssistantPath() string {
 	return "/rpc"
 }
 

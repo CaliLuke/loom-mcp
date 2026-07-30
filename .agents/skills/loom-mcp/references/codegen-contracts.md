@@ -78,15 +78,40 @@ Use this file when editing DSL, generators, generated helpers, or MCP codegen be
   JSON-RPC server, JSON-RPC client, and SDK paths: `name`, `title`,
   `description`, `inputSchema`, `outputSchema`, `annotations`, `_meta`, and
   `icons`.
+- `MCPExpr.Validate` must reject a configured `ProtocolVersion` outside the
+  canonical Loom-native set (`2024-11-05`, `2025-03-26`, `2025-06-18`,
+  `2025-11-25`). Codegen consumes that same centralized list and must never
+  prepend arbitrary configured versions. MCP `2026-07-28` is available only
+  through the upstream SDK's stateless streamable-HTTP runtime option.
 - Generated streamable-HTTP servers accept a missing `MCP-Protocol-Version`
   header using the spec's `2025-03-26` compatibility assumption. Present but
   unsupported versions remain transport errors whose JSON-RPC envelope echoes
   a readable request ID or explicitly uses `null` when none is available.
 - Generated SDK request contexts install the shared
   `runtime/mcp/sdkclient.WithClientFeatures` adapter so service code can issue
-  elicitation, text sampling, and roots/list requests through the active
-  official SDK session. Do not duplicate SDK request/response conversion in
-  generated code.
+  elicitation through official multi-round-trip
+  `InputRequests`/`InputResponses`. Generated tool, prompt, and resource handlers
+  pass retry responses into the adapter and translate its input-required control
+  flow into the matching SDK result type. Tool dispatch must preserve that
+  control flow instead of converting it into an `isError` tool result. The
+  adapter's bounded, versioned request state carries issued input contracts, the
+  exact pending round, and prior client-supplied responses. Encrypt and
+  authenticate every round with AES-GCM, bind state to the original MCP method
+  and logical parameters, and plumb the generated server's stable 32-byte
+  `RequestStateKey` into the adapter. Endpoint replicas must share that key.
+  Protected responses remain client assertions and must not drive
+  authorization.
+  One runtime elicitation call produces one input request, and multi-step flows
+  require a `2026-07-28` client. Official modern streamable HTTP is stateless
+  and sessionless, with one POST per retry. Preserve input-required errors
+  through adapter safe-error mapping, and reject wrong response types, invalid
+  actions, response IDs outside the pending round, changed input contracts on
+  re-entry, and response/state limit violations. Preserve invalid-client-input
+  markers through tool dispatch so validation failures remain protocol errors
+  rather than tool-level `isError` results. Sampling and roots are
+  deprecated in MCP `2026-07-28` and are not installed as runtime client
+  features. Do not duplicate SDK request/response or request-state conversion
+  in generated code.
 - Generated SDK tool handlers preserve `_meta.progressToken` in request context
   before invoking service code so `runtime/mcp.ReportProgress` can emit
   `notifications/progress` with the original string or numeric token.

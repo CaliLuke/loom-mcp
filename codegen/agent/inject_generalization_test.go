@@ -7,8 +7,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/CaliLuke/loom-mcp/codegen/testhelpers"
-	. "github.com/CaliLuke/loom-mcp/dsl"
+	"github.com/CaliLuke/loom-mcp/v2/codegen/testhelpers"
+	. "github.com/CaliLuke/loom-mcp/v2/dsl"
 	gcodegen "github.com/CaliLuke/loom/codegen"
 	goadsl "github.com/CaliLuke/loom/dsl"
 	"github.com/stretchr/testify/require"

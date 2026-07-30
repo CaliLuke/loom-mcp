@@ -13,7 +13,7 @@ import (
 
 	mcpjsonrpcserver "example.com/assistant/gen/jsonrpc/mcp_assistant/server"
 	mcpassistant "example.com/assistant/gen/mcp_assistant"
-	mcpruntime "github.com/CaliLuke/loom-mcp/runtime/mcp"
+	mcpruntime "github.com/CaliLuke/loom-mcp/v2/runtime/mcp"
 	loom "github.com/CaliLuke/loom/pkg"
 	sdkmcp "github.com/modelcontextprotocol/go-sdk/mcp"
 	"github.com/stretchr/testify/assert"

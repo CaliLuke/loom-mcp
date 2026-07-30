@@ -24,9 +24,9 @@ import (
 
 	assistant "example.com/assistant/gen/assistant"
 	projected "example.com/assistant/gen/assistant/toolsets/projected"
-	agentruntime "github.com/CaliLuke/loom-mcp/runtime/agent/runtime"
-	mcpruntime "github.com/CaliLuke/loom-mcp/runtime/mcp"
-	mcpskills "github.com/CaliLuke/loom-mcp/runtime/mcp/skills"
+	agentruntime "github.com/CaliLuke/loom-mcp/v2/runtime/agent/runtime"
+	mcpruntime "github.com/CaliLuke/loom-mcp/v2/runtime/mcp"
+	mcpskills "github.com/CaliLuke/loom-mcp/v2/runtime/mcp/skills"
 	goahttp "github.com/CaliLuke/loom/http"
 	loom "github.com/CaliLuke/loom/pkg"
 	mcpauth "github.com/modelcontextprotocol/go-sdk/auth"
@@ -53,6 +53,8 @@ type MCPAdapter struct {
 	promptProvider      PromptProvider
 	// Broadcaster for server-initiated events (notifications/resources)
 	broadcaster mcpruntime.Broadcaster
+	// requestStateKey encrypts and authenticates portable MCP multi-round-trip state.
+	requestStateKey []byte
 	// resourceNameToURI holds DSL-derived mapping for policy and lookups
 	resourceNameToURI map[string]string
 }
@@ -193,7 +195,7 @@ func NewMCPAdapter(service assistant.Service, promptProvider PromptProvider, opt
 	tracer := defaultMCPAdapterTracer(opts, telemetryName)
 	callCounter, errorCounter, durationHistogram := defaultMCPAdapterMetrics(opts, telemetryName)
 	// Build name->URI map from generated resources
-	nameToURI := map[string]string{"documents": "doc://list", "system_info": "system://info", "conversation_history": "conversation://history", "figma_design_system": "figma://design-system/mobile-checkout"}
+	nameToURI := map[string]string{"documents": "doc://list", "system_info": "system://info", "elicitation_context": "elicitation://context", "conversation_history": "conversation://history", "figma_design_system": "figma://design-system/mobile-checkout"}
 	return &MCPAdapter{service: service, initializedSessions: make(map[string]time.Time), sessionPrincipals: make(map[string]string), opts: opts, tracer: tracer, callCounter: callCounter, errorCounter: errorCounter, durationHistogram: durationHistogram, promptProvider: promptProvider, broadcaster: bc, resourceNameToURI: nameToURI}
 }
 
@@ -493,6 +495,9 @@ func (a *MCPAdapter) sendToolError(ctx context.Context, stream ToolsCallServerSt
 	if err == nil {
 		return nil
 	}
+	if mcpruntime.IsInputRequired(err) || mcpruntime.IsInvalidClientInput(err) {
+		return err
+	}
 	mapped := a.mapError(err)
 	if mapped == nil {
 		mapped = err
@@ -546,6 +551,9 @@ func formatToolErrorText(err error) string {
 	return fmt.Sprintf("[%s] %s\nRecovery: %s", code, message, recovery)
 }
 func (a *MCPAdapter) safeMCPError(err error, defaultCode string, fallbackMessage string) error {
+	if mcpruntime.IsInputRequired(err) {
+		return err
+	}
 	if err == nil {
 		return loom.WithErrorRemedy(loom.PermanentError(defaultCode, "%s", fallbackMessage), &loom.ErrorRemedy{
 			Code:        defaultCode,
@@ -940,18 +948,6 @@ func (a *MCPAdapter) generatedToolCatalog() []*ToolInfo {
 		OutputSchema: json.RawMessage([]byte("{\"type\":\"object\",\"properties\":{\"ok\":{\"type\":\"boolean\",\"description\":\"Operation status\"}},\"additionalProperties\":false}")),
 		Title:        stringPtr("Process Batch"),
 	}, &ToolInfo{
-		Description:  stringPtr("Request text generation from the connected MCP client"),
-		InputSchema:  json.RawMessage([]byte("{\"type\":\"object\",\"required\":[\"prompt\",\"max_tokens\"],\"properties\":{\"max_tokens\":{\"type\":\"integer\",\"description\":\"Maximum number of tokens\"},\"prompt\":{\"type\":\"string\",\"description\":\"User prompt to sample\"},\"system_prompt\":{\"type\":\"string\",\"description\":\"Optional system prompt\"}},\"additionalProperties\":false}")),
-		Name:         "sample_text",
-		OutputSchema: json.RawMessage([]byte("{\"type\":\"object\",\"required\":[\"text\",\"model\",\"stop_reason\"],\"properties\":{\"model\":{\"type\":\"string\",\"description\":\"Model selected by the client\"},\"stop_reason\":{\"type\":\"string\",\"description\":\"Reason sampling stopped\"},\"text\":{\"type\":\"string\",\"description\":\"Sampled text\"}},\"additionalProperties\":false}")),
-		Title:        stringPtr("Sample Text"),
-	}, &ToolInfo{
-		Description:  stringPtr("List filesystem roots exposed by the connected MCP client"),
-		InputSchema:  json.RawMessage([]byte("{\"type\":\"object\",\"properties\":{},\"additionalProperties\":false}")),
-		Name:         "list_client_roots",
-		OutputSchema: json.RawMessage([]byte("{\"type\":\"object\",\"required\":[\"roots\"],\"properties\":{\"roots\":{\"type\":\"array\",\"description\":\"Client filesystem roots\",\"items\":{\"type\":\"object\",\"required\":[\"uri\"],\"properties\":{\"name\":{\"type\":\"string\",\"description\":\"Optional display name\"},\"uri\":{\"type\":\"string\",\"description\":\"Root file URI\"}},\"additionalProperties\":false}}},\"additionalProperties\":false}")),
-		Title:        stringPtr("List Client Roots"),
-	}, &ToolInfo{
 		Description:  stringPtr("Report deterministic progress to the connected MCP client"),
 		InputSchema:  json.RawMessage([]byte("{\"type\":\"object\",\"properties\":{},\"additionalProperties\":false}")),
 		Name:         "report_progress",
@@ -1034,10 +1030,6 @@ func isGeneratedToolName(name string) bool {
 	case "execute_code":
 		return true
 	case "process_batch":
-		return true
-	case "sample_text":
-		return true
-	case "list_client_roots":
 		return true
 	case "report_progress":
 		return true
@@ -1895,21 +1887,6 @@ func processBatchInputRecovery(err error, raw json.RawMessage) string {
 	}
 	return "Provide valid tool arguments. Example: " + example
 }
-func sampleTextInputRecovery(err error, raw json.RawMessage) string {
-	message := strings.TrimSpace(loom.ErrorSafeMessage(err))
-	if message == "" {
-		message = strings.TrimSpace(err.Error())
-	}
-	_ = raw
-	example := "{\"max_tokens\":0,\"prompt\":\"example\"}"
-	if field := missingFieldFromMessage(message); field != "" {
-		return fmt.Sprintf("Include required field %q. Example: %s", field, example)
-	}
-	if strings.Contains(message, "unexpected end of JSON input") || strings.Contains(message, "unexpected EOF") {
-		return "Provide complete JSON arguments. Example: " + example
-	}
-	return "Provide valid tool arguments. Example: " + example
-}
 func multiContentInputRecovery(err error, raw json.RawMessage) string {
 	message := strings.TrimSpace(loom.ErrorSafeMessage(err))
 	if message == "" {
@@ -2324,57 +2301,6 @@ func (a *MCPAdapter) executeRealTool(ctx context.Context, p *ToolsCallPayload, s
 			"name":   p.Name,
 		})
 		return false, stream.SendAndClose(ctx, final)
-	case "sample_text":
-		var payload *assistant.SampleTextPayload
-		rawFields, err := decodeMCPPayloadFields(p.Arguments)
-		if err != nil {
-			return true, a.sendToolError(ctx, stream, p.Name, toolCallError(err, "invalid_params", sampleTextInputRecovery(err, p.Arguments)))
-		}
-		if err := decodeMCPPayloadStrict(p.Arguments, &payload); err != nil {
-			return true, a.sendToolError(ctx, stream, p.Name, toolCallError(err, "invalid_params", sampleTextInputRecovery(err, p.Arguments)))
-		}
-		{
-			if err := validateMCPPayloadRequired(rawFields, "prompt"); err != nil {
-				return true, a.sendToolError(ctx, stream, p.Name, toolCallError(err, "invalid_params", sampleTextInputRecovery(err, p.Arguments)))
-			}
-		}
-		result, err := a.service.SampleText(ctx, payload)
-		if err != nil {
-			return true, a.sendToolError(ctx, stream, p.Name, err)
-		}
-		structuredContent, serr := json.Marshal(result)
-		if serr != nil {
-			return false, serr
-		}
-		s := string(structuredContent)
-		final := &ToolsCallResult{
-			Content:           []*ContentItem{buildContentItem(a, s)},
-			StructuredContent: structuredContent,
-		}
-		a.log(ctx, "response", map[string]any{
-			"method": "tools/call",
-			"name":   p.Name,
-		})
-		return false, stream.SendAndClose(ctx, final)
-	case "list_client_roots":
-		result, err := a.service.ListClientRoots(ctx)
-		if err != nil {
-			return true, a.sendToolError(ctx, stream, p.Name, err)
-		}
-		structuredContent, serr := json.Marshal(result)
-		if serr != nil {
-			return false, serr
-		}
-		s := string(structuredContent)
-		final := &ToolsCallResult{
-			Content:           []*ContentItem{buildContentItem(a, s)},
-			StructuredContent: structuredContent,
-		}
-		a.log(ctx, "response", map[string]any{
-			"method": "tools/call",
-			"name":   p.Name,
-		})
-		return false, stream.SendAndClose(ctx, final)
 	case "report_progress":
 		result, err := a.service.ReportProgress(ctx)
 		if err != nil {
@@ -2606,6 +2532,11 @@ func (a *MCPAdapter) ResourcesList(ctx context.Context, p *ResourcesListPayload)
 		Name:        stringPtr("system_info"),
 		URI:         "system://info",
 	}, &ResourceInfo{
+		Description: stringPtr("Return context supplied through MCP elicitation"),
+		MimeType:    stringPtr("application/json"),
+		Name:        stringPtr("elicitation_context"),
+		URI:         "elicitation://context",
+	}, &ResourceInfo{
 		Description: stringPtr("Return conversation history with optional query params"),
 		MimeType:    stringPtr("application/json"),
 		Name:        stringPtr("conversation_history"),
@@ -2724,6 +2655,28 @@ func (a *MCPAdapter) ResourcesRead(ctx context.Context, p *ResourcesReadPayload)
 			return nil, a.safeMCPError(err, "invalid_params", "Resource URI is not allowed.")
 		}
 		result, err := a.service.SystemInfo(ctx)
+		if err != nil {
+			return nil, a.safeMCPError(err, "internal_error", "Resource read failed.")
+		}
+		s, serr := mcpruntime.EncodeJSONToString(ctx, goahttp.ResponseEncoder, result)
+		if serr != nil {
+			return nil, a.safeMCPError(serr, "internal_error", "Resource read failed.")
+		}
+		res := &ResourcesReadResult{Contents: []*ResourceContent{&ResourceContent{
+			MimeType: stringPtr("application/json"),
+			Text:     &s,
+			URI:      baseURI,
+		}}}
+		a.log(ctx, "response", map[string]any{
+			"method": "resources/read",
+			"uri":    baseURI,
+		})
+		return res, nil
+	case "elicitation://context":
+		if err := a.assertResourceURIAllowed(ctx, p.URI, nil); err != nil {
+			return nil, a.safeMCPError(err, "invalid_params", "Resource URI is not allowed.")
+		}
+		result, err := a.service.ElicitationContext(ctx)
 		if err != nil {
 			return nil, a.safeMCPError(err, "internal_error", "Resource read failed.")
 		}

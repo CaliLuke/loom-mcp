@@ -4,8 +4,8 @@ import (
 	"maps"
 	"time"
 
-	"github.com/CaliLuke/loom-mcp/runtime/agent/engine"
-	"github.com/CaliLuke/loom-mcp/runtime/agent/tools"
+	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/engine"
+	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/tools"
 )
 
 // MissingFieldsAction controls behavior when a tool validation error indicates

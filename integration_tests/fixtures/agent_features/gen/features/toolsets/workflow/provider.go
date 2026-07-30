@@ -14,10 +14,10 @@ import (
 	"fmt"
 
 	features "example.com/agentfeatures/gen/features"
-	"github.com/CaliLuke/loom-mcp/runtime/agent/planner"
-	"github.com/CaliLuke/loom-mcp/runtime/agent/runtime"
-	"github.com/CaliLuke/loom-mcp/runtime/agent/tools"
-	"github.com/CaliLuke/loom-mcp/runtime/toolregistry"
+	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/planner"
+	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/runtime"
+	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/tools"
+	"github.com/CaliLuke/loom-mcp/v2/runtime/toolregistry"
 	loom "github.com/CaliLuke/loom/pkg"
 )
 

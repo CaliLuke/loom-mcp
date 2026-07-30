@@ -3,7 +3,7 @@ package codegen
 import (
 	"testing"
 
-	agentsExpr "github.com/CaliLuke/loom-mcp/expr/agent"
+	agentsExpr "github.com/CaliLuke/loom-mcp/v2/expr/agent"
 	goaexpr "github.com/CaliLuke/loom/expr"
 	"github.com/stretchr/testify/require"
 )

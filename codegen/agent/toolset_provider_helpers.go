@@ -1,6 +1,6 @@
 package codegen
 
-import agentsExpr "github.com/CaliLuke/loom-mcp/expr/agent"
+import agentsExpr "github.com/CaliLuke/loom-mcp/v2/expr/agent"
 
 func isMCPBackedToolset(ts *ToolsetData) bool {
 	return ts != nil && ts.Expr != nil && ts.Expr.Provider != nil && ts.Expr.Provider.Kind == agentsExpr.ProviderMCP

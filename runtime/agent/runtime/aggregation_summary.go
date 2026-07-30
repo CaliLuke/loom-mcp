@@ -1,6 +1,6 @@
 package runtime
 
-import "github.com/CaliLuke/loom-mcp/runtime/agent/tools"
+import "github.com/CaliLuke/loom-mcp/v2/runtime/agent/tools"
 
 type (
 	// AggregationSummary is the provider-facing summary payload for provider-owned

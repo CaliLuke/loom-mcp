@@ -15,7 +15,7 @@ Minimal, copy‑paste runnable example to go from zero → talking agent. Keep y
 mkdir -p $GOPATH/src/example.com/quickstart && cd $_
 go mod init example.com/quickstart
 go get github.com/CaliLuke/loom@v1.7.1
-go get github.com/CaliLuke/loom-mcp@latest
+go get github.com/CaliLuke/loom-mcp/v2@latest
 ```
 
 ## 2) Add a tiny design (design/design.go)
@@ -27,7 +27,7 @@ package design
 
 import (
     . "github.com/CaliLuke/loom/dsl"
-    . "github.com/CaliLuke/loom-mcp/dsl"
+    . "github.com/CaliLuke/loom-mcp/v2/dsl"
 )
 
 var _ = API("orchestrator", func() {})
@@ -101,7 +101,7 @@ Then modify the bootstrap to use the Temporal engine:
 
 ```go
 import (
-    "github.com/CaliLuke/loom-mcp/runtime/agent/engine/temporal"
+    "github.com/CaliLuke/loom-mcp/v2/runtime/agent/engine/temporal"
     "go.temporal.io/sdk/client"
 
     // Your generated tool specs aggregate.

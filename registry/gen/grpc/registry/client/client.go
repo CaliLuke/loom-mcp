@@ -3,14 +3,14 @@
 // registry gRPC client
 //
 // Command:
-// $ loom gen github.com/CaliLuke/loom-mcp/registry/design -o registry
+// $ loom gen github.com/CaliLuke/loom-mcp/v2/registry/design -o registry
 
 package client
 
 import (
 	"context"
 
-	registrypb "github.com/CaliLuke/loom-mcp/registry/gen/grpc/registry/pb"
+	registrypb "github.com/CaliLuke/loom-mcp/v2/registry/gen/grpc/registry/pb"
 	loomgrpc "github.com/CaliLuke/loom/grpc"
 	loompb "github.com/CaliLuke/loom/grpc/pb"
 	loom "github.com/CaliLuke/loom/pkg"

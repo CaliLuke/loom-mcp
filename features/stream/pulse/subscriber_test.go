@@ -11,9 +11,9 @@ import (
 	streamopts "github.com/CaliLuke/loom/pulse/streaming/options"
 	"github.com/stretchr/testify/require"
 
-	clientspulse "github.com/CaliLuke/loom-mcp/features/stream/pulse/clients/pulse"
-	mockpulse "github.com/CaliLuke/loom-mcp/features/stream/pulse/clients/pulse/mocks"
-	"github.com/CaliLuke/loom-mcp/runtime/agent/stream"
+	clientspulse "github.com/CaliLuke/loom-mcp/v2/features/stream/pulse/clients/pulse"
+	mockpulse "github.com/CaliLuke/loom-mcp/v2/features/stream/pulse/clients/pulse/mocks"
+	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/stream"
 )
 
 func TestSubscribeEmitsEvents(t *testing.T) {

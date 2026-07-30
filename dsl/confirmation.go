@@ -3,7 +3,7 @@ package dsl
 import (
 	"github.com/CaliLuke/loom/eval"
 
-	agentsexpr "github.com/CaliLuke/loom-mcp/expr/agent"
+	agentsexpr "github.com/CaliLuke/loom-mcp/v2/expr/agent"
 )
 
 // Confirmation declares that the current tool always requires explicit out-of-band

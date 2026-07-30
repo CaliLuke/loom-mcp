@@ -59,9 +59,9 @@ import (
     "fmt"
 
     // The core loom-mcp runtime and planner interfaces
-    "github.com/CaliLuke/loom-mcp/runtime/agent/runtime"
-    "github.com/CaliLuke/loom-mcp/runtime/agent/model"
-    "github.com/CaliLuke/loom-mcp/runtime/agent/planner"
+    "github.com/CaliLuke/loom-mcp/v2/runtime/agent/runtime"
+    "github.com/CaliLuke/loom-mcp/v2/runtime/agent/model"
+    "github.com/CaliLuke/loom-mcp/v2/runtime/agent/planner"
 
     // === Your Generated Agent Packages ===
     // (Goa generated these based on your design)
@@ -254,8 +254,8 @@ package <toolset>
 
 import (
     "context"
-    "github.com/CaliLuke/loom-mcp/runtime/agent/planner"
-    "github.com/CaliLuke/loom-mcp/runtime/agent/runtime"
+    "github.com/CaliLuke/loom-mcp/v2/runtime/agent/planner"
+    "github.com/CaliLuke/loom-mcp/v2/runtime/agent/runtime"
     specs "<module>/gen/<service>/toolsets/<toolset>"
 )
 
@@ -379,7 +379,7 @@ Example: constructing a Temporal engine with the required DataConverter:
 
 ```go
 import (
-    "github.com/CaliLuke/loom-mcp/runtime/agent/engine/temporal"
+    "github.com/CaliLuke/loom-mcp/v2/runtime/agent/engine/temporal"
     "go.temporal.io/sdk/client"
 
     // Your generated tool specs aggregate.

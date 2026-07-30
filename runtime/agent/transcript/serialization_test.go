@@ -4,7 +4,7 @@ import (
 	"encoding/json"
 	"testing"
 
-	"github.com/CaliLuke/loom-mcp/runtime/agent/model"
+	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/model"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )

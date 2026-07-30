@@ -8,9 +8,9 @@ import (
 	"encoding/json"
 	"errors"
 
-	"github.com/CaliLuke/loom-mcp/runtime/agent/prompt"
-	"github.com/CaliLuke/loom-mcp/runtime/agent/rawjson"
-	"github.com/CaliLuke/loom-mcp/runtime/agent/tools"
+	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/prompt"
+	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/rawjson"
+	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/tools"
 )
 
 // ConversationRole is the role for a message in a conversation.

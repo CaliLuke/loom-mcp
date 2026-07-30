@@ -25,8 +25,8 @@ import (
 
 	catalog "example.com/assistant/progressive_discovery/gen/catalog"
 	projected "example.com/assistant/progressive_discovery/gen/catalog/toolsets/projected"
-	agentruntime "github.com/CaliLuke/loom-mcp/runtime/agent/runtime"
-	mcpruntime "github.com/CaliLuke/loom-mcp/runtime/mcp"
+	agentruntime "github.com/CaliLuke/loom-mcp/v2/runtime/agent/runtime"
+	mcpruntime "github.com/CaliLuke/loom-mcp/v2/runtime/mcp"
 	goahttp "github.com/CaliLuke/loom/http"
 	loom "github.com/CaliLuke/loom/pkg"
 	mcpauth "github.com/modelcontextprotocol/go-sdk/auth"
@@ -52,6 +52,8 @@ type MCPAdapter struct {
 	durationHistogram   metric.Float64Histogram
 	// Broadcaster for server-initiated events (notifications/resources)
 	broadcaster mcpruntime.Broadcaster
+	// requestStateKey encrypts and authenticates portable MCP multi-round-trip state.
+	requestStateKey []byte
 	// resourceNameToURI holds DSL-derived mapping for policy and lookups
 	resourceNameToURI map[string]string
 }
@@ -492,6 +494,9 @@ func (a *MCPAdapter) sendToolError(ctx context.Context, stream ToolsCallServerSt
 	if err == nil {
 		return nil
 	}
+	if mcpruntime.IsInputRequired(err) || mcpruntime.IsInvalidClientInput(err) {
+		return err
+	}
 	mapped := a.mapError(err)
 	if mapped == nil {
 		mapped = err
@@ -545,6 +550,9 @@ func formatToolErrorText(err error) string {
 	return fmt.Sprintf("[%s] %s\nRecovery: %s", code, message, recovery)
 }
 func (a *MCPAdapter) safeMCPError(err error, defaultCode string, fallbackMessage string) error {
+	if mcpruntime.IsInputRequired(err) {
+		return err
+	}
 	if err == nil {
 		return loom.WithErrorRemedy(loom.PermanentError(defaultCode, "%s", fallbackMessage), &loom.ErrorRemedy{
 			Code:        defaultCode,

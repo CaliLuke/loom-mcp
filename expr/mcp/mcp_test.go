@@ -64,6 +64,36 @@ func TestMCPExpr_Validate(t *testing.T) {
 	}
 }
 
+func TestMCPExprValidateProtocolVersion(t *testing.T) {
+	t.Parallel()
+
+	for _, version := range []string{"", "2024-11-05", "2025-03-26", "2025-06-18", "2025-11-25"} {
+		t.Run("accepts "+version, func(t *testing.T) {
+			mcp := validMCPExpr()
+			mcp.ProtocolVersion = version
+			require.NoError(t, mcp.Validate())
+		})
+	}
+
+	for _, version := range []string{"2026-07-28", "2099-01-01"} {
+		t.Run("rejects "+version, func(t *testing.T) {
+			mcp := validMCPExpr()
+			mcp.ProtocolVersion = version
+			require.ErrorContains(t, mcp.Validate(), `ProtocolVersion "`+version+`" is not implemented by Loom's generated transport`)
+		})
+	}
+}
+
+func TestSupportedProtocolVersionsReturnsCopy(t *testing.T) {
+	t.Parallel()
+
+	versions := SupportedProtocolVersions()
+	versions[0] = "mutated"
+
+	require.Equal(t, DefaultProtocolVersion, SupportedProtocolVersions()[0])
+	require.True(t, SupportsProtocolVersion(DefaultProtocolVersion))
+}
+
 func TestMCPExpr_ValidateRejectsDuplicateToolNames(t *testing.T) {
 	mcp := validMCPExpr()
 	mcp.Tools = []*ToolExpr{

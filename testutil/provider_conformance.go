@@ -7,7 +7,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	"github.com/CaliLuke/loom-mcp/runtime/agent/model"
+	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/model"
 )
 
 // ProviderConformanceCase proves one observable model-provider contract.

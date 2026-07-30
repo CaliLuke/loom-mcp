@@ -17,7 +17,7 @@
 //
 //	import (
 //	    . "github.com/CaliLuke/loom/dsl"
-//	    . "github.com/CaliLuke/loom-mcp/dsl"
+//	    . "github.com/CaliLuke/loom-mcp/v2/dsl"
 //	)
 //
 // # Mental Model

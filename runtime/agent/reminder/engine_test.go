@@ -3,7 +3,7 @@ package reminder
 import (
 	"testing"
 
-	"github.com/CaliLuke/loom-mcp/runtime/agent/model"
+	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/model"
 )
 
 func TestEngineAddAndSnapshot(t *testing.T) {

@@ -11,8 +11,8 @@ import (
 	"sort"
 	"strings"
 
-	genregistry "github.com/CaliLuke/loom-mcp/registry/gen/registry"
-	"github.com/CaliLuke/loom-mcp/runtime/agent/telemetry"
+	genregistry "github.com/CaliLuke/loom-mcp/v2/registry/gen/registry"
+	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/telemetry"
 	"github.com/google/uuid"
 )
 

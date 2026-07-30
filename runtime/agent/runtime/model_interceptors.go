@@ -5,8 +5,8 @@ import (
 	"errors"
 	"fmt"
 
-	agent "github.com/CaliLuke/loom-mcp/runtime/agent"
-	"github.com/CaliLuke/loom-mcp/runtime/agent/model"
+	agent "github.com/CaliLuke/loom-mcp/v2/runtime/agent"
+	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/model"
 )
 
 type modelInterceptedClient struct {

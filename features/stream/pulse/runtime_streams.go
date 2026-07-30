@@ -4,8 +4,8 @@ import (
 	"context"
 	"errors"
 
-	clientspulse "github.com/CaliLuke/loom-mcp/features/stream/pulse/clients/pulse"
-	"github.com/CaliLuke/loom-mcp/runtime/agent/stream"
+	clientspulse "github.com/CaliLuke/loom-mcp/v2/features/stream/pulse/clients/pulse"
+	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/stream"
 )
 
 // RuntimeStreams wires a caller-provided Pulse client into loom-mcp's runtime.

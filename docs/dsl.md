@@ -2,13 +2,13 @@
 
 This document explains how to author agents, toolsets, and runtime policies with the DSL used in
 this repository. The repo is now named `loom-mcp`, but the current Go import path for the DSL is
-still `github.com/CaliLuke/loom-mcp/dsl`.
+still `github.com/CaliLuke/loom-mcp/v2/dsl`.
 Use it alongside `docs/overview.md` and `docs/runtime.md` for the broader architecture and runtime
 details.
 
 ## Overview
 
-- **Import path:** `"github.com/CaliLuke/loom-mcp/dsl"` (typically dot-imported alongside the core Loom DSL).
+- **Import path:** `"github.com/CaliLuke/loom-mcp/v2/dsl"` (typically dot-imported alongside the core Loom DSL).
 - **Entry point:** Declare agents inside a regular `Service` definition. The DSL augments the design
   tree and is processed during `loom gen`.
 - **Outcome:** `loom gen` produces agent packages (`gen/<service>/agents/<agent>`), tool
@@ -31,7 +31,7 @@ package design
 
 import (
  . "github.com/CaliLuke/loom/dsl"
- . "github.com/CaliLuke/loom-mcp/dsl"
+ . "github.com/CaliLuke/loom-mcp/v2/dsl"
 )
 
 var DocsToolset = Toolset("docs.search", func() {
@@ -379,7 +379,7 @@ implements the corresponding transcript-local policy.
 | Function                                      | Context                                      | Purpose                                                                                                                           |
 | --------------------------------------------- | -------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------- |
 | `MCP(name, version, opts...)`                 | Inside `Service`                             | Enables MCP protocol for the service                                                                                              |
-| `ProtocolVersion(version)`                    | Option for `MCP`                             | Sets MCP protocol version (e.g., "2025-06-18")                                                                                    |
+| `ProtocolVersion(version)`                    | Option for `MCP`                             | Sets an implemented native protocol version: `2024-11-05`, `2025-03-26`, `2025-06-18`, or `2025-11-25`                            |
 | `WebsiteURL(url)`                             | Option for `MCP`                             | Sets implementation website metadata for `initialize.serverInfo`                                                                  |
 | `ServerIcons(icons...)`                       | Option for `MCP`                             | Sets implementation icons for `initialize.serverInfo`                                                                             |
 | `SkillDirectory(root)`                        | Option for `MCP`, or inside `Service`        | Exposes child skill directories as `skill://` resources through `resources/list` and `resources/read`                              |
@@ -414,9 +414,15 @@ prompt arguments with enum-backed payload fields.
 SDK-backed generated MCP servers also expose the active MCP client elicitation
 channel to tool, resource, and prompt implementations through
 `runtime/mcp.Elicit(ctx, req)`. Use it from service code when a workflow needs
-form-mode user input during an MCP call; the generated server converts the
-runtime request into the SDK `elicitation/create` request and returns the
-client's action/content response.
+form-mode user input during an MCP call. The generated handler returns an
+official MCP `InputRequiredResult` containing `elicitation/create`, then
+re-enters the implementation with the client's `inputResponses`. Code before
+the runtime call can therefore execute again and must be retry-safe. Sequential
+elicitations use one round trip each and require a `2026-07-28` client; carried
+`requestState` is AES-GCM protected, bound to the original logical request, and
+portable across processes that share the generated SDK server's stable 32-byte
+`RequestStateKey`. Its elicitation responses remain client assertions and are
+not authorization evidence.
 
 #### OAuth 2.0 protected-resource configuration
 
@@ -492,7 +498,7 @@ derivation entirely and is the spec's recommended posture.
 ```go
 import (
     mcpassistant "example.com/assistant/gen/mcp_assistant"
-    mcpruntime "github.com/CaliLuke/loom-mcp/runtime/mcp"
+    mcpruntime "github.com/CaliLuke/loom-mcp/v2/runtime/mcp"
     mcpauth "github.com/modelcontextprotocol/go-sdk/auth"
 )
 
@@ -1576,6 +1582,14 @@ Service("calculator", func() {
     })
 })
 ```
+
+`ProtocolVersion` is the default advertised by Loom's generated native
+JSON-RPC transport, which is emitted for every MCP design. Design validation
+rejects draft, future, or unknown versions rather than advertising semantics
+the native transport does not implement. The generated SDK server may
+independently negotiate MCP `2026-07-28` when configured with stateless
+`SDKServerOptions.StreamableHTTP`; that modern sessionless mode is an SDK
+runtime option, not a native DSL protocol version.
 
 `SkillDirectory(root)` scans the root at runtime. Each child directory with a
 `SKILL.md` file becomes a skill namespace. Structured frontmatter can override

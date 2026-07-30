@@ -11,7 +11,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	registry "github.com/CaliLuke/loom-mcp/runtime/registry"
+	registry "github.com/CaliLuke/loom-mcp/v2/runtime/registry"
 	"io"
 	"net/http"
 	"net/url"

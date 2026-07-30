@@ -3,8 +3,8 @@ package codegen
 import (
 	"testing"
 
-	agentsexpr "github.com/CaliLuke/loom-mcp/expr/agent"
-	"github.com/CaliLuke/loom-mcp/runtime/agent/tools"
+	agentsexpr "github.com/CaliLuke/loom-mcp/v2/expr/agent"
+	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/tools"
 	"github.com/leanovate/gopter"
 	"github.com/leanovate/gopter/gen"
 	"github.com/leanovate/gopter/prop"

@@ -11,7 +11,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/CaliLuke/loom-mcp/runtime/agent/memory"
+	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/memory"
 )
 
 const (

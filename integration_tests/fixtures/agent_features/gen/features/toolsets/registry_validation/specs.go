@@ -17,8 +17,8 @@ import (
 	"sync"
 	"unicode/utf8"
 
-	"github.com/CaliLuke/loom-mcp/runtime/agent/policy"
-	"github.com/CaliLuke/loom-mcp/runtime/agent/tools"
+	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/policy"
+	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/tools"
 )
 
 // RegistryClient defines the interface for fetching toolset data from a registry.

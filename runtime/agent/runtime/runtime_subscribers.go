@@ -5,9 +5,9 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/CaliLuke/loom-mcp/runtime/agent/hooks"
-	"github.com/CaliLuke/loom-mcp/runtime/agent/session"
-	"github.com/CaliLuke/loom-mcp/runtime/agent/stream"
+	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/hooks"
+	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/session"
+	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/stream"
 )
 
 func (r *Runtime) installRuntimeSubscribers(bus hooks.Bus) {

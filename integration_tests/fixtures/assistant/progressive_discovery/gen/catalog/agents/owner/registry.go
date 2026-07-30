@@ -16,9 +16,9 @@ import (
 
 	specs "example.com/assistant/progressive_discovery/gen/catalog/agents/owner/specs"
 	projected2 "example.com/assistant/progressive_discovery/gen/catalog/toolsets/projected"
-	"github.com/CaliLuke/loom-mcp/runtime/agent/engine"
-	"github.com/CaliLuke/loom-mcp/runtime/agent/planner"
-	agentsruntime "github.com/CaliLuke/loom-mcp/runtime/agent/runtime"
+	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/engine"
+	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/planner"
+	agentsruntime "github.com/CaliLuke/loom-mcp/v2/runtime/agent/runtime"
 )
 
 // RegisterOwnerAgent registers the generated agent components with the runtime.

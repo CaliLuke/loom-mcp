@@ -10,14 +10,19 @@ It combines:
 
 ## Current status
 
-This repository has been rehomed and detached from the original fork network to prepare for a fresh release line.
+The repository is named `loom-mcp`. Its current Go module path is
+`github.com/CaliLuke/loom-mcp/v2`; the `/v2` suffix is required by Go semantic
+import versioning.
 
-Two facts are important right now:
+### Upgrading from v1
 
-- The repository name is `loom-mcp`.
-- The Go module path is `github.com/CaliLuke/loom-mcp`.
-
-Repo identity and module identity are now aligned.
+Update imports and module requirements from `github.com/CaliLuke/loom-mcp` to
+`github.com/CaliLuke/loom-mcp/v2`. Version 2 intentionally removes the
+deprecated MCP sampling and roots runtime APIs. It also changes
+`sdkclient.WithClientFeatures` to accept `ClientFeaturesOptions` for official
+multi-round-trip elicitation. Generated SDK servers that use elicitation must
+configure a stable 32-byte `SDKServerOptions.RequestStateKey`; replicas serving
+the same endpoint must share that key. There is no v1 compatibility shim.
 
 ## What lives here
 
@@ -35,7 +40,7 @@ Repo identity and module identity are now aligned.
 This repo currently targets:
 
 - `github.com/CaliLuke/loom v1.7.1`
-- `github.com/modelcontextprotocol/go-sdk v1.6.1`
+- `github.com/modelcontextprotocol/go-sdk v1.7.0`
 - Go `1.26.5`
 
 The workspace-level `go.work` file centralizes local multi-module overrides for dependencies that must stay in sync across the root module and integration fixtures.

@@ -4,8 +4,8 @@ import (
 	"context"
 	"time"
 
-	"github.com/CaliLuke/loom-mcp/runtime/agent/engine"
-	"github.com/CaliLuke/loom-mcp/runtime/agent/planner"
+	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/engine"
+	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/planner"
 )
 
 func (e *toolBatchExec) synthesizeExpiredBatchResults(ctx context.Context, calls []planner.ToolRequest) ([]*ToolExecutionResult, error) {

@@ -4,7 +4,7 @@ import (
 	"context"
 	"time"
 
-	"github.com/CaliLuke/loom-mcp/runtime/agent/telemetry"
+	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/telemetry"
 	"go.opentelemetry.io/otel/attribute"
 )
 

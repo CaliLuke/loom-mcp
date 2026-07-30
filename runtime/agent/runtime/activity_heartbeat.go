@@ -8,7 +8,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/CaliLuke/loom-mcp/runtime/agent/engine"
+	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/engine"
 )
 
 const defaultActivityHeartbeatInterval = 5 * time.Second

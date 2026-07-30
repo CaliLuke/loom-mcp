@@ -1,6 +1,6 @@
 package planner
 
-import "github.com/CaliLuke/loom-mcp/runtime/agent/tools"
+import "github.com/CaliLuke/loom-mcp/v2/runtime/agent/tools"
 
 // RetryHintProvider can be implemented by domain-specific errors that want
 // to surface structured retry guidance to the runtime. Service executors

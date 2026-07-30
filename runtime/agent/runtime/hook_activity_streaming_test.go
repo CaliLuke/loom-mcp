@@ -9,12 +9,12 @@ import (
 	"testing"
 	"time"
 
-	"github.com/CaliLuke/loom-mcp/runtime/agent/hooks"
-	"github.com/CaliLuke/loom-mcp/runtime/agent/runlog"
-	"github.com/CaliLuke/loom-mcp/runtime/agent/session"
-	sessioninmem "github.com/CaliLuke/loom-mcp/runtime/agent/session/inmem"
-	"github.com/CaliLuke/loom-mcp/runtime/agent/stream"
-	"github.com/CaliLuke/loom-mcp/runtime/agent/telemetry"
+	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/hooks"
+	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/runlog"
+	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/session"
+	sessioninmem "github.com/CaliLuke/loom-mcp/v2/runtime/agent/session/inmem"
+	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/stream"
+	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/telemetry"
 	"github.com/stretchr/testify/require"
 )
 

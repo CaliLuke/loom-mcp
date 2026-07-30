@@ -24,7 +24,7 @@ func oauthDiscoveryFile(data *AdapterData) *codegen.File {
 		{Path: "encoding/json"},
 		{Path: "net/http"},
 		{Path: "net/url"},
-		{Path: "github.com/CaliLuke/loom-mcp/runtime/mcp", Name: "mcpruntime"},
+		{Path: "github.com/CaliLuke/loom-mcp/v2/runtime/mcp", Name: "mcpruntime"},
 	}
 	if data.OAuth.ResourceIdentifier != "" {
 		imports = append(imports,

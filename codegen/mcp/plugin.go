@@ -1,8 +1,8 @@
 package codegen
 
 import (
-	"github.com/CaliLuke/loom-mcp/codegen/shared"
-	mcpexpr "github.com/CaliLuke/loom-mcp/expr/mcp"
+	"github.com/CaliLuke/loom-mcp/v2/codegen/shared"
+	mcpexpr "github.com/CaliLuke/loom-mcp/v2/expr/mcp"
 	"github.com/CaliLuke/loom/eval"
 	"github.com/CaliLuke/loom/expr"
 )

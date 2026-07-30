@@ -17,7 +17,7 @@ import (
 	"net/url"
 	"time"
 
-	registry "github.com/CaliLuke/loom-mcp/runtime/registry"
+	registry "github.com/CaliLuke/loom-mcp/v2/runtime/registry"
 )
 
 // ToolsetInfo contains metadata about a toolset available in the registry.

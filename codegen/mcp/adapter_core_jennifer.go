@@ -53,6 +53,8 @@ func emitAdapterStruct(stmt *jen.Statement, data *AdapterData) {
 		}
 		g.Comment("Broadcaster for server-initiated events (notifications/resources)")
 		g.Id("broadcaster").Id("mcpruntime").Dot("Broadcaster")
+		g.Comment("requestStateKey encrypts and authenticates portable MCP multi-round-trip state.")
+		g.Id("requestStateKey").Index().Byte()
 		g.Comment("resourceNameToURI holds DSL-derived mapping for policy and lookups")
 		g.Id("resourceNameToURI").Map(jen.String()).String()
 	})
@@ -734,6 +736,13 @@ func emitSendToolError(stmt *jen.Statement) {
 		).Error().
 		Block(
 			jen.If(jen.Id("err").Op("==").Nil()).Block(jen.Return(jen.Nil())),
+			jen.If(
+				jen.Id("mcpruntime").Dot("IsInputRequired").Call(jen.Id("err")).
+					Op("||").
+					Id("mcpruntime").Dot("IsInvalidClientInput").Call(jen.Id("err")),
+			).Block(
+				jen.Return(jen.Id("err")),
+			),
 			jen.Id("mapped").Op(":=").Id("a").Dot("mapError").Call(jen.Id("err")),
 			jen.If(jen.Id("mapped").Op("==").Nil()).Block(
 				jen.Id("mapped").Op("=").Id("err"),
@@ -793,6 +802,9 @@ func emitSafeMCPError(stmt *jen.Statement) {
 	stmt.Func().Params(jen.Id("a").Op("*").Id("MCPAdapter")).
 		Id("safeMCPError").Params(jen.Id("err").Error(), jen.Id("defaultCode").String(), jen.Id("fallbackMessage").String()).Error().
 		Block(
+			jen.If(jen.Id("mcpruntime").Dot("IsInputRequired").Call(jen.Id("err"))).Block(
+				jen.Return(jen.Id("err")),
+			),
 			jen.If(jen.Id("err").Op("==").Nil()).Block(
 				jen.Return(jen.Id("loom").Dot("WithErrorRemedy").Call(
 					jen.Id("loom").Dot("PermanentError").Call(jen.Id("defaultCode"), jen.Lit("%s"), jen.Id("fallbackMessage")),

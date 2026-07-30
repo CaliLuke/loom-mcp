@@ -5,8 +5,8 @@ import (
 	"errors"
 	"time"
 
-	"github.com/CaliLuke/loom-mcp/features/session/mongo/clients/mongo"
-	"github.com/CaliLuke/loom-mcp/runtime/agent/session"
+	"github.com/CaliLuke/loom-mcp/v2/features/session/mongo/clients/mongo"
+	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/session"
 )
 
 // Store implements session.Store by delegating to the Mongo client.

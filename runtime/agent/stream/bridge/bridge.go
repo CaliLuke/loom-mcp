@@ -5,8 +5,8 @@
 package bridge
 
 import (
-	"github.com/CaliLuke/loom-mcp/runtime/agent/hooks"
-	"github.com/CaliLuke/loom-mcp/runtime/agent/stream"
+	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/hooks"
+	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/stream"
 )
 
 // NewSubscriber returns a hooks.Subscriber that forwards selected hook events

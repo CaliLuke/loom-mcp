@@ -4,8 +4,8 @@ import (
 	"errors"
 	"testing"
 
-	"github.com/CaliLuke/loom-mcp/runtime/agent/model"
-	"github.com/CaliLuke/loom-mcp/runtime/agent/run"
+	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/model"
+	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/run"
 	"github.com/stretchr/testify/require"
 	"go.temporal.io/sdk/temporal"
 )

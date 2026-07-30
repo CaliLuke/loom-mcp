@@ -16,10 +16,10 @@ import (
 
 	"github.com/CaliLuke/loom/clue/health"
 
-	clientinfra "github.com/CaliLuke/loom-mcp/features/mongo/clientinfra"
-	"github.com/CaliLuke/loom-mcp/runtime/agent"
-	"github.com/CaliLuke/loom-mcp/runtime/agent/hooks"
-	"github.com/CaliLuke/loom-mcp/runtime/agent/runlog"
+	clientinfra "github.com/CaliLuke/loom-mcp/v2/features/mongo/clientinfra"
+	"github.com/CaliLuke/loom-mcp/v2/runtime/agent"
+	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/hooks"
+	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/runlog"
 )
 
 type (

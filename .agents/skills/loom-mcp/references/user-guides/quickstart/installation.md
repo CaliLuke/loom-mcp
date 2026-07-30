@@ -20,7 +20,7 @@ loom version
 ```bash
 mkdir quickstart && cd quickstart
 go mod init example.com/quickstart
-go get github.com/CaliLuke/loom@v1.7.1 github.com/CaliLuke/loom-mcp@latest
+go get github.com/CaliLuke/loom@v1.7.1 github.com/CaliLuke/loom-mcp/v2@latest
 ```
 
 Temporal is optional for local development. The generated example starts with

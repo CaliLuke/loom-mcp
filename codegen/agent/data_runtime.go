@@ -12,9 +12,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/CaliLuke/loom-mcp/codegen/naming"
-	agentsExpr "github.com/CaliLuke/loom-mcp/expr/agent"
-	"github.com/CaliLuke/loom-mcp/runtime/agent/engine"
+	"github.com/CaliLuke/loom-mcp/v2/codegen/naming"
+	agentsExpr "github.com/CaliLuke/loom-mcp/v2/expr/agent"
+	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/engine"
 )
 
 // newRunPolicyData copies the evaluated DSL run policy into immutable template

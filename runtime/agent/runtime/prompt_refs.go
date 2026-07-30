@@ -4,8 +4,8 @@ import (
 	"context"
 	"errors"
 
-	"github.com/CaliLuke/loom-mcp/runtime/agent/prompt"
-	"github.com/CaliLuke/loom-mcp/runtime/agent/session"
+	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/prompt"
+	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/session"
 )
 
 // ResolvePromptRefs returns prompt refs for the run and all linked child runs.

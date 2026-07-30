@@ -1,10 +1,10 @@
 ---
 name: loom-mcp-release
-description: Cut and publish a loom-mcp release from verified code. Use this skill when the task is to prepare a patch/minor release, tag the repo, push the release, verify remote publication, or walk from finished code to a fully published loom-mcp version.
+description: Cut and publish a loom-mcp release from verified code. Use this skill when the task is to prepare a patch, minor, or major release, tag the repo, push the release, verify remote publication, or walk from finished code to a fully published loom-mcp version.
 ---
 # loom-mcp-release
 
-Use this skill when releasing `github.com/CaliLuke/loom-mcp`. Keep the workflow strict. Release work should be deterministic, fail fast, and leave a traceable tag on `main`.
+Use this skill when releasing `github.com/CaliLuke/loom-mcp/v2`. Keep the workflow strict. Release work should be deterministic, fail fast, and leave a traceable tag on `main`.
 
 ## Non-Negotiables
 
@@ -56,7 +56,7 @@ Use this skill when releasing `github.com/CaliLuke/loom-mcp`. Keep the workflow 
    - `git ls-remote origin main`
    - `gh release view v1.0.3 --json tagName,isDraft,isPrerelease,url,publishedAt`
 11. Verify module visibility if the user asks for full downstream confirmation:
-   - `go list -m -versions github.com/CaliLuke/loom-mcp`
+   - `go list -m -versions github.com/CaliLuke/loom-mcp/v2`
    - if the new version is not visible yet, note that Go proxy propagation can lag after the Git push
 
 ## Backfill Workflow For Missing GitHub Releases
@@ -112,6 +112,8 @@ gh release view vX.Y.Z --json tagName,isDraft,isPrerelease,url,publishedAt
 - If dependency pins, verification commands, or local-vs-remote workflow guidance changed, update release-facing root docs such as `README.md` in the same release.
 - If the shipped product or release workflow changed, update the relevant repo-local skills in `.agents/skills/` in the same release.
 - If the user asked for a dot release, prefer the smallest semver bump that matches the shipped behavior.
+- A breaking v2+ release must use the matching semantic import path in `go.mod`,
+  generated imports, fixtures, quickstarts, docs, and downstream examples.
 - If `gh release view vX.Y.Z` fails while `git ls-remote --tags origin vX.Y.Z` succeeds, backfill the missing GitHub Release before closing the task.
 
 ## Publish Contract

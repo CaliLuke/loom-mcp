@@ -3,9 +3,9 @@ package codegen_test
 import (
 	"testing"
 
-	codegen "github.com/CaliLuke/loom-mcp/codegen/agent"
-	. "github.com/CaliLuke/loom-mcp/dsl"
-	agentsExpr "github.com/CaliLuke/loom-mcp/expr/agent"
+	codegen "github.com/CaliLuke/loom-mcp/v2/codegen/agent"
+	. "github.com/CaliLuke/loom-mcp/v2/dsl"
+	agentsExpr "github.com/CaliLuke/loom-mcp/v2/expr/agent"
 	goadsl "github.com/CaliLuke/loom/dsl"
 	"github.com/CaliLuke/loom/eval"
 	goaexpr "github.com/CaliLuke/loom/expr"
@@ -58,7 +58,7 @@ func TestMethodTypeRefs_LocalTypes(t *testing.T) {
 	require.True(t, eval.Execute(design, nil), eval.Context.Error())
 	require.NoError(t, eval.RunDSL())
 
-	data, err := codegen.BuildDataForTest("github.com/CaliLuke/loom-mcp", []eval.Root{goaexpr.Root, agentsExpr.Root})
+	data, err := codegen.BuildDataForTest("github.com/CaliLuke/loom-mcp/v2", []eval.Root{goaexpr.Root, agentsExpr.Root})
 	require.NoError(t, err)
 	require.NotNil(t, data)
 	var svc *codegen.ServiceAgentsData
@@ -113,7 +113,7 @@ func TestMethodTypeRefs_CustomPackage(t *testing.T) {
 	require.True(t, eval.Execute(design, nil), eval.Context.Error())
 	require.NoError(t, eval.RunDSL())
 
-	data, err := codegen.BuildDataForTest("github.com/CaliLuke/loom-mcp", []eval.Root{goaexpr.Root, agentsExpr.Root})
+	data, err := codegen.BuildDataForTest("github.com/CaliLuke/loom-mcp/v2", []eval.Root{goaexpr.Root, agentsExpr.Root})
 	require.NoError(t, err)
 	require.NotNil(t, data)
 	var svc *codegen.ServiceAgentsData

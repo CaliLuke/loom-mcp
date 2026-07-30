@@ -3,7 +3,7 @@ package gateway
 import (
 	"context"
 
-	"github.com/CaliLuke/loom-mcp/runtime/agent/model"
+	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/model"
 )
 
 // RemoteClient implements model.Client using caller-supplied RPC functions

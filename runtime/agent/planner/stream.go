@@ -8,7 +8,7 @@ import (
 	"errors"
 	"io"
 
-	"github.com/CaliLuke/loom-mcp/runtime/agent/model"
+	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/model"
 )
 
 // StreamSummary aggregates the outcome of a streaming LLM invocation. Planners

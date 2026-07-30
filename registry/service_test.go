@@ -19,10 +19,10 @@ import (
 	"github.com/leanovate/gopter/prop"
 	"github.com/stretchr/testify/require"
 
-	clientspulse "github.com/CaliLuke/loom-mcp/features/stream/pulse/clients/pulse"
-	mockpulse "github.com/CaliLuke/loom-mcp/features/stream/pulse/clients/pulse/mocks"
-	genregistry "github.com/CaliLuke/loom-mcp/registry/gen/registry"
-	"github.com/CaliLuke/loom-mcp/runtime/toolregistry"
+	clientspulse "github.com/CaliLuke/loom-mcp/v2/features/stream/pulse/clients/pulse"
+	mockpulse "github.com/CaliLuke/loom-mcp/v2/features/stream/pulse/clients/pulse/mocks"
+	genregistry "github.com/CaliLuke/loom-mcp/v2/registry/gen/registry"
+	"github.com/CaliLuke/loom-mcp/v2/runtime/toolregistry"
 )
 
 // TestRegistrationIdempotence verifies Property 2: Registration idempotence.

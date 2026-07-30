@@ -10,8 +10,8 @@ package planner
 import (
 	"context"
 
-	model "github.com/CaliLuke/loom-mcp/runtime/agent/model"
-	"github.com/CaliLuke/loom-mcp/runtime/agent/planner"
+	model "github.com/CaliLuke/loom-mcp/v2/runtime/agent/model"
+	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/planner"
 )
 
 // New returns a minimal planner implementation for Chat used by example bootstrap.

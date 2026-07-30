@@ -5,7 +5,7 @@ import (
 
 	"github.com/CaliLuke/loom/eval"
 
-	agentsexpr "github.com/CaliLuke/loom-mcp/expr/agent"
+	agentsexpr "github.com/CaliLuke/loom-mcp/v2/expr/agent"
 )
 
 // Toolset defines a provider-owned group of related tools. Declare toolsets at

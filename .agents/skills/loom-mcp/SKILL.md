@@ -151,6 +151,12 @@ Use this skill for `loom-mcp` work in this repo. Keep `AGENTS.md` short and keep
 - MCP is a two-way bridge:
   - consume external MCP servers through `runtime/mcp` callers,
   - expose designed services as MCP servers through generated adapters and registrations.
+- MCP `ProtocolVersion(...)` configures the always-generated Loom-native
+  JSON-RPC transport and must be one of `2024-11-05`, `2025-03-26`,
+  `2025-06-18`, or `2025-11-25`. Reject draft, future, and unknown versions at
+  design validation. SDK servers may negotiate `2026-07-28` only through the
+  upstream stateless streamable-HTTP runtime option; do not advertise those
+  semantics from the native DSL.
 - MCP metadata is design-owned. Implementation `WebsiteURL`/`ServerIcons` and
   list-surface `ToolIcons`/`ResourceIcons`/`PromptIcons`/`DynamicPromptIcons`
   should be declared in the DSL and allowed to flow through codegen into
@@ -207,10 +213,31 @@ Use this skill for `loom-mcp` work in this repo. Keep `AGENTS.md` short and keep
   public MCP behavior without initialization, sessions, JSON-RPC, or HTTP.
 - Generated SDK-backed MCP servers expose prompt argument completion for
   enum-backed dynamic prompt arguments and place runtime client-feature
-  adapters in request contexts so service code can call `runtime/mcp.Elicit`,
-  text `runtime/mcp.Sample`, `runtime/mcp.ListRoots`, and request-scoped
-  `runtime/mcp.ReportProgress` during MCP calls. Keep official-SDK conversion in
-  `runtime/mcp/sdkclient`, not duplicated in generated files.
+  adapters in request contexts so service code can call `runtime/mcp.Elicit`
+  and request-scoped `runtime/mcp.ReportProgress` during MCP calls. Elicitation
+  uses the official multi-round-trip `InputRequests`/`InputResponses` contract:
+  generated handlers return input-required results and re-enter service code on
+  retry, with bounded, versioned opaque request state carrying issued input
+  contracts, the exact pending round, and earlier client-supplied responses
+  across multi-step flows. Generated servers encrypt and authenticate every
+  state value with AES-GCM, bind it to the original logical request, and require
+  a stable 32-byte
+  `SDKServerOptions.RequestStateKey` shared by endpoint replicas. Treat the
+  protected responses as client assertions and never as authorization evidence
+  or server-owned state.
+  Each `runtime/mcp.Elicit` call requires one round trip; multi-step flows
+  require a `2026-07-28` client because the official legacy middleware re-enters
+  only once. Official `2026-07-28` streamable HTTP is stateless and sessionless;
+  each retry is a separate POST. Reject wrong input-response types, invalid
+  elicitation actions, responses outside the exact pending input-request set,
+  changed elicitation contracts on re-entry, and bounded-state violations.
+  Preserve invalid-client-input markers through tool dispatch so these become
+  protocol errors, not tool-level `isError` results. Code before elicitation
+  must be retry-safe.
+  MCP `2026-07-28` sampling and roots are deprecated and are not exposed through
+  Loom runtime client-feature adapters. Keep official-SDK conversion and
+  request-state handling in `runtime/mcp/sdkclient`, not duplicated in generated
+  files.
 - Generated SDK servers expose Loom transport observability directly through
   `SDKServerOptions.TransportObserver`; keep external middleware wrapping as an
   application-wide alternative, not the only enablement path.

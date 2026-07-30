@@ -1,7 +1,7 @@
 package testscenarios
 
 import (
-	. "github.com/CaliLuke/loom-mcp/dsl"
+	. "github.com/CaliLuke/loom-mcp/v2/dsl"
 	. "github.com/CaliLuke/loom/dsl"
 )
 
@@ -12,7 +12,7 @@ func ToolsetNamedTools() func() {
 		Service("alpha", func() {
 			Agent("helper", "Helper agent", func() {
 				// Toolset named "tools" - this should not conflict with
-				// github.com/CaliLuke/loom-mcp/runtime/agent/tools import
+				// github.com/CaliLuke/loom-mcp/v2/runtime/agent/tools import
 				Use("tools", func() {
 					Tool("do_something", "Does something", func() {
 						Args(func() {

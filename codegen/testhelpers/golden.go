@@ -6,9 +6,9 @@ import (
 	"path/filepath"
 	"testing"
 
-	codegen "github.com/CaliLuke/loom-mcp/codegen/agent"
-	agentsExpr "github.com/CaliLuke/loom-mcp/expr/agent"
-	"github.com/CaliLuke/loom-mcp/testutil"
+	codegen "github.com/CaliLuke/loom-mcp/v2/codegen/agent"
+	agentsExpr "github.com/CaliLuke/loom-mcp/v2/expr/agent"
+	"github.com/CaliLuke/loom-mcp/v2/testutil"
 	gcodegen "github.com/CaliLuke/loom/codegen"
 	"github.com/CaliLuke/loom/eval"
 	goaexpr "github.com/CaliLuke/loom/expr"
@@ -34,7 +34,7 @@ func RunDesign(t *testing.T, design func()) (string, []eval.Root) {
 	ok := eval.Execute(design, nil)
 	require.True(t, ok, eval.Context.Error())
 	require.NoError(t, eval.RunDSL())
-	return "github.com/CaliLuke/loom-mcp", []eval.Root{goaexpr.Root, agentsExpr.Root}
+	return "github.com/CaliLuke/loom-mcp/v2", []eval.Root{goaexpr.Root, agentsExpr.Root}
 }
 
 // BuildAndGenerate executes the production DSL, prepare, and generation phases.

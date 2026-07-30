@@ -5,9 +5,9 @@ import (
 	"fmt"
 	"sort"
 
-	"github.com/CaliLuke/loom-mcp/runtime/agent/hooks"
-	"github.com/CaliLuke/loom-mcp/runtime/agent/run"
-	"github.com/CaliLuke/loom-mcp/runtime/agent/runlog"
+	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/hooks"
+	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/run"
+	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/runlog"
 )
 
 // newRunSnapshot derives a compact run state snapshot by replaying canonical

@@ -14,10 +14,10 @@ import (
 	"encoding/json"
 	"fmt"
 
-	"github.com/CaliLuke/loom-mcp/boundedresult"
-	"github.com/CaliLuke/loom-mcp/runtime/agent"
-	"github.com/CaliLuke/loom-mcp/runtime/agent/rawjson"
-	"github.com/CaliLuke/loom-mcp/runtime/agent/tools"
+	"github.com/CaliLuke/loom-mcp/v2/boundedresult"
+	"github.com/CaliLuke/loom-mcp/v2/runtime/agent"
+	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/rawjson"
+	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/tools"
 )
 
 // EncodeCanonicalToolResult encodes a typed tool result into the canonical JSON

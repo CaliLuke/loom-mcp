@@ -6,8 +6,8 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/CaliLuke/loom-mcp/codegen/shared"
-	"github.com/CaliLuke/loom-mcp/internal/upstreampaths"
+	"github.com/CaliLuke/loom-mcp/v2/codegen/shared"
+	"github.com/CaliLuke/loom-mcp/v2/internal/upstreampaths"
 	"github.com/CaliLuke/loom/codegen"
 )
 
@@ -213,8 +213,8 @@ func toolsetSpecsFiles(data *GeneratorData, specsCache *toolSpecsDataCache) ([]*
 			out = append(out, &codegen.File{Path: filepath.Join(ts.SpecsDir, "codecs.go"), Sections: codecsSections})
 			// specs.go
 			specImports := []*codegen.ImportSpec{
-				{Path: "github.com/CaliLuke/loom-mcp/runtime/agent/policy"},
-				{Path: "github.com/CaliLuke/loom-mcp/runtime/agent/tools"},
+				{Path: "github.com/CaliLuke/loom-mcp/v2/runtime/agent/policy"},
+				{Path: "github.com/CaliLuke/loom-mcp/v2/runtime/agent/tools"},
 			}
 			specSections := []codegen.Section{
 				codegen.Header(ts.Name+" tool specs", ts.SpecsPackageName, specImports),
@@ -276,18 +276,18 @@ func toolsetProviderFile(genpkg string, ts *ToolsetData) *codegen.File {
 		codegen.SimpleImport("encoding/json"),
 		codegen.SimpleImport("errors"),
 		codegen.SimpleImport("fmt"),
-		&codegen.ImportSpec{Path: "github.com/CaliLuke/loom-mcp/runtime/agent/planner"},
-		&codegen.ImportSpec{Path: "github.com/CaliLuke/loom-mcp/runtime/agent/runtime"},
-		&codegen.ImportSpec{Path: "github.com/CaliLuke/loom-mcp/runtime/agent/tools"},
-		&codegen.ImportSpec{Path: "github.com/CaliLuke/loom-mcp/runtime/toolregistry"},
+		&codegen.ImportSpec{Path: "github.com/CaliLuke/loom-mcp/v2/runtime/agent/planner"},
+		&codegen.ImportSpec{Path: "github.com/CaliLuke/loom-mcp/v2/runtime/agent/runtime"},
+		&codegen.ImportSpec{Path: "github.com/CaliLuke/loom-mcp/v2/runtime/agent/tools"},
+		&codegen.ImportSpec{Path: "github.com/CaliLuke/loom-mcp/v2/runtime/toolregistry"},
 		&codegen.ImportSpec{Name: "loom", Path: upstreampaths.LoomPkgImportPath},
 		&codegen.ImportSpec{Name: ts.SourceService.PkgName, Path: serviceImportPath},
 	)
 	if hasBoundsProjection {
-		imports = append(imports, &codegen.ImportSpec{Path: "github.com/CaliLuke/loom-mcp/runtime/agent"})
+		imports = append(imports, &codegen.ImportSpec{Path: "github.com/CaliLuke/loom-mcp/v2/runtime/agent"})
 	}
 	if hasServerDataProjection {
-		imports = append(imports, &codegen.ImportSpec{Path: "github.com/CaliLuke/loom-mcp/runtime/agent/rawjson"})
+		imports = append(imports, &codegen.ImportSpec{Path: "github.com/CaliLuke/loom-mcp/v2/runtime/agent/rawjson"})
 	}
 	sections := []codegen.Section{
 		codegen.Header(ts.Name+" tool provider", ts.SpecsPackageName, imports),
@@ -317,8 +317,8 @@ func toolsetRegistrySpecsFiles(ts *ToolsetData) []*codegen.File {
 		{Path: "strings"},
 		{Path: "sync"},
 		{Path: "unicode/utf8"},
-		{Path: "github.com/CaliLuke/loom-mcp/runtime/agent/policy"},
-		{Path: "github.com/CaliLuke/loom-mcp/runtime/agent/tools"},
+		{Path: "github.com/CaliLuke/loom-mcp/v2/runtime/agent/policy"},
+		{Path: "github.com/CaliLuke/loom-mcp/v2/runtime/agent/tools"},
 	}
 	sections := []codegen.Section{
 		codegen.Header(ts.Name+" registry toolset specs", ts.SpecsPackageName, specImports),

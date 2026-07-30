@@ -9,8 +9,8 @@ import (
 	"testing"
 	"time"
 
-	clientspulse "github.com/CaliLuke/loom-mcp/features/stream/pulse/clients/pulse"
-	"github.com/CaliLuke/loom-mcp/runtime/toolregistry"
+	clientspulse "github.com/CaliLuke/loom-mcp/v2/features/stream/pulse/clients/pulse"
+	"github.com/CaliLuke/loom-mcp/v2/runtime/toolregistry"
 	"github.com/CaliLuke/loom/pulse/pool"
 	"github.com/CaliLuke/loom/pulse/rmap"
 	"github.com/redis/go-redis/v9"

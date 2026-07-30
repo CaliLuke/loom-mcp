@@ -9,7 +9,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	agentsExpr "github.com/CaliLuke/loom-mcp/expr/agent"
+	agentsExpr "github.com/CaliLuke/loom-mcp/v2/expr/agent"
 )
 
 func TestTemplateFuncMapClassifiesProviderAndTypeShapes(t *testing.T) {

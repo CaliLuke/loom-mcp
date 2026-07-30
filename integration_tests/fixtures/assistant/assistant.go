@@ -3,15 +3,18 @@ package assistantapi
 import (
 	"context"
 	"encoding/json"
+	"sync/atomic"
 
 	assistant "example.com/assistant/gen/assistant"
-	mcpruntime "github.com/CaliLuke/loom-mcp/runtime/mcp"
+	mcpruntime "github.com/CaliLuke/loom-mcp/v2/runtime/mcp"
 	"github.com/CaliLuke/loom/clue/log"
 )
 
 // assistant service example implementation.
 // The example methods log the requests and return zero values.
-type assistantsrvc struct{}
+type assistantsrvc struct {
+	summarizeCalls atomic.Int64
+}
 
 // NewAssistant returns the assistant service implementation.
 func NewAssistant() assistant.Service {
@@ -32,6 +35,33 @@ func (s *assistantsrvc) SystemInfo(ctx context.Context) (res *assistant.SystemIn
 	res = &assistant.SystemInfoResult{Name: &name, Version: &version}
 	log.Printf(ctx, "assistant.system_info")
 	return
+}
+
+// ElicitationContext returns context supplied by the connected MCP client.
+func (s *assistantsrvc) ElicitationContext(ctx context.Context) (*assistant.ElicitationContextResult, error) {
+	result, err := mcpruntime.Elicit(ctx, mcpruntime.ElicitRequest{
+		Mode:    "form",
+		Message: "Provide resource context.",
+		RequestedSchema: map[string]any{
+			"type": "object",
+			"properties": map[string]any{
+				"context": map[string]any{
+					"type": "string",
+				},
+			},
+			"required": []any{"context"},
+		},
+	})
+	if err != nil {
+		return nil, err
+	}
+	value := "Elicitation declined."
+	if result != nil && result.Action == "accept" {
+		if supplied, ok := result.Content["context"].(string); ok {
+			value = supplied
+		}
+	}
+	return &assistant.ElicitationContextResult{Context: &value}, nil
 }
 
 // Return conversation history with optional query params
@@ -100,7 +130,8 @@ func (s *assistantsrvc) ExtractKeywords(ctx context.Context, p *assistant.Extrac
 
 // Summarize text
 func (s *assistantsrvc) SummarizeText(ctx context.Context, p *assistant.SummarizeTextPayload) (res *assistant.SummarizeTextResult, err error) {
-	if p != nil && p.Text == "needs-elicitation" {
+	s.summarizeCalls.Add(1)
+	if p != nil && (p.Text == "needs-elicitation" || p.Text == "needs-multi-elicitation") {
 		result, elicitErr := mcpruntime.Elicit(ctx, mcpruntime.ElicitRequest{
 			Mode:    "form",
 			Message: "Provide a summary for the requested text.",
@@ -123,6 +154,29 @@ func (s *assistantsrvc) SummarizeText(ctx context.Context, p *assistant.Summariz
 				summary = value
 			}
 		}
+		if p.Text == "needs-multi-elicitation" {
+			audienceResult, audienceErr := mcpruntime.Elicit(ctx, mcpruntime.ElicitRequest{
+				Mode:    "form",
+				Message: "Who is the summary for?",
+				RequestedSchema: map[string]any{
+					"type": "object",
+					"properties": map[string]any{
+						"audience": map[string]any{
+							"type": "string",
+						},
+					},
+					"required": []any{"audience"},
+				},
+			})
+			if audienceErr != nil {
+				return nil, audienceErr
+			}
+			if audienceResult != nil && audienceResult.Action == "accept" {
+				if audience, ok := audienceResult.Content["audience"].(string); ok {
+					summary += " for " + audience + "."
+				}
+			}
+		}
 		res = &assistant.SummarizeTextResult{Summary: &summary}
 		log.Printf(ctx, "assistant.summarize_text.elicited")
 		return res, nil
@@ -131,41 +185,6 @@ func (s *assistantsrvc) SummarizeText(ctx context.Context, p *assistant.Summariz
 	res = &assistant.SummarizeTextResult{Summary: &summary}
 	log.Printf(ctx, "assistant.summarize_text")
 	return
-}
-
-// Sample text through the connected MCP client.
-func (s *assistantsrvc) SampleText(ctx context.Context, p *assistant.SampleTextPayload) (*assistant.SampleTextResult, error) {
-	systemPrompt := ""
-	if p.SystemPrompt != nil {
-		systemPrompt = *p.SystemPrompt
-	}
-	result, err := mcpruntime.Sample(ctx, mcpruntime.SampleRequest{
-		Messages:     []mcpruntime.SampleMessage{{Role: "user", Text: p.Prompt}},
-		SystemPrompt: systemPrompt,
-		MaxTokens:    p.MaxTokens,
-	})
-	if err != nil {
-		return nil, err
-	}
-	return &assistant.SampleTextResult{
-		Text:       result.Text,
-		Model:      result.Model,
-		StopReason: result.StopReason,
-	}, nil
-}
-
-// List filesystem roots exposed by the connected MCP client.
-func (s *assistantsrvc) ListClientRoots(ctx context.Context) (*assistant.ListClientRootsResult, error) {
-	roots, err := mcpruntime.ListRoots(ctx)
-	if err != nil {
-		return nil, err
-	}
-	result := &assistant.ListClientRootsResult{Roots: make([]*assistant.ClientRoot, 0, len(roots))}
-	for _, root := range roots {
-		name := root.Name
-		result.Roots = append(result.Roots, &assistant.ClientRoot{URI: root.URI, Name: &name})
-	}
-	return result, nil
 }
 
 // Report deterministic progress to the connected MCP client.

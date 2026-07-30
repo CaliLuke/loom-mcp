@@ -15,6 +15,10 @@ type ListDocumentsResponseBody ListDocumentsResponseBodyResponseBody
 // endpoint HTTP response body.
 type SystemInfoResponseBody SystemInfoResponseBodyResponseBody
 
+// ElicitationContextResponseBody is the type of the "assistant" service
+// "elicitation_context" endpoint HTTP response body.
+type ElicitationContextResponseBody ElicitationContextResponseBodyResponseBody
+
 // ConversationHistoryResponseBody is the type of the "assistant" service
 // "conversation_history" endpoint HTTP response body.
 type ConversationHistoryResponseBody ConversationHistoryResponseBodyResponseBody
@@ -58,14 +62,6 @@ type ExecuteCodeResponseBody ExecuteCodeResponseBodyResponseBody
 // ProcessBatchResponseBody is the type of the "assistant" service
 // "process_batch" endpoint HTTP response body.
 type ProcessBatchResponseBody ProcessBatchResponseBodyResponseBody
-
-// SampleTextResponseBody is the type of the "assistant" service "sample_text"
-// endpoint HTTP response body.
-type SampleTextResponseBody SampleTextResponseBodyResponseBody
-
-// ListClientRootsResponseBody is the type of the "assistant" service
-// "list_client_roots" endpoint HTTP response body.
-type ListClientRootsResponseBody ListClientRootsResponseBodyResponseBody
 
 // ReportProgressResponseBody is the type of the "assistant" service
 // "report_progress" endpoint HTTP response body.

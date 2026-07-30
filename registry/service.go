@@ -13,10 +13,10 @@ import (
 	"fmt"
 	"time"
 
-	clientspulse "github.com/CaliLuke/loom-mcp/features/stream/pulse/clients/pulse"
-	genregistry "github.com/CaliLuke/loom-mcp/registry/gen/registry"
-	"github.com/CaliLuke/loom-mcp/runtime/agent/tools"
-	"github.com/CaliLuke/loom-mcp/runtime/toolregistry"
+	clientspulse "github.com/CaliLuke/loom-mcp/v2/features/stream/pulse/clients/pulse"
+	genregistry "github.com/CaliLuke/loom-mcp/v2/registry/gen/registry"
+	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/tools"
+	"github.com/CaliLuke/loom-mcp/v2/runtime/toolregistry"
 	streamopts "github.com/CaliLuke/loom/pulse/streaming/options"
 	"github.com/google/uuid"
 )

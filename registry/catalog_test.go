@@ -5,7 +5,7 @@ import (
 	"sync"
 	"testing"
 
-	genregistry "github.com/CaliLuke/loom-mcp/registry/gen/registry"
+	genregistry "github.com/CaliLuke/loom-mcp/v2/registry/gen/registry"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )

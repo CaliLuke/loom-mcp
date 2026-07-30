@@ -16,12 +16,13 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
+	"slices"
 	"sync"
 
 	catalog "example.com/assistant/progressive_discovery/gen/catalog"
 	projected "example.com/assistant/progressive_discovery/gen/catalog/toolsets/projected"
-	mcpruntime "github.com/CaliLuke/loom-mcp/runtime/mcp"
-	sdkclient "github.com/CaliLuke/loom-mcp/runtime/mcp/sdkclient"
+	mcpruntime "github.com/CaliLuke/loom-mcp/v2/runtime/mcp"
+	sdkclient "github.com/CaliLuke/loom-mcp/v2/runtime/mcp/sdkclient"
 	"github.com/CaliLuke/loom/observability/transport"
 	mcpsdk "github.com/modelcontextprotocol/go-sdk/mcp"
 )
@@ -33,8 +34,10 @@ type SDKServer struct {
 	Server  *mcpsdk.Server
 }
 type SDKServerOptions struct {
-	Adapter           *MCPAdapterOptions
-	RequestContext    func(context.Context, *http.Request) context.Context
+	Adapter        *MCPAdapterOptions
+	RequestContext func(context.Context, *http.Request) context.Context
+	// RequestStateKey encrypts and authenticates multi-round-trip request state. It must contain exactly 32 bytes when a flow emits or consumes requestState.
+	RequestStateKey   []byte
 	TransportObserver transport.Observer
 	Server            *mcpsdk.ServerOptions
 	StreamableHTTP    *mcpsdk.StreamableHTTPOptions
@@ -55,12 +58,14 @@ type sdkToolCallCollector struct {
 func NewSDKServer(service catalog.Service, opts *SDKServerOptions) (*SDKServer, error) {
 	var adapterOpts *MCPAdapterOptions
 	var requestContext func(context.Context, *http.Request) context.Context
+	var requestStateKey []byte
 	var transportObserver transport.Observer
 	var serverOpts *mcpsdk.ServerOptions
 	var streamableOpts *mcpsdk.StreamableHTTPOptions
 	if opts != nil {
 		adapterOpts = opts.Adapter
 		requestContext = opts.RequestContext
+		requestStateKey = opts.RequestStateKey
 		transportObserver = opts.TransportObserver
 		serverOpts = opts.Server
 		streamableOpts = opts.StreamableHTTP
@@ -69,6 +74,7 @@ func NewSDKServer(service catalog.Service, opts *SDKServerOptions) (*SDKServer, 
 		return nil, fmt.Errorf("SDK ToolSearch compact mode does not support AllowDirectHiddenCalls")
 	}
 	adapter := NewMCPAdapter(service, adapterOpts)
+	adapter.requestStateKey = slices.Clone(requestStateKey)
 	serverOpts = sdkServerOptionsWithDefaults(serverOpts)
 	server := mcpsdk.NewServer(&mcpsdk.Implementation{
 		Name:    "catalog-mcp",
@@ -282,22 +288,32 @@ func sdkToolFromToolInfo(tool *ToolInfo) (*mcpsdk.Tool, error) {
 func (a *MCPAdapter) sdkToolHandler(requestContext func(context.Context, *http.Request) context.Context) mcpsdk.ToolHandler {
 	return func(ctx context.Context, req *mcpsdk.CallToolRequest) (*mcpsdk.CallToolResult, error) {
 		payload := &ToolsCallPayload{}
+		var inputResponses mcpsdk.InputResponseMap
+		requestState := ""
 		if req != nil && req.Params != nil {
 			payload.Name = req.Params.Name
 			payload.Arguments = req.Params.Arguments
+			inputResponses = req.Params.InputResponses
+			requestState = req.Params.RequestState
 		}
-		ctx = a.sdkRequestContext(ctx, req.GetSession(), req.GetExtra(), requestContext)
+		ctx = a.sdkRequestContext(ctx, req.GetSession(), req.GetExtra(), requestContext, inputResponses, requestState, "tools/call", payload)
 		if req != nil && req.Params != nil {
 			ctx = mcpruntime.WithProgressToken(ctx, req.Params.GetProgressToken())
 		}
 		stream := &sdkToolCallCollector{adapter: a}
 		if _, err := a.ToolsCall(ctx, payload, stream); err != nil {
+			if requests, state, ok := sdkclient.InputRequired(err); ok {
+				return &mcpsdk.CallToolResult{
+					InputRequests: requests,
+					RequestState:  state,
+				}, nil
+			}
 			return nil, err
 		}
 		return sdkCallToolResult(stream.result())
 	}
 }
-func (a *MCPAdapter) sdkRequestContext(ctx context.Context, session mcpsdk.Session, extra *mcpsdk.RequestExtra, requestContext func(context.Context, *http.Request) context.Context) context.Context {
+func (a *MCPAdapter) sdkRequestContext(ctx context.Context, session mcpsdk.Session, extra *mcpsdk.RequestExtra, requestContext func(context.Context, *http.Request) context.Context, inputResponses mcpsdk.InputResponseMap, requestState string, requestMethod string, requestParams any) context.Context {
 	if requestContext != nil {
 		ctx = requestContext(ctx, sdkSyntheticHTTPRequest(ctx, extra))
 	}
@@ -305,7 +321,7 @@ func (a *MCPAdapter) sdkRequestContext(ctx context.Context, session mcpsdk.Sessi
 		a.markInitializedSession("")
 		return ctx
 	}
-	ctx = sdkContextWithClientFeatures(ctx, session)
+	ctx = sdkContextWithClientFeatures(ctx, session, inputResponses, requestState, a.requestStateKey, requestMethod, requestParams)
 	sessionID := session.ID()
 	if sessionID == "" {
 		a.markInitializedSession("")
@@ -314,12 +330,18 @@ func (a *MCPAdapter) sdkRequestContext(ctx context.Context, session mcpsdk.Sessi
 	a.markInitializedSession(sessionID)
 	return mcpruntime.WithSessionID(ctx, sessionID)
 }
-func sdkContextWithClientFeatures(ctx context.Context, session mcpsdk.Session) context.Context {
+func sdkContextWithClientFeatures(ctx context.Context, session mcpsdk.Session, inputResponses mcpsdk.InputResponseMap, requestState string, requestStateKey []byte, requestMethod string, requestParams any) context.Context {
 	serverSession, ok := session.(*mcpsdk.ServerSession)
 	if !ok || serverSession == nil {
 		return ctx
 	}
-	return sdkclient.WithClientFeatures(ctx, serverSession)
+	return sdkclient.WithClientFeatures(ctx, serverSession, sdkclient.ClientFeaturesOptions{
+		InputResponses:  inputResponses,
+		RequestMethod:   requestMethod,
+		RequestParams:   requestParams,
+		RequestState:    requestState,
+		RequestStateKey: requestStateKey,
+	})
 }
 func sdkSyntheticHTTPRequest(ctx context.Context, extra *mcpsdk.RequestExtra) *http.Request {
 	req := &http.Request{

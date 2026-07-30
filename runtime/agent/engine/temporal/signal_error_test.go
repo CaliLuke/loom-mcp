@@ -4,7 +4,7 @@ import (
 	"errors"
 	"testing"
 
-	"github.com/CaliLuke/loom-mcp/runtime/agent/engine"
+	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/engine"
 	"github.com/stretchr/testify/require"
 	"go.temporal.io/api/serviceerror"
 )

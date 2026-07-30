@@ -5,8 +5,8 @@ import (
 	"context"
 	"errors"
 
-	clientsmongo "github.com/CaliLuke/loom-mcp/features/runlog/mongo/clients/mongo"
-	"github.com/CaliLuke/loom-mcp/runtime/agent/runlog"
+	clientsmongo "github.com/CaliLuke/loom-mcp/v2/features/runlog/mongo/clients/mongo"
+	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/runlog"
 )
 
 // Store implements runlog.Store by delegating to the Mongo client.

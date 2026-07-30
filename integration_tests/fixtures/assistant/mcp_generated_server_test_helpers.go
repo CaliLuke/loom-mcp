@@ -18,11 +18,13 @@ import (
 	mcpAssistantjsonrpcc "example.com/assistant/gen/jsonrpc/mcp_assistant/client"
 	mcpAssistantjssvr "example.com/assistant/gen/jsonrpc/mcp_assistant/server"
 	mcpassistant "example.com/assistant/gen/mcp_assistant"
-	mcpruntime "github.com/CaliLuke/loom-mcp/runtime/mcp"
+	mcpruntime "github.com/CaliLuke/loom-mcp/v2/runtime/mcp"
 	goahttp "github.com/CaliLuke/loom/http"
 	sdkmcp "github.com/modelcontextprotocol/go-sdk/mcp"
 	"github.com/stretchr/testify/require"
 )
+
+const testRequestStateKey = "0123456789abcdef0123456789abcdef"
 
 type rawEventsStream struct {
 	resultCh chan string
@@ -217,14 +219,32 @@ func newGeneratedSDKServer(t *testing.T) (*mcpassistant.SDKServer, *httptest.Ser
 	return newGeneratedSDKServerWithAdapterOptions(t, nil)
 }
 
+func newGeneratedStatelessSDKServer(t *testing.T) (*mcpassistant.SDKServer, *httptest.Server) {
+	t.Helper()
+
+	corsPolicy := testRuntimeCORSPolicy(t)
+	sdkServer, err := mcpassistant.NewSDKServer(NewAssistant(), &mcpassistant.SDKServerOptions{
+		PromptProvider:  promptProvider{},
+		RequestStateKey: []byte(testRequestStateKey),
+		RuntimeCORS:     &corsPolicy,
+		StreamableHTTP:  &sdkmcp.StreamableHTTPOptions{Stateless: true},
+	})
+	require.NoError(t, err)
+	mux := http.NewServeMux()
+	mux.Handle("/rpc", sdkServer.Handler)
+	mountOAuthDiscovery(mux, "/rpc")
+	return sdkServer, httptest.NewServer(mux)
+}
+
 func newGeneratedSDKServerWithAdapterOptions(t *testing.T, adapterOpts *mcpassistant.MCPAdapterOptions) (*mcpassistant.SDKServer, *httptest.Server) {
 	t.Helper()
 
 	corsPolicy := testRuntimeCORSPolicy(t)
 	sdkServer, err := mcpassistant.NewSDKServer(NewAssistant(), &mcpassistant.SDKServerOptions{
-		PromptProvider: promptProvider{},
-		Adapter:        adapterOpts,
-		RuntimeCORS:    &corsPolicy,
+		PromptProvider:  promptProvider{},
+		Adapter:         adapterOpts,
+		RequestStateKey: []byte(testRequestStateKey),
+		RuntimeCORS:     &corsPolicy,
 		RequestContext: func(ctx context.Context, r *http.Request) context.Context {
 			if r == nil {
 				return ctx

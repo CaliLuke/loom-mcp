@@ -6,7 +6,7 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/CaliLuke/loom-mcp/codegen/shared"
+	"github.com/CaliLuke/loom-mcp/v2/codegen/shared"
 	"github.com/CaliLuke/loom/codegen"
 	"github.com/CaliLuke/loom/codegen/service"
 	goaexpr "github.com/CaliLuke/loom/expr"
@@ -327,7 +327,7 @@ func (d *toolSpecsData) codecsImports() []*codegen.ImportSpec {
 		codegen.SimpleImport("encoding/json"),
 		codegen.SimpleImport("errors"),
 		codegen.SimpleImport("fmt"),
-		codegen.SimpleImport("github.com/CaliLuke/loom-mcp/runtime/agent/tools"),
+		codegen.SimpleImport("github.com/CaliLuke/loom-mcp/v2/runtime/agent/tools"),
 	}
 	if d.needsUnicodeImport() {
 		base = append(base, codegen.SimpleImport("unicode/utf8"))

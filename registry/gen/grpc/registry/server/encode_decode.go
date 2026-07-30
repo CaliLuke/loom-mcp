@@ -3,15 +3,15 @@
 // registry gRPC server encoders and decoders
 //
 // Command:
-// $ loom gen github.com/CaliLuke/loom-mcp/registry/design -o registry
+// $ loom gen github.com/CaliLuke/loom-mcp/v2/registry/design -o registry
 
 package server
 
 import (
 	"context"
 
-	registrypb "github.com/CaliLuke/loom-mcp/registry/gen/grpc/registry/pb"
-	registry "github.com/CaliLuke/loom-mcp/registry/gen/registry"
+	registrypb "github.com/CaliLuke/loom-mcp/v2/registry/gen/grpc/registry/pb"
+	registry "github.com/CaliLuke/loom-mcp/v2/registry/gen/registry"
 	loomgrpc "github.com/CaliLuke/loom/grpc"
 	"google.golang.org/grpc/metadata"
 )

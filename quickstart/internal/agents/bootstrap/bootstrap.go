@@ -12,7 +12,7 @@ import (
 
 	chat "example.com/quickstart/gen/orchestrator/agents/chat"
 	plannerchat "example.com/quickstart/internal/agents/chat/planner"
-	agentsruntime "github.com/CaliLuke/loom-mcp/runtime/agent/runtime"
+	agentsruntime "github.com/CaliLuke/loom-mcp/v2/runtime/agent/runtime"
 )
 
 // Package bootstrap wires the loom-mcp runtime and registers generated agents.

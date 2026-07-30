@@ -1,4 +1,4 @@
-module github.com/CaliLuke/loom-mcp
+module github.com/CaliLuke/loom-mcp/v2
 
 go 1.26.5
 
@@ -12,7 +12,7 @@ require (
 	github.com/dave/jennifer v1.7.1
 	github.com/google/uuid v1.6.0
 	github.com/leanovate/gopter v0.2.11
-	github.com/modelcontextprotocol/go-sdk v1.6.1
+	github.com/modelcontextprotocol/go-sdk v1.7.0
 	github.com/nexus-rpc/sdk-go v0.6.0
 	github.com/openai/openai-go v1.12.0
 	github.com/redis/go-redis/v9 v9.21.0

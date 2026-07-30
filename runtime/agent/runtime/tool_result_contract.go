@@ -5,10 +5,10 @@ package runtime
 import (
 	"fmt"
 
-	"github.com/CaliLuke/loom-mcp/boundedresult"
-	"github.com/CaliLuke/loom-mcp/runtime/agent"
-	"github.com/CaliLuke/loom-mcp/runtime/agent/planner"
-	"github.com/CaliLuke/loom-mcp/runtime/agent/tools"
+	"github.com/CaliLuke/loom-mcp/v2/boundedresult"
+	"github.com/CaliLuke/loom-mcp/v2/runtime/agent"
+	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/planner"
+	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/tools"
 )
 
 // validateToolResultContract enforces runtime-owned invariants for one tool

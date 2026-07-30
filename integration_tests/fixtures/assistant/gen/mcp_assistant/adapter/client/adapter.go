@@ -22,8 +22,8 @@ import (
 	assistantjsonrpcc "example.com/assistant/gen/jsonrpc/assistant/client"
 	mcpAssistantjsonrpcc "example.com/assistant/gen/jsonrpc/mcp_assistant/client"
 	mcpAssistant "example.com/assistant/gen/mcp_assistant"
-	mcpruntime "github.com/CaliLuke/loom-mcp/runtime/mcp"
-	retry "github.com/CaliLuke/loom-mcp/runtime/mcp/retry"
+	mcpruntime "github.com/CaliLuke/loom-mcp/v2/runtime/mcp"
+	retry "github.com/CaliLuke/loom-mcp/v2/runtime/mcp/retry"
 	goahttp "github.com/CaliLuke/loom/http"
 	jsonrpc "github.com/CaliLuke/loom/jsonrpc"
 )
@@ -405,74 +405,6 @@ func NewEndpoints(scheme string, host string, doer goahttp.Doer, enc func(*http.
 		return decodeOriginalJSONRPCResult(enc, req3, toolResp.Result, decode)
 	}
 
-	// Tool: sample_text -> SampleText
-	e.SampleText = func(ctx context.Context, v any) (any, error) {
-		var payload any
-		payload = v.(*assistant.SampleTextPayload)
-		args, err := encodeOriginalPayload(ctx, enc, payload)
-		if err != nil {
-			return nil, err
-		}
-		toolResp, err := mcpCaller.CallTool(ctx, mcpruntime.CallRequest{
-			Payload: args,
-			Tool:    "sample_text",
-		})
-		if err != nil {
-			prompt := retry.BuildRepairPrompt("tools/call:sample_text", err.Error(), "{\"max_tokens\":0,\"prompt\":\"example\"}", "{\"type\":\"object\",\"required\":[\"prompt\",\"max_tokens\"],\"properties\":{\"max_tokens\":{\"type\":\"integer\",\"description\":\"Maximum number of tokens\"},\"prompt\":{\"type\":\"string\",\"description\":\"User prompt to sample\"},\"system_prompt\":{\"type\":\"string\",\"description\":\"Optional system prompt\"}},\"additionalProperties\":false}")
-			return nil, &retry.RetryableError{
-				Cause:  err,
-				Prompt: prompt,
-			}
-		}
-		if len(toolResp.Result) == 0 {
-			prompt := retry.BuildRepairPrompt("tools/call:sample_text", "empty MCP tool response", "{\"max_tokens\":0,\"prompt\":\"example\"}", "{\"type\":\"object\",\"required\":[\"prompt\",\"max_tokens\"],\"properties\":{\"max_tokens\":{\"type\":\"integer\",\"description\":\"Maximum number of tokens\"},\"prompt\":{\"type\":\"string\",\"description\":\"User prompt to sample\"},\"system_prompt\":{\"type\":\"string\",\"description\":\"Optional system prompt\"}},\"additionalProperties\":false}")
-			return nil, &retry.RetryableError{
-				Cause:  fmt.Errorf("empty MCP tool response for sample_text"),
-				Prompt: prompt,
-			}
-		}
-		req3, err := origC.BuildSampleTextRequest(ctx, v)
-		if err != nil {
-			return nil, err
-		}
-		decode := assistantjsonrpcc.DecodeSampleTextResponse(dec, false)
-		return decodeOriginalJSONRPCResult(enc, req3, toolResp.Result, decode)
-	}
-
-	// Tool: list_client_roots -> ListClientRoots
-	e.ListClientRoots = func(ctx context.Context, v any) (any, error) {
-		var payload any
-		payload = struct{}{}
-		args, err := encodeOriginalPayload(ctx, enc, payload)
-		if err != nil {
-			return nil, err
-		}
-		toolResp, err := mcpCaller.CallTool(ctx, mcpruntime.CallRequest{
-			Payload: args,
-			Tool:    "list_client_roots",
-		})
-		if err != nil {
-			prompt := retry.BuildRepairPrompt("tools/call:list_client_roots", err.Error(), "{}", "")
-			return nil, &retry.RetryableError{
-				Cause:  err,
-				Prompt: prompt,
-			}
-		}
-		if len(toolResp.Result) == 0 {
-			prompt := retry.BuildRepairPrompt("tools/call:list_client_roots", "empty MCP tool response", "{}", "")
-			return nil, &retry.RetryableError{
-				Cause:  fmt.Errorf("empty MCP tool response for list_client_roots"),
-				Prompt: prompt,
-			}
-		}
-		req3, err := origC.BuildListClientRootsRequest(ctx, v)
-		if err != nil {
-			return nil, err
-		}
-		decode := assistantjsonrpcc.DecodeListClientRootsResponse(dec, false)
-		return decodeOriginalJSONRPCResult(enc, req3, toolResp.Result, decode)
-	}
-
 	// Tool: report_progress -> ReportProgress
 	e.ReportProgress = func(ctx context.Context, v any) (any, error) {
 		var payload any
@@ -749,6 +681,25 @@ func NewEndpoints(scheme string, host string, doer goahttp.Doer, enc func(*http.
 		return decodeOriginalJSONRPCResult(enc, req3, []byte(*rr.Contents[0].Text), decode)
 	}
 
+	// Resource: elicitation://context -> ElicitationContext
+	e.ElicitationContext = func(ctx context.Context, v any) (any, error) {
+		uri := "elicitation://context"
+		ires, err := mcpC.ResourcesRead()(ctx, &mcpAssistant.ResourcesReadPayload{URI: uri})
+		if err != nil {
+			return nil, err
+		}
+		rr := ires.(*mcpAssistant.ResourcesReadResult)
+		if rr == nil || rr.Contents == nil || len(rr.Contents) == 0 || rr.Contents[0] == nil || rr.Contents[0].Text == nil {
+			return nil, fmt.Errorf("empty MCP resource response for elicitation://context")
+		}
+		req3, err := origC.BuildElicitationContextRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		decode := assistantjsonrpcc.DecodeElicitationContextResponse(dec, false)
+		return decodeOriginalJSONRPCResult(enc, req3, []byte(*rr.Contents[0].Text), decode)
+	}
+
 	// Resource: conversation://history -> ConversationHistory
 	e.ConversationHistory = func(ctx context.Context, v any) (any, error) {
 		uri := "conversation://history"
@@ -890,5 +841,5 @@ func NewEndpoints(scheme string, host string, doer goahttp.Doer, enc func(*http.
 // NewClient returns *assistant.Client using MCP-backed endpoints.
 func NewClient(scheme string, host string, doer goahttp.Doer, enc func(*http.Request) goahttp.Encoder, dec func(*http.Response) goahttp.Decoder, restore bool) *assistant.Client {
 	e := NewEndpoints(scheme, host, doer, enc, dec, restore)
-	return assistant.NewClient(e.ListDocuments, e.SystemInfo, e.ConversationHistory, e.FigmaDesignSystem, e.GeneratePrompts, e.BuildFigmaImplementationPrompt, e.SendNotification, e.AnalyzeSentiment, e.ExtractKeywords, e.SummarizeText, e.Search, e.SearchRecords, e.ExecuteCode, e.ProcessBatch, e.SampleText, e.ListClientRoots, e.ReportProgress, e.MultiContent, e.GenerateDpiSpec, e.DispatchAction, e.DispatchCommand, e.ProjectedLookup, e.ProjectedStatus)
+	return assistant.NewClient(e.ListDocuments, e.SystemInfo, e.ElicitationContext, e.ConversationHistory, e.FigmaDesignSystem, e.GeneratePrompts, e.BuildFigmaImplementationPrompt, e.SendNotification, e.AnalyzeSentiment, e.ExtractKeywords, e.SummarizeText, e.Search, e.SearchRecords, e.ExecuteCode, e.ProcessBatch, e.ReportProgress, e.MultiContent, e.GenerateDpiSpec, e.DispatchAction, e.DispatchCommand, e.ProjectedLookup, e.ProjectedStatus)
 }

@@ -10,9 +10,9 @@ import (
 	"sync"
 	"time"
 
-	pulseclients "github.com/CaliLuke/loom-mcp/features/stream/pulse/clients/pulse"
-	"github.com/CaliLuke/loom-mcp/runtime/agent/telemetry"
-	"github.com/CaliLuke/loom-mcp/runtime/toolregistry"
+	pulseclients "github.com/CaliLuke/loom-mcp/v2/features/stream/pulse/clients/pulse"
+	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/telemetry"
+	"github.com/CaliLuke/loom-mcp/v2/runtime/toolregistry"
 	"github.com/CaliLuke/loom/pulse/streaming"
 	streamopts "github.com/CaliLuke/loom/pulse/streaming/options"
 

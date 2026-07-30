@@ -8,9 +8,9 @@ package runtime
 // - Appends messages to the PlanInput in the same order used for tool_result correlation.
 
 import (
-	"github.com/CaliLuke/loom-mcp/runtime/agent/model"
-	"github.com/CaliLuke/loom-mcp/runtime/agent/planner"
-	"github.com/CaliLuke/loom-mcp/runtime/agent/transcript"
+	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/model"
+	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/planner"
+	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/transcript"
 )
 
 // recordAssistantTurn merges streamed transcript parts with the declared tool calls

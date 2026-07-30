@@ -13,7 +13,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/CaliLuke/loom-mcp/internal/upstreampaths"
+	"github.com/CaliLuke/loom-mcp/v2/internal/upstreampaths"
 )
 
 // sdkServerPatchFS contains application-owned Go sources used to replace the

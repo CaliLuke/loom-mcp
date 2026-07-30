@@ -50,6 +50,21 @@ func EncodeSystemInfoResponse(encoder func(context.Context, http.ResponseWriter)
 	}
 }
 
+// EncodeElicitationContextResponse returns an encoder for responses returned
+// by the assistant elicitation_context endpoint.
+func EncodeElicitationContextResponse(encoder func(context.Context, http.ResponseWriter) loomhttp.Encoder) func(context.Context, http.ResponseWriter, any) error {
+	return func(ctx context.Context, w http.ResponseWriter, v any) error {
+		res, ok := v.(*assistant.ElicitationContextResult)
+		if !ok {
+			return loomhttp.ErrInvalidType("assistant", "elicitation_context", "*assistant.ElicitationContextResult", v)
+		}
+		enc := encoder(ctx, w)
+		body := NewElicitationContextResponseBody(res)
+		w.WriteHeader(http.StatusOK)
+		return enc.Encode(body)
+	}
+}
+
 // EncodeConversationHistoryResponse returns an encoder for responses returned
 // by the assistant conversation_history endpoint.
 func EncodeConversationHistoryResponse(encoder func(context.Context, http.ResponseWriter) loomhttp.Encoder) func(context.Context, http.ResponseWriter, any) error {
@@ -602,71 +617,6 @@ func DecodeProcessBatchRequest(mux loomhttp.Muxer, decoder func(*http.Request) l
 	}
 }
 
-// EncodeSampleTextResponse returns an encoder for responses returned by the
-// assistant sample_text endpoint.
-func EncodeSampleTextResponse(encoder func(context.Context, http.ResponseWriter) loomhttp.Encoder) func(context.Context, http.ResponseWriter, any) error {
-	return func(ctx context.Context, w http.ResponseWriter, v any) error {
-		res, ok := v.(*assistant.SampleTextResult)
-		if !ok {
-			return loomhttp.ErrInvalidType("assistant", "sample_text", "*assistant.SampleTextResult", v)
-		}
-		enc := encoder(ctx, w)
-		body := NewSampleTextResponseBody(res)
-		w.WriteHeader(http.StatusOK)
-		return enc.Encode(body)
-	}
-}
-
-// DecodeSampleTextRequest returns a decoder for requests sent to the assistant
-// sample_text endpoint.
-func DecodeSampleTextRequest(mux loomhttp.Muxer, decoder func(*http.Request) loomhttp.Decoder) func(*http.Request, *jsonrpc.RawRequest) (*assistant.SampleTextPayload, error) {
-	return func(r *http.Request, req *jsonrpc.RawRequest) (*assistant.SampleTextPayload, error) {
-		params := req.Params
-		if len(params) == 0 {
-			params = []byte("{}")
-		}
-		r.Body = io.NopCloser(bytes.NewReader(params))
-		var payload *assistant.SampleTextPayload
-		var (
-			body SampleTextRequestBody
-			err  error
-		)
-		err = decoder(r).Decode(&body)
-		if err != nil {
-			if errors.Is(err, io.EOF) {
-				return payload, loom.MissingPayloadError()
-			}
-			var gerr *loom.ServiceError
-			if errors.As(err, &gerr) {
-				return payload, gerr
-			}
-			return payload, loom.DecodePayloadError(loomhttp.SafeDecodePayloadMessage(err))
-		}
-		err = ValidateSampleTextRequestBody(&body)
-		if err != nil {
-			return payload, err
-		}
-		payload = NewSampleTextPayload(&body)
-
-		return payload, nil
-	}
-}
-
-// EncodeListClientRootsResponse returns an encoder for responses returned by
-// the assistant list_client_roots endpoint.
-func EncodeListClientRootsResponse(encoder func(context.Context, http.ResponseWriter) loomhttp.Encoder) func(context.Context, http.ResponseWriter, any) error {
-	return func(ctx context.Context, w http.ResponseWriter, v any) error {
-		res, ok := v.(*assistant.ListClientRootsResult)
-		if !ok {
-			return loomhttp.ErrInvalidType("assistant", "list_client_roots", "*assistant.ListClientRootsResult", v)
-		}
-		enc := encoder(ctx, w)
-		body := NewListClientRootsResponseBody(res)
-		w.WriteHeader(http.StatusOK)
-		return enc.Encode(body)
-	}
-}
-
 // EncodeReportProgressResponse returns an encoder for responses returned by
 // the assistant report_progress endpoint.
 func EncodeReportProgressResponse(encoder func(context.Context, http.ResponseWriter) loomhttp.Encoder) func(context.Context, http.ResponseWriter, any) error {
@@ -975,17 +925,6 @@ func marshalAssistantDesignTokenGroupToDesignTokenGroupResponseBody(v *assistant
 		}
 	} else {
 		res.Typography = []string{}
-	}
-
-	return res
-}
-
-// marshalAssistantClientRootToClientRootResponseBody builds a value of type
-// *ClientRootResponseBody from a value of type *assistant.ClientRoot.
-func marshalAssistantClientRootToClientRootResponseBody(v *assistant.ClientRoot) *ClientRootResponseBody {
-	res := &ClientRootResponseBody{
-		URI:  v.URI,
-		Name: v.Name,
 	}
 
 	return res

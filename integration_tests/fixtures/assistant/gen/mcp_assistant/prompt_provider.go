@@ -11,7 +11,7 @@ import (
 	"context"
 	"encoding/json"
 
-	"github.com/CaliLuke/loom-mcp/runtime/agent/prompt"
+	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/prompt"
 )
 
 // PromptProvider defines the interface for providing prompt content.

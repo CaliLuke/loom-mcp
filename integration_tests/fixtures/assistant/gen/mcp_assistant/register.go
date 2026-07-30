@@ -13,12 +13,12 @@ import (
 	"errors"
 	"strings"
 
-	"github.com/CaliLuke/loom-mcp/runtime/agent/planner"
-	agentsruntime "github.com/CaliLuke/loom-mcp/runtime/agent/runtime"
-	"github.com/CaliLuke/loom-mcp/runtime/agent/telemetry"
-	"github.com/CaliLuke/loom-mcp/runtime/agent/tools"
-	mcpruntime "github.com/CaliLuke/loom-mcp/runtime/mcp"
-	"github.com/CaliLuke/loom-mcp/runtime/mcp/retry"
+	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/planner"
+	agentsruntime "github.com/CaliLuke/loom-mcp/v2/runtime/agent/runtime"
+	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/telemetry"
+	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/tools"
+	mcpruntime "github.com/CaliLuke/loom-mcp/v2/runtime/mcp"
+	"github.com/CaliLuke/loom-mcp/v2/runtime/mcp/retry"
 	"github.com/modelcontextprotocol/go-sdk/jsonrpc"
 )
 
@@ -327,94 +327,6 @@ var AssistantAssistantMcpToolsetToolSpecs = []tools.ToolSpec{tools.ToolSpec{
 			},
 		},
 		Name:   "*assistant.ProcessBatchResult",
-		Schema: nil,
-	},
-	Service: "assistant",
-	Toolset: "assistant.assistant-mcp",
-}, tools.ToolSpec{
-	Description: "Request text generation from the connected MCP client",
-	Meta:        nil,
-	Name:        "sample_text",
-	Payload: tools.TypeSpec{
-		Codec: tools.JSONCodec[any]{
-			FromJSON: func(data []byte) (any, error) {
-				if len(data) == 0 {
-					return nil, nil
-				}
-				var out any
-				if err := json.Unmarshal(data, &out); err != nil {
-					return nil, err
-				}
-				return out, nil
-			},
-			ToJSON: func(v any) ([]byte, error) {
-				return json.Marshal(v)
-			},
-		},
-		Name:   "*assistant.SampleTextPayload",
-		Schema: []byte("{\"type\":\"object\",\"required\":[\"prompt\",\"max_tokens\"],\"properties\":{\"max_tokens\":{\"type\":\"integer\",\"description\":\"Maximum number of tokens\"},\"prompt\":{\"type\":\"string\",\"description\":\"User prompt to sample\"},\"system_prompt\":{\"type\":\"string\",\"description\":\"Optional system prompt\"}},\"additionalProperties\":false}"),
-	},
-	Result: tools.TypeSpec{
-		Codec: tools.JSONCodec[any]{
-			FromJSON: func(data []byte) (any, error) {
-				if len(data) == 0 {
-					return nil, nil
-				}
-				var out any
-				if err := json.Unmarshal(data, &out); err != nil {
-					return nil, err
-				}
-				return out, nil
-			},
-			ToJSON: func(v any) ([]byte, error) {
-				return json.Marshal(v)
-			},
-		},
-		Name:   "*assistant.SampleTextResult",
-		Schema: nil,
-	},
-	Service: "assistant",
-	Toolset: "assistant.assistant-mcp",
-}, tools.ToolSpec{
-	Description: "List filesystem roots exposed by the connected MCP client",
-	Meta:        nil,
-	Name:        "list_client_roots",
-	Payload: tools.TypeSpec{
-		Codec: tools.JSONCodec[any]{
-			FromJSON: func(data []byte) (any, error) {
-				if len(data) == 0 {
-					return nil, nil
-				}
-				var out any
-				if err := json.Unmarshal(data, &out); err != nil {
-					return nil, err
-				}
-				return out, nil
-			},
-			ToJSON: func(v any) ([]byte, error) {
-				return json.Marshal(v)
-			},
-		},
-		Name:   "any",
-		Schema: []byte("{}"),
-	},
-	Result: tools.TypeSpec{
-		Codec: tools.JSONCodec[any]{
-			FromJSON: func(data []byte) (any, error) {
-				if len(data) == 0 {
-					return nil, nil
-				}
-				var out any
-				if err := json.Unmarshal(data, &out); err != nil {
-					return nil, err
-				}
-				return out, nil
-			},
-			ToJSON: func(v any) ([]byte, error) {
-				return json.Marshal(v)
-			},
-		},
-		Name:   "*assistant.ListClientRootsResult",
 		Schema: nil,
 	},
 	Service: "assistant",
@@ -849,12 +761,6 @@ func AssistantAssistantMcpToolsetRetryHint(toolName tools.Ident, err error) *pla
 			case "process_batch":
 				schemaJSON = "{\"type\":\"object\",\"required\":[\"items\"],\"properties\":{\"blob\":{\"type\":\"string\",\"description\":\"Base64 blob\"},\"format\":{\"type\":\"string\",\"description\":\"Output format\",\"enum\":[\"json\",\"text\",\"blob\",\"uri\"]},\"items\":{\"type\":\"array\",\"description\":\"Items to process\",\"items\":{\"type\":\"string\"}},\"mimeType\":{\"type\":\"string\",\"description\":\"MIME type\"},\"uri\":{\"type\":\"string\",\"description\":\"Resource URI\"}},\"additionalProperties\":false}"
 				example = "{\"items\":[]}"
-			case "sample_text":
-				schemaJSON = "{\"type\":\"object\",\"required\":[\"prompt\",\"max_tokens\"],\"properties\":{\"max_tokens\":{\"type\":\"integer\",\"description\":\"Maximum number of tokens\"},\"prompt\":{\"type\":\"string\",\"description\":\"User prompt to sample\"},\"system_prompt\":{\"type\":\"string\",\"description\":\"Optional system prompt\"}},\"additionalProperties\":false}"
-				example = "{\"max_tokens\":0,\"prompt\":\"example\"}"
-			case "list_client_roots":
-				schemaJSON = "{}"
-				example = "{}"
 			case "report_progress":
 				schemaJSON = "{}"
 				example = "{}"

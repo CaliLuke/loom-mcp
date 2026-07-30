@@ -10,7 +10,7 @@ import (
 	"time"
 
 	mcpassistant "example.com/assistant/gen/mcp_assistant"
-	mcpruntime "github.com/CaliLuke/loom-mcp/runtime/mcp"
+	mcpruntime "github.com/CaliLuke/loom-mcp/v2/runtime/mcp"
 	mcpauth "github.com/modelcontextprotocol/go-sdk/auth"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"

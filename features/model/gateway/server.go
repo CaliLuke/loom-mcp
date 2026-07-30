@@ -5,7 +5,7 @@ import (
 	"errors"
 	"io"
 
-	"github.com/CaliLuke/loom-mcp/runtime/agent/model"
+	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/model"
 )
 
 type (

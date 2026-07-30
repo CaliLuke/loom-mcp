@@ -6,8 +6,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/CaliLuke/loom-mcp/runtime/agent/model"
-	"github.com/CaliLuke/loom-mcp/runtime/agent/tools"
+	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/model"
+	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/tools"
 	brtypes "github.com/aws/aws-sdk-go-v2/service/bedrockruntime/types"
 )
 

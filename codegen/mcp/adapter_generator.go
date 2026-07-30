@@ -6,9 +6,9 @@ import (
 	"path"
 	"strings"
 
-	"github.com/CaliLuke/loom-mcp/codegen/naming"
-	"github.com/CaliLuke/loom-mcp/codegen/shared"
-	mcpexpr "github.com/CaliLuke/loom-mcp/expr/mcp"
+	"github.com/CaliLuke/loom-mcp/v2/codegen/naming"
+	"github.com/CaliLuke/loom-mcp/v2/codegen/shared"
+	mcpexpr "github.com/CaliLuke/loom-mcp/v2/expr/mcp"
 	"github.com/CaliLuke/loom/codegen"
 	"github.com/CaliLuke/loom/expr"
 )

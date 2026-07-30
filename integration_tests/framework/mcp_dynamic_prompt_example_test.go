@@ -8,7 +8,7 @@ import (
 	"runtime"
 	"testing"
 
-	"github.com/CaliLuke/loom-mcp/internal/upstreampaths"
+	"github.com/CaliLuke/loom-mcp/v2/internal/upstreampaths"
 	"github.com/stretchr/testify/require"
 )
 
@@ -29,10 +29,10 @@ go 1.26.5
 
 require (
 	github.com/CaliLuke/loom v1.7.1
-	github.com/CaliLuke/loom-mcp v0.0.0-00010101000000-000000000000
+	github.com/CaliLuke/loom-mcp/v2 v2.0.0
 )
 
-replace github.com/CaliLuke/loom-mcp => ` + repoRoot + `
+replace github.com/CaliLuke/loom-mcp/v2 => ` + repoRoot + `
 `
 	if localLoomDir != "" {
 		goMod += `
@@ -45,7 +45,7 @@ replace github.com/CaliLuke/loom => ` + localLoomDir + `
 
 import (
 	. "github.com/CaliLuke/loom/dsl"
-	. "github.com/CaliLuke/loom-mcp/dsl"
+	. "github.com/CaliLuke/loom-mcp/v2/dsl"
 )
 
 var PromptTemplates = Type("PromptTemplates", func() {

@@ -1,7 +1,7 @@
 package dsl
 
 import (
-	expragents "github.com/CaliLuke/loom-mcp/expr/agent"
+	expragents "github.com/CaliLuke/loom-mcp/v2/expr/agent"
 	"github.com/CaliLuke/loom/eval"
 )
 

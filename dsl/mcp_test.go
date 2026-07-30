@@ -3,8 +3,8 @@ package dsl_test
 import (
 	"testing"
 
-	. "github.com/CaliLuke/loom-mcp/dsl"
-	mcpexpr "github.com/CaliLuke/loom-mcp/expr/mcp"
+	. "github.com/CaliLuke/loom-mcp/v2/dsl"
+	mcpexpr "github.com/CaliLuke/loom-mcp/v2/expr/mcp"
 	. "github.com/CaliLuke/loom/dsl"
 	"github.com/CaliLuke/loom/eval"
 	goaexpr "github.com/CaliLuke/loom/expr"
@@ -81,6 +81,18 @@ func TestMCPWithProtocolVersion(t *testing.T) {
 	mcp := mcpexpr.Root.MCPServers["calculator"]
 	require.NotNil(t, mcp)
 	require.Equal(t, "2025-06-18", mcp.ProtocolVersion)
+}
+
+func TestMCPRejectsUnsupportedProtocolVersion(t *testing.T) {
+	err := runInvalidMCPDSL(t, func() {
+		API("test", func() {})
+		Service("calculator", func() {
+			MCP("calc", "1.0.0", ProtocolVersion("2026-07-28"))
+		})
+	})
+
+	require.Contains(t, err, `ProtocolVersion "2026-07-28" is not implemented by Loom's generated transport`)
+	require.Contains(t, err, "2025-11-25")
 }
 
 func TestMCPMetadata(t *testing.T) {

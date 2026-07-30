@@ -3,8 +3,8 @@ package dsl
 import (
 	"strings"
 
-	_ "github.com/CaliLuke/loom-mcp/codegen/mcp" // Registers the MCP codegen plugin with Goa
-	exprmcp "github.com/CaliLuke/loom-mcp/expr/mcp"
+	_ "github.com/CaliLuke/loom-mcp/v2/codegen/mcp" // Registers the MCP codegen plugin with Goa
+	exprmcp "github.com/CaliLuke/loom-mcp/v2/expr/mcp"
 	"github.com/CaliLuke/loom/eval"
 	goaexpr "github.com/CaliLuke/loom/expr"
 )
@@ -54,8 +54,10 @@ func MCP(name, version string, opts ...func(*exprmcp.MCPExpr)) {
 	}
 }
 
-// ProtocolVersion configures the MCP protocol version supported by the server.
-// It returns a configuration function for use with MCP.
+// ProtocolVersion configures the MCP protocol version supported by every
+// generated Loom transport. Supported versions are 2024-11-05, 2025-03-26,
+// 2025-06-18, and 2025-11-25. It returns a configuration function for use with
+// MCP.
 //
 // ProtocolVersion takes a single argument which is the protocol version string.
 //
@@ -65,7 +67,9 @@ func MCP(name, version string, opts ...func(*exprmcp.MCPExpr)) {
 //	    MCP("calc", "1.0.0", ProtocolVersion("2025-06-18"))
 //	})
 func ProtocolVersion(version string) func(*exprmcp.MCPExpr) {
-	return func(m *exprmcp.MCPExpr) { m.ProtocolVersion = version }
+	return func(m *exprmcp.MCPExpr) {
+		m.ProtocolVersion = strings.TrimSpace(version)
+	}
 }
 
 // ToolSearchExactMatchNarrow suppresses weaker matches when a query exactly

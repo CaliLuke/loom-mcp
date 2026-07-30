@@ -19,7 +19,7 @@ func clientCallerFile(data *AdapterData, svcName string) *codegen.File {
 		{Path: "fmt"},
 		{Path: "io"},
 		{Path: data.ClientCaller.MCPImportPath, Name: "mcppkg"},
-		{Path: "github.com/CaliLuke/loom-mcp/runtime/mcp", Name: "mcpruntime"},
+		{Path: "github.com/CaliLuke/loom-mcp/v2/runtime/mcp", Name: "mcpruntime"},
 	}
 	return &codegen.File{
 		Path: path,

@@ -3,7 +3,7 @@ package tests
 import (
 	"testing"
 
-	"github.com/CaliLuke/loom-mcp/codegen/agent/tests/testscenarios"
+	"github.com/CaliLuke/loom-mcp/v2/codegen/agent/tests/testscenarios"
 )
 
 // Deterministic import aliases for custom package user types appear in emitted files.

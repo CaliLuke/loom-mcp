@@ -4,7 +4,7 @@ import (
 	"github.com/CaliLuke/loom/eval"
 	goaexpr "github.com/CaliLuke/loom/expr"
 
-	agentsExpr "github.com/CaliLuke/loom-mcp/expr/agent"
+	agentsExpr "github.com/CaliLuke/loom-mcp/v2/expr/agent"
 	gcodegen "github.com/CaliLuke/loom/codegen"
 )
 

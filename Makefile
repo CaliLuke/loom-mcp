@@ -5,7 +5,7 @@ HTTP_PORT ?= 8888
 LOOM_CORE_MODULE ?= github.com/CaliLuke/loom
 LOOM_MCP_MODULE ?= $(LOOM_CORE_MODULE)
 LOOM_CLI_PACKAGE ?= $(LOOM_CORE_MODULE)/cmd/loom
-MCP_GO_SDK_VERSION ?= v1.6.1
+MCP_GO_SDK_VERSION ?= v1.7.0
 COVERAGE_MIN ?= 62.0
 
 GOPATH ?= $(shell go env GOPATH)
@@ -101,7 +101,7 @@ gen-example:
 	cd example/complete && $(GO) run $(LOOM_CLI_PACKAGE) gen example.com/assistant/design
 
 gen-registry:
-	$(GO) run $(LOOM_CLI_PACKAGE) gen github.com/CaliLuke/loom-mcp/registry/design -o registry
+	$(GO) run $(LOOM_CLI_PACKAGE) gen github.com/CaliLuke/loom-mcp/v2/registry/design -o registry
 
 loom-local:
 	bash ./scripts/loom_core_mode.sh local

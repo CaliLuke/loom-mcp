@@ -10,7 +10,7 @@ import (
 	"fmt"
 	"sync"
 
-	genregistry "github.com/CaliLuke/loom-mcp/registry/gen/registry"
+	genregistry "github.com/CaliLuke/loom-mcp/v2/registry/gen/registry"
 	"github.com/santhosh-tekuri/jsonschema/v6"
 )
 

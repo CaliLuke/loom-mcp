@@ -3,7 +3,7 @@ package hooks
 import (
 	"testing"
 
-	"github.com/CaliLuke/loom-mcp/runtime/agent/rawjson"
+	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/rawjson"
 	"github.com/stretchr/testify/require"
 )
 

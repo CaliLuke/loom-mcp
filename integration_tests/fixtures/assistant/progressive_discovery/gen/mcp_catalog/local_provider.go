@@ -15,9 +15,9 @@ import (
 	"errors"
 	"strings"
 
-	"github.com/CaliLuke/loom-mcp/runtime/agent/planner"
-	agentsruntime "github.com/CaliLuke/loom-mcp/runtime/agent/runtime"
-	"github.com/CaliLuke/loom-mcp/runtime/agent/tools"
+	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/planner"
+	agentsruntime "github.com/CaliLuke/loom-mcp/v2/runtime/agent/runtime"
+	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/tools"
 )
 
 type localToolCallCollector struct {

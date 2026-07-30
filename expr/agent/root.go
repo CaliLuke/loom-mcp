@@ -4,8 +4,8 @@ import (
 	"fmt"
 	"sort"
 
-	"github.com/CaliLuke/loom-mcp/codegen/naming"
-	exprmcp "github.com/CaliLuke/loom-mcp/expr/mcp"
+	"github.com/CaliLuke/loom-mcp/v2/codegen/naming"
+	exprmcp "github.com/CaliLuke/loom-mcp/v2/expr/mcp"
 	"github.com/CaliLuke/loom/eval"
 	goaexpr "github.com/CaliLuke/loom/expr"
 )
@@ -68,7 +68,7 @@ func (r *RootExpr) DependsOn() []eval.Root {
 
 // Packages returns packages considered for DSL error attribution.
 func (r *RootExpr) Packages() []string {
-	return []string{"github.com/CaliLuke/loom-mcp/dsl"}
+	return []string{"github.com/CaliLuke/loom-mcp/v2/dsl"}
 }
 
 // Prepare resolves deferred design references that require a complete view of

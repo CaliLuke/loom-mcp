@@ -13,7 +13,7 @@ import (
 
 	mcpAssistantjsonrpcc "example.com/assistant/gen/jsonrpc/mcp_assistant/client"
 	mcpassistant "example.com/assistant/gen/mcp_assistant"
-	mcpruntime "github.com/CaliLuke/loom-mcp/runtime/mcp"
+	mcpruntime "github.com/CaliLuke/loom-mcp/v2/runtime/mcp"
 	goahttp "github.com/CaliLuke/loom/http"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"

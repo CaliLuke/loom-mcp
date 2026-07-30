@@ -85,6 +85,28 @@ func (c *Client) SystemInfo() loom.Endpoint {
 		}
 		return decodeResponse(resp)
 	}
+} // ElicitationContext returns an endpoint that makes JSON-RPC requests to the
+// assistant service elicitation_context method.
+func (c *Client) ElicitationContext() loom.Endpoint {
+	var (
+		encodeRequest  = EncodeElicitationContextRequest(c.encoder)
+		decodeResponse = DecodeElicitationContextResponse(c.decoder, c.RestoreResponseBody)
+	)
+
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildElicitationContextRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		if err := encodeRequest(req, v); err != nil {
+			return nil, err
+		}
+		resp, err := c.Doer.Do(req)
+		if err != nil {
+			return nil, loomhttp.ErrRequestError("assistant", "elicitation_context", err)
+		}
+		return decodeResponse(resp)
+	}
 } // ConversationHistory returns an endpoint that makes JSON-RPC requests to the
 // assistant service conversation_history method.
 func (c *Client) ConversationHistory() loom.Endpoint {
@@ -346,50 +368,6 @@ func (c *Client) ProcessBatch() loom.Endpoint {
 		resp, err := c.Doer.Do(req)
 		if err != nil {
 			return nil, loomhttp.ErrRequestError("assistant", "process_batch", err)
-		}
-		return decodeResponse(resp)
-	}
-} // SampleText returns an endpoint that makes JSON-RPC requests to the assistant
-// service sample_text method.
-func (c *Client) SampleText() loom.Endpoint {
-	var (
-		encodeRequest  = EncodeSampleTextRequest(c.encoder)
-		decodeResponse = DecodeSampleTextResponse(c.decoder, c.RestoreResponseBody)
-	)
-
-	return func(ctx context.Context, v any) (any, error) {
-		req, err := c.BuildSampleTextRequest(ctx, v)
-		if err != nil {
-			return nil, err
-		}
-		if err := encodeRequest(req, v); err != nil {
-			return nil, err
-		}
-		resp, err := c.Doer.Do(req)
-		if err != nil {
-			return nil, loomhttp.ErrRequestError("assistant", "sample_text", err)
-		}
-		return decodeResponse(resp)
-	}
-} // ListClientRoots returns an endpoint that makes JSON-RPC requests to the
-// assistant service list_client_roots method.
-func (c *Client) ListClientRoots() loom.Endpoint {
-	var (
-		encodeRequest  = EncodeListClientRootsRequest(c.encoder)
-		decodeResponse = DecodeListClientRootsResponse(c.decoder, c.RestoreResponseBody)
-	)
-
-	return func(ctx context.Context, v any) (any, error) {
-		req, err := c.BuildListClientRootsRequest(ctx, v)
-		if err != nil {
-			return nil, err
-		}
-		if err := encodeRequest(req, v); err != nil {
-			return nil, err
-		}
-		resp, err := c.Doer.Do(req)
-		if err != nil {
-			return nil, loomhttp.ErrRequestError("assistant", "list_client_roots", err)
 		}
 		return decodeResponse(resp)
 	}

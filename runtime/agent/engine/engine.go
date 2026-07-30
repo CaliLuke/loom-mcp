@@ -68,7 +68,7 @@ import (
 	"errors"
 	"time"
 
-	"github.com/CaliLuke/loom-mcp/runtime/agent/api"
+	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/api"
 )
 
 // RunStatus represents the lifecycle state of a workflow execution.

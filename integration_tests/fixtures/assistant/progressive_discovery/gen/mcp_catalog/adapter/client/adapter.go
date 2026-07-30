@@ -21,8 +21,8 @@ import (
 	catalogjsonrpcc "example.com/assistant/progressive_discovery/gen/jsonrpc/catalog/client"
 	mcpCatalogjsonrpcc "example.com/assistant/progressive_discovery/gen/jsonrpc/mcp_catalog/client"
 	mcpCatalog "example.com/assistant/progressive_discovery/gen/mcp_catalog"
-	mcpruntime "github.com/CaliLuke/loom-mcp/runtime/mcp"
-	retry "github.com/CaliLuke/loom-mcp/runtime/mcp/retry"
+	mcpruntime "github.com/CaliLuke/loom-mcp/v2/runtime/mcp"
+	retry "github.com/CaliLuke/loom-mcp/v2/runtime/mcp/retry"
 	goahttp "github.com/CaliLuke/loom/http"
 	jsonrpc "github.com/CaliLuke/loom/jsonrpc"
 )

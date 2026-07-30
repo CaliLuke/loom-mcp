@@ -5,7 +5,7 @@ import (
 	"testing"
 
 	registryvalidation "example.com/agentfeatures/gen/features/toolsets/registry_validation"
-	"github.com/CaliLuke/loom-mcp/runtime/agent/tools"
+	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/tools"
 	"github.com/stretchr/testify/require"
 )
 

@@ -3,9 +3,9 @@ package runtime
 import (
 	"time"
 
-	"github.com/CaliLuke/loom-mcp/runtime/agent/hooks"
-	"github.com/CaliLuke/loom-mcp/runtime/agent/memory"
-	"github.com/CaliLuke/loom-mcp/runtime/agent/planner"
+	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/hooks"
+	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/memory"
+	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/planner"
 )
 
 func projectMemoryEvent(event hooks.Event) (agentID, runID string, memEvent memory.Event, ok bool) {

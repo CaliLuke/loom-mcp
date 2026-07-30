@@ -125,11 +125,11 @@ func TestGatherAttributeImports_UnionVariants(t *testing.T) {
 		},
 	}
 
-	imports := GatherAttributeImports("github.com/CaliLuke/loom-mcp", att)
+	imports := GatherAttributeImports("github.com/CaliLuke/loom-mcp/v2", att)
 
 	require.Len(t, imports, 1)
 	require.Equal(t, "types", imports[0].Name)
-	require.Equal(t, "github.com/CaliLuke/loom-mcp/gen/types", imports[0].Path)
+	require.Equal(t, "github.com/CaliLuke/loom-mcp/v2/gen/types", imports[0].Path)
 }
 
 // genValidGenPkg generates valid generation package paths.
@@ -137,7 +137,7 @@ func genValidGenPkg() gopter.Gen {
 	return gen.OneConstOf(
 		"example.com/myapp/gen",
 		"github.com/user/project/gen",
-		"github.com/CaliLuke/loom-mcp/gen",
+		"github.com/CaliLuke/loom-mcp/v2/gen",
 		"example.com/deep/nested/path/gen",
 	)
 }
@@ -147,7 +147,7 @@ func genValidBasePkg() gopter.Gen {
 	return gen.OneConstOf(
 		"example.com/myapp",
 		"github.com/user/project",
-		"github.com/CaliLuke/loom-mcp",
+		"github.com/CaliLuke/loom-mcp/v2",
 		"example.com/deep/nested/path",
 	)
 }

@@ -15,9 +15,9 @@ import (
 
 	assistant "example.com/assistant/gen/assistant"
 	projected "example.com/assistant/gen/assistant/toolsets/projected"
-	"github.com/CaliLuke/loom-mcp/runtime/agent/planner"
-	runtime "github.com/CaliLuke/loom-mcp/runtime/agent/runtime"
-	"github.com/CaliLuke/loom-mcp/runtime/agent/tools"
+	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/planner"
+	runtime "github.com/CaliLuke/loom-mcp/v2/runtime/agent/runtime"
+	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/tools"
 )
 
 // Default service executor for projected

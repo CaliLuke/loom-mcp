@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	mcpexpr "github.com/CaliLuke/loom-mcp/expr/mcp"
+	mcpexpr "github.com/CaliLuke/loom-mcp/v2/expr/mcp"
 	gcodegen "github.com/CaliLuke/loom/codegen"
 	"github.com/CaliLuke/loom/eval"
 	"github.com/CaliLuke/loom/expr"
@@ -155,13 +155,28 @@ func TestGenerate_TransportConformance(t *testing.T) {
 		require.NotContains(t, rendered, `"loom-mcp"`,
 			"SDK mode must not advertise the events/stream capability: the SDK transport owns GET and the handler is unreachable")
 		require.Contains(t, rendered, "sdkServerOptionsWithDefaults")
-		require.Contains(t, rendered, "sdkclient.WithClientFeatures(ctx, serverSession)")
+		require.Contains(t, rendered, "sdkclient.WithClientFeatures(ctx, serverSession, sdkclient.ClientFeaturesOptions{")
+		require.Contains(t, rendered, "RequestStateKey")
+		require.Contains(t, rendered, "RequestMethod:")
+		require.Contains(t, rendered, "RequestParams:")
+		require.Contains(t, rendered, "adapter.requestStateKey = slices.Clone(requestStateKey)")
+		require.Contains(t, rendered, "sdkclient.InputRequired(err)")
+		require.Contains(t, rendered, "InputRequests:")
+		require.Contains(t, rendered, "RequestState:")
 		require.Contains(t, rendered, "mcpruntime.WithProgressToken(ctx, req.Params.GetProgressToken())")
 		require.Contains(t, rendered, "func (w *sdkResponseObserver) Unwrap() http.ResponseWriter")
 		require.Contains(t, rendered, "func (w *sdkResponseObserver) captureSession()")
 		require.Contains(t, rendered, "w.captureSession()")
 		require.Contains(t, rendered, "onSessionIssued: func(sessionID string)")
 		require.NotContains(t, rendered, "sdkSessionElicitor")
+	})
+
+	t.Run("tool dispatch preserves input-required control flow", func(t *testing.T) {
+		file := findGeneratedFile(t, files, filepath.Join(gcodegen.Gendir, "mcp_assistant", "adapter_server.go"))
+		rendered := renderGeneratedFile(t, file)
+		require.Contains(t, rendered, "if mcpruntime.IsInputRequired(err)")
+		require.Contains(t, rendered, "mcpruntime.IsInvalidClientInput(err)")
+		require.Contains(t, rendered, "return err")
 	})
 }
 

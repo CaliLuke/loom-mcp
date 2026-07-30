@@ -7,8 +7,8 @@ import (
 	"fmt"
 	"sync"
 
-	clientspulse "github.com/CaliLuke/loom-mcp/features/stream/pulse/clients/pulse"
-	"github.com/CaliLuke/loom-mcp/runtime/toolregistry"
+	clientspulse "github.com/CaliLuke/loom-mcp/v2/features/stream/pulse/clients/pulse"
+	"github.com/CaliLuke/loom-mcp/v2/runtime/toolregistry"
 
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
@@ -151,7 +151,7 @@ func startPublishSpan(ctx context.Context, toolset, streamID string, msg toolreg
 	if msg.Type != toolregistry.MessageTypeCall {
 		return ctx, nil
 	}
-	tracer := otel.Tracer("github.com/CaliLuke/loom-mcp/registry")
+	tracer := otel.Tracer("github.com/CaliLuke/loom-mcp/v2/registry")
 	return tracer.Start(
 		ctx,
 		"toolregistry.publish",

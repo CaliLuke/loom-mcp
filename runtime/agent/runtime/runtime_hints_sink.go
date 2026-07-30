@@ -4,10 +4,10 @@ import (
 	"context"
 	"encoding/json"
 
-	"github.com/CaliLuke/loom-mcp/runtime/agent/rawjson"
-	rthints "github.com/CaliLuke/loom-mcp/runtime/agent/runtime/hints"
-	"github.com/CaliLuke/loom-mcp/runtime/agent/stream"
-	"github.com/CaliLuke/loom-mcp/runtime/agent/tools"
+	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/rawjson"
+	rthints "github.com/CaliLuke/loom-mcp/v2/runtime/agent/runtime/hints"
+	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/stream"
+	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/tools"
 )
 
 // hintingSink decorates a stream.Sink by enriching tool start events with

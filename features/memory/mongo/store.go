@@ -5,8 +5,8 @@ import (
 	"context"
 	"errors"
 
-	clientsmongo "github.com/CaliLuke/loom-mcp/features/memory/mongo/clients/mongo"
-	"github.com/CaliLuke/loom-mcp/runtime/agent/memory"
+	clientsmongo "github.com/CaliLuke/loom-mcp/v2/features/memory/mongo/clients/mongo"
+	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/memory"
 )
 
 // Store implements memory.Store by delegating to the Mongo client.

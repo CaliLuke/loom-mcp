@@ -3,7 +3,7 @@ package dsl
 import (
 	"time"
 
-	agentsexpr "github.com/CaliLuke/loom-mcp/expr/agent"
+	agentsexpr "github.com/CaliLuke/loom-mcp/v2/expr/agent"
 	"github.com/CaliLuke/loom/eval"
 )
 

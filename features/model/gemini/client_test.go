@@ -12,9 +12,9 @@ import (
 	"github.com/stretchr/testify/require"
 	"google.golang.org/genai"
 
-	geminimodel "github.com/CaliLuke/loom-mcp/features/model/gemini"
-	"github.com/CaliLuke/loom-mcp/runtime/agent/model"
-	"github.com/CaliLuke/loom-mcp/testutil"
+	geminimodel "github.com/CaliLuke/loom-mcp/v2/features/model/gemini"
+	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/model"
+	"github.com/CaliLuke/loom-mcp/v2/testutil"
 )
 
 func TestClientConformance(t *testing.T) {

@@ -63,7 +63,7 @@ const (
 	// traceparent string for trace-linking.
 	HeaderTraceParent = "ck.traceparent"
 
-	instrumentationName = "github.com/CaliLuke/loom-mcp/runtime/temporaltrace"
+	instrumentationName = "github.com/CaliLuke/loom-mcp/v2/runtime/temporaltrace"
 )
 
 // WithOriginTraceParent returns a derived context carrying the origin

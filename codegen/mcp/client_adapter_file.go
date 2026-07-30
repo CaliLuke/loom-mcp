@@ -3,7 +3,7 @@ package codegen
 import (
 	"path/filepath"
 
-	"github.com/CaliLuke/loom-mcp/internal/upstreampaths"
+	"github.com/CaliLuke/loom-mcp/v2/internal/upstreampaths"
 	"github.com/CaliLuke/loom/codegen"
 	"github.com/CaliLuke/loom/expr"
 	"github.com/dave/jennifer/jen"
@@ -41,10 +41,10 @@ func clientAdapterFile(genpkg string, svc *expr.ServiceExpr, data *AdapterData) 
 		{Path: "net/http"},
 		{Path: "net/url"},
 		{Path: "sync"},
-		{Path: "github.com/CaliLuke/loom-mcp/runtime/mcp", Name: "mcpruntime"},
+		{Path: "github.com/CaliLuke/loom-mcp/v2/runtime/mcp", Name: "mcpruntime"},
 		{Path: upstreampaths.LoomMCPHTTPImportPath, Name: "goahttp"},
 		{Path: upstreampaths.LoomMCPJSONRPCImportPath, Name: "jsonrpc"},
-		{Path: "github.com/CaliLuke/loom-mcp/runtime/mcp/retry", Name: "retry"},
+		{Path: "github.com/CaliLuke/loom-mcp/v2/runtime/mcp/retry", Name: "retry"},
 		{Path: genpkg + "/" + svcName, Name: svcName},
 		{Path: genpkg + "/jsonrpc/" + svcName + "/client", Name: fileData.SvcJSONRPCCAlias},
 		{Path: genpkg + "/mcp_" + svcName, Name: fileData.MCPPkgAlias},

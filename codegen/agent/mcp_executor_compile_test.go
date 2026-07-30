@@ -8,12 +8,12 @@ import (
 	"strings"
 	"testing"
 
-	codegen "github.com/CaliLuke/loom-mcp/codegen/agent"
-	mcpcodegen "github.com/CaliLuke/loom-mcp/codegen/mcp"
-	"github.com/CaliLuke/loom-mcp/codegen/testhelpers"
-	. "github.com/CaliLuke/loom-mcp/dsl"
-	agentsexpr "github.com/CaliLuke/loom-mcp/expr/agent"
-	mcpexpr "github.com/CaliLuke/loom-mcp/expr/mcp"
+	codegen "github.com/CaliLuke/loom-mcp/v2/codegen/agent"
+	mcpcodegen "github.com/CaliLuke/loom-mcp/v2/codegen/mcp"
+	"github.com/CaliLuke/loom-mcp/v2/codegen/testhelpers"
+	. "github.com/CaliLuke/loom-mcp/v2/dsl"
+	agentsexpr "github.com/CaliLuke/loom-mcp/v2/expr/agent"
+	mcpexpr "github.com/CaliLuke/loom-mcp/v2/expr/mcp"
 	gcodegen "github.com/CaliLuke/loom/codegen"
 	loomgenerator "github.com/CaliLuke/loom/codegen/generator"
 	. "github.com/CaliLuke/loom/dsl"
@@ -226,7 +226,7 @@ import (
 	"testing"
 
 	lookup "example.com/fmcp/gen/assistant/toolsets/lookup"
-	"github.com/CaliLuke/loom-mcp/runtime/agent/runtime"
+	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/runtime"
 )
 
 func TestInjectedPayloadRuntime(t *testing.T) {
@@ -275,7 +275,7 @@ import (
 	"testing"
 
 	lookup "example.com/fmcp/gen/assistant/toolsets/lookup"
-	"github.com/CaliLuke/loom-mcp/runtime/agent/runtime"
+	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/runtime"
 )
 
 func TestLabelInjectedPayloadRuntime(t *testing.T) {
@@ -425,12 +425,12 @@ func writeGeneratedModule(t *testing.T, files []*gcodegen.File) string {
 	require.NoError(t, err)
 	modContent := strings.Replace(
 		string(goMod),
-		"module github.com/CaliLuke/loom-mcp",
+		"module github.com/CaliLuke/loom-mcp/v2",
 		"module example.com/fmcp",
 		1,
 	)
-	modContent += "\nrequire github.com/CaliLuke/loom-mcp v0.0.0-00010101000000-000000000000\n" +
-		"\nreplace github.com/CaliLuke/loom-mcp => " + repoRoot + "\n"
+	modContent += "\nrequire github.com/CaliLuke/loom-mcp/v2 v2.0.0\n" +
+		"\nreplace github.com/CaliLuke/loom-mcp/v2 => " + repoRoot + "\n"
 	require.NoError(t, os.WriteFile(filepath.Join(moduleDir, "go.mod"), []byte(modContent), 0o600)) // #nosec G703 -- moduleDir is a test-owned temp dir.
 
 	goSum, err := os.ReadFile(filepath.Join(repoRoot, "go.sum")) // #nosec G304 -- repoRoot is resolved from this test file's location.

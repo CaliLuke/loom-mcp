@@ -1,8 +1,9 @@
 # loom-mcp Runtime Reference
 
-The `loom-mcp` runtime is the execution engine that turns your agent designs into running
-systems. The repository name and Go module path are both `github.com/CaliLuke/loom-mcp`. This
-document uses `loom-mcp` for product discussion and the same path in code examples.
+The `loom-mcp` runtime is the execution engine that turns your agent designs
+into running systems. Its Go module path is
+`github.com/CaliLuke/loom-mcp/v2`; this document uses `loom-mcp` for product
+discussion and the versioned module path in code examples.
 
 ## When to Use This Guide
 
@@ -65,8 +66,8 @@ import (
     "fmt"
 
     chat "example.com/assistant/gen/orchestrator/agents/chat"
-    "github.com/CaliLuke/loom-mcp/runtime/agent/model"
-    "github.com/CaliLuke/loom-mcp/runtime/agent/runtime"
+    "github.com/CaliLuke/loom-mcp/v2/runtime/agent/model"
+    "github.com/CaliLuke/loom-mcp/v2/runtime/agent/runtime"
 )
 
 func main() {
@@ -271,9 +272,9 @@ files through `resources/read`.
 ```go
 import (
     mcpassistant "example.com/assistant/gen/mcp_assistant"
-    promptmongo "github.com/CaliLuke/loom-mcp/features/prompt/mongo"
-    clientmongo "github.com/CaliLuke/loom-mcp/features/prompt/mongo/clients/mongo"
-    "github.com/CaliLuke/loom-mcp/runtime/agent/prompt"
+    promptmongo "github.com/CaliLuke/loom-mcp/v2/features/prompt/mongo"
+    clientmongo "github.com/CaliLuke/loom-mcp/v2/features/prompt/mongo/clients/mongo"
+    "github.com/CaliLuke/loom-mcp/v2/runtime/agent/prompt"
 )
 
 mongoClient, _ := clientmongo.New(clientmongo.Options{
@@ -749,7 +750,7 @@ Loom MCP provides a reusable executor implementation in `runtime/toolregistry/ex
 
 ```go
 import (
-    toolregexec "github.com/CaliLuke/loom-mcp/runtime/toolregistry/executor"
+    toolregexec "github.com/CaliLuke/loom-mcp/v2/runtime/toolregistry/executor"
 )
 
 exec := toolregexec.New(registryClient, pulseClient, specs)
@@ -2073,7 +2074,7 @@ resp, err := modelClient.Complete(ctx, &model.Request{
 Apply adaptive rate limiting:
 
 ```go
-import mdlmw "github.com/CaliLuke/loom-mcp/features/model/middleware"
+import mdlmw "github.com/CaliLuke/loom-mcp/v2/features/model/middleware"
 
 rl := mdlmw.NewAdaptiveRateLimiter(
     ctx,
@@ -2193,7 +2194,7 @@ status as `canceled` rather than `failed`.
 **Temporal worker** — Production-grade durable execution:
 
 ```go
-import temporal "github.com/CaliLuke/loom-mcp/runtime/agent/engine/temporal"
+import temporal "github.com/CaliLuke/loom-mcp/v2/runtime/agent/engine/temporal"
 
 eng, _ := temporal.NewWorker(temporal.Options{
     ClientOptions: &client.Options{
@@ -2239,7 +2240,7 @@ In this split:
 **In-memory** — Fast iteration, no durability:
 
 ```go
-import inmem "github.com/CaliLuke/loom-mcp/runtime/agent/engine/inmem"
+import inmem "github.com/CaliLuke/loom-mcp/v2/runtime/agent/engine/inmem"
 
 eng := inmem.New()
 ```
@@ -2379,11 +2380,18 @@ transports. Each constructor establishes an initialized MCP session and returns 
 caller that can be reused across multiple tool invocations.
 
 Generated SDK-backed MCP servers also expose server-to-client features through
-request context. `mcp.Elicit` requests structured user input, `mcp.Sample`
-sends a text `sampling/createMessage` request, and `mcp.ListRoots` retrieves
-client filesystem boundaries. `mcp.ReportProgress` sends request-scoped progress
-notifications using the original client token. All fail closed with an
-unavailable error outside a generated SDK request context. See
+request context. `mcp.Elicit` requests structured user input through official
+multi-round-trip `inputRequests`/`inputResponses`, so the implementation is
+re-entered and code before the runtime helper must be retry-safe.
+`mcp.ReportProgress` sends request-scoped progress notifications using the
+original client token. Both fail closed with an unavailable error outside a
+generated SDK request context. Sampling and roots are deprecated in MCP
+`2026-07-28` and are not exposed as Loom runtime client features. Multi-step
+elicitation requires a `2026-07-28` client and uses one round trip per
+`mcp.Elicit` call. Its `requestState` is AES-GCM protected, bound to the
+original logical request, and portable across SDK server replicas that share a
+stable 32-byte `SDKServerOptions.RequestStateKey`. The protected responses
+remain client assertions, not an authorization or server-state channel. See
 [`mcp_sdk_server.md`](mcp_sdk_server.md) for the generated-server contracts and
 examples.
 
@@ -2392,7 +2400,7 @@ examples.
 Spawns an MCP server as a subprocess and communicates via stdin/stdout:
 
 ```go
-import "github.com/CaliLuke/loom-mcp/runtime/mcp"
+import "github.com/CaliLuke/loom-mcp/v2/runtime/mcp"
 
 caller, err := mcp.NewStdioCaller(ctx, mcp.StdioOptions{
     Command: "npx",
@@ -2830,7 +2838,7 @@ events for specific use cases.
 | `MetricsProfile()`    | Telemetry and monitoring      | `usage`, `workflow` only |
 
 ```go
-import "github.com/CaliLuke/loom-mcp/runtime/agent/stream"
+import "github.com/CaliLuke/loom-mcp/v2/runtime/agent/stream"
 
 // Get a profile
 profile := stream.AgentDebugProfile()
@@ -2847,7 +2855,7 @@ The `runtime/agent/toolerrors` package provides structured error types for tool 
 failures that integrate with the planner retry system.
 
 ```go
-import "github.com/CaliLuke/loom-mcp/runtime/agent/toolerrors"
+import "github.com/CaliLuke/loom-mcp/v2/runtime/agent/toolerrors"
 
 // Create a tool error with retry hint
 err := toolerrors.New(
@@ -2911,7 +2919,7 @@ The `features/model/middleware` package provides middleware for model clients.
 Apply adaptive rate limiting to handle provider throttling:
 
 ```go
-import mdlmw "github.com/CaliLuke/loom-mcp/features/model/middleware"
+import mdlmw "github.com/CaliLuke/loom-mcp/v2/features/model/middleware"
 
 rl := mdlmw.NewAdaptiveRateLimiter(
     ctx,
@@ -2964,7 +2972,7 @@ defer cleanup()
 ### Pulse Streaming
 
 ```go
-import pulsestream "github.com/CaliLuke/loom-mcp/features/stream/pulse"
+import pulsestream "github.com/CaliLuke/loom-mcp/v2/features/stream/pulse"
 
 streams, _ := pulsestream.NewRuntimeStreams(pulsestream.RuntimeStreamsOptions{
     Client: pulseClient,

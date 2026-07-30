@@ -6,6 +6,7 @@ import (
 
 	assistant "example.com/assistant/gen/assistant"
 	mcpassistant "example.com/assistant/gen/mcp_assistant"
+	mcpruntime "github.com/CaliLuke/loom-mcp/v2/runtime/mcp"
 )
 
 // NewMcpAssistant returns an MCP server implementation for the assistant
@@ -128,12 +129,43 @@ func (s *mcpShim) ToolsList(ctx context.Context, p *mcpassistant.ToolsListPayloa
 type promptProvider struct{}
 
 func (promptProvider) GetContextualPromptsPrompt(ctx context.Context, arguments json.RawMessage) (*mcpassistant.PromptsGetResult, error) {
-	// Produce a simple message that echoes the request; tests only
-	// verify success path, not specific content.
+	var payload struct {
+		Context string `json:"context"`
+	}
+	if len(arguments) > 0 {
+		if err := json.Unmarshal(arguments, &payload); err != nil {
+			return nil, err
+		}
+	}
+	text := "Dynamic contextual prompts"
+	if payload.Context == "needs-elicitation" {
+		result, err := mcpruntime.Elicit(ctx, mcpruntime.ElicitRequest{
+			Mode:    "form",
+			Message: "Provide prompt guidance.",
+			RequestedSchema: map[string]any{
+				"type": "object",
+				"properties": map[string]any{
+					"guidance": map[string]any{
+						"type": "string",
+					},
+				},
+				"required": []any{"guidance"},
+			},
+		})
+		if err != nil {
+			return nil, err
+		}
+		text = "Elicitation declined."
+		if result != nil && result.Action == "accept" {
+			if guidance, ok := result.Content["guidance"].(string); ok {
+				text = guidance
+			}
+		}
+	}
 	return &mcpassistant.PromptsGetResult{
 		Description: nil,
 		Messages: []*mcpassistant.PromptMessage{
-			{Role: "system", Content: &mcpassistant.MessageContent{Type: "text", Text: strPtr("Dynamic contextual prompts")}},
+			{Role: "system", Content: &mcpassistant.MessageContent{Type: "text", Text: strPtr(text)}},
 		},
 	}, nil
 }

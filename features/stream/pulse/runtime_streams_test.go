@@ -9,7 +9,7 @@ import (
 	streamopts "github.com/CaliLuke/loom/pulse/streaming/options"
 	"github.com/stretchr/testify/require"
 
-	clientspulse "github.com/CaliLuke/loom-mcp/features/stream/pulse/clients/pulse"
+	clientspulse "github.com/CaliLuke/loom-mcp/v2/features/stream/pulse/clients/pulse"
 )
 
 func TestRuntimeStreamsSinkLifecycle(t *testing.T) {

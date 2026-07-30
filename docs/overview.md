@@ -1,8 +1,8 @@
 # loom-mcp Overview
 
-`loom-mcp` is the design-first agent framework in this repository. The repo name and Go module
-path are both `github.com/CaliLuke/loom-mcp`, so this guide uses `loom-mcp` for the project name
-and the same path for Go imports.
+`loom-mcp` is the design-first agent framework in this repository. Its Go module
+path is `github.com/CaliLuke/loom-mcp/v2`; the repository and product name
+remain `loom-mcp`.
 
 Build intelligent, tool-wielding agents with the confidence of strong types and the power of
 durable execution. Define agents, toolsets, MCP servers, and policies in Goa design files and let
@@ -27,7 +27,7 @@ DSL → Codegen → Runtime → Engine + Features
 
 Think of it as a pipeline from intention to execution:
 
-1. **DSL** (`github.com/CaliLuke/loom-mcp/dsl`) — Express what you want: agents, tools, policies. Clean, declarative,
+1. **DSL** (`github.com/CaliLuke/loom-mcp/v2/dsl`) — Express what you want: agents, tools, policies. Clean, declarative,
    version‑controlled.
 
 2. **Codegen** (`codegen/agent`, `codegen/mcp`) — Transform your design into typed Go packages:
@@ -210,7 +210,7 @@ package design
 
 import (
  . "github.com/CaliLuke/loom/dsl"
- . "github.com/CaliLuke/loom-mcp/dsl"
+ . "github.com/CaliLuke/loom-mcp/v2/dsl"
 )
 
 var _ = API("orchestrator", func() {})
@@ -264,9 +264,9 @@ import (
  "fmt"
 
  chat "example.com/quickstart/gen/orchestrator/agents/chat"
- "github.com/CaliLuke/loom-mcp/runtime/agent/model"
- "github.com/CaliLuke/loom-mcp/runtime/agent/planner"
- "github.com/CaliLuke/loom-mcp/runtime/agent/runtime"
+ "github.com/CaliLuke/loom-mcp/v2/runtime/agent/model"
+ "github.com/CaliLuke/loom-mcp/v2/runtime/agent/planner"
+ "github.com/CaliLuke/loom-mcp/v2/runtime/agent/runtime"
 )
 
 // A tiny planner: always replies, no tools (perfect for first run)
@@ -542,7 +542,7 @@ overlay ctx-bridged values), and the transport observability hooks, see
 | Function                                                          | Purpose                                  |
 | ----------------------------------------------------------------- | ---------------------------------------- |
 | `MCP(name, version, opts...)`                                     | Enable MCP support for a service         |
-| `ProtocolVersion(string)`                                         | Configure MCP protocol version           |
+| `ProtocolVersion(string)`                                         | Configure an implemented native MCP version |
 | `WebsiteURL(string)`                                              | Add implementation website metadata      |
 | `ServerIcons(icons...)`                                           | Add implementation icons                 |
 | `Resource(name, uri, mimeType, opts...)`                          | Mark method as MCP resource provider     |
@@ -1112,7 +1112,7 @@ rt := runtime.New(runtime.WithStream(sink))
 ### Manual Bridge (Direct Bus Access)
 
 ```go
-import "github.com/CaliLuke/loom-mcp/runtime/agent/stream/bridge"
+import "github.com/CaliLuke/loom-mcp/v2/runtime/agent/stream/bridge"
 
 sub, _ := bridge.Register(rt.Bus, sink)
 defer sub.Close()

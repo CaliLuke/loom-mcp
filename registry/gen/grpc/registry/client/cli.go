@@ -3,7 +3,7 @@
 // registry gRPC client CLI support package
 //
 // Command:
-// $ loom gen github.com/CaliLuke/loom-mcp/registry/design -o registry
+// $ loom gen github.com/CaliLuke/loom-mcp/v2/registry/design -o registry
 
 package client
 
@@ -11,8 +11,8 @@ import (
 	"encoding/json"
 	"fmt"
 
-	registrypb "github.com/CaliLuke/loom-mcp/registry/gen/grpc/registry/pb"
-	registry "github.com/CaliLuke/loom-mcp/registry/gen/registry"
+	registrypb "github.com/CaliLuke/loom-mcp/v2/registry/gen/grpc/registry/pb"
+	registry "github.com/CaliLuke/loom-mcp/v2/registry/gen/registry"
 )
 
 // BuildRegisterPayload builds the payload for the registry Register endpoint

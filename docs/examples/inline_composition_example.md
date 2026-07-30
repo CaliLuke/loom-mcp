@@ -22,7 +22,7 @@ import (
     "context"
 
     exporter "example.com/gen/exporter/agents/exporter"
-    "github.com/CaliLuke/loom-mcp/runtime/agent/runtime"
+    "github.com/CaliLuke/loom-mcp/v2/runtime/agent/runtime"
 )
 
 func main() {
@@ -51,7 +51,7 @@ import (
 
     exporteragenttools "example.com/gen/exporter/agents/exporter/agenttools"
     consumer "example.com/gen/consumer/agents/consumer"
-    "github.com/CaliLuke/loom-mcp/runtime/agent/runtime"
+    "github.com/CaliLuke/loom-mcp/v2/runtime/agent/runtime"
 )
 
 func main() {

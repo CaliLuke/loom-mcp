@@ -4,9 +4,9 @@ import (
 	"context"
 	"strings"
 
-	"github.com/CaliLuke/loom-mcp/runtime/agent/memory"
-	"github.com/CaliLuke/loom-mcp/runtime/agent/model"
-	"github.com/CaliLuke/loom-mcp/runtime/agent/run"
+	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/memory"
+	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/model"
+	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/run"
 )
 
 func (r *Runtime) preloadMemory(ctx context.Context, policy *MemoryPreloadPolicy, agentID string, runCtx run.Context, reader memory.Reader) ([]memory.Event, error) {

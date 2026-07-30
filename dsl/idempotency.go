@@ -3,8 +3,8 @@ package dsl
 import (
 	"github.com/CaliLuke/loom/eval"
 
-	agentsexpr "github.com/CaliLuke/loom-mcp/expr/agent"
-	runtimetools "github.com/CaliLuke/loom-mcp/runtime/agent/tools"
+	agentsexpr "github.com/CaliLuke/loom-mcp/v2/expr/agent"
+	runtimetools "github.com/CaliLuke/loom-mcp/v2/runtime/agent/tools"
 )
 
 // Idempotent emits metadata declaring a tool idempotent within a run transcript.

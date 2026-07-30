@@ -15,7 +15,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/CaliLuke/loom-mcp/internal/upstreampaths"
+	"github.com/CaliLuke/loom-mcp/v2/internal/upstreampaths"
 )
 
 var goaCoreReplacePattern = regexp.MustCompile(`(?m)^replace goa\.design/goa/v3 => .+$`)
@@ -178,7 +178,7 @@ func rewriteQuickstartGoMod(repoRoot string, quickstartDir string) error {
 	if err != nil {
 		return err
 	}
-	updated := strings.ReplaceAll(string(raw), "replace github.com/CaliLuke/loom-mcp => ..", "replace github.com/CaliLuke/loom-mcp => "+repoRoot)
+	updated := strings.ReplaceAll(string(raw), "replace github.com/CaliLuke/loom-mcp/v2 => ..", "replace github.com/CaliLuke/loom-mcp/v2 => "+repoRoot)
 
 	rootModPath := filepath.Join(repoRoot, "go.mod")
 	//nolint:gosec // Test helper reads the local repo module file.

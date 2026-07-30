@@ -6,11 +6,11 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	"github.com/CaliLuke/loom-mcp/runtime/agent/hooks"
-	"github.com/CaliLuke/loom-mcp/runtime/agent/prompt"
-	runloginmem "github.com/CaliLuke/loom-mcp/runtime/agent/runlog/inmem"
-	"github.com/CaliLuke/loom-mcp/runtime/agent/session"
-	sessioninmem "github.com/CaliLuke/loom-mcp/runtime/agent/session/inmem"
+	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/hooks"
+	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/prompt"
+	runloginmem "github.com/CaliLuke/loom-mcp/v2/runtime/agent/runlog/inmem"
+	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/session"
+	sessioninmem "github.com/CaliLuke/loom-mcp/v2/runtime/agent/session/inmem"
 )
 
 func TestRunOneShotPersistsCanonicalRunlogWithoutSessionState(t *testing.T) {

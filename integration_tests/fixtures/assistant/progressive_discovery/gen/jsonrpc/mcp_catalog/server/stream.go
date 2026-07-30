@@ -17,7 +17,7 @@ import (
 	"sync"
 
 	mcpcatalog "example.com/assistant/progressive_discovery/gen/mcp_catalog"
-	mcpruntime "github.com/CaliLuke/loom-mcp/runtime/mcp"
+	mcpruntime "github.com/CaliLuke/loom-mcp/v2/runtime/mcp"
 	loomhttp "github.com/CaliLuke/loom/http"
 	"github.com/CaliLuke/loom/jsonrpc"
 	loomtransport "github.com/CaliLuke/loom/observability/transport"

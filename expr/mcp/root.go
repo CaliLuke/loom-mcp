@@ -55,7 +55,7 @@ func (r *RootExpr) DependsOn() []eval.Root {
 // Packages returns the DSL packages that should be recognized for error
 // reporting.
 func (r *RootExpr) Packages() []string {
-	return []string{"github.com/CaliLuke/loom-mcp/dsl"}
+	return []string{"github.com/CaliLuke/loom-mcp/v2/dsl"}
 }
 
 // WalkSets exposes the nested expressions to the eval engine.

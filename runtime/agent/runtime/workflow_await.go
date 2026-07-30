@@ -8,9 +8,9 @@ package runtime
 import (
 	"errors"
 
-	"github.com/CaliLuke/loom-mcp/runtime/agent/engine"
-	"github.com/CaliLuke/loom-mcp/runtime/agent/interrupt"
-	"github.com/CaliLuke/loom-mcp/runtime/agent/planner"
+	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/engine"
+	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/interrupt"
+	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/planner"
 )
 
 // handleAwaitOnlyResult executes an await-only planner result (no tool calls).

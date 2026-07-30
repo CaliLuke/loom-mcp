@@ -14,8 +14,8 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/CaliLuke/loom-mcp/codegen/naming"
-	agentsExpr "github.com/CaliLuke/loom-mcp/expr/agent"
+	"github.com/CaliLuke/loom-mcp/v2/codegen/naming"
+	agentsExpr "github.com/CaliLuke/loom-mcp/v2/expr/agent"
 	goacodegen "github.com/CaliLuke/loom/codegen"
 	"github.com/CaliLuke/loom/eval"
 	goaexpr "github.com/CaliLuke/loom/expr"

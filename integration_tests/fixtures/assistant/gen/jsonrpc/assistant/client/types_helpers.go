@@ -27,6 +27,13 @@ type SystemInfoResponseBodyResponseBody struct {
 	Version *string `form:"version,omitempty" json:"version,omitempty" xml:"version,omitempty"`
 }
 
+// ElicitationContextResponseBodyResponseBody is used to define fields on
+// response body types.
+type ElicitationContextResponseBodyResponseBody struct {
+	// User-supplied context
+	Context *string `form:"context,omitempty" json:"context,omitempty" xml:"context,omitempty"`
+}
+
 // ConversationHistoryResponseBodyResponseBody is used to define fields on
 // response body types.
 type ConversationHistoryResponseBodyResponseBody struct {
@@ -118,32 +125,6 @@ type ExecuteCodeResponseBodyResponseBody struct {
 type ProcessBatchResponseBodyResponseBody struct {
 	// Operation status
 	OK *bool `form:"ok,omitempty" json:"ok,omitempty" xml:"ok,omitempty"`
-}
-
-// SampleTextResponseBodyResponseBody is used to define fields on response body
-// types.
-type SampleTextResponseBodyResponseBody struct {
-	// Sampled text
-	Text *string `form:"text,omitempty" json:"text,omitempty" xml:"text,omitempty"`
-	// Model selected by the client
-	Model *string `form:"model,omitempty" json:"model,omitempty" xml:"model,omitempty"`
-	// Reason sampling stopped
-	StopReason *string `form:"stop_reason,omitempty" json:"stop_reason,omitempty" xml:"stop_reason,omitempty"`
-}
-
-// ListClientRootsResponseBodyResponseBody is used to define fields on response
-// body types.
-type ListClientRootsResponseBodyResponseBody struct {
-	// Client filesystem roots
-	Roots []*ClientRootResponseBody `form:"roots,omitempty" json:"roots,omitempty" xml:"roots,omitempty"`
-}
-
-// ClientRootResponseBody is used to define fields on response body types.
-type ClientRootResponseBody struct {
-	// Root file URI
-	URI *string `form:"uri,omitempty" json:"uri,omitempty" xml:"uri,omitempty"`
-	// Optional display name
-	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 }
 
 // ReportProgressResponseBodyResponseBody is used to define fields on response
@@ -374,17 +355,6 @@ func NewProcessBatchRequestBody(p *assistant.ProcessBatchPayload) *ProcessBatchR
 	return body
 }
 
-// NewSampleTextRequestBody builds the HTTP request body from the payload of
-// the "sample_text" endpoint of the "assistant" service.
-func NewSampleTextRequestBody(p *assistant.SampleTextPayload) *SampleTextRequestBody {
-	body := &SampleTextRequestBody{
-		Prompt:       p.Prompt,
-		SystemPrompt: p.SystemPrompt,
-		MaxTokens:    p.MaxTokens,
-	}
-	return body
-}
-
 // NewMultiContentRequestBody builds the HTTP request body from the payload of
 // the "multi_content" endpoint of the "assistant" service.
 func NewMultiContentRequestBody(p *assistant.MultiContentPayload) *MultiContentRequestBody {
@@ -494,6 +464,16 @@ func NewSystemInfoResultOK(body *SystemInfoResponseBody) *assistant.SystemInfoRe
 	v := &assistant.SystemInfoResult{
 		Name:    body.Name,
 		Version: body.Version,
+	}
+
+	return v
+}
+
+// NewElicitationContextResultOK builds a "assistant" service
+// "elicitation_context" endpoint result from a HTTP "OK" response.
+func NewElicitationContextResultOK(body *ElicitationContextResponseBody) *assistant.ElicitationContextResult {
+	v := &assistant.ElicitationContextResult{
+		Context: body.Context,
 	}
 
 	return v
@@ -628,34 +608,6 @@ func NewExecuteCodeResultOK(body *ExecuteCodeResponseBody) *assistant.ExecuteCod
 func NewProcessBatchResultOK(body *ProcessBatchResponseBody) *assistant.ProcessBatchResult {
 	v := &assistant.ProcessBatchResult{
 		OK: body.OK,
-	}
-
-	return v
-}
-
-// NewSampleTextResultOK builds a "assistant" service "sample_text" endpoint
-// result from a HTTP "OK" response.
-func NewSampleTextResultOK(body *SampleTextResponseBody) *assistant.SampleTextResult {
-	v := &assistant.SampleTextResult{
-		Text:       *body.Text,
-		Model:      *body.Model,
-		StopReason: *body.StopReason,
-	}
-
-	return v
-}
-
-// NewListClientRootsResultOK builds a "assistant" service "list_client_roots"
-// endpoint result from a HTTP "OK" response.
-func NewListClientRootsResultOK(body *ListClientRootsResponseBody) *assistant.ListClientRootsResult {
-	v := &assistant.ListClientRootsResult{}
-	v.Roots = make([]*assistant.ClientRoot, len(body.Roots))
-	for i, val := range body.Roots {
-		if val == nil {
-			v.Roots[i] = nil
-			continue
-		}
-		v.Roots[i] = unmarshalClientRootResponseBodyToAssistantClientRoot(val)
 	}
 
 	return v

@@ -940,7 +940,7 @@ func promptProviderSection(data *AdapterData) codegen.Section {
 		}
 		stmt.Comment("RegisterRuntimePrompts registers design-declared MCP prompts as runtime prompt specs.").Line()
 		stmt.Func().Id("RegisterRuntimePrompts").
-			Params(jen.Id("reg").Op("*").Qual("github.com/CaliLuke/loom-mcp/runtime/agent/prompt", "Registry")).
+			Params(jen.Id("reg").Op("*").Qual("github.com/CaliLuke/loom-mcp/v2/runtime/agent/prompt", "Registry")).
 			Params(jen.Error()).
 			BlockFunc(func(g *jen.Group) {
 				for _, p := range data.StaticPrompts {
@@ -949,8 +949,8 @@ func promptProviderSection(data *AdapterData) codegen.Section {
 					}
 					g.If(
 						jen.Err().Op(":=").Id("reg").Dot("Register").Call(
-							jen.Qual("github.com/CaliLuke/loom-mcp/runtime/agent/prompt", "PromptSpec").Values(jen.Dict{
-								jen.Id("ID"):          jen.Qual("github.com/CaliLuke/loom-mcp/runtime/agent/prompt", "Ident").Call(jen.Lit(p.Name)),
+							jen.Qual("github.com/CaliLuke/loom-mcp/v2/runtime/agent/prompt", "PromptSpec").Values(jen.Dict{
+								jen.Id("ID"):          jen.Qual("github.com/CaliLuke/loom-mcp/v2/runtime/agent/prompt", "Ident").Call(jen.Lit(p.Name)),
 								jen.Id("AgentID"):     jen.Lit(p.RuntimePrompt.AgentID),
 								jen.Id("Role"):        promptRoleCode(p.RuntimePrompt.Role),
 								jen.Id("Description"): jen.Lit(p.Description),
@@ -980,14 +980,14 @@ func hasRuntimePrompts(prompts []*StaticPromptAdapter) bool {
 func promptRoleCode(role string) jen.Code {
 	switch role {
 	case "system":
-		return jen.Qual("github.com/CaliLuke/loom-mcp/runtime/agent/prompt", "PromptRoleSystem")
+		return jen.Qual("github.com/CaliLuke/loom-mcp/v2/runtime/agent/prompt", "PromptRoleSystem")
 	case "user":
-		return jen.Qual("github.com/CaliLuke/loom-mcp/runtime/agent/prompt", "PromptRoleUser")
+		return jen.Qual("github.com/CaliLuke/loom-mcp/v2/runtime/agent/prompt", "PromptRoleUser")
 	case "tool":
-		return jen.Qual("github.com/CaliLuke/loom-mcp/runtime/agent/prompt", "PromptRoleTool")
+		return jen.Qual("github.com/CaliLuke/loom-mcp/v2/runtime/agent/prompt", "PromptRoleTool")
 	case "synthesis":
-		return jen.Qual("github.com/CaliLuke/loom-mcp/runtime/agent/prompt", "PromptRoleSynthesis")
+		return jen.Qual("github.com/CaliLuke/loom-mcp/v2/runtime/agent/prompt", "PromptRoleSynthesis")
 	default:
-		return jen.Qual("github.com/CaliLuke/loom-mcp/runtime/agent/prompt", "PromptRole").Call(jen.Lit(role))
+		return jen.Qual("github.com/CaliLuke/loom-mcp/v2/runtime/agent/prompt", "PromptRole").Call(jen.Lit(role))
 	}
 }

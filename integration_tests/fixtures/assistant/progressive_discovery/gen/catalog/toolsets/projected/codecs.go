@@ -15,7 +15,7 @@ import (
 	"strings"
 
 	toolhttp "example.com/assistant/progressive_discovery/gen/catalog/toolsets/projected/http"
-	"github.com/CaliLuke/loom-mcp/runtime/agent/tools"
+	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/tools"
 	loom "github.com/CaliLuke/loom/pkg"
 )
 

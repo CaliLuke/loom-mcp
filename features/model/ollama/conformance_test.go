@@ -11,9 +11,9 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	ollamamodel "github.com/CaliLuke/loom-mcp/features/model/ollama"
-	"github.com/CaliLuke/loom-mcp/runtime/agent/model"
-	"github.com/CaliLuke/loom-mcp/testutil"
+	ollamamodel "github.com/CaliLuke/loom-mcp/v2/features/model/ollama"
+	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/model"
+	"github.com/CaliLuke/loom-mcp/v2/testutil"
 )
 
 func TestClientConformance(t *testing.T) {

@@ -10,7 +10,7 @@ package registry_validator
 import (
 	"errors"
 
-	"github.com/CaliLuke/loom-mcp/runtime/agent/planner"
+	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/planner"
 )
 
 // RegistryValidatorAgentConfig configures the RegistryValidatorAgent agent

@@ -15,14 +15,15 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
+	"slices"
 	"strings"
 	"sync"
 
 	assistant "example.com/assistant/gen/assistant"
 	projected "example.com/assistant/gen/assistant/toolsets/projected"
-	mcpruntime "github.com/CaliLuke/loom-mcp/runtime/mcp"
-	sdkclient "github.com/CaliLuke/loom-mcp/runtime/mcp/sdkclient"
-	mcpskills "github.com/CaliLuke/loom-mcp/runtime/mcp/skills"
+	mcpruntime "github.com/CaliLuke/loom-mcp/v2/runtime/mcp"
+	sdkclient "github.com/CaliLuke/loom-mcp/v2/runtime/mcp/sdkclient"
+	mcpskills "github.com/CaliLuke/loom-mcp/v2/runtime/mcp/skills"
 	loomhttp "github.com/CaliLuke/loom/http"
 	"github.com/CaliLuke/loom/observability/transport"
 	mcpsdk "github.com/modelcontextprotocol/go-sdk/mcp"
@@ -35,8 +36,10 @@ type SDKServer struct {
 	Server  *mcpsdk.Server
 }
 type SDKServerOptions struct {
-	Adapter           *MCPAdapterOptions
-	RequestContext    func(context.Context, *http.Request) context.Context
+	Adapter        *MCPAdapterOptions
+	RequestContext func(context.Context, *http.Request) context.Context
+	// RequestStateKey encrypts and authenticates multi-round-trip request state. It must contain exactly 32 bytes when a flow emits or consumes requestState.
+	RequestStateKey   []byte
 	TransportObserver transport.Observer
 	RuntimeCORS       *loomhttp.RuntimeCORSPolicy
 	PromptProvider    PromptProvider
@@ -59,6 +62,7 @@ type sdkToolCallCollector struct {
 func NewSDKServer(service assistant.Service, opts *SDKServerOptions) (*SDKServer, error) {
 	var adapterOpts *MCPAdapterOptions
 	var requestContext func(context.Context, *http.Request) context.Context
+	var requestStateKey []byte
 	var transportObserver transport.Observer
 	var runtimeCORS *loomhttp.RuntimeCORSPolicy
 	var promptProvider PromptProvider
@@ -67,6 +71,7 @@ func NewSDKServer(service assistant.Service, opts *SDKServerOptions) (*SDKServer
 	if opts != nil {
 		adapterOpts = opts.Adapter
 		requestContext = opts.RequestContext
+		requestStateKey = opts.RequestStateKey
 		transportObserver = opts.TransportObserver
 		runtimeCORS = opts.RuntimeCORS
 		promptProvider = opts.PromptProvider
@@ -81,6 +86,7 @@ func NewSDKServer(service assistant.Service, opts *SDKServerOptions) (*SDKServer
 	}
 	adapter := NewMCPAdapter(service, promptProvider, adapterOpts)
 	serverOpts = sdkServerOptionsWithCompletion(serverOpts, adapter.sdkCompletionHandler(requestContext))
+	adapter.requestStateKey = slices.Clone(requestStateKey)
 	serverOpts = sdkServerOptionsWithDefaults(serverOpts)
 	server := mcpsdk.NewServer(&mcpsdk.Implementation{
 		Icons: []mcpsdk.Icon{mcpsdk.Icon{
@@ -311,20 +317,6 @@ func registerSDKTools(server *mcpsdk.Server, adapter *MCPAdapter, requestContext
 		Title:        "Process Batch",
 	}, adapter.sdkToolHandler(requestContext))
 	server.AddTool(&mcpsdk.Tool{
-		Description:  "Request text generation from the connected MCP client",
-		InputSchema:  sdkToolInputSchema("{\"type\":\"object\",\"required\":[\"prompt\",\"max_tokens\"],\"properties\":{\"max_tokens\":{\"type\":\"integer\",\"description\":\"Maximum number of tokens\"},\"prompt\":{\"type\":\"string\",\"description\":\"User prompt to sample\"},\"system_prompt\":{\"type\":\"string\",\"description\":\"Optional system prompt\"}},\"additionalProperties\":false}"),
-		Name:         "sample_text",
-		OutputSchema: sdkToolInputSchema("{\"type\":\"object\",\"required\":[\"text\",\"model\",\"stop_reason\"],\"properties\":{\"model\":{\"type\":\"string\",\"description\":\"Model selected by the client\"},\"stop_reason\":{\"type\":\"string\",\"description\":\"Reason sampling stopped\"},\"text\":{\"type\":\"string\",\"description\":\"Sampled text\"}},\"additionalProperties\":false}"),
-		Title:        "Sample Text",
-	}, adapter.sdkToolHandler(requestContext))
-	server.AddTool(&mcpsdk.Tool{
-		Description:  "List filesystem roots exposed by the connected MCP client",
-		InputSchema:  sdkToolInputSchema(""),
-		Name:         "list_client_roots",
-		OutputSchema: sdkToolInputSchema("{\"type\":\"object\",\"required\":[\"roots\"],\"properties\":{\"roots\":{\"type\":\"array\",\"description\":\"Client filesystem roots\",\"items\":{\"type\":\"object\",\"required\":[\"uri\"],\"properties\":{\"name\":{\"type\":\"string\",\"description\":\"Optional display name\"},\"uri\":{\"type\":\"string\",\"description\":\"Root file URI\"}},\"additionalProperties\":false}}},\"additionalProperties\":false}"),
-		Title:        "List Client Roots",
-	}, adapter.sdkToolHandler(requestContext))
-	server.AddTool(&mcpsdk.Tool{
 		Description:  "Report deterministic progress to the connected MCP client",
 		InputSchema:  sdkToolInputSchema(""),
 		Name:         "report_progress",
@@ -392,6 +384,12 @@ func registerSDKResources(server *mcpsdk.Server, adapter *MCPAdapter, requestCon
 		MIMEType:    "application/json",
 		Name:        "system_info",
 		URI:         "system://info",
+	}, adapter.sdkResourceHandler(requestContext))
+	server.AddResource(&mcpsdk.Resource{
+		Description: "Return context supplied through MCP elicitation",
+		MIMEType:    "application/json",
+		Name:        "elicitation_context",
+		URI:         "elicitation://context",
 	}, adapter.sdkResourceHandler(requestContext))
 	server.AddResource(&mcpsdk.Resource{
 		Description: "Return conversation history with optional query params",
@@ -525,16 +523,26 @@ func sdkToolFromToolInfo(tool *ToolInfo) (*mcpsdk.Tool, error) {
 func (a *MCPAdapter) sdkToolHandler(requestContext func(context.Context, *http.Request) context.Context) mcpsdk.ToolHandler {
 	return func(ctx context.Context, req *mcpsdk.CallToolRequest) (*mcpsdk.CallToolResult, error) {
 		payload := &ToolsCallPayload{}
+		var inputResponses mcpsdk.InputResponseMap
+		requestState := ""
 		if req != nil && req.Params != nil {
 			payload.Name = req.Params.Name
 			payload.Arguments = req.Params.Arguments
+			inputResponses = req.Params.InputResponses
+			requestState = req.Params.RequestState
 		}
-		ctx = a.sdkRequestContext(ctx, req.GetSession(), req.GetExtra(), requestContext)
+		ctx = a.sdkRequestContext(ctx, req.GetSession(), req.GetExtra(), requestContext, inputResponses, requestState, "tools/call", payload)
 		if req != nil && req.Params != nil {
 			ctx = mcpruntime.WithProgressToken(ctx, req.Params.GetProgressToken())
 		}
 		stream := &sdkToolCallCollector{adapter: a}
 		if _, err := a.ToolsCall(ctx, payload, stream); err != nil {
+			if requests, state, ok := sdkclient.InputRequired(err); ok {
+				return &mcpsdk.CallToolResult{
+					InputRequests: requests,
+					RequestState:  state,
+				}, nil
+			}
 			return nil, err
 		}
 		return sdkCallToolResult(stream.result())
@@ -543,8 +551,12 @@ func (a *MCPAdapter) sdkToolHandler(requestContext func(context.Context, *http.R
 func (a *MCPAdapter) sdkPromptHandler(requestContext func(context.Context, *http.Request) context.Context) mcpsdk.PromptHandler {
 	return func(ctx context.Context, req *mcpsdk.GetPromptRequest) (*mcpsdk.GetPromptResult, error) {
 		payload := &PromptsGetPayload{}
+		var inputResponses mcpsdk.InputResponseMap
+		requestState := ""
 		if req != nil && req.Params != nil {
 			payload.Name = req.Params.Name
+			inputResponses = req.Params.InputResponses
+			requestState = req.Params.RequestState
 			if req.Params.Arguments != nil {
 				args, err := json.Marshal(req.Params.Arguments)
 				if err != nil {
@@ -553,9 +565,15 @@ func (a *MCPAdapter) sdkPromptHandler(requestContext func(context.Context, *http
 				payload.Arguments = args
 			}
 		}
-		ctx = a.sdkRequestContext(ctx, req.GetSession(), req.GetExtra(), requestContext)
+		ctx = a.sdkRequestContext(ctx, req.GetSession(), req.GetExtra(), requestContext, inputResponses, requestState, "prompts/get", payload)
 		result, err := a.PromptsGet(ctx, payload)
 		if err != nil {
+			if requests, state, ok := sdkclient.InputRequired(err); ok {
+				return &mcpsdk.GetPromptResult{
+					InputRequests: requests,
+					RequestState:  state,
+				}, nil
+			}
 			return nil, err
 		}
 		return sdkGetPromptResult(result)
@@ -564,7 +582,7 @@ func (a *MCPAdapter) sdkPromptHandler(requestContext func(context.Context, *http
 func (a *MCPAdapter) sdkCompletionHandler(requestContext func(context.Context, *http.Request) context.Context) func(context.Context, *mcpsdk.CompleteRequest) (*mcpsdk.CompleteResult, error) {
 	return func(ctx context.Context, req *mcpsdk.CompleteRequest) (*mcpsdk.CompleteResult, error) {
 		if req != nil {
-			ctx = a.sdkRequestContext(ctx, req.GetSession(), req.GetExtra(), requestContext)
+			ctx = a.sdkRequestContext(ctx, req.GetSession(), req.GetExtra(), requestContext, nil, "", "completion/complete", req.Params)
 		}
 		if req == nil || req.Params == nil || req.Params.Ref == nil {
 			return sdkCompleteValues(nil, 0, false), nil
@@ -594,18 +612,28 @@ func (a *MCPAdapter) sdkCompletionHandler(requestContext func(context.Context, *
 func (a *MCPAdapter) sdkResourceHandler(requestContext func(context.Context, *http.Request) context.Context) mcpsdk.ResourceHandler {
 	return func(ctx context.Context, req *mcpsdk.ReadResourceRequest) (*mcpsdk.ReadResourceResult, error) {
 		payload := &ResourcesReadPayload{}
+		var inputResponses mcpsdk.InputResponseMap
+		requestState := ""
 		if req != nil && req.Params != nil {
 			payload.URI = req.Params.URI
+			inputResponses = req.Params.InputResponses
+			requestState = req.Params.RequestState
 		}
-		ctx = a.sdkRequestContext(ctx, req.GetSession(), req.GetExtra(), requestContext)
+		ctx = a.sdkRequestContext(ctx, req.GetSession(), req.GetExtra(), requestContext, inputResponses, requestState, "resources/read", payload)
 		result, err := a.ResourcesRead(ctx, payload)
 		if err != nil {
+			if requests, state, ok := sdkclient.InputRequired(err); ok {
+				return &mcpsdk.ReadResourceResult{
+					InputRequests: requests,
+					RequestState:  state,
+				}, nil
+			}
 			return nil, err
 		}
 		return sdkReadResourceResult(result)
 	}
 }
-func (a *MCPAdapter) sdkRequestContext(ctx context.Context, session mcpsdk.Session, extra *mcpsdk.RequestExtra, requestContext func(context.Context, *http.Request) context.Context) context.Context {
+func (a *MCPAdapter) sdkRequestContext(ctx context.Context, session mcpsdk.Session, extra *mcpsdk.RequestExtra, requestContext func(context.Context, *http.Request) context.Context, inputResponses mcpsdk.InputResponseMap, requestState string, requestMethod string, requestParams any) context.Context {
 	if requestContext != nil {
 		ctx = requestContext(ctx, sdkSyntheticHTTPRequest(ctx, extra))
 	}
@@ -613,7 +641,7 @@ func (a *MCPAdapter) sdkRequestContext(ctx context.Context, session mcpsdk.Sessi
 		a.markInitializedSession("")
 		return ctx
 	}
-	ctx = sdkContextWithClientFeatures(ctx, session)
+	ctx = sdkContextWithClientFeatures(ctx, session, inputResponses, requestState, a.requestStateKey, requestMethod, requestParams)
 	sessionID := session.ID()
 	if sessionID == "" {
 		a.markInitializedSession("")
@@ -622,12 +650,18 @@ func (a *MCPAdapter) sdkRequestContext(ctx context.Context, session mcpsdk.Sessi
 	a.markInitializedSession(sessionID)
 	return mcpruntime.WithSessionID(ctx, sessionID)
 }
-func sdkContextWithClientFeatures(ctx context.Context, session mcpsdk.Session) context.Context {
+func sdkContextWithClientFeatures(ctx context.Context, session mcpsdk.Session, inputResponses mcpsdk.InputResponseMap, requestState string, requestStateKey []byte, requestMethod string, requestParams any) context.Context {
 	serverSession, ok := session.(*mcpsdk.ServerSession)
 	if !ok || serverSession == nil {
 		return ctx
 	}
-	return sdkclient.WithClientFeatures(ctx, serverSession)
+	return sdkclient.WithClientFeatures(ctx, serverSession, sdkclient.ClientFeaturesOptions{
+		InputResponses:  inputResponses,
+		RequestMethod:   requestMethod,
+		RequestParams:   requestParams,
+		RequestState:    requestState,
+		RequestStateKey: requestStateKey,
+	})
 }
 func sdkSyntheticHTTPRequest(ctx context.Context, extra *mcpsdk.RequestExtra) *http.Request {
 	req := &http.Request{
