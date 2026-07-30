@@ -7,6 +7,10 @@ LOOM_MCP_MODULE ?= $(LOOM_CORE_MODULE)
 LOOM_CLI_PACKAGE ?= $(LOOM_CORE_MODULE)/cmd/loom
 MCP_GO_SDK_VERSION ?= v1.7.0
 COVERAGE_MIN ?= 62.0
+# Every Docker-backed package owns explicit container cleanup. Disabling the
+# shared cross-package Ryuk session prevents one completed package from reaping
+# another package's still-running container during `go test ./...`.
+TESTCONTAINERS_RYUK_DISABLED ?= true
 
 GOPATH ?= $(shell go env GOPATH)
 GOLANGCI_LINT := $(shell command -v golangci-lint 2>/dev/null)
@@ -37,7 +41,7 @@ lint-install-hook:
 	@echo "Installed repo hooks from .githooks"
 
 test: tools
-	$(GO) test -short -race -shuffle=on -covermode=atomic -coverprofile=cover.out `$(GO) list ./... | grep -v '/integration_tests'`
+	TESTCONTAINERS_RYUK_DISABLED=$(TESTCONTAINERS_RYUK_DISABLED) $(GO) test -short -race -shuffle=on -covermode=atomic -coverprofile=cover.out `$(GO) list ./... | grep -v '/integration_tests'`
 	$(MAKE) coverage-check
 
 coverage-check:
