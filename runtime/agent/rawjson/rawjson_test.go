@@ -1,7 +1,7 @@
 package rawjson
 
 import (
-	"encoding/json"
+	json "encoding/json/v2"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -48,6 +48,14 @@ func TestRawJSONMarshalJSONRejectsInvalidJSON(t *testing.T) {
 			name:  "invalid token",
 			value: Message([]byte(`{x:1}`)),
 		},
+		{
+			name:  "duplicate object name",
+			value: Message([]byte(`{"x":1,"x":2}`)),
+		},
+		{
+			name:  "invalid UTF-8",
+			value: Message([]byte{'"', 0xff, '"'}),
+		},
 	}
 
 	for _, testCase := range testCases {
@@ -85,6 +93,16 @@ func TestRawJSONUnmarshalJSONNormalizesAndValidates(t *testing.T) {
 		{
 			name:    "invalid JSON fails",
 			input:   []byte(`{"a"`),
+			wantErr: "rawjson: invalid JSON",
+		},
+		{
+			name:    "duplicate object name fails",
+			input:   []byte(`{"x":1,"x":2}`),
+			wantErr: "rawjson: invalid JSON",
+		},
+		{
+			name:    "invalid UTF-8 fails",
+			input:   []byte{'"', 0xff, '"'},
 			wantErr: "rawjson: invalid JSON",
 		},
 	}

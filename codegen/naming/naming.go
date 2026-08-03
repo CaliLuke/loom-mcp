@@ -74,8 +74,8 @@ func HumanizeTitle(s string) string {
 		return s
 	}
 	// use last segment after '.' when present
-	if i := strings.LastIndexByte(s, '.'); i >= 0 && i+1 < len(s) {
-		s = s[i+1:]
+	if _, suffix, ok := strings.CutLast(s, "."); ok && suffix != "" {
+		s = suffix
 	}
 	s = strings.ReplaceAll(s, "_", " ")
 	s = strings.ReplaceAll(s, "-", " ")

@@ -12,6 +12,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"slices"
 
 	sdk "github.com/anthropics/anthropic-sdk-go"
 	"github.com/anthropics/anthropic-sdk-go/option"
@@ -442,8 +443,8 @@ func markLastSystemBlockCached(blocks []sdk.TextBlockParam) {
 }
 
 func markLastContentBlockCached(blocks []sdk.ContentBlockParamUnion) {
-	for i := len(blocks) - 1; i >= 0; i-- {
-		cache := blocks[i].GetCacheControl()
+	for _, block := range slices.Backward(blocks) {
+		cache := block.GetCacheControl()
 		if cache == nil {
 			continue
 		}
@@ -453,8 +454,8 @@ func markLastContentBlockCached(blocks []sdk.ContentBlockParamUnion) {
 }
 
 func markLastToolCached(toolList []sdk.ToolUnionParam) {
-	for i := len(toolList) - 1; i >= 0; i-- {
-		cache := toolList[i].GetCacheControl()
+	for _, t := range slices.Backward(toolList) {
+		cache := t.GetCacheControl()
 		if cache == nil {
 			continue
 		}

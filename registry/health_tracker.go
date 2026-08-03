@@ -19,7 +19,7 @@ import (
 	"github.com/CaliLuke/loom-mcp/v2/runtime/toolregistry"
 	"github.com/CaliLuke/loom/pulse/pool"
 	"github.com/CaliLuke/loom/pulse/rmap"
-	"github.com/google/uuid"
+	"uuid"
 )
 
 type (

@@ -73,11 +73,11 @@ func (w *serverStreamWrapper) Metadata() map[string]any { return nil }
 
 func TestE2E_UnaryComplete_WithMiddleware(t *testing.T) {
 	prov := &captureProvider{}
-	var unaryCount int32
+	var unaryCount atomic.Int32
 	// middleware increments count and bumps temperature
 	bumpTemp := func(next UnaryHandler) UnaryHandler {
 		return func(ctx context.Context, req *model.Request) (*model.Response, error) {
-			atomic.AddInt32(&unaryCount, 1)
+			unaryCount.Add(1)
 			req.Temperature = 0.42
 			return next(ctx, req)
 		}
@@ -120,7 +120,7 @@ func TestE2E_UnaryComplete_WithMiddleware(t *testing.T) {
 	if !ok {
 		t.Fatalf("unexpected response: %#v", resp)
 	}
-	if atomic.LoadInt32(&unaryCount) != 1 {
+	if unaryCount.Load() != 1 {
 		t.Fatal("unary middleware did not run")
 	}
 	// verify provider saw temperature change
@@ -131,10 +131,10 @@ func TestE2E_UnaryComplete_WithMiddleware(t *testing.T) {
 
 func TestE2E_Stream_WithMiddleware(t *testing.T) {
 	prov := &captureProvider{}
-	var streamCount int32
+	var streamCount atomic.Int32
 	countMW := func(next StreamHandler) StreamHandler {
 		return func(ctx context.Context, req *model.Request, send func(model.Chunk) error) error {
-			atomic.AddInt32(&streamCount, 1)
+			streamCount.Add(1)
 			return next(ctx, req, send)
 		}
 	}
@@ -179,7 +179,7 @@ func TestE2E_Stream_WithMiddleware(t *testing.T) {
 	if _, rerr := st.Recv(); rerr == nil {
 		t.Fatal("expected EOF")
 	}
-	if atomic.LoadInt32(&streamCount) != 1 {
+	if streamCount.Load() != 1 {
 		t.Fatal("stream middleware did not run")
 	}
 }

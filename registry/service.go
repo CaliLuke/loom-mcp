@@ -18,7 +18,7 @@ import (
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/tools"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/toolregistry"
 	streamopts "github.com/CaliLuke/loom/pulse/streaming/options"
-	"github.com/google/uuid"
+	"uuid"
 )
 
 type (

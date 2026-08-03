@@ -2,6 +2,7 @@ package runtime
 
 import (
 	"context"
+	"slices"
 
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/memory"
 )
@@ -80,9 +81,9 @@ func (r *memorySnapshotReader) Latest(t memory.EventType) (memory.Event, bool) {
 	if len(r.events) == 0 {
 		return memory.Event{}, false
 	}
-	for i := len(r.events) - 1; i >= 0; i-- {
-		if r.events[i].Type == t {
-			return r.events[i], true
+	for _, v := range slices.Backward(r.events) {
+		if v.Type == t {
+			return v, true
 		}
 	}
 	return memory.Event{}, false

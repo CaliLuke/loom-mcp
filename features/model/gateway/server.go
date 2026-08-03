@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"io"
+	"slices"
 
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/model"
 )
@@ -138,12 +139,12 @@ func NewServer(opts ...Option) (*Server, error) {
 	}
 	// Wrap with middlewares (in registration order).
 	unary := baseUnary
-	for i := len(cfg.unaryMW) - 1; i >= 0; i-- {
-		unary = cfg.unaryMW[i](unary)
+	for _, v := range slices.Backward(cfg.unaryMW) {
+		unary = v(unary)
 	}
 	stream := baseStream
-	for i := len(cfg.streamMW) - 1; i >= 0; i-- {
-		stream = cfg.streamMW[i](stream)
+	for _, v := range slices.Backward(cfg.streamMW) {
+		stream = v(stream)
 	}
 	return &Server{provider: cfg.provider, unary: unary, stream: stream}, nil
 }

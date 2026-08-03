@@ -8,6 +8,8 @@ package runtime
 // - Appends messages to the PlanInput in the same order used for tool_result correlation.
 
 import (
+	"slices"
+
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/model"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/planner"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/transcript"
@@ -52,9 +54,9 @@ func (r *Runtime) recordAssistantTurn(base *planner.PlanInput, transcriptMsgs []
 
 // findAssistantMessage returns the last assistant message in msgs, if any.
 func findAssistantMessage(msgs []*model.Message) *model.Message {
-	for i := len(msgs) - 1; i >= 0; i-- {
-		if msgs[i] != nil && msgs[i].Role == model.ConversationRoleAssistant {
-			return msgs[i]
+	for _, msg := range slices.Backward(msgs) {
+		if msg != nil && msg.Role == model.ConversationRoleAssistant {
+			return msg
 		}
 	}
 	return nil

@@ -93,13 +93,8 @@ func defaultToolTitle(id tools.Ident) string {
 
 // lastSegment returns the last segment of a string after the last separator.
 func lastSegment(s string, sep rune) string {
-	for i := len(s) - 1; i >= 0; i-- {
-		if rune(s[i]) == sep {
-			if i+1 < len(s) {
-				return s[i+1:]
-			}
-			return ""
-		}
+	if _, segment, ok := strings.CutLast(s, string(sep)); ok {
+		return segment
 	}
 	return s
 }
@@ -109,8 +104,8 @@ func ConvertRunOutputToToolResult(toolName tools.Ident, output *RunOutput) plann
 	result := planner.ToolResult{
 		Name:   toolName,
 		Result: finalRunOutputText(output),
-	}
-	result.ChildrenCount = len(output.ToolEvents)
+
+		ChildrenCount: len(output.ToolEvents)}
 	applyChildRunSummary(toolName, output, &result)
 	return result
 }

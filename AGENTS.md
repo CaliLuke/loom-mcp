@@ -12,7 +12,7 @@
 
 ## Go Style
 
-- Use Go 1.24+ and format with `go fmt ./...`.
+- Use Go 1.27+ and format with `go fmt ./...`.
 - Group stdlib imports separately. Let `gofmt` order them.
 - Use `lower_snake_case.go` filenames and keep files reasonably small; split proactively when a file starts carrying multiple concerns.
 - Exported identifiers require GoDoc. Non-trivial helpers should have brief contract comments.

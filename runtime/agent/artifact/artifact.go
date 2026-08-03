@@ -9,7 +9,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/google/uuid"
+	"uuid"
 )
 
 type (
@@ -103,7 +103,7 @@ func (s *MemoryStore) Save(_ context.Context, input SaveInput) (Ref, error) {
 		return Ref{}, fmt.Errorf("artifact save: run_id is required")
 	}
 	ref := Ref{
-		ID:         uuid.NewString(),
+		ID:         uuid.New().String(),
 		AgentID:    input.AgentID,
 		RunID:      input.RunID,
 		ToolCallID: input.ToolCallID,

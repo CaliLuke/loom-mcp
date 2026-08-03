@@ -2,6 +2,7 @@ package shared
 
 import (
 	"errors"
+	"slices"
 	"testing"
 
 	"github.com/CaliLuke/loom/eval"
@@ -327,8 +328,8 @@ func TestDeterministicUserTypeCollection(t *testing.T) {
 			}
 
 			// Insert in reverse order for builder2
-			for i := len(typeNames) - 1; i >= 0; i-- {
-				builder2.GetOrCreateType(typeNames[i], func() *expr.AttributeExpr {
+			for _, typeName := range slices.Backward(typeNames) {
+				builder2.GetOrCreateType(typeName, func() *expr.AttributeExpr {
 					return &expr.AttributeExpr{Type: expr.String}
 				})
 			}

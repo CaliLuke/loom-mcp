@@ -13,7 +13,7 @@ import (
 
 	genregistry "github.com/CaliLuke/loom-mcp/v2/registry/gen/registry"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/telemetry"
-	"github.com/google/uuid"
+	"uuid"
 )
 
 type (
@@ -71,7 +71,7 @@ func (c *toolsetCatalog) SaveToolset(ctx context.Context, toolset *genregistry.T
 	}
 	entry := catalogEntry{
 		Toolset:           toolset,
-		RegistrationToken: uuid.NewString(),
+		RegistrationToken: uuid.New().String(),
 	}
 	body, err := json.Marshal(entry)
 	if err != nil {

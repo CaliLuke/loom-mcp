@@ -2,6 +2,7 @@ package runtime
 
 import (
 	"context"
+	"slices"
 	"strings"
 
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/memory"
@@ -81,8 +82,7 @@ func (r *Runtime) preloadLongTermMemory(ctx context.Context, policy *LongTermMem
 }
 
 func latestUserText(messages []*model.Message) string {
-	for i := len(messages) - 1; i >= 0; i-- {
-		msg := messages[i]
+	for _, msg := range slices.Backward(messages) {
 		if msg == nil || msg.Role != model.ConversationRoleUser {
 			continue
 		}

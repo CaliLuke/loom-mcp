@@ -37,21 +37,20 @@ func (id Ident) String() string {
 // the last dot). For "helpers.search", this returns "helpers". Returns an
 // empty string if the identifier has no dot separator.
 func (id Ident) Toolset() string {
-	s := string(id)
-	idx := strings.LastIndexByte(s, '.')
-	if idx < 0 {
+	toolset, _, ok := strings.CutLast(string(id), ".")
+	if !ok {
 		return ""
 	}
-	return s[:idx]
+	return toolset
 }
 
 // Tool returns the tool name component of the identifier (the part after
 // the last dot). For "helpers.search", this returns "search". Returns an
 // empty string if the identifier is empty.
 func (id Ident) Tool() string {
-	parts := strings.Split(string(id), ".")
-	if len(parts) == 0 {
-		return ""
+	value := string(id)
+	if _, tool, ok := strings.CutLast(value, "."); ok {
+		return tool
 	}
-	return parts[len(parts)-1]
+	return value
 }

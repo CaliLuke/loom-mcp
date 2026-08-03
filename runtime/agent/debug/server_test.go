@@ -60,6 +60,25 @@ func TestServerErrorsUseErrorEnvelope(t *testing.T) {
 	require.Contains(t, rec.Body.String(), `"not_found"`)
 }
 
+func TestServerExposesGoroutineLeakProfile(t *testing.T) {
+	t.Parallel()
+
+	srv, err := NewServer(Config{Runtime: agentsruntime.New()})
+	require.NoError(t, err)
+
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequestWithContext(
+		context.Background(),
+		http.MethodGet,
+		"/debug/pprof/goroutineleak?debug=1",
+		nil,
+	)
+	srv.Handler().ServeHTTP(rec, req)
+
+	require.Equal(t, http.StatusOK, rec.Code)
+	require.Contains(t, rec.Body.String(), "goroutineleak profile")
+}
+
 func TestWorkflowEndpointIncludesDerivedGraphState(t *testing.T) {
 	t.Parallel()
 

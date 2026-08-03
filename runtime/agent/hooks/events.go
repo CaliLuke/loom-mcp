@@ -16,7 +16,7 @@ import (
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/telemetry"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/toolerrors"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/tools"
-	"github.com/google/uuid"
+	"uuid"
 
 	"go.temporal.io/sdk/temporal"
 )
@@ -1136,7 +1136,7 @@ func newBaseEvent(runID string, agentID agent.Ident) baseEvent {
 		runID:     runID,
 		agentID:   agentID,
 		timestamp: time.Now().UnixMilli(),
-		eventKey:  uuid.NewString(),
+		eventKey:  uuid.New().String(),
 	}
 }
 

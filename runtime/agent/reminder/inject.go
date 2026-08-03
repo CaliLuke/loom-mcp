@@ -1,6 +1,7 @@
 package reminder
 
 import (
+	"slices"
 	"strings"
 
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/model"
@@ -80,8 +81,8 @@ func injectBeforeLastUser(msgs []*model.Message, rems []Reminder) []*model.Messa
 		return msgs
 	}
 	lastUser := -1
-	for i := len(msgs) - 1; i >= 0; i-- {
-		if msgs[i] != nil && msgs[i].Role == model.ConversationRoleUser {
+	for i, msg := range slices.Backward(msgs) {
+		if msg != nil && msg.Role == model.ConversationRoleUser {
 			lastUser = i
 			break
 		}

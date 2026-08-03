@@ -18,6 +18,7 @@ package rawjson
 import (
 	"bytes"
 	"encoding/json"
+	"encoding/json/jsontext"
 	"fmt"
 )
 
@@ -25,7 +26,8 @@ import (
 //
 // Contract:
 //   - Nil represents absence (preferred).
-//   - Non-empty values must be valid JSON.
+//   - Non-empty values must be valid RFC 7493 JSON: UTF-8 encoded, with valid
+//     Unicode and unique names in every object.
 //   - Empty/whitespace-only values are normalized to JSON null during marshaling
 //     to avoid runtime encoding failures at workflow boundaries.
 type Message json.RawMessage
@@ -44,7 +46,7 @@ func (r Message) MarshalJSON() ([]byte, error) {
 	if len(bytes.TrimSpace(data)) == 0 {
 		return []byte("null"), nil
 	}
-	if !json.Valid(data) {
+	if !jsontext.Value(data).IsValid() {
 		return nil, fmt.Errorf("rawjson: invalid JSON")
 	}
 	return data, nil
@@ -59,7 +61,7 @@ func (r *Message) UnmarshalJSON(data []byte) error {
 		*r = nil
 		return nil
 	}
-	if !json.Valid(trimmed) {
+	if !jsontext.Value(trimmed).IsValid() {
 		return fmt.Errorf("rawjson: invalid JSON")
 	}
 	out := make([]byte, len(trimmed))

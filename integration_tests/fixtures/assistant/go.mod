@@ -1,9 +1,10 @@
 module example.com/assistant
 
-go 1.26.5
+go 1.27
 
 require (
 	github.com/CaliLuke/loom v1.7.1
+	github.com/CaliLuke/loom-mcp/v2 v2.0.0
 	github.com/modelcontextprotocol/go-sdk v1.7.0
 	github.com/sahilm/fuzzy v0.1.3
 	github.com/stretchr/testify v1.11.1
@@ -17,7 +18,6 @@ require (
 	cloud.google.com/go v0.123.0 // indirect
 	cloud.google.com/go/auth v0.22.0 // indirect
 	cloud.google.com/go/compute/metadata v0.9.0 // indirect
-	github.com/CaliLuke/loom-mcp/v2 v2.0.0
 	github.com/alecthomas/kong v1.16.0 // indirect
 	github.com/aws/aws-sdk-go-v2 v1.43.0 // indirect
 	github.com/aws/aws-sdk-go-v2/aws/protocol/eventstream v1.7.14 // indirect

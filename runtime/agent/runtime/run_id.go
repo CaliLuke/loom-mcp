@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/google/uuid"
+	"uuid"
 )
 
 // generateRunID returns a globally unique run identifier suitable for use as a
@@ -14,5 +14,5 @@ import (
 // observability in logs, metrics, and tracing without sacrificing uniqueness.
 func generateRunID(agentID string) string {
 	prefix := strings.ReplaceAll(agentID, ".", "-")
-	return fmt.Sprintf("%s-%s", prefix, uuid.NewString())
+	return fmt.Sprintf("%s-%s", prefix, uuid.New().String())
 }

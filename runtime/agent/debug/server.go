@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"net"
 	"net/http"
+	"net/http/pprof"
 	"strings"
 	"time"
 
@@ -85,6 +86,7 @@ func NewServer(cfg Config) (*Server, error) {
 	s := &Server{runtime: cfg.Runtime, addr: addr}
 	mux := http.NewServeMux()
 	mux.HandleFunc("/runs/", s.handleRun)
+	mux.Handle("/debug/pprof/goroutineleak", pprof.Handler("goroutineleak"))
 	s.handler = mux
 	return s, nil
 }
@@ -108,8 +110,9 @@ func (s *Server) Start() error {
 	}
 	s.addr = ln.Addr().String()
 	s.server = &http.Server{
-		Handler:           s.handler,
-		ReadHeaderTimeout: 5 * time.Second,
+		Handler:             s.handler,
+		ReadHeaderTimeout:   5 * time.Second,
+		MaxHeaderValueCount: http.DefaultMaxHeaderValueCount,
 	}
 	go func() {
 		_ = s.server.Serve(ln)

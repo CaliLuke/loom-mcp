@@ -28,20 +28,17 @@ func sanitizeToolName(canonical string) string {
 }
 
 func anthropicToolNameBase(canonical string) string {
-	base := canonical
-	idx := strings.LastIndex(canonical, ".")
-	if idx < 0 || idx+1 >= len(canonical) {
+	prefixPath, base, ok := strings.CutLast(canonical, ".")
+	if !ok || base == "" {
+		return canonical
+	}
+	if prefixPath == "" {
 		return base
 	}
-	base = canonical[idx+1:]
-	if idx == 0 {
+	_, toolsetSuffix, ok := strings.CutLast(prefixPath, ".")
+	if !ok || toolsetSuffix == "" {
 		return base
 	}
-	lastDot := strings.LastIndex(canonical[:idx], ".")
-	if lastDot < 0 || lastDot+1 >= idx {
-		return base
-	}
-	toolsetSuffix := canonical[lastDot+1 : idx]
 	prefix := toolsetSuffix + "_"
 	if strings.HasPrefix(base, prefix) && len(base) > len(prefix) {
 		return base[len(prefix):]

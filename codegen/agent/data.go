@@ -1038,8 +1038,8 @@ func buildAgentRuntimeData(agent *AgentData) RuntimeData {
 			Name:          agent.WorkflowName,
 			Queue:         agent.WorkflowQueue,
 		},
-	}
-	runtimeData.Activities = buildAgentActivities(agent)
+
+		Activities: buildAgentActivities(agent)}
 	assignRuntimeActivityRoles(&runtimeData)
 	return runtimeData
 }
