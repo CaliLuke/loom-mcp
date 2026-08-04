@@ -46,7 +46,9 @@
       "Bash(awk 'NR>=315 && NR<=760' expr/agent/tool.go)",
       "Bash(awk 'NR>=315 && NR<=760 && /ReportError|verr|InvalidArg|errors\\\\.New|fmt\\\\.Errorf/{print NR\": \"$0}' expr/agent/tool.go)",
       "Bash(awk 'NR>=680 && NR<=740 && /verr\\\\.Add/{print NR\": \"$0}' expr/agent/tool.go)",
-      "Bash(go tool *)"
+      "Bash(go tool *)",
+      "Read(//Users/luca/go/pkg/mod/github.com/modelcontextprotocol/**)",
+      "Read(//Users/luca/go/pkg/mod/github.com/modelcontextprotocol/go-sdk@v1.7.0/**)"
     ]
   },
   "disabledMcpjsonServers": [
