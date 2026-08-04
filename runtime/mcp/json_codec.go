@@ -3,6 +3,7 @@ package mcp
 import (
 	"bytes"
 	"context"
+	"encoding"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -12,12 +13,35 @@ import (
 	"reflect"
 	"strconv"
 	"strings"
+	"sync"
 
 	"github.com/CaliLuke/loom/codegen"
 	goahttp "github.com/CaliLuke/loom/http"
 )
 
 const jsonValueKindObject = "object"
+
+type (
+	jsonStructField struct {
+		index     int
+		name      string
+		omitempty bool
+		explicit  bool
+	}
+
+	jsonStructMetadata struct {
+		fields       []jsonStructField
+		fieldsByName map[string]jsonStructField
+	}
+)
+
+var jsonStructMetadataCache sync.Map // map[reflect.Type]*jsonStructMetadata
+
+var (
+	jsonDirectMarshalCache sync.Map // map[reflect.Type]bool
+	jsonMarshalerType      = reflect.TypeOf((*json.Marshaler)(nil)).Elem()
+	textMarshalerType      = reflect.TypeOf((*encoding.TextMarshaler)(nil)).Elem()
+)
 
 // EncodeJSONToString encodes v into JSON using the provided encoder factory.
 // The factory should produce an Encoder bound to the given ResponseWriter.
@@ -48,6 +72,9 @@ func MarshalCanonicalJSON(v any) ([]byte, error) {
 	}
 	if marshaler, ok := v.(json.Marshaler); ok {
 		return marshaler.MarshalJSON()
+	}
+	if canMarshalJSONDirectly(reflect.TypeOf(v)) {
+		return json.Marshal(v)
 	}
 	normalized, err := normalizeJSONValue(reflect.ValueOf(v))
 	if err != nil {
@@ -251,29 +278,21 @@ func normalizeJSONMap(v reflect.Value) (any, error) {
 }
 
 func normalizeJSONStruct(v reflect.Value) (any, error) {
-	out := make(map[string]any, v.NumField())
-	t := v.Type()
-	for i := 0; i < v.NumField(); i++ {
-		field := t.Field(i)
-		if field.PkgPath != "" {
+	metadata := cachedJSONStructMetadata(v.Type())
+	out := make(map[string]any, len(metadata.fields))
+	for _, field := range metadata.fields {
+		fv := v.Field(field.index)
+		if !field.explicit && isImplicitOmitNilField(fv) {
 			continue
 		}
-		name, omitempty, explicit, skip := jsonFieldName(field)
-		if skip {
-			continue
-		}
-		fv := v.Field(i)
-		if !explicit && isImplicitOmitNilField(fv) {
-			continue
-		}
-		if omitempty && isJSONEmptyValue(fv) {
+		if field.omitempty && isJSONEmptyValue(fv) {
 			continue
 		}
 		item, err := normalizeJSONValue(fv)
 		if err != nil {
 			return nil, err
 		}
-		out[name] = item
+		out[field.name] = item
 	}
 	return out, nil
 }
@@ -298,35 +317,53 @@ func assignCanonicalStruct(raw any, dst reflect.Value) error {
 	if !ok {
 		return &json.UnmarshalTypeError{Value: jsonValueKind(raw), Type: dst.Type()}
 	}
-	fields, fieldNames := jsonStructFields(dst.Type())
+	metadata := cachedJSONStructMetadata(dst.Type())
 	for key, val := range obj {
-		idx, ok := fields[key]
+		field, ok := metadata.fieldsByName[key]
 		if !ok {
 			return fmt.Errorf("json: unknown field %q", key)
 		}
-		if err := assignCanonicalValue(val, dst.Field(idx)); err != nil {
-			return wrapFieldError(fieldNames[idx], err)
+		if err := assignCanonicalValue(val, dst.Field(field.index)); err != nil {
+			return wrapFieldError(field.name, err)
 		}
 	}
 	return nil
 }
 
-func jsonStructFields(t reflect.Type) (map[string]int, map[int]string) {
-	fields := map[string]int{}
-	fieldNames := map[int]string{}
+func cachedJSONStructMetadata(t reflect.Type) *jsonStructMetadata {
+	if cached, ok := jsonStructMetadataCache.Load(t); ok {
+		return cached.(*jsonStructMetadata)
+	}
+
+	metadata := buildJSONStructMetadata(t)
+	cached, _ := jsonStructMetadataCache.LoadOrStore(t, metadata)
+	return cached.(*jsonStructMetadata)
+}
+
+func buildJSONStructMetadata(t reflect.Type) *jsonStructMetadata {
+	metadata := &jsonStructMetadata{
+		fields:       make([]jsonStructField, 0, t.NumField()),
+		fieldsByName: make(map[string]jsonStructField, t.NumField()),
+	}
 	for i := 0; i < t.NumField(); i++ {
 		field := t.Field(i)
 		if field.PkgPath != "" {
 			continue
 		}
-		name, _, _, skip := jsonFieldName(field)
+		name, omitempty, explicit, skip := jsonFieldName(field)
 		if skip {
 			continue
 		}
-		fields[name] = i
-		fieldNames[i] = name
+		metadataField := jsonStructField{
+			index:     i,
+			name:      name,
+			omitempty: omitempty,
+			explicit:  explicit,
+		}
+		metadata.fields = append(metadata.fields, metadataField)
+		metadata.fieldsByName[name] = metadataField
 	}
-	return fields, fieldNames
+	return metadata
 }
 
 func assignCanonicalSlice(raw any, dst reflect.Value) error {
@@ -484,6 +521,143 @@ func jsonFieldName(field reflect.StructField) (name string, omitempty, explicit,
 		name = codegen.SnakeCase(field.Name)
 	}
 	return name, omitempty, explicit, false
+}
+
+func canMarshalJSONDirectly(t reflect.Type) bool {
+	if cached, ok := jsonDirectMarshalCache.Load(t); ok {
+		return cached.(bool)
+	}
+
+	direct := canMarshalJSONTypeDirectly(t, make(map[reflect.Type]struct{}))
+	jsonDirectMarshalCache.Store(t, direct)
+	return direct
+}
+
+func canMarshalJSONTypeDirectly(t reflect.Type, visiting map[reflect.Type]struct{}) bool {
+	if t.Implements(jsonMarshalerType) {
+		return false
+	}
+	if t.Kind() != reflect.Pointer && reflect.PointerTo(t).Implements(jsonMarshalerType) {
+		return false
+	}
+	if t.Implements(textMarshalerType) ||
+		(t.Kind() != reflect.Pointer && reflect.PointerTo(t).Implements(textMarshalerType)) {
+		return false
+	}
+
+	switch t.Kind() {
+	case reflect.Pointer, reflect.Slice, reflect.Array:
+		return canMarshalJSONTypeDirectly(t.Elem(), visiting)
+	case reflect.Map:
+		return t.Key().Kind() == reflect.String && canMarshalJSONTypeDirectly(t.Elem(), visiting)
+	case reflect.Struct:
+		return canMarshalJSONStructDirectly(t, visiting)
+	case reflect.Interface:
+		return false
+	case reflect.Invalid,
+		reflect.Bool,
+		reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64,
+		reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64, reflect.Uintptr,
+		reflect.Float32, reflect.Float64,
+		reflect.Complex64, reflect.Complex128,
+		reflect.Chan, reflect.Func, reflect.String, reflect.UnsafePointer:
+		return true
+	default:
+		return false
+	}
+}
+
+func canMarshalJSONStructDirectly(t reflect.Type, visiting map[reflect.Type]struct{}) bool {
+	if _, ok := visiting[t]; ok {
+		return false
+	}
+	visiting[t] = struct{}{}
+	defer delete(visiting, t)
+
+	names := make(map[string]struct{}, t.NumField())
+	for i := 0; i < t.NumField(); i++ {
+		field := t.Field(i)
+		if field.Anonymous {
+			return false
+		}
+		if field.PkgPath != "" {
+			continue
+		}
+		name, omitempty, compatible, skip := directJSONField(field)
+		if !compatible {
+			return false
+		}
+		if skip {
+			continue
+		}
+		if _, duplicate := names[name]; duplicate {
+			return false
+		}
+		names[name] = struct{}{}
+		if omitempty && !hasStandardJSONOmitEmptySemantics(field.Type) {
+			return false
+		}
+		if !canMarshalJSONTypeDirectly(field.Type, visiting) {
+			return false
+		}
+	}
+	return true
+}
+
+func directJSONField(field reflect.StructField) (name string, omitempty, compatible, skip bool) {
+	tag := field.Tag.Get("json")
+	if tag == "-" {
+		return "", false, true, true
+	}
+	if tag == "" {
+		return "", false, false, false
+	}
+	parts := strings.Split(tag, ",")
+	if !isDirectJSONFieldName(parts[0]) {
+		return "", false, false, false
+	}
+	for _, option := range parts[1:] {
+		switch option {
+		case "":
+		case "omitempty":
+			omitempty = true
+		default:
+			return "", false, false, false
+		}
+	}
+	return parts[0], omitempty, true, false
+}
+
+func isDirectJSONFieldName(name string) bool {
+	if name == "" || name == "-" {
+		return false
+	}
+	for _, r := range name {
+		if (r < 'a' || r > 'z') &&
+			(r < 'A' || r > 'Z') &&
+			(r < '0' || r > '9') &&
+			r != '_' {
+			return false
+		}
+	}
+	return true
+}
+
+func hasStandardJSONOmitEmptySemantics(t reflect.Type) bool {
+	switch t.Kind() {
+	case reflect.Bool,
+		reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64,
+		reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64, reflect.Uintptr,
+		reflect.Float32, reflect.Float64,
+		reflect.Array, reflect.Map, reflect.Pointer, reflect.Slice, reflect.String:
+		return true
+	case reflect.Invalid,
+		reflect.Complex64, reflect.Complex128,
+		reflect.Chan, reflect.Func, reflect.Interface, reflect.Struct, reflect.UnsafePointer:
+		return false
+	default:
+		return false
+	}
 }
 
 func isJSONEmptyValue(v reflect.Value) bool {
