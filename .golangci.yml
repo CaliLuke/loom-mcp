@@ -1,6 +1,7 @@
 version: "2"
 linters:
   default: none
+  # Staticcheck runs separately from Makefile with a Go 1.27-compatible pin.
   enable:
     - bodyclose
     - copyloopvar
@@ -26,7 +27,6 @@ linters:
     - nolintlint
     - prealloc
     - sqlclosecheck
-    - staticcheck
     - tagliatelle
     - testifylint
     - unconvert
@@ -50,10 +50,6 @@ linters:
           yaml: snake
     unparam:
       check-exported: true
-    staticcheck:
-      checks:
-        - all
-        - "-ST1001" # Allow dot imports in DSL packages
   exclusions:
     generated: strict
     paths:

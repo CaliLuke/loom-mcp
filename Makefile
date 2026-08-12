@@ -13,12 +13,16 @@ COVERAGE_MIN ?= 62.0
 TESTCONTAINERS_RYUK_DISABLED ?= true
 
 GOPATH ?= $(shell go env GOPATH)
+GOLANGCI_LINT_VERSION ?= v2.12.2
 GOLANGCI_LINT := $(shell command -v golangci-lint 2>/dev/null)
+STATICCHECK_VERSION ?= v0.8.0-rc.1
+STATICCHECK := $(shell command -v staticcheck 2>/dev/null)
+STATICCHECK_CHECKS ?= all,-S*,-ST*,-QF*
 PROTOC := $(shell command -v protoc 2>/dev/null)
 PROTOC_GEN_GO := protoc-gen-go
 PROTOC_GEN_GO_GRPC := protoc-gen-go-grpc
 
-.PHONY: all build lint lint-pre-commit lint-install-hook test coverage-check itest ci tools ensure-golangci ensure-protoc-plugins protoc-check run-example example-gen loom-local loom-remote loom-status update-mcp-go-sdk verify-mcp-local regen-quickstart regen-assistant-fixture regen-progressive-discovery-fixture regen-agent-feature-fixture verify-agent-feature-fixture
+.PHONY: all build lint lint-pre-commit lint-install-hook test coverage-check itest ci tools ensure-golangci ensure-staticcheck ensure-protoc-plugins protoc-check run-example example-gen loom-local loom-remote loom-status update-mcp-go-sdk verify-mcp-local regen-quickstart regen-assistant-fixture regen-progressive-discovery-fixture regen-agent-feature-fixture verify-agent-feature-fixture
 
 all: build lint test
 
@@ -26,6 +30,7 @@ build: tools
 	$(GO) build ./...
 
 lint: tools
+	staticcheck -checks='$(STATICCHECK_CHECKS)' ./...
 	golangci-lint run --timeout=5m
 
 lint-pre-commit: tools
@@ -33,6 +38,7 @@ lint-pre-commit: tools
 		echo "PATCH_FILE is required"; \
 		exit 1; \
 	fi
+	staticcheck -checks='$(STATICCHECK_CHECKS)' ./...
 	golangci-lint run --config .golangci.precommit.yml --new-from-patch "$(PATCH_FILE)" --whole-files --timeout=5m --allow-serial-runners
 
 lint-install-hook:
@@ -67,14 +73,22 @@ itest: tools
 
 ci: build lint test
 
-tools: ensure-golangci ensure-protoc-plugins protoc-check
+tools: ensure-golangci ensure-staticcheck ensure-protoc-plugins protoc-check
 
 ensure-golangci:
 	@if [ -z "$(GOLANGCI_LINT)" ]; then \
-		echo "Installing golangci-lint latest..."; \
-		$(GO) install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@latest; \
+		echo "Installing golangci-lint $(GOLANGCI_LINT_VERSION)..."; \
+		$(GO) install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@$(GOLANGCI_LINT_VERSION); \
 	else \
 		echo "golangci-lint found: $(GOLANGCI_LINT)"; \
+	fi
+
+ensure-staticcheck:
+	@if [ -z "$(STATICCHECK)" ]; then \
+		echo "Installing staticcheck $(STATICCHECK_VERSION)..."; \
+		$(GO) install honnef.co/go/tools/cmd/staticcheck@$(STATICCHECK_VERSION); \
+	else \
+		echo "staticcheck found: $(STATICCHECK)"; \
 	fi
 
 ensure-protoc-plugins:

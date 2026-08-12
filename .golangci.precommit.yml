@@ -5,6 +5,7 @@ run:
 
 linters:
   default: none
+  # Staticcheck runs separately from Makefile with a Go 1.27-compatible pin.
   enable:
     - bodyclose
     - copyloopvar
@@ -30,7 +31,6 @@ linters:
     - nolintlint
     - prealloc
     - sqlclosecheck
-    - staticcheck
     - tagliatelle
     - testifylint
     - unconvert
@@ -47,10 +47,6 @@ linters:
       under: 40
     nestif:
       min-complexity: 25
-    staticcheck:
-      checks:
-        - all
-        - "-ST1001"
     tagliatelle:
       case:
         rules:

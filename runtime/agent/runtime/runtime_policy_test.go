@@ -215,13 +215,15 @@ func TestMergeCapsIgnoresDeprecatedExpiresAt(t *testing.T) {
 	current := policy.CapsState{MaxToolCalls: 5, RemainingToolCalls: 4}
 	decision := policy.CapsState{
 		RemainingToolCalls: 3,
-		ExpiresAt:          time.Date(2030, time.January, 2, 3, 4, 5, 0, time.UTC),
+		//lint:ignore SA1019 This test verifies the deprecated compatibility field remains inert.
+		ExpiresAt: time.Date(2030, time.January, 2, 3, 4, 5, 0, time.UTC),
 	}
 
 	got := mergeCaps(current, decision)
 
 	assert.Equal(t, 3, got.RemainingToolCalls)
-	assert.True(t, got.ExpiresAt.IsZero(), "deprecated wall-clock expiry must not become a second runtime deadline") //nolint:staticcheck // Verify the legacy field remains inert.
+	//lint:ignore SA1019 This test verifies the deprecated compatibility field remains inert.
+	assert.True(t, got.ExpiresAt.IsZero(), "deprecated wall-clock expiry must not become a second runtime deadline")
 }
 
 // TestDisableToolsPolicyBlocksToolExecution drives the workflow loop end to end

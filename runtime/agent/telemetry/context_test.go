@@ -36,7 +36,8 @@ func TestMergeContextHandlesNilContextsAndEmptyMetadata(t *testing.T) {
 	destination := context.WithValue(context.Background(), contextKey("owner"), "workflow")
 	assert.Same(t, destination, MergeContext(destination, nil))
 
-	merged := MergeContext(nil, context.Background()) //nolint:staticcheck // Nil destination is an explicit MergeContext contract.
+	//lint:ignore SA1012 Nil destination is an explicit MergeContext contract.
+	merged := MergeContext(nil, context.Background())
 	assert.NotNil(t, merged)
 	assert.Zero(t, baggage.FromContext(merged).Len())
 	assert.False(t, trace.SpanContextFromContext(merged).IsValid())
