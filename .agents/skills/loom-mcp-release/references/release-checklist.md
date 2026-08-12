@@ -25,7 +25,9 @@ If the repo was iterating against `/Users/luca/code/loom-mono/loom`, this comman
 Run regeneration only when the shipped changes require it.
 
 - Assistant fixture DSL changed: `make regen-assistant-fixture`
-- Loom dependency changed: `make regen-quickstart`
+- Loom dependency changed: `make gen-registry`, `make regen-quickstart`,
+  `make regen-assistant-fixture`, `make regen-progressive-discovery-fixture`,
+  and `make regen-agent-feature-fixture`
 - Other design/codegen changes: run the normal generation step required by that surface before verification
 
 Never hand-edit generated `gen/` files.

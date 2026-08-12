@@ -54,6 +54,7 @@ detect generator contract drift:
 ```bash
 make gen-registry
 make regen-assistant-fixture
+make regen-progressive-discovery-fixture
 make regen-agent-feature-fixture
 ```
 

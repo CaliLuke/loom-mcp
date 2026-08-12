@@ -40,6 +40,7 @@ func TestLoomVersionReferencesStayAligned(t *testing.T) {
 		"registry/gen/loom.json",
 		"quickstart/gen/loom.json",
 		"integration_tests/fixtures/assistant/gen/loom.json",
+		"integration_tests/fixtures/assistant/progressive_discovery/gen/loom.json",
 		"integration_tests/fixtures/agent_features/gen/loom.json",
 	} {
 		var marker struct {

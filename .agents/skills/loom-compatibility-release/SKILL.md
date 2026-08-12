@@ -40,6 +40,7 @@ go -C integration_tests/fixtures/agent_features mod tidy
 make loom-status
 make gen-registry
 make regen-assistant-fixture
+make regen-progressive-discovery-fixture
 make regen-agent-feature-fixture
 make verify-mcp-local
 make lint
