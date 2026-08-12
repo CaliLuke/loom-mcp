@@ -45,7 +45,7 @@ func TestLoomGen_GoSDKConformanceAgainstGeneratedJSONRPCTransport(t *testing.T) 
 
 	goMod := `module example.com/conformance
 
-go 1.27
+go 1.27rc2
 
 require (
 	github.com/CaliLuke/loom v1.0.7

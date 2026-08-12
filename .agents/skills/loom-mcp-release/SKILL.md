@@ -47,10 +47,13 @@ Use this skill when releasing `github.com/CaliLuke/loom-mcp/v2`. Keep the workfl
 7. Commit the release-ready changes on `main`.
 8. Create an annotated tag for the release version, for example:
    - `git tag -a v1.0.3 -m "v1.0.3"`
-9. Publish the release:
+9. Publish the release. Stable tags become latest; hyphenated semantic
+   prerelease tags such as `v2.1.0-alpha.1` must be marked prerelease and must
+   not become latest:
    - `git push origin main`
    - `git push origin v1.0.3`
-   - `gh release create v1.0.3 --verify-tag --generate-notes --latest`
+   - stable: `gh release create v1.0.3 --verify-tag --generate-notes --latest`
+   - prerelease: `gh release create v2.1.0-alpha.1 --verify-tag --generate-notes --prerelease`
 10. Verify the published state:
    - `git ls-remote --tags origin v1.0.3`
    - `git ls-remote origin main`
@@ -112,6 +115,8 @@ gh release view vX.Y.Z --json tagName,isDraft,isPrerelease,url,publishedAt
 - If dependency pins, verification commands, or local-vs-remote workflow guidance changed, update release-facing root docs such as `README.md` in the same release.
 - If the shipped product or release workflow changed, update the relevant repo-local skills in `.agents/skills/` in the same release.
 - If the user asked for a dot release, prefer the smallest semver bump that matches the shipped behavior.
+- For a hyphenated semantic prerelease tag, use `gh release create --prerelease`
+  and never `--latest`. Verify `isPrerelease` is true afterward.
 - A breaking v2+ release must use the matching semantic import path in `go.mod`,
   generated imports, fixtures, quickstarts, docs, and downstream examples.
 - If `gh release view vX.Y.Z` fails while `git ls-remote --tags origin vX.Y.Z` succeeds, backfill the missing GitHub Release before closing the task.

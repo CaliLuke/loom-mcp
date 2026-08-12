@@ -63,7 +63,8 @@ make release VERSION=vX.Y.Z
 ```
 
 Do not treat Loom as released until the tag and matching non-draft GitHub
-Release exist. Confirm both before changing loom-mcp's pin:
+Release exist. A semantic prerelease tag is valid when the GitHub Release is
+also marked prerelease. Confirm both before changing loom-mcp's pin:
 
 ```bash
 git -C ../loom ls-remote --tags origin "refs/tags/vX.Y.Z" "refs/tags/vX.Y.Z^{}"

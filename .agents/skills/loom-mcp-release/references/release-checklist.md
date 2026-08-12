@@ -71,7 +71,7 @@ Do not use `--no-verify`.
 
 ## 7. Tag and Publish
 
-Create an annotated semver tag, push both branch and tag, then create the GitHub Release object:
+Create an annotated semver tag, push both branch and tag, then create the GitHub Release object. Use `--latest` only for stable releases:
 
 ```bash
 git tag -a vX.Y.Z -m "vX.Y.Z"
@@ -79,6 +79,14 @@ git push origin main
 git push origin vX.Y.Z
 gh release create vX.Y.Z --verify-tag --generate-notes --latest
 ```
+
+For a prerelease such as `v2.1.0-alpha.1`, publish with:
+
+```bash
+gh release create v2.1.0-alpha.1 --verify-tag --generate-notes --prerelease
+```
+
+Never mark a prerelease as latest.
 
 ## 8. Remote Verification
 

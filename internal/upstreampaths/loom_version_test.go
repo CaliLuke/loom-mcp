@@ -13,9 +13,10 @@ import (
 )
 
 var (
-	remoteVersionPattern = regexp.MustCompile(`(?m)^REMOTE_VERSION="(v\d+\.\d+\.\d+)"$`)
-	moduleVersionPattern = regexp.MustCompile(`(?m)^\s*github\.com/CaliLuke/loom (v\d+\.\d+\.\d+)\s*$`)
-	adviceVersionPattern = regexp.MustCompile(`github\.com/CaliLuke/loom(?:/cmd/loom)?(?:@| )(v\d+\.\d+\.\d+)`)
+	semanticVersionPattern = `v\d+\.\d+\.\d+(-[0-9A-Za-z-]+(\.[0-9A-Za-z-]+)*)?`
+	remoteVersionPattern   = regexp.MustCompile(`(?m)^REMOTE_VERSION="(` + semanticVersionPattern + `)"$`)
+	moduleVersionPattern   = regexp.MustCompile(`(?m)^\s*github\.com/CaliLuke/loom (` + semanticVersionPattern + `)\s*$`)
+	adviceVersionPattern   = regexp.MustCompile(`github\.com/CaliLuke/loom(?:/cmd/loom)?(?:@| )(` + semanticVersionPattern + `)`)
 )
 
 func TestLoomVersionReferencesStayAligned(t *testing.T) {
@@ -31,7 +32,7 @@ func TestLoomVersionReferencesStayAligned(t *testing.T) {
 	} {
 		data := readRepoFile(t, repoRoot, name)
 		match := moduleVersionPattern.FindStringSubmatch(string(data))
-		require.Len(t, match, 2, "%s must pin %s", name, LoomCoreModule)
+		require.GreaterOrEqual(t, len(match), 2, "%s must pin %s", name, LoomCoreModule)
 		require.Equal(t, want, match[1], "%s Loom version", name)
 	}
 
@@ -87,7 +88,7 @@ func remoteLoomVersion(t *testing.T, repoRoot string) string {
 	t.Helper()
 	data := readRepoFile(t, repoRoot, "scripts/loom_core_mode.sh")
 	match := remoteVersionPattern.FindStringSubmatch(string(data))
-	require.Len(t, match, 2, "scripts/loom_core_mode.sh must define REMOTE_VERSION")
+	require.GreaterOrEqual(t, len(match), 2, "scripts/loom_core_mode.sh must define REMOTE_VERSION")
 	return match[1]
 }
 

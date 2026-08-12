@@ -79,7 +79,8 @@ relevant test output in the Loom release issue or pull request.
 ## 2. Publish and pin the Loom release
 
 Only after the local ladder is green, complete the Loom release using Loom's
-release process. Confirm that both the tag and GitHub Release exist:
+release process. A semantic prerelease is valid only when the GitHub Release is
+also marked prerelease. Confirm that both the tag and GitHub Release exist:
 
 ```bash
 git -C ../loom ls-remote --tags origin "refs/tags/vX.Y.Z" "refs/tags/vX.Y.Z^{}"
