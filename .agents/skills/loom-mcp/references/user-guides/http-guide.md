@@ -1,8 +1,8 @@
 # HTTP Guide
 
-Complete guide to HTTP transport in Goa - routing, content negotiation, WebSocket, SSE, CORS, and static content.
+Complete guide to HTTP transport in Loom - routing, content negotiation, WebSocket, SSE, CORS, and static content.
 
-This guide covers HTTP-specific features in Goa, from basic routing to advanced topics like WebSocket streaming and content negotiation.
+This guide covers HTTP-specific features in Loom, from basic routing to advanced topics like WebSocket streaming and content negotiation.
 
 ## HTTP Routing
 
@@ -29,7 +29,7 @@ var _ = Service("calculator", func() {
 })
 ```
 
-Goa supports all standard HTTP methods: `GET`, `POST`, `PUT`, `DELETE`, `PATCH`, `HEAD`, `OPTIONS`, `TRACE`.
+Loom supports all standard HTTP methods: `GET`, `POST`, `PUT`, `DELETE`, `PATCH`, `HEAD`, `OPTIONS`, `TRACE`.
 
 A single method can handle multiple HTTP methods or paths:
 
@@ -177,7 +177,7 @@ var _ = Service("users", func() {
 
 ### Built-in Encoders
 
-Goa's default encoders support:
+Loom's default encoders support:
 
 - JSON (`application/json`, `*+json`)
 - XML (`application/xml`, `*+xml`)
@@ -218,7 +218,7 @@ func (enc *MessagePackEncoder) Encode(v interface{}) error {
     return msgpack.NewEncoder(enc.w).Encode(v)
 }
 
-func NewMessagePackEncoder(ctx context.Context, w http.ResponseWriter) goahttp.Encoder {
+func NewMessagePackEncoder(ctx context.Context, w http.ResponseWriter) loomhttp.Encoder {
     return &MessagePackEncoder{w: w}
 }
 ```
@@ -227,20 +227,20 @@ Register custom encoders when creating the server:
 
 ```go
 func main() {
-    decoder := func(r *http.Request) goahttp.Decoder {
+    decoder := func(r *http.Request) loomhttp.Decoder {
         switch r.Header.Get("Content-Type") {
         case "application/msgpack":
             return NewMessagePackDecoder(r)
         default:
-            return goahttp.RequestDecoder(r)
+            return loomhttp.RequestDecoder(r)
         }
     }
 
-    encoder := func(ctx context.Context, w http.ResponseWriter) goahttp.Encoder {
-        if accept := ctx.Value(goahttp.AcceptTypeKey).(string); accept == "application/msgpack" {
+    encoder := func(ctx context.Context, w http.ResponseWriter) loomhttp.Encoder {
+        if accept := ctx.Value(loomhttp.AcceptTypeKey).(string); accept == "application/msgpack" {
             return NewMessagePackEncoder(ctx, w)
         }
-        return goahttp.ResponseEncoder(ctx, w)
+        return loomhttp.ResponseEncoder(ctx, w)
     }
 
     server := myapi.NewServer(endpoints, mux, decoder, encoder, nil, nil)
@@ -251,7 +251,7 @@ func main() {
 
 Design recap: streaming is defined at the design level using `StreamingPayload` and `StreamingResult`. The DSL is transport-agnostic. The same design works for HTTP (WebSocket/SSE) and gRPC. See DSL Reference: Streaming for design patterns. This section covers HTTP-specific WebSocket implementation.
 
-WebSocket enables real-time, bidirectional communication. Goa implements WebSocket through its streaming DSL.
+WebSocket enables real-time, bidirectional communication. Loom implements WebSocket through its streaming DSL.
 
 ### Streaming Patterns
 
@@ -461,25 +461,25 @@ eventSource.onerror = (error) => {
 
 ## CORS Configuration
 
-The CORS plugin handles cross-origin requests. Import it:
-
-```go
-import (
-    cors "goa.design/plugins/v3/cors/dsl"
-    . "github.com/CaliLuke/loom/dsl"
-)
-```
+`CORS` is part of the core DSL (`. "github.com/CaliLuke/loom/dsl"`) — no separate
+import is needed. Declare it inside the `HTTP` block for an `API` or a
+`Service`; service-level CORS overrides the API-level policy for that
+service.
 
 API-level CORS:
 
 ```go
 var _ = API("calc", func() {
-    cors.Origin("http://127.0.0.1", func() {
-        cors.Headers("X-Shared-Secret")
-        cors.Methods("GET", "POST")
-        cors.ExposeHeaders("X-Time")
-        cors.MaxAge(600)
-        cors.Credentials()
+    HTTP(func() {
+        CORS(func() {
+            Origin("http://127.0.0.1", func() {
+                Headers("X-Shared-Secret")
+                Methods("GET", "POST")
+                ExposeHeaders("X-Time")
+                MaxAge(600)
+                Credentials()
+            })
+        })
     })
 })
 ```
@@ -488,24 +488,28 @@ Service-level CORS:
 
 ```go
 var _ = Service("calc", func() {
-    // Allow specific origin
-    cors.Origin("localhost")
+    HTTP(func() {
+        CORS(func() {
+            // Allow specific origin
+            Origin("localhost")
 
-    // Allow subdomain pattern
-    cors.Origin("*.domain.com", func() {
-        cors.Headers("X-Shared-Secret", "X-Api-Version")
-        cors.MaxAge(100)
-        cors.Credentials()
-    })
+            // Allow subdomain pattern
+            Origin("*.domain.com", func() {
+                Headers("X-Shared-Secret", "X-Api-Version")
+                MaxAge(100)
+                Credentials()
+            })
 
-    // Allow all origins
-    cors.Origin("*")
+            // Allow all origins
+            Origin("*")
 
-    // Allow regex pattern
-    cors.Origin("/.*domain.*/", func() {
-        cors.Headers("*")
-        cors.Methods("GET", "POST")
-        cors.ExposeHeaders("X-Time")
+            // Allow regex pattern
+            OriginRegex(`.*domain.*`, func() {
+                Headers("*")
+                Methods("GET", "POST")
+                ExposeHeaders("X-Time")
+            })
+        })
     })
 })
 ```

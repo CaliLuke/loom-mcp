@@ -40,7 +40,7 @@ Use the generated `AGENTS_QUICKSTART.md` beside that package for the exact execu
 
 ## Method-backed tools
 
-`BindTo(service, method)` keeps the tool schema in the agent design and maps it to a Goa service method. Code generation owns:
+`BindTo(service, method)` keeps the tool schema in the agent design and maps it to a Loom service method. Code generation owns:
 
 - model-facing payload/result types and JSON schemas;
 - payload and result transforms;

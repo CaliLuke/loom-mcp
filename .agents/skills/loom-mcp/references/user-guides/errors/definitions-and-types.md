@@ -22,7 +22,7 @@ Includes:
 Generated helpers typically look like:
 
 ```go
-func MakeDivByZero(err error) *goa.ServiceError
+func MakeDivByZero(err error) *loom.ServiceError
 ```
 
 ## Custom Error Types
@@ -35,4 +35,4 @@ Field(3, "name", String, func() {
 })
 ```
 
-That metadata is required when multiple custom errors share a method and Goa needs to know which field carries the error name.
+That metadata is required when multiple custom errors share a method and Loom needs to know which field carries the error name.

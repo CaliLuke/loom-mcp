@@ -1,6 +1,6 @@
 # Codegen: Customization
 
-Use this for Goa metadata that changes generated types, packages, protobuf, or OpenAPI output.
+Use this for Loom metadata that changes generated types, packages, protobuf, or OpenAPI output.
 
 ## Common Metadata Knobs
 

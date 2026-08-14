@@ -21,7 +21,7 @@ application explicitly configures `runtime/agent/engine/temporal`.
 
 1. Initialize a Go module and add `github.com/CaliLuke/loom` plus
    `github.com/CaliLuke/loom-mcp/v2`.
-2. Author the Goa service and loom-mcp agent/MCP declarations under `design/`.
+2. Author the Loom service and loom-mcp agent/MCP declarations under `design/`.
 3. Generate with a Go import path:
 
 ```bash

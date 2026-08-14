@@ -24,13 +24,18 @@ Wire custom encoders/decoders in server setup, not the DSL.
 
 ## CORS
 
-Use the CORS plugin:
+`CORS` is part of the core DSL (`. "github.com/CaliLuke/loom/dsl"`) — no
+separate import is needed:
 
 ```go
-import (
-    cors "goa.design/plugins/v3/cors/dsl"
-    . "github.com/CaliLuke/loom/dsl"
-)
+HTTP(func() {
+    CORS(func() {
+        Origin("https://app.example.com", func() {
+            Methods("GET", "POST")
+            Headers("Authorization")
+        })
+    })
+})
 ```
 
 Prefer explicit origins over `*` for authenticated APIs.

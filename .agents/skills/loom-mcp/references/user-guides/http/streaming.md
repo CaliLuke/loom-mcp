@@ -4,7 +4,7 @@ Use this for HTTP-specific WebSocket and SSE behavior.
 
 ## WebSocket
 
-Goa maps streaming HTTP endpoints to WebSocket by default.
+Loom maps streaming HTTP endpoints to WebSocket by default.
 
 ```go
 Method("echo", func() {

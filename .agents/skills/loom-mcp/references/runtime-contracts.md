@@ -180,7 +180,7 @@ Use this file for current loom-mcp runtime behavior in this repo. Prefer it over
 - `RequestInput` emits `AwaitTypedInput`; answers resume via
   `Runtime.ProvideTypedInput` and enter `PlanResumeInput.TypedInputs`, not
   `ToolOutputs`.
-- The branch default DSL helper is `BranchDefault` to avoid colliding with Goa's
+- The branch default DSL helper is `BranchDefault` to avoid colliding with Loom's
   `Default` helper in dot-imported designs.
 
 ## Time Budgets

@@ -4,7 +4,7 @@ This is a routing guide for the current MCP surface. Use `docs/dsl.md` for decla
 
 ## Declare an MCP server
 
-MCP belongs to a Goa service. The current DSL names are `MCP(...)` and method-level `Tool(...)`:
+MCP belongs to a Loom service. The current DSL names are `MCP(...)` and method-level `Tool(...)`:
 
 ```go
 Service("calculator", func() {

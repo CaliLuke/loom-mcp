@@ -1,6 +1,6 @@
 # gRPC: Service Design
 
-Use this for Goa gRPC service structure, type mapping, field numbering, and metadata/message mapping.
+Use this for Loom gRPC service structure, type mapping, field numbering, and metadata/message mapping.
 
 ## Service Skeleton
 

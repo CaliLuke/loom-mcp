@@ -1,14 +1,14 @@
 # Interceptors
 
-Complete guide to interceptors and middleware in Goa - type-safe Goa interceptors, HTTP middleware, and gRPC interceptors.
+Complete guide to interceptors and middleware in Loom - type-safe Loom interceptors, HTTP middleware, and gRPC interceptors.
 
-Goa provides a comprehensive solution for request processing that combines type-safe interceptors with traditional middleware patterns. This guide covers all three approaches.
+Loom provides a comprehensive solution for request processing that combines type-safe interceptors with traditional middleware patterns. This guide covers all three approaches.
 
 ## Overview
 
-When processing requests in a Goa service, you have three complementary tools:
+When processing requests in a Loom service, you have three complementary tools:
 
-1. Goa interceptors: type-safe, compile-time checked access to your service's domain types
+1. Loom interceptors: type-safe, compile-time checked access to your service's domain types
 2. HTTP middleware: standard `http.Handler` pattern for HTTP-specific concerns
 3. gRPC interceptors: standard gRPC patterns for RPC-specific needs
 
@@ -16,21 +16,21 @@ When processing requests in a Goa service, you have three complementary tools:
 
 | Concern | Tool |
 | --- | --- |
-| Business logic validation | Goa Interceptors |
-| Data transformation | Goa Interceptors |
-| Request/response enrichment | Goa Interceptors |
+| Business logic validation | Loom Interceptors |
+| Data transformation | Loom Interceptors |
+| Request/response enrichment | Loom Interceptors |
 | Logging, tracing | HTTP/gRPC Middleware |
 | Compression, CORS | HTTP Middleware |
 | Metadata handling | gRPC Interceptors |
 | Rate limiting | HTTP/gRPC Middleware |
 
-## Goa Interceptors
+## Loom Interceptors
 
-Goa interceptors provide type-safe access to your service's domain types, with compile-time checks and generated helper methods.
+Loom interceptors provide type-safe access to your service's domain types, with compile-time checks and generated helper methods.
 
 ### Runtime Model (Generated Code)
 
-Interceptors are not "magic hooks" in the runtime. In Goa they are generated endpoint wrappers. The DSL tells Goa what fields an interceptor may read/write, and code generation produces:
+Interceptors are not "magic hooks" in the runtime. In Loom they are generated endpoint wrappers. The DSL tells Loom what fields an interceptor may read/write, and code generation produces:
 
 - Service-side contract in `gen/<service>/service_interceptors.go`
 - `ServerInterceptors` interface: one method per interceptor
@@ -49,11 +49,11 @@ The important consequence is: server interceptors execute after transport decodi
 
 ### The Server Interceptor Contract
 
-Goa generates a per-service interface. Each interceptor method must call `next` exactly once to proceed or return an error/response early:
+Loom generates a per-service interface. Each interceptor method must call `next` exactly once to proceed or return an error/response early:
 
 ```go
 type ServerInterceptors interface {
-    RequestAudit(ctx context.Context, info *RequestAuditInfo, next goa.Endpoint) (any, error)
+    RequestAudit(ctx context.Context, info *RequestAuditInfo, next loom.Endpoint) (any, error)
 }
 ```
 
@@ -69,7 +69,7 @@ Example (result enrichment + timing):
 ```go
 type Interceptors struct{}
 
-func (i *Interceptors) RequestAudit(ctx context.Context, info *RequestAuditInfo, next goa.Endpoint) (any, error) {
+func (i *Interceptors) RequestAudit(ctx context.Context, info *RequestAuditInfo, next loom.Endpoint) (any, error) {
     start := time.Now()
 
     res, err := next(ctx, info.RawPayload())
@@ -87,8 +87,8 @@ func (i *Interceptors) RequestAudit(ctx context.Context, info *RequestAuditInfo,
 
 Why the accessor interfaces matter:
 
-- If you declare `ReadPayload(Attribute("recordID"))`, Goa generates `RecordID() <type>`.
-- If you declare `WriteResult(Attribute("cachedAt"))`, Goa generates `SetCachedAt(<type>)`.
+- If you declare `ReadPayload(Attribute("recordID"))`, Loom generates `RecordID() <type>`.
+- If you declare `WriteResult(Attribute("cachedAt"))`, Loom generates `SetCachedAt(<type>)`.
 - Your interceptor can't accidentally reach for fields you didn't declare. That's the compile-time contract.
 
 ### The Client Interceptor Contract
@@ -108,7 +108,7 @@ Interceptors are applied by generating a wrapper chain. The generated `Wrap<Meth
 Conceptually, codegen does this:
 
 ```go
-func WrapGetEndpoint(endpoint goa.Endpoint, i ServerInterceptors) goa.Endpoint {
+func WrapGetEndpoint(endpoint loom.Endpoint, i ServerInterceptors) loom.Endpoint {
     endpoint = wrapGetCache(endpoint, i)
     endpoint = wrapGetJWTAuth(endpoint, i)
     endpoint = wrapGetRequestAudit(endpoint, i)
@@ -129,9 +129,9 @@ If ordering matters, rely on this mental model rather than a generic "service th
 
 For bidirectional streaming, codegen wraps the stream implementation so that each message send/receive is intercepted. A single interceptor method may be invoked for multiple call types:
 
-- `goa.InterceptorUnary`: one-time interception of the stream endpoint call
-- `goa.InterceptorStreamingSend`: interception of each `SendWithContext`
-- `goa.InterceptorStreamingRecv`: interception of each `RecvWithContext`
+- `loom.InterceptorUnary`: one-time interception of the stream endpoint call
+- `loom.InterceptorStreamingSend`: interception of each `SendWithContext`
+- `loom.InterceptorStreamingRecv`: interception of each `RecvWithContext`
 
 Use `info.CallType()` to branch when needed. For send interceptions, `info.RawPayload()` is the message being sent. For recv interceptions, the "payload" is produced by `next` and your interceptor sees it as the returned value.
 
@@ -184,7 +184,7 @@ var _ = Service("calculator", func() {
 ### Implementing Interceptors
 
 ```go
-func (i *Interceptors) RequestLogger(ctx context.Context, info *RequestLoggerInfo, next goa.Endpoint) (any, error) {
+func (i *Interceptors) RequestLogger(ctx context.Context, info *RequestLoggerInfo, next loom.Endpoint) (any, error) {
     start := time.Now()
 
     // Call next interceptor or endpoint
@@ -308,7 +308,7 @@ var ClientMetadataEnricher = Interceptor("ClientMetadataEnricher", func() {
 
 ### Execution Order
 
-Goa applies interceptors by building a wrapper chain around each method endpoint. The easiest way to understand the exact ordering, especially once you mix service-level and method-level interceptors, is to look at the generated `Wrap<Method>Endpoint` and remember:
+Loom applies interceptors by building a wrapper chain around each method endpoint. The easiest way to understand the exact ordering, especially once you mix service-level and method-level interceptors, is to look at the generated `Wrap<Method>Endpoint` and remember:
 
 - Last wrapper executes first on the request path.
 - First wrapper executes first on the response path.
@@ -322,15 +322,18 @@ HTTP middleware handles protocol-level concerns using the standard `http.Handler
 ### Common Middleware Stack
 
 ```go
-mux := goahttp.NewMuxer()
+mux := loomhttp.NewMuxer()
 
 // Add middleware (outermost to innermost)
-mux.Use(debug.HTTP())                               // Debug logging
-mux.Use(otelhttp.NewMiddleware("service"))          // OpenTelemetry
-mux.Use(log.HTTP(ctx))                              // Request logging
-mux.Use(goahttpmiddleware.RequestID())              // Request ID
-mux.Use(goahttpmiddleware.PopulateRequestContext()) // Goa context
+mux.Use(debug.HTTP())                                  // Debug logging
+mux.Use(otelhttp.NewMiddleware("service"))             // OpenTelemetry
+mux.Use(log.HTTP(ctx))                                 // Request logging (also tags a request ID)
+mux.Use(loomhttpmiddleware.PopulateRequestContext())   // Loom request context
 ```
+
+Loom has no standalone request-ID middleware — `log.HTTP` (from
+`github.com/CaliLuke/loom/clue/log`) already tags each request with an ID as
+part of its logging, so a separate middleware isn't needed.
 
 ### Creating Custom Middleware
 
@@ -431,7 +434,7 @@ func StreamLoggingInterceptor() grpc.StreamServerInterceptor {
 }
 ```
 
-### Integration with Goa
+### Integration with Loom
 
 ```go
 func main() {
@@ -457,13 +460,13 @@ Here's how all three approaches work together:
 
 ```go
 func main() {
-    // 1. Create service with Goa interceptors
+    // 1. Create service with Loom interceptors
     svc := NewService()
     interceptors := NewInterceptors(log.Default())
     endpoints := NewEndpoints(svc, interceptors)
 
     // 2. Set up HTTP with middleware
-    mux := goahttp.NewMuxer()
+    mux := loomhttp.NewMuxer()
     mux.Use(otelhttp.NewMiddleware("payment-svc"))
     mux.Use(debug.HTTP())
     mux.Use(log.HTTP(ctx))
@@ -489,16 +492,16 @@ func main() {
 ```text
 Request Processing:
 ─────────────────────────────────────────────────────────────────>
-HTTP/gRPC Middleware → Goa Interceptors → Service Method
+HTTP/gRPC Middleware → Loom Interceptors → Service Method
 
 Response Processing:
 <─────────────────────────────────────────────────────────────────
-Service Method → Goa Interceptors → HTTP/gRPC Middleware
+Service Method → Loom Interceptors → HTTP/gRPC Middleware
 ```
 
 ## Best Practices
 
-### Goa Interceptors
+### Loom Interceptors
 
 - Use for business logic validation and data transformation
 - Keep interceptors focused on single responsibilities

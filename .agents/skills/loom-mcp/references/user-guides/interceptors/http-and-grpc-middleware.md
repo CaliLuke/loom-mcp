@@ -1,6 +1,6 @@
 # Interceptors: HTTP And gRPC Middleware
 
-Use this for protocol-level middleware outside Goa's typed interceptor system.
+Use this for protocol-level middleware outside Loom's typed interceptor system.
 
 ## HTTP Middleware
 
@@ -10,7 +10,7 @@ Typical stack:
 mux.Use(debug.HTTP())
 mux.Use(otelhttp.NewMiddleware("service"))
 mux.Use(log.HTTP(ctx))
-mux.Use(goahttpmiddleware.RequestID())
+mux.Use(loomhttpmiddleware.PopulateRequestContext())
 ```
 
 Use HTTP middleware for:
@@ -41,5 +41,5 @@ Use them for:
 
 ## Rule Of Thumb
 
-- Business/domain transforms: Goa interceptors
+- Business/domain transforms: Loom interceptors
 - Protocol concerns: HTTP middleware or gRPC interceptors

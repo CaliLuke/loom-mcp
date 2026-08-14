@@ -1,10 +1,10 @@
-# Interceptors: Goa Interceptors
+# Interceptors: Loom Interceptors
 
 Use this for generated interceptor wrappers, accessor contracts, and execution ordering.
 
 ## Runtime Model
 
-Goa interceptors are generated endpoint wrappers, not ambient hooks.
+Loom interceptors are generated endpoint wrappers, not ambient hooks.
 
 Key generated files:
 
@@ -32,7 +32,7 @@ Read the generated wrapper if ordering matters.
 ## Implementation Pattern
 
 ```go
-func (i *Interceptors) RequestAudit(ctx context.Context, info *RequestAuditInfo, next goa.Endpoint) (any, error) {
+func (i *Interceptors) RequestAudit(ctx context.Context, info *RequestAuditInfo, next loom.Endpoint) (any, error) {
     res, err := next(ctx, info.RawPayload())
     if err != nil {
         return nil, err

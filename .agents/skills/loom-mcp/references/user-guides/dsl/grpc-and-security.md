@@ -44,4 +44,4 @@ Method("secure_endpoint", func() {
 
 ## Implementation Reminder
 
-Goa generates `Auther` methods for the configured schemes. Validate credentials and scopes there, not in transport glue.
+Loom generates `Authorizer` methods for the configured schemes. Validate credentials and scopes there, not in transport glue.

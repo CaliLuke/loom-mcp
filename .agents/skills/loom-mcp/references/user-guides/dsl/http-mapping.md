@@ -27,7 +27,7 @@ Method("show", func() {
 
 ## Mapping Rules
 
-- For primitive/array/map payloads, Goa maps from the first relevant HTTP element you declare.
+- For primitive/array/map payloads, Loom maps from the first relevant HTTP element you declare.
 - For object payloads, path params map from the route and remaining fields usually come from the body.
 - Use `Body("field")` when one payload field should be the whole request body.
 - Use `Header("field:X-Header-Name")` or `Attribute("field:wire_name")` to rename transport fields.

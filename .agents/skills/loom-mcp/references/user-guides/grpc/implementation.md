@@ -23,4 +23,4 @@ client := gencalc.NewClient(grpcClient.Add(), grpcClient.Multiply())
 
 ## Protobuf
 
-Goa generates `.proto` definitions from the DSL automatically. Use service/package metadata in the design when package names or protoc behavior need control.
+Loom generates `.proto` definitions from the DSL automatically. Use service/package metadata in the design when package names or protoc behavior need control.

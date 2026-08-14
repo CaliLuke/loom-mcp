@@ -1,12 +1,12 @@
 # Error Handling
 
-Complete guide to error handling in Goa - defining errors, transport mapping, custom types, and best practices.
+Complete guide to error handling in Loom - defining errors, transport mapping, custom types, and best practices.
 
-Goa provides a robust error handling system that enables you to define, manage, and communicate errors effectively across your services. This guide covers everything from basic error definitions to advanced customization.
+Loom provides a robust error handling system that enables you to define, manage, and communicate errors effectively across your services. This guide covers everything from basic error definitions to advanced customization.
 
 ## Overview
 
-Goa takes a "batteries included" approach to error handling where errors can be defined with minimal information (just a name) while also supporting completely custom error types when needed.
+Loom takes a "batteries included" approach to error handling where errors can be defined with minimal information (just a name) while also supporting completely custom error types when needed.
 
 Key features:
 
@@ -103,14 +103,14 @@ var _ = Service("divider", func() {
 Generated helper functions:
 
 ```go
-// MakeDivByZero builds a goa.ServiceError from an error
-func MakeDivByZero(err error) *goa.ServiceError {
-    return goa.NewServiceError(err, "DivByZero", false, false, false)
+// MakeDivByZero builds a loom.ServiceError from an error
+func MakeDivByZero(err error) *loom.ServiceError {
+    return loom.NewServiceError(err, "DivByZero", false, false, false)
 }
 
-// MakeServiceUnavailable builds a goa.ServiceError from an error
-func MakeServiceUnavailable(err error) *goa.ServiceError {
-    return goa.NewServiceError(err, "ServiceUnavailable", true, false, false)
+// MakeServiceUnavailable builds a loom.ServiceError from an error
+func MakeServiceUnavailable(err error) *loom.ServiceError {
+    return loom.NewServiceError(err, "ServiceUnavailable", true, false, false)
 }
 ```
 
@@ -166,7 +166,7 @@ Client-side handling:
 ```go
 res, err := client.Divide(ctx, payload)
 if err != nil {
-    if e, ok := err.(*goa.ServiceError); ok {
+    if e, ok := err.(*loom.ServiceError); ok {
         if e.Temporary {
             return retry(ctx, func() error {
                 res, err = client.Divide(ctx, payload)
@@ -289,7 +289,7 @@ Handling default errors:
 ```go
 res, err := client.Divide(ctx, payload)
 if err != nil {
-    if serr, ok := err.(*goa.ServiceError); ok {
+    if serr, ok := err.(*loom.ServiceError); ok {
         switch serr.Name {
         case "HasRemainder":
             // Handle remainder error
@@ -335,10 +335,10 @@ func (r *CustomErrorResponse) StatusCode() int {
     }
 }
 
-func customErrorFormatter(ctx context.Context, err error) goahttp.Statuser {
-    if serr, ok := err.(*goa.ServiceError); ok {
+func customErrorFormatter(ctx context.Context, err error) loomhttp.Statuser {
+    if serr, ok := err.(*loom.ServiceError); ok {
         switch serr.Name {
-        case goa.MissingField:
+        case loom.MissingField:
             return &CustomErrorResponse{
                 Code:    "MISSING_FIELD",
                 Message: fmt.Sprintf("The field '%s' is required", *serr.Field),
@@ -443,7 +443,7 @@ func TestDivideByZero(t *testing.T) {
     if err == nil {
         t.Fatalf("expected error, got nil")
     }
-    if serr, ok := err.(*goa.ServiceError); !ok || serr.Name != "DivByZero" {
+    if serr, ok := err.(*loom.ServiceError); !ok || serr.Name != "DivByZero" {
         t.Fatalf("expected DivByZero error, got %v", err)
     }
 }
@@ -456,10 +456,10 @@ func TestDivideByZero(t *testing.T) {
 - Log detailed errors internally but return safe messages to clients
 
 ```go
-func secureErrorFormatter(ctx context.Context, err error) goahttp.Statuser {
+func secureErrorFormatter(ctx context.Context, err error) loomhttp.Statuser {
     log.Printf("Error: %+v", err)  // Log full details
 
-    if serr, ok := err.(*goa.ServiceError); ok && serr.Fault {
+    if serr, ok := err.(*loom.ServiceError); ok && serr.Fault {
         // Return generic message for server faults
         return &CustomErrorResponse{
             Code:    "INTERNAL_ERROR",

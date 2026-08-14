@@ -1,6 +1,6 @@
 # DSL: Data Modeling
 
-Use this for Goa type modeling, validations, formats, and examples.
+Use this for Loom type modeling, validations, formats, and examples.
 
 ## Core Types
 

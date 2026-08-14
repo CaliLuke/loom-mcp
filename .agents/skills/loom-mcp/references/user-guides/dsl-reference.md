@@ -12,7 +12,7 @@ import (
 )
 ```
 
-Agent and MCP declarations live inside Goa `Service` definitions. Service-owned
+Agent and MCP declarations live inside Loom `Service` definitions. Service-owned
 toolsets are the defining owner of their specs/codecs/transforms; agents and MCP
 servers consume or project them.
 
@@ -50,7 +50,7 @@ Use `Description`, `Version`, and source-specific options documented in
 | --- | --- |
 | `Tool(name, description, dsl)` | Declare a method-level MCP tool or toolset tool |
 | `Args(...)`, `Return(...)` | Model-facing payload/result schemas |
-| `BindTo(service, method)` | Bind a toolset tool to a Goa method |
+| `BindTo(service, method)` | Bind a toolset tool to a Loom method |
 | `Inject(fields...)` | Keep fields in public/transport payloads but hide them from the model schema |
 | `ServerData(kind, type, dsl?)` | Server-only output/sidecar data, never server-injected input |
 | `BoundedResult(...)` | Runtime-owned canonical bounds contract |

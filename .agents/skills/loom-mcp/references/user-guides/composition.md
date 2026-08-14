@@ -383,13 +383,13 @@ Validation Errors and Retry Hints
 ================================
 
 Tool calls often fail due to missing fields, invalid enum values, or wrong JSON shapes.
-Goa‑AI surfaces these failures as structured retry hints so planners and UIs can ask precise follow-up questions without parsing error strings.
+loom-mcp surfaces these failures as structured retry hints so planners and UIs can ask precise follow-up questions without parsing error strings.
 
 
 Where Retry Hints Come From
 ---------------------------
 
-Goa‑AI produces RetryHint from validation failures in two places:
+loom-mcp produces RetryHint from validation failures in two places:
 
 1. Decode-time (tool codecs) generated tool codecs validate tool input JSON before execution. When validation
    fails, the error carries structured field issues (missing fields, constraints, allowed

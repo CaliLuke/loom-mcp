@@ -23,12 +23,12 @@ Keep mappings consistent across transports.
 
 ## Custom HTTP Formatter
 
-Use a custom `goahttp.Statuser` formatter when the wire error shape must differ from the default.
+Use a custom `loomhttp.Statuser` formatter when the wire error shape must differ from the default.
 
 ## Tests
 
 Test the generated error name or generated custom type explicitly:
 
 ```go
-if serr, ok := err.(*goa.ServiceError); !ok || serr.Name != "DivByZero" { ... }
+if serr, ok := err.(*loom.ServiceError); !ok || serr.Name != "DivByZero" { ... }
 ```

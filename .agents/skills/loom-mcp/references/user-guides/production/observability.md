@@ -10,7 +10,7 @@ Use this for Clue, tracing, metrics, logs, and health checks.
 
 ## Recommended Stack
 
-Goa recommends Clue on top of OpenTelemetry for observability.
+Loom recommends Clue on top of OpenTelemetry for observability.
 
 Typical setup includes:
 

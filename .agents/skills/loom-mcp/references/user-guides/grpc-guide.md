@@ -1,12 +1,12 @@
 # gRPC Guide
 
-Complete guide to gRPC transport in Goa - service design, streaming patterns, error handling, and Protocol Buffer integration.
+Complete guide to gRPC transport in Loom - service design, streaming patterns, error handling, and Protocol Buffer integration.
 
-Goa provides comprehensive support for building gRPC services through its DSL and code generation. This guide covers service design, streaming patterns, error handling, and implementation.
+Loom provides comprehensive support for building gRPC services through its DSL and code generation. This guide covers service design, streaming patterns, error handling, and implementation.
 
 ## Overview
 
-Goa's gRPC support includes:
+Loom's gRPC support includes:
 
 - Automatic Protocol Buffer generation: `.proto` files generated from your design
 - Type safety: end-to-end type safety from definition to implementation
@@ -17,7 +17,7 @@ Goa's gRPC support includes:
 
 ### Type Mapping
 
-| Goa Type | Protocol Buffer Type |
+| Loom Type | Protocol Buffer Type |
 | --- | --- |
 | Int | int32 |
 | Int32 | int32 |
@@ -354,7 +354,7 @@ Method("divide", func() {
 
 Common status code mappings:
 
-| Goa Error | gRPC Status Code | Use Case |
+| Loom Error | gRPC Status Code | Use Case |
 | --- | --- | --- |
 | not_found | CodeNotFound | Resource doesn't exist |
 | invalid_argument | CodeInvalidArgument | Invalid input |
@@ -489,7 +489,7 @@ func main() {
 
 ### Automatic Generation
 
-Goa automatically generates `.proto` files from your design:
+Loom automatically generates `.proto` files from your design:
 
 ```proto
 syntax = "proto3";
