@@ -204,7 +204,7 @@ func (u *BarCmdOrFooCmd) UnmarshalJSON(data []byte) error {
 	switch raw.Type {
 	case string(BarCmdOrFooCmdKindFooCmd):
 		var v *FooCmdRequestBodyRequestBody
-		if len(raw.Value) == 0 {
+		if len(raw.Value) == 0 || string(raw.Value) == "null" {
 			return loom.MissingFieldError("args", "body")
 		}
 		if err := json.Unmarshal(raw.Value, &v); err != nil {
@@ -214,7 +214,7 @@ func (u *BarCmdOrFooCmd) UnmarshalJSON(data []byte) error {
 		u.FooCmd = v
 	case string(BarCmdOrFooCmdKindBarCmd):
 		var v *BarCmdRequestBodyRequestBody
-		if len(raw.Value) == 0 {
+		if len(raw.Value) == 0 || string(raw.Value) == "null" {
 			return loom.MissingFieldError("args", "body")
 		}
 		if err := json.Unmarshal(raw.Value, &v); err != nil {
@@ -420,7 +420,7 @@ func (u *CreateActionOrListAction) UnmarshalJSON(data []byte) error {
 	switch raw.Type {
 	case string(CreateActionOrListActionKindListAction):
 		var v *ListActionRequestBodyRequestBody
-		if len(raw.Value) == 0 {
+		if len(raw.Value) == 0 || string(raw.Value) == "null" {
 			return loom.MissingFieldError("value", "body")
 		}
 		if err := json.Unmarshal(raw.Value, &v); err != nil {
@@ -430,7 +430,7 @@ func (u *CreateActionOrListAction) UnmarshalJSON(data []byte) error {
 		u.ListAction = v
 	case string(CreateActionOrListActionKindCreateAction):
 		var v *CreateActionRequestBodyRequestBody
-		if len(raw.Value) == 0 {
+		if len(raw.Value) == 0 || string(raw.Value) == "null" {
 			return loom.MissingFieldError("value", "body")
 		}
 		if err := json.Unmarshal(raw.Value, &v); err != nil {

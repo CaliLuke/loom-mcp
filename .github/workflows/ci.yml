@@ -9,7 +9,7 @@ on:
 
 env:
   GO_VERSION: '1.27.0-rc.2'
-  LOOM_VERSION: 'v1.8.0-alpha.1'
+  LOOM_VERSION: 'v1.8.0-alpha.4'
 
 permissions:
   contents: read
