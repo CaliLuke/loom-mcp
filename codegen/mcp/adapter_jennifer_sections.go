@@ -5,248 +5,6 @@ import (
 	"github.com/dave/jennifer/jen"
 )
 
-func adapterBroadcastSection() codegen.Section {
-	return codegen.NewJenniferSection("mcp-adapter-broadcast", func(stmt *jen.Statement) {
-		stmt.Comment("Broadcaster and publish helpers for server-initiated events").Line()
-
-		stmt.Comment("Publish sends an event to all event stream subscribers.").Line()
-		stmt.Func().Params(jen.Id("a").Op("*").Id("MCPAdapter")).
-			Id("Publish").
-			Params(jen.Id("ev").Op("*").Id("EventsStreamResult")).
-			Block(
-				jen.If(jen.Id("a").Op("==").Nil().Op("||").Id("a").Dot("broadcaster").Op("==").Nil()).Block(
-					jen.Return(),
-				),
-				jen.Id("a").Dot("broadcaster").Dot("Publish").Call(jen.Id("ev")),
-			)
-		stmt.Line()
-
-		stmt.Comment("PublishSession sends an event to subscribers for one MCP session.").Line()
-		stmt.Func().Params(jen.Id("a").Op("*").Id("MCPAdapter")).
-			Id("PublishSession").
-			Params(jen.Id("sessionID").String(), jen.Id("ev").Op("*").Id("EventsStreamResult")).
-			Block(
-				jen.If(jen.Id("a").Op("==").Nil().Op("||").Id("a").Dot("broadcaster").Op("==").Nil()).Block(
-					jen.Return(),
-				),
-				jen.If(jen.Id("sessionID").Op("==").Lit("")).Block(
-					jen.Id("a").Dot("broadcaster").Dot("Publish").Call(jen.Id("ev")),
-					jen.Return(),
-				),
-				jen.If(jen.List(jen.Id("scoped"), jen.Id("ok")).Op(":=").Id("a").Dot("broadcaster").Assert(jen.Id("mcpruntime").Dot("SessionBroadcaster")), jen.Id("ok")).Block(
-					jen.Id("scoped").Dot("PublishSession").Call(jen.Id("sessionID"), jen.Id("ev")),
-				),
-			)
-		stmt.Line()
-
-		stmt.Comment("PublishContext sends an event to subscribers for the MCP session in ctx.").Line()
-		stmt.Func().Params(jen.Id("a").Op("*").Id("MCPAdapter")).
-			Id("PublishContext").
-			Params(jen.Id("ctx").Qual("context", "Context"), jen.Id("ev").Op("*").Id("EventsStreamResult")).
-			Block(
-				jen.Id("a").Dot("PublishSession").Call(jen.Id("mcpruntime").Dot("SessionIDFromContext").Call(jen.Id("ctx")), jen.Id("ev")),
-			)
-		stmt.Line()
-
-		stmt.Comment("PublishStatus is a convenience to publish a status_update message.").Line()
-		stmt.Func().Params(jen.Id("a").Op("*").Id("MCPAdapter")).
-			Id("PublishStatus").
-			Params(
-				jen.Id("ctx").Qual("context", "Context"),
-				jen.Id("typ").String(),
-				jen.Id("message").String(),
-				jen.Id("data").Any(),
-			).
-			Block(
-				jen.Id("n").Op(":=").Op("&").Id("mcpruntime").Dot("Notification").Values(jen.Dict{
-					jen.Id("Type"):    jen.Id("typ"),
-					jen.Id("Message"): jen.Op("&").Id("message"),
-					jen.Id("Data"):    jen.Id("data"),
-				}),
-				jen.List(jen.Id("s"), jen.Id("err")).Op(":=").Id("mcpruntime").Dot("EncodeJSONToString").Call(
-					jen.Id("ctx"),
-					jen.Id("goahttp").Dot("ResponseEncoder"),
-					jen.Id("n"),
-				),
-				jen.If(jen.Id("err").Op("!=").Nil()).Block(
-					jen.Return(),
-				),
-				jen.Id("a").Dot("PublishContext").Call(
-					jen.Id("ctx"),
-					jen.Op("&").Id("EventsStreamResult").Values(jen.Dict{
-						jen.Id("Content"): jen.Index().Op("*").Id("ContentItem").Values(
-							jen.Id("buildContentItem").Call(jen.Id("a"), jen.Id("s")),
-						),
-					}),
-				),
-			)
-		stmt.Line()
-	})
-}
-
-func adapterNotificationsSection(data *AdapterData) codegen.Section {
-	return codegen.NewJenniferSection("mcp-adapter-notifications", func(stmt *jen.Statement) {
-		stmt.Comment("Notifications and events stream").Line()
-
-		if len(data.Notifications) > 0 {
-			stmt.Func().Params(jen.Id("a").Op("*").Id("MCPAdapter")).
-				Id("NotifyStatusUpdate").
-				Params(
-					jen.Id("ctx").Qual("context", "Context"),
-					jen.Id("p").Op("*").Id("SendNotificationPayload"),
-				).
-				Error().
-				Block(
-					jen.If(jen.Op("!").Id("a").Dot("isInitialized").Call(jen.Id("ctx"))).Block(
-						jen.Return(jen.Id("loom").Dot("PermanentError").Call(jen.Lit("invalid_params"), jen.Lit("Not initialized"))),
-					),
-					jen.If(jen.Id("p").Op("==").Nil().Op("||").Id("p").Dot("Type").Op("==").Lit("")).Block(
-						jen.Return(jen.Id("loom").Dot("PermanentError").Call(jen.Lit("invalid_params"), jen.Lit("Missing notification type"))),
-					),
-					jen.Id("n").Op(":=").Op("&").Id("mcpruntime").Dot("Notification").Values(jen.Dict{
-						jen.Id("Type"):    jen.Id("p").Dot("Type"),
-						jen.Id("Message"): jen.Id("p").Dot("Message"),
-						jen.Id("Data"):    jen.Id("p").Dot("Data"),
-					}),
-					jen.Id("a").Dot("log").Call(jen.Id("ctx"), jen.Lit("request"), jen.Map(jen.String()).Any().Values(jen.Dict{
-						jen.Lit("method"):  jen.Lit("notify_status_update"),
-						jen.Lit("type"):    jen.Id("n").Dot("Type"),
-						jen.Lit("message"): jen.Id("n").Dot("Message"),
-					})),
-					jen.List(jen.Id("s"), jen.Id("err")).Op(":=").Id("mcpruntime").Dot("EncodeJSONToString").Call(
-						jen.Id("ctx"),
-						jen.Id("goahttp").Dot("ResponseEncoder"),
-						jen.Id("n"),
-					),
-					jen.If(jen.Id("err").Op("!=").Nil()).Block(
-						jen.Return(jen.Id("err")),
-					),
-					jen.Id("ev").Op(":=").Op("&").Id("EventsStreamResult").Values(jen.Dict{
-						jen.Id("Content"): jen.Index().Op("*").Id("ContentItem").Values(
-							jen.Id("buildContentItem").Call(jen.Id("a"), jen.Id("s")),
-						),
-					}),
-					jen.Id("a").Dot("PublishContext").Call(jen.Id("ctx"), jen.Id("ev")),
-					jen.Id("a").Dot("log").Call(jen.Id("ctx"), jen.Lit("response"), jen.Map(jen.String()).Any().Values(jen.Dict{
-						jen.Lit("method"): jen.Lit("notify_status_update"),
-						jen.Lit("type"):   jen.Id("n").Dot("Type"),
-					})),
-					jen.Return(jen.Nil()),
-				)
-			stmt.Line()
-		}
-
-		stmt.Func().Params(jen.Id("a").Op("*").Id("MCPAdapter")).
-			Id("EventsStream").
-			Params(
-				jen.Id("ctx").Qual("context", "Context"),
-				jen.Id("stream").Id("EventsStreamServerStream"),
-			).
-			Params(jen.Id("res").Op("*").Id("EventsStreamResult"), jen.Id("err").Error()).
-			Block(
-				jen.If(jen.Op("!").Id("a").Dot("isInitialized").Call(jen.Id("ctx"))).Block(
-					jen.Return(jen.Nil(), jen.Id("loom").Dot("PermanentError").Call(jen.Lit("internal_error"), jen.Lit("Not initialized"))),
-				),
-				jen.Id("a").Dot("log").Call(jen.Id("ctx"), jen.Lit("request"), jen.Map(jen.String()).Any().Values(jen.Dict{
-					jen.Lit("method"):     jen.Lit("events/stream"),
-					jen.Lit("session_id"): jen.Id("mcpruntime").Dot("SessionIDFromContext").Call(jen.Id("ctx")),
-				})),
-				jen.List(jen.Id("sessionID")).Op(":=").Id("mcpruntime").Dot("SessionIDFromContext").Call(jen.Id("ctx")),
-				jen.Var().Id("sub").Id("mcpruntime").Dot("Subscription"),
-				jen.If(jen.List(jen.Id("scoped"), jen.Id("ok")).Op(":=").Id("a").Dot("broadcaster").Assert(jen.Id("mcpruntime").Dot("SessionBroadcaster")), jen.Id("ok").Op("&&").Id("sessionID").Op("!=").Lit("")).Block(
-					jen.List(jen.Id("sub"), jen.Id("err")).Op("=").Id("scoped").Dot("SubscribeSession").Call(jen.Id("ctx"), jen.Id("sessionID")),
-				).Else().Block(
-					jen.List(jen.Id("sub"), jen.Id("err")).Op("=").Id("a").Dot("broadcaster").Dot("Subscribe").Call(jen.Id("ctx")),
-				),
-				jen.If(jen.Id("err").Op("!=").Nil()).Block(
-					jen.Return(jen.Nil(), jen.Id("loom").Dot("PermanentError").Call(jen.Lit("internal_error"), jen.Lit("Failed to subscribe to events: %v"), jen.Id("err"))),
-				),
-				jen.Defer().Id("sub").Dot("Close").Call(),
-				jen.For().Block(
-					jen.Select().Block(
-						jen.Case(jen.Op("<-").Id("ctx").Dot("Done").Call()).Block(
-							jen.Id("a").Dot("log").Call(jen.Id("ctx"), jen.Lit("response"), jen.Map(jen.String()).Any().Values(jen.Dict{
-								jen.Lit("method"):     jen.Lit("events/stream"),
-								jen.Lit("session_id"): jen.Id("mcpruntime").Dot("SessionIDFromContext").Call(jen.Id("ctx")),
-								jen.Lit("closed"):     jen.True(),
-								jen.Lit("reason"):     jen.Id("ctx").Dot("Err").Call().Dot("Error").Call(),
-							})),
-							jen.Return(jen.Nil(), jen.Id("ctx").Dot("Err").Call()),
-						),
-						jen.Case(jen.List(jen.Id("ev"), jen.Id("ok")).Op(":=").Op("<-").Id("sub").Dot("C").Call()).Block(
-							jen.If(jen.Op("!").Id("ok")).Block(
-								jen.Id("a").Dot("log").Call(jen.Id("ctx"), jen.Lit("response"), jen.Map(jen.String()).Any().Values(jen.Dict{
-									jen.Lit("method"):     jen.Lit("events/stream"),
-									jen.Lit("session_id"): jen.Id("mcpruntime").Dot("SessionIDFromContext").Call(jen.Id("ctx")),
-									jen.Lit("closed"):     jen.True(),
-									jen.Lit("reason"):     jen.Lit("broadcaster_closed"),
-								})),
-								jen.Return(jen.Nil(), jen.Nil()),
-							),
-							jen.List(jen.Id("evt"), jen.Id("ok")).Op(":=").Id("ev").Assert(jen.Id("EventsStreamEvent")),
-							jen.If(jen.Op("!").Id("ok")).Block(
-								jen.Id("a").Dot("log").Call(jen.Id("ctx"), jen.Lit("response"), jen.Map(jen.String()).Any().Values(jen.Dict{
-									jen.Lit("method"):             jen.Lit("events/stream"),
-									jen.Lit("session_id"):         jen.Id("mcpruntime").Dot("SessionIDFromContext").Call(jen.Id("ctx")),
-									jen.Lit("dropped_event_type"): jen.Qual("fmt", "Sprintf").Call(jen.Lit("%T"), jen.Id("ev")),
-								})),
-								jen.Continue(),
-							),
-							jen.If(jen.Id("err").Op(":=").Id("stream").Dot("Send").Call(jen.Id("ctx"), jen.Id("evt")), jen.Id("err").Op("!=").Nil()).Block(
-								jen.Return(jen.Nil(), jen.Id("loom").Dot("PermanentError").Call(jen.Lit("internal_error"), jen.Lit("Failed to send event: %v"), jen.Id("err"))),
-							),
-							jen.Id("a").Dot("log").Call(jen.Id("ctx"), jen.Lit("response"), jen.Map(jen.String()).Any().Values(jen.Dict{
-								jen.Lit("method"):     jen.Lit("events/stream"),
-								jen.Lit("session_id"): jen.Id("mcpruntime").Dot("SessionIDFromContext").Call(jen.Id("ctx")),
-								jen.Lit("event_type"): jen.Qual("fmt", "Sprintf").Call(jen.Lit("%T"), jen.Id("evt")),
-							})),
-						),
-					),
-				),
-			)
-		stmt.Line()
-	})
-}
-
-func adapterSubscriptionsSection(data *AdapterData) codegen.Section {
-	return codegen.NewJenniferSection("mcp-adapter-subscriptions", func(stmt *jen.Statement) {
-		if len(data.Subscriptions) == 0 {
-			return
-		}
-
-		stmt.Comment("General subscriptions handling").Line()
-		stmt.Add(subscriptionHandler("Subscribe", "SubscribePayload", "SubscribeResult", "subscribe"))
-		stmt.Line()
-		stmt.Add(subscriptionHandler("Unsubscribe", "UnsubscribePayload", "UnsubscribeResult", "unsubscribe"))
-		stmt.Line()
-	})
-}
-
-func subscriptionHandler(name, payloadType, resultType, method string) jen.Code {
-	return jen.Func().Params(jen.Id("a").Op("*").Id("MCPAdapter")).
-		Id(name).
-		Params(
-			jen.Id("ctx").Qual("context", "Context"),
-			jen.Id("p").Op("*").Id(payloadType),
-		).
-		Params(jen.Op("*").Id(resultType), jen.Error()).
-		Block(
-			jen.If(jen.Op("!").Id("a").Dot("isInitialized").Call(jen.Id("ctx"))).Block(
-				jen.Return(jen.Nil(), jen.Id("loom").Dot("PermanentError").Call(jen.Lit("invalid_params"), jen.Lit("Not initialized"))),
-			),
-			jen.Id("a").Dot("log").Call(jen.Id("ctx"), jen.Lit("request"), jen.Map(jen.String()).Any().Values(jen.Dict{
-				jen.Lit("method"): jen.Lit(method),
-			})),
-			jen.Id("res").Op(":=").Op("&").Id(resultType).Values(jen.Dict{
-				jen.Id("Success"): jen.True(),
-			}),
-			jen.Id("a").Dot("log").Call(jen.Id("ctx"), jen.Lit("response"), jen.Map(jen.String()).Any().Values(jen.Dict{
-				jen.Lit("method"): jen.Lit(method),
-			})),
-			jen.Return(jen.Id("res"), jen.Nil()),
-		)
-}
-
 func adapterPromptsSection(data *AdapterData) codegen.Section {
 	return codegen.NewJenniferSection("mcp-adapter-prompts", func(stmt *jen.Statement) {
 		if len(data.StaticPrompts) == 0 && len(data.DynamicPrompts) == 0 {
@@ -254,7 +12,6 @@ func adapterPromptsSection(data *AdapterData) codegen.Section {
 		}
 
 		stmt.Comment("Prompts handling").Line()
-		emitPromptsList(stmt, data)
 		emitPromptsGet(stmt, data)
 	})
 }
@@ -265,73 +22,50 @@ func adapterResourcesSection(data *AdapterData) codegen.Section {
 			return
 		}
 		stmt.Comment("Resources handling").Line()
-		emitResourcesList(stmt, data)
+		emitResourceStreamBridges(stmt, data)
 		emitResourcesRead(stmt, data)
 		emitAssertResourceURIAllowed(stmt)
-		emitResourcesSubscribe(stmt, data)
-		emitResourcesUnsubscribe(stmt, data)
 	})
 }
 
-func emitResourcesList(stmt *jen.Statement, data *AdapterData) {
-	stmt.Func().Params(jen.Id("a").Op("*").Id("MCPAdapter")).
-		Id("ResourcesList").
-		Params(
-			jen.Id("ctx").Qual("context", "Context"),
-			jen.Id("p").Op("*").Id("ResourcesListPayload"),
-		).
-		Params(jen.Op("*").Id("ResourcesListResult"), jen.Error()).
-		BlockFunc(func(g *jen.Group) {
-			g.If(jen.Op("!").Id("a").Dot("isInitialized").Call(jen.Id("ctx"))).Block(
-				jen.Return(jen.Nil(), jen.Id("loom").Dot("PermanentError").Call(jen.Lit("invalid_params"), jen.Lit("Not initialized"))),
+func emitResourceStreamBridges(stmt *jen.Statement, data *AdapterData) {
+	for _, resource := range data.Resources {
+		if !resource.IsStreaming {
+			continue
+		}
+		typeName := resourceStreamBridgeTypeName(resource)
+		eventType := rawExpr(resource.StreamEventType)
+		stmt.Type().Id(typeName).Struct(
+			jen.Id("adapter").Op("*").Id("MCPAdapter"),
+			jen.Id("uri").String(),
+			jen.Id("mimeType").String(),
+			jen.Id("contents").Index().Op("*").Id("ResourceContent"),
+		)
+		stmt.Line()
+		stmt.Func().Params(jen.Id("b").Op("*").Id(typeName)).Id("Send").
+			Params(jen.Id("event").Add(eventType)).Error().
+			Block(jen.Return(jen.Id("b").Dot("SendWithContext").Call(jen.Qual("context", "Background").Call(), jen.Id("event"))))
+		stmt.Line()
+		stmt.Func().Params(jen.Id("b").Op("*").Id(typeName)).Id("SendWithContext").
+			Params(jen.Id("ctx").Qual("context", "Context"), jen.Id("event").Add(eventType)).Error().
+			Block(
+				jen.List(jen.Id("text"), jen.Id("err")).Op(":=").Id("mcpruntime").Dot("EncodeJSONToString").Call(jen.Id("ctx"), jen.Id("goahttp").Dot("ResponseEncoder"), jen.Id("event")),
+				jen.If(jen.Id("err").Op("!=").Nil()).Block(jen.Return(jen.Id("err"))),
+				jen.Id("b").Dot("contents").Op("=").Append(jen.Id("b").Dot("contents"), jen.Op("&").Id("ResourceContent").Values(jen.Dict{
+					jen.Id("URI"):      jen.Id("b").Dot("uri"),
+					jen.Id("MimeType"): jen.Id("stringPtr").Call(jen.Id("b").Dot("mimeType")),
+					jen.Id("Text"):     jen.Op("&").Id("text"),
+				})),
+				jen.Return(jen.Nil()),
 			)
-			emitUnsupportedListCursorCheck(g, "resources/list")
-			g.Id("a").Dot("log").Call(jen.Id("ctx"), jen.Lit("request"), jen.Map(jen.String()).Any().Values(jen.Dict{
-				jen.Lit("method"): jen.Lit("resources/list"),
-			}))
-			g.Id("resources").Op(":=").Index().Op("*").Id("ResourceInfo").ValuesFunc(func(vals *jen.Group) {
-				for _, resource := range data.Resources {
-					dict := jen.Dict{
-						jen.Id("URI"):         jen.Lit(resource.URI),
-						jen.Id("Name"):        jen.Id("stringPtr").Call(jen.Lit(resource.Name)),
-						jen.Id("Description"): jen.Id("stringPtr").Call(jen.Lit(resource.Description)),
-						jen.Id("MimeType"):    jen.Id("stringPtr").Call(jen.Lit(resource.MimeType)),
-					}
-					if icons := iconSliceValue(resource.Icons); icons != nil {
-						dict[jen.Id("Icons")] = icons
-					}
-					vals.Add(jen.Op("&").Id("ResourceInfo").Values(dict))
-				}
-			})
-			if len(data.SkillDirectories) > 0 {
-				g.Id("skillSources").Op(":=").Id("skillSources").Call()
-				g.List(jen.Id("skillResources"), jen.Err()).Op(":=").Id("mcpskills").Dot("List").Call(jen.Id("ctx"), jen.Id("skillSources"))
-				g.If(jen.Err().Op("!=").Nil()).Block(
-					jen.Id("a").Dot("log").Call(jen.Id("ctx"), jen.Lit("error"), jen.Map(jen.String()).Any().Values(jen.Dict{
-						jen.Lit("method"): jen.Lit("resources/list"),
-						jen.Lit("error"):  jen.Err().Dot("Error").Call(),
-					})),
-					jen.Return(jen.Nil(), jen.Id("a").Dot("safeMCPError").Call(jen.Err(), jen.Lit("internal_error"), jen.Lit("Unable to list skill resources."))),
-				)
-				g.For(jen.List(jen.Id("_"), jen.Id("resource")).Op(":=").Range().Id("skillResources")).Block(
-					jen.Id("resources").Op("=").Append(jen.Id("resources"), jen.Op("&").Id("ResourceInfo").Values(jen.Dict{
-						jen.Id("URI"):         jen.Id("resource").Dot("URI"),
-						jen.Id("Name"):        jen.Id("stringPtr").Call(jen.Id("resource").Dot("Name")),
-						jen.Id("Description"): jen.Id("stringPtr").Call(jen.Id("resource").Dot("Description")),
-						jen.Id("MimeType"):    jen.Id("stringPtr").Call(jen.Id("resource").Dot("MimeType")),
-						jen.Id("Meta"):        jen.Id("mcpskills").Dot("MetadataMeta").Call(jen.Id("resource").Dot("Metadata")),
-					})),
-				)
-			}
-			g.Id("res").Op(":=").Op("&").Id("ResourcesListResult").Values(jen.Dict{
-				jen.Id("Resources"): jen.Id("resources"),
-			})
-			g.Id("a").Dot("log").Call(jen.Id("ctx"), jen.Lit("response"), jen.Map(jen.String()).Any().Values(jen.Dict{
-				jen.Lit("method"): jen.Lit("resources/list"),
-			}))
-			g.Return(jen.Id("res"), jen.Nil())
-		})
-	stmt.Line()
+		stmt.Line()
+		stmt.Func().Params(jen.Id("b").Op("*").Id(typeName)).Id("Close").Params().Error().Block(jen.Return(jen.Nil()))
+		stmt.Line()
+	}
+}
+
+func resourceStreamBridgeTypeName(resource *ResourceAdapter) string {
+	return codegen.Goify(resource.OriginalMethodName, true) + "ResourceStreamCollector"
 }
 
 func emitResourcesRead(stmt *jen.Statement, data *AdapterData) {
@@ -431,6 +165,25 @@ func emitResourcesRead(stmt *jen.Statement, data *AdapterData) {
 							caseg.If(jen.Id("err").Op(":=").Id("goahttp").Dot("RequestDecoder").Call(jen.Id("req")).Dot("Decode").Call(jen.Op("&").Id("payload")), jen.Id("err").Op("!=").Nil()).Block(
 								jen.Return(jen.Nil(), jen.Id("a").Dot("safeMCPError").Call(jen.Id("err"), jen.Lit("invalid_params"), jen.Lit("Invalid resource request."))),
 							)
+						}
+						if resource.IsStreaming {
+							caseg.Id("collector").Op(":=").Op("&").Id(resourceStreamBridgeTypeName(resource)).Values(jen.Dict{
+								jen.Id("adapter"):  jen.Id("a"),
+								jen.Id("uri"):      jen.Id("baseURI"),
+								jen.Id("mimeType"): jen.Lit(resource.MimeType),
+							})
+							args := []jen.Code{jen.Id("ctx")}
+							if resource.HasPayload {
+								args = append(args, jen.Id("payload"))
+							}
+							args = append(args, jen.Id("collector"))
+							caseg.If(jen.Id("err").Op(":=").Id("a").Dot("service").Dot(resource.OriginalMethodName).Call(args...), jen.Id("err").Op("!=").Nil()).Block(
+								jen.Return(jen.Nil(), jen.Id("a").Dot("safeMCPError").Call(jen.Id("err"), jen.Lit("internal_error"), jen.Lit("Resource read failed."))),
+							)
+							caseg.Return(jen.Op("&").Id("ResourcesReadResult").Values(jen.Dict{
+								jen.Id("Contents"): jen.Id("collector").Dot("contents"),
+							}), jen.Nil())
+							return
 						}
 						if resource.HasResult {
 							if resource.HasPayload {
@@ -610,128 +363,6 @@ func resolveNamedResourcePolicies(namesSlice, targetSlice string) jen.Code {
 	)
 }
 
-func emitResourcesSubscribe(stmt *jen.Statement, data *AdapterData) {
-	stmt.Func().Params(jen.Id("a").Op("*").Id("MCPAdapter")).
-		Id("ResourcesSubscribe").
-		Params(
-			jen.Id("ctx").Qual("context", "Context"),
-			jen.Id("p").Op("*").Id("ResourcesSubscribePayload"),
-		).
-		Error().
-		BlockFunc(func(g *jen.Group) {
-			g.If(jen.Op("!").Id("a").Dot("isInitialized").Call(jen.Id("ctx"))).Block(
-				jen.Return(jen.Id("loom").Dot("PermanentError").Call(jen.Lit("invalid_params"), jen.Lit("Not initialized"))),
-			)
-			g.Switch(jen.Id("p").Dot("URI")).BlockFunc(func(sw *jen.Group) {
-				for _, resource := range data.Resources {
-					if !resource.Watchable {
-						continue
-					}
-					sw.Case(jen.Lit(resource.URI)).Block(
-						jen.Id("a").Dot("subsMu").Dot("Lock").Call(),
-						jen.Id("a").Dot("subs").Index(jen.Id("p").Dot("URI")).Op("=").Id("a").Dot("subs").Index(jen.Id("p").Dot("URI")).Op("+").Lit(1),
-						jen.Id("a").Dot("subsMu").Dot("Unlock").Call(),
-						jen.Return(jen.Nil()),
-					)
-				}
-				sw.Default().Block(
-					jen.Return(jen.Id("loom").Dot("PermanentError").Call(jen.Lit("resource_not_found"), jen.Lit("Unknown resource: %s"), jen.Id("p").Dot("URI"))),
-				)
-			})
-		})
-	stmt.Line()
-}
-
-func emitResourcesUnsubscribe(stmt *jen.Statement, data *AdapterData) {
-	stmt.Func().Params(jen.Id("a").Op("*").Id("MCPAdapter")).
-		Id("ResourcesUnsubscribe").
-		Params(
-			jen.Id("ctx").Qual("context", "Context"),
-			jen.Id("p").Op("*").Id("ResourcesUnsubscribePayload"),
-		).
-		Error().
-		BlockFunc(func(g *jen.Group) {
-			g.If(jen.Op("!").Id("a").Dot("isInitialized").Call(jen.Id("ctx"))).Block(
-				jen.Return(jen.Id("loom").Dot("PermanentError").Call(jen.Lit("invalid_params"), jen.Lit("Not initialized"))),
-			)
-			g.Switch(jen.Id("p").Dot("URI")).BlockFunc(func(sw *jen.Group) {
-				for _, resource := range data.Resources {
-					if !resource.Watchable {
-						continue
-					}
-					sw.Case(jen.Lit(resource.URI)).Block(
-						jen.Id("a").Dot("subsMu").Dot("Lock").Call(),
-						jen.If(jen.List(jen.Id("n"), jen.Id("ok")).Op(":=").Id("a").Dot("subs").Index(jen.Id("p").Dot("URI")), jen.Id("ok")).Block(
-							jen.If(jen.Id("n").Op(">").Lit(1)).Block(
-								jen.Id("a").Dot("subs").Index(jen.Id("p").Dot("URI")).Op("=").Id("n").Op("-").Lit(1),
-							).Else().Block(
-								jen.Delete(jen.Id("a").Dot("subs"), jen.Id("p").Dot("URI")),
-							),
-						),
-						jen.Id("a").Dot("subsMu").Dot("Unlock").Call(),
-						jen.Return(jen.Nil()),
-					)
-				}
-				sw.Default().Block(
-					jen.Return(jen.Id("loom").Dot("PermanentError").Call(jen.Lit("resource_not_found"), jen.Lit("Unknown resource: %s"), jen.Id("p").Dot("URI"))),
-				)
-			})
-		})
-	stmt.Line()
-}
-
-func emitPromptsList(stmt *jen.Statement, data *AdapterData) {
-	stmt.Func().Params(jen.Id("a").Op("*").Id("MCPAdapter")).
-		Id("PromptsList").
-		Params(
-			jen.Id("ctx").Qual("context", "Context"),
-			jen.Id("p").Op("*").Id("PromptsListPayload"),
-		).
-		Params(jen.Op("*").Id("PromptsListResult"), jen.Error()).
-		BlockFunc(func(g *jen.Group) {
-			g.If(jen.Op("!").Id("a").Dot("isInitialized").Call(jen.Id("ctx"))).Block(
-				jen.Return(jen.Nil(), jen.Id("loom").Dot("PermanentError").Call(jen.Lit("invalid_params"), jen.Lit("Not initialized"))),
-			)
-			emitUnsupportedListCursorCheck(g, "prompts/list")
-			g.Id("a").Dot("log").Call(jen.Id("ctx"), jen.Lit("request"), jen.Map(jen.String()).Any().Values(jen.Dict{
-				jen.Lit("method"): jen.Lit("prompts/list"),
-			}))
-			g.Id("prompts").Op(":=").Index().Op("*").Id("PromptInfo").ValuesFunc(func(vals *jen.Group) {
-				for _, prompt := range data.DynamicPrompts {
-					vals.Add(promptInfoValue(prompt.Name, prompt.Description, prompt.Icons, prompt.Arguments))
-				}
-				for _, prompt := range data.StaticPrompts {
-					vals.Add(promptInfoValue(prompt.Name, prompt.Description, prompt.Icons, nil))
-				}
-			})
-			g.Id("res").Op(":=").Op("&").Id("PromptsListResult").Values(jen.Dict{
-				jen.Id("Prompts"): jen.Id("prompts"),
-			})
-			g.Id("a").Dot("log").Call(jen.Id("ctx"), jen.Lit("response"), jen.Map(jen.String()).Any().Values(jen.Dict{
-				jen.Lit("method"): jen.Lit("prompts/list"),
-			}))
-			g.Return(jen.Id("res"), jen.Nil())
-		})
-	stmt.Line()
-}
-
-func emitUnsupportedListCursorCheck(g *jen.Group, method string) {
-	g.If(
-		jen.Id("p").Op("!=").Nil().Op("&&").
-			Id("p").Dot("Cursor").Op("!=").Nil().Op("&&").
-			Op("*").Id("p").Dot("Cursor").Op("!=").Lit(""),
-	).Block(
-		jen.Return(
-			jen.Nil(),
-			jen.Id("loom").Dot("PermanentError").Call(
-				jen.Lit("invalid_params"),
-				jen.Lit("%s pagination is not implemented; cursor must be empty"),
-				jen.Lit(method),
-			),
-		),
-	)
-}
-
 func emitPromptsGet(stmt *jen.Statement, data *AdapterData) {
 	stmt.Func().Params(jen.Id("a").Op("*").Id("MCPAdapter")).
 		Id("PromptsGet").
@@ -768,28 +399,6 @@ func emitPromptsGet(stmt *jen.Statement, data *AdapterData) {
 			g.Return(jen.Nil(), jen.Id("loom").Dot("PermanentError").Call(jen.Lit("invalid_params"), jen.Lit("Unknown prompt: %s"), jen.Id("p").Dot("Name")))
 		})
 	stmt.Line()
-}
-
-func promptInfoValue(name, description string, icons []*IconData, args []PromptArg) jen.Code {
-	dict := jen.Dict{
-		jen.Id("Name"):        jen.Lit(name),
-		jen.Id("Description"): jen.Id("stringPtr").Call(jen.Lit(description)),
-	}
-	if len(args) > 0 {
-		argValues := make([]jen.Code, 0, len(args))
-		for _, arg := range args {
-			argValues = append(argValues, jen.Op("&").Id("PromptArgument").Values(jen.Dict{
-				jen.Id("Name"):        jen.Lit(arg.Name),
-				jen.Id("Description"): jen.Id("stringPtr").Call(jen.Lit(arg.Description)),
-				jen.Id("Required"):    jen.Lit(arg.Required),
-			}))
-		}
-		dict[jen.Id("Arguments")] = jen.Index().Op("*").Id("PromptArgument").Values(argValues...)
-	}
-	if iconsValue := iconSliceValue(icons); iconsValue != nil {
-		dict[jen.Id("Icons")] = iconsValue
-	}
-	return jen.Op("&").Id("PromptInfo").Values(dict)
 }
 
 func staticPromptCase(prompt *StaticPromptAdapter) []jen.Code {

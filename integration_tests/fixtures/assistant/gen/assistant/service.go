@@ -33,8 +33,6 @@ type Service interface {
 	GeneratePrompts(context.Context, *GeneratePromptsPayload) (res *PromptTemplates, err error)
 	// Build a Figma-style implementation handoff prompt from a generated DPI spec
 	BuildFigmaImplementationPrompt(context.Context, *BuildFigmaImplementationPromptPayload) (res *PromptTemplates, err error)
-	// Send status notification to client
-	SendNotification(context.Context, *SendNotificationPayload) (err error)
 	// Analyze sentiment of text
 	AnalyzeSentiment(context.Context, *AnalyzeSentimentPayload) (res *AnalyzeSentimentResult, err error)
 	// Extract keywords from text
@@ -80,7 +78,7 @@ const ServiceName = "assistant"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [22]string{"list_documents", "system_info", "elicitation_context", "conversation_history", "figma_design_system", "generate_prompts", "build_figma_implementation_prompt", "send_notification", "analyze_sentiment", "extract_keywords", "summarize_text", "search", "search_records", "execute_code", "process_batch", "report_progress", "multi_content", "generate_dpi_spec", "dispatch_action", "dispatch_command", "projected_lookup", "projected_status"}
+var MethodNames = [21]string{"list_documents", "system_info", "elicitation_context", "conversation_history", "figma_design_system", "generate_prompts", "build_figma_implementation_prompt", "analyze_sentiment", "extract_keywords", "summarize_text", "search", "search_records", "execute_code", "process_batch", "report_progress", "multi_content", "generate_dpi_spec", "dispatch_action", "dispatch_command", "projected_lookup", "projected_status"}
 
 // AnalyzeSentimentPayload is the payload type of the assistant service
 // analyze_sentiment method.
@@ -422,17 +420,6 @@ type SearchRecordsResult struct {
 type SearchResult struct {
 	// Search results
 	Results []string `json:"results,omitempty"`
-}
-
-// SendNotificationPayload is the payload type of the assistant service
-// send_notification method.
-type SendNotificationPayload struct {
-	// Notification type
-	Type string `json:"type"`
-	// Notification message
-	Message string `json:"message"`
-	// Additional data
-	Data any `json:"data,omitempty"`
 }
 
 // SummarizeTextPayload is the payload type of the assistant service

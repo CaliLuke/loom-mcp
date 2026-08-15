@@ -11,8 +11,6 @@ import (
 	"sync"
 	"syscall"
 
-	assistantapi "example.com/assistant"
-	mcpassistant "example.com/assistant/gen/mcp_assistant"
 	"github.com/CaliLuke/loom/clue/log"
 )
 
@@ -39,19 +37,6 @@ func main() {
 		log.Debugf(ctx, "debug logs enabled")
 	}
 	log.Print(ctx, log.KV{K: "http-port", V: *httpPortF})
-
-	// Initialize the services.
-	var mcpAssistantSvc mcpassistant.Service
-	{
-		mcpAssistantSvc = assistantapi.NewMcpAssistant()
-	}
-
-	// Wrap the services in endpoints that can be invoked from other services
-	// potentially running in different processes.
-	var mcpAssistantEndpoints *mcpassistant.Endpoints
-	{
-		mcpAssistantEndpoints = mcpassistant.NewEndpoints(mcpAssistantSvc)
-	}
 
 	// Create channel used by both the signal handler and server goroutines
 	// to notify the main goroutine when to stop the server.
@@ -92,7 +77,7 @@ func main() {
 			} else if u.Port() == "" {
 				u.Host = net.JoinHostPort(u.Host, "80")
 			}
-			handleHTTPServer(ctx, u, mcpAssistantSvc, mcpAssistantEndpoints, &wg, errc, *dbgF)
+			handleHTTPServer(ctx, u, &wg, errc, *dbgF)
 		}
 
 	default:

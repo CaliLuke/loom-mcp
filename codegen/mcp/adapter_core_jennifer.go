@@ -13,7 +13,6 @@ func adapterCoreSection(data *AdapterData) codegen.Section {
 		emitToolSearchOptions(stmt)
 		emitAdapterOptions(stmt)
 		emitAdapterConstructor(stmt, data)
-		emitProtocolVersionHelpers(stmt)
 		emitParseQueryParamsToJSON(stmt)
 		emitSessionHelpers(stmt)
 		emitLogAndMapError(stmt)
@@ -25,8 +24,6 @@ func adapterCoreSection(data *AdapterData) codegen.Section {
 		emitSafeMCPError(stmt)
 		emitToolCallError(stmt)
 		emitMissingFieldFromMessage(stmt)
-		emitInitializeHandler(stmt, data)
-		emitPingHandler(stmt)
 	})
 }
 
@@ -46,13 +43,6 @@ func emitAdapterStruct(stmt *jen.Statement, data *AdapterData) {
 		if len(data.StaticPrompts) > 0 || len(data.DynamicPrompts) > 0 {
 			g.Id("promptProvider").Id("PromptProvider")
 		}
-		if data.HasWatchableResources {
-			g.Comment("Minimal subscription registry keyed by resource URI")
-			g.Id("subs").Map(jen.String()).Int()
-			g.Id("subsMu").Qual("sync", "Mutex")
-		}
-		g.Comment("Broadcaster for server-initiated events (notifications/resources)")
-		g.Id("broadcaster").Id("mcpruntime").Dot("Broadcaster")
 		g.Comment("requestStateKey encrypts and authenticates portable MCP multi-round-trip state.")
 		g.Id("requestStateKey").Index().Byte()
 		g.Comment("resourceNameToURI holds DSL-derived mapping for policy and lookups")
@@ -66,11 +56,23 @@ func emitAdapterStruct(stmt *jen.Statement, data *AdapterData) {
 	stmt.Line()
 	stmt.Var().Id("_").Id("Service").Op("=").Params(jen.Op("*").Id("MCPAdapter")).Call(jen.Nil())
 	stmt.Line()
+	stmt.Var().Defs(
+		jen.Id("errInvalidSessionID").Op("=").Qual("errors", "New").Call(jen.Lit("invalid session ID")),
+		jen.Id("errSessionPrincipalBindingMissing").Op("=").Qual("errors", "New").Call(jen.Lit("session principal binding missing")),
+		jen.Id("errSessionPrincipalMismatch").Op("=").Qual("errors", "New").Call(jen.Lit("session user mismatch")),
+	)
+	stmt.Line()
 }
 
 // emitToolCallInterceptorTypes generates the interceptor-related types and impls.
 func emitToolCallInterceptorTypes(stmt *jen.Statement) {
 	stmt.Type().Defs(
+		jen.Id("toolCallStream").Interface(
+			jen.Id("Send").Params(jen.Qual("context", "Context"), jen.Op("*").Id("ToolsCallResult")).Error(),
+			jen.Id("SendAndClose").Params(jen.Qual("context", "Context"), jen.Op("*").Id("ToolsCallResult")).Error(),
+			jen.Id("SendError").Params(jen.Qual("context", "Context"), jen.Any(), jen.Error()).Error(),
+		),
+		jen.Line(),
 		jen.Comment("ToolCallInterceptorInfo describes a generated MCP tools/call invocation.").Line().
 			Id("ToolCallInterceptorInfo").Interface(
 			jen.Id("loom").Dot("InterceptorInfo"),
@@ -81,14 +83,14 @@ func emitToolCallInterceptorTypes(stmt *jen.Statement) {
 			Id("ToolCallHandler").Func().Params(
 			jen.Id("ctx").Qual("context", "Context"),
 			jen.Id("payload").Op("*").Id("ToolsCallPayload"),
-			jen.Id("stream").Id("ToolsCallServerStream"),
+			jen.Id("stream").Id("toolCallStream"),
 		).Params(jen.Bool(), jen.Error()),
 		jen.Line().Comment("ToolCallInterceptor wraps generated MCP tool execution.").Line().
 			Id("ToolCallInterceptor").Func().Params(
 			jen.Id("ctx").Qual("context", "Context"),
 			jen.Id("info").Id("ToolCallInterceptorInfo"),
 			jen.Id("payload").Op("*").Id("ToolsCallPayload"),
-			jen.Id("stream").Id("ToolsCallServerStream"),
+			jen.Id("stream").Id("toolCallStream"),
 			jen.Id("next").Id("ToolCallHandler"),
 		).Params(jen.Bool(), jen.Error()),
 	)
@@ -195,11 +197,6 @@ func emitAdapterOptions(stmt *jen.Statement) {
 		jen.Id("StructuredStreamJSON").Bool(),
 		jen.Comment("SessionPrincipal extracts a stable auth/session owner identity from ctx."),
 		jen.Id("SessionPrincipal").Func().Params(jen.Qual("context", "Context")).String(),
-		jen.Comment("Pluggable broadcaster, else default channel broadcaster"),
-		jen.Id("Broadcaster").Id("mcpruntime").Dot("Broadcaster"),
-		jen.Id("BroadcastBuffer").Int(),
-		jen.Comment("DropIfSlow controls whether slow subscribers drop events. Nil defaults to true."),
-		jen.Id("DropIfSlow").Op("*").Bool(),
 	)
 	stmt.Line()
 }
@@ -218,25 +215,6 @@ func emitAdapterConstructor(stmt *jen.Statement, data *AdapterData) {
 
 	stmt.Func().Id("NewMCPAdapter").Params(params...).Op("*").Id("MCPAdapter").BlockFunc(func(g *jen.Group) {
 		g.Id("validateToolSearchOptions").Call(jen.Id("opts"))
-
-		// Broadcaster
-		g.Comment("Broadcaster")
-		g.Var().Id("bc").Id("mcpruntime").Dot("Broadcaster")
-		g.If(jen.Id("opts").Op("!=").Nil().Op("&&").Id("opts").Dot("Broadcaster").Op("!=").Nil()).Block(
-			jen.Id("bc").Op("=").Id("opts").Dot("Broadcaster"),
-		).Else().BlockFunc(func(eg *jen.Group) {
-			eg.Id("buf").Op(":=").Lit(32)
-			eg.Id("drop").Op(":=").True()
-			eg.If(jen.Id("opts").Op("!=").Nil()).Block(
-				jen.If(jen.Id("opts").Dot("BroadcastBuffer").Op(">").Lit(0)).Block(
-					jen.Id("buf").Op("=").Id("opts").Dot("BroadcastBuffer"),
-				),
-				jen.If(jen.Id("opts").Dot("DropIfSlow").Op("!=").Nil()).Block(
-					jen.Id("drop").Op("=").Op("*").Id("opts").Dot("DropIfSlow"),
-				),
-			)
-			eg.Id("bc").Op("=").Id("mcpruntime").Dot("NewChannelBroadcaster").Call(jen.Id("buf"), jen.Id("drop"))
-		})
 
 		// Telemetry
 		g.Id("telemetryName").Op(":=").Id("defaultMCPAdapterTelemetryName").Call(jen.Id("opts"))
@@ -264,78 +242,12 @@ func emitAdapterConstructor(stmt *jen.Statement, data *AdapterData) {
 			if hasPrompts {
 				vals.Id("promptProvider").Op(":").Id("promptProvider")
 			}
-			if data.HasWatchableResources {
-				vals.Id("subs").Op(":").Make(jen.Map(jen.String()).Int())
-			}
-			vals.Id("broadcaster").Op(":").Id("bc")
 			vals.Id("resourceNameToURI").Op(":").Id("nameToURI")
 		}))
 	})
 	stmt.Line()
 }
 
-// emitProtocolVersionHelpers generates mcpProtocolVersion, supportsProtocolVersion, validMCPProtocolVersionDate.
-func emitProtocolVersionHelpers(stmt *jen.Statement) {
-	// mcpProtocolVersion
-	stmt.Comment("mcpProtocolVersion returns the design-configured protocol version.").Line()
-	stmt.Func().Params(jen.Id("a").Op("*").Id("MCPAdapter")).
-		Id("mcpProtocolVersion").Params().String().
-		Block(
-			jen.Return(jen.Id("DefaultProtocolVersion")),
-		)
-	stmt.Line()
-
-	// supportsProtocolVersion
-	stmt.Func().Params(jen.Id("a").Op("*").Id("MCPAdapter")).
-		Id("supportsProtocolVersion").Params(jen.Id("requested").String()).Bool().
-		Block(
-			jen.For(jen.List(jen.Id("_"), jen.Id("v")).Op(":=").Range().Id("SupportedProtocolVersions")).Block(
-				jen.If(jen.Id("v").Op("==").Id("requested")).Block(
-					jen.Return(jen.True()),
-				),
-			),
-			jen.Return(jen.False()),
-		)
-	stmt.Line()
-
-	// negotiateProtocolVersion
-	stmt.Comment("negotiateProtocolVersion returns the requested version if supported, otherwise the server's latest.").Line()
-	stmt.Func().Params(jen.Id("a").Op("*").Id("MCPAdapter")).
-		Id("negotiateProtocolVersion").Params(jen.Id("requested").String()).String().
-		Block(
-			jen.If(jen.Id("a").Dot("supportsProtocolVersion").Call(jen.Id("requested"))).Block(
-				jen.Return(jen.Id("requested")),
-			),
-			jen.Return(jen.Id("a").Dot("mcpProtocolVersion").Call()),
-		)
-	stmt.Line()
-
-	// validMCPProtocolVersionDate
-	stmt.Func().Id("validMCPProtocolVersionDate").Params(jen.Id("v").String()).Bool().
-		Block(
-			jen.If(jen.Len(jen.Id("v")).Op("!=").Lit(10)).Block(
-				jen.Return(jen.False()),
-			),
-			jen.For(jen.Id("i").Op(":=").Range().Id("v")).Block(
-				jen.Switch(jen.Id("i")).Block(
-					jen.Case(jen.Lit(4), jen.Lit(7)).Block(
-						jen.If(jen.Id("v").Index(jen.Id("i")).Op("!=").LitRune('-')).Block(
-							jen.Return(jen.False()),
-						),
-					),
-					jen.Default().Block(
-						jen.If(jen.Id("v").Index(jen.Id("i")).Op("<").LitRune('0').Op("||").Id("v").Index(jen.Id("i")).Op(">").LitRune('9')).Block(
-							jen.Return(jen.False()),
-						),
-					),
-				),
-			),
-			jen.Return(jen.True()),
-		)
-	stmt.Line()
-}
-
-// emitParseQueryParamsToJSON generates the parseQueryParamsToJSON helper.
 func emitParseQueryParamsToJSON(stmt *jen.Statement) {
 	stmt.Comment("parseQueryParamsToJSON converts URI query params into JSON.").Line()
 	stmt.Func().Id("parseQueryParamsToJSON").Params(jen.Id("uri").String()).Params(jen.Index().Byte(), jen.Error()).
@@ -464,16 +376,16 @@ func emitSessionHelpers(stmt *jen.Statement) {
 			jen.Id("expected").Op(":=").Qual("strings", "TrimSpace").Call(jen.Id("a").Dot("sessionPrincipals").Index(jen.Id("sessionID"))),
 			jen.Id("a").Dot("mu").Dot("Unlock").Call(),
 			jen.If(jen.Op("!").Id("initialized")).Block(
-				jen.Return(jen.Id("mcpruntime").Dot("ErrInvalidSessionID")),
+				jen.Return(jen.Id("errInvalidSessionID")),
 			),
 			jen.If(jen.Id("expected").Op("==").Lit("")).Block(
 				jen.If(jen.Id("principalRequired").Op("||").Id("actual").Op("!=").Lit("")).Block(
-					jen.Return(jen.Id("mcpruntime").Dot("ErrSessionPrincipalBindingMissing")),
+					jen.Return(jen.Id("errSessionPrincipalBindingMissing")),
 				),
 				jen.Return(jen.Nil()),
 			),
 			jen.If(jen.Id("actual").Op("==").Lit("").Op("||").Id("actual").Op("!=").Id("expected")).Block(
-				jen.Return(jen.Id("mcpruntime").Dot("ErrSessionPrincipalMismatch")),
+				jen.Return(jen.Id("errSessionPrincipalMismatch")),
 			),
 			jen.Return(jen.Nil()),
 		)
@@ -550,7 +462,7 @@ func emitToolCallInfoAndWrap(stmt *jen.Statement, data *AdapterData) {
 				jen.Id("wrapped").Op("=").Func().Params(
 					jen.Id("ctx").Qual("context", "Context"),
 					jen.Id("payload").Op("*").Id("ToolsCallPayload"),
-					jen.Id("stream").Id("ToolsCallServerStream"),
+					jen.Id("stream").Id("toolCallStream"),
 				).Params(jen.Bool(), jen.Error()).Block(
 					jen.Return(jen.Id("interceptor").Call(jen.Id("ctx"), jen.Id("info"), jen.Id("payload"), jen.Id("stream"), jen.Id("currentNext"))),
 				),
@@ -730,7 +642,7 @@ func emitSendToolError(stmt *jen.Statement) {
 		Id("sendToolError").
 		Params(
 			jen.Id("ctx").Qual("context", "Context"),
-			jen.Id("stream").Id("ToolsCallServerStream"),
+			jen.Id("stream").Id("toolCallStream"),
 			jen.Id("toolName").String(),
 			jen.Id("err").Error(),
 		).Error().
@@ -904,152 +816,6 @@ func emitMissingFieldFromMessage(stmt *jen.Statement) {
 				jen.Return(jen.Lit("")),
 			),
 			jen.Return(jen.Qual("strings", "TrimSpace").Call(jen.Qual("strings", "TrimPrefix").Call(jen.Id("message"), jen.Id("prefix")))),
-		)
-	stmt.Line()
-}
-
-// emitInitializeHandler generates the Initialize method.
-func emitInitializeHandler(stmt *jen.Statement, data *AdapterData) {
-	stmt.Comment("Initialize handles the MCP initialize request.").Line()
-	stmt.Func().Params(jen.Id("a").Op("*").Id("MCPAdapter")).
-		Id("Initialize").
-		Params(
-			jen.Id("ctx").Qual("context", "Context"),
-			jen.Id("p").Op("*").Id("InitializePayload"),
-		).
-		Params(jen.Id("res").Op("*").Id("InitializeResult"), jen.Id("err").Error()).
-		BlockFunc(func(g *jen.Group) {
-			g.List(jen.Id("ctx"), jen.Id("span"), jen.Id("start"), jen.Id("attrs")).Op(":=").Id("a").Dot("startTelemetry").Call(jen.Id("ctx"), jen.Lit("initialize"))
-			g.Defer().Func().Params().Block(
-				jen.Id("a").Dot("finishTelemetry").Call(jen.Id("ctx"), jen.Id("span"), jen.Id("start"), jen.Id("attrs"), jen.Id("err"), jen.False()),
-			).Call()
-
-			g.Id("requestProtocol").Op(":=").Lit("")
-			g.Id("requestSessionID").Op(":=").Id("mcpruntime").Dot("SessionIDFromContext").Call(jen.Id("ctx"))
-			g.If(jen.Id("p").Op("!=").Nil()).Block(
-				jen.Id("requestProtocol").Op("=").Id("p").Dot("ProtocolVersion"),
-			)
-			g.Id("a").Dot("log").Call(jen.Id("ctx"), jen.Lit("request"), jen.Map(jen.String()).Any().Values(jen.Dict{
-				jen.Lit("method"):           jen.Lit("initialize"),
-				jen.Lit("session_id"):       jen.Id("requestSessionID"),
-				jen.Lit("protocol_version"): jen.Id("requestProtocol"),
-			}))
-
-			g.If(jen.Id("p").Op("==").Nil().Op("||").Id("p").Dot("ProtocolVersion").Op("==").Lit("")).Block(
-				jen.Return(jen.Nil(), jen.Id("loom").Dot("PermanentError").Call(jen.Lit("invalid_params"), jen.Lit("Missing protocolVersion"))),
-			)
-			g.Id("negotiatedVersion").Op(":=").Id("a").Dot("negotiateProtocolVersion").Call(jen.Id("p").Dot("ProtocolVersion"))
-
-			g.Id("sessionID").Op(":=").Id("requestSessionID")
-			g.If(jen.Id("sessionID").Op("==").Lit("").Op("&&").Id("mcpruntime").Dot("ResponseWriterFromContext").Call(jen.Id("ctx")).Op("!=").Nil()).Block(
-				jen.Id("sessionID").Op("=").Id("mcpruntime").Dot("EnsureSessionID").Call(jen.Id("ctx")),
-			)
-
-			// Lock and check initialization
-			g.Id("a").Dot("mu").Dot("Lock").Call()
-			g.Id("now").Op(":=").Qual("time", "Now").Call()
-			alreadyInitBlock := []jen.Code{
-				jen.Id("a").Dot("mu").Dot("Unlock").Call(),
-				jen.Id("err").Op("=").Id("loom").Dot("PermanentError").Call(jen.Lit("invalid_params"), jen.Lit("Already initialized")),
-				jen.Id("a").Dot("log").Call(jen.Id("ctx"), jen.Lit("response"), jen.Map(jen.String()).Any().Values(jen.Dict{
-					jen.Lit("method"):           jen.Lit("initialize"),
-					jen.Lit("session_id"):       jen.Id("sessionID"),
-					jen.Lit("protocol_version"): jen.Id("p").Dot("ProtocolVersion"),
-					jen.Lit("error"):            jen.Id("err").Dot("Error").Call(),
-				})),
-				jen.Return(jen.Nil(), jen.Id("err")),
-			}
-			g.If(jen.Id("sessionID").Op("==").Lit("")).Block(
-				jen.If(jen.Id("a").Dot("initialized")).Block(alreadyInitBlock...),
-				jen.Id("a").Dot("initialized").Op("=").True(),
-			).Else().Block(
-				jen.If(jen.List(jen.Id("_"), jen.Id("ok")).Op(":=").Id("a").Dot("initializedSessions").Index(jen.Id("sessionID")), jen.Op("!").Id("ok")).Block(
-					jen.Id("a").Dot("pruneSessionsLocked").Call(jen.Id("now"), jen.True()),
-				),
-				jen.If(jen.List(jen.Id("_"), jen.Id("ok")).Op(":=").Id("a").Dot("initializedSessions").Index(jen.Id("sessionID")), jen.Id("ok")).Block(alreadyInitBlock...),
-				jen.Id("a").Dot("initializedSessions").Index(jen.Id("sessionID")).Op("=").Id("now"),
-			)
-			g.Id("a").Dot("mu").Dot("Unlock").Call()
-			g.Id("a").Dot("captureSessionPrincipal").Call(jen.Id("ctx"), jen.Id("sessionID"))
-
-			// ServerInfo
-			g.Id("serverInfo").Op(":=").Op("&").Id("ServerInfo").ValuesFunc(func(v *jen.Group) {
-				v.Id("Name").Op(":").Lit(data.MCPName)
-				v.Id("Version").Op(":").Lit(data.MCPVersion)
-				if data.MCPDescription != "" {
-					v.Id("Description").Op(":").Id("stringPtr").Call(jen.Lit(data.MCPDescription))
-				}
-				if data.WebsiteURL != "" {
-					v.Id("WebsiteURL").Op(":").Id("stringPtr").Call(jen.Lit(data.WebsiteURL))
-				}
-				if len(data.Icons) > 0 {
-					v.Id("Icons").Op(":").Add(iconSliceValue(data.Icons))
-				}
-			})
-
-			// Capabilities
-			g.Id("capabilities").Op(":=").Op("&").Id("ServerCapabilities").Values()
-			if len(data.Tools) > 0 {
-				g.Id("capabilities").Dot("Tools").Op("=").Op("&").Id("ToolsCapability").Values()
-			}
-			if adapterDataHasResources(data) {
-				g.Id("capabilities").Dot("Resources").Op("=").Op("&").Id("ResourcesCapability").Values()
-			}
-			if len(data.StaticPrompts) > 0 || len(data.DynamicPrompts) > 0 {
-				g.Id("capabilities").Dot("Prompts").Op("=").Op("&").Id("PromptsCapability").Values()
-			}
-			g.Id("capabilities").Dot("Experimental").Op("=").Map(jen.String()).Any().Values(jen.Dict{
-				jen.Lit("loom-mcp"): jen.Map(jen.String()).Any().Values(jen.Dict{
-					jen.Lit("events"): jen.Map(jen.String()).Any().Values(jen.Dict{
-						jen.Lit("stream"): jen.True(),
-						jen.Lit("method"): jen.Lit("events/stream"),
-						jen.Lit("notifications"): jen.Index().String().ValuesFunc(func(v *jen.Group) {
-							for _, notification := range data.Notifications {
-								v.Lit("notify_" + notification.Name)
-							}
-						}),
-					}),
-				}),
-			})
-
-			g.Id("res").Op("=").Op("&").Id("InitializeResult").Values(jen.Dict{
-				jen.Id("ProtocolVersion"): jen.Id("negotiatedVersion"),
-				jen.Id("ServerInfo"):      jen.Id("serverInfo"),
-				jen.Id("Capabilities"):    jen.Id("capabilities"),
-			})
-			g.Id("a").Dot("log").Call(jen.Id("ctx"), jen.Lit("response"), jen.Map(jen.String()).Any().Values(jen.Dict{
-				jen.Lit("method"):           jen.Lit("initialize"),
-				jen.Lit("session_id"):       jen.Id("sessionID"),
-				jen.Lit("protocol_version"): jen.Id("res").Dot("ProtocolVersion"),
-				jen.Lit("server_name"):      jen.Id("serverInfo").Dot("Name"),
-			}))
-			g.Return(jen.Id("res"), jen.Nil())
-		})
-	stmt.Line()
-}
-
-// emitPingHandler generates the Ping method.
-func emitPingHandler(stmt *jen.Statement) {
-	stmt.Comment("Ping handles the MCP ping request.").Line()
-	stmt.Func().Params(jen.Id("a").Op("*").Id("MCPAdapter")).
-		Id("Ping").
-		Params(jen.Id("ctx").Qual("context", "Context")).
-		Params(jen.Id("res").Op("*").Id("PingResult"), jen.Id("err").Error()).
-		Block(
-			jen.List(jen.Id("ctx"), jen.Id("span"), jen.Id("start"), jen.Id("attrs")).Op(":=").Id("a").Dot("startTelemetry").Call(jen.Id("ctx"), jen.Lit("ping")),
-			jen.Defer().Func().Params().Block(
-				jen.Id("a").Dot("finishTelemetry").Call(jen.Id("ctx"), jen.Id("span"), jen.Id("start"), jen.Id("attrs"), jen.Id("err"), jen.False()),
-			).Call(),
-			jen.Id("a").Dot("log").Call(jen.Id("ctx"), jen.Lit("request"), jen.Map(jen.String()).Any().Values(jen.Dict{
-				jen.Lit("method"): jen.Lit("ping"),
-			})),
-			jen.Id("res").Op("=").Op("&").Id("PingResult").Values(jen.Dict{
-				jen.Id("Pong"): jen.True(),
-			}),
-			jen.Id("a").Dot("log").Call(jen.Id("ctx"), jen.Lit("response"), jen.Map(jen.String()).Any().Values(jen.Dict{
-				jen.Lit("method"): jen.Lit("ping"),
-			})),
-			jen.Return(jen.Id("res"), jen.Nil()),
 		)
 	stmt.Line()
 }

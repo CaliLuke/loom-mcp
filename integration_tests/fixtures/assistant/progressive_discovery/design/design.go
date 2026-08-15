@@ -14,16 +14,11 @@ var _ = API("progressive-discovery", func() {
 var _ = Service("catalog", func() {
 	Description("Minimal MCP progressive-discovery parity fixture")
 	MCP("catalog-mcp", "1.0.0",
-		ProtocolVersion("2025-11-25"),
 		ToolSearch(
 			ToolSearchMaxResults(3),
 			ToolSearchExactMatch(ToolSearchExactMatchNarrow),
 		),
 	)
-	JSONRPC(func() {
-		POST("/rpc")
-	})
-
 	Method("lookup", func() {
 		Payload(func() {
 			Attribute("query", String, "Lookup query")
@@ -38,7 +33,30 @@ var _ = Service("catalog", func() {
 			ToolDiscoveryTags("lookup", "direct"),
 			ToolDiscoveryKeywords("catalog", "entry"),
 		)
-		JSONRPC(func() {})
+	})
+
+	Method("status", func() {
+		Result(func() {
+			Attribute("state", String, "Current catalog state")
+			Required("state")
+		})
+		WatchableResource("status", "status://current", "application/json")
+	})
+
+	Method("stream_chunks", func() {
+		StreamingResult(func() {
+			Attribute("chunk", String, "Streamed chunk")
+			Required("chunk")
+		})
+		Tool("stream_chunks", "Return two chunks through a Loom streaming method")
+	})
+
+	Method("wait_for_cancel", func() {
+		Result(func() {
+			Attribute("completed", Boolean, "Whether the wait completed normally")
+			Required("completed")
+		})
+		Tool("wait_for_cancel", "Wait until the MCP client cancels the request")
 	})
 
 	Method("projected_lookup", func() {

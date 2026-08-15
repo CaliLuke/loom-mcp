@@ -151,18 +151,23 @@ Use this skill for `loom-mcp` work in this repo. Keep `AGENTS.md` short and keep
 - MCP is a two-way bridge:
   - consume external MCP servers through `runtime/mcp` callers,
   - expose designed services as MCP servers through generated adapters and registrations.
-- MCP `ProtocolVersion(...)` configures the always-generated Loom-native
-  JSON-RPC transport and must be one of `2024-11-05`, `2025-03-26`,
-  `2025-06-18`, or `2025-11-25`. Reject draft, future, and unknown versions at
-  design validation. SDK servers may negotiate `2026-07-28` only through the
-  upstream stateless streamable-HTTP runtime option; do not advertise those
-  semantics from the native DSL.
+- The official MCP Go SDK is the only MCP wire transport. It owns protocol
+  negotiation, Streamable HTTP, standard SSE, cancellation, and sessions.
+- MCP designs do not declare `ProtocolVersion`, `Notification`, `Subscription`,
+  `SubscriptionMonitor`, or MCP-only `JSONRPC` blocks. Explicit non-MCP
+  `JSONRPC` transports remain valid.
+- Generate only the MCP service types, adapter, local-provider registration,
+  OAuth discovery, prompt provider, and `SDKServer`. Do not generate a native
+  MCP client, server, SSE extension, session store, or broadcaster.
+- Adapter tool and resource calls are unary. Collect a streaming Loom method
+  into one MCP result. Use `runtime/mcp.ReportProgress` for intermediate
+  progress.
 - MCP metadata is design-owned. Implementation `WebsiteURL`/`ServerIcons` and
   list-surface `ToolIcons`/`ResourceIcons`/`PromptIcons`/`DynamicPromptIcons`
   should be declared in the DSL and allowed to flow through codegen into
   `initialize`, `tools/list`, `resources/list`, and `prompts/list`.
 - MCP skill exposure is design-owned too: declare local agent skill roots with
-  `SkillDirectory(...)`, then let generated JSON-RPC and SDK servers expose
+  `SkillDirectory(...)`, then let generated SDK servers expose
   `skill://` entries through `resources/list` and `resources/read`.
 - MCP adapter allow policies define the server's maximum resource grant.
   Request-scoped allowed names, including raw `x-mcp-allow-names`, may narrow
@@ -170,15 +175,14 @@ Use this skill for `loom-mcp` work in this repo. Keep `AGENTS.md` short and keep
   Treat headers as untrusted input and keep authentication and grant derivation
   in application-owned middleware backed by verified credentials.
 - MCP streamable-HTTP sessions bind the issued session ID to one verified
-  principal. Generated SDK and native JSON-RPC transports must check that pair
-  on every POST, GET, and DELETE, reject missing authenticated bindings and
-  anonymous-session adoption, and validate DELETE before cleanup. Authentication
-  middleware must run outside the generated handler; expiry and eviction remove
-  session and principal state together and fail closed. Fresh native
-  initialization omits a session ID. A supplied unknown ID fails with HTTP
-  404, a supplied foreign ID fails with HTTP 403, and a valid owner-bound ID
-  reaches the adapter so duplicate initialization returns the protocol-level
-  `Already initialized` error.
+  principal. The generated SDK wrapper must check that pair on every POST, GET,
+  and DELETE request. It must reject missing authenticated bindings and
+  anonymous-session adoption. Authentication middleware must run outside the
+  generated handler.
+- `WatchableResource` enables standard SDK subscriptions. The generated
+  `SDKServer.ResourceUpdated(ctx, uri)` method sends resource-update
+  notifications. Reject unknown URIs and reject watchable resources with
+  stateless Streamable HTTP.
 - Model-facing skill exposure is design-owned through
   `Toolset(FromSkills(..., SkillPreload(...), SkillReload(...)))`; generated
   agent registration should wire these skills into `runtime/agent/runtime`
@@ -270,7 +274,7 @@ Use this skill for `loom-mcp` work in this repo. Keep `AGENTS.md` short and keep
 ## Command Reminders
 
 ```bash
-go install github.com/CaliLuke/loom/cmd/loom@v1.8.0-alpha.5
+go install github.com/CaliLuke/loom/cmd/loom@v1.8.0-alpha.8
 loom version
 loom gen <module-import-path>/design
 loom example <module-import-path>/design

@@ -69,10 +69,10 @@ func mustMCPRepairExample(t *testing.T) string {
 	files, err := mcpcodegen.Generate("example.com/parity", []eval.Root{expr.Root, expr.GeneratedResultTypes, mcpexpr.Root}, nil)
 	require.NoError(t, err)
 
-	adapterSource := renderedFileBySuffix(t, files, "adapter.go")
-	re := regexp.MustCompile(`BuildRepairPrompt\("tools/call:dispatch", [^,]+, ("(?:\\.|[^"])*")`)
-	match := re.FindStringSubmatch(adapterSource)
-	require.Len(t, match, 2, "expected generated client adapter to embed a dispatch repair example")
+	registerSource := renderedFileBySuffix(t, files, "register.go")
+	re := regexp.MustCompile(`example = ("(?:\\.|[^"])*")`)
+	match := re.FindStringSubmatch(registerSource)
+	require.Len(t, match, 2, "expected generated local-provider registration to embed a dispatch repair example")
 	example, err := strconv.Unquote(match[1])
 	require.NoError(t, err)
 	return example

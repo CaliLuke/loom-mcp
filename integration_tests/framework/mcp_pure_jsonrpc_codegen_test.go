@@ -13,7 +13,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestLoomGen_MCPPureServiceWithoutMethodLevelJSONRPC(t *testing.T) {
+func TestLoomGen_MCPServiceWithoutJSONRPCDesign(t *testing.T) {
 	t.Parallel()
 
 	_, filename, _, ok := runtime.Caller(0)
@@ -59,8 +59,7 @@ var _ = API("repro", func() {
 })
 
 var _ = Service("demo", func() {
-	MCP("demo", "0.1.0", ProtocolVersion("2025-06-18"))
-	JSONRPC(func() { POST("/rpc") })
+	MCP("demo", "0.1.0")
 
 	Method("Ping", func() {
 		Payload(func() {})
@@ -80,7 +79,7 @@ var _ = Service("demo", func() {
 	}
 
 	run("go", "mod", "tidy")
-	run("go", "run", upstreampaths.LoomCLIPackage, "gen", "example.com/repro/design")
+	run("go", "run", "-mod=mod", upstreampaths.LoomCLIPackage, "gen", "example.com/repro/design")
 	run("go", "mod", "tidy")
 	run("go", "test", "./...")
 }

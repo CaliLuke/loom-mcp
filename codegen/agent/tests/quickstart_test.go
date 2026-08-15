@@ -88,13 +88,13 @@ func TestQuickstartGeneratesAndRuns(t *testing.T) {
 
 	// Step 1: Run loom gen
 	t.Run("goa_gen", func(t *testing.T) {
-		out := runCommand(t, ctx, quickstartDir, "run", upstreampaths.LoomCLIPackage, "gen", "example.com/quickstart/design")
+		out := runCommand(t, ctx, quickstartDir, "run", "-mod=mod", upstreampaths.LoomCLIPackage, "gen", "example.com/quickstart/design")
 		t.Logf("loom gen output:\n%s", out)
 	})
 
 	// Step 2: Run loom example
 	t.Run("goa_example", func(t *testing.T) {
-		out := runCommand(t, ctx, quickstartDir, "run", upstreampaths.LoomCLIPackage, "example", "example.com/quickstart/design")
+		out := runCommand(t, ctx, quickstartDir, "run", "-mod=mod", upstreampaths.LoomCLIPackage, "example", "example.com/quickstart/design")
 		t.Logf("loom example output:\n%s", out)
 	})
 

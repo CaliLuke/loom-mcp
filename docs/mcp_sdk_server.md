@@ -5,6 +5,25 @@ the customization hooks exposed through `SDKServerOptions`, and the runtime
 contract guarantees Loom-MCP makes for context propagation and per-call
 request metadata.
 
+## Migration from native MCP transport
+
+Version `v2.1.0-alpha.5` removes Loom's native MCP JSON-RPC client and server.
+It also removes `ProtocolVersion`, `Notification`, `Subscription`, and
+`SubscriptionMonitor` from the MCP DSL.
+
+To migrate:
+
+1. Remove those DSL declarations and any MCP-only `JSONRPC` blocks.
+2. Regenerate with `loom gen <module-import-path>/design`.
+3. Construct only the generated `NewSDKServer` for remote MCP access.
+4. Replace custom stream events with `runtime/mcp.ReportProgress`.
+5. Replace broadcaster updates with `WatchableResource` and
+   `SDKServer.ResourceUpdated`.
+6. Remove imports of obsolete generated `gen/jsonrpc/mcp_*` packages.
+
+Explicit non-MCP HTTP and JSON-RPC transports are unchanged. Application SSE
+and WebSocket event buses are also unchanged.
+
 ## Construction
 
 `loom gen` emits `gen/mcp_<service>/sdk_server.go` for every service that
@@ -38,16 +57,8 @@ mux.Handle("/rpc", server.Handler)
 http.ListenAndServe(":8080", mux)
 ```
 
-`server.Handler` is a standard `http.Handler`. It accepts both POST (the
-MCP streamable-HTTP JSON-RPC channel) and GET (the upstream SDK's standalone
-SSE listener) on the same path. The loom-specific `events/stream` method is a
-JSON-RPC-transport feature and is not routed (nor advertised) in SDK mode.
-
-The design's `ProtocolVersion` configures the always-generated Loom-native
-JSON-RPC transport and is limited to the versions that transport implements,
-through `2025-11-25`. It does not prevent the SDK handler from negotiating MCP
-`2026-07-28` when `StreamableHTTP.Stateless` is enabled; the upstream SDK owns
-that modern sessionless transport contract.
+`server.Handler` is a standard `http.Handler`. The official SDK owns the MCP
+wire protocol, Streamable HTTP, sessions, and protocol negotiation.
 
 ## SDKServerOptions
 
@@ -57,7 +68,9 @@ that modern sessionless transport contract.
 | `RequestContext` | no       | Per-request hook called once per MCP RPC. Receives the inbound request context and a synthetic `*http.Request` carrying the live transport headers; returns a new ctx. |
 | `RequestStateKey` | for elicitation | Stable 32-byte key used to AES-GCM encrypt and authenticate multi-round-trip `requestState`. All replicas serving an endpoint must share it. |
 | `TransportObserver` | no    | Loom transport observer installed on the generated SDK handler. Request lifecycle events are delivered without external middleware wiring.                           |
+| `RuntimeCORS` | no | Optional Loom runtime CORS policy. The SDK keeps its default cross-origin protection when this field is nil. |
 | `StreamableHTTP` | no       | `*mcpsdk.StreamableHTTPOptions` passed through to the upstream SDK. A default `net/http.NewCrossOriginProtection()` is applied when the options or their protection field are nil. |
+| `Server` | no | `*mcpsdk.ServerOptions` passed to the official SDK. Loom adds its default completion and logging handlers when required. |
 
 ## Design-Declared Skill Resources
 
@@ -79,10 +92,8 @@ heading or text line becomes the description. Duplicate IDs and invalid
 metadata fail resource discovery.
 
 The generated SDK server discovers and registers skill resources when
-`NewSDKServer` is called. Add or remove skills before constructing a new SDK
-server; an already-running SDK server keeps its registration snapshot. The
-generated adapter and JSON-RPC `resources/list` path scan configured roots for
-each list request.
+`NewSDKServer` runs. Add or remove skills before you construct a new server.
+An active server keeps its registration snapshot.
 
 ## Optional tool arguments
 
@@ -93,14 +104,11 @@ Tools with all-optional payloads therefore execute normally, while tools with
 required fields return the generated missing-field validation error and repair
 hint.
 
-Generated MCP JSON-RPC errors expose client-safe metadata such as the Loom error
-name, retry flags, and remediation guidance. Internal Loom service error instance
-IDs are retained for server-side logging and omitted from the wire `error.data`.
+Loom streaming service methods remain valid tool and resource sources. The
+adapter collects their results and returns one standard MCP result.
 
-JSON-RPC batches are buffered one request at a time. Streaming `tools/call`
-entries contribute only their final JSON-RPC response to the enclosing JSON
-array; SSE retry and intermediate notification frames are never written into
-the batch body.
+Use `mcpruntime.ReportProgress` for intermediate progress. The official SDK
+sends `notifications/progress` with the client progress token.
 
 ## Request Context Callback
 
@@ -151,17 +159,14 @@ RequestContext: func(ctx context.Context, r *http.Request) context.Context {
 }
 ```
 
-Treat inbound allow/deny headers as untrusted request input. The generated
-native JSON-RPC mount recognizes `x-mcp-allow-names` and
-`x-mcp-deny-names`, and an SDK application can opt into the same context
-helpers as above, but an allow header is never an authentication or grant
-mechanism. Derive principals and deployment grants in application-owned auth
-middleware from verified credentials. Use request allow values only to narrow
-that trusted maximum grant.
+Treat inbound allow and deny headers as untrusted request input. An allow
+header is not an authentication or grant mechanism. Derive grants from verified
+credentials in application middleware. Use request values only to narrow a
+trusted maximum grant.
 
 `SDKServerOptions.Adapter.ToolSearch` passes through to the generated MCP
 adapter. When set, SDK-backed servers use the same compact public discovery
-surface as JSON-RPC adapters: SDK `tools/list` registers synthetic
+surface as the local adapter: SDK `tools/list` registers synthetic
 `search_tools` and `call_tool` entries plus real tools pinned in
 `ToolSearchOptions.AlwaysVisible`. Hidden real tools are not registered directly;
 clients discover them through `search_tools` and invoke them through `call_tool`.
@@ -198,8 +203,8 @@ trailing slash authorizes or denies the full prefix, such as
 `skill://code-review/`. A skill's main resource name also maps to that prefix,
 so allowing or denying `code-review` covers `SKILL.md`, `_manifest`, and
 supporting files. Request-scoped `x-mcp-allow-names` and
-`x-mcp-deny-names` values use the same matching rules on the generated native
-JSON-RPC transport. SDK applications must derive trusted narrowing in their
+`x-mcp-deny-names` values use the same matching rules. SDK applications must
+derive trusted narrowing in their
 `RequestContext` callback and install it with
 `mcpruntime.WithAllowedResourceNames` and
 `mcpruntime.WithDeniedResourceNames`; the SDK handler intentionally does not
@@ -253,6 +258,18 @@ RequestContext: func(ctx context.Context, r *http.Request) context.Context {
     return ctx
 }
 ```
+
+## Resource Subscriptions
+
+Declare a resource with `WatchableResource` to enable standard MCP
+subscriptions. The generated SDK server rejects unknown resource URIs.
+
+Call `server.ResourceUpdated(ctx, uri)` after the resource changes. The SDK
+sends `notifications/resources/updated` to subscribed clients.
+
+Watchable resources require persistent Streamable HTTP sessions.
+`NewSDKServer` rejects a stateless configuration when the design contains a
+watchable resource.
 
 ## Elicitation
 
@@ -362,10 +379,9 @@ Authentication middleware must wrap the generated handler so verified identity
 is present in the request context before MCP session handling. Generated SDK
 servers resolve the stable session owner with
 `MCPAdapterOptions.SessionPrincipal`; when that callback is nil, they use
-`mcpauth.TokenInfoFromContext(ctx).UserID`. Generated native JSON-RPC server
-packages expose `MCPSessionPrincipal`, with the same TokenInfo default, for
-applications that use a different verified principal source. Configure that
-variable before mounting or serving the generated server.
+`mcpauth.TokenInfoFromContext(ctx).UserID`. Configure the callback before
+mounting the generated server when the application uses another stable
+principal source.
 
 When initialization returns a session ID, the transport binds that ID to the
 resolved principal. Every subsequent POST, GET, and DELETE carrying the session

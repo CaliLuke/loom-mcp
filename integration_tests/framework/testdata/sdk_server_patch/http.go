@@ -94,7 +94,7 @@ func (sdkPromptProvider) GetFigmaImplementationPromptPrompt(ctx context.Context,
 
 // handleHTTPServer configures and starts an SDK-backed HTTP server on the given
 // URL. It shuts down the server if any error is received in the error channel.
-func handleHTTPServer(ctx context.Context, u *url.URL, _ mcpassistant.Service, _ *mcpassistant.Endpoints, wg *sync.WaitGroup, errc chan error, dbg bool) {
+func handleHTTPServer(ctx context.Context, u *url.URL, wg *sync.WaitGroup, errc chan error, dbg bool) {
 	mux := goahttp.NewMuxer()
 	if dbg {
 		debug.MountPprofHandlers(debug.Adapt(mux))

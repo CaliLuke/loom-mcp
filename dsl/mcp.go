@@ -16,16 +16,15 @@ import (
 //
 // MCP must appear in a Service expression.
 //
-// MCP takes two required arguments and an optional list of configuration
-// functions:
+// MCP takes two required arguments and optional configuration functions:
 //   - name: the MCP server name (used in MCP handshake)
 //   - version: the server version string
-//   - opts: optional configuration functions (e.g., ProtocolVersion)
+//   - opts: optional configuration functions such as WebsiteURL
 //
 // Example:
 //
 //	Service("calculator", func() {
-//	    MCP("calc", "1.0.0", ProtocolVersion("2025-06-18"))
+//	    MCP("calc", "1.0.0", WebsiteURL("https://example.com/calc"))
 //	    Method("add", func() {
 //	        Payload(func() {
 //	            Attribute("a", Int)
@@ -51,24 +50,6 @@ func MCP(name, version string, opts ...func(*exprmcp.MCPExpr)) {
 	}
 	if r := exprmcp.Root; r != nil {
 		r.RegisterMCP(svc, m)
-	}
-}
-
-// ProtocolVersion configures the MCP protocol version supported by every
-// generated Loom transport. Supported versions are 2024-11-05, 2025-03-26,
-// 2025-06-18, and 2025-11-25. It returns a configuration function for use with
-// MCP.
-//
-// ProtocolVersion takes a single argument which is the protocol version string.
-//
-// Example:
-//
-//	Service("calculator", func() {
-//	    MCP("calc", "1.0.0", ProtocolVersion("2025-06-18"))
-//	})
-func ProtocolVersion(version string) func(*exprmcp.MCPExpr) {
-	return func(m *exprmcp.MCPExpr) {
-		m.ProtocolVersion = strings.TrimSpace(version)
 	}
 }
 
@@ -707,117 +688,4 @@ func boolPtr(value bool) *bool {
 
 func intPtr(value int) *int {
 	return &value
-}
-
-// Notification marks the current method as an MCP notification sender. The
-// method's payload defines the notification message structure.
-//
-// Notification must appear in a Method expression within a service that has MCP enabled.
-//
-// Notification takes two arguments:
-//   - name: the notification identifier
-//   - description: human-readable notification description
-//
-// Example:
-//
-//	Method("progress_update", func() {
-//	    Payload(func() {
-//	        Attribute("task_id", String)
-//	        Attribute("progress", Int)
-//	    })
-//	    Notification("progress", "Task progress notification")
-//	})
-func Notification(name, description string) {
-	parent := eval.Current()
-	method, isMethod := parent.(*goaexpr.MethodExpr)
-	if !isMethod {
-		incompatibleDSL("Notification")
-		return
-	}
-	svc := method.Service
-	var mcp *exprmcp.MCPExpr
-	if r := exprmcp.Root; r != nil {
-		mcp = r.GetMCP(svc)
-	}
-	if mcp == nil {
-		mcpRequiredDSL("Notification", svc)
-		return
-	}
-	notif := &exprmcp.NotificationExpr{Name: name, Description: description, Method: method}
-	mcp.Notifications = append(mcp.Notifications, notif)
-}
-
-// Subscription marks the current method as a subscription handler for a
-// watchable resource. The method is invoked when clients subscribe to the
-// resource identified by resourceName.
-//
-// Subscription must appear in a Method expression within a service that has MCP enabled.
-//
-// Subscription takes a single argument which is the resource name to subscribe to.
-// The resource name must match a WatchableResource declaration.
-//
-// Example:
-//
-//	Method("subscribe_status", func() {
-//	    Payload(func() {
-//	        Attribute("uri", String)
-//	    })
-//	    Result(String)
-//	    Subscription("status")
-//	})
-func Subscription(resourceName string) {
-	parent := eval.Current()
-	method, isMethod := parent.(*goaexpr.MethodExpr)
-	if !isMethod {
-		incompatibleDSL("Subscription")
-		return
-	}
-	svc := method.Service
-	var mcp *exprmcp.MCPExpr
-	if r := exprmcp.Root; r != nil {
-		mcp = r.GetMCP(svc)
-	}
-	if mcp == nil {
-		mcpRequiredDSL("Subscription", svc)
-		return
-	}
-	sub := &exprmcp.SubscriptionExpr{ResourceName: resourceName, Method: method}
-	mcp.Subscriptions = append(mcp.Subscriptions, sub)
-}
-
-// SubscriptionMonitor marks the current method as a server-sent events (SSE)
-// monitor for subscription updates. The method streams subscription change events
-// to connected clients.
-//
-// SubscriptionMonitor must appear in a Method expression within a service that has MCP enabled.
-//
-// SubscriptionMonitor takes a single argument which is the monitor name.
-//
-// Example:
-//
-//	Method("watch_subscriptions", func() {
-//	    StreamingResult(func() {
-//	        Attribute("resource", String)
-//	        Attribute("event", String)
-//	    })
-//	    SubscriptionMonitor("subscriptions")
-//	})
-func SubscriptionMonitor(name string) {
-	parent := eval.Current()
-	method, isMethod := parent.(*goaexpr.MethodExpr)
-	if !isMethod {
-		incompatibleDSL("SubscriptionMonitor")
-		return
-	}
-	svc := method.Service
-	var mcp *exprmcp.MCPExpr
-	if r := exprmcp.Root; r != nil {
-		mcp = r.GetMCP(svc)
-	}
-	if mcp == nil {
-		mcpRequiredDSL("SubscriptionMonitor", svc)
-		return
-	}
-	monitor := &exprmcp.SubscriptionMonitorExpr{Name: name, Method: method}
-	mcp.SubscriptionMonitors = append(mcp.SubscriptionMonitors, monitor)
 }

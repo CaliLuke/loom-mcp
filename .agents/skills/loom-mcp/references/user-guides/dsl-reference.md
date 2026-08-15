@@ -99,15 +99,18 @@ Use `MCP(name, version, opts...)` inside a service. Method-level MCP tools use
 
 Current MCP surfaces include:
 
-- protocol/implementation metadata: `ProtocolVersion` (implemented native
-  versions through `2025-11-25`), `WebsiteURL`, server and list-surface icons;
+- implementation metadata: `WebsiteURL`, server icons, and list-surface icons;
 - tools plus compact discovery: `ToolSearch(...)`, discovery metadata, and
   call-template arguments;
-- resources, templates, subscriptions, and notifications;
+- resources, templates, and `WatchableResource` subscriptions;
 - `StaticPrompt`, `DynamicPrompt`, `RuntimePrompt`, prompt icons, and enum-backed
   completion;
 - `SkillDirectory(...)` MCP resources;
 - OAuth protected-resource metadata, scopes, audience binding, and proxy trust.
+
+The official MCP Go SDK owns protocol negotiation. Do not declare
+`ProtocolVersion`, `Notification`, `Subscription`, `SubscriptionMonitor`, or an
+MCP-only `JSONRPC` block.
 
 `OAuthScope` advertises metadata; application auth enforces scopes.
 `WithOAuthChallenge` adds the standard resource-metadata challenge but is not

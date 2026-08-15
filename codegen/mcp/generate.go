@@ -1,7 +1,6 @@
 package codegen
 
 import (
-	"errors"
 	"fmt"
 	"path/filepath"
 	"sort"
@@ -16,17 +15,11 @@ import (
 	"github.com/CaliLuke/loom/codegen/service"
 	"github.com/CaliLuke/loom/eval"
 	"github.com/CaliLuke/loom/expr"
-	httpcodegen "github.com/CaliLuke/loom/http/codegen"
-	jsonrpccodegen "github.com/CaliLuke/loom/jsonrpc/codegen"
 )
 
-const headerSection = "source-header"
-const exampleMCPStubSection = "example-mcp-stub"
-const jsonrpcServerMountSectionName = "jsonrpc-server-mount"
-
 // Generate orchestrates MCP code generation for services that declare MCP
-// configuration in the DSL. It composes Goa service and JSON-RPC generators
-// and adds adapter/client helpers.
+// configuration in the DSL. It generates the internal adapter contract and an
+// official-SDK server without synthesizing a native MCP wire transport.
 func Generate(genpkg string, roots []eval.Root, files []*codegen.File) ([]*codegen.File, error) {
 	// Process MCP services from source snapshot and preserve deterministic order.
 	source := collectSourceSnapshot(roots)
@@ -70,32 +63,19 @@ func Generate(genpkg string, roots []eval.Root, files []*codegen.File) ([]*codeg
 		if err != nil {
 			return nil, fmt.Errorf("build adapter data for %s: %w", svc.Name, err)
 		}
-		if route, ok := source.jsonrpcRoute(svc.Name); ok && route.cors != nil {
-			adapterData.RuntimeCORS = route.cors.Runtime
-		}
 		if reg := registerFile(adapterData); reg != nil {
 			files = append(files, reg)
 		}
 		if provider := localProviderFile(adapterData); provider != nil {
 			files = append(files, provider)
 		}
-		if caller := clientCallerFile(adapterData, codegen.SnakeCase(svc.Name)); caller != nil {
-			files = append(files, caller)
-		}
 
-		// Generate MCP service code using Goa's standard generators (with retry hooks)
-		mcpFiles, err := generateMCPServiceCode(genpkg, mcpRoot, mcpService, adapterData.ProtocolVersion)
-		if err != nil {
-			return nil, err
-		}
+		// Generate only the internal service types used by the adapter.
+		mcpFiles := generateMCPServiceCode(genpkg, mcpRoot, mcpService)
 		files = append(files, mcpFiles...)
 
 		// Generate MCP transport that wraps the original service
 		files = append(files, generateMCPTransport(genpkg, svc, adapterData)...)
-
-		// Generate MCP client adapter that wraps the MCP JSON-RPC client
-		clientAdapterFiles := generateMCPClientAdapter(genpkg, svc, adapterData)
-		files = append(files, clientAdapterFiles...)
 	}
 
 	return files, nil
@@ -164,10 +144,9 @@ func hasAgentRoot(roots []eval.Root) bool {
 	return false
 }
 
-// generateMCPServiceCode generates the MCP service layer and JSON-RPC transport
-// using Goa's built-in generators.
-func generateMCPServiceCode(genpkg string, root *expr.RootExpr, mcpService *expr.ServiceExpr, protocolVersion string) ([]*codegen.File, error) {
-	files := make([]*codegen.File, 0, 16)
+// generateMCPServiceCode generates the minimal internal adapter service layer.
+func generateMCPServiceCode(genpkg string, root *expr.RootExpr, mcpService *expr.ServiceExpr) []*codegen.File {
+	files := make([]*codegen.File, 0, 1)
 
 	// Create services data from temporary MCP root
 	servicesData := service.NewServicesData(root)
@@ -181,658 +160,7 @@ func generateMCPServiceCode(genpkg string, root *expr.RootExpr, mcpService *expr
 		}
 	}
 	files = append(files, serviceFiles...)
-	files = append(files, service.EndpointFile(genpkg, mcpService, servicesData))
-	files = append(files, service.ClientFile(genpkg, mcpService, servicesData))
-
-	// Generate JSON-RPC transport for MCP service only
-	httpServices := httpcodegen.NewServicesData(servicesData, &root.API.JSONRPC.HTTPExpr)
-	httpServices.Root = root
-	mcpHTTPService := httpServices.Get(mcpService.Name)
-	if mcpHTTPService == nil {
-		return nil, fmt.Errorf("build MCP JSON-RPC service data for %s", mcpService.Name)
-	}
-
-	// Generate both base and SSE server files.
-	files = append(files, jsonrpccodegen.ServerFiles(genpkg, httpServices)...)
-	files = append(files, jsonrpccodegen.SSEServerFiles(genpkg, httpServices)...)
-	files = append(files, jsonrpccodegen.ServerTypeFiles(genpkg, httpServices)...)
-	files = append(files, jsonrpccodegen.PathFiles(httpServices)...)
-	// Add client-side JSON-RPC for MCP service so adapters can depend on it
-	files = append(files, jsonrpccodegen.ClientTypeFiles(genpkg, httpServices)...)
-	files = append(files, jsonrpccodegen.ClientFiles(genpkg, httpServices)...)
-	if err := applyMCPPolicyHeadersToJSONRPCMount(files, protocolVersion, mcpHTTPService); err != nil {
-		return nil, err
-	}
-	if err := applyMCPJSONRPCBatchHandlerSection(files, mcpHTTPService); err != nil {
-		return nil, err
-	}
-	if err := replaceMCPJSONRPCHandlerInitSections(files, mcpHTTPService); err != nil {
-		return nil, err
-	}
-	if err := ownMCPJSONRPCSSEStreamSections(files, mcpHTTPService); err != nil {
-		return nil, err
-	}
-	if err := applyMCPJSONRPCClientTransportDefaults(files, mcpHTTPService); err != nil {
-		return nil, err
-	}
-	return files, nil
-}
-
-// applyMCPPolicyHeadersToJSONRPCMount replaces Loom's stable mount section
-// with an MCP-owned Jennifer section built from evaluated HTTP service data.
-// The protocol helper is emitted as a separate owned section; no rendered
-// upstream source is parsed or rewritten.
-func applyMCPPolicyHeadersToJSONRPCMount(files []*codegen.File, protocolVersion string, data *httpcodegen.ServiceData) error {
-	if data == nil {
-		return errors.New("MCP JSON-RPC mount extension requires service data")
-	}
-	matched := 0
-	for _, file := range files {
-		if file == nil || filepath.Base(filepath.Dir(filepath.ToSlash(file.Path))) != "server" || filepath.Base(file.Path) != "server.go" {
-			continue
-		}
-		sections := file.AllSections()
-		updated := make([]codegen.Section, 0, len(sections)+1)
-		fileMatches := 0
-		for _, section := range sections {
-			if section.SectionName() != jsonrpcServerMountSectionName {
-				updated = append(updated, section)
-				continue
-			}
-			fileMatches++
-			matched++
-			updated = append(updated, mcpJSONRPCServerMountSection(data))
-		}
-		if fileMatches != 1 {
-			return fmt.Errorf(
-				"upstream JSON-RPC mount extension contract changed in %s: expected one %q section, found %d",
-				filepath.ToSlash(file.Path),
-				jsonrpcServerMountSectionName,
-				fileMatches,
-			)
-		}
-		updated = append(updated, codegen.NewRawSection("mcp-jsonrpc-transport-policy", jsonrpcServerMountHelperSource(protocolVersion)))
-		file.SetSections(updated)
-		if header := file.HeaderTemplate(); header != nil {
-			codegen.AddImport(header, &codegen.ImportSpec{Path: "bytes"})
-			codegen.AddImport(header, &codegen.ImportSpec{Path: "encoding/json"})
-			codegen.AddImport(header, &codegen.ImportSpec{Path: "errors"})
-			codegen.AddImport(header, &codegen.ImportSpec{Path: "fmt"})
-			codegen.AddImport(header, &codegen.ImportSpec{Path: "io"})
-			codegen.AddImport(header, &codegen.ImportSpec{Path: "github.com/CaliLuke/loom-mcp/v2/runtime/mcp", Name: "mcpruntime"})
-			codegen.AddImport(header, &codegen.ImportSpec{Path: "github.com/modelcontextprotocol/go-sdk/auth", Name: "mcpauth"})
-		}
-	}
-	if matched != 1 {
-		return fmt.Errorf("upstream JSON-RPC mount extension contract changed: expected one %q section, found %d", jsonrpcServerMountSectionName, matched)
-	}
-	return nil
-}
-
-// applyMCPJSONRPCClientTransportDefaults hardens the generated JSON-RPC client
-// so it satisfies the MCP streamable HTTP client requirements (2025-11-25
-// transports spec):
-//
-//   - every request carries "Accept: application/json, text/event-stream"
-//     (the upstream template only sets a bare "text/event-stream" on the
-//     streaming endpoints and no Accept header anywhere else),
-//   - the Mcp-Session-Id returned by initialize is captured and replayed on
-//     all subsequent requests, together with the negotiated protocol version.
-//
-// The stable upstream jsonrpc-client-init section is replaced with a
-// loom-mcp-owned Jennifer section that installs mcpClientDoer. Other upstream
-// client sections remain untouched.
-func applyMCPJSONRPCClientTransportDefaults(files []*codegen.File, data *httpcodegen.ServiceData) error {
-	if data == nil {
-		return errors.New("MCP JSON-RPC client extension requires service data")
-	}
-	if httpcodegen.HasWebSocket(data) {
-		return errors.New("MCP JSON-RPC client extension does not support WebSocket service data")
-	}
-	matched := 0
-	for _, file := range files {
-		if file == nil || filepath.Base(filepath.Dir(filepath.ToSlash(file.Path))) != "client" || filepath.Base(file.Path) != "client.go" {
-			continue
-		}
-		sections := file.AllSections()
-		updated := make([]codegen.Section, 0, len(sections)+1)
-		fileMatches := 0
-		for _, section := range sections {
-			if section.SectionName() != "jsonrpc-client-init" {
-				updated = append(updated, section)
-				continue
-			}
-			fileMatches++
-			matched++
-			updated = append(updated, mcpJSONRPCClientInitSection(data))
-		}
-		if fileMatches != 1 {
-			return fmt.Errorf(
-				"upstream JSON-RPC client extension contract changed in %s: expected one %q section, found %d",
-				filepath.ToSlash(file.Path),
-				"jsonrpc-client-init",
-				fileMatches,
-			)
-		}
-		updated = append(updated, codegen.NewRawSection("mcp-client-transport-defaults", mcpClientDoerSource))
-		file.SetSections(updated)
-		if header := file.HeaderTemplate(); header != nil {
-			codegen.AddImport(header, &codegen.ImportSpec{Path: "encoding/json"})
-		}
-	}
-	if matched != 1 {
-		return fmt.Errorf("upstream JSON-RPC client extension contract changed: expected one %q section, found %d", "jsonrpc-client-init", matched)
-	}
-	return nil
-}
-
-// mcpClientDoerSource is appended to generated JSON-RPC client files by
-// applyMCPJSONRPCClientTransportDefaults. It implements the MCP streamable
-// HTTP client transport obligations that the upstream loom jsonrpc client
-// template does not cover: the mandatory Accept header, Mcp-Session-Id
-// capture/replay, and the negotiated protocol version header.
-const mcpClientDoerSource = `
-
-// mcpClientDoer decorates the transport Doer so every generated JSON-RPC
-// request satisfies the MCP streamable HTTP client requirements:
-//   - every request carries "Accept: application/json, text/event-stream"
-//   - the Mcp-Session-Id returned by initialize is replayed on all
-//     subsequent requests
-//   - the negotiated MCP protocol version accompanies the session id
-//
-// NewClient installs this decorator so generated clients are protocol
-// conformant without hand-written transport wrappers.
-type mcpClientDoer struct {
-	next interface {
-		Do(*http.Request) (*http.Response, error)
-	}
-
-	mu              sync.Mutex
-	sessionID       string
-	protocolVersion string
-}
-
-// Do implements the transport Doer contract for mcpClientDoer.
-func (d *mcpClientDoer) Do(req *http.Request) (*http.Response, error) {
-	method, requestedVersion, err := mcpJSONRPCRequestInfo(req)
-	if err != nil {
-		return nil, err
-	}
-	req.Header.Set("Accept", "application/json, text/event-stream")
-	if method != "initialize" {
-		d.mu.Lock()
-		sessionID, protocolVersion := d.sessionID, d.protocolVersion
-		d.mu.Unlock()
-		if sessionID != "" && req.Header.Get("Mcp-Session-Id") == "" {
-			req.Header.Set("Mcp-Session-Id", sessionID)
-		}
-		if protocolVersion != "" && req.Header.Get("MCP-Protocol-Version") == "" {
-			req.Header.Set("MCP-Protocol-Version", protocolVersion)
-		}
-	}
-	resp, err := d.next.Do(req)
-	if err != nil {
-		return nil, err
-	}
-	d.mu.Lock()
-	if sessionID := resp.Header.Get("Mcp-Session-Id"); sessionID != "" {
-		d.sessionID = sessionID
-	}
-	if method == "initialize" {
-		if negotiated := mcpNegotiatedProtocolVersion(resp); negotiated != "" {
-			d.protocolVersion = negotiated
-		} else if requestedVersion != "" {
-			d.protocolVersion = requestedVersion
-		}
-	}
-	d.mu.Unlock()
-	return resp, nil
-}
-
-// mcpJSONRPCRequestInfo peeks at the JSON-RPC request envelope without
-// consuming the request body.
-func mcpJSONRPCRequestInfo(req *http.Request) (string, string, error) {
-	if req == nil || req.Body == nil {
-		return "", "", nil
-	}
-	body, err := io.ReadAll(req.Body)
-	if err != nil {
-		return "", "", err
-	}
-	req.Body = io.NopCloser(bytes.NewReader(body))
-	if len(body) == 0 {
-		return "", "", nil
-	}
-	var envelope struct {
-		Method string ` + "`json:\"method\"`" + `
-		Params struct {
-			ProtocolVersion string ` + "`json:\"protocolVersion\"`" + `
-		} ` + "`json:\"params\"`" + `
-	}
-	if err := json.Unmarshal(body, &envelope); err != nil {
-		return "", "", nil
-	}
-	return envelope.Method, envelope.Params.ProtocolVersion, nil
-}
-
-// mcpNegotiatedProtocolVersion extracts result.protocolVersion from an
-// initialize response while restoring the body for downstream decoding.
-func mcpNegotiatedProtocolVersion(resp *http.Response) string {
-	if resp == nil || resp.Body == nil {
-		return ""
-	}
-	if contentType := resp.Header.Get("Content-Type"); !strings.Contains(contentType, "application/json") {
-		return ""
-	}
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return ""
-	}
-	if closeErr := resp.Body.Close(); closeErr != nil {
-		resp.Body = io.NopCloser(bytes.NewReader(body))
-		return ""
-	}
-	resp.Body = io.NopCloser(bytes.NewReader(body))
-	var envelope struct {
-		Result struct {
-			ProtocolVersion string ` + "`json:\"protocolVersion\"`" + `
-		} ` + "`json:\"result\"`" + `
-	}
-	if err := json.Unmarshal(body, &envelope); err != nil {
-		return ""
-	}
-	return envelope.Result.ProtocolVersion
-}
-`
-
-func jsonrpcServerMountHelperSource(protocolVersion string) string {
-	return fmt.Sprintf(`
-
-// MCPMaxRequestBodyBytes limits JSON-RPC request bodies before middleware
-// inspection. Set it to a positive number before mounting the server to choose
-// a different bound; non-positive values disable the limit.
-var MCPMaxRequestBodyBytes int64 = 32 << 20
-
-// MCPCrossOriginProtection validates the Origin header on the generated MCP
-// JSON-RPC transport to protect against DNS rebinding attacks, as required by
-// the MCP streamable HTTP transport specification (2025-11-25, Security
-// Warning: servers MUST validate Origin and respond 403 when it is present
-// and invalid). The default allows same-origin and non-browser requests only,
-// mirroring the http.NewCrossOriginProtection default that the generated SDK
-// transport applies through mcpsdk.StreamableHTTPOptions.CrossOriginProtection.
-// Call AddTrustedOrigin to allow additional origins, or set the variable to
-// nil to disable the check, before mounting the server.
-var MCPCrossOriginProtection = http.NewCrossOriginProtection()
-
-// MCPSessionPrincipal extracts the authenticated owner of a streamable HTTP
-// session. Set it before mounting the server when application authentication
-// uses a principal source other than MCP SDK TokenInfo.
-var MCPSessionPrincipal = func(ctx context.Context) string {
-	if tokenInfo := mcpauth.TokenInfoFromContext(ctx); tokenInfo != nil {
-		return strings.TrimSpace(tokenInfo.UserID)
-	}
-	return ""
-}
-
-// withMCPPolicyHeaders propagates MCP policy header values into the request context.
-//
-// The MCP adapter enforces resource allow/deny policies based on context values:
-//   - allowed resource names (CSV list of resource names)
-//   - denied resource names  (CSV list of resource names)
-//
-// This helper maps those values from the corresponding HTTP headers:
-//   - x-mcp-allow-names
-//   - x-mcp-deny-names
-//
-// It also enforces the MCP transport Origin validation through
-// MCPCrossOriginProtection before any request processing.
-//
-// It is installed by the JSON-RPC Mount functions so consumers do not need
-// to patch example servers or wire middleware manually.
-func withMCPPolicyHeaders(streamableHTTPSessions *mcpruntime.StreamableHTTPSessions, requestCancellations *mcpruntime.RequestCancellationRegistry, next http.HandlerFunc) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		if MCPCrossOriginProtection != nil {
-			if err := MCPCrossOriginProtection.Check(r); err != nil {
-				http.Error(w, "origin not allowed", http.StatusForbidden)
-				return
-			}
-		}
-		envelope, err := mcpJSONRPCEnvelopeFromRequest(w, r)
-		if err != nil {
-			var maxBytesErr *http.MaxBytesError
-			if errors.As(err, &maxBytesErr) {
-				http.Error(w, "request body too large", http.StatusRequestEntityTooLarge)
-				return
-			}
-			http.Error(w, "failed to read request", http.StatusBadRequest)
-			return
-		}
-		if err := validateMCPProtocolVersionHeader(r, envelope); err != nil {
-			w.Header().Set("Content-Type", "application/json")
-			w.WriteHeader(http.StatusBadRequest)
-			_ = json.NewEncoder(w).Encode(map[string]any{
-				"jsonrpc": "2.0",
-				"id":      mcpJSONRPCResponseID(envelope),
-				"error": map[string]any{
-					"code":    -32602,
-					"message": err.Error(),
-				},
-			})
-			return
-		}
-		method := jsonRPCRequestMethod(envelope)
-		principal := mcpSessionPrincipal(r.Context())
-		if r.Method == http.MethodDelete {
-			handleMCPStreamableHTTPSessionDelete(streamableHTTPSessions, w, r, principal)
-			return
-		}
-		if err := validateMCPStreamableHTTPSession(streamableHTTPSessions, r, method, principal); err != nil {
-			writeMCPStreamableHTTPSessionError(w, r, err)
-			return
-		}
-		if acceptedMCPJSONRPCNotificationOrResponse(requestCancellations, r, envelope) {
-			w.WriteHeader(http.StatusAccepted)
-			return
-		}
-		ctx := r.Context()
-		if allow := r.Header.Get("x-mcp-allow-names"); allow != "" {
-			ctx = mcpruntime.WithAllowedResourceNames(ctx, allow)
-		}
-		if deny := r.Header.Get("x-mcp-deny-names"); deny != "" {
-			ctx = mcpruntime.WithDeniedResourceNames(ctx, deny)
-		}
-		sessionID := r.Header.Get(mcpruntime.HeaderKeySessionID)
-		if sessionID != "" {
-			ctx = mcpruntime.WithSessionID(ctx, sessionID)
-		}
-		if requestID, ok := mcpJSONRPCRequestID(envelope); ok && sessionID != "" {
-			requestCtx, cancel := context.WithCancel(ctx)
-			cleanup := requestCancellations.Register(sessionID, requestID, cancel)
-			defer cancel()
-			defer cleanup()
-			ctx = requestCtx
-		}
-		if r.Method == http.MethodGet {
-			streamCtx, cancel := context.WithCancel(ctx)
-			cleanup, err := streamableHTTPSessions.RegisterListenerForPrincipal(sessionID, principal, cancel)
-			if err != nil {
-				cancel()
-				writeMCPStreamableHTTPSessionError(w, r, err)
-				return
-			}
-			defer cancel()
-			defer cleanup()
-			ctx = streamCtx
-		}
-		ctx = mcpruntime.WithResponseWriter(ctx, w)
-		responseWriter := w
-		var responseObserver *mcpHTTPResponseObserver
-		if mcpJSONRPCInputExpectsNoResponse(envelope) {
-			responseObserver = &mcpHTTPResponseObserver{ResponseWriter: w}
-			responseWriter = responseObserver
-		}
-		next(responseWriter, r.WithContext(ctx))
-		if responseObserver != nil && !responseObserver.wroteResponse {
-			w.WriteHeader(http.StatusAccepted)
-		}
-		if method == "initialize" {
-			if issuedSessionID := w.Header().Get(mcpruntime.HeaderKeySessionID); issuedSessionID != "" {
-				if err := streamableHTTPSessions.IssueForPrincipal(issuedSessionID, principal); err != nil {
-					writeMCPStreamableHTTPSessionError(w, r, err)
-					return
-				}
-			}
-		}
-	}
-}
-
-func mcpSessionPrincipal(ctx context.Context) string {
-	if MCPSessionPrincipal == nil {
-		return ""
-	}
-	return strings.TrimSpace(MCPSessionPrincipal(ctx))
-}
-
-func validateMCPStreamableHTTPSession(sessions *mcpruntime.StreamableHTTPSessions, r *http.Request, method string, principal string) error {
-	if sessions == nil || r == nil {
-		panic("streamable HTTP session validation requires a store and request")
-	}
-	sessionID := r.Header.Get(mcpruntime.HeaderKeySessionID)
-	if method == "initialize" {
-		// A fresh initialization must not supply a session ID. A repeated
-		// initialization may carry its already-issued session so the adapter can
-		// return the protocol-level "Already initialized" error. Validate that
-		// session first so foreign and attacker-chosen IDs fail at the transport.
-		if sessionID == "" {
-			return nil
-		}
-		return sessions.ValidateForPrincipal(sessionID, principal)
-	}
-	if sessionID == "" {
-		if !sessions.HasIssued() {
-			return nil
-		}
-		return mcpruntime.ErrInvalidSessionID
-	}
-	return sessions.ValidateForPrincipal(sessionID, principal)
-}
-
-func handleMCPStreamableHTTPSessionDelete(sessions *mcpruntime.StreamableHTTPSessions, w http.ResponseWriter, r *http.Request, principal string) {
-	if sessions == nil || r == nil {
-		panic("streamable HTTP session termination requires a store and request")
-	}
-	sessionID := r.Header.Get(mcpruntime.HeaderKeySessionID)
-	if sessionID == "" {
-		http.Error(w, "Missing session ID", http.StatusBadRequest)
-		return
-	}
-	if err := sessions.TerminateForPrincipal(sessionID, principal); err != nil {
-		writeMCPStreamableHTTPSessionError(w, r, err)
-		return
-	}
-	w.WriteHeader(http.StatusOK)
-}
-
-func writeMCPStreamableHTTPSessionError(w http.ResponseWriter, r *http.Request, err error) {
-	if r == nil || r.Header.Get(mcpruntime.HeaderKeySessionID) == "" {
-		http.Error(w, "Missing session ID", http.StatusBadRequest)
-		return
-	}
-	if errors.Is(err, mcpruntime.ErrInvalidSessionID) || errors.Is(err, mcpruntime.ErrSessionTerminated) {
-		http.Error(w, "Invalid or expired session ID", http.StatusNotFound)
-		return
-	}
-	if errors.Is(err, mcpruntime.ErrSessionPrincipalBindingMissing) || errors.Is(err, mcpruntime.ErrSessionPrincipalMismatch) {
-		http.Error(w, err.Error(), http.StatusForbidden)
-		return
-	}
-	http.Error(w, "Invalid or expired session ID", http.StatusNotFound)
-}
-
-func validateMCPProtocolVersionHeader(r *http.Request, envelope *mcpJSONRPCEnvelope) error {
-	if r == nil {
-		return nil
-	}
-	method := ""
-	if r.Method == http.MethodPost {
-		method = jsonRPCRequestMethod(envelope)
-	}
-	if method == "initialize" {
-		return nil
-	}
-	version := r.Header.Get(mcpruntime.HeaderKeyProtocolVersion)
-	if version == "" {
-		// MCP clients using protocol versions before 2025-06-18 do not send this
-		// header. The transport specification requires servers to assume the
-		// 2025-03-26 compatibility version when no negotiated version is available.
-		return nil
-	}
-	for _, supported := range []string{%s} {
-		if version == supported {
-			return nil
-		}
-	}
-	return fmt.Errorf("Unsupported %%s header %%q", mcpruntime.HeaderKeyProtocolVersion, version)
-}
-
-func jsonRPCRequestMethod(envelope *mcpJSONRPCEnvelope) string {
-	if envelope == nil {
-		return ""
-	}
-	return envelope.Method
-}
-
-type mcpJSONRPCEnvelope struct {
-	JSONRPC string          `+"`json:\"jsonrpc\"`"+`
-	ID      json.RawMessage `+"`json:\"id\"`"+`
-	Method  string          `+"`json:\"method\"`"+`
-	Params  json.RawMessage `+"`json:\"params\"`"+`
-	Result  json.RawMessage `+"`json:\"result\"`"+`
-	Error   json.RawMessage `+"`json:\"error\"`"+`
-	Batch   []*mcpJSONRPCEnvelope `+"`json:\"-\"`"+`
-}
-
-type mcpHTTPResponseObserver struct {
-	http.ResponseWriter
-	wroteResponse bool
-}
-
-func (w *mcpHTTPResponseObserver) Unwrap() http.ResponseWriter {
-	return w.ResponseWriter
-}
-
-func (w *mcpHTTPResponseObserver) WriteHeader(statusCode int) {
-	w.wroteResponse = true
-	w.ResponseWriter.WriteHeader(statusCode)
-}
-
-func (w *mcpHTTPResponseObserver) Write(data []byte) (int, error) {
-	w.wroteResponse = true
-	return w.ResponseWriter.Write(data)
-}
-
-func mcpJSONRPCEnvelopeFromRequest(w http.ResponseWriter, r *http.Request) (*mcpJSONRPCEnvelope, error) {
-	if r == nil || r.Method != http.MethodPost || r.Body == nil {
-		return nil, nil
-	}
-	reader := r.Body
-	if MCPMaxRequestBodyBytes > 0 {
-		reader = http.MaxBytesReader(w, r.Body, MCPMaxRequestBodyBytes)
-	}
-	body, err := io.ReadAll(reader)
-	closeErr := reader.Close()
-	if err != nil {
-		return nil, err
-	}
-	if closeErr != nil {
-		return nil, closeErr
-	}
-	r.Body = io.NopCloser(bytes.NewReader(body))
-	if len(body) == 0 {
-		return nil, nil
-	}
-	trimmed := bytes.TrimSpace(body)
-	if len(trimmed) > 0 && trimmed[0] == '[' {
-		var batch []*mcpJSONRPCEnvelope
-		if err := json.Unmarshal(body, &batch); err != nil {
-			return nil, nil
-		}
-		return &mcpJSONRPCEnvelope{Batch: batch}, nil
-	}
-	var envelope mcpJSONRPCEnvelope
-	if err := json.Unmarshal(body, &envelope); err != nil {
-		return nil, nil
-	}
-	return &envelope, nil
-}
-
-func mcpJSONRPCInputExpectsNoResponse(envelope *mcpJSONRPCEnvelope) bool {
-	if envelope == nil {
-		return false
-	}
-	if len(envelope.Batch) > 0 {
-		for _, item := range envelope.Batch {
-			if !mcpJSONRPCInputExpectsNoResponse(item) {
-				return false
-			}
-		}
-		return true
-	}
-	return envelope.JSONRPC == "2.0" && envelope.Method != "" && len(envelope.ID) == 0
-}
-
-func mcpJSONRPCRequestID(envelope *mcpJSONRPCEnvelope) (string, bool) {
-	if envelope == nil || envelope.Method == "" {
-		return "", false
-	}
-	return canonicalMCPJSONRPCRequestID(envelope.ID)
-}
-
-func mcpJSONRPCResponseID(envelope *mcpJSONRPCEnvelope) any {
-	if envelope == nil || len(envelope.ID) == 0 || bytes.Equal(bytes.TrimSpace(envelope.ID), []byte("null")) {
-		return nil
-	}
-	return json.RawMessage(envelope.ID)
-}
-
-func canonicalMCPJSONRPCRequestID(raw json.RawMessage) (string, bool) {
-	if len(raw) == 0 || bytes.Equal(bytes.TrimSpace(raw), []byte("null")) {
-		return "", false
-	}
-	var compact bytes.Buffer
-	if err := json.Compact(&compact, raw); err != nil {
-		return "", false
-	}
-	return compact.String(), true
-}
-
-func acceptedMCPJSONRPCNotificationOrResponse(requestCancellations *mcpruntime.RequestCancellationRegistry, r *http.Request, envelope *mcpJSONRPCEnvelope) bool {
-	if r == nil || r.Method != http.MethodPost {
-		return false
-	}
-	if envelope == nil {
-		return false
-	}
-	if envelope.JSONRPC != "2.0" {
-		return false
-	}
-	if envelope.Method == "" {
-		return len(envelope.Result) > 0 || len(envelope.Error) > 0
-	}
-	if len(envelope.ID) > 0 {
-		return false
-	}
-	switch envelope.Method {
-	case "notifications/cancelled":
-		var params struct {
-			RequestID json.RawMessage `+"`json:\"requestId\"`"+`
-		}
-		if err := json.Unmarshal(envelope.Params, &params); err == nil {
-			if requestID, ok := canonicalMCPJSONRPCRequestID(params.RequestID); ok {
-				requestCancellations.Cancel(r.Header.Get(mcpruntime.HeaderKeySessionID), requestID)
-			}
-		}
-		return true
-	case "notifications/initialized", "notifications/progress", "notifications/roots/list_changed":
-		return true
-	default:
-		return false
-	}
-}
-`, supportedProtocolVersionLiterals(protocolVersion))
-}
-
-func supportedProtocolVersionLiterals(protocolVersion string) string {
-	supported := supportedProtocolVersions(protocolVersion)
-	quoted := make([]string, 0, len(supported))
-	for _, version := range supported {
-		quoted = append(quoted, fmt.Sprintf("%q", version))
-	}
-	return strings.Join(quoted, ", ")
-}
-
-func supportedProtocolVersions(string) []string {
-	return mcpexpr.SupportedProtocolVersions()
+	return files
 }
 
 // generateMCPTransport generates adapter and prompt provider files that adapt
@@ -843,7 +171,6 @@ func generateMCPTransport(genpkg string, svc *expr.ServiceExpr, data *AdapterDat
 
 	pkgName := data.MCPPackage
 	files = append(files, buildMCPAdapterFile(genpkg, svc, data, svcName))
-	files = append(files, buildMCPProtocolVersionFile(pkgName, svcName, data.ProtocolVersion))
 	if discovery := oauthDiscoveryFile(data); discovery != nil {
 		files = append(files, discovery)
 	}
@@ -854,15 +181,6 @@ func generateMCPTransport(genpkg string, svc *expr.ServiceExpr, data *AdapterDat
 	return files
 }
 
-// generateMCPClientAdapter generates a client adapter that exposes the original
-// service endpoints while calling MCP JSON-RPC methods under the hood.
-func generateMCPClientAdapter(genpkg string, svc *expr.ServiceExpr, data *AdapterData) []*codegen.File {
-	if file := clientAdapterFile(genpkg, svc, data); file != nil {
-		return []*codegen.File{file}
-	}
-	return nil
-}
-
 func buildMCPAdapterFile(genpkg string, svc *expr.ServiceExpr, data *AdapterData, svcName string) *codegen.File {
 	adapterPath := filepath.Join(codegen.Gendir, "mcp_"+svcName, "adapter_server.go")
 	return &codegen.File{
@@ -870,12 +188,9 @@ func buildMCPAdapterFile(genpkg string, svc *expr.ServiceExpr, data *AdapterData
 		Sections: []codegen.Section{
 			codegen.Header(fmt.Sprintf("MCP server adapter for %s service", svc.Name), data.MCPPackage, adapterImports(genpkg, svc, svcName, data)),
 			adapterCoreSection(data),
-			adapterBroadcastSection(),
 			adapterToolsSection(data),
 			adapterResourcesSection(data),
 			adapterPromptsSection(data),
-			adapterNotificationsSection(data),
-			adapterSubscriptionsSection(data),
 		},
 	}
 }
@@ -987,30 +302,6 @@ func addAttributeImports(target map[string]*codegen.ImportSpec, genpkg string, a
 			target[im.Path] = im
 		}
 	}
-}
-
-func buildMCPProtocolVersionFile(pkgName, svcName, protocolVersion string) *codegen.File {
-	supported := supportedProtocolVersions(protocolVersion)
-	pv := defaultProtocolVersion(protocolVersion)
-	var list strings.Builder
-	for _, v := range supported {
-		fmt.Fprintf(&list, "\t%q,\n", v)
-	}
-	source := fmt.Sprintf("const DefaultProtocolVersion = %q\n\nvar SupportedProtocolVersions = []string{\n%s}\n", pv, list.String())
-	return &codegen.File{
-		Path: filepath.Join(codegen.Gendir, "mcp_"+svcName, "protocol_version.go"),
-		SectionTemplates: []*codegen.SectionTemplate{
-			codegen.Header("MCP protocol version", pkgName, nil),
-			{Name: "mcp-protocol-version", Source: source},
-		},
-	}
-}
-
-func defaultProtocolVersion(protocolVersion string) string {
-	if protocolVersion != "" {
-		return protocolVersion
-	}
-	return mcpexpr.DefaultProtocolVersion
 }
 
 func buildMCPPromptProviderFile(genpkg string, svc *expr.ServiceExpr, data *AdapterData, svcName, pkgName string) *codegen.File {

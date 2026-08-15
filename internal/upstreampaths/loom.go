@@ -17,7 +17,4 @@ const (
 
 	// LoomMCPHTTPImportPath is the generated import path for HTTP transport helpers.
 	LoomMCPHTTPImportPath = LoomMCPModule + "/http"
-
-	// LoomMCPJSONRPCImportPath is the generated import path for JSON-RPC transport helpers.
-	LoomMCPJSONRPCImportPath = LoomMCPModule + "/jsonrpc"
 )

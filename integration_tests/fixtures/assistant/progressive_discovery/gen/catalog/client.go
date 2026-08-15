@@ -17,12 +17,15 @@ import (
 // Client is the "catalog" service client.
 type Client struct {
 	LookupEndpoint          loom.Endpoint
+	StatusEndpoint          loom.Endpoint
+	StreamChunksEndpoint    loom.Endpoint
+	WaitForCancelEndpoint   loom.Endpoint
 	ProjectedLookupEndpoint loom.Endpoint
 }
 
 // NewClient initializes a "catalog" service client given the endpoints.
-func NewClient(lookup, projectedLookup loom.Endpoint) *Client {
-	return &Client{LookupEndpoint: lookup, ProjectedLookupEndpoint: projectedLookup}
+func NewClient(lookup, status, streamChunks, waitForCancel, projectedLookup loom.Endpoint) *Client {
+	return &Client{LookupEndpoint: lookup, StatusEndpoint: status, StreamChunksEndpoint: streamChunks, WaitForCancelEndpoint: waitForCancel, ProjectedLookupEndpoint: projectedLookup}
 }
 
 // Lookup calls the "lookup" endpoint of the "catalog" service.
@@ -33,6 +36,36 @@ func (c *Client) Lookup(ctx context.Context, p *LookupPayload) (res *LookupResul
 		return
 	}
 	return ires.(*LookupResult), nil
+}
+
+// Status calls the "status" endpoint of the "catalog" service.
+func (c *Client) Status(ctx context.Context) (res *StatusResult, err error) {
+	var ires any
+	ires, err = c.StatusEndpoint(ctx, nil)
+	if err != nil {
+		return
+	}
+	return ires.(*StatusResult), nil
+}
+
+// StreamChunks calls the "stream_chunks" endpoint of the "catalog" service.
+func (c *Client) StreamChunks(ctx context.Context) (res StreamChunksClientStream, err error) {
+	var ires any
+	ires, err = c.StreamChunksEndpoint(ctx, nil)
+	if err != nil {
+		return
+	}
+	return ires.(StreamChunksClientStream), nil
+}
+
+// WaitForCancel calls the "wait_for_cancel" endpoint of the "catalog" service.
+func (c *Client) WaitForCancel(ctx context.Context) (res *WaitForCancelResult, err error) {
+	var ires any
+	ires, err = c.WaitForCancelEndpoint(ctx, nil)
+	if err != nil {
+		return
+	}
+	return ires.(*WaitForCancelResult), nil
 }
 
 // ProjectedLookup calls the "projected_lookup" endpoint of the "catalog"

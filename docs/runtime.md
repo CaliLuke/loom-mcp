@@ -2345,11 +2345,10 @@ as synchronous parent/child latency. `InstrumentationOptions.TracerOptions` is
 retained for source compatibility but is ignored by this trace-domain
 implementation.
 
-This engine instrumentation is separate from `runtime.WithTracer`, which owns
-runtime/model semantic spans, generated MCP adapter tracing, and the generated
-SDK `TransportObserver`. The local debug HTTP server, Pulse runtime stream sink,
-and generated MCP `events/stream` broadcaster are also separate surfaces; none
-enables or substitutes for the others.
+This engine instrumentation is separate from `runtime.WithTracer`. That option
+owns runtime spans, model spans, generated MCP adapter tracing, and the SDK
+`TransportObserver`. The local debug server and Pulse stream sink are separate
+surfaces.
 
 ---
 
@@ -2459,102 +2458,22 @@ MCP callers normalize `tools/call` results into a consistent shape:
 - If a tool returns no text content, callers fall back to marshaling the first
   structured content item into `CallResponse.Result`.
 
-Generated MCP JSON-RPC clients and MCP client adapters use the same
-normalization contract, so runtime callers and generated callers observe the
-same behavior for multi-part tool output.
+All outbound MCP callers use the official SDK and the same normalization
+contract.
 
 The same package also exposes canonical JSON helpers used at MCP boundaries.
 Those helpers accept string-keyed maps, including named string aliases, and
 fail fast on unsupported map key kinds instead of silently dropping entries.
 
-### Generated JSON-RPC transport conformance
+### SDK transport ownership
 
-Generated JSON-RPC clients satisfy the MCP streamable HTTP transport contract
-without hand-written wrappers: every request carries
-`Accept: application/json, text/event-stream`, the `Mcp-Session-Id` returned by
-`initialize` is captured and replayed on all subsequent requests, and the
-negotiated protocol version is sent alongside the session id.
+The official MCP Go SDK owns protocol negotiation, Streamable HTTP sessions,
+cancellation, standard SSE, and wire-level JSON-RPC. Loom does not generate a
+native MCP client or server transport.
 
-Servers also accept post-initialize requests that omit `MCP-Protocol-Version`,
-as required for clients predating the `2025-06-18` header. In that case the
-transport uses the MCP `2025-03-26` compatibility assumption; an explicitly
-present but unsupported version remains a bad request.
-
-Protocol-version error responses echo a readable JSON-RPC request ID (and use
-an explicit `null` ID when none can be determined). The mount inspects each
-POST body once, restores it for the generated decoder, and bounds that
-inspection with the exported `MCPMaxRequestBodyBytes` value. The default is 32
-MiB; set a different positive value before mounting, or a non-positive value to
-disable the middleware limit.
-
-Each generated JSON-RPC mount also tracks in-flight requests by session and
-JSON-RPC request ID. A client `notifications/cancelled` message cancels the
-matching request context, allowing long-running tools and other cooperative
-handlers to stop and release resources; requests in other sessions or with
-other IDs are unaffected. The cancellation notification itself receives the
-transport-required HTTP 202 response. Other id-less notifications, including
-design-defined methods and notification-only batches, still run through the
-JSON-RPC handler; when that handler correctly suppresses a JSON-RPC response,
-the transport returns HTTP 202 with an empty body.
-
-The mount owns the streamable HTTP session lifecycle as well. Successful
-initialization records the emitted session ID, subsequent requests validate it
-before JSON-RPC routing, GET streams are tied to session termination, and
-DELETE terminates the session. A supplied unknown, expired, or terminated
-session ID receives HTTP 404 so conformant clients re-initialize; omitting the
-session header after the server has issued a session receives HTTP 400.
-Native JSON-RPC rejects an `initialize` request carrying an unknown session ID
-with HTTP 404 and rejects foreign owner-bound IDs with HTTP 403. A repeated
-initialize may carry its valid owner-bound ID so the adapter returns the
-protocol-level `Already initialized` error; fresh initialization starts without
-a client-supplied session ID.
-Generated SDK and native JSON-RPC transports also bind an initialized session
-to its verified principal and check that pair on every POST, GET, and DELETE.
-The SDK uses `MCPAdapterOptions.SessionPrincipal` or SDK TokenInfo's `UserID`;
-the native server exposes `MCPSessionPrincipal` with the same TokenInfo default.
-Authentication must wrap the generated handler so those resolvers see verified
-identity. Principal mismatches and missing authenticated bindings return HTTP
-403, including attempts to adopt an anonymously issued session. DELETE checks
-ownership before cleanup, so a rejected termination does not invalidate the
-owner's session.
-
-Session and principal metadata is pruned after 24 hours and capped at 4096
-entries. Expiry and capacity eviction remove both values together and fail
-closed. Anonymous sessions remain available only when both initialization and
-later requests resolve to no principal.
-
-Generated JSON-RPC servers accept requests that omit optional params (for
-example `tools/list` without a `params` key), treat omitted or JSON `null`
-`tools/call.arguments` as `{}`, emit explicit `{}` results for successful
-empty-result methods, emit the final streamed
-`tools/call` response as a default `message` SSE event, and validate the
-`Origin` header against DNS rebinding through the exported
-`MCPCrossOriginProtection` variable in the generated server package. The
-default is `net/http.NewCrossOriginProtection()` (same-origin plus non-browser
-requests), matching the SDK transport default; call `AddTrustedOrigin` on it or
-set it to `nil` before mounting to change the policy.
-
-When the source API or service declares JSON-RPC `CORS(...)`, the MCP generator
-copies the effective policy into its synthetic transport and preserves Loom's
-generated CORS handler. CORS and origin validation remain separate security
-layers: the CORS policy controls which browser origins receive cross-origin
-response headers, while `MCPCrossOriginProtection` still decides whether the
-request may execute. Configure trusted origins in both layers when intentionally
-serving a cross-origin browser MCP client.
-
-Intermediate SSE values use the namespaced
-`mcp_assistant/stream.event` JSON-RPC notification method (with the generated
-MCP service name as the prefix), never the request method name such as
-`tools/call`. This makes the stream extension explicit and prevents clients
-from mistaking a partial value for a protocol request. The MCP generator sets
-this method explicitly through Loom's SSE expression contract instead of
-depending on Loom's default naming behavior.
-
-Long-lived generated SSE endpoints immediately flush a priming frame with a
-unique event ID and empty data. Active endpoint streams also publish a
-one-second standard SSE `retry` value before each message, so the final message
-always carries reconnect guidance before the transport closes.
-
+The generated SDK wrapper binds each session to one verified principal. It
+checks that binding on POST, GET, and DELETE requests. Authentication
+middleware must wrap the generated handler.
 ### Generated MCP tool search
 
 Generated MCP adapters can opt into progressive discovery with
@@ -2598,12 +2517,12 @@ examples without changing payload validation.
 `call_tool` invokes a discovered real tool by name with an `arguments` object. It
 rejects synthetic targets and unknown real tool names as tool errors. In compact
 mode, direct public `tools/call` requests for hidden real tools are rejected by
-default; pinned `AlwaysVisible` tools remain directly callable. JSON-RPC
-adapters can opt into `ToolSearchOptions.AllowDirectHiddenCalls` as a
-compatibility escape hatch, while SDK-backed servers reject that option at
-construction because unregistered SDK tools cannot preserve compact authoritative
-discovery. Synthetic name collisions and unknown `AlwaysVisible` pins fail fast
-during adapter construction.
+default. Pinned `AlwaysVisible` tools remain directly callable. The local
+adapter can opt into `ToolSearchOptions.AllowDirectHiddenCalls` as a
+compatibility option. SDK-backed servers reject that option at construction
+because unregistered SDK tools cannot preserve authoritative compact
+discovery. Synthetic name collisions and unknown `AlwaysVisible` pins fail
+fast during adapter construction.
 
 Toolset tools projected into MCP participate in the same generated catalog as
 method-level MCP tools. Their `ToolInfo` schemas come from the generated toolset
@@ -2617,10 +2536,10 @@ For agents in the same Go process, codegen also emits
 `runtime.ToolsetRegistration` exposes the same synthetic tools and
 `AlwaysVisible` pins as the adapter's compact `tools/list`. Search and
 `call_tool` run directly through the adapter's catalog, interceptors, and
-generated method/projected dispatchers; they do not open an HTTP connection,
-construct JSON-RPC envelopes, initialize MCP, or create session state. The
-registration converts structured MCP results and tool errors into ordinary
-planner-visible tool results.
+generated method and projected dispatchers. They do not open an HTTP
+connection, initialize MCP, or create session state. The registration converts
+structured MCP results and tool errors into ordinary planner-visible tool
+results.
 
 ```go
 adapter := mcpassistant.NewMCPAdapter(service, promptProvider,
@@ -2647,9 +2566,8 @@ policies ending in `/` match a URI prefix. A skill name resolves to its
 `skill://<name>/` prefix.
 
 Adapter allow policies are the server's maximum grant. Request-scoped allowed
-names, including client-supplied `x-mcp-allow-names` on the native JSON-RPC
-transport, are a separate narrowing constraint. When both exist, a resource
-must satisfy both. Request and adapter deny policies are additive and take
+names are a separate narrowing constraint. When both exist, a resource must
+satisfy both. Request and adapter deny policies are additive and take
 precedence over every allow.
 
 Headers are untrusted input and do not authenticate a caller or create a
@@ -2659,36 +2577,11 @@ adapter's maximum grant from trusted deployment policy. OAuth DSL declarations
 generate metadata, challenges, and audience helpers; they do not install this
 application authorization layer.
 
-### Server-initiated events (Broadcaster)
+### Resource updates
 
-Generated MCP adapters can stream server-initiated events (notifications, resource updates) to multiple
-subscribers via `mcp.Broadcaster`. The default in-memory implementation is:
-
-```go
-b := mcp.NewChannelBroadcaster(128, true) // (buf, drop)
-sub, _ := b.Subscribe(ctx)
-defer sub.Close()
-```
-
-Global `Publish` broadcasts to every subscriber. Session-scoped
-`PublishSession` follows the MCP multiple-connections rule and delivers each
-message to exactly one live stream in that session, even when reconnect overlap
-temporarily leaves several streams connected.
-
-Configure generated adapters with `MCPAdapterOptions.Broadcaster` to supply a
-custom implementation. Without one, `BroadcastBuffer` defaults to 32 and
-`DropIfSlow` defaults to true. Dropping prevents a slow subscriber from blocking
-the server but loses that subscriber's event. `DropIfSlow` is a `*bool`: nil
-selects the safe dropping default, while a pointer to false applies backpressure
-to publishers. Older generated adapters accepted `bool` through an untyped
-field; regenerate and pass a bool pointer when migrating rather than relying on
-the former silent fallback for invalid values.
-
-```go
-dropIfSlow := false
-adapter := mcpassistant.NewMCPAdapter(service, promptProvider,
-    &mcpassistant.MCPAdapterOptions{DropIfSlow: &dropIfSlow})
-```
+Declare `WatchableResource` to enable standard MCP subscriptions. Call the
+generated `SDKServer.ResourceUpdated(ctx, uri)` method after the resource
+changes. Watchable resources require stateful Streamable HTTP sessions.
 
 `MCPAdapterOptions.ToolCallInterceptors` wrap generated `tools/call` execution
 in declaration order, with the first interceptor outermost. Each interceptor

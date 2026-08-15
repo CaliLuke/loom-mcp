@@ -16,8 +16,8 @@ import (
 	"github.com/CaliLuke/loom-mcp/v2/internal/upstreampaths"
 )
 
-// sdkServerPatchFS contains application-owned Go sources used to replace the
-// generated JSON-RPC command with the SDK-backed integration-test command.
+// sdkServerPatchFS contains application-owned Go sources for the SDK-backed
+// integration-test command.
 // Keeping these as ordinary checked-in sources makes them reviewable, reusable,
 // and independently format-checkable.
 //
@@ -89,10 +89,7 @@ func cloneExampleRoot(exampleRoot string) (string, error) {
 }
 
 func applySDKServerFixturePatch(exampleRoot string) error {
-	cmdDir, err := findServerCmdDir(exampleRoot)
-	if err != nil {
-		return fmt.Errorf("resolve SDK fixture command dir: %w", err)
-	}
+	cmdDir := filepath.Join(exampleRoot, "cmd", "orchestrator")
 	if err := os.MkdirAll(cmdDir, 0o750); err != nil {
 		return fmt.Errorf("create SDK fixture command dir: %w", err)
 	}
@@ -105,10 +102,6 @@ func applySDKServerFixturePatch(exampleRoot string) error {
 		if err := os.WriteFile(target, content, 0o600); err != nil {
 			return fmt.Errorf("write SDK fixture %s: %w", name, err)
 		}
-	}
-	jsonrpcPath := filepath.Join(cmdDir, "jsonrpc.go")
-	if err := os.Remove(jsonrpcPath); err != nil && !errors.Is(err, os.ErrNotExist) {
-		return fmt.Errorf("remove generated JSON-RPC fixture %s: %w", jsonrpcPath, err)
 	}
 	return nil
 }
@@ -162,9 +155,10 @@ func regenerateExample(t *testing.T, exampleRoot string) error {
 	}
 	genCmd := tempModuleGoCommand(
 		context.Background(),
-		"run",
 		"-C",
 		exampleRoot,
+		"run",
+		"-mod=mod",
 		upstreampaths.LoomCLIPackage,
 		"gen",
 		"example.com/assistant/design",
@@ -172,24 +166,9 @@ func regenerateExample(t *testing.T, exampleRoot string) error {
 	if out, err := genCmd.CombinedOutput(); err != nil {
 		return fmt.Errorf("loom gen failed: %w\n%s", err, string(out))
 	}
-	_ = os.Remove(filepath.Join(exampleRoot, "assistant.go"))
-	_ = os.Remove(filepath.Join(exampleRoot, "streaming.go"))
-	_ = os.Remove(filepath.Join(exampleRoot, "websocket.go"))
-	_ = os.Remove(filepath.Join(exampleRoot, "grpcstream.go"))
-	_ = os.Remove(filepath.Join(exampleRoot, "mcp_assistant.go"))
-	exCmd := tempModuleGoCommand(
-		context.Background(),
-		"run",
-		"-C",
-		exampleRoot,
-		upstreampaths.LoomCLIPackage,
-		"example",
-		"example.com/assistant/design",
-	) // #nosec G204
-	if out, err := exCmd.CombinedOutput(); err != nil {
-		return fmt.Errorf("loom example failed: %w\n%s", err, string(out))
+	if err := applySDKServerFixturePatch(exampleRoot); err != nil {
+		return err
 	}
-	_ = os.Remove(filepath.Join(exampleRoot, "mcp_assistant.go"))
 	postTidy := tempModuleGoCommand(context.Background(), "mod", "tidy")
 	postTidy.Dir = exampleRoot
 	if out, err := postTidy.CombinedOutput(); err != nil {
@@ -208,9 +187,6 @@ func ensurePreparedExampleRoot(t *testing.T, exampleRoot string) (string, error)
 	preparedRoot, err := cloneExampleRoot(exampleRoot)
 	if err == nil {
 		err = regenerateExample(t, preparedRoot)
-	}
-	if err == nil {
-		err = restoreFixtureCommandTree(exampleRoot, preparedRoot)
 	}
 	if err != nil {
 		_ = os.RemoveAll(preparedRoot)
@@ -295,54 +271,6 @@ func cleanGeneratedExampleArtifacts(exampleRoot string) error {
 		return fmt.Errorf("clean generated example artifacts: %w", err)
 	}
 	return nil
-}
-
-func restoreFixtureCommandTree(fixtureRoot string, exampleRoot string) error {
-	sourceRoot := filepath.Join(fixtureRoot, "cmd")
-	targetRoot := filepath.Join(exampleRoot, "cmd")
-	if err := os.RemoveAll(targetRoot); err != nil {
-		return fmt.Errorf("remove regenerated cmd directory: %w", err)
-	}
-	source, err := os.OpenRoot(sourceRoot)
-	if err != nil {
-		return fmt.Errorf("open fixture cmd root: %w", err)
-	}
-	defer func() {
-		_ = source.Close()
-	}()
-	targetFS, err := os.OpenRoot(exampleRoot)
-	if err != nil {
-		return fmt.Errorf("open example root: %w", err)
-	}
-	defer func() {
-		_ = targetFS.Close()
-	}()
-	return filepath.WalkDir(sourceRoot, func(path string, d fs.DirEntry, walkErr error) error {
-		if walkErr != nil {
-			return walkErr
-		}
-		rel, err := filepath.Rel(sourceRoot, path)
-		if err != nil {
-			return err
-		}
-		targetRel := filepath.Join("cmd", rel)
-		targetPath := filepath.Join(targetRoot, rel)
-		info, err := d.Info()
-		if err != nil {
-			return err
-		}
-		if d.IsDir() {
-			return os.MkdirAll(targetPath, info.Mode())
-		}
-		data, err := source.ReadFile(rel)
-		if err != nil {
-			return err
-		}
-		if err := targetFS.MkdirAll(filepath.Dir(targetRel), 0o750); err != nil {
-			return err
-		}
-		return targetFS.WriteFile(targetRel, data, info.Mode())
-	})
 }
 
 // buildServerBinary compiles the server binary once for fast parallel test starts.

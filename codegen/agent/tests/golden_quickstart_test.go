@@ -59,7 +59,8 @@ func TestQuickstart_Renders_Minimal(t *testing.T) {
 	require.NotContains(t, content, "Use(Toolset(FromMCP(...)))")
 	require.NotContains(t, content, "mcpruntime.NewCaller(remoteClient)")
 	require.Contains(t, content, "Toolset(FromMCP(...))")
-	require.Contains(t, content, `<jsonrpc_client_pkg>.NewCaller(remoteClient, "<mcp-suite>")`)
+	require.Contains(t, content, "mcpruntime.NewHTTPCaller(ctx, mcpruntime.HTTPOptions{")
+	require.NotContains(t, content, "generated JSON-RPC MCP client")
 	require.NotContains(t, content, "Service-Side Tool Providers (Registry-Routed Execution)")
 }
 

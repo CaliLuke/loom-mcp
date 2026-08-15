@@ -68,14 +68,9 @@ func TestUnifiedToolSurfaceProjectedOnlyGeneratesToolMethods(t *testing.T) {
 	service := findProjectionGeneratedFile(t, files, filepath.Join(gcodegen.Gendir, "mcp_assistant", "service.go"))
 	serviceSource := renderProjectionGeneratedFile(t, service)
 	require.Contains(t, serviceSource, "ToolsCallPayload")
-	require.Contains(t, serviceSource, "ToolsListPayload")
-	require.Contains(t, serviceSource, "ToolInfo")
-
-	// The JSON-RPC transport must route tools/list and tools/call.
-	encodeDecode := findProjectionGeneratedFile(t, files, filepath.Join(gcodegen.Gendir, "jsonrpc", "mcp_assistant", "server", "encode_decode.go"))
-	encodeDecodeSource := renderProjectionGeneratedFile(t, encodeDecode)
-	require.Contains(t, encodeDecodeSource, "func DecodeToolsListRequest")
-	require.Contains(t, encodeDecodeSource, "func DecodeToolsCallRequest")
+	require.Contains(t, serviceSource, "ToolsCallResult")
+	require.NotContains(t, serviceSource, "ToolsListPayload")
+	require.NotContains(t, serviceSource, "ToolsList(context.Context")
 
 	adapter := findProjectionGeneratedFile(t, files, filepath.Join(gcodegen.Gendir, "mcp_assistant", "adapter_server.go"))
 	adapterSource := renderProjectionGeneratedFile(t, adapter)
@@ -85,6 +80,14 @@ func TestUnifiedToolSurfaceProjectedOnlyGeneratesToolMethods(t *testing.T) {
 	require.Contains(t, adapterSource, "args := p.Arguments")
 	require.Contains(t, adapterSource, `args = json.RawMessage("{}")`)
 	require.Contains(t, adapterSource, "DispatchProjectedLookupToolMethod(ctx, meta, args, nil,")
+
+	sdk := findProjectionGeneratedFile(t, files, filepath.Join(gcodegen.Gendir, "mcp_assistant", "sdk_server.go"))
+	sdkSource := renderProjectionGeneratedFile(t, sdk)
+	require.Contains(t, sdkSource, `"projected_lookup_tool"`)
+	require.Contains(t, sdkSource, "server.AddTool")
+	for _, file := range files {
+		require.NotContains(t, filepath.ToSlash(file.Path), "/jsonrpc/mcp_assistant/")
+	}
 }
 
 func findProjectionGeneratedFile(t *testing.T, files []*gcodegen.File, path string) *gcodegen.File {

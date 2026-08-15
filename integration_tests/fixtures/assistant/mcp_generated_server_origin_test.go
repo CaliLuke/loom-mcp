@@ -31,28 +31,6 @@ func TestGeneratedSDKServerAllowsSameOrigin(t *testing.T) {
 		"SDK streamable HTTP server must not reject same-origin requests")
 }
 
-func TestGeneratedJSONRPCServerRejectsInvalidOrigin(t *testing.T) {
-	t.Parallel()
-
-	server := newGeneratedJSONRPCServer(t)
-	defer server.Close()
-
-	resp := postSDKInitializeWithOrigin(t, server.URL+"/rpc", "https://evil.example.com")
-	require.Equal(t, http.StatusForbidden, resp.StatusCode,
-		"generated JSON-RPC transport must reject untrusted Origin with 403 per MCP 2025-11-25 spec")
-}
-
-func TestGeneratedJSONRPCServerAllowsSameOrigin(t *testing.T) {
-	t.Parallel()
-
-	server := newGeneratedJSONRPCServer(t)
-	defer server.Close()
-
-	resp := postSDKInitializeWithOrigin(t, server.URL+"/rpc", server.URL)
-	require.NotEqual(t, http.StatusForbidden, resp.StatusCode,
-		"generated JSON-RPC transport must not reject same-origin requests")
-}
-
 func postSDKInitializeWithOrigin(t *testing.T, endpoint, origin string) *http.Response {
 	t.Helper()
 

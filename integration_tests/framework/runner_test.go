@@ -2,7 +2,6 @@ package framework
 
 import (
 	"context"
-	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -134,13 +133,10 @@ func TestFindServerCmdDirPrefersDirectoryWithHTTPGo(t *testing.T) {
 
 func TestApplySDKServerFixturePatchCopiesCheckedInSources(t *testing.T) {
 	root := t.TempDir()
-	cmdDir := filepath.Join(root, "cmd", "assistant")
-	require.NoError(t, os.MkdirAll(cmdDir, 0o750))
-	require.NoError(t, os.WriteFile(filepath.Join(cmdDir, "main.go"), []byte("package main\n"), 0o600))
-	require.NoError(t, os.WriteFile(filepath.Join(cmdDir, "jsonrpc.go"), []byte("package main\n"), 0o600))
 
 	require.NoError(t, applySDKServerFixturePatch(root))
 
+	cmdDir := filepath.Join(root, "cmd", "orchestrator")
 	for _, name := range []string{"http.go", "main.go"} {
 		want, err := sdkServerPatchFS.ReadFile(filepath.Join("testdata", "sdk_server_patch", name))
 		require.NoError(t, err)
@@ -148,8 +144,6 @@ func TestApplySDKServerFixturePatchCopiesCheckedInSources(t *testing.T) {
 		require.NoError(t, err)
 		assert.Equal(t, want, got)
 	}
-	_, err := os.Stat(filepath.Join(cmdDir, "jsonrpc.go"))
-	require.ErrorIs(t, err, os.ErrNotExist)
 }
 
 func TestCloneExampleRootCopiesFiles(t *testing.T) {
@@ -166,101 +160,6 @@ func TestCloneExampleRootCopiesFiles(t *testing.T) {
 	content, err := os.ReadFile(filepath.Join(clonedRoot, "cmd", "assistant", "main.go")) // #nosec G304 -- clonedRoot is created by the test
 	require.NoError(t, err)
 	assert.Equal(t, "package main\n", string(content))
-}
-
-func TestMergeStepHeadersOverlaysStepHeaders(t *testing.T) {
-	defaults := &Defaults{Headers: map[string]string{"Accept": "application/json", "X-Test": "default"}}
-	step := Step{Headers: map[string]string{"Accept": "text/event-stream"}}
-
-	headers := mergeStepHeaders(defaults, step)
-
-	assert.Equal(t, "text/event-stream", headers["Accept"])
-	assert.Equal(t, "default", headers["X-Test"])
-}
-
-func TestApplyJSONRPCHeadersDoesNotMutateProcessEnvironment(t *testing.T) {
-	t.Setenv("MCP_SCENARIO_HEADER", "parent")
-	req := httptest.NewRequestWithContext(context.Background(), http.MethodPost, "http://localhost/rpc", nil)
-
-	applyJSONRPCHeaders(req, "session-1", map[string]string{"MCP_SCENARIO_HEADER": "scenario"})
-
-	assert.Equal(t, "scenario", req.Header.Get("MCP_SCENARIO_HEADER"))
-	assert.Equal(t, "parent", os.Getenv("MCP_SCENARIO_HEADER"))
-	assert.Equal(t, "session-1", req.Header.Get("Mcp-Session-Id"))
-}
-
-func TestIsStreamingStepUsesAcceptHeaderOrExpectation(t *testing.T) {
-	assert.True(t, isStreamingStep(Step{}, map[string]string{"Accept": "text/event-stream"}))
-	assert.True(t, isStreamingStep(Step{StreamExpect: &StreamExpect{}}, map[string]string{}))
-	assert.False(t, isStreamingStep(Step{}, map[string]string{"Accept": "application/json"}))
-}
-
-func TestCliBodyArgsOnlyForBodySubcommands(t *testing.T) {
-	args := cliBodyArgs(map[string]any{"query": "hello"}, "search-knowledge")
-	empty := cliBodyArgs(map[string]any{"query": "hello"}, "list-documents")
-
-	require.Len(t, args, 2)
-	assert.Equal(t, "--body", args[0])
-	assert.Empty(t, empty)
-}
-
-func TestExecuteSSERecognizesJSONRPCErrorEnvelope(t *testing.T) {
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
-		w.Header().Set("Content-Type", "text/event-stream")
-		_, _ = fmt.Fprint(w, "event: message\n")
-		_, _ = fmt.Fprint(w, "data: {\"jsonrpc\":\"2.0\",\"error\":{\"code\":-32601,\"message\":\"Unknown tool\"},\"id\":\"1\"}\n\n")
-	}))
-	t.Cleanup(server.Close)
-
-	runner := NewRunner()
-	runner.baseURL = mustParseURL(t, server.URL)
-
-	events, err := runner.executeSSE("tools/call", map[string]any{"name": "non_existent_tool"}, map[string]string{"Accept": "text/event-stream"}, nil)
-
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "-32601")
-	assert.Contains(t, err.Error(), "Unknown tool")
-	require.Len(t, events, 1)
-	assert.Equal(t, "message", events[0].Event)
-}
-
-func TestExecuteSSESkipsRetryControlEvents(t *testing.T) {
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
-		w.Header().Set("Content-Type", "text/event-stream")
-		if _, err := fmt.Fprint(w, "event: retry\nretry: 1000\ndata:\n\n"); err != nil {
-			return
-		}
-		if _, err := fmt.Fprint(w, "event: message\ndata: {\"jsonrpc\":\"2.0\",\"result\":{},\"id\":1}\n\n"); err != nil {
-			return
-		}
-	}))
-	t.Cleanup(server.Close)
-
-	runner := NewRunner()
-	runner.baseURL = mustParseURL(t, server.URL)
-
-	events, err := runner.executeSSE("tools/call", map[string]any{"name": "example"}, map[string]string{"Accept": "text/event-stream"}, nil)
-
-	require.NoError(t, err)
-	require.Len(t, events, 1)
-	assert.Equal(t, "message", events[0].Event)
-}
-
-func TestExecuteSSEReturnsErrorOnEmptyStream(t *testing.T) {
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
-		w.Header().Set("Content-Type", "text/event-stream")
-		w.WriteHeader(http.StatusOK)
-	}))
-	t.Cleanup(server.Close)
-
-	runner := NewRunner()
-	runner.baseURL = mustParseURL(t, server.URL)
-
-	events, err := runner.executeSSE("tools/call", map[string]any{"name": "non_existent_tool"}, map[string]string{"Accept": "text/event-stream"}, nil)
-
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "empty SSE response")
-	assert.Nil(t, events)
 }
 
 func mustParseURL(t *testing.T, rawURL string) *url.URL {

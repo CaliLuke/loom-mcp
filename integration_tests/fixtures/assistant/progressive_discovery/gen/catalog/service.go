@@ -16,6 +16,12 @@ import (
 type Service interface {
 	// Lookup implements lookup.
 	Lookup(context.Context, *LookupPayload) (res *LookupResult, err error)
+	// Status implements status.
+	Status(context.Context) (res *StatusResult, err error)
+	// StreamChunks implements stream_chunks.
+	StreamChunks(context.Context, StreamChunksServerStream) (err error)
+	// WaitForCancel implements wait_for_cancel.
+	WaitForCancel(context.Context) (res *WaitForCancelResult, err error)
 	// ProjectedLookup implements projected_lookup.
 	ProjectedLookup(context.Context, *ProjectedLookupPayload) (res *ProjectedLookupResult, err error)
 }
@@ -34,7 +40,28 @@ const ServiceName = "catalog"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [2]string{"lookup", "projected_lookup"}
+var MethodNames = [5]string{"lookup", "status", "stream_chunks", "wait_for_cancel", "projected_lookup"}
+
+// StreamChunksServerStream allows streaming instances of *StreamChunksResult
+// to the client.
+type StreamChunksServerStream interface {
+	// Send streams instances of "StreamChunksResult".
+	Send(*StreamChunksResult) error
+	// SendWithContext streams instances of "StreamChunksResult" with context.
+	SendWithContext(context.Context, *StreamChunksResult) error
+	// Close closes the stream.
+	Close() error
+}
+
+// StreamChunksClientStream allows streaming instances of *StreamChunksResult
+// to the client.
+type StreamChunksClientStream interface {
+	// Recv reads instances of "StreamChunksResult" from the stream.
+	Recv() (*StreamChunksResult, error)
+	// RecvWithContext reads instances of "StreamChunksResult" from the stream with
+	// context.
+	RecvWithContext(context.Context) (*StreamChunksResult, error)
+}
 
 // LookupPayload is the payload type of the catalog service lookup method.
 type LookupPayload struct {
@@ -60,4 +87,24 @@ type ProjectedLookupPayload struct {
 type ProjectedLookupResult struct {
 	// Lookup result
 	Value string `json:"value"`
+}
+
+// StatusResult is the result type of the catalog service status method.
+type StatusResult struct {
+	// Current catalog state
+	State string `json:"state"`
+}
+
+// StreamChunksResult is the result type of the catalog service stream_chunks
+// method.
+type StreamChunksResult struct {
+	// Streamed chunk
+	Chunk string `json:"chunk"`
+}
+
+// WaitForCancelResult is the result type of the catalog service
+// wait_for_cancel method.
+type WaitForCancelResult struct {
+	// Whether the wait completed normally
+	Completed bool `json:"completed"`
 }

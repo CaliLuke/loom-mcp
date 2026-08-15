@@ -7,7 +7,6 @@ import (
 	"encoding/json"
 	"errors"
 	"net/url"
-	"slices"
 	"strings"
 
 	"github.com/CaliLuke/loom/eval"
@@ -20,10 +19,6 @@ var (
 )
 
 const (
-	// DefaultProtocolVersion is the newest protocol version implemented by all
-	// generated Loom MCP transports.
-	DefaultProtocolVersion = "2025-11-25"
-
 	// ToolSearchExactMatchNarrow suppresses weaker matches when a query exactly
 	// matches a tool name or title.
 	ToolSearchExactMatchNarrow = "narrow"
@@ -33,25 +28,6 @@ const (
 	// ToolSearchExactMatchOff disables exact-match special handling.
 	ToolSearchExactMatchOff = "off"
 )
-
-var supportedProtocolVersions = []string{
-	DefaultProtocolVersion,
-	"2025-06-18",
-	"2025-03-26",
-	"2024-11-05",
-}
-
-// SupportedProtocolVersions returns the protocol versions implemented by all
-// generated Loom MCP transports, newest first.
-func SupportedProtocolVersions() []string {
-	return slices.Clone(supportedProtocolVersions)
-}
-
-// SupportsProtocolVersion reports whether every generated Loom MCP transport
-// implements version.
-func SupportsProtocolVersion(version string) bool {
-	return slices.Contains(supportedProtocolVersions, version)
-}
 
 func urlParse(raw string) (*url.URL, error) {
 	return url.Parse(raw)
@@ -89,9 +65,6 @@ type (
 		// Icons is the optional icon metadata exposed for the server
 		// implementation.
 		Icons []*IconExpr
-		// ProtocolVersion is the MCP protocol version this server
-		// implements.
-		ProtocolVersion string
 		// Transport is the transport mechanism (e.g., "jsonrpc",
 		// "sse").
 		Transport string
@@ -110,15 +83,6 @@ type (
 		// Prompts is the collection of static prompt expressions
 		// exposed by this server.
 		Prompts []*PromptExpr
-		// Notifications is the collection of notification expressions
-		// this server can send.
-		Notifications []*NotificationExpr
-		// Subscriptions is the collection of resource subscription
-		// expressions this server supports.
-		Subscriptions []*SubscriptionExpr
-		// SubscriptionMonitors is the collection of subscription
-		// monitor expressions for SSE.
-		SubscriptionMonitors []*SubscriptionMonitorExpr
 		// OAuth is the optional OAuth 2.0 protected-resource configuration
 		// that drives Protected Resource Metadata emission and the
 		// WWW-Authenticate challenge. When nil, the server does not
@@ -231,26 +195,6 @@ type (
 		// EnablePrompts indicates whether the server exposes prompt
 		// templates.
 		EnablePrompts bool
-		// EnableLogging indicates whether the server supports logging.
-		EnableLogging bool
-		// EnableProgress indicates whether the server supports progress
-		// notifications.
-		EnableProgress bool
-		// EnableCancellation indicates whether the server supports
-		// request cancellation.
-		EnableCancellation bool
-		// EnableNotifications indicates whether the server can send
-		// notifications.
-		EnableNotifications bool
-		// EnableCompletion indicates whether the server supports
-		// completion suggestions.
-		EnableCompletion bool
-		// EnablePagination indicates whether the server supports
-		// paginated responses.
-		EnablePagination bool
-		// EnableSubscriptions indicates whether the server supports
-		// resource subscriptions.
-		EnableSubscriptions bool
 	}
 
 	// ToolExpr defines an MCP tool that the server exposes for invocation.
@@ -373,41 +317,6 @@ type (
 		// Icons is the optional icon metadata exposed for this prompt.
 		Icons []*IconExpr
 	}
-
-	// NotificationExpr defines a notification that the server can send to
-	// clients.
-	NotificationExpr struct {
-		eval.Expression
-
-		// Name is the unique identifier for this notification type.
-		Name string
-		// Description provides a human-readable explanation of the
-		// notification.
-		Description string
-		// Method is the Goa service method that sends this notification.
-		Method *expr.MethodExpr
-	}
-
-	// SubscriptionExpr defines a subscription to resource change events.
-	SubscriptionExpr struct {
-		eval.Expression
-
-		// ResourceName is the name of the resource being subscribed to.
-		ResourceName string
-		// Method is the Goa service method that handles this subscription.
-		Method *expr.MethodExpr
-	}
-
-	// SubscriptionMonitorExpr defines a subscription monitor for SSE-based
-	// subscriptions.
-	SubscriptionMonitorExpr struct {
-		eval.Expression
-
-		// Name is the unique identifier for this monitor.
-		Name string
-		// Method is the Goa service method that implements the monitor.
-		Method *expr.MethodExpr
-	}
 )
 
 // EvalName returns the name used for evaluation.
@@ -469,31 +378,16 @@ func (m *MCPExpr) Validate() error {
 	if m.Version == "" {
 		verr.Add(m, "MCP server version is required")
 	}
-	if m.ProtocolVersion != "" && !SupportsProtocolVersion(m.ProtocolVersion) {
-		verr.Add(
-			m,
-			"ProtocolVersion %q is not implemented by Loom's generated transport; supported versions: %s",
-			m.ProtocolVersion,
-			strings.Join(supportedProtocolVersions, ", "),
-		)
-	}
 	mergeChildErrors(verr, m.Icons, iconValidator)
 	mergeChildErrors(verr, m.Tools, toolValidator)
 	mergeChildErrors(verr, m.Resources, resourceValidator)
 	mergeChildErrors(verr, m.SkillDirectories, skillDirectoryValidator)
 	mergeChildErrors(verr, m.Prompts, promptValidator)
-	mergeChildErrors(verr, m.Notifications, notificationValidator)
-	mergeChildErrors(verr, m.Subscriptions, subscriptionValidator)
-	mergeChildErrors(verr, m.SubscriptionMonitors, subscriptionMonitorValidator)
 	validateUniqueToolNames(verr, m.Tools)
 	validateSingleToolPerMethod(verr, m.Tools)
 	validateUniqueResourceNames(verr, m.Resources)
 	validateUniqueResourceURIs(verr, m.Resources)
 	validateUniquePromptNames(verr, m.Prompts)
-	validateUniqueNotificationNames(verr, m.Notifications)
-	validateSubscriptionResources(verr, m.Resources, m.Subscriptions)
-	validateUniqueSubscriptionResourceNames(verr, m.Subscriptions)
-	validateUniqueSubscriptionMonitorNames(verr, m.SubscriptionMonitors)
 	if m.OAuth != nil {
 		mergeValidationError(verr, m.OAuth.Validate())
 	}
@@ -510,15 +404,6 @@ func iconValidator(icon *IconExpr) error      { return icon.Validate() }
 func toolValidator(t *ToolExpr) error         { return t.Validate() }
 func resourceValidator(r *ResourceExpr) error { return r.Validate() }
 func promptValidator(p *PromptExpr) error     { return p.Validate() }
-func notificationValidator(n *NotificationExpr) error {
-	return n.Validate()
-}
-func subscriptionValidator(s *SubscriptionExpr) error {
-	return s.Validate()
-}
-func subscriptionMonitorValidator(s *SubscriptionMonitorExpr) error {
-	return s.Validate()
-}
 func skillDirectoryValidator(s *SkillDirectoryExpr) error {
 	return s.Validate()
 }
@@ -590,72 +475,6 @@ func validateUniquePromptNames(verr *eval.ValidationErrors, prompts []*PromptExp
 			continue
 		}
 		seen[prompt.Name] = prompt
-	}
-}
-
-func validateUniqueNotificationNames(verr *eval.ValidationErrors, notifications []*NotificationExpr) {
-	seen := make(map[string]*NotificationExpr, len(notifications))
-	for _, notification := range notifications {
-		if strings.TrimSpace(notification.Name) == "" {
-			continue
-		}
-		if other, dup := seen[notification.Name]; dup {
-			verr.Add(notification, "notification name %q duplicates a notification declared in %s", notification.Name, other.EvalName())
-			continue
-		}
-		seen[notification.Name] = notification
-	}
-}
-
-func validateUniqueSubscriptionResourceNames(verr *eval.ValidationErrors, subscriptions []*SubscriptionExpr) {
-	seen := make(map[string]*SubscriptionExpr, len(subscriptions))
-	for _, subscription := range subscriptions {
-		if strings.TrimSpace(subscription.ResourceName) == "" {
-			continue
-		}
-		if other, dup := seen[subscription.ResourceName]; dup {
-			verr.Add(subscription, "subscription resource name %q duplicates a subscription declared in %s", subscription.ResourceName, other.EvalName())
-			continue
-		}
-		seen[subscription.ResourceName] = subscription
-	}
-}
-
-func validateSubscriptionResources(verr *eval.ValidationErrors, resources []*ResourceExpr, subscriptions []*SubscriptionExpr) {
-	watchable := make(map[string]bool, len(resources))
-	declared := make(map[string]struct{}, len(resources))
-	for _, resource := range resources {
-		if resource == nil || strings.TrimSpace(resource.Name) == "" {
-			continue
-		}
-		declared[resource.Name] = struct{}{}
-		watchable[resource.Name] = resource.Watchable
-	}
-	for _, subscription := range subscriptions {
-		if subscription == nil || strings.TrimSpace(subscription.ResourceName) == "" {
-			continue
-		}
-		if _, ok := declared[subscription.ResourceName]; !ok {
-			verr.Add(subscription, "subscription resource %q does not match a declared resource", subscription.ResourceName)
-			continue
-		}
-		if !watchable[subscription.ResourceName] {
-			verr.Add(subscription, "subscription resource %q must reference a watchable resource", subscription.ResourceName)
-		}
-	}
-}
-
-func validateUniqueSubscriptionMonitorNames(verr *eval.ValidationErrors, monitors []*SubscriptionMonitorExpr) {
-	seen := make(map[string]*SubscriptionMonitorExpr, len(monitors))
-	for _, monitor := range monitors {
-		if strings.TrimSpace(monitor.Name) == "" {
-			continue
-		}
-		if other, dup := seen[monitor.Name]; dup {
-			verr.Add(monitor, "subscription monitor name %q duplicates a subscription monitor declared in %s", monitor.Name, other.EvalName())
-			continue
-		}
-		seen[monitor.Name] = monitor
 	}
 }
 
@@ -926,42 +745,6 @@ func (r *RuntimePromptExpr) Validate() error {
 	return nil
 }
 
-// Validate validates a notification expression.
-func (n *NotificationExpr) Validate() error {
-	verr := new(eval.ValidationErrors)
-	if strings.TrimSpace(n.Name) == "" {
-		verr.Add(n, "notification name is required")
-	}
-	if len(verr.Errors) > 0 {
-		return verr
-	}
-	return nil
-}
-
-// Validate validates a subscription expression.
-func (s *SubscriptionExpr) Validate() error {
-	verr := new(eval.ValidationErrors)
-	if strings.TrimSpace(s.ResourceName) == "" {
-		verr.Add(s, "subscription resource name is required")
-	}
-	if len(verr.Errors) > 0 {
-		return verr
-	}
-	return nil
-}
-
-// Validate validates a subscription monitor expression.
-func (s *SubscriptionMonitorExpr) Validate() error {
-	verr := new(eval.ValidationErrors)
-	if strings.TrimSpace(s.Name) == "" {
-		verr.Add(s, "subscription monitor name is required")
-	}
-	if len(verr.Errors) > 0 {
-		return verr
-	}
-	return nil
-}
-
 // Validate validates icon metadata.
 func (i *IconExpr) Validate() error {
 	verr := new(eval.ValidationErrors)
@@ -1022,19 +805,4 @@ func (r *RuntimePromptExpr) EvalName() string {
 // EvalName returns the name used for evaluation.
 func (d *DynamicPromptExpr) EvalName() string {
 	return "MCP dynamic prompt " + d.Name
-}
-
-// EvalName returns the name used for evaluation.
-func (n *NotificationExpr) EvalName() string {
-	return "MCP notification " + n.Name
-}
-
-// EvalName returns the name used for evaluation.
-func (s *SubscriptionExpr) EvalName() string {
-	return "MCP subscription for resource " + s.ResourceName
-}
-
-// EvalName returns the name used for evaluation.
-func (s *SubscriptionMonitorExpr) EvalName() string {
-	return "MCP subscription monitor " + s.Name
 }

@@ -8,55 +8,10 @@ import (
 	"time"
 
 	projected "example.com/assistant/gen/assistant/toolsets/projected"
-	mcpruntime "github.com/CaliLuke/loom-mcp/v2/runtime/mcp"
 	sdkmcp "github.com/modelcontextprotocol/go-sdk/mcp"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
-
-func TestGeneratedAdapterAgainstGeneratedServerReturnsRetryPrompt(t *testing.T) {
-	t.Parallel()
-
-	server := newGeneratedJSONRPCServer(t)
-	defer server.Close()
-
-	out, err := newAdapterEndpoints(t, server).ExecuteCode(context.Background(), invalidExecuteCodePayload())
-	require.Nil(t, out)
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "Redo the operation now with valid parameters.")
-	assert.Contains(t, err.Error(), `"enum":["python","javascript"]`)
-}
-
-func TestGeneratedCallerMatchesRuntimeHTTPCaller(t *testing.T) {
-	t.Parallel()
-
-	jsonrpcServer := newGeneratedJSONRPCServer(t)
-	defer jsonrpcServer.Close()
-
-	_, sdkHTTPServer := newGeneratedSDKServer(t)
-	defer sdkHTTPServer.Close()
-
-	generatedCaller := newGeneratedCallerFromServer(t, jsonrpcServer.URL)
-	runtimeSession := connectSDKSessionToServer(t, sdkHTTPServer.URL+"/rpc", nil)
-	runtimeCaller := mcpruntime.NewSessionCaller(runtimeSession, nil)
-	defer func() {
-		require.NoError(t, runtimeCaller.Close())
-	}()
-
-	req := mcpruntime.CallRequest{
-		Tool:    "analyze_sentiment",
-		Payload: json.RawMessage(`{"text":"I love parity checks"}`),
-	}
-
-	generatedResp, err := generatedCaller.CallTool(context.Background(), req)
-	require.NoError(t, err)
-
-	runtimeResp, err := runtimeCaller.CallTool(context.Background(), req)
-	require.NoError(t, err)
-
-	require.JSONEq(t, string(generatedResp.Result), string(runtimeResp.Result))
-	require.JSONEq(t, string(generatedResp.Structured), string(runtimeResp.Structured))
-}
 
 func TestGeneratedSDKServerAdvertisesUnionToolSchema(t *testing.T) {
 	t.Parallel()
@@ -157,39 +112,28 @@ func TestProjectedToolRuntimeAndMCPSchemasMatch(t *testing.T) {
 func TestProjectedToolMCPCallUsesSharedDispatcher(t *testing.T) {
 	t.Parallel()
 
-	jsonrpcServer := newGeneratedJSONRPCServer(t)
-	defer jsonrpcServer.Close()
-
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
-	caller := newGeneratedCallerFromServer(t, jsonrpcServer.URL)
-	resp, err := caller.CallTool(ctx, mcpruntime.CallRequest{
-		Tool:    "projected_lookup_tool",
-		Payload: json.RawMessage(`{"query":"loom"}`),
+	session := connectSDKSessionToServer(t, newGeneratedSDKServerURL(t), nil)
+	defer func() { require.NoError(t, session.Close()) }()
+	resp, err := session.CallTool(ctx, &sdkmcp.CallToolParams{
+		Name:      "projected_lookup_tool",
+		Arguments: map[string]any{"query": "loom"},
 	})
 	require.NoError(t, err)
-	require.JSONEq(t, `{"answer":"projected:loom","source":"runtime-toolset"}`, string(resp.Result))
-	var structured []map[string]any
-	require.NoError(t, json.Unmarshal(resp.Structured, &structured))
-	require.Len(t, structured, 1)
-	assert.Equal(t, "text", structured[0]["type"])
-	require.JSONEq(t, `{"answer":"projected:loom","source":"runtime-toolset"}`, structured[0]["text"].(string))
+	assert.Equal(t, map[string]any{"answer": "projected:loom", "source": "runtime-toolset"}, resp.StructuredContent)
 }
 
 func TestProjectedToolMCPCallSupportsNoPayloadMethod(t *testing.T) {
 	t.Parallel()
 
-	jsonrpcServer := newGeneratedJSONRPCServer(t)
-	defer jsonrpcServer.Close()
-
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
-	caller := newGeneratedCallerFromServer(t, jsonrpcServer.URL)
-	resp, err := caller.CallTool(ctx, mcpruntime.CallRequest{
-		Tool: "projected_status_tool",
-	})
+	session := connectSDKSessionToServer(t, newGeneratedSDKServerURL(t), nil)
+	defer func() { require.NoError(t, session.Close()) }()
+	resp, err := session.CallTool(ctx, &sdkmcp.CallToolParams{Name: "projected_status_tool"})
 	require.NoError(t, err)
-	require.JSONEq(t, `{"status":"ready"}`, string(resp.Result))
+	assert.Equal(t, map[string]any{"status": "ready"}, resp.StructuredContent)
 }
 
 func assertSDKSchemaJSONEq(t *testing.T, want []byte, got any) {

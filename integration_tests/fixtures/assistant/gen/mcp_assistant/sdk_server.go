@@ -52,12 +52,6 @@ type sdkResponseObserver struct {
 	onSessionIssued func(string)
 	sessionOnce     sync.Once
 }
-type sdkToolCallCollector struct {
-	adapter   *MCPAdapter
-	parts     []*ToolsCallResult
-	final     *ToolsCallResult
-	streamErr error
-}
 
 func NewSDKServer(service assistant.Service, opts *SDKServerOptions) (*SDKServer, error) {
 	var adapterOpts *MCPAdapterOptions
@@ -77,9 +71,6 @@ func NewSDKServer(service assistant.Service, opts *SDKServerOptions) (*SDKServer
 		promptProvider = opts.PromptProvider
 		serverOpts = opts.Server
 		streamableOpts = opts.StreamableHTTP
-	}
-	if runtimeCORS == nil {
-		return nil, fmt.Errorf("runtime CORS policy is required by the MCP service design")
 	}
 	if adapterOpts != nil && adapterOpts.ToolSearch != nil && adapterOpts.ToolSearch.AllowDirectHiddenCalls {
 		return nil, fmt.Errorf("SDK ToolSearch compact mode does not support AllowDirectHiddenCalls")
@@ -117,7 +108,9 @@ func NewSDKServer(service assistant.Service, opts *SDKServerOptions) (*SDKServer
 	if transportObserver != nil {
 		handler = transport.HTTPMiddleware(transportObserver)(handler)
 	}
-	handler = sdkRuntimeCORSHandler(handler, *runtimeCORS)
+	if runtimeCORS != nil {
+		handler = sdkRuntimeCORSHandler(handler, *runtimeCORS)
+	}
 	return &SDKServer{
 		Adapter: adapter,
 		Handler: handler,
@@ -150,6 +143,14 @@ func sdkServerOptionsWithDefaults(opts *mcpsdk.ServerOptions) *mcpsdk.ServerOpti
 		opts.Capabilities = &capabilities
 	}
 	return opts
+}
+
+// ResourceUpdated notifies subscribed clients that a designed watchable resource changed.
+func (s *SDKServer) ResourceUpdated(ctx context.Context, uri string) error {
+	if s == nil || s.Server == nil {
+		return fmt.Errorf("MCP SDK server is not initialized")
+	}
+	return fmt.Errorf("unknown watchable MCP resource %q", uri)
 }
 func (w *sdkResponseObserver) captureSession() {
 	if w == nil || w.onSessionIssued == nil {
@@ -239,7 +240,7 @@ func sdkRuntimeCORSHandler(next http.Handler, policy loomhttp.RuntimeCORSPolicy)
 	})
 }
 func writeSDKSessionError(w http.ResponseWriter, err error) {
-	if errors.Is(err, mcpruntime.ErrInvalidSessionID) || errors.Is(err, mcpruntime.ErrSessionTerminated) {
+	if errors.Is(err, errInvalidSessionID) {
 		http.Error(w, err.Error(), http.StatusNotFound)
 		return
 	}
@@ -535,8 +536,8 @@ func (a *MCPAdapter) sdkToolHandler(requestContext func(context.Context, *http.R
 		if req != nil && req.Params != nil {
 			ctx = mcpruntime.WithProgressToken(ctx, req.Params.GetProgressToken())
 		}
-		stream := &sdkToolCallCollector{adapter: a}
-		if _, err := a.ToolsCall(ctx, payload, stream); err != nil {
+		result, err := a.ToolsCall(ctx, payload)
+		if err != nil {
 			if requests, state, ok := sdkclient.InputRequired(err); ok {
 				return &mcpsdk.CallToolResult{
 					InputRequests: requests,
@@ -545,7 +546,7 @@ func (a *MCPAdapter) sdkToolHandler(requestContext func(context.Context, *http.R
 			}
 			return nil, err
 		}
-		return sdkCallToolResult(stream.result())
+		return sdkCallToolResult(result)
 	}
 }
 func (a *MCPAdapter) sdkPromptHandler(requestContext func(context.Context, *http.Request) context.Context) mcpsdk.PromptHandler {
@@ -684,65 +685,6 @@ func sdkSyntheticHTTPRequest(ctx context.Context, extra *mcpsdk.RequestExtra) *h
 		}
 	}
 	return req
-}
-func (c *sdkToolCallCollector) Send(_ context.Context, event ToolsCallEvent) error {
-	res := event.(*ToolsCallResult)
-	c.parts = append(c.parts, res)
-	return nil
-}
-func (c *sdkToolCallCollector) SendAndClose(_ context.Context, event ToolsCallEvent) error {
-	res := event.(*ToolsCallResult)
-	c.final = res
-	return nil
-}
-func (c *sdkToolCallCollector) SendError(_ context.Context, _ any, err error) error {
-	c.streamErr = err
-	return nil
-}
-func (c *sdkToolCallCollector) result() *ToolsCallResult {
-	if c == nil {
-		return &ToolsCallResult{}
-	}
-	if c.streamErr != nil {
-		mapped := c.streamErr
-		if c.adapter != nil {
-			mapped = c.adapter.mapError(c.streamErr)
-		}
-		if mapped == nil {
-			mapped = c.streamErr
-		}
-		item := &ContentItem{
-			Text: stringPtr(formatToolErrorText(mapped)),
-			Type: "text",
-		}
-		return &ToolsCallResult{
-			Content: []*ContentItem{item},
-			IsError: boolPtr(true),
-		}
-	}
-	if len(c.parts) == 0 {
-		if c.final == nil {
-			return &ToolsCallResult{}
-		}
-		return c.final
-	}
-	merged := &ToolsCallResult{}
-	for _, part := range c.parts {
-		if part == nil {
-			continue
-		}
-		merged.Content = append(merged.Content, part.Content...)
-		if part.IsError != nil && *part.IsError {
-			merged.IsError = boolPtr(true)
-		}
-	}
-	if c.final != nil {
-		merged.Content = append(merged.Content, c.final.Content...)
-		if c.final.IsError != nil {
-			merged.IsError = c.final.IsError
-		}
-	}
-	return merged
 }
 func sdkCallToolResult(result *ToolsCallResult) (*mcpsdk.CallToolResult, error) {
 	if result == nil {

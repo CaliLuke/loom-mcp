@@ -11,10 +11,8 @@ import (
 	"testing"
 	"time"
 
-	mcpjsonrpcserver "example.com/assistant/gen/jsonrpc/mcp_assistant/server"
 	mcpassistant "example.com/assistant/gen/mcp_assistant"
 	mcpruntime "github.com/CaliLuke/loom-mcp/v2/runtime/mcp"
-	goahttp "github.com/CaliLuke/loom/http"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -25,7 +23,7 @@ const (
 	disallowedCORSOrigin = "https://evil.example.com"
 )
 
-func TestGeneratedSDKServerRuntimeCORSMatchesJSONRPC(t *testing.T) {
+func TestGeneratedSDKServerAppliesOptionalRuntimeCORS(t *testing.T) {
 	policy := testRuntimeCORSPolicy(t)
 	protection := http.NewCrossOriginProtection()
 	protection.AddTrustedOrigin(allowedCORSOrigin)
@@ -100,41 +98,12 @@ func TestGeneratedSDKServerRuntimeCORSMatchesJSONRPC(t *testing.T) {
 	cancelSSE()
 	require.NoError(t, sseResp.Body.Close())
 
-	jsonRPCPolicy := testRuntimeCORSPolicy(t)
-	jsonRPCServer := newGeneratedJSONRPCServerWithCORSPolicy(t, jsonRPCPolicy)
-	defer jsonRPCServer.Close()
-	jsonRPCPreflight := corsPreflight(t, jsonRPCServer.URL+"/rpc", allowedCORSOrigin, http.MethodPost)
-	require.Equal(t, allowedPreflight.StatusCode, jsonRPCPreflight.StatusCode)
-	assert.Equal(t, allowedPreflight.Header.Get("Access-Control-Allow-Origin"), jsonRPCPreflight.Header.Get("Access-Control-Allow-Origin"))
-	assert.Equal(t, allowedPreflight.Header.Get("Access-Control-Allow-Credentials"), jsonRPCPreflight.Header.Get("Access-Control-Allow-Credentials"))
-	require.NoError(t, jsonRPCPreflight.Body.Close())
-	jsonRPCInit := corsInitialize(t, jsonRPCServer.URL+"/rpc", allowedCORSOrigin, "jsonrpc-allowed")
-	require.Equal(t, http.StatusOK, jsonRPCInit.StatusCode)
-	assert.Equal(t, allowedInit.Header.Get("Access-Control-Allow-Origin"), jsonRPCInit.Header.Get("Access-Control-Allow-Origin"))
-	assert.Equal(t, allowedInit.Header.Get("Access-Control-Allow-Credentials"), jsonRPCInit.Header.Get("Access-Control-Allow-Credentials"))
-	require.NoError(t, jsonRPCInit.Body.Close())
 }
 
-func TestGeneratedSDKServerRuntimeCORSIsRequired(t *testing.T) {
-	_, err := mcpassistant.NewSDKServer(NewAssistant(), &mcpassistant.SDKServerOptions{PromptProvider: promptProvider{}})
-	require.EqualError(t, err, "runtime CORS policy is required by the MCP service design")
-}
-
-func newGeneratedJSONRPCServerWithCORSPolicy(t *testing.T, policy goahttp.RuntimeCORSPolicy) *httptest.Server {
-	t.Helper()
-	previousProtection := mcpjsonrpcserver.MCPCrossOriginProtection
-	protection := http.NewCrossOriginProtection()
-	protection.AddTrustedOrigin(allowedCORSOrigin)
-	protection.AddTrustedOrigin(disallowedCORSOrigin)
-	mcpjsonrpcserver.MCPCrossOriginProtection = protection
-	t.Cleanup(func() {
-		mcpjsonrpcserver.MCPCrossOriginProtection = previousProtection
-	})
-	endpoints := mcpassistant.NewEndpoints(NewMcpAssistant())
-	mux := goahttp.NewMuxer()
-	server := mcpjsonrpcserver.New(endpoints, mux, goahttp.RequestDecoder, goahttp.ResponseEncoder, func(context.Context, http.ResponseWriter, error) {}, policy)
-	mcpjsonrpcserver.Mount(mux, server)
-	return httptest.NewServer(mux)
+func TestGeneratedSDKServerRuntimeCORSIsOptional(t *testing.T) {
+	server, err := mcpassistant.NewSDKServer(NewAssistant(), &mcpassistant.SDKServerOptions{PromptProvider: promptProvider{}})
+	require.NoError(t, err)
+	require.NotNil(t, server.Handler)
 }
 
 func corsPreflight(t *testing.T, endpoint, origin, method string) *http.Response {
@@ -156,7 +125,7 @@ func corsInitialize(t *testing.T, endpoint, origin, id string) *http.Response {
 		"id":      id,
 		"method":  "initialize",
 		"params": map[string]any{
-			"protocolVersion": mcpassistant.DefaultProtocolVersion,
+			"protocolVersion": "2025-11-25",
 			"clientInfo":      map[string]any{"name": "cors-test", "version": "1.0.0"},
 		},
 	})

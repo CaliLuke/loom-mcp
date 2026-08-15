@@ -146,9 +146,6 @@ func generateProjectedAgentDesign(t *testing.T) []*gcodegen.File {
 		})
 		Service("assistant", func() {
 			MCP("assistant-mcp", "1.0.0")
-			JSONRPC(func() {
-				POST("/rpc")
-			})
 			Method("lookup", func() {
 				Payload(payload)
 				Result(result)

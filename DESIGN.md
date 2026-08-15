@@ -5,7 +5,7 @@ Build intelligent agents, MCP servers, and registry-integrated toolsets from you
 ## What you get
 
 - **Agents**: Durable plan/execute loops with policy enforcement, memory, and streaming
-- **MCP**: Endpoints mapped from your service definition (tools, resources, prompts) with JSON-RPC/SSE transport
+- **MCP**: Tools, resources, and prompts exposed through the official MCP Go SDK
 - **Registries**: Centralized tool catalogs with federation, caching, and semantic search
 - **Unified Toolsets**: Single `Toolset` construct with providers (local, MCP, registry)
 
@@ -90,60 +90,46 @@ var AnthropicRegistry = Registry("anthropic", func() {
 
 ## MCP Server Definition
 
-Enable MCP protocol for a service with `MCP`:
+Enable MCP for a service with `MCP`:
 
 ```go
 Service("calculator", func() {
-    MCP("calc", "1.0.0", ProtocolVersion("2025-06-18"))
+    MCP("calc", "1.0.0")
     Method("add", func() {
         Payload(func() { Attribute("a", Int); Attribute("b", Int) })
         Result(func() { Attribute("sum", Int) })
-        Tool("add", "Add two numbers") // Context-aware in Method
+        Tool("add", "Add two numbers")
     })
 })
 ```
 
-### Protocol version
+The official MCP Go SDK owns protocol negotiation and all wire transport
+behavior. An MCP service does not require a `JSONRPC` declaration.
 
-Set the MCP protocol version in your design using the DSL option on `MCP`:
+### Generated server
 
-```go
-MCP("assistant-mcp", "1.0.0", ProtocolVersion("2025-06-18"))
-```
+The generator emits the service types, `MCPAdapter`, local-provider
+registration, OAuth discovery, prompt provider, and `SDKServer`. It does not
+emit an MCP JSON-RPC client, native server, SSE extension, or session store.
 
-The generator emits a constant `DefaultProtocolVersion` in `gen/mcp_<service>/protocol_version.go`.
+The generated `MCPAdapterOptions` provides hooks for logging, error mapping,
+tool search, resource authorization, request-state encryption, and principal
+resolution. `SDKServerOptions` provides Streamable HTTP, runtime CORS,
+transport observation, and SDK runtime options.
 
-### Adapter options
+All outbound MCP callers in `runtime/mcp` use the official SDK. In-process
+agents can use the generated local-provider registration without a wire
+transport.
 
-The generated `MCPAdapterOptions` provides configuration hooks:
+## MCP progress and resource updates
 
-- Logger: `func(ctx context.Context, event string, details any)` to observe adapter lifecycle.
-- ErrorMapper: `func(error) error` to normalize errors to JSON-RPC codes.
-- AllowedResourceURIs, DeniedResourceURIs: simple allow/deny lists for resource URIs.
-- StructuredStreamJSON: when true, stream events are emitted as `resource` items with `application/json`.
-- Protocol versions are design-owned through `ProtocolVersion(...)`; generated
-  negotiation and transport validation use the same configured version set.
+A streaming Loom service method remains valid as an MCP tool or resource
+implementation. The generated adapter collects its values into one standard
+MCP result. Use `runtime/mcp.ReportProgress` for intermediate progress.
 
-### Client-side caller architecture
-
-There are two distinct client-side MCP call paths, and they serve different purposes:
-
-- `runtime/mcp` provides transport callers (`NewStdioCaller`, `NewHTTPCaller`, `NewSSECaller`) for connecting to external MCP servers. These constructors create an SDK-backed `SessionCaller`, so initialize negotiation, capability exchange, and transport lifecycle are owned by the official Go SDK.
-- Generated MCP JSON-RPC clients are used only when the design generates an MCP service and a matching typed JSON-RPC client for that same service. In that case the generated `NewCaller` wrapper adapts the generated JSON-RPC client to the shared `runtime/mcp.Caller` interface and reuses the runtime normalization contract.
-
-This split is intentional:
-
-- External MCP transports should use the SDK directly because transport/session semantics are protocol-level concerns.
-- Generated JSON-RPC clients should stay typed and design-native because they target generated MCP services, not arbitrary remote MCP transports.
-
-Both paths converge on the same runtime `Caller` contract and the same tool result normalization logic, so runtime-managed callers and generated callers expose identical multi-content behavior to the rest of loom-mcp.
-
-## Streaming
-
-Streaming composes on Loom's generated JSON-RPC/SSE stack. loom-mcp adds MCP
-session, reconnect, cancellation, batch-isolation, and notification behavior
-around that generated transport. The official-SDK server separately exposes
-Streamable HTTP.
+Declare `WatchableResource` to enable SDK subscription handlers. After a
+resource changes, call the generated `SDKServer.ResourceUpdated(ctx, uri)`
+method. Watchable resources require stateful Streamable HTTP sessions.
 
 ## Agent run lifecycle streaming contract
 

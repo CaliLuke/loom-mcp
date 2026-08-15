@@ -107,12 +107,6 @@ func (s *assistantsrvc) BuildFigmaImplementationPrompt(ctx context.Context, p *a
 	return
 }
 
-// Send status notification to client
-func (s *assistantsrvc) SendNotification(ctx context.Context, p *assistant.SendNotificationPayload) (err error) {
-	log.Printf(ctx, "assistant.send_notification")
-	return
-}
-
 // Analyze sentiment of text
 func (s *assistantsrvc) AnalyzeSentiment(ctx context.Context, p *assistant.AnalyzeSentimentPayload) (res *assistant.AnalyzeSentimentResult, err error) {
 	sentiment := "positive"

@@ -21,7 +21,6 @@ var _ = Service("assistant", func() {
 	Description("AI Assistant service with full MCP protocol support")
 
 	MCP("assistant-mcp", "1.0.0",
-		ProtocolVersion("2025-11-25"),
 		WebsiteURL("https://assistant.example.com/docs"),
 		ServerIcons(
 			Icon("https://assistant.example.com/icons/server-light.png",
@@ -45,12 +44,6 @@ var _ = Service("assistant", func() {
 		),
 	)
 
-	// Keep the design minimal; integration tests exercise MCP protocol handlers.
-	JSONRPC(func() {
-		POST("/rpc")
-		RuntimeCORS()
-	})
-
 	Method("list_documents", func() {
 		Description("List available documents")
 		Result(Documents)
@@ -62,7 +55,6 @@ var _ = Service("assistant", func() {
 				),
 			),
 		)
-		JSONRPC(func() {})
 	})
 
 	// Additional resources used by scenarios
@@ -74,7 +66,6 @@ var _ = Service("assistant", func() {
 			Attribute("version", String, "System version")
 		})
 		Resource("system_info", "system://info", "application/json")
-		JSONRPC(func() {})
 	})
 
 	Method("elicitation_context", func() {
@@ -83,7 +74,6 @@ var _ = Service("assistant", func() {
 			Attribute("context", String, "User-supplied context")
 		})
 		Resource("elicitation_context", "elicitation://context", "application/json")
-		JSONRPC(func() {})
 	})
 
 	Method("conversation_history", func() {
@@ -97,14 +87,12 @@ var _ = Service("assistant", func() {
 			Attribute("items", ArrayOf(String), "History items")
 		})
 		Resource("conversation_history", "conversation://history", "application/json")
-		JSONRPC(func() {})
 	})
 
 	Method("figma_design_system", func() {
 		Description("Return a fake Figma design system summary for implementation validation")
 		Result(DesignSystem)
 		Resource("figma_design_system", "figma://design-system/mobile-checkout", "application/json")
-		JSONRPC(func() {})
 	})
 
 	// Static prompt for tests
@@ -135,7 +123,6 @@ var _ = Service("assistant", func() {
 				),
 			),
 		)
-		JSONRPC(func() {})
 	})
 
 	Method("build_figma_implementation_prompt", func() {
@@ -149,19 +136,6 @@ var _ = Service("assistant", func() {
 		})
 		Result(PromptTemplates)
 		DynamicPrompt("figma_implementation_prompt", "Generate implementation instructions from a DPI spec")
-		JSONRPC(func() {})
-	})
-
-	Method("send_notification", func() {
-		Description("Send status notification to client")
-		Payload(func() {
-			Attribute("type", String, "Notification type")
-			Attribute("message", String, "Notification message")
-			Attribute("data", Any, "Additional data")
-			Required("type", "message")
-		})
-		Notification("status_update", "Send status updates to client")
-		JSONRPC(func() {})
 	})
 
 	// ---- Tools (for MCP tools/list and tools/call) ----
@@ -187,7 +161,6 @@ var _ = Service("assistant", func() {
 				),
 			),
 		)
-		JSONRPC(func() {})
 	})
 
 	Method("extract_keywords", func() {
@@ -203,7 +176,6 @@ var _ = Service("assistant", func() {
 			ToolDiscoveryTags("keywords", "nlp"),
 			ToolDiscoveryKeywords("terms", "phrases", "entities"),
 		)
-		JSONRPC(func() {})
 	})
 
 	Method("summarize_text", func() {
@@ -214,7 +186,6 @@ var _ = Service("assistant", func() {
 		})
 		Result(func() { Attribute("summary", String, "Summary") })
 		Tool("summarize_text", "Summarize text")
-		JSONRPC(func() {})
 	})
 
 	Method("search", func() {
@@ -231,7 +202,6 @@ var _ = Service("assistant", func() {
 			ToolDiscoveryTags("search", "retrieval"),
 			ToolDiscoveryKeywords("lookup", "documents", "knowledge"),
 		)
-		JSONRPC(func() {})
 	})
 
 	Method("search_records", func() {
@@ -247,7 +217,6 @@ var _ = Service("assistant", func() {
 			ToolDiscoveryKeywords("lookup", "records"),
 			ToolDiscoveryCallTemplateArg("query", "login"),
 		)
-		JSONRPC(func() {})
 	})
 
 	Method("execute_code", func() {
@@ -259,7 +228,6 @@ var _ = Service("assistant", func() {
 		})
 		Result(func() { Attribute("output", String, "Execution output") })
 		Tool("execute_code", "Execute code")
-		JSONRPC(func() {})
 	})
 
 	Method("process_batch", func() {
@@ -274,7 +242,6 @@ var _ = Service("assistant", func() {
 		})
 		Result(func() { Attribute("ok", Boolean, "Operation status") })
 		Tool("process_batch", "Process a batch of items")
-		JSONRPC(func() {})
 	})
 
 	Method("report_progress", func() {
@@ -284,7 +251,6 @@ var _ = Service("assistant", func() {
 			Required("completed")
 		})
 		Tool("report_progress", "Report deterministic progress to the connected MCP client")
-		JSONRPC(func() {})
 	})
 
 	Method("multi_content", func() {
@@ -295,7 +261,6 @@ var _ = Service("assistant", func() {
 		})
 		Result(func() { Attribute("result", String, "Combined text result") })
 		Tool("multi_content", "Return multiple content items")
-		JSONRPC(func() {})
 	})
 
 	Method("generate_dpi_spec", func() {
@@ -311,7 +276,6 @@ var _ = Service("assistant", func() {
 		})
 		Result(DPISpec)
 		Tool("generate_dpi_spec", "Generate a deterministic design implementation plan from fake Figma data")
-		JSONRPC(func() {})
 	})
 
 	Method("dispatch_action", func() {
@@ -329,7 +293,6 @@ var _ = Service("assistant", func() {
 			Required("ack")
 		})
 		Tool("dispatch_action", "Dispatch an action using a union payload")
-		JSONRPC(func() {})
 	})
 
 	Method("dispatch_command", func() {
@@ -347,7 +310,6 @@ var _ = Service("assistant", func() {
 			Required("ack")
 		})
 		Tool("dispatch_command", "Dispatch a command using a non-value branch-key union")
-		JSONRPC(func() {})
 	})
 
 	Method("projected_lookup", func() {

@@ -74,19 +74,18 @@ Use this file when editing DSL, generators, generated helpers, or MCP codegen be
 - Generated retry and repair examples must use the same canonical union-aware
   synthesizer as adapter recovery hints. Every emitted example must validate
   against the input schema it accompanies, including discriminator envelopes.
-- Generated MCP `ToolInfo` surfaces must preserve MCP Tool fields across service,
-  JSON-RPC server, JSON-RPC client, and SDK paths: `name`, `title`,
+- Generated MCP `ToolInfo` surfaces must preserve MCP Tool fields across the
+  service, adapter, local-provider, and SDK paths: `name`, `title`,
   `description`, `inputSchema`, `outputSchema`, `annotations`, `_meta`, and
   `icons`.
-- `MCPExpr.Validate` must reject a configured `ProtocolVersion` outside the
-  canonical Loom-native set (`2024-11-05`, `2025-03-26`, `2025-06-18`,
-  `2025-11-25`). Codegen consumes that same centralized list and must never
-  prepend arbitrary configured versions. MCP `2026-07-28` is available only
-  through the upstream SDK's stateless streamable-HTTP runtime option.
-- Generated streamable-HTTP servers accept a missing `MCP-Protocol-Version`
-  header using the spec's `2025-03-26` compatibility assumption. Present but
-  unsupported versions remain transport errors whose JSON-RPC envelope echoes
-  a readable request ID or explicitly uses `null` when none is available.
+- The official MCP Go SDK owns protocol versions and all wire behavior. Do not
+  require or synthesize MCP `JSONRPC` declarations. Keep explicit non-MCP
+  `JSONRPC` transports unchanged.
+- MCP generation emits only the minimal service types, `MCPAdapter`,
+  local-provider registration, OAuth discovery, prompt provider, and
+  `SDKServer`. Absence tests must reject generated native MCP clients, servers,
+  protocol-version files, batching, SSE extensions, cancellation registries,
+  session stores, and broadcasters.
 - Generated SDK request contexts install the shared
   `runtime/mcp/sdkclient.WithClientFeatures` adapter so service code can issue
   elicitation through official multi-round-trip
@@ -121,49 +120,17 @@ Use this file when editing DSL, generators, generated helpers, or MCP codegen be
 - Generated `SDKServerOptions` expose `TransportObserver transport.Observer`;
   when present, the generated constructor installs Loom's
   `transport.HTTPMiddleware` around the SDK handler.
-- Generated JSON-RPC mounts inspect each POST envelope once before routing and
-  restore it for the generated decoder. `MCPMaxRequestBodyBytes` bounds this
-  inspection to 32 MiB by default; positive overrides change the bound and
-  non-positive values disable it.
-- Generated JSON-RPC mounts own a request-cancellation registry shared by all
-  mounted routes. In-flight request contexts are keyed by MCP session plus the
-  canonical JSON-RPC request ID, and `notifications/cancelled` cancels only the
-  matching request before the notification receives HTTP 202.
-- Generated JSON-RPC mounts also own one `StreamableHTTPSessions` store. A
-  successful initialize response issues its session, supplied unknown,
-  expired, or terminated session IDs receive HTTP 404 before JSON-RPC routing,
-  missing IDs receive HTTP 400 once sessions exist, GET listeners register for
-  termination, and DELETE terminates the matching session. Native initialization
-  validates supplied IDs before routing: unknown IDs receive HTTP 404, foreign
-  IDs receive HTTP 403, and a valid owner-bound duplicate reaches the adapter's
-  `Already initialized` error. Callers cannot seed adapter state with a chosen
-  ID. Generated issuance must handle the store's
-  error return. Initialization atomically binds the
-  session to the resolved authenticated principal; POST, GET, listener
-  registration, and DELETE validate the pair, while DELETE validates before
-  cleanup. Missing authenticated bindings, mismatches, and authenticated
-  adoption of anonymous sessions fail closed. Adapter-side
-  initialization/principal maps must remain bounded and TTL-pruned together,
-  and SDK DELETE must clear the matching adapter entry only after successful
-  ownership validation.
-- Generated JSON-RPC batch handling must buffer each request independently.
-  Streaming handlers may flush into their private buffer, but only their final
-  JSON-RPC response frame may be appended to the batch array; SSE retry and
-  notification frames must never reach the JSON body.
-- On Loom v1.6 and later, MCP reconnect priming and retry frames must be written
-  through the generated `loomhttp.SSEStreamWriter` callback. Do not bypass the
-  shared writer with direct `http.ResponseWriter` writes; doing so loses its
-  serialization, context cancellation, write policy, and observability.
-- Generated successful empty-result handlers must encode `result: {}`, never
-  omit the JSON-RPC `result` member by passing a nil body.
-- MCP intermediate SSE endpoints explicitly declare the namespaced
-  `<service>/stream.event` notification method in their generated Loom
-  expressions. Never rely on Loom's default or label an intermediate
-  notification with the original request method such as `tools/call`.
-- The source service's effective JSON-RPC CORS policy (service override or API
-  default) is deep-copied into the synthetic MCP HTTP service. The MCP-owned
-  mount section must route through Loom's generated `CORSHandler` while keeping
-  `MCPCrossOriginProtection` as the outer, independent origin check.
+- Generated SDK servers always expose `SDKServerOptions.RuntimeCORS`. Default
+  cross-origin protection remains active unless the application changes it.
+- Generated SDK subscribe and unsubscribe handlers validate designed
+  `WatchableResource` URIs. `SDKServer.ResourceUpdated(ctx, uri)` rejects an
+  unknown URI and sends the standard SDK resource-update notification.
+  Watchable resources are invalid with stateless Streamable HTTP.
+- Generated adapters collect streaming tool and resource method values into one
+  standard MCP result. Intermediate status uses `runtime/mcp.ReportProgress`.
+- The generated SDK wrapper binds each session to one verified principal and
+  checks it on POST, GET, and DELETE. Authentication middleware must wrap the
+  generated handler.
 - Dynamic-only MCP prompt services enable prompt capabilities during expression
   finalization so generated adapters and `loom example` scaffolds agree on the
   prompt-provider constructor contract.
@@ -182,8 +149,8 @@ Use this file when editing DSL, generators, generated helpers, or MCP codegen be
 - Generated `tools/call` adapters normalize omitted, whitespace-only, and JSON
   `null` arguments to `{}` before strict payload decoding.
 - Generated `MCPAdapter` types must satisfy their generated `Service` interface
-  directly. Keep streaming result/error signatures and notification payload
-  types aligned, and emit a compile-time interface assertion in the adapter.
+  directly. Keep unary result and error signatures aligned, and emit a
+  compile-time interface assertion in the adapter.
 - Method-backed toolset tools may project into MCP only when the evaluated
   design exposes both `AgentRuntime` and `MCPSurface` and places the tool with
   `MCPPlacement(service, mcpServer)`. Codegen should trust validation for

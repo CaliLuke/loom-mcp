@@ -29,8 +29,8 @@ var (
 		Toolset:     "catalog.projected",
 		Description: "Lookup a projected catalog entry",
 		Tags:        []string{},
-		Payload:     tools.TypeSpec{Name: "ProjectedLookupPayload", Schema: []byte("{\"$schema\":\"https://json-schema.org/draft/2020-12/schema\",\"type\":\"object\",\"properties\":{\"query\":{\"type\":\"string\",\"description\":\"Lookup query\",\"example\":\"Omnis quisquam est neque maiores.\"}},\"required\":[\"query\"]}"), ExampleJSON: []byte("{\"query\":\"abc123\"}"), ExampleInput: map[string]any{"query": "abc123"}, Codec: projectedLookupPayloadCodec},
-		Result:      tools.TypeSpec{Name: "ProjectedLookupResult", Schema: []byte("{\"$schema\":\"https://json-schema.org/draft/2020-12/schema\",\"type\":\"object\",\"properties\":{\"value\":{\"type\":\"string\",\"description\":\"Lookup result\",\"example\":\"Quis neque quas nemo autem et.\"}},\"required\":[\"value\"]}"), Codec: projectedLookupResultCodec},
+		Payload:     tools.TypeSpec{Name: "ProjectedLookupPayload", Schema: []byte("{\"$schema\":\"https://json-schema.org/draft/2020-12/schema\",\"type\":\"object\",\"properties\":{\"query\":{\"type\":\"string\",\"description\":\"Lookup query\",\"example\":\"Voluptatem animi illum rerum odio.\"}},\"required\":[\"query\"]}"), ExampleJSON: []byte("{\"query\":\"abc123\"}"), ExampleInput: map[string]any{"query": "abc123"}, Codec: projectedLookupPayloadCodec},
+		Result:      tools.TypeSpec{Name: "ProjectedLookupResult", Schema: []byte("{\"$schema\":\"https://json-schema.org/draft/2020-12/schema\",\"type\":\"object\",\"properties\":{\"value\":{\"type\":\"string\",\"description\":\"Lookup result\",\"example\":\"Pariatur quis deserunt.\"}},\"required\":[\"value\"]}"), Codec: projectedLookupResultCodec},
 	}
 )
 

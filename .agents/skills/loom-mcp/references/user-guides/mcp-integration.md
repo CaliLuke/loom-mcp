@@ -1,14 +1,15 @@
 # MCP Integration
 
-This is a routing guide for the current MCP surface. Use `docs/dsl.md` for declarations and `docs/mcp_sdk_server.md` for the generated SDK/server lifecycle.
+This guide routes work on the current MCP surface. Use `docs/dsl.md` for
+declarations and `docs/mcp_sdk_server.md` for the generated server lifecycle.
 
 ## Declare an MCP server
 
-MCP belongs to a Loom service. The current DSL names are `MCP(...)` and method-level `Tool(...)`:
+MCP belongs to a Loom service:
 
 ```go
 Service("calculator", func() {
-    MCP("calculator-mcp", "1.0.0", ProtocolVersion("2025-06-18"))
+    MCP("calculator-mcp", "1.0.0")
 
     Method("add", func() {
         Payload(func() {
@@ -25,41 +26,26 @@ Service("calculator", func() {
 })
 ```
 
-Do not use the removed `MCPServer(...)` or `MCPTool(...)` forms.
+Do not add an MCP-only `JSONRPC` block. The official MCP Go SDK owns protocol
+negotiation and the wire transport. Explicit non-MCP `JSONRPC` transports are
+independent and remain valid.
 
-The same MCP declaration can define resources, subscriptions, prompts, skills, progressive tool discovery, icons, protocol/implementation metadata, and OAuth metadata. Keep those contracts in design so validation and code generation remain authoritative.
+The MCP declaration can define resources, watchable resources, prompts, skills,
+tool discovery, icons, and OAuth metadata. Keep these contracts in the design.
 
-## Consume a generated MCP suite as agent tools
+## Consume MCP tools
 
-Declare a toolset backed by a service and MCP suite:
+For an external MCP server, use the `runtime/mcp` caller for its transport.
+All runtime callers use the official MCP Go SDK.
 
-```go
-var CalculatorTools = Toolset(FromMCP("calculator", "calculator-mcp"))
-
-Agent("assistant", "Uses calculator tools", func() {
-    Use(CalculatorTools)
-})
-```
-
-Generated JSON-RPC code is owner-scoped under `gen/jsonrpc/<service>/...`. The generated caller constructor takes both the transport client and suite name:
-
-```go
-caller := calculatorclient.NewCaller(client, "calculator-mcp")
-```
-
-Then use the generated agent registration helper. Its exact name is emitted into the agent package; for the assistant fixture it is:
-
-```go
-err := assistant.RegisterAssistantAssistantMcpToolset(ctx, rt, caller)
-```
-
-Do not guess helper names. Read the generated `AGENTS_QUICKSTART.md` and package API after generation.
-
-For a remote, non-generated MCP server, use the generic runtime caller appropriate to its transport and register it through the generated toolset helper. The caller owns JSON-RPC exchange; generated registration owns suite schemas and runtime tool specs.
+For an MCP adapter in the same Go process, use the generated local-provider
+registration. This path does not open a network connection or create MCP
+session state.
 
 ## Expose service-owned agent tools over MCP
 
-A method-backed tool can share one design contract between the agent runtime and an MCP surface:
+A method-backed tool can share one design contract between the agent runtime and
+an MCP surface:
 
 ```go
 Tool("search", "Search documents", func() {
@@ -71,74 +57,71 @@ Tool("search", "Search documents", func() {
 })
 ```
 
-The runtime tool spec remains the schema source of truth. Generated MCP calls use the same method dispatcher as runtime execution. The design rejects unsupported projected-tool features rather than silently dropping them.
+The runtime tool spec remains the schema source of truth. Generated MCP calls
+use the same method dispatcher as runtime execution. Validation rejects
+unsupported projected-tool features.
 
-## Server lifecycle and delivery
+## Generated server
 
-Generated code owns the protocol adapter, JSON-RPC transport, and SDK-facing server construction. Application code supplies service implementations, resource/prompt/subscription handlers, authorization policy, broadcaster/session state, and lifecycle integration.
+The generator emits minimal MCP service types, `MCPAdapter`, local-provider
+registration, OAuth discovery, prompt provider, and `SDKServer`. It does not
+emit a native MCP client, native server, custom SSE extension, session store, or
+broadcaster.
 
-Important delivery contracts:
+Create the adapter, then create `NewSDKServer`. Configure
+`SDKServerOptions.RuntimeCORS` when a browser client requires cross-origin
+access. Default origin protection remains active.
 
-- `mcp.Broadcaster.Publish` is global broadcast.
-- `mcp.SessionBroadcaster.PublishSession` delivers a message once within the target session, even with overlapping SSE connections.
-- invalid or unknown session IDs return `ErrInvalidSessionID`.
-- interceptors execute in declared order and can short-circuit the request.
-- Tool-call interceptors can receive raw model arguments. Treat them as
-  confidential and avoid logging them; see `docs/mcp_sdk_server.md`.
-- the generated telemetry boundary records MCP operations without requiring handlers to duplicate instrumentation.
+## Progress and streaming methods
+
+MCP tool and resource calls are unary. A streaming Loom service method remains
+supported: the adapter collects its values into one standard MCP result. Use
+`runtime/mcp.ReportProgress` for intermediate progress notifications.
+
+## Resource subscriptions
+
+Declare `WatchableResource` to enable standard SDK subscribe and unsubscribe
+handlers. Call the generated `SDKServer.ResourceUpdated(ctx, uri)` method after
+the resource changes. The method rejects unknown URIs.
+
+Watchable resources require persistent Streamable HTTP sessions. Do not combine
+them with stateless Streamable HTTP.
 
 ## Resource authorization
 
-`MCPAdapterOptions` URI/name allow policies define the server's maximum
-resource grant. Request-scoped allowed names may narrow that maximum but cannot
-broaden it; request and server denies are additive and take precedence. This
-also applies to `skill://` resources, where a skill name maps to its resource
-prefix.
+`MCPAdapterOptions` URI and name policies define the server's maximum resource
+grant. Request-scoped allowed names can narrow that grant but cannot broaden it.
+Request and server denies are additive and take precedence.
 
-The native JSON-RPC transport accepts `x-mcp-allow-names` and
-`x-mcp-deny-names` as request narrowing input. Never treat those client-chosen
-headers as credentials or grant authority. Authenticate before the generated
-handler and derive principals and deployment grants from verified application
-policy.
-
-The SDK transport passes request headers through for application inspection but
-does not automatically map those raw headers to resource-name policy. Apply
-trusted SDK narrowing in `SDKServerOptions.RequestContext` with
+Authenticate before the generated handler. Derive principals and grants from
+verified application policy. In `SDKServerOptions.RequestContext`, use
 `runtime/mcp.WithAllowedResourceNames` and
-`runtime/mcp.WithDeniedResourceNames`.
+`runtime/mcp.WithDeniedResourceNames` for trusted request narrowing.
 
 ## Session identity
 
-Wrap generated handlers with authentication middleware so verified identity is
-available before MCP session processing. SDK servers use
-`MCPAdapterOptions.SessionPrincipal`, falling back to TokenInfo `UserID`;
-generated native JSON-RPC packages expose `MCPSessionPrincipal` with the same
-default for custom identity systems.
-
-An initialized session is bound to its resolved principal. Every later POST,
-GET, and DELETE must present the same principal. Missing authenticated bindings,
-mismatches, and authenticated adoption of anonymous sessions return HTTP 403.
-Unknown, expired, or terminated IDs return HTTP 404. Session/principal state is
-TTL-pruned and capacity-bounded together, and DELETE validates ownership before
-termination.
-Fresh native `initialize` requests omit `Mcp-Session-Id`. Unknown IDs return
-HTTP 404, foreign owner-bound IDs return HTTP 403, and a valid owner-bound ID
-may reach the adapter only to return the protocol-level `Already initialized`
-error. Callers cannot reserve adapter session state with a chosen ID.
+Wrap the generated handler with authentication middleware. The SDK wrapper uses
+`MCPAdapterOptions.SessionPrincipal`, with TokenInfo `UserID` as its default.
+It binds each initialized session to the resolved principal and checks that
+binding on POST, GET, and DELETE.
 
 ## OAuth and HTTP
 
-Protected-resource metadata, authorization-server discovery, and OAuth scopes are design-owned. These declarations generate metadata, challenge, and audience-enforcement helpers; they do not install authentication or per-operation scope authorization. The application must verify tokens and enforce scopes before the generated handler. Use a dedicated `http.Client` for cross-origin protected-resource and authorization-server requests; do not rely on a same-origin client whose base URL or credentials are tied to the MCP server.
-
-Treat a resource-server `invalid_token` response as an authentication failure that may require token refresh/re-authorization. Do not reinterpret it as proof that the authorization server is unavailable.
+OAuth declarations generate protected-resource metadata, challenges, and
+audience helpers. They do not install authentication or per-operation scope
+authorization. The application must verify tokens and enforce scopes before the
+generated handler.
 
 ## Verification
 
-After changing an MCP declaration:
+After an MCP design change:
 
-1. Regenerate using the module import path, never a filesystem path.
-2. Inspect generated JSON-RPC, adapter, server, and quickstart output.
-3. Run focused MCP/codegen tests.
-4. Run `make verify-mcp-local`, then the full repository suite required by the repo-local skill.
+1. Regenerate with the module import path.
+2. Inspect the adapter, local-provider, and SDK server output.
+3. Confirm that no MCP `gen/jsonrpc` package was generated.
+4. Run focused MCP and code-generation tests.
+5. Run `make verify-mcp-local` and the full repository suite.
 
-For new protocol surface or MCP spec catch-up, use the repo-local `new-mcp-feature-development` skill and begin with a real client-versus-framework validation test.
+For a new MCP protocol feature, use the repo-local
+`new-mcp-feature-development` skill. Start with a real SDK
+client-versus-framework validation test.

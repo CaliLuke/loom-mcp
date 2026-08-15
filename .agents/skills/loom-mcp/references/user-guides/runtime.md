@@ -96,7 +96,8 @@ deterministic active-work deadline; external waits pause that budget.
 
 - Service-native toolsets: runtime decodes payloads and dispatches to toolset executors.
 - Agent-as-tool: executes provider agent as child run.
-- MCP toolsets: forwards canonical JSON to generated callers.
+- MCP toolsets: forward canonical JSON through an SDK-backed runtime caller or
+  a generated in-process local provider.
 
 ## Prompt runtime contracts
 

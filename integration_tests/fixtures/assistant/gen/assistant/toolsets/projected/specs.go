@@ -30,8 +30,8 @@ var (
 		Toolset:     "assistant.projected",
 		Description: "Lookup projected runtime tool data",
 		Tags:        []string{},
-		Payload:     tools.TypeSpec{Name: "ProjectedLookupToolPayload", Schema: []byte("{\"$schema\":\"https://json-schema.org/draft/2020-12/schema\",\"type\":\"object\",\"properties\":{\"query\":{\"type\":\"string\",\"description\":\"Projected lookup query\",\"example\":\"Omnis itaque sit debitis vel.\"}},\"required\":[\"query\"]}"), ExampleJSON: []byte("{\"query\":\"abc123\"}"), ExampleInput: map[string]any{"query": "abc123"}, Codec: projectedLookupToolPayloadCodec},
-		Result:      tools.TypeSpec{Name: "ProjectedLookupToolResult", Schema: []byte("{\"$schema\":\"https://json-schema.org/draft/2020-12/schema\",\"type\":\"object\",\"properties\":{\"answer\":{\"type\":\"string\",\"description\":\"Projected lookup answer\",\"example\":\"Quia ea ipsa.\"},\"source\":{\"type\":\"string\",\"description\":\"Projected lookup source\",\"example\":\"Aut exercitationem sequi.\"}},\"required\":[\"answer\",\"source\"]}"), Codec: projectedLookupToolResultCodec},
+		Payload:     tools.TypeSpec{Name: "ProjectedLookupToolPayload", Schema: []byte("{\"$schema\":\"https://json-schema.org/draft/2020-12/schema\",\"type\":\"object\",\"properties\":{\"query\":{\"type\":\"string\",\"description\":\"Projected lookup query\",\"example\":\"Non repellendus delectus illum eveniet ut ut.\"}},\"required\":[\"query\"]}"), ExampleJSON: []byte("{\"query\":\"abc123\"}"), ExampleInput: map[string]any{"query": "abc123"}, Codec: projectedLookupToolPayloadCodec},
+		Result:      tools.TypeSpec{Name: "ProjectedLookupToolResult", Schema: []byte("{\"$schema\":\"https://json-schema.org/draft/2020-12/schema\",\"type\":\"object\",\"properties\":{\"answer\":{\"type\":\"string\",\"description\":\"Projected lookup answer\",\"example\":\"Quo id qui sit consequatur ab totam.\"},\"source\":{\"type\":\"string\",\"description\":\"Projected lookup source\",\"example\":\"Velit est eos dolor laudantium provident.\"}},\"required\":[\"answer\",\"source\"]}"), Codec: projectedLookupToolResultCodec},
 	}
 	SpecProjectedStatusTool = tools.ToolSpec{
 		Name:        ProjectedStatusTool,
@@ -40,7 +40,7 @@ var (
 		Description: "Return projected runtime status",
 		Tags:        []string{},
 		Payload:     tools.TypeSpec{Name: "ProjectedStatusToolPayload", Schema: []byte("{\"$schema\":\"https://json-schema.org/draft/2020-12/schema\",\"type\":\"object\"}"), ExampleJSON: nil, ExampleInput: nil, Codec: projectedStatusToolPayloadCodec},
-		Result:      tools.TypeSpec{Name: "ProjectedStatusToolResult", Schema: []byte("{\"$schema\":\"https://json-schema.org/draft/2020-12/schema\",\"type\":\"object\",\"properties\":{\"status\":{\"type\":\"string\",\"description\":\"Projected runtime status\",\"example\":\"Voluptas consectetur ipsum rerum.\"}},\"required\":[\"status\"]}"), Codec: projectedStatusToolResultCodec},
+		Result:      tools.TypeSpec{Name: "ProjectedStatusToolResult", Schema: []byte("{\"$schema\":\"https://json-schema.org/draft/2020-12/schema\",\"type\":\"object\",\"properties\":{\"status\":{\"type\":\"string\",\"description\":\"Projected runtime status\",\"example\":\"Sint reiciendis impedit animi qui.\"}},\"required\":[\"status\"]}"), Codec: projectedStatusToolResultCodec},
 	}
 )
 

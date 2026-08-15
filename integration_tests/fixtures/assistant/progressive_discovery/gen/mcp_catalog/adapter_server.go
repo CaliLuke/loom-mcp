@@ -50,8 +50,6 @@ type MCPAdapter struct {
 	callCounter         metric.Int64Counter
 	errorCounter        metric.Int64Counter
 	durationHistogram   metric.Float64Histogram
-	// Broadcaster for server-initiated events (notifications/resources)
-	broadcaster mcpruntime.Broadcaster
 	// requestStateKey encrypts and authenticates portable MCP multi-round-trip state.
 	requestStateKey []byte
 	// resourceNameToURI holds DSL-derived mapping for policy and lookups
@@ -64,8 +62,19 @@ const (
 )
 
 var _ Service = (*MCPAdapter)(nil)
+var (
+	errInvalidSessionID               = errors.New("invalid session ID")
+	errSessionPrincipalBindingMissing = errors.New("session principal binding missing")
+	errSessionPrincipalMismatch       = errors.New("session user mismatch")
+)
 
 type (
+	toolCallStream interface {
+		Send(context.Context, *ToolsCallResult) error
+		SendAndClose(context.Context, *ToolsCallResult) error
+		SendError(context.Context, any, error) error
+	}
+
 	// ToolCallInterceptorInfo describes a generated MCP tools/call invocation.
 	ToolCallInterceptorInfo interface {
 		loom.InterceptorInfo
@@ -74,10 +83,10 @@ type (
 	}
 
 	// ToolCallHandler is the generated MCP tool-call dispatcher.
-	ToolCallHandler func(ctx context.Context, payload *ToolsCallPayload, stream ToolsCallServerStream) (bool, error)
+	ToolCallHandler func(ctx context.Context, payload *ToolsCallPayload, stream toolCallStream) (bool, error)
 
 	// ToolCallInterceptor wraps generated MCP tool execution.
-	ToolCallInterceptor func(ctx context.Context, info ToolCallInterceptorInfo, payload *ToolsCallPayload, stream ToolsCallServerStream, next ToolCallHandler) (bool, error)
+	ToolCallInterceptor func(ctx context.Context, info ToolCallInterceptorInfo, payload *ToolsCallPayload, stream toolCallStream, next ToolCallHandler) (bool, error)
 )
 type toolCallInterceptorInfo struct {
 	service    string
@@ -164,77 +173,16 @@ type MCPAdapterOptions struct {
 	StructuredStreamJSON bool
 	// SessionPrincipal extracts a stable auth/session owner identity from ctx.
 	SessionPrincipal func(context.Context) string
-	// Pluggable broadcaster, else default channel broadcaster
-	Broadcaster     mcpruntime.Broadcaster
-	BroadcastBuffer int
-	// DropIfSlow controls whether slow subscribers drop events. Nil defaults to true.
-	DropIfSlow *bool
 }
 
 func NewMCPAdapter(service catalog.Service, opts *MCPAdapterOptions) *MCPAdapter {
 	validateToolSearchOptions(opts)
-	// Broadcaster
-	var bc mcpruntime.Broadcaster
-	if opts != nil && opts.Broadcaster != nil {
-		bc = opts.Broadcaster
-	} else {
-		buf := 32
-		drop := true
-		if opts != nil {
-			if opts.BroadcastBuffer > 0 {
-				buf = opts.BroadcastBuffer
-			}
-			if opts.DropIfSlow != nil {
-				drop = *opts.DropIfSlow
-			}
-		}
-		bc = mcpruntime.NewChannelBroadcaster(buf, drop)
-	}
 	telemetryName := defaultMCPAdapterTelemetryName(opts)
 	tracer := defaultMCPAdapterTracer(opts, telemetryName)
 	callCounter, errorCounter, durationHistogram := defaultMCPAdapterMetrics(opts, telemetryName)
 	// Build name->URI map from generated resources
-	nameToURI := map[string]string{}
-	return &MCPAdapter{service: service, initializedSessions: make(map[string]time.Time), sessionPrincipals: make(map[string]string), opts: opts, tracer: tracer, callCounter: callCounter, errorCounter: errorCounter, durationHistogram: durationHistogram, broadcaster: bc, resourceNameToURI: nameToURI}
-}
-
-// mcpProtocolVersion returns the design-configured protocol version.
-func (a *MCPAdapter) mcpProtocolVersion() string {
-	return DefaultProtocolVersion
-}
-func (a *MCPAdapter) supportsProtocolVersion(requested string) bool {
-	for _, v := range SupportedProtocolVersions {
-		if v == requested {
-			return true
-		}
-	}
-	return false
-}
-
-// negotiateProtocolVersion returns the requested version if supported, otherwise the server's latest.
-func (a *MCPAdapter) negotiateProtocolVersion(requested string) string {
-	if a.supportsProtocolVersion(requested) {
-		return requested
-	}
-	return a.mcpProtocolVersion()
-}
-func validMCPProtocolVersionDate(v string) bool {
-	if len(v) != 10 {
-		return false
-	}
-	for i := range v {
-		switch i {
-		case 4, 7:
-			if v[i] != '-' {
-				return false
-			}
-		default:
-			if v[i] < '0' || v[i] > '9' {
-				return false
-			}
-		}
-	}
-	return true
+	nameToURI := map[string]string{"status": "status://current"}
+	return &MCPAdapter{service: service, initializedSessions: make(map[string]time.Time), sessionPrincipals: make(map[string]string), opts: opts, tracer: tracer, callCounter: callCounter, errorCounter: errorCounter, durationHistogram: durationHistogram, resourceNameToURI: nameToURI}
 }
 
 // parseQueryParamsToJSON converts URI query params into JSON.
@@ -342,16 +290,16 @@ func (a *MCPAdapter) assertSessionPrincipal(ctx context.Context, sessionID strin
 	expected := strings.TrimSpace(a.sessionPrincipals[sessionID])
 	a.mu.Unlock()
 	if !initialized {
-		return mcpruntime.ErrInvalidSessionID
+		return errInvalidSessionID
 	}
 	if expected == "" {
 		if principalRequired || actual != "" {
-			return mcpruntime.ErrSessionPrincipalBindingMissing
+			return errSessionPrincipalBindingMissing
 		}
 		return nil
 	}
 	if actual == "" || actual != expected {
-		return mcpruntime.ErrSessionPrincipalMismatch
+		return errSessionPrincipalMismatch
 	}
 	return nil
 }
@@ -400,7 +348,7 @@ func (a *MCPAdapter) wrapToolCallHandler(info ToolCallInterceptorInfo, next Tool
 			continue
 		}
 		currentNext := wrapped
-		wrapped = func(ctx context.Context, payload *ToolsCallPayload, stream ToolsCallServerStream) (bool, error) {
+		wrapped = func(ctx context.Context, payload *ToolsCallPayload, stream toolCallStream) (bool, error) {
 			return interceptor(ctx, info, payload, stream, currentNext)
 		}
 	}
@@ -490,7 +438,7 @@ func buildContentItem(a *MCPAdapter, s string) *ContentItem {
 		Type: "text",
 	}
 }
-func (a *MCPAdapter) sendToolError(ctx context.Context, stream ToolsCallServerStream, toolName string, err error) error {
+func (a *MCPAdapter) sendToolError(ctx context.Context, stream toolCallStream, toolName string, err error) error {
 	if err == nil {
 		return nil
 	}
@@ -626,141 +574,82 @@ func missingFieldFromMessage(message string) string {
 	return strings.TrimSpace(strings.TrimPrefix(message, prefix))
 }
 
-// Initialize handles the MCP initialize request.
-func (a *MCPAdapter) Initialize(ctx context.Context, p *InitializePayload) (res *InitializeResult, err error) {
-	ctx, span, start, attrs := a.startTelemetry(ctx, "initialize")
-	defer func() {
-		a.finishTelemetry(ctx, span, start, attrs, err, false)
-	}()
-	requestProtocol := ""
-	requestSessionID := mcpruntime.SessionIDFromContext(ctx)
-	if p != nil {
-		requestProtocol = p.ProtocolVersion
-	}
-	a.log(ctx, "request", map[string]any{
-		"method":           "initialize",
-		"protocol_version": requestProtocol,
-		"session_id":       requestSessionID,
-	})
-	if p == nil || p.ProtocolVersion == "" {
-		return nil, loom.PermanentError("invalid_params", "Missing protocolVersion")
-	}
-	negotiatedVersion := a.negotiateProtocolVersion(p.ProtocolVersion)
-	sessionID := requestSessionID
-	if sessionID == "" && mcpruntime.ResponseWriterFromContext(ctx) != nil {
-		sessionID = mcpruntime.EnsureSessionID(ctx)
-	}
-	a.mu.Lock()
-	now := time.Now()
-	if sessionID == "" {
-		if a.initialized {
-			a.mu.Unlock()
-			err = loom.PermanentError("invalid_params", "Already initialized")
-			a.log(ctx, "response", map[string]any{
-				"error":            err.Error(),
-				"method":           "initialize",
-				"protocol_version": p.ProtocolVersion,
-				"session_id":       sessionID,
-			})
-			return nil, err
-		}
-		a.initialized = true
-	} else {
-		if _, ok := a.initializedSessions[sessionID]; !ok {
-			a.pruneSessionsLocked(now, true)
-		}
-		if _, ok := a.initializedSessions[sessionID]; ok {
-			a.mu.Unlock()
-			err = loom.PermanentError("invalid_params", "Already initialized")
-			a.log(ctx, "response", map[string]any{
-				"error":            err.Error(),
-				"method":           "initialize",
-				"protocol_version": p.ProtocolVersion,
-				"session_id":       sessionID,
-			})
-			return nil, err
-		}
-		a.initializedSessions[sessionID] = now
-	}
-	a.mu.Unlock()
-	a.captureSessionPrincipal(ctx, sessionID)
-	serverInfo := &ServerInfo{Name: "catalog-mcp", Version: "1.0.0", Description: stringPtr("Minimal MCP progressive-discovery parity fixture")}
-	capabilities := &ServerCapabilities{}
-	capabilities.Tools = &ToolsCapability{}
-	capabilities.Experimental = map[string]any{"loom-mcp": map[string]any{"events": map[string]any{
-		"method":        "events/stream",
-		"notifications": []string{},
-		"stream":        true,
-	}}}
-	res = &InitializeResult{
-		Capabilities:    capabilities,
-		ProtocolVersion: negotiatedVersion,
-		ServerInfo:      serverInfo,
-	}
-	a.log(ctx, "response", map[string]any{
-		"method":           "initialize",
-		"protocol_version": res.ProtocolVersion,
-		"server_name":      serverInfo.Name,
-		"session_id":       sessionID,
-	})
-	return res, nil
-}
-
-// Ping handles the MCP ping request.
-func (a *MCPAdapter) Ping(ctx context.Context) (res *PingResult, err error) {
-	ctx, span, start, attrs := a.startTelemetry(ctx, "ping")
-	defer func() {
-		a.finishTelemetry(ctx, span, start, attrs, err, false)
-	}()
-	a.log(ctx, "request", map[string]any{"method": "ping"})
-	res = &PingResult{Pong: true}
-	a.log(ctx, "response", map[string]any{"method": "ping"})
-	return res, nil
-}
-
-// Broadcaster and publish helpers for server-initiated events
-// Publish sends an event to all event stream subscribers.
-func (a *MCPAdapter) Publish(ev *EventsStreamResult) {
-	if a == nil || a.broadcaster == nil {
-		return
-	}
-	a.broadcaster.Publish(ev)
-}
-
-// PublishSession sends an event to subscribers for one MCP session.
-func (a *MCPAdapter) PublishSession(sessionID string, ev *EventsStreamResult) {
-	if a == nil || a.broadcaster == nil {
-		return
-	}
-	if sessionID == "" {
-		a.broadcaster.Publish(ev)
-		return
-	}
-	if scoped, ok := a.broadcaster.(mcpruntime.SessionBroadcaster); ok {
-		scoped.PublishSession(sessionID, ev)
-	}
-}
-
-// PublishContext sends an event to subscribers for the MCP session in ctx.
-func (a *MCPAdapter) PublishContext(ctx context.Context, ev *EventsStreamResult) {
-	a.PublishSession(mcpruntime.SessionIDFromContext(ctx), ev)
-}
-
-// PublishStatus is a convenience to publish a status_update message.
-func (a *MCPAdapter) PublishStatus(ctx context.Context, typ string, message string, data any) {
-	n := &mcpruntime.Notification{
-		Data:    data,
-		Message: &message,
-		Type:    typ,
-	}
-	s, err := mcpruntime.EncodeJSONToString(ctx, goahttp.ResponseEncoder, n)
-	if err != nil {
-		return
-	}
-	a.PublishContext(ctx, &EventsStreamResult{Content: []*ContentItem{buildContentItem(a, s)}})
-}
-
 // Tools handling
+type Icon struct {
+	Src      string   `json:"src"`
+	MimeType *string  `json:"mimeType,omitempty"`
+	Sizes    []string `json:"sizes,omitempty"`
+	Theme    *string  `json:"theme,omitempty"`
+}
+type ToolInfo struct {
+	Name         string  `json:"name"`
+	Title        *string `json:"title,omitempty"`
+	Description  *string `json:"description,omitempty"`
+	InputSchema  any     `json:"inputSchema,omitempty"`
+	OutputSchema any     `json:"outputSchema,omitempty"`
+	Annotations  any     `json:"annotations,omitempty"`
+	Meta         any     `json:"_meta,omitempty"`
+	Icons        []*Icon `json:"icons,omitempty"`
+}
+type toolCallResultCollector struct {
+	adapter   *MCPAdapter
+	parts     []*ToolsCallResult
+	final     *ToolsCallResult
+	streamErr error
+}
+
+func newToolCallResultCollector(adapter *MCPAdapter) *toolCallResultCollector {
+	return &toolCallResultCollector{adapter: adapter}
+}
+func (c *toolCallResultCollector) Send(_ context.Context, result *ToolsCallResult) error {
+	c.parts = append(c.parts, result)
+	return nil
+}
+func (c *toolCallResultCollector) SendAndClose(_ context.Context, result *ToolsCallResult) error {
+	c.final = result
+	return nil
+}
+func (c *toolCallResultCollector) SendError(_ context.Context, _ any, err error) error {
+	c.streamErr = err
+	return nil
+}
+func (c *toolCallResultCollector) result() *ToolsCallResult {
+	if c == nil {
+		return &ToolsCallResult{}
+	}
+	if c.streamErr != nil {
+		mapped := c.streamErr
+		if c.adapter != nil {
+			mapped = c.adapter.mapError(mapped)
+		}
+		isError := true
+		return &ToolsCallResult{
+			Content: []*ContentItem{buildContentItem(c.adapter, formatToolErrorText(mapped))},
+			IsError: &isError,
+		}
+	}
+	if len(c.parts) == 0 {
+		if c.final == nil {
+			return &ToolsCallResult{}
+		}
+		return c.final
+	}
+	merged := &ToolsCallResult{}
+	for _, part := range append(c.parts, c.final) {
+		if part == nil {
+			continue
+		}
+		merged.Content = append(merged.Content, part.Content...)
+		if len(part.StructuredContent) > 0 {
+			merged.StructuredContent = append(json.RawMessage(nil), part.StructuredContent...)
+		}
+		if part.IsError != nil {
+			value := *part.IsError
+			merged.IsError = &value
+		}
+	}
+	return merged
+}
 func decodeMCPPayloadStrict(data []byte, payload any) error {
 	dec := json.NewDecoder(bytes.NewReader(data))
 	dec.DisallowUnknownFields()
@@ -891,6 +780,18 @@ func (a *MCPAdapter) generatedToolCatalog() []*ToolInfo {
 		OutputSchema: json.RawMessage([]byte("{\"type\":\"object\",\"required\":[\"value\"],\"properties\":{\"value\":{\"type\":\"string\",\"description\":\"Lookup result\"}},\"additionalProperties\":false}")),
 		Title:        stringPtr("Lookup"),
 	}, &ToolInfo{
+		Description:  stringPtr("Return two chunks through a Loom streaming method"),
+		InputSchema:  json.RawMessage([]byte("{\"type\":\"object\",\"properties\":{},\"additionalProperties\":false}")),
+		Name:         "stream_chunks",
+		OutputSchema: json.RawMessage([]byte("{\"type\":\"object\",\"required\":[\"chunk\"],\"properties\":{\"chunk\":{\"type\":\"string\",\"description\":\"Streamed chunk\"}},\"additionalProperties\":false}")),
+		Title:        stringPtr("Stream Chunks"),
+	}, &ToolInfo{
+		Description:  stringPtr("Wait until the MCP client cancels the request"),
+		InputSchema:  json.RawMessage([]byte("{\"type\":\"object\",\"properties\":{},\"additionalProperties\":false}")),
+		Name:         "wait_for_cancel",
+		OutputSchema: json.RawMessage([]byte("{\"type\":\"object\",\"required\":[\"completed\"],\"properties\":{\"completed\":{\"type\":\"boolean\",\"description\":\"Whether the wait completed normally\"}},\"additionalProperties\":false}")),
+		Title:        stringPtr("Wait For Cancel"),
+	}, &ToolInfo{
 		Description:  stringPtr("Lookup a projected catalog entry"),
 		InputSchema:  json.RawMessage(projected.SpecProjectedLookup.Payload.Schema),
 		Name:         "projected_lookup",
@@ -925,6 +826,10 @@ func (a *MCPAdapter) isToolCallProxyName(name string) bool {
 func isGeneratedToolName(name string) bool {
 	switch name {
 	case "lookup":
+		return true
+	case "stream_chunks":
+		return true
+	case "wait_for_cancel":
 		return true
 	case "projected_lookup":
 		return true
@@ -1510,7 +1415,7 @@ func toolSearchRank(tool *ToolInfo, query string, settings toolSearchSettings) i
 	}
 	return -1
 }
-func (a *MCPAdapter) handleSearchTools(ctx context.Context, p *ToolsCallPayload, stream ToolsCallServerStream) (bool, error) {
+func (a *MCPAdapter) handleSearchTools(ctx context.Context, p *ToolsCallPayload, stream toolCallStream) (bool, error) {
 	var payload toolSearchPayload
 	arguments := p.Arguments
 	if len(bytes.TrimSpace(arguments)) == 0 {
@@ -1616,7 +1521,7 @@ func (a *MCPAdapter) handleSearchTools(ctx context.Context, p *ToolsCallPayload,
 		StructuredContent: structured,
 	})
 }
-func (a *MCPAdapter) handleCallToolProxy(ctx context.Context, p *ToolsCallPayload, stream ToolsCallServerStream) (bool, error) {
+func (a *MCPAdapter) handleCallToolProxy(ctx context.Context, p *ToolsCallPayload, stream toolCallStream) (bool, error) {
 	var payload toolCallProxyPayload
 	if err := decodeMCPPayloadStrict(p.Arguments, &payload); err != nil {
 		return true, a.sendToolError(ctx, stream, p.Name, toolCallError(err, "invalid_params", "Provide {\"name\":\"tool_name\",\"arguments\":{...}} to call a discovered tool."))
@@ -1643,27 +1548,24 @@ func (a *MCPAdapter) handleCallToolProxy(ctx context.Context, p *ToolsCallPayloa
 	handler := a.wrapToolCallHandler(info, a.executeRealTool)
 	return handler(ctx, proxied, stream)
 }
-func (a *MCPAdapter) ToolsList(ctx context.Context, p *ToolsListPayload) (res *ToolsListResult, err error) {
-	ctx, span, start, attrs := a.startTelemetry(ctx, "tools/list")
-	defer func() {
-		a.finishTelemetry(ctx, span, start, attrs, err, false)
-	}()
-	if !a.isInitialized(ctx) {
-		return nil, loom.PermanentError("invalid_params", "Not initialized")
+
+type StreamChunksStreamBridge struct {
+	out     toolCallStream
+	adapter *MCPAdapter
+}
+
+func (b *StreamChunksStreamBridge) Send(ev *catalog.StreamChunksResult) error {
+	return b.SendWithContext(context.Background(), ev)
+}
+func (b *StreamChunksStreamBridge) SendWithContext(ctx context.Context, ev *catalog.StreamChunksResult) error {
+	s, e := mcpruntime.EncodeJSONToString(ctx, goahttp.ResponseEncoder, ev)
+	if e != nil {
+		return e
 	}
-	if p != nil && p.Cursor != nil && *p.Cursor != "" {
-		return nil, loom.PermanentError("invalid_params", "%s pagination is not implemented; cursor must be empty", "tools/list")
-	}
-	a.log(ctx, "request", map[string]any{"method": "tools/list"})
-	tools := a.generatedToolCatalog()
-	if a.toolSearchEnabled() {
-		visible := a.visibleToolCatalog(tools)
-		tools = a.toolSearchSyntheticTools()
-		tools = append(tools, visible...)
-	}
-	res = &ToolsListResult{Tools: tools}
-	a.log(ctx, "response", map[string]any{"method": "tools/list"})
-	return res, nil
+	return b.out.Send(ctx, &ToolsCallResult{Content: []*ContentItem{buildContentItem(b.adapter, s)}})
+}
+func (b *StreamChunksStreamBridge) Close() error {
+	return nil
 }
 func lookupInputRecovery(err error, raw json.RawMessage) string {
 	message := strings.TrimSpace(loom.ErrorSafeMessage(err))
@@ -1695,7 +1597,7 @@ func projectedLookupInputRecovery(err error, raw json.RawMessage) string {
 	}
 	return "Provide valid tool arguments. Example: " + example
 }
-func (a *MCPAdapter) ToolsCall(ctx context.Context, p *ToolsCallPayload, stream ToolsCallServerStream) (res *ToolsCallResult, err error) {
+func (a *MCPAdapter) ToolsCall(ctx context.Context, p *ToolsCallPayload) (res *ToolsCallResult, err error) {
 	attrs := []attribute.KeyValue{}
 	if p != nil && p.Name != "" {
 		attrs = append(attrs, attribute.String("mcp.tool", p.Name), attribute.String("tool", p.Name))
@@ -1713,10 +1615,14 @@ func (a *MCPAdapter) ToolsCall(ctx context.Context, p *ToolsCallPayload, stream 
 	}()
 	info := a.toolCallInfo(p)
 	handler := a.wrapToolCallHandler(info, a.toolsCallHandler)
+	stream := newToolCallResultCollector(a)
 	toolErr, err = handler(ctx, p, stream)
-	return nil, err
+	if err != nil {
+		return nil, err
+	}
+	return stream.result(), nil
 }
-func (a *MCPAdapter) toolsCallHandler(ctx context.Context, p *ToolsCallPayload, stream ToolsCallServerStream) (bool, error) {
+func (a *MCPAdapter) toolsCallHandler(ctx context.Context, p *ToolsCallPayload, stream toolCallStream) (bool, error) {
 	if !a.isInitialized(ctx) {
 		return false, loom.PermanentError("invalid_params", "Not initialized")
 	}
@@ -1739,7 +1645,7 @@ func (a *MCPAdapter) toolsCallHandler(ctx context.Context, p *ToolsCallPayload, 
 	}
 	return a.executeRealTool(ctx, p, stream)
 }
-func (a *MCPAdapter) executeRealTool(ctx context.Context, p *ToolsCallPayload, stream ToolsCallServerStream) (bool, error) {
+func (a *MCPAdapter) executeRealTool(ctx context.Context, p *ToolsCallPayload, stream toolCallStream) (bool, error) {
 	arguments := bytes.TrimSpace(p.Arguments)
 	if len(arguments) == 0 || bytes.Equal(arguments, []byte("null")) {
 		normalized := *p
@@ -1762,6 +1668,34 @@ func (a *MCPAdapter) executeRealTool(ctx context.Context, p *ToolsCallPayload, s
 			}
 		}
 		result, err := a.service.Lookup(ctx, payload)
+		if err != nil {
+			return true, a.sendToolError(ctx, stream, p.Name, err)
+		}
+		structuredContent, serr := json.Marshal(result)
+		if serr != nil {
+			return false, serr
+		}
+		s := string(structuredContent)
+		final := &ToolsCallResult{
+			Content:           []*ContentItem{buildContentItem(a, s)},
+			StructuredContent: structuredContent,
+		}
+		a.log(ctx, "response", map[string]any{
+			"method": "tools/call",
+			"name":   p.Name,
+		})
+		return false, stream.SendAndClose(ctx, final)
+	case "stream_chunks":
+		bridge := &StreamChunksStreamBridge{
+			adapter: a,
+			out:     stream,
+		}
+		if err := a.service.StreamChunks(ctx, bridge); err != nil {
+			return true, a.sendToolError(ctx, stream, p.Name, err)
+		}
+		return false, nil
+	case "wait_for_cancel":
+		result, err := a.service.WaitForCancel(ctx)
 		if err != nil {
 			return true, a.sendToolError(ctx, stream, p.Name, err)
 		}
@@ -1816,63 +1750,138 @@ func (a *MCPAdapter) executeRealTool(ctx context.Context, p *ToolsCallPayload, s
 	}
 }
 
-// Notifications and events stream
-func (a *MCPAdapter) EventsStream(ctx context.Context, stream EventsStreamServerStream) (res *EventsStreamResult, err error) {
+// Resources handling
+func (a *MCPAdapter) ResourcesRead(ctx context.Context, p *ResourcesReadPayload) (*ResourcesReadResult, error) {
 	if !a.isInitialized(ctx) {
-		return nil, loom.PermanentError("internal_error", "Not initialized")
+		return nil, loom.PermanentError("invalid_params", "Not initialized")
 	}
 	a.log(ctx, "request", map[string]any{
-		"method":     "events/stream",
-		"session_id": mcpruntime.SessionIDFromContext(ctx),
+		"method": "resources/read",
+		"uri":    p.URI,
 	})
-	sessionID := mcpruntime.SessionIDFromContext(ctx)
-	var sub mcpruntime.Subscription
-	if scoped, ok := a.broadcaster.(mcpruntime.SessionBroadcaster); ok && sessionID != "" {
-		sub, err = scoped.SubscribeSession(ctx, sessionID)
-	} else {
-		sub, err = a.broadcaster.Subscribe(ctx)
+	baseURI := p.URI
+	if i := strings.Index(baseURI, "?"); i >= 0 {
+		baseURI = baseURI[0:i]
 	}
-	if err != nil {
-		return nil, loom.PermanentError("internal_error", "Failed to subscribe to events: %v", err)
+	switch baseURI {
+	case "status://current":
+		if err := a.assertResourceURIAllowed(ctx, p.URI, nil); err != nil {
+			return nil, a.safeMCPError(err, "invalid_params", "Resource URI is not allowed.")
+		}
+		result, err := a.service.Status(ctx)
+		if err != nil {
+			return nil, a.safeMCPError(err, "internal_error", "Resource read failed.")
+		}
+		s, serr := mcpruntime.EncodeJSONToString(ctx, goahttp.ResponseEncoder, result)
+		if serr != nil {
+			return nil, a.safeMCPError(serr, "internal_error", "Resource read failed.")
+		}
+		res := &ResourcesReadResult{Contents: []*ResourceContent{&ResourceContent{
+			MimeType: stringPtr("application/json"),
+			Text:     &s,
+			URI:      baseURI,
+		}}}
+		a.log(ctx, "response", map[string]any{
+			"method": "resources/read",
+			"uri":    baseURI,
+		})
+		return res, nil
+	default:
+		return nil, loom.PermanentError("resource_not_found", "Unknown resource: %s", p.URI)
 	}
-	defer sub.Close()
-	for {
-		select {
-		case <-ctx.Done():
-			a.log(ctx, "response", map[string]any{
-				"closed":     true,
-				"method":     "events/stream",
-				"reason":     ctx.Err().Error(),
-				"session_id": mcpruntime.SessionIDFromContext(ctx),
-			})
-			return nil, ctx.Err()
-		case ev, ok := <-sub.C():
-			if !ok {
-				a.log(ctx, "response", map[string]any{
-					"closed":     true,
-					"method":     "events/stream",
-					"reason":     "broadcaster_closed",
-					"session_id": mcpruntime.SessionIDFromContext(ctx),
-				})
-				return nil, nil
-			}
-			evt, ok := ev.(EventsStreamEvent)
-			if !ok {
-				a.log(ctx, "response", map[string]any{
-					"dropped_event_type": fmt.Sprintf("%T", ev),
-					"method":             "events/stream",
-					"session_id":         mcpruntime.SessionIDFromContext(ctx),
-				})
-				continue
-			}
-			if err := stream.Send(ctx, evt); err != nil {
-				return nil, loom.PermanentError("internal_error", "Failed to send event: %v", err)
-			}
-			a.log(ctx, "response", map[string]any{
-				"event_type": fmt.Sprintf("%T", evt),
-				"method":     "events/stream",
-				"session_id": mcpruntime.SessionIDFromContext(ctx),
-			})
+}
+
+// assertResourceURIAllowed verifies pURI passes allow/deny filters when configured.
+func (a *MCPAdapter) assertResourceURIAllowed(ctx context.Context, pURI string, extraNameToURI map[string]string) error {
+	base := pURI
+	if i := strings.Index(base, "?"); i >= 0 {
+		base = base[0:i]
+	}
+	var serverNameAllowURIs []string
+	var requestNameAllowURIs []string
+	var extraDenyURIs []string
+	var serverAllowedNames []string
+	var requestAllowedNames []string
+	var deniedNames []string
+	if a.opts != nil {
+		serverAllowedNames = append(serverAllowedNames, a.opts.AllowedResourceNames...)
+		deniedNames = append(deniedNames, a.opts.DeniedResourceNames...)
+	}
+	if ctx != nil {
+		if s := mcpruntime.AllowedResourceNamesFromContext(ctx); s != "" {
+			requestAllowedNames = append(requestAllowedNames, strings.Split(s, ",")...)
+		}
+		if s := mcpruntime.DeniedResourceNamesFromContext(ctx); s != "" {
+			deniedNames = append(deniedNames, strings.Split(s, ",")...)
 		}
 	}
+	for _, n := range serverAllowedNames {
+		n = strings.TrimSpace(n)
+		u, ok := extraNameToURI[n]
+		if !ok {
+			u, ok = a.resourceNameToURI[n]
+		}
+		if ok {
+			serverNameAllowURIs = append(serverNameAllowURIs, u)
+		}
+	}
+	for _, n := range requestAllowedNames {
+		n = strings.TrimSpace(n)
+		u, ok := extraNameToURI[n]
+		if !ok {
+			u, ok = a.resourceNameToURI[n]
+		}
+		if ok {
+			requestNameAllowURIs = append(requestNameAllowURIs, u)
+		}
+	}
+	for _, n := range deniedNames {
+		n = strings.TrimSpace(n)
+		u, ok := extraNameToURI[n]
+		if !ok {
+			u, ok = a.resourceNameToURI[n]
+		}
+		if ok {
+			extraDenyURIs = append(extraDenyURIs, u)
+		}
+	}
+	var denied []string
+	if a.opts != nil {
+		denied = a.opts.DeniedResourceURIs
+	}
+	for _, d := range append(denied, extraDenyURIs...) {
+		if resourceURIMatchesPolicy(base, d) {
+			return fmt.Errorf("resource URI denied: %s", pURI)
+		}
+	}
+	var allowed []string
+	if a.opts != nil {
+		allowed = a.opts.AllowedResourceURIs
+	}
+	serverAllowConfigured := len(allowed) > 0 || len(serverAllowedNames) > 0
+	serverAllowPolicies := append([]string{}, allowed...)
+	serverAllowPolicies = append(serverAllowPolicies, serverNameAllowURIs...)
+	if !resourceURIAllowedByPolicies(base, serverAllowConfigured, serverAllowPolicies) {
+		return fmt.Errorf("resource URI not allowed: %s", pURI)
+	}
+	requestAllowConfigured := len(requestAllowedNames) > 0
+	if !resourceURIAllowedByPolicies(base, requestAllowConfigured, requestNameAllowURIs) {
+		return fmt.Errorf("resource URI not allowed: %s", pURI)
+	}
+	return nil
+}
+func resourceURIAllowedByPolicies(uri string, configured bool, policies []string) bool {
+	if !configured {
+		return true
+	}
+	for _, policy := range policies {
+		if resourceURIMatchesPolicy(uri, policy) {
+			return true
+		}
+	}
+	return false
+}
+func resourceURIMatchesPolicy(uri string, policy string) bool {
+	policy = strings.TrimSpace(policy)
+	return uri == policy || strings.HasSuffix(policy, "/") && strings.HasPrefix(uri, policy)
 }

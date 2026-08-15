@@ -69,32 +69,6 @@ func TestMCPDuplicateDeclarationDSLValidation(t *testing.T) {
 	require.Equal(t, "calc", mcp.Name)
 }
 
-func TestMCPWithProtocolVersion(t *testing.T) {
-	runMCPDSL(t, func() {
-		API("test", func() {})
-		Service("calculator", func() {
-			MCP("calc", "1.0.0", ProtocolVersion("2025-06-18"))
-		})
-	})
-
-	require.Len(t, mcpexpr.Root.MCPServers, 1)
-	mcp := mcpexpr.Root.MCPServers["calculator"]
-	require.NotNil(t, mcp)
-	require.Equal(t, "2025-06-18", mcp.ProtocolVersion)
-}
-
-func TestMCPRejectsUnsupportedProtocolVersion(t *testing.T) {
-	err := runInvalidMCPDSL(t, func() {
-		API("test", func() {})
-		Service("calculator", func() {
-			MCP("calc", "1.0.0", ProtocolVersion("2026-07-28"))
-		})
-	})
-
-	require.Contains(t, err, `ProtocolVersion "2026-07-28" is not implemented by Loom's generated transport`)
-	require.Contains(t, err, "2025-11-25")
-}
-
 func TestMCPMetadata(t *testing.T) {
 	runMCPDSL(t, func() {
 		API("test", func() {})
@@ -368,102 +342,6 @@ func TestMCPDynamicPromptRequiresMCP(t *testing.T) {
 
 	require.Contains(t, err, `DynamicPrompt requires service "assistant" to declare MCP in service "assistant" method "code_review"`)
 	require.Empty(t, mcpexpr.Root.DynamicPrompts["assistant"])
-}
-
-func TestMCPNotification(t *testing.T) {
-	runMCPDSL(t, func() {
-		API("test", func() {})
-		Service("tasks", func() {
-			MCP("tasks-server", "1.0")
-			Method("progress_update", func() {
-				Payload(func() {
-					Attribute("task_id", String)
-					Attribute("progress", Int)
-				})
-				Notification("progress", "Task progress notification")
-			})
-		})
-	})
-
-	require.Len(t, mcpexpr.Root.MCPServers, 1)
-	mcp := mcpexpr.Root.MCPServers["tasks"]
-	require.NotNil(t, mcp)
-	require.Len(t, mcp.Notifications, 1)
-	notif := mcp.Notifications[0]
-	require.Equal(t, "progress", notif.Name)
-	require.Equal(t, "Task progress notification", notif.Description)
-	require.NotNil(t, notif.Method)
-}
-
-func TestMCPSubscription(t *testing.T) {
-	runMCPDSL(t, func() {
-		API("test", func() {})
-		Service("status", func() {
-			MCP("status-server", "1.0")
-			Method("system_status", func() {
-				Result(String)
-				WatchableResource("status", "status://system", "application/json")
-			})
-			Method("subscribe_status", func() {
-				Payload(func() {
-					Attribute("uri", String)
-				})
-				Result(String)
-				Subscription("status")
-			})
-		})
-	})
-
-	require.Len(t, mcpexpr.Root.MCPServers, 1)
-	mcp := mcpexpr.Root.MCPServers["status"]
-	require.NotNil(t, mcp)
-	require.Len(t, mcp.Subscriptions, 1)
-	sub := mcp.Subscriptions[0]
-	require.Equal(t, "status", sub.ResourceName)
-	require.NotNil(t, sub.Method)
-}
-
-func TestMCPSubscriptionRequiresWatchableResourceDSLValidation(t *testing.T) {
-	err := runInvalidMCPDSL(t, func() {
-		API("test", func() {})
-		Service("status", func() {
-			MCP("status-server", "1.0")
-			Method("system_status", func() {
-				Result(String)
-				Resource("status", "status://system", "application/json")
-			})
-			Method("subscribe_status", func() {
-				Result(String)
-				Subscription("status")
-			})
-		})
-	})
-
-	require.Contains(t, err, `subscription resource "status" must reference a watchable resource`)
-}
-
-func TestMCPSubscriptionMonitor(t *testing.T) {
-	runMCPDSL(t, func() {
-		API("test", func() {})
-		Service("status", func() {
-			MCP("status-server", "1.0")
-			Method("watch_subscriptions", func() {
-				StreamingResult(func() {
-					Attribute("resource", String)
-					Attribute("event", String)
-				})
-				SubscriptionMonitor("subscriptions")
-			})
-		})
-	})
-
-	require.Len(t, mcpexpr.Root.MCPServers, 1)
-	mcp := mcpexpr.Root.MCPServers["status"]
-	require.NotNil(t, mcp)
-	require.Len(t, mcp.SubscriptionMonitors, 1)
-	monitor := mcp.SubscriptionMonitors[0]
-	require.Equal(t, "subscriptions", monitor.Name)
-	require.NotNil(t, monitor.Method)
 }
 
 func TestMCPToolInMethod(t *testing.T) {

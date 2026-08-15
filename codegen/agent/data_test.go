@@ -293,9 +293,6 @@ func runAliasedMCPDesign(t *testing.T) []eval.Root {
 		API("calc", func() {})
 		Service("calc", func() {
 			MCP("core", "1.0.0")
-			JSONRPC(func() {
-				POST("/rpc")
-			})
 			Method("add", func() {
 				Payload(func() {
 					Attribute("a", Int, "First operand")

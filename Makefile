@@ -143,7 +143,7 @@ verify-mcp-local:
 	go test ./integration_tests/framework -count=1
 
 regen-quickstart:
-	cd ./quickstart && GOWORK=off $(GO) run $(LOOM_CLI_PACKAGE) gen example.com/quickstart/design
+	cd ./quickstart && GOWORK=off $(GO) run -mod=mod $(LOOM_CLI_PACKAGE) gen example.com/quickstart/design
 
 regen-assistant-fixture:
 	cd ./integration_tests/fixtures/assistant && $(GO) run $(LOOM_CLI_PACKAGE) gen example.com/assistant/design

@@ -10,7 +10,7 @@
 //
 //   - Agent packages with workflow definitions and planner activities
 //   - Tool codecs, JSON schemas, and registry entries
-//   - MCP server adapters and client helpers
+//   - MCP adapters, local-provider registration, and SDK servers
 //   - Agent-as-tool composition helpers
 //
 // Import the DSL alongside Goa's standard DSL:
@@ -175,7 +175,6 @@
 //
 // MCP Functions:
 //   - [MCP] enables MCP protocol for a service
-//   - [ProtocolVersion] configures MCP protocol version
 //   - [WebsiteURL] configures the MCP implementation website URL
 //   - [Icon] builds MCP icon metadata
 //   - [IconMIMEType] sets icon MIME type metadata
@@ -218,9 +217,6 @@
 //   - [RuntimePromptVersion] sets the runtime prompt spec version
 //   - [DynamicPrompt] marks a method as a dynamic prompt generator
 //   - [DynamicPromptIcons] attaches icon metadata to a dynamic MCP prompt
-//   - [Notification] marks a method as an MCP notification sender
-//   - [Subscription] defines a subscription handler
-//   - [SubscriptionMonitor] defines an SSE subscription monitor
 //
 // Registry Functions:
 //   - [Registry] declares a remote registry source
@@ -245,8 +241,7 @@
 //
 // For MCP-enabled services:
 //
-//   - gen/mcp_<service>/ - MCP server adapter and protocol helpers
-//   - gen/mcp_<service>/client/ - Generated MCP client wrappers
+//   - gen/mcp_<service>/ - MCP adapter, local-provider, and SDK server helpers
 //
 // # Best Practices
 //

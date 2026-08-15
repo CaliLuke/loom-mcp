@@ -86,13 +86,13 @@ func executeLocalProgressiveTool(ctx context.Context, adapter *MCPAdapter, call 
 	return agentsruntime.Executed(result), nil
 }
 
-func (a *MCPAdapter) executeLocalProgressiveTool(ctx context.Context, payload *ToolsCallPayload, stream ToolsCallServerStream) (bool, error) {
+func (a *MCPAdapter) executeLocalProgressiveTool(ctx context.Context, payload *ToolsCallPayload, stream toolCallStream) (bool, error) {
 	info := a.toolCallInfo(payload)
 	handler := a.wrapToolCallHandler(info, a.localProgressiveToolHandler)
 	return handler(ctx, payload, stream)
 }
 
-func (a *MCPAdapter) localProgressiveToolHandler(ctx context.Context, payload *ToolsCallPayload, stream ToolsCallServerStream) (bool, error) {
+func (a *MCPAdapter) localProgressiveToolHandler(ctx context.Context, payload *ToolsCallPayload, stream toolCallStream) (bool, error) {
 	name := ""
 	if payload != nil {
 		name = payload.Name
@@ -190,20 +190,12 @@ func localToolContentText(content []*ContentItem) string {
 	return strings.Join(parts, "\n")
 }
 
-func (c *localToolCallCollector) Send(_ context.Context, event ToolsCallEvent) error {
-	result, ok := event.(*ToolsCallResult)
-	if !ok {
-		return errors.New("unexpected local tools/call event type")
-	}
+func (c *localToolCallCollector) Send(_ context.Context, result *ToolsCallResult) error {
 	c.parts = append(c.parts, result)
 	return nil
 }
 
-func (c *localToolCallCollector) SendAndClose(_ context.Context, event ToolsCallEvent) error {
-	result, ok := event.(*ToolsCallResult)
-	if !ok {
-		return errors.New("unexpected local tools/call final event type")
-	}
+func (c *localToolCallCollector) SendAndClose(_ context.Context, result *ToolsCallResult) error {
 	c.final = result
 	return nil
 }

@@ -22,11 +22,10 @@ func TestGeneratedSDKServerCompletesPromptArguments(t *testing.T) {
 
 	require.NotNil(t, session.InitializeResult().Capabilities.Completions)
 	require.NotNil(t, session.InitializeResult().Capabilities.Logging)
-	// SDK mode must not advertise the loom-mcp experimental events/stream
-	// capability: the SDK streamable HTTP transport owns the GET SSE channel,
-	// so the JSON-RPC events/stream method has no route on this server.
+	// The SDK server advertises only standard capabilities inferred from its
+	// registered protocol features.
 	_, advertisesEvents := session.InitializeResult().Capabilities.Experimental["loom-mcp"]
-	require.False(t, advertisesEvents, "SDK server must not advertise the unreachable events/stream capability")
+	require.False(t, advertisesEvents, "SDK server must not advertise custom event capabilities")
 
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()

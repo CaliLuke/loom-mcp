@@ -208,7 +208,7 @@ Use this file for current loom-mcp runtime behavior in this repo. Prefer it over
   `docs/runtime.md`.
 - These semantic signals are engine-neutral. Temporal infrastructure spans,
   generated MCP adapter telemetry, SDK transport observation, Pulse streams,
-  the debug server, and MCP `events/stream` remain separate surfaces.
+  and the debug server remain separate surfaces.
 
 ## Event Authority And Reliability
 
@@ -259,15 +259,15 @@ Use this file for current loom-mcp runtime behavior in this repo. Prefer it over
   registrations wire `runtime.NewSkillToolsetRegistration(...)`; model-facing
   `list_skills` and `load_skill*` results include parsed metadata.
 
-## MCP Event Delivery
+## MCP Progress And Resource Updates
 
-- `mcp.Broadcaster.Publish` is a global broadcast, while
-  `mcp.SessionBroadcaster.PublishSession` delivers each message to exactly one
-  live subscriber in the target session. Multiple overlapping SSE streams must
-  not receive duplicate copies of one JSON-RPC message.
-- `mcp.StreamableHTTPSessions.Issue` returns `ErrInvalidSessionID` for invalid
-  receivers or IDs. Capacity pruning must never evict the ID just issued; if
-  every older session has a listener, evict and cancel the oldest older session.
+- `runtime/mcp.ReportProgress` sends standard SDK progress notifications when
+  the request includes a progress token.
+- `WatchableResource` enables standard SDK subscriptions. The generated
+  `SDKServer.ResourceUpdated(ctx, uri)` method sends update notifications and
+  rejects unknown URIs.
+- Watchable resources require persistent Streamable HTTP sessions. Reject them
+  with stateless HTTP.
 
 ## Debug Server
 

@@ -12,32 +12,14 @@ import (
 	"encoding/json"
 )
 
-// MCP protocol service for assistant
+// MCP SDK adapter service for assistant
 type Service interface {
-	// Initialize MCP session
-	Initialize(context.Context, *InitializePayload) (res *InitializeResult, err error)
-	// Ping the server
-	Ping(context.Context) (res *PingResult, err error)
-	// List available tools
-	ToolsList(context.Context, *ToolsListPayload) (res *ToolsListResult, err error)
 	// Call a tool
-	ToolsCall(context.Context, *ToolsCallPayload, ToolsCallServerStream) (res *ToolsCallResult, err error)
-	// List available resources
-	ResourcesList(context.Context, *ResourcesListPayload) (res *ResourcesListResult, err error)
+	ToolsCall(context.Context, *ToolsCallPayload) (res *ToolsCallResult, err error)
 	// Read a resource
 	ResourcesRead(context.Context, *ResourcesReadPayload) (res *ResourcesReadResult, err error)
-	// Subscribe to resource changes
-	ResourcesSubscribe(context.Context, *ResourcesSubscribePayload) (err error)
-	// Unsubscribe from resource changes
-	ResourcesUnsubscribe(context.Context, *ResourcesUnsubscribePayload) (err error)
-	// List available prompts
-	PromptsList(context.Context, *PromptsListPayload) (res *PromptsListResult, err error)
 	// Get a prompt by name
 	PromptsGet(context.Context, *PromptsGetPayload) (res *PromptsGetResult, err error)
-	// Send status updates to client
-	NotifyStatusUpdate(context.Context, *SendNotificationPayload) (err error)
-	// Stream server-sent events (notifications)
-	EventsStream(context.Context, EventsStreamServerStream) (res *EventsStreamResult, err error)
 }
 
 // APIName is the name of the API as defined in the design.
@@ -54,141 +36,7 @@ const ServiceName = "mcp_assistant"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [12]string{"initialize", "ping", "tools/list", "tools/call", "resources/list", "resources/read", "resources/subscribe", "resources/unsubscribe", "prompts/list", "prompts/get", "notify_status_update", "events/stream"}
-
-// ToolsCallEvent is the interface implemented by the result type for the
-// tools/call method.
-type ToolsCallEvent interface {
-	isToolsCallEvent()
-}
-
-// isToolsCallEvent implements the ToolsCallEvent interface.
-func (*ToolsCallResult) isToolsCallEvent() {}
-
-// ToolsCallServerStream allows streaming instances of *ToolsCallResult over
-// SSE.
-type ToolsCallServerStream interface {
-	// Send streams JSON-RPC notifications with "ToolsCallResult". Notifications do
-	// not expect a response.
-	// IMPORTANT: Send only sends JSON-RPC notifications. Use SendAndClose to send
-	// a final response.
-	Send(context.Context, ToolsCallEvent) error
-	// SendAndClose sends a final response with "ToolsCallResult" and closes the
-	// stream.
-	// The result will be sent as a JSON-RPC response with the original request ID.
-	// If the result has an ID field populated, that ID will be used instead of the
-	// request ID.
-	SendAndClose(context.Context, ToolsCallEvent) error
-	// SendError sends a JSON-RPC error response.
-	SendError(context.Context, any, error) error
-}
-
-// ToolsCallClientStream allows streaming instances of *ToolsCallResult to the
-// client.
-type ToolsCallClientStream interface {
-	// Recv reads instances of "ToolsCallResult" from the stream.
-	Recv() (*ToolsCallResult, error)
-	// RecvWithContext reads instances of "ToolsCallResult" from the stream with
-	// context.
-	RecvWithContext(context.Context) (*ToolsCallResult, error)
-}
-
-// EventsStreamEvent is the interface implemented by the result type for the
-// events/stream method.
-type EventsStreamEvent interface {
-	isEventsStreamEvent()
-}
-
-// isEventsStreamEvent implements the EventsStreamEvent interface.
-func (*EventsStreamResult) isEventsStreamEvent() {}
-
-// EventsStreamServerStream allows streaming instances of *EventsStreamResult
-// over SSE.
-type EventsStreamServerStream interface {
-	// Send streams JSON-RPC notifications with "EventsStreamResult". Notifications
-	// do not expect a response.
-	// IMPORTANT: Send only sends JSON-RPC notifications. Use SendAndClose to send
-	// a final response.
-	Send(context.Context, EventsStreamEvent) error
-	// SendAndClose sends a final response with "EventsStreamResult" and closes the
-	// stream.
-	// The result will be sent as a JSON-RPC response with the original request ID.
-	// If the result has an ID field populated, that ID will be used instead of the
-	// request ID.
-	SendAndClose(context.Context, EventsStreamEvent) error
-	// SendError sends a JSON-RPC error response.
-	SendError(context.Context, any, error) error
-}
-
-// EventsStreamClientStream allows streaming instances of *EventsStreamResult
-// to the client.
-type EventsStreamClientStream interface {
-	// Recv reads instances of "EventsStreamResult" from the stream.
-	Recv() (*EventsStreamResult, error)
-	// RecvWithContext reads instances of "EventsStreamResult" from the stream with
-	// context.
-	RecvWithContext(context.Context) (*EventsStreamResult, error)
-}
-
-// Stream defines the interface for managing an SSE streaming connection in the
-// mcp_assistant server. It allows sending notifications and final responses.
-// This interface is used by the service to interact with clients over SSE
-// using JSON-RPC.
-type Stream interface {
-	// Send sends an event (notification or response) to the client.
-	// For notifications, the result should not have an ID field.
-	// For responses, the result must have an ID field.
-	// Accepted types: *InitializeResult, *PingResult, *ToolsListResult,
-	// *ToolsCallResult, *ResourcesListResult, *ResourcesReadResult,
-	// *PromptsListResult, *PromptsGetResult, *EventsStreamResult
-	Send(context.Context, Event) error
-}
-
-// Event is the interface implemented by all result types that can be sent via
-// the mcp_assistant Stream.
-type Event interface {
-	ismcpAssistantEvent()
-}
-
-// ismcpAssistantEvent implements the Event interface.
-func (*InitializeResult) ismcpAssistantEvent() {}
-
-// ismcpAssistantEvent implements the Event interface.
-func (*PingResult) ismcpAssistantEvent() {}
-
-// ismcpAssistantEvent implements the Event interface.
-func (*ToolsListResult) ismcpAssistantEvent() {}
-
-// ismcpAssistantEvent implements the Event interface.
-func (*ToolsCallResult) ismcpAssistantEvent() {}
-
-// ismcpAssistantEvent implements the Event interface.
-func (*ResourcesListResult) ismcpAssistantEvent() {}
-
-// ismcpAssistantEvent implements the Event interface.
-func (*ResourcesReadResult) ismcpAssistantEvent() {}
-
-// ismcpAssistantEvent implements the Event interface.
-func (*PromptsListResult) ismcpAssistantEvent() {}
-
-// ismcpAssistantEvent implements the Event interface.
-func (*PromptsGetResult) ismcpAssistantEvent() {}
-
-// ismcpAssistantEvent implements the Event interface.
-func (*EventsStreamResult) ismcpAssistantEvent() {}
-
-type ClientInfo struct {
-	// Client name
-	Name string `json:"name"`
-	// Client version
-	Version string `json:"version"`
-	// Human-readable description of the client
-	Description *string `json:"description,omitempty"`
-	// Client website URL
-	WebsiteURL *string `json:"websiteUrl,omitempty"`
-	// Client icons
-	Icons []*Icon `json:"icons,omitempty"`
-}
+var MethodNames = [3]string{"tools/call", "resources/read", "prompts/get"}
 
 type ContentItem struct {
 	// Content type
@@ -201,46 +49,6 @@ type ContentItem struct {
 	MimeType *string `json:"mimeType,omitempty"`
 	// Resource URI
 	URI *string `json:"uri,omitempty"`
-}
-
-// EventsStreamResult is the result type of the mcp_assistant service
-// events/stream method.
-type EventsStreamResult struct {
-	// Tool execution results
-	Content []*ContentItem `json:"content"`
-	// Whether the tool encountered an error
-	IsError *bool `json:"isError,omitempty"`
-}
-
-type Icon struct {
-	// Icon source URI
-	Src string `json:"src"`
-	// Icon MIME type
-	MimeType *string `json:"mimeType,omitempty"`
-	// Supported icon sizes
-	Sizes []string `json:"sizes,omitempty"`
-	// Optional icon theme preference
-	Theme *string `json:"theme,omitempty"`
-}
-
-// InitializePayload is the payload type of the mcp_assistant service
-// initialize method.
-type InitializePayload struct {
-	// MCP protocol version
-	ProtocolVersion string `json:"protocolVersion"`
-	// Client information
-	ClientInfo *ClientInfo `json:"clientInfo"`
-}
-
-// InitializeResult is the result type of the mcp_assistant service initialize
-// method.
-type InitializeResult struct {
-	// MCP protocol version
-	ProtocolVersion string `json:"protocolVersion"`
-	// Server capabilities
-	Capabilities *ServerCapabilities `json:"capabilities"`
-	// Server information
-	ServerInfo *ServerInfo `json:"serverInfo"`
 }
 
 type MessageContent struct {
@@ -256,41 +64,11 @@ type MessageContent struct {
 	URI *string `json:"uri,omitempty"`
 }
 
-// PingResult is the result type of the mcp_assistant service ping method.
-type PingResult struct {
-	// Response to ping
-	Pong bool `json:"pong"`
-}
-
-type PromptArgument struct {
-	// Argument name
-	Name string `json:"name"`
-	// Argument description
-	Description *string `json:"description,omitempty"`
-	// Whether the argument is required
-	Required bool `json:"required"`
-}
-
-type PromptInfo struct {
-	// Prompt name
-	Name string `json:"name"`
-	// Prompt description
-	Description *string `json:"description,omitempty"`
-	// Prompt arguments
-	Arguments []*PromptArgument `json:"arguments,omitempty"`
-	// Prompt icons
-	Icons []*Icon `json:"icons,omitempty"`
-}
-
 type PromptMessage struct {
 	// Message role
 	Role string `json:"role"`
 	// Message content
 	Content *MessageContent `json:"content"`
-}
-
-// Prompts capability marker
-type PromptsCapability struct {
 }
 
 // PromptsGetPayload is the payload type of the mcp_assistant service
@@ -311,20 +89,6 @@ type PromptsGetResult struct {
 	Messages []*PromptMessage `json:"messages"`
 }
 
-// PromptsListPayload is the payload type of the mcp_assistant service
-// prompts/list method.
-type PromptsListPayload struct {
-	// Pagination cursor
-	Cursor *string `json:"cursor,omitempty"`
-}
-
-// PromptsListResult is the result type of the mcp_assistant service
-// prompts/list method.
-type PromptsListResult struct {
-	// List of available prompts
-	Prompts []*PromptInfo `json:"prompts"`
-}
-
 type ResourceContent struct {
 	// Resource URI
 	URI string `json:"uri"`
@@ -336,39 +100,6 @@ type ResourceContent struct {
 	Blob *string `json:"blob,omitempty"`
 	// Resource content metadata
 	Meta any `json:"_meta,omitempty"`
-}
-
-type ResourceInfo struct {
-	// Resource URI
-	URI string `json:"uri"`
-	// Resource name
-	Name *string `json:"name,omitempty"`
-	// Resource description
-	Description *string `json:"description,omitempty"`
-	// Resource MIME type
-	MimeType *string `json:"mimeType,omitempty"`
-	// Resource icons
-	Icons []*Icon `json:"icons,omitempty"`
-	// Resource metadata
-	Meta any `json:"_meta,omitempty"`
-}
-
-// Resources capability marker
-type ResourcesCapability struct {
-}
-
-// ResourcesListPayload is the payload type of the mcp_assistant service
-// resources/list method.
-type ResourcesListPayload struct {
-	// Pagination cursor
-	Cursor *string `json:"cursor,omitempty"`
-}
-
-// ResourcesListResult is the result type of the mcp_assistant service
-// resources/list method.
-type ResourcesListResult struct {
-	// List of available resources
-	Resources []*ResourceInfo `json:"resources"`
 }
 
 // ResourcesReadPayload is the payload type of the mcp_assistant service
@@ -383,75 +114,6 @@ type ResourcesReadPayload struct {
 type ResourcesReadResult struct {
 	// Resource contents
 	Contents []*ResourceContent `json:"contents"`
-}
-
-// ResourcesSubscribePayload is the payload type of the mcp_assistant service
-// resources/subscribe method.
-type ResourcesSubscribePayload struct {
-	// Resource URI to subscribe to
-	URI string `json:"uri"`
-}
-
-// ResourcesUnsubscribePayload is the payload type of the mcp_assistant service
-// resources/unsubscribe method.
-type ResourcesUnsubscribePayload struct {
-	// Resource URI to unsubscribe from
-	URI string `json:"uri"`
-}
-
-// SendNotificationPayload is the payload type of the mcp_assistant service
-// notify_status_update method.
-type SendNotificationPayload struct {
-	// Notification type
-	Type string `json:"type"`
-	// Notification message
-	Message *string `json:"message,omitempty"`
-	// Additional data
-	Data any `json:"data,omitempty"`
-}
-
-type ServerCapabilities struct {
-	// Tool capabilities
-	Tools *ToolsCapability `json:"tools,omitempty"`
-	// Resource capabilities
-	Resources *ResourcesCapability `json:"resources,omitempty"`
-	// Prompt capabilities
-	Prompts *PromptsCapability `json:"prompts,omitempty"`
-	// Experimental server capabilities
-	Experimental any `json:"experimental,omitempty"`
-}
-
-type ServerInfo struct {
-	// Server name
-	Name string `json:"name"`
-	// Server version
-	Version string `json:"version"`
-	// Human-readable description of the server
-	Description *string `json:"description,omitempty"`
-	// Server website URL
-	WebsiteURL *string `json:"websiteUrl,omitempty"`
-	// Server icons
-	Icons []*Icon `json:"icons,omitempty"`
-}
-
-type ToolInfo struct {
-	// Tool name
-	Name string `json:"name"`
-	// Human-readable tool title
-	Title *string `json:"title,omitempty"`
-	// Tool description
-	Description *string `json:"description,omitempty"`
-	// JSON Schema for tool input
-	InputSchema any `json:"inputSchema,omitempty"`
-	// Optional JSON Schema for structured tool output
-	OutputSchema any `json:"outputSchema,omitempty"`
-	// Optional MCP tool annotations such as readOnlyHint, openWorldHint, or
-	// destructiveHint.
-	Annotations any `json:"annotations,omitempty"`
-	// Optional MCP tool metadata
-	Meta any `json:"_meta,omitempty"`
-	// Tool icons
-	Icons []*Icon `json:"icons,omitempty"`
 }
 
 // ToolsCallPayload is the payload type of the mcp_assistant service tools/call
@@ -472,22 +134,4 @@ type ToolsCallResult struct {
 	StructuredContent json.RawMessage `json:"structuredContent,omitempty"`
 	// Whether the tool encountered an error
 	IsError *bool `json:"isError,omitempty"`
-}
-
-// Tools capability marker
-type ToolsCapability struct {
-}
-
-// ToolsListPayload is the payload type of the mcp_assistant service tools/list
-// method.
-type ToolsListPayload struct {
-	// Pagination cursor
-	Cursor *string `json:"cursor,omitempty"`
-}
-
-// ToolsListResult is the result type of the mcp_assistant service tools/list
-// method.
-type ToolsListResult struct {
-	// List of available tools
-	Tools []*ToolInfo `json:"tools"`
 }

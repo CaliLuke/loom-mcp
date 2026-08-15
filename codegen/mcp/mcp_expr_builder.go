@@ -25,13 +25,6 @@ type mcpExprBuilder struct {
 	projectedToolCount int
 }
 
-// mcpHTTPServiceConfig carries the resolved JSON-RPC path into the shared HTTP
-// service builder. MCP-specific metadata stays in this package; the shared
-// builder only owns the transport shape.
-type mcpHTTPServiceConfig struct {
-	jsonrpcPath string
-}
-
 // newMCPExprBuilder creates a new MCP expression builder for the given
 // original service and its associated MCP expression configuration.
 // projectedToolCount reports how many agent toolset tools are projected into
@@ -47,27 +40,16 @@ func newMCPExprBuilder(svc *expr.ServiceExpr, mcp *mcpexpr.MCPExpr, source *sour
 	}
 }
 
-func (c mcpHTTPServiceConfig) JSONRPCPath() string {
-	return c.jsonrpcPath
-}
-
 // BuildServiceExpr creates the Goa service expression that models the MCP
-// protocol surface for the original service.
+// adapter contract for the original service.
 func (b *mcpExprBuilder) BuildServiceExpr() *expr.ServiceExpr {
 	b.mcpService = &expr.ServiceExpr{
 		Name:        "mcp_" + b.originalService.Name,
-		Description: fmt.Sprintf("MCP protocol service for %s", b.originalService.Name),
+		Description: fmt.Sprintf("MCP SDK adapter service for %s", b.originalService.Name),
 		Methods:     b.buildMethods(),
-		Meta: expr.MetaExpr{
-			"jsonrpc:service": []string{},
-		},
 	}
 
-	// Mark all methods as JSON-RPC and set service reference
 	for _, m := range b.mcpService.Methods {
-		m.Meta = expr.MetaExpr{
-			"jsonrpc": []string{},
-		}
 		m.Service = b.mcpService
 	}
 
@@ -83,13 +65,10 @@ func (b *mcpExprBuilder) userTypeAttr(name string, builder func() *expr.Attribut
 }
 
 // BuildRootExpr creates a temporary Goa root expression containing only the
-// MCP service and its transport setup used to drive code generation.
+// internal adapter service used to drive type generation.
 func (b *mcpExprBuilder) BuildRootExpr(mcpService *expr.ServiceExpr) *expr.RootExpr {
 	// Build all MCP types
 	b.buildMCPTypes()
-
-	// Create HTTP service for JSON-RPC
-	httpService := b.buildHTTPService(mcpService)
 
 	// Create the root
 	b.root = &expr.RootExpr{
@@ -98,14 +77,8 @@ func (b *mcpExprBuilder) BuildRootExpr(mcpService *expr.ServiceExpr) *expr.RootE
 		API: &expr.APIExpr{
 			Name:    "MCP",
 			Version: "1.0",
-			HTTP: &expr.HTTPExpr{
-				Services: []*expr.HTTPServiceExpr{httpService},
-			},
-			JSONRPC: &expr.JSONRPCExpr{
-				HTTPExpr: expr.HTTPExpr{
-					Services: []*expr.HTTPServiceExpr{httpService},
-				},
-			},
+			HTTP:    &expr.HTTPExpr{},
+			JSONRPC: &expr.JSONRPCExpr{},
 			GRPC: &expr.GRPCExpr{
 				Services: []*expr.GRPCServiceExpr{}, // Initialize empty to avoid nil
 			},
@@ -124,34 +97,7 @@ func (b *mcpExprBuilder) BuildRootExpr(mcpService *expr.ServiceExpr) *expr.RootE
 		Randomizer: expr.NewFakerRandomizer("MCP"),
 	}
 
-	// Set Root reference on HTTP service for proper initialization
-	httpService.Root = b.root.API.HTTP
-
 	return b.root
-}
-
-// buildHTTPService creates the HTTP/JSON-RPC service expression for MCP. The
-// builder owns path resolution from the source service, then delegates the
-// transport shape to shared.BuildHTTPServiceBase so JSON-RPC route wiring stays
-// consistent across protocol generators.
-func (b *mcpExprBuilder) buildHTTPService(mcpService *expr.ServiceExpr) *expr.HTTPServiceExpr {
-	// Get the JSONRPC path from the stored original configuration
-	jsonrpcPath := ""
-	var cors *expr.HTTPCORSExpr
-
-	if route, ok := b.source.jsonrpcRoute(b.originalService.Name); ok && route.path != "" {
-		jsonrpcPath = route.path
-		cors = route.cors.Dup()
-	} else {
-		// The shared pure-MCP contract validator should reject this before the
-		// builder runs. Keep the local error as a last-resort guard so direct
-		// builder use still fails deterministically.
-		b.RecordValidationError(fmt.Errorf(missingJSONRPCRouteMessage, b.originalService.Name))
-		jsonrpcPath = "/rpc"
-	}
-	httpService := shared.BuildHTTPServiceBase(mcpService, mcpHTTPServiceConfig{jsonrpcPath: jsonrpcPath})
-	httpService.CORS = cors
-	return httpService
 }
 
 // BuildServiceMapping creates the mapping between MCP methods and original

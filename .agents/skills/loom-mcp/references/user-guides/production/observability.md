@@ -39,6 +39,6 @@ Typical setup includes:
 - Use structured request-scoped logs
 - Expose health endpoints for critical dependencies
 
-Generated MCP adapter metrics, SDK transport observers, Pulse streams, the
-local debug server, and MCP `events/stream` are separate observability/delivery
-surfaces. Enabling one does not enable the others.
+Generated MCP adapter metrics, SDK transport observers, Pulse streams, and the
+local debug server are separate observability and delivery surfaces. Enabling
+one does not enable the others.

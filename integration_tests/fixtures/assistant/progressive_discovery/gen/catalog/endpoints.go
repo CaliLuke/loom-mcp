@@ -17,13 +17,26 @@ import (
 // Endpoints wraps the "catalog" service endpoints.
 type Endpoints struct {
 	Lookup          loom.Endpoint
+	Status          loom.Endpoint
+	StreamChunks    loom.Endpoint
+	WaitForCancel   loom.Endpoint
 	ProjectedLookup loom.Endpoint
+}
+
+// StreamChunksEndpointInput holds both the payload and the server stream of
+// the "stream_chunks" method.
+type StreamChunksEndpointInput struct {
+	// Stream is the server stream used by the "stream_chunks" method to send data.
+	Stream StreamChunksServerStream
 }
 
 // NewEndpoints wraps the methods of the "catalog" service with endpoints.
 func NewEndpoints(s Service) *Endpoints {
 	return &Endpoints{
 		Lookup:          NewLookupEndpoint(s),
+		Status:          NewStatusEndpoint(s),
+		StreamChunks:    NewStreamChunksEndpoint(s),
+		WaitForCancel:   NewWaitForCancelEndpoint(s),
 		ProjectedLookup: NewProjectedLookupEndpoint(s),
 	}
 }
@@ -31,6 +44,9 @@ func NewEndpoints(s Service) *Endpoints {
 // Use applies the given middleware to all the "catalog" service endpoints.
 func (e *Endpoints) Use(m func(loom.Endpoint) loom.Endpoint) {
 	e.Lookup = m(e.Lookup)
+	e.Status = m(e.Status)
+	e.StreamChunks = m(e.StreamChunks)
+	e.WaitForCancel = m(e.WaitForCancel)
 	e.ProjectedLookup = m(e.ProjectedLookup)
 }
 
@@ -40,6 +56,31 @@ func NewLookupEndpoint(s Service) loom.Endpoint {
 	return func(ctx context.Context, req any) (any, error) {
 		p := req.(*LookupPayload)
 		return s.Lookup(ctx, p)
+	}
+}
+
+// NewStatusEndpoint returns an endpoint function that calls the method
+// "status" of service "catalog".
+func NewStatusEndpoint(s Service) loom.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		return s.Status(ctx)
+	}
+}
+
+// NewStreamChunksEndpoint returns an endpoint function that calls the method
+// "stream_chunks" of service "catalog".
+func NewStreamChunksEndpoint(s Service) loom.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		ep := req.(*StreamChunksEndpointInput)
+		return nil, s.StreamChunks(ctx, ep.Stream)
+	}
+}
+
+// NewWaitForCancelEndpoint returns an endpoint function that calls the method
+// "wait_for_cancel" of service "catalog".
+func NewWaitForCancelEndpoint(s Service) loom.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		return s.WaitForCancel(ctx)
 	}
 }
 

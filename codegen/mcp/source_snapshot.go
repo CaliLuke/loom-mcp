@@ -10,23 +10,14 @@ import (
 
 type sourceSnapshot struct {
 	services         []*expr.ServiceExpr
-	jsonrpcRoutes    map[string]sourceJSONRPCRoute
 	projectedMethods map[string]map[string]struct{}
 }
 
-type sourceJSONRPCRoute struct {
-	method string
-	path   string
-	cors   *expr.HTTPCORSExpr
-}
-
-// collectSourceSnapshot captures the original services and JSON-RPC routes from
-// the current Goa roots. The snapshot is immutable per invocation so generation
-// stays deterministic and reentrant while preserving the source transport
-// contract for validation.
+// collectSourceSnapshot captures the original services and projected methods.
+// The snapshot is immutable per invocation so generation stays deterministic
+// and reentrant without taking ownership of application transports.
 func collectSourceSnapshot(roots []eval.Root) *sourceSnapshot {
 	serviceByName := make(map[string]*expr.ServiceExpr)
-	jsonrpcRoutes := make(map[string]sourceJSONRPCRoute)
 	projectedMethods := make(map[string]map[string]struct{})
 
 	for _, root := range roots {
@@ -34,23 +25,6 @@ func collectSourceSnapshot(roots []eval.Root) *sourceSnapshot {
 		case *expr.RootExpr:
 			for _, svc := range r.Services {
 				serviceByName[svc.Name] = svc
-			}
-			if r.API == nil || r.API.JSONRPC == nil {
-				continue
-			}
-			for _, service := range r.API.JSONRPC.Services {
-				if service.ServiceExpr == nil || service.JSONRPCRoute == nil {
-					continue
-				}
-				cors := service.CORS
-				if cors == nil {
-					cors = r.API.JSONRPC.CORS
-				}
-				jsonrpcRoutes[service.ServiceExpr.Name] = sourceJSONRPCRoute{
-					method: service.JSONRPCRoute.Method,
-					path:   service.JSONRPCRoute.Path,
-					cors:   cors.Dup(),
-				}
 			}
 		case *agentsexpr.RootExpr:
 			collectProjectedMethods(projectedMethods, r)
@@ -71,7 +45,6 @@ func collectSourceSnapshot(roots []eval.Root) *sourceSnapshot {
 
 	return &sourceSnapshot{
 		services:         services,
-		jsonrpcRoutes:    jsonrpcRoutes,
 		projectedMethods: projectedMethods,
 	}
 }
@@ -118,11 +91,6 @@ func gatheredSourceToolsets(root *agentsexpr.RootExpr) []*agentsexpr.ToolsetExpr
 
 func projectedMethodsKey(serviceName string, mcpServer string) string {
 	return serviceName + "\x00" + mcpServer
-}
-
-func (s *sourceSnapshot) jsonrpcRoute(serviceName string) (sourceJSONRPCRoute, bool) {
-	route, ok := s.jsonrpcRoutes[serviceName]
-	return route, ok
 }
 
 func (s *sourceSnapshot) projectedMethodNames(serviceName string, mcpServer string) map[string]struct{} {

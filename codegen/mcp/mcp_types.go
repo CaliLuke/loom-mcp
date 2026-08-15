@@ -1,307 +1,25 @@
 //nolint:lll // types builder constructs long composite literals for clarity
 package codegen
 
-import (
-	"strings"
+import "github.com/CaliLuke/loom/expr"
 
-	"github.com/CaliLuke/loom/expr"
-)
-
-// buildMCPTypes creates all MCP protocol type definitions
+// buildMCPTypes declares only the adapter-owned catalog and result types. The
+// official SDK owns initialize, capability, pagination, subscription, and all
+// other wire-level protocol types.
 func (b *mcpExprBuilder) buildMCPTypes() {
-	// Core types
-	b.getOrCreateType("Icon", b.buildIconType)
-	b.getOrCreateType("ClientInfo", b.buildClientInfoType)
-	b.getOrCreateType("ServerInfo", b.buildServerInfoType)
-	b.getOrCreateType("ServerCapabilities", b.buildCapabilitiesType)
-
-	// Tool types (method-level or projected)
-	if b.hasTools() {
-		b.getOrCreateType("ToolInfo", b.buildToolInfoType)
-		b.getOrCreateType("ContentItem", b.buildContentItemType)
-	}
-
-	// Resource types
+	// ContentItem is shared by the adapter's unary tool contract and prompt
+	// content conversion. It is the only content envelope Loom retains.
+	b.getOrCreateType("ContentItem", b.buildContentItemType)
 	if b.hasResources() {
-		b.getOrCreateType("ResourceInfo", b.buildResourceInfoType)
 		b.getOrCreateType("ResourceContent", b.buildResourceContentType)
 	}
-
-	// Prompt types
 	if b.hasPrompts() {
-		b.getOrCreateType("PromptInfo", b.buildPromptInfoType)
-		b.getOrCreateType("PromptArgument", b.buildPromptArgumentType)
 		b.getOrCreateType("PromptMessage", b.buildPromptMessageType)
 		b.getOrCreateType("MessageContent", b.buildMessageContentType)
-	}
-
-	// Events stream result type (avoid reusing ToolsCallResult to prevent duplicate method impls).
-	// Always define to support events/stream even when no notifications are defined in the design.
-	b.getOrCreateType("EventsStreamResult", b.buildEventsStreamResultType)
-
-	// Ensure notification payload type exists; templates may reference it even
-	// when no explicit notifications are declared in the design.
-	b.getOrCreateType("SendNotificationPayload", b.buildSendNotificationPayloadType)
-}
-
-// Core type builders
-
-func (b *mcpExprBuilder) buildIconType() *expr.AttributeExpr {
-	return &expr.AttributeExpr{
-		Type: &expr.Object{
-			{Name: "src", Attribute: &expr.AttributeExpr{
-				Type:        expr.String,
-				Description: "Icon source URI",
-			}},
-			{Name: "mimeType", Attribute: &expr.AttributeExpr{
-				Type:        expr.String,
-				Description: "Icon MIME type",
-			}},
-			{Name: "sizes", Attribute: &expr.AttributeExpr{
-				Type:        &expr.Array{ElemType: &expr.AttributeExpr{Type: expr.String}},
-				Description: "Supported icon sizes",
-			}},
-			{Name: "theme", Attribute: &expr.AttributeExpr{
-				Type:        expr.String,
-				Description: "Optional icon theme preference",
-			}},
-		},
-		Validation: &expr.ValidationExpr{
-			Required: []string{"src"},
-		},
-	}
-}
-
-func (b *mcpExprBuilder) buildInitializePayloadType() *expr.AttributeExpr {
-	return &expr.AttributeExpr{
-		Type: &expr.Object{
-			{Name: "protocolVersion", Attribute: &expr.AttributeExpr{
-				Type:        expr.String,
-				Description: "MCP protocol version",
-			}},
-			{Name: "clientInfo", Attribute: &expr.AttributeExpr{
-				Type:        b.getOrCreateType("ClientInfo", b.buildClientInfoType),
-				Description: "Client information",
-			}},
-		},
-		Validation: &expr.ValidationExpr{
-			Required: []string{"protocolVersion", "clientInfo"},
-		},
-	}
-}
-
-func (b *mcpExprBuilder) buildInitializeResultType() *expr.AttributeExpr {
-	return &expr.AttributeExpr{
-		Type: &expr.Object{
-			{Name: "protocolVersion", Attribute: &expr.AttributeExpr{
-				Type:        expr.String,
-				Description: "MCP protocol version",
-			}},
-			{Name: "capabilities", Attribute: &expr.AttributeExpr{
-				Type:        b.getOrCreateType("ServerCapabilities", b.buildCapabilitiesType),
-				Description: "Server capabilities",
-			}},
-			{Name: "serverInfo", Attribute: &expr.AttributeExpr{
-				Type:        b.getOrCreateType("ServerInfo", b.buildServerInfoType),
-				Description: "Server information",
-			}},
-		},
-		Validation: &expr.ValidationExpr{
-			Required: []string{"protocolVersion", "capabilities", "serverInfo"},
-		},
-	}
-}
-
-func (b *mcpExprBuilder) buildClientInfoType() *expr.AttributeExpr {
-	return b.buildImplementationType("Client")
-}
-
-func (b *mcpExprBuilder) buildServerInfoType() *expr.AttributeExpr {
-	return b.buildImplementationType("Server")
-}
-
-// buildImplementationType builds the shared MCP Implementation schema
-// (clientInfo / serverInfo) with role-specific descriptions.
-func (b *mcpExprBuilder) buildImplementationType(role string) *expr.AttributeExpr {
-	return &expr.AttributeExpr{
-		Type: &expr.Object{
-			{Name: "name", Attribute: &expr.AttributeExpr{
-				Type:        expr.String,
-				Description: role + " name",
-			}},
-			{Name: "version", Attribute: &expr.AttributeExpr{
-				Type:        expr.String,
-				Description: role + " version",
-			}},
-			{Name: "description", Attribute: &expr.AttributeExpr{
-				Type:        expr.String,
-				Description: "Human-readable description of the " + strings.ToLower(role),
-			}},
-			{Name: "websiteUrl", Attribute: &expr.AttributeExpr{
-				Type:        expr.String,
-				Description: role + " website URL",
-			}},
-			{Name: "icons", Attribute: &expr.AttributeExpr{
-				Type:        &expr.Array{ElemType: &expr.AttributeExpr{Type: b.getOrCreateType("Icon", b.buildIconType)}},
-				Description: role + " icons",
-			}},
-		},
-		Validation: &expr.ValidationExpr{
-			Required: []string{"name", "version"},
-		},
-	}
-}
-
-func (b *mcpExprBuilder) buildCapabilitiesType() *expr.AttributeExpr {
-	// Create individual capability types as empty structs
-	b.getOrCreateType("ToolsCapability", func() *expr.AttributeExpr {
-		return &expr.AttributeExpr{
-			Type:        &expr.Object{},
-			Description: "Tools capability marker",
-		}
-	})
-
-	b.getOrCreateType("ResourcesCapability", func() *expr.AttributeExpr {
-		return &expr.AttributeExpr{
-			Type:        &expr.Object{},
-			Description: "Resources capability marker",
-		}
-	})
-
-	b.getOrCreateType("PromptsCapability", func() *expr.AttributeExpr {
-		return &expr.AttributeExpr{
-			Type:        &expr.Object{},
-			Description: "Prompts capability marker",
-		}
-	})
-
-	// Client-side capabilities removed: SamplingCapability, RootsCapability
-
-	// Create ServerCapabilities type with references to capability types.
-	types := b.Types()
-	return &expr.AttributeExpr{
-		Type: &expr.Object{
-			{Name: "tools", Attribute: &expr.AttributeExpr{
-				Type:        types["ToolsCapability"],
-				Description: "Tool capabilities",
-			}},
-			{Name: "resources", Attribute: &expr.AttributeExpr{
-				Type:        types["ResourcesCapability"],
-				Description: "Resource capabilities",
-			}},
-			{Name: "prompts", Attribute: &expr.AttributeExpr{
-				Type:        types["PromptsCapability"],
-				Description: "Prompt capabilities",
-			}},
-			{Name: "experimental", Attribute: &expr.AttributeExpr{
-				Type:        expr.Any,
-				Description: "Experimental server capabilities",
-			}},
-			// sampling, roots removed
-		},
-	}
-}
-
-func (b *mcpExprBuilder) buildPingResultType() *expr.AttributeExpr {
-	return &expr.AttributeExpr{
-		Type: &expr.Object{
-			{Name: "pong", Attribute: &expr.AttributeExpr{
-				Type:        expr.Boolean,
-				Description: "Response to ping",
-			}},
-		},
-		Validation: &expr.ValidationExpr{
-			Required: []string{"pong"},
-		},
 	}
 }
 
 // Tool type builders
-
-func stringField(name, description string) *expr.NamedAttributeExpr {
-	return &expr.NamedAttributeExpr{
-		Name: name,
-		Attribute: &expr.AttributeExpr{
-			Type:        expr.String,
-			Description: description,
-		},
-	}
-}
-
-func anyField(name, description string) *expr.NamedAttributeExpr {
-	return &expr.NamedAttributeExpr{
-		Name: name,
-		Attribute: &expr.AttributeExpr{
-			Type:        expr.Any,
-			Description: description,
-		},
-	}
-}
-
-func arrayField(name, description string, elemType *expr.AttributeExpr) *expr.NamedAttributeExpr {
-	return &expr.NamedAttributeExpr{
-		Name: name,
-		Attribute: &expr.AttributeExpr{
-			Type:        &expr.Array{ElemType: elemType},
-			Description: description,
-		},
-	}
-}
-
-func (b *mcpExprBuilder) iconArrayField(description string) *expr.NamedAttributeExpr {
-	return arrayField("icons", description, &expr.AttributeExpr{Type: b.getOrCreateType("Icon", b.buildIconType)})
-}
-
-func infoObject(required []string, fields ...*expr.NamedAttributeExpr) *expr.AttributeExpr {
-	attr := &expr.AttributeExpr{Type: &expr.Object{}}
-	obj := attr.Type.(*expr.Object)
-	for _, field := range fields {
-		*obj = append(*obj, field)
-	}
-	if len(required) > 0 {
-		attr.Validation = &expr.ValidationExpr{Required: required}
-	}
-	return attr
-}
-
-func (b *mcpExprBuilder) buildToolsListPayloadType() *expr.AttributeExpr {
-	return &expr.AttributeExpr{
-		Type: &expr.Object{
-			{Name: "cursor", Attribute: &expr.AttributeExpr{
-				Type:        expr.String,
-				Description: "Pagination cursor",
-			}},
-		},
-	}
-}
-
-func (b *mcpExprBuilder) buildToolsListResultType() *expr.AttributeExpr {
-	return &expr.AttributeExpr{
-		Type: &expr.Object{
-			{Name: "tools", Attribute: &expr.AttributeExpr{
-				Type:        &expr.Array{ElemType: &expr.AttributeExpr{Type: b.getOrCreateType("ToolInfo", b.buildToolInfoType)}},
-				Description: "List of available tools",
-			}},
-		},
-		Validation: &expr.ValidationExpr{
-			Required: []string{"tools"},
-		},
-	}
-}
-
-func (b *mcpExprBuilder) buildToolInfoType() *expr.AttributeExpr {
-	return infoObject(
-		[]string{"name"},
-		stringField("name", "Tool name"),
-		stringField("title", "Human-readable tool title"),
-		stringField("description", "Tool description"),
-		anyField("inputSchema", "JSON Schema for tool input"),
-		anyField("outputSchema", "Optional JSON Schema for structured tool output"),
-		anyField("annotations", "Optional MCP tool annotations such as readOnlyHint, openWorldHint, or destructiveHint."),
-		anyField("_meta", "Optional MCP tool metadata"),
-		b.iconArrayField("Tool icons"),
-	)
-}
 
 func (b *mcpExprBuilder) buildToolsCallPayloadType() *expr.AttributeExpr {
 	return &expr.AttributeExpr{
@@ -349,69 +67,11 @@ func (b *mcpExprBuilder) buildToolsCallResultType() *expr.AttributeExpr {
 	}
 }
 
-// buildEventsStreamResultType is identical to ToolsCallResult but named differently
-func (b *mcpExprBuilder) buildEventsStreamResultType() *expr.AttributeExpr {
-	return &expr.AttributeExpr{
-		Type: &expr.Object{
-			{Name: "content", Attribute: &expr.AttributeExpr{
-				Type:        &expr.Array{ElemType: &expr.AttributeExpr{Type: b.getOrCreateType("ContentItem", b.buildContentItemType)}},
-				Description: "Tool execution results",
-			}},
-			{Name: "isError", Attribute: &expr.AttributeExpr{
-				Type:        expr.Boolean,
-				Description: "Whether the tool encountered an error",
-			}},
-		},
-		Validation: &expr.ValidationExpr{
-			Required: []string{"content"},
-		},
-	}
-}
-
-// (removed) buildTextContentType: unused
-
 func (b *mcpExprBuilder) buildContentItemType() *expr.AttributeExpr {
 	return b.buildContentLikeType()
 }
 
 // Resource type builders
-
-func (b *mcpExprBuilder) buildResourcesListPayloadType() *expr.AttributeExpr {
-	return &expr.AttributeExpr{
-		Type: &expr.Object{
-			{Name: "cursor", Attribute: &expr.AttributeExpr{
-				Type:        expr.String,
-				Description: "Pagination cursor",
-			}},
-		},
-	}
-}
-
-func (b *mcpExprBuilder) buildResourcesListResultType() *expr.AttributeExpr {
-	return &expr.AttributeExpr{
-		Type: &expr.Object{
-			{Name: "resources", Attribute: &expr.AttributeExpr{
-				Type:        &expr.Array{ElemType: &expr.AttributeExpr{Type: b.getOrCreateType("ResourceInfo", b.buildResourceInfoType)}},
-				Description: "List of available resources",
-			}},
-		},
-		Validation: &expr.ValidationExpr{
-			Required: []string{"resources"},
-		},
-	}
-}
-
-func (b *mcpExprBuilder) buildResourceInfoType() *expr.AttributeExpr {
-	return infoObject(
-		[]string{"uri"},
-		stringField("uri", "Resource URI"),
-		stringField("name", "Resource name"),
-		stringField("description", "Resource description"),
-		stringField("mimeType", "Resource MIME type"),
-		b.iconArrayField("Resource icons"),
-		anyField("_meta", "Resource metadata"),
-	)
-}
 
 func (b *mcpExprBuilder) buildResourcesReadPayloadType() *expr.AttributeExpr {
 	return &expr.AttributeExpr{
@@ -476,41 +136,6 @@ func (b *mcpExprBuilder) buildResourceContentType() *expr.AttributeExpr {
 
 // Prompt type builders
 
-func (b *mcpExprBuilder) buildPromptsListPayloadType() *expr.AttributeExpr {
-	return &expr.AttributeExpr{
-		Type: &expr.Object{
-			{Name: "cursor", Attribute: &expr.AttributeExpr{
-				Type:        expr.String,
-				Description: "Pagination cursor",
-			}},
-		},
-	}
-}
-
-func (b *mcpExprBuilder) buildPromptsListResultType() *expr.AttributeExpr {
-	return &expr.AttributeExpr{
-		Type: &expr.Object{
-			{Name: "prompts", Attribute: &expr.AttributeExpr{
-				Type:        &expr.Array{ElemType: &expr.AttributeExpr{Type: b.getOrCreateType("PromptInfo", b.buildPromptInfoType)}},
-				Description: "List of available prompts",
-			}},
-		},
-		Validation: &expr.ValidationExpr{
-			Required: []string{"prompts"},
-		},
-	}
-}
-
-func (b *mcpExprBuilder) buildPromptInfoType() *expr.AttributeExpr {
-	return infoObject(
-		[]string{"name"},
-		stringField("name", "Prompt name"),
-		stringField("description", "Prompt description"),
-		arrayField("arguments", "Prompt arguments", &expr.AttributeExpr{Type: b.getOrCreateType("PromptArgument", b.buildPromptArgumentType)}),
-		b.iconArrayField("Prompt icons"),
-	)
-}
-
 func (b *mcpExprBuilder) buildPromptsGetPayloadType() *expr.AttributeExpr {
 	return &expr.AttributeExpr{
 		Type: &expr.Object{
@@ -546,28 +171,6 @@ func (b *mcpExprBuilder) buildPromptsGetResultType() *expr.AttributeExpr {
 		},
 		Validation: &expr.ValidationExpr{
 			Required: []string{"messages"},
-		},
-	}
-}
-
-func (b *mcpExprBuilder) buildPromptArgumentType() *expr.AttributeExpr {
-	return &expr.AttributeExpr{
-		Type: &expr.Object{
-			{Name: "name", Attribute: &expr.AttributeExpr{
-				Type:        expr.String,
-				Description: "Argument name",
-			}},
-			{Name: "description", Attribute: &expr.AttributeExpr{
-				Type:        expr.String,
-				Description: "Argument description",
-			}},
-			{Name: "required", Attribute: &expr.AttributeExpr{
-				Type:        expr.Boolean,
-				Description: "Whether the argument is required",
-			}},
-		},
-		Validation: &expr.ValidationExpr{
-			Required: []string{"name", "required"},
 		},
 	}
 }
@@ -612,88 +215,5 @@ func (b *mcpExprBuilder) buildContentLikeType() *expr.AttributeExpr {
 			{Name: "uri", Attribute: &expr.AttributeExpr{Type: expr.String, Description: "Resource URI"}},
 		},
 		Validation: &expr.ValidationExpr{Required: []string{"type"}},
-	}
-}
-
-// Subscription type builders
-
-func (b *mcpExprBuilder) buildSubscribePayloadType() *expr.AttributeExpr {
-	return &expr.AttributeExpr{
-		Type: &expr.Object{
-			{Name: "uri", Attribute: &expr.AttributeExpr{
-				Type:        expr.String,
-				Description: "Resource URI to subscribe to",
-			}},
-		},
-		Validation: &expr.ValidationExpr{
-			Required: []string{"uri"},
-		},
-	}
-}
-
-func (b *mcpExprBuilder) buildSubscribeResultType() *expr.AttributeExpr {
-	return &expr.AttributeExpr{
-		Type: &expr.Object{
-			{Name: "success", Attribute: &expr.AttributeExpr{
-				Type:        expr.Boolean,
-				Description: "Whether subscription was successful",
-			}},
-		},
-		Validation: &expr.ValidationExpr{
-			Required: []string{"success"},
-		},
-	}
-}
-
-func (b *mcpExprBuilder) buildUnsubscribePayloadType() *expr.AttributeExpr {
-	return &expr.AttributeExpr{
-		Type: &expr.Object{
-			{Name: "uri", Attribute: &expr.AttributeExpr{
-				Type:        expr.String,
-				Description: "Resource URI to unsubscribe from",
-			}},
-		},
-		Validation: &expr.ValidationExpr{
-			Required: []string{"uri"},
-		},
-	}
-}
-
-func (b *mcpExprBuilder) buildUnsubscribeResultType() *expr.AttributeExpr {
-	return &expr.AttributeExpr{
-		Type: &expr.Object{
-			{Name: "success", Attribute: &expr.AttributeExpr{
-				Type:        expr.Boolean,
-				Description: "Whether unsubscription was successful",
-			}},
-		},
-		Validation: &expr.ValidationExpr{
-			Required: []string{"success"},
-		},
-	}
-}
-
-// Notification payload builders
-
-// buildSendNotificationPayloadType defines the MCP notification payload with required type
-func (b *mcpExprBuilder) buildSendNotificationPayloadType() *expr.AttributeExpr {
-	return &expr.AttributeExpr{
-		Type: &expr.Object{
-			{Name: "type", Attribute: &expr.AttributeExpr{
-				Type:        expr.String,
-				Description: "Notification type",
-			}},
-			{Name: "message", Attribute: &expr.AttributeExpr{
-				Type:        expr.String,
-				Description: "Notification message",
-			}},
-			{Name: "data", Attribute: &expr.AttributeExpr{
-				Type:        expr.Any,
-				Description: "Additional data",
-			}},
-		},
-		Validation: &expr.ValidationExpr{
-			Required: []string{"type"},
-		},
 	}
 }

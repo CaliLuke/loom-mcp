@@ -385,8 +385,8 @@ distributed tracing.
 All MCP callers normalize tool results the same way: text content is concatenated in
 order, valid JSON text becomes the main result payload directly, plain text is returned
 as a JSON string, and non-text-only responses fall back to the first structured content
-item. Generated MCP JSON-RPC callers and client adapters use the same normalization
-contract.
+item. Generated local-provider registrations use the same normalization
+contract without a wire transport.
 
 ### Memory, Streaming & Telemetry
 
@@ -542,7 +542,6 @@ overlay ctx-bridged values), and the transport observability hooks, see
 | Function                                                          | Purpose                                  |
 | ----------------------------------------------------------------- | ---------------------------------------- |
 | `MCP(name, version, opts...)`                                     | Enable MCP support for a service         |
-| `ProtocolVersion(string)`                                         | Configure an implemented native MCP version |
 | `WebsiteURL(string)`                                              | Add implementation website metadata      |
 | `ServerIcons(icons...)`                                           | Add implementation icons                 |
 | `Resource(name, uri, mimeType, opts...)`                          | Mark method as MCP resource provider     |
@@ -551,9 +550,10 @@ overlay ctx-bridged values), and the transport observability hooks, see
 | `DynamicPrompt(name, desc, opts...)`                              | Mark method as dynamic prompt generator  |
 | `ToolIcons`, `ResourceIcons`, `PromptIcons`, `DynamicPromptIcons` | Add list-surface icon metadata           |
 | `Icon(src, opts...)`                                              | Build a reusable icon entry              |
-| `Notification(name, desc)`                                        | Mark method as MCP notification sender   |
-| `Subscription(resourceName)`                                      | Mark method as subscription handler      |
-| `SubscriptionMonitor(name)`                                       | Mark method as SSE subscription monitor  |
+
+The official MCP Go SDK owns protocol negotiation and Streamable HTTP. Use
+`WatchableResource` for standard resource subscriptions. Notify subscribers
+with the generated `SDKServer.ResourceUpdated` method.
 
 ---
 

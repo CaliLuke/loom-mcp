@@ -69,6 +69,94 @@ var CatalogCatalogMcpToolsetToolSpecs = []tools.ToolSpec{tools.ToolSpec{
 	Service: "catalog",
 	Toolset: "catalog.catalog-mcp",
 }, tools.ToolSpec{
+	Description: "Return two chunks through a Loom streaming method",
+	Meta:        nil,
+	Name:        "stream_chunks",
+	Payload: tools.TypeSpec{
+		Codec: tools.JSONCodec[any]{
+			FromJSON: func(data []byte) (any, error) {
+				if len(data) == 0 {
+					return nil, nil
+				}
+				var out any
+				if err := json.Unmarshal(data, &out); err != nil {
+					return nil, err
+				}
+				return out, nil
+			},
+			ToJSON: func(v any) ([]byte, error) {
+				return json.Marshal(v)
+			},
+		},
+		Name:   "any",
+		Schema: []byte("{}"),
+	},
+	Result: tools.TypeSpec{
+		Codec: tools.JSONCodec[any]{
+			FromJSON: func(data []byte) (any, error) {
+				if len(data) == 0 {
+					return nil, nil
+				}
+				var out any
+				if err := json.Unmarshal(data, &out); err != nil {
+					return nil, err
+				}
+				return out, nil
+			},
+			ToJSON: func(v any) ([]byte, error) {
+				return json.Marshal(v)
+			},
+		},
+		Name:   "*catalog.StreamChunksResult",
+		Schema: nil,
+	},
+	Service: "catalog",
+	Toolset: "catalog.catalog-mcp",
+}, tools.ToolSpec{
+	Description: "Wait until the MCP client cancels the request",
+	Meta:        nil,
+	Name:        "wait_for_cancel",
+	Payload: tools.TypeSpec{
+		Codec: tools.JSONCodec[any]{
+			FromJSON: func(data []byte) (any, error) {
+				if len(data) == 0 {
+					return nil, nil
+				}
+				var out any
+				if err := json.Unmarshal(data, &out); err != nil {
+					return nil, err
+				}
+				return out, nil
+			},
+			ToJSON: func(v any) ([]byte, error) {
+				return json.Marshal(v)
+			},
+		},
+		Name:   "any",
+		Schema: []byte("{}"),
+	},
+	Result: tools.TypeSpec{
+		Codec: tools.JSONCodec[any]{
+			FromJSON: func(data []byte) (any, error) {
+				if len(data) == 0 {
+					return nil, nil
+				}
+				var out any
+				if err := json.Unmarshal(data, &out); err != nil {
+					return nil, err
+				}
+				return out, nil
+			},
+			ToJSON: func(v any) ([]byte, error) {
+				return json.Marshal(v)
+			},
+		},
+		Name:   "*catalog.WaitForCancelResult",
+		Schema: nil,
+	},
+	Service: "catalog",
+	Toolset: "catalog.catalog-mcp",
+}, tools.ToolSpec{
 	Description: "Lookup a projected catalog entry",
 	Meta:        nil,
 	Name:        "projected_lookup",
@@ -216,6 +304,12 @@ func CatalogCatalogMcpToolsetRetryHint(toolName tools.Ident, err error) *planner
 			case "lookup":
 				schemaJSON = "{\"type\":\"object\",\"required\":[\"query\"],\"properties\":{\"query\":{\"type\":\"string\",\"description\":\"Lookup query\"}},\"additionalProperties\":false}"
 				example = "{\"query\":\"example\"}"
+			case "stream_chunks":
+				schemaJSON = "{}"
+				example = "{}"
+			case "wait_for_cancel":
+				schemaJSON = "{}"
+				example = "{}"
 			case "projected_lookup":
 				schemaJSON = "{\"type\":\"object\",\"required\":[\"query\"],\"properties\":{\"query\":{\"type\":\"string\",\"description\":\"Lookup query\"}},\"additionalProperties\":false}"
 				example = "{\"query\":\"example\"}"

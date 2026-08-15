@@ -379,7 +379,6 @@ implements the corresponding transcript-local policy.
 | Function                                      | Context                                      | Purpose                                                                                                                           |
 | --------------------------------------------- | -------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------- |
 | `MCP(name, version, opts...)`                 | Inside `Service`                             | Enables MCP protocol for the service                                                                                              |
-| `ProtocolVersion(version)`                    | Option for `MCP`                             | Sets an implemented native protocol version: `2024-11-05`, `2025-03-26`, `2025-06-18`, or `2025-11-25`                            |
 | `WebsiteURL(url)`                             | Option for `MCP`                             | Sets implementation website metadata for `initialize.serverInfo`                                                                  |
 | `ServerIcons(icons...)`                       | Option for `MCP`                             | Sets implementation icons for `initialize.serverInfo`                                                                             |
 | `SkillDirectory(root)`                        | Option for `MCP`, or inside `Service`        | Exposes child skill directories as `skill://` resources through `resources/list` and `resources/read`                              |
@@ -396,9 +395,6 @@ implements the corresponding transcript-local policy.
 | `DynamicPromptIcons(icons...)`                | Option for `DynamicPrompt`                   | Sets dynamic prompt icons for `prompts/list`                                                                                      |
 | `Icon(src, opts...)`                          | MCP metadata helper                          | Declares one icon entry                                                                                                           |
 | `IconMIMEType`, `IconSizes`, `IconTheme`      | Options for `Icon`                           | Configure MIME type, sizes, and light/dark theme                                                                                  |
-| `Notification(name, description)`             | Inside `Method`                              | Marks method as MCP notification sender                                                                                           |
-| `Subscription(resourceName)`                  | Inside `Method`                              | Defines subscription handler for a resource                                                                                       |
-| `SubscriptionMonitor(name)`                   | Inside `Method`                              | Defines SSE monitor for subscriptions                                                                                             |
 | `OAuth(opts...)`                              | Option for `MCP`                             | Declares the service is an OAuth 2.0 protected resource; drives RFC 9728 PRM emission and the RFC 6750 WWW-Authenticate challenge |
 | `AuthorizationServer(url)`                    | Option for `OAuth`                           | Advertises one OAuth 2.0 authorization server; call multiple times for multiple servers                                           |
 | `OAuthScope(name, description)`               | Option for `OAuth`                           | Documents one scope the resource defines (emitted in `scopes_supported` and in challenge `scope`)                                 |
@@ -1510,7 +1506,6 @@ Enable MCP protocol for a service with `MCP`:
 ```go
 Service("calculator", func() {
     MCP("calc", "1.0.0",
-        ProtocolVersion("2025-06-18"),
         WebsiteURL("https://example.com/calc"),
         SkillDirectory(".agents/skills"),
         ServerIcons(
@@ -1583,13 +1578,8 @@ Service("calculator", func() {
 })
 ```
 
-`ProtocolVersion` is the default advertised by Loom's generated native
-JSON-RPC transport, which is emitted for every MCP design. Design validation
-rejects draft, future, or unknown versions rather than advertising semantics
-the native transport does not implement. The generated SDK server may
-independently negotiate MCP `2026-07-28` when configured with stateless
-`SDKServerOptions.StreamableHTTP`; that modern sessionless mode is an SDK
-runtime option, not a native DSL protocol version.
+The official MCP Go SDK negotiates the protocol version. The MCP DSL does not
+select or advertise a wire-protocol version.
 
 `SkillDirectory(root)` scans the root at runtime. Each child directory with a
 `SKILL.md` file becomes a skill namespace. Structured frontmatter can override
@@ -1645,29 +1635,21 @@ handling.
 | `StaticPrompt(...)`          | `prompts/list`, `prompts/get` (static)                 |
 | `RuntimePrompt(...)`         | Generated `RegisterRuntimePrompts(*prompt.Registry)`   |
 | `DynamicPrompt(...)`         | `prompts/list`, `prompts/get` (dynamic, method-backed) |
-| `Notification(...)`          | Notification senders                                   |
-| `Subscription(...)`          | Subscription handlers                                  |
-| `SubscriptionMonitor(...)`   | SSE subscription monitors                              |
 
-Dynamic prompts enable the prompt capability even when a service declares no
-static prompts. Generated adapters and `loom example` scaffolds use the same
-prompt-provider constructor contract, so a dynamic-prompt-only MCP design can
-be generated, scaffolded, and compiled without manual transport shims.
+Dynamic prompts enable the prompt capability when a service declares no static
+prompts. A dynamic-prompt-only design generates a valid SDK server.
 
-Generated JSON-RPC transport servers advertise the non-standard events surface
-under `capabilities.experimental["loom-mcp"].events` in their initialize
-results, including `events/stream` and generated notification method names.
-SDK-mode servers do not advertise it: the upstream SDK streamable HTTP
-transport owns the GET SSE channel, so the `events/stream` method is not
-routable there.
+`WatchableResource` generates standard SDK subscription handlers. Call
+`SDKServer.ResourceUpdated(ctx, uri)` after the resource changes. Watchable
+resources cannot use stateless Streamable HTTP.
 
 Generated adapters also support runtime-configured progressive discovery for
 large MCP catalogs. Set `MCPAdapterOptions.ToolSearch` (or
 `SDKServerOptions.Adapter.ToolSearch`) to replace the default `tools/list`
 catalog with synthetic `search_tools` and `call_tool` entries plus pinned real
 tools from `ToolSearchOptions.AlwaysVisible`. Hidden real tools are discovered
-through `search_tools` and invoked through `call_tool`; direct JSON-RPC hidden
-calls are rejected by default.
+through `search_tools` and invoked through `call_tool`. Direct hidden calls are
+rejected by default.
 
 This is an adapter option, not a DSL declaration: the design still owns the real
 tool contracts, while deployment code decides whether to expose the full catalog
@@ -1846,15 +1828,12 @@ Generated when an agent exports toolsets (agent-as-tool). Export packages provid
 
 ### MCP Packages
 
-When a service declares MCP (`MCP(...)`), `loom gen` emits JSON-RPC client/server code under
-`gen/jsonrpc/<service>/...` and runtime registration helpers in the service package.
+When a service declares `MCP(...)`, `loom gen` emits the SDK adapter, server,
+local registration, OAuth discovery, and prompt provider files. MCP services do
+not require `JSONRPC(...)` declarations.
 
-For MCP-only services, declare the JSON-RPC transport path once at the service level
-with `JSONRPC(func() { POST("/rpc") })`. Methods mapped with `Tool`, `Resource`,
-`Notification`, or dynamic prompt DSL participate in that JSON-RPC transport automatically;
-you only need method-level `JSONRPC(...)` blocks when a method needs method-specific
-JSON-RPC settings such as `ServerSentEvents`, `ID(...)` mapping, or custom error code
-responses.
+An explicit `JSONRPC(...)` declaration still controls a non-MCP transport. The
+MCP generator does not change that transport.
 
 ---
 

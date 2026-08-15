@@ -31,10 +31,12 @@ gen/
 │   │   └── specs/               aggregate catalog/aliases
 │   └── toolsets/<toolset>/      owner-scoped types/codecs/specs/transforms
 ├── mcp_<service>/               MCP adapter, SDK server, local provider
-├── jsonrpc/                     generated JSON-RPC transports/clients
 ├── http/
 └── grpc/
 ```
+
+MCP generation does not create `gen/jsonrpc`. An explicitly designed non-MCP
+JSON-RPC transport can still create that tree.
 
 Exact files vary with the evaluated design. Do not infer a file exists from an
 older guide; inspect the generated package API.

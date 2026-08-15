@@ -22,7 +22,6 @@ type Endpoints struct {
 	FigmaDesignSystem              loom.Endpoint
 	GeneratePrompts                loom.Endpoint
 	BuildFigmaImplementationPrompt loom.Endpoint
-	SendNotification               loom.Endpoint
 	AnalyzeSentiment               loom.Endpoint
 	ExtractKeywords                loom.Endpoint
 	SummarizeText                  loom.Endpoint
@@ -49,7 +48,6 @@ func NewEndpoints(s Service) *Endpoints {
 		FigmaDesignSystem:              NewFigmaDesignSystemEndpoint(s),
 		GeneratePrompts:                NewGeneratePromptsEndpoint(s),
 		BuildFigmaImplementationPrompt: NewBuildFigmaImplementationPromptEndpoint(s),
-		SendNotification:               NewSendNotificationEndpoint(s),
 		AnalyzeSentiment:               NewAnalyzeSentimentEndpoint(s),
 		ExtractKeywords:                NewExtractKeywordsEndpoint(s),
 		SummarizeText:                  NewSummarizeTextEndpoint(s),
@@ -76,7 +74,6 @@ func (e *Endpoints) Use(m func(loom.Endpoint) loom.Endpoint) {
 	e.FigmaDesignSystem = m(e.FigmaDesignSystem)
 	e.GeneratePrompts = m(e.GeneratePrompts)
 	e.BuildFigmaImplementationPrompt = m(e.BuildFigmaImplementationPrompt)
-	e.SendNotification = m(e.SendNotification)
 	e.AnalyzeSentiment = m(e.AnalyzeSentiment)
 	e.ExtractKeywords = m(e.ExtractKeywords)
 	e.SummarizeText = m(e.SummarizeText)
@@ -149,15 +146,6 @@ func NewBuildFigmaImplementationPromptEndpoint(s Service) loom.Endpoint {
 	return func(ctx context.Context, req any) (any, error) {
 		p := req.(*BuildFigmaImplementationPromptPayload)
 		return s.BuildFigmaImplementationPrompt(ctx, p)
-	}
-}
-
-// NewSendNotificationEndpoint returns an endpoint function that calls the
-// method "send_notification" of service "assistant".
-func NewSendNotificationEndpoint(s Service) loom.Endpoint {
-	return func(ctx context.Context, req any) (any, error) {
-		p := req.(*SendNotificationPayload)
-		return nil, s.SendNotification(ctx, p)
 	}
 }
 

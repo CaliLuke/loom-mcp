@@ -51,8 +51,6 @@ type MCPAdapter struct {
 	errorCounter        metric.Int64Counter
 	durationHistogram   metric.Float64Histogram
 	promptProvider      PromptProvider
-	// Broadcaster for server-initiated events (notifications/resources)
-	broadcaster mcpruntime.Broadcaster
 	// requestStateKey encrypts and authenticates portable MCP multi-round-trip state.
 	requestStateKey []byte
 	// resourceNameToURI holds DSL-derived mapping for policy and lookups
@@ -65,8 +63,19 @@ const (
 )
 
 var _ Service = (*MCPAdapter)(nil)
+var (
+	errInvalidSessionID               = errors.New("invalid session ID")
+	errSessionPrincipalBindingMissing = errors.New("session principal binding missing")
+	errSessionPrincipalMismatch       = errors.New("session user mismatch")
+)
 
 type (
+	toolCallStream interface {
+		Send(context.Context, *ToolsCallResult) error
+		SendAndClose(context.Context, *ToolsCallResult) error
+		SendError(context.Context, any, error) error
+	}
+
 	// ToolCallInterceptorInfo describes a generated MCP tools/call invocation.
 	ToolCallInterceptorInfo interface {
 		loom.InterceptorInfo
@@ -75,10 +84,10 @@ type (
 	}
 
 	// ToolCallHandler is the generated MCP tool-call dispatcher.
-	ToolCallHandler func(ctx context.Context, payload *ToolsCallPayload, stream ToolsCallServerStream) (bool, error)
+	ToolCallHandler func(ctx context.Context, payload *ToolsCallPayload, stream toolCallStream) (bool, error)
 
 	// ToolCallInterceptor wraps generated MCP tool execution.
-	ToolCallInterceptor func(ctx context.Context, info ToolCallInterceptorInfo, payload *ToolsCallPayload, stream ToolsCallServerStream, next ToolCallHandler) (bool, error)
+	ToolCallInterceptor func(ctx context.Context, info ToolCallInterceptorInfo, payload *ToolsCallPayload, stream toolCallStream, next ToolCallHandler) (bool, error)
 )
 type toolCallInterceptorInfo struct {
 	service    string
@@ -165,77 +174,16 @@ type MCPAdapterOptions struct {
 	StructuredStreamJSON bool
 	// SessionPrincipal extracts a stable auth/session owner identity from ctx.
 	SessionPrincipal func(context.Context) string
-	// Pluggable broadcaster, else default channel broadcaster
-	Broadcaster     mcpruntime.Broadcaster
-	BroadcastBuffer int
-	// DropIfSlow controls whether slow subscribers drop events. Nil defaults to true.
-	DropIfSlow *bool
 }
 
 func NewMCPAdapter(service assistant.Service, promptProvider PromptProvider, opts *MCPAdapterOptions) *MCPAdapter {
 	validateToolSearchOptions(opts)
-	// Broadcaster
-	var bc mcpruntime.Broadcaster
-	if opts != nil && opts.Broadcaster != nil {
-		bc = opts.Broadcaster
-	} else {
-		buf := 32
-		drop := true
-		if opts != nil {
-			if opts.BroadcastBuffer > 0 {
-				buf = opts.BroadcastBuffer
-			}
-			if opts.DropIfSlow != nil {
-				drop = *opts.DropIfSlow
-			}
-		}
-		bc = mcpruntime.NewChannelBroadcaster(buf, drop)
-	}
 	telemetryName := defaultMCPAdapterTelemetryName(opts)
 	tracer := defaultMCPAdapterTracer(opts, telemetryName)
 	callCounter, errorCounter, durationHistogram := defaultMCPAdapterMetrics(opts, telemetryName)
 	// Build name->URI map from generated resources
 	nameToURI := map[string]string{"documents": "doc://list", "system_info": "system://info", "elicitation_context": "elicitation://context", "conversation_history": "conversation://history", "figma_design_system": "figma://design-system/mobile-checkout"}
-	return &MCPAdapter{service: service, initializedSessions: make(map[string]time.Time), sessionPrincipals: make(map[string]string), opts: opts, tracer: tracer, callCounter: callCounter, errorCounter: errorCounter, durationHistogram: durationHistogram, promptProvider: promptProvider, broadcaster: bc, resourceNameToURI: nameToURI}
-}
-
-// mcpProtocolVersion returns the design-configured protocol version.
-func (a *MCPAdapter) mcpProtocolVersion() string {
-	return DefaultProtocolVersion
-}
-func (a *MCPAdapter) supportsProtocolVersion(requested string) bool {
-	for _, v := range SupportedProtocolVersions {
-		if v == requested {
-			return true
-		}
-	}
-	return false
-}
-
-// negotiateProtocolVersion returns the requested version if supported, otherwise the server's latest.
-func (a *MCPAdapter) negotiateProtocolVersion(requested string) string {
-	if a.supportsProtocolVersion(requested) {
-		return requested
-	}
-	return a.mcpProtocolVersion()
-}
-func validMCPProtocolVersionDate(v string) bool {
-	if len(v) != 10 {
-		return false
-	}
-	for i := range v {
-		switch i {
-		case 4, 7:
-			if v[i] != '-' {
-				return false
-			}
-		default:
-			if v[i] < '0' || v[i] > '9' {
-				return false
-			}
-		}
-	}
-	return true
+	return &MCPAdapter{service: service, initializedSessions: make(map[string]time.Time), sessionPrincipals: make(map[string]string), opts: opts, tracer: tracer, callCounter: callCounter, errorCounter: errorCounter, durationHistogram: durationHistogram, promptProvider: promptProvider, resourceNameToURI: nameToURI}
 }
 
 // parseQueryParamsToJSON converts URI query params into JSON.
@@ -343,16 +291,16 @@ func (a *MCPAdapter) assertSessionPrincipal(ctx context.Context, sessionID strin
 	expected := strings.TrimSpace(a.sessionPrincipals[sessionID])
 	a.mu.Unlock()
 	if !initialized {
-		return mcpruntime.ErrInvalidSessionID
+		return errInvalidSessionID
 	}
 	if expected == "" {
 		if principalRequired || actual != "" {
-			return mcpruntime.ErrSessionPrincipalBindingMissing
+			return errSessionPrincipalBindingMissing
 		}
 		return nil
 	}
 	if actual == "" || actual != expected {
-		return mcpruntime.ErrSessionPrincipalMismatch
+		return errSessionPrincipalMismatch
 	}
 	return nil
 }
@@ -401,7 +349,7 @@ func (a *MCPAdapter) wrapToolCallHandler(info ToolCallInterceptorInfo, next Tool
 			continue
 		}
 		currentNext := wrapped
-		wrapped = func(ctx context.Context, payload *ToolsCallPayload, stream ToolsCallServerStream) (bool, error) {
+		wrapped = func(ctx context.Context, payload *ToolsCallPayload, stream toolCallStream) (bool, error) {
 			return interceptor(ctx, info, payload, stream, currentNext)
 		}
 	}
@@ -491,7 +439,7 @@ func buildContentItem(a *MCPAdapter, s string) *ContentItem {
 		Type: "text",
 	}
 }
-func (a *MCPAdapter) sendToolError(ctx context.Context, stream ToolsCallServerStream, toolName string, err error) error {
+func (a *MCPAdapter) sendToolError(ctx context.Context, stream toolCallStream, toolName string, err error) error {
 	if err == nil {
 		return nil
 	}
@@ -627,153 +575,82 @@ func missingFieldFromMessage(message string) string {
 	return strings.TrimSpace(strings.TrimPrefix(message, prefix))
 }
 
-// Initialize handles the MCP initialize request.
-func (a *MCPAdapter) Initialize(ctx context.Context, p *InitializePayload) (res *InitializeResult, err error) {
-	ctx, span, start, attrs := a.startTelemetry(ctx, "initialize")
-	defer func() {
-		a.finishTelemetry(ctx, span, start, attrs, err, false)
-	}()
-	requestProtocol := ""
-	requestSessionID := mcpruntime.SessionIDFromContext(ctx)
-	if p != nil {
-		requestProtocol = p.ProtocolVersion
-	}
-	a.log(ctx, "request", map[string]any{
-		"method":           "initialize",
-		"protocol_version": requestProtocol,
-		"session_id":       requestSessionID,
-	})
-	if p == nil || p.ProtocolVersion == "" {
-		return nil, loom.PermanentError("invalid_params", "Missing protocolVersion")
-	}
-	negotiatedVersion := a.negotiateProtocolVersion(p.ProtocolVersion)
-	sessionID := requestSessionID
-	if sessionID == "" && mcpruntime.ResponseWriterFromContext(ctx) != nil {
-		sessionID = mcpruntime.EnsureSessionID(ctx)
-	}
-	a.mu.Lock()
-	now := time.Now()
-	if sessionID == "" {
-		if a.initialized {
-			a.mu.Unlock()
-			err = loom.PermanentError("invalid_params", "Already initialized")
-			a.log(ctx, "response", map[string]any{
-				"error":            err.Error(),
-				"method":           "initialize",
-				"protocol_version": p.ProtocolVersion,
-				"session_id":       sessionID,
-			})
-			return nil, err
-		}
-		a.initialized = true
-	} else {
-		if _, ok := a.initializedSessions[sessionID]; !ok {
-			a.pruneSessionsLocked(now, true)
-		}
-		if _, ok := a.initializedSessions[sessionID]; ok {
-			a.mu.Unlock()
-			err = loom.PermanentError("invalid_params", "Already initialized")
-			a.log(ctx, "response", map[string]any{
-				"error":            err.Error(),
-				"method":           "initialize",
-				"protocol_version": p.ProtocolVersion,
-				"session_id":       sessionID,
-			})
-			return nil, err
-		}
-		a.initializedSessions[sessionID] = now
-	}
-	a.mu.Unlock()
-	a.captureSessionPrincipal(ctx, sessionID)
-	serverInfo := &ServerInfo{Name: "assistant-mcp", Version: "1.0.0", Description: stringPtr("AI Assistant service with full MCP protocol support"), WebsiteURL: stringPtr("https://assistant.example.com/docs"), Icons: []*Icon{&Icon{
-		MimeType: stringPtr("image/png"),
-		Sizes:    []string{"48x48"},
-		Src:      "https://assistant.example.com/icons/server-light.png",
-		Theme:    stringPtr("light"),
-	}, &Icon{
-		MimeType: stringPtr("image/png"),
-		Sizes:    []string{"48x48"},
-		Src:      "https://assistant.example.com/icons/server-dark.png",
-		Theme:    stringPtr("dark"),
-	}}}
-	capabilities := &ServerCapabilities{}
-	capabilities.Tools = &ToolsCapability{}
-	capabilities.Resources = &ResourcesCapability{}
-	capabilities.Prompts = &PromptsCapability{}
-	capabilities.Experimental = map[string]any{"loom-mcp": map[string]any{"events": map[string]any{
-		"method":        "events/stream",
-		"notifications": []string{"notify_status_update"},
-		"stream":        true,
-	}}}
-	res = &InitializeResult{
-		Capabilities:    capabilities,
-		ProtocolVersion: negotiatedVersion,
-		ServerInfo:      serverInfo,
-	}
-	a.log(ctx, "response", map[string]any{
-		"method":           "initialize",
-		"protocol_version": res.ProtocolVersion,
-		"server_name":      serverInfo.Name,
-		"session_id":       sessionID,
-	})
-	return res, nil
-}
-
-// Ping handles the MCP ping request.
-func (a *MCPAdapter) Ping(ctx context.Context) (res *PingResult, err error) {
-	ctx, span, start, attrs := a.startTelemetry(ctx, "ping")
-	defer func() {
-		a.finishTelemetry(ctx, span, start, attrs, err, false)
-	}()
-	a.log(ctx, "request", map[string]any{"method": "ping"})
-	res = &PingResult{Pong: true}
-	a.log(ctx, "response", map[string]any{"method": "ping"})
-	return res, nil
-}
-
-// Broadcaster and publish helpers for server-initiated events
-// Publish sends an event to all event stream subscribers.
-func (a *MCPAdapter) Publish(ev *EventsStreamResult) {
-	if a == nil || a.broadcaster == nil {
-		return
-	}
-	a.broadcaster.Publish(ev)
-}
-
-// PublishSession sends an event to subscribers for one MCP session.
-func (a *MCPAdapter) PublishSession(sessionID string, ev *EventsStreamResult) {
-	if a == nil || a.broadcaster == nil {
-		return
-	}
-	if sessionID == "" {
-		a.broadcaster.Publish(ev)
-		return
-	}
-	if scoped, ok := a.broadcaster.(mcpruntime.SessionBroadcaster); ok {
-		scoped.PublishSession(sessionID, ev)
-	}
-}
-
-// PublishContext sends an event to subscribers for the MCP session in ctx.
-func (a *MCPAdapter) PublishContext(ctx context.Context, ev *EventsStreamResult) {
-	a.PublishSession(mcpruntime.SessionIDFromContext(ctx), ev)
-}
-
-// PublishStatus is a convenience to publish a status_update message.
-func (a *MCPAdapter) PublishStatus(ctx context.Context, typ string, message string, data any) {
-	n := &mcpruntime.Notification{
-		Data:    data,
-		Message: &message,
-		Type:    typ,
-	}
-	s, err := mcpruntime.EncodeJSONToString(ctx, goahttp.ResponseEncoder, n)
-	if err != nil {
-		return
-	}
-	a.PublishContext(ctx, &EventsStreamResult{Content: []*ContentItem{buildContentItem(a, s)}})
-}
-
 // Tools handling
+type Icon struct {
+	Src      string   `json:"src"`
+	MimeType *string  `json:"mimeType,omitempty"`
+	Sizes    []string `json:"sizes,omitempty"`
+	Theme    *string  `json:"theme,omitempty"`
+}
+type ToolInfo struct {
+	Name         string  `json:"name"`
+	Title        *string `json:"title,omitempty"`
+	Description  *string `json:"description,omitempty"`
+	InputSchema  any     `json:"inputSchema,omitempty"`
+	OutputSchema any     `json:"outputSchema,omitempty"`
+	Annotations  any     `json:"annotations,omitempty"`
+	Meta         any     `json:"_meta,omitempty"`
+	Icons        []*Icon `json:"icons,omitempty"`
+}
+type toolCallResultCollector struct {
+	adapter   *MCPAdapter
+	parts     []*ToolsCallResult
+	final     *ToolsCallResult
+	streamErr error
+}
+
+func newToolCallResultCollector(adapter *MCPAdapter) *toolCallResultCollector {
+	return &toolCallResultCollector{adapter: adapter}
+}
+func (c *toolCallResultCollector) Send(_ context.Context, result *ToolsCallResult) error {
+	c.parts = append(c.parts, result)
+	return nil
+}
+func (c *toolCallResultCollector) SendAndClose(_ context.Context, result *ToolsCallResult) error {
+	c.final = result
+	return nil
+}
+func (c *toolCallResultCollector) SendError(_ context.Context, _ any, err error) error {
+	c.streamErr = err
+	return nil
+}
+func (c *toolCallResultCollector) result() *ToolsCallResult {
+	if c == nil {
+		return &ToolsCallResult{}
+	}
+	if c.streamErr != nil {
+		mapped := c.streamErr
+		if c.adapter != nil {
+			mapped = c.adapter.mapError(mapped)
+		}
+		isError := true
+		return &ToolsCallResult{
+			Content: []*ContentItem{buildContentItem(c.adapter, formatToolErrorText(mapped))},
+			IsError: &isError,
+		}
+	}
+	if len(c.parts) == 0 {
+		if c.final == nil {
+			return &ToolsCallResult{}
+		}
+		return c.final
+	}
+	merged := &ToolsCallResult{}
+	for _, part := range append(c.parts, c.final) {
+		if part == nil {
+			continue
+		}
+		merged.Content = append(merged.Content, part.Content...)
+		if len(part.StructuredContent) > 0 {
+			merged.StructuredContent = append(json.RawMessage(nil), part.StructuredContent...)
+		}
+		if part.IsError != nil {
+			value := *part.IsError
+			merged.IsError = &value
+		}
+	}
+	return merged
+}
 func decodeMCPPayloadStrict(data []byte, payload any) error {
 	dec := json.NewDecoder(bytes.NewReader(data))
 	dec.DisallowUnknownFields()
@@ -1627,7 +1504,7 @@ func toolSearchRank(tool *ToolInfo, query string, settings toolSearchSettings) i
 	}
 	return -1
 }
-func (a *MCPAdapter) handleSearchTools(ctx context.Context, p *ToolsCallPayload, stream ToolsCallServerStream) (bool, error) {
+func (a *MCPAdapter) handleSearchTools(ctx context.Context, p *ToolsCallPayload, stream toolCallStream) (bool, error) {
 	var payload toolSearchPayload
 	arguments := p.Arguments
 	if len(bytes.TrimSpace(arguments)) == 0 {
@@ -1733,7 +1610,7 @@ func (a *MCPAdapter) handleSearchTools(ctx context.Context, p *ToolsCallPayload,
 		StructuredContent: structured,
 	})
 }
-func (a *MCPAdapter) handleCallToolProxy(ctx context.Context, p *ToolsCallPayload, stream ToolsCallServerStream) (bool, error) {
+func (a *MCPAdapter) handleCallToolProxy(ctx context.Context, p *ToolsCallPayload, stream toolCallStream) (bool, error) {
 	var payload toolCallProxyPayload
 	if err := decodeMCPPayloadStrict(p.Arguments, &payload); err != nil {
 		return true, a.sendToolError(ctx, stream, p.Name, toolCallError(err, "invalid_params", "Provide {\"name\":\"tool_name\",\"arguments\":{...}} to call a discovered tool."))
@@ -1759,28 +1636,6 @@ func (a *MCPAdapter) handleCallToolProxy(ctx context.Context, p *ToolsCallPayloa
 	info := a.toolCallInfo(proxied)
 	handler := a.wrapToolCallHandler(info, a.executeRealTool)
 	return handler(ctx, proxied, stream)
-}
-func (a *MCPAdapter) ToolsList(ctx context.Context, p *ToolsListPayload) (res *ToolsListResult, err error) {
-	ctx, span, start, attrs := a.startTelemetry(ctx, "tools/list")
-	defer func() {
-		a.finishTelemetry(ctx, span, start, attrs, err, false)
-	}()
-	if !a.isInitialized(ctx) {
-		return nil, loom.PermanentError("invalid_params", "Not initialized")
-	}
-	if p != nil && p.Cursor != nil && *p.Cursor != "" {
-		return nil, loom.PermanentError("invalid_params", "%s pagination is not implemented; cursor must be empty", "tools/list")
-	}
-	a.log(ctx, "request", map[string]any{"method": "tools/list"})
-	tools := a.generatedToolCatalog()
-	if a.toolSearchEnabled() {
-		visible := a.visibleToolCatalog(tools)
-		tools = a.toolSearchSyntheticTools()
-		tools = append(tools, visible...)
-	}
-	res = &ToolsListResult{Tools: tools}
-	a.log(ctx, "response", map[string]any{"method": "tools/list"})
-	return res, nil
 }
 func analyzeSentimentInputRecovery(err error, raw json.RawMessage) string {
 	message := strings.TrimSpace(loom.ErrorSafeMessage(err))
@@ -2026,7 +1881,7 @@ func projectedLookupInputRecovery(err error, raw json.RawMessage) string {
 	}
 	return "Provide valid tool arguments. Example: " + example
 }
-func (a *MCPAdapter) ToolsCall(ctx context.Context, p *ToolsCallPayload, stream ToolsCallServerStream) (res *ToolsCallResult, err error) {
+func (a *MCPAdapter) ToolsCall(ctx context.Context, p *ToolsCallPayload) (res *ToolsCallResult, err error) {
 	attrs := []attribute.KeyValue{}
 	if p != nil && p.Name != "" {
 		attrs = append(attrs, attribute.String("mcp.tool", p.Name), attribute.String("tool", p.Name))
@@ -2044,10 +1899,14 @@ func (a *MCPAdapter) ToolsCall(ctx context.Context, p *ToolsCallPayload, stream 
 	}()
 	info := a.toolCallInfo(p)
 	handler := a.wrapToolCallHandler(info, a.toolsCallHandler)
+	stream := newToolCallResultCollector(a)
 	toolErr, err = handler(ctx, p, stream)
-	return nil, err
+	if err != nil {
+		return nil, err
+	}
+	return stream.result(), nil
 }
-func (a *MCPAdapter) toolsCallHandler(ctx context.Context, p *ToolsCallPayload, stream ToolsCallServerStream) (bool, error) {
+func (a *MCPAdapter) toolsCallHandler(ctx context.Context, p *ToolsCallPayload, stream toolCallStream) (bool, error) {
 	if !a.isInitialized(ctx) {
 		return false, loom.PermanentError("invalid_params", "Not initialized")
 	}
@@ -2070,7 +1929,7 @@ func (a *MCPAdapter) toolsCallHandler(ctx context.Context, p *ToolsCallPayload, 
 	}
 	return a.executeRealTool(ctx, p, stream)
 }
-func (a *MCPAdapter) executeRealTool(ctx context.Context, p *ToolsCallPayload, stream ToolsCallServerStream) (bool, error) {
+func (a *MCPAdapter) executeRealTool(ctx context.Context, p *ToolsCallPayload, stream toolCallStream) (bool, error) {
 	arguments := bytes.TrimSpace(p.Arguments)
 	if len(arguments) == 0 || bytes.Equal(arguments, []byte("null")) {
 		normalized := *p
@@ -2508,67 +2367,6 @@ func (a *MCPAdapter) executeRealTool(ctx context.Context, p *ToolsCallPayload, s
 }
 
 // Resources handling
-func (a *MCPAdapter) ResourcesList(ctx context.Context, p *ResourcesListPayload) (*ResourcesListResult, error) {
-	if !a.isInitialized(ctx) {
-		return nil, loom.PermanentError("invalid_params", "Not initialized")
-	}
-	if p != nil && p.Cursor != nil && *p.Cursor != "" {
-		return nil, loom.PermanentError("invalid_params", "%s pagination is not implemented; cursor must be empty", "resources/list")
-	}
-	a.log(ctx, "request", map[string]any{"method": "resources/list"})
-	resources := []*ResourceInfo{&ResourceInfo{
-		Description: stringPtr("List available documents"),
-		Icons: []*Icon{&Icon{
-			MimeType: stringPtr("image/png"),
-			Sizes:    []string{"48x48"},
-			Src:      "https://assistant.example.com/icons/documents.png",
-		}},
-		MimeType: stringPtr("application/json"),
-		Name:     stringPtr("documents"),
-		URI:      "doc://list",
-	}, &ResourceInfo{
-		Description: stringPtr("Return system info"),
-		MimeType:    stringPtr("application/json"),
-		Name:        stringPtr("system_info"),
-		URI:         "system://info",
-	}, &ResourceInfo{
-		Description: stringPtr("Return context supplied through MCP elicitation"),
-		MimeType:    stringPtr("application/json"),
-		Name:        stringPtr("elicitation_context"),
-		URI:         "elicitation://context",
-	}, &ResourceInfo{
-		Description: stringPtr("Return conversation history with optional query params"),
-		MimeType:    stringPtr("application/json"),
-		Name:        stringPtr("conversation_history"),
-		URI:         "conversation://history",
-	}, &ResourceInfo{
-		Description: stringPtr("Return a fake Figma design system summary for implementation validation"),
-		MimeType:    stringPtr("application/json"),
-		Name:        stringPtr("figma_design_system"),
-		URI:         "figma://design-system/mobile-checkout",
-	}}
-	skillSources := skillSources()
-	skillResources, err := mcpskills.List(ctx, skillSources)
-	if err != nil {
-		a.log(ctx, "error", map[string]any{
-			"error":  err.Error(),
-			"method": "resources/list",
-		})
-		return nil, a.safeMCPError(err, "internal_error", "Unable to list skill resources.")
-	}
-	for _, resource := range skillResources {
-		resources = append(resources, &ResourceInfo{
-			Description: stringPtr(resource.Description),
-			Meta:        mcpskills.MetadataMeta(resource.Metadata),
-			MimeType:    stringPtr(resource.MimeType),
-			Name:        stringPtr(resource.Name),
-			URI:         resource.URI,
-		})
-	}
-	res := &ResourcesListResult{Resources: resources}
-	a.log(ctx, "response", map[string]any{"method": "resources/list"})
-	return res, nil
-}
 func (a *MCPAdapter) ResourcesRead(ctx context.Context, p *ResourcesReadPayload) (*ResourcesReadResult, error) {
 	if !a.isInitialized(ctx) {
 		return nil, loom.PermanentError("invalid_params", "Not initialized")
@@ -2852,84 +2650,8 @@ func resourceURIMatchesPolicy(uri string, policy string) bool {
 	policy = strings.TrimSpace(policy)
 	return uri == policy || strings.HasSuffix(policy, "/") && strings.HasPrefix(uri, policy)
 }
-func (a *MCPAdapter) ResourcesSubscribe(ctx context.Context, p *ResourcesSubscribePayload) error {
-	if !a.isInitialized(ctx) {
-		return loom.PermanentError("invalid_params", "Not initialized")
-	}
-	switch p.URI {
-	default:
-		return loom.PermanentError("resource_not_found", "Unknown resource: %s", p.URI)
-	}
-}
-func (a *MCPAdapter) ResourcesUnsubscribe(ctx context.Context, p *ResourcesUnsubscribePayload) error {
-	if !a.isInitialized(ctx) {
-		return loom.PermanentError("invalid_params", "Not initialized")
-	}
-	switch p.URI {
-	default:
-		return loom.PermanentError("resource_not_found", "Unknown resource: %s", p.URI)
-	}
-}
 
 // Prompts handling
-func (a *MCPAdapter) PromptsList(ctx context.Context, p *PromptsListPayload) (*PromptsListResult, error) {
-	if !a.isInitialized(ctx) {
-		return nil, loom.PermanentError("invalid_params", "Not initialized")
-	}
-	if p != nil && p.Cursor != nil && *p.Cursor != "" {
-		return nil, loom.PermanentError("invalid_params", "%s pagination is not implemented; cursor must be empty", "prompts/list")
-	}
-	a.log(ctx, "request", map[string]any{"method": "prompts/list"})
-	prompts := []*PromptInfo{&PromptInfo{
-		Arguments: []*PromptArgument{&PromptArgument{
-			Description: stringPtr("Current context"),
-			Name:        "context",
-			Required:    true,
-		}, &PromptArgument{
-			Description: stringPtr("Task type"),
-			Name:        "task",
-			Required:    true,
-		}},
-		Description: stringPtr("Generate prompts based on context"),
-		Icons: []*Icon{&Icon{
-			MimeType: stringPtr("image/png"),
-			Sizes:    []string{"48x48"},
-			Src:      "https://assistant.example.com/icons/contextual-prompts.png",
-		}},
-		Name: "contextual_prompts",
-	}, &PromptInfo{
-		Arguments: []*PromptArgument{&PromptArgument{
-			Description: stringPtr("Title of the screen being implemented"),
-			Name:        "screen_title",
-			Required:    true,
-		}, &PromptArgument{
-			Description: stringPtr("Target UI framework"),
-			Name:        "framework",
-			Required:    true,
-		}, &PromptArgument{
-			Description: stringPtr("Resource URI for the design system"),
-			Name:        "design_tokens_uri",
-			Required:    true,
-		}, &PromptArgument{
-			Description: stringPtr("Serialized DPI spec JSON"),
-			Name:        "dpi_json",
-			Required:    true,
-		}},
-		Description: stringPtr("Generate implementation instructions from a DPI spec"),
-		Name:        "figma_implementation_prompt",
-	}, &PromptInfo{
-		Description: stringPtr("Simple code review prompt"),
-		Icons: []*Icon{&Icon{
-			MimeType: stringPtr("image/svg+xml"),
-			Sizes:    []string{"any"},
-			Src:      "https://assistant.example.com/icons/code-review.svg",
-		}},
-		Name: "code_review",
-	}}
-	res := &PromptsListResult{Prompts: prompts}
-	a.log(ctx, "response", map[string]any{"method": "prompts/list"})
-	return res, nil
-}
 func (a *MCPAdapter) PromptsGet(ctx context.Context, p *PromptsGetPayload) (*PromptsGetResult, error) {
 	if !a.isInitialized(ctx) {
 		return nil, loom.PermanentError("invalid_params", "Not initialized")
@@ -3030,94 +2752,4 @@ func (a *MCPAdapter) PromptsGet(ctx context.Context, p *PromptsGetPayload) (*Pro
 		return res, nil
 	}
 	return nil, loom.PermanentError("invalid_params", "Unknown prompt: %s", p.Name)
-}
-
-// Notifications and events stream
-func (a *MCPAdapter) NotifyStatusUpdate(ctx context.Context, p *SendNotificationPayload) error {
-	if !a.isInitialized(ctx) {
-		return loom.PermanentError("invalid_params", "Not initialized")
-	}
-	if p == nil || p.Type == "" {
-		return loom.PermanentError("invalid_params", "Missing notification type")
-	}
-	n := &mcpruntime.Notification{
-		Data:    p.Data,
-		Message: p.Message,
-		Type:    p.Type,
-	}
-	a.log(ctx, "request", map[string]any{
-		"message": n.Message,
-		"method":  "notify_status_update",
-		"type":    n.Type,
-	})
-	s, err := mcpruntime.EncodeJSONToString(ctx, goahttp.ResponseEncoder, n)
-	if err != nil {
-		return err
-	}
-	ev := &EventsStreamResult{Content: []*ContentItem{buildContentItem(a, s)}}
-	a.PublishContext(ctx, ev)
-	a.log(ctx, "response", map[string]any{
-		"method": "notify_status_update",
-		"type":   n.Type,
-	})
-	return nil
-}
-func (a *MCPAdapter) EventsStream(ctx context.Context, stream EventsStreamServerStream) (res *EventsStreamResult, err error) {
-	if !a.isInitialized(ctx) {
-		return nil, loom.PermanentError("internal_error", "Not initialized")
-	}
-	a.log(ctx, "request", map[string]any{
-		"method":     "events/stream",
-		"session_id": mcpruntime.SessionIDFromContext(ctx),
-	})
-	sessionID := mcpruntime.SessionIDFromContext(ctx)
-	var sub mcpruntime.Subscription
-	if scoped, ok := a.broadcaster.(mcpruntime.SessionBroadcaster); ok && sessionID != "" {
-		sub, err = scoped.SubscribeSession(ctx, sessionID)
-	} else {
-		sub, err = a.broadcaster.Subscribe(ctx)
-	}
-	if err != nil {
-		return nil, loom.PermanentError("internal_error", "Failed to subscribe to events: %v", err)
-	}
-	defer sub.Close()
-	for {
-		select {
-		case <-ctx.Done():
-			a.log(ctx, "response", map[string]any{
-				"closed":     true,
-				"method":     "events/stream",
-				"reason":     ctx.Err().Error(),
-				"session_id": mcpruntime.SessionIDFromContext(ctx),
-			})
-			return nil, ctx.Err()
-		case ev, ok := <-sub.C():
-			if !ok {
-				a.log(ctx, "response", map[string]any{
-					"closed":     true,
-					"method":     "events/stream",
-					"reason":     "broadcaster_closed",
-					"session_id": mcpruntime.SessionIDFromContext(ctx),
-				})
-				return nil, nil
-			}
-			evt, ok := ev.(EventsStreamEvent)
-			if !ok {
-				a.log(ctx, "response", map[string]any{
-					"dropped_event_type": fmt.Sprintf("%T", ev),
-					"method":             "events/stream",
-					"session_id":         mcpruntime.SessionIDFromContext(ctx),
-				})
-				continue
-			}
-			if err := stream.Send(ctx, evt); err != nil {
-				return nil, loom.PermanentError("internal_error", "Failed to send event: %v", err)
-			}
-			a.log(ctx, "response", map[string]any{
-				"event_type": fmt.Sprintf("%T", evt),
-				"method":     "events/stream",
-				"session_id": mcpruntime.SessionIDFromContext(ctx),
-			})
-		}
-	}
 }

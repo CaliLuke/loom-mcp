@@ -12,7 +12,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestLoomExample_DynamicOnlyPromptCompiles(t *testing.T) {
+func TestLoomGen_DynamicOnlyPromptCompiles(t *testing.T) {
 	t.Parallel()
 
 	_, filename, _, ok := runtime.Caller(0)
@@ -28,7 +28,7 @@ func TestLoomExample_DynamicOnlyPromptCompiles(t *testing.T) {
 go 1.27rc2
 
 require (
-	github.com/CaliLuke/loom v1.8.0-alpha.5
+	github.com/CaliLuke/loom v1.8.0-alpha.8
 	github.com/CaliLuke/loom-mcp/v2 v2.0.0
 )
 
@@ -58,8 +58,7 @@ var _ = API("dynamicprompt", func() {
 })
 
 var _ = Service("prompt", func() {
-	MCP("prompt", "0.1.0", ProtocolVersion("2025-06-18"))
-	JSONRPC(func() { POST("/rpc") })
+	MCP("prompt", "0.1.0")
 
 	Method("generate", func() {
 		Payload(func() {
@@ -68,7 +67,6 @@ var _ = Service("prompt", func() {
 		})
 		Result(PromptTemplates)
 		DynamicPrompt("generate", "Generate a prompt")
-		JSONRPC(func() {})
 	})
 })
 `
@@ -83,12 +81,10 @@ var _ = Service("prompt", func() {
 	}
 
 	run("mod", "tidy")
-	run("run", upstreampaths.LoomCLIPackage, "gen", "example.com/dynamicprompt/design")
-	run("run", upstreampaths.LoomCLIPackage, "example", "example.com/dynamicprompt/design")
-
-	stub, err := os.ReadFile(filepath.Join(fixtureRoot, "mcp_prompt.go")) //nolint:gosec // path is rooted in the test temp directory
+	run("run", "-mod=mod", upstreampaths.LoomCLIPackage, "gen", "example.com/dynamicprompt/design")
+	stub, err := os.ReadFile(filepath.Join(fixtureRoot, "gen", "mcp_prompt", "sdk_server.go")) //nolint:gosec // path is rooted in the test temp directory
 	require.NoError(t, err)
-	require.Contains(t, string(stub), "NewMCPAdapter(NewPrompt(), nil, nil)")
+	require.Contains(t, string(stub), "func NewSDKServer")
 	run("mod", "tidy")
 	run("test", "./...")
 }

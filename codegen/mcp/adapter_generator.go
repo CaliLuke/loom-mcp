@@ -3,7 +3,6 @@ package codegen
 import (
 	"encoding/json"
 	"fmt"
-	"path"
 	"strings"
 
 	"github.com/CaliLuke/loom-mcp/v2/codegen/naming"
@@ -30,41 +29,27 @@ type (
 
 	// AdapterData holds the data for generating the adapter
 	AdapterData struct {
-		ServiceName         string
-		ServiceGoName       string
-		MCPServiceName      string
-		MCPName             string
-		MCPVersion          string
-		MCPDescription      string
-		WebsiteURL          string
-		Icons               []*IconData
-		ProtocolVersion     string
-		Package             string
-		MCPPackage          string
-		ServiceJSONRPCAlias string
-		ImportPath          string
-		Tools               []*ToolAdapter
-		Resources           []*ResourceAdapter
-		SkillDirectories    []*SkillDirectoryAdapter
-		StaticPrompts       []*StaticPromptAdapter
-		DynamicPrompts      []*DynamicPromptAdapter
-		Notifications       []*NotificationAdapter
-		Subscriptions       []*SubscriptionAdapter
-		// Streaming flags derived from original service DSL
-		ToolsCallStreaming bool
-		// RuntimeCORS reports whether the source JSON-RPC service declares
-		// Loom's design-owned RuntimeCORS mode.
-		RuntimeCORS bool
-		// Derived flags
+		ServiceName           string
+		ServiceGoName         string
+		MCPServiceName        string
+		MCPName               string
+		MCPVersion            string
+		MCPDescription        string
+		WebsiteURL            string
+		Icons                 []*IconData
+		Package               string
+		MCPPackage            string
+		ImportPath            string
+		Tools                 []*ToolAdapter
+		Resources             []*ResourceAdapter
+		SkillDirectories      []*SkillDirectoryAdapter
+		StaticPrompts         []*StaticPromptAdapter
+		DynamicPrompts        []*DynamicPromptAdapter
 		HasWatchableResources bool
-		NeedsMCPClient        bool
-		NeedsOriginalClient   bool
-		NeedsQueryFormatting  bool
 
-		Register     *RegisterData
-		ClientCaller *ClientCallerData
-		OAuth        *OAuthData
-		ToolSearch   *ToolSearchData
+		Register   *RegisterData
+		OAuth      *OAuthData
+		ToolSearch *ToolSearchData
 	}
 
 	// OAuthData carries the OAuth protected-resource configuration into
@@ -115,10 +100,6 @@ type (
 		SuiteQualifiedName string
 		Description        string
 		Tools              []RegisterTool
-	}
-
-	ClientCallerData struct {
-		MCPImportPath string
 	}
 
 	// RegisterTool represents a single tool entry in the helper file.
@@ -229,6 +210,9 @@ type (
 		ResultType         string
 		QueryFields        []*ResourceQueryField
 		Watchable          bool
+		IsStreaming        bool
+		StreamInterface    string
+		StreamEventType    string
 	}
 
 	// ResourceQueryField describes one statically known query parameter binding
@@ -302,23 +286,6 @@ type (
 		Values      []string
 	}
 
-	// NotificationAdapter represents a notification mapping
-	NotificationAdapter struct {
-		Name               string
-		Description        string
-		OriginalMethodName string
-		HasMessage         bool
-		MessagePointer     bool
-		HasData            bool
-	}
-
-	// SubscriptionAdapter represents a subscription mapping
-	SubscriptionAdapter struct {
-		ResourceName       string
-		ResourceURI        string
-		OriginalMethodName string
-	}
-
 	// adapterGenerator generates the adapter layer between MCP and the original service
 	adapterGenerator struct {
 		genpkg          string
@@ -386,45 +353,36 @@ func (g *adapterGenerator) buildAdapterData() (*AdapterData, error) {
 
 func (g *adapterGenerator) newAdapterData(tools []*ToolAdapter, resources []*ResourceAdapter) *AdapterData {
 	return &AdapterData{
-		ServiceName:         g.originalService.Name,
-		ServiceGoName:       codegen.Goify(g.originalService.Name, true),
-		MCPServiceName:      g.originalService.Name,
-		MCPName:             g.mcp.Name,
-		MCPVersion:          g.mcp.Version,
-		MCPDescription:      g.mcp.Description,
-		WebsiteURL:          g.mcp.WebsiteURL,
-		OAuth:               oauthDataFromExpr(g.mcp.OAuth),
-		ToolSearch:          toolSearchDataFromExpr(g.mcp.ToolSearch),
-		Icons:               iconDataFromExprs(g.mcp.Icons),
-		ProtocolVersion:     g.mcp.ProtocolVersion,
-		Package:             codegen.SnakeCase(g.originalService.Name),
-		MCPPackage:          "mcp" + strings.ToLower(codegen.Goify(g.originalService.Name, false)),
-		ServiceJSONRPCAlias: codegen.SnakeCase(g.originalService.Name) + "jsonrpc",
-		ImportPath:          g.genpkg,
-		Tools:               tools,
-		Resources:           resources,
-		SkillDirectories:    g.buildSkillDirectoryAdapters(),
+		ServiceName:      g.originalService.Name,
+		ServiceGoName:    codegen.Goify(g.originalService.Name, true),
+		MCPServiceName:   g.originalService.Name,
+		MCPName:          g.mcp.Name,
+		MCPVersion:       g.mcp.Version,
+		MCPDescription:   g.mcp.Description,
+		WebsiteURL:       g.mcp.WebsiteURL,
+		OAuth:            oauthDataFromExpr(g.mcp.OAuth),
+		ToolSearch:       toolSearchDataFromExpr(g.mcp.ToolSearch),
+		Icons:            iconDataFromExprs(g.mcp.Icons),
+		Package:          codegen.SnakeCase(g.originalService.Name),
+		MCPPackage:       "mcp" + strings.ToLower(codegen.Goify(g.originalService.Name, false)),
+		ImportPath:       g.genpkg,
+		Tools:            tools,
+		Resources:        resources,
+		SkillDirectories: g.buildSkillDirectoryAdapters(),
 	}
 }
 
 func (g *adapterGenerator) populateAdapterDataCollections(data *AdapterData) {
 	data.DynamicPrompts = g.buildDynamicPromptAdapters()
-	data.Notifications = g.buildNotificationAdapters()
-	data.Subscriptions = g.buildSubscriptionAdapters()
 	data.StaticPrompts = g.buildStaticPrompts()
 }
 
 func (g *adapterGenerator) populateAdapterDataFlags(data *AdapterData) {
-	data.ToolsCallStreaming = true
 	data.HasWatchableResources = hasWatchableResources(data.Resources)
-	data.NeedsMCPClient = adapterDataNeedsMCPClient(data)
-	data.NeedsOriginalClient = len(data.DynamicPrompts) > 0 || adapterDataNeedsOriginalClient(data.Tools, data.Resources)
-	data.NeedsQueryFormatting = adapterDataNeedsQueryFormatting(data.Resources)
 }
 
 func (g *adapterGenerator) populateAdapterHelperData(data *AdapterData) {
 	data.Register = g.buildRegisterData(data)
-	data.ClientCaller = g.buildClientCallerData(data, g.genpkg)
 }
 
 func toolSearchDataFromExpr(search *mcpexpr.ToolSearchExpr) *ToolSearchData {
@@ -518,40 +476,6 @@ func (g *adapterGenerator) buildRegisterData(data *AdapterData) *RegisterData {
 	return reg
 }
 
-func (g *adapterGenerator) buildClientCallerData(data *AdapterData, genpkg string) *ClientCallerData {
-	if data.Register == nil {
-		return nil
-	}
-	svcName := codegen.SnakeCase(g.originalService.Name)
-	importPath := path.Join(genpkg, "mcp_"+svcName)
-	return &ClientCallerData{
-		MCPImportPath: importPath,
-	}
-}
-
-// adapterDataNeedsOriginalClient reports whether any generated endpoint must
-// decode an MCP response through the original JSON-RPC client.
-func adapterDataNeedsOriginalClient(tools []*ToolAdapter, resources []*ResourceAdapter) bool {
-	for _, tool := range tools {
-		if tool.HasResult {
-			return true
-		}
-	}
-	for _, resource := range resources {
-		if resource.HasResult {
-			return true
-		}
-	}
-	return false
-}
-
-func adapterDataNeedsMCPClient(data *AdapterData) bool {
-	return len(data.Tools) > 0 ||
-		len(data.Resources) > 0 ||
-		len(data.DynamicPrompts) > 0 ||
-		len(data.Notifications) > 0
-}
-
 func adapterDataHasResources(data *AdapterData) bool {
 	return len(data.Resources) > 0 || len(data.SkillDirectories) > 0
 }
@@ -560,19 +484,6 @@ func hasWatchableResources(resources []*ResourceAdapter) bool {
 	for _, resource := range resources {
 		if resource.Watchable {
 			return true
-		}
-	}
-	return false
-}
-
-// adapterDataNeedsQueryFormatting reports whether resource query emission needs
-// strconv-based formatting for non-string primitive query values.
-func adapterDataNeedsQueryFormatting(resources []*ResourceAdapter) bool {
-	for _, resource := range resources {
-		for _, field := range resource.QueryFields {
-			if field.FormatKind != resourceQueryFormatString {
-				return true
-			}
 		}
 	}
 	return false
@@ -655,7 +566,7 @@ func (g *adapterGenerator) populateToolStreamingData(adapter *ToolAdapter, tool 
 		return
 	}
 	adapter.StreamInterface = codegen.Goify(tool.Method.Name, true) + "ServerStream"
-	adapter.StreamEventType = codegen.Goify(tool.Method.Name, true) + "Event"
+	adapter.StreamEventType = g.getTypeReference(tool.Method.StreamingResult)
 }
 
 func (g *adapterGenerator) populateToolPayloadData(adapter *ToolAdapter, tool *mcpexpr.ToolExpr) error {
@@ -855,6 +766,11 @@ func (g *adapterGenerator) buildResourceAdapter(resource *mcpexpr.ResourceExpr) 
 		HasPayload:         hasNonEmptyPayload(resource.Method.Payload),
 		HasResult:          resource.Method.Result != nil,
 		Watchable:          resource.Watchable,
+		IsStreaming:        resource.Method.Stream == expr.ServerStreamKind,
+	}
+	if adapter.IsStreaming {
+		adapter.StreamInterface = codegen.Goify(resource.Method.Name, true) + "ServerStream"
+		adapter.StreamEventType = g.getTypeReference(resource.Method.StreamingResult)
 	}
 	if err := g.populateResourcePayloadData(adapter, resource); err != nil {
 		return nil, err
@@ -934,41 +850,6 @@ func iconDataFromExprs(icons []*mcpexpr.IconExpr) []*IconData {
 		return nil
 	}
 	return out
-}
-
-// buildNotificationAdapters creates adapter data for notifications
-func (g *adapterGenerator) buildNotificationAdapters() []*NotificationAdapter {
-	adapters := make([]*NotificationAdapter, 0)
-	if g.mcp != nil {
-		for _, n := range g.mcp.Notifications {
-			fields := collectNotificationPayloadFields(n.Method.Payload)
-			messageField, hasMessage := fields["message"]
-			_, hasData := fields["data"]
-			adapters = append(adapters, &NotificationAdapter{
-				Name:               n.Name,
-				Description:        n.Description,
-				OriginalMethodName: codegen.Goify(n.Method.Name, true),
-				HasMessage:         hasMessage,
-				MessagePointer:     hasMessage && messageField.PrimitivePointer,
-				HasData:            hasData,
-			})
-		}
-	}
-	return adapters
-}
-
-// buildSubscriptionAdapters creates adapter data for subscriptions
-func (g *adapterGenerator) buildSubscriptionAdapters() []*SubscriptionAdapter {
-	adapters := make([]*SubscriptionAdapter, 0)
-	if g.mcp != nil {
-		for _, s := range g.mcp.Subscriptions {
-			adapters = append(adapters, &SubscriptionAdapter{
-				ResourceName:       s.ResourceName,
-				OriginalMethodName: codegen.Goify(s.Method.Name, true),
-			})
-		}
-	}
-	return adapters
 }
 
 // getTypeReference returns a Go type reference for an attribute

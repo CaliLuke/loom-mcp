@@ -335,18 +335,17 @@ Notes:
 If your agent uses a top-level MCP-backed toolset declared with
 `Toolset(FromMCP(...))` and referenced with `Use(...)`:
 
-1.  Get the generated JSON-RPC MCP client for the remote service.
-2.  Wrap it with that generated client's `NewCaller(client, suite)` helper.
-3.  Pass it to your agent's config, using the generated constant for the key.
+1.  Create an SDK-backed runtime caller for the remote MCP endpoint.
+2.  Pass it to your agent's config, using the generated constant for the key.
 
 ```go
-// 1. Get the generated JSON-RPC MCP client for the remote service.
-remoteClient := <jsonrpc_client_pkg>.NewClient(/* your endpoints */)
+caller, err := mcpruntime.NewHTTPCaller(ctx, mcpruntime.HTTPOptions{
+    Endpoint: "https://example.com/mcp",
+})
+if err != nil {
+    return err
+}
 
-// 2. Wrap it in the generated MCP Caller adapter.
-caller := <jsonrpc_client_pkg>.NewCaller(remoteClient, "<mcp-suite>")
-
-// 3. Supply it in the agent config.
 cfg := <agentpkg>.<AgentConfig>{
     Planner: myPlanner,
     MCPCallers: map[string]mcpruntime.Caller{
