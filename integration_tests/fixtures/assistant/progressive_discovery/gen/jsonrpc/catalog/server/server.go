@@ -311,7 +311,9 @@ func NewLookupHandler(endpoint loom.Endpoint, mux loomhttp.Muxer, decoder func(*
 		}
 		return nil
 	}
-} // NewProjectedLookupHandler creates a JSON-RPC handler which calls the
+}
+
+// NewProjectedLookupHandler creates a JSON-RPC handler which calls the
 // "catalog" service "projected_lookup" endpoint.
 func NewProjectedLookupHandler(endpoint loom.Endpoint, mux loomhttp.Muxer, decoder func(*http.Request) loomhttp.Decoder, encoder func(context.Context, http.ResponseWriter) loomhttp.Encoder, errhandler func(context.Context, http.ResponseWriter, error)) func(ctx context.Context, r *http.Request, req *jsonrpc.RawRequest, w http.ResponseWriter) error {
 	decodeParams := DecodeProjectedLookupRequest(mux, decoder)
@@ -380,7 +382,9 @@ func NewProjectedLookupHandler(endpoint loom.Endpoint, mux loomhttp.Muxer, decod
 		}
 		return nil
 	}
-} // encodeJSONRPCError creates and sends a JSON-RPC error response (handles nil ID gracefully)
+}
+
+// encodeJSONRPCError creates and sends a JSON-RPC error response (handles nil ID gracefully)
 func (s *Server) encodeJSONRPCError(ctx context.Context, w http.ResponseWriter, req *jsonrpc.RawRequest, code jsonrpc.Code, message string, data any) {
 	encodeJSONRPCError(ctx, w, req, code, message, data, s.encoder, s.errhandler)
 }

@@ -28,7 +28,9 @@ type Server struct {
 	SearchH       loomgrpc.UnaryHandler
 	CallToolH     loomgrpc.UnaryHandler
 	registrypb.UnimplementedRegistryServer
-} // New instantiates the server struct with the registry service endpoints.
+}
+
+// New instantiates the server struct with the registry service endpoints.
 func New(e *registry.Endpoints, uh loomgrpc.UnaryHandler) *Server {
 	return &Server{
 		CallToolH:     NewCallToolHandler(e.CallTool, uh),
@@ -39,14 +41,18 @@ func New(e *registry.Endpoints, uh loomgrpc.UnaryHandler) *Server {
 		SearchH:       NewSearchHandler(e.Search, uh),
 		UnregisterH:   NewUnregisterHandler(e.Unregister, uh),
 	}
-} // NewRegisterHandler creates a gRPC handler which serves the "registry"
+}
+
+// NewRegisterHandler creates a gRPC handler which serves the "registry"
 // service "Register" endpoint.
 func NewRegisterHandler(endpoint loom.Endpoint, h loomgrpc.UnaryHandler) loomgrpc.UnaryHandler {
 	if h == nil {
 		h = loomgrpc.NewUnaryHandler(endpoint, DecodeRegisterRequest, EncodeRegisterResponse)
 	}
 	return h
-} // Register implements the "Register" method in registrypb.RegistryServer
+}
+
+// Register implements the "Register" method in registrypb.RegistryServer
 // interface.
 func (s *Server) Register(ctx context.Context, message *registrypb.RegisterRequest) (*registrypb.RegisterResponse, error) {
 	ctx = context.WithValue(ctx, loom.MethodKey, "Register")
@@ -56,14 +62,18 @@ func (s *Server) Register(ctx context.Context, message *registrypb.RegisterReque
 		return nil, loomgrpc.EncodeError(err)
 	}
 	return resp.(*registrypb.RegisterResponse), nil
-} // NewUnregisterHandler creates a gRPC handler which serves the "registry"
+}
+
+// NewUnregisterHandler creates a gRPC handler which serves the "registry"
 // service "Unregister" endpoint.
 func NewUnregisterHandler(endpoint loom.Endpoint, h loomgrpc.UnaryHandler) loomgrpc.UnaryHandler {
 	if h == nil {
 		h = loomgrpc.NewUnaryHandler(endpoint, DecodeUnregisterRequest, EncodeUnregisterResponse)
 	}
 	return h
-} // Unregister implements the "Unregister" method in registrypb.RegistryServer
+}
+
+// Unregister implements the "Unregister" method in registrypb.RegistryServer
 // interface.
 func (s *Server) Unregister(ctx context.Context, message *registrypb.UnregisterRequest) (*registrypb.UnregisterResponse, error) {
 	ctx = context.WithValue(ctx, loom.MethodKey, "Unregister")
@@ -80,14 +90,18 @@ func (s *Server) Unregister(ctx context.Context, message *registrypb.UnregisterR
 		return nil, loomgrpc.EncodeError(err)
 	}
 	return resp.(*registrypb.UnregisterResponse), nil
-} // NewPongHandler creates a gRPC handler which serves the "registry" service
+}
+
+// NewPongHandler creates a gRPC handler which serves the "registry" service
 // "Pong" endpoint.
 func NewPongHandler(endpoint loom.Endpoint, h loomgrpc.UnaryHandler) loomgrpc.UnaryHandler {
 	if h == nil {
 		h = loomgrpc.NewUnaryHandler(endpoint, DecodePongRequest, EncodePongResponse)
 	}
 	return h
-} // Pong implements the "Pong" method in registrypb.RegistryServer interface.
+}
+
+// Pong implements the "Pong" method in registrypb.RegistryServer interface.
 func (s *Server) Pong(ctx context.Context, message *registrypb.PongRequest) (*registrypb.PongResponse, error) {
 	ctx = context.WithValue(ctx, loom.MethodKey, "Pong")
 	ctx = context.WithValue(ctx, loom.ServiceKey, "registry")
@@ -96,14 +110,18 @@ func (s *Server) Pong(ctx context.Context, message *registrypb.PongRequest) (*re
 		return nil, loomgrpc.EncodeError(err)
 	}
 	return resp.(*registrypb.PongResponse), nil
-} // NewListToolsetsHandler creates a gRPC handler which serves the "registry"
+}
+
+// NewListToolsetsHandler creates a gRPC handler which serves the "registry"
 // service "ListToolsets" endpoint.
 func NewListToolsetsHandler(endpoint loom.Endpoint, h loomgrpc.UnaryHandler) loomgrpc.UnaryHandler {
 	if h == nil {
 		h = loomgrpc.NewUnaryHandler(endpoint, DecodeListToolsetsRequest, EncodeListToolsetsResponse)
 	}
 	return h
-} // ListToolsets implements the "ListToolsets" method in
+}
+
+// ListToolsets implements the "ListToolsets" method in
 // registrypb.RegistryServer interface.
 func (s *Server) ListToolsets(ctx context.Context, message *registrypb.ListToolsetsRequest) (*registrypb.ListToolsetsResponse, error) {
 	ctx = context.WithValue(ctx, loom.MethodKey, "ListToolsets")
@@ -113,14 +131,18 @@ func (s *Server) ListToolsets(ctx context.Context, message *registrypb.ListTools
 		return nil, loomgrpc.EncodeError(err)
 	}
 	return resp.(*registrypb.ListToolsetsResponse), nil
-} // NewGetToolsetHandler creates a gRPC handler which serves the "registry"
+}
+
+// NewGetToolsetHandler creates a gRPC handler which serves the "registry"
 // service "GetToolset" endpoint.
 func NewGetToolsetHandler(endpoint loom.Endpoint, h loomgrpc.UnaryHandler) loomgrpc.UnaryHandler {
 	if h == nil {
 		h = loomgrpc.NewUnaryHandler(endpoint, DecodeGetToolsetRequest, EncodeGetToolsetResponse)
 	}
 	return h
-} // GetToolset implements the "GetToolset" method in registrypb.RegistryServer
+}
+
+// GetToolset implements the "GetToolset" method in registrypb.RegistryServer
 // interface.
 func (s *Server) GetToolset(ctx context.Context, message *registrypb.GetToolsetRequest) (*registrypb.GetToolsetResponse, error) {
 	ctx = context.WithValue(ctx, loom.MethodKey, "GetToolset")
@@ -137,14 +159,18 @@ func (s *Server) GetToolset(ctx context.Context, message *registrypb.GetToolsetR
 		return nil, loomgrpc.EncodeError(err)
 	}
 	return resp.(*registrypb.GetToolsetResponse), nil
-} // NewSearchHandler creates a gRPC handler which serves the "registry" service
+}
+
+// NewSearchHandler creates a gRPC handler which serves the "registry" service
 // "Search" endpoint.
 func NewSearchHandler(endpoint loom.Endpoint, h loomgrpc.UnaryHandler) loomgrpc.UnaryHandler {
 	if h == nil {
 		h = loomgrpc.NewUnaryHandler(endpoint, DecodeSearchRequest, EncodeSearchResponse)
 	}
 	return h
-} // Search implements the "Search" method in registrypb.RegistryServer interface.
+}
+
+// Search implements the "Search" method in registrypb.RegistryServer interface.
 func (s *Server) Search(ctx context.Context, message *registrypb.SearchRequest) (*registrypb.SearchResponse, error) {
 	ctx = context.WithValue(ctx, loom.MethodKey, "Search")
 	ctx = context.WithValue(ctx, loom.ServiceKey, "registry")
@@ -153,14 +179,18 @@ func (s *Server) Search(ctx context.Context, message *registrypb.SearchRequest) 
 		return nil, loomgrpc.EncodeError(err)
 	}
 	return resp.(*registrypb.SearchResponse), nil
-} // NewCallToolHandler creates a gRPC handler which serves the "registry"
+}
+
+// NewCallToolHandler creates a gRPC handler which serves the "registry"
 // service "CallTool" endpoint.
 func NewCallToolHandler(endpoint loom.Endpoint, h loomgrpc.UnaryHandler) loomgrpc.UnaryHandler {
 	if h == nil {
 		h = loomgrpc.NewUnaryHandler(endpoint, DecodeCallToolRequest, EncodeCallToolResponse)
 	}
 	return h
-} // CallTool implements the "CallTool" method in registrypb.RegistryServer
+}
+
+// CallTool implements the "CallTool" method in registrypb.RegistryServer
 // interface.
 func (s *Server) CallTool(ctx context.Context, message *registrypb.CallToolRequest) (*registrypb.CallToolResponse, error) {
 	ctx = context.WithValue(ctx, loom.MethodKey, "CallTool")

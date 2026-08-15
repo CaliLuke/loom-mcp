@@ -24,7 +24,9 @@ import (
 //	command (subcommand1|subcommand2|...)
 func UsageCommands() []string {
 	return []string{"assistant (list-documents|system-info|elicitation-context|conversation-history|figma-design-system|generate-prompts|build-figma-implementation-prompt|send-notification|analyze-sentiment|extract-keywords|summarize-text|search|search-records|execute-code|process-batch|report-progress|multi-content|generate-dpi-spec|dispatch-action|dispatch-command|projected-lookup|projected-status)"}
-} // UsageExamples produces an example of a valid invocation of the CLI tool.
+}
+
+// UsageExamples produces an example of a valid invocation of the CLI tool.
 func UsageExamples() string {
 	return os.Args[0] + " assistant list-documents\\n"
 }
@@ -285,7 +287,9 @@ func ParseEndpoint(scheme string, host string, doer loomhttp.Doer, enc func(*htt
 		return nil, nil, err
 	}
 	return endpoint, data, nil
-} // assistantUsage displays the usage of the assistant command and its
+}
+
+// assistantUsage displays the usage of the assistant command and its
 // subcommands.
 func assistantUsage() {
 	fmt.Fprintln(os.Stderr, "AI Assistant service with full MCP protocol support")

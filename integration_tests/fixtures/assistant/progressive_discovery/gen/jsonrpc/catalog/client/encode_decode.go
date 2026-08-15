@@ -112,7 +112,9 @@ func DecodeLookupResponse(decoder func(*http.Response) loomhttp.Decoder, restore
 		res := NewLookupResultOK(&body)
 		return res, nil
 	}
-} // BuildProjectedLookupRequest instantiates a HTTP request object with method
+}
+
+// BuildProjectedLookupRequest instantiates a HTTP request object with method
 // and path set to call the "catalog" service "projected_lookup" endpoint
 func (c *Client) BuildProjectedLookupRequest(ctx context.Context, v any) (*http.Request, error) {
 	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: ProjectedLookupCatalogPath()}

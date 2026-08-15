@@ -460,7 +460,9 @@ func NewListDocumentsHandler(endpoint loom.Endpoint, mux loomhttp.Muxer, decoder
 		}
 		return nil
 	}
-} // NewSystemInfoHandler creates a JSON-RPC handler which calls the "assistant"
+}
+
+// NewSystemInfoHandler creates a JSON-RPC handler which calls the "assistant"
 // service "system_info" endpoint.
 func NewSystemInfoHandler(endpoint loom.Endpoint, mux loomhttp.Muxer, decoder func(*http.Request) loomhttp.Decoder, encoder func(context.Context, http.ResponseWriter) loomhttp.Encoder, errhandler func(context.Context, http.ResponseWriter, error)) func(ctx context.Context, r *http.Request, req *jsonrpc.RawRequest, w http.ResponseWriter) error {
 	return func(ctx context.Context, r *http.Request, req *jsonrpc.RawRequest, w http.ResponseWriter) error {
@@ -513,7 +515,9 @@ func NewSystemInfoHandler(endpoint loom.Endpoint, mux loomhttp.Muxer, decoder fu
 		}
 		return nil
 	}
-} // NewElicitationContextHandler creates a JSON-RPC handler which calls the
+}
+
+// NewElicitationContextHandler creates a JSON-RPC handler which calls the
 // "assistant" service "elicitation_context" endpoint.
 func NewElicitationContextHandler(endpoint loom.Endpoint, mux loomhttp.Muxer, decoder func(*http.Request) loomhttp.Decoder, encoder func(context.Context, http.ResponseWriter) loomhttp.Encoder, errhandler func(context.Context, http.ResponseWriter, error)) func(ctx context.Context, r *http.Request, req *jsonrpc.RawRequest, w http.ResponseWriter) error {
 	return func(ctx context.Context, r *http.Request, req *jsonrpc.RawRequest, w http.ResponseWriter) error {
@@ -566,7 +570,9 @@ func NewElicitationContextHandler(endpoint loom.Endpoint, mux loomhttp.Muxer, de
 		}
 		return nil
 	}
-} // NewConversationHistoryHandler creates a JSON-RPC handler which calls the
+}
+
+// NewConversationHistoryHandler creates a JSON-RPC handler which calls the
 // "assistant" service "conversation_history" endpoint.
 func NewConversationHistoryHandler(endpoint loom.Endpoint, mux loomhttp.Muxer, decoder func(*http.Request) loomhttp.Decoder, encoder func(context.Context, http.ResponseWriter) loomhttp.Encoder, errhandler func(context.Context, http.ResponseWriter, error)) func(ctx context.Context, r *http.Request, req *jsonrpc.RawRequest, w http.ResponseWriter) error {
 	decodeParams := DecodeConversationHistoryRequest(mux, decoder)
@@ -635,7 +641,9 @@ func NewConversationHistoryHandler(endpoint loom.Endpoint, mux loomhttp.Muxer, d
 		}
 		return nil
 	}
-} // NewFigmaDesignSystemHandler creates a JSON-RPC handler which calls the
+}
+
+// NewFigmaDesignSystemHandler creates a JSON-RPC handler which calls the
 // "assistant" service "figma_design_system" endpoint.
 func NewFigmaDesignSystemHandler(endpoint loom.Endpoint, mux loomhttp.Muxer, decoder func(*http.Request) loomhttp.Decoder, encoder func(context.Context, http.ResponseWriter) loomhttp.Encoder, errhandler func(context.Context, http.ResponseWriter, error)) func(ctx context.Context, r *http.Request, req *jsonrpc.RawRequest, w http.ResponseWriter) error {
 	return func(ctx context.Context, r *http.Request, req *jsonrpc.RawRequest, w http.ResponseWriter) error {
@@ -688,7 +696,9 @@ func NewFigmaDesignSystemHandler(endpoint loom.Endpoint, mux loomhttp.Muxer, dec
 		}
 		return nil
 	}
-} // NewGeneratePromptsHandler creates a JSON-RPC handler which calls the
+}
+
+// NewGeneratePromptsHandler creates a JSON-RPC handler which calls the
 // "assistant" service "generate_prompts" endpoint.
 func NewGeneratePromptsHandler(endpoint loom.Endpoint, mux loomhttp.Muxer, decoder func(*http.Request) loomhttp.Decoder, encoder func(context.Context, http.ResponseWriter) loomhttp.Encoder, errhandler func(context.Context, http.ResponseWriter, error)) func(ctx context.Context, r *http.Request, req *jsonrpc.RawRequest, w http.ResponseWriter) error {
 	decodeParams := DecodeGeneratePromptsRequest(mux, decoder)
@@ -757,7 +767,9 @@ func NewGeneratePromptsHandler(endpoint loom.Endpoint, mux loomhttp.Muxer, decod
 		}
 		return nil
 	}
-} // NewBuildFigmaImplementationPromptHandler creates a JSON-RPC handler which
+}
+
+// NewBuildFigmaImplementationPromptHandler creates a JSON-RPC handler which
 // calls the "assistant" service "build_figma_implementation_prompt" endpoint.
 func NewBuildFigmaImplementationPromptHandler(endpoint loom.Endpoint, mux loomhttp.Muxer, decoder func(*http.Request) loomhttp.Decoder, encoder func(context.Context, http.ResponseWriter) loomhttp.Encoder, errhandler func(context.Context, http.ResponseWriter, error)) func(ctx context.Context, r *http.Request, req *jsonrpc.RawRequest, w http.ResponseWriter) error {
 	decodeParams := DecodeBuildFigmaImplementationPromptRequest(mux, decoder)
@@ -826,7 +838,9 @@ func NewBuildFigmaImplementationPromptHandler(endpoint loom.Endpoint, mux loomht
 		}
 		return nil
 	}
-} // NewSendNotificationHandler creates a JSON-RPC handler which calls the
+}
+
+// NewSendNotificationHandler creates a JSON-RPC handler which calls the
 // "assistant" service "send_notification" endpoint.
 func NewSendNotificationHandler(endpoint loom.Endpoint, mux loomhttp.Muxer, decoder func(*http.Request) loomhttp.Decoder, encoder func(context.Context, http.ResponseWriter) loomhttp.Encoder, errhandler func(context.Context, http.ResponseWriter, error)) func(ctx context.Context, r *http.Request, req *jsonrpc.RawRequest, w http.ResponseWriter) error {
 	decodeParams := DecodeSendNotificationRequest(mux, decoder)
@@ -891,7 +905,9 @@ func NewSendNotificationHandler(endpoint loom.Endpoint, mux loomhttp.Muxer, deco
 		}
 		return nil
 	}
-} // NewAnalyzeSentimentHandler creates a JSON-RPC handler which calls the
+}
+
+// NewAnalyzeSentimentHandler creates a JSON-RPC handler which calls the
 // "assistant" service "analyze_sentiment" endpoint.
 func NewAnalyzeSentimentHandler(endpoint loom.Endpoint, mux loomhttp.Muxer, decoder func(*http.Request) loomhttp.Decoder, encoder func(context.Context, http.ResponseWriter) loomhttp.Encoder, errhandler func(context.Context, http.ResponseWriter, error)) func(ctx context.Context, r *http.Request, req *jsonrpc.RawRequest, w http.ResponseWriter) error {
 	decodeParams := DecodeAnalyzeSentimentRequest(mux, decoder)
@@ -960,7 +976,9 @@ func NewAnalyzeSentimentHandler(endpoint loom.Endpoint, mux loomhttp.Muxer, deco
 		}
 		return nil
 	}
-} // NewExtractKeywordsHandler creates a JSON-RPC handler which calls the
+}
+
+// NewExtractKeywordsHandler creates a JSON-RPC handler which calls the
 // "assistant" service "extract_keywords" endpoint.
 func NewExtractKeywordsHandler(endpoint loom.Endpoint, mux loomhttp.Muxer, decoder func(*http.Request) loomhttp.Decoder, encoder func(context.Context, http.ResponseWriter) loomhttp.Encoder, errhandler func(context.Context, http.ResponseWriter, error)) func(ctx context.Context, r *http.Request, req *jsonrpc.RawRequest, w http.ResponseWriter) error {
 	decodeParams := DecodeExtractKeywordsRequest(mux, decoder)
@@ -1029,7 +1047,9 @@ func NewExtractKeywordsHandler(endpoint loom.Endpoint, mux loomhttp.Muxer, decod
 		}
 		return nil
 	}
-} // NewSummarizeTextHandler creates a JSON-RPC handler which calls the
+}
+
+// NewSummarizeTextHandler creates a JSON-RPC handler which calls the
 // "assistant" service "summarize_text" endpoint.
 func NewSummarizeTextHandler(endpoint loom.Endpoint, mux loomhttp.Muxer, decoder func(*http.Request) loomhttp.Decoder, encoder func(context.Context, http.ResponseWriter) loomhttp.Encoder, errhandler func(context.Context, http.ResponseWriter, error)) func(ctx context.Context, r *http.Request, req *jsonrpc.RawRequest, w http.ResponseWriter) error {
 	decodeParams := DecodeSummarizeTextRequest(mux, decoder)
@@ -1098,7 +1118,9 @@ func NewSummarizeTextHandler(endpoint loom.Endpoint, mux loomhttp.Muxer, decoder
 		}
 		return nil
 	}
-} // NewSearchHandler creates a JSON-RPC handler which calls the "assistant"
+}
+
+// NewSearchHandler creates a JSON-RPC handler which calls the "assistant"
 // service "search" endpoint.
 func NewSearchHandler(endpoint loom.Endpoint, mux loomhttp.Muxer, decoder func(*http.Request) loomhttp.Decoder, encoder func(context.Context, http.ResponseWriter) loomhttp.Encoder, errhandler func(context.Context, http.ResponseWriter, error)) func(ctx context.Context, r *http.Request, req *jsonrpc.RawRequest, w http.ResponseWriter) error {
 	decodeParams := DecodeSearchRequest(mux, decoder)
@@ -1167,7 +1189,9 @@ func NewSearchHandler(endpoint loom.Endpoint, mux loomhttp.Muxer, decoder func(*
 		}
 		return nil
 	}
-} // NewSearchRecordsHandler creates a JSON-RPC handler which calls the
+}
+
+// NewSearchRecordsHandler creates a JSON-RPC handler which calls the
 // "assistant" service "search_records" endpoint.
 func NewSearchRecordsHandler(endpoint loom.Endpoint, mux loomhttp.Muxer, decoder func(*http.Request) loomhttp.Decoder, encoder func(context.Context, http.ResponseWriter) loomhttp.Encoder, errhandler func(context.Context, http.ResponseWriter, error)) func(ctx context.Context, r *http.Request, req *jsonrpc.RawRequest, w http.ResponseWriter) error {
 	decodeParams := DecodeSearchRecordsRequest(mux, decoder)
@@ -1236,7 +1260,9 @@ func NewSearchRecordsHandler(endpoint loom.Endpoint, mux loomhttp.Muxer, decoder
 		}
 		return nil
 	}
-} // NewExecuteCodeHandler creates a JSON-RPC handler which calls the "assistant"
+}
+
+// NewExecuteCodeHandler creates a JSON-RPC handler which calls the "assistant"
 // service "execute_code" endpoint.
 func NewExecuteCodeHandler(endpoint loom.Endpoint, mux loomhttp.Muxer, decoder func(*http.Request) loomhttp.Decoder, encoder func(context.Context, http.ResponseWriter) loomhttp.Encoder, errhandler func(context.Context, http.ResponseWriter, error)) func(ctx context.Context, r *http.Request, req *jsonrpc.RawRequest, w http.ResponseWriter) error {
 	decodeParams := DecodeExecuteCodeRequest(mux, decoder)
@@ -1305,7 +1331,9 @@ func NewExecuteCodeHandler(endpoint loom.Endpoint, mux loomhttp.Muxer, decoder f
 		}
 		return nil
 	}
-} // NewProcessBatchHandler creates a JSON-RPC handler which calls the
+}
+
+// NewProcessBatchHandler creates a JSON-RPC handler which calls the
 // "assistant" service "process_batch" endpoint.
 func NewProcessBatchHandler(endpoint loom.Endpoint, mux loomhttp.Muxer, decoder func(*http.Request) loomhttp.Decoder, encoder func(context.Context, http.ResponseWriter) loomhttp.Encoder, errhandler func(context.Context, http.ResponseWriter, error)) func(ctx context.Context, r *http.Request, req *jsonrpc.RawRequest, w http.ResponseWriter) error {
 	decodeParams := DecodeProcessBatchRequest(mux, decoder)
@@ -1374,7 +1402,9 @@ func NewProcessBatchHandler(endpoint loom.Endpoint, mux loomhttp.Muxer, decoder 
 		}
 		return nil
 	}
-} // NewReportProgressHandler creates a JSON-RPC handler which calls the
+}
+
+// NewReportProgressHandler creates a JSON-RPC handler which calls the
 // "assistant" service "report_progress" endpoint.
 func NewReportProgressHandler(endpoint loom.Endpoint, mux loomhttp.Muxer, decoder func(*http.Request) loomhttp.Decoder, encoder func(context.Context, http.ResponseWriter) loomhttp.Encoder, errhandler func(context.Context, http.ResponseWriter, error)) func(ctx context.Context, r *http.Request, req *jsonrpc.RawRequest, w http.ResponseWriter) error {
 	return func(ctx context.Context, r *http.Request, req *jsonrpc.RawRequest, w http.ResponseWriter) error {
@@ -1427,7 +1457,9 @@ func NewReportProgressHandler(endpoint loom.Endpoint, mux loomhttp.Muxer, decode
 		}
 		return nil
 	}
-} // NewMultiContentHandler creates a JSON-RPC handler which calls the
+}
+
+// NewMultiContentHandler creates a JSON-RPC handler which calls the
 // "assistant" service "multi_content" endpoint.
 func NewMultiContentHandler(endpoint loom.Endpoint, mux loomhttp.Muxer, decoder func(*http.Request) loomhttp.Decoder, encoder func(context.Context, http.ResponseWriter) loomhttp.Encoder, errhandler func(context.Context, http.ResponseWriter, error)) func(ctx context.Context, r *http.Request, req *jsonrpc.RawRequest, w http.ResponseWriter) error {
 	decodeParams := DecodeMultiContentRequest(mux, decoder)
@@ -1496,7 +1528,9 @@ func NewMultiContentHandler(endpoint loom.Endpoint, mux loomhttp.Muxer, decoder 
 		}
 		return nil
 	}
-} // NewGenerateDpiSpecHandler creates a JSON-RPC handler which calls the
+}
+
+// NewGenerateDpiSpecHandler creates a JSON-RPC handler which calls the
 // "assistant" service "generate_dpi_spec" endpoint.
 func NewGenerateDpiSpecHandler(endpoint loom.Endpoint, mux loomhttp.Muxer, decoder func(*http.Request) loomhttp.Decoder, encoder func(context.Context, http.ResponseWriter) loomhttp.Encoder, errhandler func(context.Context, http.ResponseWriter, error)) func(ctx context.Context, r *http.Request, req *jsonrpc.RawRequest, w http.ResponseWriter) error {
 	decodeParams := DecodeGenerateDpiSpecRequest(mux, decoder)
@@ -1565,7 +1599,9 @@ func NewGenerateDpiSpecHandler(endpoint loom.Endpoint, mux loomhttp.Muxer, decod
 		}
 		return nil
 	}
-} // NewDispatchActionHandler creates a JSON-RPC handler which calls the
+}
+
+// NewDispatchActionHandler creates a JSON-RPC handler which calls the
 // "assistant" service "dispatch_action" endpoint.
 func NewDispatchActionHandler(endpoint loom.Endpoint, mux loomhttp.Muxer, decoder func(*http.Request) loomhttp.Decoder, encoder func(context.Context, http.ResponseWriter) loomhttp.Encoder, errhandler func(context.Context, http.ResponseWriter, error)) func(ctx context.Context, r *http.Request, req *jsonrpc.RawRequest, w http.ResponseWriter) error {
 	decodeParams := DecodeDispatchActionRequest(mux, decoder)
@@ -1634,7 +1670,9 @@ func NewDispatchActionHandler(endpoint loom.Endpoint, mux loomhttp.Muxer, decode
 		}
 		return nil
 	}
-} // NewDispatchCommandHandler creates a JSON-RPC handler which calls the
+}
+
+// NewDispatchCommandHandler creates a JSON-RPC handler which calls the
 // "assistant" service "dispatch_command" endpoint.
 func NewDispatchCommandHandler(endpoint loom.Endpoint, mux loomhttp.Muxer, decoder func(*http.Request) loomhttp.Decoder, encoder func(context.Context, http.ResponseWriter) loomhttp.Encoder, errhandler func(context.Context, http.ResponseWriter, error)) func(ctx context.Context, r *http.Request, req *jsonrpc.RawRequest, w http.ResponseWriter) error {
 	decodeParams := DecodeDispatchCommandRequest(mux, decoder)
@@ -1703,7 +1741,9 @@ func NewDispatchCommandHandler(endpoint loom.Endpoint, mux loomhttp.Muxer, decod
 		}
 		return nil
 	}
-} // NewProjectedLookupHandler creates a JSON-RPC handler which calls the
+}
+
+// NewProjectedLookupHandler creates a JSON-RPC handler which calls the
 // "assistant" service "projected_lookup" endpoint.
 func NewProjectedLookupHandler(endpoint loom.Endpoint, mux loomhttp.Muxer, decoder func(*http.Request) loomhttp.Decoder, encoder func(context.Context, http.ResponseWriter) loomhttp.Encoder, errhandler func(context.Context, http.ResponseWriter, error)) func(ctx context.Context, r *http.Request, req *jsonrpc.RawRequest, w http.ResponseWriter) error {
 	decodeParams := DecodeProjectedLookupRequest(mux, decoder)
@@ -1772,7 +1812,9 @@ func NewProjectedLookupHandler(endpoint loom.Endpoint, mux loomhttp.Muxer, decod
 		}
 		return nil
 	}
-} // NewProjectedStatusHandler creates a JSON-RPC handler which calls the
+}
+
+// NewProjectedStatusHandler creates a JSON-RPC handler which calls the
 // "assistant" service "projected_status" endpoint.
 func NewProjectedStatusHandler(endpoint loom.Endpoint, mux loomhttp.Muxer, decoder func(*http.Request) loomhttp.Decoder, encoder func(context.Context, http.ResponseWriter) loomhttp.Encoder, errhandler func(context.Context, http.ResponseWriter, error)) func(ctx context.Context, r *http.Request, req *jsonrpc.RawRequest, w http.ResponseWriter) error {
 	return func(ctx context.Context, r *http.Request, req *jsonrpc.RawRequest, w http.ResponseWriter) error {
@@ -1825,7 +1867,9 @@ func NewProjectedStatusHandler(endpoint loom.Endpoint, mux loomhttp.Muxer, decod
 		}
 		return nil
 	}
-} // encodeJSONRPCError creates and sends a JSON-RPC error response (handles nil ID gracefully)
+}
+
+// encodeJSONRPCError creates and sends a JSON-RPC error response (handles nil ID gracefully)
 func (s *Server) encodeJSONRPCError(ctx context.Context, w http.ResponseWriter, req *jsonrpc.RawRequest, code jsonrpc.Code, message string, data any) {
 	encodeJSONRPCError(ctx, w, req, code, message, data, s.encoder, s.errhandler)
 }

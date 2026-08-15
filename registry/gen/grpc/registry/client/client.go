@@ -21,13 +21,17 @@ import (
 type Client struct {
 	grpccli registrypb.RegistryClient
 	opts    []grpc.CallOption
-} // NewClient instantiates gRPC client for all the registry service servers.
+}
+
+// NewClient instantiates gRPC client for all the registry service servers.
 func NewClient(cc *grpc.ClientConn, opts ...grpc.CallOption) *Client {
 	return &Client{
 		grpccli: registrypb.NewRegistryClient(cc),
 		opts:    opts,
 	}
-} // Register calls the "Register" function in registrypb.RegistryClient
+}
+
+// Register calls the "Register" function in registrypb.RegistryClient
 // interface.
 func (c *Client) Register() loom.Endpoint {
 	return func(ctx context.Context, v any) (any, error) {
@@ -43,7 +47,9 @@ func (c *Client) Register() loom.Endpoint {
 		}
 		return res, nil
 	}
-} // Unregister calls the "Unregister" function in registrypb.RegistryClient
+}
+
+// Unregister calls the "Unregister" function in registrypb.RegistryClient
 // interface.
 func (c *Client) Unregister() loom.Endpoint {
 	return func(ctx context.Context, v any) (any, error) {
@@ -60,7 +66,9 @@ func (c *Client) Unregister() loom.Endpoint {
 		}
 		return res, nil
 	}
-} // Pong calls the "Pong" function in registrypb.RegistryClient interface.
+}
+
+// Pong calls the "Pong" function in registrypb.RegistryClient interface.
 func (c *Client) Pong() loom.Endpoint {
 	return func(ctx context.Context, v any) (any, error) {
 		inv := loomgrpc.NewInvoker(BuildPongFunc(c.grpccli, c.opts...), EncodePongRequest, nil)
@@ -75,7 +83,9 @@ func (c *Client) Pong() loom.Endpoint {
 		}
 		return res, nil
 	}
-} // ListToolsets calls the "ListToolsets" function in registrypb.RegistryClient
+}
+
+// ListToolsets calls the "ListToolsets" function in registrypb.RegistryClient
 // interface.
 func (c *Client) ListToolsets() loom.Endpoint {
 	return func(ctx context.Context, v any) (any, error) {
@@ -91,7 +101,9 @@ func (c *Client) ListToolsets() loom.Endpoint {
 		}
 		return res, nil
 	}
-} // GetToolset calls the "GetToolset" function in registrypb.RegistryClient
+}
+
+// GetToolset calls the "GetToolset" function in registrypb.RegistryClient
 // interface.
 func (c *Client) GetToolset() loom.Endpoint {
 	return func(ctx context.Context, v any) (any, error) {
@@ -108,7 +120,9 @@ func (c *Client) GetToolset() loom.Endpoint {
 		}
 		return res, nil
 	}
-} // Search calls the "Search" function in registrypb.RegistryClient interface.
+}
+
+// Search calls the "Search" function in registrypb.RegistryClient interface.
 func (c *Client) Search() loom.Endpoint {
 	return func(ctx context.Context, v any) (any, error) {
 		inv := loomgrpc.NewInvoker(BuildSearchFunc(c.grpccli, c.opts...), EncodeSearchRequest, DecodeSearchResponse)
@@ -123,7 +137,9 @@ func (c *Client) Search() loom.Endpoint {
 		}
 		return res, nil
 	}
-} // CallTool calls the "CallTool" function in registrypb.RegistryClient
+}
+
+// CallTool calls the "CallTool" function in registrypb.RegistryClient
 // interface.
 func (c *Client) CallTool() loom.Endpoint {
 	return func(ctx context.Context, v any) (any, error) {

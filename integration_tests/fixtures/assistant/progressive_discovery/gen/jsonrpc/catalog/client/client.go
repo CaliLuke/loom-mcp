@@ -64,7 +64,9 @@ func (c *Client) Lookup() loom.Endpoint {
 		}
 		return decodeResponse(resp)
 	}
-} // ProjectedLookup returns an endpoint that makes JSON-RPC requests to the
+}
+
+// ProjectedLookup returns an endpoint that makes JSON-RPC requests to the
 // catalog service projected_lookup method.
 func (c *Client) ProjectedLookup() loom.Endpoint {
 	var (

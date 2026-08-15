@@ -29,7 +29,9 @@ func BuildRegisterFunc(grpccli registrypb.RegistryClient, cliopts ...grpc.CallOp
 		}
 		return grpccli.Register(ctx, &registrypb.RegisterRequest{}, opts...)
 	}
-} // EncodeRegisterRequest encodes requests sent to registry Register endpoint.
+}
+
+// EncodeRegisterRequest encodes requests sent to registry Register endpoint.
 func EncodeRegisterRequest(ctx context.Context, v any, md *metadata.MD) (any, error) {
 	payload, ok := v.(*registry.RegisterPayload)
 	if !ok {
@@ -63,7 +65,9 @@ func BuildUnregisterFunc(grpccli registrypb.RegistryClient, cliopts ...grpc.Call
 		}
 		return grpccli.Unregister(ctx, &registrypb.UnregisterRequest{}, opts...)
 	}
-} // EncodeUnregisterRequest encodes requests sent to registry Unregister
+}
+
+// EncodeUnregisterRequest encodes requests sent to registry Unregister
 // endpoint.
 func EncodeUnregisterRequest(ctx context.Context, v any, md *metadata.MD) (any, error) {
 	payload, ok := v.(*registry.UnregisterPayload)
@@ -85,7 +89,9 @@ func BuildPongFunc(grpccli registrypb.RegistryClient, cliopts ...grpc.CallOption
 		}
 		return grpccli.Pong(ctx, &registrypb.PongRequest{}, opts...)
 	}
-} // EncodePongRequest encodes requests sent to registry Pong endpoint.
+}
+
+// EncodePongRequest encodes requests sent to registry Pong endpoint.
 func EncodePongRequest(ctx context.Context, v any, md *metadata.MD) (any, error) {
 	payload, ok := v.(*registry.PongPayload)
 	if !ok {
@@ -106,7 +112,9 @@ func BuildListToolsetsFunc(grpccli registrypb.RegistryClient, cliopts ...grpc.Ca
 		}
 		return grpccli.ListToolsets(ctx, &registrypb.ListToolsetsRequest{}, opts...)
 	}
-} // EncodeListToolsetsRequest encodes requests sent to registry ListToolsets
+}
+
+// EncodeListToolsetsRequest encodes requests sent to registry ListToolsets
 // endpoint.
 func EncodeListToolsetsRequest(ctx context.Context, v any, md *metadata.MD) (any, error) {
 	payload, ok := v.(*registry.ListToolsetsPayload)
@@ -142,7 +150,9 @@ func BuildGetToolsetFunc(grpccli registrypb.RegistryClient, cliopts ...grpc.Call
 		}
 		return grpccli.GetToolset(ctx, &registrypb.GetToolsetRequest{}, opts...)
 	}
-} // EncodeGetToolsetRequest encodes requests sent to registry GetToolset
+}
+
+// EncodeGetToolsetRequest encodes requests sent to registry GetToolset
 // endpoint.
 func EncodeGetToolsetRequest(ctx context.Context, v any, md *metadata.MD) (any, error) {
 	payload, ok := v.(*registry.GetToolsetPayload)
@@ -178,7 +188,9 @@ func BuildSearchFunc(grpccli registrypb.RegistryClient, cliopts ...grpc.CallOpti
 		}
 		return grpccli.Search(ctx, &registrypb.SearchRequest{}, opts...)
 	}
-} // EncodeSearchRequest encodes requests sent to registry Search endpoint.
+}
+
+// EncodeSearchRequest encodes requests sent to registry Search endpoint.
 func EncodeSearchRequest(ctx context.Context, v any, md *metadata.MD) (any, error) {
 	payload, ok := v.(*registry.SearchPayload)
 	if !ok {
@@ -212,7 +224,9 @@ func BuildCallToolFunc(grpccli registrypb.RegistryClient, cliopts ...grpc.CallOp
 		}
 		return grpccli.CallTool(ctx, &registrypb.CallToolRequest{}, opts...)
 	}
-} // EncodeCallToolRequest encodes requests sent to registry CallTool endpoint.
+}
+
+// EncodeCallToolRequest encodes requests sent to registry CallTool endpoint.
 func EncodeCallToolRequest(ctx context.Context, v any, md *metadata.MD) (any, error) {
 	payload, ok := v.(*registry.CallToolPayload)
 	if !ok {

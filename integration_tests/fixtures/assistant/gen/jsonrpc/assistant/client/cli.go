@@ -38,7 +38,9 @@ func BuildConversationHistoryPayload(assistantConversationHistoryBody string) (*
 	}
 
 	return v, nil
-} // BuildGeneratePromptsPayload builds the payload for the assistant
+}
+
+// BuildGeneratePromptsPayload builds the payload for the assistant
 // generate_prompts endpoint from CLI flags.
 func BuildGeneratePromptsPayload(assistantGeneratePromptsBody string) (*assistant.GeneratePromptsPayload, error) {
 	var err error
@@ -55,7 +57,9 @@ func BuildGeneratePromptsPayload(assistantGeneratePromptsBody string) (*assistan
 	}
 
 	return v, nil
-} // BuildBuildFigmaImplementationPromptPayload builds the payload for the
+}
+
+// BuildBuildFigmaImplementationPromptPayload builds the payload for the
 // assistant build_figma_implementation_prompt endpoint from CLI flags.
 func BuildBuildFigmaImplementationPromptPayload(assistantBuildFigmaImplementationPromptBody string) (*assistant.BuildFigmaImplementationPromptPayload, error) {
 	var err error
@@ -80,7 +84,9 @@ func BuildBuildFigmaImplementationPromptPayload(assistantBuildFigmaImplementatio
 	}
 
 	return v, nil
-} // BuildSendNotificationPayload builds the payload for the assistant
+}
+
+// BuildSendNotificationPayload builds the payload for the assistant
 // send_notification endpoint from CLI flags.
 func BuildSendNotificationPayload(assistantSendNotificationBody string) (*assistant.SendNotificationPayload, error) {
 	var err error
@@ -98,7 +104,9 @@ func BuildSendNotificationPayload(assistantSendNotificationBody string) (*assist
 	}
 
 	return v, nil
-} // BuildAnalyzeSentimentPayload builds the payload for the assistant
+}
+
+// BuildAnalyzeSentimentPayload builds the payload for the assistant
 // analyze_sentiment endpoint from CLI flags.
 func BuildAnalyzeSentimentPayload(assistantAnalyzeSentimentBody string) (*assistant.AnalyzeSentimentPayload, error) {
 	var err error
@@ -114,7 +122,9 @@ func BuildAnalyzeSentimentPayload(assistantAnalyzeSentimentBody string) (*assist
 	}
 
 	return v, nil
-} // BuildExtractKeywordsPayload builds the payload for the assistant
+}
+
+// BuildExtractKeywordsPayload builds the payload for the assistant
 // extract_keywords endpoint from CLI flags.
 func BuildExtractKeywordsPayload(assistantExtractKeywordsBody string) (*assistant.ExtractKeywordsPayload, error) {
 	var err error
@@ -130,7 +140,9 @@ func BuildExtractKeywordsPayload(assistantExtractKeywordsBody string) (*assistan
 	}
 
 	return v, nil
-} // BuildSummarizeTextPayload builds the payload for the assistant
+}
+
+// BuildSummarizeTextPayload builds the payload for the assistant
 // summarize_text endpoint from CLI flags.
 func BuildSummarizeTextPayload(assistantSummarizeTextBody string) (*assistant.SummarizeTextPayload, error) {
 	var err error
@@ -146,7 +158,9 @@ func BuildSummarizeTextPayload(assistantSummarizeTextBody string) (*assistant.Su
 	}
 
 	return v, nil
-} // BuildSearchPayload builds the payload for the assistant search endpoint from
+}
+
+// BuildSearchPayload builds the payload for the assistant search endpoint from
 // CLI flags.
 func BuildSearchPayload(assistantSearchBody string) (*assistant.SearchPayload, error) {
 	var err error
@@ -163,7 +177,9 @@ func BuildSearchPayload(assistantSearchBody string) (*assistant.SearchPayload, e
 	}
 
 	return v, nil
-} // BuildSearchRecordsPayload builds the payload for the assistant
+}
+
+// BuildSearchRecordsPayload builds the payload for the assistant
 // search_records endpoint from CLI flags.
 func BuildSearchRecordsPayload(assistantSearchRecordsBody string) (*assistant.SearchRecordsPayload, error) {
 	var err error
@@ -180,7 +196,9 @@ func BuildSearchRecordsPayload(assistantSearchRecordsBody string) (*assistant.Se
 	}
 
 	return v, nil
-} // BuildExecuteCodePayload builds the payload for the assistant execute_code
+}
+
+// BuildExecuteCodePayload builds the payload for the assistant execute_code
 // endpoint from CLI flags.
 func BuildExecuteCodePayload(assistantExecuteCodeBody string) (*assistant.ExecuteCodePayload, error) {
 	var err error
@@ -203,7 +221,9 @@ func BuildExecuteCodePayload(assistantExecuteCodeBody string) (*assistant.Execut
 	}
 
 	return v, nil
-} // BuildProcessBatchPayload builds the payload for the assistant process_batch
+}
+
+// BuildProcessBatchPayload builds the payload for the assistant process_batch
 // endpoint from CLI flags.
 func BuildProcessBatchPayload(assistantProcessBatchBody string) (*assistant.ProcessBatchPayload, error) {
 	var err error
@@ -241,7 +261,9 @@ func BuildProcessBatchPayload(assistantProcessBatchBody string) (*assistant.Proc
 	}
 
 	return v, nil
-} // BuildMultiContentPayload builds the payload for the assistant multi_content
+}
+
+// BuildMultiContentPayload builds the payload for the assistant multi_content
 // endpoint from CLI flags.
 func BuildMultiContentPayload(assistantMultiContentBody string) (*assistant.MultiContentPayload, error) {
 	var err error
@@ -257,7 +279,9 @@ func BuildMultiContentPayload(assistantMultiContentBody string) (*assistant.Mult
 	}
 
 	return v, nil
-} // BuildGenerateDpiSpecPayload builds the payload for the assistant
+}
+
+// BuildGenerateDpiSpecPayload builds the payload for the assistant
 // generate_dpi_spec endpoint from CLI flags.
 func BuildGenerateDpiSpecPayload(assistantGenerateDpiSpecBody string) (*assistant.GenerateDpiSpecPayload, error) {
 	var err error
@@ -297,7 +321,9 @@ func BuildGenerateDpiSpecPayload(assistantGenerateDpiSpecBody string) (*assistan
 	}
 
 	return v, nil
-} // BuildDispatchActionPayload builds the payload for the assistant
+}
+
+// BuildDispatchActionPayload builds the payload for the assistant
 // dispatch_action endpoint from CLI flags.
 func BuildDispatchActionPayload(assistantDispatchActionBody string) (*assistant.DispatchActionPayload, error) {
 	var err error
@@ -336,7 +362,9 @@ func BuildDispatchActionPayload(assistantDispatchActionBody string) (*assistant.
 	}
 
 	return v, nil
-} // BuildDispatchCommandPayload builds the payload for the assistant
+}
+
+// BuildDispatchCommandPayload builds the payload for the assistant
 // dispatch_command endpoint from CLI flags.
 func BuildDispatchCommandPayload(assistantDispatchCommandBody string) (*assistant.DispatchCommandPayload, error) {
 	var err error
@@ -375,7 +403,9 @@ func BuildDispatchCommandPayload(assistantDispatchCommandBody string) (*assistan
 	}
 
 	return v, nil
-} // BuildProjectedLookupPayload builds the payload for the assistant
+}
+
+// BuildProjectedLookupPayload builds the payload for the assistant
 // projected_lookup endpoint from CLI flags.
 func BuildProjectedLookupPayload(assistantProjectedLookupBody string) (*assistant.ProjectedLookupPayload, error) {
 	var err error

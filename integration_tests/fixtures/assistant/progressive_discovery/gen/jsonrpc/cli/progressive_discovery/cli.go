@@ -25,7 +25,9 @@ import (
 //	command (subcommand1|subcommand2|...)
 func UsageCommands() []string {
 	return []string{"catalog (lookup|projected-lookup)"}
-} // UsageExamples produces an example of a valid invocation of the CLI tool.
+}
+
+// UsageExamples produces an example of a valid invocation of the CLI tool.
 func UsageExamples() string {
 	return os.Args[0] + " catalog lookup --body '{\n      \"query\": \"Est rerum odio omnis ut reprehenderit.\"\n   }'\\n"
 }
@@ -96,7 +98,9 @@ func ParseEndpoint(scheme string, host string, doer loomhttp.Doer, enc func(*htt
 		return nil, nil, err
 	}
 	return endpoint, data, nil
-} // catalogUsage displays the usage of the catalog command and its subcommands.
+}
+
+// catalogUsage displays the usage of the catalog command and its subcommands.
 func catalogUsage() {
 	fmt.Fprintln(os.Stderr, "Minimal MCP progressive-discovery parity fixture")
 	fmt.Fprintf(os.Stderr, "Usage:\n    %s [globalflags] catalog COMMAND [flags]\n\n", os.Args[0])

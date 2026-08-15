@@ -174,10 +174,15 @@ func (s *Server) serveHTTP(w http.ResponseWriter, r *http.Request) {
 
 		var req jsonrpc.RawRequest
 		if err := s.decoder(r).Decode(&req); err != nil {
+			loomtransport.RequestObserverFromContext(r.Context()).Fail(loomtransport.ReasonInvalidJSONRPCEnvelope)
+			// SSE is negotiated: stream the envelope decode error as a message event.
 			code, message, data := jsonrpcEnvelopeDecodeError(err)
 			response := jsonrpc.MakeErrorResponse(nil, code, message, data)
-			if encErr := s.encoder(r.Context(), w).Encode(response); encErr != nil {
-				s.errhandler(r.Context(), w, fmt.Errorf("failed to encode envelope decode error response: %w", encErr))
+			writer := loomhttp.NewSSEStreamWriter(w, r.Context(), loomtransport.TransportJSONRPC, s.streamWritePolicy)
+			if sendErr := writer.WriteEvent(r.Context(), func(w io.Writer) error {
+				return loomhttp.WriteJSONSSEEvent(w, loomhttp.SSEMessage{Type: "message"}, response)
+			}); sendErr != nil {
+				s.errhandler(r.Context(), w, fmt.Errorf("failed to send envelope decode error event: %w", sendErr))
 			}
 			return
 		}
@@ -585,7 +590,9 @@ func NewInitializeHandler(endpoint loom.Endpoint, mux loomhttp.Muxer, decoder fu
 		}
 		return nil
 	}
-} // NewPingHandler creates a JSON-RPC handler which calls the "mcp_assistant"
+}
+
+// NewPingHandler creates a JSON-RPC handler which calls the "mcp_assistant"
 // service "ping" endpoint.
 func NewPingHandler(endpoint loom.Endpoint, mux loomhttp.Muxer, decoder func(*http.Request) loomhttp.Decoder, encoder func(context.Context, http.ResponseWriter) loomhttp.Encoder, errhandler func(context.Context, http.ResponseWriter, error)) func(ctx context.Context, r *http.Request, req *jsonrpc.RawRequest, w http.ResponseWriter) error {
 	return func(ctx context.Context, r *http.Request, req *jsonrpc.RawRequest, w http.ResponseWriter) error {
@@ -646,7 +653,9 @@ func NewPingHandler(endpoint loom.Endpoint, mux loomhttp.Muxer, decoder func(*ht
 		}
 		return nil
 	}
-} // NewToolsListHandler creates a JSON-RPC handler which calls the
+}
+
+// NewToolsListHandler creates a JSON-RPC handler which calls the
 // "mcp_assistant" service "tools/list" endpoint.
 func NewToolsListHandler(endpoint loom.Endpoint, mux loomhttp.Muxer, decoder func(*http.Request) loomhttp.Decoder, encoder func(context.Context, http.ResponseWriter) loomhttp.Encoder, errhandler func(context.Context, http.ResponseWriter, error)) func(ctx context.Context, r *http.Request, req *jsonrpc.RawRequest, w http.ResponseWriter) error {
 	decodeParams := DecodeToolsListRequest(mux, decoder)
@@ -726,7 +735,9 @@ func NewToolsListHandler(endpoint loom.Endpoint, mux loomhttp.Muxer, decoder fun
 		}
 		return nil
 	}
-} // NewToolsCallHandler creates a JSON-RPC handler which calls the
+}
+
+// NewToolsCallHandler creates a JSON-RPC handler which calls the
 // "mcp_assistant" service "tools/call" endpoint.
 func NewToolsCallHandler(endpoint loom.Endpoint, mux loomhttp.Muxer, decoder func(*http.Request) loomhttp.Decoder, encoder func(context.Context, http.ResponseWriter) loomhttp.Encoder, errhandler func(context.Context, http.ResponseWriter, error), streamWritePolicy loomhttp.StreamWritePolicy) func(ctx context.Context, r *http.Request, req *jsonrpc.RawRequest, w http.ResponseWriter) error {
 	decodeParams := DecodeToolsCallRequest(mux, decoder)
@@ -790,7 +801,9 @@ func NewToolsCallHandler(endpoint loom.Endpoint, mux loomhttp.Muxer, decoder fun
 		}
 		return nil
 	}
-} // NewResourcesListHandler creates a JSON-RPC handler which calls the
+}
+
+// NewResourcesListHandler creates a JSON-RPC handler which calls the
 // "mcp_assistant" service "resources/list" endpoint.
 func NewResourcesListHandler(endpoint loom.Endpoint, mux loomhttp.Muxer, decoder func(*http.Request) loomhttp.Decoder, encoder func(context.Context, http.ResponseWriter) loomhttp.Encoder, errhandler func(context.Context, http.ResponseWriter, error)) func(ctx context.Context, r *http.Request, req *jsonrpc.RawRequest, w http.ResponseWriter) error {
 	decodeParams := DecodeResourcesListRequest(mux, decoder)
@@ -870,7 +883,9 @@ func NewResourcesListHandler(endpoint loom.Endpoint, mux loomhttp.Muxer, decoder
 		}
 		return nil
 	}
-} // NewResourcesReadHandler creates a JSON-RPC handler which calls the
+}
+
+// NewResourcesReadHandler creates a JSON-RPC handler which calls the
 // "mcp_assistant" service "resources/read" endpoint.
 func NewResourcesReadHandler(endpoint loom.Endpoint, mux loomhttp.Muxer, decoder func(*http.Request) loomhttp.Decoder, encoder func(context.Context, http.ResponseWriter) loomhttp.Encoder, errhandler func(context.Context, http.ResponseWriter, error)) func(ctx context.Context, r *http.Request, req *jsonrpc.RawRequest, w http.ResponseWriter) error {
 	decodeParams := DecodeResourcesReadRequest(mux, decoder)
@@ -950,7 +965,9 @@ func NewResourcesReadHandler(endpoint loom.Endpoint, mux loomhttp.Muxer, decoder
 		}
 		return nil
 	}
-} // NewResourcesSubscribeHandler creates a JSON-RPC handler which calls the
+}
+
+// NewResourcesSubscribeHandler creates a JSON-RPC handler which calls the
 // "mcp_assistant" service "resources/subscribe" endpoint.
 func NewResourcesSubscribeHandler(endpoint loom.Endpoint, mux loomhttp.Muxer, decoder func(*http.Request) loomhttp.Decoder, encoder func(context.Context, http.ResponseWriter) loomhttp.Encoder, errhandler func(context.Context, http.ResponseWriter, error)) func(ctx context.Context, r *http.Request, req *jsonrpc.RawRequest, w http.ResponseWriter) error {
 	decodeParams := DecodeResourcesSubscribeRequest(mux, decoder)
@@ -1027,7 +1044,9 @@ func NewResourcesSubscribeHandler(endpoint loom.Endpoint, mux loomhttp.Muxer, de
 		}
 		return nil
 	}
-} // NewResourcesUnsubscribeHandler creates a JSON-RPC handler which calls the
+}
+
+// NewResourcesUnsubscribeHandler creates a JSON-RPC handler which calls the
 // "mcp_assistant" service "resources/unsubscribe" endpoint.
 func NewResourcesUnsubscribeHandler(endpoint loom.Endpoint, mux loomhttp.Muxer, decoder func(*http.Request) loomhttp.Decoder, encoder func(context.Context, http.ResponseWriter) loomhttp.Encoder, errhandler func(context.Context, http.ResponseWriter, error)) func(ctx context.Context, r *http.Request, req *jsonrpc.RawRequest, w http.ResponseWriter) error {
 	decodeParams := DecodeResourcesUnsubscribeRequest(mux, decoder)
@@ -1104,7 +1123,9 @@ func NewResourcesUnsubscribeHandler(endpoint loom.Endpoint, mux loomhttp.Muxer, 
 		}
 		return nil
 	}
-} // NewPromptsListHandler creates a JSON-RPC handler which calls the
+}
+
+// NewPromptsListHandler creates a JSON-RPC handler which calls the
 // "mcp_assistant" service "prompts/list" endpoint.
 func NewPromptsListHandler(endpoint loom.Endpoint, mux loomhttp.Muxer, decoder func(*http.Request) loomhttp.Decoder, encoder func(context.Context, http.ResponseWriter) loomhttp.Encoder, errhandler func(context.Context, http.ResponseWriter, error)) func(ctx context.Context, r *http.Request, req *jsonrpc.RawRequest, w http.ResponseWriter) error {
 	decodeParams := DecodePromptsListRequest(mux, decoder)
@@ -1184,7 +1205,9 @@ func NewPromptsListHandler(endpoint loom.Endpoint, mux loomhttp.Muxer, decoder f
 		}
 		return nil
 	}
-} // NewPromptsGetHandler creates a JSON-RPC handler which calls the
+}
+
+// NewPromptsGetHandler creates a JSON-RPC handler which calls the
 // "mcp_assistant" service "prompts/get" endpoint.
 func NewPromptsGetHandler(endpoint loom.Endpoint, mux loomhttp.Muxer, decoder func(*http.Request) loomhttp.Decoder, encoder func(context.Context, http.ResponseWriter) loomhttp.Encoder, errhandler func(context.Context, http.ResponseWriter, error)) func(ctx context.Context, r *http.Request, req *jsonrpc.RawRequest, w http.ResponseWriter) error {
 	decodeParams := DecodePromptsGetRequest(mux, decoder)
@@ -1264,7 +1287,9 @@ func NewPromptsGetHandler(endpoint loom.Endpoint, mux loomhttp.Muxer, decoder fu
 		}
 		return nil
 	}
-} // NewNotifyStatusUpdateHandler creates a JSON-RPC handler which calls the
+}
+
+// NewNotifyStatusUpdateHandler creates a JSON-RPC handler which calls the
 // "mcp_assistant" service "notify_status_update" endpoint.
 func NewNotifyStatusUpdateHandler(endpoint loom.Endpoint, mux loomhttp.Muxer, decoder func(*http.Request) loomhttp.Decoder, encoder func(context.Context, http.ResponseWriter) loomhttp.Encoder, errhandler func(context.Context, http.ResponseWriter, error)) func(ctx context.Context, r *http.Request, req *jsonrpc.RawRequest, w http.ResponseWriter) error {
 	decodeParams := DecodeNotifyStatusUpdateRequest(mux, decoder)
@@ -1341,7 +1366,9 @@ func NewNotifyStatusUpdateHandler(endpoint loom.Endpoint, mux loomhttp.Muxer, de
 		}
 		return nil
 	}
-} // NewEventsStreamHandler creates a JSON-RPC handler which calls the
+}
+
+// NewEventsStreamHandler creates a JSON-RPC handler which calls the
 // "mcp_assistant" service "events/stream" endpoint.
 func NewEventsStreamHandler(endpoint loom.Endpoint, mux loomhttp.Muxer, decoder func(*http.Request) loomhttp.Decoder, encoder func(context.Context, http.ResponseWriter) loomhttp.Encoder, errhandler func(context.Context, http.ResponseWriter, error), streamWritePolicy loomhttp.StreamWritePolicy) func(ctx context.Context, r *http.Request, req *jsonrpc.RawRequest, w http.ResponseWriter) error {
 	return func(ctx context.Context, r *http.Request, req *jsonrpc.RawRequest, w http.ResponseWriter) error {
@@ -1389,7 +1416,9 @@ func NewEventsStreamHandler(endpoint loom.Endpoint, mux loomhttp.Muxer, decoder 
 		}
 		return nil
 	}
-} // encodeJSONRPCError creates and sends a JSON-RPC error response (handles nil ID gracefully)
+}
+
+// encodeJSONRPCError creates and sends a JSON-RPC error response (handles nil ID gracefully)
 func (s *Server) encodeJSONRPCError(ctx context.Context, w http.ResponseWriter, req *jsonrpc.RawRequest, code jsonrpc.Code, message string, data any) {
 	encodeJSONRPCError(ctx, w, req, code, message, data, s.encoder, s.errhandler)
 }

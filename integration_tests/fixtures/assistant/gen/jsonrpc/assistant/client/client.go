@@ -63,7 +63,9 @@ func (c *Client) ListDocuments() loom.Endpoint {
 		}
 		return decodeResponse(resp)
 	}
-} // SystemInfo returns an endpoint that makes JSON-RPC requests to the assistant
+}
+
+// SystemInfo returns an endpoint that makes JSON-RPC requests to the assistant
 // service system_info method.
 func (c *Client) SystemInfo() loom.Endpoint {
 	var (
@@ -85,7 +87,9 @@ func (c *Client) SystemInfo() loom.Endpoint {
 		}
 		return decodeResponse(resp)
 	}
-} // ElicitationContext returns an endpoint that makes JSON-RPC requests to the
+}
+
+// ElicitationContext returns an endpoint that makes JSON-RPC requests to the
 // assistant service elicitation_context method.
 func (c *Client) ElicitationContext() loom.Endpoint {
 	var (
@@ -107,7 +111,9 @@ func (c *Client) ElicitationContext() loom.Endpoint {
 		}
 		return decodeResponse(resp)
 	}
-} // ConversationHistory returns an endpoint that makes JSON-RPC requests to the
+}
+
+// ConversationHistory returns an endpoint that makes JSON-RPC requests to the
 // assistant service conversation_history method.
 func (c *Client) ConversationHistory() loom.Endpoint {
 	var (
@@ -129,7 +135,9 @@ func (c *Client) ConversationHistory() loom.Endpoint {
 		}
 		return decodeResponse(resp)
 	}
-} // FigmaDesignSystem returns an endpoint that makes JSON-RPC requests to the
+}
+
+// FigmaDesignSystem returns an endpoint that makes JSON-RPC requests to the
 // assistant service figma_design_system method.
 func (c *Client) FigmaDesignSystem() loom.Endpoint {
 	var (
@@ -151,7 +159,9 @@ func (c *Client) FigmaDesignSystem() loom.Endpoint {
 		}
 		return decodeResponse(resp)
 	}
-} // GeneratePrompts returns an endpoint that makes JSON-RPC requests to the
+}
+
+// GeneratePrompts returns an endpoint that makes JSON-RPC requests to the
 // assistant service generate_prompts method.
 func (c *Client) GeneratePrompts() loom.Endpoint {
 	var (
@@ -173,7 +183,9 @@ func (c *Client) GeneratePrompts() loom.Endpoint {
 		}
 		return decodeResponse(resp)
 	}
-} // BuildFigmaImplementationPrompt returns an endpoint that makes JSON-RPC
+}
+
+// BuildFigmaImplementationPrompt returns an endpoint that makes JSON-RPC
 // requests to the assistant service build_figma_implementation_prompt method.
 func (c *Client) BuildFigmaImplementationPrompt() loom.Endpoint {
 	var (
@@ -195,7 +207,9 @@ func (c *Client) BuildFigmaImplementationPrompt() loom.Endpoint {
 		}
 		return decodeResponse(resp)
 	}
-} // SendNotification returns an endpoint that makes JSON-RPC requests to the
+}
+
+// SendNotification returns an endpoint that makes JSON-RPC requests to the
 // assistant service send_notification method.
 func (c *Client) SendNotification() loom.Endpoint {
 	var (
@@ -217,7 +231,9 @@ func (c *Client) SendNotification() loom.Endpoint {
 		}
 		return decodeResponse(resp)
 	}
-} // AnalyzeSentiment returns an endpoint that makes JSON-RPC requests to the
+}
+
+// AnalyzeSentiment returns an endpoint that makes JSON-RPC requests to the
 // assistant service analyze_sentiment method.
 func (c *Client) AnalyzeSentiment() loom.Endpoint {
 	var (
@@ -239,7 +255,9 @@ func (c *Client) AnalyzeSentiment() loom.Endpoint {
 		}
 		return decodeResponse(resp)
 	}
-} // ExtractKeywords returns an endpoint that makes JSON-RPC requests to the
+}
+
+// ExtractKeywords returns an endpoint that makes JSON-RPC requests to the
 // assistant service extract_keywords method.
 func (c *Client) ExtractKeywords() loom.Endpoint {
 	var (
@@ -261,7 +279,9 @@ func (c *Client) ExtractKeywords() loom.Endpoint {
 		}
 		return decodeResponse(resp)
 	}
-} // SummarizeText returns an endpoint that makes JSON-RPC requests to the
+}
+
+// SummarizeText returns an endpoint that makes JSON-RPC requests to the
 // assistant service summarize_text method.
 func (c *Client) SummarizeText() loom.Endpoint {
 	var (
@@ -283,7 +303,9 @@ func (c *Client) SummarizeText() loom.Endpoint {
 		}
 		return decodeResponse(resp)
 	}
-} // Search returns an endpoint that makes JSON-RPC requests to the assistant
+}
+
+// Search returns an endpoint that makes JSON-RPC requests to the assistant
 // service search method.
 func (c *Client) Search() loom.Endpoint {
 	var (
@@ -305,7 +327,9 @@ func (c *Client) Search() loom.Endpoint {
 		}
 		return decodeResponse(resp)
 	}
-} // SearchRecords returns an endpoint that makes JSON-RPC requests to the
+}
+
+// SearchRecords returns an endpoint that makes JSON-RPC requests to the
 // assistant service search_records method.
 func (c *Client) SearchRecords() loom.Endpoint {
 	var (
@@ -327,7 +351,9 @@ func (c *Client) SearchRecords() loom.Endpoint {
 		}
 		return decodeResponse(resp)
 	}
-} // ExecuteCode returns an endpoint that makes JSON-RPC requests to the
+}
+
+// ExecuteCode returns an endpoint that makes JSON-RPC requests to the
 // assistant service execute_code method.
 func (c *Client) ExecuteCode() loom.Endpoint {
 	var (
@@ -349,7 +375,9 @@ func (c *Client) ExecuteCode() loom.Endpoint {
 		}
 		return decodeResponse(resp)
 	}
-} // ProcessBatch returns an endpoint that makes JSON-RPC requests to the
+}
+
+// ProcessBatch returns an endpoint that makes JSON-RPC requests to the
 // assistant service process_batch method.
 func (c *Client) ProcessBatch() loom.Endpoint {
 	var (
@@ -371,7 +399,9 @@ func (c *Client) ProcessBatch() loom.Endpoint {
 		}
 		return decodeResponse(resp)
 	}
-} // ReportProgress returns an endpoint that makes JSON-RPC requests to the
+}
+
+// ReportProgress returns an endpoint that makes JSON-RPC requests to the
 // assistant service report_progress method.
 func (c *Client) ReportProgress() loom.Endpoint {
 	var (
@@ -393,7 +423,9 @@ func (c *Client) ReportProgress() loom.Endpoint {
 		}
 		return decodeResponse(resp)
 	}
-} // MultiContent returns an endpoint that makes JSON-RPC requests to the
+}
+
+// MultiContent returns an endpoint that makes JSON-RPC requests to the
 // assistant service multi_content method.
 func (c *Client) MultiContent() loom.Endpoint {
 	var (
@@ -415,7 +447,9 @@ func (c *Client) MultiContent() loom.Endpoint {
 		}
 		return decodeResponse(resp)
 	}
-} // GenerateDpiSpec returns an endpoint that makes JSON-RPC requests to the
+}
+
+// GenerateDpiSpec returns an endpoint that makes JSON-RPC requests to the
 // assistant service generate_dpi_spec method.
 func (c *Client) GenerateDpiSpec() loom.Endpoint {
 	var (
@@ -437,7 +471,9 @@ func (c *Client) GenerateDpiSpec() loom.Endpoint {
 		}
 		return decodeResponse(resp)
 	}
-} // DispatchAction returns an endpoint that makes JSON-RPC requests to the
+}
+
+// DispatchAction returns an endpoint that makes JSON-RPC requests to the
 // assistant service dispatch_action method.
 func (c *Client) DispatchAction() loom.Endpoint {
 	var (
@@ -459,7 +495,9 @@ func (c *Client) DispatchAction() loom.Endpoint {
 		}
 		return decodeResponse(resp)
 	}
-} // DispatchCommand returns an endpoint that makes JSON-RPC requests to the
+}
+
+// DispatchCommand returns an endpoint that makes JSON-RPC requests to the
 // assistant service dispatch_command method.
 func (c *Client) DispatchCommand() loom.Endpoint {
 	var (
@@ -481,7 +519,9 @@ func (c *Client) DispatchCommand() loom.Endpoint {
 		}
 		return decodeResponse(resp)
 	}
-} // ProjectedLookup returns an endpoint that makes JSON-RPC requests to the
+}
+
+// ProjectedLookup returns an endpoint that makes JSON-RPC requests to the
 // assistant service projected_lookup method.
 func (c *Client) ProjectedLookup() loom.Endpoint {
 	var (
@@ -503,7 +543,9 @@ func (c *Client) ProjectedLookup() loom.Endpoint {
 		}
 		return decodeResponse(resp)
 	}
-} // ProjectedStatus returns an endpoint that makes JSON-RPC requests to the
+}
+
+// ProjectedStatus returns an endpoint that makes JSON-RPC requests to the
 // assistant service projected_status method.
 func (c *Client) ProjectedStatus() loom.Endpoint {
 	var (

@@ -3,7 +3,7 @@ module example.com/assistant
 go 1.27rc2
 
 require (
-	github.com/CaliLuke/loom v1.8.0-alpha.4
+	github.com/CaliLuke/loom v1.8.0-alpha.5
 	github.com/CaliLuke/loom-mcp/v2 v2.0.0
 	github.com/modelcontextprotocol/go-sdk v1.7.0
 	github.com/sahilm/fuzzy v0.1.3

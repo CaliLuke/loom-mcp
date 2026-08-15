@@ -22,10 +22,14 @@ import (
 //	command (subcommand1|subcommand2|...)
 func UsageCommands() []string {
 	return []string{"registry (register|unregister|pong|list-toolsets|get-toolset|search|call-tool)"}
-} // UsageExamples produces an example of a valid invocation of the CLI tool.
+}
+
+// UsageExamples produces an example of a valid invocation of the CLI tool.
 func UsageExamples() string {
 	return os.Args[0] + " registry register --message '{\n      \"description\": \"Tools for data processing and analysis\",\n      \"name\": \"data-tools\",\n      \"tags\": [\n         \"data\",\n         \"etl\",\n         \"analytics\"\n      ],\n      \"tools\": [\n         {\n            \"description\": \"Fetch a time series for a point over a time window.\",\n            \"name\": \"atlas.read.get_time_series\",\n            \"payload_schema\": \"eyJ0eXBlIjoib2JqZWN0IiwicHJvcGVydGllcyI6eyJxdWVyeSI6eyJ0eXBlIjoic3RyaW5nIn19LCJyZXF1aXJlZCI6WyJxdWVyeSJdfQ==\",\n            \"result_schema\": \"eyJ0eXBlIjoib2JqZWN0IiwicHJvcGVydGllcyI6eyJvayI6eyJ0eXBlIjoiYm9vbGVhbiJ9fSwicmVxdWlyZWQiOlsib2siXX0=\",\n            \"sidecar_schema\": \"eyJ0eXBlIjoib2JqZWN0IiwicHJvcGVydGllcyI6eyJhcnRpZmFjdF9raW5kIjp7InR5cGUiOiJzdHJpbmcifX19\",\n            \"tags\": [\n               \"atlas\",\n               \"data\",\n               \"read\"\n            ]\n         },\n         {\n            \"description\": \"Fetch a time series for a point over a time window.\",\n            \"name\": \"atlas.read.get_time_series\",\n            \"payload_schema\": \"eyJ0eXBlIjoib2JqZWN0IiwicHJvcGVydGllcyI6eyJxdWVyeSI6eyJ0eXBlIjoic3RyaW5nIn19LCJyZXF1aXJlZCI6WyJxdWVyeSJdfQ==\",\n            \"result_schema\": \"eyJ0eXBlIjoib2JqZWN0IiwicHJvcGVydGllcyI6eyJvayI6eyJ0eXBlIjoiYm9vbGVhbiJ9fSwicmVxdWlyZWQiOlsib2siXX0=\",\n            \"sidecar_schema\": \"eyJ0eXBlIjoib2JqZWN0IiwicHJvcGVydGllcyI6eyJhcnRpZmFjdF9raW5kIjp7InR5cGUiOiJzdHJpbmcifX19\",\n            \"tags\": [\n               \"atlas\",\n               \"data\",\n               \"read\"\n            ]\n         }\n      ],\n      \"version\": \"1.0.0\"\n   }'\\n"
-} // ParseEndpoint returns the endpoint and payload as specified on the command
+}
+
+// ParseEndpoint returns the endpoint and payload as specified on the command
 // line.
 func ParseEndpoint(cc *grpc.ClientConn, opts ...grpc.CallOption) (loom.Endpoint, any, error) {
 	var (
@@ -149,7 +153,9 @@ func ParseEndpoint(cc *grpc.ClientConn, opts ...grpc.CallOption) (loom.Endpoint,
 		return nil, nil, err
 	}
 	return endpoint, data, nil
-} // registryUsage displays the usage of the registry command and its subcommands.
+}
+
+// registryUsage displays the usage of the registry command and its subcommands.
 func registryUsage() {
 	fmt.Fprintln(os.Stderr, "Internal tool registry gateway for toolset discovery and tool invocation")
 	fmt.Fprintf(os.Stderr, "Usage:\n    %s [globalflags] registry COMMAND [flags]\n\n", os.Args[0])

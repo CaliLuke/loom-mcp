@@ -58,7 +58,9 @@ func BuildRegisterPayload(registryRegisterMessage string) (*registry.RegisterPay
 	}
 
 	return v, nil
-} // BuildUnregisterPayload builds the payload for the registry Unregister
+}
+
+// BuildUnregisterPayload builds the payload for the registry Unregister
 // endpoint from CLI flags.
 func BuildUnregisterPayload(registryUnregisterMessage string) (*registry.UnregisterPayload, error) {
 	var err error
@@ -76,7 +78,9 @@ func BuildUnregisterPayload(registryUnregisterMessage string) (*registry.Unregis
 	}
 
 	return v, nil
-} // BuildPongPayload builds the payload for the registry Pong endpoint from CLI
+}
+
+// BuildPongPayload builds the payload for the registry Pong endpoint from CLI
 // flags.
 func BuildPongPayload(registryPongMessage string) (*registry.PongPayload, error) {
 	var err error
@@ -95,7 +99,9 @@ func BuildPongPayload(registryPongMessage string) (*registry.PongPayload, error)
 	}
 
 	return v, nil
-} // BuildListToolsetsPayload builds the payload for the registry ListToolsets
+}
+
+// BuildListToolsetsPayload builds the payload for the registry ListToolsets
 // endpoint from CLI flags.
 func BuildListToolsetsPayload(registryListToolsetsMessage string) (*registry.ListToolsetsPayload, error) {
 	var err error
@@ -115,7 +121,9 @@ func BuildListToolsetsPayload(registryListToolsetsMessage string) (*registry.Lis
 	}
 
 	return v, nil
-} // BuildGetToolsetPayload builds the payload for the registry GetToolset
+}
+
+// BuildGetToolsetPayload builds the payload for the registry GetToolset
 // endpoint from CLI flags.
 func BuildGetToolsetPayload(registryGetToolsetMessage string) (*registry.GetToolsetPayload, error) {
 	var err error
@@ -133,7 +141,9 @@ func BuildGetToolsetPayload(registryGetToolsetMessage string) (*registry.GetTool
 	}
 
 	return v, nil
-} // BuildSearchPayload builds the payload for the registry Search endpoint from
+}
+
+// BuildSearchPayload builds the payload for the registry Search endpoint from
 // CLI flags.
 func BuildSearchPayload(registrySearchMessage string) (*registry.SearchPayload, error) {
 	var err error
@@ -151,7 +161,9 @@ func BuildSearchPayload(registrySearchMessage string) (*registry.SearchPayload, 
 	}
 
 	return v, nil
-} // BuildCallToolPayload builds the payload for the registry CallTool endpoint
+}
+
+// BuildCallToolPayload builds the payload for the registry CallTool endpoint
 // from CLI flags.
 func BuildCallToolPayload(registryCallToolMessage string) (*registry.CallToolPayload, error) {
 	var err error
@@ -174,7 +186,9 @@ func BuildCallToolPayload(registryCallToolMessage string) (*registry.CallToolPay
 	}
 
 	return v, nil
-} // protobufRegistrypbToolCallMetaToRegistryToolCallMeta builds a value of type
+}
+
+// protobufRegistrypbToolCallMetaToRegistryToolCallMeta builds a value of type
 // *registry.ToolCallMeta from a value of type *registrypb.ToolCallMeta.
 func protobufRegistrypbToolCallMetaToRegistryToolCallMeta(v *registrypb.ToolCallMeta) *registry.ToolCallMeta {
 	res := &registry.ToolCallMeta{

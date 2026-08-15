@@ -31,7 +31,9 @@ func BuildLookupPayload(catalogLookupBody string) (*catalog.LookupPayload, error
 	}
 
 	return v, nil
-} // BuildProjectedLookupPayload builds the payload for the catalog
+}
+
+// BuildProjectedLookupPayload builds the payload for the catalog
 // projected_lookup endpoint from CLI flags.
 func BuildProjectedLookupPayload(catalogProjectedLookupBody string) (*catalog.ProjectedLookupPayload, error) {
 	var err error

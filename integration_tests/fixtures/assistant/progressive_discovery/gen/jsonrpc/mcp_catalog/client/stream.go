@@ -272,7 +272,9 @@ func (s *ToolsCallClientStream) Close() error {
 		return body.Close()
 	}
 	return nil
-} // EventsStreamClientStream implements the mcpcatalog.EventsStreamClientStream
+}
+
+// EventsStreamClientStream implements the mcpcatalog.EventsStreamClientStream
 // interface using Server-Sent Events.
 type EventsStreamClientStream struct {
 	resp     *http.Response
