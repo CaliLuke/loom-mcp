@@ -139,8 +139,16 @@ func (demoService) Lookup(ctx context.Context, p *demo.LookupPayload) (*demo.Loo
 	return &demo.LookupResult{Answer: answer}, nil
 }
 
+func passthroughToolCall(ctx context.Context, info mcpdemo.ToolCallInterceptorInfo, payload *mcpdemo.ToolsCallPayload, next mcpdemo.ToolCallHandler) (*mcpdemo.ToolsCallResult, error) {
+	return next(ctx, payload)
+}
+
 func TestOfficialSDKClientAgainstGeneratedSDKServer(t *testing.T) {
-	generated, err := mcpdemo.NewSDKServer(demoService{}, nil)
+	generated, err := mcpdemo.NewSDKServer(demoService{}, &mcpdemo.SDKServerOptions{
+		Adapter: &mcpdemo.MCPAdapterOptions{
+			ToolCallInterceptors: []mcpdemo.ToolCallInterceptor{passthroughToolCall},
+		},
+	})
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -72,6 +72,11 @@ func emitToolCallInterceptorTypes(stmt *jen.Statement) {
 			jen.Id("SendAndClose").Params(jen.Qual("context", "Context"), jen.Op("*").Id("ToolsCallResult")).Error(),
 			jen.Id("SendError").Params(jen.Qual("context", "Context"), jen.Any(), jen.Error()).Error(),
 		),
+		jen.Id("toolCallStreamHandler").Func().Params(
+			jen.Id("ctx").Qual("context", "Context"),
+			jen.Id("payload").Op("*").Id("ToolsCallPayload"),
+			jen.Id("stream").Id("toolCallStream"),
+		).Params(jen.Bool(), jen.Error()),
 		jen.Line(),
 		jen.Comment("ToolCallInterceptorInfo describes a generated MCP tools/call invocation.").Line().
 			Id("ToolCallInterceptorInfo").Interface(
@@ -83,16 +88,14 @@ func emitToolCallInterceptorTypes(stmt *jen.Statement) {
 			Id("ToolCallHandler").Func().Params(
 			jen.Id("ctx").Qual("context", "Context"),
 			jen.Id("payload").Op("*").Id("ToolsCallPayload"),
-			jen.Id("stream").Id("toolCallStream"),
-		).Params(jen.Bool(), jen.Error()),
+		).Params(jen.Op("*").Id("ToolsCallResult"), jen.Error()),
 		jen.Line().Comment("ToolCallInterceptor wraps generated MCP tool execution.").Line().
 			Id("ToolCallInterceptor").Func().Params(
 			jen.Id("ctx").Qual("context", "Context"),
 			jen.Id("info").Id("ToolCallInterceptorInfo"),
 			jen.Id("payload").Op("*").Id("ToolsCallPayload"),
-			jen.Id("stream").Id("toolCallStream"),
 			jen.Id("next").Id("ToolCallHandler"),
-		).Params(jen.Bool(), jen.Error()),
+		).Params(jen.Op("*").Id("ToolsCallResult"), jen.Error()),
 	)
 	stmt.Line()
 
@@ -462,9 +465,8 @@ func emitToolCallInfoAndWrap(stmt *jen.Statement, data *AdapterData) {
 				jen.Id("wrapped").Op("=").Func().Params(
 					jen.Id("ctx").Qual("context", "Context"),
 					jen.Id("payload").Op("*").Id("ToolsCallPayload"),
-					jen.Id("stream").Id("toolCallStream"),
-				).Params(jen.Bool(), jen.Error()).Block(
-					jen.Return(jen.Id("interceptor").Call(jen.Id("ctx"), jen.Id("info"), jen.Id("payload"), jen.Id("stream"), jen.Id("currentNext"))),
+				).Params(jen.Op("*").Id("ToolsCallResult"), jen.Error()).Block(
+					jen.Return(jen.Id("interceptor").Call(jen.Id("ctx"), jen.Id("info"), jen.Id("payload"), jen.Id("currentNext"))),
 				),
 			),
 			jen.Return(jen.Id("wrapped")),

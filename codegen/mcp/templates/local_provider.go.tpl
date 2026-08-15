@@ -45,17 +45,13 @@ func executeLocalProgressiveTool(ctx context.Context, adapter *MCPAdapter, call 
 		Name:      toolName,
 		Arguments: append(json.RawMessage(nil), arguments...),
 	}
-	collector := new(localToolCallCollector)
-	if _, err := adapter.executeLocalProgressiveTool(ctx, payload, collector); err != nil {
+	response, err := adapter.executeLocalProgressiveTool(ctx, payload)
+	if err != nil {
 		return agentsruntime.Executed(&planner.ToolResult{
 			Name:       call.Name,
 			ToolCallID: call.ToolCallID,
 			Error:      planner.ToolErrorFromError(err),
 		}), nil
-	}
-	response, err := collector.result()
-	if err != nil {
-		return nil, err
 	}
 	result, err := localPlannerToolResult(call, response)
 	if err != nil {
@@ -64,10 +60,18 @@ func executeLocalProgressiveTool(ctx context.Context, adapter *MCPAdapter, call 
 	return agentsruntime.Executed(result), nil
 }
 
-func (a *MCPAdapter) executeLocalProgressiveTool(ctx context.Context, payload *ToolsCallPayload, stream toolCallStream) (bool, error) {
+func (a *MCPAdapter) executeLocalProgressiveTool(ctx context.Context, payload *ToolsCallPayload) (*ToolsCallResult, error) {
 	info := a.toolCallInfo(payload)
-	handler := a.wrapToolCallHandler(info, a.localProgressiveToolHandler)
-	return handler(ctx, payload, stream)
+	handler := a.wrapToolCallHandler(info, a.collectLocalProgressiveTool)
+	return handler(ctx, payload)
+}
+
+func (a *MCPAdapter) collectLocalProgressiveTool(ctx context.Context, payload *ToolsCallPayload) (*ToolsCallResult, error) {
+	collector := new(localToolCallCollector)
+	if _, err := a.localProgressiveToolHandler(ctx, payload, collector); err != nil {
+		return nil, err
+	}
+	return collector.result()
 }
 
 func (a *MCPAdapter) localProgressiveToolHandler(ctx context.Context, payload *ToolsCallPayload, stream toolCallStream) (bool, error) {

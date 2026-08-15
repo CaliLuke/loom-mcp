@@ -74,6 +74,7 @@ type (
 		SendAndClose(context.Context, *ToolsCallResult) error
 		SendError(context.Context, any, error) error
 	}
+	toolCallStreamHandler func(ctx context.Context, payload *ToolsCallPayload, stream toolCallStream) (bool, error)
 
 	// ToolCallInterceptorInfo describes a generated MCP tools/call invocation.
 	ToolCallInterceptorInfo interface {
@@ -83,10 +84,10 @@ type (
 	}
 
 	// ToolCallHandler is the generated MCP tool-call dispatcher.
-	ToolCallHandler func(ctx context.Context, payload *ToolsCallPayload, stream toolCallStream) (bool, error)
+	ToolCallHandler func(ctx context.Context, payload *ToolsCallPayload) (*ToolsCallResult, error)
 
 	// ToolCallInterceptor wraps generated MCP tool execution.
-	ToolCallInterceptor func(ctx context.Context, info ToolCallInterceptorInfo, payload *ToolsCallPayload, stream toolCallStream, next ToolCallHandler) (bool, error)
+	ToolCallInterceptor func(ctx context.Context, info ToolCallInterceptorInfo, payload *ToolsCallPayload, next ToolCallHandler) (*ToolsCallResult, error)
 )
 type toolCallInterceptorInfo struct {
 	service    string
@@ -348,8 +349,8 @@ func (a *MCPAdapter) wrapToolCallHandler(info ToolCallInterceptorInfo, next Tool
 			continue
 		}
 		currentNext := wrapped
-		wrapped = func(ctx context.Context, payload *ToolsCallPayload, stream toolCallStream) (bool, error) {
-			return interceptor(ctx, info, payload, stream, currentNext)
+		wrapped = func(ctx context.Context, payload *ToolsCallPayload) (*ToolsCallResult, error) {
+			return interceptor(ctx, info, payload, currentNext)
 		}
 	}
 	return wrapped
@@ -1545,8 +1546,13 @@ func (a *MCPAdapter) handleCallToolProxy(ctx context.Context, p *ToolsCallPayloa
 		Name:      payload.Name,
 	}
 	info := a.toolCallInfo(proxied)
-	handler := a.wrapToolCallHandler(info, a.executeRealTool)
-	return handler(ctx, proxied, stream)
+	handler := a.wrapToolCallHandler(info, a.collectRealToolCall)
+	result, err := handler(ctx, proxied)
+	if err != nil {
+		return false, err
+	}
+	toolErr := result != nil && result.IsError != nil && *result.IsError
+	return toolErr, stream.SendAndClose(ctx, result)
 }
 
 type StreamChunksStreamBridge struct {
@@ -1614,9 +1620,22 @@ func (a *MCPAdapter) ToolsCall(ctx context.Context, p *ToolsCallPayload) (res *T
 		a.finishTelemetry(ctx, span, start, attrs, err, toolErr)
 	}()
 	info := a.toolCallInfo(p)
-	handler := a.wrapToolCallHandler(info, a.toolsCallHandler)
+	handler := a.wrapToolCallHandler(info, a.collectToolsCall)
+	res, err = handler(ctx, p)
+	if res != nil && res.IsError != nil {
+		toolErr = *res.IsError
+	}
+	return res, err
+}
+func (a *MCPAdapter) collectToolsCall(ctx context.Context, p *ToolsCallPayload) (*ToolsCallResult, error) {
+	return a.collectToolCall(ctx, p, a.toolsCallHandler)
+}
+func (a *MCPAdapter) collectRealToolCall(ctx context.Context, p *ToolsCallPayload) (*ToolsCallResult, error) {
+	return a.collectToolCall(ctx, p, a.executeRealTool)
+}
+func (a *MCPAdapter) collectToolCall(ctx context.Context, p *ToolsCallPayload, handler toolCallStreamHandler) (*ToolsCallResult, error) {
 	stream := newToolCallResultCollector(a)
-	toolErr, err = handler(ctx, p, stream)
+	_, err := handler(ctx, p, stream)
 	if err != nil {
 		return nil, err
 	}

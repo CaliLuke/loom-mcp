@@ -1308,8 +1308,11 @@ func emitHandleCallToolProxy(stmt *jen.Statement) {
 				jen.Id("Arguments"): jen.Id("arguments"),
 			})
 			g.Id("info").Op(":=").Id("a").Dot("toolCallInfo").Call(jen.Id("proxied"))
-			g.Id("handler").Op(":=").Id("a").Dot("wrapToolCallHandler").Call(jen.Id("info"), jen.Id("a").Dot("executeRealTool"))
-			g.Return(jen.Id("handler").Call(jen.Id("ctx"), jen.Id("proxied"), jen.Id("stream")))
+			g.Id("handler").Op(":=").Id("a").Dot("wrapToolCallHandler").Call(jen.Id("info"), jen.Id("a").Dot("collectRealToolCall"))
+			g.List(jen.Id("result"), jen.Id("err")).Op(":=").Id("handler").Call(jen.Id("ctx"), jen.Id("proxied"))
+			g.If(jen.Id("err").Op("!=").Nil()).Block(jen.Return(jen.False(), jen.Id("err")))
+			g.Id("toolErr").Op(":=").Id("result").Op("!=").Nil().Op("&&").Id("result").Dot("IsError").Op("!=").Nil().Op("&&").Op("*").Id("result").Dot("IsError")
+			g.Return(jen.Id("toolErr"), jen.Id("stream").Dot("SendAndClose").Call(jen.Id("ctx"), jen.Id("result")))
 		})
 	stmt.Line()
 }
@@ -1390,12 +1393,45 @@ func emitToolsCall(stmt *jen.Statement) {
 				jen.Id("a").Dot("finishTelemetry").Call(jen.Id("ctx"), jen.Id("span"), jen.Id("start"), jen.Id("attrs"), jen.Id("err"), jen.Id("toolErr")),
 			).Call(),
 			jen.Id("info").Op(":=").Id("a").Dot("toolCallInfo").Call(jen.Id("p")),
-			jen.Id("handler").Op(":=").Id("a").Dot("wrapToolCallHandler").Call(jen.Id("info"), jen.Id("a").Dot("toolsCallHandler")),
-			jen.Id("stream").Op(":=").Id("newToolCallResultCollector").Call(jen.Id("a")),
-			jen.Id("toolErr").Op(",").Id("err").Op("=").Id("handler").Call(jen.Id("ctx"), jen.Id("p"), jen.Id("stream")),
-			jen.If(jen.Id("err").Op("!=").Nil()).Block(
-				jen.Return(jen.Nil(), jen.Id("err")),
+			jen.Id("handler").Op(":=").Id("a").Dot("wrapToolCallHandler").Call(jen.Id("info"), jen.Id("a").Dot("collectToolsCall")),
+			jen.Id("res").Op(",").Id("err").Op("=").Id("handler").Call(jen.Id("ctx"), jen.Id("p")),
+			jen.If(jen.Id("res").Op("!=").Nil().Op("&&").Id("res").Dot("IsError").Op("!=").Nil()).Block(
+				jen.Id("toolErr").Op("=").Op("*").Id("res").Dot("IsError"),
 			),
+			jen.Return(jen.Id("res"), jen.Id("err")),
+		)
+	stmt.Line()
+
+	stmt.Func().Params(jen.Id("a").Op("*").Id("MCPAdapter")).
+		Id("collectToolsCall").
+		Params(jen.Id("ctx").Qual("context", "Context"), jen.Id("p").Op("*").Id("ToolsCallPayload")).
+		Params(jen.Op("*").Id("ToolsCallResult"), jen.Error()).
+		Block(
+			jen.Return(jen.Id("a").Dot("collectToolCall").Call(jen.Id("ctx"), jen.Id("p"), jen.Id("a").Dot("toolsCallHandler"))),
+		)
+	stmt.Line()
+
+	stmt.Func().Params(jen.Id("a").Op("*").Id("MCPAdapter")).
+		Id("collectRealToolCall").
+		Params(jen.Id("ctx").Qual("context", "Context"), jen.Id("p").Op("*").Id("ToolsCallPayload")).
+		Params(jen.Op("*").Id("ToolsCallResult"), jen.Error()).
+		Block(
+			jen.Return(jen.Id("a").Dot("collectToolCall").Call(jen.Id("ctx"), jen.Id("p"), jen.Id("a").Dot("executeRealTool"))),
+		)
+	stmt.Line()
+
+	stmt.Func().Params(jen.Id("a").Op("*").Id("MCPAdapter")).
+		Id("collectToolCall").
+		Params(
+			jen.Id("ctx").Qual("context", "Context"),
+			jen.Id("p").Op("*").Id("ToolsCallPayload"),
+			jen.Id("handler").Id("toolCallStreamHandler"),
+		).
+		Params(jen.Op("*").Id("ToolsCallResult"), jen.Error()).
+		Block(
+			jen.Id("stream").Op(":=").Id("newToolCallResultCollector").Call(jen.Id("a")),
+			jen.List(jen.Id("_"), jen.Id("err")).Op(":=").Id("handler").Call(jen.Id("ctx"), jen.Id("p"), jen.Id("stream")),
+			jen.If(jen.Id("err").Op("!=").Nil()).Block(jen.Return(jen.Nil(), jen.Id("err"))),
 			jen.Return(jen.Id("stream").Dot("result").Call(), jen.Nil()),
 		)
 	stmt.Line()
