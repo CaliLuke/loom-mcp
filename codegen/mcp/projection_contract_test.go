@@ -77,7 +77,7 @@ func TestUnifiedToolSurfaceProjectedOnlyGeneratesToolMethods(t *testing.T) {
 	require.Contains(t, adapterSource, `case "projected_lookup_tool":`)
 	// Omitted tools/call arguments must be normalized to {} before dispatch
 	// so the toolset dispatcher never receives empty raw JSON.
-	require.Contains(t, adapterSource, "args := p.Arguments")
+	require.Contains(t, adapterSource, "args := arguments")
 	require.Contains(t, adapterSource, `args = json.RawMessage("{}")`)
 	require.Contains(t, adapterSource, "DispatchProjectedLookupToolMethod(ctx, meta, args, nil,")
 

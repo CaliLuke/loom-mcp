@@ -381,7 +381,7 @@ func (a *MCPAdapter) sdkToolHandler(requestContext func(context.Context, *http.R
 		requestState := ""
 		if req != nil && req.Params != nil {
 			payload.Name = req.Params.Name
-			payload.Arguments = req.Params.Arguments
+			payload.Arguments = mcpJSONFromRaw(req.Params.Arguments)
 			inputResponses = req.Params.InputResponses
 			requestState = req.Params.RequestState
 		}
@@ -491,8 +491,12 @@ func sdkCallToolResult(result *ToolsCallResult) (*mcpsdk.CallToolResult, error) 
 		content = append(content, converted)
 	}
 	callResult := &mcpsdk.CallToolResult{Content: content}
-	if result.StructuredContent != nil {
-		callResult.StructuredContent = result.StructuredContent
+	structuredContent, err := mcpJSONRaw(result.StructuredContent)
+	if err != nil {
+		return nil, err
+	}
+	if len(structuredContent) > 0 {
+		callResult.StructuredContent = structuredContent
 	}
 	if result.IsError != nil {
 		callResult.IsError = *result.IsError
@@ -519,7 +523,7 @@ func sdkReadResourceContent(item *ResourceContent) (*mcpsdk.ResourceContents, er
 	}
 	resource := &mcpsdk.ResourceContents{
 		MIMEType: derefString(item.MimeType),
-		Meta:     sdkMeta(item.Meta),
+		Meta:     sdkMeta(mcpJSONAny(item.Meta)),
 		Text:     derefString(item.Text),
 		URI:      item.URI,
 	}

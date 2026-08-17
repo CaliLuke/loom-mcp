@@ -31,7 +31,7 @@ func TestLoomGen_GoSDKConformance(t *testing.T) {
 go 1.27rc2
 
 require (
-	github.com/CaliLuke/loom v1.8.0-alpha.8
+	github.com/CaliLuke/loom v1.8.0-alpha.14
 	github.com/CaliLuke/loom-mcp/v2 v2.0.0
 )
 

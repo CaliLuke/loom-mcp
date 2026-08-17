@@ -112,8 +112,8 @@ func emitToolCallResultCollector(stmt *jen.Statement) {
 		jen.For(jen.List(jen.Id("_"), jen.Id("part")).Op(":=").Range().Append(jen.Id("c").Dot("parts"), jen.Id("c").Dot("final"))).Block(
 			jen.If(jen.Id("part").Op("==").Nil()).Block(jen.Continue()),
 			jen.Id("merged").Dot("Content").Op("=").Append(jen.Id("merged").Dot("Content"), jen.Id("part").Dot("Content").Op("...")),
-			jen.If(jen.Len(jen.Id("part").Dot("StructuredContent")).Op(">").Lit(0)).Block(
-				jen.Id("merged").Dot("StructuredContent").Op("=").Append(jen.Qual("encoding/json", "RawMessage").Call(jen.Nil()), jen.Id("part").Dot("StructuredContent").Op("...")),
+			jen.If(jen.Id("part").Dot("StructuredContent").Dot("Present").Call()).Block(
+				jen.Id("merged").Dot("StructuredContent").Op("=").Id("part").Dot("StructuredContent"),
 			),
 			jen.If(jen.Id("part").Dot("IsError").Op("!=").Nil()).Block(
 				jen.Id("value").Op(":=").Op("*").Id("part").Dot("IsError"),
@@ -1172,7 +1172,8 @@ func emitHandleSearchTools(stmt *jen.Statement) {
 	).Params(jen.Bool(), jen.Error()).
 		BlockFunc(func(g *jen.Group) {
 			g.Var().Id("payload").Id("toolSearchPayload")
-			g.Id("arguments").Op(":=").Id("p").Dot("Arguments")
+			g.List(jen.Id("arguments"), jen.Id("err")).Op(":=").Id("mcpJSONRaw").Call(jen.Id("p").Dot("Arguments"))
+			g.If(jen.Id("err").Op("!=").Nil()).Block(jen.Return(jen.False(), jen.Id("err")))
 			g.If(jen.Len(jen.Qual("bytes", "TrimSpace").Call(jen.Id("arguments"))).Op("==").Lit(0)).Block(
 				jen.Id("arguments").Op("=").Qual("encoding/json", "RawMessage").Call(jen.Index().Byte().Call(jen.Lit(`{}`))),
 			)
@@ -1271,7 +1272,7 @@ func emitHandleSearchTools(stmt *jen.Statement) {
 			g.Id("text").Op(":=").Qual("strings", "Join").Call(jen.Id("lines"), jen.Lit("\n"))
 			g.Return(jen.False(), jen.Id("stream").Dot("SendAndClose").Call(jen.Id("ctx"), jen.Op("&").Id("ToolsCallResult").Values(jen.Dict{
 				jen.Id("Content"):           jen.Index().Op("*").Id("ContentItem").Values(jen.Id("buildContentItem").Call(jen.Id("a"), jen.Id("text"))),
-				jen.Id("StructuredContent"): jen.Id("structured"),
+				jen.Id("StructuredContent"): jen.Id("mcpJSONFromRaw").Call(jen.Id("structured")),
 			})))
 		})
 	stmt.Line()
@@ -1285,8 +1286,10 @@ func emitHandleCallToolProxy(stmt *jen.Statement) {
 		jen.Id("stream").Id("toolCallStream"),
 	).Params(jen.Bool(), jen.Error()).
 		BlockFunc(func(g *jen.Group) {
+			g.List(jen.Id("rawArguments"), jen.Id("err")).Op(":=").Id("mcpJSONRaw").Call(jen.Id("p").Dot("Arguments"))
+			g.If(jen.Id("err").Op("!=").Nil()).Block(jen.Return(jen.False(), jen.Id("err")))
 			g.Var().Id("payload").Id("toolCallProxyPayload")
-			g.If(jen.Id("err").Op(":=").Id("decodeMCPPayloadStrict").Call(jen.Id("p").Dot("Arguments"), jen.Op("&").Id("payload")), jen.Id("err").Op("!=").Nil()).Block(
+			g.If(jen.Id("err").Op(":=").Id("decodeMCPPayloadStrict").Call(jen.Id("rawArguments"), jen.Op("&").Id("payload")), jen.Id("err").Op("!=").Nil()).Block(
 				jen.Return(jen.True(), jen.Id("a").Dot("sendToolError").Call(jen.Id("ctx"), jen.Id("stream"), jen.Id("p").Dot("Name"), jen.Id("toolCallError").Call(jen.Id("err"), jen.Lit("invalid_params"), jen.Lit(`Provide {"name":"tool_name","arguments":{...}} to call a discovered tool.`)))),
 			)
 			g.Id("payload").Dot("Name").Op("=").Qual("strings", "TrimSpace").Call(jen.Id("payload").Dot("Name"))
@@ -1305,9 +1308,9 @@ func emitHandleCallToolProxy(stmt *jen.Statement) {
 			)
 			g.Id("proxied").Op(":=").Op("&").Id("ToolsCallPayload").Values(jen.Dict{
 				jen.Id("Name"):      jen.Id("payload").Dot("Name"),
-				jen.Id("Arguments"): jen.Id("arguments"),
+				jen.Id("Arguments"): jen.Id("mcpJSONFromRaw").Call(jen.Id("arguments")),
 			})
-			g.Id("info").Op(":=").Id("a").Dot("toolCallInfo").Call(jen.Id("proxied"))
+			g.Id("info").Op(":=").Id("a").Dot("toolCallInfo").Call(jen.Id("proxied"), jen.Id("arguments"))
 			g.Id("handler").Op(":=").Id("a").Dot("wrapToolCallHandler").Call(jen.Id("info"), jen.Id("a").Dot("collectRealToolCall"))
 			g.List(jen.Id("result"), jen.Id("err")).Op(":=").Id("handler").Call(jen.Id("ctx"), jen.Id("proxied"))
 			g.If(jen.Id("err").Op("!=").Nil()).Block(jen.Return(jen.False(), jen.Id("err")))
@@ -1374,6 +1377,11 @@ func emitToolsCall(stmt *jen.Statement) {
 		Params(jen.Id("res").Op("*").Id("ToolsCallResult"), jen.Id("err").Error()).
 		Block(
 			jen.Id("attrs").Op(":=").Index().Qual("go.opentelemetry.io/otel/attribute", "KeyValue").Values(),
+			jen.Var().Id("rawArguments").Qual("encoding/json", "RawMessage"),
+			jen.If(jen.Id("p").Op("!=").Nil()).Block(
+				jen.List(jen.Id("rawArguments"), jen.Id("err")).Op("=").Id("mcpJSONRaw").Call(jen.Id("p").Dot("Arguments")),
+				jen.If(jen.Id("err").Op("!=").Nil()).Block(jen.Return(jen.Nil(), jen.Id("err"))),
+			),
 			jen.If(jen.Id("p").Op("!=").Nil().Op("&&").Id("p").Dot("Name").Op("!=").Lit("")).Block(
 				jen.Id("attrs").Op("=").Append(
 					jen.Id("attrs"),
@@ -1382,7 +1390,7 @@ func emitToolsCall(stmt *jen.Statement) {
 				),
 				jen.If(jen.Id("a").Dot("isToolCallProxyName").Call(jen.Id("p").Dot("Name"))).Block(
 					jen.Var().Id("target").Id("toolCallProxyPayload"),
-					jen.If(jen.Qual("encoding/json", "Unmarshal").Call(jen.Id("p").Dot("Arguments"), jen.Op("&").Id("target")).Op("==").Nil().Op("&&").Qual("strings", "TrimSpace").Call(jen.Id("target").Dot("Name")).Op("!=").Lit("")).Block(
+					jen.If(jen.Qual("encoding/json", "Unmarshal").Call(jen.Id("rawArguments"), jen.Op("&").Id("target")).Op("==").Nil().Op("&&").Qual("strings", "TrimSpace").Call(jen.Id("target").Dot("Name")).Op("!=").Lit("")).Block(
 						jen.Id("attrs").Op("=").Append(jen.Id("attrs"), jen.Qual("go.opentelemetry.io/otel/attribute", "String").Call(jen.Lit("mcp.target_tool"), jen.Qual("strings", "TrimSpace").Call(jen.Id("target").Dot("Name")))),
 					),
 				),
@@ -1392,7 +1400,7 @@ func emitToolsCall(stmt *jen.Statement) {
 			jen.Defer().Func().Params().Block(
 				jen.Id("a").Dot("finishTelemetry").Call(jen.Id("ctx"), jen.Id("span"), jen.Id("start"), jen.Id("attrs"), jen.Id("err"), jen.Id("toolErr")),
 			).Call(),
-			jen.Id("info").Op(":=").Id("a").Dot("toolCallInfo").Call(jen.Id("p")),
+			jen.Id("info").Op(":=").Id("a").Dot("toolCallInfo").Call(jen.Id("p"), jen.Id("rawArguments")),
 			jen.Id("handler").Op(":=").Id("a").Dot("wrapToolCallHandler").Call(jen.Id("info"), jen.Id("a").Dot("collectToolsCall")),
 			jen.Id("res").Op(",").Id("err").Op("=").Id("handler").Call(jen.Id("ctx"), jen.Id("p")),
 			jen.If(jen.Id("res").Op("!=").Nil().Op("&&").Id("res").Dot("IsError").Op("!=").Nil()).Block(
@@ -1480,11 +1488,11 @@ func emitToolsCallHandler(stmt *jen.Statement, data *AdapterData) {
 		).
 		Params(jen.Bool(), jen.Error()).
 		BlockFunc(func(g *jen.Group) {
-			g.Id("arguments").Op(":=").Qual("bytes", "TrimSpace").Call(jen.Id("p").Dot("Arguments"))
+			g.List(jen.Id("arguments"), jen.Id("err")).Op(":=").Id("mcpJSONRaw").Call(jen.Id("p").Dot("Arguments"))
+			g.If(jen.Id("err").Op("!=").Nil()).Block(jen.Return(jen.False(), jen.Id("err")))
+			g.Id("arguments").Op("=").Qual("bytes", "TrimSpace").Call(jen.Id("arguments"))
 			g.If(jen.Len(jen.Id("arguments")).Op("==").Lit(0).Op("||").Qual("bytes", "Equal").Call(jen.Id("arguments"), jen.Index().Byte().Call(jen.Lit("null")))).Block(
-				jen.Id("normalized").Op(":=").Op("*").Id("p"),
-				jen.Id("normalized").Dot("Arguments").Op("=").Qual("encoding/json", "RawMessage").Call(jen.Index().Byte().Call(jen.Lit(`{}`))),
-				jen.Id("p").Op("=").Op("&").Id("normalized"),
+				jen.Id("arguments").Op("=").Qual("encoding/json", "RawMessage").Call(jen.Index().Byte().Call(jen.Lit(`{}`))),
 			)
 			g.Switch(jen.Id("p").Dot("Name")).BlockFunc(func(sw *jen.Group) {
 				for _, tool := range data.Tools {
@@ -1508,13 +1516,13 @@ func emitToolCase(g *jen.Group, tool *ToolAdapter) {
 	if tool.HasPayload {
 		g.Var().Id("payload").Add(rawExpr(tool.PayloadType))
 		if len(tool.DefaultFields) > 0 || len(tool.RequiredFields) > 0 || len(tool.EnumFields) > 0 {
-			g.List(jen.Id("rawFields"), jen.Id("err")).Op(":=").Id("decodeMCPPayloadFields").Call(jen.Id("p").Dot("Arguments"))
+			g.List(jen.Id("rawFields"), jen.Id("err")).Op(":=").Id("decodeMCPPayloadFields").Call(jen.Id("arguments"))
 			g.If(jen.Id("err").Op("!=").Nil()).Block(
-				jen.Return(jen.True(), jen.Id("a").Dot("sendToolError").Call(jen.Id("ctx"), jen.Id("stream"), jen.Id("p").Dot("Name"), jen.Id("toolCallError").Call(jen.Id("err"), jen.Lit("invalid_params"), jen.Id(toolRecoveryFuncName(tool)).Call(jen.Id("err"), jen.Id("p").Dot("Arguments"))))),
+				jen.Return(jen.True(), jen.Id("a").Dot("sendToolError").Call(jen.Id("ctx"), jen.Id("stream"), jen.Id("p").Dot("Name"), jen.Id("toolCallError").Call(jen.Id("err"), jen.Lit("invalid_params"), jen.Id(toolRecoveryFuncName(tool)).Call(jen.Id("err"), jen.Id("arguments"))))),
 			)
 		}
-		g.If(jen.Id("err").Op(":=").Id("decodeMCPPayloadStrict").Call(jen.Id("p").Dot("Arguments"), jen.Op("&").Id("payload")), jen.Id("err").Op("!=").Nil()).Block(
-			jen.Return(jen.True(), jen.Id("a").Dot("sendToolError").Call(jen.Id("ctx"), jen.Id("stream"), jen.Id("p").Dot("Name"), jen.Id("toolCallError").Call(jen.Id("err"), jen.Lit("invalid_params"), jen.Id(toolRecoveryFuncName(tool)).Call(jen.Id("err"), jen.Id("p").Dot("Arguments"))))),
+		g.If(jen.Id("err").Op(":=").Id("decodeMCPPayloadStrict").Call(jen.Id("arguments"), jen.Op("&").Id("payload")), jen.Id("err").Op("!=").Nil()).Block(
+			jen.Return(jen.True(), jen.Id("a").Dot("sendToolError").Call(jen.Id("ctx"), jen.Id("stream"), jen.Id("p").Dot("Name"), jen.Id("toolCallError").Call(jen.Id("err"), jen.Lit("invalid_params"), jen.Id(toolRecoveryFuncName(tool)).Call(jen.Id("err"), jen.Id("arguments"))))),
 		)
 		emitToolDefaultAssignments(g, tool)
 		emitToolRequiredChecks(g, tool)
@@ -1554,7 +1562,7 @@ func emitToolCase(g *jen.Group, tool *ToolAdapter) {
 			jen.Id("Content"): jen.Index().Op("*").Id("ContentItem").Values(
 				jen.Id("buildContentItem").Call(jen.Id("a"), jen.Id("s")),
 			),
-			jen.Id("StructuredContent"): jen.Id("structuredContent"),
+			jen.Id("StructuredContent"): jen.Id("mcpJSONFromRaw").Call(jen.Id("structuredContent")),
 		})
 		g.Id("a").Dot("log").Call(jen.Id("ctx"), jen.Lit("response"), jen.Map(jen.String()).Any().Values(jen.Dict{
 			jen.Lit("method"): jen.Lit("tools/call"),
@@ -1603,7 +1611,7 @@ func emitToolRequiredChecks(g *jen.Group, tool *ToolAdapter) {
 	g.BlockFunc(func(block *jen.Group) {
 		for _, field := range tool.RequiredFields {
 			block.If(jen.Id("err").Op(":=").Id("validateMCPPayloadRequired").Call(jen.Id("rawFields"), jen.Lit(field)), jen.Id("err").Op("!=").Nil()).Block(
-				jen.Return(jen.True(), jen.Id("a").Dot("sendToolError").Call(jen.Id("ctx"), jen.Id("stream"), jen.Id("p").Dot("Name"), jen.Id("toolCallError").Call(jen.Id("err"), jen.Lit("invalid_params"), jen.Id(toolRecoveryFuncName(tool)).Call(jen.Id("err"), jen.Id("p").Dot("Arguments"))))),
+				jen.Return(jen.True(), jen.Id("a").Dot("sendToolError").Call(jen.Id("ctx"), jen.Id("stream"), jen.Id("p").Dot("Name"), jen.Id("toolCallError").Call(jen.Id("err"), jen.Lit("invalid_params"), jen.Id(toolRecoveryFuncName(tool)).Call(jen.Id("err"), jen.Id("arguments"))))),
 			)
 		}
 	})
@@ -1621,7 +1629,7 @@ func emitToolEnumChecks(g *jen.Group, tool *ToolAdapter) {
 				args = append(args, jen.Lit(val))
 			}
 			block.If(jen.Id("err").Op(":=").Id("validateMCPPayloadEnum").Call(args...), jen.Id("err").Op("!=").Nil()).Block(
-				jen.Return(jen.True(), jen.Id("a").Dot("sendToolError").Call(jen.Id("ctx"), jen.Id("stream"), jen.Id("p").Dot("Name"), jen.Id("toolCallError").Call(jen.Id("err"), jen.Lit("invalid_params"), jen.Id(toolRecoveryFuncName(tool)).Call(jen.Id("err"), jen.Id("p").Dot("Arguments"))))),
+				jen.Return(jen.True(), jen.Id("a").Dot("sendToolError").Call(jen.Id("ctx"), jen.Id("stream"), jen.Id("p").Dot("Name"), jen.Id("toolCallError").Call(jen.Id("err"), jen.Lit("invalid_params"), jen.Id(toolRecoveryFuncName(tool)).Call(jen.Id("err"), jen.Id("arguments"))))),
 			)
 		}
 	})
@@ -1645,7 +1653,7 @@ func emitProjectedToolCase(g *jen.Group, tool *ToolAdapter) {
 	// entirely. Normalize absent arguments to the empty JSON object so the
 	// toolset dispatcher never receives empty raw bytes (which would fail or
 	// panic downstream when decoded as a nil value).
-	g.Id("args").Op(":=").Id("p").Dot("Arguments")
+	g.Id("args").Op(":=").Id("arguments")
 	g.If(jen.Len(jen.Id("args")).Op("==").Lit(0)).Block(
 		jen.Id("args").Op("=").Qual("encoding/json", "RawMessage").Call(jen.Lit("{}")),
 	)
@@ -1678,7 +1686,7 @@ func emitProjectedToolCase(g *jen.Group, tool *ToolAdapter) {
 			jen.Id("Content"): jen.Index().Op("*").Id("ContentItem").Values(
 				jen.Id("buildContentItem").Call(jen.Id("a"), jen.Id("s")),
 			),
-			jen.Id("StructuredContent"): jen.Id("structuredContent"),
+			jen.Id("StructuredContent"): jen.Id("mcpJSONFromRaw").Call(jen.Id("structuredContent")),
 		})
 		g.Id("a").Dot("log").Call(jen.Id("ctx"), jen.Lit("response"), jen.Map(jen.String()).Any().Values(jen.Dict{
 			jen.Lit("method"): jen.Lit("tools/call"),

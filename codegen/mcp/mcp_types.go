@@ -31,9 +31,6 @@ func (b *mcpExprBuilder) buildToolsCallPayloadType() *expr.AttributeExpr {
 			{Name: "arguments", Attribute: &expr.AttributeExpr{
 				Type:        expr.Any,
 				Description: "Tool arguments",
-				Meta: expr.MetaExpr{
-					"struct:field:type": []string{"json.RawMessage", "encoding/json"},
-				},
 			}},
 		},
 		Validation: &expr.ValidationExpr{
@@ -52,9 +49,6 @@ func (b *mcpExprBuilder) buildToolsCallResultType() *expr.AttributeExpr {
 			{Name: "structuredContent", Attribute: &expr.AttributeExpr{
 				Type:        expr.Any,
 				Description: "Optional structured result for machine consumers",
-				Meta: expr.MetaExpr{
-					"struct:field:type": []string{"json.RawMessage", "encoding/json"},
-				},
 			}},
 			{Name: "isError", Attribute: &expr.AttributeExpr{
 				Type:        expr.Boolean,
@@ -146,9 +140,6 @@ func (b *mcpExprBuilder) buildPromptsGetPayloadType() *expr.AttributeExpr {
 			{Name: "arguments", Attribute: &expr.AttributeExpr{
 				Type:        expr.Any,
 				Description: "Prompt arguments",
-				Meta: expr.MetaExpr{
-					"struct:field:type": []string{"json.RawMessage", "encoding/json"},
-				},
 			}},
 		},
 		Validation: &expr.ValidationExpr{

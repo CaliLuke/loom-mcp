@@ -818,7 +818,7 @@ func sdkServerHandlerSection(data *AdapterData) codegen.Section {
 						jen.Id("requestState").Op(":=").Lit(""),
 						jen.If(jen.Id("req").Op("!=").Nil().Op("&&").Id("req").Dot("Params").Op("!=").Nil()).Block(
 							jen.Id("payload").Dot("Name").Op("=").Id("req").Dot("Params").Dot("Name"),
-							jen.Id("payload").Dot("Arguments").Op("=").Id("req").Dot("Params").Dot("Arguments"),
+							jen.Id("payload").Dot("Arguments").Op("=").Id("mcpJSONFromRaw").Call(jen.Id("req").Dot("Params").Dot("Arguments")),
 							jen.Id("inputResponses").Op("=").Id("req").Dot("Params").Dot("InputResponses"),
 							jen.Id("requestState").Op("=").Id("req").Dot("Params").Dot("RequestState"),
 						),
@@ -860,7 +860,7 @@ func sdkServerHandlerSection(data *AdapterData) codegen.Section {
 								jen.If(jen.Id("req").Dot("Params").Dot("Arguments").Op("!=").Nil()).Block(
 									jen.List(jen.Id("args"), jen.Id("err")).Op(":=").Qual("encoding/json", "Marshal").Call(jen.Id("req").Dot("Params").Dot("Arguments")),
 									jen.If(jen.Id("err").Op("!=").Nil()).Block(jen.Return(jen.Nil(), jen.Id("err"))),
-									jen.Id("payload").Dot("Arguments").Op("=").Id("args"),
+									jen.Id("payload").Dot("Arguments").Op("=").Id("mcpJSONFromRaw").Call(jen.Id("args")),
 								),
 							),
 							jen.Id("ctx").Op("=").Id("a").Dot("sdkRequestContext").Call(jen.Id("ctx"), jen.Id("req").Dot("GetSession").Call(), jen.Id("req").Dot("GetExtra").Call(), jen.Id("requestContext"), jen.Id("inputResponses"), jen.Id("requestState"), jen.Lit("prompts/get"), jen.Id("payload")),
@@ -1097,8 +1097,10 @@ func emitSDKCallToolResult(stmt *jen.Statement) {
 			jen.Id("callResult").Op(":=").Op("&").Id("mcpsdk").Dot("CallToolResult").Values(jen.Dict{
 				jen.Id("Content"): jen.Id("content"),
 			}),
-			jen.If(jen.Id("result").Dot("StructuredContent").Op("!=").Nil()).Block(
-				jen.Id("callResult").Dot("StructuredContent").Op("=").Id("result").Dot("StructuredContent"),
+			jen.List(jen.Id("structuredContent"), jen.Id("err")).Op(":=").Id("mcpJSONRaw").Call(jen.Id("result").Dot("StructuredContent")),
+			jen.If(jen.Id("err").Op("!=").Nil()).Block(jen.Return(jen.Nil(), jen.Id("err"))),
+			jen.If(jen.Len(jen.Id("structuredContent")).Op(">").Lit(0)).Block(
+				jen.Id("callResult").Dot("StructuredContent").Op("=").Id("structuredContent"),
 			),
 			jen.If(jen.Id("result").Dot("IsError").Op("!=").Nil()).Block(
 				jen.Id("callResult").Dot("IsError").Op("=").Op("*").Id("result").Dot("IsError"),
@@ -1236,7 +1238,7 @@ func emitSDKReadResourceConversion(stmt *jen.Statement) {
 				jen.Id("URI"):      jen.Id("item").Dot("URI"),
 				jen.Id("MIMEType"): jen.Id("derefString").Call(jen.Id("item").Dot("MimeType")),
 				jen.Id("Text"):     jen.Id("derefString").Call(jen.Id("item").Dot("Text")),
-				jen.Id("Meta"):     jen.Id("sdkMeta").Call(jen.Id("item").Dot("Meta")),
+				jen.Id("Meta"):     jen.Id("sdkMeta").Call(jen.Id("mcpJSONAny").Call(jen.Id("item").Dot("Meta"))),
 			}),
 			jen.If(jen.Id("item").Dot("Blob").Op("!=").Nil()).Block(
 				jen.List(jen.Id("data"), jen.Id("err")).Op(":=").Id("sdkDecodeBase64").Call(jen.Id("item").Dot("Blob")),

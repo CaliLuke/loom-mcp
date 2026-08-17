@@ -9,7 +9,6 @@ package server
 
 import (
 	"context"
-	"errors"
 
 	registrypb "github.com/CaliLuke/loom-mcp/v2/registry/gen/grpc/registry/pb"
 	registry "github.com/CaliLuke/loom-mcp/v2/registry/gen/registry"
@@ -55,13 +54,22 @@ func NewRegisterHandler(endpoint loom.Endpoint, h loomgrpc.UnaryHandler) loomgrp
 // Register implements the "Register" method in registrypb.RegistryServer
 // interface.
 func (s *Server) Register(ctx context.Context, message *registrypb.RegisterRequest) (*registrypb.RegisterResponse, error) {
-	ctx = context.WithValue(ctx, loom.MethodKey, "Register")
-	ctx = context.WithValue(ctx, loom.ServiceKey, "registry")
-	resp, err := s.RegisterH.Handle(ctx, message)
+	resp, err := loomgrpc.ServeUnary(ctx, message, loomgrpc.UnaryServerSpec{
+		Handler: s.RegisterH,
+		Method:  "Register",
+		Service: "registry",
+	})
 	if err != nil {
-		return nil, loomgrpc.EncodeError(err)
+		return nil, err
 	}
 	return resp.(*registrypb.RegisterResponse), nil
+}
+
+// RegisterResponseContractCases returns the declared gRPC wire-response
+// contracts for Register. Callers remain responsible for exercising the
+// application scenarios that produce each response.
+func RegisterResponseContractCases() []loomgrpc.ResponseContractCase {
+	return []loomgrpc.ResponseContractCase{{ID: "registry.Register.success.0", Kind: loomgrpc.ResponseContractSuccess, StatusCode: codes.OK, MessageType: "loom_mcp_registry.RegisterResponse"}}
 }
 
 // NewUnregisterHandler creates a gRPC handler which serves the "registry"
@@ -76,20 +84,33 @@ func NewUnregisterHandler(endpoint loom.Endpoint, h loomgrpc.UnaryHandler) loomg
 // Unregister implements the "Unregister" method in registrypb.RegistryServer
 // interface.
 func (s *Server) Unregister(ctx context.Context, message *registrypb.UnregisterRequest) (*registrypb.UnregisterResponse, error) {
-	ctx = context.WithValue(ctx, loom.MethodKey, "Unregister")
-	ctx = context.WithValue(ctx, loom.ServiceKey, "registry")
-	resp, err := s.UnregisterH.Handle(ctx, message)
+	resp, err := loomgrpc.ServeUnary(ctx, message, loomgrpc.UnaryServerSpec{
+		Handler:  s.UnregisterH,
+		MapError: mapUnregisterError,
+		Method:   "Unregister",
+		Service:  "registry",
+	})
 	if err != nil {
-		var en loom.LoomErrorNamer
-		if errors.As(err, &en) {
-			switch en.LoomErrorName() {
-			case "not_found":
-				return nil, loomgrpc.NewStatusError(codes.NotFound, err, loomgrpc.NewErrorResponse(err))
-			}
-		}
-		return nil, loomgrpc.EncodeError(err)
+		return nil, err
 	}
 	return resp.(*registrypb.UnregisterResponse), nil
+}
+func mapUnregisterError(name string, err error) (loomgrpc.ErrorMapping, bool, error) {
+	switch name {
+	case "not_found":
+		return loomgrpc.ErrorMapping{
+			Code:   codes.NotFound,
+			Detail: loomgrpc.NewErrorResponse(err),
+		}, true, nil
+	}
+	return loomgrpc.ErrorMapping{}, false, nil
+}
+
+// UnregisterResponseContractCases returns the declared gRPC wire-response
+// contracts for Unregister. Callers remain responsible for exercising the
+// application scenarios that produce each response.
+func UnregisterResponseContractCases() []loomgrpc.ResponseContractCase {
+	return []loomgrpc.ResponseContractCase{{ID: "registry.Unregister.success.0", Kind: loomgrpc.ResponseContractSuccess, StatusCode: codes.OK, MessageType: "loom_mcp_registry.UnregisterResponse"}, {ID: "registry.Unregister.error.not_found.5", Kind: loomgrpc.ResponseContractError, StatusCode: codes.NotFound, ErrorName: "not_found", DetailType: "loompb.ErrorResponse"}}
 }
 
 // NewPongHandler creates a gRPC handler which serves the "registry" service
@@ -103,13 +124,22 @@ func NewPongHandler(endpoint loom.Endpoint, h loomgrpc.UnaryHandler) loomgrpc.Un
 
 // Pong implements the "Pong" method in registrypb.RegistryServer interface.
 func (s *Server) Pong(ctx context.Context, message *registrypb.PongRequest) (*registrypb.PongResponse, error) {
-	ctx = context.WithValue(ctx, loom.MethodKey, "Pong")
-	ctx = context.WithValue(ctx, loom.ServiceKey, "registry")
-	resp, err := s.PongH.Handle(ctx, message)
+	resp, err := loomgrpc.ServeUnary(ctx, message, loomgrpc.UnaryServerSpec{
+		Handler: s.PongH,
+		Method:  "Pong",
+		Service: "registry",
+	})
 	if err != nil {
-		return nil, loomgrpc.EncodeError(err)
+		return nil, err
 	}
 	return resp.(*registrypb.PongResponse), nil
+}
+
+// PongResponseContractCases returns the declared gRPC wire-response contracts
+// for Pong. Callers remain responsible for exercising the application
+// scenarios that produce each response.
+func PongResponseContractCases() []loomgrpc.ResponseContractCase {
+	return []loomgrpc.ResponseContractCase{{ID: "registry.Pong.success.0", Kind: loomgrpc.ResponseContractSuccess, StatusCode: codes.OK, MessageType: "loom_mcp_registry.PongResponse"}}
 }
 
 // NewListToolsetsHandler creates a gRPC handler which serves the "registry"
@@ -124,13 +154,22 @@ func NewListToolsetsHandler(endpoint loom.Endpoint, h loomgrpc.UnaryHandler) loo
 // ListToolsets implements the "ListToolsets" method in
 // registrypb.RegistryServer interface.
 func (s *Server) ListToolsets(ctx context.Context, message *registrypb.ListToolsetsRequest) (*registrypb.ListToolsetsResponse, error) {
-	ctx = context.WithValue(ctx, loom.MethodKey, "ListToolsets")
-	ctx = context.WithValue(ctx, loom.ServiceKey, "registry")
-	resp, err := s.ListToolsetsH.Handle(ctx, message)
+	resp, err := loomgrpc.ServeUnary(ctx, message, loomgrpc.UnaryServerSpec{
+		Handler: s.ListToolsetsH,
+		Method:  "ListToolsets",
+		Service: "registry",
+	})
 	if err != nil {
-		return nil, loomgrpc.EncodeError(err)
+		return nil, err
 	}
 	return resp.(*registrypb.ListToolsetsResponse), nil
+}
+
+// ListToolsetsResponseContractCases returns the declared gRPC wire-response
+// contracts for ListToolsets. Callers remain responsible for exercising the
+// application scenarios that produce each response.
+func ListToolsetsResponseContractCases() []loomgrpc.ResponseContractCase {
+	return []loomgrpc.ResponseContractCase{{ID: "registry.ListToolsets.success.0", Kind: loomgrpc.ResponseContractSuccess, StatusCode: codes.OK, MessageType: "loom_mcp_registry.ListToolsetsResponse"}}
 }
 
 // NewGetToolsetHandler creates a gRPC handler which serves the "registry"
@@ -145,20 +184,33 @@ func NewGetToolsetHandler(endpoint loom.Endpoint, h loomgrpc.UnaryHandler) loomg
 // GetToolset implements the "GetToolset" method in registrypb.RegistryServer
 // interface.
 func (s *Server) GetToolset(ctx context.Context, message *registrypb.GetToolsetRequest) (*registrypb.GetToolsetResponse, error) {
-	ctx = context.WithValue(ctx, loom.MethodKey, "GetToolset")
-	ctx = context.WithValue(ctx, loom.ServiceKey, "registry")
-	resp, err := s.GetToolsetH.Handle(ctx, message)
+	resp, err := loomgrpc.ServeUnary(ctx, message, loomgrpc.UnaryServerSpec{
+		Handler:  s.GetToolsetH,
+		MapError: mapGetToolsetError,
+		Method:   "GetToolset",
+		Service:  "registry",
+	})
 	if err != nil {
-		var en loom.LoomErrorNamer
-		if errors.As(err, &en) {
-			switch en.LoomErrorName() {
-			case "not_found":
-				return nil, loomgrpc.NewStatusError(codes.NotFound, err, loomgrpc.NewErrorResponse(err))
-			}
-		}
-		return nil, loomgrpc.EncodeError(err)
+		return nil, err
 	}
 	return resp.(*registrypb.GetToolsetResponse), nil
+}
+func mapGetToolsetError(name string, err error) (loomgrpc.ErrorMapping, bool, error) {
+	switch name {
+	case "not_found":
+		return loomgrpc.ErrorMapping{
+			Code:   codes.NotFound,
+			Detail: loomgrpc.NewErrorResponse(err),
+		}, true, nil
+	}
+	return loomgrpc.ErrorMapping{}, false, nil
+}
+
+// GetToolsetResponseContractCases returns the declared gRPC wire-response
+// contracts for GetToolset. Callers remain responsible for exercising the
+// application scenarios that produce each response.
+func GetToolsetResponseContractCases() []loomgrpc.ResponseContractCase {
+	return []loomgrpc.ResponseContractCase{{ID: "registry.GetToolset.success.0", Kind: loomgrpc.ResponseContractSuccess, StatusCode: codes.OK, MessageType: "loom_mcp_registry.GetToolsetResponse"}, {ID: "registry.GetToolset.error.not_found.5", Kind: loomgrpc.ResponseContractError, StatusCode: codes.NotFound, ErrorName: "not_found", DetailType: "loompb.ErrorResponse"}}
 }
 
 // NewSearchHandler creates a gRPC handler which serves the "registry" service
@@ -172,13 +224,22 @@ func NewSearchHandler(endpoint loom.Endpoint, h loomgrpc.UnaryHandler) loomgrpc.
 
 // Search implements the "Search" method in registrypb.RegistryServer interface.
 func (s *Server) Search(ctx context.Context, message *registrypb.SearchRequest) (*registrypb.SearchResponse, error) {
-	ctx = context.WithValue(ctx, loom.MethodKey, "Search")
-	ctx = context.WithValue(ctx, loom.ServiceKey, "registry")
-	resp, err := s.SearchH.Handle(ctx, message)
+	resp, err := loomgrpc.ServeUnary(ctx, message, loomgrpc.UnaryServerSpec{
+		Handler: s.SearchH,
+		Method:  "Search",
+		Service: "registry",
+	})
 	if err != nil {
-		return nil, loomgrpc.EncodeError(err)
+		return nil, err
 	}
 	return resp.(*registrypb.SearchResponse), nil
+}
+
+// SearchResponseContractCases returns the declared gRPC wire-response
+// contracts for Search. Callers remain responsible for exercising the
+// application scenarios that produce each response.
+func SearchResponseContractCases() []loomgrpc.ResponseContractCase {
+	return []loomgrpc.ResponseContractCase{{ID: "registry.Search.success.0", Kind: loomgrpc.ResponseContractSuccess, StatusCode: codes.OK, MessageType: "loom_mcp_registry.SearchResponse"}}
 }
 
 // NewCallToolHandler creates a gRPC handler which serves the "registry"
@@ -193,22 +254,55 @@ func NewCallToolHandler(endpoint loom.Endpoint, h loomgrpc.UnaryHandler) loomgrp
 // CallTool implements the "CallTool" method in registrypb.RegistryServer
 // interface.
 func (s *Server) CallTool(ctx context.Context, message *registrypb.CallToolRequest) (*registrypb.CallToolResponse, error) {
-	ctx = context.WithValue(ctx, loom.MethodKey, "CallTool")
-	ctx = context.WithValue(ctx, loom.ServiceKey, "registry")
-	resp, err := s.CallToolH.Handle(ctx, message)
+	resp, err := loomgrpc.ServeUnary(ctx, message, loomgrpc.UnaryServerSpec{
+		Handler:  s.CallToolH,
+		MapError: mapCallToolError,
+		Method:   "CallTool",
+		Service:  "registry",
+	})
 	if err != nil {
-		var en loom.LoomErrorNamer
-		if errors.As(err, &en) {
-			switch en.LoomErrorName() {
-			case "not_found":
-				return nil, loomgrpc.NewStatusError(codes.NotFound, err, loomgrpc.NewErrorResponse(err))
-			case "validation_error":
-				return nil, loomgrpc.NewStatusError(codes.InvalidArgument, err, loomgrpc.NewErrorResponse(err))
-			case "service_unavailable":
-				return nil, loomgrpc.NewStatusError(codes.Unavailable, err, loomgrpc.NewErrorResponse(err))
-			}
-		}
-		return nil, loomgrpc.EncodeError(err)
+		return nil, err
 	}
 	return resp.(*registrypb.CallToolResponse), nil
+}
+func mapCallToolError(name string, err error) (loomgrpc.ErrorMapping, bool, error) {
+	switch name {
+	case "not_found":
+		return loomgrpc.ErrorMapping{
+			Code:   codes.NotFound,
+			Detail: loomgrpc.NewErrorResponse(err),
+		}, true, nil
+	case "validation_error":
+		return loomgrpc.ErrorMapping{
+			Code:   codes.InvalidArgument,
+			Detail: loomgrpc.NewErrorResponse(err),
+		}, true, nil
+	case "service_unavailable":
+		return loomgrpc.ErrorMapping{
+			Code:   codes.Unavailable,
+			Detail: loomgrpc.NewErrorResponse(err),
+		}, true, nil
+	}
+	return loomgrpc.ErrorMapping{}, false, nil
+}
+
+// CallToolResponseContractCases returns the declared gRPC wire-response
+// contracts for CallTool. Callers remain responsible for exercising the
+// application scenarios that produce each response.
+func CallToolResponseContractCases() []loomgrpc.ResponseContractCase {
+	return []loomgrpc.ResponseContractCase{{ID: "registry.CallTool.success.0", Kind: loomgrpc.ResponseContractSuccess, StatusCode: codes.OK, MessageType: "loom_mcp_registry.CallToolResponse"}, {ID: "registry.CallTool.error.not_found.5", Kind: loomgrpc.ResponseContractError, StatusCode: codes.NotFound, ErrorName: "not_found", DetailType: "loompb.ErrorResponse"}, {ID: "registry.CallTool.error.validation_error.3", Kind: loomgrpc.ResponseContractError, StatusCode: codes.InvalidArgument, ErrorName: "validation_error", DetailType: "loompb.ErrorResponse"}, {ID: "registry.CallTool.error.service_unavailable.14", Kind: loomgrpc.ResponseContractError, StatusCode: codes.Unavailable, ErrorName: "service_unavailable", DetailType: "loompb.ErrorResponse"}}
+}
+
+// ResponseContractCases returns every supported declared gRPC wire-response
+// contract for this service. The returned slice is owned by the caller.
+func ResponseContractCases() []loomgrpc.ResponseContractCase {
+	cases := make([]loomgrpc.ResponseContractCase, 0, 12)
+	cases = append(cases, RegisterResponseContractCases()...)
+	cases = append(cases, UnregisterResponseContractCases()...)
+	cases = append(cases, PongResponseContractCases()...)
+	cases = append(cases, ListToolsetsResponseContractCases()...)
+	cases = append(cases, GetToolsetResponseContractCases()...)
+	cases = append(cases, SearchResponseContractCases()...)
+	cases = append(cases, CallToolResponseContractCases()...)
+	return cases
 }

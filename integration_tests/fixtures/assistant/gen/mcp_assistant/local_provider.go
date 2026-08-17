@@ -64,7 +64,7 @@ func executeLocalProgressiveTool(ctx context.Context, adapter *MCPAdapter, call 
 	}
 	payload := &ToolsCallPayload{
 		Name:      toolName,
-		Arguments: append(json.RawMessage(nil), arguments...),
+		Arguments: mcpJSONFromRaw(append(json.RawMessage(nil), arguments...)),
 	}
 	response, err := adapter.executeLocalProgressiveTool(ctx, payload)
 	if err != nil {
@@ -82,7 +82,11 @@ func executeLocalProgressiveTool(ctx context.Context, adapter *MCPAdapter, call 
 }
 
 func (a *MCPAdapter) executeLocalProgressiveTool(ctx context.Context, payload *ToolsCallPayload) (*ToolsCallResult, error) {
-	info := a.toolCallInfo(payload)
+	arguments, err := mcpJSONRaw(payload.Arguments)
+	if err != nil {
+		return nil, err
+	}
+	info := a.toolCallInfo(payload, arguments)
 	handler := a.wrapToolCallHandler(info, a.collectLocalProgressiveTool)
 	return handler(ctx, payload)
 }
@@ -167,9 +171,13 @@ func localPlannerToolResult(call *planner.ToolRequest, response *ToolsCallResult
 		result.Error = planner.NewToolError(text)
 		return result, nil
 	}
-	if len(response.StructuredContent) > 0 {
+	structuredContent, err := mcpJSONRaw(response.StructuredContent)
+	if err != nil {
+		return nil, err
+	}
+	if len(structuredContent) > 0 {
 		var structured any
-		if err := json.Unmarshal(response.StructuredContent, &structured); err != nil {
+		if err := json.Unmarshal(structuredContent, &structured); err != nil {
 			return nil, err
 		}
 		result.Result = structured
@@ -224,8 +232,8 @@ func (c *localToolCallCollector) result() (*ToolsCallResult, error) {
 			continue
 		}
 		merged.Content = append(merged.Content, part.Content...)
-		if len(part.StructuredContent) > 0 {
-			merged.StructuredContent = append(json.RawMessage(nil), part.StructuredContent...)
+		if part.StructuredContent.Present() {
+			merged.StructuredContent = part.StructuredContent
 		}
 		if part.IsError != nil {
 			value := *part.IsError

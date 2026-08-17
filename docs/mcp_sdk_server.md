@@ -104,6 +104,14 @@ Tools with all-optional payloads therefore execute normally, while tools with
 required fields return the generated missing-field validation error and repair
 hint.
 
+Generated MCP service types use `loom.Nullable[any]` for optional arbitrary
+JSON such as tool arguments, structured tool results, prompt arguments, and
+resource metadata. The zero value means absent, `loom.NullValue[any]()` means
+explicit JSON `null`, and `loom.NullableValue[any](value)` carries a concrete
+value. SDK and dispatch boundaries preserve a contained `json.RawMessage`
+without decoding it. The adapter marshals other concrete values only when a
+raw JSON boundary requires them.
+
 Loom streaming service methods remain valid tool and resource sources. The
 adapter collects their results and returns one standard MCP result.
 

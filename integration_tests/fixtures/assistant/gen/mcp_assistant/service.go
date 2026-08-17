@@ -9,7 +9,8 @@ package mcpassistant
 
 import (
 	"context"
-	"encoding/json"
+
+	loom "github.com/CaliLuke/loom/pkg"
 )
 
 // MCP SDK adapter service for assistant
@@ -77,7 +78,7 @@ type PromptsGetPayload struct {
 	// Prompt name
 	Name string `json:"name"`
 	// Prompt arguments
-	Arguments json.RawMessage `json:"arguments,omitempty"`
+	Arguments loom.Nullable[any] `json:"arguments,omitzero"`
 }
 
 // PromptsGetResult is the result type of the mcp_assistant service prompts/get
@@ -99,7 +100,7 @@ type ResourceContent struct {
 	// Base64 encoded binary content
 	Blob *string `json:"blob,omitempty"`
 	// Resource content metadata
-	Meta any `json:"_meta,omitempty"`
+	Meta loom.Nullable[any] `json:"_meta,omitzero"`
 }
 
 // ResourcesReadPayload is the payload type of the mcp_assistant service
@@ -122,7 +123,7 @@ type ToolsCallPayload struct {
 	// Tool name
 	Name string `json:"name"`
 	// Tool arguments
-	Arguments json.RawMessage `json:"arguments,omitempty"`
+	Arguments loom.Nullable[any] `json:"arguments,omitzero"`
 }
 
 // ToolsCallResult is the result type of the mcp_assistant service tools/call
@@ -131,7 +132,7 @@ type ToolsCallResult struct {
 	// Tool execution results
 	Content []*ContentItem `json:"content"`
 	// Optional structured result for machine consumers
-	StructuredContent json.RawMessage `json:"structuredContent,omitempty"`
+	StructuredContent loom.Nullable[any] `json:"structuredContent,omitzero"`
 	// Whether the tool encountered an error
 	IsError *bool `json:"isError,omitempty"`
 }

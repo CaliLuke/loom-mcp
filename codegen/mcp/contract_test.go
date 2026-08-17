@@ -116,13 +116,22 @@ func TestGenerateAdapterUsesUnaryToolBoundaryAndPrivateStreamingCollector(t *tes
 
 	require.Contains(t, service, "ToolsCall(context.Context, *ToolsCallPayload) (res *ToolsCallResult, err error)")
 	require.NotContains(t, service, "ToolsCallServerStream")
+	require.Contains(t, service, "Arguments loom.Nullable[any]")
+	require.Contains(t, service, "StructuredContent loom.Nullable[any]")
+	require.NotContains(t, service, "Arguments json.RawMessage")
+	require.NotContains(t, service, "StructuredContent json.RawMessage")
 	require.Contains(t, adapter, "type toolCallResultCollector struct")
 	require.Contains(t, adapter, "type SearchStreamBridge struct")
 	require.Contains(t, adapter, "ToolCallHandler func(ctx context.Context, payload *ToolsCallPayload) (*ToolsCallResult, error)")
 	require.Contains(t, adapter, "ToolCallInterceptor func(ctx context.Context, info ToolCallInterceptorInfo, payload *ToolsCallPayload, next ToolCallHandler) (*ToolsCallResult, error)")
 	require.NotContains(t, adapter, "ToolCallInterceptor func(ctx context.Context, info ToolCallInterceptorInfo, payload *ToolsCallPayload, stream")
+	require.Contains(t, adapter, "func mcpJSONRaw(value loom.Nullable[any]) (json.RawMessage, error)")
+	require.Contains(t, adapter, "if raw, ok := actual.(json.RawMessage); ok")
+	require.Contains(t, adapter, "func mcpJSONFromRaw(raw json.RawMessage) loom.Nullable[any]")
 	require.Contains(t, adapter, "func (a *MCPAdapter) ToolsCall(ctx context.Context, p *ToolsCallPayload) (res *ToolsCallResult, err error)")
 	require.Contains(t, sdk, "result, err := a.ToolsCall(ctx, payload)")
+	require.Contains(t, sdk, "payload.Arguments = mcpJSONFromRaw(req.Params.Arguments)")
+	require.Contains(t, sdk, "structuredContent, err := mcpJSONRaw(result.StructuredContent)")
 	require.NotContains(t, sdk, "sdkToolCallCollector")
 }
 

@@ -13,6 +13,7 @@ func adapterCoreSection(data *AdapterData) codegen.Section {
 		emitToolSearchOptions(stmt)
 		emitAdapterOptions(stmt)
 		emitAdapterConstructor(stmt, data)
+		emitMCPJSONPresenceHelpers(stmt)
 		emitParseQueryParamsToJSON(stmt)
 		emitSessionHelpers(stmt)
 		emitLogAndMapError(stmt)
@@ -25,6 +26,64 @@ func adapterCoreSection(data *AdapterData) codegen.Section {
 		emitToolCallError(stmt)
 		emitMissingFieldFromMessage(stmt)
 	})
+}
+
+func emitMCPJSONPresenceHelpers(stmt *jen.Statement) {
+	nullableAny := func() *jen.Statement {
+		return jen.Id("loom").Dot("Nullable").Types(jen.Any())
+	}
+	stmt.Func().Id("mcpJSONRaw").
+		Params(jen.Id("value").Add(nullableAny())).
+		Params(jen.Qual("encoding/json", "RawMessage"), jen.Error()).
+		Block(
+			jen.If(jen.Op("!").Id("value").Dot("Present").Call()).Block(
+				jen.Return(jen.Nil(), jen.Nil()),
+			),
+			jen.If(jen.Id("value").Dot("IsNull").Call()).Block(
+				jen.Return(jen.Qual("encoding/json", "RawMessage").Call(jen.Lit("null")), jen.Nil()),
+			),
+			jen.List(jen.Id("actual"), jen.Id("ok")).Op(":=").Id("value").Dot("Value").Call(),
+			jen.If(jen.Op("!").Id("ok")).Block(
+				jen.Return(jen.Nil(), jen.Qual("errors", "New").Call(jen.Lit("present MCP JSON value has no concrete value"))),
+			),
+			jen.If(jen.List(jen.Id("raw"), jen.Id("ok")).Op(":=").Id("actual").Assert(jen.Qual("encoding/json", "RawMessage")), jen.Id("ok")).Block(
+				jen.Return(
+					jen.Append(jen.Qual("encoding/json", "RawMessage").Call(jen.Nil()), jen.Id("raw").Op("...")),
+					jen.Nil(),
+				),
+			),
+			jen.List(jen.Id("raw"), jen.Id("err")).Op(":=").Qual("encoding/json", "Marshal").Call(jen.Id("actual")),
+			jen.If(jen.Id("err").Op("!=").Nil()).Block(
+				jen.Return(jen.Nil(), jen.Id("err")),
+			),
+			jen.Return(jen.Qual("encoding/json", "RawMessage").Call(jen.Id("raw")), jen.Nil()),
+		)
+	stmt.Line()
+	stmt.Func().Id("mcpJSONFromRaw").
+		Params(jen.Id("raw").Qual("encoding/json", "RawMessage")).
+		Add(nullableAny()).
+		Block(
+			jen.Id("trimmed").Op(":=").Qual("bytes", "TrimSpace").Call(jen.Id("raw")),
+			jen.If(jen.Len(jen.Id("trimmed")).Op("==").Lit(0)).Block(
+				jen.Return(nullableAny().Values()),
+			),
+			jen.If(jen.Qual("bytes", "Equal").Call(jen.Id("trimmed"), jen.Index().Byte().Call(jen.Lit("null")))).Block(
+				jen.Return(jen.Id("loom").Dot("NullValue").Types(jen.Any()).Call()),
+			),
+			jen.Id("copied").Op(":=").Append(jen.Qual("encoding/json", "RawMessage").Call(jen.Nil()), jen.Id("raw").Op("...")),
+			jen.Return(jen.Id("loom").Dot("NullableValue").Types(jen.Any()).Call(jen.Id("copied"))),
+		)
+	stmt.Line()
+	stmt.Func().Id("mcpJSONAny").
+		Params(jen.Id("value").Add(nullableAny())).
+		Any().
+		Block(
+			jen.If(jen.Id("value").Dot("IsNull").Call()).Block(jen.Return(jen.Nil())),
+			jen.List(jen.Id("actual"), jen.Id("ok")).Op(":=").Id("value").Dot("Value").Call(),
+			jen.If(jen.Op("!").Id("ok")).Block(jen.Return(jen.Nil())),
+			jen.Return(jen.Id("actual")),
+		)
+	stmt.Line()
 }
 
 // emitAdapterStruct generates the MCPAdapter struct definition.
@@ -436,7 +495,10 @@ func emitLogAndMapError(stmt *jen.Statement) {
 // emitToolCallInfoAndWrap generates toolCallInfo and wrapToolCallHandler.
 func emitToolCallInfoAndWrap(stmt *jen.Statement, data *AdapterData) {
 	stmt.Func().Params(jen.Id("a").Op("*").Id("MCPAdapter")).
-		Id("toolCallInfo").Params(jen.Id("p").Op("*").Id("ToolsCallPayload")).Id("ToolCallInterceptorInfo").
+		Id("toolCallInfo").Params(
+		jen.Id("p").Op("*").Id("ToolsCallPayload"),
+		jen.Id("rawArgs").Qual("encoding/json", "RawMessage"),
+	).Id("ToolCallInterceptorInfo").
 		Block(
 			jen.Id("info").Op(":=").Op("&").Id("toolCallInterceptorInfo").Values(jen.Dict{
 				jen.Id("service"):    jen.Lit(data.ServiceName),
@@ -445,7 +507,7 @@ func emitToolCallInfoAndWrap(stmt *jen.Statement, data *AdapterData) {
 			}),
 			jen.If(jen.Id("p").Op("!=").Nil()).Block(
 				jen.Id("info").Dot("tool").Op("=").Id("p").Dot("Name"),
-				jen.Id("info").Dot("rawArgs").Op("=").Id("p").Dot("Arguments"),
+				jen.Id("info").Dot("rawArgs").Op("=").Id("rawArgs"),
 			),
 			jen.Return(jen.Id("info")),
 		)

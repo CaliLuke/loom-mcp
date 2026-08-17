@@ -133,7 +133,9 @@ func emitResourcesRead(stmt *jen.Statement, data *AdapterData) {
 								jen.Id("MimeType"): jen.Id("stringPtr").Call(jen.Id("content").Dot("MimeType")),
 								jen.Id("Text"):     jen.Id("content").Dot("Text"),
 								jen.Id("Blob"):     jen.Id("content").Dot("Blob"),
-								jen.Id("Meta"):     jen.Id("mcpskills").Dot("MetadataMeta").Call(jen.Id("content").Dot("Metadata")),
+								jen.Id("Meta"): jen.Id("loom").Dot("NullableValue").Types(jen.Any()).Call(
+									jen.Id("mcpskills").Dot("MetadataMeta").Call(jen.Id("content").Dot("Metadata")),
+								),
 							}),
 						),
 					}),
@@ -378,6 +380,8 @@ func emitPromptsGet(stmt *jen.Statement, data *AdapterData) {
 			g.If(jen.Id("p").Op("==").Nil().Op("||").Id("p").Dot("Name").Op("==").Lit("")).Block(
 				jen.Return(jen.Nil(), jen.Id("loom").Dot("PermanentError").Call(jen.Lit("invalid_params"), jen.Lit("Missing prompt name"))),
 			)
+			g.List(jen.Id("arguments"), jen.Id("err")).Op(":=").Id("mcpJSONRaw").Call(jen.Id("p").Dot("Arguments"))
+			g.If(jen.Id("err").Op("!=").Nil()).Block(jen.Return(jen.Nil(), jen.Id("err")))
 			g.Id("a").Dot("log").Call(jen.Id("ctx"), jen.Lit("request"), jen.Map(jen.String()).Any().Values(jen.Dict{
 				jen.Lit("method"): jen.Lit("prompts/get"),
 				jen.Lit("name"):   jen.Id("p").Dot("Name"),
@@ -405,7 +409,7 @@ func staticPromptCase(prompt *StaticPromptAdapter) []jen.Code {
 	codes := make([]jen.Code, 0, 6)
 	codes = append(codes,
 		jen.If(jen.Id("a").Dot("promptProvider").Op("!=").Nil()).Block(
-			jen.If(jen.List(jen.Id("res"), jen.Id("err")).Op(":=").Id("a").Dot("promptProvider").Dot("Get"+codegen.Goify(prompt.Name, true)+"Prompt").Call(jen.Id("p").Dot("Arguments")), jen.Id("err").Op("==").Nil().Op("&&").Id("res").Op("!=").Nil()).Block(
+			jen.If(jen.List(jen.Id("res"), jen.Id("err")).Op(":=").Id("a").Dot("promptProvider").Dot("Get"+codegen.Goify(prompt.Name, true)+"Prompt").Call(jen.Id("arguments")), jen.Id("err").Op("==").Nil().Op("&&").Id("res").Op("!=").Nil()).Block(
 				jen.Id("a").Dot("log").Call(jen.Id("ctx"), jen.Lit("response"), jen.Map(jen.String()).Any().Values(jen.Dict{
 					jen.Lit("method"): jen.Lit("prompts/get"),
 					jen.Lit("name"):   jen.Id("p").Dot("Name"),
@@ -453,8 +457,8 @@ func dynamicPromptCase(prompt *DynamicPromptAdapter) []jen.Code {
 	if hasRequired {
 		codes = append(codes,
 			jen.Var().Id("args").Map(jen.String()).Any(),
-			jen.If(jen.Len(jen.Id("p").Dot("Arguments")).Op(">").Lit(0)).Block(
-				jen.If(jen.Id("err").Op(":=").Qual("encoding/json", "Unmarshal").Call(jen.Id("p").Dot("Arguments"), jen.Op("&").Id("args")), jen.Id("err").Op("!=").Nil()).Block(
+			jen.If(jen.Len(jen.Id("arguments")).Op(">").Lit(0)).Block(
+				jen.If(jen.Id("err").Op(":=").Qual("encoding/json", "Unmarshal").Call(jen.Id("arguments"), jen.Op("&").Id("args")), jen.Id("err").Op("!=").Nil()).Block(
 					jen.Return(jen.Nil(), jen.Id("a").Dot("safeMCPError").Call(jen.Id("err"), jen.Lit("invalid_params"), jen.Lit("Invalid prompt arguments."))),
 				),
 			),
@@ -473,7 +477,7 @@ func dynamicPromptCase(prompt *DynamicPromptAdapter) []jen.Code {
 		jen.If(jen.Id("a").Dot("promptProvider").Op("==").Nil()).Block(
 			jen.Return(jen.Nil(), jen.Id("loom").Dot("PermanentError").Call(jen.Lit("invalid_params"), jen.Lit("No prompt provider configured for dynamic prompts"))),
 		),
-		jen.List(jen.Id("res"), jen.Id("err")).Op(":=").Id("a").Dot("promptProvider").Dot("Get"+codegen.Goify(prompt.Name, true)+"Prompt").Call(jen.Id("ctx"), jen.Id("p").Dot("Arguments")),
+		jen.List(jen.Id("res"), jen.Id("err")).Op(":=").Id("a").Dot("promptProvider").Dot("Get"+codegen.Goify(prompt.Name, true)+"Prompt").Call(jen.Id("ctx"), jen.Id("arguments")),
 		jen.If(jen.Id("err").Op("!=").Nil()).Block(
 			jen.Return(jen.Nil(), jen.Id("a").Dot("safeMCPError").Call(jen.Id("err"), jen.Lit("internal_error"), jen.Lit("Prompt retrieval failed."))),
 		),

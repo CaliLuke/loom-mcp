@@ -186,6 +186,47 @@ func NewMCPAdapter(service assistant.Service, promptProvider PromptProvider, opt
 	nameToURI := map[string]string{"documents": "doc://list", "system_info": "system://info", "elicitation_context": "elicitation://context", "conversation_history": "conversation://history", "figma_design_system": "figma://design-system/mobile-checkout"}
 	return &MCPAdapter{service: service, initializedSessions: make(map[string]time.Time), sessionPrincipals: make(map[string]string), opts: opts, tracer: tracer, callCounter: callCounter, errorCounter: errorCounter, durationHistogram: durationHistogram, promptProvider: promptProvider, resourceNameToURI: nameToURI}
 }
+func mcpJSONRaw(value loom.Nullable[any]) (json.RawMessage, error) {
+	if !value.Present() {
+		return nil, nil
+	}
+	if value.IsNull() {
+		return json.RawMessage("null"), nil
+	}
+	actual, ok := value.Value()
+	if !ok {
+		return nil, errors.New("present MCP JSON value has no concrete value")
+	}
+	if raw, ok := actual.(json.RawMessage); ok {
+		return append(json.RawMessage(nil), raw...), nil
+	}
+	raw, err := json.Marshal(actual)
+	if err != nil {
+		return nil, err
+	}
+	return json.RawMessage(raw), nil
+}
+func mcpJSONFromRaw(raw json.RawMessage) loom.Nullable[any] {
+	trimmed := bytes.TrimSpace(raw)
+	if len(trimmed) == 0 {
+		return loom.Nullable[any]{}
+	}
+	if bytes.Equal(trimmed, []byte("null")) {
+		return loom.NullValue[any]()
+	}
+	copied := append(json.RawMessage(nil), raw...)
+	return loom.NullableValue[any](copied)
+}
+func mcpJSONAny(value loom.Nullable[any]) any {
+	if value.IsNull() {
+		return nil
+	}
+	actual, ok := value.Value()
+	if !ok {
+		return nil
+	}
+	return actual
+}
 
 // parseQueryParamsToJSON converts URI query params into JSON.
 func parseQueryParamsToJSON(uri string) ([]byte, error) {
@@ -327,7 +368,7 @@ func (a *MCPAdapter) mapError(err error) error {
 	}
 	return err
 }
-func (a *MCPAdapter) toolCallInfo(p *ToolsCallPayload) ToolCallInterceptorInfo {
+func (a *MCPAdapter) toolCallInfo(p *ToolsCallPayload, rawArgs json.RawMessage) ToolCallInterceptorInfo {
 	info := &toolCallInterceptorInfo{
 		method:     "tools/call",
 		rawPayload: p,
@@ -335,7 +376,7 @@ func (a *MCPAdapter) toolCallInfo(p *ToolsCallPayload) ToolCallInterceptorInfo {
 	}
 	if p != nil {
 		info.tool = p.Name
-		info.rawArgs = p.Arguments
+		info.rawArgs = rawArgs
 	}
 	return info
 }
@@ -642,8 +683,8 @@ func (c *toolCallResultCollector) result() *ToolsCallResult {
 			continue
 		}
 		merged.Content = append(merged.Content, part.Content...)
-		if len(part.StructuredContent) > 0 {
-			merged.StructuredContent = append(json.RawMessage(nil), part.StructuredContent...)
+		if part.StructuredContent.Present() {
+			merged.StructuredContent = part.StructuredContent
 		}
 		if part.IsError != nil {
 			value := *part.IsError
@@ -1507,7 +1548,10 @@ func toolSearchRank(tool *ToolInfo, query string, settings toolSearchSettings) i
 }
 func (a *MCPAdapter) handleSearchTools(ctx context.Context, p *ToolsCallPayload, stream toolCallStream) (bool, error) {
 	var payload toolSearchPayload
-	arguments := p.Arguments
+	arguments, err := mcpJSONRaw(p.Arguments)
+	if err != nil {
+		return false, err
+	}
 	if len(bytes.TrimSpace(arguments)) == 0 {
 		arguments = json.RawMessage([]byte("{}"))
 	}
@@ -1608,12 +1652,16 @@ func (a *MCPAdapter) handleSearchTools(ctx context.Context, p *ToolsCallPayload,
 	text := strings.Join(lines, "\n")
 	return false, stream.SendAndClose(ctx, &ToolsCallResult{
 		Content:           []*ContentItem{buildContentItem(a, text)},
-		StructuredContent: structured,
+		StructuredContent: mcpJSONFromRaw(structured),
 	})
 }
 func (a *MCPAdapter) handleCallToolProxy(ctx context.Context, p *ToolsCallPayload, stream toolCallStream) (bool, error) {
+	rawArguments, err := mcpJSONRaw(p.Arguments)
+	if err != nil {
+		return false, err
+	}
 	var payload toolCallProxyPayload
-	if err := decodeMCPPayloadStrict(p.Arguments, &payload); err != nil {
+	if err := decodeMCPPayloadStrict(rawArguments, &payload); err != nil {
 		return true, a.sendToolError(ctx, stream, p.Name, toolCallError(err, "invalid_params", "Provide {\"name\":\"tool_name\",\"arguments\":{...}} to call a discovered tool."))
 	}
 	payload.Name = strings.TrimSpace(payload.Name)
@@ -1631,10 +1679,10 @@ func (a *MCPAdapter) handleCallToolProxy(ctx context.Context, p *ToolsCallPayloa
 		arguments = json.RawMessage([]byte("{}"))
 	}
 	proxied := &ToolsCallPayload{
-		Arguments: arguments,
+		Arguments: mcpJSONFromRaw(arguments),
 		Name:      payload.Name,
 	}
-	info := a.toolCallInfo(proxied)
+	info := a.toolCallInfo(proxied, arguments)
 	handler := a.wrapToolCallHandler(info, a.collectRealToolCall)
 	result, err := handler(ctx, proxied)
 	if err != nil {
@@ -1889,11 +1937,18 @@ func projectedLookupInputRecovery(err error, raw json.RawMessage) string {
 }
 func (a *MCPAdapter) ToolsCall(ctx context.Context, p *ToolsCallPayload) (res *ToolsCallResult, err error) {
 	attrs := []attribute.KeyValue{}
+	var rawArguments json.RawMessage
+	if p != nil {
+		rawArguments, err = mcpJSONRaw(p.Arguments)
+		if err != nil {
+			return nil, err
+		}
+	}
 	if p != nil && p.Name != "" {
 		attrs = append(attrs, attribute.String("mcp.tool", p.Name), attribute.String("tool", p.Name))
 		if a.isToolCallProxyName(p.Name) {
 			var target toolCallProxyPayload
-			if json.Unmarshal(p.Arguments, &target) == nil && strings.TrimSpace(target.Name) != "" {
+			if json.Unmarshal(rawArguments, &target) == nil && strings.TrimSpace(target.Name) != "" {
 				attrs = append(attrs, attribute.String("mcp.target_tool", strings.TrimSpace(target.Name)))
 			}
 		}
@@ -1903,7 +1958,7 @@ func (a *MCPAdapter) ToolsCall(ctx context.Context, p *ToolsCallPayload) (res *T
 	defer func() {
 		a.finishTelemetry(ctx, span, start, attrs, err, toolErr)
 	}()
-	info := a.toolCallInfo(p)
+	info := a.toolCallInfo(p, rawArguments)
 	handler := a.wrapToolCallHandler(info, a.collectToolsCall)
 	res, err = handler(ctx, p)
 	if res != nil && res.IsError != nil {
@@ -1949,25 +2004,27 @@ func (a *MCPAdapter) toolsCallHandler(ctx context.Context, p *ToolsCallPayload, 
 	return a.executeRealTool(ctx, p, stream)
 }
 func (a *MCPAdapter) executeRealTool(ctx context.Context, p *ToolsCallPayload, stream toolCallStream) (bool, error) {
-	arguments := bytes.TrimSpace(p.Arguments)
+	arguments, err := mcpJSONRaw(p.Arguments)
+	if err != nil {
+		return false, err
+	}
+	arguments = bytes.TrimSpace(arguments)
 	if len(arguments) == 0 || bytes.Equal(arguments, []byte("null")) {
-		normalized := *p
-		normalized.Arguments = json.RawMessage([]byte("{}"))
-		p = &normalized
+		arguments = json.RawMessage([]byte("{}"))
 	}
 	switch p.Name {
 	case "analyze_sentiment":
 		var payload *assistant.AnalyzeSentimentPayload
-		rawFields, err := decodeMCPPayloadFields(p.Arguments)
+		rawFields, err := decodeMCPPayloadFields(arguments)
 		if err != nil {
-			return true, a.sendToolError(ctx, stream, p.Name, toolCallError(err, "invalid_params", analyzeSentimentInputRecovery(err, p.Arguments)))
+			return true, a.sendToolError(ctx, stream, p.Name, toolCallError(err, "invalid_params", analyzeSentimentInputRecovery(err, arguments)))
 		}
-		if err := decodeMCPPayloadStrict(p.Arguments, &payload); err != nil {
-			return true, a.sendToolError(ctx, stream, p.Name, toolCallError(err, "invalid_params", analyzeSentimentInputRecovery(err, p.Arguments)))
+		if err := decodeMCPPayloadStrict(arguments, &payload); err != nil {
+			return true, a.sendToolError(ctx, stream, p.Name, toolCallError(err, "invalid_params", analyzeSentimentInputRecovery(err, arguments)))
 		}
 		{
 			if err := validateMCPPayloadRequired(rawFields, "text"); err != nil {
-				return true, a.sendToolError(ctx, stream, p.Name, toolCallError(err, "invalid_params", analyzeSentimentInputRecovery(err, p.Arguments)))
+				return true, a.sendToolError(ctx, stream, p.Name, toolCallError(err, "invalid_params", analyzeSentimentInputRecovery(err, arguments)))
 			}
 		}
 		result, err := a.service.AnalyzeSentiment(ctx, payload)
@@ -1981,7 +2038,7 @@ func (a *MCPAdapter) executeRealTool(ctx context.Context, p *ToolsCallPayload, s
 		s := string(structuredContent)
 		final := &ToolsCallResult{
 			Content:           []*ContentItem{buildContentItem(a, s)},
-			StructuredContent: structuredContent,
+			StructuredContent: mcpJSONFromRaw(structuredContent),
 		}
 		a.log(ctx, "response", map[string]any{
 			"method": "tools/call",
@@ -1990,16 +2047,16 @@ func (a *MCPAdapter) executeRealTool(ctx context.Context, p *ToolsCallPayload, s
 		return false, stream.SendAndClose(ctx, final)
 	case "extract_keywords":
 		var payload *assistant.ExtractKeywordsPayload
-		rawFields, err := decodeMCPPayloadFields(p.Arguments)
+		rawFields, err := decodeMCPPayloadFields(arguments)
 		if err != nil {
-			return true, a.sendToolError(ctx, stream, p.Name, toolCallError(err, "invalid_params", extractKeywordsInputRecovery(err, p.Arguments)))
+			return true, a.sendToolError(ctx, stream, p.Name, toolCallError(err, "invalid_params", extractKeywordsInputRecovery(err, arguments)))
 		}
-		if err := decodeMCPPayloadStrict(p.Arguments, &payload); err != nil {
-			return true, a.sendToolError(ctx, stream, p.Name, toolCallError(err, "invalid_params", extractKeywordsInputRecovery(err, p.Arguments)))
+		if err := decodeMCPPayloadStrict(arguments, &payload); err != nil {
+			return true, a.sendToolError(ctx, stream, p.Name, toolCallError(err, "invalid_params", extractKeywordsInputRecovery(err, arguments)))
 		}
 		{
 			if err := validateMCPPayloadRequired(rawFields, "text"); err != nil {
-				return true, a.sendToolError(ctx, stream, p.Name, toolCallError(err, "invalid_params", extractKeywordsInputRecovery(err, p.Arguments)))
+				return true, a.sendToolError(ctx, stream, p.Name, toolCallError(err, "invalid_params", extractKeywordsInputRecovery(err, arguments)))
 			}
 		}
 		result, err := a.service.ExtractKeywords(ctx, payload)
@@ -2013,7 +2070,7 @@ func (a *MCPAdapter) executeRealTool(ctx context.Context, p *ToolsCallPayload, s
 		s := string(structuredContent)
 		final := &ToolsCallResult{
 			Content:           []*ContentItem{buildContentItem(a, s)},
-			StructuredContent: structuredContent,
+			StructuredContent: mcpJSONFromRaw(structuredContent),
 		}
 		a.log(ctx, "response", map[string]any{
 			"method": "tools/call",
@@ -2022,16 +2079,16 @@ func (a *MCPAdapter) executeRealTool(ctx context.Context, p *ToolsCallPayload, s
 		return false, stream.SendAndClose(ctx, final)
 	case "summarize_text":
 		var payload *assistant.SummarizeTextPayload
-		rawFields, err := decodeMCPPayloadFields(p.Arguments)
+		rawFields, err := decodeMCPPayloadFields(arguments)
 		if err != nil {
-			return true, a.sendToolError(ctx, stream, p.Name, toolCallError(err, "invalid_params", summarizeTextInputRecovery(err, p.Arguments)))
+			return true, a.sendToolError(ctx, stream, p.Name, toolCallError(err, "invalid_params", summarizeTextInputRecovery(err, arguments)))
 		}
-		if err := decodeMCPPayloadStrict(p.Arguments, &payload); err != nil {
-			return true, a.sendToolError(ctx, stream, p.Name, toolCallError(err, "invalid_params", summarizeTextInputRecovery(err, p.Arguments)))
+		if err := decodeMCPPayloadStrict(arguments, &payload); err != nil {
+			return true, a.sendToolError(ctx, stream, p.Name, toolCallError(err, "invalid_params", summarizeTextInputRecovery(err, arguments)))
 		}
 		{
 			if err := validateMCPPayloadRequired(rawFields, "text"); err != nil {
-				return true, a.sendToolError(ctx, stream, p.Name, toolCallError(err, "invalid_params", summarizeTextInputRecovery(err, p.Arguments)))
+				return true, a.sendToolError(ctx, stream, p.Name, toolCallError(err, "invalid_params", summarizeTextInputRecovery(err, arguments)))
 			}
 		}
 		result, err := a.service.SummarizeText(ctx, payload)
@@ -2045,7 +2102,7 @@ func (a *MCPAdapter) executeRealTool(ctx context.Context, p *ToolsCallPayload, s
 		s := string(structuredContent)
 		final := &ToolsCallResult{
 			Content:           []*ContentItem{buildContentItem(a, s)},
-			StructuredContent: structuredContent,
+			StructuredContent: mcpJSONFromRaw(structuredContent),
 		}
 		a.log(ctx, "response", map[string]any{
 			"method": "tools/call",
@@ -2054,16 +2111,16 @@ func (a *MCPAdapter) executeRealTool(ctx context.Context, p *ToolsCallPayload, s
 		return false, stream.SendAndClose(ctx, final)
 	case "search":
 		var payload *assistant.SearchPayload
-		rawFields, err := decodeMCPPayloadFields(p.Arguments)
+		rawFields, err := decodeMCPPayloadFields(arguments)
 		if err != nil {
-			return true, a.sendToolError(ctx, stream, p.Name, toolCallError(err, "invalid_params", searchInputRecovery(err, p.Arguments)))
+			return true, a.sendToolError(ctx, stream, p.Name, toolCallError(err, "invalid_params", searchInputRecovery(err, arguments)))
 		}
-		if err := decodeMCPPayloadStrict(p.Arguments, &payload); err != nil {
-			return true, a.sendToolError(ctx, stream, p.Name, toolCallError(err, "invalid_params", searchInputRecovery(err, p.Arguments)))
+		if err := decodeMCPPayloadStrict(arguments, &payload); err != nil {
+			return true, a.sendToolError(ctx, stream, p.Name, toolCallError(err, "invalid_params", searchInputRecovery(err, arguments)))
 		}
 		{
 			if err := validateMCPPayloadRequired(rawFields, "query"); err != nil {
-				return true, a.sendToolError(ctx, stream, p.Name, toolCallError(err, "invalid_params", searchInputRecovery(err, p.Arguments)))
+				return true, a.sendToolError(ctx, stream, p.Name, toolCallError(err, "invalid_params", searchInputRecovery(err, arguments)))
 			}
 		}
 		result, err := a.service.Search(ctx, payload)
@@ -2077,7 +2134,7 @@ func (a *MCPAdapter) executeRealTool(ctx context.Context, p *ToolsCallPayload, s
 		s := string(structuredContent)
 		final := &ToolsCallResult{
 			Content:           []*ContentItem{buildContentItem(a, s)},
-			StructuredContent: structuredContent,
+			StructuredContent: mcpJSONFromRaw(structuredContent),
 		}
 		a.log(ctx, "response", map[string]any{
 			"method": "tools/call",
@@ -2086,8 +2143,8 @@ func (a *MCPAdapter) executeRealTool(ctx context.Context, p *ToolsCallPayload, s
 		return false, stream.SendAndClose(ctx, final)
 	case "search_records":
 		var payload *assistant.SearchRecordsPayload
-		if err := decodeMCPPayloadStrict(p.Arguments, &payload); err != nil {
-			return true, a.sendToolError(ctx, stream, p.Name, toolCallError(err, "invalid_params", searchRecordsInputRecovery(err, p.Arguments)))
+		if err := decodeMCPPayloadStrict(arguments, &payload); err != nil {
+			return true, a.sendToolError(ctx, stream, p.Name, toolCallError(err, "invalid_params", searchRecordsInputRecovery(err, arguments)))
 		}
 		result, err := a.service.SearchRecords(ctx, payload)
 		if err != nil {
@@ -2100,7 +2157,7 @@ func (a *MCPAdapter) executeRealTool(ctx context.Context, p *ToolsCallPayload, s
 		s := string(structuredContent)
 		final := &ToolsCallResult{
 			Content:           []*ContentItem{buildContentItem(a, s)},
-			StructuredContent: structuredContent,
+			StructuredContent: mcpJSONFromRaw(structuredContent),
 		}
 		a.log(ctx, "response", map[string]any{
 			"method": "tools/call",
@@ -2109,24 +2166,24 @@ func (a *MCPAdapter) executeRealTool(ctx context.Context, p *ToolsCallPayload, s
 		return false, stream.SendAndClose(ctx, final)
 	case "execute_code":
 		var payload *assistant.ExecuteCodePayload
-		rawFields, err := decodeMCPPayloadFields(p.Arguments)
+		rawFields, err := decodeMCPPayloadFields(arguments)
 		if err != nil {
-			return true, a.sendToolError(ctx, stream, p.Name, toolCallError(err, "invalid_params", executeCodeInputRecovery(err, p.Arguments)))
+			return true, a.sendToolError(ctx, stream, p.Name, toolCallError(err, "invalid_params", executeCodeInputRecovery(err, arguments)))
 		}
-		if err := decodeMCPPayloadStrict(p.Arguments, &payload); err != nil {
-			return true, a.sendToolError(ctx, stream, p.Name, toolCallError(err, "invalid_params", executeCodeInputRecovery(err, p.Arguments)))
+		if err := decodeMCPPayloadStrict(arguments, &payload); err != nil {
+			return true, a.sendToolError(ctx, stream, p.Name, toolCallError(err, "invalid_params", executeCodeInputRecovery(err, arguments)))
 		}
 		{
 			if err := validateMCPPayloadRequired(rawFields, "language"); err != nil {
-				return true, a.sendToolError(ctx, stream, p.Name, toolCallError(err, "invalid_params", executeCodeInputRecovery(err, p.Arguments)))
+				return true, a.sendToolError(ctx, stream, p.Name, toolCallError(err, "invalid_params", executeCodeInputRecovery(err, arguments)))
 			}
 			if err := validateMCPPayloadRequired(rawFields, "code"); err != nil {
-				return true, a.sendToolError(ctx, stream, p.Name, toolCallError(err, "invalid_params", executeCodeInputRecovery(err, p.Arguments)))
+				return true, a.sendToolError(ctx, stream, p.Name, toolCallError(err, "invalid_params", executeCodeInputRecovery(err, arguments)))
 			}
 		}
 		{
 			if err := validateMCPPayloadEnum(rawFields, "language", false, "python", "javascript"); err != nil {
-				return true, a.sendToolError(ctx, stream, p.Name, toolCallError(err, "invalid_params", executeCodeInputRecovery(err, p.Arguments)))
+				return true, a.sendToolError(ctx, stream, p.Name, toolCallError(err, "invalid_params", executeCodeInputRecovery(err, arguments)))
 			}
 		}
 		result, err := a.service.ExecuteCode(ctx, payload)
@@ -2140,7 +2197,7 @@ func (a *MCPAdapter) executeRealTool(ctx context.Context, p *ToolsCallPayload, s
 		s := string(structuredContent)
 		final := &ToolsCallResult{
 			Content:           []*ContentItem{buildContentItem(a, s)},
-			StructuredContent: structuredContent,
+			StructuredContent: mcpJSONFromRaw(structuredContent),
 		}
 		a.log(ctx, "response", map[string]any{
 			"method": "tools/call",
@@ -2149,16 +2206,16 @@ func (a *MCPAdapter) executeRealTool(ctx context.Context, p *ToolsCallPayload, s
 		return false, stream.SendAndClose(ctx, final)
 	case "process_batch":
 		var payload *assistant.ProcessBatchPayload
-		rawFields, err := decodeMCPPayloadFields(p.Arguments)
+		rawFields, err := decodeMCPPayloadFields(arguments)
 		if err != nil {
-			return true, a.sendToolError(ctx, stream, p.Name, toolCallError(err, "invalid_params", processBatchInputRecovery(err, p.Arguments)))
+			return true, a.sendToolError(ctx, stream, p.Name, toolCallError(err, "invalid_params", processBatchInputRecovery(err, arguments)))
 		}
-		if err := decodeMCPPayloadStrict(p.Arguments, &payload); err != nil {
-			return true, a.sendToolError(ctx, stream, p.Name, toolCallError(err, "invalid_params", processBatchInputRecovery(err, p.Arguments)))
+		if err := decodeMCPPayloadStrict(arguments, &payload); err != nil {
+			return true, a.sendToolError(ctx, stream, p.Name, toolCallError(err, "invalid_params", processBatchInputRecovery(err, arguments)))
 		}
 		{
 			if err := validateMCPPayloadEnum(rawFields, "format", true, "json", "text", "blob", "uri"); err != nil {
-				return true, a.sendToolError(ctx, stream, p.Name, toolCallError(err, "invalid_params", processBatchInputRecovery(err, p.Arguments)))
+				return true, a.sendToolError(ctx, stream, p.Name, toolCallError(err, "invalid_params", processBatchInputRecovery(err, arguments)))
 			}
 		}
 		result, err := a.service.ProcessBatch(ctx, payload)
@@ -2172,7 +2229,7 @@ func (a *MCPAdapter) executeRealTool(ctx context.Context, p *ToolsCallPayload, s
 		s := string(structuredContent)
 		final := &ToolsCallResult{
 			Content:           []*ContentItem{buildContentItem(a, s)},
-			StructuredContent: structuredContent,
+			StructuredContent: mcpJSONFromRaw(structuredContent),
 		}
 		a.log(ctx, "response", map[string]any{
 			"method": "tools/call",
@@ -2191,7 +2248,7 @@ func (a *MCPAdapter) executeRealTool(ctx context.Context, p *ToolsCallPayload, s
 		s := string(structuredContent)
 		final := &ToolsCallResult{
 			Content:           []*ContentItem{buildContentItem(a, s)},
-			StructuredContent: structuredContent,
+			StructuredContent: mcpJSONFromRaw(structuredContent),
 		}
 		a.log(ctx, "response", map[string]any{
 			"method": "tools/call",
@@ -2200,8 +2257,8 @@ func (a *MCPAdapter) executeRealTool(ctx context.Context, p *ToolsCallPayload, s
 		return false, stream.SendAndClose(ctx, final)
 	case "multi_content":
 		var payload *assistant.MultiContentPayload
-		if err := decodeMCPPayloadStrict(p.Arguments, &payload); err != nil {
-			return true, a.sendToolError(ctx, stream, p.Name, toolCallError(err, "invalid_params", multiContentInputRecovery(err, p.Arguments)))
+		if err := decodeMCPPayloadStrict(arguments, &payload); err != nil {
+			return true, a.sendToolError(ctx, stream, p.Name, toolCallError(err, "invalid_params", multiContentInputRecovery(err, arguments)))
 		}
 		result, err := a.service.MultiContent(ctx, payload)
 		if err != nil {
@@ -2214,7 +2271,7 @@ func (a *MCPAdapter) executeRealTool(ctx context.Context, p *ToolsCallPayload, s
 		s := string(structuredContent)
 		final := &ToolsCallResult{
 			Content:           []*ContentItem{buildContentItem(a, s)},
-			StructuredContent: structuredContent,
+			StructuredContent: mcpJSONFromRaw(structuredContent),
 		}
 		a.log(ctx, "response", map[string]any{
 			"method": "tools/call",
@@ -2223,33 +2280,33 @@ func (a *MCPAdapter) executeRealTool(ctx context.Context, p *ToolsCallPayload, s
 		return false, stream.SendAndClose(ctx, final)
 	case "generate_dpi_spec":
 		var payload *assistant.GenerateDpiSpecPayload
-		rawFields, err := decodeMCPPayloadFields(p.Arguments)
+		rawFields, err := decodeMCPPayloadFields(arguments)
 		if err != nil {
-			return true, a.sendToolError(ctx, stream, p.Name, toolCallError(err, "invalid_params", generateDpiSpecInputRecovery(err, p.Arguments)))
+			return true, a.sendToolError(ctx, stream, p.Name, toolCallError(err, "invalid_params", generateDpiSpecInputRecovery(err, arguments)))
 		}
-		if err := decodeMCPPayloadStrict(p.Arguments, &payload); err != nil {
-			return true, a.sendToolError(ctx, stream, p.Name, toolCallError(err, "invalid_params", generateDpiSpecInputRecovery(err, p.Arguments)))
+		if err := decodeMCPPayloadStrict(arguments, &payload); err != nil {
+			return true, a.sendToolError(ctx, stream, p.Name, toolCallError(err, "invalid_params", generateDpiSpecInputRecovery(err, arguments)))
 		}
 		{
 			if err := validateMCPPayloadRequired(rawFields, "screen_title"); err != nil {
-				return true, a.sendToolError(ctx, stream, p.Name, toolCallError(err, "invalid_params", generateDpiSpecInputRecovery(err, p.Arguments)))
+				return true, a.sendToolError(ctx, stream, p.Name, toolCallError(err, "invalid_params", generateDpiSpecInputRecovery(err, arguments)))
 			}
 			if err := validateMCPPayloadRequired(rawFields, "platform"); err != nil {
-				return true, a.sendToolError(ctx, stream, p.Name, toolCallError(err, "invalid_params", generateDpiSpecInputRecovery(err, p.Arguments)))
+				return true, a.sendToolError(ctx, stream, p.Name, toolCallError(err, "invalid_params", generateDpiSpecInputRecovery(err, arguments)))
 			}
 			if err := validateMCPPayloadRequired(rawFields, "density"); err != nil {
-				return true, a.sendToolError(ctx, stream, p.Name, toolCallError(err, "invalid_params", generateDpiSpecInputRecovery(err, p.Arguments)))
+				return true, a.sendToolError(ctx, stream, p.Name, toolCallError(err, "invalid_params", generateDpiSpecInputRecovery(err, arguments)))
 			}
 			if err := validateMCPPayloadRequired(rawFields, "primary_cta"); err != nil {
-				return true, a.sendToolError(ctx, stream, p.Name, toolCallError(err, "invalid_params", generateDpiSpecInputRecovery(err, p.Arguments)))
+				return true, a.sendToolError(ctx, stream, p.Name, toolCallError(err, "invalid_params", generateDpiSpecInputRecovery(err, arguments)))
 			}
 		}
 		{
 			if err := validateMCPPayloadEnum(rawFields, "platform", false, "ios", "web"); err != nil {
-				return true, a.sendToolError(ctx, stream, p.Name, toolCallError(err, "invalid_params", generateDpiSpecInputRecovery(err, p.Arguments)))
+				return true, a.sendToolError(ctx, stream, p.Name, toolCallError(err, "invalid_params", generateDpiSpecInputRecovery(err, arguments)))
 			}
 			if err := validateMCPPayloadEnum(rawFields, "density", false, "compact", "comfortable"); err != nil {
-				return true, a.sendToolError(ctx, stream, p.Name, toolCallError(err, "invalid_params", generateDpiSpecInputRecovery(err, p.Arguments)))
+				return true, a.sendToolError(ctx, stream, p.Name, toolCallError(err, "invalid_params", generateDpiSpecInputRecovery(err, arguments)))
 			}
 		}
 		result, err := a.service.GenerateDpiSpec(ctx, payload)
@@ -2263,7 +2320,7 @@ func (a *MCPAdapter) executeRealTool(ctx context.Context, p *ToolsCallPayload, s
 		s := string(structuredContent)
 		final := &ToolsCallResult{
 			Content:           []*ContentItem{buildContentItem(a, s)},
-			StructuredContent: structuredContent,
+			StructuredContent: mcpJSONFromRaw(structuredContent),
 		}
 		a.log(ctx, "response", map[string]any{
 			"method": "tools/call",
@@ -2272,8 +2329,8 @@ func (a *MCPAdapter) executeRealTool(ctx context.Context, p *ToolsCallPayload, s
 		return false, stream.SendAndClose(ctx, final)
 	case "dispatch_action":
 		var payload *assistant.DispatchActionPayload
-		if err := decodeMCPPayloadStrict(p.Arguments, &payload); err != nil {
-			return true, a.sendToolError(ctx, stream, p.Name, toolCallError(err, "invalid_params", dispatchActionInputRecovery(err, p.Arguments)))
+		if err := decodeMCPPayloadStrict(arguments, &payload); err != nil {
+			return true, a.sendToolError(ctx, stream, p.Name, toolCallError(err, "invalid_params", dispatchActionInputRecovery(err, arguments)))
 		}
 		result, err := a.service.DispatchAction(ctx, payload)
 		if err != nil {
@@ -2286,7 +2343,7 @@ func (a *MCPAdapter) executeRealTool(ctx context.Context, p *ToolsCallPayload, s
 		s := string(structuredContent)
 		final := &ToolsCallResult{
 			Content:           []*ContentItem{buildContentItem(a, s)},
-			StructuredContent: structuredContent,
+			StructuredContent: mcpJSONFromRaw(structuredContent),
 		}
 		a.log(ctx, "response", map[string]any{
 			"method": "tools/call",
@@ -2295,8 +2352,8 @@ func (a *MCPAdapter) executeRealTool(ctx context.Context, p *ToolsCallPayload, s
 		return false, stream.SendAndClose(ctx, final)
 	case "dispatch_command":
 		var payload *assistant.DispatchCommandPayload
-		if err := decodeMCPPayloadStrict(p.Arguments, &payload); err != nil {
-			return true, a.sendToolError(ctx, stream, p.Name, toolCallError(err, "invalid_params", dispatchCommandInputRecovery(err, p.Arguments)))
+		if err := decodeMCPPayloadStrict(arguments, &payload); err != nil {
+			return true, a.sendToolError(ctx, stream, p.Name, toolCallError(err, "invalid_params", dispatchCommandInputRecovery(err, arguments)))
 		}
 		result, err := a.service.DispatchCommand(ctx, payload)
 		if err != nil {
@@ -2309,7 +2366,7 @@ func (a *MCPAdapter) executeRealTool(ctx context.Context, p *ToolsCallPayload, s
 		s := string(structuredContent)
 		final := &ToolsCallResult{
 			Content:           []*ContentItem{buildContentItem(a, s)},
-			StructuredContent: structuredContent,
+			StructuredContent: mcpJSONFromRaw(structuredContent),
 		}
 		a.log(ctx, "response", map[string]any{
 			"method": "tools/call",
@@ -2317,7 +2374,7 @@ func (a *MCPAdapter) executeRealTool(ctx context.Context, p *ToolsCallPayload, s
 		})
 		return false, stream.SendAndClose(ctx, final)
 	case "projected_lookup_tool":
-		args := p.Arguments
+		args := arguments
 		if len(args) == 0 {
 			args = json.RawMessage("{}")
 		}
@@ -2341,7 +2398,7 @@ func (a *MCPAdapter) executeRealTool(ctx context.Context, p *ToolsCallPayload, s
 		s := string(structuredContent)
 		final := &ToolsCallResult{
 			Content:           []*ContentItem{buildContentItem(a, s)},
-			StructuredContent: structuredContent,
+			StructuredContent: mcpJSONFromRaw(structuredContent),
 		}
 		a.log(ctx, "response", map[string]any{
 			"method": "tools/call",
@@ -2349,7 +2406,7 @@ func (a *MCPAdapter) executeRealTool(ctx context.Context, p *ToolsCallPayload, s
 		})
 		return false, stream.SendAndClose(ctx, final)
 	case "projected_status_tool":
-		args := p.Arguments
+		args := arguments
 		if len(args) == 0 {
 			args = json.RawMessage("{}")
 		}
@@ -2373,7 +2430,7 @@ func (a *MCPAdapter) executeRealTool(ctx context.Context, p *ToolsCallPayload, s
 		s := string(structuredContent)
 		final := &ToolsCallResult{
 			Content:           []*ContentItem{buildContentItem(a, s)},
-			StructuredContent: structuredContent,
+			StructuredContent: mcpJSONFromRaw(structuredContent),
 		}
 		a.log(ctx, "response", map[string]any{
 			"method": "tools/call",
@@ -2433,7 +2490,7 @@ func (a *MCPAdapter) ResourcesRead(ctx context.Context, p *ResourcesReadPayload)
 		}
 		res := &ResourcesReadResult{Contents: []*ResourceContent{&ResourceContent{
 			Blob:     content.Blob,
-			Meta:     mcpskills.MetadataMeta(content.Metadata),
+			Meta:     loom.NullableValue[any](mcpskills.MetadataMeta(content.Metadata)),
 			MimeType: stringPtr(content.MimeType),
 			Text:     content.Text,
 			URI:      content.URI,
@@ -2678,6 +2735,10 @@ func (a *MCPAdapter) PromptsGet(ctx context.Context, p *PromptsGetPayload) (*Pro
 	if p == nil || p.Name == "" {
 		return nil, loom.PermanentError("invalid_params", "Missing prompt name")
 	}
+	arguments, err := mcpJSONRaw(p.Arguments)
+	if err != nil {
+		return nil, err
+	}
 	a.log(ctx, "request", map[string]any{
 		"method": "prompts/get",
 		"name":   p.Name,
@@ -2685,7 +2746,7 @@ func (a *MCPAdapter) PromptsGet(ctx context.Context, p *PromptsGetPayload) (*Pro
 	switch p.Name {
 	case "code_review":
 		if a.promptProvider != nil {
-			if res, err := a.promptProvider.GetCodeReviewPrompt(p.Arguments); err == nil && res != nil {
+			if res, err := a.promptProvider.GetCodeReviewPrompt(arguments); err == nil && res != nil {
 				a.log(ctx, "response", map[string]any{
 					"method": "prompts/get",
 					"name":   p.Name,
@@ -2715,8 +2776,8 @@ func (a *MCPAdapter) PromptsGet(ctx context.Context, p *PromptsGetPayload) (*Pro
 	switch p.Name {
 	case "contextual_prompts":
 		var args map[string]any
-		if len(p.Arguments) > 0 {
-			if err := json.Unmarshal(p.Arguments, &args); err != nil {
+		if len(arguments) > 0 {
+			if err := json.Unmarshal(arguments, &args); err != nil {
 				return nil, a.safeMCPError(err, "invalid_params", "Invalid prompt arguments.")
 			}
 		}
@@ -2729,7 +2790,7 @@ func (a *MCPAdapter) PromptsGet(ctx context.Context, p *PromptsGetPayload) (*Pro
 		if a.promptProvider == nil {
 			return nil, loom.PermanentError("invalid_params", "No prompt provider configured for dynamic prompts")
 		}
-		res, err := a.promptProvider.GetContextualPromptsPrompt(ctx, p.Arguments)
+		res, err := a.promptProvider.GetContextualPromptsPrompt(ctx, arguments)
 		if err != nil {
 			return nil, a.safeMCPError(err, "internal_error", "Prompt retrieval failed.")
 		}
@@ -2740,8 +2801,8 @@ func (a *MCPAdapter) PromptsGet(ctx context.Context, p *PromptsGetPayload) (*Pro
 		return res, nil
 	case "figma_implementation_prompt":
 		var args map[string]any
-		if len(p.Arguments) > 0 {
-			if err := json.Unmarshal(p.Arguments, &args); err != nil {
+		if len(arguments) > 0 {
+			if err := json.Unmarshal(arguments, &args); err != nil {
 				return nil, a.safeMCPError(err, "invalid_params", "Invalid prompt arguments.")
 			}
 		}
@@ -2760,7 +2821,7 @@ func (a *MCPAdapter) PromptsGet(ctx context.Context, p *PromptsGetPayload) (*Pro
 		if a.promptProvider == nil {
 			return nil, loom.PermanentError("invalid_params", "No prompt provider configured for dynamic prompts")
 		}
-		res, err := a.promptProvider.GetFigmaImplementationPromptPrompt(ctx, p.Arguments)
+		res, err := a.promptProvider.GetFigmaImplementationPromptPrompt(ctx, arguments)
 		if err != nil {
 			return nil, a.safeMCPError(err, "internal_error", "Prompt retrieval failed.")
 		}
