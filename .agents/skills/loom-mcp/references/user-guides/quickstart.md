@@ -6,11 +6,11 @@ in two places.
 
 ## Prerequisites
 
-- Go 1.27rc3 or later.
+- Go 1.27.0 or later.
 - Loom CLI pinned to the repository's supported release:
 
 ```bash
-go install github.com/CaliLuke/loom/cmd/loom@v1.8.0-alpha.21
+go install github.com/CaliLuke/loom/cmd/loom@v1.8.0
 loom version
 ```
 

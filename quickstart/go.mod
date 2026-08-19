@@ -1,9 +1,9 @@
 module example.com/quickstart
 
-go 1.27rc3
+go 1.27.0
 
 require (
-	github.com/CaliLuke/loom v1.8.0-alpha.21
+	github.com/CaliLuke/loom v1.8.0
 	github.com/CaliLuke/loom-mcp/v2 v2.0.1
 )
 

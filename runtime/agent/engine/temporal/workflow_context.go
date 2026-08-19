@@ -315,17 +315,17 @@ func (w *temporalWorkflowContext) Await(ctx context.Context, condition func() bo
 func (w *temporalWorkflowContext) WithCancel() (engine.WorkflowContext, func()) {
 	cctx, cancel := workflow.WithCancel(w.ctx)
 	return &temporalWorkflowContext{
-			engine:     w.engine,
-			ctx:        cctx,
-			workflowID: w.workflowID,
-			runID:      w.runID,
-			logger:     w.logger,
-			metrics:    w.metrics,
-			tracer:     w.tracer,
-			baseCtx:    w.baseCtx,
-		}, func() {
-			cancel()
-		}
+		engine:     w.engine,
+		ctx:        cctx,
+		workflowID: w.workflowID,
+		runID:      w.runID,
+		logger:     w.logger,
+		metrics:    w.metrics,
+		tracer:     w.tracer,
+		baseCtx:    w.baseCtx,
+	}, func() {
+		cancel()
+	}
 }
 
 func (w *temporalWorkflowContext) activityOptionsFor(name string, override engine.ActivityOptions) workflow.ActivityOptions {
