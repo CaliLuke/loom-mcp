@@ -3,7 +3,7 @@ module example.com/agentfeatures
 go 1.27rc2
 
 require (
-	github.com/CaliLuke/loom v1.8.0-alpha.14
+	github.com/CaliLuke/loom v1.8.0-alpha.21
 	github.com/CaliLuke/loom-mcp/v2 v2.0.0
 	github.com/stretchr/testify v1.12.0
 )

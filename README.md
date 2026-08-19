@@ -39,7 +39,7 @@ the same endpoint must share that key. There is no v1 compatibility shim.
 
 This repo currently targets:
 
-- `github.com/CaliLuke/loom v1.8.0-alpha.14`
+- `github.com/CaliLuke/loom v1.8.0-alpha.21`
 - `github.com/modelcontextprotocol/go-sdk v1.7.0`
 - Go `1.27rc2` or later; this preview requirement will move to Go `1.27` after its stable release
 
@@ -49,7 +49,7 @@ Use `make update-mcp-go-sdk MCP_GO_SDK_VERSION=vX.Y.Z` when bumping the MCP Go S
 The standard CLI for generation is:
 
 ```bash
-go install github.com/CaliLuke/loom/cmd/loom@v1.8.0-alpha.14
+go install github.com/CaliLuke/loom/cmd/loom@v1.8.0-alpha.21
 ```
 
 ## Working in this repo
