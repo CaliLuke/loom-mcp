@@ -26,7 +26,7 @@ func TestLoomGen_MCPServiceWithoutJSONRPCDesign(t *testing.T) {
 
 	goMod := `module example.com/repro
 
-go 1.27rc2
+go 1.27rc3
 
 require (
 	github.com/CaliLuke/loom v1.0.7

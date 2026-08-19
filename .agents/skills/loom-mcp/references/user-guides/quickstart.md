@@ -6,7 +6,7 @@ in two places.
 
 ## Prerequisites
 
-- Go 1.27rc2 or later.
+- Go 1.27rc3 or later.
 - Loom CLI pinned to the repository's supported release:
 
 ```bash

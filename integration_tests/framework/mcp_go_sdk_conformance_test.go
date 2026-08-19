@@ -28,7 +28,7 @@ func TestLoomGen_GoSDKConformance(t *testing.T) {
 
 	goMod := `module example.com/conformance
 
-go 1.27rc2
+go 1.27rc3
 
 require (
 	github.com/CaliLuke/loom v1.8.0-alpha.21

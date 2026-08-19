@@ -41,7 +41,7 @@ This repo currently targets:
 
 - `github.com/CaliLuke/loom v1.8.0-alpha.21`
 - `github.com/modelcontextprotocol/go-sdk v1.7.0`
-- Go `1.27rc2` or later; this preview requirement will move to Go `1.27` after its stable release
+- Go `1.27rc3` or later; this preview requirement will move to Go `1.27` after its stable release
 
 The workspace-level `go.work` file centralizes local multi-module overrides for dependencies that must stay in sync across the root module and integration fixtures.
 Use `make update-mcp-go-sdk MCP_GO_SDK_VERSION=vX.Y.Z` when bumping the MCP Go SDK.
