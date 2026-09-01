@@ -214,6 +214,7 @@ func TestPingsSurviveUnregisterReregisterAndFailover(t *testing.T) {
 	// Unregister on node1: Ticker.Stop deletes the shared ticker-map entry,
 	// remotely stopping node2's local ticker instance.
 	unregisterCatalogToolset(t, ctx, registryMap, tracker1, toolset)
+	waitForTickerAbsent(t, tracker2, toolset)
 
 	// Re-register on node1: rotates the catalog registration token and
 	// recreates the shared ticker entry.
@@ -258,6 +259,38 @@ drain:
 	}
 	if mockSM.getPingCount(toolset) <= pingCountBefore {
 		t.Fatalf("expected ping count to increase after failover: before=%d after=%d", pingCountBefore, mockSM.getPingCount(toolset))
+	}
+}
+
+// waitForTickerAbsent waits until catalog propagation has detached the peer's
+// local ticker. This establishes the unregister phase before the test starts a
+// new registration epoch instead of relying on two asynchronous map events to
+// be observed separately.
+func waitForTickerAbsent(t *testing.T, tracker HealthTracker, toolset string) {
+	t.Helper()
+
+	ht, ok := tracker.(*healthTracker)
+	if !ok {
+		t.Fatalf("unexpected tracker type %T", tracker)
+	}
+
+	deadline := time.NewTimer(10 * time.Second)
+	defer deadline.Stop()
+	poll := time.NewTicker(10 * time.Millisecond)
+	defer poll.Stop()
+	for {
+		ht.mu.RLock()
+		_, hasTicker := ht.tickers[toolset]
+		_, hasToken := ht.tickerTokens[toolset]
+		ht.mu.RUnlock()
+		if !hasTicker && !hasToken {
+			return
+		}
+		select {
+		case <-poll.C:
+		case <-deadline.C:
+			t.Fatalf("tracker did not detach ticker for %q (has_ticker=%v, has_token=%v)", toolset, hasTicker, hasToken)
+		}
 	}
 }
 

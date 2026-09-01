@@ -9,12 +9,12 @@ fi
 
 check_group() {
   local name="$1"
-  local include="$2"
+  local pattern="$2"
   local minimum="$3"
   local result
 
   result="$({
-    awk -v include="${include}" '
+    awk -v pattern="${pattern}" '
       NR == 1 { next }
       {
         split($1, location, ":")
@@ -24,7 +24,7 @@ check_group() {
         if (path ~ /\/gen\// || path ~ /\/mocks\// || path ~ /\/design\//) {
           next
         }
-        if (path !~ include) {
+        if (path !~ pattern) {
           next
         }
         total += statements

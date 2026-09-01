@@ -54,6 +54,11 @@ Local and hosted CI now share `make verify-generated`, which snapshots the
 current diff before regenerating every tracked surface. Loom mode changes also
 preserve quickstart generator-only checksums, closing the ordering gap that let
 local release verification miss stale `quickstart/go.sum` state.
+The coverage-group parser is also verified with GNU Awk so Linux does not
+discover dialect-specific failures after macOS passes. The registry
+unregister/re-register failover test now waits for the peer to detach its old
+ticker before creating the new registration epoch, while retaining the same
+post-failover ping assertion.
 
 Generated server middleware now converts untyped adapter errors into typed
 JSON-RPC errors. Duplicate initialization and generated resource-policy errors
