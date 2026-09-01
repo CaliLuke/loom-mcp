@@ -2,7 +2,8 @@ package pulse
 
 import (
 	"context"
-	"encoding/json"
+	"encoding/json/jsontext"
+	"encoding/json/v2"
 	"errors"
 	"testing"
 	"time"
@@ -59,7 +60,7 @@ func TestSubscribeEmitsEvents(t *testing.T) {
 	e := <-events
 	require.Equal(t, stream.EventAssistantReply, e.Type())
 	body := make(map[string]string)
-	require.NoError(t, json.Unmarshal(e.Payload().(json.RawMessage), &body))
+	require.NoError(t, json.Unmarshal(e.Payload().(jsontext.Value), &body))
 	require.Equal(t, "hi", body["chunk"])
 	require.Empty(t, errs)
 }
@@ -225,7 +226,7 @@ func TestSubscribeDecoderErrorAcksAndContinues(t *testing.T) {
 			if string(payload) == "bad" {
 				return nil, errors.New("decode error")
 			}
-			return stream.NewBase(stream.EventAssistantReply, "run-1", "session-1", json.RawMessage(payload)), nil
+			return stream.NewBase(stream.EventAssistantReply, "run-1", "session-1", jsontext.Value(payload)), nil
 		},
 	})
 	require.NoError(t, err)
@@ -241,7 +242,7 @@ func TestSubscribeDecoderErrorAcksAndContinues(t *testing.T) {
 	// channel is never read (issue #142).
 	event := <-events
 	require.Equal(t, stream.EventAssistantReply, event.Type())
-	require.JSONEq(t, `{"chunk":"hi"}`, string(event.Payload().(json.RawMessage)))
+	require.JSONEq(t, `{"chunk":"hi"}`, string(event.Payload().(jsontext.Value)))
 	require.Equal(t, "1-0", <-ackedIDs)
 	require.Equal(t, "2-0", <-ackedIDs)
 	require.EqualError(t, <-errs, "pulse decode payload: decode error")
@@ -272,7 +273,7 @@ func TestSubscribeConsecutivePoisonMessagesThenValidEvent(t *testing.T) {
 			if string(payload) == "bad" {
 				return nil, errors.New("decode error")
 			}
-			return stream.NewBase(stream.EventAssistantReply, "run-1", "session-1", json.RawMessage(payload)), nil
+			return stream.NewBase(stream.EventAssistantReply, "run-1", "session-1", jsontext.Value(payload)), nil
 		},
 	})
 	require.NoError(t, err)
@@ -289,7 +290,7 @@ func TestSubscribeConsecutivePoisonMessagesThenValidEvent(t *testing.T) {
 	// must not block consumption.
 	event := <-events
 	require.Equal(t, stream.EventAssistantReply, event.Type())
-	require.JSONEq(t, `{"chunk":"hi"}`, string(event.Payload().(json.RawMessage)))
+	require.JSONEq(t, `{"chunk":"hi"}`, string(event.Payload().(jsontext.Value)))
 	require.Equal(t, "1-0", <-ackedIDs)
 	require.Equal(t, "2-0", <-ackedIDs)
 	require.Equal(t, "3-0", <-ackedIDs)
@@ -323,7 +324,7 @@ func TestSubscribeAckFailureEvictsPendingDecodeError(t *testing.T) {
 			if string(payload) == "bad" {
 				return nil, errors.New("decode error")
 			}
-			return stream.NewBase(stream.EventAssistantReply, "run-1", "session-1", json.RawMessage(payload)), nil
+			return stream.NewBase(stream.EventAssistantReply, "run-1", "session-1", jsontext.Value(payload)), nil
 		},
 	})
 	require.NoError(t, err)

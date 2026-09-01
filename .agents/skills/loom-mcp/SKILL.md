@@ -164,7 +164,7 @@ Use this skill for `loom-mcp` work in this repo. Keep `AGENTS.md` short and keep
   progress.
 - Generated MCP service fields that carry optional arbitrary JSON use Loom's
   `loom.Nullable[any]` presence contract. Adapter boundaries must preserve a
-  contained `json.RawMessage` without an intermediate decode and marshal other
+  contained `jsontext.Value` without an intermediate decode and marshal other
   concrete values only when strict dispatch or wire forwarding requires raw
   JSON.
 - MCP metadata is design-owned. Implementation `WebsiteURL`/`ServerIcons` and
@@ -279,7 +279,7 @@ Use this skill for `loom-mcp` work in this repo. Keep `AGENTS.md` short and keep
 ## Command Reminders
 
 ```bash
-go install github.com/CaliLuke/loom/cmd/loom@v1.8.0
+go install github.com/CaliLuke/loom/cmd/loom@v1.9.0-alpha.7
 loom version
 loom gen <module-import-path>/design
 loom example <module-import-path>/design

@@ -632,8 +632,8 @@ canonical `completion` chunk before EOF. Decode the final typed value with
 ### Tool Payload and Result Flow
 
 1. **Model emits tool call** — Provider adapter produces `model.ToolCall` with
-   `json.RawMessage` payload
-2. **Planner returns ToolRequest** — Payload stays as `json.RawMessage`
+   `jsontext.Value` payload
+2. **Planner returns ToolRequest** — Payload stays as `jsontext.Value`
 3. **Runtime decodes payload** — Uses generated codecs to validate and decode
 4. **Executor runs tool** — Receives typed or raw payload depending on configuration
 5. **Runtime encodes result** — Uses generated codecs for consistency
@@ -1191,7 +1191,7 @@ return &planner.PlanResult{
             Items: []planner.AwaitToolItem{{
                 Name:       tools.Ident("external.fetch"),
                 ToolCallID: "tc-ext-1",
-                Payload:    json.RawMessage(`{"url":"..."}`),
+                Payload:    jsontext.Value(`{"url":"..."}`),
             }},
         },
     },
@@ -1209,7 +1209,7 @@ err := rt.ProvideToolResults(ctx, &api.ToolResultsSet{
             ToolCallID: "toolcall-1",
             Name:       tools.Ident("chat.ask_question.ask_question"),
             // Contract: canonical JSON bytes matching the tool's Return schema.
-            Result: json.RawMessage(`{"answers":[{"question_id":"...","selected_ids":["approve"]}]}`),
+            Result: jsontext.Value(`{"answers":[{"question_id":"...","selected_ids":["approve"]}]}`),
         },
     },
 })
@@ -1236,7 +1236,7 @@ return &planner.PlanResult{
         Items: []planner.AwaitItem{planner.AwaitTypedInputItem(&planner.AwaitTypedInput{
             ID:     "approval",
             Title:  "Approval",
-            Schema: json.RawMessage(`{"type":"object","properties":{"approved":{"type":"boolean"}}}`),
+            Schema: jsontext.Value(`{"type":"object","properties":{"approved":{"type":"boolean"}}}`),
         })},
     },
 }
@@ -1252,7 +1252,7 @@ hung. Callers resume with:
 err := rt.ProvideTypedInput(ctx, &api.TypedInputAnswer{
     RunID:   "run-123",
     ID:      "approval",
-    Payload: json.RawMessage(`{"approved":true}`),
+    Payload: jsontext.Value(`{"approved":true}`),
 })
 ```
 
@@ -2680,7 +2680,7 @@ handler := mcpauth.RequireBearerToken(verifier, nil)(sdkServer.Handler)
 ```
 
 The wrapper reads `TokenInfo.Extra["aud"]` and accepts `string`,
-`[]string`, and `[]any` (the shape `encoding/json` produces when decoding
+`[]string`, and `[]any` (the shape JSON decoding produces for
 a JWT `aud` array). Missing or wrong-typed claims fail closed — there is
 no silent admission path. Mismatches return `ErrAudienceMismatch`, which
 wraps `mcpauth.ErrInvalidToken` so `RequireBearerToken` responds 401 and

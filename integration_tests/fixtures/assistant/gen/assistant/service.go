@@ -9,7 +9,8 @@ package assistant
 
 import (
 	"context"
-	"encoding/json"
+	"encoding/json/jsontext"
+	json "encoding/json/v2"
 	"fmt"
 	"net/url"
 
@@ -624,8 +625,8 @@ func (u *BarCmdOrFooCmd) UnmarshalFormValues(values url.Values, prefix string) e
 // UnmarshalJSON unmarshals the union from the canonical {type,value} JSON shape.
 func (u *BarCmdOrFooCmd) UnmarshalJSON(data []byte) error {
 	var raw struct {
-		Type  string          `json:"action"`
-		Value json.RawMessage `json:"args"`
+		Type  string         `json:"action"`
+		Value jsontext.Value `json:"args"`
 	}
 	if err := json.Unmarshal(data, &raw); err != nil {
 		return err
@@ -840,8 +841,8 @@ func (u *CreateActionOrListAction) UnmarshalFormValues(values url.Values, prefix
 // UnmarshalJSON unmarshals the union from the canonical {type,value} JSON shape.
 func (u *CreateActionOrListAction) UnmarshalJSON(data []byte) error {
 	var raw struct {
-		Type  string          `json:"action"`
-		Value json.RawMessage `json:"value"`
+		Type  string         `json:"action"`
+		Value jsontext.Value `json:"value"`
 	}
 	if err := json.Unmarshal(data, &raw); err != nil {
 		return err

@@ -1,7 +1,7 @@
 package dsl
 
 import (
-	"encoding/json"
+	"encoding/json/jsontext"
 
 	expragents "github.com/CaliLuke/loom-mcp/v2/expr/agent"
 	"github.com/CaliLuke/loom/eval"
@@ -32,7 +32,7 @@ func Step(name string, tool string, payloadJSON string) {
 		incompatibleDSL("Step")
 		return
 	}
-	if !json.Valid([]byte(payloadJSON)) {
+	if !jsontext.Value(payloadJSON).IsValid() {
 		eval.ReportError("workflow step %q payload must be valid JSON", name)
 		return
 	}
@@ -145,7 +145,7 @@ func RequestInput(name string, title string, schemaJSON string) {
 		incompatibleDSL("RequestInput")
 		return
 	}
-	if !json.Valid([]byte(schemaJSON)) {
+	if !jsontext.Value(schemaJSON).IsValid() {
 		eval.ReportError("workflow input %q schema must be valid JSON", name)
 		return
 	}
@@ -175,7 +175,7 @@ func Loop(name string, tool string, payloadJSON string, opts ...LoopOption) {
 		incompatibleDSL("Loop")
 		return
 	}
-	if !json.Valid([]byte(payloadJSON)) {
+	if !jsontext.Value(payloadJSON).IsValid() {
 		eval.ReportError("workflow loop %q payload must be valid JSON", name)
 		return
 	}

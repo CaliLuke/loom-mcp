@@ -1,7 +1,8 @@
 package mcp
 
 import (
-	"encoding/json"
+	"encoding/json/jsontext"
+	"encoding/json/v2"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -65,7 +66,7 @@ func TestUnmarshalCanonicalJSONSupportsInterfacesPointersNullAndUnmarshalers(t *
 	}
 	var decoded payload
 	require.NoError(t, UnmarshalCanonicalJSON([]byte(`{"value":{"n":1},"nested":{"width":3},"custom":"value"}`), &decoded))
-	assert.Equal(t, map[string]any{"n": json.Number("1")}, decoded.Value)
+	assert.Equal(t, map[string]any{"n": jsontext.Value("1")}, decoded.Value)
 	require.NotNil(t, decoded.Nested)
 	require.NotNil(t, *decoded.Nested)
 	assert.Equal(t, 3, (*decoded.Nested).Width)
@@ -86,13 +87,13 @@ func TestUnmarshalCanonicalJSONRejectsMalformedAndUnsafeAssignments(t *testing.T
 		{name: "invalid_json", data: `{`, target: func() any { return &canonicalDecoded{} }, message: "unexpected EOF"},
 		{name: "trailing_json", data: `{}` + `{}`, target: func() any { return &canonicalDecoded{} }, message: "unexpected trailing JSON data"},
 		{name: "unknown_field", data: `{"other":1}`, target: func() any { return &canonicalDecoded{} }, message: `unknown field "other"`},
-		{name: "wrong_struct_shape", data: `[]`, target: func() any { return &canonicalDecoded{} }, message: "cannot unmarshal array"},
-		{name: "int_overflow", data: `{"count":128}`, target: func() any { return &canonicalDecoded{} }, message: "field .count"},
-		{name: "negative_uint", data: `{"unsigned":-1}`, target: func() any { return &canonicalDecoded{} }, message: "field .unsigned"},
-		{name: "fractional_int", data: `{"count":1.5}`, target: func() any { return &canonicalDecoded{} }, message: "field .count"},
-		{name: "array_length", data: `{"pair":[1]}`, target: func() any { return &canonicalDecoded{} }, message: "field .pair"},
-		{name: "slice_item", data: `{"items":[{"width":"bad"}]}`, target: func() any { return &canonicalDecoded{} }, message: "field .width"},
-		{name: "non_string_map_key", data: `{"a":1}`, target: func() any { value := map[int]int{}; return &value }, message: "cannot unmarshal object"},
+		{name: "wrong_struct_shape", data: `[]`, target: func() any { return &canonicalDecoded{} }, message: "cannot handle JSON array"},
+		{name: "int_overflow", data: `{"count":128}`, target: func() any { return &canonicalDecoded{} }, message: `within "/count"`},
+		{name: "negative_uint", data: `{"unsigned":-1}`, target: func() any { return &canonicalDecoded{} }, message: `within "/unsigned"`},
+		{name: "fractional_int", data: `{"count":1.5}`, target: func() any { return &canonicalDecoded{} }, message: `within "/count"`},
+		{name: "array_length", data: `{"pair":[1]}`, target: func() any { return &canonicalDecoded{} }, message: `within "/pair"`},
+		{name: "slice_item", data: `{"items":[{"width":"bad"}]}`, target: func() any { return &canonicalDecoded{} }, message: `within "/items/0/width"`},
+		{name: "non_string_map_key", data: `{"a":1}`, target: func() any { value := map[int]int{}; return &value }, message: "cannot handle JSON object"},
 	}
 
 	for _, tt := range cases {
@@ -105,7 +106,7 @@ func TestUnmarshalCanonicalJSONRejectsMalformedAndUnsafeAssignments(t *testing.T
 
 	for _, target := range []any{nil, canonicalDecoded{}, (*canonicalDecoded)(nil)} {
 		err := UnmarshalCanonicalJSON([]byte(`{}`), target)
-		var invalid *json.InvalidUnmarshalError
+		var invalid *json.SemanticError
 		require.ErrorAs(t, err, &invalid)
 	}
 }
@@ -114,12 +115,12 @@ func TestUnmarshalCanonicalJSONReportsMapAndIndexFields(t *testing.T) {
 	var mapped map[canonicalNamedKey]int
 	err := UnmarshalCanonicalJSON([]byte(`{"valid":1,"invalid":"bad"}`), &mapped)
 	require.Error(t, err)
-	var typeErr *json.UnmarshalTypeError
+	var typeErr *json.SemanticError
 	require.ErrorAs(t, err, &typeErr)
-	assert.Equal(t, "invalid", typeErr.Field)
+	assert.Equal(t, jsontext.Pointer("/invalid"), typeErr.JSONPointer)
 
 	var values []int
 	err = UnmarshalCanonicalJSON([]byte(`[1,"bad"]`), &values)
 	require.ErrorAs(t, err, &typeErr)
-	assert.Equal(t, "1", typeErr.Field)
+	assert.Equal(t, jsontext.Pointer("/1"), typeErr.JSONPointer)
 }

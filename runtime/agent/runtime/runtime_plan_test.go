@@ -3,7 +3,7 @@ package runtime
 
 import (
 	"context"
-	"encoding/json"
+	"encoding/json/jsontext"
 	"reflect"
 	"testing"
 	"time"
@@ -279,17 +279,17 @@ func TestNormalizeTranscriptRawJSONNormalizesEmptyRawMessageValues(t *testing.T)
 				model.ToolUsePart{
 					ID:    "call-1",
 					Name:  "tool.one",
-					Input: json.RawMessage{},
+					Input: jsontext.Value{},
 				},
 				model.ToolResultPart{
 					ToolUseID: "call-1",
 					Content: map[string]any{
-						"payload": json.RawMessage{},
+						"payload": jsontext.Value{},
 					},
 				},
 			},
 			Meta: map[string]any{
-				"raw": json.RawMessage{},
+				"raw": jsontext.Value{},
 			},
 		},
 	}

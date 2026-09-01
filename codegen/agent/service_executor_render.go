@@ -197,7 +197,7 @@ func New{{ .Agent.GoName }}{{ goify .Toolset.PathName true }}Exec(opts ...ExecOp
         {{- range .Toolset.Tools }}
         {{- if .IsMethodBacked }}
         case tools.Ident({{ printf "%q" .QualifiedName }}):
-            result, err := {{ $.Toolset.SpecsPackageName }}.Dispatch{{ .ConstName }}Method(ctx, meta, json.RawMessage(call.Payload), call.Labels, {{ $.Toolset.SpecsPackageName }}.{{ .ConstName }}DispatchOptions{
+            result, err := {{ $.Toolset.SpecsPackageName }}.Dispatch{{ .ConstName }}Method(ctx, meta, jsontext.Value(call.Payload), call.Labels, {{ $.Toolset.SpecsPackageName }}.{{ .ConstName }}DispatchOptions{
                 Call: caller,
                 MapPayload: cfg.mapPayload,
                 MapResult: cfg.mapResult,

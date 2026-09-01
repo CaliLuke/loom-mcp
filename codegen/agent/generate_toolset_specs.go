@@ -140,7 +140,8 @@ func toolsetSpecsFiles(data *GeneratorData, specsCache *toolSpecsDataCache) ([]*
 			out = append(out, &codegen.File{Path: filepath.Join(ts.SpecsDir, transportDirName, "types.go"), Sections: transportSections})
 			// http/validate.go
 			validateImports := []*codegen.ImportSpec{
-				codegen.SimpleImport("encoding/json"),
+				codegen.NewImport("json", "encoding/json/v2"),
+				codegen.NewImport("jsontext", "encoding/json/jsontext"),
 				codegen.SimpleImport("fmt"),
 				codegen.LoomImport(""),
 			}
@@ -156,7 +157,8 @@ func toolsetSpecsFiles(data *GeneratorData, specsCache *toolSpecsDataCache) ([]*
 			if len(specsData.TransportUnions) > 0 {
 				unionImports := make([]*codegen.ImportSpec, 0, 3+len(timports))
 				unionImports = append(unionImports,
-					codegen.SimpleImport("encoding/json"),
+					codegen.NewImport("json", "encoding/json/v2"),
+					codegen.NewImport("jsontext", "encoding/json/jsontext"),
 					codegen.SimpleImport("fmt"),
 					codegen.LoomImport(""),
 				)
@@ -181,7 +183,8 @@ func toolsetSpecsFiles(data *GeneratorData, specsCache *toolSpecsDataCache) ([]*
 			typeImports := specsData.typeImports()
 			unionImports := make([]*codegen.ImportSpec, 0, 3+len(typeImports))
 			unionImports = append(unionImports,
-				codegen.SimpleImport("encoding/json"),
+				codegen.NewImport("json", "encoding/json/v2"),
+				codegen.NewImport("jsontext", "encoding/json/jsontext"),
 				codegen.SimpleImport("fmt"),
 				codegen.LoomImport(""),
 			)
@@ -273,7 +276,8 @@ func toolsetProviderFile(genpkg string, ts *ToolsetData) *codegen.File {
 	imports := make([]*codegen.ImportSpec, 0, 6)
 	imports = append(imports,
 		codegen.SimpleImport("context"),
-		codegen.SimpleImport("encoding/json"),
+		codegen.NewImport("json", "encoding/json/v2"),
+		codegen.NewImport("jsontext", "encoding/json/jsontext"),
 		codegen.SimpleImport("errors"),
 		codegen.SimpleImport("fmt"),
 		&codegen.ImportSpec{Path: "github.com/CaliLuke/loom-mcp/v2/runtime/agent/planner"},
@@ -310,7 +314,8 @@ func toolsetRegistrySpecsFiles(ts *ToolsetData) []*codegen.File {
 
 	specImports := []*codegen.ImportSpec{
 		{Path: "context"},
-		{Path: "encoding/json"},
+		{Name: "json", Path: "encoding/json/v2"},
+		{Name: "jsontext", Path: "encoding/json/jsontext"},
 		{Path: "fmt"},
 		{Path: "regexp"},
 		{Path: "sort"},

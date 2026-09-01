@@ -2,7 +2,8 @@ package anthropic
 
 import (
 	"context"
-	"encoding/json"
+	"encoding/json/jsontext"
+	"encoding/json/v2"
 	"errors"
 	"net/http"
 	"testing"
@@ -118,8 +119,8 @@ func TestPrepareRequestAppliesCachePolicies(t *testing.T) {
 			{Role: model.ConversationRoleUser, Parts: []model.Part{model.TextPart{Text: "hello"}}},
 		},
 		Tools: []*model.ToolDefinition{
-			{Name: "test.first", Description: "first tool", InputSchema: json.RawMessage(`{"type":"object"}`)},
-			{Name: "test.second", Description: "second tool", InputSchema: json.RawMessage(`{"type":"object"}`)},
+			{Name: "test.first", Description: "first tool", InputSchema: jsontext.Value(`{"type":"object"}`)},
+			{Name: "test.second", Description: "second tool", InputSchema: jsontext.Value(`{"type":"object"}`)},
 		},
 		Cache: &model.CacheOptions{AfterSystem: true, AfterTools: true},
 	})
@@ -224,7 +225,7 @@ func TestComplete_ToolUse(t *testing.T) {
 			{
 				Name:        "test.tool",
 				Description: "test tool",
-				InputSchema: json.RawMessage(`{"type":"object"}`),
+				InputSchema: jsontext.Value(`{"type":"object"}`),
 			},
 		},
 	}
@@ -251,7 +252,7 @@ func TestComplete_ToolUse(t *testing.T) {
 				Type:  "tool_use",
 				Name:  sanitized,
 				ID:    "tool-1",
-				Input: json.RawMessage(`{"x":1}`),
+				Input: jsontext.Value(`{"x":1}`),
 			},
 		},
 		StopReason: sdk.StopReasonToolUse,

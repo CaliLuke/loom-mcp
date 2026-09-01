@@ -2,7 +2,7 @@ package ollama_test
 
 import (
 	"context"
-	"encoding/json"
+	"encoding/json/v2"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -24,10 +24,10 @@ func TestClientCompleteEncodesToolsAndDecodesToolCalls(t *testing.T) {
 		if r.URL.Path != "/api/chat" {
 			t.Errorf("unexpected path %q", r.URL.Path)
 		}
-		if err := json.NewDecoder(r.Body).Decode(&captured); err != nil {
+		if err := json.UnmarshalRead(r.Body, &captured); err != nil {
 			t.Errorf("decode request: %v", err)
 		}
-		if err := json.NewEncoder(w).Encode(map[string]any{
+		if err := json.MarshalWrite(w, map[string]any{
 			"model": "llama3.1",
 			"done":  true,
 			"message": map[string]any{
@@ -96,7 +96,7 @@ func TestClientCompleteEncodesToolsAndDecodesToolCalls(t *testing.T) {
 
 func TestClientCompleteReturnsEmbeddedProviderError(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		assert.NoError(t, json.NewEncoder(w).Encode(map[string]any{
+		assert.NoError(t, json.MarshalWrite(w, map[string]any{
 			"error": "model runner crashed",
 		}))
 	}))
@@ -139,11 +139,11 @@ func TestClientCompleteEncodesThinkingOption(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			var captured map[string]any
 			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-				if err := json.NewDecoder(r.Body).Decode(&captured); err != nil {
+				if err := json.UnmarshalRead(r.Body, &captured); err != nil {
 					t.Errorf("decode request: %v", err)
 					return
 				}
-				if err := json.NewEncoder(w).Encode(map[string]any{
+				if err := json.MarshalWrite(w, map[string]any{
 					"model": "gemma4",
 					"done":  true,
 					"message": map[string]any{
@@ -175,7 +175,7 @@ func TestClientCompleteEncodesThinkingOption(t *testing.T) {
 
 func TestClientCompleteDecodesThinkingAndTextParts(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if err := json.NewEncoder(w).Encode(map[string]any{
+		if err := json.MarshalWrite(w, map[string]any{
 			"model": "gemma4",
 			"done":  true,
 			"message": map[string]any{

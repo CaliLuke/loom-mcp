@@ -3,7 +3,8 @@
 package api
 
 import (
-	"encoding/json"
+	"encoding/json/jsontext"
+	"encoding/json/v2"
 	"fmt"
 	"time"
 
@@ -634,7 +635,7 @@ const (
 func (o *PlanActivityOutput) UnmarshalJSON(data []byte) error {
 	type alias struct {
 		Result           *planner.PlanResult `json:"Result"`           //nolint:tagliatelle
-		Transcript       []json.RawMessage   `json:"Transcript"`       //nolint:tagliatelle
+		Transcript       []jsontext.Value    `json:"Transcript"`       //nolint:tagliatelle
 		Usage            model.TokenUsage    `json:"Usage"`            //nolint:tagliatelle
 		ToolPolicyActive bool                `json:"ToolPolicyActive"` //nolint:tagliatelle
 		AllowedTools     []tools.Ident       `json:"AllowedTools"`     //nolint:tagliatelle

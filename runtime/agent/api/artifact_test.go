@@ -1,7 +1,7 @@
 package api
 
 import (
-	"encoding/json"
+	"encoding/json/v2"
 	"testing"
 
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/artifact"

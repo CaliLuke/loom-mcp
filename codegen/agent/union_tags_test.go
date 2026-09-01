@@ -75,5 +75,5 @@ func TestGeneratedAgentUnionUsesExplicitVariantTags(t *testing.T) {
 	require.Contains(t, unions, "InvalidEnumValueError(\"action\"")
 	require.Contains(t, unions, "Type string `json:\"action\"`")
 	require.Contains(t, unions, "Value any `json:\"payload\"`")
-	require.Contains(t, unions, "Value json.RawMessage `json:\"payload\"`")
+	require.Contains(t, unions, "Value jsontext.Value `json:\"payload\"`")
 }

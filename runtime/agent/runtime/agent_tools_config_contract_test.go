@@ -1,7 +1,7 @@
 package runtime
 
 import (
-	"encoding/json"
+	"encoding/json/jsontext"
 	"strings"
 	"testing"
 	"text/template"
@@ -105,10 +105,10 @@ func TestValidateAgentToolCoverageAndPayloadToString(t *testing.T) {
 	text, err := PayloadToString("ready")
 	require.NoError(t, err)
 	assert.Equal(t, "ready", text)
-	text, err = PayloadToString(json.RawMessage(`{"ready":true}`))
+	text, err = PayloadToString(jsontext.Value(`{"ready":true}`))
 	require.NoError(t, err)
 	assert.JSONEq(t, `{"ready":true}`, text)
-	text, err = PayloadToString(json.RawMessage(nil))
+	text, err = PayloadToString(jsontext.Value(nil))
 	require.NoError(t, err)
 	assert.Empty(t, text)
 	text, err = PayloadToString(nil)

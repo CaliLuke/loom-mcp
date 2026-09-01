@@ -2,7 +2,7 @@ package ollama_test
 
 import (
 	"context"
-	"encoding/json"
+	"encoding/json/v2"
 	"errors"
 	"io"
 	"net/http"
@@ -280,7 +280,7 @@ func localOllamaModels(ctx context.Context, serverURL string) ([]localOllamaMode
 	var body struct {
 		Models []localOllamaModel `json:"models"`
 	}
-	if err := json.NewDecoder(resp.Body).Decode(&body); err != nil {
+	if err := json.UnmarshalRead(resp.Body, &body); err != nil {
 		return nil, err
 	}
 	return body.Models, nil

@@ -10,7 +10,8 @@ package mcpassistant
 import (
 	"context"
 	"encoding/base64"
-	"encoding/json"
+	jsontext "encoding/json/jsontext"
+	json "encoding/json/v2"
 	"errors"
 	"fmt"
 	"net/http"
@@ -267,7 +268,7 @@ func registerSDKTools(server *mcpsdk.Server, adapter *MCPAdapter, requestContext
 			Source:   "https://assistant.example.com/icons/analyze-sentiment.png",
 		}},
 		InputSchema:  sdkToolInputSchema("{\"type\":\"object\",\"required\":[\"text\"],\"properties\":{\"text\":{\"type\":\"string\",\"description\":\"Input text to analyze\"}},\"additionalProperties\":false}"),
-		Meta:         sdkMeta(json.RawMessage([]byte("{\"com.github.caliluke.loom-mcp/discovery\":{\"category\":\"analysis\",\"keywords\":[\"tone\",\"emotion\",\"polarity\"],\"tags\":[\"sentiment\",\"nlp\"]}}"))),
+		Meta:         sdkMeta(jsontext.Value([]byte("{\"com.github.caliluke.loom-mcp/discovery\":{\"tags\":[\"sentiment\",\"nlp\"],\"keywords\":[\"tone\",\"emotion\",\"polarity\"],\"category\":\"analysis\"}}"))),
 		Name:         "analyze_sentiment",
 		OutputSchema: sdkToolInputSchema("{\"type\":\"object\",\"properties\":{\"sentiment\":{\"type\":\"string\",\"description\":\"Detected sentiment\"}},\"additionalProperties\":false}"),
 		Title:        "Analyze Sentiment",
@@ -275,7 +276,7 @@ func registerSDKTools(server *mcpsdk.Server, adapter *MCPAdapter, requestContext
 	server.AddTool(&mcpsdk.Tool{
 		Description:  "Extract keywords from text",
 		InputSchema:  sdkToolInputSchema("{\"type\":\"object\",\"required\":[\"text\"],\"properties\":{\"text\":{\"type\":\"string\",\"description\":\"Input text\"}},\"additionalProperties\":false}"),
-		Meta:         sdkMeta(json.RawMessage([]byte("{\"com.github.caliluke.loom-mcp/discovery\":{\"category\":\"analysis\",\"keywords\":[\"terms\",\"phrases\",\"entities\"],\"tags\":[\"keywords\",\"nlp\"]}}"))),
+		Meta:         sdkMeta(jsontext.Value([]byte("{\"com.github.caliluke.loom-mcp/discovery\":{\"tags\":[\"keywords\",\"nlp\"],\"keywords\":[\"terms\",\"phrases\",\"entities\"],\"category\":\"analysis\"}}"))),
 		Name:         "extract_keywords",
 		OutputSchema: sdkToolInputSchema("{\"type\":\"object\",\"properties\":{\"keywords\":{\"type\":\"array\",\"description\":\"Extracted keywords\",\"items\":{\"type\":\"string\"}}},\"additionalProperties\":false}"),
 		Title:        "Extract Keywords",
@@ -290,29 +291,29 @@ func registerSDKTools(server *mcpsdk.Server, adapter *MCPAdapter, requestContext
 	server.AddTool(&mcpsdk.Tool{
 		Description:  "Search knowledge base",
 		InputSchema:  sdkToolInputSchema("{\"type\":\"object\",\"required\":[\"query\"],\"properties\":{\"limit\":{\"type\":\"integer\",\"description\":\"Maximum number of results\"},\"query\":{\"type\":\"string\",\"description\":\"Search query\"}},\"additionalProperties\":false}"),
-		Meta:         sdkMeta(json.RawMessage([]byte("{\"com.github.caliluke.loom-mcp/discovery\":{\"category\":\"knowledge\",\"keywords\":[\"lookup\",\"documents\",\"knowledge\"],\"tags\":[\"search\",\"retrieval\"]}}"))),
+		Meta:         sdkMeta(jsontext.Value([]byte("{\"com.github.caliluke.loom-mcp/discovery\":{\"category\":\"knowledge\",\"tags\":[\"search\",\"retrieval\"],\"keywords\":[\"lookup\",\"documents\",\"knowledge\"]}}"))),
 		Name:         "search",
 		OutputSchema: sdkToolInputSchema("{\"type\":\"object\",\"properties\":{\"results\":{\"type\":\"array\",\"description\":\"Search results\",\"items\":{\"type\":\"string\"}}},\"additionalProperties\":false}"),
 		Title:        "Search Knowledge Base",
 	}, adapter.sdkToolHandler(requestContext))
 	server.AddTool(&mcpsdk.Tool{
 		Description:  "Search records with an optional query",
-		InputSchema:  sdkToolInputSchema("{\"type\":\"object\",\"properties\":{\"limit\":{\"type\":\"integer\",\"description\":\"Maximum number of records\"},\"query\":{\"type\":\"string\",\"description\":\"Search query\"}},\"additionalProperties\":false}"),
-		Meta:         sdkMeta(json.RawMessage([]byte("{\"com.github.caliluke.loom-mcp/discovery\":{\"call_template_arguments\":{\"query\":\"login\"},\"category\":\"records\",\"keywords\":[\"lookup\",\"records\"],\"tags\":[\"search\",\"records\"]}}"))),
+		InputSchema:  sdkToolInputSchema("{\"type\":\"object\",\"properties\":{\"query\":{\"type\":\"string\",\"description\":\"Search query\"},\"limit\":{\"type\":\"integer\",\"description\":\"Maximum number of records\"}},\"additionalProperties\":false}"),
+		Meta:         sdkMeta(jsontext.Value([]byte("{\"com.github.caliluke.loom-mcp/discovery\":{\"tags\":[\"search\",\"records\"],\"keywords\":[\"lookup\",\"records\"],\"call_template_arguments\":{\"query\":\"login\"},\"category\":\"records\"}}"))),
 		Name:         "search_records",
 		OutputSchema: sdkToolInputSchema("{\"type\":\"object\",\"properties\":{\"results\":{\"type\":\"array\",\"description\":\"Record results\",\"items\":{\"type\":\"string\"}}},\"additionalProperties\":false}"),
 		Title:        "Search Records",
 	}, adapter.sdkToolHandler(requestContext))
 	server.AddTool(&mcpsdk.Tool{
 		Description:  "Execute code",
-		InputSchema:  sdkToolInputSchema("{\"type\":\"object\",\"required\":[\"language\",\"code\"],\"properties\":{\"code\":{\"type\":\"string\",\"description\":\"Code to execute\"},\"language\":{\"type\":\"string\",\"description\":\"Language to execute\",\"enum\":[\"python\",\"javascript\"]}},\"additionalProperties\":false}"),
+		InputSchema:  sdkToolInputSchema("{\"type\":\"object\",\"required\":[\"language\",\"code\"],\"properties\":{\"language\":{\"type\":\"string\",\"description\":\"Language to execute\",\"enum\":[\"python\",\"javascript\"]},\"code\":{\"type\":\"string\",\"description\":\"Code to execute\"}},\"additionalProperties\":false}"),
 		Name:         "execute_code",
 		OutputSchema: sdkToolInputSchema("{\"type\":\"object\",\"properties\":{\"output\":{\"type\":\"string\",\"description\":\"Execution output\"}},\"additionalProperties\":false}"),
 		Title:        "Execute Code",
 	}, adapter.sdkToolHandler(requestContext))
 	server.AddTool(&mcpsdk.Tool{
 		Description:  "Process a batch of items",
-		InputSchema:  sdkToolInputSchema("{\"type\":\"object\",\"required\":[\"items\"],\"properties\":{\"blob\":{\"type\":\"string\",\"description\":\"Base64 blob\"},\"format\":{\"type\":\"string\",\"description\":\"Output format\",\"enum\":[\"json\",\"text\",\"blob\",\"uri\"]},\"items\":{\"type\":\"array\",\"description\":\"Items to process\",\"items\":{\"type\":\"string\"}},\"mimeType\":{\"type\":\"string\",\"description\":\"MIME type\"},\"uri\":{\"type\":\"string\",\"description\":\"Resource URI\"}},\"additionalProperties\":false}"),
+		InputSchema:  sdkToolInputSchema("{\"type\":\"object\",\"required\":[\"items\"],\"properties\":{\"items\":{\"type\":\"array\",\"description\":\"Items to process\",\"items\":{\"type\":\"string\"}},\"format\":{\"type\":\"string\",\"description\":\"Output format\",\"enum\":[\"json\",\"text\",\"blob\",\"uri\"]},\"blob\":{\"type\":\"string\",\"description\":\"Base64 blob\"},\"uri\":{\"type\":\"string\",\"description\":\"Resource URI\"},\"mimeType\":{\"type\":\"string\",\"description\":\"MIME type\"}},\"additionalProperties\":false}"),
 		Name:         "process_batch",
 		OutputSchema: sdkToolInputSchema("{\"type\":\"object\",\"properties\":{\"ok\":{\"type\":\"boolean\",\"description\":\"Operation status\"}},\"additionalProperties\":false}"),
 		Title:        "Process Batch",
@@ -333,14 +334,14 @@ func registerSDKTools(server *mcpsdk.Server, adapter *MCPAdapter, requestContext
 	}, adapter.sdkToolHandler(requestContext))
 	server.AddTool(&mcpsdk.Tool{
 		Description:  "Generate a deterministic design implementation plan from fake Figma data",
-		InputSchema:  sdkToolInputSchema("{\"type\":\"object\",\"required\":[\"screen_title\",\"platform\",\"density\",\"primary_cta\",\"sections\"],\"properties\":{\"density\":{\"type\":\"string\",\"description\":\"Layout density\",\"enum\":[\"compact\",\"comfortable\"]},\"include_dev_notes\":{\"type\":\"boolean\",\"description\":\"Whether to include implementation notes\"},\"platform\":{\"type\":\"string\",\"description\":\"Target platform\",\"enum\":[\"ios\",\"web\"]},\"primary_cta\":{\"type\":\"string\",\"description\":\"Primary call to action\"},\"screen_title\":{\"type\":\"string\",\"description\":\"Name of the frame or screen\"},\"sections\":{\"type\":\"array\",\"description\":\"Ordered screen sections\",\"items\":{\"type\":\"string\"}}},\"additionalProperties\":false}"),
+		InputSchema:  sdkToolInputSchema("{\"type\":\"object\",\"required\":[\"screen_title\",\"platform\",\"density\",\"primary_cta\",\"sections\"],\"properties\":{\"sections\":{\"type\":\"array\",\"description\":\"Ordered screen sections\",\"items\":{\"type\":\"string\"}},\"include_dev_notes\":{\"type\":\"boolean\",\"description\":\"Whether to include implementation notes\"},\"screen_title\":{\"type\":\"string\",\"description\":\"Name of the frame or screen\"},\"platform\":{\"type\":\"string\",\"description\":\"Target platform\",\"enum\":[\"ios\",\"web\"]},\"density\":{\"type\":\"string\",\"description\":\"Layout density\",\"enum\":[\"compact\",\"comfortable\"]},\"primary_cta\":{\"type\":\"string\",\"description\":\"Primary call to action\"}},\"additionalProperties\":false}"),
 		Name:         "generate_dpi_spec",
-		OutputSchema: sdkToolInputSchema("{\"type\":\"object\",\"required\":[\"screen_title\",\"platform\",\"density\",\"viewport\",\"sections\",\"primary_cta\",\"design_tokens_uri\",\"dev_notes\"],\"properties\":{\"density\":{\"type\":\"string\",\"description\":\"Layout density\"},\"design_tokens_uri\":{\"type\":\"string\",\"description\":\"Design system resource URI\"},\"dev_notes\":{\"type\":\"array\",\"description\":\"Development handoff notes\",\"items\":{\"type\":\"string\"}},\"platform\":{\"type\":\"string\",\"description\":\"Target platform\"},\"primary_cta\":{\"type\":\"object\",\"description\":\"Primary CTA\",\"required\":[\"label\",\"style\"],\"properties\":{\"label\":{\"type\":\"string\",\"description\":\"CTA label\"},\"style\":{\"type\":\"string\",\"description\":\"CTA visual style\"}},\"additionalProperties\":false},\"screen_title\":{\"type\":\"string\",\"description\":\"Screen title\"},\"sections\":{\"type\":\"array\",\"description\":\"Ordered screen sections\",\"items\":{\"type\":\"object\",\"required\":[\"name\",\"component\",\"notes\"],\"properties\":{\"component\":{\"type\":\"string\",\"description\":\"Primary UI component\"},\"name\":{\"type\":\"string\",\"description\":\"Section name\"},\"notes\":{\"type\":\"array\",\"description\":\"Implementation notes for this section\",\"items\":{\"type\":\"string\"}}},\"additionalProperties\":false}},\"viewport\":{\"type\":\"object\",\"description\":\"Viewport dimensions\",\"required\":[\"width\",\"height\"],\"properties\":{\"height\":{\"type\":\"integer\",\"description\":\"Viewport height\"},\"width\":{\"type\":\"integer\",\"description\":\"Viewport width\"}},\"additionalProperties\":false}},\"additionalProperties\":false}"),
+		OutputSchema: sdkToolInputSchema("{\"type\":\"object\",\"required\":[\"screen_title\",\"platform\",\"density\",\"viewport\",\"sections\",\"primary_cta\",\"design_tokens_uri\",\"dev_notes\"],\"properties\":{\"sections\":{\"type\":\"array\",\"description\":\"Ordered screen sections\",\"items\":{\"type\":\"object\",\"required\":[\"name\",\"component\",\"notes\"],\"properties\":{\"notes\":{\"type\":\"array\",\"description\":\"Implementation notes for this section\",\"items\":{\"type\":\"string\"}},\"name\":{\"type\":\"string\",\"description\":\"Section name\"},\"component\":{\"type\":\"string\",\"description\":\"Primary UI component\"}},\"additionalProperties\":false}},\"primary_cta\":{\"type\":\"object\",\"description\":\"Primary CTA\",\"required\":[\"label\",\"style\"],\"properties\":{\"label\":{\"type\":\"string\",\"description\":\"CTA label\"},\"style\":{\"type\":\"string\",\"description\":\"CTA visual style\"}},\"additionalProperties\":false},\"design_tokens_uri\":{\"type\":\"string\",\"description\":\"Design system resource URI\"},\"dev_notes\":{\"type\":\"array\",\"description\":\"Development handoff notes\",\"items\":{\"type\":\"string\"}},\"screen_title\":{\"type\":\"string\",\"description\":\"Screen title\"},\"platform\":{\"type\":\"string\",\"description\":\"Target platform\"},\"density\":{\"type\":\"string\",\"description\":\"Layout density\"},\"viewport\":{\"type\":\"object\",\"description\":\"Viewport dimensions\",\"required\":[\"width\",\"height\"],\"properties\":{\"width\":{\"type\":\"integer\",\"description\":\"Viewport width\"},\"height\":{\"type\":\"integer\",\"description\":\"Viewport height\"}},\"additionalProperties\":false}},\"additionalProperties\":false}"),
 		Title:        "Generate Dpi Spec",
 	}, adapter.sdkToolHandler(requestContext))
 	server.AddTool(&mcpsdk.Tool{
 		Description:  "Dispatch an action using a union payload",
-		InputSchema:  sdkToolInputSchema("{\"type\":\"object\",\"required\":[\"request\"],\"properties\":{\"request\":{\"type\":\"object\",\"description\":\"Action envelope\",\"oneOf\":[{\"type\":\"object\",\"required\":[\"action\",\"value\"],\"properties\":{\"action\":{\"type\":\"string\",\"enum\":[\"list\"]},\"value\":{\"type\":\"object\",\"properties\":{\"limit\":{\"type\":\"integer\",\"description\":\"Maximum number of items to list\"}},\"additionalProperties\":false}},\"additionalProperties\":false},{\"type\":\"object\",\"required\":[\"action\",\"value\"],\"properties\":{\"action\":{\"type\":\"string\",\"enum\":[\"create\"]},\"value\":{\"type\":\"object\",\"required\":[\"name\"],\"properties\":{\"name\":{\"type\":\"string\",\"description\":\"Name to create\"}},\"additionalProperties\":false}},\"additionalProperties\":false}],\"discriminator\":{\"propertyName\":\"action\"}}},\"additionalProperties\":false}"),
+		InputSchema:  sdkToolInputSchema("{\"type\":\"object\",\"required\":[\"request\"],\"properties\":{\"request\":{\"type\":\"object\",\"description\":\"Action envelope\",\"oneOf\":[{\"type\":\"object\",\"required\":[\"action\",\"value\"],\"properties\":{\"value\":{\"type\":\"object\",\"properties\":{\"limit\":{\"type\":\"integer\",\"description\":\"Maximum number of items to list\"}},\"additionalProperties\":false},\"action\":{\"type\":\"string\",\"enum\":[\"list\"]}},\"additionalProperties\":false},{\"type\":\"object\",\"required\":[\"action\",\"value\"],\"properties\":{\"action\":{\"type\":\"string\",\"enum\":[\"create\"]},\"value\":{\"type\":\"object\",\"required\":[\"name\"],\"properties\":{\"name\":{\"type\":\"string\",\"description\":\"Name to create\"}},\"additionalProperties\":false}},\"additionalProperties\":false}],\"discriminator\":{\"propertyName\":\"action\"}}},\"additionalProperties\":false}"),
 		Name:         "dispatch_action",
 		OutputSchema: sdkToolInputSchema("{\"type\":\"object\",\"required\":[\"ack\"],\"properties\":{\"ack\":{\"type\":\"string\",\"description\":\"Acknowledgement\"}},\"additionalProperties\":false}"),
 		Title:        "Dispatch Action",
@@ -354,16 +355,16 @@ func registerSDKTools(server *mcpsdk.Server, adapter *MCPAdapter, requestContext
 	}, adapter.sdkToolHandler(requestContext))
 	server.AddTool(&mcpsdk.Tool{
 		Description:  "Lookup projected runtime tool data",
-		InputSchema:  json.RawMessage(projected.SpecProjectedLookupTool.Payload.Schema),
+		InputSchema:  jsontext.Value(projected.SpecProjectedLookupTool.Payload.Schema),
 		Name:         "projected_lookup_tool",
-		OutputSchema: json.RawMessage(projected.SpecProjectedLookupTool.Result.Schema),
+		OutputSchema: jsontext.Value(projected.SpecProjectedLookupTool.Result.Schema),
 		Title:        "Projected Lookup Tool",
 	}, adapter.sdkToolHandler(requestContext))
 	server.AddTool(&mcpsdk.Tool{
 		Description:  "Return projected runtime status",
-		InputSchema:  json.RawMessage(projected.SpecProjectedStatusTool.Payload.Schema),
+		InputSchema:  jsontext.Value(projected.SpecProjectedStatusTool.Payload.Schema),
 		Name:         "projected_status_tool",
-		OutputSchema: json.RawMessage(projected.SpecProjectedStatusTool.Result.Schema),
+		OutputSchema: jsontext.Value(projected.SpecProjectedStatusTool.Result.Schema),
 		Title:        "Projected Status Tool",
 	}, adapter.sdkToolHandler(requestContext))
 	return nil
@@ -486,9 +487,9 @@ func sdkToolAnnotations(raw any) (*mcpsdk.ToolAnnotations, error) {
 }
 func sdkToolInputSchema(raw string) any {
 	if raw == "" {
-		return json.RawMessage("{\"type\":\"object\"}")
+		return jsontext.Value("{\"type\":\"object\"}")
 	}
-	return json.RawMessage([]byte(raw))
+	return jsontext.Value([]byte(raw))
 }
 func sdkToolFromToolInfo(tool *ToolInfo) (*mcpsdk.Tool, error) {
 	if tool == nil {
@@ -877,7 +878,7 @@ func sdkMeta(value any) mcpsdk.Meta {
 		return typed
 	case map[string]any:
 		return mcpsdk.Meta(typed)
-	case json.RawMessage:
+	case jsontext.Value:
 		var meta map[string]any
 		if err := json.Unmarshal(typed, &meta); err != nil {
 			return nil

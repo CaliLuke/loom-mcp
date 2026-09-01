@@ -3,20 +3,24 @@ package codegen
 import (
 	"testing"
 
-	"github.com/CaliLuke/loom/http/codegen/openapi"
+	goaexpr "github.com/CaliLuke/loom/expr"
 	"github.com/stretchr/testify/require"
 )
 
-func TestRootDefinitionJSONPropagatesMarshalError(t *testing.T) {
-	def := &openapi.Schema{
-		DefaultValue: func() {},
+func TestSchemaForAttributePropagatesInlineSchemaError(t *testing.T) {
+	recursive := &goaexpr.UserTypeExpr{TypeName: "Node"}
+	object := goaexpr.Object{
+		&goaexpr.NamedAttributeExpr{
+			Name: "next",
+			Attribute: &goaexpr.AttributeExpr{
+				Type: recursive,
+			},
+		},
 	}
-	definitions := map[string]*openapi.Schema{
-		"Node": def,
-	}
+	recursive.AttributeExpr = &goaexpr.AttributeExpr{Type: &object}
 
-	_, err := rootDefinitionJSON(def, "Node", definitions)
+	_, err := schemaForAttribute(&goaexpr.AttributeExpr{Type: recursive})
 
 	require.Error(t, err)
-	require.ErrorContains(t, err, "unsupported type: func()")
+	require.ErrorContains(t, err, "recursive user type")
 }

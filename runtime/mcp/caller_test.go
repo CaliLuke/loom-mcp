@@ -2,7 +2,8 @@ package mcp
 
 import (
 	"context"
-	"encoding/json"
+	"encoding/json/jsontext"
+	"encoding/json/v2"
 	"errors"
 	"fmt"
 	"net/http"
@@ -361,7 +362,7 @@ func assertMultiContentResponse(t *testing.T, caller *SessionCaller, ctx context
 
 	resp, err := caller.CallTool(ctx, CallRequest{
 		Tool:    "multi_content_tool",
-		Payload: json.RawMessage(`{}`),
+		Payload: jsontext.Value(`{}`),
 	})
 	require.NoError(t, err)
 
@@ -386,7 +387,7 @@ func assertTraceMetadataForwarding(t *testing.T, caller *SessionCaller, ctx cont
 
 	resp, err := caller.CallTool(ctx, CallRequest{
 		Tool:    "trace_meta_tool",
-		Payload: json.RawMessage(`{}`),
+		Payload: jsontext.Value(`{}`),
 	})
 	require.NoError(t, err)
 
@@ -420,7 +421,7 @@ func newSDKTestServer() *sdkmcp.Server {
 	server.AddTool(&sdkmcp.Tool{
 		Name:        "multi_content_tool",
 		Description: "Returns multiple text items",
-		InputSchema: json.RawMessage(`{"type":"object"}`),
+		InputSchema: jsontext.Value(`{"type":"object"}`),
 	}, func(context.Context, *sdkmcp.CallToolRequest) (*sdkmcp.CallToolResult, error) {
 		return &sdkmcp.CallToolResult{
 			Content: []sdkmcp.Content{
@@ -434,7 +435,7 @@ func newSDKTestServer() *sdkmcp.Server {
 	server.AddTool(&sdkmcp.Tool{
 		Name:        "trace_meta_tool",
 		Description: "Returns the incoming trace metadata",
-		InputSchema: json.RawMessage(`{"type":"object"}`),
+		InputSchema: jsontext.Value(`{"type":"object"}`),
 	}, func(_ context.Context, req *sdkmcp.CallToolRequest) (*sdkmcp.CallToolResult, error) {
 		traceparent, _ := req.Params.Meta["traceparent"].(string)
 		return &sdkmcp.CallToolResult{

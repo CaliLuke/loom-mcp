@@ -2,7 +2,7 @@ package ollama_test
 
 import (
 	"context"
-	"encoding/json"
+	"encoding/json/v2"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -40,7 +40,7 @@ func TestClientConformance(t *testing.T) {
 		Provider: "ollama",
 		OrdinaryProviderError: func(t *testing.T) {
 			client := newClient(t, func(w http.ResponseWriter, _ *http.Request) {
-				assert.NoError(t, json.NewEncoder(w).Encode(map[string]any{"error": "model runner crashed"}))
+				assert.NoError(t, json.MarshalWrite(w, map[string]any{"error": "model runner crashed"}))
 			})
 			response, err := client.Complete(context.Background(), request())
 			require.Nil(t, response)
@@ -57,7 +57,7 @@ func TestClientConformance(t *testing.T) {
 		},
 		MalformedToolCall: func(t *testing.T) {
 			client := newClient(t, func(w http.ResponseWriter, _ *http.Request) {
-				assert.NoError(t, json.NewEncoder(w).Encode(map[string]any{
+				assert.NoError(t, json.MarshalWrite(w, map[string]any{
 					"model": "llama3.1",
 					"done":  true,
 					"message": map[string]any{"tool_calls": []any{map[string]any{
@@ -83,8 +83,8 @@ func TestClientConformance(t *testing.T) {
 		StructuredOutputAndToolChoice: func(t *testing.T) {
 			var captured map[string]any
 			client := newClient(t, func(w http.ResponseWriter, r *http.Request) {
-				assert.NoError(t, json.NewDecoder(r.Body).Decode(&captured))
-				assert.NoError(t, json.NewEncoder(w).Encode(map[string]any{
+				assert.NoError(t, json.UnmarshalRead(r.Body, &captured))
+				assert.NoError(t, json.MarshalWrite(w, map[string]any{
 					"model": "llama3.1",
 					"done":  true,
 					"message": map[string]any{
@@ -114,7 +114,7 @@ func TestClientConformance(t *testing.T) {
 		},
 		UsageAccounting: func(t *testing.T) {
 			client := newClient(t, func(w http.ResponseWriter, _ *http.Request) {
-				assert.NoError(t, json.NewEncoder(w).Encode(map[string]any{
+				assert.NoError(t, json.MarshalWrite(w, map[string]any{
 					"model":             "deepseek-r1",
 					"done":              true,
 					"prompt_eval_count": 8,

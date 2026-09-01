@@ -4,7 +4,8 @@ import (
 	"bytes"
 	"context"
 	"encoding"
-	"encoding/json"
+	"encoding/json/jsontext"
+	"encoding/json/v2"
 	"errors"
 	"fmt"
 	"io"
@@ -18,8 +19,6 @@ import (
 	"github.com/CaliLuke/loom/codegen"
 	goahttp "github.com/CaliLuke/loom/http"
 )
-
-const jsonValueKindObject = "object"
 
 type (
 	jsonStructField struct {
@@ -68,41 +67,126 @@ func EncodeJSONToString(
 // - Unsupported map key kinds fail fast instead of being silently dropped.
 func MarshalCanonicalJSON(v any) ([]byte, error) {
 	if v == nil {
-		return json.Marshal(nil)
+		return json.Marshal(nil, json.Deterministic(true))
 	}
 	if marshaler, ok := v.(json.Marshaler); ok {
 		return marshaler.MarshalJSON()
 	}
 	if canMarshalJSONDirectly(reflect.TypeOf(v)) {
-		return json.Marshal(v)
+		return json.Marshal(v, json.Deterministic(true))
 	}
 	normalized, err := normalizeJSONValue(reflect.ValueOf(v))
 	if err != nil {
 		return nil, err
 	}
-	return json.Marshal(normalized)
+	return json.Marshal(normalized, json.Deterministic(true))
 }
 
 // UnmarshalCanonicalJSON decodes JSON into dst using explicit JSON tags when
 // present and otherwise matching snake_case keys to exported struct fields.
 func UnmarshalCanonicalJSON(data []byte, dst any) error {
-	dec := json.NewDecoder(bytes.NewReader(data))
-	dec.UseNumber()
-	var raw any
-	if err := dec.Decode(&raw); err != nil {
-		return err
-	}
-	if err := dec.Decode(&struct{}{}); err != io.EOF {
-		if err == nil {
-			return fmt.Errorf("unexpected trailing JSON data")
-		}
+	raw, err := decodeCanonicalJSON(data)
+	if err != nil {
 		return err
 	}
 	v := reflect.ValueOf(dst)
 	if !v.IsValid() || v.Kind() != reflect.Pointer || v.IsNil() {
-		return &json.InvalidUnmarshalError{Type: reflect.TypeOf(dst)}
+		return &json.SemanticError{
+			GoType: reflect.TypeOf(dst),
+			Err:    errors.New("destination must be a non-nil pointer"),
+		}
 	}
 	return assignCanonicalValue(raw, v.Elem())
+}
+
+func decodeCanonicalJSON(data []byte) (any, error) {
+	decoder := jsontext.NewDecoder(bytes.NewReader(data))
+	value, err := decodeCanonicalJSONValue(decoder)
+	if err != nil {
+		return nil, err
+	}
+	if _, err := decoder.ReadToken(); !errors.Is(err, io.EOF) {
+		if err == nil {
+			return nil, errors.New("unexpected trailing JSON data")
+		}
+		return nil, err
+	}
+	return value, nil
+}
+
+func decodeCanonicalJSONValue(decoder *jsontext.Decoder) (any, error) {
+	switch decoder.PeekKind() {
+	case jsontext.KindNull:
+		_, err := decoder.ReadToken()
+		return nil, err
+	case jsontext.KindFalse, jsontext.KindTrue:
+		token, err := decoder.ReadToken()
+		if err != nil {
+			return nil, err
+		}
+		return token.Bool(), nil
+	case jsontext.KindString:
+		token, err := decoder.ReadToken()
+		if err != nil {
+			return nil, err
+		}
+		return token.String(), nil
+	case jsontext.KindNumber:
+		token, err := decoder.ReadToken()
+		if err != nil {
+			return nil, err
+		}
+		return jsontext.Value(token.String()), nil
+	case jsontext.KindBeginArray:
+		return decodeCanonicalJSONArray(decoder)
+	case jsontext.KindBeginObject:
+		return decodeCanonicalJSONObject(decoder)
+	case jsontext.KindInvalid, jsontext.KindEndObject, jsontext.KindEndArray:
+		_, err := decoder.ReadToken()
+		if err == nil {
+			err = errors.New("invalid JSON value")
+		}
+		return nil, err
+	default:
+		return nil, errors.New("unsupported JSON value kind")
+	}
+}
+
+func decodeCanonicalJSONArray(decoder *jsontext.Decoder) ([]any, error) {
+	if _, err := decoder.ReadToken(); err != nil {
+		return nil, err
+	}
+	values := make([]any, 0)
+	for decoder.PeekKind() != jsontext.KindEndArray {
+		value, err := decodeCanonicalJSONValue(decoder)
+		if err != nil {
+			return nil, err
+		}
+		values = append(values, value)
+	}
+	_, err := decoder.ReadToken()
+	return values, err
+}
+
+func decodeCanonicalJSONObject(decoder *jsontext.Decoder) (map[string]any, error) {
+	if _, err := decoder.ReadToken(); err != nil {
+		return nil, err
+	}
+	values := make(map[string]any)
+	for decoder.PeekKind() != jsontext.KindEndObject {
+		name, err := decoder.ReadToken()
+		if err != nil {
+			return nil, err
+		}
+		nameString := name.String()
+		value, err := decodeCanonicalJSONValue(decoder)
+		if err != nil {
+			return nil, err
+		}
+		values[nameString] = value
+	}
+	_, err := decoder.ReadToken()
+	return values, err
 }
 
 func normalizeJSONValue(v reflect.Value) (any, error) {
@@ -161,7 +245,7 @@ func assignCanonicalValue(raw any, dst reflect.Value) error {
 func assignCanonicalByKind(raw any, dst reflect.Value) error {
 	switch dst.Kind() {
 	case reflect.Invalid:
-		return &json.UnmarshalTypeError{Value: jsonValueKind(raw), Type: dst.Type()}
+		return newJSONTypeError(raw, dst.Type())
 	case reflect.Interface:
 		dst.Set(reflect.ValueOf(raw))
 		return nil
@@ -315,7 +399,7 @@ func assignViaJSONUnmarshaler(raw any, dst reflect.Value) (error, bool) {
 func assignCanonicalStruct(raw any, dst reflect.Value) error {
 	obj, ok := raw.(map[string]any)
 	if !ok {
-		return &json.UnmarshalTypeError{Value: jsonValueKind(raw), Type: dst.Type()}
+		return newJSONTypeError(raw, dst.Type())
 	}
 	metadata := cachedJSONStructMetadata(dst.Type())
 	for key, val := range obj {
@@ -376,7 +460,7 @@ func assignCanonicalSlice(raw any, dst reflect.Value) error {
 	}
 	arr, ok := raw.([]any)
 	if !ok {
-		return &json.UnmarshalTypeError{Value: jsonValueKind(raw), Type: dst.Type()}
+		return newJSONTypeError(raw, dst.Type())
 	}
 	slice := reflect.MakeSlice(dst.Type(), len(arr), len(arr))
 	for i, item := range arr {
@@ -391,7 +475,7 @@ func assignCanonicalSlice(raw any, dst reflect.Value) error {
 func assignCanonicalArray(raw any, dst reflect.Value) error {
 	arr, ok := raw.([]any)
 	if !ok || len(arr) != dst.Len() {
-		return &json.UnmarshalTypeError{Value: jsonValueKind(raw), Type: dst.Type()}
+		return newJSONTypeError(raw, dst.Type())
 	}
 	for i, item := range arr {
 		if err := assignCanonicalValue(item, dst.Index(i)); err != nil {
@@ -404,10 +488,10 @@ func assignCanonicalArray(raw any, dst reflect.Value) error {
 func assignCanonicalMap(raw any, dst reflect.Value) error {
 	obj, ok := raw.(map[string]any)
 	if !ok {
-		return &json.UnmarshalTypeError{Value: jsonValueKind(raw), Type: dst.Type()}
+		return newJSONTypeError(raw, dst.Type())
 	}
 	if dst.Type().Key().Kind() != reflect.String {
-		return &json.UnmarshalTypeError{Value: jsonValueKindObject, Type: dst.Type()}
+		return &json.SemanticError{JSONKind: jsontext.KindBeginObject, GoType: dst.Type()}
 	}
 	m := reflect.MakeMapWithSize(dst.Type(), len(obj))
 	for key, val := range obj {
@@ -428,7 +512,7 @@ func assignCanonicalMap(raw any, dst reflect.Value) error {
 func assignCanonicalString(raw any, dst reflect.Value) error {
 	value, ok := raw.(string)
 	if !ok {
-		return &json.UnmarshalTypeError{Value: jsonValueKind(raw), Type: dst.Type()}
+		return newJSONTypeError(raw, dst.Type())
 	}
 	dst.SetString(value)
 	return nil
@@ -437,7 +521,7 @@ func assignCanonicalString(raw any, dst reflect.Value) error {
 func assignCanonicalBool(raw any, dst reflect.Value) error {
 	value, ok := raw.(bool)
 	if !ok {
-		return &json.UnmarshalTypeError{Value: jsonValueKind(raw), Type: dst.Type()}
+		return newJSONTypeError(raw, dst.Type())
 	}
 	dst.SetBool(value)
 	return nil
@@ -446,7 +530,7 @@ func assignCanonicalBool(raw any, dst reflect.Value) error {
 func assignCanonicalInt(raw any, dst reflect.Value) error {
 	value, err := toInt64(raw)
 	if err != nil || dst.OverflowInt(value) {
-		return &json.UnmarshalTypeError{Value: jsonValueKind(raw), Type: dst.Type()}
+		return newJSONTypeError(raw, dst.Type())
 	}
 	dst.SetInt(value)
 	return nil
@@ -455,7 +539,7 @@ func assignCanonicalInt(raw any, dst reflect.Value) error {
 func assignCanonicalUint(raw any, dst reflect.Value) error {
 	value, err := toUint64(raw)
 	if err != nil || dst.OverflowUint(value) {
-		return &json.UnmarshalTypeError{Value: jsonValueKind(raw), Type: dst.Type()}
+		return newJSONTypeError(raw, dst.Type())
 	}
 	dst.SetUint(value)
 	return nil
@@ -464,27 +548,27 @@ func assignCanonicalUint(raw any, dst reflect.Value) error {
 func assignCanonicalFloat(raw any, dst reflect.Value) error {
 	value, err := toFloat64(raw)
 	if err != nil || dst.OverflowFloat(value) {
-		return &json.UnmarshalTypeError{Value: jsonValueKind(raw), Type: dst.Type()}
+		return newJSONTypeError(raw, dst.Type())
 	}
 	dst.SetFloat(value)
 	return nil
 }
 
 func wrapFieldError(name string, err error) error {
-	var ute *json.UnmarshalTypeError
-	if errors.As(err, &ute) && ute.Field == "" {
-		clone := *ute
-		clone.Field = name
+	var semanticError *json.SemanticError
+	if errors.As(err, &semanticError) {
+		clone := *semanticError
+		clone.JSONPointer = jsontext.Pointer("").AppendToken(name) + clone.JSONPointer
 		return &clone
 	}
 	return err
 }
 
 func wrapIndexError(idx int, err error) error {
-	var ute *json.UnmarshalTypeError
-	if errors.As(err, &ute) && ute.Field == "" {
-		clone := *ute
-		clone.Field = strconv.Itoa(idx)
+	var semanticError *json.SemanticError
+	if errors.As(err, &semanticError) {
+		clone := *semanticError
+		clone.JSONPointer = jsontext.Pointer("").AppendToken(strconv.Itoa(idx)) + clone.JSONPointer
 		return &clone
 	}
 	return err
@@ -712,8 +796,8 @@ func isImplicitOmitNilField(v reflect.Value) bool {
 
 func toInt64(raw any) (int64, error) {
 	switch v := raw.(type) {
-	case json.Number:
-		return v.Int64()
+	case jsontext.Value:
+		return strconv.ParseInt(string(v), 10, 64)
 	case float64:
 		if math.Trunc(v) != v {
 			return 0, fmt.Errorf("not an integer")
@@ -730,8 +814,8 @@ func toInt64(raw any) (int64, error) {
 
 func toUint64(raw any) (uint64, error) {
 	switch v := raw.(type) {
-	case json.Number:
-		return strconv.ParseUint(v.String(), 10, 64)
+	case jsontext.Value:
+		return strconv.ParseUint(string(v), 10, 64)
 	case float64:
 		if v < 0 || math.Trunc(v) != v {
 			return 0, fmt.Errorf("not an unsigned integer")
@@ -756,8 +840,8 @@ func toUint64(raw any) (uint64, error) {
 
 func toFloat64(raw any) (float64, error) {
 	switch v := raw.(type) {
-	case json.Number:
-		return v.Float64()
+	case jsontext.Value:
+		return strconv.ParseFloat(string(v), 64)
 	case float64:
 		return v, nil
 	case int64:
@@ -769,21 +853,31 @@ func toFloat64(raw any) (float64, error) {
 	}
 }
 
-func jsonValueKind(raw any) string {
-	switch raw.(type) {
+func newJSONTypeError(raw any, goType reflect.Type) error {
+	return &json.SemanticError{
+		JSONKind: jsonKind(raw),
+		GoType:   goType,
+	}
+}
+
+func jsonKind(raw any) jsontext.Kind {
+	switch value := raw.(type) {
 	case nil:
-		return "null"
+		return jsontext.KindNull
 	case bool:
-		return "bool"
+		if value {
+			return jsontext.KindTrue
+		}
+		return jsontext.KindFalse
 	case string:
-		return "string"
-	case json.Number, float64, int, int64, uint64:
-		return "number"
+		return jsontext.KindString
+	case jsontext.Value, float64, int, int64, uint64:
+		return jsontext.KindNumber
 	case []any:
-		return "array"
+		return jsontext.KindBeginArray
 	case map[string]any:
-		return jsonValueKindObject
+		return jsontext.KindBeginObject
 	default:
-		return reflect.TypeOf(raw).String()
+		return jsontext.KindInvalid
 	}
 }

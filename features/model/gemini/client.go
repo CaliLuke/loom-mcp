@@ -5,7 +5,8 @@ package gemini
 
 import (
 	"context"
-	"encoding/json"
+	"encoding/json/jsontext"
+	"encoding/json/v2"
 	"errors"
 	"fmt"
 	"math"
@@ -822,7 +823,7 @@ func jsonValue(v any) (any, error) {
 			return nil, err
 		}
 		return out, nil
-	case json.RawMessage:
+	case jsontext.Value:
 		if len(value) == 0 {
 			return nil, nil
 		}
@@ -845,7 +846,7 @@ func marshalJSONValue(v any) ([]byte, error) {
 			return []byte("null"), nil
 		}
 		return value.RawMessage(), nil
-	case json.RawMessage:
+	case jsontext.Value:
 		if len(value) == 0 {
 			return []byte("null"), nil
 		}

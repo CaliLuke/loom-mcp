@@ -13,7 +13,8 @@ func buildMCPSDKServerFile(genpkg string, svc *expr.ServiceExpr, data *AdapterDa
 	sdkServerImports := []*codegen.ImportSpec{
 		{Path: "context"},
 		{Path: "encoding/base64"},
-		{Path: "encoding/json"},
+		{Name: "json", Path: "encoding/json/v2"},
+		{Name: "jsontext", Path: "encoding/json/jsontext"},
 		{Path: "errors"},
 		{Path: "fmt"},
 		{Path: "net/http"},
@@ -522,10 +523,10 @@ func sdkServerRegistrationSection(data *AdapterData) codegen.Section {
 				jen.If(jen.Id("raw").Op("==").Nil()).Block(
 					jen.Return(jen.Nil(), jen.Nil()),
 				),
-				jen.List(jen.Id("data"), jen.Id("err")).Op(":=").Qual("encoding/json", "Marshal").Call(jen.Id("raw")),
+				jen.List(jen.Id("data"), jen.Id("err")).Op(":=").Id("json").Dot("Marshal").Call(jen.Id("raw")),
 				jen.If(jen.Id("err").Op("!=").Nil()).Block(jen.Return(jen.Nil(), jen.Id("err"))),
 				jen.Var().Id("annotations").Id("mcpsdk").Dot("ToolAnnotations"),
-				jen.If(jen.Id("err").Op(":=").Qual("encoding/json", "Unmarshal").Call(jen.Id("data"), jen.Op("&").Id("annotations")), jen.Id("err").Op("!=").Nil()).Block(
+				jen.If(jen.Id("err").Op(":=").Id("json").Dot("Unmarshal").Call(jen.Id("data"), jen.Op("&").Id("annotations")), jen.Id("err").Op("!=").Nil()).Block(
 					jen.Return(jen.Nil(), jen.Id("err")),
 				),
 				jen.Return(jen.Op("&").Id("annotations"), jen.Nil()),
@@ -536,9 +537,9 @@ func sdkServerRegistrationSection(data *AdapterData) codegen.Section {
 			Any().
 			Block(
 				jen.If(jen.Id("raw").Op("==").Lit("")).Block(
-					jen.Return(jen.Qual("encoding/json", "RawMessage").Call(jen.Lit(`{"type":"object"}`))),
+					jen.Return(jen.Id("jsontext").Dot("Value").Call(jen.Lit(`{"type":"object"}`))),
 				),
-				jen.Return(jen.Qual("encoding/json", "RawMessage").Call(jen.Index().Byte().Call(jen.Id("raw")))),
+				jen.Return(jen.Id("jsontext").Dot("Value").Call(jen.Index().Byte().Call(jen.Id("raw")))),
 			)
 		stmt.Line()
 		stmt.Func().Id("sdkToolFromToolInfo").
@@ -605,7 +606,7 @@ func emitSDKRegisterTools(stmt *jen.Statement, data *AdapterData) {
 				if tool.AnnotationsJSON != "" {
 					name := "annotations" + codegen.Goify(tool.Name, true)
 					g.List(jen.Id(name), jen.Id("err")).Op(":=").Id("sdkToolAnnotations").Call(
-						jen.Qual("encoding/json", "RawMessage").Call(jen.Index().Byte().Call(jen.Lit(tool.AnnotationsJSON))),
+						jen.Id("jsontext").Dot("Value").Call(jen.Index().Byte().Call(jen.Lit(tool.AnnotationsJSON))),
 					)
 					g.If(jen.Id("err").Op("!=").Nil()).Block(
 						jen.Return(jen.Qual("fmt", "Errorf").Call(jen.Lit("tool %q annotations: %w"), jen.Lit(tool.Name), jen.Id("err"))),
@@ -621,7 +622,7 @@ func emitSDKRegisterTools(stmt *jen.Statement, data *AdapterData) {
 					dict[jen.Id("OutputSchema")] = outputSchema
 				}
 				if tool.MetaJSON != "" {
-					dict[jen.Id("Meta")] = jen.Id("sdkMeta").Call(jen.Qual("encoding/json", "RawMessage").Call(jen.Index().Byte().Call(jen.Lit(tool.MetaJSON))))
+					dict[jen.Id("Meta")] = jen.Id("sdkMeta").Call(jen.Id("jsontext").Dot("Value").Call(jen.Index().Byte().Call(jen.Lit(tool.MetaJSON))))
 				}
 				if icons := sdkIconSliceValue(tool.Icons); icons != nil {
 					dict[jen.Id("Icons")] = icons
@@ -642,12 +643,12 @@ func emitSDKRegisterTools(stmt *jen.Statement, data *AdapterData) {
 func sdkToolSchemaValue(tool *ToolAdapter, input bool) jen.Code {
 	if tool.Projected != nil {
 		if input {
-			return jen.Qual("encoding/json", "RawMessage").Call(
+			return jen.Id("jsontext").Dot("Value").Call(
 				jen.Id(tool.Projected.SpecsPackageName).Dot(tool.Projected.SpecName).Dot("Payload").Dot("Schema"),
 			)
 		}
 		if !input && tool.Projected.HasResult {
-			return jen.Qual("encoding/json", "RawMessage").Call(
+			return jen.Id("jsontext").Dot("Value").Call(
 				jen.Id(tool.Projected.SpecsPackageName).Dot(tool.Projected.SpecName).Dot("Result").Dot("Schema"),
 			)
 		}
@@ -858,7 +859,7 @@ func sdkServerHandlerSection(data *AdapterData) codegen.Section {
 								jen.Id("inputResponses").Op("=").Id("req").Dot("Params").Dot("InputResponses"),
 								jen.Id("requestState").Op("=").Id("req").Dot("Params").Dot("RequestState"),
 								jen.If(jen.Id("req").Dot("Params").Dot("Arguments").Op("!=").Nil()).Block(
-									jen.List(jen.Id("args"), jen.Id("err")).Op(":=").Qual("encoding/json", "Marshal").Call(jen.Id("req").Dot("Params").Dot("Arguments")),
+									jen.List(jen.Id("args"), jen.Id("err")).Op(":=").Id("json").Dot("Marshal").Call(jen.Id("req").Dot("Params").Dot("Arguments")),
 									jen.If(jen.Id("err").Op("!=").Nil()).Block(jen.Return(jen.Nil(), jen.Id("err"))),
 									jen.Id("payload").Dot("Arguments").Op("=").Id("mcpJSONFromRaw").Call(jen.Id("args")),
 								),
@@ -1329,16 +1330,16 @@ func emitSDKHelpers(stmt *jen.Statement) {
 				jen.Case(jen.Map(jen.String()).Any()).Block(
 					jen.Return(jen.Id("mcpsdk").Dot("Meta").Call(jen.Id("typed"))),
 				),
-				jen.Case(jen.Qual("encoding/json", "RawMessage")).Block(
+				jen.Case(jen.Id("jsontext").Dot("Value")).Block(
 					jen.Var().Id("meta").Map(jen.String()).Any(),
-					jen.If(jen.Id("err").Op(":=").Qual("encoding/json", "Unmarshal").Call(jen.Id("typed"), jen.Op("&").Id("meta")), jen.Id("err").Op("!=").Nil()).Block(
+					jen.If(jen.Id("err").Op(":=").Id("json").Dot("Unmarshal").Call(jen.Id("typed"), jen.Op("&").Id("meta")), jen.Id("err").Op("!=").Nil()).Block(
 						jen.Return(jen.Nil()),
 					),
 					jen.Return(jen.Id("mcpsdk").Dot("Meta").Call(jen.Id("meta"))),
 				),
 				jen.Case(jen.Index().Byte()).Block(
 					jen.Var().Id("meta").Map(jen.String()).Any(),
-					jen.If(jen.Id("err").Op(":=").Qual("encoding/json", "Unmarshal").Call(jen.Id("typed"), jen.Op("&").Id("meta")), jen.Id("err").Op("!=").Nil()).Block(
+					jen.If(jen.Id("err").Op(":=").Id("json").Dot("Unmarshal").Call(jen.Id("typed"), jen.Op("&").Id("meta")), jen.Id("err").Op("!=").Nil()).Block(
 						jen.Return(jen.Nil()),
 					),
 					jen.Return(jen.Id("mcpsdk").Dot("Meta").Call(jen.Id("meta"))),

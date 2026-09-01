@@ -2,7 +2,8 @@ package pulse
 
 import (
 	"context"
-	"encoding/json"
+	"encoding/json/jsontext"
+	"encoding/json/v2"
 	"errors"
 	"fmt"
 	"sync"
@@ -63,7 +64,7 @@ type (
 		run string
 		s   string
 		k   string
-		b   json.RawMessage
+		b   jsontext.Value
 	}
 )
 
@@ -335,12 +336,12 @@ func (s *Subscriber) reportTerminalError(errs chan error, err error) {
 // runtime stream event. Returns an error if the payload is malformed.
 func decodeEnvelope(payload []byte) (stream.Event, error) {
 	var env struct {
-		Type      string          `json:"type"`
-		EventKey  string          `json:"event_key"`
-		RunID     string          `json:"run_id"`
-		SessionID string          `json:"session_id"`
-		Timestamp time.Time       `json:"timestamp"`
-		Payload   json.RawMessage `json:"payload"`
+		Type      string         `json:"type"`
+		EventKey  string         `json:"event_key"`
+		RunID     string         `json:"run_id"`
+		SessionID string         `json:"session_id"`
+		Timestamp time.Time      `json:"timestamp"`
+		Payload   jsontext.Value `json:"payload"`
 	}
 	if err := json.Unmarshal(payload, &env); err != nil {
 		return nil, err

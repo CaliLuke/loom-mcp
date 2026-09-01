@@ -3,7 +3,7 @@ package runtime
 import (
 	"bytes"
 	"context"
-	"encoding/json"
+	"encoding/json/jsontext"
 	"errors"
 	"fmt"
 	"time"
@@ -302,7 +302,7 @@ func normalizeTranscriptRawJSON(messages []*model.Message) {
 
 func normalizeAnyRawMessage(value any) any {
 	switch typed := value.(type) {
-	case json.RawMessage:
+	case jsontext.Value:
 		if len(bytes.TrimSpace(typed)) == 0 {
 			return nil
 		}

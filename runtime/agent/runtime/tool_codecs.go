@@ -2,7 +2,7 @@ package runtime
 
 import (
 	"context"
-	"encoding/json"
+	"encoding/json/jsontext"
 	"fmt"
 
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent"
@@ -12,7 +12,7 @@ import (
 // marshalToolValue encodes a tool result using the registered result codec and,
 // for bounded tools, projects canonical bounds metadata into the public JSON
 // contract emitted by the runtime.
-func (r *Runtime) marshalToolValue(ctx context.Context, toolName tools.Ident, value any, bounds *agent.Bounds) (json.RawMessage, error) {
+func (r *Runtime) marshalToolValue(ctx context.Context, toolName tools.Ident, value any, bounds *agent.Bounds) (jsontext.Value, error) {
 	if value == nil {
 		return nil, nil
 	}
@@ -26,11 +26,11 @@ func (r *Runtime) marshalToolValue(ctx context.Context, toolName tools.Ident, va
 		r.logger.Warn(ctx, "tool result encode failed", "tool", toolName, "payload", false, "err", err)
 		return nil, err
 	}
-	return json.RawMessage(projected), nil
+	return jsontext.Value(projected), nil
 }
 
 // unmarshalToolValue decodes a tool value using the registered codec or standard JSON.
-func (r *Runtime) unmarshalToolValue(ctx context.Context, toolName tools.Ident, raw json.RawMessage, payload bool) (any, error) {
+func (r *Runtime) unmarshalToolValue(ctx context.Context, toolName tools.Ident, raw jsontext.Value, payload bool) (any, error) {
 	if len(raw) == 0 {
 		return nil, nil
 	}

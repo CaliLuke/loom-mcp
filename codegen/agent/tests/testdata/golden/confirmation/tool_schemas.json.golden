@@ -11,16 +11,14 @@
       "payload": {
         "name": "DangerousWritePayload",
         "schema": {
-          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "additionalProperties": false,
           "properties": {
             "key": {
               "description": "Key to update.",
-              "example": "Dignissimos quo illum.",
               "type": "string"
             },
             "value": {
               "description": "New value.",
-              "example": "Nemo quia.",
               "type": "string"
             }
           },
@@ -34,16 +32,14 @@
       "result": {
         "name": "DangerousWriteResult",
         "schema": {
-          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "additionalProperties": false,
           "properties": {
             "key": {
               "description": "Key that was updated.",
-              "example": "Molestiae velit quam amet cupiditate non.",
               "type": "string"
             },
             "summary": {
               "description": "Summary of the update.",
-              "example": "Consequatur reprehenderit.",
               "type": "string"
             }
           },

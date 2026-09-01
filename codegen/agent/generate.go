@@ -549,7 +549,8 @@ func mcpExecutorFiles(agent *AgentData) []*codegen.File {
 		data := serviceToolsetFileData{PackageName: ts.PackageName, Agent: agent, Toolset: ts}
 		imports := []*codegen.ImportSpec{
 			{Path: "context"},
-			{Path: "encoding/json"},
+			{Name: "json", Path: "encoding/json/v2"},
+			{Name: "jsontext", Path: "encoding/json/jsontext"},
 			{Path: "strings"},
 			{Path: "github.com/CaliLuke/loom-mcp/v2/runtime/agent/planner"},
 			{Path: "github.com/CaliLuke/loom-mcp/v2/runtime/agent/runtime", Name: "runtime"},
@@ -683,7 +684,8 @@ func serviceExecutorFiles(agent *AgentData) []*codegen.File {
 		}
 		imports := []*codegen.ImportSpec{
 			{Path: "context"},
-			{Path: "encoding/json"},
+			{Name: "json", Path: "encoding/json/v2"},
+			{Name: "jsontext", Path: "encoding/json/jsontext"},
 			{Path: "fmt"},
 			{Path: "strings"},
 			{Path: "github.com/CaliLuke/loom-mcp/v2/runtime/agent/planner"},

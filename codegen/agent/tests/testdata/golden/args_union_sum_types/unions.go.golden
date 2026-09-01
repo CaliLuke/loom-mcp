@@ -7,7 +7,8 @@
 package union
 
 import (
-	"encoding/json"
+	jsontext "encoding/json/jsontext"
+	json "encoding/json/v2"
 	"fmt"
 	loom "github.com/CaliLuke/loom/pkg"
 )
@@ -126,8 +127,8 @@ func (u Value) MarshalJSON() ([]byte, error) {
 // UnmarshalJSON unmarshals the union from its canonical discriminated JSON shape.
 func (u *Value) UnmarshalJSON(data []byte) error {
 	var raw struct {
-		Type  string          `json:"type"`
-		Value json.RawMessage `json:"value"`
+		Type  string         `json:"type"`
+		Value jsontext.Value `json:"value"`
 	}
 	if err := json.Unmarshal(data, &raw); err != nil {
 		return err

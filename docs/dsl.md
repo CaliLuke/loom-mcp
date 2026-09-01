@@ -461,7 +461,7 @@ When `ResourceIdentifier(...)` is declared, two more helpers are generated:
   the consumer's verifier so tokens whose `aud` claim does not match the
   pinned identifier are rejected with `ErrAudienceMismatch`. The claim is
   read from `TokenInfo.Extra["aud"]` and accepted as `string`, `[]string`,
-  or `[]any` (matching how `encoding/json` decodes a JWT `aud` array).
+  or `[]any` (matching how JSON decoding represents a JWT `aud` array).
   Missing or wrong-typed claims fail closed.
 - `ErrAudienceMismatch` — wraps `mcpauth.ErrInvalidToken` so
   `mcpauth.RequireBearerToken` rejects the request. The current

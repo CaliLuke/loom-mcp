@@ -6,7 +6,8 @@ package openai
 import (
 	"context"
 	"encoding/base64"
-	"encoding/json"
+	"encoding/json/jsontext"
+	"encoding/json/v2"
 	"errors"
 	"fmt"
 	"net/http"
@@ -600,7 +601,7 @@ func parseToolArguments(raw string) (rawjson.Message, error) {
 	if len(data) == 0 {
 		return nil, nil
 	}
-	if !json.Valid(data) {
+	if !jsontext.Value(data).IsValid() {
 		return nil, errors.New("invalid JSON")
 	}
 	return rawjson.Message(data), nil
@@ -615,7 +616,7 @@ func marshalJSONValue(v any) ([]byte, error) {
 			return []byte("null"), nil
 		}
 		return val.RawMessage(), nil
-	case json.RawMessage:
+	case jsontext.Value:
 		if len(val) == 0 {
 			return []byte("null"), nil
 		}
@@ -637,7 +638,7 @@ func schemaMessage(name string, v any) (rawjson.Message, error) {
 	switch val := v.(type) {
 	case rawjson.Message:
 		return val, nil
-	case json.RawMessage:
+	case jsontext.Value:
 		return rawjson.Message(val), nil
 	case []byte:
 		return rawjson.Message(val), nil
@@ -656,7 +657,7 @@ func structuredOutputPayload(content []model.Message, output *model.StructuredOu
 	if text == "" {
 		return nil, fmt.Errorf("openai: structured output %q completed without content", output.Name)
 	}
-	if !json.Valid([]byte(text)) {
+	if !jsontext.Value(text).IsValid() {
 		return nil, fmt.Errorf("openai: structured output %q payload is not valid JSON", output.Name)
 	}
 	payload, err := canonicalizeStrictPayload(output.Schema, rawjson.Message(text))

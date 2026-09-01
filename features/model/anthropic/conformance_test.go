@@ -2,7 +2,8 @@ package anthropic
 
 import (
 	"context"
-	"encoding/json"
+	"encoding/json/jsontext"
+	"encoding/json/v2"
 	"errors"
 	"io"
 	"net/http"
@@ -56,7 +57,7 @@ func TestClientConformance(t *testing.T) {
 				Type:  anthropicContentTypeToolUse,
 				Name:  "lookup",
 				ID:    "tool-1",
-				Input: json.RawMessage("{"),
+				Input: jsontext.Value("{"),
 			}}}}
 			response, err := newClient(t, stub).Complete(context.Background(), request())
 			require.Nil(t, response)

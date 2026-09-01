@@ -1,13 +1,13 @@
 package codegen
 
 import (
-	"encoding/json"
+	"encoding/json/jsontext"
+	"encoding/json/v2"
 	"fmt"
 
 	"github.com/CaliLuke/loom/codegen"
 	"github.com/CaliLuke/loom/codegen/service"
 	goaexpr "github.com/CaliLuke/loom/expr"
-	"github.com/CaliLuke/loom/http/codegen/openapi"
 )
 
 // buildFieldDescriptions collects dotted field-path descriptions from the provided
@@ -126,65 +126,22 @@ func servicePkgAlias(svc *service.Data) string {
 	return svc.PkgName
 }
 
-// schemaForAttribute generates an OpenAPI JSON schema for the given attribute.
+// schemaForAttribute generates an inline JSON Schema for the given attribute.
 // It returns the schema as JSON bytes, or nil if the attribute is empty or
 // cannot be represented as a schema.
 func schemaForAttribute(att *goaexpr.AttributeExpr) ([]byte, error) {
 	if att == nil || att.Type == nil || att.Type == goaexpr.Empty {
 		return nil, nil
 	}
-	prev := openapi.Definitions
-	openapi.Definitions = make(map[string]*openapi.Schema)
-	defer func() { openapi.Definitions = prev }()
-	schema := openapi.AttributeTypeSchema(goaexpr.Root.API, att)
-	if schema == nil {
-		return nil, nil
-	}
-	if len(openapi.Definitions) > 0 {
-		schema.Defs = openapi.Definitions
-	}
-	// Prefer a concrete root schema: for user types, inline the referenced
-	// definition as the root so that the top-level contains "type":"object".
-	// Retain definitions to allow nested $ref resolution.
-	if ut, ok := att.Type.(goaexpr.UserType); ok {
-		// Compute type name
-		tname := ""
-		switch u := ut.(type) {
-		case *goaexpr.UserTypeExpr:
-			tname = u.TypeName
-		case *goaexpr.ResultTypeExpr:
-			tname = u.TypeName
-		}
-		if tname != "" {
-			if def, ok := openapi.Definitions[tname]; ok && def != nil {
-				return rootDefinitionJSON(def, tname, openapi.Definitions)
-			}
-		}
-	}
-	b, err := schema.JSON()
+	schema, err := goaexpr.InlineJSONSchema(att)
 	if err != nil {
-		return b, err
+		return nil, err
 	}
-	return b, nil
-}
-
-func rootDefinitionJSON(def *openapi.Schema, tname string, definitions map[string]*openapi.Schema) ([]byte, error) {
-	// Build a new definitions map excluding the root to avoid self-referential
-	// cycles during JSON marshaling.
-	if len(definitions) > 0 {
-		defs := make(map[string]*openapi.Schema, len(definitions))
-		for k, v := range definitions {
-			if k == tname {
-				continue
-			}
-			defs[k] = v
-		}
-		if len(defs) > 0 {
-			def.Defs = defs
-		}
+	canonical := jsontext.Value(schema)
+	if err := canonical.Canonicalize(); err != nil {
+		return nil, fmt.Errorf("canonicalize inline JSON Schema: %w", err)
 	}
-	// Marshal schema JSON directly (Goa emits 2020-12 + $defs).
-	return def.JSON()
+	return []byte(canonical), nil
 }
 
 // authoredExampleForAttribute returns the last explicit Example(...) declared on
@@ -237,7 +194,7 @@ func normalizeExampleValue(att *goaexpr.AttributeExpr, v any, path string) ([]by
 	if err != nil {
 		return nil, err
 	}
-	data, err := json.Marshal(normalized)
+	data, err := json.Marshal(normalized, json.Deterministic(true))
 	if err != nil {
 		return nil, err
 	}

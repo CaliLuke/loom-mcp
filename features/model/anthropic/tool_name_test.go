@@ -2,7 +2,7 @@ package anthropic
 
 import (
 	"context"
-	"encoding/json"
+	"encoding/json/jsontext"
 	"strings"
 	"testing"
 
@@ -63,7 +63,7 @@ func TestEncodeToolsLongNameRoundTrip(t *testing.T) {
 		{
 			Name:        canonical,
 			Description: "long-name tool",
-			InputSchema: json.RawMessage(`{"type":"object"}`),
+			InputSchema: jsontext.Value(`{"type":"object"}`),
 		},
 	}
 
@@ -80,7 +80,7 @@ func TestEncodeToolsLongNameRoundTrip(t *testing.T) {
 				Type:  anthropicContentTypeToolUse,
 				Name:  providerName,
 				ID:    "tool-1",
-				Input: json.RawMessage(`{"value":1}`),
+				Input: jsontext.Value(`{"value":1}`),
 			},
 		},
 	}, providerToCanonical, newToolUseIDCodec(), "claude", model.ModelClassDefault)

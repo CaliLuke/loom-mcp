@@ -1,7 +1,7 @@
 package transcript
 
 import (
-	"encoding/json"
+	"encoding/json/v2"
 	"testing"
 
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/model"
@@ -88,7 +88,7 @@ func TestMessageJSONRejectsMalformedParts(t *testing.T) {
 		payload string
 		want    string
 	}{
-		{name: "invalid JSON", payload: `{`, want: "unexpected end"},
+		{name: "invalid JSON", payload: `{`, want: "unexpected EOF"},
 		{name: "empty part", payload: `{"Role":"assistant","Parts":[{}]}`, want: "empty part payload"},
 		{name: "unknown part", payload: `{"Role":"assistant","Parts":[{"Other":true}]}`, want: "unknown part shape"},
 		{name: "tool result without ID", payload: `{"Role":"user","Parts":[{"ToolUseID":"","Content":"result"}]}`, want: "requires ToolUseID"},

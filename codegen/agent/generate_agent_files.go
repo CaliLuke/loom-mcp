@@ -1,7 +1,8 @@
 package codegen
 
 import (
-	"encoding/json"
+	"encoding/json/jsontext"
+	"encoding/json/v2"
 	"fmt"
 	"path/filepath"
 	"slices"
@@ -137,8 +138,8 @@ func agentSpecsJSONFile(agent *AgentData, specsCache *toolSpecsDataCache) (*code
 	}
 
 	type typeSchema struct {
-		Name   string          `json:"name"`
-		Schema json.RawMessage `json:"schema,omitempty"`
+		Name   string         `json:"name"`
+		Schema jsontext.Value `json:"schema,omitempty"`
 	}
 
 	type confirmationSchema struct {
@@ -206,7 +207,7 @@ func agentSpecsJSONFile(agent *AgentData, specsCache *toolSpecsDataCache) (*code
 				Name: td.TypeName,
 			}
 			if len(td.SchemaJSON) > 0 {
-				ts.Schema = json.RawMessage(td.SchemaJSON)
+				ts.Schema = jsontext.Value(td.SchemaJSON)
 			}
 			entry.Payload = &ts
 		}
@@ -216,7 +217,7 @@ func agentSpecsJSONFile(agent *AgentData, specsCache *toolSpecsDataCache) (*code
 				Name: td.TypeName,
 			}
 			if len(td.SchemaJSON) > 0 {
-				ts.Schema = json.RawMessage(td.SchemaJSON)
+				ts.Schema = jsontext.Value(td.SchemaJSON)
 			}
 			entry.Result = &ts
 		}
@@ -231,7 +232,7 @@ func agentSpecsJSONFile(agent *AgentData, specsCache *toolSpecsDataCache) (*code
 					Name: sd.Type.TypeName,
 				}
 				if len(sd.Type.SchemaJSON) > 0 {
-					ts.Schema = json.RawMessage(sd.Type.SchemaJSON)
+					ts.Schema = jsontext.Value(sd.Type.SchemaJSON)
 				}
 				schemas = append(schemas, serverDataSchema{
 					Kind:        sd.Kind,
@@ -260,7 +261,7 @@ func agentSpecsJSONFile(agent *AgentData, specsCache *toolSpecsDataCache) (*code
 		return nil, nil
 	}
 
-	payload, err := json.MarshalIndent(out, "", "  ")
+	payload, err := json.Marshal(out, json.Deterministic(true), jsontext.WithIndent("  "))
 	if err != nil {
 		return nil, fmt.Errorf("loom-mcp: marshal tool schemas for agent %q: %w", agent.Name, err)
 	}

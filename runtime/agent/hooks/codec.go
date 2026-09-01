@@ -1,7 +1,7 @@
 package hooks
 
 import (
-	"encoding/json"
+	"encoding/json/v2"
 	"errors"
 	"fmt"
 	"reflect"
@@ -54,7 +54,7 @@ type (
 		ServerData       rawjson.Message          `json:"server_data,omitempty"`
 		ResultPreview    string                   `json:"result_preview,omitempty"`
 		Bounds           *agent.Bounds            `json:"bounds,omitempty"`
-		Duration         time.Duration            `json:"duration"`
+		Duration         int64                    `json:"duration"`
 		Telemetry        *telemetry.ToolTelemetry `json:"telemetry,omitempty"`
 		RetryHint        *planner.RetryHint       `json:"retry_hint,omitempty"`
 		Error            *toolerrors.ToolError    `json:"error,omitempty"`
@@ -124,7 +124,7 @@ func encodeToolResultPayload(e *ToolResultReceivedEvent) (rawjson.Message, error
 		ServerData:       e.ServerData,
 		ResultPreview:    e.ResultPreview,
 		Bounds:           e.Bounds,
-		Duration:         e.Duration,
+		Duration:         int64(e.Duration),
 		Telemetry:        e.Telemetry,
 		RetryHint:        e.RetryHint,
 		Error:            e.Error,
@@ -133,7 +133,7 @@ func encodeToolResultPayload(e *ToolResultReceivedEvent) (rawjson.Message, error
 }
 
 func marshalHookPayload(label string, payload any) (rawjson.Message, error) {
-	b, err := json.Marshal(payload)
+	b, err := json.Marshal(payload, json.FormatNilMapAsNull(true), json.FormatNilSliceAsNull(true))
 	if err != nil {
 		return nil, fmt.Errorf("marshal %s payload: %w", label, err)
 	}
@@ -394,7 +394,7 @@ func decodeToolResultReceivedEvent(input *ActivityInput) (Event, bool, error) {
 	if err := decodeHookPayload(input, &p); err != nil {
 		return nil, false, err
 	}
-	ev := NewToolResultReceivedEvent(input.RunID, input.AgentID, input.SessionID, p.ToolName, p.ToolCallID, p.ParentToolCallID, p.Result, p.ResultJSON, p.ServerData, p.ResultPreview, p.Bounds, p.Duration, p.Telemetry, p.RetryHint, p.Error)
+	ev := NewToolResultReceivedEvent(input.RunID, input.AgentID, input.SessionID, p.ToolName, p.ToolCallID, p.ParentToolCallID, p.Result, p.ResultJSON, p.ServerData, p.ResultPreview, p.Bounds, time.Duration(p.Duration), p.Telemetry, p.RetryHint, p.Error)
 	ev.Artifacts = p.Artifacts
 	return ev, true, nil
 }

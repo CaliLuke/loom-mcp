@@ -7,7 +7,8 @@ package bedrock
 
 import (
 	"context"
-	"encoding/json"
+	"encoding/json/jsontext"
+	"encoding/json/v2"
 	"errors"
 	"fmt"
 	"net/http"
@@ -816,7 +817,7 @@ func toDocument(ctx context.Context, schema any, logger telemetry.Logger) docume
 	switch v := schema.(type) {
 	case document.Interface:
 		return v
-	case json.RawMessage:
+	case jsontext.Value:
 		var decoded any
 		if len(v) == 0 {
 			return lazyDocument(map[string]any{bedrockSchemaTypeKey: bedrockObjectType})

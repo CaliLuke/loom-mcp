@@ -10,7 +10,8 @@ package mcpassistant
 import (
 	"bytes"
 	"context"
-	"encoding/json"
+	jsontext "encoding/json/jsontext"
+	json "encoding/json/v2"
 	"errors"
 	"fmt"
 	"io"
@@ -81,7 +82,7 @@ type (
 	ToolCallInterceptorInfo interface {
 		loom.InterceptorInfo
 		Tool() string
-		RawArguments() json.RawMessage
+		RawArguments() jsontext.Value
 	}
 
 	// ToolCallHandler is the generated MCP tool-call dispatcher.
@@ -95,7 +96,7 @@ type toolCallInterceptorInfo struct {
 	method     string
 	tool       string
 	rawPayload any
-	rawArgs    json.RawMessage
+	rawArgs    jsontext.Value
 }
 
 func (i *toolCallInterceptorInfo) Service() string {
@@ -113,7 +114,7 @@ func (i *toolCallInterceptorInfo) CallType() loom.InterceptorCallType {
 func (i *toolCallInterceptorInfo) RawPayload() any {
 	return i.rawPayload
 }
-func (i *toolCallInterceptorInfo) RawArguments() json.RawMessage {
+func (i *toolCallInterceptorInfo) RawArguments() jsontext.Value {
 	return i.rawArgs
 }
 
@@ -186,27 +187,27 @@ func NewMCPAdapter(service assistant.Service, promptProvider PromptProvider, opt
 	nameToURI := map[string]string{"documents": "doc://list", "system_info": "system://info", "elicitation_context": "elicitation://context", "conversation_history": "conversation://history", "figma_design_system": "figma://design-system/mobile-checkout"}
 	return &MCPAdapter{service: service, initializedSessions: make(map[string]time.Time), sessionPrincipals: make(map[string]string), opts: opts, tracer: tracer, callCounter: callCounter, errorCounter: errorCounter, durationHistogram: durationHistogram, promptProvider: promptProvider, resourceNameToURI: nameToURI}
 }
-func mcpJSONRaw(value loom.Nullable[any]) (json.RawMessage, error) {
+func mcpJSONRaw(value loom.Nullable[any]) (jsontext.Value, error) {
 	if !value.Present() {
 		return nil, nil
 	}
 	if value.IsNull() {
-		return json.RawMessage("null"), nil
+		return jsontext.Value("null"), nil
 	}
 	actual, ok := value.Value()
 	if !ok {
 		return nil, errors.New("present MCP JSON value has no concrete value")
 	}
-	if raw, ok := actual.(json.RawMessage); ok {
-		return append(json.RawMessage(nil), raw...), nil
+	if raw, ok := actual.(jsontext.Value); ok {
+		return append(jsontext.Value(nil), raw...), nil
 	}
 	raw, err := json.Marshal(actual)
 	if err != nil {
 		return nil, err
 	}
-	return json.RawMessage(raw), nil
+	return jsontext.Value(raw), nil
 }
-func mcpJSONFromRaw(raw json.RawMessage) loom.Nullable[any] {
+func mcpJSONFromRaw(raw jsontext.Value) loom.Nullable[any] {
 	trimmed := bytes.TrimSpace(raw)
 	if len(trimmed) == 0 {
 		return loom.Nullable[any]{}
@@ -214,7 +215,7 @@ func mcpJSONFromRaw(raw json.RawMessage) loom.Nullable[any] {
 	if bytes.Equal(trimmed, []byte("null")) {
 		return loom.NullValue[any]()
 	}
-	copied := append(json.RawMessage(nil), raw...)
+	copied := append(jsontext.Value(nil), raw...)
 	return loom.NullableValue[any](copied)
 }
 func mcpJSONAny(value loom.Nullable[any]) any {
@@ -368,7 +369,7 @@ func (a *MCPAdapter) mapError(err error) error {
 	}
 	return err
 }
-func (a *MCPAdapter) toolCallInfo(p *ToolsCallPayload, rawArgs json.RawMessage) ToolCallInterceptorInfo {
+func (a *MCPAdapter) toolCallInfo(p *ToolsCallPayload, rawArgs jsontext.Value) ToolCallInterceptorInfo {
 	info := &toolCallInterceptorInfo{
 		method:     "tools/call",
 		rawPayload: p,
@@ -463,7 +464,7 @@ func stringPtr(s string) *string {
 	return &s
 }
 func isLikelyJSON(s string) bool {
-	return json.Valid([]byte(s))
+	return jsontext.Value(s).IsValid()
 }
 
 // buildContentItem returns a ContentItem honoring StructuredStreamJSON option.
@@ -541,7 +542,7 @@ func formatToolErrorText(err error) string {
 	return fmt.Sprintf("[%s] %s\nRecovery: %s", code, message, recovery)
 }
 func (a *MCPAdapter) safeMCPError(err error, defaultCode string, fallbackMessage string) error {
-	if mcpruntime.IsInputRequired(err) {
+	if mcpruntime.IsInputRequired(err) || mcpruntime.IsInvalidClientInput(err) {
 		return err
 	}
 	if err == nil {
@@ -694,30 +695,19 @@ func (c *toolCallResultCollector) result() *ToolsCallResult {
 	return merged
 }
 func decodeMCPPayloadStrict(data []byte, payload any) error {
-	dec := json.NewDecoder(bytes.NewReader(data))
-	dec.DisallowUnknownFields()
-	if err := dec.Decode(payload); err != nil {
-		return err
-	}
-	if err := dec.Decode(&struct{}{}); err != io.EOF {
-		if err == nil {
-			return fmt.Errorf("unexpected trailing JSON data")
-		}
-		return err
-	}
-	return nil
+	return json.Unmarshal(data, payload, json.RejectUnknownMembers(true))
 }
-func decodeMCPPayloadFields(data []byte) (map[string]json.RawMessage, error) {
-	var fields map[string]json.RawMessage
+func decodeMCPPayloadFields(data []byte) (map[string]jsontext.Value, error) {
+	var fields map[string]jsontext.Value
 	if err := json.Unmarshal(data, &fields); err != nil {
 		return nil, err
 	}
 	if fields == nil {
-		fields = make(map[string]json.RawMessage)
+		fields = make(map[string]jsontext.Value)
 	}
 	return fields, nil
 }
-func validateMCPPayloadRequired(fields map[string]json.RawMessage, field string) error {
+func validateMCPPayloadRequired(fields map[string]jsontext.Value, field string) error {
 	raw, ok := fields[field]
 	if !ok {
 		return loom.WithErrorRemedy(loom.PermanentError("invalid_params", "Missing required field: %s", field), &loom.ErrorRemedy{
@@ -734,7 +724,7 @@ func validateMCPPayloadRequired(fields map[string]json.RawMessage, field string)
 	}
 	return nil
 }
-func validateMCPPayloadEnum(fields map[string]json.RawMessage, field string, optional bool, allowed ...string) error {
+func validateMCPPayloadEnum(fields map[string]jsontext.Value, field string, optional bool, allowed ...string) error {
 	raw, ok := fields[field]
 	if !ok {
 		return nil
@@ -768,8 +758,8 @@ type toolSearchPayload struct {
 	Tags           []string `json:"tags,omitempty"`
 }
 type toolCallProxyPayload struct {
-	Name      string          `json:"name"`
-	Arguments json.RawMessage `json:"arguments,omitempty"`
+	Name      string         `json:"name"`
+	Arguments jsontext.Value `json:"arguments,omitempty"`
 }
 type toolSearchResult struct {
 	Tools        []toolSearchDescriptor `json:"tools"`
@@ -779,21 +769,21 @@ type toolSearchResult struct {
 	Pattern      string                 `json:"pattern,omitempty"`
 }
 type toolSearchDescriptor struct {
-	Name              string          `json:"name"`
-	Title             string          `json:"title,omitempty"`
-	Description       string          `json:"description,omitempty"`
-	InputSchema       json.RawMessage `json:"inputSchema,omitempty"`
-	OutputSchema      json.RawMessage `json:"outputSchema,omitempty"`
-	Annotations       json.RawMessage `json:"annotations,omitempty"`
-	Meta              json.RawMessage `json:"_meta,omitempty"`
-	Icons             []*Icon         `json:"icons,omitempty"`
-	Category          string          `json:"category,omitempty"`
-	Tags              []string        `json:"tags,omitempty"`
-	Keywords          []string        `json:"keywords,omitempty"`
-	WhyMatched        []string        `json:"why_matched,omitempty"`
-	CallToolName      string          `json:"call_tool_name,omitempty"`
-	CallToolArguments json.RawMessage `json:"call_tool_arguments,omitempty"`
-	CallToolJSON      string          `json:"call_tool_json,omitempty"`
+	Name              string         `json:"name"`
+	Title             string         `json:"title,omitempty"`
+	Description       string         `json:"description,omitempty"`
+	InputSchema       jsontext.Value `json:"inputSchema,omitempty"`
+	OutputSchema      jsontext.Value `json:"outputSchema,omitempty"`
+	Annotations       jsontext.Value `json:"annotations,omitempty"`
+	Meta              jsontext.Value `json:"_meta,omitempty"`
+	Icons             []*Icon        `json:"icons,omitempty"`
+	Category          string         `json:"category,omitempty"`
+	Tags              []string       `json:"tags,omitempty"`
+	Keywords          []string       `json:"keywords,omitempty"`
+	WhyMatched        []string       `json:"why_matched,omitempty"`
+	CallToolName      string         `json:"call_tool_name,omitempty"`
+	CallToolArguments jsontext.Value `json:"call_tool_arguments,omitempty"`
+	CallToolJSON      string         `json:"call_tool_json,omitempty"`
 }
 type toolSearchCandidate struct {
 	tool  *ToolInfo
@@ -822,91 +812,91 @@ func (a *MCPAdapter) generatedToolCatalog() []*ToolInfo {
 			Sizes:    []string{"48x48"},
 			Src:      "https://assistant.example.com/icons/analyze-sentiment.png",
 		}},
-		InputSchema:  json.RawMessage([]byte("{\"type\":\"object\",\"required\":[\"text\"],\"properties\":{\"text\":{\"type\":\"string\",\"description\":\"Input text to analyze\"}},\"additionalProperties\":false}")),
-		Meta:         json.RawMessage([]byte("{\"com.github.caliluke.loom-mcp/discovery\":{\"category\":\"analysis\",\"keywords\":[\"tone\",\"emotion\",\"polarity\"],\"tags\":[\"sentiment\",\"nlp\"]}}")),
+		InputSchema:  jsontext.Value([]byte("{\"type\":\"object\",\"required\":[\"text\"],\"properties\":{\"text\":{\"type\":\"string\",\"description\":\"Input text to analyze\"}},\"additionalProperties\":false}")),
+		Meta:         jsontext.Value([]byte("{\"com.github.caliluke.loom-mcp/discovery\":{\"tags\":[\"sentiment\",\"nlp\"],\"keywords\":[\"tone\",\"emotion\",\"polarity\"],\"category\":\"analysis\"}}")),
 		Name:         "analyze_sentiment",
-		OutputSchema: json.RawMessage([]byte("{\"type\":\"object\",\"properties\":{\"sentiment\":{\"type\":\"string\",\"description\":\"Detected sentiment\"}},\"additionalProperties\":false}")),
+		OutputSchema: jsontext.Value([]byte("{\"type\":\"object\",\"properties\":{\"sentiment\":{\"type\":\"string\",\"description\":\"Detected sentiment\"}},\"additionalProperties\":false}")),
 		Title:        stringPtr("Analyze Sentiment"),
 	}, &ToolInfo{
 		Description:  stringPtr("Extract keywords from text"),
-		InputSchema:  json.RawMessage([]byte("{\"type\":\"object\",\"required\":[\"text\"],\"properties\":{\"text\":{\"type\":\"string\",\"description\":\"Input text\"}},\"additionalProperties\":false}")),
-		Meta:         json.RawMessage([]byte("{\"com.github.caliluke.loom-mcp/discovery\":{\"category\":\"analysis\",\"keywords\":[\"terms\",\"phrases\",\"entities\"],\"tags\":[\"keywords\",\"nlp\"]}}")),
+		InputSchema:  jsontext.Value([]byte("{\"type\":\"object\",\"required\":[\"text\"],\"properties\":{\"text\":{\"type\":\"string\",\"description\":\"Input text\"}},\"additionalProperties\":false}")),
+		Meta:         jsontext.Value([]byte("{\"com.github.caliluke.loom-mcp/discovery\":{\"tags\":[\"keywords\",\"nlp\"],\"keywords\":[\"terms\",\"phrases\",\"entities\"],\"category\":\"analysis\"}}")),
 		Name:         "extract_keywords",
-		OutputSchema: json.RawMessage([]byte("{\"type\":\"object\",\"properties\":{\"keywords\":{\"type\":\"array\",\"description\":\"Extracted keywords\",\"items\":{\"type\":\"string\"}}},\"additionalProperties\":false}")),
+		OutputSchema: jsontext.Value([]byte("{\"type\":\"object\",\"properties\":{\"keywords\":{\"type\":\"array\",\"description\":\"Extracted keywords\",\"items\":{\"type\":\"string\"}}},\"additionalProperties\":false}")),
 		Title:        stringPtr("Extract Keywords"),
 	}, &ToolInfo{
 		Description:  stringPtr("Summarize text"),
-		InputSchema:  json.RawMessage([]byte("{\"type\":\"object\",\"required\":[\"text\"],\"properties\":{\"text\":{\"type\":\"string\",\"description\":\"Input text to summarize\"}},\"additionalProperties\":false}")),
+		InputSchema:  jsontext.Value([]byte("{\"type\":\"object\",\"required\":[\"text\"],\"properties\":{\"text\":{\"type\":\"string\",\"description\":\"Input text to summarize\"}},\"additionalProperties\":false}")),
 		Name:         "summarize_text",
-		OutputSchema: json.RawMessage([]byte("{\"type\":\"object\",\"properties\":{\"summary\":{\"type\":\"string\",\"description\":\"Summary\"}},\"additionalProperties\":false}")),
+		OutputSchema: jsontext.Value([]byte("{\"type\":\"object\",\"properties\":{\"summary\":{\"type\":\"string\",\"description\":\"Summary\"}},\"additionalProperties\":false}")),
 		Title:        stringPtr("Summarize Text"),
 	}, &ToolInfo{
 		Description:  stringPtr("Search knowledge base"),
-		InputSchema:  json.RawMessage([]byte("{\"type\":\"object\",\"required\":[\"query\"],\"properties\":{\"limit\":{\"type\":\"integer\",\"description\":\"Maximum number of results\"},\"query\":{\"type\":\"string\",\"description\":\"Search query\"}},\"additionalProperties\":false}")),
-		Meta:         json.RawMessage([]byte("{\"com.github.caliluke.loom-mcp/discovery\":{\"category\":\"knowledge\",\"keywords\":[\"lookup\",\"documents\",\"knowledge\"],\"tags\":[\"search\",\"retrieval\"]}}")),
+		InputSchema:  jsontext.Value([]byte("{\"type\":\"object\",\"required\":[\"query\"],\"properties\":{\"limit\":{\"type\":\"integer\",\"description\":\"Maximum number of results\"},\"query\":{\"type\":\"string\",\"description\":\"Search query\"}},\"additionalProperties\":false}")),
+		Meta:         jsontext.Value([]byte("{\"com.github.caliluke.loom-mcp/discovery\":{\"category\":\"knowledge\",\"tags\":[\"search\",\"retrieval\"],\"keywords\":[\"lookup\",\"documents\",\"knowledge\"]}}")),
 		Name:         "search",
-		OutputSchema: json.RawMessage([]byte("{\"type\":\"object\",\"properties\":{\"results\":{\"type\":\"array\",\"description\":\"Search results\",\"items\":{\"type\":\"string\"}}},\"additionalProperties\":false}")),
+		OutputSchema: jsontext.Value([]byte("{\"type\":\"object\",\"properties\":{\"results\":{\"type\":\"array\",\"description\":\"Search results\",\"items\":{\"type\":\"string\"}}},\"additionalProperties\":false}")),
 		Title:        stringPtr("Search Knowledge Base"),
 	}, &ToolInfo{
 		Description:  stringPtr("Search records with an optional query"),
-		InputSchema:  json.RawMessage([]byte("{\"type\":\"object\",\"properties\":{\"limit\":{\"type\":\"integer\",\"description\":\"Maximum number of records\"},\"query\":{\"type\":\"string\",\"description\":\"Search query\"}},\"additionalProperties\":false}")),
-		Meta:         json.RawMessage([]byte("{\"com.github.caliluke.loom-mcp/discovery\":{\"call_template_arguments\":{\"query\":\"login\"},\"category\":\"records\",\"keywords\":[\"lookup\",\"records\"],\"tags\":[\"search\",\"records\"]}}")),
+		InputSchema:  jsontext.Value([]byte("{\"type\":\"object\",\"properties\":{\"query\":{\"type\":\"string\",\"description\":\"Search query\"},\"limit\":{\"type\":\"integer\",\"description\":\"Maximum number of records\"}},\"additionalProperties\":false}")),
+		Meta:         jsontext.Value([]byte("{\"com.github.caliluke.loom-mcp/discovery\":{\"tags\":[\"search\",\"records\"],\"keywords\":[\"lookup\",\"records\"],\"call_template_arguments\":{\"query\":\"login\"},\"category\":\"records\"}}")),
 		Name:         "search_records",
-		OutputSchema: json.RawMessage([]byte("{\"type\":\"object\",\"properties\":{\"results\":{\"type\":\"array\",\"description\":\"Record results\",\"items\":{\"type\":\"string\"}}},\"additionalProperties\":false}")),
+		OutputSchema: jsontext.Value([]byte("{\"type\":\"object\",\"properties\":{\"results\":{\"type\":\"array\",\"description\":\"Record results\",\"items\":{\"type\":\"string\"}}},\"additionalProperties\":false}")),
 		Title:        stringPtr("Search Records"),
 	}, &ToolInfo{
 		Description:  stringPtr("Execute code"),
-		InputSchema:  json.RawMessage([]byte("{\"type\":\"object\",\"required\":[\"language\",\"code\"],\"properties\":{\"code\":{\"type\":\"string\",\"description\":\"Code to execute\"},\"language\":{\"type\":\"string\",\"description\":\"Language to execute\",\"enum\":[\"python\",\"javascript\"]}},\"additionalProperties\":false}")),
+		InputSchema:  jsontext.Value([]byte("{\"type\":\"object\",\"required\":[\"language\",\"code\"],\"properties\":{\"language\":{\"type\":\"string\",\"description\":\"Language to execute\",\"enum\":[\"python\",\"javascript\"]},\"code\":{\"type\":\"string\",\"description\":\"Code to execute\"}},\"additionalProperties\":false}")),
 		Name:         "execute_code",
-		OutputSchema: json.RawMessage([]byte("{\"type\":\"object\",\"properties\":{\"output\":{\"type\":\"string\",\"description\":\"Execution output\"}},\"additionalProperties\":false}")),
+		OutputSchema: jsontext.Value([]byte("{\"type\":\"object\",\"properties\":{\"output\":{\"type\":\"string\",\"description\":\"Execution output\"}},\"additionalProperties\":false}")),
 		Title:        stringPtr("Execute Code"),
 	}, &ToolInfo{
 		Description:  stringPtr("Process a batch of items"),
-		InputSchema:  json.RawMessage([]byte("{\"type\":\"object\",\"required\":[\"items\"],\"properties\":{\"blob\":{\"type\":\"string\",\"description\":\"Base64 blob\"},\"format\":{\"type\":\"string\",\"description\":\"Output format\",\"enum\":[\"json\",\"text\",\"blob\",\"uri\"]},\"items\":{\"type\":\"array\",\"description\":\"Items to process\",\"items\":{\"type\":\"string\"}},\"mimeType\":{\"type\":\"string\",\"description\":\"MIME type\"},\"uri\":{\"type\":\"string\",\"description\":\"Resource URI\"}},\"additionalProperties\":false}")),
+		InputSchema:  jsontext.Value([]byte("{\"type\":\"object\",\"required\":[\"items\"],\"properties\":{\"items\":{\"type\":\"array\",\"description\":\"Items to process\",\"items\":{\"type\":\"string\"}},\"format\":{\"type\":\"string\",\"description\":\"Output format\",\"enum\":[\"json\",\"text\",\"blob\",\"uri\"]},\"blob\":{\"type\":\"string\",\"description\":\"Base64 blob\"},\"uri\":{\"type\":\"string\",\"description\":\"Resource URI\"},\"mimeType\":{\"type\":\"string\",\"description\":\"MIME type\"}},\"additionalProperties\":false}")),
 		Name:         "process_batch",
-		OutputSchema: json.RawMessage([]byte("{\"type\":\"object\",\"properties\":{\"ok\":{\"type\":\"boolean\",\"description\":\"Operation status\"}},\"additionalProperties\":false}")),
+		OutputSchema: jsontext.Value([]byte("{\"type\":\"object\",\"properties\":{\"ok\":{\"type\":\"boolean\",\"description\":\"Operation status\"}},\"additionalProperties\":false}")),
 		Title:        stringPtr("Process Batch"),
 	}, &ToolInfo{
 		Description:  stringPtr("Report deterministic progress to the connected MCP client"),
-		InputSchema:  json.RawMessage([]byte("{\"type\":\"object\",\"properties\":{},\"additionalProperties\":false}")),
+		InputSchema:  jsontext.Value([]byte("{\"type\":\"object\",\"properties\":{},\"additionalProperties\":false}")),
 		Name:         "report_progress",
-		OutputSchema: json.RawMessage([]byte("{\"type\":\"object\",\"required\":[\"completed\"],\"properties\":{\"completed\":{\"type\":\"boolean\",\"description\":\"Whether all progress updates were sent\"}},\"additionalProperties\":false}")),
+		OutputSchema: jsontext.Value([]byte("{\"type\":\"object\",\"required\":[\"completed\"],\"properties\":{\"completed\":{\"type\":\"boolean\",\"description\":\"Whether all progress updates were sent\"}},\"additionalProperties\":false}")),
 		Title:        stringPtr("Report Progress"),
 	}, &ToolInfo{
 		Description:  stringPtr("Return multiple content items"),
-		InputSchema:  json.RawMessage([]byte("{\"type\":\"object\",\"required\":[\"count\"],\"properties\":{\"count\":{\"type\":\"integer\",\"description\":\"Number of content items to return\"}},\"additionalProperties\":false}")),
+		InputSchema:  jsontext.Value([]byte("{\"type\":\"object\",\"required\":[\"count\"],\"properties\":{\"count\":{\"type\":\"integer\",\"description\":\"Number of content items to return\"}},\"additionalProperties\":false}")),
 		Name:         "multi_content",
-		OutputSchema: json.RawMessage([]byte("{\"type\":\"object\",\"properties\":{\"result\":{\"type\":\"string\",\"description\":\"Combined text result\"}},\"additionalProperties\":false}")),
+		OutputSchema: jsontext.Value([]byte("{\"type\":\"object\",\"properties\":{\"result\":{\"type\":\"string\",\"description\":\"Combined text result\"}},\"additionalProperties\":false}")),
 		Title:        stringPtr("Multi Content"),
 	}, &ToolInfo{
 		Description:  stringPtr("Generate a deterministic design implementation plan from fake Figma data"),
-		InputSchema:  json.RawMessage([]byte("{\"type\":\"object\",\"required\":[\"screen_title\",\"platform\",\"density\",\"primary_cta\",\"sections\"],\"properties\":{\"density\":{\"type\":\"string\",\"description\":\"Layout density\",\"enum\":[\"compact\",\"comfortable\"]},\"include_dev_notes\":{\"type\":\"boolean\",\"description\":\"Whether to include implementation notes\"},\"platform\":{\"type\":\"string\",\"description\":\"Target platform\",\"enum\":[\"ios\",\"web\"]},\"primary_cta\":{\"type\":\"string\",\"description\":\"Primary call to action\"},\"screen_title\":{\"type\":\"string\",\"description\":\"Name of the frame or screen\"},\"sections\":{\"type\":\"array\",\"description\":\"Ordered screen sections\",\"items\":{\"type\":\"string\"}}},\"additionalProperties\":false}")),
+		InputSchema:  jsontext.Value([]byte("{\"type\":\"object\",\"required\":[\"screen_title\",\"platform\",\"density\",\"primary_cta\",\"sections\"],\"properties\":{\"sections\":{\"type\":\"array\",\"description\":\"Ordered screen sections\",\"items\":{\"type\":\"string\"}},\"include_dev_notes\":{\"type\":\"boolean\",\"description\":\"Whether to include implementation notes\"},\"screen_title\":{\"type\":\"string\",\"description\":\"Name of the frame or screen\"},\"platform\":{\"type\":\"string\",\"description\":\"Target platform\",\"enum\":[\"ios\",\"web\"]},\"density\":{\"type\":\"string\",\"description\":\"Layout density\",\"enum\":[\"compact\",\"comfortable\"]},\"primary_cta\":{\"type\":\"string\",\"description\":\"Primary call to action\"}},\"additionalProperties\":false}")),
 		Name:         "generate_dpi_spec",
-		OutputSchema: json.RawMessage([]byte("{\"type\":\"object\",\"required\":[\"screen_title\",\"platform\",\"density\",\"viewport\",\"sections\",\"primary_cta\",\"design_tokens_uri\",\"dev_notes\"],\"properties\":{\"density\":{\"type\":\"string\",\"description\":\"Layout density\"},\"design_tokens_uri\":{\"type\":\"string\",\"description\":\"Design system resource URI\"},\"dev_notes\":{\"type\":\"array\",\"description\":\"Development handoff notes\",\"items\":{\"type\":\"string\"}},\"platform\":{\"type\":\"string\",\"description\":\"Target platform\"},\"primary_cta\":{\"type\":\"object\",\"description\":\"Primary CTA\",\"required\":[\"label\",\"style\"],\"properties\":{\"label\":{\"type\":\"string\",\"description\":\"CTA label\"},\"style\":{\"type\":\"string\",\"description\":\"CTA visual style\"}},\"additionalProperties\":false},\"screen_title\":{\"type\":\"string\",\"description\":\"Screen title\"},\"sections\":{\"type\":\"array\",\"description\":\"Ordered screen sections\",\"items\":{\"type\":\"object\",\"required\":[\"name\",\"component\",\"notes\"],\"properties\":{\"component\":{\"type\":\"string\",\"description\":\"Primary UI component\"},\"name\":{\"type\":\"string\",\"description\":\"Section name\"},\"notes\":{\"type\":\"array\",\"description\":\"Implementation notes for this section\",\"items\":{\"type\":\"string\"}}},\"additionalProperties\":false}},\"viewport\":{\"type\":\"object\",\"description\":\"Viewport dimensions\",\"required\":[\"width\",\"height\"],\"properties\":{\"height\":{\"type\":\"integer\",\"description\":\"Viewport height\"},\"width\":{\"type\":\"integer\",\"description\":\"Viewport width\"}},\"additionalProperties\":false}},\"additionalProperties\":false}")),
+		OutputSchema: jsontext.Value([]byte("{\"type\":\"object\",\"required\":[\"screen_title\",\"platform\",\"density\",\"viewport\",\"sections\",\"primary_cta\",\"design_tokens_uri\",\"dev_notes\"],\"properties\":{\"sections\":{\"type\":\"array\",\"description\":\"Ordered screen sections\",\"items\":{\"type\":\"object\",\"required\":[\"name\",\"component\",\"notes\"],\"properties\":{\"notes\":{\"type\":\"array\",\"description\":\"Implementation notes for this section\",\"items\":{\"type\":\"string\"}},\"name\":{\"type\":\"string\",\"description\":\"Section name\"},\"component\":{\"type\":\"string\",\"description\":\"Primary UI component\"}},\"additionalProperties\":false}},\"primary_cta\":{\"type\":\"object\",\"description\":\"Primary CTA\",\"required\":[\"label\",\"style\"],\"properties\":{\"label\":{\"type\":\"string\",\"description\":\"CTA label\"},\"style\":{\"type\":\"string\",\"description\":\"CTA visual style\"}},\"additionalProperties\":false},\"design_tokens_uri\":{\"type\":\"string\",\"description\":\"Design system resource URI\"},\"dev_notes\":{\"type\":\"array\",\"description\":\"Development handoff notes\",\"items\":{\"type\":\"string\"}},\"screen_title\":{\"type\":\"string\",\"description\":\"Screen title\"},\"platform\":{\"type\":\"string\",\"description\":\"Target platform\"},\"density\":{\"type\":\"string\",\"description\":\"Layout density\"},\"viewport\":{\"type\":\"object\",\"description\":\"Viewport dimensions\",\"required\":[\"width\",\"height\"],\"properties\":{\"width\":{\"type\":\"integer\",\"description\":\"Viewport width\"},\"height\":{\"type\":\"integer\",\"description\":\"Viewport height\"}},\"additionalProperties\":false}},\"additionalProperties\":false}")),
 		Title:        stringPtr("Generate Dpi Spec"),
 	}, &ToolInfo{
 		Description:  stringPtr("Dispatch an action using a union payload"),
-		InputSchema:  json.RawMessage([]byte("{\"type\":\"object\",\"required\":[\"request\"],\"properties\":{\"request\":{\"type\":\"object\",\"description\":\"Action envelope\",\"oneOf\":[{\"type\":\"object\",\"required\":[\"action\",\"value\"],\"properties\":{\"action\":{\"type\":\"string\",\"enum\":[\"list\"]},\"value\":{\"type\":\"object\",\"properties\":{\"limit\":{\"type\":\"integer\",\"description\":\"Maximum number of items to list\"}},\"additionalProperties\":false}},\"additionalProperties\":false},{\"type\":\"object\",\"required\":[\"action\",\"value\"],\"properties\":{\"action\":{\"type\":\"string\",\"enum\":[\"create\"]},\"value\":{\"type\":\"object\",\"required\":[\"name\"],\"properties\":{\"name\":{\"type\":\"string\",\"description\":\"Name to create\"}},\"additionalProperties\":false}},\"additionalProperties\":false}],\"discriminator\":{\"propertyName\":\"action\"}}},\"additionalProperties\":false}")),
+		InputSchema:  jsontext.Value([]byte("{\"type\":\"object\",\"required\":[\"request\"],\"properties\":{\"request\":{\"type\":\"object\",\"description\":\"Action envelope\",\"oneOf\":[{\"type\":\"object\",\"required\":[\"action\",\"value\"],\"properties\":{\"value\":{\"type\":\"object\",\"properties\":{\"limit\":{\"type\":\"integer\",\"description\":\"Maximum number of items to list\"}},\"additionalProperties\":false},\"action\":{\"type\":\"string\",\"enum\":[\"list\"]}},\"additionalProperties\":false},{\"type\":\"object\",\"required\":[\"action\",\"value\"],\"properties\":{\"action\":{\"type\":\"string\",\"enum\":[\"create\"]},\"value\":{\"type\":\"object\",\"required\":[\"name\"],\"properties\":{\"name\":{\"type\":\"string\",\"description\":\"Name to create\"}},\"additionalProperties\":false}},\"additionalProperties\":false}],\"discriminator\":{\"propertyName\":\"action\"}}},\"additionalProperties\":false}")),
 		Name:         "dispatch_action",
-		OutputSchema: json.RawMessage([]byte("{\"type\":\"object\",\"required\":[\"ack\"],\"properties\":{\"ack\":{\"type\":\"string\",\"description\":\"Acknowledgement\"}},\"additionalProperties\":false}")),
+		OutputSchema: jsontext.Value([]byte("{\"type\":\"object\",\"required\":[\"ack\"],\"properties\":{\"ack\":{\"type\":\"string\",\"description\":\"Acknowledgement\"}},\"additionalProperties\":false}")),
 		Title:        stringPtr("Dispatch Action"),
 	}, &ToolInfo{
 		Description:  stringPtr("Dispatch a command using a non-value branch-key union"),
-		InputSchema:  json.RawMessage([]byte("{\"type\":\"object\",\"required\":[\"command\"],\"properties\":{\"command\":{\"type\":\"object\",\"description\":\"Command envelope with custom branch key\",\"oneOf\":[{\"type\":\"object\",\"required\":[\"action\",\"args\"],\"properties\":{\"action\":{\"type\":\"string\",\"enum\":[\"foo\"]},\"args\":{\"type\":\"object\",\"properties\":{\"label\":{\"type\":\"string\",\"description\":\"Foo label\"}},\"additionalProperties\":false}},\"additionalProperties\":false},{\"type\":\"object\",\"required\":[\"action\",\"args\"],\"properties\":{\"action\":{\"type\":\"string\",\"enum\":[\"bar\"]},\"args\":{\"type\":\"object\",\"required\":[\"count\"],\"properties\":{\"count\":{\"type\":\"integer\",\"description\":\"Bar count\"}},\"additionalProperties\":false}},\"additionalProperties\":false}],\"discriminator\":{\"propertyName\":\"action\"}}},\"additionalProperties\":false}")),
+		InputSchema:  jsontext.Value([]byte("{\"type\":\"object\",\"required\":[\"command\"],\"properties\":{\"command\":{\"type\":\"object\",\"description\":\"Command envelope with custom branch key\",\"oneOf\":[{\"type\":\"object\",\"required\":[\"action\",\"args\"],\"properties\":{\"action\":{\"type\":\"string\",\"enum\":[\"foo\"]},\"args\":{\"type\":\"object\",\"properties\":{\"label\":{\"type\":\"string\",\"description\":\"Foo label\"}},\"additionalProperties\":false}},\"additionalProperties\":false},{\"type\":\"object\",\"required\":[\"action\",\"args\"],\"properties\":{\"action\":{\"type\":\"string\",\"enum\":[\"bar\"]},\"args\":{\"type\":\"object\",\"required\":[\"count\"],\"properties\":{\"count\":{\"type\":\"integer\",\"description\":\"Bar count\"}},\"additionalProperties\":false}},\"additionalProperties\":false}],\"discriminator\":{\"propertyName\":\"action\"}}},\"additionalProperties\":false}")),
 		Name:         "dispatch_command",
-		OutputSchema: json.RawMessage([]byte("{\"type\":\"object\",\"required\":[\"ack\"],\"properties\":{\"ack\":{\"type\":\"string\",\"description\":\"Acknowledgement\"}},\"additionalProperties\":false}")),
+		OutputSchema: jsontext.Value([]byte("{\"type\":\"object\",\"required\":[\"ack\"],\"properties\":{\"ack\":{\"type\":\"string\",\"description\":\"Acknowledgement\"}},\"additionalProperties\":false}")),
 		Title:        stringPtr("Dispatch Command"),
 	}, &ToolInfo{
 		Description:  stringPtr("Lookup projected runtime tool data"),
-		InputSchema:  json.RawMessage(projected.SpecProjectedLookupTool.Payload.Schema),
+		InputSchema:  jsontext.Value(projected.SpecProjectedLookupTool.Payload.Schema),
 		Name:         "projected_lookup_tool",
-		OutputSchema: json.RawMessage(projected.SpecProjectedLookupTool.Result.Schema),
+		OutputSchema: jsontext.Value(projected.SpecProjectedLookupTool.Result.Schema),
 		Title:        stringPtr("Projected Lookup Tool"),
 	}, &ToolInfo{
 		Description:  stringPtr("Return projected runtime status"),
-		InputSchema:  json.RawMessage(projected.SpecProjectedStatusTool.Payload.Schema),
+		InputSchema:  jsontext.Value(projected.SpecProjectedStatusTool.Payload.Schema),
 		Name:         "projected_status_tool",
-		OutputSchema: json.RawMessage(projected.SpecProjectedStatusTool.Result.Schema),
+		OutputSchema: jsontext.Value(projected.SpecProjectedStatusTool.Result.Schema),
 		Title:        stringPtr("Projected Status Tool"),
 	}}
 }
@@ -1111,16 +1101,16 @@ func (a *MCPAdapter) toolSearchSyntheticTools() []*ToolInfo {
 func toolSearchToolInfo(name string) *ToolInfo {
 	return &ToolInfo{
 		Description:  stringPtr("Search available tools by plain text query or regex pattern and return matching tool definitions."),
-		InputSchema:  json.RawMessage([]byte("{\"type\":\"object\",\"properties\":{\"query\":{\"type\":\"string\",\"description\":\"Plain text query matched against tool names, titles, descriptions, metadata, and schemas\"},\"pattern\":{\"type\":\"string\",\"description\":\"Case-insensitive regex pattern matched against tool names, titles, descriptions, metadata, and schemas\"},\"max_results\":{\"type\":\"integer\",\"description\":\"Maximum number of tools to return for this search\"},\"include_schemas\":{\"type\":\"boolean\",\"description\":\"Include input and output schemas in returned descriptors\"},\"category\":{\"type\":\"string\",\"description\":\"Discovery category filter\"},\"tags\":{\"type\":\"array\",\"items\":{\"type\":\"string\"},\"description\":\"Discovery tag filters\"}},\"additionalProperties\":false}")),
+		InputSchema:  jsontext.Value([]byte("{\"type\":\"object\",\"properties\":{\"query\":{\"type\":\"string\",\"description\":\"Plain text query matched against tool names, titles, descriptions, metadata, and schemas\"},\"pattern\":{\"type\":\"string\",\"description\":\"Case-insensitive regex pattern matched against tool names, titles, descriptions, metadata, and schemas\"},\"max_results\":{\"type\":\"integer\",\"description\":\"Maximum number of tools to return for this search\"},\"include_schemas\":{\"type\":\"boolean\",\"description\":\"Include input and output schemas in returned descriptors\"},\"category\":{\"type\":\"string\",\"description\":\"Discovery category filter\"},\"tags\":{\"type\":\"array\",\"items\":{\"type\":\"string\"},\"description\":\"Discovery tag filters\"}},\"additionalProperties\":false}")),
 		Name:         name,
-		OutputSchema: json.RawMessage([]byte("{\"type\":\"object\",\"required\":[\"tools\",\"total_matches\",\"truncated\"],\"properties\":{\"tools\":{\"type\":\"array\",\"items\":{\"type\":\"object\",\"required\":[\"name\",\"description\"],\"properties\":{\"name\":{\"type\":\"string\"},\"title\":{\"type\":\"string\"},\"description\":{\"type\":\"string\"},\"inputSchema\":{\"type\":\"object\"},\"outputSchema\":{\"type\":\"object\"},\"annotations\":{\"type\":\"object\"},\"_meta\":{\"type\":\"object\"},\"icons\":{\"type\":\"array\",\"items\":{\"type\":\"object\"}},\"category\":{\"type\":\"string\"},\"tags\":{\"type\":\"array\",\"items\":{\"type\":\"string\"}},\"keywords\":{\"type\":\"array\",\"items\":{\"type\":\"string\"}},\"why_matched\":{\"type\":\"array\",\"items\":{\"type\":\"string\"}},\"call_tool_name\":{\"type\":\"string\"},\"call_tool_arguments\":{\"type\":\"object\"},\"call_tool_json\":{\"type\":\"string\"}}}},\"total_matches\":{\"type\":\"integer\"},\"truncated\":{\"type\":\"boolean\"},\"query\":{\"type\":\"string\"},\"pattern\":{\"type\":\"string\"}},\"additionalProperties\":false}")),
+		OutputSchema: jsontext.Value([]byte("{\"type\":\"object\",\"required\":[\"tools\",\"total_matches\",\"truncated\"],\"properties\":{\"tools\":{\"type\":\"array\",\"items\":{\"type\":\"object\",\"required\":[\"name\",\"description\"],\"properties\":{\"name\":{\"type\":\"string\"},\"title\":{\"type\":\"string\"},\"description\":{\"type\":\"string\"},\"inputSchema\":{\"type\":\"object\"},\"outputSchema\":{\"type\":\"object\"},\"annotations\":{\"type\":\"object\"},\"_meta\":{\"type\":\"object\"},\"icons\":{\"type\":\"array\",\"items\":{\"type\":\"object\"}},\"category\":{\"type\":\"string\"},\"tags\":{\"type\":\"array\",\"items\":{\"type\":\"string\"}},\"keywords\":{\"type\":\"array\",\"items\":{\"type\":\"string\"}},\"why_matched\":{\"type\":\"array\",\"items\":{\"type\":\"string\"}},\"call_tool_name\":{\"type\":\"string\"},\"call_tool_arguments\":{\"type\":\"object\"},\"call_tool_json\":{\"type\":\"string\"}}}},\"total_matches\":{\"type\":\"integer\"},\"truncated\":{\"type\":\"boolean\"},\"query\":{\"type\":\"string\"},\"pattern\":{\"type\":\"string\"}},\"additionalProperties\":false}")),
 		Title:        stringPtr("Search Tools"),
 	}
 }
 func toolCallProxyToolInfo(name string) *ToolInfo {
 	return &ToolInfo{
 		Description: stringPtr("Call a discovered tool by exact name. Always provide both top-level fields: name and arguments. Use arguments: {} when the discovered tool takes no arguments. Do not use args."),
-		InputSchema: json.RawMessage([]byte("{\"type\":\"object\",\"required\":[\"name\",\"arguments\"],\"properties\":{\"name\":{\"type\":\"string\",\"description\":\"Exact discovered tool name. Required. Copy this from search_tools results.\"},\"arguments\":{\"type\":\"object\",\"description\":\"Arguments object for the discovered tool. Required. Use {} when the discovered tool takes no arguments. Do not use args.\"}},\"additionalProperties\":false}")),
+		InputSchema: jsontext.Value([]byte("{\"type\":\"object\",\"required\":[\"name\",\"arguments\"],\"properties\":{\"name\":{\"type\":\"string\",\"description\":\"Exact discovered tool name. Required. Copy this from search_tools results.\"},\"arguments\":{\"type\":\"object\",\"description\":\"Arguments object for the discovered tool. Required. Use {} when the discovered tool takes no arguments. Do not use args.\"}},\"additionalProperties\":false}")),
 		Name:        name,
 		Title:       stringPtr("Call Tool"),
 	}
@@ -1137,7 +1127,7 @@ func toolSearchHaystack(tool *ToolInfo) string {
 		parts = append(parts, *tool.Title)
 	}
 	switch schema := tool.InputSchema.(type) {
-	case json.RawMessage:
+	case jsontext.Value:
 		parts = append(parts, string(schema))
 	case []byte:
 		parts = append(parts, string(schema))
@@ -1149,27 +1139,27 @@ func toolSearchHaystack(tool *ToolInfo) string {
 		}
 	}
 	switch schema := tool.OutputSchema.(type) {
-	case json.RawMessage:
+	case jsontext.Value:
 		parts = append(parts, string(schema))
 	case []byte:
 		parts = append(parts, string(schema))
 	}
 	switch meta := tool.Meta.(type) {
-	case json.RawMessage:
+	case jsontext.Value:
 		parts = append(parts, string(meta))
 	case []byte:
 		parts = append(parts, string(meta))
 	}
 	return strings.Join(parts, " ")
 }
-func toolRawJSON(value any) json.RawMessage {
+func toolRawJSON(value any) jsontext.Value {
 	switch v := value.(type) {
-	case json.RawMessage:
+	case jsontext.Value:
 		return v
 	case []byte:
-		return json.RawMessage(v)
+		return jsontext.Value(v)
 	case string:
-		return json.RawMessage([]byte(v))
+		return jsontext.Value([]byte(v))
 	default:
 		if v == nil {
 			return nil
@@ -1178,7 +1168,7 @@ func toolRawJSON(value any) json.RawMessage {
 		if err != nil {
 			return nil
 		}
-		return json.RawMessage(raw)
+		return jsontext.Value(raw)
 	}
 }
 func toolDiscoveryMetadata(tool *ToolInfo) (string, []string, []string) {
@@ -1229,7 +1219,7 @@ func toolSearchDescriptorFor(tool *ToolInfo, includeSchemas bool, callName strin
 	callArguments := toolCallArgumentsExample(tool)
 	callArgumentsJSON, _ := marshalToolSearchJSON(callArguments)
 	descriptor := toolSearchDescriptor{
-		CallToolArguments: json.RawMessage(callArgumentsJSON),
+		CallToolArguments: jsontext.Value(callArgumentsJSON),
 		CallToolJSON:      string(callArgumentsJSON),
 		CallToolName:      callName,
 		Category:          category,
@@ -1409,14 +1399,7 @@ func toolSearchWhyMatched(tool *ToolInfo, query string, score int, settings tool
 	return []string{fmt.Sprintf("matched query %q against tool metadata", query)}
 }
 func marshalToolSearchJSON(value any) ([]byte, error) {
-	var buf bytes.Buffer
-	enc := json.NewEncoder(&buf)
-	enc.SetEscapeHTML(false)
-	enc.SetIndent("", "  ")
-	if err := enc.Encode(value); err != nil {
-		return nil, err
-	}
-	return bytes.TrimRight(buf.Bytes(), "\n"), nil
+	return json.Marshal(value, json.Deterministic(true), jsontext.EscapeForHTML(false), jsontext.WithIndent("  "))
 }
 func toolExampleValue(property map[string]any) any {
 	typ := ""
@@ -1553,7 +1536,7 @@ func (a *MCPAdapter) handleSearchTools(ctx context.Context, p *ToolsCallPayload,
 		return false, err
 	}
 	if len(bytes.TrimSpace(arguments)) == 0 {
-		arguments = json.RawMessage([]byte("{}"))
+		arguments = jsontext.Value([]byte("{}"))
 	}
 	if err := decodeMCPPayloadStrict(arguments, &payload); err != nil {
 		return true, a.sendToolError(ctx, stream, p.Name, toolCallError(err, "invalid_params", "Provide {\"query\":\"...\"} or {\"pattern\":\"...\"} to search tools."))
@@ -1676,7 +1659,7 @@ func (a *MCPAdapter) handleCallToolProxy(ctx context.Context, p *ToolsCallPayloa
 	}
 	arguments := payload.Arguments
 	if len(bytes.TrimSpace(arguments)) == 0 {
-		arguments = json.RawMessage([]byte("{}"))
+		arguments = jsontext.Value([]byte("{}"))
 	}
 	proxied := &ToolsCallPayload{
 		Arguments: mcpJSONFromRaw(arguments),
@@ -1691,7 +1674,7 @@ func (a *MCPAdapter) handleCallToolProxy(ctx context.Context, p *ToolsCallPayloa
 	toolErr := result != nil && result.IsError != nil && *result.IsError
 	return toolErr, stream.SendAndClose(ctx, result)
 }
-func analyzeSentimentInputRecovery(err error, raw json.RawMessage) string {
+func analyzeSentimentInputRecovery(err error, raw jsontext.Value) string {
 	message := strings.TrimSpace(loom.ErrorSafeMessage(err))
 	if message == "" {
 		message = strings.TrimSpace(err.Error())
@@ -1706,7 +1689,7 @@ func analyzeSentimentInputRecovery(err error, raw json.RawMessage) string {
 	}
 	return "Provide valid tool arguments. Example: " + example
 }
-func extractKeywordsInputRecovery(err error, raw json.RawMessage) string {
+func extractKeywordsInputRecovery(err error, raw jsontext.Value) string {
 	message := strings.TrimSpace(loom.ErrorSafeMessage(err))
 	if message == "" {
 		message = strings.TrimSpace(err.Error())
@@ -1721,7 +1704,7 @@ func extractKeywordsInputRecovery(err error, raw json.RawMessage) string {
 	}
 	return "Provide valid tool arguments. Example: " + example
 }
-func summarizeTextInputRecovery(err error, raw json.RawMessage) string {
+func summarizeTextInputRecovery(err error, raw jsontext.Value) string {
 	message := strings.TrimSpace(loom.ErrorSafeMessage(err))
 	if message == "" {
 		message = strings.TrimSpace(err.Error())
@@ -1736,7 +1719,7 @@ func summarizeTextInputRecovery(err error, raw json.RawMessage) string {
 	}
 	return "Provide valid tool arguments. Example: " + example
 }
-func searchInputRecovery(err error, raw json.RawMessage) string {
+func searchInputRecovery(err error, raw jsontext.Value) string {
 	message := strings.TrimSpace(loom.ErrorSafeMessage(err))
 	if message == "" {
 		message = strings.TrimSpace(err.Error())
@@ -1751,7 +1734,7 @@ func searchInputRecovery(err error, raw json.RawMessage) string {
 	}
 	return "Provide valid tool arguments. Example: " + example
 }
-func searchRecordsInputRecovery(err error, raw json.RawMessage) string {
+func searchRecordsInputRecovery(err error, raw jsontext.Value) string {
 	message := strings.TrimSpace(loom.ErrorSafeMessage(err))
 	if message == "" {
 		message = strings.TrimSpace(err.Error())
@@ -1766,13 +1749,13 @@ func searchRecordsInputRecovery(err error, raw json.RawMessage) string {
 	}
 	return "Provide valid tool arguments. Example: " + example
 }
-func executeCodeInputRecovery(err error, raw json.RawMessage) string {
+func executeCodeInputRecovery(err error, raw jsontext.Value) string {
 	message := strings.TrimSpace(loom.ErrorSafeMessage(err))
 	if message == "" {
 		message = strings.TrimSpace(err.Error())
 	}
 	_ = raw
-	example := "{\"code\":\"example\",\"language\":\"python\"}"
+	example := "{\"language\":\"python\",\"code\":\"example\"}"
 	if field := missingFieldFromMessage(message); field != "" {
 		return fmt.Sprintf("Include required field %q. Example: %s", field, example)
 	}
@@ -1781,7 +1764,7 @@ func executeCodeInputRecovery(err error, raw json.RawMessage) string {
 	}
 	return "Provide valid tool arguments. Example: " + example
 }
-func processBatchInputRecovery(err error, raw json.RawMessage) string {
+func processBatchInputRecovery(err error, raw jsontext.Value) string {
 	message := strings.TrimSpace(loom.ErrorSafeMessage(err))
 	if message == "" {
 		message = strings.TrimSpace(err.Error())
@@ -1796,7 +1779,7 @@ func processBatchInputRecovery(err error, raw json.RawMessage) string {
 	}
 	return "Provide valid tool arguments. Example: " + example
 }
-func multiContentInputRecovery(err error, raw json.RawMessage) string {
+func multiContentInputRecovery(err error, raw jsontext.Value) string {
 	message := strings.TrimSpace(loom.ErrorSafeMessage(err))
 	if message == "" {
 		message = strings.TrimSpace(err.Error())
@@ -1811,13 +1794,13 @@ func multiContentInputRecovery(err error, raw json.RawMessage) string {
 	}
 	return "Provide valid tool arguments. Example: " + example
 }
-func generateDpiSpecInputRecovery(err error, raw json.RawMessage) string {
+func generateDpiSpecInputRecovery(err error, raw jsontext.Value) string {
 	message := strings.TrimSpace(loom.ErrorSafeMessage(err))
 	if message == "" {
 		message = strings.TrimSpace(err.Error())
 	}
 	_ = raw
-	example := "{\"density\":\"compact\",\"platform\":\"ios\",\"primary_cta\":\"example\",\"screen_title\":\"example\",\"sections\":[]}"
+	example := "{\"screen_title\":\"example\",\"platform\":\"ios\",\"density\":\"compact\",\"primary_cta\":\"example\",\"sections\":[]}"
 	if field := missingFieldFromMessage(message); field != "" {
 		return fmt.Sprintf("Include required field %q. Example: %s", field, example)
 	}
@@ -1826,9 +1809,9 @@ func generateDpiSpecInputRecovery(err error, raw json.RawMessage) string {
 	}
 	return "Provide valid tool arguments. Example: " + example
 }
-func dispatchActionRecoveryExample(raw json.RawMessage) string {
+func dispatchActionRecoveryExample(raw jsontext.Value) string {
 	const fallback = "{\"request\":{\"action\":\"list\",\"value\":{}}}"
-	var top map[string]json.RawMessage
+	var top map[string]jsontext.Value
 	if json.Unmarshal(raw, &top) != nil {
 		return fallback
 	}
@@ -1836,7 +1819,7 @@ func dispatchActionRecoveryExample(raw json.RawMessage) string {
 	if !hasEnv {
 		return fallback
 	}
-	var envelope map[string]json.RawMessage
+	var envelope map[string]jsontext.Value
 	if json.Unmarshal(envRaw, &envelope) != nil {
 		return fallback
 	}
@@ -1856,7 +1839,7 @@ func dispatchActionRecoveryExample(raw json.RawMessage) string {
 	}
 	return fallback
 }
-func dispatchActionInputRecovery(err error, raw json.RawMessage) string {
+func dispatchActionInputRecovery(err error, raw jsontext.Value) string {
 	message := strings.TrimSpace(loom.ErrorSafeMessage(err))
 	if message == "" {
 		message = strings.TrimSpace(err.Error())
@@ -1873,9 +1856,9 @@ func dispatchActionInputRecovery(err error, raw json.RawMessage) string {
 	}
 	return "Provide valid tool arguments. Example: " + example
 }
-func dispatchCommandRecoveryExample(raw json.RawMessage) string {
+func dispatchCommandRecoveryExample(raw jsontext.Value) string {
 	const fallback = "{\"command\":{\"action\":\"foo\",\"args\":{}}}"
-	var top map[string]json.RawMessage
+	var top map[string]jsontext.Value
 	if json.Unmarshal(raw, &top) != nil {
 		return fallback
 	}
@@ -1883,7 +1866,7 @@ func dispatchCommandRecoveryExample(raw json.RawMessage) string {
 	if !hasEnv {
 		return fallback
 	}
-	var envelope map[string]json.RawMessage
+	var envelope map[string]jsontext.Value
 	if json.Unmarshal(envRaw, &envelope) != nil {
 		return fallback
 	}
@@ -1903,7 +1886,7 @@ func dispatchCommandRecoveryExample(raw json.RawMessage) string {
 	}
 	return fallback
 }
-func dispatchCommandInputRecovery(err error, raw json.RawMessage) string {
+func dispatchCommandInputRecovery(err error, raw jsontext.Value) string {
 	message := strings.TrimSpace(loom.ErrorSafeMessage(err))
 	if message == "" {
 		message = strings.TrimSpace(err.Error())
@@ -1920,7 +1903,7 @@ func dispatchCommandInputRecovery(err error, raw json.RawMessage) string {
 	}
 	return "Provide valid tool arguments. Example: " + example
 }
-func projectedLookupInputRecovery(err error, raw json.RawMessage) string {
+func projectedLookupInputRecovery(err error, raw jsontext.Value) string {
 	message := strings.TrimSpace(loom.ErrorSafeMessage(err))
 	if message == "" {
 		message = strings.TrimSpace(err.Error())
@@ -1937,7 +1920,7 @@ func projectedLookupInputRecovery(err error, raw json.RawMessage) string {
 }
 func (a *MCPAdapter) ToolsCall(ctx context.Context, p *ToolsCallPayload) (res *ToolsCallResult, err error) {
 	attrs := []attribute.KeyValue{}
-	var rawArguments json.RawMessage
+	var rawArguments jsontext.Value
 	if p != nil {
 		rawArguments, err = mcpJSONRaw(p.Arguments)
 		if err != nil {
@@ -2010,7 +1993,7 @@ func (a *MCPAdapter) executeRealTool(ctx context.Context, p *ToolsCallPayload, s
 	}
 	arguments = bytes.TrimSpace(arguments)
 	if len(arguments) == 0 || bytes.Equal(arguments, []byte("null")) {
-		arguments = json.RawMessage([]byte("{}"))
+		arguments = jsontext.Value([]byte("{}"))
 	}
 	switch p.Name {
 	case "analyze_sentiment":
@@ -2376,7 +2359,7 @@ func (a *MCPAdapter) executeRealTool(ctx context.Context, p *ToolsCallPayload, s
 	case "projected_lookup_tool":
 		args := arguments
 		if len(args) == 0 {
-			args = json.RawMessage("{}")
+			args = jsontext.Value("{}")
 		}
 		meta := &agentruntime.ToolCallMeta{}
 		toolResult, err := projected.DispatchProjectedLookupToolMethod(ctx, meta, args, nil, projected.ProjectedLookupToolDispatchOptions{Call: func(ctx context.Context, args any) (any, error) {
@@ -2408,7 +2391,7 @@ func (a *MCPAdapter) executeRealTool(ctx context.Context, p *ToolsCallPayload, s
 	case "projected_status_tool":
 		args := arguments
 		if len(args) == 0 {
-			args = json.RawMessage("{}")
+			args = jsontext.Value("{}")
 		}
 		meta := &agentruntime.ToolCallMeta{}
 		toolResult, err := projected.DispatchProjectedStatusToolMethod(ctx, meta, args, nil, projected.ProjectedStatusToolDispatchOptions{Call: func(ctx context.Context, args any) (any, error) {

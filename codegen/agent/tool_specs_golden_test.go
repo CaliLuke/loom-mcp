@@ -1,7 +1,8 @@
 package codegen_test
 
 import (
-	"encoding/json"
+	"encoding/json/jsontext"
+	"encoding/json/v2"
 	"path/filepath"
 	"testing"
 
@@ -123,12 +124,12 @@ func TestToolSchemasJSONEmitted(t *testing.T) {
 			Toolset string `json:"toolset"`
 			Title   string `json:"title"`
 			Payload *struct {
-				Name   string          `json:"name"`
-				Schema json.RawMessage `json:"schema"`
+				Name   string         `json:"name"`
+				Schema jsontext.Value `json:"schema"`
 			} `json:"payload"`
 			Result *struct {
-				Name   string          `json:"name"`
-				Schema json.RawMessage `json:"schema"`
+				Name   string         `json:"name"`
+				Schema jsontext.Value `json:"schema"`
 			} `json:"result"`
 		} `json:"tools"`
 	}

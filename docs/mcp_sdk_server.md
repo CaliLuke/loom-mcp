@@ -108,7 +108,7 @@ Generated MCP service types use `loom.Nullable[any]` for optional arbitrary
 JSON such as tool arguments, structured tool results, prompt arguments, and
 resource metadata. The zero value means absent, `loom.NullValue[any]()` means
 explicit JSON `null`, and `loom.NullableValue[any](value)` carries a concrete
-value. SDK and dispatch boundaries preserve a contained `json.RawMessage`
+value. SDK and dispatch boundaries preserve a contained `jsontext.Value`
 without decoding it. The adapter marshals other concrete values only when a
 raw JSON boundary requires them.
 

@@ -8,7 +8,8 @@ package anthropic
 import (
 	"context"
 	"encoding/base64"
-	"encoding/json"
+	"encoding/json/jsontext"
+	"encoding/json/v2"
 	"errors"
 	"fmt"
 	"net/http"
@@ -611,9 +612,9 @@ func toolInputSchema(_ context.Context, schema any) (sdk.ToolInputSchemaParam, e
 	if schema == nil {
 		return sdk.ToolInputSchemaParam{}, nil
 	}
-	var raw json.RawMessage
+	var raw jsontext.Value
 	switch v := schema.(type) {
-	case json.RawMessage:
+	case jsontext.Value:
 		raw = v
 	default:
 		data, err := json.Marshal(v)

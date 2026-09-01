@@ -2,7 +2,8 @@ package executor
 
 import (
 	"context"
-	"encoding/json"
+	"encoding/json/jsontext"
+	"encoding/json/v2"
 	"sync"
 	"testing"
 	"time"
@@ -47,7 +48,7 @@ func TestExecutorUsesOldestStartForResultStreamSink(t *testing.T) {
 				EventName: resultEventName,
 				Payload: mustJSON(t, toolregistry.ToolResultMessage{
 					ToolUseID: toolUseID,
-					Result:    json.RawMessage(`{}`),
+					Result:    jsontext.Value(`{}`),
 				}),
 			},
 		},
@@ -101,7 +102,7 @@ func TestExecutorDerivesResultStreamIDFromToolUseID(t *testing.T) {
 				EventName: resultEventName,
 				Payload: mustJSON(t, toolregistry.ToolResultMessage{
 					ToolUseID: toolUseID,
-					Result:    json.RawMessage(`{}`),
+					Result:    jsontext.Value(`{}`),
 				}),
 			},
 		},
@@ -155,7 +156,7 @@ func TestExecutorReturnsResultWhenStreamDestroyFails(t *testing.T) {
 				EventName: resultEventName,
 				Payload: mustJSON(t, toolregistry.ToolResultMessage{
 					ToolUseID: toolUseID,
-					Result:    json.RawMessage(`{}`),
+					Result:    jsontext.Value(`{}`),
 				}),
 			},
 		},
@@ -333,7 +334,7 @@ func TestExecutorCleansResultStreamWhenResultAckFails(t *testing.T) {
 				EventName: resultEventName,
 				Payload: mustJSON(t, toolregistry.ToolResultMessage{
 					ToolUseID: toolUseID,
-					Result:    json.RawMessage(`{}`),
+					Result:    jsontext.Value(`{}`),
 				}),
 			},
 		},
@@ -468,7 +469,7 @@ func TestExecutorForwardsOutputDelta(t *testing.T) {
 				EventName: resultEventName,
 				Payload: mustJSON(t, toolregistry.ToolResultMessage{
 					ToolUseID: toolUseID,
-					Result:    json.RawMessage(`{}`),
+					Result:    jsontext.Value(`{}`),
 				}),
 			},
 		},
@@ -545,7 +546,7 @@ func TestExecutorRestoresBoundsFromRegistryMessage(t *testing.T) {
 				EventName: resultEventName,
 				Payload: mustJSON(t, toolregistry.ToolResultMessage{
 					ToolUseID: toolUseID,
-					Result:    json.RawMessage(`{}`),
+					Result:    jsontext.Value(`{}`),
 					Bounds: &agent.Bounds{
 						Returned:       1,
 						Truncated:      true,

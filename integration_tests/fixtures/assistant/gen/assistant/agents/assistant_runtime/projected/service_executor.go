@@ -9,7 +9,7 @@ package projected
 
 import (
 	"context"
-	"encoding/json"
+	jsontext "encoding/json/jsontext"
 	"fmt"
 	"strings"
 
@@ -189,7 +189,7 @@ func NewAssistantRuntimeProjectedExec(opts ...ExecOpt) runtime.ToolCallExecutor 
 		}
 		switch call.Name {
 		case tools.Ident("projected.projected_lookup_tool"):
-			result, err := projected.DispatchProjectedLookupToolMethod(ctx, meta, json.RawMessage(call.Payload), call.Labels, projected.ProjectedLookupToolDispatchOptions{
+			result, err := projected.DispatchProjectedLookupToolMethod(ctx, meta, jsontext.Value(call.Payload), call.Labels, projected.ProjectedLookupToolDispatchOptions{
 				Call:       caller,
 				MapPayload: cfg.mapPayload,
 				MapResult:  cfg.mapResult,
@@ -200,7 +200,7 @@ func NewAssistantRuntimeProjectedExec(opts ...ExecOpt) runtime.ToolCallExecutor 
 			}
 			return runtime.Executed(result), nil
 		case tools.Ident("projected.projected_status_tool"):
-			result, err := projected.DispatchProjectedStatusToolMethod(ctx, meta, json.RawMessage(call.Payload), call.Labels, projected.ProjectedStatusToolDispatchOptions{
+			result, err := projected.DispatchProjectedStatusToolMethod(ctx, meta, jsontext.Value(call.Payload), call.Labels, projected.ProjectedStatusToolDispatchOptions{
 				Call:       caller,
 				MapPayload: cfg.mapPayload,
 				MapResult:  cfg.mapResult,

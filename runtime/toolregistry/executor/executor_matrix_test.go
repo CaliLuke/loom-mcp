@@ -2,7 +2,7 @@ package executor
 
 import (
 	"context"
-	"encoding/json"
+	"encoding/json/jsontext"
 	"errors"
 	"testing"
 
@@ -146,9 +146,9 @@ func TestDecodeToolResultDecodesAndDetachesWireMetadata(t *testing.T) {
 	total := 9
 	next := "cursor-2"
 	bounds := &agent.Bounds{Returned: 2, Total: &total, NextCursor: &next}
-	serverData := []*toolregistry.ServerDataItem{{Kind: "card", Audience: "timeline", Data: json.RawMessage(`{"title":"original"}`)}, nil}
+	serverData := []*toolregistry.ServerDataItem{{Kind: "card", Audience: "timeline", Data: jsontext.Value(`{"title":"original"}`)}, nil}
 	spec := &tools.ToolSpec{Result: tools.TypeSpec{Codec: tools.AnyJSONCodec}}
-	msg := toolregistry.ToolResultMessage{Result: json.RawMessage(`{"ok":true}`), Bounds: bounds, ServerData: serverData}
+	msg := toolregistry.ToolResultMessage{Result: jsontext.Value(`{"ok":true}`), Bounds: bounds, ServerData: serverData}
 
 	result := New(nil, nil, nil).decodeToolResult(spec, &planner.ToolRequest{Name: "todos.update"}, "call-1", msg)
 
@@ -175,7 +175,7 @@ func TestDecodeToolResultSurfacesCodecFailure(t *testing.T) {
 		},
 	}}}
 
-	result := New(nil, nil, nil).decodeToolResult(spec, &planner.ToolRequest{Name: "todos.update"}, "call-1", toolregistry.ToolResultMessage{Result: json.RawMessage(`{}`)})
+	result := New(nil, nil, nil).decodeToolResult(spec, &planner.ToolRequest{Name: "todos.update"}, "call-1", toolregistry.ToolResultMessage{Result: jsontext.Value(`{}`)})
 
 	require.NotNil(t, result.Error)
 	assert.Equal(t, codecErr.Error(), result.Error.Error())

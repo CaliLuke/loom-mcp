@@ -458,7 +458,7 @@ func dynamicPromptCase(prompt *DynamicPromptAdapter) []jen.Code {
 		codes = append(codes,
 			jen.Var().Id("args").Map(jen.String()).Any(),
 			jen.If(jen.Len(jen.Id("arguments")).Op(">").Lit(0)).Block(
-				jen.If(jen.Id("err").Op(":=").Qual("encoding/json", "Unmarshal").Call(jen.Id("arguments"), jen.Op("&").Id("args")), jen.Id("err").Op("!=").Nil()).Block(
+				jen.If(jen.Id("err").Op(":=").Id("json").Dot("Unmarshal").Call(jen.Id("arguments"), jen.Op("&").Id("args")), jen.Id("err").Op("!=").Nil()).Block(
 					jen.Return(jen.Nil(), jen.Id("a").Dot("safeMCPError").Call(jen.Id("err"), jen.Lit("invalid_params"), jen.Lit("Invalid prompt arguments."))),
 				),
 			),
@@ -534,7 +534,7 @@ func promptProviderSection(data *AdapterData) codegen.Section {
 			for _, prompt := range data.StaticPrompts {
 				g.Commentf("Get%sPrompt returns the content for the %s prompt.", codegen.Goify(prompt.Name, true), prompt.Name)
 				g.Id("Get"+codegen.Goify(prompt.Name, true)+"Prompt").
-					Params(jen.Id("arguments").Qual("encoding/json", "RawMessage")).
+					Params(jen.Id("arguments").Id("jsontext").Dot("Value")).
 					Params(jen.Op("*").Id("PromptsGetResult"), jen.Error())
 			}
 			for _, prompt := range data.DynamicPrompts {
@@ -542,7 +542,7 @@ func promptProviderSection(data *AdapterData) codegen.Section {
 				g.Id("Get"+codegen.Goify(prompt.Name, true)+"Prompt").
 					Params(
 						jen.Id("ctx").Qual("context", "Context"),
-						jen.Id("arguments").Qual("encoding/json", "RawMessage"),
+						jen.Id("arguments").Id("jsontext").Dot("Value"),
 					).
 					Params(jen.Op("*").Id("PromptsGetResult"), jen.Error())
 			}

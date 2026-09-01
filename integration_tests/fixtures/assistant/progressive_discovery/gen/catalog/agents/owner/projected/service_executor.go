@@ -10,7 +10,7 @@ package projected
 
 import (
 	"context"
-	"encoding/json"
+	jsontext "encoding/json/jsontext"
 	"fmt"
 	"strings"
 
@@ -173,7 +173,7 @@ func NewOwnerProjectedExec(opts ...ExecOpt) runtime.ToolCallExecutor {
 		}
 		switch call.Name {
 		case tools.Ident("projected.projected_lookup"):
-			result, err := projected.DispatchProjectedLookupMethod(ctx, meta, json.RawMessage(call.Payload), call.Labels, projected.ProjectedLookupDispatchOptions{
+			result, err := projected.DispatchProjectedLookupMethod(ctx, meta, jsontext.Value(call.Payload), call.Labels, projected.ProjectedLookupDispatchOptions{
 				Call:       caller,
 				MapPayload: cfg.mapPayload,
 				MapResult:  cfg.mapResult,

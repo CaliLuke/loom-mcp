@@ -2,7 +2,7 @@ package registry
 
 import (
 	"context"
-	"encoding/json"
+	"encoding/json/jsontext"
 	"errors"
 	"fmt"
 	"reflect"
@@ -513,7 +513,7 @@ func TestRegisterSeedsHealthForImmediateCallTool(t *testing.T) {
 type payloadValidationTestCase struct {
 	toolset        *genregistry.Toolset
 	toolName       string
-	invalidPayload json.RawMessage
+	invalidPayload jsontext.Value
 }
 
 // genPayloadValidationTestCase generates test cases with toolsets and invalid payloads.
@@ -526,7 +526,7 @@ func genPayloadValidationTestCase() gopter.Gen {
 		schemaType := arr[0].(string)
 		toolsetName := arr[1].(string)
 
-		return genInvalidPayloadForSchema(schemaType).Map(func(invalidPayload json.RawMessage) payloadValidationTestCase {
+		return genInvalidPayloadForSchema(schemaType).Map(func(invalidPayload jsontext.Value) payloadValidationTestCase {
 			// Create a tool with the schema.
 			schema := schemaForType(schemaType)
 			toolName := "test-tool"
@@ -593,40 +593,40 @@ func genInvalidPayloadForSchema(schemaType string) gopter.Gen {
 	case "object-required":
 		// Generate objects missing required fields or with wrong types.
 		return gen.OneConstOf(
-			json.RawMessage(`{"name":"test"}`),
-			json.RawMessage(`{"count":42}`),
-			json.RawMessage(`{}`),
-			json.RawMessage(`{"name":123,"count":42}`),
-			json.RawMessage(`{"name":"test","count":"string"}`),
+			jsontext.Value(`{"name":"test"}`),
+			jsontext.Value(`{"count":42}`),
+			jsontext.Value(`{}`),
+			jsontext.Value(`{"name":123,"count":42}`),
+			jsontext.Value(`{"name":"test","count":"string"}`),
 		)
 	case "string":
 		// Generate non-string values.
 		return gen.OneConstOf(
-			json.RawMessage(`42`),
-			json.RawMessage(`true`),
-			json.RawMessage(`["array"]`),
-			json.RawMessage(`{"key":"value"}`),
+			jsontext.Value(`42`),
+			jsontext.Value(`true`),
+			jsontext.Value(`["array"]`),
+			jsontext.Value(`{"key":"value"}`),
 		)
 	case "integer":
 		// Generate non-integer values.
 		return gen.OneConstOf(
-			json.RawMessage(`"string"`),
-			json.RawMessage(`true`),
-			json.RawMessage(`[1,2,3]`),
-			json.RawMessage(`{"key":"value"}`),
-			json.RawMessage(`3.14`),
+			jsontext.Value(`"string"`),
+			jsontext.Value(`true`),
+			jsontext.Value(`[1,2,3]`),
+			jsontext.Value(`{"key":"value"}`),
+			jsontext.Value(`3.14`),
 		)
 	case "array-of-strings":
 		// Generate non-arrays or arrays with wrong item types.
 		return gen.OneConstOf(
-			json.RawMessage(`"not-an-array"`),
-			json.RawMessage(`42`),
-			json.RawMessage(`[1,2,3]`),
-			json.RawMessage(`{"key":"value"}`),
-			json.RawMessage(`["string",42]`),
+			jsontext.Value(`"not-an-array"`),
+			jsontext.Value(`42`),
+			jsontext.Value(`[1,2,3]`),
+			jsontext.Value(`{"key":"value"}`),
+			jsontext.Value(`["string",42]`),
 		)
 	default:
-		return gen.OneConstOf(json.RawMessage(`"invalid"`))
+		return gen.OneConstOf(jsontext.Value(`"invalid"`))
 	}
 }
 

@@ -7,7 +7,8 @@
 package progress
 
 import (
-	"encoding/json"
+	jsontext "encoding/json/jsontext"
+	json "encoding/json/v2"
 	"errors"
 	"fmt"
 	toolhttp "github.com/CaliLuke/loom-mcp/v2/alpha/toolsets/progress/http"

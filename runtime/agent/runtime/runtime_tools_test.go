@@ -3,7 +3,8 @@ package runtime
 import (
 	"bytes"
 	"context"
-	"encoding/json"
+	"encoding/json/jsontext"
+	"encoding/json/v2"
 	"testing"
 	"text/template"
 	"time"
@@ -33,7 +34,9 @@ type projectedRuntimeResult struct {
 
 func newProjectedResultSpec() tools.ToolSpec {
 	codec := tools.JSONCodec[any]{
-		ToJSON: json.Marshal,
+		ToJSON: func(value any) ([]byte, error) {
+			return json.Marshal(value)
+		},
 		FromJSON: func(data []byte) (any, error) {
 			if len(bytes.TrimSpace(data)) == 0 || string(bytes.TrimSpace(data)) == "null" {
 				return nil, nil
@@ -263,7 +266,7 @@ func TestEncodeCanonicalToolResultProjectsBoundsIntoEncodedResult(t *testing.T) 
 }
 
 func TestEncodeCanonicalToolResultRejectsRawJSONResult(t *testing.T) {
-	_, err := EncodeCanonicalToolResult(newProjectedResultSpec(), json.RawMessage(`{"results":["alpha"]}`), &agent.Bounds{
+	_, err := EncodeCanonicalToolResult(newProjectedResultSpec(), jsontext.Value(`{"results":["alpha"]}`), &agent.Bounds{
 		Returned:  1,
 		Truncated: false,
 	})

@@ -8,18 +8,19 @@ package registry
 
 import (
 	"context"
-	"encoding/json"
+	"encoding/json/v2"
 	"errors"
 	"fmt"
 	"strings"
 	"sync"
 	"time"
 
+	"uuid"
+
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/telemetry"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/toolregistry"
 	"github.com/CaliLuke/loom/pulse/pool"
 	"github.com/CaliLuke/loom/pulse/rmap"
-	"uuid"
 )
 
 type (

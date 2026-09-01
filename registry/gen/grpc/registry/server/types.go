@@ -250,7 +250,10 @@ func ValidateRegisterRequest(message *registrypb.RegisterRequest) (err error) {
 	if message.Version != nil {
 		err = loom.MergeErrors(err, loom.ValidatePatternCompiled("message.version", string(*message.Version), loomPatternTypes0))
 	}
-	for _, e := range message.Tools {
+	for i, e := range message.Tools {
+		if e == nil {
+			err = loom.MergeErrors(err, loom.InvalidNullElementError("message.tools", i))
+		}
 		if e != nil {
 			if err2 := ValidateToolSchema(e); err2 != nil {
 				err = loom.MergeErrors(err, err2)

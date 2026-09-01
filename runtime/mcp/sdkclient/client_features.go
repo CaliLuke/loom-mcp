@@ -9,7 +9,8 @@ import (
 	"crypto/cipher"
 	"crypto/rand"
 	"encoding/base64"
-	"encoding/json"
+	"encoding/json/jsontext"
+	"encoding/json/v2"
 	"errors"
 	"fmt"
 
@@ -64,7 +65,7 @@ type sessionProgressReporter struct {
 }
 
 type inputRoundTrip struct {
-	responses       map[string]json.RawMessage
+	responses       map[string]jsontext.Value
 	requests        map[string]persistedInputRequest
 	pending         map[string]struct{}
 	requestStateKey []byte
@@ -77,14 +78,14 @@ type inputRoundTrip struct {
 // contracts, the exact pending round, and prior client-supplied responses.
 type persistedRequestState struct {
 	Version   int                              `json:"version"`
-	Responses map[string]json.RawMessage       `json:"responses,omitempty"`
+	Responses map[string]jsontext.Value        `json:"responses,omitempty"`
 	Requests  map[string]persistedInputRequest `json:"requests,omitempty"`
 	Pending   []string                         `json:"pending,omitempty"`
 }
 
 type persistedInputRequest struct {
-	Method string          `json:"method"`
-	Params json.RawMessage `json:"params"`
+	Method string         `json:"method"`
+	Params jsontext.Value `json:"params"`
 }
 
 type inputRequiredError struct {
@@ -143,7 +144,7 @@ func (r sessionProgressReporter) ReportProgress(ctx context.Context, token any, 
 
 func newInputRoundTrip(opts ClientFeaturesOptions) *inputRoundTrip {
 	roundTrip := &inputRoundTrip{
-		responses:       make(map[string]json.RawMessage),
+		responses:       make(map[string]jsontext.Value),
 		requests:        make(map[string]persistedInputRequest),
 		pending:         make(map[string]struct{}),
 		requestStateKey: append([]byte(nil), opts.RequestStateKey...),
@@ -324,14 +325,14 @@ func invalidClientInput(err error) error {
 	return &invalidClientInputError{err: err}
 }
 
-func encodePersistedRequestState(responses map[string]json.RawMessage, requests map[string]persistedInputRequest, pending []string, key, aad []byte) (string, error) {
+func encodePersistedRequestState(responses map[string]jsontext.Value, requests map[string]persistedInputRequest, pending []string, key, aad []byte) (string, error) {
 	state := persistedRequestState{
 		Version:   requestStateVersion,
 		Responses: responses,
 		Requests:  requests,
 		Pending:   pending,
 	}
-	data, err := json.Marshal(state)
+	data, err := marshalCanonicalState(state)
 	if err != nil {
 		return "", fmt.Errorf("encode MCP requestState: %w", err)
 	}
@@ -358,7 +359,7 @@ func persistInputRequest(request mcp.InputRequest) (persistedInputRequest, error
 	if !ok || params == nil {
 		return persistedInputRequest{}, fmt.Errorf("unsupported MCP input request type %T", request)
 	}
-	data, err := json.Marshal(params)
+	data, err := marshalCanonicalState(params)
 	if err != nil {
 		return persistedInputRequest{}, fmt.Errorf("encode MCP pending input request: %w", err)
 	}
@@ -427,11 +428,23 @@ func requestStateBinding(method string, params any) ([]byte, error) {
 		Method: method,
 		Params: params,
 	}
-	data, err := json.Marshal(binding)
+	data, err := marshalCanonicalState(binding)
 	if err != nil {
 		return nil, fmt.Errorf("encode MCP requestState binding: %w", err)
 	}
 	return data, nil
+}
+
+func marshalCanonicalState(value any) ([]byte, error) {
+	data, err := json.Marshal(value, json.Deterministic(true))
+	if err != nil {
+		return nil, err
+	}
+	canonical := jsontext.Value(data)
+	if err := canonical.Canonicalize(); err != nil {
+		return nil, err
+	}
+	return []byte(canonical), nil
 }
 
 func validateElicitResult(id string, result *mcp.ElicitResult) error {

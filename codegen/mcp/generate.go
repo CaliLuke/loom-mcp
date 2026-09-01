@@ -200,7 +200,8 @@ func adapterImports(genpkg string, svc *expr.ServiceExpr, svcName string, data *
 	imports = append(imports, []*codegen.ImportSpec{
 		{Path: "bytes"},
 		{Path: "context"},
-		{Path: "encoding/json"},
+		{Name: "json", Path: "encoding/json/v2"},
+		{Name: "jsontext", Path: "encoding/json/jsontext"},
 		{Path: "errors"},
 		{Path: "fmt"},
 		{Path: "io"},
@@ -310,7 +311,8 @@ func buildMCPPromptProviderFile(genpkg string, svc *expr.ServiceExpr, data *Adap
 	}
 	imports := []*codegen.ImportSpec{
 		{Path: "context"},
-		{Path: "encoding/json"},
+		{Name: "json", Path: "encoding/json/v2"},
+		{Name: "jsontext", Path: "encoding/json/jsontext"},
 		{Path: genpkg + "/" + svcName, Name: svcName},
 	}
 	if hasRuntimePrompts(data.StaticPrompts) {

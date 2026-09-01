@@ -1,11 +1,11 @@
 package tests
 
 import (
-	"go/parser"
-	"go/token"
 	"testing"
 
+	agentcodegen "github.com/CaliLuke/loom-mcp/v2/codegen/agent"
 	"github.com/CaliLuke/loom-mcp/v2/codegen/agent/tests/testscenarios"
+	"github.com/CaliLuke/loom-mcp/v2/codegen/testhelpers"
 	"github.com/stretchr/testify/require"
 )
 
@@ -60,11 +60,9 @@ func TestGolden_Args_UnionSumTypes(t *testing.T) {
 }
 
 func TestGolden_Args_RecursiveUserTypes(t *testing.T) {
-	files := buildAndGenerate(t, testscenarios.RecursiveToolTypes())
-	types := fileContent(t, files, "gen/alpha/toolsets/graph/types.go")
+	genpkg, roots := testhelpers.RunDesign(t, testscenarios.RecursiveToolTypes())
+	_, err := agentcodegen.Generate(genpkg, roots, nil)
 
-	_, err := parser.ParseFile(token.NewFileSet(), "types.go", types, parser.AllErrors)
-	require.NoError(t, err)
-	require.Contains(t, types, "Node = struct")
-	require.Contains(t, types, "Next *Node `json:\"next,omitempty\"`")
+	require.Error(t, err)
+	require.ErrorContains(t, err, "recursive user type")
 }

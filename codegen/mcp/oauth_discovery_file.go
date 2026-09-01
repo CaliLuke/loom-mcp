@@ -21,7 +21,8 @@ func oauthDiscoveryFile(data *AdapterData) *codegen.File {
 	svcPkg := "mcp_" + codegen.SnakeCase(data.ServiceName)
 	path := filepath.Join(codegen.Gendir, svcPkg, "oauth_discovery.go")
 	imports := []*codegen.ImportSpec{
-		{Path: "encoding/json"},
+		{Name: "json", Path: "encoding/json/v2"},
+		{Name: "jsontext", Path: "encoding/json/jsontext"},
 		{Path: "net/http"},
 		{Path: "net/url"},
 		{Path: "github.com/CaliLuke/loom-mcp/v2/runtime/mcp", Name: "mcpruntime"},
@@ -118,7 +119,7 @@ func emitOAuthHandlers(stmt *jen.Statement) {
 			jen.Id("BearerMethodsSupported"): jen.Id("oauthBearerMethodsSupported"),
 			jen.Id("ResourceDocumentation"):  jen.Id("oauthResourceDocumentation"),
 		}),
-		jen.List(jen.Id("payload"), jen.Id("err")).Op(":=").Qual("encoding/json", "Marshal").Call(jen.Id("doc")),
+		jen.List(jen.Id("payload"), jen.Id("err")).Op(":=").Id("json").Dot("Marshal").Call(jen.Id("doc")),
 		jen.If(jen.Id("err").Op("!=").Nil()).Block(
 			jen.Qual("net/http", "Error").Call(jen.Id("w"), jen.Lit("failed to marshal protected resource metadata"), jen.Qual("net/http", "StatusInternalServerError")),
 			jen.Return(),
@@ -230,7 +231,7 @@ func emitOAuthAudienceEnforcement(stmt *jen.Statement) {
 	stmt.Comment("does not match the DSL-declared ResourceIdentifier are rejected.").Line()
 	stmt.Comment("").Line()
 	stmt.Comment("The claim is read from TokenInfo.Extra[\"aud\"] and may be a string, a").Line()
-	stmt.Comment("[]string, or a []any (matching how encoding/json decodes a JWT `aud`").Line()
+	stmt.Comment("[]string, or a []any (matching how JSON decoding represents a JWT `aud`").Line()
 	stmt.Comment("array). Missing or wrong-typed claims are treated as mismatches.").Line()
 	stmt.Comment("").Line()
 	stmt.Comment("Wrap the consumer's verifier exactly once at mount time:").Line()

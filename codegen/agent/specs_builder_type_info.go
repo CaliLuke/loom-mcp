@@ -2,7 +2,8 @@ package codegen
 
 import (
 	"bytes"
-	"encoding/json"
+	"encoding/json/jsontext"
+	"encoding/json/v2"
 	"fmt"
 	"sort"
 	"strconv"
@@ -376,13 +377,11 @@ func removeRequiredField(att *goaexpr.AttributeExpr, field string) {
 
 func exampleInputGoExpr(exampleJSON []byte) (string, bool) {
 	trimmed := bytes.TrimSpace(exampleJSON)
-	if len(trimmed) == 0 || !json.Valid(trimmed) {
+	if len(trimmed) == 0 || !jsontext.Value(trimmed).IsValid() {
 		return "", false
 	}
-	dec := json.NewDecoder(bytes.NewReader(trimmed))
-	dec.UseNumber()
 	var v any
-	if err := dec.Decode(&v); err != nil {
+	if err := json.Unmarshal(trimmed, &v); err != nil {
 		return "", false
 	}
 	m, ok := v.(map[string]any)
@@ -403,14 +402,6 @@ func goLiteralForAny(v any) string {
 		return fmt.Sprintf("%#v", x)
 	case string:
 		return fmt.Sprintf("%#v", x)
-	case json.Number:
-		if i, err := x.Int64(); err == nil {
-			return fmt.Sprintf("%#v", i)
-		}
-		if f, err := x.Float64(); err == nil {
-			return fmt.Sprintf("%#v", f)
-		}
-		return fmt.Sprintf("%#v", x.String())
 	case float64:
 		return fmt.Sprintf("%#v", x)
 	case []any:

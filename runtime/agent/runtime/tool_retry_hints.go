@@ -1,7 +1,8 @@
 package runtime
 
 import (
-	"encoding/json"
+	"encoding/json/jsontext"
+	"encoding/json/v2"
 	"errors"
 	"fmt"
 	"slices"
@@ -135,16 +136,16 @@ func validationQuestionLabel(field string, issues []*tools.FieldIssue, descs map
 // ExampleInput so consumers can display a concrete, valid payload.
 func buildRetryHintFromDecodeError(err error, toolName tools.Ident, spec *tools.ToolSpec) *planner.RetryHint {
 	var (
-		typeErr   *json.UnmarshalTypeError
-		syntaxErr *json.SyntaxError
-		fields    []string
-		reason    planner.RetryReason
-		question  string
+		semanticErr *json.SemanticError
+		syntaxErr   *jsontext.SyntacticError
+		fields      []string
+		reason      planner.RetryReason
+		question    string
 	)
 
 	switch {
-	case errors.As(err, &typeErr):
-		field := typeErr.Field
+	case errors.As(err, &semanticErr):
+		field := semanticErr.JSONPointer.LastToken()
 		if field == "" {
 			field = payloadFieldAnchor
 		}
@@ -161,7 +162,7 @@ func buildRetryHintFromDecodeError(err error, toolName tools.Ident, spec *tools.
 		question = fmt.Sprintf(
 			"I could not parse the %s tool input as JSON (syntax error near byte offset %d). Please resend this tool call with a valid JSON object payload.",
 			toolName,
-			syntaxErr.Offset,
+			syntaxErr.ByteOffset,
 		)
 	default:
 		// Not a JSON decode error we can interpret.

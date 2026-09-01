@@ -1,7 +1,8 @@
 package tests
 
 import (
-	"encoding/json"
+	"encoding/json/jsontext"
+	"encoding/json/v2"
 	"fmt"
 	"go/ast"
 	"go/parser"
@@ -124,18 +125,18 @@ func validateToolSchemasGolden(t *testing.T, path string) {
 
 	raw, err := os.ReadFile(filepath.Clean(path))
 	require.NoError(t, err)
-	require.True(t, json.Valid(raw), "expected valid JSON in %q", path)
+	require.True(t, jsontext.Value(raw).IsValid(), "expected valid JSON in %q", path)
 
 	var doc struct {
 		Tools []struct {
 			ID      string `json:"id"`
 			Payload struct {
-				Name   string          `json:"name"`
-				Schema json.RawMessage `json:"schema"`
+				Name   string         `json:"name"`
+				Schema jsontext.Value `json:"schema"`
 			} `json:"payload"`
 			Result struct {
-				Name   string          `json:"name"`
-				Schema json.RawMessage `json:"schema"`
+				Name   string         `json:"name"`
+				Schema jsontext.Value `json:"schema"`
 			} `json:"result"`
 		} `json:"tools"`
 	}
@@ -153,7 +154,7 @@ func validateSchemaBytes(t *testing.T, schemaBytes []byte, label string) {
 	t.Helper()
 
 	require.NotEmpty(t, schemaBytes, "expected schema bytes for %s", label)
-	require.True(t, json.Valid(schemaBytes), "schema is not valid JSON for %s", label)
+	require.True(t, jsontext.Value(schemaBytes).IsValid(), "schema is not valid JSON for %s", label)
 
 	var schemaDoc any
 	require.NoError(t, json.Unmarshal(schemaBytes, &schemaDoc), "unmarshal schema for %s", label)

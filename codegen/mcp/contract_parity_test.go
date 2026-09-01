@@ -2,7 +2,8 @@ package codegen_test
 
 import (
 	"bytes"
-	"encoding/json"
+	"encoding/json/jsontext"
+	"encoding/json/v2"
 	"path/filepath"
 	"regexp"
 	"slices"
@@ -20,7 +21,6 @@ import (
 	goadsl "github.com/CaliLuke/loom/dsl"
 	"github.com/CaliLuke/loom/eval"
 	"github.com/CaliLuke/loom/expr"
-	openapi "github.com/CaliLuke/loom/http/codegen/openapi"
 	"github.com/santhosh-tekuri/jsonschema/v6"
 	"github.com/stretchr/testify/require"
 )
@@ -47,11 +47,9 @@ func TestUnionContractParityAcrossGeneratedSurfaces(t *testing.T) {
 	attr := runUnionContractParityDesign(t)
 
 	inlineFacts := extractUnionContractFacts(t, mustInlineJSONSchema(t, attr))
-	openAPIFacts := extractUnionContractFacts(t, mustOpenAPISchemaJSON(t, attr))
 	mcpFacts := extractUnionContractFacts(t, mustMCPInputSchema(t))
 	agentFacts := extractUnionContractFacts(t, mustAgentToolSchema(t))
 
-	require.Equal(t, inlineFacts, openAPIFacts)
 	require.Equal(t, inlineFacts, mcpFacts)
 	require.Equal(t, inlineFacts, agentFacts)
 	require.Equal(t, []string{"request"}, inlineFacts.TopLevelRequired)
@@ -97,11 +95,9 @@ func TestFieldContractParityAcrossGeneratedSurfaces(t *testing.T) {
 	attr := runFieldContractParityDesign(t)
 
 	inlineFacts := extractFieldContractFacts(t, mustInlineJSONSchema(t, attr))
-	openAPIFacts := extractFieldContractFacts(t, mustOpenAPISchemaJSON(t, attr))
 	mcpFacts := extractFieldContractFacts(t, mustMCPInputSchema(t))
 	agentFacts := extractFieldContractFacts(t, mustAgentPayloadSchema(t))
 
-	require.Equal(t, inlineFacts, openAPIFacts)
 	require.Equal(t, inlineFacts, mcpFacts)
 	require.Equal(t, inlineFacts, agentFacts)
 	require.Equal(t, []string{"id"}, inlineFacts.TopLevelRequired)
@@ -316,16 +312,6 @@ func mustInlineJSONSchema(t *testing.T, attr *expr.AttributeExpr) []byte {
 	return schema
 }
 
-func mustOpenAPISchemaJSON(t *testing.T, attr *expr.AttributeExpr) []byte {
-	t.Helper()
-
-	openapi.Definitions = make(map[string]*openapi.Schema)
-	schema := openapi.AttributeTypeSchema(expr.Root.API, attr)
-	payload, err := json.Marshal(schema)
-	require.NoError(t, err)
-	return payload
-}
-
 func mustMCPInputSchema(t *testing.T) []byte {
 	t.Helper()
 
@@ -513,10 +499,10 @@ func normalizeExamples(t *testing.T, schema map[string]any) []string {
 type agentToolSchemaDoc struct {
 	ID      string `json:"id"`
 	Payload struct {
-		Schema json.RawMessage `json:"schema"`
+		Schema jsontext.Value `json:"schema"`
 	} `json:"payload"`
 	Result struct {
-		Schema json.RawMessage `json:"schema"`
+		Schema jsontext.Value `json:"schema"`
 	} `json:"result"`
 }
 

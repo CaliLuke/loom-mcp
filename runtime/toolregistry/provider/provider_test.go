@@ -2,7 +2,8 @@ package provider
 
 import (
 	"context"
-	"encoding/json"
+	"encoding/json/jsontext"
+	"encoding/json/v2"
 	"errors"
 	"fmt"
 	"sync"
@@ -45,7 +46,7 @@ func (h *recordingHandler) HandleToolCall(ctx context.Context, msg toolregistry.
 			<-h.unblock
 		})
 	}
-	return toolregistry.NewToolResultMessage(msg.ToolUseID, json.RawMessage(`{"ok":true}`)), nil
+	return toolregistry.NewToolResultMessage(msg.ToolUseID, jsontext.Value(`{"ok":true}`)), nil
 }
 
 func (h *blockingHandler) HandleToolCall(ctx context.Context, msg toolregistry.ToolCallMessage) (toolregistry.ToolResultMessage, error) {
@@ -53,7 +54,7 @@ func (h *blockingHandler) HandleToolCall(ctx context.Context, msg toolregistry.T
 		close(h.started)
 	}
 	<-h.unblock
-	return toolregistry.NewToolResultMessage(msg.ToolUseID, json.RawMessage(`{"ok":true}`)), nil
+	return toolregistry.NewToolResultMessage(msg.ToolUseID, jsontext.Value(`{"ok":true}`)), nil
 }
 
 func TestDrainPending_PreservesCapacity(t *testing.T) {
@@ -195,7 +196,7 @@ func TestServe_RespondsToPingWhileToolCallInFlight(t *testing.T) {
 	call := toolregistry.NewToolCallMessage(
 		"tooluse_1",
 		tools.Ident("toolset.tool"),
-		json.RawMessage(`{"x":1}`),
+		jsontext.Value(`{"x":1}`),
 		&toolregistry.ToolCallMeta{RunID: "r1", SessionID: "s1"},
 	)
 	callPayload, err := json.Marshal(call)
@@ -316,7 +317,7 @@ func TestServe_RespondsToPingWhenQueueIsFull(t *testing.T) {
 	call1 := toolregistry.NewToolCallMessage(
 		"tooluse_1",
 		tools.Ident("toolset.tool"),
-		json.RawMessage(`{"x":1}`),
+		jsontext.Value(`{"x":1}`),
 		&toolregistry.ToolCallMeta{RunID: "r1", SessionID: "s1"},
 	)
 	call1Payload, err := json.Marshal(call1)
@@ -336,7 +337,7 @@ func TestServe_RespondsToPingWhenQueueIsFull(t *testing.T) {
 	call2 := toolregistry.NewToolCallMessage(
 		"tooluse_2",
 		tools.Ident("toolset.tool"),
-		json.RawMessage(`{"x":2}`),
+		jsontext.Value(`{"x":2}`),
 		&toolregistry.ToolCallMeta{RunID: "r1", SessionID: "s1"},
 	)
 	call2Payload, err := json.Marshal(call2)
@@ -664,7 +665,7 @@ func TestServe_DoesNotExitOnPongFailure(t *testing.T) {
 	call := toolregistry.NewToolCallMessage(
 		"tooluse_1",
 		tools.Ident("toolset.tool"),
-		json.RawMessage(`{"x":1}`),
+		jsontext.Value(`{"x":1}`),
 		&toolregistry.ToolCallMeta{RunID: "r1", SessionID: "s1"},
 	)
 	callPayload, err := json.Marshal(call)
@@ -796,7 +797,7 @@ func (h *outputDeltaHandler) HandleToolCall(ctx context.Context, msg toolregistr
 		case h.errc <- errors.New("missing output delta publisher in context"):
 		default:
 		}
-		return toolregistry.NewToolResultMessage(msg.ToolUseID, json.RawMessage(`{"ok":true}`)), nil
+		return toolregistry.NewToolResultMessage(msg.ToolUseID, jsontext.Value(`{"ok":true}`)), nil
 	}
 	if err := pub.PublishToolOutputDelta(ctx, "stdout", "hello\n"); err != nil {
 		select {
@@ -804,7 +805,7 @@ func (h *outputDeltaHandler) HandleToolCall(ctx context.Context, msg toolregistr
 		default:
 		}
 	}
-	return toolregistry.NewToolResultMessage(msg.ToolUseID, json.RawMessage(`{"ok":true}`)), nil
+	return toolregistry.NewToolResultMessage(msg.ToolUseID, jsontext.Value(`{"ok":true}`)), nil
 }
 
 func TestServe_PublishesOutputDeltaToResultStream(t *testing.T) {
@@ -858,7 +859,7 @@ func TestServe_PublishesOutputDeltaToResultStream(t *testing.T) {
 	call := toolregistry.NewToolCallMessage(
 		"tooluse_1",
 		tools.Ident("toolset.tool"),
-		json.RawMessage(`{"x":1}`),
+		jsontext.Value(`{"x":1}`),
 		&toolregistry.ToolCallMeta{RunID: "r1", SessionID: "s1"},
 	)
 	callPayload, err := json.Marshal(call)
@@ -960,7 +961,7 @@ func makeToolCallEvent(t *testing.T, eventID string, toolUseID string) *streamin
 	call := toolregistry.NewToolCallMessage(
 		toolUseID,
 		tools.Ident("toolset.tool"),
-		json.RawMessage(`{"x":1}`),
+		jsontext.Value(`{"x":1}`),
 		&toolregistry.ToolCallMeta{RunID: "r1", SessionID: "s1"},
 	)
 	payload, err := json.Marshal(call)

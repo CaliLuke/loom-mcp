@@ -2,7 +2,7 @@ package mcp
 
 import (
 	"context"
-	"encoding/json"
+	"encoding/json/jsontext"
 	"errors"
 	"testing"
 
@@ -13,7 +13,7 @@ import (
 func TestCallerFuncDelegatesRequestContextResponseAndError(t *testing.T) {
 	type contextKey string
 	wantErr := errors.New("call failed")
-	wantResponse := CallResponse{Result: json.RawMessage(`{"ok":true}`)}
+	wantResponse := CallResponse{Result: jsontext.Value(`{"ok":true}`)}
 	wantRequest := CallRequest{Tool: "search"}
 	caller := CallerFunc(func(ctx context.Context, req CallRequest) (CallResponse, error) {
 		assert.Equal(t, "trace-1", ctx.Value(contextKey("trace")))

@@ -2,7 +2,7 @@ package runtime
 
 import (
 	"context"
-	"encoding/json"
+	"encoding/json/jsontext"
 	"errors"
 	"fmt"
 	"strings"
@@ -437,8 +437,8 @@ func cloneToolJSONValue(value any) any {
 			out[i] = cloneToolJSONValue(item)
 		}
 		return out
-	case json.RawMessage:
-		return append(json.RawMessage(nil), typed...)
+	case jsontext.Value:
+		return append(jsontext.Value(nil), typed...)
 	case []byte:
 		return append([]byte(nil), typed...)
 	default:

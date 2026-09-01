@@ -9,7 +9,7 @@ package mcpassistant
 
 import (
 	"context"
-	"encoding/json"
+	jsontext "encoding/json/jsontext"
 
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/prompt"
 )
@@ -18,11 +18,11 @@ import (
 // Users must implement this interface to provide actual prompt implementations.
 type PromptProvider interface {
 	// GetCodeReviewPrompt returns the content for the code_review prompt.
-	GetCodeReviewPrompt(arguments json.RawMessage) (*PromptsGetResult, error)
+	GetCodeReviewPrompt(arguments jsontext.Value) (*PromptsGetResult, error)
 	// GetContextualPromptsPrompt returns the dynamic content for the contextual_prompts prompt.
-	GetContextualPromptsPrompt(ctx context.Context, arguments json.RawMessage) (*PromptsGetResult, error)
+	GetContextualPromptsPrompt(ctx context.Context, arguments jsontext.Value) (*PromptsGetResult, error)
 	// GetFigmaImplementationPromptPrompt returns the dynamic content for the figma_implementation_prompt prompt.
-	GetFigmaImplementationPromptPrompt(ctx context.Context, arguments json.RawMessage) (*PromptsGetResult, error)
+	GetFigmaImplementationPromptPrompt(ctx context.Context, arguments jsontext.Value) (*PromptsGetResult, error)
 }
 
 // RegisterRuntimePrompts registers design-declared MCP prompts as runtime prompt specs.

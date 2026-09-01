@@ -23,7 +23,7 @@ func TestGolden_BoundedResult_UsesBoundsSpecAndProjection(t *testing.T) {
 	require.Contains(t, schemas, `"next_cursor"`)
 
 	executor := generatedContentBySuffix(t, files, "agents/scribe/lookup/service_executor.go")
-	require.Contains(t, executor, "lookup.DispatchSearchMethod(ctx, meta, json.RawMessage(call.Payload), call.Labels, lookup.SearchDispatchOptions{")
+	require.Contains(t, executor, "lookup.DispatchSearchMethod(ctx, meta, jsontext.Value(call.Payload), call.Labels, lookup.SearchDispatchOptions{")
 	require.Contains(t, executor, "Call: caller,")
 	require.Contains(t, executor, "MapPayload: cfg.mapPayload,")
 	require.Contains(t, executor, "MapResult: cfg.mapResult,")

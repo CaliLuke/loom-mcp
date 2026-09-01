@@ -11,10 +11,10 @@ package mcpcatalog
 import (
 	"bytes"
 	"context"
-	"encoding/json"
+	jsontext "encoding/json/jsontext"
+	json "encoding/json/v2"
 	"errors"
 	"fmt"
-	"io"
 	"net/http"
 	"net/url"
 	"regexp"
@@ -80,7 +80,7 @@ type (
 	ToolCallInterceptorInfo interface {
 		loom.InterceptorInfo
 		Tool() string
-		RawArguments() json.RawMessage
+		RawArguments() jsontext.Value
 	}
 
 	// ToolCallHandler is the generated MCP tool-call dispatcher.
@@ -94,7 +94,7 @@ type toolCallInterceptorInfo struct {
 	method     string
 	tool       string
 	rawPayload any
-	rawArgs    json.RawMessage
+	rawArgs    jsontext.Value
 }
 
 func (i *toolCallInterceptorInfo) Service() string {
@@ -112,7 +112,7 @@ func (i *toolCallInterceptorInfo) CallType() loom.InterceptorCallType {
 func (i *toolCallInterceptorInfo) RawPayload() any {
 	return i.rawPayload
 }
-func (i *toolCallInterceptorInfo) RawArguments() json.RawMessage {
+func (i *toolCallInterceptorInfo) RawArguments() jsontext.Value {
 	return i.rawArgs
 }
 
@@ -185,27 +185,27 @@ func NewMCPAdapter(service catalog.Service, opts *MCPAdapterOptions) *MCPAdapter
 	nameToURI := map[string]string{"status": "status://current"}
 	return &MCPAdapter{service: service, initializedSessions: make(map[string]time.Time), sessionPrincipals: make(map[string]string), opts: opts, tracer: tracer, callCounter: callCounter, errorCounter: errorCounter, durationHistogram: durationHistogram, resourceNameToURI: nameToURI}
 }
-func mcpJSONRaw(value loom.Nullable[any]) (json.RawMessage, error) {
+func mcpJSONRaw(value loom.Nullable[any]) (jsontext.Value, error) {
 	if !value.Present() {
 		return nil, nil
 	}
 	if value.IsNull() {
-		return json.RawMessage("null"), nil
+		return jsontext.Value("null"), nil
 	}
 	actual, ok := value.Value()
 	if !ok {
 		return nil, errors.New("present MCP JSON value has no concrete value")
 	}
-	if raw, ok := actual.(json.RawMessage); ok {
-		return append(json.RawMessage(nil), raw...), nil
+	if raw, ok := actual.(jsontext.Value); ok {
+		return append(jsontext.Value(nil), raw...), nil
 	}
 	raw, err := json.Marshal(actual)
 	if err != nil {
 		return nil, err
 	}
-	return json.RawMessage(raw), nil
+	return jsontext.Value(raw), nil
 }
-func mcpJSONFromRaw(raw json.RawMessage) loom.Nullable[any] {
+func mcpJSONFromRaw(raw jsontext.Value) loom.Nullable[any] {
 	trimmed := bytes.TrimSpace(raw)
 	if len(trimmed) == 0 {
 		return loom.Nullable[any]{}
@@ -213,7 +213,7 @@ func mcpJSONFromRaw(raw json.RawMessage) loom.Nullable[any] {
 	if bytes.Equal(trimmed, []byte("null")) {
 		return loom.NullValue[any]()
 	}
-	copied := append(json.RawMessage(nil), raw...)
+	copied := append(jsontext.Value(nil), raw...)
 	return loom.NullableValue[any](copied)
 }
 func mcpJSONAny(value loom.Nullable[any]) any {
@@ -367,7 +367,7 @@ func (a *MCPAdapter) mapError(err error) error {
 	}
 	return err
 }
-func (a *MCPAdapter) toolCallInfo(p *ToolsCallPayload, rawArgs json.RawMessage) ToolCallInterceptorInfo {
+func (a *MCPAdapter) toolCallInfo(p *ToolsCallPayload, rawArgs jsontext.Value) ToolCallInterceptorInfo {
 	info := &toolCallInterceptorInfo{
 		method:     "tools/call",
 		rawPayload: p,
@@ -462,7 +462,7 @@ func stringPtr(s string) *string {
 	return &s
 }
 func isLikelyJSON(s string) bool {
-	return json.Valid([]byte(s))
+	return jsontext.Value(s).IsValid()
 }
 
 // buildContentItem returns a ContentItem honoring StructuredStreamJSON option.
@@ -540,7 +540,7 @@ func formatToolErrorText(err error) string {
 	return fmt.Sprintf("[%s] %s\nRecovery: %s", code, message, recovery)
 }
 func (a *MCPAdapter) safeMCPError(err error, defaultCode string, fallbackMessage string) error {
-	if mcpruntime.IsInputRequired(err) {
+	if mcpruntime.IsInputRequired(err) || mcpruntime.IsInvalidClientInput(err) {
 		return err
 	}
 	if err == nil {
@@ -693,30 +693,19 @@ func (c *toolCallResultCollector) result() *ToolsCallResult {
 	return merged
 }
 func decodeMCPPayloadStrict(data []byte, payload any) error {
-	dec := json.NewDecoder(bytes.NewReader(data))
-	dec.DisallowUnknownFields()
-	if err := dec.Decode(payload); err != nil {
-		return err
-	}
-	if err := dec.Decode(&struct{}{}); err != io.EOF {
-		if err == nil {
-			return fmt.Errorf("unexpected trailing JSON data")
-		}
-		return err
-	}
-	return nil
+	return json.Unmarshal(data, payload, json.RejectUnknownMembers(true))
 }
-func decodeMCPPayloadFields(data []byte) (map[string]json.RawMessage, error) {
-	var fields map[string]json.RawMessage
+func decodeMCPPayloadFields(data []byte) (map[string]jsontext.Value, error) {
+	var fields map[string]jsontext.Value
 	if err := json.Unmarshal(data, &fields); err != nil {
 		return nil, err
 	}
 	if fields == nil {
-		fields = make(map[string]json.RawMessage)
+		fields = make(map[string]jsontext.Value)
 	}
 	return fields, nil
 }
-func validateMCPPayloadRequired(fields map[string]json.RawMessage, field string) error {
+func validateMCPPayloadRequired(fields map[string]jsontext.Value, field string) error {
 	raw, ok := fields[field]
 	if !ok {
 		return loom.WithErrorRemedy(loom.PermanentError("invalid_params", "Missing required field: %s", field), &loom.ErrorRemedy{
@@ -733,7 +722,7 @@ func validateMCPPayloadRequired(fields map[string]json.RawMessage, field string)
 	}
 	return nil
 }
-func validateMCPPayloadEnum(fields map[string]json.RawMessage, field string, optional bool, allowed ...string) error {
+func validateMCPPayloadEnum(fields map[string]jsontext.Value, field string, optional bool, allowed ...string) error {
 	raw, ok := fields[field]
 	if !ok {
 		return nil
@@ -767,8 +756,8 @@ type toolSearchPayload struct {
 	Tags           []string `json:"tags,omitempty"`
 }
 type toolCallProxyPayload struct {
-	Name      string          `json:"name"`
-	Arguments json.RawMessage `json:"arguments,omitempty"`
+	Name      string         `json:"name"`
+	Arguments jsontext.Value `json:"arguments,omitempty"`
 }
 type toolSearchResult struct {
 	Tools        []toolSearchDescriptor `json:"tools"`
@@ -778,21 +767,21 @@ type toolSearchResult struct {
 	Pattern      string                 `json:"pattern,omitempty"`
 }
 type toolSearchDescriptor struct {
-	Name              string          `json:"name"`
-	Title             string          `json:"title,omitempty"`
-	Description       string          `json:"description,omitempty"`
-	InputSchema       json.RawMessage `json:"inputSchema,omitempty"`
-	OutputSchema      json.RawMessage `json:"outputSchema,omitempty"`
-	Annotations       json.RawMessage `json:"annotations,omitempty"`
-	Meta              json.RawMessage `json:"_meta,omitempty"`
-	Icons             []*Icon         `json:"icons,omitempty"`
-	Category          string          `json:"category,omitempty"`
-	Tags              []string        `json:"tags,omitempty"`
-	Keywords          []string        `json:"keywords,omitempty"`
-	WhyMatched        []string        `json:"why_matched,omitempty"`
-	CallToolName      string          `json:"call_tool_name,omitempty"`
-	CallToolArguments json.RawMessage `json:"call_tool_arguments,omitempty"`
-	CallToolJSON      string          `json:"call_tool_json,omitempty"`
+	Name              string         `json:"name"`
+	Title             string         `json:"title,omitempty"`
+	Description       string         `json:"description,omitempty"`
+	InputSchema       jsontext.Value `json:"inputSchema,omitempty"`
+	OutputSchema      jsontext.Value `json:"outputSchema,omitempty"`
+	Annotations       jsontext.Value `json:"annotations,omitempty"`
+	Meta              jsontext.Value `json:"_meta,omitempty"`
+	Icons             []*Icon        `json:"icons,omitempty"`
+	Category          string         `json:"category,omitempty"`
+	Tags              []string       `json:"tags,omitempty"`
+	Keywords          []string       `json:"keywords,omitempty"`
+	WhyMatched        []string       `json:"why_matched,omitempty"`
+	CallToolName      string         `json:"call_tool_name,omitempty"`
+	CallToolArguments jsontext.Value `json:"call_tool_arguments,omitempty"`
+	CallToolJSON      string         `json:"call_tool_json,omitempty"`
 }
 type toolSearchCandidate struct {
 	tool  *ToolInfo
@@ -816,28 +805,28 @@ type toolSearchSettings struct {
 func (a *MCPAdapter) generatedToolCatalog() []*ToolInfo {
 	return []*ToolInfo{&ToolInfo{
 		Description:  stringPtr("Lookup a direct catalog entry"),
-		InputSchema:  json.RawMessage([]byte("{\"type\":\"object\",\"required\":[\"query\"],\"properties\":{\"query\":{\"type\":\"string\",\"description\":\"Lookup query\"}},\"additionalProperties\":false}")),
-		Meta:         json.RawMessage([]byte("{\"com.github.caliluke.loom-mcp/discovery\":{\"category\":\"catalog\",\"keywords\":[\"catalog\",\"entry\"],\"tags\":[\"lookup\",\"direct\"]}}")),
+		InputSchema:  jsontext.Value([]byte("{\"type\":\"object\",\"required\":[\"query\"],\"properties\":{\"query\":{\"type\":\"string\",\"description\":\"Lookup query\"}},\"additionalProperties\":false}")),
+		Meta:         jsontext.Value([]byte("{\"com.github.caliluke.loom-mcp/discovery\":{\"category\":\"catalog\",\"tags\":[\"lookup\",\"direct\"],\"keywords\":[\"catalog\",\"entry\"]}}")),
 		Name:         "lookup",
-		OutputSchema: json.RawMessage([]byte("{\"type\":\"object\",\"required\":[\"value\"],\"properties\":{\"value\":{\"type\":\"string\",\"description\":\"Lookup result\"}},\"additionalProperties\":false}")),
+		OutputSchema: jsontext.Value([]byte("{\"type\":\"object\",\"required\":[\"value\"],\"properties\":{\"value\":{\"type\":\"string\",\"description\":\"Lookup result\"}},\"additionalProperties\":false}")),
 		Title:        stringPtr("Lookup"),
 	}, &ToolInfo{
 		Description:  stringPtr("Return two chunks through a Loom streaming method"),
-		InputSchema:  json.RawMessage([]byte("{\"type\":\"object\",\"properties\":{},\"additionalProperties\":false}")),
+		InputSchema:  jsontext.Value([]byte("{\"type\":\"object\",\"properties\":{},\"additionalProperties\":false}")),
 		Name:         "stream_chunks",
-		OutputSchema: json.RawMessage([]byte("{\"type\":\"object\",\"required\":[\"chunk\"],\"properties\":{\"chunk\":{\"type\":\"string\",\"description\":\"Streamed chunk\"}},\"additionalProperties\":false}")),
+		OutputSchema: jsontext.Value([]byte("{\"type\":\"object\",\"required\":[\"chunk\"],\"properties\":{\"chunk\":{\"type\":\"string\",\"description\":\"Streamed chunk\"}},\"additionalProperties\":false}")),
 		Title:        stringPtr("Stream Chunks"),
 	}, &ToolInfo{
 		Description:  stringPtr("Wait until the MCP client cancels the request"),
-		InputSchema:  json.RawMessage([]byte("{\"type\":\"object\",\"properties\":{},\"additionalProperties\":false}")),
+		InputSchema:  jsontext.Value([]byte("{\"type\":\"object\",\"properties\":{},\"additionalProperties\":false}")),
 		Name:         "wait_for_cancel",
-		OutputSchema: json.RawMessage([]byte("{\"type\":\"object\",\"required\":[\"completed\"],\"properties\":{\"completed\":{\"type\":\"boolean\",\"description\":\"Whether the wait completed normally\"}},\"additionalProperties\":false}")),
+		OutputSchema: jsontext.Value([]byte("{\"type\":\"object\",\"required\":[\"completed\"],\"properties\":{\"completed\":{\"type\":\"boolean\",\"description\":\"Whether the wait completed normally\"}},\"additionalProperties\":false}")),
 		Title:        stringPtr("Wait For Cancel"),
 	}, &ToolInfo{
 		Description:  stringPtr("Lookup a projected catalog entry"),
-		InputSchema:  json.RawMessage(projected.SpecProjectedLookup.Payload.Schema),
+		InputSchema:  jsontext.Value(projected.SpecProjectedLookup.Payload.Schema),
 		Name:         "projected_lookup",
-		OutputSchema: json.RawMessage(projected.SpecProjectedLookup.Result.Schema),
+		OutputSchema: jsontext.Value(projected.SpecProjectedLookup.Result.Schema),
 		Title:        stringPtr("Projected Lookup"),
 	}}
 }
@@ -1022,16 +1011,16 @@ func (a *MCPAdapter) toolSearchSyntheticTools() []*ToolInfo {
 func toolSearchToolInfo(name string) *ToolInfo {
 	return &ToolInfo{
 		Description:  stringPtr("Search available tools by plain text query or regex pattern and return matching tool definitions."),
-		InputSchema:  json.RawMessage([]byte("{\"type\":\"object\",\"properties\":{\"query\":{\"type\":\"string\",\"description\":\"Plain text query matched against tool names, titles, descriptions, metadata, and schemas\"},\"pattern\":{\"type\":\"string\",\"description\":\"Case-insensitive regex pattern matched against tool names, titles, descriptions, metadata, and schemas\"},\"max_results\":{\"type\":\"integer\",\"description\":\"Maximum number of tools to return for this search\"},\"include_schemas\":{\"type\":\"boolean\",\"description\":\"Include input and output schemas in returned descriptors\"},\"category\":{\"type\":\"string\",\"description\":\"Discovery category filter\"},\"tags\":{\"type\":\"array\",\"items\":{\"type\":\"string\"},\"description\":\"Discovery tag filters\"}},\"additionalProperties\":false}")),
+		InputSchema:  jsontext.Value([]byte("{\"type\":\"object\",\"properties\":{\"query\":{\"type\":\"string\",\"description\":\"Plain text query matched against tool names, titles, descriptions, metadata, and schemas\"},\"pattern\":{\"type\":\"string\",\"description\":\"Case-insensitive regex pattern matched against tool names, titles, descriptions, metadata, and schemas\"},\"max_results\":{\"type\":\"integer\",\"description\":\"Maximum number of tools to return for this search\"},\"include_schemas\":{\"type\":\"boolean\",\"description\":\"Include input and output schemas in returned descriptors\"},\"category\":{\"type\":\"string\",\"description\":\"Discovery category filter\"},\"tags\":{\"type\":\"array\",\"items\":{\"type\":\"string\"},\"description\":\"Discovery tag filters\"}},\"additionalProperties\":false}")),
 		Name:         name,
-		OutputSchema: json.RawMessage([]byte("{\"type\":\"object\",\"required\":[\"tools\",\"total_matches\",\"truncated\"],\"properties\":{\"tools\":{\"type\":\"array\",\"items\":{\"type\":\"object\",\"required\":[\"name\",\"description\"],\"properties\":{\"name\":{\"type\":\"string\"},\"title\":{\"type\":\"string\"},\"description\":{\"type\":\"string\"},\"inputSchema\":{\"type\":\"object\"},\"outputSchema\":{\"type\":\"object\"},\"annotations\":{\"type\":\"object\"},\"_meta\":{\"type\":\"object\"},\"icons\":{\"type\":\"array\",\"items\":{\"type\":\"object\"}},\"category\":{\"type\":\"string\"},\"tags\":{\"type\":\"array\",\"items\":{\"type\":\"string\"}},\"keywords\":{\"type\":\"array\",\"items\":{\"type\":\"string\"}},\"why_matched\":{\"type\":\"array\",\"items\":{\"type\":\"string\"}},\"call_tool_name\":{\"type\":\"string\"},\"call_tool_arguments\":{\"type\":\"object\"},\"call_tool_json\":{\"type\":\"string\"}}}},\"total_matches\":{\"type\":\"integer\"},\"truncated\":{\"type\":\"boolean\"},\"query\":{\"type\":\"string\"},\"pattern\":{\"type\":\"string\"}},\"additionalProperties\":false}")),
+		OutputSchema: jsontext.Value([]byte("{\"type\":\"object\",\"required\":[\"tools\",\"total_matches\",\"truncated\"],\"properties\":{\"tools\":{\"type\":\"array\",\"items\":{\"type\":\"object\",\"required\":[\"name\",\"description\"],\"properties\":{\"name\":{\"type\":\"string\"},\"title\":{\"type\":\"string\"},\"description\":{\"type\":\"string\"},\"inputSchema\":{\"type\":\"object\"},\"outputSchema\":{\"type\":\"object\"},\"annotations\":{\"type\":\"object\"},\"_meta\":{\"type\":\"object\"},\"icons\":{\"type\":\"array\",\"items\":{\"type\":\"object\"}},\"category\":{\"type\":\"string\"},\"tags\":{\"type\":\"array\",\"items\":{\"type\":\"string\"}},\"keywords\":{\"type\":\"array\",\"items\":{\"type\":\"string\"}},\"why_matched\":{\"type\":\"array\",\"items\":{\"type\":\"string\"}},\"call_tool_name\":{\"type\":\"string\"},\"call_tool_arguments\":{\"type\":\"object\"},\"call_tool_json\":{\"type\":\"string\"}}}},\"total_matches\":{\"type\":\"integer\"},\"truncated\":{\"type\":\"boolean\"},\"query\":{\"type\":\"string\"},\"pattern\":{\"type\":\"string\"}},\"additionalProperties\":false}")),
 		Title:        stringPtr("Search Tools"),
 	}
 }
 func toolCallProxyToolInfo(name string) *ToolInfo {
 	return &ToolInfo{
 		Description: stringPtr("Call a discovered tool by exact name. Always provide both top-level fields: name and arguments. Use arguments: {} when the discovered tool takes no arguments. Do not use args."),
-		InputSchema: json.RawMessage([]byte("{\"type\":\"object\",\"required\":[\"name\",\"arguments\"],\"properties\":{\"name\":{\"type\":\"string\",\"description\":\"Exact discovered tool name. Required. Copy this from search_tools results.\"},\"arguments\":{\"type\":\"object\",\"description\":\"Arguments object for the discovered tool. Required. Use {} when the discovered tool takes no arguments. Do not use args.\"}},\"additionalProperties\":false}")),
+		InputSchema: jsontext.Value([]byte("{\"type\":\"object\",\"required\":[\"name\",\"arguments\"],\"properties\":{\"name\":{\"type\":\"string\",\"description\":\"Exact discovered tool name. Required. Copy this from search_tools results.\"},\"arguments\":{\"type\":\"object\",\"description\":\"Arguments object for the discovered tool. Required. Use {} when the discovered tool takes no arguments. Do not use args.\"}},\"additionalProperties\":false}")),
 		Name:        name,
 		Title:       stringPtr("Call Tool"),
 	}
@@ -1048,7 +1037,7 @@ func toolSearchHaystack(tool *ToolInfo) string {
 		parts = append(parts, *tool.Title)
 	}
 	switch schema := tool.InputSchema.(type) {
-	case json.RawMessage:
+	case jsontext.Value:
 		parts = append(parts, string(schema))
 	case []byte:
 		parts = append(parts, string(schema))
@@ -1060,27 +1049,27 @@ func toolSearchHaystack(tool *ToolInfo) string {
 		}
 	}
 	switch schema := tool.OutputSchema.(type) {
-	case json.RawMessage:
+	case jsontext.Value:
 		parts = append(parts, string(schema))
 	case []byte:
 		parts = append(parts, string(schema))
 	}
 	switch meta := tool.Meta.(type) {
-	case json.RawMessage:
+	case jsontext.Value:
 		parts = append(parts, string(meta))
 	case []byte:
 		parts = append(parts, string(meta))
 	}
 	return strings.Join(parts, " ")
 }
-func toolRawJSON(value any) json.RawMessage {
+func toolRawJSON(value any) jsontext.Value {
 	switch v := value.(type) {
-	case json.RawMessage:
+	case jsontext.Value:
 		return v
 	case []byte:
-		return json.RawMessage(v)
+		return jsontext.Value(v)
 	case string:
-		return json.RawMessage([]byte(v))
+		return jsontext.Value([]byte(v))
 	default:
 		if v == nil {
 			return nil
@@ -1089,7 +1078,7 @@ func toolRawJSON(value any) json.RawMessage {
 		if err != nil {
 			return nil
 		}
-		return json.RawMessage(raw)
+		return jsontext.Value(raw)
 	}
 }
 func toolDiscoveryMetadata(tool *ToolInfo) (string, []string, []string) {
@@ -1140,7 +1129,7 @@ func toolSearchDescriptorFor(tool *ToolInfo, includeSchemas bool, callName strin
 	callArguments := toolCallArgumentsExample(tool)
 	callArgumentsJSON, _ := marshalToolSearchJSON(callArguments)
 	descriptor := toolSearchDescriptor{
-		CallToolArguments: json.RawMessage(callArgumentsJSON),
+		CallToolArguments: jsontext.Value(callArgumentsJSON),
 		CallToolJSON:      string(callArgumentsJSON),
 		CallToolName:      callName,
 		Category:          category,
@@ -1320,14 +1309,7 @@ func toolSearchWhyMatched(tool *ToolInfo, query string, score int, settings tool
 	return []string{fmt.Sprintf("matched query %q against tool metadata", query)}
 }
 func marshalToolSearchJSON(value any) ([]byte, error) {
-	var buf bytes.Buffer
-	enc := json.NewEncoder(&buf)
-	enc.SetEscapeHTML(false)
-	enc.SetIndent("", "  ")
-	if err := enc.Encode(value); err != nil {
-		return nil, err
-	}
-	return bytes.TrimRight(buf.Bytes(), "\n"), nil
+	return json.Marshal(value, json.Deterministic(true), jsontext.EscapeForHTML(false), jsontext.WithIndent("  "))
 }
 func toolExampleValue(property map[string]any) any {
 	typ := ""
@@ -1464,7 +1446,7 @@ func (a *MCPAdapter) handleSearchTools(ctx context.Context, p *ToolsCallPayload,
 		return false, err
 	}
 	if len(bytes.TrimSpace(arguments)) == 0 {
-		arguments = json.RawMessage([]byte("{}"))
+		arguments = jsontext.Value([]byte("{}"))
 	}
 	if err := decodeMCPPayloadStrict(arguments, &payload); err != nil {
 		return true, a.sendToolError(ctx, stream, p.Name, toolCallError(err, "invalid_params", "Provide {\"query\":\"...\"} or {\"pattern\":\"...\"} to search tools."))
@@ -1587,7 +1569,7 @@ func (a *MCPAdapter) handleCallToolProxy(ctx context.Context, p *ToolsCallPayloa
 	}
 	arguments := payload.Arguments
 	if len(bytes.TrimSpace(arguments)) == 0 {
-		arguments = json.RawMessage([]byte("{}"))
+		arguments = jsontext.Value([]byte("{}"))
 	}
 	proxied := &ToolsCallPayload{
 		Arguments: mcpJSONFromRaw(arguments),
@@ -1621,7 +1603,7 @@ func (b *StreamChunksStreamBridge) SendWithContext(ctx context.Context, ev *cata
 func (b *StreamChunksStreamBridge) Close() error {
 	return nil
 }
-func lookupInputRecovery(err error, raw json.RawMessage) string {
+func lookupInputRecovery(err error, raw jsontext.Value) string {
 	message := strings.TrimSpace(loom.ErrorSafeMessage(err))
 	if message == "" {
 		message = strings.TrimSpace(err.Error())
@@ -1636,7 +1618,7 @@ func lookupInputRecovery(err error, raw json.RawMessage) string {
 	}
 	return "Provide valid tool arguments. Example: " + example
 }
-func projectedLookupInputRecovery(err error, raw json.RawMessage) string {
+func projectedLookupInputRecovery(err error, raw jsontext.Value) string {
 	message := strings.TrimSpace(loom.ErrorSafeMessage(err))
 	if message == "" {
 		message = strings.TrimSpace(err.Error())
@@ -1653,7 +1635,7 @@ func projectedLookupInputRecovery(err error, raw json.RawMessage) string {
 }
 func (a *MCPAdapter) ToolsCall(ctx context.Context, p *ToolsCallPayload) (res *ToolsCallResult, err error) {
 	attrs := []attribute.KeyValue{}
-	var rawArguments json.RawMessage
+	var rawArguments jsontext.Value
 	if p != nil {
 		rawArguments, err = mcpJSONRaw(p.Arguments)
 		if err != nil {
@@ -1726,7 +1708,7 @@ func (a *MCPAdapter) executeRealTool(ctx context.Context, p *ToolsCallPayload, s
 	}
 	arguments = bytes.TrimSpace(arguments)
 	if len(arguments) == 0 || bytes.Equal(arguments, []byte("null")) {
-		arguments = json.RawMessage([]byte("{}"))
+		arguments = jsontext.Value([]byte("{}"))
 	}
 	switch p.Name {
 	case "lookup":
@@ -1792,7 +1774,7 @@ func (a *MCPAdapter) executeRealTool(ctx context.Context, p *ToolsCallPayload, s
 	case "projected_lookup":
 		args := arguments
 		if len(args) == 0 {
-			args = json.RawMessage("{}")
+			args = jsontext.Value("{}")
 		}
 		meta := &agentruntime.ToolCallMeta{}
 		toolResult, err := projected.DispatchProjectedLookupMethod(ctx, meta, args, nil, projected.ProjectedLookupDispatchOptions{Call: func(ctx context.Context, args any) (any, error) {

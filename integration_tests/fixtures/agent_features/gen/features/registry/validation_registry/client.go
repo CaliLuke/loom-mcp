@@ -9,7 +9,8 @@ package validation_registry
 
 import (
 	"context"
-	"encoding/json"
+	jsontext "encoding/json/jsontext"
+	json "encoding/json/v2"
 	"errors"
 	"fmt"
 	"io"
@@ -55,7 +56,7 @@ type ToolSchema struct {
 	// Description explains what the tool does.
 	Description string `json:"description,omitempty"`
 	// InputSchema is the JSON Schema for tool input.
-	InputSchema json.RawMessage `json:"inputSchema,omitempty"`
+	InputSchema jsontext.Value `json:"inputSchema,omitempty"`
 }
 
 // SearchResult contains a single search result from the registry.
@@ -300,7 +301,7 @@ func (c *Client) doSingleRequest(ctx context.Context, method string, reqURL stri
 		}
 	}
 	if result != nil && resp.StatusCode != http.StatusNoContent {
-		if err := json.NewDecoder(resp.Body).Decode(result); err != nil {
+		if err := json.UnmarshalRead(resp.Body, result); err != nil {
 			return fmt.Errorf("decoding response: %w", err)
 		}
 	}

@@ -31,7 +31,7 @@ func TestLoomGen_GoSDKConformance(t *testing.T) {
 go 1.27.0
 
 require (
-	github.com/CaliLuke/loom v1.8.0
+	github.com/CaliLuke/loom v1.9.0-alpha.7
 	github.com/CaliLuke/loom-mcp/v2 v2.0.0
 )
 
@@ -117,7 +117,7 @@ const goSDKConformanceTestSource = `package conformance_test
 
 import (
 	"context"
-	"encoding/json"
+	"encoding/json/v2"
 	"net/http"
 	"net/http/httptest"
 	"strings"

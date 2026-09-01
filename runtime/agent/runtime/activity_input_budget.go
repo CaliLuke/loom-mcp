@@ -14,7 +14,7 @@ package runtime
 //     so oversized transcripts fail fast with a clear error instead of terminating the run.
 
 import (
-	"encoding/json"
+	"encoding/json/v2"
 	"fmt"
 )
 

@@ -2,7 +2,7 @@ package toolregistry
 
 import (
 	"context"
-	"encoding/json"
+	"encoding/json/jsontext"
 	"errors"
 	"testing"
 
@@ -19,7 +19,7 @@ import (
 
 func TestMessageConstructorsPreserveCanonicalWireFields(t *testing.T) {
 	meta := &ToolCallMeta{RunID: "run-1", SessionID: "session-1", ToolCallID: "call-1"}
-	payload := json.RawMessage(`{"query":"status"}`)
+	payload := jsontext.Value(`{"query":"status"}`)
 	call := NewToolCallMessage("use-1", tools.Ident("service.search"), payload, meta)
 	assert.Equal(t, MessageTypeCall, call.Type)
 	assert.Equal(t, "use-1", call.ToolUseID)
@@ -30,11 +30,11 @@ func TestMessageConstructorsPreserveCanonicalWireFields(t *testing.T) {
 	ping := NewPingMessage("ping-1")
 	assert.Equal(t, ToolCallMessage{Type: MessageTypePing, PingID: "ping-1"}, ping)
 
-	result := NewToolResultMessage("use-1", json.RawMessage(`{"ok":true}`))
+	result := NewToolResultMessage("use-1", jsontext.Value(`{"ok":true}`))
 	assert.Equal(t, "use-1", result.ToolUseID)
 	assert.JSONEq(t, `{"ok":true}`, string(result.Result))
 
-	serverData := []*ServerDataItem{{Kind: "card", Audience: "ui", Data: json.RawMessage(`{"title":"Done"}`)}}
+	serverData := []*ServerDataItem{{Kind: "card", Audience: "ui", Data: jsontext.Value(`{"title":"Done"}`)}}
 	withServerData := NewToolResultMessageWithServerData("use-1", result.Result, serverData)
 	assert.Equal(t, serverData, withServerData.ServerData)
 

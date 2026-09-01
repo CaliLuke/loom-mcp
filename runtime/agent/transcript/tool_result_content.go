@@ -10,7 +10,8 @@ package transcript
 
 import (
 	"bytes"
-	"encoding/json"
+	"encoding/json/jsontext"
+	"encoding/json/v2"
 	"fmt"
 
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent"
@@ -40,7 +41,7 @@ func ProjectToolResultContent(resultJSON rawjson.Message, bounds *agent.Bounds, 
 	if len(resultJSON) > MaxToolResultContentBytes {
 		return toolResultOmission(preview, bounds)
 	}
-	return decodeToolResultJSONValue(json.RawMessage(resultJSON))
+	return decodeToolResultJSONValue(jsontext.Value(resultJSON))
 }
 
 // toolResultOmission builds the explicit omission object used when a canonical
@@ -69,7 +70,7 @@ func toolResultOmission(preview string, bounds *agent.Bounds) (map[string]any, e
 
 // decodeToolResultJSONValue decodes canonical tool-result JSON into plain
 // JSON-compatible Go values suitable for transcript message content.
-func decodeToolResultJSONValue(raw json.RawMessage) (any, error) {
+func decodeToolResultJSONValue(raw jsontext.Value) (any, error) {
 	var value any
 	if err := json.Unmarshal(raw, &value); err != nil {
 		return nil, fmt.Errorf("transcript: decode tool_result JSON: %w", err)
@@ -86,7 +87,7 @@ func hasNonNullToolResultJSON(raw rawjson.Message) bool {
 
 // marshalToolResultJSON encodes transcript-side metadata into canonical JSON for
 // reuse by the semantic JSON decoder above.
-func marshalToolResultJSON(value any) (json.RawMessage, error) {
+func marshalToolResultJSON(value any) (jsontext.Value, error) {
 	raw, err := json.Marshal(value)
 	if err != nil {
 		return nil, fmt.Errorf("transcript: encode tool_result JSON value: %w", err)

@@ -2,7 +2,8 @@ package runtime
 
 import (
 	"context"
-	"encoding/json"
+	"encoding/json/jsontext"
+	"encoding/json/v2"
 	"errors"
 	"fmt"
 	"strings"
@@ -90,7 +91,7 @@ func waitAwaitTypedInput(ctx context.Context, ctrl *interrupt.Controller, st *ru
 	if typedInput.ID == "" {
 		return nil, errors.New("await typed_input: missing id")
 	}
-	if len(typedInput.Schema) == 0 || !json.Valid(typedInput.Schema) {
+	if len(typedInput.Schema) == 0 || !jsontext.Value(typedInput.Schema).IsValid() {
 		return nil, errors.New("await typed_input: invalid schema")
 	}
 	ans, err := ctrl.WaitProvideTypedInput(ctx, timeout)
@@ -103,7 +104,7 @@ func waitAwaitTypedInput(ctx context.Context, ctrl *interrupt.Controller, st *ru
 	if ans.ID != "" && ans.ID != typedInput.ID {
 		return nil, errors.New("unexpected await ID for typed_input")
 	}
-	if len(ans.Payload) == 0 || !json.Valid(ans.Payload) {
+	if len(ans.Payload) == 0 || !jsontext.Value(ans.Payload).IsValid() {
 		return nil, errors.New("await typed_input: invalid answer payload")
 	}
 	if err := validateTypedInputPayload(typedInput.Schema, ans.Payload); err != nil {

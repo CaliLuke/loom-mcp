@@ -1,7 +1,7 @@
 package runtime
 
 import (
-	"encoding/json"
+	"encoding/json/v2"
 	"strconv"
 	"strings"
 	"text/template"

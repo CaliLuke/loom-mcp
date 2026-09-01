@@ -3,7 +3,7 @@ package debug
 
 import (
 	"context"
-	"encoding/json"
+	"encoding/json/v2"
 	"errors"
 	"fmt"
 	"net"
@@ -394,7 +394,7 @@ func firstNonEmpty(values ...string) string {
 
 func writeData(w http.ResponseWriter, data any) {
 	w.Header().Set("Content-Type", "application/json")
-	_ = json.NewEncoder(w).Encode(dataEnvelope{Data: data})
+	_ = json.MarshalWrite(w, dataEnvelope{Data: data})
 }
 
 func writeMappedError(w http.ResponseWriter, err error) {
@@ -412,5 +412,5 @@ func writeMappedError(w http.ResponseWriter, err error) {
 func writeError(w http.ResponseWriter, status int, code string, message string) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)
-	_ = json.NewEncoder(w).Encode(errorEnvelope{Error: debugError{Code: code, Message: message}})
+	_ = json.MarshalWrite(w, errorEnvelope{Error: debugError{Code: code, Message: message}})
 }

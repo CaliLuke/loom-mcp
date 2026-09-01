@@ -6,9 +6,10 @@ package pulse
 
 import (
 	"context"
-	"encoding/json"
+	"encoding/json/v2"
 	"errors"
 	"fmt"
+	"strconv"
 	"time"
 
 	"github.com/CaliLuke/loom-mcp/v2/features/stream/pulse/clients/pulse"
@@ -171,5 +172,8 @@ func defaultStreamID(event stream.Event) (string, error) {
 
 // defaultMarshal serializes an envelope to JSON.
 func defaultMarshal(env Envelope) ([]byte, error) {
-	return json.Marshal(env)
+	durationMarshaler := json.MarshalFunc(func(duration time.Duration) ([]byte, error) {
+		return strconv.AppendInt(nil, int64(duration), 10), nil
+	})
+	return json.Marshal(env, json.WithMarshalers(durationMarshaler))
 }

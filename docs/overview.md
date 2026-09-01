@@ -673,7 +673,7 @@ err := rt.ProvideToolResults(ctx, &api.ToolResultsSet{
         {
             ToolCallID: "tc-ext-1",
             Name:       tools.Ident("external.fetch"),
-            Result:     json.RawMessage(`{"status":"ok"}`),
+            Result:     jsontext.Value(`{"status":"ok"}`),
         },
     },
 })

@@ -1,7 +1,8 @@
 package model
 
 import (
-	"encoding/json"
+	"encoding/json/jsontext"
+	"encoding/json/v2"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -181,14 +182,14 @@ func TestPartMarshalJSONIncludesKind(t *testing.T) {
 				Parts: []Part{tt.part},
 			})
 			require.NoError(t, err)
-			var obj map[string]json.RawMessage
+			var obj map[string]jsontext.Value
 			require.NoError(t, json.Unmarshal(raw, &obj))
 
-			var parts []json.RawMessage
+			var parts []jsontext.Value
 			require.NoError(t, json.Unmarshal(obj["Parts"], &parts))
 			require.Len(t, parts, 1)
 
-			var partObj map[string]json.RawMessage
+			var partObj map[string]jsontext.Value
 			require.NoError(t, json.Unmarshal(parts[0], &partObj))
 
 			var kind string
@@ -242,10 +243,10 @@ func TestCacheCheckpointPartRoundTrip(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	var obj map[string]json.RawMessage
+	var obj map[string]jsontext.Value
 	require.NoError(t, json.Unmarshal(raw, &obj))
 
-	var parts []json.RawMessage
+	var parts []jsontext.Value
 	require.NoError(t, json.Unmarshal(obj["Parts"], &parts))
 	require.Len(t, parts, 1)
 

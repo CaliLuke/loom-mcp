@@ -28,8 +28,8 @@ var (
 		Toolset:     "orchestrator.helpers",
 		Description: "Answer a simple question",
 		Tags:        []string{},
-		Payload:     tools.TypeSpec{Name: "AnswerPayload", Schema: []byte("{\"$schema\":\"https://json-schema.org/draft/2020-12/schema\",\"type\":\"object\",\"properties\":{\"question\":{\"type\":\"string\",\"description\":\"User question to answer\",\"example\":\"What is the capital of Japan?\"}},\"required\":[\"question\"]}"), ExampleJSON: []byte("{\"question\":\"What is the capital of Japan?\"}"), ExampleInput: map[string]any{"question": "What is the capital of Japan?"}, Codec: answerPayloadCodec},
-		Result:      tools.TypeSpec{Name: "AnswerResult", Schema: []byte("{\"$schema\":\"https://json-schema.org/draft/2020-12/schema\",\"type\":\"object\",\"properties\":{\"text\":{\"type\":\"string\",\"description\":\"Answer text\",\"example\":\"Tokyo is the capital of Japan.\"}},\"required\":[\"text\"]}"), Codec: answerResultCodec},
+		Payload:     tools.TypeSpec{Name: "AnswerPayload", Schema: []byte("{\"additionalProperties\":false,\"examples\":[{\"question\":\"What is the capital of Japan?\"}],\"properties\":{\"question\":{\"description\":\"User question to answer\",\"examples\":[\"What is the capital of Japan?\"],\"type\":\"string\"}},\"required\":[\"question\"],\"type\":\"object\"}"), ExampleJSON: []byte("{\"question\":\"What is the capital of Japan?\"}"), ExampleInput: map[string]any{"question": "What is the capital of Japan?"}, Codec: answerPayloadCodec},
+		Result:      tools.TypeSpec{Name: "AnswerResult", Schema: []byte("{\"additionalProperties\":false,\"properties\":{\"text\":{\"description\":\"Answer text\",\"examples\":[\"Tokyo is the capital of Japan.\"],\"type\":\"string\"}},\"required\":[\"text\"],\"type\":\"object\"}"), Codec: answerResultCodec},
 	}
 )
 

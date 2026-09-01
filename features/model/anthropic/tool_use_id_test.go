@@ -2,7 +2,8 @@ package anthropic
 
 import (
 	"context"
-	"encoding/json"
+	"encoding/json/jsontext"
+	"encoding/json/v2"
 	"strings"
 	"testing"
 
@@ -221,7 +222,7 @@ func TestComplete_RestoresCanonicalToolUseIDs(t *testing.T) {
 			{
 				Name:        "test.tool",
 				Description: "test tool",
-				InputSchema: json.RawMessage(`{"type":"object"}`),
+				InputSchema: jsontext.Value(`{"type":"object"}`),
 			},
 		},
 	}
@@ -233,7 +234,7 @@ func TestComplete_RestoresCanonicalToolUseIDs(t *testing.T) {
 				Type:  "tool_use",
 				Name:  "tool",
 				ID:    "t1",
-				Input: json.RawMessage(`{"x":2}`),
+				Input: jsontext.Value(`{"x":2}`),
 			},
 		},
 		StopReason: sdk.StopReasonToolUse,

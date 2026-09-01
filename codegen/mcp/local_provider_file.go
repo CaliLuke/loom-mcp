@@ -31,7 +31,8 @@ func localProviderFile(data *AdapterData) *codegen.File {
 	imports := []*codegen.ImportSpec{
 		{Path: "bytes"},
 		{Path: "context"},
-		{Path: "encoding/json"},
+		{Name: "json", Path: "encoding/json/v2"},
+		{Name: "jsontext", Path: "encoding/json/jsontext"},
 		{Path: "errors"},
 		{Path: "strings"},
 		{Path: "github.com/CaliLuke/loom-mcp/v2/runtime/agent/planner"},

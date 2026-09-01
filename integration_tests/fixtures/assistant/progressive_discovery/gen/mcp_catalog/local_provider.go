@@ -11,7 +11,8 @@ package mcpcatalog
 import (
 	"bytes"
 	"context"
-	"encoding/json"
+	jsontext "encoding/json/jsontext"
+	json "encoding/json/v2"
 	"errors"
 	"strings"
 
@@ -65,7 +66,7 @@ func executeLocalProgressiveTool(ctx context.Context, adapter *MCPAdapter, call 
 	}
 	payload := &ToolsCallPayload{
 		Name:      toolName,
-		Arguments: mcpJSONFromRaw(append(json.RawMessage(nil), arguments...)),
+		Arguments: mcpJSONFromRaw(append(jsontext.Value(nil), arguments...)),
 	}
 	response, err := adapter.executeLocalProgressiveTool(ctx, payload)
 	if err != nil {

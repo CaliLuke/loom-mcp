@@ -21,7 +21,8 @@ package runtime
 import (
 	"bytes"
 	"context"
-	"encoding/json"
+	"encoding/json/jsontext"
+	"encoding/json/v2"
 	"fmt"
 	"text/template"
 
@@ -103,8 +104,8 @@ func (r *Runtime) confirmationPlan(ctx context.Context, call *planner.ToolReques
 	if err != nil {
 		return nil, false, fmt.Errorf("render denied result for %q: %w", call.Name, err)
 	}
-	deniedRaw := json.RawMessage(deniedJSON)
-	if !json.Valid(deniedRaw) {
+	deniedRaw := jsontext.Value(deniedJSON)
+	if !deniedRaw.IsValid() {
 		return nil, false, fmt.Errorf("denied result template for %q did not render valid JSON", call.Name)
 	}
 	deniedResult, err := r.unmarshalToolValue(ctx, call.Name, deniedRaw, false)

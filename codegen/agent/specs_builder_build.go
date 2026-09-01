@@ -324,7 +324,8 @@ func (d *toolSpecsData) typeImports() []*codegen.ImportSpec {
 // codecsImports returns the imports required by the generated tool codecs file.
 func (d *toolSpecsData) codecsImports() []*codegen.ImportSpec {
 	base := []*codegen.ImportSpec{
-		codegen.SimpleImport("encoding/json"),
+		codegen.NewImport("json", "encoding/json/v2"),
+		codegen.NewImport("jsontext", "encoding/json/jsontext"),
 		codegen.SimpleImport("errors"),
 		codegen.SimpleImport("fmt"),
 		codegen.SimpleImport("github.com/CaliLuke/loom-mcp/v2/runtime/agent/tools"),

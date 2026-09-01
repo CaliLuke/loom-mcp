@@ -2,7 +2,7 @@ package assistantapi
 
 import (
 	"context"
-	"encoding/json"
+	"encoding/json/v2"
 	"slices"
 	"testing"
 	"time"

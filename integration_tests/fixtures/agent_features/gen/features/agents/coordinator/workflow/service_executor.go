@@ -9,7 +9,7 @@ package workflow
 
 import (
 	"context"
-	"encoding/json"
+	jsontext "encoding/json/jsontext"
 	"fmt"
 	"strings"
 
@@ -172,7 +172,7 @@ func NewCoordinatorWorkflowExec(opts ...ExecOpt) runtime.ToolCallExecutor {
 		}
 		switch call.Name {
 		case tools.Ident("workflow.method_echo"):
-			result, err := workflow.DispatchMethodEchoMethod(ctx, meta, json.RawMessage(call.Payload), call.Labels, workflow.MethodEchoDispatchOptions{
+			result, err := workflow.DispatchMethodEchoMethod(ctx, meta, jsontext.Value(call.Payload), call.Labels, workflow.MethodEchoDispatchOptions{
 				Call:       caller,
 				MapPayload: cfg.mapPayload,
 				MapResult:  cfg.mapResult,

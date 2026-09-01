@@ -9,7 +9,8 @@ package testutil
 
 import (
 	"bytes"
-	"encoding/json"
+	"encoding/json/jsontext"
+	"encoding/json/v2"
 	"flag"
 	"go/format"
 	"os"
@@ -97,7 +98,7 @@ func AssertJSON(t testing.TB, goldenPath string, got []byte) {
 	t.Helper()
 	var v any
 	if err := json.Unmarshal(got, &v); err == nil {
-		if formatted, err := json.MarshalIndent(v, "", "  "); err == nil {
+		if formatted, err := json.Marshal(v, json.Deterministic(true), jsontext.WithIndent("  ")); err == nil {
 			got = formatted
 		}
 	}
@@ -211,7 +212,7 @@ func (g *GoldenFile) prepareContent() []byte {
 	if strings.HasSuffix(g.path, ".json") || strings.HasSuffix(g.path, ".json.golden") {
 		var v any
 		if err := json.Unmarshal(content, &v); err == nil {
-			if formatted, err := json.MarshalIndent(v, "", "  "); err == nil {
+			if formatted, err := json.Marshal(v, json.Deterministic(true), jsontext.WithIndent("  ")); err == nil {
 				content = formatted
 			}
 		}

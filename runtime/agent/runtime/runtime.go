@@ -28,7 +28,7 @@ package runtime
 
 import (
 	"context"
-	"encoding/json"
+	"encoding/json/jsontext"
 	"sync"
 	"time"
 
@@ -370,7 +370,7 @@ type (
 		// PayloadAdapter normalizes or enriches raw JSON payloads prior to decoding.
 		// The adapter is applied exactly once at the activity boundary, or before
 		// inline execution for Inline toolsets. When nil, no adaptation is applied.
-		PayloadAdapter func(ctx context.Context, meta ToolCallMeta, tool tools.Ident, raw json.RawMessage) (json.RawMessage, error)
+		PayloadAdapter func(ctx context.Context, meta ToolCallMeta, tool tools.Ident, raw jsontext.Value) (jsontext.Value, error)
 
 		// ResultMaterializer enriches typed tool results before the runtime encodes
 		// them for hooks, workflow boundaries, or callers. When nil, the runtime

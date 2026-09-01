@@ -9,7 +9,7 @@ package mcpassistant
 
 import (
 	"context"
-	"encoding/json"
+	json "encoding/json/v2"
 	"fmt"
 	"net/http"
 	"net/url"
@@ -145,7 +145,7 @@ var ErrAudienceMismatch = fmt.Errorf("token audience does not match protected re
 // does not match the DSL-declared ResourceIdentifier are rejected.
 //
 // The claim is read from TokenInfo.Extra["aud"] and may be a string, a
-// []string, or a []any (matching how encoding/json decodes a JWT `aud`
+// []string, or a []any (matching how JSON decoding represents a JWT `aud`
 // array). Missing or wrong-typed claims are treated as mismatches.
 //
 // Wrap the consumer's verifier exactly once at mount time:

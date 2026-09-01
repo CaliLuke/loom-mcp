@@ -4,7 +4,8 @@
 package model
 
 import (
-	"encoding/json"
+	"encoding/json/jsontext"
+	"encoding/json/v2"
 	"errors"
 	"fmt"
 )
@@ -36,7 +37,7 @@ func (m Message) MarshalJSON() ([]byte, error) {
 			Role:  m.Role,
 			Parts: nil,
 			Meta:  m.Meta,
-		})
+		}, json.FormatNilMapAsNull(true), json.FormatNilSliceAsNull(true))
 	}
 
 	parts := make([]any, 0, len(m.Parts))
@@ -52,7 +53,7 @@ func (m Message) MarshalJSON() ([]byte, error) {
 		Role:  m.Role,
 		Parts: parts,
 		Meta:  m.Meta,
-	})
+	}, json.FormatNilMapAsNull(true), json.FormatNilSliceAsNull(true))
 }
 
 // UnmarshalJSON decodes a Message while materializing concrete Part
@@ -60,7 +61,7 @@ func (m Message) MarshalJSON() ([]byte, error) {
 func (m *Message) UnmarshalJSON(data []byte) error {
 	type alias struct {
 		Role  ConversationRole `json:"Role"` //nolint:tagliatelle
-		Parts []json.RawMessage
+		Parts []jsontext.Value
 		Meta  map[string]any `json:"Meta"` //nolint:tagliatelle
 	}
 	var tmp alias
@@ -208,7 +209,7 @@ func encodeCacheCheckpointPart() any {
 	}{Kind: partKindCacheCheckpoint}
 }
 
-func decodeMessagePart(raw json.RawMessage) (Part, error) {
+func decodeMessagePart(raw jsontext.Value) (Part, error) {
 	obj, err := decodePartObject(raw)
 	if err != nil {
 		if text, ok := decodeRawTextPart(raw); ok {
@@ -222,7 +223,7 @@ func decodeMessagePart(raw json.RawMessage) (Part, error) {
 	return decodePartByShape(raw, obj)
 }
 
-func hasAnyKey(obj map[string]json.RawMessage, keys ...string) bool {
+func hasAnyKey(obj map[string]jsontext.Value, keys ...string) bool {
 	for _, k := range keys {
 		if _, ok := obj[k]; ok {
 			return true
@@ -231,8 +232,8 @@ func hasAnyKey(obj map[string]json.RawMessage, keys ...string) bool {
 	return false
 }
 
-func decodePartObject(raw json.RawMessage) (map[string]json.RawMessage, error) {
-	var obj map[string]json.RawMessage
+func decodePartObject(raw jsontext.Value) (map[string]jsontext.Value, error) {
+	var obj map[string]jsontext.Value
 	if err := json.Unmarshal(raw, &obj); err != nil {
 		return nil, fmt.Errorf("decode part object: %w", err)
 	}
@@ -242,7 +243,7 @@ func decodePartObject(raw json.RawMessage) (map[string]json.RawMessage, error) {
 	return obj, nil
 }
 
-func decodeRawTextPart(raw json.RawMessage) (Part, bool) {
+func decodeRawTextPart(raw jsontext.Value) (Part, bool) {
 	var text *string
 	if err := json.Unmarshal(raw, &text); err != nil {
 		return nil, false
@@ -253,7 +254,7 @@ func decodeRawTextPart(raw json.RawMessage) (Part, bool) {
 	return TextPart{Text: *text}, true
 }
 
-func decodePartByKind(raw json.RawMessage, obj map[string]json.RawMessage, kindRaw json.RawMessage) (Part, error) {
+func decodePartByKind(raw jsontext.Value, obj map[string]jsontext.Value, kindRaw jsontext.Value) (Part, error) {
 	var kind string
 	if err := json.Unmarshal(kindRaw, &kind); err != nil {
 		return nil, fmt.Errorf("decode Kind: %w", err)
@@ -280,7 +281,7 @@ func decodePartByKind(raw json.RawMessage, obj map[string]json.RawMessage, kindR
 	}
 }
 
-func decodePartByShape(raw json.RawMessage, obj map[string]json.RawMessage) (Part, error) {
+func decodePartByShape(raw jsontext.Value, obj map[string]jsontext.Value) (Part, error) {
 	switch {
 	case hasAnyKey(obj, "Signature", "Redacted", "Index", "Final"):
 		return decodeThinkingPart(raw)
@@ -295,7 +296,7 @@ func decodePartByShape(raw json.RawMessage, obj map[string]json.RawMessage) (Par
 	}
 }
 
-func decodeImagePart(raw json.RawMessage) (Part, error) {
+func decodeImagePart(raw jsontext.Value) (Part, error) {
 	var img ImagePart
 	if err := json.Unmarshal(raw, &img); err != nil {
 		return nil, fmt.Errorf("decode ImagePart: %w", err)
@@ -316,7 +317,7 @@ func validateImagePart(img ImagePart) error {
 	return nil
 }
 
-func decodeDocumentPart(raw json.RawMessage) (Part, error) {
+func decodeDocumentPart(raw jsontext.Value) (Part, error) {
 	var doc DocumentPart
 	if err := json.Unmarshal(raw, &doc); err != nil {
 		return nil, fmt.Errorf("decode DocumentPart: %w", err)
@@ -359,7 +360,7 @@ func validateDocumentSources(doc DocumentPart) error {
 	return nil
 }
 
-func decodeThinkingPart(raw json.RawMessage) (Part, error) {
+func decodeThinkingPart(raw jsontext.Value) (Part, error) {
 	var thinking ThinkingPart
 	if err := json.Unmarshal(raw, &thinking); err != nil {
 		return nil, fmt.Errorf("decode ThinkingPart: %w", err)
@@ -367,7 +368,7 @@ func decodeThinkingPart(raw json.RawMessage) (Part, error) {
 	return thinking, nil
 }
 
-func decodeCitationsPart(raw json.RawMessage) (Part, error) {
+func decodeCitationsPart(raw jsontext.Value) (Part, error) {
 	var citations CitationsPart
 	if err := json.Unmarshal(raw, &citations); err != nil {
 		return nil, fmt.Errorf("decode CitationsPart: %w", err)
@@ -375,7 +376,7 @@ func decodeCitationsPart(raw json.RawMessage) (Part, error) {
 	return citations, nil
 }
 
-func decodeToolResultPart(raw json.RawMessage) (Part, error) {
+func decodeToolResultPart(raw jsontext.Value) (Part, error) {
 	var result ToolResultPart
 	if err := json.Unmarshal(raw, &result); err != nil {
 		return nil, fmt.Errorf("decode ToolResultPart: %w", err)
@@ -393,7 +394,7 @@ func validateToolResultPart(result ToolResultPart) error {
 	return nil
 }
 
-func decodeToolUsePart(raw json.RawMessage, obj map[string]json.RawMessage) (Part, error) {
+func decodeToolUsePart(raw jsontext.Value, obj map[string]jsontext.Value) (Part, error) {
 	var use ToolUsePart
 	if err := json.Unmarshal(raw, &use); err != nil {
 		return nil, fmt.Errorf("decode ToolUsePart: %w", err)
@@ -414,7 +415,7 @@ func validateToolUsePart(use ToolUsePart) error {
 	return nil
 }
 
-func applyToolUseArgsFallback(obj map[string]json.RawMessage, use *ToolUsePart) error {
+func applyToolUseArgsFallback(obj map[string]jsontext.Value, use *ToolUsePart) error {
 	if use.Input != nil || hasKey(obj, "Input") {
 		return nil
 	}
@@ -430,7 +431,7 @@ func applyToolUseArgsFallback(obj map[string]json.RawMessage, use *ToolUsePart) 
 	return nil
 }
 
-func decodeTextPart(raw json.RawMessage) (Part, error) {
+func decodeTextPart(raw jsontext.Value) (Part, error) {
 	var text TextPart
 	if err := json.Unmarshal(raw, &text); err != nil {
 		return nil, fmt.Errorf("decode TextPart: %w", err)
@@ -438,7 +439,7 @@ func decodeTextPart(raw json.RawMessage) (Part, error) {
 	return text, nil
 }
 
-func hasKey(obj map[string]json.RawMessage, key string) bool {
+func hasKey(obj map[string]jsontext.Value, key string) bool {
 	_, ok := obj[key]
 	return ok
 }

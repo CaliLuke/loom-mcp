@@ -34,33 +34,33 @@ func emitMCPJSONPresenceHelpers(stmt *jen.Statement) {
 	}
 	stmt.Func().Id("mcpJSONRaw").
 		Params(jen.Id("value").Add(nullableAny())).
-		Params(jen.Qual("encoding/json", "RawMessage"), jen.Error()).
+		Params(jen.Id("jsontext").Dot("Value"), jen.Error()).
 		Block(
 			jen.If(jen.Op("!").Id("value").Dot("Present").Call()).Block(
 				jen.Return(jen.Nil(), jen.Nil()),
 			),
 			jen.If(jen.Id("value").Dot("IsNull").Call()).Block(
-				jen.Return(jen.Qual("encoding/json", "RawMessage").Call(jen.Lit("null")), jen.Nil()),
+				jen.Return(jen.Id("jsontext").Dot("Value").Call(jen.Lit("null")), jen.Nil()),
 			),
 			jen.List(jen.Id("actual"), jen.Id("ok")).Op(":=").Id("value").Dot("Value").Call(),
 			jen.If(jen.Op("!").Id("ok")).Block(
 				jen.Return(jen.Nil(), jen.Qual("errors", "New").Call(jen.Lit("present MCP JSON value has no concrete value"))),
 			),
-			jen.If(jen.List(jen.Id("raw"), jen.Id("ok")).Op(":=").Id("actual").Assert(jen.Qual("encoding/json", "RawMessage")), jen.Id("ok")).Block(
+			jen.If(jen.List(jen.Id("raw"), jen.Id("ok")).Op(":=").Id("actual").Assert(jen.Id("jsontext").Dot("Value")), jen.Id("ok")).Block(
 				jen.Return(
-					jen.Append(jen.Qual("encoding/json", "RawMessage").Call(jen.Nil()), jen.Id("raw").Op("...")),
+					jen.Append(jen.Id("jsontext").Dot("Value").Call(jen.Nil()), jen.Id("raw").Op("...")),
 					jen.Nil(),
 				),
 			),
-			jen.List(jen.Id("raw"), jen.Id("err")).Op(":=").Qual("encoding/json", "Marshal").Call(jen.Id("actual")),
+			jen.List(jen.Id("raw"), jen.Id("err")).Op(":=").Id("json").Dot("Marshal").Call(jen.Id("actual")),
 			jen.If(jen.Id("err").Op("!=").Nil()).Block(
 				jen.Return(jen.Nil(), jen.Id("err")),
 			),
-			jen.Return(jen.Qual("encoding/json", "RawMessage").Call(jen.Id("raw")), jen.Nil()),
+			jen.Return(jen.Id("jsontext").Dot("Value").Call(jen.Id("raw")), jen.Nil()),
 		)
 	stmt.Line()
 	stmt.Func().Id("mcpJSONFromRaw").
-		Params(jen.Id("raw").Qual("encoding/json", "RawMessage")).
+		Params(jen.Id("raw").Id("jsontext").Dot("Value")).
 		Add(nullableAny()).
 		Block(
 			jen.Id("trimmed").Op(":=").Qual("bytes", "TrimSpace").Call(jen.Id("raw")),
@@ -70,7 +70,7 @@ func emitMCPJSONPresenceHelpers(stmt *jen.Statement) {
 			jen.If(jen.Qual("bytes", "Equal").Call(jen.Id("trimmed"), jen.Index().Byte().Call(jen.Lit("null")))).Block(
 				jen.Return(jen.Id("loom").Dot("NullValue").Types(jen.Any()).Call()),
 			),
-			jen.Id("copied").Op(":=").Append(jen.Qual("encoding/json", "RawMessage").Call(jen.Nil()), jen.Id("raw").Op("...")),
+			jen.Id("copied").Op(":=").Append(jen.Id("jsontext").Dot("Value").Call(jen.Nil()), jen.Id("raw").Op("...")),
 			jen.Return(jen.Id("loom").Dot("NullableValue").Types(jen.Any()).Call(jen.Id("copied"))),
 		)
 	stmt.Line()
@@ -141,7 +141,7 @@ func emitToolCallInterceptorTypes(stmt *jen.Statement) {
 			Id("ToolCallInterceptorInfo").Interface(
 			jen.Id("loom").Dot("InterceptorInfo"),
 			jen.Id("Tool").Params().String(),
-			jen.Id("RawArguments").Params().Qual("encoding/json", "RawMessage"),
+			jen.Id("RawArguments").Params().Id("jsontext").Dot("Value"),
 		),
 		jen.Line().Comment("ToolCallHandler is the generated MCP tool-call dispatcher.").Line().
 			Id("ToolCallHandler").Func().Params(
@@ -164,7 +164,7 @@ func emitToolCallInterceptorTypes(stmt *jen.Statement) {
 		jen.Id("method").String(),
 		jen.Id("tool").String(),
 		jen.Id("rawPayload").Any(),
-		jen.Id("rawArgs").Qual("encoding/json", "RawMessage"),
+		jen.Id("rawArgs").Id("jsontext").Dot("Value"),
 	)
 	stmt.Line()
 
@@ -191,7 +191,7 @@ func emitToolCallInterceptorTypes(stmt *jen.Statement) {
 	stmt.Line()
 
 	stmt.Func().Params(jen.Id("i").Op("*").Id("toolCallInterceptorInfo")).
-		Id("RawArguments").Params().Qual("encoding/json", "RawMessage").
+		Id("RawArguments").Params().Id("jsontext").Dot("Value").
 		Block(jen.Return(jen.Id("i").Dot("rawArgs")))
 	stmt.Line()
 }
@@ -328,7 +328,7 @@ func emitParseQueryParamsToJSON(stmt *jen.Statement) {
 				jen.Id("m").Index(jen.Id("k")).Op("=").Id("v"),
 			),
 			jen.Id("coerced").Op(":=").Id("mcpruntime").Dot("CoerceQuery").Call(jen.Id("m")),
-			jen.Return(jen.Qual("encoding/json", "Marshal").Call(jen.Id("coerced"))),
+			jen.Return(jen.Id("json").Dot("Marshal").Call(jen.Id("coerced"))),
 		)
 	stmt.Line()
 }
@@ -497,7 +497,7 @@ func emitToolCallInfoAndWrap(stmt *jen.Statement, data *AdapterData) {
 	stmt.Func().Params(jen.Id("a").Op("*").Id("MCPAdapter")).
 		Id("toolCallInfo").Params(
 		jen.Id("p").Op("*").Id("ToolsCallPayload"),
-		jen.Id("rawArgs").Qual("encoding/json", "RawMessage"),
+		jen.Id("rawArgs").Id("jsontext").Dot("Value"),
 	).Id("ToolCallInterceptorInfo").
 		Block(
 			jen.Id("info").Op(":=").Op("&").Id("toolCallInterceptorInfo").Values(jen.Dict{
@@ -678,7 +678,7 @@ func emitStringPtrAndBuildContentItem(stmt *jen.Statement) {
 	stmt.Line()
 
 	stmt.Func().Id("isLikelyJSON").Params(jen.Id("s").String()).Bool().
-		Block(jen.Return(jen.Qual("encoding/json", "Valid").Call(jen.Index().Byte().Call(jen.Id("s")))))
+		Block(jen.Return(jen.Id("jsontext").Dot("Value").Call(jen.Id("s")).Dot("IsValid").Call()))
 	stmt.Line()
 
 	stmt.Comment("buildContentItem returns a ContentItem honoring StructuredStreamJSON option.").Line()
@@ -778,7 +778,10 @@ func emitSafeMCPError(stmt *jen.Statement) {
 	stmt.Func().Params(jen.Id("a").Op("*").Id("MCPAdapter")).
 		Id("safeMCPError").Params(jen.Id("err").Error(), jen.Id("defaultCode").String(), jen.Id("fallbackMessage").String()).Error().
 		Block(
-			jen.If(jen.Id("mcpruntime").Dot("IsInputRequired").Call(jen.Id("err"))).Block(
+			jen.If(
+				jen.Id("mcpruntime").Dot("IsInputRequired").Call(jen.Id("err")).Op("||").
+					Id("mcpruntime").Dot("IsInvalidClientInput").Call(jen.Id("err")),
+			).Block(
 				jen.Return(jen.Id("err")),
 			),
 			jen.If(jen.Id("err").Op("==").Nil()).Block(

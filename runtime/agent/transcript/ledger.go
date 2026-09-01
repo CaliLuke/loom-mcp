@@ -12,7 +12,8 @@
 package transcript
 
 import (
-	"encoding/json"
+	"encoding/json/jsontext"
+	"encoding/json/v2"
 	"errors"
 	"fmt"
 	"strings"
@@ -199,9 +200,9 @@ func BuildMessagesFromEvents(events []memory.Event) ([]*model.Message, error) {
 // interface implementations) can be reconstructed from stored JSON.
 func (m *Message) UnmarshalJSON(data []byte) error {
 	type alias struct {
-		Role  string            `json:"Role"`  //nolint:tagliatelle
-		Parts []json.RawMessage `json:"Parts"` //nolint:tagliatelle
-		Meta  map[string]any    `json:"Meta"`  //nolint:tagliatelle
+		Role  string           `json:"Role"`  //nolint:tagliatelle
+		Parts []jsontext.Value `json:"Parts"` //nolint:tagliatelle
+		Meta  map[string]any   `json:"Meta"`  //nolint:tagliatelle
 	}
 	var tmp alias
 	if err := json.Unmarshal(data, &tmp); err != nil {
@@ -237,7 +238,7 @@ func (l *Ledger) MarshalJSON() ([]byte, error) {
 	return json.Marshal(ledgerJSON{
 		Messages: l.messages,
 		Current:  l.current,
-	})
+	}, json.FormatNilMapAsNull(true), json.FormatNilSliceAsNull(true))
 }
 
 // UnmarshalJSON restores committed messages and pending assistant progress.
@@ -455,7 +456,7 @@ func (l *Ledger) IsEmpty() bool {
 	return len(l.messages) == 0
 }
 
-func decodeLedgerPart(raw json.RawMessage) (Part, error) {
+func decodeLedgerPart(raw jsontext.Value) (Part, error) {
 	var legacyText string
 	if err := json.Unmarshal(raw, &legacyText); err == nil {
 		return TextPart{Text: legacyText}, nil
@@ -479,8 +480,8 @@ func decodeLedgerPart(raw json.RawMessage) (Part, error) {
 	return nil, errors.New("unknown part shape")
 }
 
-func decodeLedgerPartObject(raw json.RawMessage) (map[string]json.RawMessage, error) {
-	var obj map[string]json.RawMessage
+func decodeLedgerPartObject(raw jsontext.Value) (map[string]jsontext.Value, error) {
+	var obj map[string]jsontext.Value
 	if err := json.Unmarshal(raw, &obj); err != nil {
 		return nil, fmt.Errorf("decode part object: %w", err)
 	}
@@ -490,7 +491,7 @@ func decodeLedgerPartObject(raw json.RawMessage) (map[string]json.RawMessage, er
 	return obj, nil
 }
 
-func decodeLedgerThinkingPart(raw json.RawMessage) (Part, error) {
+func decodeLedgerThinkingPart(raw jsontext.Value) (Part, error) {
 	var thinking ThinkingPart
 	if err := json.Unmarshal(raw, &thinking); err != nil {
 		return nil, fmt.Errorf("decode ThinkingPart: %w", err)
@@ -498,7 +499,7 @@ func decodeLedgerThinkingPart(raw json.RawMessage) (Part, error) {
 	return thinking, nil
 }
 
-func decodeLedgerToolResultPart(raw json.RawMessage) (Part, error) {
+func decodeLedgerToolResultPart(raw jsontext.Value) (Part, error) {
 	var result ToolResultPart
 	if err := json.Unmarshal(raw, &result); err != nil {
 		return nil, fmt.Errorf("decode ToolResultPart: %w", err)
@@ -509,7 +510,7 @@ func decodeLedgerToolResultPart(raw json.RawMessage) (Part, error) {
 	return result, nil
 }
 
-func decodeLedgerToolUsePart(raw json.RawMessage) (Part, error) {
+func decodeLedgerToolUsePart(raw jsontext.Value) (Part, error) {
 	var use ToolUsePart
 	if err := json.Unmarshal(raw, &use); err != nil {
 		return nil, fmt.Errorf("decode ToolUsePart: %w", err)
@@ -520,7 +521,7 @@ func decodeLedgerToolUsePart(raw json.RawMessage) (Part, error) {
 	return use, nil
 }
 
-func decodeLedgerTextPart(raw json.RawMessage) (Part, error) {
+func decodeLedgerTextPart(raw jsontext.Value) (Part, error) {
 	var text TextPart
 	if err := json.Unmarshal(raw, &text); err != nil {
 		return nil, fmt.Errorf("decode TextPart: %w", err)
@@ -709,7 +710,7 @@ func orderToolResults(pendingResults []ToolResultSpec, toolOrder []string) []Too
 	return ordered
 }
 
-func hasAnyKey(obj map[string]json.RawMessage, keys ...string) bool {
+func hasAnyKey(obj map[string]jsontext.Value, keys ...string) bool {
 	for _, k := range keys {
 		if _, ok := obj[k]; ok {
 			return true

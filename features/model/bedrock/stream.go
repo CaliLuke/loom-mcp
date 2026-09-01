@@ -2,7 +2,7 @@ package bedrock
 
 import (
 	"context"
-	"encoding/json"
+	"encoding/json/jsontext"
 	"errors"
 	"fmt"
 	"io"
@@ -551,7 +551,7 @@ func (cb *completionBuffer) finalPayload() (rawjson.Message, error) {
 		return nil, errors.New("structured completion payload is empty")
 	}
 	data := []byte(trimmed)
-	if !json.Valid(data) {
+	if !jsontext.Value(data).IsValid() {
 		return nil, fmt.Errorf("structured completion payload is not valid JSON: %q", trimmed)
 	}
 	return rawjson.Message(data), nil
@@ -621,7 +621,7 @@ func decodeToolPayload(raw string) rawjson.Message {
 		return rawjson.Message([]byte("{}"))
 	}
 	data := []byte(trimmed)
-	if !json.Valid(data) {
+	if !jsontext.Value(data).IsValid() {
 		// Tool payload fragments come from a model stream boundary and can be
 		// truncated when the provider stops on max_tokens. Return an empty object
 		// so tool schema validation can produce a structured tool error.

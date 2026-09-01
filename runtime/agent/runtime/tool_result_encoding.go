@@ -11,7 +11,8 @@ package runtime
 
 import (
 	"bytes"
-	"encoding/json"
+	"encoding/json/jsontext"
+	"encoding/json/v2"
 	"fmt"
 
 	"github.com/CaliLuke/loom-mcp/v2/boundedresult"
@@ -32,7 +33,7 @@ func EncodeCanonicalToolResult(spec tools.ToolSpec, value any, bounds *agent.Bou
 		return nil, nil
 	}
 	switch value.(type) {
-	case json.RawMessage, rawjson.Message, []byte:
+	case jsontext.Value, rawjson.Message, []byte:
 		return nil, fmt.Errorf("tool %s result must be a typed Go value, got %T", spec.Name, value)
 	}
 	if spec.Result.Codec.ToJSON == nil {
@@ -42,7 +43,7 @@ func EncodeCanonicalToolResult(spec tools.ToolSpec, value any, bounds *agent.Bou
 	if err != nil {
 		return nil, fmt.Errorf("encode tool %s result: %w", spec.Name, err)
 	}
-	projected, err := projectBoundedToolResultJSON(spec, json.RawMessage(data), bounds)
+	projected, err := projectBoundedToolResultJSON(spec, jsontext.Value(data), bounds)
 	if err != nil {
 		return nil, fmt.Errorf("project bounded tool %s result: %w", spec.Name, err)
 	}
@@ -61,7 +62,7 @@ func EncodeCanonicalToolResult(spec tools.ToolSpec, value any, bounds *agent.Bou
 //     before projection so stale values cannot leak past the bounds contract.
 //   - The projected JSON contract is object-shaped; bounded tools that encode a
 //     non-object semantic result fail loudly rather than silently drifting.
-func projectBoundedToolResultJSON(spec tools.ToolSpec, raw json.RawMessage, bounds *agent.Bounds) (json.RawMessage, error) {
+func projectBoundedToolResultJSON(spec tools.ToolSpec, raw jsontext.Value, bounds *agent.Bounds) (jsontext.Value, error) {
 	if spec.Bounds == nil || bounds == nil {
 		return raw, nil
 	}

@@ -1,7 +1,7 @@
 package codegen
 
 import (
-	"encoding/json"
+	"encoding/json/v2"
 
 	mcpexpr "github.com/CaliLuke/loom-mcp/v2/expr/mcp"
 	"github.com/CaliLuke/loom/codegen"

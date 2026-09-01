@@ -10,7 +10,7 @@ package projected
 
 import (
 	"context"
-	"encoding/json"
+	jsontext "encoding/json/jsontext"
 	"errors"
 	"fmt"
 
@@ -43,7 +43,7 @@ type ProjectedLookupDispatchOptions struct {
 
 // DispatchProjectedLookupMethod executes projected.projected_lookup through
 // its bound service method.
-func DispatchProjectedLookupMethod(ctx context.Context, meta *runtime.ToolCallMeta, raw json.RawMessage, labels map[string]string, opts ProjectedLookupDispatchOptions) (*planner.ToolResult, error) {
+func DispatchProjectedLookupMethod(ctx context.Context, meta *runtime.ToolCallMeta, raw jsontext.Value, labels map[string]string, opts ProjectedLookupDispatchOptions) (*planner.ToolResult, error) {
 	if opts.Call == nil {
 		return &planner.ToolResult{
 			Error: planner.NewToolError("method dispatcher missing Call"),
@@ -54,7 +54,7 @@ func DispatchProjectedLookupMethod(ctx context.Context, meta *runtime.ToolCallMe
 		// Tool arguments may legally be omitted (for example MCP tools/call
 		// without "arguments"). Decode an empty object so required-field
 		// validation applies and dispatch never sees a nil payload.
-		raw = json.RawMessage("{}")
+		raw = jsontext.Value("{}")
 	}
 	var toolArgs any
 	decodedArgs, err := ProjectedLookupPayloadCodec.FromJSON(raw)

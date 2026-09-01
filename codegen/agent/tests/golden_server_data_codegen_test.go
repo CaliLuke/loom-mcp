@@ -22,7 +22,7 @@ func TestGolden_ServerData_UsesGeneratedCodec(t *testing.T) {
 	require.NotContains(t, provider, "rawjson.RawJSON")
 
 	executor := generatedContentBySuffix(t, files, "agents/scribe/lookup/service_executor.go")
-	require.Contains(t, executor, "lookup.DispatchByIDMethod(ctx, meta, json.RawMessage(call.Payload), call.Labels, lookup.ByIDDispatchOptions{")
+	require.Contains(t, executor, "lookup.DispatchByIDMethod(ctx, meta, jsontext.Value(call.Payload), call.Labels, lookup.ByIDDispatchOptions{")
 	require.Contains(t, executor, "Call: caller,")
 	require.Contains(t, executor, "MapPayload: cfg.mapPayload,")
 	require.Contains(t, executor, "MapResult: cfg.mapResult,")

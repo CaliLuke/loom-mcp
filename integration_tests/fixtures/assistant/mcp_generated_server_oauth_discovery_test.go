@@ -2,7 +2,7 @@ package assistantapi
 
 import (
 	"context"
-	"encoding/json"
+	"encoding/json/v2"
 	"net/http"
 	"testing"
 
@@ -74,6 +74,6 @@ func fetchOAuthMetadata(t *testing.T, url string) map[string]any {
 	require.Equal(t, http.StatusOK, resp.StatusCode, "metadata endpoint must return 200")
 
 	var doc map[string]any
-	require.NoError(t, json.NewDecoder(resp.Body).Decode(&doc))
+	require.NoError(t, json.UnmarshalRead(resp.Body, &doc))
 	return doc
 }

@@ -17,7 +17,7 @@ func TestGeneratedMethodBackedDispatcher(t *testing.T) {
 	require.Contains(t, provider, "MapPayload func(tools.Ident, any, *runtime.ToolCallMeta) (any, error)")
 	require.Contains(t, provider, "MapResult  func(tools.Ident, any, *runtime.ToolCallMeta) (any, error)")
 	require.Contains(t, provider, "Injectors  []func(context.Context, any, *runtime.ToolCallMeta) error")
-	require.Contains(t, provider, "func DispatchByIDMethod(ctx context.Context, meta *runtime.ToolCallMeta, raw json.RawMessage, labels map[string]string, opts ByIDDispatchOptions) (*planner.ToolResult, error)")
+	require.Contains(t, provider, "func DispatchByIDMethod(ctx context.Context, meta *runtime.ToolCallMeta, raw jsontext.Value, labels map[string]string, opts ByIDDispatchOptions) (*planner.ToolResult, error)")
 }
 
 // TestGeneratedMethodBackedDispatcherDecodesOmittedArguments verifies that the
@@ -30,7 +30,7 @@ func TestGeneratedMethodBackedDispatcherDecodesOmittedArguments(t *testing.T) {
 	provider := fileContent(t, files, "gen/alpha/toolsets/lookup/provider.go")
 
 	require.Contains(t, provider, "if len(raw) == 0 {")
-	require.Contains(t, provider, `raw = json.RawMessage("{}")`)
+	require.Contains(t, provider, `raw = jsontext.Value("{}")`)
 	require.Contains(t, provider, "decodedArgs, err := ByIDPayloadCodec.FromJSON(raw)")
 	require.Contains(t, provider, "toolArgs = decodedArgs")
 	require.NotContains(t, provider, "if len(raw) > 0 {",
@@ -45,7 +45,7 @@ func TestGeneratedMethodBackedDispatcherPreservesExecutorHooks(t *testing.T) {
 	require.Contains(t, executor, "WithPayloadMapper")
 	require.Contains(t, executor, "WithResultMapper")
 	require.Contains(t, executor, "WithInterceptors")
-	require.Contains(t, executor, "lookup.DispatchByIDMethod(ctx, meta, json.RawMessage(call.Payload), call.Labels, lookup.ByIDDispatchOptions{")
+	require.Contains(t, executor, "lookup.DispatchByIDMethod(ctx, meta, jsontext.Value(call.Payload), call.Labels, lookup.ByIDDispatchOptions{")
 	require.Contains(t, executor, "Call: caller,")
 	require.Contains(t, executor, "MapPayload: cfg.mapPayload,")
 	require.Contains(t, executor, "MapResult: cfg.mapResult,")

@@ -102,7 +102,7 @@ func TestEnforceAudience_RejectsMismatchingStringClaim(t *testing.T) {
 }
 
 // TestEnforceAudience_AcceptsMatchingArrayClaim covers the RFC 7519 §4.1.3
-// `aud` array shape. A JWT decoded by encoding/json typically yields
+// `aud` array shape. A JWT decoded into arbitrary Go values typically yields
 // []any of strings, so both []string and []any must pass as long as one
 // element matches.
 func TestEnforceAudience_AcceptsMatchingArrayClaim(t *testing.T) {

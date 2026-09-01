@@ -3,7 +3,7 @@ package runtime
 import (
 	"bytes"
 	"context"
-	"encoding/json"
+	"encoding/json/jsontext"
 	"fmt"
 	"hash/fnv"
 	"strconv"
@@ -53,7 +53,7 @@ func promptRenderHookContextFromContext(ctx context.Context) (PromptRenderHookCo
 }
 
 // hasNonNullJSON reports whether raw contains a non-empty JSON value other than the literal `null`.
-func hasNonNullJSON(raw json.RawMessage) bool {
+func hasNonNullJSON(raw jsontext.Value) bool {
 	trimmed := bytes.TrimSpace(raw)
 	return len(trimmed) > 0 && !bytes.Equal(trimmed, []byte("null"))
 }

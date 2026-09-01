@@ -38,8 +38,8 @@ var (
 		Toolset:     "features.workflow",
 		Description: "Draft a response",
 		Tags:        []string{},
-		Payload:     tools.TypeSpec{Name: "DraftPayload", Schema: []byte("{\"$schema\":\"https://json-schema.org/draft/2020-12/schema\",\"type\":\"object\",\"properties\":{\"topic\":{\"type\":\"string\",\"description\":\"Topic to process\",\"example\":\"Molestiae aut omnis eum voluptatibus corporis maiores.\"}},\"required\":[\"topic\"]}"), ExampleJSON: []byte("{\"topic\":\"abc123\"}"), ExampleInput: map[string]any{"topic": "abc123"}, Codec: draftPayloadCodec},
-		Result:      tools.TypeSpec{Name: "DraftResult", Schema: []byte("{\"$schema\":\"https://json-schema.org/draft/2020-12/schema\",\"type\":\"object\",\"properties\":{\"approved\":{\"type\":\"boolean\",\"description\":\"Whether the operation was approved\",\"example\":true},\"ok\":{\"type\":\"boolean\",\"description\":\"Whether the operation succeeded\",\"example\":true}},\"required\":[\"ok\"]}"), Codec: draftResultCodec},
+		Payload:     tools.TypeSpec{Name: "DraftPayload", Schema: []byte("{\"additionalProperties\":false,\"properties\":{\"topic\":{\"description\":\"Topic to process\",\"type\":\"string\"}},\"required\":[\"topic\"],\"type\":\"object\"}"), ExampleJSON: []byte("{\"topic\":\"abc123\"}"), ExampleInput: map[string]any{"topic": "abc123"}, Codec: draftPayloadCodec},
+		Result:      tools.TypeSpec{Name: "DraftResult", Schema: []byte("{\"additionalProperties\":false,\"properties\":{\"approved\":{\"description\":\"Whether the operation was approved\",\"type\":\"boolean\"},\"ok\":{\"description\":\"Whether the operation succeeded\",\"type\":\"boolean\"}},\"required\":[\"ok\"],\"type\":\"object\"}"), Codec: draftResultCodec},
 	}
 	SpecMethodEcho = tools.ToolSpec{
 		Name:        MethodEcho,
@@ -47,8 +47,8 @@ var (
 		Toolset:     "features.workflow",
 		Description: "Echo a topic through the generated method dispatcher",
 		Tags:        []string{},
-		Payload:     tools.TypeSpec{Name: "MethodEchoPayload", Schema: []byte("{\"$schema\":\"https://json-schema.org/draft/2020-12/schema\",\"type\":\"object\",\"properties\":{\"topic\":{\"type\":\"string\",\"description\":\"Topic to send to the service method\",\"example\":\"In ducimus laudantium consequatur libero.\"}},\"required\":[\"topic\"]}"), ExampleJSON: []byte("{\"topic\":\"abc123\"}"), ExampleInput: map[string]any{"topic": "abc123"}, Codec: methodEchoPayloadCodec},
-		Result:      tools.TypeSpec{Name: "MethodEchoResult", Schema: []byte("{\"$schema\":\"https://json-schema.org/draft/2020-12/schema\",\"type\":\"object\",\"properties\":{\"message\":{\"type\":\"string\",\"description\":\"Message returned to the agent runtime\",\"example\":\"Ut voluptatem rem et natus nihil.\"},\"ok\":{\"type\":\"boolean\",\"description\":\"Whether the method-backed tool succeeded\",\"example\":true}},\"required\":[\"ok\",\"message\"]}"), Codec: methodEchoResultCodec},
+		Payload:     tools.TypeSpec{Name: "MethodEchoPayload", Schema: []byte("{\"additionalProperties\":false,\"properties\":{\"topic\":{\"description\":\"Topic to send to the service method\",\"type\":\"string\"}},\"required\":[\"topic\"],\"type\":\"object\"}"), ExampleJSON: []byte("{\"topic\":\"abc123\"}"), ExampleInput: map[string]any{"topic": "abc123"}, Codec: methodEchoPayloadCodec},
+		Result:      tools.TypeSpec{Name: "MethodEchoResult", Schema: []byte("{\"additionalProperties\":false,\"properties\":{\"message\":{\"description\":\"Message returned to the agent runtime\",\"type\":\"string\"},\"ok\":{\"description\":\"Whether the method-backed tool succeeded\",\"type\":\"boolean\"}},\"required\":[\"ok\",\"message\"],\"type\":\"object\"}"), Codec: methodEchoResultCodec},
 	}
 	SpecPublish = tools.ToolSpec{
 		Name:        Publish,
@@ -56,8 +56,8 @@ var (
 		Toolset:     "features.workflow",
 		Description: "Publish the result",
 		Tags:        []string{},
-		Payload:     tools.TypeSpec{Name: "PublishPayload", Schema: []byte("{\"$schema\":\"https://json-schema.org/draft/2020-12/schema\",\"type\":\"object\"}"), ExampleJSON: nil, ExampleInput: nil, Codec: publishPayloadCodec},
-		Result:      tools.TypeSpec{Name: "PublishResult", Schema: []byte("{\"$schema\":\"https://json-schema.org/draft/2020-12/schema\",\"type\":\"object\",\"properties\":{\"approved\":{\"type\":\"boolean\",\"description\":\"Whether the operation was approved\",\"example\":false},\"ok\":{\"type\":\"boolean\",\"description\":\"Whether the operation succeeded\",\"example\":false}},\"required\":[\"ok\"]}"), Codec: publishResultCodec},
+		Payload:     tools.TypeSpec{Name: "PublishPayload", Schema: []byte("{\"additionalProperties\":false,\"type\":\"object\"}"), ExampleJSON: nil, ExampleInput: nil, Codec: publishPayloadCodec},
+		Result:      tools.TypeSpec{Name: "PublishResult", Schema: []byte("{\"additionalProperties\":false,\"properties\":{\"approved\":{\"description\":\"Whether the operation was approved\",\"type\":\"boolean\"},\"ok\":{\"description\":\"Whether the operation succeeded\",\"type\":\"boolean\"}},\"required\":[\"ok\"],\"type\":\"object\"}"), Codec: publishResultCodec},
 	}
 	SpecRetry = tools.ToolSpec{
 		Name:        Retry,
@@ -65,8 +65,8 @@ var (
 		Toolset:     "features.workflow",
 		Description: "Run a bounded retry step",
 		Tags:        []string{},
-		Payload:     tools.TypeSpec{Name: "RetryPayload", Schema: []byte("{\"$schema\":\"https://json-schema.org/draft/2020-12/schema\",\"type\":\"object\"}"), ExampleJSON: nil, ExampleInput: nil, Codec: retryPayloadCodec},
-		Result:      tools.TypeSpec{Name: "RetryResult", Schema: []byte("{\"$schema\":\"https://json-schema.org/draft/2020-12/schema\",\"type\":\"object\",\"properties\":{\"approved\":{\"type\":\"boolean\",\"description\":\"Whether the operation was approved\",\"example\":false},\"ok\":{\"type\":\"boolean\",\"description\":\"Whether the operation succeeded\",\"example\":false}},\"required\":[\"ok\"]}"), Codec: retryResultCodec},
+		Payload:     tools.TypeSpec{Name: "RetryPayload", Schema: []byte("{\"additionalProperties\":false,\"type\":\"object\"}"), ExampleJSON: nil, ExampleInput: nil, Codec: retryPayloadCodec},
+		Result:      tools.TypeSpec{Name: "RetryResult", Schema: []byte("{\"additionalProperties\":false,\"properties\":{\"approved\":{\"description\":\"Whether the operation was approved\",\"type\":\"boolean\"},\"ok\":{\"description\":\"Whether the operation succeeded\",\"type\":\"boolean\"}},\"required\":[\"ok\"],\"type\":\"object\"}"), Codec: retryResultCodec},
 	}
 	SpecReview = tools.ToolSpec{
 		Name:        Review,
@@ -74,8 +74,8 @@ var (
 		Toolset:     "features.workflow",
 		Description: "Review the draft",
 		Tags:        []string{},
-		Payload:     tools.TypeSpec{Name: "ReviewPayload", Schema: []byte("{\"$schema\":\"https://json-schema.org/draft/2020-12/schema\",\"type\":\"object\",\"properties\":{\"strict\":{\"type\":\"boolean\",\"description\":\"Whether review should be strict\",\"example\":true}},\"required\":[\"strict\"]}"), ExampleJSON: []byte("{\"strict\":false}"), ExampleInput: map[string]any{"strict": false}, Codec: reviewPayloadCodec},
-		Result:      tools.TypeSpec{Name: "ReviewResult", Schema: []byte("{\"$schema\":\"https://json-schema.org/draft/2020-12/schema\",\"type\":\"object\",\"properties\":{\"approved\":{\"type\":\"boolean\",\"description\":\"Whether the operation was approved\",\"example\":true},\"ok\":{\"type\":\"boolean\",\"description\":\"Whether the operation succeeded\",\"example\":true}},\"required\":[\"ok\"]}"), Codec: reviewResultCodec},
+		Payload:     tools.TypeSpec{Name: "ReviewPayload", Schema: []byte("{\"additionalProperties\":false,\"properties\":{\"strict\":{\"description\":\"Whether review should be strict\",\"type\":\"boolean\"}},\"required\":[\"strict\"],\"type\":\"object\"}"), ExampleJSON: []byte("{\"strict\":false}"), ExampleInput: map[string]any{"strict": false}, Codec: reviewPayloadCodec},
+		Result:      tools.TypeSpec{Name: "ReviewResult", Schema: []byte("{\"additionalProperties\":false,\"properties\":{\"approved\":{\"description\":\"Whether the operation was approved\",\"type\":\"boolean\"},\"ok\":{\"description\":\"Whether the operation succeeded\",\"type\":\"boolean\"}},\"required\":[\"ok\"],\"type\":\"object\"}"), Codec: reviewResultCodec},
 	}
 	SpecRevise = tools.ToolSpec{
 		Name:        Revise,
@@ -83,8 +83,8 @@ var (
 		Toolset:     "features.workflow",
 		Description: "Revise the result",
 		Tags:        []string{},
-		Payload:     tools.TypeSpec{Name: "RevisePayload", Schema: []byte("{\"$schema\":\"https://json-schema.org/draft/2020-12/schema\",\"type\":\"object\"}"), ExampleJSON: nil, ExampleInput: nil, Codec: revisePayloadCodec},
-		Result:      tools.TypeSpec{Name: "ReviseResult", Schema: []byte("{\"$schema\":\"https://json-schema.org/draft/2020-12/schema\",\"type\":\"object\",\"properties\":{\"approved\":{\"type\":\"boolean\",\"description\":\"Whether the operation was approved\",\"example\":true},\"ok\":{\"type\":\"boolean\",\"description\":\"Whether the operation succeeded\",\"example\":true}},\"required\":[\"ok\"]}"), Codec: reviseResultCodec},
+		Payload:     tools.TypeSpec{Name: "RevisePayload", Schema: []byte("{\"additionalProperties\":false,\"type\":\"object\"}"), ExampleJSON: nil, ExampleInput: nil, Codec: revisePayloadCodec},
+		Result:      tools.TypeSpec{Name: "ReviseResult", Schema: []byte("{\"additionalProperties\":false,\"properties\":{\"approved\":{\"description\":\"Whether the operation was approved\",\"type\":\"boolean\"},\"ok\":{\"description\":\"Whether the operation succeeded\",\"type\":\"boolean\"}},\"required\":[\"ok\"],\"type\":\"object\"}"), Codec: reviseResultCodec},
 	}
 )
 

@@ -2,7 +2,8 @@ package main
 
 import (
 	"context"
-	"encoding/json"
+	"encoding/json/jsontext"
+	"encoding/json/v2"
 	"fmt"
 	"net/http"
 	"net/url"
@@ -42,7 +43,7 @@ func (s sdkAssistantService) GenerateDpiSpec(ctx context.Context, p *assistant.G
 
 type sdkPromptProvider struct{}
 
-func (sdkPromptProvider) GetCodeReviewPrompt(arguments json.RawMessage) (*mcpassistant.PromptsGetResult, error) {
+func (sdkPromptProvider) GetCodeReviewPrompt(arguments jsontext.Value) (*mcpassistant.PromptsGetResult, error) {
 	description := "Code review guidance"
 	text := "Review the provided code and suggest improvements."
 	return &mcpassistant.PromptsGetResult{
@@ -53,7 +54,7 @@ func (sdkPromptProvider) GetCodeReviewPrompt(arguments json.RawMessage) (*mcpass
 	}, nil
 }
 
-func (sdkPromptProvider) GetContextualPromptsPrompt(ctx context.Context, arguments json.RawMessage) (*mcpassistant.PromptsGetResult, error) {
+func (sdkPromptProvider) GetContextualPromptsPrompt(ctx context.Context, arguments jsontext.Value) (*mcpassistant.PromptsGetResult, error) {
 	text := "Dynamic contextual prompts"
 	return &mcpassistant.PromptsGetResult{
 		Messages: []*mcpassistant.PromptMessage{
@@ -62,7 +63,7 @@ func (sdkPromptProvider) GetContextualPromptsPrompt(ctx context.Context, argumen
 	}, nil
 }
 
-func (sdkPromptProvider) GetFigmaImplementationPromptPrompt(ctx context.Context, arguments json.RawMessage) (*mcpassistant.PromptsGetResult, error) {
+func (sdkPromptProvider) GetFigmaImplementationPromptPrompt(ctx context.Context, arguments jsontext.Value) (*mcpassistant.PromptsGetResult, error) {
 	var payload map[string]any
 	if len(arguments) > 0 {
 		if err := json.Unmarshal(arguments, &payload); err != nil {

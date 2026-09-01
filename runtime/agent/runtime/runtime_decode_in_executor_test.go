@@ -2,7 +2,7 @@ package runtime
 
 import (
 	"context"
-	"encoding/json"
+	"encoding/json/v2"
 	"testing"
 
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/planner"
@@ -44,7 +44,9 @@ func TestExecuteToolActivity_DecodeInExecutor_PassesRaw(t *testing.T) {
 			Result: tools.TypeSpec{
 				Name: "R",
 				Codec: tools.JSONCodec[any]{
-					ToJSON: json.Marshal,
+					ToJSON: func(value any) ([]byte, error) {
+						return json.Marshal(value)
+					},
 					FromJSON: func(data []byte) (any, error) {
 						var m map[string]any
 						if err := json.Unmarshal(data, &m); err != nil {

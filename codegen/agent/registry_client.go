@@ -219,7 +219,8 @@ func registryClientFile(data *RegistryClientData) *codegen.File {
 
 	imports := []*codegen.ImportSpec{
 		{Path: "context"},
-		{Path: "encoding/json"},
+		{Name: "json", Path: "encoding/json/v2"},
+		{Name: "jsontext", Path: "encoding/json/jsontext"},
 		{Path: "errors"},
 		{Path: "fmt"},
 		{Path: "io"},
@@ -318,7 +319,7 @@ func emitRegistryClientTypes(stmt *jen.Statement, data *RegistryClientData) {
 		jen.Comment("Description explains what the tool does."),
 		jen.Id("Description").String().Tag(map[string]string{"json": "description,omitempty"}),
 		jen.Comment("InputSchema is the JSON Schema for tool input."),
-		jen.Id("InputSchema").Qual("encoding/json", "RawMessage").Tag(map[string]string{"json": "inputSchema,omitempty"}),
+		jen.Id("InputSchema").Id("jsontext").Dot("Value").Tag(map[string]string{"json": "inputSchema,omitempty"}),
 	)
 	stmt.Line()
 
@@ -635,7 +636,7 @@ func emitRegistryClientPrivateMethods(stmt *jen.Statement) {
 				})),
 			),
 			jen.If(jen.Id("result").Op("!=").Nil().Op("&&").Id("resp").Dot("StatusCode").Op("!=").Qual("net/http", "StatusNoContent")).Block(
-				jen.If(jen.Id("err").Op(":=").Qual("encoding/json", "NewDecoder").Call(jen.Id("resp").Dot("Body")).Dot("Decode").Call(jen.Id("result")), jen.Id("err").Op("!=").Nil()).Block(
+				jen.If(jen.Id("err").Op(":=").Id("json").Dot("UnmarshalRead").Call(jen.Id("resp").Dot("Body"), jen.Id("result")), jen.Id("err").Op("!=").Nil()).Block(
 					jen.Return(jen.Qual("fmt", "Errorf").Call(jen.Lit("decoding response: %w"), jen.Id("err"))),
 				),
 			),

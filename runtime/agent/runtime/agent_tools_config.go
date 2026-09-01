@@ -2,7 +2,8 @@ package runtime
 
 import (
 	"context"
-	"encoding/json"
+	"encoding/json/jsontext"
+	"encoding/json/v2"
 	"fmt"
 	"maps"
 	"strings"
@@ -256,7 +257,7 @@ func PayloadToString(payload any) (string, error) {
 	switch v := payload.(type) {
 	case string:
 		return v, nil
-	case json.RawMessage:
+	case jsontext.Value:
 		if len(v) == 0 {
 			return "", nil
 		}

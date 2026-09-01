@@ -2,7 +2,7 @@ package runtime
 
 import (
 	"context"
-	"encoding/json"
+	"encoding/json/v2"
 	"testing"
 	"text/template"
 
@@ -147,7 +147,9 @@ func TestHintingSinkOverrideWins(t *testing.T) {
 
 func newTypedHintSpec(name tools.Ident) tools.ToolSpec {
 	codec := tools.JSONCodec[any]{
-		ToJSON: json.Marshal,
+		ToJSON: func(value any) ([]byte, error) {
+			return json.Marshal(value)
+		},
 		FromJSON: func(data []byte) (any, error) {
 			var out struct {
 				Resolution string `json:"resolution"`

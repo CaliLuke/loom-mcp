@@ -2,7 +2,7 @@ package assistantapi
 
 import (
 	"context"
-	"encoding/json"
+	"encoding/json/v2"
 	"sync/atomic"
 
 	assistant "example.com/assistant/gen/assistant"

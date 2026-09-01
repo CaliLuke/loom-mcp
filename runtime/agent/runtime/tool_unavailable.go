@@ -9,7 +9,7 @@ package runtime
 
 import (
 	"context"
-	"encoding/json"
+	"encoding/json/v2"
 	"fmt"
 
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/model"

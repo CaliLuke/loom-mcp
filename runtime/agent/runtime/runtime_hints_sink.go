@@ -2,7 +2,7 @@ package runtime
 
 import (
 	"context"
-	"encoding/json"
+	"encoding/json/jsontext"
 
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/rawjson"
 	rthints "github.com/CaliLuke/loom-mcp/v2/runtime/agent/runtime/hints"
@@ -75,7 +75,7 @@ func (h *hintingSink) Close(ctx context.Context) error {
 //   - Hints are only rendered from typed payloads produced by registered codecs.
 //     If decode fails, this function returns nil.
 func (h *hintingSink) decodePayload(ctx context.Context, tool tools.Ident, payload any) any {
-	raw := json.RawMessage("{}")
+	raw := jsontext.Value("{}")
 	switch v := payload.(type) {
 	case nil:
 		// Keep canonical empty object.
@@ -83,23 +83,23 @@ func (h *hintingSink) decodePayload(ctx context.Context, tool tools.Ident, paylo
 		if len(v) > 0 {
 			raw = v.RawMessage()
 		}
-	case json.RawMessage:
+	case jsontext.Value:
 		if len(v) > 0 {
 			raw = v
 		}
 	case []byte:
 		if len(v) > 0 {
-			raw = json.RawMessage(v)
+			raw = jsontext.Value(v)
 		}
 	case string:
 		if v == "" {
 			break
 		}
 		b := []byte(v)
-		if !json.Valid(b) {
+		if !jsontext.Value(b).IsValid() {
 			return nil
 		}
-		raw = json.RawMessage(b)
+		raw = jsontext.Value(b)
 	default:
 		// Already a typed value (e.g., inline producers); honor it as-is.
 		return payload

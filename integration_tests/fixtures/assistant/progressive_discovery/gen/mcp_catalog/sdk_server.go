@@ -11,7 +11,8 @@ package mcpcatalog
 import (
 	"context"
 	"encoding/base64"
-	"encoding/json"
+	jsontext "encoding/json/jsontext"
+	json "encoding/json/v2"
 	"errors"
 	"fmt"
 	"net/http"
@@ -283,7 +284,7 @@ func registerSDKTools(server *mcpsdk.Server, adapter *MCPAdapter, requestContext
 	server.AddTool(&mcpsdk.Tool{
 		Description:  "Lookup a direct catalog entry",
 		InputSchema:  sdkToolInputSchema("{\"type\":\"object\",\"required\":[\"query\"],\"properties\":{\"query\":{\"type\":\"string\",\"description\":\"Lookup query\"}},\"additionalProperties\":false}"),
-		Meta:         sdkMeta(json.RawMessage([]byte("{\"com.github.caliluke.loom-mcp/discovery\":{\"category\":\"catalog\",\"keywords\":[\"catalog\",\"entry\"],\"tags\":[\"lookup\",\"direct\"]}}"))),
+		Meta:         sdkMeta(jsontext.Value([]byte("{\"com.github.caliluke.loom-mcp/discovery\":{\"category\":\"catalog\",\"tags\":[\"lookup\",\"direct\"],\"keywords\":[\"catalog\",\"entry\"]}}"))),
 		Name:         "lookup",
 		OutputSchema: sdkToolInputSchema("{\"type\":\"object\",\"required\":[\"value\"],\"properties\":{\"value\":{\"type\":\"string\",\"description\":\"Lookup result\"}},\"additionalProperties\":false}"),
 		Title:        "Lookup",
@@ -304,9 +305,9 @@ func registerSDKTools(server *mcpsdk.Server, adapter *MCPAdapter, requestContext
 	}, adapter.sdkToolHandler(requestContext))
 	server.AddTool(&mcpsdk.Tool{
 		Description:  "Lookup a projected catalog entry",
-		InputSchema:  json.RawMessage(projected.SpecProjectedLookup.Payload.Schema),
+		InputSchema:  jsontext.Value(projected.SpecProjectedLookup.Payload.Schema),
 		Name:         "projected_lookup",
-		OutputSchema: json.RawMessage(projected.SpecProjectedLookup.Result.Schema),
+		OutputSchema: jsontext.Value(projected.SpecProjectedLookup.Result.Schema),
 		Title:        "Projected Lookup",
 	}, adapter.sdkToolHandler(requestContext))
 	return nil
@@ -339,9 +340,9 @@ func sdkToolAnnotations(raw any) (*mcpsdk.ToolAnnotations, error) {
 }
 func sdkToolInputSchema(raw string) any {
 	if raw == "" {
-		return json.RawMessage("{\"type\":\"object\"}")
+		return jsontext.Value("{\"type\":\"object\"}")
 	}
-	return json.RawMessage([]byte(raw))
+	return jsontext.Value([]byte(raw))
 }
 func sdkToolFromToolInfo(tool *ToolInfo) (*mcpsdk.Tool, error) {
 	if tool == nil {
@@ -601,7 +602,7 @@ func sdkMeta(value any) mcpsdk.Meta {
 		return typed
 	case map[string]any:
 		return mcpsdk.Meta(typed)
-	case json.RawMessage:
+	case jsontext.Value:
 		var meta map[string]any
 		if err := json.Unmarshal(typed, &meta); err != nil {
 			return nil

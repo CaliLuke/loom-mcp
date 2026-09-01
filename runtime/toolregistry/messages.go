@@ -3,7 +3,7 @@
 package toolregistry
 
 import (
-	"encoding/json"
+	"encoding/json/jsontext"
 	"errors"
 	"strings"
 
@@ -41,7 +41,7 @@ type (
 		ToolUseID string              `json:"tool_use_id,omitempty"`
 		PingID    string              `json:"ping_id,omitempty"`
 		Tool      tools.Ident         `json:"tool,omitempty"`
-		Payload   json.RawMessage     `json:"payload,omitempty"`
+		Payload   jsontext.Value      `json:"payload,omitempty"`
 		Meta      *ToolCallMeta       `json:"meta,omitempty"`
 
 		// TraceParent and TraceState carry W3C Trace Context headers for distributed
@@ -59,8 +59,8 @@ type (
 	// ToolResultMessage is published to a per-call result stream. The gateway never
 	// interprets these bytes; consumers decode them using compiled tool codecs.
 	ToolResultMessage struct {
-		ToolUseID string          `json:"tool_use_id"`
-		Result    json.RawMessage `json:"result_json,omitempty"`
+		ToolUseID string         `json:"tool_use_id"`
+		Result    jsontext.Value `json:"result_json,omitempty"`
 		// Bounds carries canonical bounded-result metadata projected out-of-band
 		// from the semantic result payload when the tool declares a bounded-result
 		// contract.
@@ -95,9 +95,9 @@ type (
 	// ServerDataItem is server-only tool output published alongside the canonical
 	// tool result JSON. Server data is never sent to model providers.
 	ServerDataItem struct {
-		Kind     string          `json:"kind"`
-		Audience string          `json:"audience"`
-		Data     json.RawMessage `json:"data"`
+		Kind     string         `json:"kind"`
+		Audience string         `json:"audience"`
+		Data     jsontext.Value `json:"data"`
 	}
 
 	// ToolError is a structured tool error published by providers.
@@ -126,7 +126,7 @@ const (
 )
 
 // NewToolCallMessage constructs a tool invocation message.
-func NewToolCallMessage(toolUseID string, tool tools.Ident, payload json.RawMessage, meta *ToolCallMeta) ToolCallMessage {
+func NewToolCallMessage(toolUseID string, tool tools.Ident, payload jsontext.Value, meta *ToolCallMeta) ToolCallMessage {
 	return ToolCallMessage{
 		Type:      MessageTypeCall,
 		ToolUseID: toolUseID,
@@ -145,7 +145,7 @@ func NewPingMessage(pingID string) ToolCallMessage {
 }
 
 // NewToolResultMessage constructs a successful tool result message.
-func NewToolResultMessage(toolUseID string, result json.RawMessage) ToolResultMessage {
+func NewToolResultMessage(toolUseID string, result jsontext.Value) ToolResultMessage {
 	return ToolResultMessage{
 		ToolUseID: toolUseID,
 		Result:    result,
@@ -154,7 +154,7 @@ func NewToolResultMessage(toolUseID string, result json.RawMessage) ToolResultMe
 
 // NewToolResultMessageWithServerData constructs a successful tool result message with
 // additional server-only metadata.
-func NewToolResultMessageWithServerData(toolUseID string, result json.RawMessage, serverData []*ServerDataItem) ToolResultMessage {
+func NewToolResultMessageWithServerData(toolUseID string, result jsontext.Value, serverData []*ServerDataItem) ToolResultMessage {
 	out := NewToolResultMessage(toolUseID, result)
 	out.ServerData = serverData
 	return out

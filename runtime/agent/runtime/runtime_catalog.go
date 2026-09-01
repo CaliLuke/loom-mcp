@@ -1,7 +1,7 @@
 package runtime
 
 import (
-	"encoding/json"
+	"encoding/json/v2"
 	"slices"
 
 	agent "github.com/CaliLuke/loom-mcp/v2/runtime/agent"

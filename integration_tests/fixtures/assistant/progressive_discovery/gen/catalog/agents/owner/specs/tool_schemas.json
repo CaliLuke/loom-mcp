@@ -9,35 +9,33 @@
       "payload": {
         "name": "ProjectedLookupPayload",
         "schema": {
-          "$schema": "https://json-schema.org/draft/2020-12/schema",
-          "type": "object",
+          "additionalProperties": false,
           "properties": {
             "query": {
-              "type": "string",
               "description": "Lookup query",
-              "example": "Voluptatem animi illum rerum odio."
+              "type": "string"
             }
           },
           "required": [
             "query"
-          ]
+          ],
+          "type": "object"
         }
       },
       "result": {
         "name": "ProjectedLookupResult",
         "schema": {
-          "$schema": "https://json-schema.org/draft/2020-12/schema",
-          "type": "object",
+          "additionalProperties": false,
           "properties": {
             "value": {
-              "type": "string",
               "description": "Lookup result",
-              "example": "Pariatur quis deserunt."
+              "type": "string"
             }
           },
           "required": [
             "value"
-          ]
+          ],
+          "type": "object"
         }
       }
     }

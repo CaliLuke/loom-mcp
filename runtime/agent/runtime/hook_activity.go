@@ -3,7 +3,7 @@ package runtime
 import (
 	"bytes"
 	"context"
-	"encoding/json"
+	"encoding/json/jsontext"
 	"errors"
 	"time"
 
@@ -199,10 +199,10 @@ func (r *Runtime) enrichToolCallScheduledHint(ctx context.Context, evt *hooks.To
 	return false
 }
 
-func normalizeHintPayloadJSON(raw json.RawMessage) json.RawMessage {
+func normalizeHintPayloadJSON(raw jsontext.Value) jsontext.Value {
 	trimmed := bytes.TrimSpace(raw)
 	if len(trimmed) == 0 || bytes.Equal(trimmed, []byte("null")) {
-		return json.RawMessage("{}")
+		return jsontext.Value("{}")
 	}
 	return raw
 }

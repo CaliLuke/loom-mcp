@@ -3,7 +3,8 @@ package sdkclient
 import (
 	"context"
 	"encoding/base64"
-	"encoding/json"
+	"encoding/json/jsontext"
+	"encoding/json/v2"
 	"fmt"
 	"strings"
 	"testing"
@@ -360,7 +361,7 @@ func largestAcceptedRequestStateContentSize(t *testing.T) int {
 			pendingTestInput{id: "loom-input-0", request: mcpruntime.ElicitRequest{Message: "first"}},
 			pendingTestInput{id: "loom-input-1", request: mcpruntime.ElicitRequest{Message: "second"}},
 		)
-		_, err = encodePersistedRequestState(map[string]json.RawMessage{"loom-input-0": data}, requests, []string{"loom-input-1"}, testRequestStateKey, testRequestStateAAD(t))
+		_, err = encodePersistedRequestState(map[string]jsontext.Value{"loom-input-0": data}, requests, []string{"loom-input-1"}, testRequestStateKey, testRequestStateAAD(t))
 		if err == nil {
 			low = candidate
 		} else {

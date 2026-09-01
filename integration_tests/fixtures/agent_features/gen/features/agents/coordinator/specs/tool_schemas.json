@@ -9,40 +9,37 @@
       "payload": {
         "name": "DraftPayload",
         "schema": {
-          "$schema": "https://json-schema.org/draft/2020-12/schema",
-          "type": "object",
+          "additionalProperties": false,
           "properties": {
             "topic": {
-              "type": "string",
               "description": "Topic to process",
-              "example": "Molestiae aut omnis eum voluptatibus corporis maiores."
+              "type": "string"
             }
           },
           "required": [
             "topic"
-          ]
+          ],
+          "type": "object"
         }
       },
       "result": {
         "name": "DraftResult",
         "schema": {
-          "$schema": "https://json-schema.org/draft/2020-12/schema",
-          "type": "object",
+          "additionalProperties": false,
           "properties": {
             "approved": {
-              "type": "boolean",
               "description": "Whether the operation was approved",
-              "example": true
+              "type": "boolean"
             },
             "ok": {
-              "type": "boolean",
               "description": "Whether the operation succeeded",
-              "example": true
+              "type": "boolean"
             }
           },
           "required": [
             "ok"
-          ]
+          ],
+          "type": "object"
         }
       }
     },
@@ -55,41 +52,38 @@
       "payload": {
         "name": "MethodEchoPayload",
         "schema": {
-          "$schema": "https://json-schema.org/draft/2020-12/schema",
-          "type": "object",
+          "additionalProperties": false,
           "properties": {
             "topic": {
-              "type": "string",
               "description": "Topic to send to the service method",
-              "example": "In ducimus laudantium consequatur libero."
+              "type": "string"
             }
           },
           "required": [
             "topic"
-          ]
+          ],
+          "type": "object"
         }
       },
       "result": {
         "name": "MethodEchoResult",
         "schema": {
-          "$schema": "https://json-schema.org/draft/2020-12/schema",
-          "type": "object",
+          "additionalProperties": false,
           "properties": {
             "message": {
-              "type": "string",
               "description": "Message returned to the agent runtime",
-              "example": "Ut voluptatem rem et natus nihil."
+              "type": "string"
             },
             "ok": {
-              "type": "boolean",
               "description": "Whether the method-backed tool succeeded",
-              "example": true
+              "type": "boolean"
             }
           },
           "required": [
             "ok",
             "message"
-          ]
+          ],
+          "type": "object"
         }
       }
     },
@@ -102,30 +96,28 @@
       "payload": {
         "name": "PublishPayload",
         "schema": {
-          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "additionalProperties": false,
           "type": "object"
         }
       },
       "result": {
         "name": "PublishResult",
         "schema": {
-          "$schema": "https://json-schema.org/draft/2020-12/schema",
-          "type": "object",
+          "additionalProperties": false,
           "properties": {
             "approved": {
-              "type": "boolean",
               "description": "Whether the operation was approved",
-              "example": false
+              "type": "boolean"
             },
             "ok": {
-              "type": "boolean",
               "description": "Whether the operation succeeded",
-              "example": false
+              "type": "boolean"
             }
           },
           "required": [
             "ok"
-          ]
+          ],
+          "type": "object"
         }
       }
     },
@@ -138,30 +130,28 @@
       "payload": {
         "name": "RetryPayload",
         "schema": {
-          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "additionalProperties": false,
           "type": "object"
         }
       },
       "result": {
         "name": "RetryResult",
         "schema": {
-          "$schema": "https://json-schema.org/draft/2020-12/schema",
-          "type": "object",
+          "additionalProperties": false,
           "properties": {
             "approved": {
-              "type": "boolean",
               "description": "Whether the operation was approved",
-              "example": false
+              "type": "boolean"
             },
             "ok": {
-              "type": "boolean",
               "description": "Whether the operation succeeded",
-              "example": false
+              "type": "boolean"
             }
           },
           "required": [
             "ok"
-          ]
+          ],
+          "type": "object"
         }
       }
     },
@@ -174,40 +164,37 @@
       "payload": {
         "name": "ReviewPayload",
         "schema": {
-          "$schema": "https://json-schema.org/draft/2020-12/schema",
-          "type": "object",
+          "additionalProperties": false,
           "properties": {
             "strict": {
-              "type": "boolean",
               "description": "Whether review should be strict",
-              "example": true
+              "type": "boolean"
             }
           },
           "required": [
             "strict"
-          ]
+          ],
+          "type": "object"
         }
       },
       "result": {
         "name": "ReviewResult",
         "schema": {
-          "$schema": "https://json-schema.org/draft/2020-12/schema",
-          "type": "object",
+          "additionalProperties": false,
           "properties": {
             "approved": {
-              "type": "boolean",
               "description": "Whether the operation was approved",
-              "example": true
+              "type": "boolean"
             },
             "ok": {
-              "type": "boolean",
               "description": "Whether the operation succeeded",
-              "example": true
+              "type": "boolean"
             }
           },
           "required": [
             "ok"
-          ]
+          ],
+          "type": "object"
         }
       }
     },
@@ -220,30 +207,28 @@
       "payload": {
         "name": "RevisePayload",
         "schema": {
-          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "additionalProperties": false,
           "type": "object"
         }
       },
       "result": {
         "name": "ReviseResult",
         "schema": {
-          "$schema": "https://json-schema.org/draft/2020-12/schema",
-          "type": "object",
+          "additionalProperties": false,
           "properties": {
             "approved": {
-              "type": "boolean",
               "description": "Whether the operation was approved",
-              "example": true
+              "type": "boolean"
             },
             "ok": {
-              "type": "boolean",
               "description": "Whether the operation succeeded",
-              "example": true
+              "type": "boolean"
             }
           },
           "required": [
             "ok"
-          ]
+          ],
+          "type": "object"
         }
       }
     }

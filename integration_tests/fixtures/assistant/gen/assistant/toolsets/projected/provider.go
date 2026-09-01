@@ -9,7 +9,7 @@ package projected
 
 import (
 	"context"
-	"encoding/json"
+	jsontext "encoding/json/jsontext"
 	"errors"
 	"fmt"
 
@@ -43,7 +43,7 @@ type ProjectedLookupToolDispatchOptions struct {
 
 // DispatchProjectedLookupToolMethod executes projected.projected_lookup_tool
 // through its bound service method.
-func DispatchProjectedLookupToolMethod(ctx context.Context, meta *runtime.ToolCallMeta, raw json.RawMessage, labels map[string]string, opts ProjectedLookupToolDispatchOptions) (*planner.ToolResult, error) {
+func DispatchProjectedLookupToolMethod(ctx context.Context, meta *runtime.ToolCallMeta, raw jsontext.Value, labels map[string]string, opts ProjectedLookupToolDispatchOptions) (*planner.ToolResult, error) {
 	if opts.Call == nil {
 		return &planner.ToolResult{
 			Error: planner.NewToolError("method dispatcher missing Call"),
@@ -54,7 +54,7 @@ func DispatchProjectedLookupToolMethod(ctx context.Context, meta *runtime.ToolCa
 		// Tool arguments may legally be omitted (for example MCP tools/call
 		// without "arguments"). Decode an empty object so required-field
 		// validation applies and dispatch never sees a nil payload.
-		raw = json.RawMessage("{}")
+		raw = jsontext.Value("{}")
 	}
 	var toolArgs any
 	decodedArgs, err := ProjectedLookupToolPayloadCodec.FromJSON(raw)
@@ -133,7 +133,7 @@ type ProjectedStatusToolDispatchOptions struct {
 
 // DispatchProjectedStatusToolMethod executes projected.projected_status_tool
 // through its bound service method.
-func DispatchProjectedStatusToolMethod(ctx context.Context, meta *runtime.ToolCallMeta, raw json.RawMessage, labels map[string]string, opts ProjectedStatusToolDispatchOptions) (*planner.ToolResult, error) {
+func DispatchProjectedStatusToolMethod(ctx context.Context, meta *runtime.ToolCallMeta, raw jsontext.Value, labels map[string]string, opts ProjectedStatusToolDispatchOptions) (*planner.ToolResult, error) {
 	if opts.Call == nil {
 		return &planner.ToolResult{
 			Error: planner.NewToolError("method dispatcher missing Call"),
@@ -144,7 +144,7 @@ func DispatchProjectedStatusToolMethod(ctx context.Context, meta *runtime.ToolCa
 		// Tool arguments may legally be omitted (for example MCP tools/call
 		// without "arguments"). Decode an empty object so required-field
 		// validation applies and dispatch never sees a nil payload.
-		raw = json.RawMessage("{}")
+		raw = jsontext.Value("{}")
 	}
 	var toolArgs any
 	decodedArgs, err := ProjectedStatusToolPayloadCodec.FromJSON(raw)

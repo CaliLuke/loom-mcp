@@ -1,7 +1,7 @@
 package temporal
 
 import (
-	"encoding/json"
+	"encoding/json/v2"
 	"fmt"
 
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent"
@@ -25,7 +25,7 @@ type (
 	// boundaries as canonical JSON bytes (`api.ToolEvent` / `api.ToolArtifact`).
 	//
 	// This converter exists to:
-	//   - Preserve encoding/json's default field-name behavior for existing workflow
+	//   - Preserve the standard JSON field-name behavior for existing workflow
 	//     histories (no JSON tags in wire structs).
 	//   - Fail fast when code attempts to send `planner.ToolResult` across a Temporal
 	//     boundary (it must be wrapped/encoded as `api.ToolEvent`).
@@ -41,7 +41,7 @@ type (
 		// NOTE: These fields intentionally do not use JSON tags.
 		//
 		// Temporal's default JSON payload converter marshals loom-mcp runtime API types
-		// (e.g. api.PlanActivityInput) using encoding/json defaults, which emit the
+		// (e.g. api.PlanActivityInput) using standard JSON defaults, which emit the
 		// Go field names ("AgentID", "RunID", ...). We must decode that payload
 		// verbatim to preserve correctness for existing workflow histories.
 		AgentID     agent.Ident
@@ -82,7 +82,7 @@ type (
 // Temporal's default JSON payload converter decodes `any` fields as JSON-shaped
 // values (map[string]any, []any, float64, ...). loom-mcp forbids `any` across
 // workflow/activity/signal boundaries: it must be represented as canonical JSON
-// bytes (json.RawMessage) and decoded back into typed Go values using the tool's
+// bytes (jsontext.Value) and decoded back into typed Go values using the tool's
 // generated codecs at the execution boundary (activities), not inside workflow
 // serialization.
 //

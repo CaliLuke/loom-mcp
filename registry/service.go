@@ -8,17 +8,18 @@ package registry
 
 import (
 	"context"
-	"encoding/json"
+	"encoding/json/jsontext"
 	"errors"
 	"fmt"
 	"time"
+
+	"uuid"
 
 	clientspulse "github.com/CaliLuke/loom-mcp/v2/features/stream/pulse/clients/pulse"
 	genregistry "github.com/CaliLuke/loom-mcp/v2/registry/gen/registry"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/tools"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/toolregistry"
 	streamopts "github.com/CaliLuke/loom/pulse/streaming/options"
-	"uuid"
 )
 
 type (
@@ -242,7 +243,7 @@ func (s *Service) CallTool(ctx context.Context, p *genregistry.CallToolPayload) 
 		return nil, err
 	}
 	meta := buildToolCallMeta(p.Meta)
-	msg := toolregistry.NewToolCallMessage(toolUseID, tools.Ident(p.Tool), json.RawMessage(p.PayloadJSON), &meta)
+	msg := toolregistry.NewToolCallMessage(toolUseID, tools.Ident(p.Tool), jsontext.Value(p.PayloadJSON), &meta)
 	if err := s.streamManager.PublishToolCall(ctx, p.Toolset, msg); err != nil {
 		return nil, fmt.Errorf("publish tool call: %w", err)
 	}

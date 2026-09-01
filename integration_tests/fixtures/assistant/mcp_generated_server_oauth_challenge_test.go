@@ -2,7 +2,7 @@ package assistantapi
 
 import (
 	"context"
-	"encoding/json"
+	"encoding/json/v2"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -160,7 +160,7 @@ func TestGeneratedSDKServerMetadataPinnedResourceIgnoresMalformedForwarded(t *te
 		"pinned ResourceIdentifier makes the PRM handler independent of forwarded headers; a malformed header must not fail the request either")
 
 	var doc map[string]any
-	require.NoError(t, json.NewDecoder(resp.Body).Decode(&doc))
+	require.NoError(t, json.UnmarshalRead(resp.Body, &doc))
 	assert.Equal(t, "https://api.example.com/mcp", doc["resource"],
 		"pinned resource must be returned verbatim regardless of request headers")
 }

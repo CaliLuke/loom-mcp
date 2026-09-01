@@ -15,7 +15,8 @@ func registerFile(data *AdapterData) *codegen.File {
 	path := filepath.Join(codegen.Gendir, svcPkg, "register.go")
 	imports := []*codegen.ImportSpec{
 		{Path: "context"},
-		{Path: "encoding/json"},
+		{Name: "json", Path: "encoding/json/v2"},
+		{Name: "jsontext", Path: "encoding/json/jsontext"},
 		{Path: "errors"},
 		{Path: "strings"},
 		{Path: "github.com/CaliLuke/loom-mcp/v2/runtime/agent/planner"},
@@ -105,7 +106,7 @@ func emitRegisterExecPrelude(fn *jen.Group, reg *RegisterData) {
 }
 
 func emitRegisterExecPayload(fn *jen.Group) {
-	fn.List(jen.Id("payload"), jen.Id("err")).Op(":=").Qual("encoding/json", "Marshal").Call(jen.Id("call").Dot("Payload"))
+	fn.List(jen.Id("payload"), jen.Id("err")).Op(":=").Id("json").Dot("Marshal").Call(jen.Id("call").Dot("Payload"))
 	fn.If(jen.Id("err").Op("!=").Nil()).Block(
 		jen.Return(registerErrorResultValue(), jen.Id("err")),
 	)
@@ -129,7 +130,7 @@ func emitRegisterExecDecodeResult(fn *jen.Group) {
 	fn.Var().Id("value").Any()
 	fn.If(jen.Len(jen.Id("resp").Dot("Result")).Op(">").Lit(0)).Block(
 		jen.If(
-			jen.Id("err").Op(":=").Qual("encoding/json", "Unmarshal").Call(jen.Id("resp").Dot("Result"), jen.Op("&").Id("value")),
+			jen.Id("err").Op(":=").Id("json").Dot("Unmarshal").Call(jen.Id("resp").Dot("Result"), jen.Op("&").Id("value")),
 			jen.Id("err").Op("!=").Nil(),
 		).Block(
 			jen.Return(registerErrorResultValue(), jen.Id("err")),
@@ -142,7 +143,7 @@ func emitRegisterExecDecodeStructured(fn *jen.Group) {
 	fn.If(jen.Len(jen.Id("resp").Dot("Structured")).Op(">").Lit(0)).Block(
 		jen.Var().Id("structured").Any(),
 		jen.If(
-			jen.Id("err").Op(":=").Qual("encoding/json", "Unmarshal").Call(jen.Id("resp").Dot("Structured"), jen.Op("&").Id("structured")),
+			jen.Id("err").Op(":=").Id("json").Dot("Unmarshal").Call(jen.Id("resp").Dot("Structured"), jen.Op("&").Id("structured")),
 			jen.Id("err").Op("!=").Nil(),
 		).Block(
 			jen.Return(registerErrorResultValue(), jen.Id("err")),
@@ -326,7 +327,7 @@ func jsonCodecValue() jen.Code {
 			Params(jen.Id("v").Any()).
 			Params(jen.Index().Byte(), jen.Error()).
 			Block(
-				jen.Return(jen.Qual("encoding/json", "Marshal").Call(jen.Id("v"))),
+				jen.Return(jen.Id("json").Dot("Marshal").Call(jen.Id("v"))),
 			),
 		jen.Id("FromJSON"): jen.Func().
 			Params(jen.Id("data").Index().Byte()).
@@ -337,7 +338,7 @@ func jsonCodecValue() jen.Code {
 				),
 				jen.Var().Id("out").Any(),
 				jen.If(
-					jen.Id("err").Op(":=").Qual("encoding/json", "Unmarshal").Call(jen.Id("data"), jen.Op("&").Id("out")),
+					jen.Id("err").Op(":=").Id("json").Dot("Unmarshal").Call(jen.Id("data"), jen.Op("&").Id("out")),
 					jen.Id("err").Op("!=").Nil(),
 				).Block(
 					jen.Return(jen.Nil(), jen.Id("err")),

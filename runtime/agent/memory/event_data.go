@@ -7,7 +7,7 @@ package memory
 import (
 	"bytes"
 	"encoding/base64"
-	"encoding/json"
+	"encoding/json/v2"
 	"fmt"
 	"maps"
 	"math"
@@ -392,7 +392,7 @@ func (d ToolResultData) ToMap() map[string]any {
 		m[eventFieldBounds] = cloneBounds(d.Bounds)
 	}
 	if d.Duration != 0 {
-		m[eventFieldDuration] = d.Duration
+		m[eventFieldDuration] = int64(d.Duration)
 	}
 	if d.Telemetry != nil {
 		m[eventFieldTelemetry] = cloneToolTelemetry(d.Telemetry)

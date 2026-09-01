@@ -1,7 +1,7 @@
 package agent
 
 import (
-	"encoding/json"
+	"encoding/json/jsontext"
 	"fmt"
 	"strings"
 
@@ -237,7 +237,7 @@ func (w *WorkflowExpr) validateTypedInputNode(verr *eval.ValidationErrors, node 
 		verr.Add(w, "RequestInput %q schema is required", node.ID)
 		return
 	}
-	if !json.Valid([]byte(node.Schema)) {
+	if !jsontext.Value(node.Schema).IsValid() {
 		verr.Add(w, "RequestInput %q schema must be valid JSON", node.ID)
 	}
 }

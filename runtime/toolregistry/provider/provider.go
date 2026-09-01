@@ -5,7 +5,7 @@ package provider
 
 import (
 	"context"
-	"encoding/json"
+	"encoding/json/v2"
 	"fmt"
 	"sync"
 	"time"

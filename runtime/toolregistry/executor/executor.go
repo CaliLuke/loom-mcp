@@ -4,7 +4,8 @@ package executor
 
 import (
 	"context"
-	"encoding/json"
+	"encoding/json/jsontext"
+	"encoding/json/v2"
 	"errors"
 	"fmt"
 	"net"
@@ -600,7 +601,7 @@ func cloneServerDataItems(items []*toolregistry.ServerDataItem) []*toolregistry.
 		out = append(out, &toolregistry.ServerDataItem{
 			Kind:     item.Kind,
 			Audience: item.Audience,
-			Data:     append(json.RawMessage(nil), item.Data...),
+			Data:     append(jsontext.Value(nil), item.Data...),
 		})
 	}
 	return out

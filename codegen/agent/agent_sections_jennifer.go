@@ -499,7 +499,7 @@ func emitToolProviderDispatchers(stmt *jen.Statement, data toolProviderFileData)
 			Params(
 				jen.Id("ctx").Qual("context", "Context"),
 				jen.Id("meta").Op("*").Id("runtime").Dot("ToolCallMeta"),
-				jen.Id("raw").Qual("encoding/json", "RawMessage"),
+				jen.Id("raw").Id("jsontext").Dot("Value"),
 				jen.Id("labels").Map(jen.String()).String(),
 				jen.Id("opts").Id(optionsName),
 			).
@@ -515,7 +515,7 @@ func emitToolProviderDispatchers(stmt *jen.Statement, data toolProviderFileData)
 					jen.Comment("Tool arguments may legally be omitted (for example MCP tools/call"),
 					jen.Comment("without \"arguments\"). Decode an empty object so required-field"),
 					jen.Comment("validation applies and dispatch never sees a nil payload."),
-					jen.Id("raw").Op("=").Qual("encoding/json", "RawMessage").Call(jen.Lit("{}")),
+					jen.Id("raw").Op("=").Id("jsontext").Dot("Value").Call(jen.Lit("{}")),
 				)
 				g.Var().Id("toolArgs").Any()
 				g.List(jen.Id("decodedArgs"), jen.Id("err")).Op(":=").Id(tool.ConstName + "PayloadCodec").Dot("FromJSON").Call(jen.Id("raw"))
@@ -697,7 +697,7 @@ func emitToolProviderDispatcherServerData(g *jen.Group, tool *ToolData) {
 	}
 	g.Var().Id("serverData").Id("rawjson").Dot("Message")
 	g.If(jen.Len(jen.Id("serverItems")).Op(">").Lit(0)).Block(
-		jen.List(jen.Id("data"), jen.Id("err")).Op(":=").Qual("encoding/json", "Marshal").Call(jen.Id("serverItems")),
+		jen.List(jen.Id("data"), jen.Id("err")).Op(":=").Id("json").Dot("Marshal").Call(jen.Id("serverItems")),
 		jen.If(jen.Id("err").Op("!=").Nil()).Block(
 			jen.Return(jen.Op("&").Id("planner").Dot("ToolResult").Values(jen.Dict{
 				jen.Id("Name"):  jen.Id(tool.ConstName),
@@ -1007,7 +1007,7 @@ func emitMCPExecutorConstructor(stmt *jen.Statement, data serviceToolsetFileData
 								jen.If(jen.Len(jen.Id("resp").Dot("Structured")).Op(">").Lit(0)).Block(
 									jen.Id("tel").Op("=").Op("&").Id("telemetry").Dot("ToolTelemetry").Values(jen.Dict{
 										jen.Id("Extra"): jen.Map(jen.String()).Any().Values(jen.Dict{
-											jen.Lit("structured"): jen.Qual("encoding/json", "RawMessage").Call(jen.Id("resp").Dot("Structured")),
+											jen.Lit("structured"): jen.Id("jsontext").Dot("Value").Call(jen.Id("resp").Dot("Structured")),
 										}),
 									}),
 								),

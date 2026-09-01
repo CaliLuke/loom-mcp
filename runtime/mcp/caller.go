@@ -2,7 +2,8 @@ package mcp
 
 import (
 	"context"
-	"encoding/json"
+	"encoding/json/jsontext"
+	"encoding/json/v2"
 	"errors"
 	"fmt"
 	"reflect"
@@ -26,16 +27,16 @@ type CallRequest struct {
 	// Tool is the MCP-local tool identifier (without the suite prefix).
 	Tool string
 	// Payload is the JSON-encoded tool arguments produced by the runtime.
-	Payload json.RawMessage
+	Payload jsontext.Value
 }
 
 // CallResponse captures the MCP tool result returned by the caller.
 type CallResponse struct {
 	// Result is the JSON payload returned by the MCP server.
-	Result json.RawMessage
+	Result jsontext.Value
 	// Structured carries the full structured MCP content payload, including text
 	// items that may also contribute to Result.
-	Structured json.RawMessage
+	Structured jsontext.Value
 }
 
 // ToolCallError reports a remote MCP tool failure that was returned as an
@@ -63,13 +64,13 @@ func NormalizeToolCallResponse(textParts []string, structured any, fallbackResul
 		return CallResponse{}, errors.New("tool returned no content")
 	}
 
-	var result json.RawMessage
+	var result jsontext.Value
 	textResult := strings.Join(textParts, "")
 	textBytes := []byte(textResult)
 
 	switch {
-	case textResult != "" && json.Valid(textBytes):
-		result = append(json.RawMessage(nil), textBytes...)
+	case textResult != "" && jsontext.Value(textBytes).IsValid():
+		result = append(jsontext.Value(nil), textBytes...)
 	case textResult != "" && shouldUseStructuredFallback(fallbackResult):
 		marshaled, err := json.Marshal(fallbackResult)
 		if err != nil {
@@ -90,13 +91,13 @@ func NormalizeToolCallResponse(textParts []string, structured any, fallbackResul
 		result = marshaled
 	}
 
-	var structuredPayload json.RawMessage
+	var structuredPayload jsontext.Value
 	if hasStructuredPayload(structured) {
 		marshaled, err := json.Marshal(structured)
 		if err != nil {
 			return CallResponse{}, fmt.Errorf("failed to marshal structured content: %w", err)
 		}
-		structuredPayload = append(json.RawMessage(nil), marshaled...)
+		structuredPayload = append(jsontext.Value(nil), marshaled...)
 	}
 
 	return CallResponse{
@@ -128,7 +129,7 @@ func hasStructuredPayload(v any) bool {
 
 func shouldUseStructuredFallback(v any) bool {
 	switch v.(type) {
-	case nil, string, *string, []byte, json.RawMessage:
+	case nil, string, *string, []byte, jsontext.Value:
 		return false
 	default:
 		return true
@@ -145,7 +146,7 @@ func ToolCallErrorFromResponse(textParts []string, fallbackResult any) error {
 			message = strings.TrimSpace(v)
 		case []byte:
 			message = strings.TrimSpace(string(v))
-		case json.RawMessage:
+		case jsontext.Value:
 			message = strings.TrimSpace(string(v))
 		default:
 			marshaled, err := json.Marshal(v)

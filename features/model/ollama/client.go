@@ -4,7 +4,8 @@ import (
 	"bytes"
 	"context"
 	"encoding/base64"
-	"encoding/json"
+	"encoding/json/jsontext"
+	"encoding/json/v2"
 	"errors"
 	"fmt"
 	"io"
@@ -100,13 +101,13 @@ type ollamaFunctionCall struct {
 }
 
 type ollamaChatResponse struct {
-	Model           string          `json:"model"`
-	Message         ollamaMessage   `json:"message"`
-	Done            bool            `json:"done"`
-	DoneReason      string          `json:"done_reason"`
-	PromptEvalCount int             `json:"prompt_eval_count"`
-	EvalCount       int             `json:"eval_count"`
-	Error           json.RawMessage `json:"error,omitempty"`
+	Model           string         `json:"model"`
+	Message         ollamaMessage  `json:"message"`
+	Done            bool           `json:"done"`
+	DoneReason      string         `json:"done_reason"`
+	PromptEvalCount int            `json:"prompt_eval_count"`
+	EvalCount       int            `json:"eval_count"`
+	Error           jsontext.Value `json:"error,omitempty"`
 }
 
 const (
@@ -270,7 +271,7 @@ func (c *Client) doJSON(ctx context.Context, chatReq ollamaChatRequest, out *oll
 		body, _ := io.ReadAll(io.LimitReader(resp.Body, 4096))
 		return ollamaHTTPStatusError("ollama chat", resp.StatusCode, strings.TrimSpace(string(body)))
 	}
-	if err := json.NewDecoder(resp.Body).Decode(out); err != nil {
+	if err := json.UnmarshalRead(resp.Body, out); err != nil {
 		return fmt.Errorf("ollama chat: decode response: %w", err)
 	}
 	if err := ollamaProviderError(out.Error); err != nil {
@@ -279,7 +280,7 @@ func (c *Client) doJSON(ctx context.Context, chatReq ollamaChatRequest, out *oll
 	return nil
 }
 
-func ollamaProviderError(raw json.RawMessage) error {
+func ollamaProviderError(raw jsontext.Value) error {
 	if len(raw) == 0 || string(raw) == "null" {
 		return nil
 	}
@@ -546,7 +547,7 @@ func structuredOutputPayload(content []model.Message, output *model.StructuredOu
 	if text == "" {
 		return nil, fmt.Errorf("ollama: structured output %q completed without content", output.Name)
 	}
-	if !json.Valid([]byte(text)) {
+	if !jsontext.Value(text).IsValid() {
 		return nil, fmt.Errorf("ollama: structured output %q payload is not valid JSON", output.Name)
 	}
 	return rawjson.Message(text), nil
@@ -604,7 +605,7 @@ func marshalJSONValue(v any) ([]byte, error) {
 		return []byte("null"), nil
 	case rawjson.Message:
 		return val.MarshalJSON()
-	case json.RawMessage:
+	case jsontext.Value:
 		return rawjson.Message(val).MarshalJSON()
 	case []byte:
 		return rawjson.Message(val).MarshalJSON()

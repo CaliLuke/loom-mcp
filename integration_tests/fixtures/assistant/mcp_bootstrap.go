@@ -2,7 +2,8 @@ package assistantapi
 
 import (
 	"context"
-	"encoding/json"
+	"encoding/json/jsontext"
+	"encoding/json/v2"
 
 	assistant "example.com/assistant/gen/assistant"
 	mcpassistant "example.com/assistant/gen/mcp_assistant"
@@ -13,7 +14,7 @@ import (
 // serve dynamic prompts used by tests (e.g., "contextual_prompts").
 type promptProvider struct{}
 
-func (promptProvider) GetContextualPromptsPrompt(ctx context.Context, arguments json.RawMessage) (*mcpassistant.PromptsGetResult, error) {
+func (promptProvider) GetContextualPromptsPrompt(ctx context.Context, arguments jsontext.Value) (*mcpassistant.PromptsGetResult, error) {
 	var payload struct {
 		Context string `json:"context"`
 	}
@@ -56,7 +57,7 @@ func (promptProvider) GetContextualPromptsPrompt(ctx context.Context, arguments 
 }
 
 // GetCodeReviewPrompt satisfies the generated provider when a static prompt is present.
-func (promptProvider) GetCodeReviewPrompt(arguments json.RawMessage) (*mcpassistant.PromptsGetResult, error) {
+func (promptProvider) GetCodeReviewPrompt(arguments jsontext.Value) (*mcpassistant.PromptsGetResult, error) {
 	return &mcpassistant.PromptsGetResult{
 		Description: strPtr("Code review guidance"),
 		Messages: []*mcpassistant.PromptMessage{
@@ -65,7 +66,7 @@ func (promptProvider) GetCodeReviewPrompt(arguments json.RawMessage) (*mcpassist
 	}, nil
 }
 
-func (promptProvider) GetFigmaImplementationPromptPrompt(ctx context.Context, arguments json.RawMessage) (*mcpassistant.PromptsGetResult, error) {
+func (promptProvider) GetFigmaImplementationPromptPrompt(ctx context.Context, arguments jsontext.Value) (*mcpassistant.PromptsGetResult, error) {
 	var payload struct {
 		ScreenTitle     string `json:"screen_title"`
 		Framework       string `json:"framework"`

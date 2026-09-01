@@ -78,7 +78,7 @@ func TestUnifiedToolSurfaceProjectedOnlyGeneratesToolMethods(t *testing.T) {
 	// Omitted tools/call arguments must be normalized to {} before dispatch
 	// so the toolset dispatcher never receives empty raw JSON.
 	require.Contains(t, adapterSource, "args := arguments")
-	require.Contains(t, adapterSource, `args = json.RawMessage("{}")`)
+	require.Contains(t, adapterSource, `args = jsontext.Value("{}")`)
 	require.Contains(t, adapterSource, "DispatchProjectedLookupToolMethod(ctx, meta, args, nil,")
 
 	sdk := findProjectionGeneratedFile(t, files, filepath.Join(gcodegen.Gendir, "mcp_assistant", "sdk_server.go"))

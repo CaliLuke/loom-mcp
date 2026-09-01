@@ -164,7 +164,7 @@ func toolUnionTypesSection(data toolUnionTypesFileData) gocodegen.Section {
 			fmt.Fprintf(&b, "\tdefault:\n\t\treturn nil, fmt.Errorf(\"unexpected %s discriminant %%q\", u.kind)\n\t}\n", u.Name)
 			fmt.Fprintf(&b, "\treturn json.Marshal(struct {\n\t\tType string `json:\"%s\"`\n\t\tValue any `json:\"%s\"`\n\t}{\n\t\tType: string(u.kind),\n\t\tValue: value,\n\t})\n}\n\n", u.TypeKey, u.ValueKey)
 			fmt.Fprintf(&b, "// UnmarshalJSON unmarshals the union from its canonical discriminated JSON shape.\nfunc (u *%s) UnmarshalJSON(data []byte) error {\n", u.Name)
-			fmt.Fprintf(&b, "\tvar raw struct {\n\t\tType string `json:\"%s\"`\n\t\tValue json.RawMessage `json:\"%s\"`\n\t}\n", u.TypeKey, u.ValueKey)
+			fmt.Fprintf(&b, "\tvar raw struct {\n\t\tType string `json:\"%s\"`\n\t\tValue jsontext.Value `json:\"%s\"`\n\t}\n", u.TypeKey, u.ValueKey)
 			b.WriteString("\tif err := json.Unmarshal(data, &raw); err != nil {\n\t\treturn err\n\t}\n\tswitch raw.Type {\n")
 			for _, f := range u.Fields {
 				fmt.Fprintf(&b, "\tcase string(%s):\n\t\tvar v %s\n\t\tif err := json.Unmarshal(raw.Value, &v); err != nil {\n\t\t\treturn err\n\t\t}\n\t\tu.kind = %s\n\t\tu.%s = v\n", f.KindConst, f.FieldType, f.KindConst, f.FieldName)

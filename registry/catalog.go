@@ -5,15 +5,16 @@ package registry
 
 import (
 	"context"
-	"encoding/json"
+	"encoding/json/v2"
 	"errors"
 	"fmt"
 	"sort"
 	"strings"
 
+	"uuid"
+
 	genregistry "github.com/CaliLuke/loom-mcp/v2/registry/gen/registry"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/telemetry"
-	"uuid"
 )
 
 type (

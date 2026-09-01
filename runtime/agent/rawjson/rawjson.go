@@ -2,13 +2,13 @@
 //
 // # Motivation
 //
-// Go's json.RawMessage implements json.Marshaler and treats a non-nil empty
+// Go's jsontext.Value implements json.Marshaler and treats a non-nil empty
 // slice as invalid JSON, returning:
-// "json: error calling MarshalJSON for type json.RawMessage: unexpected end of JSON input".
+// "json: error calling MarshalJSON for type jsontext.Value: unexpected end of JSON input".
 //
 // In this runtime, raw JSON byte fields are intentionally used at workflow and
 // activity boundaries (tool payloads/results, hook envelopes, server-data
-// sidecars). A single accidental `json.RawMessage{}` or `[]byte{}` assignment
+// sidecars). A single accidental `jsontext.Value{}` or `[]byte{}` assignment
 // can therefore crash workflow encoding.
 //
 // Message eliminates that failure mode by normalizing empty/whitespace payloads
@@ -17,7 +17,6 @@ package rawjson
 
 import (
 	"bytes"
-	"encoding/json"
 	"encoding/json/jsontext"
 	"fmt"
 )
@@ -30,11 +29,11 @@ import (
 //     Unicode and unique names in every object.
 //   - Empty/whitespace-only values are normalized to JSON null during marshaling
 //     to avoid runtime encoding failures at workflow boundaries.
-type Message json.RawMessage
+type Message jsontext.Value
 
-// RawMessage returns the underlying value as json.RawMessage.
-func (r Message) RawMessage() json.RawMessage {
-	return json.RawMessage(r)
+// RawMessage returns the underlying value as jsontext.Value.
+func (r Message) RawMessage() jsontext.Value {
+	return jsontext.Value(r)
 }
 
 // MarshalJSON implements json.Marshaler.

@@ -1,7 +1,7 @@
 package tests
 
 import (
-	"encoding/json"
+	"encoding/json/v2"
 	"testing"
 
 	agentcodegen "github.com/CaliLuke/loom-mcp/v2/codegen/agent"

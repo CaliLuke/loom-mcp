@@ -3,7 +3,8 @@ package runtime
 import (
 	"bytes"
 	"context"
-	"encoding/json"
+	"encoding/json/jsontext"
+	"encoding/json/v2"
 	"errors"
 	"fmt"
 	"strings"
@@ -74,7 +75,7 @@ func (r *Runtime) buildPromptTemplateData(ctx context.Context, toolName tools.Id
 		return map[string]any{}, nil
 	}
 	switch payload.(type) {
-	case json.RawMessage, []byte:
+	case jsontext.Value, []byte:
 		return nil, fmt.Errorf("tool %s prompt payload must be a typed Go value, got %T", toolName, payload)
 	}
 	codec, ok := r.toolCodec(toolName, true)

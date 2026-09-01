@@ -1,7 +1,7 @@
 package runtime
 
 import (
-	"encoding/json"
+	"encoding/json/v2"
 	"strings"
 	"testing"
 	"time"
@@ -50,7 +50,9 @@ func TestAppendUserToolResults_DecodesSuccessfulResultContent(t *testing.T) {
 				Name: tools.Ident("svc.commands.adjust_setpoint"),
 				Result: tools.TypeSpec{
 					Codec: tools.JSONCodec[any]{
-						ToJSON: json.Marshal,
+						ToJSON: func(value any) ([]byte, error) {
+							return json.Marshal(value)
+						},
 					},
 				},
 			},
@@ -89,7 +91,9 @@ func TestAppendUserToolResults_MatchesReplayProjection(t *testing.T) {
 				Name: tools.Ident("svc.commands.adjust_setpoint"),
 				Result: tools.TypeSpec{
 					Codec: tools.JSONCodec[any]{
-						ToJSON: json.Marshal,
+						ToJSON: func(value any) ([]byte, error) {
+							return json.Marshal(value)
+						},
 					},
 				},
 			},
@@ -191,7 +195,9 @@ func TestAppendUserToolResults_AppendsBoundsReminderAfterToolResults(t *testing.
 				Name: tools.Ident("svc.read.list_devices"),
 				Result: tools.TypeSpec{
 					Codec: tools.JSONCodec[any]{
-						ToJSON: json.Marshal,
+						ToJSON: func(value any) ([]byte, error) {
+							return json.Marshal(value)
+						},
 					},
 				},
 			},

@@ -243,7 +243,10 @@ func ValidateRegisterResponse(message *registrypb.RegisterResponse) (err error) 
 // ValidateListToolsetsResponse runs the validations defined on
 // ListToolsetsResponse.
 func ValidateListToolsetsResponse(message *registrypb.ListToolsetsResponse) (err error) {
-	for _, e := range message.Toolsets {
+	for i, e := range message.Toolsets {
+		if e == nil {
+			err = loom.MergeErrors(err, loom.InvalidNullElementError("message.toolsets", i))
+		}
 		if e != nil {
 			if err2 := ValidateToolsetInfo(e); err2 != nil {
 				err = loom.MergeErrors(err, err2)
@@ -286,7 +289,10 @@ func ValidateGetToolsetResponse(message *registrypb.GetToolsetResponse) (err err
 	if message.Version != nil {
 		err = loom.MergeErrors(err, loom.ValidatePatternCompiled("message.version", string(*message.Version), loomPatternTypes0))
 	}
-	for _, e := range message.Tools {
+	for i, e := range message.Tools {
+		if e == nil {
+			err = loom.MergeErrors(err, loom.InvalidNullElementError("message.tools", i))
+		}
 		if e != nil {
 			if err2 := ValidateToolSchema(e); err2 != nil {
 				err = loom.MergeErrors(err, err2)
@@ -299,7 +305,10 @@ func ValidateGetToolsetResponse(message *registrypb.GetToolsetResponse) (err err
 
 // ValidateSearchResponse runs the validations defined on SearchResponse.
 func ValidateSearchResponse(message *registrypb.SearchResponse) (err error) {
-	for _, e := range message.Toolsets {
+	for i, e := range message.Toolsets {
+		if e == nil {
+			err = loom.MergeErrors(err, loom.InvalidNullElementError("message.toolsets", i))
+		}
 		if e != nil {
 			if err2 := ValidateToolsetInfo(e); err2 != nil {
 				err = loom.MergeErrors(err, err2)

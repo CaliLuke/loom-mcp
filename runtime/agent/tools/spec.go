@@ -1,12 +1,14 @@
 package tools
 
-import "encoding/json"
+import "encoding/json/v2"
 
 // AnyJSONCodec is a pre-built codec for the `any` type. It uses standard JSON
 // marshaling/unmarshaling and is suitable for integrations where the concrete
 // type is not known at compile time.
 var AnyJSONCodec = JSONCodec[any]{
-	ToJSON: json.Marshal,
+	ToJSON: func(value any) ([]byte, error) {
+		return json.Marshal(value)
+	},
 	FromJSON: func(data []byte) (any, error) {
 		if len(data) == 0 {
 			return nil, nil

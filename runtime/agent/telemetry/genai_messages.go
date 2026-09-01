@@ -2,7 +2,7 @@ package telemetry
 
 import (
 	"encoding/base64"
-	"encoding/json"
+	"encoding/json/v2"
 	"strings"
 
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/model"

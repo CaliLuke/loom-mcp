@@ -2,7 +2,8 @@ package runtime
 
 import (
 	"context"
-	"encoding/json"
+	"encoding/json/jsontext"
+	"encoding/json/v2"
 	"errors"
 	"testing"
 
@@ -13,27 +14,12 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// decodeTypeError wraps json.UnmarshalTypeError so tests can exercise
-// buildRetryHintFromDecodeError without relying on the panic-prone Error
-// method when Type is unset.
-type decodeTypeError struct {
-	inner *json.UnmarshalTypeError
-}
-
-func (e decodeTypeError) Error() string {
-	return "decode error"
-}
-
-func (e decodeTypeError) Unwrap() error {
-	return e.inner
-}
-
-// TestBuildRetryHintFromDecodeError_UnmarshalTypeError verifies that a JSON
+// TestBuildRetryHintFromDecodeError_SemanticError verifies that a JSON
 // type mismatch produces a RetryHint with MissingFields, ReasonMissingFields,
 // and an attached example when available.
-func TestBuildRetryHintFromDecodeError_UnmarshalTypeError(t *testing.T) {
+func TestBuildRetryHintFromDecodeError_SemanticError(t *testing.T) {
 	// Simulate a type error on the "summary" field.
-	ute := &json.UnmarshalTypeError{Field: "summary"}
+	semanticErr := &json.SemanticError{JSONPointer: "/summary"}
 	spec := &tools.ToolSpec{
 		Payload: tools.TypeSpec{
 			ExampleInput: map[string]any{
@@ -46,7 +32,7 @@ func TestBuildRetryHintFromDecodeError_UnmarshalTypeError(t *testing.T) {
 		},
 	}
 
-	hint := buildRetryHintFromDecodeError(decodeTypeError{inner: ute}, tools.Ident("diagnostics.emit.emit_diagnosis_result"), spec)
+	hint := buildRetryHintFromDecodeError(semanticErr, tools.Ident("diagnostics.emit.emit_diagnosis_result"), spec)
 	require.NotNil(t, hint)
 	require.Equal(t, planner.RetryReasonMissingFields, hint.Reason)
 	require.Equal(t, tools.Ident("diagnostics.emit.emit_diagnosis_result"), hint.Tool)
@@ -63,7 +49,7 @@ func TestBuildRetryHintFromDecodeError_UnmarshalTypeError(t *testing.T) {
 // TestBuildRetryHintFromDecodeError_SyntaxError verifies that malformed JSON
 // yields a RetryHint with $payload marked as missing.
 func TestBuildRetryHintFromDecodeError_SyntaxError(t *testing.T) {
-	se := &json.SyntaxError{Offset: 10}
+	se := &jsontext.SyntacticError{ByteOffset: 10, Err: errors.New("invalid JSON")}
 	hint := buildRetryHintFromDecodeError(se, tools.Ident("svc.ts.tool"), nil)
 	require.NotNil(t, hint)
 	require.Equal(t, planner.RetryReasonMissingFields, hint.Reason)
@@ -101,9 +87,8 @@ func TestExecuteToolActivity_DecodeErrorRetryHint(t *testing.T) {
 					Codec: tools.JSONCodec[any]{
 						FromJSON: func(data []byte) (any, error) {
 							// Force a decode failure that buildRetryHintFromDecodeError
-							// can interpret, wrapped to avoid invoking the panic-prone
-							// UnmarshalTypeError.Error implementation in tests.
-							return nil, decodeTypeError{inner: &json.UnmarshalTypeError{Field: "summary"}}
+							// can interpret.
+							return nil, &json.SemanticError{JSONPointer: "/summary"}
 						},
 					},
 				},

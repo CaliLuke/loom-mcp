@@ -4,7 +4,7 @@ package runtime
 import (
 	"bytes"
 	"context"
-	"encoding/json"
+	"encoding/json/v2"
 	"fmt"
 	"sync"
 	"time"
@@ -956,7 +956,9 @@ func (h *testChildHandle) RunID() string                    { return "" }
 
 func newAnyJSONSpec(name tools.Ident, toolset string) tools.ToolSpec {
 	codec := tools.JSONCodec[any]{
-		ToJSON: json.Marshal,
+		ToJSON: func(value any) ([]byte, error) {
+			return json.Marshal(value)
+		},
 		FromJSON: func(data []byte) (any, error) {
 			if len(bytes.TrimSpace(data)) == 0 || string(bytes.TrimSpace(data)) == "null" {
 				return nil, nil

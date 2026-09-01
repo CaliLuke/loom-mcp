@@ -9,35 +9,44 @@
       "payload": {
         "name": "AnswerPayload",
         "schema": {
-          "$schema": "https://json-schema.org/draft/2020-12/schema",
-          "type": "object",
+          "additionalProperties": false,
+          "examples": [
+            {
+              "question": "What is the capital of Japan?"
+            }
+          ],
           "properties": {
             "question": {
-              "type": "string",
               "description": "User question to answer",
-              "example": "What is the capital of Japan?"
+              "examples": [
+                "What is the capital of Japan?"
+              ],
+              "type": "string"
             }
           },
           "required": [
             "question"
-          ]
+          ],
+          "type": "object"
         }
       },
       "result": {
         "name": "AnswerResult",
         "schema": {
-          "$schema": "https://json-schema.org/draft/2020-12/schema",
-          "type": "object",
+          "additionalProperties": false,
           "properties": {
             "text": {
-              "type": "string",
               "description": "Answer text",
-              "example": "Tokyo is the capital of Japan."
+              "examples": [
+                "Tokyo is the capital of Japan."
+              ],
+              "type": "string"
             }
           },
           "required": [
             "text"
-          ]
+          ],
+          "type": "object"
         }
       }
     }
