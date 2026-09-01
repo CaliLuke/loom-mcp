@@ -38,7 +38,7 @@ PROTOC_GEN_GO_GRPC := protoc-gen-go-grpc
 PROTOC_GEN_GO_GRPC_VERSION ?= v1.6.2
 PROTOC_INSTALL_DIR ?= $(GOPATH)
 
-.PHONY: all build lint lint-pre-commit lint-install-hook test coverage-check coverage-check-critical docker-coverage test-stress itest ci tools ensure-golangci ensure-staticcheck ensure-protoc-plugins install-protoc protoc-check run-example example-gen loom-local loom-remote loom-status update-mcp-go-sdk verify-mcp-local regen-quickstart regen-assistant-fixture regen-progressive-discovery-fixture regen-agent-feature-fixture verify-agent-feature-fixture
+.PHONY: all build lint lint-pre-commit lint-install-hook test coverage-check coverage-check-critical docker-coverage test-stress itest ci tools ensure-golangci ensure-staticcheck ensure-protoc-plugins install-protoc protoc-check run-example example-gen loom-local loom-remote loom-status update-mcp-go-sdk verify-generated verify-mcp-local regen-quickstart regen-assistant-fixture regen-progressive-discovery-fixture regen-agent-feature-fixture verify-agent-feature-fixture
 
 all: build lint test
 
@@ -120,9 +120,13 @@ itest: tools
 	$(GO) test -race -count=1 ./codegen/agent/tests -run '^TestQuickstartGeneratesAndRuns$$'
 	$(MAKE) verify-mcp-local
 
-# Canonical CI contract: build, lint, unit/coverage, generated quickstart, and
-# every nested fixture/framework integration suite.
-ci: build lint test itest
+# Canonical local and hosted CI contract. Keep the recursive steps explicit so
+# generation cannot race build or tests when callers enable parallel make.
+ci: verify-generated
+	$(MAKE) build
+	$(MAKE) lint
+	$(MAKE) test
+	$(MAKE) itest
 
 tools: ensure-golangci ensure-staticcheck ensure-protoc-plugins protoc-check
 
@@ -201,6 +205,9 @@ update-mcp-go-sdk:
 	$(GO) work edit -replace github.com/modelcontextprotocol/go-sdk=github.com/modelcontextprotocol/go-sdk@$(MCP_GO_SDK_VERSION)
 	$(GO) mod tidy
 	cd ./integration_tests/fixtures/assistant && $(GO) mod tidy
+
+verify-generated: tools
+	bash ./scripts/verify_generated.sh
 
 verify-mcp-local:
 	$(GO) test -C ./integration_tests/fixtures/assistant -race ./... -count=1

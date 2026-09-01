@@ -39,32 +39,34 @@ Use this skill when releasing `github.com/CaliLuke/loom-mcp/v2`. Keep the workfl
      `make regen-agent-feature-fixture`
    - `make regen-assistant-fixture` for assistant fixture DSL changes
    - any normal design/codegen regeneration already required by the change itself
-4. Update docs whenever shipped behavior or release workflow guidance changed:
+4. Prove every tracked generated surface is current:
+   - `make verify-generated`
+5. Update docs whenever shipped behavior or release workflow guidance changed:
    - update `docs/` for user-facing DSL, runtime, or codegen contract changes
    - update release-facing root docs such as `README.md` when dependency pins, commands, or workflow expectations changed
    - update the relevant repo-local skills in `.agents/skills/`, especially `.agents/skills/loom-mcp/` and this release skill, when the shipped product or release workflow changed
-5. Run the full release verification suite in this order:
+6. Run the full release verification suite in this order:
    - `make lint`
    - `make test`
    - `make itest`
    - `make verify-mcp-local`
    - `go test ./...`
-6. Review the final diff and confirm the docs shipped with the same contract as the code.
-7. Commit the release-ready changes on `main`.
-8. Create an annotated tag for the release version, for example:
+7. Review the final diff and confirm the docs shipped with the same contract as the code.
+8. Commit the release-ready changes on `main`.
+9. Create an annotated tag for the release version, for example:
    - `git tag -a v1.0.3 -m "v1.0.3"`
-9. Publish the release. Stable tags become latest; hyphenated semantic
+10. Publish the release. Stable tags become latest; hyphenated semantic
    prerelease tags such as `v2.1.0-alpha.1` must be marked prerelease and must
    not become latest:
    - `git push origin main`
    - `git push origin v1.0.3`
    - stable: `gh release create v1.0.3 --verify-tag --generate-notes --latest`
    - prerelease: `gh release create v2.1.0-alpha.1 --verify-tag --generate-notes --prerelease`
-10. Verify the published state:
+11. Verify the published state:
    - `git ls-remote --tags origin v1.0.3`
    - `git ls-remote origin main`
    - `gh release view v1.0.3 --json tagName,isDraft,isPrerelease,url,publishedAt`
-11. Verify module visibility if the user asks for full downstream confirmation:
+12. Verify module visibility if the user asks for full downstream confirmation:
    - `go list -m -versions github.com/CaliLuke/loom-mcp/v2`
    - if the new version is not visible yet, note that Go proxy propagation can lag after the Git push
 
@@ -94,6 +96,8 @@ make loom-status
 git tag --sort=creatordate
 gh release list --limit 20
 make loom-remote
+<run any required regeneration>
+make verify-generated
 <update docs and repo-local skills if behavior or workflow changed>
 make lint
 make test

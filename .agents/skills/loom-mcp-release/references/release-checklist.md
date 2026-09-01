@@ -32,6 +32,16 @@ Run regeneration only when the shipped changes require it.
 
 Never hand-edit generated `gen/` files.
 
+After all required regeneration, prove every tracked surface is current:
+
+```bash
+make verify-generated
+```
+
+This snapshots the current release diff, regenerates every tracked surface, and
+fails if regeneration changes it. Local `make ci` and hosted CI use the same
+target, so generation freshness cannot drift between environments.
+
 ## 4. Docs
 
 Docs and repo-local skills are release gates, not cleanup.

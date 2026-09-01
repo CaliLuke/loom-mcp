@@ -51,14 +51,6 @@ jobs:
           go install github.com/CaliLuke/loom/cmd/loom@"${LOOM_VERSION}"
           echo "$(go env GOPATH)/bin" >> "${GITHUB_PATH}"
 
-      - name: Verify generated fixtures are current
-        run: |
-          make regen-quickstart
-          make regen-assistant-fixture
-          make regen-progressive-discovery-fixture
-          make regen-agent-feature-fixture
-          git diff --exit-code -- quickstart integration_tests/fixtures/assistant integration_tests/fixtures/agent_features
-
       - name: Run complete CI contract
         env:
           LOOM_MCP_REQUIRE_DOCKER_TESTS: '1'

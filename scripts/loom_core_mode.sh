@@ -10,6 +10,16 @@ REMOTE_VERSION="v1.9.0-alpha.8"
 # layout); override with LOOM_DIR when the checkout is elsewhere.
 LOCAL_LOOM_DIR="${LOOM_DIR:-${ROOT_DIR}/../loom}"
 
+sync_quickstart_generator_dependencies() {
+  (
+    cd "${QUICKSTART_DIR}"
+    # go mod tidy cannot see dependencies imported only by the Loom CLI invoked
+    # through go run. Resolve that package explicitly so switching modes leaves
+    # the quickstart in the same module state as regeneration.
+    GOWORK=off go list -mod=mod -deps github.com/CaliLuke/loom/cmd/loom >/dev/null
+  )
+}
+
 usage() {
   cat <<EOF
 Usage: $(basename "$0") <local|remote|status|remote-version>
@@ -46,8 +56,9 @@ set_local() {
   (
     cd "${QUICKSTART_DIR}"
     go mod edit -replace=github.com/CaliLuke/loom="${LOCAL_LOOM_DIR}"
-    go mod tidy
+    GOWORK=off go mod tidy
   )
+  sync_quickstart_generator_dependencies
 }
 
 set_remote() {
@@ -69,8 +80,9 @@ set_remote() {
     cd "${QUICKSTART_DIR}"
     go mod edit -dropreplace=github.com/CaliLuke/loom || true
     go get github.com/CaliLuke/loom@"${REMOTE_VERSION}"
-    go mod tidy
+    GOWORK=off go mod tidy
   )
+  sync_quickstart_generator_dependencies
 }
 
 show_module_status() {

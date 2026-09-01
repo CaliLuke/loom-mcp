@@ -96,6 +96,7 @@ make loom-remote
 go -C integration_tests/fixtures/agent_features get github.com/CaliLuke/loom@vX.Y.Z
 go -C integration_tests/fixtures/agent_features mod tidy
 make loom-status
+make verify-generated
 ```
 
 The root module, assistant fixture, quickstart, and agent-features fixture must

@@ -60,6 +60,7 @@ Common commands:
 make loom-status
 make loom-local
 make loom-remote
+make verify-generated
 make regen-assistant-fixture
 make verify-mcp-local
 make lint
@@ -69,8 +70,11 @@ make ci
 make test-stress
 ```
 
-`make ci` is the complete local CI contract: build, lint, unit coverage,
-quickstart generation acceptance, nested fixtures, and MCP framework tests.
+`make ci` is the same complete contract used by hosted CI: generated-output
+freshness, build, lint, unit coverage, quickstart generation acceptance, nested
+fixtures, and MCP framework tests. `make loom-remote` preserves the generator
+dependencies needed by `make verify-generated`, so changing Loom modes cannot
+silently leave `quickstart/go.sum` stale.
 The Makefile pins `protoc` and both Go protobuf plugins. Run
 `make install-protoc` if the pinned compiler is not already first on `PATH`.
 `make test` enforces global and critical package-group coverage floors.

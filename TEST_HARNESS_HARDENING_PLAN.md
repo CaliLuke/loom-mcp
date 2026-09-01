@@ -50,6 +50,10 @@ Phase 6 is complete. `make test` enforces global and package-group coverage
 floors. Generated, mock, and design packages do not affect the group floors.
 CI produces a separate Docker-required report. The workflow uses the complete
 `make ci` target, pinned protobuf tools, and the canonical Loom release pin.
+Local and hosted CI now share `make verify-generated`, which snapshots the
+current diff before regenerating every tracked surface. Loom mode changes also
+preserve quickstart generator-only checksums, closing the ordering gap that let
+local release verification miss stale `quickstart/go.sum` state.
 
 Generated server middleware now converts untyped adapter errors into typed
 JSON-RPC errors. Duplicate initialization and generated resource-policy errors

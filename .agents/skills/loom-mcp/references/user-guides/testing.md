@@ -77,7 +77,7 @@ make gen-registry
 make regen-assistant-fixture
 ```
 
-Use only the targets relevant to the changed design, but never skip a red repository target. Before CI-facing verification or a commit, restore the pinned remote fork with `make loom-remote` as required by the repository rules.
+Use only the targets relevant to the changed design, but never skip a red repository target. Before CI-facing verification or a commit, restore the pinned remote fork with `make loom-remote` as required by the repository rules, then run `make verify-generated`. This target snapshots the current diff, regenerates every tracked surface, and fails if generation changes it. Both local `make ci` and hosted CI use this same target.
 
 `make test` applies the global coverage floor and the critical package-group
 floors. The group floors omit generated, mock, and design packages.
