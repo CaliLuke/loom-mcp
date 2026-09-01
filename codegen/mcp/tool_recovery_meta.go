@@ -46,7 +46,7 @@ func synthesizeCanonicalExample(attr *expr.AttributeExpr) string {
 	if v == nil {
 		return "{}"
 	}
-	b, err := json.Marshal(v)
+	b, err := json.Marshal(v, json.Deterministic(true))
 	if err != nil {
 		return "{}"
 	}
@@ -117,7 +117,7 @@ func tagExamples(payload *expr.AttributeExpr, fieldName string, u *expr.Union) m
 			u.GetTypeKey():  tag,
 			u.GetValueKey(): branch,
 		}
-		b, err := json.Marshal(obj)
+		b, err := json.Marshal(obj, json.Deterministic(true))
 		if err != nil {
 			continue
 		}

@@ -87,7 +87,7 @@ func buildExampleJSON(attr *expr.AttributeExpr) string {
 	if v == nil {
 		return "{}"
 	}
-	b, err := json.Marshal(v)
+	b, err := json.Marshal(v, json.Deterministic(true))
 	if err != nil {
 		return "{}"
 	}

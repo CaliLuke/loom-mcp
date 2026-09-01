@@ -79,6 +79,13 @@ Use this skill for `loom-mcp` work in this repo. Keep `AGENTS.md` short and keep
 - Agent-as-tool runs as a real child workflow. Parent and child are linked by `ChildRunLinked`, and parent tool results carry `RunLink`.
 - Stream visibility is profile-driven. Child runs are linked, not flattened, by default.
 - Runtime schemas come from generated `tool_specs.Specs` and codecs, not `docs.json`.
+- Generation-time JSON embedded in MCP Go source must use
+  `json.Deterministic(true)`. Do not change runtime wire serialization merely
+  to stabilize generated source.
+- Hook activity payloads use JSON v2 with
+  `encoding/json.FormatDurationAsNano(true)`. This keeps per-run policy
+  durations compatible as integer nanoseconds while preserving field tags and
+  duration map-key handling; do not replace it with a global type marshaler.
 - Workflow state is the live execution authority, while `runlog.Store` is the
   canonical append-only introspection record and fails closed. Streams, the
   hook bus, and `memory.Store` projections have distinct delivery guarantees;

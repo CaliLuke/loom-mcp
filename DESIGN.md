@@ -24,7 +24,9 @@ For each service annotated with agents or MCP, the plugin:
    duplicate sections; rendered Go source is never inspected or rewritten.
 
 We compose on top of the shared Loom generation pipeline and keep the resulting
-output deterministic and covered by golden and compile tests.
+output deterministic and covered by golden and compile tests. JSON serialized
+at generation time for embedding in generated Go source uses deterministic
+object-member ordering; runtime JSON keeps its independent wire semantics.
 
 ## Layout
 

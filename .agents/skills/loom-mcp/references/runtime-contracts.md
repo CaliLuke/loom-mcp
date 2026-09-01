@@ -212,6 +212,10 @@ Use this file for current loom-mcp runtime behavior in this repo. Prefer it over
 
 ## Event Authority And Reliability
 
+- Hook activity payloads use JSON v2 and
+  `encoding/json.FormatDurationAsNano(true)`. Duration-bearing per-run policy
+  fields cross the workflow/activity boundary as integer nanoseconds while
+  JSON field tags and duration map keys keep their standard behavior.
 - Workflow state/ledger is the live deterministic execution authority.
 - `runlog.Store` is the canonical append-only introspection record. Run-log
   append or metadata-update failure fails the hook activity so the engine can

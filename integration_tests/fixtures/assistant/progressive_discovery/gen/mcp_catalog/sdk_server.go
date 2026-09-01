@@ -284,7 +284,7 @@ func registerSDKTools(server *mcpsdk.Server, adapter *MCPAdapter, requestContext
 	server.AddTool(&mcpsdk.Tool{
 		Description:  "Lookup a direct catalog entry",
 		InputSchema:  sdkToolInputSchema("{\"type\":\"object\",\"required\":[\"query\"],\"properties\":{\"query\":{\"type\":\"string\",\"description\":\"Lookup query\"}},\"additionalProperties\":false}"),
-		Meta:         sdkMeta(jsontext.Value([]byte("{\"com.github.caliluke.loom-mcp/discovery\":{\"keywords\":[\"catalog\",\"entry\"],\"category\":\"catalog\",\"tags\":[\"lookup\",\"direct\"]}}"))),
+		Meta:         sdkMeta(jsontext.Value([]byte("{\"com.github.caliluke.loom-mcp/discovery\":{\"category\":\"catalog\",\"keywords\":[\"catalog\",\"entry\"],\"tags\":[\"lookup\",\"direct\"]}}"))),
 		Name:         "lookup",
 		OutputSchema: sdkToolInputSchema("{\"type\":\"object\",\"required\":[\"value\"],\"properties\":{\"value\":{\"type\":\"string\",\"description\":\"Lookup result\"}},\"additionalProperties\":false}"),
 		Title:        "Lookup",

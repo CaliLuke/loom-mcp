@@ -813,14 +813,14 @@ func (a *MCPAdapter) generatedToolCatalog() []*ToolInfo {
 			Src:      "https://assistant.example.com/icons/analyze-sentiment.png",
 		}},
 		InputSchema:  jsontext.Value([]byte("{\"type\":\"object\",\"required\":[\"text\"],\"properties\":{\"text\":{\"type\":\"string\",\"description\":\"Input text to analyze\"}},\"additionalProperties\":false}")),
-		Meta:         jsontext.Value([]byte("{\"com.github.caliluke.loom-mcp/discovery\":{\"category\":\"analysis\",\"tags\":[\"sentiment\",\"nlp\"],\"keywords\":[\"tone\",\"emotion\",\"polarity\"]}}")),
+		Meta:         jsontext.Value([]byte("{\"com.github.caliluke.loom-mcp/discovery\":{\"category\":\"analysis\",\"keywords\":[\"tone\",\"emotion\",\"polarity\"],\"tags\":[\"sentiment\",\"nlp\"]}}")),
 		Name:         "analyze_sentiment",
 		OutputSchema: jsontext.Value([]byte("{\"type\":\"object\",\"properties\":{\"sentiment\":{\"type\":\"string\",\"description\":\"Detected sentiment\"}},\"additionalProperties\":false}")),
 		Title:        stringPtr("Analyze Sentiment"),
 	}, &ToolInfo{
 		Description:  stringPtr("Extract keywords from text"),
 		InputSchema:  jsontext.Value([]byte("{\"type\":\"object\",\"required\":[\"text\"],\"properties\":{\"text\":{\"type\":\"string\",\"description\":\"Input text\"}},\"additionalProperties\":false}")),
-		Meta:         jsontext.Value([]byte("{\"com.github.caliluke.loom-mcp/discovery\":{\"category\":\"analysis\",\"tags\":[\"keywords\",\"nlp\"],\"keywords\":[\"terms\",\"phrases\",\"entities\"]}}")),
+		Meta:         jsontext.Value([]byte("{\"com.github.caliluke.loom-mcp/discovery\":{\"category\":\"analysis\",\"keywords\":[\"terms\",\"phrases\",\"entities\"],\"tags\":[\"keywords\",\"nlp\"]}}")),
 		Name:         "extract_keywords",
 		OutputSchema: jsontext.Value([]byte("{\"type\":\"object\",\"properties\":{\"keywords\":{\"type\":\"array\",\"description\":\"Extracted keywords\",\"items\":{\"type\":\"string\"}}},\"additionalProperties\":false}")),
 		Title:        stringPtr("Extract Keywords"),
@@ -833,14 +833,14 @@ func (a *MCPAdapter) generatedToolCatalog() []*ToolInfo {
 	}, &ToolInfo{
 		Description:  stringPtr("Search knowledge base"),
 		InputSchema:  jsontext.Value([]byte("{\"type\":\"object\",\"required\":[\"query\"],\"properties\":{\"limit\":{\"type\":\"integer\",\"description\":\"Maximum number of results\"},\"query\":{\"type\":\"string\",\"description\":\"Search query\"}},\"additionalProperties\":false}")),
-		Meta:         jsontext.Value([]byte("{\"com.github.caliluke.loom-mcp/discovery\":{\"keywords\":[\"lookup\",\"documents\",\"knowledge\"],\"category\":\"knowledge\",\"tags\":[\"search\",\"retrieval\"]}}")),
+		Meta:         jsontext.Value([]byte("{\"com.github.caliluke.loom-mcp/discovery\":{\"category\":\"knowledge\",\"keywords\":[\"lookup\",\"documents\",\"knowledge\"],\"tags\":[\"search\",\"retrieval\"]}}")),
 		Name:         "search",
 		OutputSchema: jsontext.Value([]byte("{\"type\":\"object\",\"properties\":{\"results\":{\"type\":\"array\",\"description\":\"Search results\",\"items\":{\"type\":\"string\"}}},\"additionalProperties\":false}")),
 		Title:        stringPtr("Search Knowledge Base"),
 	}, &ToolInfo{
 		Description:  stringPtr("Search records with an optional query"),
 		InputSchema:  jsontext.Value([]byte("{\"type\":\"object\",\"properties\":{\"limit\":{\"type\":\"integer\",\"description\":\"Maximum number of records\"},\"query\":{\"type\":\"string\",\"description\":\"Search query\"}},\"additionalProperties\":false}")),
-		Meta:         jsontext.Value([]byte("{\"com.github.caliluke.loom-mcp/discovery\":{\"keywords\":[\"lookup\",\"records\"],\"call_template_arguments\":{\"query\":\"login\"},\"category\":\"records\",\"tags\":[\"search\",\"records\"]}}")),
+		Meta:         jsontext.Value([]byte("{\"com.github.caliluke.loom-mcp/discovery\":{\"call_template_arguments\":{\"query\":\"login\"},\"category\":\"records\",\"keywords\":[\"lookup\",\"records\"],\"tags\":[\"search\",\"records\"]}}")),
 		Name:         "search_records",
 		OutputSchema: jsontext.Value([]byte("{\"type\":\"object\",\"properties\":{\"results\":{\"type\":\"array\",\"description\":\"Record results\",\"items\":{\"type\":\"string\"}}},\"additionalProperties\":false}")),
 		Title:        stringPtr("Search Records"),
@@ -1755,7 +1755,7 @@ func executeCodeInputRecovery(err error, raw jsontext.Value) string {
 		message = strings.TrimSpace(err.Error())
 	}
 	_ = raw
-	example := "{\"language\":\"python\",\"code\":\"example\"}"
+	example := "{\"code\":\"example\",\"language\":\"python\"}"
 	if field := missingFieldFromMessage(message); field != "" {
 		return fmt.Sprintf("Include required field %q. Example: %s", field, example)
 	}
@@ -1800,7 +1800,7 @@ func generateDpiSpecInputRecovery(err error, raw jsontext.Value) string {
 		message = strings.TrimSpace(err.Error())
 	}
 	_ = raw
-	example := "{\"platform\":\"ios\",\"density\":\"compact\",\"primary_cta\":\"example\",\"sections\":[],\"screen_title\":\"example\"}"
+	example := "{\"density\":\"compact\",\"platform\":\"ios\",\"primary_cta\":\"example\",\"screen_title\":\"example\",\"sections\":[]}"
 	if field := missingFieldFromMessage(message); field != "" {
 		return fmt.Sprintf("Include required field %q. Example: %s", field, example)
 	}

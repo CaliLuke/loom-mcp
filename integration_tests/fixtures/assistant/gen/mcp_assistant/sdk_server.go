@@ -268,7 +268,7 @@ func registerSDKTools(server *mcpsdk.Server, adapter *MCPAdapter, requestContext
 			Source:   "https://assistant.example.com/icons/analyze-sentiment.png",
 		}},
 		InputSchema:  sdkToolInputSchema("{\"type\":\"object\",\"required\":[\"text\"],\"properties\":{\"text\":{\"type\":\"string\",\"description\":\"Input text to analyze\"}},\"additionalProperties\":false}"),
-		Meta:         sdkMeta(jsontext.Value([]byte("{\"com.github.caliluke.loom-mcp/discovery\":{\"category\":\"analysis\",\"tags\":[\"sentiment\",\"nlp\"],\"keywords\":[\"tone\",\"emotion\",\"polarity\"]}}"))),
+		Meta:         sdkMeta(jsontext.Value([]byte("{\"com.github.caliluke.loom-mcp/discovery\":{\"category\":\"analysis\",\"keywords\":[\"tone\",\"emotion\",\"polarity\"],\"tags\":[\"sentiment\",\"nlp\"]}}"))),
 		Name:         "analyze_sentiment",
 		OutputSchema: sdkToolInputSchema("{\"type\":\"object\",\"properties\":{\"sentiment\":{\"type\":\"string\",\"description\":\"Detected sentiment\"}},\"additionalProperties\":false}"),
 		Title:        "Analyze Sentiment",
@@ -276,7 +276,7 @@ func registerSDKTools(server *mcpsdk.Server, adapter *MCPAdapter, requestContext
 	server.AddTool(&mcpsdk.Tool{
 		Description:  "Extract keywords from text",
 		InputSchema:  sdkToolInputSchema("{\"type\":\"object\",\"required\":[\"text\"],\"properties\":{\"text\":{\"type\":\"string\",\"description\":\"Input text\"}},\"additionalProperties\":false}"),
-		Meta:         sdkMeta(jsontext.Value([]byte("{\"com.github.caliluke.loom-mcp/discovery\":{\"category\":\"analysis\",\"tags\":[\"keywords\",\"nlp\"],\"keywords\":[\"terms\",\"phrases\",\"entities\"]}}"))),
+		Meta:         sdkMeta(jsontext.Value([]byte("{\"com.github.caliluke.loom-mcp/discovery\":{\"category\":\"analysis\",\"keywords\":[\"terms\",\"phrases\",\"entities\"],\"tags\":[\"keywords\",\"nlp\"]}}"))),
 		Name:         "extract_keywords",
 		OutputSchema: sdkToolInputSchema("{\"type\":\"object\",\"properties\":{\"keywords\":{\"type\":\"array\",\"description\":\"Extracted keywords\",\"items\":{\"type\":\"string\"}}},\"additionalProperties\":false}"),
 		Title:        "Extract Keywords",
@@ -291,7 +291,7 @@ func registerSDKTools(server *mcpsdk.Server, adapter *MCPAdapter, requestContext
 	server.AddTool(&mcpsdk.Tool{
 		Description:  "Search knowledge base",
 		InputSchema:  sdkToolInputSchema("{\"type\":\"object\",\"required\":[\"query\"],\"properties\":{\"limit\":{\"type\":\"integer\",\"description\":\"Maximum number of results\"},\"query\":{\"type\":\"string\",\"description\":\"Search query\"}},\"additionalProperties\":false}"),
-		Meta:         sdkMeta(jsontext.Value([]byte("{\"com.github.caliluke.loom-mcp/discovery\":{\"keywords\":[\"lookup\",\"documents\",\"knowledge\"],\"category\":\"knowledge\",\"tags\":[\"search\",\"retrieval\"]}}"))),
+		Meta:         sdkMeta(jsontext.Value([]byte("{\"com.github.caliluke.loom-mcp/discovery\":{\"category\":\"knowledge\",\"keywords\":[\"lookup\",\"documents\",\"knowledge\"],\"tags\":[\"search\",\"retrieval\"]}}"))),
 		Name:         "search",
 		OutputSchema: sdkToolInputSchema("{\"type\":\"object\",\"properties\":{\"results\":{\"type\":\"array\",\"description\":\"Search results\",\"items\":{\"type\":\"string\"}}},\"additionalProperties\":false}"),
 		Title:        "Search Knowledge Base",
@@ -299,7 +299,7 @@ func registerSDKTools(server *mcpsdk.Server, adapter *MCPAdapter, requestContext
 	server.AddTool(&mcpsdk.Tool{
 		Description:  "Search records with an optional query",
 		InputSchema:  sdkToolInputSchema("{\"type\":\"object\",\"properties\":{\"limit\":{\"type\":\"integer\",\"description\":\"Maximum number of records\"},\"query\":{\"type\":\"string\",\"description\":\"Search query\"}},\"additionalProperties\":false}"),
-		Meta:         sdkMeta(jsontext.Value([]byte("{\"com.github.caliluke.loom-mcp/discovery\":{\"keywords\":[\"lookup\",\"records\"],\"call_template_arguments\":{\"query\":\"login\"},\"category\":\"records\",\"tags\":[\"search\",\"records\"]}}"))),
+		Meta:         sdkMeta(jsontext.Value([]byte("{\"com.github.caliluke.loom-mcp/discovery\":{\"call_template_arguments\":{\"query\":\"login\"},\"category\":\"records\",\"keywords\":[\"lookup\",\"records\"],\"tags\":[\"search\",\"records\"]}}"))),
 		Name:         "search_records",
 		OutputSchema: sdkToolInputSchema("{\"type\":\"object\",\"properties\":{\"results\":{\"type\":\"array\",\"description\":\"Record results\",\"items\":{\"type\":\"string\"}}},\"additionalProperties\":false}"),
 		Title:        "Search Records",

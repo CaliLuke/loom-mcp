@@ -637,7 +637,7 @@ func mcpDiscoveryMetaJSON(tool *mcpexpr.ToolExpr) string {
 	meta := map[string]any{
 		"com.github.caliluke.loom-mcp/discovery": discovery,
 	}
-	raw, err := json.Marshal(meta)
+	raw, err := json.Marshal(meta, json.Deterministic(true))
 	if err != nil {
 		return ""
 	}
@@ -685,7 +685,7 @@ func mcpAnnotationJSON(meta expr.MetaExpr) string {
 	if len(normalized) == 0 {
 		return ""
 	}
-	data, err := json.Marshal(normalized)
+	data, err := json.Marshal(normalized, json.Deterministic(true))
 	if err != nil {
 		return ""
 	}

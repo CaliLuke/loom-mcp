@@ -23,6 +23,10 @@ Use this file when editing DSL, generators, generated helpers, or MCP codegen be
 - Do not generate runtime loops over known collections.
 - Do not generate runtime conditionals for compile-time-known cases.
 - Prefer small runtime libraries configured by generated data over duplicating near-identical generated logic.
+- Use `json.Deterministic(true)` for every generation-time JSON value embedded
+  in generated Go source, including schemas, examples, annotations, discovery
+  metadata, and recovery hints. Do not alter runtime JSON behavior to stabilize
+  source generation.
 
 ## Type References
 

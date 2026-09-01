@@ -1370,6 +1370,11 @@ runtime therefore routes workflow-emitted hook events through a dedicated hook
 activity (`runtime.publish_hook`), which publishes to the bus outside the
 workflow thread. Activities and other non-workflow code publish directly.
 
+Hook activity payloads use JSON v2 with the standard nanosecond compatibility
+format for `time.Duration`. Per-run policy budgets and timeouts therefore cross
+the workflow/activity boundary as integer nanoseconds, while JSON field tags and
+duration-valued map keys retain their normal encoding behavior.
+
 **Event types:**
 
 | Event                                       | When                                                |
@@ -1593,6 +1598,9 @@ client.Run(ctx, "session-1", msgs,
     runtime.WithDeniedTags([]string{"destructive"}),
 )
 ```
+
+These overrides are included in the `RunStarted` hook payload. Duration-bearing
+fields use integer nanoseconds on that durable boundary.
 
 ### Runtime Policy Override
 

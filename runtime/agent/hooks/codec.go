@@ -1,6 +1,7 @@
 package hooks
 
 import (
+	jsonopts "encoding/json"
 	"encoding/json/v2"
 	"errors"
 	"fmt"
@@ -133,7 +134,12 @@ func encodeToolResultPayload(e *ToolResultReceivedEvent) (rawjson.Message, error
 }
 
 func marshalHookPayload(label string, payload any) (rawjson.Message, error) {
-	b, err := json.Marshal(payload, json.FormatNilMapAsNull(true), json.FormatNilSliceAsNull(true))
+	b, err := json.Marshal(
+		payload,
+		json.FormatNilMapAsNull(true),
+		json.FormatNilSliceAsNull(true),
+		jsonopts.FormatDurationAsNano(true),
+	)
 	if err != nil {
 		return nil, fmt.Errorf("marshal %s payload: %w", label, err)
 	}
@@ -301,7 +307,7 @@ func newRunCompletedFromPayload(input *ActivityInput, p runCompletedPayload) Eve
 }
 
 func decodeHookPayload(input *ActivityInput, payload any) error {
-	if err := json.Unmarshal(input.Payload, payload); err != nil {
+	if err := json.Unmarshal(input.Payload, payload, jsonopts.FormatDurationAsNano(true)); err != nil {
 		return fmt.Errorf("decode %s payload: %w", input.Type, err)
 	}
 	return nil
