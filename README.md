@@ -65,19 +65,23 @@ make regen-assistant-fixture
 make verify-mcp-local
 make lint
 make test
+make test-docker
 make itest
 make ci
 make test-stress
 ```
 
 `make ci` is the same complete contract used by hosted CI: generated-output
-freshness, build, lint, unit coverage, quickstart generation acceptance, nested
-fixtures, and MCP framework tests. `make loom-remote` preserves the generator
+freshness, build, lint, container-free unit coverage, fail-closed Docker-backed
+coverage, quickstart generation acceptance, nested fixtures, and MCP framework
+tests. `make loom-remote` preserves the generator
 dependencies needed by `make verify-generated`, so changing Loom modes cannot
 silently leave `quickstart/go.sum` stale.
 The Makefile pins `protoc` and both Go protobuf plugins. Run
 `make install-protoc` if the pinned compiler is not already first on `PATH`.
-`make test` enforces global and critical package-group coverage floors.
+`make test` enforces global and critical package-group coverage floors without
+starting containers. `make test-docker` runs the Mongo, Pulse, and registry
+contracts once under race detection and enforces their owner coverage floors.
 The scheduled stress workflow repeats race-enabled lifecycle tests and requires
 the Docker-backed Mongo, Redis, and registry tests.
 

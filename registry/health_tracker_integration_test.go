@@ -19,7 +19,10 @@ import (
 	"github.com/testcontainers/testcontainers-go/wait"
 )
 
-const requireDockerIntegrationEnv = "LOOM_MCP_REQUIRE_DOCKER_TESTS"
+const (
+	runDockerIntegrationEnv     = "LOOM_MCP_RUN_DOCKER_TESTS"
+	requireDockerIntegrationEnv = "LOOM_MCP_REQUIRE_DOCKER_TESTS"
+)
 
 var (
 	testRedisClient    *redis.Client
@@ -29,16 +32,20 @@ var (
 
 func TestMain(m *testing.M) {
 	ctx := context.Background()
-	if err := setupTestRedis(ctx); err != nil {
+	if !dockerIntegrationRequested() {
 		skipIntegration = true
-		if requireDockerIntegration() {
-			fmt.Fprintf(os.Stderr, "required Docker-backed registry tests unavailable: %v\n", err)
-			if cleanupErr := cleanupTestRedis(ctx); cleanupErr != nil {
-				fmt.Fprintf(os.Stderr, "registry test cleanup failed: %v\n", cleanupErr)
+	} else {
+		if err := setupTestRedis(ctx); err != nil {
+			skipIntegration = true
+			if requireDockerIntegration() {
+				fmt.Fprintf(os.Stderr, "required Docker-backed registry tests unavailable: %v\n", err)
+				if cleanupErr := cleanupTestRedis(ctx); cleanupErr != nil {
+					fmt.Fprintf(os.Stderr, "registry test cleanup failed: %v\n", cleanupErr)
+				}
+				os.Exit(1)
 			}
-			os.Exit(1)
+			fmt.Printf("Docker not available, integration tests will be skipped: %v\n", err)
 		}
-		fmt.Printf("Docker not available, integration tests will be skipped: %v\n", err)
 	}
 
 	code := m.Run()
@@ -104,19 +111,26 @@ func requireDockerIntegration() bool {
 	return os.Getenv(requireDockerIntegrationEnv) == "1"
 }
 
-func TestRequireDockerIntegration(t *testing.T) {
+func dockerIntegrationRequested() bool {
+	return os.Getenv(runDockerIntegrationEnv) == "1" || requireDockerIntegration()
+}
+
+func TestDockerIntegrationRequested(t *testing.T) {
 	for _, tc := range []struct {
-		name  string
-		value string
-		want  bool
+		name     string
+		run      string
+		required string
+		want     bool
 	}{
 		{name: "unset", want: false},
-		{name: "disabled", value: "0", want: false},
-		{name: "required", value: "1", want: true},
+		{name: "disabled", run: "0", required: "0", want: false},
+		{name: "selected", run: "1", want: true},
+		{name: "required implies selected", required: "1", want: true},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			t.Setenv(requireDockerIntegrationEnv, tc.value)
-			assert.Equal(t, tc.want, requireDockerIntegration())
+			t.Setenv(runDockerIntegrationEnv, tc.run)
+			t.Setenv(requireDockerIntegrationEnv, tc.required)
+			assert.Equal(t, tc.want, dockerIntegrationRequested())
 		})
 	}
 }

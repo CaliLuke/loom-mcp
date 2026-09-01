@@ -16,6 +16,31 @@ import (
 	streamopts "github.com/CaliLuke/loom/pulse/streaming/options"
 )
 
+const (
+	runDockerIntegrationEnv     = "LOOM_MCP_RUN_DOCKER_TESTS"
+	requireDockerIntegrationEnv = "LOOM_MCP_REQUIRE_DOCKER_TESTS"
+)
+
+func TestDockerIntegrationRequested(t *testing.T) {
+	for _, tc := range []struct {
+		name     string
+		run      string
+		required string
+		want     bool
+	}{
+		{name: "unset", want: false},
+		{name: "disabled", run: "0", required: "0", want: false},
+		{name: "selected", run: "1", want: true},
+		{name: "required implies selected", required: "1", want: true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Setenv(runDockerIntegrationEnv, tc.run)
+			t.Setenv(requireDockerIntegrationEnv, tc.required)
+			assert.Equal(t, tc.want, dockerIntegrationRequested())
+		})
+	}
+}
+
 func TestClientRedisStreamRoundTrip(t *testing.T) {
 	ctx := context.Background()
 	rdb := startRedis(t, ctx)
@@ -76,6 +101,9 @@ func TestClientValidation(t *testing.T) {
 
 func startRedis(t *testing.T, ctx context.Context) *redis.Client {
 	t.Helper()
+	if !dockerIntegrationRequested() {
+		t.Skipf("set %s=1 to run Docker-backed Pulse contracts", runDockerIntegrationEnv)
+	}
 	req := testcontainers.ContainerRequest{
 		Image:        "redis:7-alpine",
 		ExposedPorts: []string{"6379/tcp"},
@@ -86,7 +114,7 @@ func startRedis(t *testing.T, ctx context.Context) *redis.Client {
 		Started:          true,
 	})
 	if err != nil {
-		if os.Getenv("LOOM_MCP_REQUIRE_DOCKER_TESTS") == "1" {
+		if os.Getenv(requireDockerIntegrationEnv) == "1" {
 			require.NoError(t, err, "required Docker-backed Pulse client contract unavailable")
 		}
 		t.Skipf("Docker not available: %v", err)
@@ -102,4 +130,8 @@ func startRedis(t *testing.T, ctx context.Context) *redis.Client {
 	t.Cleanup(func() { require.NoError(t, rdb.Close()) })
 	require.NoError(t, rdb.Ping(ctx).Err())
 	return rdb
+}
+
+func dockerIntegrationRequested() bool {
+	return os.Getenv(runDockerIntegrationEnv) == "1" || os.Getenv(requireDockerIntegrationEnv) == "1"
 }

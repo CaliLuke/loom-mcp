@@ -26,7 +26,31 @@ import (
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/session"
 )
 
-const integrationSessionID = "session-1"
+const (
+	integrationSessionID        = "session-1"
+	runDockerIntegrationEnv     = "LOOM_MCP_RUN_DOCKER_TESTS"
+	requireDockerIntegrationEnv = "LOOM_MCP_REQUIRE_DOCKER_TESTS"
+)
+
+func TestDockerIntegrationRequested(t *testing.T) {
+	for _, tc := range []struct {
+		name     string
+		run      string
+		required string
+		want     bool
+	}{
+		{name: "unset", want: false},
+		{name: "disabled", run: "0", required: "0", want: false},
+		{name: "selected", run: "1", want: true},
+		{name: "required implies selected", required: "1", want: true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Setenv(runDockerIntegrationEnv, tc.run)
+			t.Setenv(requireDockerIntegrationEnv, tc.required)
+			require.Equal(t, tc.want, dockerIntegrationRequested())
+		})
+	}
+}
 
 func TestMongoDriverV2RunlogAppendRoundTrip(t *testing.T) {
 	mongoClient, database := newMongoIntegrationClient(t)
@@ -226,6 +250,9 @@ func TestMongoDriverV2MemoryRoundTrip(t *testing.T) {
 
 func newMongoIntegrationClient(t *testing.T) (*mongodriver.Client, string) {
 	t.Helper()
+	if !dockerIntegrationRequested() {
+		t.Skipf("set %s=1 to run Docker-backed Mongo contracts", runDockerIntegrationEnv)
+	}
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
 	defer cancel()
 
@@ -240,7 +267,7 @@ func newMongoIntegrationClient(t *testing.T) (*mongodriver.Client, string) {
 		Started:          true,
 	})
 	if err != nil {
-		if os.Getenv("LOOM_MCP_REQUIRE_DOCKER_TESTS") == "1" {
+		if os.Getenv(requireDockerIntegrationEnv) == "1" {
 			require.NoError(t, err, "Mongo testcontainer is required")
 		}
 		t.Skipf("Mongo testcontainer unavailable: %v", err)
@@ -269,6 +296,10 @@ func newMongoIntegrationClient(t *testing.T) (*mongodriver.Client, string) {
 		require.NoError(t, client.Database(database).Drop(context.Background()))
 	})
 	return client, database
+}
+
+func dockerIntegrationRequested() bool {
+	return os.Getenv(runDockerIntegrationEnv) == "1" || os.Getenv(requireDockerIntegrationEnv) == "1"
 }
 
 func initMongoReplicaSet(ctx context.Context, t *testing.T, container testcontainers.Container) {

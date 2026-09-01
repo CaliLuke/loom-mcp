@@ -52,14 +52,7 @@ jobs:
           echo "$(go env GOPATH)/bin" >> "${GITHUB_PATH}"
 
       - name: Run complete CI contract
-        env:
-          LOOM_MCP_REQUIRE_DOCKER_TESTS: '1'
         run: make ci
-
-      - name: Produce Docker-required coverage
-        env:
-          LOOM_MCP_REQUIRE_DOCKER_TESTS: '1'
-        run: make docker-coverage
 
       - name: Preserve coverage report
         if: always()

@@ -2,6 +2,7 @@
 set -euo pipefail
 
 profile="${1:-cover.out}"
+mode="${2:-critical}"
 if [[ ! -f "${profile}" ]]; then
   echo "coverage profile not found: ${profile}" >&2
   exit 1
@@ -36,7 +37,7 @@ check_group() {
         if (total == 0) {
           exit 2
         }
-        printf "%.1f %d %d", 100 * covered / total, covered, total
+        printf "%d %d", covered, total
       }
     ' "${profile}"
   } || {
@@ -44,16 +45,29 @@ check_group() {
     exit 1
   })"
 
-  local actual covered total
-  read -r actual covered total <<<"${result}"
-  awk -v name="${name}" -v actual="${actual}" -v minimum="${minimum}" -v covered="${covered}" -v total="${total}" 'BEGIN {
-    if (actual + 0 < minimum + 0) {
+  local covered total
+  read -r covered total <<<"${result}"
+  awk -v name="${name}" -v minimum="${minimum}" -v covered="${covered}" -v total="${total}" 'BEGIN {
+    actual = 100 * covered / total
+    if (covered * 100 < minimum * total) {
       printf "%s coverage %.1f%% (%d/%d) is below required %.1f%%\n", name, actual, covered, total, minimum
       exit 1
     }
     printf "%s coverage %.1f%% (%d/%d) meets required %.1f%%\n", name, actual, covered, total, minimum
   }'
 }
+
+if [[ "${mode}" == "docker" ]]; then
+  check_group "docker-mongo" '/features/mongo/clientinfra/' "${COVERAGE_DOCKER_MONGO_MIN:-80.0}"
+  check_group "docker-pulse" '/features/stream/pulse/clients/pulse/' "${COVERAGE_DOCKER_PULSE_MIN:-80.0}"
+  check_group "docker-registry" '/registry/' "${COVERAGE_DOCKER_REGISTRY_MIN:-75.0}"
+  exit 0
+fi
+
+if [[ "${mode}" != "critical" ]]; then
+  echo "unknown coverage mode: ${mode}" >&2
+  exit 1
+fi
 
 check_group "runtime" '/runtime/' "${COVERAGE_RUNTIME_MIN:-75.0}"
 check_group "mcp" '/(codegen/mcp|runtime/mcp)/' "${COVERAGE_MCP_MIN:-78.0}"

@@ -68,6 +68,7 @@ make verify-mcp-local
 make lint
 make test
 make itest
+make test-docker
 ```
 
 Regenerate affected registry or assistant fixture outputs before `make verify-mcp-local`:
@@ -80,7 +81,10 @@ make regen-assistant-fixture
 Use only the targets relevant to the changed design, but never skip a red repository target. Before CI-facing verification or a commit, restore the pinned remote fork with `make loom-remote` as required by the repository rules, then run `make verify-generated`. This target snapshots the current diff, regenerates every tracked surface, and fails if generation changes it. Both local `make ci` and hosted CI use this same target.
 
 `make test` applies the global coverage floor and the critical package-group
-floors. The group floors omit generated, mock, and design packages.
+floors. The group floors omit generated, mock, and design packages. It forces
+Docker-backed tests off so focused and full unit runs never start containers.
+`make test-docker` is the explicit fail-closed Mongo, Pulse, and registry gate;
+it writes `docker-cover.out` and enforces a floor for each owner.
 
 Run the repeated lifecycle lane after concurrency or shutdown changes:
 
@@ -88,8 +92,9 @@ Run the repeated lifecycle lane after concurrency or shutdown changes:
 make test-stress
 ```
 
-CI runs this target each week with Docker-backed tests set as required. CI also
-writes `docker-cover.out` from Mongo, Pulse, and registry integration packages.
+CI runs this target each week with Docker-backed tests set as required. The
+complete `make ci` contract runs `make test-docker` exactly once and preserves
+`docker-cover.out` from Mongo, Pulse, and registry integration packages.
 
 ## Failure policy
 

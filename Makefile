@@ -13,6 +13,9 @@ COVERAGE_CODEGEN_MIN ?= 70.0
 COVERAGE_TEMPORAL_MIN ?= 73.0
 COVERAGE_REGISTRY_PULSE_MIN ?= 58.0
 COVERAGE_PROVIDERS_MIN ?= 70.0
+COVERAGE_DOCKER_MONGO_MIN ?= 80.0
+COVERAGE_DOCKER_PULSE_MIN ?= 80.0
+COVERAGE_DOCKER_REGISTRY_MIN ?= 75.0
 STRESS_COUNT ?= 5
 STRESS_TIMEOUT ?= 20m
 # Testcontainers does not resolve Docker CLI contexts on every host. Export the
@@ -38,7 +41,7 @@ PROTOC_GEN_GO_GRPC := protoc-gen-go-grpc
 PROTOC_GEN_GO_GRPC_VERSION ?= v1.6.2
 PROTOC_INSTALL_DIR ?= $(GOPATH)
 
-.PHONY: all build lint lint-pre-commit lint-install-hook test coverage-check coverage-check-critical docker-coverage test-stress itest ci tools ensure-golangci ensure-staticcheck ensure-protoc-plugins install-protoc protoc-check run-example example-gen loom-local loom-remote loom-status update-mcp-go-sdk verify-generated verify-mcp-local regen-quickstart regen-assistant-fixture regen-progressive-discovery-fixture regen-agent-feature-fixture verify-agent-feature-fixture
+.PHONY: all build lint lint-pre-commit lint-install-hook test test-docker coverage-check coverage-check-critical docker-coverage test-stress itest ci tools ensure-golangci ensure-staticcheck ensure-protoc-plugins install-protoc protoc-check run-example example-gen loom-local loom-remote loom-status update-mcp-go-sdk verify-generated verify-mcp-local regen-quickstart regen-assistant-fixture regen-progressive-discovery-fixture regen-agent-feature-fixture verify-agent-feature-fixture
 
 all: build lint test
 
@@ -63,7 +66,10 @@ lint-install-hook:
 	@echo "Installed repo hooks from .githooks"
 
 test: tools
-	TESTCONTAINERS_RYUK_DISABLED=$(TESTCONTAINERS_RYUK_DISABLED) $(GO) test -short -race -shuffle=on -covermode=atomic -coverprofile=cover.out `$(GO) list ./... | grep -v '/integration_tests'`
+	LOOM_MCP_RUN_DOCKER_TESTS=0 \
+	LOOM_MCP_REQUIRE_DOCKER_TESTS=0 \
+	TESTCONTAINERS_RYUK_DISABLED=$(TESTCONTAINERS_RYUK_DISABLED) \
+	$(GO) test -short -race -shuffle=on -covermode=atomic -coverprofile=cover.out `$(GO) list ./... | grep -v '/integration_tests'`
 	$(MAKE) coverage-check
 	$(MAKE) coverage-check-critical
 
@@ -90,17 +96,24 @@ coverage-check-critical:
 	COVERAGE_PROVIDERS_MIN=$(COVERAGE_PROVIDERS_MIN) \
 	bash ./scripts/check_critical_coverage.sh cover.out
 
-docker-coverage:
+test-docker: tools
 	TESTCONTAINERS_RYUK_DISABLED=$(TESTCONTAINERS_RYUK_DISABLED) \
-	LOOM_MCP_REQUIRE_DOCKER_TESTS=$(LOOM_MCP_REQUIRE_DOCKER_TESTS) \
-	$(GO) test -race -count=1 -covermode=atomic -coverprofile=docker-cover.out \
+	LOOM_MCP_RUN_DOCKER_TESTS=1 \
+	LOOM_MCP_REQUIRE_DOCKER_TESTS=1 \
+	$(GO) test -race -shuffle=on -count=1 -covermode=atomic -coverprofile=docker-cover.out \
 		./features/mongo/clientinfra \
 		./features/stream/pulse/clients/pulse \
 		./registry
-	@$(GO) tool cover -func=docker-cover.out | awk '/^total:/ { print "Docker-required " $$0 }'
+	COVERAGE_DOCKER_MONGO_MIN=$(COVERAGE_DOCKER_MONGO_MIN) \
+	COVERAGE_DOCKER_PULSE_MIN=$(COVERAGE_DOCKER_PULSE_MIN) \
+	COVERAGE_DOCKER_REGISTRY_MIN=$(COVERAGE_DOCKER_REGISTRY_MIN) \
+	bash ./scripts/check_critical_coverage.sh docker-cover.out docker
+
+docker-coverage: test-docker
 
 test-stress: tools
 	TESTCONTAINERS_RYUK_DISABLED=$(TESTCONTAINERS_RYUK_DISABLED) \
+	LOOM_MCP_RUN_DOCKER_TESTS=1 \
 	LOOM_MCP_REQUIRE_DOCKER_TESTS=$(LOOM_MCP_REQUIRE_DOCKER_TESTS) \
 	$(GO) test -race -shuffle=on -count=$(STRESS_COUNT) -timeout=$(STRESS_TIMEOUT) \
 		./runtime/agent/runtime \
@@ -127,6 +140,7 @@ ci: verify-generated
 	$(MAKE) lint
 	$(MAKE) test
 	$(MAKE) itest
+	$(MAKE) test-docker
 
 tools: ensure-golangci ensure-staticcheck ensure-protoc-plugins protoc-check
 

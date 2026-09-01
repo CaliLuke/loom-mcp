@@ -12,8 +12,95 @@ a surface that is absent, skipped, stale, or outside the Go module being tested.
 
 ## Progress (2026-09-01)
 
-Phases 1 and 3 through 6 are implemented. Phase 2 is deferred because real
-Temporal acceptance is not a current product priority.
+The original phases 1 and 3 through 6 are implemented. A current-tree audit
+reprioritized the remaining work around observed defect yield and production
+risk. The unit and integration ladders are green, but the largest confidence
+gaps are real Temporal execution, cross-layer runtime transitions, provider
+stream state machines, persistence upgrades, and malformed dynamic inputs.
+
+## Reprioritized Backlog
+
+### Priority 1: Isolate Fast Unit And Docker Gates
+
+Status: implemented and locally verified.
+
+1. Make `make test` explicitly container-free so targeted and full unit runs do
+   not start Redis or Mongo.
+2. Add one fail-closed `make test-docker` owner for Mongo, Pulse, and registry
+   contracts, and run it exactly once from `make ci`.
+3. Preserve `docker-cover.out` and enforce separate Mongo, Pulse, and registry
+   floors rather than printing only the aggregate.
+4. Keep scheduled stress capable of selecting Docker tests explicitly while
+   requiring them only when `LOOM_MCP_REQUIRE_DOCKER_TESTS=1` is set.
+
+Exit criteria:
+
+- ordinary unit and targeted package tests start no containers;
+- `make test-docker` fails instead of skipping when Docker is unavailable;
+- local and hosted `make ci` run every Docker contract exactly once;
+- each Docker owner must satisfy its own coverage floor.
+
+Implementation evidence:
+
+- targeted registry, Mongo infrastructure, and Pulse unit tests pass with an
+  intentionally invalid Docker endpoint because no container setup is reached;
+- `make test` completes in about 24 seconds on the audit host instead of waiting
+  for the 72-second Redis-backed registry suite;
+- `make test-docker` runs Mongo, Pulse, and registry with `-race`, shuffle, and
+  fail-closed selection, then enforces 80%, 80%, and 75% owner floors;
+- a required Mongo contract fails immediately rather than skipping when given
+  an invalid Docker endpoint;
+- hosted CI delegates Docker execution to the single `make ci` call and still
+  preserves `docker-cover.out`.
+
+### Priority 2: Run Generated Acceptance Against Real Temporal
+
+1. Extract an engine-neutral generated acceptance fixture.
+2. Run the same coordinator scenarios against the in-memory engine and a pinned
+   real Temporal development server.
+3. Prove late activity retry, signal/timeout races, cancellation, child-run
+   identity, active-time budget pauses, replay, and worker replacement.
+4. Prove repeated planner effects are observable while application-owned
+   idempotency protection commits a durable effect once.
+
+### Priority 3: Expand Cross-Layer Generated Runtime Acceptance
+
+Extend `integration_tests/fixtures/agent_features/design/design.go` with a child
+agent and generated scenarios for agent-as-tool, confirmation, clarification,
+external tool results, pause/resume, cancellation, and `TimeBudget`. Assert
+generated registration, runtime output, runlog, session, hook, and stream
+contracts together.
+
+### Priority 4: Test Provider Streams As State Machines
+
+Extend `testutil.ProviderStreamingConformance` beyond setup, receive failure,
+rate limits, and terminal output. Require fragmented tool calls, text/thinking/
+usage ordering, early EOF, partial cancellation, close errors, and interleaved
+content indexes. Start with Bedrock, whose streaming branch coverage and event
+grammar are the coldest high-churn provider surface.
+
+### Priority 5: Test Persistence Upgrades And Concurrency Against Real Services
+
+Pre-seed Mongo with legacy prompt, memory, runlog, and session records before
+client construction. Prove fingerprint migration, mixed legacy/bucket ordering,
+duplicate insertion, index conflicts, and session terminal-state races using
+real driver semantics. Add Redis disruption and pending-delivery cases after
+the Mongo upgrade contracts.
+
+### Priority 6: Add Fuzzing At Dynamic Trust Boundaries
+
+Add seed corpora for canonical JSON, hook envelopes, protected MCP request
+state, model message codecs, provider tool fragments, and generated union
+codecs. Run corpus seeds on pull requests and bounded fuzz time in the scheduled
+stress workflow. Malformed inputs must return typed errors without panic, hang,
+or silent coercion.
+
+### Priority 7: Add Risk-Weighted Owner Floors
+
+After behavioral tests land, add exact owner floors for
+`runtime/agent/runtime`, Bedrock, Gemini, and each Docker-backed package. Do not
+raise the global floor as a substitute for exercising the high-risk state
+machines.
 
 Phase 1 is implemented and verified:
 
@@ -76,8 +163,9 @@ expected future `-32602` on that upstream-owned path.
 
 ### Verification entry points
 
-- `Makefile` owns `make test`, `make itest`, `make verify-mcp-local`, fixture
-  regeneration, linting, and the current global coverage floor.
+- `Makefile` owns `make test`, `make test-docker`, `make itest`,
+  `make verify-mcp-local`, fixture regeneration, linting, and the current global
+  and owner coverage floors.
 - `.github/workflows/ci.yml` owns the pull-request unit and integration jobs,
   Docker-required coverage, and generated-fixture drift detection.
 - `.githooks/pre-commit` owns staged Go formatting and changed-file linting.
@@ -213,9 +301,9 @@ Exit criteria:
 - Every nested fixture module runs under the race detector.
 - No test claims readiness from an arbitrary HTTP response.
 
-## Phase 2: Run Generated Acceptance Against Real Temporal (Deferred)
+## Priority 2 Detail: Run Generated Acceptance Against Real Temporal
 
-Priority: deferred by product priority.
+Priority: highest remaining after unit/Docker gate isolation.
 
 1. Extract an engine fixture contract from
    `integration_tests/fixtures/agent_features/acceptance_helpers_test.go`.
@@ -369,8 +457,14 @@ Exit criteria:
 
 ## Completion Checklist
 
+- [x] Priority 1: fast unit and fail-closed Docker gate isolation
+- [ ] Priority 2: real-Temporal generated acceptance
+- [ ] Priority 3: cross-layer generated runtime transitions
+- [ ] Priority 4: provider stream state-machine conformance
+- [ ] Priority 5: real persistence upgrade and concurrency contracts
+- [ ] Priority 6: fuzz dynamic trust boundaries
+- [ ] Priority 7: risk-weighted owner floors
 - [x] Phase 1: truthful MCP integration coverage
-- [ ] Phase 2: real-Temporal generated acceptance (deferred)
 - [x] Phase 3: executable codegen matrix
 - [x] Phase 4: race and stress lane
 - [x] Phase 5: complete provider conformance
