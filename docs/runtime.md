@@ -1054,6 +1054,9 @@ helpers separately.
 
 Agents can expose tools via `Export` blocks and consume them via `Use`. When invoked,
 nested agents execute as child workflows with their own run IDs and event streams.
+Temporal child workflows use request-cancel parent-close behavior so canceling
+or closing a parent requests child cancellation instead of terminating the
+child as a generic failure.
 
 ### How It Works
 

@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"example.com/agentfeatures/gen/features"
+	"example.com/agentfeatures/gen/features/agents/coordinator"
 	agentworkflow "example.com/agentfeatures/gen/features/agents/coordinator/workflow"
 	"example.com/agentfeatures/gen/features/toolsets/workflow"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/api"
@@ -303,6 +304,18 @@ func (r *streamRecorder) Close(ctx context.Context) error {
 	return nil
 }
 
+func (r *streamRecorder) count(kind stream.EventType) int {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	count := 0
+	for _, event := range r.events {
+		if event.Type() == kind {
+			count++
+		}
+	}
+	return count
+}
+
 type modelClientFunc func(context.Context, *model.Request) (*model.Response, error)
 
 func (f modelClientFunc) Complete(ctx context.Context, req *model.Request) (*model.Response, error) {
@@ -354,6 +367,14 @@ func newFeatureRuntime(t *testing.T, opts ...agentsruntime.RuntimeOption) *featu
 		artifacts: artifacts,
 		stream:    streams,
 	}
+}
+
+func registerCoordinatorToolsets(t *testing.T, ctx context.Context, rt *agentsruntime.Runtime, exec agentsruntime.ToolCallExecutor) {
+	t.Helper()
+	require.NoError(t, coordinator.RegisterUsedToolsets(ctx, rt, coordinator.WithWorkflowExecutor(exec)))
+	delegated, err := coordinator.NewCoordinatorDelegatedAgentToolsetRegistration(rt, "")
+	require.NoError(t, err)
+	require.NoError(t, rt.RegisterToolset(delegated))
 }
 
 func messageText(msg *model.Message) string {

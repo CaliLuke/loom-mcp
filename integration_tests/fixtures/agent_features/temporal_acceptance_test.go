@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"sync"
@@ -16,11 +17,13 @@ import (
 	"go.temporal.io/sdk/testsuite"
 
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/api"
+	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/engine"
 	temporalengine "github.com/CaliLuke/loom-mcp/v2/runtime/agent/engine/temporal"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/hooks"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/model"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/planner"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/rawjson"
+	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/run"
 	runloginmem "github.com/CaliLuke/loom-mcp/v2/runtime/agent/runlog/inmem"
 	agentsruntime "github.com/CaliLuke/loom-mcp/v2/runtime/agent/runtime"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/session"
@@ -39,6 +42,8 @@ type silentTemporalLogger struct{}
 type fileEffectLedger struct {
 	dir string
 }
+
+type signalTimeoutPlanner struct{}
 
 const temporalCLIVersion = "v1.6.1"
 
@@ -70,9 +75,9 @@ func TestGeneratedFeatureRealTemporalContracts(t *testing.T) {
 			exec,
 			"sess-temporal-core",
 			"run-temporal-core",
-			1200*time.Millisecond,
-			5*time.Second,
-			agentsruntime.WithRunTimeBudget(time.Second),
+			2500*time.Millisecond,
+			8*time.Second,
+			agentsruntime.WithRunTimeBudget(2*time.Second),
 		)
 	})
 
@@ -84,7 +89,7 @@ func TestGeneratedFeatureRealTemporalContracts(t *testing.T) {
 		exec := newRecordingWorkflowExecutor()
 		ledger := &fileEffectLedger{dir: t.TempDir()}
 		plan := newRetryIdempotencyPlanner(ledger)
-		require.NoError(t, coordinator.RegisterUsedToolsets(ctx, fx.rt, coordinator.WithWorkflowExecutor(exec)))
+		registerCoordinatorToolsets(t, ctx, fx.rt, exec)
 		require.NoError(t, coordinator.RegisterCoordinatorAgent(ctx, fx.rt, coordinator.CoordinatorAgentConfig{Planner: plan}))
 		_, err := fx.rt.CreateSession(ctx, "sess-temporal-retry")
 		require.NoError(t, err)
@@ -108,13 +113,38 @@ func TestGeneratedFeatureRealTemporalContracts(t *testing.T) {
 		testTemporalWorkerReplacement(t, server.Client())
 	})
 
+	t.Run("typed input races workflow timeout without stranding state", func(t *testing.T) {
+		testTemporalSignalTimeoutRace(t, server.Client())
+	})
+
+	t.Run("child agent links every observable layer", func(t *testing.T) {
+		ctx, cancel := temporalScenarioContext(t)
+		defer cancel()
+		eng := newTemporalAcceptanceEngine(t, server.Client())
+		runGeneratedChildScenario(t, ctx, newFeatureRuntime(t, agentsruntime.WithEngine(eng)))
+	})
+
+	t.Run("clarification and external result share one barrier", func(t *testing.T) {
+		ctx, cancel := temporalScenarioContext(t)
+		defer cancel()
+		eng := newTemporalAcceptanceEngine(t, server.Client())
+		runGeneratedExternalAwaitScenario(t, ctx, newFeatureRuntime(t, agentsruntime.WithEngine(eng)))
+	})
+
+	t.Run("parent cancellation reaches child agent", func(t *testing.T) {
+		ctx, cancel := temporalScenarioContext(t)
+		defer cancel()
+		eng := newTemporalAcceptanceEngine(t, server.Client())
+		runGeneratedChildCancellationScenario(t, ctx, newFeatureRuntime(t, agentsruntime.WithEngine(eng)))
+	})
+
 	t.Run("cancellation terminates generated await", func(t *testing.T) {
 		ctx, cancel := temporalScenarioContext(t)
 		defer cancel()
 		eng := newTemporalAcceptanceEngine(t, server.Client())
 		fx := newFeatureRuntime(t, agentsruntime.WithEngine(eng))
 		exec := newRecordingWorkflowExecutor()
-		require.NoError(t, coordinator.RegisterUsedToolsets(ctx, fx.rt, coordinator.WithWorkflowExecutor(exec)))
+		registerCoordinatorToolsets(t, ctx, fx.rt, exec)
 		require.NoError(t, coordinator.RegisterCoordinatorAgent(ctx, fx.rt, coordinator.CoordinatorAgentConfig{}))
 		_, err := fx.rt.CreateSession(ctx, "sess-temporal-cancel")
 		require.NoError(t, err)
@@ -208,7 +238,7 @@ func newRetryIdempotencyPlanner(ledger *fileEffectLedger) *retryIdempotencyPlann
 
 func temporalScenarioContext(t *testing.T) (context.Context, context.CancelFunc) {
 	t.Helper()
-	return context.WithTimeout(t.Context(), 20*time.Second)
+	return context.WithTimeout(t.Context(), 45*time.Second)
 }
 
 func testTemporalWorkerReplacement(t *testing.T, temporalClient client.Client) {
@@ -239,7 +269,7 @@ func testTemporalWorkerReplacement(t *testing.T, temporalClient client.Client) {
 		agentsruntime.WithSessionStore(sessions),
 		agentsruntime.WithRunEventStore(runlog),
 	)
-	require.NoError(t, coordinator.RegisterUsedToolsets(ctx, first.rt, coordinator.WithWorkflowExecutor(firstExec)))
+	registerCoordinatorToolsets(t, ctx, first.rt, firstExec)
 	require.NoError(t, coordinator.RegisterCoordinatorAgent(ctx, first.rt, coordinator.CoordinatorAgentConfig{}))
 	_, err = first.rt.CreateSession(ctx, "sess-temporal-restart")
 	require.NoError(t, err)
@@ -263,10 +293,18 @@ func testTemporalWorkerReplacement(t *testing.T, temporalClient client.Client) {
 		agentsruntime.WithSessionStore(sessions),
 		agentsruntime.WithRunEventStore(runlog),
 	)
-	require.NoError(t, coordinator.RegisterUsedToolsets(ctx, second.rt, coordinator.WithWorkflowExecutor(secondExec)))
+	registerCoordinatorToolsets(t, ctx, second.rt, secondExec)
 	require.NoError(t, coordinator.RegisterCoordinatorAgent(ctx, second.rt, coordinator.CoordinatorAgentConfig{}))
 	require.NoError(t, second.rt.Seal(ctx))
 	require.NoError(t, second.rt.ProvideTypedInput(ctx, typedInputAnswer("run-temporal-restart")))
+	require.Eventually(t, func() bool {
+		return second.recorder.count(hooks.AwaitConfirmation) == 1
+	}, 10*time.Second, 20*time.Millisecond)
+	require.NoError(t, second.rt.ProvideConfirmation(ctx, &api.ConfirmationDecision{
+		RunID:       "run-temporal-restart",
+		Approved:    true,
+		RequestedBy: "fixture-reviewer",
+	}))
 	out, err := handle.Wait(ctx)
 	require.NoError(t, err)
 	require.Equal(t, "generated workflow complete", messageText(out.Final))
@@ -283,6 +321,117 @@ func testTemporalWorkerReplacement(t *testing.T, temporalClient client.Client) {
 		require.False(t, exists, event.EventKey)
 		keys[event.EventKey] = struct{}{}
 	}
+}
+
+func testTemporalSignalTimeoutRace(t *testing.T, temporalClient client.Client) {
+	t.Helper()
+	ctx, cancel := temporalScenarioContext(t)
+	defer cancel()
+	eng := newTemporalAcceptanceEngine(t, temporalClient)
+	fx := newFeatureRuntime(t, agentsruntime.WithEngine(eng))
+	registerCoordinatorToolsets(t, ctx, fx.rt, newRecordingWorkflowExecutor())
+	require.NoError(t, coordinator.RegisterCoordinatorAgent(ctx, fx.rt, coordinator.CoordinatorAgentConfig{Planner: signalTimeoutPlanner{}}))
+	require.NoError(t, fx.rt.Seal(ctx))
+
+	const workflowTimeout = 2 * time.Second
+	offsets := []time.Duration{time.Second, 1900 * time.Millisecond, workflowTimeout + time.Nanosecond}
+	completed := 0
+	timedOut := 0
+	for i, offset := range offsets {
+		runID := fmt.Sprintf("run-signal-timeout-%d", i)
+		sessionID := fmt.Sprintf("sess-signal-timeout-%d", i)
+		_, err := fx.rt.CreateSession(ctx, sessionID)
+		require.NoError(t, err)
+		startedAt := time.Now()
+		handle, err := temporalClient.ExecuteWorkflow(ctx, client.StartWorkflowOptions{
+			ID:                 runID,
+			TaskQueue:          coordinator.DefaultTaskQueue,
+			WorkflowRunTimeout: workflowTimeout,
+		}, coordinator.WorkflowName, &agentsruntime.RunInput{
+			AgentID:   coordinator.AgentID,
+			RunID:     runID,
+			SessionID: sessionID,
+			Messages:  []*model.Message{{Role: model.ConversationRoleUser, Parts: []model.Part{model.TextPart{Text: "race"}}}},
+		})
+		require.NoError(t, err)
+		require.Eventually(t, func() bool {
+			return fx.recorder.countForRun(hooks.AwaitTypedInput, runID) == 1
+		}, time.Second, 10*time.Millisecond)
+		var out *api.RunOutput
+		var waitErr error
+		var signalErr error
+		if offset > workflowTimeout {
+			waitErr = handle.Get(ctx, &out)
+			signalErr = temporalClient.SignalWorkflow(ctx, runID, "", api.SignalProvideTypedInput, &api.TypedInputAnswer{
+				RunID:   runID,
+				ID:      "signal-race",
+				Payload: rawjson.Message([]byte(`{"ok":true}`)),
+			})
+		} else {
+			if remaining := offset - time.Since(startedAt); remaining > 0 {
+				timer := time.NewTimer(remaining)
+				select {
+				case <-ctx.Done():
+					timer.Stop()
+					require.NoError(t, ctx.Err())
+				case <-timer.C:
+				}
+			}
+			signalErr = temporalClient.SignalWorkflow(ctx, runID, "", api.SignalProvideTypedInput, &api.TypedInputAnswer{
+				RunID:   runID,
+				ID:      "signal-race",
+				Payload: rawjson.Message([]byte(`{"ok":true}`)),
+			})
+			waitErr = handle.Get(ctx, &out)
+		}
+		status, statusErr := eng.QueryRunStatus(ctx, runID)
+		require.NoError(t, statusErr)
+		switch status {
+		case engine.RunStatusCompleted:
+			require.NoError(t, signalErr)
+			require.NoError(t, waitErr)
+			require.Equal(t, "signal won", messageText(out.Final))
+			completed++
+		case engine.RunStatusTimedOut:
+			require.Error(t, waitErr)
+			timedOut++
+		default:
+			require.Failf(t, "unexpected terminal status", "run %s ended as %s (signal error: %v, wait error: %v)", runID, status, signalErr, waitErr)
+		}
+		snapshot, err := fx.rt.GetRunSnapshot(ctx, runID)
+		require.NoError(t, err)
+		runMeta, err := fx.rt.SessionStore.LoadRun(ctx, runID)
+		require.NoError(t, err)
+		if status == engine.RunStatusCompleted {
+			require.Equal(t, run.StatusCompleted, snapshot.Status)
+			require.Equal(t, session.RunStatusCompleted, runMeta.Status)
+		} else {
+			require.Equal(t, run.StatusFailed, snapshot.Status)
+			require.Equal(t, session.RunStatusFailed, runMeta.Status)
+		}
+	}
+	require.GreaterOrEqual(t, completed, 1)
+	require.GreaterOrEqual(t, timedOut, 1)
+}
+
+func (signalTimeoutPlanner) PlanStart(context.Context, *planner.PlanInput) (*planner.PlanResult, error) {
+	return &planner.PlanResult{Await: planner.NewAwait(
+		planner.AwaitTypedInputItem(&planner.AwaitTypedInput{
+			ID:     "signal-race",
+			Title:  "Signal race",
+			Schema: rawjson.Message([]byte(`{"type":"object"}`)),
+		}),
+	)}, nil
+}
+
+func (signalTimeoutPlanner) PlanResume(_ context.Context, input *planner.PlanResumeInput) (*planner.PlanResult, error) {
+	if input == nil || len(input.TypedInputs) != 1 {
+		return nil, errors.New("signal-timeout planner expected one typed input")
+	}
+	return &planner.PlanResult{FinalResponse: &planner.FinalResponse{Message: &model.Message{
+		Role:  model.ConversationRoleAssistant,
+		Parts: []model.Part{model.TextPart{Text: "signal won"}},
+	}}}, nil
 }
 
 func typedInputAnswer(runID string) *api.TypedInputAnswer {

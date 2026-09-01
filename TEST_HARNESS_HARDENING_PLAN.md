@@ -55,9 +55,8 @@ Implementation evidence:
 
 ### Priority 2: Run Generated Acceptance Against Real Temporal
 
-Status: foundation implemented and locally verified. Priority 3 owns the
-remaining generated child/signal boundary matrix, and Priority 5 owns restart
-proof against real persistent stores.
+Status: runtime behavior implemented and locally verified. Priority 5 owns the
+remaining restart proof against real persistent stores.
 
 1. Extract an engine-neutral generated acceptance fixture.
 2. Run the same coordinator scenarios against the in-memory engine and a pinned
@@ -71,8 +70,10 @@ Implementation evidence:
 
 - the generated coordinator await/resume scenario now shares one assertion
   helper between the in-memory engine and Temporal CLI `v1.6.1`;
-- a one-second active-work budget still completes after a 1.2-second external
-  typed-input wait, proving the wait pauses rather than consumes the budget;
+- the in-memory lane's one-second active-work budget completes after a
+  1.2-second external typed-input wait, while the real Temporal lane's
+  two-second budget completes after a 2.5-second wait, proving the wait pauses
+  rather than consumes the budget;
 - a real Temporal planner activity fails after its application effect, retries,
   exposes two attempts, and commits the effect once through a filesystem-backed
   application idempotency ledger rather than planner-local state;
@@ -82,22 +83,45 @@ Implementation evidence:
   shared store backend; Priority 5 replaces this backend with real persistence;
 - cancellation during the generated typed-input wait returns a workflow error
   and converges the durable run status to `canceled`.
+- real Temporal runs signal typed input before, on, and after a two-second
+  workflow timeout boundary; every run converges to completed or timed out
+  runlog/session state, with both sides of the race observed.
 
 Remaining dependent evidence:
 
-- Priority 3 adds child-run identity and clarification, confirmation, external
-  tool, pause/resume, timeout-boundary, and child cancellation scenarios to the
-  generated design and executes them on this Temporal lane.
 - Priority 5 repeats worker/process replacement with real persistence so the
   test does not retain session or runlog state through shared in-process stores.
 
 ### Priority 3: Expand Cross-Layer Generated Runtime Acceptance
+
+Status: implemented and locally verified.
 
 Extend `integration_tests/fixtures/agent_features/design/design.go` with a child
 agent and generated scenarios for agent-as-tool, confirmation, clarification,
 external tool results, pause/resume, cancellation, and `TimeBudget`. Assert
 generated registration, runtime output, runlog, session, hook, and stream
 contracts together.
+
+Implementation evidence:
+
+- the generated design now exports a typed specialist toolset, consumes it from
+  the coordinator, requires confirmation before publish, and enables generated
+  interrupt handling;
+- shared in-memory and real Temporal scenarios prove parent/child run identity
+  through generated registration, planner context, runtime output, runlog,
+  session metadata, hooks, and streams;
+- one generated barrier collects clarification and external tool results and
+  resumes the planner exactly once after both inputs arrive;
+- the core generated flow queues pause/resume signals, resumes typed input,
+  approves confirmation, and completes after an external wait longer than its
+  active-work budget;
+- parent cancellation while a generated child workflow awaits typed input
+  cancels both workflows and converges child runlog and session projections;
+  the race-enabled case found and fixed Temporal's default parent-close
+  termination behavior by making child closure request cancellation explicitly;
+- the child-agent case exposed and fixed a runtime validation bug that rejected
+  `FinalToolResult` as an initial terminal planner result despite lower-level
+  support for that contract.
 
 ### Priority 4: Test Provider Streams As State Machines
 

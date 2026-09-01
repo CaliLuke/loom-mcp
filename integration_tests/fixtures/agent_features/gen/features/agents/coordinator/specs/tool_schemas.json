@@ -1,6 +1,50 @@
 {
   "tools": [
     {
+      "id": "delegated.summarize",
+      "service": "features",
+      "toolset": "features.delegated",
+      "title": "Summarize",
+      "description": "Summarize a topic through a child run",
+      "payload": {
+        "name": "SummarizePayload",
+        "schema": {
+          "additionalProperties": false,
+          "properties": {
+            "topic": {
+              "description": "Topic to process",
+              "type": "string"
+            }
+          },
+          "required": [
+            "topic"
+          ],
+          "type": "object"
+        }
+      },
+      "result": {
+        "name": "SummarizeResult",
+        "schema": {
+          "additionalProperties": false,
+          "properties": {
+            "message": {
+              "description": "Message returned to the agent runtime",
+              "type": "string"
+            },
+            "ok": {
+              "description": "Whether the method-backed tool succeeded",
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "ok",
+            "message"
+          ],
+          "type": "object"
+        }
+      }
+    },
+    {
       "id": "workflow.draft",
       "service": "features",
       "toolset": "features.workflow",
@@ -93,6 +137,10 @@
       "toolset": "features.workflow",
       "title": "Publish",
       "description": "Publish the result",
+      "confirmation": {
+        "prompt_template": "Publish this generated result?",
+        "denied_result_template": "{\"ok\":false,\"approved\":false}"
+      },
       "payload": {
         "name": "PublishPayload",
         "schema": {

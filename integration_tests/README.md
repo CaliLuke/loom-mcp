@@ -97,6 +97,10 @@ with `httptest`, including:
 - parity between the in-memory engine and a pinned real Temporal development
   server, including activity retry, active-time waits, cancellation, replay,
   and worker replacement;
+- generated agent-as-tool links, parent-to-child cancellation, confirmation,
+  clarification, external tool results, and queued pause/resume signals;
+- cross-layer agreement between runtime output, runlog, session state, hooks,
+  and streams for generated lifecycle transitions;
 - artifacts, transcript memory, long-term memory, and local skills;
 - named interceptors, retry hints, debug state, and registry capabilities;
 - generated registry schema reference resolution and Unicode validation.

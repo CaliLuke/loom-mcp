@@ -20,6 +20,8 @@ import (
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/model"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/rawjson"
 	agentsruntime "github.com/CaliLuke/loom-mcp/v2/runtime/agent/runtime"
+	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/session"
+	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/stream"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/tools"
 	"github.com/stretchr/testify/require"
 )
@@ -41,7 +43,7 @@ func TestGeneratedFeatureFixtureRegistersRuntimeSurface(t *testing.T) {
 			"audit": &auditInterceptor{},
 		}),
 	)
-	require.NoError(t, coordinator.RegisterUsedToolsets(ctx, rt, coordinator.WithWorkflowExecutor(newRecordingWorkflowExecutor())))
+	registerCoordinatorToolsets(t, ctx, rt, newRecordingWorkflowExecutor())
 	require.NoError(t, coordinator.RegisterCoordinatorAgent(ctx, rt, coordinator.CoordinatorAgentConfig{}))
 
 	toolsets := rt.ListToolsets()
@@ -67,7 +69,7 @@ func TestAgentFeatureMethodBackedDispatcher(t *testing.T) {
 	client := features.NewClient(features.NewEchoTopicEndpoint(svc))
 	exec := coordinatorworkflow.NewCoordinatorWorkflowExec(coordinatorworkflow.WithClient(client))
 
-	require.NoError(t, coordinator.RegisterUsedToolsets(ctx, fx.rt, coordinator.WithWorkflowExecutor(exec)))
+	registerCoordinatorToolsets(t, ctx, fx.rt, exec)
 	require.NoError(t, coordinator.RegisterCoordinatorAgent(ctx, fx.rt, coordinator.CoordinatorAgentConfig{}))
 
 	out, err := fx.rt.ExecuteToolActivity(ctx, &agentsruntime.ToolInput{
@@ -105,7 +107,7 @@ func runGeneratedFeatureAwaitScenario(
 	t.Helper()
 	rt := fx.rt
 	exec.failRetryOnce = true
-	require.NoError(t, coordinator.RegisterUsedToolsets(ctx, rt, coordinator.WithWorkflowExecutor(exec)))
+	registerCoordinatorToolsets(t, ctx, rt, exec)
 	require.NoError(t, coordinator.RegisterCoordinatorAgent(ctx, rt, coordinator.CoordinatorAgentConfig{}))
 	_, err := rt.CreateSession(ctx, sessionID)
 	require.NoError(t, err)
@@ -121,6 +123,16 @@ func runGeneratedFeatureAwaitScenario(
 	require.Eventually(t, func() bool {
 		return fx.recorder.count(hooks.AwaitTypedInput) == 1
 	}, awaitTimeout, 10*time.Millisecond)
+	require.NoError(t, rt.PauseRun(ctx, &api.PauseRequest{
+		RunID:       runID,
+		Reason:      "fixture-review",
+		RequestedBy: "fixture-reviewer",
+	}))
+	require.NoError(t, rt.ResumeRun(ctx, &api.ResumeRequest{
+		RunID:       runID,
+		Notes:       "continue fixture",
+		RequestedBy: "fixture-reviewer",
+	}))
 	if answerDelay > 0 {
 		timer := time.NewTimer(answerDelay)
 		defer timer.Stop()
@@ -137,6 +149,14 @@ func runGeneratedFeatureAwaitScenario(
 		Payload: rawjson.Message([]byte(`{"content-type":"application/json"}`)),
 	})
 	require.NoError(t, err)
+	require.Eventually(t, func() bool {
+		return fx.recorder.count(hooks.AwaitConfirmation) == 1
+	}, awaitTimeout, 10*time.Millisecond)
+	require.NoError(t, rt.ProvideConfirmation(ctx, &api.ConfirmationDecision{
+		RunID:       runID,
+		Approved:    true,
+		RequestedBy: "fixture-reviewer",
+	}))
 	out, err := handle.Wait(ctx)
 	require.NoError(t, err)
 
@@ -155,6 +175,30 @@ func runGeneratedFeatureAwaitScenario(
 	require.GreaterOrEqual(t, fx.audit.beforeRunCount(), 1)
 	require.GreaterOrEqual(t, fx.audit.beforeToolCount(), 5)
 	require.GreaterOrEqual(t, fx.recorder.count(hooks.ToolResultReceived), 5)
+	require.Equal(t, 1, fx.recorder.count(hooks.AwaitConfirmation))
+	require.Equal(t, 1, fx.recorder.count(hooks.ToolAuthorization))
+	require.GreaterOrEqual(t, fx.recorder.count(hooks.RunPaused), 3)
+	require.GreaterOrEqual(t, fx.recorder.count(hooks.RunResumed), 3)
+
+	runMeta, err := rt.SessionStore.LoadRun(ctx, runID)
+	require.NoError(t, err)
+	require.Equal(t, session.RunStatusCompleted, runMeta.Status)
+	require.Equal(t, sessionID, runMeta.SessionID)
+	page, err := rt.RunEventStore.List(ctx, runID, "", 100)
+	require.NoError(t, err)
+	eventTypes := make([]hooks.EventType, 0, len(page.Events))
+	for _, event := range page.Events {
+		eventTypes = append(eventTypes, event.Type)
+	}
+	require.Contains(t, eventTypes, hooks.AwaitTypedInput)
+	require.Contains(t, eventTypes, hooks.AwaitConfirmation)
+	require.Contains(t, eventTypes, hooks.ToolAuthorization)
+	require.Contains(t, eventTypes, hooks.RunPaused)
+	require.Contains(t, eventTypes, hooks.RunCompleted)
+	require.Equal(t, 1, fx.stream.count(stream.EventAwaitTypedInput))
+	require.Equal(t, 1, fx.stream.count(stream.EventAwaitConfirmation))
+	require.Equal(t, 1, fx.stream.count(stream.EventToolAuthorization))
+	require.Equal(t, 1, fx.stream.count(stream.EventRunStreamEnd))
 }
 
 func TestGeneratedFeatureRunPersistsArtifactsMemorySkillsAndDebugState(t *testing.T) {
@@ -168,7 +212,7 @@ func TestGeneratedFeatureRunPersistsArtifactsMemorySkillsAndDebugState(t *testin
 	})))
 	rt := fx.rt
 	exec := newRecordingWorkflowExecutor()
-	require.NoError(t, coordinator.RegisterUsedToolsets(ctx, rt, coordinator.WithWorkflowExecutor(exec)))
+	registerCoordinatorToolsets(t, ctx, rt, exec)
 	require.NoError(t, coordinator.RegisterCoordinatorAgent(ctx, rt, coordinator.CoordinatorAgentConfig{}))
 	_, err := rt.CreateSession(ctx, "sess-state")
 	require.NoError(t, err)
@@ -191,6 +235,14 @@ func TestGeneratedFeatureRunPersistsArtifactsMemorySkillsAndDebugState(t *testin
 		RunID:   runID,
 		ID:      "approval",
 		Payload: rawjson.Message([]byte(`{"content-type":"application/json"}`)),
+	}))
+	require.Eventually(t, func() bool {
+		return fx.recorder.count(hooks.AwaitConfirmation) == 1
+	}, time.Second, 10*time.Millisecond)
+	require.NoError(t, rt.ProvideConfirmation(ctx, &api.ConfirmationDecision{
+		RunID:       runID,
+		Approved:    true,
+		RequestedBy: "fixture-reviewer",
 	}))
 	out, err := handle.Wait(ctx)
 	require.NoError(t, err)
@@ -350,7 +402,7 @@ func TestGeneratedFeatureRunAppliesNamedInterceptorsAndRetryReflect(t *testing.T
 	})))
 	exec := newRecordingWorkflowExecutor()
 	exec.failRetryOnce = true
-	require.NoError(t, coordinator.RegisterUsedToolsets(ctx, rt, coordinator.WithWorkflowExecutor(exec)))
+	registerCoordinatorToolsets(t, ctx, rt, exec)
 	require.NoError(t, fx.memory.AppendEvents(ctx, string(coordinator.AgentID), "run-interceptors",
 		memory.NewEvent(time.Unix(40, 0), memory.UserMessageData{Message: "preload memory"}, nil),
 	))
@@ -402,7 +454,7 @@ func TestGeneratedFeatureRunBranchesToReviseWhenCaseDoesNotMatch(t *testing.T) {
 	fx := newFeatureRuntime(t)
 	rt := fx.rt
 	exec := newRecordingWorkflowExecutor()
-	require.NoError(t, coordinator.RegisterUsedToolsets(ctx, rt, coordinator.WithWorkflowExecutor(exec)))
+	registerCoordinatorToolsets(t, ctx, rt, exec)
 	require.NoError(t, coordinator.RegisterCoordinatorAgent(ctx, rt, coordinator.CoordinatorAgentConfig{}))
 	_, err := rt.CreateSession(ctx, "sess-revise")
 	require.NoError(t, err)

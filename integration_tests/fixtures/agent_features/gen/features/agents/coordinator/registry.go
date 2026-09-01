@@ -71,6 +71,7 @@ func RegisterCoordinatorAgent(ctx context.Context, rt *agentsruntime.Runtime, cf
 			MaxToolCalls:                  12,
 			MaxConsecutiveFailedToolCalls: 2,
 			TimeBudget:                    time.Duration(30000000000),
+			InterruptsAllowed:             true,
 			NamedInterceptors:             []string{"audit"},
 			PreloadMemory: &agentsruntime.MemoryPreloadPolicy{
 				Scope:      agentsruntime.MemoryScopeCurrentRun,

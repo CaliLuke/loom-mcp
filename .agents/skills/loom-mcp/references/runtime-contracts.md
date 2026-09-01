@@ -26,6 +26,8 @@ Use this file for current loom-mcp runtime behavior in this repo. Prefer it over
 ## Agent-As-Tool
 
 - Agent-as-tool runs as a real child workflow, not an inline local shortcut.
+- Temporal parent closure requests child cancellation; it must not terminate a
+  child run as a generic failure.
 - Parent and child runs are linked with a `ChildRunLinked` event.
 - Parent tool results carry a `RunLink` to the child run.
 - Runtime execution goes through `ExecuteAgentChildWithRoute`.

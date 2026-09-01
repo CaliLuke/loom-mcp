@@ -18,6 +18,7 @@ import (
 	"errors"
 	"time"
 
+	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/sdk/temporal"
 	"go.temporal.io/sdk/workflow"
 
@@ -381,6 +382,7 @@ func (w *temporalWorkflowContext) StartChildWorkflow(ctx context.Context, req en
 	opts := workflow.ChildWorkflowOptions{
 		WorkflowID:         req.ID,
 		TaskQueue:          req.TaskQueue,
+		ParentClosePolicy:  enumspb.PARENT_CLOSE_POLICY_REQUEST_CANCEL,
 		WorkflowRunTimeout: req.RunTimeout,
 		RetryPolicy:        convertRetryPolicy(req.RetryPolicy),
 	}

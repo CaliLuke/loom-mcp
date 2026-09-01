@@ -56,8 +56,13 @@ var (
 		Toolset:     "features.workflow",
 		Description: "Publish the result",
 		Tags:        []string{},
-		Payload:     tools.TypeSpec{Name: "PublishPayload", Schema: []byte("{\"additionalProperties\":false,\"type\":\"object\"}"), ExampleJSON: nil, ExampleInput: nil, Codec: publishPayloadCodec},
-		Result:      tools.TypeSpec{Name: "PublishResult", Schema: []byte("{\"additionalProperties\":false,\"properties\":{\"approved\":{\"description\":\"Whether the operation was approved\",\"type\":\"boolean\"},\"ok\":{\"description\":\"Whether the operation succeeded\",\"type\":\"boolean\"}},\"required\":[\"ok\"],\"type\":\"object\"}"), Codec: publishResultCodec},
+		Confirmation: &tools.ConfirmationSpec{
+			Title:                "",
+			PromptTemplate:       "Publish this generated result?",
+			DeniedResultTemplate: "{\"ok\":false,\"approved\":false}",
+		},
+		Payload: tools.TypeSpec{Name: "PublishPayload", Schema: []byte("{\"additionalProperties\":false,\"type\":\"object\"}"), ExampleJSON: nil, ExampleInput: nil, Codec: publishPayloadCodec},
+		Result:  tools.TypeSpec{Name: "PublishResult", Schema: []byte("{\"additionalProperties\":false,\"properties\":{\"approved\":{\"description\":\"Whether the operation was approved\",\"type\":\"boolean\"},\"ok\":{\"description\":\"Whether the operation succeeded\",\"type\":\"boolean\"}},\"required\":[\"ok\"],\"type\":\"object\"}"), Codec: publishResultCodec},
 	}
 	SpecRetry = tools.ToolSpec{
 		Name:        Retry,

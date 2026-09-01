@@ -18,6 +18,7 @@ Here’s a map of what loom-mcp just built for you based on your `design/*.go` f
         * **Mission:** *Generated acceptance agent*
         * **Uses Toolsets:**
             * `features.artifacts`
+            * `features.delegated`
             * `features.long_term_memory`
             * `features.memory`
             * `features.skills`
@@ -27,7 +28,7 @@ Here’s a map of what loom-mcp just built for you based on your `design/*.go` f
             * Max Tool Calls: `12`
             * Max Consecutive Failures: `2`
             * Time Budget: `30s`
-            * Interrupts Allowed: `false`
+            * Interrupts Allowed: `true`
     * **Agent `registry-validator`** (ID: `features.registry_validator`):
         * **Mission:** *Generated registry schema validation fixture*
         * **Uses Toolsets:**
@@ -38,6 +39,16 @@ Here’s a map of what loom-mcp just built for you based on your `design/*.go` f
             * Max Consecutive Failures: `0`
             * Time Budget: `0s`
             * Interrupts Allowed: `false`
+    * **Agent `specialist`** (ID: `features.specialist`):
+        * **Mission:** *Generated child-agent fixture*
+        * **Uses Toolsets:***none*
+        * **Exports Toolsets:**
+            * `delegated`
+        * **Run Policy:**
+            * Max Tool Calls: `4`
+            * Max Consecutive Failures: `1`
+            * Time Budget: `10s`
+            * Interrupts Allowed: `true`
 
 ---
 
@@ -81,6 +92,7 @@ import (
     // (Goa generated these based on your design)
     coordinator "example.com/agentfeatures/gen/features/agents/coordinator"
     registry_validator "example.com/agentfeatures/gen/features/agents/registry_validator"
+    specialist "example.com/agentfeatures/gen/features/agents/specialist"
 )
 
 // A simple "brain" for our agent. It just says hello for now.
@@ -129,6 +141,15 @@ func main() {
             // We'll add tool configurations here later on.
         }
         if err := registry_validator.RegisterRegistryValidatorAgent(context.Background(), rt, cfg); err != nil {
+            panic(err)
+        }
+    }
+    {
+        cfg := specialist.SpecialistAgentConfig{
+            Planner: &StubPlanner{},
+            // We'll add tool configurations here later on.
+        }
+        if err := specialist.RegisterSpecialistAgent(context.Background(), rt, cfg); err != nil {
             panic(err)
         }
     }
@@ -217,6 +238,33 @@ cfg := coordinator.CoordinatorAgentConfig{
 
 #### Minimal Configuration```go
 cfg := registry_validator.RegistryValidatorAgentConfig{
+    Planner: myPlanner,
+}
+```
+</details>
+<details>
+<summary><strong>Agent: <code>specialist</code></strong> (ID: <code>features.specialist</code>)</summary>
+
+* **Package:** `example.com/agentfeatures/gen/features/agents/specialist`
+* **Directory:** `gen/features/agents/specialist`
+* **Config Struct:** `SpecialistAgentConfig`
+* **Register Function:** `RegisterSpecialistAgent(ctx, rt, cfg)`
+* **How to Run:**
+    * **Sessions are first-class:** call `rt.CreateSession(ctx, sessionID)` once before you start any runs under that session ID.
+    * **Synchronous (wait for result):**
+        ```go
+        client := specialist.NewClient(rt)
+        out, err := client.Run(ctx, sessionID, messages)
+        ```
+    * **Asynchronous (get a handle):**
+        ```go
+        client := specialist.NewClient(rt)
+        handle, err := client.Start(ctx, sessionID, messages)
+        ```
+* **Workflow Name:** `features.specialist.workflow` (Queue: `features_specialist_workflow`)
+
+#### Minimal Configuration```go
+cfg := specialist.SpecialistAgentConfig{
     Planner: myPlanner,
 }
 ```
@@ -415,6 +463,9 @@ cfg := <agentpkg>.<AgentConfig>{
 
 * **Tools this agent can USE:**
 * **`features.artifacts`**
+* **`features.delegated`**
+* **Tool: `delegated.summarize`**
+* *Summarize a topic through a child run*
 * **`features.long_term_memory`**
 * **`features.memory`**
 * **`features.skills`**
@@ -440,6 +491,13 @@ cfg := <agentpkg>.<AgentConfig>{
 * **`features.registry_validation`**
 * **Tools this agent EXPORTS for others to use:**
 * *This agent does not export any toolsets.*
+
+### Agent `specialist` Toolsets
+
+* **Tools this agent can USE:**
+* *This agent does not use any toolsets.*
+* **Tools this agent EXPORTS for others to use:**
+* **`delegated`**
 </details>
 
 ---

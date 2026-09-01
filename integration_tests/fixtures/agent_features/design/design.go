@@ -70,11 +70,25 @@ var _ = Service("features", func() {
 		Payload(MethodEchoPayload)
 		Result(MethodEchoResult)
 	})
+	Agent("specialist", "Generated child-agent fixture", func() {
+		Export("delegated", func() {
+			Tool("summarize", "Summarize a topic through a child run", func() {
+				Args(TopicPayload)
+				Return(MethodToolResult)
+			})
+		})
+		RunPolicy(func() {
+			DefaultCaps(MaxToolCalls(4), MaxConsecutiveFailedToolCalls(1))
+			TimeBudget("10s")
+			InterruptsAllowed(true)
+		})
+	})
 	Agent("coordinator", "Generated acceptance agent", func() {
 		Use(ArtifactTools)
 		Use(MemoryTools)
 		Use(LongTermMemoryTools)
 		Use(SkillTools)
+		Use(AgentToolset("features", "specialist", "delegated"))
 		Use("workflow", func() {
 			Tool("draft", "Draft a response", func() {
 				Args(TopicPayload)
@@ -91,6 +105,10 @@ var _ = Service("features", func() {
 			Tool("publish", "Publish the result", func() {
 				Args(EmptyPayload)
 				Return(StatusResult)
+				Confirmation(func() {
+					PromptTemplate("Publish this generated result?")
+					DeniedResultTemplate(`{"ok":false,"approved":false}`)
+				})
 			})
 			Tool("revise", "Revise the result", func() {
 				Args(EmptyPayload)
@@ -105,6 +123,7 @@ var _ = Service("features", func() {
 		RunPolicy(func() {
 			DefaultCaps(MaxToolCalls(12), MaxConsecutiveFailedToolCalls(2))
 			TimeBudget("30s")
+			InterruptsAllowed(true)
 			Interceptors("audit")
 			RetryAndReflect(MaxRetries(1), ErrorIfRetryExceeded(true))
 			PreloadMemory(MemoryScopeCurrentRun(), MemoryMaxResults(5))

@@ -360,11 +360,11 @@ func (r *Runtime) prepareWorkflowLoopState(
 	result *planner.PlanResult,
 	output *PlanActivityOutput,
 ) (policy.CapsState, int, *childTracker, error) {
-	if len(result.ToolCalls) == 0 && result.FinalResponse == nil && result.Await == nil {
-		return policy.CapsState{}, 0, nil, fmt.Errorf("plan result has no tool calls, final response, or await")
+	if len(result.ToolCalls) == 0 && result.FinalResponse == nil && result.FinalToolResult == nil && result.Await == nil {
+		return policy.CapsState{}, 0, nil, fmt.Errorf("plan result has no tool calls, final response, final tool result, or await")
 	}
-	if len(result.ToolCalls) == 0 && result.FinalResponse != nil {
-		r.logger.Info(ctx, "PlanResult has FinalResponse but no ToolCalls - workflow will return early")
+	if len(result.ToolCalls) == 0 && (result.FinalResponse != nil || result.FinalToolResult != nil) {
+		r.logger.Info(ctx, "PlanResult has a terminal result but no ToolCalls - workflow will return early")
 	}
 	caps := applyWorkflowCaps(initialCaps(reg.Policy), input)
 	if output != nil && output.ToolPolicyActive {
@@ -441,8 +441,8 @@ func (r *Runtime) validateRunLoopInputs(base *planner.PlanInput, initialResult *
 	if initialResult == nil {
 		return fmt.Errorf("runLoop initial PlanResult is nil")
 	}
-	if len(initialResult.ToolCalls) == 0 && initialResult.FinalResponse == nil && initialResult.Await == nil {
-		return fmt.Errorf("runLoop initial PlanResult has no ToolCalls, FinalResponse, or Await")
+	if len(initialResult.ToolCalls) == 0 && initialResult.FinalResponse == nil && initialResult.FinalToolResult == nil && initialResult.Await == nil {
+		return fmt.Errorf("runLoop initial PlanResult has no ToolCalls, FinalResponse, FinalToolResult, or Await")
 	}
 	return nil
 }
@@ -454,7 +454,7 @@ func (r *Runtime) ensureWorkflowLogger() {
 }
 
 func (r *Runtime) logRunLoopStart(ctx context.Context, initialResult *planner.PlanResult) {
-	r.logger.Info(ctx, "runLoop starting iteration", "tool_calls", len(initialResult.ToolCalls), "final_response", initialResult.FinalResponse != nil, "await", initialResult.Await != nil)
+	r.logger.Info(ctx, "runLoop starting iteration", "tool_calls", len(initialResult.ToolCalls), "final_response", initialResult.FinalResponse != nil, "final_tool_result", initialResult.FinalToolResult != nil, "await", initialResult.Await != nil)
 }
 
 func setLedgerMessagesQuery(wfCtx engine.WorkflowContext, st *runLoopState) error {
