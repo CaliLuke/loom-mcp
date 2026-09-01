@@ -55,6 +55,10 @@ Implementation evidence:
 
 ### Priority 2: Run Generated Acceptance Against Real Temporal
 
+Status: foundation implemented and locally verified. Priority 3 owns the
+remaining generated child/signal boundary matrix, and Priority 5 owns restart
+proof against real persistent stores.
+
 1. Extract an engine-neutral generated acceptance fixture.
 2. Run the same coordinator scenarios against the in-memory engine and a pinned
    real Temporal development server.
@@ -62,6 +66,30 @@ Implementation evidence:
    identity, active-time budget pauses, replay, and worker replacement.
 4. Prove repeated planner effects are observable while application-owned
    idempotency protection commits a durable effect once.
+
+Implementation evidence:
+
+- the generated coordinator await/resume scenario now shares one assertion
+  helper between the in-memory engine and Temporal CLI `v1.6.1`;
+- a one-second active-work budget still completes after a 1.2-second external
+  typed-input wait, proving the wait pauses rather than consumes the budget;
+- a real Temporal planner activity fails after its application effect, retries,
+  exposes two attempts, and commits the effect once through a filesystem-backed
+  application idempotency ledger rather than planner-local state;
+- a generated workflow waiting for typed input survives worker shutdown,
+  replays on a replacement worker, resumes through a second runtime, and
+  preserves deduplicated runlog events plus terminal session state through a
+  shared store backend; Priority 5 replaces this backend with real persistence;
+- cancellation during the generated typed-input wait returns a workflow error
+  and converges the durable run status to `canceled`.
+
+Remaining dependent evidence:
+
+- Priority 3 adds child-run identity and clarification, confirmation, external
+  tool, pause/resume, timeout-boundary, and child cancellation scenarios to the
+  generated design and executes them on this Temporal lane.
+- Priority 5 repeats worker/process replacement with real persistence so the
+  test does not retain session or runlog state through shared in-process stores.
 
 ### Priority 3: Expand Cross-Layer Generated Runtime Acceptance
 
@@ -458,7 +486,8 @@ Exit criteria:
 ## Completion Checklist
 
 - [x] Priority 1: fast unit and fail-closed Docker gate isolation
-- [ ] Priority 2: real-Temporal generated acceptance
+- [ ] Priority 2: real-Temporal generated acceptance (foundation implemented;
+  completed by Priority 3 signal/child coverage and Priority 5 persistence)
 - [ ] Priority 3: cross-layer generated runtime transitions
 - [ ] Priority 4: provider stream state-machine conformance
 - [ ] Priority 5: real persistence upgrade and concurrency contracts

@@ -94,9 +94,18 @@ with `httptest`, including:
 
 - generated registrations and method-backed dispatch;
 - workflow graphs, branching, retries, awaits, and typed input;
+- parity between the in-memory engine and a pinned real Temporal development
+  server, including activity retry, active-time waits, cancellation, replay,
+  and worker replacement;
 - artifacts, transcript memory, long-term memory, and local skills;
 - named interceptors, retry hints, debug state, and registry capabilities;
 - generated registry schema reference resolution and Unicode validation.
+
+The Temporal acceptance test uses the SDK development-server harness and pins
+Temporal CLI `v1.6.1`. The SDK downloads that executable into the operating
+system temporary directory on first use and reuses it for later focused runs.
+It is part of the normal agent-feature fixture and therefore runs in
+`make verify-mcp-local`, `make itest`, and `make ci`.
 
 ## Supported environment variables
 

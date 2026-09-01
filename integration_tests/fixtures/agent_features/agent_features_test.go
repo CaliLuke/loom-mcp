@@ -87,25 +87,49 @@ func TestAgentFeatureMethodBackedDispatcher(t *testing.T) {
 func TestGeneratedFeatureRunPublishesAwaitAndResumesWithTypedInput(t *testing.T) {
 	ctx := context.Background()
 	fx := newFeatureRuntime(t)
-	rt := fx.rt
 	exec := newRecordingWorkflowExecutor()
+	runGeneratedFeatureAwaitScenario(t, ctx, fx, exec, "sess-1", "run-generated-agent-features", 0, time.Second)
+}
+
+func runGeneratedFeatureAwaitScenario(
+	t *testing.T,
+	ctx context.Context,
+	fx *featureRuntime,
+	exec *recordingWorkflowExecutor,
+	sessionID string,
+	runID string,
+	answerDelay time.Duration,
+	awaitTimeout time.Duration,
+	runOpts ...agentsruntime.RunOption,
+) {
+	t.Helper()
+	rt := fx.rt
 	exec.failRetryOnce = true
 	require.NoError(t, coordinator.RegisterUsedToolsets(ctx, rt, coordinator.WithWorkflowExecutor(exec)))
 	require.NoError(t, coordinator.RegisterCoordinatorAgent(ctx, rt, coordinator.CoordinatorAgentConfig{}))
-	_, err := rt.CreateSession(ctx, "sess-1")
+	_, err := rt.CreateSession(ctx, sessionID)
 	require.NoError(t, err)
 
-	runID := "run-generated-agent-features"
+	runOpts = append(runOpts, agentsruntime.WithRunID(runID))
 	handle, err := rt.MustClient(coordinator.AgentID).Start(
 		ctx,
-		"sess-1",
+		sessionID,
 		[]*model.Message{{Role: model.ConversationRoleUser, Parts: []model.Part{model.TextPart{Text: "ship it"}}}},
-		agentsruntime.WithRunID(runID),
+		runOpts...,
 	)
 	require.NoError(t, err)
 	require.Eventually(t, func() bool {
 		return fx.recorder.count(hooks.AwaitTypedInput) == 1
-	}, time.Second, 10*time.Millisecond)
+	}, awaitTimeout, 10*time.Millisecond)
+	if answerDelay > 0 {
+		timer := time.NewTimer(answerDelay)
+		defer timer.Stop()
+		select {
+		case <-ctx.Done():
+			require.NoError(t, ctx.Err())
+		case <-timer.C:
+		}
+	}
 
 	err = rt.ProvideTypedInput(ctx, &api.TypedInputAnswer{
 		RunID:   runID,

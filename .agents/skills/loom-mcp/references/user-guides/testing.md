@@ -14,6 +14,12 @@ Use fast contract tests close to the changed layer, then run the repository veri
 | Registry/Pulse behavior | `registry/...` and runtime registry tests with Redis-backed integration coverage |
 | Cross-layer user behavior | generated fixture packages and `integration_tests/framework` |
 
+The agent-feature fixture runs its core generated coordinator scenario against
+both the in-memory engine and a real Temporal development server. Keep the
+Temporal CLI version pinned in the fixture. Put retry, replay, cancellation,
+worker-replacement, and active-time wait regressions in this shared acceptance
+surface instead of relying only on the Temporal SDK's simulated environment.
+
 Prefer table-driven tests, deterministic inputs, explicit error assertions, and generated constants/types over stringly typed fixtures.
 
 ## Generated-code changes
