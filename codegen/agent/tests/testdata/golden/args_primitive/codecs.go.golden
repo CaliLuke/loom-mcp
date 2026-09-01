@@ -113,7 +113,8 @@ func MarshalEchoPayload(v *EchoPayload) ([]byte, error) {
 	in := v
 	_ = in
 	var out *toolhttp.EchoPayloadTransport
-	out = toolhttp.EchoPayloadTransport(in)
+	converted := toolhttp.EchoPayloadTransport(*in)
+	out = &converted
 	return json.Marshal(out)
 }
 
@@ -129,7 +130,8 @@ func UnmarshalEchoPayload(data []byte) (*EchoPayload, error) {
 	in := &tv
 	_ = in
 	var out *EchoPayload
-	out = EchoPayload(in)
+	converted := EchoPayload(*in)
+	out = &converted
 	return out, nil
 }
 

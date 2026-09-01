@@ -1,5 +1,6 @@
 prompts.txt
 cover.out
+docker-cover.out
 agents/.DS_Store
 .cache/
 .kiro/

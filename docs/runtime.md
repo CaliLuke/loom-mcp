@@ -1922,6 +1922,10 @@ client, err := rt.NewOpenAIModelClient(runtime.OpenAIConfig{
 })
 ```
 
+If `model.Request.Thinking.Enable` is true, the OpenAI adapter requests an
+automatic reasoning summary. It returns each summary as a typed
+`model.ThinkingPart`.
+
 Explicit `model.Request.Model` values take precedence over class routing; when
 the request leaves `Model` empty, `ModelClass` selects `HighModel` or
 `SmallModel`, falling back to `DefaultModel` when no class-specific model is
@@ -2018,16 +2022,18 @@ families may impose additional provider-side restrictions.
 | Gemini / Vertex | yes | no (`ErrStreamingUnsupported`) | unary; not with tools | yes | no | yes | yes |
 | Ollama | yes | yes | unary and stream; not with tools | limited by local API/model | no | native typed thinking | no |
 
-Every provider runs `testutil.RunProviderConformance`, which verifies ordinary
-errors, rate limits, malformed tool calls, cancellation, structured-output and
-tool-choice behavior, usage accounting, and either the complete stream
-lifecycle or an explicit unsupported-stream contract.
+Every provider runs `testutil.RunProviderConformance`. The suite requires one
+supported or unsupported case for each provider capability. These capabilities
+include multimodal input, typed thinking, exact token counting, and tool-name
+round trips. Streaming providers prove setup, receive, terminal, and
+receive-time rate-limit behavior.
 
 Bedrock normalizes structured-output schemas to its supported subset. It closes
 object schemas, removes unsupported keywords and formats, and rejects shapes
 whose `additionalProperties` semantics cannot be represented instead of
 silently weakening the schema. Its exact token counter uses the provider's
-count-tokens path and removes replayed thinking blocks before counting.
+count-tokens path and removes replayed thinking blocks before counting. Unary
+and streaming responses both preserve provider reasoning as typed thinking.
 
 The OpenAI adapter projects tool and structured-output schemas into the
 provider's strict-mode JSON Schema subset and canonicalizes strict-mode `null`

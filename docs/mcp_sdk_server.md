@@ -60,6 +60,20 @@ http.ListenAndServe(":8080", mux)
 `server.Handler` is a standard `http.Handler`. The official SDK owns the MCP
 wire protocol, Streamable HTTP, sessions, and protocol negotiation.
 
+## JSON-RPC errors
+
+Generated SDK servers install a receiving middleware that normalizes handler
+failures into typed JSON-RPC errors. Invalid parameters, invalid retry input,
+missing resources, and duplicate initialization return `-32602`. Internal and unknown handler failures
+return `-32603`. The middleware hides private details unless the service declares
+an explicit safe message. Errors already typed by the official SDK pass through unchanged.
+
+The official MCP Go SDK performs its pre-initialization method gate before
+server receiving middleware. In SDK v1.7.0, that one upstream-owned path still
+serializes its untyped error with code `0`. The raw transport tests allow only
+that known value or the expected future `-32602`, so an upstream correction can
+land without weakening the generated adapter contract.
+
 ## SDKServerOptions
 
 | Field            | Required | Description                                                                                                                                                            |

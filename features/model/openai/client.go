@@ -117,12 +117,7 @@ func (c *Client) buildResponseRequest(req *model.Request) (responses.ResponseNew
 		},
 		Tools: tools,
 	}
-	if req.Temperature > 0 {
-		request.Temperature = openai.Float(float64(req.Temperature))
-	}
-	if req.MaxTokens > 0 {
-		request.MaxOutputTokens = openai.Int(int64(req.MaxTokens))
-	}
+	applyOpenAIRequestOptions(&request, req)
 	textConfig, err := encodeStructuredOutput(req.StructuredOutput)
 	if err != nil {
 		return responses.ResponseNewParams{}, nil, err
@@ -138,6 +133,18 @@ func (c *Client) buildResponseRequest(req *model.Request) (responses.ResponseNew
 		request.ToolChoice = toolChoice
 	}
 	return request, codec, nil
+}
+
+func applyOpenAIRequestOptions(request *responses.ResponseNewParams, req *model.Request) {
+	if req.Temperature > 0 {
+		request.Temperature = openai.Float(float64(req.Temperature))
+	}
+	if req.MaxTokens > 0 {
+		request.MaxOutputTokens = openai.Int(int64(req.MaxTokens))
+	}
+	if req.Thinking != nil && req.Thinking.Enable {
+		request.Reasoning = shared.ReasoningParam{Summary: shared.ReasoningSummaryAuto}
+	}
 }
 
 func (c *Client) resolveModelID(req *model.Request) string {
@@ -509,6 +516,11 @@ func translateResponse(resp *responses.Response, codec *openAIToolCodec, modelCl
 			if len(msg.Parts) > 0 {
 				messages = append(messages, msg)
 			}
+		case "reasoning":
+			msg := translateReasoningItem(item)
+			if len(msg.Parts) > 0 {
+				messages = append(messages, msg)
+			}
 		case "function_call":
 			toolCall, err := translateFunctionCall(item, codec)
 			if err != nil {
@@ -535,6 +547,27 @@ func translateResponse(resp *responses.Response, codec *openAIToolCodec, modelCl
 		Usage:      usage,
 		StopReason: string(resp.Status),
 	}, nil
+}
+
+func translateReasoningItem(item responses.ResponseOutputItemUnion) model.Message {
+	msg := model.Message{Role: model.ConversationRoleAssistant}
+	for index, summary := range item.Summary {
+		if summary.Text == "" {
+			continue
+		}
+		msg.Parts = append(msg.Parts, model.ThinkingPart{
+			Text:  summary.Text,
+			Index: index,
+			Final: index == len(item.Summary)-1,
+		})
+	}
+	if len(msg.Parts) == 0 && item.EncryptedContent != "" {
+		msg.Parts = append(msg.Parts, model.ThinkingPart{
+			Redacted: []byte(item.EncryptedContent),
+			Final:    true,
+		})
+	}
+	return msg
 }
 
 func translateFunctionCall(item responses.ResponseOutputItemUnion, codec *openAIToolCodec) (model.ToolCall, error) {

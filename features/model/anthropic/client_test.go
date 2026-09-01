@@ -315,7 +315,7 @@ func TestComplete_RateLimited(t *testing.T) {
 
 func TestComplete_RateLimitedAPIError(t *testing.T) {
 	stub := &stubMessagesClient{
-		err: newAnthropicAPIError(t, http.StatusTooManyRequests),
+		err: newAnthropicRateLimitError(t),
 	}
 	cl, err := New(stub, Options{
 		DefaultModel: "claude-3.5-sonnet",
@@ -342,7 +342,7 @@ func TestComplete_RateLimitedAPIError(t *testing.T) {
 
 func TestStream_RateLimitedAPIError(t *testing.T) {
 	stub := &stubMessagesClient{
-		stream: ssestream.NewStream[sdk.MessageStreamEventUnion](&noopDecoder{}, newAnthropicAPIError(t, http.StatusTooManyRequests)),
+		stream: ssestream.NewStream[sdk.MessageStreamEventUnion](&noopDecoder{}, newAnthropicRateLimitError(t)),
 	}
 	cl, err := New(stub, Options{
 		DefaultModel: "claude-3.5-sonnet",
@@ -458,15 +458,15 @@ func TestComplete_RejectsStructuredOutput(t *testing.T) {
 	}
 }
 
-func newAnthropicAPIError(t *testing.T, statusCode int) *sdk.Error {
+func newAnthropicRateLimitError(t *testing.T) *sdk.Error {
 	t.Helper()
 	req, err := http.NewRequestWithContext(context.Background(), http.MethodPost, "https://api.anthropic.test/v1/messages", nil)
 	require.NoError(t, err)
 	return &sdk.Error{
-		StatusCode: statusCode,
+		StatusCode: http.StatusTooManyRequests,
 		Request:    req,
 		Response: &http.Response{
-			StatusCode: statusCode,
+			StatusCode: http.StatusTooManyRequests,
 			Request:    req,
 		},
 	}

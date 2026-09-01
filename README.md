@@ -65,7 +65,17 @@ make verify-mcp-local
 make lint
 make test
 make itest
+make ci
+make test-stress
 ```
+
+`make ci` is the complete local CI contract: build, lint, unit coverage,
+quickstart generation acceptance, nested fixtures, and MCP framework tests.
+The Makefile pins `protoc` and both Go protobuf plugins. Run
+`make install-protoc` if the pinned compiler is not already first on `PATH`.
+`make test` enforces global and critical package-group coverage floors.
+The scheduled stress workflow repeats race-enabled lifecycle tests and requires
+the Docker-backed Mongo, Redis, and registry tests.
 
 Design changes should always start in `design/*.go`. Regenerate after changing the DSL and do not hand-edit generated `gen/` files.
 

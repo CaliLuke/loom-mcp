@@ -12,7 +12,7 @@ Use fast contract tests close to the changed layer, then run the repository veri
 | Model provider | provider tests plus shared conformance tests |
 | MCP protocol/transport | `runtime/mcp/...`, generated adapter tests, real client validation where required |
 | Registry/Pulse behavior | `registry/...` and runtime registry tests with Redis-backed integration coverage |
-| Cross-layer user behavior | `integration_tests/scenarios` and fixture tests |
+| Cross-layer user behavior | generated fixture packages and `integration_tests/framework` |
 
 Prefer table-driven tests, deterministic inputs, explicit error assertions, and generated constants/types over stringly typed fixtures.
 
@@ -42,6 +42,10 @@ Every provider must preserve the shared model contract, not merely compile again
 - provider-safe tool-name mapping with canonical round trips.
 
 Run the provider package with `-race`. Add or extend its conformance test instead of copying incomplete one-off assertions.
+
+Each capability row must contain one supported case or one unsupported case.
+Streaming providers must prove setup, receive, terminal, and rate-limit behavior.
+If a provider cannot receive a late rate limit, prove where the setup error occurs.
 
 ## Runtime event contracts
 
@@ -74,6 +78,18 @@ make regen-assistant-fixture
 ```
 
 Use only the targets relevant to the changed design, but never skip a red repository target. Before CI-facing verification or a commit, restore the pinned remote fork with `make loom-remote` as required by the repository rules.
+
+`make test` applies the global coverage floor and the critical package-group
+floors. The group floors omit generated, mock, and design packages.
+
+Run the repeated lifecycle lane after concurrency or shutdown changes:
+
+```bash
+make test-stress
+```
+
+CI runs this target each week with Docker-backed tests set as required. CI also
+writes `docker-cover.out` from Mongo, Pulse, and registry integration packages.
 
 ## Failure policy
 

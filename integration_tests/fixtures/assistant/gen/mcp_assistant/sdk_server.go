@@ -96,6 +96,7 @@ func NewSDKServer(service assistant.Service, opts *SDKServerOptions) (*SDKServer
 		Version:    "1.0.0",
 		WebsiteURL: "https://assistant.example.com/docs",
 	}, serverOpts)
+	server.AddReceivingMiddleware(sdkJSONRPCErrorMiddleware)
 	if err := registerSDKTools(server, adapter, requestContext); err != nil {
 		return nil, err
 	}
@@ -183,6 +184,15 @@ func (w *sdkResponseObserver) Write(data []byte) (int, error) {
 		w.captureSession()
 	}
 	return w.ResponseWriter.Write(data)
+}
+func sdkJSONRPCErrorMiddleware(next mcpsdk.MethodHandler) mcpsdk.MethodHandler {
+	return func(ctx context.Context, method string, req mcpsdk.Request) (mcpsdk.Result, error) {
+		result, err := next(ctx, method, req)
+		if err != nil {
+			return nil, mcpruntime.NormalizeJSONRPCError(method, err)
+		}
+		return result, nil
+	}
 }
 func newSDKHandler(server *mcpsdk.Server, adapter *MCPAdapter, requestContext func(context.Context, *http.Request) context.Context, streamableOpts *mcpsdk.StreamableHTTPOptions) http.Handler {
 	base := mcpsdk.NewStreamableHTTPHandler(func(*http.Request) *mcpsdk.Server {

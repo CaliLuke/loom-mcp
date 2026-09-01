@@ -3,13 +3,12 @@ name: CI
 on:
   workflow_dispatch:
   push:
-    branches: [ main ]
+    branches: [main]
   pull_request:
-    branches: [ main ]
+    branches: [main]
 
 env:
   GO_VERSION: '1.27.0'
-  LOOM_VERSION: 'v1.8.0'
 
 permissions:
   contents: read
@@ -19,57 +18,9 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  build:
+  verify:
     runs-on: ubuntu-latest
-    timeout-minutes: 30
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v7
-
-      - name: Set up Go
-        uses: actions/setup-go@v6
-        with:
-          go-version: ${{ env.GO_VERSION }}
-          cache: true
-          cache-dependency-path: go.sum
-
-      - name: Install protoc (for make tools)
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y protobuf-compiler
-
-      - name: Install developer tools
-        run: |
-          make tools
-
-      - name: Install Loom CLI
-        run: |
-          go install github.com/CaliLuke/loom/cmd/loom@${LOOM_VERSION}
-          echo "$(go env GOPATH)/bin" >> $GITHUB_PATH
-
-      - name: Verify build
-        run: make build
-
-      - name: Lint
-        run: make lint
-
-      - name: Run unit tests
-        env:
-          LOOM_MCP_REQUIRE_DOCKER_TESTS: '1'
-        run: make test
-
-      - name: Preserve coverage report
-        if: always()
-        uses: actions/upload-artifact@v7
-        with:
-          name: unit-coverage-${{ github.sha }}
-          path: cover.out
-          if-no-files-found: warn
-          retention-days: 14
-
-  integration-tests:
-    runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 45
     steps:
       - name: Checkout
         uses: actions/checkout@v7
@@ -84,35 +35,21 @@ jobs:
             integration_tests/fixtures/assistant/go.sum
             integration_tests/fixtures/agent_features/go.sum
 
-      - name: Install latest protoc
+      - name: Install pinned protoc
         run: |
-          set -euo pipefail
           sudo apt-get update
-          sudo apt-get install -y unzip jq
-          PROTOC_VERSION=$(curl -s https://api.github.com/repos/protocolbuffers/protobuf/releases/latest | jq -r '.tag_name' | sed 's/^v//')
-          ARCH=$(uname -m)
-          case "$ARCH" in
-            x86_64|amd64) ARCH=x86_64 ;;
-            aarch64|arm64) ARCH=aarch_64 ;;
-            *) echo "Unsupported arch: $ARCH" ; exit 1 ;;
-          esac
-          OS=$(uname -s | tr '[:upper:]' '[:lower:]')
-          FNAME="protoc-${PROTOC_VERSION}-${OS}-${ARCH}.zip"
-          URL="https://github.com/protocolbuffers/protobuf/releases/download/v${PROTOC_VERSION}/${FNAME}"
-          echo "Downloading $URL" 
-          curl -sSL -o /tmp/protoc.zip "$URL"
-          sudo unzip -o /tmp/protoc.zip -d /usr/local
-          /usr/local/bin/protoc --version
+          sudo apt-get install -y unzip
+          make install-protoc PROTOC_INSTALL_DIR="${RUNNER_TEMP}/protoc"
+          echo "${RUNNER_TEMP}/protoc/bin" >> "${GITHUB_PATH}"
 
-      - name: Install protoc plugins
-        run: |
-          go install google.golang.org/protobuf/cmd/protoc-gen-go@v1.35.1
-          go install google.golang.org/grpc/cmd/protoc-gen-go-grpc@v1.5.1
+      - name: Install pinned developer tools
+        run: make tools
 
-      - name: Install Loom CLI
+      - name: Install canonical Loom CLI
         run: |
-          go install github.com/CaliLuke/loom/cmd/loom@${LOOM_VERSION}
-          echo "$(go env GOPATH)/bin" >> $GITHUB_PATH
+          LOOM_VERSION="$(bash ./scripts/loom_core_mode.sh remote-version)"
+          go install github.com/CaliLuke/loom/cmd/loom@"${LOOM_VERSION}"
+          echo "$(go env GOPATH)/bin" >> "${GITHUB_PATH}"
 
       - name: Verify generated fixtures are current
         run: |
@@ -122,5 +59,23 @@ jobs:
           make regen-agent-feature-fixture
           git diff --exit-code -- quickstart integration_tests/fixtures/assistant integration_tests/fixtures/agent_features
 
-      - name: Run integration tests
-        run: make itest
+      - name: Run complete CI contract
+        env:
+          LOOM_MCP_REQUIRE_DOCKER_TESTS: '1'
+        run: make ci
+
+      - name: Produce Docker-required coverage
+        env:
+          LOOM_MCP_REQUIRE_DOCKER_TESTS: '1'
+        run: make docker-coverage
+
+      - name: Preserve coverage report
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: unit-coverage-${{ github.sha }}
+          path: |
+            cover.out
+            docker-cover.out
+          if-no-files-found: warn
+          retention-days: 14

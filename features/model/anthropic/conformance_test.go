@@ -6,7 +6,6 @@ import (
 	"encoding/json/v2"
 	"errors"
 	"io"
-	"net/http"
 	"testing"
 
 	sdk "github.com/anthropics/anthropic-sdk-go"
@@ -45,7 +44,7 @@ func TestClientConformance(t *testing.T) {
 			require.ErrorContains(t, err, "anthropic messages.new")
 		},
 		RateLimit: func(t *testing.T) {
-			providerErr := newAnthropicAPIError(t, http.StatusTooManyRequests)
+			providerErr := newAnthropicRateLimitError(t)
 			response, err := newClient(t, &stubMessagesClient{err: providerErr}).Complete(context.Background(), request())
 			require.Nil(t, response)
 			require.ErrorIs(t, err, model.ErrRateLimited)
@@ -113,6 +112,48 @@ func TestClientConformance(t *testing.T) {
 				CacheWriteTokens: 4,
 			}, response.Usage)
 		},
+		MultimodalInput: testutil.ProviderCapabilityConformance{Supported: func(t *testing.T) {
+			stub := &stubMessagesClient{resp: &sdk.Message{}}
+			req := request()
+			req.Messages[0].Parts = append(req.Messages[0].Parts, model.ImagePart{Format: model.ImageFormatPNG, Bytes: []byte("png")})
+			_, err := newClient(t, stub).Complete(context.Background(), req)
+			require.NoError(t, err)
+			require.Len(t, stub.lastParams.Messages, 1)
+			require.Len(t, stub.lastParams.Messages[0].Content, 2)
+			require.NotNil(t, stub.lastParams.Messages[0].Content[1].OfImage)
+		}},
+		TypedThinking: testutil.ProviderCapabilityConformance{Supported: func(t *testing.T) {
+			stub := &stubMessagesClient{resp: &sdk.Message{Content: []sdk.ContentBlockUnion{
+				mustContentBlock(t, `{"type":"thinking","thinking":"private reasoning","signature":"sig"}`),
+			}}}
+			response, err := newClient(t, stub).Complete(context.Background(), request())
+			require.NoError(t, err)
+			require.Len(t, response.Content, 1)
+			require.Len(t, response.Content[0].Parts, 1)
+			thinking, ok := response.Content[0].Parts[0].(model.ThinkingPart)
+			require.True(t, ok)
+			require.Equal(t, "private reasoning", thinking.Text)
+			require.Equal(t, "sig", thinking.Signature)
+		}},
+		ExactTokenCounting: testutil.ProviderCapabilityConformance{Unsupported: func(t *testing.T) {
+			_, ok := any(newClient(t, &stubMessagesClient{})).(model.TokenCounter)
+			require.False(t, ok)
+		}},
+		ToolNameRoundTrip: testutil.ProviderCapabilityConformance{Supported: func(t *testing.T) {
+			const canonical = "catalog.lookup"
+			stub := &stubMessagesClient{resp: &sdk.Message{Content: []sdk.ContentBlockUnion{{
+				Type:  anthropicContentTypeToolUse,
+				Name:  sanitizeToolName(canonical),
+				ID:    "tool-1",
+				Input: jsontext.Value(`{"query":"docs"}`),
+			}}}}
+			req := request()
+			req.Tools = []*model.ToolDefinition{{Name: canonical, Description: "Search", InputSchema: map[string]any{"type": "object"}}}
+			response, err := newClient(t, stub).Complete(context.Background(), req)
+			require.NoError(t, err)
+			require.Len(t, response.ToolCalls, 1)
+			require.Equal(t, canonical, response.ToolCalls[0].Name.String())
+		}},
 		Streaming: testutil.ProviderStreamingConformance{
 			SetupError: func(t *testing.T) {
 				providerErr := errors.New("stream setup failed")
@@ -130,6 +171,17 @@ func TestClientConformance(t *testing.T) {
 				_, err = stream.Recv()
 				require.ErrorIs(t, err, providerErr)
 			},
+			ReceiveRateLimit: testutil.ProviderCapabilityConformance{Supported: func(t *testing.T) {
+				providerErr := newAnthropicRateLimitError(t)
+				stub := &stubMessagesClient{stream: ssestream.NewStream[sdk.MessageStreamEventUnion](&testDecoder{err: providerErr}, nil)}
+				stream, err := newClient(t, stub).Stream(context.Background(), request())
+				require.NoError(t, err)
+				t.Cleanup(func() { require.NoError(t, stream.Close()) })
+				_, err = stream.Recv()
+				require.ErrorIs(t, err, model.ErrRateLimited)
+				var apiErr *sdk.Error
+				require.ErrorAs(t, err, &apiErr)
+			}},
 			Terminal: func(t *testing.T) {
 				messageStart := mustAnthropicStreamEvent(t, `{
 					"type":"message_start",

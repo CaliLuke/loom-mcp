@@ -125,6 +125,62 @@ func TestClientConformance(t *testing.T) {
 				CacheReadTokens: 3,
 			}, response.Usage)
 		},
+		MultimodalInput: testutil.ProviderCapabilityConformance{Supported: func(t *testing.T) {
+			mock := &mockResponsesClient{response: &responses.Response{}}
+			req := request()
+			req.Messages[0].Parts = append(req.Messages[0].Parts, model.ImagePart{Format: model.ImageFormatPNG, Bytes: []byte("png")})
+			_, err := newClient(t, mock).Complete(context.Background(), req)
+			require.NoError(t, err)
+			content := mock.captured.Input.OfInputItemList[0].OfMessage.Content.OfInputItemContentList
+			require.Len(t, content, 2)
+			require.Equal(t, "data:image/png;base64,cG5n", content[1].OfInputImage.ImageURL.Value)
+		}},
+		TypedThinking: testutil.ProviderCapabilityConformance{Supported: func(t *testing.T) {
+			mock := &mockResponsesClient{response: &responses.Response{Output: []responses.ResponseOutputItemUnion{{
+				Type:    "reasoning",
+				Summary: []responses.ResponseReasoningItemSummary{{Text: "private reasoning"}},
+			}}}}
+			req := request()
+			req.Thinking = &model.ThinkingOptions{Enable: true}
+			response, err := newClient(t, mock).Complete(context.Background(), req)
+			require.NoError(t, err)
+			require.Equal(t, "auto", string(mock.captured.Reasoning.Summary))
+			require.Len(t, response.Content, 1)
+			thinking, ok := response.Content[0].Parts[0].(model.ThinkingPart)
+			require.True(t, ok)
+			require.Equal(t, "private reasoning", thinking.Text)
+			require.True(t, thinking.Final)
+
+			streamMock := &mockResponsesClient{stream: newMockOpenAIStream(
+				`{"type":"response.reasoning_summary_text.delta","sequence_number":1,"item_id":"rs_1","output_index":0,"summary_index":0,"delta":"reasoning delta"}`,
+				`{"type":"response.completed","sequence_number":2,"response":{"model":"o3","status":"completed","output":[]}}`,
+			)}
+			stream, err := newClient(t, streamMock).Stream(context.Background(), req)
+			require.NoError(t, err)
+			t.Cleanup(func() { require.NoError(t, stream.Close()) })
+			chunks := testutil.CollectStreamChunks(t, stream)
+			require.Len(t, chunks, 2)
+			require.Equal(t, model.ChunkTypeThinking, chunks[0].Type)
+			require.Equal(t, "reasoning delta", chunks[0].Thinking)
+			require.Equal(t, model.ChunkTypeStop, chunks[1].Type)
+		}},
+		ExactTokenCounting: testutil.ProviderCapabilityConformance{Unsupported: func(t *testing.T) {
+			_, ok := any(newClient(t, &mockResponsesClient{})).(model.TokenCounter)
+			require.False(t, ok)
+		}},
+		ToolNameRoundTrip: testutil.ProviderCapabilityConformance{Supported: func(t *testing.T) {
+			const canonical = "catalog.lookup"
+			mock := &mockResponsesClient{response: &responses.Response{Output: []responses.ResponseOutputItemUnion{{
+				Type: "function_call", Name: "catalog_lookup", CallID: "call-1", Arguments: `{"query":"docs"}`,
+			}}}}
+			req := request()
+			req.Tools = []*model.ToolDefinition{{Name: canonical, Description: "Search", InputSchema: map[string]any{"type": "object"}}}
+			response, err := newClient(t, mock).Complete(context.Background(), req)
+			require.NoError(t, err)
+			require.Equal(t, "catalog_lookup", mock.captured.Tools[0].OfFunction.Name)
+			require.Len(t, response.ToolCalls, 1)
+			require.Equal(t, canonical, response.ToolCalls[0].Name.String())
+		}},
 		Streaming: testutil.ProviderStreamingConformance{
 			SetupError: func(t *testing.T) {
 				providerErr := errors.New("stream setup failed")
@@ -142,6 +198,17 @@ func TestClientConformance(t *testing.T) {
 				_, err = stream.Recv()
 				require.ErrorIs(t, err, providerErr)
 			},
+			ReceiveRateLimit: testutil.ProviderCapabilityConformance{Supported: func(t *testing.T) {
+				providerErr := newOpenAIRateLimitError(t)
+				mock := &mockResponsesClient{stream: newMockOpenAIStreamReadError(providerErr)}
+				stream, err := newClient(t, mock).Stream(context.Background(), request())
+				require.NoError(t, err)
+				t.Cleanup(func() { require.NoError(t, stream.Close()) })
+				_, err = stream.Recv()
+				require.ErrorIs(t, err, model.ErrRateLimited)
+				var apiErr *openai.Error
+				require.ErrorAs(t, err, &apiErr)
+			}},
 			Terminal: func(t *testing.T) {
 				mock := &mockResponsesClient{stream: newMockOpenAIStream(`{
 					"type":"response.completed",

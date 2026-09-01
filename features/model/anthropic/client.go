@@ -144,10 +144,7 @@ func (c *Client) Stream(ctx context.Context, req *model.Request) (model.Streamer
 	}
 	stream := c.msg.NewStreaming(ctx, *params)
 	if err := stream.Err(); err != nil {
-		if isRateLimited(err) {
-			return nil, fmt.Errorf("%w: %w", model.ErrRateLimited, err)
-		}
-		return nil, fmt.Errorf("anthropic messages.new stream: %w", err)
+		return nil, wrapAnthropicStreamError(err)
 	}
 	return newAnthropicStreamer(ctx, stream, params.Model, req.ModelClass, provToCanon, toolUseIDs), nil
 }
@@ -685,6 +682,13 @@ func isRateLimited(err error) bool {
 	}
 	var apiErr *sdk.Error
 	return errors.As(err, &apiErr) && apiErr.StatusCode == http.StatusTooManyRequests
+}
+
+func wrapAnthropicStreamError(err error) error {
+	if isRateLimited(err) {
+		return fmt.Errorf("%w: %w", model.ErrRateLimited, err)
+	}
+	return fmt.Errorf("anthropic messages.new stream: %w", err)
 }
 
 func translateResponse(msg *sdk.Message, nameMap map[string]string, toolUseIDs *toolUseIDCodec, modelID string, modelClass model.ModelClass) (*model.Response, error) {

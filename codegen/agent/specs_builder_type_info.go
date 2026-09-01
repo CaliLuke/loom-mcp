@@ -233,6 +233,14 @@ func (b *toolSpecBuilder) buildTypeInfo(tool *ToolData, att *goaexpr.AttributeEx
 	if err != nil {
 		return nil, err
 	}
+	if usage == usagePayload && goaexpr.IsPrimitive(baseAttr.Type) {
+		// Payload codecs expose pointers even when the designed payload is a
+		// primitive alias. Goa's transform contexts describe field presence, so
+		// the generic primitive transform does not dereference the top-level
+		// values. Emit the exact pointer conversion from generated local names.
+		decodeBody = fmt.Sprintf("converted := %s(*in)\nout = &converted", typeName)
+		encodeBody = fmt.Sprintf("converted := toolhttp.%s(*in)\nout = &converted", transportTypeName)
+	}
 	for _, h := range append(decodeHelpers, encodeHelpers...) {
 		if h == nil {
 			continue

@@ -23,23 +23,43 @@ func TestRunProviderConformanceRunsRequiredCases(t *testing.T) {
 		Cancellation:                  providerCase("cancellation"),
 		StructuredOutputAndToolChoice: providerCase("structured_output"),
 		UsageAccounting:               providerCase("usage"),
+		MultimodalInput: ProviderCapabilityConformance{
+			Supported: providerCase("multimodal"),
+		},
+		TypedThinking: ProviderCapabilityConformance{
+			Unsupported: providerCase("thinking_unsupported"),
+		},
+		ExactTokenCounting: ProviderCapabilityConformance{
+			Supported: providerCase("token_counting"),
+		},
+		ToolNameRoundTrip: ProviderCapabilityConformance{
+			Supported: providerCase("tool_name"),
+		},
 		Streaming: ProviderStreamingConformance{
 			SetupError:   providerCase("stream_setup"),
 			ReceiveError: providerCase("stream_receive"),
-			Terminal:     providerCase("stream_terminal"),
+			ReceiveRateLimit: ProviderCapabilityConformance{
+				Supported: providerCase("stream_rate_limit"),
+			},
+			Terminal: providerCase("stream_terminal"),
 		},
 	})
 
 	require.Equal(t, map[string]bool{
-		"provider_error":      true,
-		"rate_limit":          true,
-		"malformed_tool_call": true,
-		"cancellation":        true,
-		"structured_output":   true,
-		"usage":               true,
-		"stream_setup":        true,
-		"stream_receive":      true,
-		"stream_terminal":     true,
+		"provider_error":       true,
+		"rate_limit":           true,
+		"malformed_tool_call":  true,
+		"cancellation":         true,
+		"structured_output":    true,
+		"usage":                true,
+		"multimodal":           true,
+		"thinking_unsupported": true,
+		"token_counting":       true,
+		"tool_name":            true,
+		"stream_setup":         true,
+		"stream_receive":       true,
+		"stream_rate_limit":    true,
+		"stream_terminal":      true,
 	}, ran)
 }
 
@@ -55,6 +75,10 @@ func TestRunProviderConformanceRunsUnsupportedStreamingCase(t *testing.T) {
 		Cancellation:                  providerCase,
 		StructuredOutputAndToolChoice: providerCase,
 		UsageAccounting:               providerCase,
+		MultimodalInput:               ProviderCapabilityConformance{Supported: providerCase},
+		TypedThinking:                 ProviderCapabilityConformance{Supported: providerCase},
+		ExactTokenCounting:            ProviderCapabilityConformance{Unsupported: providerCase},
+		ToolNameRoundTrip:             ProviderCapabilityConformance{Supported: providerCase},
 		Streaming: ProviderStreamingConformance{
 			Unsupported: func(*testing.T) {
 				ranUnsupported = true

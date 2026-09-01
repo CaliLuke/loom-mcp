@@ -1,13 +1,13 @@
 package framework
 
 import (
-	"fmt"
-	"net"
 	"net/http"
 	"net/url"
 	"os"
 	"os/exec"
+	"strings"
 	"sync"
+	"time"
 )
 
 // Runner manages the application-owned SDK server used by integration tests.
@@ -51,7 +51,7 @@ var (
 
 // NewRunner creates an SDK integration server runner.
 func NewRunner() *Runner {
-	return &Runner{client: &http.Client{}}
+	return &Runner{client: &http.Client{Timeout: 2 * time.Second}}
 }
 
 // SupportsServer reports whether the integration framework can reach a server.
@@ -86,15 +86,15 @@ func (r *ringBuffer) Bytes() []byte {
 	return out
 }
 
-func getFreePort() (string, error) {
-	listener, err := net.Listen("tcp", "127.0.0.1:0") //nolint:noctx // test helper reserves an ephemeral port
-	if err != nil {
-		return "", fmt.Errorf("listen for free port: %w", err)
+func (r *Runner) rpcURL() string {
+	if r.baseURL == nil {
+		return ""
 	}
-	defer func() { _ = listener.Close() }()
-	_, port, err := net.SplitHostPort(listener.Addr().String())
-	if err != nil {
-		return "", err
+	u := *r.baseURL
+	path := strings.TrimRight(u.Path, "/")
+	if !strings.HasSuffix(path, "/rpc") {
+		path += "/rpc"
 	}
-	return port, nil
+	u.Path = path
+	return u.String()
 }

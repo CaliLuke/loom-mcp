@@ -83,24 +83,32 @@ func TestUnmarshalCanonicalJSONRejectsMalformedAndUnsafeAssignments(t *testing.T
 		data    string
 		target  func() any
 		message string
+		kind    jsontext.Kind
 	}{
 		{name: "invalid_json", data: `{`, target: func() any { return &canonicalDecoded{} }, message: "unexpected EOF"},
 		{name: "trailing_json", data: `{}` + `{}`, target: func() any { return &canonicalDecoded{} }, message: "unexpected trailing JSON data"},
 		{name: "unknown_field", data: `{"other":1}`, target: func() any { return &canonicalDecoded{} }, message: `unknown field "other"`},
-		{name: "wrong_struct_shape", data: `[]`, target: func() any { return &canonicalDecoded{} }, message: "cannot handle JSON array"},
+		{name: "wrong_struct_shape", data: `[]`, target: func() any { return &canonicalDecoded{} }, kind: jsontext.KindBeginArray},
 		{name: "int_overflow", data: `{"count":128}`, target: func() any { return &canonicalDecoded{} }, message: `within "/count"`},
 		{name: "negative_uint", data: `{"unsigned":-1}`, target: func() any { return &canonicalDecoded{} }, message: `within "/unsigned"`},
 		{name: "fractional_int", data: `{"count":1.5}`, target: func() any { return &canonicalDecoded{} }, message: `within "/count"`},
 		{name: "array_length", data: `{"pair":[1]}`, target: func() any { return &canonicalDecoded{} }, message: `within "/pair"`},
 		{name: "slice_item", data: `{"items":[{"width":"bad"}]}`, target: func() any { return &canonicalDecoded{} }, message: `within "/items/0/width"`},
-		{name: "non_string_map_key", data: `{"a":1}`, target: func() any { value := map[int]int{}; return &value }, message: "cannot handle JSON object"},
+		{name: "non_string_map_key", data: `{"a":1}`, target: func() any { value := map[int]int{}; return &value }, kind: jsontext.KindBeginObject},
 	}
 
 	for _, tt := range cases {
 		t.Run(tt.name, func(t *testing.T) {
 			err := UnmarshalCanonicalJSON([]byte(tt.data), tt.target())
 			require.Error(t, err)
-			assert.Contains(t, err.Error(), tt.message)
+			if tt.message != "" {
+				assert.Contains(t, err.Error(), tt.message)
+			}
+			if tt.kind != jsontext.KindInvalid {
+				var semantic *json.SemanticError
+				require.ErrorAs(t, err, &semantic)
+				assert.Equal(t, tt.kind, semantic.JSONKind)
+			}
 		})
 	}
 

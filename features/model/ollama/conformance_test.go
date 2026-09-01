@@ -133,6 +133,68 @@ func TestClientConformance(t *testing.T) {
 				TotalTokens:  11,
 			}, response.Usage)
 		},
+		MultimodalInput: testutil.ProviderCapabilityConformance{Supported: func(t *testing.T) {
+			var captured map[string]any
+			client := newClient(t, func(w http.ResponseWriter, r *http.Request) {
+				assert.NoError(t, json.UnmarshalRead(r.Body, &captured))
+				assert.NoError(t, json.MarshalWrite(w, map[string]any{"model": "llama3.1", "done": true}))
+			})
+			req := request()
+			req.Messages[0].Parts = append(req.Messages[0].Parts, model.ImagePart{Format: model.ImageFormatPNG, Bytes: []byte("png")})
+			_, err := client.Complete(context.Background(), req)
+			require.NoError(t, err)
+			messages, ok := captured["messages"].([]any)
+			require.True(t, ok)
+			message, ok := messages[0].(map[string]any)
+			require.True(t, ok)
+			require.Equal(t, []any{"cG5n"}, message["images"])
+		}},
+		TypedThinking: testutil.ProviderCapabilityConformance{Supported: func(t *testing.T) {
+			var captured map[string]any
+			client := newClient(t, func(w http.ResponseWriter, r *http.Request) {
+				assert.NoError(t, json.UnmarshalRead(r.Body, &captured))
+				assert.NoError(t, json.MarshalWrite(w, map[string]any{
+					"model": "deepseek-r1", "done": true,
+					"message": map[string]any{"role": "assistant", "thinking": "private reasoning"},
+				}))
+			})
+			req := request()
+			req.Thinking = &model.ThinkingOptions{Enable: true}
+			response, err := client.Complete(context.Background(), req)
+			require.NoError(t, err)
+			require.Equal(t, true, captured["think"])
+			require.Len(t, response.Content, 1)
+			thinking, ok := response.Content[0].Parts[0].(model.ThinkingPart)
+			require.True(t, ok)
+			require.Equal(t, "private reasoning", thinking.Text)
+		}},
+		ExactTokenCounting: testutil.ProviderCapabilityConformance{Unsupported: func(t *testing.T) {
+			client := newClient(t, func(w http.ResponseWriter, _ *http.Request) {
+				assert.NoError(t, json.MarshalWrite(w, map[string]any{"model": "llama3.1", "done": true}))
+			})
+			_, ok := any(client).(model.TokenCounter)
+			require.False(t, ok)
+		}},
+		ToolNameRoundTrip: testutil.ProviderCapabilityConformance{Supported: func(t *testing.T) {
+			const canonical = "catalog.lookup"
+			var captured map[string]any
+			client := newClient(t, func(w http.ResponseWriter, r *http.Request) {
+				assert.NoError(t, json.UnmarshalRead(r.Body, &captured))
+				assert.NoError(t, json.MarshalWrite(w, map[string]any{
+					"model": "llama3.1", "done": true,
+					"message": map[string]any{"tool_calls": []any{map[string]any{
+						"id": "call-1", "function": map[string]any{"name": canonical, "arguments": map[string]any{"query": "docs"}},
+					}}},
+				}))
+			})
+			req := request()
+			req.Tools = []*model.ToolDefinition{{Name: canonical, Description: "Search", InputSchema: map[string]any{"type": "object"}}}
+			response, err := client.Complete(context.Background(), req)
+			require.NoError(t, err)
+			require.NotNil(t, captured["tools"])
+			require.Len(t, response.ToolCalls, 1)
+			require.Equal(t, canonical, response.ToolCalls[0].Name.String())
+		}},
 		Streaming: testutil.ProviderStreamingConformance{
 			SetupError: func(t *testing.T) {
 				client := newClient(t, func(w http.ResponseWriter, _ *http.Request) {
@@ -153,6 +215,14 @@ func TestClientConformance(t *testing.T) {
 				_, err = stream.Recv()
 				require.ErrorContains(t, err, "ollama: decode stream chunk")
 			},
+			ReceiveRateLimit: testutil.ProviderCapabilityConformance{Unsupported: func(t *testing.T) {
+				client := newClient(t, func(w http.ResponseWriter, _ *http.Request) {
+					http.Error(w, "too many requests", http.StatusTooManyRequests)
+				})
+				stream, err := client.Stream(context.Background(), request())
+				require.Nil(t, stream)
+				require.ErrorIs(t, err, model.ErrRateLimited)
+			}},
 			Terminal: func(t *testing.T) {
 				client := newClient(t, func(w http.ResponseWriter, _ *http.Request) {
 					_, err := io.WriteString(w, `{"model":"deepseek-r1","done":true,"done_reason":"stop","prompt_eval_count":8,"eval_count":3}`+"\n")

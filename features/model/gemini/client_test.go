@@ -110,6 +110,56 @@ func TestClientConformance(t *testing.T) {
 				CacheReadTokens: 3,
 			}, response.Usage)
 		},
+		MultimodalInput: testutil.ProviderCapabilityConformance{Supported: func(t *testing.T) {
+			mock := &mockModelsClient{response: &genai.GenerateContentResponse{}}
+			req := request()
+			req.Messages[0].Parts = append(req.Messages[0].Parts, model.ImagePart{Format: model.ImageFormatPNG, Bytes: []byte("png")})
+			_, err := newClient(t, mock).Complete(context.Background(), req)
+			require.NoError(t, err)
+			require.Len(t, mock.contents, 1)
+			require.Len(t, mock.contents[0].Parts, 2)
+			require.Equal(t, "image/png", mock.contents[0].Parts[1].InlineData.MIMEType)
+		}},
+		TypedThinking: testutil.ProviderCapabilityConformance{Supported: func(t *testing.T) {
+			mock := &mockModelsClient{response: &genai.GenerateContentResponse{Candidates: []*genai.Candidate{{
+				Content: &genai.Content{Parts: []*genai.Part{{Text: "private reasoning", Thought: true, ThoughtSignature: []byte("sig")}}},
+			}}}}
+			req := request()
+			req.Thinking = &model.ThinkingOptions{Enable: true, BudgetTokens: 64}
+			response, err := newClient(t, mock).Complete(context.Background(), req)
+			require.NoError(t, err)
+			require.NotNil(t, mock.config.ThinkingConfig)
+			require.True(t, mock.config.ThinkingConfig.IncludeThoughts)
+			require.Len(t, response.Content, 1)
+			thinking, ok := response.Content[0].Parts[0].(model.ThinkingPart)
+			require.True(t, ok)
+			require.Equal(t, "private reasoning", thinking.Text)
+			require.Equal(t, "sig", thinking.Signature)
+		}},
+		ExactTokenCounting: testutil.ProviderCapabilityConformance{Supported: func(t *testing.T) {
+			client := newClient(t, &mockModelsClient{countResponse: &genai.CountTokensResponse{TotalTokens: 42}})
+			counter, ok := any(client).(model.TokenCounter)
+			require.True(t, ok)
+			count, err := counter.CountTokens(context.Background(), request())
+			require.NoError(t, err)
+			require.Equal(t, 42, count.InputTokens)
+			require.True(t, count.Exact)
+		}},
+		ToolNameRoundTrip: testutil.ProviderCapabilityConformance{Supported: func(t *testing.T) {
+			const canonical = "catalog.lookup"
+			mock := &mockModelsClient{response: &genai.GenerateContentResponse{Candidates: []*genai.Candidate{{
+				Content: &genai.Content{Parts: []*genai.Part{{FunctionCall: &genai.FunctionCall{
+					ID: "call-1", Name: canonical, Args: map[string]any{"query": "docs"},
+				}}}},
+			}}}}
+			req := request()
+			req.Tools = []*model.ToolDefinition{{Name: canonical, Description: "Search", InputSchema: map[string]any{"type": "object"}}}
+			response, err := newClient(t, mock).Complete(context.Background(), req)
+			require.NoError(t, err)
+			require.Equal(t, canonical, mock.config.Tools[0].FunctionDeclarations[0].Name)
+			require.Len(t, response.ToolCalls, 1)
+			require.Equal(t, canonical, response.ToolCalls[0].Name.String())
+		}},
 		Streaming: testutil.ProviderStreamingConformance{
 			Unsupported: func(t *testing.T) {
 				stream, err := newClient(t, &mockModelsClient{}).Stream(context.Background(), request())

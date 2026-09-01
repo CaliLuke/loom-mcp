@@ -13,14 +13,23 @@ import (
 // ProviderConformanceCase proves one observable model-provider contract.
 type ProviderConformanceCase func(t *testing.T)
 
+// ProviderCapabilityConformance requires each adapter to prove either the
+// supported behavior or an explicit unsupported contract for one capability.
+// Exactly one case must be set.
+type ProviderCapabilityConformance struct {
+	Supported   ProviderConformanceCase
+	Unsupported ProviderConformanceCase
+}
+
 // ProviderStreamingConformance describes either an explicit unsupported
 // streaming contract or the three required lifecycle cases for a streaming
 // provider.
 type ProviderStreamingConformance struct {
-	Unsupported  ProviderConformanceCase
-	SetupError   ProviderConformanceCase
-	ReceiveError ProviderConformanceCase
-	Terminal     ProviderConformanceCase
+	Unsupported      ProviderConformanceCase
+	SetupError       ProviderConformanceCase
+	ReceiveError     ProviderConformanceCase
+	ReceiveRateLimit ProviderCapabilityConformance
+	Terminal         ProviderConformanceCase
 }
 
 // ProviderConformanceSuite is the minimum behavioral matrix every model
@@ -35,6 +44,10 @@ type ProviderConformanceSuite struct {
 	Cancellation                  ProviderConformanceCase
 	StructuredOutputAndToolChoice ProviderConformanceCase
 	UsageAccounting               ProviderConformanceCase
+	MultimodalInput               ProviderCapabilityConformance
+	TypedThinking                 ProviderCapabilityConformance
+	ExactTokenCounting            ProviderCapabilityConformance
+	ToolNameRoundTrip             ProviderCapabilityConformance
 	Streaming                     ProviderStreamingConformance
 }
 
@@ -65,9 +78,24 @@ func RunProviderConformance(t *testing.T, suite ProviderConformanceSuite) {
 		}
 	}
 	validateStreamingConformance(t, suite.Provider, suite.Streaming)
+	capabilities := []struct {
+		name       string
+		capability ProviderCapabilityConformance
+	}{
+		{name: "multimodal input", capability: suite.MultimodalInput},
+		{name: "typed thinking", capability: suite.TypedThinking},
+		{name: "exact token counting", capability: suite.ExactTokenCounting},
+		{name: "tool name round trip", capability: suite.ToolNameRoundTrip},
+	}
+	for _, capability := range capabilities {
+		validateCapabilityConformance(t, suite.Provider, capability.name, capability.capability)
+	}
 
 	for _, tc := range cases {
 		t.Run(tc.name, tc.run)
+	}
+	for _, capability := range capabilities {
+		runCapabilityConformance(t, capability.name, capability.capability)
 	}
 	runStreamingConformance(t, suite.Streaming)
 }
@@ -110,6 +138,7 @@ func validateStreamingConformance(t *testing.T, provider string, streaming Provi
 			t.Fatalf("provider conformance %s: streaming %s case is required", provider, tc.name)
 		}
 	}
+	validateCapabilityConformance(t, provider, "stream receive rate limit", streaming.ReceiveRateLimit)
 }
 
 func runStreamingConformance(t *testing.T, streaming ProviderStreamingConformance) {
@@ -120,5 +149,25 @@ func runStreamingConformance(t *testing.T, streaming ProviderStreamingConformanc
 	}
 	t.Run("stream setup error", streaming.SetupError)
 	t.Run("stream receive error", streaming.ReceiveError)
+	runCapabilityConformance(t, "stream receive rate limit", streaming.ReceiveRateLimit)
 	t.Run("stream terminal", streaming.Terminal)
+}
+
+func validateCapabilityConformance(t *testing.T, provider, name string, capability ProviderCapabilityConformance) {
+	t.Helper()
+	if capability.Supported != nil && capability.Unsupported != nil {
+		t.Fatalf("provider conformance %s: %s cannot be both supported and unsupported", provider, name)
+	}
+	if capability.Supported == nil && capability.Unsupported == nil {
+		t.Fatalf("provider conformance %s: %s capability declaration is required", provider, name)
+	}
+}
+
+func runCapabilityConformance(t *testing.T, name string, capability ProviderCapabilityConformance) {
+	t.Helper()
+	if capability.Supported != nil {
+		t.Run(name+" supported", capability.Supported)
+		return
+	}
+	t.Run(name+" unsupported", capability.Unsupported)
 }

@@ -46,6 +46,12 @@ Use this skill for `loom-mcp` work in this repo. Keep `AGENTS.md` short and keep
   full repo gates expected by AGENTS.md: `make lint`, `make test`, `make itest`,
   and `make verify-mcp-local`, with targeted package commands only as earlier
   red-green checks.
+- Generator branch coverage must include executable compile or behavior tests.
+  Golden output alone is not sufficient proof for a generated contract.
+- `make test` enforces global and critical package-group coverage floors.
+  Use `make test-stress` for concurrency and lifecycle changes.
+- Docker-backed coverage must fail closed in CI through
+  `LOOM_MCP_REQUIRE_DOCKER_TESTS=1`.
 - When a model-facing agent feature crosses DSL, codegen, generated
   registration, and runtime behavior, extend
   `integration_tests/fixtures/agent_features` as the generated acceptance
@@ -160,6 +166,10 @@ Use this skill for `loom-mcp` work in this repo. Keep `AGENTS.md` short and keep
   - expose designed services as MCP servers through generated adapters and registrations.
 - The official MCP Go SDK is the only MCP wire transport. It owns protocol
   negotiation, Streamable HTTP, standard SSE, cancellation, and sessions.
+- Generated SDK servers must install their JSON-RPC error normalizer as an
+  official receiving middleware. Preserve typed SDK errors. Map generated
+  invalid and resource errors to `-32602`. Map unknown handler errors to
+  `-32603`. Do not rewrite SDK response bodies in the HTTP wrapper.
 - MCP designs do not declare `ProtocolVersion`, `Notification`, `Subscription`,
   `SubscriptionMonitor`, or MCP-only `JSONRPC` blocks. Explicit non-MCP
   `JSONRPC` transports remain valid.

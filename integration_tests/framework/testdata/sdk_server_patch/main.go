@@ -21,6 +21,7 @@ func main() {
 		hostF     = flag.String("host", "dev", "Server host (valid values: dev)")
 		domainF   = flag.String("domain", "", "Host domain name (overrides host domain specified in service design)")
 		httpPortF = flag.String("http-port", "", "HTTP port (overrides host HTTP port specified in service design)")
+		listenerF = flag.Int("listener-fd", 0, "inherited listener file descriptor used by integration tests")
 		secureF   = flag.Bool("secure", false, "Use secure scheme (https or grpcs)")
 		dbgF      = flag.Bool("debug", false, "Log request and response bodies")
 	)
@@ -77,7 +78,12 @@ func main() {
 			} else if u.Port() == "" {
 				u.Host = net.JoinHostPort(u.Host, "80")
 			}
-			handleHTTPServer(ctx, u, &wg, errc, *dbgF)
+			listener, err := serverListener(u, *listenerF)
+			if err != nil {
+				log.Fatalf(ctx, err, "initialize HTTP listener")
+			}
+			u.Host = listener.Addr().String()
+			handleHTTPServer(ctx, u, listener, &wg, errc, *dbgF)
 		}
 
 	default:
@@ -92,4 +98,24 @@ func main() {
 
 	wg.Wait()
 	log.Printf(ctx, "exited")
+}
+
+func serverListener(u *url.URL, inheritedFD int) (net.Listener, error) {
+	if inheritedFD <= 0 {
+		return net.Listen("tcp", u.Host) //nolint:noctx // application listener lifetime is owned by the HTTP server
+	}
+	file := os.NewFile(uintptr(inheritedFD), "loom-mcp-integration-listener")
+	if file == nil {
+		return nil, fmt.Errorf("open inherited listener file descriptor %d", inheritedFD)
+	}
+	listener, err := net.FileListener(file)
+	closeErr := file.Close()
+	if err != nil {
+		return nil, fmt.Errorf("open inherited listener: %w", err)
+	}
+	if closeErr != nil {
+		_ = listener.Close()
+		return nil, fmt.Errorf("close inherited listener file: %w", closeErr)
+	}
+	return listener, nil
 }

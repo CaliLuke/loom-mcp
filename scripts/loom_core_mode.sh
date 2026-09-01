@@ -12,12 +12,13 @@ LOCAL_LOOM_DIR="${LOOM_DIR:-${ROOT_DIR}/../loom}"
 
 usage() {
   cat <<EOF
-Usage: $(basename "$0") <local|remote|status>
+Usage: $(basename "$0") <local|remote|status|remote-version>
 
 Modes:
   local   Point repo modules at the local Loom checkout (${LOCAL_LOOM_DIR} by default)
   remote  Restore the pinned Loom release (${REMOTE_VERSION})
   status  Print the current Loom source in repo modules
+  remote-version  Print the canonical remote Loom release tag
 
 Environment:
   LOOM_DIR   Override the local Loom checkout path used by local mode
@@ -86,6 +87,10 @@ show_status() {
   show_module_status "${QUICKSTART_DIR}/go.mod"
 }
 
+show_remote_version() {
+  printf '%s\n' "${REMOTE_VERSION}"
+}
+
 main() {
   if [[ $# -ne 1 ]]; then
     usage >&2
@@ -101,6 +106,9 @@ main() {
       ;;
     status)
       show_status
+      ;;
+    remote-version)
+      show_remote_version
       ;;
     *)
       usage >&2

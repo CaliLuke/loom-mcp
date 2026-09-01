@@ -12,8 +12,14 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/CaliLuke/loom-mcp/v2/internal/upstreampaths"
+)
+
+const (
+	exampleRootPrefix   = "loom-mcp-example-"
+	staleExampleRootAge = 24 * time.Hour
 )
 
 // sdkServerPatchFS contains application-owned Go sources for the SDK-backed
@@ -48,7 +54,10 @@ func cloneExampleRoot(exampleRoot string) (string, error) {
 	if err := os.MkdirAll(tmpBase, 0o750); err != nil {
 		return "", fmt.Errorf("create temp example base: %w", err)
 	}
-	tmpRoot, err := os.MkdirTemp(tmpBase, "loom-mcp-example-*")
+	if err := cleanupStaleExampleRoots(tmpBase, time.Now().Add(-staleExampleRootAge)); err != nil {
+		return "", err
+	}
+	tmpRoot, err := os.MkdirTemp(tmpBase, exampleRootPrefix+"*")
 	if err != nil {
 		return "", fmt.Errorf("create temp example root: %w", err)
 	}
@@ -86,6 +95,36 @@ func cloneExampleRoot(exampleRoot string) (string, error) {
 		return "", fmt.Errorf("clone example root: %w", walkErr)
 	}
 	return tmpRoot, nil
+}
+
+func cleanupStaleExampleRoots(tmpBase string, cutoff time.Time) error {
+	root, err := os.OpenRoot(tmpBase)
+	if err != nil {
+		return fmt.Errorf("open temp example base: %w", err)
+	}
+	defer func() {
+		_ = root.Close()
+	}()
+	entries, err := fs.ReadDir(root.FS(), ".")
+	if err != nil {
+		return fmt.Errorf("read temp example base: %w", err)
+	}
+	for _, entry := range entries {
+		if !entry.IsDir() || !strings.HasPrefix(entry.Name(), exampleRootPrefix) {
+			continue
+		}
+		info, err := entry.Info()
+		if err != nil {
+			return fmt.Errorf("inspect temp example root %q: %w", entry.Name(), err)
+		}
+		if info.ModTime().After(cutoff) {
+			continue
+		}
+		if err := root.RemoveAll(entry.Name()); err != nil {
+			return fmt.Errorf("remove stale temp example root %q: %w", entry.Name(), err)
+		}
+	}
+	return nil
 }
 
 func applySDKServerFixturePatch(exampleRoot string) error {
@@ -148,13 +187,13 @@ func regenerateExample(t *testing.T, exampleRoot string) error {
 	if err := cleanGeneratedExampleArtifacts(exampleRoot); err != nil {
 		return err
 	}
-	tidyCmd := tempModuleGoCommand(context.Background(), "mod", "tidy")
+	tidyCmd := tempModuleGoCommand(t.Context(), "mod", "tidy")
 	tidyCmd.Dir = exampleRoot
 	if out, err := tidyCmd.CombinedOutput(); err != nil {
 		return fmt.Errorf("go mod tidy failed: %w\n%s", err, string(out))
 	}
 	genCmd := tempModuleGoCommand(
-		context.Background(),
+		t.Context(),
 		"-C",
 		exampleRoot,
 		"run",
@@ -169,7 +208,7 @@ func regenerateExample(t *testing.T, exampleRoot string) error {
 	if err := applySDKServerFixturePatch(exampleRoot); err != nil {
 		return err
 	}
-	postTidy := tempModuleGoCommand(context.Background(), "mod", "tidy")
+	postTidy := tempModuleGoCommand(t.Context(), "mod", "tidy")
 	postTidy.Dir = exampleRoot
 	if out, err := postTidy.CombinedOutput(); err != nil {
 		return fmt.Errorf("post loom example tidy failed: %w\n%s", err, string(out))
@@ -274,7 +313,7 @@ func cleanGeneratedExampleArtifacts(exampleRoot string) error {
 }
 
 // buildServerBinary compiles the server binary once for fast parallel test starts.
-func buildServerBinary(exampleRoot string) (string, error) {
+func buildServerBinary(ctx context.Context, exampleRoot string) (string, error) {
 	serverBinMu.Lock()
 	defer serverBinMu.Unlock()
 
@@ -299,7 +338,7 @@ func buildServerBinary(exampleRoot string) (string, error) {
 		return "", fmt.Errorf("close temp file for binary: %w", err)
 	}
 
-	buildCmd := tempModuleGoCommand(context.Background(), "build", "-o", binPath, ".") // #nosec G204 -- cmdPath is resolved from the trusted fixture tree
+	buildCmd := tempModuleGoCommand(ctx, "build", "-o", binPath, ".") // #nosec G204 -- cmdPath is resolved from the trusted fixture tree
 	buildCmd.Dir = cmdPath
 	out, err := buildCmd.CombinedOutput()
 	if err != nil {

@@ -1,0 +1,45 @@
+name: Stress
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '17 9 * * 1'
+
+env:
+  GO_VERSION: '1.27.0'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  stress:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Set up Go
+        uses: actions/setup-go@v6
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          cache: true
+          cache-dependency-path: |
+            go.sum
+            integration_tests/fixtures/assistant/go.sum
+
+      - name: Install pinned protoc
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y unzip
+          make install-protoc PROTOC_INSTALL_DIR="${RUNNER_TEMP}/protoc"
+          echo "${RUNNER_TEMP}/protoc/bin" >> "${GITHUB_PATH}"
+
+      - name: Run repeated lifecycle tests
+        env:
+          LOOM_MCP_REQUIRE_DOCKER_TESTS: '1'
+        run: make test-stress

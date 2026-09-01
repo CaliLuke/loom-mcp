@@ -94,6 +94,15 @@ func TestGenerateSDKServerAlwaysExposesOptionalRuntimeCORS(t *testing.T) {
 	require.Contains(t, sdk, "CrossOriginProtection: http.NewCrossOriginProtection()")
 }
 
+func TestGenerateSDKServerNormalizesJSONRPCErrors(t *testing.T) {
+	files := generateToolDiscoveryFixture(t)
+	sdk := renderGeneratedFile(t, findGeneratedFile(t, files, "gen/mcp_assistant/sdk_server.go"))
+
+	require.Contains(t, sdk, "server.AddReceivingMiddleware(sdkJSONRPCErrorMiddleware)")
+	require.Contains(t, sdk, "func sdkJSONRPCErrorMiddleware(next mcpsdk.MethodHandler) mcpsdk.MethodHandler")
+	require.Contains(t, sdk, "mcpruntime.NormalizeJSONRPCError(method, err)")
+}
+
 func TestGenerateAdapterUsesUnaryToolBoundaryAndPrivateStreamingCollector(t *testing.T) {
 	restore := resetMCPCodegenState(t)
 	defer restore()

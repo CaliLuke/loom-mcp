@@ -61,6 +61,7 @@ func buildMCPSDKServerFile(genpkg string, svc *expr.ServiceExpr, data *AdapterDa
 		codegen.Header("SDK-backed MCP server for "+svc.Name+" service", pkgName, sdkServerImports),
 		sdkServerTypesSection(data),
 		sdkServerConstructorSection(data),
+		sdkServerJSONRPCErrorSection(),
 		sdkServerHTTPSection(),
 		sdkServerSessionErrorSection(),
 		sdkServerRegistrationSection(data),
@@ -161,6 +162,7 @@ func sdkServerConstructorSection(data *AdapterData) codegen.Section {
 					jen.Op("&").Id("mcpsdk").Dot("Implementation").Values(sdkImplementationDict(data)),
 					jen.Id("serverOpts"),
 				)
+				g.Id("server").Dot("AddReceivingMiddleware").Call(jen.Id("sdkJSONRPCErrorMiddleware"))
 				g.If(jen.Id("err").Op(":=").Id("registerSDKTools").Call(jen.Id("server"), jen.Id("adapter"), jen.Id("requestContext")), jen.Id("err").Op("!=").Nil()).Block(
 					jen.Return(jen.Nil(), jen.Id("err")),
 				)
@@ -384,6 +386,32 @@ func sdkImplementationDict(data *AdapterData) jen.Dict {
 		dict[jen.Id("Icons")] = icons
 	}
 	return dict
+}
+
+func sdkServerJSONRPCErrorSection() codegen.Section {
+	return codegen.NewJenniferSection("mcp-sdk-server-jsonrpc-errors", func(stmt *jen.Statement) {
+		stmt.Func().Id("sdkJSONRPCErrorMiddleware").
+			Params(jen.Id("next").Id("mcpsdk").Dot("MethodHandler")).
+			Id("mcpsdk").Dot("MethodHandler").
+			Block(
+				jen.Return(jen.Func().
+					Params(
+						jen.Id("ctx").Qual("context", "Context"),
+						jen.Id("method").String(),
+						jen.Id("req").Id("mcpsdk").Dot("Request"),
+					).
+					Params(jen.Id("mcpsdk").Dot("Result"), jen.Error()).
+					Block(
+						jen.List(jen.Id("result"), jen.Id("err")).Op(":=").Id("next").Call(jen.Id("ctx"), jen.Id("method"), jen.Id("req")),
+						jen.If(jen.Id("err").Op("!=").Nil()).Block(
+							jen.Return(jen.Nil(), jen.Id("mcpruntime").Dot("NormalizeJSONRPCError").Call(jen.Id("method"), jen.Id("err"))),
+						),
+						jen.Return(jen.Id("result"), jen.Nil()),
+					),
+				),
+			)
+		stmt.Line()
+	})
 }
 
 func sdkServerHTTPSection() codegen.Section {

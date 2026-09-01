@@ -9,6 +9,7 @@ import (
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/bedrockruntime"
+	"github.com/aws/aws-sdk-go-v2/service/bedrockruntime/document"
 	brtypes "github.com/aws/aws-sdk-go-v2/service/bedrockruntime/types"
 	"github.com/aws/smithy-go"
 	"github.com/stretchr/testify/require"
@@ -19,8 +20,9 @@ import (
 )
 
 type conformanceRuntimeClient struct {
-	converse     func(context.Context, *bedrockruntime.ConverseInput) (*bedrockruntime.ConverseOutput, error)
-	lastConverse *bedrockruntime.ConverseInput
+	converse       func(context.Context, *bedrockruntime.ConverseInput) (*bedrockruntime.ConverseOutput, error)
+	lastConverse   *bedrockruntime.ConverseInput
+	countTokensErr error
 }
 
 type conformanceStreamOutput struct {
@@ -43,6 +45,10 @@ func (c *conformanceRuntimeClient) Converse(ctx context.Context, input *bedrockr
 
 func (c *conformanceRuntimeClient) ConverseStream(context.Context, *bedrockruntime.ConverseStreamInput, ...func(*bedrockruntime.Options)) (*bedrockruntime.ConverseStreamOutput, error) {
 	return nil, errors.New("unexpected direct ConverseStream call")
+}
+
+func (c *conformanceRuntimeClient) CountTokens(context.Context, *bedrockruntime.CountTokensInput, ...func(*bedrockruntime.Options)) (*bedrockruntime.CountTokensOutput, error) {
+	return &bedrockruntime.CountTokensOutput{InputTokens: aws.Int32(42)}, c.countTokensErr
 }
 
 func (o *conformanceStreamOutput) GetStream() *bedrockruntime.ConverseStreamEventStream {
@@ -174,6 +180,55 @@ func TestClientConformance(t *testing.T) {
 				CacheWriteTokens: 4,
 			}, response.Usage)
 		},
+		MultimodalInput: testutil.ProviderCapabilityConformance{Supported: func(t *testing.T) {
+			runtime := &conformanceRuntimeClient{}
+			req := request()
+			req.Messages[0].Parts = append(req.Messages[0].Parts, model.ImagePart{Format: model.ImageFormatPNG, Bytes: []byte("png")})
+			_, err := newClient(runtime).Complete(context.Background(), req)
+			require.NoError(t, err)
+			require.Len(t, runtime.lastConverse.Messages, 1)
+			require.Len(t, runtime.lastConverse.Messages[0].Content, 2)
+			_, ok := runtime.lastConverse.Messages[0].Content[1].(*brtypes.ContentBlockMemberImage)
+			require.True(t, ok)
+		}},
+		TypedThinking: testutil.ProviderCapabilityConformance{Supported: func(t *testing.T) {
+			runtime := &conformanceRuntimeClient{converse: func(context.Context, *bedrockruntime.ConverseInput) (*bedrockruntime.ConverseOutput, error) {
+				return &bedrockruntime.ConverseOutput{Output: &brtypes.ConverseOutputMemberMessage{Value: brtypes.Message{Content: []brtypes.ContentBlock{
+					&brtypes.ContentBlockMemberReasoningContent{Value: &brtypes.ReasoningContentBlockMemberReasoningText{Value: brtypes.ReasoningTextBlock{
+						Text: aws.String("private reasoning"), Signature: aws.String("sig"),
+					}}},
+				}}}}, nil
+			}}
+			response, err := newClient(runtime).Complete(context.Background(), request())
+			require.NoError(t, err)
+			require.Len(t, response.Content, 1)
+			thinking, ok := response.Content[0].Parts[0].(model.ThinkingPart)
+			require.True(t, ok)
+			require.Equal(t, "private reasoning", thinking.Text)
+			require.Equal(t, "sig", thinking.Signature)
+			require.True(t, thinking.Final)
+		}},
+		ExactTokenCounting: testutil.ProviderCapabilityConformance{Supported: func(t *testing.T) {
+			client := newClient(&conformanceRuntimeClient{})
+			counter, ok := any(client).(model.TokenCounter)
+			require.True(t, ok)
+			count, err := counter.CountTokens(context.Background(), request())
+			require.NoError(t, err)
+			require.Equal(t, 42, count.InputTokens)
+			require.True(t, count.Exact)
+		}},
+		ToolNameRoundTrip: testutil.ProviderCapabilityConformance{Supported: func(t *testing.T) {
+			const canonical = "catalog.lookup"
+			runtime := &conformanceRuntimeClient{converse: func(context.Context, *bedrockruntime.ConverseInput) (*bedrockruntime.ConverseOutput, error) {
+				return conformanceToolUseResponse(SanitizeToolName(canonical), map[string]any{"query": "docs"}), nil
+			}}
+			req := request()
+			req.Tools = []*model.ToolDefinition{{Name: canonical, Description: "Search", InputSchema: map[string]any{"type": "object"}}}
+			response, err := newClient(runtime).Complete(context.Background(), req)
+			require.NoError(t, err)
+			require.Len(t, response.ToolCalls, 1)
+			require.Equal(t, canonical, response.ToolCalls[0].Name.String())
+		}},
 		Streaming: testutil.ProviderStreamingConformance{
 			SetupError: func(t *testing.T) {
 				providerErr := errors.New("stream setup failed")
@@ -197,6 +252,20 @@ func TestClientConformance(t *testing.T) {
 				_, err = stream.Recv()
 				require.ErrorIs(t, err, providerErr)
 			},
+			ReceiveRateLimit: testutil.ProviderCapabilityConformance{Supported: func(t *testing.T) {
+				providerErr := &smithy.GenericAPIError{Code: bedrockThrottlingCode, Message: "slow down"}
+				client := newClient(&conformanceRuntimeClient{})
+				client.converseStream = func(context.Context, *bedrockruntime.ConverseStreamInput, ...func(*bedrockruntime.Options)) (StreamOutput, error) {
+					return streamOutput(nil, providerErr), nil
+				}
+				stream, err := client.Stream(context.Background(), request())
+				require.NoError(t, err)
+				t.Cleanup(func() { require.Error(t, stream.Close()) })
+				_, err = stream.Recv()
+				require.ErrorIs(t, err, model.ErrRateLimited)
+				var apiErr smithy.APIError
+				require.ErrorAs(t, err, &apiErr)
+			}},
 			Terminal: func(t *testing.T) {
 				events := []brtypes.ConverseStreamOutput{
 					&brtypes.ConverseStreamOutputMemberMetadata{Value: brtypes.ConverseStreamMetadataEvent{Usage: &brtypes.TokenUsage{
@@ -232,4 +301,12 @@ func TestClientConformance(t *testing.T) {
 			},
 		},
 	})
+}
+
+func conformanceToolUseResponse(name string, input any) *bedrockruntime.ConverseOutput {
+	return &bedrockruntime.ConverseOutput{Output: &brtypes.ConverseOutputMemberMessage{Value: brtypes.Message{Content: []brtypes.ContentBlock{
+		&brtypes.ContentBlockMemberToolUse{Value: brtypes.ToolUseBlock{
+			Name: aws.String(name), ToolUseId: aws.String("call-1"), Input: document.NewLazyDocument(&input),
+		}},
+	}}}}
 }

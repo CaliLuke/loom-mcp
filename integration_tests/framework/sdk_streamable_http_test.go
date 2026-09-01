@@ -272,7 +272,7 @@ func newIntegrationSDKSessionWithOptions(t *testing.T, clientName string, opts *
 	require.NoError(t, r.startServer(t))
 	t.Cleanup(r.stopServer)
 
-	return connectSDKSessionWithOptions(t, r.baseURL.String()+"/rpc", clientName, opts)
+	return connectSDKSessionWithOptions(t, r.rpcURL(), clientName, opts)
 }
 
 func connectSDKSessionWithOptions(t *testing.T, endpoint string, clientName string, opts *mcp.ClientOptions) *mcp.ClientSession {

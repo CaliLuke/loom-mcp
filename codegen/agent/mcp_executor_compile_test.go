@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	codegen "github.com/CaliLuke/loom-mcp/v2/codegen/agent"
+	"github.com/CaliLuke/loom-mcp/v2/codegen/agent/tests/testscenarios"
 	mcpcodegen "github.com/CaliLuke/loom-mcp/v2/codegen/mcp"
 	"github.com/CaliLuke/loom-mcp/v2/codegen/testhelpers"
 	. "github.com/CaliLuke/loom-mcp/v2/dsl"
@@ -99,12 +100,54 @@ func TestGeneratedAgentDesignsCompile(t *testing.T) {
 				require.NotContains(t, provider, "methodIn := args")
 			},
 		},
+		{
+			name:     "located nested user type",
+			generate: compileAgentScenario(testscenarios.ArgsLocatedNestedUserType()),
+		},
+		{
+			name:     "union payload and result",
+			generate: compileAgentScenario(testscenarios.ArgsUnionSumTypes()),
+		},
+		{
+			name:     "custom union envelope",
+			generate: generateCustomUnionAgentDesign,
+		},
+		{
+			name:     "server data projection",
+			generate: compileAgentScenario(testscenarios.ServiceToolsetBindSelfServerData()),
+		},
+		{
+			name:     "bounded result projection",
+			generate: compileAgentScenario(testscenarios.ServiceToolsetBindSelfBoundedResult()),
+		},
+		{
+			name:     "no-result bound method",
+			generate: compileAgentScenario(testscenarios.NoResultMethod()),
+		},
+		{
+			name:     "no-payload no-result bound method",
+			generate: generateNoPayloadNoResultAgentDesign,
+		},
+		{
+			name:     "reused toolset",
+			generate: compileAgentScenario(testscenarios.ReUse()),
+		},
+		{
+			name:     "multi-toolset aggregation",
+			generate: compileAgentScenario(testscenarios.MultiToolset()),
+		},
+		{
+			name:     "MCP surface matrix",
+			generate: generateMCPSurfaceMatrixDesign,
+		},
 	}
 
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			files := tc.generate(t)
-			tc.verify(t, files)
+			if tc.verify != nil {
+				tc.verify(t, files)
+			}
 			moduleDir := writeGeneratedModule(t, files)
 			if tc.moduleTest != "" {
 				err := os.WriteFile(filepath.Join(moduleDir, "injection_runtime_test.go"), []byte(tc.moduleTest), 0o600)
@@ -118,6 +161,104 @@ func TestGeneratedAgentDesignsCompile(t *testing.T) {
 			require.NoErrorf(t, err, "generated %s output does not compile:\n%s", tc.name, string(out))
 		})
 	}
+}
+
+func compileAgentScenario(design func()) func(*testing.T) []*gcodegen.File {
+	return func(t *testing.T) []*gcodegen.File {
+		return generateCompileDesign(t, design)
+	}
+}
+
+func generateCustomUnionAgentDesign(t *testing.T) []*gcodegen.File {
+	t.Helper()
+	return generateCompileDesign(t, func() {
+		API("assistant", func() {})
+		lookup := Type("LookupAction", func() {
+			Attribute("query", String)
+			Required("query")
+		})
+		count := Type("CountAction", func() {
+			Attribute("limit", Int)
+			Required("limit")
+		})
+		request := Type("CustomRequest", func() {
+			OneOf("request", "Custom action envelope", func() {
+				Meta("oneof:type:field", "action")
+				Meta("oneof:value:field", "payload")
+				Attribute("lookup_branch", lookup, func() {
+					Meta("oneof:type:tag", "lookup")
+				})
+				Attribute("count_branch", count, func() {
+					Meta("oneof:type:tag", "count")
+				})
+			})
+			Required("request")
+		})
+		Service("assistant", func() {
+			Agent("planner", "Planner", func() {
+				Use("actions", func() {
+					Tool("dispatch", "Dispatch", func() {
+						Args(request)
+						Return(request)
+					})
+				})
+			})
+		})
+	})
+}
+
+func generateNoPayloadNoResultAgentDesign(t *testing.T) []*gcodegen.File {
+	t.Helper()
+	return generateCompileDesign(t, func() {
+		API("assistant", func() {})
+		Service("assistant", func() {
+			Method("publish", func() {})
+			Agent("planner", "Planner", func() {
+				Use("ops", func() {
+					Tool("publish", "Publish", func() {
+						BindTo("assistant", "publish")
+					})
+				})
+			})
+		})
+	})
+}
+
+func generateMCPSurfaceMatrixDesign(t *testing.T) []*gcodegen.File {
+	t.Helper()
+	setupCompileEvalRoots(t, true)
+	design := func() {
+		API("mcp-matrix", func() {})
+		Service("prompt_only", func() {
+			MCP("prompt-only", "1.0.0")
+			StaticPrompt("review", "Review prompt", "user", "Review this change.")
+		})
+		Service("resource_only", func() {
+			MCP("resource-only", "1.0.0")
+			Method("status", func() {
+				Result(String)
+				Resource("status", "status://current", "text/plain")
+			})
+		})
+		Service("skill_only", func() {
+			MCP("skill-only", "1.0.0", SkillDirectory("skills"))
+		})
+		Service("streaming", func() {
+			MCP("streaming", "1.0.0")
+			Method("search", func() {
+				Payload(String)
+				StreamingResult(String)
+				Tool("search", "Stream search")
+			})
+			Method("watch", func() {
+				StreamingResult(String)
+				Resource("watch", "watch://current", "text/plain")
+			})
+		})
+	}
+	require.True(t, eval.Execute(design, nil), eval.Context.Error())
+	require.NoError(t, eval.RunDSL())
+	return generateProductionFiles(t, []eval.Root{goaexpr.Root, agentsexpr.Root, mcpexpr.Root}, true)
 }
 
 func verifyFromMCPExecutor(t *testing.T, files []*gcodegen.File) {

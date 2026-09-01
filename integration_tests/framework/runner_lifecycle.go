@@ -4,6 +4,8 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"io"
+	"net"
 	"net/http"
 	"net/url"
 	"os"
@@ -49,21 +51,33 @@ func (r *Runner) stopServer() {
 
 // ping checks if the server is ready.
 func (r *Runner) ping() error {
-	// Send a minimal invalid JSON-RPC request that does not initialize state.
-	body := []byte(`{"jsonrpc":"2.0","id":1}`)
+	// A malformed JSON-RPC body exercises the mounted MCP transport without
+	// creating session state. Readiness requires its specific transport error;
+	// an arbitrary HTTP response is not sufficient.
+	body := []byte(`{"jsonrpc":"2.0",`)
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
 	req, _ := http.NewRequestWithContext(
-		context.Background(),
+		ctx,
 		http.MethodPost,
-		r.baseURL.String()+"/rpc",
+		r.rpcURL(),
 		bytes.NewReader(body),
 	)
 	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Accept", "application/json, text/event-stream")
 	// #nosec G704 -- test runner issues requests to localhost (or a validated TEST_SERVER_URL)
 	resp, err := r.client.Do(req)
 	if err != nil {
 		return err
 	}
 	defer func() { _ = resp.Body.Close() }()
+	responseBody, err := io.ReadAll(io.LimitReader(resp.Body, 1024))
+	if err != nil {
+		return fmt.Errorf("read MCP readiness response: %w", err)
+	}
+	if resp.StatusCode != http.StatusBadRequest || !bytes.Contains(responseBody, []byte("malformed payload")) {
+		return fmt.Errorf("unexpected MCP readiness response: status %d body %q", resp.StatusCode, responseBody)
+	}
 	return nil
 }
 
@@ -84,11 +98,26 @@ func (r *Runner) configureExternalServer(external string) error {
 }
 
 func (r *Runner) startManagedServer(t *testing.T) error {
-	port, err := getFreePort()
+	listener, err := net.Listen("tcp", "127.0.0.1:0") //nolint:noctx // listener is inherited by the managed test process
 	if err != nil {
-		return err
+		return fmt.Errorf("reserve managed server listener: %w", err)
 	}
-	r.baseURL, err = url.Parse("http://localhost:" + port)
+	closeListener := true
+	defer func() {
+		if closeListener {
+			_ = listener.Close()
+		}
+	}()
+	tcpListener, ok := listener.(*net.TCPListener)
+	if !ok {
+		return fmt.Errorf("managed server listener has type %T, want *net.TCPListener", listener)
+	}
+	listenerFile, err := tcpListener.File()
+	if err != nil {
+		return fmt.Errorf("duplicate managed server listener: %w", err)
+	}
+	defer func() { _ = listenerFile.Close() }()
+	r.baseURL, err = url.Parse("http://" + listener.Addr().String())
 	if err != nil {
 		return fmt.Errorf("parse local server URL: %w", err)
 	}
@@ -96,13 +125,15 @@ func (r *Runner) startManagedServer(t *testing.T) error {
 	if err != nil {
 		return err
 	}
-	binPath, err := buildServerBinary(workingRoot)
+	binPath, err := buildServerBinary(t.Context(), workingRoot)
 	if err != nil {
 		return err
 	}
-	// Start HTTP server from pre-compiled binary (much faster than go run).
+	// Start the pre-compiled server with the already-bound listener. Passing the
+	// descriptor removes the release-before-bind race between parallel tests.
 	//nolint:gosec // launching pre-compiled test server binary
-	cmd := exec.CommandContext(context.Background(), binPath, "-http-port", port)
+	cmd := exec.CommandContext(context.Background(), binPath, "-listener-fd", "3")
+	cmd.ExtraFiles = []*os.File{listenerFile}
 	cmd.Env = os.Environ()
 	r.stdoutTail = &ringBuffer{max: tailMaxBytes}
 	r.stderrTail = &ringBuffer{max: tailMaxBytes}
@@ -111,6 +142,11 @@ func (r *Runner) startManagedServer(t *testing.T) error {
 	if err := cmd.Start(); err != nil {
 		return fmt.Errorf("failed to start server: %w", err)
 	}
+	if err := listener.Close(); err != nil {
+		_ = cmd.Process.Kill()
+		return fmt.Errorf("close parent managed server listener: %w", err)
+	}
+	closeListener = false
 	r.server = cmd
 	r.exitCh = make(chan error, 1)
 	go func() {

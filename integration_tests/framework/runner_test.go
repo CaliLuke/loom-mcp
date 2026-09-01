@@ -53,6 +53,7 @@ func TestRunnerStartServerExternalURL(t *testing.T) {
 	assert.True(t, runner.externalServer)
 	require.NotNil(t, runner.baseURL)
 	assert.Equal(t, "http://127.0.0.1:8080/rpc", runner.baseURL.String())
+	assert.Equal(t, "http://127.0.0.1:8080/rpc", runner.rpcURL())
 	assert.Nil(t, runner.server)
 }
 
@@ -98,7 +99,7 @@ func TestRunnerStopServerAfterProcessStart(t *testing.T) {
 	}
 }
 
-func TestRunnerPingTreatsHTTPResponseAsReady(t *testing.T) {
+func TestRunnerPingRejectsArbitraryHTTPResponse(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
 		assert.Equal(t, http.MethodPost, req.Method)
 		assert.Equal(t, "/rpc", req.URL.Path)
@@ -111,7 +112,40 @@ func TestRunnerPingTreatsHTTPResponseAsReady(t *testing.T) {
 
 	err := runner.ping()
 
-	require.NoError(t, err)
+	require.ErrorContains(t, err, "unexpected MCP readiness response")
+}
+
+func TestRunnerPingAcceptsExpectedMCPTransportError(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
+		assert.Equal(t, http.MethodPost, req.Method)
+		assert.Equal(t, "/rpc", req.URL.Path)
+		assert.Equal(t, "application/json, text/event-stream", req.Header.Get("Accept"))
+		http.Error(w, "malformed payload: unexpected EOF", http.StatusBadRequest)
+	}))
+	t.Cleanup(server.Close)
+
+	runner := NewRunner()
+	runner.baseURL = mustParseURL(t, server.URL)
+
+	require.NoError(t, runner.ping())
+}
+
+func TestRunnerRPCURLAppendsEndpointOnce(t *testing.T) {
+	for _, test := range []struct {
+		name string
+		base string
+		want string
+	}{
+		{name: "server root", base: "http://127.0.0.1:8080", want: "http://127.0.0.1:8080/rpc"},
+		{name: "server endpoint", base: "http://127.0.0.1:8080/rpc/", want: "http://127.0.0.1:8080/rpc"},
+		{name: "server prefix", base: "http://127.0.0.1:8080/mcp", want: "http://127.0.0.1:8080/mcp/rpc"},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			runner := NewRunner()
+			runner.baseURL = mustParseURL(t, test.base)
+			assert.Equal(t, test.want, runner.rpcURL())
+		})
+	}
 }
 
 func TestFindServerCmdDirPrefersDirectoryWithHTTPGo(t *testing.T) {

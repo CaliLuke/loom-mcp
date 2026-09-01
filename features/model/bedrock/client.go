@@ -888,6 +888,8 @@ func appendBedrockResponseBlock(resp *model.Response, block brtypes.ContentBlock
 		appendBedrockTextBlock(resp, v.Value)
 	case *brtypes.ContentBlockMemberCitationsContent:
 		appendBedrockCitationBlock(resp, v.Value)
+	case *brtypes.ContentBlockMemberReasoningContent:
+		appendBedrockReasoningBlock(resp, v.Value)
 	case *brtypes.ContentBlockMemberToolUse:
 		toolCall, err := bedrockToolCall(v.Value, nameMap)
 		if err != nil {
@@ -896,6 +898,31 @@ func appendBedrockResponseBlock(resp *model.Response, block brtypes.ContentBlock
 		resp.ToolCalls = append(resp.ToolCalls, toolCall)
 	}
 	return nil
+}
+
+func appendBedrockReasoningBlock(resp *model.Response, block brtypes.ReasoningContentBlock) {
+	var part model.ThinkingPart
+	switch value := block.(type) {
+	case *brtypes.ReasoningContentBlockMemberReasoningText:
+		if value.Value.Text != nil {
+			part.Text = *value.Value.Text
+		}
+		if value.Value.Signature != nil {
+			part.Signature = *value.Value.Signature
+		}
+	case *brtypes.ReasoningContentBlockMemberRedactedContent:
+		part.Redacted = append([]byte(nil), value.Value...)
+	default:
+		return
+	}
+	if part.Text == "" && part.Signature == "" && len(part.Redacted) == 0 {
+		return
+	}
+	part.Final = true
+	resp.Content = append(resp.Content, model.Message{
+		Role:  bedrockRoleAssistant,
+		Parts: []model.Part{part},
+	})
 }
 
 func appendBedrockTextBlock(resp *model.Response, text string) {
