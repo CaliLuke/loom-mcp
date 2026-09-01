@@ -31,7 +31,9 @@ type conformanceStreamOutput struct {
 
 type conformanceStreamReader struct {
 	events    chan brtypes.ConverseStreamOutput
+	errMu     sync.Mutex
 	err       error
+	closeErr  error
 	closeOnce sync.Once
 }
 
@@ -60,11 +62,19 @@ func (r *conformanceStreamReader) Events() <-chan brtypes.ConverseStreamOutput {
 }
 
 func (r *conformanceStreamReader) Close() error {
-	r.closeOnce.Do(func() {})
-	return nil
+	r.closeOnce.Do(func() {
+		if r.closeErr != nil {
+			r.errMu.Lock()
+			r.err = r.closeErr
+			r.errMu.Unlock()
+		}
+	})
+	return r.closeErr
 }
 
 func (r *conformanceStreamReader) Err() error {
+	r.errMu.Lock()
+	defer r.errMu.Unlock()
 	return r.err
 }
 
@@ -92,10 +102,7 @@ func TestClientConformance(t *testing.T) {
 		}
 		close(ch)
 		reader := &conformanceStreamReader{events: ch, err: streamErr}
-		stream := bedrockruntime.NewConverseStreamEventStream(func(eventStream *bedrockruntime.ConverseStreamEventStream) {
-			eventStream.Reader = reader
-		})
-		return &conformanceStreamOutput{stream: stream}
+		return newConformanceStreamOutput(reader)
 	}
 
 	testutil.RunProviderConformance(t, testutil.ProviderConformanceSuite{
@@ -266,16 +273,115 @@ func TestClientConformance(t *testing.T) {
 				var apiErr smithy.APIError
 				require.ErrorAs(t, err, &apiErr)
 			}},
+			StateMachine: func(t *testing.T) {
+				thinkingIndex := int32(0)
+				textIndex := int32(1)
+				toolIndex := int32(2)
+				events := []brtypes.ConverseStreamOutput{
+					bedrockMessageStart(),
+					bedrockReasoningDelta(thinkingIndex, &brtypes.ReasoningContentBlockDeltaMemberText{Value: "consider"}),
+					bedrockReasoningDelta(thinkingIndex, &brtypes.ReasoningContentBlockDeltaMemberSignature{Value: "sig"}),
+					&brtypes.ConverseStreamOutputMemberContentBlockStop{Value: brtypes.ContentBlockStopEvent{ContentBlockIndex: &thinkingIndex}},
+					bedrockTextDelta(textIndex, "answer"),
+					bedrockTextDelta(textIndex, " follows"),
+					&brtypes.ConverseStreamOutputMemberContentBlockStop{Value: brtypes.ContentBlockStopEvent{ContentBlockIndex: &textIndex}},
+					&brtypes.ConverseStreamOutputMemberContentBlockStart{Value: brtypes.ContentBlockStartEvent{
+						ContentBlockIndex: &toolIndex,
+						Start: &brtypes.ContentBlockStartMemberToolUse{Value: brtypes.ToolUseBlockStart{
+							Name: aws.String("lookup"), ToolUseId: aws.String("call-1"),
+						}},
+					}},
+					bedrockToolDelta(toolIndex, `{"query":`),
+					bedrockToolDelta(toolIndex, `"docs"}`),
+					&brtypes.ConverseStreamOutputMemberContentBlockStop{Value: brtypes.ContentBlockStopEvent{ContentBlockIndex: &toolIndex}},
+					&brtypes.ConverseStreamOutputMemberMessageStop{Value: brtypes.MessageStopEvent{StopReason: brtypes.StopReasonToolUse}},
+					bedrockMetadata(&brtypes.TokenUsage{InputTokens: aws.Int32(2), OutputTokens: aws.Int32(3), TotalTokens: aws.Int32(5)}),
+				}
+				client := newClient(&conformanceRuntimeClient{})
+				client.converseStream = func(context.Context, *bedrockruntime.ConverseStreamInput, ...func(*bedrockruntime.Options)) (StreamOutput, error) {
+					return streamOutput(events, nil), nil
+				}
+				stream, err := client.Stream(context.Background(), request())
+				require.NoError(t, err)
+				t.Cleanup(func() { require.NoError(t, stream.Close()) })
+				chunks := testutil.CollectStreamChunks(t, stream)
+				require.Equal(t, []string{
+					model.ChunkTypeThinking, model.ChunkTypeThinking, model.ChunkTypeText,
+					model.ChunkTypeText, model.ChunkTypeToolCallDelta, model.ChunkTypeToolCallDelta,
+					model.ChunkTypeToolCall, model.ChunkTypeUsage, model.ChunkTypeStop,
+				}, chunkTypes(chunks))
+				require.Equal(t, 1, chunks[2].Message.Meta["content_index"])
+				for _, chunk := range chunks[4:6] {
+					require.Equal(t, "call-1", chunk.ToolCallDelta.ID)
+					require.Equal(t, "lookup", chunk.ToolCallDelta.Name.String())
+				}
+				require.Equal(t, "call-1", chunks[6].ToolCall.ID)
+				require.Equal(t, "lookup", chunks[6].ToolCall.Name.String())
+				require.JSONEq(t, `{"query":"docs"}`, string(chunks[6].ToolCall.Payload))
+				finalThinking, ok := chunks[1].Message.Parts[0].(model.ThinkingPart)
+				require.True(t, ok)
+				require.True(t, finalThinking.Final)
+				require.Equal(t, "sig", finalThinking.Signature)
+			},
+			EarlyEOF: func(t *testing.T) {
+				client := newClient(&conformanceRuntimeClient{})
+				client.converseStream = func(context.Context, *bedrockruntime.ConverseStreamInput, ...func(*bedrockruntime.Options)) (StreamOutput, error) {
+					return streamOutput([]brtypes.ConverseStreamOutput{
+						bedrockMessageStart(),
+						bedrockTextDelta(0, "partial"),
+					}, nil), nil
+				}
+				stream, err := client.Stream(context.Background(), request())
+				require.NoError(t, err)
+				t.Cleanup(func() { _ = stream.Close() })
+				chunk, err := stream.Recv()
+				require.NoError(t, err)
+				require.Equal(t, model.ChunkTypeText, chunk.Type)
+				_, err = stream.Recv()
+				require.EqualError(t, err, "bedrock: stream ended before message_stop")
+			},
+			PartialCancel: func(t *testing.T) {
+				events := make(chan brtypes.ConverseStreamOutput, 2)
+				events <- bedrockMessageStart()
+				events <- bedrockTextDelta(0, "partial")
+				reader := &conformanceStreamReader{events: events}
+				client := newClient(&conformanceRuntimeClient{})
+				client.converseStream = func(context.Context, *bedrockruntime.ConverseStreamInput, ...func(*bedrockruntime.Options)) (StreamOutput, error) {
+					return newConformanceStreamOutput(reader), nil
+				}
+				ctx, cancel := context.WithCancel(context.Background())
+				stream, err := client.Stream(ctx, request())
+				require.NoError(t, err)
+				chunk, err := stream.Recv()
+				require.NoError(t, err)
+				require.Equal(t, model.ChunkTypeText, chunk.Type)
+				cancel()
+				_, err = stream.Recv()
+				require.ErrorIs(t, err, context.Canceled)
+				require.NoError(t, stream.Close())
+			},
+			CloseError: func(t *testing.T) {
+				closeErr := errors.New("stream close failed")
+				reader := &conformanceStreamReader{events: make(chan brtypes.ConverseStreamOutput), closeErr: closeErr}
+				client := newClient(&conformanceRuntimeClient{})
+				client.converseStream = func(context.Context, *bedrockruntime.ConverseStreamInput, ...func(*bedrockruntime.Options)) (StreamOutput, error) {
+					return newConformanceStreamOutput(reader), nil
+				}
+				stream, err := client.Stream(context.Background(), request())
+				require.NoError(t, err)
+				require.ErrorIs(t, stream.Close(), closeErr)
+			},
 			Terminal: func(t *testing.T) {
 				events := []brtypes.ConverseStreamOutput{
-					&brtypes.ConverseStreamOutputMemberMetadata{Value: brtypes.ConverseStreamMetadataEvent{Usage: &brtypes.TokenUsage{
+					bedrockMessageStart(),
+					&brtypes.ConverseStreamOutputMemberMessageStop{Value: brtypes.MessageStopEvent{StopReason: brtypes.StopReasonEndTurn}},
+					bedrockMetadata(&brtypes.TokenUsage{
 						InputTokens:           aws.Int32(10),
 						OutputTokens:          aws.Int32(5),
 						TotalTokens:           aws.Int32(15),
 						CacheReadInputTokens:  aws.Int32(3),
 						CacheWriteInputTokens: aws.Int32(4),
-					}}},
-					&brtypes.ConverseStreamOutputMemberMessageStop{Value: brtypes.MessageStopEvent{StopReason: brtypes.StopReasonEndTurn}},
+					}),
 				}
 				client := newClient(&conformanceRuntimeClient{})
 				client.converseStream = func(context.Context, *bedrockruntime.ConverseStreamInput, ...func(*bedrockruntime.Options)) (StreamOutput, error) {
@@ -285,7 +391,6 @@ func TestClientConformance(t *testing.T) {
 				req.ModelClass = model.ModelClassHighReasoning
 				stream, err := client.Stream(context.Background(), req)
 				require.NoError(t, err)
-				t.Cleanup(func() { require.NoError(t, stream.Close()) })
 
 				usage, err := stream.Recv()
 				require.NoError(t, err)
@@ -298,9 +403,70 @@ func TestClientConformance(t *testing.T) {
 				require.Equal(t, "end_turn", stop.StopReason)
 				_, err = stream.Recv()
 				require.ErrorIs(t, err, io.EOF)
+				require.NoError(t, stream.Close())
+
+				client = newClient(&conformanceRuntimeClient{})
+				client.converseStream = func(context.Context, *bedrockruntime.ConverseStreamInput, ...func(*bedrockruntime.Options)) (StreamOutput, error) {
+					return streamOutput([]brtypes.ConverseStreamOutput{
+						bedrockMessageStart(),
+						&brtypes.ConverseStreamOutputMemberMessageStop{Value: brtypes.MessageStopEvent{StopReason: brtypes.StopReasonEndTurn}},
+					}, nil), nil
+				}
+				stream, err = client.Stream(context.Background(), request())
+				require.NoError(t, err)
+				_, err = stream.Recv()
+				require.EqualError(t, err, "bedrock: stream ended before metadata")
+				require.NoError(t, stream.Close())
 			},
 		},
 	})
+}
+
+func newConformanceStreamOutput(reader *conformanceStreamReader) StreamOutput {
+	stream := bedrockruntime.NewConverseStreamEventStream(func(eventStream *bedrockruntime.ConverseStreamEventStream) {
+		eventStream.Reader = reader
+	})
+	return &conformanceStreamOutput{stream: stream}
+}
+
+func bedrockTextDelta(index int32, text string) brtypes.ConverseStreamOutput {
+	return &brtypes.ConverseStreamOutputMemberContentBlockDelta{Value: brtypes.ContentBlockDeltaEvent{
+		ContentBlockIndex: &index,
+		Delta:             &brtypes.ContentBlockDeltaMemberText{Value: text},
+	}}
+}
+
+func bedrockMessageStart() brtypes.ConverseStreamOutput {
+	return &brtypes.ConverseStreamOutputMemberMessageStart{Value: brtypes.MessageStartEvent{Role: brtypes.ConversationRoleAssistant}}
+}
+
+func bedrockMetadata(usage *brtypes.TokenUsage) brtypes.ConverseStreamOutput {
+	return &brtypes.ConverseStreamOutputMemberMetadata{Value: brtypes.ConverseStreamMetadataEvent{
+		Metrics: &brtypes.ConverseStreamMetrics{LatencyMs: aws.Int64(1)},
+		Usage:   usage,
+	}}
+}
+
+func bedrockToolDelta(index int32, fragment string) brtypes.ConverseStreamOutput {
+	return &brtypes.ConverseStreamOutputMemberContentBlockDelta{Value: brtypes.ContentBlockDeltaEvent{
+		ContentBlockIndex: &index,
+		Delta:             &brtypes.ContentBlockDeltaMemberToolUse{Value: brtypes.ToolUseBlockDelta{Input: aws.String(fragment)}},
+	}}
+}
+
+func bedrockReasoningDelta(index int32, delta brtypes.ReasoningContentBlockDelta) brtypes.ConverseStreamOutput {
+	return &brtypes.ConverseStreamOutputMemberContentBlockDelta{Value: brtypes.ContentBlockDeltaEvent{
+		ContentBlockIndex: &index,
+		Delta:             &brtypes.ContentBlockDeltaMemberReasoningContent{Value: delta},
+	}}
+}
+
+func chunkTypes(chunks []model.Chunk) []string {
+	types := make([]string, 0, len(chunks))
+	for _, chunk := range chunks {
+		types = append(types, chunk.Type)
+	}
+	return types
 }
 
 func conformanceToolUseResponse(name string, input any) *bedrockruntime.ConverseOutput {

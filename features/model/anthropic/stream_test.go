@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json/v2"
 	"errors"
+	"sync/atomic"
 	"testing"
 
 	sdk "github.com/anthropics/anthropic-sdk-go"
@@ -14,9 +15,12 @@ import (
 
 // testDecoder feeds a fixed sequence of events to the ssestream.Stream.
 type testDecoder struct {
-	events []ssestream.Event
-	i      int
-	err    error
+	events       []ssestream.Event
+	i            int
+	err          error
+	closeErr     error
+	closeErrOnce bool
+	closeCalls   atomic.Int32
 }
 
 func (d *testDecoder) Event() ssestream.Event { return d.events[d.i-1] }
@@ -32,8 +36,13 @@ func (d *testDecoder) Next() bool {
 	return true
 }
 
-func (d *testDecoder) Close() error { return nil }
-func (d *testDecoder) Err() error   { return d.err }
+func (d *testDecoder) Close() error {
+	if d.closeErrOnce && d.closeCalls.Add(1) > 1 {
+		return nil
+	}
+	return d.closeErr
+}
+func (d *testDecoder) Err() error { return d.err }
 
 func TestAnthropicStreamer_TextAndToolCall(t *testing.T) {
 	// Build a minimal text delta and tool_use JSON sequence.

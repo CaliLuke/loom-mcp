@@ -2,6 +2,7 @@ package testutil
 
 import (
 	"errors"
+	"fmt"
 	"io"
 	"testing"
 
@@ -22,13 +23,17 @@ type ProviderCapabilityConformance struct {
 }
 
 // ProviderStreamingConformance describes either an explicit unsupported
-// streaming contract or the three required lifecycle cases for a streaming
-// provider.
+// streaming contract or the required lifecycle and event-grammar cases for a
+// streaming provider.
 type ProviderStreamingConformance struct {
 	Unsupported      ProviderConformanceCase
 	SetupError       ProviderConformanceCase
 	ReceiveError     ProviderConformanceCase
 	ReceiveRateLimit ProviderCapabilityConformance
+	StateMachine     ProviderConformanceCase
+	EarlyEOF         ProviderConformanceCase
+	PartialCancel    ProviderConformanceCase
+	CloseError       ProviderConformanceCase
 	Terminal         ProviderConformanceCase
 }
 
@@ -52,8 +57,9 @@ type ProviderConformanceSuite struct {
 }
 
 // RunProviderConformance validates and runs the provider-neutral behavioral
-// matrix. Streaming providers must prove setup errors, receive errors, and
-// successful terminal behavior; adapters without streaming must prove their
+// matrix. Streaming providers must prove setup and receive errors, event
+// ordering, premature termination, partial cancellation, close errors, and
+// successful terminal behavior. Adapters without streaming must prove their
 // explicit unsupported result.
 func RunProviderConformance(t *testing.T, suite ProviderConformanceSuite) {
 	t.Helper()
@@ -123,9 +129,16 @@ func validateStreamingConformance(t *testing.T, provider string, streaming Provi
 	}{
 		{name: "setup error", run: streaming.SetupError},
 		{name: "receive error", run: streaming.ReceiveError},
+		{name: "state machine", run: streaming.StateMachine},
+		{name: "early EOF", run: streaming.EarlyEOF},
+		{name: "partial cancellation", run: streaming.PartialCancel},
+		{name: "close error", run: streaming.CloseError},
 		{name: "terminal", run: streaming.Terminal},
 	}
 	if streaming.Unsupported != nil {
+		if err := validateUnsupportedStreaming(streaming); err != nil {
+			t.Fatalf("provider conformance %s: %s", provider, err)
+		}
 		for _, tc := range supportedCases {
 			if tc.run != nil {
 				t.Fatalf("provider conformance %s: streaming cannot be both unsupported and define %s", provider, tc.name)
@@ -141,6 +154,16 @@ func validateStreamingConformance(t *testing.T, provider string, streaming Provi
 	validateCapabilityConformance(t, provider, "stream receive rate limit", streaming.ReceiveRateLimit)
 }
 
+func validateUnsupportedStreaming(streaming ProviderStreamingConformance) error {
+	if streaming.Unsupported == nil {
+		return nil
+	}
+	if streaming.ReceiveRateLimit.Supported != nil || streaming.ReceiveRateLimit.Unsupported != nil {
+		return fmt.Errorf("streaming cannot be both unsupported and define receive rate limit")
+	}
+	return nil
+}
+
 func runStreamingConformance(t *testing.T, streaming ProviderStreamingConformance) {
 	t.Helper()
 	if streaming.Unsupported != nil {
@@ -150,6 +173,10 @@ func runStreamingConformance(t *testing.T, streaming ProviderStreamingConformanc
 	t.Run("stream setup error", streaming.SetupError)
 	t.Run("stream receive error", streaming.ReceiveError)
 	runCapabilityConformance(t, "stream receive rate limit", streaming.ReceiveRateLimit)
+	t.Run("stream state machine", streaming.StateMachine)
+	t.Run("stream early EOF", streaming.EarlyEOF)
+	t.Run("stream partial cancellation", streaming.PartialCancel)
+	t.Run("stream close error", streaming.CloseError)
 	t.Run("stream terminal", streaming.Terminal)
 }
 

@@ -36,6 +36,9 @@ type anthropicStreamer struct {
 	toolUseIDs  *toolUseIDCodec
 	modelID     string
 	modelClass  model.ModelClass
+
+	streamCloseOnce sync.Once
+	streamCloseErr  error
 }
 
 func newAnthropicStreamer(ctx context.Context, stream *ssestream.Stream[sdk.MessageStreamEventUnion], modelID string, modelClass model.ModelClass, nameMap map[string]string, toolUseIDs *toolUseIDCodec) model.Streamer {
@@ -80,10 +83,7 @@ func (s *anthropicStreamer) Recv() (model.Chunk, error) {
 
 func (s *anthropicStreamer) Close() error {
 	s.cancel()
-	if s.stream == nil {
-		return nil
-	}
-	return s.stream.Close()
+	return s.closeStream()
 }
 
 func (s *anthropicStreamer) Metadata() map[string]any {
@@ -102,9 +102,7 @@ func (s *anthropicStreamer) Metadata() map[string]any {
 func (s *anthropicStreamer) run() {
 	defer close(s.chunks)
 	defer func() {
-		if s.stream != nil {
-			_ = s.stream.Close()
-		}
+		_ = s.closeStream()
 	}()
 
 	processor := newAnthropicChunkProcessor(s.emitChunk, s.recordUsage, s.modelID, s.modelClass, s.toolNameMap, s.toolUseIDs)
@@ -134,6 +132,15 @@ func (s *anthropicStreamer) run() {
 			return
 		}
 	}
+}
+
+func (s *anthropicStreamer) closeStream() error {
+	s.streamCloseOnce.Do(func() {
+		if s.stream != nil {
+			s.streamCloseErr = s.stream.Close()
+		}
+	})
+	return s.streamCloseErr
 }
 
 func (s *anthropicStreamer) emitChunk(chunk model.Chunk) error {

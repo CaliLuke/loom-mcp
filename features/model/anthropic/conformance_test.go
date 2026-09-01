@@ -6,6 +6,7 @@ import (
 	"encoding/json/v2"
 	"errors"
 	"io"
+	"sync"
 	"testing"
 
 	sdk "github.com/anthropics/anthropic-sdk-go"
@@ -182,6 +183,98 @@ func TestClientConformance(t *testing.T) {
 				var apiErr *sdk.Error
 				require.ErrorAs(t, err, &apiErr)
 			}},
+			StateMachine: func(t *testing.T) {
+				events := anthropicConformanceEvents(t,
+					`{"type":"message_start","message":{"id":"msg-1","type":"message","role":"assistant","model":"claude-opus","content":[],"usage":{"input_tokens":2,"output_tokens":0}}}`,
+					`{"type":"content_block_start","index":0,"content_block":{"type":"thinking","thinking":""}}`,
+					`{"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":"consider"}}`,
+					`{"type":"content_block_delta","index":0,"delta":{"type":"signature_delta","signature":"sig"}}`,
+					`{"type":"content_block_stop","index":0}`,
+					`{"type":"content_block_start","index":1,"content_block":{"type":"text","text":""}}`,
+					`{"type":"content_block_delta","index":1,"delta":{"type":"text_delta","text":"answer"}}`,
+					`{"type":"content_block_delta","index":1,"delta":{"type":"text_delta","text":" follows"}}`,
+					`{"type":"content_block_stop","index":1}`,
+					`{"type":"content_block_start","index":2,"content_block":{"type":"tool_use","id":"call-1","name":"lookup","input":{}}}`,
+					`{"type":"content_block_delta","index":2,"delta":{"type":"input_json_delta","partial_json":"{\"query\":"}}`,
+					`{"type":"content_block_delta","index":2,"delta":{"type":"input_json_delta","partial_json":"\"docs\"}"}}`,
+					`{"type":"content_block_stop","index":2}`,
+					`{"type":"message_delta","delta":{"stop_reason":"tool_use"},"usage":{"output_tokens":3}}`,
+					`{"type":"message_stop"}`,
+				)
+				stub := &stubMessagesClient{stream: ssestream.NewStream[sdk.MessageStreamEventUnion](&testDecoder{events: events}, nil)}
+				stream, err := newClient(t, stub).Stream(context.Background(), request())
+				require.NoError(t, err)
+				t.Cleanup(func() { require.NoError(t, stream.Close()) })
+				chunks := testutil.CollectStreamChunks(t, stream)
+				require.Equal(t, []string{
+					model.ChunkTypeThinking, model.ChunkTypeThinking, model.ChunkTypeText,
+					model.ChunkTypeText, model.ChunkTypeToolCallDelta, model.ChunkTypeToolCallDelta,
+					model.ChunkTypeToolCall, model.ChunkTypeUsage, model.ChunkTypeStop,
+				}, anthropicChunkTypes(chunks))
+				require.Equal(t, 1, chunks[2].Message.Meta["content_index"])
+				for _, chunk := range chunks[4:6] {
+					require.Equal(t, "call-1", chunk.ToolCallDelta.ID)
+					require.Equal(t, "lookup", chunk.ToolCallDelta.Name.String())
+				}
+				require.Equal(t, "call-1", chunks[6].ToolCall.ID)
+				require.Equal(t, "lookup", chunks[6].ToolCall.Name.String())
+				require.JSONEq(t, `{"query":"docs"}`, string(chunks[6].ToolCall.Payload))
+				finalThinking, ok := chunks[1].Message.Parts[0].(model.ThinkingPart)
+				require.True(t, ok)
+				require.True(t, finalThinking.Final)
+				require.Equal(t, "sig", finalThinking.Signature)
+			},
+			EarlyEOF: func(t *testing.T) {
+				events := anthropicConformanceEvents(t,
+					`{"type":"message_start","message":{"id":"msg-1","type":"message","role":"assistant","model":"claude-opus","content":[],"usage":{"input_tokens":1,"output_tokens":0}}}`,
+					`{"type":"content_block_start","index":0,"content_block":{"type":"text","text":""}}`,
+					`{"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":"partial"}}`,
+				)
+				stub := &stubMessagesClient{stream: ssestream.NewStream[sdk.MessageStreamEventUnion](&testDecoder{events: events}, nil)}
+				stream, err := newClient(t, stub).Stream(context.Background(), request())
+				require.NoError(t, err)
+				t.Cleanup(func() { _ = stream.Close() })
+				chunk, err := stream.Recv()
+				require.NoError(t, err)
+				require.Equal(t, model.ChunkTypeText, chunk.Type)
+				_, err = stream.Recv()
+				require.EqualError(t, err, "anthropic: stream ended before message_stop")
+			},
+			PartialCancel: func(t *testing.T) {
+				events := anthropicConformanceEvents(t,
+					`{"type":"message_start","message":{"id":"msg-1","type":"message","role":"assistant","model":"claude-opus","content":[],"usage":{"input_tokens":1,"output_tokens":0}}}`,
+					`{"type":"content_block_start","index":0,"content_block":{"type":"text","text":""}}`,
+					`{"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":"partial"}}`,
+				)
+				decoder := newAnthropicPartialCancelDecoder(events)
+				stub := &stubMessagesClient{stream: ssestream.NewStream[sdk.MessageStreamEventUnion](decoder, nil)}
+				ctx, cancel := context.WithCancel(context.Background())
+				stream, err := newClient(t, stub).Stream(ctx, request())
+				require.NoError(t, err)
+				chunk, err := stream.Recv()
+				require.NoError(t, err)
+				require.Equal(t, model.ChunkTypeText, chunk.Type)
+				cancel()
+				_, err = stream.Recv()
+				require.ErrorIs(t, err, context.Canceled)
+				require.NoError(t, stream.Close())
+			},
+			CloseError: func(t *testing.T) {
+				closeErr := errors.New("stream close failed")
+				events := anthropicConformanceEvents(t,
+					`{"type":"message_start","message":{"id":"msg-1","type":"message","role":"assistant","model":"claude-opus","content":[],"usage":{"input_tokens":1,"output_tokens":0}}}`,
+					`{"type":"message_delta","delta":{"stop_reason":"end_turn"},"usage":{"output_tokens":1}}`,
+					`{"type":"message_stop"}`,
+				)
+				decoder := &testDecoder{events: events, closeErr: closeErr, closeErrOnce: true}
+				stub := &stubMessagesClient{stream: ssestream.NewStream[sdk.MessageStreamEventUnion](decoder, nil)}
+				stream, err := newClient(t, stub).Stream(context.Background(), request())
+				require.NoError(t, err)
+				chunks := testutil.CollectStreamChunks(t, stream)
+				require.Equal(t, []string{model.ChunkTypeUsage, model.ChunkTypeStop}, anthropicChunkTypes(chunks))
+				require.ErrorIs(t, stream.Close(), closeErr)
+				require.Equal(t, int32(1), decoder.closeCalls.Load())
+			},
 			Terminal: func(t *testing.T) {
 				messageStart := mustAnthropicStreamEvent(t, `{
 					"type":"message_start",
@@ -230,6 +323,57 @@ func TestClientConformance(t *testing.T) {
 			},
 		},
 	})
+}
+
+type anthropicPartialCancelDecoder struct {
+	events    []ssestream.Event
+	index     int
+	closed    chan struct{}
+	closeOnce sync.Once
+}
+
+func newAnthropicPartialCancelDecoder(events []ssestream.Event) *anthropicPartialCancelDecoder {
+	return &anthropicPartialCancelDecoder{events: events, closed: make(chan struct{})}
+}
+
+func (d *anthropicPartialCancelDecoder) Event() ssestream.Event {
+	return d.events[d.index-1]
+}
+
+func (d *anthropicPartialCancelDecoder) Next() bool {
+	if d.index < len(d.events) {
+		d.index++
+		return true
+	}
+	<-d.closed
+	return false
+}
+
+func (d *anthropicPartialCancelDecoder) Close() error {
+	d.closeOnce.Do(func() { close(d.closed) })
+	return nil
+}
+
+func (d *anthropicPartialCancelDecoder) Err() error {
+	return nil
+}
+
+func anthropicConformanceEvents(t *testing.T, raws ...string) []ssestream.Event {
+	t.Helper()
+	events := make([]ssestream.Event, 0, len(raws))
+	for _, raw := range raws {
+		event := mustAnthropicStreamEvent(t, raw)
+		events = append(events, ssestream.Event{Type: event.Type, Data: mustJSON(event)})
+	}
+	return events
+}
+
+func anthropicChunkTypes(chunks []model.Chunk) []string {
+	types := make([]string, 0, len(chunks))
+	for _, chunk := range chunks {
+		types = append(types, chunk.Type)
+	}
+	return types
 }
 
 func mustAnthropicStreamEvent(t *testing.T, raw string) sdk.MessageStreamEventUnion {

@@ -36,8 +36,12 @@ func TestRunProviderConformanceRunsRequiredCases(t *testing.T) {
 			Supported: providerCase("tool_name"),
 		},
 		Streaming: ProviderStreamingConformance{
-			SetupError:   providerCase("stream_setup"),
-			ReceiveError: providerCase("stream_receive"),
+			SetupError:    providerCase("stream_setup"),
+			ReceiveError:  providerCase("stream_receive"),
+			StateMachine:  providerCase("stream_state_machine"),
+			EarlyEOF:      providerCase("stream_early_eof"),
+			PartialCancel: providerCase("stream_partial_cancel"),
+			CloseError:    providerCase("stream_close_error"),
 			ReceiveRateLimit: ProviderCapabilityConformance{
 				Supported: providerCase("stream_rate_limit"),
 			},
@@ -46,20 +50,24 @@ func TestRunProviderConformanceRunsRequiredCases(t *testing.T) {
 	})
 
 	require.Equal(t, map[string]bool{
-		"provider_error":       true,
-		"rate_limit":           true,
-		"malformed_tool_call":  true,
-		"cancellation":         true,
-		"structured_output":    true,
-		"usage":                true,
-		"multimodal":           true,
-		"thinking_unsupported": true,
-		"token_counting":       true,
-		"tool_name":            true,
-		"stream_setup":         true,
-		"stream_receive":       true,
-		"stream_rate_limit":    true,
-		"stream_terminal":      true,
+		"provider_error":        true,
+		"rate_limit":            true,
+		"malformed_tool_call":   true,
+		"cancellation":          true,
+		"structured_output":     true,
+		"usage":                 true,
+		"multimodal":            true,
+		"thinking_unsupported":  true,
+		"token_counting":        true,
+		"tool_name":             true,
+		"stream_setup":          true,
+		"stream_receive":        true,
+		"stream_rate_limit":     true,
+		"stream_state_machine":  true,
+		"stream_early_eof":      true,
+		"stream_partial_cancel": true,
+		"stream_close_error":    true,
+		"stream_terminal":       true,
 	}, ran)
 }
 
@@ -87,4 +95,14 @@ func TestRunProviderConformanceRunsUnsupportedStreamingCase(t *testing.T) {
 	})
 
 	require.True(t, ranUnsupported)
+}
+
+func TestValidateUnsupportedStreamingRejectsRateLimitDeclaration(t *testing.T) {
+	err := validateUnsupportedStreaming(ProviderStreamingConformance{
+		Unsupported: func(*testing.T) {},
+		ReceiveRateLimit: ProviderCapabilityConformance{
+			Supported: func(*testing.T) {},
+		},
+	})
+	require.EqualError(t, err, "streaming cannot be both unsupported and define receive rate limit")
 }

@@ -3,9 +3,11 @@ package ollama_test
 import (
 	"context"
 	"encoding/json/v2"
+	"errors"
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -223,6 +225,79 @@ func TestClientConformance(t *testing.T) {
 				require.Nil(t, stream)
 				require.ErrorIs(t, err, model.ErrRateLimited)
 			}},
+			StateMachine: func(t *testing.T) {
+				client := newClient(t, func(w http.ResponseWriter, _ *http.Request) {
+					lines := []string{
+						`{"model":"deepseek-r1","message":{"role":"assistant","thinking":"consider"}}`,
+						`{"model":"deepseek-r1","message":{"role":"assistant","content":"answer"}}`,
+						`{"model":"deepseek-r1","message":{"role":"assistant","tool_calls":[{"id":"call-1","function":{"name":"lookup","arguments":{"query":"docs"}}}]}}`,
+						`{"model":"deepseek-r1","message":{"role":"assistant","content":" follows"}}`,
+						`{"model":"deepseek-r1","done":true,"done_reason":"stop","prompt_eval_count":2,"eval_count":3}`,
+					}
+					_, err := io.WriteString(w, strings.Join(lines, "\n")+"\n")
+					assert.NoError(t, err)
+				})
+				stream, err := client.Stream(context.Background(), request())
+				require.NoError(t, err)
+				t.Cleanup(func() { require.NoError(t, stream.Close()) })
+				chunks := testutil.CollectStreamChunks(t, stream)
+				require.Equal(t, []string{
+					model.ChunkTypeThinking, model.ChunkTypeText, model.ChunkTypeToolCall,
+					model.ChunkTypeText, model.ChunkTypeUsage, model.ChunkTypeStop,
+				}, ollamaChunkTypes(chunks))
+				require.Equal(t, "call-1", chunks[2].ToolCall.ID)
+				require.Equal(t, "lookup", chunks[2].ToolCall.Name.String())
+				require.JSONEq(t, `{"query":"docs"}`, string(chunks[2].ToolCall.Payload))
+				require.Equal(t, 5, chunks[4].UsageDelta.TotalTokens)
+			},
+			EarlyEOF: func(t *testing.T) {
+				client := newClient(t, func(w http.ResponseWriter, _ *http.Request) {
+					_, err := io.WriteString(w, `{"model":"llama3.1","message":{"role":"assistant","content":"partial"}}`+"\n")
+					assert.NoError(t, err)
+				})
+				stream, err := client.Stream(context.Background(), request())
+				require.NoError(t, err)
+				t.Cleanup(func() { _ = stream.Close() })
+				chunk, err := stream.Recv()
+				require.NoError(t, err)
+				require.Equal(t, model.ChunkTypeText, chunk.Type)
+				_, err = stream.Recv()
+				require.EqualError(t, err, "ollama: stream ended before done")
+			},
+			PartialCancel: func(t *testing.T) {
+				client := newClient(t, func(w http.ResponseWriter, r *http.Request) {
+					_, err := io.WriteString(w, `{"model":"llama3.1","message":{"role":"assistant","content":"partial"}}`+"\n")
+					assert.NoError(t, err)
+					flusher, ok := w.(http.Flusher)
+					if !assert.True(t, ok) {
+						return
+					}
+					flusher.Flush()
+					<-r.Context().Done()
+				})
+				ctx, cancel := context.WithCancel(context.Background())
+				stream, err := client.Stream(ctx, request())
+				require.NoError(t, err)
+				chunk, err := stream.Recv()
+				require.NoError(t, err)
+				require.Equal(t, model.ChunkTypeText, chunk.Type)
+				cancel()
+				_, err = stream.Recv()
+				require.ErrorIs(t, err, context.Canceled)
+				require.NoError(t, stream.Close())
+			},
+			CloseError: func(t *testing.T) {
+				closeErr := errors.New("stream close failed")
+				body := &ollamaCloseErrorBody{Reader: strings.NewReader(`{"model":"llama3.1","done":true}` + "\n"), closeErr: closeErr}
+				httpClient := &http.Client{Transport: roundTripFunc(func(*http.Request) (*http.Response, error) {
+					return &http.Response{StatusCode: http.StatusOK, Header: make(http.Header), Body: body}, nil
+				})}
+				client, err := ollamamodel.New(ollamamodel.Options{HTTPClient: httpClient, ServerURL: "http://ollama.test", DefaultModel: "llama3.1"})
+				require.NoError(t, err)
+				stream, err := client.Stream(context.Background(), request())
+				require.NoError(t, err)
+				require.ErrorIs(t, stream.Close(), closeErr)
+			},
 			Terminal: func(t *testing.T) {
 				client := newClient(t, func(w http.ResponseWriter, _ *http.Request) {
 					_, err := io.WriteString(w, `{"model":"deepseek-r1","done":true,"done_reason":"stop","prompt_eval_count":8,"eval_count":3}`+"\n")
@@ -248,4 +323,27 @@ func TestClientConformance(t *testing.T) {
 			},
 		},
 	})
+}
+
+type roundTripFunc func(*http.Request) (*http.Response, error)
+
+func (f roundTripFunc) RoundTrip(req *http.Request) (*http.Response, error) {
+	return f(req)
+}
+
+type ollamaCloseErrorBody struct {
+	io.Reader
+	closeErr error
+}
+
+func (b *ollamaCloseErrorBody) Close() error {
+	return b.closeErr
+}
+
+func ollamaChunkTypes(chunks []model.Chunk) []string {
+	types := make([]string, 0, len(chunks))
+	for _, chunk := range chunks {
+		types = append(types, chunk.Type)
+	}
+	return types
 }

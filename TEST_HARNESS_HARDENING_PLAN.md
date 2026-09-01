@@ -125,11 +125,34 @@ Implementation evidence:
 
 ### Priority 4: Test Provider Streams As State Machines
 
+Status: implemented and locally verified.
+
 Extend `testutil.ProviderStreamingConformance` beyond setup, receive failure,
 rate limits, and terminal output. Require fragmented tool calls, text/thinking/
 usage ordering, early EOF, partial cancellation, close errors, and interleaved
-content indexes. Start with Bedrock, whose streaming branch coverage and event
-grammar are the coldest high-churn provider surface.
+content indexes where the provider grammar permits them; otherwise require
+index attribution across the provider's valid sequential lifecycle. Start with
+Bedrock, whose streaming branch coverage and event grammar are the coldest
+high-churn provider surface.
+
+Implementation evidence:
+
+- every streaming provider now proves its event grammar, premature EOF result,
+  cancellation after partial delivery, close-error propagation, and the
+  existing setup/receive/rate-limit/terminal lifecycle;
+- Anthropic, Bedrock, and OpenAI assemble fragmented tool arguments using each
+  provider's canonical block/item lifecycle and preserve content indexes across
+  successive blocks/items;
+- Ollama proves its line-oriented whole-tool-call grammar alongside interleaved
+  thinking, text, usage, and terminal chunks;
+- the Bedrock case found and fixed silent acceptance of streams that closed
+  before `message_stop`; it also models Bedrock's canonical stop-before-metadata
+  grammar, requires the mandatory trailing metadata, and keeps the model's stop
+  chunk terminal;
+- close operations now preserve the underlying SDK error across concurrent
+  background and caller shutdown paths;
+- the race-enabled provider matrix found and fixed an unsafe OpenAI stream test
+  double, keeping the new cancellation and close paths race-clean.
 
 ### Priority 5: Test Persistence Upgrades And Concurrency Against Real Services
 
@@ -180,10 +203,11 @@ A weekly CI workflow runs five repetitions and requires Docker-backed tests.
 
 Phase 5 makes each provider declare and prove multimodal input, typed thinking,
 exact token counting, and tool-name round trips. Streaming providers also prove
-setup, receive, terminal, and receive-time rate-limit behavior. This matrix
-found and fixed Anthropic receive-time rate-limit mapping and Bedrock
-non-streaming reasoning translation. OpenAI now requests and returns typed
-reasoning summaries.
+setup, receive, terminal, receive-time rate limits, state-machine ordering,
+premature EOF, partial cancellation, and close errors. This matrix found and
+fixed Anthropic receive-time rate-limit mapping, Bedrock non-streaming reasoning
+translation and premature-EOF handling, and an OpenAI test-double race. OpenAI
+now requests and returns typed reasoning summaries.
 
 Phase 6 is complete. `make test` enforces global and package-group coverage
 floors. Generated, mock, and design packages do not affect the group floors.

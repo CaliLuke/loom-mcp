@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"net/http"
+	"sync/atomic"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -525,7 +526,7 @@ func TestClientStreamReturnsNewStreamingError(t *testing.T) {
 	require.Nil(t, streamer)
 	require.ErrorIs(t, err, streamErr)
 	require.ErrorContains(t, err, "openai responses stream")
-	require.True(t, decoder.closed)
+	require.True(t, decoder.closed.Load())
 }
 
 func TestClientCompleteReturnsRateLimitedAPIError(t *testing.T) {
@@ -1029,10 +1030,13 @@ func (m *mockResponsesClient) NewStreaming(ctx context.Context, request response
 }
 
 type mockStreamDecoder struct {
-	events []ssestream.Event
-	idx    int
-	err    error
-	closed bool
+	events       []ssestream.Event
+	idx          int
+	err          error
+	closeErr     error
+	closeErrOnce bool
+	closeCalls   atomic.Int32
+	closed       atomic.Bool
 }
 
 func newMockOpenAIStream(raws ...string) *ssestream.Stream[responses.ResponseStreamEventUnion] {
@@ -1049,6 +1053,14 @@ func newMockOpenAIStreamError(err error) *ssestream.Stream[responses.ResponseStr
 
 func newMockOpenAIStreamReadError(err error) *ssestream.Stream[responses.ResponseStreamEventUnion] {
 	return ssestream.NewStream[responses.ResponseStreamEventUnion](&mockStreamDecoder{err: err}, nil)
+}
+
+func newMockOpenAIPartialStream(ctx context.Context, raws ...string) *ssestream.Stream[responses.ResponseStreamEventUnion] {
+	events := make([]ssestream.Event, 0, len(raws))
+	for _, raw := range raws {
+		events = append(events, ssestream.Event{Data: []byte(raw)})
+	}
+	return ssestream.NewStream[responses.ResponseStreamEventUnion](newOpenAIPartialCancelDecoder(ctx, events), nil)
 }
 
 func newOpenAIRateLimitError(t *testing.T) *openai.Error {
@@ -1081,10 +1093,44 @@ func (d *mockStreamDecoder) Next() bool {
 }
 
 func (d *mockStreamDecoder) Close() error {
-	d.closed = true
-	return nil
+	d.closed.Store(true)
+	if d.closeErrOnce && d.closeCalls.Add(1) > 1 {
+		return nil
+	}
+	return d.closeErr
 }
 
 func (d *mockStreamDecoder) Err() error {
 	return d.err
+}
+
+type openAIPartialCancelDecoder struct {
+	events []ssestream.Event
+	ctx    context.Context
+	index  int
+}
+
+func newOpenAIPartialCancelDecoder(ctx context.Context, events []ssestream.Event) *openAIPartialCancelDecoder {
+	return &openAIPartialCancelDecoder{events: events, ctx: ctx}
+}
+
+func (d *openAIPartialCancelDecoder) Event() ssestream.Event {
+	return d.events[d.index-1]
+}
+
+func (d *openAIPartialCancelDecoder) Next() bool {
+	if d.index < len(d.events) {
+		d.index++
+		return true
+	}
+	<-d.ctx.Done()
+	return false
+}
+
+func (d *openAIPartialCancelDecoder) Close() error {
+	return nil
+}
+
+func (d *openAIPartialCancelDecoder) Err() error {
+	return nil
 }

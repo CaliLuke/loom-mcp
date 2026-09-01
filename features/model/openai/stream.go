@@ -33,6 +33,9 @@ type openAIStreamer struct {
 
 	metaMu   sync.RWMutex
 	metadata map[string]any
+
+	streamCloseOnce sync.Once
+	streamCloseErr  error
 }
 
 type openAIChunkProcessor struct {
@@ -100,10 +103,7 @@ func (s *openAIStreamer) Recv() (model.Chunk, error) {
 
 func (s *openAIStreamer) Close() error {
 	s.cancel()
-	if s.stream == nil {
-		return nil
-	}
-	return s.stream.Close()
+	return s.closeStream()
 }
 
 func (s *openAIStreamer) Metadata() map[string]any {
@@ -122,9 +122,7 @@ func (s *openAIStreamer) Metadata() map[string]any {
 func (s *openAIStreamer) run(processor *openAIChunkProcessor) {
 	defer close(s.chunks)
 	defer func() {
-		if s.stream != nil {
-			_ = s.stream.Close()
-		}
+		_ = s.closeStream()
 	}()
 
 	for {
@@ -139,6 +137,10 @@ func (s *openAIStreamer) run(processor *openAIChunkProcessor) {
 				s.setErr(wrapResponsesStreamError(err))
 				return
 			}
+			if err := s.ctx.Err(); err != nil {
+				s.setErr(err)
+				return
+			}
 			if !processor.completed {
 				s.setErr(errors.New("openai: stream ended before response.completed"))
 				return
@@ -151,6 +153,15 @@ func (s *openAIStreamer) run(processor *openAIChunkProcessor) {
 			return
 		}
 	}
+}
+
+func (s *openAIStreamer) closeStream() error {
+	s.streamCloseOnce.Do(func() {
+		if s.stream != nil {
+			s.streamCloseErr = s.stream.Close()
+		}
+	})
+	return s.streamCloseErr
 }
 
 func (s *openAIStreamer) emitChunk(chunk model.Chunk) error {

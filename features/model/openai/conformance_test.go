@@ -3,10 +3,10 @@ package openai_test
 import (
 	"context"
 	"errors"
-	"io"
 	"testing"
 
 	openai "github.com/openai/openai-go"
+	"github.com/openai/openai-go/packages/ssestream"
 	"github.com/openai/openai-go/responses"
 	"github.com/stretchr/testify/require"
 
@@ -209,41 +209,132 @@ func TestClientConformance(t *testing.T) {
 				var apiErr *openai.Error
 				require.ErrorAs(t, err, &apiErr)
 			}},
+			StateMachine: func(t *testing.T) {
+				mock := &mockResponsesClient{stream: newMockOpenAIStream(openAIConformanceLifecycle()...)}
+				stream, err := newClient(t, mock).Stream(context.Background(), request())
+				require.NoError(t, err)
+				t.Cleanup(func() { require.NoError(t, stream.Close()) })
+				chunks := testutil.CollectStreamChunks(t, stream)
+				require.Equal(t, []string{
+					model.ChunkTypeThinking, model.ChunkTypeText, model.ChunkTypeText,
+					model.ChunkTypeToolCallDelta, model.ChunkTypeToolCallDelta,
+					model.ChunkTypeToolCall, model.ChunkTypeUsage, model.ChunkTypeStop,
+				}, openAIChunkTypes(chunks))
+				require.Equal(t, int64(1), chunks[1].Message.Meta["output_index"])
+				require.Equal(t, `{"query":`, chunks[3].ToolCallDelta.Delta)
+				for _, chunk := range chunks[3:5] {
+					require.Equal(t, "call_1", chunk.ToolCallDelta.ID)
+					require.Equal(t, "lookup", chunk.ToolCallDelta.Name.String())
+				}
+				require.Equal(t, "call_1", chunks[5].ToolCall.ID)
+				require.Equal(t, "lookup", chunks[5].ToolCall.Name.String())
+				require.JSONEq(t, `{"query":"docs"}`, string(chunks[5].ToolCall.Payload))
+			},
+			EarlyEOF: func(t *testing.T) {
+				lifecycle := openAIConformanceLifecycle()
+				mock := &mockResponsesClient{stream: newMockOpenAIStream(lifecycle[:11]...)}
+				stream, err := newClient(t, mock).Stream(context.Background(), request())
+				require.NoError(t, err)
+				t.Cleanup(func() { _ = stream.Close() })
+				thinking, err := stream.Recv()
+				require.NoError(t, err)
+				require.Equal(t, model.ChunkTypeThinking, thinking.Type)
+				chunk, err := stream.Recv()
+				require.NoError(t, err)
+				require.Equal(t, model.ChunkTypeText, chunk.Type)
+				_, err = stream.Recv()
+				require.EqualError(t, err, "openai: stream ended before response.completed")
+			},
+			PartialCancel: func(t *testing.T) {
+				ctx, cancel := context.WithCancel(context.Background())
+				lifecycle := openAIConformanceLifecycle()
+				mock := &mockResponsesClient{stream: newMockOpenAIPartialStream(ctx, lifecycle[:11]...)}
+				stream, err := newClient(t, mock).Stream(ctx, request())
+				require.NoError(t, err)
+				thinking, err := stream.Recv()
+				require.NoError(t, err)
+				require.Equal(t, model.ChunkTypeThinking, thinking.Type)
+				chunk, err := stream.Recv()
+				require.NoError(t, err)
+				require.Equal(t, model.ChunkTypeText, chunk.Type)
+				cancel()
+				_, err = stream.Recv()
+				require.ErrorIs(t, err, context.Canceled)
+				require.NoError(t, stream.Close())
+			},
+			CloseError: func(t *testing.T) {
+				closeErr := errors.New("stream close failed")
+				decoder := &mockStreamDecoder{
+					events:   openAIStreamEvents(openAIConformanceLifecycle()),
+					closeErr: closeErr, closeErrOnce: true,
+				}
+				mock := &mockResponsesClient{stream: ssestream.NewStream[responses.ResponseStreamEventUnion](decoder, nil)}
+				stream, err := newClient(t, mock).Stream(context.Background(), request())
+				require.NoError(t, err)
+				chunks := testutil.CollectStreamChunks(t, stream)
+				require.Equal(t, model.ChunkTypeStop, chunks[len(chunks)-1].Type)
+				require.ErrorIs(t, stream.Close(), closeErr)
+				require.Equal(t, int32(1), decoder.closeCalls.Load())
+			},
 			Terminal: func(t *testing.T) {
-				mock := &mockResponsesClient{stream: newMockOpenAIStream(`{
-					"type":"response.completed",
-					"sequence_number":1,
-					"response":{
-						"model":"o3",
-						"status":"completed",
-						"usage":{
-							"input_tokens":10,
-							"input_tokens_details":{"cached_tokens":3},
-							"output_tokens":5,
-							"output_tokens_details":{"reasoning_tokens":0},
-							"total_tokens":15
-						},
-						"output":[]
-					}
-				}`)}
+				mock := &mockResponsesClient{stream: newMockOpenAIStream(openAIConformanceLifecycle()...)}
 				req := request()
 				req.ModelClass = model.ModelClassHighReasoning
 				stream, err := newClient(t, mock).Stream(context.Background(), req)
 				require.NoError(t, err)
 				t.Cleanup(func() { require.NoError(t, stream.Close()) })
-
-				usage, err := stream.Recv()
-				require.NoError(t, err)
+				chunks := testutil.CollectStreamChunks(t, stream)
+				require.GreaterOrEqual(t, len(chunks), 2)
+				usage := chunks[len(chunks)-2]
 				require.Equal(t, model.ChunkTypeUsage, usage.Type)
 				require.Equal(t, model.ModelClassHighReasoning, usage.UsageDelta.ModelClass)
 				require.Equal(t, "o3", usage.UsageDelta.Model)
-				stop, err := stream.Recv()
-				require.NoError(t, err)
+				stop := chunks[len(chunks)-1]
 				require.Equal(t, model.ChunkTypeStop, stop.Type)
 				require.Equal(t, "completed", stop.StopReason)
-				_, err = stream.Recv()
-				require.ErrorIs(t, err, io.EOF)
 			},
 		},
 	})
+}
+
+func openAIConformanceLifecycle() []string {
+	return []string{
+		`{"type":"response.created","sequence_number":1,"response":{"id":"resp_1","object":"response","model":"o3","status":"queued","output":[]}}`,
+		`{"type":"response.in_progress","sequence_number":2,"response":{"id":"resp_1","object":"response","model":"o3","status":"in_progress","output":[]}}`,
+		`{"type":"response.output_item.added","sequence_number":3,"output_index":0,"item":{"id":"rs_1","type":"reasoning","summary":[],"status":"in_progress"}}`,
+		`{"type":"response.reasoning_summary_part.added","sequence_number":4,"item_id":"rs_1","output_index":0,"summary_index":0,"part":{"type":"summary_text","text":""}}`,
+		`{"type":"response.reasoning_summary_text.delta","sequence_number":5,"item_id":"rs_1","output_index":0,"summary_index":0,"delta":"consider"}`,
+		`{"type":"response.reasoning_summary_text.done","sequence_number":6,"item_id":"rs_1","output_index":0,"summary_index":0,"text":"consider"}`,
+		`{"type":"response.reasoning_summary_part.done","sequence_number":7,"item_id":"rs_1","output_index":0,"summary_index":0,"part":{"type":"summary_text","text":"consider"}}`,
+		`{"type":"response.output_item.done","sequence_number":8,"output_index":0,"item":{"id":"rs_1","type":"reasoning","summary":[{"type":"summary_text","text":"consider"}],"status":"completed"}}`,
+		`{"type":"response.output_item.added","sequence_number":9,"output_index":1,"item":{"id":"msg_1","type":"message","role":"assistant","content":[],"status":"in_progress"}}`,
+		`{"type":"response.content_part.added","sequence_number":10,"item_id":"msg_1","output_index":1,"content_index":0,"part":{"type":"output_text","text":"","annotations":[],"logprobs":[]}}`,
+		`{"type":"response.output_text.delta","sequence_number":11,"item_id":"msg_1","output_index":1,"content_index":0,"delta":"answer","logprobs":[]}`,
+		`{"type":"response.output_text.delta","sequence_number":12,"item_id":"msg_1","output_index":1,"content_index":0,"delta":" follows","logprobs":[]}`,
+		`{"type":"response.output_text.done","sequence_number":13,"item_id":"msg_1","output_index":1,"content_index":0,"text":"answer follows","logprobs":[]}`,
+		`{"type":"response.content_part.done","sequence_number":14,"item_id":"msg_1","output_index":1,"content_index":0,"part":{"type":"output_text","text":"answer follows","annotations":[],"logprobs":[]}}`,
+		`{"type":"response.output_item.done","sequence_number":15,"output_index":1,"item":{"id":"msg_1","type":"message","role":"assistant","content":[{"type":"output_text","text":"answer follows","annotations":[],"logprobs":[]}],"status":"completed"}}`,
+		`{"type":"response.output_item.added","sequence_number":16,"output_index":2,"item":{"id":"fc_1","type":"function_call","call_id":"call_1","name":"lookup","arguments":"","status":"in_progress"}}`,
+		`{"type":"response.function_call_arguments.delta","sequence_number":17,"item_id":"fc_1","output_index":2,"delta":"{\"query\":"}`,
+		`{"type":"response.function_call_arguments.delta","sequence_number":18,"item_id":"fc_1","output_index":2,"delta":"\"docs\"}"}`,
+		`{"type":"response.function_call_arguments.done","sequence_number":19,"item_id":"fc_1","output_index":2,"arguments":"{\"query\":\"docs\"}"}`,
+		`{"type":"response.output_item.done","sequence_number":20,"output_index":2,"item":{"id":"fc_1","type":"function_call","call_id":"call_1","name":"lookup","arguments":"{\"query\":\"docs\"}","status":"completed"}}`,
+		`{"type":"response.completed","sequence_number":21,"response":{"id":"resp_1","object":"response","model":"o3","status":"completed","usage":{"input_tokens":2,"input_tokens_details":{"cached_tokens":0},"output_tokens":3,"output_tokens_details":{"reasoning_tokens":1},"total_tokens":5},"output":[{"id":"rs_1","type":"reasoning","summary":[{"type":"summary_text","text":"consider"}],"status":"completed"},{"id":"msg_1","type":"message","role":"assistant","content":[{"type":"output_text","text":"answer follows","annotations":[],"logprobs":[]}],"status":"completed"},{"id":"fc_1","type":"function_call","call_id":"call_1","name":"lookup","arguments":"{\"query\":\"docs\"}","status":"completed"}]}}`,
+	}
+}
+
+func openAIStreamEvents(raws []string) []ssestream.Event {
+	events := make([]ssestream.Event, 0, len(raws))
+	for _, raw := range raws {
+		events = append(events, ssestream.Event{Data: []byte(raw)})
+	}
+	return events
+}
+
+func openAIChunkTypes(chunks []model.Chunk) []string {
+	types := make([]string, 0, len(chunks))
+	for _, chunk := range chunks {
+		types = append(types, chunk.Type)
+	}
+	return types
 }

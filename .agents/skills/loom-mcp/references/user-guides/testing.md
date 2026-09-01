@@ -52,8 +52,13 @@ Every provider must preserve the shared model contract, not merely compile again
 Run the provider package with `-race`. Add or extend its conformance test instead of copying incomplete one-off assertions.
 
 Each capability row must contain one supported case or one unsupported case.
-Streaming providers must prove setup, receive, terminal, and rate-limit behavior.
-If a provider cannot receive a late rate limit, prove where the setup error occurs.
+Streaming providers must prove setup, receive, terminal, and rate-limit behavior,
+plus their event state machine, premature EOF result, cancellation after partial
+delivery, and close-error propagation. State-machine cases must assert observable
+chunk order and identifiers across fragmented tool calls, interleaved content
+indexes, thinking/text deltas, usage, and stop events as supported by the provider
+grammar. If a provider cannot receive a late rate limit, prove where the setup
+error occurs.
 
 ## Runtime event contracts
 

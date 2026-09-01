@@ -37,6 +37,9 @@ type bedrockStreamer struct {
 	modelID     string
 	modelClass  model.ModelClass
 	output      *model.StructuredOutput
+
+	streamCloseOnce sync.Once
+	streamCloseErr  error
 }
 
 func newBedrockStreamer(
@@ -88,7 +91,7 @@ func (s *bedrockStreamer) Recv() (model.Chunk, error) {
 
 func (s *bedrockStreamer) Close() error {
 	s.cancel()
-	return s.stream.Close()
+	return s.closeStream()
 }
 
 func (s *bedrockStreamer) Metadata() map[string]any {
@@ -107,7 +110,7 @@ func (s *bedrockStreamer) Metadata() map[string]any {
 func (s *bedrockStreamer) run() {
 	defer close(s.chunks)
 	defer func() {
-		if err := s.stream.Close(); err != nil {
+		if err := s.closeStream(); err != nil {
 			s.setErr(err)
 		}
 	}()
@@ -122,11 +125,18 @@ func (s *bedrockStreamer) run() {
 			return
 		case event, ok := <-events:
 			if !ok {
-				if err := s.stream.Err(); err != nil {
-					s.setErr(wrapBedrockError("converse_stream.recv", err))
-				} else if err := s.ctx.Err(); err != nil {
-					s.setErr(err)
-				} else {
+				streamErr := s.stream.Err()
+				ctxErr := s.ctx.Err()
+				switch {
+				case streamErr != nil:
+					s.setErr(wrapBedrockError("converse_stream.recv", streamErr))
+				case ctxErr != nil:
+					s.setErr(ctxErr)
+				case !processor.completed:
+					s.setErr(errors.New("bedrock: stream ended before message_stop"))
+				case !processor.metadataSeen:
+					s.setErr(errors.New("bedrock: stream ended before metadata"))
+				default:
 					s.setErr(nil)
 				}
 				return
@@ -137,6 +147,13 @@ func (s *bedrockStreamer) run() {
 			}
 		}
 	}
+}
+
+func (s *bedrockStreamer) closeStream() error {
+	s.streamCloseOnce.Do(func() {
+		s.streamCloseErr = s.stream.Close()
+	})
+	return s.streamCloseErr
 }
 
 func (s *bedrockStreamer) emitChunk(chunk model.Chunk) error {
@@ -201,10 +218,13 @@ type chunkProcessor struct {
 	// reasoningBlocks accumulates reasoning content per content index until stop.
 	reasoningBlocks map[int]*reasoningBuffer
 
-	toolNameMap map[string]string
-	modelID     string
-	modelClass  model.ModelClass
-	output      *model.StructuredOutput
+	toolNameMap  map[string]string
+	modelID      string
+	modelClass   model.ModelClass
+	output       *model.StructuredOutput
+	completed    bool
+	metadataSeen bool
+	pendingStop  *model.Chunk
 }
 
 func newChunkProcessor(
@@ -250,28 +270,49 @@ func (p *chunkProcessor) Handle(event any) error {
 
 func (p *chunkProcessor) resetMessageState() {
 	p.toolBlocks = make(map[int]*toolBuffer)
+	p.reasoningBlocks = make(map[int]*reasoningBuffer)
 	p.completion = nil
+	p.completed = false
+	p.metadataSeen = false
+	p.pendingStop = nil
 }
 
 func (p *chunkProcessor) handleMessageStop(ev *brtypes.ConverseStreamOutputMemberMessageStop) error {
+	p.completed = true
 	chunk := model.Chunk{Type: model.ChunkTypeStop}
 	if ev.Value.StopReason != "" {
 		chunk.StopReason = string(ev.Value.StopReason)
 	}
 	p.toolBlocks = make(map[int]*toolBuffer)
 	p.reasoningBlocks = make(map[int]*reasoningBuffer)
-	return p.emit(chunk)
+	p.pendingStop = &chunk
+	if p.metadataSeen {
+		return p.emitPendingStop()
+	}
+	return nil
 }
 
 func (p *chunkProcessor) handleMetadata(ev *brtypes.ConverseStreamOutputMemberMetadata) error {
+	p.metadataSeen = true
 	usage := bedrockStreamUsage(ev.Value.Usage, p.modelID, p.modelClass)
-	if usage == nil {
+	if usage != nil {
+		if p.recordUsage != nil {
+			p.recordUsage(*usage)
+		}
+		if err := p.emit(model.Chunk{Type: model.ChunkTypeUsage, UsageDelta: usage}); err != nil {
+			return err
+		}
+	}
+	return p.emitPendingStop()
+}
+
+func (p *chunkProcessor) emitPendingStop() error {
+	if p.pendingStop == nil {
 		return nil
 	}
-	if p.recordUsage != nil {
-		p.recordUsage(*usage)
-	}
-	return p.emit(model.Chunk{Type: model.ChunkTypeUsage, UsageDelta: usage})
+	chunk := *p.pendingStop
+	p.pendingStop = nil
+	return p.emit(chunk)
 }
 
 func bedrockStreamUsage(usage *brtypes.TokenUsage, modelID string, modelClass model.ModelClass) *model.TokenUsage {

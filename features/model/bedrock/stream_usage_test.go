@@ -16,6 +16,7 @@ func TestChunkProcessor_MetadataUsageIncludesCacheTokens(t *testing.T) {
 		total      int32 = 14
 		cacheRead  int32 = 3
 		cacheWrite int32 = 5
+		latency    int64 = 1
 	)
 
 	var (
@@ -41,6 +42,7 @@ func TestChunkProcessor_MetadataUsageIncludesCacheTokens(t *testing.T) {
 
 	event := &brtypes.ConverseStreamOutputMemberMetadata{
 		Value: brtypes.ConverseStreamMetadataEvent{
+			Metrics: &brtypes.ConverseStreamMetrics{LatencyMs: &latency},
 			Usage: &brtypes.TokenUsage{
 				InputTokens:           &inTokens,
 				OutputTokens:          &outTokens,
@@ -109,8 +111,15 @@ func TestChunkProcessor_StructuredOutputEmitsCompletionDeltaAndFinalCompletion(t
 	require.NoError(t, err)
 	err = cp.Handle(&brtypes.ConverseStreamOutputMemberMessageStop{})
 	require.NoError(t, err)
+	require.Len(t, chunks, 2)
+	latency := int64(1)
+	err = cp.Handle(&brtypes.ConverseStreamOutputMemberMetadata{Value: brtypes.ConverseStreamMetadataEvent{
+		Metrics: &brtypes.ConverseStreamMetrics{LatencyMs: &latency},
+		Usage:   &brtypes.TokenUsage{},
+	}})
+	require.NoError(t, err)
 
-	require.Len(t, chunks, 3)
+	require.Len(t, chunks, 4)
 	require.Equal(t, model.ChunkTypeCompletionDelta, chunks[0].Type)
 	require.NotNil(t, chunks[0].CompletionDelta)
 	require.Equal(t, "draft_from_transcript", chunks[0].CompletionDelta.Name)
@@ -121,7 +130,8 @@ func TestChunkProcessor_StructuredOutputEmitsCompletionDeltaAndFinalCompletion(t
 	require.Equal(t, "draft_from_transcript", chunks[1].Completion.Name)
 	require.JSONEq(t, `{"assistant_text":"created a draft"}`, string(chunks[1].Completion.Payload))
 
-	require.Equal(t, model.ChunkTypeStop, chunks[2].Type)
+	require.Equal(t, model.ChunkTypeUsage, chunks[2].Type)
+	require.Equal(t, model.ChunkTypeStop, chunks[3].Type)
 }
 
 func TestChunkProcessor_StructuredOutputRejectsInvalidFinalJSON(t *testing.T) {
