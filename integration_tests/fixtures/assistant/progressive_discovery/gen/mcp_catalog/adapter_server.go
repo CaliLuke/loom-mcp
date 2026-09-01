@@ -806,7 +806,7 @@ func (a *MCPAdapter) generatedToolCatalog() []*ToolInfo {
 	return []*ToolInfo{&ToolInfo{
 		Description:  stringPtr("Lookup a direct catalog entry"),
 		InputSchema:  jsontext.Value([]byte("{\"type\":\"object\",\"required\":[\"query\"],\"properties\":{\"query\":{\"type\":\"string\",\"description\":\"Lookup query\"}},\"additionalProperties\":false}")),
-		Meta:         jsontext.Value([]byte("{\"com.github.caliluke.loom-mcp/discovery\":{\"category\":\"catalog\",\"tags\":[\"lookup\",\"direct\"],\"keywords\":[\"catalog\",\"entry\"]}}")),
+		Meta:         jsontext.Value([]byte("{\"com.github.caliluke.loom-mcp/discovery\":{\"keywords\":[\"catalog\",\"entry\"],\"category\":\"catalog\",\"tags\":[\"lookup\",\"direct\"]}}")),
 		Name:         "lookup",
 		OutputSchema: jsontext.Value([]byte("{\"type\":\"object\",\"required\":[\"value\"],\"properties\":{\"value\":{\"type\":\"string\",\"description\":\"Lookup result\"}},\"additionalProperties\":false}")),
 		Title:        stringPtr("Lookup"),

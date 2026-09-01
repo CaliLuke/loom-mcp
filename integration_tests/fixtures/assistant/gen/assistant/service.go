@@ -556,7 +556,7 @@ func (u BarCmdOrFooCmd) MarshalJSON() ([]byte, error) {
 	}{
 		Type:  string(u.kind),
 		Value: value,
-	})
+	}, json.Deterministic(true))
 }
 
 // MarshalFormValues marshals the union into application/x-www-form-urlencoded
@@ -772,7 +772,7 @@ func (u CreateActionOrListAction) MarshalJSON() ([]byte, error) {
 	}{
 		Type:  string(u.kind),
 		Value: value,
-	})
+	}, json.Deterministic(true))
 }
 
 // MarshalFormValues marshals the union into application/x-www-form-urlencoded
