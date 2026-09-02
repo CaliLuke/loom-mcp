@@ -66,9 +66,10 @@ Use this skill for `loom-mcp` work in this repo. Keep `AGENTS.md` short and keep
 ## Current Product Rules
 
 - Runtime planners have two streaming modes only:
-  - use `PlannerContext.ModelClient(id)` and drain the decorated stream yourself, or
-  - use `planner.ConsumeStream` with a validated client that is not decorated by
-    the runtime.
+  - use `PlannerContext.ModelClient(id)` and either drain plus finalize the
+    decorated stream yourself or pass it to `planner.ConsumeStream`, or
+  - use `planner.ConsumeStream` with another validated client and the runtime
+    planner-event sink.
 - Runtime registration is immutable after `Runtime.Seal` or the first submitted
   run. `RegisterModel`, `RegisterAgent`, and `RegisterToolset` all return
   `ErrRegistrationClosed`; model-client hot-swapping requires a replacement
@@ -161,6 +162,13 @@ Use this skill for `loom-mcp` work in this repo. Keep `AGENTS.md` short and keep
 - Stream middleware must commit success, tracing status, and adaptive feedback
   in `Finalize`, never on EOF or cleanup-only `Close`. Invocation cancellation
   observed before terminal acceptance rejects the response.
+- Runtime model streams publish one provisional presentation lifecycle. Live
+  text and thinking carry its presentation ID. Stream finalization stages valid
+  content; the planner activity commits all ready presentations in one atomic
+  canonical response event, then emits accepted for each presentation, or
+  discarded for all of them on any attempt failure. The canonical event carries
+  the presentation IDs and authoritative response messages. Partial tool-call
+  JSON never leaves the model boundary.
 - Streamed tool arguments may normalize an empty payload to `{}`, but malformed
   or truncated JSON must fail with a provider-scoped error. Never silently
   coerce malformed model output into a valid tool payload.

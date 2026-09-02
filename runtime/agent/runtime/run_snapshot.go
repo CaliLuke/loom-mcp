@@ -2,10 +2,13 @@ package runtime
 
 import (
 	"encoding/json/v2"
+	"errors"
 	"fmt"
 	"sort"
+	"strings"
 
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/hooks"
+	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/model"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/run"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/runlog"
 )
@@ -104,6 +107,8 @@ func applySnapshotEvent(snapshot *run.Snapshot, toolCalls map[string]*run.ToolCa
 		return nil
 	case hooks.AssistantMessage:
 		return applyAssistantMessage(snapshot, event)
+	case hooks.AssistantTurnCommitted:
+		return applyAssistantTurnCommitted(snapshot, event)
 	case hooks.ToolCallScheduled:
 		return applyToolCallScheduled(toolCalls, event)
 	case hooks.ToolCallUpdated:
@@ -220,6 +225,38 @@ func applyAssistantMessage(snapshot *run.Snapshot, event *runlog.Event) error {
 		return err
 	}
 	snapshot.LastAssistantMessage = payload.Message
+	return nil
+}
+
+func applyAssistantTurnCommitted(snapshot *run.Snapshot, event *runlog.Event) error {
+	var payload hooks.AssistantTurnCommittedEvent
+	if err := decodeSnapshotPayload(event, &payload); err != nil {
+		return err
+	}
+	messages := payload.Messages
+	if len(messages) == 0 && payload.Message != nil {
+		messages = []*model.Message{payload.Message}
+	}
+	if len(messages) == 0 && !payload.ContentEventsOmitted {
+		return errors.New("assistant turn committed payload is missing its message")
+	}
+	var text strings.Builder
+	for _, message := range messages {
+		if message == nil {
+			continue
+		}
+		for _, part := range message.Parts {
+			switch value := part.(type) {
+			case model.TextPart:
+				text.WriteString(value.Text)
+			case model.CitationsPart:
+				text.WriteString(value.Text)
+			}
+		}
+	}
+	if text.Len() > 0 {
+		snapshot.LastAssistantMessage = text.String()
+	}
 	return nil
 }
 

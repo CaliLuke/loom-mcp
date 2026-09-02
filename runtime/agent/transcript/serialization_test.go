@@ -23,6 +23,32 @@ func TestFromModelMessagesPreservesAssistantMessageBoundaries(t *testing.T) {
 	assert.Equal(t, "second", messages[1].Parts[0].(model.TextPart).Text)
 }
 
+func TestAppendAssistantMessagePreservesMetadataAndCitations(t *testing.T) {
+	t.Parallel()
+
+	message := &model.Message{
+		Role: model.ConversationRoleAssistant,
+		Parts: []model.Part{model.CitationsPart{
+			Text: "supported",
+			Citations: []model.Citation{{
+				Title:         "source",
+				SourceContent: []string{"excerpt"},
+			}},
+		}, model.TextPart{Text: " answer"}},
+		Meta: map[string]any{"provider_message_id": "message-1"},
+	}
+	ledger := NewLedger()
+	ledger.AppendAssistantMessage(message)
+
+	messages := ledger.BuildMessages()
+	require.Len(t, messages, 1)
+	require.Equal(t, "message-1", messages[0].Meta["provider_message_id"])
+	cited := messages[0].Parts[0].(model.CitationsPart)
+	require.Equal(t, "supported", cited.Text)
+	require.Equal(t, "source", cited.Citations[0].Title)
+	require.Equal(t, " answer", messages[0].Parts[1].(model.TextPart).Text)
+}
+
 func TestFromModelMessagesAcceptsPointerPartsAndDetachesReasoning(t *testing.T) {
 	t.Parallel()
 
@@ -51,6 +77,7 @@ func TestMessageJSONRoundTripsEveryLedgerPart(t *testing.T) {
 		Parts: []Part{
 			ThinkingPart{Text: "thinking", Signature: "sig", Index: 1, Final: true},
 			TextPart{Text: "calling"},
+			CitationsPart{Text: "supported", Citations: []model.Citation{{Title: "source"}}},
 			ToolUsePart{ID: "call-1", Name: "svc.tool", Args: map[string]any{"q": "loom"}},
 			ToolResultPart{ToolUseID: "call-1", Content: map[string]any{"ok": true}, IsError: false},
 		},
@@ -60,14 +87,16 @@ func TestMessageJSONRoundTripsEveryLedgerPart(t *testing.T) {
 	require.NoError(t, err)
 	var got Message
 	require.NoError(t, json.Unmarshal(raw, &got))
-	require.Len(t, got.Parts, 4)
+	require.Len(t, got.Parts, 5)
 	assert.IsType(t, ThinkingPart{}, got.Parts[0])
 	assert.IsType(t, TextPart{}, got.Parts[1])
-	assert.IsType(t, ToolUsePart{}, got.Parts[2])
-	assert.IsType(t, ToolResultPart{}, got.Parts[3])
+	assert.IsType(t, CitationsPart{}, got.Parts[2])
+	assert.IsType(t, ToolUsePart{}, got.Parts[3])
+	assert.IsType(t, ToolResultPart{}, got.Parts[4])
 	assert.Equal(t, "thinking", got.Parts[0].(ThinkingPart).Text)
-	assert.Equal(t, "loom", got.Parts[2].(ToolUsePart).Args.(map[string]any)["q"])
-	assert.Equal(t, true, got.Parts[3].(ToolResultPart).Content.(map[string]any)["ok"])
+	assert.Equal(t, "source", got.Parts[2].(CitationsPart).Citations[0].Title)
+	assert.Equal(t, "loom", got.Parts[3].(ToolUsePart).Args.(map[string]any)["q"])
+	assert.Equal(t, true, got.Parts[4].(ToolResultPart).Content.(map[string]any)["ok"])
 	assert.Equal(t, "trace-1", got.Meta["trace"])
 }
 

@@ -46,7 +46,7 @@ func (r *Runtime) PlanStartActivity(ctx context.Context, input *PlanActivityInpu
 		return out, err
 	}
 	r.logger.Info(ctx, "PlanStartActivity returning PlanResult", "tool_calls", len(result.ToolCalls), "final_response", result.FinalResponse != nil, "await", result.Await != nil)
-	return r.completePlanActivity(result, input, events, recoveryRecorder)
+	return r.completePlanActivity(ctx, result, input, events, recoveryRecorder)
 }
 
 func (r *Runtime) startPlanInput(
@@ -112,7 +112,7 @@ func (r *Runtime) PlanResumeActivity(ctx context.Context, input *PlanActivityInp
 	if out, handled, err := resolvePlanActivityRecovery(ctx, events, recoveryRecorder, input, err); handled {
 		return out, err
 	}
-	return r.completePlanActivity(result, input, events, recoveryRecorder)
+	return r.completePlanActivity(ctx, result, input, events, recoveryRecorder)
 }
 
 func resolvePlanActivityRecovery(
@@ -141,6 +141,7 @@ func resolvePlanActivityRecovery(
 }
 
 func (r *Runtime) completePlanActivity(
+	ctx context.Context,
 	result *planner.PlanResult,
 	input *PlanActivityInput,
 	events *runtimePlannerEvents,
@@ -148,14 +149,22 @@ func (r *Runtime) completePlanActivity(
 ) (*PlanActivityOutput, error) {
 	r.canonicalizePlanActivityToolCalls(result, input)
 	if err := events.hookError(); err != nil {
+		events.discardModelPresentations(ctx)
 		return nil, err
+	}
+	usage, err := recorder.activityUsage(events.exportUsage())
+	if err != nil {
+		events.discardModelPresentations(ctx)
+		return nil, err
+	}
+	if err := events.commitModelPresentations(ctx); err != nil {
+		return nil, err
+	}
+	if !result.Streamed && events.presentationOwnsFinalResponse(result) {
+		result.Streamed = true
 	}
 	transcript := events.exportTranscript()
 	normalizeTranscriptRawJSON(transcript)
-	usage, err := recorder.activityUsage(events.exportUsage())
-	if err != nil {
-		return nil, err
-	}
 	return &PlanActivityOutput{
 		Result:           result,
 		Transcript:       transcript,
@@ -186,7 +195,11 @@ func plannerActivityError(ctx context.Context, events *runtimePlannerEvents, err
 			map[string]string{plannerThoughtCodeKey: "rate_limited"},
 		)
 	}
-	return errors.Join(err, events.hookError())
+	err = errors.Join(err, events.hookError())
+	if err != nil {
+		events.discardModelPresentations(ctx)
+	}
+	return err
 }
 
 func (r *Runtime) resumePlanInput(

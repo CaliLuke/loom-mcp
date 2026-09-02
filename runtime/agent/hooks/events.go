@@ -363,8 +363,19 @@ type (
 	//     as a best-effort streaming chunk.
 	AssistantTurnCommittedEvent struct {
 		baseEvent `json:"-"`
-		// Message is the canonical assistant transcript message that was just committed.
+		// Message is the canonical assistant transcript message that was just
+		// committed by legacy single-message paths.
 		Message *model.Message
+		// Messages is the ordered canonical model response committed atomically by
+		// a validated presentation. It preserves response message boundaries.
+		Messages []*model.Message
+		// PresentationIDs identifies the provisional presentations accepted by
+		// this atomic commit, in invocation order.
+		PresentationIDs []string `json:"presentation_ids,omitempty"`
+		// ContentEventsOmitted reports that separate AssistantMessage and
+		// ThinkingBlock events were intentionally omitted. Derived projections
+		// must reconstruct those views from Message or Messages when this field is true.
+		ContentEventsOmitted bool `json:"content_events_omitted,omitempty"`
 	}
 
 	// RetryHintIssuedEvent fires when the planner or runtime suggests a retry
@@ -999,6 +1010,19 @@ func NewAssistantTurnCommittedEvent(runID string, agentID agent.Ident, sessionID
 	return &AssistantTurnCommittedEvent{
 		baseEvent: be,
 		Message:   message,
+	}
+}
+
+// NewAssistantPresentationCommittedEvent constructs one atomic committed event
+// for the ordered assistant messages in a validated model response.
+func NewAssistantPresentationCommittedEvent(runID string, agentID agent.Ident, sessionID string, presentationIDs []string, messages []*model.Message) *AssistantTurnCommittedEvent {
+	be := newBaseEvent(runID, agentID)
+	be.sessionID = sessionID
+	return &AssistantTurnCommittedEvent{
+		baseEvent:            be,
+		Messages:             messages,
+		PresentationIDs:      presentationIDs,
+		ContentEventsOmitted: true,
 	}
 }
 

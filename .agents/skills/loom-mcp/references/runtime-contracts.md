@@ -5,11 +5,12 @@ Use this file for current loom-mcp runtime behavior in this repo. Prefer it over
 ## Planner Streaming
 
 - `PlannerContext.ModelClient(id)` returns a runtime-decorated client.
-- With the decorated client, drain the validated stream yourself with `Recv()`.
-- Do not pass a decorated stream to `planner.ConsumeStream`.
-- Use `planner.ConsumeStream` only with a validated client that is not already
-  decorated to emit runtime events.
-- Mixing the two paths double-emits thinking and assistant text events.
+- A planner can drain the decorated stream itself with `Recv()` and `Finalize`,
+  or pass it to `planner.ConsumeStream`. The stream ownership marker prevents
+  duplicate planner events in the helper path.
+- `planner.ConsumeStream` also recognizes runtime presentation events when a
+  validated stream is not decorated, so both supported paths use the same
+  durable acceptance boundary.
 - Drain to the literal `io.EOF`; wrapped EOF is a provider failure.
 - Call `ValidatedStreamer.Finalize(primaryErr)` after draining or aborting.
   `Close` is cleanup-only and does not prove successful completion.
@@ -21,6 +22,22 @@ Use this file for current loom-mcp runtime behavior in this repo. Prefer it over
   `Finalize`, after cleanup errors are known.
 - Final tool calls and typed completions are withheld until terminal validation
   accepts the entire stream.
+- Each runtime model stream starts one provisional presentation. Live text and
+  thinking share its presentation ID. Stream finalization stages valid content;
+  the planner activity emits exactly one accepted or discarded outcome.
+- Acceptance follows planner success and one atomic canonical response write for
+  all ready presentations in the activity. The committed assistant-turn payload
+  carries their presentation IDs plus the authoritative response messages. If
+  the planner or write fails, discard every presentation and fail the attempt;
+  never retain an accepted client projection from an activity that can retry.
+- Canonical presentation commits support the model output boundary rather than
+  the smaller ordinary-hook payload limit. Bound the aggregate activity commit
+  before staging a presentation so oversized batches never become accepted.
+- When a final planner response has the same visible text as an accepted model
+  presentation, the runtime owns streamed-result suppression. A missing planner
+  `Streamed` flag cannot create a duplicate canonical assistant turn.
+- Runtime model tool-argument fragments stay private until validation produces
+  a complete tool call. They are not provisional presentation events.
 
 ## Planner Activity Retries
 
@@ -132,6 +149,10 @@ Use this file for current loom-mcp runtime behavior in this repo. Prefer it over
 - Runtime model streams own planner event publication. `planner.ConsumeStream`
   detects this ownership through the stream marker and only builds its summary;
   it must not publish the same text, thinking, tool delta, or usage twice.
+- Runtime presentation delivery is a best-effort client projection. Sink
+  failures or ended sessions cannot fail, retry, or reclassify model work.
+  Canonical stream and bus projections use detached payloads so one consumer
+  cannot mutate another projection or the planner transcript.
 - Provider changes must extend the shared conformance matrix for applicable
   complete/streaming, multimodal, tool-call, structured-output, typed-thinking,
   token-counting, cancellation, normalized-error, and name-codec behavior.

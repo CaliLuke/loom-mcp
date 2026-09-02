@@ -434,7 +434,14 @@ func decodeAssistantTurnCommittedEvent(input *ActivityInput) (Event, bool, error
 	if err := decodeHookPayload(input, &p); err != nil {
 		return nil, false, err
 	}
-	return NewAssistantTurnCommittedEvent(input.RunID, input.AgentID, input.SessionID, p.Message), true, nil
+	var evt *AssistantTurnCommittedEvent
+	if p.Message != nil {
+		evt = NewAssistantTurnCommittedEvent(input.RunID, input.AgentID, input.SessionID, p.Message)
+	} else {
+		evt = NewAssistantPresentationCommittedEvent(input.RunID, input.AgentID, input.SessionID, p.PresentationIDs, p.Messages)
+	}
+	evt.ContentEventsOmitted = p.ContentEventsOmitted
+	return evt, true, nil
 }
 
 func decodePlannerNoteEvent(input *ActivityInput) (Event, bool, error) {

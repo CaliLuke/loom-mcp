@@ -27,9 +27,10 @@ type StreamSummary struct {
 // ConsumeStream drains the provided streamer and returns the aggregated
 // StreamSummary so planners can produce a final response or schedule tool calls.
 // It emits planner events for text and thinking chunks unless the streamer
-// reports that it owns planner event emission. A runtime-owned stream stages
-// those events until successful finalization. Callers are responsible for
-// handling ToolCalls in the resulting summary.
+// reports that it owns planner event emission. Runtime planner events publish a
+// provisional presentation live and stage only its canonical commitment until
+// successful finalization. Callers are responsible for handling ToolCalls in
+// the resulting summary.
 func ConsumeStream(ctx context.Context, streamer model.ValidatedStreamer, ev PlannerEvents) (StreamSummary, error) {
 	var summary StreamSummary
 	if err := validateStreamInputs(streamer, ev); err != nil {
@@ -39,6 +40,7 @@ func ConsumeStream(ctx context.Context, streamer model.ValidatedStreamer, ev Pla
 	if owned, ok := streamer.(interface{ EmitsPlannerEvents() bool }); ok {
 		emitEvents = !owned.EmitsPlannerEvents()
 	}
+	presentation := newStreamPresentation(ctx, ev, emitEvents)
 
 	for {
 		chunk, err := streamer.Recv()
@@ -47,23 +49,69 @@ func ConsumeStream(ctx context.Context, streamer model.ValidatedStreamer, ev Pla
 			if err == io.EOF {
 				break
 			}
-			return summary, finalizeStream(streamer, err)
+			return summary, presentation.finalize(streamer, nil, err)
 		}
-		handleStreamChunk(ctx, ev, &summary, chunk, emitEvents)
+		handleStreamChunk(ctx, ev, &summary, chunk, emitEvents, presentation)
 	}
 
 	response := streamer.Response()
 	if response == nil {
-		return summary, finalizeStream(streamer, errors.New("validated model stream ended without a canonical response"))
+		return summary, presentation.finalize(streamer, nil, errors.New("validated model stream ended without a canonical response"))
 	}
 	summary.Usage = response.Usage
 	summary.StopReason = response.StopReason
 
-	return summary, finalizeStream(streamer, nil)
+	return summary, presentation.finalize(streamer, response, nil)
 }
 
-func finalizeStream(streamer model.ValidatedStreamer, primaryErr error) error {
-	return streamer.Finalize(primaryErr)
+type streamPresentation struct {
+	ctx    context.Context
+	events ModelPresentationEvents
+	id     string
+}
+
+func newStreamPresentation(ctx context.Context, events PlannerEvents, emitEvents bool) *streamPresentation {
+	presentation := &streamPresentation{ctx: ctx}
+	if !emitEvents {
+		return presentation
+	}
+	presentation.events, _ = events.(ModelPresentationEvents)
+	if presentation.events != nil {
+		presentation.id = presentation.events.StartModelPresentation(ctx)
+	}
+	return presentation
+}
+
+func (p *streamPresentation) stageText(text string) {
+	if p.events == nil || text == "" {
+		return
+	}
+	p.events.PublishModelText(p.ctx, p.id, text)
+}
+
+func (p *streamPresentation) stageThinking(block model.ThinkingPart) {
+	if p.events == nil {
+		return
+	}
+	p.events.PublishModelThinking(p.ctx, p.id, block)
+}
+
+func (p *streamPresentation) finalize(streamer model.ValidatedStreamer, response *model.Response, primaryErr error) error {
+	err := streamer.Finalize(primaryErr)
+	if p.events == nil {
+		return err
+	}
+	if err != nil {
+		p.events.FinishModelPresentation(p.ctx, p.id, false)
+		return err
+	}
+	commitErr := p.events.CommitModelPresentation(p.ctx, p.id, response)
+	if commitErr != nil {
+		p.events.FinishModelPresentation(p.ctx, p.id, false)
+		return commitErr
+	}
+	p.events.FinishModelPresentation(p.ctx, p.id, true)
+	return nil
 }
 
 func validateStreamInputs(streamer model.ValidatedStreamer, ev PlannerEvents) error {
@@ -76,18 +124,18 @@ func validateStreamInputs(streamer model.ValidatedStreamer, ev PlannerEvents) er
 	return nil
 }
 
-func handleStreamChunk(ctx context.Context, ev PlannerEvents, summary *StreamSummary, chunk model.Chunk, emitEvents bool) {
+func handleStreamChunk(ctx context.Context, ev PlannerEvents, summary *StreamSummary, chunk model.Chunk, emitEvents bool, presentation *streamPresentation) {
 	switch value := chunk.(type) {
 	case model.TextChunk:
-		handleTextChunk(ctx, ev, summary, value, emitEvents)
+		handleTextChunk(ctx, ev, summary, value, emitEvents, presentation)
 	case model.ThinkingChunk:
 		if emitEvents {
-			handleThinkingChunk(ctx, ev, value)
+			handleThinkingChunk(ctx, ev, value, presentation)
 		}
 	case model.ToolCallChunk:
 		handleToolCallChunk(summary, value)
 	case model.ToolCallDeltaChunk:
-		if emitEvents {
+		if emitEvents && presentation.events == nil {
 			handleToolCallDeltaChunk(ctx, ev, value)
 		}
 	case model.UsageChunk:
@@ -97,14 +145,18 @@ func handleStreamChunk(ctx context.Context, ev PlannerEvents, summary *StreamSum
 	}
 }
 
-func handleTextChunk(ctx context.Context, ev PlannerEvents, summary *StreamSummary, chunk model.TextChunk, emitEvents bool) {
+func handleTextChunk(ctx context.Context, ev PlannerEvents, summary *StreamSummary, chunk model.TextChunk, emitEvents bool, presentation *streamPresentation) {
 	delta := textChunkDelta(chunk)
 	if delta == "" {
 		return
 	}
 	summary.Text += delta
 	if emitEvents {
-		ev.AssistantChunk(ctx, delta)
+		if presentation.events != nil {
+			presentation.stageText(delta)
+		} else {
+			ev.AssistantChunk(ctx, delta)
+		}
 	}
 }
 
@@ -124,10 +176,14 @@ func textChunkDelta(chunk model.TextChunk) string {
 	return delta
 }
 
-func handleThinkingChunk(ctx context.Context, ev PlannerEvents, chunk model.ThinkingChunk) {
+func handleThinkingChunk(ctx context.Context, ev PlannerEvents, chunk model.ThinkingChunk, presentation *streamPresentation) {
 	for _, p := range chunk.Message.Parts {
 		if tp, ok := p.(model.ThinkingPart); ok {
-			ev.PlannerThinkingBlock(ctx, tp)
+			if presentation.events != nil {
+				presentation.stageThinking(tp)
+			} else {
+				ev.PlannerThinkingBlock(ctx, tp)
+			}
 		}
 	}
 }

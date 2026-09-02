@@ -23,6 +23,14 @@ func TestHookCodecRoundTripsEveryEventType(t *testing.T) {
 	total := 2
 	scheduled := NewToolCallScheduledEvent(testRunID, "agent-1", testSessionID, "svc.tools.lookup", "call-1", rawjson.Message(`{"query":"loom"}`), "tools", "parent-1", 2)
 	scheduled.DisplayHint = "Looking up loom"
+	committed := NewAssistantPresentationCommittedEvent(testRunID, "agent-1", testSessionID, []string{"presentation-1"}, []*model.Message{{
+		Role: model.ConversationRoleAssistant,
+		Parts: []model.Part{model.CitationsPart{
+			Text:      "supported",
+			Citations: []model.Citation{{Title: "source"}},
+		}},
+		Meta: map[string]any{"provider": "test"},
+	}})
 	events := []Event{
 		NewRunStartedEvent(testRunID, "agent-1", run.Context{SessionID: testSessionID}, map[string]any{"message": "hello"}),
 		NewRunCompletedEvent(testRunID, "agent-1", testSessionID, "failed", run.PhaseFailed, errors.New("failed")),
@@ -43,7 +51,7 @@ func TestHookCodecRoundTripsEveryEventType(t *testing.T) {
 		NewToolResultReceivedEvent(testRunID, "agent-1", testSessionID, "svc.tools.lookup", "call-1", "parent-1", map[string]any{"answer": "loom"}, rawjson.Message(`{"answer":"loom"}`), rawjson.Message(`[{"kind":"private"}]`), "loom", &agent.Bounds{Total: &total}, 125*time.Millisecond, nil, nil, nil),
 		NewRetryHintIssuedEvent(testRunID, "agent-1", testSessionID, "invalid_arguments", "svc.tools.lookup", "supply query"),
 		NewAssistantMessageEvent(testRunID, "agent-1", testSessionID, "Done", map[string]any{"answer": "loom"}),
-		NewAssistantTurnCommittedEvent(testRunID, "agent-1", testSessionID, &model.Message{}),
+		committed,
 		NewPlannerNoteEvent(testRunID, "agent-1", testSessionID, "checking", map[string]string{"stage": "lookup"}),
 		NewThinkingBlockEvent(testRunID, "agent-1", testSessionID, "thought", "signature", []byte("redacted"), 1, true),
 		NewPolicyDecisionEvent(testRunID, "agent-1", testSessionID, []tools.Ident{"svc.tools.lookup"}, policy.CapsState{}, map[string]string{"policy": "default"}, map[string]any{"rule": "allow"}),
@@ -73,6 +81,25 @@ func TestHookCodecRoundTripsEveryEventType(t *testing.T) {
 			assert.JSONEq(t, string(input.Payload), string(reencoded.Payload))
 		})
 	}
+}
+
+func TestAssistantTurnCodecPreservesLegacyMessageField(t *testing.T) {
+	t.Parallel()
+
+	message := &model.Message{
+		Role:  model.ConversationRoleAssistant,
+		Parts: []model.Part{model.TextPart{Text: "legacy"}},
+	}
+	input, err := EncodeToHookInput(NewAssistantTurnCommittedEvent(testRunID, "agent-1", testSessionID, message), "turn-1")
+	require.NoError(t, err)
+	require.Contains(t, string(input.Payload), `"Message"`)
+
+	decoded, err := DecodeFromHookInput(input)
+	require.NoError(t, err)
+	committed := decoded.(*AssistantTurnCommittedEvent)
+	require.Equal(t, message, committed.Message)
+	require.Empty(t, committed.Messages)
+	require.Empty(t, committed.PresentationIDs)
 }
 
 func TestHookCodecRejectsInvalidEnvelopes(t *testing.T) {

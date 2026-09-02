@@ -30,7 +30,10 @@ const (
 	SubscriberBestEffort
 )
 
-const maxHookPayloadBytes = 1_000_000
+const (
+	maxHookPayloadBytes                  = 1_000_000
+	maxCanonicalPresentationPayloadBytes = 17 << 20
+)
 
 // logWarn emits a warning log and records the error in the current span if tracing is enabled.
 func (r *Runtime) logWarn(ctx context.Context, msg string, err error, kv ...any) {
@@ -53,7 +56,15 @@ func (r *Runtime) publishHookErr(ctx context.Context, evt hooks.Event, turnID st
 	if err != nil {
 		return err
 	}
-	if len(in.Payload) > maxHookPayloadBytes {
+	if isCanonicalPresentationCommit(evt) {
+		if len(in.Payload) > maxCanonicalPresentationPayloadBytes {
+			return fmt.Errorf(
+				"canonical presentation payload too large: %d bytes (limit %d)",
+				len(in.Payload),
+				maxCanonicalPresentationPayloadBytes,
+			)
+		}
+	} else if len(in.Payload) > maxHookPayloadBytes {
 		in, err = compactOversizedHookInput(evt, turnID)
 		if err != nil {
 			return err

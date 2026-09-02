@@ -8,6 +8,7 @@ import (
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/engine"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/hooks"
+	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/model"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/run"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/runlog"
 	runloginmem "github.com/CaliLuke/loom-mcp/v2/runtime/agent/runlog/inmem"
@@ -173,6 +174,54 @@ func TestNewRunSnapshotProjectsAwaitPauseAndResume(t *testing.T) {
 			assert.Equal(t, tc.wantAwait, snap.Await)
 		})
 	}
+}
+
+func TestNewRunSnapshotProjectsCommittedAssistantTurn(t *testing.T) {
+	t.Parallel()
+
+	const (
+		runID     = "run-1"
+		sessionID = "sess-1"
+		turnID    = "turn-1"
+	)
+	agentID := agent.Ident("svc.agent")
+	mk := func(at time.Time, evt hooks.Event) *runlog.Event {
+		input, err := hooks.EncodeToHookInput(evt, turnID)
+		require.NoError(t, err)
+		return &runlog.Event{
+			EventKey:  input.EventKey,
+			RunID:     runID,
+			AgentID:   agentID,
+			SessionID: sessionID,
+			TurnID:    turnID,
+			Type:      input.Type,
+			Payload:   input.Payload,
+			Timestamp: at,
+		}
+	}
+
+	committed := hooks.NewAssistantPresentationCommittedEvent(runID, agentID, sessionID, []string{"presentation-1"}, []*model.Message{
+		{
+			Role: model.ConversationRoleAssistant,
+			Parts: []model.Part{
+				model.ThinkingPart{Text: "reasoning"},
+				model.TextPart{Text: "hello"},
+			},
+		},
+		{
+			Role:  model.ConversationRoleAssistant,
+			Parts: []model.Part{model.CitationsPart{Text: " world"}},
+		},
+	})
+	events := []*runlog.Event{
+		mk(time.Unix(10, 0).UTC(), hooks.NewAssistantMessageEvent(runID, agentID, sessionID, "stale", nil)),
+		mk(time.Unix(11, 0).UTC(), committed),
+		mk(time.Unix(12, 0).UTC(), hooks.NewAssistantTurnCommittedEvent(runID, agentID, sessionID, &model.Message{Role: model.ConversationRoleAssistant})),
+	}
+
+	snapshot, err := newRunSnapshot(events)
+	require.NoError(t, err)
+	assert.Equal(t, "hello world", snapshot.LastAssistantMessage)
 }
 
 func TestGetRunSnapshotReadsThroughStore(t *testing.T) {

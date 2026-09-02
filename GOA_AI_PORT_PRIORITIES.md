@@ -90,9 +90,11 @@ Implemented on `codex/port-goa-ai-runtime-contracts`:
   a second completion authority, and gateway handlers return the terminal
   response with the streamed chunks.
 
-Still open in Batch 2: publish provisional presentation deltas with an explicit
-accepted or discarded outcome. Presentation text and thinking now stay
-provisional until stream validation and provider cleanup both succeed.
+Batch 2 is complete. Each streamed model invocation now has a presentation ID.
+The runtime publishes a start event and live text/thinking deltas, then exactly
+one accepted or discarded outcome. Only accepted content enters the durable
+transcript. Partial tool JSON stays private until validation produces a complete
+tool call.
 
 ### Active Progress — Recovery and Atomic Registry Decisions
 

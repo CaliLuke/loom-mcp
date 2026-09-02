@@ -5,42 +5,82 @@ import (
 
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/hooks"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/memory"
+	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/model"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/planner"
 )
 
-func projectMemoryEvent(event hooks.Event) (agentID, runID string, memEvent memory.Event, ok bool) {
+func projectMemoryEvents(event hooks.Event) (agentID, runID string, memEvents []memory.Event, ok bool) {
 	switch evt := event.(type) {
 	case *hooks.ToolCallScheduledEvent:
-		return evt.AgentID(), evt.RunID(), memory.NewEvent(time.UnixMilli(evt.Timestamp()), memory.ToolCallData{
+		return evt.AgentID(), evt.RunID(), []memory.Event{memory.NewEvent(time.UnixMilli(evt.Timestamp()), memory.ToolCallData{
 			ToolCallID:            evt.ToolCallID,
 			ParentToolCallID:      evt.ParentToolCallID,
 			ToolName:              evt.ToolName,
 			PayloadJSON:           evt.Payload,
 			Queue:                 evt.Queue,
 			ExpectedChildrenTotal: evt.ExpectedChildrenTotal,
-		}, nil), true
+		}, nil)}, true
 	case *hooks.ToolResultReceivedEvent:
-		return evt.AgentID(), evt.RunID(), memory.NewEvent(time.UnixMilli(evt.Timestamp()), newToolResultMemoryData(evt), nil), true
+		return evt.AgentID(), evt.RunID(), []memory.Event{memory.NewEvent(time.UnixMilli(evt.Timestamp()), newToolResultMemoryData(evt), nil)}, true
 	case *hooks.AssistantMessageEvent:
-		return evt.AgentID(), evt.RunID(), memory.NewEvent(time.UnixMilli(evt.Timestamp()), memory.AssistantMessageData{
+		return evt.AgentID(), evt.RunID(), []memory.Event{memory.NewEvent(time.UnixMilli(evt.Timestamp()), memory.AssistantMessageData{
 			Message:    evt.Message,
 			Structured: evt.Structured,
-		}, nil), true
+		}, nil)}, true
+	case *hooks.AssistantTurnCommittedEvent:
+		if !evt.ContentEventsOmitted {
+			return "", "", nil, false
+		}
+		return projectCommittedAssistantMemoryEvents(evt)
 	case *hooks.ThinkingBlockEvent:
-		return evt.AgentID(), evt.RunID(), memory.NewEvent(time.UnixMilli(evt.Timestamp()), memory.ThinkingData{
+		return evt.AgentID(), evt.RunID(), []memory.Event{memory.NewEvent(time.UnixMilli(evt.Timestamp()), memory.ThinkingData{
 			Text:         evt.Text,
 			Signature:    evt.Signature,
 			Redacted:     evt.Redacted,
 			ContentIndex: evt.ContentIndex,
 			Final:        evt.Final,
-		}, nil), true
+		}, nil)}, true
 	case *hooks.PlannerNoteEvent:
-		return evt.AgentID(), evt.RunID(), memory.NewEvent(time.UnixMilli(evt.Timestamp()), memory.PlannerNoteData{
+		return evt.AgentID(), evt.RunID(), []memory.Event{memory.NewEvent(time.UnixMilli(evt.Timestamp()), memory.PlannerNoteData{
 			Note: evt.Note,
-		}, evt.Labels), true
+		}, evt.Labels)}, true
 	default:
-		return "", "", memory.Event{}, false
+		return "", "", nil, false
 	}
+}
+
+func projectCommittedAssistantMemoryEvents(evt *hooks.AssistantTurnCommittedEvent) (agentID, runID string, memEvents []memory.Event, ok bool) {
+	messages := evt.Messages
+	if len(messages) == 0 && evt.Message != nil {
+		messages = []*model.Message{evt.Message}
+	}
+	timestamp := time.UnixMilli(evt.Timestamp())
+	var events []memory.Event
+	for _, message := range messages {
+		if message == nil {
+			continue
+		}
+		for _, part := range message.Parts {
+			switch value := part.(type) {
+			case model.ThinkingPart:
+				events = append(events, memory.NewEvent(timestamp, memory.ThinkingData{
+					Text:         value.Text,
+					Signature:    value.Signature,
+					Redacted:     value.Redacted,
+					ContentIndex: value.Index,
+					Final:        value.Final,
+				}, nil))
+			case model.TextPart:
+				events = append(events, memory.NewEvent(timestamp, memory.AssistantMessageData{Message: value.Text}, nil))
+			case model.CitationsPart:
+				events = append(events, memory.NewEvent(timestamp, memory.AssistantMessageData{Message: value.Text}, nil))
+			}
+		}
+	}
+	if len(events) == 0 {
+		return "", "", nil, false
+	}
+	return evt.AgentID(), evt.RunID(), events, true
 }
 
 func newToolResultMemoryData(evt *hooks.ToolResultReceivedEvent) memory.ToolResultData {

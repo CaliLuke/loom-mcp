@@ -115,11 +115,21 @@ type (
 		Data AssistantReplyPayload
 	}
 
-	// AssistantTurn streams a canonical assistant transcript message after the
+	// ModelPresentation marks the lifecycle of one provisional model response.
+	// Clients use the presentation ID to group live text and thinking, then
+	// either commit or remove that content at the terminal lifecycle event.
+	ModelPresentation struct {
+		Base
+		Data ModelPresentationPayload
+	}
+
+	// AssistantTurn streams canonical assistant transcript content after the
 	// runtime has durably appended it to the run log.
 	//
 	// Contract:
-	//   - Each event represents one committed assistant transcript artifact.
+	//   - Each event represents one atomic committed assistant transcript artifact.
+	//   - Presentation commits preserve the model response's message boundaries.
+	//   - PresentationIDs correlates the canonical content with provisional output.
 	//   - Unlike AssistantReply, this event is canonical and replay-safe.
 	AssistantTurn struct {
 		Base
@@ -270,14 +280,20 @@ type (
 	}
 
 	// AssistantReplyPayload is the typed wire payload for assistant reply events.
-	// It mirrors AssistantReply.Text for consumers decoding Base.Payload().
+	// PresentationID is set for provisional model output and empty for legacy
+	// planner-authored assistant events.
 	AssistantReplyPayload struct {
-		Text string `json:"text"`
+		PresentationID string `json:"presentation_id,omitempty"`
+		Text           string `json:"text"`
 	}
 
-	// AssistantTurnPayload carries the committed assistant transcript message.
+	// AssistantTurnPayload carries canonical assistant transcript content. Message
+	// is the legacy single-message shape; Messages and PresentationIDs form the
+	// atomic presentation shape.
 	AssistantTurnPayload struct {
-		Message *model.Message `json:"message"`
+		Message         *model.Message   `json:"message,omitempty"`
+		Messages        []*model.Message `json:"messages,omitempty"`
+		PresentationIDs []string         `json:"presentation_ids,omitempty"`
 	}
 
 	// PlannerThoughtPayload is the typed wire payload for planner thought events.
@@ -285,12 +301,13 @@ type (
 	// structured thinking blocks, Text/Signature or Redacted are populated with
 	// ContentIndex and Final flags mirroring provider content blocks.
 	PlannerThoughtPayload struct {
-		Note         string `json:"note,omitempty"`
-		Text         string `json:"text,omitempty"`
-		Signature    string `json:"signature,omitempty"`
-		Redacted     []byte `json:"redacted,omitempty"`
-		ContentIndex int    `json:"content_index,omitempty"`
-		Final        bool   `json:"final,omitempty"`
+		PresentationID string `json:"presentation_id,omitempty"`
+		Note           string `json:"note,omitempty"`
+		Text           string `json:"text,omitempty"`
+		Signature      string `json:"signature,omitempty"`
+		Redacted       []byte `json:"redacted,omitempty"`
+		ContentIndex   int    `json:"content_index,omitempty"`
+		Final          bool   `json:"final,omitempty"`
 	}
 
 	// PromptRenderedPayload describes one rendered prompt reference and scope.
@@ -575,6 +592,13 @@ type (
 		Delta string `json:"delta"`
 	}
 
+	// ModelPresentationPayload identifies one provisional model response and
+	// reports whether clients should start, accept, or remove its visible output.
+	ModelPresentationPayload struct {
+		PresentationID string                 `json:"presentation_id"`
+		State          ModelPresentationState `json:"state"`
+	}
+
 	// ToolOutputDeltaPayload describes a streamed tool output fragment.
 	ToolOutputDeltaPayload struct {
 		// ToolCallID identifies the tool call producing the output.
@@ -764,10 +788,27 @@ func MetricsProfile() StreamProfile {
 	}
 }
 
-// EventType enumerates stream payload flavors.
-type EventType string
+type (
+	// EventType enumerates stream payload flavors.
+	EventType string
+
+	// ModelPresentationState identifies the client action for one provisional
+	// model response.
+	ModelPresentationState string
+)
 
 const (
+	// ModelPresentationStarted begins one provisional model response.
+	ModelPresentationStarted ModelPresentationState = "started"
+
+	// ModelPresentationAccepted tells clients that the provisional response is
+	// canonical and may be committed to the visible conversation.
+	ModelPresentationAccepted ModelPresentationState = "accepted"
+
+	// ModelPresentationDiscarded tells clients to remove provisional output
+	// because the response failed validation or provider cleanup.
+	ModelPresentationDiscarded ModelPresentationState = "discarded"
+
 	// EventPlannerThought streams incremental planner reasoning and annotations during
 	// execution. These events allow clients to display "thinking..." indicators and show
 	// intermediate planner thoughts before tool calls complete. Emitted by StreamSubscriber
@@ -815,6 +856,10 @@ const (
 	// progressively (streaming typewriter effect). Emitted by StreamSubscriber when
 	// AssistantMessageEvent hooks fire. Payload is AssistantReplyPayload.
 	EventAssistantReply EventType = "assistant_reply"
+
+	// EventModelPresentation reports the lifecycle of one provisional model
+	// response.
+	EventModelPresentation EventType = "model_presentation"
 
 	// EventAssistantTurn streams one canonical assistant transcript message after
 	// the runtime has durably appended it to the run log.

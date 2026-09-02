@@ -43,6 +43,59 @@ func TestStreamSubscriber(t *testing.T) {
 	require.Equal(t, "hello", v.Data.Text)
 }
 
+func TestStreamSubscriberProvisionalEventsRespectProfile(t *testing.T) {
+	t.Parallel()
+
+	payload := ModelPresentationPayload{PresentationID: "presentation-1", State: ModelPresentationStarted}
+	presentation := ModelPresentation{
+		Base: NewBase(EventModelPresentation, "run-1", "session-1", payload),
+		Data: payload,
+	}
+
+	t.Run("default forwards lifecycle", func(t *testing.T) {
+		sink := &mockSink{}
+		sub, err := NewSubscriber(sink)
+		require.NoError(t, err)
+		require.NoError(t, sub.HandleProvisionalEvent(context.Background(), presentation))
+		require.Equal(t, []Event{presentation}, sink.events)
+	})
+
+	t.Run("disabled lifecycle is filtered", func(t *testing.T) {
+		sink := &mockSink{}
+		profile := DefaultProfile()
+		profile.Assistant = false
+		profile.Thoughts = false
+		sub, err := NewSubscriberWithProfile(sink, profile)
+		require.NoError(t, err)
+		require.NoError(t, sub.HandleProvisionalEvent(context.Background(), presentation))
+		require.Empty(t, sink.events)
+	})
+
+	t.Run("assistant-turn-only profile receives canonical turn", func(t *testing.T) {
+		sink := &mockSink{}
+		sub, err := NewSubscriberWithProfile(sink, StreamProfile{AssistantTurns: true})
+		require.NoError(t, err)
+		require.NoError(t, sub.HandleProvisionalEvent(context.Background(), presentation))
+		require.Empty(t, sink.events)
+
+		message := &model.Message{Role: model.ConversationRoleAssistant, Parts: []model.Part{model.TextPart{Text: "canonical"}}}
+		require.NoError(t, sub.HandleEvent(context.Background(), hooks.NewAssistantTurnCommittedEvent("run-1", "agent-1", "session-1", message)))
+		require.Len(t, sink.events, 1)
+		require.Equal(t, EventAssistantTurn, sink.events[0].Type())
+	})
+
+	t.Run("durable event is rejected", func(t *testing.T) {
+		sink := &mockSink{}
+		sub, err := NewSubscriber(sink)
+		require.NoError(t, err)
+		err = sub.HandleProvisionalEvent(context.Background(), Workflow{
+			Base: NewBase(EventWorkflow, "run-1", "session-1", WorkflowPayload{Phase: "running"}),
+		})
+		require.ErrorContains(t, err, "unsupported provisional stream event")
+		require.Empty(t, sink.events)
+	})
+}
+
 func TestStreamSubscriber_AssistantTurnCommitted(t *testing.T) {
 	sink := &mockSink{}
 	sub, err := NewSubscriber(sink)
@@ -61,6 +114,27 @@ func TestStreamSubscriber_AssistantTurnCommitted(t *testing.T) {
 	require.True(t, ok)
 	require.NotNil(t, v.Data.Message)
 	require.Equal(t, msg, v.Data.Message)
+}
+
+func TestStreamSubscriber_AssistantPresentationPreservesMessages(t *testing.T) {
+	t.Parallel()
+
+	sink := &mockSink{}
+	sub, err := NewSubscriber(sink)
+	require.NoError(t, err)
+	messages := []*model.Message{
+		{Role: model.ConversationRoleAssistant, Parts: []model.Part{model.CitationsPart{Text: "first"}}},
+		{Role: model.ConversationRoleAssistant, Parts: []model.Part{model.TextPart{Text: " second"}}},
+	}
+	evt := hooks.NewAssistantPresentationCommittedEvent("r1", agent.Ident("agent1"), "session-1", []string{"presentation-1", "presentation-2"}, messages)
+
+	require.NoError(t, sub.HandleEvent(context.Background(), evt))
+
+	require.Len(t, sink.events, 1)
+	turn := sink.events[0].(AssistantTurn)
+	require.Nil(t, turn.Data.Message)
+	require.Equal(t, messages, turn.Data.Messages)
+	require.Equal(t, []string{"presentation-1", "presentation-2"}, turn.Data.PresentationIDs)
 }
 
 func TestStreamSubscriber_AssistantTurnCommittedRespectsProfileToggle(t *testing.T) {

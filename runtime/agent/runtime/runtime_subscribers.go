@@ -48,11 +48,11 @@ func (r *Runtime) registerSessionSubscriber(bus hooks.Bus) {
 
 func (r *Runtime) registerMemorySubscriber(bus hooks.Bus) {
 	memSub := hooks.SubscriberFunc(func(ctx context.Context, event hooks.Event) error {
-		agentID, runID, memEvent, ok := projectMemoryEvent(event)
+		agentID, runID, memEvents, ok := projectMemoryEvents(event)
 		if !ok {
 			return nil
 		}
-		return r.Memory.AppendEvents(ctx, agentID, runID, memEvent)
+		return r.Memory.AppendEvents(ctx, agentID, runID, memEvents...)
 	})
 	if _, err := r.registerSubscriber(bus, memSub, SubscriberBestEffort); err != nil {
 		r.logger.Warn(context.Background(), "failed to register memory subscriber", "err", err)

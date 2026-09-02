@@ -42,9 +42,15 @@ func (r *Runtime) hookActivity(ctx context.Context, input *HookActivityInput) er
 	if err != nil {
 		return err
 	}
+	if isCanonicalPresentationCommit(evt) {
+		return r.publishCanonicalPresentationCommit(ctx, input, evt, payload)
+	}
+	return r.publishInterceptableHookEvent(ctx, input, evt, payload)
+}
+
+func (r *Runtime) publishInterceptableHookEvent(ctx context.Context, input *HookActivityInput, evt hooks.Event, payload []byte) error {
 	interceptors := r.interceptorsForAgent(input.AgentID)
-	var dropped bool
-	evt, payload, dropped, err = runBeforeEventInterceptors(ctx, interceptors, evt, payload, *input)
+	evt, payload, dropped, err := runBeforeEventInterceptors(ctx, interceptors, evt, payload, *input)
 	if err != nil {
 		return err
 	}
@@ -52,14 +58,13 @@ func (r *Runtime) hookActivity(ctx context.Context, input *HookActivityInput) er
 		return runAfterEventInterceptors(ctx, interceptors, evt, true, nil)
 	}
 	eventType := evt.Type()
-	inserted := false
 	// Tool call argument deltas are best-effort UX signals. They are intentionally
 	// excluded from the canonical run event log to avoid bloating durable history.
 	//
 	// Consumers must treat ToolCallArgsDelta as optional; the canonical tool
 	// payload is still emitted via tool_start/tool_end and the finalized tool call.
 	if eventType != hooks.ToolCallArgsDelta {
-		inserted, err = r.appendHookRunEvent(ctx, input, evt, payload)
+		inserted, err := r.appendHookRunEvent(ctx, input, evt, payload)
 		if err != nil {
 			return runAfterEventInterceptors(ctx, interceptors, evt, false, err)
 		}
@@ -78,6 +83,35 @@ func (r *Runtime) hookActivity(ctx context.Context, input *HookActivityInput) er
 		r.storeWorkflowHandle(input.RunID, nil)
 	}
 	return runAfterEventInterceptors(ctx, interceptors, evt, false, nil)
+}
+
+// publishCanonicalPresentationCommit persists the runtime-owned presentation
+// boundary without application interception. Once the append succeeds, stream
+// and bus projections are best-effort and cannot reverse canonical acceptance.
+func (r *Runtime) publishCanonicalPresentationCommit(ctx context.Context, input *HookActivityInput, evt hooks.Event, payload []byte) error {
+	inserted, err := r.appendHookRunEvent(ctx, input, evt, payload)
+	if err != nil {
+		return err
+	}
+	if inserted {
+		r.recordCanonicalEventTelemetry(ctx, evt)
+	}
+	r.publishHookStreamEvent(ctx, input.SessionID, evt)
+	busEvent, err := hooks.DecodeFromHookInput(input)
+	if err != nil {
+		r.logWarn(ctx, "canonical presentation projection decode failed", err, "event", evt.Type())
+		return nil
+	}
+	if err := r.publishHookBusEvent(ctx, busEvent.Type(), busEvent); err != nil {
+		//nolint:nilerr // Canonical storage succeeded; projections cannot reverse acceptance.
+		return nil
+	}
+	return nil
+}
+
+func isCanonicalPresentationCommit(evt hooks.Event) bool {
+	committed, ok := evt.(*hooks.AssistantTurnCommittedEvent)
+	return ok && committed.ContentEventsOmitted
 }
 
 func (r *Runtime) decodeHookActivityEvent(ctx context.Context, input *HookActivityInput) (hooks.Event, []byte, error) {

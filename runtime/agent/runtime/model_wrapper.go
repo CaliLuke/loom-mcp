@@ -2,6 +2,8 @@ package runtime
 
 import (
 	"context"
+	"errors"
+	"sync"
 
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/model"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/planner"
@@ -10,17 +12,18 @@ import (
 
 // This file implements a per-turn model.Client decorator that emits runtime
 // planner events for accepted model output. The wrapper:
-//   - Streams: stages assistant text and thinking until finalization succeeds,
-//     and forwards safe usage deltas as they arrive.
+//   - Streams: publishes provisional text and thinking live, stages their
+//     canonical commitment until finalization succeeds, and forwards safe usage
+//     deltas as they arrive.
 //   - Unary: emits assistant text/thinking from the final response and
 //     reports usage when available.
 //
 // Critical invariants:
 //   - Final tool calls are NOT emitted here; those are already surfaced to
 //     planners via model.ChunkTypeToolCall and handled by the workflow loop.
-//   - Tool call argument deltas MAY be emitted here as a best-effort UX signal
-//     (model.ChunkTypeToolCallDelta). Consumers may ignore them; the canonical
-//     tool payload remains the finalized tool call and the runtime tool_start.
+//   - Runtime model tool-call argument deltas remain private until the complete
+//     validated tool call is available. Legacy non-runtime event sinks retain
+//     their existing best-effort delta behavior.
 //   - Emission occurs in the planner activity context to keep ledger writes
 //     deterministic and scoped to the current turn.
 
@@ -79,28 +82,27 @@ func canonicalizeModelToolUnavailableCalls(response *model.Response, request *mo
 }
 
 // Stream delegates to the inner client and returns a Streamer that owns planner
-// events. It emits usage while receiving and publishes staged assistant text and
-// thinking only after finalization succeeds. The request supplies model identity
-// when usage chunks do not include one.
+// events. It emits usage and provisional presentation while receiving, then
+// stages the canonical assistant message after finalization succeeds. The
+// planner activity commits it only after the planner returns successfully. The
+// request supplies model identity when usage chunks do not include one.
 func (c *eventDecoratedClient) Stream(ctx context.Context, req *model.Request) (model.ValidatedStreamer, error) {
 	st, err := c.inner.Stream(ctx, req)
 	if err != nil {
 		return nil, err
 	}
-	return &eventStream{
+	wrapped := &eventStream{
 		inner:  st,
 		events: c.events,
 		ctx:    ctx,
 		req:    req,
-	}, nil
-}
-
-// stagedPlannerEvent holds presentation content until the validated stream
-// reaches a clean terminal boundary. Rejected model content must never enter
-// the canonical run log.
-type stagedPlannerEvent struct {
-	text     string
-	thinking *model.ThinkingPart
+	}
+	if presentation, ok := c.events.(planner.ModelPresentationEvents); ok {
+		presentationID := presentation.StartModelPresentation(ctx)
+		wrapped.presentation = presentation
+		wrapped.presentationID = presentationID
+	}
+	return wrapped, nil
 }
 
 // eventStream decorates a model.Streamer to emit PlannerEvents for chunks. It
@@ -111,13 +113,19 @@ type eventStream struct {
 	events planner.PlannerEvents
 	ctx    context.Context
 	req    *model.Request
-	staged []stagedPlannerEvent
+	parts  []model.Part
+
+	presentation   planner.ModelPresentationEvents
+	presentationID string
+	finalizeMu     sync.Mutex
+	finalized      bool
+	finalizeErr    error
 }
 
 // EmitsPlannerEvents reports that the stream owns planner presentation and usage
-// events. Recv publishes safe incremental events, and Finalize publishes staged
-// presentation events after acceptance. Helpers such as planner.ConsumeStream
-// use this marker to avoid publishing the same accepted chunk twice.
+// events. Recv publishes safe incremental events, and Finalize stages validated
+// presentation content for the planner activity. Helpers such as
+// planner.ConsumeStream use this marker to avoid publishing each chunk twice.
 func (*eventStream) EmitsPlannerEvents() bool {
 	return true
 }
@@ -128,9 +136,10 @@ func (*eventStream) EmitsPlannerEvents() bool {
 // Contract:
 //   - Final tool calls are passed through untouched for the planner/workflow to
 //     handle.
-//   - Tool call argument deltas are forwarded as best-effort PlannerEvents for
-//     streaming UX; consumers may ignore them. Internal tool argument deltas are
-//     never emitted because their payload is replaced at the activity boundary.
+//   - Runtime model tool-call argument deltas remain private. Legacy event sinks
+//     may still receive them as best-effort UX signals. Internal tool argument
+//     deltas are never emitted because their payload is replaced at the activity
+//     boundary.
 func (s *eventStream) Recv() (model.Chunk, error) {
 	ch, err := s.inner.Recv()
 	if err != nil {
@@ -138,7 +147,7 @@ func (s *eventStream) Recv() (model.Chunk, error) {
 	}
 	switch value := ch.(type) {
 	case model.ToolCallDeltaChunk:
-		if value.Delta.Name != tools.ToolUnavailable {
+		if s.presentation == nil && value.Delta.Name != tools.ToolUnavailable {
 			s.events.ToolCallArgsDelta(s.ctx, value.Delta.ID, value.Delta.Name, value.Delta.Delta)
 		}
 	case model.TextChunk:
@@ -169,7 +178,10 @@ func (s *eventStream) stageMessageContent(message *model.Message) {
 			text = content.Text
 		}
 		if text != "" {
-			s.staged = append(s.staged, stagedPlannerEvent{text: text})
+			s.parts = append(s.parts, model.TextPart{Text: text})
+			if s.presentation != nil {
+				s.presentation.PublishModelText(s.ctx, s.presentationID, text)
+			}
 		}
 	}
 }
@@ -184,19 +196,28 @@ func (s *eventStream) stageThinkingParts(message *model.Message) {
 
 func (s *eventStream) stageThinking(thinking model.ThinkingPart) {
 	thinking.Redacted = append([]byte(nil), thinking.Redacted...)
-	s.staged = append(s.staged, stagedPlannerEvent{thinking: &thinking})
+	s.parts = append(s.parts, thinking)
+	if s.presentation == nil {
+		return
+	}
+	s.presentation.PublishModelThinking(s.ctx, s.presentationID, thinking)
 }
 
-func (s *eventStream) flushStagedEvents() {
-	staged := s.staged
-	s.staged = nil
-	for _, event := range staged {
-		if event.thinking != nil {
-			s.events.PlannerThinkingBlock(s.ctx, *event.thinking)
-			continue
-		}
-		s.events.AssistantChunk(s.ctx, event.text)
+func (s *eventStream) flushStagedEvents(response *model.Response) error {
+	parts := s.parts
+	s.parts = nil
+	if s.presentation != nil {
+		return s.presentation.CommitModelPresentation(s.ctx, s.presentationID, response)
 	}
+	for _, part := range parts {
+		switch value := part.(type) {
+		case model.ThinkingPart:
+			s.events.PlannerThinkingBlock(s.ctx, value)
+		case model.TextPart:
+			s.events.AssistantChunk(s.ctx, value.Text)
+		}
+	}
+	return nil
 }
 
 func (s *eventStream) Close() error {
@@ -210,13 +231,36 @@ func (s *eventStream) Response() *model.Response {
 }
 
 func (s *eventStream) Finalize(primaryErr error) error {
+	s.finalizeMu.Lock()
+	defer s.finalizeMu.Unlock()
+	if s.finalized {
+		return s.finalizeErr
+	}
+	s.finalized = true
+
 	err := s.inner.Finalize(primaryErr)
 	if err != nil {
-		s.staged = nil
-		return err
+		s.parts = nil
+		if s.presentation != nil {
+			s.presentation.FinishModelPresentation(s.ctx, s.presentationID, false)
+		}
+		s.finalizeErr = err
+		return s.finalizeErr
 	}
-	s.flushStagedEvents()
-	return nil
+	response := s.Response()
+	if response == nil {
+		s.finalizeErr = errors.New("validated model stream finalized without a canonical response")
+		if s.presentation != nil {
+			s.presentation.FinishModelPresentation(s.ctx, s.presentationID, false)
+		}
+		return s.finalizeErr
+	}
+	commitErr := s.flushStagedEvents(response)
+	if s.presentation != nil {
+		s.presentation.FinishModelPresentation(s.ctx, s.presentationID, commitErr == nil)
+	}
+	s.finalizeErr = commitErr
+	return s.finalizeErr
 }
 
 // cacheConfiguredClient wraps a model.Client and applies the agent CachePolicy

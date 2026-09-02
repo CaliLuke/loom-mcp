@@ -253,7 +253,16 @@ func TestPlannerContextModelClientAndConsumeStreamDoNotDuplicateTranscriptOrUsag
 			model.UsageChunk{Usage: usage},
 			model.StopChunk{Reason: "end_turn"},
 		},
-		response: &model.Response{Usage: usage, StopReason: "end_turn"},
+		response: &model.Response{
+			Content: []model.Message{{
+				Role: model.ConversationRoleAssistant,
+				Parts: []model.Part{
+					model.TextPart{Text: "hello"},
+					model.ThinkingPart{Text: "consider", Final: true},
+				},
+			}},
+			Usage: usage, StopReason: "end_turn",
+		},
 	}
 	rt := New()
 	rt.models["default"] = contractModelClient{streamer: inner}

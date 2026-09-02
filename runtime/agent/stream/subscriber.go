@@ -89,6 +89,49 @@ func NewSubscriberWithProfile(sink Sink, profile StreamProfile) (*Subscriber, er
 	}, nil
 }
 
+// HandleProvisionalEvent applies the configured audience profile to one
+// activity-owned model presentation event. These events bypass the hook bus
+// and durable run log.
+func (s *Subscriber) HandleProvisionalEvent(ctx context.Context, event Event) error {
+	switch event.Type() {
+	case EventAssistantReply:
+		if !s.profile.Assistant {
+			return nil
+		}
+	case EventPlannerThought:
+		if !s.profile.Thoughts {
+			return nil
+		}
+	case EventModelPresentation:
+		if !s.profile.Assistant && !s.profile.Thoughts {
+			return nil
+		}
+	case EventPromptRendered,
+		EventToolStart,
+		EventToolEnd,
+		EventToolUpdate,
+		EventToolCallArgsDelta,
+		EventToolOutputDelta,
+		EventAssistantTurn,
+		EventAwaitClarification,
+		EventAwaitConfirmation,
+		EventAwaitQuestions,
+		EventAwaitTypedInput,
+		EventAwaitExternalTools,
+		EventToolAuthorization,
+		EventUsage,
+		EventWorkflow,
+		EventChildRunLinked,
+		EventSessionStreamStarted,
+		EventSessionStreamEnd,
+		EventRunStreamEnd:
+		return fmt.Errorf("unsupported provisional stream event %q", event.Type())
+	default:
+		return fmt.Errorf("unsupported provisional stream event %q", event.Type())
+	}
+	return s.sink.Send(ctx, event)
+}
+
 // HandleEvent implements the Subscriber interface by translating hook events
 // into stream events and forwarding them to the configured sink.
 //
@@ -445,10 +488,10 @@ func (s *Subscriber) sendAssistantTurn(ctx context.Context, evt *hooks.Assistant
 	if !s.profile.AssistantTurns {
 		return nil
 	}
-	if evt.Message == nil {
+	if evt.Message == nil && evt.Messages == nil && !evt.ContentEventsOmitted {
 		return fmt.Errorf("assistant_turn_committed missing message for run %s", evt.RunID())
 	}
-	payload := AssistantTurnPayload{Message: evt.Message}
+	payload := AssistantTurnPayload{Message: evt.Message, Messages: evt.Messages, PresentationIDs: evt.PresentationIDs}
 	return s.sink.Send(ctx, AssistantTurn{
 		Base: newBaseFromHook(evt, EventAssistantTurn, payload),
 		Data: payload,

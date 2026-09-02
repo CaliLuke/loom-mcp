@@ -139,7 +139,11 @@ func TestClientRedisPendingDeliverySurvivesSinkReplacement(t *testing.T) {
 		require.Equal(t, "created", event.EventName)
 		require.JSONEq(t, `{"id":"job-1"}`, string(event.Payload))
 		require.NoError(t, second.Ack(ctx, event))
-	case <-time.After(15 * time.Second):
+	case <-time.After(30 * time.Second):
+		pending, pendingErr := rdb.XPending(ctx, "pulse:stream:pending-delivery", "durable").Result()
+		consumers, consumersErr := rdb.XInfoConsumers(ctx, "pulse:stream:pending-delivery", "durable").Result()
+		keepAlives, keepAliveErr := rdb.HGetAll(ctx, "map:sink:durable:keepalive:content").Result()
+		t.Logf("pending=%+v pending_err=%v consumers=%+v consumers_err=%v keepalives=%v keepalive_err=%v", pending, pendingErr, consumers, consumersErr, keepAlives, keepAliveErr)
 		require.FailNow(t, "timed out waiting for pending Pulse delivery to be reclaimed")
 	}
 

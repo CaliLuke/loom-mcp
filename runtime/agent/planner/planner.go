@@ -160,6 +160,8 @@ type PlannerEvents interface {
 	//   - Deltas are not guaranteed to be valid JSON on their own.
 	//   - The canonical tool payload is still delivered via the final tool call
 	//     (model.ChunkTypeToolCall) and the runtime's tool_start event.
+	//   - Runtime-owned model streams keep raw argument fragments private. This
+	//     method remains available for planner-authored progress and legacy sinks.
 	ToolCallArgsDelta(ctx context.Context, toolCallID string, toolName tools.Ident, delta string)
 
 	// PlannerThinkingBlock emits a structured thinking block (for models that
@@ -171,6 +173,20 @@ type PlannerEvents interface {
 
 	// UsageDelta reports incremental token usage for the current planning phase.
 	UsageDelta(ctx context.Context, usage model.TokenUsage)
+}
+
+// ModelPresentationEvents is the optional runtime contract for provisional
+// model output. ConsumeStream uses it when the validated stream does not own
+// event emission. Implementations must treat presentation delivery as a
+// best-effort client projection: failures must not affect model execution.
+// CommitModelPresentation stages validated content; the surrounding planner
+// activity owns its durable commit and final accepted or discarded state.
+type ModelPresentationEvents interface {
+	StartModelPresentation(ctx context.Context) string
+	PublishModelText(ctx context.Context, presentationID, text string)
+	PublishModelThinking(ctx context.Context, presentationID string, block model.ThinkingPart)
+	CommitModelPresentation(ctx context.Context, presentationID string, response *model.Response) error
+	FinishModelPresentation(ctx context.Context, presentationID string, accepted bool)
 }
 
 // ToolRequest describes a tool invocation requested by the planner.

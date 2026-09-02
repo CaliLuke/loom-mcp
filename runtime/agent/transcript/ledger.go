@@ -29,8 +29,8 @@ const (
 
 type (
 	// Part is the canonical provider‑precise content fragment stored by the ledger.
-	// Implementations must be one of ThinkingPart, TextPart, ToolUsePart, or
-	// ToolResultPart.
+	// Implementations must be one of ThinkingPart, TextPart, CitationsPart,
+	// ToolUsePart, or ToolResultPart.
 	Part interface {
 		isPart()
 	}
@@ -55,6 +55,12 @@ type (
 	TextPart struct {
 		// Text is visible content intended for users.
 		Text string
+	}
+
+	// CitationsPart carries assistant text and its provider citation metadata.
+	CitationsPart struct {
+		Text      string
+		Citations []model.Citation
 	}
 
 	// ToolUsePart declares a tool invocation by the assistant.
@@ -122,34 +128,7 @@ func NewLedger() *Ledger {
 func FromModelMessages(msgs []*model.Message) *Ledger {
 	led := NewLedger()
 	for _, msg := range msgs {
-		if msg == nil || msg.Role != model.ConversationRoleAssistant {
-			continue
-		}
-		for _, p := range msg.Parts {
-			// Tool results are not part of assistant messages; they are
-			// reconstructed from events or planner results.
-			switch v := p.(type) {
-			case model.ThinkingPart:
-				led.AppendThinking(thinkingPartFromModel(v))
-			case model.TextPart:
-				led.AppendText(v.Text)
-			case model.ToolUsePart:
-				led.DeclareToolUse(v.ID, v.Name, v.Input)
-			case *model.ThinkingPart:
-				if v != nil {
-					led.AppendThinking(thinkingPartFromModel(*v))
-				}
-			case *model.TextPart:
-				if v != nil {
-					led.AppendText(v.Text)
-				}
-			case *model.ToolUsePart:
-				if v != nil {
-					led.DeclareToolUse(v.ID, v.Name, v.Input)
-				}
-			}
-		}
-		led.FlushAssistant()
+		led.AppendAssistantMessage(msg)
 	}
 	return led
 }
@@ -311,6 +290,51 @@ func (l *Ledger) AppendText(text string) {
 	l.current.Parts = append(l.current.Parts, TextPart{Text: text})
 }
 
+// AppendAssistantMessage appends one already-owned canonical assistant message
+// without changing its part order, metadata, or citation structure.
+func (l *Ledger) AppendAssistantMessage(message *model.Message) {
+	if message == nil || message.Role != model.ConversationRoleAssistant || len(message.Parts) == 0 {
+		return
+	}
+	l.flushAssistant()
+	canonical := Message{
+		Role:  string(message.Role),
+		Parts: make([]Part, 0, len(message.Parts)),
+		Meta:  message.Meta,
+	}
+	for _, part := range message.Parts {
+		switch value := part.(type) {
+		case model.ThinkingPart:
+			canonical.Parts = append(canonical.Parts, thinkingPartFromModel(value))
+		case model.TextPart:
+			canonical.Parts = append(canonical.Parts, TextPart{Text: value.Text})
+		case model.CitationsPart:
+			canonical.Parts = append(canonical.Parts, CitationsPart{Text: value.Text, Citations: value.Citations})
+		case model.ToolUsePart:
+			canonical.Parts = append(canonical.Parts, ToolUsePart{ID: value.ID, Name: value.Name, Args: value.Input})
+		case *model.ThinkingPart:
+			if value != nil {
+				canonical.Parts = append(canonical.Parts, thinkingPartFromModel(*value))
+			}
+		case *model.TextPart:
+			if value != nil {
+				canonical.Parts = append(canonical.Parts, TextPart{Text: value.Text})
+			}
+		case *model.CitationsPart:
+			if value != nil {
+				canonical.Parts = append(canonical.Parts, CitationsPart{Text: value.Text, Citations: value.Citations})
+			}
+		case *model.ToolUsePart:
+			if value != nil {
+				canonical.Parts = append(canonical.Parts, ToolUsePart{ID: value.ID, Name: value.Name, Args: value.Input})
+			}
+		}
+	}
+	if len(canonical.Parts) > 0 {
+		l.messages = append(l.messages, canonical)
+	}
+}
+
 // DeclareToolUse appends a tool_use to the current assistant message. The
 // caller is responsible for flushing the assistant message at the end of the
 // turn so that subsequent user tool_result messages can correlate to the full
@@ -409,6 +433,8 @@ func appendLedgerPart(msg *model.Message, p Part) (bool, bool) {
 		return true, appendLedgerThinkingPart(msg, v)
 	case TextPart:
 		msg.Parts = append(msg.Parts, model.TextPart{Text: v.Text})
+	case CitationsPart:
+		msg.Parts = append(msg.Parts, model.CitationsPart{Text: v.Text, Citations: v.Citations})
 	case ToolUsePart:
 		msg.Parts = append(msg.Parts, model.ToolUsePart{ID: v.ID, Name: v.Name, Input: v.Args})
 	case ToolResultPart:
@@ -474,6 +500,9 @@ func decodeLedgerPart(raw jsontext.Value) (Part, error) {
 	if _, ok := obj["Name"]; ok {
 		return decodeLedgerToolUsePart(raw)
 	}
+	if _, ok := obj["Citations"]; ok {
+		return decodeLedgerCitationsPart(raw)
+	}
 	if _, ok := obj["Text"]; ok {
 		return decodeLedgerTextPart(raw)
 	}
@@ -527,6 +556,14 @@ func decodeLedgerTextPart(raw jsontext.Value) (Part, error) {
 		return nil, fmt.Errorf("decode TextPart: %w", err)
 	}
 	return text, nil
+}
+
+func decodeLedgerCitationsPart(raw jsontext.Value) (Part, error) {
+	var citations CitationsPart
+	if err := json.Unmarshal(raw, &citations); err != nil {
+		return nil, fmt.Errorf("decode CitationsPart: %w", err)
+	}
+	return citations, nil
 }
 
 func isAssistantMessage(m *model.Message) bool {
@@ -721,6 +758,7 @@ func hasAnyKey(obj map[string]jsontext.Value, keys ...string) bool {
 
 func (ThinkingPart) isPart()   {}
 func (TextPart) isPart()       {}
+func (CitationsPart) isPart()  {}
 func (ToolUsePart) isPart()    {}
 func (ToolResultPart) isPart() {}
 
@@ -755,6 +793,8 @@ func summarizeParts(parts []model.Part) string {
 		case model.ThinkingPart:
 			names[i] = model.ChunkTypeThinking
 		case model.TextPart:
+			names[i] = model.ChunkTypeText
+		case model.CitationsPart:
 			names[i] = model.ChunkTypeText
 		case model.ToolUsePart:
 			names[i] = ledgerPartToolUse

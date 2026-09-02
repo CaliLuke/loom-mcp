@@ -857,7 +857,13 @@ against all observed chunks before it becomes canonical.
 Drain a validated stream to the literal `io.EOF`, read `Response`, and call
 `Finalize(nil)`. Pass the receive or processing error to `Finalize` when the
 stream does not complete. `Close` releases resources only; it does not mean the
-model response was accepted. Final tool calls and structured completions remain
+model response was accepted. Each runtime model stream publishes a
+`model_presentation` start event, tags provisional text and thinking with the
+same presentation ID, and ends with one `accepted` or `discarded` state. Clients
+must remove discarded content. One atomic assistant-turn event commits every
+ready presentation in the planner activity and carries the presentation IDs plus
+the authoritative response messages. The runtime writes only accepted content
+to the durable transcript. Partial tool-call JSON is not streamed. Final tool calls and structured completions remain
 private until terminal validation succeeds. `Response` remains unavailable and
 `Finalize(nil)` fails until the consumer itself observes EOF; internal provider
 draining while terminal chunks are withheld does not count.

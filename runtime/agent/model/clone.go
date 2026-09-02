@@ -35,6 +35,11 @@ func CloneRequest(request *Request) (*Request, error) {
 	return cloneModelRequest(request)
 }
 
+// CloneResponse returns a bounded, ownership-safe copy of a model response.
+func CloneResponse(response *Response) (*Response, error) {
+	return cloneModelResponse(response)
+}
+
 // CloneToolDefinitions returns a bounded, ownership-safe copy of tool
 // definitions and their input schemas.
 func CloneToolDefinitions(definitions []*ToolDefinition) ([]*ToolDefinition, error) {

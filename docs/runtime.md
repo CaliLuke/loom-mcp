@@ -542,18 +542,17 @@ func (p *MyPlanner) PlanResume(ctx context.Context, input *PlanResumeInput) (*Pl
     if err != nil {
         return nil, err
     }
-    defer st.Close()
-
-    // Drain stream manually; events are emitted automatically by the wrapper
+    // Drain stream manually; events are emitted automatically by the wrapper.
     var calls []ToolRequest
     var out strings.Builder
     for {
         chunk, rerr := st.Recv()
-        if errors.Is(rerr, io.EOF) {
+        //nolint:errorlint // Only literal EOF proves validated completion.
+        if rerr == io.EOF {
             break
         }
         if rerr != nil {
-            return nil, rerr
+            return nil, st.Finalize(rerr)
         }
         switch chunk := chunk.(type) {
         case model.ToolCallChunk:
@@ -571,6 +570,9 @@ func (p *MyPlanner) PlanResume(ctx context.Context, input *PlanResumeInput) (*Pl
             }
         }
     }
+    if err := st.Finalize(nil); err != nil {
+        return nil, err
+    }
 
     if len(calls) > 0 {
         return &PlanResult{ToolCalls: calls}, nil
@@ -587,7 +589,8 @@ func (p *MyPlanner) PlanResume(ctx context.Context, input *PlanResumeInput) (*Pl
 }
 ```
 
-**Important:** Do NOT call `planner.ConsumeStream` when using the decorated client.
+The decorated stream advertises that it owns runtime events, so it is also safe
+to pass it to `planner.ConsumeStream`; the helper only aggregates its result.
 
 ### Option 2: ConsumeStream without Runtime Event Decoration
 
@@ -601,10 +604,10 @@ if err != nil {
 }
 ```
 
-This helper drains the stream, emits events via `PlannerEvents`, and returns a
-`StreamSummary` with accumulated text and tool calls.
-
-**Important:** Never combine a decorated client with `ConsumeStream`.
+This helper drains the stream, emits events via `PlannerEvents` when the stream
+does not own them, and returns a `StreamSummary` with accumulated text and tool
+calls. Runtime planner events apply the same provisional presentation lifecycle
+to this validated-but-undecorated path.
 
 ### Typed Structured Completions
 
@@ -633,6 +636,22 @@ The consumer must observe literal EOF before reading `Response` or finalizing
 successfully. The first `Finalize` result is authoritative and includes provider
 cleanup. Runtime tracing and adaptive rate limiting commit their lifecycle
 outcome there rather than when `Recv` first reaches EOF.
+
+Runtime-owned model streams also publish provisional presentation events. A
+`model_presentation` event starts the presentation. Each live assistant or
+thinking delta carries its `presentation_id`. Stream finalization stages valid
+content, and the surrounding planner activity emits exactly one `accepted` or
+`discarded` state. Treat accepted content as canonical and remove discarded
+content. Partial tool-call JSON stays inside the model boundary until the
+complete call passes validation. The runtime emits `accepted` only after the
+planner succeeds and one atomic canonical response event for all ready
+presentations is durable. That assistant-turn event carries the presentation
+IDs and authoritative response messages. A later planner failure or failed
+run-log write discards every presentation and fails the attempt. When a final
+planner response matches an accepted presentation, the runtime suppresses the
+legacy duplicate final-message path even if the planner omitted `Streamed`.
+Canonical presentation commits support the full validated model-output bound;
+the smaller ordinary-hook payload limit does not truncate accepted content.
 
 ---
 
@@ -1487,11 +1506,12 @@ type Sink interface {
 | `tool_start`           | `ToolStartPayload` (tool_call_id, tool_name, payload)                        |
 | `tool_end`             | `ToolEndPayload` (result, error, duration, telemetry)                        |
 | `tool_update`          | `ToolUpdatePayload` (expected_children_total)                                |
-| `tool_call_args_delta` | Best-effort streamed model tool-argument delta                               |
+| `tool_call_args_delta` | Best-effort planner-authored argument progress; runtime model fragments stay private |
 | `tool_output_delta`    | Incremental tool output                                                        |
-| `assistant_reply`      | `AssistantReplyPayload` (text)                                               |
-| `assistant_turn`       | Committed assistant-turn payload                                              |
-| `planner_thought`      | `PlannerThoughtPayload` (note, thinking blocks)                              |
+| `assistant_reply`      | `AssistantReplyPayload` (`text`, optional `presentation_id`)                 |
+| `assistant_turn`       | Atomic committed assistant content (`message` legacy, or `presentation_ids` plus ordered `messages`) |
+| `planner_thought`      | `PlannerThoughtPayload` (note/thinking fields, optional `presentation_id`)   |
+| `model_presentation`   | `ModelPresentationPayload` (`presentation_id`, `started`/`accepted`/`discarded`) |
 | `await_clarification`  | `AwaitClarificationPayload`                                                  |
 | `await_confirmation`   | `AwaitConfirmationPayload`                                                   |
 | `await_questions`      | `AwaitQuestionsPayload` (`tool_name`, `tool_call_id`, `payload`, `questions`) |
@@ -1645,10 +1665,10 @@ the planner catches. It matches recovery to the exact error that the planner
 returns. Concurrent model calls cannot erase that match. Token totals include
 all accepted and rejected billed calls. Every durable total uses checked
 addition and fails if a count overflows. Generated retry hints are at most 4096
-encoded bytes. For a stream, the runtime stages text and thinking events until
-terminal validation and provider cleanup both succeed. A rejected or
-cleanup-failed stream cannot append its presentation content to the canonical
-run log.
+encoded bytes. For a stream, the runtime publishes provisional text and thinking
+live but stages their canonical commitment until terminal validation and
+provider cleanup both succeed. A rejected or cleanup-failed stream cannot append
+its presentation content to the canonical run log.
 
 Structured-output and output-limit recovery disables all tools for the
 replacement turn. The runtime checks the same effective tool catalog at the
@@ -3127,8 +3147,9 @@ var ErrRateLimited = errors.New("model: rate limited")
 2. **Use generated clients.** The typed `<agent>.NewClient(rt)` embeds route
    information and provides compile-time safety.
 
-3. **Choose one streaming path.** Either use the decorated model client OR
-   `planner.ConsumeStream`, never both.
+3. **Choose one event owner.** Use a decorated model stream directly or through
+   `planner.ConsumeStream`. For another validated stream, give
+   `planner.ConsumeStream` the runtime planner-event sink.
 
 4. **Set SessionID for sessionful runs.** `Run` and `Start` require a session ID
    for grouping and memory association. `OneShotRun` is explicitly sessionless.

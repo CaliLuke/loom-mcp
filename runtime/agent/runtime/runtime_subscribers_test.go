@@ -8,6 +8,7 @@ import (
 	agent "github.com/CaliLuke/loom-mcp/v2/runtime/agent"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/hooks"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/memory"
+	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/model"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/run"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/session"
 	"github.com/stretchr/testify/assert"
@@ -33,6 +34,12 @@ type seamMemoryStore struct {
 	memory.Store
 	mu      sync.Mutex
 	appends []memory.Event
+}
+
+func (m *seamMemoryStore) LoadRun(_ context.Context, agentID, runID string) (memory.Snapshot, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return memory.Snapshot{AgentID: agentID, RunID: runID, Events: append([]memory.Event(nil), m.appends...)}, nil
 }
 
 func (m *seamMemoryStore) AppendEvents(_ context.Context, _ string, _ string, events ...memory.Event) error {
@@ -89,4 +96,38 @@ func TestNewFromOptionsInstallsSessionAndMemorySubscribers(t *testing.T) {
 		assert.Equal(t, session.RunStatusRunning, sessionStore.upserts[0].Status)
 	}
 	assert.Len(t, memoryStore.appends, 1, "memory subscriber should record AssistantMessage via the bus wired by newFromOptions")
+}
+
+func TestMemorySubscriberProjectsOnlyCommittedTurnsWithOmittedContentEvents(t *testing.T) {
+	t.Parallel()
+
+	bus := hooks.NewBus()
+	memoryStore := &seamMemoryStore{}
+	newFromOptions(Options{Hooks: bus, MemoryStore: memoryStore})
+	ctx := context.Background()
+
+	ordinary := hooks.NewAssistantTurnCommittedEvent("run-1", "agent-1", "session-1", &model.Message{
+		Role:  model.ConversationRoleAssistant,
+		Parts: []model.Part{model.TextPart{Text: "already projected"}},
+	})
+	require.NoError(t, bus.Publish(ctx, ordinary))
+	require.Empty(t, memoryStore.appends)
+
+	committed := hooks.NewAssistantPresentationCommittedEvent("run-1", "agent-1", "session-1", []string{"presentation-1"}, []*model.Message{{
+		Role: model.ConversationRoleAssistant,
+		Parts: []model.Part{
+			model.ThinkingPart{Text: "consider", Signature: "sig", Index: 1, Final: true},
+			model.TextPart{Text: "accepted"},
+		},
+	}})
+	require.NoError(t, bus.Publish(ctx, committed))
+	require.Len(t, memoryStore.appends, 2)
+
+	thinking, err := memory.DecodeThinkingData(memoryStore.appends[0])
+	require.NoError(t, err)
+	assert.Equal(t, "consider", thinking.Text)
+	assert.Equal(t, "sig", thinking.Signature)
+	assistant, err := memory.DecodeAssistantMessageData(memoryStore.appends[1])
+	require.NoError(t, err)
+	assert.Equal(t, "accepted", assistant.Message)
 }

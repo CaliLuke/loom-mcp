@@ -65,6 +65,29 @@ func TestSubscribeEmitsEvents(t *testing.T) {
 	require.Empty(t, errs)
 }
 
+func TestDecodeEnvelopePreservesModelPresentationLifecycle(t *testing.T) {
+	t.Parallel()
+
+	wire, err := json.Marshal(map[string]any{
+		"type":       stream.EventModelPresentation,
+		"run_id":     "run-1",
+		"session_id": "session-1",
+		"payload": stream.ModelPresentationPayload{
+			PresentationID: "presentation-1",
+			State:          stream.ModelPresentationAccepted,
+		},
+	})
+	require.NoError(t, err)
+	event, err := decodeEnvelope(wire)
+	require.NoError(t, err)
+	require.Equal(t, stream.EventModelPresentation, event.Type())
+
+	var payload stream.ModelPresentationPayload
+	require.NoError(t, json.Unmarshal(event.Payload().(jsontext.Value), &payload))
+	require.Equal(t, "presentation-1", payload.PresentationID)
+	require.Equal(t, stream.ModelPresentationAccepted, payload.State)
+}
+
 func TestSubscribeManualDoesNotAckBeforeDeliveryAck(t *testing.T) {
 	client := mockpulse.NewClient(t)
 	streamMock := mockpulse.NewStream(t)
