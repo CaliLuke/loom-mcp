@@ -104,6 +104,11 @@ test-docker: tools
 		./features/mongo/clientinfra \
 		./features/stream/pulse/clients/pulse \
 		./registry
+	TESTCONTAINERS_RYUK_DISABLED=$(TESTCONTAINERS_RYUK_DISABLED) \
+	LOOM_MCP_RUN_DOCKER_TESTS=1 \
+	LOOM_MCP_REQUIRE_DOCKER_TESTS=1 \
+	$(GO) test -C ./integration_tests/fixtures/agent_features -race -shuffle=on -count=1 \
+		-run '^TestGeneratedFeatureRealTemporalMongoWorkerReplacement$$' .
 	COVERAGE_DOCKER_MONGO_MIN=$(COVERAGE_DOCKER_MONGO_MIN) \
 	COVERAGE_DOCKER_PULSE_MIN=$(COVERAGE_DOCKER_PULSE_MIN) \
 	COVERAGE_DOCKER_REGISTRY_MIN=$(COVERAGE_DOCKER_REGISTRY_MIN) \

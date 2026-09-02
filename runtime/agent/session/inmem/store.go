@@ -145,6 +145,9 @@ func (s *Store) UpsertRun(ctx context.Context, run session.RunMeta) error {
 	if err := normalizeRunTimestamps(&run, existing, exists, now); err != nil {
 		return err
 	}
+	if session.IsTerminalRunStatus(existing.Status) {
+		run.Status = existing.Status
+	}
 	run.UpdatedAt = now
 
 	// Child links are owned by LinkChildRun; keep the committed links and

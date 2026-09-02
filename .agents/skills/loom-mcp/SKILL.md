@@ -113,6 +113,9 @@ Use this skill for `loom-mcp` work in this repo. Keep `AGENTS.md` short and keep
   `runlog.Store` and `session.Store` implementations when run introspection and
   session metadata must survive process replacement; configure memory and
   stream projections independently.
+- Run status is monotonic once terminal. The first committed `completed`,
+  `failed`, or `canceled` status remains authoritative; later session-store
+  updates may enrich metadata but must not reopen or replace that outcome.
 - `TimeBudget` measures active runtime work. Clarification, confirmation,
   typed-input, and external-tool waits pause the budget, so elapsed wall time
   may exceed the configured duration.

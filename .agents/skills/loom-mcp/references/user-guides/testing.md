@@ -71,6 +71,22 @@ When testing hooks, streams, run logs, or memory, assert the intended reliabilit
 
 Test event identity/deduplication, ordering, audience/profile filtering, and failure behavior explicitly. Do not infer durable delivery from a successful publish call alone.
 
+## Persistent adapter contracts
+
+Storage migrations and concurrency behavior must run against the real driver,
+not only fake collections. Pre-seed legacy documents before client construction
+so startup backfills and index failures are observable. For Mongo, cover prompt
+fingerprints, legacy-plus-bucket memory ordering, runlog duplicate identities,
+and session terminal-state races. A terminal run status is monotonic even when
+late updates add metadata.
+
+Pulse durability tests must leave a delivery unacknowledged, replace the sink,
+and prove the pending entry is reclaimed before acknowledgement. Also stop the
+real Redis service and require bounded publishing to return an error. The
+Docker lane includes a generated Temporal worker replacement that closes the
+first Mongo connection and creates fresh session/runlog clients for the second
+worker.
+
 ## Verification ladder
 
 For ordinary focused work, run the closest package tests first. Before calling framework, dependency, refactor, or integration work complete:
@@ -96,8 +112,9 @@ Use only the targets relevant to the changed design, but never skip a red reposi
 `make test` applies the global coverage floor and the critical package-group
 floors. The group floors omit generated, mock, and design packages. It forces
 Docker-backed tests off so focused and full unit runs never start containers.
-`make test-docker` is the explicit fail-closed Mongo, Pulse, and registry gate;
-it writes `docker-cover.out` and enforces a floor for each owner.
+`make test-docker` is the explicit fail-closed Mongo, Pulse, registry, and
+generated Temporal/Mongo replacement gate. It writes `docker-cover.out` and
+enforces a floor for each root-module Docker owner.
 
 Run the repeated lifecycle lane after concurrency or shutdown changes:
 

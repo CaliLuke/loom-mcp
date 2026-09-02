@@ -85,6 +85,8 @@ type (
 		//
 		// New runs require an existing active session. Existing runs may receive
 		// terminal updates after their session ends, but their SessionID is immutable.
+		// Once a run reaches a terminal status, later updates may enrich its metadata
+		// but must not change or reopen that terminal status.
 		// Returns ErrSessionNotFound, ErrSessionEnded, or ErrRunSessionImmutable
 		// when those ownership invariants are violated.
 		UpsertRun(ctx context.Context, run RunMeta) error
@@ -155,6 +157,17 @@ var (
 	// ErrRunSessionImmutable indicates an existing run was assigned to a different session.
 	ErrRunSessionImmutable = errors.New("run session id is immutable")
 )
+
+// IsTerminalRunStatus reports whether status permanently closes a run.
+func IsTerminalRunStatus(status RunStatus) bool {
+	switch status {
+	case RunStatusCompleted, RunStatusFailed, RunStatusCanceled:
+		return true
+	case RunStatusPending, RunStatusRunning, RunStatusPaused, "":
+		return false
+	}
+	return false
+}
 
 // ValidateChildRunLink validates required identifiers for Store.LinkChildRun input.
 func ValidateChildRunLink(parentRunID string, child RunMeta) error {

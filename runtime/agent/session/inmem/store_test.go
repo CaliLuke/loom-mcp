@@ -91,6 +91,29 @@ func TestUpsertRunDoesNotClobberLinkedChildren(t *testing.T) {
 	require.Equal(t, []string{"run-child"}, parent.ChildRunIDs)
 }
 
+func TestUpsertRunDoesNotReopenTerminalRun(t *testing.T) {
+	store := New()
+	ctx := context.Background()
+	_, err := store.CreateSession(ctx, "sess-terminal", time.Unix(1, 0).UTC())
+	require.NoError(t, err)
+	run := session.RunMeta{
+		RunID:     "run-terminal",
+		AgentID:   "agent.chat",
+		SessionID: "sess-terminal",
+		Status:    session.RunStatusCompleted,
+	}
+	require.NoError(t, store.UpsertRun(ctx, run))
+
+	run.Status = session.RunStatusRunning
+	run.Metadata = map[string]any{"late": true}
+	require.NoError(t, store.UpsertRun(ctx, run))
+
+	stored, err := store.LoadRun(ctx, run.RunID)
+	require.NoError(t, err)
+	require.Equal(t, session.RunStatusCompleted, stored.Status)
+	require.Equal(t, true, stored.Metadata["late"])
+}
+
 func TestLinkChildRunIsIdempotent(t *testing.T) {
 	t.Parallel()
 

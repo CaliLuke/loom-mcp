@@ -89,6 +89,75 @@ func TestClientRedisStreamRoundTrip(t *testing.T) {
 	assert.Zero(t, exists)
 }
 
+func TestClientRedisPendingDeliverySurvivesSinkReplacement(t *testing.T) {
+	ctx := context.Background()
+	rdb := startRedis(t, ctx)
+	client, err := New(Options{Redis: rdb, OperationTimeout: 2 * time.Second})
+	require.NoError(t, err)
+	stream, err := client.Stream("pending-delivery")
+	require.NoError(t, err)
+
+	first, err := stream.NewSink(
+		ctx,
+		"durable",
+		streamopts.WithSinkStartAtOldest(),
+		streamopts.WithSinkBlockDuration(50*time.Millisecond),
+		streamopts.WithSinkAckGracePeriod(150*time.Millisecond),
+	)
+	require.NoError(t, err)
+	firstEvents := first.Subscribe()
+	id, err := stream.Add(ctx, "created", []byte(`{"id":"job-1"}`))
+	require.NoError(t, err)
+
+	select {
+	case event := <-firstEvents:
+		require.NotNil(t, event)
+		require.Equal(t, id, event.ID)
+	case <-time.After(5 * time.Second):
+		require.FailNow(t, "timed out waiting for initial Pulse delivery")
+	}
+	first.Close(ctx)
+
+	second, err := stream.NewSink(
+		ctx,
+		"durable",
+		streamopts.WithSinkBlockDuration(50*time.Millisecond),
+		streamopts.WithSinkAckGracePeriod(150*time.Millisecond),
+	)
+	require.NoError(t, err)
+	t.Cleanup(func() { second.Close(context.Background()) })
+	secondEvents := second.Subscribe()
+	select {
+	case event := <-secondEvents:
+		require.NotNil(t, event)
+		require.Equal(t, id, event.ID)
+		require.Equal(t, "created", event.EventName)
+		require.JSONEq(t, `{"id":"job-1"}`, string(event.Payload))
+		require.NoError(t, second.Ack(ctx, event))
+	case <-time.After(10 * time.Second):
+		require.FailNow(t, "timed out waiting for pending Pulse delivery to be reclaimed")
+	}
+
+	require.Eventually(t, func() bool {
+		pending, pendingErr := rdb.XPending(ctx, "pulse:stream:pending-delivery", "durable").Result()
+		return pendingErr == nil && pending.Count == 0
+	}, 5*time.Second, 25*time.Millisecond)
+}
+
+func TestClientRedisDisruptionFailsPublish(t *testing.T) {
+	ctx := context.Background()
+	rdb, container := startRedisContainer(t, ctx)
+	client, err := New(Options{Redis: rdb, OperationTimeout: 250 * time.Millisecond})
+	require.NoError(t, err)
+	stream, err := client.Stream("disruption")
+	require.NoError(t, err)
+
+	stopTimeout := time.Second
+	require.NoError(t, container.Stop(ctx, &stopTimeout))
+	_, err = stream.Add(ctx, "unavailable", []byte(`{"ok":false}`))
+	require.Error(t, err)
+}
+
 func TestClientValidation(t *testing.T) {
 	_, err := New(Options{})
 	require.EqualError(t, err, "redis client is required")
@@ -100,6 +169,12 @@ func TestClientValidation(t *testing.T) {
 }
 
 func startRedis(t *testing.T, ctx context.Context) *redis.Client {
+	t.Helper()
+	rdb, _ := startRedisContainer(t, ctx)
+	return rdb
+}
+
+func startRedisContainer(t *testing.T, ctx context.Context) (*redis.Client, testcontainers.Container) {
 	t.Helper()
 	if !dockerIntegrationRequested() {
 		t.Skipf("set %s=1 to run Docker-backed Pulse contracts", runDockerIntegrationEnv)
@@ -129,7 +204,7 @@ func startRedis(t *testing.T, ctx context.Context) *redis.Client {
 	rdb := redis.NewClient(&redis.Options{Addr: fmt.Sprintf("%s:%s", host, port.Port())})
 	t.Cleanup(func() { require.NoError(t, rdb.Close()) })
 	require.NoError(t, rdb.Ping(ctx).Err())
-	return rdb
+	return rdb, container
 }
 
 func dockerIntegrationRequested() bool {

@@ -24,6 +24,7 @@ import (
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/planner"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/rawjson"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/run"
+	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/runlog"
 	runloginmem "github.com/CaliLuke/loom-mcp/v2/runtime/agent/runlog/inmem"
 	agentsruntime "github.com/CaliLuke/loom-mcp/v2/runtime/agent/runtime"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/session"
@@ -110,7 +111,18 @@ func TestGeneratedFeatureRealTemporalContracts(t *testing.T) {
 	})
 
 	t.Run("worker replacement replays and resumes durable run", func(t *testing.T) {
-		testTemporalWorkerReplacement(t, server.Client())
+		sessions := sessioninmem.New()
+		runEvents := runloginmem.New()
+		testTemporalWorkerReplacement(
+			t,
+			server.Client(),
+			sessions,
+			runEvents,
+			func() (session.Store, runlog.Store) {
+				return sessions, runEvents
+			},
+			func() {},
+		)
 	})
 
 	t.Run("typed input races workflow timeout without stranding state", func(t *testing.T) {
@@ -241,12 +253,17 @@ func temporalScenarioContext(t *testing.T) (context.Context, context.CancelFunc)
 	return context.WithTimeout(t.Context(), 45*time.Second)
 }
 
-func testTemporalWorkerReplacement(t *testing.T, temporalClient client.Client) {
+func testTemporalWorkerReplacement(
+	t *testing.T,
+	temporalClient client.Client,
+	firstSessions session.Store,
+	firstRunEvents runlog.Store,
+	replacementStores func() (session.Store, runlog.Store),
+	afterFirstWorker func(),
+) {
 	t.Helper()
 	ctx, cancel := temporalScenarioContext(t)
 	defer cancel()
-	sessions := sessioninmem.New()
-	runlog := runloginmem.New()
 	firstExec := newRecordingWorkflowExecutor()
 
 	firstEngine, err := temporalengine.NewWorker(temporalengine.Options{
@@ -266,8 +283,8 @@ func testTemporalWorkerReplacement(t *testing.T, temporalClient client.Client) {
 	first := newFeatureRuntime(
 		t,
 		agentsruntime.WithEngine(firstEngine),
-		agentsruntime.WithSessionStore(sessions),
-		agentsruntime.WithRunEventStore(runlog),
+		agentsruntime.WithSessionStore(firstSessions),
+		agentsruntime.WithRunEventStore(firstRunEvents),
 	)
 	registerCoordinatorToolsets(t, ctx, first.rt, firstExec)
 	require.NoError(t, coordinator.RegisterCoordinatorAgent(ctx, first.rt, coordinator.CoordinatorAgentConfig{}))
@@ -283,15 +300,24 @@ func testTemporalWorkerReplacement(t *testing.T, temporalClient client.Client) {
 	require.Eventually(t, func() bool {
 		return first.recorder.count(hooks.AwaitTypedInput) == 1
 	}, 5*time.Second, 20*time.Millisecond)
+	firstPage, err := firstRunEvents.List(ctx, "run-temporal-restart", "", 100)
+	require.NoError(t, err)
+	require.NotEmpty(t, firstPage.Events)
+	preReplacementKeys := make(map[string]struct{}, len(firstPage.Events))
+	for _, event := range firstPage.Events {
+		preReplacementKeys[event.EventKey] = struct{}{}
+	}
 	require.NoError(t, firstEngine.Close())
+	afterFirstWorker()
+	secondSessions, secondRunEvents := replacementStores()
 
 	secondEngine := newTemporalAcceptanceEngine(t, temporalClient)
 	secondExec := newRecordingWorkflowExecutor()
 	second := newFeatureRuntime(
 		t,
 		agentsruntime.WithEngine(secondEngine),
-		agentsruntime.WithSessionStore(sessions),
-		agentsruntime.WithRunEventStore(runlog),
+		agentsruntime.WithSessionStore(secondSessions),
+		agentsruntime.WithRunEventStore(secondRunEvents),
 	)
 	registerCoordinatorToolsets(t, ctx, second.rt, secondExec)
 	require.NoError(t, coordinator.RegisterCoordinatorAgent(ctx, second.rt, coordinator.CoordinatorAgentConfig{}))
@@ -309,17 +335,19 @@ func testTemporalWorkerReplacement(t *testing.T, temporalClient client.Client) {
 	require.NoError(t, err)
 	require.Equal(t, "generated workflow complete", messageText(out.Final))
 
-	run, err := sessions.LoadRun(ctx, "run-temporal-restart")
+	run, err := secondSessions.LoadRun(ctx, "run-temporal-restart")
 	require.NoError(t, err)
 	require.Equal(t, session.RunStatusCompleted, run.Status)
-	page, err := runlog.List(ctx, "run-temporal-restart", "", 100)
+	page, err := secondRunEvents.List(ctx, "run-temporal-restart", "", 100)
 	require.NoError(t, err)
 	require.NotEmpty(t, page.Events)
-	keys := make(map[string]struct{}, len(page.Events))
+	keyCounts := make(map[string]int, len(page.Events))
 	for _, event := range page.Events {
-		_, exists := keys[event.EventKey]
-		require.False(t, exists, event.EventKey)
-		keys[event.EventKey] = struct{}{}
+		keyCounts[event.EventKey]++
+		require.Equal(t, 1, keyCounts[event.EventKey], event.EventKey)
+	}
+	for eventKey := range preReplacementKeys {
+		require.Equal(t, 1, keyCounts[eventKey], eventKey)
 	}
 }
 

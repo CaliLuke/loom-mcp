@@ -12,11 +12,9 @@ a surface that is absent, skipped, stale, or outside the Go module being tested.
 
 ## Progress (2026-09-01)
 
-The original phases 1 and 3 through 6 are implemented. A current-tree audit
-reprioritized the remaining work around observed defect yield and production
-risk. The unit and integration ladders are green, but the largest confidence
-gaps are real Temporal execution, cross-layer runtime transitions, provider
-stream state machines, persistence upgrades, and malformed dynamic inputs.
+The original phases 1 and 3 through 6 and reprioritized items 1 through 5 are
+implemented. The remaining work targets malformed dynamic inputs and exact
+risk-weighted owner coverage floors.
 
 ## Reprioritized Backlog
 
@@ -55,8 +53,7 @@ Implementation evidence:
 
 ### Priority 2: Run Generated Acceptance Against Real Temporal
 
-Status: runtime behavior implemented and locally verified. Priority 5 owns the
-remaining restart proof against real persistent stores.
+Status: implemented and locally verified.
 
 1. Extract an engine-neutral generated acceptance fixture.
 2. Run the same coordinator scenarios against the in-memory engine and a pinned
@@ -79,18 +76,13 @@ Implementation evidence:
   application idempotency ledger rather than planner-local state;
 - a generated workflow waiting for typed input survives worker shutdown,
   replays on a replacement worker, resumes through a second runtime, and
-  preserves deduplicated runlog events plus terminal session state through a
-  shared store backend; Priority 5 replaces this backend with real persistence;
+  preserves deduplicated runlog events plus terminal session state after the
+  replacement worker reconnects fresh Mongo-backed store clients;
 - cancellation during the generated typed-input wait returns a workflow error
   and converges the durable run status to `canceled`.
 - real Temporal runs signal typed input before, on, and after a two-second
   workflow timeout boundary; every run converges to completed or timed out
   runlog/session state, with both sides of the race observed.
-
-Remaining dependent evidence:
-
-- Priority 5 repeats worker/process replacement with real persistence so the
-  test does not retain session or runlog state through shared in-process stores.
 
 ### Priority 3: Expand Cross-Layer Generated Runtime Acceptance
 
@@ -156,11 +148,31 @@ Implementation evidence:
 
 ### Priority 5: Test Persistence Upgrades And Concurrency Against Real Services
 
+Status: implemented and locally verified.
+
 Pre-seed Mongo with legacy prompt, memory, runlog, and session records before
 client construction. Prove fingerprint migration, mixed legacy/bucket ordering,
 duplicate insertion, index conflicts, and session terminal-state races using
 real driver semantics. Add Redis disruption and pending-delivery cases after
 the Mongo upgrade contracts.
+
+Implementation evidence:
+
+- one real-driver Mongo contract pre-seeds prompt, memory, runlog, and session
+  collections before constructing their clients, proving prompt fingerprint
+  backfill and deterministic legacy/bucket transcript ordering;
+- twelve concurrent runlog appends produce one stored event and one inserted
+  result, while duplicate pre-seeded identities make unique-index construction
+  fail closed;
+- concurrent completed, failed, and canceled session projections preserve the
+  first committed terminal run status, and a later stale running update cannot
+  reopen it in either the in-memory or Mongo implementation;
+- an unacknowledged Pulse event remains pending across sink replacement, is
+  reclaimed and acknowledged by the replacement, and Redis shutdown makes a
+  bounded publish fail instead of reporting success;
+- the generated real-Temporal worker-replacement scenario reconnects new Mongo
+  session and runlog clients after the first worker and Mongo connection close,
+  then resumes the workflow with deduplicated runlog and terminal session state.
 
 ### Priority 6: Add Fuzzing At Dynamic Trust Boundaries
 
@@ -534,11 +546,10 @@ Exit criteria:
 ## Completion Checklist
 
 - [x] Priority 1: fast unit and fail-closed Docker gate isolation
-- [ ] Priority 2: real-Temporal generated acceptance (foundation implemented;
-  completed by Priority 3 signal/child coverage and Priority 5 persistence)
-- [ ] Priority 3: cross-layer generated runtime transitions
-- [ ] Priority 4: provider stream state-machine conformance
-- [ ] Priority 5: real persistence upgrade and concurrency contracts
+- [x] Priority 2: real-Temporal generated acceptance
+- [x] Priority 3: cross-layer generated runtime transitions
+- [x] Priority 4: provider stream state-machine conformance
+- [x] Priority 5: real persistence upgrade and concurrency contracts
 - [ ] Priority 6: fuzz dynamic trust boundaries
 - [ ] Priority 7: risk-weighted owner floors
 - [x] Phase 1: truthful MCP integration coverage

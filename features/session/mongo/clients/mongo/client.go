@@ -217,6 +217,9 @@ func (c *client) upsertRun(ctx context.Context, run session.RunMeta) error {
 		if existing.SessionID != run.SessionID {
 			return session.ErrRunSessionImmutable
 		}
+		if session.IsTerminalRunStatus(existing.Status) {
+			run.Status = existing.Status
+		}
 	case errors.Is(err, session.ErrRunNotFound):
 		owner, loadErr := c.LoadSession(ctx, run.SessionID)
 		if loadErr != nil {

@@ -1517,6 +1517,12 @@ logs:
 | `memory.Store` | Derived per-run transcript/event projection | The built-in memory subscriber is best effort and may be incomplete after a subscriber failure |
 | `memory.Service` | Explicit long-term entry store | Written only through its `PutEntry`/ingest contract; it is not the transcript or run log |
 
+Session stores also persist the coarse run lifecycle. The first committed
+`completed`, `failed`, or `canceled` status is terminal. Later updates may add
+metadata or prompt references, but they cannot replace that terminal outcome or
+reopen the run as pending, running, or paused. This makes retrying concurrent
+terminal hook projections safe across in-memory and Mongo-backed stores.
+
 `ToolCallArgsDelta` is intentionally excluded from the durable run event log and
 hook bus because it is a high-volume, best-effort UX signal. The finalized tool
 call remains canonical. `transcript.BuildMessagesFromEvents` consumes

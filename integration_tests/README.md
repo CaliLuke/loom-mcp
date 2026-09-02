@@ -111,6 +111,12 @@ system temporary directory on first use and reuses it for later focused runs.
 It is part of the normal agent-feature fixture and therefore runs in
 `make verify-mcp-local`, `make itest`, and `make ci`.
 
+The Docker-gated Temporal/Mongo replacement test closes the first worker and
+Mongo connection, constructs fresh Mongo session/runlog clients, and resumes
+the same generated workflow on the replacement worker. Run it through
+`make test-docker`; the fail-closed Docker lane also owns Mongo upgrade/index
+contracts and Pulse pending-delivery/disruption behavior.
+
 ## Supported environment variables
 
 | Variable | Purpose |
@@ -118,6 +124,8 @@ It is part of the normal agent-feature fixture and therefore runs in
 | `TEST_SERVER_URL` | Use an already-running generated server instead of starting the managed fixture. Supply the server base URL or its `/rpc` endpoint. |
 | `TEST_SKIP_GENERATION=true` | Reuse the checked-in assistant fixture in focused framework debugging. |
 | `MCP_TEST_READY_TIMEOUT_SECONDS` | Override the managed server's 30-second readiness timeout with a positive integer. |
+| `LOOM_MCP_RUN_DOCKER_TESTS=1` | Select Docker-backed Mongo, Redis, and generated Temporal/Mongo contracts. |
+| `LOOM_MCP_REQUIRE_DOCKER_TESTS=1` | Fail instead of skipping when a selected Docker service cannot start. |
 
 Go's standard test flags provide filtering, timeouts, verbosity, shuffle, and
 repeat counts. For example:
