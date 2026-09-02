@@ -555,14 +555,14 @@ func (p *MyPlanner) PlanResume(ctx context.Context, input *PlanResumeInput) (*Pl
         if rerr != nil {
             return nil, rerr
         }
-        switch chunk.Type {
-        case model.ChunkTypeToolCall:
+        switch chunk := chunk.(type) {
+        case model.ToolCallChunk:
             calls = append(calls, ToolRequest{
                 Name:       chunk.ToolCall.Name,
                 Payload:    chunk.ToolCall.Payload,
                 ToolCallID: chunk.ToolCall.ID,
             })
-        case model.ChunkTypeText:
+        case model.TextChunk:
             // Accumulate text locally (already emitted via decorator)
             for _, p := range chunk.Message.Parts {
                 if tp, ok := p.(model.TextPart); ok {

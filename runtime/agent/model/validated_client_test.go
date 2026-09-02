@@ -59,9 +59,9 @@ func (s *contractStream) Recv() (Chunk, error) {
 	if s.err != nil {
 		err := s.err
 		s.err = nil
-		return Chunk{}, err
+		return nil, err
 	}
-	return Chunk{}, io.EOF
+	return nil, io.EOF
 }
 
 func (s *contractStream) Close() error {
@@ -151,9 +151,8 @@ func TestValidatedClientRejectsOutputLimitedResponse(t *testing.T) {
 }
 
 func TestValidatedClientRejectsStreamWithoutTerminalStop(t *testing.T) {
-	providerStream := &contractStream{chunks: []Chunk{{
-		Type:    ChunkTypeText,
-		Message: &Message{Role: ConversationRoleAssistant, Parts: []Part{TextPart{Text: "partial"}}},
+	providerStream := &contractStream{chunks: []Chunk{TextChunk{
+		Message: Message{Role: ConversationRoleAssistant, Parts: []Part{TextPart{Text: "partial"}}},
 	}}}
 	client, err := NewClient(&contractProvider{stream: providerStream})
 	require.NoError(t, err)
@@ -171,15 +170,14 @@ func TestValidatedClientRejectsStreamWithoutTerminalStop(t *testing.T) {
 
 func TestValidatedClientWithholdsToolCallsUntilTerminalAcceptance(t *testing.T) {
 	providerStream := &contractStream{chunks: []Chunk{
-		{
-			Type: ChunkTypeToolCall,
-			ToolCall: &ToolCall{
+		ToolCallChunk{
+			ToolCall: ToolCall{
 				Name:    tools.Ident("lookup"),
 				Payload: rawjson.Message(`{"query":"safe"}`),
 				ID:      "call-1",
 			},
 		},
-		{Type: ChunkTypeStop, StopReason: "tool_use"},
+		StopChunk{Reason: "tool_use"},
 	}}
 	client, err := NewClient(&contractProvider{stream: providerStream})
 	require.NoError(t, err)
@@ -188,10 +186,10 @@ func TestValidatedClientWithholdsToolCallsUntilTerminalAcceptance(t *testing.T) 
 
 	chunk, err := stream.Recv()
 	require.NoError(t, err)
-	assert.Equal(t, ChunkTypeToolCall, chunk.Type)
+	assert.IsType(t, ToolCallChunk{}, chunk)
 	chunk, err = stream.Recv()
 	require.NoError(t, err)
-	assert.Equal(t, ChunkTypeStop, chunk.Type)
+	assert.IsType(t, StopChunk{}, chunk)
 	_, err = stream.Recv()
 	require.ErrorIs(t, err, io.EOF)
 
@@ -205,9 +203,8 @@ func TestValidatedClientWithholdsToolCallsUntilTerminalAcceptance(t *testing.T) 
 }
 
 func TestValidatedClientDiscardsHeldToolCallOnPrematureEOF(t *testing.T) {
-	providerStream := &contractStream{chunks: []Chunk{{
-		Type: ChunkTypeToolCall,
-		ToolCall: &ToolCall{
+	providerStream := &contractStream{chunks: []Chunk{ToolCallChunk{
+		ToolCall: ToolCall{
 			Name:    tools.Ident("lookup"),
 			Payload: rawjson.Message(`{"query":"unsafe"}`),
 			ID:      "call-1",
@@ -220,7 +217,7 @@ func TestValidatedClientDiscardsHeldToolCallOnPrematureEOF(t *testing.T) {
 
 	chunk, err := stream.Recv()
 	require.Error(t, err)
-	assert.Equal(t, Chunk{}, chunk)
+	assert.Nil(t, chunk)
 	var validationErr *OutputValidationError
 	require.ErrorAs(t, err, &validationErr)
 	assert.Equal(t, OutputValidationStreamProtocol, validationErr.Kind())
@@ -230,7 +227,7 @@ func TestValidatedClientDiscardsHeldToolCallOnPrematureEOF(t *testing.T) {
 func TestValidatedClientRejectsWrappedEOF(t *testing.T) {
 	wrappedEOF := fmt.Errorf("provider wrapper: %w", io.EOF)
 	providerStream := &contractStream{
-		chunks: []Chunk{{Type: ChunkTypeStop, StopReason: "end_turn"}},
+		chunks: []Chunk{StopChunk{Reason: "end_turn"}},
 		err:    wrappedEOF,
 	}
 	client, err := NewClient(&contractProvider{stream: providerStream})
@@ -282,14 +279,13 @@ func TestValidatedClientAppliesApplicationCompletionValidator(t *testing.T) {
 func TestValidatedStreamAppliesApplicationCompletionValidatorBeforeExposure(t *testing.T) {
 	request := structuredContractRequest(t)
 	providerStream := &contractStream{chunks: []Chunk{
-		{
-			Type: ChunkTypeCompletion,
-			Completion: &Completion{
+		CompletionChunk{
+			Completion: Completion{
 				Name:    "typed_result",
 				Payload: rawjson.Message(`{"value":"schema-valid"}`),
 			},
 		},
-		{Type: ChunkTypeStop, StopReason: "end_turn"},
+		StopChunk{Reason: "end_turn"},
 	}}
 	client, err := NewClient(&contractProvider{stream: providerStream})
 	require.NoError(t, err)
@@ -298,7 +294,7 @@ func TestValidatedStreamAppliesApplicationCompletionValidatorBeforeExposure(t *t
 
 	chunk, err := stream.Recv()
 	require.Error(t, err)
-	assert.Equal(t, Chunk{}, chunk)
+	assert.Nil(t, chunk)
 	var validationErr *OutputValidationError
 	require.ErrorAs(t, err, &validationErr)
 	assert.Equal(t, OutputValidationStructuredOutput, validationErr.Kind())
@@ -400,15 +396,14 @@ func TestValidatedClientAcceptsAndOwnsPointerMessageParts(t *testing.T) {
 
 func TestValidatedStreamLiveMessageCannotMutateCanonicalResponse(t *testing.T) {
 	providerStream := &contractStream{chunks: []Chunk{
-		{
-			Type: ChunkTypeText,
-			Message: &Message{
+		TextChunk{
+			Message: Message{
 				Role:  ConversationRoleAssistant,
 				Parts: []Part{TextPart{Text: "original"}},
 				Meta:  map[string]any{"source": "provider"},
 			},
 		},
-		{Type: ChunkTypeStop, StopReason: "end_turn"},
+		StopChunk{Reason: "end_turn"},
 	}}
 	client, err := NewClient(&contractProvider{stream: providerStream})
 	require.NoError(t, err)
@@ -417,8 +412,9 @@ func TestValidatedStreamLiveMessageCannotMutateCanonicalResponse(t *testing.T) {
 
 	chunk, err := stream.Recv()
 	require.NoError(t, err)
-	chunk.Message.Parts[0] = TextPart{Text: "consumer mutation"}
-	chunk.Message.Meta["source"] = "consumer"
+	textChunk := chunk.(TextChunk)
+	textChunk.Message.Parts[0] = TextPart{Text: "consumer mutation"}
+	textChunk.Message.Meta["source"] = "consumer"
 	drainValidatedStream(t, stream)
 
 	response := stream.Response()

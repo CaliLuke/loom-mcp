@@ -1075,8 +1075,8 @@ func (c *activityRecoveryUsageClient) Stream(context.Context, *model.Request) (m
 	}
 	return &modelTracingScriptedStreamer{
 		chunks: []model.Chunk{
-			{Type: model.ChunkTypeUsage, UsageDelta: &model.TokenUsage{InputTokens: 3, OutputTokens: 2, TotalTokens: 5}},
-			{Type: model.ChunkTypeStop, StopReason: "stop"},
+			model.UsageChunk{Usage: model.TokenUsage{InputTokens: 3, OutputTokens: 2, TotalTokens: 5}},
+			model.StopChunk{Reason: "stop"},
 		},
 		finalizeErr: c.rejected,
 	}, nil

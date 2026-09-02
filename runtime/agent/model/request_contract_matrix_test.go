@@ -17,10 +17,10 @@ import (
 
 func TestValidatedStreamRequiresConsumerEOFBeforeResponseOrSuccessfulFinalize(t *testing.T) {
 	providerStream := &contractStream{chunks: []Chunk{
-		{Type: ChunkTypeToolCall, ToolCall: &ToolCall{Name: tools.Ident("lookup"), ID: "call-1", Payload: rawjson.Message(`{"query":"one"}`)}},
-		{Type: ChunkTypeToolCall, ToolCall: &ToolCall{Name: tools.Ident("lookup"), ID: "call-2", Payload: rawjson.Message(`{"query":"two"}`)}},
-		{Type: ChunkTypeUsage, UsageDelta: &TokenUsage{InputTokens: 2, OutputTokens: 3, TotalTokens: 5}},
-		{Type: ChunkTypeStop, StopReason: "tool_use"},
+		ToolCallChunk{ToolCall: ToolCall{Name: tools.Ident("lookup"), ID: "call-1", Payload: rawjson.Message(`{"query":"one"}`)}},
+		ToolCallChunk{ToolCall: ToolCall{Name: tools.Ident("lookup"), ID: "call-2", Payload: rawjson.Message(`{"query":"two"}`)}},
+		UsageChunk{Usage: TokenUsage{InputTokens: 2, OutputTokens: 3, TotalTokens: 5}},
+		StopChunk{Reason: "tool_use"},
 	}}
 	client, err := NewClient(&contractProvider{stream: providerStream})
 	require.NoError(t, err)
@@ -29,7 +29,7 @@ func TestValidatedStreamRequiresConsumerEOFBeforeResponseOrSuccessfulFinalize(t 
 
 	chunk, err := stream.Recv()
 	require.NoError(t, err)
-	require.Equal(t, "call-1", chunk.ToolCall.ID)
+	require.Equal(t, "call-1", chunk.(ToolCallChunk).ToolCall.ID)
 	assert.Nil(t, stream.Response())
 
 	err = stream.Finalize(nil)
@@ -40,9 +40,9 @@ func TestValidatedStreamRequiresConsumerEOFBeforeResponseOrSuccessfulFinalize(t 
 
 func TestValidatedStreamPublishesCanonicalResponseOnlyAfterConsumerEOF(t *testing.T) {
 	providerStream := &contractStream{chunks: []Chunk{
-		{Type: ChunkTypeText, Message: &Message{Role: ConversationRoleAssistant, Parts: []Part{TextPart{Text: "done"}}}},
-		{Type: ChunkTypeUsage, UsageDelta: &TokenUsage{InputTokens: 2, OutputTokens: 3, TotalTokens: 5}},
-		{Type: ChunkTypeStop, StopReason: "end_turn"},
+		TextChunk{Message: Message{Role: ConversationRoleAssistant, Parts: []Part{TextPart{Text: "done"}}}},
+		UsageChunk{Usage: TokenUsage{InputTokens: 2, OutputTokens: 3, TotalTokens: 5}},
+		StopChunk{Reason: "end_turn"},
 	}}
 	client, err := NewClient(&contractProvider{stream: providerStream})
 	require.NoError(t, err)
@@ -66,8 +66,8 @@ func TestValidatedStreamRejectsCancellationBeforeTerminalAcceptanceAndJoinsClean
 	closeErr := errors.New("provider close failed")
 	providerStream := &contractStream{
 		chunks: []Chunk{
-			{Type: ChunkTypeText, Message: &Message{Role: ConversationRoleAssistant, Parts: []Part{TextPart{Text: "partial"}}}},
-			{Type: ChunkTypeStop, StopReason: "end_turn"},
+			TextChunk{Message: Message{Role: ConversationRoleAssistant, Parts: []Part{TextPart{Text: "partial"}}}},
+			StopChunk{Reason: "end_turn"},
 		},
 		closeErr: closeErr,
 	}
@@ -92,8 +92,8 @@ func TestValidatedStreamRejectsCancellationBeforeTerminalAcceptanceAndJoinsClean
 
 func TestValidatedStreamFirstFinalizationIsAuthoritative(t *testing.T) {
 	providerStream := &contractStream{chunks: []Chunk{
-		{Type: ChunkTypeText, Message: &Message{Role: ConversationRoleAssistant, Parts: []Part{TextPart{Text: "done"}}}},
-		{Type: ChunkTypeStop, StopReason: "end_turn"},
+		TextChunk{Message: Message{Role: ConversationRoleAssistant, Parts: []Part{TextPart{Text: "done"}}}},
+		StopChunk{Reason: "end_turn"},
 	}}
 	client, err := NewClient(&contractProvider{stream: providerStream})
 	require.NoError(t, err)
@@ -109,9 +109,8 @@ func TestValidatedStreamFirstFinalizationIsAuthoritative(t *testing.T) {
 }
 
 func TestValidatedStructuredStreamClassifiesOutputLimitBeforeMissingCompletion(t *testing.T) {
-	providerStream := &contractStream{chunks: []Chunk{{
-		Type:          ChunkTypeStop,
-		StopReason:    "max_tokens",
+	providerStream := &contractStream{chunks: []Chunk{StopChunk{
+		Reason:        "max_tokens",
 		OutputLimited: true,
 	}}}
 	client, err := NewClient(&contractProvider{stream: providerStream})
@@ -128,8 +127,8 @@ func TestValidatedStructuredStreamClassifiesOutputLimitBeforeMissingCompletion(t
 
 func TestValidatedStreamClassifiesOutputLimitBeforeUnfinishedToolDelta(t *testing.T) {
 	providerStream := &contractStream{chunks: []Chunk{
-		{Type: ChunkTypeToolCallDelta, ToolCallDelta: &ToolCallDelta{Name: tools.Ident("lookup"), ID: "call-1", Delta: `{"query":"truncated`}},
-		{Type: ChunkTypeStop, StopReason: "max_tokens", OutputLimited: true},
+		ToolCallDeltaChunk{Delta: ToolCallDelta{Name: tools.Ident("lookup"), ID: "call-1", Delta: `{"query":"truncated`}},
+		StopChunk{Reason: "max_tokens", OutputLimited: true},
 	}}
 	client, err := NewClient(&contractProvider{stream: providerStream})
 	require.NoError(t, err)
@@ -148,11 +147,11 @@ func TestValidatedStreamReconcilesToolDeltasAndUsage(t *testing.T) {
 	request.ToolChoice = &ToolChoice{Mode: ToolChoiceModeAny}
 	usage := TokenUsage{Model: "provider-model", InputTokens: 2, OutputTokens: 3, TotalTokens: 5}
 	providerStream := &contractStream{chunks: []Chunk{
-		{Type: ChunkTypeToolCallDelta, ToolCallDelta: &ToolCallDelta{Name: tools.Ident("lookup"), ID: "call-1", Delta: `{"query":`}},
-		{Type: ChunkTypeToolCallDelta, ToolCallDelta: &ToolCallDelta{Name: tools.Ident("lookup"), ID: "call-1", Delta: `"one"}`}},
-		{Type: ChunkTypeToolCall, ToolCall: &ToolCall{Name: tools.Ident("lookup"), ID: "call-1", Payload: rawjson.Message(`{"query":"one"}`)}},
-		{Type: ChunkTypeUsage, UsageDelta: &usage},
-		{Type: ChunkTypeStop, StopReason: "tool_use"},
+		ToolCallDeltaChunk{Delta: ToolCallDelta{Name: tools.Ident("lookup"), ID: "call-1", Delta: `{"query":`}},
+		ToolCallDeltaChunk{Delta: ToolCallDelta{Name: tools.Ident("lookup"), ID: "call-1", Delta: `"one"}`}},
+		ToolCallChunk{ToolCall: ToolCall{Name: tools.Ident("lookup"), ID: "call-1", Payload: rawjson.Message(`{"query":"one"}`)}},
+		UsageChunk{Usage: usage},
+		StopChunk{Reason: "tool_use"},
 	}}
 	client, err := NewClient(&contractProvider{stream: providerStream})
 	require.NoError(t, err)
@@ -174,10 +173,10 @@ func TestValidatedStructuredStreamAcceptsDeltasAndCanonicalCompletion(t *testing
 		Schema: rawjson.Message(`{"type":"object","required":["value"],"properties":{"value":{"type":"string"}}}`),
 	}}
 	providerStream := &contractStream{chunks: []Chunk{
-		{Type: ChunkTypeCompletionDelta, CompletionDelta: &CompletionDelta{Name: "result", Delta: `{"value":`}},
-		{Type: ChunkTypeCompletionDelta, CompletionDelta: &CompletionDelta{Name: "result", Delta: `"done"}`}},
-		{Type: ChunkTypeCompletion, Completion: &Completion{Name: "result", Payload: rawjson.Message(`{"value":"done"}`)}},
-		{Type: ChunkTypeStop, StopReason: "end_turn"},
+		CompletionDeltaChunk{Delta: CompletionDelta{Name: "result", Delta: `{"value":`}},
+		CompletionDeltaChunk{Delta: CompletionDelta{Name: "result", Delta: `"done"}`}},
+		CompletionChunk{Completion: Completion{Name: "result", Payload: rawjson.Message(`{"value":"done"}`)}},
+		StopChunk{Reason: "end_turn"},
 	}}
 	client, err := NewClient(&contractProvider{stream: providerStream})
 	require.NoError(t, err)
@@ -281,8 +280,8 @@ func TestRequestContractRejectsInvalidToolChoiceRequests(t *testing.T) {
 
 func TestValidatedStreamRejectsPostStopOutput(t *testing.T) {
 	providerStream := &contractStream{chunks: []Chunk{
-		{Type: ChunkTypeStop, StopReason: "end_turn"},
-		{Type: ChunkTypeText, Message: &Message{Role: ConversationRoleAssistant, Parts: []Part{TextPart{Text: "late"}}}},
+		StopChunk{Reason: "end_turn"},
+		TextChunk{Message: Message{Role: ConversationRoleAssistant, Parts: []Part{TextPart{Text: "late"}}}},
 	}}
 	client, err := NewClient(&contractProvider{stream: providerStream})
 	require.NoError(t, err)
@@ -388,9 +387,8 @@ func TestResponseEvidenceFingerprintIsDeterministic(t *testing.T) {
 }
 
 func TestRejectedStreamCarriesBoundedEvidence(t *testing.T) {
-	providerStream := &contractStream{chunks: []Chunk{{
-		Type: ChunkTypeToolCall,
-		ToolCall: &ToolCall{
+	providerStream := &contractStream{chunks: []Chunk{ToolCallChunk{
+		ToolCall: ToolCall{
 			Name:    tools.Ident("unadvertised"),
 			Payload: rawjson.Message(`{}`),
 		},
@@ -448,8 +446,8 @@ func TestValidatedStreamConcurrentFinalizationReturnsOneAuthoritativeResult(t *t
 	closeErr := errors.New("close failed")
 	providerStream := &contractStream{
 		chunks: []Chunk{
-			{Type: ChunkTypeText, Message: &Message{Role: ConversationRoleAssistant, Parts: []Part{TextPart{Text: "done"}}}},
-			{Type: ChunkTypeStop, StopReason: "end_turn"},
+			TextChunk{Message: Message{Role: ConversationRoleAssistant, Parts: []Part{TextPart{Text: "done"}}}},
+			StopChunk{Reason: "end_turn"},
 		},
 		closeErr: closeErr,
 	}
@@ -485,8 +483,8 @@ func TestValidatedStreamConcurrentFinalizationReturnsOneAuthoritativeResult(t *t
 func TestValidatedStreamEarlyFinalizationIsTerminal(t *testing.T) {
 	processErr := errors.New("consumer processing failed")
 	providerStream := &contractStream{chunks: []Chunk{
-		{Type: ChunkTypeText, Message: &Message{Role: ConversationRoleAssistant, Parts: []Part{TextPart{Text: "partial"}}}},
-		{Type: ChunkTypeStop, StopReason: "end_turn"},
+		TextChunk{Message: Message{Role: ConversationRoleAssistant, Parts: []Part{TextPart{Text: "partial"}}}},
+		StopChunk{Reason: "end_turn"},
 	}}
 	client, err := NewClient(&contractProvider{stream: providerStream})
 	require.NoError(t, err)
@@ -508,7 +506,7 @@ func TestValidatedStreamJoinsCancellationWithProviderAndCleanupFailures(t *testi
 	providerErr := errors.New("provider receive failed")
 	closeErr := errors.New("provider close failed")
 	providerStream := &contractStream{
-		chunks:   []Chunk{{Type: ChunkTypeText, Message: &Message{Role: ConversationRoleAssistant, Parts: []Part{TextPart{Text: "partial"}}}}},
+		chunks:   []Chunk{TextChunk{Message: Message{Role: ConversationRoleAssistant, Parts: []Part{TextPart{Text: "partial"}}}}},
 		err:      providerErr,
 		closeErr: closeErr,
 	}
@@ -533,8 +531,8 @@ func TestValidatedStreamJoinsCancellationWithProviderAndCleanupFailures(t *testi
 func TestValidatedStreamJoinsCancellationWithEarlyProcessingFailure(t *testing.T) {
 	processErr := errors.New("consumer processing failed")
 	providerStream := &contractStream{chunks: []Chunk{
-		{Type: ChunkTypeText, Message: &Message{Role: ConversationRoleAssistant, Parts: []Part{TextPart{Text: "partial"}}}},
-		{Type: ChunkTypeStop, StopReason: "end_turn"},
+		TextChunk{Message: Message{Role: ConversationRoleAssistant, Parts: []Part{TextPart{Text: "partial"}}}},
+		StopChunk{Reason: "end_turn"},
 	}}
 	ctx, cancel := context.WithCancel(context.Background())
 	client, err := NewClient(&contractProvider{stream: providerStream})

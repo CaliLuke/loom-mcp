@@ -44,7 +44,7 @@ func (c interceptableModelClient) Stream(context.Context, *model.Request) (model
 
 type emptyModelStream struct{}
 
-func (emptyModelStream) Recv() (model.Chunk, error) { return model.Chunk{}, io.EOF }
+func (emptyModelStream) Recv() (model.Chunk, error) { return nil, io.EOF }
 func (emptyModelStream) Close() error               { return nil }
 func (emptyModelStream) Metadata() map[string]any   { return nil }
 func (emptyModelStream) Response() *model.Response  { return nil }
@@ -68,7 +68,7 @@ type closeCountingModelStream struct {
 	closeCount int
 }
 
-func (s *closeCountingModelStream) Recv() (model.Chunk, error) { return model.Chunk{}, io.EOF }
+func (s *closeCountingModelStream) Recv() (model.Chunk, error) { return nil, io.EOF }
 func (s *closeCountingModelStream) Close() error {
 	s.closeCount++
 	return nil

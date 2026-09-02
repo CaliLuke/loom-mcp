@@ -75,7 +75,7 @@ func (c *recordingCompletionClient) Stream(_ context.Context, req *model.Request
 
 func (s *scriptedStreamer) Recv() (model.Chunk, error) {
 	if s.index >= len(s.results) {
-		return model.Chunk{}, io.EOF
+		return nil, io.EOF
 	}
 	result := s.results[s.index]
 	s.index++
@@ -200,24 +200,22 @@ func TestStreamEnforcesCanonicalCompletionContract(t *testing.T) {
 		metadata: map[string]any{"provider": "test"},
 		results: []recvResult{
 			{
-				chunk: model.Chunk{
-					Type: model.ChunkTypeCompletionDelta,
-					CompletionDelta: &model.CompletionDelta{
+				chunk: model.CompletionDeltaChunk{
+					Delta: model.CompletionDelta{
 						Name:  "draft_from_transcript",
 						Delta: `{"assistant_text":"draft`,
 					},
 				},
 			},
 			{
-				chunk: model.Chunk{
-					Type: model.ChunkTypeCompletion,
-					Completion: &model.Completion{
+				chunk: model.CompletionChunk{
+					Completion: model.Completion{
 						Name:    "draft_from_transcript",
 						Payload: rawjson.Message(`{"assistant_text":"created a draft"}`),
 					},
 				},
 			},
-			{chunk: model.Chunk{Type: model.ChunkTypeStop, StopReason: "stop"}},
+			{chunk: model.StopChunk{Reason: "stop"}},
 		},
 	}
 	stream, err := Stream(context.Background(), &recordingCompletionClient{streamer: upstream}, &model.Request{}, testCompletionSpec())
@@ -225,7 +223,7 @@ func TestStreamEnforcesCanonicalCompletionContract(t *testing.T) {
 
 	chunk, err := stream.Recv()
 	require.NoError(t, err)
-	require.Equal(t, model.ChunkTypeCompletionDelta, chunk.Type)
+	require.IsType(t, model.CompletionDeltaChunk{}, chunk)
 	chunk, err = stream.Recv()
 	require.NoError(t, err)
 	value, ok, err := DecodeChunk(chunk, testCompletionSpec())
@@ -234,7 +232,7 @@ func TestStreamEnforcesCanonicalCompletionContract(t *testing.T) {
 	require.Equal(t, testCompletionResult{AssistantText: "created a draft"}, value)
 	chunk, err = stream.Recv()
 	require.NoError(t, err)
-	require.Equal(t, model.ChunkTypeStop, chunk.Type)
+	require.IsType(t, model.StopChunk{}, chunk)
 	require.Equal(t, map[string]any{"provider": "test"}, stream.Metadata())
 }
 
@@ -255,7 +253,7 @@ func TestStreamRejectsStopBeforeFinalCompletion(t *testing.T) {
 	stream, err := Stream(
 		context.Background(),
 		&recordingCompletionClient{
-			streamer: &scriptedStreamer{results: []recvResult{{chunk: model.Chunk{Type: model.ChunkTypeStop}}}},
+			streamer: &scriptedStreamer{results: []recvResult{{chunk: model.StopChunk{}}}},
 		},
 		&model.Request{},
 		testCompletionSpec(),
@@ -270,7 +268,7 @@ func TestStreamRejectsUnexpectedChunk(t *testing.T) {
 	stream, err := Stream(
 		context.Background(),
 		&recordingCompletionClient{
-			streamer: &scriptedStreamer{results: []recvResult{{chunk: model.Chunk{Type: model.ChunkTypeText}}}},
+			streamer: &scriptedStreamer{results: []recvResult{{chunk: model.TextChunk{}}}},
 		},
 		&model.Request{},
 		testCompletionSpec(),
@@ -278,13 +276,12 @@ func TestStreamRejectsUnexpectedChunk(t *testing.T) {
 	require.NoError(t, err)
 
 	_, err = stream.Recv()
-	require.ErrorContains(t, err, `unexpected "text" chunk`)
+	require.ErrorContains(t, err, "unexpected model.TextChunk chunk")
 }
 
 func TestDecodeChunkIgnoresPreviewAndDecodesFinalCompletion(t *testing.T) {
-	_, ok, err := DecodeChunk(model.Chunk{
-		Type: model.ChunkTypeCompletionDelta,
-		CompletionDelta: &model.CompletionDelta{
+	_, ok, err := DecodeChunk(model.CompletionDeltaChunk{
+		Delta: model.CompletionDelta{
 			Name:  "draft_from_transcript",
 			Delta: `{"assistant_text":"draft"}`,
 		},
@@ -292,9 +289,8 @@ func TestDecodeChunkIgnoresPreviewAndDecodesFinalCompletion(t *testing.T) {
 	require.NoError(t, err)
 	require.False(t, ok)
 
-	value, ok, err := DecodeChunk(model.Chunk{
-		Type: model.ChunkTypeCompletion,
-		Completion: &model.Completion{
+	value, ok, err := DecodeChunk(model.CompletionChunk{
+		Completion: model.Completion{
 			Name:    "draft_from_transcript",
 			Payload: rawjson.Message(`{"assistant_text":"created a draft"}`),
 		},
@@ -305,9 +301,8 @@ func TestDecodeChunkIgnoresPreviewAndDecodesFinalCompletion(t *testing.T) {
 }
 
 func TestDecodeChunkRejectsWrongCompletionName(t *testing.T) {
-	_, _, err := DecodeChunk(model.Chunk{
-		Type: model.ChunkTypeCompletion,
-		Completion: &model.Completion{
+	_, _, err := DecodeChunk(model.CompletionChunk{
+		Completion: model.Completion{
 			Name:    "other",
 			Payload: rawjson.Message(`{"assistant_text":"created a draft"}`),
 		},

@@ -66,19 +66,19 @@ func (s *anthropicStreamer) Recv() (model.Chunk, error) {
 		}
 		if err := s.err(); err != nil {
 			if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
-				return model.Chunk{}, err
+				return nil, err
 			}
 			s.setErr(err)
-			return model.Chunk{}, err
+			return nil, err
 		}
-		return model.Chunk{}, io.EOF
+		return nil, io.EOF
 	case <-s.ctx.Done():
 		err := s.ctx.Err()
 		if err == nil {
 			err = context.Canceled
 		}
 		s.setErr(err)
-		return model.Chunk{}, err
+		return nil, err
 	}
 }
 
@@ -238,16 +238,10 @@ func (p *anthropicChunkProcessor) Handle(event sdk.MessageStreamEventUnion) erro
 		if p.recordUsage != nil {
 			p.recordUsage(usage)
 		}
-		return p.emit(model.Chunk{Type: model.ChunkTypeUsage, UsageDelta: &usage})
+		return p.emit(model.UsageChunk{Usage: usage})
 	case sdk.MessageStopEvent:
 		p.completed = true
-		chunk := model.Chunk{
-			Type:          model.ChunkTypeStop,
-			OutputLimited: anthropicOutputLimited(p.stopReason),
-		}
-		if p.stopReason != "" {
-			chunk.StopReason = p.stopReason
-		}
+		chunk := model.StopChunk{Reason: p.stopReason, OutputLimited: anthropicOutputLimited(p.stopReason)}
 		p.toolBlocks = make(map[int]*toolBuffer)
 		p.thinkingBlocks = make(map[int]*thinkingBuffer)
 		return p.emit(chunk)
@@ -346,9 +340,8 @@ func (p *anthropicChunkProcessor) emitTextDelta(idx int, text string) error {
 	if text == "" {
 		return nil
 	}
-	return p.emit(model.Chunk{
-		Type: model.ChunkTypeText,
-		Message: &model.Message{
+	return p.emit(model.TextChunk{
+		Message: model.Message{
 			Role: model.ConversationRoleAssistant,
 			Parts: []model.Part{
 				model.TextPart{Text: text},
@@ -373,9 +366,8 @@ func (p *anthropicChunkProcessor) emitToolJSONDelta(idx int, fragment string) er
 	if tb.name == "" {
 		return fmt.Errorf("anthropic stream: tool JSON delta missing tool name for id %q", tb.id)
 	}
-	return p.emit(model.Chunk{
-		Type: model.ChunkTypeToolCallDelta,
-		ToolCallDelta: &model.ToolCallDelta{
+	return p.emit(model.ToolCallDeltaChunk{
+		Delta: model.ToolCallDelta{
 			Name:  tools.Ident(tb.name),
 			ID:    tb.id,
 			Delta: fragment,
@@ -389,10 +381,8 @@ func (p *anthropicChunkProcessor) emitThinkingDelta(idx int, text string) error 
 	}
 	tb := p.ensureThinkingBuffer(idx)
 	tb.text.WriteString(text)
-	return p.emit(model.Chunk{
-		Type:     model.ChunkTypeThinking,
-		Thinking: text,
-		Message: &model.Message{
+	return p.emit(model.ThinkingChunk{
+		Message: model.Message{
 			Role: model.ConversationRoleAssistant,
 			Parts: []model.Part{
 				model.ThinkingPart{
@@ -440,15 +430,13 @@ func (p *anthropicChunkProcessor) emitFinalThinking(idx int) error {
 	if part == nil {
 		return nil
 	}
-	chunk := model.Chunk{
-		Type: model.ChunkTypeThinking,
-		Message: &model.Message{
+	chunk := model.ThinkingChunk{
+		Message: model.Message{
 			Role:  model.ConversationRoleAssistant,
 			Parts: []model.Part{*part},
 		},
 	}
 	if part.Text != "" {
-		chunk.Thinking = part.Text
 		return p.emit(chunk)
 	}
 	if len(part.Redacted) > 0 {
@@ -467,9 +455,8 @@ func (p *anthropicChunkProcessor) emitFinalToolCall(idx int) error {
 	if err != nil {
 		return fmt.Errorf("anthropic stream: tool call %q payload: %w", tb.id, err)
 	}
-	return p.emit(model.Chunk{
-		Type: model.ChunkTypeToolCall,
-		ToolCall: &model.ToolCall{
+	return p.emit(model.ToolCallChunk{
+		ToolCall: model.ToolCall{
 			Name:    tools.Ident(tb.name),
 			Payload: payload,
 			ID:      tb.id,

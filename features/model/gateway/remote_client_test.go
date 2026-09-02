@@ -17,7 +17,7 @@ import (
 type emptyRemoteStream struct{}
 
 func (emptyRemoteStream) Recv() (model.Chunk, error) {
-	return model.Chunk{}, io.EOF
+	return nil, io.EOF
 }
 
 func (emptyRemoteStream) Close() error {
@@ -43,9 +43,9 @@ func (s *remoteSequenceStream) Recv() (model.Chunk, error) {
 		return chunk, nil
 	}
 	if s.terminal != nil {
-		return model.Chunk{}, s.terminal
+		return nil, s.terminal
 	}
-	return model.Chunk{}, io.EOF
+	return nil, io.EOF
 }
 
 func (s *remoteSequenceStream) Close() error {
@@ -93,8 +93,8 @@ func TestRemoteClientKeepsPreTransportToolContract(t *testing.T) {
 
 func TestRemoteClientKeepsPreTransportStreamingToolContract(t *testing.T) {
 	raw := &remoteSequenceStream{chunks: []model.Chunk{
-		{Type: model.ChunkTypeToolCall, ToolCall: &model.ToolCall{Name: tools.Ident("transport_injected"), ID: "call-1", Payload: rawjson.Message(`{}`)}},
-		{Type: model.ChunkTypeStop, StopReason: "tool_use"},
+		model.ToolCallChunk{ToolCall: model.ToolCall{Name: tools.Ident("transport_injected"), ID: "call-1", Payload: rawjson.Message(`{}`)}},
+		model.StopChunk{Reason: "tool_use"},
 	}}
 	client := NewRemoteClient(
 		func(context.Context, *model.Request) (*model.Response, error) {

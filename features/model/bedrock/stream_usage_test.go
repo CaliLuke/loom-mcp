@@ -64,12 +64,11 @@ func TestChunkProcessor_MetadataUsageIncludesCacheTokens(t *testing.T) {
 	require.Equal(t, "test-model-id", recordedUsage.Model)
 	require.Equal(t, model.ModelClassDefault, recordedUsage.ModelClass)
 
-	require.Equal(t, model.ChunkTypeUsage, gotChunk.Type)
-	require.NotNil(t, gotChunk.UsageDelta)
-	require.Equal(t, int(cacheRead), gotChunk.UsageDelta.CacheReadTokens)
-	require.Equal(t, int(cacheWrite), gotChunk.UsageDelta.CacheWriteTokens)
-	require.Equal(t, "test-model-id", gotChunk.UsageDelta.Model)
-	require.Equal(t, model.ModelClassDefault, gotChunk.UsageDelta.ModelClass)
+	usage := gotChunk.(model.UsageChunk).Usage
+	require.Equal(t, int(cacheRead), usage.CacheReadTokens)
+	require.Equal(t, int(cacheWrite), usage.CacheWriteTokens)
+	require.Equal(t, "test-model-id", usage.Model)
+	require.Equal(t, model.ModelClassDefault, usage.ModelClass)
 }
 
 func TestChunkProcessor_StructuredOutputEmitsCompletionDeltaAndFinalCompletion(t *testing.T) {
@@ -120,18 +119,16 @@ func TestChunkProcessor_StructuredOutputEmitsCompletionDeltaAndFinalCompletion(t
 	require.NoError(t, err)
 
 	require.Len(t, chunks, 4)
-	require.Equal(t, model.ChunkTypeCompletionDelta, chunks[0].Type)
-	require.NotNil(t, chunks[0].CompletionDelta)
-	require.Equal(t, "draft_from_transcript", chunks[0].CompletionDelta.Name)
-	require.JSONEq(t, `{"assistant_text":"created a draft"}`, chunks[0].CompletionDelta.Delta)
+	delta := chunks[0].(model.CompletionDeltaChunk).Delta
+	require.Equal(t, "draft_from_transcript", delta.Name)
+	require.JSONEq(t, `{"assistant_text":"created a draft"}`, delta.Delta)
 
-	require.Equal(t, model.ChunkTypeCompletion, chunks[1].Type)
-	require.NotNil(t, chunks[1].Completion)
-	require.Equal(t, "draft_from_transcript", chunks[1].Completion.Name)
-	require.JSONEq(t, `{"assistant_text":"created a draft"}`, string(chunks[1].Completion.Payload))
+	completion := chunks[1].(model.CompletionChunk).Completion
+	require.Equal(t, "draft_from_transcript", completion.Name)
+	require.JSONEq(t, `{"assistant_text":"created a draft"}`, string(completion.Payload))
 
-	require.Equal(t, model.ChunkTypeUsage, chunks[2].Type)
-	require.Equal(t, model.ChunkTypeStop, chunks[3].Type)
+	require.IsType(t, model.UsageChunk{}, chunks[2])
+	require.IsType(t, model.StopChunk{}, chunks[3])
 }
 
 func TestChunkProcessor_StructuredOutputRejectsInvalidFinalJSON(t *testing.T) {

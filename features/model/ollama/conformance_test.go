@@ -260,10 +260,11 @@ func TestClientConformance(t *testing.T) {
 					model.ChunkTypeThinking, model.ChunkTypeText, model.ChunkTypeToolCall,
 					model.ChunkTypeText, model.ChunkTypeUsage, model.ChunkTypeStop,
 				}, ollamaChunkTypes(chunks))
-				require.Equal(t, "call-1", chunks[2].ToolCall.ID)
-				require.Equal(t, "lookup", chunks[2].ToolCall.Name.String())
-				require.JSONEq(t, `{"query":"docs"}`, string(chunks[2].ToolCall.Payload))
-				require.Equal(t, 5, chunks[4].UsageDelta.TotalTokens)
+				call := chunks[2].(model.ToolCallChunk).ToolCall
+				require.Equal(t, "call-1", call.ID)
+				require.Equal(t, "lookup", call.Name.String())
+				require.JSONEq(t, `{"query":"docs"}`, string(call.Payload))
+				require.Equal(t, 5, chunks[4].(model.UsageChunk).Usage.TotalTokens)
 			},
 			EarlyEOF: func(t *testing.T) {
 				client := newClient(t, func(w http.ResponseWriter, _ *http.Request) {
@@ -275,7 +276,7 @@ func TestClientConformance(t *testing.T) {
 				t.Cleanup(func() { _ = stream.Close() })
 				chunk, err := stream.Recv()
 				require.NoError(t, err)
-				require.Equal(t, model.ChunkTypeText, chunk.Type)
+				require.IsType(t, model.TextChunk{}, chunk)
 				_, err = stream.Recv()
 				require.EqualError(t, err, "ollama: stream ended before done")
 			},
@@ -295,7 +296,7 @@ func TestClientConformance(t *testing.T) {
 				require.NoError(t, err)
 				chunk, err := stream.Recv()
 				require.NoError(t, err)
-				require.Equal(t, model.ChunkTypeText, chunk.Type)
+				require.IsType(t, model.TextChunk{}, chunk)
 				cancel()
 				_, err = stream.Recv()
 				require.ErrorIs(t, err, context.Canceled)
@@ -326,13 +327,12 @@ func TestClientConformance(t *testing.T) {
 
 				usage, err := stream.Recv()
 				require.NoError(t, err)
-				require.Equal(t, model.ChunkTypeUsage, usage.Type)
-				require.Equal(t, model.ModelClassHighReasoning, usage.UsageDelta.ModelClass)
-				require.Equal(t, "deepseek-r1", usage.UsageDelta.Model)
+				usageValue := usage.(model.UsageChunk).Usage
+				require.Equal(t, model.ModelClassHighReasoning, usageValue.ModelClass)
+				require.Equal(t, "deepseek-r1", usageValue.Model)
 				stop, err := stream.Recv()
 				require.NoError(t, err)
-				require.Equal(t, model.ChunkTypeStop, stop.Type)
-				require.Equal(t, "stop", stop.StopReason)
+				require.Equal(t, "stop", stop.(model.StopChunk).Reason)
 				_, err = stream.Recv()
 				require.ErrorIs(t, err, io.EOF)
 			},
@@ -348,7 +348,7 @@ func TestClientConformance(t *testing.T) {
 				t.Cleanup(func() { require.NoError(t, stream.Close()) })
 				chunks := testutil.CollectStreamChunks(t, stream)
 				require.Equal(t, []string{model.ChunkTypeCompletionDelta, model.ChunkTypeStop}, ollamaChunkTypes(chunks))
-				require.True(t, chunks[1].OutputLimited)
+				require.True(t, chunks[1].(model.StopChunk).OutputLimited)
 			},
 		},
 	})
@@ -380,7 +380,7 @@ func (b *ollamaCloseErrorBody) Close() error {
 func ollamaChunkTypes(chunks []model.Chunk) []string {
 	types := make([]string, 0, len(chunks))
 	for _, chunk := range chunks {
-		types = append(types, chunk.Type)
+		types = append(types, chunk.Kind())
 	}
 	return types
 }

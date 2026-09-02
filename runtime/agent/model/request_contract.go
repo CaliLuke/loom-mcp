@@ -444,19 +444,19 @@ func (s *validatedProviderStream) Recv() (Chunk, error) { //nolint:maintidx // T
 	defer s.mu.Unlock()
 	if s.finalized {
 		if s.finalizeErr != nil {
-			return Chunk{}, s.finalizeErr
+			return nil, s.finalizeErr
 		}
-		return Chunk{}, io.EOF
+		return nil, io.EOF
 	}
 	if s.response != nil && len(s.pending) > 0 {
 		return s.takePending(), nil
 	}
 	if s.terminal {
 		if s.terminalErr != nil {
-			return Chunk{}, s.terminalErr
+			return nil, s.terminalErr
 		}
 		s.consumerEOF = true
-		return Chunk{}, io.EOF
+		return nil, io.EOF
 	}
 	for {
 		chunk, err := s.inner.Recv()
@@ -464,7 +464,7 @@ func (s *validatedProviderStream) Recv() (Chunk, error) { //nolint:maintidx // T
 			return s.finishReceive(err)
 		}
 		if s.stopped {
-			return Chunk{}, s.failStream(OutputValidationStreamProtocol, errors.New("provider stream emitted output after its terminal stop"), nil)
+			return nil, s.failStream(OutputValidationStreamProtocol, errors.New("provider stream emitted output after its terminal stop"), nil)
 		}
 		owned, cloneErr := cloneModelChunk(chunk, &s.budget)
 		if cloneErr != nil {
@@ -473,14 +473,14 @@ func (s *validatedProviderStream) Recv() (Chunk, error) { //nolint:maintidx // T
 			if errors.As(cloneErr, &boundsErr) {
 				kind = OutputValidationOutputBounds
 			}
-			return Chunk{}, s.failStream(kind, cloneErr, nil)
+			return nil, s.failStream(kind, cloneErr, nil)
 		}
 		if evidenceErr := s.recordChunkEvidence(owned); evidenceErr != nil {
-			return Chunk{}, s.failStream(OutputValidationOutputBounds, evidenceErr, nil)
+			return nil, s.failStream(OutputValidationOutputBounds, evidenceErr, nil)
 		}
 		withhold, validateErr := s.acceptChunk(owned)
 		if validateErr != nil {
-			return Chunk{}, validateErr
+			return nil, validateErr
 		}
 		if withhold || len(s.pending) > 0 {
 			s.pending = append(s.pending, owned)
@@ -545,54 +545,49 @@ func (s *validatedProviderStream) Finalize(primaryErr error) error {
 	return s.finalizeErr
 }
 
-func (s *validatedProviderStream) acceptChunk(chunk Chunk) (bool, error) { //nolint:maintidx // Exhaustive dispatch keeps every open chunk variant on the same validation boundary.
+func (s *validatedProviderStream) acceptChunk(chunk Chunk) (bool, error) {
 	if err := validateChunkShape(chunk); err != nil {
 		kind := OutputValidationResponseShape
-		switch chunk.Type {
-		case ChunkTypeUsage:
+		var usage *TokenUsage
+		switch value := chunk.(type) {
+		case UsageChunk:
 			kind = OutputValidationUsage
-		case ChunkTypeCompletion, ChunkTypeCompletionDelta:
+			usage = &value.Usage
+		case CompletionChunk, CompletionDeltaChunk:
 			kind = OutputValidationStructuredOutput
-		case ChunkTypeStop:
+		case StopChunk:
 			kind = OutputValidationStreamProtocol
 		}
-		return false, s.failStream(kind, err, chunk.UsageDelta)
+		return false, s.failStream(kind, err, usage)
 	}
-	switch chunk.Type {
-	case ChunkTypeText:
+	switch value := chunk.(type) {
+	case TextChunk:
 		if s.contract.structuredValidate != nil {
 			return false, s.failStream(OutputValidationStructuredOutput, errors.New("structured output stream emitted text"), nil)
 		}
-		message, err := cloneStreamMessageForCanonicalResponse(*chunk.Message)
+		message, err := cloneStreamMessageForCanonicalResponse(value.Message)
 		if err != nil {
 			return false, s.failStream(OutputValidationResponseShape, err, nil)
 		}
 		s.content = append(s.content, message)
-	case ChunkTypeThinking:
-		if chunk.Message != nil {
-			message, err := cloneStreamMessageForCanonicalResponse(*chunk.Message)
-			if err != nil {
-				return false, s.failStream(OutputValidationResponseShape, err, nil)
-			}
-			s.content = append(s.content, message)
-		} else {
-			s.content = append(s.content, Message{
-				Role:  ConversationRoleAssistant,
-				Parts: []Part{ThinkingPart{Text: chunk.Thinking}},
-			})
+	case ThinkingChunk:
+		message, err := cloneStreamMessageForCanonicalResponse(value.Message)
+		if err != nil {
+			return false, s.failStream(OutputValidationResponseShape, err, nil)
 		}
-	case ChunkTypeToolCall:
-		return s.acceptToolCall(*chunk.ToolCall)
-	case ChunkTypeToolCallDelta:
-		return s.acceptToolCallDelta(*chunk.ToolCallDelta)
-	case ChunkTypeCompletion:
-		return s.acceptCompletion(chunk.Completion)
-	case ChunkTypeCompletionDelta:
-		return s.acceptCompletionDelta(chunk.CompletionDelta)
-	case ChunkTypeUsage:
-		return false, s.acceptUsage(chunk.UsageDelta)
-	case ChunkTypeStop:
-		return s.acceptStop(chunk)
+		s.content = append(s.content, message)
+	case ToolCallChunk:
+		return s.acceptToolCall(value.ToolCall)
+	case ToolCallDeltaChunk:
+		return s.acceptToolCallDelta(value.Delta)
+	case CompletionChunk:
+		return s.acceptCompletion(value.Completion)
+	case CompletionDeltaChunk:
+		return s.acceptCompletionDelta(value.Delta)
+	case UsageChunk:
+		return false, s.acceptUsage(value.Usage)
+	case StopChunk:
+		return s.acceptStop(value)
 	}
 	return false, nil
 }
@@ -657,7 +652,7 @@ func (s *validatedProviderStream) acceptToolCallDelta(delta ToolCallDelta) (bool
 	return true, nil
 }
 
-func (s *validatedProviderStream) acceptCompletion(completion *Completion) (bool, error) {
+func (s *validatedProviderStream) acceptCompletion(completion Completion) (bool, error) {
 	if s.contract.structuredValidate == nil {
 		return false, s.failStream(OutputValidationStructuredOutput, errors.New("provider stream emitted a completion without a structured output request"), nil)
 	}
@@ -667,30 +662,30 @@ func (s *validatedProviderStream) acceptCompletion(completion *Completion) (bool
 	if completion.Name != s.contract.structuredName {
 		return false, s.failStream(OutputValidationStructuredOutput, errors.New("provider stream completion name does not match its request"), nil)
 	}
-	s.completion = completion
+	s.completion = &completion
 	return true, nil
 }
 
-func (s *validatedProviderStream) acceptCompletionDelta(delta *CompletionDelta) (bool, error) {
+func (s *validatedProviderStream) acceptCompletionDelta(delta CompletionDelta) (bool, error) {
 	if s.contract.structuredValidate == nil || delta.Name != s.contract.structuredName {
 		return false, s.failStream(OutputValidationStructuredOutput, errors.New("provider stream completion delta does not match its request"), nil)
 	}
 	return false, nil
 }
 
-func (s *validatedProviderStream) acceptUsage(delta *TokenUsage) error {
-	if err := s.contract.validateUsageIdentity(*delta); err != nil {
-		return s.failStream(OutputValidationUsage, err, delta)
+func (s *validatedProviderStream) acceptUsage(delta TokenUsage) error {
+	if err := s.contract.validateUsageIdentity(delta); err != nil {
+		return s.failStream(OutputValidationUsage, err, &delta)
 	}
-	usage, err := addTokenUsage(s.usage, *delta)
+	usage, err := addTokenUsage(s.usage, delta)
 	if err != nil {
-		return s.failStream(OutputValidationUsage, err, delta)
+		return s.failStream(OutputValidationUsage, err, &delta)
 	}
 	s.usage = usage
 	return nil
 }
 
-func (s *validatedProviderStream) acceptStop(chunk Chunk) (bool, error) {
+func (s *validatedProviderStream) acceptStop(chunk StopChunk) (bool, error) {
 	if len(s.toolDeltaNames) > 0 && !chunk.OutputLimited {
 		return false, s.failStream(OutputValidationStreamProtocol, errors.New("provider stream stopped before all tool calls were finalized"), nil)
 	}
@@ -699,7 +694,7 @@ func (s *validatedProviderStream) acceptStop(chunk Chunk) (bool, error) {
 		clear(s.toolDeltaPayloads)
 	}
 	s.stopped = true
-	s.stopReason = chunk.StopReason
+	s.stopReason = chunk.Reason
 	s.outputLimited = chunk.OutputLimited
 	return true, nil
 }
@@ -710,19 +705,19 @@ func (s *validatedProviderStream) finishReceive(err error) (Chunk, error) {
 		s.terminal = true
 		s.terminalErr = joinContextError(err, s.ctx.Err())
 		s.pending = nil
-		return Chunk{}, s.terminalErr
+		return nil, s.terminalErr
 	}
 	if ctxErr := s.ctx.Err(); ctxErr != nil {
 		s.terminal = true
 		s.terminalErr = ctxErr
 		s.pending = nil
-		return Chunk{}, ctxErr
+		return nil, ctxErr
 	}
 	if !s.stopped {
-		return Chunk{}, s.failStream(OutputValidationStreamProtocol, errors.New("provider stream ended without a terminal stop"), nil)
+		return nil, s.failStream(OutputValidationStreamProtocol, errors.New("provider stream ended without a terminal stop"), nil)
 	}
 	if !s.outputLimited && s.contract.structuredValidate != nil && s.completion == nil {
-		return Chunk{}, s.failStream(OutputValidationStructuredOutput, errors.New("structured output stream ended without a completion"), nil)
+		return nil, s.failStream(OutputValidationStructuredOutput, errors.New("structured output stream ended without a completion"), nil)
 	}
 	response := &Response{
 		Content:       s.content,
@@ -741,7 +736,7 @@ func (s *validatedProviderStream) finishReceive(err error) (Chunk, error) {
 		s.terminal = true
 		s.terminalErr = validateErr
 		s.pending = nil
-		return Chunk{}, validateErr
+		return nil, validateErr
 	}
 	s.response = accepted
 	s.terminal = true
@@ -749,7 +744,7 @@ func (s *validatedProviderStream) finishReceive(err error) (Chunk, error) {
 		return s.takePending(), nil
 	}
 	s.consumerEOF = true
-	return Chunk{}, io.EOF
+	return nil, io.EOF
 }
 
 func (s *validatedProviderStream) failStream(kind OutputValidationKind, cause error, usage *TokenUsage) error {
@@ -761,7 +756,10 @@ func (s *validatedProviderStream) failStream(kind OutputValidationKind, cause er
 }
 
 func (s *validatedProviderStream) recordChunkEvidence(chunk Chunk) error {
-	raw, err := deterministicModelJSON(chunk)
+	raw, err := deterministicModelJSON(map[string]any{
+		"kind":  chunk.Kind(),
+		"value": chunk,
+	})
 	if err != nil {
 		return fmt.Errorf("encode stream evidence: %w", err)
 	}
@@ -800,99 +798,45 @@ func (s *validatedProviderStream) takePending() Chunk {
 	return chunk
 }
 
-func validateChunkShape(chunk Chunk) error { //nolint:maintidx // Exhaustive chunk-shape validation makes each closed protocol variant explicit.
-	payloads := chunkPayloadCount(chunk)
-	switch chunk.Type {
-	case ChunkTypeText:
-		if chunk.Message == nil || payloads != 1 || chunk.OutputLimited {
-			return errors.New("provider stream emitted invalid text chunk shape")
+func validateChunkShape(chunk Chunk) error {
+	switch value := chunk.(type) {
+	case TextChunk:
+		return nil
+	case ThinkingChunk:
+		return validateThinkingChunkMessage(value.Message)
+	case ToolCallChunk, ToolCallDeltaChunk, CompletionDeltaChunk:
+		return nil
+	case CompletionChunk:
+		if len(value.Completion.Payload) == 0 {
+			return errors.New("provider stream emitted an empty completion")
 		}
-	case ChunkTypeThinking:
-		thinkingPayloads := 0
-		if chunk.Message != nil {
-			thinkingPayloads++
-		}
-		if chunk.Thinking != "" {
-			thinkingPayloads++
-		}
-		if thinkingPayloads == 0 || payloads != thinkingPayloads || chunk.OutputLimited {
-			return errors.New("provider stream emitted invalid thinking chunk shape")
-		}
-		if err := validateThinkingChunkMessage(chunk); err != nil {
+	case UsageChunk:
+		if err := validateTokenUsage(value.Usage); err != nil {
 			return err
 		}
-	case ChunkTypeToolCall:
-		if chunk.ToolCall == nil || payloads != 1 || chunk.OutputLimited {
-			return errors.New("provider stream emitted invalid tool call chunk shape")
-		}
-	case ChunkTypeToolCallDelta:
-		if chunk.ToolCallDelta == nil || payloads != 1 || chunk.OutputLimited {
-			return errors.New("provider stream emitted invalid tool delta chunk shape")
-		}
-	case ChunkTypeCompletion:
-		if chunk.Completion == nil || len(chunk.Completion.Payload) == 0 || payloads != 1 || chunk.OutputLimited {
-			return errors.New("provider stream emitted invalid completion chunk shape")
-		}
-	case ChunkTypeCompletionDelta:
-		if chunk.CompletionDelta == nil || payloads != 1 || chunk.OutputLimited {
-			return errors.New("provider stream emitted invalid completion delta chunk shape")
-		}
-	case ChunkTypeUsage:
-		if chunk.UsageDelta == nil || payloads != 1 || chunk.OutputLimited {
-			return errors.New("provider stream emitted invalid usage chunk shape")
-		}
-		if err := validateTokenUsage(*chunk.UsageDelta); err != nil {
-			return err
-		}
-	case ChunkTypeStop:
-		if strings.TrimSpace(chunk.StopReason) == "" || payloads != 1 {
+	case StopChunk:
+		if strings.TrimSpace(value.Reason) == "" {
 			return errors.New("provider stream emitted invalid stop chunk shape")
 		}
 	default:
-		return errors.New("provider stream emitted an unknown chunk type")
+		return errors.New("provider stream emitted an unsupported chunk variant")
 	}
 	return nil
 }
 
-func validateThinkingChunkMessage(chunk Chunk) error {
-	if chunk.Message == nil {
-		return nil
-	}
-	if chunk.Message.Role != ConversationRoleAssistant || len(chunk.Message.Parts) != 1 {
+func validateThinkingChunkMessage(message Message) error {
+	if message.Role != ConversationRoleAssistant || len(message.Parts) != 1 {
 		return errors.New("provider stream thinking message must contain exactly one assistant thinking part")
 	}
-	part, err := normalizeMessagePart(chunk.Message.Parts[0])
+	part, err := normalizeMessagePart(message.Parts[0])
 	if err != nil {
 		return errors.New("provider stream thinking message contains an invalid part")
 	}
-	thinking, ok := part.(ThinkingPart)
+	_, ok := part.(ThinkingPart)
 	if !ok {
 		return errors.New("provider stream thinking message contains a non-thinking part")
 	}
-	if chunk.Thinking != "" && thinking.Text != chunk.Thinking {
-		return errors.New("provider stream thinking payloads disagree")
-	}
 	return nil
-}
-
-func chunkPayloadCount(chunk Chunk) int {
-	count := 0
-	values := []bool{
-		chunk.Message != nil,
-		chunk.Thinking != "",
-		chunk.ToolCall != nil,
-		chunk.ToolCallDelta != nil,
-		chunk.Completion != nil,
-		chunk.CompletionDelta != nil,
-		chunk.UsageDelta != nil,
-		chunk.StopReason != "",
-	}
-	for _, present := range values {
-		if present {
-			count++
-		}
-	}
-	return count
 }
 
 func addTokenUsage(current, delta TokenUsage) (TokenUsage, error) {

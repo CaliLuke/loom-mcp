@@ -221,15 +221,17 @@ func TestClientConformance(t *testing.T) {
 					model.ChunkTypeText, model.ChunkTypeToolCallDelta, model.ChunkTypeToolCallDelta,
 					model.ChunkTypeToolCall, model.ChunkTypeUsage, model.ChunkTypeStop,
 				}, anthropicChunkTypes(chunks))
-				require.Equal(t, 1, chunks[2].Message.Meta["content_index"])
+				require.Equal(t, 1, chunks[2].(model.TextChunk).Message.Meta["content_index"])
 				for _, chunk := range chunks[4:6] {
-					require.Equal(t, "call-1", chunk.ToolCallDelta.ID)
-					require.Equal(t, "lookup", chunk.ToolCallDelta.Name.String())
+					delta := chunk.(model.ToolCallDeltaChunk).Delta
+					require.Equal(t, "call-1", delta.ID)
+					require.Equal(t, "lookup", delta.Name.String())
 				}
-				require.Equal(t, "call-1", chunks[6].ToolCall.ID)
-				require.Equal(t, "lookup", chunks[6].ToolCall.Name.String())
-				require.JSONEq(t, `{"query":"docs"}`, string(chunks[6].ToolCall.Payload))
-				finalThinking, ok := chunks[1].Message.Parts[0].(model.ThinkingPart)
+				call := chunks[6].(model.ToolCallChunk).ToolCall
+				require.Equal(t, "call-1", call.ID)
+				require.Equal(t, "lookup", call.Name.String())
+				require.JSONEq(t, `{"query":"docs"}`, string(call.Payload))
+				finalThinking, ok := chunks[1].(model.ThinkingChunk).Message.Parts[0].(model.ThinkingPart)
 				require.True(t, ok)
 				require.True(t, finalThinking.Final)
 				require.Equal(t, "sig", finalThinking.Signature)
@@ -246,7 +248,7 @@ func TestClientConformance(t *testing.T) {
 				t.Cleanup(func() { _ = stream.Close() })
 				chunk, err := stream.Recv()
 				require.NoError(t, err)
-				require.Equal(t, model.ChunkTypeText, chunk.Type)
+				require.IsType(t, model.TextChunk{}, chunk)
 				_, err = stream.Recv()
 				require.EqualError(t, err, "anthropic: stream ended before message_stop")
 			},
@@ -263,7 +265,7 @@ func TestClientConformance(t *testing.T) {
 				require.NoError(t, err)
 				chunk, err := stream.Recv()
 				require.NoError(t, err)
-				require.Equal(t, model.ChunkTypeText, chunk.Type)
+				require.IsType(t, model.TextChunk{}, chunk)
 				cancel()
 				_, err = stream.Recv()
 				require.ErrorIs(t, err, context.Canceled)
@@ -321,13 +323,12 @@ func TestClientConformance(t *testing.T) {
 
 				usage, err := stream.Recv()
 				require.NoError(t, err)
-				require.Equal(t, model.ChunkTypeUsage, usage.Type)
-				require.Equal(t, model.ModelClassHighReasoning, usage.UsageDelta.ModelClass)
-				require.Equal(t, "claude-opus", usage.UsageDelta.Model)
+				usageValue := usage.(model.UsageChunk).Usage
+				require.Equal(t, model.ModelClassHighReasoning, usageValue.ModelClass)
+				require.Equal(t, "claude-opus", usageValue.Model)
 				stop, err := stream.Recv()
 				require.NoError(t, err)
-				require.Equal(t, model.ChunkTypeStop, stop.Type)
-				require.Equal(t, "end_turn", stop.StopReason)
+				require.Equal(t, "end_turn", stop.(model.StopChunk).Reason)
 				_, err = stream.Recv()
 				require.ErrorIs(t, err, io.EOF)
 			},
@@ -345,7 +346,7 @@ func TestClientConformance(t *testing.T) {
 				require.NoError(t, err)
 				t.Cleanup(func() { require.NoError(t, stream.Close()) })
 				chunks := testutil.CollectStreamChunks(t, stream)
-				require.True(t, chunks[len(chunks)-1].OutputLimited)
+				require.True(t, chunks[len(chunks)-1].(model.StopChunk).OutputLimited)
 			},
 		},
 	})
@@ -405,7 +406,7 @@ func anthropicConformanceEvents(t *testing.T, raws ...string) []ssestream.Event 
 func anthropicChunkTypes(chunks []model.Chunk) []string {
 	types := make([]string, 0, len(chunks))
 	for _, chunk := range chunks {
-		types = append(types, chunk.Type)
+		types = append(types, chunk.Kind())
 	}
 	return types
 }

@@ -136,30 +136,24 @@ func (s *eventStream) Recv() (model.Chunk, error) {
 	if err != nil {
 		return ch, err
 	}
-	switch ch.Type {
-	case model.ChunkTypeToolCallDelta:
-		if ch.ToolCallDelta != nil && ch.ToolCallDelta.Name != tools.ToolUnavailable {
-			s.events.ToolCallArgsDelta(s.ctx, ch.ToolCallDelta.ID, ch.ToolCallDelta.Name, ch.ToolCallDelta.Delta)
+	switch value := ch.(type) {
+	case model.ToolCallDeltaChunk:
+		if value.Delta.Name != tools.ToolUnavailable {
+			s.events.ToolCallArgsDelta(s.ctx, value.Delta.ID, value.Delta.Name, value.Delta.Delta)
 		}
-	case model.ChunkTypeText:
-		if ch.Message != nil {
-			s.stageMessageContent(ch.Message)
+	case model.TextChunk:
+		s.stageMessageContent(&value.Message)
+	case model.ThinkingChunk:
+		s.stageThinkingParts(&value.Message)
+	case model.ToolCallChunk:
+		if value.ToolCall.Name == tools.ToolUnavailable {
+			value.ToolCall.Payload = exactToolUnavailablePayload(s.req)
+			ch = value
 		}
-	case model.ChunkTypeThinking:
-		if ch.Message != nil {
-			s.stageThinkingParts(ch.Message)
-		} else if ch.Thinking != "" {
-			s.stageThinking(model.ThinkingPart{Text: ch.Thinking})
-		}
-	case model.ChunkTypeToolCall:
-		if ch.ToolCall != nil && ch.ToolCall.Name == tools.ToolUnavailable {
-			ch.ToolCall.Payload = exactToolUnavailablePayload(s.req)
-		}
-	case model.ChunkTypeUsage:
-		if ch.UsageDelta != nil {
-			stampModelIdentity(ch.UsageDelta, s.req)
-			s.events.UsageDelta(s.ctx, *ch.UsageDelta)
-		}
+	case model.UsageChunk:
+		stampModelIdentity(&value.Usage, s.req)
+		s.events.UsageDelta(s.ctx, value.Usage)
+		ch = value
 	}
 	return ch, nil
 }

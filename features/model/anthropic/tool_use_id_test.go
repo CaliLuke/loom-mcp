@@ -309,11 +309,11 @@ func TestAnthropicStreamer_RestoresCanonicalToolUseID(t *testing.T) {
 		if err != nil {
 			break
 		}
-		switch ch.Type {
-		case model.ChunkTypeToolCallDelta:
-			deltaID = ch.ToolCallDelta.ID
-		case model.ChunkTypeToolCall:
-			callID = ch.ToolCall.ID
+		switch value := ch.(type) {
+		case model.ToolCallDeltaChunk:
+			deltaID = value.Delta.ID
+		case model.ToolCallChunk:
+			callID = value.ToolCall.ID
 		}
 	}
 

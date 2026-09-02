@@ -564,6 +564,6 @@ var _ model.Streamer = emptyStreamer{}
 
 type emptyStreamer struct{}
 
-func (emptyStreamer) Recv() (model.Chunk, error) { return model.Chunk{}, io.EOF }
+func (emptyStreamer) Recv() (model.Chunk, error) { return nil, io.EOF }
 func (emptyStreamer) Close() error               { return nil }
 func (emptyStreamer) Metadata() map[string]any   { return nil }

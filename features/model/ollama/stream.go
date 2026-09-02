@@ -72,9 +72,9 @@ func (s *ollamaStreamer) Recv() (model.Chunk, error) {
 	}
 	if s.closed {
 		if s.finalErr != nil {
-			return model.Chunk{}, s.finalErr
+			return nil, s.finalErr
 		}
-		return model.Chunk{}, io.EOF
+		return nil, io.EOF
 	}
 	for s.scanner.Scan() {
 		line := strings.TrimSpace(s.scanner.Text())
@@ -84,7 +84,7 @@ func (s *ollamaStreamer) Recv() (model.Chunk, error) {
 		if err := s.handleLine(line); err != nil {
 			s.finalErr = err
 			s.closed = true
-			return model.Chunk{}, err
+			return nil, err
 		}
 		if len(s.queue) > 0 {
 			return s.pop(), nil
@@ -93,13 +93,13 @@ func (s *ollamaStreamer) Recv() (model.Chunk, error) {
 	s.closed = true
 	if err := s.scanner.Err(); err != nil {
 		s.finalErr = fmt.Errorf("ollama chat stream: %w", err)
-		return model.Chunk{}, s.finalErr
+		return nil, s.finalErr
 	}
 	if !s.done {
 		s.finalErr = errors.New("ollama: stream ended before done")
-		return model.Chunk{}, s.finalErr
+		return nil, s.finalErr
 	}
-	return model.Chunk{}, io.EOF
+	return nil, io.EOF
 }
 
 func (s *ollamaStreamer) Close() error {
@@ -123,7 +123,7 @@ func (s *ollamaStreamer) Metadata() map[string]any {
 
 func (s *ollamaStreamer) pop() model.Chunk {
 	chunk := s.queue[0]
-	s.queue[0] = model.Chunk{}
+	s.queue[0] = nil
 	s.queue = s.queue[1:]
 	return chunk
 }
@@ -153,9 +153,8 @@ func (s *ollamaStreamer) handleLine(line string) error {
 			if err != nil {
 				return err
 			}
-			s.queue = append(s.queue, model.Chunk{
-				Type: model.ChunkTypeCompletion,
-				Completion: &model.Completion{
+			s.queue = append(s.queue, model.CompletionChunk{
+				Completion: model.Completion{
 					Name:    structuredOutputName(s.output),
 					Payload: payload,
 				},
@@ -165,11 +164,10 @@ func (s *ollamaStreamer) handleLine(line string) error {
 		usage.Model = s.modelID
 		if usage.TotalTokens > 0 {
 			s.metadata = map[string]any{"usage": usage}
-			s.queue = append(s.queue, model.Chunk{Type: model.ChunkTypeUsage, UsageDelta: &usage})
+			s.queue = append(s.queue, model.UsageChunk{Usage: usage})
 		}
-		s.queue = append(s.queue, model.Chunk{
-			Type:          model.ChunkTypeStop,
-			StopReason:    stopReason(resp),
+		s.queue = append(s.queue, model.StopChunk{
+			Reason:        stopReason(resp),
 			OutputLimited: outputLimited,
 		})
 	}
@@ -178,10 +176,8 @@ func (s *ollamaStreamer) handleLine(line string) error {
 
 func (s *ollamaStreamer) enqueueMessage(msg ollamaMessage) error {
 	if msg.Thinking != "" {
-		s.queue = append(s.queue, model.Chunk{
-			Type:     model.ChunkTypeThinking,
-			Thinking: msg.Thinking,
-			Message: &model.Message{
+		s.queue = append(s.queue, model.ThinkingChunk{
+			Message: model.Message{
 				Role: model.ConversationRoleAssistant,
 				Parts: []model.Part{model.ThinkingPart{
 					Text:  msg.Thinking,
@@ -193,17 +189,15 @@ func (s *ollamaStreamer) enqueueMessage(msg ollamaMessage) error {
 	if msg.Content != "" {
 		s.text.WriteString(msg.Content)
 		if s.output != nil {
-			s.queue = append(s.queue, model.Chunk{
-				Type: model.ChunkTypeCompletionDelta,
-				CompletionDelta: &model.CompletionDelta{
+			s.queue = append(s.queue, model.CompletionDeltaChunk{
+				Delta: model.CompletionDelta{
 					Name:  structuredOutputName(s.output),
 					Delta: msg.Content,
 				},
 			})
 		} else {
-			s.queue = append(s.queue, model.Chunk{
-				Type: model.ChunkTypeText,
-				Message: &model.Message{
+			s.queue = append(s.queue, model.TextChunk{
+				Message: model.Message{
 					Role:  model.ConversationRoleAssistant,
 					Parts: []model.Part{model.TextPart{Text: msg.Content}},
 				},
@@ -215,9 +209,8 @@ func (s *ollamaStreamer) enqueueMessage(msg ollamaMessage) error {
 		if err != nil {
 			return err
 		}
-		s.queue = append(s.queue, model.Chunk{
-			Type:     model.ChunkTypeToolCall,
-			ToolCall: &translated,
+		s.queue = append(s.queue, model.ToolCallChunk{
+			ToolCall: translated,
 		})
 	}
 	return nil

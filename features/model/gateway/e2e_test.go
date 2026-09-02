@@ -22,7 +22,7 @@ type seqStreamer struct {
 
 func (s *seqStreamer) Recv() (model.Chunk, error) {
 	if s.idx >= len(s.chunks) {
-		return model.Chunk{}, io.EOF
+		return nil, io.EOF
 	}
 	c := s.chunks[s.idx]
 	s.idx++
@@ -45,16 +45,15 @@ func (p *captureProvider) Complete(_ context.Context, req *model.Request) (*mode
 func (p *captureProvider) Stream(_ context.Context, req *model.Request) (model.Streamer, error) {
 	p.lastReq.Store(*req)
 	return &seqStreamer{chunks: []model.Chunk{
-		{Type: model.ChunkTypeText, Message: &model.Message{Role: "assistant", Parts: []model.Part{model.TextPart{Text: "hello"}}}},
-		{
-			Type: model.ChunkTypeToolCall,
-			ToolCall: &model.ToolCall{
+		model.TextChunk{Message: model.Message{Role: "assistant", Parts: []model.Part{model.TextPart{Text: "hello"}}}},
+		model.ToolCallChunk{
+			ToolCall: model.ToolCall{
 				Name:    "emit_tool",
 				Payload: rawjson.Message([]byte(`{"k":"v"}`)),
 			},
 		},
-		{Type: model.ChunkTypeUsage, UsageDelta: &model.TokenUsage{InputTokens: 1, OutputTokens: 2, TotalTokens: 3}},
-		{Type: model.ChunkTypeStop, StopReason: "stop_sequence"},
+		model.UsageChunk{Usage: model.TokenUsage{InputTokens: 1, OutputTokens: 2, TotalTokens: 3}},
+		model.StopChunk{Reason: "stop_sequence"},
 	}}, nil
 }
 
@@ -68,9 +67,9 @@ func (w *serverStreamWrapper) Recv() (model.Chunk, error) {
 	c, ok := <-w.ch
 	if !ok {
 		if err := <-w.done; err != nil {
-			return model.Chunk{}, err
+			return nil, err
 		}
-		return model.Chunk{}, io.EOF
+		return nil, io.EOF
 	}
 	return c, nil
 }
@@ -183,8 +182,8 @@ func TestE2E_Stream_WithMiddleware(t *testing.T) {
 		if rerr != nil {
 			t.Fatalf("recv %d: %v", i, rerr)
 		}
-		if ch.Type != et {
-			t.Fatalf("chunk %d type = %s, want %s", i, ch.Type, et)
+		if ch.Kind() != et {
+			t.Fatalf("chunk %d type = %s, want %s", i, ch.Kind(), et)
 		}
 	}
 	// then EOF

@@ -41,7 +41,7 @@ func (c *countingClient) CountTokens(context.Context, *model.Request) (model.Tok
 func (s *scriptedStreamer) Recv() (model.Chunk, error) {
 	s.recvCalls++
 	if len(s.results) == 0 {
-		return model.Chunk{}, io.EOF
+		return nil, io.EOF
 	}
 	result := s.results[0]
 	s.results = s.results[1:]
@@ -151,9 +151,8 @@ func TestAdaptiveRateLimiterStreamObservesTerminalRecvOutcomeOnce(t *testing.T) 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			limiter := newAdaptiveRateLimiter(60000, 120000)
-			wantChunk := model.Chunk{
-				Type: model.ChunkTypeText,
-				Message: &model.Message{
+			wantChunk := model.TextChunk{
+				Message: model.Message{
 					Role:  model.ConversationRoleAssistant,
 					Parts: []model.Part{model.TextPart{Text: "partial"}},
 				},

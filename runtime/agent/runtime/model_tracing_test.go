@@ -259,12 +259,12 @@ func TestTracedStreamCapturesCoalescedOutputAtEnd(t *testing.T) {
 		&modelTracingStreamClient{
 			streamer: &modelTracingScriptedStreamer{
 				chunks: []model.Chunk{
-					{Type: model.ChunkTypeText, Message: &model.Message{Role: model.ConversationRoleAssistant, Parts: []model.Part{model.TextPart{Text: "hel"}}}},
-					{Type: model.ChunkTypeText, Message: &model.Message{Role: model.ConversationRoleAssistant, Parts: []model.Part{model.TextPart{Text: "lo"}}}},
-					{Type: model.ChunkTypeThinking, Message: &model.Message{Role: model.ConversationRoleAssistant, Parts: []model.Part{model.ThinkingPart{Text: "do not capture"}}}},
-					{Type: model.ChunkTypeToolCall, ToolCall: &model.ToolCall{ID: "tool-1", Name: tools.Ident("svc.lookup"), Payload: rawjson.Message(`{"id":1}`)}},
-					{Type: model.ChunkTypeUsage, UsageDelta: &model.TokenUsage{InputTokens: 4, OutputTokens: 2}},
-					{Type: model.ChunkTypeStop, StopReason: "stop"},
+					model.TextChunk{Message: model.Message{Role: model.ConversationRoleAssistant, Parts: []model.Part{model.TextPart{Text: "hel"}}}},
+					model.TextChunk{Message: model.Message{Role: model.ConversationRoleAssistant, Parts: []model.Part{model.TextPart{Text: "lo"}}}},
+					model.ThinkingChunk{Message: model.Message{Role: model.ConversationRoleAssistant, Parts: []model.Part{model.ThinkingPart{Text: "do not capture"}}}},
+					model.ToolCallChunk{ToolCall: model.ToolCall{ID: "tool-1", Name: tools.Ident("svc.lookup"), Payload: rawjson.Message(`{"id":1}`)}},
+					model.UsageChunk{Usage: model.TokenUsage{InputTokens: 4, OutputTokens: 2}},
+					model.StopChunk{Reason: "stop"},
 				},
 			},
 		},
@@ -307,15 +307,14 @@ func TestTracedStreamCanonicalizesInternalToolOutput(t *testing.T) {
 	tracer := &modelTracingRecorder{}
 	client := newTracedClient(
 		&modelTracingStreamClient{streamer: &modelTracingScriptedStreamer{chunks: []model.Chunk{
-			{
-				Type: model.ChunkTypeToolCall,
-				ToolCall: &model.ToolCall{
+			model.ToolCallChunk{
+				ToolCall: model.ToolCall{
 					ID:      "internal-call",
 					Name:    tools.ToolUnavailable,
 					Payload: rawjson.Message(`{"available_tools":["private.stream"]}`),
 				},
 			},
-			{Type: model.ChunkTypeStop, StopReason: "tool_use"},
+			model.StopChunk{Reason: "tool_use"},
 		}}},
 		tracer,
 		telemetry.NoopLogger{},
@@ -383,11 +382,11 @@ func TestTracedStreamDoesNotCaptureRejectedOutput(t *testing.T) {
 	client := newTracedClient(
 		&modelTracingStreamClient{streamer: &modelTracingScriptedStreamer{
 			chunks: []model.Chunk{
-				{Type: model.ChunkTypeText, Message: &model.Message{
+				model.TextChunk{Message: model.Message{
 					Role:  model.ConversationRoleAssistant,
 					Parts: []model.Part{model.TextPart{Text: "private rejected output"}},
 				}},
-				{Type: model.ChunkTypeStop, StopReason: "stop"},
+				model.StopChunk{Reason: "stop"},
 			},
 			finalizeErr: rejected,
 		}},
@@ -450,7 +449,7 @@ type modelTracingScriptedStreamer struct {
 
 func (s *modelTracingScriptedStreamer) Recv() (model.Chunk, error) {
 	if s.index >= len(s.chunks) {
-		return model.Chunk{}, io.EOF
+		return nil, io.EOF
 	}
 	ch := s.chunks[s.index]
 	s.index++

@@ -18,13 +18,12 @@ func TestConsumeStreamAggregatesChunksAndEvents(t *testing.T) {
 	thinking := model.ThinkingPart{Text: "reason", Final: true}
 	stream := &streamStub{
 		chunks: []model.Chunk{
-			{Type: model.ChunkTypeText, Message: &model.Message{Parts: []model.Part{model.TextPart{Text: "hello "}, model.TextPart{Text: "world"}}}},
-			{Type: model.ChunkTypeThinking, Message: &model.Message{Parts: []model.Part{thinking}}},
-			{Type: model.ChunkTypeToolCallDelta, ToolCallDelta: &model.ToolCallDelta{ID: "call-1", Name: "tools.search", Delta: "{\"q\":"}},
-			{Type: model.ChunkTypeToolCall, ToolCall: nil},
-			{Type: model.ChunkTypeToolCall, ToolCall: &model.ToolCall{ID: "call-1", Name: "tools.search", Payload: []byte("{\"q\":\"loom\"}")}},
-			{Type: model.ChunkTypeUsage, UsageDelta: &usage},
-			{Type: model.ChunkTypeStop, StopReason: "tool_use"},
+			model.TextChunk{Message: model.Message{Parts: []model.Part{model.TextPart{Text: "hello "}, model.TextPart{Text: "world"}}}},
+			model.ThinkingChunk{Message: model.Message{Parts: []model.Part{thinking}}},
+			model.ToolCallDeltaChunk{Delta: model.ToolCallDelta{ID: "call-1", Name: "tools.search", Delta: "{\"q\":"}},
+			model.ToolCallChunk{ToolCall: model.ToolCall{ID: "call-1", Name: "tools.search", Payload: []byte("{\"q\":\"loom\"}")}},
+			model.UsageChunk{Usage: usage},
+			model.StopChunk{Reason: "tool_use"},
 		},
 		metadata: map[string]any{"usage": metaUsage},
 	}
@@ -49,7 +48,7 @@ func TestConsumeStreamErrorsAndAlwaysCloses(t *testing.T) {
 	recvErr := errors.New("receive failed")
 	closeErr := errors.New("close failed")
 	stream := &streamStub{
-		chunks:   []model.Chunk{{Type: model.ChunkTypeText, Message: &model.Message{Parts: []model.Part{model.TextPart{Text: "partial"}}}}},
+		chunks:   []model.Chunk{model.TextChunk{Message: model.Message{Parts: []model.Part{model.TextPart{Text: "partial"}}}}},
 		recvErr:  recvErr,
 		closeErr: closeErr,
 	}
@@ -77,7 +76,7 @@ func TestConsumeValidatedStreamUsesCanonicalUsageOnce(t *testing.T) {
 	canonicalUsage := model.TokenUsage{InputTokens: 2, OutputTokens: 3, TotalTokens: 5, Model: "provider-model"}
 	stream := &validatedStreamStub{
 		streamStub: streamStub{
-			chunks:   []model.Chunk{{Type: model.ChunkTypeUsage, UsageDelta: &chunkUsage}},
+			chunks:   []model.Chunk{model.UsageChunk{Usage: chunkUsage}},
 			metadata: map[string]any{"usage": canonicalUsage},
 		},
 		response: &model.Response{Usage: canonicalUsage, StopReason: "end_turn"},
@@ -123,9 +122,9 @@ func (s *streamStub) Recv() (model.Chunk, error) {
 		return chunk, nil
 	}
 	if s.recvErr != nil {
-		return model.Chunk{}, s.recvErr
+		return nil, s.recvErr
 	}
-	return model.Chunk{}, io.EOF
+	return nil, io.EOF
 }
 
 func (s *streamStub) Close() error {

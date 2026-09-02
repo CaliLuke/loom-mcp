@@ -238,20 +238,15 @@ func TestClientStreamEmitsThinkingTextToolCallUsageAndStop(t *testing.T) {
 
 	chunks := testutil.CollectStreamChunks(t, streamer)
 	require.Len(t, chunks, 6)
-	require.Equal(t, model.ChunkTypeThinking, chunks[0].Type)
-	require.Equal(t, "Considering tools.", chunks[0].Thinking)
-	require.Equal(t, "Considering tools.", chunks[0].Message.Parts[0].(model.ThinkingPart).Text)
-	require.Equal(t, model.ChunkTypeText, chunks[1].Type)
-	require.Equal(t, "Hel", chunks[1].Message.Parts[0].(model.TextPart).Text)
-	require.Equal(t, model.ChunkTypeText, chunks[2].Type)
-	require.Equal(t, "lo", chunks[2].Message.Parts[0].(model.TextPart).Text)
-	require.Equal(t, model.ChunkTypeToolCall, chunks[3].Type)
-	require.Equal(t, tools.Ident("lookup"), chunks[3].ToolCall.Name)
-	require.JSONEq(t, `{"query":"docs"}`, string(chunks[3].ToolCall.Payload))
-	require.Equal(t, model.ChunkTypeUsage, chunks[4].Type)
-	require.Equal(t, 15, chunks[4].UsageDelta.TotalTokens)
-	require.Equal(t, model.ChunkTypeStop, chunks[5].Type)
-	require.Equal(t, "stop", chunks[5].StopReason)
+	thinking := chunks[0].(model.ThinkingChunk).Message.Parts[0].(model.ThinkingPart)
+	require.Equal(t, "Considering tools.", thinking.Text)
+	require.Equal(t, "Hel", chunks[1].(model.TextChunk).Message.Parts[0].(model.TextPart).Text)
+	require.Equal(t, "lo", chunks[2].(model.TextChunk).Message.Parts[0].(model.TextPart).Text)
+	call := chunks[3].(model.ToolCallChunk).ToolCall
+	require.Equal(t, tools.Ident("lookup"), call.Name)
+	require.JSONEq(t, `{"query":"docs"}`, string(call.Payload))
+	require.Equal(t, 15, chunks[4].(model.UsageChunk).Usage.TotalTokens)
+	require.Equal(t, "stop", chunks[5].(model.StopChunk).Reason)
 }
 
 func TestClientStreamTimeoutDoesNotLimitBodyLifetime(t *testing.T) {
@@ -286,17 +281,17 @@ func TestClientStreamTimeoutDoesNotLimitBodyLifetime(t *testing.T) {
 
 	chunk, err := streamer.Recv()
 	require.NoError(t, err)
-	require.Equal(t, model.ChunkTypeText, chunk.Type)
-	require.Equal(t, "first", chunk.Message.Parts[0].(model.TextPart).Text)
+	require.IsType(t, model.TextChunk{}, chunk)
+	require.Equal(t, "first", chunk.(model.TextChunk).Message.Parts[0].(model.TextPart).Text)
 
 	chunk, err = streamer.Recv()
 	require.NoError(t, err)
-	require.Equal(t, model.ChunkTypeText, chunk.Type)
-	require.Equal(t, "second", chunk.Message.Parts[0].(model.TextPart).Text)
+	require.IsType(t, model.TextChunk{}, chunk)
+	require.Equal(t, "second", chunk.(model.TextChunk).Message.Parts[0].(model.TextPart).Text)
 
 	chunk, err = streamer.Recv()
 	require.NoError(t, err)
-	require.Equal(t, model.ChunkTypeStop, chunk.Type)
+	require.IsType(t, model.StopChunk{}, chunk)
 }
 
 func TestClientStreamStructuredOutput(t *testing.T) {
@@ -322,13 +317,13 @@ func TestClientStreamStructuredOutput(t *testing.T) {
 
 	chunks := testutil.CollectStreamChunks(t, streamer)
 	require.Len(t, chunks, 3)
-	require.Equal(t, model.ChunkTypeCompletionDelta, chunks[0].Type)
-	require.Equal(t, "draft", chunks[0].CompletionDelta.Name)
-	require.JSONEq(t, `{"answer":"ok"}`, chunks[0].CompletionDelta.Delta)
-	require.Equal(t, model.ChunkTypeCompletion, chunks[1].Type)
-	require.Equal(t, "draft", chunks[1].Completion.Name)
-	require.JSONEq(t, `{"answer":"ok"}`, string(chunks[1].Completion.Payload))
-	require.Equal(t, model.ChunkTypeStop, chunks[2].Type)
+	delta := chunks[0].(model.CompletionDeltaChunk).Delta
+	require.Equal(t, "draft", delta.Name)
+	require.JSONEq(t, `{"answer":"ok"}`, delta.Delta)
+	completion := chunks[1].(model.CompletionChunk).Completion
+	require.Equal(t, "draft", completion.Name)
+	require.JSONEq(t, `{"answer":"ok"}`, string(completion.Payload))
+	require.IsType(t, model.StopChunk{}, chunks[2])
 }
 
 func TestClientStreamReturnsEmbeddedProviderError(t *testing.T) {
@@ -379,7 +374,7 @@ func TestClientStreamRejectsTruncatedResponseBeforeDone(t *testing.T) {
 
 	chunk, err := streamer.Recv()
 	require.NoError(t, err)
-	require.Equal(t, model.ChunkTypeText, chunk.Type)
+	require.IsType(t, model.TextChunk{}, chunk)
 	_, err = streamer.Recv()
 	require.EqualError(t, err, "ollama: stream ended before done")
 }
@@ -425,13 +420,11 @@ func TestClientStreamStructuredOutputExcludesThinking(t *testing.T) {
 
 	chunks := testutil.CollectStreamChunks(t, streamer)
 	require.Len(t, chunks, 4)
-	require.Equal(t, model.ChunkTypeThinking, chunks[0].Type)
-	require.Equal(t, "Draft JSON privately.", chunks[0].Thinking)
-	require.Equal(t, model.ChunkTypeCompletionDelta, chunks[1].Type)
-	require.JSONEq(t, `{"answer":"ok"}`, chunks[1].CompletionDelta.Delta)
-	require.Equal(t, model.ChunkTypeCompletion, chunks[2].Type)
-	require.JSONEq(t, `{"answer":"ok"}`, string(chunks[2].Completion.Payload))
-	require.Equal(t, model.ChunkTypeStop, chunks[3].Type)
+	thinking := chunks[0].(model.ThinkingChunk).Message.Parts[0].(model.ThinkingPart)
+	require.Equal(t, "Draft JSON privately.", thinking.Text)
+	require.JSONEq(t, `{"answer":"ok"}`, chunks[1].(model.CompletionDeltaChunk).Delta.Delta)
+	require.JSONEq(t, `{"answer":"ok"}`, string(chunks[2].(model.CompletionChunk).Completion.Payload))
+	require.IsType(t, model.StopChunk{}, chunks[3])
 }
 
 func TestClientValidation(t *testing.T) {

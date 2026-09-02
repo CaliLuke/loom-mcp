@@ -88,16 +88,16 @@ func (s *openAIStreamer) Recv() (model.Chunk, error) {
 			return chunk, nil
 		}
 		if err := s.err(); err != nil {
-			return model.Chunk{}, err
+			return nil, err
 		}
-		return model.Chunk{}, io.EOF
+		return nil, io.EOF
 	case <-s.ctx.Done():
 		err := s.ctx.Err()
 		if err == nil {
 			err = context.Canceled
 		}
 		s.setErr(err)
-		return model.Chunk{}, err
+		return nil, err
 	}
 }
 
@@ -278,9 +278,8 @@ func (p *openAIChunkProcessor) emitToolCallDelta(buffer *streamToolBuffer, delta
 	if delta == "" {
 		return nil
 	}
-	return p.emit(model.Chunk{
-		Type: model.ChunkTypeToolCallDelta,
-		ToolCallDelta: &model.ToolCallDelta{
+	return p.emit(model.ToolCallDeltaChunk{
+		Delta: model.ToolCallDelta{
 			Name:  tools.Ident(p.codec.canonicalName(buffer.name)),
 			ID:    buffer.callID,
 			Delta: delta,
@@ -294,17 +293,15 @@ func (p *openAIChunkProcessor) handleTextDelta(delta string, itemID string, outp
 	}
 	p.sawText = true
 	if p.output != nil {
-		return p.emit(model.Chunk{
-			Type: model.ChunkTypeCompletionDelta,
-			CompletionDelta: &model.CompletionDelta{
+		return p.emit(model.CompletionDeltaChunk{
+			Delta: model.CompletionDelta{
 				Name:  structuredOutputName(p.output),
 				Delta: delta,
 			},
 		})
 	}
-	return p.emit(model.Chunk{
-		Type: model.ChunkTypeText,
-		Message: &model.Message{
+	return p.emit(model.TextChunk{
+		Message: model.Message{
 			Role:  model.ConversationRoleAssistant,
 			Parts: []model.Part{model.TextPart{Text: delta}},
 			Meta: map[string]any{
@@ -319,10 +316,8 @@ func (p *openAIChunkProcessor) handleThinkingDelta(event responses.ResponseReaso
 	if event.Delta == "" {
 		return nil
 	}
-	return p.emit(model.Chunk{
-		Type:     model.ChunkTypeThinking,
-		Thinking: event.Delta,
-		Message: &model.Message{
+	return p.emit(model.ThinkingChunk{
+		Message: model.Message{
 			Role: model.ConversationRoleAssistant,
 			Parts: []model.Part{model.ThinkingPart{
 				Text:  event.Delta,
@@ -370,9 +365,8 @@ func (p *openAIChunkProcessor) emitCompletion(content []model.Message) error {
 	if err != nil {
 		return err
 	}
-	return p.emit(model.Chunk{
-		Type: model.ChunkTypeCompletion,
-		Completion: &model.Completion{
+	return p.emit(model.CompletionChunk{
+		Completion: model.Completion{
 			Name:    structuredOutputName(p.output),
 			Payload: payload,
 		},
@@ -381,10 +375,8 @@ func (p *openAIChunkProcessor) emitCompletion(content []model.Message) error {
 
 func (p *openAIChunkProcessor) emitFinalToolCalls(calls []model.ToolCall) error {
 	for _, call := range calls {
-		callCopy := call
-		if err := p.emit(model.Chunk{
-			Type:     model.ChunkTypeToolCall,
-			ToolCall: &callCopy,
+		if err := p.emit(model.ToolCallChunk{
+			ToolCall: call,
 		}); err != nil {
 			return err
 		}
@@ -400,9 +392,8 @@ func (p *openAIChunkProcessor) emitFinalTextIfNeeded(content []model.Message) er
 	if text == "" {
 		return nil
 	}
-	return p.emit(model.Chunk{
-		Type: model.ChunkTypeText,
-		Message: &model.Message{
+	return p.emit(model.TextChunk{
+		Message: model.Message{
 			Role:  model.ConversationRoleAssistant,
 			Parts: []model.Part{model.TextPart{Text: text}},
 		},
@@ -414,16 +405,14 @@ func (p *openAIChunkProcessor) emitUsageAndStop(usage model.TokenUsage, stopReas
 		if p.recordUsage != nil {
 			p.recordUsage(usage)
 		}
-		if err := p.emit(model.Chunk{
-			Type:       model.ChunkTypeUsage,
-			UsageDelta: &usage,
+		if err := p.emit(model.UsageChunk{
+			Usage: usage,
 		}); err != nil {
 			return err
 		}
 	}
-	return p.emit(model.Chunk{
-		Type:          model.ChunkTypeStop,
-		StopReason:    stopReason,
+	return p.emit(model.StopChunk{
+		Reason:        stopReason,
 		OutputLimited: outputLimited,
 	})
 }

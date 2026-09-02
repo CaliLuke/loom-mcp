@@ -157,28 +157,29 @@ func (s *tracedStream) Recv() (model.Chunk, error) {
 	if err != nil {
 		return ch, err
 	}
-	if ch.UsageDelta != nil {
+	if usageChunk, ok := ch.(model.UsageChunk); ok {
+		usage := usageChunk.Usage
 		s.mu.Lock()
 		if s.usage.Model == "" {
-			s.usage.Model = ch.UsageDelta.Model
+			s.usage.Model = usage.Model
 		}
 		if s.usage.ModelClass == "" {
-			s.usage.ModelClass = ch.UsageDelta.ModelClass
+			s.usage.ModelClass = usage.ModelClass
 		}
-		s.usage.InputTokens += ch.UsageDelta.InputTokens
-		s.usage.OutputTokens += ch.UsageDelta.OutputTokens
-		s.usage.TotalTokens += ch.UsageDelta.TotalTokens
-		s.usage.CacheReadTokens += ch.UsageDelta.CacheReadTokens
-		s.usage.CacheWriteTokens += ch.UsageDelta.CacheWriteTokens
+		s.usage.InputTokens += usage.InputTokens
+		s.usage.OutputTokens += usage.OutputTokens
+		s.usage.TotalTokens += usage.TotalTokens
+		s.usage.CacheReadTokens += usage.CacheReadTokens
+		s.usage.CacheWriteTokens += usage.CacheWriteTokens
 		s.mu.Unlock()
 	}
-	if isFirstGenAIOutputChunk(ch.Type) {
+	if isFirstGenAIOutputChunk(ch.Kind()) {
 		s.recordFirstChunk()
 	}
 	s.recordOutputChunk(ch)
-	if ch.Type == model.ChunkTypeStop && ch.StopReason != "" {
-		s.span.SetAttributes(telemetry.AttrGenAIResponseFinishReasons.StringSlice([]string{ch.StopReason}))
-		s.span.AddEvent("model.stop", "reason", ch.StopReason)
+	if stop, ok := ch.(model.StopChunk); ok && stop.Reason != "" {
+		s.span.SetAttributes(telemetry.AttrGenAIResponseFinishReasons.StringSlice([]string{stop.Reason}))
+		s.span.AddEvent("model.stop", "reason", stop.Reason)
 	}
 	return ch, nil
 }
@@ -420,25 +421,21 @@ func newGenAIStreamAccumulator(req *model.Request) *genAIStreamAccumulator {
 }
 
 func (a *genAIStreamAccumulator) recordChunk(chunk model.Chunk) {
-	switch chunk.Type {
-	case model.ChunkTypeText:
-		if chunk.Message != nil {
-			a.appendOutputParts(chunk.Message.Parts)
+	switch value := chunk.(type) {
+	case model.TextChunk:
+		a.appendOutputParts(value.Message.Parts)
+	case model.ToolCallChunk:
+		input := any(value.ToolCall.Payload)
+		if value.ToolCall.Name == tools.ToolUnavailable {
+			input = map[string]any{availableToolsKey: append([]string(nil), a.availableTools...)}
 		}
-	case model.ChunkTypeToolCall:
-		if chunk.ToolCall != nil {
-			input := any(chunk.ToolCall.Payload)
-			if chunk.ToolCall.Name == tools.ToolUnavailable {
-				input = map[string]any{availableToolsKey: append([]string(nil), a.availableTools...)}
-			}
-			a.parts = append(a.parts, model.ToolUsePart{
-				ID:    chunk.ToolCall.ID,
-				Name:  string(chunk.ToolCall.Name),
-				Input: input,
-			})
-		}
-	case model.ChunkTypeStop:
-		a.stopReason = chunk.StopReason
+		a.parts = append(a.parts, model.ToolUsePart{
+			ID:    value.ToolCall.ID,
+			Name:  string(value.ToolCall.Name),
+			Input: input,
+		})
+	case model.StopChunk:
+		a.stopReason = value.Reason
 	}
 }
 

@@ -175,9 +175,9 @@ func TestClientConformance(t *testing.T) {
 			t.Cleanup(func() { require.NoError(t, stream.Close()) })
 			chunks := testutil.CollectStreamChunks(t, stream)
 			require.Len(t, chunks, 2)
-			require.Equal(t, model.ChunkTypeThinking, chunks[0].Type)
-			require.Equal(t, "reasoning delta", chunks[0].Thinking)
-			require.Equal(t, model.ChunkTypeStop, chunks[1].Type)
+			streamThinking := chunks[0].(model.ThinkingChunk).Message.Parts[0].(model.ThinkingPart)
+			require.Equal(t, "reasoning delta", streamThinking.Text)
+			require.IsType(t, model.StopChunk{}, chunks[1])
 		}},
 		ExactTokenCounting: testutil.ProviderCapabilityConformance{Unsupported: func(t *testing.T) {
 			_, ok := any(newClient(t, &mockResponsesClient{})).(model.TokenCounter)
@@ -235,15 +235,17 @@ func TestClientConformance(t *testing.T) {
 					model.ChunkTypeToolCallDelta, model.ChunkTypeToolCallDelta,
 					model.ChunkTypeToolCall, model.ChunkTypeUsage, model.ChunkTypeStop,
 				}, openAIChunkTypes(chunks))
-				require.Equal(t, int64(1), chunks[1].Message.Meta["output_index"])
-				require.Equal(t, `{"query":`, chunks[3].ToolCallDelta.Delta)
+				require.Equal(t, int64(1), chunks[1].(model.TextChunk).Message.Meta["output_index"])
+				require.Equal(t, `{"query":`, chunks[3].(model.ToolCallDeltaChunk).Delta.Delta)
 				for _, chunk := range chunks[3:5] {
-					require.Equal(t, "call_1", chunk.ToolCallDelta.ID)
-					require.Equal(t, "lookup", chunk.ToolCallDelta.Name.String())
+					delta := chunk.(model.ToolCallDeltaChunk).Delta
+					require.Equal(t, "call_1", delta.ID)
+					require.Equal(t, "lookup", delta.Name.String())
 				}
-				require.Equal(t, "call_1", chunks[5].ToolCall.ID)
-				require.Equal(t, "lookup", chunks[5].ToolCall.Name.String())
-				require.JSONEq(t, `{"query":"docs"}`, string(chunks[5].ToolCall.Payload))
+				call := chunks[5].(model.ToolCallChunk).ToolCall
+				require.Equal(t, "call_1", call.ID)
+				require.Equal(t, "lookup", call.Name.String())
+				require.JSONEq(t, `{"query":"docs"}`, string(call.Payload))
 			},
 			EarlyEOF: func(t *testing.T) {
 				lifecycle := openAIConformanceLifecycle()
@@ -253,10 +255,10 @@ func TestClientConformance(t *testing.T) {
 				t.Cleanup(func() { _ = stream.Close() })
 				thinking, err := stream.Recv()
 				require.NoError(t, err)
-				require.Equal(t, model.ChunkTypeThinking, thinking.Type)
+				require.IsType(t, model.ThinkingChunk{}, thinking)
 				chunk, err := stream.Recv()
 				require.NoError(t, err)
-				require.Equal(t, model.ChunkTypeText, chunk.Type)
+				require.IsType(t, model.TextChunk{}, chunk)
 				_, err = stream.Recv()
 				require.EqualError(t, err, "openai: stream ended before response.completed")
 			},
@@ -268,10 +270,10 @@ func TestClientConformance(t *testing.T) {
 				require.NoError(t, err)
 				thinking, err := stream.Recv()
 				require.NoError(t, err)
-				require.Equal(t, model.ChunkTypeThinking, thinking.Type)
+				require.IsType(t, model.ThinkingChunk{}, thinking)
 				chunk, err := stream.Recv()
 				require.NoError(t, err)
-				require.Equal(t, model.ChunkTypeText, chunk.Type)
+				require.IsType(t, model.TextChunk{}, chunk)
 				cancel()
 				_, err = stream.Recv()
 				require.ErrorIs(t, err, context.Canceled)
@@ -287,7 +289,7 @@ func TestClientConformance(t *testing.T) {
 				stream, err := newClient(t, mock).Stream(context.Background(), request())
 				require.NoError(t, err)
 				chunks := testutil.CollectStreamChunks(t, stream)
-				require.Equal(t, model.ChunkTypeStop, chunks[len(chunks)-1].Type)
+				require.IsType(t, model.StopChunk{}, chunks[len(chunks)-1])
 				require.ErrorIs(t, stream.Close(), closeErr)
 				require.Equal(t, int32(1), decoder.closeCalls.Load())
 			},
@@ -301,12 +303,11 @@ func TestClientConformance(t *testing.T) {
 				chunks := testutil.CollectStreamChunks(t, stream)
 				require.GreaterOrEqual(t, len(chunks), 2)
 				usage := chunks[len(chunks)-2]
-				require.Equal(t, model.ChunkTypeUsage, usage.Type)
-				require.Equal(t, model.ModelClassHighReasoning, usage.UsageDelta.ModelClass)
-				require.Equal(t, "o3", usage.UsageDelta.Model)
+				usageValue := usage.(model.UsageChunk).Usage
+				require.Equal(t, model.ModelClassHighReasoning, usageValue.ModelClass)
+				require.Equal(t, "o3", usageValue.Model)
 				stop := chunks[len(chunks)-1]
-				require.Equal(t, model.ChunkTypeStop, stop.Type)
-				require.Equal(t, "completed", stop.StopReason)
+				require.Equal(t, "completed", stop.(model.StopChunk).Reason)
 			},
 			OutputLimited: func(t *testing.T) {
 				raw := `{"type":"response.incomplete","sequence_number":1,"response":{"id":"resp_1","object":"response","model":"o3","status":"incomplete","incomplete_details":{"reason":"max_output_tokens"},"output":[{"id":"msg_1","type":"message","role":"assistant","content":[{"type":"output_text","text":"{","annotations":[],"logprobs":[]}],"status":"incomplete"}]}}`
@@ -318,8 +319,7 @@ func TestClientConformance(t *testing.T) {
 				t.Cleanup(func() { require.NoError(t, stream.Close()) })
 				chunks := testutil.CollectStreamChunks(t, stream)
 				require.Len(t, chunks, 1)
-				require.Equal(t, model.ChunkTypeStop, chunks[0].Type)
-				require.True(t, chunks[0].OutputLimited)
+				require.True(t, chunks[0].(model.StopChunk).OutputLimited)
 			},
 		},
 	})
@@ -370,7 +370,7 @@ func openAIStreamEvents(raws []string) []ssestream.Event {
 func openAIChunkTypes(chunks []model.Chunk) []string {
 	types := make([]string, 0, len(chunks))
 	for _, chunk := range chunks {
-		types = append(types, chunk.Type)
+		types = append(types, chunk.Kind())
 	}
 	return types
 }

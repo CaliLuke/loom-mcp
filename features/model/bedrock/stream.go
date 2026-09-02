@@ -73,19 +73,19 @@ func (s *bedrockStreamer) Recv() (model.Chunk, error) {
 		}
 		if err := s.err(); err != nil {
 			if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
-				return model.Chunk{}, err
+				return nil, err
 			}
 			s.setErr(err)
-			return model.Chunk{}, err
+			return nil, err
 		}
-		return model.Chunk{}, io.EOF
+		return nil, io.EOF
 	case <-s.ctx.Done():
 		err := s.ctx.Err()
 		if err == nil {
 			err = context.Canceled
 		}
 		s.setErr(err)
-		return model.Chunk{}, err
+		return nil, err
 	}
 }
 
@@ -224,7 +224,7 @@ type chunkProcessor struct {
 	output       *model.StructuredOutput
 	completed    bool
 	metadataSeen bool
-	pendingStop  *model.Chunk
+	pendingStop  model.Chunk
 }
 
 func newChunkProcessor(
@@ -287,16 +287,10 @@ func (p *chunkProcessor) handleMessageStop(ev *brtypes.ConverseStreamOutputMembe
 			return err
 		}
 	}
-	chunk := model.Chunk{
-		Type:          model.ChunkTypeStop,
-		OutputLimited: outputLimited,
-	}
-	if ev.Value.StopReason != "" {
-		chunk.StopReason = string(ev.Value.StopReason)
-	}
+	chunk := model.StopChunk{Reason: string(ev.Value.StopReason), OutputLimited: outputLimited}
 	p.toolBlocks = make(map[int]*toolBuffer)
 	p.reasoningBlocks = make(map[int]*reasoningBuffer)
-	p.pendingStop = &chunk
+	p.pendingStop = chunk
 	if p.metadataSeen {
 		return p.emitPendingStop()
 	}
@@ -310,7 +304,7 @@ func (p *chunkProcessor) handleMetadata(ev *brtypes.ConverseStreamOutputMemberMe
 		if p.recordUsage != nil {
 			p.recordUsage(*usage)
 		}
-		if err := p.emit(model.Chunk{Type: model.ChunkTypeUsage, UsageDelta: usage}); err != nil {
+		if err := p.emit(model.UsageChunk{Usage: *usage}); err != nil {
 			return err
 		}
 	}
@@ -321,7 +315,7 @@ func (p *chunkProcessor) emitPendingStop() error {
 	if p.pendingStop == nil {
 		return nil
 	}
-	chunk := *p.pendingStop
+	chunk := p.pendingStop
 	p.pendingStop = nil
 	return p.emit(chunk)
 }
@@ -409,9 +403,8 @@ func (p *chunkProcessor) emitTextDelta(idx int, text string) error {
 	if p.output != nil {
 		return p.handleCompletionDelta(idx, text)
 	}
-	return p.emit(model.Chunk{
-		Type: model.ChunkTypeText,
-		Message: &model.Message{
+	return p.emit(model.TextChunk{
+		Message: model.Message{
 			Role:  bedrockRoleAssistant,
 			Parts: []model.Part{model.TextPart{Text: text}},
 			Meta:  map[string]any{"content_index": idx},
@@ -465,10 +458,8 @@ func (p *chunkProcessor) emitReasoningText(idx int, rb *reasoningBuffer, text st
 		return nil
 	}
 	rb.text.WriteString(text)
-	return p.emit(model.Chunk{
-		Type:     model.ChunkTypeThinking,
-		Thinking: text,
-		Message: &model.Message{
+	return p.emit(model.ThinkingChunk{
+		Message: model.Message{
 			Role: bedrockRoleAssistant,
 			Parts: []model.Part{model.ThinkingPart{
 				Text:  text,
@@ -495,9 +486,8 @@ func (p *chunkProcessor) emitToolUseDelta(idx int, delta *brtypes.ContentBlockDe
 	if tb.name == "" {
 		return fmt.Errorf("bedrock stream: tool JSON delta missing tool name for id %q", tb.id)
 	}
-	return p.emit(model.Chunk{
-		Type: model.ChunkTypeToolCallDelta,
-		ToolCallDelta: &model.ToolCallDelta{
+	return p.emit(model.ToolCallDeltaChunk{
+		Delta: model.ToolCallDelta{
 			Name:  tools.Ident(tb.name),
 			ID:    tb.id,
 			Delta: fragment,
@@ -528,15 +518,13 @@ func (p *chunkProcessor) emitFinalReasoning(idx int) error {
 	}
 	part.Index = idx
 	part.Final = true
-	chunk := model.Chunk{
-		Type: model.ChunkTypeThinking,
-		Message: &model.Message{
+	chunk := model.ThinkingChunk{
+		Message: model.Message{
 			Role:  bedrockRoleAssistant,
 			Parts: []model.Part{*part},
 		},
 	}
 	if part.Text != "" {
-		chunk.Thinking = part.Text
 		return p.emit(chunk)
 	}
 	if len(part.Redacted) > 0 {
@@ -555,9 +543,8 @@ func (p *chunkProcessor) emitFinalToolCall(idx int) error {
 	if err != nil {
 		return fmt.Errorf("bedrock stream: tool call %q payload: %w", tb.id, err)
 	}
-	return p.emit(model.Chunk{
-		Type: model.ChunkTypeToolCall,
-		ToolCall: &model.ToolCall{
+	return p.emit(model.ToolCallChunk{
+		ToolCall: model.ToolCall{
 			Name:    tools.Ident(tb.name),
 			Payload: payload,
 			ID:      tb.id,
@@ -630,9 +617,8 @@ func (p *chunkProcessor) handleCompletionDelta(idx int, delta string) error {
 		)
 	}
 	p.completion.fragments = append(p.completion.fragments, delta)
-	return p.emit(model.Chunk{
-		Type: model.ChunkTypeCompletionDelta,
-		CompletionDelta: &model.CompletionDelta{
+	return p.emit(model.CompletionDeltaChunk{
+		Delta: model.CompletionDelta{
 			Name:  p.completion.name,
 			Delta: delta,
 		},
@@ -651,9 +637,8 @@ func (p *chunkProcessor) finalizeCompletion(idx int) error {
 	}
 	completion := p.completion
 	p.completion = nil
-	return p.emit(model.Chunk{
-		Type: model.ChunkTypeCompletion,
-		Completion: &model.Completion{
+	return p.emit(model.CompletionChunk{
+		Completion: model.Completion{
 			Name:    completion.name,
 			Payload: payload,
 		},

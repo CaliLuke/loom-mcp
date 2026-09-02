@@ -173,16 +173,13 @@ func TestAnthropicStreamer_TextAndToolCall(t *testing.T) {
 
 	var sawText, sawTool bool
 	for _, ch := range chunks {
-		switch ch.Type {
-		case model.ChunkTypeText:
+		switch value := ch.(type) {
+		case model.TextChunk:
 			sawText = true
-		case model.ChunkTypeToolCall:
+		case model.ToolCallChunk:
 			sawTool = true
-			if ch.ToolCall == nil {
-				t.Fatalf("tool chunk missing ToolCall")
-			}
-			if string(ch.ToolCall.Name) != "toolset.tool" {
-				t.Fatalf("unexpected tool name %q", ch.ToolCall.Name)
+			if string(value.ToolCall.Name) != "toolset.tool" {
+				t.Fatalf("unexpected tool name %q", value.ToolCall.Name)
 			}
 		}
 	}
@@ -230,8 +227,8 @@ func TestAnthropicStreamerRejectsEOFBeforeMessageStop(t *testing.T) {
 	if err != nil {
 		t.Fatalf("receive text: %v", err)
 	}
-	if chunk.Type != model.ChunkTypeText {
-		t.Fatalf("chunk type = %q, want %q", chunk.Type, model.ChunkTypeText)
+	if _, ok := chunk.(model.TextChunk); !ok {
+		t.Fatalf("chunk type = %T, want model.TextChunk", chunk)
 	}
 	_, err = s.Recv()
 	if err == nil || err.Error() != "anthropic: stream ended before message_stop" {
@@ -325,12 +322,13 @@ func TestAnthropicStreamer_ThinkingBlocks(t *testing.T) {
 			}
 			break
 		}
-		if ch.Type != model.ChunkTypeThinking || ch.Message == nil || len(ch.Message.Parts) == 0 {
+		thinkingChunk, ok := ch.(model.ThinkingChunk)
+		if !ok || len(thinkingChunk.Message.Parts) == 0 {
 			continue
 		}
-		part, ok := ch.Message.Parts[0].(model.ThinkingPart)
+		part, ok := thinkingChunk.Message.Parts[0].(model.ThinkingPart)
 		if !ok {
-			t.Fatalf("thinking chunk part = %T, want ThinkingPart", ch.Message.Parts[0])
+			t.Fatalf("thinking chunk part = %T, want ThinkingPart", thinkingChunk.Message.Parts[0])
 		}
 		if !part.Final {
 			thinkingDeltas++

@@ -11,7 +11,7 @@ import (
 
 type stubStreamer struct{ meta map[string]any }
 
-func (s *stubStreamer) Recv() (model.Chunk, error) { return model.Chunk{}, io.EOF }
+func (s *stubStreamer) Recv() (model.Chunk, error) { return nil, io.EOF }
 func (s *stubStreamer) Close() error               { return nil }
 func (s *stubStreamer) Metadata() map[string]any   { return s.meta }
 
@@ -93,10 +93,10 @@ type singleChunkStreamer struct {
 
 func (s *singleChunkStreamer) Recv() (model.Chunk, error) {
 	if s.sent {
-		return model.Chunk{}, io.EOF
+		return nil, io.EOF
 	}
 	s.sent = true
-	return model.Chunk{Type: model.ChunkTypeText}, nil
+	return model.TextChunk{}, nil
 }
 
 func (s *singleChunkStreamer) Close() error             { return nil }

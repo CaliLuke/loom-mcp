@@ -172,9 +172,9 @@ func (s *wrapperLifecycleStream) Recv() (model.Chunk, error) {
 		if s.terminalErr != nil {
 			err := s.terminalErr
 			s.terminalErr = nil
-			return model.Chunk{}, err
+			return nil, err
 		}
-		return model.Chunk{}, io.EOF
+		return nil, io.EOF
 	}
 	chunk := s.chunks[s.index]
 	s.index++
@@ -204,10 +204,10 @@ func TestEventStreamAndConsumeStreamEmitEachChunkOnce(t *testing.T) {
 	response := &model.Response{Usage: usage, StopReason: "end_turn"}
 	inner := &wrapperLifecycleStream{
 		chunks: []model.Chunk{
-			{Type: model.ChunkTypeText, Message: &model.Message{Role: model.ConversationRoleAssistant, Parts: []model.Part{model.TextPart{Text: "hello"}}}},
-			{Type: model.ChunkTypeThinking, Thinking: "consider"},
-			{Type: model.ChunkTypeToolCallDelta, ToolCallDelta: &model.ToolCallDelta{ID: "call-1", Name: "lookup", Delta: `{"q":`}},
-			{Type: model.ChunkTypeUsage, UsageDelta: &usage},
+			model.TextChunk{Message: model.Message{Role: model.ConversationRoleAssistant, Parts: []model.Part{model.TextPart{Text: "hello"}}}},
+			model.ThinkingChunk{Message: model.Message{Role: model.ConversationRoleAssistant, Parts: []model.Part{model.ThinkingPart{Text: "consider"}}}},
+			model.ToolCallDeltaChunk{Delta: model.ToolCallDelta{ID: "call-1", Name: "lookup", Delta: `{"q":`}},
+			model.UsageChunk{Usage: usage},
 		},
 		metadata: map[string]any{"provider": "test"},
 		response: response,
@@ -239,11 +239,11 @@ func TestPlannerContextModelClientAndConsumeStreamDoNotDuplicateTranscriptOrUsag
 	usage := model.TokenUsage{InputTokens: 2, OutputTokens: 3, TotalTokens: 5}
 	inner := &wrapperLifecycleStream{
 		chunks: []model.Chunk{
-			{Type: model.ChunkTypeText, Message: &model.Message{Role: model.ConversationRoleAssistant, Parts: []model.Part{model.TextPart{Text: "hello"}}}},
-			{Type: model.ChunkTypeThinking, Message: &model.Message{Role: model.ConversationRoleAssistant, Parts: []model.Part{model.ThinkingPart{Text: "consider", Final: true}}}},
-			{Type: model.ChunkTypeToolCallDelta, ToolCallDelta: &model.ToolCallDelta{ID: "call-1", Name: "lookup", Delta: `{"q":`}},
-			{Type: model.ChunkTypeUsage, UsageDelta: &usage},
-			{Type: model.ChunkTypeStop, StopReason: "end_turn"},
+			model.TextChunk{Message: model.Message{Role: model.ConversationRoleAssistant, Parts: []model.Part{model.TextPart{Text: "hello"}}}},
+			model.ThinkingChunk{Message: model.Message{Role: model.ConversationRoleAssistant, Parts: []model.Part{model.ThinkingPart{Text: "consider", Final: true}}}},
+			model.ToolCallDeltaChunk{Delta: model.ToolCallDelta{ID: "call-1", Name: "lookup", Delta: `{"q":`}},
+			model.UsageChunk{Usage: usage},
+			model.StopChunk{Reason: "end_turn"},
 		},
 		response: &model.Response{Usage: usage, StopReason: "end_turn"},
 	}
@@ -280,9 +280,8 @@ func TestPlannerContextModelClientAndConsumeStreamDoNotDuplicateTranscriptOrUsag
 func TestEventStreamDoesNotEmitInternalToolArguments(t *testing.T) {
 	t.Parallel()
 
-	inner := &wrapperLifecycleStream{chunks: []model.Chunk{{
-		Type: model.ChunkTypeToolCallDelta,
-		ToolCallDelta: &model.ToolCallDelta{
+	inner := &wrapperLifecycleStream{chunks: []model.Chunk{model.ToolCallDeltaChunk{
+		Delta: model.ToolCallDelta{
 			ID:    "internal-call",
 			Name:  tools.ToolUnavailable,
 			Delta: `{"available_tools":["private.secret"]}`,
@@ -294,7 +293,7 @@ func TestEventStreamDoesNotEmitInternalToolArguments(t *testing.T) {
 	require.NoError(t, err)
 	chunk, err := stream.Recv()
 	require.NoError(t, err)
-	require.Equal(t, tools.ToolUnavailable, chunk.ToolCallDelta.Name)
+	require.Equal(t, tools.ToolUnavailable, chunk.(model.ToolCallDeltaChunk).Delta.Name)
 	require.Empty(t, events.toolDeltas)
 }
 
@@ -302,9 +301,8 @@ func TestEventStreamCanonicalizesDirectInternalToolFromExactRequest(t *testing.T
 	t.Parallel()
 
 	inner := &wrapperLifecycleStream{
-		chunks: []model.Chunk{{
-			Type: model.ChunkTypeToolCall,
-			ToolCall: &model.ToolCall{
+		chunks: []model.Chunk{model.ToolCallChunk{
+			ToolCall: model.ToolCall{
 				ID:      "internal-call",
 				Name:    tools.ToolUnavailable,
 				Payload: []byte(`{"available_tools":["svc.write"]}`),
@@ -321,7 +319,7 @@ func TestEventStreamCanonicalizesDirectInternalToolFromExactRequest(t *testing.T
 	require.NoError(t, err)
 	chunk, err := stream.Recv()
 	require.NoError(t, err)
-	require.JSONEq(t, `{"available_tools":["svc.read"]}`, string(chunk.ToolCall.Payload))
+	require.JSONEq(t, `{"available_tools":["svc.read"]}`, string(chunk.(model.ToolCallChunk).ToolCall.Payload))
 }
 
 func TestRejectedStreamDoesNotPersistPresentationContent(t *testing.T) {
@@ -329,13 +327,12 @@ func TestRejectedStreamDoesNotPersistPresentationContent(t *testing.T) {
 
 	const secret = "rejected-stream-secret"
 	rawStream := &wrapperLifecycleStream{chunks: []model.Chunk{
-		{
-			Type: model.ChunkTypeText,
-			Message: &model.Message{Role: model.ConversationRoleAssistant, Parts: []model.Part{
+		model.TextChunk{
+			Message: model.Message{Role: model.ConversationRoleAssistant, Parts: []model.Part{
 				model.TextPart{Text: secret},
 			}},
 		},
-		{Type: model.ChunkTypeStop, StopReason: "max_tokens", OutputLimited: true},
+		model.StopChunk{Reason: "max_tokens", OutputLimited: true},
 	}}
 	client, err := model.NewClient(&wrapperRawProvider{stream: rawStream})
 	require.NoError(t, err)
@@ -369,9 +366,8 @@ func TestFailedStreamFinalizationDoesNotPersistStagedContent(t *testing.T) {
 		{
 			name: "provider close failure",
 			stream: &wrapperLifecycleStream{
-				chunks: []model.Chunk{{
-					Type: model.ChunkTypeText,
-					Message: &model.Message{Role: model.ConversationRoleAssistant, Parts: []model.Part{
+				chunks: []model.Chunk{model.TextChunk{
+					Message: model.Message{Role: model.ConversationRoleAssistant, Parts: []model.Part{
 						model.TextPart{Text: secret},
 					}},
 				}},
@@ -382,9 +378,8 @@ func TestFailedStreamFinalizationDoesNotPersistStagedContent(t *testing.T) {
 		{
 			name: "wrapped eof",
 			stream: &wrapperLifecycleStream{
-				chunks: []model.Chunk{{
-					Type: model.ChunkTypeText,
-					Message: &model.Message{Role: model.ConversationRoleAssistant, Parts: []model.Part{
+				chunks: []model.Chunk{model.TextChunk{
+					Message: model.Message{Role: model.ConversationRoleAssistant, Parts: []model.Part{
 						model.TextPart{Text: secret},
 					}},
 				}},
@@ -447,15 +442,14 @@ func TestStreamResponseInternalToolUsesNarrowModelCatalogUnderBroadPolicy(t *tes
 	t.Parallel()
 
 	rawStream := &wrapperLifecycleStream{chunks: []model.Chunk{
-		{
-			Type: model.ChunkTypeToolCall,
-			ToolCall: &model.ToolCall{
+		model.ToolCallChunk{
+			ToolCall: model.ToolCall{
 				ID:      "direct-internal",
 				Name:    tools.ToolUnavailable,
 				Payload: []byte(`{"available_tools":["svc.write"]}`),
 			},
 		},
-		{Type: model.ChunkTypeStop, StopReason: "tool_use"},
+		model.StopChunk{Reason: "tool_use"},
 	}}
 	client, err := model.NewClient(&wrapperRawProvider{stream: rawStream})
 	require.NoError(t, err)

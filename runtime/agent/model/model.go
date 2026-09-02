@@ -510,49 +510,6 @@ type (
 		OutputLimited bool
 	}
 
-	// Chunk is a streaming event from the model.
-	//
-	// Chunks are classified by Type and may carry partial messages, tool calls,
-	// usage deltas, or a final stop reason.
-	Chunk struct {
-		// Type identifies the kind of streaming event.
-		Type string
-
-		// Message carries incremental assistant content for text or thinking
-		// chunks when present.
-		Message *Message
-
-		// Thinking carries incremental reasoning text for providers that surface
-		// it out-of-band from Message.
-		Thinking string
-
-		// ToolCall carries a single tool invocation when Type is ChunkTypeToolCall.
-		ToolCall *ToolCall
-
-		// ToolCallDelta carries an incremental tool-call payload fragment when Type
-		// is ChunkTypeToolCallDelta. It is strictly optional and may be ignored.
-		ToolCallDelta *ToolCallDelta
-
-		// Completion carries the canonical structured payload when Type is
-		// ChunkTypeCompletion.
-		Completion *Completion
-
-		// CompletionDelta carries an incremental structured-output fragment when
-		// Type is ChunkTypeCompletionDelta. It is strictly optional and may be
-		// ignored.
-		CompletionDelta *CompletionDelta
-
-		// UsageDelta reports incremental token usage when available.
-		UsageDelta *TokenUsage
-
-		// StopReason records why streaming stopped when Type is ChunkTypeStop.
-		StopReason string
-
-		// OutputLimited reports that the terminal stop was caused by an output
-		// or context limit. It is meaningful only for ChunkTypeStop.
-		OutputLimited bool
-	}
-
 	// ThinkingOptions configures provider thinking behavior.
 	ThinkingOptions struct {
 		// Enable turns provider thinking features on when supported.

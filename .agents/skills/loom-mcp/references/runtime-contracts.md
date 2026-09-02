@@ -154,7 +154,7 @@ Use this file for current loom-mcp runtime behavior in this repo. Prefer it over
 - The Ollama adapter uses the local `/api/chat` endpoint for text, image,
   streaming, function-tool, native thinking, and structured-output requests. It
   maps `model.Request.Thinking` to Ollama's top-level `think` flag and surfaces
-  `message.thinking` as typed `model.ThinkingPart` / `ChunkTypeThinking`, never
+  `message.thinking` as typed `model.ThinkingPart` / `model.ThinkingChunk`, never
   as assistant text or structured-output content. Some Gemma 4 variants,
   including MLX builds, also require the model-level `<|think|>` control token at
   the start of the system prompt to activate thinking; keep that prompt concern

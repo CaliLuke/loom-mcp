@@ -195,65 +195,50 @@ func cloneModelResponse(response *Response) (*Response, error) {
 	return &owned, nil
 }
 
-func cloneModelChunk(chunk Chunk, budget *cloneBudget) (Chunk, error) { //nolint:maintidx // Central exhaustive clone switch keeps every chunk variant ownership-safe.
-	owned := chunk
-	switch chunk.Type {
-	case ChunkTypeText, ChunkTypeThinking:
-		if chunk.Message != nil {
-			message, err := cloneModelMessage(*chunk.Message, budget)
-			if err != nil {
-				return Chunk{}, err
-			}
-			owned.Message = &message
+func cloneModelChunk(chunk Chunk, budget *cloneBudget) (Chunk, error) {
+	switch value := chunk.(type) {
+	case TextChunk:
+		message, err := cloneModelMessage(value.Message, budget)
+		return TextChunk{Message: message}, err
+	case ThinkingChunk:
+		message, err := cloneModelMessage(value.Message, budget)
+		return ThinkingChunk{Message: message}, err
+	case ToolCallChunk:
+		call := value.ToolCall
+		if err := budget.addBytes(len(call.Name) + len(call.ID) + len(call.Payload)); err != nil {
+			return nil, err
 		}
-		if err := budget.addBytes(len(chunk.Thinking)); err != nil {
-			return Chunk{}, err
+		call.Payload = slices.Clone(call.Payload)
+		return ToolCallChunk{ToolCall: call}, nil
+	case ToolCallDeltaChunk:
+		delta := value.Delta
+		if err := budget.addBytes(len(delta.Name) + len(delta.ID) + len(delta.Delta)); err != nil {
+			return nil, err
 		}
-	case ChunkTypeToolCall:
-		if chunk.ToolCall != nil {
-			call := *chunk.ToolCall
-			if err := budget.addBytes(len(call.Name) + len(call.ID) + len(call.Payload)); err != nil {
-				return Chunk{}, err
-			}
-			call.Payload = slices.Clone(call.Payload)
-			owned.ToolCall = &call
+		return ToolCallDeltaChunk{Delta: delta}, nil
+	case CompletionChunk:
+		completion := value.Completion
+		if err := budget.addBytes(len(completion.Name) + len(completion.Payload)); err != nil {
+			return nil, err
 		}
-	case ChunkTypeToolCallDelta:
-		if chunk.ToolCallDelta != nil {
-			delta := *chunk.ToolCallDelta
-			if err := budget.addBytes(len(delta.Name) + len(delta.ID) + len(delta.Delta)); err != nil {
-				return Chunk{}, err
-			}
-			owned.ToolCallDelta = &delta
+		completion.Payload = slices.Clone(completion.Payload)
+		return CompletionChunk{Completion: completion}, nil
+	case CompletionDeltaChunk:
+		delta := value.Delta
+		if err := budget.addBytes(len(delta.Name) + len(delta.Delta)); err != nil {
+			return nil, err
 		}
-	case ChunkTypeCompletion:
-		if chunk.Completion != nil {
-			completion := *chunk.Completion
-			if err := budget.addBytes(len(completion.Name) + len(completion.Payload)); err != nil {
-				return Chunk{}, err
-			}
-			completion.Payload = slices.Clone(completion.Payload)
-			owned.Completion = &completion
+		return CompletionDeltaChunk{Delta: delta}, nil
+	case UsageChunk:
+		return value, nil
+	case StopChunk:
+		if err := budget.addBytes(len(value.Reason)); err != nil {
+			return nil, err
 		}
-	case ChunkTypeCompletionDelta:
-		if chunk.CompletionDelta != nil {
-			delta := *chunk.CompletionDelta
-			if err := budget.addBytes(len(delta.Name) + len(delta.Delta)); err != nil {
-				return Chunk{}, err
-			}
-			owned.CompletionDelta = &delta
-		}
-	case ChunkTypeUsage:
-		if chunk.UsageDelta != nil {
-			usage := *chunk.UsageDelta
-			owned.UsageDelta = &usage
-		}
-	case ChunkTypeStop:
-		if err := budget.addBytes(len(chunk.StopReason)); err != nil {
-			return Chunk{}, err
-		}
+		return value, nil
+	default:
+		return nil, errors.New("model stream emitted an unsupported chunk variant")
 	}
-	return owned, nil
 }
 
 func cloneModelMessage(message Message, budget *cloneBudget) (Message, error) {

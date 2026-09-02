@@ -120,20 +120,18 @@ func DecodeResponse[T any](resp *model.Response, spec Spec[T]) (T, error) {
 // completion stream. Non-completion chunks are ignored and return ok=false.
 func DecodeChunk[T any](chunk model.Chunk, spec Spec[T]) (T, bool, error) {
 	var zero T
-	if chunk.Type != model.ChunkTypeCompletion {
+	completionChunk, ok := chunk.(model.CompletionChunk)
+	if !ok {
 		return zero, false, nil
 	}
-	if chunk.Completion == nil {
-		return zero, false, fmt.Errorf("decode completion %q: completion chunk missing payload", spec.Name)
-	}
-	if chunk.Completion.Name != string(spec.Name) {
+	if completionChunk.Completion.Name != string(spec.Name) {
 		return zero, false, fmt.Errorf(
 			"decode completion %q: completion chunk name %q does not match spec",
 			spec.Name,
-			chunk.Completion.Name,
+			completionChunk.Completion.Name,
 		)
 	}
-	value, err := decodePayload(chunk.Completion.Payload, spec)
+	value, err := decodePayload(completionChunk.Completion.Payload, spec)
 	if err != nil {
 		return zero, false, err
 	}
@@ -255,43 +253,43 @@ func (s *completionStream) Recv() (model.Chunk, error) {
 	if err != nil {
 		//nolint:errorlint // Wrapped EOF is a provider failure, not completion.
 		if err == io.EOF && !s.finalSeen {
-			return model.Chunk{}, fmt.Errorf(
+			return nil, fmt.Errorf(
 				"completion %q stream ended without canonical completion chunk",
 				s.name,
 			)
 		}
 		return chunk, err
 	}
-	switch chunk.Type {
-	case model.ChunkTypeCompletionDelta:
-		if err := s.validateCompletionDelta(chunk.CompletionDelta); err != nil {
-			return model.Chunk{}, err
+	switch value := chunk.(type) {
+	case model.CompletionDeltaChunk:
+		if err := s.validateCompletionDelta(value.Delta); err != nil {
+			return nil, err
 		}
-	case model.ChunkTypeCompletion:
-		if err := s.validateCompletion(chunk.Completion); err != nil {
-			return model.Chunk{}, err
+	case model.CompletionChunk:
+		if err := s.validateCompletion(value.Completion); err != nil {
+			return nil, err
 		}
 		s.finalSeen = true
-	case model.ChunkTypeThinking, model.ChunkTypeUsage:
+	case model.ThinkingChunk, model.UsageChunk:
 		return chunk, nil
-	case model.ChunkTypeStop:
+	case model.StopChunk:
 		if !s.finalSeen {
-			return model.Chunk{}, fmt.Errorf(
+			return nil, fmt.Errorf(
 				"completion %q stream stopped before canonical completion chunk",
 				s.name,
 			)
 		}
-	case model.ChunkTypeText, model.ChunkTypeToolCall, model.ChunkTypeToolCallDelta:
-		return model.Chunk{}, fmt.Errorf(
-			"completion %q stream emitted unexpected %q chunk",
+	case model.TextChunk, model.ToolCallChunk, model.ToolCallDeltaChunk:
+		return nil, fmt.Errorf(
+			"completion %q stream emitted unexpected %T chunk",
 			s.name,
-			chunk.Type,
+			chunk,
 		)
 	default:
-		return model.Chunk{}, fmt.Errorf(
-			"completion %q stream emitted unsupported %q chunk",
+		return nil, fmt.Errorf(
+			"completion %q stream emitted unsupported %T chunk",
 			s.name,
-			chunk.Type,
+			chunk,
 		)
 	}
 	return chunk, nil
@@ -313,10 +311,7 @@ func (s *completionStream) Finalize(primaryErr error) error {
 	return s.inner.Finalize(primaryErr)
 }
 
-func (s *completionStream) validateCompletionDelta(delta *model.CompletionDelta) error {
-	if delta == nil {
-		return fmt.Errorf("completion %q stream emitted completion delta without payload", s.name)
-	}
+func (s *completionStream) validateCompletionDelta(delta model.CompletionDelta) error {
 	if s.finalSeen {
 		return fmt.Errorf("completion %q stream emitted completion delta after final completion", s.name)
 	}
@@ -326,10 +321,7 @@ func (s *completionStream) validateCompletionDelta(delta *model.CompletionDelta)
 	return nil
 }
 
-func (s *completionStream) validateCompletion(completion *model.Completion) error {
-	if completion == nil {
-		return fmt.Errorf("completion %q stream emitted completion without payload", s.name)
-	}
+func (s *completionStream) validateCompletion(completion model.Completion) error {
 	if s.finalSeen {
 		return fmt.Errorf("completion %q stream emitted multiple canonical completion chunks", s.name)
 	}

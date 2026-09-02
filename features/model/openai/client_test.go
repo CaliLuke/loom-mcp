@@ -636,7 +636,7 @@ func TestClientStreamRejectsEOFBeforeCompletedEvent(t *testing.T) {
 
 	chunk, err := streamer.Recv()
 	require.NoError(t, err)
-	require.Equal(t, model.ChunkTypeText, chunk.Type)
+	require.IsType(t, model.TextChunk{}, chunk)
 	_, err = streamer.Recv()
 	require.EqualError(t, err, "openai: stream ended before response.completed")
 }
@@ -744,22 +744,19 @@ func TestClientStreamEmitsTextToolCallsUsageAndStop(t *testing.T) {
 
 	chunks := testutil.CollectStreamChunks(t, streamer)
 	require.Len(t, chunks, 7)
-	require.Equal(t, model.ChunkTypeText, chunks[0].Type)
-	require.Equal(t, "Hel", chunks[0].Message.Parts[0].(model.TextPart).Text)
-	require.Equal(t, model.ChunkTypeText, chunks[1].Type)
-	require.Equal(t, "lo", chunks[1].Message.Parts[0].(model.TextPart).Text)
-	require.Equal(t, model.ChunkTypeToolCallDelta, chunks[2].Type)
-	require.Equal(t, "call_1", chunks[2].ToolCallDelta.ID)
-	require.Equal(t, tools.Ident("lookup"), chunks[2].ToolCallDelta.Name)
-	require.Equal(t, model.ChunkTypeToolCallDelta, chunks[3].Type)
-	require.Equal(t, model.ChunkTypeToolCall, chunks[4].Type)
-	require.Equal(t, "call_1", chunks[4].ToolCall.ID)
-	require.JSONEq(t, `{"query":"docs"}`, string(chunks[4].ToolCall.Payload))
-	require.Equal(t, model.ChunkTypeUsage, chunks[5].Type)
-	require.Equal(t, 15, chunks[5].UsageDelta.TotalTokens)
-	require.Equal(t, "gpt-4o", chunks[5].UsageDelta.Model)
-	require.Equal(t, model.ChunkTypeStop, chunks[6].Type)
-	require.Equal(t, "completed", chunks[6].StopReason)
+	require.Equal(t, "Hel", chunks[0].(model.TextChunk).Message.Parts[0].(model.TextPart).Text)
+	require.Equal(t, "lo", chunks[1].(model.TextChunk).Message.Parts[0].(model.TextPart).Text)
+	delta := chunks[2].(model.ToolCallDeltaChunk).Delta
+	require.Equal(t, "call_1", delta.ID)
+	require.Equal(t, tools.Ident("lookup"), delta.Name)
+	require.IsType(t, model.ToolCallDeltaChunk{}, chunks[3])
+	call := chunks[4].(model.ToolCallChunk).ToolCall
+	require.Equal(t, "call_1", call.ID)
+	require.JSONEq(t, `{"query":"docs"}`, string(call.Payload))
+	usage := chunks[5].(model.UsageChunk).Usage
+	require.Equal(t, 15, usage.TotalTokens)
+	require.Equal(t, "gpt-4o", usage.Model)
+	require.Equal(t, "completed", chunks[6].(model.StopChunk).Reason)
 
 	meta := streamer.Metadata()
 	require.NotNil(t, meta)
@@ -821,13 +818,13 @@ func TestClientStreamStructuredOutput(t *testing.T) {
 
 	chunks := testutil.CollectStreamChunks(t, streamer)
 	require.Len(t, chunks, 3)
-	require.Equal(t, model.ChunkTypeCompletionDelta, chunks[0].Type)
-	require.Equal(t, "draft", chunks[0].CompletionDelta.Name)
-	require.JSONEq(t, `{"answer":"ok"}`, chunks[0].CompletionDelta.Delta)
-	require.Equal(t, model.ChunkTypeCompletion, chunks[1].Type)
-	require.Equal(t, "draft", chunks[1].Completion.Name)
-	require.JSONEq(t, `{"answer":"ok"}`, string(chunks[1].Completion.Payload))
-	require.Equal(t, model.ChunkTypeStop, chunks[2].Type)
+	delta := chunks[0].(model.CompletionDeltaChunk).Delta
+	require.Equal(t, "draft", delta.Name)
+	require.JSONEq(t, `{"answer":"ok"}`, delta.Delta)
+	completion := chunks[1].(model.CompletionChunk).Completion
+	require.Equal(t, "draft", completion.Name)
+	require.JSONEq(t, `{"answer":"ok"}`, string(completion.Payload))
+	require.IsType(t, model.StopChunk{}, chunks[2])
 }
 
 func TestClientCompleteTranslatesDottedToolNames(t *testing.T) {
@@ -998,13 +995,13 @@ func TestClientStreamTranslatesDottedToolNames(t *testing.T) {
 
 	chunks := testutil.CollectStreamChunks(t, streamer)
 	require.Len(t, chunks, 3)
-	require.Equal(t, model.ChunkTypeToolCallDelta, chunks[0].Type)
-	assert.Equal(t, tools.Ident("toolset.lookup"), chunks[0].ToolCallDelta.Name)
-	assert.Equal(t, "call_1", chunks[0].ToolCallDelta.ID)
-	require.Equal(t, model.ChunkTypeToolCall, chunks[1].Type)
-	assert.Equal(t, tools.Ident("toolset.lookup"), chunks[1].ToolCall.Name)
-	assert.JSONEq(t, `{"query":"docs"}`, string(chunks[1].ToolCall.Payload))
-	require.Equal(t, model.ChunkTypeStop, chunks[2].Type)
+	delta := chunks[0].(model.ToolCallDeltaChunk).Delta
+	assert.Equal(t, tools.Ident("toolset.lookup"), delta.Name)
+	assert.Equal(t, "call_1", delta.ID)
+	call := chunks[1].(model.ToolCallChunk).ToolCall
+	assert.Equal(t, tools.Ident("toolset.lookup"), call.Name)
+	assert.JSONEq(t, `{"query":"docs"}`, string(call.Payload))
+	require.IsType(t, model.StopChunk{}, chunks[2])
 }
 
 type mockResponsesClient struct {

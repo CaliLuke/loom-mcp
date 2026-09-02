@@ -82,27 +82,27 @@ func validateStreamInputs(streamer model.Streamer, ev PlannerEvents) error {
 }
 
 func handleStreamChunk(ctx context.Context, ev PlannerEvents, summary *StreamSummary, chunk model.Chunk, emitEvents bool) {
-	switch chunk.Type {
-	case model.ChunkTypeText:
-		handleTextChunk(ctx, ev, summary, chunk, emitEvents)
-	case model.ChunkTypeThinking:
+	switch value := chunk.(type) {
+	case model.TextChunk:
+		handleTextChunk(ctx, ev, summary, value, emitEvents)
+	case model.ThinkingChunk:
 		if emitEvents {
-			handleThinkingChunk(ctx, ev, chunk)
+			handleThinkingChunk(ctx, ev, value)
 		}
-	case model.ChunkTypeToolCall:
-		handleToolCallChunk(summary, chunk)
-	case model.ChunkTypeToolCallDelta:
+	case model.ToolCallChunk:
+		handleToolCallChunk(summary, value)
+	case model.ToolCallDeltaChunk:
 		if emitEvents {
-			handleToolCallDeltaChunk(ctx, ev, chunk)
+			handleToolCallDeltaChunk(ctx, ev, value)
 		}
-	case model.ChunkTypeUsage:
-		handleUsageChunk(ctx, ev, summary, chunk, emitEvents)
-	case model.ChunkTypeStop:
-		summary.StopReason = chunk.StopReason
+	case model.UsageChunk:
+		handleUsageChunk(ctx, ev, summary, value, emitEvents)
+	case model.StopChunk:
+		summary.StopReason = value.Reason
 	}
 }
 
-func handleTextChunk(ctx context.Context, ev PlannerEvents, summary *StreamSummary, chunk model.Chunk, emitEvents bool) {
+func handleTextChunk(ctx context.Context, ev PlannerEvents, summary *StreamSummary, chunk model.TextChunk, emitEvents bool) {
 	delta := textChunkDelta(chunk)
 	if delta == "" {
 		return
@@ -113,8 +113,8 @@ func handleTextChunk(ctx context.Context, ev PlannerEvents, summary *StreamSumma
 	}
 }
 
-func textChunkDelta(chunk model.Chunk) string {
-	if chunk.Message == nil || len(chunk.Message.Parts) == 0 {
+func textChunkDelta(chunk model.TextChunk) string {
+	if len(chunk.Message.Parts) == 0 {
 		return ""
 	}
 	var delta string
@@ -126,10 +126,7 @@ func textChunkDelta(chunk model.Chunk) string {
 	return delta
 }
 
-func handleThinkingChunk(ctx context.Context, ev PlannerEvents, chunk model.Chunk) {
-	if chunk.Message == nil {
-		return
-	}
+func handleThinkingChunk(ctx context.Context, ev PlannerEvents, chunk model.ThinkingChunk) {
 	for _, p := range chunk.Message.Parts {
 		if tp, ok := p.(model.ThinkingPart); ok {
 			ev.PlannerThinkingBlock(ctx, tp)
@@ -137,8 +134,8 @@ func handleThinkingChunk(ctx context.Context, ev PlannerEvents, chunk model.Chun
 	}
 }
 
-func handleToolCallChunk(summary *StreamSummary, chunk model.Chunk) {
-	if chunk.ToolCall == nil || chunk.ToolCall.Name == "" {
+func handleToolCallChunk(summary *StreamSummary, chunk model.ToolCallChunk) {
+	if chunk.ToolCall.Name == "" {
 		return
 	}
 	summary.ToolCalls = append(summary.ToolCalls, ToolRequest{
@@ -148,20 +145,17 @@ func handleToolCallChunk(summary *StreamSummary, chunk model.Chunk) {
 	})
 }
 
-func handleToolCallDeltaChunk(ctx context.Context, ev PlannerEvents, chunk model.Chunk) {
-	if chunk.ToolCallDelta == nil || chunk.ToolCallDelta.ID == "" || chunk.ToolCallDelta.Delta == "" {
+func handleToolCallDeltaChunk(ctx context.Context, ev PlannerEvents, chunk model.ToolCallDeltaChunk) {
+	if chunk.Delta.ID == "" || chunk.Delta.Delta == "" {
 		return
 	}
-	ev.ToolCallArgsDelta(ctx, chunk.ToolCallDelta.ID, chunk.ToolCallDelta.Name, chunk.ToolCallDelta.Delta)
+	ev.ToolCallArgsDelta(ctx, chunk.Delta.ID, chunk.Delta.Name, chunk.Delta.Delta)
 }
 
-func handleUsageChunk(ctx context.Context, ev PlannerEvents, summary *StreamSummary, chunk model.Chunk, emitEvents bool) {
-	if chunk.UsageDelta == nil {
-		return
-	}
-	summary.Usage = addUsage(summary.Usage, *chunk.UsageDelta)
+func handleUsageChunk(ctx context.Context, ev PlannerEvents, summary *StreamSummary, chunk model.UsageChunk, emitEvents bool) {
+	summary.Usage = addUsage(summary.Usage, chunk.Usage)
 	if emitEvents {
-		ev.UsageDelta(ctx, *chunk.UsageDelta)
+		ev.UsageDelta(ctx, chunk.Usage)
 	}
 }
 

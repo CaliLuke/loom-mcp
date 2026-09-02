@@ -88,10 +88,11 @@ func TestLocalOllamaStreamText(t *testing.T) {
 			break
 		}
 		require.NoError(t, err)
-		if chunk.Type != model.ChunkTypeText || chunk.Message == nil {
+		textChunk, ok := chunk.(model.TextChunk)
+		if !ok {
 			continue
 		}
-		text.WriteString(assistantText([]model.Message{*chunk.Message}))
+		text.WriteString(assistantText([]model.Message{textChunk.Message}))
 	}
 	require.Contains(t, strings.ToLower(text.String()), "loom ollama stream ok")
 }
@@ -146,19 +147,16 @@ func TestLocalOllamaStreamThinking(t *testing.T) {
 			break
 		}
 		require.NoError(t, err)
-		switch chunk.Type {
-		case model.ChunkTypeThinking:
-			require.NotNil(t, chunk.Message)
-			part, ok := chunk.Message.Parts[0].(model.ThinkingPart)
+		switch value := chunk.(type) {
+		case model.ThinkingChunk:
+			part, ok := value.Message.Parts[0].(model.ThinkingPart)
 			require.True(t, ok)
 			require.NotEmpty(t, part.Text)
-			require.Equal(t, chunk.Thinking, part.Text)
 			thinking.WriteString(part.Text)
-		case model.ChunkTypeText:
-			require.NotNil(t, chunk.Message)
-			text.WriteString(assistantText([]model.Message{*chunk.Message}))
-		case model.ChunkTypeCompletionDelta:
-			t.Fatalf("unexpected structured-output delta in plain thinking stream: %q", chunk.CompletionDelta.Delta)
+		case model.TextChunk:
+			text.WriteString(assistantText([]model.Message{value.Message}))
+		case model.CompletionDeltaChunk:
+			t.Fatalf("unexpected structured-output delta in plain thinking stream: %q", value.Delta.Delta)
 		}
 	}
 

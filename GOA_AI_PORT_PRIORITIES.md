@@ -81,11 +81,14 @@ Implemented on `codex/port-goa-ai-runtime-contracts`:
   cases, the model package has an explicit coverage floor, and stress runs
   include the changed model, completion, planner, gateway, middleware, and
   provider packages.
+- `model.Chunk` is a sealed sum type. Its eight value variants carry only their
+  legal payload, expose a stable kind, clone mutable data at the validation
+  boundary, and reject nil, pointer, or unsupported variants without panicking.
 
-Still open in Batches 1–2: replace the open chunk struct with closed variants
-and reconcile provider streams with provider-owned canonical terminal
-responses. Presentation text and thinking now stay provisional until stream
-validation and provider cleanup both succeed.
+Still open in Batches 1–2: reconcile provider streams with provider-owned
+canonical terminal responses and publish provisional presentation deltas with
+an explicit accepted or discarded outcome. Presentation text and thinking now
+stay provisional until stream validation and provider cleanup both succeed.
 
 ### Active Progress — Recovery and Atomic Registry Decisions
 
