@@ -3,6 +3,7 @@ package inmem
 import (
 	"context"
 	"errors"
+	"fmt"
 	"testing"
 	"time"
 
@@ -15,13 +16,21 @@ import (
 func TestWorkflowLifecycleStatuses(t *testing.T) {
 	t.Parallel()
 
+	ordinary := errors.New("failed")
+	cleanup := errors.New("cleanup failed")
+	cancellationOnly := errors.Join(context.Canceled, fmt.Errorf("wrapped: %w", context.Canceled))
+	mixed := errors.Join(context.Canceled, cleanup)
 	tests := []struct {
 		name       string
 		handlerErr error
 		wantStatus engine.RunStatus
+		wantLeaves []error
 	}{
 		{name: "completed", wantStatus: engine.RunStatusCompleted},
-		{name: "failed", handlerErr: errors.New("failed"), wantStatus: engine.RunStatusFailed},
+		{name: "failed", handlerErr: ordinary, wantStatus: engine.RunStatusFailed, wantLeaves: []error{ordinary}},
+		{name: "cancellation only", handlerErr: cancellationOnly, wantStatus: engine.RunStatusCanceled, wantLeaves: []error{context.Canceled}},
+		{name: "mixed cancellation and failure", handlerErr: mixed, wantStatus: engine.RunStatusFailed, wantLeaves: []error{context.Canceled, cleanup}},
+		{name: "deadline", handlerErr: context.DeadlineExceeded, wantStatus: engine.RunStatusFailed, wantLeaves: []error{context.DeadlineExceeded}},
 	}
 
 	for _, tt := range tests {
@@ -38,16 +47,44 @@ func TestWorkflowLifecycleStatuses(t *testing.T) {
 			h, err := eng.StartWorkflow(context.Background(), engine.WorkflowStartRequest{ID: tt.name, Workflow: "workflow", Input: &api.RunInput{}})
 			require.NoError(t, err)
 			_, err = h.Wait(context.Background())
-			if tt.handlerErr == nil {
+			if len(tt.wantLeaves) == 0 {
 				require.NoError(t, err)
 			} else {
-				require.ErrorIs(t, err, tt.handlerErr)
+				for _, leaf := range tt.wantLeaves {
+					require.ErrorIs(t, err, leaf)
+				}
 			}
 			status, err := eng.QueryRunStatus(context.Background(), tt.name)
 			require.NoError(t, err)
 			assert.Equal(t, tt.wantStatus, status)
 		})
 	}
+}
+
+func TestWorkflowCancellationPreservesHandlerCleanupFailure(t *testing.T) {
+	t.Parallel()
+
+	eng := New()
+	started := make(chan struct{})
+	cleanup := errors.New("cleanup failed")
+	require.NoError(t, eng.RegisterWorkflow(context.Background(), engine.WorkflowDefinition{
+		Name: "mixed-cancellation",
+		Handler: func(ctx engine.WorkflowContext, _ *api.RunInput) (*api.RunOutput, error) {
+			close(started)
+			<-ctx.Context().Done()
+			return nil, cleanup
+		},
+	}))
+	handle, err := eng.StartWorkflow(context.Background(), engine.WorkflowStartRequest{ID: "mixed-cancellation", Workflow: "mixed-cancellation", Input: &api.RunInput{}})
+	require.NoError(t, err)
+	<-started
+	require.NoError(t, handle.Cancel(context.Background()))
+	_, err = handle.Wait(context.Background())
+	require.ErrorIs(t, err, context.Canceled)
+	require.ErrorIs(t, err, cleanup)
+	status, err := eng.QueryRunStatus(context.Background(), "mixed-cancellation")
+	require.NoError(t, err)
+	require.Equal(t, engine.RunStatusFailed, status)
 }
 
 func TestStartWorkflowRejectsDuplicateRunID(t *testing.T) {

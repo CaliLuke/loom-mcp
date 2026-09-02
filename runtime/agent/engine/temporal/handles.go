@@ -20,7 +20,7 @@ type workflowHandle struct {
 func (h *workflowHandle) Wait(ctx context.Context) (*api.RunOutput, error) {
 	var out *api.RunOutput
 	if err := h.run.Get(ctx, &out); err != nil {
-		return nil, err
+		return nil, normalizeTemporalError(err)
 	}
 	return out, nil
 }

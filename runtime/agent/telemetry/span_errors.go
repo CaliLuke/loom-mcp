@@ -2,10 +2,8 @@ package telemetry
 
 import (
 	"context"
-	"errors"
 
-	grpcCodes "google.golang.org/grpc/codes"
-	grpcStatus "google.golang.org/grpc/status"
+	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/internal/cancellation"
 )
 
 // ShouldRecordSpanError reports whether err should mark the current span as a
@@ -25,9 +23,5 @@ func isContextTerminationError(ctx context.Context, err error) bool {
 	if ctx.Err() == nil {
 		return false
 	}
-	if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
-		return true
-	}
-	code := grpcStatus.Code(err)
-	return code == grpcCodes.Canceled || code == grpcCodes.DeadlineExceeded
+	return cancellation.OnlyContextTermination(err)
 }

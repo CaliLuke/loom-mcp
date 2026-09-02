@@ -7,6 +7,7 @@ import (
 
 	agent "github.com/CaliLuke/loom-mcp/v2/runtime/agent"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/hooks"
+	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/internal/cancellation"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/model"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/planner"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/rawjson"
@@ -376,7 +377,7 @@ func runBeforeRunInterceptors(ctx context.Context, interceptors []Interceptor, i
 
 func runAfterRunInterceptors(ctx context.Context, interceptors []Interceptor, input RunInput, runCtx run.Context, out *RunOutput, runErr error) (*RunOutput, error) {
 	currentOut := out
-	currentErr := runErr
+	currentErr := cancellation.Sanitize(runErr)
 	for _, interceptor := range interceptors {
 		runInterceptor, ok := interceptor.(RunInterceptor)
 		if !ok || runInterceptor == nil {
@@ -391,7 +392,7 @@ func runAfterRunInterceptors(ctx context.Context, interceptors []Interceptor, in
 			RunContext: runCtx,
 		})
 		if err != nil {
-			return currentOut, err
+			return currentOut, cancellation.Sanitize(err)
 		}
 		if decision == nil {
 			continue
@@ -400,7 +401,7 @@ func runAfterRunInterceptors(ctx context.Context, interceptors []Interceptor, in
 			currentOut = decision.Output
 		}
 		if decision.Output != nil || decision.Err != nil {
-			currentErr = decision.Err
+			currentErr = cancellation.Sanitize(decision.Err)
 		}
 	}
 	return currentOut, currentErr

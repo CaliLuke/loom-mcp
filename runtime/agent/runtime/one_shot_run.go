@@ -9,6 +9,7 @@ import (
 
 	agent "github.com/CaliLuke/loom-mcp/v2/runtime/agent"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/hooks"
+	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/internal/cancellation"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/run"
 )
 
@@ -80,7 +81,7 @@ func (r *Runtime) RunOneShot(ctx context.Context, input OneShotRunInput, execute
 		SessionID: "",
 		TurnID:    input.TurnID,
 	})
-	execErr := execute(execCtx)
+	execErr := cancellation.Sanitize(execute(execCtx))
 	status, phase := oneShotTerminalState(execErr)
 	if err := r.publishHookErr(ctx, hooks.NewRunCompletedEvent(input.RunID, input.AgentID, "", status, phase, execErr), input.TurnID); err != nil {
 		if execErr != nil {
@@ -97,7 +98,7 @@ func oneShotTerminalState(err error) (string, run.Phase) {
 	if err == nil {
 		return runStatusSuccess, run.PhaseCompleted
 	}
-	if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+	if cancellation.Only(err) {
 		return runStatusCanceled, run.PhaseCanceled
 	}
 	return runStatusFailed, run.PhaseFailed

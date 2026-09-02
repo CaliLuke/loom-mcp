@@ -52,6 +52,28 @@ Use this file for current loom-mcp runtime behavior in this repo. Prefer it over
 - `PlanResult.RetryHint` is successful planner output used to recover from tool
   failures. It is separate from engine activity retries.
 
+## Cancellation Classification
+
+- The runtime classifies the complete error graph. Every leaf must be
+  `context.Canceled` or a Temporal cancellation for a canceled result.
+- The classifier has fixed limits for depth, visits, and children. Cycles,
+  typed nil errors, panics, and oversized graphs are failures. Each decision
+  uses one bounded inspection, including stable Temporal marker discovery.
+- A mixed cancellation and failure graph fails the run. The returned error
+  keeps the cancellation leaf and each independent failure leaf.
+- The Temporal adapter makes a mixed graph non-retryable. A stable application
+  error type restores cancellation evidence after Temporal failure conversion.
+  This applies to activities, children, top-level waits, and restart queries.
+- The Temporal adapter replaces a rejected graph with a static, non-retryable
+  failure. The failure converter does not traverse the rejected graph.
+- All completion paths replace invalid graphs before interceptors, hook
+  classification, logging, or serialization can inspect them.
+- `context.DeadlineExceeded` is a timeout failure. It is not a cancellation.
+- A canceled tool activity or agent child stops the owning run. The runtime
+  does not create an ordinary failed tool result for this condition.
+- Telemetry suppresses context termination only when the operation context is
+  also done. Mixed gRPC or Go error graphs remain visible as errors.
+
 ## Agent-As-Tool
 
 - Agent-as-tool runs as a real child workflow, not an inline local shortcut.

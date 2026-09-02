@@ -1565,6 +1565,21 @@ Terminal status mapping:
 Cancellation is not an error:
 
 - For `status="canceled"`, the workflow payload must not include a user-facing `error`.
+- Every leaf in the error graph must be `context.Canceled` or a Temporal
+  cancellation. The runtime treats mixed cancellation and failure graphs as
+  failed runs and preserves each error leaf.
+- Temporal records a mixed graph as a non-retryable application failure. The
+  adapter restores its cancellation evidence after failure conversion. This
+  applies to activities, children, top-level waits, and restart queries.
+- `context.DeadlineExceeded` is a timeout failure. It is not a cancellation.
+- A canceled tool activity or agent child stops the owning run. The runtime
+  does not convert this condition into a failed tool result.
+- The classifier makes each decision with one bounded traversal. It detects
+  cycles. Invalid or oversized error graphs fail the run.
+- Temporal replaces an invalid graph with a static, non-retryable failure. Its
+  failure converter does not traverse the rejected graph.
+- Workflow, one-shot, observed, and restart completion paths replace invalid
+  graphs before interceptors, hook classification, logging, or serialization.
 
 Failures are structured:
 
@@ -2334,7 +2349,8 @@ type WorkflowContext interface {
 Temporal signal receivers select between the signal channel and workflow
 cancellation. Canceling a workflow therefore releases a receiver blocked in
 `Receive` or `ReceiveWithTimeout`, and durable completion records the terminal
-status as `canceled` rather than `failed`.
+status as `canceled` when all error leaves are cancellations. An independent
+cleanup, provider, hook, or transport failure makes the run fail.
 
 ### Available Engines
 

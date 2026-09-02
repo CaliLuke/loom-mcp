@@ -14,11 +14,13 @@ import (
 	"go.temporal.io/sdk/activity"
 	"go.temporal.io/sdk/client"
 	temporalotel "go.temporal.io/sdk/contrib/opentelemetry"
+	temporalsdk "go.temporal.io/sdk/temporal"
 	"go.temporal.io/sdk/worker"
 	"go.temporal.io/sdk/workflow"
 
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/api"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/engine"
+	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/internal/cancellation"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/telemetry"
 )
 
@@ -316,7 +318,8 @@ func (e *Engine) RegisterWorkflow(_ context.Context, def engine.WorkflowDefiniti
 	bundle.registerWorkflow(def.Name, func(tctx workflow.Context, input *api.RunInput) (*api.RunOutput, error) {
 		wfCtx := newTemporalWorkflowContext(e, tctx)
 		defer e.releaseWorkflowContext(wfCtx.runID)
-		return def.Handler(wfCtx, input)
+		out, err := def.Handler(wfCtx, input)
+		return out, classifyTemporalCancellation(err)
 	})
 	e.finishWorkflowRegistration(def)
 	registered = true
@@ -332,7 +335,7 @@ func (e *Engine) RegisterHookActivity(_ context.Context, name string, opts engin
 	}
 	opts = e.applyActivityClassDefaults(activityKindHook, opts)
 	wrapped := func(ctx context.Context, in *api.HookActivityInput) error {
-		return fn(e.injectWorkflowContextIntoActivity(ctx), in)
+		return classifyTemporalCancellation(fn(e.injectWorkflowContextIntoActivity(ctx), in))
 	}
 	return e.registerActivityWithCtx(name, opts, wrapped)
 }
@@ -357,7 +360,8 @@ func (e *Engine) RegisterPlannerActivity(_ context.Context, name string, opts en
 	// Wrap to inject originating WorkflowContext into activity context so runtime code
 	// can start child workflows (agent-as-tool) with engine-owned context.
 	wrapped := func(ctx context.Context, in *api.PlanActivityInput) (*api.PlanActivityOutput, error) {
-		return fn(e.injectWorkflowContextIntoActivity(ctx), in)
+		out, err := fn(e.injectWorkflowContextIntoActivity(ctx), in)
+		return out, classifyTemporalCancellation(err)
 	}
 	return e.registerActivityWithCtx(name, opts, wrapped)
 }
@@ -380,7 +384,8 @@ func (e *Engine) RegisterExecuteToolActivity(_ context.Context, name string, opt
 	// Wrap to inject originating WorkflowContext into activity context so runtime code
 	// can start child workflows (agent-as-tool) with engine-owned context.
 	wrapped := func(ctx context.Context, in *api.ToolInput) (*api.ToolOutput, error) {
-		return fn(e.injectWorkflowContextIntoActivity(ctx), in)
+		out, err := fn(e.injectWorkflowContextIntoActivity(ctx), in)
+		return out, classifyTemporalCancellation(err)
 	}
 	return e.registerActivityWithCtx(name, opts, wrapped)
 }
@@ -533,7 +538,38 @@ const (
 	activityKindHook    activityKind = "hook"
 	activityKindPlanner activityKind = "planner"
 	activityKindTool    activityKind = "tool"
+
+	mixedCancellationFailureType = "loom_mcp.mixed_cancellation_failure"
+	invalidErrorGraphFailureType = "loom_mcp.invalid_error_graph"
 )
+
+// classifyTemporalCancellation translates cancellation-only graphs into the
+// Temporal cancellation type while protecting mixed cancellation and failure
+// graphs from Temporal's permissive context.Canceled classification.
+func classifyTemporalCancellation(err error) error {
+	if err == nil {
+		return nil
+	}
+	inspection := cancellation.Inspect(err, nil)
+	if !inspection.Valid {
+		return temporalsdk.NewNonRetryableApplicationError(
+			"operation failed with an invalid error graph",
+			invalidErrorGraphFailureType,
+			nil,
+		)
+	}
+	if inspection.OnlyCancellation {
+		return temporalsdk.NewCanceledError("operation canceled")
+	}
+	if inspection.ContainsCancellation {
+		return temporalsdk.NewNonRetryableApplicationError(
+			"operation failed with mixed cancellation and failure",
+			mixedCancellationFailureType,
+			err,
+		)
+	}
+	return err
+}
 
 // applyActivityClassDefaults overlays Temporal-owned queue-wait and liveness
 // defaults onto a runtime-owned registration when those mechanics were left

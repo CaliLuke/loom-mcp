@@ -89,8 +89,12 @@ func mergeToolResultsInCallOrder(calls []planner.ToolRequest, activityByID, inli
 func (e *toolBatchExec) collectActivityExecution(wfCtx engine.WorkflowContext, ctx context.Context, info futureInfo) (*ToolExecutionResult, error) {
 	out, err := info.future.Get(ctx)
 	if err != nil {
+		failure := inspectCollectedExecutionFailure(err)
+		if failure.containsCancellation {
+			return nil, failure.err
+		}
 		duration := wfCtx.Now().Sub(info.startTime)
-		tr, synthErr := e.synthesizeToolError(ctx, info.call, err, "tool activity failed", duration)
+		tr, synthErr := e.synthesizeToolError(ctx, info.call, failure, "tool activity failed", duration)
 		if synthErr != nil {
 			return nil, synthErr
 		}
@@ -223,8 +227,12 @@ func popReadyChildFuture(pending []agentChildFutureInfo) (agentChildFutureInfo, 
 func (e *toolBatchExec) collectChildResult(wfCtx engine.WorkflowContext, ctx context.Context, info agentChildFutureInfo) (*planner.ToolResult, error) {
 	outPtr, err := info.handle.Get(wfCtx.Context())
 	if err != nil {
+		failure := inspectCollectedExecutionFailure(err)
+		if failure.containsCancellation {
+			return nil, failure.err
+		}
 		duration := wfCtx.Now().Sub(info.startTime)
-		return e.synthesizeToolError(ctx, info.call, err, "agent tool execution failed", duration)
+		return e.synthesizeToolError(ctx, info.call, failure, "agent tool execution failed", duration)
 	}
 	tr, err := e.r.adaptAgentChildOutput(ctx, info.cfg, &info.call, info.nestedRun, outPtr)
 	if err != nil {

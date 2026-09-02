@@ -135,6 +135,22 @@ Use this skill for `loom-mcp` work in this repo. Keep `AGENTS.md` short and keep
 - Run status is monotonic once terminal. The first committed `completed`,
   `failed`, or `canceled` status remains authoritative; later session-store
   updates may enrich metadata but must not reopen or replace that outcome.
+- An error graph is a cancellation only when every leaf is `context.Canceled`
+  or a Temporal cancellation. The classifier bounds graph depth, visits, and
+  fan-out. It rejects cycles, typed nil errors, panics, and oversized graphs.
+- A mixed cancellation and failure graph fails the run and preserves every
+  error leaf. `context.DeadlineExceeded` is a failure unless the engine reports
+  a canceled run.
+- The Temporal adapter stores mixed cancellation as a non-retryable application
+  failure. One bounded inspection finds its stable type without `errors.As`.
+  Activity, child, top-level wait, and restart query paths restore cancellation
+  evidence after Temporal failure conversion.
+- The Temporal adapter replaces an invalid error graph with a static,
+  non-retryable failure. Temporal must not traverse the rejected graph.
+- Workflow, one-shot, observed, and restart completion paths sanitize invalid
+  graphs before interceptors, hook classification, logging, or serialization.
+- A canceled tool activity or agent child stops the owning run. The runtime
+  does not convert that cancellation into a failed tool result.
 - `TimeBudget` measures active runtime work. Clarification, confirmation,
   typed-input, and external-tool waits pause the budget, so elapsed wall time
   may exceed the configured duration.

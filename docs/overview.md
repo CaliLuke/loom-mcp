@@ -403,6 +403,17 @@ The hook bus publishes events (`tool_start`, `tool_result`, `assistant_message`,
 | **In‑memory** | Fast dev loops, no external dependencies                        |
 | **Temporal**  | Durable execution, replay, retries, signals, horizontal scaling |
 
+Both engines inspect the complete error graph before they classify a canceled
+run. Every leaf must be a context or Temporal cancellation. A mixed graph fails
+the run and keeps each independent error. Each decision uses one bounded
+inspection. A deadline is a timeout failure.
+
+Temporal restores mixed cancellation evidence on activity, child, top-level
+wait, and restart query paths.
+
+Cancellation from a tool activity or agent child stops the owning run. The
+runtime does not present that cancellation to the model as a failed tool call.
+
 ### Human‑in‑the‑Loop (Pause & Resume)
 
 Agents can pause mid‑run to request human input or external tool results:

@@ -2,13 +2,13 @@ package runtime
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"time"
 
 	agent "github.com/CaliLuke/loom-mcp/v2/runtime/agent"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/engine"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/hooks"
+	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/internal/cancellation"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/model"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/planner"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/rawjson"
@@ -45,6 +45,13 @@ type (
 		nestedRun run.Context
 		// startTime records when the child workflow was started.
 		startTime time.Time
+	}
+
+	collectedExecutionFailure struct {
+		err                  error
+		text                 string
+		containsCancellation bool
+		serviceUnavailable   bool
 	}
 
 	// toolCallBatch carries the in-flight execution state for a batch of tool calls.
@@ -151,9 +158,32 @@ func parentToolCallID(call planner.ToolRequest, runCtx *run.Context) string {
 	return ""
 }
 
-func retryHintFromExecutionError(tool tools.Ident, err error) *planner.RetryHint {
-	var svcErr *loom.ServiceError
-	if errors.As(err, &svcErr) && svcErr.Name == "service_unavailable" {
+func inspectCollectedExecutionFailure(err error) collectedExecutionFailure {
+	failure := collectedExecutionFailure{err: err}
+	root := true
+	inspection := cancellation.Inspect(err, func(candidate error, errorText string) bool {
+		if root {
+			failure.text = errorText
+			root = false
+		}
+		//nolint:errorlint // Inspect supplies each exact graph node to the matcher.
+		if serviceErr, ok := candidate.(*loom.ServiceError); ok && serviceErr.Name == "service_unavailable" {
+			failure.serviceUnavailable = true
+		}
+		return false
+	})
+	if !inspection.Valid {
+		failure.err = cancellation.ErrInvalidErrorGraph
+		failure.text = cancellation.ErrInvalidErrorGraph.Error()
+		failure.serviceUnavailable = false
+		return failure
+	}
+	failure.containsCancellation = inspection.ContainsCancellation
+	return failure
+}
+
+func retryHintFromExecutionFailure(tool tools.Ident, failure collectedExecutionFailure) *planner.RetryHint {
+	if failure.serviceUnavailable {
 		return &planner.RetryHint{
 			Reason: planner.RetryReasonToolUnavailable,
 			Tool:   tool,
@@ -168,13 +198,14 @@ func retryHintFromExecutionError(tool tools.Ident, err error) *planner.RetryHint
 // the corresponding ToolResultReceived event. This is used when activity or
 // child workflow execution fails (e.g., timeout) and we want to convert the
 // error into a tool result rather than failing the workflow.
-func (e *toolBatchExec) synthesizeToolError(ctx context.Context, call planner.ToolRequest, err error, errMsg string, duration time.Duration) (*planner.ToolResult, error) {
-	toolErr := planner.NewToolErrorWithCause(errMsg, err)
+func (e *toolBatchExec) synthesizeToolError(ctx context.Context, call planner.ToolRequest, failure collectedExecutionFailure, errMsg string, duration time.Duration) (*planner.ToolResult, error) {
+	toolErr := planner.NewToolError(errMsg)
+	toolErr.Cause = &planner.ToolError{Message: failure.text}
 	toolRes := &planner.ToolResult{
 		Name:       call.Name,
 		ToolCallID: call.ToolCallID,
 		Error:      toolErr,
-		RetryHint:  retryHintFromExecutionError(call.Name, err),
+		RetryHint:  retryHintFromExecutionFailure(call.Name, failure),
 	}
 	if _, ok := e.r.toolSpec(call.Name); !ok {
 		return e.synthesizeUnknownToolResult(ctx, call, duration)

@@ -19,6 +19,7 @@ import (
 
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/api"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/engine"
+	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/internal/cancellation"
 )
 
 type (
@@ -218,7 +219,7 @@ func (e *eng) StartWorkflow(ctx context.Context, req engine.WorkflowStartRequest
 		res, err := def.Handler(wctx, req.Input)
 		if runErr := runCtx.Err(); runErr != nil {
 			res = nil
-			err = runErr
+			err = errors.Join(runErr, err)
 		}
 		h.mu.Lock()
 		h.result = res
@@ -227,7 +228,7 @@ func (e *eng) StartWorkflow(ctx context.Context, req engine.WorkflowStartRequest
 		// Update status based on completion.
 		e.mu.Lock()
 		if err != nil {
-			if errors.Is(err, context.Canceled) {
+			if cancellation.Only(err) {
 				e.statuses[req.ID] = engine.RunStatusCanceled
 			} else {
 				e.statuses[req.ID] = engine.RunStatusFailed

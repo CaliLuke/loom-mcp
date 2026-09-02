@@ -2,13 +2,13 @@ package hooks
 
 import (
 	"context"
-	"errors"
 	"time"
 
 	"uuid"
 
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/artifact"
+	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/internal/cancellation"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/model"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/planner"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/policy"
@@ -34,6 +34,15 @@ type (
 		Message    string
 		RequestID  string
 		Retryable  bool
+	}
+
+	completionErrorInspection struct {
+		inspection   cancellation.Inspection
+		provider     *model.ProviderError
+		providerText string
+		application  *temporal.ApplicationError
+		timeout      bool
+		deadline     bool
 	}
 
 	// Event is the interface all hook events must implement. The runtime publishes
@@ -619,25 +628,35 @@ func NewRunCompletedEvent(runID string, agentID agent.Ident, sessionID, status s
 	if err == nil {
 		return out
 	}
-	if pe, ok := providerErrorFromError(err); ok {
+	details := inspectCompletionError(err)
+	if !details.inspection.Valid {
+		out.Error = cancellation.ErrInvalidErrorGraph
+		if status == string(run.StatusFailed) {
+			out.ErrorKind = ErrorKindInternal
+			out.PublicError = PublicErrorInternal
+			out.Retryable = true
+		}
+		return out
+	}
+	if pe, ok := providerErrorFromInspection(details); ok {
 		out.ErrorProvider = pe.Provider()
 		out.ErrorOperation = pe.Operation()
 		out.ErrorKind = string(pe.Kind())
 		out.ErrorCode = pe.Code()
 		out.HTTPStatus = pe.HTTPStatus()
 		out.Retryable = pe.Retryable()
-		if status == "failed" {
+		if status == string(run.StatusFailed) {
 			out.PublicError = providerPublicError(pe)
 		}
 		return out
 	}
 
 	// Cancellation is terminal but non-error for UX purposes.
-	if status != "failed" {
+	if status != string(run.StatusFailed) {
 		return out
 	}
 
-	out.ErrorKind, out.PublicError = classifyNonProviderFailure(err)
+	out.ErrorKind, out.PublicError = classifyNonProviderFailure(details)
 	out.Retryable = true // Non-provider failures are always retryable.
 	return out
 }
@@ -646,11 +665,18 @@ func NewRunCompletedEvent(runID string, agentID agent.Ident, sessionID, status s
 // error envelope so Wait()/Get()-based terminal paths can recover structured
 // provider metadata after the workflow engine serializes the error.
 func WrapRunCompletionError(err error) error {
-	if _, alreadyWrapped := providerErrorFromTemporalEnvelope(err); alreadyWrapped {
+	if err == nil {
+		return nil
+	}
+	details := inspectCompletionError(err)
+	if !details.inspection.Valid {
+		return cancellation.ErrInvalidErrorGraph
+	}
+	if _, alreadyWrapped := providerErrorFromTemporalInspection(details); alreadyWrapped {
 		return err
 	}
-	pe, ok := model.AsProviderError(err)
-	if !ok {
+	pe := details.provider
+	if pe == nil {
 		return err
 	}
 	envelope := providerErrorEnvelope{
@@ -664,9 +690,9 @@ func WrapRunCompletionError(err error) error {
 		Retryable:  pe.Retryable(),
 	}
 	if pe.Retryable() {
-		return temporal.NewApplicationErrorWithCause(pe.Error(), providerErrorApplicationType, err, envelope)
+		return temporal.NewApplicationErrorWithCause(details.providerText, providerErrorApplicationType, err, envelope)
 	}
-	return temporal.NewNonRetryableApplicationError(pe.Error(), providerErrorApplicationType, err, envelope)
+	return temporal.NewNonRetryableApplicationError(details.providerText, providerErrorApplicationType, err, envelope)
 }
 
 // NewChildRunLinkedEvent constructs a ChildRunLinkedEvent for the given parent
@@ -1050,28 +1076,48 @@ func NewMemoryAppendedEvent(runID string, agentID agent.Ident, sessionID string,
 	}
 }
 
-func classifyNonProviderFailure(err error) (kind, publicError string) {
-	var te *temporal.TimeoutError
-	if errors.As(err, &te) || errors.Is(err, context.DeadlineExceeded) {
+func inspectCompletionError(err error) completionErrorInspection {
+	details := completionErrorInspection{}
+	details.inspection = cancellation.Inspect(err, func(candidate error, errorText string) bool {
+		//nolint:errorlint // Inspect supplies each exact graph node to the matcher.
+		switch typed := candidate.(type) {
+		case *model.ProviderError:
+			if details.provider == nil {
+				details.provider = typed
+				details.providerText = errorText
+			}
+		case *temporal.ApplicationError:
+			if details.application == nil && typed.Type() == providerErrorApplicationType {
+				details.application = typed
+			}
+		case *temporal.TimeoutError:
+			details.timeout = true
+		}
+		if cancellation.Exact(candidate, context.DeadlineExceeded) {
+			details.deadline = true
+		}
+		return false
+	})
+	return details
+}
+
+func classifyNonProviderFailure(details completionErrorInspection) (kind, publicError string) {
+	if details.timeout || details.deadline {
 		return ErrorKindTimeout, PublicErrorTimeout
 	}
 	return ErrorKindInternal, PublicErrorInternal
 }
 
-func providerErrorFromError(err error) (*model.ProviderError, bool) {
-	pe, ok := model.AsProviderError(err)
-	if ok {
-		return pe, true
+func providerErrorFromInspection(details completionErrorInspection) (*model.ProviderError, bool) {
+	if details.provider != nil {
+		return details.provider, true
 	}
-	return providerErrorFromTemporalEnvelope(err)
+	return providerErrorFromTemporalInspection(details)
 }
 
-func providerErrorFromTemporalEnvelope(err error) (*model.ProviderError, bool) {
-	var appErr *temporal.ApplicationError
-	if !errors.As(err, &appErr) {
-		return nil, false
-	}
-	if appErr.Type() != providerErrorApplicationType {
+func providerErrorFromTemporalInspection(details completionErrorInspection) (*model.ProviderError, bool) {
+	appErr := details.application
+	if appErr == nil {
 		return nil, false
 	}
 	var envelope providerErrorEnvelope

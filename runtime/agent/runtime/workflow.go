@@ -16,6 +16,7 @@ import (
 
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/engine"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/hooks"
+	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/internal/cancellation"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/interrupt"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/model"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/planner"
@@ -73,9 +74,10 @@ func (r *Runtime) ExecuteWorkflow(wfCtx engine.WorkflowContext, input *RunInput)
 	finalStatus := runStatusSuccess
 	var finalErr error
 	defer func() {
+		finalErr = cancellation.Sanitize(finalErr)
 		afterOut, afterErr := runAfterRunInterceptors(wfCtx.Context(), r.interceptorsForAgent(input.AgentID), *input, runCtx, out, finalErr)
 		out = afterOut
-		finalErr = afterErr
+		finalErr = cancellation.Sanitize(afterErr)
 		retErr = afterErr
 		if finalErr != nil {
 			finalStatus = terminalRunStatusForError(finalErr)
@@ -213,7 +215,7 @@ func (r *Runtime) handleWorkflowStartError(
 	turnID string,
 	startErr error,
 ) (*RunOutput, string, error) {
-	if !errors.Is(startErr, errRecoveryTurnCapExceeded) || planInput == nil || firstOutput == nil {
+	if !boundedErrorIs(startErr, errRecoveryTurnCapExceeded) || planInput == nil || firstOutput == nil {
 		return nil, workflowStatusForError(startErr), startErr
 	}
 	out, err := r.finalizeWithPlanner(

@@ -10,12 +10,11 @@ import (
 	"sync"
 	"time"
 
-	"go.temporal.io/sdk/temporal"
-
 	agent "github.com/CaliLuke/loom-mcp/v2/runtime/agent"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/api"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/engine"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/hooks"
+	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/internal/cancellation"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/run"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/session"
 )
@@ -97,6 +96,7 @@ func (h *observedWorkflowHandle) ensureWait() {
 // metadata whenever a local observed handle exists.
 func (h *observedWorkflowHandle) awaitCompletion() {
 	h.out, h.err = h.inner.Wait(context.Background())
+	h.err = cancellation.Sanitize(h.err)
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	err := h.runtime.repairObservedTerminalRunCompletion(ctx, h.runID, h.agentID, h.sessionID, h.turnID, h.err)
 	cancel()
@@ -142,7 +142,7 @@ func (r *Runtime) repairTerminalRunCompletion(ctx context.Context, runID string)
 	}
 	status, err := r.Engine.QueryRunStatus(ctx, runID)
 	if err != nil {
-		if errors.Is(err, engine.ErrWorkflowNotFound) {
+		if boundedErrorIs(err, engine.ErrWorkflowNotFound) {
 			return false, nil
 		}
 		return false, err
@@ -197,7 +197,7 @@ func (r *Runtime) withSerializedTerminalRepair(ctx context.Context, runID string
 func (r *Runtime) runHasTerminalSnapshot(ctx context.Context, runID string) (bool, error) {
 	snapshot, err := r.loadRunSnapshot(ctx, runID)
 	if err != nil {
-		if errors.Is(err, run.ErrNotFound) {
+		if boundedErrorIs(err, run.ErrNotFound) {
 			return false, nil
 		}
 		return false, err
@@ -246,9 +246,10 @@ func (r *Runtime) synthesizeTerminalRunCompletion(ctx context.Context, runID str
 func (r *Runtime) repairQueriedTerminalRunCompletion(ctx context.Context, runID string, querier engine.CompletionQuerier) error {
 	return r.withSerializedTerminalRepair(ctx, runID, func(ctx context.Context) error {
 		_, waitErr := querier.QueryRunCompletion(ctx, runID)
-		if errors.Is(waitErr, engine.ErrWorkflowNotFound) {
+		if boundedErrorIs(waitErr, engine.ErrWorkflowNotFound) {
 			return waitErr
 		}
+		waitErr = cancellation.Sanitize(waitErr)
 		agentID, sessionID, turnID, err := r.runCompletionMetadata(ctx, runID)
 		if err != nil {
 			return err
@@ -284,7 +285,7 @@ func (r *Runtime) runCompletionMetadata(ctx context.Context, runID string) (agen
 		if err == nil {
 			agentID = agent.Ident(meta.AgentID)
 			sessionID = meta.SessionID
-		} else if !errors.Is(err, session.ErrRunNotFound) {
+		} else if !boundedErrorIs(err, session.ErrRunNotFound) {
 			return "", "", "", err
 		}
 	}
@@ -314,16 +315,13 @@ func (r *Runtime) runCompletionMetadata(ctx context.Context, runID string) (agen
 // runtime status contract. Timeouts are failures, explicit cancellations stay
 // canceled, and everything else is a generic failure.
 func terminalRunStatusForError(err error) string {
-	switch {
-	case err == nil:
+	if err == nil {
 		return runStatusSuccess
-	case isRunTimeoutError(err):
-		return runStatusFailed
-	case isRunCancellationError(err):
-		return runStatusCanceled
-	default:
-		return runStatusFailed
 	}
+	if isRunCancellationError(err) {
+		return runStatusCanceled
+	}
+	return runStatusFailed
 }
 
 func terminalRunStatusForEngineStatus(status engine.RunStatus) (string, error) {
@@ -375,16 +373,17 @@ func terminalRunPhaseForStatus(status string) run.Phase {
 	}
 }
 
-// isRunTimeoutError recognizes engine timeout closures that should surface as
-// failed runs with timeout-facing public errors.
-func isRunTimeoutError(err error) bool {
-	var timeoutErr *temporal.TimeoutError
-	return errors.As(err, &timeoutErr) || errors.Is(err, context.DeadlineExceeded)
-}
-
 // isRunCancellationError recognizes operator-initiated or engine-propagated
 // cancellations that should surface as canceled runs.
 func isRunCancellationError(err error) bool {
-	var canceledErr *temporal.CanceledError
-	return errors.As(err, &canceledErr) || errors.Is(err, context.Canceled)
+	return cancellation.Only(err)
+}
+
+func boundedErrorIs(err, target error) bool {
+	if err == nil || target == nil {
+		return false
+	}
+	return cancellation.Inspect(err, func(candidate error, _ string) bool {
+		return cancellation.Exact(candidate, target)
+	}).Matched
 }

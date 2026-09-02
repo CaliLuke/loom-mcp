@@ -15,6 +15,7 @@ import (
 
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/api"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/engine"
+	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/internal/cancellation"
 )
 
 // QueryWorkflow exposes Temporal query execution through the engine's durable
@@ -53,13 +54,20 @@ func (e *Engine) QueryRunCompletion(ctx context.Context, workflowID string) (*ap
 	}
 	var out *api.RunOutput
 	if err := e.client.GetWorkflow(ctx, workflowID, "").Get(ctx, &out); err != nil {
-		var notFound *serviceerror.NotFound
-		if errors.As(err, &notFound) {
+		if isWorkflowNotFound(err) {
 			return nil, engine.ErrWorkflowNotFound
 		}
-		return nil, err
+		return nil, normalizeTemporalError(err)
 	}
 	return out, nil
+}
+
+func isWorkflowNotFound(err error) bool {
+	return cancellation.Inspect(err, func(candidate error, _ string) bool {
+		//nolint:errorlint // Inspect supplies each exact graph node to the matcher.
+		_, ok := candidate.(*serviceerror.NotFound)
+		return ok
+	}).Matched
 }
 
 // queryRunStatusFromInfo maps Temporal execution info into the engine's coarse

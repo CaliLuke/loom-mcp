@@ -307,6 +307,8 @@ Proof:
 
 ### Batch 6 — Cancellation Classification (Must Port)
 
+Status: complete on `codex/port-goa-ai-runtime-contracts`.
+
 Upstream reference: `v0.76.15`.
 
 Implement:

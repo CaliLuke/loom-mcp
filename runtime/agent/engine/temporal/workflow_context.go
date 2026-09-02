@@ -24,6 +24,7 @@ import (
 
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/api"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/engine"
+	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/internal/cancellation"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/telemetry"
 )
 
@@ -119,8 +120,19 @@ func normalizeTemporalError(err error) error {
 	if err == nil {
 		return nil
 	}
-	if temporal.IsCanceledError(err) {
+	inspection := cancellation.Inspect(err, func(candidate error, _ string) bool {
+		//nolint:errorlint // Inspect supplies each exact graph node to the matcher.
+		applicationErr, ok := candidate.(*temporal.ApplicationError)
+		return ok && applicationErr.Type() == mixedCancellationFailureType
+	})
+	if !inspection.Valid {
+		return err
+	}
+	if inspection.OnlyCancellation {
 		return context.Canceled
+	}
+	if inspection.Matched {
+		return errors.Join(context.Canceled, err)
 	}
 	return err
 }
@@ -410,7 +422,7 @@ func (w *temporalWorkflowContext) Detached() engine.WorkflowContext {
 func (h *temporalChildHandle) Get(_ context.Context) (*api.RunOutput, error) {
 	var out *api.RunOutput
 	if err := h.future.Get(h.ctx, &out); err != nil {
-		return nil, err
+		return nil, normalizeTemporalError(err)
 	}
 	return out, nil
 }

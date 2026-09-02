@@ -5,14 +5,23 @@ import (
 	"encoding/json/v2"
 	"errors"
 	"testing"
+	"time"
 
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/hooks"
+	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/internal/cancellation"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/planner"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/rawjson"
+	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/run"
 	runloginmem "github.com/CaliLuke/loom-mcp/v2/runtime/agent/runlog/inmem"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/tools"
 	"github.com/stretchr/testify/require"
 )
+
+type panickingInterceptorError struct{}
+
+func (*panickingInterceptorError) Error() string {
+	panic("broken interceptor error")
+}
 
 func TestExecuteToolActivityRunsInterceptorsAroundTool(t *testing.T) {
 	var calls []string
@@ -301,6 +310,137 @@ func TestExecuteWorkflowPublishesCanceledStatus(t *testing.T) {
 	}
 	require.NotNil(t, completed)
 	require.Equal(t, runStatusCanceled, completed.Status)
+}
+
+func TestExecuteWorkflowSanitizesHostileCompletionError(t *testing.T) {
+	recorder := &recordingHooks{}
+	rt := New(WithHooks(recorder))
+	rt.agents["svc.agent"] = AgentRegistration{
+		ID:                  "svc.agent",
+		PlanActivityName:    "plan",
+		ExecuteToolActivity: "execute",
+		ResumeActivityName:  "resume",
+	}
+	rt.RunEventStore = runloginmem.New()
+	cyclic := &cyclicCompletionError{}
+	cyclic.next = cyclic
+	wfCtx := &routeWorkflowContext{
+		ctx:         context.Background(),
+		hookRuntime: rt,
+		plannerRoutes: map[string]func(context.Context, *PlanActivityInput) (*PlanActivityOutput, error){
+			"plan": func(context.Context, *PlanActivityInput) (*PlanActivityOutput, error) {
+				return &PlanActivityOutput{}, cyclic
+			},
+		},
+	}
+
+	result := make(chan error, 1)
+	go func() {
+		_, err := rt.ExecuteWorkflow(wfCtx, &RunInput{
+			AgentID: "svc.agent",
+			RunID:   "run-hostile",
+			TurnID:  "turn-hostile",
+		})
+		result <- err
+	}()
+	select {
+	case err := <-result:
+		require.ErrorIs(t, err, cancellation.ErrInvalidErrorGraph)
+	case <-time.After(time.Second):
+		t.Fatal("ExecuteWorkflow hung on a cyclic completion error")
+	}
+
+	var completed *hooks.RunCompletedEvent
+	for _, event := range recorder.events {
+		if candidate, ok := event.(*hooks.RunCompletedEvent); ok {
+			completed = candidate
+		}
+	}
+	require.NotNil(t, completed)
+	require.Equal(t, runStatusFailed, completed.Status)
+	require.EqualError(t, completed.Error, cancellation.ErrInvalidErrorGraph.Error())
+}
+
+func TestExecuteWorkflowSanitizesErrorsBetweenAfterRunInterceptors(t *testing.T) {
+	cycle := &cyclicCompletionError{}
+	cycle.next = cycle
+	tests := []struct {
+		name string
+		err  error
+	}{
+		{name: "cycle", err: cycle},
+		{name: "panicking error text", err: &panickingInterceptorError{}},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			recorder := &recordingHooks{}
+			observedSecond := false
+			rt := New(
+				WithHooks(recorder),
+				WithInterceptors(
+					RuntimeInterceptorFuncs{AfterRunFunc: func(context.Context, *AfterRunInput) (*AfterRunDecision, error) {
+						return &AfterRunDecision{Err: test.err}, nil
+					}},
+					RuntimeInterceptorFuncs{AfterRunFunc: func(_ context.Context, input *AfterRunInput) (*AfterRunDecision, error) {
+						observedSecond = true
+						require.ErrorIs(t, input.Err, cancellation.ErrInvalidErrorGraph)
+						return nil, nil
+					}},
+				),
+			)
+			rt.agents["svc.agent"] = AgentRegistration{
+				ID:                  "svc.agent",
+				PlanActivityName:    "plan",
+				ExecuteToolActivity: "execute",
+				ResumeActivityName:  "resume",
+			}
+			rt.RunEventStore = runloginmem.New()
+			wfCtx := &routeWorkflowContext{
+				ctx:         context.Background(),
+				hookRuntime: rt,
+				plannerRoutes: map[string]func(context.Context, *PlanActivityInput) (*PlanActivityOutput, error){
+					"plan": func(context.Context, *PlanActivityInput) (*PlanActivityOutput, error) {
+						return &PlanActivityOutput{}, errors.New("planner failed")
+					},
+				},
+			}
+
+			out, err := rt.ExecuteWorkflow(wfCtx, &RunInput{
+				AgentID: "svc.agent",
+				RunID:   "run-hostile-interceptor",
+				TurnID:  "turn-hostile-interceptor",
+			})
+
+			require.Nil(t, out)
+			require.ErrorIs(t, err, cancellation.ErrInvalidErrorGraph)
+			require.True(t, observedSecond)
+			var completed *hooks.RunCompletedEvent
+			for _, event := range recorder.events {
+				if candidate, ok := event.(*hooks.RunCompletedEvent); ok {
+					completed = candidate
+				}
+			}
+			require.NotNil(t, completed)
+			require.Equal(t, runStatusFailed, completed.Status)
+			require.EqualError(t, completed.Error, cancellation.ErrInvalidErrorGraph.Error())
+		})
+	}
+}
+
+func TestAfterRunInterceptorReturnErrorIsSanitized(t *testing.T) {
+	cycle := &cyclicCompletionError{}
+	cycle.next = cycle
+	_, err := runAfterRunInterceptors(
+		context.Background(),
+		[]Interceptor{RuntimeInterceptorFuncs{AfterRunFunc: func(context.Context, *AfterRunInput) (*AfterRunDecision, error) {
+			return nil, cycle
+		}}},
+		RunInput{AgentID: "svc.agent", RunID: "run-hostile-interceptor-return"},
+		run.Context{RunID: "run-hostile-interceptor-return"},
+		nil,
+		errors.New("planner failed"),
+	)
+	require.ErrorIs(t, err, cancellation.ErrInvalidErrorGraph)
 }
 
 func TestExecuteWorkflowEmptyAfterRunDecisionPreservesRunError(t *testing.T) {
