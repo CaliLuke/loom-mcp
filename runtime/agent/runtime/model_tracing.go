@@ -195,10 +195,6 @@ func (s *tracedStream) Close() error {
 	return s.inner.Close()
 }
 
-func (s *tracedStream) Metadata() map[string]any {
-	return s.inner.Metadata()
-}
-
 func (s *tracedStream) Response() *model.Response {
 	return s.inner.Response()
 }

@@ -44,7 +44,6 @@ func FuzzToolFragmentPayload(f *testing.F) {
 func TestAnthropicChunkProcessorRejectsMalformedToolFragments(t *testing.T) {
 	processor := newAnthropicChunkProcessor(
 		func(model.Chunk) error { return nil },
-		nil,
 		"",
 		model.ModelClassDefault,
 		nil,

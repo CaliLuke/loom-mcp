@@ -3,6 +3,7 @@ package ollama_test
 import (
 	"context"
 	"encoding/json/v2"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -249,6 +250,70 @@ func TestClientStreamEmitsThinkingTextToolCallUsageAndStop(t *testing.T) {
 	require.Equal(t, "stop", chunks[5].(model.StopChunk).Reason)
 }
 
+func TestClientStreamPrematureCloseDoesNotReturnCleanEOF(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/x-ndjson")
+		_, err := w.Write([]byte(`{"model":"llama3.1","message":{"role":"assistant","content":"partial"}}` + "\n"))
+		assert.NoError(t, err)
+	}))
+	defer server.Close()
+
+	client, err := ollamamodel.New(ollamamodel.Options{ServerURL: server.URL, DefaultModel: "llama3.1"})
+	require.NoError(t, err)
+	streamer, err := client.Stream(context.Background(), &model.Request{Messages: []*model.Message{{
+		Role:  model.ConversationRoleUser,
+		Parts: []model.Part{model.TextPart{Text: "ping"}},
+	}}})
+	require.NoError(t, err)
+	require.NoError(t, streamer.Close())
+
+	chunk, err := streamer.Recv()
+	require.Nil(t, chunk)
+	require.EqualError(t, err, "ollama: stream closed before completion")
+	require.Nil(t, streamer.Response())
+}
+
+func TestClientValidatedStreamPreservesModelIdentityWithZeroTokenUsage(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_, err := w.Write([]byte(`{"model":"llama3.1","message":{"role":"assistant","content":"ok"},"done":true,"done_reason":"stop"}` + "\n"))
+		assert.NoError(t, err)
+	}))
+	defer server.Close()
+
+	provider, err := ollamamodel.New(ollamamodel.Options{ServerURL: server.URL, DefaultModel: "llama3.1"})
+	require.NoError(t, err)
+	client, err := model.NewClient(provider)
+	require.NoError(t, err)
+	streamer, err := client.Stream(context.Background(), &model.Request{
+		Model:      "llama3.1",
+		ModelClass: model.ModelClassHighReasoning,
+		Messages: []*model.Message{{
+			Role:  model.ConversationRoleUser,
+			Parts: []model.Part{model.TextPart{Text: "ping"}},
+		}},
+	})
+	require.NoError(t, err)
+
+	chunk, err := streamer.Recv()
+	require.NoError(t, err)
+	require.IsType(t, model.TextChunk{}, chunk)
+	chunk, err = streamer.Recv()
+	require.NoError(t, err)
+	usage := chunk.(model.UsageChunk).Usage
+	assert.Equal(t, "llama3.1", usage.Model)
+	assert.Equal(t, model.ModelClassHighReasoning, usage.ModelClass)
+	assert.Zero(t, usage.TotalTokens)
+	chunk, err = streamer.Recv()
+	require.NoError(t, err)
+	require.IsType(t, model.StopChunk{}, chunk)
+	_, err = streamer.Recv()
+	require.Equal(t, io.EOF, err)
+	response := streamer.Response()
+	require.NotNil(t, response)
+	assert.Equal(t, usage, response.Usage)
+	require.NoError(t, streamer.Finalize(nil))
+}
+
 func TestClientStreamTimeoutDoesNotLimitBodyLifetime(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		flusher, ok := w.(http.Flusher)
@@ -291,6 +356,11 @@ func TestClientStreamTimeoutDoesNotLimitBodyLifetime(t *testing.T) {
 
 	chunk, err = streamer.Recv()
 	require.NoError(t, err)
+	require.IsType(t, model.UsageChunk{}, chunk)
+	require.Equal(t, "llama3.1", chunk.(model.UsageChunk).Usage.Model)
+
+	chunk, err = streamer.Recv()
+	require.NoError(t, err)
 	require.IsType(t, model.StopChunk{}, chunk)
 }
 
@@ -316,14 +386,15 @@ func TestClientStreamStructuredOutput(t *testing.T) {
 	}()
 
 	chunks := testutil.CollectStreamChunks(t, streamer)
-	require.Len(t, chunks, 3)
+	require.Len(t, chunks, 4)
 	delta := chunks[0].(model.CompletionDeltaChunk).Delta
 	require.Equal(t, "draft", delta.Name)
 	require.JSONEq(t, `{"answer":"ok"}`, delta.Delta)
 	completion := chunks[1].(model.CompletionChunk).Completion
 	require.Equal(t, "draft", completion.Name)
 	require.JSONEq(t, `{"answer":"ok"}`, string(completion.Payload))
-	require.IsType(t, model.StopChunk{}, chunks[2])
+	require.Equal(t, "llama3.1", chunks[2].(model.UsageChunk).Usage.Model)
+	require.IsType(t, model.StopChunk{}, chunks[3])
 }
 
 func TestClientStreamReturnsEmbeddedProviderError(t *testing.T) {
@@ -419,12 +490,13 @@ func TestClientStreamStructuredOutputExcludesThinking(t *testing.T) {
 	}()
 
 	chunks := testutil.CollectStreamChunks(t, streamer)
-	require.Len(t, chunks, 4)
+	require.Len(t, chunks, 5)
 	thinking := chunks[0].(model.ThinkingChunk).Message.Parts[0].(model.ThinkingPart)
 	require.Equal(t, "Draft JSON privately.", thinking.Text)
 	require.JSONEq(t, `{"answer":"ok"}`, chunks[1].(model.CompletionDeltaChunk).Delta.Delta)
 	require.JSONEq(t, `{"answer":"ok"}`, string(chunks[2].(model.CompletionChunk).Completion.Payload))
-	require.IsType(t, model.StopChunk{}, chunks[3])
+	require.Equal(t, "gemma4", chunks[3].(model.UsageChunk).Usage.Model)
+	require.IsType(t, model.StopChunk{}, chunks[4])
 }
 
 func TestClientValidation(t *testing.T) {

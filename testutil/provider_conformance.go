@@ -113,14 +113,17 @@ func RunProviderConformance(t *testing.T, suite ProviderConformanceSuite) {
 func CollectStreamChunks(t *testing.T, streamer model.Streamer) []model.Chunk {
 	t.Helper()
 	var chunks []model.Chunk
+	require.Nil(t, streamer.Response(), "terminal response must be unavailable before EOF")
 	for {
 		chunk, err := streamer.Recv()
 		//nolint:errorlint // Only literal EOF proves clean provider completion.
 		if err == io.EOF {
+			require.NotNil(t, streamer.Response(), "terminal response must be available after EOF")
 			return chunks
 		}
 		require.NoError(t, err)
 		chunks = append(chunks, chunk)
+		require.Nil(t, streamer.Response(), "terminal response must be unavailable before EOF")
 	}
 }
 

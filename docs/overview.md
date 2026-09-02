@@ -835,12 +835,11 @@ type Provider interface {
 type Streamer interface {
     Recv() (Chunk, error)
     Close() error
-    Metadata() map[string]any
+    Response() *Response
 }
 
 type ValidatedStreamer interface {
     Streamer
-    Response() *Response
     Finalize(primaryErr error) error
 }
 ```
@@ -850,6 +849,10 @@ Provider adapters return untrusted normalized output. Construct a `Client` with
 owns a bounded copy of each request, validates unary and streaming output
 against that exact request, and returns `*model.OutputValidationError` when the
 provider violates the contract.
+
+Each provider stream owns its terminal `Response`. It stays unavailable until
+`Recv` returns literal `io.EOF`. The validated client checks that response
+against all observed chunks before it becomes canonical.
 
 Drain a validated stream to the literal `io.EOF`, read `Response`, and call
 `Finalize(nil)`. Pass the receive or processing error to `Finalize` when the

@@ -84,11 +84,15 @@ Implemented on `codex/port-goa-ai-runtime-contracts`:
 - `model.Chunk` is a sealed sum type. Its eight value variants carry only their
   legal payload, expose a stable kind, clone mutable data at the validation
   boundary, and reject nil, pointer, or unsupported variants without panicking.
+- Raw streams own a canonical terminal response and expose it only after literal
+  EOF. The validation boundary reconciles provider response content, tool calls,
+  usage, and stop state with the observed chunks. Stream metadata is no longer
+  a second completion authority, and gateway handlers return the terminal
+  response with the streamed chunks.
 
-Still open in Batches 1–2: reconcile provider streams with provider-owned
-canonical terminal responses and publish provisional presentation deltas with
-an explicit accepted or discarded outcome. Presentation text and thinking now
-stay provisional until stream validation and provider cleanup both succeed.
+Still open in Batch 2: publish provisional presentation deltas with an explicit
+accepted or discarded outcome. Presentation text and thinking now stay
+provisional until stream validation and provider cleanup both succeed.
 
 ### Active Progress — Recovery and Atomic Registry Decisions
 

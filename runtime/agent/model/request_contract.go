@@ -62,6 +62,7 @@ type (
 		consumerEOF       bool
 		terminalErr       error
 		response          *Response
+		observed          StreamResponseBuilder
 
 		closeOnce sync.Once
 		closeErr  error
@@ -449,11 +450,17 @@ func (s *validatedProviderStream) Recv() (Chunk, error) { //nolint:maintidx // T
 		return nil, io.EOF
 	}
 	if s.response != nil && len(s.pending) > 0 {
+		if ctxErr := s.ctx.Err(); ctxErr != nil {
+			return nil, s.failContext(ctxErr)
+		}
 		return s.takePending(), nil
 	}
 	if s.terminal {
 		if s.terminalErr != nil {
 			return nil, s.terminalErr
+		}
+		if ctxErr := s.ctx.Err(); ctxErr != nil && !s.consumerEOF {
+			return nil, s.failContext(ctxErr)
 		}
 		s.consumerEOF = true
 		return nil, io.EOF
@@ -462,6 +469,9 @@ func (s *validatedProviderStream) Recv() (Chunk, error) { //nolint:maintidx // T
 		chunk, err := s.inner.Recv()
 		if err != nil {
 			return s.finishReceive(err)
+		}
+		if ctxErr := s.ctx.Err(); ctxErr != nil {
+			return nil, s.failContext(ctxErr)
 		}
 		if s.stopped {
 			return nil, s.failStream(OutputValidationStreamProtocol, errors.New("provider stream emitted output after its terminal stop"), nil)
@@ -482,6 +492,9 @@ func (s *validatedProviderStream) Recv() (Chunk, error) { //nolint:maintidx // T
 		if validateErr != nil {
 			return nil, validateErr
 		}
+		if observeErr := s.observed.Add(owned); observeErr != nil {
+			return nil, s.failStream(OutputValidationStreamProtocol, observeErr, nil)
+		}
 		if withhold || len(s.pending) > 0 {
 			s.pending = append(s.pending, owned)
 			continue
@@ -495,18 +508,6 @@ func (s *validatedProviderStream) Close() error {
 		s.closeErr = s.inner.Close()
 	})
 	return s.closeErr
-}
-
-func (s *validatedProviderStream) Metadata() map[string]any {
-	metadata := s.inner.Metadata()
-	if metadata == nil {
-		return nil
-	}
-	copy := make(map[string]any, len(metadata))
-	for key, value := range metadata {
-		copy[key] = value
-	}
-	return copy
 }
 
 // Response returns the accepted canonical response after a clean EOF.
@@ -719,24 +720,9 @@ func (s *validatedProviderStream) finishReceive(err error) (Chunk, error) {
 	if !s.outputLimited && s.contract.structuredValidate != nil && s.completion == nil {
 		return nil, s.failStream(OutputValidationStructuredOutput, errors.New("structured output stream ended without a completion"), nil)
 	}
-	response := &Response{
-		Content:       s.content,
-		ToolCalls:     s.toolCalls,
-		Usage:         s.usage,
-		StopReason:    s.stopReason,
-		OutputLimited: s.outputLimited,
-	}
-	if s.completion != nil {
-		parts := streamedThinkingParts(s.content)
-		parts = append(parts, TextPart{Text: string(s.completion.Payload)})
-		response.Content = []Message{{Role: ConversationRoleAssistant, Parts: parts}}
-	}
-	accepted, validateErr := s.contract.ValidateResponse(response)
-	if validateErr != nil {
-		s.terminal = true
-		s.terminalErr = validateErr
-		s.pending = nil
-		return nil, validateErr
+	accepted, acceptErr := s.acceptTerminalResponse()
+	if acceptErr != nil {
+		return nil, acceptErr
 	}
 	s.response = accepted
 	s.terminal = true
@@ -747,11 +733,48 @@ func (s *validatedProviderStream) finishReceive(err error) (Chunk, error) {
 	return nil, io.EOF
 }
 
+func (s *validatedProviderStream) acceptTerminalResponse() (*Response, error) {
+	provided, err := cloneModelResponse(s.inner.Response())
+	if err != nil {
+		kind := OutputValidationResponseShape
+		var boundsErr *modelBoundsError
+		if errors.As(err, &boundsErr) {
+			kind = OutputValidationOutputBounds
+		}
+		return nil, s.failStream(kind, err, nil)
+	}
+	if provided == nil {
+		return nil, s.failStream(OutputValidationStreamProtocol, errors.New("provider stream ended without a terminal response"), nil)
+	}
+	if err := s.recordResponseEvidence(provided); err != nil {
+		return nil, s.failStream(OutputValidationOutputBounds, err, nil)
+	}
+	if err := reconcileStreamResponses(s.observed.Response(), provided); err != nil {
+		return nil, s.failStream(OutputValidationStreamProtocol, err, &provided.Usage)
+	}
+	accepted, err := s.contract.ValidateResponse(provided)
+	if err != nil {
+		s.terminal = true
+		s.terminalErr = err
+		s.pending = nil
+		return nil, err
+	}
+	return accepted, nil
+}
+
 func (s *validatedProviderStream) failStream(kind OutputValidationKind, cause error, usage *TokenUsage) error {
 	err := joinContextError(newOutputValidationError(kind, cause, s.streamEvidence(), usage), s.ctx.Err())
 	s.terminal = true
 	s.terminalErr = err
 	s.pending = nil
+	return err
+}
+
+func (s *validatedProviderStream) failContext(err error) error {
+	s.terminal = true
+	s.terminalErr = err
+	s.pending = nil
+	s.response = nil
 	return err
 }
 
@@ -773,6 +796,29 @@ func (s *validatedProviderStream) recordChunkEvidence(chunk Chunk) error {
 	}
 	if _, err := s.evidence.Write(raw); err != nil {
 		return fmt.Errorf("hash stream evidence chunk: %w", err)
+	}
+	s.evidenceBytes += len(raw)
+	return nil
+}
+
+func (s *validatedProviderStream) recordResponseEvidence(response *Response) error {
+	raw, err := deterministicModelJSON(map[string]any{
+		"kind":  "terminal_response",
+		"value": response,
+	})
+	if err != nil {
+		return fmt.Errorf("encode terminal response evidence: %w", err)
+	}
+	if len(raw) > maxModelOutputBytes-s.evidenceBytes {
+		return &modelBoundsError{cause: fmt.Errorf("value exceeds maximum size %d bytes", maxModelOutputBytes)}
+	}
+	var size [8]byte
+	binary.BigEndian.PutUint64(size[:], uint64(len(raw)))
+	if _, err := s.evidence.Write(size[:]); err != nil {
+		return fmt.Errorf("hash terminal response evidence length: %w", err)
+	}
+	if _, err := s.evidence.Write(raw); err != nil {
+		return fmt.Errorf("hash terminal response evidence: %w", err)
 	}
 	s.evidenceBytes += len(raw)
 	return nil
@@ -801,7 +847,7 @@ func (s *validatedProviderStream) takePending() Chunk {
 func validateChunkShape(chunk Chunk) error {
 	switch value := chunk.(type) {
 	case TextChunk:
-		return nil
+		return validateTextChunkMessage(value.Message)
 	case ThinkingChunk:
 		return validateThinkingChunkMessage(value.Message)
 	case ToolCallChunk, ToolCallDeltaChunk, CompletionDeltaChunk:
@@ -820,6 +866,25 @@ func validateChunkShape(chunk Chunk) error {
 		}
 	default:
 		return errors.New("provider stream emitted an unsupported chunk variant")
+	}
+	return nil
+}
+
+func validateTextChunkMessage(message Message) error {
+	if message.Role != ConversationRoleAssistant || len(message.Parts) == 0 {
+		return errors.New("provider stream text message must contain assistant text or citations")
+	}
+	for _, part := range message.Parts {
+		normalized, err := normalizeMessagePart(part)
+		if err != nil {
+			return errors.New("provider stream text message contains an invalid part")
+		}
+		switch normalized.(type) {
+		case TextPart, CitationsPart:
+			continue
+		default:
+			return errors.New("provider stream text message contains a non-text part")
+		}
 	}
 	return nil
 }

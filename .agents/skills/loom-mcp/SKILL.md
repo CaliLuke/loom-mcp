@@ -67,7 +67,8 @@ Use this skill for `loom-mcp` work in this repo. Keep `AGENTS.md` short and keep
 
 - Runtime planners have two streaming modes only:
   - use `PlannerContext.ModelClient(id)` and drain the decorated stream yourself, or
-  - use `planner.ConsumeStream` with a raw client.
+  - use `planner.ConsumeStream` with a validated client that is not decorated by
+    the runtime.
 - Runtime registration is immutable after `Runtime.Seal` or the first submitted
   run. `RegisterModel`, `RegisterAgent`, and `RegisterToolset` all return
   `ErrRegistrationClosed`; model-client hot-swapping requires a replacement
@@ -150,6 +151,9 @@ Use this skill for `loom-mcp` work in this repo. Keep `AGENTS.md` short and keep
   `Finalize(nil)`. Pass terminal receive or processing errors to `Finalize`.
   `Close` is cleanup-only. Do not expose finalized tool calls or completions
   before terminal validation accepts the stream.
+- Raw provider streams own a canonical `Response`, return it only after literal
+  EOF, and do not expose a separate metadata side channel. Validated streams
+  reconcile that response with every observed chunk before accepting it.
 - `ValidatedStreamer.Response()` remains unavailable until the consumer has
   observed literal EOF, even when the validator drained the raw provider ahead
   while withholding terminal chunks. `Finalize(nil)` must fail before that same

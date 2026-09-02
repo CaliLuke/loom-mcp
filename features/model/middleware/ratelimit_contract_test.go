@@ -25,12 +25,10 @@ type streamResult struct {
 }
 
 type scriptedStreamer struct {
-	results       []streamResult
-	metadata      map[string]any
-	closeErr      error
-	recvCalls     int
-	closeCalls    int
-	metadataCalls int
+	results    []streamResult
+	closeErr   error
+	recvCalls  int
+	closeCalls int
 }
 
 func (c *countingClient) CountTokens(context.Context, *model.Request) (model.TokenCount, error) {
@@ -51,11 +49,6 @@ func (s *scriptedStreamer) Recv() (model.Chunk, error) {
 func (s *scriptedStreamer) Close() error {
 	s.closeCalls++
 	return s.closeErr
-}
-
-func (s *scriptedStreamer) Metadata() map[string]any {
-	s.metadataCalls++
-	return s.metadata
 }
 
 func (s *scriptedStreamer) Response() *model.Response {
@@ -199,11 +192,9 @@ func TestAdaptiveRateLimiterStreamObservesTerminalRecvOutcomeOnce(t *testing.T) 
 	}
 }
 
-func TestAdaptiveRateLimiterStreamDelegatesCloseAndMetadata(t *testing.T) {
+func TestAdaptiveRateLimiterStreamDelegatesClose(t *testing.T) {
 	closeErr := errors.New("provider close failed")
-	metadata := map[string]any{"provider": "test"}
 	providerStream := &scriptedStreamer{
-		metadata: metadata,
 		closeErr: closeErr,
 	}
 	limiter := newAdaptiveRateLimiter(60000, 120000)
@@ -212,12 +203,6 @@ func TestAdaptiveRateLimiterStreamDelegatesCloseAndMetadata(t *testing.T) {
 
 	stream, err := wrapped.Stream(context.Background(), &model.Request{})
 	require.NoError(t, err)
-	gotMetadata := stream.Metadata()
-	assert.Equal(t, metadata, gotMetadata)
-	gotMetadata["delegated"] = true
-	assert.Equal(t, true, providerStream.metadata["delegated"], "metadata must not be copied")
-	assert.Equal(t, 1, providerStream.metadataCalls)
-
 	err = stream.Close()
 	assert.Same(t, closeErr, err)
 	assert.Equal(t, 1, providerStream.closeCalls)

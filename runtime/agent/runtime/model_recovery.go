@@ -86,10 +86,6 @@ func (s *recoveryCapturingStream) Close() error {
 	return s.inner.Close()
 }
 
-func (s *recoveryCapturingStream) Metadata() map[string]any {
-	return s.inner.Metadata()
-}
-
 func (s *recoveryCapturingStream) Response() *model.Response {
 	return s.inner.Response()
 }

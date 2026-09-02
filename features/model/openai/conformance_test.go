@@ -174,10 +174,11 @@ func TestClientConformance(t *testing.T) {
 			require.NoError(t, err)
 			t.Cleanup(func() { require.NoError(t, stream.Close()) })
 			chunks := testutil.CollectStreamChunks(t, stream)
-			require.Len(t, chunks, 2)
+			require.Len(t, chunks, 3)
 			streamThinking := chunks[0].(model.ThinkingChunk).Message.Parts[0].(model.ThinkingPart)
 			require.Equal(t, "reasoning delta", streamThinking.Text)
-			require.IsType(t, model.StopChunk{}, chunks[1])
+			require.IsType(t, model.UsageChunk{}, chunks[1])
+			require.IsType(t, model.StopChunk{}, chunks[2])
 		}},
 		ExactTokenCounting: testutil.ProviderCapabilityConformance{Unsupported: func(t *testing.T) {
 			_, ok := any(newClient(t, &mockResponsesClient{})).(model.TokenCounter)
@@ -246,6 +247,11 @@ func TestClientConformance(t *testing.T) {
 				require.Equal(t, "call_1", call.ID)
 				require.Equal(t, "lookup", call.Name.String())
 				require.JSONEq(t, `{"query":"docs"}`, string(call.Payload))
+				response := stream.Response()
+				require.Equal(t, "completed", response.StopReason)
+				require.Equal(t, 5, response.Usage.TotalTokens)
+				require.Len(t, response.ToolCalls, 1)
+				require.Len(t, response.Content, 2)
 			},
 			EarlyEOF: func(t *testing.T) {
 				lifecycle := openAIConformanceLifecycle()
@@ -318,8 +324,9 @@ func TestClientConformance(t *testing.T) {
 				require.NoError(t, err)
 				t.Cleanup(func() { require.NoError(t, stream.Close()) })
 				chunks := testutil.CollectStreamChunks(t, stream)
-				require.Len(t, chunks, 1)
-				require.True(t, chunks[0].(model.StopChunk).OutputLimited)
+				require.Len(t, chunks, 2)
+				require.IsType(t, model.UsageChunk{}, chunks[0])
+				require.True(t, chunks[1].(model.StopChunk).OutputLimited)
 			},
 		},
 	})

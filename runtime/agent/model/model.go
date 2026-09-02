@@ -487,7 +487,7 @@ type (
 		completionValidate func(*Response, *Completion) error
 	}
 
-	// Response is the result of a non-streaming invocation.
+	// Response is the canonical result of a model invocation.
 	//
 	// Content carries assistant messages; ToolCalls holds any tool invocations
 	// requested by the model; Usage and StopReason mirror provider metadata.
@@ -579,8 +579,9 @@ type (
 		// Close releases any resources associated with the stream.
 		Close() error
 
-		// Metadata carries provider-specific metadata collected during the call.
-		Metadata() map[string]any
+		// Response returns the provider-owned terminal response after Recv has
+		// returned a literal io.EOF. It returns nil before then or after failure.
+		Response() *Response
 	}
 
 	// ValidatedStreamer is the complete consumer-facing stream contract returned
@@ -590,7 +591,6 @@ type (
 	ValidatedStreamer interface {
 		Streamer
 
-		Response() *Response
 		Finalize(primaryErr error) error
 	}
 )

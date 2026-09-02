@@ -31,8 +31,11 @@ type bedrockStreamer struct {
 	errSet   bool
 	finalErr error
 
-	metaMu      sync.RWMutex
-	metadata    map[string]any
+	responseMu  sync.RWMutex
+	response    *model.Response
+	consumerEOF bool
+	builder     model.StreamResponseBuilder
+
 	toolNameMap map[string]string
 	modelID     string
 	modelClass  model.ModelClass
@@ -78,6 +81,9 @@ func (s *bedrockStreamer) Recv() (model.Chunk, error) {
 			s.setErr(err)
 			return nil, err
 		}
+		s.responseMu.Lock()
+		s.consumerEOF = true
+		s.responseMu.Unlock()
 		return nil, io.EOF
 	case <-s.ctx.Done():
 		err := s.ctx.Err()
@@ -94,17 +100,13 @@ func (s *bedrockStreamer) Close() error {
 	return s.closeStream()
 }
 
-func (s *bedrockStreamer) Metadata() map[string]any {
-	s.metaMu.RLock()
-	defer s.metaMu.RUnlock()
-	if len(s.metadata) == 0 {
+func (s *bedrockStreamer) Response() *model.Response {
+	s.responseMu.RLock()
+	defer s.responseMu.RUnlock()
+	if !s.consumerEOF {
 		return nil
 	}
-	out := make(map[string]any, len(s.metadata))
-	for k, v := range s.metadata {
-		out[k] = v
-	}
-	return out
+	return s.response
 }
 
 func (s *bedrockStreamer) run() {
@@ -115,7 +117,7 @@ func (s *bedrockStreamer) run() {
 		}
 	}()
 
-	processor := newChunkProcessor(s.emitChunk, s.recordUsage, s.recordCitations, s.toolNameMap, s.modelID, s.modelClass, s.output)
+	processor := newChunkProcessor(s.emitChunk, s.toolNameMap, s.modelID, s.modelClass, s.output)
 	events := s.stream.Events()
 
 	for {
@@ -137,6 +139,9 @@ func (s *bedrockStreamer) run() {
 				case !processor.metadataSeen:
 					s.setErr(errors.New("bedrock: stream ended before metadata"))
 				default:
+					s.responseMu.Lock()
+					s.response = s.builder.Response()
+					s.responseMu.Unlock()
 					s.setErr(nil)
 				}
 				return
@@ -157,36 +162,15 @@ func (s *bedrockStreamer) closeStream() error {
 }
 
 func (s *bedrockStreamer) emitChunk(chunk model.Chunk) error {
+	if err := s.builder.Add(chunk); err != nil {
+		return fmt.Errorf("bedrock: assemble stream response: %w", err)
+	}
 	select {
 	case <-s.ctx.Done():
 		return s.ctx.Err()
 	case s.chunks <- chunk:
 		return nil
 	}
-}
-
-func (s *bedrockStreamer) recordUsage(usage model.TokenUsage) {
-	s.metaMu.Lock()
-	if s.metadata == nil {
-		s.metadata = make(map[string]any)
-	}
-	s.metadata["usage"] = usage
-	s.metaMu.Unlock()
-}
-
-func (s *bedrockStreamer) recordCitations(citations []model.Citation) {
-	if len(citations) == 0 {
-		return
-	}
-	s.metaMu.Lock()
-	if s.metadata == nil {
-		s.metadata = make(map[string]any)
-	}
-	if prev, ok := s.metadata["citations"].([]model.Citation); ok && len(prev) > 0 {
-		citations = append(prev, citations...)
-	}
-	s.metadata["citations"] = citations
-	s.metaMu.Unlock()
 }
 
 func (s *bedrockStreamer) setErr(err error) {
@@ -209,9 +193,7 @@ func (s *bedrockStreamer) err() error {
 // stamps model attribution onto usage chunks using the resolved model ID and
 // class provided at construction.
 type chunkProcessor struct {
-	emit        func(model.Chunk) error
-	recordUsage func(model.TokenUsage)
-	recordCites func([]model.Citation)
+	emit func(model.Chunk) error
 
 	toolBlocks map[int]*toolBuffer
 	completion *completionBuffer
@@ -229,8 +211,6 @@ type chunkProcessor struct {
 
 func newChunkProcessor(
 	emit func(model.Chunk) error,
-	recordUsage func(model.TokenUsage),
-	recordCites func([]model.Citation),
 	nameMap map[string]string,
 	modelID string,
 	modelClass model.ModelClass,
@@ -238,8 +218,6 @@ func newChunkProcessor(
 ) *chunkProcessor {
 	return &chunkProcessor{
 		emit:            emit,
-		recordUsage:     recordUsage,
-		recordCites:     recordCites,
 		toolBlocks:      make(map[int]*toolBuffer),
 		reasoningBlocks: make(map[int]*reasoningBuffer),
 		toolNameMap:     nameMap,
@@ -301,9 +279,6 @@ func (p *chunkProcessor) handleMetadata(ev *brtypes.ConverseStreamOutputMemberMe
 	p.metadataSeen = true
 	usage := bedrockStreamUsage(ev.Value.Usage, p.modelID, p.modelClass)
 	if usage != nil {
-		if p.recordUsage != nil {
-			p.recordUsage(*usage)
-		}
 		if err := p.emit(model.UsageChunk{Usage: *usage}); err != nil {
 			return err
 		}
@@ -386,7 +361,7 @@ func (p *chunkProcessor) handleContentBlockDelta(ev *brtypes.ConverseStreamOutpu
 	case *brtypes.ContentBlockDeltaMemberText:
 		return p.emitTextDelta(idx, delta.Value)
 	case *brtypes.ContentBlockDeltaMemberCitation:
-		return p.recordCitationDelta(delta)
+		return p.emitCitationDelta(idx, delta)
 	case *brtypes.ContentBlockDeltaMemberReasoningContent:
 		return p.handleReasoningDelta(idx, delta)
 	case *brtypes.ContentBlockDeltaMemberToolUse:
@@ -412,16 +387,18 @@ func (p *chunkProcessor) emitTextDelta(idx int, text string) error {
 	})
 }
 
-func (p *chunkProcessor) recordCitationDelta(delta *brtypes.ContentBlockDeltaMemberCitation) error {
-	if p.recordCites == nil {
-		return nil
-	}
+func (p *chunkProcessor) emitCitationDelta(idx int, delta *brtypes.ContentBlockDeltaMemberCitation) error {
 	citation := translateCitationDelta(delta.Value)
 	if citation.Title == "" && citation.Source == "" && citation.Location == (model.CitationLocation{}) && len(citation.SourceContent) == 0 {
 		return nil
 	}
-	p.recordCites([]model.Citation{citation})
-	return nil
+	return p.emit(model.TextChunk{Message: model.Message{
+		Role: model.ConversationRoleAssistant,
+		Parts: []model.Part{model.CitationsPart{
+			Citations: []model.Citation{citation},
+		}},
+		Meta: map[string]any{"content_index": idx},
+	}})
 }
 
 func (p *chunkProcessor) handleReasoningDelta(idx int, delta *brtypes.ContentBlockDeltaMemberReasoningContent) error {

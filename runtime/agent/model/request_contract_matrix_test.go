@@ -90,6 +90,58 @@ func TestValidatedStreamRejectsCancellationBeforeTerminalAcceptanceAndJoinsClean
 	assert.Equal(t, 1, providerStream.closed)
 }
 
+func TestValidatedStreamRejectsCancellationAfterWithheldStopBeforeConsumerEOF(t *testing.T) {
+	providerStream := &contractStream{chunks: []Chunk{
+		TextChunk{Message: Message{Role: ConversationRoleAssistant, Parts: []Part{TextPart{Text: "done"}}}},
+		StopChunk{Reason: "end_turn"},
+	}}
+	ctx, cancel := context.WithCancel(context.Background())
+	client, err := NewClient(&contractProvider{stream: providerStream})
+	require.NoError(t, err)
+	stream, err := client.Stream(ctx, &Request{})
+	require.NoError(t, err)
+
+	chunk, err := stream.Recv()
+	require.NoError(t, err)
+	require.IsType(t, TextChunk{}, chunk)
+	chunk, err = stream.Recv()
+	require.NoError(t, err)
+	require.IsType(t, StopChunk{}, chunk)
+	assert.Nil(t, stream.Response())
+
+	cancel()
+	_, err = stream.Recv()
+	require.ErrorIs(t, err, context.Canceled)
+	assert.Nil(t, stream.Response())
+	require.ErrorIs(t, stream.Finalize(err), context.Canceled)
+	assert.Equal(t, 1, providerStream.closed)
+}
+
+func TestValidatedStreamRejectsMalformedTextChunkBeforeTerminalResponseCanRepairIt(t *testing.T) {
+	providerStream := &contractStream{
+		chunks: []Chunk{
+			TextChunk{Message: Message{Role: ConversationRoleUser, Parts: []Part{TextPart{Text: "done"}}}},
+			StopChunk{Reason: "end_turn"},
+		},
+		response: &Response{
+			Content:    []Message{{Role: ConversationRoleAssistant, Parts: []Part{TextPart{Text: "done"}}}},
+			StopReason: "end_turn",
+		},
+	}
+	client, err := NewClient(&contractProvider{stream: providerStream})
+	require.NoError(t, err)
+	stream, err := client.Stream(context.Background(), &Request{})
+	require.NoError(t, err)
+
+	chunk, err := stream.Recv()
+	require.Nil(t, chunk)
+	require.Error(t, err)
+	var validationErr *OutputValidationError
+	require.ErrorAs(t, err, &validationErr)
+	assert.Equal(t, OutputValidationResponseShape, validationErr.Kind())
+	assert.Nil(t, stream.Response())
+}
+
 func TestValidatedStreamFirstFinalizationIsAuthoritative(t *testing.T) {
 	providerStream := &contractStream{chunks: []Chunk{
 		TextChunk{Message: Message{Role: ConversationRoleAssistant, Parts: []Part{TextPart{Text: "done"}}}},

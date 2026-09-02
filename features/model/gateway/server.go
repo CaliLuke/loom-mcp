@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"io"
+	"reflect"
 	"slices"
 
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/model"
@@ -40,7 +41,7 @@ type (
 	// function must be called sequentially for each chunk; returning an error
 	// from send will abort the stream. Implementations are responsible for
 	// managing the underlying stream lifecycle, including cleanup on errors.
-	StreamHandler func(ctx context.Context, req *model.Request, send func(model.Chunk) error) error
+	StreamHandler func(ctx context.Context, req *model.Request, send func(model.Chunk) error) (*model.Response, error)
 
 	// UnaryMiddleware wraps a UnaryHandler to add behavior before, after, or
 	// around the handler invocation. Middleware receives the next handler in
@@ -114,32 +115,8 @@ func NewServer(opts ...Option) (*Server, error) {
 	if cfg.provider == nil {
 		return nil, ErrProviderRequired
 	}
-	// Base handlers call the provider directly.
-	baseUnary := func(ctx context.Context, req *model.Request) (*model.Response, error) {
-		return cfg.provider.Complete(ctx, req)
-	}
-	baseStream := func(ctx context.Context, req *model.Request, send func(model.Chunk) error) error {
-		st, err := cfg.provider.Stream(ctx, req)
-		if err != nil {
-			return err
-		}
-		var primaryErr error
-		for {
-			ch, err := st.Recv()
-			if err != nil {
-				//nolint:errorlint // Wrapped EOF is a provider failure, not clean completion.
-				if err != io.EOF {
-					primaryErr = err
-				}
-				break
-			}
-			if err := send(ch); err != nil {
-				primaryErr = err
-				break
-			}
-		}
-		return errors.Join(primaryErr, st.Close())
-	}
+	baseUnary := newUnaryHandler(cfg.provider)
+	baseStream := newStreamHandler(cfg.provider)
 	// Wrap with middlewares (in registration order).
 	unary := baseUnary
 	for _, v := range slices.Backward(cfg.unaryMW) {
@@ -166,6 +143,72 @@ func (s *Server) Complete(ctx context.Context, req *model.Request) (*model.Respo
 // must be called sequentially; returning an error from send or from any
 // middleware aborts the stream. The context is propagated through the chain
 // and controls the lifetime of the stream.
-func (s *Server) Stream(ctx context.Context, req *model.Request, send func(model.Chunk) error) error {
+func (s *Server) Stream(ctx context.Context, req *model.Request, send func(model.Chunk) error) (*model.Response, error) {
 	return s.stream(ctx, req, send)
+}
+
+func newUnaryHandler(provider model.Provider) UnaryHandler {
+	return func(ctx context.Context, req *model.Request) (*model.Response, error) {
+		return provider.Complete(ctx, req)
+	}
+}
+
+func newStreamHandler(provider model.Provider) StreamHandler {
+	return func(ctx context.Context, req *model.Request, send func(model.Chunk) error) (*model.Response, error) {
+		return streamProvider(ctx, provider, req, send)
+	}
+}
+
+func streamProvider(ctx context.Context, provider model.Provider, req *model.Request, send func(model.Chunk) error) (*model.Response, error) {
+	streamer, err := provider.Stream(ctx, req)
+	if isNilStreamer(streamer) {
+		if err != nil {
+			return nil, err
+		}
+		return nil, errors.New("gateway: provider returned a nil stream")
+	}
+	if err != nil {
+		return nil, errors.Join(err, streamer.Close())
+	}
+	if ctxErr := ctx.Err(); ctxErr != nil {
+		return nil, errors.Join(ctxErr, streamer.Close())
+	}
+	for {
+		chunk, recvErr := streamer.Recv()
+		if recvErr != nil {
+			//nolint:errorlint // Wrapped EOF is a provider failure, not clean completion.
+			if recvErr != io.EOF {
+				return nil, errors.Join(recvErr, streamer.Close())
+			}
+			break
+		}
+		if ctxErr := ctx.Err(); ctxErr != nil {
+			return nil, errors.Join(ctxErr, streamer.Close())
+		}
+		if sendErr := send(chunk); sendErr != nil {
+			return nil, errors.Join(sendErr, streamer.Close())
+		}
+	}
+	if ctxErr := ctx.Err(); ctxErr != nil {
+		return nil, errors.Join(ctxErr, streamer.Close())
+	}
+	response := streamer.Response()
+	if response == nil {
+		err = errors.New("gateway: provider stream ended without a terminal response")
+	}
+	if closeErr := streamer.Close(); closeErr != nil {
+		return nil, errors.Join(err, closeErr)
+	}
+	return response, err
+}
+
+func isNilStreamer(streamer model.Streamer) bool {
+	if streamer == nil {
+		return true
+	}
+	value := reflect.ValueOf(streamer)
+	kind := value.Kind()
+	nilCapable := kind == reflect.Chan || kind == reflect.Func || kind == reflect.Interface ||
+		kind == reflect.Map || kind == reflect.Pointer || kind == reflect.Slice
+	return nilCapable && value.IsNil()
 }

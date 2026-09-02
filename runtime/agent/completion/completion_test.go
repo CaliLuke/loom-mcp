@@ -32,7 +32,6 @@ type recvResult struct {
 }
 
 type scriptedStreamer struct {
-	metadata      map[string]any
 	response      *model.Response
 	results       []recvResult
 	index         int
@@ -85,10 +84,6 @@ func (s *scriptedStreamer) Recv() (model.Chunk, error) {
 func (s *scriptedStreamer) Close() error {
 	s.closeCalls++
 	return s.closeErr
-}
-
-func (s *scriptedStreamer) Metadata() map[string]any {
-	return s.metadata
 }
 
 func (s *scriptedStreamer) Response() *model.Response {
@@ -179,14 +174,12 @@ func TestCompletionStreamDelegatesCanonicalLifecycle(t *testing.T) {
 	closeErr := errors.New("provider close failed")
 	response := &model.Response{StopReason: "end_turn"}
 	upstream := &scriptedStreamer{
-		metadata: map[string]any{"provider": "test"},
 		response: response,
 		closeErr: closeErr,
 	}
 	stream := newCompletionStream(upstream, "draft_from_transcript")
 
 	require.Same(t, response, stream.Response())
-	require.Equal(t, map[string]any{"provider": "test"}, stream.Metadata())
 	err := stream.Finalize(primaryErr)
 	require.ErrorIs(t, err, primaryErr)
 	require.ErrorIs(t, err, closeErr)
@@ -197,7 +190,6 @@ func TestCompletionStreamDelegatesCanonicalLifecycle(t *testing.T) {
 
 func TestStreamEnforcesCanonicalCompletionContract(t *testing.T) {
 	upstream := &scriptedStreamer{
-		metadata: map[string]any{"provider": "test"},
 		results: []recvResult{
 			{
 				chunk: model.CompletionDeltaChunk{
@@ -233,7 +225,6 @@ func TestStreamEnforcesCanonicalCompletionContract(t *testing.T) {
 	chunk, err = stream.Recv()
 	require.NoError(t, err)
 	require.IsType(t, model.StopChunk{}, chunk)
-	require.Equal(t, map[string]any{"provider": "test"}, stream.Metadata())
 }
 
 func TestStreamRejectsEOFBeforeFinalCompletion(t *testing.T) {

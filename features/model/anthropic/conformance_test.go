@@ -235,6 +235,11 @@ func TestClientConformance(t *testing.T) {
 				require.True(t, ok)
 				require.True(t, finalThinking.Final)
 				require.Equal(t, "sig", finalThinking.Signature)
+				response := stream.Response()
+				require.Equal(t, "tool_use", response.StopReason)
+				require.Equal(t, 5, response.Usage.TotalTokens)
+				require.Len(t, response.ToolCalls, 1)
+				require.Len(t, response.Content, 3, "provisional thinking must be replaced by its final block")
 			},
 			EarlyEOF: func(t *testing.T) {
 				events := anthropicConformanceEvents(t,

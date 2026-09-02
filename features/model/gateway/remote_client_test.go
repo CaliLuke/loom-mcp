@@ -24,9 +24,7 @@ func (emptyRemoteStream) Close() error {
 	return nil
 }
 
-func (emptyRemoteStream) Metadata() map[string]any {
-	return nil
-}
+func (emptyRemoteStream) Response() *model.Response { return nil }
 
 type remoteSequenceStream struct {
 	chunks   []model.Chunk
@@ -34,6 +32,8 @@ type remoteSequenceStream struct {
 	terminal error
 	closeErr error
 	closed   int
+	eof      bool
+	response *model.Response
 }
 
 func (s *remoteSequenceStream) Recv() (model.Chunk, error) {
@@ -45,6 +45,7 @@ func (s *remoteSequenceStream) Recv() (model.Chunk, error) {
 	if s.terminal != nil {
 		return nil, s.terminal
 	}
+	s.eof = true
 	return nil, io.EOF
 }
 
@@ -53,8 +54,14 @@ func (s *remoteSequenceStream) Close() error {
 	return s.closeErr
 }
 
-func (*remoteSequenceStream) Metadata() map[string]any {
-	return nil
+func (s *remoteSequenceStream) Response() *model.Response {
+	if !s.eof {
+		return nil
+	}
+	if s.response != nil {
+		return s.response
+	}
+	return &model.Response{}
 }
 
 func TestRemoteClientKeepsPreTransportToolContract(t *testing.T) {

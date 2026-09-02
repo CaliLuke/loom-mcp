@@ -106,6 +106,9 @@ Use this file for current loom-mcp runtime behavior in this repo. Prefer it over
 - `Provider.Stream` returns raw `model.Streamer`; `Client.Stream` returns
   `model.ValidatedStreamer`. This difference prevents provider adapters from
   satisfying the consumer-facing client interface accidentally.
+- A raw provider stream returns its provider-owned terminal `Response` only
+  after literal EOF. The validated boundary reconciles it with observed chunks;
+  there is no independent stream metadata channel.
 - The validated client owns bounded request/response copies and checks the exact
   tool catalog, tool choice, structured output, generated completion decoder,
   token usage, output limits, and terminal stream protocol.

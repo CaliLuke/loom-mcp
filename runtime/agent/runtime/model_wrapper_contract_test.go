@@ -159,12 +159,13 @@ func (e *wrapperEvents) UsageDelta(_ context.Context, usage model.TokenUsage) {
 type wrapperLifecycleStream struct {
 	chunks        []model.Chunk
 	index         int
-	metadata      map[string]any
 	response      *model.Response
 	terminalErr   error
 	closeErr      error
 	finalizeInput error
 	closeCalls    int
+	eof           bool
+	builder       model.StreamResponseBuilder
 }
 
 func (s *wrapperLifecycleStream) Recv() (model.Chunk, error) {
@@ -174,10 +175,14 @@ func (s *wrapperLifecycleStream) Recv() (model.Chunk, error) {
 			s.terminalErr = nil
 			return nil, err
 		}
+		s.eof = true
 		return nil, io.EOF
 	}
 	chunk := s.chunks[s.index]
 	s.index++
+	if err := s.builder.Add(chunk); err != nil {
+		return nil, err
+	}
 	return chunk, nil
 }
 
@@ -186,11 +191,13 @@ func (s *wrapperLifecycleStream) Close() error {
 	return s.closeErr
 }
 
-func (s *wrapperLifecycleStream) Metadata() map[string]any {
-	return s.metadata
-}
-
 func (s *wrapperLifecycleStream) Response() *model.Response {
+	if !s.eof {
+		return nil
+	}
+	if s.response == nil {
+		return s.builder.Response()
+	}
 	return s.response
 }
 
@@ -204,12 +211,14 @@ func TestEventStreamAndConsumeStreamEmitEachChunkOnce(t *testing.T) {
 	response := &model.Response{Usage: usage, StopReason: "end_turn"}
 	inner := &wrapperLifecycleStream{
 		chunks: []model.Chunk{
-			model.TextChunk{Message: model.Message{Role: model.ConversationRoleAssistant, Parts: []model.Part{model.TextPart{Text: "hello"}}}},
+			model.TextChunk{Message: model.Message{Role: model.ConversationRoleAssistant, Parts: []model.Part{
+				model.TextPart{Text: "hello"},
+				model.CitationsPart{Text: " cited", Citations: []model.Citation{{Title: "source"}}},
+			}}},
 			model.ThinkingChunk{Message: model.Message{Role: model.ConversationRoleAssistant, Parts: []model.Part{model.ThinkingPart{Text: "consider"}}}},
 			model.ToolCallDeltaChunk{Delta: model.ToolCallDelta{ID: "call-1", Name: "lookup", Delta: `{"q":`}},
 			model.UsageChunk{Usage: usage},
 		},
-		metadata: map[string]any{"provider": "test"},
 		response: response,
 	}
 	events := &wrapperEvents{}
@@ -219,14 +228,13 @@ func TestEventStreamAndConsumeStreamEmitEachChunkOnce(t *testing.T) {
 	summary, err := planner.ConsumeStream(context.Background(), stream, events)
 	require.NoError(t, err)
 
-	assert.Equal(t, "hello", summary.Text)
+	assert.Equal(t, "hello cited", summary.Text)
 	assert.Equal(t, response.Usage, summary.Usage)
-	assert.Equal(t, []string{"hello"}, events.text)
+	assert.Equal(t, []string{"hello", " cited"}, events.text)
 	assert.Equal(t, []model.ThinkingPart{{Text: "consider"}}, events.thinking)
 	assert.Equal(t, []string{`{"q":`}, events.toolDeltas)
 	require.Len(t, events.usage, 1)
 	assert.Equal(t, "requested", events.usage[0].Model)
-	assert.Equal(t, map[string]any{"provider": "test"}, stream.Metadata())
 	assert.Same(t, response, stream.Response())
 
 	require.NoError(t, inner.finalizeInput)

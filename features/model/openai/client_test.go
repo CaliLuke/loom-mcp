@@ -3,6 +3,7 @@ package openai_test
 import (
 	"context"
 	"errors"
+	"io"
 	"net/http"
 	"sync/atomic"
 	"testing"
@@ -758,12 +759,10 @@ func TestClientStreamEmitsTextToolCallsUsageAndStop(t *testing.T) {
 	require.Equal(t, "gpt-4o", usage.Model)
 	require.Equal(t, "completed", chunks[6].(model.StopChunk).Reason)
 
-	meta := streamer.Metadata()
-	require.NotNil(t, meta)
-	usage, ok := meta["usage"].(model.TokenUsage)
-	require.True(t, ok)
-	require.Equal(t, 15, usage.TotalTokens)
-	require.Equal(t, "gpt-4o", usage.Model)
+	response := streamer.Response()
+	require.NotNil(t, response)
+	require.Equal(t, 15, response.Usage.TotalTokens)
+	require.Equal(t, "gpt-4o", response.Usage.Model)
 	require.Equal(t, "gpt-4o", mock.streamCaptured.Model)
 }
 
@@ -817,14 +816,49 @@ func TestClientStreamStructuredOutput(t *testing.T) {
 	}()
 
 	chunks := testutil.CollectStreamChunks(t, streamer)
-	require.Len(t, chunks, 3)
+	require.Len(t, chunks, 4)
 	delta := chunks[0].(model.CompletionDeltaChunk).Delta
 	require.Equal(t, "draft", delta.Name)
 	require.JSONEq(t, `{"answer":"ok"}`, delta.Delta)
 	completion := chunks[1].(model.CompletionChunk).Completion
 	require.Equal(t, "draft", completion.Name)
 	require.JSONEq(t, `{"answer":"ok"}`, string(completion.Payload))
-	require.IsType(t, model.StopChunk{}, chunks[2])
+	require.IsType(t, model.UsageChunk{}, chunks[2])
+	require.IsType(t, model.StopChunk{}, chunks[3])
+}
+
+func TestClientStreamZeroTokenUsageReconcilesThroughValidatedClient(t *testing.T) {
+	mock := &mockResponsesClient{stream: newMockOpenAIStream(
+		`{"type":"response.completed","sequence_number":1,"response":{"model":"gpt-4o","status":"completed","output":[{"id":"msg_1","type":"message","role":"assistant","status":"completed","content":[{"type":"output_text","text":"ok","annotations":[],"logprobs":[]}]}]}}`,
+	)}
+	provider, err := openaimodel.New(openaimodel.Options{Client: mock, DefaultModel: "gpt-4o"})
+	require.NoError(t, err)
+	client, err := model.NewClient(provider)
+	require.NoError(t, err)
+	stream, err := client.Stream(context.Background(), &model.Request{
+		Model: "gpt-4o",
+		Messages: []*model.Message{{
+			Role:  model.ConversationRoleUser,
+			Parts: []model.Part{model.TextPart{Text: "ping"}},
+		}},
+	})
+	require.NoError(t, err)
+
+	chunk, err := stream.Recv()
+	require.NoError(t, err)
+	require.IsType(t, model.TextChunk{}, chunk)
+	chunk, err = stream.Recv()
+	require.NoError(t, err)
+	usage := chunk.(model.UsageChunk).Usage
+	require.Equal(t, "gpt-4o", usage.Model)
+	require.Zero(t, usage.TotalTokens)
+	chunk, err = stream.Recv()
+	require.NoError(t, err)
+	require.IsType(t, model.StopChunk{}, chunk)
+	_, err = stream.Recv()
+	require.Equal(t, io.EOF, err)
+	require.Equal(t, "gpt-4o", stream.Response().Usage.Model)
+	require.NoError(t, stream.Finalize(nil))
 }
 
 func TestClientCompleteTranslatesDottedToolNames(t *testing.T) {
@@ -994,14 +1028,15 @@ func TestClientStreamTranslatesDottedToolNames(t *testing.T) {
 	assert.Equal(t, "toolset_lookup", functionTool.Name)
 
 	chunks := testutil.CollectStreamChunks(t, streamer)
-	require.Len(t, chunks, 3)
+	require.Len(t, chunks, 4)
 	delta := chunks[0].(model.ToolCallDeltaChunk).Delta
 	assert.Equal(t, tools.Ident("toolset.lookup"), delta.Name)
 	assert.Equal(t, "call_1", delta.ID)
 	call := chunks[1].(model.ToolCallChunk).ToolCall
 	assert.Equal(t, tools.Ident("toolset.lookup"), call.Name)
 	assert.JSONEq(t, `{"query":"docs"}`, string(call.Payload))
-	require.IsType(t, model.StopChunk{}, chunks[2])
+	require.IsType(t, model.UsageChunk{}, chunks[2])
+	require.IsType(t, model.StopChunk{}, chunks[3])
 }
 
 type mockResponsesClient struct {

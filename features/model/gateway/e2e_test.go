@@ -17,19 +17,30 @@ import (
 type seqStreamer struct {
 	chunks []model.Chunk
 	idx    int
-	meta   map[string]any
+	eof    bool
 }
 
 func (s *seqStreamer) Recv() (model.Chunk, error) {
 	if s.idx >= len(s.chunks) {
+		s.eof = true
 		return nil, io.EOF
 	}
 	c := s.chunks[s.idx]
 	s.idx++
 	return c, nil
 }
-func (s *seqStreamer) Close() error             { return nil }
-func (s *seqStreamer) Metadata() map[string]any { return s.meta }
+func (s *seqStreamer) Close() error { return nil }
+func (s *seqStreamer) Response() *model.Response {
+	if !s.eof {
+		return nil
+	}
+	return &model.Response{
+		Content:    []model.Message{{Role: "assistant", Parts: []model.Part{model.TextPart{Text: "hello"}}}},
+		ToolCalls:  []model.ToolCall{{Name: "emit_tool", Payload: rawjson.Message([]byte(`{"k":"v"}`))}},
+		Usage:      model.TokenUsage{InputTokens: 1, OutputTokens: 2, TotalTokens: 3},
+		StopReason: "stop_sequence",
+	}
+}
 
 type captureProvider struct {
 	lastReq atomic.Value // model.Request
@@ -59,22 +70,37 @@ func (p *captureProvider) Stream(_ context.Context, req *model.Request) (model.S
 
 // stream wrapper turning server.Stream into model.Streamer
 type serverStreamWrapper struct {
-	ch   chan model.Chunk
-	done chan error
+	ch       chan model.Chunk
+	done     chan serverStreamResult
+	response *model.Response
+	eof      bool
+}
+
+type serverStreamResult struct {
+	response *model.Response
+	err      error
 }
 
 func (w *serverStreamWrapper) Recv() (model.Chunk, error) {
 	c, ok := <-w.ch
 	if !ok {
-		if err := <-w.done; err != nil {
-			return nil, err
+		result := <-w.done
+		if result.err != nil {
+			return nil, result.err
 		}
+		w.response = result.response
+		w.eof = true
 		return nil, io.EOF
 	}
 	return c, nil
 }
-func (w *serverStreamWrapper) Close() error             { return nil }
-func (w *serverStreamWrapper) Metadata() map[string]any { return nil }
+func (w *serverStreamWrapper) Close() error { return nil }
+func (w *serverStreamWrapper) Response() *model.Response {
+	if !w.eof {
+		return nil
+	}
+	return w.response
+}
 
 // --- Tests ---
 
@@ -99,11 +125,11 @@ func TestE2E_UnaryComplete_WithMiddleware(t *testing.T) {
 		return srv.Complete(ctx, req)
 	}
 	streamFn := func(ctx context.Context, req *model.Request) (model.Streamer, error) {
-		wrapper := &serverStreamWrapper{ch: make(chan model.Chunk, 8), done: make(chan error, 1)}
+		wrapper := &serverStreamWrapper{ch: make(chan model.Chunk, 8), done: make(chan serverStreamResult, 1)}
 		go func() {
-			err := srv.Stream(ctx, req, func(c model.Chunk) error { wrapper.ch <- c; return nil })
+			response, err := srv.Stream(ctx, req, func(c model.Chunk) error { wrapper.ch <- c; return nil })
 			close(wrapper.ch)
-			wrapper.done <- err
+			wrapper.done <- serverStreamResult{response: response, err: err}
 		}()
 		return wrapper, nil
 	}
@@ -140,7 +166,7 @@ func TestE2E_Stream_WithMiddleware(t *testing.T) {
 	prov := &captureProvider{}
 	var streamCount atomic.Int32
 	countMW := func(next StreamHandler) StreamHandler {
-		return func(ctx context.Context, req *model.Request, send func(model.Chunk) error) error {
+		return func(ctx context.Context, req *model.Request, send func(model.Chunk) error) (*model.Response, error) {
 			streamCount.Add(1)
 			return next(ctx, req, send)
 		}
@@ -151,11 +177,11 @@ func TestE2E_Stream_WithMiddleware(t *testing.T) {
 	}
 
 	streamFn := func(ctx context.Context, req *model.Request) (model.Streamer, error) {
-		wrapper := &serverStreamWrapper{ch: make(chan model.Chunk, 8), done: make(chan error, 1)}
+		wrapper := &serverStreamWrapper{ch: make(chan model.Chunk, 8), done: make(chan serverStreamResult, 1)}
 		go func() {
-			err := srv.Stream(ctx, req, func(c model.Chunk) error { wrapper.ch <- c; return nil })
+			response, err := srv.Stream(ctx, req, func(c model.Chunk) error { wrapper.ch <- c; return nil })
 			close(wrapper.ch)
-			wrapper.done <- err
+			wrapper.done <- serverStreamResult{response: response, err: err}
 		}()
 		return wrapper, nil
 	}

@@ -18,7 +18,7 @@ type StreamSummary struct {
 	Text string
 	// ToolCalls captures tool invocations requested by the model (if any).
 	ToolCalls []ToolRequest
-	// Usage aggregates the reported token usage across usage chunks/metadata.
+	// Usage reports the canonical terminal response usage.
 	Usage model.TokenUsage
 	// StopReason records the provider stop reason when emitted.
 	StopReason string
@@ -30,7 +30,7 @@ type StreamSummary struct {
 // reports that it owns planner event emission. A runtime-owned stream stages
 // those events until successful finalization. Callers are responsible for
 // handling ToolCalls in the resulting summary.
-func ConsumeStream(ctx context.Context, streamer model.Streamer, ev PlannerEvents) (StreamSummary, error) {
+func ConsumeStream(ctx context.Context, streamer model.ValidatedStreamer, ev PlannerEvents) (StreamSummary, error) {
 	var summary StreamSummary
 	if err := validateStreamInputs(streamer, ev); err != nil {
 		return summary, err
@@ -52,26 +52,21 @@ func ConsumeStream(ctx context.Context, streamer model.Streamer, ev PlannerEvent
 		handleStreamChunk(ctx, ev, &summary, chunk, emitEvents)
 	}
 
-	if validated, ok := streamer.(model.ValidatedStreamer); ok {
-		if response := validated.Response(); response != nil {
-			summary.Usage = response.Usage
-			summary.StopReason = response.StopReason
-		}
-	} else {
-		applyStreamMetadataUsage(ctx, ev, &summary, streamer.Metadata())
+	response := streamer.Response()
+	if response == nil {
+		return summary, finalizeStream(streamer, errors.New("validated model stream ended without a canonical response"))
 	}
+	summary.Usage = response.Usage
+	summary.StopReason = response.StopReason
 
 	return summary, finalizeStream(streamer, nil)
 }
 
-func finalizeStream(streamer model.Streamer, primaryErr error) error {
-	if validated, ok := streamer.(model.ValidatedStreamer); ok {
-		return validated.Finalize(primaryErr)
-	}
-	return errors.Join(primaryErr, streamer.Close())
+func finalizeStream(streamer model.ValidatedStreamer, primaryErr error) error {
+	return streamer.Finalize(primaryErr)
 }
 
-func validateStreamInputs(streamer model.Streamer, ev PlannerEvents) error {
+func validateStreamInputs(streamer model.ValidatedStreamer, ev PlannerEvents) error {
 	if streamer == nil {
 		return errors.New("nil streamer")
 	}
@@ -119,8 +114,11 @@ func textChunkDelta(chunk model.TextChunk) string {
 	}
 	var delta string
 	for _, p := range chunk.Message.Parts {
-		if tp, ok := p.(model.TextPart); ok && tp.Text != "" {
-			delta += tp.Text
+		switch part := p.(type) {
+		case model.TextPart:
+			delta += part.Text
+		case model.CitationsPart:
+			delta += part.Text
 		}
 	}
 	return delta
@@ -157,18 +155,6 @@ func handleUsageChunk(ctx context.Context, ev PlannerEvents, summary *StreamSumm
 	if emitEvents {
 		ev.UsageDelta(ctx, chunk.Usage)
 	}
-}
-
-func applyStreamMetadataUsage(ctx context.Context, ev PlannerEvents, summary *StreamSummary, meta map[string]any) {
-	if meta == nil {
-		return
-	}
-	usage, ok := meta["usage"].(model.TokenUsage)
-	if !ok {
-		return
-	}
-	summary.Usage = addUsage(summary.Usage, usage)
-	ev.UsageDelta(ctx, usage)
 }
 
 func addUsage(current, delta model.TokenUsage) model.TokenUsage {

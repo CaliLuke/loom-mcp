@@ -203,11 +203,6 @@ func (s *limitedStreamer) Close() error {
 	return s.inner.Close()
 }
 
-// Metadata delegates provider metadata without copying or transforming it.
-func (s *limitedStreamer) Metadata() map[string]any {
-	return s.inner.Metadata()
-}
-
 func (s *limitedStreamer) Response() *model.Response {
 	return s.inner.Response()
 }

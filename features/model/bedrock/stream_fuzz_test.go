@@ -39,8 +39,6 @@ func TestChunkProcessorRejectsMalformedToolFragments(t *testing.T) {
 	processor := newChunkProcessor(
 		func(model.Chunk) error { return nil },
 		nil,
-		nil,
-		nil,
 		"",
 		model.ModelClassDefault,
 		nil,

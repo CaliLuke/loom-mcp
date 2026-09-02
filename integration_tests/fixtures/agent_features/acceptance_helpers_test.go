@@ -566,4 +566,4 @@ type emptyStreamer struct{}
 
 func (emptyStreamer) Recv() (model.Chunk, error) { return nil, io.EOF }
 func (emptyStreamer) Close() error               { return nil }
-func (emptyStreamer) Metadata() map[string]any   { return nil }
+func (emptyStreamer) Response() *model.Response  { return nil }

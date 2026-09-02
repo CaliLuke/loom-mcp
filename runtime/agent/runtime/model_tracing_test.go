@@ -460,10 +460,6 @@ func (s *modelTracingScriptedStreamer) Close() error {
 	return s.closeErr
 }
 
-func (s *modelTracingScriptedStreamer) Metadata() map[string]any {
-	return nil
-}
-
 func (s *modelTracingScriptedStreamer) Response() *model.Response {
 	return nil
 }

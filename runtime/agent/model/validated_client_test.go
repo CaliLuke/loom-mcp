@@ -48,6 +48,10 @@ type contractStream struct {
 	err      error
 	closed   int
 	closeErr error
+	eof      bool
+
+	response     *Response
+	omitResponse bool
 }
 
 func (s *contractStream) Recv() (Chunk, error) {
@@ -61,6 +65,7 @@ func (s *contractStream) Recv() (Chunk, error) {
 		s.err = nil
 		return nil, err
 	}
+	s.eof = true
 	return nil, io.EOF
 }
 
@@ -69,8 +74,20 @@ func (s *contractStream) Close() error {
 	return s.closeErr
 }
 
-func (s *contractStream) Metadata() map[string]any {
-	return nil
+func (s *contractStream) Response() *Response {
+	if !s.eof || s.omitResponse {
+		return nil
+	}
+	if s.response != nil {
+		return s.response
+	}
+	var builder StreamResponseBuilder
+	for _, chunk := range s.chunks {
+		if err := builder.Add(chunk); err != nil {
+			return nil
+		}
+	}
+	return builder.Response()
 }
 
 func TestValidatedClientRejectsUnadvertisedToolWithoutRenderingIt(t *testing.T) {

@@ -25,8 +25,11 @@ type ollamaStreamer struct {
 	text     strings.Builder
 	done     bool
 	closed   bool
-	metadata map[string]any
 	finalErr error
+
+	builder     model.StreamResponseBuilder
+	response    *model.Response
+	consumerEOF bool
 }
 
 // Stream renders a streaming response using Ollama's chat API.
@@ -74,6 +77,9 @@ func (s *ollamaStreamer) Recv() (model.Chunk, error) {
 		if s.finalErr != nil {
 			return nil, s.finalErr
 		}
+		if !s.consumerEOF {
+			return nil, errors.New("ollama: stream closed before completion")
+		}
 		return nil, io.EOF
 	}
 	for s.scanner.Scan() {
@@ -99,10 +105,14 @@ func (s *ollamaStreamer) Recv() (model.Chunk, error) {
 		s.finalErr = errors.New("ollama: stream ended before done")
 		return nil, s.finalErr
 	}
+	s.consumerEOF = true
 	return nil, io.EOF
 }
 
 func (s *ollamaStreamer) Close() error {
+	if !s.consumerEOF && s.finalErr == nil {
+		s.finalErr = errors.New("ollama: stream closed before completion")
+	}
 	s.closed = true
 	if s.body == nil {
 		return nil
@@ -110,15 +120,11 @@ func (s *ollamaStreamer) Close() error {
 	return s.body.Close()
 }
 
-func (s *ollamaStreamer) Metadata() map[string]any {
-	if len(s.metadata) == 0 {
+func (s *ollamaStreamer) Response() *model.Response {
+	if !s.consumerEOF {
 		return nil
 	}
-	out := make(map[string]any, len(s.metadata))
-	for key, value := range s.metadata {
-		out[key] = value
-	}
-	return out
+	return s.response
 }
 
 func (s *ollamaStreamer) pop() model.Chunk {
@@ -142,41 +148,47 @@ func (s *ollamaStreamer) handleLine(line string) error {
 	if err := s.enqueueMessage(resp.Message); err != nil {
 		return err
 	}
-	if resp.Done {
-		s.done = true
-		outputLimited := ollamaOutputLimited(resp.DoneReason)
-		if s.output != nil && !outputLimited {
-			payload, err := structuredOutputPayload([]model.Message{{
-				Role:  model.ConversationRoleAssistant,
-				Parts: []model.Part{model.TextPart{Text: s.text.String()}},
-			}}, s.output)
-			if err != nil {
-				return err
-			}
-			s.queue = append(s.queue, model.CompletionChunk{
-				Completion: model.Completion{
-					Name:    structuredOutputName(s.output),
-					Payload: payload,
-				},
-			})
-		}
-		usage := responseUsage(resp, s.modelClass)
-		usage.Model = s.modelID
-		if usage.TotalTokens > 0 {
-			s.metadata = map[string]any{"usage": usage}
-			s.queue = append(s.queue, model.UsageChunk{Usage: usage})
-		}
-		s.queue = append(s.queue, model.StopChunk{
-			Reason:        stopReason(resp),
-			OutputLimited: outputLimited,
-		})
+	if !resp.Done {
+		return nil
 	}
+	return s.finishResponse(resp)
+}
+
+func (s *ollamaStreamer) finishResponse(resp ollamaChatResponse) error {
+	s.done = true
+	outputLimited := ollamaOutputLimited(resp.DoneReason)
+	if s.output != nil && !outputLimited {
+		payload, err := structuredOutputPayload([]model.Message{{
+			Role:  model.ConversationRoleAssistant,
+			Parts: []model.Part{model.TextPart{Text: s.text.String()}},
+		}}, s.output)
+		if err != nil {
+			return err
+		}
+		if err := s.enqueue(model.CompletionChunk{Completion: model.Completion{
+			Name:    structuredOutputName(s.output),
+			Payload: payload,
+		}}); err != nil {
+			return err
+		}
+	}
+	usage := responseUsage(resp, s.modelClass)
+	usage.Model = s.modelID
+	if usage != (model.TokenUsage{}) {
+		if err := s.enqueue(model.UsageChunk{Usage: usage}); err != nil {
+			return err
+		}
+	}
+	if err := s.enqueue(model.StopChunk{Reason: stopReason(resp), OutputLimited: outputLimited}); err != nil {
+		return err
+	}
+	s.response = s.builder.Response()
 	return nil
 }
 
 func (s *ollamaStreamer) enqueueMessage(msg ollamaMessage) error {
 	if msg.Thinking != "" {
-		s.queue = append(s.queue, model.ThinkingChunk{
+		if err := s.enqueue(model.ThinkingChunk{
 			Message: model.Message{
 				Role: model.ConversationRoleAssistant,
 				Parts: []model.Part{model.ThinkingPart{
@@ -184,24 +196,30 @@ func (s *ollamaStreamer) enqueueMessage(msg ollamaMessage) error {
 					Final: false,
 				}},
 			},
-		})
+		}); err != nil {
+			return err
+		}
 	}
 	if msg.Content != "" {
 		s.text.WriteString(msg.Content)
 		if s.output != nil {
-			s.queue = append(s.queue, model.CompletionDeltaChunk{
+			if err := s.enqueue(model.CompletionDeltaChunk{
 				Delta: model.CompletionDelta{
 					Name:  structuredOutputName(s.output),
 					Delta: msg.Content,
 				},
-			})
+			}); err != nil {
+				return err
+			}
 		} else {
-			s.queue = append(s.queue, model.TextChunk{
+			if err := s.enqueue(model.TextChunk{
 				Message: model.Message{
 					Role:  model.ConversationRoleAssistant,
 					Parts: []model.Part{model.TextPart{Text: msg.Content}},
 				},
-			})
+			}); err != nil {
+				return err
+			}
 		}
 	}
 	for _, call := range msg.ToolCalls {
@@ -209,10 +227,20 @@ func (s *ollamaStreamer) enqueueMessage(msg ollamaMessage) error {
 		if err != nil {
 			return err
 		}
-		s.queue = append(s.queue, model.ToolCallChunk{
+		if err := s.enqueue(model.ToolCallChunk{
 			ToolCall: translated,
-		})
+		}); err != nil {
+			return err
+		}
 	}
+	return nil
+}
+
+func (s *ollamaStreamer) enqueue(chunk model.Chunk) error {
+	if err := s.builder.Add(chunk); err != nil {
+		return fmt.Errorf("ollama: assemble stream response: %w", err)
+	}
+	s.queue = append(s.queue, chunk)
 	return nil
 }
 

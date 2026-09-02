@@ -14,7 +14,6 @@ import (
 
 func TestConsumeStreamAggregatesChunksAndEvents(t *testing.T) {
 	usage := model.TokenUsage{InputTokens: 2, OutputTokens: 3, TotalTokens: 5, CacheReadTokens: 7, CacheWriteTokens: 11}
-	metaUsage := model.TokenUsage{InputTokens: 13, OutputTokens: 17, TotalTokens: 30, CacheReadTokens: 19, CacheWriteTokens: 23}
 	thinking := model.ThinkingPart{Text: "reason", Final: true}
 	stream := &streamStub{
 		chunks: []model.Chunk{
@@ -25,7 +24,7 @@ func TestConsumeStreamAggregatesChunksAndEvents(t *testing.T) {
 			model.UsageChunk{Usage: usage},
 			model.StopChunk{Reason: "tool_use"},
 		},
-		metadata: map[string]any{"usage": metaUsage},
+		response: &model.Response{Usage: usage, StopReason: "tool_use"},
 	}
 	events := &plannerEventsStub{}
 
@@ -37,11 +36,11 @@ func TestConsumeStreamAggregatesChunksAndEvents(t *testing.T) {
 	require.Len(t, summary.ToolCalls, 1)
 	assert.Equal(t, ToolRequest{Name: "tools.search", Payload: []byte("{\"q\":\"loom\"}"), ToolCallID: "call-1"}, summary.ToolCalls[0])
 	assert.Equal(t, "tool_use", summary.StopReason)
-	assert.Equal(t, model.TokenUsage{InputTokens: 15, OutputTokens: 20, TotalTokens: 35, CacheReadTokens: 26, CacheWriteTokens: 34}, summary.Usage)
+	assert.Equal(t, usage, summary.Usage)
 	assert.Equal(t, []string{"hello world"}, events.text)
 	assert.Equal(t, []model.ThinkingPart{thinking}, events.thinking)
 	assert.Equal(t, []toolDelta{{id: "call-1", name: "tools.search", delta: "{\"q\":"}}, events.toolDeltas)
-	assert.Equal(t, []model.TokenUsage{usage, metaUsage}, events.usage)
+	assert.Equal(t, []model.TokenUsage{usage}, events.usage)
 }
 
 func TestConsumeStreamErrorsAndAlwaysCloses(t *testing.T) {
@@ -63,7 +62,7 @@ func TestConsumeStreamErrorsAndAlwaysCloses(t *testing.T) {
 
 func TestConsumeStreamReportsCloseFailureAfterEOF(t *testing.T) {
 	closeErr := errors.New("close failed")
-	stream := &streamStub{closeErr: closeErr}
+	stream := &streamStub{closeErr: closeErr, response: &model.Response{}}
 
 	_, err := ConsumeStream(context.Background(), stream, &plannerEventsStub{})
 
@@ -76,8 +75,7 @@ func TestConsumeValidatedStreamUsesCanonicalUsageOnce(t *testing.T) {
 	canonicalUsage := model.TokenUsage{InputTokens: 2, OutputTokens: 3, TotalTokens: 5, Model: "provider-model"}
 	stream := &validatedStreamStub{
 		streamStub: streamStub{
-			chunks:   []model.Chunk{model.UsageChunk{Usage: chunkUsage}},
-			metadata: map[string]any{"usage": canonicalUsage},
+			chunks: []model.Chunk{model.UsageChunk{Usage: chunkUsage}},
 		},
 		response: &model.Response{Usage: canonicalUsage, StopReason: "end_turn"},
 	}
@@ -92,6 +90,22 @@ func TestConsumeValidatedStreamUsesCanonicalUsageOnce(t *testing.T) {
 	assert.Equal(t, []model.TokenUsage{chunkUsage}, events.usage)
 }
 
+func TestConsumeStreamIncludesCitationBackedText(t *testing.T) {
+	stream := &streamStub{
+		chunks: []model.Chunk{model.TextChunk{Message: model.Message{Parts: []model.Part{
+			model.CitationsPart{Text: "cited answer", Citations: []model.Citation{{Title: "source"}}},
+		}}}},
+		response: &model.Response{StopReason: "end_turn"},
+	}
+	events := &plannerEventsStub{}
+
+	summary, err := ConsumeStream(context.Background(), stream, events)
+
+	require.NoError(t, err)
+	assert.Equal(t, "cited answer", summary.Text)
+	assert.Equal(t, []string{"cited answer"}, events.text)
+}
+
 func TestConsumeStreamRejectsNilInputs(t *testing.T) {
 	_, err := ConsumeStream(context.Background(), nil, &plannerEventsStub{})
 	require.EqualError(t, err, "nil streamer")
@@ -101,12 +115,13 @@ func TestConsumeStreamRejectsNilInputs(t *testing.T) {
 }
 
 type streamStub struct {
-	chunks   []model.Chunk
-	metadata map[string]any
-	recvErr  error
-	closeErr error
-	index    int
-	closed   bool
+	chunks    []model.Chunk
+	response  *model.Response
+	recvErr   error
+	closeErr  error
+	index     int
+	closed    bool
+	finalized bool
 }
 
 type validatedStreamStub struct {
@@ -132,8 +147,13 @@ func (s *streamStub) Close() error {
 	return s.closeErr
 }
 
-func (s *streamStub) Metadata() map[string]any {
-	return s.metadata
+func (s *streamStub) Response() *model.Response {
+	return s.response
+}
+
+func (s *streamStub) Finalize(primaryErr error) error {
+	s.finalized = true
+	return errors.Join(primaryErr, s.Close())
 }
 
 func (s *validatedStreamStub) Response() *model.Response {

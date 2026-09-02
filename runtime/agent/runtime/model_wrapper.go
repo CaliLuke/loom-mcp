@@ -161,8 +161,15 @@ func (s *eventStream) Recv() (model.Chunk, error) {
 func (s *eventStream) stageMessageContent(message *model.Message) {
 	s.stageThinkingParts(message)
 	for _, part := range message.Parts {
-		if text, ok := part.(model.TextPart); ok && text.Text != "" {
-			s.staged = append(s.staged, stagedPlannerEvent{text: text.Text})
+		var text string
+		switch content := part.(type) {
+		case model.TextPart:
+			text = content.Text
+		case model.CitationsPart:
+			text = content.Text
+		}
+		if text != "" {
+			s.staged = append(s.staged, stagedPlannerEvent{text: text})
 		}
 	}
 }
@@ -194,10 +201,6 @@ func (s *eventStream) flushStagedEvents() {
 
 func (s *eventStream) Close() error {
 	return s.inner.Close()
-}
-
-func (s *eventStream) Metadata() map[string]any {
-	return s.inner.Metadata()
 }
 
 func (s *eventStream) Response() *model.Response {

@@ -40,7 +40,7 @@ type (
 	}
 
 	// completionStream validates the typed completion streaming contract on top
-	// of a provider-neutral model.Streamer.
+	// of a provider-neutral model.ValidatedStreamer.
 	//
 	// Contract:
 	//   - Preview chunks are optional and surfaced as ChunkTypeCompletionDelta.
@@ -78,7 +78,7 @@ func Complete[T any](ctx context.Context, client model.Client, req *model.Reques
 
 // Stream starts a typed completion stream using the provided generated spec.
 //
-// Streaming completions reuse the provider-neutral model.Streamer contract. The
+// Streaming completions reuse the provider-neutral model.ValidatedStreamer contract. The
 // final typed value is decoded from the canonical ChunkTypeCompletion payload;
 // completion deltas are preview-only and may be ignored.
 func Stream[T any](ctx context.Context, client model.Client, req *model.Request, spec Spec[T]) (model.ValidatedStreamer, error) {
@@ -297,10 +297,6 @@ func (s *completionStream) Recv() (model.Chunk, error) {
 
 func (s *completionStream) Close() error {
 	return s.inner.Close()
-}
-
-func (s *completionStream) Metadata() map[string]any {
-	return s.inner.Metadata()
 }
 
 func (s *completionStream) Response() *model.Response {

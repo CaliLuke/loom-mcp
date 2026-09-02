@@ -265,6 +265,11 @@ func TestClientConformance(t *testing.T) {
 				require.Equal(t, "lookup", call.Name.String())
 				require.JSONEq(t, `{"query":"docs"}`, string(call.Payload))
 				require.Equal(t, 5, chunks[4].(model.UsageChunk).Usage.TotalTokens)
+				response := stream.Response()
+				require.Equal(t, "stop", response.StopReason)
+				require.Equal(t, 5, response.Usage.TotalTokens)
+				require.Len(t, response.ToolCalls, 1)
+				require.Len(t, response.Content, 3)
 			},
 			EarlyEOF: func(t *testing.T) {
 				client := newClient(t, func(w http.ResponseWriter, _ *http.Request) {
@@ -347,8 +352,9 @@ func TestClientConformance(t *testing.T) {
 				require.NoError(t, err)
 				t.Cleanup(func() { require.NoError(t, stream.Close()) })
 				chunks := testutil.CollectStreamChunks(t, stream)
-				require.Equal(t, []string{model.ChunkTypeCompletionDelta, model.ChunkTypeStop}, ollamaChunkTypes(chunks))
-				require.True(t, chunks[1].(model.StopChunk).OutputLimited)
+				require.Equal(t, []string{model.ChunkTypeCompletionDelta, model.ChunkTypeUsage, model.ChunkTypeStop}, ollamaChunkTypes(chunks))
+				require.Equal(t, "llama3.1", chunks[1].(model.UsageChunk).Usage.Model)
+				require.True(t, chunks[2].(model.StopChunk).OutputLimited)
 			},
 		},
 	})

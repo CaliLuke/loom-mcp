@@ -31,16 +31,17 @@ type openAIStreamer struct {
 	errSet   bool
 	finalErr error
 
-	metaMu   sync.RWMutex
-	metadata map[string]any
+	responseMu  sync.RWMutex
+	response    *model.Response
+	consumerEOF bool
 
 	streamCloseOnce sync.Once
 	streamCloseErr  error
 }
 
 type openAIChunkProcessor struct {
-	emit        func(model.Chunk) error
-	recordUsage func(model.TokenUsage)
+	emit           func(model.Chunk) error
+	recordResponse func(*model.Response)
 
 	toolCalls map[string]*streamToolBuffer
 
@@ -69,13 +70,13 @@ func newOpenAIStreamer(ctx context.Context, stream responseStream, codec *openAI
 		chunks: make(chan model.Chunk, 32),
 	}
 	processor := &openAIChunkProcessor{
-		emit:        streamer.emitChunk,
-		recordUsage: streamer.recordUsage,
-		toolCalls:   make(map[string]*streamToolBuffer),
-		codec:       codec,
-		modelID:     modelID,
-		modelClass:  modelClass,
-		output:      output,
+		emit:           streamer.emitChunk,
+		recordResponse: streamer.recordResponse,
+		toolCalls:      make(map[string]*streamToolBuffer),
+		codec:          codec,
+		modelID:        modelID,
+		modelClass:     modelClass,
+		output:         output,
 	}
 	go streamer.run(processor)
 	return streamer
@@ -90,6 +91,9 @@ func (s *openAIStreamer) Recv() (model.Chunk, error) {
 		if err := s.err(); err != nil {
 			return nil, err
 		}
+		s.responseMu.Lock()
+		s.consumerEOF = true
+		s.responseMu.Unlock()
 		return nil, io.EOF
 	case <-s.ctx.Done():
 		err := s.ctx.Err()
@@ -106,17 +110,13 @@ func (s *openAIStreamer) Close() error {
 	return s.closeStream()
 }
 
-func (s *openAIStreamer) Metadata() map[string]any {
-	s.metaMu.RLock()
-	defer s.metaMu.RUnlock()
-	if len(s.metadata) == 0 {
+func (s *openAIStreamer) Response() *model.Response {
+	s.responseMu.RLock()
+	defer s.responseMu.RUnlock()
+	if !s.consumerEOF {
 		return nil
 	}
-	out := make(map[string]any, len(s.metadata))
-	for key, value := range s.metadata {
-		out[key] = value
-	}
-	return out
+	return s.response
 }
 
 func (s *openAIStreamer) run(processor *openAIChunkProcessor) {
@@ -173,13 +173,10 @@ func (s *openAIStreamer) emitChunk(chunk model.Chunk) error {
 	}
 }
 
-func (s *openAIStreamer) recordUsage(usage model.TokenUsage) {
-	s.metaMu.Lock()
-	if s.metadata == nil {
-		s.metadata = make(map[string]any)
-	}
-	s.metadata["usage"] = usage
-	s.metaMu.Unlock()
+func (s *openAIStreamer) recordResponse(response *model.Response) {
+	s.responseMu.Lock()
+	s.response = response
+	s.responseMu.Unlock()
 }
 
 func (s *openAIStreamer) setErr(err error) {
@@ -343,7 +340,11 @@ func (p *openAIChunkProcessor) handleCompleted(resp responses.Response) error {
 	}
 	translated.Usage.Model = p.modelID
 	if translated.OutputLimited {
-		return p.emitUsageAndStop(translated.Usage, translated.StopReason, true)
+		if err := p.emitUsageAndStop(translated.Usage, translated.StopReason, true); err != nil {
+			return err
+		}
+		p.recordResponse(translated)
+		return nil
 	}
 	if p.output != nil {
 		if err := p.emitCompletion(translated.Content); err != nil {
@@ -357,7 +358,11 @@ func (p *openAIChunkProcessor) handleCompleted(resp responses.Response) error {
 			return err
 		}
 	}
-	return p.emitUsageAndStop(translated.Usage, translated.StopReason, translated.OutputLimited)
+	if err := p.emitUsageAndStop(translated.Usage, translated.StopReason, translated.OutputLimited); err != nil {
+		return err
+	}
+	p.recordResponse(translated)
+	return nil
 }
 
 func (p *openAIChunkProcessor) emitCompletion(content []model.Message) error {
@@ -402,9 +407,6 @@ func (p *openAIChunkProcessor) emitFinalTextIfNeeded(content []model.Message) er
 
 func (p *openAIChunkProcessor) emitUsageAndStop(usage model.TokenUsage, stopReason string, outputLimited bool) error {
 	if hasOpenAITokenUsage(usage) {
-		if p.recordUsage != nil {
-			p.recordUsage(usage)
-		}
 		if err := p.emit(model.UsageChunk{
 			Usage: usage,
 		}); err != nil {
@@ -418,7 +420,9 @@ func (p *openAIChunkProcessor) emitUsageAndStop(usage model.TokenUsage, stopReas
 }
 
 func hasOpenAITokenUsage(usage model.TokenUsage) bool {
-	return usage.InputTokens != 0 ||
+	return usage.Model != "" ||
+		usage.ModelClass != "" ||
+		usage.InputTokens != 0 ||
 		usage.OutputTokens != 0 ||
 		usage.TotalTokens != 0 ||
 		usage.CacheReadTokens != 0 ||

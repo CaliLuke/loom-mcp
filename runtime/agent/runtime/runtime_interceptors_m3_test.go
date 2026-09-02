@@ -46,7 +46,6 @@ type emptyModelStream struct{}
 
 func (emptyModelStream) Recv() (model.Chunk, error) { return nil, io.EOF }
 func (emptyModelStream) Close() error               { return nil }
-func (emptyModelStream) Metadata() map[string]any   { return nil }
 func (emptyModelStream) Response() *model.Response  { return nil }
 func (emptyModelStream) Finalize(primaryErr error) error {
 	return primaryErr
@@ -73,7 +72,6 @@ func (s *closeCountingModelStream) Close() error {
 	s.closeCount++
 	return nil
 }
-func (s *closeCountingModelStream) Metadata() map[string]any  { return nil }
 func (s *closeCountingModelStream) Response() *model.Response { return nil }
 func (s *closeCountingModelStream) Finalize(primaryErr error) error {
 	return errors.Join(primaryErr, s.Close())
