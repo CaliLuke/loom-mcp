@@ -10,7 +10,7 @@ in two places.
 - Loom CLI pinned to the repository's supported release:
 
 ```bash
-go install github.com/CaliLuke/loom/cmd/loom@v1.9.0-alpha.9
+go install github.com/CaliLuke/loom/cmd/loom@v1.9.0-alpha.10
 loom version
 ```
 
