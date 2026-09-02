@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -315,6 +316,11 @@ func TestClientValidatedStreamPreservesModelIdentityWithZeroTokenUsage(t *testin
 }
 
 func TestClientStreamTimeoutDoesNotLimitBodyLifetime(t *testing.T) {
+	const responseHeaderTimeout = time.Second
+	bodyRelease := make(chan struct{})
+	releaseBody := sync.OnceFunc(func() {
+		close(bodyRelease)
+	})
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		flusher, ok := w.(http.Flusher)
 		if !ok {
@@ -324,16 +330,17 @@ func TestClientStreamTimeoutDoesNotLimitBodyLifetime(t *testing.T) {
 		w.Header().Set("Content-Type", "application/x-ndjson")
 		_, _ = w.Write([]byte(`{"model":"llama3.1","message":{"role":"assistant","content":"first"}}` + "\n"))
 		flusher.Flush()
-		time.Sleep(50 * time.Millisecond)
+		<-bodyRelease
 		_, _ = w.Write([]byte(`{"model":"llama3.1","message":{"role":"assistant","content":"second"}}` + "\n"))
 		_, _ = w.Write([]byte(`{"model":"llama3.1","done":true,"done_reason":"stop"}` + "\n"))
 	}))
 	defer server.Close()
+	defer releaseBody()
 
 	client, err := ollamamodel.New(ollamamodel.Options{
 		ServerURL:    server.URL,
 		DefaultModel: "llama3.1",
-		Timeout:      10 * time.Millisecond,
+		Timeout:      responseHeaderTimeout,
 	})
 	require.NoError(t, err)
 	streamer, err := client.Stream(context.Background(), &model.Request{
@@ -348,6 +355,13 @@ func TestClientStreamTimeoutDoesNotLimitBodyLifetime(t *testing.T) {
 	require.NoError(t, err)
 	require.IsType(t, model.TextChunk{}, chunk)
 	require.Equal(t, "first", chunk.(model.TextChunk).Message.Parts[0].(model.TextPart).Text)
+
+	// Release the remaining body only after the configured response-header
+	// deadline. A whole-request timeout would close the stream before release.
+	timer := time.NewTimer(responseHeaderTimeout + 100*time.Millisecond)
+	defer timer.Stop()
+	<-timer.C
+	releaseBody()
 
 	chunk, err = streamer.Recv()
 	require.NoError(t, err)

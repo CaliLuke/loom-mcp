@@ -11,6 +11,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"net"
 	"os"
 	"strings"
 	"testing"
@@ -34,43 +35,45 @@ var (
 )
 
 func TestMain(m *testing.M) {
-	ctx := context.Background()
-	var err error
-	testRedisContainer, err = testcontainers.GenericContainer(ctx, testcontainers.GenericContainerRequest{
-		ContainerRequest: testcontainers.ContainerRequest{
-			Image:        "redis:7-alpine",
-			ExposedPorts: []string{"6379/tcp"},
-			WaitingFor:   wait.ForLog("Ready to accept connections"),
-		},
-		Started: true,
+	os.Exit(runRegistryTests(m))
+}
+
+func TestWaitForRedisHonorsContextDeadline(t *testing.T) {
+	listener, err := net.Listen("tcp", "127.0.0.1:0")
+	require.NoError(t, err)
+	releaseServer := make(chan struct{})
+	serverDone := make(chan error, 1)
+	go func() {
+		conn, acceptErr := listener.Accept()
+		if acceptErr != nil {
+			serverDone <- acceptErr
+			return
+		}
+		<-releaseServer
+		serverDone <- conn.Close()
+	}()
+	t.Cleanup(func() {
+		close(releaseServer)
+		require.NoError(t, listener.Close())
+		serverErr := <-serverDone
+		if serverErr != nil {
+			require.ErrorIs(t, serverErr, net.ErrClosed)
+		}
 	})
-	if err != nil {
-		fmt.Printf("integration tests require Docker: failed to start Redis: %v\n", err)
-		os.Exit(1)
-	}
-	host, err := testRedisContainer.Host(ctx)
-	if err != nil {
-		fmt.Printf("failed to get Redis host: %v\n", err)
-		os.Exit(1)
-	}
-	port, err := testRedisContainer.MappedPort(ctx, "6379")
-	if err != nil {
-		fmt.Printf("failed to get Redis port: %v\n", err)
-		os.Exit(1)
-	}
-	testRedisClient = redis.NewClient(&redis.Options{Addr: host + ":" + port.Port()})
-	if err := testRedisClient.Ping(ctx).Err(); err != nil {
-		fmt.Printf("failed to ping Redis: %v\n", err)
-		os.Exit(1)
-	}
-	code := m.Run()
-	if err := testRedisClient.Close(); err != nil {
-		fmt.Printf("failed to close Redis client: %v\n", err)
-	}
-	if err := testRedisContainer.Terminate(ctx); err != nil {
-		fmt.Printf("failed to terminate Redis: %v\n", err)
-	}
-	os.Exit(code)
+	client := redis.NewClient(&redis.Options{
+		Addr:                  listener.Addr().String(),
+		ContextTimeoutEnabled: true,
+	})
+	t.Cleanup(func() {
+		require.NoError(t, client.Close())
+	})
+	ctx, cancel := context.WithTimeout(context.Background(), 50*time.Millisecond)
+	defer cancel()
+
+	started := time.Now()
+	err = waitForRedis(ctx, client)
+	assert.ErrorIs(t, err, context.DeadlineExceeded)
+	assert.Less(t, time.Since(started), time.Second)
 }
 
 func TestMultiNodeAdmissionHandoff(t *testing.T) {
@@ -1162,4 +1165,78 @@ func getRedis(t *testing.T) *redis.Client {
 	t.Helper()
 	require.NoError(t, testRedisClient.FlushDB(context.Background()).Err())
 	return testRedisClient
+}
+
+func runRegistryTests(m *testing.M) (code int) {
+	ctx := context.Background()
+	var err error
+	testRedisContainer, err = testcontainers.GenericContainer(ctx, testcontainers.GenericContainerRequest{
+		ContainerRequest: testcontainers.ContainerRequest{
+			Image:        "redis:7-alpine",
+			ExposedPorts: []string{"6379/tcp"},
+			WaitingFor: wait.ForAll(
+				wait.ForLog("Ready to accept connections"),
+				wait.ForListeningPort("6379/tcp"),
+			),
+		},
+		Started: true,
+	})
+	if testRedisContainer != nil {
+		defer func() {
+			if terminateErr := testRedisContainer.Terminate(context.Background()); terminateErr != nil {
+				fmt.Printf("failed to terminate Redis: %v\n", terminateErr)
+				code = 1
+			}
+		}()
+	}
+	if err != nil {
+		fmt.Printf("integration tests require Docker: failed to start Redis: %v\n", err)
+		return 1
+	}
+	host, err := testRedisContainer.Host(ctx)
+	if err != nil {
+		fmt.Printf("failed to get Redis host: %v\n", err)
+		return 1
+	}
+	port, err := testRedisContainer.MappedPort(ctx, "6379")
+	if err != nil {
+		fmt.Printf("failed to get Redis port: %v\n", err)
+		return 1
+	}
+	testRedisClient = redis.NewClient(&redis.Options{
+		Addr:                  host + ":" + port.Port(),
+		ContextTimeoutEnabled: true,
+	})
+	defer func() {
+		if closeErr := testRedisClient.Close(); closeErr != nil {
+			fmt.Printf("failed to close Redis client: %v\n", closeErr)
+			code = 1
+		}
+	}()
+	startupCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
+	defer cancel()
+	if err := waitForRedis(startupCtx, testRedisClient); err != nil {
+		fmt.Printf("failed to ping Redis before startup deadline: %v\n", err)
+		return 1
+	}
+	return m.Run()
+}
+
+func waitForRedis(ctx context.Context, client *redis.Client) error {
+	ticker := time.NewTicker(50 * time.Millisecond)
+	defer ticker.Stop()
+
+	var lastErr error
+	for {
+		if err := client.Ping(ctx).Err(); err == nil {
+			return nil
+		} else {
+			lastErr = err
+		}
+		select {
+		case <-ctx.Done():
+			return errors.Join(ctx.Err(), lastErr)
+		case <-ticker.C:
+		}
+	}
 }
