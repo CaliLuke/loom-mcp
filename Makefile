@@ -13,6 +13,9 @@ COVERAGE_CODEGEN_MIN ?= 70.0
 COVERAGE_TEMPORAL_MIN ?= 73.0
 COVERAGE_REGISTRY_PULSE_MIN ?= 58.0
 COVERAGE_PROVIDERS_MIN ?= 70.0
+COVERAGE_AGENT_RUNTIME_MIN ?= 70.0
+COVERAGE_BEDROCK_MIN ?= 72.0
+COVERAGE_GEMINI_MIN ?= 65.0
 COVERAGE_DOCKER_MONGO_MIN ?= 80.0
 COVERAGE_DOCKER_PULSE_MIN ?= 80.0
 COVERAGE_DOCKER_REGISTRY_MIN ?= 75.0
@@ -42,7 +45,7 @@ PROTOC_GEN_GO_GRPC := protoc-gen-go-grpc
 PROTOC_GEN_GO_GRPC_VERSION ?= v1.6.2
 PROTOC_INSTALL_DIR ?= $(GOPATH)
 
-.PHONY: all build lint lint-pre-commit lint-install-hook test test-docker coverage-check coverage-check-critical docker-coverage test-stress test-fuzz itest ci tools ensure-golangci ensure-staticcheck ensure-protoc-plugins install-protoc protoc-check run-example example-gen loom-local loom-remote loom-status update-mcp-go-sdk verify-generated verify-mcp-local regen-quickstart regen-assistant-fixture regen-progressive-discovery-fixture regen-agent-feature-fixture verify-agent-feature-fixture
+.PHONY: all build lint lint-pre-commit lint-install-hook test test-docker coverage-check coverage-check-critical coverage-parser-test docker-coverage test-stress test-fuzz itest ci tools ensure-golangci ensure-staticcheck ensure-protoc-plugins install-protoc protoc-check run-example example-gen loom-local loom-remote loom-status update-mcp-go-sdk verify-generated verify-mcp-local regen-quickstart regen-assistant-fixture regen-progressive-discovery-fixture regen-agent-feature-fixture verify-agent-feature-fixture
 
 all: build lint test
 
@@ -88,16 +91,22 @@ coverage-check:
 		printf "coverage %.1f%% meets required %.1f%%\n", actual, minimum; \
 	}'
 
-coverage-check-critical:
+coverage-check-critical: coverage-parser-test
 	COVERAGE_RUNTIME_MIN=$(COVERAGE_RUNTIME_MIN) \
 	COVERAGE_MCP_MIN=$(COVERAGE_MCP_MIN) \
 	COVERAGE_CODEGEN_MIN=$(COVERAGE_CODEGEN_MIN) \
 	COVERAGE_TEMPORAL_MIN=$(COVERAGE_TEMPORAL_MIN) \
 	COVERAGE_REGISTRY_PULSE_MIN=$(COVERAGE_REGISTRY_PULSE_MIN) \
 	COVERAGE_PROVIDERS_MIN=$(COVERAGE_PROVIDERS_MIN) \
+	COVERAGE_AGENT_RUNTIME_MIN=$(COVERAGE_AGENT_RUNTIME_MIN) \
+	COVERAGE_BEDROCK_MIN=$(COVERAGE_BEDROCK_MIN) \
+	COVERAGE_GEMINI_MIN=$(COVERAGE_GEMINI_MIN) \
 	bash ./scripts/check_critical_coverage.sh cover.out
 
-test-docker: tools
+coverage-parser-test:
+	bash ./scripts/check_critical_coverage_test.sh
+
+test-docker: tools coverage-parser-test
 	TESTCONTAINERS_RYUK_DISABLED=$(TESTCONTAINERS_RYUK_DISABLED) \
 	LOOM_MCP_RUN_DOCKER_TESTS=1 \
 	LOOM_MCP_REQUIRE_DOCKER_TESTS=1 \

@@ -12,9 +12,8 @@ a surface that is absent, skipped, stale, or outside the Go module being tested.
 
 ## Progress (2026-09-01)
 
-The original phases 1 and 3 through 6 and reprioritized items 1 through 5 are
-implemented. The remaining work targets malformed dynamic inputs and exact
-risk-weighted owner coverage floors.
+The original phases 1 and 3 through 6 and all seven reprioritized items are
+implemented and locally verified.
 
 ## Reprioritized Backlog
 
@@ -201,6 +200,19 @@ After behavioral tests land, add exact owner floors for
 `runtime/agent/runtime`, Bedrock, Gemini, and each Docker-backed package. Do not
 raise the global floor as a substitute for exercising the high-risk state
 machines.
+
+Implemented:
+
+- `make test` enforces independent 70%, 72%, and 65% floors for the exact
+  `runtime/agent/runtime`, Bedrock, and Gemini package owners in addition to the
+  broader runtime and provider groups;
+- Docker coverage matches only the root Mongo infrastructure, Pulse client,
+  and registry package files before enforcing their existing 80%, 80%, and 75%
+  floors, so nested packages cannot inflate an owner's result;
+- the exact owner measurements are reported with covered and total statement
+  counts by the same portable coverage parser used on macOS and Linux;
+- a synthetic profile proves all six exact patterns reject lookalike module
+  prefixes, non-`.go` suffixes, and nested-package coverage.
 
 Phase 1 is implemented and verified:
 
@@ -564,7 +576,7 @@ Exit criteria:
 - [x] Priority 4: provider stream state-machine conformance
 - [x] Priority 5: real persistence upgrade and concurrency contracts
 - [x] Priority 6: fuzz dynamic trust boundaries
-- [ ] Priority 7: risk-weighted owner floors
+- [x] Priority 7: risk-weighted owner floors
 - [x] Phase 1: truthful MCP integration coverage
 - [x] Phase 3: executable codegen matrix
 - [x] Phase 4: race and stress lane

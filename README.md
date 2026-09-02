@@ -80,8 +80,10 @@ silently leave `quickstart/go.sum` stale.
 The Makefile pins `protoc` and both Go protobuf plugins. Run
 `make install-protoc` if the pinned compiler is not already first on `PATH`.
 `make test` enforces global and critical package-group coverage floors without
-starting containers. `make test-docker` runs the Mongo, Pulse, and registry
-contracts once under race detection and enforces their owner coverage floors.
+starting containers. It also pins exact floors for the agent runtime, Bedrock,
+and Gemini so broader package groups cannot hide regressions in those owners.
+`make test-docker` runs the Mongo, Pulse, and registry contracts once under
+race detection and enforces an exact floor for each package.
 The scheduled stress workflow repeats race-enabled lifecycle tests and requires
 the Docker-backed Mongo, Redis, and registry tests.
 

@@ -48,8 +48,11 @@ Use this skill for `loom-mcp` work in this repo. Keep `AGENTS.md` short and keep
   red-green checks.
 - Generator branch coverage must include executable compile or behavior tests.
   Golden output alone is not sufficient proof for a generated contract.
-- `make test` enforces global and critical package-group coverage floors.
-  Use `make test-stress` for concurrency and lifecycle changes.
+- `make test` enforces global and critical package-group coverage floors plus
+  exact owner floors for `runtime/agent/runtime`, Bedrock, and Gemini. Docker
+  coverage likewise matches the Mongo infrastructure, Pulse client, and root
+  registry packages exactly. Use `make test-stress` for concurrency and
+  lifecycle changes.
 - Ordinary `go test` runs the seed corpora at dynamic JSON boundaries. Use
   `make test-fuzz` for bounded mutation of those corpora; change `FUZZ_TIME`
   only when a longer scheduled or focused run is intentional.
