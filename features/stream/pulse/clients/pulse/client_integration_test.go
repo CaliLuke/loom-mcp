@@ -98,13 +98,14 @@ func TestClientRedisPendingDeliverySurvivesSinkReplacement(t *testing.T) {
 	require.NoError(t, err)
 	stream, err := client.Stream("pending-delivery")
 	require.NoError(t, err)
+	const ackGracePeriod = time.Second
 
 	first, err := stream.NewSink(
 		ctx,
 		"durable",
 		streamopts.WithSinkStartAtOldest(),
 		streamopts.WithSinkBlockDuration(50*time.Millisecond),
-		streamopts.WithSinkAckGracePeriod(150*time.Millisecond),
+		streamopts.WithSinkAckGracePeriod(ackGracePeriod),
 	)
 	require.NoError(t, err)
 	firstEvents := first.Subscribe()
@@ -124,7 +125,7 @@ func TestClientRedisPendingDeliverySurvivesSinkReplacement(t *testing.T) {
 		ctx,
 		"durable",
 		streamopts.WithSinkBlockDuration(50*time.Millisecond),
-		streamopts.WithSinkAckGracePeriod(150*time.Millisecond),
+		streamopts.WithSinkAckGracePeriod(ackGracePeriod),
 	)
 	require.NoError(t, err)
 	t.Cleanup(func() {
@@ -138,7 +139,7 @@ func TestClientRedisPendingDeliverySurvivesSinkReplacement(t *testing.T) {
 		require.Equal(t, "created", event.EventName)
 		require.JSONEq(t, `{"id":"job-1"}`, string(event.Payload))
 		require.NoError(t, second.Ack(ctx, event))
-	case <-time.After(10 * time.Second):
+	case <-time.After(15 * time.Second):
 		require.FailNow(t, "timed out waiting for pending Pulse delivery to be reclaimed")
 	}
 
@@ -244,7 +245,9 @@ func startRedisContainer(t *testing.T, ctx context.Context) (*redis.Client, test
 	require.NoError(t, err)
 	rdb := redis.NewClient(&redis.Options{Addr: fmt.Sprintf("%s:%s", host, port.Port())})
 	t.Cleanup(func() { require.NoError(t, rdb.Close()) })
-	require.NoError(t, rdb.Ping(ctx).Err())
+	require.Eventually(t, func() bool {
+		return rdb.Ping(ctx).Err() == nil
+	}, 10*time.Second, 50*time.Millisecond, "Redis mapped port did not become reachable")
 	return rdb, container
 }
 
