@@ -11,6 +11,35 @@ import (
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/prompt"
 )
 
+func FuzzMessageJSONCodec(f *testing.F) {
+	f.Add([]byte(`{"Role":"assistant","Parts":[{"Kind":"text","Text":"hello"}],"Meta":{"trace":"trace-1"}}`))
+	f.Add([]byte(`{"Role":"user","Parts":["legacy text"]}`))
+	f.Add([]byte(`{"Role":"assistant","Parts":[{"Kind":"tool_use","ID":"call-1","Name":"search","Input":{"q":"loom"}}]}`))
+	f.Add([]byte(`{"Role":"assistant","Parts":[{"Kind":"audio"}]}`))
+	f.Add([]byte(`{"Role":"assistant","Parts":[null]}`))
+	f.Add([]byte(`{`))
+
+	f.Fuzz(func(t *testing.T, data []byte) {
+		if len(data) > 1<<20 {
+			return
+		}
+		var decoded Message
+		err := json.Unmarshal(data, &decoded)
+		if !jsontext.Value(data).IsValid() {
+			require.Error(t, err)
+			return
+		}
+		if err != nil {
+			return
+		}
+		encoded, err := json.Marshal(decoded)
+		require.NoError(t, err)
+		var roundTrip Message
+		require.NoError(t, json.Unmarshal(encoded, &roundTrip))
+		assert.Equal(t, decoded, roundTrip)
+	})
+}
+
 func TestMessageJSONRoundTripPreservesEveryPartType(t *testing.T) {
 	documentLocation := &DocumentPageLocation{DocumentIndex: 2, Start: 4, End: 5}
 	original := Message{

@@ -542,8 +542,11 @@ func (p *chunkProcessor) emitFinalToolCall(idx int) error {
 	if tb == nil {
 		return nil
 	}
-	payload := decodeToolPayload(tb.finalInput())
 	delete(p.toolBlocks, idx)
+	payload, err := decodeToolPayload(tb.finalInput())
+	if err != nil {
+		return fmt.Errorf("bedrock stream: tool call %q payload: %w", tb.id, err)
+	}
 	return p.emit(model.Chunk{
 		Type: model.ChunkTypeToolCall,
 		ToolCall: &model.ToolCall{
@@ -656,19 +659,16 @@ func contentIndex(idx *int32) (int, error) {
 	return int(*idx), nil
 }
 
-func decodeToolPayload(raw string) rawjson.Message {
+func decodeToolPayload(raw string) (rawjson.Message, error) {
 	trimmed := strings.TrimSpace(raw)
 	if trimmed == "" {
-		return rawjson.Message([]byte("{}"))
+		return rawjson.Message([]byte("{}")), nil
 	}
 	data := []byte(trimmed)
 	if !jsontext.Value(data).IsValid() {
-		// Tool payload fragments come from a model stream boundary and can be
-		// truncated when the provider stops on max_tokens. Return an empty object
-		// so tool schema validation can produce a structured tool error.
-		return rawjson.Message([]byte("{}"))
+		return nil, errors.New("invalid JSON")
 	}
-	return rawjson.Message(data)
+	return rawjson.Message(data), nil
 }
 
 func translateCitationDelta(delta brtypes.CitationsDelta) model.Citation {

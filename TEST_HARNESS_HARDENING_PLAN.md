@@ -182,6 +182,19 @@ codecs. Run corpus seeds on pull requests and bounded fuzz time in the scheduled
 stress workflow. Malformed inputs must return typed errors without panic, hang,
 or silent coercion.
 
+Implemented:
+
+- root-module corpora cover canonical JSON, hook activity envelopes, protected
+  MCP retry state, model messages, and Anthropic, Bedrock, and OpenAI tool
+  argument boundaries;
+- the assistant fixture owns the corpus for generated sum-type JSON codecs,
+  keeping generated `gen/` files untouched;
+- normal package and fixture tests execute every seed on pull requests, while
+  `make test-fuzz` gives each target a bounded mutation window under `-race` in
+  the scheduled stress workflow;
+- Anthropic and Bedrock streaming now reject malformed or truncated tool JSON
+  with provider-scoped errors instead of forwarding or silently replacing it.
+
 ### Priority 7: Add Risk-Weighted Owner Floors
 
 After behavioral tests land, add exact owner floors for
@@ -550,7 +563,7 @@ Exit criteria:
 - [x] Priority 3: cross-layer generated runtime transitions
 - [x] Priority 4: provider stream state-machine conformance
 - [x] Priority 5: real persistence upgrade and concurrency contracts
-- [ ] Priority 6: fuzz dynamic trust boundaries
+- [x] Priority 6: fuzz dynamic trust boundaries
 - [ ] Priority 7: risk-weighted owner floors
 - [x] Phase 1: truthful MCP integration coverage
 - [x] Phase 3: executable codegen matrix
@@ -563,3 +576,4 @@ Exit criteria:
 - [x] `make verify-mcp-local`
 - [x] `make itest`
 - [x] `make test-stress STRESS_COUNT=2`
+- [x] `make test-fuzz FUZZ_TIME=1s`

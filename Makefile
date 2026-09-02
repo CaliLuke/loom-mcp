@@ -18,6 +18,7 @@ COVERAGE_DOCKER_PULSE_MIN ?= 80.0
 COVERAGE_DOCKER_REGISTRY_MIN ?= 75.0
 STRESS_COUNT ?= 5
 STRESS_TIMEOUT ?= 20m
+FUZZ_TIME ?= 10s
 # Testcontainers does not resolve Docker CLI contexts on every host. Export the
 # active context endpoint unless the caller already selected a Docker daemon.
 DOCKER_HOST ?= $(shell command -v docker >/dev/null 2>&1 && docker context inspect --format '{{.Endpoints.docker.Host}}' 2>/dev/null)
@@ -41,7 +42,7 @@ PROTOC_GEN_GO_GRPC := protoc-gen-go-grpc
 PROTOC_GEN_GO_GRPC_VERSION ?= v1.6.2
 PROTOC_INSTALL_DIR ?= $(GOPATH)
 
-.PHONY: all build lint lint-pre-commit lint-install-hook test test-docker coverage-check coverage-check-critical docker-coverage test-stress itest ci tools ensure-golangci ensure-staticcheck ensure-protoc-plugins install-protoc protoc-check run-example example-gen loom-local loom-remote loom-status update-mcp-go-sdk verify-generated verify-mcp-local regen-quickstart regen-assistant-fixture regen-progressive-discovery-fixture regen-agent-feature-fixture verify-agent-feature-fixture
+.PHONY: all build lint lint-pre-commit lint-install-hook test test-docker coverage-check coverage-check-critical docker-coverage test-stress test-fuzz itest ci tools ensure-golangci ensure-staticcheck ensure-protoc-plugins install-protoc protoc-check run-example example-gen loom-local loom-remote loom-status update-mcp-go-sdk verify-generated verify-mcp-local regen-quickstart regen-assistant-fixture regen-progressive-discovery-fixture regen-agent-feature-fixture verify-agent-feature-fixture
 
 all: build lint test
 
@@ -131,6 +132,17 @@ test-stress: tools
 		-count=$(STRESS_COUNT) -timeout=$(STRESS_TIMEOUT) \
 		-run 'TestGeneratedSDKServer(GETEnforcesSessionPrincipal|EnforcesSessionPrincipalOnEverySessionRequest|RejectsUnknownSessionIDWithNotFound|ResourceSubscriptionLifecycle|PropagatesClientCancellation)' \
 		./...
+
+test-fuzz:
+	$(GO) test -race -run '^$$' -fuzz '^FuzzUnmarshalCanonicalJSON$$' -fuzztime=$(FUZZ_TIME) ./runtime/mcp
+	$(GO) test -race -run '^$$' -fuzz '^FuzzDecodeFromHookInput$$' -fuzztime=$(FUZZ_TIME) ./runtime/agent/hooks
+	$(GO) test -race -run '^$$' -fuzz '^FuzzProtectedRequestState$$' -fuzztime=$(FUZZ_TIME) ./runtime/mcp/sdkclient
+	$(GO) test -race -run '^$$' -fuzz '^FuzzMessageJSONCodec$$' -fuzztime=$(FUZZ_TIME) ./runtime/agent/model
+	$(GO) test -race -run '^$$' -fuzz '^FuzzToolFragmentPayload$$' -fuzztime=$(FUZZ_TIME) ./features/model/anthropic
+	$(GO) test -race -run '^$$' -fuzz '^FuzzToolFragmentPayload$$' -fuzztime=$(FUZZ_TIME) ./features/model/bedrock
+	$(GO) test -race -run '^$$' -fuzz '^FuzzParseToolArguments$$' -fuzztime=$(FUZZ_TIME) ./features/model/openai
+	$(GO) test -C ./integration_tests/fixtures/assistant -race -run '^$$' \
+		-fuzz '^FuzzGeneratedUnionJSONCodecs$$' -fuzztime=$(FUZZ_TIME) .
 
 # Run generated quickstart acceptance plus every generated fixture and MCP
 # framework contract. Nested fixture modules must be invoked explicitly.

@@ -50,6 +50,9 @@ Use this skill for `loom-mcp` work in this repo. Keep `AGENTS.md` short and keep
   Golden output alone is not sufficient proof for a generated contract.
 - `make test` enforces global and critical package-group coverage floors.
   Use `make test-stress` for concurrency and lifecycle changes.
+- Ordinary `go test` runs the seed corpora at dynamic JSON boundaries. Use
+  `make test-fuzz` for bounded mutation of those corpora; change `FUZZ_TIME`
+  only when a longer scheduled or focused run is intentional.
 - Docker-backed coverage must fail closed in CI through
   `LOOM_MCP_REQUIRE_DOCKER_TESTS=1`.
 - When a model-facing agent feature crosses DSL, codegen, generated
@@ -126,6 +129,9 @@ Use this skill for `loom-mcp` work in this repo. Keep `AGENTS.md` short and keep
   cancellation, normalized errors, and canonical/provider tool-name round
   trips. Rate limits that surface during stream receive must still wrap
   `model.ErrRateLimited`.
+- Streamed tool arguments may normalize an empty payload to `{}`, but malformed
+  or truncated JSON must fail with a provider-scoped error. Never silently
+  coerce malformed model output into a valid tool payload.
 - Gemini and Vertex implement exact `model.TokenCounter` but do not implement
   streaming; `Stream` returns `model.ErrStreamingUnsupported`. Treat streaming
   as a provider capability, not a universal consequence of `model.Client`.

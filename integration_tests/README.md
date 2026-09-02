@@ -117,6 +117,12 @@ the same generated workflow on the replacement worker. Run it through
 `make test-docker`; the fail-closed Docker lane also owns Mongo upgrade/index
 contracts and Pulse pending-delivery/disruption behavior.
 
+The assistant fixture also owns a seed corpus for generated JSON union codecs.
+Normal fixture tests run every seed. The scheduled stress workflow uses
+`make test-fuzz` to mutate those unions and the root module's dynamic JSON,
+hook, request-state, message, and provider-fragment boundaries for a bounded
+duration.
+
 ## Supported environment variables
 
 | Variable | Purpose |
@@ -126,6 +132,7 @@ contracts and Pulse pending-delivery/disruption behavior.
 | `MCP_TEST_READY_TIMEOUT_SECONDS` | Override the managed server's 30-second readiness timeout with a positive integer. |
 | `LOOM_MCP_RUN_DOCKER_TESTS=1` | Select Docker-backed Mongo, Redis, and generated Temporal/Mongo contracts. |
 | `LOOM_MCP_REQUIRE_DOCKER_TESTS=1` | Fail instead of skipping when a selected Docker service cannot start. |
+| `FUZZ_TIME` | Set the duration for each boundary owned by `make test-fuzz` (default `10s`). |
 
 Go's standard test flags provide filtering, timeouts, verbosity, shuffle, and
 repeat counts. For example:

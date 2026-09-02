@@ -2037,6 +2037,12 @@ include multimodal input, typed thinking, exact token counting, and tool-name
 round trips. Streaming providers prove setup, receive, terminal, and
 receive-time rate-limit behavior.
 
+Streaming provider adapters assemble tool arguments only until the provider
+closes the content block. Anthropic and Bedrock normalize empty arguments to
+`{}`; OpenAI preserves its existing empty-argument representation. Malformed
+or truncated JSON fails the stream with a provider-scoped error instead of
+being replaced with an empty object.
+
 Bedrock normalizes structured-output schemas to its supported subset. It closes
 object schemas, removes unsupported keywords and formats, and rejects shapes
 whose `additionalProperties` semantics cannot be represented instead of

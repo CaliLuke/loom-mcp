@@ -43,3 +43,6 @@ jobs:
         env:
           LOOM_MCP_REQUIRE_DOCKER_TESTS: '1'
         run: make test-stress
+
+      - name: Fuzz dynamic trust boundaries
+        run: make test-fuzz FUZZ_TIME=30s

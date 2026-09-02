@@ -2,6 +2,7 @@ package anthropic
 
 import (
 	"context"
+	"encoding/json/jsontext"
 	"errors"
 	"fmt"
 	"io"
@@ -458,8 +459,11 @@ func (p *anthropicChunkProcessor) emitFinalToolCall(idx int) error {
 	if tb == nil {
 		return nil
 	}
-	payload := decodeToolPayload(tb.finalInput())
 	delete(p.toolBlocks, idx)
+	payload, err := decodeToolPayload(tb.finalInput())
+	if err != nil {
+		return fmt.Errorf("anthropic stream: tool call %q payload: %w", tb.id, err)
+	}
 	return p.emit(model.Chunk{
 		Type: model.ChunkTypeToolCall,
 		ToolCall: &model.ToolCall{
@@ -512,14 +516,14 @@ func (tb *thinkingBuffer) finalize(index int) *model.ThinkingPart {
 	return nil
 }
 
-func decodeToolPayload(raw string) rawjson.Message {
+func decodeToolPayload(raw string) (rawjson.Message, error) {
 	trimmed := strings.TrimSpace(raw)
 	if trimmed == "" {
 		trimmed = "{}"
 	}
 	data := []byte(trimmed)
-	if len(data) == 0 {
-		return nil
+	if !jsontext.Value(data).IsValid() {
+		return nil, errors.New("invalid JSON")
 	}
-	return rawjson.Message(data)
+	return rawjson.Message(data), nil
 }

@@ -17,6 +17,61 @@ import (
 
 var testRequestStateKey = []byte("0123456789abcdef0123456789abcdef")
 
+func FuzzProtectedRequestState(f *testing.F) {
+	f.Add([]byte(`{"version":1}`), uint8(0))
+	f.Add([]byte(`{"version":1,"requests":{"loom-input-0":{"method":"elicitation/create","params":{"message":"continue?"}}},"pending":["loom-input-0"]}`), uint8(0))
+	f.Add([]byte(`{"version":2}`), uint8(0))
+	f.Add([]byte(`not-base64`), uint8(1))
+	f.Add([]byte(`{"version":1}`), uint8(2))
+	aad, err := requestStateBinding("tools/call", map[string]any{"name": "test-tool"})
+	require.NoError(f, err)
+
+	f.Fuzz(func(t *testing.T, data []byte, mode uint8) {
+		if len(data) > maxRequestStateBytes {
+			return
+		}
+		state := "!" + string(data)
+		if mode%3 != 1 {
+			sealedState, sealErr := sealRequestStateForFuzz(data, testRequestStateKey, aad)
+			require.NoError(t, sealErr)
+			state = sealedState
+			if mode%3 == 2 {
+				sealed, err := base64.RawURLEncoding.DecodeString(state)
+				require.NoError(t, err)
+				sealed[len(sealed)-1] ^= 1
+				state = base64.RawURLEncoding.EncodeToString(sealed)
+			}
+		}
+
+		roundTrip := newInputRoundTrip(testClientFeaturesOptions(nil, state))
+		if mode%3 != 0 {
+			require.Error(t, roundTrip.err)
+			require.True(t, mcpruntime.IsInvalidClientInput(roundTrip.err))
+			return
+		}
+		if roundTrip.err != nil {
+			require.True(t, mcpruntime.IsInvalidClientInput(roundTrip.err))
+			return
+		}
+		for id := range roundTrip.pending {
+			_, ok := roundTrip.requests[id]
+			require.True(t, ok)
+		}
+	})
+}
+
+// sealRequestStateForFuzz uses a fixed nonce so every saved fuzz input produces
+// the same protected state. It is test-only and must not be used for real data.
+func sealRequestStateForFuzz(data, key, aad []byte) (string, error) {
+	aead, err := requestStateAEAD(key)
+	if err != nil {
+		return "", err
+	}
+	nonce := make([]byte, aead.NonceSize())
+	sealed := aead.Seal(nonce, nonce, data, aad)
+	return base64.RawURLEncoding.EncodeToString(sealed), nil
+}
+
 func TestWithClientFeaturesIgnoresNilSession(t *testing.T) {
 	t.Parallel()
 

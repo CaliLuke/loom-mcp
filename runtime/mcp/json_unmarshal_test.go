@@ -36,6 +36,34 @@ func (c *canonicalCustom) UnmarshalJSON(data []byte) error {
 	return nil
 }
 
+func FuzzUnmarshalCanonicalJSON(f *testing.F) {
+	f.Add([]byte(`{"display_name":"home","count":7,"unsigned":9,"ratio":1.5,"enabled":true,"pair":[4,5]}`))
+	f.Add([]byte(`{"count":128}`))
+	f.Add([]byte(`{}{} `))
+	f.Add([]byte(`{"items":[{"width":2,"height":3}]}`))
+	f.Add([]byte(`{`))
+
+	f.Fuzz(func(t *testing.T, data []byte) {
+		if len(data) > 1<<20 {
+			return
+		}
+		var decoded canonicalDecoded
+		err := UnmarshalCanonicalJSON(data, &decoded)
+		if !jsontext.Value(data).IsValid() {
+			require.Error(t, err)
+			return
+		}
+		if err != nil {
+			return
+		}
+		encoded, err := MarshalCanonicalJSON(decoded)
+		require.NoError(t, err)
+		var roundTrip canonicalDecoded
+		require.NoError(t, UnmarshalCanonicalJSON(encoded, &roundTrip))
+		assert.Equal(t, decoded, roundTrip)
+	})
+}
+
 func TestUnmarshalCanonicalJSONDecodesCompleteShape(t *testing.T) {
 	data := []byte(`{
 		"display_name":"home","count":7,"unsigned":9,"ratio":1.5,"enabled":true,
