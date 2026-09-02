@@ -443,12 +443,19 @@ func testTemporalSignalTimeoutRace(t *testing.T, temporalClient client.Client) {
 		require.NoError(t, err)
 		runMeta, err := fx.rt.SessionStore.LoadRun(ctx, runID)
 		require.NoError(t, err)
-		if status == engine.RunStatusCompleted {
-			require.Equal(t, run.StatusCompleted, snapshot.Status)
+		// Workflow completion and the server-enforced timeout are separate
+		// durable commits at this boundary. If the runtime commits completion
+		// first, that monotonic terminal result remains authoritative even when
+		// Temporal records the workflow as timed out immediately afterward.
+		switch snapshot.Status {
+		case run.StatusCompleted:
+			require.Contains(t, []engine.RunStatus{engine.RunStatusCompleted, engine.RunStatusTimedOut}, status)
 			require.Equal(t, session.RunStatusCompleted, runMeta.Status)
-		} else {
-			require.Equal(t, run.StatusFailed, snapshot.Status)
+		case run.StatusFailed:
+			require.Equal(t, engine.RunStatusTimedOut, status)
 			require.Equal(t, session.RunStatusFailed, runMeta.Status)
+		default:
+			require.Failf(t, "stranded canonical run status", "run %s remained %s after engine terminal status %s", runID, snapshot.Status, status)
 		}
 	}
 	require.GreaterOrEqual(t, completed, 1)
