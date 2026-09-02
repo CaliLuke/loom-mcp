@@ -3,6 +3,7 @@ package temporal
 import (
 	"encoding/json/v2"
 	"fmt"
+	"time"
 
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/api"
@@ -51,10 +52,21 @@ type (
 		ToolOutputs []*api.ToolCallOutput
 		TypedInputs []planner.TypedInputOutput
 		Finalize    *planner.Termination
+		Recovery    *api.ModelRecovery
 
 		ToolPolicyActive bool
 		AllowedTools     []aitools.Ident
-		PolicyCaps       policy.CapsState
+		PolicyCaps       planCapsWire
+	}
+
+	planCapsWire struct {
+		MaxToolCalls                        int
+		RemainingToolCalls                  int
+		MaxRecoveryTurns                    int
+		RemainingRecoveryTurns              int
+		MaxConsecutiveFailedToolCalls       int
+		RemainingConsecutiveFailedToolCalls int
+		ExpiresAt                           time.Time
 	}
 
 	runOutputWire struct {
@@ -217,9 +229,10 @@ func decodePlanActivityInput(p *commonpb.Payload, valuePtr any) error {
 	dst.ToolOutputs = w.ToolOutputs
 	dst.TypedInputs = w.TypedInputs
 	dst.Finalize = w.Finalize
+	dst.Recovery = w.Recovery
 	dst.ToolPolicyActive = w.ToolPolicyActive
 	dst.AllowedTools = w.AllowedTools
-	dst.PolicyCaps = w.PolicyCaps
+	dst.PolicyCaps = decodePlanCaps(w.PolicyCaps)
 	return nil
 }
 
@@ -267,11 +280,42 @@ func encodePlanActivityInputWire(in *api.PlanActivityInput) (*planActivityInputW
 		ToolOutputs: in.ToolOutputs,
 		TypedInputs: in.TypedInputs,
 		Finalize:    in.Finalize,
+		Recovery:    in.Recovery,
 
 		ToolPolicyActive: in.ToolPolicyActive,
 		AllowedTools:     in.AllowedTools,
-		PolicyCaps:       in.PolicyCaps,
+		PolicyCaps:       encodePlanCaps(in.PolicyCaps),
 	}, nil
+}
+
+func encodePlanCaps(in policy.CapsState) planCapsWire {
+	return planCapsWire{
+		MaxToolCalls:           in.MaxToolCalls,
+		RemainingToolCalls:     in.RemainingToolCalls,
+		MaxRecoveryTurns:       in.MaxRecoveryTurns,
+		RemainingRecoveryTurns: in.RemainingRecoveryTurns,
+		//lint:ignore SA1019 Temporal history migration must preserve the deprecated wire field.
+		ExpiresAt: in.ExpiresAt,
+	}
+}
+
+func decodePlanCaps(in planCapsWire) policy.CapsState {
+	maxRecoveryTurns := in.MaxRecoveryTurns
+	if maxRecoveryTurns == 0 {
+		maxRecoveryTurns = in.MaxConsecutiveFailedToolCalls
+	}
+	remainingRecoveryTurns := in.RemainingRecoveryTurns
+	if remainingRecoveryTurns == 0 {
+		remainingRecoveryTurns = in.RemainingConsecutiveFailedToolCalls
+	}
+	return policy.CapsState{
+		MaxToolCalls:           in.MaxToolCalls,
+		RemainingToolCalls:     in.RemainingToolCalls,
+		MaxRecoveryTurns:       maxRecoveryTurns,
+		RemainingRecoveryTurns: remainingRecoveryTurns,
+		//lint:ignore SA1019 Temporal history migration must restore the deprecated compatibility field.
+		ExpiresAt: in.ExpiresAt,
+	}
 }
 
 func encodeToolResultsSetWire(in *api.ToolResultsSet) (*toolResultsSetWire, error) {

@@ -1,42 +1,17 @@
 package registry
 
 import (
-	"context"
-	"encoding/json/v2"
+	"encoding/json"
 	"testing"
+	"time"
 
-	clientspulse "github.com/CaliLuke/loom-mcp/v2/features/stream/pulse/clients/pulse"
-	mockpulse "github.com/CaliLuke/loom-mcp/v2/features/stream/pulse/clients/pulse/mocks"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/tools"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/toolregistry"
-	streamopts "github.com/CaliLuke/loom/pulse/streaming/options"
 
 	"github.com/leanovate/gopter"
 	"github.com/leanovate/gopter/gen"
 	"github.com/leanovate/gopter/prop"
-	"github.com/stretchr/testify/require"
 )
-
-func TestStreamManagerRemovesStreamsAbsentFromCatalog(t *testing.T) {
-	ctx := context.Background()
-	client := mockpulse.NewClient(t)
-	client.SetStream(func(name string, opts ...streamopts.Stream) (clientspulse.Stream, error) {
-		return mockpulse.NewStream(t), nil
-	})
-
-	manager := NewStreamManager(client)
-	_, _, err := manager.GetOrCreateStream(ctx, "registered-toolset")
-	require.NoError(t, err)
-	_, _, err = manager.GetOrCreateStream(ctx, "stale-toolset")
-	require.NoError(t, err)
-
-	manager.RemoveStreamsNotInCatalog(map[string]bool{
-		"registered-toolset": true,
-	})
-
-	require.NotNil(t, manager.GetStream("registered-toolset"))
-	require.Nil(t, manager.GetStream("stale-toolset"))
-}
 
 // TestToolCallMessageStructure verifies Property 13: Tool call message structure.
 // **Feature: internal-tool-registry, Property 13: Tool call message structure**
@@ -57,7 +32,15 @@ func TestToolCallMessageStructure(t *testing.T) {
 			}
 
 			// Create the message
-			msg := toolregistry.NewToolCallMessage(toolUseID, tools.Ident(tool), payload, nil)
+			msg := toolregistry.NewToolCallMessage(
+				"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+				toolUseID,
+				time.Now().Add(toolregistry.MaxToolCallWait),
+				time.Now().Add(toolregistry.DefaultResultStreamTTL),
+				tools.Ident(tool),
+				payload,
+				nil,
+			)
 
 			// Verify message type is "call"
 			if msg.Type != toolregistry.MessageTypeCall {
@@ -94,7 +77,7 @@ func TestToolCallMessageStructure(t *testing.T) {
 	properties.Property("NewPingMessage creates message with correct structure", prop.ForAll(
 		func(pingID string) bool {
 			// Create the ping message
-			msg := toolregistry.NewPingMessage(pingID)
+			msg := toolregistry.NewPingMessage("registration-a", pingID)
 
 			// Verify message type is "ping"
 			if msg.Type != toolregistry.MessageTypePing {
@@ -135,7 +118,15 @@ func TestToolCallMessageStructure(t *testing.T) {
 			}
 
 			// Create and serialize the message
-			msg := toolregistry.NewToolCallMessage(toolUseID, tools.Ident(tool), payload, nil)
+			msg := toolregistry.NewToolCallMessage(
+				"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+				toolUseID,
+				time.Now().Add(toolregistry.MaxToolCallWait),
+				time.Now().Add(toolregistry.DefaultResultStreamTTL),
+				tools.Ident(tool),
+				payload,
+				nil,
+			)
 			serialized, err := json.Marshal(msg)
 			if err != nil {
 				return false
@@ -149,6 +140,9 @@ func TestToolCallMessageStructure(t *testing.T) {
 
 			// Verify required fields are present
 			if decoded["type"] != string(toolregistry.MessageTypeCall) {
+				return false
+			}
+			if decoded["registration_token"] != "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" {
 				return false
 			}
 			if decoded["tool_use_id"] != toolUseID {

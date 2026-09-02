@@ -78,7 +78,7 @@ var _ = Service("features", func() {
 			})
 		})
 		RunPolicy(func() {
-			DefaultCaps(MaxToolCalls(4), MaxConsecutiveFailedToolCalls(1))
+			DefaultCaps(MaxToolCalls(4), MaxRecoveryTurns(1))
 			TimeBudget("10s")
 			InterruptsAllowed(true)
 		})
@@ -121,7 +121,7 @@ var _ = Service("features", func() {
 			})
 		})
 		RunPolicy(func() {
-			DefaultCaps(MaxToolCalls(12), MaxConsecutiveFailedToolCalls(2))
+			DefaultCaps(MaxToolCalls(12), MaxRecoveryTurns(2))
 			TimeBudget("30s")
 			InterruptsAllowed(true)
 			Interceptors("audit")

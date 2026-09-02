@@ -2,7 +2,6 @@ package runtime
 
 import (
 	"context"
-	"encoding/json/v2"
 	"fmt"
 	"sync"
 
@@ -63,13 +62,12 @@ func (r *retryAndReflectInterceptor) AfterTool(_ context.Context, input *AfterTo
 	result := &planner.ToolResult{
 		Name:       input.Call.Name,
 		ToolCallID: input.Call.ToolCallID,
-		Error:      planner.NewToolError(fmt.Sprintf("tool %q failed: %v", input.Call.Name, input.Err)),
+		Error:      planner.NewToolError("tool execution failed; retry with corrected arguments"),
 		RetryHint: &planner.RetryHint{
 			Reason:         planner.RetryReasonInvalidArguments,
 			Tool:           input.Call.Name,
 			RestrictToTool: true,
-			PriorInput:     priorInputObject(input.Call.Payload.RawMessage()),
-			Message:        retryReflectMessage(input.Call.Name, input.Err, count, r.max),
+			Message:        retryReflectMessage(input.Call.Name, count, r.max),
 		},
 	}
 	return &AfterToolDecision{Result: result}, nil
@@ -93,23 +91,11 @@ func retryReflectKey(call planner.ToolRequest) string {
 	return call.RunID + "\x00" + string(call.Name)
 }
 
-func priorInputObject(data []byte) map[string]any {
-	if len(data) == 0 {
-		return nil
-	}
-	var out map[string]any
-	if err := json.Unmarshal(data, &out); err != nil {
-		return nil
-	}
-	return out
-}
-
-func retryReflectMessage(tool tools.Ident, err error, count, max int) string {
+func retryReflectMessage(tool tools.Ident, count, max int) string {
 	return fmt.Sprintf(
-		"Retry %s with corrected arguments. Previous attempt %d of %d failed with: %v",
+		"Retry %s with corrected arguments. Attempt %d of %d failed.",
 		tool,
 		count,
 		max,
-		err,
 	)
 }

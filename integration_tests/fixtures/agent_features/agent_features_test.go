@@ -23,6 +23,7 @@ import (
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/session"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/stream"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/tools"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
@@ -60,6 +61,18 @@ func TestGeneratedFeatureFixtureRegistersRuntimeSurface(t *testing.T) {
 		workflow.Publish,
 		workflow.Revise,
 	}, workflow.Names())
+}
+
+func TestGeneratedFeatureInMemoryModelRecovery(t *testing.T) {
+	t.Parallel()
+
+	runGeneratedModelRecoveryScenario(
+		t,
+		context.Background(),
+		newFeatureRuntime(t),
+		"sess-inmem-recovery",
+		"run-inmem-recovery",
+	)
 }
 
 func TestAgentFeatureMethodBackedDispatcher(t *testing.T) {
@@ -120,9 +133,14 @@ func runGeneratedFeatureAwaitScenario(
 		runOpts...,
 	)
 	require.NoError(t, err)
-	require.Eventually(t, func() bool {
+	if !assert.Eventually(t, func() bool {
 		return fx.recorder.count(hooks.AwaitTypedInput) == 1
-	}, awaitTimeout, 10*time.Millisecond)
+	}, awaitTimeout, 10*time.Millisecond) {
+		waitCtx, cancelWait := context.WithTimeout(ctx, 2*time.Second)
+		defer cancelWait()
+		out, waitErr := handle.Wait(waitCtx)
+		require.FailNowf(t, "typed-input await was not published", "run output: %#v; wait error: %v", out, waitErr)
+	}
 	require.NoError(t, rt.PauseRun(ctx, &api.PauseRequest{
 		RunID:       runID,
 		Reason:      "fixture-review",
@@ -398,7 +416,10 @@ func TestGeneratedFeatureRunAppliesNamedInterceptorsAndRetryReflect(t *testing.T
 	)
 	rt := fx.rt
 	require.NoError(t, rt.RegisterModel("test-model", modelClientFunc(func(ctx context.Context, req *model.Request) (*model.Response, error) {
-		return &model.Response{Content: []model.Message{{Role: model.ConversationRoleAssistant, Parts: []model.Part{model.TextPart{Text: "model ok"}}}}}, nil
+		return &model.Response{
+			Content:    []model.Message{{Role: model.ConversationRoleAssistant, Parts: []model.Part{model.TextPart{Text: "model ok"}}}},
+			StopReason: "end_turn",
+		}, nil
 	})))
 	exec := newRecordingWorkflowExecutor()
 	exec.failRetryOnce = true

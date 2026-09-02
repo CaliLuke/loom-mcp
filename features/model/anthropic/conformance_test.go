@@ -113,6 +113,16 @@ func TestClientConformance(t *testing.T) {
 				CacheWriteTokens: 4,
 			}, response.Usage)
 		},
+		OutputLimited: func(t *testing.T) {
+			provider := newClient(t, &stubMessagesClient{resp: &sdk.Message{StopReason: sdk.StopReasonMaxTokens}})
+			response, err := provider.Complete(context.Background(), request())
+			require.NoError(t, err)
+			require.True(t, response.OutputLimited)
+			client, err := model.NewClient(provider)
+			require.NoError(t, err)
+			_, err = client.Complete(context.Background(), request())
+			requireOutputLimitedRejection(t, err)
+		},
 		MultimodalInput: testutil.ProviderCapabilityConformance{Supported: func(t *testing.T) {
 			stub := &stubMessagesClient{resp: &sdk.Message{}}
 			req := request()
@@ -321,8 +331,32 @@ func TestClientConformance(t *testing.T) {
 				_, err = stream.Recv()
 				require.ErrorIs(t, err, io.EOF)
 			},
+			OutputLimited: func(t *testing.T) {
+				events := anthropicConformanceEvents(t,
+					`{"type":"message_start","message":{"id":"msg-1","type":"message","role":"assistant","model":"claude-opus","content":[],"usage":{"input_tokens":1,"output_tokens":0}}}`,
+					`{"type":"content_block_start","index":0,"content_block":{"type":"text","text":""}}`,
+					`{"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":"partial"}}`,
+					`{"type":"content_block_stop","index":0}`,
+					`{"type":"message_delta","delta":{"stop_reason":"max_tokens"},"usage":{"output_tokens":1}}`,
+					`{"type":"message_stop"}`,
+				)
+				provider := newClient(t, &stubMessagesClient{stream: ssestream.NewStream[sdk.MessageStreamEventUnion](&testDecoder{events: events}, nil)})
+				stream, err := provider.Stream(context.Background(), request())
+				require.NoError(t, err)
+				t.Cleanup(func() { require.NoError(t, stream.Close()) })
+				chunks := testutil.CollectStreamChunks(t, stream)
+				require.True(t, chunks[len(chunks)-1].OutputLimited)
+			},
 		},
 	})
+}
+
+func requireOutputLimitedRejection(t *testing.T, err error) {
+	t.Helper()
+	require.Error(t, err)
+	var validationErr *model.OutputValidationError
+	require.ErrorAs(t, err, &validationErr)
+	require.Equal(t, model.OutputValidationOutputBounds, validationErr.Kind())
 }
 
 type anthropicPartialCancelDecoder struct {

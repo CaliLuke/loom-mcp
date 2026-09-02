@@ -17,11 +17,16 @@ type modelInterceptedClient struct {
 	sessionID    string
 	turnID       string
 	modelID      string
+	recovery     *modelRecoveryRecorder
+	configureReq func(*model.Request)
 }
 
-func newModelInterceptedClient(inner model.Client, interceptors []Interceptor, agentID agent.Ident, runID, sessionID, turnID, modelID string) model.Client {
-	if inner == nil || !hasModelInterceptors(interceptors) {
+func newModelInterceptedClient(inner model.Client, interceptors []Interceptor, agentID agent.Ident, runID, sessionID, turnID, modelID string, recovery *modelRecoveryRecorder, configureReq func(*model.Request)) model.Client {
+	if inner == nil {
 		return inner
+	}
+	if !hasModelInterceptors(interceptors) {
+		return newRecoveryCapturingClient(inner, recovery)
 	}
 	return &modelInterceptedClient{
 		inner:        inner,
@@ -31,36 +36,72 @@ func newModelInterceptedClient(inner model.Client, interceptors []Interceptor, a
 		sessionID:    sessionID,
 		turnID:       turnID,
 		modelID:      modelID,
+		recovery:     recovery,
+		configureReq: configureReq,
 	}
 }
 
 func (c *modelInterceptedClient) Complete(ctx context.Context, req *model.Request) (*model.Response, error) {
 	currentReq, resp, err, short := c.beforeModel(ctx, req)
+	c.configureRequest(currentReq)
+	effectiveReq, snapshotErr := separateEffectiveModelRequest(req, currentReq)
+	if snapshotErr != nil {
+		return nil, snapshotErr
+	}
+	currentReq = effectiveReq
+	contract, contractErr := model.NewRequestContract(currentReq)
+	if contractErr != nil {
+		return nil, contractErr
+	}
 	if short {
-		return c.afterModel(ctx, currentReq, resp, err)
+		return c.afterModel(ctx, currentReq, contract, resp, err)
 	}
 	resp, err = c.inner.Complete(ctx, currentReq)
-	return c.afterModel(ctx, currentReq, resp, err)
+	return c.afterModel(ctx, currentReq, contract, resp, err)
 }
 
-func (c *modelInterceptedClient) Stream(ctx context.Context, req *model.Request) (model.Streamer, error) {
+func (c *modelInterceptedClient) Stream(ctx context.Context, req *model.Request) (model.ValidatedStreamer, error) {
 	currentReq, resp, err, short := c.beforeModel(ctx, req)
+	c.configureRequest(currentReq)
+	effectiveReq, snapshotErr := separateEffectiveModelRequest(req, currentReq)
+	if snapshotErr != nil {
+		return nil, snapshotErr
+	}
+	currentReq = effectiveReq
 	if short {
 		if err == nil && resp != nil {
 			err = errors.New("model response short-circuit is unsupported for streaming")
 		}
 		return nil, err
 	}
+	recoveryRequest, recoveryRequestErr := cloneRecoveryRequest(currentReq)
 	st, err := c.inner.Stream(ctx, currentReq)
 	err = c.afterModelStream(ctx, currentReq, err)
 	if err != nil && st != nil {
-		closeErr := st.Close()
-		return nil, errors.Join(err, closeErr)
+		err = st.Finalize(err)
+	}
+	if err != nil {
+		c.recovery.recordSnapshot(recoveryRequest, recoveryRequestErr, err, false)
+		return nil, err
 	}
 	if err == nil && st == nil {
 		return nil, fmt.Errorf("model stream contract violation: nil streamer with nil error")
 	}
-	return st, err
+	if c.recovery != nil {
+		return &recoveryCapturingStream{
+			inner:      st,
+			recorder:   c.recovery,
+			request:    recoveryRequest,
+			requestErr: recoveryRequestErr,
+		}, nil
+	}
+	return st, nil
+}
+
+func (c *modelInterceptedClient) configureRequest(req *model.Request) {
+	if c.configureReq != nil {
+		c.configureReq(req)
+	}
 }
 
 func (c *modelInterceptedClient) beforeModel(ctx context.Context, req *model.Request) (*model.Request, *model.Response, error, bool) {
@@ -87,16 +128,26 @@ func (c *modelInterceptedClient) beforeModel(ctx context.Context, req *model.Req
 	return currentReq, nil, nil, false
 }
 
-func (c *modelInterceptedClient) afterModel(ctx context.Context, req *model.Request, resp *model.Response, callErr error) (*model.Response, error) {
+func (c *modelInterceptedClient) afterModel(ctx context.Context, req *model.Request, contract *model.RequestContract, resp *model.Response, callErr error) (*model.Response, error) {
+	recoveryRequest, recoveryRequestErr := cloneRecoveryRequest(req)
 	currentResp, currentErr := c.applyAfterModel(ctx, req, resp, callErr)
+	if currentErr != nil {
+		c.recovery.recordSnapshot(recoveryRequest, recoveryRequestErr, currentErr, false)
+		return currentResp, currentErr
+	}
 	if currentErr == nil && currentResp == nil {
 		return nil, fmt.Errorf("model complete contract violation: nil response with nil error")
 	}
-	return currentResp, currentErr
+	validated, err := contract.ValidateResponse(currentResp)
+	c.recovery.recordSnapshot(recoveryRequest, recoveryRequestErr, err, false)
+	return validated, err
 }
 
 func (c *modelInterceptedClient) afterModelStream(ctx context.Context, req *model.Request, callErr error) error {
-	_, err := c.applyAfterModel(ctx, req, nil, callErr)
+	resp, err := c.applyAfterModel(ctx, req, nil, callErr)
+	if resp != nil {
+		return errors.Join(callErr, err, errors.New("model response replacement is unsupported for streaming"))
+	}
 	return err
 }
 
@@ -158,4 +209,26 @@ func hasModelInterceptors(interceptors []Interceptor) bool {
 		}
 	}
 	return false
+}
+
+// separateEffectiveModelRequest exposes an immutable effective snapshot to
+// outer decorators and returns a request that after-model interceptors may
+// mutate without changing that snapshot.
+func separateEffectiveModelRequest(original, effective *model.Request) (*model.Request, error) {
+	if original == nil || effective == nil {
+		return effective, nil
+	}
+	outerSnapshot, err := model.CloneRequest(effective)
+	if err != nil {
+		return nil, fmt.Errorf("snapshot effective model request: %w", err)
+	}
+	*original = *outerSnapshot
+	if original != effective {
+		return effective, nil
+	}
+	callRequest, err := model.CloneRequest(effective)
+	if err != nil {
+		return nil, fmt.Errorf("separate effective model request: %w", err)
+	}
+	return callRequest, nil
 }

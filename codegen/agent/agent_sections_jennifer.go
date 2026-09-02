@@ -744,10 +744,14 @@ func emitToolProviderHandle(stmt *jen.Statement, data toolProviderFileData) {
 		Params(jen.Id("toolregistry").Dot("ToolResultMessage"), jen.Error()).
 		Block(
 			jen.If(jen.Id("msg").Dot("ToolUseID").Op("==").Lit("")).Block(
-				jen.Return(jen.Id("toolregistry").Dot("NewToolResultErrorMessage").Call(jen.Lit(""), jen.Lit("invalid_call"), jen.Lit("tool_use_id is required")), jen.Nil()),
+				jen.Return(jen.Id("toolregistry").Dot("NewToolResultErrorMessage").Call(jen.Id("msg").Dot("RegistrationToken"), jen.Lit(""), jen.Lit("invalid_call"), jen.Lit("tool_use_id is required")), jen.Nil()),
+			),
+			jen.List(jen.Id("toolUseID"), jen.Id("ok")).Op(":=").Id("toolregistry").Dot("ToolUseIDFromContext").Call(jen.Id("ctx")),
+			jen.If(jen.Op("!").Id("ok").Op("||").Id("toolUseID").Op("!=").Id("msg").Dot("ToolUseID")).Block(
+				jen.Return(jen.Id("toolregistry").Dot("NewToolResultErrorMessage").Call(jen.Id("msg").Dot("RegistrationToken"), jen.Id("msg").Dot("ToolUseID"), jen.Lit("invalid_call"), jen.Lit("canonical tool_use_id is missing from context")), jen.Nil()),
 			),
 			jen.If(jen.Id("msg").Dot("Meta").Op("==").Nil()).Block(
-				jen.Return(jen.Id("toolregistry").Dot("NewToolResultErrorMessage").Call(jen.Id("msg").Dot("ToolUseID"), jen.Lit("invalid_call"), jen.Lit("meta is required")), jen.Nil()),
+				jen.Return(jen.Id("toolregistry").Dot("NewToolResultErrorMessage").Call(jen.Id("msg").Dot("RegistrationToken"), jen.Id("msg").Dot("ToolUseID"), jen.Lit("invalid_call"), jen.Lit("meta is required")), jen.Nil()),
 			),
 			jen.Switch(jen.Id("msg").Dot("Tool")).BlockFunc(func(g *jen.Group) {
 				for _, tool := range data.Tools {
@@ -759,9 +763,9 @@ func emitToolProviderHandle(stmt *jen.Statement, data toolProviderFileData) {
 							cg.List(jen.Id("args"), jen.Id("err")).Op(":=").Id(tool.ConstName + "PayloadCodec").Dot("FromJSON").Call(jen.Id("msg").Dot("Payload"))
 							cg.If(jen.Id("err").Op("!=").Nil()).Block(
 								jen.If(jen.List(jen.Id("issues")).Op(":=").Id("toolregistry").Dot("ValidationIssues").Call(jen.Id("err")), jen.Len(jen.Id("issues")).Op(">").Lit(0)).Block(
-									jen.Return(jen.Id("toolregistry").Dot("NewToolResultErrorMessageWithIssues").Call(jen.Id("msg").Dot("ToolUseID"), jen.Lit("invalid_arguments"), jen.Id("err").Dot("Error").Call(), jen.Id("issues")), jen.Nil()),
+									jen.Return(jen.Id("toolregistry").Dot("NewToolResultInvalidArgumentsMessage").Call(jen.Id("msg").Dot("RegistrationToken"), jen.Id("msg").Dot("ToolUseID"), jen.Lit("tool arguments failed validation"), jen.Id("issues")), jen.Nil()),
 								),
-								jen.Return(jen.Id("toolregistry").Dot("NewToolResultErrorMessage").Call(jen.Id("msg").Dot("ToolUseID"), jen.Lit("invalid_arguments"), jen.Id("err").Dot("Error").Call()), jen.Nil()),
+								jen.Return(jen.Id("toolregistry").Dot("NewToolResultErrorMessage").Call(jen.Id("msg").Dot("RegistrationToken"), jen.Id("msg").Dot("ToolUseID"), jen.Id("toolregistry").Dot("ToolErrorCodeInvalidArguments"), jen.Lit("tool arguments failed validation")), jen.Nil()),
 							)
 							cg.Id("methodIn").Op(":=").Id("Init" + tool.ConstName + "MethodPayload").Call(jen.Id("args"))
 							for _, field := range tool.InjectedFields {
@@ -781,15 +785,15 @@ func emitToolProviderHandle(stmt *jen.Statement, data toolProviderFileData) {
 						}
 						cg.If(jen.Id("err").Op("!=").Nil()).Block(
 							jen.If(jen.List(jen.Id("issues")).Op(":=").Id("toolregistry").Dot("ValidationIssues").Call(jen.Id("err")), jen.Len(jen.Id("issues")).Op(">").Lit(0)).Block(
-								jen.Return(jen.Id("toolregistry").Dot("NewToolResultErrorMessageWithIssues").Call(jen.Id("msg").Dot("ToolUseID"), jen.Lit("invalid_arguments"), jen.Id("err").Dot("Error").Call(), jen.Id("issues")), jen.Nil()),
+								jen.Return(jen.Id("toolregistry").Dot("NewToolResultInvalidArgumentsMessage").Call(jen.Id("msg").Dot("RegistrationToken"), jen.Id("msg").Dot("ToolUseID"), jen.Lit("tool arguments failed validation"), jen.Id("issues")), jen.Nil()),
 							),
-							jen.Return(jen.Id("toolregistry").Dot("NewToolResultErrorMessage").Call(jen.Id("msg").Dot("ToolUseID"), jen.Id("toolErrorCode").Call(jen.Id("err")), jen.Id("err").Dot("Error").Call()), jen.Nil()),
+							jen.Return(jen.Id("toolregistry").Dot("NewToolResultServiceErrorMessage").Call(jen.Id("msg").Dot("RegistrationToken"), jen.Id("msg").Dot("ToolUseID"), jen.Id("msg").Dot("Tool"), jen.Id("toolErrorCode").Call(jen.Id("err")), jen.Id("err")), jen.Nil()),
 						)
 						if tool.HasResult {
 							cg.Id("result").Op(":=").Id("Init" + tool.ConstName + "ToolResult").Call(jen.Id("methodOut"))
 							cg.List(jen.Id("resultJSON"), jen.Id("err")).Op(":=").Id(tool.ConstName + "ResultCodec").Dot("ToJSON").Call(jen.Id("result"))
 							cg.If(jen.Id("err").Op("!=").Nil()).Block(
-								jen.Return(jen.Id("toolregistry").Dot("NewToolResultErrorMessage").Call(jen.Id("msg").Dot("ToolUseID"), jen.Lit("encode_failed"), jen.Id("err").Dot("Error").Call()), jen.Nil()),
+								jen.Return(jen.Id("toolregistry").Dot("NewToolResultErrorMessage").Call(jen.Id("msg").Dot("RegistrationToken"), jen.Id("msg").Dot("ToolUseID"), jen.Lit("encode_failed"), jen.Id("err").Dot("Error").Call()), jen.Nil()),
 							)
 							if tool.Bounds != nil && tool.Bounds.Projection != nil && tool.Bounds.Projection.Returned != nil && tool.Bounds.Projection.Truncated != nil {
 								cg.Id("bounds").Op(":=").Id("init" + gocodegen.Goify(tool.Name, true) + "Bounds").Call(jen.Id("methodOut"))
@@ -805,7 +809,7 @@ func emitToolProviderHandle(stmt *jen.Statement, data toolProviderFileData) {
 									jen.Id("data").Op(":=").Id(typeName).Call(jen.Id("methodOut").Dot(gocodegen.Goify(sd.MethodResultField, true))),
 									jen.List(jen.Id("dataJSON"), jen.Id("err")).Op(":=").Id(codecName).Dot("ToJSON").Call(jen.Id("data")),
 									jen.If(jen.Id("err").Op("!=").Nil()).Block(
-										jen.Return(jen.Id("toolregistry").Dot("NewToolResultErrorMessage").Call(jen.Id("msg").Dot("ToolUseID"), jen.Lit("encode_failed"), jen.Id("err").Dot("Error").Call()), jen.Nil()),
+										jen.Return(jen.Id("toolregistry").Dot("NewToolResultErrorMessage").Call(jen.Id("msg").Dot("RegistrationToken"), jen.Id("msg").Dot("ToolUseID"), jen.Lit("encode_failed"), jen.Id("err").Dot("Error").Call()), jen.Nil()),
 									),
 									jen.If(jen.String().Call(jen.Id("dataJSON")).Op("!=").Lit("null")).Block(
 										jen.Id("server").Op("=").Append(jen.Id("server"), jen.Op("&").Id("toolregistry").Dot("ServerDataItem").Values(jen.Dict{
@@ -818,9 +822,10 @@ func emitToolProviderHandle(stmt *jen.Statement, data toolProviderFileData) {
 							}
 							cg.If(jen.Len(jen.Id("server")).Op(">").Lit(0)).BlockFunc(func(rg *jen.Group) {
 								dict := jen.Dict{
-									jen.Id("ToolUseID"):  jen.Id("msg").Dot("ToolUseID"),
-									jen.Id("Result"):     jen.Id("resultJSON"),
-									jen.Id("ServerData"): jen.Id("server"),
+									jen.Id("RegistrationToken"): jen.Id("msg").Dot("RegistrationToken"),
+									jen.Id("ToolUseID"):         jen.Id("msg").Dot("ToolUseID"),
+									jen.Id("Result"):            jen.Id("resultJSON"),
+									jen.Id("ServerData"):        jen.Id("server"),
 								}
 								if tool.Bounds != nil && tool.Bounds.Projection != nil && tool.Bounds.Projection.Returned != nil && tool.Bounds.Projection.Truncated != nil {
 									dict[jen.Id("Bounds")] = jen.Id("bounds")
@@ -828,20 +833,21 @@ func emitToolProviderHandle(stmt *jen.Statement, data toolProviderFileData) {
 								rg.Return(jen.Id("toolregistry").Dot("ToolResultMessage").Values(dict), jen.Nil())
 							})
 							dict := jen.Dict{
-								jen.Id("ToolUseID"): jen.Id("msg").Dot("ToolUseID"),
-								jen.Id("Result"):    jen.Id("resultJSON"),
+								jen.Id("RegistrationToken"): jen.Id("msg").Dot("RegistrationToken"),
+								jen.Id("ToolUseID"):         jen.Id("msg").Dot("ToolUseID"),
+								jen.Id("Result"):            jen.Id("resultJSON"),
 							}
 							if tool.Bounds != nil && tool.Bounds.Projection != nil && tool.Bounds.Projection.Returned != nil && tool.Bounds.Projection.Truncated != nil {
 								dict[jen.Id("Bounds")] = jen.Id("bounds")
 							}
 							cg.Return(jen.Id("toolregistry").Dot("ToolResultMessage").Values(dict), jen.Nil())
 						} else {
-							cg.Return(jen.Id("toolregistry").Dot("NewToolResultMessage").Call(jen.Id("msg").Dot("ToolUseID"), jen.Nil()), jen.Nil())
+							cg.Return(jen.Id("toolregistry").Dot("NewToolResultMessage").Call(jen.Id("msg").Dot("RegistrationToken"), jen.Id("msg").Dot("ToolUseID"), jen.Nil()), jen.Nil())
 						}
 					})
 				}
 				g.Default().Block(
-					jen.Return(jen.Id("toolregistry").Dot("NewToolResultErrorMessage").Call(jen.Id("msg").Dot("ToolUseID"), jen.Lit("unknown_tool"), jen.Qual("fmt", "Sprintf").Call(jen.Lit("unknown tool %q"), jen.Id("msg").Dot("Tool"))), jen.Nil()),
+					jen.Return(jen.Id("toolregistry").Dot("NewToolResultErrorMessage").Call(jen.Id("msg").Dot("RegistrationToken"), jen.Id("msg").Dot("ToolUseID"), jen.Lit("unknown_tool"), jen.Qual("fmt", "Sprintf").Call(jen.Lit("unknown tool %q"), jen.Id("msg").Dot("Tool"))), jen.Nil()),
 				)
 			}),
 		)

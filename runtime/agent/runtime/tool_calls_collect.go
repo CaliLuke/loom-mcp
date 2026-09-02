@@ -2,9 +2,7 @@ package runtime
 
 import (
 	"context"
-	"encoding/json/v2"
 	"fmt"
-	"maps"
 	"time"
 
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/engine"
@@ -171,7 +169,7 @@ func (e *toolBatchExec) decodeActivityToolResult(ctx context.Context, info futur
 	if err := e.r.enforceToolResultContracts(spec, info.call, toolRes); err != nil {
 		return nil, err
 	}
-	applyActivityRetryHint(toolRes, spec, info.call, out)
+	applyActivityRetryHint(toolRes, spec, out)
 	return toolRes, nil
 }
 
@@ -186,21 +184,15 @@ func (e *toolBatchExec) decodeActivityResultValue(ctx context.Context, info futu
 	return v, nil
 }
 
-func applyActivityRetryHint(toolRes *planner.ToolResult, spec tools.ToolSpec, call planner.ToolRequest, out *ToolOutput) {
+func applyActivityRetryHint(toolRes *planner.ToolResult, spec tools.ToolSpec, out *ToolOutput) {
 	if out.RetryHint == nil {
 		return
 	}
 	h := *out.RetryHint
-	if len(h.ExampleInput) == 0 && len(spec.Payload.ExampleInput) > 0 {
-		h.ExampleInput = maps.Clone(spec.Payload.ExampleInput)
-	}
-	if len(h.PriorInput) == 0 && len(call.Payload) > 0 {
-		var prior map[string]any
-		if err := json.Unmarshal(call.Payload, &prior); err == nil && len(prior) > 0 {
-			h.PriorInput = prior
-		}
-	}
-	toolRes.RetryHint = &h
+	h.ExampleInput = nil
+	h.PriorInput = nil
+	h.Message = appendFieldContract(h.Message, generatedFieldContract(spec))
+	toolRes.RetryHint = BoundGeneratedRetryHint(&h)
 }
 
 func waitForReadyChildResult(wfCtx engine.WorkflowContext, ctx context.Context, pending []agentChildFutureInfo, finalizeTimer engine.Future[time.Time]) error {

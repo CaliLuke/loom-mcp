@@ -64,8 +64,10 @@ func RegisterRegistryValidatorAgent(ctx context.Context, rt *agentsruntime.Runti
 				BackoffCoefficient: 2,
 			},
 		},
-		Specs:  nil,
-		Policy: agentsruntime.RunPolicy{},
+		Specs: nil,
+		Policy: agentsruntime.RunPolicy{
+			MaxRecoveryTurns: 3,
+		},
 	}); err != nil {
 		return err
 	}

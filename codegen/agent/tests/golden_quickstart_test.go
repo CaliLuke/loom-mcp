@@ -25,7 +25,7 @@ func TestQuickstart_Renders_Minimal(t *testing.T) {
 	split := "\n## 2. 🚀 The 3-Step Liftoff"
 	var header string
 	if idx := strings.Index(content, split); idx > 0 {
-		header = content[:idx+1] // include trailing newline before the section header
+		header = strings.TrimRight(content[:idx], "\n") + "\n"
 	} else {
 		t.Fatalf("expected quickstart section header %q", split)
 	}

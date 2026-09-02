@@ -250,6 +250,7 @@ func TestPlanResumeActivityPreservesEmptyRawJSONPayloads(t *testing.T) {
 		},
 	}
 	rt := newTestRuntimeWithPlanner("service.agent", pl)
+	rt.toolSpecs["svc.other.tool"] = tools.ToolSpec{Name: "svc.other.tool"}
 	input := PlanActivityInput{
 		AgentID:    "service.agent",
 		RunID:      "run-123",

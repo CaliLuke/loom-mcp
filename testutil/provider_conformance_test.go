@@ -23,6 +23,7 @@ func TestRunProviderConformanceRunsRequiredCases(t *testing.T) {
 		Cancellation:                  providerCase("cancellation"),
 		StructuredOutputAndToolChoice: providerCase("structured_output"),
 		UsageAccounting:               providerCase("usage"),
+		OutputLimited:                 providerCase("output_limited"),
 		MultimodalInput: ProviderCapabilityConformance{
 			Supported: providerCase("multimodal"),
 		},
@@ -45,7 +46,8 @@ func TestRunProviderConformanceRunsRequiredCases(t *testing.T) {
 			ReceiveRateLimit: ProviderCapabilityConformance{
 				Supported: providerCase("stream_rate_limit"),
 			},
-			Terminal: providerCase("stream_terminal"),
+			Terminal:      providerCase("stream_terminal"),
+			OutputLimited: providerCase("stream_output_limited"),
 		},
 	})
 
@@ -56,6 +58,7 @@ func TestRunProviderConformanceRunsRequiredCases(t *testing.T) {
 		"cancellation":          true,
 		"structured_output":     true,
 		"usage":                 true,
+		"output_limited":        true,
 		"multimodal":            true,
 		"thinking_unsupported":  true,
 		"token_counting":        true,
@@ -68,6 +71,7 @@ func TestRunProviderConformanceRunsRequiredCases(t *testing.T) {
 		"stream_partial_cancel": true,
 		"stream_close_error":    true,
 		"stream_terminal":       true,
+		"stream_output_limited": true,
 	}, ran)
 }
 
@@ -83,6 +87,7 @@ func TestRunProviderConformanceRunsUnsupportedStreamingCase(t *testing.T) {
 		Cancellation:                  providerCase,
 		StructuredOutputAndToolChoice: providerCase,
 		UsageAccounting:               providerCase,
+		OutputLimited:                 providerCase,
 		MultimodalInput:               ProviderCapabilityConformance{Supported: providerCase},
 		TypedThinking:                 ProviderCapabilityConformance{Supported: providerCase},
 		ExactTokenCounting:            ProviderCapabilityConformance{Unsupported: providerCase},

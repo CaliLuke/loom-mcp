@@ -148,6 +148,9 @@ func (r *Runtime) validateAgentRegistration(reg AgentRegistration) error {
 	if reg.Planner == nil {
 		return fmt.Errorf("%w: missing planner", ErrInvalidConfig)
 	}
+	if reg.Policy.MaxRecoveryTurns < 0 {
+		return fmt.Errorf("%w: agent %q MaxRecoveryTurns must not be negative", ErrInvalidConfig, reg.ID)
+	}
 	if reg.Workflow.Handler == nil {
 		return fmt.Errorf("%w: missing workflow handler", ErrInvalidConfig)
 	}

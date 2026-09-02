@@ -110,6 +110,19 @@ func TestGeneratedFeatureRealTemporalContracts(t *testing.T) {
 		require.Equal(t, 1, commits)
 	})
 
+	t.Run("generated model recovery survives activity boundaries", func(t *testing.T) {
+		ctx, cancel := temporalScenarioContext(t)
+		defer cancel()
+		eng := newTemporalAcceptanceEngine(t, server.Client())
+		runGeneratedModelRecoveryScenario(
+			t,
+			ctx,
+			newFeatureRuntime(t, agentsruntime.WithEngine(eng)),
+			"sess-temporal-recovery",
+			"run-temporal-recovery",
+		)
+	})
+
 	t.Run("worker replacement replays and resumes durable run", func(t *testing.T) {
 		sessions := sessioninmem.New()
 		runEvents := runloginmem.New()

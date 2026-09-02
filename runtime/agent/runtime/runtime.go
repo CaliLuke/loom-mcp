@@ -405,8 +405,9 @@ type (
 		// MaxToolCalls caps the total number of tool invocations per run (0 = unlimited).
 		MaxToolCalls int
 
-		// MaxConsecutiveFailedToolCalls caps sequential failures before aborting (0 = unlimited).
-		MaxConsecutiveFailedToolCalls int
+		// MaxRecoveryTurns caps replacement planner activities after rejected
+		// model or tool output. Zero selects the framework default.
+		MaxRecoveryTurns int
 
 		// TimeBudget is the active-work budget for planner and tool work within the
 		// run (0 = unlimited). External-input waits pause it. The runtime derives the

@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"slices"
 	"strings"
+	"unicode/utf8"
 
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/planner"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/tools"
@@ -15,24 +16,30 @@ import (
 const (
 	validationConstraintMissingField = "missing_field"
 	payloadFieldAnchor               = "$payload"
+	maxGeneratedRetryHintBytes       = 4096
+	maxGeneratedRetryHintFields      = 8
+	maxGeneratedRetryHintFieldBytes  = 96
+	maxGeneratedRetryQuestionBytes   = 1024
+	maxGeneratedRetryMessageBytes    = 1536
 )
 
 func (r *Runtime) toolDecodeErrorOutput(toolName tools.Ident, decErr error) *ToolOutput {
-	if fields, question, reason, ok := buildRetryHintFromValidation(decErr, toolName); ok {
-		return &ToolOutput{
-			Error: decErr.Error(),
-			RetryHint: &planner.RetryHint{
-				Reason:             reason,
-				Tool:               toolName,
-				MissingFields:      fields,
-				ClarifyingQuestion: question,
-			},
-		}
-	}
 	var specPtr *tools.ToolSpec
 	if spec, ok := r.toolSpec(toolName); ok {
 		cp := spec
 		specPtr = &cp
+	}
+	if fields, question, reason, ok := buildRetryHintFromValidation(decErr, toolName); ok {
+		return &ToolOutput{
+			Error: decErr.Error(),
+			RetryHint: boundGeneratedRetryHint(&planner.RetryHint{
+				Reason:             reason,
+				Tool:               toolName,
+				MissingFields:      fields,
+				ClarifyingQuestion: question,
+				Message:            generatedFieldContractPtr(specPtr),
+			}),
+		}
 	}
 	if hint := buildRetryHintFromDecodeError(decErr, toolName, specPtr); hint != nil {
 		return &ToolOutput{Error: decErr.Error(), RetryHint: hint}
@@ -54,7 +61,7 @@ func buildRetryHintFromValidation(err error, toolName tools.Ident) ([]string, st
 	if len(fields) == 0 {
 		return nil, "", planner.RetryReasonInvalidArguments, false
 	}
-	question := buildValidationRetryQuestion(fields, issues, descs, toolName)
+	question := truncateUTF8Bytes(buildValidationRetryQuestion(fields, issues, descs, toolName), maxGeneratedRetryQuestionBytes)
 	reason := planner.RetryReasonInvalidArguments
 	if len(missing) > 0 {
 		reason = planner.RetryReasonMissingFields
@@ -89,11 +96,12 @@ func collectValidationFields(issues []*tools.FieldIssue) ([]string, []string) {
 		if is.Field == "" {
 			continue
 		}
-		if !slices.Contains(fields, is.Field) {
-			fields = append(fields, is.Field)
+		field := truncateUTF8Bytes(is.Field, maxGeneratedRetryHintFieldBytes)
+		if !slices.Contains(fields, field) && len(fields) < maxGeneratedRetryHintFields {
+			fields = append(fields, field)
 		}
-		if is.Constraint == validationConstraintMissingField && !slices.Contains(missing, is.Field) {
-			missing = append(missing, is.Field)
+		if is.Constraint == validationConstraintMissingField && !slices.Contains(missing, field) && len(missing) < maxGeneratedRetryHintFields {
+			missing = append(missing, field)
 		}
 	}
 	return fields, missing
@@ -132,8 +140,8 @@ func validationQuestionLabel(field string, issues []*tools.FieldIssue, descs map
 // wrong-shape JSON as conceptually equivalent to missing required fields so that
 // planners and UIs can guide callers toward a schema-compliant payload.
 //
-// When a payload example is available in the tool specs, the hint attaches it as
-// ExampleInput so consumers can display a concrete, valid payload.
+// Generated hints contain only bounded schema-derived field guidance. They do
+// not retain example or submitted input values.
 func buildRetryHintFromDecodeError(err error, toolName tools.Ident, spec *tools.ToolSpec) *planner.RetryHint {
 	var (
 		semanticErr *json.SemanticError
@@ -169,31 +177,119 @@ func buildRetryHintFromDecodeError(err error, toolName tools.Ident, spec *tools.
 		return nil
 	}
 
-	var example map[string]any
-	if spec != nil && len(spec.Payload.ExampleInput) > 0 {
-		example = spec.Payload.ExampleInput
-	}
-
-	return &planner.RetryHint{
+	return boundGeneratedRetryHint(&planner.RetryHint{
 		Reason:             reason,
 		Tool:               toolName,
 		MissingFields:      fields,
-		ExampleInput:       example,
 		ClarifyingQuestion: question,
+		Message:            generatedFieldContractPtr(spec),
+	})
+}
+
+func generatedFieldContractPtr(spec *tools.ToolSpec) string {
+	if spec == nil {
+		return ""
 	}
+	return truncateUTF8Bytes(appendFieldContract("", generatedFieldContract(*spec)), maxGeneratedRetryMessageBytes)
+}
+
+func generatedFieldContract(spec tools.ToolSpec) string {
+	if len(spec.Payload.Schema) == 0 {
+		return jsonSchemaTypeValue
+	}
+	var schema any
+	if err := json.Unmarshal(spec.Payload.Schema, &schema); err != nil {
+		return jsonSchemaTypeValue
+	}
+	return topLevelFieldContract(schema)
+}
+
+func appendFieldContract(message, contract string) string {
+	if contract == "" {
+		return message
+	}
+	if message == "" {
+		return "Field contract: " + contract
+	}
+	return message + " Field contract: " + contract
 }
 
 func buildRetryHintFromAgentToolRequestError(err error, toolName tools.Ident, spec *tools.ToolSpec) *planner.RetryHint {
 	if fields, question, reason, ok := buildRetryHintFromValidation(err, toolName); ok {
-		return &planner.RetryHint{
+		return boundGeneratedRetryHint(&planner.RetryHint{
 			Reason:             reason,
 			Tool:               toolName,
 			MissingFields:      fields,
 			ClarifyingQuestion: question,
-		}
+			Message:            generatedFieldContractPtr(spec),
+		})
 	}
 	if hint := buildRetryHintFromDecodeError(err, toolName, spec); hint != nil {
 		return hint
 	}
 	return nil
+}
+
+// BoundGeneratedRetryHint removes submitted payloads and bounds generated
+// retry guidance before it crosses a durable or provider-facing boundary.
+func BoundGeneratedRetryHint(hint *planner.RetryHint) *planner.RetryHint {
+	return boundGeneratedRetryHint(hint)
+}
+
+func boundGeneratedRetryHint(hint *planner.RetryHint) *planner.RetryHint {
+	if hint == nil {
+		return nil
+	}
+	bounded := *hint
+	bounded.ExampleInput = nil
+	bounded.PriorInput = nil
+	bounded.MissingFields = append([]string(nil), hint.MissingFields[:min(len(hint.MissingFields), maxGeneratedRetryHintFields)]...)
+	for index, field := range bounded.MissingFields {
+		bounded.MissingFields[index] = truncateUTF8Bytes(field, maxGeneratedRetryHintFieldBytes)
+	}
+	bounded.ClarifyingQuestion = truncateUTF8Bytes(bounded.ClarifyingQuestion, maxGeneratedRetryQuestionBytes)
+	bounded.Message = truncateUTF8Bytes(bounded.Message, maxGeneratedRetryMessageBytes)
+
+	for {
+		encoded, err := json.Marshal(bounded)
+		if err != nil {
+			return nil
+		}
+		if len(encoded) <= maxGeneratedRetryHintBytes {
+			return &bounded
+		}
+		overflow := len(encoded) - maxGeneratedRetryHintBytes
+		switch {
+		case bounded.Message != "":
+			bounded.Message = shrinkUTF8Bytes(bounded.Message, overflow)
+		case bounded.ClarifyingQuestion != "":
+			bounded.ClarifyingQuestion = shrinkUTF8Bytes(bounded.ClarifyingQuestion, overflow)
+		case len(bounded.MissingFields) > 0:
+			bounded.MissingFields = bounded.MissingFields[:len(bounded.MissingFields)-1]
+		default:
+			return nil
+		}
+	}
+}
+
+func shrinkUTF8Bytes(value string, overflow int) string {
+	target := len(value) - overflow - 16
+	if target < 0 {
+		target = 0
+	}
+	return truncateUTF8Bytes(value, target)
+}
+
+func truncateUTF8Bytes(value string, maxBytes int) string {
+	if maxBytes <= 0 {
+		return ""
+	}
+	if len(value) <= maxBytes {
+		return value
+	}
+	value = value[:maxBytes]
+	for !utf8.ValidString(value) {
+		value = value[:len(value)-1]
+	}
+	return value
 }

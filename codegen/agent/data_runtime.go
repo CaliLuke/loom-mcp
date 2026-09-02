@@ -15,22 +15,24 @@ import (
 	"github.com/CaliLuke/loom-mcp/v2/codegen/naming"
 	agentsExpr "github.com/CaliLuke/loom-mcp/v2/expr/agent"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/engine"
+	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/policy"
 )
 
 // newRunPolicyData copies the evaluated DSL run policy into immutable template
 // data, preserving only the fields that affect generated runtime wiring.
 func newRunPolicyData(expr *agentsExpr.RunPolicyExpr) RunPolicyData {
-	if expr == nil {
-		return RunPolicyData{}
-	}
 	rp := RunPolicyData{
-		TimeBudget:        expr.TimeBudget,
-		PlanTimeout:       expr.PlanTimeout,
-		ToolTimeout:       expr.ToolTimeout,
-		InterruptsAllowed: expr.InterruptsAllowed,
-		OnMissingFields:   expr.OnMissingFields,
-		NamedInterceptors: append([]string(nil), expr.Interceptors...),
+		Caps: CapsData{MaxRecoveryTurns: policy.DefaultMaxRecoveryTurns},
 	}
+	if expr == nil {
+		return rp
+	}
+	rp.TimeBudget = expr.TimeBudget
+	rp.PlanTimeout = expr.PlanTimeout
+	rp.ToolTimeout = expr.ToolTimeout
+	rp.InterruptsAllowed = expr.InterruptsAllowed
+	rp.OnMissingFields = expr.OnMissingFields
+	rp.NamedInterceptors = append([]string(nil), expr.Interceptors...)
 	if expr.History != nil {
 		h := &HistoryData{
 			Mode:                     string(expr.History.Mode),
@@ -67,9 +69,9 @@ func newRunPolicyData(expr *agentsExpr.RunPolicyExpr) RunPolicyData {
 		}
 	}
 	if expr.DefaultCaps != nil {
-		rp.Caps = CapsData{
-			MaxToolCalls:                  expr.DefaultCaps.MaxToolCalls,
-			MaxConsecutiveFailedToolCalls: expr.DefaultCaps.MaxConsecutiveFailedToolCall,
+		rp.Caps.MaxToolCalls = expr.DefaultCaps.MaxToolCalls
+		if expr.DefaultCaps.MaxRecoveryTurns > 0 {
+			rp.Caps.MaxRecoveryTurns = expr.DefaultCaps.MaxRecoveryTurns
 		}
 	}
 	return rp

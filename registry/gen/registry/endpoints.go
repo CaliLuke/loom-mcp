@@ -15,37 +15,58 @@ import (
 
 // Endpoints wraps the "registry" service endpoints.
 type Endpoints struct {
-	Register     loom.Endpoint
-	Unregister   loom.Endpoint
-	Pong         loom.Endpoint
-	ListToolsets loom.Endpoint
-	GetToolset   loom.Endpoint
-	Search       loom.Endpoint
-	CallTool     loom.Endpoint
+	Register               loom.Endpoint
+	ReleaseProvider        loom.Endpoint
+	DrainProvider          loom.Endpoint
+	Unregister             loom.Endpoint
+	Pong                   loom.Endpoint
+	ListToolsets           loom.Endpoint
+	GetToolset             loom.Endpoint
+	Search                 loom.Endpoint
+	CallTool               loom.Endpoint
+	RetryTool              loom.Endpoint
+	CompleteToolCall       loom.Endpoint
+	PublishToolOutputDelta loom.Endpoint
+	ReportToolCallOverload loom.Endpoint
+	ClaimToolCall          loom.Endpoint
 }
 
 // NewEndpoints wraps the methods of the "registry" service with endpoints.
 func NewEndpoints(s Service) *Endpoints {
 	return &Endpoints{
-		Register:     NewRegisterEndpoint(s),
-		Unregister:   NewUnregisterEndpoint(s),
-		Pong:         NewPongEndpoint(s),
-		ListToolsets: NewListToolsetsEndpoint(s),
-		GetToolset:   NewGetToolsetEndpoint(s),
-		Search:       NewSearchEndpoint(s),
-		CallTool:     NewCallToolEndpoint(s),
+		Register:               NewRegisterEndpoint(s),
+		ReleaseProvider:        NewReleaseProviderEndpoint(s),
+		DrainProvider:          NewDrainProviderEndpoint(s),
+		Unregister:             NewUnregisterEndpoint(s),
+		Pong:                   NewPongEndpoint(s),
+		ListToolsets:           NewListToolsetsEndpoint(s),
+		GetToolset:             NewGetToolsetEndpoint(s),
+		Search:                 NewSearchEndpoint(s),
+		CallTool:               NewCallToolEndpoint(s),
+		RetryTool:              NewRetryToolEndpoint(s),
+		CompleteToolCall:       NewCompleteToolCallEndpoint(s),
+		PublishToolOutputDelta: NewPublishToolOutputDeltaEndpoint(s),
+		ReportToolCallOverload: NewReportToolCallOverloadEndpoint(s),
+		ClaimToolCall:          NewClaimToolCallEndpoint(s),
 	}
 }
 
 // Use applies the given middleware to all the "registry" service endpoints.
 func (e *Endpoints) Use(m func(loom.Endpoint) loom.Endpoint) {
 	e.Register = m(e.Register)
+	e.ReleaseProvider = m(e.ReleaseProvider)
+	e.DrainProvider = m(e.DrainProvider)
 	e.Unregister = m(e.Unregister)
 	e.Pong = m(e.Pong)
 	e.ListToolsets = m(e.ListToolsets)
 	e.GetToolset = m(e.GetToolset)
 	e.Search = m(e.Search)
 	e.CallTool = m(e.CallTool)
+	e.RetryTool = m(e.RetryTool)
+	e.CompleteToolCall = m(e.CompleteToolCall)
+	e.PublishToolOutputDelta = m(e.PublishToolOutputDelta)
+	e.ReportToolCallOverload = m(e.ReportToolCallOverload)
+	e.ClaimToolCall = m(e.ClaimToolCall)
 }
 
 // NewRegisterEndpoint returns an endpoint function that calls the method
@@ -54,6 +75,24 @@ func NewRegisterEndpoint(s Service) loom.Endpoint {
 	return func(ctx context.Context, req any) (any, error) {
 		p := req.(*RegisterPayload)
 		return s.Register(ctx, p)
+	}
+}
+
+// NewReleaseProviderEndpoint returns an endpoint function that calls the
+// method "ReleaseProvider" of service "registry".
+func NewReleaseProviderEndpoint(s Service) loom.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*ReleaseProviderPayload)
+		return nil, s.ReleaseProvider(ctx, p)
+	}
+}
+
+// NewDrainProviderEndpoint returns an endpoint function that calls the method
+// "DrainProvider" of service "registry".
+func NewDrainProviderEndpoint(s Service) loom.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*DrainProviderPayload)
+		return nil, s.DrainProvider(ctx, p)
 	}
 }
 
@@ -108,5 +147,50 @@ func NewCallToolEndpoint(s Service) loom.Endpoint {
 	return func(ctx context.Context, req any) (any, error) {
 		p := req.(*CallToolPayload)
 		return s.CallTool(ctx, p)
+	}
+}
+
+// NewRetryToolEndpoint returns an endpoint function that calls the method
+// "RetryTool" of service "registry".
+func NewRetryToolEndpoint(s Service) loom.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*RetryToolPayload)
+		return s.RetryTool(ctx, p)
+	}
+}
+
+// NewCompleteToolCallEndpoint returns an endpoint function that calls the
+// method "CompleteToolCall" of service "registry".
+func NewCompleteToolCallEndpoint(s Service) loom.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*CompleteToolCallPayload)
+		return nil, s.CompleteToolCall(ctx, p)
+	}
+}
+
+// NewPublishToolOutputDeltaEndpoint returns an endpoint function that calls
+// the method "PublishToolOutputDelta" of service "registry".
+func NewPublishToolOutputDeltaEndpoint(s Service) loom.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*PublishToolOutputDeltaPayload)
+		return nil, s.PublishToolOutputDelta(ctx, p)
+	}
+}
+
+// NewReportToolCallOverloadEndpoint returns an endpoint function that calls
+// the method "ReportToolCallOverload" of service "registry".
+func NewReportToolCallOverloadEndpoint(s Service) loom.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*ProviderToolCallClaimPayload)
+		return nil, s.ReportToolCallOverload(ctx, p)
+	}
+}
+
+// NewClaimToolCallEndpoint returns an endpoint function that calls the method
+// "ClaimToolCall" of service "registry".
+func NewClaimToolCallEndpoint(s Service) loom.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*ProviderToolCallClaimPayload)
+		return s.ClaimToolCall(ctx, p)
 	}
 }

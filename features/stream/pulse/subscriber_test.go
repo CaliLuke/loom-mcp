@@ -29,7 +29,7 @@ func TestSubscribeEmitsEvents(t *testing.T) {
 		require.Equal(t, "1-0", evt.ID)
 		return nil
 	})
-	sinkMock.AddClose(func(ctx context.Context) {})
+	sinkMock.AddClose(func(ctx context.Context) error { return nil })
 
 	client.AddStream(func(name string, _ ...streamopts.Stream) (clientspulse.Stream, error) {
 		require.Equal(t, "session/session-123", name)
@@ -83,7 +83,7 @@ func TestSubscribeManualDoesNotAckBeforeDeliveryAck(t *testing.T) {
 		ackedIDs <- evt.ID
 		return nil
 	})
-	sinkMock.AddClose(func(ctx context.Context) {})
+	sinkMock.AddClose(func(ctx context.Context) error { return nil })
 
 	sub, err := NewSubscriber(SubscriberOptions{Client: client})
 	require.NoError(t, err)
@@ -125,7 +125,7 @@ func TestSubscribeManualExposesDecodeFailuresWithoutAck(t *testing.T) {
 		return sinkMock, nil
 	})
 	sinkMock.AddSubscribe(func() <-chan *streaming.Event { return eventCh })
-	sinkMock.AddClose(func(ctx context.Context) {})
+	sinkMock.AddClose(func(ctx context.Context) error { return nil })
 
 	sub, err := NewSubscriber(SubscriberOptions{
 		Client: client,
@@ -181,7 +181,7 @@ func TestSubscribeDecoderError(t *testing.T) {
 		ackedIDs <- evt.ID
 		return nil
 	})
-	sinkMock.AddClose(func(ctx context.Context) {})
+	sinkMock.AddClose(func(ctx context.Context) error { return nil })
 
 	sub, err := NewSubscriber(SubscriberOptions{
 		Client: client,
@@ -218,7 +218,7 @@ func TestSubscribeDecoderErrorAcksAndContinues(t *testing.T) {
 		ackedIDs <- evt.ID
 		return nil
 	})
-	sinkMock.AddClose(func(ctx context.Context) {})
+	sinkMock.AddClose(func(ctx context.Context) error { return nil })
 
 	sub, err := NewSubscriber(SubscriberOptions{
 		Client: client,
@@ -265,7 +265,7 @@ func TestSubscribeConsecutivePoisonMessagesThenValidEvent(t *testing.T) {
 		ackedIDs <- evt.ID
 		return nil
 	})
-	sinkMock.AddClose(func(ctx context.Context) {})
+	sinkMock.AddClose(func(ctx context.Context) error { return nil })
 
 	sub, err := NewSubscriber(SubscriberOptions{
 		Client: client,
@@ -316,7 +316,7 @@ func TestSubscribeAckFailureEvictsPendingDecodeError(t *testing.T) {
 	sinkMock.AddAck(func(ctx context.Context, evt *streaming.Event) error {
 		return errors.New("ack failed")
 	})
-	sinkMock.AddClose(func(ctx context.Context) {})
+	sinkMock.AddClose(func(ctx context.Context) error { return nil })
 
 	sub, err := NewSubscriber(SubscriberOptions{
 		Client: client,

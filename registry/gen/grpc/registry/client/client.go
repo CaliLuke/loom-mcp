@@ -39,11 +39,50 @@ func (c *Client) Register() loom.Endpoint {
 		res, err := inv.Invoke(ctx, v)
 		if err != nil {
 			resp := loomgrpc.DecodeError(err)
-			// Try to decode a Loom error response detail before falling back to Fault.
-			if eresp, ok := resp.(*loompb.ErrorResponse); ok {
-				return nil, loomgrpc.NewServiceError(eresp)
+			switch message := resp.(type) {
+			case *loompb.ErrorResponse:
+				return nil, loomgrpc.NewServiceError(message)
+			default:
+				return nil, loom.Fault("%s", err.Error())
 			}
-			return nil, loom.Fault("%s", err.Error())
+		}
+		return res, nil
+	}
+}
+
+// ReleaseProvider calls the "ReleaseProvider" function in
+// registrypb.RegistryClient interface.
+func (c *Client) ReleaseProvider() loom.Endpoint {
+	return func(ctx context.Context, v any) (any, error) {
+		inv := loomgrpc.NewInvoker(BuildReleaseProviderFunc(c.grpccli, c.opts...), EncodeReleaseProviderRequest, nil)
+		res, err := inv.Invoke(ctx, v)
+		if err != nil {
+			resp := loomgrpc.DecodeError(err)
+			switch message := resp.(type) {
+			case *loompb.ErrorResponse:
+				return nil, loomgrpc.NewServiceError(message)
+			default:
+				return nil, loom.Fault("%s", err.Error())
+			}
+		}
+		return res, nil
+	}
+}
+
+// DrainProvider calls the "DrainProvider" function in
+// registrypb.RegistryClient interface.
+func (c *Client) DrainProvider() loom.Endpoint {
+	return func(ctx context.Context, v any) (any, error) {
+		inv := loomgrpc.NewInvoker(BuildDrainProviderFunc(c.grpccli, c.opts...), EncodeDrainProviderRequest, nil)
+		res, err := inv.Invoke(ctx, v)
+		if err != nil {
+			resp := loomgrpc.DecodeError(err)
+			switch message := resp.(type) {
+			case *loompb.ErrorResponse:
+				return nil, loomgrpc.NewServiceError(message)
+			default:
+				return nil, loom.Fault("%s", err.Error())
+			}
 		}
 		return res, nil
 	}
@@ -144,6 +183,101 @@ func (c *Client) Search() loom.Endpoint {
 func (c *Client) CallTool() loom.Endpoint {
 	return func(ctx context.Context, v any) (any, error) {
 		inv := loomgrpc.NewInvoker(BuildCallToolFunc(c.grpccli, c.opts...), EncodeCallToolRequest, DecodeCallToolResponse)
+		res, err := inv.Invoke(ctx, v)
+		if err != nil {
+			resp := loomgrpc.DecodeError(err)
+			switch message := resp.(type) {
+			case *loompb.ErrorResponse:
+				return nil, loomgrpc.NewServiceError(message)
+			default:
+				return nil, loom.Fault("%s", err.Error())
+			}
+		}
+		return res, nil
+	}
+}
+
+// RetryTool calls the "RetryTool" function in registrypb.RegistryClient
+// interface.
+func (c *Client) RetryTool() loom.Endpoint {
+	return func(ctx context.Context, v any) (any, error) {
+		inv := loomgrpc.NewInvoker(BuildRetryToolFunc(c.grpccli, c.opts...), EncodeRetryToolRequest, DecodeRetryToolResponse)
+		res, err := inv.Invoke(ctx, v)
+		if err != nil {
+			resp := loomgrpc.DecodeError(err)
+			switch message := resp.(type) {
+			case *loompb.ErrorResponse:
+				return nil, loomgrpc.NewServiceError(message)
+			default:
+				return nil, loom.Fault("%s", err.Error())
+			}
+		}
+		return res, nil
+	}
+}
+
+// CompleteToolCall calls the "CompleteToolCall" function in
+// registrypb.RegistryClient interface.
+func (c *Client) CompleteToolCall() loom.Endpoint {
+	return func(ctx context.Context, v any) (any, error) {
+		inv := loomgrpc.NewInvoker(BuildCompleteToolCallFunc(c.grpccli, c.opts...), EncodeCompleteToolCallRequest, nil)
+		res, err := inv.Invoke(ctx, v)
+		if err != nil {
+			resp := loomgrpc.DecodeError(err)
+			switch message := resp.(type) {
+			case *loompb.ErrorResponse:
+				return nil, loomgrpc.NewServiceError(message)
+			default:
+				return nil, loom.Fault("%s", err.Error())
+			}
+		}
+		return res, nil
+	}
+}
+
+// PublishToolOutputDelta calls the "PublishToolOutputDelta" function in
+// registrypb.RegistryClient interface.
+func (c *Client) PublishToolOutputDelta() loom.Endpoint {
+	return func(ctx context.Context, v any) (any, error) {
+		inv := loomgrpc.NewInvoker(BuildPublishToolOutputDeltaFunc(c.grpccli, c.opts...), EncodePublishToolOutputDeltaRequest, nil)
+		res, err := inv.Invoke(ctx, v)
+		if err != nil {
+			resp := loomgrpc.DecodeError(err)
+			switch message := resp.(type) {
+			case *loompb.ErrorResponse:
+				return nil, loomgrpc.NewServiceError(message)
+			default:
+				return nil, loom.Fault("%s", err.Error())
+			}
+		}
+		return res, nil
+	}
+}
+
+// ReportToolCallOverload calls the "ReportToolCallOverload" function in
+// registrypb.RegistryClient interface.
+func (c *Client) ReportToolCallOverload() loom.Endpoint {
+	return func(ctx context.Context, v any) (any, error) {
+		inv := loomgrpc.NewInvoker(BuildReportToolCallOverloadFunc(c.grpccli, c.opts...), EncodeReportToolCallOverloadRequest, nil)
+		res, err := inv.Invoke(ctx, v)
+		if err != nil {
+			resp := loomgrpc.DecodeError(err)
+			switch message := resp.(type) {
+			case *loompb.ErrorResponse:
+				return nil, loomgrpc.NewServiceError(message)
+			default:
+				return nil, loom.Fault("%s", err.Error())
+			}
+		}
+		return res, nil
+	}
+}
+
+// ClaimToolCall calls the "ClaimToolCall" function in
+// registrypb.RegistryClient interface.
+func (c *Client) ClaimToolCall() loom.Endpoint {
+	return func(ctx context.Context, v any) (any, error) {
+		inv := loomgrpc.NewInvoker(BuildClaimToolCallFunc(c.grpccli, c.opts...), EncodeClaimToolCallRequest, DecodeClaimToolCallResponse)
 		res, err := inv.Invoke(ctx, v)
 		if err != nil {
 			resp := loomgrpc.DecodeError(err)

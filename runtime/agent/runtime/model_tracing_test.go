@@ -137,6 +137,122 @@ func TestTracedClientDoesNotCaptureGenAIMessagesByDefault(t *testing.T) {
 	require.NotContains(t, attrs, "gen_ai.output.messages")
 }
 
+func TestTracedClientCanonicalizesInternalToolMessages(t *testing.T) {
+	t.Parallel()
+
+	tracer := &modelTracingRecorder{}
+	client := newTracedClient(
+		&modelTracingCompleteClient{response: &model.Response{
+			ToolCalls: []model.ToolCall{{
+				ID:      "internal-call",
+				Name:    tools.ToolUnavailable,
+				Payload: rawjson.Message(`{"available_tools":["private.output"]}`),
+			}},
+			StopReason: "tool_use",
+		}},
+		tracer,
+		telemetry.NoopLogger{},
+		modelTraceConfig{ModelID: "default", CaptureGenAIMessages: true},
+	)
+	request := &model.Request{
+		Messages: []*model.Message{{
+			Role: model.ConversationRoleAssistant,
+			Parts: []model.Part{model.ToolUsePart{
+				ID:    "prior-internal",
+				Name:  tools.ToolUnavailable.String(),
+				Input: map[string]any{availableToolsKey: []string{"private.input"}},
+			}},
+		}},
+		Tools: []*model.ToolDefinition{
+			{Name: "svc.read"},
+			{Name: tools.ToolUnavailable.String()},
+		},
+	}
+
+	_, err := client.Complete(context.Background(), request)
+	require.NoError(t, err)
+	attrs := tracer.singleSpan(t).attrsByKey()
+	require.NotContains(t, attrs["gen_ai.input.messages"].AsString(), "private.input")
+	require.NotContains(t, attrs["gen_ai.output.messages"].AsString(), "private.output")
+	require.Contains(t, attrs["gen_ai.input.messages"].AsString(), "svc.read")
+	require.Contains(t, attrs["gen_ai.output.messages"].AsString(), "svc.read")
+}
+
+func TestTracedClientCapturesEffectivePolicyAndInterceptorRequest(t *testing.T) {
+	t.Parallel()
+
+	tracer := &modelTracingRecorder{}
+	rt := New(
+		WithTracer(tracer),
+		WithCaptureGenAIMessages(true),
+		WithInterceptors(RuntimeInterceptorFuncs{
+			BeforeModelFunc: func(context.Context, *BeforeModelInput) (*BeforeModelDecision, error) {
+				return &BeforeModelDecision{Request: &model.Request{
+					Model: "effective-model",
+					Messages: []*model.Message{{
+						Role: model.ConversationRoleAssistant,
+						Parts: []model.Part{model.ToolUsePart{
+							ID:    "prior-internal",
+							Name:  tools.ToolUnavailable.String(),
+							Input: map[string]any{availableToolsKey: []string{"private.input"}},
+						}},
+					}},
+					Tools: []*model.ToolDefinition{
+						{Name: "allowed", InputSchema: map[string]any{"type": "object"}},
+						{Name: "blocked", InputSchema: map[string]any{"type": "object"}},
+					},
+				}}, nil
+			},
+			AfterModelFunc: func(_ context.Context, input *AfterModelInput) (*AfterModelDecision, error) {
+				input.Request.Messages[0].Parts[0] = model.ToolUsePart{
+					ID:    "mutated-after-model",
+					Name:  tools.ToolUnavailable.String(),
+					Input: map[string]any{availableToolsKey: []string{"private.after_model"}},
+				}
+				return nil, nil
+			},
+		}),
+	)
+	rt.models["default"] = &modelTracingCompleteClient{response: &model.Response{
+		ToolCalls: []model.ToolCall{{
+			ID:      "internal-call",
+			Name:    tools.ToolUnavailable,
+			Payload: rawjson.Message(`{"available_tools":["private.output"]}`),
+		}},
+		StopReason: "tool_use",
+	}}
+	ctx := newAgentContext(agentContextOptions{
+		runtime: rt,
+		agentID: "svc.agent",
+		runID:   "run-effective-trace",
+		toolPolicy: toolPolicyEnvelope{
+			Active:  true,
+			Allowed: []tools.Ident{"allowed"},
+		},
+	})
+	client, ok := ctx.ModelClient("default")
+	require.True(t, ok)
+
+	_, err := client.Complete(context.Background(), &model.Request{
+		Model: "original-model",
+		Tools: []*model.ToolDefinition{{
+			Name:        "private.original",
+			InputSchema: map[string]any{"type": "object"},
+		}},
+	})
+	require.NoError(t, err)
+
+	attrs := tracer.singleSpan(t).attrsByKey()
+	require.Equal(t, "effective-model", attrs["gen_ai.request.model"].AsString())
+	input := attrs["gen_ai.input.messages"].AsString()
+	output := attrs["gen_ai.output.messages"].AsString()
+	for _, captured := range []string{input, output} {
+		require.Contains(t, captured, "allowed")
+		require.NotContains(t, captured, "blocked")
+		require.NotContains(t, captured, "private")
+	}
+}
+
 func TestTracedStreamCapturesCoalescedOutputAtEnd(t *testing.T) {
 	tracer := &modelTracingRecorder{}
 	client := newTracedClient(
@@ -169,6 +285,7 @@ func TestTracedStreamCapturesCoalescedOutputAtEnd(t *testing.T) {
 		}
 		require.NoError(t, err)
 	}
+	require.NoError(t, streamer.Finalize(nil))
 
 	attrs := tracer.singleSpan(t).attrsByKey()
 	output := decodeGenAIMessages(t, attrs["gen_ai.output.messages"].AsString())
@@ -184,6 +301,117 @@ func TestTracedStreamCapturesCoalescedOutputAtEnd(t *testing.T) {
 	require.True(t, ok)
 }
 
+func TestTracedStreamCanonicalizesInternalToolOutput(t *testing.T) {
+	t.Parallel()
+
+	tracer := &modelTracingRecorder{}
+	client := newTracedClient(
+		&modelTracingStreamClient{streamer: &modelTracingScriptedStreamer{chunks: []model.Chunk{
+			{
+				Type: model.ChunkTypeToolCall,
+				ToolCall: &model.ToolCall{
+					ID:      "internal-call",
+					Name:    tools.ToolUnavailable,
+					Payload: rawjson.Message(`{"available_tools":["private.stream"]}`),
+				},
+			},
+			{Type: model.ChunkTypeStop, StopReason: "tool_use"},
+		}}},
+		tracer,
+		telemetry.NoopLogger{},
+		modelTraceConfig{ModelID: "default", CaptureGenAIMessages: true},
+	)
+	streamer, err := client.Stream(context.Background(), &model.Request{
+		Tools: []*model.ToolDefinition{
+			{Name: "svc.read"},
+			{Name: tools.ToolUnavailable.String()},
+		},
+	})
+	require.NoError(t, err)
+	for {
+		_, err = streamer.Recv()
+		if errors.Is(err, io.EOF) {
+			break
+		}
+		require.NoError(t, err)
+	}
+	require.NoError(t, streamer.Finalize(nil))
+
+	output := tracer.singleSpan(t).attrsByKey()["gen_ai.output.messages"].AsString()
+	require.NotContains(t, output, "private.stream")
+	require.Contains(t, output, "svc.read")
+}
+
+func TestTracedStreamCommitsLifecycleOnlyAtFinalize(t *testing.T) {
+	closeErr := errors.New("provider close failed")
+	tracer := &modelTracingRecorder{}
+	client := newTracedClient(
+		&modelTracingStreamClient{streamer: &modelTracingScriptedStreamer{closeErr: closeErr}},
+		tracer,
+		telemetry.NoopLogger{},
+		modelTraceConfig{ModelID: "default"},
+	)
+
+	streamer, err := client.Stream(context.Background(), &model.Request{Stream: true})
+	require.NoError(t, err)
+	_, err = streamer.Recv()
+	require.Equal(t, io.EOF, err)
+	span := tracer.singleSpan(t)
+	require.False(t, span.ended)
+
+	err = streamer.Close()
+	require.ErrorIs(t, err, closeErr)
+	require.False(t, span.ended, "cleanup-only Close must not commit lifecycle state")
+
+	err = streamer.Finalize(nil)
+	require.ErrorIs(t, err, closeErr)
+	require.True(t, span.ended)
+	require.Equal(t, codes.Error, span.code)
+}
+
+func TestTracedStreamDoesNotCaptureRejectedOutput(t *testing.T) {
+	t.Parallel()
+
+	rejected, err := model.RestoreOutputValidationError(
+		model.OutputValidationToolArguments,
+		errors.New("private validation cause"),
+		model.ResponseEvidence{Present: true, ByteCount: 14},
+		nil,
+	)
+	require.NoError(t, err)
+	tracer := &modelTracingRecorder{}
+	client := newTracedClient(
+		&modelTracingStreamClient{streamer: &modelTracingScriptedStreamer{
+			chunks: []model.Chunk{
+				{Type: model.ChunkTypeText, Message: &model.Message{
+					Role:  model.ConversationRoleAssistant,
+					Parts: []model.Part{model.TextPart{Text: "private rejected output"}},
+				}},
+				{Type: model.ChunkTypeStop, StopReason: "stop"},
+			},
+			finalizeErr: rejected,
+		}},
+		tracer,
+		telemetry.NoopLogger{},
+		modelTraceConfig{ModelID: "default", CaptureGenAIMessages: true},
+	)
+
+	streamer, err := client.Stream(context.Background(), &model.Request{Stream: true})
+	require.NoError(t, err)
+	for {
+		_, err = streamer.Recv()
+		if errors.Is(err, io.EOF) {
+			break
+		}
+		require.NoError(t, err)
+	}
+	err = streamer.Finalize(nil)
+	require.ErrorIs(t, err, rejected)
+
+	attrs := tracer.singleSpan(t).attrsByKey()
+	require.NotContains(t, attrs, "gen_ai.output.messages")
+}
+
 func TestWithCaptureGenAIMessagesConfiguresRuntime(t *testing.T) {
 	rt := New(WithCaptureGenAIMessages(true))
 	require.True(t, rt.captureGenAIMessages)
@@ -197,25 +425,27 @@ func (c *modelTracingCompleteClient) Complete(context.Context, *model.Request) (
 	return c.response, nil
 }
 
-func (c *modelTracingCompleteClient) Stream(context.Context, *model.Request) (model.Streamer, error) {
+func (c *modelTracingCompleteClient) Stream(context.Context, *model.Request) (model.ValidatedStreamer, error) {
 	return nil, model.ErrStreamingUnsupported
 }
 
 type modelTracingStreamClient struct {
-	streamer model.Streamer
+	streamer model.ValidatedStreamer
 }
 
 func (c *modelTracingStreamClient) Complete(context.Context, *model.Request) (*model.Response, error) {
 	return nil, errors.New("unexpected complete")
 }
 
-func (c *modelTracingStreamClient) Stream(context.Context, *model.Request) (model.Streamer, error) {
+func (c *modelTracingStreamClient) Stream(context.Context, *model.Request) (model.ValidatedStreamer, error) {
 	return c.streamer, nil
 }
 
 type modelTracingScriptedStreamer struct {
-	chunks []model.Chunk
-	index  int
+	chunks      []model.Chunk
+	index       int
+	closeErr    error
+	finalizeErr error
 }
 
 func (s *modelTracingScriptedStreamer) Recv() (model.Chunk, error) {
@@ -228,11 +458,19 @@ func (s *modelTracingScriptedStreamer) Recv() (model.Chunk, error) {
 }
 
 func (s *modelTracingScriptedStreamer) Close() error {
-	return nil
+	return s.closeErr
 }
 
 func (s *modelTracingScriptedStreamer) Metadata() map[string]any {
 	return nil
+}
+
+func (s *modelTracingScriptedStreamer) Response() *model.Response {
+	return nil
+}
+
+func (s *modelTracingScriptedStreamer) Finalize(primaryErr error) error {
+	return errors.Join(primaryErr, s.finalizeErr, s.Close())
 }
 
 type modelTracingRecorder struct {

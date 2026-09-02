@@ -11,7 +11,7 @@
 // - protoc             v7.36.0
 // source: loomgen_registry_registry.proto
 
-package loom_mcp_registrypb
+package goa_ai_registrypb
 
 import (
 	context "context"
@@ -26,26 +26,62 @@ import (
 const _ = grpc.SupportPackageIsVersion9
 
 const (
-	Registry_Register_FullMethodName     = "/loom_mcp_registry.Registry/Register"
-	Registry_Unregister_FullMethodName   = "/loom_mcp_registry.Registry/Unregister"
-	Registry_Pong_FullMethodName         = "/loom_mcp_registry.Registry/Pong"
-	Registry_ListToolsets_FullMethodName = "/loom_mcp_registry.Registry/ListToolsets"
-	Registry_GetToolset_FullMethodName   = "/loom_mcp_registry.Registry/GetToolset"
-	Registry_Search_FullMethodName       = "/loom_mcp_registry.Registry/Search"
-	Registry_CallTool_FullMethodName     = "/loom_mcp_registry.Registry/CallTool"
+	Registry_Register_FullMethodName               = "/goa_ai_registry.Registry/Register"
+	Registry_ReleaseProvider_FullMethodName        = "/goa_ai_registry.Registry/ReleaseProvider"
+	Registry_DrainProvider_FullMethodName          = "/goa_ai_registry.Registry/DrainProvider"
+	Registry_Unregister_FullMethodName             = "/goa_ai_registry.Registry/Unregister"
+	Registry_Pong_FullMethodName                   = "/goa_ai_registry.Registry/Pong"
+	Registry_ListToolsets_FullMethodName           = "/goa_ai_registry.Registry/ListToolsets"
+	Registry_GetToolset_FullMethodName             = "/goa_ai_registry.Registry/GetToolset"
+	Registry_Search_FullMethodName                 = "/goa_ai_registry.Registry/Search"
+	Registry_CallTool_FullMethodName               = "/goa_ai_registry.Registry/CallTool"
+	Registry_RetryTool_FullMethodName              = "/goa_ai_registry.Registry/RetryTool"
+	Registry_CompleteToolCall_FullMethodName       = "/goa_ai_registry.Registry/CompleteToolCall"
+	Registry_PublishToolOutputDelta_FullMethodName = "/goa_ai_registry.Registry/PublishToolOutputDelta"
+	Registry_ReportToolCallOverload_FullMethodName = "/goa_ai_registry.Registry/ReportToolCallOverload"
+	Registry_ClaimToolCall_FullMethodName          = "/goa_ai_registry.Registry/ClaimToolCall"
 )
 
 // RegistryClient is the client API for Registry service.
 //
 // For semantics around ctx use and closing/ending streaming RPCs, please refer to https://pkg.go.dev/google.golang.org/grpc/?tab=doc#ClientConn.NewStream.
 //
-// Internal tool registry gateway for toolset discovery and tool invocation
+// The registry owns serialized toolset admission generations, provider leases
+// and health, discovery, and routed invocation over Pulse streams. Providers
+// renew leases for the one active schema and admission revision; consumers
+// discover and invoke only healthy admitted providers.
 type RegistryClient interface {
-	// Register a toolset with the registry
+	// Reject providers whose required runtime-owned wire protocol version differs
+	// from the registry, then atomically admit or renew one provider-incarnation
+	// lease in the catalog admission record. The same wire version, schema, and
+	// admission revision add or renew replicas under one token. A different token
+	// replaces the admission after Redis-time pruning proves every old lease
+	// expired and atomically tombstones the prior token; otherwise
+	// admission_blocked asks the provider to retry. Any candidate in the permanent
+	// retired-token set returns admission_retired and cannot resurrect.
 	Register(ctx context.Context, in *RegisterRequest, opts ...grpc.CallOption) (*RegisterResponse, error)
-	// Unregister a toolset from the registry
+	// Release one exact provider-incarnation lease from the admission token after
+	// that Serve lifecycle has stopped claiming work and settled in-flight calls.
+	// Missing incarnations and stale tokens succeed without mutation;
+	// infrastructure failures are retryable.
+	ReleaseProvider(ctx context.Context, in *ReleaseProviderRequest, opts ...grpc.CallOption) (*ReleaseProviderResponse, error)
+	// Atomically mark one exact provider-incarnation lease non-routable before its
+	// Serve lifecycle closes the shared request sink. The provider supplies its
+	// configured settlement duration; Redis time extends the draining lease
+	// through that full lifecycle so the same Serve lifecycle can claim and settle
+	// calls already published to its local request buffer. Newly admitted calls
+	// route only when another non-draining provider remains.
+	DrainProvider(ctx context.Context, in *DrainProviderRequest, opts ...grpc.CallOption) (*DrainProviderResponse, error)
+	// Intentionally retire the exact active admission while preserving its
+	// provider leases until graceful release or expiry and atomically adding its
+	// token to the permanent retired-token set. Repeating the same-token
+	// retirement succeeds; a stale token returns admission_conflict. Retirement
+	// removes the toolset from discovery and routing and permanently prevents that
+	// exact token from registering again.
 	Unregister(ctx context.Context, in *UnregisterRequest, opts ...grpc.CallOption) (*UnregisterResponse, error)
-	// Respond to a health check ping
+	// Atomically record shared consumer-group liveness for a
+	// token-and-membership-epoch health ping. The responding provider incarnation
+	// must hold an unexpired lease in that same catalog record.
 	Pong(ctx context.Context, in *PongRequest, opts ...grpc.CallOption) (*PongResponse, error)
 	// List all registered toolsets with optional tag filtering
 	ListToolsets(ctx context.Context, in *ListToolsetsRequest, opts ...grpc.CallOption) (*ListToolsetsResponse, error)
@@ -53,9 +89,53 @@ type RegistryClient interface {
 	GetToolset(ctx context.Context, in *GetToolsetRequest, opts ...grpc.CallOption) (*GetToolsetResponse, error)
 	// Search toolsets by keyword matching name, description, or tags
 	Search(ctx context.Context, in *SearchRequest, opts ...grpc.CallOption) (*SearchResponse, error)
-	// Initiate a tool call by publishing a tool call message to the toolset
-	// request stream and returning the tool use identifier.
+	// Reject consumers whose required runtime-owned wire protocol version differs
+	// from the registry, then store one immutable admitted or rejected decision
+	// for a run-scoped tool call. Catalog or provider-health failures commit the
+	// rejected decision before returning call_not_admitted, so exact retries
+	// cannot execute while that decision is retained and the caller safely chooses
+	// another plan. Admitted calls atomically own initial publication and terminal
+	// completion by tool_use_id: the call record retains the full canonical
+	// terminal through its absolute expiration and restores it when bounded
+	// result-stream history was trimmed. Before returning an admission, the
+	// registry establishes the result stream so the caller can create a reader
+	// immediately.
 	CallTool(ctx context.Context, in *CallToolRequest, opts ...grpc.CallOption) (*CallToolResponse, error)
+	// Republish one previously admitted call after provider overload recorded in
+	// the authoritative call record. The runtime supplies the exact original
+	// registration token; the registry rejects a changed active admission before
+	// publishing and never rebinds claimed execution to a replacement provider.
+	// Before returning either a republished or terminal call, the registry
+	// establishes the result stream so the caller can create a reader immediately.
+	RetryTool(ctx context.Context, in *RetryToolRequest, opts ...grpc.CallOption) (*RetryToolResponse, error)
+	// Publish one canonical terminal result for an admitted call. The registry
+	// verifies the exact provider incarnation still owns an unexpired lease and
+	// claimed request event, then atomically stores the full terminal in the
+	// authoritative call record and appends it to bounded result history. If that
+	// exact dispatch lease disappears first, registry-owned settlement commits
+	// outcome_unknown because the effect may have occurred; execution ownership
+	// never transfers.
+	CompleteToolCall(ctx context.Context, in *CompleteToolCallRequest, opts ...grpc.CallOption) (*CompleteToolCallResponse, error)
+	// Publish one best-effort output fragment for a claimed live call. The
+	// registry verifies the exact provider lease and request-event claim, then
+	// atomically appends the delta only while the authoritative call record
+	// remains nonterminal.
+	PublishToolOutputDelta(ctx context.Context, in *PublishToolOutputDeltaRequest, opts ...grpc.CallOption) (*PublishToolOutputDeltaResponse, error)
+	// Report that an exact provider claim could not enter its bounded worker
+	// queue. The registry verifies the provider lease and request-event claim,
+	// then atomically appends retry control only while the authoritative call
+	// record remains nonterminal.
+	ReportToolCallOverload(ctx context.Context, in *ReportToolCallOverloadRequest, opts ...grpc.CallOption) (*ReportToolCallOverloadResponse, error)
+	// Atomically settle one queued request before handler dispatch. The registry
+	// authenticates the exact provider lease and request event; an unexpired
+	// active or draining lease may gain immutable execution ownership for a
+	// request already published to that Serve lifecycle, while draining prevents
+	// new routing. Existing owners, retained terminal history, and Redis-owned
+	// expiration settle without execution, while stale or retired unclaimed work
+	// receives the canonical stale-generation terminal. Only the exact granted
+	// provider incarnation and request event may publish deltas or complete the
+	// call; ownership never transfers after a crash.
+	ClaimToolCall(ctx context.Context, in *ClaimToolCallRequest, opts ...grpc.CallOption) (*ClaimToolCallResponse, error)
 }
 
 type registryClient struct {
@@ -70,6 +150,26 @@ func (c *registryClient) Register(ctx context.Context, in *RegisterRequest, opts
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(RegisterResponse)
 	err := c.cc.Invoke(ctx, Registry_Register_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *registryClient) ReleaseProvider(ctx context.Context, in *ReleaseProviderRequest, opts ...grpc.CallOption) (*ReleaseProviderResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ReleaseProviderResponse)
+	err := c.cc.Invoke(ctx, Registry_ReleaseProvider_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *registryClient) DrainProvider(ctx context.Context, in *DrainProviderRequest, opts ...grpc.CallOption) (*DrainProviderResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(DrainProviderResponse)
+	err := c.cc.Invoke(ctx, Registry_DrainProvider_FullMethodName, in, out, cOpts...)
 	if err != nil {
 		return nil, err
 	}
@@ -136,17 +236,96 @@ func (c *registryClient) CallTool(ctx context.Context, in *CallToolRequest, opts
 	return out, nil
 }
 
+func (c *registryClient) RetryTool(ctx context.Context, in *RetryToolRequest, opts ...grpc.CallOption) (*RetryToolResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(RetryToolResponse)
+	err := c.cc.Invoke(ctx, Registry_RetryTool_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *registryClient) CompleteToolCall(ctx context.Context, in *CompleteToolCallRequest, opts ...grpc.CallOption) (*CompleteToolCallResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(CompleteToolCallResponse)
+	err := c.cc.Invoke(ctx, Registry_CompleteToolCall_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *registryClient) PublishToolOutputDelta(ctx context.Context, in *PublishToolOutputDeltaRequest, opts ...grpc.CallOption) (*PublishToolOutputDeltaResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(PublishToolOutputDeltaResponse)
+	err := c.cc.Invoke(ctx, Registry_PublishToolOutputDelta_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *registryClient) ReportToolCallOverload(ctx context.Context, in *ReportToolCallOverloadRequest, opts ...grpc.CallOption) (*ReportToolCallOverloadResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ReportToolCallOverloadResponse)
+	err := c.cc.Invoke(ctx, Registry_ReportToolCallOverload_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *registryClient) ClaimToolCall(ctx context.Context, in *ClaimToolCallRequest, opts ...grpc.CallOption) (*ClaimToolCallResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ClaimToolCallResponse)
+	err := c.cc.Invoke(ctx, Registry_ClaimToolCall_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // RegistryServer is the server API for Registry service.
 // All implementations must embed UnimplementedRegistryServer
 // for forward compatibility.
 //
-// Internal tool registry gateway for toolset discovery and tool invocation
+// The registry owns serialized toolset admission generations, provider leases
+// and health, discovery, and routed invocation over Pulse streams. Providers
+// renew leases for the one active schema and admission revision; consumers
+// discover and invoke only healthy admitted providers.
 type RegistryServer interface {
-	// Register a toolset with the registry
+	// Reject providers whose required runtime-owned wire protocol version differs
+	// from the registry, then atomically admit or renew one provider-incarnation
+	// lease in the catalog admission record. The same wire version, schema, and
+	// admission revision add or renew replicas under one token. A different token
+	// replaces the admission after Redis-time pruning proves every old lease
+	// expired and atomically tombstones the prior token; otherwise
+	// admission_blocked asks the provider to retry. Any candidate in the permanent
+	// retired-token set returns admission_retired and cannot resurrect.
 	Register(context.Context, *RegisterRequest) (*RegisterResponse, error)
-	// Unregister a toolset from the registry
+	// Release one exact provider-incarnation lease from the admission token after
+	// that Serve lifecycle has stopped claiming work and settled in-flight calls.
+	// Missing incarnations and stale tokens succeed without mutation;
+	// infrastructure failures are retryable.
+	ReleaseProvider(context.Context, *ReleaseProviderRequest) (*ReleaseProviderResponse, error)
+	// Atomically mark one exact provider-incarnation lease non-routable before its
+	// Serve lifecycle closes the shared request sink. The provider supplies its
+	// configured settlement duration; Redis time extends the draining lease
+	// through that full lifecycle so the same Serve lifecycle can claim and settle
+	// calls already published to its local request buffer. Newly admitted calls
+	// route only when another non-draining provider remains.
+	DrainProvider(context.Context, *DrainProviderRequest) (*DrainProviderResponse, error)
+	// Intentionally retire the exact active admission while preserving its
+	// provider leases until graceful release or expiry and atomically adding its
+	// token to the permanent retired-token set. Repeating the same-token
+	// retirement succeeds; a stale token returns admission_conflict. Retirement
+	// removes the toolset from discovery and routing and permanently prevents that
+	// exact token from registering again.
 	Unregister(context.Context, *UnregisterRequest) (*UnregisterResponse, error)
-	// Respond to a health check ping
+	// Atomically record shared consumer-group liveness for a
+	// token-and-membership-epoch health ping. The responding provider incarnation
+	// must hold an unexpired lease in that same catalog record.
 	Pong(context.Context, *PongRequest) (*PongResponse, error)
 	// List all registered toolsets with optional tag filtering
 	ListToolsets(context.Context, *ListToolsetsRequest) (*ListToolsetsResponse, error)
@@ -154,9 +333,53 @@ type RegistryServer interface {
 	GetToolset(context.Context, *GetToolsetRequest) (*GetToolsetResponse, error)
 	// Search toolsets by keyword matching name, description, or tags
 	Search(context.Context, *SearchRequest) (*SearchResponse, error)
-	// Initiate a tool call by publishing a tool call message to the toolset
-	// request stream and returning the tool use identifier.
+	// Reject consumers whose required runtime-owned wire protocol version differs
+	// from the registry, then store one immutable admitted or rejected decision
+	// for a run-scoped tool call. Catalog or provider-health failures commit the
+	// rejected decision before returning call_not_admitted, so exact retries
+	// cannot execute while that decision is retained and the caller safely chooses
+	// another plan. Admitted calls atomically own initial publication and terminal
+	// completion by tool_use_id: the call record retains the full canonical
+	// terminal through its absolute expiration and restores it when bounded
+	// result-stream history was trimmed. Before returning an admission, the
+	// registry establishes the result stream so the caller can create a reader
+	// immediately.
 	CallTool(context.Context, *CallToolRequest) (*CallToolResponse, error)
+	// Republish one previously admitted call after provider overload recorded in
+	// the authoritative call record. The runtime supplies the exact original
+	// registration token; the registry rejects a changed active admission before
+	// publishing and never rebinds claimed execution to a replacement provider.
+	// Before returning either a republished or terminal call, the registry
+	// establishes the result stream so the caller can create a reader immediately.
+	RetryTool(context.Context, *RetryToolRequest) (*RetryToolResponse, error)
+	// Publish one canonical terminal result for an admitted call. The registry
+	// verifies the exact provider incarnation still owns an unexpired lease and
+	// claimed request event, then atomically stores the full terminal in the
+	// authoritative call record and appends it to bounded result history. If that
+	// exact dispatch lease disappears first, registry-owned settlement commits
+	// outcome_unknown because the effect may have occurred; execution ownership
+	// never transfers.
+	CompleteToolCall(context.Context, *CompleteToolCallRequest) (*CompleteToolCallResponse, error)
+	// Publish one best-effort output fragment for a claimed live call. The
+	// registry verifies the exact provider lease and request-event claim, then
+	// atomically appends the delta only while the authoritative call record
+	// remains nonterminal.
+	PublishToolOutputDelta(context.Context, *PublishToolOutputDeltaRequest) (*PublishToolOutputDeltaResponse, error)
+	// Report that an exact provider claim could not enter its bounded worker
+	// queue. The registry verifies the provider lease and request-event claim,
+	// then atomically appends retry control only while the authoritative call
+	// record remains nonterminal.
+	ReportToolCallOverload(context.Context, *ReportToolCallOverloadRequest) (*ReportToolCallOverloadResponse, error)
+	// Atomically settle one queued request before handler dispatch. The registry
+	// authenticates the exact provider lease and request event; an unexpired
+	// active or draining lease may gain immutable execution ownership for a
+	// request already published to that Serve lifecycle, while draining prevents
+	// new routing. Existing owners, retained terminal history, and Redis-owned
+	// expiration settle without execution, while stale or retired unclaimed work
+	// receives the canonical stale-generation terminal. Only the exact granted
+	// provider incarnation and request event may publish deltas or complete the
+	// call; ownership never transfers after a crash.
+	ClaimToolCall(context.Context, *ClaimToolCallRequest) (*ClaimToolCallResponse, error)
 	mustEmbedUnimplementedRegistryServer()
 }
 
@@ -169,6 +392,12 @@ type UnimplementedRegistryServer struct{}
 
 func (UnimplementedRegistryServer) Register(context.Context, *RegisterRequest) (*RegisterResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method Register not implemented")
+}
+func (UnimplementedRegistryServer) ReleaseProvider(context.Context, *ReleaseProviderRequest) (*ReleaseProviderResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method ReleaseProvider not implemented")
+}
+func (UnimplementedRegistryServer) DrainProvider(context.Context, *DrainProviderRequest) (*DrainProviderResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method DrainProvider not implemented")
 }
 func (UnimplementedRegistryServer) Unregister(context.Context, *UnregisterRequest) (*UnregisterResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method Unregister not implemented")
@@ -187,6 +416,21 @@ func (UnimplementedRegistryServer) Search(context.Context, *SearchRequest) (*Sea
 }
 func (UnimplementedRegistryServer) CallTool(context.Context, *CallToolRequest) (*CallToolResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method CallTool not implemented")
+}
+func (UnimplementedRegistryServer) RetryTool(context.Context, *RetryToolRequest) (*RetryToolResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method RetryTool not implemented")
+}
+func (UnimplementedRegistryServer) CompleteToolCall(context.Context, *CompleteToolCallRequest) (*CompleteToolCallResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method CompleteToolCall not implemented")
+}
+func (UnimplementedRegistryServer) PublishToolOutputDelta(context.Context, *PublishToolOutputDeltaRequest) (*PublishToolOutputDeltaResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method PublishToolOutputDelta not implemented")
+}
+func (UnimplementedRegistryServer) ReportToolCallOverload(context.Context, *ReportToolCallOverloadRequest) (*ReportToolCallOverloadResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method ReportToolCallOverload not implemented")
+}
+func (UnimplementedRegistryServer) ClaimToolCall(context.Context, *ClaimToolCallRequest) (*ClaimToolCallResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method ClaimToolCall not implemented")
 }
 func (UnimplementedRegistryServer) mustEmbedUnimplementedRegistryServer() {}
 func (UnimplementedRegistryServer) testEmbeddedByValue()                  {}
@@ -223,6 +467,42 @@ func _Registry_Register_Handler(srv interface{}, ctx context.Context, dec func(i
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
 		return srv.(RegistryServer).Register(ctx, req.(*RegisterRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _Registry_ReleaseProvider_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ReleaseProviderRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(RegistryServer).ReleaseProvider(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: Registry_ReleaseProvider_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(RegistryServer).ReleaseProvider(ctx, req.(*ReleaseProviderRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _Registry_DrainProvider_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(DrainProviderRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(RegistryServer).DrainProvider(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: Registry_DrainProvider_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(RegistryServer).DrainProvider(ctx, req.(*DrainProviderRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
@@ -335,16 +615,114 @@ func _Registry_CallTool_Handler(srv interface{}, ctx context.Context, dec func(i
 	return interceptor(ctx, in, info, handler)
 }
 
+func _Registry_RetryTool_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(RetryToolRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(RegistryServer).RetryTool(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: Registry_RetryTool_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(RegistryServer).RetryTool(ctx, req.(*RetryToolRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _Registry_CompleteToolCall_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(CompleteToolCallRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(RegistryServer).CompleteToolCall(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: Registry_CompleteToolCall_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(RegistryServer).CompleteToolCall(ctx, req.(*CompleteToolCallRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _Registry_PublishToolOutputDelta_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(PublishToolOutputDeltaRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(RegistryServer).PublishToolOutputDelta(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: Registry_PublishToolOutputDelta_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(RegistryServer).PublishToolOutputDelta(ctx, req.(*PublishToolOutputDeltaRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _Registry_ReportToolCallOverload_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ReportToolCallOverloadRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(RegistryServer).ReportToolCallOverload(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: Registry_ReportToolCallOverload_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(RegistryServer).ReportToolCallOverload(ctx, req.(*ReportToolCallOverloadRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _Registry_ClaimToolCall_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ClaimToolCallRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(RegistryServer).ClaimToolCall(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: Registry_ClaimToolCall_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(RegistryServer).ClaimToolCall(ctx, req.(*ClaimToolCallRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // Registry_ServiceDesc is the grpc.ServiceDesc for Registry service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
 var Registry_ServiceDesc = grpc.ServiceDesc{
-	ServiceName: "loom_mcp_registry.Registry",
+	ServiceName: "goa_ai_registry.Registry",
 	HandlerType: (*RegistryServer)(nil),
 	Methods: []grpc.MethodDesc{
 		{
 			MethodName: "Register",
 			Handler:    _Registry_Register_Handler,
+		},
+		{
+			MethodName: "ReleaseProvider",
+			Handler:    _Registry_ReleaseProvider_Handler,
+		},
+		{
+			MethodName: "DrainProvider",
+			Handler:    _Registry_DrainProvider_Handler,
 		},
 		{
 			MethodName: "Unregister",
@@ -369,6 +747,26 @@ var Registry_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "CallTool",
 			Handler:    _Registry_CallTool_Handler,
+		},
+		{
+			MethodName: "RetryTool",
+			Handler:    _Registry_RetryTool_Handler,
+		},
+		{
+			MethodName: "CompleteToolCall",
+			Handler:    _Registry_CompleteToolCall_Handler,
+		},
+		{
+			MethodName: "PublishToolOutputDelta",
+			Handler:    _Registry_PublishToolOutputDelta_Handler,
+		},
+		{
+			MethodName: "ReportToolCallOverload",
+			Handler:    _Registry_ReportToolCallOverload_Handler,
+		},
+		{
+			MethodName: "ClaimToolCall",
+			Handler:    _Registry_ClaimToolCall_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},

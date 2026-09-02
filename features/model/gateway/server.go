@@ -10,7 +10,7 @@ import (
 )
 
 type (
-	// Server adapts a model.Client into a composable request handler with
+	// Server adapts a raw model.Provider into a composable request handler with
 	// middleware support for both unary and streaming completions.
 	//
 	// Applications typically instantiate a Server with NewServer, configure it
@@ -23,7 +23,7 @@ type (
 	// wraps all subsequent ones, forming an onion structure where the innermost
 	// layer invokes the provider client.
 	Server struct {
-		provider model.Client
+		provider model.Provider
 		unary    UnaryHandler
 		stream   StreamHandler
 	}
@@ -63,7 +63,7 @@ type (
 
 	// serverConfig holds the configuration accumulated during Server construction.
 	serverConfig struct {
-		provider model.Client
+		provider model.Provider
 		unaryMW  []UnaryMiddleware
 		streamMW []StreamMiddleware
 	}
@@ -74,7 +74,7 @@ type (
 // NewServer will return ErrProviderRequired if no provider is configured.
 // The provider's Complete and Stream methods form the innermost layer of the
 // middleware chain.
-func WithProvider(p model.Client) Option {
+func WithProvider(p model.Provider) Option {
 	return func(c *serverConfig) { c.provider = p }
 }
 
@@ -123,19 +123,22 @@ func NewServer(opts ...Option) (*Server, error) {
 		if err != nil {
 			return err
 		}
-		defer func() { _ = st.Close() }()
+		var primaryErr error
 		for {
 			ch, err := st.Recv()
 			if err != nil {
-				if errors.Is(err, io.EOF) {
-					return nil
+				//nolint:errorlint // Wrapped EOF is a provider failure, not clean completion.
+				if err != io.EOF {
+					primaryErr = err
 				}
-				return err
+				break
 			}
 			if err := send(ch); err != nil {
-				return err
+				primaryErr = err
+				break
 			}
 		}
+		return errors.Join(primaryErr, st.Close())
 	}
 	// Wrap with middlewares (in registration order).
 	unary := baseUnary

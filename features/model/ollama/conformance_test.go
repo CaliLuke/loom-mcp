@@ -135,6 +135,21 @@ func TestClientConformance(t *testing.T) {
 				TotalTokens:  11,
 			}, response.Usage)
 		},
+		OutputLimited: func(t *testing.T) {
+			provider := newClient(t, func(w http.ResponseWriter, _ *http.Request) {
+				assert.NoError(t, json.MarshalWrite(w, map[string]any{
+					"model": "llama3.1", "done": true, "done_reason": "length",
+					"message": map[string]any{"role": "assistant", "content": "{"},
+				}))
+			})
+			response, err := provider.Complete(context.Background(), request())
+			require.NoError(t, err)
+			require.True(t, response.OutputLimited)
+			client, err := model.NewClient(provider)
+			require.NoError(t, err)
+			_, err = client.Complete(context.Background(), request())
+			requireOutputLimitedRejection(t, err)
+		},
 		MultimodalInput: testutil.ProviderCapabilityConformance{Supported: func(t *testing.T) {
 			var captured map[string]any
 			client := newClient(t, func(w http.ResponseWriter, r *http.Request) {
@@ -321,8 +336,30 @@ func TestClientConformance(t *testing.T) {
 				_, err = stream.Recv()
 				require.ErrorIs(t, err, io.EOF)
 			},
+			OutputLimited: func(t *testing.T) {
+				provider := newClient(t, func(w http.ResponseWriter, _ *http.Request) {
+					_, err := io.WriteString(w, `{"model":"llama3.1","message":{"role":"assistant","content":"{"},"done":true,"done_reason":"length"}`+"\n")
+					assert.NoError(t, err)
+				})
+				req := request()
+				req.StructuredOutput = &model.StructuredOutput{Name: "result", Schema: []byte(`{"type":"object"}`)}
+				stream, err := provider.Stream(context.Background(), req)
+				require.NoError(t, err)
+				t.Cleanup(func() { require.NoError(t, stream.Close()) })
+				chunks := testutil.CollectStreamChunks(t, stream)
+				require.Equal(t, []string{model.ChunkTypeCompletionDelta, model.ChunkTypeStop}, ollamaChunkTypes(chunks))
+				require.True(t, chunks[1].OutputLimited)
+			},
 		},
 	})
+}
+
+func requireOutputLimitedRejection(t *testing.T, err error) {
+	t.Helper()
+	require.Error(t, err)
+	var validationErr *model.OutputValidationError
+	require.ErrorAs(t, err, &validationErr)
+	require.Equal(t, model.OutputValidationOutputBounds, validationErr.Kind())
 }
 
 type roundTripFunc func(*http.Request) (*http.Response, error)

@@ -358,11 +358,12 @@ func TestHookActivityEmptyAfterEventDecisionPreservesAppendError(t *testing.T) {
 }
 
 func TestRetryAndReflectInterceptorConvertsToolErrorToRetryHint(t *testing.T) {
+	const secret = "submitted-secret-value"
 	rt := New(WithInterceptors(NewRetryAndReflectInterceptor(RetryAndReflectConfig{MaxRetries: 2})))
 	rt.toolsets["svc.tools"] = ToolsetRegistration{
 		Name: "svc.tools",
 		Execute: func(ctx context.Context, call *planner.ToolRequest) (*ToolExecutionResult, error) {
-			return nil, errors.New("backend rejected limit")
+			return nil, errors.New("backend rejected submitted value " + secret)
 		},
 	}
 	rt.toolSpecs["svc.tools.search"] = tools.ToolSpec{
@@ -380,12 +381,27 @@ func TestRetryAndReflectInterceptorConvertsToolErrorToRetryHint(t *testing.T) {
 	})
 
 	require.NoError(t, err)
-	require.Equal(t, `tool "svc.tools.search" failed: backend rejected limit`, out.Error)
+	require.Equal(t, "tool execution failed; retry with corrected arguments", out.Error)
 	require.NotNil(t, out.RetryHint)
 	require.Equal(t, planner.RetryReasonInvalidArguments, out.RetryHint.Reason)
 	require.Equal(t, tools.Ident("svc.tools.search"), out.RetryHint.Tool)
 	require.True(t, out.RetryHint.RestrictToTool)
-	require.Equal(t, map[string]any{"query": "loom", "limit": float64(-1)}, out.RetryHint.PriorInput)
+	require.Nil(t, out.RetryHint.PriorInput)
 	require.Contains(t, out.RetryHint.Message, "Retry svc.tools.search with corrected arguments")
-	require.Contains(t, out.RetryHint.Message, "backend rejected limit")
+	require.NotContains(t, out.Error, secret)
+	require.NotContains(t, out.RetryHint.Message, secret)
+
+	result := &planner.ToolResult{
+		Name:       "svc.tools.search",
+		ToolCallID: "call-1",
+		Error:      planner.NewToolError(out.Error),
+	}
+	applyActivityRetryHint(result, rt.toolSpecs[result.Name], out)
+	require.NotContains(t, result.Error.Error(), secret)
+	require.NotContains(t, result.RetryHint.Message, secret)
+	events, eventErr := rt.encodeToolEvents(context.Background(), []*planner.ToolResult{result})
+	require.NoError(t, eventErr)
+	require.Len(t, events, 1)
+	require.NotContains(t, events[0].Error.Error(), secret)
+	require.NotContains(t, events[0].RetryHint.Message, secret)
 }

@@ -21,6 +21,7 @@ import (
 	agentsruntime "github.com/CaliLuke/loom-mcp/v2/runtime/agent/runtime"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/session"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/stream"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
@@ -134,10 +135,15 @@ func runGeneratedExternalAwaitScenario(t *testing.T, ctx context.Context, fx *fe
 		agentsruntime.WithRunTimeBudget(time.Second),
 	)
 	require.NoError(t, err)
-	require.Eventually(t, func() bool {
+	if !assert.Eventually(t, func() bool {
 		return fx.recorder.count(hooks.AwaitClarification) == 1 &&
 			fx.recorder.count(hooks.AwaitExternalTools) == 1
-	}, 5*time.Second, 10*time.Millisecond)
+	}, 5*time.Second, 10*time.Millisecond) {
+		waitCtx, cancelWait := context.WithTimeout(ctx, 2*time.Second)
+		defer cancelWait()
+		out, waitErr := handle.Wait(waitCtx)
+		require.FailNowf(t, "external-input barrier was not published", "run output: %#v; wait error: %v", out, waitErr)
+	}
 
 	require.NoError(t, fx.rt.ProvideClarification(ctx, &api.ClarificationAnswer{
 		RunID:  "run-external-await",

@@ -76,6 +76,32 @@ func TestStartRunSetsWorkflowName(t *testing.T) {
 	require.Equal(t, "service.workflow", eng.last.Workflow)
 }
 
+func TestRunAndStartRejectNegativeRecoveryOverride(t *testing.T) {
+	t.Parallel()
+
+	rt := &Runtime{
+		Engine:       &stubEngine{},
+		SessionStore: sessioninmem.New(),
+		agents: map[agent.Ident]AgentRegistration{
+			"service.agent": {
+				ID:       "service.agent",
+				Workflow: engine.WorkflowDefinition{Name: "service.workflow", TaskQueue: "q"},
+			},
+		},
+		logger:  telemetry.NoopLogger{},
+		metrics: telemetry.NoopMetrics{},
+		tracer:  telemetry.NoopTracer{},
+	}
+	client := rt.MustClient("service.agent")
+
+	_, err := client.Start(context.Background(), "session", nil, WithRunMaxRecoveryTurns(-1))
+	require.ErrorIs(t, err, ErrInvalidConfig)
+	require.ErrorContains(t, err, "MaxRecoveryTurns must not be negative")
+	_, err = client.Run(context.Background(), "session", nil, WithRunMaxRecoveryTurns(-1))
+	require.ErrorIs(t, err, ErrInvalidConfig)
+	require.ErrorContains(t, err, "MaxRecoveryTurns must not be negative")
+}
+
 func TestStartRunRequiresSessionID(t *testing.T) {
 	eng := &stubEngine{}
 	rt := &Runtime{
@@ -535,7 +561,7 @@ func TestRuntimeResumeRunSignalsWorkflow(t *testing.T) {
 	require.Equal(t, interrupt.SignalResume, handle.lastSignal)
 }
 
-func TestConsecutiveFailureBreaker(t *testing.T) {
+func TestRecoveryTurnAllowsOneReplacementPlannerActivity(t *testing.T) {
 	rt := &Runtime{
 		toolsets: map[string]ToolsetRegistration{
 			"svc.tools": {Execute: func(ctx context.Context, call *planner.ToolRequest) (*ToolExecutionResult, error) {
@@ -553,19 +579,26 @@ func TestConsecutiveFailureBreaker(t *testing.T) {
 		metrics: telemetry.NoopMetrics{},
 		tracer:  telemetry.NoopTracer{},
 	}
-	wfCtx := &testWorkflowContext{ctx: context.Background(), asyncResult: ToolOutput{Error: "boom"}}
+	finalMessage := &model.Message{Role: model.ConversationRoleAssistant, Parts: []model.Part{model.TextPart{Text: "recovered"}}}
+	wfCtx := &testWorkflowContext{
+		ctx:           context.Background(),
+		asyncResult:   ToolOutput{Error: "boom"},
+		hasPlanResult: true,
+		planResult:    &planner.PlanResult{FinalResponse: &planner.FinalResponse{Message: finalMessage}},
+	}
 	input := &RunInput{AgentID: "svc.agent", RunID: "run-1"}
 	base := &planner.PlanInput{RunContext: run.Context{RunID: input.RunID}, Agent: newAgentContext(agentContextOptions{runtime: rt, agentID: input.AgentID, runID: input.RunID})}
 	initial := &planner.PlanResult{ToolCalls: []planner.ToolRequest{{Name: tools.Ident("fail")}}}
-	_, err := rt.runLoop(wfCtx, AgentRegistration{
+	out, err := rt.runLoop(wfCtx, AgentRegistration{
 		ID:                  input.AgentID,
 		Planner:             &stubPlanner{},
 		ExecuteToolActivity: "execute",
 		ResumeActivityName:  "resume",
-		Policy:              RunPolicy{MaxConsecutiveFailedToolCalls: 1},
-	}, input, base, initial, nil, model.TokenUsage{}, initialCaps(RunPolicy{MaxConsecutiveFailedToolCalls: 1}), time.Time{}, time.Time{}, 2, "", nil, nil, 0)
-	require.Error(t, err)
-	require.Contains(t, err.Error(), "consecutive failed tool call cap exceeded")
+		Policy:              RunPolicy{MaxRecoveryTurns: 1},
+	}, input, base, initial, nil, model.TokenUsage{}, initialCaps(RunPolicy{MaxRecoveryTurns: 1}), time.Time{}, time.Time{}, 2, "", nil, nil, 0)
+	require.NoError(t, err)
+	require.NotNil(t, out)
+	require.Equal(t, finalMessage, out.Final)
 }
 
 func TestStartRunForwardsWorkflowOptions(t *testing.T) {
@@ -771,6 +804,26 @@ func TestRegisterAgentRejectsUnknownPreloadMemoryScope(t *testing.T) {
 	require.Contains(t, err.Error(), `unknown PreloadMemory scope "elsewhere"`)
 }
 
+func TestRegisterAgentRejectsNegativeMaxRecoveryTurns(t *testing.T) {
+	t.Parallel()
+
+	rt := New()
+	err := rt.RegisterAgent(context.Background(), AgentRegistration{
+		ID:      "svc.agent",
+		Planner: &stubPlanner{},
+		Workflow: engine.WorkflowDefinition{
+			Name:    "svc.agent.workflow",
+			Handler: func(engine.WorkflowContext, *RunInput) (*RunOutput, error) { return &RunOutput{}, nil },
+		},
+		PlanActivityName:    "plan",
+		ResumeActivityName:  "resume",
+		ExecuteToolActivity: "execute",
+		Policy:              RunPolicy{MaxRecoveryTurns: -1},
+	})
+	require.ErrorIs(t, err, ErrInvalidConfig)
+	require.ErrorContains(t, err, "MaxRecoveryTurns must not be negative")
+}
+
 func TestRegisterAgentRejectsPreloadMemoryWithoutBackend(t *testing.T) {
 	rt := New()
 
@@ -857,6 +910,20 @@ func TestOverridePolicy_AppliesToNewRuns_MaxToolCalls(t *testing.T) {
 	caps := initialCaps(reg.Policy)
 	require.Equal(t, 1, caps.MaxToolCalls)
 	require.Equal(t, 1, caps.RemainingToolCalls)
+}
+
+func TestOverridePolicyRejectsNegativeRecoveryTurnsWithoutMutation(t *testing.T) {
+	t.Parallel()
+
+	agentID := agent.Ident("svc.agent")
+	original := RunPolicy{MaxToolCalls: 5, MaxRecoveryTurns: 2}
+	rt := &Runtime{agents: map[agent.Ident]AgentRegistration{
+		agentID: {ID: agentID, Policy: original},
+	}}
+
+	err := rt.OverridePolicy(agentID, RunPolicy{MaxToolCalls: 1, MaxRecoveryTurns: -1})
+	require.ErrorContains(t, err, "max recovery turns cannot be negative")
+	require.Equal(t, original, rt.agents[agentID].Policy)
 }
 
 func TestConvertRunOutputToToolResult(t *testing.T) {

@@ -76,5 +76,6 @@ check_group "temporal" '/(runtime/agent/engine/temporal|runtime/temporaltrace)/'
 check_group "registry-pulse" '/(registry|runtime/registry|features/stream/pulse)/' "${COVERAGE_REGISTRY_PULSE_MIN:-58.0}"
 check_group "providers" '/features/model/(anthropic|bedrock|gateway|gemini|middleware|ollama|openai)/' "${COVERAGE_PROVIDERS_MIN:-70.0}"
 check_group "agent-runtime" '^github.com/CaliLuke/loom-mcp/v2/runtime/agent/runtime/[^/]+[.]go$' "${COVERAGE_AGENT_RUNTIME_MIN:-70.0}"
+check_group "model" '^github.com/CaliLuke/loom-mcp/v2/runtime/agent/model/[^/]+[.]go$' "${COVERAGE_MODEL_MIN:-70.0}"
 check_group "bedrock" '^github.com/CaliLuke/loom-mcp/v2/features/model/bedrock/[^/]+[.]go$' "${COVERAGE_BEDROCK_MIN:-72.0}"
 check_group "gemini" '^github.com/CaliLuke/loom-mcp/v2/features/model/gemini/[^/]+[.]go$' "${COVERAGE_GEMINI_MIN:-65.0}"

@@ -27,7 +27,7 @@ func TestAgentDSLExample(t *testing.T) {
 				RunPolicy(func() {
 					DefaultCaps(
 						MaxToolCalls(5),
-						MaxConsecutiveFailedToolCalls(2),
+						MaxRecoveryTurns(2),
 					)
 					TimeBudget("30s")
 					InterruptsAllowed(true)
@@ -101,18 +101,18 @@ func TestRunPolicyRejectsNonPositiveCapsAndBudgets(t *testing.T) {
 			err: "MaxToolCalls requires n > 0",
 		},
 		{
-			name: "negative max consecutive failed tool calls",
+			name: "negative max recovery turns",
 			dsl: func() {
-				DefaultCaps(MaxConsecutiveFailedToolCalls(-1))
+				DefaultCaps(MaxRecoveryTurns(-1))
 			},
-			err: "MaxConsecutiveFailedToolCalls requires n > 0",
+			err: "MaxRecoveryTurns requires n > 0",
 		},
 		{
-			name: "zero max consecutive failed tool calls",
+			name: "zero max recovery turns",
 			dsl: func() {
-				DefaultCaps(MaxConsecutiveFailedToolCalls(0))
+				DefaultCaps(MaxRecoveryTurns(0))
 			},
-			err: "MaxConsecutiveFailedToolCalls requires n > 0",
+			err: "MaxRecoveryTurns requires n > 0",
 		},
 		{
 			name: "negative time budget",

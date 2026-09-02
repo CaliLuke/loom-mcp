@@ -1,4 +1,4 @@
-// Package bedrock provides a model.Client implementation backed by the AWS
+// Package bedrock provides a raw model.Provider backed by the AWS
 // Bedrock Converse API. It mirrors the inference-engine request pipeline used
 // in production systems: split system vs. conversational messages, encode tool
 // schemas into Bedrock's ToolConfiguration, and translate Converse responses
@@ -94,7 +94,7 @@ type Options struct {
 	Logger telemetry.Logger
 }
 
-// Client implements model.Client on top of AWS Bedrock Converse.
+// Client implements model.Provider on top of AWS Bedrock Converse.
 type Client struct {
 	runtime        RuntimeClient
 	defaultModel   string
@@ -869,6 +869,13 @@ func translateResponse(output *bedrockruntime.ConverseOutput, nameMap map[string
 	if output == nil {
 		return nil, errors.New("bedrock: response is nil")
 	}
+	if bedrockOutputLimited(output.StopReason) {
+		return &model.Response{
+			Usage:         bedrockUsage(output.Usage, modelID, modelClass),
+			StopReason:    string(output.StopReason),
+			OutputLimited: true,
+		}, nil
+	}
 	resp := &model.Response{}
 	if msg, ok := output.Output.(*brtypes.ConverseOutputMemberMessage); ok {
 		for _, block := range msg.Value.Content {
@@ -879,7 +886,12 @@ func translateResponse(output *bedrockruntime.ConverseOutput, nameMap map[string
 	}
 	resp.Usage = bedrockUsage(output.Usage, modelID, modelClass)
 	resp.StopReason = string(output.StopReason)
+	resp.OutputLimited = false
 	return resp, nil
+}
+
+func bedrockOutputLimited(reason brtypes.StopReason) bool {
+	return reason == brtypes.StopReasonMaxTokens || reason == brtypes.StopReasonModelContextWindowExceeded
 }
 
 func appendBedrockResponseBlock(resp *model.Response, block brtypes.ContentBlock, nameMap map[string]string) error {

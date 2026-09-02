@@ -73,7 +73,7 @@ var _ = Service("orchestrator", func() {
   RunPolicy(func() {
    DefaultCaps(
     MaxToolCalls(8),
-    MaxConsecutiveFailedToolCalls(3),
+    MaxRecoveryTurns(3),
    )
    TimeBudget("2m")
    OnMissingFields("await_clarification")
@@ -333,7 +333,7 @@ implements the corresponding transcript-local policy.
 | `RunPolicy(dsl)`                   | Inside `Agent`            | Configures runtime execution constraints                                     |
 | `DefaultCaps(opts...)`             | Inside `RunPolicy`        | Sets resource limits using option functions                                  |
 | `MaxToolCalls(n)`                  | Argument to `DefaultCaps` | Maximum total tool invocations                                               |
-| `MaxConsecutiveFailedToolCalls(n)` | Argument to `DefaultCaps` | Maximum consecutive failures before stopping                                 |
+| `MaxRecoveryTurns(n)` | Argument to `DefaultCaps` | Maximum replacement planner activities after rejected output                 |
 | `TimeBudget(duration)`             | Inside `RunPolicy`        | Maximum active execution time; clarification, confirmation, typed-input, and external-tool waits pause the budget |
 | `InterruptsAllowed(bool)`          | Inside `RunPolicy`        | Enables user interruption handling                                           |
 | `OnMissingFields(action)`          | Inside `RunPolicy`        | Validation behavior: `""`, `"finalize"`, `"await_clarification"`, `"resume"` |
@@ -345,6 +345,14 @@ implements the corresponding transcript-local policy.
 | `MemoryScopeCurrentRun()`          | Argument to `PreloadMemory` | Reads snippets from the current run memory snapshot                        |
 | `MemoryScopeIndexed()`             | Argument to `PreloadMemory` | Reads snippets through the configured runtime memory searcher               |
 | `MemoryMaxResults(n)`              | Argument to memory helpers | Caps memory tool or preload result count                                     |
+
+`MaxRecoveryTurns` defaults to 3 when the design does not set a positive
+value. One turn replaces one rejected model or recoverable tool output.
+Successful registered domain work resets the allowance.
+
+Recovery stores bounded framework guidance and response evidence. It does not
+store rejected model output or submitted tool arguments. Final-answer recovery
+disables tools for the replacement turn.
 
 ### Timing Functions
 
@@ -1290,7 +1298,7 @@ RunPolicy(func() {
     // Resource limits
     DefaultCaps(
         MaxToolCalls(20),
-        MaxConsecutiveFailedToolCalls(3),
+        MaxRecoveryTurns(3),
     )
 
     // Timing
@@ -1354,7 +1362,7 @@ RunPolicy(func() {
 | Option                             | Purpose                                |
 | ---------------------------------- | -------------------------------------- |
 | `MaxToolCalls(n)`                  | Maximum total tool invocations per run |
-| `MaxConsecutiveFailedToolCalls(n)` | Stop after N consecutive failures      |
+| `MaxRecoveryTurns(n)` | Stop after N rejected-output replacement activities |
 
 ### OnMissingFields Values
 

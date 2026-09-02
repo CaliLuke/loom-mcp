@@ -88,6 +88,14 @@ func (f *fakeStream) NewSink(ctx context.Context, name string, opts ...streamopt
 	return f.sink, nil
 }
 
+func (f *fakeStream) NewReader(context.Context, ...streamopts.Reader) (clientspulse.Reader, error) {
+	return nil, nil
+}
+
+func (f *fakeStream) EnsureGroup(context.Context, string) error {
+	return nil
+}
+
 func (f *fakeStream) Destroy(ctx context.Context) error {
 	return nil
 }
@@ -97,8 +105,15 @@ type fakeSink struct {
 	closed bool
 }
 
-func (f *fakeSink) Subscribe() <-chan *streaming.Event { return f.events }
+func (f *fakeSink) Subscribe() <-chan *streaming.Event {
+	return f.events
+}
 
-func (f *fakeSink) Ack(context.Context, *streaming.Event) error { return nil }
+func (f *fakeSink) Ack(context.Context, *streaming.Event) error {
+	return nil
+}
 
-func (f *fakeSink) Close(context.Context) { f.closed = true }
+func (f *fakeSink) Close(context.Context) error {
+	f.closed = true
+	return nil
+}

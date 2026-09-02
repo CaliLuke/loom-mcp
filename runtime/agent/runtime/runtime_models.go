@@ -122,9 +122,17 @@ func (r *Runtime) NewBedrockModelClient(awsrt *bedrockruntime.Client, cfg Bedroc
 		Logger:         r.logger,
 	}
 	if querier, ok := r.Engine.(bedrock.WorkflowQuerier); ok {
-		return bedrock.New(awsrt, opts, bedrock.NewTemporalLedgerSource(querier))
+		provider, err := bedrock.New(awsrt, opts, bedrock.NewTemporalLedgerSource(querier))
+		if err != nil {
+			return nil, err
+		}
+		return model.NewClient(provider)
 	}
-	return bedrock.New(awsrt, opts, nil)
+	provider, err := bedrock.New(awsrt, opts, nil)
+	if err != nil {
+		return nil, err
+	}
+	return model.NewClient(provider)
 }
 
 // NewOpenAIModelClient constructs a model.Client backed by the OpenAI Responses
@@ -145,12 +153,16 @@ func (r *Runtime) NewOpenAIModelClient(cfg OpenAIConfig) (model.Client, error) {
 		requestOptions = append(requestOptions, option.WithBaseURL(baseURL))
 	}
 	client := openaisdk.NewClient(requestOptions...)
-	return openaifeature.New(openaifeature.Options{
+	provider, err := openaifeature.New(openaifeature.Options{
 		Client:       &client.Responses,
 		DefaultModel: cfg.DefaultModel,
 		HighModel:    cfg.HighModel,
 		SmallModel:   cfg.SmallModel,
 	})
+	if err != nil {
+		return nil, err
+	}
+	return model.NewClient(provider)
 }
 
 // NewOllamaModelClient constructs a model.Client backed by a local Ollama
@@ -164,7 +176,7 @@ func (r *Runtime) NewOllamaModelClient(cfg OllamaConfig) (model.Client, error) {
 	if strings.TrimSpace(cfg.DefaultModel) == "" {
 		return nil, errors.New("ollama: default model is required")
 	}
-	return ollamafeature.New(ollamafeature.Options{
+	provider, err := ollamafeature.New(ollamafeature.Options{
 		HTTPClient:   cfg.HTTPClient,
 		ServerURL:    serverURL,
 		DefaultModel: cfg.DefaultModel,
@@ -174,6 +186,10 @@ func (r *Runtime) NewOllamaModelClient(cfg OllamaConfig) (model.Client, error) {
 		Temperature:  cfg.Temperature,
 		Timeout:      cfg.Timeout,
 	})
+	if err != nil {
+		return nil, err
+	}
+	return model.NewClient(provider)
 }
 
 // NewGeminiModelClient constructs a model.Client backed by the Gemini API using
@@ -194,7 +210,7 @@ func (r *Runtime) NewGeminiModelClient(ctx context.Context, cfg GeminiConfig) (m
 	if err != nil {
 		return nil, fmt.Errorf("gemini client init: %w", err)
 	}
-	return gemini.New(gemini.Options{
+	provider, err := gemini.New(gemini.Options{
 		Client:         client.Models,
 		DefaultModel:   cfg.DefaultModel,
 		HighModel:      cfg.HighModel,
@@ -203,6 +219,10 @@ func (r *Runtime) NewGeminiModelClient(ctx context.Context, cfg GeminiConfig) (m
 		ThinkingBudget: cfg.ThinkingBudget,
 		Temperature:    cfg.Temperature,
 	})
+	if err != nil {
+		return nil, err
+	}
+	return model.NewClient(provider)
 }
 
 // NewVertexGeminiModelClient constructs a model.Client backed by Vertex AI
@@ -222,7 +242,7 @@ func (r *Runtime) NewVertexGeminiModelClient(ctx context.Context, cfg VertexConf
 	if strings.TrimSpace(cfg.DefaultModel) == "" {
 		return nil, errors.New("vertex: default model is required")
 	}
-	return gemini.NewFromVertex(ctx, gemini.VertexOptions{
+	provider, err := gemini.NewFromVertex(ctx, gemini.VertexOptions{
 		ProjectID:      projectID,
 		Location:       location,
 		APIKey:         apiKey,
@@ -236,4 +256,8 @@ func (r *Runtime) NewVertexGeminiModelClient(ctx context.Context, cfg VertexConf
 		ThinkingBudget: cfg.ThinkingBudget,
 		Temperature:    cfg.Temperature,
 	})
+	if err != nil {
+		return nil, err
+	}
+	return model.NewClient(provider)
 }

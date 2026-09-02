@@ -21,7 +21,7 @@ Here’s a map of what loom-mcp just built for you based on your `design/*.go` f
         * **Exports Toolsets:***none*
         * **Run Policy:**
             * Max Tool Calls: `2`
-            * Max Consecutive Failures: `1`
+            * Max Recovery Turns: `1`
             * Time Budget: `15s`
             * Interrupts Allowed: `false`
 

@@ -6,6 +6,8 @@ import (
 	"sync/atomic"
 	"testing"
 
+	"github.com/stretchr/testify/require"
+
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/model"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/rawjson"
 )
@@ -35,7 +37,10 @@ type captureProvider struct {
 
 func (p *captureProvider) Complete(_ context.Context, req *model.Request) (*model.Response, error) {
 	p.lastReq.Store(*req)
-	return &model.Response{Content: []model.Message{{Role: "assistant", Parts: []model.Part{model.TextPart{Text: "ok"}}}}}, nil
+	return &model.Response{
+		Content:    []model.Message{{Role: "assistant", Parts: []model.Part{model.TextPart{Text: "ok"}}}},
+		StopReason: "end_turn",
+	}, nil
 }
 func (p *captureProvider) Stream(_ context.Context, req *model.Request) (model.Streamer, error) {
 	p.lastReq.Store(*req)
@@ -62,6 +67,9 @@ type serverStreamWrapper struct {
 func (w *serverStreamWrapper) Recv() (model.Chunk, error) {
 	c, ok := <-w.ch
 	if !ok {
+		if err := <-w.done; err != nil {
+			return model.Chunk{}, err
+		}
 		return model.Chunk{}, io.EOF
 	}
 	return c, nil
@@ -152,18 +160,22 @@ func TestE2E_Stream_WithMiddleware(t *testing.T) {
 		}()
 		return wrapper, nil
 	}
-	client := NewRemoteClient(nil, streamFn)
+	completeFn := func(ctx context.Context, req *model.Request) (*model.Response, error) {
+		return srv.Complete(ctx, req)
+	}
+	client := NewRemoteClient(completeFn, streamFn)
 
-	st, err := client.Stream(context.Background(), &model.Request{Model: "m", Messages: []*model.Message{{Role: "user", Parts: []model.Part{model.TextPart{Text: "hi"}}}}})
+	st, err := client.Stream(context.Background(), &model.Request{
+		Model:    "m",
+		Messages: []*model.Message{{Role: "user", Parts: []model.Part{model.TextPart{Text: "hi"}}}},
+		Tools: []*model.ToolDefinition{{
+			Name:        "emit_tool",
+			InputSchema: map[string]any{"type": "object"},
+		}},
+	})
 	if err != nil {
 		t.Fatalf("Stream: %v", err)
 	}
-	defer func() {
-		if cerr := st.Close(); cerr != nil {
-			t.Errorf("stream close: %v", cerr)
-		}
-	}()
-
 	// expect 4 chunks in order
 	expectTypes := []string{model.ChunkTypeText, model.ChunkTypeToolCall, model.ChunkTypeUsage, model.ChunkTypeStop}
 	for i, et := range expectTypes {
@@ -176,9 +188,10 @@ func TestE2E_Stream_WithMiddleware(t *testing.T) {
 		}
 	}
 	// then EOF
-	if _, rerr := st.Recv(); rerr == nil {
-		t.Fatal("expected EOF")
-	}
+	_, rerr := st.Recv()
+	require.Equal(t, io.EOF, rerr)
+	require.NotNil(t, st.Response())
+	require.NoError(t, st.Finalize(nil))
 	if streamCount.Load() != 1 {
 		t.Fatal("stream middleware did not run")
 	}

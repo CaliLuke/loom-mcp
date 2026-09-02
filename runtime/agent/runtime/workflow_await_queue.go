@@ -238,7 +238,7 @@ func (r *Runtime) finalizeProtectedAwaitRun(ctx context.Context, wfCtx engine.Wo
 	if !protected {
 		return nil, nil
 	}
-	return r.finalizeWithPlanner(wfCtx, reg, input, base, st.ToolEvents, st.ToolOutputs, st.AggUsage, st.NextAttempt, turnID, planner.TerminationReasonFailureCap, deadlines.Hard)
+	return r.finalizeWithPlanner(wfCtx, reg, input, base, st.ToolEvents, st.ToolOutputs, st.AggUsage, st.Caps, st.NextAttempt, turnID, planner.TerminationReasonFailureCap, deadlines.Hard)
 }
 
 // resumeAfterAwait resumes planning after the await queue is fully satisfied.
@@ -246,29 +246,25 @@ func (r *Runtime) finalizeProtectedAwaitRun(ctx context.Context, wfCtx engine.Wo
 // this boundary and the resume request carries a fresh tool-policy envelope
 // (allowlist, caps, labels) instead of the stale pre-await state.
 func (r *Runtime) resumeAfterAwait(wfCtx engine.WorkflowContext, reg AgentRegistration, input *RunInput, base *planner.PlanInput, st *runLoopState, resumeOpts engine.ActivityOptions, deadlines *runDeadlines, turnID string) (*RunOutput, error) {
-	return nil, r.resumeAfterToolTurn(wfCtx, reg, input, base, st, resumeOpts, deadlines, turnID)
+	return r.resumeAfterToolTurn(wfCtx, reg, input, base, st, resumeOpts, deadlines, turnID)
 }
 
 func (r *Runtime) applyAwaitFailurePolicy(wfCtx engine.WorkflowContext, reg AgentRegistration, input *RunInput, base *planner.PlanInput, st *runLoopState, allToolResults []*planner.ToolResult, turnID string, ctrl *interrupt.Controller, deadlines *runDeadlines) (*RunOutput, error) {
 	if out, err := r.applyAwaitFailureCap(wfCtx, reg, input, base, st, allToolResults, turnID, deadlines); err != nil || out != nil {
 		return out, err
 	}
-	return r.handleMissingFieldsPolicy(wfCtx, reg, input, base, allToolResults, st.ToolEvents, st.ToolOutputs, st.AggUsage, &st.NextAttempt, turnID, ctrl, deadlines)
+	return r.handleMissingFieldsPolicy(wfCtx, reg, input, base, allToolResults, st.ToolEvents, st.ToolOutputs, st.AggUsage, st.Caps, &st.NextAttempt, turnID, ctrl, deadlines)
 }
 
 func (r *Runtime) applyAwaitFailureCap(wfCtx engine.WorkflowContext, reg AgentRegistration, input *RunInput, base *planner.PlanInput, st *runLoopState, allToolResults []*planner.ToolResult, turnID string, deadlines *runDeadlines) (*RunOutput, error) {
-	failures := capFailures(allToolResults)
-	if failures == 0 {
-		if st.Caps.MaxConsecutiveFailedToolCalls > 0 {
-			st.Caps.RemainingConsecutiveFailedToolCalls = st.Caps.MaxConsecutiveFailedToolCalls
-		}
+	resetRecoveryTurnsAfterResults(r, &st.Caps, allToolResults)
+	if !resultsRequireRecovery(allToolResults) {
 		return nil, nil
 	}
-	st.Caps.RemainingConsecutiveFailedToolCalls = decrementCap(st.Caps.RemainingConsecutiveFailedToolCalls, failures)
-	if st.Caps.MaxConsecutiveFailedToolCalls == 0 || st.Caps.RemainingConsecutiveFailedToolCalls > 0 {
+	if consumeRecoveryTurn(&st.Caps) {
 		return nil, nil
 	}
-	return r.finalizeWithPlanner(wfCtx, reg, input, base, st.ToolEvents, st.ToolOutputs, st.AggUsage, st.NextAttempt, turnID, planner.TerminationReasonFailureCap, deadlines.Hard)
+	return r.finalizeWithPlanner(wfCtx, reg, input, base, st.ToolEvents, st.ToolOutputs, st.AggUsage, st.Caps, st.NextAttempt, turnID, planner.TerminationReasonFailureCap, deadlines.Hard)
 }
 
 func (r *Runtime) publishAwaitResume(ctx context.Context, input *RunInput, base *planner.PlanInput, turnID string, confirmations []confirmationAwait, items []planner.AwaitItem) error {
@@ -408,7 +404,7 @@ func (r *Runtime) executeConfirmedToolCall(ctx context.Context, wfCtx engine.Wor
 		return nil, nil, nil, err
 	}
 	if timedOut {
-		out, err := r.finalizeWithPlanner(wfCtx, reg, input, base, st.ToolEvents, st.ToolOutputs, st.AggUsage, st.NextAttempt, turnID, planner.TerminationReasonTimeBudget, deadlines.Hard)
+		out, err := r.finalizeWithPlanner(wfCtx, reg, input, base, st.ToolEvents, st.ToolOutputs, st.AggUsage, st.Caps, st.NextAttempt, turnID, planner.TerminationReasonTimeBudget, deadlines.Hard)
 		return nil, nil, out, err
 	}
 	return vals, pauses, nil, nil

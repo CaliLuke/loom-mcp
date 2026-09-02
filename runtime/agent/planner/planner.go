@@ -601,7 +601,7 @@ const (
 	// TerminationReasonToolCap indicates the run exceeded its allowed tool call count.
 	TerminationReasonToolCap TerminationReason = "tool_cap"
 
-	// TerminationReasonFailureCap indicates the run exceeded its allowed consecutive failure count.
+	// TerminationReasonFailureCap indicates the run exhausted its recovery-turn allowance.
 	TerminationReasonFailureCap TerminationReason = "failure_cap"
 )
 

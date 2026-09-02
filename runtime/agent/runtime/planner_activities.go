@@ -32,7 +32,8 @@ func (r *Runtime) PlanStartActivity(ctx context.Context, input *PlanActivityInpu
 	defer stopHeartbeat()
 
 	events := newPlannerEvents(r, input.AgentID, input.RunID, input.RunContext.SessionID, input.RunContext.TurnID)
-	reg, agentCtx, err := r.plannerContext(ctx, input, events)
+	recoveryRecorder := &modelRecoveryRecorder{}
+	reg, agentCtx, err := r.plannerContext(ctx, input, events, recoveryRecorder)
 	if err != nil {
 		return nil, err
 	}
@@ -41,31 +42,11 @@ func (r *Runtime) PlanStartActivity(ctx context.Context, input *PlanActivityInpu
 		return nil, err
 	}
 	result, err := r.planStart(ctx, reg, planInput)
-	if err != nil {
-		if errors.Is(err, model.ErrRateLimited) {
-			events.PlannerThought(
-				ctx,
-				"Model provider is rate-limiting this request. It is safe to retry after a short delay.",
-				map[string]string{plannerThoughtCodeKey: "rate_limited"},
-			)
-		}
-		return nil, err
+	if out, handled, err := resolvePlanActivityRecovery(ctx, events, recoveryRecorder, input, err); handled {
+		return out, err
 	}
 	r.logger.Info(ctx, "PlanStartActivity returning PlanResult", "tool_calls", len(result.ToolCalls), "final_response", result.FinalResponse != nil, "await", result.Await != nil)
-	if err := events.hookError(); err != nil {
-		return nil, err
-	}
-	transcript := events.exportTranscript()
-	normalizeTranscriptRawJSON(transcript)
-	out := &PlanActivityOutput{
-		Result:           result,
-		Transcript:       transcript,
-		Usage:            events.exportUsage(),
-		ToolPolicyActive: input.ToolPolicyActive,
-		AllowedTools:     cloneToolIdents(input.AllowedTools),
-		PolicyCaps:       input.PolicyCaps,
-	}
-	return out, nil
+	return r.completePlanActivity(result, input, events, recoveryRecorder)
 }
 
 func (r *Runtime) startPlanInput(
@@ -83,6 +64,7 @@ func (r *Runtime) startPlanInput(
 	if err != nil {
 		return nil, err
 	}
+	messages = applyRecoveryInstruction(messages, input.Recovery)
 	preloadedEntries, err := r.preloadLongTermMemory(ctx, reg.Policy.PreloadLongTermMemory, string(input.AgentID), input.RunContext, messages)
 	if err != nil {
 		return nil, err
@@ -113,7 +95,8 @@ func (r *Runtime) PlanResumeActivity(ctx context.Context, input *PlanActivityInp
 	defer stopHeartbeat()
 
 	events := newPlannerEvents(r, input.AgentID, input.RunID, input.RunContext.SessionID, input.RunContext.TurnID)
-	reg, agentCtx, err := r.plannerContext(ctx, input, events)
+	recoveryRecorder := &modelRecoveryRecorder{}
+	reg, agentCtx, err := r.plannerContext(ctx, input, events, recoveryRecorder)
 	if err != nil {
 		return nil, err
 	}
@@ -126,30 +109,84 @@ func (r *Runtime) PlanResumeActivity(ctx context.Context, input *PlanActivityInp
 		return nil, err
 	}
 	result, err := r.planResume(ctx, reg, planInput)
-	if err != nil {
-		if errors.Is(err, model.ErrRateLimited) {
-			events.PlannerThought(
-				ctx,
-				"Model provider is rate-limiting this request. It is safe to retry after a short delay.",
-				map[string]string{plannerThoughtCodeKey: "rate_limited"},
-			)
-		}
-		return nil, err
+	if out, handled, err := resolvePlanActivityRecovery(ctx, events, recoveryRecorder, input, err); handled {
+		return out, err
 	}
+	return r.completePlanActivity(result, input, events, recoveryRecorder)
+}
+
+func resolvePlanActivityRecovery(
+	ctx context.Context,
+	events *runtimePlannerEvents,
+	recorder *modelRecoveryRecorder,
+	input *PlanActivityInput,
+	planErr error,
+) (*PlanActivityOutput, bool, error) {
+	planErr = plannerActivityError(ctx, events, planErr)
+	recovery, recoveryErr := recorder.recovery(planErr, input.RunContext.Attempt)
+	if recovery != nil {
+		usage, err := recorder.activityUsage(events.exportUsage())
+		if err != nil {
+			return nil, true, err
+		}
+		return recoveryPlanActivityOutput(input, recovery, usage), true, nil
+	}
+	if recoveryErr != nil {
+		return nil, true, recoveryErr
+	}
+	if planErr != nil {
+		return nil, true, planErr
+	}
+	return nil, false, nil
+}
+
+func (r *Runtime) completePlanActivity(
+	result *planner.PlanResult,
+	input *PlanActivityInput,
+	events *runtimePlannerEvents,
+	recorder *modelRecoveryRecorder,
+) (*PlanActivityOutput, error) {
+	r.canonicalizePlanActivityToolCalls(result, input)
 	if err := events.hookError(); err != nil {
 		return nil, err
 	}
 	transcript := events.exportTranscript()
 	normalizeTranscriptRawJSON(transcript)
-	out := &PlanActivityOutput{
+	usage, err := recorder.activityUsage(events.exportUsage())
+	if err != nil {
+		return nil, err
+	}
+	return &PlanActivityOutput{
 		Result:           result,
 		Transcript:       transcript,
-		Usage:            events.exportUsage(),
+		Usage:            usage,
 		ToolPolicyActive: input.ToolPolicyActive,
 		AllowedTools:     cloneToolIdents(input.AllowedTools),
 		PolicyCaps:       input.PolicyCaps,
+		Attempt:          input.RunContext.Attempt,
+	}, nil
+}
+
+func (r *Runtime) canonicalizePlanActivityToolCalls(result *planner.PlanResult, input *PlanActivityInput) {
+	if result == nil || len(result.ToolCalls) == 0 {
+		return
 	}
-	return out, nil
+	calls := r.rewriteUnknownToolCalls(result.ToolCalls, toolPolicyEnvelope{
+		Active:  input.ToolPolicyActive,
+		Allowed: cloneToolIdents(input.AllowedTools),
+	})
+	result.ToolCalls = calls
+}
+
+func plannerActivityError(ctx context.Context, events *runtimePlannerEvents, err error) error {
+	if errors.Is(err, model.ErrRateLimited) {
+		events.PlannerThought(
+			ctx,
+			"Model provider is rate-limiting this request. It is safe to retry after a short delay.",
+			map[string]string{plannerThoughtCodeKey: "rate_limited"},
+		)
+	}
+	return errors.Join(err, events.hookError())
 }
 
 func (r *Runtime) resumePlanInput(
@@ -168,6 +205,7 @@ func (r *Runtime) resumePlanInput(
 	if err != nil {
 		return nil, err
 	}
+	messages = applyRecoveryInstruction(messages, input.Recovery)
 	preloadedEntries, err := r.preloadLongTermMemory(ctx, reg.Policy.PreloadLongTermMemory, string(input.AgentID), input.RunContext, messages)
 	if err != nil {
 		return nil, err
@@ -248,7 +286,7 @@ func (r *Runtime) planResume(ctx context.Context, reg *AgentRegistration, input 
 }
 
 // plannerContext constructs the agent registration and context needed for planner execution.
-func (r *Runtime) plannerContext(ctx context.Context, input *PlanActivityInput, events planner.PlannerEvents) (*AgentRegistration, planner.PlannerContext, error) {
+func (r *Runtime) plannerContext(ctx context.Context, input *PlanActivityInput, events planner.PlannerEvents, recovery *modelRecoveryRecorder) (*AgentRegistration, planner.PlannerContext, error) {
 	if input.AgentID == "" {
 		return nil, nil, errors.New("agent id is required")
 	}
@@ -270,12 +308,24 @@ func (r *Runtime) plannerContext(ctx context.Context, input *PlanActivityInput, 
 		turnID:    input.RunContext.TurnID,
 		events:    events,
 		cache:     reg.Policy.Cache,
+		recovery:  recovery,
 		toolPolicy: toolPolicyEnvelope{
 			Active:  input.ToolPolicyActive,
 			Allowed: cloneToolIdents(input.AllowedTools),
 		},
 	})
 	return &reg, agentCtx, nil
+}
+
+func recoveryPlanActivityOutput(input *PlanActivityInput, recovery *ModelRecovery, usage model.TokenUsage) *PlanActivityOutput {
+	return &PlanActivityOutput{
+		Recovery:         recovery,
+		Usage:            usage,
+		ToolPolicyActive: input.ToolPolicyActive,
+		AllowedTools:     cloneToolIdents(input.AllowedTools),
+		PolicyCaps:       input.PolicyCaps,
+		Attempt:          input.RunContext.Attempt,
+	}
 }
 
 func normalizeTranscriptRawJSON(messages []*model.Message) {

@@ -40,12 +40,14 @@ type testWorkflowContext struct {
 	confirmCh     chan *api.ConfirmationDecision
 	typedInputCh  chan *api.TypedInputAnswer
 
-	planResult    *planner.PlanResult
-	hasPlanResult bool
-	barrier       chan struct{}
-	hookRuntime   *Runtime // optional runtime for hook activity execution
-	runtime       *Runtime // optional runtime for activity execution (plan/resume/execute)
-	childRuntime  *Runtime // optional runtime for child workflow execution
+	planResult     *planner.PlanResult
+	hasPlanResult  bool
+	plannerOutputs []*api.PlanActivityOutput
+	plannerCalls   []engine.PlannerActivityCall
+	barrier        chan struct{}
+	hookRuntime    *Runtime // optional runtime for hook activity execution
+	runtime        *Runtime // optional runtime for activity execution (plan/resume/execute)
+	childRuntime   *Runtime // optional runtime for child workflow execution
 
 	childRequests      []engine.ChildWorkflowRequest
 	firstChildGetCount int
@@ -237,7 +239,25 @@ func (t *testWorkflowContext) PublishHook(ctx context.Context, call engine.HookA
 }
 
 func (t *testWorkflowContext) ExecutePlannerActivity(ctx context.Context, call engine.PlannerActivityCall) (*api.PlanActivityOutput, error) {
-	t.lastPlannerCall = call
+	root := t.root()
+	root.lastPlannerCall = call
+	callCopy := call
+	if call.Input != nil {
+		inputCopy := *call.Input
+		inputCopy.Messages = append([]*model.Message(nil), call.Input.Messages...)
+		inputCopy.AllowedTools = append([]tools.Ident(nil), call.Input.AllowedTools...)
+		if call.Input.Recovery != nil {
+			recoveryCopy := *call.Input.Recovery
+			inputCopy.Recovery = &recoveryCopy
+		}
+		callCopy.Input = &inputCopy
+	}
+	root.plannerCalls = append(root.plannerCalls, callCopy)
+	if len(root.plannerOutputs) > 0 {
+		output := root.plannerOutputs[0]
+		root.plannerOutputs = root.plannerOutputs[1:]
+		return output, nil
+	}
 	switch call.Name {
 	case "plan", "nested.plan":
 		if t.runtime != nil {

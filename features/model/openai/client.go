@@ -1,4 +1,4 @@
-// Package openai provides a model.Client implementation backed by the OpenAI
+// Package openai provides a raw model.Provider backed by the OpenAI
 // Responses API. It translates loom-mcp requests into Responses API calls and
 // maps responses back to the generic planner structures.
 package openai
@@ -25,6 +25,8 @@ import (
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/tools"
 )
 
+const openAIMaxOutputTokensReason = "max_output_tokens"
+
 // ResponseClient captures the subset of the official OpenAI client used by the adapter.
 type ResponseClient interface {
 	New(ctx context.Context, body responses.ResponseNewParams, opts ...option.RequestOption) (*responses.Response, error)
@@ -45,7 +47,7 @@ type Options struct {
 	SmallModel string
 }
 
-// Client implements model.Client via the OpenAI Responses API.
+// Client implements model.Provider via the OpenAI Responses API.
 type Client struct {
 	resp       ResponseClient
 	model      string
@@ -503,9 +505,24 @@ func encodeStructuredOutput(output *model.StructuredOutput) (responses.ResponseT
 	}, nil
 }
 
-func translateResponse(resp *responses.Response, codec *openAIToolCodec, modelClass model.ModelClass, output *model.StructuredOutput) (*model.Response, error) {
+func translateResponse(resp *responses.Response, codec *openAIToolCodec, modelClass model.ModelClass, output *model.StructuredOutput) (*model.Response, error) { //nolint:maintidx // Exhaustive provider output translation keeps every OpenAI response variant in one boundary.
 	if resp == nil {
 		return &model.Response{}, nil
+	}
+	usage := model.TokenUsage{
+		Model:           resp.Model,
+		ModelClass:      modelClass,
+		InputTokens:     int(resp.Usage.InputTokens),
+		OutputTokens:    int(resp.Usage.OutputTokens),
+		TotalTokens:     int(resp.Usage.TotalTokens),
+		CacheReadTokens: int(resp.Usage.InputTokensDetails.CachedTokens),
+	}
+	if openAIOutputLimited(resp) {
+		return &model.Response{
+			Usage:         usage,
+			StopReason:    string(resp.Status),
+			OutputLimited: true,
+		}, nil
 	}
 	messages := make([]model.Message, 0, len(resp.Output))
 	toolCalls := make([]model.ToolCall, 0)
@@ -533,20 +550,19 @@ func translateResponse(resp *responses.Response, codec *openAIToolCodec, modelCl
 	if err != nil {
 		return nil, err
 	}
-	usage := model.TokenUsage{
-		Model:           resp.Model,
-		ModelClass:      modelClass,
-		InputTokens:     int(resp.Usage.InputTokens),
-		OutputTokens:    int(resp.Usage.OutputTokens),
-		TotalTokens:     int(resp.Usage.TotalTokens),
-		CacheReadTokens: int(resp.Usage.InputTokensDetails.CachedTokens),
-	}
 	return &model.Response{
-		Content:    messages,
-		ToolCalls:  toolCalls,
-		Usage:      usage,
-		StopReason: string(resp.Status),
+		Content:       messages,
+		ToolCalls:     toolCalls,
+		Usage:         usage,
+		StopReason:    string(resp.Status),
+		OutputLimited: false,
 	}, nil
+}
+
+func openAIOutputLimited(resp *responses.Response) bool {
+	return resp != nil &&
+		resp.Status == responses.ResponseStatusIncomplete &&
+		resp.IncompleteDetails.Reason == openAIMaxOutputTokensReason
 }
 
 func translateReasoningItem(item responses.ResponseOutputItemUnion) model.Message {

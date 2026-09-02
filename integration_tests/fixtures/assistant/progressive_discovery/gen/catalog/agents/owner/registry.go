@@ -66,8 +66,10 @@ func RegisterOwnerAgent(ctx context.Context, rt *agentsruntime.Runtime, cfg Owne
 				BackoffCoefficient: 2,
 			},
 		},
-		Specs:  specs.Specs,
-		Policy: agentsruntime.RunPolicy{},
+		Specs: specs.Specs,
+		Policy: agentsruntime.RunPolicy{
+			MaxRecoveryTurns: 3,
+		},
 	}); err != nil {
 		return err
 	}

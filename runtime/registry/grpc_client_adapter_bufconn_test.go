@@ -77,6 +77,14 @@ func (*registryServiceStub) Register(context.Context, *genregistry.RegisterPaylo
 	return nil, nil
 }
 
+func (*registryServiceStub) ReleaseProvider(context.Context, *genregistry.ReleaseProviderPayload) error {
+	return nil
+}
+
+func (*registryServiceStub) DrainProvider(context.Context, *genregistry.DrainProviderPayload) error {
+	return nil
+}
+
 func (*registryServiceStub) Unregister(context.Context, *genregistry.UnregisterPayload) error {
 	return nil
 }
@@ -127,5 +135,25 @@ func (s *registryServiceStub) Search(_ context.Context, payload *genregistry.Sea
 }
 
 func (*registryServiceStub) CallTool(context.Context, *genregistry.CallToolPayload) (*genregistry.CallToolResult, error) {
+	return nil, nil
+}
+
+func (*registryServiceStub) RetryTool(context.Context, *genregistry.RetryToolPayload) (*genregistry.CallToolResult, error) {
+	return nil, nil
+}
+
+func (*registryServiceStub) CompleteToolCall(context.Context, *genregistry.CompleteToolCallPayload) error {
+	return nil
+}
+
+func (*registryServiceStub) PublishToolOutputDelta(context.Context, *genregistry.PublishToolOutputDeltaPayload) error {
+	return nil
+}
+
+func (*registryServiceStub) ReportToolCallOverload(context.Context, *genregistry.ProviderToolCallClaimPayload) error {
+	return nil
+}
+
+func (*registryServiceStub) ClaimToolCall(context.Context, *genregistry.ProviderToolCallClaimPayload) (*genregistry.ClaimToolCallResult, error) {
 	return nil, nil
 }

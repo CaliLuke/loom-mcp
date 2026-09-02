@@ -15,7 +15,7 @@ import (
 // RunPolicy takes a single argument which is the defining DSL function.
 //
 // The DSL function may use:
-//   - DefaultCaps to set capability limits (tool calls, consecutive failures)
+//   - DefaultCaps to set capability limits (tool calls, recovery turns)
 //   - TimeBudget to set maximum execution duration
 //   - InterruptsAllowed to enable or disable user interruptions
 //   - OnMissingFields to configure validation behavior
@@ -26,7 +26,7 @@ import (
 //
 //	Agent("assistant", "Helper agent", func() {
 //	    RunPolicy(func() {
-//	        DefaultCaps(MaxToolCalls(10), MaxConsecutiveFailedToolCalls(3))
+//	        DefaultCaps(MaxToolCalls(10), MaxRecoveryTurns(3))
 //	        TimeBudget("5m")
 //	        InterruptsAllowed(true)
 //	        OnMissingFields("await_clarification")
@@ -60,14 +60,14 @@ func RunPolicy(fn func()) {
 // DefaultCaps must appear in a RunPolicy expression.
 //
 // DefaultCaps takes zero or more CapsOption arguments (created via MaxToolCalls
-// and MaxConsecutiveFailedToolCalls).
+// and MaxRecoveryTurns).
 //
 // Example:
 //
 //	RunPolicy(func() {
 //	    DefaultCaps(
 //	        MaxToolCalls(20),
-//	        MaxConsecutiveFailedToolCalls(3),
+//	        MaxRecoveryTurns(3),
 //	    )
 //	})
 func DefaultCaps(opts ...CapsOption) {
@@ -327,22 +327,22 @@ func MaxToolCalls(n int) CapsOption {
 	}
 }
 
-// MaxConsecutiveFailedToolCalls configures the maximum number of consecutive
-// tool failures before the agent stops execution. Use this with DefaultCaps to
-// prevent runaway failure loops.
+// MaxRecoveryTurns configures the maximum number of replacement planner
+// activities after rejected model or tool output. Use this with DefaultCaps to
+// bound correction loops.
 //
-// MaxConsecutiveFailedToolCalls takes a single integer argument specifying the
-// maximum consecutive failure count.
+// MaxRecoveryTurns takes a single integer argument specifying the
+// maximum replacement activity count.
 //
 // Example:
 //
-//	DefaultCaps(MaxConsecutiveFailedToolCalls(3))
-func MaxConsecutiveFailedToolCalls(n int) CapsOption {
+//	DefaultCaps(MaxRecoveryTurns(3))
+func MaxRecoveryTurns(n int) CapsOption {
 	return func(c *expragents.CapsExpr) {
 		if n <= 0 {
-			eval.ReportError("MaxConsecutiveFailedToolCalls requires n > 0, got %d", n)
+			eval.ReportError("MaxRecoveryTurns requires n > 0, got %d", n)
 			return
 		}
-		c.MaxConsecutiveFailedToolCall = n
+		c.MaxRecoveryTurns = n
 	}
 }

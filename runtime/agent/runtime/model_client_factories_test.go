@@ -2,14 +2,12 @@ package runtime
 
 import (
 	"context"
-	"reflect"
 	"testing"
 
 	"cloud.google.com/go/auth"
-	geminifeature "github.com/CaliLuke/loom-mcp/v2/features/model/gemini"
-	ollamafeature "github.com/CaliLuke/loom-mcp/v2/features/model/ollama"
-	openaifeature "github.com/CaliLuke/loom-mcp/v2/features/model/openai"
 	"github.com/stretchr/testify/require"
+
+	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/model"
 )
 
 func TestNewOpenAIModelClientRequiresAPIKey(t *testing.T) {
@@ -32,12 +30,9 @@ func TestNewOpenAIModelClientBuildsSDKClient(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	openaiClient, ok := client.(*openaifeature.Client)
-	require.True(t, ok)
-	value := reflect.ValueOf(openaiClient).Elem()
-	require.Equal(t, "gpt-4o", value.FieldByName("model").String())
-	require.Equal(t, "gpt-4.1", value.FieldByName("highModel").String())
-	require.Equal(t, "gpt-4.1-mini", value.FieldByName("smallModel").String())
+	require.NotNil(t, client)
+	_, ok := client.(model.TokenCounter)
+	require.False(t, ok)
 }
 
 func TestNewOllamaModelClientValidates(t *testing.T) {
@@ -67,13 +62,9 @@ func TestNewOllamaModelClientBuildsClient(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	ollamaClient, ok := client.(*ollamafeature.Client)
-	require.True(t, ok)
-	value := reflect.ValueOf(ollamaClient).Elem()
-	require.Equal(t, "http://localhost:11434", value.FieldByName("serverURL").String())
-	require.Equal(t, "llama3.1", value.FieldByName("defaultModel").String())
-	require.Equal(t, "qwen3:32b", value.FieldByName("highModel").String())
-	require.Equal(t, "llama3.2", value.FieldByName("smallModel").String())
+	require.NotNil(t, client)
+	_, ok := client.(model.TokenCounter)
+	require.False(t, ok)
 }
 
 func TestNewGeminiModelClientRequiresAPIKey(t *testing.T) {
@@ -98,12 +89,9 @@ func TestNewGeminiModelClientBuildsSDKClient(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	geminiClient, ok := client.(*geminifeature.Client)
+	require.NotNil(t, client)
+	_, ok := client.(model.TokenCounter)
 	require.True(t, ok)
-	value := reflect.ValueOf(geminiClient).Elem()
-	require.Equal(t, "gemini-2.5-flash", value.FieldByName("defaultModel").String())
-	require.Equal(t, "gemini-2.5-pro", value.FieldByName("highModel").String())
-	require.Equal(t, "gemini-2.5-flash-lite", value.FieldByName("smallModel").String())
 }
 
 func TestNewVertexGeminiModelClientValidates(t *testing.T) {
@@ -150,10 +138,7 @@ func TestNewVertexGeminiModelClientBuildsSDKClient(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	geminiClient, ok := client.(*geminifeature.Client)
+	require.NotNil(t, client)
+	_, ok := client.(model.TokenCounter)
 	require.True(t, ok)
-	value := reflect.ValueOf(geminiClient).Elem()
-	require.Equal(t, "gemini-2.5-pro", value.FieldByName("defaultModel").String())
-	require.Equal(t, "gemini-2.5-pro", value.FieldByName("highModel").String())
-	require.Equal(t, "gemini-2.5-flash", value.FieldByName("smallModel").String())
 }

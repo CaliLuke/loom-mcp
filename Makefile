@@ -14,6 +14,7 @@ COVERAGE_TEMPORAL_MIN ?= 73.0
 COVERAGE_REGISTRY_PULSE_MIN ?= 58.0
 COVERAGE_PROVIDERS_MIN ?= 70.0
 COVERAGE_AGENT_RUNTIME_MIN ?= 70.0
+COVERAGE_MODEL_MIN ?= 70.0
 COVERAGE_BEDROCK_MIN ?= 72.0
 COVERAGE_GEMINI_MIN ?= 65.0
 COVERAGE_DOCKER_MONGO_MIN ?= 80.0
@@ -99,6 +100,7 @@ coverage-check-critical: coverage-parser-test
 	COVERAGE_REGISTRY_PULSE_MIN=$(COVERAGE_REGISTRY_PULSE_MIN) \
 	COVERAGE_PROVIDERS_MIN=$(COVERAGE_PROVIDERS_MIN) \
 	COVERAGE_AGENT_RUNTIME_MIN=$(COVERAGE_AGENT_RUNTIME_MIN) \
+	COVERAGE_MODEL_MIN=$(COVERAGE_MODEL_MIN) \
 	COVERAGE_BEDROCK_MIN=$(COVERAGE_BEDROCK_MIN) \
 	COVERAGE_GEMINI_MIN=$(COVERAGE_GEMINI_MIN) \
 	bash ./scripts/check_critical_coverage.sh cover.out
@@ -110,7 +112,7 @@ test-docker: tools coverage-parser-test
 	TESTCONTAINERS_RYUK_DISABLED=$(TESTCONTAINERS_RYUK_DISABLED) \
 	LOOM_MCP_RUN_DOCKER_TESTS=1 \
 	LOOM_MCP_REQUIRE_DOCKER_TESTS=1 \
-	$(GO) test -race -shuffle=on -count=1 -covermode=atomic -coverprofile=docker-cover.out \
+	$(GO) test -tags=integration -race -shuffle=on -count=1 -covermode=atomic -coverprofile=docker-cover.out \
 		./features/mongo/clientinfra \
 		./features/stream/pulse/clients/pulse \
 		./registry
@@ -130,9 +132,22 @@ test-stress: tools
 	TESTCONTAINERS_RYUK_DISABLED=$(TESTCONTAINERS_RYUK_DISABLED) \
 	LOOM_MCP_RUN_DOCKER_TESTS=1 \
 	LOOM_MCP_REQUIRE_DOCKER_TESTS=$(LOOM_MCP_REQUIRE_DOCKER_TESTS) \
-	$(GO) test -race -shuffle=on -count=$(STRESS_COUNT) -timeout=$(STRESS_TIMEOUT) \
+	$(GO) test -tags=integration -race -shuffle=on -count=$(STRESS_COUNT) -timeout=$(STRESS_TIMEOUT) \
 		./runtime/agent/runtime \
+		./runtime/agent/model \
+		./runtime/agent/completion \
+		./runtime/agent/planner \
 		./runtime/agent/engine/temporal \
+		./features/model/anthropic \
+		./features/model/bedrock \
+		./features/model/gateway \
+		./features/model/gemini \
+		./features/model/middleware \
+		./features/model/ollama \
+		./features/model/openai \
+		./runtime/toolregistry \
+		./runtime/toolregistry/executor \
+		./runtime/toolregistry/provider \
 		./runtime/registry \
 		./registry \
 		./features/stream/pulse \
@@ -147,6 +162,7 @@ test-fuzz:
 	$(GO) test -race -run '^$$' -fuzz '^FuzzDecodeFromHookInput$$' -fuzztime=$(FUZZ_TIME) ./runtime/agent/hooks
 	$(GO) test -race -run '^$$' -fuzz '^FuzzProtectedRequestState$$' -fuzztime=$(FUZZ_TIME) ./runtime/mcp/sdkclient
 	$(GO) test -race -run '^$$' -fuzz '^FuzzMessageJSONCodec$$' -fuzztime=$(FUZZ_TIME) ./runtime/agent/model
+	$(GO) test -race -run '^$$' -fuzz '^FuzzValidateChunkShape$$' -fuzztime=$(FUZZ_TIME) ./runtime/agent/model
 	$(GO) test -race -run '^$$' -fuzz '^FuzzToolFragmentPayload$$' -fuzztime=$(FUZZ_TIME) ./features/model/anthropic
 	$(GO) test -race -run '^$$' -fuzz '^FuzzToolFragmentPayload$$' -fuzztime=$(FUZZ_TIME) ./features/model/bedrock
 	$(GO) test -race -run '^$$' -fuzz '^FuzzParseToolArguments$$' -fuzztime=$(FUZZ_TIME) ./features/model/openai

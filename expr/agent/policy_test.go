@@ -29,15 +29,15 @@ func TestRunPolicyExprValidateCapsAndTiming(t *testing.T) {
 		require.ErrorContains(t, policy.Validate(), "MaxToolCalls must be non-negative")
 	})
 
-	t.Run("negative consecutive failed tool calls", func(t *testing.T) {
+	t.Run("negative recovery turns", func(t *testing.T) {
 		policy := &RunPolicyExpr{
 			Agent: &AgentExpr{Name: "planner"},
 			DefaultCaps: &CapsExpr{
-				MaxConsecutiveFailedToolCall: -1,
+				MaxRecoveryTurns: -1,
 			},
 		}
 
-		require.ErrorContains(t, policy.Validate(), "MaxConsecutiveFailedToolCalls must be non-negative")
+		require.ErrorContains(t, policy.Validate(), "MaxRecoveryTurns must be non-negative")
 	})
 
 	t.Run("negative time budget", func(t *testing.T) {

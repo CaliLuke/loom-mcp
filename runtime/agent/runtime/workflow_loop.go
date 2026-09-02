@@ -230,6 +230,7 @@ func (l *workflowLoop) finalizeForTimeBudget() (*RunOutput, error) {
 		l.st.ToolEvents,
 		l.st.ToolOutputs,
 		l.st.AggUsage,
+		l.st.Caps,
 		l.st.NextAttempt,
 		l.turnID,
 		planner.TerminationReasonTimeBudget,

@@ -2,6 +2,8 @@ package runtime
 
 import (
 	"context"
+	"errors"
+	"fmt"
 	"sync"
 
 	agent "github.com/CaliLuke/loom-mcp/v2/runtime/agent"
@@ -31,7 +33,8 @@ type runtimePlannerEvents struct {
 	mu  sync.Mutex
 	led *transcript.Ledger
 
-	usage model.TokenUsage
+	usage    model.TokenUsage
+	usageErr error
 
 	hookErr error
 }
@@ -84,7 +87,14 @@ func (e *runtimePlannerEvents) PlannerThought(ctx context.Context, note string, 
 
 func (e *runtimePlannerEvents) UsageDelta(ctx context.Context, usage model.TokenUsage) {
 	e.mu.Lock()
-	e.usage = addTokenUsage(e.usage, usage)
+	if e.usageErr == nil {
+		combined, err := checkedAddTokenUsage(e.usage, usage)
+		if err != nil {
+			e.usageErr = fmt.Errorf("aggregate planner usage: %w", err)
+		} else {
+			e.usage = combined
+		}
+	}
 	e.mu.Unlock()
 
 	e.publish(ctx, hooks.NewUsageEvent(e.runID, e.agentID, e.sessionID, usage))
@@ -115,7 +125,7 @@ func (e *runtimePlannerEvents) exportUsage() model.TokenUsage {
 func (e *runtimePlannerEvents) hookError() error {
 	e.mu.Lock()
 	defer e.mu.Unlock()
-	return e.hookErr
+	return errors.Join(e.hookErr, e.usageErr)
 }
 
 func (e *runtimePlannerEvents) publish(ctx context.Context, evt hooks.Event) {

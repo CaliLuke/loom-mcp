@@ -20,8 +20,12 @@ import (
 // "registry" service from the gRPC request type.
 func NewRegisterPayload(message *registrypb.RegisterRequest) *registry.RegisterPayload {
 	v := &registry.RegisterPayload{
-		Name:        message.Name,
-		Description: message.Description,
+		Name:                  message.Name,
+		Description:           message.Description,
+		ProviderID:            message.ProviderId,
+		AdmissionRevision:     message.AdmissionRevision,
+		ProviderIncarnationID: message.ProviderIncarnationId,
+		WireProtocolVersion:   int(message.WireProtocolVersion),
 	}
 	if message.Version != nil {
 		version := registry.SemVer(*message.Version)
@@ -54,8 +58,49 @@ func NewRegisterPayload(message *registrypb.RegisterRequest) *registry.RegisterP
 // the "Register" endpoint of the "registry" service.
 func NewProtoRegisterResponse(result *registry.RegisterResult) *registrypb.RegisterResponse {
 	message := &registrypb.RegisterResponse{
-		RegisteredAt: result.RegisteredAt,
+		RegisteredAt:      result.RegisteredAt,
+		RegistrationToken: result.RegistrationToken,
+		LeaseDurationMs:   result.LeaseDurationMs,
 	}
+	return message
+}
+
+// NewReleaseProviderPayload builds the payload of the "ReleaseProvider"
+// endpoint of the "registry" service from the gRPC request type.
+func NewReleaseProviderPayload(message *registrypb.ReleaseProviderRequest) *registry.ReleaseProviderPayload {
+	v := &registry.ReleaseProviderPayload{
+		Name:                      message.Name,
+		ProviderID:                message.ProviderId,
+		ExpectedRegistrationToken: message.ExpectedRegistrationToken,
+		ProviderIncarnationID:     message.ProviderIncarnationId,
+	}
+	return v
+}
+
+// NewProtoReleaseProviderResponse builds the gRPC response type from the
+// result of the "ReleaseProvider" endpoint of the "registry" service.
+func NewProtoReleaseProviderResponse() *registrypb.ReleaseProviderResponse {
+	message := &registrypb.ReleaseProviderResponse{}
+	return message
+}
+
+// NewDrainProviderPayload builds the payload of the "DrainProvider" endpoint
+// of the "registry" service from the gRPC request type.
+func NewDrainProviderPayload(message *registrypb.DrainProviderRequest) *registry.DrainProviderPayload {
+	v := &registry.DrainProviderPayload{
+		SettlementDurationMs:      message.SettlementDurationMs,
+		Name:                      message.Name,
+		ProviderID:                message.ProviderId,
+		ExpectedRegistrationToken: message.ExpectedRegistrationToken,
+		ProviderIncarnationID:     message.ProviderIncarnationId,
+	}
+	return v
+}
+
+// NewProtoDrainProviderResponse builds the gRPC response type from the result
+// of the "DrainProvider" endpoint of the "registry" service.
+func NewProtoDrainProviderResponse() *registrypb.DrainProviderResponse {
+	message := &registrypb.DrainProviderResponse{}
 	return message
 }
 
@@ -63,7 +108,8 @@ func NewProtoRegisterResponse(result *registry.RegisterResult) *registrypb.Regis
 // "registry" service from the gRPC request type.
 func NewUnregisterPayload(message *registrypb.UnregisterRequest) *registry.UnregisterPayload {
 	v := &registry.UnregisterPayload{
-		Name: message.Name,
+		Name:                      message.Name,
+		ExpectedRegistrationToken: message.ExpectedRegistrationToken,
 	}
 	return v
 }
@@ -79,8 +125,10 @@ func NewProtoUnregisterResponse() *registrypb.UnregisterResponse {
 // service from the gRPC request type.
 func NewPongPayload(message *registrypb.PongRequest) *registry.PongPayload {
 	v := &registry.PongPayload{
-		PingID:  message.PingId,
-		Toolset: message.Toolset,
+		PingID:                message.PingId,
+		Toolset:               message.Toolset,
+		ProviderID:            message.ProviderId,
+		ProviderIncarnationID: message.ProviderIncarnationId,
 	}
 	return v
 }
@@ -212,9 +260,10 @@ func NewProtoSearchResponse(result *registry.SearchResult) *registrypb.SearchRes
 // "registry" service from the gRPC request type.
 func NewCallToolPayload(message *registrypb.CallToolRequest) *registry.CallToolPayload {
 	v := &registry.CallToolPayload{
-		Toolset:     message.Toolset,
-		Tool:        message.Tool,
-		PayloadJSON: message.PayloadJson,
+		Toolset:             message.Toolset,
+		Tool:                message.Tool,
+		PayloadJSON:         message.PayloadJson,
+		WireProtocolVersion: int(message.WireProtocolVersion),
 	}
 	if message.Meta != nil {
 		v.Meta = protobufRegistrypbToolCallMetaToRegistryToolCallMeta(message.Meta)
@@ -226,7 +275,135 @@ func NewCallToolPayload(message *registrypb.CallToolRequest) *registry.CallToolP
 // the "CallTool" endpoint of the "registry" service.
 func NewProtoCallToolResponse(result *registry.CallToolResult) *registrypb.CallToolResponse {
 	message := &registrypb.CallToolResponse{
-		ToolUseId: result.ToolUseID,
+		ToolUseId:             result.ToolUseID,
+		RegistrationToken:     result.RegistrationToken,
+		ExecutionDeadline:     result.ExecutionDeadline,
+		ResultStreamExpiresAt: result.ResultStreamExpiresAt,
+	}
+	return message
+}
+
+// NewRetryToolPayload builds the payload of the "RetryTool" endpoint of the
+// "registry" service from the gRPC request type.
+func NewRetryToolPayload(message *registrypb.RetryToolRequest) *registry.RetryToolPayload {
+	v := &registry.RetryToolPayload{
+		ExpectedRegistrationToken: message.ExpectedRegistrationToken,
+		Toolset:                   message.Toolset,
+		Tool:                      message.Tool,
+		PayloadJSON:               message.PayloadJson,
+		WireProtocolVersion:       int(message.WireProtocolVersion),
+	}
+	if message.Meta != nil {
+		v.Meta = protobufRegistrypbToolCallMetaToRegistryToolCallMeta(message.Meta)
+	}
+	return v
+}
+
+// NewProtoRetryToolResponse builds the gRPC response type from the result of
+// the "RetryTool" endpoint of the "registry" service.
+func NewProtoRetryToolResponse(result *registry.CallToolResult) *registrypb.RetryToolResponse {
+	message := &registrypb.RetryToolResponse{
+		ToolUseId:             result.ToolUseID,
+		RegistrationToken:     result.RegistrationToken,
+		ExecutionDeadline:     result.ExecutionDeadline,
+		ResultStreamExpiresAt: result.ResultStreamExpiresAt,
+	}
+	return message
+}
+
+// NewCompleteToolCallPayload builds the payload of the "CompleteToolCall"
+// endpoint of the "registry" service from the gRPC request type.
+func NewCompleteToolCallPayload(message *registrypb.CompleteToolCallRequest) *registry.CompleteToolCallPayload {
+	v := &registry.CompleteToolCallPayload{
+		Toolset:                   message.Toolset,
+		ProviderID:                message.ProviderId,
+		ProviderIncarnationID:     message.ProviderIncarnationId,
+		RegistrationToken:         message.RegistrationToken,
+		ToolUseID:                 message.ToolUseId,
+		ResultJSON:                message.ResultJson,
+		RequestEventID:            message.RequestEventId,
+		ProviderRegistrationToken: message.ProviderRegistrationToken,
+	}
+	return v
+}
+
+// NewProtoCompleteToolCallResponse builds the gRPC response type from the
+// result of the "CompleteToolCall" endpoint of the "registry" service.
+func NewProtoCompleteToolCallResponse() *registrypb.CompleteToolCallResponse {
+	message := &registrypb.CompleteToolCallResponse{}
+	return message
+}
+
+// NewPublishToolOutputDeltaPayload builds the payload of the
+// "PublishToolOutputDelta" endpoint of the "registry" service from the gRPC
+// request type.
+func NewPublishToolOutputDeltaPayload(message *registrypb.PublishToolOutputDeltaRequest) *registry.PublishToolOutputDeltaPayload {
+	v := &registry.PublishToolOutputDeltaPayload{
+		Stream:                    message.Stream,
+		Delta:                     message.Delta,
+		Toolset:                   message.Toolset,
+		ProviderID:                message.ProviderId,
+		ProviderIncarnationID:     message.ProviderIncarnationId,
+		ProviderRegistrationToken: message.ProviderRegistrationToken,
+		CallRegistrationToken:     message.CallRegistrationToken,
+		ToolUseID:                 message.ToolUseId,
+		RequestEventID:            message.RequestEventId,
+	}
+	return v
+}
+
+// NewProtoPublishToolOutputDeltaResponse builds the gRPC response type from
+// the result of the "PublishToolOutputDelta" endpoint of the "registry"
+// service.
+func NewProtoPublishToolOutputDeltaResponse() *registrypb.PublishToolOutputDeltaResponse {
+	message := &registrypb.PublishToolOutputDeltaResponse{}
+	return message
+}
+
+// NewReportToolCallOverloadPayload builds the payload of the
+// "ReportToolCallOverload" endpoint of the "registry" service from the gRPC
+// request type.
+func NewReportToolCallOverloadPayload(message *registrypb.ReportToolCallOverloadRequest) *registry.ProviderToolCallClaimPayload {
+	v := &registry.ProviderToolCallClaimPayload{
+		Toolset:                   message.Toolset,
+		ProviderID:                message.ProviderId,
+		ProviderIncarnationID:     message.ProviderIncarnationId,
+		ProviderRegistrationToken: message.ProviderRegistrationToken,
+		CallRegistrationToken:     message.CallRegistrationToken,
+		ToolUseID:                 message.ToolUseId,
+		RequestEventID:            message.RequestEventId,
+	}
+	return v
+}
+
+// NewProtoReportToolCallOverloadResponse builds the gRPC response type from
+// the result of the "ReportToolCallOverload" endpoint of the "registry"
+// service.
+func NewProtoReportToolCallOverloadResponse() *registrypb.ReportToolCallOverloadResponse {
+	message := &registrypb.ReportToolCallOverloadResponse{}
+	return message
+}
+
+// NewClaimToolCallPayload builds the payload of the "ClaimToolCall" endpoint
+// of the "registry" service from the gRPC request type.
+func NewClaimToolCallPayload(message *registrypb.ClaimToolCallRequest) *registry.ProviderToolCallClaimPayload {
+	v := &registry.ProviderToolCallClaimPayload{
+		Toolset:                   message.Toolset,
+		ProviderID:                message.ProviderId,
+		ProviderIncarnationID:     message.ProviderIncarnationId,
+		ProviderRegistrationToken: message.ProviderRegistrationToken,
+		CallRegistrationToken:     message.CallRegistrationToken,
+		ToolUseID:                 message.ToolUseId,
+		RequestEventID:            message.RequestEventId,
+	}
+	return v
+}
+
+// NewProtoClaimToolCallResponse builds the gRPC response type from the result
+// of the "ClaimToolCall" endpoint of the "registry" service.
+func NewProtoClaimToolCallResponse(result *registry.ClaimToolCallResult) *registrypb.ClaimToolCallResponse {
+	message := &registrypb.ClaimToolCallResponse{
+		Disposition: result.Disposition,
 	}
 	return message
 }
@@ -260,6 +437,18 @@ func ValidateRegisterRequest(message *registrypb.RegisterRequest) (err error) {
 			}
 		}
 	}
+	err = loom.MergeErrors(err, loom.ValidatePatternCompiled("message.provider_id", message.ProviderId, loomPatternTypes1))
+	if utf8.RuneCountInString(message.ProviderId) < 1 {
+		err = loom.MergeErrors(err, loom.InvalidLengthError("message.provider_id", message.ProviderId, utf8.RuneCountInString(message.ProviderId), 1, true))
+	}
+	if utf8.RuneCountInString(message.ProviderId) > 512 {
+		err = loom.MergeErrors(err, loom.InvalidLengthError("message.provider_id", message.ProviderId, utf8.RuneCountInString(message.ProviderId), 512, false))
+	}
+	err = loom.MergeErrors(err, loom.ValidatePatternCompiled("message.admission_revision", message.AdmissionRevision, loomPatternTypes2))
+	err = loom.MergeErrors(err, loom.ValidateFormat("message.provider_incarnation_id", message.ProviderIncarnationId, loom.FormatUUID))
+	if !(message.WireProtocolVersion == 8) {
+		err = loom.MergeErrors(err, loom.InvalidEnumValueError("message.wire_protocol_version", message.WireProtocolVersion, []any{8}))
+	}
 	return
 }
 
@@ -280,11 +469,60 @@ func ValidateToolSchema(elem *registrypb.ToolSchema) (err error) {
 	return
 }
 
+// ValidateReleaseProviderRequest runs the validations defined on
+// ReleaseProviderRequest.
+func ValidateReleaseProviderRequest(message *registrypb.ReleaseProviderRequest) (err error) {
+	if utf8.RuneCountInString(message.Name) < 1 {
+		err = loom.MergeErrors(err, loom.InvalidLengthError("message.name", message.Name, utf8.RuneCountInString(message.Name), 1, true))
+	}
+	if utf8.RuneCountInString(message.Name) > 256 {
+		err = loom.MergeErrors(err, loom.InvalidLengthError("message.name", message.Name, utf8.RuneCountInString(message.Name), 256, false))
+	}
+	err = loom.MergeErrors(err, loom.ValidatePatternCompiled("message.provider_id", message.ProviderId, loomPatternTypes1))
+	if utf8.RuneCountInString(message.ProviderId) < 1 {
+		err = loom.MergeErrors(err, loom.InvalidLengthError("message.provider_id", message.ProviderId, utf8.RuneCountInString(message.ProviderId), 1, true))
+	}
+	if utf8.RuneCountInString(message.ProviderId) > 512 {
+		err = loom.MergeErrors(err, loom.InvalidLengthError("message.provider_id", message.ProviderId, utf8.RuneCountInString(message.ProviderId), 512, false))
+	}
+	err = loom.MergeErrors(err, loom.ValidatePatternCompiled("message.expected_registration_token", message.ExpectedRegistrationToken, loomPatternTypes3))
+	err = loom.MergeErrors(err, loom.ValidateFormat("message.provider_incarnation_id", message.ProviderIncarnationId, loom.FormatUUID))
+	return
+}
+
+// ValidateDrainProviderRequest runs the validations defined on
+// DrainProviderRequest.
+func ValidateDrainProviderRequest(message *registrypb.DrainProviderRequest) (err error) {
+	if message.SettlementDurationMs < 1 {
+		err = loom.MergeErrors(err, loom.InvalidRangeError("message.settlement_duration_ms", message.SettlementDurationMs, 1, true))
+	}
+	if message.SettlementDurationMs > 8.64e+07 {
+		err = loom.MergeErrors(err, loom.InvalidRangeError("message.settlement_duration_ms", message.SettlementDurationMs, 8.64e+07, false))
+	}
+	if utf8.RuneCountInString(message.Name) < 1 {
+		err = loom.MergeErrors(err, loom.InvalidLengthError("message.name", message.Name, utf8.RuneCountInString(message.Name), 1, true))
+	}
+	if utf8.RuneCountInString(message.Name) > 256 {
+		err = loom.MergeErrors(err, loom.InvalidLengthError("message.name", message.Name, utf8.RuneCountInString(message.Name), 256, false))
+	}
+	err = loom.MergeErrors(err, loom.ValidatePatternCompiled("message.provider_id", message.ProviderId, loomPatternTypes1))
+	if utf8.RuneCountInString(message.ProviderId) < 1 {
+		err = loom.MergeErrors(err, loom.InvalidLengthError("message.provider_id", message.ProviderId, utf8.RuneCountInString(message.ProviderId), 1, true))
+	}
+	if utf8.RuneCountInString(message.ProviderId) > 512 {
+		err = loom.MergeErrors(err, loom.InvalidLengthError("message.provider_id", message.ProviderId, utf8.RuneCountInString(message.ProviderId), 512, false))
+	}
+	err = loom.MergeErrors(err, loom.ValidatePatternCompiled("message.expected_registration_token", message.ExpectedRegistrationToken, loomPatternTypes3))
+	err = loom.MergeErrors(err, loom.ValidateFormat("message.provider_incarnation_id", message.ProviderIncarnationId, loom.FormatUUID))
+	return
+}
+
 // ValidateUnregisterRequest runs the validations defined on UnregisterRequest.
 func ValidateUnregisterRequest(message *registrypb.UnregisterRequest) (err error) {
 	if utf8.RuneCountInString(message.Name) < 1 {
 		err = loom.MergeErrors(err, loom.InvalidLengthError("message.name", message.Name, utf8.RuneCountInString(message.Name), 1, true))
 	}
+	err = loom.MergeErrors(err, loom.ValidatePatternCompiled("message.expected_registration_token", message.ExpectedRegistrationToken, loomPatternTypes3))
 	return
 }
 
@@ -302,6 +540,14 @@ func ValidatePongRequest(message *registrypb.PongRequest) (err error) {
 	if utf8.RuneCountInString(message.Toolset) > 256 {
 		err = loom.MergeErrors(err, loom.InvalidLengthError("message.toolset", message.Toolset, utf8.RuneCountInString(message.Toolset), 256, false))
 	}
+	err = loom.MergeErrors(err, loom.ValidatePatternCompiled("message.provider_id", message.ProviderId, loomPatternTypes1))
+	if utf8.RuneCountInString(message.ProviderId) < 1 {
+		err = loom.MergeErrors(err, loom.InvalidLengthError("message.provider_id", message.ProviderId, utf8.RuneCountInString(message.ProviderId), 1, true))
+	}
+	if utf8.RuneCountInString(message.ProviderId) > 512 {
+		err = loom.MergeErrors(err, loom.InvalidLengthError("message.provider_id", message.ProviderId, utf8.RuneCountInString(message.ProviderId), 512, false))
+	}
+	err = loom.MergeErrors(err, loom.ValidateFormat("message.provider_incarnation_id", message.ProviderIncarnationId, loom.FormatUUID))
 	return
 }
 
@@ -349,32 +595,208 @@ func ValidateCallToolRequest(message *registrypb.CallToolRequest) (err error) {
 			err = loom.MergeErrors(err, err2)
 		}
 	}
+	if !(message.WireProtocolVersion == 8) {
+		err = loom.MergeErrors(err, loom.InvalidEnumValueError("message.wire_protocol_version", message.WireProtocolVersion, []any{8}))
+	}
 	return
 }
 
 // ValidateToolCallMeta runs the validations defined on ToolCallMeta.
 func ValidateToolCallMeta(meta *registrypb.ToolCallMeta) (err error) {
+	err = loom.MergeErrors(err, loom.ValidatePatternCompiled("meta.run_id", meta.RunId, loomPatternTypes1))
 	if utf8.RuneCountInString(meta.RunId) < 1 {
 		err = loom.MergeErrors(err, loom.InvalidLengthError("meta.run_id", meta.RunId, utf8.RuneCountInString(meta.RunId), 1, true))
 	}
+	if utf8.RuneCountInString(meta.RunId) > 256 {
+		err = loom.MergeErrors(err, loom.InvalidLengthError("meta.run_id", meta.RunId, utf8.RuneCountInString(meta.RunId), 256, false))
+	}
+	err = loom.MergeErrors(err, loom.ValidatePatternCompiled("meta.session_id", meta.SessionId, loomPatternTypes1))
 	if utf8.RuneCountInString(meta.SessionId) < 1 {
 		err = loom.MergeErrors(err, loom.InvalidLengthError("meta.session_id", meta.SessionId, utf8.RuneCountInString(meta.SessionId), 1, true))
+	}
+	if utf8.RuneCountInString(meta.SessionId) > 256 {
+		err = loom.MergeErrors(err, loom.InvalidLengthError("meta.session_id", meta.SessionId, utf8.RuneCountInString(meta.SessionId), 256, false))
+	}
+	if meta.TurnId != nil {
+		err = loom.MergeErrors(err, loom.ValidatePatternCompiled("meta.turn_id", *meta.TurnId, loomPatternTypes1))
 	}
 	if meta.TurnId != nil {
 		if utf8.RuneCountInString(*meta.TurnId) < 1 {
 			err = loom.MergeErrors(err, loom.InvalidLengthError("meta.turn_id", *meta.TurnId, utf8.RuneCountInString(*meta.TurnId), 1, true))
 		}
 	}
-	if meta.ToolCallId != nil {
-		if utf8.RuneCountInString(*meta.ToolCallId) < 1 {
-			err = loom.MergeErrors(err, loom.InvalidLengthError("meta.tool_call_id", *meta.ToolCallId, utf8.RuneCountInString(*meta.ToolCallId), 1, true))
+	if meta.TurnId != nil {
+		if utf8.RuneCountInString(*meta.TurnId) > 256 {
+			err = loom.MergeErrors(err, loom.InvalidLengthError("meta.turn_id", *meta.TurnId, utf8.RuneCountInString(*meta.TurnId), 256, false))
 		}
+	}
+	err = loom.MergeErrors(err, loom.ValidatePatternCompiled("meta.tool_call_id", meta.ToolCallId, loomPatternTypes1))
+	if utf8.RuneCountInString(meta.ToolCallId) < 1 {
+		err = loom.MergeErrors(err, loom.InvalidLengthError("meta.tool_call_id", meta.ToolCallId, utf8.RuneCountInString(meta.ToolCallId), 1, true))
+	}
+	if utf8.RuneCountInString(meta.ToolCallId) > 256 {
+		err = loom.MergeErrors(err, loom.InvalidLengthError("meta.tool_call_id", meta.ToolCallId, utf8.RuneCountInString(meta.ToolCallId), 256, false))
+	}
+	if meta.ParentToolCallId != nil {
+		err = loom.MergeErrors(err, loom.ValidatePatternCompiled("meta.parent_tool_call_id", *meta.ParentToolCallId, loomPatternTypes1))
 	}
 	if meta.ParentToolCallId != nil {
 		if utf8.RuneCountInString(*meta.ParentToolCallId) < 1 {
 			err = loom.MergeErrors(err, loom.InvalidLengthError("meta.parent_tool_call_id", *meta.ParentToolCallId, utf8.RuneCountInString(*meta.ParentToolCallId), 1, true))
 		}
 	}
+	if meta.ParentToolCallId != nil {
+		if utf8.RuneCountInString(*meta.ParentToolCallId) > 256 {
+			err = loom.MergeErrors(err, loom.InvalidLengthError("meta.parent_tool_call_id", *meta.ParentToolCallId, utf8.RuneCountInString(*meta.ParentToolCallId), 256, false))
+		}
+	}
+	return
+}
+
+// ValidateRetryToolRequest runs the validations defined on RetryToolRequest.
+func ValidateRetryToolRequest(message *registrypb.RetryToolRequest) (err error) {
+	if message.Meta == nil {
+		err = loom.MergeErrors(err, loom.MissingFieldError("meta", "message"))
+	}
+	err = loom.MergeErrors(err, loom.ValidatePatternCompiled("message.expected_registration_token", message.ExpectedRegistrationToken, loomPatternTypes3))
+	if utf8.RuneCountInString(message.Toolset) < 1 {
+		err = loom.MergeErrors(err, loom.InvalidLengthError("message.toolset", message.Toolset, utf8.RuneCountInString(message.Toolset), 1, true))
+	}
+	if utf8.RuneCountInString(message.Toolset) > 256 {
+		err = loom.MergeErrors(err, loom.InvalidLengthError("message.toolset", message.Toolset, utf8.RuneCountInString(message.Toolset), 256, false))
+	}
+	if utf8.RuneCountInString(message.Tool) < 1 {
+		err = loom.MergeErrors(err, loom.InvalidLengthError("message.tool", message.Tool, utf8.RuneCountInString(message.Tool), 1, true))
+	}
+	if utf8.RuneCountInString(message.Tool) > 256 {
+		err = loom.MergeErrors(err, loom.InvalidLengthError("message.tool", message.Tool, utf8.RuneCountInString(message.Tool), 256, false))
+	}
+	if len(message.PayloadJson) < 1 {
+		err = loom.MergeErrors(err, loom.InvalidLengthError("message.payload_json", message.PayloadJson, len(message.PayloadJson), 1, true))
+	}
+	if message.Meta != nil {
+		if err2 := ValidateToolCallMeta(message.Meta); err2 != nil {
+			err = loom.MergeErrors(err, err2)
+		}
+	}
+	if !(message.WireProtocolVersion == 8) {
+		err = loom.MergeErrors(err, loom.InvalidEnumValueError("message.wire_protocol_version", message.WireProtocolVersion, []any{8}))
+	}
+	return
+}
+
+// ValidateCompleteToolCallRequest runs the validations defined on
+// CompleteToolCallRequest.
+func ValidateCompleteToolCallRequest(message *registrypb.CompleteToolCallRequest) (err error) {
+	if utf8.RuneCountInString(message.Toolset) < 1 {
+		err = loom.MergeErrors(err, loom.InvalidLengthError("message.toolset", message.Toolset, utf8.RuneCountInString(message.Toolset), 1, true))
+	}
+	if utf8.RuneCountInString(message.Toolset) > 256 {
+		err = loom.MergeErrors(err, loom.InvalidLengthError("message.toolset", message.Toolset, utf8.RuneCountInString(message.Toolset), 256, false))
+	}
+	err = loom.MergeErrors(err, loom.ValidatePatternCompiled("message.provider_id", message.ProviderId, loomPatternTypes1))
+	if utf8.RuneCountInString(message.ProviderId) < 1 {
+		err = loom.MergeErrors(err, loom.InvalidLengthError("message.provider_id", message.ProviderId, utf8.RuneCountInString(message.ProviderId), 1, true))
+	}
+	if utf8.RuneCountInString(message.ProviderId) > 512 {
+		err = loom.MergeErrors(err, loom.InvalidLengthError("message.provider_id", message.ProviderId, utf8.RuneCountInString(message.ProviderId), 512, false))
+	}
+	err = loom.MergeErrors(err, loom.ValidateFormat("message.provider_incarnation_id", message.ProviderIncarnationId, loom.FormatUUID))
+	err = loom.MergeErrors(err, loom.ValidatePatternCompiled("message.registration_token", message.RegistrationToken, loomPatternTypes3))
+	err = loom.MergeErrors(err, loom.ValidatePatternCompiled("message.tool_use_id", message.ToolUseId, loomPatternTypes4))
+	if len(message.ResultJson) < 1 {
+		err = loom.MergeErrors(err, loom.InvalidLengthError("message.result_json", message.ResultJson, len(message.ResultJson), 1, true))
+	}
+	if len(message.ResultJson) > 1048576 {
+		err = loom.MergeErrors(err, loom.InvalidLengthError("message.result_json", message.ResultJson, len(message.ResultJson), 1048576, false))
+	}
+	err = loom.MergeErrors(err, loom.ValidatePatternCompiled("message.request_event_id", message.RequestEventId, loomPatternTypes5))
+	err = loom.MergeErrors(err, loom.ValidatePatternCompiled("message.provider_registration_token", message.ProviderRegistrationToken, loomPatternTypes3))
+	return
+}
+
+// ValidatePublishToolOutputDeltaRequest runs the validations defined on
+// PublishToolOutputDeltaRequest.
+func ValidatePublishToolOutputDeltaRequest(message *registrypb.PublishToolOutputDeltaRequest) (err error) {
+	err = loom.MergeErrors(err, loom.ValidatePatternCompiled("message.stream", message.Stream, loomPatternTypes1))
+	if utf8.RuneCountInString(message.Stream) < 1 {
+		err = loom.MergeErrors(err, loom.InvalidLengthError("message.stream", message.Stream, utf8.RuneCountInString(message.Stream), 1, true))
+	}
+	if utf8.RuneCountInString(message.Stream) > 128 {
+		err = loom.MergeErrors(err, loom.InvalidLengthError("message.stream", message.Stream, utf8.RuneCountInString(message.Stream), 128, false))
+	}
+	if utf8.RuneCountInString(message.Delta) < 1 {
+		err = loom.MergeErrors(err, loom.InvalidLengthError("message.delta", message.Delta, utf8.RuneCountInString(message.Delta), 1, true))
+	}
+	if utf8.RuneCountInString(message.Delta) > 65536 {
+		err = loom.MergeErrors(err, loom.InvalidLengthError("message.delta", message.Delta, utf8.RuneCountInString(message.Delta), 65536, false))
+	}
+	if utf8.RuneCountInString(message.Toolset) < 1 {
+		err = loom.MergeErrors(err, loom.InvalidLengthError("message.toolset", message.Toolset, utf8.RuneCountInString(message.Toolset), 1, true))
+	}
+	if utf8.RuneCountInString(message.Toolset) > 256 {
+		err = loom.MergeErrors(err, loom.InvalidLengthError("message.toolset", message.Toolset, utf8.RuneCountInString(message.Toolset), 256, false))
+	}
+	err = loom.MergeErrors(err, loom.ValidatePatternCompiled("message.provider_id", message.ProviderId, loomPatternTypes1))
+	if utf8.RuneCountInString(message.ProviderId) < 1 {
+		err = loom.MergeErrors(err, loom.InvalidLengthError("message.provider_id", message.ProviderId, utf8.RuneCountInString(message.ProviderId), 1, true))
+	}
+	if utf8.RuneCountInString(message.ProviderId) > 512 {
+		err = loom.MergeErrors(err, loom.InvalidLengthError("message.provider_id", message.ProviderId, utf8.RuneCountInString(message.ProviderId), 512, false))
+	}
+	err = loom.MergeErrors(err, loom.ValidateFormat("message.provider_incarnation_id", message.ProviderIncarnationId, loom.FormatUUID))
+	err = loom.MergeErrors(err, loom.ValidatePatternCompiled("message.provider_registration_token", message.ProviderRegistrationToken, loomPatternTypes3))
+	err = loom.MergeErrors(err, loom.ValidatePatternCompiled("message.call_registration_token", message.CallRegistrationToken, loomPatternTypes3))
+	err = loom.MergeErrors(err, loom.ValidatePatternCompiled("message.tool_use_id", message.ToolUseId, loomPatternTypes4))
+	err = loom.MergeErrors(err, loom.ValidatePatternCompiled("message.request_event_id", message.RequestEventId, loomPatternTypes5))
+	return
+}
+
+// ValidateReportToolCallOverloadRequest runs the validations defined on
+// ReportToolCallOverloadRequest.
+func ValidateReportToolCallOverloadRequest(message *registrypb.ReportToolCallOverloadRequest) (err error) {
+	if utf8.RuneCountInString(message.Toolset) < 1 {
+		err = loom.MergeErrors(err, loom.InvalidLengthError("message.toolset", message.Toolset, utf8.RuneCountInString(message.Toolset), 1, true))
+	}
+	if utf8.RuneCountInString(message.Toolset) > 256 {
+		err = loom.MergeErrors(err, loom.InvalidLengthError("message.toolset", message.Toolset, utf8.RuneCountInString(message.Toolset), 256, false))
+	}
+	err = loom.MergeErrors(err, loom.ValidatePatternCompiled("message.provider_id", message.ProviderId, loomPatternTypes1))
+	if utf8.RuneCountInString(message.ProviderId) < 1 {
+		err = loom.MergeErrors(err, loom.InvalidLengthError("message.provider_id", message.ProviderId, utf8.RuneCountInString(message.ProviderId), 1, true))
+	}
+	if utf8.RuneCountInString(message.ProviderId) > 512 {
+		err = loom.MergeErrors(err, loom.InvalidLengthError("message.provider_id", message.ProviderId, utf8.RuneCountInString(message.ProviderId), 512, false))
+	}
+	err = loom.MergeErrors(err, loom.ValidateFormat("message.provider_incarnation_id", message.ProviderIncarnationId, loom.FormatUUID))
+	err = loom.MergeErrors(err, loom.ValidatePatternCompiled("message.provider_registration_token", message.ProviderRegistrationToken, loomPatternTypes3))
+	err = loom.MergeErrors(err, loom.ValidatePatternCompiled("message.call_registration_token", message.CallRegistrationToken, loomPatternTypes3))
+	err = loom.MergeErrors(err, loom.ValidatePatternCompiled("message.tool_use_id", message.ToolUseId, loomPatternTypes4))
+	err = loom.MergeErrors(err, loom.ValidatePatternCompiled("message.request_event_id", message.RequestEventId, loomPatternTypes5))
+	return
+}
+
+// ValidateClaimToolCallRequest runs the validations defined on
+// ClaimToolCallRequest.
+func ValidateClaimToolCallRequest(message *registrypb.ClaimToolCallRequest) (err error) {
+	if utf8.RuneCountInString(message.Toolset) < 1 {
+		err = loom.MergeErrors(err, loom.InvalidLengthError("message.toolset", message.Toolset, utf8.RuneCountInString(message.Toolset), 1, true))
+	}
+	if utf8.RuneCountInString(message.Toolset) > 256 {
+		err = loom.MergeErrors(err, loom.InvalidLengthError("message.toolset", message.Toolset, utf8.RuneCountInString(message.Toolset), 256, false))
+	}
+	err = loom.MergeErrors(err, loom.ValidatePatternCompiled("message.provider_id", message.ProviderId, loomPatternTypes1))
+	if utf8.RuneCountInString(message.ProviderId) < 1 {
+		err = loom.MergeErrors(err, loom.InvalidLengthError("message.provider_id", message.ProviderId, utf8.RuneCountInString(message.ProviderId), 1, true))
+	}
+	if utf8.RuneCountInString(message.ProviderId) > 512 {
+		err = loom.MergeErrors(err, loom.InvalidLengthError("message.provider_id", message.ProviderId, utf8.RuneCountInString(message.ProviderId), 512, false))
+	}
+	err = loom.MergeErrors(err, loom.ValidateFormat("message.provider_incarnation_id", message.ProviderIncarnationId, loom.FormatUUID))
+	err = loom.MergeErrors(err, loom.ValidatePatternCompiled("message.provider_registration_token", message.ProviderRegistrationToken, loomPatternTypes3))
+	err = loom.MergeErrors(err, loom.ValidatePatternCompiled("message.call_registration_token", message.CallRegistrationToken, loomPatternTypes3))
+	err = loom.MergeErrors(err, loom.ValidatePatternCompiled("message.tool_use_id", message.ToolUseId, loomPatternTypes4))
+	err = loom.MergeErrors(err, loom.ValidatePatternCompiled("message.request_event_id", message.RequestEventId, loomPatternTypes5))
 	return
 }
 
@@ -392,4 +814,11 @@ func protobufRegistrypbToolCallMetaToRegistryToolCallMeta(v *registrypb.ToolCall
 	return res
 }
 
-var loomPatternTypes0 = regexp.MustCompile("^v?\\d+\\.\\d+\\.\\d+(-[a-zA-Z0-9.]+)?$")
+var (
+	loomPatternTypes0 = regexp.MustCompile("^v?\\d+\\.\\d+\\.\\d+(-[a-zA-Z0-9.]+)?$")
+	loomPatternTypes1 = regexp.MustCompile("^[^\\x00]+$")
+	loomPatternTypes2 = regexp.MustCompile("^[A-Za-z0-9][A-Za-z0-9._:/@+\\-]{0,255}$")
+	loomPatternTypes3 = regexp.MustCompile("^[0-9a-f]{64}$")
+	loomPatternTypes4 = regexp.MustCompile("^[^\\x00]{1,256}$")
+	loomPatternTypes5 = regexp.MustCompile("^\\d+-\\d+$")
+)

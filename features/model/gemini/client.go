@@ -1,4 +1,4 @@
-// Package gemini provides a model.Client implementation backed by the Google
+// Package gemini provides a raw model.Provider backed by the Google
 // Gen AI SDK. It translates loom-mcp requests into Gemini GenerateContent
 // calls and maps responses back into the generic planner structures.
 package gemini
@@ -105,7 +105,7 @@ type (
 		ThinkingBudget int
 	}
 
-	// Client implements model.Client using Gemini GenerateContent calls.
+	// Client implements model.Provider using Gemini GenerateContent calls.
 	Client struct {
 		models         ModelsClient
 		defaultModel   string
@@ -715,14 +715,18 @@ func translateResponse(modelID string, modelClass model.ModelClass, resp *genai.
 	}
 	messages := make([]model.Message, 0, len(resp.Candidates))
 	toolCalls := make([]model.ToolCall, 0)
-	stopReason := ""
+	stopReason, outputLimitedReason := geminiFinishReasons(resp.Candidates)
+	if outputLimitedReason != "" {
+		return &model.Response{
+			Usage:         translateUsage(modelID, modelClass, resp.UsageMetadata),
+			StopReason:    outputLimitedReason,
+			OutputLimited: true,
+		}, nil
+	}
 
 	for _, candidate := range resp.Candidates {
 		if candidate == nil {
 			continue
-		}
-		if stopReason == "" && candidate.FinishReason != "" {
-			stopReason = string(candidate.FinishReason)
 		}
 		msg, calls, err := translateCandidate(candidate)
 		if err != nil {
@@ -735,11 +739,34 @@ func translateResponse(modelID string, modelClass model.ModelClass, resp *genai.
 	}
 
 	return &model.Response{
-		Content:    messages,
-		ToolCalls:  toolCalls,
-		Usage:      translateUsage(modelID, modelClass, resp.UsageMetadata),
-		StopReason: stopReason,
+		Content:       messages,
+		ToolCalls:     toolCalls,
+		Usage:         translateUsage(modelID, modelClass, resp.UsageMetadata),
+		StopReason:    stopReason,
+		OutputLimited: geminiOutputLimited(stopReason),
 	}, nil
+}
+
+func geminiOutputLimited(reason string) bool {
+	return reason == string(genai.FinishReasonMaxTokens)
+}
+
+func geminiFinishReasons(candidates []*genai.Candidate) (string, string) {
+	stopReason := ""
+	outputLimitedReason := ""
+	for _, candidate := range candidates {
+		if candidate == nil || candidate.FinishReason == "" {
+			continue
+		}
+		reason := string(candidate.FinishReason)
+		if stopReason == "" {
+			stopReason = reason
+		}
+		if geminiOutputLimited(reason) {
+			outputLimitedReason = reason
+		}
+	}
+	return stopReason, outputLimitedReason
 }
 
 func translateCandidate(candidate *genai.Candidate) (model.Message, []model.ToolCall, error) {

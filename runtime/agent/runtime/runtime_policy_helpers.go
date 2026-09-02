@@ -69,16 +69,20 @@ func historyToolInputSchema(spec tools.ToolSpec) any {
 
 // initialCaps constructs the initial caps state from the agent's run policy.
 func initialCaps(cfg RunPolicy) policy.CapsState {
+	maxRecoveryTurns := cfg.MaxRecoveryTurns
+	if maxRecoveryTurns < 0 {
+		maxRecoveryTurns = 0
+	} else if maxRecoveryTurns == 0 {
+		maxRecoveryTurns = policy.DefaultMaxRecoveryTurns
+	}
 	caps := policy.CapsState{
-		MaxToolCalls:                  cfg.MaxToolCalls,
-		MaxConsecutiveFailedToolCalls: cfg.MaxConsecutiveFailedToolCalls,
+		MaxToolCalls:     cfg.MaxToolCalls,
+		MaxRecoveryTurns: maxRecoveryTurns,
 	}
 	if cfg.MaxToolCalls > 0 {
 		caps.RemainingToolCalls = cfg.MaxToolCalls
 	}
-	if cfg.MaxConsecutiveFailedToolCalls > 0 {
-		caps.RemainingConsecutiveFailedToolCalls = cfg.MaxConsecutiveFailedToolCalls
-	}
+	caps.RemainingRecoveryTurns = maxRecoveryTurns
 	return caps
 }
 
@@ -94,31 +98,6 @@ func decrementCap(current int, delta int) int {
 	return result
 }
 
-// capFailures counts tool failures that should decrement the consecutive-failure cap.
-func capFailures(results []*planner.ToolResult) int {
-	count := 0
-	for _, res := range results {
-		if res == nil || res.Error == nil {
-			continue
-		}
-		if h := res.RetryHint; h != nil {
-			switch h.Reason {
-			case planner.RetryReasonMissingFields,
-				planner.RetryReasonInvalidArguments,
-				planner.RetryReasonToolUnavailable,
-				planner.RetryReasonUnsupportedOperation:
-				continue
-			case planner.RetryReasonMalformedResponse,
-				planner.RetryReasonTimeout,
-				planner.RetryReasonRateLimited:
-			default:
-			}
-		}
-		count++
-	}
-	return count
-}
-
 // mergeCaps merges policy decision caps into the current caps state.
 func mergeCaps(current policy.CapsState, decision policy.CapsState) policy.CapsState {
 	if decision.MaxToolCalls > 0 {
@@ -127,11 +106,14 @@ func mergeCaps(current policy.CapsState, decision policy.CapsState) policy.CapsS
 	if decision.RemainingToolCalls > 0 {
 		current.RemainingToolCalls = decision.RemainingToolCalls
 	}
-	if decision.MaxConsecutiveFailedToolCalls > 0 {
-		current.MaxConsecutiveFailedToolCalls = decision.MaxConsecutiveFailedToolCalls
+	if decision.MaxRecoveryTurns > 0 {
+		current.MaxRecoveryTurns = decision.MaxRecoveryTurns
 	}
-	if decision.RemainingConsecutiveFailedToolCalls > 0 {
-		current.RemainingConsecutiveFailedToolCalls = decision.RemainingConsecutiveFailedToolCalls
+	if decision.RemainingRecoveryTurns > 0 {
+		current.RemainingRecoveryTurns = decision.RemainingRecoveryTurns
+	}
+	if current.MaxRecoveryTurns > 0 && current.RemainingRecoveryTurns > current.MaxRecoveryTurns {
+		current.RemainingRecoveryTurns = current.MaxRecoveryTurns
 	}
 	return current
 }

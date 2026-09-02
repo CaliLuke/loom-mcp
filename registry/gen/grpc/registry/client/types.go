@@ -20,8 +20,12 @@ import (
 // "Register" endpoint of the "registry" service.
 func NewProtoRegisterRequest(payload *registry.RegisterPayload) *registrypb.RegisterRequest {
 	message := &registrypb.RegisterRequest{
-		Name:        payload.Name,
-		Description: payload.Description,
+		Name:                  payload.Name,
+		Description:           payload.Description,
+		ProviderId:            payload.ProviderID,
+		AdmissionRevision:     payload.AdmissionRevision,
+		ProviderIncarnationId: payload.ProviderIncarnationID,
+		WireProtocolVersion:   int64(payload.WireProtocolVersion),
 	}
 	if payload.Version != nil {
 		version := string(*payload.Version)
@@ -54,16 +58,44 @@ func NewProtoRegisterRequest(payload *registry.RegisterPayload) *registrypb.Regi
 // "registry" service from the gRPC response type.
 func NewRegisterResult(message *registrypb.RegisterResponse) *registry.RegisterResult {
 	result := &registry.RegisterResult{
-		RegisteredAt: message.RegisteredAt,
+		RegisteredAt:      message.RegisteredAt,
+		RegistrationToken: message.RegistrationToken,
+		LeaseDurationMs:   message.LeaseDurationMs,
 	}
 	return result
+}
+
+// NewProtoReleaseProviderRequest builds the gRPC request type from the payload
+// of the "ReleaseProvider" endpoint of the "registry" service.
+func NewProtoReleaseProviderRequest(payload *registry.ReleaseProviderPayload) *registrypb.ReleaseProviderRequest {
+	message := &registrypb.ReleaseProviderRequest{
+		Name:                      payload.Name,
+		ProviderId:                payload.ProviderID,
+		ExpectedRegistrationToken: payload.ExpectedRegistrationToken,
+		ProviderIncarnationId:     payload.ProviderIncarnationID,
+	}
+	return message
+}
+
+// NewProtoDrainProviderRequest builds the gRPC request type from the payload
+// of the "DrainProvider" endpoint of the "registry" service.
+func NewProtoDrainProviderRequest(payload *registry.DrainProviderPayload) *registrypb.DrainProviderRequest {
+	message := &registrypb.DrainProviderRequest{
+		SettlementDurationMs:      payload.SettlementDurationMs,
+		Name:                      payload.Name,
+		ProviderId:                payload.ProviderID,
+		ExpectedRegistrationToken: payload.ExpectedRegistrationToken,
+		ProviderIncarnationId:     payload.ProviderIncarnationID,
+	}
+	return message
 }
 
 // NewProtoUnregisterRequest builds the gRPC request type from the payload of
 // the "Unregister" endpoint of the "registry" service.
 func NewProtoUnregisterRequest(payload *registry.UnregisterPayload) *registrypb.UnregisterRequest {
 	message := &registrypb.UnregisterRequest{
-		Name: payload.Name,
+		Name:                      payload.Name,
+		ExpectedRegistrationToken: payload.ExpectedRegistrationToken,
 	}
 	return message
 }
@@ -72,8 +104,10 @@ func NewProtoUnregisterRequest(payload *registry.UnregisterPayload) *registrypb.
 // "Pong" endpoint of the "registry" service.
 func NewProtoPongRequest(payload *registry.PongPayload) *registrypb.PongRequest {
 	message := &registrypb.PongRequest{
-		PingId:  payload.PingID,
-		Toolset: payload.Toolset,
+		PingId:                payload.PingID,
+		Toolset:               payload.Toolset,
+		ProviderId:            payload.ProviderID,
+		ProviderIncarnationId: payload.ProviderIncarnationID,
 	}
 	return message
 }
@@ -198,9 +232,10 @@ func NewSearchResult(message *registrypb.SearchResponse) *registry.SearchResult 
 // "CallTool" endpoint of the "registry" service.
 func NewProtoCallToolRequest(payload *registry.CallToolPayload) *registrypb.CallToolRequest {
 	message := &registrypb.CallToolRequest{
-		Toolset:     payload.Toolset,
-		Tool:        payload.Tool,
-		PayloadJson: payload.PayloadJSON,
+		Toolset:             payload.Toolset,
+		Tool:                payload.Tool,
+		PayloadJson:         payload.PayloadJSON,
+		WireProtocolVersion: int64(payload.WireProtocolVersion),
 	}
 	if payload.Meta != nil {
 		message.Meta = svcRegistryToolCallMetaToRegistrypbToolCallMeta(payload.Meta)
@@ -212,7 +247,110 @@ func NewProtoCallToolRequest(payload *registry.CallToolPayload) *registrypb.Call
 // "registry" service from the gRPC response type.
 func NewCallToolResult(message *registrypb.CallToolResponse) *registry.CallToolResult {
 	result := &registry.CallToolResult{
-		ToolUseID: message.ToolUseId,
+		ToolUseID:             message.ToolUseId,
+		RegistrationToken:     message.RegistrationToken,
+		ExecutionDeadline:     message.ExecutionDeadline,
+		ResultStreamExpiresAt: message.ResultStreamExpiresAt,
+	}
+	return result
+}
+
+// NewProtoRetryToolRequest builds the gRPC request type from the payload of
+// the "RetryTool" endpoint of the "registry" service.
+func NewProtoRetryToolRequest(payload *registry.RetryToolPayload) *registrypb.RetryToolRequest {
+	message := &registrypb.RetryToolRequest{
+		ExpectedRegistrationToken: payload.ExpectedRegistrationToken,
+		Toolset:                   payload.Toolset,
+		Tool:                      payload.Tool,
+		PayloadJson:               payload.PayloadJSON,
+		WireProtocolVersion:       int64(payload.WireProtocolVersion),
+	}
+	if payload.Meta != nil {
+		message.Meta = svcRegistryToolCallMetaToRegistrypbToolCallMeta(payload.Meta)
+	}
+	return message
+}
+
+// NewRetryToolResult builds the result type of the "RetryTool" endpoint of the
+// "registry" service from the gRPC response type.
+func NewRetryToolResult(message *registrypb.RetryToolResponse) *registry.CallToolResult {
+	result := &registry.CallToolResult{
+		ToolUseID:             message.ToolUseId,
+		RegistrationToken:     message.RegistrationToken,
+		ExecutionDeadline:     message.ExecutionDeadline,
+		ResultStreamExpiresAt: message.ResultStreamExpiresAt,
+	}
+	return result
+}
+
+// NewProtoCompleteToolCallRequest builds the gRPC request type from the
+// payload of the "CompleteToolCall" endpoint of the "registry" service.
+func NewProtoCompleteToolCallRequest(payload *registry.CompleteToolCallPayload) *registrypb.CompleteToolCallRequest {
+	message := &registrypb.CompleteToolCallRequest{
+		Toolset:                   payload.Toolset,
+		ProviderId:                payload.ProviderID,
+		ProviderIncarnationId:     payload.ProviderIncarnationID,
+		RegistrationToken:         payload.RegistrationToken,
+		ToolUseId:                 payload.ToolUseID,
+		ResultJson:                payload.ResultJSON,
+		RequestEventId:            payload.RequestEventID,
+		ProviderRegistrationToken: payload.ProviderRegistrationToken,
+	}
+	return message
+}
+
+// NewProtoPublishToolOutputDeltaRequest builds the gRPC request type from the
+// payload of the "PublishToolOutputDelta" endpoint of the "registry" service.
+func NewProtoPublishToolOutputDeltaRequest(payload *registry.PublishToolOutputDeltaPayload) *registrypb.PublishToolOutputDeltaRequest {
+	message := &registrypb.PublishToolOutputDeltaRequest{
+		Stream:                    payload.Stream,
+		Delta:                     payload.Delta,
+		Toolset:                   payload.Toolset,
+		ProviderId:                payload.ProviderID,
+		ProviderIncarnationId:     payload.ProviderIncarnationID,
+		ProviderRegistrationToken: payload.ProviderRegistrationToken,
+		CallRegistrationToken:     payload.CallRegistrationToken,
+		ToolUseId:                 payload.ToolUseID,
+		RequestEventId:            payload.RequestEventID,
+	}
+	return message
+}
+
+// NewProtoReportToolCallOverloadRequest builds the gRPC request type from the
+// payload of the "ReportToolCallOverload" endpoint of the "registry" service.
+func NewProtoReportToolCallOverloadRequest(payload *registry.ProviderToolCallClaimPayload) *registrypb.ReportToolCallOverloadRequest {
+	message := &registrypb.ReportToolCallOverloadRequest{
+		Toolset:                   payload.Toolset,
+		ProviderId:                payload.ProviderID,
+		ProviderIncarnationId:     payload.ProviderIncarnationID,
+		ProviderRegistrationToken: payload.ProviderRegistrationToken,
+		CallRegistrationToken:     payload.CallRegistrationToken,
+		ToolUseId:                 payload.ToolUseID,
+		RequestEventId:            payload.RequestEventID,
+	}
+	return message
+}
+
+// NewProtoClaimToolCallRequest builds the gRPC request type from the payload
+// of the "ClaimToolCall" endpoint of the "registry" service.
+func NewProtoClaimToolCallRequest(payload *registry.ProviderToolCallClaimPayload) *registrypb.ClaimToolCallRequest {
+	message := &registrypb.ClaimToolCallRequest{
+		Toolset:                   payload.Toolset,
+		ProviderId:                payload.ProviderID,
+		ProviderIncarnationId:     payload.ProviderIncarnationID,
+		ProviderRegistrationToken: payload.ProviderRegistrationToken,
+		CallRegistrationToken:     payload.CallRegistrationToken,
+		ToolUseId:                 payload.ToolUseID,
+		RequestEventId:            payload.RequestEventID,
+	}
+	return message
+}
+
+// NewClaimToolCallResult builds the result type of the "ClaimToolCall"
+// endpoint of the "registry" service from the gRPC response type.
+func NewClaimToolCallResult(message *registrypb.ClaimToolCallResponse) *registry.ClaimToolCallResult {
+	result := &registry.ClaimToolCallResult{
+		Disposition: message.Disposition,
 	}
 	return result
 }
@@ -237,6 +375,13 @@ func ValidateToolSchema(elem *registrypb.ToolSchema) (err error) {
 // ValidateRegisterResponse runs the validations defined on RegisterResponse.
 func ValidateRegisterResponse(message *registrypb.RegisterResponse) (err error) {
 	err = loom.MergeErrors(err, loom.ValidateFormat("message.registered_at", message.RegisteredAt, loom.FormatDateTime))
+	err = loom.MergeErrors(err, loom.ValidatePatternCompiled("message.registration_token", message.RegistrationToken, loomPatternTypes0))
+	if message.LeaseDurationMs < 1 {
+		err = loom.MergeErrors(err, loom.InvalidRangeError("message.lease_duration_ms", message.LeaseDurationMs, 1, true))
+	}
+	if message.LeaseDurationMs > 8.64e+07 {
+		err = loom.MergeErrors(err, loom.InvalidRangeError("message.lease_duration_ms", message.LeaseDurationMs, 8.64e+07, false))
+	}
 	return
 }
 
@@ -265,7 +410,7 @@ func ValidateToolsetInfo(elem *registrypb.ToolsetInfo) (err error) {
 		err = loom.MergeErrors(err, loom.InvalidLengthError("elem.name", elem.Name, utf8.RuneCountInString(elem.Name), 256, false))
 	}
 	if elem.Version != nil {
-		err = loom.MergeErrors(err, loom.ValidatePatternCompiled("elem.version", string(*elem.Version), loomPatternTypes0))
+		err = loom.MergeErrors(err, loom.ValidatePatternCompiled("elem.version", string(*elem.Version), loomPatternTypes1))
 	}
 	if elem.ToolCount < 0 {
 		err = loom.MergeErrors(err, loom.InvalidRangeError("elem.tool_count", elem.ToolCount, 0, true))
@@ -287,7 +432,7 @@ func ValidateGetToolsetResponse(message *registrypb.GetToolsetResponse) (err err
 		err = loom.MergeErrors(err, loom.InvalidLengthError("message.name", message.Name, utf8.RuneCountInString(message.Name), 256, false))
 	}
 	if message.Version != nil {
-		err = loom.MergeErrors(err, loom.ValidatePatternCompiled("message.version", string(*message.Version), loomPatternTypes0))
+		err = loom.MergeErrors(err, loom.ValidatePatternCompiled("message.version", string(*message.Version), loomPatternTypes1))
 	}
 	for i, e := range message.Tools {
 		if e == nil {
@@ -326,6 +471,32 @@ func ValidateCallToolResponse(message *registrypb.CallToolResponse) (err error) 
 	if utf8.RuneCountInString(message.ToolUseId) > 256 {
 		err = loom.MergeErrors(err, loom.InvalidLengthError("message.tool_use_id", message.ToolUseId, utf8.RuneCountInString(message.ToolUseId), 256, false))
 	}
+	err = loom.MergeErrors(err, loom.ValidatePatternCompiled("message.registration_token", message.RegistrationToken, loomPatternTypes0))
+	err = loom.MergeErrors(err, loom.ValidateFormat("message.execution_deadline", message.ExecutionDeadline, loom.FormatDateTime))
+	err = loom.MergeErrors(err, loom.ValidateFormat("message.result_stream_expires_at", message.ResultStreamExpiresAt, loom.FormatDateTime))
+	return
+}
+
+// ValidateRetryToolResponse runs the validations defined on RetryToolResponse.
+func ValidateRetryToolResponse(message *registrypb.RetryToolResponse) (err error) {
+	if utf8.RuneCountInString(message.ToolUseId) < 1 {
+		err = loom.MergeErrors(err, loom.InvalidLengthError("message.tool_use_id", message.ToolUseId, utf8.RuneCountInString(message.ToolUseId), 1, true))
+	}
+	if utf8.RuneCountInString(message.ToolUseId) > 256 {
+		err = loom.MergeErrors(err, loom.InvalidLengthError("message.tool_use_id", message.ToolUseId, utf8.RuneCountInString(message.ToolUseId), 256, false))
+	}
+	err = loom.MergeErrors(err, loom.ValidatePatternCompiled("message.registration_token", message.RegistrationToken, loomPatternTypes0))
+	err = loom.MergeErrors(err, loom.ValidateFormat("message.execution_deadline", message.ExecutionDeadline, loom.FormatDateTime))
+	err = loom.MergeErrors(err, loom.ValidateFormat("message.result_stream_expires_at", message.ResultStreamExpiresAt, loom.FormatDateTime))
+	return
+}
+
+// ValidateClaimToolCallResponse runs the validations defined on
+// ClaimToolCallResponse.
+func ValidateClaimToolCallResponse(message *registrypb.ClaimToolCallResponse) (err error) {
+	if !(message.Disposition == "execute" || message.Disposition == "terminal" || message.Disposition == "claimed" || message.Disposition == "expired") {
+		err = loom.MergeErrors(err, loom.InvalidEnumValueError("message.disposition", message.Disposition, []any{"execute", "terminal", "claimed", "expired"}))
+	}
 	return
 }
 
@@ -343,4 +514,7 @@ func svcRegistryToolCallMetaToRegistrypbToolCallMeta(v *registry.ToolCallMeta) *
 	return res
 }
 
-var loomPatternTypes0 = regexp.MustCompile("^v?\\d+\\.\\d+\\.\\d+(-[a-zA-Z0-9.]+)?$")
+var (
+	loomPatternTypes0 = regexp.MustCompile("^[0-9a-f]{64}$")
+	loomPatternTypes1 = regexp.MustCompile("^v?\\d+\\.\\d+\\.\\d+(-[a-zA-Z0-9.]+)?$")
+)

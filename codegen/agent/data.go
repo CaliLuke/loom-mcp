@@ -245,8 +245,8 @@ type (
 	// template access. Generated code uses these values to configure the
 	// runtime's policy enforcement (see agents/runtime/policy package).
 	//
-	// Zero-valued fields indicate no limit: TimeBudget = 0 means unlimited
-	// execution time, and zero caps mean no resource restrictions. Templates
+	// TimeBudget = 0 and MaxToolCalls = 0 mean unlimited. MaxRecoveryTurns is
+	// materialized to the framework default when the design omits it. Templates
 	// use these values to generate registration and validation logic.
 	//
 	// The policy is enforced by the agent runtime during workflow execution,
@@ -344,20 +344,20 @@ type (
 
 	// CapsData captures per-run resource limits that restrict agent tool
 	// usage. It prevents runaway execution and excessive resource consumption
-	// by capping the number of tool invocations and consecutive failures
+	// by capping the number of tool invocations and recovery turns
 	// allowed within a single agent run.
 	//
-	// Zero values indicate no cap is enforced. These limits are transformed
-	// from CapsExpr during policy data construction and are enforced by the
-	// runtime policy engine, not at generation time.
+	// Zero MaxToolCalls means unlimited tool calls. Generation materializes the
+	// default MaxRecoveryTurns value when the design does not set it.
 	//
-	// The runtime increments counters for each tool call and failure,
-	// terminating the agent run with an error if caps are exceeded.
+	// The runtime consumes one recovery turn for each replacement planner
+	// activity after rejected model or tool output, terminating the agent run
+	// with an error if either cap is exceeded.
 	CapsData struct {
 		// MaxToolCalls caps the number of tool invocations per run (0 = unlimited).
 		MaxToolCalls int
-		// MaxConsecutiveFailedToolCalls stops execution after N consecutive failures (0 = unlimited).
-		MaxConsecutiveFailedToolCalls int
+		// MaxRecoveryTurns caps replacement planner activities after rejected output.
+		MaxRecoveryTurns int
 	}
 
 	// ToolsetData captures metadata about a toolset and its relationship to agents

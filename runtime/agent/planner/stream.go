@@ -24,30 +24,51 @@ type StreamSummary struct {
 	StopReason string
 }
 
-// ConsumeStream drains the provided streamer, emitting planner events for text and
-// thinking chunks via the provided PlannerEvents. It returns the aggregated
+// ConsumeStream drains the provided streamer and returns the aggregated
 // StreamSummary so planners can produce a final response or schedule tool calls.
-// Callers are responsible for handling ToolCalls in the resulting summary.
+// It emits planner events for text and thinking chunks unless the streamer
+// reports that it owns planner event emission. A runtime-owned stream stages
+// those events until successful finalization. Callers are responsible for
+// handling ToolCalls in the resulting summary.
 func ConsumeStream(ctx context.Context, streamer model.Streamer, ev PlannerEvents) (StreamSummary, error) {
 	var summary StreamSummary
 	if err := validateStreamInputs(streamer, ev); err != nil {
 		return summary, err
 	}
+	emitEvents := true
+	if owned, ok := streamer.(interface{ EmitsPlannerEvents() bool }); ok {
+		emitEvents = !owned.EmitsPlannerEvents()
+	}
 
 	for {
 		chunk, err := streamer.Recv()
 		if err != nil {
-			if errors.Is(err, io.EOF) {
+			//nolint:errorlint // Only literal EOF proves validated completion.
+			if err == io.EOF {
 				break
 			}
-			return summary, errors.Join(err, streamer.Close())
+			return summary, finalizeStream(streamer, err)
 		}
-		handleStreamChunk(ctx, ev, &summary, chunk)
+		handleStreamChunk(ctx, ev, &summary, chunk, emitEvents)
 	}
 
-	applyStreamMetadataUsage(ctx, ev, &summary, streamer.Metadata())
+	if validated, ok := streamer.(model.ValidatedStreamer); ok {
+		if response := validated.Response(); response != nil {
+			summary.Usage = response.Usage
+			summary.StopReason = response.StopReason
+		}
+	} else {
+		applyStreamMetadataUsage(ctx, ev, &summary, streamer.Metadata())
+	}
 
-	return summary, streamer.Close()
+	return summary, finalizeStream(streamer, nil)
+}
+
+func finalizeStream(streamer model.Streamer, primaryErr error) error {
+	if validated, ok := streamer.(model.ValidatedStreamer); ok {
+		return validated.Finalize(primaryErr)
+	}
+	return errors.Join(primaryErr, streamer.Close())
 }
 
 func validateStreamInputs(streamer model.Streamer, ev PlannerEvents) error {
@@ -60,30 +81,36 @@ func validateStreamInputs(streamer model.Streamer, ev PlannerEvents) error {
 	return nil
 }
 
-func handleStreamChunk(ctx context.Context, ev PlannerEvents, summary *StreamSummary, chunk model.Chunk) {
+func handleStreamChunk(ctx context.Context, ev PlannerEvents, summary *StreamSummary, chunk model.Chunk, emitEvents bool) {
 	switch chunk.Type {
 	case model.ChunkTypeText:
-		handleTextChunk(ctx, ev, summary, chunk)
+		handleTextChunk(ctx, ev, summary, chunk, emitEvents)
 	case model.ChunkTypeThinking:
-		handleThinkingChunk(ctx, ev, chunk)
+		if emitEvents {
+			handleThinkingChunk(ctx, ev, chunk)
+		}
 	case model.ChunkTypeToolCall:
 		handleToolCallChunk(summary, chunk)
 	case model.ChunkTypeToolCallDelta:
-		handleToolCallDeltaChunk(ctx, ev, chunk)
+		if emitEvents {
+			handleToolCallDeltaChunk(ctx, ev, chunk)
+		}
 	case model.ChunkTypeUsage:
-		handleUsageChunk(ctx, ev, summary, chunk)
+		handleUsageChunk(ctx, ev, summary, chunk, emitEvents)
 	case model.ChunkTypeStop:
 		summary.StopReason = chunk.StopReason
 	}
 }
 
-func handleTextChunk(ctx context.Context, ev PlannerEvents, summary *StreamSummary, chunk model.Chunk) {
+func handleTextChunk(ctx context.Context, ev PlannerEvents, summary *StreamSummary, chunk model.Chunk, emitEvents bool) {
 	delta := textChunkDelta(chunk)
 	if delta == "" {
 		return
 	}
 	summary.Text += delta
-	ev.AssistantChunk(ctx, delta)
+	if emitEvents {
+		ev.AssistantChunk(ctx, delta)
+	}
 }
 
 func textChunkDelta(chunk model.Chunk) string {
@@ -128,12 +155,14 @@ func handleToolCallDeltaChunk(ctx context.Context, ev PlannerEvents, chunk model
 	ev.ToolCallArgsDelta(ctx, chunk.ToolCallDelta.ID, chunk.ToolCallDelta.Name, chunk.ToolCallDelta.Delta)
 }
 
-func handleUsageChunk(ctx context.Context, ev PlannerEvents, summary *StreamSummary, chunk model.Chunk) {
+func handleUsageChunk(ctx context.Context, ev PlannerEvents, summary *StreamSummary, chunk model.Chunk, emitEvents bool) {
 	if chunk.UsageDelta == nil {
 		return
 	}
 	summary.Usage = addUsage(summary.Usage, *chunk.UsageDelta)
-	ev.UsageDelta(ctx, *chunk.UsageDelta)
+	if emitEvents {
+		ev.UsageDelta(ctx, *chunk.UsageDelta)
+	}
 }
 
 func applyStreamMetadataUsage(ctx context.Context, ev PlannerEvents, summary *StreamSummary, meta map[string]any) {

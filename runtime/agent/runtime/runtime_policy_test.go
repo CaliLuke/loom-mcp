@@ -25,7 +25,8 @@ import (
 )
 
 type captureModelClient struct {
-	tools []string
+	tools      []string
+	toolChoice *model.ToolChoice
 }
 
 func (c *captureModelClient) Complete(ctx context.Context, req *model.Request) (*model.Response, error) {
@@ -33,15 +34,22 @@ func (c *captureModelClient) Complete(ctx context.Context, req *model.Request) (
 	for _, tool := range req.Tools {
 		c.tools = append(c.tools, tool.Name)
 	}
+	if req.ToolChoice == nil {
+		c.toolChoice = nil
+	} else {
+		choice := *req.ToolChoice
+		c.toolChoice = &choice
+	}
 	return &model.Response{
 		Content: []model.Message{{
 			Role:  model.ConversationRoleAssistant,
 			Parts: []model.Part{model.TextPart{Text: "done"}},
 		}},
+		StopReason: "end_turn",
 	}, nil
 }
 
-func (c *captureModelClient) Stream(context.Context, *model.Request) (model.Streamer, error) {
+func (c *captureModelClient) Stream(context.Context, *model.Request) (model.ValidatedStreamer, error) {
 	return nil, io.EOF
 }
 
@@ -224,6 +232,42 @@ func TestMergeCapsIgnoresDeprecatedExpiresAt(t *testing.T) {
 	assert.Equal(t, 3, got.RemainingToolCalls)
 	//lint:ignore SA1019 This test verifies the deprecated compatibility field remains inert.
 	assert.True(t, got.ExpiresAt.IsZero(), "deprecated wall-clock expiry must not become a second runtime deadline")
+}
+
+func TestMergeCapsClampsRecoveryAllowance(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name     string
+		current  policy.CapsState
+		decision policy.CapsState
+		want     policy.CapsState
+	}{
+		{
+			name:     "lowered maximum clamps existing allowance",
+			current:  policy.CapsState{MaxRecoveryTurns: 5, RemainingRecoveryTurns: 4},
+			decision: policy.CapsState{MaxRecoveryTurns: 2},
+			want:     policy.CapsState{MaxRecoveryTurns: 2, RemainingRecoveryTurns: 2},
+		},
+		{
+			name:     "decision allowance cannot exceed maximum",
+			current:  policy.CapsState{MaxRecoveryTurns: 3, RemainingRecoveryTurns: 1},
+			decision: policy.CapsState{RemainingRecoveryTurns: 8},
+			want:     policy.CapsState{MaxRecoveryTurns: 3, RemainingRecoveryTurns: 3},
+		},
+		{
+			name:     "new maximum clamps new allowance",
+			current:  policy.CapsState{MaxRecoveryTurns: 5, RemainingRecoveryTurns: 4},
+			decision: policy.CapsState{MaxRecoveryTurns: 2, RemainingRecoveryTurns: 7},
+			want:     policy.CapsState{MaxRecoveryTurns: 2, RemainingRecoveryTurns: 2},
+		},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			require.Equal(t, test.want, mergeCaps(test.current, test.decision))
+		})
+	}
 }
 
 // TestDisableToolsPolicyBlocksToolExecution drives the workflow loop end to end
@@ -419,9 +463,63 @@ func TestPlanStartActivityFiltersModelVisibleTools(t *testing.T) {
 
 	require.NoError(t, err)
 	require.NotNil(t, out)
-	require.Equal(t, []string{"allowed"}, modelClient.tools)
+	require.Equal(t, []string{"allowed", tools.ToolUnavailable.String()}, modelClient.tools)
+	require.NotNil(t, modelClient.toolChoice)
 	require.True(t, out.ToolPolicyActive)
 	require.Equal(t, []tools.Ident{tools.Ident("allowed")}, out.AllowedTools)
+}
+
+func TestRecoveryDisableToolsProducesToolFreeModelRequest(t *testing.T) {
+	modelClient := &captureModelClient{}
+	rt := &Runtime{
+		agents: map[agent.Ident]AgentRegistration{
+			"svc.agent": {
+				ID:      "svc.agent",
+				Planner: &modelToolPolicyPlanner{},
+			},
+		},
+		models: map[string]model.Client{
+			"default": modelClient,
+		},
+		Bus:           hooks.NewBus(),
+		logger:        telemetry.NoopLogger{},
+		metrics:       telemetry.NoopMetrics{},
+		tracer:        telemetry.NoopTracer{},
+		RunEventStore: runloginmem.New(),
+	}
+
+	out, err := rt.PlanStartActivity(context.Background(), &PlanActivityInput{
+		AgentID:          "svc.agent",
+		RunID:            "run-1",
+		RunContext:       run.Context{RunID: "run-1"},
+		ToolPolicyActive: true,
+		AllowedTools:     nil,
+		Recovery: &api.ModelRecovery{
+			Kind:         model.OutputValidationStructuredOutput,
+			Correction:   "replace the invalid final answer",
+			DisableTools: true,
+		},
+		Messages: []*model.Message{{
+			Role: model.ConversationRoleAssistant,
+			Parts: []model.Part{model.ToolUsePart{
+				ID:    "call-1",
+				Name:  tools.ToolUnavailable.String(),
+				Input: map[string]any{"available_tools": []any{"allowed"}},
+			}},
+		}, {
+			Role: model.ConversationRoleUser,
+			Parts: []model.Part{model.ToolResultPart{
+				ToolUseID: "call-1",
+				Content:   map[string]any{"error": "unavailable"},
+				IsError:   true,
+			}},
+		}},
+	})
+
+	require.NoError(t, err)
+	require.NotNil(t, out)
+	require.Empty(t, modelClient.tools)
+	require.Nil(t, modelClient.toolChoice)
 }
 
 func TestPlanStartActivityReturnsHistoryPolicyError(t *testing.T) {

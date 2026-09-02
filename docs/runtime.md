@@ -589,9 +589,10 @@ func (p *MyPlanner) PlanResume(ctx context.Context, input *PlanResumeInput) (*Pl
 
 **Important:** Do NOT call `planner.ConsumeStream` when using the decorated client.
 
-### Option 2: ConsumeStream with Raw Client
+### Option 2: ConsumeStream without Runtime Event Decoration
 
-When you have a raw `model.Client` (not decorated), use `planner.ConsumeStream`:
+When you have a validated `model.Client` that is not decorated to emit runtime
+events, use `planner.ConsumeStream`:
 
 ```go
 sum, err := planner.ConsumeStream(ctx, streamer, input.Events)
@@ -607,10 +608,11 @@ This helper drains the stream, emits events via `PlannerEvents`, and returns a
 
 ### Typed Structured Completions
 
-`runtime/agent/completion` wraps a raw `model.Client` with a generated-style
+`runtime/agent/completion` uses a validated `model.Client` with a generated
 typed completion spec. The helper clones the request, installs
-`model.StructuredOutput`, rejects tool calls on that request, and decodes the
-provider's structured JSON through the supplied codec:
+`model.StructuredOutput`, rejects tool calls on that request, and binds the
+generated decoder into the immutable request contract. Schema-valid output that
+the generated decoder rejects never leaves the client boundary:
 
 ```go
 resp, err := completion.Complete(ctx, modelClient, req, completions.SpecDraft)
@@ -620,10 +622,17 @@ if err != nil {
 fmt.Println(resp.Value)
 ```
 
-For streaming completions, `completion.Stream` returns a `model.Streamer` that
-allows `completion_delta`, thinking, and usage chunks, but requires exactly one
-canonical `completion` chunk before EOF. Decode the final typed value with
-`completion.DecodeChunk`.
+For streaming completions, `completion.Stream` returns a
+`model.ValidatedStreamer` that
+allows `completion_delta`, thinking, and usage chunks, but withholds the
+canonical `completion` until the complete stream is accepted. Decode the final
+typed value with `completion.DecodeChunk`, drain to the literal `io.EOF`, and
+finalize the stream.
+
+The consumer must observe literal EOF before reading `Response` or finalizing
+successfully. The first `Finalize` result is authoritative and includes provider
+cleanup. Runtime tracing and adaptive rate limiting commit their lifecycle
+outcome there rather than when `Recv` first reaches EOF.
 
 ---
 
@@ -706,8 +715,12 @@ construction separately.
 
 Loom MCP supports cross-process tool invocation via the **Internal Tool Registry**. In this mode:
 
-- The registry validates payload JSON against the tool schema and publishes tool calls to a deterministic Pulse stream: `toolset:<toolsetID>:requests`
-- A **provider loop** runs inside the toolset-owning service process, subscribes to the toolset stream, executes the tool, and publishes the result to `result:<toolUseID>`
+- The registry validates payload JSON, atomically admits or rejects one durable
+  run/tool-call identity, and publishes admitted calls to
+  `toolset:<toolsetID>:requests`.
+- A provider loop claims the exact admitted call before execution. It submits
+  deltas and terminal results through the registry, which owns canonical
+  publication on `result:<toolUseID>`.
 
 For method-backed service toolsets, codegen emits a provider adapter at:
 
@@ -715,36 +728,65 @@ For method-backed service toolsets, codegen emits a provider adapter at:
 
 That generated provider implements a dispatcher that decodes the tool payload JSON using generated codecs, adapts into the bound method payload (via generated transforms), calls the bound method, and re-encodes the tool result JSON together with any declared server-data (optional observer-facing server-data and always-on server-only metadata).
 
-To run it, wire the generated provider into the runtime provider loop:
+To run it, wire the generated provider into the runtime provider loop. The
+callback names below stand for direct adapters to the corresponding generated
+registry operations:
 
 ```go
 handler := toolsetpkg.NewProvider(serviceImpl)
+providerID := mustRequiredEnv("HOSTNAME") + "/" + toolsetID
+admissionRevision := mustRequiredEnv("TOOL_REGISTRY_ADMISSION_REVISION")
 go func() {
-    err := toolprovider.Serve(ctx, pulseClient, toolsetID, handler, toolprovider.Options{
-        Pong: func(ctx context.Context, pingID string) error {
-            return registryClient.Pong(ctx, &registry.PongPayload{
-                PingID:  pingID,
-                Toolset: toolsetID,
-            })
+    err := toolprovider.Serve(
+        ctx,
+        pulseClient,
+        toolsetID,
+        handler,
+        toolprovider.Registration{
+            AdmissionRevision:  admissionRevision,
+            Register:           registerProvider,
+            Drain:              drainProvider,
+            Release:            releaseProvider,
+            Claim:              claimToolCall,
+            Complete:           completeToolCall,
+            PublishOutputDelta: publishToolOutputDelta,
+            ReportOverload:     reportToolCallOverload,
         },
-    })
-    if err != nil {
+        toolprovider.Options{ProviderID: providerID, Pong: pongProvider},
+    )
+    if err != nil && !errors.Is(err, context.Canceled) {
         panic(err)
     }
 }()
 ```
 
-This integration is intentionally split:
+`Serve` creates one incarnation, registers it before opening shared
+consumption, renews its lease, and performs drain/settle/release shutdown. Use
+one admission revision for same-contract replicas and rolling updates. Change
+it to create a new execution fence. Provider registration and consumer
+CallTool/RetryTool requests must declare `toolregistry.WireProtocolVersion`.
 
-- **Registry gateway**: validates payloads, tracks provider health, creates per-call result streams, and returns `tool_use_id`
-- **Service provider loop**: executes tools using the generated provider adapters and publishes results
+The registration token is the immutable admission-generation fence. The exact
+token follows the request through provider claim, output deltas, overload
+control, completion, and consumer result filtering. Stale queued work is
+settled as `stale_registration`; it is never executed under a replacement
+provider generation.
+
+This integration has separate ownership:
+
+- **Registry gateway**: owns provider generations, exact-CAS membership,
+  durable call decisions, deadlines, result retention, and canonical results.
+- **Service provider loop**: claims admitted work and executes generated
+  provider adapters under the registry-issued deadline.
 
 ### Registry-Routed Execution (Agent/Consumer Side)
 
 On the consumer side (an agent calling registry-routed toolsets), the runtime needs a `ToolCallExecutor` that:
 
-- calls the registry gateway to publish the tool request and get a `(tool_use_id, result_stream_id)`, then
-- subscribes to the per-call result stream and decodes the result using the compiled tool specs/codecs.
+- calls the registry gateway with stable run and model tool-call identity to
+  obtain the durable admitted or rejected decision, then
+- reads the retained per-call result stream independently and decodes the exact
+  token-matched result using compiled tool specs/codecs.
 
 Loom MCP provides a reusable executor implementation in `runtime/toolregistry/executor` that implements `runtime.ToolCallExecutor`:
 
@@ -762,6 +804,13 @@ The registry wire protocol and deterministic stream IDs are defined in `runtime/
 
 - Toolset request stream: `toolset:<toolsetID>:requests`
 - Per-call result stream: `result:<toolUseID>`
+
+Identical retries observe the same decision and result stream. An admitted call
+that later loses routing certainty resolves as `outcome_unknown`; callers must
+not reclassify it as safely replannable. Queue publication rejects atomically
+when unread backlog is full, and stream trimming is garbage collection only.
+The registry owns one absolute execution deadline and one later absolute result
+retention deadline for every call.
 
 ### Registry discovery & catalog sync (runtime/registry)
 
@@ -848,7 +897,9 @@ Key mutation rules:
 `runtime.NewRetryAndReflectInterceptor(...)` implements the tool path to convert
 tool execution errors into planner-visible tool errors with structured
 `planner.RetryHint` guidance, keeping the run alive so the planner can repair
-the call.
+the call. Its generated error and retry message use fixed framework text. They
+do not persist the raw service error because that error can contain submitted
+arguments or secrets.
 
 ### Model-Facing Skills
 
@@ -1572,20 +1623,53 @@ type Decision struct {
 
 ```go
 type CapsState struct {
-    MaxToolCalls                        int
-    RemainingToolCalls                  int
-    MaxConsecutiveFailedToolCalls       int
-    RemainingConsecutiveFailedToolCalls int
-    ExpiresAt                           time.Time // Deprecated; ignored by runtime
+    MaxToolCalls           int
+    RemainingToolCalls     int
+    MaxRecoveryTurns       int
+    RemainingRecoveryTurns int
+    ExpiresAt              time.Time // Deprecated; ignored by runtime
 }
 ```
+
+The default `MaxRecoveryTurns` value is 3. The runtime uses this default when
+the design and the run do not set a positive value.
+
+One recovery turn runs one replacement planner activity after rejected model
+output or recoverable tool output. Successful registered domain work resets
+the allowance. Failed work and `runtime.tool_unavailable` do not reset it.
+
+Model recovery stores a fingerprint, byte count, usage, attempt, and bounded
+framework guidance. It does not store rejected model output or submitted tool
+arguments. The activity records each rejected unary call, including calls that
+the planner catches. It matches recovery to the exact error that the planner
+returns. Concurrent model calls cannot erase that match. Token totals include
+all accepted and rejected billed calls. Every durable total uses checked
+addition and fails if a count overflows. Generated retry hints are at most 4096
+encoded bytes. For a stream, the runtime stages text and thinking events until
+terminal validation and provider cleanup both succeed. A rejected or
+cleanup-failed stream cannot append its presentation content to the canonical
+run log.
+
+Structured-output and output-limit recovery disables all tools for the
+replacement turn. The runtime checks the same effective tool catalog at the
+model boundary and the workflow boundary. A tool-call replacement must carry a
+non-nil, bounded, unique copy of the rejected request catalog. The workflow
+rejects a catalog that adds a tool outside the active policy. When the recovery
+allowance is empty, a normal start or resume enters the tool-free failure
+finalizer. A rejection from that finalizer ends the run and does not recurse.
+The model and recovery contracts accept at most 256 tool definitions per
+request, so every accepted request has a durable exact-catalog representation.
 
 Caps constrain the calls a planner selected; they do not truncate the tool
 catalog shown to the planner. The pre-plan policy envelope therefore carries
 the full policy allowlist, and per-turn or remaining-call caps are applied only
 after planning. The runtime-owned `tool_unavailable` recovery call remains
 executable under an active allowlist so rewritten unavailable calls can produce
-their structured recovery result.
+their structured recovery result. Per-run tool and tag filters also preserve
+this internal recovery call. The internal tool is not a policy candidate. The
+runtime replaces every direct call payload with the exact server-owned catalog
+at the model boundary. The activity boundary preserves that narrower catalog
+when the run policy allows more tools.
 
 `CapsState` owns counter budgets only. Its legacy `ExpiresAt` field is retained
 for source compatibility but is not merged or enforced. Absolute wall-clock
@@ -1617,10 +1701,10 @@ Override registered agent policy in-process:
 
 ```go
 err := rt.OverridePolicy(agent.Ident("service.chat"), runtime.RunPolicy{
-    MaxToolCalls:                  10,
-    MaxConsecutiveFailedToolCalls: 2,
-    TimeBudget:                    5 * time.Minute,
-    InterruptsAllowed:             true,
+    MaxToolCalls:      10,
+    MaxRecoveryTurns: 2,
+    TimeBudget:        5 * time.Minute,
+    InterruptsAllowed: true,
 })
 ```
 
@@ -1899,6 +1983,13 @@ input.Agent.RemoveReminder("pending_todos")
 
 ## Model Clients
 
+Provider packages under `features/model/*` construct raw `model.Provider`
+implementations. Runtime factory methods wrap them with `model.NewClient` and
+return validated `model.Client` values. If an application constructs a provider
+directly, it must call `model.NewClient(provider)` before registration. The
+different `Stream` return types make a raw provider fail the `model.Client`
+interface at compile time.
+
 ### Registration
 
 ```go
@@ -1919,6 +2010,13 @@ client, err := rt.NewBedrockModelClient(awsClient, runtime.BedrockConfig{
 Model lookup is immutable after registration closes. Loom does not define
 post-`Seal` credential/client rotation or in-flight hot-swap semantics; build a
 new runtime and move traffic to it when replacing a model client.
+
+Validated clients bound request and response ownership, enforce the exact
+current tool catalog and tool-choice rule, run structured-output and generated
+completion validation, reject output-limit termination, and expose only
+terminally accepted tool calls. `model.OutputValidationError` has a closed kind
+and bounded fingerprint; its public message does not render rejected model text,
+tool names, arguments, or schemas.
 
 Create an OpenAI Responses client through the runtime helper:
 
@@ -2358,7 +2456,10 @@ When enabled, model spans include `gen_ai.input.messages` and
 `gen_ai.output.messages`. Reasoning/thinking parts are deliberately omitted,
 streamed text deltas are coalesced into one output message at stream end, and
 serialization failures are recorded as span events instead of failing the model
-call.
+call. Capture uses the request after cache, tool policy, and model interceptors
+apply their changes. A rejected response or stream does not publish output
+messages. Internal `runtime.tool_unavailable` payloads contain only the exact
+effective tool catalog.
 
 ### Temporal trace domains
 
@@ -2812,7 +2913,8 @@ Loom MCP supports two complementary paths that produce `planner.RetryHint`:
    etc.). Generated union decoders report invalid discriminators with the allowed
    enum values and report a missing nested union `value` as a missing field, so
    MCP callers receive actionable retry guidance instead of transport-level JSON
-   decoder failures.
+   decoder failures. The generated error uses fixed framework text. It does not
+   retain the raw Goa validation message or the submitted value.
 
 2. **Execution‑time validation (service / tool provider errors)**
 
@@ -2825,7 +2927,10 @@ Loom MCP supports two complementary paths that produce `planner.RetryHint`:
      result that includes them.
    - **Wire protocol**: tool result errors may include `issues` (`[]FieldIssue`).
    - **Consumer behavior**: registry executors convert `issues` into a `RetryHint`
-     (e.g., `missing_fields`) and attach the tool spec example input when available.
+     (e.g., `missing_fields`). They do not attach examples or submitted input.
+
+The runtime bounds all generated retry hints to 4096 encoded bytes after final
+enrichment. The bound applies to local and registry-routed tool execution.
 
 This keeps the contract strong and deterministic: validation stays at boundaries,
 and “what to retry with” is computed from structured data, not heuristics.

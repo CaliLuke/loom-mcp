@@ -160,7 +160,7 @@ func newValidationError(err error) error {
 		return err
 	}
 	return &ValidationError{
-		msg:    err.Error(),
+		msg:    "value failed schema validation",
 		issues: issues,
 	}
 }

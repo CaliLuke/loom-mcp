@@ -241,7 +241,10 @@ func (p *anthropicChunkProcessor) Handle(event sdk.MessageStreamEventUnion) erro
 		return p.emit(model.Chunk{Type: model.ChunkTypeUsage, UsageDelta: &usage})
 	case sdk.MessageStopEvent:
 		p.completed = true
-		chunk := model.Chunk{Type: model.ChunkTypeStop}
+		chunk := model.Chunk{
+			Type:          model.ChunkTypeStop,
+			OutputLimited: anthropicOutputLimited(p.stopReason),
+		}
 		if p.stopReason != "" {
 			chunk.StopReason = p.stopReason
 		}

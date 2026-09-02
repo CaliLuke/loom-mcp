@@ -279,7 +279,18 @@ func (p *chunkProcessor) resetMessageState() {
 
 func (p *chunkProcessor) handleMessageStop(ev *brtypes.ConverseStreamOutputMemberMessageStop) error {
 	p.completed = true
-	chunk := model.Chunk{Type: model.ChunkTypeStop}
+	outputLimited := bedrockOutputLimited(ev.Value.StopReason)
+	if p.completion != nil {
+		if outputLimited {
+			p.completion = nil
+		} else if err := p.finalizeCompletion(p.completion.index); err != nil {
+			return err
+		}
+	}
+	chunk := model.Chunk{
+		Type:          model.ChunkTypeStop,
+		OutputLimited: outputLimited,
+	}
 	if ev.Value.StopReason != "" {
 		chunk.StopReason = string(ev.Value.StopReason)
 	}
@@ -497,9 +508,6 @@ func (p *chunkProcessor) emitToolUseDelta(idx int, delta *brtypes.ContentBlockDe
 func (p *chunkProcessor) handleContentBlockStop(ev *brtypes.ConverseStreamOutputMemberContentBlockStop) error {
 	idx, err := contentIndex(ev.Value.ContentBlockIndex)
 	if err != nil {
-		return err
-	}
-	if err := p.finalizeCompletion(idx); err != nil {
 		return err
 	}
 	if err := p.emitFinalReasoning(idx); err != nil {

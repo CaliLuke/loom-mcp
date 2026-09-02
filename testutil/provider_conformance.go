@@ -1,7 +1,6 @@
 package testutil
 
 import (
-	"errors"
 	"fmt"
 	"io"
 	"testing"
@@ -35,11 +34,12 @@ type ProviderStreamingConformance struct {
 	PartialCancel    ProviderConformanceCase
 	CloseError       ProviderConformanceCase
 	Terminal         ProviderConformanceCase
+	OutputLimited    ProviderConformanceCase
 }
 
 // ProviderConformanceSuite is the minimum behavioral matrix every model
 // adapter must execute. Provider-specific SDK fixtures stay in the owning
-// package; this suite standardizes only externally observable model.Client
+// package; this suite standardizes only externally observable raw model.Provider
 // behavior.
 type ProviderConformanceSuite struct {
 	Provider                      string
@@ -49,6 +49,7 @@ type ProviderConformanceSuite struct {
 	Cancellation                  ProviderConformanceCase
 	StructuredOutputAndToolChoice ProviderConformanceCase
 	UsageAccounting               ProviderConformanceCase
+	OutputLimited                 ProviderConformanceCase
 	MultimodalInput               ProviderCapabilityConformance
 	TypedThinking                 ProviderCapabilityConformance
 	ExactTokenCounting            ProviderCapabilityConformance
@@ -77,6 +78,7 @@ func RunProviderConformance(t *testing.T, suite ProviderConformanceSuite) {
 		{name: "cancellation", run: suite.Cancellation},
 		{name: "structured output and tool choice", run: suite.StructuredOutputAndToolChoice},
 		{name: "usage accounting", run: suite.UsageAccounting},
+		{name: "output limited", run: suite.OutputLimited},
 	}
 	for _, tc := range cases {
 		if tc.run == nil {
@@ -113,7 +115,8 @@ func CollectStreamChunks(t *testing.T, streamer model.Streamer) []model.Chunk {
 	var chunks []model.Chunk
 	for {
 		chunk, err := streamer.Recv()
-		if errors.Is(err, io.EOF) {
+		//nolint:errorlint // Only literal EOF proves clean provider completion.
+		if err == io.EOF {
 			return chunks
 		}
 		require.NoError(t, err)
@@ -134,6 +137,7 @@ func validateStreamingConformance(t *testing.T, provider string, streaming Provi
 		{name: "partial cancellation", run: streaming.PartialCancel},
 		{name: "close error", run: streaming.CloseError},
 		{name: "terminal", run: streaming.Terminal},
+		{name: "output limited", run: streaming.OutputLimited},
 	}
 	if streaming.Unsupported != nil {
 		if err := validateUnsupportedStreaming(streaming); err != nil {
@@ -178,6 +182,7 @@ func runStreamingConformance(t *testing.T, streaming ProviderStreamingConformanc
 	t.Run("stream partial cancellation", streaming.PartialCancel)
 	t.Run("stream close error", streaming.CloseError)
 	t.Run("stream terminal", streaming.Terminal)
+	t.Run("stream output limited", streaming.OutputLimited)
 }
 
 func validateCapabilityConformance(t *testing.T, provider, name string, capability ProviderCapabilityConformance) {

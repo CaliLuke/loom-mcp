@@ -64,10 +64,10 @@ func RegisterSpecialistAgent(ctx context.Context, rt *agentsruntime.Runtime, cfg
 		},
 		Specs: specs.Specs,
 		Policy: agentsruntime.RunPolicy{
-			MaxToolCalls:                  4,
-			MaxConsecutiveFailedToolCalls: 1,
-			TimeBudget:                    time.Duration(10000000000),
-			InterruptsAllowed:             true,
+			MaxToolCalls:      4,
+			MaxRecoveryTurns:  1,
+			TimeBudget:        time.Duration(10000000000),
+			InterruptsAllowed: true,
 		},
 	}); err != nil {
 		return err

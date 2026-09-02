@@ -2,9 +2,11 @@ package toolregistry
 
 import (
 	"context"
-	"encoding/json/jsontext"
+	"encoding/json"
 	"errors"
+	"strings"
 	"testing"
+	"time"
 
 	loom "github.com/CaliLuke/loom/pkg"
 	"github.com/stretchr/testify/assert"
@@ -17,40 +19,67 @@ import (
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/tools"
 )
 
+func TestValidateToolResultMessageRejectsAggregateOversize(t *testing.T) {
+	t.Parallel()
+
+	message := NewToolResultMessage(
+		strings.Repeat("a", 64),
+		"use-1",
+		json.RawMessage(`{"value":"`+strings.Repeat("x", MaxToolResultMessageBytes)+`"}`),
+	)
+	require.ErrorContains(t, ValidateToolResultMessage(message), "exceeds")
+}
+
 func TestMessageConstructorsPreserveCanonicalWireFields(t *testing.T) {
+	const registrationToken = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
 	meta := &ToolCallMeta{RunID: "run-1", SessionID: "session-1", ToolCallID: "call-1"}
-	payload := jsontext.Value(`{"query":"status"}`)
-	call := NewToolCallMessage("use-1", tools.Ident("service.search"), payload, meta)
+	payload := json.RawMessage(`{"query":"status"}`)
+	executionDeadline := time.UnixMilli(1000)
+	resultExpiration := time.UnixMilli(2000)
+	call := NewToolCallMessage(
+		registrationToken,
+		"use-1",
+		executionDeadline,
+		resultExpiration,
+		tools.Ident("service.search"),
+		payload,
+		meta,
+	)
 	assert.Equal(t, MessageTypeCall, call.Type)
+	assert.Equal(t, registrationToken, call.RegistrationToken)
 	assert.Equal(t, "use-1", call.ToolUseID)
+	assert.Equal(t, executionDeadline.UnixMilli(), call.ExecutionDeadlineUnixMilli)
+	assert.Equal(t, resultExpiration.UnixMilli(), call.ResultStreamExpiresAtUnixMilli)
 	assert.Equal(t, tools.Ident("service.search"), call.Tool)
 	assert.JSONEq(t, string(payload), string(call.Payload))
 	assert.Same(t, meta, call.Meta)
 
-	ping := NewPingMessage("ping-1")
-	assert.Equal(t, ToolCallMessage{Type: MessageTypePing, PingID: "ping-1"}, ping)
+	ping := NewPingMessage(registrationToken, "ping-1")
+	assert.Equal(t, ToolCallMessage{RegistrationToken: registrationToken, Type: MessageTypePing, PingID: "ping-1"}, ping)
 
-	result := NewToolResultMessage("use-1", jsontext.Value(`{"ok":true}`))
+	result := NewToolResultMessage(registrationToken, "use-1", json.RawMessage(`{"ok":true}`))
+	assert.Equal(t, registrationToken, result.RegistrationToken)
 	assert.Equal(t, "use-1", result.ToolUseID)
 	assert.JSONEq(t, `{"ok":true}`, string(result.Result))
 
-	serverData := []*ServerDataItem{{Kind: "card", Audience: "ui", Data: jsontext.Value(`{"title":"Done"}`)}}
-	withServerData := NewToolResultMessageWithServerData("use-1", result.Result, serverData)
+	serverData := []*ServerDataItem{{Kind: "card", Audience: "ui", Data: json.RawMessage(`{"title":"Done"}`)}}
+	withServerData := NewToolResultMessageWithServerData(registrationToken, "use-1", result.Result, serverData)
 	assert.Equal(t, serverData, withServerData.ServerData)
 
-	delta := NewToolOutputDeltaMessage("use-1", "stdout", "ready\n")
-	assert.Equal(t, ToolOutputDeltaMessage{ToolUseID: "use-1", Stream: "stdout", Delta: "ready\n"}, delta)
+	delta := NewToolOutputDeltaMessage(registrationToken, "use-1", "stdout", "ready\n")
+	assert.Equal(t, ToolOutputDeltaMessage{RegistrationToken: registrationToken, ToolUseID: "use-1", Stream: "stdout", Delta: "ready\n"}, delta)
 
-	failure := NewToolResultErrorMessage("use-1", "invalid_arguments", "query is required")
+	failure := NewToolResultErrorMessage(registrationToken, "use-1", "invalid_arguments", "query is required")
 	require.NotNil(t, failure.Error)
 	assert.Equal(t, "invalid_arguments", failure.Error.Code)
 	assert.Equal(t, "query is required", failure.Error.Message)
 }
 
 func TestValidationIssueMessagesCloneCallerOwnedData(t *testing.T) {
+	const registrationToken = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
 	allowed := []string{"fast", "safe"}
 	issues := []*tools.FieldIssue{{Field: "mode", Constraint: loom.InvalidEnumValue, Allowed: allowed}, nil}
-	message := NewToolResultErrorMessageWithIssues("use-1", "invalid_arguments", "bad mode", issues)
+	message := NewToolResultInvalidArgumentsMessage(registrationToken, "use-1", "bad mode", issues)
 
 	allowed[0] = "mutated"
 	issues[0].Field = "changed"
@@ -59,7 +88,7 @@ func TestValidationIssueMessagesCloneCallerOwnedData(t *testing.T) {
 	assert.Equal(t, "mode", message.Error.Issues[0].Field)
 	assert.Equal(t, []string{"fast", "safe"}, message.Error.Issues[0].Allowed)
 
-	assert.Nil(t, NewToolResultErrorMessageWithIssues("use-1", "failed", "boom", nil).Error.Issues)
+	assert.Nil(t, NewToolResultInvalidArgumentsMessage(registrationToken, "use-1", "boom", nil).Error.Issues)
 }
 
 func TestValidationIssuesSupportsGeneratedAndGoaErrors(t *testing.T) {

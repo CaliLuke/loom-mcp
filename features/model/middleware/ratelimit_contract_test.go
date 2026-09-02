@@ -58,6 +58,14 @@ func (s *scriptedStreamer) Metadata() map[string]any {
 	return s.metadata
 }
 
+func (s *scriptedStreamer) Response() *model.Response {
+	return nil
+}
+
+func (s *scriptedStreamer) Finalize(primaryErr error) error {
+	return errors.Join(primaryErr, s.Close())
+}
+
 func TestAdaptiveRateLimiterStreamSetupContract(t *testing.T) {
 	cases := []struct {
 		name       string
@@ -168,14 +176,26 @@ func TestAdaptiveRateLimiterStreamObservesTerminalRecvOutcomeOnce(t *testing.T) 
 
 			_, err = stream.Recv()
 			assert.Same(t, tt.terminalErr, err)
+			assert.InDelta(t, before, limiter.currentTPM, 0,
+				"terminal receive must not adjust capacity before finalization")
+			primaryErr := tt.terminalErr
+			//nolint:errorlint // Only the literal EOF test case represents success.
+			if tt.terminalErr == io.EOF {
+				primaryErr = nil
+			}
+			finalizeErr := stream.Finalize(primaryErr)
+			if primaryErr == nil {
+				require.NoError(t, finalizeErr)
+			} else {
+				require.ErrorIs(t, finalizeErr, primaryErr)
+			}
 			tt.wantChange(t, before, limiter.currentTPM)
 			afterTerminal := limiter.currentTPM
 
-			_, err = stream.Recv()
-			require.ErrorIs(t, err, io.EOF)
+			_ = stream.Finalize(errors.New("ignored second primary"))
 			assert.InDelta(t, afterTerminal, limiter.currentTPM, 0,
-				"a later terminal receive must not adjust capacity twice")
-			assert.Equal(t, 3, providerStream.recvCalls)
+				"repeated finalization must not adjust capacity twice")
+			assert.Equal(t, 2, providerStream.recvCalls)
 		})
 	}
 }

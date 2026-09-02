@@ -24,6 +24,7 @@ type agentContextOptions struct {
 	events     planner.PlannerEvents
 	cache      CachePolicy
 	toolPolicy toolPolicyEnvelope
+	recovery   *modelRecoveryRecorder
 }
 
 // simplePlannerContext is a minimal implementation of planner.PlannerContext.
@@ -38,6 +39,7 @@ type simplePlannerContext struct {
 	ev         planner.PlannerEvents
 	cache      CachePolicy
 	toolPolicy toolPolicyEnvelope
+	recovery   *modelRecoveryRecorder
 }
 
 func newAgentContext(opts agentContextOptions) planner.PlannerContext {
@@ -52,6 +54,7 @@ func newAgentContext(opts agentContextOptions) planner.PlannerContext {
 		ev:         opts.events,
 		cache:      opts.cache,
 		toolPolicy: opts.toolPolicy,
+		recovery:   opts.recovery,
 	}
 }
 
@@ -70,6 +73,13 @@ func (c *simplePlannerContext) ModelClient(id string) (model.Client, bool) {
 		return nil, false
 	}
 	cli := m
+	// Model interceptors observe the fully decorated request and their final
+	// response/error is the only outcome eligible for workflow recovery.
+	cli = newModelInterceptedClient(cli, c.rt.interceptorsForAgent(c.agent), c.agent, c.runID, c.sessionID, c.turnID, id, c.recovery, func(req *model.Request) {
+		applyCachePolicy(req, c.cache)
+		ensureToolUnavailableDefinition(req)
+		applyModelToolPolicy(req, c.toolPolicy)
+	})
 	// Wrap with per-turn event decorator so thinking/text/usage are captured automatically.
 	if c.ev != nil {
 		cli = newEventDecoratedClient(cli, c.ev)
@@ -84,7 +94,6 @@ func (c *simplePlannerContext) ModelClient(id string) (model.Client, bool) {
 	// Ensure the runtime-owned tool_unavailable tool is always present when tool
 	// history may be re-encoded for providers with strict tool availability rules.
 	cli = newToolUnavailableConfiguredClient(cli)
-	cli = newModelInterceptedClient(cli, c.rt.interceptorsForAgent(c.agent), c.agent, c.runID, c.sessionID, c.turnID, id)
 	// Wrap with tracing so model invocations are always visible in traces, including
 	// full stream lifetimes when streaming is used.
 	cli = newTracedClient(cli, c.rt.tracer, c.rt.logger, modelTraceConfig{

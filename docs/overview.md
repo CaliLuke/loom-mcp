@@ -235,7 +235,7 @@ var _ = Service("orchestrator", func() {
             })
         })
   RunPolicy(func() {
-   DefaultCaps(MaxToolCalls(2), MaxConsecutiveFailedToolCalls(1))
+   DefaultCaps(MaxToolCalls(2), MaxRecoveryTurns(1))
    TimeBudget("15s")
    History(func() {
     // For long sessions, summarize older turns and keep a measured exact tail.
@@ -361,7 +361,7 @@ Then use `Start/Wait` for asynchronous runs with task queues, memos, and search 
 Per‑turn enforcement of:
 
 - Maximum tool calls
-- Consecutive failure limits
+- Bounded recovery turns after rejected model or tool output
 - Time budgets
 - Tool allowlists via policy engines
 
@@ -490,10 +490,15 @@ policies, and MCP servers within Goa service designs.
 | `RunPolicy(func())`                | Define execution constraints for an agent |
 | `DefaultCaps(opts...)`             | Configure resource limits                 |
 | `MaxToolCalls(n)`                  | Cap total tool invocations per run        |
-| `MaxConsecutiveFailedToolCalls(n)` | Cap sequential failures before aborting   |
+| `MaxRecoveryTurns(n)` | Cap rejected-output replacement turns     |
 | `TimeBudget(duration)`             | Limit active execution time; external-input waits pause the budget |
 | `InterruptsAllowed(bool)`          | Enable/disable user interruptions         |
 | `OnMissingFields(action)`          | Configure validation behavior             |
+
+`MaxRecoveryTurns` defaults to 3. One turn replaces one rejected model or
+recoverable tool output. Successful registered domain work resets the
+allowance. Final-answer recovery uses bounded private evidence and disables
+tools for the replacement turn.
 
 ### History Management
 
@@ -819,6 +824,11 @@ Provider-agnostic model interactions:
 ```go
 type Client interface {
     Complete(ctx context.Context, req *Request) (*Response, error)
+    Stream(ctx context.Context, req *Request) (ValidatedStreamer, error)
+}
+
+type Provider interface {
+    Complete(ctx context.Context, req *Request) (*Response, error)
     Stream(ctx context.Context, req *Request) (Streamer, error)
 }
 
@@ -827,7 +837,27 @@ type Streamer interface {
     Close() error
     Metadata() map[string]any
 }
+
+type ValidatedStreamer interface {
+    Streamer
+    Response() *Response
+    Finalize(primaryErr error) error
+}
 ```
+
+Provider adapters return untrusted normalized output. Construct a `Client` with
+`model.NewClient(provider)` before giving it to a planner or runtime. The client
+owns a bounded copy of each request, validates unary and streaming output
+against that exact request, and returns `*model.OutputValidationError` when the
+provider violates the contract.
+
+Drain a validated stream to the literal `io.EOF`, read `Response`, and call
+`Finalize(nil)`. Pass the receive or processing error to `Finalize` when the
+stream does not complete. `Close` releases resources only; it does not mean the
+model response was accepted. Final tool calls and structured completions remain
+private until terminal validation succeeds. `Response` remains unavailable and
+`Finalize(nil)` fails until the consumer itself observes EOF; internal provider
+draining while terminal chunks are withheld does not count.
 
 ### Message Types
 

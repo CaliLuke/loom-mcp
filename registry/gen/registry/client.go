@@ -15,21 +15,34 @@ import (
 
 // Client is the "registry" service client.
 type Client struct {
-	RegisterEndpoint     loom.Endpoint
-	UnregisterEndpoint   loom.Endpoint
-	PongEndpoint         loom.Endpoint
-	ListToolsetsEndpoint loom.Endpoint
-	GetToolsetEndpoint   loom.Endpoint
-	SearchEndpoint       loom.Endpoint
-	CallToolEndpoint     loom.Endpoint
+	RegisterEndpoint               loom.Endpoint
+	ReleaseProviderEndpoint        loom.Endpoint
+	DrainProviderEndpoint          loom.Endpoint
+	UnregisterEndpoint             loom.Endpoint
+	PongEndpoint                   loom.Endpoint
+	ListToolsetsEndpoint           loom.Endpoint
+	GetToolsetEndpoint             loom.Endpoint
+	SearchEndpoint                 loom.Endpoint
+	CallToolEndpoint               loom.Endpoint
+	RetryToolEndpoint              loom.Endpoint
+	CompleteToolCallEndpoint       loom.Endpoint
+	PublishToolOutputDeltaEndpoint loom.Endpoint
+	ReportToolCallOverloadEndpoint loom.Endpoint
+	ClaimToolCallEndpoint          loom.Endpoint
 }
 
 // NewClient initializes a "registry" service client given the endpoints.
-func NewClient(register, unregister, pong, listToolsets, getToolset, search, callTool loom.Endpoint) *Client {
-	return &Client{RegisterEndpoint: register, UnregisterEndpoint: unregister, PongEndpoint: pong, ListToolsetsEndpoint: listToolsets, GetToolsetEndpoint: getToolset, SearchEndpoint: search, CallToolEndpoint: callTool}
+func NewClient(register, releaseProvider, drainProvider, unregister, pong, listToolsets, getToolset, search, callTool, retryTool, completeToolCall, publishToolOutputDelta, reportToolCallOverload, claimToolCall loom.Endpoint) *Client {
+	return &Client{RegisterEndpoint: register, ReleaseProviderEndpoint: releaseProvider, DrainProviderEndpoint: drainProvider, UnregisterEndpoint: unregister, PongEndpoint: pong, ListToolsetsEndpoint: listToolsets, GetToolsetEndpoint: getToolset, SearchEndpoint: search, CallToolEndpoint: callTool, RetryToolEndpoint: retryTool, CompleteToolCallEndpoint: completeToolCall, PublishToolOutputDeltaEndpoint: publishToolOutputDelta, ReportToolCallOverloadEndpoint: reportToolCallOverload, ClaimToolCallEndpoint: claimToolCall}
 }
 
 // Register calls the "Register" endpoint of the "registry" service.
+// Register may return the following errors:
+// - "admission_blocked" (type *loom.ServiceError)
+// - "admission_retired" (type *loom.ServiceError)
+// - "validation_error" (type *loom.ServiceError)
+// - "service_unavailable" (type *loom.ServiceError)
+// - error: internal error
 func (c *Client) Register(ctx context.Context, p *RegisterPayload) (res *RegisterResult, err error) {
 	var ires any
 	ires, err = c.RegisterEndpoint(ctx, p)
@@ -39,9 +52,29 @@ func (c *Client) Register(ctx context.Context, p *RegisterPayload) (res *Registe
 	return ires.(*RegisterResult), nil
 }
 
+// ReleaseProvider calls the "ReleaseProvider" endpoint of the "registry"
+// service.
+// ReleaseProvider may return the following errors:
+// - "service_unavailable" (type *loom.ServiceError)
+// - error: internal error
+func (c *Client) ReleaseProvider(ctx context.Context, p *ReleaseProviderPayload) (err error) {
+	_, err = c.ReleaseProviderEndpoint(ctx, p)
+	return
+}
+
+// DrainProvider calls the "DrainProvider" endpoint of the "registry" service.
+// DrainProvider may return the following errors:
+// - "service_unavailable" (type *loom.ServiceError)
+// - error: internal error
+func (c *Client) DrainProvider(ctx context.Context, p *DrainProviderPayload) (err error) {
+	_, err = c.DrainProviderEndpoint(ctx, p)
+	return
+}
+
 // Unregister calls the "Unregister" endpoint of the "registry" service.
 // Unregister may return the following errors:
-// - "not_found" (type *loom.ServiceError)
+// - "admission_conflict" (type *loom.ServiceError)
+// - "service_unavailable" (type *loom.ServiceError)
 // - error: internal error
 func (c *Client) Unregister(ctx context.Context, p *UnregisterPayload) (err error) {
 	_, err = c.UnregisterEndpoint(ctx, p)
@@ -92,6 +125,7 @@ func (c *Client) Search(ctx context.Context, p *SearchPayload) (res *SearchResul
 // - "not_found" (type *loom.ServiceError)
 // - "validation_error" (type *loom.ServiceError)
 // - "service_unavailable" (type *loom.ServiceError)
+// - "call_not_admitted" (type *loom.ServiceError)
 // - error: internal error
 func (c *Client) CallTool(ctx context.Context, p *CallToolPayload) (res *CallToolResult, err error) {
 	var ires any
@@ -100,4 +134,67 @@ func (c *Client) CallTool(ctx context.Context, p *CallToolPayload) (res *CallToo
 		return
 	}
 	return ires.(*CallToolResult), nil
+}
+
+// RetryTool calls the "RetryTool" endpoint of the "registry" service.
+// RetryTool may return the following errors:
+// - "not_found" (type *loom.ServiceError)
+// - "validation_error" (type *loom.ServiceError)
+// - "service_unavailable" (type *loom.ServiceError)
+// - "admission_conflict" (type *loom.ServiceError)
+// - error: internal error
+func (c *Client) RetryTool(ctx context.Context, p *RetryToolPayload) (res *CallToolResult, err error) {
+	var ires any
+	ires, err = c.RetryToolEndpoint(ctx, p)
+	if err != nil {
+		return
+	}
+	return ires.(*CallToolResult), nil
+}
+
+// CompleteToolCall calls the "CompleteToolCall" endpoint of the "registry"
+// service.
+// CompleteToolCall may return the following errors:
+// - "validation_error" (type *loom.ServiceError)
+// - "service_unavailable" (type *loom.ServiceError)
+// - error: internal error
+func (c *Client) CompleteToolCall(ctx context.Context, p *CompleteToolCallPayload) (err error) {
+	_, err = c.CompleteToolCallEndpoint(ctx, p)
+	return
+}
+
+// PublishToolOutputDelta calls the "PublishToolOutputDelta" endpoint of the
+// "registry" service.
+// PublishToolOutputDelta may return the following errors:
+// - "validation_error" (type *loom.ServiceError)
+// - "service_unavailable" (type *loom.ServiceError)
+// - error: internal error
+func (c *Client) PublishToolOutputDelta(ctx context.Context, p *PublishToolOutputDeltaPayload) (err error) {
+	_, err = c.PublishToolOutputDeltaEndpoint(ctx, p)
+	return
+}
+
+// ReportToolCallOverload calls the "ReportToolCallOverload" endpoint of the
+// "registry" service.
+// ReportToolCallOverload may return the following errors:
+// - "validation_error" (type *loom.ServiceError)
+// - "service_unavailable" (type *loom.ServiceError)
+// - error: internal error
+func (c *Client) ReportToolCallOverload(ctx context.Context, p *ProviderToolCallClaimPayload) (err error) {
+	_, err = c.ReportToolCallOverloadEndpoint(ctx, p)
+	return
+}
+
+// ClaimToolCall calls the "ClaimToolCall" endpoint of the "registry" service.
+// ClaimToolCall may return the following errors:
+// - "validation_error" (type *loom.ServiceError)
+// - "service_unavailable" (type *loom.ServiceError)
+// - error: internal error
+func (c *Client) ClaimToolCall(ctx context.Context, p *ProviderToolCallClaimPayload) (res *ClaimToolCallResult, err error) {
+	var ires any
+	ires, err = c.ClaimToolCallEndpoint(ctx, p)
+	if err != nil {
+		return
+	}
+	return ires.(*ClaimToolCallResult), nil
 }

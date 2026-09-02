@@ -9,6 +9,8 @@ import (
 // suitable for retry and UX decisions.
 type ProviderErrorKind string
 
+const providerOperationRequest = "request"
+
 const (
 	// ProviderErrorKindAuth indicates authentication/authorization failures.
 	ProviderErrorKindAuth ProviderErrorKind = "auth"
@@ -92,7 +94,7 @@ func (e *ProviderError) Retryable() bool { return e.retryable }
 func (e *ProviderError) Error() string {
 	op := e.operation
 	if op == "" {
-		op = "request"
+		op = providerOperationRequest
 	}
 	status := ""
 	if e.http > 0 {

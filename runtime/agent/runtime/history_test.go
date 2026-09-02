@@ -27,7 +27,7 @@ func (c *historyCountingClient) Complete(_ context.Context, _ *model.Request) (*
 	}, nil
 }
 
-func (c *historyCountingClient) Stream(context.Context, *model.Request) (model.Streamer, error) {
+func (c *historyCountingClient) Stream(context.Context, *model.Request) (model.ValidatedStreamer, error) {
 	return nil, model.ErrStreamingUnsupported
 }
 

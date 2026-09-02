@@ -3,6 +3,7 @@
 package api
 
 import (
+	"encoding/hex"
 	"encoding/json/jsontext"
 	"encoding/json/v2"
 	"fmt"
@@ -130,8 +131,9 @@ type (
 		// MaxToolCalls caps the total number of tool calls a run may execute.
 		MaxToolCalls int
 
-		// MaxConsecutiveFailedToolCalls caps the number of consecutive failing tool calls before finalizing.
-		MaxConsecutiveFailedToolCalls int
+		// MaxRecoveryTurns caps replacement planner activities after rejected
+		// model or tool output before finalizing.
+		MaxRecoveryTurns int
 
 		// TimeBudget caps active planner/tool work; human and external waits pause it.
 		TimeBudget time.Duration
@@ -347,6 +349,26 @@ type (
 
 		// PolicyCaps carries the cap state used to derive AllowedTools.
 		PolicyCaps policy.CapsState
+
+		// Recovery carries bounded correction guidance from the rejected activity
+		// this planner invocation replaces. It never contains rejected model output.
+		Recovery *ModelRecovery
+	}
+
+	// ModelRecovery is the workflow-safe record for one rejected model output.
+	// Fingerprint and byte count identify the rejected response without retaining
+	// its body; Correction is framework-authored and bounded.
+	ModelRecovery struct {
+		Kind         model.OutputValidationKind
+		Fingerprint  [32]byte
+		ByteCount    int
+		Usage        model.TokenUsage
+		Attempt      int
+		Correction   string
+		DisableTools bool
+		// ToolCatalog is the exact model-visible catalog from the rejected
+		// request. Replacement output must stay within this snapshot.
+		ToolCatalog []tools.Ident
 	}
 
 	// PlanActivityOutput wraps the planner result produced by a plan/resume activity.
@@ -368,6 +390,13 @@ type (
 
 		// PolicyCaps echoes the cap state used to derive AllowedTools.
 		PolicyCaps policy.CapsState
+
+		// Recovery is set instead of Result when this activity rejected model
+		// output that may be replaced within the workflow recovery budget.
+		Recovery *ModelRecovery
+
+		// Attempt is the planner activity attempt that produced this output.
+		Attempt int
 	}
 
 	// HookActivityInput is the canonical workflow-to-activity envelope for hook events.
@@ -629,6 +658,123 @@ const (
 	SignalProvideTypedInput = "loom_mcp.runtime.provide.typed_input"
 )
 
+// MarshalJSON encodes ModelRecovery with a stable hexadecimal fingerprint.
+// Go's JSON v2 codec does not round-trip a byte array through its default
+// representation, so the workflow boundary owns this explicit wire contract.
+func (r ModelRecovery) MarshalJSON() ([]byte, error) {
+	type wire struct {
+		Kind         model.OutputValidationKind
+		Fingerprint  string
+		ByteCount    int
+		Usage        model.TokenUsage
+		Attempt      int
+		Correction   string
+		DisableTools bool
+		ToolCatalog  []tools.Ident
+	}
+	return json.Marshal(wire{
+		Kind:         r.Kind,
+		Fingerprint:  hex.EncodeToString(r.Fingerprint[:]),
+		ByteCount:    r.ByteCount,
+		Usage:        r.Usage,
+		Attempt:      r.Attempt,
+		Correction:   r.Correction,
+		DisableTools: r.DisableTools,
+		ToolCatalog:  r.ToolCatalog,
+	})
+}
+
+// UnmarshalJSON decodes the stable ModelRecovery workflow representation.
+func (r *ModelRecovery) UnmarshalJSON(data []byte) error {
+	if r == nil {
+		return fmt.Errorf("api: cannot decode ModelRecovery into nil receiver")
+	}
+	type wire struct {
+		Kind         model.OutputValidationKind
+		Fingerprint  string
+		ByteCount    int
+		Usage        model.TokenUsage
+		Attempt      int
+		Correction   string
+		DisableTools bool
+		ToolCatalog  []tools.Ident
+	}
+	var decoded wire
+	if err := json.Unmarshal(data, &decoded); err != nil {
+		return err
+	}
+	fingerprint, err := hex.DecodeString(decoded.Fingerprint)
+	if err != nil {
+		return fmt.Errorf("api: decode ModelRecovery fingerprint: %w", err)
+	}
+	if len(fingerprint) != len(r.Fingerprint) {
+		return fmt.Errorf("api: ModelRecovery fingerprint must contain %d bytes", len(r.Fingerprint))
+	}
+	copy(r.Fingerprint[:], fingerprint)
+	r.Kind = decoded.Kind
+	r.ByteCount = decoded.ByteCount
+	r.Usage = decoded.Usage
+	r.Attempt = decoded.Attempt
+	r.Correction = decoded.Correction
+	r.DisableTools = decoded.DisableTools
+	r.ToolCatalog = decoded.ToolCatalog
+	return nil
+}
+
+// UnmarshalJSON restores per-run recovery overrides written before
+// MaxRecoveryTurns replaced MaxConsecutiveFailedToolCalls in workflow history.
+func (o *PolicyOverrides) UnmarshalJSON(data []byte) error {
+	if o == nil {
+		return fmt.Errorf("api: cannot decode PolicyOverrides into nil receiver")
+	}
+	// Temporal's JSON payload converter writes durations as integer nanoseconds.
+	// Decode them through integer wire fields because encoding/json/v2 does not
+	// define a default representation for time.Duration.
+	var wire struct {
+		PerTurnMaxToolCalls           int
+		RestrictToTool                tools.Ident
+		AllowedTags                   []string
+		DeniedTags                    []string
+		MaxToolCalls                  int
+		MaxRecoveryTurns              int
+		MaxConsecutiveFailedToolCalls int
+		TimeBudget                    int64
+		PlanTimeout                   int64
+		ToolTimeout                   int64
+		PerToolTimeout                map[tools.Ident]int64
+		FinalizerGrace                int64
+		InterruptsAllowed             bool
+	}
+	if err := json.Unmarshal(data, &wire); err != nil {
+		return err
+	}
+	if wire.MaxRecoveryTurns == 0 {
+		wire.MaxRecoveryTurns = wire.MaxConsecutiveFailedToolCalls
+	}
+	var perToolTimeout map[tools.Ident]time.Duration
+	if wire.PerToolTimeout != nil {
+		perToolTimeout = make(map[tools.Ident]time.Duration, len(wire.PerToolTimeout))
+		for name, timeout := range wire.PerToolTimeout {
+			perToolTimeout[name] = time.Duration(timeout)
+		}
+	}
+	*o = PolicyOverrides{
+		PerTurnMaxToolCalls: wire.PerTurnMaxToolCalls,
+		RestrictToTool:      wire.RestrictToTool,
+		AllowedTags:         wire.AllowedTags,
+		DeniedTags:          wire.DeniedTags,
+		MaxToolCalls:        wire.MaxToolCalls,
+		MaxRecoveryTurns:    wire.MaxRecoveryTurns,
+		TimeBudget:          time.Duration(wire.TimeBudget),
+		PlanTimeout:         time.Duration(wire.PlanTimeout),
+		ToolTimeout:         time.Duration(wire.ToolTimeout),
+		PerToolTimeout:      perToolTimeout,
+		FinalizerGrace:      time.Duration(wire.FinalizerGrace),
+		InterruptsAllowed:   wire.InterruptsAllowed,
+	}
+	return nil
+}
+
 // UnmarshalJSON handles decoding PlanActivityOutput so that Transcript entries are
 // deserialized through the richer model.Message decoder (which materializes Part
 // implementations). This keeps workflows resilient to legacy payloads.
@@ -640,6 +786,8 @@ func (o *PlanActivityOutput) UnmarshalJSON(data []byte) error {
 		ToolPolicyActive bool                `json:"ToolPolicyActive"` //nolint:tagliatelle
 		AllowedTools     []tools.Ident       `json:"AllowedTools"`     //nolint:tagliatelle
 		PolicyCaps       policy.CapsState    `json:"PolicyCaps"`       //nolint:tagliatelle
+		Recovery         *ModelRecovery      `json:"Recovery"`         //nolint:tagliatelle
+		Attempt          int                 `json:"Attempt"`          //nolint:tagliatelle
 	}
 	var tmp alias
 	if err := json.Unmarshal(data, &tmp); err != nil {
@@ -651,6 +799,8 @@ func (o *PlanActivityOutput) UnmarshalJSON(data []byte) error {
 	o.ToolPolicyActive = tmp.ToolPolicyActive
 	o.AllowedTools = tmp.AllowedTools
 	o.PolicyCaps = tmp.PolicyCaps
+	o.Recovery = tmp.Recovery
+	o.Attempt = tmp.Attempt
 	if len(tmp.Transcript) == 0 {
 		o.Transcript = nil
 		return nil

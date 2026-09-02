@@ -19,6 +19,7 @@ import (
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/hooks"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/model"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/planner"
+	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/policy"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/run"
 )
 
@@ -31,6 +32,7 @@ func (r *Runtime) finalizeWithPlanner(
 	allToolResults []*planner.ToolResult,
 	allToolOutputs []*planner.ToolOutput,
 	aggUsage model.TokenUsage,
+	caps policy.CapsState,
 	nextAttempt int,
 	turnID string,
 	reason planner.TerminationReason,
@@ -40,7 +42,7 @@ func (r *Runtime) finalizeWithPlanner(
 		return nil, errors.New("base plan input is required")
 	}
 	ctx := wfCtx.Context()
-	output, aggUsage, err := r.runFinalizationPlan(wfCtx, reg, input, base, allToolOutputs, aggUsage, nextAttempt, turnID, reason, hardDeadline)
+	output, aggUsage, err := r.runFinalizationPlan(wfCtx, reg, input, base, allToolOutputs, aggUsage, caps, nextAttempt, turnID, reason, hardDeadline)
 	if err != nil {
 		return nil, err
 	}
@@ -58,24 +60,29 @@ func (r *Runtime) runFinalizationPlan(
 	base *planner.PlanInput,
 	allToolOutputs []*planner.ToolOutput,
 	aggUsage model.TokenUsage,
+	caps policy.CapsState,
 	nextAttempt int,
 	turnID string,
 	reason planner.TerminationReason,
 	hardDeadline time.Time,
 ) (*PlanActivityOutput, model.TokenUsage, error) {
 	ctx := wfCtx.Context()
-	req, reasonText, resumeOpts, err := r.prepareFinalizePlan(ctx, reg, input, base, allToolOutputs, nextAttempt, turnID, reason)
+	req, reasonText, resumeOpts, err := r.prepareFinalizePlan(ctx, reg, input, base, allToolOutputs, caps, nextAttempt, turnID, reason)
 	if err != nil {
 		return nil, aggUsage, err
 	}
-	output, err := r.runPlanActivity(wfCtx, reg.ResumeActivityName, resumeOpts, req, hardDeadline)
+	output, err := r.runPlanActivityRecovering(wfCtx, reg.ResumeActivityName, resumeOpts, req, hardDeadline, &caps, &nextAttempt)
 	if err != nil {
 		return nil, aggUsage, fmt.Errorf("%s: %w", reasonText, err)
 	}
 	if err := validateFinalizePlanOutput(output, reasonText); err != nil {
 		return nil, aggUsage, err
 	}
-	aggUsage = addTokenUsage(aggUsage, output.Usage)
+	combinedUsage, err := checkedAddTokenUsage(aggUsage, output.Usage)
+	if err != nil {
+		return nil, aggUsage, fmt.Errorf("aggregate finalizer model usage: %w", err)
+	}
+	aggUsage = combinedUsage
 	if err := r.publishFinalizeOutput(ctx, base, input, turnID, output); err != nil {
 		return nil, aggUsage, err
 	}
@@ -132,6 +139,7 @@ func (r *Runtime) prepareFinalizePlan(
 	input *RunInput,
 	base *planner.PlanInput,
 	allToolOutputs []*planner.ToolOutput,
+	caps policy.CapsState,
 	nextAttempt int,
 	turnID string,
 	reason planner.TerminationReason,
@@ -139,7 +147,7 @@ func (r *Runtime) prepareFinalizePlan(
 	if err := r.publishFinalizingPhase(ctx, base, input, turnID); err != nil {
 		return PlanActivityInput{}, "", engine.ActivityOptions{}, err
 	}
-	req, reasonText, err := r.buildFinalizePlanRequest(base, input, allToolOutputs, nextAttempt, reason)
+	req, reasonText, err := r.buildFinalizePlanRequest(base, input, allToolOutputs, caps, nextAttempt, reason)
 	if err != nil {
 		return PlanActivityInput{}, "", engine.ActivityOptions{}, err
 	}
@@ -153,6 +161,7 @@ func (r *Runtime) buildFinalizePlanRequest(
 	base *planner.PlanInput,
 	input *RunInput,
 	allToolOutputs []*planner.ToolOutput,
+	caps policy.CapsState,
 	nextAttempt int,
 	reason planner.TerminationReason,
 ) (PlanActivityInput, string, error) {
@@ -172,6 +181,7 @@ func (r *Runtime) buildFinalizePlanRequest(
 		ToolOutputs:      encodedToolOutputs,
 		Finalize:         &planner.Termination{Reason: reason, Message: hint},
 		ToolPolicyActive: true,
+		PolicyCaps:       caps,
 	}
 	if err := enforcePlanActivityInputBudget(req); err != nil {
 		return PlanActivityInput{}, "", err
@@ -211,7 +221,7 @@ func finalizationHint(reason planner.TerminationReason) string {
 	case planner.TerminationReasonToolCap:
 		return "FINALIZE NOW: tool budget exhausted.\n\n- Provide the best possible final answer using ONLY the information already available in the conversation and tool results.\n- Do NOT call any tools.\n- Do NOT say you will call tools.\n- If further tool calls would be needed, describe them briefly and provide the best provisional answer."
 	case planner.TerminationReasonFailureCap:
-		return "FINALIZE NOW: too many tool failures.\n\n- Provide the best possible final answer using ONLY the information already available in the conversation and tool results.\n- Do NOT call any tools.\n- Do NOT say you will call tools.\n- If tools failed due to invalid arguments, summarize the failure and provide a corrected plan/payload shape (without actually calling tools), then provide the best provisional answer."
+		return "FINALIZE NOW: recovery budget exhausted.\n\n- Provide the best possible final answer using ONLY the information already available in the conversation and tool results.\n- Do NOT call any tools.\n- Do NOT say you will call tools.\n- A model or tool result could not be accepted after bounded retries. State what remains uncertain, then provide the best provisional answer."
 	default:
 		return "FINALIZE NOW.\n\n- Provide the best possible final answer using ONLY the information already available in the conversation and tool results.\n- Do NOT call any tools.\n- Do NOT say you will call tools.\n- If more work is needed, describe it succinctly and provide the best provisional answer."
 	}
@@ -271,7 +281,7 @@ func finalizationReasonText(reason planner.TerminationReason) string {
 	case planner.TerminationReasonToolCap:
 		return "tool call cap exceeded"
 	case planner.TerminationReasonFailureCap:
-		return "consecutive failed tool call cap exceeded"
+		return "recovery turn cap exceeded"
 	default:
 		return "finalization failed"
 	}

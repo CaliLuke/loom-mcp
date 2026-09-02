@@ -6,7 +6,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"io"
 	"strconv"
 	"sync"
 	"time"
@@ -53,7 +52,7 @@ type (
 	}
 
 	limitedStreamer struct {
-		inner    model.Streamer
+		inner    model.ValidatedStreamer
 		limiter  *AdaptiveRateLimiter
 		observed sync.Once
 	}
@@ -172,7 +171,7 @@ func (c *limitedClient) Complete(ctx context.Context, req *model.Request) (*mode
 // Stream enforces the limiter before delegating to the underlying client. A
 // successful setup is not treated as a successful request: the returned
 // streamer adjusts the limiter only after Recv reports its terminal outcome.
-func (c *limitedClient) Stream(ctx context.Context, req *model.Request) (model.Streamer, error) {
+func (c *limitedClient) Stream(ctx context.Context, req *model.Request) (model.ValidatedStreamer, error) {
 	if err := c.limiter.wait(ctx, req); err != nil {
 		return nil, err
 	}
@@ -192,27 +191,10 @@ func (c *tokenCountingLimitedClient) CountTokens(ctx context.Context, req *model
 	return c.counter.CountTokens(ctx, req)
 }
 
-// Recv delegates to the provider stream and observes its first terminal
-// outcome. EOF is the only successful terminal outcome; rate-limit failures
-// back off, while other failures leave the adaptive budget unchanged.
+// Recv delegates to the provider stream. Finalize owns lifecycle observation
+// because EOF alone does not include provider cleanup.
 func (s *limitedStreamer) Recv() (model.Chunk, error) {
-	chunk, err := s.inner.Recv()
-	if err == nil {
-		return chunk, nil
-	}
-
-	s.observed.Do(func() {
-		if errors.Is(err, model.ErrRateLimited) {
-			s.limiter.observe(err)
-			return
-		}
-		if errors.Is(err, io.EOF) {
-			s.limiter.observe(nil)
-			return
-		}
-		s.limiter.observe(err)
-	})
-	return chunk, err
+	return s.inner.Recv()
 }
 
 // Close delegates resource cleanup without changing the adaptive budget. An
@@ -224,6 +206,18 @@ func (s *limitedStreamer) Close() error {
 // Metadata delegates provider metadata without copying or transforming it.
 func (s *limitedStreamer) Metadata() map[string]any {
 	return s.inner.Metadata()
+}
+
+func (s *limitedStreamer) Response() *model.Response {
+	return s.inner.Response()
+}
+
+func (s *limitedStreamer) Finalize(primaryErr error) error {
+	err := s.inner.Finalize(primaryErr)
+	s.observed.Do(func() {
+		s.limiter.observe(err)
+	})
+	return err
 }
 
 func (l *AdaptiveRateLimiter) wait(ctx context.Context, req *model.Request) error {

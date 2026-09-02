@@ -50,7 +50,7 @@ type Options struct {
 	Timeout time.Duration
 }
 
-// Client implements model.Client using Ollama's /api/chat endpoint.
+// Client implements model.Provider using Ollama's /api/chat endpoint.
 type Client struct {
 	httpClient   *http.Client
 	serverURL    string
@@ -471,6 +471,13 @@ func encodeStructuredOutput(output *model.StructuredOutput, tools []ollamaTool) 
 }
 
 func translateChatResponse(resp ollamaChatResponse, modelClass model.ModelClass, output *model.StructuredOutput) (*model.Response, error) {
+	if ollamaOutputLimited(resp.DoneReason) {
+		return &model.Response{
+			Usage:         responseUsage(resp, modelClass),
+			StopReason:    stopReason(resp),
+			OutputLimited: true,
+		}, nil
+	}
 	content, toolCalls, err := translateMessage(resp.Message)
 	if err != nil {
 		return nil, err
@@ -480,10 +487,11 @@ func translateChatResponse(resp ollamaChatResponse, modelClass model.ModelClass,
 		return nil, err
 	}
 	return &model.Response{
-		Content:    content,
-		ToolCalls:  toolCalls,
-		Usage:      responseUsage(resp, modelClass),
-		StopReason: stopReason(resp),
+		Content:       content,
+		ToolCalls:     toolCalls,
+		Usage:         responseUsage(resp, modelClass),
+		StopReason:    stopReason(resp),
+		OutputLimited: false,
 	}, nil
 }
 
@@ -597,6 +605,10 @@ func stopReason(resp ollamaChatResponse) string {
 		return "stop"
 	}
 	return ""
+}
+
+func ollamaOutputLimited(reason string) bool {
+	return reason == "length"
 }
 
 func marshalJSONValue(v any) ([]byte, error) {

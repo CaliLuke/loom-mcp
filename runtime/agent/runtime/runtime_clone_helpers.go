@@ -1,7 +1,10 @@
 package runtime
 
 import (
+	"errors"
+	"fmt"
 	"maps"
+	"math"
 
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/artifact"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/engine"
@@ -138,6 +141,37 @@ func addTokenUsage(current, delta model.TokenUsage) model.TokenUsage {
 		CacheReadTokens:  current.CacheReadTokens + delta.CacheReadTokens,
 		CacheWriteTokens: current.CacheWriteTokens + delta.CacheWriteTokens,
 	}
+}
+
+func checkedAddTokenUsage(current, delta model.TokenUsage) (model.TokenUsage, error) {
+	if err := model.ValidateTokenUsage(current); err != nil {
+		return model.TokenUsage{}, fmt.Errorf("current usage: %w", err)
+	}
+	if err := model.ValidateTokenUsage(delta); err != nil {
+		return model.TokenUsage{}, fmt.Errorf("usage delta: %w", err)
+	}
+	counts := [][2]int{
+		{current.InputTokens, delta.InputTokens},
+		{current.OutputTokens, delta.OutputTokens},
+		{current.TotalTokens, delta.TotalTokens},
+		{current.CacheReadTokens, delta.CacheReadTokens},
+		{current.CacheWriteTokens, delta.CacheWriteTokens},
+	}
+	for _, count := range counts {
+		if count[0] > math.MaxInt-count[1] {
+			return model.TokenUsage{}, errors.New("token usage aggregation overflows")
+		}
+	}
+	usage := addTokenUsage(current, delta)
+	currentTotalKnown := current.TotalTokens != 0 || (current.InputTokens == 0 && current.OutputTokens == 0)
+	deltaTotalKnown := delta.TotalTokens != 0 || (delta.InputTokens == 0 && delta.OutputTokens == 0)
+	if !currentTotalKnown || !deltaTotalKnown {
+		usage.TotalTokens = 0
+	}
+	if err := model.ValidateTokenUsage(usage); err != nil {
+		return model.TokenUsage{}, fmt.Errorf("aggregated usage: %w", err)
+	}
+	return usage, nil
 }
 
 // mergeLabels merges src labels into dst.

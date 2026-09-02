@@ -65,8 +65,10 @@ func RegisterAssistantRuntimeAgent(ctx context.Context, rt *agentsruntime.Runtim
 				BackoffCoefficient: 2,
 			},
 		},
-		Specs:  specs.Specs,
-		Policy: agentsruntime.RunPolicy{},
+		Specs: specs.Specs,
+		Policy: agentsruntime.RunPolicy{
+			MaxRecoveryTurns: 3,
+		},
 	}); err != nil {
 		return err
 	}

@@ -149,13 +149,14 @@ func WithRunMaxToolCalls(n int) RunOption {
 	}
 }
 
-// WithRunMaxConsecutiveFailedToolCalls caps consecutive failures before aborting the run.
-func WithRunMaxConsecutiveFailedToolCalls(n int) RunOption {
+// WithRunMaxRecoveryTurns caps replacement planner activities after rejected
+// model or tool output.
+func WithRunMaxRecoveryTurns(n int) RunOption {
 	return func(in *RunInput) {
 		if in.Policy == nil {
 			in.Policy = &PolicyOverrides{}
 		}
-		in.Policy.MaxConsecutiveFailedToolCalls = n
+		in.Policy.MaxRecoveryTurns = n
 	}
 }
 

@@ -45,12 +45,106 @@ type recordingWorkflowExecutor struct {
 	retryFailed   bool
 }
 
+type recoveryAcceptancePlanner struct{}
+
+type recoveryAcceptanceModel struct {
+	mu       sync.Mutex
+	calls    int
+	requests []*model.Request
+	rejected *model.OutputValidationError
+}
+
 type methodBackedFeatureService struct {
 	topic string
 }
 
 func newRecordingWorkflowExecutor() *recordingWorkflowExecutor {
 	return &recordingWorkflowExecutor{}
+}
+
+func (recoveryAcceptancePlanner) PlanStart(ctx context.Context, input *planner.PlanInput) (*planner.PlanResult, error) {
+	return runRecoveryAcceptancePlan(ctx, input.Agent, input.RunContext.RunID, input.Messages)
+}
+
+func (recoveryAcceptancePlanner) PlanResume(ctx context.Context, input *planner.PlanResumeInput) (*planner.PlanResult, error) {
+	return runRecoveryAcceptancePlan(ctx, input.Agent, input.RunContext.RunID, input.Messages)
+}
+
+func runRecoveryAcceptancePlan(
+	ctx context.Context,
+	agentContext planner.PlannerContext,
+	runID string,
+	messages []*model.Message,
+) (*planner.PlanResult, error) {
+	client, ok := agentContext.ModelClient("recovery-model")
+	if !ok {
+		return nil, errors.New("recovery model not registered")
+	}
+	response, err := client.Complete(ctx, &model.Request{
+		RunID:    runID,
+		Messages: messages,
+		Tools: []*model.ToolDefinition{
+			{Name: workflow.Draft.String(), InputSchema: map[string]any{"type": "object"}},
+			{Name: workflow.Review.String(), InputSchema: map[string]any{"type": "object"}},
+		},
+	})
+	if err != nil {
+		return nil, err
+	}
+	if response == nil || len(response.Content) != 1 {
+		return nil, errors.New("recovery model returned an invalid response")
+	}
+	message := response.Content[0]
+	return &planner.PlanResult{FinalResponse: &planner.FinalResponse{Message: &message}}, nil
+}
+
+func (m *recoveryAcceptanceModel) Complete(_ context.Context, request *model.Request) (*model.Response, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.calls++
+	m.requests = append(m.requests, cloneRecoveryAcceptanceRequest(request))
+	if m.calls == 1 {
+		return nil, m.rejected
+	}
+	return &model.Response{
+		Content: []model.Message{{
+			Role:  model.ConversationRoleAssistant,
+			Parts: []model.Part{model.TextPart{Text: "recovered safely"}},
+		}},
+		Usage:      model.TokenUsage{InputTokens: 3, OutputTokens: 4, TotalTokens: 7},
+		StopReason: "end_turn",
+	}, nil
+}
+
+func (m *recoveryAcceptanceModel) Stream(context.Context, *model.Request) (model.ValidatedStreamer, error) {
+	return nil, errors.New("stream unsupported")
+}
+
+func (m *recoveryAcceptanceModel) snapshot() []*model.Request {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	out := make([]*model.Request, len(m.requests))
+	for i, request := range m.requests {
+		out[i] = cloneRecoveryAcceptanceRequest(request)
+	}
+	return out
+}
+
+func cloneRecoveryAcceptanceRequest(request *model.Request) *model.Request {
+	if request == nil {
+		return nil
+	}
+	copy := *request
+	copy.Messages = append([]*model.Message(nil), request.Messages...)
+	copy.Tools = make([]*model.ToolDefinition, 0, len(request.Tools))
+	for _, tool := range request.Tools {
+		if tool == nil {
+			continue
+		}
+		toolCopy := *tool
+		copy.Tools = append(copy.Tools, &toolCopy)
+	}
+	return &copy
 }
 
 func (s *methodBackedFeatureService) EchoTopic(ctx context.Context, payload *features.MethodEchoPayload) (*features.MethodEchoResult, error) {
@@ -322,7 +416,7 @@ func (f modelClientFunc) Complete(ctx context.Context, req *model.Request) (*mod
 	return f(ctx, req)
 }
 
-func (f modelClientFunc) Stream(ctx context.Context, req *model.Request) (model.Streamer, error) {
+func (f modelClientFunc) Stream(ctx context.Context, req *model.Request) (model.ValidatedStreamer, error) {
 	return nil, errors.New("stream unsupported")
 }
 
@@ -375,6 +469,56 @@ func registerCoordinatorToolsets(t *testing.T, ctx context.Context, rt *agentsru
 	delegated, err := coordinator.NewCoordinatorDelegatedAgentToolsetRegistration(rt, "")
 	require.NoError(t, err)
 	require.NoError(t, rt.RegisterToolset(delegated))
+}
+
+func runGeneratedModelRecoveryScenario(t *testing.T, ctx context.Context, fx *featureRuntime, sessionID, runID string) {
+	t.Helper()
+
+	rejected, err := model.RestoreOutputValidationError(
+		model.OutputValidationToolIdentity,
+		errors.New("private rejected output: secret-value"),
+		model.ResponseEvidence{Present: true, ByteCount: 128, Fingerprint: [32]byte{7, 6, 5}},
+		&model.TokenUsage{InputTokens: 2, OutputTokens: 3, TotalTokens: 5},
+	)
+	require.NoError(t, err)
+	modelClient := &recoveryAcceptanceModel{rejected: rejected}
+	require.NoError(t, fx.rt.RegisterModel("recovery-model", modelClient))
+	registerCoordinatorToolsets(t, ctx, fx.rt, newRecordingWorkflowExecutor())
+	require.NoError(t, coordinator.RegisterCoordinatorAgent(ctx, fx.rt, coordinator.CoordinatorAgentConfig{
+		Planner: recoveryAcceptancePlanner{},
+	}))
+	_, err = fx.rt.CreateSession(ctx, sessionID)
+	require.NoError(t, err)
+
+	out, err := coordinator.NewClient(fx.rt).Run(
+		ctx,
+		sessionID,
+		[]*model.Message{{Role: model.ConversationRoleUser, Parts: []model.Part{model.TextPart{Text: "recover"}}}},
+		agentsruntime.WithRunID(runID),
+	)
+	require.NoError(t, err)
+	require.Equal(t, "recovered safely", messageText(out.Final))
+	require.Equal(t, &model.TokenUsage{InputTokens: 5, OutputTokens: 7, TotalTokens: 12}, out.Usage)
+
+	requests := modelClient.snapshot()
+	require.Len(t, requests, 2)
+	require.Len(t, requests[0].Tools, 3)
+	require.Len(t, requests[1].Tools, 3)
+	firstToolNames := make([]string, 0, len(requests[0].Tools))
+	secondToolNames := make([]string, 0, len(requests[1].Tools))
+	for _, definition := range requests[0].Tools {
+		firstToolNames = append(firstToolNames, definition.Name)
+	}
+	for _, definition := range requests[1].Tools {
+		secondToolNames = append(secondToolNames, definition.Name)
+	}
+	require.ElementsMatch(t, []string{workflow.Draft.String(), workflow.Review.String(), tools.ToolUnavailable.String()}, firstToolNames)
+	require.ElementsMatch(t, firstToolNames, secondToolNames)
+	encodedMessages, err := json.Marshal(requests[1].Messages)
+	require.NoError(t, err)
+	require.Contains(t, string(encodedMessages), workflow.Draft.String())
+	require.Contains(t, string(encodedMessages), workflow.Review.String())
+	require.NotContains(t, string(encodedMessages), "secret-value")
 }
 
 func messageText(msg *model.Message) string {

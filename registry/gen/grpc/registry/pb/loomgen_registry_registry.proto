@@ -7,17 +7,46 @@
 
 syntax = "proto3";
 
-package loom_mcp_registry;
+package goa_ai_registry;
 
-option go_package = "/loom_mcp_registrypb";
+option go_package = "/goa_ai_registrypb";
 
-// Internal tool registry gateway for toolset discovery and tool invocation
+// The registry owns serialized toolset admission generations, provider leases
+// and health, discovery, and routed invocation over Pulse streams. Providers
+// renew leases for the one active schema and admission revision; consumers
+// discover and invoke only healthy admitted providers.
 service Registry {
-	// Register a toolset with the registry
+	// Reject providers whose required runtime-owned wire protocol version differs
+// from the registry, then atomically admit or renew one provider-incarnation
+// lease in the catalog admission record. The same wire version, schema, and
+// admission revision add or renew replicas under one token. A different token
+// replaces the admission after Redis-time pruning proves every old lease
+// expired and atomically tombstones the prior token; otherwise
+// admission_blocked asks the provider to retry. Any candidate in the permanent
+// retired-token set returns admission_retired and cannot resurrect.
 	rpc Register (RegisterRequest) returns (RegisterResponse);
-	// Unregister a toolset from the registry
+	// Release one exact provider-incarnation lease from the admission token after
+// that Serve lifecycle has stopped claiming work and settled in-flight calls.
+// Missing incarnations and stale tokens succeed without mutation;
+// infrastructure failures are retryable.
+	rpc ReleaseProvider (ReleaseProviderRequest) returns (ReleaseProviderResponse);
+	// Atomically mark one exact provider-incarnation lease non-routable before its
+// Serve lifecycle closes the shared request sink. The provider supplies its
+// configured settlement duration; Redis time extends the draining lease
+// through that full lifecycle so the same Serve lifecycle can claim and settle
+// calls already published to its local request buffer. Newly admitted calls
+// route only when another non-draining provider remains.
+	rpc DrainProvider (DrainProviderRequest) returns (DrainProviderResponse);
+	// Intentionally retire the exact active admission while preserving its
+// provider leases until graceful release or expiry and atomically adding its
+// token to the permanent retired-token set. Repeating the same-token
+// retirement succeeds; a stale token returns admission_conflict. Retirement
+// removes the toolset from discovery and routing and permanently prevents that
+// exact token from registering again.
 	rpc Unregister (UnregisterRequest) returns (UnregisterResponse);
-	// Respond to a health check ping
+	// Atomically record shared consumer-group liveness for a
+// token-and-membership-epoch health ping. The responding provider incarnation
+// must hold an unexpired lease in that same catalog record.
 	rpc Pong (PongRequest) returns (PongResponse);
 	// List all registered toolsets with optional tag filtering
 	rpc ListToolsets (ListToolsetsRequest) returns (ListToolsetsResponse);
@@ -25,9 +54,53 @@ service Registry {
 	rpc GetToolset (GetToolsetRequest) returns (GetToolsetResponse);
 	// Search toolsets by keyword matching name, description, or tags
 	rpc Search (SearchRequest) returns (SearchResponse);
-	// Initiate a tool call by publishing a tool call message to the toolset
-// request stream and returning the tool use identifier.
+	// Reject consumers whose required runtime-owned wire protocol version differs
+// from the registry, then store one immutable admitted or rejected decision
+// for a run-scoped tool call. Catalog or provider-health failures commit the
+// rejected decision before returning call_not_admitted, so exact retries
+// cannot execute while that decision is retained and the caller safely chooses
+// another plan. Admitted calls atomically own initial publication and terminal
+// completion by tool_use_id: the call record retains the full canonical
+// terminal through its absolute expiration and restores it when bounded
+// result-stream history was trimmed. Before returning an admission, the
+// registry establishes the result stream so the caller can create a reader
+// immediately.
 	rpc CallTool (CallToolRequest) returns (CallToolResponse);
+	// Republish one previously admitted call after provider overload recorded in
+// the authoritative call record. The runtime supplies the exact original
+// registration token; the registry rejects a changed active admission before
+// publishing and never rebinds claimed execution to a replacement provider.
+// Before returning either a republished or terminal call, the registry
+// establishes the result stream so the caller can create a reader immediately.
+	rpc RetryTool (RetryToolRequest) returns (RetryToolResponse);
+	// Publish one canonical terminal result for an admitted call. The registry
+// verifies the exact provider incarnation still owns an unexpired lease and
+// claimed request event, then atomically stores the full terminal in the
+// authoritative call record and appends it to bounded result history. If that
+// exact dispatch lease disappears first, registry-owned settlement commits
+// outcome_unknown because the effect may have occurred; execution ownership
+// never transfers.
+	rpc CompleteToolCall (CompleteToolCallRequest) returns (CompleteToolCallResponse);
+	// Publish one best-effort output fragment for a claimed live call. The
+// registry verifies the exact provider lease and request-event claim, then
+// atomically appends the delta only while the authoritative call record
+// remains nonterminal.
+	rpc PublishToolOutputDelta (PublishToolOutputDeltaRequest) returns (PublishToolOutputDeltaResponse);
+	// Report that an exact provider claim could not enter its bounded worker
+// queue. The registry verifies the provider lease and request-event claim,
+// then atomically appends retry control only while the authoritative call
+// record remains nonterminal.
+	rpc ReportToolCallOverload (ReportToolCallOverloadRequest) returns (ReportToolCallOverloadResponse);
+	// Atomically settle one queued request before handler dispatch. The registry
+// authenticates the exact provider lease and request event; an unexpired
+// active or draining lease may gain immutable execution ownership for a
+// request already published to that Serve lifecycle, while draining prevents
+// new routing. Existing owners, retained terminal history, and Redis-owned
+// expiration settle without execution, while stale or retired unclaimed work
+// receives the canonical stale-generation terminal. Only the exact granted
+// provider incarnation and request event may publish deltas or complete the
+// call; ownership never transfers after a crash.
+	rpc ClaimToolCall (ClaimToolCallRequest) returns (ClaimToolCallResponse);
 }
 
 message RegisterRequest {
@@ -41,6 +114,18 @@ message RegisterRequest {
 	repeated string tags = 4;
 	// Tool definitions with their schemas
 	repeated ToolSchema tools = 5;
+	// Stable identity of the provider process registering this toolset.
+	string provider_id = 6;
+	// Deployment-issued revision shared by every replica of one fenced admission.
+// Reuse it for same-contract scaling and rolling updates; change it only to
+// create a new fenced admission.
+	string admission_revision = 7;
+	// Runtime-generated UUID identifying one Serve lifecycle. The provider runtime
+// generates it once and reuses it for every renewal.
+	string provider_incarnation_id = 8;
+	// Required runtime-owned version of the provider message envelope. The
+// registry admits only its exact canonical version.
+	sint64 wire_protocol_version = 9;
 }
 // Tool schema declaration for registration with the tool registry gateway.
 message ToolSchema {
@@ -61,11 +146,51 @@ message ToolSchema {
 message RegisterResponse {
 	// ISO 8601 timestamp of registration
 	string registered_at = 1;
+	// Deterministic admission-generation token derived from the wire protocol
+// version, canonical schema fingerprint, and deployment-issued admission
+// revision
+	string registration_token = 2;
+	// Duration of the admitted provider lease in milliseconds
+	sint64 lease_duration_ms = 3;
+}
+
+message ReleaseProviderRequest {
+	// Name of the toolset whose provider is leaving
+	string name = 1;
+	// Stable identity of the provider process releasing its lease
+	string provider_id = 2;
+	// Exact admission-generation token returned by Register
+	string expected_registration_token = 3;
+	// Runtime-generated UUID of the exact Serve lifecycle releasing its lease.
+	string provider_incarnation_id = 4;
+}
+
+message ReleaseProviderResponse {
+}
+
+message DrainProviderRequest {
+	// Full provider shutdown duration for which the draining lease must retain
+// settlement authority.
+	sint64 settlement_duration_ms = 100;
+	// Name of the toolset whose provider is leaving
+	string name = 1;
+	// Stable identity of the provider process releasing its lease
+	string provider_id = 2;
+	// Exact admission-generation token returned by Register
+	string expected_registration_token = 3;
+	// Runtime-generated UUID of the exact Serve lifecycle releasing its lease.
+	string provider_incarnation_id = 4;
+}
+
+message DrainProviderResponse {
 }
 
 message UnregisterRequest {
 	// Name of the toolset to unregister
 	string name = 1;
+	// Exact admission-generation token returned by Register for the stopped
+// provider rollout
+	string expected_registration_token = 2;
 }
 
 message UnregisterResponse {
@@ -76,6 +201,10 @@ message PongRequest {
 	string ping_id = 1;
 	// Name of the toolset responding
 	string toolset = 2;
+	// Stable identity of the provider instance responding to the ping.
+	string provider_id = 3;
+	// Runtime-generated UUID of the Serve lifecycle responding to the ping.
+	string provider_incarnation_id = 4;
 }
 
 message PongResponse {
@@ -148,6 +277,9 @@ message CallToolRequest {
 	bytes payload_json = 3;
 	// Execution metadata propagated alongside the tool call.
 	ToolCallMeta meta = 4;
+	// Required runtime-owned version of the consumer message envelope. The
+// registry accepts only its exact canonical version.
+	sint64 wire_protocol_version = 5;
 }
 // Context metadata propagated alongside tool calls for routing, correlation,
 // and domain injection (for example, session-scoped data access).
@@ -159,12 +291,143 @@ message ToolCallMeta {
 	// Turn identifier within the session.
 	optional string turn_id = 3;
 	// Tool call identifier used for correlation with model provider tool calls.
-	optional string tool_call_id = 4;
+	string tool_call_id = 4;
 	// Parent tool call identifier when the tool call is nested.
 	optional string parent_tool_call_id = 5;
 }
 
 message CallToolResponse {
-	// Unique identifier for this invocation
+	// Global transport identifier derived from required run_id and tool_call_id.
 	string tool_use_id = 1;
+	// Exact admission-generation token stamped on the routed call
+	string registration_token = 2;
+	// Absolute Redis-owned deadline that bounds provider execution and caller
+// waiting.
+	string execution_deadline = 3;
+	// Later absolute Redis-owned expiration shared by the call record and result
+// stream.
+	string result_stream_expires_at = 4;
+}
+
+message RetryToolRequest {
+	// Exact admission-generation token returned by the original CallTool admission.
+	string expected_registration_token = 100;
+	// Toolset registration identifier used for routing (for example,
+// "atlas_data.atlas.read").
+	string toolset = 1;
+	// Globally unique tool identifier of the form "toolset.tool" (for example,
+// "atlas.read.get_time_series").
+	string tool = 2;
+	// Canonical JSON payload for the tool call. Must validate against the
+// registered payload schema.
+	bytes payload_json = 3;
+	// Execution metadata propagated alongside the tool call.
+	ToolCallMeta meta = 4;
+	// Required runtime-owned version of the consumer message envelope. The
+// registry accepts only its exact canonical version.
+	sint64 wire_protocol_version = 5;
+}
+
+message RetryToolResponse {
+	// Global transport identifier derived from required run_id and tool_call_id.
+	string tool_use_id = 1;
+	// Exact admission-generation token stamped on the routed call
+	string registration_token = 2;
+	// Absolute Redis-owned deadline that bounds provider execution and caller
+// waiting.
+	string execution_deadline = 3;
+	// Later absolute Redis-owned expiration shared by the call record and result
+// stream.
+	string result_stream_expires_at = 4;
+}
+
+message CompleteToolCallRequest {
+	// Toolset whose provider completed the call.
+	string toolset = 1;
+	// Stable provider process identity that executed the call.
+	string provider_id = 2;
+	// Runtime UUID of the exact Serve lifecycle that executed the call.
+	string provider_incarnation_id = 3;
+	// Exact admission-generation token stamped on the call.
+	string registration_token = 4;
+	// Global transport identity stamped on the call.
+	string tool_use_id = 5;
+	// Canonical encoded terminal ToolResultMessage.
+	bytes result_json = 6;
+	// Pulse request-stream event claimed by this provider.
+	string request_event_id = 7;
+	// Exact registration token of the provider lease settling the claim.
+	string provider_registration_token = 8;
+}
+
+message CompleteToolCallResponse {
+}
+
+message PublishToolOutputDeltaRequest {
+	// Logical output stream such as stdout or stderr.
+	string stream = 100;
+	// Output fragment emitted by the running tool.
+	string delta = 101;
+	// Toolset whose provider claimed the call.
+	string toolset = 1;
+	// Stable identity of the provider process.
+	string provider_id = 2;
+	// Runtime UUID of the exact Serve lifecycle.
+	string provider_incarnation_id = 3;
+	// Exact registration token of the provider lease.
+	string provider_registration_token = 4;
+	// Admission token stamped on the claimed call.
+	string call_registration_token = 5;
+	// Global transport identity stamped on the claimed call.
+	string tool_use_id = 6;
+	// Pulse request-stream event claimed by this provider.
+	string request_event_id = 7;
+}
+
+message PublishToolOutputDeltaResponse {
+}
+
+message ReportToolCallOverloadRequest {
+	// Toolset whose provider claimed the call.
+	string toolset = 1;
+	// Stable identity of the provider process.
+	string provider_id = 2;
+	// Runtime UUID of the exact Serve lifecycle.
+	string provider_incarnation_id = 3;
+	// Exact registration token of the provider lease.
+	string provider_registration_token = 4;
+	// Admission token stamped on the claimed call.
+	string call_registration_token = 5;
+	// Global transport identity stamped on the claimed call.
+	string tool_use_id = 6;
+	// Pulse request-stream event claimed by this provider.
+	string request_event_id = 7;
+}
+
+message ReportToolCallOverloadResponse {
+}
+
+message ClaimToolCallRequest {
+	// Toolset whose provider claimed the call.
+	string toolset = 1;
+	// Stable identity of the provider process.
+	string provider_id = 2;
+	// Runtime UUID of the exact Serve lifecycle.
+	string provider_incarnation_id = 3;
+	// Exact registration token of the provider lease.
+	string provider_registration_token = 4;
+	// Admission token stamped on the claimed call.
+	string call_registration_token = 5;
+	// Global transport identity stamped on the claimed call.
+	string tool_use_id = 6;
+	// Pulse request-stream event claimed by this provider.
+	string request_event_id = 7;
+}
+
+message ClaimToolCallResponse {
+	// Closed settlement outcome. execute grants immutable dispatch ownership;
+// terminal means retained terminal history already exists; claimed means
+// another request delivery owns execution; expired means Redis time settled
+// the call.
+	string disposition = 1;
 }

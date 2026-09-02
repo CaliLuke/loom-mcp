@@ -47,7 +47,7 @@ type (
 	//   - Exactly one canonical ChunkTypeCompletion must arrive before EOF.
 	//   - Text and tool chunks are invalid on this typed completion surface.
 	completionStream struct {
-		inner     model.Streamer
+		inner     model.ValidatedStreamer
 		name      Ident
 		finalSeen bool
 	}
@@ -81,7 +81,7 @@ func Complete[T any](ctx context.Context, client model.Client, req *model.Reques
 // Streaming completions reuse the provider-neutral model.Streamer contract. The
 // final typed value is decoded from the canonical ChunkTypeCompletion payload;
 // completion deltas are preview-only and may be ignored.
-func Stream[T any](ctx context.Context, client model.Client, req *model.Request, spec Spec[T]) (model.Streamer, error) {
+func Stream[T any](ctx context.Context, client model.Client, req *model.Request, spec Spec[T]) (model.ValidatedStreamer, error) {
 	if client == nil {
 		return nil, errors.New("completion client is required")
 	}
@@ -206,6 +206,15 @@ func prepareRequest[T any](req *model.Request, spec Spec[T], stream bool) (*mode
 	cloned := *req
 	cloned.Stream = stream
 	cloned.StructuredOutput = structuredOutput
+	if err := model.SetCompletionValidator(&cloned, func(_ *model.Response, completion *model.Completion) error {
+		if completion == nil {
+			return errors.New("generated completion payload is required")
+		}
+		_, err := spec.Codec.FromJSON(completion.Payload)
+		return err
+	}); err != nil {
+		return nil, err
+	}
 	return &cloned, nil
 }
 
@@ -218,7 +227,7 @@ func decodePayload[T any](payload []byte, spec Spec[T]) (T, error) {
 	return value, nil
 }
 
-func newCompletionStream(inner model.Streamer, name Ident) model.Streamer {
+func newCompletionStream(inner model.ValidatedStreamer, name Ident) model.ValidatedStreamer {
 	return &completionStream{
 		inner: inner,
 		name:  name,
@@ -228,6 +237,9 @@ func newCompletionStream(inner model.Streamer, name Ident) model.Streamer {
 func structuredOutputFor[T any](spec Spec[T]) (*model.StructuredOutput, error) {
 	if spec.Name == "" {
 		return nil, errors.New("completion spec name is required")
+	}
+	if spec.Codec.FromJSON == nil {
+		return nil, fmt.Errorf("completion %q requires a result decoder", spec.Name)
 	}
 	if len(spec.Result.Schema) == 0 {
 		return nil, fmt.Errorf("completion %q requires a result schema", spec.Name)
@@ -241,7 +253,8 @@ func structuredOutputFor[T any](spec Spec[T]) (*model.StructuredOutput, error) {
 func (s *completionStream) Recv() (model.Chunk, error) {
 	chunk, err := s.inner.Recv()
 	if err != nil {
-		if errors.Is(err, io.EOF) && !s.finalSeen {
+		//nolint:errorlint // Wrapped EOF is a provider failure, not completion.
+		if err == io.EOF && !s.finalSeen {
 			return model.Chunk{}, fmt.Errorf(
 				"completion %q stream ended without canonical completion chunk",
 				s.name,
@@ -290,6 +303,14 @@ func (s *completionStream) Close() error {
 
 func (s *completionStream) Metadata() map[string]any {
 	return s.inner.Metadata()
+}
+
+func (s *completionStream) Response() *model.Response {
+	return s.inner.Response()
+}
+
+func (s *completionStream) Finalize(primaryErr error) error {
+	return s.inner.Finalize(primaryErr)
 }
 
 func (s *completionStream) validateCompletionDelta(delta *model.CompletionDelta) error {

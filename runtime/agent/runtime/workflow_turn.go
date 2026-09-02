@@ -69,7 +69,7 @@ func (r *Runtime) handleToolTurn(
 	if out, err := r.finishOrContinueToolTurn(wfCtx, reg, input, base, st, resumeOpts, toolOpts, deadlines, turnID, parentTracker, ctrl, turn, vals, toolPauses, timedOut); err != nil || out != nil {
 		return out, err
 	}
-	return nil, r.resumeAfterToolTurn(wfCtx, reg, input, base, st, resumeOpts, deadlines, turnID)
+	return r.resumeAfterToolTurn(wfCtx, reg, input, base, st, resumeOpts, deadlines, turnID)
 }
 
 func (r *Runtime) finishOrContinueToolTurn(
@@ -90,7 +90,7 @@ func (r *Runtime) finishOrContinueToolTurn(
 	timedOut bool,
 ) (*RunOutput, error) {
 	if timedOut {
-		return r.finalizeWithPlanner(wfCtx, reg, input, base, st.ToolEvents, st.ToolOutputs, st.AggUsage, st.NextAttempt, turnID, planner.TerminationReasonTimeBudget, deadlines.Hard)
+		return r.finalizeWithPlanner(wfCtx, reg, input, base, st.ToolEvents, st.ToolOutputs, st.AggUsage, st.Caps, st.NextAttempt, turnID, planner.TerminationReasonTimeBudget, deadlines.Hard)
 	}
 	terminal, err := r.executedTerminalRunTool(vals)
 	if err != nil {
@@ -245,28 +245,71 @@ func (r *Runtime) resumeAfterToolTurn(
 	resumeOpts engine.ActivityOptions,
 	deadlines *runDeadlines,
 	turnID string,
-) error {
+) (*RunOutput, error) {
 	policyResult, err := r.preparePrePlanToolPolicy(wfCtx.Context(), reg, input, base, st.Caps, turnID)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	st.Caps = policyResult.Caps
 	resumeReq, err := r.buildNextResumeRequest(input.AgentID, base, st.ToolOutputs, st.TypedInputs, &st.NextAttempt)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	resumeReq.ToolPolicyActive = policyResult.Envelope.Active
 	resumeReq.AllowedTools = cloneToolIdents(policyResult.Envelope.Allowed)
 	resumeReq.PolicyCaps = st.Caps
 	resumeReq.RunContext.Labels = cloneLabels(base.RunContext.Labels)
-	resOutput, err := r.runPlanActivity(wfCtx, reg.ResumeActivityName, resumeOpts, resumeReq, deadlines.Budget)
+	resOutput, err := r.runPlanActivityRecovering(wfCtx, reg.ResumeActivityName, resumeOpts, resumeReq, deadlines.Budget, &st.Caps, &st.NextAttempt)
 	if err != nil {
-		return err
+		return r.handleResumePlanError(wfCtx, reg, input, base, st, resOutput, deadlines, turnID, err)
 	}
+	return applyResumePlanOutput(st, resOutput)
+}
+
+func (r *Runtime) handleResumePlanError(
+	wfCtx engine.WorkflowContext,
+	reg AgentRegistration,
+	input *RunInput,
+	base *planner.PlanInput,
+	st *runLoopState,
+	resOutput *PlanActivityOutput,
+	deadlines *runDeadlines,
+	turnID string,
+	resumeErr error,
+) (*RunOutput, error) {
+	if !errors.Is(resumeErr, errRecoveryTurnCapExceeded) || resOutput == nil {
+		return nil, resumeErr
+	}
+	usage, err := checkedAddTokenUsage(st.AggUsage, resOutput.Usage)
+	if err != nil {
+		return nil, fmt.Errorf("aggregate resumed model usage: %w", err)
+	}
+	st.AggUsage = usage
+	return r.finalizeWithPlanner(
+		wfCtx,
+		reg,
+		input,
+		base,
+		st.ToolEvents,
+		st.ToolOutputs,
+		st.AggUsage,
+		st.Caps,
+		st.NextAttempt,
+		turnID,
+		planner.TerminationReasonFailureCap,
+		deadlines.Hard,
+	)
+}
+
+func applyResumePlanOutput(st *runLoopState, resOutput *PlanActivityOutput) (*RunOutput, error) {
 	if resOutput == nil || resOutput.Result == nil {
-		return fmt.Errorf("plan activity returned nil result on resume")
+		return nil, fmt.Errorf("plan activity returned nil result on resume")
 	}
-	st.AggUsage = addTokenUsage(st.AggUsage, resOutput.Usage)
+	usage, err := checkedAddTokenUsage(st.AggUsage, resOutput.Usage)
+	if err != nil {
+		return nil, fmt.Errorf("aggregate resumed model usage: %w", err)
+	}
+	st.AggUsage = usage
 	st.Result = resOutput.Result
 	st.setTurnTranscript(resOutput.Transcript)
 	st.Ledger = transcript.FromModelMessages(st.Transcript)
@@ -274,7 +317,7 @@ func (r *Runtime) resumeAfterToolTurn(
 		Active:  resOutput.ToolPolicyActive,
 		Allowed: cloneToolIdents(resOutput.AllowedTools),
 	}
-	return nil
+	return nil, nil
 }
 
 func (r *Runtime) enforceToolTurnGuards(
@@ -287,10 +330,10 @@ func (r *Runtime) enforceToolTurnGuards(
 	deadlines *runDeadlines,
 ) (*RunOutput, error) {
 	if st.Caps.RemainingToolCalls == 0 && st.Caps.MaxToolCalls > 0 {
-		return r.finalizeWithPlanner(wfCtx, reg, input, base, st.ToolEvents, st.ToolOutputs, st.AggUsage, st.NextAttempt, turnID, planner.TerminationReasonToolCap, deadlines.Hard)
+		return r.finalizeWithPlanner(wfCtx, reg, input, base, st.ToolEvents, st.ToolOutputs, st.AggUsage, st.Caps, st.NextAttempt, turnID, planner.TerminationReasonToolCap, deadlines.Hard)
 	}
 	if !deadlines.Budget.IsZero() && wfCtx.Now().After(deadlines.Budget) {
-		return r.finalizeWithPlanner(wfCtx, reg, input, base, st.ToolEvents, st.ToolOutputs, st.AggUsage, st.NextAttempt, turnID, planner.TerminationReasonTimeBudget, deadlines.Hard)
+		return r.finalizeWithPlanner(wfCtx, reg, input, base, st.ToolEvents, st.ToolOutputs, st.AggUsage, st.Caps, st.NextAttempt, turnID, planner.TerminationReasonTimeBudget, deadlines.Hard)
 	}
 	return nil, nil
 }
@@ -307,10 +350,10 @@ func (r *Runtime) prepareToolTurnCalls(
 	candidates := st.Result.ToolCalls
 	r.logger.Info(ctx, "Workflow received tool calls from planner", "count", len(candidates))
 	candidates = r.applyPerRunOverrides(ctx, input, candidates)
-	rewritten, err := r.rewriteUnknownToolCalls(candidates)
-	if err != nil {
-		return nil, nil, nil, nil, err
+	if st.ToolPolicy.Active && len(st.ToolPolicy.Allowed) == 0 {
+		return nil, nil, nil, nil, errors.New("no tools allowed for execution")
 	}
+	rewritten := r.rewriteUnknownToolCalls(candidates, st.ToolPolicy)
 	result, err := r.applyPolicy(ctx, base, input, rewritten, st.Caps, turnID, st.Result.RetryHint, st.ToolPolicy)
 	if err != nil {
 		return nil, nil, nil, nil, err
@@ -433,15 +476,13 @@ func (r *Runtime) applyFailureAndProtectionPolicy(
 	deadlines *runDeadlines,
 	vals []*planner.ToolResult,
 ) (*RunOutput, error) {
-	if failures := capFailures(vals); failures > 0 {
-		st.Caps.RemainingConsecutiveFailedToolCalls = decrementCap(st.Caps.RemainingConsecutiveFailedToolCalls, failures)
-		if st.Caps.MaxConsecutiveFailedToolCalls > 0 && st.Caps.RemainingConsecutiveFailedToolCalls <= 0 {
-			return r.finalizeWithPlanner(wfCtx, reg, input, base, st.ToolEvents, st.ToolOutputs, st.AggUsage, st.NextAttempt, turnID, planner.TerminationReasonFailureCap, deadlines.Hard)
+	resetRecoveryTurnsAfterResults(r, &st.Caps, vals)
+	if resultsRequireRecovery(vals) {
+		if !consumeRecoveryTurn(&st.Caps) {
+			return r.finalizeWithPlanner(wfCtx, reg, input, base, st.ToolEvents, st.ToolOutputs, st.AggUsage, st.Caps, st.NextAttempt, turnID, planner.TerminationReasonFailureCap, deadlines.Hard)
 		}
-	} else if st.Caps.MaxConsecutiveFailedToolCalls > 0 {
-		st.Caps.RemainingConsecutiveFailedToolCalls = st.Caps.MaxConsecutiveFailedToolCalls
 	}
-	if out, err := r.handleMissingFieldsPolicy(wfCtx, reg, input, base, vals, st.ToolEvents, st.ToolOutputs, st.AggUsage, &st.NextAttempt, turnID, ctrl, deadlines); err != nil || out != nil {
+	if out, err := r.handleMissingFieldsPolicy(wfCtx, reg, input, base, vals, st.ToolEvents, st.ToolOutputs, st.AggUsage, st.Caps, &st.NextAttempt, turnID, ctrl, deadlines); err != nil || out != nil {
 		return out, err
 	}
 	protected, err := r.hardProtectionIfNeeded(wfCtx.Context(), input.AgentID, base, vals, turnID)
@@ -449,7 +490,7 @@ func (r *Runtime) applyFailureAndProtectionPolicy(
 		return nil, err
 	}
 	if protected {
-		return r.finalizeWithPlanner(wfCtx, reg, input, base, st.ToolEvents, st.ToolOutputs, st.AggUsage, st.NextAttempt, turnID, planner.TerminationReasonFailureCap, deadlines.Hard)
+		return r.finalizeWithPlanner(wfCtx, reg, input, base, st.ToolEvents, st.ToolOutputs, st.AggUsage, st.Caps, st.NextAttempt, turnID, planner.TerminationReasonFailureCap, deadlines.Hard)
 	}
 	return nil, nil
 }

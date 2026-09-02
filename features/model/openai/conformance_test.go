@@ -125,6 +125,21 @@ func TestClientConformance(t *testing.T) {
 				CacheReadTokens: 3,
 			}, response.Usage)
 		},
+		OutputLimited: func(t *testing.T) {
+			mock := &mockResponsesClient{response: &responses.Response{
+				Status:            responses.ResponseStatusIncomplete,
+				IncompleteDetails: responses.ResponseIncompleteDetails{Reason: "max_output_tokens"},
+			}}
+			provider := newClient(t, mock)
+			response, err := provider.Complete(context.Background(), request())
+			require.NoError(t, err)
+			require.True(t, response.OutputLimited)
+
+			client, err := model.NewClient(provider)
+			require.NoError(t, err)
+			_, err = client.Complete(context.Background(), request())
+			requireOutputLimitedRejection(t, err)
+		},
 		MultimodalInput: testutil.ProviderCapabilityConformance{Supported: func(t *testing.T) {
 			mock := &mockResponsesClient{response: &responses.Response{}}
 			req := request()
@@ -293,8 +308,29 @@ func TestClientConformance(t *testing.T) {
 				require.Equal(t, model.ChunkTypeStop, stop.Type)
 				require.Equal(t, "completed", stop.StopReason)
 			},
+			OutputLimited: func(t *testing.T) {
+				raw := `{"type":"response.incomplete","sequence_number":1,"response":{"id":"resp_1","object":"response","model":"o3","status":"incomplete","incomplete_details":{"reason":"max_output_tokens"},"output":[{"id":"msg_1","type":"message","role":"assistant","content":[{"type":"output_text","text":"{","annotations":[],"logprobs":[]}],"status":"incomplete"}]}}`
+				mock := &mockResponsesClient{stream: newMockOpenAIStream(raw)}
+				req := request()
+				req.StructuredOutput = &model.StructuredOutput{Name: "result", Schema: []byte(`{"type":"object"}`)}
+				stream, err := newClient(t, mock).Stream(context.Background(), req)
+				require.NoError(t, err)
+				t.Cleanup(func() { require.NoError(t, stream.Close()) })
+				chunks := testutil.CollectStreamChunks(t, stream)
+				require.Len(t, chunks, 1)
+				require.Equal(t, model.ChunkTypeStop, chunks[0].Type)
+				require.True(t, chunks[0].OutputLimited)
+			},
 		},
 	})
+}
+
+func requireOutputLimitedRejection(t *testing.T, err error) {
+	t.Helper()
+	require.Error(t, err)
+	var validationErr *model.OutputValidationError
+	require.ErrorAs(t, err, &validationErr)
+	require.Equal(t, model.OutputValidationOutputBounds, validationErr.Kind())
 }
 
 func openAIConformanceLifecycle() []string {

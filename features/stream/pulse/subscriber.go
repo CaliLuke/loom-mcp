@@ -179,7 +179,9 @@ func (s *Subscriber) Subscribe(
 	cancelFunc := func() {
 		cancel()
 		<-done
-		sink.Close(context.Background())
+		if err := sink.Close(context.Background()); err != nil {
+			s.dropped.Add(1)
+		}
 	}
 	return events, errs, cancelFunc, nil
 }
@@ -215,7 +217,9 @@ func (s *Subscriber) SubscribeManual(
 	cancelFunc := func() {
 		cancel()
 		<-done
-		sink.Close(context.Background())
+		if err := sink.Close(context.Background()); err != nil {
+			s.dropped.Add(1)
+		}
 	}
 	return deliveries, errs, cancelFunc, nil
 }

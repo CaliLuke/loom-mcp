@@ -1,4 +1,4 @@
-// Package anthropic provides a model.Client implementation backed by the
+// Package anthropic provides a raw model.Provider backed by the
 // Anthropic Claude Messages API. It translates loom-mcp requests into
 // anthropic.Message calls using github.com/anthropics/anthropic-sdk-go and maps
 // responses (text, tools, thinking, usage) back into the generic planner
@@ -69,7 +69,7 @@ type (
 		ThinkingBudget int64
 	}
 
-	// Client implements model.Client on top of Anthropic Claude Messages.
+	// Client implements model.Provider on top of Anthropic Claude Messages.
 	Client struct {
 		msg          MessagesClient
 		defaultModel string
@@ -695,16 +695,29 @@ func translateResponse(msg *sdk.Message, nameMap map[string]string, toolUseIDs *
 	if msg == nil {
 		return nil, errors.New("anthropic: response message is nil")
 	}
+	if msg.Model != "" {
+		modelID = msg.Model
+	}
+	stopReason := string(msg.StopReason)
+	if anthropicOutputLimited(stopReason) {
+		return &model.Response{
+			Usage:         anthropicUsage(msg.Usage, modelID, modelClass),
+			StopReason:    stopReason,
+			OutputLimited: true,
+		}, nil
+	}
 	resp, err := translateResponseContent(msg.Content, nameMap, toolUseIDs)
 	if err != nil {
 		return nil, err
 	}
-	if msg.Model != "" {
-		modelID = msg.Model
-	}
 	resp.Usage = anthropicUsage(msg.Usage, modelID, modelClass)
-	resp.StopReason = string(msg.StopReason)
+	resp.StopReason = stopReason
+	resp.OutputLimited = false
 	return resp, nil
+}
+
+func anthropicOutputLimited(reason string) bool {
+	return reason == string(sdk.StopReasonMaxTokens)
 }
 
 func translateResponseContent(blocks []sdk.ContentBlockUnion, nameMap map[string]string, toolUseIDs *toolUseIDCodec) (*model.Response, error) {

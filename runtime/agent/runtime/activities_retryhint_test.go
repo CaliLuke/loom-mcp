@@ -1,7 +1,9 @@
 package runtime
 
 import (
+	"encoding/json/jsontext"
 	"encoding/json/v2"
+	"fmt"
 	"strings"
 	"testing"
 
@@ -90,12 +92,89 @@ func TestBuildRetryHintFromAgentToolRequestError(t *testing.T) {
 		issues: []*tools.FieldIssue{{Field: "topic", Constraint: "missing_field"}},
 		descs:  map[string]string{"topic": "Topic to research"},
 	}
-	hint := buildRetryHintFromAgentToolRequestError(ferr, "svc.agent", nil)
+	hint := buildRetryHintFromAgentToolRequestError(ferr, "svc.agent", &tools.ToolSpec{Payload: tools.TypeSpec{
+		Schema: []byte(`{"type":"object","properties":{"topic":{"type":"string"}},"required":["topic"]}`),
+	}})
 	require.NotNil(t, hint)
 	require.Equal(t, planner.RetryReasonMissingFields, hint.Reason)
 	require.Equal(t, tools.Ident("svc.agent"), hint.Tool)
 	require.Equal(t, []string{"topic"}, hint.MissingFields)
 	require.True(t, containsAll(hint.ClarifyingQuestion, []string{"svc.agent", "topic"}))
+	require.Contains(t, hint.Message, "topic:string,required")
+}
+
+func TestGeneratedRetryHintsAreBounded(t *testing.T) {
+	t.Parallel()
+
+	issues := make([]*tools.FieldIssue, 0, 64)
+	descriptions := make(map[string]string, 64)
+	for index := range 64 {
+		field := fmt.Sprintf("field_%02d_%s", index, strings.Repeat("界", 80))
+		issues = append(issues, &tools.FieldIssue{
+			Field:      field,
+			Constraint: validationConstraintMissingField,
+			Allowed:    []string{strings.Repeat("allowed", 256)},
+		})
+		descriptions[field] = strings.Repeat("description", 256)
+	}
+	hint := buildRetryHintFromAgentToolRequestError(&fakeValidationError{issues: issues, descs: descriptions}, "svc.generated", nil)
+	require.NotNil(t, hint)
+	require.LessOrEqual(t, len(hint.MissingFields), maxGeneratedRetryHintFields)
+	for _, field := range hint.MissingFields {
+		require.LessOrEqual(t, len(field), maxGeneratedRetryHintFieldBytes)
+		require.Equal(t, field, strings.ToValidUTF8(field, ""))
+	}
+	requireRetryHintWithinBound(t, hint)
+
+	properties := make(map[string]any, 128)
+	for index := range 128 {
+		properties[fmt.Sprintf("property_%03d_%s", index, strings.Repeat("x", 128))] = map[string]any{"type": "string"}
+	}
+	schema, err := json.Marshal(map[string]any{"type": "object", "properties": properties})
+	require.NoError(t, err)
+	decodeHint := buildRetryHintFromDecodeError(
+		&json.SemanticError{JSONPointer: jsontext.Pointer("/" + strings.Repeat("field", 128))},
+		"svc.generated",
+		&tools.ToolSpec{Payload: tools.TypeSpec{Schema: schema}},
+	)
+	require.NotNil(t, decodeHint)
+	requireRetryHintWithinBound(t, decodeHint)
+}
+
+func TestActivityRetryHintRemainsBoundedAfterFieldContractEnrichment(t *testing.T) {
+	t.Parallel()
+
+	properties := make(map[string]any, 128)
+	for index := range 128 {
+		properties[fmt.Sprintf("property_%03d_%s", index, strings.Repeat("界", 96))] = map[string]any{"type": "string"}
+	}
+	schema, err := json.Marshal(map[string]any{"type": "object", "properties": properties})
+	require.NoError(t, err)
+	toolResult := &planner.ToolResult{}
+	applyActivityRetryHint(toolResult, tools.ToolSpec{Payload: tools.TypeSpec{Schema: schema}}, &ToolOutput{
+		RetryHint: &planner.RetryHint{
+			Reason:             planner.RetryReasonMissingFields,
+			MissingFields:      []string{strings.Repeat("field", 256)},
+			ClarifyingQuestion: strings.Repeat("question", 1024),
+			Message:            strings.Repeat("message", 1024),
+			ExampleInput:       map[string]any{"secret": "example"},
+			PriorInput:         map[string]any{"secret": "submitted"},
+		},
+	})
+
+	require.NotNil(t, toolResult.RetryHint)
+	requireRetryHintWithinBound(t, toolResult.RetryHint)
+}
+
+func requireRetryHintWithinBound(t *testing.T, hint *planner.RetryHint) {
+	t.Helper()
+	encoded, err := json.Marshal(hint)
+	require.NoError(t, err)
+	require.LessOrEqual(t, len(encoded), maxGeneratedRetryHintBytes)
+	require.LessOrEqual(t, len(hint.ClarifyingQuestion), maxGeneratedRetryQuestionBytes)
+	require.LessOrEqual(t, len(hint.Message), maxGeneratedRetryMessageBytes)
+	require.Nil(t, hint.ExampleInput)
+	require.Nil(t, hint.PriorInput)
 }
 
 // containsAll helper

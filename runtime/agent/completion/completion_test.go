@@ -21,7 +21,7 @@ type testCompletionResult struct {
 type recordingCompletionClient struct {
 	request   *model.Request
 	response  *model.Response
-	streamer  model.Streamer
+	streamer  model.ValidatedStreamer
 	err       error
 	streamErr error
 }
@@ -32,9 +32,14 @@ type recvResult struct {
 }
 
 type scriptedStreamer struct {
-	metadata map[string]any
-	results  []recvResult
-	index    int
+	metadata      map[string]any
+	response      *model.Response
+	results       []recvResult
+	index         int
+	closeErr      error
+	closeCalls    int
+	finalizeCalls int
+	finalizeInput error
 }
 
 func testCompletionSpec() Spec[testCompletionResult] {
@@ -63,7 +68,7 @@ func (c *recordingCompletionClient) Complete(_ context.Context, req *model.Reque
 	return c.response, c.err
 }
 
-func (c *recordingCompletionClient) Stream(_ context.Context, req *model.Request) (model.Streamer, error) {
+func (c *recordingCompletionClient) Stream(_ context.Context, req *model.Request) (model.ValidatedStreamer, error) {
 	c.request = req
 	return c.streamer, c.streamErr
 }
@@ -78,11 +83,22 @@ func (s *scriptedStreamer) Recv() (model.Chunk, error) {
 }
 
 func (s *scriptedStreamer) Close() error {
-	return nil
+	s.closeCalls++
+	return s.closeErr
 }
 
 func (s *scriptedStreamer) Metadata() map[string]any {
 	return s.metadata
+}
+
+func (s *scriptedStreamer) Response() *model.Response {
+	return s.response
+}
+
+func (s *scriptedStreamer) Finalize(primaryErr error) error {
+	s.finalizeCalls++
+	s.finalizeInput = primaryErr
+	return errors.Join(primaryErr, s.Close())
 }
 
 func TestCompleteSetsStructuredOutputAndDecodesTypedValue(t *testing.T) {
@@ -156,6 +172,27 @@ func TestStreamSetsStructuredOutputAndEnablesStreaming(t *testing.T) {
 	require.Equal(t, "draft_from_transcript", client.request.StructuredOutput.Name)
 	require.False(t, req.Stream)
 	require.Nil(t, req.StructuredOutput)
+}
+
+func TestCompletionStreamDelegatesCanonicalLifecycle(t *testing.T) {
+	primaryErr := errors.New("processing failed")
+	closeErr := errors.New("provider close failed")
+	response := &model.Response{StopReason: "end_turn"}
+	upstream := &scriptedStreamer{
+		metadata: map[string]any{"provider": "test"},
+		response: response,
+		closeErr: closeErr,
+	}
+	stream := newCompletionStream(upstream, "draft_from_transcript")
+
+	require.Same(t, response, stream.Response())
+	require.Equal(t, map[string]any{"provider": "test"}, stream.Metadata())
+	err := stream.Finalize(primaryErr)
+	require.ErrorIs(t, err, primaryErr)
+	require.ErrorIs(t, err, closeErr)
+	require.Equal(t, primaryErr, upstream.finalizeInput)
+	require.Equal(t, 1, upstream.finalizeCalls)
+	require.Equal(t, 1, upstream.closeCalls)
 }
 
 func TestStreamEnforcesCanonicalCompletionContract(t *testing.T) {

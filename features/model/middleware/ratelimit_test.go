@@ -16,7 +16,7 @@ import (
 
 type fakeClient struct {
 	completeErr error
-	stream      model.Streamer
+	stream      model.ValidatedStreamer
 	streamErr   error
 
 	completeCalls int
@@ -28,7 +28,7 @@ func (f *fakeClient) Complete(_ context.Context, _ *model.Request) (*model.Respo
 	return nil, f.completeErr
 }
 
-func (f *fakeClient) Stream(_ context.Context, _ *model.Request) (model.Streamer, error) {
+func (f *fakeClient) Stream(_ context.Context, _ *model.Request) (model.ValidatedStreamer, error) {
 	f.streamCalls++
 	return f.stream, f.streamErr
 }

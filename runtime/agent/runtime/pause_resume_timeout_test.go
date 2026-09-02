@@ -11,6 +11,7 @@ import (
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/interrupt"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/model"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/planner"
+	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/policy"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/run"
 	runloginmem "github.com/CaliLuke/loom-mcp/v2/runtime/agent/runlog/inmem"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/session"
@@ -139,6 +140,7 @@ func TestMissingFieldsClarificationAwaitResumesWhenProvided(t *testing.T) {
 		results,
 		nil,
 		model.TokenUsage{},
+		policy.CapsState{},
 		&nextAttempt,
 		"turn-1",
 		ctrl,

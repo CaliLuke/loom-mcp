@@ -2,6 +2,7 @@ package runtime
 
 import (
 	"encoding/json/v2"
+	"errors"
 	"slices"
 
 	agent "github.com/CaliLuke/loom-mcp/v2/runtime/agent"
@@ -124,6 +125,9 @@ func (r *Runtime) ToolSchema(name tools.Ident) (map[string]any, bool) {
 
 // OverridePolicy applies a best-effort in-process override of the registered agent policy.
 func (r *Runtime) OverridePolicy(agentID agent.Ident, delta RunPolicy) error {
+	if delta.MaxRecoveryTurns < 0 {
+		return errors.New("max recovery turns cannot be negative")
+	}
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	reg, ok := r.agents[agentID]
@@ -133,8 +137,8 @@ func (r *Runtime) OverridePolicy(agentID agent.Ident, delta RunPolicy) error {
 	if delta.MaxToolCalls > 0 {
 		reg.Policy.MaxToolCalls = delta.MaxToolCalls
 	}
-	if delta.MaxConsecutiveFailedToolCalls > 0 {
-		reg.Policy.MaxConsecutiveFailedToolCalls = delta.MaxConsecutiveFailedToolCalls
+	if delta.MaxRecoveryTurns > 0 {
+		reg.Policy.MaxRecoveryTurns = delta.MaxRecoveryTurns
 	}
 	if delta.TimeBudget > 0 {
 		reg.Policy.TimeBudget = delta.TimeBudget

@@ -144,7 +144,8 @@ func (s *ollamaStreamer) handleLine(line string) error {
 	}
 	if resp.Done {
 		s.done = true
-		if s.output != nil {
+		outputLimited := ollamaOutputLimited(resp.DoneReason)
+		if s.output != nil && !outputLimited {
 			payload, err := structuredOutputPayload([]model.Message{{
 				Role:  model.ConversationRoleAssistant,
 				Parts: []model.Part{model.TextPart{Text: s.text.String()}},
@@ -166,7 +167,11 @@ func (s *ollamaStreamer) handleLine(line string) error {
 			s.metadata = map[string]any{"usage": usage}
 			s.queue = append(s.queue, model.Chunk{Type: model.ChunkTypeUsage, UsageDelta: &usage})
 		}
-		s.queue = append(s.queue, model.Chunk{Type: model.ChunkTypeStop, StopReason: stopReason(resp)})
+		s.queue = append(s.queue, model.Chunk{
+			Type:          model.ChunkTypeStop,
+			StopReason:    stopReason(resp),
+			OutputLimited: outputLimited,
+		})
 	}
 	return nil
 }

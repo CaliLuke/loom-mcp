@@ -483,6 +483,8 @@ type (
 
 		// Cache configures prompt caching behavior. Nil means no caching.
 		Cache *CacheOptions
+
+		completionValidate func(*Response, *Completion) error
 	}
 
 	// Response is the result of a non-streaming invocation.
@@ -501,6 +503,11 @@ type (
 
 		// StopReason records why generation stopped (provider-specific).
 		StopReason string
+
+		// OutputLimited reports that the provider stopped because generated
+		// output reached its configured token or context limit. A validated
+		// client never exposes such a response as successful completed work.
+		OutputLimited bool
 	}
 
 	// Chunk is a streaming event from the model.
@@ -540,6 +547,10 @@ type (
 
 		// StopReason records why streaming stopped when Type is ChunkTypeStop.
 		StopReason string
+
+		// OutputLimited reports that the terminal stop was caused by an output
+		// or context limit. It is meaningful only for ChunkTypeStop.
+		OutputLimited bool
 	}
 
 	// ThinkingOptions configures provider thinking behavior.
@@ -575,11 +586,11 @@ type (
 	// Providers map these classes to concrete model identifiers.
 	ModelClass string
 
-	// Client is the provider-agnostic model client.
-	//
-	// Implementations translate Requests into provider calls and adapt
-	// Responses and Chunks back into the generic types used by planners.
-	Client interface {
+	// Provider is the raw provider-agnostic model transport. Provider adapters
+	// translate Requests into provider calls and return normalized Responses and
+	// Chunks. Callers should construct a validated Client with NewClient instead
+	// of consuming a Provider directly.
+	Provider interface {
 		// Complete performs a non-streaming model invocation.
 		Complete(ctx context.Context, req *Request) (*Response, error)
 
@@ -587,10 +598,23 @@ type (
 		Stream(ctx context.Context, req *Request) (Streamer, error)
 	}
 
+	// Client is the validated provider-agnostic model client.
+	//
+	// NewClient owns the canonical implementation. Its distinct streaming return
+	// type prevents a raw Provider from satisfying Client accidentally.
+	Client interface {
+		// Complete performs a non-streaming model invocation.
+		Complete(ctx context.Context, req *Request) (*Response, error)
+
+		// Stream performs a validated streaming model invocation when supported.
+		Stream(ctx context.Context, req *Request) (ValidatedStreamer, error)
+	}
+
 	// Streamer delivers incremental model output.
 	//
-	// Callers must drain the stream until Recv returns io.EOF or another
-	// terminal error, then call Close.
+	// Raw provider owners must drain the stream until Recv returns io.EOF or
+	// another terminal error, then call Close. Consumers receive a
+	// ValidatedStreamer and call Finalize instead.
 	Streamer interface {
 		// Recv returns the next streaming chunk or an error.
 		Recv() (Chunk, error)
@@ -600,6 +624,17 @@ type (
 
 		// Metadata carries provider-specific metadata collected during the call.
 		Metadata() map[string]any
+	}
+
+	// ValidatedStreamer is the complete consumer-facing stream contract returned
+	// by clients constructed with NewClient. Response is available only after a
+	// clean EOF. Finalize combines the caller's terminal result with exactly-once
+	// provider cleanup.
+	ValidatedStreamer interface {
+		Streamer
+
+		Response() *Response
+		Finalize(primaryErr error) error
 	}
 )
 

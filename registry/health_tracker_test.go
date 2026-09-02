@@ -1,755 +1,200 @@
 package registry
 
+// These tests pin catalog-owned health epochs independently from Pulse pool
+// integration. Redis integration tests cover the same CAS transitions across
+// registry replicas.
+
 import (
 	"context"
-	"encoding/json/v2"
-	"fmt"
-	"sync"
-	"sync/atomic"
+	"strings"
 	"testing"
 	"time"
 
-	clientspulse "github.com/CaliLuke/loom-mcp/v2/features/stream/pulse/clients/pulse"
-	mockpulse "github.com/CaliLuke/loom-mcp/v2/features/stream/pulse/clients/pulse/mocks"
-	genregistry "github.com/CaliLuke/loom-mcp/v2/registry/gen/registry"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/telemetry"
-	"github.com/CaliLuke/loom-mcp/v2/runtime/toolregistry"
-	"github.com/CaliLuke/loom/pulse/pool"
-	"github.com/CaliLuke/loom/pulse/rmap"
-	streamopts "github.com/CaliLuke/loom/pulse/streaming/options"
-	"github.com/leanovate/gopter"
-	"github.com/leanovate/gopter/gen"
-	"github.com/leanovate/gopter/prop"
+	"github.com/google/uuid"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
-func TestReconcileCatalogTickersForgetsDepartedToolsetObservations(t *testing.T) {
-	h := &healthTracker{
-		tickers:              map[string]*pool.Ticker{"departed": nil, "retained": nil},
-		cancels:              make(map[string]context.CancelFunc),
-		tickerTokens:         make(map[string]string),
-		lastObservedHealthy:  map[string]bool{"departed": false, "retained": true},
-		lastObservedPongNano: map[string]int64{"departed": 10, "retained": 20},
+type healthCaptureLogger struct {
+	warnings []string
+}
+
+func (*healthCaptureLogger) Debug(context.Context, string, ...any) {}
+
+func (*healthCaptureLogger) Info(context.Context, string, ...any) {}
+
+func (l *healthCaptureLogger) Warn(_ context.Context, message string, _ ...any) {
+	l.warnings = append(l.warnings, message)
+}
+
+func (*healthCaptureLogger) Error(context.Context, string, ...any) {}
+
+func TestHealthTrackerHelperValidation(t *testing.T) {
+	t.Parallel()
+
+	logger := telemetry.NewNoopLogger()
+	options := healthTrackerOptions{}
+	WithHealthLogger(logger)(&options)
+	assert.Equal(t, logger, options.logger)
+
+	validToken := strings.Repeat("a", 64)
+	validUUID := uuid.NewString()
+	for _, pingID := range []string{
+		"malformed",
+		"invalid/1/" + validUUID,
+		validToken + "/0/" + validUUID,
+		validToken + "/1/invalid",
+	} {
+		_, _, ok := parsePingID(pingID)
+		assert.False(t, ok, pingID)
 	}
-
-	h.reconcileCatalogTickers(map[string]bool{"retained": true}, nil)
-
-	require.NotContains(t, h.lastObservedHealthy, "departed")
-	require.NotContains(t, h.lastObservedPongNano, "departed")
-	require.True(t, h.lastObservedHealthy["retained"])
-	require.Equal(t, int64(20), h.lastObservedPongNano["retained"])
-	require.NotContains(t, h.tickers, "departed")
-	require.Contains(t, h.tickers, "retained")
-}
-
-// iterCounter provides unique IDs for each property test iteration.
-var iterCounter atomic.Int64
-
-// TestUnhealthyToolsetFastFailure verifies Property 9: Unhealthy toolset fast failure.
-// **Feature: internal-tool-registry, Property 9: Unhealthy toolset fast failure**
-// *For any* toolset where all providers are marked unhealthy, CallTool should
-// immediately return service unavailable without waiting for timeout.
-// **Validates: Requirements 9.5, 13.4**
-//
-// This test verifies the health tracker correctly determines health based on
-// the staleness threshold. We test the core logic by directly manipulating
-// timestamps in the health map rather than relying on timing.
-func TestUnhealthyToolsetFastFailure(t *testing.T) {
-	rdb := getRedis(t)
-	ctx := context.Background()
-
-	parameters := gopter.DefaultTestParameters()
-	parameters.MinSuccessfulTests = 100
-	properties := gopter.NewProperties(parameters)
-
-	properties.Property("toolset is unhealthy when last pong exceeds staleness threshold", prop.ForAll(
-		func(toolsetName string, missedPingThreshold int) bool {
-			// Use unique suffix per iteration to avoid conflicts.
-			iter := iterCounter.Add(1)
-			suffix := fmt.Sprintf("%s-%d", toolsetName, iter)
-
-			// Create unique rmaps for this test iteration.
-			healthMap, err := rmap.Join(ctx, "health-test-"+suffix, rdb)
-			if err != nil {
-				return false
-			}
-			defer healthMap.Close()
-
-			registryMap, err := rmap.Join(ctx, "registry-test-"+suffix, rdb)
-			if err != nil {
-				return false
-			}
-			defer registryMap.Close()
-			registryEvents := registryMap.Subscribe()
-			defer registryMap.Unsubscribe(registryEvents)
-			healthEvents := healthMap.Subscribe()
-			defer healthMap.Unsubscribe(healthEvents)
-
-			// Create a pool node for distributed tickers.
-			node, err := pool.AddNode(ctx, "health-test-pool-"+suffix, rdb, testNodeOpts()...)
-			if err != nil {
-				return false
-			}
-			defer func() { _ = node.Close(ctx) }()
-
-			mockSM := newMockStreamManager()
-
-			pingInterval := 100 * time.Millisecond
-			tracker, err := NewHealthTracker(
-				mockSM,
-				healthMap,
-				registryMap,
-				node,
-				WithPingInterval(pingInterval),
-				WithMissedPingThreshold(missedPingThreshold),
-			)
-			if err != nil {
-				return false
-			}
-			defer func() { _ = tracker.Close() }()
-
-			catalog := newToolsetCatalog(registryMap)
-			if err := saveHealthTestToolset(ctx, catalog, toolsetName, "registration-1"); err != nil {
-				return false
-			}
-			awaitMapEvent(registryEvents)
-			registrationToken, err := catalog.RegistrationToken(ctx, toolsetName)
-			if err != nil {
-				return false
-			}
-
-			// Directly set a stale timestamp in the health map.
-			// stalenessThreshold = (missedPingThreshold + 1) * pingInterval
-			stalenessThreshold := time.Duration(missedPingThreshold+1) * pingInterval
-			staleTime := time.Now().Add(-stalenessThreshold - time.Second)
-			if err := setHealthRecordForTest(ctx, healthMap, toolsetName, registrationToken, staleTime); err != nil {
-				return false
-			}
-			awaitMapEvent(healthEvents)
-			return !tracker.IsHealthy(toolsetName)
-		},
-		genHealthyToolsetName(),
-		genMissedPingThreshold(),
-	))
-
-	properties.TestingRun(t)
-}
-
-// TestPongRestoresHealthyStatus verifies that responding to a ping restores healthy status.
-// **Feature: internal-tool-registry, Property 9: Unhealthy toolset fast failure**
-// This is a complementary test that verifies pong responses restore health.
-// **Validates: Requirements 13.5**
-func TestPongRestoresHealthyStatus(t *testing.T) {
-	rdb := getRedis(t)
-	ctx := context.Background()
-
-	parameters := gopter.DefaultTestParameters()
-	parameters.MinSuccessfulTests = 100
-	properties := gopter.NewProperties(parameters)
-
-	properties.Property("pong response restores healthy status", prop.ForAll(
-		func(toolsetName string) bool {
-			// Use unique suffix per iteration to avoid conflicts.
-			iter := iterCounter.Add(1)
-			suffix := fmt.Sprintf("%s-%d", toolsetName, iter)
-
-			healthMap, err := rmap.Join(ctx, "health-pong-test-"+suffix, rdb)
-			if err != nil {
-				return false
-			}
-			defer healthMap.Close()
-
-			registryMap, err := rmap.Join(ctx, "registry-pong-test-"+suffix, rdb)
-			if err != nil {
-				return false
-			}
-			defer registryMap.Close()
-			registryEvents := registryMap.Subscribe()
-			defer registryMap.Unsubscribe(registryEvents)
-
-			node, err := pool.AddNode(ctx, "health-pong-pool-"+suffix, rdb, testNodeOpts()...)
-			if err != nil {
-				return false
-			}
-			defer func() { _ = node.Close(ctx) }()
-
-			mockSM := newMockStreamManager()
-
-			pingInterval := 100 * time.Millisecond
-			tracker, err := NewHealthTracker(
-				mockSM,
-				healthMap,
-				registryMap,
-				node,
-				WithPingInterval(pingInterval),
-				WithMissedPingThreshold(2),
-			)
-			if err != nil {
-				return false
-			}
-			defer func() { _ = tracker.Close() }()
-
-			catalog := newToolsetCatalog(registryMap)
-			if err := saveHealthTestToolset(ctx, catalog, toolsetName, "registration-1"); err != nil {
-				return false
-			}
-			awaitMapEvent(registryEvents)
-			registrationToken, err := catalog.RegistrationToken(ctx, toolsetName)
-			if err != nil {
-				return false
-			}
-
-			// Subscribe to health map events to wait for updates to propagate.
-			healthEvents := healthMap.Subscribe()
-			defer healthMap.Unsubscribe(healthEvents)
-
-			// Directly set a stale timestamp to make toolset unhealthy.
-			// stalenessThreshold = (2 + 1) * 100ms = 300ms
-			staleTime := time.Now().Add(-500 * time.Millisecond)
-			if err := setHealthRecordForTest(ctx, healthMap, toolsetName, registrationToken, staleTime); err != nil {
-				return false
-			}
-			awaitMapEvent(healthEvents)
-
-			// Should be unhealthy because the timestamp is stale.
-			if tracker.IsHealthy(toolsetName) {
-				return false
-			}
-
-			// Record a pong (updates timestamp to now).
-			if err := tracker.RecordPong(ctx, toolsetName, newPingID(registrationToken)); err != nil {
-				return false
-			}
-			awaitMapEvent(healthEvents)
-
-			// Should be healthy again.
-			return tracker.IsHealthy(toolsetName)
-		},
-		genHealthyToolsetName(),
-	))
-
-	properties.TestingRun(t)
-}
-
-func TestPongForUnregisteredToolsetDoesNotCreateHealth(t *testing.T) {
-	ctx := context.Background()
-	svc, tracker, _, healthMap, _ := newPongTestService(t)
-	require.NoError(t, svc.Pong(ctx, &genregistry.PongPayload{
-		PingID:  "registration-1/ping-1",
-		Toolset: "unknown-toolset",
-	}))
-
-	health, err := tracker.Health("unknown-toolset")
-	require.NoError(t, err)
-	require.False(t, health.Healthy)
-
-	_, ok := healthMap.Get(healthKey("unknown-toolset"))
-	require.False(t, ok)
-}
-
-func TestReregisterInvalidatesPreviousRegistrationHealth(t *testing.T) {
-	ctx := context.Background()
-	svc, tracker, catalog, healthMap, registryMap := newPongTestService(t)
-	registryEvents := registryMap.Subscribe()
-	defer registryMap.Unsubscribe(registryEvents)
-	healthEvents := healthMap.Subscribe()
-	defer healthMap.Unsubscribe(healthEvents)
-
-	require.NoError(t, catalog.SaveToolset(ctx, &genregistry.Toolset{
-		Name:         "toolset-1",
-		RegisteredAt: "registration-1",
-	}))
-	awaitMapEvent(registryEvents)
-	firstToken := requireRegistrationToken(t, ctx, catalog)
-	require.NoError(t, svc.Pong(ctx, &genregistry.PongPayload{
-		PingID:  newPingID(firstToken),
-		Toolset: "toolset-1",
-	}))
-	awaitMapEvent(healthEvents)
-	health, err := tracker.Health("toolset-1")
-	require.NoError(t, err)
-	require.True(t, health.Healthy)
-
-	require.NoError(t, catalog.SaveToolset(ctx, &genregistry.Toolset{
-		Name:         "toolset-1",
-		RegisteredAt: "registration-2",
-	}))
-	awaitMapEvent(registryEvents)
-	secondToken := requireRegistrationToken(t, ctx, catalog)
-	require.NotEqual(t, firstToken, secondToken)
-
-	health, err = tracker.Health("toolset-1")
-	require.NoError(t, err)
-	require.False(t, health.Healthy)
-
-	healthBefore, ok := healthMap.Get(healthKey("toolset-1"))
+	token, epoch, ok := parsePingID(validToken + "/2/" + validUUID)
 	require.True(t, ok)
+	assert.Equal(t, validToken, token)
+	assert.Equal(t, uint64(2), epoch)
 
-	require.NoError(t, svc.Pong(ctx, &genregistry.PongPayload{
-		PingID:  newPingID(firstToken),
-		Toolset: "toolset-1",
-	}))
-	healthAfter, ok := healthMap.Get(healthKey("toolset-1"))
-	require.True(t, ok)
-	require.Equal(t, healthBefore, healthAfter)
-
-	health, err = tracker.Health("toolset-1")
-	require.NoError(t, err)
-	require.False(t, health.Healthy)
+	assert.Empty(t, toolsetFromCatalogKey("unrelated"))
+	assert.Equal(t, "weather", toolsetFromCatalogKey(toolsetCatalogKey("weather")))
 }
 
-func TestReregisterWithCollidingRegistrationTimestampsRejectsStalePong(t *testing.T) {
+func TestHealthTrackerPongIsMonotonicAndIncarnationFenced(t *testing.T) {
+	t.Parallel()
+
 	ctx := context.Background()
-	svc, tracker, catalog, healthMap, registryMap := newPongTestService(t)
-	registryEvents := registryMap.Subscribe()
-	defer registryMap.Unsubscribe(registryEvents)
-	healthEvents := healthMap.Subscribe()
-	defer healthMap.Unsubscribe(healthEvents)
-
-	const (
-		toolset      = "toolset-1"
-		registeredAt = "2024-01-15T10:30:00Z"
-	)
-
-	require.NoError(t, catalog.SaveToolset(ctx, &genregistry.Toolset{
-		Name:         toolset,
-		RegisteredAt: registeredAt,
-	}))
-	awaitMapEvent(registryEvents)
-	firstToken := requireRegistrationToken(t, ctx, catalog)
-	require.NoError(t, svc.Pong(ctx, &genregistry.PongPayload{
-		PingID:  newPingID(firstToken),
-		Toolset: toolset,
-	}))
-	awaitMapEvent(healthEvents)
-	health, err := tracker.Health(toolset)
-	require.NoError(t, err)
-	require.True(t, health.Healthy)
-
-	require.NoError(t, catalog.SaveToolset(ctx, &genregistry.Toolset{
-		Name:         toolset,
-		RegisteredAt: registeredAt,
-	}))
-	awaitMapEvent(registryEvents)
-	secondToken := requireRegistrationToken(t, ctx, catalog)
-	require.NotEqual(t, firstToken, secondToken)
-
-	health, err = tracker.Health(toolset)
-	require.NoError(t, err)
-	require.False(t, health.Healthy)
-
-	healthBefore, ok := healthMap.Get(healthKey(toolset))
-	require.True(t, ok)
-
-	require.NoError(t, svc.Pong(ctx, &genregistry.PongPayload{
-		PingID:  newPingID(firstToken),
-		Toolset: toolset,
-	}))
-	healthAfter, ok := healthMap.Get(healthKey(toolset))
-	require.True(t, ok)
-	require.Equal(t, healthBefore, healthAfter)
-
-	health, err = tracker.Health(toolset)
-	require.NoError(t, err)
-	require.False(t, health.Healthy)
-}
-
-func TestSyncWithCatalogRemovesStreamHandlesForAbsentToolsets(t *testing.T) {
-	rdb := getRedis(t)
-	ctx := context.Background()
-
-	healthMap, err := rmap.Join(ctx, "health-sync-streams-"+t.Name(), rdb)
-	require.NoError(t, err)
-	t.Cleanup(func() {
-		healthMap.Close()
-	})
-
-	registryMap, err := rmap.Join(ctx, "registry-sync-streams-"+t.Name(), rdb)
-	require.NoError(t, err)
-	t.Cleanup(func() {
-		registryMap.Close()
-	})
-
-	catalog := newToolsetCatalog(registryMap)
-	require.NoError(t, catalog.SaveToolset(ctx, &genregistry.Toolset{
-		Name:         "registered-toolset",
-		RegisteredAt: "registration-1",
-	}))
-
-	node, err := pool.AddNode(ctx, "health-sync-streams-pool-"+t.Name(), rdb, testNodeOpts()...)
-	require.NoError(t, err)
-	t.Cleanup(func() {
-		require.NoError(t, node.Close(ctx))
-	})
-
-	pulseClient := mockpulse.NewClient(t)
-	pulseClient.SetStream(func(name string, opts ...streamopts.Stream) (clientspulse.Stream, error) {
-		return mockpulse.NewStream(t), nil
-	})
-	streams := NewStreamManager(pulseClient)
-	tracker, err := NewHealthTracker(
-		streams,
-		healthMap,
-		registryMap,
-		node,
-		WithPingInterval(time.Hour),
-		WithMissedPingThreshold(2),
+	now := time.Unix(1_700_000_000, 0)
+	clock := newTestTimeSource(now)
+	catalog := newToolsetCatalog(newTestCatalogMap(), clock)
+	incarnation := uuid.NewString()
+	admission, err := catalog.Register(
+		ctx,
+		testCatalogToolset("test.toolset", "test", nil),
+		testAdmissionRevisionA,
+		"provider-a",
+		incarnation,
+		time.Minute,
 	)
 	require.NoError(t, err)
-	t.Cleanup(func() {
-		require.NoError(t, tracker.Close())
-	})
+	tracker := newDirectHealthTracker(ctx, catalog)
+	pingID := newPingID(admission.RegistrationToken, admission.HealthEpoch)
 
-	_, _, err = streams.GetOrCreateStream(ctx, "registered-toolset")
+	require.NoError(t, tracker.RecordPong(ctx, "test.toolset", "provider-a", incarnation, pingID))
+	health, err := tracker.Health(ctx, "test.toolset", admission.RegistrationToken)
 	require.NoError(t, err)
-	_, _, err = streams.GetOrCreateStream(ctx, "stale-toolset")
+	assert.Equal(t, now, health.LastPong)
+	assert.True(t, health.Healthy)
+
+	clock.Set(now.Add(-time.Minute))
+	require.NoError(t, tracker.RecordPong(ctx, "test.toolset", "provider-a", incarnation, pingID))
+	entry, _, err := catalog.healthEntry(ctx, "test.toolset")
 	require.NoError(t, err)
+	assert.Equal(t, now.UnixNano(), entry.LastPongUnixNano)
 
-	tracker.(*healthTracker).syncWithCatalog()
-
-	require.NotNil(t, streams.GetStream("registered-toolset"))
-	require.Nil(t, streams.GetStream("stale-toolset"))
+	require.NoError(t, catalog.ReleaseProvider(
+		ctx,
+		"test.toolset",
+		"provider-a",
+		incarnation,
+		admission.RegistrationToken,
+	))
+	require.NoError(t, tracker.RecordPong(ctx, "test.toolset", "provider-a", incarnation, pingID))
+	entry, _, err = catalog.healthEntry(ctx, "test.toolset")
+	require.NoError(t, err)
+	assert.Zero(t, entry.LastPongUnixNano)
+	assert.Equal(t, admission.HealthEpoch+1, entry.HealthEpoch)
 }
 
-func TestSendPingRemovesStreamHandleWhenRegistrationDisappearsDuringPublish(t *testing.T) {
-	rdb := getRedis(t)
+func TestHealthTrackerZeroLeaseReregistrationRejectsOldPong(t *testing.T) {
+	t.Parallel()
+
 	ctx := context.Background()
-
-	registryMap, err := rmap.Join(ctx, "registry-stale-ping-"+t.Name(), rdb)
+	clock := newTestTimeSource(time.Unix(1_700_000_000, 0))
+	catalog := newToolsetCatalog(newTestCatalogMap(), clock)
+	firstIncarnation := uuid.NewString()
+	first, err := catalog.Register(
+		ctx,
+		testCatalogToolset("test.toolset", "test", nil),
+		testAdmissionRevisionA,
+		"provider",
+		firstIncarnation,
+		time.Minute,
+	)
 	require.NoError(t, err)
-	t.Cleanup(func() {
-		registryMap.Close()
-	})
+	oldPing := newPingID(first.RegistrationToken, first.HealthEpoch)
+	require.NoError(t, catalog.ReleaseProvider(
+		ctx,
+		"test.toolset",
+		"provider",
+		firstIncarnation,
+		first.RegistrationToken,
+	))
+	secondIncarnation := uuid.NewString()
+	second, err := catalog.Register(
+		ctx,
+		testCatalogToolset("test.toolset", "test", nil),
+		testAdmissionRevisionA,
+		"provider",
+		secondIncarnation,
+		time.Minute,
+	)
+	require.NoError(t, err)
+	assert.Greater(t, second.HealthEpoch, first.HealthEpoch)
+	tracker := newDirectHealthTracker(ctx, catalog)
 
-	registryEvents := registryMap.Subscribe()
-	defer registryMap.Unsubscribe(registryEvents)
+	require.NoError(t, tracker.RecordPong(ctx, "test.toolset", "provider", firstIncarnation, oldPing))
+	health, err := tracker.Health(ctx, "test.toolset", second.RegistrationToken)
+	require.NoError(t, err)
+	assert.False(t, health.Healthy)
 
-	catalog := newToolsetCatalog(registryMap)
-	require.NoError(t, catalog.SaveToolset(ctx, &genregistry.Toolset{
-		Name:         "racing-toolset",
-		RegisteredAt: "registration-1",
-	}))
-	// The replicated map applies writes to the local replica asynchronously;
-	// wait for the save to land before sendPing resolves the registration.
-	awaitMapEvent(registryEvents)
+	require.NoError(t, tracker.RecordPong(
+		ctx,
+		"test.toolset",
+		"provider",
+		secondIncarnation,
+		newPingID(second.RegistrationToken, second.HealthEpoch),
+	))
+	health, err = tracker.Health(ctx, "test.toolset", second.RegistrationToken)
+	require.NoError(t, err)
+	assert.True(t, health.Healthy)
+}
 
-	streams := &catalogDeletingStreamManager{
-		onPublish: func() {
-			require.NoError(t, catalog.DeleteToolset(ctx, "racing-toolset"))
-			// Wait until the local replica observes the deletion so the
-			// post-publish registration check reads the deleted state.
-			awaitMapEvent(registryEvents)
-		},
-	}
+func TestHealthTrackerLogsHealthyToStaleTransitionOnce(t *testing.T) {
+	t.Parallel()
+
+	lastPong := time.Unix(1_700_000_000, 0)
+	logger := &healthCaptureLogger{}
 	tracker := &healthTracker{
-		streamManager: streams,
-		catalog:       catalog,
-		logger:        telemetry.NewNoopLogger(),
+		logger:              logger,
+		lastObservedHealthy: make(map[string]bool),
+	}
+	healthy := ToolsetHealth{Healthy: true, LastPong: lastPong, ProviderCount: 1}
+	stale := ToolsetHealth{
+		Healthy:       false,
+		LastPong:      lastPong,
+		Age:           time.Minute,
+		ProviderCount: 1,
 	}
 
-	tracker.sendPing(ctx, "racing-toolset")
+	tracker.noteHealth(context.Background(), "test.toolset", healthy)
+	tracker.noteHealth(context.Background(), "test.toolset", stale)
+	tracker.noteHealth(context.Background(), "test.toolset", stale)
 
-	require.Equal(t, []string{"racing-toolset"}, streams.removedToolsets())
+	require.Equal(t, []string{"toolset became unhealthy"}, logger.warnings)
 }
 
-func TestHealthTrackerClosePreventsCatalogSyncRestart(t *testing.T) {
-	rdb := getRedis(t)
-	ctx := context.Background()
-
-	healthMap, err := rmap.Join(ctx, "health-close-sync-"+t.Name(), rdb)
-	require.NoError(t, err)
-	t.Cleanup(func() {
-		healthMap.Close()
-	})
-
-	registryMap, err := rmap.Join(ctx, "registry-close-sync-"+t.Name(), rdb)
-	require.NoError(t, err)
-	t.Cleanup(func() {
-		registryMap.Close()
-	})
-
-	node, err := pool.AddNode(ctx, "health-close-sync-pool-"+t.Name(), rdb, testNodeOpts()...)
-	require.NoError(t, err)
-	t.Cleanup(func() {
-		require.NoError(t, node.Close(ctx))
-	})
-
-	tracker, err := NewHealthTracker(
-		newMockStreamManager(),
-		healthMap,
-		registryMap,
-		node,
-		WithPingInterval(time.Hour),
-		WithMissedPingThreshold(2),
-	)
-	require.NoError(t, err)
-
-	require.NoError(t, tracker.Close())
-	require.NoError(t, newToolsetCatalog(registryMap).SaveToolset(ctx, testCatalogToolset("closed-toolset", "closed", []string{"closed"})))
-
-	ht := tracker.(*healthTracker)
-	ht.syncWithCatalog()
-
-	ht.mu.RLock()
-	require.True(t, ht.closed)
-	require.Empty(t, ht.tickers)
-	require.Empty(t, ht.cancels)
-	ht.mu.RUnlock()
-
-	err = tracker.StartPingLoop(ctx, "closed-toolset")
-	require.Error(t, err)
-}
-
-// TestNewHealthTrackerFailsWhenCatalogMapStopped verifies that constructing a
-// tracker over an already-stopped catalog map fails loudly instead of leaving
-// the watch goroutine blocked forever on a nil subscription channel.
-func TestNewHealthTrackerFailsWhenCatalogMapStopped(t *testing.T) {
-	rdb := getRedis(t)
-	ctx := context.Background()
-
-	healthMap, err := rmap.Join(ctx, "health-stopped-catalog-"+t.Name(), rdb)
-	require.NoError(t, err)
-	t.Cleanup(func() {
-		healthMap.Close()
-	})
-
-	registryMap, err := rmap.Join(ctx, "registry-stopped-catalog-"+t.Name(), rdb)
-	require.NoError(t, err)
-	registryMap.Close()
-
-	node, err := pool.AddNode(ctx, "health-stopped-catalog-pool-"+t.Name(), rdb, testNodeOpts()...)
-	require.NoError(t, err)
-	t.Cleanup(func() {
-		require.NoError(t, node.Close(ctx))
-	})
-
-	tracker, err := NewHealthTracker(
-		newMockStreamManager(),
-		healthMap,
-		registryMap,
-		node,
-		WithPingInterval(time.Hour),
-		WithMissedPingThreshold(2),
-	)
-	require.ErrorContains(t, err, "subscribe to catalog map")
-	require.Nil(t, tracker)
-}
-
-// TestWatchCatalogChangesExitsWhenEventsChannelCloses verifies that the catalog
-// watch goroutine returns when the subscription channel is closed (the catalog
-// map was stopped) instead of busy-spinning on closed-channel receives.
-func TestWatchCatalogChangesExitsWhenEventsChannelCloses(t *testing.T) {
-	rdb := getRedis(t)
-	ctx := context.Background()
-
-	healthMap, err := rmap.Join(ctx, "health-watch-close-"+t.Name(), rdb)
-	require.NoError(t, err)
-	t.Cleanup(func() {
-		healthMap.Close()
-	})
-
-	registryMap, err := rmap.Join(ctx, "registry-watch-close-"+t.Name(), rdb)
-	require.NoError(t, err)
-	t.Cleanup(func() {
-		registryMap.Close()
-	})
-
-	node, err := pool.AddNode(ctx, "health-watch-close-pool-"+t.Name(), rdb, testNodeOpts()...)
-	require.NoError(t, err)
-	t.Cleanup(func() {
-		require.NoError(t, node.Close(ctx))
-	})
-
-	tracker, err := NewHealthTracker(
-		newMockStreamManager(),
-		healthMap,
-		registryMap,
-		node,
-		WithPingInterval(time.Hour),
-		WithMissedPingThreshold(2),
-	)
-	require.NoError(t, err)
-	t.Cleanup(func() {
-		require.NoError(t, tracker.Close())
-	})
-
-	events := make(chan rmap.EventKind, 1)
-	done := make(chan struct{})
-	go func() {
-		defer close(done)
-		tracker.(*healthTracker).watchCatalogChanges(events)
-	}()
-
-	close(events)
-
-	select {
-	case <-done:
-	case <-time.After(5 * time.Second):
-		t.Fatal("watchCatalogChanges did not exit after the events channel closed")
+func newDirectHealthTracker(_ context.Context, catalog *toolsetCatalog) *healthTracker {
+	closed := make(chan struct{})
+	close(closed)
+	return &healthTracker{
+		catalog:             catalog,
+		catalogMap:          catalog.m,
+		pingInterval:        time.Second,
+		missedPingThreshold: 1,
+		stalenessThreshold:  2 * time.Second,
+		logger:              telemetry.NewNoopLogger(),
+		revFloors:           make(map[string]int64),
+		lastObservedHealthy: make(map[string]bool),
+		closeCh:             make(chan struct{}),
+		doneCh:              closed,
 	}
 }
-
-// newPongTestService builds a registry service backed by a real health tracker
-// so Pong tests exercise the full health admission path.
-func newPongTestService(t *testing.T) (*Service, HealthTracker, *toolsetCatalog, *rmap.Map, *rmap.Map) {
-	t.Helper()
-
-	rdb := getRedis(t)
-	ctx := context.Background()
-	suffix := fmt.Sprintf("%s-%d", t.Name(), iterCounter.Add(1))
-
-	healthMap, err := rmap.Join(ctx, "health-pong-service-"+suffix, rdb)
-	require.NoError(t, err)
-	t.Cleanup(func() {
-		healthMap.Close()
-	})
-
-	registryMap, err := rmap.Join(ctx, "registry-pong-service-"+suffix, rdb)
-	require.NoError(t, err)
-	t.Cleanup(func() {
-		registryMap.Close()
-	})
-
-	node, err := pool.AddNode(ctx, "health-pong-service-pool-"+suffix, rdb, testNodeOpts()...)
-	require.NoError(t, err)
-	t.Cleanup(func() {
-		require.NoError(t, node.Close(ctx))
-	})
-
-	tracker, err := NewHealthTracker(
-		newMockStreamManager(),
-		healthMap,
-		registryMap,
-		node,
-		WithPingInterval(100*time.Millisecond),
-		WithMissedPingThreshold(2),
-	)
-	require.NoError(t, err)
-	t.Cleanup(func() {
-		require.NoError(t, tracker.Close())
-	})
-
-	catalog := newToolsetCatalog(registryMap)
-	svc, err := newService(serviceOptions{
-		catalog:       catalog,
-		StreamManager: newMockStreamManagerForService(),
-		HealthTracker: tracker,
-		PulseClient:   mockpulse.NewClient(t),
-	})
-	require.NoError(t, err)
-	return svc, tracker, catalog, healthMap, registryMap
-}
-
-func saveHealthTestToolset(ctx context.Context, catalog *toolsetCatalog, toolset string, registeredAt string) error {
-	return catalog.SaveToolset(ctx, &genregistry.Toolset{
-		Name:         toolset,
-		RegisteredAt: registeredAt,
-	})
-}
-
-func requireRegistrationToken(t *testing.T, ctx context.Context, catalog *toolsetCatalog) string {
-	t.Helper()
-
-	token, err := catalog.RegistrationToken(ctx, "toolset-1")
-	require.NoError(t, err)
-	return token
-}
-
-// awaitMapEvent blocks until the subscribed replicated map publishes the next
-// change. Tests use it to synchronize on actual distributed state updates
-// instead of polling local reads.
-func awaitMapEvent(events <-chan rmap.EventKind) {
-	<-events
-}
-
-func setHealthRecordForTest(ctx context.Context, healthMap *rmap.Map, toolset string, registrationToken string, lastPong time.Time) error {
-	payload, err := json.Marshal(healthRecord{
-		RegistrationToken: registrationToken,
-		LastPongUnixNano:  lastPong.UnixNano(),
-	})
-	if err != nil {
-		return err
-	}
-	_, err = healthMap.Set(ctx, healthKey(toolset), string(payload))
-	return err
-}
-
-type mockStreamManager struct {
-	mu       sync.RWMutex
-	messages map[string][]toolregistry.ToolCallMessage
-}
-
-func newMockStreamManager() *mockStreamManager {
-	return &mockStreamManager{
-		messages: make(map[string][]toolregistry.ToolCallMessage),
-	}
-}
-
-func (m *mockStreamManager) GetOrCreateStream(ctx context.Context, toolset string) (clientspulse.Stream, string, error) {
-	return nil, "mock-stream:" + toolset, nil
-}
-
-func (m *mockStreamManager) GetStream(toolset string) clientspulse.Stream {
-	return nil
-}
-
-func (m *mockStreamManager) RemoveStream(toolset string) {}
-
-func (m *mockStreamManager) RemoveStreamsNotInCatalog(registered map[string]bool) {}
-
-func (m *mockStreamManager) PublishToolCall(ctx context.Context, toolset string, msg toolregistry.ToolCallMessage) error {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	m.messages[toolset] = append(m.messages[toolset], msg)
-	return nil
-}
-
-type catalogDeletingStreamManager struct {
-	mu        sync.Mutex
-	onPublish func()
-	removed   []string
-}
-
-func (m *catalogDeletingStreamManager) GetOrCreateStream(ctx context.Context, toolset string) (clientspulse.Stream, string, error) {
-	return nil, "mock-stream:" + toolset, nil
-}
-
-func (m *catalogDeletingStreamManager) GetStream(toolset string) clientspulse.Stream {
-	return nil
-}
-
-func (m *catalogDeletingStreamManager) RemoveStream(toolset string) {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	m.removed = append(m.removed, toolset)
-}
-
-func (m *catalogDeletingStreamManager) RemoveStreamsNotInCatalog(registered map[string]bool) {}
-
-func (m *catalogDeletingStreamManager) PublishToolCall(ctx context.Context, toolset string, msg toolregistry.ToolCallMessage) error {
-	m.onPublish()
-	return nil
-}
-
-func (m *catalogDeletingStreamManager) removedToolsets() []string {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	return append([]string(nil), m.removed...)
-}
-
-func genHealthyToolsetName() gopter.Gen {
-	return gen.OneConstOf(
-		"data-tools",
-		"analytics",
-		"etl-pipeline",
-		"search-service",
-		"notification-tools",
-	)
-}
-
-func genMissedPingThreshold() gopter.Gen {
-	return gen.IntRange(1, 5)
-}
-
-var _ StreamManager = (*mockStreamManager)(nil)
-var _ StreamManager = (*catalogDeletingStreamManager)(nil)

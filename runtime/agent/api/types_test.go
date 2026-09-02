@@ -3,6 +3,7 @@ package api
 import (
 	"encoding/json/v2"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/require"
 
@@ -91,8 +92,8 @@ func TestPlanActivityOutput_UnmarshalJSON(t *testing.T) {
 			"PolicyCaps": {
 				"MaxToolCalls": 5,
 				"RemainingToolCalls": 3,
-				"MaxConsecutiveFailedToolCalls": 2,
-				"RemainingConsecutiveFailedToolCalls": 1
+				"MaxRecoveryTurns": 2,
+				"RemainingRecoveryTurns": 1
 			}
 		}`
 
@@ -101,10 +102,87 @@ func TestPlanActivityOutput_UnmarshalJSON(t *testing.T) {
 		require.True(t, out.ToolPolicyActive)
 		require.Equal(t, []tools.Ident{"search.web", "memory.lookup"}, out.AllowedTools)
 		require.Equal(t, policy.CapsState{
-			MaxToolCalls:                        5,
-			RemainingToolCalls:                  3,
-			MaxConsecutiveFailedToolCalls:       2,
-			RemainingConsecutiveFailedToolCalls: 1,
+			MaxToolCalls:           5,
+			RemainingToolCalls:     3,
+			MaxRecoveryTurns:       2,
+			RemainingRecoveryTurns: 1,
 		}, out.PolicyCaps)
 	})
+
+	t.Run("historical recovery caps", func(t *testing.T) {
+		const payload = `{
+			"Result": null,
+			"Transcript": [],
+			"PolicyCaps": {
+				"MaxToolCalls": 5,
+				"RemainingToolCalls": 3,
+				"MaxConsecutiveFailedToolCalls": 4,
+				"RemainingConsecutiveFailedToolCalls": 2
+			}
+		}`
+
+		var out PlanActivityOutput
+		require.NoError(t, json.Unmarshal([]byte(payload), &out))
+		require.Equal(t, policy.CapsState{
+			MaxToolCalls:           5,
+			RemainingToolCalls:     3,
+			MaxRecoveryTurns:       4,
+			RemainingRecoveryTurns: 2,
+		}, out.PolicyCaps)
+	})
+}
+
+func TestPolicyOverridesUnmarshalJSONMigratesHistoricalRecoveryCap(t *testing.T) {
+	t.Parallel()
+
+	const payload = `{
+		"MaxToolCalls": 8,
+		"MaxConsecutiveFailedToolCalls": 5,
+		"TimeBudget": 2000000000,
+		"PlanTimeout": 3000000000,
+		"ToolTimeout": 4000000000,
+		"PerToolTimeout": {"svc.read": 5000000000},
+		"FinalizerGrace": 6000000000,
+		"InterruptsAllowed": true
+	}`
+	var overrides PolicyOverrides
+	require.NoError(t, json.Unmarshal([]byte(payload), &overrides))
+	require.Equal(t, 8, overrides.MaxToolCalls)
+	require.Equal(t, 5, overrides.MaxRecoveryTurns)
+	require.Equal(t, 2*time.Second, overrides.TimeBudget)
+	require.Equal(t, 3*time.Second, overrides.PlanTimeout)
+	require.Equal(t, 4*time.Second, overrides.ToolTimeout)
+	require.Equal(t, map[tools.Ident]time.Duration{"svc.read": 5 * time.Second}, overrides.PerToolTimeout)
+	require.Equal(t, 6*time.Second, overrides.FinalizerGrace)
+	require.True(t, overrides.InterruptsAllowed)
+}
+
+func TestPolicyOverridesUnmarshalJSONPreservesNilPerToolTimeout(t *testing.T) {
+	t.Parallel()
+
+	var overrides PolicyOverrides
+	require.NoError(t, json.Unmarshal([]byte(`{}`), &overrides))
+	require.Nil(t, overrides.PerToolTimeout)
+}
+
+func TestModelRecoveryJSONRoundTrip(t *testing.T) {
+	t.Parallel()
+
+	want := ModelRecovery{
+		Kind:         model.OutputValidationToolIdentity,
+		Fingerprint:  [32]byte{1, 2, 3},
+		ByteCount:    42,
+		Usage:        model.TokenUsage{InputTokens: 2, OutputTokens: 3, TotalTokens: 5},
+		Attempt:      4,
+		Correction:   "use an advertised tool",
+		DisableTools: false,
+		ToolCatalog:  []tools.Ident{"svc.read", "runtime.tool_unavailable"},
+	}
+	data, err := json.Marshal(want)
+	require.NoError(t, err)
+	require.NotContains(t, string(data), "[1,2,3")
+
+	var got ModelRecovery
+	require.NoError(t, json.Unmarshal(data, &got))
+	require.Equal(t, want, got)
 }

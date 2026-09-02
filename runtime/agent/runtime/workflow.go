@@ -107,8 +107,14 @@ func (r *Runtime) setupWorkflowExecution(
 }
 
 func validateWorkflowInput(input *RunInput) error {
+	if input == nil {
+		return fmt.Errorf("%w: run input is required", ErrInvalidConfig)
+	}
 	if input.AgentID == "" {
 		return errors.New("agent id is required")
+	}
+	if input.Policy != nil && input.Policy.MaxRecoveryTurns < 0 {
+		return fmt.Errorf("%w: MaxRecoveryTurns must not be negative", ErrInvalidConfig)
 	}
 	return nil
 }
@@ -192,8 +198,55 @@ func (r *Runtime) executeWorkflowRun(
 ) (*RunOutput, string, error) {
 	planInput, firstOutput, timing, deadlines, err := r.startWorkflowRun(wfCtx, reg, input, runCtx, turnID)
 	if err != nil {
+		return r.handleWorkflowStartError(wfCtx, reg, input, planInput, firstOutput, deadlines, turnID, err)
+	}
+	return r.continueWorkflowRun(wfCtx, reg, input, planInput, firstOutput, timing, deadlines, turnID, ctrl)
+}
+
+func (r *Runtime) handleWorkflowStartError(
+	wfCtx engine.WorkflowContext,
+	reg AgentRegistration,
+	input *RunInput,
+	planInput *planner.PlanInput,
+	firstOutput *PlanActivityOutput,
+	deadlines runDeadlines,
+	turnID string,
+	startErr error,
+) (*RunOutput, string, error) {
+	if !errors.Is(startErr, errRecoveryTurnCapExceeded) || planInput == nil || firstOutput == nil {
+		return nil, workflowStatusForError(startErr), startErr
+	}
+	out, err := r.finalizeWithPlanner(
+		wfCtx,
+		reg,
+		input,
+		planInput,
+		nil,
+		nil,
+		firstOutput.Usage,
+		firstOutput.PolicyCaps,
+		firstOutput.Attempt+1,
+		turnID,
+		planner.TerminationReasonFailureCap,
+		deadlines.Hard,
+	)
+	if err != nil {
 		return nil, workflowStatusForError(err), err
 	}
+	return out, runStatusSuccess, nil
+}
+
+func (r *Runtime) continueWorkflowRun(
+	wfCtx engine.WorkflowContext,
+	reg AgentRegistration,
+	input *RunInput,
+	planInput *planner.PlanInput,
+	firstOutput *PlanActivityOutput,
+	timing runTiming,
+	deadlines runDeadlines,
+	turnID string,
+	ctrl *interrupt.Controller,
+) (*RunOutput, string, error) {
 	caps, nextAttempt, parentTracker, err := r.prepareWorkflowLoopState(wfCtx.Context(), reg, input, planInput, firstOutput.Result, firstOutput)
 	if err != nil {
 		return nil, runStatusFailed, err
@@ -254,9 +307,13 @@ func (r *Runtime) startWorkflowRun(
 	if err := r.publishPlanningPhase(wfCtx.Context(), input, turnID); err != nil {
 		return nil, nil, runTiming{}, runDeadlines{}, err
 	}
-	firstOutput, err := r.runInitialPlan(wfCtx, reg, startReq, planOpts, deadlines.Hard)
+	nextAttempt := startReq.RunContext.Attempt + 1
+	firstOutput, err := r.runInitialPlan(wfCtx, reg, startReq, planOpts, deadlines.Hard, &caps, &nextAttempt)
+	if firstOutput != nil && firstOutput.Attempt > 0 {
+		planInput.RunContext.Attempt = firstOutput.Attempt
+	}
 	if err != nil {
-		return nil, nil, runTiming{}, runDeadlines{}, err
+		return planInput, firstOutput, timing, deadlines, err
 	}
 	return planInput, firstOutput, timing, deadlines, nil
 }
@@ -321,11 +378,13 @@ func (r *Runtime) runInitialPlan(
 	startReq PlanActivityInput,
 	planOpts engine.ActivityOptions,
 	hardDeadline time.Time,
+	caps *policy.CapsState,
+	nextAttempt *int,
 ) (*PlanActivityOutput, error) {
-	firstOutput, err := r.runPlanActivity(wfCtx, reg.PlanActivityName, planOpts, startReq, hardDeadline)
+	firstOutput, err := r.runPlanActivityRecovering(wfCtx, reg.PlanActivityName, planOpts, startReq, hardDeadline, caps, nextAttempt)
 	if err != nil {
 		r.logger.Error(wfCtx.Context(), "Plan activity failed", "error", err)
-		return nil, err
+		return firstOutput, err
 	}
 	if err := r.validateFirstPlanOutput(wfCtx.Context(), firstOutput); err != nil {
 		return nil, err
@@ -341,9 +400,9 @@ func applyWorkflowCaps(caps policy.CapsState, input *RunInput) policy.CapsState 
 		caps.MaxToolCalls = input.Policy.MaxToolCalls
 		caps.RemainingToolCalls = input.Policy.MaxToolCalls
 	}
-	if input.Policy.MaxConsecutiveFailedToolCalls > 0 {
-		caps.MaxConsecutiveFailedToolCalls = input.Policy.MaxConsecutiveFailedToolCalls
-		caps.RemainingConsecutiveFailedToolCalls = input.Policy.MaxConsecutiveFailedToolCalls
+	if input.Policy.MaxRecoveryTurns > 0 {
+		caps.MaxRecoveryTurns = input.Policy.MaxRecoveryTurns
+		caps.RemainingRecoveryTurns = input.Policy.MaxRecoveryTurns
 	}
 	return caps
 }
@@ -367,14 +426,18 @@ func (r *Runtime) prepareWorkflowLoopState(
 		r.logger.Info(ctx, "PlanResult has a terminal result but no ToolCalls - workflow will return early")
 	}
 	caps := applyWorkflowCaps(initialCaps(reg.Policy), input)
-	if output != nil && output.ToolPolicyActive {
+	if output != nil && (output.PolicyCaps.MaxToolCalls > 0 || output.PolicyCaps.MaxRecoveryTurns > 0) {
 		caps = output.PolicyCaps
 	}
 	var parentTracker *childTracker
 	if planInput.RunContext.ParentToolCallID != "" {
 		parentTracker = newChildTracker(planInput.RunContext.ParentToolCallID)
 	}
-	return caps, planInput.RunContext.Attempt + 1, parentTracker, nil
+	nextAttempt := planInput.RunContext.Attempt + 1
+	if output != nil && output.Attempt > 0 {
+		nextAttempt = output.Attempt + 1
+	}
+	return caps, nextAttempt, parentTracker, nil
 }
 
 // runLoop executes the plan/tool/resume cycle until the planner returns a final response

@@ -66,7 +66,9 @@ func TestClientRedisStreamRoundTrip(t *testing.T) {
 	)
 	require.NoError(t, err)
 	events := sink.Subscribe()
-	t.Cleanup(func() { sink.Close(context.Background()) })
+	t.Cleanup(func() {
+		require.NoError(t, sink.Close(context.Background()))
+	})
 
 	id, err := stream.Add(ctx, "update", []byte(`{"status":"ready"}`))
 	require.NoError(t, err)
@@ -116,7 +118,7 @@ func TestClientRedisPendingDeliverySurvivesSinkReplacement(t *testing.T) {
 	case <-time.After(5 * time.Second):
 		require.FailNow(t, "timed out waiting for initial Pulse delivery")
 	}
-	first.Close(ctx)
+	require.NoError(t, first.Close(ctx))
 
 	second, err := stream.NewSink(
 		ctx,
@@ -125,7 +127,9 @@ func TestClientRedisPendingDeliverySurvivesSinkReplacement(t *testing.T) {
 		streamopts.WithSinkAckGracePeriod(150*time.Millisecond),
 	)
 	require.NoError(t, err)
-	t.Cleanup(func() { second.Close(context.Background()) })
+	t.Cleanup(func() {
+		require.NoError(t, second.Close(context.Background()))
+	})
 	secondEvents := second.Subscribe()
 	select {
 	case event := <-secondEvents:
@@ -142,6 +146,43 @@ func TestClientRedisPendingDeliverySurvivesSinkReplacement(t *testing.T) {
 		pending, pendingErr := rdb.XPending(ctx, "pulse:stream:pending-delivery", "durable").Result()
 		return pendingErr == nil && pending.Count == 0
 	}, 5*time.Second, 25*time.Millisecond)
+}
+
+func TestClientRedisIndependentReaderAndGroupRepair(t *testing.T) {
+	ctx := context.Background()
+	rdb := startRedis(t, ctx)
+	client, err := New(Options{Redis: rdb, OperationTimeout: 2 * time.Second})
+	require.NoError(t, err)
+	stream, err := client.Stream("reader-and-group")
+	require.NoError(t, err)
+
+	require.EqualError(t, stream.EnsureGroup(ctx, ""), "group name is required")
+	require.NoError(t, stream.EnsureGroup(ctx, "providers"))
+	require.NoError(t, stream.EnsureGroup(ctx, "providers"), "existing groups must remain unchanged")
+	groups, err := rdb.XInfoGroups(ctx, "pulse:stream:reader-and-group").Result()
+	require.NoError(t, err)
+	require.Len(t, groups, 1)
+	require.Equal(t, "providers", groups[0].Name)
+
+	id, err := stream.Add(ctx, "retained", []byte(`{"value":1}`))
+	require.NoError(t, err)
+	reader, err := stream.NewReader(
+		ctx,
+		streamopts.WithReaderStartAtOldest(),
+		streamopts.WithReaderBlockDuration(25*time.Millisecond),
+	)
+	require.NoError(t, err)
+	defer reader.Close()
+
+	select {
+	case event := <-reader.Subscribe():
+		require.NotNil(t, event)
+		require.Equal(t, id, event.ID)
+		require.Equal(t, "retained", event.EventName)
+		require.JSONEq(t, `{"value":1}`, string(event.Payload))
+	case <-time.After(5 * time.Second):
+		require.FailNow(t, "timed out waiting for independent reader")
+	}
 }
 
 func TestClientRedisDisruptionFailsPublish(t *testing.T) {

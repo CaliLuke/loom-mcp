@@ -36,7 +36,7 @@ Here’s a map of what loom-mcp just built for you based on your `design/*.go` f
             {{- end }}
         * **Run Policy:**
             * Max Tool Calls: `{{ .RunPolicy.Caps.MaxToolCalls }}`
-            * Max Consecutive Failures: `{{ .RunPolicy.Caps.MaxConsecutiveFailedToolCalls }}`
+            * Max Recovery Turns: `{{ .RunPolicy.Caps.MaxRecoveryTurns }}`
             * Time Budget: `{{ .RunPolicy.TimeBudget }}`
             * Interrupts Allowed: `{{ .RunPolicy.InterruptsAllowed }}`
 {{- end }}
@@ -348,21 +348,36 @@ The provider implements `HandleToolCall(ctx, msg)` which:
 - Calls the bound service method
 - Encodes the tool result JSON (and optional artifact/sidecar) using the generated result codec
 
-To serve tool calls from the registry gateway, run the provider loop inside the owning service process:
+To serve tool calls from the registry gateway, give `Serve` one immutable
+deployment admission revision and typed callbacks for the full registry
+lifecycle:
 
 ```go
-// cmd/<service>/main.go (or your service bootstrap)
 handler := <toolsetpkg>.NewProvider(svcImpl)
+providerID := mustRequiredEnv("HOSTNAME") + "/" + toolsetID
+admissionRevision := mustRequiredEnv("TOOL_REGISTRY_ADMISSION_REVISION")
 go func() {
-    err := toolprovider.Serve(ctx, pulseClient, toolsetID, handler, toolprovider.Options{
-        Pong: func(ctx context.Context, pingID string) error {
-            return registryClient.Pong(ctx, &registry.PongPayload{
-                PingID:  pingID,
-                Toolset: toolsetID,
-            })
+    err := toolprovider.Serve(
+        ctx,
+        pulseClient,
+        toolsetID,
+        handler,
+        toolprovider.Registration{
+            AdmissionRevision: admissionRevision,
+            Register:          registerProvider,
+            Drain:             drainProvider,
+            Release:           releaseProvider,
+            Claim:             claimToolCall,
+            Complete:          completeToolCall,
+            PublishOutputDelta: publishToolOutputDelta,
+            ReportOverload:     reportToolCallOverload,
         },
-    })
-    if err != nil {
+        toolprovider.Options{
+            ProviderID: providerID,
+            Pong:        pongProvider,
+        },
+    )
+    if err != nil && !errors.Is(err, context.Canceled) {
         panic(err)
     }
 }()
@@ -370,7 +385,20 @@ go func() {
 
 Notes:
 
-- The registry publishes tool calls to the deterministic stream `toolset:<toolsetID>:requests` and providers publish results to `result:<toolUseID>`.
+- Each callback maps its arguments directly to the corresponding generated
+  registry operation. Register and every consumer call must set
+  `toolregistry.WireProtocolVersion`.
+- `Serve` creates one provider incarnation, registers before consuming,
+  renews its lease, drains before shutdown, settles claimed work, and releases
+  only after clean settlement.
+- `RegistrationToken` is the admission-generation fence. Calls, claims,
+  deltas, overload reports, and terminal results must carry the exact admitted
+  token.
+- The registry publishes calls to `toolset:<toolsetID>:requests`. Providers
+  submit claims and results through the registry; the registry owns canonical
+  publication on `result:<toolUseID>`.
+- Use one admission revision for same-contract scaling and rolling updates.
+  Change it when schema or rollout intent requires a new execution fence.
 - Providers are generated only when the toolset has at least one **method-backed** tool (and the toolset is not registry-backed).
 {{- end }}
 

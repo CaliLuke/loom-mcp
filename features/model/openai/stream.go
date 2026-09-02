@@ -347,6 +347,9 @@ func (p *openAIChunkProcessor) handleCompleted(resp responses.Response) error {
 		return err
 	}
 	translated.Usage.Model = p.modelID
+	if translated.OutputLimited {
+		return p.emitUsageAndStop(translated.Usage, translated.StopReason, true)
+	}
 	if p.output != nil {
 		if err := p.emitCompletion(translated.Content); err != nil {
 			return err
@@ -359,7 +362,7 @@ func (p *openAIChunkProcessor) handleCompleted(resp responses.Response) error {
 			return err
 		}
 	}
-	return p.emitUsageAndStop(translated.Usage, translated.StopReason)
+	return p.emitUsageAndStop(translated.Usage, translated.StopReason, translated.OutputLimited)
 }
 
 func (p *openAIChunkProcessor) emitCompletion(content []model.Message) error {
@@ -406,7 +409,7 @@ func (p *openAIChunkProcessor) emitFinalTextIfNeeded(content []model.Message) er
 	})
 }
 
-func (p *openAIChunkProcessor) emitUsageAndStop(usage model.TokenUsage, stopReason string) error {
+func (p *openAIChunkProcessor) emitUsageAndStop(usage model.TokenUsage, stopReason string, outputLimited bool) error {
 	if hasOpenAITokenUsage(usage) {
 		if p.recordUsage != nil {
 			p.recordUsage(usage)
@@ -419,8 +422,9 @@ func (p *openAIChunkProcessor) emitUsageAndStop(usage model.TokenUsage, stopReas
 		}
 	}
 	return p.emit(model.Chunk{
-		Type:       model.ChunkTypeStop,
-		StopReason: stopReason,
+		Type:          model.ChunkTypeStop,
+		StopReason:    stopReason,
+		OutputLimited: outputLimited,
 	})
 }
 

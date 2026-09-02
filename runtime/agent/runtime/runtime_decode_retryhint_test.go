@@ -22,6 +22,7 @@ func TestBuildRetryHintFromDecodeError_SemanticError(t *testing.T) {
 	semanticErr := &json.SemanticError{JSONPointer: "/summary"}
 	spec := &tools.ToolSpec{
 		Payload: tools.TypeSpec{
+			Schema: []byte(`{"type":"object","properties":{"summary":{"type":"object"}},"required":["summary"]}`),
 			ExampleInput: map[string]any{
 				"summary": map[string]any{
 					"summary": "Headline",
@@ -39,11 +40,8 @@ func TestBuildRetryHintFromDecodeError_SemanticError(t *testing.T) {
 	require.Equal(t, []string{"summary"}, hint.MissingFields)
 	require.NotEmpty(t, hint.ClarifyingQuestion)
 	require.Contains(t, hint.ClarifyingQuestion, "summary")
-	require.NotNil(t, hint.ExampleInput)
-	// ExampleInput should contain the top-level summary object.
-	s, ok := hint.ExampleInput["summary"]
-	require.True(t, ok)
-	require.NotNil(t, s)
+	require.Nil(t, hint.ExampleInput)
+	require.Contains(t, hint.Message, "summary:object,required")
 }
 
 // TestBuildRetryHintFromDecodeError_SyntaxError verifies that malformed JSON
@@ -76,7 +74,8 @@ func TestExecuteToolActivity_DecodeErrorRetryHint(t *testing.T) {
 				Service: "svc",
 				Toolset: "svc.ts",
 				Payload: tools.TypeSpec{
-					Name: "P",
+					Name:   "P",
+					Schema: []byte(`{"type":"object","properties":{"summary":{"type":"object"}},"required":["summary"]}`),
 					ExampleInput: map[string]any{
 						"summary": map[string]any{
 							"summary": "Headline",
@@ -121,5 +120,6 @@ func TestExecuteToolActivity_DecodeErrorRetryHint(t *testing.T) {
 	require.NotNil(t, out.RetryHint)
 	require.Equal(t, planner.RetryReasonMissingFields, out.RetryHint.Reason)
 	require.Equal(t, []string{"summary"}, out.RetryHint.MissingFields)
-	require.NotNil(t, out.RetryHint.ExampleInput)
+	require.Nil(t, out.RetryHint.ExampleInput)
+	require.Contains(t, out.RetryHint.Message, "summary:object,required")
 }

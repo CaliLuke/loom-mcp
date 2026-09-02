@@ -76,6 +76,17 @@ Use this skill for `loom-mcp` work in this repo. Keep `AGENTS.md` short and keep
   partial-failure semantics. The Pulse replicated map is the catalog authority;
   the removed registry memory/Mongo `Store` model must not be documented or
   restored.
+- Registry-routed providers must use `provider.Serve` with a required admission
+  revision and complete Register/Drain/Release/Claim/Complete/delta/overload
+  callbacks. `Serve` owns incarnation, lease renewal, drain, settlement, and
+  release ordering.
+- One deterministic registration token fences provider membership, calls,
+  claims, deltas, overload control, and results. Never execute stale queued work
+  under a replacement generation or turn post-admission uncertainty into a
+  retryable planner failure.
+- Registry call admission is durable per run/tool-call identity. Exact replay
+  observes the same decision and independently readable retained result stream;
+  publication backlog checks are atomic and trimming is garbage collection.
 - Mongo prompt override resolution uses canonical indexed label-scope
   fingerprints, at most one session plus one global lookup, and a 15-label
   bound. Client startup backfills missing fingerprints before index creation
@@ -132,6 +143,20 @@ Use this skill for `loom-mcp` work in this repo. Keep `AGENTS.md` short and keep
   cancellation, normalized errors, and canonical/provider tool-name round
   trips. Rate limits that surface during stream receive must still wrap
   `model.ErrRateLimited`.
+- Provider adapters implement raw `model.Provider`, not consumer-facing
+  `model.Client`. Construct clients with `model.NewClient`; never pass a raw
+  provider to a planner or runtime.
+- Drain `model.ValidatedStreamer` to the literal `io.EOF`, then call
+  `Finalize(nil)`. Pass terminal receive or processing errors to `Finalize`.
+  `Close` is cleanup-only. Do not expose finalized tool calls or completions
+  before terminal validation accepts the stream.
+- `ValidatedStreamer.Response()` remains unavailable until the consumer has
+  observed literal EOF, even when the validator drained the raw provider ahead
+  while withholding terminal chunks. `Finalize(nil)` must fail before that same
+  consumer boundary. The first finalization result is authoritative.
+- Stream middleware must commit success, tracing status, and adaptive feedback
+  in `Finalize`, never on EOF or cleanup-only `Close`. Invocation cancellation
+  observed before terminal acceptance rejects the response.
 - Streamed tool arguments may normalize an empty payload to `{}`, but malformed
   or truncated JSON must fail with a provider-scoped error. Never silently
   coerce malformed model output into a valid tool payload.

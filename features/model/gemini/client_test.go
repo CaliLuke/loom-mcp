@@ -110,6 +110,19 @@ func TestClientConformance(t *testing.T) {
 				CacheReadTokens: 3,
 			}, response.Usage)
 		},
+		OutputLimited: func(t *testing.T) {
+			mock := &mockModelsClient{response: &genai.GenerateContentResponse{Candidates: []*genai.Candidate{{
+				FinishReason: genai.FinishReasonMaxTokens,
+			}}}}
+			provider := newClient(t, mock)
+			response, err := provider.Complete(context.Background(), request())
+			require.NoError(t, err)
+			require.True(t, response.OutputLimited)
+			client, err := model.NewClient(provider)
+			require.NoError(t, err)
+			_, err = client.Complete(context.Background(), request())
+			requireOutputLimitedRejection(t, err)
+		},
 		MultimodalInput: testutil.ProviderCapabilityConformance{Supported: func(t *testing.T) {
 			mock := &mockModelsClient{response: &genai.GenerateContentResponse{}}
 			req := request()
@@ -291,6 +304,52 @@ func TestClientComplete(t *testing.T) {
 	require.Equal(t, "tool-1", mock.contents[2].Parts[0].FunctionResponse.ID)
 	require.Equal(t, "lookup", mock.contents[2].Parts[0].FunctionResponse.Name)
 	require.Equal(t, map[string]any{"output": map[string]any{"hits": float64(2)}}, normalizeJSONMap(t, mock.contents[2].Parts[0].FunctionResponse.Response))
+}
+
+func TestClientTreatsAnyOutputLimitedCandidateAsTerminal(t *testing.T) {
+	tests := []struct {
+		name       string
+		candidates []*genai.Candidate
+	}{
+		{
+			name: "limited candidate last",
+			candidates: []*genai.Candidate{
+				{FinishReason: genai.FinishReasonStop, Content: &genai.Content{Parts: []*genai.Part{{Text: "complete"}}}},
+				{FinishReason: genai.FinishReasonMaxTokens, Content: &genai.Content{Parts: []*genai.Part{{Text: "truncated"}}}},
+			},
+		},
+		{
+			name: "limited candidate first",
+			candidates: []*genai.Candidate{
+				{FinishReason: genai.FinishReasonMaxTokens, Content: &genai.Content{Parts: []*genai.Part{{Text: "truncated"}}}},
+				{FinishReason: genai.FinishReasonStop, Content: &genai.Content{Parts: []*genai.Part{{Text: "complete"}}}},
+			},
+		},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			provider, err := geminimodel.New(geminimodel.Options{
+				Client:       &mockModelsClient{response: &genai.GenerateContentResponse{Candidates: test.candidates}},
+				DefaultModel: "gemini-2.5-flash",
+			})
+			require.NoError(t, err)
+			request := &model.Request{Messages: []*model.Message{{
+				Role:  model.ConversationRoleUser,
+				Parts: []model.Part{model.TextPart{Text: "hello"}},
+			}}}
+
+			response, err := provider.Complete(context.Background(), request)
+			require.NoError(t, err)
+			require.True(t, response.OutputLimited)
+			require.Equal(t, string(genai.FinishReasonMaxTokens), response.StopReason)
+			require.Empty(t, response.Content)
+
+			client, err := model.NewClient(provider)
+			require.NoError(t, err)
+			_, err = client.Complete(context.Background(), request)
+			requireOutputLimitedRejection(t, err)
+		})
+	}
 }
 
 func TestClientCompleteWithToolChoiceTool(t *testing.T) {
@@ -607,6 +666,14 @@ func normalizeJSONMap(t *testing.T, in map[string]any) map[string]any {
 	var out map[string]any
 	require.NoError(t, json.Unmarshal(data, &out))
 	return out
+}
+
+func requireOutputLimitedRejection(t *testing.T, err error) {
+	t.Helper()
+	require.Error(t, err)
+	var validationErr *model.OutputValidationError
+	require.ErrorAs(t, err, &validationErr)
+	require.Equal(t, model.OutputValidationOutputBounds, validationErr.Kind())
 }
 
 func normalizeJSONValue(t *testing.T, in any) any {

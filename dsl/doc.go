@@ -141,7 +141,7 @@
 //
 // Policy Functions:
 //   - [RunPolicy] configures execution constraints
-//   - [DefaultCaps] sets resource limits using [MaxToolCalls] and [MaxConsecutiveFailedToolCalls]
+//   - [DefaultCaps] sets resource limits using [MaxToolCalls] and [MaxRecoveryTurns]
 //   - [TimeBudget] sets the active-work budget (human/external waits pause it)
 //   - [InterruptsAllowed] enables user interruption handling
 //   - [OnMissingFields] configures validation behavior

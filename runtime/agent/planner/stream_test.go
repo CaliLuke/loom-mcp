@@ -72,6 +72,27 @@ func TestConsumeStreamReportsCloseFailureAfterEOF(t *testing.T) {
 	assert.True(t, stream.closed)
 }
 
+func TestConsumeValidatedStreamUsesCanonicalUsageOnce(t *testing.T) {
+	chunkUsage := model.TokenUsage{InputTokens: 2, OutputTokens: 3, TotalTokens: 5}
+	canonicalUsage := model.TokenUsage{InputTokens: 2, OutputTokens: 3, TotalTokens: 5, Model: "provider-model"}
+	stream := &validatedStreamStub{
+		streamStub: streamStub{
+			chunks:   []model.Chunk{{Type: model.ChunkTypeUsage, UsageDelta: &chunkUsage}},
+			metadata: map[string]any{"usage": canonicalUsage},
+		},
+		response: &model.Response{Usage: canonicalUsage, StopReason: "end_turn"},
+	}
+	events := &plannerEventsStub{}
+
+	summary, err := ConsumeStream(context.Background(), stream, events)
+
+	require.NoError(t, err)
+	assert.True(t, stream.finalized)
+	assert.Equal(t, canonicalUsage, summary.Usage)
+	assert.Equal(t, "end_turn", summary.StopReason)
+	assert.Equal(t, []model.TokenUsage{chunkUsage}, events.usage)
+}
+
 func TestConsumeStreamRejectsNilInputs(t *testing.T) {
 	_, err := ConsumeStream(context.Background(), nil, &plannerEventsStub{})
 	require.EqualError(t, err, "nil streamer")
@@ -87,6 +108,12 @@ type streamStub struct {
 	closeErr error
 	index    int
 	closed   bool
+}
+
+type validatedStreamStub struct {
+	streamStub
+	response  *model.Response
+	finalized bool
 }
 
 func (s *streamStub) Recv() (model.Chunk, error) {
@@ -108,6 +135,15 @@ func (s *streamStub) Close() error {
 
 func (s *streamStub) Metadata() map[string]any {
 	return s.metadata
+}
+
+func (s *validatedStreamStub) Response() *model.Response {
+	return s.response
+}
+
+func (s *validatedStreamStub) Finalize(primaryErr error) error {
+	s.finalized = true
+	return errors.Join(primaryErr, s.Close())
 }
 
 type toolDelta struct {

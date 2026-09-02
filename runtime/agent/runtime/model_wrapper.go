@@ -9,9 +9,9 @@ import (
 )
 
 // This file implements a per-turn model.Client decorator that emits runtime
-// planner events as model output is consumed. The wrapper:
-//   - Streams: forwards assistant text, thinking blocks, and usage deltas
-//     to PlannerEvents so the runtime ledger captures them automatically.
+// planner events for accepted model output. The wrapper:
+//   - Streams: stages assistant text and thinking until finalization succeeds,
+//     and forwards safe usage deltas as they arrive.
 //   - Unary: emits assistant text/thinking from the final response and
 //     reports usage when available.
 //
@@ -52,6 +52,7 @@ func (c *eventDecoratedClient) Complete(ctx context.Context, req *model.Request)
 	if err != nil {
 		return resp, err
 	}
+	canonicalizeModelToolUnavailableCalls(resp, req)
 	if (resp.Usage != model.TokenUsage{}) {
 		stampModelIdentity(&resp.Usage, req)
 		c.events.UsageDelta(ctx, resp.Usage)
@@ -66,10 +67,22 @@ func (c *eventDecoratedClient) Complete(ctx context.Context, req *model.Request)
 	return resp, nil
 }
 
-// Stream delegates to the inner client and returns a Streamer whose Recv()
-// emits PlannerEvents for assistant text, thinking blocks, and usage. Model
-// identity from the request is captured so usage chunks can be attributed.
-func (c *eventDecoratedClient) Stream(ctx context.Context, req *model.Request) (model.Streamer, error) {
+func canonicalizeModelToolUnavailableCalls(response *model.Response, request *model.Request) {
+	if response == nil {
+		return
+	}
+	for index := range response.ToolCalls {
+		if response.ToolCalls[index].Name == tools.ToolUnavailable {
+			response.ToolCalls[index].Payload = exactToolUnavailablePayload(request)
+		}
+	}
+}
+
+// Stream delegates to the inner client and returns a Streamer that owns planner
+// events. It emits usage while receiving and publishes staged assistant text and
+// thinking only after finalization succeeds. The request supplies model identity
+// when usage chunks do not include one.
+func (c *eventDecoratedClient) Stream(ctx context.Context, req *model.Request) (model.ValidatedStreamer, error) {
 	st, err := c.inner.Stream(ctx, req)
 	if err != nil {
 		return nil, err
@@ -82,23 +95,42 @@ func (c *eventDecoratedClient) Stream(ctx context.Context, req *model.Request) (
 	}, nil
 }
 
-// eventStream decorates a model.Streamer to emit PlannerEvents for chunks.
-// It carries the original request so usage chunks can be attributed to the
-// requested model when the adapter did not stamp identity.
+// stagedPlannerEvent holds presentation content until the validated stream
+// reaches a clean terminal boundary. Rejected model content must never enter
+// the canonical run log.
+type stagedPlannerEvent struct {
+	text     string
+	thinking *model.ThinkingPart
+}
+
+// eventStream decorates a model.Streamer to emit PlannerEvents for chunks. It
+// carries the original request so usage chunks can be attributed and direct
+// runtime tool calls can be canonicalized from the exact effective request.
 type eventStream struct {
-	inner  model.Streamer
+	inner  model.ValidatedStreamer
 	events planner.PlannerEvents
 	ctx    context.Context
 	req    *model.Request
+	staged []stagedPlannerEvent
 }
 
-// Recv forwards events for text/thinking/usage chunks.
+// EmitsPlannerEvents reports that the stream owns planner presentation and usage
+// events. Recv publishes safe incremental events, and Finalize publishes staged
+// presentation events after acceptance. Helpers such as planner.ConsumeStream
+// use this marker to avoid publishing the same accepted chunk twice.
+func (*eventStream) EmitsPlannerEvents() bool {
+	return true
+}
+
+// Recv forwards safe incremental events and stages model-authored presentation
+// content until terminal validation accepts the complete stream.
 //
 // Contract:
 //   - Final tool calls are passed through untouched for the planner/workflow to
 //     handle.
 //   - Tool call argument deltas are forwarded as best-effort PlannerEvents for
-//     streaming UX; consumers may ignore them.
+//     streaming UX; consumers may ignore them. Internal tool argument deltas are
+//     never emitted because their payload is replaced at the activity boundary.
 func (s *eventStream) Recv() (model.Chunk, error) {
 	ch, err := s.inner.Recv()
 	if err != nil {
@@ -106,19 +138,22 @@ func (s *eventStream) Recv() (model.Chunk, error) {
 	}
 	switch ch.Type {
 	case model.ChunkTypeToolCallDelta:
-		if ch.ToolCallDelta != nil {
+		if ch.ToolCallDelta != nil && ch.ToolCallDelta.Name != tools.ToolUnavailable {
 			s.events.ToolCallArgsDelta(s.ctx, ch.ToolCallDelta.ID, ch.ToolCallDelta.Name, ch.ToolCallDelta.Delta)
 		}
 	case model.ChunkTypeText:
 		if ch.Message != nil {
-			emitMessageContent(s.ctx, s.events, ch.Message)
+			s.stageMessageContent(ch.Message)
 		}
 	case model.ChunkTypeThinking:
-		// Prefer structured thinking parts when present; otherwise use delta text.
 		if ch.Message != nil {
-			emitThinkingParts(s.ctx, s.events, ch.Message)
+			s.stageThinkingParts(ch.Message)
 		} else if ch.Thinking != "" {
-			s.events.PlannerThinkingBlock(s.ctx, model.ThinkingPart{Text: ch.Thinking})
+			s.stageThinking(model.ThinkingPart{Text: ch.Thinking})
+		}
+	case model.ChunkTypeToolCall:
+		if ch.ToolCall != nil && ch.ToolCall.Name == tools.ToolUnavailable {
+			ch.ToolCall.Payload = exactToolUnavailablePayload(s.req)
 		}
 	case model.ChunkTypeUsage:
 		if ch.UsageDelta != nil {
@@ -129,12 +164,62 @@ func (s *eventStream) Recv() (model.Chunk, error) {
 	return ch, nil
 }
 
+func (s *eventStream) stageMessageContent(message *model.Message) {
+	s.stageThinkingParts(message)
+	for _, part := range message.Parts {
+		if text, ok := part.(model.TextPart); ok && text.Text != "" {
+			s.staged = append(s.staged, stagedPlannerEvent{text: text.Text})
+		}
+	}
+}
+
+func (s *eventStream) stageThinkingParts(message *model.Message) {
+	for _, part := range message.Parts {
+		if thinking, ok := part.(model.ThinkingPart); ok {
+			s.stageThinking(thinking)
+		}
+	}
+}
+
+func (s *eventStream) stageThinking(thinking model.ThinkingPart) {
+	thinking.Redacted = append([]byte(nil), thinking.Redacted...)
+	s.staged = append(s.staged, stagedPlannerEvent{thinking: &thinking})
+}
+
+func (s *eventStream) flushStagedEvents() {
+	staged := s.staged
+	s.staged = nil
+	for _, event := range staged {
+		if event.thinking != nil {
+			s.events.PlannerThinkingBlock(s.ctx, *event.thinking)
+			continue
+		}
+		s.events.AssistantChunk(s.ctx, event.text)
+	}
+}
+
 func (s *eventStream) Close() error {
 	return s.inner.Close()
 }
 
 func (s *eventStream) Metadata() map[string]any {
 	return s.inner.Metadata()
+}
+
+func (s *eventStream) Response() *model.Response {
+	response := s.inner.Response()
+	canonicalizeModelToolUnavailableCalls(response, s.req)
+	return response
+}
+
+func (s *eventStream) Finalize(primaryErr error) error {
+	err := s.inner.Finalize(primaryErr)
+	if err != nil {
+		s.staged = nil
+		return err
+	}
+	s.flushStagedEvents()
+	return nil
 }
 
 // cacheConfiguredClient wraps a model.Client and applies the agent CachePolicy
@@ -163,7 +248,7 @@ func (c *cacheConfiguredClient) Complete(ctx context.Context, req *model.Request
 	return c.inner.Complete(ctx, req)
 }
 
-func (c *cacheConfiguredClient) Stream(ctx context.Context, req *model.Request) (model.Streamer, error) {
+func (c *cacheConfiguredClient) Stream(ctx context.Context, req *model.Request) (model.ValidatedStreamer, error) {
 	applyCachePolicy(req, c.cache)
 	return c.inner.Stream(ctx, req)
 }
@@ -207,7 +292,7 @@ func (c *toolUnavailableConfiguredClient) Complete(ctx context.Context, req *mod
 	return c.inner.Complete(ctx, req)
 }
 
-func (c *toolUnavailableConfiguredClient) Stream(ctx context.Context, req *model.Request) (model.Streamer, error) {
+func (c *toolUnavailableConfiguredClient) Stream(ctx context.Context, req *model.Request) (model.ValidatedStreamer, error) {
 	ensureToolUnavailableDefinition(req)
 	return c.inner.Stream(ctx, req)
 }
@@ -217,7 +302,7 @@ func (c *toolPolicyConfiguredClient) Complete(ctx context.Context, req *model.Re
 	return c.inner.Complete(ctx, req)
 }
 
-func (c *toolPolicyConfiguredClient) Stream(ctx context.Context, req *model.Request) (model.Streamer, error) {
+func (c *toolPolicyConfiguredClient) Stream(ctx context.Context, req *model.Request) (model.ValidatedStreamer, error) {
 	applyModelToolPolicy(req, c.policy)
 	return c.inner.Stream(ctx, req)
 }
@@ -281,6 +366,12 @@ func applyModelToolPolicy(req *model.Request, policy toolPolicyEnvelope) {
 	allowed := make(map[string]struct{}, len(policy.Allowed))
 	for _, tool := range policy.Allowed {
 		allowed[tool.String()] = struct{}{}
+	}
+	// tool_unavailable is part of every non-empty tool-aware request so strict
+	// providers can replay its tool-use history. An empty active allowlist is an
+	// explicit tool-free turn and must not re-admit the internal definition.
+	if len(policy.Allowed) > 0 {
+		allowed[tools.ToolUnavailable.String()] = struct{}{}
 	}
 	if len(req.Tools) > 0 {
 		filtered := make([]*model.ToolDefinition, 0, len(req.Tools))

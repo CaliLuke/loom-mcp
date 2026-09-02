@@ -16,24 +16,28 @@ github.com/CaliLuke/loom-mcp/v2/runtime/agent/engine/temporal/core.go:1.1,1.2 1 
 github.com/CaliLuke/loom-mcp/v2/runtime/registry/core.go:1.1,1.2 1 1
 github.com/CaliLuke/loom-mcp/v2/features/model/openai/core.go:1.1,1.2 1 1
 github.com/CaliLuke/loom-mcp/v2/runtime/agent/runtime/owner.go:1.1,1.2 1 0
+github.com/CaliLuke/loom-mcp/v2/runtime/agent/model/owner.go:1.1,1.2 1 0
 github.com/CaliLuke/loom-mcp/v2/features/model/bedrock/owner.go:1.1,1.2 1 0
 github.com/CaliLuke/loom-mcp/v2/features/model/gemini/owner.go:1.1,1.2 1 0
 github.com/CaliLuke/loom-mcp/v2/features/mongo/clientinfra/owner.go:1.1,1.2 1 0
 github.com/CaliLuke/loom-mcp/v2/features/stream/pulse/clients/pulse/owner.go:1.1,1.2 1 0
 github.com/CaliLuke/loom-mcp/v2/registry/owner.go:1.1,1.2 1 0
 example.com/decoy/github.com/CaliLuke/loom-mcp/v2/runtime/agent/runtime/decoy.go:1.1,1.2 99 1
+example.com/decoy/github.com/CaliLuke/loom-mcp/v2/runtime/agent/model/decoy.go:1.1,1.2 99 1
 example.com/decoy/github.com/CaliLuke/loom-mcp/v2/features/model/bedrock/decoy.go:1.1,1.2 99 1
 example.com/decoy/github.com/CaliLuke/loom-mcp/v2/features/model/gemini/decoy.go:1.1,1.2 99 1
 example.com/decoy/github.com/CaliLuke/loom-mcp/v2/features/mongo/clientinfra/decoy.go:1.1,1.2 99 1
 example.com/decoy/github.com/CaliLuke/loom-mcp/v2/features/stream/pulse/clients/pulse/decoy.go:1.1,1.2 99 1
 example.com/decoy/github.com/CaliLuke/loom-mcp/v2/registry/decoy.go:1.1,1.2 99 1
 github.com/CaliLuke/loom-mcp/v2/runtime/agent/runtime/ownerXgo:1.1,1.2 99 1
+github.com/CaliLuke/loom-mcp/v2/runtime/agent/model/ownerXgo:1.1,1.2 99 1
 github.com/CaliLuke/loom-mcp/v2/features/model/bedrock/ownerXgo:1.1,1.2 99 1
 github.com/CaliLuke/loom-mcp/v2/features/model/gemini/ownerXgo:1.1,1.2 99 1
 github.com/CaliLuke/loom-mcp/v2/features/mongo/clientinfra/ownerXgo:1.1,1.2 99 1
 github.com/CaliLuke/loom-mcp/v2/features/stream/pulse/clients/pulse/ownerXgo:1.1,1.2 99 1
 github.com/CaliLuke/loom-mcp/v2/registry/ownerXgo:1.1,1.2 99 1
 github.com/CaliLuke/loom-mcp/v2/runtime/agent/runtime/nested/decoy.go:1.1,1.2 99 1
+github.com/CaliLuke/loom-mcp/v2/runtime/agent/model/nested/decoy.go:1.1,1.2 99 1
 github.com/CaliLuke/loom-mcp/v2/features/model/bedrock/nested/decoy.go:1.1,1.2 99 1
 github.com/CaliLuke/loom-mcp/v2/features/model/gemini/nested/decoy.go:1.1,1.2 99 1
 github.com/CaliLuke/loom-mcp/v2/features/mongo/clientinfra/nested/decoy.go:1.1,1.2 99 1
@@ -66,9 +70,10 @@ critical_floors=(
   COVERAGE_PROVIDERS_MIN=0
 )
 
-expect_floor_failure agent-runtime critical "${critical_floors[@]}" COVERAGE_AGENT_RUNTIME_MIN=50 COVERAGE_BEDROCK_MIN=0 COVERAGE_GEMINI_MIN=0
-expect_floor_failure bedrock critical "${critical_floors[@]}" COVERAGE_AGENT_RUNTIME_MIN=0 COVERAGE_BEDROCK_MIN=50 COVERAGE_GEMINI_MIN=0
-expect_floor_failure gemini critical "${critical_floors[@]}" COVERAGE_AGENT_RUNTIME_MIN=0 COVERAGE_BEDROCK_MIN=0 COVERAGE_GEMINI_MIN=50
+expect_floor_failure agent-runtime critical "${critical_floors[@]}" COVERAGE_AGENT_RUNTIME_MIN=50 COVERAGE_MODEL_MIN=0 COVERAGE_BEDROCK_MIN=0 COVERAGE_GEMINI_MIN=0
+expect_floor_failure model critical "${critical_floors[@]}" COVERAGE_AGENT_RUNTIME_MIN=0 COVERAGE_MODEL_MIN=50 COVERAGE_BEDROCK_MIN=0 COVERAGE_GEMINI_MIN=0
+expect_floor_failure bedrock critical "${critical_floors[@]}" COVERAGE_AGENT_RUNTIME_MIN=0 COVERAGE_MODEL_MIN=0 COVERAGE_BEDROCK_MIN=50 COVERAGE_GEMINI_MIN=0
+expect_floor_failure gemini critical "${critical_floors[@]}" COVERAGE_AGENT_RUNTIME_MIN=0 COVERAGE_MODEL_MIN=0 COVERAGE_BEDROCK_MIN=0 COVERAGE_GEMINI_MIN=50
 
 expect_floor_failure docker-mongo docker COVERAGE_DOCKER_MONGO_MIN=50 COVERAGE_DOCKER_PULSE_MIN=0 COVERAGE_DOCKER_REGISTRY_MIN=0
 expect_floor_failure docker-pulse docker COVERAGE_DOCKER_MONGO_MIN=0 COVERAGE_DOCKER_PULSE_MIN=50 COVERAGE_DOCKER_REGISTRY_MIN=0

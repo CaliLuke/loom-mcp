@@ -17,14 +17,15 @@
 // Nodes with the same name automatically:
 //
 //   - Share toolset registrations via replicated maps
-//   - Coordinate health check pings via distributed tickers (only one node pings at a time)
+//   - Coordinate health check pings via expiring Redis leases (only one node pings per interval)
 //   - Share provider health state across all nodes
 //
 // This enables horizontal scaling and high availability. Clients can connect
 // to any node and see the same registry state.
 //
-// For client-side code that agents use to connect to and consume the registry,
-// see the runtime/registry package.
+// For generated agent-side clients emitted from DSL `Registry(...)` declarations,
+// see `gen/<svc>/registry/<name>/`. For the shared wire protocol used by this
+// service, providers, and executors, see `runtime/toolregistry`.
 package registry
 
 import (
@@ -34,6 +35,8 @@ import (
 	"net"
 	"os"
 	"os/signal"
+	"sort"
+	"strings"
 	"syscall"
 	"time"
 
@@ -42,7 +45,7 @@ import (
 	grpcserver "github.com/CaliLuke/loom-mcp/v2/registry/gen/grpc/registry/server"
 	genregistry "github.com/CaliLuke/loom-mcp/v2/registry/gen/registry"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/telemetry"
-	"github.com/CaliLuke/loom/pulse/pool"
+	"github.com/CaliLuke/loom-mcp/v2/runtime/toolregistry"
 	"github.com/CaliLuke/loom/pulse/rmap"
 	"github.com/redis/go-redis/v9"
 	"google.golang.org/grpc"
@@ -51,16 +54,15 @@ import (
 type (
 	// Registry is the main entry point for the internal tool registry.
 	// It manages all components required for multi-node operation including
-	// Pulse streams, replicated maps, and distributed tickers.
+	// Pulse streams, replicated maps, and lease-scheduled health pings.
 	Registry struct {
-		service       *Service
-		pulseClient   clientspulse.Client
-		healthMap     *rmap.Map
-		registryMap   *rmap.Map
-		poolNode      *pool.Node
-		healthTracker HealthTracker
-		streamManager StreamManager
-		redis         *redis.Client
+		service        *Service
+		pulseClient    clientspulse.Client
+		registryMap    *rmap.Map
+		healthTracker  HealthTracker
+		callSettlement *callSettlementTracker
+		streamManager  StreamManager
+		redis          *redis.Client
 	}
 
 	// Config configures the registry service.
@@ -71,9 +73,8 @@ type (
 		// Multiple nodes with the same Name and Redis connection form a cluster,
 		// sharing state and coordinating health checks automatically.
 		//
-		// The pool, health map, and registry map names are derived as:
+		// The pool and registry map names are derived as:
 		//   - Pool: "<name>"
-		//   - Health map: "<name>:health"
 		//   - Registry map: "<name>:toolsets"
 		//
 		// Defaults to "registry" if not provided.
@@ -88,74 +89,84 @@ type (
 		// before marking a toolset as unhealthy.
 		// Defaults to 3 if not provided.
 		MissedPingThreshold int
-		// ResultStreamMappingTTL is the TTL for tool_use_id to stream_id mappings.
-		// ResultStreamTTL is the TTL for per-call result streams in Redis.
-		// Defaults to 15 minutes if not provided.
+		// ResultStreamTTL selects the retention used to compute each call
+		// record's Redis-owned absolute expiration. Zero uses
+		// toolregistry.DefaultResultStreamTTL.
 		ResultStreamTTL time.Duration
-		// PoolNodeOptions are additional options for the Pulse pool node.
-		PoolNodeOptions []pool.NodeOption
+		// ExecutionTimeout selects how long newly admitted tool execution may
+		// run. Zero uses toolregistry.MaxToolCallWait.
+		ExecutionTimeout time.Duration
+		// ProviderLeaseDuration is how long identical registration admits one
+		// provider instance without renewal. Provider Serve derives its renewal
+		// schedule from this duration; the default is two minutes.
+		ProviderLeaseDuration time.Duration
 	}
 )
-
-// registryCloseTimeout bounds resource cleanup when Run shuts down after its
-// context is already canceled.
-const registryCloseTimeout = 30 * time.Second
 
 // New creates a new Registry with all components wired together.
 // The registry connects to Redis for Pulse stream operations and creates
 // replicated maps for cross-node state synchronization.
 //
 // The caller is responsible for calling Close() when done to release resources.
-func New(ctx context.Context, cfg Config) (*Registry, error) {
-	if err := validateConfig(cfg); err != nil {
-		return nil, err
-	}
+func New(ctx context.Context, cfg Config) (*Registry, error) { //nolint:funlen,maintidx // Constructor wiring keeps ownership and reverse-order cleanup visible in one place.
 	if cfg.Redis == nil {
 		return nil, fmt.Errorf("redis client is required")
 	}
-	parts, err := buildRegistryParts(ctx, cfg)
-	if err != nil {
-		return nil, err
+	if cfg.ResultStreamTTL != 0 &&
+		(cfg.ResultStreamTTL < toolregistry.MinResultStreamTTL ||
+			cfg.ResultStreamTTL > toolregistry.MaxResultStreamTTL) {
+		return nil, fmt.Errorf(
+			"result stream TTL must be between %s and %s",
+			toolregistry.MinResultStreamTTL,
+			toolregistry.MaxResultStreamTTL,
+		)
 	}
-	service, err := buildRegistryService(cfg, parts)
-	if err != nil {
-		closeErr := closeRegistryParts(ctx, parts)
-		return nil, errors.Join(fmt.Errorf("create service: %w", err), closeErr)
+	if cfg.ExecutionTimeout != 0 &&
+		(cfg.ExecutionTimeout < time.Millisecond ||
+			cfg.ExecutionTimeout > toolregistry.MaxToolCallWait) {
+		return nil, fmt.Errorf(
+			"tool execution timeout must be between %s and %s",
+			time.Millisecond,
+			toolregistry.MaxToolCallWait,
+		)
 	}
-	return assembleRegistry(cfg.Redis, service, parts), nil
-}
+	if cfg.ProviderLeaseDuration != 0 &&
+		(cfg.ProviderLeaseDuration < toolregistry.MinProviderLeaseDuration ||
+			cfg.ProviderLeaseDuration > toolregistry.MaxProviderLeaseDuration) {
+		return nil, fmt.Errorf(
+			"provider lease duration must be between %s and %s",
+			toolregistry.MinProviderLeaseDuration,
+			toolregistry.MaxProviderLeaseDuration,
+		)
+	}
 
-func validateConfig(cfg Config) error {
-	if cfg.PingInterval < 0 {
-		return fmt.Errorf("ping interval must not be negative")
-	}
-	if cfg.MissedPingThreshold < 0 {
-		return fmt.Errorf("missed ping threshold must not be negative")
-	}
-	return nil
-}
-
-func registryResourceNames(name string) (string, string, string) {
+	// Apply defaults and derive Pulse resource names.
+	name := cfg.Name
 	if name == "" {
 		name = "registry"
 	}
-	return name, name + ":health", name + ":toolsets"
-}
 
-func joinRegistryMaps(ctx context.Context, cfg Config, healthMapName, registryMapName string) (*rmap.Map, *rmap.Map, error) {
-	healthMap, err := rmap.Join(ctx, healthMapName, cfg.Redis)
+	registryMapName := name + ":toolsets"
+
+	// Create Pulse client for stream operations.
+	pulseClient, err := clientspulse.New(clientspulse.Options{
+		Redis: cfg.Redis,
+	})
 	if err != nil {
-		return nil, nil, fmt.Errorf("join health map: %w", err)
+		return nil, fmt.Errorf("create pulse client: %w", err)
 	}
+
 	registryMap, err := rmap.Join(ctx, registryMapName, cfg.Redis)
 	if err != nil {
-		healthMap.Close()
-		return nil, nil, fmt.Errorf("join registry map: %w", err)
+		return nil, fmt.Errorf("join registry map: %w", err)
 	}
-	return healthMap, registryMap, nil
-}
 
-func buildHealthTrackerOptions(cfg Config) []HealthTrackerOption {
+	// Create stream manager.
+	streamManager := NewStreamManager(pulseClient, cfg.Redis)
+
+	// Build health tracker options. The registry map name passed to the
+	// tracker scopes ping leases, isolating distinct registry clusters
+	// sharing one Redis database.
 	var healthOpts []HealthTrackerOption
 	if cfg.PingInterval > 0 {
 		healthOpts = append(healthOpts, WithPingInterval(cfg.PingInterval))
@@ -166,91 +177,55 @@ func buildHealthTrackerOptions(cfg Config) []HealthTrackerOption {
 	if cfg.Logger != nil {
 		healthOpts = append(healthOpts, WithHealthLogger(cfg.Logger))
 	}
-	return healthOpts
-}
 
-type registryParts struct {
-	pulseClient   clientspulse.Client
-	healthMap     *rmap.Map
-	registryMap   *rmap.Map
-	poolNode      *pool.Node
-	healthTracker HealthTracker
-	streamManager StreamManager
-}
+	clock := newRedisTimeSource(cfg.Redis)
 
-func buildRegistryParts(ctx context.Context, cfg Config) (*registryParts, error) {
-	poolName, healthMapName, registryMapName := registryResourceNames(cfg.Name)
-	pulseClient, err := clientspulse.New(clientspulse.Options{Redis: cfg.Redis})
-	if err != nil {
-		return nil, fmt.Errorf("create pulse client: %w", err)
-	}
-	healthMap, registryMap, err := joinRegistryMaps(ctx, cfg, healthMapName, registryMapName)
-	if err != nil {
-		return nil, err
-	}
-	poolNode, err := pool.AddNode(ctx, poolName, cfg.Redis, cfg.PoolNodeOptions...)
-	if err != nil {
-		healthMap.Close()
+	// Create the one authoritative toolset catalog shared by the service and
+	// health tracker.
+	catalog := newToolsetCatalog(authoritativeCatalogMap{Map: registryMap, rdb: cfg.Redis}, clock)
+	if err := catalog.validatePersistedEntries(ctx); err != nil {
 		registryMap.Close()
-		return nil, fmt.Errorf("add pool node: %w", err)
+		closeErr := pulseClient.Close(ctx)
+		return nil, errors.Join(fmt.Errorf("validate persisted toolset catalog: %w", err), closeErr)
 	}
-	streamManager := NewStreamManager(pulseClient)
-	healthTracker, err := NewHealthTracker(streamManager, healthMap, registryMap, poolNode, buildHealthTrackerOptions(cfg)...)
-	if err != nil {
-		healthMap.Close()
-		registryMap.Close()
-		closeErr := poolNode.Close(ctx)
-		return nil, errors.Join(fmt.Errorf("create health tracker: %w", err), closeErr)
-	}
-	return &registryParts{
-		pulseClient:   pulseClient,
-		healthMap:     healthMap,
-		registryMap:   registryMap,
-		poolNode:      poolNode,
-		healthTracker: healthTracker,
-		streamManager: streamManager,
-	}, nil
-}
 
-func buildRegistryService(cfg Config, parts *registryParts) (*Service, error) {
-	return newService(serviceOptions{
-		catalog:         newToolsetCatalogWithLogger(parts.registryMap, cfg.Logger),
-		StreamManager:   parts.streamManager,
-		HealthTracker:   parts.healthTracker,
-		PulseClient:     parts.pulseClient,
-		ResultStreamTTL: cfg.ResultStreamTTL,
+	// Create health tracker.
+	healthTracker, err := newHealthTracker(streamManager, catalog, cfg.Redis, registryMapName, healthOpts...)
+	if err != nil {
+		registryMap.Close()
+		return nil, fmt.Errorf("create health tracker: %w", err)
+	}
+
+	callAdmissions := newCallAdmissionStore(cfg.Redis, name)
+	callSettlement := newCallSettlementTracker(ctx, callAdmissions, cfg.Logger)
+
+	// Create the service.
+	service, err := newService(serviceOptions{
+		catalog:               catalog,
+		StreamManager:         streamManager,
+		HealthTracker:         healthTracker,
+		CallAdmissions:        callAdmissions,
+		PulseClient:           pulseClient,
+		ExecutionTimeout:      cfg.ExecutionTimeout,
+		ResultStreamTTL:       cfg.ResultStreamTTL,
+		ProviderLeaseDuration: cfg.ProviderLeaseDuration,
 	})
-}
+	if err != nil {
+		callSettlement.Close()
+		htCloseErr := healthTracker.Close()
+		registryMap.Close()
+		return nil, errors.Join(fmt.Errorf("create service: %w", err), htCloseErr)
+	}
 
-func closeRegistryParts(ctx context.Context, parts *registryParts) error {
-	var htCloseErr error
-	if parts.healthTracker != nil {
-		htCloseErr = parts.healthTracker.Close()
-	}
-	if parts.healthMap != nil {
-		parts.healthMap.Close()
-	}
-	if parts.registryMap != nil {
-		parts.registryMap.Close()
-	}
-	var poolCloseErr error
-	if parts.poolNode != nil {
-		poolCloseErr = parts.poolNode.Close(ctx)
-	}
-	return errors.Join(htCloseErr, poolCloseErr)
-}
-
-func assembleRegistry(redis *redis.Client, service *Service, parts *registryParts) *Registry {
 	return &Registry{
-		service:       service,
-		pulseClient:   parts.pulseClient,
-		healthMap:     parts.healthMap,
-		registryMap:   parts.registryMap,
-		poolNode:      parts.poolNode,
-		healthTracker: parts.healthTracker,
-		streamManager: parts.streamManager,
-		redis:         redis,
-	}
+		service:        service,
+		pulseClient:    pulseClient,
+		registryMap:    registryMap,
+		healthTracker:  healthTracker,
+		callSettlement: callSettlement,
+		streamManager:  streamManager,
+		redis:          cfg.Redis,
+	}, nil
 }
 
 // Service returns the registry service implementation.
@@ -268,24 +243,18 @@ func (r *Registry) Service() *Service {
 func (r *Registry) Close(ctx context.Context) error {
 	var errs []error
 
-	// Stop all ping loops via health tracker.
+	if r.callSettlement != nil {
+		r.callSettlement.Close()
+	}
+
+	// Stop the ping scheduler via health tracker.
 	if r.healthTracker != nil {
 		if err := r.healthTracker.Close(); err != nil {
 			errs = append(errs, fmt.Errorf("close health tracker: %w", err))
 		}
 	}
 
-	// Close Pulse pool node.
-	if r.poolNode != nil {
-		if err := r.poolNode.Close(ctx); err != nil {
-			errs = append(errs, fmt.Errorf("close pool node: %w", err))
-		}
-	}
-
 	// Close rmap instances.
-	if r.healthMap != nil {
-		r.healthMap.Close()
-	}
 	if r.registryMap != nil {
 		r.registryMap.Close()
 	}
@@ -329,8 +298,8 @@ func (r *Registry) Run(ctx context.Context, addr string, opts ...grpc.ServerOpti
 	registrypb.RegisterRegistryServer(grpcServer, grpcserver.New(endpoints, nil))
 
 	// Set up signal handling for graceful shutdown.
-	sigCh, stopSignals := shutdownSignals()
-	defer stopSignals()
+	sigCh := make(chan os.Signal, 1)
+	signal.Notify(sigCh, syscall.SIGINT, syscall.SIGTERM)
 
 	// Channel to capture server errors.
 	errCh := make(chan error, 1)
@@ -353,22 +322,36 @@ func (r *Registry) Run(ctx context.Context, addr string, opts ...grpc.ServerOpti
 	// Graceful shutdown: stop accepting new connections and drain existing ones.
 	grpcServer.GracefulStop()
 
-	// Close registry resources with a fresh bounded context: on the ctx-cancel
-	// shutdown path the run context is already dead and would abort the Redis
-	// cleanup performed by Close (job requeue, worker-map and node removal).
-	closeCtx, cancel := context.WithTimeout(context.Background(), registryCloseTimeout)
-	defer cancel()
-	if err := r.Close(closeCtx); err != nil {
+	// Close registry resources.
+	if err := r.Close(ctx); err != nil {
 		return fmt.Errorf("close registry: %w", err)
 	}
 
 	return nil
 }
 
-func shutdownSignals() (<-chan os.Signal, func()) {
-	sigCh := make(chan os.Signal, 1)
-	signal.Notify(sigCh, syscall.SIGINT, syscall.SIGTERM)
-	return sigCh, func() {
-		signal.Stop(sigCh)
+// authoritativeCatalogMap extends the replicated catalog map with
+// Redis-authoritative key enumeration. Replica keys converge through the
+// update channel, but discovery and ping scheduling must observe an admission
+// the moment Register commits it. The content-hash layout is part of the
+// documented Pulse rmap pins enforced by the integration suite.
+type authoritativeCatalogMap struct {
+	*rmap.Map
+	rdb *redis.Client
+}
+
+// AuthoritativeKeys implements catalogMap.
+func (m authoritativeCatalogMap) AuthoritativeKeys(ctx context.Context) ([]string, error) {
+	fields, err := m.rdb.HKeys(ctx, "map:"+m.Map.Name+":content").Result()
+	if err != nil {
+		return nil, fmt.Errorf("enumerate catalog keys: %w", err)
 	}
+	keys := fields[:0]
+	for _, field := range fields {
+		if !strings.HasPrefix(field, "=") {
+			keys = append(keys, field)
+		}
+	}
+	sort.Strings(keys)
+	return keys, nil
 }

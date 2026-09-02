@@ -2,10 +2,13 @@ package agentfeatures_test
 
 import (
 	"context"
+	"strings"
 	"testing"
 
 	registryvalidation "example.com/agentfeatures/gen/features/toolsets/registry_validation"
+	"example.com/agentfeatures/gen/features/toolsets/workflow"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/tools"
+	"github.com/CaliLuke/loom-mcp/v2/runtime/toolregistry"
 	"github.com/stretchr/testify/require"
 )
 
@@ -69,4 +72,26 @@ func TestGeneratedRegistryValidatorResolvesRefsAndCountsUnicodeCodePoints(t *tes
 
 	err = registryvalidation.ValidatePayload(tools.Ident("broken_ref"), map[string]any{})
 	require.ErrorContains(t, err, "unresolved local schema reference")
+}
+
+func TestGeneratedRegistryProviderUsesSafeValidationText(t *testing.T) {
+	t.Parallel()
+
+	const toolUseID = "generated-validation-use"
+	provider := workflow.NewProvider(&methodBackedFeatureService{})
+	result, err := provider.HandleToolCall(
+		toolregistry.WithToolUseID(context.Background(), toolUseID),
+		toolregistry.ToolCallMessage{
+			RegistrationToken: strings.Repeat("a", 64),
+			ToolUseID:         toolUseID,
+			Tool:              workflow.MethodEcho,
+			Payload:           []byte(`{}`),
+			Meta:              &toolregistry.ToolCallMeta{RunID: "run", ToolCallID: "call"},
+		},
+	)
+	require.NoError(t, err)
+	require.NotNil(t, result.Error)
+	require.Equal(t, "invalid_arguments", result.Error.Code)
+	require.Equal(t, "tool arguments failed validation", result.Error.Message)
+	require.Equal(t, []*tools.FieldIssue{{Field: "topic", Constraint: "missing_field"}}, result.Error.Issues)
 }

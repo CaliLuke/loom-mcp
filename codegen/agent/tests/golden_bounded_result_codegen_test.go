@@ -35,7 +35,7 @@ func TestGolden_BoundedResult_UsesBoundsSpecAndProjection(t *testing.T) {
 
 	provider := generatedContentBySuffix(t, files, "toolsets/lookup/provider.go")
 	require.Contains(t, provider, "bounds := initSearchBounds(typedMethodOut)")
-	require.Contains(t, provider, "Bounds:    bounds,")
+	require.Regexp(t, `Bounds:\s+bounds,`, provider)
 	require.Contains(t, provider, "func initSearchBounds(")
 	require.Contains(t, provider, "bounds.Returned = mr.Returned")
 	require.Contains(t, provider, "bounds.Truncated = mr.Truncated")

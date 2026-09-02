@@ -5,10 +5,22 @@ Use this file for current loom-mcp runtime behavior in this repo. Prefer it over
 ## Planner Streaming
 
 - `PlannerContext.ModelClient(id)` returns a runtime-decorated client.
-- With the decorated client, drain the `Streamer` yourself with `Recv()`.
+- With the decorated client, drain the validated stream yourself with `Recv()`.
 - Do not pass a decorated stream to `planner.ConsumeStream`.
-- Use `planner.ConsumeStream` only with a raw `model.Client`.
+- Use `planner.ConsumeStream` only with a validated client that is not already
+  decorated to emit runtime events.
 - Mixing the two paths double-emits thinking and assistant text events.
+- Drain to the literal `io.EOF`; wrapped EOF is a provider failure.
+- Call `ValidatedStreamer.Finalize(primaryErr)` after draining or aborting.
+  `Close` is cleanup-only and does not prove successful completion.
+- `Response()` becomes available only after the consumer observes literal EOF;
+  internal provider draining does not satisfy this boundary. The first
+  `Finalize` call owns the authoritative joined result.
+- Context cancellation observed before terminal acceptance rejects the stream.
+  Tracing, rate limiting, and other lifecycle observers commit only from
+  `Finalize`, after cleanup errors are known.
+- Final tool calls and typed completions are withheld until terminal validation
+  accepts the entire stream.
 
 ## Planner Activity Retries
 
@@ -65,11 +77,58 @@ Use this file for current loom-mcp runtime behavior in this repo. Prefer it over
 - Registration remains closed even when the first `Seal` activation attempt
   fails. A later successful `Seal` retry is idempotent.
 
+## Registry-Routed Provider Lifecycle
+
+- `runtime/toolregistry/provider.Serve` owns one provider incarnation from
+  registration through lease renewal, drain, local settlement, acknowledgement
+  drain, and exact-token release. Applications supply typed registry callbacks;
+  they do not reproduce lifecycle ordering.
+- Admission revision plus canonical generated schema and wire-protocol version
+  derive one deterministic registration token. The token fences calls, claims,
+  output deltas, overload reports, terminal settlement, and consumer reads.
+- The registry persists one admitted or rejected decision before provider
+  execution for each stable run/tool-call identity. Exact replay returns that
+  decision and result stream. After admission, lost routing certainty is
+  terminal `outcome_unknown`, not a safe planner retry.
+- Providers claim before handler execution. Pulse redelivery observes claimed
+  or terminal state and cannot repeat handler work. Stale generations settle
+  queued calls as `stale_registration`.
+- Queue publication checks unread backlog and appends atomically. Trimming is
+  garbage collection, never admission control. One absolute execution deadline
+  precedes one registry-owned absolute result-retention deadline.
+
 ## Model Clients
 
 - Runtime model clients implement `runtime/agent/model.Client`.
-- Provider packages live under `features/model/*`; runtime helpers construct
-  Bedrock, OpenAI, Gemini/Vertex, and local Ollama clients.
+- Provider packages under `features/model/*` implement raw `model.Provider`.
+  Runtime helpers construct the provider and wrap it with `model.NewClient`.
+  Direct callers must do the same before registration.
+- `Provider.Stream` returns raw `model.Streamer`; `Client.Stream` returns
+  `model.ValidatedStreamer`. This difference prevents provider adapters from
+  satisfying the consumer-facing client interface accidentally.
+- The validated client owns bounded request/response copies and checks the exact
+  tool catalog, tool choice, structured output, generated completion decoder,
+  token usage, output limits, and terminal stream protocol.
+- Runtime model interceptors capture that immutable request contract before
+  provider work and revalidate any short-circuit or replacement response, so an
+  interceptor cannot broaden the request while replacing output.
+- GenAI message tracing captures the effective request after cache, tool policy,
+  and interceptor replacement. It does not capture rejected output. Internal
+  `runtime.tool_unavailable` payloads use only the effective tool catalog.
+- Model recovery keeps a bounded set of rejected calls and selects the exact
+  error returned by the planner. It accounts all billed unary rejections, even
+  when the planner catches one or model calls finish out of order. Durable token
+  totals use checked addition. Stage streamed text and thinking until terminal
+  validation and provider cleanup both succeed. Rejected or cleanup-failed
+  presentation content must not enter the canonical run log.
+- Tool-call recovery must carry a non-nil, bounded, unique copy of the rejected
+  request catalog. It cannot widen an active policy. Recovery-budget exhaustion
+  enters the tool-free failure finalizer on both start and resume paths. A
+  finalizer rejection ends the run without recursive recovery. The model and
+  recovery boundaries share a limit of 256 tool definitions per request.
+- Runtime model streams own planner event publication. `planner.ConsumeStream`
+  detects this ownership through the stream marker and only builds its summary;
+  it must not publish the same text, thinking, tool delta, or usage twice.
 - Provider changes must extend the shared conformance matrix for applicable
   complete/streaming, multimodal, tool-call, structured-output, typed-thinking,
   token-counting, cancellation, normalized-error, and name-codec behavior.
@@ -109,6 +168,18 @@ Use this file for current loom-mcp runtime behavior in this repo. Prefer it over
 - Use generated `tool_specs.Specs` and codecs for payload/result schema and encoding needs.
 - Do not introspect `docs.json` at runtime.
 - Tool results and retry hints should stay structured; avoid best-effort coercion when contracts fail.
+- Generated validation errors use fixed framework text. Do not preserve raw Goa
+  validation messages because they can contain submitted values. Bound generated
+  retry hints after all field-contract enrichment and before durable storage.
+- Retry-and-reflect guidance also uses fixed framework text. Do not persist the
+  raw service error in its tool error or retry hint because the error can contain
+  submitted values.
+- `runtime.tool_unavailable` is not a policy candidate. Rewrite every direct
+  model call to it with the exact effective request catalog at the model
+  boundary. Preserve that narrower catalog at the activity boundary when the
+  policy allows more tools. Never retain or echo a model-supplied
+  `available_tools` value. Preserve this internal recovery call across per-run
+  tool and tag filters.
 - Generated `Idempotent()` tags are metadata only. Until an explicit runtime
   replay contract exists, do not claim exactly-once execution or automatic
   duplicate suppression.

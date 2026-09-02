@@ -2,13 +2,12 @@ package runtime
 
 import (
 	"context"
-	"errors"
-	"io"
 	"sync"
 	"time"
 
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/model"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/telemetry"
+	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/tools"
 
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/codes"
@@ -32,7 +31,7 @@ type (
 	}
 
 	tracedStream struct {
-		inner model.Streamer
+		inner model.ValidatedStreamer
 		span  telemetry.Span
 		ctx   context.Context
 
@@ -73,9 +72,10 @@ func (c *tracedClient) Complete(ctx context.Context, req *model.Request) (*model
 		trace.WithAttributes(modelSpanAttrs(c.config, req)...),
 	)
 	defer span.End()
-	c.recordInputMessages(span, req)
 
 	resp, err := c.inner.Complete(ctx, req)
+	span.SetAttributes(modelSpanAttrs(c.config, req)...)
+	c.recordInputMessages(span, req)
 	if err != nil {
 		if !telemetry.ShouldRecordSpanError(ctx, err) {
 			span.SetStatus(codes.Unset, "")
@@ -106,12 +106,12 @@ func (c *tracedClient) Complete(ctx context.Context, req *model.Request) (*model
 		span.SetAttributes(telemetry.AttrGenAIResponseFinishReasons.StringSlice([]string{resp.StopReason}))
 		span.AddEvent("model.stop", "reason", resp.StopReason)
 	}
-	c.recordOutputMessages(span, responseOutputMessages(resp), resp.StopReason)
+	c.recordOutputMessages(span, responseOutputMessages(resp, req), resp.StopReason)
 	span.SetStatus(codes.Ok, "ok")
 	return resp, nil
 }
 
-func (c *tracedClient) Stream(ctx context.Context, req *model.Request) (model.Streamer, error) {
+func (c *tracedClient) Stream(ctx context.Context, req *model.Request) (model.ValidatedStreamer, error) {
 	startedAt := time.Now()
 	ctx, span := c.tracer.Start(
 		ctx,
@@ -119,9 +119,10 @@ func (c *tracedClient) Stream(ctx context.Context, req *model.Request) (model.St
 		trace.WithSpanKind(trace.SpanKindClient),
 		trace.WithAttributes(modelSpanAttrs(c.config, req)...),
 	)
-	c.recordInputMessages(span, req)
 
 	st, err := c.inner.Stream(ctx, req)
+	span.SetAttributes(modelSpanAttrs(c.config, req)...)
+	c.recordInputMessages(span, req)
 	if err != nil {
 		if !telemetry.ShouldRecordSpanError(ctx, err) {
 			span.SetStatus(codes.Unset, "")
@@ -146,7 +147,7 @@ func (c *tracedClient) Stream(ctx context.Context, req *model.Request) (model.St
 		startedAt: startedAt,
 	}
 	if c.config.CaptureGenAIMessages {
-		ts.output = newGenAIStreamAccumulator()
+		ts.output = newGenAIStreamAccumulator(req)
 	}
 	return ts, nil
 }
@@ -154,16 +155,6 @@ func (c *tracedClient) Stream(ctx context.Context, req *model.Request) (model.St
 func (s *tracedStream) Recv() (model.Chunk, error) {
 	ch, err := s.inner.Recv()
 	if err != nil {
-		if errors.Is(err, io.EOF) {
-			s.end(codes.Ok, "eof")
-			return ch, err
-		}
-		if !telemetry.ShouldRecordSpanError(s.ctx, err) {
-			s.end(codes.Unset, "")
-			return ch, err
-		}
-		s.span.RecordError(err)
-		s.end(codes.Error, "stream recv failed")
 		return ch, err
 	}
 	if ch.UsageDelta != nil {
@@ -192,26 +183,41 @@ func (s *tracedStream) Recv() (model.Chunk, error) {
 	return ch, nil
 }
 
+// EmitsPlannerEvents forwards the inner stream's event-ownership marker so
+// planner helpers do not publish accepted chunks twice through tracing.
+func (s *tracedStream) EmitsPlannerEvents() bool {
+	owned, ok := s.inner.(interface{ EmitsPlannerEvents() bool })
+	return ok && owned.EmitsPlannerEvents()
+}
+
 func (s *tracedStream) Close() error {
-	err := s.inner.Close()
-	if err != nil {
-		if !telemetry.ShouldRecordSpanError(s.ctx, err) {
-			s.end(codes.Unset, "")
-			return err
-		}
-		s.span.RecordError(err)
-		s.end(codes.Error, "stream close failed")
-		return err
-	}
-	s.end(codes.Ok, "closed")
-	return nil
+	return s.inner.Close()
 }
 
 func (s *tracedStream) Metadata() map[string]any {
 	return s.inner.Metadata()
 }
 
-func (s *tracedStream) end(code codes.Code, desc string) {
+func (s *tracedStream) Response() *model.Response {
+	return s.inner.Response()
+}
+
+func (s *tracedStream) Finalize(primaryErr error) error {
+	err := s.inner.Finalize(primaryErr)
+	if err != nil {
+		if telemetry.ShouldRecordSpanError(s.ctx, err) {
+			s.span.RecordError(err)
+			s.end(codes.Error, "stream finalize failed", false)
+		} else {
+			s.end(codes.Unset, "", false)
+		}
+		return err
+	}
+	s.end(codes.Ok, "finalized", true)
+	return nil
+}
+
+func (s *tracedStream) end(code codes.Code, desc string, captureOutput bool) {
 	s.endOnce.Do(func() {
 		s.mu.Lock()
 		usage := s.usage
@@ -236,7 +242,7 @@ func (s *tracedStream) end(code codes.Code, desc string) {
 				"cache_write_tokens", usage.CacheWriteTokens,
 			)
 		}
-		if haveOutput {
+		if captureOutput && haveOutput {
 			s.applyOutputMessages(outputMessages, stopReason)
 		}
 		s.span.SetStatus(code, desc)
@@ -338,7 +344,7 @@ func (c *tracedClient) recordInputMessages(span telemetry.Span, req *model.Reque
 	if !c.config.CaptureGenAIMessages || req == nil {
 		return
 	}
-	attr, ok, err := telemetry.GenAIInputMessagesAttr(req.Messages)
+	attr, ok, err := telemetry.GenAIInputMessagesAttr(sanitizeTraceInputMessages(req))
 	setGenAIMessagesAttr(span, attr, ok, err, "input")
 }
 
@@ -376,23 +382,26 @@ func (s *tracedStream) recordOutputChunk(chunk model.Chunk) {
 	s.output.recordChunk(chunk)
 }
 
-func responseOutputMessages(resp *model.Response) []model.Message {
+func responseOutputMessages(resp *model.Response, req *model.Request) []model.Message {
 	if resp == nil {
 		return nil
 	}
+	messages := sanitizeTraceOutputMessages(resp.Content, req)
 	if len(resp.ToolCalls) == 0 {
-		return resp.Content
+		return messages
 	}
 	parts := make([]model.Part, 0, len(resp.ToolCalls))
 	for _, call := range resp.ToolCalls {
+		input := any(call.Payload)
+		if call.Name == tools.ToolUnavailable {
+			input = canonicalTraceToolUnavailableInput(req)
+		}
 		parts = append(parts, model.ToolUsePart{
 			ID:    call.ID,
 			Name:  string(call.Name),
-			Input: call.Payload,
+			Input: input,
 		})
 	}
-	messages := make([]model.Message, 0, len(resp.Content)+1)
-	messages = append(messages, resp.Content...)
 	messages = append(messages, model.Message{
 		Role:  model.ConversationRoleAssistant,
 		Parts: parts,
@@ -401,12 +410,13 @@ func responseOutputMessages(resp *model.Response) []model.Message {
 }
 
 type genAIStreamAccumulator struct {
-	parts      []model.Part
-	stopReason string
+	parts          []model.Part
+	stopReason     string
+	availableTools []string
 }
 
-func newGenAIStreamAccumulator() *genAIStreamAccumulator {
-	return &genAIStreamAccumulator{}
+func newGenAIStreamAccumulator(req *model.Request) *genAIStreamAccumulator {
+	return &genAIStreamAccumulator{availableTools: traceAvailableToolNames(req)}
 }
 
 func (a *genAIStreamAccumulator) recordChunk(chunk model.Chunk) {
@@ -417,10 +427,14 @@ func (a *genAIStreamAccumulator) recordChunk(chunk model.Chunk) {
 		}
 	case model.ChunkTypeToolCall:
 		if chunk.ToolCall != nil {
+			input := any(chunk.ToolCall.Payload)
+			if chunk.ToolCall.Name == tools.ToolUnavailable {
+				input = map[string]any{availableToolsKey: append([]string(nil), a.availableTools...)}
+			}
 			a.parts = append(a.parts, model.ToolUsePart{
 				ID:    chunk.ToolCall.ID,
 				Name:  string(chunk.ToolCall.Name),
-				Input: chunk.ToolCall.Payload,
+				Input: input,
 			})
 		}
 	case model.ChunkTypeStop:
@@ -440,6 +454,10 @@ func (a *genAIStreamAccumulator) finish() ([]model.Message, string, bool) {
 
 func (a *genAIStreamAccumulator) appendOutputParts(parts []model.Part) {
 	for _, part := range parts {
+		if toolUse, ok := part.(model.ToolUsePart); ok && toolUse.Name == tools.ToolUnavailable.String() {
+			toolUse.Input = map[string]any{availableToolsKey: append([]string(nil), a.availableTools...)}
+			part = toolUse
+		}
 		text, ok := part.(model.TextPart)
 		if !ok {
 			a.parts = append(a.parts, part)
@@ -457,6 +475,66 @@ func (a *genAIStreamAccumulator) appendOutputParts(parts []model.Part) {
 		}
 		a.parts = append(a.parts, text)
 	}
+}
+
+func sanitizeTraceInputMessages(req *model.Request) []*model.Message {
+	if req == nil || len(req.Messages) == 0 {
+		return nil
+	}
+	messages := make([]*model.Message, 0, len(req.Messages))
+	for _, message := range req.Messages {
+		if message == nil {
+			messages = append(messages, nil)
+			continue
+		}
+		copy := *message
+		copy.Parts = sanitizeTraceParts(message.Parts, req)
+		messages = append(messages, &copy)
+	}
+	return messages
+}
+
+func sanitizeTraceOutputMessages(messages []model.Message, req *model.Request) []model.Message {
+	if len(messages) == 0 {
+		return nil
+	}
+	out := make([]model.Message, len(messages))
+	for index := range messages {
+		out[index] = messages[index]
+		out[index].Parts = sanitizeTraceParts(messages[index].Parts, req)
+	}
+	return out
+}
+
+func sanitizeTraceParts(parts []model.Part, req *model.Request) []model.Part {
+	if len(parts) == 0 {
+		return nil
+	}
+	out := append([]model.Part(nil), parts...)
+	for index, part := range out {
+		toolUse, ok := part.(model.ToolUsePart)
+		if !ok || toolUse.Name != tools.ToolUnavailable.String() {
+			continue
+		}
+		toolUse.Input = canonicalTraceToolUnavailableInput(req)
+		out[index] = toolUse
+	}
+	return out
+}
+
+func canonicalTraceToolUnavailableInput(req *model.Request) map[string]any {
+	return map[string]any{availableToolsKey: traceAvailableToolNames(req)}
+}
+
+func traceAvailableToolNames(req *model.Request) []string {
+	names := recoveryToolNames(req)
+	out := make([]string, 0, len(names))
+	for _, name := range names {
+		if name != tools.ToolUnavailable.String() {
+			out = append(out, name)
+		}
+	}
+	return out
 }
 
 func firstNonEmpty(values ...string) string {

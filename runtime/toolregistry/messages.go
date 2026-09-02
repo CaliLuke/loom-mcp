@@ -3,19 +3,24 @@
 package toolregistry
 
 import (
-	"encoding/json/jsontext"
+	"encoding/json"
 	"errors"
+	"fmt"
 	"strings"
+	"time"
 
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent"
-	loom "github.com/CaliLuke/loom/pkg"
-
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/tools"
+	goa "github.com/CaliLuke/loom/pkg"
 )
 
 type (
 	// ToolCallMessageType is the type discriminator for toolset stream messages.
 	ToolCallMessageType string
+
+	// ToolRetryReason identifies one registry-owned reason for republishing an
+	// admitted call without exposing a terminal failure to the planner.
+	ToolRetryReason string
 
 	// ToolCallMeta is execution metadata propagated alongside tool calls.
 	// Providers may use this metadata to scope data access and persistence (for example,
@@ -24,25 +29,41 @@ type (
 		RunID     string `json:"run_id"`
 		SessionID string `json:"session_id"`
 		TurnID    string `json:"turn_id,omitempty"`
-		// ToolCallID is the logical execution identity assigned by the runtime. When
-		// present, registry retries must reuse it as the transport ToolUseID instead
-		// of minting a fresh per-attempt identifier.
-		ToolCallID       string `json:"tool_call_id,omitempty"`
+		// ToolCallID is the model/provider call identity. The registry preserves it
+		// as metadata and derives the separate global ToolUseID from RunID plus
+		// ToolCallID.
+		ToolCallID       string `json:"tool_call_id"`
 		ParentToolCallID string `json:"parent_tool_call_id,omitempty"`
+	}
+
+	// ToolCallRef identifies one registry-routed invocation and the exact
+	// admission generation whose events the caller may accept.
+	ToolCallRef struct {
+		ToolUseID             string
+		RegistrationToken     string
+		ExecutionDeadline     time.Time
+		ResultStreamExpiresAt time.Time
 	}
 
 	// ToolCallMessage is published to a toolset request stream for tool invocations
 	// and provider health checks.
 	ToolCallMessage struct {
-		// ToolUseID is the transport identity for this request stream message. For
-		// registry-routed tool calls it is stable across retries and equals the
-		// logical ToolCallID when the caller supplied one.
+		// RegistrationToken is the exact admission generation used to validate
+		// and route this message. Providers reject calls from any other admission.
+		RegistrationToken string `json:"registration_token"`
+		// ToolUseID is the globally unique transport identity for this request.
 		Type      ToolCallMessageType `json:"type"`
 		ToolUseID string              `json:"tool_use_id,omitempty"`
-		PingID    string              `json:"ping_id,omitempty"`
-		Tool      tools.Ident         `json:"tool,omitempty"`
-		Payload   jsontext.Value      `json:"payload,omitempty"`
-		Meta      *ToolCallMeta       `json:"meta,omitempty"`
+		// ExecutionDeadlineUnixMilli is the Redis-selected absolute deadline
+		// that bounds provider dispatch and executor waiting.
+		ExecutionDeadlineUnixMilli int64 `json:"execution_deadline_unix_ms,omitempty"`
+		// ResultStreamExpiresAtUnixMilli is the registry-selected absolute
+		// expiration shared by the call record and every result-stream handle.
+		ResultStreamExpiresAtUnixMilli int64           `json:"result_stream_expires_at_unix_ms,omitempty"`
+		PingID                         string          `json:"ping_id,omitempty"`
+		Tool                           tools.Ident     `json:"tool,omitempty"`
+		Payload                        json.RawMessage `json:"payload,omitempty"`
+		Meta                           *ToolCallMeta   `json:"meta,omitempty"`
 
 		// TraceParent and TraceState carry W3C Trace Context headers for distributed
 		// tracing across Pulse boundaries. These fields are optional and may be empty.
@@ -56,11 +77,14 @@ type (
 		Baggage string `json:"baggage,omitempty"`
 	}
 
-	// ToolResultMessage is published to a per-call result stream. The gateway never
-	// interprets these bytes; consumers decode them using compiled tool codecs.
+	// ToolResultMessage is published to a per-call result stream. The gateway
+	// interprets only the retry-control variant; consumers decode terminal
+	// success and error variants using compiled tool contracts.
 	ToolResultMessage struct {
-		ToolUseID string         `json:"tool_use_id"`
-		Result    jsontext.Value `json:"result_json,omitempty"`
+		// RegistrationToken echoes the exact token stamped on the tool call.
+		RegistrationToken string          `json:"registration_token"`
+		ToolUseID         string          `json:"tool_use_id"`
+		Result            json.RawMessage `json:"result_json,omitempty"`
 		// Bounds carries canonical bounded-result metadata projected out-of-band
 		// from the semantic result payload when the tool declares a bounded-result
 		// contract.
@@ -74,6 +98,9 @@ type (
 		// protocol keeps a single server-side envelope.
 		ServerData []*ServerDataItem `json:"server_data,omitempty"`
 		Error      *ToolError        `json:"error,omitempty"`
+		// Retry asks registry orchestration to republish this exact admitted call.
+		// It is mutually exclusive with every terminal success and error field.
+		Retry *ToolRetry `json:"retry,omitempty"`
 	}
 
 	// ToolOutputDeltaMessage is published to a per-call result stream while a tool
@@ -85,7 +112,10 @@ type (
 	//   - Deltas are not persisted by default; the canonical output remains the
 	//     final tool result payload.
 	ToolOutputDeltaMessage struct {
-		ToolUseID string `json:"tool_use_id"`
+		// RegistrationToken echoes the exact token stamped on the tool call so
+		// reused transport IDs cannot forward output from an older admission.
+		RegistrationToken string `json:"registration_token"`
+		ToolUseID         string `json:"tool_use_id"`
 		// Stream identifies which logical output channel produced the delta
 		// (for example, "stdout", "stderr", "log", "progress").
 		Stream string `json:"stream"`
@@ -95,18 +125,25 @@ type (
 	// ServerDataItem is server-only tool output published alongside the canonical
 	// tool result JSON. Server data is never sent to model providers.
 	ServerDataItem struct {
-		Kind     string         `json:"kind"`
-		Audience string         `json:"audience"`
-		Data     jsontext.Value `json:"data"`
+		Kind     string          `json:"kind"`
+		Audience string          `json:"audience"`
+		Data     json.RawMessage `json:"data"`
 	}
 
-	// ToolError is a structured tool error published by providers.
+	// ToolError is a structured terminal provider failure.
 	ToolError struct {
-		Code    string `json:"code"`
-		Message string `json:"message"`
-		// Issues optionally carries structured field-level validation issues.
-		// When present, consumers can build a RetryHint without parsing Message.
-		Issues []*tools.FieldIssue `json:"issues,omitempty"`
+		Code    string              `json:"code"`
+		Message string              `json:"message"`
+		Issues  []*tools.FieldIssue `json:"issues,omitempty"`
+	}
+
+	// ToolRetry is a non-terminal registry orchestration instruction. It never
+	// carries planner failure semantics.
+	ToolRetry struct {
+		// Reason identifies the retryable transport condition.
+		Reason ToolRetryReason `json:"reason"`
+		// RetryAfterMillis is the bounded delay before exact republication.
+		RetryAfterMillis int64 `json:"retry_after_ms,omitempty"`
 	}
 )
 
@@ -116,63 +153,189 @@ const (
 	// MessageTypePing indicates a health ping message on a toolset stream.
 	MessageTypePing ToolCallMessageType = "ping"
 
-	// ResultEventKey is the Pulse event name used to publish canonical tool result
-	// envelopes to a per-call result stream.
+	// ResultEventKey is the Pulse event name used to publish canonical terminal
+	// results and retry-control envelopes to a per-call result stream.
 	ResultEventKey = "result"
+	// ProviderConsumerGroup is the one canonical Pulse consumer group shared by
+	// every provider replica for a toolset stream.
+	ProviderConsumerGroup = "provider"
 
 	// OutputDeltaEventKey is the Pulse event name used to publish best-effort tool
 	// output delta messages to a per-call result stream.
 	OutputDeltaEventKey = "output_delta"
+
+	// ProviderOverloadRetryAfter is the provider-requested delay before the
+	// registry republishes an admitted call after queue saturation.
+	ProviderOverloadRetryAfter = 250 * time.Millisecond
+	// MaxProviderOverloadRetryAfter bounds overload delay at the message boundary.
+	MaxProviderOverloadRetryAfter = 5 * time.Second
+	// MaxToolCallMetaIDLength matches the Goa boundary for every identifier
+	// propagated in ToolCallMeta.
+	MaxToolCallMetaIDLength = 256
+
+	// ToolRetryReasonProviderOverloaded means provider intake was saturated
+	// before execution began.
+	ToolRetryReasonProviderOverloaded ToolRetryReason = "provider_overloaded"
+
+	// ToolErrorCodeInvalidArguments identifies a terminal schema-validation failure.
+	ToolErrorCodeInvalidArguments = "invalid_arguments"
+	// ToolErrorCodeStaleRegistration completes a queued call whose admission
+	// generation no longer matches the admitted provider.
+	ToolErrorCodeStaleRegistration = "stale_registration"
+	// ToolErrorCodeOutcomeUnknown completes a claimed call when the exact
+	// provider lease disappears before terminal publication. The provider may
+	// already have performed the side effect, so execution must not transfer.
+	ToolErrorCodeOutcomeUnknown = "outcome_unknown"
 )
 
+// DecodeServerData decodes the canonical server-only item envelope carried by
+// planner tool results. Kind-specific payloads remain raw JSON for decoding by
+// the generated codec declared on the corresponding tool specification.
+func DecodeServerData(data []byte) ([]*ServerDataItem, error) {
+	if len(data) == 0 {
+		return nil, nil
+	}
+	var items []*ServerDataItem
+	if err := json.Unmarshal(data, &items); err != nil {
+		return nil, fmt.Errorf("decode server data: %w", err)
+	}
+	return items, nil
+}
+
 // NewToolCallMessage constructs a tool invocation message.
-func NewToolCallMessage(toolUseID string, tool tools.Ident, payload jsontext.Value, meta *ToolCallMeta) ToolCallMessage {
+func NewToolCallMessage(
+	registrationToken, toolUseID string,
+	executionDeadline time.Time,
+	resultStreamExpiresAt time.Time,
+	tool tools.Ident,
+	payload json.RawMessage,
+	meta *ToolCallMeta,
+) ToolCallMessage {
 	return ToolCallMessage{
-		Type:      MessageTypeCall,
-		ToolUseID: toolUseID,
-		Tool:      tool,
-		Payload:   payload,
-		Meta:      meta,
+		RegistrationToken:              registrationToken,
+		Type:                           MessageTypeCall,
+		ToolUseID:                      toolUseID,
+		ExecutionDeadlineUnixMilli:     executionDeadline.UnixMilli(),
+		ResultStreamExpiresAtUnixMilli: resultStreamExpiresAt.UnixMilli(),
+		Tool:                           tool,
+		Payload:                        payload,
+		Meta:                           meta,
+	}
+}
+
+// ValidateToolCallMessage enforces the structural Pulse request boundary
+// without deciding whether a call's absolute expiration has elapsed. The
+// registry owns that decision with Redis time.
+func ValidateToolCallMessage(message ToolCallMessage) error { //nolint:maintidx // Exhaustive wire validation makes every call invariant explicit.
+	if err := ValidateRegistrationToken(message.RegistrationToken); err != nil {
+		return err
+	}
+	switch message.Type {
+	case MessageTypePing:
+		if message.PingID == "" {
+			return fmt.Errorf("ping ID is required")
+		}
+		return nil
+	case MessageTypeCall:
+		if err := ValidateToolUseID(message.ToolUseID); err != nil {
+			return err
+		}
+		if message.ExecutionDeadlineUnixMilli <= 0 {
+			return fmt.Errorf("execution deadline must be a positive Unix millisecond timestamp")
+		}
+		if message.ResultStreamExpiresAtUnixMilli <= 0 {
+			return fmt.Errorf("result stream expiration must be a positive Unix millisecond timestamp")
+		}
+		if message.ExecutionDeadlineUnixMilli >= message.ResultStreamExpiresAtUnixMilli {
+			return fmt.Errorf("execution deadline must precede result stream expiration")
+		}
+		if message.Meta == nil ||
+			message.Meta.RunID == "" ||
+			message.Meta.SessionID == "" ||
+			message.Meta.ToolCallID == "" {
+			return fmt.Errorf("tool call run, session, and tool call metadata are required")
+		}
+		for name, value := range map[string]string{
+			"run ID":              message.Meta.RunID,
+			"session ID":          message.Meta.SessionID,
+			"turn ID":             message.Meta.TurnID,
+			"tool call ID":        message.Meta.ToolCallID,
+			"parent tool call ID": message.Meta.ParentToolCallID,
+		} {
+			if len(value) > MaxToolCallMetaIDLength {
+				return fmt.Errorf("%s exceeds %d bytes", name, MaxToolCallMetaIDLength)
+			}
+			if strings.ContainsRune(value, '\x00') {
+				return fmt.Errorf("%s must not contain NUL", name)
+			}
+		}
+		return nil
+	default:
+		return fmt.Errorf("unsupported tool call message type %q", message.Type)
 	}
 }
 
 // NewPingMessage constructs a health ping message.
-func NewPingMessage(pingID string) ToolCallMessage {
+func NewPingMessage(registrationToken, pingID string) ToolCallMessage {
 	return ToolCallMessage{
-		Type:   MessageTypePing,
-		PingID: pingID,
+		RegistrationToken: registrationToken,
+		Type:              MessageTypePing,
+		PingID:            pingID,
 	}
 }
 
 // NewToolResultMessage constructs a successful tool result message.
-func NewToolResultMessage(toolUseID string, result jsontext.Value) ToolResultMessage {
+func NewToolResultMessage(registrationToken, toolUseID string, result json.RawMessage) ToolResultMessage {
 	return ToolResultMessage{
-		ToolUseID: toolUseID,
-		Result:    result,
+		RegistrationToken: registrationToken,
+		ToolUseID:         toolUseID,
+		Result:            result,
 	}
 }
 
 // NewToolResultMessageWithServerData constructs a successful tool result message with
 // additional server-only metadata.
-func NewToolResultMessageWithServerData(toolUseID string, result jsontext.Value, serverData []*ServerDataItem) ToolResultMessage {
-	out := NewToolResultMessage(toolUseID, result)
+func NewToolResultMessageWithServerData(
+	registrationToken, toolUseID string,
+	result json.RawMessage,
+	serverData []*ServerDataItem,
+) ToolResultMessage {
+	out := NewToolResultMessage(registrationToken, toolUseID, result)
 	out.ServerData = serverData
 	return out
 }
 
+// NewToolResultRetryMessage constructs a non-terminal retry-control message.
+func NewToolResultRetryMessage(
+	registrationToken, toolUseID string,
+	reason ToolRetryReason,
+	retryAfter time.Duration,
+) ToolResultMessage {
+	return ToolResultMessage{
+		RegistrationToken: registrationToken,
+		ToolUseID:         toolUseID,
+		Retry: &ToolRetry{
+			Reason:           reason,
+			RetryAfterMillis: retryAfter.Milliseconds(),
+		},
+	}
+}
+
 // NewToolOutputDeltaMessage constructs a tool output delta message.
-func NewToolOutputDeltaMessage(toolUseID string, stream string, delta string) ToolOutputDeltaMessage {
+func NewToolOutputDeltaMessage(registrationToken, toolUseID, stream, delta string) ToolOutputDeltaMessage {
 	return ToolOutputDeltaMessage{
-		ToolUseID: toolUseID,
-		Stream:    stream,
-		Delta:     delta,
+		RegistrationToken: registrationToken,
+		ToolUseID:         toolUseID,
+		Stream:            stream,
+		Delta:             delta,
 	}
 }
 
 // NewToolResultErrorMessage constructs an error tool result message.
-func NewToolResultErrorMessage(toolUseID, code, message string) ToolResultMessage {
+func NewToolResultErrorMessage(registrationToken, toolUseID, code, message string) ToolResultMessage {
 	return ToolResultMessage{
-		ToolUseID: toolUseID,
+		RegistrationToken: registrationToken,
+		ToolUseID:         toolUseID,
 		Error: &ToolError{
 			Code:    code,
 			Message: message,
@@ -180,18 +343,100 @@ func NewToolResultErrorMessage(toolUseID, code, message string) ToolResultMessag
 	}
 }
 
-// NewToolResultErrorMessageWithIssues constructs an error tool result message that
-// includes structured validation issues for building retry hints.
-func NewToolResultErrorMessageWithIssues(toolUseID, code, message string, issues []*tools.FieldIssue) ToolResultMessage {
-	out := NewToolResultErrorMessage(toolUseID, code, message)
-	if out.Error == nil {
-		return out
+// NewToolResultServiceErrorMessage constructs a terminal provider result while
+// preserving a service-owned ToolFailureProvider contract when present.
+func NewToolResultServiceErrorMessage(
+	registrationToken, toolUseID string,
+	_ tools.Ident,
+	code string,
+	err error,
+) ToolResultMessage {
+	out := NewToolResultErrorMessage(registrationToken, toolUseID, code, err.Error())
+	issues := ValidationIssues(err)
+	if len(issues) > 0 {
+		out.Error.Issues = cloneFieldIssues(issues)
 	}
-	if len(issues) == 0 {
-		return out
-	}
+	return out
+}
+
+// NewToolResultInvalidArgumentsMessage constructs a correct-call failure with
+// structured validation issues. Other recovery actions cannot carry issues.
+func NewToolResultInvalidArgumentsMessage(
+	registrationToken, toolUseID, message string,
+	issues []*tools.FieldIssue,
+) ToolResultMessage {
+	out := NewToolResultErrorMessage(registrationToken, toolUseID, ToolErrorCodeInvalidArguments, message)
 	out.Error.Issues = cloneFieldIssues(issues)
 	return out
+}
+
+// ValidateToolResultMessage enforces the top-level success, terminal-error, or
+// retry-control union before a consumer acts on the message.
+func ValidateToolResultMessage(message ToolResultMessage) error { //nolint:maintidx // Exhaustive wire validation makes every result invariant explicit.
+	encoded, err := json.Marshal(message)
+	if err != nil {
+		return fmt.Errorf("encode tool result message: %w", err)
+	}
+	if len(encoded) > MaxToolResultMessageBytes {
+		return fmt.Errorf("tool result message exceeds %d bytes", MaxToolResultMessageBytes)
+	}
+	if err := ValidateRegistrationToken(message.RegistrationToken); err != nil {
+		return err
+	}
+	if err := ValidateToolUseID(message.ToolUseID); err != nil {
+		return err
+	}
+	if message.Retry != nil {
+		if message.Error != nil {
+			return fmt.Errorf("retry and error are both set")
+		}
+		if rawMessageHasNonNullJSON(message.Result) {
+			return fmt.Errorf("retry and result are both set")
+		}
+		if message.Bounds != nil {
+			return fmt.Errorf("retry and bounds are both set")
+		}
+		if len(message.ServerData) > 0 {
+			return fmt.Errorf("retry and server data are both set")
+		}
+		if message.Retry.Reason != ToolRetryReasonProviderOverloaded {
+			return fmt.Errorf("unsupported tool retry reason %q", message.Retry.Reason)
+		}
+		if message.Retry.RetryAfterMillis <= 0 ||
+			message.Retry.RetryAfterMillis > MaxProviderOverloadRetryAfter.Milliseconds() {
+			return fmt.Errorf(
+				"tool retry delay %dms is outside (0,%dms]",
+				message.Retry.RetryAfterMillis,
+				MaxProviderOverloadRetryAfter.Milliseconds(),
+			)
+		}
+		return nil
+	}
+	if message.Error == nil {
+		return nil
+	}
+	if message.Error.Code == "" {
+		return fmt.Errorf("error code is required")
+	}
+	if message.Error.Message == "" {
+		return fmt.Errorf("error message is required")
+	}
+	if rawMessageHasNonNullJSON(message.Result) {
+		return fmt.Errorf("error and result are both set")
+	}
+	if message.Bounds != nil {
+		return fmt.Errorf("error and bounds are both set")
+	}
+	if len(message.ServerData) > 0 {
+		return fmt.Errorf("error and server data are both set")
+	}
+	return nil
+}
+
+// rawMessageHasNonNullJSON reports whether raw carries a real JSON value.
+func rawMessageHasNonNullJSON(raw json.RawMessage) bool {
+	trimmed := strings.TrimSpace(string(raw))
+	return trimmed != "" && trimmed != "null"
 }
 
 // ValidationIssues extracts structured field-level validation issues from err.
@@ -214,7 +459,7 @@ func ValidationIssues(err error) []*tools.FieldIssue {
 		return cloneFieldIssues(ip.Issues())
 	}
 
-	var se *loom.ServiceError
+	var se *goa.ServiceError
 	if !errors.As(err, &se) {
 		return nil
 	}
@@ -256,31 +501,26 @@ func cloneFieldIssues(in []*tools.FieldIssue) []*tools.FieldIssue {
 		return nil
 	}
 	out := make([]*tools.FieldIssue, 0, len(in))
-	for _, is := range in {
-		if is == nil {
+	for _, issue := range in {
+		if issue == nil {
 			continue
 		}
-		cp := *is
-		if len(cp.Allowed) > 0 {
-			cp.Allowed = append([]string(nil), cp.Allowed...)
-		}
-		out = append(out, &cp)
-	}
-	if len(out) == 0 {
-		return nil
+		copy := *issue
+		copy.Allowed = append([]string(nil), issue.Allowed...)
+		out = append(out, &copy)
 	}
 	return out
 }
 
 func isGoaValidationConstraint(name string) bool {
 	switch name {
-	case loom.InvalidFieldType,
-		loom.MissingField,
-		loom.InvalidEnumValue,
-		loom.InvalidFormat,
-		loom.InvalidPattern,
-		loom.InvalidRange,
-		loom.InvalidLength:
+	case goa.InvalidFieldType,
+		goa.MissingField,
+		goa.InvalidEnumValue,
+		goa.InvalidFormat,
+		goa.InvalidPattern,
+		goa.InvalidRange,
+		goa.InvalidLength:
 		return true
 	default:
 		return false

@@ -187,6 +187,19 @@ func TestClientConformance(t *testing.T) {
 				CacheWriteTokens: 4,
 			}, response.Usage)
 		},
+		OutputLimited: func(t *testing.T) {
+			runtime := &conformanceRuntimeClient{converse: func(context.Context, *bedrockruntime.ConverseInput) (*bedrockruntime.ConverseOutput, error) {
+				return &bedrockruntime.ConverseOutput{StopReason: brtypes.StopReasonMaxTokens}, nil
+			}}
+			provider := newClient(runtime)
+			response, err := provider.Complete(context.Background(), request())
+			require.NoError(t, err)
+			require.True(t, response.OutputLimited)
+			client, err := model.NewClient(provider)
+			require.NoError(t, err)
+			_, err = client.Complete(context.Background(), request())
+			requireOutputLimitedRejection(t, err)
+		},
 		MultimodalInput: testutil.ProviderCapabilityConformance{Supported: func(t *testing.T) {
 			runtime := &conformanceRuntimeClient{}
 			req := request()
@@ -418,8 +431,38 @@ func TestClientConformance(t *testing.T) {
 				require.EqualError(t, err, "bedrock: stream ended before metadata")
 				require.NoError(t, stream.Close())
 			},
+			OutputLimited: func(t *testing.T) {
+				index := int32(0)
+				events := []brtypes.ConverseStreamOutput{
+					bedrockMessageStart(),
+					bedrockTextDelta(index, `{"partial":`),
+					&brtypes.ConverseStreamOutputMemberContentBlockStop{Value: brtypes.ContentBlockStopEvent{ContentBlockIndex: &index}},
+					&brtypes.ConverseStreamOutputMemberMessageStop{Value: brtypes.MessageStopEvent{StopReason: brtypes.StopReasonMaxTokens}},
+					bedrockMetadata(&brtypes.TokenUsage{InputTokens: aws.Int32(1), OutputTokens: aws.Int32(1), TotalTokens: aws.Int32(2)}),
+				}
+				provider := newClient(&conformanceRuntimeClient{})
+				provider.converseStream = func(context.Context, *bedrockruntime.ConverseStreamInput, ...func(*bedrockruntime.Options)) (StreamOutput, error) {
+					return streamOutput(events, nil), nil
+				}
+				req := request()
+				req.StructuredOutput = &model.StructuredOutput{Name: "result", Schema: []byte(`{"type":"object"}`)}
+				stream, err := provider.Stream(context.Background(), req)
+				require.NoError(t, err)
+				t.Cleanup(func() { require.NoError(t, stream.Close()) })
+				chunks := testutil.CollectStreamChunks(t, stream)
+				require.Equal(t, []string{model.ChunkTypeCompletionDelta, model.ChunkTypeUsage, model.ChunkTypeStop}, chunkTypes(chunks))
+				require.True(t, chunks[len(chunks)-1].OutputLimited)
+			},
 		},
 	})
+}
+
+func requireOutputLimitedRejection(t *testing.T, err error) {
+	t.Helper()
+	require.Error(t, err)
+	var validationErr *model.OutputValidationError
+	require.ErrorAs(t, err, &validationErr)
+	require.Equal(t, model.OutputValidationOutputBounds, validationErr.Kind())
 }
 
 func newConformanceStreamOutput(reader *conformanceStreamReader) StreamOutput {

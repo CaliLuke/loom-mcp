@@ -10,6 +10,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/CaliLuke/loom/pulse/streaming"
@@ -18,6 +19,13 @@ import (
 )
 
 type (
+	// SnapshotEvent is one immutable event captured from retained history.
+	SnapshotEvent struct {
+		ID        string
+		EventName string
+		Payload   []byte
+	}
+
 	// Options configures the Pulse client.
 	Options struct {
 		// Redis is the Redis connection used to back Pulse streams. Required.
@@ -52,6 +60,10 @@ type (
 		Add(ctx context.Context, event string, payload []byte) (string, error)
 		// NewSink creates a Pulse sink (consumer group) on this stream for reading events.
 		NewSink(ctx context.Context, name string, opts ...streamopts.Sink) (Sink, error)
+		// NewReader creates an independent reader. Every reader receives every event.
+		NewReader(ctx context.Context, opts ...streamopts.Reader) (Reader, error)
+		// EnsureGroup recreates a lost consumer group at the stream tail.
+		EnsureGroup(ctx context.Context, group string) error
 		// Destroy deletes the entire stream and all its messages from Redis.
 		Destroy(ctx context.Context) error
 	}
@@ -64,7 +76,15 @@ type (
 		// Ack acknowledges successful processing of an event, removing it from the pending list.
 		Ack(context.Context, *streaming.Event) error
 		// Close stops the sink and releases resources.
-		Close(context.Context)
+		Close(context.Context) error
+	}
+
+	// Reader is an independent stream subscription.
+	Reader interface {
+		// Subscribe returns events from the reader's configured cursor.
+		Subscribe() <-chan *streaming.Event
+		// Close stops polling and joins the reader goroutine.
+		Close()
 	}
 )
 
@@ -109,7 +129,12 @@ func (c *client) Stream(name string, opts ...streamopts.Stream) (Stream, error) 
 	if err != nil {
 		return nil, fmt.Errorf("create pulse stream: %w", err)
 	}
-	return &handle{stream: str, timeout: c.timeout}, nil
+	return &handle{
+		stream:  str,
+		key:     pulseStreamKey(name),
+		redis:   c.redis,
+		timeout: c.timeout,
+	}, nil
 }
 
 // Close is a no-op because the caller typically owns and manages the Redis
@@ -121,6 +146,8 @@ func (c *client) Close(ctx context.Context) error {
 // handle wraps a Pulse stream and applies optional timeouts to operations.
 type handle struct {
 	stream  *streaming.Stream
+	key     string
+	redis   *redis.Client
 	timeout time.Duration
 }
 
@@ -153,6 +180,29 @@ func (h *handle) NewSink(ctx context.Context, name string, opts ...streamopts.Si
 	return &sinkAdapter{Sink: sink}, nil
 }
 
+// NewReader creates an independent reader for the stream.
+func (h *handle) NewReader(ctx context.Context, opts ...streamopts.Reader) (Reader, error) {
+	return h.stream.NewReader(ctx, opts...)
+}
+
+// EnsureGroup recreates the consumer group when Redis lost it. Existing
+// groups are left untouched.
+func (h *handle) EnsureGroup(ctx context.Context, group string) error {
+	if group == "" {
+		return errors.New("group name is required")
+	}
+	if h.timeout > 0 {
+		var cancel context.CancelFunc
+		ctx, cancel = context.WithTimeout(ctx, h.timeout)
+		defer cancel()
+	}
+	err := h.redis.XGroupCreateMkStream(ctx, h.key, group, "$").Err()
+	if err != nil && !strings.Contains(err.Error(), "BUSYGROUP") {
+		return fmt.Errorf("ensure consumer group %q: %w", group, err)
+	}
+	return nil
+}
+
 // Destroy deletes the entire stream and all its messages from Redis.
 func (h *handle) Destroy(ctx context.Context) error {
 	return h.stream.Destroy(ctx)
@@ -165,6 +215,12 @@ type sinkAdapter struct {
 }
 
 // Close delegates to the underlying Pulse sink.
-func (s sinkAdapter) Close(ctx context.Context) {
+func (s sinkAdapter) Close(ctx context.Context) error {
 	s.Sink.Close(ctx)
+	return ctx.Err()
+}
+
+// pulseStreamKey returns the Redis key used by the pinned Pulse version.
+func pulseStreamKey(name string) string {
+	return "pulse:stream:" + name
 }

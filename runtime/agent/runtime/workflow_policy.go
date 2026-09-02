@@ -40,6 +40,10 @@ func (r *Runtime) applyPerRunOverrides(ctx context.Context, input *RunInput, can
 	metas := r.toolMetadata(candidates)
 	filtered := make([]planner.ToolRequest, 0, len(candidates))
 	for i, call := range candidates {
+		if call.Name == tools.ToolUnavailable {
+			filtered = append(filtered, call)
+			continue
+		}
 		if ov.RestrictToTool != "" && call.Name != ov.RestrictToTool {
 			r.logger.Info(ctx, "Tool filtered by RestrictToTool", "tool", call.Name)
 			continue
@@ -178,6 +182,9 @@ func (r *Runtime) policyCandidateCalls(reg AgentRegistration) []planner.ToolRequ
 	}
 	calls := make([]planner.ToolRequest, 0, len(specs))
 	for _, spec := range specs {
+		if spec.Name == tools.ToolUnavailable {
+			continue
+		}
 		calls = append(calls, planner.ToolRequest{Name: spec.Name})
 	}
 	return calls

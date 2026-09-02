@@ -7,6 +7,8 @@ package policy
 
 import (
 	"context"
+	"encoding/json/v2"
+	"fmt"
 	"time"
 
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/run"
@@ -53,8 +55,8 @@ type (
 		// can honor or ignore these hints based on configuration.
 		RetryHint *RetryHint
 
-		// RemainingCaps reflects the current execution budgets (remaining tool calls,
-		// consecutive failures allowed, time budget). Policies use this to decide
+		// RemainingCaps reflects the current execution budgets (remaining tool calls
+		// and replacement recovery turns). Policies use this to decide
 		// whether to allow more tool invocations or terminate the run.
 		RemainingCaps CapsState
 
@@ -135,15 +137,14 @@ type (
 		// When this reaches zero, no more tool calls are permitted.
 		RemainingToolCalls int
 
-		// MaxConsecutiveFailedToolCalls caps consecutive failures per run. Zero means
-		// unlimited. Used for circuit breaking: if N tools fail in a row, terminate.
-		MaxConsecutiveFailedToolCalls int
+		// MaxRecoveryTurns caps consecutive replacement planner activities after
+		// rejected model or tool output. The runtime materializes a positive
+		// default when an agent does not configure this value.
+		MaxRecoveryTurns int
 
-		// RemainingConsecutiveFailedToolCalls tracks how many consecutive failures are allowed
-		// before circuit breaking. The runtime decrements this on each failure and resets
-		// it to MaxConsecutiveFailedToolCalls on success. When this reaches zero, the
-		// run is terminated.
-		RemainingConsecutiveFailedToolCalls int
+		// RemainingRecoveryTurns tracks replacement planner activities left in the
+		// current recovery episode. Successful budgeted domain work resets it.
+		RemainingRecoveryTurns int
 
 		// ExpiresAt is retained for source compatibility and is ignored by the
 		// runtime. Use RunPolicy.TimeBudget or runtime.WithRunTimeBudget to set an
@@ -155,6 +156,42 @@ type (
 		ExpiresAt time.Time
 	}
 )
+
+const (
+	// DefaultMaxRecoveryTurns is the bounded recovery budget used when an agent
+	// does not declare one explicitly.
+	DefaultMaxRecoveryTurns = 3
+)
+
+// UnmarshalJSON restores both the current recovery-turn fields and their
+// historical consecutive-failure names. Temporal histories may contain either
+// representation, so zero-valued current fields fall back to the legacy wire
+// values during replay.
+func (c *CapsState) UnmarshalJSON(data []byte) error {
+	if c == nil {
+		return fmt.Errorf("policy: cannot decode CapsState into nil receiver")
+	}
+	type plain CapsState
+	var decoded plain
+	if err := json.Unmarshal(data, &decoded); err != nil {
+		return err
+	}
+	var legacy struct {
+		MaxConsecutiveFailedToolCalls       int
+		RemainingConsecutiveFailedToolCalls int
+	}
+	if err := json.Unmarshal(data, &legacy); err != nil {
+		return err
+	}
+	if decoded.MaxRecoveryTurns == 0 {
+		decoded.MaxRecoveryTurns = legacy.MaxConsecutiveFailedToolCalls
+	}
+	if decoded.RemainingRecoveryTurns == 0 {
+		decoded.RemainingRecoveryTurns = legacy.RemainingConsecutiveFailedToolCalls
+	}
+	*c = CapsState(decoded)
+	return nil
+}
 
 // RetryReason categorizes planner failures communicated via RetryHint. These values
 // mirror planner.RetryReason so policy engines can share logic without importing the
