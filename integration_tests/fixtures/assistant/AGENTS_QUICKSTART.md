@@ -394,6 +394,8 @@ cfg := <agentpkg>.<AgentConfig>{
 
 * **Tools this agent can USE:**
 * **`assistant.projected`**
+* **Tool: `projected.projected_bounded_lookup_tool`**
+* *Lookup bounded projected data*
 * **Tool: `projected.projected_lookup_tool`**
 * *Lookup projected runtime tool data*
 * **Tool: `projected.projected_status_tool`**

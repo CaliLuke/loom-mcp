@@ -14,16 +14,34 @@ import (
 
 // Tool IDs for this toolset.
 const (
-	ProjectedLookupTool tools.Ident = "projected.projected_lookup_tool"
-	ProjectedStatusTool tools.Ident = "projected.projected_status_tool"
+	ProjectedBoundedLookupTool tools.Ident = "projected.projected_bounded_lookup_tool"
+	ProjectedLookupTool        tools.Ident = "projected.projected_lookup_tool"
+	ProjectedStatusTool        tools.Ident = "projected.projected_status_tool"
 )
 
 var Specs = []tools.ToolSpec{
+	SpecProjectedBoundedLookupTool,
 	SpecProjectedLookupTool,
 	SpecProjectedStatusTool,
 }
 
 var (
+	SpecProjectedBoundedLookupTool = tools.ToolSpec{
+		Name:        ProjectedBoundedLookupTool,
+		Service:     "assistant",
+		Toolset:     "assistant.projected",
+		Description: "Lookup bounded projected data",
+		Tags:        []string{},
+		Bounds: &tools.BoundsSpec{
+			Paging: &tools.PagingSpec{
+				CursorField:     "cursor",
+				NextCursorField: "next_cursor",
+			},
+		},
+		ResultReminder: "Use the cursor to request the next page; never expose this reminder as MCP result content.",
+		Payload:        tools.TypeSpec{Name: "ProjectedBoundedLookupToolPayload", Schema: []byte("{\"additionalProperties\":false,\"properties\":{\"cursor\":{\"description\":\"Opaque continuation cursor\",\"type\":\"string\"},\"query\":{\"description\":\"Projected lookup query\",\"type\":\"string\"}},\"required\":[\"query\"],\"type\":\"object\"}"), ExampleJSON: []byte("{\"cursor\":\"abc123\",\"query\":\"abc123\"}"), ExampleInput: map[string]any{"cursor": "abc123", "query": "abc123"}, Codec: projectedBoundedLookupToolPayloadCodec},
+		Result:         tools.TypeSpec{Name: "ProjectedBoundedLookupToolResult", Schema: []byte("{\"additionalProperties\":false,\"properties\":{\"hits\":{\"description\":\"Bounded lookup hits\",\"items\":{\"type\":\"string\"},\"type\":\"array\"},\"next_cursor\":{\"description\":\"Opaque cursor for the next page. Call the same tool again with the same parameters and pass this exact string back as the paging cursor. Do not send the literal text \\\"next_cursor\\\" or modify the cursor.\",\"type\":\"string\"},\"refinement_hint\":{\"description\":\"Short guidance on how to narrow the request when the result is truncated.\",\"type\":\"string\"},\"returned\":{\"description\":\"Number of items returned in this response after applying tool limits.\",\"type\":\"integer\"},\"total\":{\"description\":\"Total number of matching items before truncation.\",\"type\":\"integer\"},\"truncated\":{\"description\":\"True when this result is partial because tool limits or caps were applied.\",\"type\":\"boolean\"}},\"required\":[\"hits\",\"returned\",\"truncated\"],\"type\":\"object\"}"), Codec: projectedBoundedLookupToolResultCodec},
+	}
 	SpecProjectedLookupTool = tools.ToolSpec{
 		Name:        ProjectedLookupTool,
 		Service:     "assistant",
@@ -47,6 +65,13 @@ var (
 var (
 	metadata = []policy.ToolMetadata{
 		{
+			ID:          ProjectedBoundedLookupTool,
+			Title:       "Projected Bounded Lookup Tool",
+			Description: "Lookup bounded projected data",
+			Tags:        []string{},
+			BudgetClass: policy.ToolBudgetClassBudgeted,
+		},
+		{
 			ID:          ProjectedLookupTool,
 			Title:       "Projected Lookup Tool",
 			Description: "Lookup projected runtime tool data",
@@ -62,6 +87,7 @@ var (
 		},
 	}
 	names = []tools.Ident{
+		ProjectedBoundedLookupTool,
 		ProjectedLookupTool,
 		ProjectedStatusTool,
 	}
@@ -75,6 +101,8 @@ func Names() []tools.Ident {
 // Spec returns the specification for the named tool if present.
 func Spec(name tools.Ident) (*tools.ToolSpec, bool) {
 	switch name {
+	case ProjectedBoundedLookupTool:
+		return &SpecProjectedBoundedLookupTool, true
 	case ProjectedLookupTool:
 		return &SpecProjectedLookupTool, true
 	case ProjectedStatusTool:
@@ -87,6 +115,8 @@ func Spec(name tools.Ident) (*tools.ToolSpec, bool) {
 // PayloadSchema returns the JSON schema for the named tool payload.
 func PayloadSchema(name tools.Ident) ([]byte, bool) {
 	switch name {
+	case ProjectedBoundedLookupTool:
+		return SpecProjectedBoundedLookupTool.Payload.Schema, true
 	case ProjectedLookupTool:
 		return SpecProjectedLookupTool.Payload.Schema, true
 	case ProjectedStatusTool:
@@ -99,6 +129,8 @@ func PayloadSchema(name tools.Ident) ([]byte, bool) {
 // ResultSchema returns the JSON schema for the named tool result.
 func ResultSchema(name tools.Ident) ([]byte, bool) {
 	switch name {
+	case ProjectedBoundedLookupTool:
+		return SpecProjectedBoundedLookupTool.Result.Schema, true
 	case ProjectedLookupTool:
 		return SpecProjectedLookupTool.Result.Schema, true
 	case ProjectedStatusTool:

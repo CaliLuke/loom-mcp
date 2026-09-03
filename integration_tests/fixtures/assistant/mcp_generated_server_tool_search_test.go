@@ -128,7 +128,7 @@ func TestGeneratedSDKServerToolSearchFindsProjectedTool(t *testing.T) {
 	result, err := session.CallTool(ctx, &sdkmcp.CallToolParams{
 		Name: "search_tools",
 		Arguments: map[string]any{
-			"query":           "projected lookup",
+			"query":           "runtime tool data",
 			"include_schemas": true,
 		},
 	})

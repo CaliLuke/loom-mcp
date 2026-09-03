@@ -259,10 +259,15 @@ Use this skill for `loom-mcp` work in this repo. Keep `AGENTS.md` short and keep
 - Generated method dispatchers with injected fields validate `MapPayload` output
   before field injection. Mapper errors, nil results, and wrong types become tool
   errors, not panics.
-- Unified tool-surface projection v1 rejects projected tools that use
-  `Confirmation(...)`, `Inject(...)`, `ServerData(...)`,
-  `ResultReminder(...)`, or `BoundedResult(...)`; treat those as validation
-  errors until the runtime/MCP contract is explicitly extended.
+- Map rich features on projected MCP tools by contract. `Inject(...)` reads
+  `ToolCallMeta` from `mcpruntime.WithProjectedToolCallMeta` and fails if
+  verified request context is absent. `BoundedResult(...)` uses standard MCP
+  output schemas, `structuredContent`, and matching JSON text.
+  `ResultReminder(...)` stays agent-only and does not enter MCP content.
+  Reject `Confirmation(...)` because elicitation is not authorization
+  evidence. Reject `ServerData(...)` because MCP metadata cannot guarantee
+  exclusion from model context. None of the supported mappings requires a
+  client capability.
 - Tool confirmation is runtime-owned and design-visible: declare
   `Confirmation(...)` in tool DSL for default approval requirements, or use
   `runtime.WithToolConfirmation(...)` for runtime overrides. The runtime emits

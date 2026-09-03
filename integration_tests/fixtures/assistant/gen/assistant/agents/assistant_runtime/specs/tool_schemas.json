@@ -1,6 +1,74 @@
 {
   "tools": [
     {
+      "id": "projected.projected_bounded_lookup_tool",
+      "service": "assistant",
+      "toolset": "assistant.projected",
+      "title": "Projected Bounded Lookup Tool",
+      "description": "Lookup bounded projected data",
+      "payload": {
+        "name": "ProjectedBoundedLookupToolPayload",
+        "schema": {
+          "additionalProperties": false,
+          "properties": {
+            "cursor": {
+              "description": "Opaque continuation cursor",
+              "type": "string"
+            },
+            "query": {
+              "description": "Projected lookup query",
+              "type": "string"
+            }
+          },
+          "required": [
+            "query"
+          ],
+          "type": "object"
+        }
+      },
+      "result": {
+        "name": "ProjectedBoundedLookupToolResult",
+        "schema": {
+          "additionalProperties": false,
+          "properties": {
+            "hits": {
+              "description": "Bounded lookup hits",
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            "next_cursor": {
+              "description": "Opaque cursor for the next page. Call the same tool again with the same parameters and pass this exact string back as the paging cursor. Do not send the literal text \"next_cursor\" or modify the cursor.",
+              "type": "string"
+            },
+            "refinement_hint": {
+              "description": "Short guidance on how to narrow the request when the result is truncated.",
+              "type": "string"
+            },
+            "returned": {
+              "description": "Number of items returned in this response after applying tool limits.",
+              "type": "integer"
+            },
+            "total": {
+              "description": "Total number of matching items before truncation.",
+              "type": "integer"
+            },
+            "truncated": {
+              "description": "True when this result is partial because tool limits or caps were applied.",
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "hits",
+            "returned",
+            "truncated"
+          ],
+          "type": "object"
+        }
+      }
+    },
+    {
       "id": "projected.projected_lookup_tool",
       "service": "assistant",
       "toolset": "assistant.projected",

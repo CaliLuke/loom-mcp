@@ -14,6 +14,7 @@ import (
 	"fmt"
 
 	assistant "example.com/assistant/gen/assistant"
+	"github.com/CaliLuke/loom-mcp/v2/runtime/agent"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/planner"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/runtime"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/tools"
@@ -31,6 +32,117 @@ type (
 		svc assistant.Service
 	}
 )
+
+// ProjectedBoundedLookupToolDispatchOptions customizes
+// DispatchProjectedBoundedLookupToolMethod. For tools with injected fields,
+// MapPayload must return a non-nil bound method payload. Invalid results
+// become tool errors.
+type ProjectedBoundedLookupToolDispatchOptions struct {
+	Call       func(context.Context, any) (any, error)
+	MapPayload func(tools.Ident, any, *runtime.ToolCallMeta) (any, error)
+	MapResult  func(tools.Ident, any, *runtime.ToolCallMeta) (any, error)
+	Injectors  []func(context.Context, any, *runtime.ToolCallMeta) error
+}
+
+// DispatchProjectedBoundedLookupToolMethod executes
+// projected.projected_bounded_lookup_tool through its bound service method.
+func DispatchProjectedBoundedLookupToolMethod(ctx context.Context, meta *runtime.ToolCallMeta, raw jsontext.Value, labels map[string]string, opts ProjectedBoundedLookupToolDispatchOptions) (*planner.ToolResult, error) {
+	if opts.Call == nil {
+		return &planner.ToolResult{
+			Error: planner.NewToolError("method dispatcher missing Call"),
+			Name:  ProjectedBoundedLookupTool,
+		}, nil
+	}
+	if len(raw) == 0 {
+		// Tool arguments may legally be omitted (for example MCP tools/call
+		// without "arguments"). Decode an empty object so required-field
+		// validation applies and dispatch never sees a nil payload.
+		raw = jsontext.Value("{}")
+	}
+	var toolArgs any
+	decodedArgs, err := ProjectedBoundedLookupToolPayloadCodec.FromJSON(raw)
+	if err != nil {
+		return &planner.ToolResult{
+			Error: planner.ToolErrorFromError(err),
+			Name:  ProjectedBoundedLookupTool,
+		}, nil
+	}
+	toolArgs = decodedArgs
+	var methodIn any
+	if opts.MapPayload != nil {
+		value, err := opts.MapPayload(ProjectedBoundedLookupTool, toolArgs, meta)
+		if err != nil {
+			return &planner.ToolResult{
+				Error: planner.ToolErrorFromError(err),
+				Name:  ProjectedBoundedLookupTool,
+			}, nil
+		}
+		methodIn = value
+	} else {
+		methodIn = InitProjectedBoundedLookupToolMethodPayload(toolArgs.(*ProjectedBoundedLookupToolPayload))
+	}
+	payload, ok := methodIn.(*assistant.ProjectedBoundedLookupPayload)
+	if !ok || payload == nil {
+		err := fmt.Errorf("invalid mapped payload type for %q: %T", ProjectedBoundedLookupTool, methodIn)
+		return &planner.ToolResult{
+			Error: planner.ToolErrorFromError(err),
+			Name:  ProjectedBoundedLookupTool,
+		}, nil
+	}
+	payload.SessionID = meta.SessionID
+	methodIn = payload
+	for _, inject := range opts.Injectors {
+		if inject == nil {
+			continue
+		}
+		if err := inject(ctx, methodIn, meta); err != nil {
+			return &planner.ToolResult{
+				Error: planner.ToolErrorFromError(err),
+				Name:  ProjectedBoundedLookupTool,
+			}, nil
+		}
+	}
+	methodOut, err := opts.Call(ctx, methodIn)
+	if err != nil {
+		tr := &planner.ToolResult{
+			Error: planner.ToolErrorFromError(err),
+			Name:  ProjectedBoundedLookupTool,
+		}
+		var provider planner.RetryHintProvider
+		if errors.As(err, &provider) {
+			if hint := provider.RetryHint(ProjectedBoundedLookupTool); hint != nil {
+				tr.RetryHint = hint
+			}
+		}
+		return tr, nil
+	}
+	typedMethodOut, ok := methodOut.(*assistant.ProjectedBoundedLookupResult)
+	if !ok {
+		return &planner.ToolResult{
+			Error: planner.NewToolError(fmt.Sprintf("unexpected method result type for %q", ProjectedBoundedLookupTool)),
+			Name:  ProjectedBoundedLookupTool,
+		}, nil
+	}
+	var result any
+	if opts.MapResult != nil {
+		value, err := opts.MapResult(ProjectedBoundedLookupTool, methodOut, meta)
+		if err != nil {
+			return &planner.ToolResult{
+				Error: planner.ToolErrorFromError(err),
+				Name:  ProjectedBoundedLookupTool,
+			}, nil
+		}
+		result = value
+	} else {
+		result = InitProjectedBoundedLookupToolToolResult(typedMethodOut)
+	}
+	bounds := initProjectedBoundedLookupToolBounds(typedMethodOut)
+	return &planner.ToolResult{
+		Bounds: bounds,
+		Name:   ProjectedBoundedLookupTool,
+		Result: result,
+	}, nil
+}
 
 // ProjectedLookupToolDispatchOptions customizes
 // DispatchProjectedLookupToolMethod. For tools with injected fields,
@@ -249,6 +361,45 @@ func (p *Provider) HandleToolCall(ctx context.Context, msg toolregistry.ToolCall
 		return toolregistry.NewToolResultErrorMessage(msg.RegistrationToken, msg.ToolUseID, "invalid_call", "meta is required"), nil
 	}
 	switch msg.Tool {
+	case ProjectedBoundedLookupTool:
+		args, err := ProjectedBoundedLookupToolPayloadCodec.FromJSON(msg.Payload)
+		if err != nil {
+			if issues := toolregistry.ValidationIssues(err); len(issues) > 0 {
+				return toolregistry.NewToolResultInvalidArgumentsMessage(msg.RegistrationToken, msg.ToolUseID, "tool arguments failed validation", issues), nil
+			}
+			return toolregistry.NewToolResultErrorMessage(msg.RegistrationToken, msg.ToolUseID, toolregistry.ToolErrorCodeInvalidArguments, "tool arguments failed validation"), nil
+		}
+		methodIn := InitProjectedBoundedLookupToolMethodPayload(args)
+		methodIn.SessionID = msg.Meta.SessionID
+		methodOut, err := p.svc.ProjectedBoundedLookup(ctx, methodIn)
+		if err != nil {
+			if issues := toolregistry.ValidationIssues(err); len(issues) > 0 {
+				return toolregistry.NewToolResultInvalidArgumentsMessage(msg.RegistrationToken, msg.ToolUseID, "tool arguments failed validation", issues), nil
+			}
+			return toolregistry.NewToolResultServiceErrorMessage(msg.RegistrationToken, msg.ToolUseID, msg.Tool, toolErrorCode(err), err), nil
+		}
+		result := InitProjectedBoundedLookupToolToolResult(methodOut)
+		resultJSON, err := ProjectedBoundedLookupToolResultCodec.ToJSON(result)
+		if err != nil {
+			return toolregistry.NewToolResultErrorMessage(msg.RegistrationToken, msg.ToolUseID, "encode_failed", "tool execution failed"), nil
+		}
+		bounds := initProjectedBoundedLookupToolBounds(methodOut)
+		var server []*toolregistry.ServerDataItem
+		if len(server) > 0 {
+			return toolregistry.ToolResultMessage{
+				Bounds:            bounds,
+				RegistrationToken: msg.RegistrationToken,
+				Result:            resultJSON,
+				ServerData:        server,
+				ToolUseID:         msg.ToolUseID,
+			}, nil
+		}
+		return toolregistry.ToolResultMessage{
+			Bounds:            bounds,
+			RegistrationToken: msg.RegistrationToken,
+			Result:            resultJSON,
+			ToolUseID:         msg.ToolUseID,
+		}, nil
 	case ProjectedLookupTool:
 		args, err := ProjectedLookupToolPayloadCodec.FromJSON(msg.Payload)
 		if err != nil {
@@ -314,4 +465,19 @@ func (p *Provider) HandleToolCall(ctx context.Context, msg toolregistry.ToolCall
 	default:
 		return toolregistry.NewToolResultErrorMessage(msg.RegistrationToken, msg.ToolUseID, "unknown_tool", fmt.Sprintf("unknown tool %q", msg.Tool)), nil
 	}
+}
+
+// initProjectedBoundedLookupToolBounds projects canonical bounds metadata from
+// the
+// bound method result.
+func initProjectedBoundedLookupToolBounds(mr *assistant.ProjectedBoundedLookupResult) *agent.Bounds {
+	bounds := &agent.Bounds{}
+	bounds.Returned = mr.Returned
+	bounds.Total = mr.Total
+	bounds.Truncated = mr.Truncated
+	bounds.NextCursor = mr.NextCursor
+	if mr.RefinementHint != nil {
+		bounds.RefinementHint = *mr.RefinementHint
+	}
+	return bounds
 }

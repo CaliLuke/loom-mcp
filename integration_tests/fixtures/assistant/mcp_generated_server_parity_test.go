@@ -152,3 +152,76 @@ func newGeneratedSDKServerURL(t *testing.T) string {
 	t.Cleanup(sdkHTTPServer.Close)
 	return sdkHTTPServer.URL + "/rpc"
 }
+func TestProjectedRichToolFeaturesUseStandardMCPContracts(t *testing.T) {
+	t.Parallel()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	session := connectSDKSessionToServer(t, newGeneratedSDKServerURL(t), map[string]string{
+		"x-fixture-session-id": "verified-session",
+	})
+	defer func() { require.NoError(t, session.Close()) }()
+
+	toolsResult, err := session.ListTools(ctx, nil)
+	require.NoError(t, err)
+	tool := findToolByName(t, toolsResult.Tools, "projected_bounded_lookup_tool")
+
+	inputSchema, ok := tool.InputSchema.(map[string]any)
+	require.True(t, ok)
+	inputProperties, ok := inputSchema["properties"].(map[string]any)
+	require.True(t, ok)
+	assert.NotContains(t, inputProperties, "session_id", "server-owned injected fields must not be model-visible")
+	assert.NotContains(t, inputSchema["required"], "session_id")
+
+	outputSchema, ok := tool.OutputSchema.(map[string]any)
+	require.True(t, ok)
+	outputProperties, ok := outputSchema["properties"].(map[string]any)
+	require.True(t, ok)
+	for _, field := range []string{"hits", "returned", "total", "truncated", "next_cursor", "refinement_hint"} {
+		assert.Contains(t, outputProperties, field)
+	}
+
+	result, err := session.CallTool(ctx, &sdkmcp.CallToolParams{
+		Name:      "projected_bounded_lookup_tool",
+		Arguments: map[string]any{"query": "loom"},
+	})
+	require.NoError(t, err)
+	assert.False(t, result.IsError)
+	assert.Equal(t, map[string]any{
+		"hits":            []any{"document:loom@verified-session"},
+		"next_cursor":     "page-2",
+		"refinement_hint": "narrow by repository",
+		"returned":        float64(1),
+		"total":           float64(3),
+		"truncated":       true,
+	}, result.StructuredContent)
+	require.Len(t, result.Content, 1)
+	textContent, ok := result.Content[0].(*sdkmcp.TextContent)
+	require.True(t, ok)
+	structuredJSON, err := json.Marshal(result.StructuredContent)
+	require.NoError(t, err)
+	require.JSONEq(t, string(structuredJSON), textContent.Text)
+	resultJSON, err := json.Marshal(result)
+	require.NoError(t, err)
+	assert.NotContains(t, string(resultJSON), "Use the cursor", "agent-only result reminders must not enter MCP content")
+}
+
+func TestProjectedInjectedToolRejectsMissingVerifiedContext(t *testing.T) {
+	t.Parallel()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	session := connectSDKSessionToServer(t, newGeneratedSDKServerURL(t), nil)
+	defer func() { require.NoError(t, session.Close()) }()
+
+	result, err := session.CallTool(ctx, &sdkmcp.CallToolParams{
+		Name:      "projected_bounded_lookup_tool",
+		Arguments: map[string]any{"query": "loom"},
+	})
+	require.NoError(t, err)
+	require.True(t, result.IsError)
+	require.Len(t, result.Content, 1)
+	content, ok := result.Content[0].(*sdkmcp.TextContent)
+	require.True(t, ok)
+	assert.Contains(t, content.Text, "requires verified request context")
+}

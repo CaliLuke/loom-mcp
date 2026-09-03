@@ -8,6 +8,28 @@
 package http
 
 type (
+	// ProjectedBoundedLookupToolPayloadTransport is the internal JSON transport type for ProjectedBoundedLookupToolPayload.
+	// It lives in the toolset-local http package and is used only for JSON
+	// decode + validation (missing-field detection) before transforming into
+	// the public tool type.
+	ProjectedBoundedLookupToolPayloadTransport struct {
+		// Projected lookup query
+		Query *string `json:"query"`
+		// Opaque continuation cursor
+		Cursor *string `json:"cursor,omitempty"`
+		// Verified server-owned session identifier
+		SessionID *string `json:"-"`
+	}
+
+	// ProjectedBoundedLookupToolResultTransport is the internal JSON transport type for ProjectedBoundedLookupToolResult.
+	// It lives in the toolset-local http package and is used only for JSON
+	// decode + validation (missing-field detection) before transforming into
+	// the public tool type.
+	ProjectedBoundedLookupToolResultTransport struct {
+		// Bounded lookup hits
+		Hits []string `json:"hits"`
+	}
+
 	// ProjectedLookupToolPayloadTransport is the internal JSON transport type for ProjectedLookupToolPayload.
 	// It lives in the toolset-local http package and is used only for JSON
 	// decode + validation (missing-field detection) before transforming into

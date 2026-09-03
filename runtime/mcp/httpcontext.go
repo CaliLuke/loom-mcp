@@ -6,6 +6,8 @@ import (
 	"encoding/hex"
 	"fmt"
 	"net/http"
+
+	agentruntime "github.com/CaliLuke/loom-mcp/v2/runtime/agent/runtime"
 )
 
 const (
@@ -17,11 +19,12 @@ const (
 )
 
 type (
-	sessionIDKey      struct{}
-	requestHeadersKey struct{}
-	responseWriterKey struct{}
-	allowedNamesKey   struct{}
-	deniedNamesKey    struct{}
+	sessionIDKey             struct{}
+	requestHeadersKey        struct{}
+	responseWriterKey        struct{}
+	allowedNamesKey          struct{}
+	projectedToolCallMetaKey struct{}
+	deniedNamesKey           struct{}
 )
 
 // WithSessionID stores the MCP session ID in ctx.
@@ -64,6 +67,26 @@ func RequestHeadersFromContext(ctx context.Context) http.Header {
 		}
 	}
 	return nil
+}
+
+// WithProjectedToolCallMeta stores verified application-owned metadata used to
+// populate Inject fields on projected MCP tools. Authentication middleware must
+// validate the request before its RequestContext callback calls this function.
+func WithProjectedToolCallMeta(ctx context.Context, meta agentruntime.ToolCallMeta) context.Context {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	return context.WithValue(ctx, projectedToolCallMetaKey{}, meta)
+}
+
+// ProjectedToolCallMetaFromContext returns verified metadata for a projected
+// MCP tool call. The boolean is false when the application did not install it.
+func ProjectedToolCallMetaFromContext(ctx context.Context) (agentruntime.ToolCallMeta, bool) {
+	if ctx == nil {
+		return agentruntime.ToolCallMeta{}, false
+	}
+	meta, ok := ctx.Value(projectedToolCallMetaKey{}).(agentruntime.ToolCallMeta)
+	return meta, ok
 }
 
 // WithAllowedResourceNames stores request-scoped allowed MCP resource names in ctx.

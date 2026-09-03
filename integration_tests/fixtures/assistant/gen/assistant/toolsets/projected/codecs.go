@@ -19,6 +19,16 @@ import (
 )
 
 var (
+	// ProjectedBoundedLookupToolPayloadCodec serializes values of type *ProjectedBoundedLookupToolPayload to canonical JSON.
+	ProjectedBoundedLookupToolPayloadCodec = tools.JSONCodec[*ProjectedBoundedLookupToolPayload]{
+		ToJSON:   MarshalProjectedBoundedLookupToolPayload,
+		FromJSON: UnmarshalProjectedBoundedLookupToolPayload,
+	}
+	// ProjectedBoundedLookupToolResultCodec serializes values of type *ProjectedBoundedLookupToolResult to canonical JSON.
+	ProjectedBoundedLookupToolResultCodec = tools.JSONCodec[*ProjectedBoundedLookupToolResult]{
+		ToJSON:   MarshalProjectedBoundedLookupToolResult,
+		FromJSON: UnmarshalProjectedBoundedLookupToolResult,
+	}
 	// ProjectedLookupToolPayloadCodec serializes values of type *ProjectedLookupToolPayload to canonical JSON.
 	ProjectedLookupToolPayloadCodec = tools.JSONCodec[*ProjectedLookupToolPayload]{
 		ToJSON:   MarshalProjectedLookupToolPayload,
@@ -38,6 +48,32 @@ var (
 	ProjectedStatusToolResultCodec = tools.JSONCodec[*ProjectedStatusToolResult]{
 		ToJSON:   MarshalProjectedStatusToolResult,
 		FromJSON: UnmarshalProjectedStatusToolResult,
+	}
+	// projectedBoundedLookupToolPayloadCodec provides an untyped codec for *ProjectedBoundedLookupToolPayload.
+	projectedBoundedLookupToolPayloadCodec = tools.JSONCodec[any]{
+		ToJSON: func(v any) ([]byte, error) {
+			// Prefer typed marshal when the value matches the expected type.
+			if typed, ok := v.(*ProjectedBoundedLookupToolPayload); ok {
+				return MarshalProjectedBoundedLookupToolPayload(typed)
+			}
+			return nil, fmt.Errorf("invalid value type for *ProjectedBoundedLookupToolPayload: %T", v)
+		},
+		FromJSON: func(data []byte) (any, error) {
+			return UnmarshalProjectedBoundedLookupToolPayload(data)
+		},
+	}
+	// projectedBoundedLookupToolResultCodec provides an untyped codec for *ProjectedBoundedLookupToolResult.
+	projectedBoundedLookupToolResultCodec = tools.JSONCodec[any]{
+		ToJSON: func(v any) ([]byte, error) {
+			// Prefer typed marshal when the value matches the expected type.
+			if typed, ok := v.(*ProjectedBoundedLookupToolResult); ok {
+				return MarshalProjectedBoundedLookupToolResult(typed)
+			}
+			return nil, fmt.Errorf("invalid value type for *ProjectedBoundedLookupToolResult: %T", v)
+		},
+		FromJSON: func(data []byte) (any, error) {
+			return UnmarshalProjectedBoundedLookupToolResult(data)
+		},
 	}
 	// projectedLookupToolPayloadCodec provides an untyped codec for *ProjectedLookupToolPayload.
 	projectedLookupToolPayloadCodec = tools.JSONCodec[any]{
@@ -92,6 +128,14 @@ var (
 		},
 	}
 )
+var ProjectedBoundedLookupToolPayloadFieldDescs = map[string]string{
+	"cursor":     "Opaque continuation cursor",
+	"query":      "Projected lookup query",
+	"session_id": "Verified server-owned session identifier",
+}
+var ProjectedBoundedLookupToolResultFieldDescs = map[string]string{
+	"hits": "Bounded lookup hits",
+}
 var ProjectedLookupToolPayloadFieldDescs = map[string]string{
 	"query": "Projected lookup query",
 }
@@ -164,6 +208,40 @@ func newValidationError(err error) error {
 		issues: issues,
 	}
 }
+func enrichProjectedBoundedLookupToolPayloadValidationError(err error) error {
+	ve, ok := err.(*ValidationError)
+	if !ok || ve == nil {
+		return err
+	}
+	if len(ve.issues) == 0 {
+		return err
+	}
+	m := make(map[string]string)
+	for _, is := range ve.issues {
+		if d, ok := ProjectedBoundedLookupToolPayloadFieldDescs[is.Field]; ok && d != "" {
+			m[is.Field] = d
+		}
+	}
+	ve.descriptions = m
+	return ve
+}
+func enrichProjectedBoundedLookupToolResultValidationError(err error) error {
+	ve, ok := err.(*ValidationError)
+	if !ok || ve == nil {
+		return err
+	}
+	if len(ve.issues) == 0 {
+		return err
+	}
+	m := make(map[string]string)
+	for _, is := range ve.issues {
+		if d, ok := ProjectedBoundedLookupToolResultFieldDescs[is.Field]; ok && d != "" {
+			m[is.Field] = d
+		}
+	}
+	ve.descriptions = m
+	return ve
+}
 func enrichProjectedLookupToolPayloadValidationError(err error) error {
 	ve, ok := err.(*ValidationError)
 	if !ok || ve == nil {
@@ -219,6 +297,8 @@ func enrichProjectedStatusToolResultValidationError(err error) error {
 // PayloadCodec returns the generic codec for the named tool payload.
 func PayloadCodec(name string) (*tools.JSONCodec[any], bool) {
 	switch name {
+	case "projected.projected_bounded_lookup_tool":
+		return &projectedBoundedLookupToolPayloadCodec, true
 	case "projected.projected_lookup_tool":
 		return &projectedLookupToolPayloadCodec, true
 	case "projected.projected_status_tool":
@@ -231,6 +311,8 @@ func PayloadCodec(name string) (*tools.JSONCodec[any], bool) {
 // ResultCodec returns the generic codec for the named tool result.
 func ResultCodec(name string) (*tools.JSONCodec[any], bool) {
 	switch name {
+	case "projected.projected_bounded_lookup_tool":
+		return &projectedBoundedLookupToolResultCodec, true
 	case "projected.projected_lookup_tool":
 		return &projectedLookupToolResultCodec, true
 	case "projected.projected_status_tool":
@@ -238,6 +320,88 @@ func ResultCodec(name string) (*tools.JSONCodec[any], bool) {
 	default:
 		return nil, false
 	}
+}
+
+// MarshalProjectedBoundedLookupToolPayload serializes *ProjectedBoundedLookupToolPayload into JSON.
+func MarshalProjectedBoundedLookupToolPayload(v *ProjectedBoundedLookupToolPayload) ([]byte, error) {
+	if v == nil {
+		return nil, fmt.Errorf("projectedBoundedLookupToolPayload is nil")
+	}
+	in := v
+	_ = in
+	var out *toolhttp.ProjectedBoundedLookupToolPayloadTransport
+	out = &toolhttp.ProjectedBoundedLookupToolPayloadTransport{
+		Query:     &in.Query,
+		Cursor:    in.Cursor,
+		SessionID: in.SessionID,
+	}
+	return json.Marshal(out)
+}
+
+// UnmarshalProjectedBoundedLookupToolPayload deserializes JSON into *ProjectedBoundedLookupToolPayload.
+func UnmarshalProjectedBoundedLookupToolPayload(data []byte) (*ProjectedBoundedLookupToolPayload, error) {
+	if len(data) == 0 {
+		return nil, fmt.Errorf("projectedBoundedLookupToolPayload JSON is empty")
+	}
+	var tv toolhttp.ProjectedBoundedLookupToolPayloadTransport
+	if err := json.Unmarshal(data, &tv); err != nil {
+		return nil, fmt.Errorf("decode projectedBoundedLookupToolPayload: %w", err)
+	}
+	if err := toolhttp.ValidateProjectedBoundedLookupToolPayloadTransport(&tv); err != nil {
+		err = newValidationError(err)
+		err = enrichProjectedBoundedLookupToolPayloadValidationError(err)
+		return nil, err
+	}
+	in := &tv
+	_ = in
+	var out *ProjectedBoundedLookupToolPayload
+	out = &ProjectedBoundedLookupToolPayload{
+		Query:     *in.Query,
+		Cursor:    in.Cursor,
+		SessionID: in.SessionID,
+	}
+	return out, nil
+}
+
+// MarshalProjectedBoundedLookupToolResult serializes *ProjectedBoundedLookupToolResult into JSON.
+func MarshalProjectedBoundedLookupToolResult(v *ProjectedBoundedLookupToolResult) ([]byte, error) {
+	if v == nil {
+		return nil, fmt.Errorf("projectedBoundedLookupToolResult is nil")
+	}
+	in := v
+	_ = in
+	var out *toolhttp.ProjectedBoundedLookupToolResultTransport
+	out = &toolhttp.ProjectedBoundedLookupToolResultTransport{}
+	out.Hits = make([]string, len(in.Hits))
+	for i, val := range in.Hits {
+		out.Hits[i] = val
+	}
+	return json.Marshal(out)
+}
+
+// UnmarshalProjectedBoundedLookupToolResult deserializes JSON into *ProjectedBoundedLookupToolResult.
+func UnmarshalProjectedBoundedLookupToolResult(data []byte) (*ProjectedBoundedLookupToolResult, error) {
+	if len(data) == 0 {
+		return nil, fmt.Errorf("projectedBoundedLookupToolResult JSON is empty")
+	}
+	var tv toolhttp.ProjectedBoundedLookupToolResultTransport
+	if err := json.Unmarshal(data, &tv); err != nil {
+		return nil, fmt.Errorf("decode projectedBoundedLookupToolResult: %w", err)
+	}
+	if err := toolhttp.ValidateProjectedBoundedLookupToolResultTransport(&tv); err != nil {
+		err = newValidationError(err)
+		err = enrichProjectedBoundedLookupToolResultValidationError(err)
+		return nil, err
+	}
+	in := &tv
+	_ = in
+	var out *ProjectedBoundedLookupToolResult
+	out = &ProjectedBoundedLookupToolResult{}
+	out.Hits = make([]string, len(in.Hits))
+	for i, val := range in.Hits {
+		out.Hits[i] = val
+	}
+	return out, nil
 }
 
 // MarshalProjectedLookupToolPayload serializes *ProjectedLookupToolPayload into JSON.

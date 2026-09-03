@@ -1649,6 +1649,18 @@ func emitProjectedToolCase(g *jen.Group, tool *ToolAdapter) {
 		jen.Id("args").Op("=").Id("jsontext").Dot("Value").Call(jen.Lit("{}")),
 	)
 	g.Id("meta").Op(":=").Op("&").Id("agentruntime").Dot("ToolCallMeta").Values()
+	if len(projected.InjectedFields) > 0 {
+		g.List(jen.Id("verifiedMeta"), jen.Id("ok")).Op(":=").Id("mcpruntime").Dot("ProjectedToolCallMetaFromContext").Call(jen.Id("ctx"))
+		g.If(jen.Op("!").Id("ok")).Block(
+			jen.Return(jen.True(), jen.Id("a").Dot("sendToolError").Call(
+				jen.Id("ctx"),
+				jen.Id("stream"),
+				jen.Id("p").Dot("Name"),
+				jen.Qual("fmt", "Errorf").Call(jen.Lit("projected tool %q with Inject requires verified request context"), jen.Id("p").Dot("Name")),
+			)),
+		)
+		g.Id("meta").Op("=").Op("&").Id("verifiedMeta")
+	}
 	g.List(jen.Id("toolResult"), jen.Id("err")).Op(":=").Id(projected.SpecsPackageName).Dot(projected.DispatcherFuncName).Call(
 		jen.Id("ctx"),
 		jen.Id("meta"),
@@ -1668,16 +1680,28 @@ func emitProjectedToolCase(g *jen.Group, tool *ToolAdapter) {
 		jen.Return(jen.True(), jen.Id("a").Dot("sendToolError").Call(jen.Id("ctx"), jen.Id("stream"), jen.Id("p").Dot("Name"), jen.Id("toolResult").Dot("Error"))),
 	)
 	if tool.HasResult {
-		g.List(jen.Id("structuredContent"), jen.Id("serr")).Op(":=").Id("json").Dot("Marshal").Call(jen.Id("toolResult").Dot("Result"))
+		if projected.HasBounds {
+			g.List(jen.Id("structuredContent"), jen.Id("serr")).Op(":=").Id("agentruntime").Dot("EncodeCanonicalToolResult").Call(
+				jen.Id(projected.SpecsPackageName).Dot(projected.SpecName),
+				jen.Id("toolResult").Dot("Result"),
+				jen.Id("toolResult").Dot("Bounds"),
+			)
+		} else {
+			g.List(jen.Id("structuredContent"), jen.Id("serr")).Op(":=").Id("json").Dot("Marshal").Call(jen.Id("toolResult").Dot("Result"))
+		}
 		g.If(jen.Id("serr").Op("!=").Nil()).Block(
 			jen.Return(jen.False(), jen.Id("serr")),
 		)
+		structuredContentValue := jen.Id("structuredContent")
+		if projected.HasBounds {
+			structuredContentValue = jen.Id("jsontext").Dot("Value").Call(jen.Id("structuredContent"))
+		}
 		g.Id("s").Op(":=").String().Call(jen.Id("structuredContent"))
 		g.Id("final").Op(":=").Op("&").Id("ToolsCallResult").Values(jen.Dict{
 			jen.Id("Content"): jen.Index().Op("*").Id("ContentItem").Values(
 				jen.Id("buildContentItem").Call(jen.Id("a"), jen.Id("s")),
 			),
-			jen.Id("StructuredContent"): jen.Id("mcpJSONFromRaw").Call(jen.Id("structuredContent")),
+			jen.Id("StructuredContent"): jen.Id("mcpJSONFromRaw").Call(structuredContentValue),
 		})
 		g.Id("a").Dot("log").Call(jen.Id("ctx"), jen.Lit("response"), jen.Map(jen.String()).Any().Values(jen.Dict{
 			jen.Lit("method"): jen.Lit("tools/call"),

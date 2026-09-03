@@ -93,8 +93,13 @@ func ProjectedToolInventory(genpkg string, roots []eval.Root, serviceName string
 	out := make([]*ProjectedToolAdapter, 0, len(tools))
 	for _, tool := range tools {
 		inputSchema := ""
+		advertisedArgs := tool.Args
 		if tool.Args != nil {
-			schema, err := shared.ToJSONSchema(tool.Args)
+			advertisedArgs, err = agentcodegen.AdvertisedPayloadAttribute(tool.Args, tool.InjectedFields)
+			if err != nil {
+				return nil, fmt.Errorf("build advertised projected input for %q: %w", tool.QualifiedName, err)
+			}
+			schema, err := shared.ToJSONSchema(advertisedArgs)
 			if err != nil {
 				return nil, fmt.Errorf("build projected input schema for %q: %w", tool.QualifiedName, err)
 			}
@@ -127,14 +132,15 @@ func ProjectedToolInventory(genpkg string, roots []eval.Root, serviceName string
 			QualifiedSourceTool: tool.QualifiedName,
 			HasPayload:          tool.Args != nil && tool.Args.Type != expr.Empty,
 			HasResult:           tool.HasResult,
+			InjectedFields:      append([]string(nil), tool.InjectedFields...),
+			HasBounds:           tool.Bounds != nil,
 			InputSchema:         inputSchema,
 			OutputSchema:        outputSchema,
-			ExampleArguments:    synthesizeCanonicalExample(tool.Args),
+			ExampleArguments:    synthesizeCanonicalExample(advertisedArgs),
 		})
 	}
 	return out, nil
 }
-
 func hasAgentRoot(roots []eval.Root) bool {
 	for _, root := range roots {
 		if _, ok := root.(*agentsexpr.RootExpr); ok {

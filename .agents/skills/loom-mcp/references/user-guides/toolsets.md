@@ -83,7 +83,7 @@ Cursors are opaque. A caller fetching the next page must keep all other argument
 - `Confirmation(...)` declares authorization requirements enforced by the runtime.
 - `Idempotent()` currently emits metadata only; it does not add replay suppression by itself.
 
-Projected MCP tools use `Expose(AgentRuntime, MCPSurface)` plus `MCPPlacement(...)`. The design rejects combinations unsupported by the v1 projected surface, including bounded results, confirmation, injection, server data, and result reminders.
+Projected MCP tools use `Expose(AgentRuntime, MCPSurface)` with `MCPPlacement(...)`. Projection supports injection, bounded results, and agent-only result reminders. It rejects confirmation and server data.
 
 ## Verification
 

@@ -65,10 +65,11 @@ Do not author canonical `returned`, `total`, `truncated`, `refinement_hint`, or
 configured next-cursor fields in a tool `Return`. `BoundedResult` projects those
 runtime-owned fields. Successful executions populate `planner.ToolResult.Bounds`.
 
-Toolset tools are runtime-only by default. Projection v1 requires both
+Toolset tools are runtime-only by default. Projection requires both
 `AgentRuntime` and `MCPSurface`, a same-service `MCPPlacement`, and a
-method-backed tool. It rejects confirmation, injection, server data, result
-reminders, and bounded results.
+method-backed tool. Projection supports injection, bounded results, and
+agent-only result reminders. It rejects confirmation and server data because
+MCP cannot preserve their authorization and privacy contracts.
 
 ## Run policy and workflows
 

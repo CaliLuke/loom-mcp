@@ -182,6 +182,15 @@ Use this file when editing DSL, generators, generated helpers, or MCP codegen be
 - Generated method dispatchers with injected fields must validate `MapPayload`
   output before field injection. Mapper errors, nil results, and wrong types
   become tool errors. The dispatcher must not panic.
+- Projected rich tools use a feature-by-feature contract. For `Inject(...)`,
+  generated MCP execution reads verified `ToolCallMeta` from
+  `mcpruntime.WithProjectedToolCallMeta` and fails if it is absent. For
+  `BoundedResult(...)`, encode the semantic result and runtime bounds with
+  `runtime.EncodeCanonicalToolResult`. Return the same canonical JSON through
+  MCP `structuredContent` and text content. Keep `ResultReminder(...)`
+  agent-only. Reject `Confirmation(...)` and `ServerData(...)` during
+  validation because MCP cannot preserve their authorization and privacy
+  contracts.
 - Generated tool specs must keep transport/public payload shapes distinct from
   advertised model-facing shapes. `Inject(...)` fields remain in generated
   public payload structs, codecs, validation, and method dispatch payloads, but

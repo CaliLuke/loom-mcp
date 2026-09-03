@@ -552,6 +552,50 @@ var AssistantAssistantMcpToolsetToolSpecs = []tools.ToolSpec{tools.ToolSpec{
 	Service: "assistant",
 	Toolset: "assistant.assistant-mcp",
 }, tools.ToolSpec{
+	Description: "Lookup bounded projected data",
+	Meta:        nil,
+	Name:        "projected_bounded_lookup_tool",
+	Payload: tools.TypeSpec{
+		Codec: tools.JSONCodec[any]{
+			FromJSON: func(data []byte) (any, error) {
+				if len(data) == 0 {
+					return nil, nil
+				}
+				var out any
+				if err := json.Unmarshal(data, &out); err != nil {
+					return nil, err
+				}
+				return out, nil
+			},
+			ToJSON: func(v any) ([]byte, error) {
+				return json.Marshal(v)
+			},
+		},
+		Name:   "any",
+		Schema: []byte("{\"type\":\"object\",\"required\":[\"query\"],\"properties\":{\"cursor\":{\"type\":\"string\",\"description\":\"Opaque continuation cursor\"},\"query\":{\"type\":\"string\",\"description\":\"Projected lookup query\"}},\"additionalProperties\":false}"),
+	},
+	Result: tools.TypeSpec{
+		Codec: tools.JSONCodec[any]{
+			FromJSON: func(data []byte) (any, error) {
+				if len(data) == 0 {
+					return nil, nil
+				}
+				var out any
+				if err := json.Unmarshal(data, &out); err != nil {
+					return nil, err
+				}
+				return out, nil
+			},
+			ToJSON: func(v any) ([]byte, error) {
+				return json.Marshal(v)
+			},
+		},
+		Name:   "any",
+		Schema: nil,
+	},
+	Service: "assistant",
+	Toolset: "assistant.assistant-mcp",
+}, tools.ToolSpec{
 	Description: "Lookup projected runtime tool data",
 	Meta:        nil,
 	Name:        "projected_lookup_tool",
@@ -776,6 +820,9 @@ func AssistantAssistantMcpToolsetRetryHint(toolName tools.Ident, err error) *pla
 			case "dispatch_command":
 				schemaJSON = "{\"type\":\"object\",\"required\":[\"command\"],\"properties\":{\"command\":{\"type\":\"object\",\"description\":\"Command envelope with custom branch key\",\"oneOf\":[{\"type\":\"object\",\"required\":[\"action\",\"args\"],\"properties\":{\"action\":{\"type\":\"string\",\"enum\":[\"foo\"]},\"args\":{\"type\":\"object\",\"properties\":{\"label\":{\"type\":\"string\",\"description\":\"Foo label\"}},\"additionalProperties\":false}},\"additionalProperties\":false},{\"type\":\"object\",\"required\":[\"action\",\"args\"],\"properties\":{\"action\":{\"type\":\"string\",\"enum\":[\"bar\"]},\"args\":{\"type\":\"object\",\"required\":[\"count\"],\"properties\":{\"count\":{\"type\":\"integer\",\"description\":\"Bar count\"}},\"additionalProperties\":false}},\"additionalProperties\":false}],\"discriminator\":{\"propertyName\":\"action\"}}},\"additionalProperties\":false}"
 				example = "{\"command\":{\"action\":\"foo\",\"args\":{}}}"
+			case "projected_bounded_lookup_tool":
+				schemaJSON = "{\"type\":\"object\",\"required\":[\"query\"],\"properties\":{\"cursor\":{\"type\":\"string\",\"description\":\"Opaque continuation cursor\"},\"query\":{\"type\":\"string\",\"description\":\"Projected lookup query\"}},\"additionalProperties\":false}"
+				example = "{\"query\":\"example\"}"
 			case "projected_lookup_tool":
 				schemaJSON = "{\"type\":\"object\",\"required\":[\"query\"],\"properties\":{\"query\":{\"type\":\"string\",\"description\":\"Projected lookup query\"}},\"additionalProperties\":false}"
 				example = "{\"query\":\"example\"}"

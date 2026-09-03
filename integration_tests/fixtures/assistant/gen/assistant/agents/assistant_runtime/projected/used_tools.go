@@ -19,11 +19,20 @@ import (
 
 // Tool IDs (globally unique). Use these constants in planner tool calls.
 const (
-	ProjectedLookupTool tools.Ident = "projected.projected_lookup_tool"
-	ProjectedStatusTool tools.Ident = "projected.projected_status_tool"
+	ProjectedBoundedLookupTool tools.Ident = "projected.projected_bounded_lookup_tool"
+	ProjectedLookupTool        tools.Ident = "projected.projected_lookup_tool"
+	ProjectedStatusTool        tools.Ident = "projected.projected_status_tool"
 )
 
 // Type aliases and codec re-exports for convenience.
+type ProjectedBoundedLookupToolPayload = projectedspecs.ProjectedBoundedLookupToolPayload
+
+var ProjectedBoundedLookupToolPayloadCodec = projectedspecs.ProjectedBoundedLookupToolPayloadCodec
+
+type ProjectedBoundedLookupToolResult = projectedspecs.ProjectedBoundedLookupToolResult
+
+var ProjectedBoundedLookupToolResultCodec = projectedspecs.ProjectedBoundedLookupToolResultCodec
+
 type ProjectedLookupToolPayload = projectedspecs.ProjectedLookupToolPayload
 
 var ProjectedLookupToolPayloadCodec = projectedspecs.ProjectedLookupToolPayloadCodec
@@ -60,6 +69,33 @@ func WithToolCallID(id string) CallOption {
 
 // Typed tool-call helpers (one per tool). These ensure use of the generated tool ID
 // and accept typed payloads matching tool schemas.
+// NewProjectedBoundedLookupToolCall builds a planner.ToolRequest for
+// projected.projected_bounded_lookup_tool.
+func NewProjectedBoundedLookupToolCall(args *ProjectedBoundedLookupToolPayload, opts ...CallOption) planner.ToolRequest {
+	var payload []byte
+	var toolErr *planner.ToolError
+	if args != nil {
+		// Encode typed payloads into canonical JSON using the generated codec.
+		b, err := ProjectedBoundedLookupToolPayloadCodec.ToJSON(args)
+		if err != nil {
+			toolErr = planner.ToolErrorFromError(err)
+		} else {
+			payload = b
+		}
+	}
+	req := planner.ToolRequest{
+		Error:   toolErr,
+		Name:    ProjectedBoundedLookupTool,
+		Payload: payload,
+	}
+	for _, o := range opts {
+		if o != nil {
+			o(&req)
+		}
+	}
+	return req
+}
+
 // NewProjectedLookupToolCall builds a planner.ToolRequest for
 // projected.projected_lookup_tool.
 func NewProjectedLookupToolCall(args *ProjectedLookupToolPayload, opts ...CallOption) planner.ToolRequest {

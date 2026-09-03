@@ -19,7 +19,7 @@ The visible symptom is an exposure-policy question, but the real design gap is d
 - Route dual-exposed method-backed tools through one bound service implementation.
 - Keep deployment-time registration decisions separate from design-time exposure permission.
 - Fail fast during design evaluation when a requested projection lacks a valid implementation route.
-- Limit v1 MCP projection to method-backed `Toolset(...)` tools that do not declare runtime-only features.
+- Limit v1 MCP projection to method-backed `Toolset(...)` tools with contracts that MCP can preserve.
 
 ## Non-Goals
 
@@ -31,7 +31,7 @@ The visible symptom is an exposure-policy question, but the real design gap is d
 - Do not invent a second execution bridge when `BindTo(...)` already identifies the service implementation.
 - Do not require deployment code to register every surface that the design permits.
 - Do not support MCP-only `Toolset(...)` tools in v1.
-- Do not support MCP projection for `Confirmation(...)`, `Inject(...)`, `ServerData(...)`, `ResultReminder(...)`, or `BoundedResult(...)` in v1.
+- Do not project features when MCP cannot preserve their authorization or privacy contracts.
 
 ## Current State
 
@@ -158,7 +158,8 @@ Validation changes:
 - `MCPPlacement(...)` names must resolve to an existing service and MCP suite.
 - `MCPPlacement(...)` service must match the `BindTo(...)` service in v1.
 - `Expose(AgentRuntime)` inside a service `Method(...)` is rejected in v1.
-- `Expose(MCP)` with `Confirmation(...)`, `Inject(...)`, `ServerData(...)`, `ResultReminder(...)`, or `BoundedResult(...)` is rejected in v1.
+- `Expose(MCP)` supports `Inject(...)`, `BoundedResult(...)`, and agent-only `ResultReminder(...)` semantics.
+- `Expose(MCP)` rejects `Confirmation(...)` and `ServerData(...)` because MCP cannot preserve their authorization and privacy contracts.
 - Dual projection requires payload/result contracts compatible with both runtime specs and MCP schema constraints.
 - Name collisions in the generated MCP tool catalog are rejected unless an explicit future aliasing rule is added.
 
@@ -221,8 +222,8 @@ func validateProjection(tool) error {
         if mcpNameCollides(tool.MCPPlacement, tool.Name) {
             return error("projected MCP tool name collides in target suite")
         }
-        if tool.HasAny(Confirmation, Inject, ServerData, ResultReminder, BoundedResult) {
-            return error("runtime-only tool features are unsupported for MCP projection in v1")
+        if tool.HasAny(Confirmation, ServerData) {
+            return error("MCP projection cannot preserve authorization or server-only privacy semantics")
         }
     }
 

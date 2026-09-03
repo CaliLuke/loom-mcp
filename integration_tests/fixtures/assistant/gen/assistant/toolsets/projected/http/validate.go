@@ -11,6 +11,22 @@ import (
 	loom "github.com/CaliLuke/loom/pkg"
 )
 
+// ValidateProjectedBoundedLookupToolPayloadTransport runs the validations defined on ProjectedBoundedLookupToolPayloadTransport.
+func ValidateProjectedBoundedLookupToolPayloadTransport(body *ProjectedBoundedLookupToolPayloadTransport) (err error) {
+	if body.Query == nil {
+		err = loom.MergeErrors(err, loom.MissingFieldError("query", "body"))
+	}
+	return
+}
+
+// ValidateProjectedBoundedLookupToolResultTransport runs the validations defined on ProjectedBoundedLookupToolResultTransport.
+func ValidateProjectedBoundedLookupToolResultTransport(body *ProjectedBoundedLookupToolResultTransport) (err error) {
+	if body.Hits == nil {
+		err = loom.MergeErrors(err, loom.MissingFieldError("hits", "body"))
+	}
+	return
+}
+
 // ValidateProjectedLookupToolPayloadTransport runs the validations defined on ProjectedLookupToolPayloadTransport.
 func ValidateProjectedLookupToolPayloadTransport(body *ProjectedLookupToolPayloadTransport) (err error) {
 	if body.Query == nil {

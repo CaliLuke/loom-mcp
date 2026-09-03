@@ -148,7 +148,7 @@ func sdkToolBindings(adapter *MCPAdapter, requestContext func(context.Context, *
 		}
 		return bindings, nil
 	}
-	bindings := make([]sdkbridge.ToolBinding, 0, 14)
+	bindings := make([]sdkbridge.ToolBinding, 0, 15)
 	bindings = append(bindings, sdkbridge.ToolBinding{
 		Handler: handler,
 		Tool: &mcpsdk.Tool{
@@ -276,6 +276,16 @@ func sdkToolBindings(adapter *MCPAdapter, requestContext func(context.Context, *
 			Name:         "dispatch_command",
 			OutputSchema: sdkToolInputSchema("{\"type\":\"object\",\"required\":[\"ack\"],\"properties\":{\"ack\":{\"type\":\"string\",\"description\":\"Acknowledgement\"}},\"additionalProperties\":false}"),
 			Title:        "Dispatch Command",
+		},
+	})
+	bindings = append(bindings, sdkbridge.ToolBinding{
+		Handler: handler,
+		Tool: &mcpsdk.Tool{
+			Description:  "Lookup bounded projected data",
+			InputSchema:  jsontext.Value(projected.SpecProjectedBoundedLookupTool.Payload.Schema),
+			Name:         "projected_bounded_lookup_tool",
+			OutputSchema: jsontext.Value(projected.SpecProjectedBoundedLookupTool.Result.Schema),
+			Title:        "Projected Bounded Lookup Tool",
 		},
 	})
 	bindings = append(bindings, sdkbridge.ToolBinding{

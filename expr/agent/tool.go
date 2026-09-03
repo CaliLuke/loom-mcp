@@ -460,19 +460,10 @@ func validateToolSurfaceEntry(t *ToolExpr, surface ToolSurface, seen map[ToolSur
 
 func validateMCPProjectionUnsupportedFeatures(t *ToolExpr, verr *eval.ValidationErrors) {
 	if t.Confirmation != nil {
-		verr.Add(t, "Confirmation is not supported for MCPSurface projection in v1")
-	}
-	if len(t.InjectedFields) > 0 {
-		verr.Add(t, "Inject is not supported for MCPSurface projection in v1")
+		verr.Add(t, "Confirmation cannot project to MCPSurface: MCP elicitation is a client assertion, not authorization evidence")
 	}
 	if len(t.ServerData) > 0 {
-		verr.Add(t, "ServerData is not supported for MCPSurface projection in v1")
-	}
-	if t.ResultReminder != "" {
-		verr.Add(t, "ResultReminder is not supported for MCPSurface projection in v1")
-	}
-	if t.Bounds != nil {
-		verr.Add(t, "BoundedResult is not supported for MCPSurface projection in v1")
+		verr.Add(t, "ServerData cannot project to MCPSurface: standard MCP metadata does not guarantee exclusion from model context")
 	}
 }
 

@@ -9,6 +9,34 @@ package projected
 
 import assistant "example.com/assistant/gen/assistant"
 
+// InitProjectedBoundedLookupToolMethodPayload converts *ProjectedBoundedLookupToolPayload to *assistant.ProjectedBoundedLookupPayload.
+func InitProjectedBoundedLookupToolMethodPayload(in *ProjectedBoundedLookupToolPayload) *assistant.ProjectedBoundedLookupPayload {
+	var out *assistant.ProjectedBoundedLookupPayload
+	out = &assistant.ProjectedBoundedLookupPayload{
+		Query:  in.Query,
+		Cursor: in.Cursor,
+	}
+	if in.SessionID != nil {
+		out.SessionID = *in.SessionID
+	}
+	return out
+}
+
+// InitProjectedBoundedLookupToolToolResult converts *assistant.ProjectedBoundedLookupResult to *ProjectedBoundedLookupToolResult.
+func InitProjectedBoundedLookupToolToolResult(in *assistant.ProjectedBoundedLookupResult) *ProjectedBoundedLookupToolResult {
+	var out *ProjectedBoundedLookupToolResult
+	out = &ProjectedBoundedLookupToolResult{}
+	if in.Hits != nil {
+		out.Hits = make([]string, len(in.Hits))
+		for i, val := range in.Hits {
+			out.Hits[i] = val
+		}
+	} else {
+		out.Hits = []string{}
+	}
+	return out
+}
+
 // InitProjectedLookupToolMethodPayload converts *ProjectedLookupToolPayload to *assistant.ProjectedLookupPayload.
 func InitProjectedLookupToolMethodPayload(in *ProjectedLookupToolPayload) *assistant.ProjectedLookupPayload {
 	var out *assistant.ProjectedLookupPayload

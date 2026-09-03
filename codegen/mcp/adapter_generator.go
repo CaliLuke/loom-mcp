@@ -176,6 +176,8 @@ type (
 		QualifiedSourceTool string
 		HasPayload          bool
 		HasResult           bool
+		InjectedFields      []string
+		HasBounds           bool
 		InputSchema         string
 		OutputSchema        string
 		ExampleArguments    string

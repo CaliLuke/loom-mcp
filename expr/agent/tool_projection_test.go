@@ -81,39 +81,18 @@ func TestToolSurfaceProjectionValidation(t *testing.T) {
 			err: "MCPPlacement requires MCPSurface",
 		},
 		{
-			name: "confirmation unsupported",
+			name: "confirmation remains agent-only",
 			mutate: func(tool *ToolExpr) {
 				tool.Confirmation = &ToolConfirmationExpr{}
 			},
-			err: "Confirmation is not supported",
+			err: "client assertion, not authorization evidence",
 		},
 		{
-			name: "inject unsupported",
-			mutate: func(tool *ToolExpr) {
-				tool.InjectedFields = []string{"session_id"}
-			},
-			err: "Inject is not supported",
-		},
-		{
-			name: "server data unsupported",
+			name: "server data remains rejected",
 			mutate: func(tool *ToolExpr) {
 				tool.ServerData = []*ServerDataExpr{{Kind: "evidence", Schema: &goaexpr.AttributeExpr{Type: goaexpr.String}}}
 			},
-			err: "ServerData is not supported",
-		},
-		{
-			name: "result reminder unsupported",
-			mutate: func(tool *ToolExpr) {
-				tool.ResultReminder = "Summarize the result"
-			},
-			err: "ResultReminder is not supported",
-		},
-		{
-			name: "bounded result unsupported",
-			mutate: func(tool *ToolExpr) {
-				tool.Bounds = &ToolBoundsExpr{}
-			},
-			err: "BoundedResult is not supported",
+			err: "does not guarantee exclusion from model context",
 		},
 	}
 

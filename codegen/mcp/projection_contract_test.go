@@ -33,6 +33,7 @@ func TestUnifiedToolSurfaceProjectionData(t *testing.T) {
 	require.Contains(t, tool.SpecsImportPath, "/lookup_tools")
 	require.Equal(t, "assistant", tool.BoundService)
 	require.Equal(t, "ProjectedLookup", tool.BoundMethod)
+	require.NotContains(t, tool.InputSchema, "session_id")
 	require.Equal(t, "lookup_tools.projected_lookup_tool", tool.RuntimeToolName)
 	require.Equal(t, "DispatchProjectedLookupToolMethod", tool.DispatcherFuncName)
 	require.JSONEq(t, `{"query":"example"}`, tool.ExampleArguments)
@@ -128,7 +129,8 @@ func runProjectionCodegenDesign(t *testing.T) []eval.Root {
 		API("projection", func() {})
 		payload := Type("LookupPayload", func() {
 			Attribute("query", String)
-			Required("query")
+			Attribute("session_id", String)
+			Required("query", "session_id")
 		})
 		result := Type("LookupResult", func() {
 			Attribute("answer", String)
@@ -148,6 +150,7 @@ func runProjectionCodegenDesign(t *testing.T) []eval.Root {
 					Tool("projected_lookup_tool", "Lookup through runtime and MCP", func() {
 						Args(payload)
 						Return(result)
+						Inject("session_id")
 						BindTo("assistant", "projected_lookup")
 						Expose(AgentRuntime, MCPSurface)
 						MCPPlacement("assistant", "assistant-mcp")

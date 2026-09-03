@@ -153,7 +153,7 @@ func (b *toolSpecBuilder) buildTypeInfo(tool *ToolData, att *goaexpr.AttributeEx
 	advertisedAttr := schemaAttr
 	var err error
 	if usage == usagePayload && len(tool.InjectedFields) > 0 {
-		advertisedAttr, err = advertisedPayloadAttribute(schemaAttr, tool.InjectedFields)
+		advertisedAttr, err = AdvertisedPayloadAttribute(schemaAttr, tool.InjectedFields)
 		if err != nil {
 			return nil, err
 		}
@@ -331,7 +331,8 @@ func (b *toolSpecBuilder) buildTypeInfo(tool *ToolData, att *goaexpr.AttributeEx
 // the generated tool schema. Tool payload schemas remain stable and do not
 // include runtime-reserved controls.
 
-func advertisedPayloadAttribute(att *goaexpr.AttributeExpr, injected []string) (*goaexpr.AttributeExpr, error) {
+// AdvertisedPayloadAttribute removes server-injected fields from the model-facing payload schema.
+func AdvertisedPayloadAttribute(att *goaexpr.AttributeExpr, injected []string) (*goaexpr.AttributeExpr, error) {
 	if len(injected) == 0 || att == nil {
 		return att, nil
 	}
@@ -472,7 +473,7 @@ func projectBoundedResultSchema(schemaBytes []byte, bounds *ToolBoundsData) ([]b
 	}
 	schema["required"] = mergeBoundedResultRequired(schema["required"], bounds, boundedresult.RequiredFieldNames()...)
 
-	projected, err := json.Marshal(schema)
+	projected, err := json.Marshal(schema, json.Deterministic(true))
 	if err != nil {
 		return nil, fmt.Errorf("marshal bounded result schema: %w", err)
 	}

@@ -109,12 +109,25 @@ func WithClient(client *assistant.Client) ExecOpt {
 		if c.callers == nil {
 			c.callers = make(map[tools.Ident]func(context.Context, any) (any, error))
 		}
+		c.callers[tools.Ident("projected.projected_bounded_lookup_tool")] = func(ctx context.Context, args any) (any, error) {
+			return client.ProjectedBoundedLookup(ctx, args.(*assistant.ProjectedBoundedLookupPayload))
+		}
 		c.callers[tools.Ident("projected.projected_lookup_tool")] = func(ctx context.Context, args any) (any, error) {
 			return client.ProjectedLookup(ctx, args.(*assistant.ProjectedLookupPayload))
 		}
 		c.callers[tools.Ident("projected.projected_status_tool")] = func(ctx context.Context, args any) (any, error) {
 			return client.ProjectedStatus(ctx)
 		}
+	})
+}
+
+// WithProjectedBoundedLookupTool sets the caller for projected.projected_bounded_lookup_tool.
+func WithProjectedBoundedLookupTool(f func(context.Context, any) (any, error)) ExecOpt {
+	return execOptFunc(func(c *seCfg) {
+		if c.callers == nil {
+			c.callers = make(map[tools.Ident]func(context.Context, any) (any, error))
+		}
+		c.callers[tools.Ident("projected.projected_bounded_lookup_tool")] = f
 	})
 }
 
@@ -153,6 +166,10 @@ func NewAssistantRuntimeProjectedExec(opts ...ExecOpt) runtime.ToolCallExecutor 
 	// Preflight: ensure callers are provided for all method-backed tools.
 	{
 		var missing []string
+		if cfg.callers == nil || cfg.callers[tools.Ident("projected.projected_bounded_lookup_tool")] == nil {
+			// report the fully-qualified tool for clarity
+			missing = append(missing, "projected.projected_bounded_lookup_tool")
+		}
 		if cfg.callers == nil || cfg.callers[tools.Ident("projected.projected_lookup_tool")] == nil {
 			// report the fully-qualified tool for clarity
 			missing = append(missing, "projected.projected_lookup_tool")
@@ -188,6 +205,17 @@ func NewAssistantRuntimeProjectedExec(opts ...ExecOpt) runtime.ToolCallExecutor 
 			}), nil
 		}
 		switch call.Name {
+		case tools.Ident("projected.projected_bounded_lookup_tool"):
+			result, err := projected.DispatchProjectedBoundedLookupToolMethod(ctx, meta, jsontext.Value(call.Payload), call.Labels, projected.ProjectedBoundedLookupToolDispatchOptions{
+				Call:       caller,
+				MapPayload: cfg.mapPayload,
+				MapResult:  cfg.mapResult,
+				Injectors:  dispatchInjectors(cfg.injectors),
+			})
+			if err != nil {
+				return nil, err
+			}
+			return runtime.Executed(result), nil
 		case tools.Ident("projected.projected_lookup_tool"):
 			result, err := projected.DispatchProjectedLookupToolMethod(ctx, meta, jsontext.Value(call.Payload), call.Labels, projected.ProjectedLookupToolDispatchOptions{
 				Call:       caller,

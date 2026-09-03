@@ -887,6 +887,12 @@ func (a *MCPAdapter) generatedToolCatalog() []*ToolInfo {
 		OutputSchema: jsontext.Value([]byte("{\"type\":\"object\",\"required\":[\"ack\"],\"properties\":{\"ack\":{\"type\":\"string\",\"description\":\"Acknowledgement\"}},\"additionalProperties\":false}")),
 		Title:        stringPtr("Dispatch Command"),
 	}, &ToolInfo{
+		Description:  stringPtr("Lookup bounded projected data"),
+		InputSchema:  jsontext.Value(projected.SpecProjectedBoundedLookupTool.Payload.Schema),
+		Name:         "projected_bounded_lookup_tool",
+		OutputSchema: jsontext.Value(projected.SpecProjectedBoundedLookupTool.Result.Schema),
+		Title:        stringPtr("Projected Bounded Lookup Tool"),
+	}, &ToolInfo{
 		Description:  stringPtr("Lookup projected runtime tool data"),
 		InputSchema:  jsontext.Value(projected.SpecProjectedLookupTool.Payload.Schema),
 		Name:         "projected_lookup_tool",
@@ -949,6 +955,8 @@ func isGeneratedToolName(name string) bool {
 	case "dispatch_action":
 		return true
 	case "dispatch_command":
+		return true
+	case "projected_bounded_lookup_tool":
 		return true
 	case "projected_lookup_tool":
 		return true
@@ -1903,6 +1911,21 @@ func dispatchCommandInputRecovery(err error, raw jsontext.Value) string {
 	}
 	return "Provide valid tool arguments. Example: " + example
 }
+func projectedBoundedLookupInputRecovery(err error, raw jsontext.Value) string {
+	message := strings.TrimSpace(loom.ErrorSafeMessage(err))
+	if message == "" {
+		message = strings.TrimSpace(err.Error())
+	}
+	_ = raw
+	example := "{\"query\":\"example\"}"
+	if field := missingFieldFromMessage(message); field != "" {
+		return fmt.Sprintf("Include required field %q. Example: %s", field, example)
+	}
+	if strings.Contains(message, "unexpected end of JSON input") || strings.Contains(message, "unexpected EOF") {
+		return "Provide complete JSON arguments. Example: " + example
+	}
+	return "Provide valid tool arguments. Example: " + example
+}
 func projectedLookupInputRecovery(err error, raw jsontext.Value) string {
 	message := strings.TrimSpace(loom.ErrorSafeMessage(err))
 	if message == "" {
@@ -2350,6 +2373,43 @@ func (a *MCPAdapter) executeRealTool(ctx context.Context, p *ToolsCallPayload, s
 		final := &ToolsCallResult{
 			Content:           []*ContentItem{buildContentItem(a, s)},
 			StructuredContent: mcpJSONFromRaw(structuredContent),
+		}
+		a.log(ctx, "response", map[string]any{
+			"method": "tools/call",
+			"name":   p.Name,
+		})
+		return false, stream.SendAndClose(ctx, final)
+	case "projected_bounded_lookup_tool":
+		args := arguments
+		if len(args) == 0 {
+			args = jsontext.Value("{}")
+		}
+		meta := &agentruntime.ToolCallMeta{}
+		verifiedMeta, ok := mcpruntime.ProjectedToolCallMetaFromContext(ctx)
+		if !ok {
+			return true, a.sendToolError(ctx, stream, p.Name, fmt.Errorf("projected tool %q with Inject requires verified request context", p.Name))
+		}
+		meta = &verifiedMeta
+		toolResult, err := projected.DispatchProjectedBoundedLookupToolMethod(ctx, meta, args, nil, projected.ProjectedBoundedLookupToolDispatchOptions{Call: func(ctx context.Context, args any) (any, error) {
+			return a.service.ProjectedBoundedLookup(ctx, args.(*assistant.ProjectedBoundedLookupPayload))
+		}})
+		if err != nil {
+			return true, a.sendToolError(ctx, stream, p.Name, err)
+		}
+		if toolResult == nil {
+			return false, fmt.Errorf("projected tool %q returned nil result", p.Name)
+		}
+		if toolResult.Error != nil {
+			return true, a.sendToolError(ctx, stream, p.Name, toolResult.Error)
+		}
+		structuredContent, serr := agentruntime.EncodeCanonicalToolResult(projected.SpecProjectedBoundedLookupTool, toolResult.Result, toolResult.Bounds)
+		if serr != nil {
+			return false, serr
+		}
+		s := string(structuredContent)
+		final := &ToolsCallResult{
+			Content:           []*ContentItem{buildContentItem(a, s)},
+			StructuredContent: mcpJSONFromRaw(jsontext.Value(structuredContent)),
 		}
 		a.log(ctx, "response", map[string]any{
 			"method": "tools/call",

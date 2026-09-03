@@ -8,6 +8,22 @@
 package projected
 
 type (
+	// ProjectedBoundedLookupToolPayload defines the JSON payload for the projected.projected_bounded_lookup_tool tool.
+	ProjectedBoundedLookupToolPayload = struct {
+		// Projected lookup query
+		Query string `json:"query"`
+		// Opaque continuation cursor
+		Cursor *string `json:"cursor,omitempty"`
+		// Verified server-owned session identifier
+		SessionID *string `json:"-"`
+	}
+
+	// ProjectedBoundedLookupToolResult defines the JSON result for the projected.projected_bounded_lookup_tool tool.
+	ProjectedBoundedLookupToolResult = struct {
+		// Bounded lookup hits
+		Hits []string `json:"hits"`
+	}
+
 	// ProjectedLookupToolPayload defines the JSON payload for the projected.projected_lookup_tool tool.
 	ProjectedLookupToolPayload = struct {
 		// Projected lookup query

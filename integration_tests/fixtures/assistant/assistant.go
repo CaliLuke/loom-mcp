@@ -266,6 +266,23 @@ func (s *assistantsrvc) ProjectedLookup(ctx context.Context, p *assistant.Projec
 	return
 }
 
+// Return bounded projected lookup data with verified request context.
+func (s *assistantsrvc) ProjectedBoundedLookup(ctx context.Context, p *assistant.ProjectedBoundedLookupPayload) (res *assistant.ProjectedBoundedLookupResult, err error) {
+	nextCursor := "page-2"
+	refinementHint := "narrow by repository"
+	total := 3
+	res = &assistant.ProjectedBoundedLookupResult{
+		Hits:           []string{"document:" + p.Query + "@" + p.SessionID},
+		Returned:       1,
+		Total:          &total,
+		Truncated:      true,
+		NextCursor:     &nextCursor,
+		RefinementHint: &refinementHint,
+	}
+	log.Printf(ctx, "assistant.projected_bounded_lookup")
+	return
+}
+
 // Return projected runtime status without a payload.
 func (s *assistantsrvc) ProjectedStatus(ctx context.Context) (res *assistant.ProjectedStatusResult, err error) {
 	res = &assistant.ProjectedStatusResult{Status: "ready"}

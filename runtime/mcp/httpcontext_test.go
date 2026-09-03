@@ -5,6 +5,8 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
+
+	agentruntime "github.com/CaliLuke/loom-mcp/v2/runtime/agent/runtime"
 )
 
 func TestSessionIDFromContext(t *testing.T) {
@@ -73,5 +75,21 @@ func TestRequestHeadersFromContext(t *testing.T) {
 	again := RequestHeadersFromContext(ctx)
 	if again.Get("X-Test") != "a" {
 		t.Fatalf("expected cloned headers on read, got %q", again.Get("X-Test"))
+	}
+}
+
+func TestProjectedToolCallMetaFromContext(t *testing.T) {
+	if _, ok := ProjectedToolCallMetaFromContext(context.Background()); ok {
+		t.Fatal("expected absent projected tool call metadata")
+	}
+
+	want := agentruntime.ToolCallMeta{SessionID: "verified-session", ToolCallID: "call-1"}
+	ctx := WithProjectedToolCallMeta(context.Background(), want)
+	got, ok := ProjectedToolCallMetaFromContext(ctx)
+	if !ok {
+		t.Fatal("expected projected tool call metadata")
+	}
+	if got != want {
+		t.Fatalf("projected tool call metadata = %#v, want %#v", got, want)
 	}
 }

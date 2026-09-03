@@ -8,6 +8,7 @@ import (
 	"time"
 
 	mcpassistant "example.com/assistant/gen/mcp_assistant"
+	agentruntime "github.com/CaliLuke/loom-mcp/v2/runtime/agent/runtime"
 	mcpruntime "github.com/CaliLuke/loom-mcp/v2/runtime/mcp"
 	goahttp "github.com/CaliLuke/loom/http"
 	sdkmcp "github.com/modelcontextprotocol/go-sdk/mcp"
@@ -60,6 +61,9 @@ func newGeneratedSDKServerWithAdapterOptions(t *testing.T, adapterOpts *mcpassis
 			}
 			if deny := r.Header.Get("x-mcp-deny-names"); deny != "" {
 				ctx = mcpruntime.WithDeniedResourceNames(ctx, deny)
+			}
+			if sessionID := r.Header.Get("x-fixture-session-id"); sessionID != "" {
+				ctx = mcpruntime.WithProjectedToolCallMeta(ctx, agentruntime.ToolCallMeta{SessionID: sessionID})
 			}
 			return ctx
 		},

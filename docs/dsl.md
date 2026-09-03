@@ -993,14 +993,20 @@ Runtime registration still chooses whether the generated toolset is available to
 agents; MCP adapter construction still chooses which generated MCP server is
 served. Method-level `Tool(...)` inside a Goa method remains MCP-only and must
 not use `Expose(AgentRuntime)` or `MCPPlacement(...)`.
+The projection contract maps each rich tool feature separately:
 
-The v1 projection path is intentionally narrow. Projected MCP tools must be
-method-backed with `BindTo(...)`, must include `AgentRuntime` alongside
-`MCPSurface`, and cannot use `Confirmation(...)`, `Inject(...)`,
-`ServerData(...)`, `ResultReminder(...)`, or `BoundedResult(...)`. Validation
-also rejects missing or inert placements, cross-service placements, unresolved
-MCP servers, duplicate surfaces, and name collisions with method-level MCP
-tools or other projected tools in the same MCP catalog.
+| Tool feature | MCP projection | Required support or failure |
+| --- | --- | --- |
+| `Inject(...)` | The input schema omits injected fields. The adapter gets values from verified request context. | The application must call `mcpruntime.WithProjectedToolCallMeta`. The tool call fails if this context is absent. |
+| `Confirmation(...)` | Not supported. | Design validation fails. MCP elicitation is a client assertion, not authorization evidence. |
+| `ServerData(...)` | Not supported. | Design validation fails. Standard MCP metadata does not guarantee exclusion from model context. |
+| `BoundedResult(...)` | The output schema and result contain canonical bounds. The adapter uses `structuredContent` and matching JSON text. | No client capability is required. Older clients can read the JSON text result. |
+| `ResultReminder(...)` | The reminder stays in the agent runtime. The MCP result omits it. | No client capability is required. |
+
+Projected MCP tools must be method-backed with `BindTo(...)`. They must include
+`AgentRuntime` with `MCPSurface`. Validation also rejects missing or inert
+placements, cross-service placements, unresolved MCP servers, duplicate
+surfaces, and catalog name collisions.
 
 ### Args and Return
 

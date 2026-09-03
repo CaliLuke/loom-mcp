@@ -16,11 +16,17 @@ import (
 var (
 	// Specs is the static list of tool specs exported by this agent.
 
-	Specs = []tools.ToolSpec{projected.SpecProjectedLookupTool, projected.SpecProjectedStatusTool}
+	Specs = []tools.ToolSpec{projected.SpecProjectedBoundedLookupTool, projected.SpecProjectedLookupTool, projected.SpecProjectedStatusTool}
 
 	// metadata is the static list of policy metadata exported by this agent.
 
 	metadata = []policy.ToolMetadata{{
+		BudgetClass: policy.ToolBudgetClassBudgeted,
+		Description: "Lookup bounded projected data",
+		ID:          tools.Ident("projected.projected_bounded_lookup_tool"),
+		Tags:        []string{},
+		Title:       "Projected Bounded Lookup Tool",
+	}, {
 		BudgetClass: policy.ToolBudgetClassBudgeted,
 		Description: "Lookup projected runtime tool data",
 		ID:          tools.Ident("projected.projected_lookup_tool"),
@@ -36,7 +42,7 @@ var (
 
 	// names is the static list of exported tool identifiers.
 
-	names = []tools.Ident{projected.ProjectedLookupTool, projected.ProjectedStatusTool}
+	names = []tools.Ident{projected.ProjectedBoundedLookupTool, projected.ProjectedLookupTool, projected.ProjectedStatusTool}
 )
 
 // Names returns the tool identifiers exported by this agent.
@@ -47,6 +53,8 @@ func Names() []tools.Ident {
 // Spec returns the specification for the named tool if present.
 func Spec(name tools.Ident) (*tools.ToolSpec, bool) {
 	switch name {
+	case tools.Ident("projected.projected_bounded_lookup_tool"):
+		return &projected.SpecProjectedBoundedLookupTool, true
 	case tools.Ident("projected.projected_lookup_tool"):
 		return &projected.SpecProjectedLookupTool, true
 	case tools.Ident("projected.projected_status_tool"):

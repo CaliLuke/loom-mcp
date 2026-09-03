@@ -252,6 +252,31 @@ can pin them with `AlwaysVisible`, and SDK `call_tool` invokes them through the
 generated MCP adapter so execution still uses the shared method-backed
 dispatcher.
 
+Rich projected tools use the following MCP contracts:
+
+| Tool feature | MCP contract |
+| --- | --- |
+| `Inject(...)` | The application supplies `ToolCallMeta` from verified request context. Injected fields stay out of `inputSchema`. |
+| `BoundedResult(...)` | The server returns canonical bounds in `structuredContent` and in the JSON text content. |
+| `ResultReminder(...)` | The reminder stays in the agent runtime and does not enter MCP content. |
+| `Confirmation(...)` | Design validation rejects the projection. Elicitation cannot replace authorization evidence. |
+| `ServerData(...)` | Design validation rejects the projection. MCP metadata cannot guarantee model exclusion. |
+
+Install injected values in `SDKServerOptions.RequestContext` after the
+application verifies the request identity:
+
+```go
+RequestContext: func(ctx context.Context, r *http.Request) context.Context {
+    meta := agentruntime.ToolCallMeta{SessionID: verifiedSessionID(r)}
+    return mcpruntime.WithProjectedToolCallMeta(ctx, meta)
+},
+```
+
+Do not copy unverified client headers into this metadata. A projected tool with
+`Inject(...)` returns a tool error if the metadata is absent. These mappings
+do not require an MCP client capability. Clients without structured-result
+support can use the matching JSON text content.
+
 `ToolSearchOptions.AllowDirectHiddenCalls` is unsupported for SDK-backed compact
 mode. `NewSDKServer` fails construction when that option is true because the SDK
 cannot directly call tools that were intentionally omitted from the registered

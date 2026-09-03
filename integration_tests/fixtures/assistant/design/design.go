@@ -321,6 +321,11 @@ var _ = Service("assistant", func() {
 		Description("Return projected runtime status without a payload")
 		Result(ProjectedStatusResult)
 	})
+	Method("projected_bounded_lookup", func() {
+		Description("Lookup bounded projected data with server-owned request context")
+		Payload(ProjectedBoundedLookupPayload)
+		Result(ProjectedBoundedLookupResult)
+	})
 
 	Agent("assistant_runtime", "Runtime agent that owns projected tools", func() {
 		Use("projected", func() {
@@ -334,6 +339,19 @@ var _ = Service("assistant", func() {
 			Tool("projected_status_tool", "Return projected runtime status", func() {
 				Return(ProjectedStatusResult)
 				BindTo("assistant", "projected_status")
+				Expose(AgentRuntime, MCPSurface)
+				MCPPlacement("assistant", "assistant-mcp")
+			})
+			Tool("projected_bounded_lookup_tool", "Lookup bounded projected data", func() {
+				Args(ProjectedBoundedLookupToolPayload)
+				Return(ProjectedBoundedLookupToolResult)
+				Inject("session_id")
+				BoundedResult(func() {
+					Cursor("cursor")
+					NextCursor("next_cursor")
+				})
+				ResultReminder("Use the cursor to request the next page; never expose this reminder as MCP result content.")
+				BindTo("assistant", "projected_bounded_lookup")
 				Expose(AgentRuntime, MCPSurface)
 				MCPPlacement("assistant", "assistant-mcp")
 			})
@@ -431,6 +449,34 @@ var ProjectedLookupToolResult = Type("ProjectedLookupToolResult", func() {
 	Required("answer", "source")
 })
 
+var ProjectedBoundedLookupPayload = Type("ProjectedBoundedLookupPayload", func() {
+	Attribute("query", String, "Projected lookup query")
+	Attribute("cursor", String, "Opaque continuation cursor")
+	Attribute("session_id", String, "Verified server-owned session identifier")
+	Required("query", "session_id")
+})
+
+var ProjectedBoundedLookupResult = Type("ProjectedBoundedLookupResult", func() {
+	Attribute("hits", ArrayOf(String), "Bounded lookup hits")
+	Attribute("returned", Int, "Number of returned hits")
+	Attribute("total", Int, "Total matching hits")
+	Attribute("truncated", Boolean, "Whether more hits are available")
+	Attribute("next_cursor", String, "Opaque continuation cursor")
+	Attribute("refinement_hint", String, "Guidance for narrowing the query")
+	Required("hits", "returned", "truncated")
+})
+
+var ProjectedBoundedLookupToolPayload = Type("ProjectedBoundedLookupToolPayload", func() {
+	Attribute("query", String, "Projected lookup query")
+	Attribute("cursor", String, "Opaque continuation cursor")
+	Attribute("session_id", String, "Verified server-owned session identifier")
+	Required("query", "session_id")
+})
+
+var ProjectedBoundedLookupToolResult = Type("ProjectedBoundedLookupToolResult", func() {
+	Attribute("hits", ArrayOf(String), "Bounded lookup hits")
+	Required("hits")
+})
 var ProjectedStatusResult = Type("ProjectedStatusResult", func() {
 	Attribute("status", String, "Projected runtime status")
 	Required("status")

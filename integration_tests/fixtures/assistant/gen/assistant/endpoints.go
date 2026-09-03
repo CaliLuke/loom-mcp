@@ -36,6 +36,7 @@ type Endpoints struct {
 	DispatchCommand                loom.Endpoint
 	ProjectedLookup                loom.Endpoint
 	ProjectedStatus                loom.Endpoint
+	ProjectedBoundedLookup         loom.Endpoint
 }
 
 // NewEndpoints wraps the methods of the "assistant" service with endpoints.
@@ -62,6 +63,7 @@ func NewEndpoints(s Service) *Endpoints {
 		DispatchCommand:                NewDispatchCommandEndpoint(s),
 		ProjectedLookup:                NewProjectedLookupEndpoint(s),
 		ProjectedStatus:                NewProjectedStatusEndpoint(s),
+		ProjectedBoundedLookup:         NewProjectedBoundedLookupEndpoint(s),
 	}
 }
 
@@ -88,6 +90,7 @@ func (e *Endpoints) Use(m func(loom.Endpoint) loom.Endpoint) {
 	e.DispatchCommand = m(e.DispatchCommand)
 	e.ProjectedLookup = m(e.ProjectedLookup)
 	e.ProjectedStatus = m(e.ProjectedStatus)
+	e.ProjectedBoundedLookup = m(e.ProjectedBoundedLookup)
 }
 
 // NewListDocumentsEndpoint returns an endpoint function that calls the method
@@ -270,5 +273,14 @@ func NewProjectedLookupEndpoint(s Service) loom.Endpoint {
 func NewProjectedStatusEndpoint(s Service) loom.Endpoint {
 	return func(ctx context.Context, req any) (any, error) {
 		return s.ProjectedStatus(ctx)
+	}
+}
+
+// NewProjectedBoundedLookupEndpoint returns an endpoint function that calls
+// the method "projected_bounded_lookup" of service "assistant".
+func NewProjectedBoundedLookupEndpoint(s Service) loom.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*ProjectedBoundedLookupPayload)
+		return s.ProjectedBoundedLookup(ctx, p)
 	}
 }
