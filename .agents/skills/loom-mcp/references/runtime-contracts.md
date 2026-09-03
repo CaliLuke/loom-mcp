@@ -294,7 +294,8 @@ Use this file for current loom-mcp runtime behavior in this repo. Prefer it over
 ## Workflow Composition
 
 - Plain `Workflow` plus `Step` remains source-compatible and generated through
-  `planner.NewSequentialWorkflowPlanner(...)`.
+  `planner.NewSequentialWorkflowPlanner(...)`. Sequential step names must be
+  unique because they become tool-call IDs.
 - Graph helpers (`Parallel`, `Join`, `RequestInput`, `Loop`, `Branch`) generate
   `planner.NewGraphWorkflowPlanner(...)`.
 - Graph workflow resume state is derived from stable node/tool-call IDs in

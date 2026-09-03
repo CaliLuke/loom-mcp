@@ -94,6 +94,9 @@ Use this skill for `loom-mcp` work in this repo. Keep `AGENTS.md` short and keep
   fingerprints, at most one session plus one global lookup, and a 15-label
   bound. Client startup backfills missing fingerprints before index creation
   and fails closed on migration errors.
+- Sequential workflow step names must be unique because generated planners use
+  them as tool-call IDs for output correlation. Reject duplicates during design
+  validation, before code generation.
 - Planner turns are workflow activities, not exactly-once method calls. Generated
   registrations retry failed plan/resume activities up to three attempts by
   default, so model calls and direct side effects can repeat after a late attempt

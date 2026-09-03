@@ -37,6 +37,13 @@ func TestWorkflowDSLRejectsInvalidJSON(t *testing.T) {
 	}
 }
 
+func TestWorkflowDSLRejectsDuplicateSequentialStepNames(t *testing.T) {
+	runDSLExpectError(t, workflowDesign(func() {
+		Step("search", "tools.search", `{}`)
+		Step("search", "tools.refine", `{}`)
+	}), `duplicate workflow step name "search"`)
+}
+
 func workflowDesign(node func()) func() {
 	return func() {
 		API("test", func() {})

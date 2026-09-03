@@ -1484,9 +1484,10 @@ wall-clock SLA separately at the caller or workflow boundary.
 ## Workflow Composition
 
 `Workflow` defines a generated deterministic planner for multi-tool flows. A plain sequence of
-`Step` calls remains source-compatible and emits one tool request at a time. Graph helpers switch
-the generated planner to `planner.NewGraphWorkflowPlanner(...)`, where node completion is keyed by
-stable step IDs rather than `len(ToolOutputs)`.
+`Step` calls remains source-compatible and emits one tool request at a time. Every step name must
+be unique because it becomes the tool-call ID used to correlate workflow output. Graph helpers
+switch the generated planner to `planner.NewGraphWorkflowPlanner(...)`, where node completion is
+keyed by stable step IDs rather than `len(ToolOutputs)`.
 
 ```go
 Agent("release", "Release workflow", func() {

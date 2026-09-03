@@ -292,12 +292,18 @@ func (w *WorkflowExpr) validateLoopNode(verr *eval.ValidationErrors, node *Workf
 }
 
 func (w *WorkflowExpr) validateSequential(verr *eval.ValidationErrors) {
+	names := make(map[string]struct{}, len(w.Steps))
 	for _, step := range w.Steps {
 		if step == nil {
 			continue
 		}
 		if step.Name == "" {
 			verr.Add(w, "workflow step name is required")
+		} else {
+			if _, ok := names[step.Name]; ok {
+				verr.Add(w, "duplicate workflow step name %q", step.Name)
+			}
+			names[step.Name] = struct{}{}
 		}
 		if step.Tool == "" {
 			verr.Add(w, "workflow step %q tool is required", step.Name)
