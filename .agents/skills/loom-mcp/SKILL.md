@@ -293,8 +293,9 @@ Use this skill for `loom-mcp` work in this repo. Keep `AGENTS.md` short and keep
   `PreloadLongTermMemory(...)`; do not overload transcript preload or
   `load_memory` with extracted facts.
 - Local skills can declare structured `SKILL.md` frontmatter (`id`, `name`,
-  `description`, `allowed_tools`, `preload`, `reload`). Duplicate IDs and
-  unknown load modes are hard errors, not silent skips.
+  `description`, `allowed_tools`, `preload`, `reload`). Skill IDs from
+  frontmatter or directory names must match `[A-Za-z0-9._-]+`. Duplicate IDs,
+  invalid IDs, and unknown load modes are hard errors, not silent skips.
 - Generated MCP adapters can opt into progressive discovery with
   `MCPAdapterOptions.ToolSearch`. Compact mode makes `tools/list` authoritative:
   it exposes `search_tools`, `call_tool`, and validated `AlwaysVisible` pins.

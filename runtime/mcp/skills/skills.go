@@ -387,6 +387,9 @@ func validateMetadata(metadata Metadata) error {
 	if metadata.ID == "" {
 		return fmt.Errorf("%w: id is required", ErrInvalidMetadata)
 	}
+	if !validSkillID(metadata.ID) {
+		return fmt.Errorf("%w: invalid skill id %q: must contain only ASCII letters, digits, '.', '_', or '-'", ErrInvalidMetadata, metadata.ID)
+	}
 	for _, tool := range metadata.AllowedTools {
 		if strings.TrimSpace(tool) == "" {
 			return fmt.Errorf("%w: allowed_tools contains an empty value", ErrInvalidMetadata)
@@ -403,6 +406,25 @@ func validateMetadata(metadata Metadata) error {
 		return fmt.Errorf("%w: unknown reload mode %q", ErrInvalidMetadata, metadata.Reload)
 	}
 	return nil
+}
+
+func validSkillID(id string) bool {
+	if id == "" {
+		return false
+	}
+	for i := range len(id) {
+		c := id[i]
+		if c >= 'a' && c <= 'z' || c >= 'A' && c <= 'Z' || c >= '0' && c <= '9' {
+			continue
+		}
+		switch c {
+		case '.', '_', '-':
+			continue
+		default:
+			return false
+		}
+	}
+	return true
 }
 
 func manifestJSON(s skill) (string, error) {

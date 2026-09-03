@@ -89,6 +89,41 @@ func TestInvalidSkillMetadataReturnsError(t *testing.T) {
 	_, err := List(context.Background(), []Source{{Root: root}})
 	require.ErrorIs(t, err, ErrInvalidMetadata)
 }
+func TestInvalidSkillIDReturnsError(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name     string
+		dirName  string
+		contents string
+	}{
+		{
+			name:     "space in directory name",
+			dirName:  "my skill",
+			contents: "# Invalid skill ID\n",
+		},
+		{
+			name:     "slash in frontmatter ID",
+			dirName:  "invalid-slash",
+			contents: "---\nid: a/b\n---\n# Invalid skill ID\n",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			root := t.TempDir()
+			skillDir := filepath.Join(root, tt.dirName)
+			require.NoError(t, os.MkdirAll(skillDir, 0o750))
+			require.NoError(t, os.WriteFile(filepath.Join(skillDir, "SKILL.md"), []byte(tt.contents), 0o600))
+
+			_, err := List(context.Background(), []Source{{Root: root}})
+			require.ErrorIs(t, err, ErrInvalidMetadata)
+			require.Contains(t, err.Error(), "invalid skill id")
+		})
+	}
+}
 
 func TestDuplicateSkillIDReturnsError(t *testing.T) {
 	root := t.TempDir()
