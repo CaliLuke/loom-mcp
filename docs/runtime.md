@@ -844,8 +844,8 @@ Both plain `Manager.Search` and the richer `SearchClient.Search` use the same
 concurrent fan-out and partial-failure contract: every selected registry starts
 independently, successful results are retained when only some registries fail,
 and the call fails only when every selected registry fails. `SearchClient`
-adds semantic fallback, filtering, relevance ordering, and result limits after
-that shared collection step.
+adds semantic fallback and filtering. Before applying `MaxResults`, it orders
+results by descending relevance, with ties ordered by ascending `Origin` and `ID`.
 
 These are client-side helpers. The standalone registry service implementation lives under `loom-mcp/registry`.
 Generated registry-backed agent registrations intentionally freeze their discovered tool specs at

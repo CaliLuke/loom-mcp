@@ -16,10 +16,10 @@ The client-side `runtime/registry.Manager.Search` and semantic
 `SearchClient.Search` share one concurrent registry fan-out implementation and
 the same partial-failure rule. Successful registries contribute results when
 some peers fail; an error is returned only when every selected registry fails.
-The richer client then applies semantic-to-keyword fallback, filters, ranking,
-and limits. Do not reintroduce the removed registry `Store` model in wiring or
+The richer client then applies semantic-to-keyword fallback and filters. It
+orders results by descending relevance, then origin and ID, before applying the
+result limit. Do not reintroduce the removed registry `Store` model in wiring or
 documentation.
-
 ## Configuration
 
 ```go

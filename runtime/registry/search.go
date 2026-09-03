@@ -86,6 +86,7 @@ func NewSearchClient(manager *Manager) *SearchClient {
 // Search performs a search across registries with automatic fallback.
 // If semantic search is preferred and available, it is used first.
 // If semantic search fails or is not supported, keyword search is used as fallback.
+// Results are ordered by descending relevance, then by origin and ID, before MaxResults is applied.
 func (s *SearchClient) Search(ctx context.Context, query string, opts SearchOptions) ([]*SearchResult, error) {
 	start := time.Now()
 	ctx, span := s.startSearchSpan(ctx, query, opts)
@@ -126,8 +127,14 @@ func (s *SearchClient) collectSearchResults(
 }
 
 func sortAndLimitSearchResults(results []*SearchResult, maxResults int) []*SearchResult {
-	sort.Slice(results, func(i, j int) bool {
-		return results[i].RelevanceScore > results[j].RelevanceScore
+	sort.SliceStable(results, func(i, j int) bool {
+		if results[i].RelevanceScore != results[j].RelevanceScore {
+			return results[i].RelevanceScore > results[j].RelevanceScore
+		}
+		if results[i].Origin != results[j].Origin {
+			return results[i].Origin < results[j].Origin
+		}
+		return results[i].ID < results[j].ID
 	})
 	if maxResults > 0 && len(results) > maxResults {
 		return results[:maxResults]

@@ -566,6 +566,34 @@ func TestSearchClientFiltering(t *testing.T) {
 	})
 }
 
+func TestSortAndLimitSearchResultsDeterministicTies(t *testing.T) {
+	results := []*SearchResult{
+		{ID: "z", Origin: "registry-b", RelevanceScore: 0.8},
+		{ID: "b", Origin: "registry-a", RelevanceScore: 0.8},
+		{ID: "top", Origin: "registry-z", RelevanceScore: 0.9},
+		{ID: "a", Origin: "registry-a", RelevanceScore: 0.8},
+	}
+
+	got := sortAndLimitSearchResults(results, 3)
+	want := []struct {
+		origin string
+		id     string
+	}{
+		{origin: "registry-z", id: "top"},
+		{origin: "registry-a", id: "a"},
+		{origin: "registry-a", id: "b"},
+	}
+
+	if len(got) != len(want) {
+		t.Fatalf("expected %d results, got %d", len(want), len(got))
+	}
+	for i := range want {
+		if got[i].Origin != want[i].origin || got[i].ID != want[i].id {
+			t.Errorf("result %d: expected %s/%s, got %s/%s", i, want[i].origin, want[i].id, got[i].Origin, got[i].ID)
+		}
+	}
+}
+
 // TestSearchClientMultipleRegistries tests search across multiple registries.
 // **Validates: Requirements 4.1**
 func TestSearchClientMultipleRegistries(t *testing.T) {

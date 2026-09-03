@@ -75,9 +75,10 @@ Use this skill for `loom-mcp` work in this repo. Keep `AGENTS.md` short and keep
   `ErrRegistrationClosed`; model-client hot-swapping requires a replacement
   runtime.
 - Runtime registry plain and semantic search paths share concurrent fan-out and
-  partial-failure semantics. The Pulse replicated map is the catalog authority;
-  the removed registry memory/Mongo `Store` model must not be documented or
-  restored.
+  partial-failure semantics. Rich search results are ordered by descending
+  relevance, then origin and ID, before applying the result limit. The Pulse
+  replicated map is the catalog authority; the removed registry memory/Mongo
+  `Store` model must not be documented or restored.
 - Registry-routed providers must use `provider.Serve` with a required admission
   revision and complete Register/Drain/Release/Claim/Complete/delta/overload
   callbacks. `Serve` owns incarnation, lease renewal, drain, settlement, and
