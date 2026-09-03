@@ -29,7 +29,18 @@ type captureModelClient struct {
 	toolChoice *model.ToolChoice
 }
 
-func (c *captureModelClient) Complete(ctx context.Context, req *model.Request) (*model.Response, error) {
+func (c *captureModelClient) Complete(_ context.Context, req *model.Request) (*model.Response, error) {
+	c.captureRequest(req)
+	return &model.Response{
+		Content: []model.Message{{
+			Role:  model.ConversationRoleAssistant,
+			Parts: []model.Part{model.TextPart{Text: "done"}},
+		}},
+		StopReason: "end_turn",
+	}, nil
+}
+
+func (c *captureModelClient) captureRequest(req *model.Request) {
 	c.tools = nil
 	for _, tool := range req.Tools {
 		c.tools = append(c.tools, tool.Name)
@@ -40,16 +51,10 @@ func (c *captureModelClient) Complete(ctx context.Context, req *model.Request) (
 		choice := *req.ToolChoice
 		c.toolChoice = &choice
 	}
-	return &model.Response{
-		Content: []model.Message{{
-			Role:  model.ConversationRoleAssistant,
-			Parts: []model.Part{model.TextPart{Text: "done"}},
-		}},
-		StopReason: "end_turn",
-	}, nil
 }
 
-func (c *captureModelClient) Stream(context.Context, *model.Request) (model.ValidatedStreamer, error) {
+func (c *captureModelClient) Stream(_ context.Context, req *model.Request) (model.ValidatedStreamer, error) {
+	c.captureRequest(req)
 	return nil, io.EOF
 }
 
@@ -79,6 +84,51 @@ func (p *modelToolPolicyPlanner) PlanResume(context.Context, *planner.PlanResume
 	return nil, nil
 }
 
+func TestToolUnavailableSurvivesModelWrapperPolicy(t *testing.T) {
+	t.Parallel()
+
+	for _, test := range []struct {
+		name string
+		call func(model.Client, *model.Request) error
+	}{
+		{
+			name: "complete",
+			call: func(client model.Client, req *model.Request) error {
+				_, err := client.Complete(context.Background(), req)
+				return err
+			},
+		},
+		{
+			name: "stream",
+			call: func(client model.Client, req *model.Request) error {
+				_, err := client.Stream(context.Background(), req)
+				return err
+			},
+		},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+
+			provider := &captureModelClient{}
+			client := newToolPolicyConfiguredClient(provider, toolPolicyEnvelope{
+				Active:  true,
+				Allowed: []tools.Ident{"allowed"},
+			})
+			client = newToolUnavailableConfiguredClient(client)
+
+			err := test.call(client, &model.Request{Tools: []*model.ToolDefinition{
+				{Name: "allowed", InputSchema: map[string]any{"type": "object"}},
+				{Name: "blocked", InputSchema: map[string]any{"type": "object"}},
+			}})
+			if test.name == "stream" {
+				require.ErrorIs(t, err, io.EOF)
+			} else {
+				require.NoError(t, err)
+			}
+			require.Equal(t, []string{"allowed", tools.ToolUnavailable.String()}, provider.tools)
+		})
+	}
+}
 func TestPolicyAllowlistTrimsToolExecution(t *testing.T) {
 	recorder := &recordingHooks{}
 	rt := &Runtime{
