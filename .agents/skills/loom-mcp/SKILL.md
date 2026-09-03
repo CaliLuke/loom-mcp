@@ -298,7 +298,8 @@ Use this skill for `loom-mcp` work in this repo. Keep `AGENTS.md` short and keep
   and DELETE request. It must reject missing authenticated bindings and
   anonymous-session adoption. Authentication middleware must run outside the
   generated handler.
-- `WatchableResource` enables standard SDK subscriptions. The generated
+- `WatchableResource` enables standard SDK subscriptions and makes initialize
+  advertise `resources.subscribe: true`. The generated
   `SDKServer.ResourceUpdated(ctx, uri)` method sends resource-update
   notifications. Reject unknown URIs and reject watchable resources with
   stateless Streamable HTTP.

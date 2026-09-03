@@ -284,7 +284,8 @@ RequestContext: func(ctx context.Context, r *http.Request) context.Context {
 ## Resource Subscriptions
 
 Declare a resource with `WatchableResource` to enable standard MCP
-subscriptions. The generated SDK server rejects unknown resource URIs.
+subscriptions. The generated server advertises `resources.subscribe: true`
+during initialization, and it rejects unknown resource URIs.
 
 Call `server.ResourceUpdated(ctx, uri)` after the resource changes. The SDK
 sends `notifications/resources/updated` to subscribed clients.

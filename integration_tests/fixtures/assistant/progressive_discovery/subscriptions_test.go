@@ -36,6 +36,12 @@ func TestGeneratedSDKServerResourceSubscriptionLifecycle(t *testing.T) {
 	require.NoError(t, err)
 	defer func() { require.NoError(t, session.Close()) }()
 
+	initializeResult := session.InitializeResult()
+	require.NotNil(t, initializeResult, "official MCP client did not retain the initialize result")
+	require.NotNil(t, initializeResult.Capabilities, "initialize omitted server capabilities")
+	require.NotNil(t, initializeResult.Capabilities.Resources, "initialize omitted the resources capability")
+	require.True(t, initializeResult.Capabilities.Resources.Subscribe, "initialize resources capability did not advertise subscription support")
+
 	require.Error(t, session.Subscribe(ctx, &mcp.SubscribeParams{URI: "status://unknown"}))
 	require.Error(t, server.ResourceUpdated(ctx, "status://unknown"))
 	require.NoError(t, session.Subscribe(ctx, &mcp.SubscribeParams{URI: "status://current"}))
