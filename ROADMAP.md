@@ -19,59 +19,6 @@ architecture work belongs here instead of in separate plan files.
 
 ## Ready workstreams
 
-### Generated agent evaluations
-
-Source: `goadesign/goa-ai` `v0.78.6`, especially `eval/` and
-[`docs/evals.md`](https://github.com/goadesign/goa-ai/blob/v0.78.6/docs/evals.md).
-
-Decision: implement evaluations in `loom-mcp` as a separate workstream and
-design surface. This supersedes the 2026-09-01 decision that kept evaluation
-contracts outside this repository.
-
-Current gap:
-
-- `loom-mcp` has framework tests and generated acceptance fixtures, but no
-  product eval DSL, generated eval suites, evidence collector, model judge or
-  programmatic eval runner.
-
-Implement:
-
-- Add evaluation DSL and expressions for suites, scenarios, descriptions,
-  typed inputs, tags and timeouts.
-- Generate `gen/evals/<suite>` contracts with one hook per scenario, validated
-  concrete inputs and typed access to the agent's generated tool contracts.
-- Add a programmatic runner with scenario/tag selection, bounded concurrency,
-  timeouts, deterministic checks, model-judged claims and JSON reports.
-- Add evidence collection for assistant output, canonical tool calls, nested
-  child calls, confirmation state and terminal workflow phase.
-- Add typed tool expectations using generated payload and result codecs.
-- Generate an application-owned `cmd/<suite>-evals` example once without
-  overwriting later edits.
-- Add an integration fixture that runs a real generated agent evaluation.
-
-Primary owners:
-
-- new top-level `eval`, `eval/dsl`, `eval/expr`, `eval/codegen`,
-  `eval/evidence` and `eval/judge` packages
-- agent codegen data needed to expose reachable tool contracts
-- a generated evaluation integration fixture
-- `docs/`
-
-Proof:
-
-- DSL tests reject invalid names, missing descriptions, invalid timeouts and
-  unsupported input shapes.
-- Generated suites compile and fail compilation when a scenario hook is
-  missing.
-- Runner tests cover filtering, concurrency, timeout, malformed results,
-  infrastructure errors, judge verdicts, report JSON and failing exit status.
-- Evidence tests cover causal child-tool ordering, duplicate IDs, malformed
-  events, terminal states and typed argument/result checks.
-- The fixture executes through both the programmatic runner and generated
-  command.
-
-Keep environment simulation separate from this first contract. Evals measure
-agent behavior; simulation controls faults and responses.
 
 ### Durable cross-workflow continuations
 
@@ -196,6 +143,60 @@ Proof:
 
 These gaps are real, but implementation should not start until the named
 decision has a concrete consumer.
+
+### Generated agent evaluations
+
+Source: `goadesign/goa-ai` `v0.78.6`, especially `eval/` and
+[`docs/evals.md`](https://github.com/goadesign/goa-ai/blob/v0.78.6/docs/evals.md).
+
+Decision: agree on the local DSL, package ownership, judge contract, report
+format and generated command boundary before implementation. The upstream
+design is input to that discussion, not an accepted local architecture.
+
+Current gap:
+
+- `loom-mcp` has framework tests and generated acceptance fixtures, but no
+  product eval DSL, generated eval suites, evidence collector, model judge or
+  programmatic eval runner.
+
+If approved:
+
+- Add evaluation DSL and expressions for suites, scenarios, descriptions,
+  typed inputs, tags and timeouts.
+- Generate `gen/evals/<suite>` contracts with one hook per scenario, validated
+  concrete inputs and typed access to the agent's generated tool contracts.
+- Add a programmatic runner with scenario/tag selection, bounded concurrency,
+  timeouts, deterministic checks, model-judged claims and JSON reports.
+- Add evidence collection for assistant output, canonical tool calls, nested
+  child calls, confirmation state and terminal workflow phase.
+- Add typed tool expectations using generated payload and result codecs.
+- Generate an application-owned `cmd/<suite>-evals` example once without
+  overwriting later edits.
+- Add an integration fixture that runs a real generated agent evaluation.
+
+Primary owners:
+
+- new top-level `eval`, `eval/dsl`, `eval/expr`, `eval/codegen`,
+  `eval/evidence` and `eval/judge` packages
+- agent codegen data needed to expose reachable tool contracts
+- a generated evaluation integration fixture
+- `docs/`
+
+Proof:
+
+- DSL tests reject invalid names, missing descriptions, invalid timeouts and
+  unsupported input shapes.
+- Generated suites compile and fail compilation when a scenario hook is
+  missing.
+- Runner tests cover filtering, concurrency, timeout, malformed results,
+  infrastructure errors, judge verdicts, report JSON and failing exit status.
+- Evidence tests cover causal child-tool ordering, duplicate IDs, malformed
+  events, terminal states and typed argument/result checks.
+- The fixture executes through both the programmatic runner and generated
+  command.
+
+Keep environment simulation separate from this first contract. Evals measure
+agent behavior; simulation controls faults and responses.
 
 ### Persistent session state
 
@@ -329,15 +330,14 @@ ownership between generated code, runtime code and the official SDK.
 ## Defect backlog
 
 GitHub issues are canonical; copying individual defects here would create two
-status sources. As of 2026-09-02, the repository has 72 open issues:
+status sources. As of 2026-09-02, the repository has 59 open issues:
 
-- [13 high-severity defects](https://github.com/CaliLuke/loom-mcp/issues?q=is%3Aissue+state%3Aopen+label%3Aseverity%3Ahigh)
 - [28 medium-severity defects](https://github.com/CaliLuke/loom-mcp/issues?q=is%3Aissue+state%3Aopen+label%3Aseverity%3Amedium)
 - [27 low-severity defects](https://github.com/CaliLuke/loom-mcp/issues?q=is%3Aissue+state%3Aopen+label%3Aseverity%3Alow)
 - four open architecture issues listed above
 
-Fix high-severity defects before medium- or low-severity work unless a lower
-severity defect blocks a committed workstream.
+Fix medium-severity defects before low-severity work unless a low-severity
+defect blocks a committed workstream.
 
 ## Trigger-only refactoring
 
