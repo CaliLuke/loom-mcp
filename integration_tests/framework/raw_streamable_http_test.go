@@ -152,6 +152,28 @@ func TestGeneratedServerRawNotificationHasNoJSONRPCResponse(t *testing.T) {
 	assert.Equal(t, http.StatusAccepted, resp.StatusCode, "response body: %s", body)
 	assert.Empty(t, bytes.TrimSpace(body))
 }
+func TestGeneratedServerRawRejectsSSEBeforeInitialize(t *testing.T) {
+	t.Parallel()
+
+	runner := startRawMCPServer(t)
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, runner.rpcURL(), nil)
+	require.NoError(t, err)
+	req.Header.Set("Accept", "text/event-stream")
+
+	resp, err := http.DefaultClient.Do(req)
+	require.NoError(t, err)
+	defer func() {
+		require.NoError(t, resp.Body.Close())
+	}()
+	body, err := io.ReadAll(resp.Body)
+	require.NoError(t, err)
+
+	assert.Equal(t, http.StatusBadRequest, resp.StatusCode, "response body: %s", body)
+	assert.NotEqual(t, "text/event-stream", resp.Header.Get("Content-Type"))
+	assert.Contains(t, string(body), "GET requires an Mcp-Session-Id header")
+}
 
 func TestGeneratedServerRawRejectsCallWithoutSession(t *testing.T) {
 	t.Parallel()
