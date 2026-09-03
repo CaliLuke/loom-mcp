@@ -103,26 +103,39 @@ Proof:
 - Redis-backed tests cover accounting-mode isolation and exact reservation
   under concurrency.
 
-### MCP OAuth catch-up
 
-Source:
-`third_party/modelcontextprotocol/docs/specification/2025-11-25/basic/authorization.mdx`.
+## Product decisions before engineering
 
-Preserve these defaults:
+These gaps are real, but implementation should not start until the named
+decision has a concrete consumer.
 
-- OAuth remains opt-in per MCP service.
-- Protected-resource metadata supports multiple authorization servers.
-- Consumers provide token verification, JWT/JWKS and audience policy.
-- Generated code uses official MCP SDK auth types rather than reimplementing
-  the protocol.
+### MCP OAuth transport follow-ups
 
-Implement:
+Decision: choose which layer owns operation-specific HTTP authentication
+responses. The generated `MCPAdapter` can inspect `TokenInfo.Scopes`, but an MCP
+method handler has no `http.ResponseWriter`. The official SDK's bearer
+middleware can emit 401 and 403 responses, but it runs before `tools/call` is
+decoded and accepts only one static required-scope set.
 
-1. Add tool-level `RequireScope(...)` and return a 403 RFC 6750
-   `insufficient_scope` challenge before dispatch when the verified token lacks
-   a required scope.
-2. Add OIDC issuer discovery only when a concrete client requires it. Prefer
-   advertising the issuer over proxying its discovery document.
+Do not add tool-level scope enforcement until one of these contracts is
+accepted:
+
+- the official SDK exposes a transport hook for operation-specific scope
+  checks; or
+- `loom-mcp` owns an outer HTTP middleware that parses and restores MCP request
+  bodies before the SDK.
+
+If approved:
+
+- Add tool-level `RequireScope(...)`.
+- Return an RFC 6750 403 `insufficient_scope` challenge with the minimum scopes
+  required for the operation and the Protected Resource Metadata URL.
+- Preserve the current 401 discovery path for missing and invalid tokens.
+- Replace the split `RequireBearerToken` and `WithOAuthChallenge` path only if
+  the chosen owner can also emit the advisory `error="invalid_token"`
+  parameter.
+- Add OIDC issuer discovery only when a concrete client requires it. Prefer
+  advertising the issuer over proxying its discovery document.
 
 Client ID Metadata Documents require no protected-resource implementation in
 `loom-mcp`. The authorization server advertises support through
@@ -131,23 +144,12 @@ and the MCP client hosts its own metadata document. Do not emit the
 non-standard `client_registration_types_supported` field in Protected Resource
 Metadata.
 
-Conditional follow-up:
-
-- Replace the split `RequireBearerToken` and `WithOAuthChallenge` path with one
-  error-aware middleware only when a client needs the advisory
-  `error="invalid_token"` challenge parameter.
-
-Proof:
+Proof after the transport decision:
 
 - Start each protocol change with a client-versus-framework test against the
   bundled specification.
 - Cover missing tokens, insufficient scopes, sufficient scopes and each
   supported discovery configuration.
-
-## Product decisions before engineering
-
-These gaps are real, but implementation should not start until the named
-decision has a concrete consumer.
 
 ### Generated agent evaluations
 
