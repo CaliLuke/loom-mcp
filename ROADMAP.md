@@ -292,7 +292,6 @@ If approved:
 
 - [#276: replace large generated SDK servers with a typed runtime bridge](https://github.com/CaliLuke/loom-mcp/issues/276)
 - [#275: support capability-aware projection of rich `ToolSpec` features](https://github.com/CaliLuke/loom-mcp/issues/275)
-- [#274: evaluate retiring or isolating the Loom-native MCP JSON-RPC transport](https://github.com/CaliLuke/loom-mcp/issues/274)
 - [#271: enrich SDK transport observation with parsed MCP envelope metadata](https://github.com/CaliLuke/loom-mcp/issues/271)
 
 Resolve architecture decisions before implementation where an issue changes
