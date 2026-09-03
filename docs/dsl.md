@@ -1496,12 +1496,11 @@ attempt budget for planner and tool work once execution begins. They do not
 configure workflow-engine mechanics such as queue-wait timeouts or heartbeat
 liveness. Those deployment concerns belong in the selected engine adapter (for
 example `temporal.Options.ActivityDefaults` for the Temporal engine).
-`Budget(...)` is equivalent to `TimeBudget(...)`: it caps active planner/tool
-work and pauses while the run waits for clarification, confirmation, typed
-input, or an external tool. The runtime derives a larger engine hard timeout by
-adding finalizer reserve, wait allowance, and small engine headroom so the final
-planner turn and terminal cleanup can still complete. Enforce any end-to-end
-wall-clock SLA separately at the caller or workflow boundary.
+`Budget(...)` is equivalent to `TimeBudget(...)`. It limits active planner
+and tool work. The budget pauses during clarification, confirmation, typed
+input, or an external tool wait. Agent workflow submissions do not set a fixed
+engine timeout because every workflow can enter these wait paths. Enforce an
+end-to-end wall-clock limit at the caller or workflow boundary.
 
 ---
 

@@ -410,9 +410,10 @@ type (
 		MaxRecoveryTurns int
 
 		// TimeBudget is the active-work budget for planner and tool work within the
-		// run (0 = unlimited). External-input waits pause it. The runtime derives the
-		// engine run timeout from this budget plus finalizer reserve, wait allowance,
-		// and small engine headroom.
+		// run (0 = unlimited). External-input waits pause it. Agent workflow submission
+		// does not set a fixed engine timeout because every workflow can enter an
+		// external await queue. Enforce an independent wall-clock limit at the caller
+		// or workflow boundary when needed.
 		TimeBudget time.Duration
 
 		// FinalizerGrace reserves time to produce a last assistant message after the

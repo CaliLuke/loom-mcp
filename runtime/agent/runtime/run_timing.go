@@ -1,38 +1,19 @@
-// Package runtime centralizes the timeout contract shared by run submission and
-// workflow execution so the engine-level run timeout can never undercut the
-// workflow's own hard deadline.
+// Package runtime centralizes the active-work deadline contract used by workflow
+// execution.
 package runtime
 
 import "time"
 
-const (
-	// defaultEngineRunTimeout bounds runs that do not declare an explicit policy budget.
-	defaultEngineRunTimeout = 15 * time.Minute
-
-	// runTimeoutHeadroom leaves a small buffer after the hard workflow deadline so
-	// the engine timeout does not preempt deterministic terminal hook emission.
-	runTimeoutHeadroom = 30 * time.Second
-)
-
 type runTiming struct {
 	TimeBudget     time.Duration
 	FinalizerGrace time.Duration
-	RunTimeout     time.Duration
 }
 
-// resolveRunTiming derives the workflow timing contract shared by startRunOn and
-// ExecuteWorkflow.
-//
-// Contract:
-//   - TimeBudget governs active planner/tool execution. Zero means "use the engine
-//     default run timeout" rather than introducing an unbounded workflow.
-//   - FinalizerGrace always reserves enough time for one final planner resume turn.
-//   - RunTimeout is the engine-level wall clock bound and must never undercut the
-//     workflow hard deadline computed from TimeBudget + FinalizerGrace.
+// resolveRunTiming derives the workflow timing contract used by ExecuteWorkflow.
+// TimeBudget governs active planner/tool execution; zero leaves it unlimited.
+// FinalizerGrace always reserves enough time for one final planner resume turn.
 func resolveRunTiming(reg AgentRegistration, input *RunInput) runTiming {
-	timing := runTiming{
-		RunTimeout: defaultEngineRunTimeout,
-	}
+	var timing runTiming
 	if reg.Policy.TimeBudget > 0 {
 		timing.TimeBudget = reg.Policy.TimeBudget
 	}
@@ -58,9 +39,6 @@ func resolveRunTiming(reg AgentRegistration, input *RunInput) runTiming {
 	}
 	if timing.FinalizerGrace < resumeTimeout {
 		timing.FinalizerGrace = resumeTimeout
-	}
-	if timing.TimeBudget > 0 {
-		timing.RunTimeout = timing.TimeBudget + timing.FinalizerGrace + runTimeoutHeadroom
 	}
 	return timing
 }

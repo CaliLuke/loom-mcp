@@ -125,6 +125,9 @@ Use this skill for `loom-mcp` work in this repo. Keep `AGENTS.md` short and keep
   A manual `AgentRoute` must match the worker's `TimeBudget`,
   `FinalizerGrace`, and resume-activity timeout. Per-run options override route
   values.
+  Agent workflow starts must omit a fixed engine timeout because planner awaits
+  and confirmation gates can wait regardless of `InterruptsAllowed`.
+
 - `Bookkeeping()` marks durable side-effect tools that do not consume the
   domain-call budget and do not enter planner-visible history. `TerminalRun()`
   implies bookkeeping and must end the run without another planner call or a

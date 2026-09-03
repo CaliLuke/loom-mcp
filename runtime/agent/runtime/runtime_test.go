@@ -345,7 +345,7 @@ func TestOneShotRunRejectsSessionSearchAttribute(t *testing.T) {
 	require.Contains(t, err.Error(), "SessionID is not allowed for one-shot runs")
 }
 
-func TestStartRunUsesPolicyBudgetForRunTimeout(t *testing.T) {
+func TestStartRunOmitsEngineTimeoutWithInteractivePolicyBudget(t *testing.T) {
 	eng := &stubEngine{}
 	rt := &Runtime{
 		Engine:       eng,
@@ -361,8 +361,9 @@ func TestStartRunUsesPolicyBudgetForRunTimeout(t *testing.T) {
 					TaskQueue: "svc.queue",
 				},
 				Policy: RunPolicy{
-					TimeBudget:     20 * time.Minute,
-					FinalizerGrace: 10 * time.Second,
+					TimeBudget:        20 * time.Minute,
+					FinalizerGrace:    10 * time.Second,
+					InterruptsAllowed: true,
 				},
 				ResumeActivityOptions: engine.ActivityOptions{
 					StartToCloseTimeout: 20 * time.Second,
@@ -375,10 +376,10 @@ func TestStartRunUsesPolicyBudgetForRunTimeout(t *testing.T) {
 	require.NoError(t, err)
 	_, err = client.Start(context.Background(), "sess-1", nil)
 	require.NoError(t, err)
-	require.Equal(t, 20*time.Minute+50*time.Second, eng.last.RunTimeout)
+	require.Zero(t, eng.last.RunTimeout)
 }
 
-func TestStartRunUsesDefaultTimeoutWithoutPolicyBudget(t *testing.T) {
+func TestStartRunOmitsEngineTimeoutWithoutPolicyBudget(t *testing.T) {
 	eng := &stubEngine{}
 	rt := &Runtime{
 		Engine:       eng,
@@ -401,7 +402,7 @@ func TestStartRunUsesDefaultTimeoutWithoutPolicyBudget(t *testing.T) {
 	require.NoError(t, err)
 	_, err = client.Start(context.Background(), "sess-1", nil)
 	require.NoError(t, err)
-	require.Equal(t, 15*time.Minute, eng.last.RunTimeout)
+	require.Zero(t, eng.last.RunTimeout)
 }
 
 func TestWorkerConfigOnlyExposesQueuePlacement(t *testing.T) {

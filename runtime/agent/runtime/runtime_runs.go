@@ -134,7 +134,9 @@ func (r *Runtime) startRunOn(ctx context.Context, input *RunInput, workflowName,
 	if err := r.validateRunSession(ctx, input, requireSession); err != nil {
 		return nil, err
 	}
-	req := buildWorkflowStartRequest(input, workflowName, defaultQueue, runTimeout)
+	// Every workflow can enter an external await queue. A fixed engine timeout
+	// would consume paused wait time and preempt the deterministic deadlines.
+	req := buildWorkflowStartRequest(input, workflowName, defaultQueue, 0)
 	if err := validateWorkflowStartRequest(req, input.SessionID, requireSession); err != nil {
 		return nil, err
 	}

@@ -1834,6 +1834,12 @@ or external tool results pauses the budget: the runtime extends both its budget
 and hard deadlines by the measured wait duration. Manual human interaction can
 therefore make elapsed wall time greater than `TimeBudget`.
 
+Agent workflow submissions do not set a fixed engine-level timeout because any
+workflow can enter an external await queue. This applies whether or not
+`InterruptsAllowed` is true: planner await items and confirmation-gated tools
+can wait without that policy flag. Deterministic active-work deadlines remain
+the time-budget authority and move forward by each measured wait duration.
+
 `FinalizerGrace` and `WithRunFinalizerGrace` reserve time after the active
 budget ends. The finalizer can return a response or execute an advertised
 terminal bookkeeping tool.
