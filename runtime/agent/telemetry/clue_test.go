@@ -3,6 +3,7 @@ package telemetry
 import (
 	"context"
 	"errors"
+	"sync"
 	"testing"
 	"time"
 
@@ -16,6 +17,23 @@ import (
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 	"go.opentelemetry.io/otel/sdk/trace/tracetest"
 )
+
+type recordingErrorHandler struct {
+	mu     sync.Mutex
+	errors []error
+}
+
+func (h *recordingErrorHandler) Handle(err error) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	h.errors = append(h.errors, err)
+}
+
+func (h *recordingErrorHandler) recordedErrors() []error {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	return append([]error(nil), h.errors...)
+}
 
 func TestClueMetricsRecordsAllInstrumentKinds(t *testing.T) {
 	previous := otel.GetMeterProvider()
@@ -43,6 +61,37 @@ func TestClueMetricsRecordsAllInstrumentKinds(t *testing.T) {
 	assert.Contains(t, names, "requests")
 	assert.Contains(t, names, "latency")
 	assert.Contains(t, names, "queue_depth_gauge")
+}
+func TestClueMetricsReportsInstrumentCreationErrorsOncePerName(t *testing.T) {
+	previousProvider := otel.GetMeterProvider()
+	previousHandler := otel.GetErrorHandler()
+	provider := sdkmetric.NewMeterProvider()
+	handler := &recordingErrorHandler{}
+	otel.SetMeterProvider(provider)
+	otel.SetErrorHandler(handler)
+	t.Cleanup(func() {
+		otel.SetMeterProvider(previousProvider)
+		otel.SetErrorHandler(previousHandler)
+		require.NoError(t, provider.Shutdown(context.Background()))
+	})
+
+	metrics := NewClueMetrics()
+	var calls sync.WaitGroup
+	for range 10 {
+		calls.Go(func() {
+			metrics.IncCounter("invalid counter", 1)
+			metrics.RecordTimer("invalid timer", time.Second)
+			metrics.RecordGauge("invalid gauge", 1)
+		})
+	}
+	calls.Wait()
+
+	reported := handler.recordedErrors()
+	require.Len(t, reported, 3)
+	reportedError := errors.Join(reported...)
+	require.ErrorContains(t, reportedError, "invalid counter")
+	require.ErrorContains(t, reportedError, "invalid timer")
+	require.ErrorContains(t, reportedError, "invalid gauge_gauge")
 }
 
 func TestClueTracerRecordsSpanContract(t *testing.T) {

@@ -3,6 +3,7 @@ package telemetry
 import (
 	"context"
 	"fmt"
+	"sync"
 	"time"
 
 	"github.com/CaliLuke/loom/clue/log"
@@ -19,7 +20,8 @@ type (
 
 	// ClueMetrics wraps OTEL metrics for runtime instrumentation.
 	ClueMetrics struct {
-		meter metric.Meter
+		meter            metric.Meter
+		instrumentErrors *sync.Map
 	}
 
 	// ClueTracer wraps OTEL tracing for runtime tracing.
@@ -43,11 +45,11 @@ func NewClueLogger() Logger {
 }
 
 // NewClueMetrics constructs a Metrics recorder that delegates to OTEL metrics.
-// Uses the global MeterProvider; configure it via otel.SetMeterProvider before
-// invoking runtime methods (typically done via clue.ConfigureOpenTelemetry).
+// It uses the global MeterProvider and reports each instrument-creation failure
+// once per instrument name through the global OTEL error handler.
 func NewClueMetrics() Metrics {
 	meter := otel.Meter("github.com/CaliLuke/loom-mcp/v2/agents/runtime")
-	return &ClueMetrics{meter: meter}
+	return &ClueMetrics{meter: meter, instrumentErrors: new(sync.Map)}
 }
 
 // NewClueTracer constructs a Tracer that delegates to OTEL tracing.
@@ -90,6 +92,7 @@ func (ClueLogger) Error(ctx context.Context, msg string, keyvals ...any) {
 func (m *ClueMetrics) IncCounter(name string, value float64, tags ...string) {
 	counter, err := m.meter.Float64Counter(name)
 	if err != nil {
+		m.reportInstrumentError(name, err)
 		return
 	}
 	counter.Add(context.Background(), value, metric.WithAttributes(tagsToAttrs(tags)...))
@@ -99,6 +102,7 @@ func (m *ClueMetrics) IncCounter(name string, value float64, tags ...string) {
 func (m *ClueMetrics) RecordTimer(name string, duration time.Duration, tags ...string) {
 	histogram, err := m.meter.Float64Histogram(name)
 	if err != nil {
+		m.reportInstrumentError(name, err)
 		return
 	}
 	histogram.Record(context.Background(), duration.Seconds(), metric.WithAttributes(tagsToAttrs(tags)...))
@@ -107,8 +111,10 @@ func (m *ClueMetrics) RecordTimer(name string, duration time.Duration, tags ...s
 // RecordGauge records a gauge metric value.
 func (m *ClueMetrics) RecordGauge(name string, value float64, tags ...string) {
 	// OTEL doesn't have synchronous gauges; use an observable gauge or histogram as fallback
-	histogram, err := m.meter.Float64Histogram(name + "_gauge")
+	instrumentName := name + "_gauge"
+	histogram, err := m.meter.Float64Histogram(instrumentName)
 	if err != nil {
+		m.reportInstrumentError(instrumentName, err)
 		return
 	}
 	histogram.Record(context.Background(), value, metric.WithAttributes(tagsToAttrs(tags)...))
@@ -215,4 +221,10 @@ func kvSliceToAttrs(keyvals []any) []attribute.KeyValue {
 		}
 	}
 	return attrs
+}
+func (m *ClueMetrics) reportInstrumentError(name string, err error) {
+	if _, loaded := m.instrumentErrors.LoadOrStore(name, struct{}{}); loaded {
+		return
+	}
+	otel.Handle(fmt.Errorf("create OpenTelemetry metric instrument %q: %w", name, err))
 }

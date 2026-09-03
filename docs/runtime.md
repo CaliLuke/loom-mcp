@@ -2568,6 +2568,12 @@ metric dimensions.
 Unregistered or model-invented tool names use the metric value `unknown`; the
 raw name remains available on the corresponding span.
 
+`telemetry.NewClueMetrics` reports instrument-creation failures through the
+OpenTelemetry global error handler. It reports at most one error per effective
+instrument name for each recorder, then skips that measurement. (`RecordGauge`
+uses the effective name `<name>_gauge`.) Applications can use
+`otel.SetErrorHandler` to send these diagnostics to logs or alerts.
+
 Planner calls use `planner.plan_start` and `planner.plan_resume` spans. Every
 new canonical tool result also emits a `tool.execute` semantic span covering
 the result's reported execution interval, with `loom_mcp.agent_id`,

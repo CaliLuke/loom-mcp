@@ -417,6 +417,9 @@ Use this skill for `loom-mcp` work in this repo. Keep `AGENTS.md` short and keep
   from planner activities and newly inserted canonical events. Planner metrics
   count retryable attempts; run/tool events are event-key deduplicated. Keep
   correlation IDs on spans rather than metric dimensions.
+- `telemetry.NewClueMetrics` reports instrument-creation failures through the
+  global OpenTelemetry error handler once per effective instrument name. Keep
+  this diagnostic fail-soft path when changing runtime metric adapters.
 - Preserve explicit source JSON-RPC CORS policies when building the synthetic
   MCP transport. Loom's generated CORS handler and MCP origin validation are
   independent layers: CORS controls browser response policy, while
