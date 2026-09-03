@@ -105,13 +105,13 @@ URL: <https://deepwiki.com/CaliLuke/loom-mcp/5.4-mcp-oauth-and-security>
 
 Major claims checked: MCP 2025-11-25 auth alignment; RFC 9728 PRM; path-suffixed metadata; strict/lenient canonicalization; Bearer challenges; audience validation; modernization phases.
 
-Local coverage: `docs/dsl.md` and the OAuth section in `docs/runtime.md` are detailed. `MCP_AUTH_MODERNIZATION_PLAN.md` accurately lists shipped and planned work. The skill routes protocol catch-up through the dedicated feature-development workflow.
+Local coverage: `docs/dsl.md` and the OAuth section in `docs/runtime.md` are detailed. Current follow-up work lives in `ROADMAP.md`. The skill routes protocol catch-up through the dedicated feature-development workflow.
 
 | Class | Priority | Confidence | Evidence and discrepancy |
 | --- | --- | --- | --- |
-| MATCH | P3 | High | PRM fields, path suffixing, safe default proxy posture, strict 400 behavior, lenient challenge fallback, audience claim shapes, and consumer-owned verifier all match `runtime/mcp/oauth.go`, generated `oauth_discovery.go`, `docs/dsl.md`, and `MCP_AUTH_MODERNIZATION_PLAN.md`. |
+| MATCH | P3 | High | PRM fields, path suffixing, safe default proxy posture, strict 400 behavior, lenient challenge fallback, audience claim shapes, and consumer-owned verifier all match `runtime/mcp/oauth.go`, generated `oauth_discovery.go`, `docs/dsl.md`, and `ROADMAP.md`. |
 | MATCH | P3 | High | DeepWiki correctly identifies incremental scope consent, client ID metadata, and OIDC discovery as planned, not shipped. Local planning also explicitly excludes bundled JWT/JWKS and authorization-server behavior. |
-| DOC-GAP | P1 | High | `docs/dsl.md:445-447` claims `ErrAudienceMismatch` plus `RequireBearerToken`/`WithOAuthChallenge` automatically emits an RFC 6750 `error="invalid_token"` challenge. Generated code comments and `MCP_AUTH_MODERNIZATION_PLAN.md` explicitly say the middleware is error-agnostic and currently emits only the generic challenge. Correct the security documentation. |
+| DOC-GAP | P1 | High | **Resolved:** `docs/dsl.md` no longer claims that `ErrAudienceMismatch` plus `RequireBearerToken`/`WithOAuthChallenge` automatically emits an RFC 6750 `error="invalid_token"` challenge. Generated code comments and `ROADMAP.md` record the remaining error-aware middleware work. |
 | DOC-GAP | P2 | High | User docs should state next to `OAuthScope(...)` that scopes are advertised only; tool-level enforcement and `403 insufficient_scope` are not implemented yet. The DSL table says “documents one scope”, but the limitation is easy to miss in the mounting example. |
 | DEEPWIKI-INACCURACY | P3 | High | “A reachable challenge is always returned” is too absolute: `CanonicalizeChallengeOrigin(nil, ...)` or a request with no usable host returns an empty string. The normal HTTP-server path is fine, but the helper contract is not unconditional. |
 

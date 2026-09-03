@@ -93,6 +93,8 @@ Design changes should always start in `design/*.go`. Regenerate after changing t
 
 Start here:
 
+- [`ROADMAP.md`](ROADMAP.md)
+- [`docs/architecture_decisions.md`](docs/architecture_decisions.md)
 - [`docs/overview.md`](docs/overview.md)
 - [`docs/dsl.md`](docs/dsl.md)
 - [`docs/runtime.md`](docs/runtime.md)

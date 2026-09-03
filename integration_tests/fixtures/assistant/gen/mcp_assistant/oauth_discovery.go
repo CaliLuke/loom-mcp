@@ -138,7 +138,7 @@ func buildOAuthMetadataURL(requestURL, mountPath string) string {
 // RFC 6750 §3.1 invalid_token challenge parameter should either emit it
 // manually from a verifier wrapper (see OAuthInvalidTokenChallengeHeader) or
 // wait for the planned error-aware challenge middleware — tracked in
-// MCP_AUTH_MODERNIZATION_PLAN.md.
+// ROADMAP.md.
 var ErrAudienceMismatch = fmt.Errorf("token audience does not match protected resource %q: %w", oauthResourceIdentifier, mcpauth.ErrInvalidToken)
 
 // EnforceAudience wraps a bearer-token verifier so tokens whose `aud` claim

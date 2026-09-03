@@ -98,7 +98,7 @@ func TestEnforceAudience_RejectsMismatchingStringClaim(t *testing.T) {
 	// emits the scope-listing challenge rather than the
 	// `error="invalid_token"` form. The 401 + PRM pointer still lets the
 	// client recover; the error-aware variant is tracked as a follow-up
-	// in MCP_AUTH_MODERNIZATION_PLAN.md.
+	// in ROADMAP.md.
 }
 
 // TestEnforceAudience_AcceptsMatchingArrayClaim covers the RFC 7519 §4.1.3

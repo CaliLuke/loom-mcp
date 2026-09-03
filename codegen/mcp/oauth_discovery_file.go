@@ -220,7 +220,7 @@ func emitOAuthAudienceEnforcement(stmt *jen.Statement) {
 	stmt.Comment("RFC 6750 §3.1 invalid_token challenge parameter should either emit it").Line()
 	stmt.Comment("manually from a verifier wrapper (see OAuthInvalidTokenChallengeHeader) or").Line()
 	stmt.Comment("wait for the planned error-aware challenge middleware — tracked in").Line()
-	stmt.Comment("MCP_AUTH_MODERNIZATION_PLAN.md.").Line()
+	stmt.Comment("ROADMAP.md.").Line()
 	stmt.Var().Id("ErrAudienceMismatch").Op("=").Qual("fmt", "Errorf").Call(
 		jen.Lit("token audience does not match protected resource %q: %w"),
 		jen.Id("oauthResourceIdentifier"),
