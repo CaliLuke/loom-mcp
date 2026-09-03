@@ -26,6 +26,11 @@ type workflowContextProbe struct {
 	ChildRunID          string
 	ChildOutputRunID    string
 }
+type childRunIDProbe struct {
+	BeforeGet   string
+	AfterGet    string
+	ExecutionID string
+}
 
 func TestTemporalWorkflowContextLifecycleAndChildIdentity(t *testing.T) {
 	var suite testsuite.WorkflowTestSuite
@@ -99,6 +104,40 @@ func TestTemporalWorkflowContextLifecycleAndChildIdentity(t *testing.T) {
 	assert.True(t, probe.CanceledTimer)
 	assert.NotEmpty(t, probe.ChildRunID)
 	assert.Equal(t, "child-output-run", probe.ChildOutputRunID)
+}
+func TestTemporalChildHandleRunIDMatchesExecution(t *testing.T) {
+	var suite testsuite.WorkflowTestSuite
+	env := suite.NewTestWorkflowEnvironment()
+	childWorkflow := func(ctx workflow.Context) (*api.RunOutput, error) {
+		return &api.RunOutput{RunID: workflow.GetInfo(ctx).WorkflowExecution.RunID}, nil
+	}
+	env.RegisterWorkflowWithOptions(childWorkflow, workflow.RegisterOptions{Name: "runIDChildWorkflow"})
+	parentWorkflow := func(ctx workflow.Context) (childRunIDProbe, error) {
+		wf := newTemporalWorkflowContext(workflowContextTestEngine(), ctx)
+		child, err := wf.StartChildWorkflow(context.Background(), engine.ChildWorkflowRequest{
+			ID:       "run-id-child-workflow-id",
+			Workflow: "runIDChildWorkflow",
+		})
+		if err != nil {
+			return childRunIDProbe{}, err
+		}
+		probe := childRunIDProbe{BeforeGet: child.RunID()}
+		out, err := child.Get(context.Background())
+		if err != nil {
+			return probe, err
+		}
+		probe.AfterGet = child.RunID()
+		probe.ExecutionID = out.RunID
+		return probe, nil
+	}
+
+	env.ExecuteWorkflow(parentWorkflow)
+	require.NoError(t, env.GetWorkflowError())
+	var probe childRunIDProbe
+	require.NoError(t, env.GetWorkflowResult(&probe))
+	require.NotEmpty(t, probe.ExecutionID)
+	assert.Equal(t, probe.ExecutionID, probe.BeforeGet)
+	assert.Equal(t, probe.ExecutionID, probe.AfterGet)
 }
 
 func TestTemporalWorkflowContextReceivesAllSignalsAndTimesOut(t *testing.T) {
