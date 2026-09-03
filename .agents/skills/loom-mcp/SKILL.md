@@ -280,7 +280,9 @@ Use this skill for `loom-mcp` work in this repo. Keep `AGENTS.md` short and keep
 - Generated SDK servers must install their JSON-RPC error normalizer as an
   official receiving middleware. Preserve typed SDK errors. Map generated
   invalid and resource errors to `-32602`. Map unknown handler errors to
-  `-32603`. Do not rewrite SDK response bodies in the HTTP wrapper.
+  `-32603`. Reject request envelopes with an explicit null `id` before SDK
+  dispatch. Return HTTP 400 with JSON-RPC `-32600`. Do not rewrite SDK response
+  bodies in the HTTP wrapper.
 - MCP designs do not declare `ProtocolVersion`, `Notification`, `Subscription`,
   `SubscriptionMonitor`, or MCP-only `JSONRPC` blocks. Explicit non-MCP
   `JSONRPC` transports remain valid.

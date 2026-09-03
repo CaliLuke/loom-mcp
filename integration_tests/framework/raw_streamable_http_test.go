@@ -105,6 +105,41 @@ func TestGeneratedServerRawRejectsInvalidRequests(t *testing.T) {
 		})
 	}
 }
+func TestGeneratedServerRawRejectsNullRequestID(t *testing.T) {
+	t.Parallel()
+
+	runner := startRawMCPServer(t)
+	sessionID := rawInitializedSession(t, runner)
+	resp, body := rawMCPPost(t, runner, []byte("{\"jsonrpc\":\"2.0\",\"id\":null,\"method\":\"tools/list\",\"params\":{}}"), map[string]string{
+		"Mcp-Protocol-Version": legacyProtocolVersion,
+		"Mcp-Session-Id":       sessionID,
+	})
+
+	require.Equal(t, http.StatusBadRequest, resp.StatusCode, "response body: %s", body)
+	wire := decodeRawJSONRPCResponse(t, body)
+	require.NotNil(t, wire.Error, "response body: %s; result: %#v", body, wire.Result)
+	assert.Nil(t, wire.ID)
+	assert.Equal(t, int64(-32600), wire.Error.Code)
+}
+func TestGeneratedServerRawRejectsNullRequestIDWithSDKCompatibilityFlags(t *testing.T) {
+	t.Setenv("MCPGODEBUG", "disablelocalhostprotection=0,disablelocalhostprotection=1,disablecontenttypecheck=0,disablecontenttypecheck=1")
+
+	runner := startRawMCPServer(t)
+	sessionID := rawInitializedSession(t, runner)
+	resp, body := rawMCPPost(t, runner, []byte("{\"jsonrpc\":\"2.0\",\"id\":null,\"method\":\"tools/list\",\"params\":{}}"), map[string]string{
+		"Accept":               "application/json, text/event-stream",
+		"Content-Type":         "text/plain",
+		"Host":                 "evil.example.com",
+		"Mcp-Protocol-Version": legacyProtocolVersion,
+		"Mcp-Session-Id":       sessionID,
+	})
+
+	require.Equal(t, http.StatusBadRequest, resp.StatusCode, "response body: %s", body)
+	wire := decodeRawJSONRPCResponse(t, body)
+	require.NotNil(t, wire.Error, "response body: %s; result: %#v", body, wire.Result)
+	assert.Nil(t, wire.ID)
+	assert.Equal(t, int64(-32600), wire.Error.Code)
+}
 
 func TestGeneratedServerRawMissingProtocolVersionFallsBackToLatestLegacy(t *testing.T) {
 	t.Parallel()
@@ -380,6 +415,10 @@ func rawMCPPost(t *testing.T, runner *Runner, body []byte, headers map[string]st
 	req.Header.Set("Accept", "application/json, text/event-stream")
 	req.Header.Set("Content-Type", "application/json")
 	for name, value := range headers {
+		if strings.EqualFold(name, "Host") {
+			req.Host = value
+			continue
+		}
 		req.Header.Set(name, value)
 	}
 	client := &http.Client{Timeout: 10 * time.Second}

@@ -11,15 +11,22 @@ import (
 
 func buildMCPSDKServerFile(genpkg string, svc *expr.ServiceExpr, data *AdapterData, svcName, pkgName string) *codegen.File {
 	sdkServerImports := []*codegen.ImportSpec{
+		{Path: "bytes"},
 		{Path: "context"},
 		{Path: "encoding/base64"},
 		{Name: "json", Path: "encoding/json/v2"},
 		{Name: "jsontext", Path: "encoding/json/jsontext"},
 		{Path: "errors"},
 		{Path: "fmt"},
+		{Path: "io"},
+		{Path: "mime"},
+		{Path: "net"},
 		{Path: "net/http"},
+		{Path: "net/netip"},
 		{Path: "net/url"},
+		{Path: "os"},
 		{Path: "slices"},
+		{Path: "strings"},
 		{Path: "sync"},
 		{Path: genpkg + "/" + svcName, Name: svcName},
 		{Path: "github.com/modelcontextprotocol/go-sdk/auth", Name: "mcpauth"},
@@ -28,10 +35,6 @@ func buildMCPSDKServerFile(genpkg string, svc *expr.ServiceExpr, data *AdapterDa
 		{Path: "github.com/CaliLuke/loom-mcp/v2/runtime/mcp/sdkclient", Name: "sdkclient"},
 		{Path: "github.com/CaliLuke/loom/http", Name: "loomhttp"},
 		{Path: "github.com/CaliLuke/loom/observability/transport"},
-	}
-	if len(data.StaticPrompts) > 0 || len(data.DynamicPrompts) > 0 {
-		// strings is only referenced by the prompt completion helpers.
-		sdkServerImports = append(sdkServerImports, &codegen.ImportSpec{Path: "strings"})
 	}
 	if len(data.SkillDirectories) > 0 {
 		sdkServerImports = append(sdkServerImports, &codegen.ImportSpec{
@@ -103,6 +106,15 @@ func sdkServerTypesSection(data *AdapterData) codegen.Section {
 			jen.Id("onSessionIssued").Func().Params(jen.String()),
 			jen.Id("sessionOnce").Qual("sync", "Once"),
 		)
+		stmt.Line()
+		stmt.Type().Id("sdkJSONRPCRequestEnvelope").Struct(
+			jen.Id("ID").Id("jsontext").Dot("Value").Tag(map[string]string{"json": "id"}),
+			jen.Id("Method").Id("jsontext").Dot("Value").Tag(map[string]string{"json": "method"}),
+		)
+		stmt.Line()
+		stmt.Var().Id("sdkDisableLocalhostProtection").Op("=").Id("sdkMCPGoDebugValue").Call(jen.Lit("disablelocalhostprotection")).Op("==").Lit("1")
+		stmt.Line()
+		stmt.Var().Id("sdkDisableContentTypeCheck").Op("=").Id("sdkMCPGoDebugValue").Call(jen.Lit("disablecontenttypecheck")).Op("==").Lit("1")
 		stmt.Line()
 	})
 }
@@ -425,11 +437,14 @@ func sdkServerHTTPSection() codegen.Section {
 			).
 			Qual("net/http", "Handler").
 			Block(
+				jen.Id("configuredStreamableOpts").Op(":=").Id("sdkStreamableHTTPOptions").Call(jen.Id("streamableOpts")),
+				jen.Id("crossOriginProtection").Op(":=").Id("configuredStreamableOpts").Dot("CrossOriginProtection"),
+				jen.Id("configuredStreamableOpts").Dot("CrossOriginProtection").Op("=").Nil(),
 				jen.Id("base").Op(":=").Id("mcpsdk").Dot("NewStreamableHTTPHandler").Call(
 					jen.Func().Params(jen.Op("*").Qual("net/http", "Request")).Op("*").Id("mcpsdk").Dot("Server").Block(
 						jen.Return(jen.Id("server")),
 					),
-					jen.Id("sdkStreamableHTTPOptions").Call(jen.Id("streamableOpts")),
+					jen.Id("configuredStreamableOpts"),
 				),
 				jen.Return(
 					jen.Qual("net/http", "HandlerFunc").Call(
@@ -452,6 +467,15 @@ func sdkServerHTTPSection() codegen.Section {
 								jen.Id("r"),
 							),
 							jen.Defer().Id("transportObs").Dot("End").Call(),
+							jen.If(jen.Id("err").Op(":=").Id("crossOriginProtection").Dot("Check").Call(jen.Id("r")), jen.Id("err").Op("!=").Nil()).Block(
+								jen.Qual("net/http", "Error").Call(jen.Id("transportW"), jen.Id("err").Dot("Error").Call(), jen.Qual("net/http", "StatusForbidden")),
+								jen.Id("transportObs").Dot("Fail").Call(jen.Qual("github.com/CaliLuke/loom/observability/transport", "ReasonHandlerError")),
+								jen.Return(),
+							),
+							jen.If(jen.Id("sdkRequestAllowsBodyInspection").Call(jen.Id("r"), jen.Id("configuredStreamableOpts")).Op("&&").Id("rejectNullMCPRequestID").Call(jen.Id("transportW"), jen.Id("r"), jen.Id("configuredStreamableOpts").Dot("MaxRequestBodyBytes"))).Block(
+								jen.Id("transportObs").Dot("Fail").Call(jen.Qual("github.com/CaliLuke/loom/observability/transport", "ReasonHandlerError")),
+								jen.Return(),
+							),
 							jen.Id("observer").Op(":=").Op("&").Id("sdkResponseObserver").Values(jen.Dict{
 								jen.Id("ResponseWriter"): jen.Id("transportW"),
 								jen.Id("onSessionIssued"): jen.Func().Params(jen.Id("sessionID").String()).Block(
@@ -482,13 +506,150 @@ func sdkServerHTTPSection() codegen.Section {
 				jen.If(jen.Id("opts").Op("==").Nil()).Block(
 					jen.Return(jen.Op("&").Id("mcpsdk").Dot("StreamableHTTPOptions").Values(jen.Dict{
 						jen.Id("CrossOriginProtection"): jen.Qual("net/http", "NewCrossOriginProtection").Call(),
+						jen.Id("MaxRequestBodyBytes"):   jen.Id("mcpsdk").Dot("DefaultMaxRequestBodyBytes"),
 					})),
 				),
 				jen.Id("configured").Op(":=").Op("*").Id("opts"),
 				jen.If(jen.Id("configured").Dot("CrossOriginProtection").Op("==").Nil()).Block(
 					jen.Id("configured").Dot("CrossOriginProtection").Op("=").Qual("net/http", "NewCrossOriginProtection").Call(),
 				),
+				jen.If(jen.Id("configured").Dot("MaxRequestBodyBytes").Op("==").Lit(0)).Block(
+					jen.Id("configured").Dot("MaxRequestBodyBytes").Op("=").Id("mcpsdk").Dot("DefaultMaxRequestBodyBytes"),
+				),
 				jen.Return(jen.Op("&").Id("configured")),
+			)
+		stmt.Line()
+		stmt.Comment("sdkRequestAllowsBodyInspection reports whether the SDK pre-body checks accept the request.").Line()
+		stmt.Func().Id("sdkRequestAllowsBodyInspection").
+			Params(
+				jen.Id("r").Op("*").Qual("net/http", "Request"),
+				jen.Id("opts").Op("*").Id("mcpsdk").Dot("StreamableHTTPOptions"),
+			).
+			Bool().
+			Block(
+				jen.If(jen.Id("r").Dot("Method").Op("!=").Qual("net/http", "MethodPost")).Block(
+					jen.Return(jen.False()),
+				),
+				jen.If(jen.Op("!").Id("opts").Dot("DisableLocalhostProtection").Op("&&").Op("!").Id("sdkDisableLocalhostProtection")).Block(
+					jen.If(
+						jen.List(jen.Id("localAddr"), jen.Id("ok")).Op(":=").Id("r").Dot("Context").Call().Dot("Value").Call(jen.Qual("net/http", "LocalAddrContextKey")).Assert(jen.Qual("net", "Addr")),
+						jen.Id("ok").Op("&&").Id("localAddr").Op("!=").Nil().Op("&&").Id("sdkLoopbackAddress").Call(jen.Id("localAddr").Dot("String").Call()).Op("&&").Op("!").Id("sdkLoopbackAddress").Call(jen.Id("r").Dot("Host")),
+					).Block(
+						jen.Return(jen.False()),
+					),
+				),
+				jen.If(jen.Op("!").Id("sdkDisableContentTypeCheck")).Block(
+					jen.List(jen.Id("mediaType"), jen.Id("parameters"), jen.Id("err")).Op(":=").Qual("mime", "ParseMediaType").Call(jen.Id("r").Dot("Header").Dot("Get").Call(jen.Lit("Content-Type"))),
+					jen.If(jen.Id("err").Op("!=").Nil().Op("||").Id("mediaType").Op("!=").Lit("application/json").Op("||").Id("parameters").Op("==").Nil()).Block(
+						jen.Return(jen.False()),
+					),
+				),
+				jen.Id("jsonAccepted").Op(":=").False(),
+				jen.Id("streamAccepted").Op(":=").False(),
+				jen.Id("acceptValues").Op(":=").Id("r").Dot("Header").Dot("Values").Call(jen.Lit("Accept")),
+				jen.For(jen.Id("headerIndex").Op(":=").Lit(0), jen.Id("headerIndex").Op("<").Len(jen.Id("acceptValues")), jen.Id("headerIndex").Op("++")).Block(
+					jen.Id("mediaRanges").Op(":=").Qual("strings", "Split").Call(jen.Id("acceptValues").Index(jen.Id("headerIndex")), jen.Lit(",")),
+					jen.For(jen.Id("rangeIndex").Op(":=").Lit(0), jen.Id("rangeIndex").Op("<").Len(jen.Id("mediaRanges")), jen.Id("rangeIndex").Op("++")).Block(
+						jen.Id("parts").Op(":=").Qual("strings", "SplitN").Call(jen.Id("mediaRanges").Index(jen.Id("rangeIndex")), jen.Lit(";"), jen.Lit(2)),
+						jen.Id("mediaRange").Op(":=").Qual("strings", "ToLower").Call(jen.Qual("strings", "TrimSpace").Call(jen.Id("parts").Index(jen.Lit(0)))),
+						jen.Switch(jen.Id("mediaRange")).Block(
+							jen.Case(jen.Lit("application/json"), jen.Lit("application/*")).Block(jen.Id("jsonAccepted").Op("=").True()),
+							jen.Case(jen.Lit("text/event-stream"), jen.Lit("text/*")).Block(jen.Id("streamAccepted").Op("=").True()),
+							jen.Case(jen.Lit("*/*")).Block(
+								jen.Id("jsonAccepted").Op("=").True(),
+								jen.Id("streamAccepted").Op("=").True(),
+							),
+						),
+					),
+				),
+				jen.If(jen.Op("!").Id("jsonAccepted").Op("||").Op("!").Id("streamAccepted")).Block(
+					jen.Return(jen.False()),
+				),
+				jen.Id("protocolVersion").Op(":=").Id("r").Dot("Header").Dot("Get").Call(jen.Lit("MCP-Protocol-Version")),
+				jen.Switch(jen.Id("protocolVersion")).Block(
+					jen.Case(
+						jen.Lit(""),
+						jen.Lit("2024-11-05"),
+						jen.Lit("2025-03-26"),
+						jen.Lit("2025-06-18"),
+						jen.Lit("2025-11-25"),
+						jen.Lit("2026-07-28"),
+					).Block(jen.Return(jen.True())),
+				),
+				jen.Return(jen.False()),
+			)
+		stmt.Line()
+		stmt.Comment("sdkLoopbackAddress matches the official SDK localhost protection predicate.").Line()
+		stmt.Func().Id("sdkLoopbackAddress").Params(jen.Id("address").String()).Bool().Block(
+			jen.List(jen.Id("host"), jen.Id("port"), jen.Id("err")).Op(":=").Qual("net", "SplitHostPort").Call(jen.Id("address")),
+			jen.If(jen.Id("err").Op("!=").Nil()).Block(
+				jen.Id("host").Op("=").Qual("strings", "Trim").Call(jen.Id("address"), jen.Lit("[]")),
+			).Else().Block(
+				jen.If(jen.Id("port").Op("==").Lit("")).Block(jen.Return(jen.False())),
+			),
+			jen.If(jen.Id("host").Op("==").Lit("localhost")).Block(jen.Return(jen.True())),
+			jen.List(jen.Id("addressValue"), jen.Id("err")).Op(":=").Qual("net/netip", "ParseAddr").Call(jen.Id("host")),
+			jen.If(jen.Id("err").Op("!=").Nil()).Block(jen.Return(jen.False())),
+			jen.Return(jen.Id("addressValue").Dot("IsLoopback").Call()),
+		)
+		stmt.Line()
+		stmt.Func().Id("sdkMCPGoDebugValue").Params(jen.Id("name").String()).String().Block(
+			jen.Id("value").Op(":=").Lit(""),
+			jen.Id("parts").Op(":=").Qual("strings", "Split").Call(jen.Qual("os", "Getenv").Call(jen.Lit("MCPGODEBUG")), jen.Lit(",")),
+			jen.For(jen.Id("partIndex").Op(":=").Lit(0), jen.Id("partIndex").Op("<").Len(jen.Id("parts")), jen.Id("partIndex").Op("++")).Block(
+				jen.Id("pair").Op(":=").Qual("strings", "SplitN").Call(jen.Id("parts").Index(jen.Id("partIndex")), jen.Lit("="), jen.Lit(2)),
+				jen.If(jen.Len(jen.Id("pair")).Op("==").Lit(2).Op("&&").Qual("strings", "TrimSpace").Call(jen.Id("pair").Index(jen.Lit(0))).Op("==").Id("name")).Block(
+					jen.Id("value").Op("=").Qual("strings", "TrimSpace").Call(jen.Id("pair").Index(jen.Lit(1))),
+				),
+			),
+			jen.Return(jen.Id("value")),
+		)
+		stmt.Line()
+		stmt.Comment("rejectNullMCPRequestID rejects null request IDs and restores other request bodies.").Line()
+		stmt.Func().Id("rejectNullMCPRequestID").
+			Params(
+				jen.Id("w").Qual("net/http", "ResponseWriter"),
+				jen.Id("r").Op("*").Qual("net/http", "Request"),
+				jen.Id("maxBodyBytes").Int64(),
+			).
+			Bool().
+			Block(
+				jen.If(jen.Id("r").Op("==").Nil().Op("||").Id("r").Dot("Method").Op("!=").Qual("net/http", "MethodPost").Op("||").Id("r").Dot("Body").Op("==").Nil()).Block(
+					jen.Return(jen.False()),
+				),
+				jen.Var().Id("reader").Qual("io", "Reader").Op("=").Id("r").Dot("Body"),
+				jen.If(jen.Id("maxBodyBytes").Op(">").Lit(0)).Block(
+					jen.Id("reader").Op("=").Qual("net/http", "MaxBytesReader").Call(jen.Id("w"), jen.Id("r").Dot("Body"), jen.Id("maxBodyBytes")),
+				),
+				jen.List(jen.Id("body"), jen.Id("err")).Op(":=").Qual("io", "ReadAll").Call(jen.Id("reader")),
+				jen.Id("closeErr").Op(":=").Id("r").Dot("Body").Dot("Close").Call(),
+				jen.If(jen.Id("err").Op("==").Nil().Op("&&").Id("closeErr").Op("!=").Nil()).Block(
+					jen.Id("err").Op("=").Id("closeErr"),
+				),
+				jen.If(jen.Id("err").Op("!=").Nil()).Block(
+					jen.Var().Id("maxBytesErr").Op("*").Qual("net/http", "MaxBytesError"),
+					jen.If(jen.Qual("errors", "As").Call(jen.Id("err"), jen.Op("&").Id("maxBytesErr"))).Block(
+						jen.Qual("net/http", "Error").Call(jen.Id("w"), jen.Qual("fmt", "Sprintf").Call(jen.Lit("request body exceeds %d bytes"), jen.Id("maxBytesErr").Dot("Limit")), jen.Qual("net/http", "StatusRequestEntityTooLarge")),
+						jen.Return(jen.True()),
+					),
+					jen.Qual("net/http", "Error").Call(jen.Id("w"), jen.Lit("failed to read body"), jen.Qual("net/http", "StatusBadRequest")),
+					jen.Return(jen.True()),
+				),
+				jen.Id("r").Dot("Body").Op("=").Qual("io", "NopCloser").Call(jen.Qual("bytes", "NewReader").Call(jen.Id("body"))),
+				jen.Var().Id("envelope").Id("sdkJSONRPCRequestEnvelope"),
+				jen.If(jen.Id("err").Op(":=").Id("json").Dot("Unmarshal").Call(jen.Id("body"), jen.Op("&").Id("envelope")), jen.Id("err").Op("!=").Nil()).Block(
+					jen.Return(jen.False()),
+				),
+				jen.If(jen.Len(jen.Id("envelope").Dot("Method")).Op("==").Lit(0).Op("||").Op("!").Qual("bytes", "Equal").Call(jen.Qual("bytes", "TrimSpace").Call(jen.Id("envelope").Dot("ID")), jen.Index().Byte().Call(jen.Lit("null")))).Block(
+					jen.Return(jen.False()),
+				),
+				jen.Id("w").Dot("Header").Call().Dot("Set").Call(jen.Lit("Content-Type"), jen.Lit("application/json")),
+				jen.Qual("net/http", "Error").Call(
+					jen.Id("w"),
+					jen.Lit("{\"jsonrpc\":\"2.0\",\"id\":null,\"error\":{\"code\":-32600,\"message\":\"Invalid Request: request id must not be null\"}}"),
+					jen.Qual("net/http", "StatusBadRequest"),
+				),
+				jen.Return(jen.True()),
 			)
 		stmt.Line()
 		stmt.Func().Id("sdkRuntimeCORSHandler").

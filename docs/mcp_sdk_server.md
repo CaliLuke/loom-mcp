@@ -64,9 +64,13 @@ wire protocol, Streamable HTTP, sessions, and protocol negotiation.
 
 Generated SDK servers install a receiving middleware that normalizes handler
 failures into typed JSON-RPC errors. Invalid parameters, invalid retry input,
-missing resources, and duplicate initialization return `-32602`. Internal and unknown handler failures
-return `-32603`. The middleware hides private details unless the service declares
-an explicit safe message. Errors already typed by the official SDK pass through unchanged.
+missing resources, and duplicate initialization return `-32602`. Internal and
+unknown handler failures return `-32603`. The middleware hides private details
+unless the service declares an explicit safe message. Errors already typed by
+the official SDK pass through unchanged.
+
+Generated HTTP handlers reject an MCP request with an explicit `null` ID.
+The handler returns HTTP 400 and JSON-RPC code `-32600`.
 
 The official MCP Go SDK performs its pre-initialization method gate before
 server receiving middleware. In SDK v1.7.0, that one upstream-owned path still

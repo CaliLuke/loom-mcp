@@ -9,15 +9,22 @@
 package mcpcatalog
 
 import (
+	"bytes"
 	"context"
 	"encoding/base64"
 	jsontext "encoding/json/jsontext"
 	json "encoding/json/v2"
 	"errors"
 	"fmt"
+	"io"
+	"mime"
+	"net"
 	"net/http"
+	"net/netip"
 	"net/url"
+	"os"
 	"slices"
+	"strings"
 	"sync"
 
 	catalog "example.com/assistant/progressive_discovery/gen/catalog"
@@ -51,6 +58,13 @@ type sdkResponseObserver struct {
 	onSessionIssued func(string)
 	sessionOnce     sync.Once
 }
+type sdkJSONRPCRequestEnvelope struct {
+	ID     jsontext.Value `json:"id"`
+	Method jsontext.Value `json:"method"`
+}
+
+var sdkDisableLocalhostProtection = sdkMCPGoDebugValue("disablelocalhostprotection") == "1"
+var sdkDisableContentTypeCheck = sdkMCPGoDebugValue("disablecontenttypecheck") == "1"
 
 func NewSDKServer(service catalog.Service, opts *SDKServerOptions) (*SDKServer, error) {
 	var adapterOpts *MCPAdapterOptions
@@ -216,9 +230,12 @@ func sdkJSONRPCErrorMiddleware(next mcpsdk.MethodHandler) mcpsdk.MethodHandler {
 	}
 }
 func newSDKHandler(server *mcpsdk.Server, adapter *MCPAdapter, requestContext func(context.Context, *http.Request) context.Context, streamableOpts *mcpsdk.StreamableHTTPOptions) http.Handler {
+	configuredStreamableOpts := sdkStreamableHTTPOptions(streamableOpts)
+	crossOriginProtection := configuredStreamableOpts.CrossOriginProtection
+	configuredStreamableOpts.CrossOriginProtection = nil
 	base := mcpsdk.NewStreamableHTTPHandler(func(*http.Request) *mcpsdk.Server {
 		return server
-	}, sdkStreamableHTTPOptions(streamableOpts))
+	}, configuredStreamableOpts)
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		r = r.WithContext(mcpruntime.WithRequestHeaders(r.Context(), r.Header))
 		if requestContext != nil {
@@ -232,6 +249,15 @@ func newSDKHandler(server *mcpsdk.Server, adapter *MCPAdapter, requestContext fu
 		}
 		transportObs, transportW := transport.BeginHTTPRequest(r.Context(), w, "mcp", r.Method, r)
 		defer transportObs.End()
+		if err := crossOriginProtection.Check(r); err != nil {
+			http.Error(transportW, err.Error(), http.StatusForbidden)
+			transportObs.Fail(transport.ReasonHandlerError)
+			return
+		}
+		if sdkRequestAllowsBodyInspection(r, configuredStreamableOpts) && rejectNullMCPRequestID(transportW, r, configuredStreamableOpts.MaxRequestBodyBytes) {
+			transportObs.Fail(transport.ReasonHandlerError)
+			return
+		}
 		observer := &sdkResponseObserver{
 			ResponseWriter: transportW,
 			onSessionIssued: func(sessionID string) {
@@ -253,13 +279,132 @@ func newSDKHandler(server *mcpsdk.Server, adapter *MCPAdapter, requestContext fu
 }
 func sdkStreamableHTTPOptions(opts *mcpsdk.StreamableHTTPOptions) *mcpsdk.StreamableHTTPOptions {
 	if opts == nil {
-		return &mcpsdk.StreamableHTTPOptions{CrossOriginProtection: http.NewCrossOriginProtection()}
+		return &mcpsdk.StreamableHTTPOptions{
+			CrossOriginProtection: http.NewCrossOriginProtection(),
+			MaxRequestBodyBytes:   mcpsdk.DefaultMaxRequestBodyBytes,
+		}
 	}
 	configured := *opts
 	if configured.CrossOriginProtection == nil {
 		configured.CrossOriginProtection = http.NewCrossOriginProtection()
 	}
+	if configured.MaxRequestBodyBytes == 0 {
+		configured.MaxRequestBodyBytes = mcpsdk.DefaultMaxRequestBodyBytes
+	}
 	return &configured
+}
+
+// sdkRequestAllowsBodyInspection reports whether the SDK pre-body checks accept the request.
+func sdkRequestAllowsBodyInspection(r *http.Request, opts *mcpsdk.StreamableHTTPOptions) bool {
+	if r.Method != http.MethodPost {
+		return false
+	}
+	if !opts.DisableLocalhostProtection && !sdkDisableLocalhostProtection {
+		if localAddr, ok := r.Context().Value(http.LocalAddrContextKey).(net.Addr); ok && localAddr != nil && sdkLoopbackAddress(localAddr.String()) && !sdkLoopbackAddress(r.Host) {
+			return false
+		}
+	}
+	if !sdkDisableContentTypeCheck {
+		mediaType, parameters, err := mime.ParseMediaType(r.Header.Get("Content-Type"))
+		if err != nil || mediaType != "application/json" || parameters == nil {
+			return false
+		}
+	}
+	jsonAccepted := false
+	streamAccepted := false
+	acceptValues := r.Header.Values("Accept")
+	for headerIndex := 0; headerIndex < len(acceptValues); headerIndex++ {
+		mediaRanges := strings.Split(acceptValues[headerIndex], ",")
+		for rangeIndex := 0; rangeIndex < len(mediaRanges); rangeIndex++ {
+			parts := strings.SplitN(mediaRanges[rangeIndex], ";", 2)
+			mediaRange := strings.ToLower(strings.TrimSpace(parts[0]))
+			switch mediaRange {
+			case "application/json", "application/*":
+				jsonAccepted = true
+			case "text/event-stream", "text/*":
+				streamAccepted = true
+			case "*/*":
+				jsonAccepted = true
+				streamAccepted = true
+			}
+		}
+	}
+	if !jsonAccepted || !streamAccepted {
+		return false
+	}
+	protocolVersion := r.Header.Get("MCP-Protocol-Version")
+	switch protocolVersion {
+	case "", "2024-11-05", "2025-03-26", "2025-06-18", "2025-11-25", "2026-07-28":
+		return true
+	}
+	return false
+}
+
+// sdkLoopbackAddress matches the official SDK localhost protection predicate.
+func sdkLoopbackAddress(address string) bool {
+	host, port, err := net.SplitHostPort(address)
+	if err != nil {
+		host = strings.Trim(address, "[]")
+	} else {
+		if port == "" {
+			return false
+		}
+	}
+	if host == "localhost" {
+		return true
+	}
+	addressValue, err := netip.ParseAddr(host)
+	if err != nil {
+		return false
+	}
+	return addressValue.IsLoopback()
+}
+func sdkMCPGoDebugValue(name string) string {
+	value := ""
+	parts := strings.Split(os.Getenv("MCPGODEBUG"), ",")
+	for partIndex := 0; partIndex < len(parts); partIndex++ {
+		pair := strings.SplitN(parts[partIndex], "=", 2)
+		if len(pair) == 2 && strings.TrimSpace(pair[0]) == name {
+			value = strings.TrimSpace(pair[1])
+		}
+	}
+	return value
+}
+
+// rejectNullMCPRequestID rejects null request IDs and restores other request bodies.
+func rejectNullMCPRequestID(w http.ResponseWriter, r *http.Request, maxBodyBytes int64) bool {
+	if r == nil || r.Method != http.MethodPost || r.Body == nil {
+		return false
+	}
+	var reader io.Reader = r.Body
+	if maxBodyBytes > 0 {
+		reader = http.MaxBytesReader(w, r.Body, maxBodyBytes)
+	}
+	body, err := io.ReadAll(reader)
+	closeErr := r.Body.Close()
+	if err == nil && closeErr != nil {
+		err = closeErr
+	}
+	if err != nil {
+		var maxBytesErr *http.MaxBytesError
+		if errors.As(err, &maxBytesErr) {
+			http.Error(w, fmt.Sprintf("request body exceeds %d bytes", maxBytesErr.Limit), http.StatusRequestEntityTooLarge)
+			return true
+		}
+		http.Error(w, "failed to read body", http.StatusBadRequest)
+		return true
+	}
+	r.Body = io.NopCloser(bytes.NewReader(body))
+	var envelope sdkJSONRPCRequestEnvelope
+	if err := json.Unmarshal(body, &envelope); err != nil {
+		return false
+	}
+	if len(envelope.Method) == 0 || !bytes.Equal(bytes.TrimSpace(envelope.ID), []byte("null")) {
+		return false
+	}
+	w.Header().Set("Content-Type", "application/json")
+	http.Error(w, "{\"jsonrpc\":\"2.0\",\"id\":null,\"error\":{\"code\":-32600,\"message\":\"Invalid Request: request id must not be null\"}}", http.StatusBadRequest)
+	return true
 }
 func sdkRuntimeCORSHandler(next http.Handler, policy loomhttp.RuntimeCORSPolicy) http.Handler {
 	actual := policy.Handler(next.ServeHTTP)

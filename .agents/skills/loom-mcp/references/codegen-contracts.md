@@ -88,8 +88,10 @@ Use this file when editing DSL, generators, generated helpers, or MCP codegen be
 - Generated SDK servers install a receiving middleware that converts untyped
   adapter errors into typed JSON-RPC errors. Preserve existing typed SDK errors.
   Map invalid parameters and missing resources to `-32602`. Map internal and
-  unknown errors to `-32603` with only declared safe messages. Do not parse or
-  rewrite response bodies to reach SDK session errors emitted before middleware.
+  unknown errors to `-32603` with only declared safe messages. Reject request
+  envelopes with an explicit null `id` before SDK dispatch. Return HTTP 400
+  with JSON-RPC `-32600`. Do not parse or rewrite SDK response bodies to reach
+  SDK session errors emitted before middleware.
 - MCP generation emits only the minimal service types, `MCPAdapter`,
   local-provider registration, OAuth discovery, prompt provider, and
   `SDKServer`. Absence tests must reject generated native MCP clients, servers,
