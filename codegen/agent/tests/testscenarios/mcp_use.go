@@ -9,9 +9,15 @@ import (
 func MCPUse() func() {
 	return func() {
 		API("alpha", func() {})
-		// Provider service referenced by FromMCP
-		Service("calc", func() {})
-		var CalcCore = Toolset(FromMCP("calc", "core"))
+		// External provider service and inline schemas referenced by FromMCP.
+		Service("calc", func() {
+		})
+		var CalcCore = Toolset(FromMCP("calc", "core"), func() {
+			Tool("ping", "Ping", func() {
+				Args(String)
+				Return(String)
+			})
+		})
 		Service("alpha", func() {
 			Agent("scribe", "Doc helper", func() {
 				Use(CalcCore)

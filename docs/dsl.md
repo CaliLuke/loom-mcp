@@ -49,7 +49,16 @@ var DocsToolset = Toolset("docs.search", func() {
  })
 })
 
-var AssistantSuite = Toolset(FromMCP("assistant", "assistant-mcp"))
+var _ = Service("assistant", func() {
+ Description("External MCP provider")
+})
+
+var AssistantSuite = Toolset(FromMCP("assistant", "assistant-mcp"), func() {
+ Tool("lookup", "Look up a document", func() {
+  Args(String)
+  Return(String)
+ })
+})
 
 var _ = Service("orchestrator", func() {
  Description("Human front door for the knowledge agent.")
@@ -185,12 +194,17 @@ overrides remain operational at the runtime/store layer.
 | Function                          | Context                    | Purpose                                     |
 | --------------------------------- | -------------------------- | ------------------------------------------- |
 | `Toolset(args...)`                | Top-level                  | Defines a provider-owned toolset            |
-| `FromMCP(service, toolset)`       | Argument to `Toolset`      | Configures MCP server as toolset provider   |
+| `FromMCP(service, toolset)`       | Argument to `Toolset`      | Configures an in-design or schema-declared external MCP provider |
 | `FromRegistry(registry, toolset)` | Argument to `Toolset`      | Configures registry as toolset provider     |
 | `FromSkills(roots..., opts...)`    | Argument to `Toolset`      | Exposes skill files as model-facing tools   |
 | `SkillPreload(mode)`              | Argument to `FromSkills`   | Configures skill instruction preload mode   |
 | `SkillReload(mode)`               | Argument to `FromSkills`   | Configures skill file reload mode           |
 | `Tags(values...)`                 | Inside `Toolset` or `Tool` | Attaches metadata labels for categorization |
+
+`FromMCP` resolves the named service and MCP server from the current design. If
+the service exists but the server does not, the toolset must declare at least one
+inline `Tool` schema for an external MCP endpoint. Otherwise design validation
+fails instead of generating an empty toolset.
 
 ### Tool Functions
 
@@ -726,9 +740,13 @@ Agent("chat", "Chat agent", func() {
 
 #### Pattern 2: External MCP server (inline schemas)
 
-For external MCP servers, define the schemas inline:
+For external MCP servers, declare a service name and define the tool schemas inline. The service does not declare an MCP server.
 
 ```go
+Service("remote", func() {
+    Description("External MCP provider")
+})
+
 var RemoteSearch = Toolset("remote-search", FromMCP("remote", "search"), func() {
     Tool("web_search", "Search the web", func() {
         Args(func() { Attribute("query", String) })

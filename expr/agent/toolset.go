@@ -211,7 +211,10 @@ func (t *ToolsetExpr) validateMCPProvider(verr *eval.ValidationErrors) {
 	if t.Provider.MCPService != "" && svc == nil {
 		verr.Add(t, "FromMCP could not resolve service %q", t.Provider.MCPService)
 	}
-	if svc != nil && exprmcp.Root.HasMCP(svc) && t.Provider.MCPToolset != "" && exprmcp.Root.ServiceMCP(t.Provider.MCPService, t.Provider.MCPToolset) == nil {
+	if svc != nil &&
+		t.Provider.MCPToolset != "" &&
+		exprmcp.Root.ServiceMCP(t.Provider.MCPService, t.Provider.MCPToolset) == nil &&
+		len(t.Tools) == 0 && len(t.ToolSelections) == 0 {
 		verr.Add(t, "FromMCP could not resolve service %q MCP server %q", t.Provider.MCPService, t.Provider.MCPToolset)
 	}
 }

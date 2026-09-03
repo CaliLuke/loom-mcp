@@ -1,7 +1,6 @@
 package codegen_test
 
 import (
-	"strings"
 	"testing"
 
 	codegen "github.com/CaliLuke/loom-mcp/v2/codegen/agent"
@@ -25,9 +24,18 @@ func TestExternalMCPToolset_SelfContainedTypes(t *testing.T) {
 
 	design := func() {
 		API("svc", func() {})
-		// Provider service referenced by FromMCP
+		// External MCP providers define their model-facing schemas inline.
 		Service("assistant", func() {})
-		assistantSuite := Toolset(FromMCP("assistant", "assistant-mcp"))
+		assistantSuite := Toolset(FromMCP("assistant", "assistant-mcp"), func() {
+			Tool("lookup", "Look up a value", func() {
+				Args(func() {
+					Attribute("query", String)
+				})
+				Return(func() {
+					Attribute("result", String)
+				})
+			})
+		})
 		Service("svc", func() {
 			Agent("a", "", func() {
 				Use(assistantSuite)
@@ -46,10 +54,8 @@ func TestExternalMCPToolset_SelfContainedTypes(t *testing.T) {
 	require.NoError(t, err)
 
 	defs := codegen.CollectTypeInfoForTest(specs)
-	// Look for assistant-mcp types; ensure no "= <pkg>." aliasing appears.
+	require.NotEmpty(t, defs, "expected generated external MCP tool types")
 	for name, def := range defs {
-		if strings.Contains(name, "AssistantMcp") {
-			require.NotContainsf(t, def, "= ", "unexpected alias in %s: %s", name, def)
-		}
+		require.Containsf(t, def, " struct {", "expected self-contained type in %s: %s", name, def)
 	}
 }

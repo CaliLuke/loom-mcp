@@ -11,6 +11,7 @@ import (
 	"errors"
 	"fmt"
 	core "github.com/CaliLuke/loom-mcp/v2/alpha/agents/scribe/core"
+	specs "github.com/CaliLuke/loom-mcp/v2/alpha/agents/scribe/specs"
 	core2 "github.com/CaliLuke/loom-mcp/v2/calc/toolsets/core"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/engine"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/planner"
@@ -63,7 +64,7 @@ func RegisterScribeAgent(ctx context.Context, rt *agentsruntime.Runtime, cfg Scr
 				BackoffCoefficient: 2,
 			},
 		},
-		Specs: nil,
+		Specs: specs.Specs,
 		Policy: agentsruntime.RunPolicy{
 			MaxRecoveryTurns: 3,
 		},

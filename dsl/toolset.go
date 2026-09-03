@@ -98,8 +98,10 @@ func Toolset(args ...any) *agentsexpr.ToolsetExpr {
 	return ts
 }
 
-// FromMCP configures a toolset to be backed by an MCP server. Use FromMCP
-// as a provider option when declaring a Toolset.
+// FromMCP configures a toolset to be backed by an MCP server. The service must
+// resolve in the design. The named server must also resolve unless the toolset
+// declares inline tool schemas for an external MCP endpoint. Use FromMCP as a
+// provider option when declaring a Toolset.
 //
 // FromMCP takes:
 //   - service: Goa service name that owns the MCP server

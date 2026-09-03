@@ -16,6 +16,11 @@ Use this guide for the current toolset model. Confirm exact DSL and generated na
 
 An agent consumes a toolset with `Use(...)`; an agent publishes a toolset to other agents with `Export(...)`.
 
+`FromMCP` must resolve the named MCP server in the current design unless the
+toolset declares inline `Tool` schemas for an external endpoint. A service that
+exists without that MCP server is not enough: an otherwise empty toolset fails
+design validation instead of generating a registration with zero tools.
+
 ## Generated ownership
 
 Service-owned toolset code lives under:

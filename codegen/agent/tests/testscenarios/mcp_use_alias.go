@@ -11,8 +11,15 @@ import (
 func MCPUseAlias() func() {
 	return func() {
 		API("alpha", func() {})
-		Service("calc", func() {})
-		var CalcRemote = Toolset("calc-remote", FromMCP("calc", "core"))
+		// External provider service and inline schemas referenced by FromMCP.
+		Service("calc", func() {
+		})
+		var CalcRemote = Toolset("calc-remote", FromMCP("calc", "core"), func() {
+			Tool("ping", "Ping", func() {
+				Args(String)
+				Return(String)
+			})
+		})
 		Service("alpha", func() {
 			Agent("scribe", "Doc helper", func() {
 				Use(CalcRemote)

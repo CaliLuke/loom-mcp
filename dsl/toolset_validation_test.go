@@ -65,6 +65,19 @@ func TestToolsetDSLRejectsInvalidDefinitionsAndProviders(t *testing.T) {
 		})
 	}
 }
+func TestToolsetDSLRejectsEmptyMCPProviderForServiceWithoutMCP(t *testing.T) {
+	runDSLExpectError(t, func() {
+		API("test", func() {})
+		Service("plain", func() {})
+
+		tools := Toolset(FromMCP("plain", "missing"))
+		Service("consumer", func() {
+			Agent("assistant", "Assistant", func() {
+				Use(tools)
+			})
+		})
+	}, `FromMCP could not resolve service "plain" MCP server "missing"`)
+}
 
 func TestToolsetDSLRejectsInvalidReferences(t *testing.T) {
 	var nilToolset *agentexpr.ToolsetExpr

@@ -279,6 +279,9 @@ Use this skill for `loom-mcp` work in this repo. Keep `AGENTS.md` short and keep
 - MCP is a two-way bridge:
   - consume external MCP servers through `runtime/mcp` callers,
   - expose designed services as MCP servers through generated adapters and registrations.
+- `FromMCP(service, server)` must resolve an MCP server declared on the named
+  service unless the toolset declares inline `Tool` schemas for an external
+  endpoint. Reject an unresolved provider that would otherwise generate zero tools.
 - The official MCP Go SDK is the only MCP wire transport. It owns protocol
   negotiation, Streamable HTTP, standard SSE, cancellation, and sessions.
 - Runtime MCP callers delegate client lifecycle handling to the official SDK.
