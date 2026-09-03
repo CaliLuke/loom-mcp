@@ -4,6 +4,7 @@ import (
 	"path/filepath"
 	"testing"
 
+	agentcodegen "github.com/CaliLuke/loom-mcp/v2/codegen/agent"
 	"github.com/CaliLuke/loom-mcp/v2/codegen/testhelpers"
 	. "github.com/CaliLuke/loom-mcp/v2/dsl"
 	"github.com/CaliLuke/loom-mcp/v2/testutil"
@@ -246,4 +247,30 @@ func TestRegistryClientOnlyEmitsReferencedRegistries(t *testing.T) {
 	require.False(t, testhelpers.FileExists(files, "gen/uses_registry/registry/unused_registry/client.go"))
 	require.False(t, testhelpers.FileExists(files, "gen/plain_agent/registry/used_registry/client.go"))
 	require.False(t, testhelpers.FileExists(files, "gen/plain_agent/registry/unused_registry/client.go"))
+}
+
+func TestRegistryClientRejectsCollidingSecuritySchemeNames(t *testing.T) {
+	design := func() {
+		goadsl.API("colliding_auth_test", func() {})
+		first := goadsl.APIKeySecurity("api-key")
+		second := goadsl.APIKeySecurity("api_key")
+		registry := Registry("corp", func() {
+			goadsl.URL("https://registry.example.com")
+			goadsl.Security(first)
+			goadsl.Security(second)
+		})
+		tools := Toolset(FromRegistry(registry, "data-tools"))
+		goadsl.Service("colliding_auth_test", func() {
+			Agent("planner", "Planner", func() {
+				Use(tools)
+			})
+		})
+	}
+
+	genpkg, roots := testhelpers.RunDesign(t, design)
+	require.NoError(t, agentcodegen.Prepare(genpkg, roots))
+	files, err := agentcodegen.Generate(genpkg, roots, nil)
+
+	require.Nil(t, files)
+	require.ErrorContains(t, err, `security schemes "api-key" and "api_key" both generate Go identifier "APIKey"`)
 }

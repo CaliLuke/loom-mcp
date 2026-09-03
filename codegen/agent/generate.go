@@ -34,6 +34,7 @@ import (
 // declared in the DSL, returns the input slice unchanged. Returns an error if:
 //   - The agents root cannot be located in roots
 //   - A service referenced by an agent is not found
+//   - Registry security scheme names collide after conversion to Go identifiers
 //   - Template rendering fails
 //   - Tool spec generation fails
 //
@@ -60,9 +61,11 @@ func Generate(genpkg string, roots []eval.Root, files []*codegen.File) ([]*codeg
 
 	for _, svc := range data.Services {
 		// Emit registry client packages for declared registries.
-		if regFiles := registryClientFiles(genpkg, svc); len(regFiles) > 0 {
-			generated = append(generated, regFiles...)
+		regFiles, err := registryClientFiles(genpkg, svc)
+		if err != nil {
+			return nil, err
 		}
+		generated = append(generated, regFiles...)
 
 		for _, agent := range svc.Agents {
 			afiles, err := agentFiles(agent, specsCache)

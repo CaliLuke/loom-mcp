@@ -58,6 +58,10 @@ func TestGeneratedAgentDesignsCompile(t *testing.T) {
 			},
 		},
 		{
+			name:     "registry duplicate security scheme",
+			generate: generateDuplicateRegistrySecurityDesign,
+		},
+		{
 			name:       "injected payload field",
 			generate:   generateInjectedAgentDesign,
 			moduleTest: injectedPayloadRuntimeTest,
@@ -317,6 +321,26 @@ func generateRegistryAgentDesign(t *testing.T) []*gcodegen.File {
 			URL("https://registry.example.com")
 			SyncInterval("5m")
 			CacheTTL("1h")
+		})
+		tools := Toolset(FromRegistry(registry, "data-tools"))
+		Service("assistant", func() {
+			Agent("planner", "Planner", func() {
+				Use(tools)
+			})
+		})
+	})
+}
+
+func generateDuplicateRegistrySecurityDesign(t *testing.T) []*gcodegen.File {
+	t.Helper()
+	return generateCompileDesign(t, func() {
+		API("assistant", func() {})
+		apiKey := APIKeySecurity("registry_api_key")
+		jwt := JWTSecurity("registry_jwt")
+		registry := Registry("corp", func() {
+			URL("https://registry.example.com")
+			Security(apiKey)
+			Security(apiKey, jwt)
 		})
 		tools := Toolset(FromRegistry(registry, "data-tools"))
 		Service("assistant", func() {

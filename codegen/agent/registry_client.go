@@ -1,6 +1,7 @@
 package codegen
 
 import (
+	"fmt"
 	"path/filepath"
 	"time"
 
@@ -83,13 +84,13 @@ const authLocationHeader = "header"
 // registryClientFiles generates registry client files for registries referenced
 // by the service's agents. Each referenced registry produces a client package under
 // gen/<service>/registry/<name>/.
-func registryClientFiles(genpkg string, svc *ServiceAgentsData) []*codegen.File {
+func registryClientFiles(genpkg string, svc *ServiceAgentsData) ([]*codegen.File, error) {
 	if svc == nil || svc.Service == nil {
-		return nil
+		return nil, nil
 	}
 	referenced := referencedRegistryNames(svc)
 	if len(referenced) == 0 {
-		return nil
+		return nil, nil
 	}
 
 	var files []*codegen.File
@@ -97,7 +98,10 @@ func registryClientFiles(genpkg string, svc *ServiceAgentsData) []*codegen.File 
 		if reg == nil || !referenced[reg.Name] {
 			continue
 		}
-		data := newRegistryClientData(genpkg, svc.Service.PathName, reg)
+		data, err := newRegistryClientData(genpkg, svc.Service.PathName, reg)
+		if err != nil {
+			return nil, err
+		}
 		if data == nil {
 			continue
 		}
@@ -114,7 +118,7 @@ func registryClientFiles(genpkg string, svc *ServiceAgentsData) []*codegen.File 
 			files = append(files, optionsFile)
 		}
 	}
-	return files
+	return files, nil
 }
 
 func referencedRegistryNames(svc *ServiceAgentsData) map[string]bool {
@@ -137,9 +141,9 @@ func referencedRegistryNames(svc *ServiceAgentsData) map[string]bool {
 }
 
 // newRegistryClientData transforms a RegistryExpr into template-ready data.
-func newRegistryClientData(genpkg, svcPath string, reg *agentsExpr.RegistryExpr) *RegistryClientData {
+func newRegistryClientData(genpkg, svcPath string, reg *agentsExpr.RegistryExpr) (*RegistryClientData, error) {
 	if reg == nil {
-		return nil
+		return nil, nil
 	}
 
 	goName := codegen.Goify(reg.Name, true)
@@ -170,13 +174,26 @@ func newRegistryClientData(genpkg, svcPath string, reg *agentsExpr.RegistryExpr)
 		}
 	}
 
-	// Convert security schemes
+	// Convert security schemes. A scheme may participate in multiple OR-style
+	// requirements, but its generated authentication declarations are emitted once.
+	var seenSchemes map[string]string
 	for _, sec := range reg.Requirements {
 		for _, scheme := range sec.Schemes {
 			if scheme.Kind == loomexpr.NoKind {
 				// Skip schemes with no kind specified.
 				continue
 			}
+			identifier := codegen.Goify(scheme.SchemeName, true)
+			if previousName, ok := seenSchemes[identifier]; ok {
+				if previousName != scheme.SchemeName {
+					return nil, fmt.Errorf("registry %q security schemes %q and %q both generate Go identifier %q", reg.Name, previousName, scheme.SchemeName, identifier)
+				}
+				continue
+			}
+			if seenSchemes == nil {
+				seenSchemes = make(map[string]string, len(reg.Requirements))
+			}
+			seenSchemes[identifier] = scheme.SchemeName
 			schemeData := &SecuritySchemeData{
 				Name: scheme.SchemeName,
 				Kind: scheme.Kind,
@@ -208,7 +225,7 @@ func newRegistryClientData(genpkg, svcPath string, reg *agentsExpr.RegistryExpr)
 		}
 	}
 
-	return data
+	return data, nil
 }
 
 // registryClientFile generates the main client.go file for a registry.

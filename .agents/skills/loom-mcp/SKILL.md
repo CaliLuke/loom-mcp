@@ -79,6 +79,8 @@ Use this skill for `loom-mcp` work in this repo. Keep `AGENTS.md` short and keep
   relevance, then origin and ID, before applying the result limit. The Pulse
   replicated map is the catalog authority; the removed registry memory/Mongo
   `Store` model must not be documented or restored.
+- Generated registry clients emit each security scheme once across alternative
+  requirements. Different scheme names must not produce the same Go identifier.
 - Registry-routed providers must use `provider.Serve` with a required admission
   revision and complete Register/Drain/Release/Claim/Complete/delta/overload
   callbacks. `Serve` owns incarnation, lease renewal, drain, settlement, and

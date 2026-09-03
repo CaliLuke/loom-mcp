@@ -1787,7 +1787,9 @@ var AnthropicRegistry = Registry("anthropic", func() {
 })
 ```
 
-Multiple security schemes can be added by calling `Security()` multiple times.
+Multiple `Security()` calls define alternative requirements. If requirements reuse a scheme, the registry client generates one authentication type and option for that scheme.
+
+Scheme names must produce unique exported Go identifiers. Generation fails if different scheme names produce the same identifier.
 
 ---
 
