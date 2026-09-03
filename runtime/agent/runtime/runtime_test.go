@@ -405,6 +405,26 @@ func TestStartRunOmitsEngineTimeoutWithoutPolicyBudget(t *testing.T) {
 	require.Zero(t, eng.last.RunTimeout)
 }
 
+func TestRouteStartOmitsEngineTimeout(t *testing.T) {
+	eng := &stubEngine{}
+	rt := &Runtime{
+		Engine:       eng,
+		logger:       telemetry.NoopLogger{},
+		metrics:      telemetry.NoopMetrics{},
+		tracer:       telemetry.NoopTracer{},
+		SessionStore: sessioninmem.New(),
+	}
+	client := rt.MustClientFor(AgentRoute{
+		ID:               "service.agent",
+		WorkflowName:     "service.workflow",
+		DefaultTaskQueue: "svc.queue",
+	})
+	_, err := rt.CreateSession(context.Background(), "sess-1")
+	require.NoError(t, err)
+	_, err = client.Start(context.Background(), "sess-1", nil)
+	require.NoError(t, err)
+	require.Zero(t, eng.last.RunTimeout)
+}
 func TestWorkerConfigOnlyExposesQueuePlacement(t *testing.T) {
 	t.Parallel()
 
