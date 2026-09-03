@@ -153,6 +153,10 @@ Use this skill for `loom-mcp` work in this repo. Keep `AGENTS.md` short and keep
   `runlog.Store` and `session.Store` implementations when run introspection and
   session metadata must survive process replacement; configure memory and
   stream projections independently.
+- If you register a Temporal workflow outside `Engine.RegisterWorkflow`, call
+  `NewWorkflowContext`. Immediately defer the returned release function. The
+  release function removes the completed workflow from the process-local context
+  registry.
 - Run status is monotonic once terminal. The first committed `completed`,
   `failed`, or `canceled` status remains authoritative; later session-store
   updates may enrich metadata but must not reopen or replace that outcome.

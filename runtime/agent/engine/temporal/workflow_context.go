@@ -86,10 +86,15 @@ const (
 // engine but are not started through it, and still need to call runtime helpers
 // (for example ExecuteAgentChildWithRoute).
 //
-// The returned context uses engine defaults (queue, timeouts, retry) when invoking
-// typed planner/tool/hook activities.
-func NewWorkflowContext(e *Engine, ctx workflow.Context) engine.WorkflowContext {
-	return newTemporalWorkflowContext(e, ctx)
+// The returned context uses engine defaults (queue, timeouts, retry) when it invokes
+// typed planner, tool, and hook activities. The caller must defer the returned
+// release function immediately. The release function removes this context from
+// the engine registry after workflow completion.
+func NewWorkflowContext(e *Engine, ctx workflow.Context) (engine.WorkflowContext, func()) {
+	wfCtx := newTemporalWorkflowContext(e, ctx)
+	return wfCtx, func() {
+		e.releaseWorkflowContext(wfCtx.runID, wfCtx)
+	}
 }
 
 func newTemporalWorkflowContext(e *Engine, ctx workflow.Context) *temporalWorkflowContext {

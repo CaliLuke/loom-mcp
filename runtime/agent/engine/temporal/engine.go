@@ -317,7 +317,7 @@ func (e *Engine) RegisterWorkflow(_ context.Context, def engine.WorkflowDefiniti
 
 	bundle.registerWorkflow(def.Name, func(tctx workflow.Context, input *api.RunInput) (*api.RunOutput, error) {
 		wfCtx := newTemporalWorkflowContext(e, tctx)
-		defer e.releaseWorkflowContext(wfCtx.runID)
+		defer e.releaseWorkflowContext(wfCtx.runID, wfCtx)
 		out, err := def.Handler(wfCtx, input)
 		return out, classifyTemporalCancellation(err)
 	})
@@ -727,9 +727,9 @@ func (e *Engine) trackWorkflowContext(runID string, wf engine.WorkflowContext) {
 	e.workflowContexts.Store(runID, wf)
 }
 
-func (e *Engine) releaseWorkflowContext(runID string) {
+func (e *Engine) releaseWorkflowContext(runID string, wf engine.WorkflowContext) {
 	if runID == "" {
 		return
 	}
-	e.workflowContexts.Delete(runID)
+	e.workflowContexts.CompareAndDelete(runID, wf)
 }

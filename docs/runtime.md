@@ -2442,6 +2442,17 @@ type WorkflowContext interface {
 }
 ```
 
+If you register a workflow directly with a Temporal worker, own the adapter lifetime:
+
+```go
+wfCtx, release := temporal.NewWorkflowContext(eng, ctx)
+defer release()
+```
+
+Defer `release` immediately after construction.
+
+The release function removes the workflow context from the engine registry when the workflow finishes. This cleanup prevents workers from retaining completed external workflows.
+
 Temporal signal receivers select between the signal channel and workflow
 cancellation. Canceling a workflow therefore releases a receiver blocked in
 `Receive` or `ReceiveWithTimeout`, and durable completion records the terminal

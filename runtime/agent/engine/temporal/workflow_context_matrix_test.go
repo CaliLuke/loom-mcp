@@ -140,6 +140,34 @@ func TestTemporalChildHandleRunIDMatchesExecution(t *testing.T) {
 	assert.Equal(t, probe.ExecutionID, probe.AfterGet)
 }
 
+func TestNewWorkflowContextReleasePreservesReplacementAndRemovesRegistryEntry(t *testing.T) {
+	var suite testsuite.WorkflowTestSuite
+	env := suite.NewTestWorkflowEnvironment()
+	eng := workflowContextTestEngine()
+	externalWorkflow := func(ctx workflow.Context) (bool, error) {
+		_, releaseFirst := NewWorkflowContext(eng, ctx)
+		wfCtx, release := NewWorkflowContext(eng, ctx)
+		defer release()
+
+		releaseFirst()
+		tracked, ok := eng.workflowContexts.Load(wfCtx.RunID())
+		return ok && tracked == wfCtx, nil
+	}
+
+	env.ExecuteWorkflow(externalWorkflow)
+	require.NoError(t, env.GetWorkflowError())
+	var replacementSurvivedStaleRelease bool
+	require.NoError(t, env.GetWorkflowResult(&replacementSurvivedStaleRelease))
+	assert.True(t, replacementSurvivedStaleRelease)
+
+	remaining := 0
+	eng.workflowContexts.Range(func(_, _ any) bool {
+		remaining++
+		return true
+	})
+	assert.Zero(t, remaining)
+}
+
 func TestTemporalWorkflowContextReceivesAllSignalsAndTimesOut(t *testing.T) {
 	var suite testsuite.WorkflowTestSuite
 	env := suite.NewTestWorkflowEnvironment()
