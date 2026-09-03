@@ -3,6 +3,7 @@ package runtime
 import (
 	"context"
 	"errors"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -28,6 +29,17 @@ type hostileCompletionQuerier struct {
 	err error
 }
 
+type fireAndForgetEngine struct {
+	*stubEngine
+	handle engine.WorkflowHandle
+}
+
+type blockingWorkflowHandle struct {
+	waitStarted chan struct{}
+	complete    chan struct{}
+	waitCalls   atomic.Int32
+}
+
 func (*cyclicCompletionError) Error() string {
 	return "cyclic completion error"
 }
@@ -50,6 +62,30 @@ func (*hostileWorkflowHandle) Cancel(context.Context) error {
 
 func (q *hostileCompletionQuerier) QueryRunCompletion(context.Context, string) (*api.RunOutput, error) {
 	return nil, q.err
+}
+
+func (e *fireAndForgetEngine) StartWorkflow(context.Context, engine.WorkflowStartRequest) (engine.WorkflowHandle, error) {
+	return e.handle, nil
+}
+
+func (h *blockingWorkflowHandle) Wait(ctx context.Context) (*api.RunOutput, error) {
+	if h.waitCalls.Add(1) == 1 {
+		close(h.waitStarted)
+	}
+	select {
+	case <-ctx.Done():
+		return nil, ctx.Err()
+	case <-h.complete:
+		return &api.RunOutput{}, nil
+	}
+}
+
+func (*blockingWorkflowHandle) Signal(context.Context, string, any) error {
+	return nil
+}
+
+func (*blockingWorkflowHandle) Cancel(context.Context) error {
+	return nil
 }
 
 func TestTerminalRunStatusForErrorClassifiesCompleteGraph(t *testing.T) {
@@ -113,6 +149,62 @@ func TestObservedCompletionSanitizesHostileError(t *testing.T) {
 	require.NotNil(t, completed)
 	require.Equal(t, runStatusFailed, completed.Status)
 	require.EqualError(t, completed.Error, cancellation.ErrInvalidErrorGraph.Error())
+}
+
+func TestClientForStartReleasesCompletedFireAndForgetHandle(t *testing.T) {
+	t.Parallel()
+
+	const runID = "fire-and-forget"
+	inner := &blockingWorkflowHandle{
+		waitStarted: make(chan struct{}),
+		complete:    make(chan struct{}),
+	}
+	rt := New(
+		WithEngine(&fireAndForgetEngine{stubEngine: &stubEngine{}, handle: inner}),
+		WithRunEventStore(runloginmem.New()),
+	)
+	_, err := rt.CreateSession(context.Background(), "session")
+	require.NoError(t, err)
+	client := rt.MustClientFor(AgentRoute{
+		ID:               "svc.agent",
+		WorkflowName:     "svc.workflow",
+		DefaultTaskQueue: "svc.queue",
+	})
+
+	var (
+		handle   engine.WorkflowHandle
+		startErr error
+	)
+	startDone := make(chan struct{})
+	go func() {
+		handle, startErr = client.Start(context.Background(), "session", nil, WithRunID(runID))
+		close(startDone)
+	}()
+	select {
+	case <-startDone:
+	case <-time.After(time.Second):
+		t.Fatal("fire-and-forget start blocked on workflow completion")
+	}
+	require.NoError(t, startErr)
+	require.NotNil(t, handle)
+	select {
+	case <-inner.waitStarted:
+	case <-time.After(time.Second):
+		t.Fatal("fire-and-forget start did not observe workflow completion")
+	}
+	_, retained := rt.workflowHandle(runID)
+	require.True(t, retained)
+
+	close(inner.complete)
+	waitCtx, cancelWait := context.WithTimeout(context.Background(), time.Second)
+	defer cancelWait()
+	_, err = handle.Wait(waitCtx)
+	require.NoError(t, err)
+	require.Equal(t, int32(1), inner.waitCalls.Load())
+	require.Eventually(t, func() bool {
+		_, ok := rt.workflowHandle(runID)
+		return !ok
+	}, time.Second, 10*time.Millisecond)
 }
 
 func TestQueriedCompletionSanitizesHostileError(t *testing.T) {

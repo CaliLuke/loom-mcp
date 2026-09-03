@@ -146,7 +146,9 @@ func (r *Runtime) startRunOn(ctx context.Context, input *RunInput, workflowName,
 		return nil, fmt.Errorf("%w: %w", ErrWorkflowStartFailed, err)
 	}
 	if r.RunEventStore != nil {
-		handle = newObservedWorkflowHandle(r, input, handle)
+		observed := newObservedWorkflowHandle(r, input, handle)
+		observed.ensureWait()
+		return observed, nil
 	}
 	r.storeWorkflowHandle(input.RunID, handle)
 	return handle, nil

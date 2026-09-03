@@ -1,6 +1,6 @@
-// Package runtime coordinates lazy workflow-handle waiting and terminal hook
-// repair so durable runs still emit one canonical RunCompleted event without
-// forcing every starter process to block on workflow completion.
+// Package runtime coordinates workflow-handle completion observation and terminal
+// hook repair so durable runs emit one canonical RunCompleted event while
+// asynchronous starters remain non-blocking.
 package runtime
 
 import (
@@ -33,8 +33,8 @@ type observedWorkflowHandle struct {
 	err      error
 }
 
-// newObservedWorkflowHandle wraps an engine handle so explicit Wait callers and
-// on-demand snapshot repair share one underlying Wait call.
+// newObservedWorkflowHandle wraps an engine handle so eager observation, explicit
+// Wait callers, and on-demand snapshot repair share one underlying Wait call.
 func newObservedWorkflowHandle(runtime *Runtime, input *RunInput, inner engine.WorkflowHandle) *observedWorkflowHandle {
 	return &observedWorkflowHandle{
 		inner:     inner,
@@ -92,8 +92,7 @@ func (h *observedWorkflowHandle) ensureWait() {
 
 // awaitCompletion owns the single underlying Wait call. Terminal hook
 // convergence happens here via the shared repair helper before any waiter is
-// released so explicit Wait calls remain the canonical source of terminal
-// metadata whenever a local observed handle exists.
+// released, then the process-local handle entry is removed.
 func (h *observedWorkflowHandle) awaitCompletion() {
 	h.out, h.err = h.inner.Wait(context.Background())
 	h.err = cancellation.Sanitize(h.err)
