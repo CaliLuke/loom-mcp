@@ -509,13 +509,14 @@ func translateResponse(resp *responses.Response, codec *openAIToolCodec, modelCl
 	if resp == nil {
 		return &model.Response{}, nil
 	}
+	cachedInputTokens := resp.Usage.InputTokensDetails.CachedTokens
 	usage := model.TokenUsage{
 		Model:           resp.Model,
 		ModelClass:      modelClass,
-		InputTokens:     int(resp.Usage.InputTokens),
+		InputTokens:     int(resp.Usage.InputTokens - cachedInputTokens),
 		OutputTokens:    int(resp.Usage.OutputTokens),
 		TotalTokens:     int(resp.Usage.TotalTokens),
-		CacheReadTokens: int(resp.Usage.InputTokensDetails.CachedTokens),
+		CacheReadTokens: int(cachedInputTokens),
 	}
 	if openAIOutputLimited(resp) {
 		return &model.Response{

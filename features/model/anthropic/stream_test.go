@@ -60,6 +60,28 @@ func TestAnthropicChunkProcessorRejectsMalformedToolFragments(t *testing.T) {
 	require.NotContains(t, processor.toolBlocks, 1)
 }
 
+func TestAnthropicChunkProcessorUsageIncludesCachedTokensInTotal(t *testing.T) {
+	processor := newAnthropicChunkProcessor(
+		func(model.Chunk) error { return nil },
+		"claude-opus",
+		model.ModelClassHighReasoning,
+		nil,
+		newToolUseIDCodec(),
+	)
+
+	processor.mergeUsage(10, 5, 3, 4)
+
+	require.Equal(t, model.TokenUsage{
+		Model:            "claude-opus",
+		ModelClass:       model.ModelClassHighReasoning,
+		InputTokens:      10,
+		OutputTokens:     5,
+		TotalTokens:      22,
+		CacheReadTokens:  3,
+		CacheWriteTokens: 4,
+	}, processor.usage)
+}
+
 // testDecoder feeds a fixed sequence of events to the ssestream.Stream.
 type testDecoder struct {
 	events       []ssestream.Event

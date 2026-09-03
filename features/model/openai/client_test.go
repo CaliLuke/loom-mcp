@@ -698,7 +698,7 @@ func TestClientStreamEmitsTextToolCallsUsageAndStop(t *testing.T) {
 					"status":"completed",
 					"usage":{
 						"input_tokens":10,
-						"input_tokens_details":{"cached_tokens":0},
+						"input_tokens_details":{"cached_tokens":3},
 						"output_tokens":5,
 						"output_tokens_details":{"reasoning_tokens":0},
 						"total_tokens":15
@@ -755,13 +755,19 @@ func TestClientStreamEmitsTextToolCallsUsageAndStop(t *testing.T) {
 	require.Equal(t, "call_1", call.ID)
 	require.JSONEq(t, `{"query":"docs"}`, string(call.Payload))
 	usage := chunks[5].(model.UsageChunk).Usage
+	require.Equal(t, 7, usage.InputTokens)
+	require.Equal(t, 5, usage.OutputTokens)
 	require.Equal(t, 15, usage.TotalTokens)
+	require.Equal(t, 3, usage.CacheReadTokens)
 	require.Equal(t, "gpt-4o", usage.Model)
 	require.Equal(t, "completed", chunks[6].(model.StopChunk).Reason)
 
 	response := streamer.Response()
 	require.NotNil(t, response)
+	require.Equal(t, 7, response.Usage.InputTokens)
+	require.Equal(t, 5, response.Usage.OutputTokens)
 	require.Equal(t, 15, response.Usage.TotalTokens)
+	require.Equal(t, 3, response.Usage.CacheReadTokens)
 	require.Equal(t, "gpt-4o", response.Usage.Model)
 	require.Equal(t, "gpt-4o", mock.streamCaptured.Model)
 }

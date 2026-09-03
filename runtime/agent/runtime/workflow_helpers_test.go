@@ -270,3 +270,13 @@ func TestAppendUserToolResults_AppendsRetryHintReminderAfterToolResults(t *testi
 	require.Contains(t, txt.Text, "A tool call failed and provided a RetryHint.")
 	require.Contains(t, txt.Text, "Tool: svc.read.aggregate")
 }
+
+func TestCheckedAddTokenUsagePreservesUnknownTotalWithCachedTokens(t *testing.T) {
+	current := model.TokenUsage{CacheReadTokens: 1}
+	delta := model.TokenUsage{InputTokens: 1, TotalTokens: 1}
+
+	usage, err := checkedAddTokenUsage(current, delta)
+
+	require.NoError(t, err)
+	require.Equal(t, model.TokenUsage{InputTokens: 1, CacheReadTokens: 1}, usage)
+}

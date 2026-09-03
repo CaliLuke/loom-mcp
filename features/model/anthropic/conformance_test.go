@@ -108,7 +108,7 @@ func TestClientConformance(t *testing.T) {
 				ModelClass:       model.ModelClassHighReasoning,
 				InputTokens:      10,
 				OutputTokens:     5,
-				TotalTokens:      15,
+				TotalTokens:      22,
 				CacheReadTokens:  3,
 				CacheWriteTokens: 4,
 			}, response.Usage)

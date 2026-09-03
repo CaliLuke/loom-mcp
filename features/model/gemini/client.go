@@ -809,13 +809,14 @@ func translateUsage(modelID string, modelClass model.ModelClass, usage *genai.Ge
 	if usage == nil {
 		return model.TokenUsage{Model: modelID, ModelClass: modelClass}
 	}
+	cachedInputTokens := usage.CachedContentTokenCount
 	return model.TokenUsage{
 		Model:           modelID,
 		ModelClass:      modelClass,
-		InputTokens:     int(usage.PromptTokenCount + usage.ToolUsePromptTokenCount),
-		OutputTokens:    int(usage.CandidatesTokenCount),
+		InputTokens:     int(usage.PromptTokenCount + usage.ToolUsePromptTokenCount - cachedInputTokens),
+		OutputTokens:    int(usage.CandidatesTokenCount + usage.ThoughtsTokenCount),
 		TotalTokens:     int(usage.TotalTokenCount),
-		CacheReadTokens: int(usage.CachedContentTokenCount),
+		CacheReadTokens: int(cachedInputTokens),
 	}
 }
 

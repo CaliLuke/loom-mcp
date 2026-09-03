@@ -292,11 +292,24 @@ func handleUsageChunk(ctx context.Context, ev PlannerEvents, summary *StreamSumm
 }
 
 func addUsage(current, delta model.TokenUsage) model.TokenUsage {
-	return model.TokenUsage{
+	currentTotalKnown := tokenUsageTotalKnown(current)
+	deltaTotalKnown := tokenUsageTotalKnown(delta)
+	usage := model.TokenUsage{
 		InputTokens:      current.InputTokens + delta.InputTokens,
 		OutputTokens:     current.OutputTokens + delta.OutputTokens,
 		TotalTokens:      current.TotalTokens + delta.TotalTokens,
 		CacheReadTokens:  current.CacheReadTokens + delta.CacheReadTokens,
 		CacheWriteTokens: current.CacheWriteTokens + delta.CacheWriteTokens,
 	}
+	if !currentTotalKnown || !deltaTotalKnown {
+		usage.TotalTokens = 0
+	}
+	return usage
+}
+
+func tokenUsageTotalKnown(usage model.TokenUsage) bool {
+	if usage.TotalTokens != 0 {
+		return true
+	}
+	return usage.InputTokens == 0 && usage.OutputTokens == 0 && usage.CacheReadTokens == 0 && usage.CacheWriteTokens == 0
 }

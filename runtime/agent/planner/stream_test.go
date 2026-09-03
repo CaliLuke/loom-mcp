@@ -14,7 +14,7 @@ import (
 )
 
 func TestConsumeStreamAggregatesChunksAndEvents(t *testing.T) {
-	usage := model.TokenUsage{InputTokens: 2, OutputTokens: 3, TotalTokens: 5, CacheReadTokens: 7, CacheWriteTokens: 11}
+	usage := model.TokenUsage{InputTokens: 2, OutputTokens: 3, TotalTokens: 23, CacheReadTokens: 7, CacheWriteTokens: 11}
 	thinking := model.ThinkingPart{Text: "reason", Final: true}
 	stream := &streamStub{
 		chunks: []model.Chunk{
@@ -42,6 +42,15 @@ func TestConsumeStreamAggregatesChunksAndEvents(t *testing.T) {
 	assert.Equal(t, []model.ThinkingPart{thinking}, events.thinking)
 	assert.Equal(t, []toolDelta{{id: "call-1", name: "tools.search", delta: "{\"q\":"}}, events.toolDeltas)
 	assert.Equal(t, []model.TokenUsage{usage}, events.usage)
+}
+
+func TestAddUsagePreservesUnknownTotalWithCachedTokens(t *testing.T) {
+	current := model.TokenUsage{CacheReadTokens: 1}
+	delta := model.TokenUsage{InputTokens: 1, TotalTokens: 1}
+
+	usage := addUsage(current, delta)
+
+	assert.Equal(t, model.TokenUsage{InputTokens: 1, CacheReadTokens: 1}, usage)
 }
 
 func TestConsumeStreamErrorsAndAlwaysCloses(t *testing.T) {

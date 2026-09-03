@@ -2113,6 +2113,12 @@ directly, it must call `model.NewClient(provider)` before registration. The
 different `Stream` return types make a raw provider fail the `model.Client`
 interface at compile time.
 
+`model.TokenUsage` uses one cache accounting convention for every provider.
+`InputTokens` contains only uncached input. `CacheReadTokens` and
+`CacheWriteTokens` are disjoint input counts. A non-zero `TotalTokens` equals
+the sum of uncached input, output, cache-read, and cache-write tokens. Provider
+adapters normalize their native usage fields before runtime aggregation.
+
 ### Registration
 
 ```go

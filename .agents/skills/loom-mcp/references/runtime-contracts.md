@@ -160,6 +160,10 @@ Use this file for current loom-mcp runtime behavior in this repo. Prefer it over
 - The validated client owns bounded request/response copies and checks the exact
   tool catalog, tool choice, structured output, generated completion decoder,
   token usage, output limits, and terminal stream protocol.
+- `model.TokenUsage.InputTokens` excludes cached input. `CacheReadTokens` and
+  `CacheWriteTokens` are disjoint counts, and non-zero `TotalTokens` equals the
+  sum of input, output, cache-read, and cache-write tokens. Provider adapters
+  normalize native usage before the validated client and runtime aggregate it.
 - Runtime model interceptors capture that immutable request contract before
   provider work and revalidate any short-circuit or replacement response, so an
   interceptor cannot broaden the request while replacing output.

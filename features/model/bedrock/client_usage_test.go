@@ -15,7 +15,7 @@ func TestTranslateResponse_UsageIncludesCacheTokens(t *testing.T) {
 	var (
 		inTokens   int32 = 100
 		outTokens  int32 = 25
-		total      int32 = 125
+		total      int32 = 225
 		cacheRead  int32 = 40
 		cacheWrite int32 = 60
 	)

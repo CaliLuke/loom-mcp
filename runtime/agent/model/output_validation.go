@@ -164,7 +164,7 @@ func validOutputValidationKind(kind OutputValidationKind) bool {
 }
 
 // ValidateTokenUsage checks that token counts are non-negative and that a
-// non-zero total equals input plus output tokens.
+// non-zero total equals the sum of uncached input, output, and cache tokens.
 func ValidateTokenUsage(usage TokenUsage) error {
 	return validateTokenUsage(usage)
 }
@@ -173,11 +173,28 @@ func validateTokenUsage(usage TokenUsage) error {
 	if usage.InputTokens < 0 || usage.OutputTokens < 0 || usage.TotalTokens < 0 || usage.CacheReadTokens < 0 || usage.CacheWriteTokens < 0 {
 		return errors.New("token usage contains a negative count")
 	}
-	if usage.InputTokens > math.MaxInt-usage.OutputTokens {
-		return errors.New("token usage input plus output overflows")
+	total := usage.InputTokens
+	if total > math.MaxInt-usage.OutputTokens {
+		return errors.New("token usage component sum overflows")
 	}
-	if usage.TotalTokens != 0 && usage.TotalTokens != usage.InputTokens+usage.OutputTokens {
-		return errors.New("token usage total does not equal input plus output")
+	total += usage.OutputTokens
+	if total > math.MaxInt-usage.CacheReadTokens {
+		return errors.New("token usage component sum overflows")
+	}
+	total += usage.CacheReadTokens
+	if total > math.MaxInt-usage.CacheWriteTokens {
+		return errors.New("token usage component sum overflows")
+	}
+	total += usage.CacheWriteTokens
+	if usage.TotalTokens != 0 && usage.TotalTokens != total {
+		return errors.New("token usage total does not equal input, output, and cache tokens")
 	}
 	return nil
+}
+
+func tokenUsageTotalKnown(usage TokenUsage) bool {
+	if usage.TotalTokens != 0 {
+		return true
+	}
+	return usage.InputTokens == 0 && usage.OutputTokens == 0 && usage.CacheReadTokens == 0 && usage.CacheWriteTokens == 0
 }

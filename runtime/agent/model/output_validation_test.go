@@ -12,7 +12,7 @@ import (
 func TestRestoreOutputValidationErrorPreservesBoundedFields(t *testing.T) {
 	cause := errors.New("trusted private cause")
 	evidence := ResponseEvidence{Present: true, ByteCount: 42, Fingerprint: [32]byte{1, 2, 3}}
-	usage := &TokenUsage{Model: "model", InputTokens: 2, OutputTokens: 3, TotalTokens: 5}
+	usage := &TokenUsage{Model: "model", InputTokens: 2, OutputTokens: 3, TotalTokens: 12, CacheReadTokens: 3, CacheWriteTokens: 4}
 
 	restored, err := RestoreOutputValidationError(OutputValidationToolArguments, cause, evidence, usage)
 	require.NoError(t, err)
@@ -29,6 +29,16 @@ func TestRestoreOutputValidationErrorPreservesBoundedFields(t *testing.T) {
 	assert.Equal(t, 2, restored.Usage().InputTokens)
 }
 
+func TestAddTokenUsagePreservesUnknownTotalWithCachedTokens(t *testing.T) {
+	current := TokenUsage{CacheReadTokens: 1}
+	delta := TokenUsage{InputTokens: 1, TotalTokens: 1}
+
+	usage, err := addTokenUsage(current, delta)
+
+	require.NoError(t, err)
+	assert.Equal(t, TokenUsage{InputTokens: 1, CacheReadTokens: 1}, usage)
+}
+
 func TestRestoreOutputValidationErrorRejectsInvalidFields(t *testing.T) {
 	validCause := errors.New("cause")
 	tests := []struct {
@@ -42,7 +52,9 @@ func TestRestoreOutputValidationErrorRejectsInvalidFields(t *testing.T) {
 		{name: "missing cause", kind: OutputValidationUsage},
 		{name: "negative evidence", kind: OutputValidationUsage, cause: validCause, evidence: ResponseEvidence{ByteCount: -1}},
 		{name: "invalid usage", kind: OutputValidationUsage, cause: validCause, usage: &TokenUsage{InputTokens: -1}},
+		{name: "invalid cache-inclusive total", kind: OutputValidationUsage, cause: validCause, usage: &TokenUsage{InputTokens: 2, OutputTokens: 3, TotalTokens: 5, CacheReadTokens: 1}},
 		{name: "overflowing usage", kind: OutputValidationUsage, cause: validCause, usage: &TokenUsage{InputTokens: math.MaxInt, OutputTokens: 1}},
+		{name: "overflowing cached usage", kind: OutputValidationUsage, cause: validCause, usage: &TokenUsage{InputTokens: math.MaxInt, CacheReadTokens: 1}},
 		{
 			name:  "nested classification",
 			kind:  OutputValidationUsage,

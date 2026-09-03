@@ -257,7 +257,7 @@ func (p *anthropicChunkProcessor) mergeUsage(inputTokens, outputTokens, cacheRea
 	}
 	p.usage.Model = p.modelID
 	p.usage.ModelClass = p.modelClass
-	p.usage.TotalTokens = p.usage.InputTokens + p.usage.OutputTokens
+	p.usage.TotalTokens = p.usage.InputTokens + p.usage.OutputTokens + p.usage.CacheReadTokens + p.usage.CacheWriteTokens
 }
 
 func (p *anthropicChunkProcessor) handleContentBlockStart(ev sdk.ContentBlockStartEvent) error {

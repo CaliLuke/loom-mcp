@@ -143,6 +143,13 @@ func addTokenUsage(current, delta model.TokenUsage) model.TokenUsage {
 	}
 }
 
+func tokenUsageTotalKnown(usage model.TokenUsage) bool {
+	if usage.TotalTokens != 0 {
+		return true
+	}
+	return usage.InputTokens == 0 && usage.OutputTokens == 0 && usage.CacheReadTokens == 0 && usage.CacheWriteTokens == 0
+}
+
 func checkedAddTokenUsage(current, delta model.TokenUsage) (model.TokenUsage, error) {
 	if err := model.ValidateTokenUsage(current); err != nil {
 		return model.TokenUsage{}, fmt.Errorf("current usage: %w", err)
@@ -163,8 +170,8 @@ func checkedAddTokenUsage(current, delta model.TokenUsage) (model.TokenUsage, er
 		}
 	}
 	usage := addTokenUsage(current, delta)
-	currentTotalKnown := current.TotalTokens != 0 || (current.InputTokens == 0 && current.OutputTokens == 0)
-	deltaTotalKnown := delta.TotalTokens != 0 || (delta.InputTokens == 0 && delta.OutputTokens == 0)
+	currentTotalKnown := tokenUsageTotalKnown(current)
+	deltaTotalKnown := tokenUsageTotalKnown(delta)
 	if !currentTotalKnown || !deltaTotalKnown {
 		usage.TotalTokens = 0
 	}

@@ -13,7 +13,7 @@ func TestChunkProcessor_MetadataUsageIncludesCacheTokens(t *testing.T) {
 	var (
 		inTokens   int32 = 10
 		outTokens  int32 = 4
-		total      int32 = 14
+		total      int32 = 22
 		cacheRead  int32 = 3
 		cacheWrite int32 = 5
 		latency    int64 = 1

@@ -160,6 +160,7 @@ func (s *tracedStream) Recv() (model.Chunk, error) {
 	if usageChunk, ok := ch.(model.UsageChunk); ok {
 		usage := usageChunk.Usage
 		s.mu.Lock()
+		totalKnown := tokenUsageTotalKnown(s.usage) && tokenUsageTotalKnown(usage)
 		if s.usage.Model == "" {
 			s.usage.Model = usage.Model
 		}
@@ -171,6 +172,9 @@ func (s *tracedStream) Recv() (model.Chunk, error) {
 		s.usage.TotalTokens += usage.TotalTokens
 		s.usage.CacheReadTokens += usage.CacheReadTokens
 		s.usage.CacheWriteTokens += usage.CacheWriteTokens
+		if !totalKnown {
+			s.usage.TotalTokens = 0
+		}
 		s.mu.Unlock()
 	}
 	if isFirstGenAIOutputChunk(ch.Kind()) {

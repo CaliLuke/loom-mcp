@@ -168,7 +168,7 @@ func TestClientConformance(t *testing.T) {
 				return &bedrockruntime.ConverseOutput{Usage: &brtypes.TokenUsage{
 					InputTokens:           aws.Int32(10),
 					OutputTokens:          aws.Int32(5),
-					TotalTokens:           aws.Int32(15),
+					TotalTokens:           aws.Int32(22),
 					CacheReadInputTokens:  aws.Int32(3),
 					CacheWriteInputTokens: aws.Int32(4),
 				}}, nil
@@ -182,7 +182,7 @@ func TestClientConformance(t *testing.T) {
 				ModelClass:       model.ModelClassHighReasoning,
 				InputTokens:      10,
 				OutputTokens:     5,
-				TotalTokens:      15,
+				TotalTokens:      22,
 				CacheReadTokens:  3,
 				CacheWriteTokens: 4,
 			}, response.Usage)
@@ -398,7 +398,7 @@ func TestClientConformance(t *testing.T) {
 					bedrockMetadata(&brtypes.TokenUsage{
 						InputTokens:           aws.Int32(10),
 						OutputTokens:          aws.Int32(5),
-						TotalTokens:           aws.Int32(15),
+						TotalTokens:           aws.Int32(22),
 						CacheReadInputTokens:  aws.Int32(3),
 						CacheWriteInputTokens: aws.Int32(4),
 					}),

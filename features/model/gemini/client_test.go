@@ -104,7 +104,7 @@ func TestClientConformance(t *testing.T) {
 			require.Equal(t, model.TokenUsage{
 				Model:           "gemini-2.5-pro",
 				ModelClass:      model.ModelClassHighReasoning,
-				InputTokens:     12,
+				InputTokens:     9,
 				OutputTokens:    5,
 				TotalTokens:     17,
 				CacheReadTokens: 3,
@@ -267,7 +267,7 @@ func TestClientComplete(t *testing.T) {
 	require.Equal(t, "call-1", resp.ToolCalls[0].ID)
 	require.JSONEq(t, `{"query":"docs"}`, string(resp.ToolCalls[0].Payload))
 	require.Equal(t, "STOP", resp.StopReason)
-	require.Equal(t, 12, resp.Usage.InputTokens)
+	require.Equal(t, 9, resp.Usage.InputTokens)
 	require.Equal(t, 5, resp.Usage.OutputTokens)
 	require.Equal(t, 17, resp.Usage.TotalTokens)
 	require.Equal(t, 3, resp.Usage.CacheReadTokens)

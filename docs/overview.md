@@ -861,6 +861,12 @@ owns a bounded copy of each request, validates unary and streaming output
 against that exact request, and returns `*model.OutputValidationError` when the
 provider violates the contract.
 
+Token usage is provider-neutral. `InputTokens` excludes cached input, while
+`CacheReadTokens` and `CacheWriteTokens` report disjoint cached counts. A
+non-zero `TotalTokens` equals `InputTokens + OutputTokens + CacheReadTokens +
+CacheWriteTokens`. Provider adapters normalize native cache conventions before
+the runtime aggregates usage.
+
 Each provider stream owns its terminal `Response`. It stays unavailable until
 `Recv` returns literal `io.EOF`. The validated client checks that response
 against all observed chunks before it becomes canonical.

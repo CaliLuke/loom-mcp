@@ -119,7 +119,7 @@ func TestClientConformance(t *testing.T) {
 			require.Equal(t, model.TokenUsage{
 				Model:           "o3",
 				ModelClass:      model.ModelClassHighReasoning,
-				InputTokens:     10,
+				InputTokens:     7,
 				OutputTokens:    5,
 				TotalTokens:     15,
 				CacheReadTokens: 3,

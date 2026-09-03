@@ -815,7 +815,7 @@ func anthropicUsage(u sdk.Usage, modelID string, modelClass model.ModelClass) mo
 		ModelClass:       modelClass,
 		InputTokens:      int(u.InputTokens),
 		OutputTokens:     int(u.OutputTokens),
-		TotalTokens:      int(u.InputTokens + u.OutputTokens),
+		TotalTokens:      int(u.InputTokens + u.OutputTokens + u.CacheReadInputTokens + u.CacheCreationInputTokens),
 		CacheReadTokens:  int(u.CacheReadInputTokens),
 		CacheWriteTokens: int(u.CacheCreationInputTokens),
 	}

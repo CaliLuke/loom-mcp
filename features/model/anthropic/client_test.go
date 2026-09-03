@@ -103,7 +103,7 @@ func TestComplete_TextOnly(t *testing.T) {
 	if resp.StopReason != string(sdk.StopReasonEndTurn) {
 		t.Fatalf("unexpected stop reason %q", resp.StopReason)
 	}
-	if resp.Usage.InputTokens != 10 || resp.Usage.OutputTokens != 5 || resp.Usage.TotalTokens != 15 ||
+	if resp.Usage.InputTokens != 10 || resp.Usage.OutputTokens != 5 || resp.Usage.TotalTokens != 22 ||
 		resp.Usage.CacheReadTokens != 3 || resp.Usage.CacheWriteTokens != 4 {
 		t.Fatalf("unexpected usage: %+v", resp.Usage)
 	}

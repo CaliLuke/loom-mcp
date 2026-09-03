@@ -920,6 +920,8 @@ func addTokenUsage(current, delta TokenUsage) (TokenUsage, error) {
 	if current.ModelClass == "" {
 		current.ModelClass = delta.ModelClass
 	}
+	currentTotalKnown := tokenUsageTotalKnown(current)
+	deltaTotalKnown := tokenUsageTotalKnown(delta)
 	counts := []*int{&current.InputTokens, &current.OutputTokens, &current.TotalTokens, &current.CacheReadTokens, &current.CacheWriteTokens}
 	deltas := []int{delta.InputTokens, delta.OutputTokens, delta.TotalTokens, delta.CacheReadTokens, delta.CacheWriteTokens}
 	maxInt := int(^uint(0) >> 1)
@@ -928,6 +930,9 @@ func addTokenUsage(current, delta TokenUsage) (TokenUsage, error) {
 			return TokenUsage{}, errors.New("provider stream token usage overflowed")
 		}
 		*counts[index] += deltas[index]
+	}
+	if !currentTotalKnown || !deltaTotalKnown {
+		current.TotalTokens = 0
 	}
 	return current, nil
 }

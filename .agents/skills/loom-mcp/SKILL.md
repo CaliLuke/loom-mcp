@@ -74,6 +74,10 @@ Use this skill for `loom-mcp` work in this repo. Keep `AGENTS.md` short and keep
   accepted chunk variants. The helper owns literal EOF, canonical `Response`
   retrieval, and exactly-once `Finalize`. `StreamConsumptionError` keeps the
   exact primary error separate from the finalization result.
+- `model.TokenUsage` is normalized across providers: `InputTokens` excludes
+  cache reads and writes, cache fields are disjoint, and a non-zero
+  `TotalTokens` equals input plus output plus both cache counts. Normalize
+  provider-native usage at the adapter boundary before aggregation.
 - Runtime registration is immutable after `Runtime.Seal` or the first submitted
   run. `RegisterModel`, `RegisterAgent`, and `RegisterToolset` all return
   `ErrRegistrationClosed`; model-client hot-swapping requires a replacement

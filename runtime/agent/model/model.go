@@ -367,19 +367,24 @@ type (
 		// from the original request.
 		ModelClass ModelClass
 
-		// InputTokens is the number of tokens consumed by inputs.
+		// InputTokens is the number of uncached input tokens consumed. It does
+		// not include CacheReadTokens or CacheWriteTokens.
 		InputTokens int
 
 		// OutputTokens is the number of tokens produced by outputs.
 		OutputTokens int
 
-		// TotalTokens is the total number of tokens consumed by the call.
+		// TotalTokens is the total number of tokens consumed by the call. When
+		// non-zero, it equals InputTokens + OutputTokens + CacheReadTokens +
+		// CacheWriteTokens.
 		TotalTokens int
 
-		// CacheReadTokens is tokens read from cache (reduced cost).
+		// CacheReadTokens is the number of input tokens read from cache. This
+		// count is disjoint from InputTokens.
 		CacheReadTokens int
 
-		// CacheWriteTokens is tokens written to cache.
+		// CacheWriteTokens is the number of input tokens written to cache. This
+		// count is disjoint from InputTokens.
 		CacheWriteTokens int
 	}
 

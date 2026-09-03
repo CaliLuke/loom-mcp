@@ -301,6 +301,44 @@ func TestTracedStreamCapturesCoalescedOutputAtEnd(t *testing.T) {
 	require.True(t, ok)
 }
 
+func TestTracedStreamPreservesUnknownUsageTotal(t *testing.T) {
+	tracer := &modelTracingRecorder{}
+	client := newTracedClient(
+		&modelTracingStreamClient{
+			streamer: &modelTracingScriptedStreamer{
+				chunks: []model.Chunk{
+					model.UsageChunk{Usage: model.TokenUsage{CacheReadTokens: 1}},
+					model.UsageChunk{Usage: model.TokenUsage{InputTokens: 1, TotalTokens: 1}},
+				},
+			},
+		},
+		tracer,
+		telemetry.NoopLogger{},
+		modelTraceConfig{ModelID: "default"},
+	)
+
+	streamer, err := client.Stream(context.Background(), &model.Request{Stream: true})
+	require.NoError(t, err)
+	for {
+		_, err = streamer.Recv()
+		if errors.Is(err, io.EOF) {
+			break
+		}
+		require.NoError(t, err)
+	}
+	require.NoError(t, streamer.Finalize(nil))
+
+	span := tracer.singleSpan(t)
+	require.Len(t, span.events, 1)
+	attrs := make(map[string]attribute.Value, len(span.events[0].attrs))
+	for _, attr := range span.events[0].attrs {
+		attrs[string(attr.Key)] = attr.Value
+	}
+	require.Equal(t, int64(1), attrs["input_tokens"].AsInt64())
+	require.Equal(t, int64(1), attrs["cache_read_tokens"].AsInt64())
+	require.Equal(t, int64(0), attrs["total_tokens"].AsInt64())
+}
+
 func TestTracedStreamCanonicalizesInternalToolOutput(t *testing.T) {
 	t.Parallel()
 
