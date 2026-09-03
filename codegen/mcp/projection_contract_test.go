@@ -84,7 +84,7 @@ func TestUnifiedToolSurfaceProjectedOnlyGeneratesToolMethods(t *testing.T) {
 	sdk := findProjectionGeneratedFile(t, files, filepath.Join(gcodegen.Gendir, "mcp_assistant", "sdk_server.go"))
 	sdkSource := renderProjectionGeneratedFile(t, sdk)
 	require.Contains(t, sdkSource, `"projected_lookup_tool"`)
-	require.Contains(t, sdkSource, "server.AddTool")
+	require.Contains(t, sdkSource, "sdkbridge.ToolBinding")
 	for _, file := range files {
 		require.NotContains(t, filepath.ToSlash(file.Path), "/jsonrpc/mcp_assistant/")
 	}

@@ -60,17 +60,60 @@ http.ListenAndServe(":8080", mux)
 `server.Handler` is a standard `http.Handler`. The official SDK owns the MCP
 wire protocol, Streamable HTTP, sessions, and protocol negotiation.
 
+## Generated/runtime bridge boundary
+
+Generated SDK servers are compact, typed bindings over
+`runtime/mcp/sdkbridge`. The generated package calls
+`sdkbridge.NewServer` with service-specific descriptors and closures. The
+bridge does not use reflection for dispatch.
+
+| Generated for each service | Owned once by `sdkbridge` |
+| --- | --- |
+| Public service payload and result types | Official SDK registration loops |
+| JSON schemas, tool/resource/prompt descriptors, and icons | Streamable HTTP defaults and cross-origin protection |
+| Typed calls to `MCPAdapter.ToolsCall`, `PromptsGet`, and `ResourcesRead` | Request-header, session, progress, and client-feature context plumbing |
+| Service-result to official-SDK result conversion | Input-required response handling and JSON-RPC error normalization |
+| Dynamic prompt completion values and watchable resource URI set | Subscription policy, transport observation, runtime CORS, and session HTTP errors |
+
+Application authentication and authorization stay outside the bridge. The
+generated adapter supplies session-principal hooks after application
+middleware has put a verified principal in the request context. The official
+SDK remains the owner of MCP negotiation and wire behavior.
+
+The generated configuration contains compatibility version `1`.
+`sdkbridge.NewServer` compares that literal with the runtime's
+`sdkbridge.CompatibilityVersion` and fails construction with both versions in
+the error when they differ. Additive descriptor fields keep the same version.
+An incompatible descriptor or callback change increments the runtime version
+and the generated literal together, so stale generated code fails closed after
+an independently upgraded runtime is linked. Go types provide the earlier
+compile-time failure when a callback signature changes.
+
+For the checked-in assistant prototype, `gen/mcp_assistant/sdk_server.go`
+decreased from 925 to 786 lines. Its service-specific
+`adapter_server.go` remains 2,818 lines because typed codecs, policy dispatch,
+and service calls stay generated. Existing official-SDK integration tests run
+against this generated fixture. Direct bridge tests cover the common behavior.
+For example, `TestToolHandlerAcceptsNilSDKRequest` fixed nil-request handling
+only in the bridge. The generated assistant file did not change for that fix.
+The same bridge fix applies to every service that uses compatibility version 1.
+
+### Staged implementation
+
+- [#281](https://github.com/CaliLuke/loom-mcp/issues/281) moves common adapter policy and dispatch orchestration into typed runtime descriptors.
+- [#282](https://github.com/CaliLuke/loom-mcp/issues/282) adds release and consumer checks for the compatibility contract.
+
 ## JSON-RPC errors
 
-Generated SDK servers install a receiving middleware that normalizes handler
+The shared SDK bridge installs receiving middleware that normalizes handler
 failures into typed JSON-RPC errors. Invalid parameters, invalid retry input,
 missing resources, and duplicate initialization return `-32602`. Internal and
 unknown handler failures return `-32603`. The middleware hides private details
-unless the service declares an explicit safe message. Errors already typed by
-the official SDK pass through unchanged.
+unless the service declares an explicit safe message. Errors that use official
+SDK types pass through unchanged.
 
-Generated HTTP handlers reject an MCP request with an explicit `null` ID.
-The handler returns HTTP 400 and JSON-RPC code `-32600`.
+The bridge rejects an MCP request with an explicit `null` ID before SDK
+dispatch. The handler returns HTTP 400 and JSON-RPC code `-32600`.
 
 The official MCP Go SDK performs its pre-initialization method gate before
 server receiving middleware. In SDK v1.7.0, that one upstream-owned path still

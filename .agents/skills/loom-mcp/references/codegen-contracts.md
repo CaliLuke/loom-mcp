@@ -85,28 +85,32 @@ Use this file when editing DSL, generators, generated helpers, or MCP codegen be
 - The official MCP Go SDK owns protocol versions and all wire behavior. Do not
   require or synthesize MCP `JSONRPC` declarations. Keep explicit non-MCP
   `JSONRPC` transports unchanged.
-- Generated SDK servers install a receiving middleware that converts untyped
-  adapter errors into typed JSON-RPC errors. Preserve existing typed SDK errors.
-  Map invalid parameters and missing resources to `-32602`. Map internal and
-  unknown errors to `-32603` with only declared safe messages. Reject request
-  envelopes with an explicit null `id` before SDK dispatch. Return HTTP 400
-  with JSON-RPC `-32600`. Do not parse or rewrite SDK response bodies to reach
-  SDK session errors emitted before middleware.
+- The shared `runtime/mcp/sdkbridge` installs receiving middleware that
+  converts untyped adapter errors into typed JSON-RPC errors. Preserve existing
+  typed SDK errors. Map invalid parameters and missing resources to `-32602`.
+  Map internal and unknown errors to `-32603` with only declared safe messages.
+  The bridge rejects request envelopes with an explicit null `id` before SDK
+  dispatch, returning HTTP 400 with JSON-RPC `-32600`. Do not parse or rewrite
+  response bodies for SDK session errors.
+- Generated SDK files contain service descriptors, typed dispatch closures, and
+  result conversion. The bridge owns registration loops, common options, HTTP
+  plumbing, sessions, subscriptions, request context, CORS, and observation.
+  Generated configuration uses a literal compatibility version. Construction
+  fails when it differs from `sdkbridge.CompatibilityVersion`.
 - MCP generation emits only the minimal service types, `MCPAdapter`,
   local-provider registration, OAuth discovery, prompt provider, and
   `SDKServer`. Absence tests must reject generated native MCP clients, servers,
   protocol-version files, batching, SSE extensions, cancellation registries,
   session stores, and broadcasters.
-- Generated SDK request contexts install the shared
-  `runtime/mcp/sdkclient.WithClientFeatures` adapter so service code can issue
-  elicitation through official multi-round-trip
-  `InputRequests`/`InputResponses`. Generated tool, prompt, and resource handlers
-  pass retry responses into the adapter and translate its input-required control
-  flow into the matching SDK result type. Tool dispatch must preserve that
-  control flow instead of converting it into an `isError` tool result. The
-  adapter's bounded, versioned request state carries issued input contracts, the
-  exact pending round, and prior client-supplied responses. Encrypt and
-  authenticate every round with AES-GCM, bind state to the original MCP method
+- The shared SDK bridge installs the
+  `runtime/mcp/sdkclient.WithClientFeatures` adapter in request contexts.
+  Service code can then issue elicitation through official multi-round-trip
+  `InputRequests` and `InputResponses`. Generated tool, prompt, and resource
+  closures preserve typed payload and result conversion. The bounded and
+  versioned request state carries issued input contracts, the exact pending
+  round, and prior client responses.
+  Encrypt and authenticate every round with AES-GCM. Bind the state to the
+  original MCP method
   and logical parameters, and plumb the generated server's stable 32-byte
   `RequestStateKey` into the adapter. Endpoint replicas must share that key.
   Protected responses remain client assertions and must not drive
@@ -122,26 +126,22 @@ Use this file when editing DSL, generators, generated helpers, or MCP codegen be
   deprecated in MCP `2026-07-28` and are not installed as runtime client
   features. Do not duplicate SDK request/response or request-state conversion
   in generated code.
-- Generated SDK tool handlers preserve `_meta.progressToken` in request context
-  before invoking service code so `runtime/mcp.ReportProgress` can emit
-  `notifications/progress` with the original string or numeric token.
-- Generated SDK response-writer observers must implement `Unwrap() http.ResponseWriter`
-  so `http.ResponseController` can reach flushing and other optional transport
-  capabilities required by nested server-to-client requests.
-- Generated `SDKServerOptions` expose `TransportObserver transport.Observer`;
-  when present, the generated constructor installs Loom's
-  `transport.HTTPMiddleware` around the SDK handler.
-- Generated SDK servers always expose `SDKServerOptions.RuntimeCORS`. Default
-  cross-origin protection remains active unless the application changes it.
-- Generated SDK subscribe and unsubscribe handlers validate designed
-  `WatchableResource` URIs. `SDKServer.ResourceUpdated(ctx, uri)` rejects an
-  unknown URI and sends the standard SDK resource-update notification.
+- The shared SDK bridge preserves `_meta.progressToken` in request context.
+  Thus, `runtime/mcp.ReportProgress` can send the original token.
+- The bridge response observer implements `Unwrap() http.ResponseWriter`.
+  Thus, `http.ResponseController` can use optional transport interfaces.
+- Generated `SDKServerOptions` expose `TransportObserver transport.Observer`.
+  The bridge installs `transport.HTTPMiddleware` around the SDK handler.
+- Generated SDK servers always expose `SDKServerOptions.RuntimeCORS`. The
+  bridge keeps default cross-origin protection unless the application changes it.
+- Generated closures identify designed `WatchableResource` URIs. The bridge
+  validates subscriptions and `SDKServer.ResourceUpdated(ctx, uri)` calls.
   Watchable resources are invalid with stateless Streamable HTTP.
 - Generated adapters collect streaming tool and resource method values into one
   standard MCP result. Intermediate status uses `runtime/mcp.ReportProgress`.
-- The generated SDK wrapper binds each session to one verified principal and
-  checks it on POST, GET, and DELETE. Authentication middleware must wrap the
-  generated handler.
+- The shared SDK bridge binds each session to one verified principal. It checks
+  the principal on POST, GET, and DELETE. Authentication middleware must wrap
+  the generated handler.
 - Dynamic-only MCP prompt services enable prompt capabilities during expression
   finalization so generated adapters and `loom example` scaffolds agree on the
   prompt-provider constructor contract.

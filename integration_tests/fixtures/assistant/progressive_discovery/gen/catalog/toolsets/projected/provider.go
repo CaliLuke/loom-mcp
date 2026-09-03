@@ -33,7 +33,9 @@ type (
 	}
 )
 
-// ProjectedLookupDispatchOptions customizes DispatchProjectedLookupMethod.
+// ProjectedLookupDispatchOptions customizes DispatchProjectedLookupMethod. For
+// tools with injected fields, MapPayload must return a non-nil bound method
+// payload. Invalid results become tool errors.
 type ProjectedLookupDispatchOptions struct {
 	Call       func(context.Context, any) (any, error)
 	MapPayload func(tools.Ident, any, *runtime.ToolCallMeta) (any, error)

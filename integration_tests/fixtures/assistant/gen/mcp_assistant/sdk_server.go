@@ -8,40 +8,34 @@
 package mcpassistant
 
 import (
-	"bytes"
 	"context"
 	"encoding/base64"
 	jsontext "encoding/json/jsontext"
 	json "encoding/json/v2"
 	"errors"
 	"fmt"
-	"io"
-	"mime"
-	"net"
 	"net/http"
-	"net/netip"
-	"net/url"
-	"os"
 	"slices"
 	"strings"
-	"sync"
 
 	assistant "example.com/assistant/gen/assistant"
 	projected "example.com/assistant/gen/assistant/toolsets/projected"
-	mcpruntime "github.com/CaliLuke/loom-mcp/v2/runtime/mcp"
-	sdkclient "github.com/CaliLuke/loom-mcp/v2/runtime/mcp/sdkclient"
+	sdkbridge "github.com/CaliLuke/loom-mcp/v2/runtime/mcp/sdkbridge"
 	mcpskills "github.com/CaliLuke/loom-mcp/v2/runtime/mcp/skills"
 	loomhttp "github.com/CaliLuke/loom/http"
 	"github.com/CaliLuke/loom/observability/transport"
 	mcpsdk "github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
-// SDK-backed MCP streamable HTTP server.
+// SDKServer is an official SDK-backed MCP streamable HTTP server.
 type SDKServer struct {
 	Handler http.Handler
 	Adapter *MCPAdapter
 	Server  *mcpsdk.Server
+	bridge  *sdkbridge.Server
 }
+
+// SDKServerOptions configures the generated service binding and shared SDK bridge.
 type SDKServerOptions struct {
 	Adapter        *MCPAdapterOptions
 	RequestContext func(context.Context, *http.Request) context.Context
@@ -53,577 +47,391 @@ type SDKServerOptions struct {
 	Server            *mcpsdk.ServerOptions
 	StreamableHTTP    *mcpsdk.StreamableHTTPOptions
 }
-type sdkResponseObserver struct {
-	http.ResponseWriter
-	statusCode      int
-	onSessionIssued func(string)
-	sessionOnce     sync.Once
-}
-type sdkJSONRPCRequestEnvelope struct {
-	ID     jsontext.Value `json:"id"`
-	Method jsontext.Value `json:"method"`
-}
 
-var sdkDisableLocalhostProtection = sdkMCPGoDebugValue("disablelocalhostprotection") == "1"
-var sdkDisableContentTypeCheck = sdkMCPGoDebugValue("disablecontenttypecheck") == "1"
-
+// NewSDKServer constructs the generated service adapter and shared official SDK bridge.
 func NewSDKServer(service assistant.Service, opts *SDKServerOptions) (*SDKServer, error) {
 	var adapterOpts *MCPAdapterOptions
 	var requestContext func(context.Context, *http.Request) context.Context
 	var requestStateKey []byte
-	var transportObserver transport.Observer
-	var runtimeCORS *loomhttp.RuntimeCORSPolicy
+	var bridgeOptions sdkbridge.Options
 	var promptProvider PromptProvider
-	var serverOpts *mcpsdk.ServerOptions
-	var streamableOpts *mcpsdk.StreamableHTTPOptions
 	if opts != nil {
 		adapterOpts = opts.Adapter
 		requestContext = opts.RequestContext
 		requestStateKey = opts.RequestStateKey
-		transportObserver = opts.TransportObserver
-		runtimeCORS = opts.RuntimeCORS
 		promptProvider = opts.PromptProvider
-		serverOpts = opts.Server
-		streamableOpts = opts.StreamableHTTP
+		bridgeOptions = sdkbridge.Options{
+			RequestContext:    requestContext,
+			RuntimeCORS:       opts.RuntimeCORS,
+			Server:            opts.Server,
+			StreamableHTTP:    opts.StreamableHTTP,
+			TransportObserver: opts.TransportObserver,
+		}
 	}
 	if adapterOpts != nil && adapterOpts.ToolSearch != nil && adapterOpts.ToolSearch.AllowDirectHiddenCalls {
 		return nil, fmt.Errorf("SDK ToolSearch compact mode does not support AllowDirectHiddenCalls")
 	}
 	adapter := NewMCPAdapter(service, promptProvider, adapterOpts)
-	serverOpts = sdkServerOptionsWithCompletion(serverOpts, adapter.sdkCompletionHandler(requestContext))
 	adapter.requestStateKey = slices.Clone(requestStateKey)
-	serverOpts = sdkServerOptionsWithDefaults(serverOpts)
-	server := mcpsdk.NewServer(&mcpsdk.Implementation{
-		Icons: []mcpsdk.Icon{mcpsdk.Icon{
-			MIMEType: "image/png",
-			Sizes:    []string{"48x48"},
-			Source:   "https://assistant.example.com/icons/server-light.png",
-			Theme:    mcpsdk.IconTheme("light"),
-		}, mcpsdk.Icon{
-			MIMEType: "image/png",
-			Sizes:    []string{"48x48"},
-			Source:   "https://assistant.example.com/icons/server-dark.png",
-			Theme:    mcpsdk.IconTheme("dark"),
-		}},
-		Name:       "assistant-mcp",
-		Version:    "1.0.0",
-		WebsiteURL: "https://assistant.example.com/docs",
-	}, serverOpts)
-	server.AddReceivingMiddleware(sdkJSONRPCErrorMiddleware)
-	if err := registerSDKTools(server, adapter, requestContext); err != nil {
+	runtimeBridge, err := sdkbridge.NewServer(sdkbridge.Config{
+		CompatibilityVersion: 1,
+		CompletionHandler:    adapter.sdkCompletionHandler(requestContext),
+		Implementation: mcpsdk.Implementation{
+			Icons: []mcpsdk.Icon{mcpsdk.Icon{
+				MIMEType: "image/png",
+				Sizes:    []string{"48x48"},
+				Source:   "https://assistant.example.com/icons/server-light.png",
+				Theme:    mcpsdk.IconTheme("light"),
+			}, mcpsdk.Icon{
+				MIMEType: "image/png",
+				Sizes:    []string{"48x48"},
+				Source:   "https://assistant.example.com/icons/server-dark.png",
+				Theme:    mcpsdk.IconTheme("dark"),
+			}},
+			Name:       "assistant-mcp",
+			Version:    "1.0.0",
+			WebsiteURL: "https://assistant.example.com/docs",
+		},
+		Options: bridgeOptions,
+		Prompts: func() ([]sdkbridge.PromptBinding, error) {
+			return sdkPromptBindings(adapter, requestContext)
+		},
+		Resources: func() ([]sdkbridge.ResourceBinding, error) {
+			return sdkResourceBindings(adapter, requestContext)
+		},
+		Sessions: sdkbridge.SessionHooks{
+			AssertPrincipal:  adapter.assertSessionPrincipal,
+			CapturePrincipal: adapter.captureSessionPrincipal,
+			Clear:            adapter.clearSession,
+			IsInvalidSessionID: func(err error) bool {
+				return errors.Is(err, errInvalidSessionID)
+			},
+			MarkInitialized: adapter.markInitializedSession,
+		},
+		Tools: func() ([]sdkbridge.ToolBinding, error) {
+			return sdkToolBindings(adapter, requestContext)
+		},
+	})
+	if err != nil {
 		return nil, err
-	}
-	if err := registerSDKResources(server, adapter, requestContext); err != nil {
-		return nil, err
-	}
-	if err := registerSDKPrompts(server, adapter, requestContext); err != nil {
-		return nil, err
-	}
-	handler := newSDKHandler(server, adapter, requestContext, streamableOpts)
-	if transportObserver != nil {
-		handler = transport.HTTPMiddleware(transportObserver)(handler)
-	}
-	if runtimeCORS != nil {
-		handler = sdkRuntimeCORSHandler(handler, *runtimeCORS)
 	}
 	return &SDKServer{
 		Adapter: adapter,
-		Handler: handler,
-		Server:  server,
+		Handler: runtimeBridge.Handler,
+		Server:  runtimeBridge.SDK,
+		bridge:  runtimeBridge,
 	}, nil
-}
-func sdkServerOptionsWithCompletion(opts *mcpsdk.ServerOptions, handler func(context.Context, *mcpsdk.CompleteRequest) (*mcpsdk.CompleteResult, error)) *mcpsdk.ServerOptions {
-	if opts == nil {
-		opts = &mcpsdk.ServerOptions{}
-	} else {
-		copied := *opts
-		opts = &copied
-	}
-	if opts.CompletionHandler == nil {
-		opts.CompletionHandler = handler
-	}
-	return opts
-}
-func sdkServerOptionsWithDefaults(opts *mcpsdk.ServerOptions) *mcpsdk.ServerOptions {
-	if opts == nil {
-		opts = &mcpsdk.ServerOptions{}
-	} else {
-		copied := *opts
-		opts = &copied
-	}
-	if opts.Capabilities == nil {
-		opts.Capabilities = &mcpsdk.ServerCapabilities{Logging: &mcpsdk.LoggingCapabilities{}}
-	} else {
-		capabilities := *opts.Capabilities
-		opts.Capabilities = &capabilities
-	}
-	return opts
 }
 
 // ResourceUpdated notifies subscribed clients that a designed watchable resource changed.
 func (s *SDKServer) ResourceUpdated(ctx context.Context, uri string) error {
-	if s == nil || s.Server == nil {
+	if s == nil || s.bridge == nil {
 		return fmt.Errorf("MCP SDK server is not initialized")
 	}
-	return fmt.Errorf("unknown watchable MCP resource %q", uri)
+	return s.bridge.ResourceUpdated(ctx, uri)
 }
-func (w *sdkResponseObserver) captureSession() {
-	if w == nil || w.onSessionIssued == nil {
-		return
-	}
-	sessionID := w.Header().Get(mcpruntime.HeaderKeySessionID)
-	if sessionID == "" {
-		return
-	}
-	w.sessionOnce.Do(func() {
-		w.onSessionIssued(sessionID)
-	})
-}
-func (w *sdkResponseObserver) Unwrap() http.ResponseWriter {
-	return w.ResponseWriter
-}
-func (w *sdkResponseObserver) WriteHeader(statusCode int) {
-	w.statusCode = statusCode
-	if statusCode < http.StatusBadRequest {
-		w.captureSession()
-	}
-	w.ResponseWriter.WriteHeader(statusCode)
-}
-func (w *sdkResponseObserver) Write(data []byte) (int, error) {
-	if w.statusCode == 0 {
-		w.statusCode = http.StatusOK
-	}
-	if w.statusCode < http.StatusBadRequest {
-		w.captureSession()
-	}
-	return w.ResponseWriter.Write(data)
-}
-func sdkJSONRPCErrorMiddleware(next mcpsdk.MethodHandler) mcpsdk.MethodHandler {
-	return func(ctx context.Context, method string, req mcpsdk.Request) (mcpsdk.Result, error) {
-		result, err := next(ctx, method, req)
-		if err != nil {
-			return nil, mcpruntime.NormalizeJSONRPCError(method, err)
-		}
-		return result, nil
-	}
-}
-func newSDKHandler(server *mcpsdk.Server, adapter *MCPAdapter, requestContext func(context.Context, *http.Request) context.Context, streamableOpts *mcpsdk.StreamableHTTPOptions) http.Handler {
-	configuredStreamableOpts := sdkStreamableHTTPOptions(streamableOpts)
-	crossOriginProtection := configuredStreamableOpts.CrossOriginProtection
-	configuredStreamableOpts.CrossOriginProtection = nil
-	base := mcpsdk.NewStreamableHTTPHandler(func(*http.Request) *mcpsdk.Server {
-		return server
-	}, configuredStreamableOpts)
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		r = r.WithContext(mcpruntime.WithRequestHeaders(r.Context(), r.Header))
-		if requestContext != nil {
-			r = r.WithContext(requestContext(r.Context(), r))
-		}
-		if sessionID := r.Header.Get(mcpruntime.HeaderKeySessionID); sessionID != "" {
-			if err := adapter.assertSessionPrincipal(r.Context(), sessionID); err != nil {
-				writeSDKSessionError(w, err)
-				return
-			}
-		}
-		transportObs, transportW := transport.BeginHTTPRequest(r.Context(), w, "mcp", r.Method, r)
-		defer transportObs.End()
-		if err := crossOriginProtection.Check(r); err != nil {
-			http.Error(transportW, err.Error(), http.StatusForbidden)
-			transportObs.Fail(transport.ReasonHandlerError)
-			return
-		}
-		if sdkRequestAllowsBodyInspection(r, configuredStreamableOpts) && rejectNullMCPRequestID(transportW, r, configuredStreamableOpts.MaxRequestBodyBytes) {
-			transportObs.Fail(transport.ReasonHandlerError)
-			return
-		}
-		observer := &sdkResponseObserver{
-			ResponseWriter: transportW,
-			onSessionIssued: func(sessionID string) {
-				adapter.markInitializedSession(sessionID)
-				adapter.captureSessionPrincipal(r.Context(), sessionID)
-			},
-		}
-		base.ServeHTTP(observer, r)
-		if observer.statusCode < http.StatusBadRequest {
-			observer.captureSession()
-		}
-		if r.Method == http.MethodDelete && observer.statusCode < 400 {
-			adapter.clearSession(r.Header.Get(mcpruntime.HeaderKeySessionID))
-		}
-		if observer.statusCode >= 400 {
-			transportObs.Fail(transport.ReasonHandlerError)
-		}
-	})
-}
-func sdkStreamableHTTPOptions(opts *mcpsdk.StreamableHTTPOptions) *mcpsdk.StreamableHTTPOptions {
-	if opts == nil {
-		return &mcpsdk.StreamableHTTPOptions{
-			CrossOriginProtection: http.NewCrossOriginProtection(),
-			MaxRequestBodyBytes:   mcpsdk.DefaultMaxRequestBodyBytes,
-		}
-	}
-	configured := *opts
-	if configured.CrossOriginProtection == nil {
-		configured.CrossOriginProtection = http.NewCrossOriginProtection()
-	}
-	if configured.MaxRequestBodyBytes == 0 {
-		configured.MaxRequestBodyBytes = mcpsdk.DefaultMaxRequestBodyBytes
-	}
-	return &configured
-}
-
-// sdkRequestAllowsBodyInspection reports whether the SDK pre-body checks accept the request.
-func sdkRequestAllowsBodyInspection(r *http.Request, opts *mcpsdk.StreamableHTTPOptions) bool {
-	if r.Method != http.MethodPost {
-		return false
-	}
-	if !opts.DisableLocalhostProtection && !sdkDisableLocalhostProtection {
-		if localAddr, ok := r.Context().Value(http.LocalAddrContextKey).(net.Addr); ok && localAddr != nil && sdkLoopbackAddress(localAddr.String()) && !sdkLoopbackAddress(r.Host) {
-			return false
-		}
-	}
-	if !sdkDisableContentTypeCheck {
-		mediaType, parameters, err := mime.ParseMediaType(r.Header.Get("Content-Type"))
-		if err != nil || mediaType != "application/json" || parameters == nil {
-			return false
-		}
-	}
-	jsonAccepted := false
-	streamAccepted := false
-	acceptValues := r.Header.Values("Accept")
-	for headerIndex := 0; headerIndex < len(acceptValues); headerIndex++ {
-		mediaRanges := strings.Split(acceptValues[headerIndex], ",")
-		for rangeIndex := 0; rangeIndex < len(mediaRanges); rangeIndex++ {
-			parts := strings.SplitN(mediaRanges[rangeIndex], ";", 2)
-			mediaRange := strings.ToLower(strings.TrimSpace(parts[0]))
-			switch mediaRange {
-			case "application/json", "application/*":
-				jsonAccepted = true
-			case "text/event-stream", "text/*":
-				streamAccepted = true
-			case "*/*":
-				jsonAccepted = true
-				streamAccepted = true
-			}
-		}
-	}
-	if !jsonAccepted || !streamAccepted {
-		return false
-	}
-	protocolVersion := r.Header.Get("MCP-Protocol-Version")
-	switch protocolVersion {
-	case "", "2024-11-05", "2025-03-26", "2025-06-18", "2025-11-25", "2026-07-28":
-		return true
-	}
-	return false
-}
-
-// sdkLoopbackAddress matches the official SDK localhost protection predicate.
-func sdkLoopbackAddress(address string) bool {
-	host, port, err := net.SplitHostPort(address)
-	if err != nil {
-		host = strings.Trim(address, "[]")
-	} else {
-		if port == "" {
-			return false
-		}
-	}
-	if host == "localhost" {
-		return true
-	}
-	addressValue, err := netip.ParseAddr(host)
-	if err != nil {
-		return false
-	}
-	return addressValue.IsLoopback()
-}
-func sdkMCPGoDebugValue(name string) string {
-	value := ""
-	parts := strings.Split(os.Getenv("MCPGODEBUG"), ",")
-	for partIndex := 0; partIndex < len(parts); partIndex++ {
-		pair := strings.SplitN(parts[partIndex], "=", 2)
-		if len(pair) == 2 && strings.TrimSpace(pair[0]) == name {
-			value = strings.TrimSpace(pair[1])
-		}
-	}
-	return value
-}
-
-// rejectNullMCPRequestID rejects null request IDs and restores other request bodies.
-func rejectNullMCPRequestID(w http.ResponseWriter, r *http.Request, maxBodyBytes int64) bool {
-	if r == nil || r.Method != http.MethodPost || r.Body == nil {
-		return false
-	}
-	var reader io.Reader = r.Body
-	if maxBodyBytes > 0 {
-		reader = http.MaxBytesReader(w, r.Body, maxBodyBytes)
-	}
-	body, err := io.ReadAll(reader)
-	closeErr := r.Body.Close()
-	if err == nil && closeErr != nil {
-		err = closeErr
-	}
-	if err != nil {
-		var maxBytesErr *http.MaxBytesError
-		if errors.As(err, &maxBytesErr) {
-			http.Error(w, fmt.Sprintf("request body exceeds %d bytes", maxBytesErr.Limit), http.StatusRequestEntityTooLarge)
-			return true
-		}
-		http.Error(w, "failed to read body", http.StatusBadRequest)
-		return true
-	}
-	r.Body = io.NopCloser(bytes.NewReader(body))
-	var envelope sdkJSONRPCRequestEnvelope
-	if err := json.Unmarshal(body, &envelope); err != nil {
-		return false
-	}
-	if len(envelope.Method) == 0 || !bytes.Equal(bytes.TrimSpace(envelope.ID), []byte("null")) {
-		return false
-	}
-	w.Header().Set("Content-Type", "application/json")
-	http.Error(w, "{\"jsonrpc\":\"2.0\",\"id\":null,\"error\":{\"code\":-32600,\"message\":\"Invalid Request: request id must not be null\"}}", http.StatusBadRequest)
-	return true
-}
-func sdkRuntimeCORSHandler(next http.Handler, policy loomhttp.RuntimeCORSPolicy) http.Handler {
-	actual := policy.Handler(next.ServeHTTP)
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.Method == http.MethodOptions {
-			policy.HandlePreflight(w, r, []string{http.MethodDelete, http.MethodGet, http.MethodPost})
-			return
-		}
-		actual(w, r)
-	})
-}
-func writeSDKSessionError(w http.ResponseWriter, err error) {
-	if errors.Is(err, errInvalidSessionID) {
-		http.Error(w, err.Error(), http.StatusNotFound)
-		return
-	}
-	http.Error(w, err.Error(), http.StatusForbidden)
-}
-func registerSDKTools(server *mcpsdk.Server, adapter *MCPAdapter, requestContext func(context.Context, *http.Request) context.Context) error {
+func sdkToolBindings(adapter *MCPAdapter, requestContext func(context.Context, *http.Request) context.Context) ([]sdkbridge.ToolBinding, error) {
+	handler := adapter.sdkToolHandler(requestContext)
 	if adapter.toolSearchEnabled() {
 		tools := adapter.toolSearchSyntheticTools()
 		tools = append(tools, adapter.visibleToolCatalog(adapter.generatedToolCatalog())...)
+		bindings := make([]sdkbridge.ToolBinding, 0, len(tools))
 		for _, tool := range tools {
 			sdkTool, err := sdkToolFromToolInfo(tool)
 			if err != nil {
-				return err
+				return nil, err
 			}
-			server.AddTool(sdkTool, adapter.sdkToolHandler(requestContext))
+			bindings = append(bindings, sdkbridge.ToolBinding{
+				Handler: handler,
+				Tool:    sdkTool,
+			})
 		}
-		return nil
+		return bindings, nil
 	}
-	server.AddTool(&mcpsdk.Tool{
-		Description: "Analyze sentiment of text",
-		Icons: []mcpsdk.Icon{mcpsdk.Icon{
-			MIMEType: "image/png",
-			Sizes:    []string{"48x48"},
-			Source:   "https://assistant.example.com/icons/analyze-sentiment.png",
-		}},
-		InputSchema:  sdkToolInputSchema("{\"type\":\"object\",\"required\":[\"text\"],\"properties\":{\"text\":{\"type\":\"string\",\"description\":\"Input text to analyze\"}},\"additionalProperties\":false}"),
-		Meta:         sdkMeta(jsontext.Value([]byte("{\"com.github.caliluke.loom-mcp/discovery\":{\"category\":\"analysis\",\"keywords\":[\"tone\",\"emotion\",\"polarity\"],\"tags\":[\"sentiment\",\"nlp\"]}}"))),
-		Name:         "analyze_sentiment",
-		OutputSchema: sdkToolInputSchema("{\"type\":\"object\",\"properties\":{\"sentiment\":{\"type\":\"string\",\"description\":\"Detected sentiment\"}},\"additionalProperties\":false}"),
-		Title:        "Analyze Sentiment",
-	}, adapter.sdkToolHandler(requestContext))
-	server.AddTool(&mcpsdk.Tool{
-		Description:  "Extract keywords from text",
-		InputSchema:  sdkToolInputSchema("{\"type\":\"object\",\"required\":[\"text\"],\"properties\":{\"text\":{\"type\":\"string\",\"description\":\"Input text\"}},\"additionalProperties\":false}"),
-		Meta:         sdkMeta(jsontext.Value([]byte("{\"com.github.caliluke.loom-mcp/discovery\":{\"category\":\"analysis\",\"keywords\":[\"terms\",\"phrases\",\"entities\"],\"tags\":[\"keywords\",\"nlp\"]}}"))),
-		Name:         "extract_keywords",
-		OutputSchema: sdkToolInputSchema("{\"type\":\"object\",\"properties\":{\"keywords\":{\"type\":\"array\",\"description\":\"Extracted keywords\",\"items\":{\"type\":\"string\"}}},\"additionalProperties\":false}"),
-		Title:        "Extract Keywords",
-	}, adapter.sdkToolHandler(requestContext))
-	server.AddTool(&mcpsdk.Tool{
-		Description:  "Summarize text",
-		InputSchema:  sdkToolInputSchema("{\"type\":\"object\",\"required\":[\"text\"],\"properties\":{\"text\":{\"type\":\"string\",\"description\":\"Input text to summarize\"}},\"additionalProperties\":false}"),
-		Name:         "summarize_text",
-		OutputSchema: sdkToolInputSchema("{\"type\":\"object\",\"properties\":{\"summary\":{\"type\":\"string\",\"description\":\"Summary\"}},\"additionalProperties\":false}"),
-		Title:        "Summarize Text",
-	}, adapter.sdkToolHandler(requestContext))
-	server.AddTool(&mcpsdk.Tool{
-		Description:  "Search knowledge base",
-		InputSchema:  sdkToolInputSchema("{\"type\":\"object\",\"required\":[\"query\"],\"properties\":{\"limit\":{\"type\":\"integer\",\"description\":\"Maximum number of results\"},\"query\":{\"type\":\"string\",\"description\":\"Search query\"}},\"additionalProperties\":false}"),
-		Meta:         sdkMeta(jsontext.Value([]byte("{\"com.github.caliluke.loom-mcp/discovery\":{\"category\":\"knowledge\",\"keywords\":[\"lookup\",\"documents\",\"knowledge\"],\"tags\":[\"search\",\"retrieval\"]}}"))),
-		Name:         "search",
-		OutputSchema: sdkToolInputSchema("{\"type\":\"object\",\"properties\":{\"results\":{\"type\":\"array\",\"description\":\"Search results\",\"items\":{\"type\":\"string\"}}},\"additionalProperties\":false}"),
-		Title:        "Search Knowledge Base",
-	}, adapter.sdkToolHandler(requestContext))
-	server.AddTool(&mcpsdk.Tool{
-		Description:  "Search records with an optional query",
-		InputSchema:  sdkToolInputSchema("{\"type\":\"object\",\"properties\":{\"limit\":{\"type\":\"integer\",\"description\":\"Maximum number of records\"},\"query\":{\"type\":\"string\",\"description\":\"Search query\"}},\"additionalProperties\":false}"),
-		Meta:         sdkMeta(jsontext.Value([]byte("{\"com.github.caliluke.loom-mcp/discovery\":{\"call_template_arguments\":{\"query\":\"login\"},\"category\":\"records\",\"keywords\":[\"lookup\",\"records\"],\"tags\":[\"search\",\"records\"]}}"))),
-		Name:         "search_records",
-		OutputSchema: sdkToolInputSchema("{\"type\":\"object\",\"properties\":{\"results\":{\"type\":\"array\",\"description\":\"Record results\",\"items\":{\"type\":\"string\"}}},\"additionalProperties\":false}"),
-		Title:        "Search Records",
-	}, adapter.sdkToolHandler(requestContext))
-	server.AddTool(&mcpsdk.Tool{
-		Description:  "Execute code",
-		InputSchema:  sdkToolInputSchema("{\"type\":\"object\",\"required\":[\"language\",\"code\"],\"properties\":{\"code\":{\"type\":\"string\",\"description\":\"Code to execute\"},\"language\":{\"type\":\"string\",\"description\":\"Language to execute\",\"enum\":[\"python\",\"javascript\"]}},\"additionalProperties\":false}"),
-		Name:         "execute_code",
-		OutputSchema: sdkToolInputSchema("{\"type\":\"object\",\"properties\":{\"output\":{\"type\":\"string\",\"description\":\"Execution output\"}},\"additionalProperties\":false}"),
-		Title:        "Execute Code",
-	}, adapter.sdkToolHandler(requestContext))
-	server.AddTool(&mcpsdk.Tool{
-		Description:  "Process a batch of items",
-		InputSchema:  sdkToolInputSchema("{\"type\":\"object\",\"required\":[\"items\"],\"properties\":{\"blob\":{\"type\":\"string\",\"description\":\"Base64 blob\"},\"format\":{\"type\":\"string\",\"description\":\"Output format\",\"enum\":[\"json\",\"text\",\"blob\",\"uri\"]},\"items\":{\"type\":\"array\",\"description\":\"Items to process\",\"items\":{\"type\":\"string\"}},\"mimeType\":{\"type\":\"string\",\"description\":\"MIME type\"},\"uri\":{\"type\":\"string\",\"description\":\"Resource URI\"}},\"additionalProperties\":false}"),
-		Name:         "process_batch",
-		OutputSchema: sdkToolInputSchema("{\"type\":\"object\",\"properties\":{\"ok\":{\"type\":\"boolean\",\"description\":\"Operation status\"}},\"additionalProperties\":false}"),
-		Title:        "Process Batch",
-	}, adapter.sdkToolHandler(requestContext))
-	server.AddTool(&mcpsdk.Tool{
-		Description:  "Report deterministic progress to the connected MCP client",
-		InputSchema:  sdkToolInputSchema(""),
-		Name:         "report_progress",
-		OutputSchema: sdkToolInputSchema("{\"type\":\"object\",\"required\":[\"completed\"],\"properties\":{\"completed\":{\"type\":\"boolean\",\"description\":\"Whether all progress updates were sent\"}},\"additionalProperties\":false}"),
-		Title:        "Report Progress",
-	}, adapter.sdkToolHandler(requestContext))
-	server.AddTool(&mcpsdk.Tool{
-		Description:  "Return multiple content items",
-		InputSchema:  sdkToolInputSchema("{\"type\":\"object\",\"required\":[\"count\"],\"properties\":{\"count\":{\"type\":\"integer\",\"description\":\"Number of content items to return\"}},\"additionalProperties\":false}"),
-		Name:         "multi_content",
-		OutputSchema: sdkToolInputSchema("{\"type\":\"object\",\"properties\":{\"result\":{\"type\":\"string\",\"description\":\"Combined text result\"}},\"additionalProperties\":false}"),
-		Title:        "Multi Content",
-	}, adapter.sdkToolHandler(requestContext))
-	server.AddTool(&mcpsdk.Tool{
-		Description:  "Generate a deterministic design implementation plan from fake Figma data",
-		InputSchema:  sdkToolInputSchema("{\"type\":\"object\",\"required\":[\"screen_title\",\"platform\",\"density\",\"primary_cta\",\"sections\"],\"properties\":{\"density\":{\"type\":\"string\",\"description\":\"Layout density\",\"enum\":[\"compact\",\"comfortable\"]},\"include_dev_notes\":{\"type\":\"boolean\",\"description\":\"Whether to include implementation notes\"},\"platform\":{\"type\":\"string\",\"description\":\"Target platform\",\"enum\":[\"ios\",\"web\"]},\"primary_cta\":{\"type\":\"string\",\"description\":\"Primary call to action\"},\"screen_title\":{\"type\":\"string\",\"description\":\"Name of the frame or screen\"},\"sections\":{\"type\":\"array\",\"description\":\"Ordered screen sections\",\"items\":{\"type\":\"string\"}}},\"additionalProperties\":false}"),
-		Name:         "generate_dpi_spec",
-		OutputSchema: sdkToolInputSchema("{\"type\":\"object\",\"required\":[\"screen_title\",\"platform\",\"density\",\"viewport\",\"sections\",\"primary_cta\",\"design_tokens_uri\",\"dev_notes\"],\"properties\":{\"density\":{\"type\":\"string\",\"description\":\"Layout density\"},\"design_tokens_uri\":{\"type\":\"string\",\"description\":\"Design system resource URI\"},\"dev_notes\":{\"type\":\"array\",\"description\":\"Development handoff notes\",\"items\":{\"type\":\"string\"}},\"platform\":{\"type\":\"string\",\"description\":\"Target platform\"},\"primary_cta\":{\"type\":\"object\",\"description\":\"Primary CTA\",\"required\":[\"label\",\"style\"],\"properties\":{\"label\":{\"type\":\"string\",\"description\":\"CTA label\"},\"style\":{\"type\":\"string\",\"description\":\"CTA visual style\"}},\"additionalProperties\":false},\"screen_title\":{\"type\":\"string\",\"description\":\"Screen title\"},\"sections\":{\"type\":\"array\",\"description\":\"Ordered screen sections\",\"items\":{\"type\":\"object\",\"required\":[\"name\",\"component\",\"notes\"],\"properties\":{\"component\":{\"type\":\"string\",\"description\":\"Primary UI component\"},\"name\":{\"type\":\"string\",\"description\":\"Section name\"},\"notes\":{\"type\":\"array\",\"description\":\"Implementation notes for this section\",\"items\":{\"type\":\"string\"}}},\"additionalProperties\":false}},\"viewport\":{\"type\":\"object\",\"description\":\"Viewport dimensions\",\"required\":[\"width\",\"height\"],\"properties\":{\"height\":{\"type\":\"integer\",\"description\":\"Viewport height\"},\"width\":{\"type\":\"integer\",\"description\":\"Viewport width\"}},\"additionalProperties\":false}},\"additionalProperties\":false}"),
-		Title:        "Generate Dpi Spec",
-	}, adapter.sdkToolHandler(requestContext))
-	server.AddTool(&mcpsdk.Tool{
-		Description:  "Dispatch an action using a union payload",
-		InputSchema:  sdkToolInputSchema("{\"type\":\"object\",\"required\":[\"request\"],\"properties\":{\"request\":{\"type\":\"object\",\"description\":\"Action envelope\",\"oneOf\":[{\"type\":\"object\",\"required\":[\"action\",\"value\"],\"properties\":{\"action\":{\"type\":\"string\",\"enum\":[\"list\"]},\"value\":{\"type\":\"object\",\"properties\":{\"limit\":{\"type\":\"integer\",\"description\":\"Maximum number of items to list\"}},\"additionalProperties\":false}},\"additionalProperties\":false},{\"type\":\"object\",\"required\":[\"action\",\"value\"],\"properties\":{\"action\":{\"type\":\"string\",\"enum\":[\"create\"]},\"value\":{\"type\":\"object\",\"required\":[\"name\"],\"properties\":{\"name\":{\"type\":\"string\",\"description\":\"Name to create\"}},\"additionalProperties\":false}},\"additionalProperties\":false}],\"discriminator\":{\"propertyName\":\"action\"}}},\"additionalProperties\":false}"),
-		Name:         "dispatch_action",
-		OutputSchema: sdkToolInputSchema("{\"type\":\"object\",\"required\":[\"ack\"],\"properties\":{\"ack\":{\"type\":\"string\",\"description\":\"Acknowledgement\"}},\"additionalProperties\":false}"),
-		Title:        "Dispatch Action",
-	}, adapter.sdkToolHandler(requestContext))
-	server.AddTool(&mcpsdk.Tool{
-		Description:  "Dispatch a command using a non-value branch-key union",
-		InputSchema:  sdkToolInputSchema("{\"type\":\"object\",\"required\":[\"command\"],\"properties\":{\"command\":{\"type\":\"object\",\"description\":\"Command envelope with custom branch key\",\"oneOf\":[{\"type\":\"object\",\"required\":[\"action\",\"args\"],\"properties\":{\"action\":{\"type\":\"string\",\"enum\":[\"foo\"]},\"args\":{\"type\":\"object\",\"properties\":{\"label\":{\"type\":\"string\",\"description\":\"Foo label\"}},\"additionalProperties\":false}},\"additionalProperties\":false},{\"type\":\"object\",\"required\":[\"action\",\"args\"],\"properties\":{\"action\":{\"type\":\"string\",\"enum\":[\"bar\"]},\"args\":{\"type\":\"object\",\"required\":[\"count\"],\"properties\":{\"count\":{\"type\":\"integer\",\"description\":\"Bar count\"}},\"additionalProperties\":false}},\"additionalProperties\":false}],\"discriminator\":{\"propertyName\":\"action\"}}},\"additionalProperties\":false}"),
-		Name:         "dispatch_command",
-		OutputSchema: sdkToolInputSchema("{\"type\":\"object\",\"required\":[\"ack\"],\"properties\":{\"ack\":{\"type\":\"string\",\"description\":\"Acknowledgement\"}},\"additionalProperties\":false}"),
-		Title:        "Dispatch Command",
-	}, adapter.sdkToolHandler(requestContext))
-	server.AddTool(&mcpsdk.Tool{
-		Description:  "Lookup projected runtime tool data",
-		InputSchema:  jsontext.Value(projected.SpecProjectedLookupTool.Payload.Schema),
-		Name:         "projected_lookup_tool",
-		OutputSchema: jsontext.Value(projected.SpecProjectedLookupTool.Result.Schema),
-		Title:        "Projected Lookup Tool",
-	}, adapter.sdkToolHandler(requestContext))
-	server.AddTool(&mcpsdk.Tool{
-		Description:  "Return projected runtime status",
-		InputSchema:  jsontext.Value(projected.SpecProjectedStatusTool.Payload.Schema),
-		Name:         "projected_status_tool",
-		OutputSchema: jsontext.Value(projected.SpecProjectedStatusTool.Result.Schema),
-		Title:        "Projected Status Tool",
-	}, adapter.sdkToolHandler(requestContext))
-	return nil
+	bindings := make([]sdkbridge.ToolBinding, 0, 14)
+	bindings = append(bindings, sdkbridge.ToolBinding{
+		Handler: handler,
+		Tool: &mcpsdk.Tool{
+			Description: "Analyze sentiment of text",
+			Icons: []mcpsdk.Icon{mcpsdk.Icon{
+				MIMEType: "image/png",
+				Sizes:    []string{"48x48"},
+				Source:   "https://assistant.example.com/icons/analyze-sentiment.png",
+			}},
+			InputSchema:  sdkToolInputSchema("{\"type\":\"object\",\"required\":[\"text\"],\"properties\":{\"text\":{\"type\":\"string\",\"description\":\"Input text to analyze\"}},\"additionalProperties\":false}"),
+			Meta:         sdkMeta(jsontext.Value([]byte("{\"com.github.caliluke.loom-mcp/discovery\":{\"category\":\"analysis\",\"keywords\":[\"tone\",\"emotion\",\"polarity\"],\"tags\":[\"sentiment\",\"nlp\"]}}"))),
+			Name:         "analyze_sentiment",
+			OutputSchema: sdkToolInputSchema("{\"type\":\"object\",\"properties\":{\"sentiment\":{\"type\":\"string\",\"description\":\"Detected sentiment\"}},\"additionalProperties\":false}"),
+			Title:        "Analyze Sentiment",
+		},
+	})
+	bindings = append(bindings, sdkbridge.ToolBinding{
+		Handler: handler,
+		Tool: &mcpsdk.Tool{
+			Description:  "Extract keywords from text",
+			InputSchema:  sdkToolInputSchema("{\"type\":\"object\",\"required\":[\"text\"],\"properties\":{\"text\":{\"type\":\"string\",\"description\":\"Input text\"}},\"additionalProperties\":false}"),
+			Meta:         sdkMeta(jsontext.Value([]byte("{\"com.github.caliluke.loom-mcp/discovery\":{\"category\":\"analysis\",\"keywords\":[\"terms\",\"phrases\",\"entities\"],\"tags\":[\"keywords\",\"nlp\"]}}"))),
+			Name:         "extract_keywords",
+			OutputSchema: sdkToolInputSchema("{\"type\":\"object\",\"properties\":{\"keywords\":{\"type\":\"array\",\"description\":\"Extracted keywords\",\"items\":{\"type\":\"string\"}}},\"additionalProperties\":false}"),
+			Title:        "Extract Keywords",
+		},
+	})
+	bindings = append(bindings, sdkbridge.ToolBinding{
+		Handler: handler,
+		Tool: &mcpsdk.Tool{
+			Description:  "Summarize text",
+			InputSchema:  sdkToolInputSchema("{\"type\":\"object\",\"required\":[\"text\"],\"properties\":{\"text\":{\"type\":\"string\",\"description\":\"Input text to summarize\"}},\"additionalProperties\":false}"),
+			Name:         "summarize_text",
+			OutputSchema: sdkToolInputSchema("{\"type\":\"object\",\"properties\":{\"summary\":{\"type\":\"string\",\"description\":\"Summary\"}},\"additionalProperties\":false}"),
+			Title:        "Summarize Text",
+		},
+	})
+	bindings = append(bindings, sdkbridge.ToolBinding{
+		Handler: handler,
+		Tool: &mcpsdk.Tool{
+			Description:  "Search knowledge base",
+			InputSchema:  sdkToolInputSchema("{\"type\":\"object\",\"required\":[\"query\"],\"properties\":{\"limit\":{\"type\":\"integer\",\"description\":\"Maximum number of results\"},\"query\":{\"type\":\"string\",\"description\":\"Search query\"}},\"additionalProperties\":false}"),
+			Meta:         sdkMeta(jsontext.Value([]byte("{\"com.github.caliluke.loom-mcp/discovery\":{\"category\":\"knowledge\",\"keywords\":[\"lookup\",\"documents\",\"knowledge\"],\"tags\":[\"search\",\"retrieval\"]}}"))),
+			Name:         "search",
+			OutputSchema: sdkToolInputSchema("{\"type\":\"object\",\"properties\":{\"results\":{\"type\":\"array\",\"description\":\"Search results\",\"items\":{\"type\":\"string\"}}},\"additionalProperties\":false}"),
+			Title:        "Search Knowledge Base",
+		},
+	})
+	bindings = append(bindings, sdkbridge.ToolBinding{
+		Handler: handler,
+		Tool: &mcpsdk.Tool{
+			Description:  "Search records with an optional query",
+			InputSchema:  sdkToolInputSchema("{\"type\":\"object\",\"properties\":{\"limit\":{\"type\":\"integer\",\"description\":\"Maximum number of records\"},\"query\":{\"type\":\"string\",\"description\":\"Search query\"}},\"additionalProperties\":false}"),
+			Meta:         sdkMeta(jsontext.Value([]byte("{\"com.github.caliluke.loom-mcp/discovery\":{\"call_template_arguments\":{\"query\":\"login\"},\"category\":\"records\",\"keywords\":[\"lookup\",\"records\"],\"tags\":[\"search\",\"records\"]}}"))),
+			Name:         "search_records",
+			OutputSchema: sdkToolInputSchema("{\"type\":\"object\",\"properties\":{\"results\":{\"type\":\"array\",\"description\":\"Record results\",\"items\":{\"type\":\"string\"}}},\"additionalProperties\":false}"),
+			Title:        "Search Records",
+		},
+	})
+	bindings = append(bindings, sdkbridge.ToolBinding{
+		Handler: handler,
+		Tool: &mcpsdk.Tool{
+			Description:  "Execute code",
+			InputSchema:  sdkToolInputSchema("{\"type\":\"object\",\"required\":[\"language\",\"code\"],\"properties\":{\"code\":{\"type\":\"string\",\"description\":\"Code to execute\"},\"language\":{\"type\":\"string\",\"description\":\"Language to execute\",\"enum\":[\"python\",\"javascript\"]}},\"additionalProperties\":false}"),
+			Name:         "execute_code",
+			OutputSchema: sdkToolInputSchema("{\"type\":\"object\",\"properties\":{\"output\":{\"type\":\"string\",\"description\":\"Execution output\"}},\"additionalProperties\":false}"),
+			Title:        "Execute Code",
+		},
+	})
+	bindings = append(bindings, sdkbridge.ToolBinding{
+		Handler: handler,
+		Tool: &mcpsdk.Tool{
+			Description:  "Process a batch of items",
+			InputSchema:  sdkToolInputSchema("{\"type\":\"object\",\"required\":[\"items\"],\"properties\":{\"blob\":{\"type\":\"string\",\"description\":\"Base64 blob\"},\"format\":{\"type\":\"string\",\"description\":\"Output format\",\"enum\":[\"json\",\"text\",\"blob\",\"uri\"]},\"items\":{\"type\":\"array\",\"description\":\"Items to process\",\"items\":{\"type\":\"string\"}},\"mimeType\":{\"type\":\"string\",\"description\":\"MIME type\"},\"uri\":{\"type\":\"string\",\"description\":\"Resource URI\"}},\"additionalProperties\":false}"),
+			Name:         "process_batch",
+			OutputSchema: sdkToolInputSchema("{\"type\":\"object\",\"properties\":{\"ok\":{\"type\":\"boolean\",\"description\":\"Operation status\"}},\"additionalProperties\":false}"),
+			Title:        "Process Batch",
+		},
+	})
+	bindings = append(bindings, sdkbridge.ToolBinding{
+		Handler: handler,
+		Tool: &mcpsdk.Tool{
+			Description:  "Report deterministic progress to the connected MCP client",
+			InputSchema:  sdkToolInputSchema(""),
+			Name:         "report_progress",
+			OutputSchema: sdkToolInputSchema("{\"type\":\"object\",\"required\":[\"completed\"],\"properties\":{\"completed\":{\"type\":\"boolean\",\"description\":\"Whether all progress updates were sent\"}},\"additionalProperties\":false}"),
+			Title:        "Report Progress",
+		},
+	})
+	bindings = append(bindings, sdkbridge.ToolBinding{
+		Handler: handler,
+		Tool: &mcpsdk.Tool{
+			Description:  "Return multiple content items",
+			InputSchema:  sdkToolInputSchema("{\"type\":\"object\",\"required\":[\"count\"],\"properties\":{\"count\":{\"type\":\"integer\",\"description\":\"Number of content items to return\"}},\"additionalProperties\":false}"),
+			Name:         "multi_content",
+			OutputSchema: sdkToolInputSchema("{\"type\":\"object\",\"properties\":{\"result\":{\"type\":\"string\",\"description\":\"Combined text result\"}},\"additionalProperties\":false}"),
+			Title:        "Multi Content",
+		},
+	})
+	bindings = append(bindings, sdkbridge.ToolBinding{
+		Handler: handler,
+		Tool: &mcpsdk.Tool{
+			Description:  "Generate a deterministic design implementation plan from fake Figma data",
+			InputSchema:  sdkToolInputSchema("{\"type\":\"object\",\"required\":[\"screen_title\",\"platform\",\"density\",\"primary_cta\",\"sections\"],\"properties\":{\"density\":{\"type\":\"string\",\"description\":\"Layout density\",\"enum\":[\"compact\",\"comfortable\"]},\"include_dev_notes\":{\"type\":\"boolean\",\"description\":\"Whether to include implementation notes\"},\"platform\":{\"type\":\"string\",\"description\":\"Target platform\",\"enum\":[\"ios\",\"web\"]},\"primary_cta\":{\"type\":\"string\",\"description\":\"Primary call to action\"},\"screen_title\":{\"type\":\"string\",\"description\":\"Name of the frame or screen\"},\"sections\":{\"type\":\"array\",\"description\":\"Ordered screen sections\",\"items\":{\"type\":\"string\"}}},\"additionalProperties\":false}"),
+			Name:         "generate_dpi_spec",
+			OutputSchema: sdkToolInputSchema("{\"type\":\"object\",\"required\":[\"screen_title\",\"platform\",\"density\",\"viewport\",\"sections\",\"primary_cta\",\"design_tokens_uri\",\"dev_notes\"],\"properties\":{\"density\":{\"type\":\"string\",\"description\":\"Layout density\"},\"design_tokens_uri\":{\"type\":\"string\",\"description\":\"Design system resource URI\"},\"dev_notes\":{\"type\":\"array\",\"description\":\"Development handoff notes\",\"items\":{\"type\":\"string\"}},\"platform\":{\"type\":\"string\",\"description\":\"Target platform\"},\"primary_cta\":{\"type\":\"object\",\"description\":\"Primary CTA\",\"required\":[\"label\",\"style\"],\"properties\":{\"label\":{\"type\":\"string\",\"description\":\"CTA label\"},\"style\":{\"type\":\"string\",\"description\":\"CTA visual style\"}},\"additionalProperties\":false},\"screen_title\":{\"type\":\"string\",\"description\":\"Screen title\"},\"sections\":{\"type\":\"array\",\"description\":\"Ordered screen sections\",\"items\":{\"type\":\"object\",\"required\":[\"name\",\"component\",\"notes\"],\"properties\":{\"component\":{\"type\":\"string\",\"description\":\"Primary UI component\"},\"name\":{\"type\":\"string\",\"description\":\"Section name\"},\"notes\":{\"type\":\"array\",\"description\":\"Implementation notes for this section\",\"items\":{\"type\":\"string\"}}},\"additionalProperties\":false}},\"viewport\":{\"type\":\"object\",\"description\":\"Viewport dimensions\",\"required\":[\"width\",\"height\"],\"properties\":{\"height\":{\"type\":\"integer\",\"description\":\"Viewport height\"},\"width\":{\"type\":\"integer\",\"description\":\"Viewport width\"}},\"additionalProperties\":false}},\"additionalProperties\":false}"),
+			Title:        "Generate Dpi Spec",
+		},
+	})
+	bindings = append(bindings, sdkbridge.ToolBinding{
+		Handler: handler,
+		Tool: &mcpsdk.Tool{
+			Description:  "Dispatch an action using a union payload",
+			InputSchema:  sdkToolInputSchema("{\"type\":\"object\",\"required\":[\"request\"],\"properties\":{\"request\":{\"type\":\"object\",\"description\":\"Action envelope\",\"oneOf\":[{\"type\":\"object\",\"required\":[\"action\",\"value\"],\"properties\":{\"action\":{\"type\":\"string\",\"enum\":[\"list\"]},\"value\":{\"type\":\"object\",\"properties\":{\"limit\":{\"type\":\"integer\",\"description\":\"Maximum number of items to list\"}},\"additionalProperties\":false}},\"additionalProperties\":false},{\"type\":\"object\",\"required\":[\"action\",\"value\"],\"properties\":{\"action\":{\"type\":\"string\",\"enum\":[\"create\"]},\"value\":{\"type\":\"object\",\"required\":[\"name\"],\"properties\":{\"name\":{\"type\":\"string\",\"description\":\"Name to create\"}},\"additionalProperties\":false}},\"additionalProperties\":false}],\"discriminator\":{\"propertyName\":\"action\"}}},\"additionalProperties\":false}"),
+			Name:         "dispatch_action",
+			OutputSchema: sdkToolInputSchema("{\"type\":\"object\",\"required\":[\"ack\"],\"properties\":{\"ack\":{\"type\":\"string\",\"description\":\"Acknowledgement\"}},\"additionalProperties\":false}"),
+			Title:        "Dispatch Action",
+		},
+	})
+	bindings = append(bindings, sdkbridge.ToolBinding{
+		Handler: handler,
+		Tool: &mcpsdk.Tool{
+			Description:  "Dispatch a command using a non-value branch-key union",
+			InputSchema:  sdkToolInputSchema("{\"type\":\"object\",\"required\":[\"command\"],\"properties\":{\"command\":{\"type\":\"object\",\"description\":\"Command envelope with custom branch key\",\"oneOf\":[{\"type\":\"object\",\"required\":[\"action\",\"args\"],\"properties\":{\"action\":{\"type\":\"string\",\"enum\":[\"foo\"]},\"args\":{\"type\":\"object\",\"properties\":{\"label\":{\"type\":\"string\",\"description\":\"Foo label\"}},\"additionalProperties\":false}},\"additionalProperties\":false},{\"type\":\"object\",\"required\":[\"action\",\"args\"],\"properties\":{\"action\":{\"type\":\"string\",\"enum\":[\"bar\"]},\"args\":{\"type\":\"object\",\"required\":[\"count\"],\"properties\":{\"count\":{\"type\":\"integer\",\"description\":\"Bar count\"}},\"additionalProperties\":false}},\"additionalProperties\":false}],\"discriminator\":{\"propertyName\":\"action\"}}},\"additionalProperties\":false}"),
+			Name:         "dispatch_command",
+			OutputSchema: sdkToolInputSchema("{\"type\":\"object\",\"required\":[\"ack\"],\"properties\":{\"ack\":{\"type\":\"string\",\"description\":\"Acknowledgement\"}},\"additionalProperties\":false}"),
+			Title:        "Dispatch Command",
+		},
+	})
+	bindings = append(bindings, sdkbridge.ToolBinding{
+		Handler: handler,
+		Tool: &mcpsdk.Tool{
+			Description:  "Lookup projected runtime tool data",
+			InputSchema:  jsontext.Value(projected.SpecProjectedLookupTool.Payload.Schema),
+			Name:         "projected_lookup_tool",
+			OutputSchema: jsontext.Value(projected.SpecProjectedLookupTool.Result.Schema),
+			Title:        "Projected Lookup Tool",
+		},
+	})
+	bindings = append(bindings, sdkbridge.ToolBinding{
+		Handler: handler,
+		Tool: &mcpsdk.Tool{
+			Description:  "Return projected runtime status",
+			InputSchema:  jsontext.Value(projected.SpecProjectedStatusTool.Payload.Schema),
+			Name:         "projected_status_tool",
+			OutputSchema: jsontext.Value(projected.SpecProjectedStatusTool.Result.Schema),
+			Title:        "Projected Status Tool",
+		},
+	})
+	return bindings, nil
 }
-func registerSDKResources(server *mcpsdk.Server, adapter *MCPAdapter, requestContext func(context.Context, *http.Request) context.Context) error {
-	server.AddResource(&mcpsdk.Resource{
-		Description: "List available documents",
-		Icons: []mcpsdk.Icon{mcpsdk.Icon{
-			MIMEType: "image/png",
-			Sizes:    []string{"48x48"},
-			Source:   "https://assistant.example.com/icons/documents.png",
-		}},
-		MIMEType: "application/json",
-		Name:     "documents",
-		URI:      "doc://list",
-	}, adapter.sdkResourceHandler(requestContext))
-	server.AddResource(&mcpsdk.Resource{
-		Description: "Return system info",
-		MIMEType:    "application/json",
-		Name:        "system_info",
-		URI:         "system://info",
-	}, adapter.sdkResourceHandler(requestContext))
-	server.AddResource(&mcpsdk.Resource{
-		Description: "Return context supplied through MCP elicitation",
-		MIMEType:    "application/json",
-		Name:        "elicitation_context",
-		URI:         "elicitation://context",
-	}, adapter.sdkResourceHandler(requestContext))
-	server.AddResource(&mcpsdk.Resource{
-		Description: "Return conversation history with optional query params",
-		MIMEType:    "application/json",
-		Name:        "conversation_history",
-		URI:         "conversation://history",
-	}, adapter.sdkResourceHandler(requestContext))
-	server.AddResource(&mcpsdk.Resource{
-		Description: "Return a fake Figma design system summary for implementation validation",
-		MIMEType:    "application/json",
-		Name:        "figma_design_system",
-		URI:         "figma://design-system/mobile-checkout",
-	}, adapter.sdkResourceHandler(requestContext))
+func sdkResourceBindings(adapter *MCPAdapter, requestContext func(context.Context, *http.Request) context.Context) ([]sdkbridge.ResourceBinding, error) {
+	handler := adapter.sdkResourceHandler(requestContext)
+	bindings := make([]sdkbridge.ResourceBinding, 0, 5)
+	bindings = append(bindings, sdkbridge.ResourceBinding{
+		Handler: handler,
+		Resource: &mcpsdk.Resource{
+			Description: "List available documents",
+			Icons: []mcpsdk.Icon{mcpsdk.Icon{
+				MIMEType: "image/png",
+				Sizes:    []string{"48x48"},
+				Source:   "https://assistant.example.com/icons/documents.png",
+			}},
+			MIMEType: "application/json",
+			Name:     "documents",
+			URI:      "doc://list",
+		},
+	})
+	bindings = append(bindings, sdkbridge.ResourceBinding{
+		Handler: handler,
+		Resource: &mcpsdk.Resource{
+			Description: "Return system info",
+			MIMEType:    "application/json",
+			Name:        "system_info",
+			URI:         "system://info",
+		},
+	})
+	bindings = append(bindings, sdkbridge.ResourceBinding{
+		Handler: handler,
+		Resource: &mcpsdk.Resource{
+			Description: "Return context supplied through MCP elicitation",
+			MIMEType:    "application/json",
+			Name:        "elicitation_context",
+			URI:         "elicitation://context",
+		},
+	})
+	bindings = append(bindings, sdkbridge.ResourceBinding{
+		Handler: handler,
+		Resource: &mcpsdk.Resource{
+			Description: "Return conversation history with optional query params",
+			MIMEType:    "application/json",
+			Name:        "conversation_history",
+			URI:         "conversation://history",
+		},
+	})
+	bindings = append(bindings, sdkbridge.ResourceBinding{
+		Handler: handler,
+		Resource: &mcpsdk.Resource{
+			Description: "Return a fake Figma design system summary for implementation validation",
+			MIMEType:    "application/json",
+			Name:        "figma_design_system",
+			URI:         "figma://design-system/mobile-checkout",
+		},
+	})
 	skillResources, err := mcpskills.List(context.Background(), skillSources())
 	if err != nil {
-		return err
+		return nil, err
 	}
 	for _, resource := range skillResources {
-		server.AddResource(&mcpsdk.Resource{
-			Description: resource.Description,
-			MIMEType:    resource.MimeType,
-			Meta:        sdkMeta(mcpskills.MetadataMeta(resource.Metadata)),
-			Name:        resource.Name,
-			URI:         resource.URI,
-		}, adapter.sdkResourceHandler(requestContext))
+		bindings = append(bindings, sdkbridge.ResourceBinding{
+			Handler: handler,
+			Resource: &mcpsdk.Resource{
+				Description: resource.Description,
+				MIMEType:    resource.MimeType,
+				Meta:        sdkMeta(mcpskills.MetadataMeta(resource.Metadata)),
+				Name:        resource.Name,
+				URI:         resource.URI,
+			},
+		})
 	}
-	return nil
+	return bindings, nil
 }
-func registerSDKPrompts(server *mcpsdk.Server, adapter *MCPAdapter, requestContext func(context.Context, *http.Request) context.Context) error {
-	server.AddPrompt(&mcpsdk.Prompt{
-		Description: "Simple code review prompt",
-		Icons: []mcpsdk.Icon{mcpsdk.Icon{
-			MIMEType: "image/svg+xml",
-			Sizes:    []string{"any"},
-			Source:   "https://assistant.example.com/icons/code-review.svg",
-		}},
-		Name: "code_review",
-	}, adapter.sdkPromptHandler(requestContext))
-	server.AddPrompt(&mcpsdk.Prompt{
-		Arguments: []*mcpsdk.PromptArgument{&mcpsdk.PromptArgument{
-			Description: "Current context",
-			Name:        "context",
-			Required:    true,
-		}, &mcpsdk.PromptArgument{
-			Description: "Task type",
-			Name:        "task",
-			Required:    true,
-		}},
-		Description: "Generate prompts based on context",
-		Icons: []mcpsdk.Icon{mcpsdk.Icon{
-			MIMEType: "image/png",
-			Sizes:    []string{"48x48"},
-			Source:   "https://assistant.example.com/icons/contextual-prompts.png",
-		}},
-		Name: "contextual_prompts",
-	}, adapter.sdkPromptHandler(requestContext))
-	server.AddPrompt(&mcpsdk.Prompt{
-		Arguments: []*mcpsdk.PromptArgument{&mcpsdk.PromptArgument{
-			Description: "Title of the screen being implemented",
-			Name:        "screen_title",
-			Required:    true,
-		}, &mcpsdk.PromptArgument{
-			Description: "Target UI framework",
-			Name:        "framework",
-			Required:    true,
-		}, &mcpsdk.PromptArgument{
-			Description: "Resource URI for the design system",
-			Name:        "design_tokens_uri",
-			Required:    true,
-		}, &mcpsdk.PromptArgument{
-			Description: "Serialized DPI spec JSON",
-			Name:        "dpi_json",
-			Required:    true,
-		}},
-		Description: "Generate implementation instructions from a DPI spec",
-		Name:        "figma_implementation_prompt",
-	}, adapter.sdkPromptHandler(requestContext))
-	return nil
+func sdkPromptBindings(adapter *MCPAdapter, requestContext func(context.Context, *http.Request) context.Context) ([]sdkbridge.PromptBinding, error) {
+	handler := adapter.sdkPromptHandler(requestContext)
+	bindings := make([]sdkbridge.PromptBinding, 0, 3)
+	bindings = append(bindings, sdkbridge.PromptBinding{
+		Handler: handler,
+		Prompt: &mcpsdk.Prompt{
+			Description: "Simple code review prompt",
+			Icons: []mcpsdk.Icon{mcpsdk.Icon{
+				MIMEType: "image/svg+xml",
+				Sizes:    []string{"any"},
+				Source:   "https://assistant.example.com/icons/code-review.svg",
+			}},
+			Name: "code_review",
+		},
+	})
+	bindings = append(bindings, sdkbridge.PromptBinding{
+		Handler: handler,
+		Prompt: &mcpsdk.Prompt{
+			Arguments: []*mcpsdk.PromptArgument{&mcpsdk.PromptArgument{
+				Description: "Current context",
+				Name:        "context",
+				Required:    true,
+			}, &mcpsdk.PromptArgument{
+				Description: "Task type",
+				Name:        "task",
+				Required:    true,
+			}},
+			Description: "Generate prompts based on context",
+			Icons: []mcpsdk.Icon{mcpsdk.Icon{
+				MIMEType: "image/png",
+				Sizes:    []string{"48x48"},
+				Source:   "https://assistant.example.com/icons/contextual-prompts.png",
+			}},
+			Name: "contextual_prompts",
+		},
+	})
+	bindings = append(bindings, sdkbridge.PromptBinding{
+		Handler: handler,
+		Prompt: &mcpsdk.Prompt{
+			Arguments: []*mcpsdk.PromptArgument{&mcpsdk.PromptArgument{
+				Description: "Title of the screen being implemented",
+				Name:        "screen_title",
+				Required:    true,
+			}, &mcpsdk.PromptArgument{
+				Description: "Target UI framework",
+				Name:        "framework",
+				Required:    true,
+			}, &mcpsdk.PromptArgument{
+				Description: "Resource URI for the design system",
+				Name:        "design_tokens_uri",
+				Required:    true,
+			}, &mcpsdk.PromptArgument{
+				Description: "Serialized DPI spec JSON",
+				Name:        "dpi_json",
+				Required:    true,
+			}},
+			Description: "Generate implementation instructions from a DPI spec",
+			Name:        "figma_implementation_prompt",
+		},
+	})
+	return bindings, nil
 }
 func sdkToolAnnotations(raw any) (*mcpsdk.ToolAnnotations, error) {
 	if raw == nil {
@@ -676,70 +484,44 @@ func sdkToolFromToolInfo(tool *ToolInfo) (*mcpsdk.Tool, error) {
 	}
 	return sdkTool, nil
 }
+func (a *MCPAdapter) sdkHandlerContext(requestContext func(context.Context, *http.Request) context.Context) sdkbridge.HandlerContext {
+	return sdkbridge.HandlerContext{
+		MarkInitialized: a.markInitializedSession,
+		RequestContext:  requestContext,
+		RequestStateKey: a.requestStateKey,
+	}
+}
 func (a *MCPAdapter) sdkToolHandler(requestContext func(context.Context, *http.Request) context.Context) mcpsdk.ToolHandler {
-	return func(ctx context.Context, req *mcpsdk.CallToolRequest) (*mcpsdk.CallToolResult, error) {
-		payload := &ToolsCallPayload{}
-		var inputResponses mcpsdk.InputResponseMap
-		requestState := ""
-		if req != nil && req.Params != nil {
-			payload.Name = req.Params.Name
-			payload.Arguments = mcpJSONFromRaw(req.Params.Arguments)
-			inputResponses = req.Params.InputResponses
-			requestState = req.Params.RequestState
+	return sdkbridge.ToolHandler(a.sdkHandlerContext(requestContext), func(ctx context.Context, request sdkbridge.ToolRequest) (*mcpsdk.CallToolResult, error) {
+		payload := &ToolsCallPayload{
+			Arguments: mcpJSONFromRaw(request.Arguments),
+			Name:      request.Name,
 		}
-		ctx = a.sdkRequestContext(ctx, req.GetSession(), req.GetExtra(), requestContext, inputResponses, requestState, "tools/call", payload)
-		if req != nil && req.Params != nil {
-			ctx = mcpruntime.WithProgressToken(ctx, req.Params.GetProgressToken())
-		}
+		ctx = request.Bind(payload)
 		result, err := a.ToolsCall(ctx, payload)
 		if err != nil {
-			if requests, state, ok := sdkclient.InputRequired(err); ok {
-				return &mcpsdk.CallToolResult{
-					InputRequests: requests,
-					RequestState:  state,
-				}, nil
-			}
 			return nil, err
 		}
 		return sdkCallToolResult(result)
-	}
+	})
 }
 func (a *MCPAdapter) sdkPromptHandler(requestContext func(context.Context, *http.Request) context.Context) mcpsdk.PromptHandler {
-	return func(ctx context.Context, req *mcpsdk.GetPromptRequest) (*mcpsdk.GetPromptResult, error) {
-		payload := &PromptsGetPayload{}
-		var inputResponses mcpsdk.InputResponseMap
-		requestState := ""
-		if req != nil && req.Params != nil {
-			payload.Name = req.Params.Name
-			inputResponses = req.Params.InputResponses
-			requestState = req.Params.RequestState
-			if req.Params.Arguments != nil {
-				args, err := json.Marshal(req.Params.Arguments)
-				if err != nil {
-					return nil, err
-				}
-				payload.Arguments = mcpJSONFromRaw(args)
-			}
+	return sdkbridge.PromptHandler(a.sdkHandlerContext(requestContext), func(ctx context.Context, request sdkbridge.PromptRequest) (*mcpsdk.GetPromptResult, error) {
+		payload := &PromptsGetPayload{
+			Arguments: mcpJSONFromRaw(request.Arguments),
+			Name:      request.Name,
 		}
-		ctx = a.sdkRequestContext(ctx, req.GetSession(), req.GetExtra(), requestContext, inputResponses, requestState, "prompts/get", payload)
+		ctx = request.Bind(payload)
 		result, err := a.PromptsGet(ctx, payload)
 		if err != nil {
-			if requests, state, ok := sdkclient.InputRequired(err); ok {
-				return &mcpsdk.GetPromptResult{
-					InputRequests: requests,
-					RequestState:  state,
-				}, nil
-			}
 			return nil, err
 		}
 		return sdkGetPromptResult(result)
-	}
+	})
 }
 func (a *MCPAdapter) sdkCompletionHandler(requestContext func(context.Context, *http.Request) context.Context) func(context.Context, *mcpsdk.CompleteRequest) (*mcpsdk.CompleteResult, error) {
 	return func(ctx context.Context, req *mcpsdk.CompleteRequest) (*mcpsdk.CompleteResult, error) {
-		if req != nil {
-			ctx = a.sdkRequestContext(ctx, req.GetSession(), req.GetExtra(), requestContext, nil, "", "completion/complete", req.Params)
-		}
+		ctx = sdkbridge.BindCompletionContext(ctx, req, a.sdkHandlerContext(requestContext))
 		if req == nil || req.Params == nil || req.Params.Ref == nil {
 			return sdkCompleteValues(nil, 0, false), nil
 		}
@@ -766,80 +548,15 @@ func (a *MCPAdapter) sdkCompletionHandler(requestContext func(context.Context, *
 	}
 }
 func (a *MCPAdapter) sdkResourceHandler(requestContext func(context.Context, *http.Request) context.Context) mcpsdk.ResourceHandler {
-	return func(ctx context.Context, req *mcpsdk.ReadResourceRequest) (*mcpsdk.ReadResourceResult, error) {
-		payload := &ResourcesReadPayload{}
-		var inputResponses mcpsdk.InputResponseMap
-		requestState := ""
-		if req != nil && req.Params != nil {
-			payload.URI = req.Params.URI
-			inputResponses = req.Params.InputResponses
-			requestState = req.Params.RequestState
-		}
-		ctx = a.sdkRequestContext(ctx, req.GetSession(), req.GetExtra(), requestContext, inputResponses, requestState, "resources/read", payload)
+	return sdkbridge.ResourceHandler(a.sdkHandlerContext(requestContext), func(ctx context.Context, request sdkbridge.ResourceRequest) (*mcpsdk.ReadResourceResult, error) {
+		payload := &ResourcesReadPayload{URI: request.URI}
+		ctx = request.Bind(payload)
 		result, err := a.ResourcesRead(ctx, payload)
 		if err != nil {
-			if requests, state, ok := sdkclient.InputRequired(err); ok {
-				return &mcpsdk.ReadResourceResult{
-					InputRequests: requests,
-					RequestState:  state,
-				}, nil
-			}
 			return nil, err
 		}
 		return sdkReadResourceResult(result)
-	}
-}
-func (a *MCPAdapter) sdkRequestContext(ctx context.Context, session mcpsdk.Session, extra *mcpsdk.RequestExtra, requestContext func(context.Context, *http.Request) context.Context, inputResponses mcpsdk.InputResponseMap, requestState string, requestMethod string, requestParams any) context.Context {
-	if requestContext != nil {
-		ctx = requestContext(ctx, sdkSyntheticHTTPRequest(ctx, extra))
-	}
-	if session == nil {
-		a.markInitializedSession("")
-		return ctx
-	}
-	ctx = sdkContextWithClientFeatures(ctx, session, inputResponses, requestState, a.requestStateKey, requestMethod, requestParams)
-	sessionID := session.ID()
-	if sessionID == "" {
-		a.markInitializedSession("")
-		return ctx
-	}
-	a.markInitializedSession(sessionID)
-	return mcpruntime.WithSessionID(ctx, sessionID)
-}
-func sdkContextWithClientFeatures(ctx context.Context, session mcpsdk.Session, inputResponses mcpsdk.InputResponseMap, requestState string, requestStateKey []byte, requestMethod string, requestParams any) context.Context {
-	serverSession, ok := session.(*mcpsdk.ServerSession)
-	if !ok || serverSession == nil {
-		return ctx
-	}
-	return sdkclient.WithClientFeatures(ctx, serverSession, sdkclient.ClientFeaturesOptions{
-		InputResponses:  inputResponses,
-		RequestMethod:   requestMethod,
-		RequestParams:   requestParams,
-		RequestState:    requestState,
-		RequestStateKey: requestStateKey,
 	})
-}
-func sdkSyntheticHTTPRequest(ctx context.Context, extra *mcpsdk.RequestExtra) *http.Request {
-	req := &http.Request{
-		Header: make(http.Header),
-		Method: http.MethodPost,
-		URL:    &url.URL{Path: "/mcp"},
-	}
-	for key, values := range mcpruntime.RequestHeadersFromContext(ctx) {
-		req.Header.Del(key)
-		for _, value := range values {
-			req.Header.Add(key, value)
-		}
-	}
-	if extra != nil && extra.Header != nil {
-		for key, values := range extra.Header {
-			req.Header.Del(key)
-			for _, value := range values {
-				req.Header.Add(key, value)
-			}
-		}
-	}
-	return req
 }
 func sdkCallToolResult(result *ToolsCallResult) (*mcpsdk.CallToolResult, error) {
 	if result == nil {

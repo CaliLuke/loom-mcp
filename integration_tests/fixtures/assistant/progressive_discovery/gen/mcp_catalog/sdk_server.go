@@ -9,39 +9,32 @@
 package mcpcatalog
 
 import (
-	"bytes"
 	"context"
 	"encoding/base64"
 	jsontext "encoding/json/jsontext"
 	json "encoding/json/v2"
 	"errors"
 	"fmt"
-	"io"
-	"mime"
-	"net"
 	"net/http"
-	"net/netip"
-	"net/url"
-	"os"
 	"slices"
-	"strings"
-	"sync"
 
 	catalog "example.com/assistant/progressive_discovery/gen/catalog"
 	projected "example.com/assistant/progressive_discovery/gen/catalog/toolsets/projected"
-	mcpruntime "github.com/CaliLuke/loom-mcp/v2/runtime/mcp"
-	sdkclient "github.com/CaliLuke/loom-mcp/v2/runtime/mcp/sdkclient"
+	sdkbridge "github.com/CaliLuke/loom-mcp/v2/runtime/mcp/sdkbridge"
 	loomhttp "github.com/CaliLuke/loom/http"
 	"github.com/CaliLuke/loom/observability/transport"
 	mcpsdk "github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
-// SDK-backed MCP streamable HTTP server.
+// SDKServer is an official SDK-backed MCP streamable HTTP server.
 type SDKServer struct {
 	Handler http.Handler
 	Adapter *MCPAdapter
 	Server  *mcpsdk.Server
+	bridge  *sdkbridge.Server
 }
+
+// SDKServerOptions configures the generated service binding and shared SDK bridge.
 type SDKServerOptions struct {
 	Adapter        *MCPAdapterOptions
 	RequestContext func(context.Context, *http.Request) context.Context
@@ -52,432 +45,160 @@ type SDKServerOptions struct {
 	Server            *mcpsdk.ServerOptions
 	StreamableHTTP    *mcpsdk.StreamableHTTPOptions
 }
-type sdkResponseObserver struct {
-	http.ResponseWriter
-	statusCode      int
-	onSessionIssued func(string)
-	sessionOnce     sync.Once
-}
-type sdkJSONRPCRequestEnvelope struct {
-	ID     jsontext.Value `json:"id"`
-	Method jsontext.Value `json:"method"`
-}
 
-var sdkDisableLocalhostProtection = sdkMCPGoDebugValue("disablelocalhostprotection") == "1"
-var sdkDisableContentTypeCheck = sdkMCPGoDebugValue("disablecontenttypecheck") == "1"
-
+// NewSDKServer constructs the generated service adapter and shared official SDK bridge.
 func NewSDKServer(service catalog.Service, opts *SDKServerOptions) (*SDKServer, error) {
 	var adapterOpts *MCPAdapterOptions
 	var requestContext func(context.Context, *http.Request) context.Context
 	var requestStateKey []byte
-	var transportObserver transport.Observer
-	var runtimeCORS *loomhttp.RuntimeCORSPolicy
-	var serverOpts *mcpsdk.ServerOptions
-	var streamableOpts *mcpsdk.StreamableHTTPOptions
+	var bridgeOptions sdkbridge.Options
 	if opts != nil {
 		adapterOpts = opts.Adapter
 		requestContext = opts.RequestContext
 		requestStateKey = opts.RequestStateKey
-		transportObserver = opts.TransportObserver
-		runtimeCORS = opts.RuntimeCORS
-		serverOpts = opts.Server
-		streamableOpts = opts.StreamableHTTP
+		bridgeOptions = sdkbridge.Options{
+			RequestContext:    requestContext,
+			RuntimeCORS:       opts.RuntimeCORS,
+			Server:            opts.Server,
+			StreamableHTTP:    opts.StreamableHTTP,
+			TransportObserver: opts.TransportObserver,
+		}
 	}
 	if adapterOpts != nil && adapterOpts.ToolSearch != nil && adapterOpts.ToolSearch.AllowDirectHiddenCalls {
 		return nil, fmt.Errorf("SDK ToolSearch compact mode does not support AllowDirectHiddenCalls")
 	}
 	adapter := NewMCPAdapter(service, adapterOpts)
 	adapter.requestStateKey = slices.Clone(requestStateKey)
-	serverOpts = sdkServerOptionsWithDefaults(serverOpts)
-	if streamableOpts != nil && streamableOpts.Stateless {
-		return nil, fmt.Errorf("watchable MCP resources require stateful Streamable HTTP sessions")
-	}
-	serverOpts = sdkServerOptionsWithSubscriptions(serverOpts)
-	server := mcpsdk.NewServer(&mcpsdk.Implementation{
-		Name:    "catalog-mcp",
-		Version: "1.0.0",
-	}, serverOpts)
-	server.AddReceivingMiddleware(sdkJSONRPCErrorMiddleware)
-	if err := registerSDKTools(server, adapter, requestContext); err != nil {
+	runtimeBridge, err := sdkbridge.NewServer(sdkbridge.Config{
+		CompatibilityVersion: 1,
+		Implementation: mcpsdk.Implementation{
+			Name:    "catalog-mcp",
+			Version: "1.0.0",
+		},
+		Options: bridgeOptions,
+		Prompts: func() ([]sdkbridge.PromptBinding, error) {
+			return sdkPromptBindings(adapter, requestContext)
+		},
+		Resources: func() ([]sdkbridge.ResourceBinding, error) {
+			return sdkResourceBindings(adapter, requestContext)
+		},
+		Sessions: sdkbridge.SessionHooks{
+			AssertPrincipal:  adapter.assertSessionPrincipal,
+			CapturePrincipal: adapter.captureSessionPrincipal,
+			Clear:            adapter.clearSession,
+			IsInvalidSessionID: func(err error) bool {
+				return errors.Is(err, errInvalidSessionID)
+			},
+			MarkInitialized: adapter.markInitializedSession,
+		},
+		Tools: func() ([]sdkbridge.ToolBinding, error) {
+			return sdkToolBindings(adapter, requestContext)
+		},
+		WatchableResource: func(uri string) bool {
+			switch uri {
+			case "status://current":
+				return true
+			default:
+				return false
+			}
+		},
+	})
+	if err != nil {
 		return nil, err
-	}
-	if err := registerSDKResources(server, adapter, requestContext); err != nil {
-		return nil, err
-	}
-	if err := registerSDKPrompts(server, adapter, requestContext); err != nil {
-		return nil, err
-	}
-	handler := newSDKHandler(server, adapter, requestContext, streamableOpts)
-	if transportObserver != nil {
-		handler = transport.HTTPMiddleware(transportObserver)(handler)
-	}
-	if runtimeCORS != nil {
-		handler = sdkRuntimeCORSHandler(handler, *runtimeCORS)
 	}
 	return &SDKServer{
 		Adapter: adapter,
-		Handler: handler,
-		Server:  server,
+		Handler: runtimeBridge.Handler,
+		Server:  runtimeBridge.SDK,
+		bridge:  runtimeBridge,
 	}, nil
-}
-func sdkServerOptionsWithDefaults(opts *mcpsdk.ServerOptions) *mcpsdk.ServerOptions {
-	if opts == nil {
-		opts = &mcpsdk.ServerOptions{}
-	} else {
-		copied := *opts
-		opts = &copied
-	}
-	if opts.Capabilities == nil {
-		opts.Capabilities = &mcpsdk.ServerCapabilities{Logging: &mcpsdk.LoggingCapabilities{}}
-	} else {
-		capabilities := *opts.Capabilities
-		opts.Capabilities = &capabilities
-	}
-	return opts
-}
-func sdkServerOptionsWithSubscriptions(opts *mcpsdk.ServerOptions) *mcpsdk.ServerOptions {
-	subscribe := opts.SubscribeHandler
-	unsubscribe := opts.UnsubscribeHandler
-	opts.SubscribeHandler = func(ctx context.Context, req *mcpsdk.SubscribeRequest) error {
-		if req == nil || req.Params == nil || !sdkWatchableResourceURI(req.Params.URI) {
-			return fmt.Errorf("unknown watchable MCP resource %q", sdkSubscriptionURI(req))
-		}
-		if subscribe != nil {
-			return subscribe(ctx, req)
-		}
-		return nil
-	}
-	opts.UnsubscribeHandler = func(ctx context.Context, req *mcpsdk.UnsubscribeRequest) error {
-		if req == nil || req.Params == nil || !sdkWatchableResourceURI(req.Params.URI) {
-			return fmt.Errorf("unknown watchable MCP resource %q", sdkUnsubscriptionURI(req))
-		}
-		if unsubscribe != nil {
-			return unsubscribe(ctx, req)
-		}
-		return nil
-	}
-	return opts
-}
-func sdkWatchableResourceURI(uri string) bool {
-	switch uri {
-	case "status://current":
-		return true
-	default:
-		return false
-	}
-}
-func sdkSubscriptionURI(req *mcpsdk.SubscribeRequest) string {
-	if req == nil || req.Params == nil {
-		return ""
-	}
-	return req.Params.URI
-}
-func sdkUnsubscriptionURI(req *mcpsdk.UnsubscribeRequest) string {
-	if req == nil || req.Params == nil {
-		return ""
-	}
-	return req.Params.URI
 }
 
 // ResourceUpdated notifies subscribed clients that a designed watchable resource changed.
 func (s *SDKServer) ResourceUpdated(ctx context.Context, uri string) error {
-	if s == nil || s.Server == nil {
+	if s == nil || s.bridge == nil {
 		return fmt.Errorf("MCP SDK server is not initialized")
 	}
-	if !sdkWatchableResourceURI(uri) {
-		return fmt.Errorf("unknown watchable MCP resource %q", uri)
-	}
-	return s.Server.ResourceUpdated(ctx, &mcpsdk.ResourceUpdatedNotificationParams{URI: uri})
+	return s.bridge.ResourceUpdated(ctx, uri)
 }
-func (w *sdkResponseObserver) captureSession() {
-	if w == nil || w.onSessionIssued == nil {
-		return
-	}
-	sessionID := w.Header().Get(mcpruntime.HeaderKeySessionID)
-	if sessionID == "" {
-		return
-	}
-	w.sessionOnce.Do(func() {
-		w.onSessionIssued(sessionID)
-	})
-}
-func (w *sdkResponseObserver) Unwrap() http.ResponseWriter {
-	return w.ResponseWriter
-}
-func (w *sdkResponseObserver) WriteHeader(statusCode int) {
-	w.statusCode = statusCode
-	if statusCode < http.StatusBadRequest {
-		w.captureSession()
-	}
-	w.ResponseWriter.WriteHeader(statusCode)
-}
-func (w *sdkResponseObserver) Write(data []byte) (int, error) {
-	if w.statusCode == 0 {
-		w.statusCode = http.StatusOK
-	}
-	if w.statusCode < http.StatusBadRequest {
-		w.captureSession()
-	}
-	return w.ResponseWriter.Write(data)
-}
-func sdkJSONRPCErrorMiddleware(next mcpsdk.MethodHandler) mcpsdk.MethodHandler {
-	return func(ctx context.Context, method string, req mcpsdk.Request) (mcpsdk.Result, error) {
-		result, err := next(ctx, method, req)
-		if err != nil {
-			return nil, mcpruntime.NormalizeJSONRPCError(method, err)
-		}
-		return result, nil
-	}
-}
-func newSDKHandler(server *mcpsdk.Server, adapter *MCPAdapter, requestContext func(context.Context, *http.Request) context.Context, streamableOpts *mcpsdk.StreamableHTTPOptions) http.Handler {
-	configuredStreamableOpts := sdkStreamableHTTPOptions(streamableOpts)
-	crossOriginProtection := configuredStreamableOpts.CrossOriginProtection
-	configuredStreamableOpts.CrossOriginProtection = nil
-	base := mcpsdk.NewStreamableHTTPHandler(func(*http.Request) *mcpsdk.Server {
-		return server
-	}, configuredStreamableOpts)
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		r = r.WithContext(mcpruntime.WithRequestHeaders(r.Context(), r.Header))
-		if requestContext != nil {
-			r = r.WithContext(requestContext(r.Context(), r))
-		}
-		if sessionID := r.Header.Get(mcpruntime.HeaderKeySessionID); sessionID != "" {
-			if err := adapter.assertSessionPrincipal(r.Context(), sessionID); err != nil {
-				writeSDKSessionError(w, err)
-				return
-			}
-		}
-		transportObs, transportW := transport.BeginHTTPRequest(r.Context(), w, "mcp", r.Method, r)
-		defer transportObs.End()
-		if err := crossOriginProtection.Check(r); err != nil {
-			http.Error(transportW, err.Error(), http.StatusForbidden)
-			transportObs.Fail(transport.ReasonHandlerError)
-			return
-		}
-		if sdkRequestAllowsBodyInspection(r, configuredStreamableOpts) && rejectNullMCPRequestID(transportW, r, configuredStreamableOpts.MaxRequestBodyBytes) {
-			transportObs.Fail(transport.ReasonHandlerError)
-			return
-		}
-		observer := &sdkResponseObserver{
-			ResponseWriter: transportW,
-			onSessionIssued: func(sessionID string) {
-				adapter.markInitializedSession(sessionID)
-				adapter.captureSessionPrincipal(r.Context(), sessionID)
-			},
-		}
-		base.ServeHTTP(observer, r)
-		if observer.statusCode < http.StatusBadRequest {
-			observer.captureSession()
-		}
-		if r.Method == http.MethodDelete && observer.statusCode < 400 {
-			adapter.clearSession(r.Header.Get(mcpruntime.HeaderKeySessionID))
-		}
-		if observer.statusCode >= 400 {
-			transportObs.Fail(transport.ReasonHandlerError)
-		}
-	})
-}
-func sdkStreamableHTTPOptions(opts *mcpsdk.StreamableHTTPOptions) *mcpsdk.StreamableHTTPOptions {
-	if opts == nil {
-		return &mcpsdk.StreamableHTTPOptions{
-			CrossOriginProtection: http.NewCrossOriginProtection(),
-			MaxRequestBodyBytes:   mcpsdk.DefaultMaxRequestBodyBytes,
-		}
-	}
-	configured := *opts
-	if configured.CrossOriginProtection == nil {
-		configured.CrossOriginProtection = http.NewCrossOriginProtection()
-	}
-	if configured.MaxRequestBodyBytes == 0 {
-		configured.MaxRequestBodyBytes = mcpsdk.DefaultMaxRequestBodyBytes
-	}
-	return &configured
-}
-
-// sdkRequestAllowsBodyInspection reports whether the SDK pre-body checks accept the request.
-func sdkRequestAllowsBodyInspection(r *http.Request, opts *mcpsdk.StreamableHTTPOptions) bool {
-	if r.Method != http.MethodPost {
-		return false
-	}
-	if !opts.DisableLocalhostProtection && !sdkDisableLocalhostProtection {
-		if localAddr, ok := r.Context().Value(http.LocalAddrContextKey).(net.Addr); ok && localAddr != nil && sdkLoopbackAddress(localAddr.String()) && !sdkLoopbackAddress(r.Host) {
-			return false
-		}
-	}
-	if !sdkDisableContentTypeCheck {
-		mediaType, parameters, err := mime.ParseMediaType(r.Header.Get("Content-Type"))
-		if err != nil || mediaType != "application/json" || parameters == nil {
-			return false
-		}
-	}
-	jsonAccepted := false
-	streamAccepted := false
-	acceptValues := r.Header.Values("Accept")
-	for headerIndex := 0; headerIndex < len(acceptValues); headerIndex++ {
-		mediaRanges := strings.Split(acceptValues[headerIndex], ",")
-		for rangeIndex := 0; rangeIndex < len(mediaRanges); rangeIndex++ {
-			parts := strings.SplitN(mediaRanges[rangeIndex], ";", 2)
-			mediaRange := strings.ToLower(strings.TrimSpace(parts[0]))
-			switch mediaRange {
-			case "application/json", "application/*":
-				jsonAccepted = true
-			case "text/event-stream", "text/*":
-				streamAccepted = true
-			case "*/*":
-				jsonAccepted = true
-				streamAccepted = true
-			}
-		}
-	}
-	if !jsonAccepted || !streamAccepted {
-		return false
-	}
-	protocolVersion := r.Header.Get("MCP-Protocol-Version")
-	switch protocolVersion {
-	case "", "2024-11-05", "2025-03-26", "2025-06-18", "2025-11-25", "2026-07-28":
-		return true
-	}
-	return false
-}
-
-// sdkLoopbackAddress matches the official SDK localhost protection predicate.
-func sdkLoopbackAddress(address string) bool {
-	host, port, err := net.SplitHostPort(address)
-	if err != nil {
-		host = strings.Trim(address, "[]")
-	} else {
-		if port == "" {
-			return false
-		}
-	}
-	if host == "localhost" {
-		return true
-	}
-	addressValue, err := netip.ParseAddr(host)
-	if err != nil {
-		return false
-	}
-	return addressValue.IsLoopback()
-}
-func sdkMCPGoDebugValue(name string) string {
-	value := ""
-	parts := strings.Split(os.Getenv("MCPGODEBUG"), ",")
-	for partIndex := 0; partIndex < len(parts); partIndex++ {
-		pair := strings.SplitN(parts[partIndex], "=", 2)
-		if len(pair) == 2 && strings.TrimSpace(pair[0]) == name {
-			value = strings.TrimSpace(pair[1])
-		}
-	}
-	return value
-}
-
-// rejectNullMCPRequestID rejects null request IDs and restores other request bodies.
-func rejectNullMCPRequestID(w http.ResponseWriter, r *http.Request, maxBodyBytes int64) bool {
-	if r == nil || r.Method != http.MethodPost || r.Body == nil {
-		return false
-	}
-	var reader io.Reader = r.Body
-	if maxBodyBytes > 0 {
-		reader = http.MaxBytesReader(w, r.Body, maxBodyBytes)
-	}
-	body, err := io.ReadAll(reader)
-	closeErr := r.Body.Close()
-	if err == nil && closeErr != nil {
-		err = closeErr
-	}
-	if err != nil {
-		var maxBytesErr *http.MaxBytesError
-		if errors.As(err, &maxBytesErr) {
-			http.Error(w, fmt.Sprintf("request body exceeds %d bytes", maxBytesErr.Limit), http.StatusRequestEntityTooLarge)
-			return true
-		}
-		http.Error(w, "failed to read body", http.StatusBadRequest)
-		return true
-	}
-	r.Body = io.NopCloser(bytes.NewReader(body))
-	var envelope sdkJSONRPCRequestEnvelope
-	if err := json.Unmarshal(body, &envelope); err != nil {
-		return false
-	}
-	if len(envelope.Method) == 0 || !bytes.Equal(bytes.TrimSpace(envelope.ID), []byte("null")) {
-		return false
-	}
-	w.Header().Set("Content-Type", "application/json")
-	http.Error(w, "{\"jsonrpc\":\"2.0\",\"id\":null,\"error\":{\"code\":-32600,\"message\":\"Invalid Request: request id must not be null\"}}", http.StatusBadRequest)
-	return true
-}
-func sdkRuntimeCORSHandler(next http.Handler, policy loomhttp.RuntimeCORSPolicy) http.Handler {
-	actual := policy.Handler(next.ServeHTTP)
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.Method == http.MethodOptions {
-			policy.HandlePreflight(w, r, []string{http.MethodDelete, http.MethodGet, http.MethodPost})
-			return
-		}
-		actual(w, r)
-	})
-}
-func writeSDKSessionError(w http.ResponseWriter, err error) {
-	if errors.Is(err, errInvalidSessionID) {
-		http.Error(w, err.Error(), http.StatusNotFound)
-		return
-	}
-	http.Error(w, err.Error(), http.StatusForbidden)
-}
-func registerSDKTools(server *mcpsdk.Server, adapter *MCPAdapter, requestContext func(context.Context, *http.Request) context.Context) error {
+func sdkToolBindings(adapter *MCPAdapter, requestContext func(context.Context, *http.Request) context.Context) ([]sdkbridge.ToolBinding, error) {
+	handler := adapter.sdkToolHandler(requestContext)
 	if adapter.toolSearchEnabled() {
 		tools := adapter.toolSearchSyntheticTools()
 		tools = append(tools, adapter.visibleToolCatalog(adapter.generatedToolCatalog())...)
+		bindings := make([]sdkbridge.ToolBinding, 0, len(tools))
 		for _, tool := range tools {
 			sdkTool, err := sdkToolFromToolInfo(tool)
 			if err != nil {
-				return err
+				return nil, err
 			}
-			server.AddTool(sdkTool, adapter.sdkToolHandler(requestContext))
+			bindings = append(bindings, sdkbridge.ToolBinding{
+				Handler: handler,
+				Tool:    sdkTool,
+			})
 		}
-		return nil
+		return bindings, nil
 	}
-	server.AddTool(&mcpsdk.Tool{
-		Description:  "Lookup a direct catalog entry",
-		InputSchema:  sdkToolInputSchema("{\"type\":\"object\",\"required\":[\"query\"],\"properties\":{\"query\":{\"type\":\"string\",\"description\":\"Lookup query\"}},\"additionalProperties\":false}"),
-		Meta:         sdkMeta(jsontext.Value([]byte("{\"com.github.caliluke.loom-mcp/discovery\":{\"category\":\"catalog\",\"keywords\":[\"catalog\",\"entry\"],\"tags\":[\"lookup\",\"direct\"]}}"))),
-		Name:         "lookup",
-		OutputSchema: sdkToolInputSchema("{\"type\":\"object\",\"required\":[\"value\"],\"properties\":{\"value\":{\"type\":\"string\",\"description\":\"Lookup result\"}},\"additionalProperties\":false}"),
-		Title:        "Lookup",
-	}, adapter.sdkToolHandler(requestContext))
-	server.AddTool(&mcpsdk.Tool{
-		Description:  "Return two chunks through a Loom streaming method",
-		InputSchema:  sdkToolInputSchema(""),
-		Name:         "stream_chunks",
-		OutputSchema: sdkToolInputSchema("{\"type\":\"object\",\"required\":[\"chunk\"],\"properties\":{\"chunk\":{\"type\":\"string\",\"description\":\"Streamed chunk\"}},\"additionalProperties\":false}"),
-		Title:        "Stream Chunks",
-	}, adapter.sdkToolHandler(requestContext))
-	server.AddTool(&mcpsdk.Tool{
-		Description:  "Wait until the MCP client cancels the request",
-		InputSchema:  sdkToolInputSchema(""),
-		Name:         "wait_for_cancel",
-		OutputSchema: sdkToolInputSchema("{\"type\":\"object\",\"required\":[\"completed\"],\"properties\":{\"completed\":{\"type\":\"boolean\",\"description\":\"Whether the wait completed normally\"}},\"additionalProperties\":false}"),
-		Title:        "Wait For Cancel",
-	}, adapter.sdkToolHandler(requestContext))
-	server.AddTool(&mcpsdk.Tool{
-		Description:  "Lookup a projected catalog entry",
-		InputSchema:  jsontext.Value(projected.SpecProjectedLookup.Payload.Schema),
-		Name:         "projected_lookup",
-		OutputSchema: jsontext.Value(projected.SpecProjectedLookup.Result.Schema),
-		Title:        "Projected Lookup",
-	}, adapter.sdkToolHandler(requestContext))
-	return nil
+	bindings := make([]sdkbridge.ToolBinding, 0, 4)
+	bindings = append(bindings, sdkbridge.ToolBinding{
+		Handler: handler,
+		Tool: &mcpsdk.Tool{
+			Description:  "Lookup a direct catalog entry",
+			InputSchema:  sdkToolInputSchema("{\"type\":\"object\",\"required\":[\"query\"],\"properties\":{\"query\":{\"type\":\"string\",\"description\":\"Lookup query\"}},\"additionalProperties\":false}"),
+			Meta:         sdkMeta(jsontext.Value([]byte("{\"com.github.caliluke.loom-mcp/discovery\":{\"category\":\"catalog\",\"keywords\":[\"catalog\",\"entry\"],\"tags\":[\"lookup\",\"direct\"]}}"))),
+			Name:         "lookup",
+			OutputSchema: sdkToolInputSchema("{\"type\":\"object\",\"required\":[\"value\"],\"properties\":{\"value\":{\"type\":\"string\",\"description\":\"Lookup result\"}},\"additionalProperties\":false}"),
+			Title:        "Lookup",
+		},
+	})
+	bindings = append(bindings, sdkbridge.ToolBinding{
+		Handler: handler,
+		Tool: &mcpsdk.Tool{
+			Description:  "Return two chunks through a Loom streaming method",
+			InputSchema:  sdkToolInputSchema(""),
+			Name:         "stream_chunks",
+			OutputSchema: sdkToolInputSchema("{\"type\":\"object\",\"required\":[\"chunk\"],\"properties\":{\"chunk\":{\"type\":\"string\",\"description\":\"Streamed chunk\"}},\"additionalProperties\":false}"),
+			Title:        "Stream Chunks",
+		},
+	})
+	bindings = append(bindings, sdkbridge.ToolBinding{
+		Handler: handler,
+		Tool: &mcpsdk.Tool{
+			Description:  "Wait until the MCP client cancels the request",
+			InputSchema:  sdkToolInputSchema(""),
+			Name:         "wait_for_cancel",
+			OutputSchema: sdkToolInputSchema("{\"type\":\"object\",\"required\":[\"completed\"],\"properties\":{\"completed\":{\"type\":\"boolean\",\"description\":\"Whether the wait completed normally\"}},\"additionalProperties\":false}"),
+			Title:        "Wait For Cancel",
+		},
+	})
+	bindings = append(bindings, sdkbridge.ToolBinding{
+		Handler: handler,
+		Tool: &mcpsdk.Tool{
+			Description:  "Lookup a projected catalog entry",
+			InputSchema:  jsontext.Value(projected.SpecProjectedLookup.Payload.Schema),
+			Name:         "projected_lookup",
+			OutputSchema: jsontext.Value(projected.SpecProjectedLookup.Result.Schema),
+			Title:        "Projected Lookup",
+		},
+	})
+	return bindings, nil
 }
-func registerSDKResources(server *mcpsdk.Server, adapter *MCPAdapter, requestContext func(context.Context, *http.Request) context.Context) error {
-	server.AddResource(&mcpsdk.Resource{
-		Description: "",
-		MIMEType:    "application/json",
-		Name:        "status",
-		URI:         "status://current",
-	}, adapter.sdkResourceHandler(requestContext))
-	return nil
+func sdkResourceBindings(adapter *MCPAdapter, requestContext func(context.Context, *http.Request) context.Context) ([]sdkbridge.ResourceBinding, error) {
+	handler := adapter.sdkResourceHandler(requestContext)
+	bindings := make([]sdkbridge.ResourceBinding, 0, 1)
+	bindings = append(bindings, sdkbridge.ResourceBinding{
+		Handler: handler,
+		Resource: &mcpsdk.Resource{
+			Description: "",
+			MIMEType:    "application/json",
+			Name:        "status",
+			URI:         "status://current",
+		},
+	})
+	return bindings, nil
 }
-func registerSDKPrompts(server *mcpsdk.Server, adapter *MCPAdapter, requestContext func(context.Context, *http.Request) context.Context) error {
-	return nil
+func sdkPromptBindings(adapter *MCPAdapter, requestContext func(context.Context, *http.Request) context.Context) ([]sdkbridge.PromptBinding, error) {
+	return nil, nil
 }
 func sdkToolAnnotations(raw any) (*mcpsdk.ToolAnnotations, error) {
 	if raw == nil {
@@ -530,109 +251,37 @@ func sdkToolFromToolInfo(tool *ToolInfo) (*mcpsdk.Tool, error) {
 	}
 	return sdkTool, nil
 }
+func (a *MCPAdapter) sdkHandlerContext(requestContext func(context.Context, *http.Request) context.Context) sdkbridge.HandlerContext {
+	return sdkbridge.HandlerContext{
+		MarkInitialized: a.markInitializedSession,
+		RequestContext:  requestContext,
+		RequestStateKey: a.requestStateKey,
+	}
+}
 func (a *MCPAdapter) sdkToolHandler(requestContext func(context.Context, *http.Request) context.Context) mcpsdk.ToolHandler {
-	return func(ctx context.Context, req *mcpsdk.CallToolRequest) (*mcpsdk.CallToolResult, error) {
-		payload := &ToolsCallPayload{}
-		var inputResponses mcpsdk.InputResponseMap
-		requestState := ""
-		if req != nil && req.Params != nil {
-			payload.Name = req.Params.Name
-			payload.Arguments = mcpJSONFromRaw(req.Params.Arguments)
-			inputResponses = req.Params.InputResponses
-			requestState = req.Params.RequestState
+	return sdkbridge.ToolHandler(a.sdkHandlerContext(requestContext), func(ctx context.Context, request sdkbridge.ToolRequest) (*mcpsdk.CallToolResult, error) {
+		payload := &ToolsCallPayload{
+			Arguments: mcpJSONFromRaw(request.Arguments),
+			Name:      request.Name,
 		}
-		ctx = a.sdkRequestContext(ctx, req.GetSession(), req.GetExtra(), requestContext, inputResponses, requestState, "tools/call", payload)
-		if req != nil && req.Params != nil {
-			ctx = mcpruntime.WithProgressToken(ctx, req.Params.GetProgressToken())
-		}
+		ctx = request.Bind(payload)
 		result, err := a.ToolsCall(ctx, payload)
 		if err != nil {
-			if requests, state, ok := sdkclient.InputRequired(err); ok {
-				return &mcpsdk.CallToolResult{
-					InputRequests: requests,
-					RequestState:  state,
-				}, nil
-			}
 			return nil, err
 		}
 		return sdkCallToolResult(result)
-	}
+	})
 }
 func (a *MCPAdapter) sdkResourceHandler(requestContext func(context.Context, *http.Request) context.Context) mcpsdk.ResourceHandler {
-	return func(ctx context.Context, req *mcpsdk.ReadResourceRequest) (*mcpsdk.ReadResourceResult, error) {
-		payload := &ResourcesReadPayload{}
-		var inputResponses mcpsdk.InputResponseMap
-		requestState := ""
-		if req != nil && req.Params != nil {
-			payload.URI = req.Params.URI
-			inputResponses = req.Params.InputResponses
-			requestState = req.Params.RequestState
-		}
-		ctx = a.sdkRequestContext(ctx, req.GetSession(), req.GetExtra(), requestContext, inputResponses, requestState, "resources/read", payload)
+	return sdkbridge.ResourceHandler(a.sdkHandlerContext(requestContext), func(ctx context.Context, request sdkbridge.ResourceRequest) (*mcpsdk.ReadResourceResult, error) {
+		payload := &ResourcesReadPayload{URI: request.URI}
+		ctx = request.Bind(payload)
 		result, err := a.ResourcesRead(ctx, payload)
 		if err != nil {
-			if requests, state, ok := sdkclient.InputRequired(err); ok {
-				return &mcpsdk.ReadResourceResult{
-					InputRequests: requests,
-					RequestState:  state,
-				}, nil
-			}
 			return nil, err
 		}
 		return sdkReadResourceResult(result)
-	}
-}
-func (a *MCPAdapter) sdkRequestContext(ctx context.Context, session mcpsdk.Session, extra *mcpsdk.RequestExtra, requestContext func(context.Context, *http.Request) context.Context, inputResponses mcpsdk.InputResponseMap, requestState string, requestMethod string, requestParams any) context.Context {
-	if requestContext != nil {
-		ctx = requestContext(ctx, sdkSyntheticHTTPRequest(ctx, extra))
-	}
-	if session == nil {
-		a.markInitializedSession("")
-		return ctx
-	}
-	ctx = sdkContextWithClientFeatures(ctx, session, inputResponses, requestState, a.requestStateKey, requestMethod, requestParams)
-	sessionID := session.ID()
-	if sessionID == "" {
-		a.markInitializedSession("")
-		return ctx
-	}
-	a.markInitializedSession(sessionID)
-	return mcpruntime.WithSessionID(ctx, sessionID)
-}
-func sdkContextWithClientFeatures(ctx context.Context, session mcpsdk.Session, inputResponses mcpsdk.InputResponseMap, requestState string, requestStateKey []byte, requestMethod string, requestParams any) context.Context {
-	serverSession, ok := session.(*mcpsdk.ServerSession)
-	if !ok || serverSession == nil {
-		return ctx
-	}
-	return sdkclient.WithClientFeatures(ctx, serverSession, sdkclient.ClientFeaturesOptions{
-		InputResponses:  inputResponses,
-		RequestMethod:   requestMethod,
-		RequestParams:   requestParams,
-		RequestState:    requestState,
-		RequestStateKey: requestStateKey,
 	})
-}
-func sdkSyntheticHTTPRequest(ctx context.Context, extra *mcpsdk.RequestExtra) *http.Request {
-	req := &http.Request{
-		Header: make(http.Header),
-		Method: http.MethodPost,
-		URL:    &url.URL{Path: "/mcp"},
-	}
-	for key, values := range mcpruntime.RequestHeadersFromContext(ctx) {
-		req.Header.Del(key)
-		for _, value := range values {
-			req.Header.Add(key, value)
-		}
-	}
-	if extra != nil && extra.Header != nil {
-		for key, values := range extra.Header {
-			req.Header.Del(key)
-			for _, value := range values {
-				req.Header.Add(key, value)
-			}
-		}
-	}
-	return req
 }
 func sdkCallToolResult(result *ToolsCallResult) (*mcpsdk.CallToolResult, error) {
 	if result == nil {

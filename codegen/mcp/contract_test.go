@@ -89,18 +89,31 @@ func TestGenerateSDKServerAlwaysExposesOptionalRuntimeCORS(t *testing.T) {
 
 	require.Contains(t, sdk, "RuntimeCORS       *loomhttp.RuntimeCORSPolicy")
 	require.NotContains(t, sdk, "runtime CORS policy is required")
-	require.Contains(t, sdk, "if runtimeCORS != nil")
-	require.Contains(t, sdk, "handler = sdkRuntimeCORSHandler(handler, *runtimeCORS)")
-	require.Contains(t, sdk, "CrossOriginProtection: http.NewCrossOriginProtection()")
+	require.Contains(t, sdk, "RuntimeCORS:       opts.RuntimeCORS")
+	require.Contains(t, sdk, "sdkbridge.NewServer")
+	require.NotContains(t, sdk, "func sdkRuntimeCORSHandler(")
 }
 
 func TestGenerateSDKServerNormalizesJSONRPCErrors(t *testing.T) {
 	files := generateToolDiscoveryFixture(t)
 	sdk := renderGeneratedFile(t, findGeneratedFile(t, files, "gen/mcp_assistant/sdk_server.go"))
 
-	require.Contains(t, sdk, "server.AddReceivingMiddleware(sdkJSONRPCErrorMiddleware)")
-	require.Contains(t, sdk, "func sdkJSONRPCErrorMiddleware(next mcpsdk.MethodHandler) mcpsdk.MethodHandler")
-	require.Contains(t, sdk, "mcpruntime.NormalizeJSONRPCError(method, err)")
+	require.Contains(t, sdk, "sdkbridge.NewServer")
+	require.NotContains(t, sdk, "func sdkJSONRPCErrorMiddleware(")
+}
+
+func TestGenerateSDKServerDelegatesCommonBehaviorToTypedBridge(t *testing.T) {
+	files := generateToolDiscoveryFixture(t)
+	sdk := renderGeneratedFile(t, findGeneratedFile(t, files, "gen/mcp_assistant/sdk_server.go"))
+
+	require.Contains(t, sdk, "sdkbridge.NewServer(sdkbridge.Config{")
+	require.Contains(t, sdk, "CompatibilityVersion: 1")
+	require.Contains(t, sdk, "Tools: func() ([]sdkbridge.ToolBinding, error)")
+	require.Contains(t, sdk, "return sdkToolBindings(adapter, requestContext)")
+	require.NotContains(t, sdk, "func sdkJSONRPCErrorMiddleware(")
+	require.NotContains(t, sdk, "func newSDKHandler(")
+	require.NotContains(t, sdk, "func sdkStreamableHTTPOptions(")
+	require.Less(t, strings.Count(sdk, "\n"), 650, "generated SDK server should contain only service-specific descriptors and typed conversions")
 }
 
 func TestGenerateAdapterUsesUnaryToolBoundaryAndPrivateStreamingCollector(t *testing.T) {
@@ -139,7 +152,7 @@ func TestGenerateAdapterUsesUnaryToolBoundaryAndPrivateStreamingCollector(t *tes
 	require.Contains(t, adapter, "func mcpJSONFromRaw(raw jsontext.Value) loom.Nullable[any]")
 	require.Contains(t, adapter, "func (a *MCPAdapter) ToolsCall(ctx context.Context, p *ToolsCallPayload) (res *ToolsCallResult, err error)")
 	require.Contains(t, sdk, "result, err := a.ToolsCall(ctx, payload)")
-	require.Contains(t, sdk, "payload.Arguments = mcpJSONFromRaw(req.Params.Arguments)")
+	require.Contains(t, sdk, "Arguments: mcpJSONFromRaw(request.Arguments)")
 	require.Contains(t, sdk, "structuredContent, err := mcpJSONRaw(result.StructuredContent)")
 	require.NotContains(t, sdk, "sdkToolCallCollector")
 }
@@ -188,12 +201,10 @@ func TestGenerateWatchableResourcesUseSDKSubscriptions(t *testing.T) {
 	sdk := renderGeneratedFile(t, findGeneratedFile(t, files, "gen/mcp_catalog/sdk_server.go"))
 	adapter := renderGeneratedFile(t, findGeneratedFile(t, files, "gen/mcp_catalog/adapter_server.go"))
 
-	require.Contains(t, sdk, "watchable MCP resources require stateful Streamable HTTP sessions")
-	require.Contains(t, sdk, "opts.SubscribeHandler = func(ctx context.Context, req *mcpsdk.SubscribeRequest) error")
-	require.Contains(t, sdk, "opts.UnsubscribeHandler = func(ctx context.Context, req *mcpsdk.UnsubscribeRequest) error")
+	require.Contains(t, sdk, "WatchableResource: func(uri string) bool")
 	require.Contains(t, sdk, `case "status://current":`)
 	require.Contains(t, sdk, "func (s *SDKServer) ResourceUpdated(ctx context.Context, uri string) error")
-	require.Contains(t, sdk, "s.Server.ResourceUpdated(ctx, &mcpsdk.ResourceUpdatedNotificationParams{URI: uri})")
+	require.Contains(t, sdk, "return s.bridge.ResourceUpdated(ctx, uri)")
 	require.NotContains(t, adapter, "subs map[string]int")
 	require.NotContains(t, adapter, "EventsStream")
 }
