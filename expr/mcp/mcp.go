@@ -714,6 +714,19 @@ func (p *PromptExpr) Validate() error {
 	return nil
 }
 
+// Validate validates a dynamic prompt expression.
+func (d *DynamicPromptExpr) Validate() error {
+	verr := new(eval.ValidationErrors)
+	if d.Name == "" {
+		verr.Add(d, "dynamic prompt name is required")
+	}
+	mergeChildErrors(verr, d.Icons, iconValidator)
+	if len(verr.Errors) > 0 {
+		return verr
+	}
+	return nil
+}
+
 // Validate validates a static prompt message expression.
 func (m *MessageExpr) Validate() error {
 	verr := new(eval.ValidationErrors)

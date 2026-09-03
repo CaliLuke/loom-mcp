@@ -617,8 +617,10 @@ func StaticPrompt(name, description string, args ...any) {
 // DynamicPrompt must appear in a Method expression within a service that has MCP enabled.
 //
 // DynamicPrompt takes two arguments:
-//   - name: the prompt identifier
+//   - name: the non-empty prompt identifier
 //   - description: human-readable prompt description
+//
+// Each icon must have a non-empty source and a valid theme.
 //
 // Example:
 //

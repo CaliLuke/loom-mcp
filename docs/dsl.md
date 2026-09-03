@@ -1681,6 +1681,9 @@ handling.
 Dynamic prompts enable the prompt capability when a service declares no static
 prompts. A dynamic-prompt-only design generates a valid SDK server.
 
+Each dynamic prompt must have a non-empty name. Each attached icon must have a
+non-empty source and a valid theme.
+
 `WatchableResource` generates standard SDK subscription handlers. Call
 `SDKServer.ResourceUpdated(ctx, uri)` after the resource changes. Watchable
 resources cannot use stateless Streamable HTTP.

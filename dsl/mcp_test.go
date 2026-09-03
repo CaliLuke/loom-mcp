@@ -359,6 +359,42 @@ func TestMCPDynamicPrompt(t *testing.T) {
 	require.Equal(t, "https://example.com/icons/code-review.png", prompt.Icons[0].Source)
 }
 
+func TestMCPDynamicPromptValidation(t *testing.T) {
+	tests := []struct {
+		name       string
+		promptName string
+		icons      []*mcpexpr.IconExpr
+		wantError  string
+	}{
+		{
+			name:      "missing name",
+			wantError: "dynamic prompt name is required",
+		},
+		{
+			name:       "missing icon source",
+			promptName: "code_review",
+			icons:      []*mcpexpr.IconExpr{{}},
+			wantError:  "icon source is required",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := runInvalidMCPDSL(t, func() {
+				API("test", func() {})
+				Service("assistant", func() {
+					MCP("assistant", "1.0")
+					Method("code_review", func() {
+						Result(ArrayOf(String))
+						DynamicPrompt(tt.promptName, "Generate code review prompt", DynamicPromptIcons(tt.icons...))
+					})
+				})
+			})
+
+			require.Contains(t, err, tt.wantError)
+		})
+	}
+}
 func TestMCPDynamicPromptRequiresMCP(t *testing.T) {
 	err := runInvalidMCPDSL(t, func() {
 		API("test", func() {})

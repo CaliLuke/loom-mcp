@@ -288,6 +288,8 @@ Use this skill for `loom-mcp` work in this repo. Keep `AGENTS.md` short and keep
   list-surface `ToolIcons`/`ResourceIcons`/`PromptIcons`/`DynamicPromptIcons`
   should be declared in the DSL and allowed to flow through codegen into
   `initialize`, `tools/list`, `resources/list`, and `prompts/list`.
+- Dynamic prompt design validation requires a non-empty prompt name. It also
+  validates all attached icons before code generation.
 - MCP skill exposure is design-owned too: declare local agent skill roots with
   `SkillDirectory(...)`, then let generated SDK servers expose
   `skill://` entries through `resources/list` and `resources/read`.
