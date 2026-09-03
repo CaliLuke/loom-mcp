@@ -30,28 +30,6 @@ func TestGeneratedSDKServerAllowsSameOrigin(t *testing.T) {
 	require.NotEqual(t, http.StatusForbidden, resp.StatusCode,
 		"SDK streamable HTTP server must not reject same-origin requests")
 }
-func TestGeneratedSDKServerRejectsInvalidHostBeforeNullRequestID(t *testing.T) {
-	t.Parallel()
-
-	_, sdkHTTPServer := newGeneratedSDKServer(t)
-	defer sdkHTTPServer.Close()
-
-	req, err := http.NewRequestWithContext(
-		context.Background(),
-		http.MethodPost,
-		sdkHTTPServer.URL+"/rpc",
-		bytes.NewReader([]byte("{\"jsonrpc\":\"2.0\",\"id\":null,\"method\":\"tools/list\",\"params\":{}}")),
-	)
-	require.NoError(t, err)
-	req.Host = "evil.example.com"
-	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("Accept", "application/json, text/event-stream")
-
-	resp, err := http.DefaultClient.Do(req)
-	require.NoError(t, err)
-	defer func() { require.NoError(t, resp.Body.Close()) }()
-	require.Equal(t, http.StatusForbidden, resp.StatusCode)
-}
 func postSDKInitializeWithOrigin(t *testing.T, endpoint, origin string) *http.Response {
 	t.Helper()
 

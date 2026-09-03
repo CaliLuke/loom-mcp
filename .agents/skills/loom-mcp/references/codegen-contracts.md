@@ -97,9 +97,9 @@ Use this file when editing DSL, generators, generated helpers, or MCP codegen be
   converts untyped adapter errors into typed JSON-RPC errors. Preserve existing
   typed SDK errors. Map invalid parameters and missing resources to `-32602`.
   Map internal and unknown errors to `-32603` with only declared safe messages.
-  The bridge rejects request envelopes with an explicit null `id` before SDK
-  dispatch, returning HTTP 400 with JSON-RPC `-32600`. Do not parse or rewrite
-  response bodies for SDK session errors.
+  The bridge does not read, replace, or reparse request bodies outside the
+  official SDK, and does not parse or rewrite response bodies for SDK session
+  errors.
 - Generated SDK files contain service descriptors, typed dispatch closures, and
   result conversion. The bridge owns registration loops, common options, HTTP
   plumbing, sessions, subscriptions, request context, CORS, and observation.

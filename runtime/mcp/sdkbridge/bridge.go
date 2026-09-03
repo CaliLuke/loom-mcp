@@ -214,10 +214,6 @@ func newHandler(server *mcpsdk.Server, requestContext func(context.Context, *htt
 			transportObservation.Fail(transport.ReasonHandlerError)
 			return
 		}
-		if requestAllowsBodyInspection(r, configuredStreamableOptions) && rejectNullRequestID(transportWriter, r, configuredStreamableOptions.MaxRequestBodyBytes) {
-			transportObservation.Fail(transport.ReasonHandlerError)
-			return
-		}
 		observer := &responseObserver{
 			ResponseWriter: transportWriter,
 			onSessionIssued: func(sessionID string) {
