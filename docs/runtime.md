@@ -727,6 +727,10 @@ tool-to-method transform, label and metadata injection, interceptor wrapping,
 method invocation, method-to-tool transform, retry hints, bounds projection, and
 server-data projection.
 
+For a tool with injected fields, `MapPayload` must return a non-nil bound method
+payload. A mapper error or invalid mapped value becomes `planner.ToolResult.Error`.
+The dispatcher does not panic.
+
 When a method-backed toolset tool is also exposed to MCP with
 `Expose(AgentRuntime, MCPSurface)` and `MCPPlacement(...)`, generated MCP
 adapters call the same dispatcher. Design-time exposure only permits the

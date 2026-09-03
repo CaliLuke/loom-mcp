@@ -361,10 +361,14 @@ func generateInjectedAgentDesign(t *testing.T) []*gcodegen.File {
 const injectedPayloadRuntimeTest = `package fmcp_test
 
 import (
+	"context"
 	"testing"
 
+	assistant "example.com/fmcp/gen/assistant"
 	lookup "example.com/fmcp/gen/assistant/toolsets/lookup"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/runtime"
+	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/tools"
+	"github.com/go-json-experiment/json/jsontext"
 )
 
 func TestInjectedPayloadRuntime(t *testing.T) {
@@ -381,6 +385,38 @@ func TestInjectedPayloadRuntime(t *testing.T) {
 	}
 	if payload.TurnID != "turn-1" {
 		t.Fatalf("unexpected turn ID: %q", payload.TurnID)
+	}
+
+	for _, tc := range []struct {
+		name   string
+		mapped any
+	}{
+		{name: "wrong type", mapped: "invalid payload type"},
+		{name: "nil", mapped: nil},
+		{name: "typed nil", mapped: (*assistant.LookupPayload)(nil)},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			result, err := lookup.DispatchLookupMethod(
+				context.Background(),
+				&runtime.ToolCallMeta{},
+				jsontext.Value("{\"query\":\"find me\"}"),
+				nil,
+				lookup.LookupDispatchOptions{
+					Call: func(context.Context, any) (any, error) {
+						return "unused", nil
+					},
+					MapPayload: func(tools.Ident, any, *runtime.ToolCallMeta) (any, error) {
+						return tc.mapped, nil
+					},
+				},
+			)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if result.Error == nil {
+				t.Fatal("expected invalid mapped payload type to return a tool error")
+			}
+		})
 	}
 }
 `

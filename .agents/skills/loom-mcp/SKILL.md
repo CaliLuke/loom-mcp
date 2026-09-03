@@ -246,6 +246,9 @@ Use this skill for `loom-mcp` work in this repo. Keep `AGENTS.md` short and keep
   remove them from model-facing `required`. Injection renderers must inspect
   the prepared public payload field and emit pointer or value assignments that
   match its generated Go type.
+- Generated method dispatchers with injected fields validate `MapPayload` output
+  before field injection. Mapper errors, nil results, and wrong types become tool
+  errors, not panics.
 - Unified tool-surface projection v1 rejects projected tools that use
   `Confirmation(...)`, `Inject(...)`, `ServerData(...)`,
   `ResultReminder(...)`, or `BoundedResult(...)`; treat those as validation

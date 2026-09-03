@@ -177,6 +177,9 @@ Use this file when editing DSL, generators, generated helpers, or MCP codegen be
   server-data projection, retry hints, or tool-error mapping. Registry provider
   loops still use their generated provider adapter path unless that path is
   explicitly unified in a later milestone.
+- Generated method dispatchers with injected fields must validate `MapPayload`
+  output before field injection. Mapper errors, nil results, and wrong types
+  become tool errors. The dispatcher must not panic.
 - Generated tool specs must keep transport/public payload shapes distinct from
   advertised model-facing shapes. `Inject(...)` fields remain in generated
   public payload structs, codecs, validation, and method dispatch payloads, but

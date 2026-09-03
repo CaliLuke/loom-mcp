@@ -491,7 +491,7 @@ func emitToolProviderDispatchers(stmt *jen.Statement, data toolProviderFileData)
 		}
 		optionsName := tool.ConstName + "DispatchOptions"
 		dispatchName := "Dispatch" + tool.ConstName + "Method"
-		gocodegen.Doc(stmt, optionsName+" customizes "+dispatchName+".")
+		gocodegen.Doc(stmt, optionsName+" customizes "+dispatchName+". For tools with injected fields, MapPayload must return a non-nil bound method payload. Invalid results become tool errors.")
 		stmt.Type().Id(optionsName).Struct(
 			jen.Id("Call").Func().Params(jen.Qual("context", "Context"), jen.Any()).Params(jen.Any(), jen.Error()),
 			jen.Id("MapPayload").Func().Params(jen.Id("tools").Dot("Ident"), jen.Any(), jen.Op("*").Id("runtime").Dot("ToolCallMeta")).Params(jen.Any(), jen.Error()),
@@ -546,7 +546,11 @@ func emitToolProviderDispatchers(stmt *jen.Statement, data toolProviderFileData)
 					}
 				})
 				if len(tool.InjectedFields) > 0 {
-					g.Id("payload").Op(":=").Id("methodIn").Assert(gocodegen.TypeRef(tool.MethodPayloadTypeRef))
+					g.List(jen.Id("payload"), jen.Id("ok")).Op(":=").Id("methodIn").Assert(gocodegen.TypeRef(tool.MethodPayloadTypeRef))
+					g.If(jen.Op("!").Id("ok").Op("||").Id("payload").Op("==").Nil()).Block(
+						jen.Id("err").Op(":=").Qual("fmt", "Errorf").Call(jen.Lit("invalid mapped payload type for %q: %T"), jen.Id(tool.ConstName), jen.Id("methodIn")),
+						emitToolProviderDispatcherErrResult(tool),
+					)
 					for _, field := range tool.InjectedFields {
 						if isMetaInject(field) {
 							g.Id("payload").Dot(gocodegen.Goify(field, true)).Op("=").Id("meta").Dot(gocodegen.Goify(field, true))
