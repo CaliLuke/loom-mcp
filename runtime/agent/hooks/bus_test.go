@@ -50,3 +50,18 @@ func TestSubscriptionClose(t *testing.T) {
 	require.NoError(t, bus.Publish(ctx, evt2))
 	require.Equal(t, 1, count)
 }
+
+func TestSubscriptionCloseRemovesRegistration(t *testing.T) {
+	bus := NewBus().(*bus)
+	sub := SubscriberFunc(func(context.Context, Event) error {
+		return nil
+	})
+
+	for range 100 {
+		subscription, err := bus.Register(sub)
+		require.NoError(t, err)
+		require.NoError(t, subscription.Close())
+	}
+
+	require.Empty(t, bus.subs)
+}

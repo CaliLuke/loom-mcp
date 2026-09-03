@@ -72,8 +72,7 @@ type (
 		// mu protects concurrent access to subs.
 		mu sync.RWMutex
 
-		// subs holds active subscriptions in registration order. Entries are set
-		// to nil on Close; Publish snapshots and skips nils.
+		// subs holds active subscriptions in registration order.
 		subs []*subscription
 	}
 
@@ -191,7 +190,10 @@ func (s *subscription) Close() error {
 		s.bus.mu.Lock()
 		for i := range s.bus.subs {
 			if s.bus.subs[i] == s {
-				s.bus.subs[i] = nil
+				last := len(s.bus.subs) - 1
+				copy(s.bus.subs[i:], s.bus.subs[i+1:])
+				s.bus.subs[last] = nil
+				s.bus.subs = s.bus.subs[:last]
 				break
 			}
 		}
