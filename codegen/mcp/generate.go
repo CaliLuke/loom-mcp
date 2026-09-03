@@ -212,7 +212,6 @@ func adapterImports(genpkg string, svc *expr.ServiceExpr, svcName string, data *
 		{Path: "fmt"},
 		{Path: "io"},
 		{Path: "net/http"},
-		{Path: "net/url"},
 		{Path: "path"},
 		{Path: "regexp"},
 		{Path: "sort"},
@@ -229,6 +228,7 @@ func adapterImports(genpkg string, svc *expr.ServiceExpr, svcName string, data *
 		{Path: "github.com/sahilm/fuzzy"},
 		{Path: genpkg + "/" + svcName, Name: svcName},
 		{Path: "github.com/CaliLuke/loom-mcp/v2/runtime/mcp", Name: "mcpruntime"},
+		{Path: "github.com/CaliLuke/loom-mcp/v2/runtime/mcp/sdkbridge", Name: "sdkbridge"},
 		{Path: upstreampaths.LoomMCPHTTPImportPath, Name: "goahttp"},
 		{Path: upstreampaths.LoomPkgImportPath, Name: "loom"},
 	}...)

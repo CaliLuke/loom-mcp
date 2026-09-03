@@ -19,7 +19,7 @@ func generateTransportConformanceFixture(t *testing.T) []*gcodegen.File {
 	restore := resetMCPCodegenState(t)
 	t.Cleanup(restore)
 
-	svc, methods := testService("assistant", "search", "read_document")
+	svc, methods := testService("assistant", "search", "read_document", "build_summary")
 	methods["search"].Payload = &expr.AttributeExpr{
 		Type: &expr.Object{
 			{Name: "query", Attribute: &expr.AttributeExpr{Type: expr.String}},
@@ -48,6 +48,8 @@ func generateTransportConformanceFixture(t *testing.T) []*gcodegen.File {
 			},
 		},
 	})
+
+	mcpexpr.Root.RegisterDynamicPrompt(svc, &mcpexpr.DynamicPromptExpr{Name: "dynamic_summary", Method: methods["build_summary"]})
 
 	files, err := Generate("example.com/assistant/gen", []eval.Root{root}, nil)
 	require.NoError(t, err)

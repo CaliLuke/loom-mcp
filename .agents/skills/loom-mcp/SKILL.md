@@ -409,12 +409,14 @@ Use this skill for `loom-mcp` work in this repo. Keep `AGENTS.md` short and keep
   Loom runtime client-feature adapters. Keep official-SDK conversion and
   request-state handling in `runtime/mcp/sdkclient`, not duplicated in generated
   files.
-- Generated SDK servers provide typed service descriptors and closures to
-  `runtime/mcp/sdkbridge`. The bridge owns common registration, request context,
-  error, session, subscription, CORS, and observation behavior. Keep service
-  types, schemas, typed calls, and result conversion in generated code. Generated
-  code must pass a literal compatibility version. The bridge fails construction
-  when this version differs from `sdkbridge.CompatibilityVersion`.
+- Generated SDK servers and adapters provide typed service descriptors and
+  closures to `runtime/mcp/sdkbridge`. The bridge owns common registration,
+  tool interceptor composition, prompt and resource dispatch, resource policy,
+  skill dispatch, request context, errors, sessions, subscriptions, CORS, and
+  observation. Keep schemas, codecs, typed service calls, and result conversion
+  in generated code. Do not use reflection. Generated code must pass a literal
+  compatibility version. The bridge fails construction when this version differs
+  from `sdkbridge.CompatibilityVersion`.
 - Generated SDK servers expose Loom transport observability directly through
   `SDKServerOptions.TransportObserver`; keep external middleware wrapping as an
   application-wide alternative, not the only enablement path.

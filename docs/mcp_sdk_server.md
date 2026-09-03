@@ -76,18 +76,17 @@ The wrapper does not modify the original request.
 
 ## Generated/runtime bridge boundary
 
-Generated SDK servers are compact, typed bindings over
-`runtime/mcp/sdkbridge`. The generated package calls
-`sdkbridge.NewServer` with service-specific descriptors and closures. The
-bridge does not use reflection for dispatch.
+Generated SDK servers and adapters are compact, typed bindings over
+`runtime/mcp/sdkbridge`. Generated code supplies service descriptors and
+closures. The bridge does not use reflection for dispatch.
 
 | Generated for each service | Owned once by `sdkbridge` |
 | --- | --- |
 | Public service payload and result types | Official SDK registration loops |
-| JSON schemas, tool/resource/prompt descriptors, and icons | Streamable HTTP defaults and cross-origin protection |
-| Typed calls to `MCPAdapter.ToolsCall`, `PromptsGet`, and `ResourcesRead` | Request-header, session, progress, and client-feature context plumbing |
-| Service-result to official-SDK result conversion | Input-required response handling and JSON-RPC error normalization |
-| Dynamic prompt completion values and watchable resource URI set | Subscription policy, transport observation, runtime CORS, and session HTTP errors |
+| JSON schemas, descriptors, icons, and result conversion | Streamable HTTP defaults and cross-origin protection |
+| Typed tool, prompt, and resource service closures | Tool interceptor composition and prompt or resource dispatch |
+| Resource query codecs and prompt argument validation | Resource policy, skill dispatch, and common request logging |
+| Dynamic prompt completion values and watchable resource URI set | Request context, sessions, subscriptions, CORS, and observation |
 
 Application authentication and authorization stay outside the bridge. The
 generated adapter supplies session-principal hooks after application
@@ -103,18 +102,21 @@ and the generated literal together, so stale generated code fails closed after
 an independently upgraded runtime is linked. Go types provide the earlier
 compile-time failure when a callback signature changes.
 
-For the checked-in assistant prototype, `gen/mcp_assistant/sdk_server.go`
-decreased from 925 to 786 lines. Its service-specific
-`adapter_server.go` remains 2,818 lines because typed codecs, policy dispatch,
-and service calls stay generated. Existing official-SDK integration tests run
-against this generated fixture. Direct bridge tests cover the common behavior.
-For example, `TestToolHandlerAcceptsNilSDKRequest` fixed nil-request handling
-only in the bridge. The generated assistant file did not change for that fix.
-The same bridge fix applies to every service that uses compatibility version 1.
+For the checked-in assistant fixture, `gen/mcp_assistant/adapter_server.go`
+decreased from the 2,818-line issue #276 baseline to 2,665 lines. Generated
+code still owns typed codecs, service calls, and result conversion.
+
+The runtime owns common tool interceptor composition. It also owns prompt and
+resource dispatch, resource policy, skill dispatch, and request logging. Direct
+runtime tests cover these contracts. Official-SDK integration tests cover the
+generated closures and the complete server.
+
+The bridge compatibility version remains `1`. This change adds runtime types
+and does not change the existing SDK server descriptor contract. Incompatible
+descriptor or callback changes still require a version increase.
 
 ### Staged implementation
 
-- [#281](https://github.com/CaliLuke/loom-mcp/issues/281) moves common adapter policy and dispatch orchestration into typed runtime descriptors.
 - [#282](https://github.com/CaliLuke/loom-mcp/issues/282) adds release and consumer checks for the compatibility contract.
 
 ## JSON-RPC errors

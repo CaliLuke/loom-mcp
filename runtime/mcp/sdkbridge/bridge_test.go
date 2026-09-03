@@ -195,3 +195,69 @@ func TestNewServerRejectsOriginBeforeRuntimeCORSPreflight(t *testing.T) {
 
 	assert.Equal(t, http.StatusForbidden, response.Code)
 }
+func TestPromptHandlerEncodesArgumentsAndBindsRequestContext(t *testing.T) {
+	initialized := false
+	handler := PromptHandler(HandlerContext{
+		RequestContext: func(ctx context.Context, req *http.Request) context.Context {
+			assert.Equal(t, http.MethodPost, req.Method)
+			assert.Equal(t, "/mcp", req.URL.Path)
+			assert.Equal(t, "request", req.Header.Get("X-Source"))
+			return ctx
+		},
+		MarkInitialized: func(sessionID string) {
+			assert.Empty(t, sessionID)
+			initialized = true
+		},
+	}, func(_ context.Context, request PromptRequest) (*mcpsdk.GetPromptResult, error) {
+		assert.Equal(t, "code_review", request.Name)
+		assert.JSONEq(t, `{"code":"return true"}`, string(request.Arguments))
+		assert.NotNil(t, request.Bind(struct{}{}))
+		return &mcpsdk.GetPromptResult{Description: "ready"}, nil
+	})
+	ctx := mcpruntime.WithRequestHeaders(context.Background(), http.Header{"X-Source": {"request"}})
+	req := &mcpsdk.GetPromptRequest{Params: &mcpsdk.GetPromptParams{
+		Name:      "code_review",
+		Arguments: map[string]string{"code": "return true"},
+	}}
+
+	result, err := handler(ctx, req)
+
+	require.NoError(t, err)
+	assert.Equal(t, "ready", result.Description)
+	assert.True(t, initialized)
+}
+
+func TestResourceHandlerBindsTypedRequest(t *testing.T) {
+	handler := ResourceHandler(HandlerContext{}, func(_ context.Context, request ResourceRequest) (*mcpsdk.ReadResourceResult, error) {
+		assert.Equal(t, "doc://guide", request.URI)
+		assert.NotNil(t, request.Bind(struct{}{}))
+		return &mcpsdk.ReadResourceResult{}, nil
+	})
+
+	result, err := handler(context.Background(), &mcpsdk.ReadResourceRequest{Params: &mcpsdk.ReadResourceParams{URI: "doc://guide"}})
+
+	require.NoError(t, err)
+	assert.NotNil(t, result)
+}
+
+func TestPromptAndResourceHandlersAcceptNilSDKRequests(t *testing.T) {
+	prompt, err := PromptHandler(HandlerContext{}, func(_ context.Context, request PromptRequest) (*mcpsdk.GetPromptResult, error) {
+		assert.Empty(t, request.Name)
+		assert.Empty(t, request.Arguments)
+		return &mcpsdk.GetPromptResult{}, nil
+	})(context.Background(), nil)
+	require.NoError(t, err)
+	assert.NotNil(t, prompt)
+
+	resource, err := ResourceHandler(HandlerContext{}, func(_ context.Context, request ResourceRequest) (*mcpsdk.ReadResourceResult, error) {
+		assert.Empty(t, request.URI)
+		return &mcpsdk.ReadResourceResult{}, nil
+	})(context.Background(), nil)
+	require.NoError(t, err)
+	assert.NotNil(t, resource)
+}
+
+func TestBindCompletionContextHandlesNilAndSDKRequests(t *testing.T) {
+	ctx := context.Background()
+	assert.Equal(t, ctx, BindCompletionContext(ctx, nil, HandlerContext{}))
+}

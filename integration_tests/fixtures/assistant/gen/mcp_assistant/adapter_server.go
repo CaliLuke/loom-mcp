@@ -16,7 +16,6 @@ import (
 	"fmt"
 	"io"
 	"net/http"
-	"net/url"
 	"regexp"
 	"sort"
 	"strings"
@@ -27,6 +26,7 @@ import (
 	projected "example.com/assistant/gen/assistant/toolsets/projected"
 	agentruntime "github.com/CaliLuke/loom-mcp/v2/runtime/agent/runtime"
 	mcpruntime "github.com/CaliLuke/loom-mcp/v2/runtime/mcp"
+	sdkbridge "github.com/CaliLuke/loom-mcp/v2/runtime/mcp/sdkbridge"
 	mcpskills "github.com/CaliLuke/loom-mcp/v2/runtime/mcp/skills"
 	goahttp "github.com/CaliLuke/loom/http"
 	loom "github.com/CaliLuke/loom/pkg"
@@ -52,10 +52,11 @@ type MCPAdapter struct {
 	errorCounter        metric.Int64Counter
 	durationHistogram   metric.Float64Histogram
 	promptProvider      PromptProvider
+	promptOperations    []sdkbridge.NamedOperation[*PromptsGetPayload, *PromptsGetResult]
+	resourceOperations  []sdkbridge.ResourceOperation[*ResourcesReadPayload, *ResourcesReadResult]
+	resourcePolicy      sdkbridge.ResourcePolicy
 	// requestStateKey encrypts and authenticates portable MCP multi-round-trip state.
 	requestStateKey []byte
-	// resourceNameToURI holds DSL-derived mapping for policy and lookups
-	resourceNameToURI map[string]string
 }
 
 const (
@@ -79,44 +80,14 @@ type (
 	toolCallStreamHandler func(ctx context.Context, payload *ToolsCallPayload, stream toolCallStream) (bool, error)
 
 	// ToolCallInterceptorInfo describes a generated MCP tools/call invocation.
-	ToolCallInterceptorInfo interface {
-		loom.InterceptorInfo
-		Tool() string
-		RawArguments() jsontext.Value
-	}
+	ToolCallInterceptorInfo = sdkbridge.ToolCallInterceptorInfo
 
-	// ToolCallHandler is the generated MCP tool-call dispatcher.
-	ToolCallHandler func(ctx context.Context, payload *ToolsCallPayload) (*ToolsCallResult, error)
+	// ToolCallHandler is the typed MCP tool-call dispatcher.
+	ToolCallHandler = sdkbridge.TypedHandler[*ToolsCallPayload, *ToolsCallResult]
 
-	// ToolCallInterceptor wraps generated MCP tool execution.
-	ToolCallInterceptor func(ctx context.Context, info ToolCallInterceptorInfo, payload *ToolsCallPayload, next ToolCallHandler) (*ToolsCallResult, error)
+	// ToolCallInterceptor wraps typed MCP tool execution.
+	ToolCallInterceptor = sdkbridge.TypedInterceptor[*ToolsCallPayload, *ToolsCallResult]
 )
-type toolCallInterceptorInfo struct {
-	service    string
-	method     string
-	tool       string
-	rawPayload any
-	rawArgs    jsontext.Value
-}
-
-func (i *toolCallInterceptorInfo) Service() string {
-	return i.service
-}
-func (i *toolCallInterceptorInfo) Method() string {
-	return i.method
-}
-func (i *toolCallInterceptorInfo) Tool() string {
-	return i.tool
-}
-func (i *toolCallInterceptorInfo) CallType() loom.InterceptorCallType {
-	return loom.InterceptorUnary
-}
-func (i *toolCallInterceptorInfo) RawPayload() any {
-	return i.rawPayload
-}
-func (i *toolCallInterceptorInfo) RawArguments() jsontext.Value {
-	return i.rawArgs
-}
 
 // ToolSearchWeights customizes progressive discovery ranking weights. Zero values use generated defaults.
 type ToolSearchWeights struct {
@@ -183,9 +154,17 @@ func NewMCPAdapter(service assistant.Service, promptProvider PromptProvider, opt
 	telemetryName := defaultMCPAdapterTelemetryName(opts)
 	tracer := defaultMCPAdapterTracer(opts, telemetryName)
 	callCounter, errorCounter, durationHistogram := defaultMCPAdapterMetrics(opts, telemetryName)
-	// Build name->URI map from generated resources
-	nameToURI := map[string]string{"documents": "doc://list", "system_info": "system://info", "elicitation_context": "elicitation://context", "conversation_history": "conversation://history", "figma_design_system": "figma://design-system/mobile-checkout"}
-	return &MCPAdapter{service: service, initializedSessions: make(map[string]time.Time), sessionPrincipals: make(map[string]string), opts: opts, tracer: tracer, callCounter: callCounter, errorCounter: errorCounter, durationHistogram: durationHistogram, promptProvider: promptProvider, resourceNameToURI: nameToURI}
+	adapter := &MCPAdapter{service: service, initializedSessions: make(map[string]time.Time), sessionPrincipals: make(map[string]string), opts: opts, tracer: tracer, callCounter: callCounter, errorCounter: errorCounter, durationHistogram: durationHistogram, promptProvider: promptProvider}
+	adapter.promptOperations = adapter.promptOperationDescriptors()
+	adapter.resourceOperations = adapter.resourceOperationDescriptors()
+	adapter.resourcePolicy.ResourceNameToURI = map[string]string{"documents": "doc://list", "system_info": "system://info", "elicitation_context": "elicitation://context", "conversation_history": "conversation://history", "figma_design_system": "figma://design-system/mobile-checkout"}
+	if opts != nil {
+		adapter.resourcePolicy.AllowedURIs = opts.AllowedResourceURIs
+		adapter.resourcePolicy.DeniedURIs = opts.DeniedResourceURIs
+		adapter.resourcePolicy.AllowedNames = opts.AllowedResourceNames
+		adapter.resourcePolicy.DeniedNames = opts.DeniedResourceNames
+	}
+	return adapter
 }
 func mcpJSONRaw(value loom.Nullable[any]) (jsontext.Value, error) {
 	if !value.Present() {
@@ -227,25 +206,6 @@ func mcpJSONAny(value loom.Nullable[any]) any {
 		return nil
 	}
 	return actual
-}
-
-// parseQueryParamsToJSON converts URI query params into JSON.
-func parseQueryParamsToJSON(uri string) ([]byte, error) {
-	u, err := url.Parse(uri)
-	if err != nil {
-		return nil, fmt.Errorf("invalid resource URI: %w", err)
-	}
-	q := u.Query()
-	if len(q) == 0 {
-		return []byte("{}"), nil
-	}
-	// Copy to plain map[string][]string to avoid depending on url.Values in helper
-	m := make(map[string][]string, len(q))
-	for k, v := range q {
-		m[k] = v
-	}
-	coerced := mcpruntime.CoerceQuery(m)
-	return json.Marshal(coerced)
 }
 func (a *MCPAdapter) pruneSessionsLocked(now time.Time, reserveSlot bool) {
 	for sessionID, touchedAt := range a.initializedSessions {
@@ -370,33 +330,17 @@ func (a *MCPAdapter) mapError(err error) error {
 	return err
 }
 func (a *MCPAdapter) toolCallInfo(p *ToolsCallPayload, rawArgs jsontext.Value) ToolCallInterceptorInfo {
-	info := &toolCallInterceptorInfo{
-		method:     "tools/call",
-		rawPayload: p,
-		service:    "assistant",
-	}
+	tool := ""
 	if p != nil {
-		info.tool = p.Name
-		info.rawArgs = rawArgs
+		tool = p.Name
 	}
-	return info
+	return sdkbridge.NewToolCallInfo("assistant", tool, p, rawArgs)
 }
 func (a *MCPAdapter) wrapToolCallHandler(info ToolCallInterceptorInfo, next ToolCallHandler) ToolCallHandler {
-	if a == nil || a.opts == nil || len(a.opts.ToolCallInterceptors) == 0 {
+	if a == nil || a.opts == nil {
 		return next
 	}
-	wrapped := next
-	for i := len(a.opts.ToolCallInterceptors) - 1; i >= 0; i-- {
-		interceptor := a.opts.ToolCallInterceptors[i]
-		if interceptor == nil {
-			continue
-		}
-		currentNext := wrapped
-		wrapped = func(ctx context.Context, payload *ToolsCallPayload) (*ToolsCallResult, error) {
-			return interceptor(ctx, info, payload, currentNext)
-		}
-	}
-	return wrapped
+	return sdkbridge.WrapTypedHandler(a.opts.ToolCallInterceptors, info, next)
 }
 func defaultMCPAdapterTelemetryName(opts *MCPAdapterOptions) string {
 	if opts != nil && opts.TelemetryName != "" {
@@ -2487,397 +2431,235 @@ func (a *MCPAdapter) executeRealTool(ctx context.Context, p *ToolsCallPayload, s
 
 // Resources handling
 func (a *MCPAdapter) ResourcesRead(ctx context.Context, p *ResourcesReadPayload) (*ResourcesReadResult, error) {
-	if !a.isInitialized(ctx) {
-		return nil, loom.PermanentError("invalid_params", "Not initialized")
-	}
-	a.log(ctx, "request", map[string]any{
-		"method": "resources/read",
-		"uri":    p.URI,
+	return sdkbridge.DispatchResource(ctx, p, sdkbridge.ResourceDispatchConfig[*ResourcesReadPayload, *ResourcesReadResult]{
+		Initialized: a.isInitialized,
+		Log:         a.log,
+		MapError:    a.safeMCPError,
+		Policy:      a.resourcePolicy,
+		Resources:   a.resourceOperations,
+		SkillResult: func(content *mcpskills.Content) *ResourcesReadResult {
+			return &ResourcesReadResult{Contents: []*ResourceContent{&ResourceContent{
+				Blob:     content.Blob,
+				Meta:     loom.NullableValue[any](mcpskills.MetadataMeta(content.Metadata)),
+				MimeType: stringPtr(content.MimeType),
+				Text:     content.Text,
+				URI:      content.URI,
+			}}}
+		},
+		SkillSources: skillSources(),
+		URI: func(payload *ResourcesReadPayload) string {
+			if payload == nil {
+				return ""
+			}
+			return payload.URI
+		},
 	})
-	baseURI := p.URI
-	if i := strings.Index(baseURI, "?"); i >= 0 {
-		baseURI = baseURI[0:i]
-	}
-	if strings.HasPrefix(baseURI, "skill://") {
-		skillSources := skillSources()
-		skillResources, err := mcpskills.List(ctx, skillSources)
-		if err != nil {
-			return nil, a.safeMCPError(err, "internal_error", "Unable to inspect skill resource policy.")
-		}
-		skillNameToURI := make(map[string]string, len(skillResources))
-		for _, resource := range skillResources {
-			policyURI := resource.URI
-			if strings.HasSuffix(policyURI, "/SKILL.md") {
-				policyURI = strings.TrimSuffix(policyURI, "SKILL.md")
+}
+func (a *MCPAdapter) resourceOperationDescriptors() []sdkbridge.ResourceOperation[*ResourcesReadPayload, *ResourcesReadResult] {
+	return []sdkbridge.ResourceOperation[*ResourcesReadPayload, *ResourcesReadResult]{{
+		Handle: func(ctx context.Context, _ *ResourcesReadPayload, baseURI string) (*ResourcesReadResult, error) {
+			result, err := a.service.ListDocuments(ctx)
+			if err != nil {
+				return nil, err
 			}
-			skillNameToURI[resource.Name] = policyURI
-		}
-		if err := a.assertResourceURIAllowed(ctx, p.URI, skillNameToURI); err != nil {
-			return nil, a.safeMCPError(err, "invalid_params", "Resource URI is not allowed.")
-		}
-		content, err := mcpskills.Read(ctx, skillSources, baseURI)
-		if err != nil {
-			a.log(ctx, "error", map[string]any{
-				"error":  err.Error(),
-				"method": "resources/read",
-				"uri":    baseURI,
-			})
-			code := "internal_error"
-			if errors.Is(err, mcpskills.ErrInvalidURI) {
-				code = "invalid_params"
-			} else if errors.Is(err, mcpskills.ErrNotFound) {
-				code = "resource_not_found"
+			text, err := mcpruntime.EncodeJSONToString(ctx, goahttp.ResponseEncoder, result)
+			if err != nil {
+				return nil, err
 			}
-			message := fmt.Sprintf("Unable to read skill resource: %s", baseURI)
-			return nil, a.safeMCPError(loom.PermanentError(code, "%s", message), code, message)
-		}
-		res := &ResourcesReadResult{Contents: []*ResourceContent{&ResourceContent{
-			Blob:     content.Blob,
-			Meta:     loom.NullableValue[any](mcpskills.MetadataMeta(content.Metadata)),
-			MimeType: stringPtr(content.MimeType),
-			Text:     content.Text,
-			URI:      content.URI,
-		}}}
-		a.log(ctx, "response", map[string]any{
-			"method": "resources/read",
-			"uri":    baseURI,
-		})
-		return res, nil
-	}
-	switch baseURI {
-	case "doc://list":
-		if err := a.assertResourceURIAllowed(ctx, p.URI, nil); err != nil {
-			return nil, a.safeMCPError(err, "invalid_params", "Resource URI is not allowed.")
-		}
-		result, err := a.service.ListDocuments(ctx)
-		if err != nil {
-			return nil, a.safeMCPError(err, "internal_error", "Resource read failed.")
-		}
-		s, serr := mcpruntime.EncodeJSONToString(ctx, goahttp.ResponseEncoder, result)
-		if serr != nil {
-			return nil, a.safeMCPError(serr, "internal_error", "Resource read failed.")
-		}
-		res := &ResourcesReadResult{Contents: []*ResourceContent{&ResourceContent{
-			MimeType: stringPtr("application/json"),
-			Text:     &s,
-			URI:      baseURI,
-		}}}
-		a.log(ctx, "response", map[string]any{
-			"method": "resources/read",
-			"uri":    baseURI,
-		})
-		return res, nil
-	case "system://info":
-		if err := a.assertResourceURIAllowed(ctx, p.URI, nil); err != nil {
-			return nil, a.safeMCPError(err, "invalid_params", "Resource URI is not allowed.")
-		}
-		result, err := a.service.SystemInfo(ctx)
-		if err != nil {
-			return nil, a.safeMCPError(err, "internal_error", "Resource read failed.")
-		}
-		s, serr := mcpruntime.EncodeJSONToString(ctx, goahttp.ResponseEncoder, result)
-		if serr != nil {
-			return nil, a.safeMCPError(serr, "internal_error", "Resource read failed.")
-		}
-		res := &ResourcesReadResult{Contents: []*ResourceContent{&ResourceContent{
-			MimeType: stringPtr("application/json"),
-			Text:     &s,
-			URI:      baseURI,
-		}}}
-		a.log(ctx, "response", map[string]any{
-			"method": "resources/read",
-			"uri":    baseURI,
-		})
-		return res, nil
-	case "elicitation://context":
-		if err := a.assertResourceURIAllowed(ctx, p.URI, nil); err != nil {
-			return nil, a.safeMCPError(err, "invalid_params", "Resource URI is not allowed.")
-		}
-		result, err := a.service.ElicitationContext(ctx)
-		if err != nil {
-			return nil, a.safeMCPError(err, "internal_error", "Resource read failed.")
-		}
-		s, serr := mcpruntime.EncodeJSONToString(ctx, goahttp.ResponseEncoder, result)
-		if serr != nil {
-			return nil, a.safeMCPError(serr, "internal_error", "Resource read failed.")
-		}
-		res := &ResourcesReadResult{Contents: []*ResourceContent{&ResourceContent{
-			MimeType: stringPtr("application/json"),
-			Text:     &s,
-			URI:      baseURI,
-		}}}
-		a.log(ctx, "response", map[string]any{
-			"method": "resources/read",
-			"uri":    baseURI,
-		})
-		return res, nil
-	case "conversation://history":
-		if err := a.assertResourceURIAllowed(ctx, p.URI, nil); err != nil {
-			return nil, a.safeMCPError(err, "invalid_params", "Resource URI is not allowed.")
-		}
-		args, aerr := parseQueryParamsToJSON(p.URI)
-		if aerr != nil {
-			return nil, a.safeMCPError(aerr, "invalid_params", "Invalid resource request.")
-		}
-		req := &http.Request{
-			Body:   io.NopCloser(bytes.NewReader(args)),
-			Header: http.Header{"Content-Type": []string{"application/json"}},
-		}
-		var payload *assistant.ConversationHistoryPayload
-		if err := goahttp.RequestDecoder(req).Decode(&payload); err != nil {
-			return nil, a.safeMCPError(err, "invalid_params", "Invalid resource request.")
-		}
-		result, err := a.service.ConversationHistory(ctx, payload)
-		if err != nil {
-			return nil, a.safeMCPError(err, "internal_error", "Resource read failed.")
-		}
-		s, serr := mcpruntime.EncodeJSONToString(ctx, goahttp.ResponseEncoder, result)
-		if serr != nil {
-			return nil, a.safeMCPError(serr, "internal_error", "Resource read failed.")
-		}
-		res := &ResourcesReadResult{Contents: []*ResourceContent{&ResourceContent{
-			MimeType: stringPtr("application/json"),
-			Text:     &s,
-			URI:      baseURI,
-		}}}
-		a.log(ctx, "response", map[string]any{
-			"method": "resources/read",
-			"uri":    baseURI,
-		})
-		return res, nil
-	case "figma://design-system/mobile-checkout":
-		if err := a.assertResourceURIAllowed(ctx, p.URI, nil); err != nil {
-			return nil, a.safeMCPError(err, "invalid_params", "Resource URI is not allowed.")
-		}
-		result, err := a.service.FigmaDesignSystem(ctx)
-		if err != nil {
-			return nil, a.safeMCPError(err, "internal_error", "Resource read failed.")
-		}
-		s, serr := mcpruntime.EncodeJSONToString(ctx, goahttp.ResponseEncoder, result)
-		if serr != nil {
-			return nil, a.safeMCPError(serr, "internal_error", "Resource read failed.")
-		}
-		res := &ResourcesReadResult{Contents: []*ResourceContent{&ResourceContent{
-			MimeType: stringPtr("application/json"),
-			Text:     &s,
-			URI:      baseURI,
-		}}}
-		a.log(ctx, "response", map[string]any{
-			"method": "resources/read",
-			"uri":    baseURI,
-		})
-		return res, nil
-	default:
-		return nil, loom.PermanentError("resource_not_found", "Unknown resource: %s", p.URI)
-	}
+			return &ResourcesReadResult{Contents: []*ResourceContent{&ResourceContent{
+				MimeType: stringPtr("application/json"),
+				Text:     &text,
+				URI:      baseURI,
+			}}}, nil
+		},
+		URI: "doc://list",
+	}, {
+		Handle: func(ctx context.Context, _ *ResourcesReadPayload, baseURI string) (*ResourcesReadResult, error) {
+			result, err := a.service.SystemInfo(ctx)
+			if err != nil {
+				return nil, err
+			}
+			text, err := mcpruntime.EncodeJSONToString(ctx, goahttp.ResponseEncoder, result)
+			if err != nil {
+				return nil, err
+			}
+			return &ResourcesReadResult{Contents: []*ResourceContent{&ResourceContent{
+				MimeType: stringPtr("application/json"),
+				Text:     &text,
+				URI:      baseURI,
+			}}}, nil
+		},
+		URI: "system://info",
+	}, {
+		Handle: func(ctx context.Context, _ *ResourcesReadPayload, baseURI string) (*ResourcesReadResult, error) {
+			result, err := a.service.ElicitationContext(ctx)
+			if err != nil {
+				return nil, err
+			}
+			text, err := mcpruntime.EncodeJSONToString(ctx, goahttp.ResponseEncoder, result)
+			if err != nil {
+				return nil, err
+			}
+			return &ResourcesReadResult{Contents: []*ResourceContent{&ResourceContent{
+				MimeType: stringPtr("application/json"),
+				Text:     &text,
+				URI:      baseURI,
+			}}}, nil
+		},
+		URI: "elicitation://context",
+	}, {
+		Handle: func(ctx context.Context, request *ResourcesReadPayload, baseURI string) (*ResourcesReadResult, error) {
+			args, err := sdkbridge.ResourceQueryJSON(request.URI)
+			if err != nil {
+				return nil, sdkbridge.InvalidClientInput(loom.PermanentError("invalid_params", "Invalid resource request."))
+			}
+			httpRequest := &http.Request{
+				Body:   io.NopCloser(bytes.NewReader(args)),
+				Header: http.Header{"Content-Type": []string{"application/json"}},
+			}
+			var payload *assistant.ConversationHistoryPayload
+			if err := goahttp.RequestDecoder(httpRequest).Decode(&payload); err != nil {
+				return nil, sdkbridge.InvalidClientInput(loom.PermanentError("invalid_params", "Invalid resource request."))
+			}
+			result, err := a.service.ConversationHistory(ctx, payload)
+			if err != nil {
+				return nil, err
+			}
+			text, err := mcpruntime.EncodeJSONToString(ctx, goahttp.ResponseEncoder, result)
+			if err != nil {
+				return nil, err
+			}
+			return &ResourcesReadResult{Contents: []*ResourceContent{&ResourceContent{
+				MimeType: stringPtr("application/json"),
+				Text:     &text,
+				URI:      baseURI,
+			}}}, nil
+		},
+		URI: "conversation://history",
+	}, {
+		Handle: func(ctx context.Context, _ *ResourcesReadPayload, baseURI string) (*ResourcesReadResult, error) {
+			result, err := a.service.FigmaDesignSystem(ctx)
+			if err != nil {
+				return nil, err
+			}
+			text, err := mcpruntime.EncodeJSONToString(ctx, goahttp.ResponseEncoder, result)
+			if err != nil {
+				return nil, err
+			}
+			return &ResourcesReadResult{Contents: []*ResourceContent{&ResourceContent{
+				MimeType: stringPtr("application/json"),
+				Text:     &text,
+				URI:      baseURI,
+			}}}, nil
+		},
+		URI: "figma://design-system/mobile-checkout",
+	}}
 }
 func skillSources() []mcpskills.Source {
 	return []mcpskills.Source{{Root: ".agents/skills"}}
 }
 
-// assertResourceURIAllowed verifies pURI passes allow/deny filters when configured.
-func (a *MCPAdapter) assertResourceURIAllowed(ctx context.Context, pURI string, extraNameToURI map[string]string) error {
-	base := pURI
-	if i := strings.Index(base, "?"); i >= 0 {
-		base = base[0:i]
-	}
-	var serverNameAllowURIs []string
-	var requestNameAllowURIs []string
-	var extraDenyURIs []string
-	var serverAllowedNames []string
-	var requestAllowedNames []string
-	var deniedNames []string
-	if a.opts != nil {
-		serverAllowedNames = append(serverAllowedNames, a.opts.AllowedResourceNames...)
-		deniedNames = append(deniedNames, a.opts.DeniedResourceNames...)
-	}
-	if ctx != nil {
-		if s := mcpruntime.AllowedResourceNamesFromContext(ctx); s != "" {
-			requestAllowedNames = append(requestAllowedNames, strings.Split(s, ",")...)
-		}
-		if s := mcpruntime.DeniedResourceNamesFromContext(ctx); s != "" {
-			deniedNames = append(deniedNames, strings.Split(s, ",")...)
-		}
-	}
-	for _, n := range serverAllowedNames {
-		n = strings.TrimSpace(n)
-		u, ok := extraNameToURI[n]
-		if !ok {
-			u, ok = a.resourceNameToURI[n]
-		}
-		if ok {
-			serverNameAllowURIs = append(serverNameAllowURIs, u)
-		}
-	}
-	for _, n := range requestAllowedNames {
-		n = strings.TrimSpace(n)
-		u, ok := extraNameToURI[n]
-		if !ok {
-			u, ok = a.resourceNameToURI[n]
-		}
-		if ok {
-			requestNameAllowURIs = append(requestNameAllowURIs, u)
-		}
-	}
-	for _, n := range deniedNames {
-		n = strings.TrimSpace(n)
-		u, ok := extraNameToURI[n]
-		if !ok {
-			u, ok = a.resourceNameToURI[n]
-		}
-		if ok {
-			extraDenyURIs = append(extraDenyURIs, u)
-		}
-	}
-	var denied []string
-	if a.opts != nil {
-		denied = a.opts.DeniedResourceURIs
-	}
-	for _, d := range denied {
-		if resourceURIMatchesPolicy(base, d) {
-			return fmt.Errorf("resource URI denied: %s", pURI)
-		}
-	}
-	for _, d := range extraDenyURIs {
-		if resourceURIMatchesPolicy(base, d) {
-			return fmt.Errorf("resource URI denied: %s", pURI)
-		}
-	}
-	var allowed []string
-	if a.opts != nil {
-		allowed = a.opts.AllowedResourceURIs
-	}
-	serverAllowConfigured := len(allowed) > 0 || len(serverAllowedNames) > 0
-	serverAllowPolicies := append([]string{}, allowed...)
-	serverAllowPolicies = append(serverAllowPolicies, serverNameAllowURIs...)
-	if !resourceURIAllowedByPolicies(base, serverAllowConfigured, serverAllowPolicies) {
-		return fmt.Errorf("resource URI not allowed: %s", pURI)
-	}
-	requestAllowConfigured := len(requestAllowedNames) > 0
-	if !resourceURIAllowedByPolicies(base, requestAllowConfigured, requestNameAllowURIs) {
-		return fmt.Errorf("resource URI not allowed: %s", pURI)
-	}
-	return nil
-}
-func resourceURIAllowedByPolicies(uri string, configured bool, policies []string) bool {
-	if !configured {
-		return true
-	}
-	for _, policy := range policies {
-		if resourceURIMatchesPolicy(uri, policy) {
-			return true
-		}
-	}
-	return false
-}
-func resourceURIMatchesPolicy(uri string, policy string) bool {
-	policy = strings.TrimSpace(policy)
-	return uri == policy || strings.HasSuffix(policy, "/") && strings.HasPrefix(uri, policy)
-}
-
 // Prompts handling
 func (a *MCPAdapter) PromptsGet(ctx context.Context, p *PromptsGetPayload) (*PromptsGetResult, error) {
-	if !a.isInitialized(ctx) {
-		return nil, loom.PermanentError("invalid_params", "Not initialized")
-	}
-	if p == nil || p.Name == "" {
-		return nil, loom.PermanentError("invalid_params", "Missing prompt name")
-	}
-	arguments, err := mcpJSONRaw(p.Arguments)
-	if err != nil {
-		return nil, err
-	}
-	a.log(ctx, "request", map[string]any{
-		"method": "prompts/get",
-		"name":   p.Name,
+	return sdkbridge.DispatchNamed(ctx, p, sdkbridge.NamedDispatchConfig[*PromptsGetPayload, *PromptsGetResult]{
+		FailureCode:    "internal_error",
+		FailureMessage: "Prompt retrieval failed.",
+		Initialized:    a.isInitialized,
+		Log:            a.log,
+		MapError:       a.safeMCPError,
+		Method:         "prompts/get",
+		MissingName:    "Missing prompt name",
+		Name: func(payload *PromptsGetPayload) string {
+			if payload == nil {
+				return ""
+			}
+			return payload.Name
+		},
+		Operations:  a.promptOperations,
+		UnknownName: "Unknown prompt: %s",
 	})
-	switch p.Name {
-	case "code_review":
-		if a.promptProvider != nil {
-			if res, err := a.promptProvider.GetCodeReviewPrompt(arguments); err == nil && res != nil {
-				a.log(ctx, "response", map[string]any{
-					"method": "prompts/get",
-					"name":   p.Name,
-				})
-				return res, nil
-			} else if err != nil {
-				return nil, a.safeMCPError(err, "internal_error", "Prompt retrieval failed.")
+}
+func (a *MCPAdapter) promptOperationDescriptors() []sdkbridge.NamedOperation[*PromptsGetPayload, *PromptsGetResult] {
+	return []sdkbridge.NamedOperation[*PromptsGetPayload, *PromptsGetResult]{{
+		Handle: func(_ context.Context, payload *PromptsGetPayload) (*PromptsGetResult, error) {
+			arguments, err := mcpJSONRaw(payload.Arguments)
+			if err != nil {
+				return nil, err
 			}
-		}
-		msgs := []*PromptMessage{&PromptMessage{
-			Content: &MessageContent{
-				Text: stringPtr("Review the provided code and suggest improvements."),
-				Type: "text",
-			},
-			Role: "user",
-		}}
-		res := &PromptsGetResult{
-			Description: stringPtr("Simple code review prompt"),
-			Messages:    msgs,
-		}
-		a.log(ctx, "response", map[string]any{
-			"method": "prompts/get",
-			"name":   p.Name,
-		})
-		return res, nil
-	}
-	switch p.Name {
-	case "contextual_prompts":
-		var args map[string]any
-		if len(arguments) > 0 {
-			if err := json.Unmarshal(arguments, &args); err != nil {
-				return nil, a.safeMCPError(err, "invalid_params", "Invalid prompt arguments.")
+			if a.promptProvider != nil {
+				result, err := a.promptProvider.GetCodeReviewPrompt(arguments)
+				if err != nil {
+					return nil, err
+				}
+				if result != nil {
+					return result, nil
+				}
 			}
-		}
-		if _, ok := args["context"]; !ok {
-			return nil, loom.PermanentError("invalid_params", "Missing required argument: %s", "context")
-		}
-		if _, ok := args["task"]; !ok {
-			return nil, loom.PermanentError("invalid_params", "Missing required argument: %s", "task")
-		}
-		if a.promptProvider == nil {
-			return nil, loom.PermanentError("invalid_params", "No prompt provider configured for dynamic prompts")
-		}
-		res, err := a.promptProvider.GetContextualPromptsPrompt(ctx, arguments)
-		if err != nil {
-			return nil, a.safeMCPError(err, "internal_error", "Prompt retrieval failed.")
-		}
-		a.log(ctx, "response", map[string]any{
-			"method": "prompts/get",
-			"name":   p.Name,
-		})
-		return res, nil
-	case "figma_implementation_prompt":
-		var args map[string]any
-		if len(arguments) > 0 {
-			if err := json.Unmarshal(arguments, &args); err != nil {
-				return nil, a.safeMCPError(err, "invalid_params", "Invalid prompt arguments.")
+			return &PromptsGetResult{
+				Description: stringPtr("Simple code review prompt"),
+				Messages: []*PromptMessage{&PromptMessage{
+					Content: &MessageContent{
+						Text: stringPtr("Review the provided code and suggest improvements."),
+						Type: "text",
+					},
+					Role: "user",
+				}},
+			}, nil
+		},
+		Name: "code_review",
+	}, {
+		Handle: func(ctx context.Context, payload *PromptsGetPayload) (*PromptsGetResult, error) {
+			arguments, err := mcpJSONRaw(payload.Arguments)
+			if err != nil {
+				return nil, err
 			}
-		}
-		if _, ok := args["screen_title"]; !ok {
-			return nil, loom.PermanentError("invalid_params", "Missing required argument: %s", "screen_title")
-		}
-		if _, ok := args["framework"]; !ok {
-			return nil, loom.PermanentError("invalid_params", "Missing required argument: %s", "framework")
-		}
-		if _, ok := args["design_tokens_uri"]; !ok {
-			return nil, loom.PermanentError("invalid_params", "Missing required argument: %s", "design_tokens_uri")
-		}
-		if _, ok := args["dpi_json"]; !ok {
-			return nil, loom.PermanentError("invalid_params", "Missing required argument: %s", "dpi_json")
-		}
-		if a.promptProvider == nil {
-			return nil, loom.PermanentError("invalid_params", "No prompt provider configured for dynamic prompts")
-		}
-		res, err := a.promptProvider.GetFigmaImplementationPromptPrompt(ctx, arguments)
-		if err != nil {
-			return nil, a.safeMCPError(err, "internal_error", "Prompt retrieval failed.")
-		}
-		a.log(ctx, "response", map[string]any{
-			"method": "prompts/get",
-			"name":   p.Name,
-		})
-		return res, nil
-	}
-	return nil, loom.PermanentError("invalid_params", "Unknown prompt: %s", p.Name)
+			var args map[string]any
+			if len(arguments) > 0 {
+				if err := json.Unmarshal(arguments, &args); err != nil {
+					return nil, sdkbridge.InvalidClientInput(loom.PermanentError("invalid_params", "Invalid prompt arguments."))
+				}
+			}
+			if _, ok := args["context"]; !ok {
+				return nil, sdkbridge.InvalidClientInput(loom.PermanentError("invalid_params", "Missing required argument: %s", "context"))
+			}
+			if _, ok := args["task"]; !ok {
+				return nil, sdkbridge.InvalidClientInput(loom.PermanentError("invalid_params", "Missing required argument: %s", "task"))
+			}
+			if a.promptProvider == nil {
+				return nil, sdkbridge.InvalidClientInput(loom.PermanentError("invalid_params", "No prompt provider configured for dynamic prompts"))
+			}
+			return a.promptProvider.GetContextualPromptsPrompt(ctx, arguments)
+		},
+		Name: "contextual_prompts",
+	}, {
+		Handle: func(ctx context.Context, payload *PromptsGetPayload) (*PromptsGetResult, error) {
+			arguments, err := mcpJSONRaw(payload.Arguments)
+			if err != nil {
+				return nil, err
+			}
+			var args map[string]any
+			if len(arguments) > 0 {
+				if err := json.Unmarshal(arguments, &args); err != nil {
+					return nil, sdkbridge.InvalidClientInput(loom.PermanentError("invalid_params", "Invalid prompt arguments."))
+				}
+			}
+			if _, ok := args["screen_title"]; !ok {
+				return nil, sdkbridge.InvalidClientInput(loom.PermanentError("invalid_params", "Missing required argument: %s", "screen_title"))
+			}
+			if _, ok := args["framework"]; !ok {
+				return nil, sdkbridge.InvalidClientInput(loom.PermanentError("invalid_params", "Missing required argument: %s", "framework"))
+			}
+			if _, ok := args["design_tokens_uri"]; !ok {
+				return nil, sdkbridge.InvalidClientInput(loom.PermanentError("invalid_params", "Missing required argument: %s", "design_tokens_uri"))
+			}
+			if _, ok := args["dpi_json"]; !ok {
+				return nil, sdkbridge.InvalidClientInput(loom.PermanentError("invalid_params", "Missing required argument: %s", "dpi_json"))
+			}
+			if a.promptProvider == nil {
+				return nil, sdkbridge.InvalidClientInput(loom.PermanentError("invalid_params", "No prompt provider configured for dynamic prompts"))
+			}
+			return a.promptProvider.GetFigmaImplementationPromptPrompt(ctx, arguments)
+		},
+		Name: "figma_implementation_prompt",
+	}}
 }

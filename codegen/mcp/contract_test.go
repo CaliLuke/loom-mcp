@@ -115,7 +115,21 @@ func TestGenerateSDKServerDelegatesCommonBehaviorToTypedBridge(t *testing.T) {
 	require.NotContains(t, sdk, "func sdkStreamableHTTPOptions(")
 	require.Less(t, strings.Count(sdk, "\n"), 650, "generated SDK server should contain only service-specific descriptors and typed conversions")
 }
+func TestGenerateAdapterDelegatesOrchestrationToTypedRuntimeDescriptors(t *testing.T) {
+	files := generateTransportConformanceFixture(t)
+	adapter := renderGeneratedFile(t, findGeneratedFile(t, files, "gen/mcp_assistant/adapter_server.go"))
 
+	require.Contains(t, adapter, "sdkbridge.TypedHandler[*ToolsCallPayload, *ToolsCallResult]")
+	require.Contains(t, adapter, "sdkbridge.TypedInterceptor[*ToolsCallPayload, *ToolsCallResult]")
+	require.Contains(t, adapter, "sdkbridge.NamedOperation[*PromptsGetPayload, *PromptsGetResult]")
+	require.Contains(t, adapter, "sdkbridge.ResourceOperation[*ResourcesReadPayload, *ResourcesReadResult]")
+	require.Contains(t, adapter, "sdkbridge.DispatchNamed")
+	require.Contains(t, adapter, "sdkbridge.DispatchResource")
+	require.Contains(t, adapter, "sdkbridge.InvalidClientInput")
+	require.Regexp(t, `sdkbridge\.InvalidClientInput\(\s*loom\.PermanentError\("invalid_params", "No prompt provider configured for dynamic prompts"\)\s*\)`, adapter)
+	require.NotContains(t, adapter, "type toolCallInterceptorInfo struct")
+	require.NotContains(t, adapter, "func (a *MCPAdapter) assertResourceURIAllowed")
+}
 func TestGenerateAdapterUsesUnaryToolBoundaryAndPrivateStreamingCollector(t *testing.T) {
 	restore := resetMCPCodegenState(t)
 	defer restore()
@@ -144,9 +158,9 @@ func TestGenerateAdapterUsesUnaryToolBoundaryAndPrivateStreamingCollector(t *tes
 	require.NotContains(t, service, "StructuredContent jsontext.Value")
 	require.Contains(t, adapter, "type toolCallResultCollector struct")
 	require.Contains(t, adapter, "type SearchStreamBridge struct")
-	require.Contains(t, adapter, "ToolCallHandler func(ctx context.Context, payload *ToolsCallPayload) (*ToolsCallResult, error)")
-	require.Contains(t, adapter, "ToolCallInterceptor func(ctx context.Context, info ToolCallInterceptorInfo, payload *ToolsCallPayload, next ToolCallHandler) (*ToolsCallResult, error)")
-	require.NotContains(t, adapter, "ToolCallInterceptor func(ctx context.Context, info ToolCallInterceptorInfo, payload *ToolsCallPayload, stream")
+	require.Contains(t, adapter, "ToolCallHandler = sdkbridge.TypedHandler[*ToolsCallPayload, *ToolsCallResult]")
+	require.Contains(t, adapter, "ToolCallInterceptor = sdkbridge.TypedInterceptor[*ToolsCallPayload, *ToolsCallResult]")
+	require.Contains(t, adapter, "sdkbridge.WrapTypedHandler(a.opts.ToolCallInterceptors, info, next)")
 	require.Contains(t, adapter, "func mcpJSONRaw(value loom.Nullable[any]) (jsontext.Value, error)")
 	require.Contains(t, adapter, "if raw, ok := actual.(jsontext.Value); ok")
 	require.Contains(t, adapter, "func mcpJSONFromRaw(raw jsontext.Value) loom.Nullable[any]")

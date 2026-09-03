@@ -16,7 +16,6 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
-	"net/url"
 	"regexp"
 	"sort"
 	"strings"
@@ -27,6 +26,7 @@ import (
 	projected "example.com/assistant/progressive_discovery/gen/catalog/toolsets/projected"
 	agentruntime "github.com/CaliLuke/loom-mcp/v2/runtime/agent/runtime"
 	mcpruntime "github.com/CaliLuke/loom-mcp/v2/runtime/mcp"
+	sdkbridge "github.com/CaliLuke/loom-mcp/v2/runtime/mcp/sdkbridge"
 	goahttp "github.com/CaliLuke/loom/http"
 	loom "github.com/CaliLuke/loom/pkg"
 	mcpauth "github.com/modelcontextprotocol/go-sdk/auth"
@@ -50,10 +50,10 @@ type MCPAdapter struct {
 	callCounter         metric.Int64Counter
 	errorCounter        metric.Int64Counter
 	durationHistogram   metric.Float64Histogram
+	resourceOperations  []sdkbridge.ResourceOperation[*ResourcesReadPayload, *ResourcesReadResult]
+	resourcePolicy      sdkbridge.ResourcePolicy
 	// requestStateKey encrypts and authenticates portable MCP multi-round-trip state.
 	requestStateKey []byte
-	// resourceNameToURI holds DSL-derived mapping for policy and lookups
-	resourceNameToURI map[string]string
 }
 
 const (
@@ -77,44 +77,14 @@ type (
 	toolCallStreamHandler func(ctx context.Context, payload *ToolsCallPayload, stream toolCallStream) (bool, error)
 
 	// ToolCallInterceptorInfo describes a generated MCP tools/call invocation.
-	ToolCallInterceptorInfo interface {
-		loom.InterceptorInfo
-		Tool() string
-		RawArguments() jsontext.Value
-	}
+	ToolCallInterceptorInfo = sdkbridge.ToolCallInterceptorInfo
 
-	// ToolCallHandler is the generated MCP tool-call dispatcher.
-	ToolCallHandler func(ctx context.Context, payload *ToolsCallPayload) (*ToolsCallResult, error)
+	// ToolCallHandler is the typed MCP tool-call dispatcher.
+	ToolCallHandler = sdkbridge.TypedHandler[*ToolsCallPayload, *ToolsCallResult]
 
-	// ToolCallInterceptor wraps generated MCP tool execution.
-	ToolCallInterceptor func(ctx context.Context, info ToolCallInterceptorInfo, payload *ToolsCallPayload, next ToolCallHandler) (*ToolsCallResult, error)
+	// ToolCallInterceptor wraps typed MCP tool execution.
+	ToolCallInterceptor = sdkbridge.TypedInterceptor[*ToolsCallPayload, *ToolsCallResult]
 )
-type toolCallInterceptorInfo struct {
-	service    string
-	method     string
-	tool       string
-	rawPayload any
-	rawArgs    jsontext.Value
-}
-
-func (i *toolCallInterceptorInfo) Service() string {
-	return i.service
-}
-func (i *toolCallInterceptorInfo) Method() string {
-	return i.method
-}
-func (i *toolCallInterceptorInfo) Tool() string {
-	return i.tool
-}
-func (i *toolCallInterceptorInfo) CallType() loom.InterceptorCallType {
-	return loom.InterceptorUnary
-}
-func (i *toolCallInterceptorInfo) RawPayload() any {
-	return i.rawPayload
-}
-func (i *toolCallInterceptorInfo) RawArguments() jsontext.Value {
-	return i.rawArgs
-}
 
 // ToolSearchWeights customizes progressive discovery ranking weights. Zero values use generated defaults.
 type ToolSearchWeights struct {
@@ -181,9 +151,16 @@ func NewMCPAdapter(service catalog.Service, opts *MCPAdapterOptions) *MCPAdapter
 	telemetryName := defaultMCPAdapterTelemetryName(opts)
 	tracer := defaultMCPAdapterTracer(opts, telemetryName)
 	callCounter, errorCounter, durationHistogram := defaultMCPAdapterMetrics(opts, telemetryName)
-	// Build name->URI map from generated resources
-	nameToURI := map[string]string{"status": "status://current"}
-	return &MCPAdapter{service: service, initializedSessions: make(map[string]time.Time), sessionPrincipals: make(map[string]string), opts: opts, tracer: tracer, callCounter: callCounter, errorCounter: errorCounter, durationHistogram: durationHistogram, resourceNameToURI: nameToURI}
+	adapter := &MCPAdapter{service: service, initializedSessions: make(map[string]time.Time), sessionPrincipals: make(map[string]string), opts: opts, tracer: tracer, callCounter: callCounter, errorCounter: errorCounter, durationHistogram: durationHistogram}
+	adapter.resourceOperations = adapter.resourceOperationDescriptors()
+	adapter.resourcePolicy.ResourceNameToURI = map[string]string{"status": "status://current"}
+	if opts != nil {
+		adapter.resourcePolicy.AllowedURIs = opts.AllowedResourceURIs
+		adapter.resourcePolicy.DeniedURIs = opts.DeniedResourceURIs
+		adapter.resourcePolicy.AllowedNames = opts.AllowedResourceNames
+		adapter.resourcePolicy.DeniedNames = opts.DeniedResourceNames
+	}
+	return adapter
 }
 func mcpJSONRaw(value loom.Nullable[any]) (jsontext.Value, error) {
 	if !value.Present() {
@@ -225,25 +202,6 @@ func mcpJSONAny(value loom.Nullable[any]) any {
 		return nil
 	}
 	return actual
-}
-
-// parseQueryParamsToJSON converts URI query params into JSON.
-func parseQueryParamsToJSON(uri string) ([]byte, error) {
-	u, err := url.Parse(uri)
-	if err != nil {
-		return nil, fmt.Errorf("invalid resource URI: %w", err)
-	}
-	q := u.Query()
-	if len(q) == 0 {
-		return []byte("{}"), nil
-	}
-	// Copy to plain map[string][]string to avoid depending on url.Values in helper
-	m := make(map[string][]string, len(q))
-	for k, v := range q {
-		m[k] = v
-	}
-	coerced := mcpruntime.CoerceQuery(m)
-	return json.Marshal(coerced)
 }
 func (a *MCPAdapter) pruneSessionsLocked(now time.Time, reserveSlot bool) {
 	for sessionID, touchedAt := range a.initializedSessions {
@@ -368,33 +326,17 @@ func (a *MCPAdapter) mapError(err error) error {
 	return err
 }
 func (a *MCPAdapter) toolCallInfo(p *ToolsCallPayload, rawArgs jsontext.Value) ToolCallInterceptorInfo {
-	info := &toolCallInterceptorInfo{
-		method:     "tools/call",
-		rawPayload: p,
-		service:    "catalog",
-	}
+	tool := ""
 	if p != nil {
-		info.tool = p.Name
-		info.rawArgs = rawArgs
+		tool = p.Name
 	}
-	return info
+	return sdkbridge.NewToolCallInfo("catalog", tool, p, rawArgs)
 }
 func (a *MCPAdapter) wrapToolCallHandler(info ToolCallInterceptorInfo, next ToolCallHandler) ToolCallHandler {
-	if a == nil || a.opts == nil || len(a.opts.ToolCallInterceptors) == 0 {
+	if a == nil || a.opts == nil {
 		return next
 	}
-	wrapped := next
-	for i := len(a.opts.ToolCallInterceptors) - 1; i >= 0; i-- {
-		interceptor := a.opts.ToolCallInterceptors[i]
-		if interceptor == nil {
-			continue
-		}
-		currentNext := wrapped
-		wrapped = func(ctx context.Context, payload *ToolsCallPayload) (*ToolsCallResult, error) {
-			return interceptor(ctx, info, payload, currentNext)
-		}
-	}
-	return wrapped
+	return sdkbridge.WrapTypedHandler(a.opts.ToolCallInterceptors, info, next)
 }
 func defaultMCPAdapterTelemetryName(opts *MCPAdapterOptions) string {
 	if opts != nil && opts.TelemetryName != "" {
@@ -1810,141 +1752,39 @@ func (a *MCPAdapter) executeRealTool(ctx context.Context, p *ToolsCallPayload, s
 
 // Resources handling
 func (a *MCPAdapter) ResourcesRead(ctx context.Context, p *ResourcesReadPayload) (*ResourcesReadResult, error) {
-	if !a.isInitialized(ctx) {
-		return nil, loom.PermanentError("invalid_params", "Not initialized")
-	}
-	a.log(ctx, "request", map[string]any{
-		"method": "resources/read",
-		"uri":    p.URI,
+	return sdkbridge.DispatchResource(ctx, p, sdkbridge.ResourceDispatchConfig[*ResourcesReadPayload, *ResourcesReadResult]{
+		Initialized:  a.isInitialized,
+		Log:          a.log,
+		MapError:     a.safeMCPError,
+		Policy:       a.resourcePolicy,
+		Resources:    a.resourceOperations,
+		SkillResult:  nil,
+		SkillSources: nil,
+		URI: func(payload *ResourcesReadPayload) string {
+			if payload == nil {
+				return ""
+			}
+			return payload.URI
+		},
 	})
-	baseURI := p.URI
-	if i := strings.Index(baseURI, "?"); i >= 0 {
-		baseURI = baseURI[0:i]
-	}
-	switch baseURI {
-	case "status://current":
-		if err := a.assertResourceURIAllowed(ctx, p.URI, nil); err != nil {
-			return nil, a.safeMCPError(err, "invalid_params", "Resource URI is not allowed.")
-		}
-		result, err := a.service.Status(ctx)
-		if err != nil {
-			return nil, a.safeMCPError(err, "internal_error", "Resource read failed.")
-		}
-		s, serr := mcpruntime.EncodeJSONToString(ctx, goahttp.ResponseEncoder, result)
-		if serr != nil {
-			return nil, a.safeMCPError(serr, "internal_error", "Resource read failed.")
-		}
-		res := &ResourcesReadResult{Contents: []*ResourceContent{&ResourceContent{
-			MimeType: stringPtr("application/json"),
-			Text:     &s,
-			URI:      baseURI,
-		}}}
-		a.log(ctx, "response", map[string]any{
-			"method": "resources/read",
-			"uri":    baseURI,
-		})
-		return res, nil
-	default:
-		return nil, loom.PermanentError("resource_not_found", "Unknown resource: %s", p.URI)
-	}
 }
-
-// assertResourceURIAllowed verifies pURI passes allow/deny filters when configured.
-func (a *MCPAdapter) assertResourceURIAllowed(ctx context.Context, pURI string, extraNameToURI map[string]string) error {
-	base := pURI
-	if i := strings.Index(base, "?"); i >= 0 {
-		base = base[0:i]
-	}
-	var serverNameAllowURIs []string
-	var requestNameAllowURIs []string
-	var extraDenyURIs []string
-	var serverAllowedNames []string
-	var requestAllowedNames []string
-	var deniedNames []string
-	if a.opts != nil {
-		serverAllowedNames = append(serverAllowedNames, a.opts.AllowedResourceNames...)
-		deniedNames = append(deniedNames, a.opts.DeniedResourceNames...)
-	}
-	if ctx != nil {
-		if s := mcpruntime.AllowedResourceNamesFromContext(ctx); s != "" {
-			requestAllowedNames = append(requestAllowedNames, strings.Split(s, ",")...)
-		}
-		if s := mcpruntime.DeniedResourceNamesFromContext(ctx); s != "" {
-			deniedNames = append(deniedNames, strings.Split(s, ",")...)
-		}
-	}
-	for _, n := range serverAllowedNames {
-		n = strings.TrimSpace(n)
-		u, ok := extraNameToURI[n]
-		if !ok {
-			u, ok = a.resourceNameToURI[n]
-		}
-		if ok {
-			serverNameAllowURIs = append(serverNameAllowURIs, u)
-		}
-	}
-	for _, n := range requestAllowedNames {
-		n = strings.TrimSpace(n)
-		u, ok := extraNameToURI[n]
-		if !ok {
-			u, ok = a.resourceNameToURI[n]
-		}
-		if ok {
-			requestNameAllowURIs = append(requestNameAllowURIs, u)
-		}
-	}
-	for _, n := range deniedNames {
-		n = strings.TrimSpace(n)
-		u, ok := extraNameToURI[n]
-		if !ok {
-			u, ok = a.resourceNameToURI[n]
-		}
-		if ok {
-			extraDenyURIs = append(extraDenyURIs, u)
-		}
-	}
-	var denied []string
-	if a.opts != nil {
-		denied = a.opts.DeniedResourceURIs
-	}
-	for _, d := range denied {
-		if resourceURIMatchesPolicy(base, d) {
-			return fmt.Errorf("resource URI denied: %s", pURI)
-		}
-	}
-	for _, d := range extraDenyURIs {
-		if resourceURIMatchesPolicy(base, d) {
-			return fmt.Errorf("resource URI denied: %s", pURI)
-		}
-	}
-	var allowed []string
-	if a.opts != nil {
-		allowed = a.opts.AllowedResourceURIs
-	}
-	serverAllowConfigured := len(allowed) > 0 || len(serverAllowedNames) > 0
-	serverAllowPolicies := append([]string{}, allowed...)
-	serverAllowPolicies = append(serverAllowPolicies, serverNameAllowURIs...)
-	if !resourceURIAllowedByPolicies(base, serverAllowConfigured, serverAllowPolicies) {
-		return fmt.Errorf("resource URI not allowed: %s", pURI)
-	}
-	requestAllowConfigured := len(requestAllowedNames) > 0
-	if !resourceURIAllowedByPolicies(base, requestAllowConfigured, requestNameAllowURIs) {
-		return fmt.Errorf("resource URI not allowed: %s", pURI)
-	}
-	return nil
-}
-func resourceURIAllowedByPolicies(uri string, configured bool, policies []string) bool {
-	if !configured {
-		return true
-	}
-	for _, policy := range policies {
-		if resourceURIMatchesPolicy(uri, policy) {
-			return true
-		}
-	}
-	return false
-}
-func resourceURIMatchesPolicy(uri string, policy string) bool {
-	policy = strings.TrimSpace(policy)
-	return uri == policy || strings.HasSuffix(policy, "/") && strings.HasPrefix(uri, policy)
+func (a *MCPAdapter) resourceOperationDescriptors() []sdkbridge.ResourceOperation[*ResourcesReadPayload, *ResourcesReadResult] {
+	return []sdkbridge.ResourceOperation[*ResourcesReadPayload, *ResourcesReadResult]{{
+		Handle: func(ctx context.Context, _ *ResourcesReadPayload, baseURI string) (*ResourcesReadResult, error) {
+			result, err := a.service.Status(ctx)
+			if err != nil {
+				return nil, err
+			}
+			text, err := mcpruntime.EncodeJSONToString(ctx, goahttp.ResponseEncoder, result)
+			if err != nil {
+				return nil, err
+			}
+			return &ResourcesReadResult{Contents: []*ResourceContent{&ResourceContent{
+				MimeType: stringPtr("application/json"),
+				Text:     &text,
+				URI:      baseURI,
+			}}}, nil
+		},
+		URI: "status://current",
+	}}
 }

@@ -14,7 +14,6 @@ func adapterCoreSection(data *AdapterData) codegen.Section {
 		emitAdapterOptions(stmt)
 		emitAdapterConstructor(stmt, data)
 		emitMCPJSONPresenceHelpers(stmt)
-		emitParseQueryParamsToJSON(stmt)
 		emitSessionHelpers(stmt)
 		emitLogAndMapError(stmt)
 		emitToolCallInfoAndWrap(stmt, data)
@@ -101,11 +100,14 @@ func emitAdapterStruct(stmt *jen.Statement, data *AdapterData) {
 		g.Id("durationHistogram").Qual("go.opentelemetry.io/otel/metric", "Float64Histogram")
 		if len(data.StaticPrompts) > 0 || len(data.DynamicPrompts) > 0 {
 			g.Id("promptProvider").Id("PromptProvider")
+			g.Id("promptOperations").Index().Id("sdkbridge").Dot("NamedOperation").Types(jen.Op("*").Id("PromptsGetPayload"), jen.Op("*").Id("PromptsGetResult"))
+		}
+		if len(data.Resources) > 0 || len(data.SkillDirectories) > 0 {
+			g.Id("resourceOperations").Index().Id("sdkbridge").Dot("ResourceOperation").Types(jen.Op("*").Id("ResourcesReadPayload"), jen.Op("*").Id("ResourcesReadResult"))
+			g.Id("resourcePolicy").Id("sdkbridge").Dot("ResourcePolicy")
 		}
 		g.Comment("requestStateKey encrypts and authenticates portable MCP multi-round-trip state.")
 		g.Id("requestStateKey").Index().Byte()
-		g.Comment("resourceNameToURI holds DSL-derived mapping for policy and lookups")
-		g.Id("resourceNameToURI").Map(jen.String()).String()
 	})
 	stmt.Line()
 	stmt.Const().Defs(
@@ -123,7 +125,7 @@ func emitAdapterStruct(stmt *jen.Statement, data *AdapterData) {
 	stmt.Line()
 }
 
-// emitToolCallInterceptorTypes generates the interceptor-related types and impls.
+// emitToolCallInterceptorTypes generates public typed runtime aliases and stream helpers.
 func emitToolCallInterceptorTypes(stmt *jen.Statement) {
 	stmt.Type().Defs(
 		jen.Id("toolCallStream").Interface(
@@ -136,63 +138,13 @@ func emitToolCallInterceptorTypes(stmt *jen.Statement) {
 			jen.Id("payload").Op("*").Id("ToolsCallPayload"),
 			jen.Id("stream").Id("toolCallStream"),
 		).Params(jen.Bool(), jen.Error()),
-		jen.Line(),
-		jen.Comment("ToolCallInterceptorInfo describes a generated MCP tools/call invocation.").Line().
-			Id("ToolCallInterceptorInfo").Interface(
-			jen.Id("loom").Dot("InterceptorInfo"),
-			jen.Id("Tool").Params().String(),
-			jen.Id("RawArguments").Params().Id("jsontext").Dot("Value"),
-		),
-		jen.Line().Comment("ToolCallHandler is the generated MCP tool-call dispatcher.").Line().
-			Id("ToolCallHandler").Func().Params(
-			jen.Id("ctx").Qual("context", "Context"),
-			jen.Id("payload").Op("*").Id("ToolsCallPayload"),
-		).Params(jen.Op("*").Id("ToolsCallResult"), jen.Error()),
-		jen.Line().Comment("ToolCallInterceptor wraps generated MCP tool execution.").Line().
-			Id("ToolCallInterceptor").Func().Params(
-			jen.Id("ctx").Qual("context", "Context"),
-			jen.Id("info").Id("ToolCallInterceptorInfo"),
-			jen.Id("payload").Op("*").Id("ToolsCallPayload"),
-			jen.Id("next").Id("ToolCallHandler"),
-		).Params(jen.Op("*").Id("ToolsCallResult"), jen.Error()),
+		jen.Line().Comment("ToolCallInterceptorInfo describes a generated MCP tools/call invocation.").Line().
+			Id("ToolCallInterceptorInfo").Op("=").Id("sdkbridge").Dot("ToolCallInterceptorInfo"),
+		jen.Line().Comment("ToolCallHandler is the typed MCP tool-call dispatcher.").Line().
+			Id("ToolCallHandler").Op("=").Id("sdkbridge").Dot("TypedHandler").Types(jen.Op("*").Id("ToolsCallPayload"), jen.Op("*").Id("ToolsCallResult")),
+		jen.Line().Comment("ToolCallInterceptor wraps typed MCP tool execution.").Line().
+			Id("ToolCallInterceptor").Op("=").Id("sdkbridge").Dot("TypedInterceptor").Types(jen.Op("*").Id("ToolsCallPayload"), jen.Op("*").Id("ToolsCallResult")),
 	)
-	stmt.Line()
-
-	// toolCallInterceptorInfo struct
-	stmt.Type().Id("toolCallInterceptorInfo").Struct(
-		jen.Id("service").String(),
-		jen.Id("method").String(),
-		jen.Id("tool").String(),
-		jen.Id("rawPayload").Any(),
-		jen.Id("rawArgs").Id("jsontext").Dot("Value"),
-	)
-	stmt.Line()
-
-	// Method implementations
-	for _, m := range []struct{ name, ret string }{
-		{"Service", "i.service"},
-		{"Method", "i.method"},
-		{"Tool", "i.tool"},
-	} {
-		stmt.Func().Params(jen.Id("i").Op("*").Id("toolCallInterceptorInfo")).
-			Id(m.name).Params().String().
-			Block(jen.Return(jen.Id(m.ret)))
-		stmt.Line()
-	}
-
-	stmt.Func().Params(jen.Id("i").Op("*").Id("toolCallInterceptorInfo")).
-		Id("CallType").Params().Id("loom").Dot("InterceptorCallType").
-		Block(jen.Return(jen.Id("loom").Dot("InterceptorUnary")))
-	stmt.Line()
-
-	stmt.Func().Params(jen.Id("i").Op("*").Id("toolCallInterceptorInfo")).
-		Id("RawPayload").Params().Any().
-		Block(jen.Return(jen.Id("i").Dot("rawPayload")))
-	stmt.Line()
-
-	stmt.Func().Params(jen.Id("i").Op("*").Id("toolCallInterceptorInfo")).
-		Id("RawArguments").Params().Id("jsontext").Dot("Value").
-		Block(jen.Return(jen.Id("i").Dot("rawArgs")))
 	stmt.Line()
 }
 
@@ -266,10 +218,8 @@ func emitAdapterOptions(stmt *jen.Statement) {
 // emitAdapterConstructor generates NewMCPAdapter.
 func emitAdapterConstructor(stmt *jen.Statement, data *AdapterData) {
 	hasPrompts := len(data.StaticPrompts) > 0 || len(data.DynamicPrompts) > 0
-
-	params := []jen.Code{
-		jen.Id("service").Id(data.Package).Dot("Service"),
-	}
+	hasResources := len(data.Resources) > 0 || len(data.SkillDirectories) > 0
+	params := []jen.Code{jen.Id("service").Id(data.Package).Dot("Service")}
 	if hasPrompts {
 		params = append(params, jen.Id("promptProvider").Id("PromptProvider"))
 	}
@@ -277,22 +227,10 @@ func emitAdapterConstructor(stmt *jen.Statement, data *AdapterData) {
 
 	stmt.Func().Id("NewMCPAdapter").Params(params...).Op("*").Id("MCPAdapter").BlockFunc(func(g *jen.Group) {
 		g.Id("validateToolSearchOptions").Call(jen.Id("opts"))
-
-		// Telemetry
 		g.Id("telemetryName").Op(":=").Id("defaultMCPAdapterTelemetryName").Call(jen.Id("opts"))
 		g.Id("tracer").Op(":=").Id("defaultMCPAdapterTracer").Call(jen.Id("opts"), jen.Id("telemetryName"))
 		g.List(jen.Id("callCounter"), jen.Id("errorCounter"), jen.Id("durationHistogram")).Op(":=").Id("defaultMCPAdapterMetrics").Call(jen.Id("opts"), jen.Id("telemetryName"))
-
-		// Build name->URI map
-		g.Comment("Build name->URI map from generated resources")
-		g.Id("nameToURI").Op(":=").Map(jen.String()).String().ValuesFunc(func(vals *jen.Group) {
-			for _, r := range data.Resources {
-				vals.Lit(r.Name).Op(":").Lit(r.URI)
-			}
-		})
-
-		// Return
-		g.Return(jen.Op("&").Id("MCPAdapter").ValuesFunc(func(vals *jen.Group) {
+		g.Id("adapter").Op(":=").Op("&").Id("MCPAdapter").ValuesFunc(func(vals *jen.Group) {
 			vals.Id("service").Op(":").Id("service")
 			vals.Id("initializedSessions").Op(":").Make(jen.Map(jen.String()).Qual("time", "Time"))
 			vals.Id("sessionPrincipals").Op(":").Make(jen.Map(jen.String()).String())
@@ -304,32 +242,26 @@ func emitAdapterConstructor(stmt *jen.Statement, data *AdapterData) {
 			if hasPrompts {
 				vals.Id("promptProvider").Op(":").Id("promptProvider")
 			}
-			vals.Id("resourceNameToURI").Op(":").Id("nameToURI")
-		}))
+		})
+		if hasPrompts {
+			g.Id("adapter").Dot("promptOperations").Op("=").Id("adapter").Dot("promptOperationDescriptors").Call()
+		}
+		if hasResources {
+			g.Id("adapter").Dot("resourceOperations").Op("=").Id("adapter").Dot("resourceOperationDescriptors").Call()
+			g.Id("adapter").Dot("resourcePolicy").Dot("ResourceNameToURI").Op("=").Map(jen.String()).String().ValuesFunc(func(vals *jen.Group) {
+				for _, resource := range data.Resources {
+					vals.Lit(resource.Name).Op(":").Lit(resource.URI)
+				}
+			})
+			g.If(jen.Id("opts").Op("!=").Nil()).Block(
+				jen.Id("adapter").Dot("resourcePolicy").Dot("AllowedURIs").Op("=").Id("opts").Dot("AllowedResourceURIs"),
+				jen.Id("adapter").Dot("resourcePolicy").Dot("DeniedURIs").Op("=").Id("opts").Dot("DeniedResourceURIs"),
+				jen.Id("adapter").Dot("resourcePolicy").Dot("AllowedNames").Op("=").Id("opts").Dot("AllowedResourceNames"),
+				jen.Id("adapter").Dot("resourcePolicy").Dot("DeniedNames").Op("=").Id("opts").Dot("DeniedResourceNames"),
+			)
+		}
+		g.Return(jen.Id("adapter"))
 	})
-	stmt.Line()
-}
-
-func emitParseQueryParamsToJSON(stmt *jen.Statement) {
-	stmt.Comment("parseQueryParamsToJSON converts URI query params into JSON.").Line()
-	stmt.Func().Id("parseQueryParamsToJSON").Params(jen.Id("uri").String()).Params(jen.Index().Byte(), jen.Error()).
-		Block(
-			jen.List(jen.Id("u"), jen.Id("err")).Op(":=").Qual("net/url", "Parse").Call(jen.Id("uri")),
-			jen.If(jen.Id("err").Op("!=").Nil()).Block(
-				jen.Return(jen.Nil(), jen.Qual("fmt", "Errorf").Call(jen.Lit("invalid resource URI: %w"), jen.Id("err"))),
-			),
-			jen.Id("q").Op(":=").Id("u").Dot("Query").Call(),
-			jen.If(jen.Len(jen.Id("q")).Op("==").Lit(0)).Block(
-				jen.Return(jen.Index().Byte().Call(jen.Lit("{}")), jen.Nil()),
-			),
-			jen.Comment("Copy to plain map[string][]string to avoid depending on url.Values in helper"),
-			jen.Id("m").Op(":=").Make(jen.Map(jen.String()).Index().String(), jen.Len(jen.Id("q"))),
-			jen.For(jen.List(jen.Id("k"), jen.Id("v")).Op(":=").Range().Id("q")).Block(
-				jen.Id("m").Index(jen.Id("k")).Op("=").Id("v"),
-			),
-			jen.Id("coerced").Op(":=").Id("mcpruntime").Dot("CoerceQuery").Call(jen.Id("m")),
-			jen.Return(jen.Id("json").Dot("Marshal").Call(jen.Id("coerced"))),
-		)
 	stmt.Line()
 }
 
@@ -492,47 +424,27 @@ func emitLogAndMapError(stmt *jen.Statement) {
 	stmt.Line()
 }
 
-// emitToolCallInfoAndWrap generates toolCallInfo and wrapToolCallHandler.
+// emitToolCallInfoAndWrap delegates interceptor metadata and wrapping to sdkbridge.
 func emitToolCallInfoAndWrap(stmt *jen.Statement, data *AdapterData) {
 	stmt.Func().Params(jen.Id("a").Op("*").Id("MCPAdapter")).
 		Id("toolCallInfo").Params(
 		jen.Id("p").Op("*").Id("ToolsCallPayload"),
 		jen.Id("rawArgs").Id("jsontext").Dot("Value"),
-	).Id("ToolCallInterceptorInfo").
-		Block(
-			jen.Id("info").Op(":=").Op("&").Id("toolCallInterceptorInfo").Values(jen.Dict{
-				jen.Id("service"):    jen.Lit(data.ServiceName),
-				jen.Id("method"):     jen.Lit("tools/call"),
-				jen.Id("rawPayload"): jen.Id("p"),
-			}),
-			jen.If(jen.Id("p").Op("!=").Nil()).Block(
-				jen.Id("info").Dot("tool").Op("=").Id("p").Dot("Name"),
-				jen.Id("info").Dot("rawArgs").Op("=").Id("rawArgs"),
-			),
-			jen.Return(jen.Id("info")),
-		)
+	).Id("ToolCallInterceptorInfo").BlockFunc(func(g *jen.Group) {
+		g.Id("tool").Op(":=").Lit("")
+		g.If(jen.Id("p").Op("!=").Nil()).Block(jen.Id("tool").Op("=").Id("p").Dot("Name"))
+		g.Return(jen.Id("sdkbridge").Dot("NewToolCallInfo").Call(
+			jen.Lit(data.ServiceName), jen.Id("tool"), jen.Id("p"), jen.Id("rawArgs"),
+		))
+	})
 	stmt.Line()
 
 	stmt.Func().Params(jen.Id("a").Op("*").Id("MCPAdapter")).
 		Id("wrapToolCallHandler").Params(jen.Id("info").Id("ToolCallInterceptorInfo"), jen.Id("next").Id("ToolCallHandler")).Id("ToolCallHandler").
-		Block(
-			jen.If(jen.Id("a").Op("==").Nil().Op("||").Id("a").Dot("opts").Op("==").Nil().Op("||").Len(jen.Id("a").Dot("opts").Dot("ToolCallInterceptors")).Op("==").Lit(0)).Block(
-				jen.Return(jen.Id("next")),
-			),
-			jen.Id("wrapped").Op(":=").Id("next"),
-			jen.For(jen.Id("i").Op(":=").Len(jen.Id("a").Dot("opts").Dot("ToolCallInterceptors")).Op("-").Lit(1), jen.Id("i").Op(">=").Lit(0), jen.Id("i").Op("--")).Block(
-				jen.Id("interceptor").Op(":=").Id("a").Dot("opts").Dot("ToolCallInterceptors").Index(jen.Id("i")),
-				jen.If(jen.Id("interceptor").Op("==").Nil()).Block(jen.Continue()),
-				jen.Id("currentNext").Op(":=").Id("wrapped"),
-				jen.Id("wrapped").Op("=").Func().Params(
-					jen.Id("ctx").Qual("context", "Context"),
-					jen.Id("payload").Op("*").Id("ToolsCallPayload"),
-				).Params(jen.Op("*").Id("ToolsCallResult"), jen.Error()).Block(
-					jen.Return(jen.Id("interceptor").Call(jen.Id("ctx"), jen.Id("info"), jen.Id("payload"), jen.Id("currentNext"))),
-				),
-			),
-			jen.Return(jen.Id("wrapped")),
-		)
+		BlockFunc(func(g *jen.Group) {
+			g.If(jen.Id("a").Op("==").Nil().Op("||").Id("a").Dot("opts").Op("==").Nil()).Block(jen.Return(jen.Id("next")))
+			g.Return(jen.Id("sdkbridge").Dot("WrapTypedHandler").Call(jen.Id("a").Dot("opts").Dot("ToolCallInterceptors"), jen.Id("info"), jen.Id("next")))
+		})
 	stmt.Line()
 }
 
