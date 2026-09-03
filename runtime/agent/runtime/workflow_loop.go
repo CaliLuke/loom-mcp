@@ -98,6 +98,10 @@ func (d runDeadlines) finalizeReserve() time.Duration {
 	return minActivityTimeout
 }
 
+func (d runDeadlines) budgetExpired(now time.Time) bool {
+	return !d.Budget.IsZero() && !now.Before(d.Budget)
+}
+
 // pause extends the run deadlines by delta to account for time spent waiting on
 // external input (clarifications, confirmations, UI-provided tool results).
 //
@@ -151,6 +155,10 @@ func (l *workflowLoop) beforeTurn(ctx context.Context) (*RunOutput, error) {
 	if err := l.handlePendingInterrupts(); err != nil {
 		return nil, err
 	}
+	if err := l.r.validateCompletionToolPlanResult(l.st.Result, completionTool(l.input)); err != nil {
+		return nil, err
+	}
+
 	if out, err := l.finalizeIfPastBudget(); err != nil || out != nil {
 		return out, err
 	}
@@ -233,6 +241,7 @@ func (l *workflowLoop) finalizeForTimeBudget() (*RunOutput, error) {
 		l.st.Caps,
 		l.st.NextAttempt,
 		l.turnID,
+		plannerResultNotes(l.st.Result),
 		planner.TerminationReasonTimeBudget,
 		l.deadlines.Hard,
 	)

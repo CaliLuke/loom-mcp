@@ -26,7 +26,7 @@ func resetRecoveryTurnsAfterResults(r *Runtime, caps *policy.CapsState, results 
 		if result == nil || result.Error != nil || result.Name == tools.ToolUnavailable {
 			continue
 		}
-		if _, ok := r.toolSpec(result.Name); ok {
+		if spec, ok := r.toolSpec(result.Name); ok && !spec.Bookkeeping {
 			caps.RemainingRecoveryTurns = caps.MaxRecoveryTurns
 			return
 		}

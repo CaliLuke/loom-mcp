@@ -235,6 +235,7 @@ func (r *Runtime) recordProvidedToolResults(ctx context.Context, base *planner.P
 	if err := r.appendToolOutputs(ctx, st, allowed, decoded); err != nil {
 		return err
 	}
+	r.hideSuccessfulBookkeepingCallsFromPlanner(base, decoded)
 	return r.appendUserToolResults(base, allowed, decoded, st.Ledger)
 }
 

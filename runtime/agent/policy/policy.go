@@ -101,6 +101,9 @@ type (
 		Metadata map[string]any
 	}
 
+	// ToolBudgetClass identifies whether a tool consumes MaxToolCalls budget.
+	ToolBudgetClass string
+
 	// ToolMetadata describes a candidate tool available to the agent. The runtime
 	// provides this metadata to the policy engine for filtering and allowlist decisions.
 	ToolMetadata struct {
@@ -121,6 +124,10 @@ type (
 		// Tags lists metadata labels for filtering (e.g., ["privileged", "external"]).
 		// Policies can allowlist/blocklist based on tags without hardcoding tool IDs.
 		Tags []string
+
+		// BudgetClass reports whether calls consume the run-level MaxToolCalls
+		// budget.
+		BudgetClass ToolBudgetClass
 	}
 
 	// CapsState tracks remaining counter budgets for a run. The runtime decrements
@@ -161,6 +168,13 @@ const (
 	// DefaultMaxRecoveryTurns is the bounded recovery budget used when an agent
 	// does not declare one explicitly.
 	DefaultMaxRecoveryTurns = 3
+)
+
+const (
+	// ToolBudgetClassBudgeted identifies tools that consume MaxToolCalls budget.
+	ToolBudgetClassBudgeted ToolBudgetClass = "budgeted"
+	// ToolBudgetClassBookkeeping identifies tools exempt from MaxToolCalls.
+	ToolBudgetClassBookkeeping ToolBudgetClass = "bookkeeping"
 )
 
 // UnmarshalJSON restores both the current recovery-turn fields and their

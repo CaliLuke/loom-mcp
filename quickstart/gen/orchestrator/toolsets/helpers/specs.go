@@ -40,6 +40,7 @@ var (
 			Title:       "Answer",
 			Description: "Answer a simple question",
 			Tags:        []string{},
+			BudgetClass: policy.ToolBudgetClassBudgeted,
 		},
 	}
 	names = []tools.Ident{

@@ -157,7 +157,11 @@ func (r *Runtime) finishAfterTerminalToolCalls(
 	input *RunInput,
 	base *planner.PlanInput,
 	st *runLoopState,
+	turnID string,
 ) (*RunOutput, error) {
+	if err := r.publishPlannerNotes(ctx, base, input, turnID, st.Result.Notes); err != nil {
+		return nil, err
+	}
 	toolEvents, err := r.encodeToolEvents(ctx, st.ToolEvents)
 	if err != nil {
 		return nil, err
@@ -167,7 +171,43 @@ func (r *Runtime) finishAfterTerminalToolCalls(
 		RunID:      base.RunContext.RunID,
 		Final:      &model.Message{Role: model.ConversationRoleAssistant},
 		ToolEvents: toolEvents,
+		Notes:      clonePlannerNotes(st.Result.Notes),
 		Usage:      &st.AggUsage,
+	}, nil
+}
+
+func (r *Runtime) finishAfterCompletionTool(
+	ctx context.Context,
+	input *RunInput,
+	base *planner.PlanInput,
+	st *runLoopState,
+	turnID string,
+	completion tools.Ident,
+) (*RunOutput, error) {
+	if err := r.publishPlannerNotes(ctx, base, input, turnID, st.Result.Notes); err != nil {
+		return nil, err
+	}
+	toolEvents, err := r.encodeToolEvents(ctx, st.ToolEvents)
+	if err != nil {
+		return nil, err
+	}
+	var finalToolResult *api.ToolEvent
+	for i := len(toolEvents) - 1; i >= 0; i-- {
+		if toolEvents[i] != nil && toolEvents[i].Name == completion && toolEvents[i].Error == nil {
+			finalToolResult = toolEvents[i]
+			break
+		}
+	}
+	if finalToolResult == nil {
+		return nil, fmt.Errorf("completion tool %q produced no successful result", completion)
+	}
+	return &RunOutput{
+		AgentID:         input.AgentID,
+		RunID:           base.RunContext.RunID,
+		FinalToolResult: finalToolResult,
+		ToolEvents:      toolEvents,
+		Notes:           clonePlannerNotes(st.Result.Notes),
+		Usage:           &st.AggUsage,
 	}, nil
 }
 

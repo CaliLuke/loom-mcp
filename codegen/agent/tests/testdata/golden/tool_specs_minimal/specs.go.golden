@@ -39,6 +39,7 @@ var (
 			Title:       "Summarize Doc",
 			Description: "Summarize a document",
 			Tags:        []string{},
+			BudgetClass: policy.ToolBudgetClassBudgeted,
 		},
 	}
 	names = []tools.Ident{

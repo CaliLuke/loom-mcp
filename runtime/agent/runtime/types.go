@@ -29,7 +29,9 @@ type (
 
 	// PolicyOverrides configures per-run policy constraints.
 	// All fields are optional; zero values mean no override.
-	PolicyOverrides = api.PolicyOverrides
+	PolicyOverrides    = api.PolicyOverrides
+	LimitTerminalPlans = api.LimitTerminalPlans
+	LimitTerminalCall  = api.LimitTerminalCall
 
 	// RunOutput represents the final outcome returned by a run workflow, including the
 	// concluding assistant message plus tool traces and planner notes for callers.

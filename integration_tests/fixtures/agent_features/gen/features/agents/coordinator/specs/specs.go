@@ -17,41 +17,54 @@ import (
 var (
 	// Specs is the static list of tool specs exported by this agent.
 
-	Specs = []tools.ToolSpec{delegated.SpecSummarize, workflow.SpecDraft, workflow.SpecMethodEcho, workflow.SpecPublish, workflow.SpecRetry, workflow.SpecReview, workflow.SpecRevise}
+	Specs = []tools.ToolSpec{delegated.SpecSummarize, workflow.SpecDraft, workflow.SpecFinalize, workflow.SpecMethodEcho, workflow.SpecPublish, workflow.SpecRetry, workflow.SpecReview, workflow.SpecRevise}
 
 	// metadata is the static list of policy metadata exported by this agent.
 
 	metadata = []policy.ToolMetadata{{
+		BudgetClass: policy.ToolBudgetClassBudgeted,
 		Description: "Summarize a topic through a child run",
 		ID:          tools.Ident("delegated.summarize"),
 		Tags:        []string{},
 		Title:       "Summarize",
 	}, {
+		BudgetClass: policy.ToolBudgetClassBudgeted,
 		Description: "Draft a response",
 		ID:          tools.Ident("workflow.draft"),
 		Tags:        []string{},
 		Title:       "Draft",
 	}, {
+		BudgetClass: policy.ToolBudgetClassBookkeeping,
+		Description: "Record the final workflow result",
+		ID:          tools.Ident("workflow.finalize"),
+		Tags:        []string{},
+		Title:       "Finalize",
+	}, {
+		BudgetClass: policy.ToolBudgetClassBudgeted,
 		Description: "Echo a topic through the generated method dispatcher",
 		ID:          tools.Ident("workflow.method_echo"),
 		Tags:        []string{},
 		Title:       "Method Echo",
 	}, {
+		BudgetClass: policy.ToolBudgetClassBudgeted,
 		Description: "Publish the result",
 		ID:          tools.Ident("workflow.publish"),
 		Tags:        []string{},
 		Title:       "Publish",
 	}, {
+		BudgetClass: policy.ToolBudgetClassBudgeted,
 		Description: "Run a bounded retry step",
 		ID:          tools.Ident("workflow.retry"),
 		Tags:        []string{},
 		Title:       "Retry",
 	}, {
+		BudgetClass: policy.ToolBudgetClassBudgeted,
 		Description: "Review the draft",
 		ID:          tools.Ident("workflow.review"),
 		Tags:        []string{},
 		Title:       "Review",
 	}, {
+		BudgetClass: policy.ToolBudgetClassBudgeted,
 		Description: "Revise the result",
 		ID:          tools.Ident("workflow.revise"),
 		Tags:        []string{},
@@ -60,7 +73,7 @@ var (
 
 	// names is the static list of exported tool identifiers.
 
-	names = []tools.Ident{delegated.Summarize, workflow.Draft, workflow.MethodEcho, workflow.Publish, workflow.Retry, workflow.Review, workflow.Revise}
+	names = []tools.Ident{delegated.Summarize, workflow.Draft, workflow.Finalize, workflow.MethodEcho, workflow.Publish, workflow.Retry, workflow.Review, workflow.Revise}
 )
 
 // Names returns the tool identifiers exported by this agent.
@@ -75,6 +88,8 @@ func Spec(name tools.Ident) (*tools.ToolSpec, bool) {
 		return &delegated.SpecSummarize, true
 	case tools.Ident("workflow.draft"):
 		return &workflow.SpecDraft, true
+	case tools.Ident("workflow.finalize"):
+		return &workflow.SpecFinalize, true
 	case tools.Ident("workflow.method_echo"):
 		return &workflow.SpecMethodEcho, true
 	case tools.Ident("workflow.publish"):

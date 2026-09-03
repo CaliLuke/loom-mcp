@@ -42,6 +42,7 @@ var (
 			Title:       "Summarize",
 			Description: "Summarize a topic through a child run",
 			Tags:        []string{},
+			BudgetClass: policy.ToolBudgetClassBudgeted,
 		},
 	}
 	names = []tools.Ident{

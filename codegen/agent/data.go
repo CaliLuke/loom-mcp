@@ -648,6 +648,9 @@ type (
 		// TerminalRun indicates that once this tool executes, the runtime should
 		// complete the run immediately (no follow-up PlanResume/finalize turn).
 		TerminalRun bool
+		// Bookkeeping indicates that the tool records control-plane state without
+		// consuming the run-level MaxToolCalls budget.
+		Bookkeeping bool
 
 		// ResultReminder is an optional system reminder injected into the
 		// conversation after the tool result is returned. It provides backstage

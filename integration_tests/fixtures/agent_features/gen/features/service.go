@@ -36,6 +36,11 @@ var MethodNames = [1]string{"echo_topic"}
 type EmptyPayload struct {
 }
 
+type LimitPayload struct {
+	// Reason that ended the run
+	Reason string `json:"reason"`
+}
+
 // MethodEchoPayload is the payload type of the features service echo_topic
 // method.
 type MethodEchoPayload struct {

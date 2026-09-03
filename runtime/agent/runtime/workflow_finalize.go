@@ -23,8 +23,94 @@ import (
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/run"
 )
 
-// finalizeWithPlanner asks the planner for a tool-free final response and returns it as RunOutput.
+// finalizeWithPlanner executes the configured limit plan or asks the finalizer
+// for a final response or terminal bookkeeping call.
 func (r *Runtime) finalizeWithPlanner(
+	wfCtx engine.WorkflowContext,
+	reg AgentRegistration,
+	input *RunInput,
+	base *planner.PlanInput,
+	allToolResults []*planner.ToolResult,
+	allToolOutputs []*planner.ToolOutput,
+	aggUsage model.TokenUsage,
+	caps policy.CapsState,
+	nextAttempt int,
+	turnID string,
+	notes []planner.PlannerAnnotation,
+	reason planner.TerminationReason,
+	hardDeadline time.Time,
+) (*RunOutput, error) {
+	if base == nil {
+		return nil, errors.New("base plan input is required")
+	}
+	if completion := completionTool(input); completion != "" {
+		return nil, completionToolRequiredError(completion, reason)
+	}
+	out, handled, err := r.executeFixedLimitTerminalPlan(
+		wfCtx, reg, input, base, allToolResults, aggUsage, caps, nextAttempt, turnID, notes, reason, hardDeadline,
+	)
+	if err != nil || handled {
+		return out, err
+	}
+	return r.finalizeWithModelPlan(
+		wfCtx, reg, input, base, allToolResults, allToolOutputs, aggUsage, caps, nextAttempt, turnID, reason, hardDeadline,
+	)
+}
+
+func (r *Runtime) executeFixedLimitTerminalPlan(
+	wfCtx engine.WorkflowContext,
+	reg AgentRegistration,
+	input *RunInput,
+	base *planner.PlanInput,
+	allToolResults []*planner.ToolResult,
+	aggUsage model.TokenUsage,
+	caps policy.CapsState,
+	nextAttempt int,
+	turnID string,
+	notes []planner.PlannerAnnotation,
+	reason planner.TerminationReason,
+	hardDeadline time.Time,
+) (*RunOutput, bool, error) {
+	var plans *LimitTerminalPlans
+	if input.Policy != nil {
+		plans = input.Policy.LimitTerminalPlans
+	}
+	call, ok, err := limitTerminalCall(plans, reason)
+	if err != nil || !ok {
+		return nil, false, err
+	}
+	ctx := wfCtx.Context()
+	if err := r.publishFinalizingPhase(ctx, base, input, turnID); err != nil {
+		return nil, true, err
+	}
+	if err := r.publishFinalizeTransition(ctx, base, input, turnID, reason); err != nil {
+		return nil, true, err
+	}
+	out, err := r.executeFinalizationToolCalls(
+		wfCtx,
+		reg,
+		input,
+		base,
+		[]planner.ToolRequest{{Name: call.Name, Payload: call.Payload}},
+		allToolResults,
+		aggUsage,
+		caps,
+		nextAttempt,
+		turnID,
+		reason,
+		hardDeadline,
+	)
+	if err != nil {
+		return nil, true, err
+	}
+	if err := r.publishPlannerNotes(ctx, base, input, turnID, notes); err != nil {
+		return nil, true, err
+	}
+	out.Notes = clonePlannerNotes(notes)
+	return out, true, nil
+}
+
+func (r *Runtime) finalizeWithModelPlan(
 	wfCtx engine.WorkflowContext,
 	reg AgentRegistration,
 	input *RunInput,
@@ -38,15 +124,33 @@ func (r *Runtime) finalizeWithPlanner(
 	reason planner.TerminationReason,
 	hardDeadline time.Time,
 ) (*RunOutput, error) {
-	if base == nil {
-		return nil, errors.New("base plan input is required")
-	}
-	ctx := wfCtx.Context()
-	output, aggUsage, err := r.runFinalizationPlan(wfCtx, reg, input, base, allToolOutputs, aggUsage, caps, nextAttempt, turnID, reason, hardDeadline)
+	output, aggUsage, err := r.runFinalizationPlan(
+		wfCtx, reg, input, base, allToolOutputs, aggUsage, caps, nextAttempt, turnID, reason, hardDeadline,
+	)
 	if err != nil {
 		return nil, err
 	}
-	toolEvents, err := r.encodeToolEvents(ctx, allToolResults)
+	if len(output.Result.ToolCalls) > 0 {
+		out, executeErr := r.executeFinalizationToolCalls(
+			wfCtx,
+			reg,
+			input,
+			base,
+			output.Result.ToolCalls,
+			allToolResults,
+			aggUsage,
+			caps,
+			nextAttempt,
+			turnID,
+			reason,
+			hardDeadline,
+		)
+		if out != nil {
+			out.Notes = clonePlannerNotes(output.Result.Notes)
+		}
+		return out, executeErr
+	}
+	toolEvents, err := r.encodeToolEvents(wfCtx.Context(), allToolResults)
 	if err != nil {
 		return nil, err
 	}
@@ -92,6 +196,12 @@ func (r *Runtime) runFinalizationPlan(
 func validateFinalizePlanOutput(output *PlanActivityOutput, reasonText string) error {
 	if output == nil || output.Result == nil {
 		return fmt.Errorf("%s", reasonText)
+	}
+	if len(output.Result.ToolCalls) > 0 {
+		if output.Result.FinalResponse != nil || output.Result.FinalToolResult != nil || output.Result.Await != nil {
+			return fmt.Errorf("%s: finalization tool calls cannot be combined with terminal output or await", reasonText)
+		}
+		return nil
 	}
 	if err := validateTerminalPlanResult(output.Result); err != nil {
 		return fmt.Errorf("%s: %w", reasonText, err)
@@ -147,7 +257,8 @@ func (r *Runtime) prepareFinalizePlan(
 	if err := r.publishFinalizingPhase(ctx, base, input, turnID); err != nil {
 		return PlanActivityInput{}, "", engine.ActivityOptions{}, err
 	}
-	req, reasonText, err := r.buildFinalizePlanRequest(base, input, allToolOutputs, caps, nextAttempt, reason)
+	req, reasonText, err := r.buildFinalizePlanRequest(reg, base, input, allToolOutputs, caps, nextAttempt, reason)
+
 	if err != nil {
 		return PlanActivityInput{}, "", engine.ActivityOptions{}, err
 	}
@@ -158,6 +269,7 @@ func (r *Runtime) prepareFinalizePlan(
 }
 
 func (r *Runtime) buildFinalizePlanRequest(
+	reg AgentRegistration,
 	base *planner.PlanInput,
 	input *RunInput,
 	allToolOutputs []*planner.ToolOutput,
@@ -183,6 +295,8 @@ func (r *Runtime) buildFinalizePlanRequest(
 		ToolPolicyActive: true,
 		PolicyCaps:       caps,
 	}
+	req.AllowedTools = r.terminalFinalizerToolNames(reg, input)
+
 	if err := enforcePlanActivityInputBudget(req); err != nil {
 		return PlanActivityInput{}, "", err
 	}
@@ -202,6 +316,13 @@ func finalPlannerMessage(output *PlanActivityOutput) *model.Message {
 	return finalMsg
 }
 
+func plannerResultNotes(result *planner.PlanResult) []planner.PlannerAnnotation {
+	if result == nil {
+		return nil
+	}
+	return result.Notes
+}
+
 func clonePlannerNotes(in []planner.PlannerAnnotation) []*planner.PlannerAnnotation {
 	out := make([]*planner.PlannerAnnotation, len(in))
 	for i := range in {
@@ -215,15 +336,16 @@ func (r *Runtime) publishFinalizingPhase(ctx context.Context, base *planner.Plan
 }
 
 func finalizationHint(reason planner.TerminationReason) string {
+	const terminalToolGuidance = "\n- Do NOT call domain tools. You may call an advertised terminal bookkeeping tool to produce the final result."
 	switch reason {
 	case planner.TerminationReasonTimeBudget:
-		return "FINALIZE NOW: time budget reached.\n\n- Provide the best possible final answer using ONLY the information already available in the conversation and tool results.\n- Do NOT call any tools.\n- Do NOT say you will call tools or that you will \"try\" another approach.\n- If additional tool calls would be needed, explain what you would have retrieved and how it would change the answer, then provide the best provisional answer."
+		return "FINALIZE NOW: time budget reached.\n\n- Provide the best possible final answer using ONLY the information already available in the conversation and tool results." + terminalToolGuidance + "\n- Do NOT say you will call tools or that you will \"try\" another approach.\n- If additional domain tool calls would be needed, explain what you would have retrieved and how it would change the answer, then provide the best provisional answer."
 	case planner.TerminationReasonToolCap:
-		return "FINALIZE NOW: tool budget exhausted.\n\n- Provide the best possible final answer using ONLY the information already available in the conversation and tool results.\n- Do NOT call any tools.\n- Do NOT say you will call tools.\n- If further tool calls would be needed, describe them briefly and provide the best provisional answer."
+		return "FINALIZE NOW: tool budget exhausted.\n\n- Provide the best possible final answer using ONLY the information already available in the conversation and tool results." + terminalToolGuidance + "\n- Do NOT say you will call tools.\n- If further domain tool calls would be needed, describe them briefly and provide the best provisional answer."
 	case planner.TerminationReasonFailureCap:
-		return "FINALIZE NOW: recovery budget exhausted.\n\n- Provide the best possible final answer using ONLY the information already available in the conversation and tool results.\n- Do NOT call any tools.\n- Do NOT say you will call tools.\n- A model or tool result could not be accepted after bounded retries. State what remains uncertain, then provide the best provisional answer."
+		return "FINALIZE NOW: recovery budget exhausted.\n\n- Provide the best possible final answer using ONLY the information already available in the conversation and tool results." + terminalToolGuidance + "\n- Do NOT say you will call tools.\n- A model or tool result could not be accepted after bounded retries. State what remains uncertain, then provide the best provisional answer."
 	default:
-		return "FINALIZE NOW.\n\n- Provide the best possible final answer using ONLY the information already available in the conversation and tool results.\n- Do NOT call any tools.\n- Do NOT say you will call tools.\n- If more work is needed, describe it succinctly and provide the best provisional answer."
+		return "FINALIZE NOW.\n\n- Provide the best possible final answer using ONLY the information already available in the conversation and tool results." + terminalToolGuidance + "\n- Do NOT say you will call tools.\n- If more work is needed, describe it succinctly and provide the best provisional answer."
 	}
 }
 

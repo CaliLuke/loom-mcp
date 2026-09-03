@@ -85,6 +85,10 @@ type (
 		// TerminalRun indicates this tool should terminate the run immediately after
 		// execution (no follow-up plan/resume/finalization turn).
 		TerminalRun bool
+		// Bookkeeping indicates that this tool is exempt from the run-level
+		// MaxToolCalls budget.
+		Bookkeeping bool
+
 		// ResultReminder is an optional system reminder injected into the
 		// conversation after the tool result is returned.
 		ResultReminder string

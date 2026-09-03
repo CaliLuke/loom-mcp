@@ -178,6 +178,9 @@ func (e *recordingWorkflowExecutor) Execute(ctx context.Context, meta *agentsrun
 		result = &workflow.PublishResult{OK: true, Approved: &approved}
 	case workflow.Revise:
 		result = &workflow.ReviseResult{OK: true, Approved: &approved}
+	case workflow.Finalize:
+		result = &workflow.FinalizeResult{OK: true, Approved: &approved}
+
 	default:
 		return nil, errors.New("unexpected workflow tool: " + string(call.Name))
 	}
@@ -237,6 +240,14 @@ func (e *recordingWorkflowExecutor) toolNames() []tools.Ident {
 		names = append(names, call.Name)
 	}
 	return names
+}
+
+func (e *recordingWorkflowExecutor) callsSnapshot() []planner.ToolRequest {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	calls := make([]planner.ToolRequest, len(e.calls))
+	copy(calls, e.calls)
+	return calls
 }
 
 type namedInterceptorPlanner struct {

@@ -48,6 +48,7 @@ func (r *Runtime) handleMissingFieldsPolicy(
 	caps policy.CapsState,
 	nextAttempt *int,
 	turnID string,
+	notes []planner.PlannerAnnotation,
 	ctrl *interrupt.Controller,
 	deadlines *runDeadlines,
 ) (*RunOutput, error) {
@@ -60,7 +61,7 @@ func (r *Runtime) handleMissingFieldsPolicy(
 	}
 	switch reg.Policy.OnMissingFields {
 	case MissingFieldsFinalize:
-		out, err := r.finalizeWithPlanner(wfCtx, reg, input, base, allResults, allToolOutputs, aggUsage, caps, *nextAttempt, turnID, planner.TerminationReasonFailureCap, time.Time{})
+		out, err := r.finalizeWithPlanner(wfCtx, reg, input, base, allResults, allToolOutputs, aggUsage, caps, *nextAttempt, turnID, notes, planner.TerminationReasonFailureCap, time.Time{})
 		return out, err
 	case MissingFieldsAwaitClarification:
 		return r.awaitMissingFieldClarification(wfCtx, input, base, turnID, ctrl, deadlines, mf, triggerTool, triggerCall)

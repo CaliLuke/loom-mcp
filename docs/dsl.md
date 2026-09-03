@@ -207,6 +207,8 @@ overrides remain operational at the runtime/store layer.
 | `NextCursor(name)`                            | Inside `BoundedResult(func() { ... })` | Declares the projected result field name for the next-page cursor (optional)                        |
 | `ResultReminder(text)`                        | Inside `Tool`                          | Static system reminder injected after tool result                                                   |
 | `Confirmation(dsl)`                           | Inside `Tool`                          | Declares that tool execution must be explicitly approved out-of-band                                |
+| `Bookkeeping()`                               | Inside `Tool`                          | Excludes successful control-plane calls from the run-level domain-call budget                      |
+| `TerminalRun()`                               | Inside `Tool`                          | Marks a bookkeeping tool that completes the run after successful execution                          |
 | `Idempotent()`                                 | Inside `Tool`                          | Emits transcript-scoped idempotency metadata for planners/orchestrators                              |
 | `Expose(surfaces...)`                         | Inside toolset `Tool`                  | Declares design-time exposure permission; omitted means `AgentRuntime`                              |
 | `MCPPlacement(service, mcpServer)`             | Inside toolset `Tool`                  | Places a method-backed toolset tool into an existing service MCP server when `MCPSurface` is exposed |
@@ -275,6 +277,30 @@ Contract:
 - When paging, keep **all other arguments unchanged**; only set the payload cursor field.
 - Paged tools should also be `BoundedResult(...)` tools and return the next cursor through
   `planner.ToolResult.Bounds.NextCursor`.
+
+### Bookkeeping and terminal tools
+
+`Bookkeeping()` marks a control-plane tool. Successful calls do not use the
+run-level `MaxToolCalls` budget. They also do not reset the recovery budget.
+
+The runtime retains each bookkeeping request and result in the durable
+transcript. It does not return successful bookkeeping output to the planner.
+A bookkeeping-only turn must also complete the run or enter an await state.
+
+The per-turn tool-call limit counts bookkeeping calls. The runtime accepts or
+rejects each provider tool-call batch as one unit. It never executes a partial
+batch because the run budget is too small.
+
+`TerminalRun()` marks a tool that completes the run after successful execution.
+It also marks the tool as bookkeeping. A failed terminal call fails the run.
+
+```go
+Tool("record_completion", "Record the final result", func() {
+    Args(CompletionPayload)
+    Return(CompletionResult)
+    TerminalRun()
+})
+```
 
 ### Tool Confirmation (Human-in-the-Loop)
 

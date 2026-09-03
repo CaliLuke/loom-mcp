@@ -755,10 +755,10 @@ func ResultReminder(s string) {
 	tool.ResultReminder = s
 }
 
-// TerminalRun marks the current tool as terminal for the run: after the tool
-// executes, the runtime should complete the run immediately without requesting
-// a follow-up planner PlanResume/finalization turn.
-//
+// TerminalRun marks the current tool as terminal for the run. After the tool
+// succeeds, the runtime completes the run without a follow-up planner
+// PlanResume or finalization turn.
+
 // TerminalRun must appear in a Tool expression.
 func TerminalRun() {
 	tool, ok := eval.Current().(*agentsexpr.ToolExpr)
@@ -767,6 +767,23 @@ func TerminalRun() {
 		return
 	}
 	tool.TerminalRun = true
+}
+
+// Bookkeeping marks the current tool as a control-plane record whose success
+// does not independently schedule another planner turn.
+//
+// Bookkeeping calls remain durable and audit-visible. They do not consume the
+// run-level MaxToolCalls budget. Successful results do not reset recovery turns
+// or enter future planner input.
+
+// Bookkeeping must appear in a Tool expression.
+func Bookkeeping() {
+	tool, ok := eval.Current().(*agentsexpr.ToolExpr)
+	if !ok {
+		incompatibleDSL("Bookkeeping")
+		return
+	}
+	tool.Bookkeeping = true
 }
 
 // toolDSL mirrors Goa's method DSL helpers to define tool shapes.

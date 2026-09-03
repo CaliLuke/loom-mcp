@@ -49,12 +49,14 @@ type (
 		Meta map[string][]string
 		// TerminalRun indicates that once this tool executes in a run, the runtime
 		// terminates the run immediately after publishing the tool result(s), without
-		// requesting a follow-up planner PlanResume/finalization turn.
-		//
-		// This is intended for tools whose result is the user-facing terminal output
-		// (for example, a final report renderer) and should not be followed by extra
-		// model narration.
+		// requesting a follow-up planner PlanResume/finalization turn. Terminal tools
+		// must also be bookkeeping tools.
 		TerminalRun bool
+		// Bookkeeping indicates that the tool records control-plane state without
+		// consuming the run-level MaxToolCalls budget. Successful bookkeeping results
+		// do not reset recovery turns or independently schedule another planner turn.
+		Bookkeeping bool
+
 		// IsAgentTool indicates this tool is implemented by an agent (agent-as-tool).
 		// When true, the runtime executes the tool by starting the provider agent as a
 		// child workflow from within the parent workflow loop. Set by codegen when

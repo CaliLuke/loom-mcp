@@ -1695,6 +1695,25 @@ finalizer. A rejection from that finalizer ends the run and does not recurse.
 The model and recovery contracts accept at most 256 tool definitions per
 request, so every accepted request has a durable exact-catalog representation.
 
+### Bookkeeping budgets
+
+Generated policy metadata classifies each tool as `budgeted` or `bookkeeping`.
+`MaxToolCalls` counts only budgeted domain calls. The per-turn limit counts all
+calls.
+
+The runtime accepts a provider tool-call batch only when the complete batch
+fits. It never removes selected calls to make a batch fit the remaining budget.
+A bookkeeping-only batch can run when the domain-call budget is empty.
+
+Successful bookkeeping calls do not reset the recovery budget. Their requests
+and results remain in the durable transcript. Their successful outputs do not
+enter the next planner request.
+
+`TerminalRun` tools must use the bookkeeping class. A successful terminal call
+completes the run without another planner request. A failed terminal call fails
+the run.
+
+
 Caps constrain the calls a planner selected; they do not truncate the tool
 catalog shown to the planner. The pre-plan policy envelope therefore carries
 the full policy allowlist, and per-turn or remaining-call caps are applied only
@@ -1730,6 +1749,70 @@ client.Run(ctx, "session-1", msgs,
 These overrides are included in the `RunStarted` hook payload. Duration-bearing
 fields use integer nanoseconds on that durable boundary.
 
+### Terminal run policies
+
+`WithRunCompletionTool` requires one budgeted tool to succeed before the run
+can complete. The first successful call returns its result and skips another
+planner request.
+
+```go
+client.Run(ctx, "session-1", msgs,
+    runtime.WithRunCompletionTool(tools.Ident("reports.persist")),
+)
+```
+
+The completion tool must belong to the agent. It cannot be a bookkeeping,
+terminal, or confirmation tool. A completion-tool run cannot use whole-workflow
+retries.
+
+The planner must select the completion tool as the only action in its response.
+Final responses and delegated completion calls fail the run. Limit exhaustion
+also fails the run if the completion tool did not succeed.
+
+`WithLimitTerminalPlans` supplies fixed terminal calls for three limit reasons:
+
+- the active time budget
+- the domain tool-call budget
+- the recovery-turn budget
+
+```go
+plans := runtime.LimitTerminalPlans{
+    TimeBudget: runtime.LimitTerminalCall{
+        Name: "reports.limit",
+        Payload: rawjson.Message(`{"reason":"time_budget"}`),
+    },
+    ToolCallCap: runtime.LimitTerminalCall{
+        Name: "reports.limit",
+        Payload: rawjson.Message(`{"reason":"tool_call_cap"}`),
+    },
+    RecoveryCap: runtime.LimitTerminalCall{
+        Name: "reports.limit",
+        Payload: rawjson.Message(`{"reason":"recovery_cap"}`),
+    },
+}
+
+client.Run(ctx, "session-1", msgs,
+    runtime.WithLimitTerminalPlans(plans),
+)
+```
+
+All three calls are required. Each call must target an agent-owned terminal
+bookkeeping tool without confirmation. The runtime validates each payload before
+the first planner request.
+
+A fixed limit plan skips the finalizer model call. The runtime assigns a
+deterministic tool-call ID before execution. A failed terminal side effect fails
+the run.
+
+Without a fixed plan, the finalizer advertises eligible terminal bookkeeping
+tools. The finalizer can return a final response or select these terminal tools.
+It cannot select a domain tool.
+
+Each finalization tool receives `runtime.FinalizationReasonLabel`. The label
+contains the exact termination reason. The runtime removes this reserved label
+from ordinary tool calls and overwrites caller values during finalization.
+
+
 ### Runtime Policy Override
 
 Override registered agent policy in-process:
@@ -1751,11 +1834,12 @@ or external tool results pauses the budget: the runtime extends both its budget
 and hard deadlines by the measured wait duration. Manual human interaction can
 therefore make elapsed wall time greater than `TimeBudget`.
 
-`FinalizerGrace` and `WithRunFinalizerGrace` reserve a bounded interval after
-the active budget is exhausted so the planner can produce a tool-free final
-answer. The grace period is not additional normal planning or tool-execution
-time. Deployments with an end-to-end wall-clock SLA should enforce that SLA at
-the calling/workflow boundary in addition to configuring the runtime budget.
+`FinalizerGrace` and `WithRunFinalizerGrace` reserve time after the active
+budget ends. The finalizer can return a response or execute an advertised
+terminal bookkeeping tool.
+
+The grace period does not permit normal planning or domain tool execution.
+Deployments can enforce a separate wall-clock limit at the workflow boundary.
 
 ---
 

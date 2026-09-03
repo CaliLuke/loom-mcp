@@ -129,6 +129,17 @@ func WithTiming(t Timing) RunOption {
 	}
 }
 
+// WithLimitTerminalPlans sets the deterministic terminal calls used when this
+// run exhausts its time, tool-call, or recovery limit.
+func WithLimitTerminalPlans(plans LimitTerminalPlans) RunOption {
+	return func(in *RunInput) {
+		if in.Policy == nil {
+			in.Policy = &PolicyOverrides{}
+		}
+		in.Policy.LimitTerminalPlans = cloneLimitTerminalPlans(&plans)
+	}
+}
+
 // WithPerTurnMaxToolCalls sets a per-turn cap on tool executions. Zero means unlimited.
 func WithPerTurnMaxToolCalls(n int) RunOption {
 	return func(in *RunInput) {
@@ -157,6 +168,20 @@ func WithRunMaxRecoveryTurns(n int) RunOption {
 			in.Policy = &PolicyOverrides{}
 		}
 		in.Policy.MaxRecoveryTurns = n
+	}
+}
+
+// WithRunCompletionTool requires one budgeted tool to succeed before the run
+// can complete.
+func WithRunCompletionTool(id tools.Ident) RunOption {
+	if id == "" {
+		panic("runtime: WithRunCompletionTool requires a tool identifier")
+	}
+	return func(in *RunInput) {
+		if in.Policy == nil {
+			in.Policy = &PolicyOverrides{}
+		}
+		in.Policy.CompletionTool = id
 	}
 }
 

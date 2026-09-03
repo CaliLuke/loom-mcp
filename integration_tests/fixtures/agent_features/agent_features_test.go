@@ -9,7 +9,9 @@ import (
 
 	"example.com/agentfeatures/gen/features"
 	"example.com/agentfeatures/gen/features/agents/coordinator"
+	coordinatorspecs "example.com/agentfeatures/gen/features/agents/coordinator/specs"
 	coordinatorworkflow "example.com/agentfeatures/gen/features/agents/coordinator/workflow"
+
 	"example.com/agentfeatures/gen/features/toolsets/workflow"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/api"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/artifact"
@@ -18,6 +20,8 @@ import (
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/memory"
 	memoryinmem "github.com/CaliLuke/loom-mcp/v2/runtime/agent/memory/inmem"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/model"
+	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/policy"
+
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/rawjson"
 	agentsruntime "github.com/CaliLuke/loom-mcp/v2/runtime/agent/runtime"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/session"
@@ -55,12 +59,27 @@ func TestGeneratedFeatureFixtureRegistersRuntimeSurface(t *testing.T) {
 	require.Contains(t, toolsets, "features.workflow")
 	require.ElementsMatch(t, []tools.Ident{
 		workflow.Draft,
+		workflow.Finalize,
+
 		workflow.MethodEcho,
 		workflow.Review,
 		workflow.Retry,
 		workflow.Publish,
 		workflow.Revise,
 	}, workflow.Names())
+	spec, ok := coordinatorspecs.Spec(workflow.Finalize)
+	require.True(t, ok)
+	require.True(t, spec.Bookkeeping)
+	require.True(t, spec.TerminalRun)
+	var foundMetadata bool
+	for _, metadata := range coordinatorspecs.Metadata() {
+		if metadata.ID == workflow.Finalize {
+			require.Equal(t, policy.ToolBudgetClassBookkeeping, metadata.BudgetClass)
+			foundMetadata = true
+			break
+		}
+	}
+	require.True(t, foundMetadata)
 }
 
 func TestGeneratedFeatureInMemoryModelRecovery(t *testing.T) {

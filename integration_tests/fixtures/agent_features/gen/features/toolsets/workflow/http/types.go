@@ -28,6 +28,26 @@ type (
 		Approved *bool `json:"approved,omitempty"`
 	}
 
+	// FinalizePayloadTransport is the internal JSON transport type for FinalizePayload.
+	// It lives in the toolset-local http package and is used only for JSON
+	// decode + validation (missing-field detection) before transforming into
+	// the public tool type.
+	FinalizePayloadTransport struct {
+		// Reason that ended the run
+		Reason *string `json:"reason"`
+	}
+
+	// FinalizeResultTransport is the internal JSON transport type for FinalizeResult.
+	// It lives in the toolset-local http package and is used only for JSON
+	// decode + validation (missing-field detection) before transforming into
+	// the public tool type.
+	FinalizeResultTransport struct {
+		// Whether the operation succeeded
+		OK *bool `json:"ok"`
+		// Whether the operation was approved
+		Approved *bool `json:"approved,omitempty"`
+	}
+
 	// MethodEchoPayloadTransport is the internal JSON transport type for MethodEchoPayload.
 	// It lives in the toolset-local http package and is used only for JSON
 	// decode + validation (missing-field detection) before transforming into

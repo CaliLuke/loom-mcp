@@ -305,21 +305,15 @@ func TestMemoryCacheBackgroundRefresh(t *testing.T) {
 	cache.StartRefresh(ctx)
 	defer cache.StopRefresh()
 
-	// Set entry with short TTL
+	// Put the entry inside its refresh window without relying on a narrow
+	// wall-clock interval that can expire under the race detector.
 	schema := &ToolsetSchema{ID: "original", Name: "original", Version: "1.0"}
-	if err := cache.Set(ctx, "refresh-key", schema, 100*time.Millisecond); err != nil {
+	if err := cache.Set(ctx, "refresh-key", schema, time.Minute); err != nil {
 		t.Fatalf("Set failed: %v", err)
 	}
-
-	waitForCondition(t, func() bool {
-		cache.mu.RLock()
-		entry, ok := cache.entries["refresh-key"]
-		cache.mu.RUnlock()
-		if !ok {
-			return false
-		}
-		return time.Now().After(entry.expiresAt.Add(-entry.ttl / 5))
-	}, "expected refresh-key to enter refresh window")
+	cache.mu.Lock()
+	cache.entries["refresh-key"].expiresAt = time.Now().Add(10 * time.Second)
+	cache.mu.Unlock()
 
 	// Trigger refresh by accessing the entry
 	_, _ = cache.Get(ctx, "refresh-key")

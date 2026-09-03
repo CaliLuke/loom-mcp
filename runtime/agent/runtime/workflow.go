@@ -25,6 +25,15 @@ import (
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/telemetry"
 )
 
+type workflowStartState struct {
+	planInput   *planner.PlanInput
+	firstOutput *PlanActivityOutput
+	timing      runTiming
+	deadlines   runDeadlines
+	caps        policy.CapsState
+	nextAttempt int
+}
+
 const (
 	// Minimal viable timeout for scheduling an activity. If remaining time is
 	// less than or equal to this value, the runtime should not schedule new work.
@@ -56,41 +65,66 @@ func (r *Runtime) ExecuteWorkflow(wfCtx engine.WorkflowContext, input *RunInput)
 	if err != nil {
 		return nil, err
 	}
-	effectiveInput, err := runBeforeRunInterceptors(wfCtx.Context(), r.interceptorsForAgent(input.AgentID), *input, runCtx)
+	input, err = r.prepareEffectiveRunInput(wfCtx.Context(), reg, input, runCtx)
 	if err != nil {
 		return nil, err
 	}
-	input = &effectiveInput
 	runCtx = workflowRunContext(input)
-	defer func() {
-		r.storeWorkflowHandle(input.RunID, nil)
-		if r.reminders != nil {
-			r.reminders.ClearRun(input.RunID)
-		}
-	}()
+	defer r.cleanupWorkflowRun(input.RunID)
+
 	if err := r.publishInitialWorkflowEvents(wfCtx.Context(), input, runCtx, turnID); err != nil {
 		return nil, err
 	}
 	finalStatus := runStatusSuccess
 	var finalErr error
-	defer func() {
-		finalErr = cancellation.Sanitize(finalErr)
-		afterOut, afterErr := runAfterRunInterceptors(wfCtx.Context(), r.interceptorsForAgent(input.AgentID), *input, runCtx, out, finalErr)
-		out = afterOut
-		finalErr = cancellation.Sanitize(afterErr)
-		retErr = afterErr
-		if finalErr != nil {
-			finalStatus = terminalRunStatusForError(finalErr)
-		} else if finalStatus != runStatusSuccess {
-			finalStatus = runStatusSuccess
-		}
-		r.publishWorkflowCompletion(wfCtx, input, turnID, &finalStatus, &finalErr)
-	}()
+	defer r.finishWorkflowExecution(wfCtx, input, runCtx, turnID, &out, &retErr, &finalStatus, &finalErr)
+
 	var status string
 	out, status, err = r.executeWorkflowRun(wfCtx, reg, input, runCtx, turnID, ctrl)
 	finalStatus = status
 	finalErr = err
 	return out, err
+}
+
+func (r *Runtime) prepareEffectiveRunInput(ctx context.Context, reg AgentRegistration, input *RunInput, runCtx run.Context) (*RunInput, error) {
+	effective, err := runBeforeRunInterceptors(ctx, r.interceptorsForAgent(input.AgentID), *input, runCtx)
+	if err != nil {
+		return nil, err
+	}
+	if err := r.validateTerminalPolicies(reg, &effective); err != nil {
+		return nil, err
+	}
+	return &effective, nil
+}
+
+func (r *Runtime) cleanupWorkflowRun(runID string) {
+	r.storeWorkflowHandle(runID, nil)
+	if r.reminders != nil {
+		r.reminders.ClearRun(runID)
+	}
+}
+
+func (r *Runtime) finishWorkflowExecution(
+	wfCtx engine.WorkflowContext,
+	input *RunInput,
+	runCtx run.Context,
+	turnID string,
+	out **RunOutput,
+	retErr *error,
+	finalStatus *string,
+	finalErr *error,
+) {
+	*finalErr = cancellation.Sanitize(*finalErr)
+	afterOut, afterErr := runAfterRunInterceptors(wfCtx.Context(), r.interceptorsForAgent(input.AgentID), *input, runCtx, *out, *finalErr)
+	*out = afterOut
+	*finalErr = cancellation.Sanitize(afterErr)
+	*retErr = afterErr
+	if *finalErr != nil {
+		*finalStatus = terminalRunStatusForError(*finalErr)
+	} else if *finalStatus != runStatusSuccess {
+		*finalStatus = runStatusSuccess
+	}
+	r.publishWorkflowCompletion(wfCtx, input, turnID, finalStatus, finalErr)
 }
 
 func (r *Runtime) setupWorkflowExecution(
@@ -128,6 +162,8 @@ func (r *Runtime) logWorkflowStart(wfCtx engine.WorkflowContext, input *RunInput
 }
 
 func workflowRunContext(input *RunInput) run.Context {
+	labels := cloneLabels(input.Labels)
+	delete(labels, FinalizationReasonLabel)
 	return run.Context{
 		RunID:            input.RunID,
 		SessionID:        input.SessionID,
@@ -138,7 +174,7 @@ func workflowRunContext(input *RunInput) run.Context {
 		Tool:             input.Tool,
 		ToolArgs:         input.ToolArgs,
 		Attempt:          1,
-		Labels:           input.Labels,
+		Labels:           labels,
 	}
 }
 
@@ -198,39 +234,60 @@ func (r *Runtime) executeWorkflowRun(
 	turnID string,
 	ctrl *interrupt.Controller,
 ) (*RunOutput, string, error) {
-	planInput, firstOutput, timing, deadlines, err := r.startWorkflowRun(wfCtx, reg, input, runCtx, turnID)
+	state, err := r.startWorkflowRun(wfCtx, reg, input, runCtx, turnID)
 	if err != nil {
-		return r.handleWorkflowStartError(wfCtx, reg, input, planInput, firstOutput, deadlines, turnID, err)
+		return r.handleWorkflowStartError(wfCtx, reg, input, state, turnID, err)
 	}
-	return r.continueWorkflowRun(wfCtx, reg, input, planInput, firstOutput, timing, deadlines, turnID, ctrl)
+	return r.continueWorkflowRun(
+		wfCtx,
+		reg,
+		input,
+		state.planInput,
+		state.firstOutput,
+		state.timing,
+		state.deadlines,
+		turnID,
+		ctrl,
+	)
 }
 
 func (r *Runtime) handleWorkflowStartError(
 	wfCtx engine.WorkflowContext,
 	reg AgentRegistration,
 	input *RunInput,
-	planInput *planner.PlanInput,
-	firstOutput *PlanActivityOutput,
-	deadlines runDeadlines,
+	state workflowStartState,
 	turnID string,
 	startErr error,
 ) (*RunOutput, string, error) {
-	if !boundedErrorIs(startErr, errRecoveryTurnCapExceeded) || planInput == nil || firstOutput == nil {
+	if state.planInput == nil {
 		return nil, workflowStatusForError(startErr), startErr
+	}
+	reason := planner.TerminationReasonFailureCap
+	if state.deadlines.budgetExpired(wfCtx.Now()) {
+		reason = planner.TerminationReasonTimeBudget
+	} else if !boundedErrorIs(startErr, errRecoveryTurnCapExceeded) || state.firstOutput == nil {
+		return nil, workflowStatusForError(startErr), startErr
+	}
+	var usage model.TokenUsage
+	var notes []planner.PlannerAnnotation
+	if state.firstOutput != nil {
+		usage = state.firstOutput.Usage
+		notes = plannerResultNotes(state.firstOutput.Result)
 	}
 	out, err := r.finalizeWithPlanner(
 		wfCtx,
 		reg,
 		input,
-		planInput,
+		state.planInput,
 		nil,
 		nil,
-		firstOutput.Usage,
-		firstOutput.PolicyCaps,
-		firstOutput.Attempt+1,
+		usage,
+		state.caps,
+		state.nextAttempt,
 		turnID,
-		planner.TerminationReasonFailureCap,
-		deadlines.Hard,
+		notes,
+		reason,
+		state.deadlines.Hard,
 	)
 	if err != nil {
 		return nil, workflowStatusForError(err), err
@@ -290,34 +347,44 @@ func (r *Runtime) startWorkflowRun(
 	input *RunInput,
 	runCtx run.Context,
 	turnID string,
-) (*planner.PlanInput, *PlanActivityOutput, runTiming, runDeadlines, error) {
+) (workflowStartState, error) {
 	planInput, startReq, timing, deadlines := r.prepareWorkflowPlanning(wfCtx, reg, input, runCtx)
-	caps := applyWorkflowCaps(initialCaps(reg.Policy), input)
-	policyResult, err := r.preparePrePlanToolPolicy(wfCtx.Context(), reg, input, planInput, caps, turnID)
-	if err != nil {
-		return nil, nil, runTiming{}, runDeadlines{}, err
+	state := workflowStartState{
+		planInput:   planInput,
+		timing:      timing,
+		deadlines:   deadlines,
+		caps:        applyWorkflowCaps(initialCaps(reg.Policy), input),
+		nextAttempt: startReq.RunContext.Attempt + 1,
 	}
-	caps = policyResult.Caps
+	policyResult, err := r.preparePrePlanToolPolicy(wfCtx.Context(), reg, input, planInput, state.caps, turnID)
+	if err != nil {
+		return state, err
+	}
+	state.caps = policyResult.Caps
 	startReq.ToolPolicyActive = policyResult.Envelope.Active
 	startReq.AllowedTools = cloneToolIdents(policyResult.Envelope.Allowed)
-	startReq.PolicyCaps = caps
+	startReq.PolicyCaps = state.caps
 	startReq.RunContext.Labels = cloneLabels(planInput.RunContext.Labels)
 	if err := enforcePlanActivityInputBudget(startReq); err != nil {
-		return nil, nil, runTiming{}, runDeadlines{}, err
+		return state, err
 	}
 	planOpts := r.resolveAndLogWorkflowTiming(wfCtx, reg, input, timing)
 	if err := r.publishPlanningPhase(wfCtx.Context(), input, turnID); err != nil {
-		return nil, nil, runTiming{}, runDeadlines{}, err
+		return state, err
 	}
-	nextAttempt := startReq.RunContext.Attempt + 1
-	firstOutput, err := r.runInitialPlan(wfCtx, reg, startReq, planOpts, deadlines.Hard, &caps, &nextAttempt)
-	if firstOutput != nil && firstOutput.Attempt > 0 {
-		planInput.RunContext.Attempt = firstOutput.Attempt
+	state.firstOutput, err = r.runInitialPlan(
+		wfCtx,
+		reg,
+		startReq,
+		planOpts,
+		deadlines.Budget,
+		&state.caps,
+		&state.nextAttempt,
+	)
+	if state.firstOutput != nil && state.firstOutput.Attempt > 0 {
+		planInput.RunContext.Attempt = state.firstOutput.Attempt
 	}
-	if err != nil {
-		return planInput, firstOutput, timing, deadlines, err
-	}
-	return planInput, firstOutput, timing, deadlines, nil
+	return state, err
 }
 
 func workflowStatusForError(err error) string {

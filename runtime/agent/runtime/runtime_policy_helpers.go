@@ -149,17 +149,23 @@ func (r *Runtime) toolMetadata(calls []planner.ToolRequest) []policy.ToolMetadat
 	metas := make([]policy.ToolMetadata, 0, len(calls))
 	for _, call := range calls {
 		if spec, ok := r.toolSpec(call.Name); ok {
+			budgetClass := policy.ToolBudgetClassBudgeted
+			if spec.Bookkeeping {
+				budgetClass = policy.ToolBudgetClassBookkeeping
+			}
 			metas = append(metas, policy.ToolMetadata{
 				ID:          spec.Name,
 				Title:       defaultToolTitle(spec.Name),
 				Description: spec.Description,
 				Tags:        append([]string(nil), spec.Tags...),
+				BudgetClass: budgetClass,
 			})
 			continue
 		}
 		metas = append(metas, policy.ToolMetadata{
-			ID:    call.Name,
-			Title: defaultToolTitle(call.Name),
+			ID:          call.Name,
+			Title:       defaultToolTitle(call.Name),
+			BudgetClass: policy.ToolBudgetClassBudgeted,
 		})
 	}
 	return metas

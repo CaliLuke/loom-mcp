@@ -20,6 +20,8 @@ import (
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/tools"
 )
 
+var errToolCallBatchCapExceeded = errors.New("tool call batch exceeds configured cap")
+
 type prePlanPolicyResult struct {
 	Envelope toolPolicyEnvelope
 	Caps     policy.CapsState
@@ -78,6 +80,7 @@ type policyApplicationResult struct {
 	Caps         policy.CapsState
 	Labels       map[string]string
 	Events       []hooks.Event
+	CapExceeded  bool
 }
 
 // applyPolicy is the single policy-application boundary used by the workflow
@@ -105,8 +108,10 @@ func (r *Runtime) applyPolicy(
 		return policyApplicationResult{
 			AllowedCalls: r.capAllowedCalls(allowedCalls, input, caps),
 			Caps:         caps,
+			CapExceeded:  r.toolCallBatchExceedsCaps(allowedCalls, input, caps),
 		}, nil
 	}
+
 	allowed, caps, labels, events, err := r.applyRuntimePolicy(ctx, base, input, candidates, caps, turnID, retry)
 	if err != nil {
 		return policyApplicationResult{}, err
@@ -116,6 +121,7 @@ func (r *Runtime) applyPolicy(
 		Caps:         caps,
 		Labels:       labels,
 		Events:       events,
+		CapExceeded:  r.toolCallBatchExceedsCaps(allowed, input, caps),
 	}, nil
 }
 
@@ -265,20 +271,52 @@ func allowedPolicyCalls(candidates []planner.ToolRequest, allowed []tools.Ident)
 	return filterToolCalls(candidates, allowed)
 }
 
-// capAllowedCalls applies per-turn and remaining caps to the allowed set.
+// capAllowedCalls admits or rejects one provider tool-call batch as a whole.
+// Per-turn caps count every call. The run-level cap counts budgeted domain calls
+// only, so bookkeeping-only batches remain executable after that budget expires.
 func (r *Runtime) capAllowedCalls(allowed []planner.ToolRequest, input *RunInput, caps policy.CapsState) []planner.ToolRequest {
 	if input.Policy != nil && input.Policy.PerTurnMaxToolCalls > 0 && len(allowed) > input.Policy.PerTurnMaxToolCalls {
-		allowed = allowed[:input.Policy.PerTurnMaxToolCalls]
+		return nil
 	}
-	if caps.MaxToolCalls > 0 && caps.RemainingToolCalls < len(allowed) {
-		allowed = allowed[:caps.RemainingToolCalls]
+	_, admitted := r.admitToolBatch(allowed, caps)
+	if !admitted {
+		return nil
 	}
 	return allowed
+}
+
+func (r *Runtime) toolCallBatchExceedsCaps(allowed []planner.ToolRequest, input *RunInput, caps policy.CapsState) bool {
+	if input.Policy != nil && input.Policy.PerTurnMaxToolCalls > 0 && len(allowed) > input.Policy.PerTurnMaxToolCalls {
+		return true
+	}
+	_, admitted := r.admitToolBatch(allowed, caps)
+	return !admitted
+}
+
+func (r *Runtime) admitToolBatch(calls []planner.ToolRequest, caps policy.CapsState) (int, bool) {
+	cost := r.budgetedToolCallCount(calls)
+	return cost, caps.MaxToolCalls <= 0 || cost <= caps.RemainingToolCalls
+}
+
+func (r *Runtime) isBookkeeping(name tools.Ident) bool {
+	spec, ok := r.toolSpec(name)
+	return ok && spec.Bookkeeping
+}
+
+func (r *Runtime) budgetedToolCallCount(calls []planner.ToolRequest) int {
+	count := 0
+	for _, call := range calls {
+		if !r.isBookkeeping(call.Name) {
+			count++
+		}
+	}
+	return count
 }
 
 // prepareAllowedCallsMetadata stamps run/session/turn IDs and deterministic tool
 // call IDs on allowed calls. It also fills parentToolCallID when tracking children.
 func (r *Runtime) prepareAllowedCallsMetadata(agentID agent.Ident, base *planner.PlanInput, allowed []planner.ToolRequest, parentTracker *childTracker) []planner.ToolRequest {
+	delete(base.RunContext.Labels, FinalizationReasonLabel)
 	for i := range allowed {
 		if allowed[i].RunID == "" {
 			allowed[i].RunID = base.RunContext.RunID
@@ -292,6 +330,8 @@ func (r *Runtime) prepareAllowedCallsMetadata(agentID agent.Ident, base *planner
 		if allowed[i].TurnID == "" {
 			allowed[i].TurnID = base.RunContext.TurnID
 		}
+		allowed[i].Labels = mergeLabels(cloneLabels(base.RunContext.Labels), allowed[i].Labels)
+		delete(allowed[i].Labels, FinalizationReasonLabel)
 		if allowed[i].ToolCallID == "" {
 			allowed[i].ToolCallID = generateDeterministicToolCallID(
 				base.RunContext.RunID, base.RunContext.TurnID, base.RunContext.Attempt, allowed[i].Name, i,

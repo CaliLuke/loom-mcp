@@ -39,6 +39,7 @@ var (
 			Title:       "Set Step Status",
 			Description: "Set step status",
 			Tags:        []string{},
+			BudgetClass: policy.ToolBudgetClassBudgeted,
 		},
 	}
 	names = []tools.Ident{

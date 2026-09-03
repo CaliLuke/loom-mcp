@@ -29,6 +29,16 @@ var (
 		ToJSON:   MarshalDraftResult,
 		FromJSON: UnmarshalDraftResult,
 	}
+	// FinalizePayloadCodec serializes values of type *FinalizePayload to canonical JSON.
+	FinalizePayloadCodec = tools.JSONCodec[*FinalizePayload]{
+		ToJSON:   MarshalFinalizePayload,
+		FromJSON: UnmarshalFinalizePayload,
+	}
+	// FinalizeResultCodec serializes values of type *FinalizeResult to canonical JSON.
+	FinalizeResultCodec = tools.JSONCodec[*FinalizeResult]{
+		ToJSON:   MarshalFinalizeResult,
+		FromJSON: UnmarshalFinalizeResult,
+	}
 	// MethodEchoPayloadCodec serializes values of type *MethodEchoPayload to canonical JSON.
 	MethodEchoPayloadCodec = tools.JSONCodec[*MethodEchoPayload]{
 		ToJSON:   MarshalMethodEchoPayload,
@@ -103,6 +113,32 @@ var (
 		},
 		FromJSON: func(data []byte) (any, error) {
 			return UnmarshalDraftResult(data)
+		},
+	}
+	// finalizePayloadCodec provides an untyped codec for *FinalizePayload.
+	finalizePayloadCodec = tools.JSONCodec[any]{
+		ToJSON: func(v any) ([]byte, error) {
+			// Prefer typed marshal when the value matches the expected type.
+			if typed, ok := v.(*FinalizePayload); ok {
+				return MarshalFinalizePayload(typed)
+			}
+			return nil, fmt.Errorf("invalid value type for *FinalizePayload: %T", v)
+		},
+		FromJSON: func(data []byte) (any, error) {
+			return UnmarshalFinalizePayload(data)
+		},
+	}
+	// finalizeResultCodec provides an untyped codec for *FinalizeResult.
+	finalizeResultCodec = tools.JSONCodec[any]{
+		ToJSON: func(v any) ([]byte, error) {
+			// Prefer typed marshal when the value matches the expected type.
+			if typed, ok := v.(*FinalizeResult); ok {
+				return MarshalFinalizeResult(typed)
+			}
+			return nil, fmt.Errorf("invalid value type for *FinalizeResult: %T", v)
+		},
+		FromJSON: func(data []byte) (any, error) {
+			return UnmarshalFinalizeResult(data)
 		},
 	}
 	// methodEchoPayloadCodec provides an untyped codec for *MethodEchoPayload.
@@ -243,6 +279,13 @@ var DraftResultFieldDescs = map[string]string{
 	"approved": "Whether the operation was approved",
 	"ok":       "Whether the operation succeeded",
 }
+var FinalizePayloadFieldDescs = map[string]string{
+	"reason": "Reason that ended the run",
+}
+var FinalizeResultFieldDescs = map[string]string{
+	"approved": "Whether the operation was approved",
+	"ok":       "Whether the operation succeeded",
+}
 var MethodEchoPayloadFieldDescs = map[string]string{
 	"topic": "Topic to send to the service method",
 }
@@ -359,6 +402,40 @@ func enrichDraftResultValidationError(err error) error {
 	m := make(map[string]string)
 	for _, is := range ve.issues {
 		if d, ok := DraftResultFieldDescs[is.Field]; ok && d != "" {
+			m[is.Field] = d
+		}
+	}
+	ve.descriptions = m
+	return ve
+}
+func enrichFinalizePayloadValidationError(err error) error {
+	ve, ok := err.(*ValidationError)
+	if !ok || ve == nil {
+		return err
+	}
+	if len(ve.issues) == 0 {
+		return err
+	}
+	m := make(map[string]string)
+	for _, is := range ve.issues {
+		if d, ok := FinalizePayloadFieldDescs[is.Field]; ok && d != "" {
+			m[is.Field] = d
+		}
+	}
+	ve.descriptions = m
+	return ve
+}
+func enrichFinalizeResultValidationError(err error) error {
+	ve, ok := err.(*ValidationError)
+	if !ok || ve == nil {
+		return err
+	}
+	if len(ve.issues) == 0 {
+		return err
+	}
+	m := make(map[string]string)
+	for _, is := range ve.issues {
+		if d, ok := FinalizeResultFieldDescs[is.Field]; ok && d != "" {
 			m[is.Field] = d
 		}
 	}
@@ -490,6 +567,8 @@ func PayloadCodec(name string) (*tools.JSONCodec[any], bool) {
 	switch name {
 	case "workflow.draft":
 		return &draftPayloadCodec, true
+	case "workflow.finalize":
+		return &finalizePayloadCodec, true
 	case "workflow.method_echo":
 		return &methodEchoPayloadCodec, true
 	case "workflow.publish":
@@ -510,6 +589,8 @@ func ResultCodec(name string) (*tools.JSONCodec[any], bool) {
 	switch name {
 	case "workflow.draft":
 		return &draftResultCodec, true
+	case "workflow.finalize":
+		return &finalizeResultCodec, true
 	case "workflow.method_echo":
 		return &methodEchoResultCodec, true
 	case "workflow.publish":
@@ -595,6 +676,82 @@ func UnmarshalDraftResult(data []byte) (*DraftResult, error) {
 	_ = in
 	var out *DraftResult
 	out = &DraftResult{
+		OK:       *in.OK,
+		Approved: in.Approved,
+	}
+	return out, nil
+}
+
+// MarshalFinalizePayload serializes *FinalizePayload into JSON.
+func MarshalFinalizePayload(v *FinalizePayload) ([]byte, error) {
+	if v == nil {
+		return nil, fmt.Errorf("finalizePayload is nil")
+	}
+	in := v
+	_ = in
+	var out *toolhttp.FinalizePayloadTransport
+	out = &toolhttp.FinalizePayloadTransport{
+		Reason: &in.Reason,
+	}
+	return json.Marshal(out)
+}
+
+// UnmarshalFinalizePayload deserializes JSON into *FinalizePayload.
+func UnmarshalFinalizePayload(data []byte) (*FinalizePayload, error) {
+	if len(data) == 0 {
+		return nil, fmt.Errorf("finalizePayload JSON is empty")
+	}
+	var tv toolhttp.FinalizePayloadTransport
+	if err := json.Unmarshal(data, &tv); err != nil {
+		return nil, fmt.Errorf("decode finalizePayload: %w", err)
+	}
+	if err := toolhttp.ValidateFinalizePayloadTransport(&tv); err != nil {
+		err = newValidationError(err)
+		err = enrichFinalizePayloadValidationError(err)
+		return nil, err
+	}
+	in := &tv
+	_ = in
+	var out *FinalizePayload
+	out = &FinalizePayload{
+		Reason: *in.Reason,
+	}
+	return out, nil
+}
+
+// MarshalFinalizeResult serializes *FinalizeResult into JSON.
+func MarshalFinalizeResult(v *FinalizeResult) ([]byte, error) {
+	if v == nil {
+		return nil, fmt.Errorf("finalizeResult is nil")
+	}
+	in := v
+	_ = in
+	var out *toolhttp.FinalizeResultTransport
+	out = &toolhttp.FinalizeResultTransport{
+		OK:       &in.OK,
+		Approved: in.Approved,
+	}
+	return json.Marshal(out)
+}
+
+// UnmarshalFinalizeResult deserializes JSON into *FinalizeResult.
+func UnmarshalFinalizeResult(data []byte) (*FinalizeResult, error) {
+	if len(data) == 0 {
+		return nil, fmt.Errorf("finalizeResult JSON is empty")
+	}
+	var tv toolhttp.FinalizeResultTransport
+	if err := json.Unmarshal(data, &tv); err != nil {
+		return nil, fmt.Errorf("decode finalizeResult: %w", err)
+	}
+	if err := toolhttp.ValidateFinalizeResultTransport(&tv); err != nil {
+		err = newValidationError(err)
+		err = enrichFinalizeResultValidationError(err)
+		return nil, err
+	}
+	in := &tv
+	_ = in
+	var out *FinalizeResult
+	out = &FinalizeResult{
 		OK:       *in.OK,
 		Approved: in.Approved,
 	}

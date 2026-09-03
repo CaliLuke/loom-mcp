@@ -500,6 +500,8 @@ cfg := <agentpkg>.<AgentConfig>{
 * **`features.workflow`**
 * **Tool: `workflow.draft`**
 * *Draft a response*
+* **Tool: `workflow.finalize`**
+* *Record the final workflow result*
 * **Tool: `workflow.method_echo`**
 * *Echo a topic through the generated method dispatcher*
 * **Tool: `workflow.publish`**

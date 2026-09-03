@@ -101,6 +101,17 @@ Use this skill for `loom-mcp` work in this repo. Keep `AGENTS.md` short and keep
 - `policy.CapsState` owns counter budgets only. Its deprecated `ExpiresAt` field
   is ignored; active-time enforcement belongs to deterministic runtime deadlines
   configured through `TimeBudget`, with external waits pausing that budget.
+- `Bookkeeping()` marks durable side-effect tools that do not consume the
+  domain-call budget and do not enter planner-visible history. `TerminalRun()`
+  implies bookkeeping and must end the run without another planner call or a
+  pause.
+- Configure a required completion tool and deterministic time, tool-call, and
+  recovery-cap terminal plans through run policy. Terminal execution must
+  preserve planner notes, reject partial or paused completion, and fail if any
+  terminal call fails.
+- `loom-mcp.finalization_reason` is runtime-owned. Remove caller and planner
+  values before policy evaluation. Add the authoritative value only to
+  finalization tool calls, without sharing label maps between calls.
 - Agent-as-tool runs as a real child workflow. Parent and child are linked by `ChildRunLinked`, and parent tool results carry `RunLink`.
 - Stream visibility is profile-driven. Child runs are linked, not flattened, by default.
 - Runtime schemas come from generated `tool_specs.Specs` and codecs, not `docs.json`.

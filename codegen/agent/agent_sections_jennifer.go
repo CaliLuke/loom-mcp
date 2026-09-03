@@ -72,6 +72,10 @@ func emitToolSpecsAggregateVars(stmt *jen.Statement, data toolSpecsAggregateData
 		g.Id("metadata").Op("=").Index().Id("policy").Dot("ToolMetadata").ValuesFunc(func(vals *jen.Group) {
 			for _, ts := range data.Toolsets {
 				for _, tool := range ts.Tools {
+					budgetClass := "ToolBudgetClassBudgeted"
+					if tool.Bookkeeping {
+						budgetClass = "ToolBudgetClassBookkeeping"
+					}
 					vals.Values(jen.Dict{
 						jen.Id("ID"):          jen.Id("tools").Dot("Ident").Call(jen.Lit(tool.QualifiedName)),
 						jen.Id("Title"):       jen.Lit(tool.Title),
@@ -81,6 +85,7 @@ func emitToolSpecsAggregateVars(stmt *jen.Statement, data toolSpecsAggregateData
 								tags.Lit(tag)
 							}
 						}),
+						jen.Id("BudgetClass"): jen.Id("policy").Dot(budgetClass),
 					})
 				}
 			}

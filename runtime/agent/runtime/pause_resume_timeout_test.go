@@ -143,6 +143,7 @@ func TestMissingFieldsClarificationAwaitResumesWhenProvided(t *testing.T) {
 		policy.CapsState{},
 		&nextAttempt,
 		"turn-1",
+		nil,
 		ctrl,
 		&runDeadlines{Budget: deadline, Hard: deadline},
 	)

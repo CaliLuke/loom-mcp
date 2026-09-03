@@ -15,6 +15,7 @@ import (
 // Tool IDs for this toolset.
 const (
 	Draft      tools.Ident = "workflow.draft"
+	Finalize   tools.Ident = "workflow.finalize"
 	MethodEcho tools.Ident = "workflow.method_echo"
 	Publish    tools.Ident = "workflow.publish"
 	Retry      tools.Ident = "workflow.retry"
@@ -24,6 +25,7 @@ const (
 
 var Specs = []tools.ToolSpec{
 	SpecDraft,
+	SpecFinalize,
 	SpecMethodEcho,
 	SpecPublish,
 	SpecRetry,
@@ -40,6 +42,17 @@ var (
 		Tags:        []string{},
 		Payload:     tools.TypeSpec{Name: "DraftPayload", Schema: []byte("{\"additionalProperties\":false,\"properties\":{\"topic\":{\"description\":\"Topic to process\",\"type\":\"string\"}},\"required\":[\"topic\"],\"type\":\"object\"}"), ExampleJSON: []byte("{\"topic\":\"abc123\"}"), ExampleInput: map[string]any{"topic": "abc123"}, Codec: draftPayloadCodec},
 		Result:      tools.TypeSpec{Name: "DraftResult", Schema: []byte("{\"additionalProperties\":false,\"properties\":{\"approved\":{\"description\":\"Whether the operation was approved\",\"type\":\"boolean\"},\"ok\":{\"description\":\"Whether the operation succeeded\",\"type\":\"boolean\"}},\"required\":[\"ok\"],\"type\":\"object\"}"), Codec: draftResultCodec},
+	}
+	SpecFinalize = tools.ToolSpec{
+		Name:        Finalize,
+		Service:     "features",
+		Toolset:     "features.workflow",
+		Description: "Record the final workflow result",
+		Tags:        []string{},
+		TerminalRun: true,
+		Bookkeeping: true,
+		Payload:     tools.TypeSpec{Name: "FinalizePayload", Schema: []byte("{\"additionalProperties\":false,\"properties\":{\"reason\":{\"description\":\"Reason that ended the run\",\"type\":\"string\"}},\"required\":[\"reason\"],\"type\":\"object\"}"), ExampleJSON: []byte("{\"reason\":\"abc123\"}"), ExampleInput: map[string]any{"reason": "abc123"}, Codec: finalizePayloadCodec},
+		Result:      tools.TypeSpec{Name: "FinalizeResult", Schema: []byte("{\"additionalProperties\":false,\"properties\":{\"approved\":{\"description\":\"Whether the operation was approved\",\"type\":\"boolean\"},\"ok\":{\"description\":\"Whether the operation succeeded\",\"type\":\"boolean\"}},\"required\":[\"ok\"],\"type\":\"object\"}"), Codec: finalizeResultCodec},
 	}
 	SpecMethodEcho = tools.ToolSpec{
 		Name:        MethodEcho,
@@ -100,40 +113,54 @@ var (
 			Title:       "Draft",
 			Description: "Draft a response",
 			Tags:        []string{},
+			BudgetClass: policy.ToolBudgetClassBudgeted,
+		},
+		{
+			ID:          Finalize,
+			Title:       "Finalize",
+			Description: "Record the final workflow result",
+			Tags:        []string{},
+			BudgetClass: policy.ToolBudgetClassBookkeeping,
 		},
 		{
 			ID:          MethodEcho,
 			Title:       "Method Echo",
 			Description: "Echo a topic through the generated method dispatcher",
 			Tags:        []string{},
+			BudgetClass: policy.ToolBudgetClassBudgeted,
 		},
 		{
 			ID:          Publish,
 			Title:       "Publish",
 			Description: "Publish the result",
 			Tags:        []string{},
+			BudgetClass: policy.ToolBudgetClassBudgeted,
 		},
 		{
 			ID:          Retry,
 			Title:       "Retry",
 			Description: "Run a bounded retry step",
 			Tags:        []string{},
+			BudgetClass: policy.ToolBudgetClassBudgeted,
 		},
 		{
 			ID:          Review,
 			Title:       "Review",
 			Description: "Review the draft",
 			Tags:        []string{},
+			BudgetClass: policy.ToolBudgetClassBudgeted,
 		},
 		{
 			ID:          Revise,
 			Title:       "Revise",
 			Description: "Revise the result",
 			Tags:        []string{},
+			BudgetClass: policy.ToolBudgetClassBudgeted,
 		},
 	}
 	names = []tools.Ident{
 		Draft,
+		Finalize,
 		MethodEcho,
 		Publish,
 		Retry,
@@ -152,6 +179,8 @@ func Spec(name tools.Ident) (*tools.ToolSpec, bool) {
 	switch name {
 	case Draft:
 		return &SpecDraft, true
+	case Finalize:
+		return &SpecFinalize, true
 	case MethodEcho:
 		return &SpecMethodEcho, true
 	case Publish:
@@ -172,6 +201,8 @@ func PayloadSchema(name tools.Ident) ([]byte, bool) {
 	switch name {
 	case Draft:
 		return SpecDraft.Payload.Schema, true
+	case Finalize:
+		return SpecFinalize.Payload.Schema, true
 	case MethodEcho:
 		return SpecMethodEcho.Payload.Schema, true
 	case Publish:
@@ -192,6 +223,8 @@ func ResultSchema(name tools.Ident) ([]byte, bool) {
 	switch name {
 	case Draft:
 		return SpecDraft.Result.Schema, true
+	case Finalize:
+		return SpecFinalize.Result.Schema, true
 	case MethodEcho:
 		return SpecMethodEcho.Result.Schema, true
 	case Publish:

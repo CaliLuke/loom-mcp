@@ -20,6 +20,7 @@ func TestRunLoopStopsAfterTerminalTool(t *testing.T) {
 
 	terminalTool := newAnyJSONSpec(tools.Ident("tasks.progress.final_report"), "tasks.progress")
 	terminalTool.TerminalRun = true
+	terminalTool.Bookkeeping = true
 	require.NoError(t, rt.RegisterToolset(ToolsetRegistration{
 		Name: "tasks.progress",
 		Execute: func(ctx context.Context, call *planner.ToolRequest) (*ToolExecutionResult, error) {

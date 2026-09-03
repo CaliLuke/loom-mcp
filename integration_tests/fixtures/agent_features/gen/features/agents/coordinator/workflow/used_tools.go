@@ -20,6 +20,7 @@ import (
 // Tool IDs (globally unique). Use these constants in planner tool calls.
 const (
 	Draft      tools.Ident = "workflow.draft"
+	Finalize   tools.Ident = "workflow.finalize"
 	MethodEcho tools.Ident = "workflow.method_echo"
 	Publish    tools.Ident = "workflow.publish"
 	Retry      tools.Ident = "workflow.retry"
@@ -35,6 +36,14 @@ var DraftPayloadCodec = workflowspecs.DraftPayloadCodec
 type DraftResult = workflowspecs.DraftResult
 
 var DraftResultCodec = workflowspecs.DraftResultCodec
+
+type FinalizePayload = workflowspecs.FinalizePayload
+
+var FinalizePayloadCodec = workflowspecs.FinalizePayloadCodec
+
+type FinalizeResult = workflowspecs.FinalizeResult
+
+var FinalizeResultCodec = workflowspecs.FinalizeResultCodec
 
 type MethodEchoPayload = workflowspecs.MethodEchoPayload
 
@@ -112,6 +121,32 @@ func NewDraftCall(args *DraftPayload, opts ...CallOption) planner.ToolRequest {
 	req := planner.ToolRequest{
 		Error:   toolErr,
 		Name:    Draft,
+		Payload: payload,
+	}
+	for _, o := range opts {
+		if o != nil {
+			o(&req)
+		}
+	}
+	return req
+}
+
+// NewFinalizeCall builds a planner.ToolRequest for workflow.finalize.
+func NewFinalizeCall(args *FinalizePayload, opts ...CallOption) planner.ToolRequest {
+	var payload []byte
+	var toolErr *planner.ToolError
+	if args != nil {
+		// Encode typed payloads into canonical JSON using the generated codec.
+		b, err := FinalizePayloadCodec.ToJSON(args)
+		if err != nil {
+			toolErr = planner.ToolErrorFromError(err)
+		} else {
+			payload = b
+		}
+	}
+	req := planner.ToolRequest{
+		Error:   toolErr,
+		Name:    Finalize,
 		Payload: payload,
 	}
 	for _, o := range opts {

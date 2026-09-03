@@ -36,6 +36,10 @@ var ReviewPayload = Type("ReviewPayload", func() {
 })
 
 var EmptyPayload = Type("EmptyPayload", func() {})
+var LimitPayload = Type("LimitPayload", func() {
+	Attribute("reason", String, "Reason that ended the run")
+	Required("reason")
+})
 
 var StatusResult = Type("StatusResult", func() {
 	Attribute("ok", Boolean, "Whether the operation succeeded")
@@ -114,6 +118,12 @@ var _ = Service("features", func() {
 				Args(EmptyPayload)
 				Return(StatusResult)
 			})
+			Tool("finalize", "Record the final workflow result", func() {
+				Args(LimitPayload)
+				Return(StatusResult)
+				TerminalRun()
+			})
+
 			Tool("method_echo", "Echo a topic through the generated method dispatcher", func() {
 				Args(MethodToolPayload)
 				Return(MethodToolResult)

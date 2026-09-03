@@ -62,8 +62,10 @@ func buildToolSpecsDataFor(genpkg string, svc *service.Data, tools []*ToolData) 
 			Result:            result,
 			Bounds:            tool.Bounds,
 			TerminalRun:       tool.TerminalRun,
-			ResultReminder:    tool.ResultReminder,
-			Confirmation:      tool.Confirmation,
+			Bookkeeping:       tool.Bookkeeping,
+
+			ResultReminder: tool.ResultReminder,
+			Confirmation:   tool.Confirmation,
 		}
 		data.addTool(entry)
 	}

@@ -39,6 +39,7 @@ var (
 			Title:       "Upsert",
 			Description: "Upsert a profile",
 			Tags:        []string{},
+			BudgetClass: policy.ToolBudgetClassBudgeted,
 		},
 	}
 	names = []tools.Ident{

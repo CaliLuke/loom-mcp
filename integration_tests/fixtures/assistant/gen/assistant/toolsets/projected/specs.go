@@ -51,12 +51,14 @@ var (
 			Title:       "Projected Lookup Tool",
 			Description: "Lookup projected runtime tool data",
 			Tags:        []string{},
+			BudgetClass: policy.ToolBudgetClassBudgeted,
 		},
 		{
 			ID:          ProjectedStatusTool,
 			Title:       "Projected Status Tool",
 			Description: "Return projected runtime status",
 			Tags:        []string{},
+			BudgetClass: policy.ToolBudgetClassBudgeted,
 		},
 	}
 	names = []tools.Ident{

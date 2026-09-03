@@ -6,6 +6,8 @@
 - Read before editing. Search the repo and current docs before changing code.
 - Fix root causes. Do not ship local workarounds.
 - Keep status updates short during multi-step work.
+- Before declaring significant work complete, run a fresh agent review of the final diff. The reviewer must not have implemented the work. Resolve each verified finding and rerun affected verification gates before reporting completion.
+- Significant work includes a feature, roadmap batch, refactor, framework or dependency bump, and any multi-file behavior change.
 - Prefer less code, strong contracts, and fail-fast behavior over defensive fallbacks.
 - A broken build is a broken build. Do not dismiss lint, test, or integration failures as "pre-existing" or "unrelated" to the current task. If `make lint`, `make test`, `make itest`, or `make verify-mcp-local` is red on the current tree, fix it before calling any task done — regardless of who introduced the failure. The one exception is a confirmed upstream `loom` regression, which per the loom-mcp repo rules must be captured as an upstream ticket instead of patched locally; in that case, stop and report, do not proceed while red.
 - When framework-specific `loom-mcp` guidance is needed, use the repo-local skill at `.agents/skills/loom-mcp/SKILL.md` instead of expanding this file again.

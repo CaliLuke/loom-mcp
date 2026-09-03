@@ -21,6 +21,7 @@ var (
 	// metadata is the static list of policy metadata exported by this agent.
 
 	metadata = []policy.ToolMetadata{{
+		BudgetClass: policy.ToolBudgetClassBudgeted,
 		Description: "Answer a simple question",
 		ID:          tools.Ident("helpers.answer"),
 		Tags:        []string{},

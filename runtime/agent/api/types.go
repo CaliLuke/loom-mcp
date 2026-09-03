@@ -121,6 +121,9 @@ type (
 
 		// RestrictToTool restricts tool execution to the given tool identifier.
 		RestrictToTool tools.Ident
+		// CompletionTool identifies the budgeted tool whose first successful
+		// execution completes the run without another planner turn.
+		CompletionTool tools.Ident
 
 		// AllowedTags restricts tool execution to tools tagged with at least one of the listed tags.
 		AllowedTags []string
@@ -150,7 +153,46 @@ type (
 		// FinalizerGrace caps the time spent in the finalizer phase after termination is requested.
 		FinalizerGrace time.Duration
 
+		// LimitTerminalPlans supplies deterministic terminal calls for time,
+		// tool-call, and recovery limits.
+		LimitTerminalPlans *LimitTerminalPlans
+
 		// InterruptsAllowed enables interrupt/pause behavior for the run when supported by the engine.
+		InterruptsAllowed bool
+	}
+
+	// LimitTerminalPlans contains the complete set of calls used when a workflow
+	// exhausts one of its configured limits.
+	LimitTerminalPlans struct {
+		TimeBudget  LimitTerminalCall
+		ToolCallCap LimitTerminalCall
+		RecoveryCap LimitTerminalCall
+	}
+
+	// LimitTerminalCall names one terminal bookkeeping tool and its canonical
+	// generated payload.
+	LimitTerminalCall struct {
+		Name    tools.Ident
+		Payload rawjson.Message
+	}
+
+	policyOverridesWire struct {
+		PerTurnMaxToolCalls int
+		RestrictToTool      tools.Ident
+		CompletionTool      tools.Ident
+
+		AllowedTags                   *[]string
+		DeniedTags                    *[]string
+		MaxToolCalls                  int
+		MaxRecoveryTurns              int
+		MaxConsecutiveFailedToolCalls int
+		TimeBudget                    int64
+		PlanTimeout                   int64
+		ToolTimeout                   int64
+		PerToolTimeout                map[tools.Ident]int64
+		FinalizerGrace                int64
+		LimitTerminalPlans            *LimitTerminalPlans
+
 		InterruptsAllowed bool
 	}
 
@@ -721,58 +763,101 @@ func (r *ModelRecovery) UnmarshalJSON(data []byte) error {
 	return nil
 }
 
+// MarshalJSON writes durations as integer nanoseconds for Temporal's workflow
+// payload contract.
+func (o PolicyOverrides) MarshalJSON() ([]byte, error) {
+	return json.Marshal(policyOverridesToWire(o))
+}
+
 // UnmarshalJSON restores per-run recovery overrides written before
 // MaxRecoveryTurns replaced MaxConsecutiveFailedToolCalls in workflow history.
 func (o *PolicyOverrides) UnmarshalJSON(data []byte) error {
 	if o == nil {
 		return fmt.Errorf("api: cannot decode PolicyOverrides into nil receiver")
 	}
-	// Temporal's JSON payload converter writes durations as integer nanoseconds.
-	// Decode them through integer wire fields because encoding/json/v2 does not
-	// define a default representation for time.Duration.
-	var wire struct {
-		PerTurnMaxToolCalls           int
-		RestrictToTool                tools.Ident
-		AllowedTags                   []string
-		DeniedTags                    []string
-		MaxToolCalls                  int
-		MaxRecoveryTurns              int
-		MaxConsecutiveFailedToolCalls int
-		TimeBudget                    int64
-		PlanTimeout                   int64
-		ToolTimeout                   int64
-		PerToolTimeout                map[tools.Ident]int64
-		FinalizerGrace                int64
-		InterruptsAllowed             bool
-	}
+	var wire policyOverridesWire
 	if err := json.Unmarshal(data, &wire); err != nil {
 		return err
 	}
 	if wire.MaxRecoveryTurns == 0 {
 		wire.MaxRecoveryTurns = wire.MaxConsecutiveFailedToolCalls
 	}
-	var perToolTimeout map[tools.Ident]time.Duration
-	if wire.PerToolTimeout != nil {
-		perToolTimeout = make(map[tools.Ident]time.Duration, len(wire.PerToolTimeout))
-		for name, timeout := range wire.PerToolTimeout {
-			perToolTimeout[name] = time.Duration(timeout)
-		}
+	*o = policyOverridesFromWire(wire)
+	return nil
+}
+
+func policyOverridesToWire(o PolicyOverrides) policyOverridesWire {
+	return policyOverridesWire{
+		PerTurnMaxToolCalls: o.PerTurnMaxToolCalls,
+		RestrictToTool:      o.RestrictToTool,
+		CompletionTool:      o.CompletionTool,
+		AllowedTags:         optionalStrings(o.AllowedTags),
+		DeniedTags:          optionalStrings(o.DeniedTags),
+		MaxToolCalls:        o.MaxToolCalls,
+		MaxRecoveryTurns:    o.MaxRecoveryTurns,
+		TimeBudget:          int64(o.TimeBudget),
+		PlanTimeout:         int64(o.PlanTimeout),
+		ToolTimeout:         int64(o.ToolTimeout),
+		PerToolTimeout:      encodePolicyToolTimeouts(o.PerToolTimeout),
+		FinalizerGrace:      int64(o.FinalizerGrace),
+		LimitTerminalPlans:  o.LimitTerminalPlans,
+		InterruptsAllowed:   o.InterruptsAllowed,
 	}
-	*o = PolicyOverrides{
+}
+
+func policyOverridesFromWire(wire policyOverridesWire) PolicyOverrides {
+	return PolicyOverrides{
 		PerTurnMaxToolCalls: wire.PerTurnMaxToolCalls,
 		RestrictToTool:      wire.RestrictToTool,
-		AllowedTags:         wire.AllowedTags,
-		DeniedTags:          wire.DeniedTags,
+		CompletionTool:      wire.CompletionTool,
+		AllowedTags:         dereferenceStrings(wire.AllowedTags),
+		DeniedTags:          dereferenceStrings(wire.DeniedTags),
 		MaxToolCalls:        wire.MaxToolCalls,
 		MaxRecoveryTurns:    wire.MaxRecoveryTurns,
 		TimeBudget:          time.Duration(wire.TimeBudget),
 		PlanTimeout:         time.Duration(wire.PlanTimeout),
 		ToolTimeout:         time.Duration(wire.ToolTimeout),
-		PerToolTimeout:      perToolTimeout,
+		PerToolTimeout:      decodePolicyToolTimeouts(wire.PerToolTimeout),
 		FinalizerGrace:      time.Duration(wire.FinalizerGrace),
+		LimitTerminalPlans:  wire.LimitTerminalPlans,
 		InterruptsAllowed:   wire.InterruptsAllowed,
 	}
-	return nil
+}
+
+func optionalStrings(values []string) *[]string {
+	if values == nil {
+		return nil
+	}
+	return &values
+}
+
+func dereferenceStrings(values *[]string) []string {
+	if values == nil {
+		return nil
+	}
+	return *values
+}
+
+func encodePolicyToolTimeouts(timeouts map[tools.Ident]time.Duration) map[tools.Ident]int64 {
+	if timeouts == nil {
+		return nil
+	}
+	encoded := make(map[tools.Ident]int64, len(timeouts))
+	for name, timeout := range timeouts {
+		encoded[name] = int64(timeout)
+	}
+	return encoded
+}
+
+func decodePolicyToolTimeouts(timeouts map[tools.Ident]int64) map[tools.Ident]time.Duration {
+	if timeouts == nil {
+		return nil
+	}
+	decoded := make(map[tools.Ident]time.Duration, len(timeouts))
+	for name, timeout := range timeouts {
+		decoded[name] = time.Duration(timeout)
+	}
+	return decoded
 }
 
 // UnmarshalJSON handles decoding PlanActivityOutput so that Transcript entries are

@@ -129,6 +129,10 @@ func (r *Runtime) RegisterToolset(ts ToolsetRegistration) error {
 	if err := validateAgentToolsetSpecs(ts); err != nil {
 		return err
 	}
+	if err := validateToolSpecs(ts.Specs); err != nil {
+		return err
+	}
+
 	return r.storeRegisteredToolset(ts)
 }
 
@@ -151,6 +155,10 @@ func (r *Runtime) validateAgentRegistration(reg AgentRegistration) error {
 	if reg.Policy.MaxRecoveryTurns < 0 {
 		return fmt.Errorf("%w: agent %q MaxRecoveryTurns must not be negative", ErrInvalidConfig, reg.ID)
 	}
+	if err := validateToolSpecs(reg.Specs); err != nil {
+		return err
+	}
+
 	if reg.Workflow.Handler == nil {
 		return fmt.Errorf("%w: missing workflow handler", ErrInvalidConfig)
 	}
@@ -321,6 +329,9 @@ func validateRegisteredAgentToolsets(toolsets []ToolsetRegistration) error {
 		if err := validateAgentToolsetSpecs(ts); err != nil {
 			return err
 		}
+		if err := validateToolSpecs(ts.Specs); err != nil {
+			return err
+		}
 	}
 	return nil
 }
@@ -329,6 +340,18 @@ func (r *Runtime) validateRegisteredAgentToolsets(toolsets []ToolsetRegistration
 	for _, ts := range toolsets {
 		if err := validateAgentToolsetSpecs(ts); err != nil {
 			return err
+		}
+		if err := validateToolSpecs(ts.Specs); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func validateToolSpecs(specs []tools.ToolSpec) error {
+	for _, spec := range specs {
+		if spec.TerminalRun && !spec.Bookkeeping {
+			return fmt.Errorf("%w: terminal tool %q must also declare bookkeeping", ErrInvalidConfig, spec.Name)
 		}
 	}
 	return nil

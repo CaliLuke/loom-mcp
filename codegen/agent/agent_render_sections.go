@@ -217,6 +217,10 @@ func toolSpecsSection(data toolSpecFileData) gocodegen.Section {
 			if tool.TerminalRun {
 				b.WriteString("\t\tTerminalRun: true,\n")
 			}
+			if tool.Bookkeeping {
+				b.WriteString("\t\tBookkeeping: true,\n")
+			}
+
 			if tool.Bounds != nil {
 				b.WriteString("\t\tBounds: &tools.BoundsSpec{\n")
 				if tool.Bounds.Paging != nil {
@@ -268,7 +272,13 @@ func toolSpecsSection(data toolSpecFileData) gocodegen.Section {
 			for _, tag := range tool.Tags {
 				fmt.Fprintf(&b, "\t\t\t\t%q,\n", tag)
 			}
-			b.WriteString("\t\t\t},\n\t\t},\n")
+			b.WriteString("\t\t\t},\n")
+			budgetClass := "policy.ToolBudgetClassBudgeted"
+			if tool.Bookkeeping {
+				budgetClass = "policy.ToolBudgetClassBookkeeping"
+			}
+			fmt.Fprintf(&b, "\t\t\tBudgetClass: %s,\n", budgetClass)
+			b.WriteString("\t\t},\n")
 		}
 		b.WriteString("\t}\n\tnames = []tools.Ident{\n")
 		for _, tool := range data.Tools {

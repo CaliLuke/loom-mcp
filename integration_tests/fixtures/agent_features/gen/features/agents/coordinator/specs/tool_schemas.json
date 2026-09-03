@@ -88,6 +88,49 @@
       }
     },
     {
+      "id": "workflow.finalize",
+      "service": "features",
+      "toolset": "features.workflow",
+      "title": "Finalize",
+      "description": "Record the final workflow result",
+      "payload": {
+        "name": "FinalizePayload",
+        "schema": {
+          "additionalProperties": false,
+          "properties": {
+            "reason": {
+              "description": "Reason that ended the run",
+              "type": "string"
+            }
+          },
+          "required": [
+            "reason"
+          ],
+          "type": "object"
+        }
+      },
+      "result": {
+        "name": "FinalizeResult",
+        "schema": {
+          "additionalProperties": false,
+          "properties": {
+            "approved": {
+              "description": "Whether the operation was approved",
+              "type": "boolean"
+            },
+            "ok": {
+              "description": "Whether the operation succeeded",
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "ok"
+          ],
+          "type": "object"
+        }
+      }
+    },
+    {
       "id": "workflow.method_echo",
       "service": "features",
       "toolset": "features.workflow",

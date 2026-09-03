@@ -165,6 +165,25 @@ func TestPolicyOverridesUnmarshalJSONPreservesNilPerToolTimeout(t *testing.T) {
 	require.Nil(t, overrides.PerToolTimeout)
 }
 
+func TestPolicyOverridesTerminalPolicyJSONRoundTrip(t *testing.T) {
+	t.Parallel()
+
+	want := PolicyOverrides{
+		CompletionTool: "reports.persist",
+		LimitTerminalPlans: &LimitTerminalPlans{
+			TimeBudget:  LimitTerminalCall{Name: "reports.limit", Payload: []byte(`{"reason":"time"}`)},
+			ToolCallCap: LimitTerminalCall{Name: "reports.limit", Payload: []byte(`{"reason":"tools"}`)},
+			RecoveryCap: LimitTerminalCall{Name: "reports.limit", Payload: []byte(`{"reason":"recovery"}`)},
+		},
+	}
+	data, err := json.Marshal(want)
+	require.NoError(t, err)
+	var got PolicyOverrides
+	require.NoError(t, json.Unmarshal(data, &got))
+	require.Equal(t, want.CompletionTool, got.CompletionTool)
+	require.Equal(t, want.LimitTerminalPlans, got.LimitTerminalPlans)
+}
+
 func TestModelRecoveryJSONRoundTrip(t *testing.T) {
 	t.Parallel()
 

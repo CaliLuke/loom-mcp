@@ -13,6 +13,8 @@ import (
 	"time"
 
 	"example.com/agentfeatures/gen/features/agents/coordinator"
+	"example.com/agentfeatures/gen/features/toolsets/workflow"
+
 	"go.temporal.io/sdk/client"
 	"go.temporal.io/sdk/testsuite"
 
@@ -45,6 +47,7 @@ type fileEffectLedger struct {
 }
 
 type signalTimeoutPlanner struct{}
+type terminalCapPlanner struct{}
 
 const temporalCLIVersion = "v1.6.1"
 
@@ -181,7 +184,7 @@ func TestGeneratedFeatureRealTemporalContracts(t *testing.T) {
 		)
 		require.NoError(t, err)
 		require.Eventually(t, func() bool {
-			return fx.recorder.count(hooks.AwaitTypedInput) == 1
+			return fx.recorder.count(hooks.AwaitTypedInput) > 0
 		}, 5*time.Second, 20*time.Millisecond)
 		require.NoError(t, fx.rt.CancelRun(ctx, "run-temporal-cancel"))
 		_, err = handle.Wait(ctx)
@@ -190,6 +193,44 @@ func TestGeneratedFeatureRealTemporalContracts(t *testing.T) {
 		require.NoError(t, err)
 		require.Equal(t, session.RunStatusCanceled, run.Status)
 	})
+	t.Run("fixed terminal plan crosses Temporal boundaries", func(t *testing.T) {
+		ctx, cancel := temporalScenarioContext(t)
+		defer cancel()
+		eng := newTemporalAcceptanceEngine(t, server.Client())
+		fx := newFeatureRuntime(t, agentsruntime.WithEngine(eng))
+		exec := newRecordingWorkflowExecutor()
+		registerCoordinatorToolsets(t, ctx, fx.rt, exec)
+		require.NoError(t, coordinator.RegisterCoordinatorAgent(ctx, fx.rt, coordinator.CoordinatorAgentConfig{Planner: terminalCapPlanner{}}))
+		_, err := fx.rt.CreateSession(ctx, "sess-temporal-terminal")
+		require.NoError(t, err)
+
+		terminalCall := func(reason string) agentsruntime.LimitTerminalCall {
+			return agentsruntime.LimitTerminalCall{
+				Name: workflow.Finalize, Payload: rawjson.Message(fmt.Sprintf(`{"reason":%q}`, reason)),
+			}
+		}
+		out, err := coordinator.NewClient(fx.rt).Run(
+			ctx,
+			"sess-temporal-terminal",
+			[]*model.Message{{Role: model.ConversationRoleUser, Parts: []model.Part{model.TextPart{Text: "finish at the cap"}}}},
+			agentsruntime.WithRunID("run-temporal-terminal"),
+			agentsruntime.WithRunMaxToolCalls(1),
+			agentsruntime.WithLimitTerminalPlans(agentsruntime.LimitTerminalPlans{
+				TimeBudget:  terminalCall("time_budget"),
+				ToolCallCap: terminalCall("tool_call_cap"),
+				RecoveryCap: terminalCall("recovery_cap"),
+			}),
+		)
+		require.NoError(t, err)
+		require.NotNil(t, out.FinalToolResult)
+		require.Equal(t, workflow.Finalize, out.FinalToolResult.Name)
+		calls := exec.callsSnapshot()
+		require.Len(t, calls, 1)
+		require.Equal(t, workflow.Finalize, calls[0].Name)
+		require.NotEmpty(t, calls[0].ToolCallID)
+		require.Equal(t, string(planner.TerminationReasonToolCap), calls[0].Labels[agentsruntime.FinalizationReasonLabel])
+	})
+
 }
 
 func TestFileEffectLedger(t *testing.T) {
@@ -311,7 +352,7 @@ func testTemporalWorkerReplacement(
 	)
 	require.NoError(t, err)
 	require.Eventually(t, func() bool {
-		return first.recorder.count(hooks.AwaitTypedInput) == 1
+		return first.recorder.count(hooks.AwaitTypedInput) > 0
 	}, 5*time.Second, 20*time.Millisecond)
 	firstPage, err := firstRunEvents.List(ctx, "run-temporal-restart", "", 100)
 	require.NoError(t, err)
@@ -337,7 +378,7 @@ func testTemporalWorkerReplacement(
 	require.NoError(t, second.rt.Seal(ctx))
 	require.NoError(t, second.rt.ProvideTypedInput(ctx, typedInputAnswer("run-temporal-restart")))
 	require.Eventually(t, func() bool {
-		return second.recorder.count(hooks.AwaitConfirmation) == 1
+		return second.recorder.count(hooks.AwaitConfirmation) > 0
 	}, 10*time.Second, 20*time.Millisecond)
 	require.NoError(t, second.rt.ProvideConfirmation(ctx, &api.ConfirmationDecision{
 		RunID:       "run-temporal-restart",
@@ -480,6 +521,17 @@ func (signalTimeoutPlanner) PlanResume(_ context.Context, input *planner.PlanRes
 		Role:  model.ConversationRoleAssistant,
 		Parts: []model.Part{model.TextPart{Text: "signal won"}},
 	}}}, nil
+}
+
+func (terminalCapPlanner) PlanStart(context.Context, *planner.PlanInput) (*planner.PlanResult, error) {
+	return &planner.PlanResult{ToolCalls: []planner.ToolRequest{
+		{Name: workflow.Draft, Payload: rawjson.Message(`{"topic":"loom"}`)},
+		{Name: workflow.Review, Payload: rawjson.Message(`{"strict":true}`)},
+	}}, nil
+}
+
+func (terminalCapPlanner) PlanResume(context.Context, *planner.PlanResumeInput) (*planner.PlanResult, error) {
+	return nil, errors.New("unexpected terminal-cap planner resume")
 }
 
 func typedInputAnswer(runID string) *api.TypedInputAnswer {

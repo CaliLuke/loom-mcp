@@ -49,6 +49,30 @@ func TestToolSurfaceProjectionDSL(t *testing.T) {
 	require.Empty(t, mcpTool.MCPPlacementServer)
 }
 
+func TestBookkeepingAndTerminalRunDSL(t *testing.T) {
+	runProjectionDSL(t, func() {
+		API("test", func() {})
+		Service("assistant", func() {
+			Agent("planner", "Planner", func() {
+				Use("control", func() {
+					Tool("checkpoint", "Record progress", func() {
+						Bookkeeping()
+					})
+					Tool("complete", "Record completion", func() {
+						TerminalRun()
+					})
+				})
+			})
+		})
+	})
+
+	tools := agentsexpr.Root.Agents[0].Used.Toolsets[0].Tools
+	require.True(t, tools[0].Bookkeeping)
+	require.False(t, tools[0].TerminalRun)
+	require.True(t, tools[1].Bookkeeping)
+	require.True(t, tools[1].TerminalRun)
+}
+
 func TestToolReportsInvalidArgumentType(t *testing.T) {
 	setupProjectionDSL(t)
 

@@ -150,6 +150,7 @@ func DiscoverAndPopulate(ctx context.Context, client RegistryClient) error {
 			Title:       tool.Title,
 			Description: tool.Description,
 			Tags:        tool.Tags,
+			BudgetClass: policy.ToolBudgetClassBudgeted,
 		})
 	}
 	populated = true

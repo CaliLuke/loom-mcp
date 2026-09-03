@@ -39,6 +39,7 @@ var (
 			Title:       "Echo",
 			Description: "Echo",
 			Tags:        []string{},
+			BudgetClass: policy.ToolBudgetClassBudgeted,
 		},
 	}
 	names = []tools.Ident{

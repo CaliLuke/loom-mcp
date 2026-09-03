@@ -198,6 +198,13 @@ func (r *Runtime) collectAwaitResults(ctx context.Context, wfCtx engine.Workflow
 		if err != nil {
 			return nil, nil, nil, err
 		}
+		out, err := r.finishProvidedTerminalResults(ctx, input, base, st, turnID, res)
+		if err != nil {
+			return nil, nil, nil, err
+		}
+		if out != nil {
+			return nil, nil, out, nil
+		}
 		allToolResults = appendAwaitToolResults(allToolResults, res)
 	}
 	return allToolResults, extraItems, nil, nil
@@ -208,6 +215,24 @@ func (r *Runtime) waitForAwaitItem(ctx context.Context, wfCtx engine.WorkflowCon
 	res, err := r.waitAwaitQueueItem(ctx, ctrl, input, base, st, turnID, timeout, it)
 	deadlines.pause(wfCtx.Now().Sub(waitStartedAt))
 	return res, err
+}
+
+func (r *Runtime) finishProvidedTerminalResults(
+	ctx context.Context,
+	input *RunInput,
+	base *planner.PlanInput,
+	st *runLoopState,
+	turnID string,
+	results []*planner.ToolResult,
+) (*RunOutput, error) {
+	terminal, err := r.executedTerminalRunTool(results)
+	if err != nil {
+		return nil, err
+	}
+	if !terminal {
+		return nil, nil
+	}
+	return r.finishAfterTerminalToolCalls(ctx, input, base, st, turnID)
 }
 
 func appendAwaitToolResults(current []*planner.ToolResult, extra []*planner.ToolResult) []*planner.ToolResult {
@@ -238,7 +263,7 @@ func (r *Runtime) finalizeProtectedAwaitRun(ctx context.Context, wfCtx engine.Wo
 	if !protected {
 		return nil, nil
 	}
-	return r.finalizeWithPlanner(wfCtx, reg, input, base, st.ToolEvents, st.ToolOutputs, st.AggUsage, st.Caps, st.NextAttempt, turnID, planner.TerminationReasonFailureCap, deadlines.Hard)
+	return r.finalizeWithPlanner(wfCtx, reg, input, base, st.ToolEvents, st.ToolOutputs, st.AggUsage, st.Caps, st.NextAttempt, turnID, plannerResultNotes(st.Result), planner.TerminationReasonFailureCap, deadlines.Hard)
 }
 
 // resumeAfterAwait resumes planning after the await queue is fully satisfied.
@@ -253,7 +278,7 @@ func (r *Runtime) applyAwaitFailurePolicy(wfCtx engine.WorkflowContext, reg Agen
 	if out, err := r.applyAwaitFailureCap(wfCtx, reg, input, base, st, allToolResults, turnID, deadlines); err != nil || out != nil {
 		return out, err
 	}
-	return r.handleMissingFieldsPolicy(wfCtx, reg, input, base, allToolResults, st.ToolEvents, st.ToolOutputs, st.AggUsage, st.Caps, &st.NextAttempt, turnID, ctrl, deadlines)
+	return r.handleMissingFieldsPolicy(wfCtx, reg, input, base, allToolResults, st.ToolEvents, st.ToolOutputs, st.AggUsage, st.Caps, &st.NextAttempt, turnID, plannerResultNotes(st.Result), ctrl, deadlines)
 }
 
 func (r *Runtime) applyAwaitFailureCap(wfCtx engine.WorkflowContext, reg AgentRegistration, input *RunInput, base *planner.PlanInput, st *runLoopState, allToolResults []*planner.ToolResult, turnID string, deadlines *runDeadlines) (*RunOutput, error) {
@@ -264,7 +289,7 @@ func (r *Runtime) applyAwaitFailureCap(wfCtx engine.WorkflowContext, reg AgentRe
 	if consumeRecoveryTurn(&st.Caps) {
 		return nil, nil
 	}
-	return r.finalizeWithPlanner(wfCtx, reg, input, base, st.ToolEvents, st.ToolOutputs, st.AggUsage, st.Caps, st.NextAttempt, turnID, planner.TerminationReasonFailureCap, deadlines.Hard)
+	return r.finalizeWithPlanner(wfCtx, reg, input, base, st.ToolEvents, st.ToolOutputs, st.AggUsage, st.Caps, st.NextAttempt, turnID, plannerResultNotes(st.Result), planner.TerminationReasonFailureCap, deadlines.Hard)
 }
 
 func (r *Runtime) publishAwaitResume(ctx context.Context, input *RunInput, base *planner.PlanInput, turnID string, confirmations []confirmationAwait, items []planner.AwaitItem) error {
@@ -373,6 +398,7 @@ func (r *Runtime) recordConfirmationToolResult(ctx context.Context, base *planne
 	if err := r.appendToolOutputs(ctx, st, []planner.ToolRequest{call}, []*planner.ToolResult{tr}); err != nil {
 		return err
 	}
+	r.hideSuccessfulBookkeepingCallsFromPlanner(base, []*planner.ToolResult{tr})
 	return r.appendUserToolResults(base, []planner.ToolRequest{call}, []*planner.ToolResult{tr}, st.Ledger)
 }
 
@@ -403,8 +429,19 @@ func (r *Runtime) executeConfirmedToolCall(ctx context.Context, wfCtx engine.Wor
 	if err := r.recordExecutedConfirmationResults(ctx, base, st, call, vals); err != nil {
 		return nil, nil, nil, err
 	}
+	terminal, err := r.executedTerminalRunTool(vals)
+	if err != nil {
+		return nil, nil, nil, err
+	}
+	if terminal && len(pauses) > 0 {
+		return nil, nil, nil, errors.New("terminal tool must not request a pause")
+	}
 	if timedOut {
-		out, err := r.finalizeWithPlanner(wfCtx, reg, input, base, st.ToolEvents, st.ToolOutputs, st.AggUsage, st.Caps, st.NextAttempt, turnID, planner.TerminationReasonTimeBudget, deadlines.Hard)
+		out, err := r.finalizeWithPlanner(wfCtx, reg, input, base, st.ToolEvents, st.ToolOutputs, st.AggUsage, st.Caps, st.NextAttempt, turnID, plannerResultNotes(st.Result), planner.TerminationReasonTimeBudget, deadlines.Hard)
+		return nil, nil, out, err
+	}
+	if terminal {
+		out, err := r.finishAfterTerminalToolCalls(ctx, input, base, st, turnID)
 		return nil, nil, out, err
 	}
 	return vals, pauses, nil, nil
@@ -422,5 +459,6 @@ func (r *Runtime) recordExecutedConfirmationResults(ctx context.Context, base *p
 	if err := r.appendToolOutputs(ctx, st, []planner.ToolRequest{call}, vals); err != nil {
 		return err
 	}
+	r.hideSuccessfulBookkeepingCallsFromPlanner(base, vals)
 	return r.appendUserToolResults(base, []planner.ToolRequest{call}, vals, st.Ledger)
 }

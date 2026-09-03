@@ -22,6 +22,7 @@ var (
 	// metadata is the static list of policy metadata exported by this agent.
 
 	metadata = []policy.ToolMetadata{{
+		BudgetClass: policy.ToolBudgetClassBudgeted,
 		Description: "Lookup a projected catalog entry",
 		ID:          tools.Ident("projected.projected_lookup"),
 		Tags:        []string{},

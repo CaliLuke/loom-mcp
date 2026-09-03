@@ -41,6 +41,7 @@ var (
 			Title:       "Projected Lookup",
 			Description: "Lookup a projected catalog entry",
 			Tags:        []string{},
+			BudgetClass: policy.ToolBudgetClassBudgeted,
 		},
 	}
 	names = []tools.Ident{

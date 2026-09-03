@@ -334,6 +334,10 @@ Proof:
 
 Upstream references: `v0.53.x`, `v0.76.12`, `v0.76.13`, `v0.77.2`.
 
+Status: complete on `codex/port-goa-ai-runtime-contracts`. The terminal policy
+fields now live in `RunInput.Policy`. Batch 5 must copy them into its
+continuation schema when that schema is added.
+
 Implement:
 
 - Add application-declared bookkeeping tools through the DSL, expressions,

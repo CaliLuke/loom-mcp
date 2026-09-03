@@ -87,6 +87,9 @@ func (r *Runtime) appendUserToolResults(
 	if err != nil {
 		return err
 	}
+	if len(specs) > 0 {
+		led.AppendUserToolResults(specs)
+	}
 	if len(parts) == 0 {
 		return nil
 	}
@@ -95,7 +98,6 @@ func (r *Runtime) appendUserToolResults(
 		Role:  model.ConversationRoleUser,
 		Parts: parts,
 	})
-	led.AppendUserToolResults(specs)
 
 	if len(reminders) > 0 {
 		var reminderText strings.Builder
@@ -210,11 +212,51 @@ func (r *Runtime) buildToolResultArtifacts(
 		if err != nil {
 			return nil, nil, nil, err
 		}
+		resultSpec := transcript.ToolResultSpec{ToolUseID: tr.ToolCallID, Content: content, IsError: tr.Error != nil}
+		specs = append(specs, resultSpec)
+		if tr.Error == nil && r.isBookkeeping(tr.Name) {
+			continue
+		}
 		parts = append(parts, model.ToolResultPart{ToolUseID: tr.ToolCallID, Content: content, IsError: tr.Error != nil})
-		specs = append(specs, transcript.ToolResultSpec{ToolUseID: tr.ToolCallID, Content: content, IsError: tr.Error != nil})
 		reminders = append(reminders, r.toolResultReminders(tr)...)
 	}
 	return parts, specs, reminders, nil
+}
+
+func (r *Runtime) hideSuccessfulBookkeepingCallsFromPlanner(base *planner.PlanInput, vals []*planner.ToolResult) {
+	hidden := make(map[string]struct{})
+	for _, result := range vals {
+		if result != nil && result.Error == nil && result.ToolCallID != "" && r.isBookkeeping(result.Name) {
+			hidden[result.ToolCallID] = struct{}{}
+		}
+	}
+	if len(hidden) == 0 {
+		return
+	}
+	for i := len(base.Messages) - 1; i >= 0; i-- {
+		message := base.Messages[i]
+		if message == nil || message.Role != model.ConversationRoleAssistant {
+			continue
+		}
+		parts := message.Parts[:0]
+		for _, part := range message.Parts {
+			toolUse, ok := part.(model.ToolUsePart)
+			if ok {
+				if _, hide := hidden[toolUse.ID]; hide {
+					delete(hidden, toolUse.ID)
+					continue
+				}
+			}
+			parts = append(parts, part)
+		}
+		message.Parts = parts
+		if len(message.Parts) == 0 {
+			base.Messages = append(base.Messages[:i], base.Messages[i+1:]...)
+		}
+		if len(hidden) == 0 {
+			return
+		}
+	}
 }
 
 func (r *Runtime) toolResultReminders(tr *planner.ToolResult) []string {
@@ -315,7 +357,12 @@ func (r *Runtime) appendToolOutputs(ctx context.Context, st *runLoopState, calls
 	if err != nil {
 		return err
 	}
-	st.ToolOutputs = append(st.ToolOutputs, outputs...)
+	for _, output := range outputs {
+		if output == nil || output.Error != nil || !r.isBookkeeping(output.Name) {
+			st.ToolOutputs = append(st.ToolOutputs, output)
+		}
+	}
+
 	return nil
 }
 

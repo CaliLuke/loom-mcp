@@ -22,6 +22,20 @@ type (
 		Approved *bool `json:"approved,omitempty"`
 	}
 
+	// FinalizePayload defines the JSON payload for the workflow.finalize tool.
+	FinalizePayload = struct {
+		// Reason that ended the run
+		Reason string `json:"reason"`
+	}
+
+	// FinalizeResult defines the JSON result for the workflow.finalize tool.
+	FinalizeResult = struct {
+		// Whether the operation succeeded
+		OK bool `json:"ok"`
+		// Whether the operation was approved
+		Approved *bool `json:"approved,omitempty"`
+	}
+
 	// MethodEchoPayload defines the JSON payload for the workflow.method_echo tool.
 	MethodEchoPayload = struct {
 		// Topic to send to the service method
