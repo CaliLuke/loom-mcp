@@ -181,6 +181,7 @@ func TestClientConformance(t *testing.T) {
 				t.Cleanup(func() { require.NoError(t, stream.Close()) })
 				_, err = stream.Recv()
 				require.ErrorIs(t, err, providerErr)
+				require.ErrorContains(t, err, "anthropic messages.new stream")
 			},
 			ReceiveRateLimit: testutil.ProviderCapabilityConformance{Supported: func(t *testing.T) {
 				providerErr := newAnthropicRateLimitError(t)
