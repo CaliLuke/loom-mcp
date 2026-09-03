@@ -95,7 +95,16 @@ func TestMCPMetadata(t *testing.T) {
 	require.Equal(t, []string{"48x48", "96x96"}, mcp.Icons[0].Sizes)
 	require.Equal(t, IconThemeLight, mcp.Icons[0].Theme)
 }
+func TestMCPAuthorizationServerRejectsBlankURL(t *testing.T) {
+	err := runInvalidMCPDSL(t, func() {
+		API("test", func() {})
+		Service("calculator", func() {
+			MCP("calc", "1.0.0", OAuth(AuthorizationServer("   ")))
+		})
+	})
 
+	require.Contains(t, err, "AuthorizationServer URL cannot be empty")
+}
 func TestMCPResource(t *testing.T) {
 	runMCPDSL(t, func() {
 		API("test", func() {})

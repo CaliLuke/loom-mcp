@@ -141,7 +141,37 @@ func TestOAuthExprValidateReportsDiagnostics(t *testing.T) {
 	require.ErrorContains(t, err, `OAuth BearerMethodsSupported must be header, body, or query; got "cookie"`)
 	require.ErrorContains(t, err, "OAuth ResourceIdentifier invalid: must not contain a fragment")
 }
+func TestOAuthExprValidateAuthorizationServers(t *testing.T) {
+	tests := []struct {
+		name    string
+		server  string
+		wantErr string
+	}{
+		{name: "empty", server: "", wantErr: "must be an absolute URL with https scheme and host"},
+		{name: "relative", server: "auth.example.com", wantErr: "must be an absolute URL with https scheme and host"},
+		{name: "http", server: "http://auth.example.com", wantErr: "must be an absolute URL with https scheme and host"},
+		{name: "query", server: "https://auth.example.com?tenant=acme", wantErr: "must not contain a query"},
+		{name: "empty query", server: "https://auth.example.com?", wantErr: "must not contain a query"},
+		{name: "fragment", server: "https://auth.example.com#issuer", wantErr: "must not contain a fragment"},
+		{name: "empty fragment", server: "https://auth.example.com#", wantErr: "must not contain a fragment"},
+		{name: "absolute", server: "https://auth.example.com"},
+	}
 
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			oauth := &OAuthExpr{AuthorizationServers: []string{test.server}}
+
+			err := oauth.Validate()
+
+			if test.wantErr == "" {
+				require.NoError(t, err)
+				return
+			}
+			require.ErrorContains(t, err, "OAuth AuthorizationServer")
+			require.ErrorContains(t, err, test.wantErr)
+		})
+	}
+}
 func TestMCPExpr_Finalize(t *testing.T) {
 	t.Run("sets default transport", func(t *testing.T) {
 		m := &MCPExpr{

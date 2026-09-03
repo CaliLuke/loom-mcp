@@ -315,6 +315,9 @@ Use this skill for `loom-mcp` work in this repo. Keep `AGENTS.md` short and keep
   `initialize`, `tools/list`, `resources/list`, and `prompts/list`.
 - Dynamic prompt design validation requires a non-empty prompt name. It also
   validates all attached icons before code generation.
+- OAuth `AuthorizationServer(...)` values must be non-empty HTTPS issuer URLs
+  without query or fragment components. Reject invalid values during design
+  evaluation so protected-resource metadata cannot advertise invalid servers.
 - MCP skill exposure is design-owned too: declare local agent skill roots with
   `SkillDirectory(...)`, then let generated SDK servers expose
   `skill://` entries through `resources/list` and `resources/read`.

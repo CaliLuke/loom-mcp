@@ -14,8 +14,10 @@ import (
 )
 
 var (
-	errAbsoluteURLRequired        = errors.New("must be an absolute URL with scheme and host")
-	errResourceIdentifierFragment = errors.New("must not contain a fragment")
+	errAbsoluteURLRequired      = errors.New("must be an absolute URL with scheme and host")
+	errAuthorizationServerURL   = errors.New("must be an absolute URL with https scheme and host")
+	errAuthorizationServerQuery = errors.New("must not contain a query")
+	errURLFragment              = errors.New("must not contain a fragment")
 )
 
 const (
@@ -134,9 +136,9 @@ type (
 	// and the WWW-Authenticate challenge emitted for unauthenticated
 	// requests.
 	OAuthExpr struct {
-		// AuthorizationServers lists the OAuth 2.0 authorization servers
-		// that can issue tokens for this resource. Required; at least
-		// one entry.
+		// AuthorizationServers lists the OAuth 2.0 authorization server issuer
+		// identifiers that can issue tokens for this resource. Each entry must use
+		// HTTPS and have no query or fragment. Required; at least one entry.
 		AuthorizationServers []string
 		// Scopes documents the scopes the resource defines.
 		Scopes []*ScopeExpr
@@ -508,6 +510,11 @@ func (o *OAuthExpr) Validate() error {
 	if len(o.AuthorizationServers) == 0 {
 		verr.Add(o, "OAuth requires at least one AuthorizationServer")
 	}
+	for _, server := range o.AuthorizationServers {
+		if err := validateAuthorizationServer(server); err != nil {
+			verr.Add(o, "OAuth AuthorizationServer %q invalid: %s", server, err.Error())
+		}
+	}
 	seenScope := make(map[string]struct{}, len(o.Scopes))
 	for _, scope := range o.Scopes {
 		if scope == nil {
@@ -546,6 +553,23 @@ func (o *OAuthExpr) EvalName() string {
 	return "MCP OAuth configuration"
 }
 
+func validateAuthorizationServer(server string) error {
+	u, err := urlParse(server)
+	if err != nil {
+		return err
+	}
+	if !strings.EqualFold(u.Scheme, "https") || u.Host == "" {
+		return errAuthorizationServerURL
+	}
+	if u.RawQuery != "" || u.ForceQuery {
+		return errAuthorizationServerQuery
+	}
+	if strings.Contains(server, "#") {
+		return errURLFragment
+	}
+	return nil
+}
+
 func validateResourceIdentifier(id string) error {
 	u, err := urlParse(id)
 	if err != nil {
@@ -555,7 +579,7 @@ func validateResourceIdentifier(id string) error {
 		return errAbsoluteURLRequired
 	}
 	if u.Fragment != "" {
-		return errResourceIdentifierFragment
+		return errURLFragment
 	}
 	return nil
 }

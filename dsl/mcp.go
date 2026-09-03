@@ -254,11 +254,17 @@ func OAuth(opts ...OAuthOption) func(*exprmcp.MCPExpr) {
 	}
 }
 
-// AuthorizationServer appends one OAuth 2.0 authorization server URL to
-// the PRM document. Call multiple times to advertise more than one.
-func AuthorizationServer(url string) OAuthOption {
+// AuthorizationServer appends one OAuth 2.0 authorization server URL to the
+// PRM document. The URL must use HTTPS and must not contain a query or fragment.
+// Call multiple times to advertise more than one authorization server.
+func AuthorizationServer(rawURL string) OAuthOption {
 	return func(o *exprmcp.OAuthExpr) {
-		o.AuthorizationServers = append(o.AuthorizationServers, strings.TrimSpace(url))
+		server := strings.TrimSpace(rawURL)
+		if server == "" {
+			eval.ReportError("AuthorizationServer URL cannot be empty")
+			return
+		}
+		o.AuthorizationServers = append(o.AuthorizationServers, server)
 	}
 }
 
