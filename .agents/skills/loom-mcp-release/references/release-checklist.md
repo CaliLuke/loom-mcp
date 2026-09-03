@@ -22,25 +22,40 @@ If the repo was iterating against `/Users/luca/code/loom-mono/loom`, this comman
 
 ## 3. Regeneration
 
-Run regeneration only when the shipped changes require it.
+Review each `runtime/mcp/sdkbridge` change before release.
+
+Keep `sdkbridge.CompatibilityVersion` unchanged for compatible additions. These
+changes include internal fixes and optional fields with safe zero-value
+behavior. Existing generated consumers must continue to work without
+regeneration.
+
+Increment `sdkbridge.CompatibilityVersion` when old generated descriptors or
+callbacks are unsafe with the new runtime contract. Do not add a compatibility
+path for the old version. The generator reads the runtime constant and emits the
+new value as a literal.
+
+Run regeneration when the shipped changes require it:
 
 - Assistant fixture DSL changed: `make regen-assistant-fixture`
 - Loom dependency changed: `make gen-registry`, `make regen-quickstart`,
   `make regen-assistant-fixture`, `make regen-progressive-discovery-fixture`,
-  and `make regen-agent-feature-fixture`
-- Other design/codegen changes: run the normal generation step required by that surface before verification
+  `make regen-agent-feature-fixture`, and
+  `make regen-sdkbridge-consumer-fixture`
+- `sdkbridge.CompatibilityVersion` changed: `make regen-assistant-fixture`,
+  `make regen-progressive-discovery-fixture`, and
+  `make regen-sdkbridge-consumer-fixture`
+- Other design or codegen changed: run the generation target for that surface.
 
-Never hand-edit generated `gen/` files.
+Never edit generated `gen/` files.
 
-After all required regeneration, prove every tracked surface is current:
+After regeneration, prove that every tracked surface is current:
 
 ```bash
 make verify-generated
 ```
 
-This snapshots the current release diff, regenerates every tracked surface, and
-fails if regeneration changes it. Local `make ci` and hosted CI use the same
-target, so generation freshness cannot drift between environments.
+This command snapshots the release diff and regenerates every tracked surface.
+It fails if regeneration changes the diff. Local and hosted CI use this target.
 
 ## 4. Docs
 

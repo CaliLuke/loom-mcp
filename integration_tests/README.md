@@ -88,6 +88,17 @@ with `httptest`, including:
 - prompt completion and single- or multi-step elicitation;
 - resource subscriptions, cancellation, and unary collection of Loom streams.
 
+### SDK bridge consumer fixture
+
+`fixtures/sdkbridge_consumer` is a separate module outside `go.work`. It owns the
+consumer policy for `sdkbridge.CompatibilityVersion`. Its checked-in generated
+server links the current runtime with `GOWORK=off`.
+
+A real official SDK client calls the generated tool. This proves that a
+same-version runtime fix does not require consumer regeneration.
+`make regen-sdkbridge-consumer-fixture` updates the fixture. `make
+verify-generated` fails when the checked-in output is stale.
+
 ### Agent-feature fixture
 
 `fixtures/agent_features` owns DSL-to-generated-runtime acceptance for:

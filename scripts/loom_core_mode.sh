@@ -4,6 +4,7 @@ set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 FIXTURE_DIR="${ROOT_DIR}/integration_tests/fixtures/assistant"
+CONSUMER_DIR="${ROOT_DIR}/integration_tests/fixtures/sdkbridge_consumer"
 QUICKSTART_DIR="${ROOT_DIR}/quickstart"
 REMOTE_VERSION="v1.9.0-alpha.11"
 # Default to the loom checkout that lives as a peer of this repo (loom-mono
@@ -52,6 +53,11 @@ set_local() {
     go mod edit -replace=github.com/CaliLuke/loom="${LOCAL_LOOM_DIR}"
     go mod tidy
   )
+  (
+    cd "${CONSUMER_DIR}"
+    go mod edit -replace=github.com/CaliLuke/loom="${LOCAL_LOOM_DIR}"
+    GOWORK=off go mod tidy
+  )
 
   (
     cd "${QUICKSTART_DIR}"
@@ -75,6 +81,12 @@ set_remote() {
     go get github.com/CaliLuke/loom@"${REMOTE_VERSION}"
     go mod tidy
   )
+  (
+    cd "${CONSUMER_DIR}"
+    go mod edit -dropreplace=github.com/CaliLuke/loom || true
+    GOWORK=off go get github.com/CaliLuke/loom@"${REMOTE_VERSION}"
+    GOWORK=off go mod tidy
+  )
 
   (
     cd "${QUICKSTART_DIR}"
@@ -95,6 +107,8 @@ show_status() {
   show_module_status "${ROOT_DIR}/go.mod"
   echo "fixture:"
   show_module_status "${FIXTURE_DIR}/go.mod"
+  echo "sdkbridge consumer:"
+  show_module_status "${CONSUMER_DIR}/go.mod"
   echo "quickstart:"
   show_module_status "${QUICKSTART_DIR}/go.mod"
 }

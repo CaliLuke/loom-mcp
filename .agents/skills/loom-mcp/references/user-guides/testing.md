@@ -100,14 +100,19 @@ make itest
 make test-docker
 ```
 
-Regenerate affected registry or assistant fixture outputs before `make verify-mcp-local`:
+Regenerate each affected fixture before `make verify-mcp-local`:
 
 ```bash
 make gen-registry
 make regen-assistant-fixture
+make regen-sdkbridge-consumer-fixture
 ```
 
-Use only the targets relevant to the changed design, but never skip a red repository target. Before CI-facing verification or a commit, restore the pinned remote fork with `make loom-remote` as required by the repository rules, then run `make verify-generated`. This target snapshots the current diff, regenerates every tracked surface, and fails if generation changes it. Both local `make ci` and hosted CI use this same target.
+Use only the targets for the changed design. Before a commit, restore the pinned
+Loom release with `make loom-remote`. Then run `make verify-generated`.
+This target regenerates every tracked surface and fails if generation changes
+it. It includes the external SDK bridge consumer module. Local and hosted CI
+use the same target.
 
 `make test` applies the global coverage floor and the critical package-group
 floors. The group floors omit generated, mock, and design packages. It forces

@@ -28,8 +28,8 @@ test.
 
 ## 1. Prove the Loom release candidate locally
 
-Point the root module, assistant fixture, and quickstart at the exact sibling
-checkout:
+Point the root module, assistant fixture, SDK bridge consumer, and quickstart at
+the exact sibling checkout:
 
 ```bash
 make loom-local
@@ -41,12 +41,11 @@ go -C integration_tests/fixtures/agent_features mod tidy
 make loom-status
 ```
 
-The status output must show a `replace github.com/CaliLuke/loom => .../loom`
-line for each module. `make loom-local` manages the root, assistant fixture, and
-quickstart; the separately versioned agent-features fixture is switched by the
-explicit commands above. Every path must resolve to the candidate commit
-recorded above. When using a Go workspace, use the same absolute path spelling
-for every replacement so Go does not report conflicting replacements.
+The status output must show the local Loom replacement for each managed module.
+`make loom-local` manages the root, assistant, SDK bridge consumer, and
+quickstart modules. The commands above manage the separately versioned
+agent-features fixture. Every path must resolve to the recorded candidate
+commit. Use the same absolute path for each workspace replacement.
 
 Regenerate the checked-in surfaces because compiler success alone does not
 detect generator contract drift:
@@ -56,6 +55,7 @@ make gen-registry
 make regen-assistant-fixture
 make regen-progressive-discovery-fixture
 make regen-agent-feature-fixture
+make regen-sdkbridge-consumer-fixture
 ```
 
 Review the diff before testing. Generated changes must be explainable by the
@@ -99,8 +99,8 @@ make loom-status
 make verify-generated
 ```
 
-The root module, assistant fixture, quickstart, and agent-features fixture must
-all require the same Loom release tag. No Loom `replace` directive may remain:
+The root, assistant, SDK bridge consumer, quickstart, and agent-features modules
+must require the same Loom release. No Loom replacement can remain:
 
 ```bash
 rg -n 'github.com/CaliLuke/loom v|replace github.com/CaliLuke/loom' \
@@ -128,6 +128,7 @@ Inspect the final diff and module graph:
 go list -m github.com/CaliLuke/loom
 go -C quickstart list -m github.com/CaliLuke/loom
 go -C integration_tests/fixtures/assistant list -m github.com/CaliLuke/loom
+GOWORK=off go -C integration_tests/fixtures/sdkbridge_consumer list -m github.com/CaliLuke/loom
 go -C integration_tests/fixtures/agent_features list -m github.com/CaliLuke/loom
 git status --short --branch
 ```

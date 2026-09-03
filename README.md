@@ -71,12 +71,11 @@ make ci
 make test-stress
 ```
 
-`make ci` is the same complete contract used by hosted CI: generated-output
-freshness, build, lint, container-free unit coverage, fail-closed Docker-backed
-coverage, quickstart generation acceptance, nested fixtures, and MCP framework
-tests. `make loom-remote` preserves the generator
-dependencies needed by `make verify-generated`, so changing Loom modes cannot
-silently leave `quickstart/go.sum` stale.
+`make ci` uses the same complete contract as hosted CI. It checks generated
+output, builds, lints, and runs all required test lanes.
+`make verify-generated` includes the external SDK bridge consumer fixture.
+`make loom-remote` preserves the generator dependencies for the quickstart and
+that fixture. A mode change cannot leave their module sums stale.
 The Makefile pins `protoc` and both Go protobuf plugins. Run
 `make install-protoc` if the pinned compiler is not already first on `PATH`.
 `make test` enforces global and critical package-group coverage floors without

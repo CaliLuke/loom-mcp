@@ -97,21 +97,24 @@ Use this file when editing DSL, generators, generated helpers, or MCP codegen be
   every HTTP method before SDK processing, including GET for SSE. It reuses the
   configured `CrossOriginProtection` trusted-origin policy and returns HTTP 403
   for invalid origins.
+- The shared `runtime/mcp/sdkbridge` installs receiving middleware that
   converts untyped adapter errors into typed JSON-RPC errors. Preserve existing
   typed SDK errors. Map invalid parameters and missing resources to `-32602`.
   Map internal and unknown errors to `-32603` with only declared safe messages.
-  The bridge does not read, replace, buffer, or reparse request bodies outside
-  the official SDK, and does not parse or rewrite response bodies for SDK
-  session errors.
+  The official SDK exclusively owns request envelopes and bodies. The bridge
+  and generated code never read, buffer, replace, or parse request bodies and
+  never parse or rewrite SDK response bodies.
 - Generated SDK and adapter files contain service descriptors, typed closures,
   codecs, and result conversion. The bridge owns registration loops, tool
   interceptor composition, prompt and resource dispatch, resource policy, skill
   dispatch, common options, HTTP plumbing, sessions, subscriptions, request
-  context, CORS, and observation. The official SDK exclusively owns the inbound
-  envelope and request body. Do not use reflection for typed dispatch.
-  Generated configuration uses a literal compatibility version. Construction
-  fails when it differs from `sdkbridge.CompatibilityVersion`. Additive runtime
-  APIs keep the same version.
+  context, CORS, and observation. Do not use reflection for typed dispatch.
+  The generator reads `sdkbridge.CompatibilityVersion` and writes a literal.
+  Construction fails when the generated and runtime versions differ. Keep the
+  version for additive runtime fixes and optional fields with safe defaults.
+  Increment it when old descriptors or callbacks cannot satisfy the new runtime
+  contract. The generation gate regenerates all checked-in SDK fixtures and the
+  external `sdkbridge_consumer` module.
 - MCP generation emits only the minimal service types, `MCPAdapter`,
   local-provider registration, OAuth discovery, prompt provider, and
   `SDKServer`. Absence tests must reject generated native MCP clients, servers,

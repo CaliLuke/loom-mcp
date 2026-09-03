@@ -93,14 +93,7 @@ generated adapter supplies session-principal hooks after application
 middleware has put a verified principal in the request context. The official
 SDK remains the owner of MCP negotiation and wire behavior.
 
-The generated configuration contains compatibility version `1`.
-`sdkbridge.NewServer` compares that literal with the runtime's
-`sdkbridge.CompatibilityVersion` and fails construction with both versions in
-the error when they differ. Additive descriptor fields keep the same version.
-An incompatible descriptor or callback change increments the runtime version
-and the generated literal together, so stale generated code fails closed after
-an independently upgraded runtime is linked. Go types provide the earlier
-compile-time failure when a callback signature changes.
+### Compatibility and consumer regeneration
 
 For the checked-in assistant fixture, `gen/mcp_assistant/adapter_server.go`
 decreased from the 2,818-line issue #276 baseline to 2,665 lines. Generated
@@ -114,10 +107,48 @@ generated closures and the complete server.
 The bridge compatibility version remains `1`. This change adds runtime types
 and does not change the existing SDK server descriptor contract. Incompatible
 descriptor or callback changes still require a version increase.
+The generator reads `sdkbridge.CompatibilityVersion` and writes its value as a
+literal in each generated server. The generated server never reads the runtime
+constant during initialization.
 
-### Staged implementation
+Keep the version unchanged for compatible additions. Examples include internal
+bug fixes, new optional fields, and new hooks with safe zero-value behavior.
+A consumer can link these runtime changes without regeneration.
 
-- [#282](https://github.com/CaliLuke/loom-mcp/issues/282) adds release and consumer checks for the compatibility contract.
+Increment `sdkbridge.CompatibilityVersion` when old generated descriptors or
+callbacks are not safe with the new runtime contract. This includes these
+changes:
+
+- A required field is added to `sdkbridge.Config` or a binding type.
+- A field or callback changes meaning, required behavior, or invocation order.
+- The runtime removes behavior that old generated closures require.
+- The runtime cannot safely interpret the old generated literal.
+
+Do not increment the version for an additive runtime fix. Do not support two
+contract versions with a compatibility path.
+
+For an incompatible change, update the runtime constant first. The generator
+then emits the new literal. Run these commands before release:
+
+```bash
+make regen-assistant-fixture
+make regen-progressive-discovery-fixture
+make regen-sdkbridge-consumer-fixture
+make verify-generated
+make verify-mcp-local
+```
+
+A stale generated server fails during construction. The error contains the
+generated version and the runtime version.
+
+The external fixture at `integration_tests/fixtures/sdkbridge_consumer` stays
+outside `go.work`. Its commands use `GOWORK=off` and link the current runtime
+through a module replacement. A real official SDK client calls its generated
+server. This proves that same-version runtime fixes do not require consumer
+regeneration.
+
+`make verify-generated` regenerates this fixture and all other checked-in
+surfaces. The gate fails if a checked-in SDK server is stale.
 
 ## JSON-RPC errors
 
@@ -128,8 +159,6 @@ unknown handler failures return `-32603`. The middleware hides private details
 unless the service declares an explicit safe message. Errors that use official
 SDK types pass through unchanged.
 
-The bridge rejects an MCP request with an explicit `null` ID before SDK
-dispatch. The handler returns HTTP 400 and JSON-RPC code `-32600`.
 
 The official MCP Go SDK performs its pre-initialization method gate before
 server receiving middleware. In SDK v1.7.0, that one upstream-owned path still

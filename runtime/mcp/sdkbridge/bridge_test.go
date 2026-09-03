@@ -3,6 +3,7 @@ package sdkbridge
 import (
 	"context"
 	"errors"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -16,12 +17,26 @@ import (
 
 func TestNewServerRejectsGeneratedRuntimeVersionMismatch(t *testing.T) {
 	server, err := NewServer(Config{
-		CompatibilityVersion: CompatibilityVersion + 1,
+		CompatibilityVersion: CompatibilityVersion - 1,
 		Implementation:       mcpsdk.Implementation{Name: "test", Version: "1.0.0"},
 	})
 
-	require.ErrorContains(t, err, "MCP SDK bridge compatibility mismatch: generated version 2, runtime version 1")
+	require.EqualError(t, err, fmt.Sprintf(
+		"MCP SDK bridge compatibility mismatch: generated version %d, runtime version %d",
+		CompatibilityVersion-1,
+		CompatibilityVersion,
+	))
 	assert.Nil(t, server)
+}
+
+func TestNewServerAcceptsSameCompatibilityVersion(t *testing.T) {
+	server, err := NewServer(Config{
+		CompatibilityVersion: CompatibilityVersion,
+		Implementation:       mcpsdk.Implementation{Name: "same-version", Version: "1.0.0"},
+	})
+
+	require.NoError(t, err)
+	assert.NotNil(t, server)
 }
 
 func TestNewServerRejectsInvalidSessionBeforeSDKDispatch(t *testing.T) {
@@ -43,7 +58,7 @@ func TestNewServerRejectsInvalidSessionBeforeSDKDispatch(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	req := httptest.NewRequest(http.MethodPost, "http://example.com/mcp", nil)
+	req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "http://example.com/mcp", nil)
 	req.Header.Set(mcpruntime.HeaderKeySessionID, "missing")
 	response := httptest.NewRecorder()
 	server.Handler.ServeHTTP(response, req)

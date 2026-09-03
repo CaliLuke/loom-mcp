@@ -4,6 +4,7 @@ import (
 	"path/filepath"
 	"sort"
 
+	"github.com/CaliLuke/loom-mcp/v2/runtime/mcp/sdkbridge"
 	"github.com/CaliLuke/loom/codegen"
 	"github.com/CaliLuke/loom/expr"
 	"github.com/dave/jennifer/jen"
@@ -124,7 +125,7 @@ func sdkServerConstructorSection(data *AdapterData) codegen.Section {
 			}
 			g.Id("adapter").Dot("requestStateKey").Op("=").Qual("slices", "Clone").Call(jen.Id("requestStateKey"))
 			config := jen.Dict{
-				jen.Id("CompatibilityVersion"): jen.Lit(1),
+				jen.Id("CompatibilityVersion"): jen.Lit(sdkbridge.CompatibilityVersion),
 				jen.Id("Implementation"):       jen.Id("mcpsdk").Dot("Implementation").Values(sdkImplementationDict(data)),
 				jen.Id("Tools"):                jen.Func().Params().Params(jen.Index().Id("sdkbridge").Dot("ToolBinding"), jen.Error()).Block(jen.Return(jen.Id("sdkToolBindings").Call(jen.Id("adapter"), jen.Id("requestContext")))),
 				jen.Id("Resources"):            jen.Func().Params().Params(jen.Index().Id("sdkbridge").Dot("ResourceBinding"), jen.Error()).Block(jen.Return(jen.Id("sdkResourceBindings").Call(jen.Id("adapter"), jen.Id("requestContext")))),
@@ -443,6 +444,28 @@ func sdkPromptArgumentsValue(args []PromptArg) jen.Code {
 	}
 	return jen.Index().Op("*").Id("mcpsdk").Dot("PromptArgument").Values(values...)
 }
+func sdkAdapterHandler(methodName, sdkHandlerType, bridgeHandler, requestType, resultType string, body ...jen.Code) *jen.Statement {
+	return jen.Func().Params(jen.Id("a").Op("*").Id("MCPAdapter")).Id(methodName).Params(
+		jen.Id("requestContext").Func().Params(jen.Qual("context", "Context"), jen.Op("*").Qual("net/http", "Request")).Qual("context", "Context"),
+	).Id("mcpsdk").Dot(sdkHandlerType).Block(
+		jen.Return(jen.Id("sdkbridge").Dot(bridgeHandler).Call(
+			jen.Id("a").Dot("sdkHandlerContext").Call(jen.Id("requestContext")),
+			jen.Func().Params(
+				jen.Id("ctx").Qual("context", "Context"),
+				jen.Id("request").Id("sdkbridge").Dot(requestType),
+			).Params(jen.Op("*").Id("mcpsdk").Dot(resultType), jen.Error()).Block(body...),
+		)),
+	)
+}
+func sdkNamedDispatchBody(payloadType, adapterMethod, resultConverter string) []jen.Code {
+	return []jen.Code{
+		jen.Id("payload").Op(":=").Op("&").Id(payloadType).Values(jen.Dict{jen.Id("Name"): jen.Id("request").Dot("Name"), jen.Id("Arguments"): jen.Id("mcpJSONFromRaw").Call(jen.Id("request").Dot("Arguments"))}),
+		jen.Id("ctx").Op("=").Id("request").Dot("Bind").Call(jen.Id("payload")),
+		jen.List(jen.Id("result"), jen.Id("err")).Op(":=").Id("a").Dot(adapterMethod).Call(jen.Id("ctx"), jen.Id("payload")),
+		jen.If(jen.Id("err").Op("!=").Nil()).Block(jen.Return(jen.Nil(), jen.Id("err"))),
+		jen.Return(jen.Id(resultConverter).Call(jen.Id("result"))),
+	}
+}
 
 func sdkServerHandlerSection(data *AdapterData) codegen.Section {
 	return codegen.NewJenniferSection("mcp-sdk-server-handlers", func(stmt *jen.Statement) {
@@ -456,34 +479,16 @@ func sdkServerHandlerSection(data *AdapterData) codegen.Section {
 			})),
 		)
 		stmt.Line()
-		stmt.Func().Params(jen.Id("a").Op("*").Id("MCPAdapter")).Id("sdkToolHandler").Params(
-			jen.Id("requestContext").Func().Params(jen.Qual("context", "Context"), jen.Op("*").Qual("net/http", "Request")).Qual("context", "Context"),
-		).Id("mcpsdk").Dot("ToolHandler").Block(
-			jen.Return(jen.Id("sdkbridge").Dot("ToolHandler").Call(jen.Id("a").Dot("sdkHandlerContext").Call(jen.Id("requestContext")), jen.Func().Params(
-				jen.Id("ctx").Qual("context", "Context"), jen.Id("request").Id("sdkbridge").Dot("ToolRequest"),
-			).Params(jen.Op("*").Id("mcpsdk").Dot("CallToolResult"), jen.Error()).Block(
-				jen.Id("payload").Op(":=").Op("&").Id("ToolsCallPayload").Values(jen.Dict{jen.Id("Name"): jen.Id("request").Dot("Name"), jen.Id("Arguments"): jen.Id("mcpJSONFromRaw").Call(jen.Id("request").Dot("Arguments"))}),
-				jen.Id("ctx").Op("=").Id("request").Dot("Bind").Call(jen.Id("payload")),
-				jen.List(jen.Id("result"), jen.Id("err")).Op(":=").Id("a").Dot("ToolsCall").Call(jen.Id("ctx"), jen.Id("payload")),
-				jen.If(jen.Id("err").Op("!=").Nil()).Block(jen.Return(jen.Nil(), jen.Id("err"))),
-				jen.Return(jen.Id("sdkCallToolResult").Call(jen.Id("result"))),
-			))),
-		)
+		stmt.Add(sdkAdapterHandler(
+			"sdkToolHandler", "ToolHandler", "ToolHandler", "ToolRequest", "CallToolResult",
+			sdkNamedDispatchBody("ToolsCallPayload", "ToolsCall", "sdkCallToolResult")...,
+		))
 		stmt.Line()
 		if len(data.StaticPrompts) > 0 || len(data.DynamicPrompts) > 0 {
-			stmt.Func().Params(jen.Id("a").Op("*").Id("MCPAdapter")).Id("sdkPromptHandler").Params(
-				jen.Id("requestContext").Func().Params(jen.Qual("context", "Context"), jen.Op("*").Qual("net/http", "Request")).Qual("context", "Context"),
-			).Id("mcpsdk").Dot("PromptHandler").Block(
-				jen.Return(jen.Id("sdkbridge").Dot("PromptHandler").Call(jen.Id("a").Dot("sdkHandlerContext").Call(jen.Id("requestContext")), jen.Func().Params(
-					jen.Id("ctx").Qual("context", "Context"), jen.Id("request").Id("sdkbridge").Dot("PromptRequest"),
-				).Params(jen.Op("*").Id("mcpsdk").Dot("GetPromptResult"), jen.Error()).Block(
-					jen.Id("payload").Op(":=").Op("&").Id("PromptsGetPayload").Values(jen.Dict{jen.Id("Name"): jen.Id("request").Dot("Name"), jen.Id("Arguments"): jen.Id("mcpJSONFromRaw").Call(jen.Id("request").Dot("Arguments"))}),
-					jen.Id("ctx").Op("=").Id("request").Dot("Bind").Call(jen.Id("payload")),
-					jen.List(jen.Id("result"), jen.Id("err")).Op(":=").Id("a").Dot("PromptsGet").Call(jen.Id("ctx"), jen.Id("payload")),
-					jen.If(jen.Id("err").Op("!=").Nil()).Block(jen.Return(jen.Nil(), jen.Id("err"))),
-					jen.Return(jen.Id("sdkGetPromptResult").Call(jen.Id("result"))),
-				))),
-			)
+			stmt.Add(sdkAdapterHandler(
+				"sdkPromptHandler", "PromptHandler", "PromptHandler", "PromptRequest", "GetPromptResult",
+				sdkNamedDispatchBody("PromptsGetPayload", "PromptsGet", "sdkGetPromptResult")...,
+			))
 			stmt.Line()
 			stmt.Func().Params(jen.Id("a").Op("*").Id("MCPAdapter")).Id("sdkCompletionHandler").Params(
 				jen.Id("requestContext").Func().Params(jen.Qual("context", "Context"), jen.Op("*").Qual("net/http", "Request")).Qual("context", "Context"),

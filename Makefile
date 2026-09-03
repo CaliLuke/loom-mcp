@@ -46,7 +46,7 @@ PROTOC_GEN_GO_GRPC := protoc-gen-go-grpc
 PROTOC_GEN_GO_GRPC_VERSION ?= v1.6.2
 PROTOC_INSTALL_DIR ?= $(GOPATH)
 
-.PHONY: all build lint lint-pre-commit lint-install-hook test test-docker coverage-check coverage-check-critical coverage-parser-test docker-coverage test-stress test-fuzz itest ci tools ensure-golangci ensure-staticcheck ensure-protoc-plugins install-protoc protoc-check run-example example-gen loom-local loom-remote loom-status update-mcp-go-sdk verify-generated verify-mcp-local regen-quickstart regen-assistant-fixture regen-progressive-discovery-fixture regen-agent-feature-fixture verify-agent-feature-fixture
+.PHONY: all build lint lint-pre-commit lint-install-hook test test-docker coverage-check coverage-check-critical coverage-parser-test docker-coverage test-stress test-fuzz itest ci tools ensure-golangci ensure-staticcheck ensure-protoc-plugins install-protoc protoc-check run-example example-gen loom-local loom-remote loom-status update-mcp-go-sdk verify-generated verify-mcp-local regen-quickstart regen-assistant-fixture regen-progressive-discovery-fixture regen-agent-feature-fixture regen-sdkbridge-consumer-fixture verify-agent-feature-fixture
 
 all: build lint test
 
@@ -258,9 +258,11 @@ loom-status:
 update-mcp-go-sdk:
 	$(GO) get github.com/modelcontextprotocol/go-sdk@$(MCP_GO_SDK_VERSION)
 	cd ./integration_tests/fixtures/assistant && $(GO) get github.com/modelcontextprotocol/go-sdk@$(MCP_GO_SDK_VERSION)
+	cd ./integration_tests/fixtures/sdkbridge_consumer && GOWORK=off $(GO) get github.com/modelcontextprotocol/go-sdk@$(MCP_GO_SDK_VERSION)
 	$(GO) work edit -replace github.com/modelcontextprotocol/go-sdk=github.com/modelcontextprotocol/go-sdk@$(MCP_GO_SDK_VERSION)
 	$(GO) mod tidy
 	cd ./integration_tests/fixtures/assistant && $(GO) mod tidy
+	cd ./integration_tests/fixtures/sdkbridge_consumer && GOWORK=off $(GO) mod tidy
 
 verify-generated: tools
 	bash ./scripts/verify_generated.sh
@@ -268,6 +270,7 @@ verify-generated: tools
 verify-mcp-local:
 	$(GO) test -C ./integration_tests/fixtures/assistant -race ./... -count=1
 	$(GO) test -C ./integration_tests/fixtures/agent_features -race ./... -count=1
+	cd ./integration_tests/fixtures/sdkbridge_consumer && GOWORK=off $(GO) test -race ./... -count=1
 	$(GO) test -race -count=1 ./integration_tests/framework
 
 regen-quickstart:
@@ -281,6 +284,11 @@ regen-progressive-discovery-fixture:
 
 regen-agent-feature-fixture:
 	cd ./integration_tests/fixtures/agent_features && $(GO) run $(LOOM_CLI_PACKAGE) gen example.com/agentfeatures/design
+
+regen-sdkbridge-consumer-fixture:
+	cd ./integration_tests/fixtures/sdkbridge_consumer && GOWORK=off $(GO) list -mod=mod ./design >/dev/null
+	cd ./integration_tests/fixtures/sdkbridge_consumer && GOWORK=off $(GO) run -mod=mod $(LOOM_CLI_PACKAGE) gen example.com/sdkbridgeconsumer/design
+	cd ./integration_tests/fixtures/sdkbridge_consumer && GOWORK=off $(GO) mod tidy
 
 verify-agent-feature-fixture:
 	$(GO) test -C ./integration_tests/fixtures/agent_features -race ./... -count=1

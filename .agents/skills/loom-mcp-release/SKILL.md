@@ -18,6 +18,11 @@ Use this skill when releasing `github.com/CaliLuke/loom-mcp/v2`. Keep the workfl
   `make regen-progressive-discovery-fixture`, and
   `make regen-agent-feature-fixture`.
 - If the release changed user-facing DSL, codegen, runtime, or release workflow behavior, update the repo docs in `docs/`, any release-facing root docs, and the relevant repo-local skills in `.agents/skills/` before tagging.
+- Review every `runtime/mcp/sdkbridge` contract change before release.
+  Keep `sdkbridge.CompatibilityVersion` for additive fixes and optional fields
+  with safe defaults. Increment it when old generated descriptors or callbacks
+  are unsafe. After an increment, regenerate the assistant,
+  progressive-discovery, and external consumer fixtures.
 - Do not hand-edit generated `gen/` files.
 - Do not call the release published until `main`, the tag, and the GitHub Release object all exist remotely.
 - If a tag already exists without a GitHub Release, backfill the release object before treating that version as published.
@@ -37,6 +42,12 @@ Use this skill when releasing `github.com/CaliLuke/loom-mcp/v2`. Keep the workfl
      `make regen-quickstart`, `make regen-assistant-fixture`,
      `make regen-progressive-discovery-fixture`, and
      `make regen-agent-feature-fixture`
+   - after an incompatible `sdkbridge` contract change: update
+     `sdkbridge.CompatibilityVersion`. Then run `make regen-assistant-fixture`,
+     `make regen-progressive-discovery-fixture`, and
+     `make regen-sdkbridge-consumer-fixture`
+   - after a compatible `sdkbridge` runtime fix: keep the version unchanged.
+     `make verify-generated` must not change the generated consumer
    - `make regen-assistant-fixture` for assistant fixture DSL changes
    - any normal design/codegen regeneration already required by the change itself
 4. Prove every tracked generated surface is current:

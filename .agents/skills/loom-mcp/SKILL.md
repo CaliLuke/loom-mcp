@@ -303,10 +303,11 @@ Use this skill for `loom-mcp` work in this repo. Keep `AGENTS.md` short and keep
   406 when the client does not accept the selected type. If a client sends only
   the selected type, add both MCP media types only to the cloned SDK request.
   Do not modify the original request.
-- The shared SDK bridge installs the JSON-RPC error normalizer as an official
+- The shared SDK bridge installs the JSON-RPC error normalizer as official
   receiving middleware. Preserve typed SDK errors. Map generated invalid and
-  resource errors to `-32602`. Map unknown handler errors to `-32603`. Do not
-  read, replace, or reparse request bodies outside the official SDK. Do not
+  resource errors to `-32602`. Map unknown handler errors to `-32603`.
+  The official SDK exclusively owns request envelopes and bodies. Do not read,
+  buffer, replace, or parse request bodies in bridge or generated code. Do not
   rewrite SDK response bodies.
 - MCP designs do not declare `ProtocolVersion`, `Notification`, `Subscription`,
   `SubscriptionMonitor`, or MCP-only `JSONRPC` blocks. Explicit non-MCP
@@ -414,9 +415,13 @@ Use this skill for `loom-mcp` work in this repo. Keep `AGENTS.md` short and keep
   tool interceptor composition, prompt and resource dispatch, resource policy,
   skill dispatch, request context, errors, sessions, subscriptions, CORS, and
   observation. Keep schemas, codecs, typed service calls, and result conversion
-  in generated code. Do not use reflection. Generated code must pass a literal
-  compatibility version. The bridge fails construction when this version differs
-  from `sdkbridge.CompatibilityVersion`.
+  in generated code. Do not use reflection.
+  The generator reads `sdkbridge.CompatibilityVersion` and emits its value as a
+  literal. Keep the version for additive runtime fixes and optional fields with
+  safe zero-value behavior. Increment it when old descriptors or callbacks are
+  unsafe under the new runtime contract. Regenerate every SDK fixture, including
+  `integration_tests/fixtures/sdkbridge_consumer`, after an increment. Do not add
+  a compatibility path for old versions.
 - Generated SDK servers expose Loom transport observability directly through
   `SDKServerOptions.TransportObserver`; keep external middleware wrapping as an
   application-wide alternative, not the only enablement path.

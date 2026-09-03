@@ -12,6 +12,7 @@ GENERATED_PATHS=(
   registry/gen
   integration_tests/fixtures/assistant
   integration_tests/fixtures/agent_features
+  integration_tests/fixtures/sdkbridge_consumer
 )
 
 before_state="$(mktemp)"
@@ -33,6 +34,7 @@ make -C "${ROOT_DIR}" regen-quickstart
 make -C "${ROOT_DIR}" regen-assistant-fixture
 make -C "${ROOT_DIR}" regen-progressive-discovery-fixture
 make -C "${ROOT_DIR}" regen-agent-feature-fixture
+make -C "${ROOT_DIR}" regen-sdkbridge-consumer-fixture
 
 capture_state >"${after_state}"
 

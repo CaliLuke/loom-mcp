@@ -2,6 +2,7 @@ package codegen
 
 import (
 	"bytes"
+	"fmt"
 	"net/http"
 	"path/filepath"
 	"strings"
@@ -9,6 +10,7 @@ import (
 	"text/template"
 
 	mcpexpr "github.com/CaliLuke/loom-mcp/v2/expr/mcp"
+	"github.com/CaliLuke/loom-mcp/v2/runtime/mcp/sdkbridge"
 	gcodegen "github.com/CaliLuke/loom/codegen"
 	"github.com/CaliLuke/loom/eval"
 	"github.com/CaliLuke/loom/expr"
@@ -107,7 +109,7 @@ func TestGenerateSDKServerDelegatesCommonBehaviorToTypedBridge(t *testing.T) {
 	sdk := renderGeneratedFile(t, findGeneratedFile(t, files, "gen/mcp_assistant/sdk_server.go"))
 
 	require.Contains(t, sdk, "sdkbridge.NewServer(sdkbridge.Config{")
-	require.Contains(t, sdk, "CompatibilityVersion: 1")
+	require.Contains(t, sdk, fmt.Sprintf("CompatibilityVersion: %d", sdkbridge.CompatibilityVersion))
 	require.Contains(t, sdk, "Tools: func() ([]sdkbridge.ToolBinding, error)")
 	require.Contains(t, sdk, "return sdkToolBindings(adapter, requestContext)")
 	require.NotContains(t, sdk, "func sdkJSONRPCErrorMiddleware(")
