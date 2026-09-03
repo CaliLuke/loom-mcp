@@ -1,12 +1,18 @@
 package progressivediscovery
 
 import (
+	"bufio"
 	"context"
+	"encoding/json/v2"
+	"io"
+	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 
 	mcpcatalog "example.com/assistant/progressive_discovery/gen/mcp_catalog"
+	mcpruntime "github.com/CaliLuke/loom-mcp/v2/runtime/mcp"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -47,6 +53,79 @@ func TestGeneratedSDKServerResourceSubscriptionLifecycle(t *testing.T) {
 	case uri := <-updates:
 		t.Fatalf("received update after unsubscribe: %s", uri)
 	case <-time.After(200 * time.Millisecond):
+	}
+}
+
+func TestGeneratedSDKServerSSEContainsOnlyJSONRPCEvents(t *testing.T) {
+	server, err := mcpcatalog.NewSDKServer(NewCatalog(), nil)
+	require.NoError(t, err)
+	httpServer := httptest.NewServer(server.Handler)
+	t.Cleanup(httpServer.Close)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	// The affected transport was the persistent stateful SSE stream. MCP
+	// 2026-07-28 is stateless, so negotiate the latest stateful protocol here.
+	initialize := `{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"strict-sse-test","version":"1.0.0"}}}`
+	initReq, err := http.NewRequestWithContext(ctx, http.MethodPost, httpServer.URL, strings.NewReader(initialize))
+	require.NoError(t, err)
+	initReq.Header.Set("Content-Type", "application/json")
+	initReq.Header.Set("Accept", "application/json, text/event-stream")
+	initResp, err := http.DefaultClient.Do(initReq)
+	require.NoError(t, err)
+	initBody, err := io.ReadAll(initResp.Body)
+	require.NoError(t, err)
+	require.NoError(t, initResp.Body.Close())
+	require.Less(t, initResp.StatusCode, http.StatusBadRequest, string(initBody))
+	sessionID := initResp.Header.Get(mcpruntime.HeaderKeySessionID)
+	require.NotEmpty(t, sessionID)
+
+	post := func(body string) {
+		req, err := http.NewRequestWithContext(ctx, http.MethodPost, httpServer.URL, strings.NewReader(body))
+		require.NoError(t, err)
+		req.Header.Set("Content-Type", "application/json")
+		req.Header.Set("Accept", "application/json, text/event-stream")
+		req.Header.Set(mcpruntime.HeaderKeySessionID, sessionID)
+		req.Header.Set(mcpruntime.HeaderKeyProtocolVersion, "2025-06-18")
+		resp, err := http.DefaultClient.Do(req)
+		require.NoError(t, err)
+		responseBody, err := io.ReadAll(resp.Body)
+		require.NoError(t, err)
+		require.NoError(t, resp.Body.Close())
+		require.Less(t, resp.StatusCode, http.StatusBadRequest, string(responseBody))
+	}
+	post(`{"jsonrpc":"2.0","method":"notifications/initialized"}`)
+	post(`{"jsonrpc":"2.0","id":2,"method":"resources/subscribe","params":{"uri":"status://current"}}`)
+
+	streamReq, err := http.NewRequestWithContext(ctx, http.MethodGet, httpServer.URL, nil)
+	require.NoError(t, err)
+	streamReq.Header.Set("Accept", "text/event-stream")
+	streamReq.Header.Set(mcpruntime.HeaderKeySessionID, sessionID)
+	streamReq.Header.Set(mcpruntime.HeaderKeyProtocolVersion, "2025-06-18")
+	streamResp, err := http.DefaultClient.Do(streamReq)
+	require.NoError(t, err)
+	t.Cleanup(func() { require.NoError(t, streamResp.Body.Close()) })
+	require.Equal(t, http.StatusOK, streamResp.StatusCode)
+
+	scanner := bufio.NewScanner(streamResp.Body)
+	openingFrame := readSSEFrame(t, scanner)
+	require.Len(t, openingFrame, 1)
+	require.True(t, strings.HasPrefix(openingFrame[0], ":"), "first SSE frame is not a comment: %q", openingFrame)
+	for range 2 {
+		require.NoError(t, server.ResourceUpdated(ctx, "status://current"))
+		frame := readSSEFrame(t, scanner)
+		for _, line := range frame {
+			require.False(t, strings.HasPrefix(line, "retry:"), "unexpected retry control field in SSE frame %q", frame)
+			require.NotEqual(t, "event: retry", line, "unexpected retry control event in SSE frame %q", frame)
+		}
+		data := sseFrameData(t, frame)
+		var message struct {
+			JSONRPC string `json:"jsonrpc"`
+			Method  string `json:"method"`
+		}
+		require.NoError(t, json.Unmarshal([]byte(data), &message))
+		assert.Equal(t, "2.0", message.JSONRPC)
+		assert.Equal(t, "notifications/resources/updated", message.Method)
 	}
 }
 
@@ -116,4 +195,30 @@ func TestGeneratedSDKServerPropagatesClientCancellation(t *testing.T) {
 	case <-ctx.Done():
 		t.Fatal("SDK cancellation did not reach the service context")
 	}
+}
+
+func readSSEFrame(t *testing.T, scanner *bufio.Scanner) []string {
+	t.Helper()
+	var lines []string
+	for scanner.Scan() {
+		if scanner.Text() == "" {
+			return lines
+		}
+		lines = append(lines, scanner.Text())
+	}
+	require.NoError(t, scanner.Err())
+	t.Fatal("SSE stream ended before the next frame")
+	return nil
+}
+
+func sseFrameData(t *testing.T, frame []string) string {
+	t.Helper()
+	var data []string
+	for _, line := range frame {
+		if value, ok := strings.CutPrefix(line, "data:"); ok {
+			data = append(data, strings.TrimPrefix(value, " "))
+		}
+	}
+	require.NotEmpty(t, data, "SSE frame has no data field: %q", frame)
+	return strings.Join(data, "\n")
 }
