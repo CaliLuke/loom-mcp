@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestRunGRPCServerClosesRegistryAfterServeFailure(t *testing.T) {
@@ -21,8 +22,8 @@ func TestRunGRPCServerClosesRegistryAfterServeFailure(t *testing.T) {
 
 	assert.False(t, server.gracefullyStopped)
 	assert.True(t, tracker.closed)
-	assert.ErrorIs(t, err, serveErr)
-	assert.ErrorContains(t, err, closeErr.Error())
+	require.ErrorIs(t, err, serveErr)
+	require.ErrorContains(t, err, closeErr.Error())
 }
 
 func TestRunGRPCServerPreservesServeFailureDuringShutdown(t *testing.T) {
@@ -37,7 +38,7 @@ func TestRunGRPCServerPreservesServeFailureDuringShutdown(t *testing.T) {
 
 	assert.True(t, server.gracefullyStopped)
 	assert.True(t, tracker.closed)
-	assert.ErrorIs(t, err, serveErr)
+	require.ErrorIs(t, err, serveErr)
 }
 
 type failingGRPCServer struct {

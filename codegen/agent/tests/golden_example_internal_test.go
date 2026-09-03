@@ -99,7 +99,7 @@ func TestExampleInternal_MultiServiceScaffoldsAreServiceScopedAndPreserved(t *te
 	require.NoError(t, os.WriteFile(path, []byte(applicationEdit), 0o600))
 	_, err = alphaPlanner.Render(dir)
 	require.NoError(t, err)
-	got, err := os.ReadFile(path)
+	got, err := os.ReadFile(path) //nolint:gosec // path is generated beneath t.TempDir.
 	require.NoError(t, err)
 	require.Equal(t, applicationEdit, string(got))
 }

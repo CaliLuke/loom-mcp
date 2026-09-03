@@ -83,6 +83,7 @@ func sdkServerTypesSection(data *AdapterData) codegen.Section {
 				g.Id("PromptProvider").Id("PromptProvider")
 			}
 			g.Id("Server").Op("*").Id("mcpsdk").Dot("ServerOptions")
+			g.Id("OriginProtection").Op("*").Qual("net/http", "CrossOriginProtection")
 			g.Id("StreamableHTTP").Op("*").Id("mcpsdk").Dot("StreamableHTTPOptions")
 		})
 		stmt.Line()
@@ -115,6 +116,7 @@ func sdkServerConstructorSection(data *AdapterData) codegen.Section {
 					jen.Id("TransportObserver"): jen.Id("opts").Dot("TransportObserver"),
 					jen.Id("RuntimeCORS"):       jen.Id("opts").Dot("RuntimeCORS"),
 					jen.Id("Server"):            jen.Id("opts").Dot("Server"),
+					jen.Id("OriginProtection"):  jen.Id("opts").Dot("OriginProtection"),
 					jen.Id("StreamableHTTP"):    jen.Id("opts").Dot("StreamableHTTP"),
 				})
 			})

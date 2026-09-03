@@ -38,6 +38,7 @@ func localProviderFile(data *AdapterData) *codegen.File {
 		{Path: "github.com/CaliLuke/loom-mcp/v2/runtime/agent/planner"},
 		{Path: "github.com/CaliLuke/loom-mcp/v2/runtime/agent/runtime", Name: "agentsruntime"},
 		{Path: "github.com/CaliLuke/loom-mcp/v2/runtime/agent/tools"},
+		{Path: "github.com/CaliLuke/loom-mcp/v2/runtime/mcp", Name: "mcpruntime"},
 	}
 	return &codegen.File{
 		Path: path,

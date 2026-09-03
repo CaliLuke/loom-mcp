@@ -17,6 +17,7 @@ func CoerceQuery(m map[string][]string) map[string]any {
 // QueryField describes the query shape declared by a resource payload schema.
 type QueryField struct {
 	String   bool
+	Unsigned bool
 	Repeated bool
 }
 
@@ -34,24 +35,28 @@ func CoerceQueryTyped(m map[string][]string, fields map[string]QueryField) map[s
 		vals := m[key]
 		field := fields[key]
 		if len(vals) == 1 && !field.Repeated {
-			if field.String {
-				out[key] = vals[0]
-			} else {
-				out[key] = coerceQueryValue(vals[0])
-			}
+			out[key] = coerceTypedQueryValue(vals[0], field)
 			continue
 		}
 		arr := make([]any, len(vals))
 		for i := range vals {
-			if field.String {
-				arr[i] = vals[i]
-			} else {
-				arr[i] = coerceQueryValue(vals[i])
-			}
+			arr[i] = coerceTypedQueryValue(vals[i], field)
 		}
 		out[key] = arr
 	}
 	return out
+}
+
+func coerceTypedQueryValue(value string, field QueryField) any {
+	if field.String {
+		return value
+	}
+	if field.Unsigned && looksIntegral(value) {
+		if parsed, err := strconv.ParseUint(value, 10, 64); err == nil {
+			return parsed
+		}
+	}
+	return coerceQueryValue(value)
 }
 
 func coerceQueryValue(s string) any {

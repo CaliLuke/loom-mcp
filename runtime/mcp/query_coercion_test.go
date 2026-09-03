@@ -42,7 +42,7 @@ func TestCoerceQueryCoversScalarRepeatedAndOverflowForms(t *testing.T) {
 	assert.Equal(t, []any{int64(1), true, "text"}, got["repeated"])
 	assert.Equal(t, []any{}, got["absent"])
 }
-func TestCoerceQueryTypedPreservesDeclaredStringValues(t *testing.T) {
+func TestCoerceQueryTypedPreservesDeclaredShapes(t *testing.T) {
 	timestamp := "2024-01-01T00:00:00Z"
 	got := CoerceQueryTyped(map[string][]string{
 		"query":   {"true"},
@@ -52,6 +52,8 @@ func TestCoerceQueryTypedPreservesDeclaredStringValues(t *testing.T) {
 		"single":  {"true"},
 		"numbers": {"42"},
 		"limit":   {"42"},
+		"maximum": {"18446744073709551615"},
+		"uints":   {"0", "18446744073709551615"},
 	}, map[string]QueryField{
 		"name":    {String: true},
 		"query":   {String: true},
@@ -59,6 +61,8 @@ func TestCoerceQueryTypedPreservesDeclaredStringValues(t *testing.T) {
 		"tags":    {String: true, Repeated: true},
 		"when":    {String: true},
 		"numbers": {Repeated: true},
+		"maximum": {Unsigned: true},
+		"uints":   {Unsigned: true, Repeated: true},
 	})
 
 	assert.Equal(t, "true", got["query"])
@@ -68,6 +72,8 @@ func TestCoerceQueryTypedPreservesDeclaredStringValues(t *testing.T) {
 	assert.Equal(t, []any{"true"}, got["single"])
 	assert.Equal(t, []any{int64(42)}, got["numbers"])
 	assert.Equal(t, int64(42), got["limit"])
+	assert.Equal(t, uint64(18446744073709551615), got["maximum"])
+	assert.Equal(t, []any{uint64(0), uint64(18446744073709551615)}, got["uints"])
 }
 func TestQueryShapeDetectorsRejectAmbiguousForms(t *testing.T) {
 	for _, value := range []string{"", "-", "+1", "1.0", "1e2", " 1"} {

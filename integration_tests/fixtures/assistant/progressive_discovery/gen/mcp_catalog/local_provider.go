@@ -19,6 +19,7 @@ import (
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/planner"
 	agentsruntime "github.com/CaliLuke/loom-mcp/v2/runtime/agent/runtime"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/tools"
+	mcpruntime "github.com/CaliLuke/loom-mcp/v2/runtime/mcp"
 )
 
 type localToolCallCollector struct {
@@ -68,6 +69,13 @@ func executeLocalProgressiveTool(ctx context.Context, adapter *MCPAdapter, call 
 		Name:      toolName,
 		Arguments: mcpJSONFromRaw(append(jsontext.Value(nil), arguments...)),
 	}
+	ctx = mcpruntime.WithProjectedToolCallMeta(ctx, agentsruntime.ToolCallMeta{
+		RunID:            call.RunID,
+		SessionID:        call.SessionID,
+		TurnID:           call.TurnID,
+		ToolCallID:       call.ToolCallID,
+		ParentToolCallID: call.ParentToolCallID,
+	})
 	response, err := adapter.executeLocalProgressiveTool(ctx, payload)
 	if err != nil {
 		return agentsruntime.Executed(&planner.ToolResult{

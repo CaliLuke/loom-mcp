@@ -147,11 +147,11 @@ func TestGeneratedSDKServerResourceQueryPreservesStringValues(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 	for _, value := range []string{"true", "42", "2024-01-01T00:00:00Z"} {
-		resource, err := session.ReadResource(ctx, &sdkmcp.ReadResourceParams{
-			URI: "conversation://history?query-value=" + url.QueryEscape(value),
-		})
+		requestedURI := "conversation://history?query-value=" + url.QueryEscape(value)
+		resource, err := session.ReadResource(ctx, &sdkmcp.ReadResourceParams{URI: requestedURI})
 		require.NoError(t, err, value)
 		require.Len(t, resource.Contents, 1)
+		assert.Equal(t, requestedURI, resource.Contents[0].URI)
 		var body struct {
 			Items []string `json:"items"`
 		}
@@ -159,11 +159,11 @@ func TestGeneratedSDKServerResourceQueryPreservesStringValues(t *testing.T) {
 		require.NotEmpty(t, body.Items)
 		assert.Equal(t, value, body.Items[len(body.Items)-1])
 	}
-	resource, err := session.ReadResource(ctx, &sdkmcp.ReadResourceParams{
-		URI: "conversation://history?tags=true",
-	})
+	requestedURI := "conversation://history?tags=true"
+	resource, err := session.ReadResource(ctx, &sdkmcp.ReadResourceParams{URI: requestedURI})
 	require.NoError(t, err)
 	require.Len(t, resource.Contents, 1)
+	assert.Equal(t, requestedURI, resource.Contents[0].URI)
 	var body struct {
 		Items []string `json:"items"`
 	}

@@ -34,7 +34,6 @@ make -C "${ROOT_DIR}" regen-quickstart
 make -C "${ROOT_DIR}" regen-assistant-fixture
 make -C "${ROOT_DIR}" regen-progressive-discovery-fixture
 make -C "${ROOT_DIR}" regen-agent-feature-fixture
-make -C "${ROOT_DIR}" regen-sdkbridge-consumer-fixture
 
 capture_state >"${after_state}"
 

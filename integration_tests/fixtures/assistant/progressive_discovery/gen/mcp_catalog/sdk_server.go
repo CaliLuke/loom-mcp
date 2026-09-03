@@ -44,6 +44,7 @@ type SDKServerOptions struct {
 	TransportObserver transport.Observer
 	RuntimeCORS       *loomhttp.RuntimeCORSPolicy
 	Server            *mcpsdk.ServerOptions
+	OriginProtection  *http.CrossOriginProtection
 	StreamableHTTP    *mcpsdk.StreamableHTTPOptions
 }
 
@@ -58,6 +59,7 @@ func NewSDKServer(service catalog.Service, opts *SDKServerOptions) (*SDKServer, 
 		requestContext = opts.RequestContext
 		requestStateKey = opts.RequestStateKey
 		bridgeOptions = sdkbridge.Options{
+			OriginProtection:  opts.OriginProtection,
 			RequestContext:    requestContext,
 			RuntimeCORS:       opts.RuntimeCORS,
 			Server:            opts.Server,

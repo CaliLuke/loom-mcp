@@ -10,7 +10,6 @@ import (
 
 	mcpassistant "example.com/assistant/gen/mcp_assistant"
 	mcpruntime "github.com/CaliLuke/loom-mcp/v2/runtime/mcp"
-	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"github.com/stretchr/testify/require"
 )
 
@@ -73,8 +72,8 @@ func TestGeneratedSDKServerKeepsUnsafeMethodBypassScoped(t *testing.T) {
 	protection := http.NewCrossOriginProtection()
 	protection.AddInsecureBypassPattern("POST /rpc")
 	sdkServer, err := mcpassistant.NewSDKServer(NewAssistant(), &mcpassistant.SDKServerOptions{
-		PromptProvider: promptProvider{},
-		StreamableHTTP: &mcp.StreamableHTTPOptions{CrossOriginProtection: protection},
+		PromptProvider:   promptProvider{},
+		OriginProtection: protection,
 	})
 	require.NoError(t, err)
 

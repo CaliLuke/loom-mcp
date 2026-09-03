@@ -21,7 +21,6 @@ func TestGeneratedSDKServerCompletesPromptArguments(t *testing.T) {
 	}()
 
 	require.NotNil(t, session.InitializeResult().Capabilities.Completions)
-	require.NotNil(t, session.InitializeResult().Capabilities.Logging)
 	// The SDK server advertises only standard capabilities inferred from its
 	// registered protocol features.
 	_, advertisesEvents := session.InitializeResult().Capabilities.Experimental["loom-mcp"]

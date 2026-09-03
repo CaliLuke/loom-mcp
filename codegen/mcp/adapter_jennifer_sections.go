@@ -140,6 +140,10 @@ func resourceOperationHandler(resource *ResourceAdapter) jen.Code {
 	if resource.HasPayload {
 		payloadName = "request"
 	}
+	contentURI := jen.Id("baseURI")
+	if resource.HasPayload {
+		contentURI = jen.Id("request").Dot("URI")
+	}
 	return jen.Func().Params(
 		jen.Id("ctx").Qual("context", "Context"),
 		jen.Id(payloadName).Op("*").Id("ResourcesReadPayload"),
@@ -161,7 +165,7 @@ func resourceOperationHandler(resource *ResourceAdapter) jen.Code {
 		}
 		if resource.IsStreaming {
 			g.Id("collector").Op(":=").Op("&").Id(resourceStreamBridgeTypeName(resource)).Values(jen.Dict{
-				jen.Id("adapter"): jen.Id("a"), jen.Id("uri"): jen.Id("baseURI"), jen.Id("mimeType"): jen.Lit(resource.MimeType),
+				jen.Id("adapter"): jen.Id("a"), jen.Id("uri"): contentURI, jen.Id("mimeType"): jen.Lit(resource.MimeType),
 			})
 			args := []jen.Code{jen.Id("ctx")}
 			if resource.HasPayload {
@@ -181,7 +185,7 @@ func resourceOperationHandler(resource *ResourceAdapter) jen.Code {
 			g.If(jen.Id("err").Op("!=").Nil()).Block(jen.Return(jen.Nil(), jen.Id("err")))
 			g.List(jen.Id("text"), jen.Id("err")).Op(":=").Id("mcpruntime").Dot("EncodeJSONToString").Call(jen.Id("ctx"), jen.Id("goahttp").Dot("ResponseEncoder"), jen.Id("result"))
 			g.If(jen.Id("err").Op("!=").Nil()).Block(jen.Return(jen.Nil(), jen.Id("err")))
-			g.Return(resourceReadResult(jen.Id("baseURI"), jen.Lit(resource.MimeType), jen.Op("&").Id("text")), jen.Nil())
+			g.Return(resourceReadResult(contentURI, jen.Lit(resource.MimeType), jen.Op("&").Id("text")), jen.Nil())
 			return
 		}
 		args := []jen.Code{jen.Id("ctx")}
@@ -189,7 +193,7 @@ func resourceOperationHandler(resource *ResourceAdapter) jen.Code {
 			args = append(args, jen.Id("payload"))
 		}
 		g.If(jen.Id("err").Op(":=").Id("a").Dot("service").Dot(resource.OriginalMethodName).Call(args...), jen.Id("err").Op("!=").Nil()).Block(jen.Return(jen.Nil(), jen.Id("err")))
-		g.Return(resourceReadResult(jen.Id("baseURI"), jen.Lit(resource.MimeType), jen.Id("stringPtr").Call(jen.Lit(`{"status":"success"}`))), jen.Nil())
+		g.Return(resourceReadResult(contentURI, jen.Lit(resource.MimeType), jen.Id("stringPtr").Call(jen.Lit(`{"status":"success"}`))), jen.Nil())
 	})
 }
 
@@ -199,6 +203,9 @@ func resourceQueryFieldsValue(resource *ResourceAdapter, packageName, typeName s
 		metadata := jen.Dict{}
 		if field.FormatKind == resourceQueryFormatString {
 			metadata[jen.Id("String")] = jen.True()
+		}
+		if field.FormatKind == resourceQueryFormatUint {
+			metadata[jen.Id("Unsigned")] = jen.True()
 		}
 		if field.Repeated {
 			metadata[jen.Id("Repeated")] = jen.True()

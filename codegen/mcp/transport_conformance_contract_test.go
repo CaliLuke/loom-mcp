@@ -119,6 +119,7 @@ func TestGenerateTransportConformance(t *testing.T) {
 		require.Contains(t, adapter, "String: true")
 		require.Contains(t, adapter, `"tags"`)
 		require.Contains(t, adapter, "Repeated: true")
+		require.Contains(t, adapter, "Unsigned: true")
 		require.Contains(t, sdk, "Template: &mcpsdk.ResourceTemplate{")
 		require.Contains(t, sdk, `URITemplate: "doc://list{?cursor,enabled,limit,offset,ratio,tags*,tenant}"`)
 		require.Contains(t, sdk, "[]sdkbridge.ResourceURIMatcher{")

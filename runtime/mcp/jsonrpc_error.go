@@ -8,7 +8,10 @@ import (
 	"github.com/modelcontextprotocol/go-sdk/jsonrpc"
 )
 
-const jsonRPCInternalErrorMessage = "Internal error."
+const (
+	jsonRPCInitializeMethod     = "initialize"
+	jsonRPCInternalErrorMessage = "Internal error."
+)
 
 // NormalizeJSONRPCError converts handler errors into typed JSON-RPC errors.
 // Existing typed errors pass through unchanged. Untyped initialize errors are
@@ -24,7 +27,7 @@ func NormalizeJSONRPCError(method string, err error) error {
 		return rpcErr
 	}
 
-	if method == "initialize" {
+	if method == jsonRPCInitializeMethod {
 		return &jsonrpc.Error{
 			Code:    jsonrpc.CodeInvalidParams,
 			Message: err.Error(),

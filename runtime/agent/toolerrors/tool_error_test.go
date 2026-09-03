@@ -39,7 +39,7 @@ func TestFromErrorReusesDirectToolErrorAndHandlesNil(t *testing.T) {
 func TestToolErrorUnwrapStopsAtLeaf(t *testing.T) {
 	leaf := New("failed")
 
-	assert.NoError(t, errors.Unwrap(leaf))
+	require.NoError(t, errors.Unwrap(leaf))
 	assert.NotErrorIs(t, leaf, (*ToolError)(nil))
 }
 

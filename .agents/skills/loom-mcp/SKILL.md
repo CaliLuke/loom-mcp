@@ -444,7 +444,7 @@ Use this skill for `loom-mcp` work in this repo. Keep `AGENTS.md` short and keep
   MCP transport. CORS controls browser response policy. The shared SDK bridge
   validates each present `Origin` header on every HTTP method before MCP
   processing, including GET for SSE. It returns HTTP 403 for invalid origins
-  and retains `CrossOriginProtection` as the unsafe-method CSRF layer.
+  and uses bridge-owned `OriginProtection` as the unsafe-method CSRF layer.
 - Non-generated HTTP server scaffolds must retain bounded read and idle
   timeouts. Long-lived MCP SSE servers keep `WriteTimeout: 0` so a generic HTTP
   deadline cannot terminate a healthy stream.

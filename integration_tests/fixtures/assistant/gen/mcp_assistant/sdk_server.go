@@ -45,6 +45,7 @@ type SDKServerOptions struct {
 	RuntimeCORS       *loomhttp.RuntimeCORSPolicy
 	PromptProvider    PromptProvider
 	Server            *mcpsdk.ServerOptions
+	OriginProtection  *http.CrossOriginProtection
 	StreamableHTTP    *mcpsdk.StreamableHTTPOptions
 }
 
@@ -61,6 +62,7 @@ func NewSDKServer(service assistant.Service, opts *SDKServerOptions) (*SDKServer
 		requestStateKey = opts.RequestStateKey
 		promptProvider = opts.PromptProvider
 		bridgeOptions = sdkbridge.Options{
+			OriginProtection:  opts.OriginProtection,
 			RequestContext:    requestContext,
 			RuntimeCORS:       opts.RuntimeCORS,
 			Server:            opts.Server,

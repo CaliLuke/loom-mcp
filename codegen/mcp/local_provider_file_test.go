@@ -30,6 +30,9 @@ func TestLocalProviderFileGeneratesProgressiveDiscoveryRegistration(t *testing.T
 	require.Contains(t, source, "return a.handleSearchTools(ctx, payload, stream)")
 	require.Contains(t, source, "return a.handleCallToolProxy(ctx, payload, stream)")
 	require.Contains(t, source, "return a.executeRealTool(ctx, payload, stream)")
+	require.Contains(t, source, "ctx = mcpruntime.WithProjectedToolCallMeta(ctx, agentsruntime.ToolCallMeta{")
+	require.Contains(t, source, "RunID:            call.RunID")
+	require.Contains(t, source, "ParentToolCallID: call.ParentToolCallID")
 }
 
 func TestLocalProviderFileRequiresGeneratedTools(t *testing.T) {

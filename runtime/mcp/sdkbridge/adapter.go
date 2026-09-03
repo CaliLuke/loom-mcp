@@ -72,6 +72,9 @@ func (matcher ResourceURIMatcher) Match(uri string) bool {
 	if err != nil {
 		return false
 	}
+	if parsed.ForceQuery && parsed.RawQuery == "" {
+		return false
+	}
 	query, err := url.ParseQuery(parsed.RawQuery)
 	if err != nil {
 		return false

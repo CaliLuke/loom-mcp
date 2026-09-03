@@ -116,7 +116,7 @@ func TestToolHandlerPreservesProgressTokenAfterPayloadBinding(t *testing.T) {
 
 func TestValidateOriginChecksEveryHTTPMethod(t *testing.T) {
 	protection := http.NewCrossOriginProtection()
-	protection.AddTrustedOrigin("https://trusted.example")
+	require.NoError(t, protection.AddTrustedOrigin("https://trusted.example"))
 
 	tests := []struct {
 		name      string
@@ -140,7 +140,7 @@ func TestValidateOriginChecksEveryHTTPMethod(t *testing.T) {
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			req := httptest.NewRequest(test.method, "https://server.example/rpc", nil)
+			req := httptest.NewRequestWithContext(t.Context(), test.method, "https://server.example/rpc", nil)
 			for _, origin := range test.origins {
 				req.Header.Add("Origin", origin)
 			}
@@ -178,7 +178,7 @@ func TestNewServerRejectsOriginBeforeApplicationHooks(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	req := httptest.NewRequest(http.MethodPost, "https://server.example/mcp", nil)
+	req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "https://server.example/mcp", nil)
 	req.Header.Set("Origin", "https://evil.example")
 	req.Header.Set(mcpruntime.HeaderKeySessionID, "session")
 	response := httptest.NewRecorder()
@@ -202,7 +202,7 @@ func TestNewServerRejectsOriginBeforeRuntimeCORSPreflight(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	req := httptest.NewRequest(http.MethodOptions, "https://server.example/mcp", nil)
+	req := httptest.NewRequestWithContext(t.Context(), http.MethodOptions, "https://server.example/mcp", nil)
 	req.Header.Set("Origin", "https://evil.example")
 	req.Header.Set("Access-Control-Request-Method", http.MethodPost)
 	response := httptest.NewRecorder()

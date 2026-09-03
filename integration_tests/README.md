@@ -96,8 +96,9 @@ server links the current runtime with `GOWORK=off`.
 
 A real official SDK client calls the generated tool. This proves that a
 same-version runtime fix does not require consumer regeneration.
-`make regen-sdkbridge-consumer-fixture` updates the fixture. `make
-verify-generated` fails when the checked-in output is stale.
+`make regen-sdkbridge-consumer-fixture` intentionally updates the frozen
+compatibility baseline. Run it only when `sdkbridge.CompatibilityVersion`
+increments. Routine `make verify-generated` runs leave this fixture unchanged.
 
 ### Agent-feature fixture
 

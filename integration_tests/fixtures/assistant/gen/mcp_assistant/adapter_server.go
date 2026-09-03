@@ -2541,7 +2541,7 @@ func (a *MCPAdapter) resourceOperationDescriptors() []sdkbridge.ResourceOperatio
 			return &ResourcesReadResult{Contents: []*ResourceContent{&ResourceContent{
 				MimeType: stringPtr("application/json"),
 				Text:     &text,
-				URI:      baseURI,
+				URI:      request.URI,
 			}}}, nil
 		},
 		URI: "conversation://history",

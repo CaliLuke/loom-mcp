@@ -204,6 +204,7 @@ func TestResourceURIMatcherRejectsUndeclaredQueryShapes(t *testing.T) {
 		"doc://list?extra=1",
 		"doc://list?count=1&count=2",
 		"doc://list?count=1;extra=2",
+		"doc://list?",
 	} {
 		assert.False(t, matcher.Match(uri), uri)
 	}
@@ -232,7 +233,7 @@ func TestDispatchResourceOwnsSkillRouting(t *testing.T) {
 	root := t.TempDir()
 	var skillErrorDetails map[string]any
 	directory := filepath.Join(root, "code-review")
-	require.NoError(t, os.Mkdir(directory, 0o755))
+	require.NoError(t, os.Mkdir(directory, 0o750))
 	require.NoError(t, os.WriteFile(filepath.Join(directory, "SKILL.md"), []byte("# Code Review\nReview code.\n"), 0o600))
 
 	config := ResourceDispatchConfig[*dispatchPayload, *dispatchResult]{
@@ -290,6 +291,6 @@ func TestInvalidClientInputPreservesClassifiedError(t *testing.T) {
 	sentinel := loom.PermanentError("invalid_params", "Missing required argument: context")
 	err := InvalidClientInput(sentinel)
 
-	assert.ErrorIs(t, err, sentinel)
+	require.ErrorIs(t, err, sentinel)
 	assert.True(t, mcpruntime.IsInvalidClientInput(err))
 }

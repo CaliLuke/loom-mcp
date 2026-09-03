@@ -94,9 +94,9 @@ Use this file when editing DSL, generators, generated helpers, or MCP codegen be
   accepts only that type, add both MCP media types only to a cloned SDK request.
   Do not modify the original request.
 - The shared `runtime/mcp/sdkbridge` validates each present `Origin` header on
-  every HTTP method before SDK processing, including GET for SSE. It reuses the
-  configured `CrossOriginProtection` trusted-origin policy and returns HTTP 403
-  for invalid origins.
+  every HTTP method before SDK processing, including GET for SSE. It uses the
+  bridge-owned `OriginProtection` trusted-origin policy and returns HTTP 403 for
+  invalid origins. Do not use the deprecated SDK streamable-handler field.
 - The shared `runtime/mcp/sdkbridge` installs receiving middleware that
   converts untyped adapter errors into typed JSON-RPC errors. Preserve existing
   typed SDK errors. Map invalid parameters and missing resources to `-32602`.
@@ -113,8 +113,9 @@ Use this file when editing DSL, generators, generated helpers, or MCP codegen be
   Construction fails when the generated and runtime versions differ. Keep the
   version for additive runtime fixes and optional fields with safe defaults.
   Increment it when old descriptors or callbacks cannot satisfy the new runtime
-  contract. The generation gate regenerates all checked-in SDK fixtures and the
-  external `sdkbridge_consumer` module.
+  contract. The generation gate regenerates current SDK fixtures but leaves the
+  external `sdkbridge_consumer` output frozen. Regenerate that baseline only
+  when `sdkbridge.CompatibilityVersion` increments.
 - MCP generation emits only the minimal service types, `MCPAdapter`,
   local-provider registration, OAuth discovery, prompt provider, and
   `SDKServer`. Absence tests must reject generated native MCP clients, servers,

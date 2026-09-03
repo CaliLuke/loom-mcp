@@ -147,8 +147,9 @@ through a module replacement. A real official SDK client calls its generated
 server. This proves that same-version runtime fixes do not require consumer
 regeneration.
 
-`make verify-generated` regenerates this fixture and all other checked-in
-surfaces. The gate fails if a checked-in SDK server is stale.
+`make verify-generated` regenerates current checked-in surfaces but leaves this
+compatibility fixture frozen. `make verify-mcp-local` links its old generated
+server against the current runtime and runs its official SDK client test.
 
 ## JSON-RPC errors
 
@@ -174,9 +175,10 @@ land without weakening the generated adapter contract.
 | `RequestContext` | no       | Per-request hook called once per MCP RPC. Receives the inbound request context and a synthetic `*http.Request` carrying the live transport headers; returns a new ctx. |
 | `RequestStateKey` | for elicitation | Stable 32-byte key used to AES-GCM encrypt and authenticate multi-round-trip `requestState`. All replicas serving an endpoint must share it. |
 | `TransportObserver` | no    | Loom transport observer installed on the generated SDK handler. Request lifecycle events are delivered without external middleware wiring.                           |
-| `RuntimeCORS` | no | Optional Loom runtime CORS policy. The SDK keeps its default cross-origin protection when this field is nil. |
-| `StreamableHTTP` | no       | `*mcpsdk.StreamableHTTPOptions` passed through to the upstream SDK. A default `net/http.NewCrossOriginProtection()` is applied when the options or their protection field are nil. |
-| `Server` | no | `*mcpsdk.ServerOptions` passed to the official SDK. Loom adds its default completion and logging handlers when required. |
+| `RuntimeCORS` | no | Optional Loom runtime CORS response policy. It is separate from request origin validation. |
+| `OriginProtection` | no | Bridge-owned `*http.CrossOriginProtection` policy. The bridge creates the standard safe default when nil. |
+| `StreamableHTTP` | no | Supported `*mcpsdk.StreamableHTTPOptions` transport fields. Configure origins with `OriginProtection`; the deprecated SDK origin field is not propagated. |
+| `Server` | no | `*mcpsdk.ServerOptions` passed to the official SDK. Loom installs its generated completion handler when required; the SDK infers registered capabilities. |
 
 ## Design-Declared Skill Resources
 
@@ -582,10 +584,9 @@ The shared SDK bridge validates each present `Origin` header before MCP
 processing. This validation applies to all HTTP methods, including the GET
 connection for SSE. An invalid origin receives HTTP 403 Forbidden.
 
-The bridge uses `net/http.NewCrossOriginProtection()` by default. A nil
-`CrossOriginProtection` in `StreamableHTTP` selects the same default. Supply a
-custom policy to add trusted origins. The bridge uses those trusted origins for
-safe and unsafe HTTP methods.
+The bridge uses `net/http.NewCrossOriginProtection()` by default. Supply a
+custom `SDKServerOptions.OriginProtection` policy to add trusted origins. The
+bridge applies that policy to safe and unsafe HTTP methods before SDK handling.
 
 The CORS policy and origin validation are separate. Configure
 `SDKServerOptions.RuntimeCORS` when trusted browser clients require CORS

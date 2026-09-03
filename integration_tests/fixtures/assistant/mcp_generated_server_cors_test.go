@@ -13,7 +13,6 @@ import (
 
 	mcpassistant "example.com/assistant/gen/mcp_assistant"
 	mcpruntime "github.com/CaliLuke/loom-mcp/v2/runtime/mcp"
-	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -36,7 +35,7 @@ func TestGeneratedSDKServerAppliesOptionalRuntimeCORS(t *testing.T) {
 			requestContextCalls.Add(1)
 			return ctx
 		},
-		StreamableHTTP: &mcp.StreamableHTTPOptions{CrossOriginProtection: protection},
+		OriginProtection: protection,
 	})
 	require.NoError(t, err)
 	sdkHTTP := httptest.NewServer(sdkServer.Handler)

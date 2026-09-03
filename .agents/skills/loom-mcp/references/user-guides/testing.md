@@ -105,14 +105,14 @@ Regenerate each affected fixture before `make verify-mcp-local`:
 ```bash
 make gen-registry
 make regen-assistant-fixture
-make regen-sdkbridge-consumer-fixture
 ```
 
 Use only the targets for the changed design. Before a commit, restore the pinned
 Loom release with `make loom-remote`. Then run `make verify-generated`.
-This target regenerates every tracked surface and fails if generation changes
-it. It includes the external SDK bridge consumer module. Local and hosted CI
-use the same target.
+This target regenerates every current tracked surface and fails if generation
+changes it. It leaves the external SDK bridge consumer frozen; regenerate that
+fixture only when `sdkbridge.CompatibilityVersion` increments. Local and hosted
+CI use the same target.
 
 `make test` applies the global coverage floor and the critical package-group
 floors. The group floors omit generated, mock, and design packages. It forces

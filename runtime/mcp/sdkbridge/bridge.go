@@ -38,6 +38,7 @@ type Options struct {
 	RuntimeCORS       *loomhttp.RuntimeCORSPolicy
 	Server            *mcpsdk.ServerOptions
 	StreamableHTTP    *mcpsdk.StreamableHTTPOptions
+	OriginProtection  *http.CrossOriginProtection
 }
 
 // ToolBinding pairs a generated SDK descriptor with its typed handler.
@@ -86,36 +87,97 @@ type responseObserver struct {
 
 // NewServer validates generated/runtime compatibility and installs common SDK behavior.
 func NewServer(config Config) (*Server, error) {
+	if err := validateConfig(config); err != nil {
+		return nil, err
+	}
+	server, err := newSDKServer(config)
+	if err != nil {
+		return nil, err
+	}
+	handler := serverHTTPHandler(server, config.Options, config.Sessions)
+	return &Server{Handler: handler, SDK: server, watchableResource: config.WatchableResource}, nil
+}
+
+func validateConfig(config Config) error {
 	if config.CompatibilityVersion != CompatibilityVersion {
-		return nil, fmt.Errorf("MCP SDK bridge compatibility mismatch: generated version %d, runtime version %d", config.CompatibilityVersion, CompatibilityVersion)
+		return fmt.Errorf("MCP SDK bridge compatibility mismatch: generated version %d, runtime version %d", config.CompatibilityVersion, CompatibilityVersion)
 	}
 	if config.WatchableResource != nil && config.Options.StreamableHTTP != nil && config.Options.StreamableHTTP.Stateless {
-		return nil, fmt.Errorf("watchable MCP resources require stateful Streamable HTTP sessions")
+		return fmt.Errorf("watchable MCP resources require stateful Streamable HTTP sessions")
 	}
-	tools, err := loadBindings(config.Tools)
-	if err != nil {
-		return nil, fmt.Errorf("load MCP SDK tool bindings: %w", err)
-	}
-	resources, err := loadBindings(config.Resources)
-	if err != nil {
-		return nil, fmt.Errorf("load MCP SDK resource bindings: %w", err)
-	}
-	prompts, err := loadBindings(config.Prompts)
-	if err != nil {
-		return nil, fmt.Errorf("load MCP SDK prompt bindings: %w", err)
-	}
+	return nil
+}
+
+func newSDKServer(config Config) (*mcpsdk.Server, error) {
 	serverOptions := serverOptions(config.Options.Server, config.CompletionHandler, config.WatchableResource)
 	server := mcpsdk.NewServer(&config.Implementation, serverOptions)
 	server.AddReceivingMiddleware(jsonRPCErrorMiddleware)
-	for _, binding := range tools {
+	if err := loadToolBindings(server, config.Tools); err != nil {
+		return nil, err
+	}
+	if err := loadResourceBindings(server, config.Resources); err != nil {
+		return nil, err
+	}
+	if err := loadPromptBindings(server, config.Prompts); err != nil {
+		return nil, err
+	}
+	return server, nil
+}
+
+func loadToolBindings(server *mcpsdk.Server, loader func() ([]ToolBinding, error)) error {
+	bindings, err := loadBindings(loader)
+	if err != nil {
+		return fmt.Errorf("load MCP SDK tool bindings: %w", err)
+	}
+	return addToolBindings(server, bindings)
+}
+
+func loadResourceBindings(server *mcpsdk.Server, loader func() ([]ResourceBinding, error)) error {
+	bindings, err := loadBindings(loader)
+	if err != nil {
+		return fmt.Errorf("load MCP SDK resource bindings: %w", err)
+	}
+	return addResourceBindings(server, bindings)
+}
+
+func loadPromptBindings(server *mcpsdk.Server, loader func() ([]PromptBinding, error)) error {
+	bindings, err := loadBindings(loader)
+	if err != nil {
+		return fmt.Errorf("load MCP SDK prompt bindings: %w", err)
+	}
+	return addPromptBindings(server, bindings)
+}
+
+func serverHTTPHandler(server *mcpsdk.Server, options Options, sessions SessionHooks) http.Handler {
+	configuredStreamableOptions := streamableHTTPOptions(options.StreamableHTTP)
+	originProtection := options.OriginProtection
+	if originProtection == nil {
+		originProtection = http.NewCrossOriginProtection()
+	}
+	handler := newHandler(server, options.RequestContext, configuredStreamableOptions, sessions)
+	if options.TransportObserver != nil {
+		handler = transport.HTTPMiddleware(options.TransportObserver)(handler)
+	}
+	if options.RuntimeCORS != nil {
+		handler = runtimeCORSHandler(handler, *options.RuntimeCORS)
+	}
+	return originValidationHandler(handler, originProtection)
+}
+
+func addToolBindings(server *mcpsdk.Server, bindings []ToolBinding) error {
+	for _, binding := range bindings {
 		if binding.Tool == nil || binding.Handler == nil {
-			return nil, fmt.Errorf("MCP SDK bridge tool binding requires a descriptor and handler")
+			return fmt.Errorf("MCP SDK bridge tool binding requires a descriptor and handler")
 		}
 		server.AddTool(binding.Tool, binding.Handler)
 	}
-	for _, binding := range resources {
-		if binding.Handler == nil || binding.Resource == nil && binding.Template == nil || binding.Resource != nil && binding.Template != nil {
-			return nil, fmt.Errorf("MCP SDK bridge resource binding requires exactly one descriptor and a handler")
+	return nil
+}
+
+func addResourceBindings(server *mcpsdk.Server, bindings []ResourceBinding) error {
+	for _, binding := range bindings {
+		if binding.Handler == nil || (binding.Resource == nil) == (binding.Template == nil) {
+			return fmt.Errorf("MCP SDK bridge resource binding requires exactly one descriptor and a handler")
 		}
 		if binding.Template != nil {
 			server.AddResourceTemplate(binding.Template, binding.Handler)
@@ -123,23 +185,17 @@ func NewServer(config Config) (*Server, error) {
 		}
 		server.AddResource(binding.Resource, binding.Handler)
 	}
-	for _, binding := range prompts {
+	return nil
+}
+
+func addPromptBindings(server *mcpsdk.Server, bindings []PromptBinding) error {
+	for _, binding := range bindings {
 		if binding.Prompt == nil || binding.Handler == nil {
-			return nil, fmt.Errorf("MCP SDK bridge prompt binding requires a descriptor and handler")
+			return fmt.Errorf("MCP SDK bridge prompt binding requires a descriptor and handler")
 		}
 		server.AddPrompt(binding.Prompt, binding.Handler)
 	}
-
-	configuredStreamableOptions := streamableHTTPOptions(config.Options.StreamableHTTP)
-	handler := newHandler(server, config.Options.RequestContext, configuredStreamableOptions, config.Sessions)
-	if config.Options.TransportObserver != nil {
-		handler = transport.HTTPMiddleware(config.Options.TransportObserver)(handler)
-	}
-	if config.Options.RuntimeCORS != nil {
-		handler = runtimeCORSHandler(handler, *config.Options.RuntimeCORS)
-	}
-	handler = originValidationHandler(handler, configuredStreamableOptions.CrossOriginProtection)
-	return &Server{Handler: handler, SDK: server, watchableResource: config.WatchableResource}, nil
+	return nil
 }
 
 // ResourceUpdated notifies subscribers that a generated watchable resource changed.
@@ -159,12 +215,6 @@ func serverOptions(opts *mcpsdk.ServerOptions, completion func(context.Context, 
 	} else {
 		copied := *opts
 		opts = &copied
-	}
-	if opts.Capabilities == nil {
-		opts.Capabilities = &mcpsdk.ServerCapabilities{Logging: &mcpsdk.LoggingCapabilities{}}
-	} else {
-		capabilities := *opts.Capabilities
-		opts.Capabilities = &capabilities
 	}
 	if opts.CompletionHandler == nil {
 		opts.CompletionHandler = completion
@@ -198,7 +248,6 @@ func serverOptions(opts *mcpsdk.ServerOptions, completion func(context.Context, 
 
 func newHandler(server *mcpsdk.Server, requestContext func(context.Context, *http.Request) context.Context, configuredStreamableOptions *mcpsdk.StreamableHTTPOptions, sessions SessionHooks) http.Handler {
 	sdkStreamableOptions := *configuredStreamableOptions
-	sdkStreamableOptions.CrossOriginProtection = nil
 	base := mcpruntime.StreamableHTTPNegotiation(
 		mcpsdk.NewStreamableHTTPHandler(func(*http.Request) *mcpsdk.Server {
 			return server
@@ -243,20 +292,21 @@ func newHandler(server *mcpsdk.Server, requestContext func(context.Context, *htt
 }
 
 func streamableHTTPOptions(opts *mcpsdk.StreamableHTTPOptions) *mcpsdk.StreamableHTTPOptions {
+	configured := &mcpsdk.StreamableHTTPOptions{MaxRequestBodyBytes: mcpsdk.DefaultMaxRequestBodyBytes}
 	if opts == nil {
-		return &mcpsdk.StreamableHTTPOptions{
-			CrossOriginProtection: http.NewCrossOriginProtection(),
-			MaxRequestBodyBytes:   mcpsdk.DefaultMaxRequestBodyBytes,
-		}
+		return configured
 	}
-	configured := *opts
-	if configured.CrossOriginProtection == nil {
-		configured.CrossOriginProtection = http.NewCrossOriginProtection()
+	configured.Stateless = opts.Stateless
+	configured.JSONResponse = opts.JSONResponse
+	configured.Logger = opts.Logger
+	configured.EventStore = opts.EventStore
+	configured.SessionTimeout = opts.SessionTimeout
+	configured.DisableLocalhostProtection = opts.DisableLocalhostProtection
+	configured.PropagateRequestCancellation = opts.PropagateRequestCancellation
+	if opts.MaxRequestBodyBytes != 0 {
+		configured.MaxRequestBodyBytes = opts.MaxRequestBodyBytes
 	}
-	if configured.MaxRequestBodyBytes == 0 {
-		configured.MaxRequestBodyBytes = mcpsdk.DefaultMaxRequestBodyBytes
-	}
-	return &configured
+	return configured
 }
 
 func originValidationHandler(next http.Handler, protection *http.CrossOriginProtection) http.Handler {
