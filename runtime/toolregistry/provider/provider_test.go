@@ -597,6 +597,141 @@ func TestServeDrainingLeaseProcessesAcceptedBufferedCalls(t *testing.T) {
 	<-released
 }
 
+func TestServeAckBackpressureDoesNotStopProvider(t *testing.T) {
+	t.Parallel()
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	events := make(chan *streaming.Event)
+	ackStarted := make(chan struct{})
+	allowAcks := make(chan struct{})
+	acked := make(chan string, 6)
+	completed := make(chan string, 5)
+	ponged := make(chan struct{}, 1)
+	var firstAck sync.Once
+
+	sink := mockpulse.NewSink(t)
+	sink.SetSubscribe(func() <-chan *streaming.Event { return events })
+	sink.SetClose(func(context.Context) error { return nil })
+	sink.SetAck(func(ctx context.Context, event *streaming.Event) error {
+		firstAck.Do(func() { close(ackStarted) })
+		select {
+		case <-allowAcks:
+			acked <- event.ID
+			return nil
+		case <-ctx.Done():
+			return ctx.Err()
+		}
+	})
+	toolsetStream := mockpulse.NewStream(t)
+	toolsetStream.SetNewSink(func(context.Context, string, ...streamopts.Sink) (pulse.Sink, error) {
+		return sink, nil
+	})
+	client := mockpulse.NewClient(t)
+	client.SetStream(func(string, ...streamopts.Stream) (pulse.Stream, error) {
+		return toolsetStream, nil
+	})
+	registration := successfulRegistration(func(result toolregistry.ToolResultMessage) error {
+		completed <- result.ToolUseID
+		return nil
+	})
+
+	errc := make(chan error, 1)
+	go func() {
+		errc <- Serve(ctx, client, "test.toolset", &recordingHandler{}, registration, Options{
+			ProviderID: testProviderID,
+			Pong: func(context.Context, string, string, string) error {
+				ponged <- struct{}{}
+				return nil
+			},
+			MaxConcurrentToolCalls: 1,
+			MaxQueuedToolCalls:     1,
+			ShutdownTimeout:        2 * time.Second,
+		})
+	}()
+
+	sendEvent := func(event *streaming.Event) {
+		select {
+		case events <- event:
+		case err := <-errc:
+			t.Fatalf("Serve stopped before accepting event %s: %v", event.ID, err)
+		case <-time.After(time.Second):
+			t.Fatalf("provider did not accept event %s", event.ID)
+		}
+	}
+
+	for _, toolUseID := range []string{"ack-pressure-1", "ack-pressure-2", "ack-pressure-3", "ack-pressure-4"} {
+		sendEvent(testToolCallEvent(t, toolUseID))
+		select {
+		case got := <-completed:
+			require.Equal(t, toolUseID, got)
+		case err := <-errc:
+			t.Fatalf("Serve stopped before completing %s: %v", toolUseID, err)
+		case <-time.After(time.Second):
+			t.Fatalf("provider did not complete %s", toolUseID)
+		}
+		if toolUseID == "ack-pressure-1" {
+			<-ackStarted
+		}
+	}
+
+	// The first acknowledgement is in flight, two fill the bounded queue, and
+	// the fourth blocks the worker. Queue one more call before the ping; because
+	// the event stream is unbuffered, receiving the pong proves intake accepted
+	// that call while the worker remained under acknowledgement backpressure.
+	sendEvent(testToolCallEvent(t, "ack-pressure-5"))
+	ping := toolregistry.NewPingMessage(testRegistrationTokenA, "ack-pressure-ping")
+	pingPayload, err := json.Marshal(ping)
+	require.NoError(t, err)
+	sendEvent(&streaming.Event{ID: "ack-pressure-ping", EventName: "ping", Payload: pingPayload})
+	select {
+	case <-ponged:
+	case err := <-errc:
+		t.Fatalf("Serve stopped instead of processing control traffic under ack backpressure: %v", err)
+	case <-time.After(time.Second):
+		t.Fatal("provider did not process ping under acknowledgement backpressure")
+	}
+	select {
+	case got := <-completed:
+		t.Fatalf("worker handled queued call %q before ack backpressure was released", got)
+	case err := <-errc:
+		t.Fatalf("Serve stopped while the acknowledgement queue was full: %v", err)
+	case <-time.After(100 * time.Millisecond):
+	}
+
+	close(allowAcks)
+	select {
+	case got := <-completed:
+		require.Equal(t, "ack-pressure-5", got)
+	case err := <-errc:
+		t.Fatalf("Serve stopped instead of resuming after ack backpressure: %v", err)
+	case <-time.After(time.Second):
+		t.Fatal("provider did not resume after acknowledgement backpressure")
+	}
+
+	gotAcked := make([]string, 0, 6)
+	for range 6 {
+		select {
+		case eventID := <-acked:
+			gotAcked = append(gotAcked, eventID)
+		case <-time.After(time.Second):
+			t.Fatalf("timed out after %d acknowledgements", len(gotAcked))
+		}
+	}
+	assert.ElementsMatch(t, []string{
+		"ack-pressure-1",
+		"ack-pressure-2",
+		"ack-pressure-3",
+		"ack-pressure-4",
+		"ack-pressure-ping",
+		"ack-pressure-5",
+	}, gotAcked)
+
+	cancel()
+	require.ErrorIs(t, <-errc, context.Canceled)
+}
+
 func TestServeAckFailureIsExplicitAndPreventsRelease(t *testing.T) {
 	t.Parallel()
 
