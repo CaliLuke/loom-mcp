@@ -8,8 +8,6 @@
 package assistant_runtime
 
 import (
-	"time"
-
 	agent "github.com/CaliLuke/loom-mcp/v2/runtime/agent"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/planner"
 	runtime "github.com/CaliLuke/loom-mcp/v2/runtime/agent/runtime"
@@ -64,19 +62,18 @@ func NewWorker(opts ...runtime.WorkerOption) runtime.WorkerConfig {
 	return cfg
 }
 
-// Route returns the route and worker timing metadata required to construct a
-// client in a caller process without registering the agent locally.
+// Route returns the minimal route required to construct a client in a
+// caller process without registering the agent locally.
 func Route() runtime.AgentRoute {
 	return runtime.AgentRoute{
-		DefaultTaskQueue:      "assistant_assistant_runtime_workflow",
-		ID:                    AgentID,
-		ResumeActivityTimeout: time.Duration(int64(120000000000)),
-		WorkflowName:          WorkflowName,
+		DefaultTaskQueue: "assistant_assistant_runtime_workflow",
+		ID:               AgentID,
+		WorkflowName:     WorkflowName,
 	}
 }
 
 // NewClient returns a runtime.AgentClient bound to this agent. In caller
-// processes that do not register the agent locally, this uses Route metadata to
+// processes that do not register the agent locally, this uses ClientMeta to
 // construct a client that can start workflows against remote workers.
 func NewClient(rt *runtime.Runtime) runtime.AgentClient {
 	return rt.MustClientFor(Route())

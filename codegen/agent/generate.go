@@ -169,7 +169,6 @@ func agentImplFile(agent *AgentData) *codegen.File {
 		{Path: "errors"},
 		{Path: "strings"},
 		{Path: "context"},
-		{Path: "time"},
 		{Path: "github.com/CaliLuke/loom-mcp/v2/runtime/agent/engine"},
 		{Path: "github.com/CaliLuke/loom-mcp/v2/runtime/agent", Name: "agent"},
 		{Path: "github.com/CaliLuke/loom-mcp/v2/runtime/agent/runtime", Name: "runtime"},
@@ -475,7 +474,6 @@ func agentToolsFiles(agent *AgentData, specsCache *toolSpecsDataCache) ([]*codeg
 			Tools:       specs.tools,
 		}
 		imports := []*codegen.ImportSpec{
-			{Path: "time"},
 			{Path: "github.com/CaliLuke/loom-mcp/v2/runtime/agent/runtime", Name: "runtime"},
 			{Path: "github.com/CaliLuke/loom-mcp/v2/runtime/agent", Name: "agent"},
 			{Path: "github.com/CaliLuke/loom-mcp/v2/runtime/agent/tools"},

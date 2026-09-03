@@ -1136,26 +1136,21 @@ child as a generic failure.
 
 ```go
 reg := runtime.NewAgentToolsetRegistration(rt, runtime.AgentToolConfig{
-    AgentID: agent.Ident("service.data-analyst"),
-    Route: runtime.AgentRoute{
-        ID:                    agent.Ident("service.data-analyst"),
-        WorkflowName:          "DataAnalystWorkflow",
-        DefaultTaskQueue:      "orchestrator.data-analyst",
-        TimeBudget:            30 * time.Minute,
-        FinalizerGrace:        10 * time.Second,
-        ResumeActivityTimeout: 2 * time.Minute,
+    AgentID:         agent.Ident("service.data-analyst"),
+    Route:           runtime.AgentRoute{
+        ID:               agent.Ident("service.data-analyst"),
+        WorkflowName:     "DataAnalystWorkflow",
+        DefaultTaskQueue: "orchestrator.data-analyst",
     },
-    SystemPrompt: "You are a data analysis expert.",
+    SystemPrompt:    "You are a data analysis expert.",
     AgentToolContent: runtime.AgentToolContent{
         Templates: compiledTemplates, // Per-tool user message templates (optional)
         Texts:     textMessages,      // Alternative to templates (optional)
     },
-    JSONOnly:  true,        // Return structured results
-    Finalizer: myFinalizer, // Custom result aggregation
+    JSONOnly:        true,                // Return structured results
+    Finalizer:       myFinalizer,         // Custom result aggregation
 })
 ```
-
-Generated routes include the worker timing values. A manual route must use the same timing values as the worker registration.
 
 ### Per-Tool Content
 

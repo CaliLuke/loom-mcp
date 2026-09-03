@@ -635,17 +635,10 @@ client := rt.MustClient(agent.Ident("service.agent"))
 
 // Get client for remote agent (workers elsewhere)
 client, err := rt.ClientFor(runtime.AgentRoute{
-    ID:                    agent.Ident("service.agent"),
-    WorkflowName:          "ServiceAgentWorkflow",
-    DefaultTaskQueue:      "service.agent",
-    TimeBudget:            30*time.Minute,
-    FinalizerGrace:        10*time.Second,
-    ResumeActivityTimeout: 2*time.Minute,
+    ID:               agent.Ident("service.agent"),
+    WorkflowName:     "ServiceAgentWorkflow",
+    DefaultTaskQueue: "service.agent",
 })
-
-Generated `Route()` helpers set the route timing from the agent design. A manual
-`AgentRoute` must use the same timing as the remote worker. Per-run timing
-options override the route values.
 
 // Synchronous run
 out, err := client.Run(ctx, "session-1", messages,
@@ -1101,7 +1094,7 @@ as child workflows, enabling linked streams and run links.
 | Type                                 | Purpose                                    |
 | ------------------------------------ | ------------------------------------------ |
 | `runtime.ToolsetRegistration`        | Name, Specs, Execute, TaskQueue, AgentTool |
-| `runtime.AgentRoute`                 | Route identity, queue, and worker timing    |
+| `runtime.AgentRoute`                 | ID, WorkflowName, DefaultTaskQueue         |
 | `runtime.AgentToolConfig`            | Route, activity names, prompts, templates  |
 | `runtime.ExecuteAgentChildWithRoute` | Execute nested child workflow              |
 

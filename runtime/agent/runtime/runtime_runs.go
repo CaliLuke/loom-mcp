@@ -26,9 +26,9 @@ func (r *Runtime) agentByID(id agent.Ident) (AgentRegistration, bool) {
 	return agent, ok
 }
 
-// ExecuteAgentChildWithRoute starts a provider agent as a child workflow using
-// explicit route metadata. The child executes its own plan/execute loop and
-// returns a RunOutput which is adapted by callers.
+// ExecuteAgentChildWithRoute starts a provider agent as a child workflow using the
+// explicit route metadata (workflow name and task queue). The child executes its own
+// plan/execute loop and returns a RunOutput which is adapted by callers.
 func (r *Runtime) ExecuteAgentChildWithRoute(
 	wfCtx engine.WorkflowContext,
 	route AgentRoute,
@@ -52,11 +52,10 @@ func (r *Runtime) ExecuteAgentChildWithRoute(
 		Labels:           nestedRunCtx.Labels,
 	}
 	handle, err := wfCtx.StartChildWorkflow(wfCtx.Context(), engine.ChildWorkflowRequest{
-		ID:         input.RunID,
-		Workflow:   route.WorkflowName,
-		TaskQueue:  route.DefaultTaskQueue,
-		Input:      &input,
-		RunTimeout: resolveRunTiming(route.timingRegistration(), &input).RunTimeout,
+		ID:        input.RunID,
+		Workflow:  route.WorkflowName,
+		TaskQueue: route.DefaultTaskQueue,
+		Input:     &input,
 	})
 	if err != nil {
 		return nil, err
@@ -80,7 +79,7 @@ func (r *Runtime) startRun(ctx context.Context, input *RunInput) (engine.Workflo
 	if !ok {
 		return nil, fmt.Errorf("%w: %q", ErrAgentNotFound, input.AgentID)
 	}
-	return r.startRunOn(ctx, input, reg.Workflow.Name, reg.Workflow.TaskQueue, resolveRunTiming(reg, input).RunTimeout, true)
+	return r.startRunOn(ctx, input, reg.Workflow.Name, reg.Workflow.TaskQueue, true)
 }
 
 // startRunWithMeta launches the agent workflow using client-supplied metadata
@@ -93,7 +92,7 @@ func (r *Runtime) startRunWithRoute(ctx context.Context, input *RunInput, route 
 	if input.AgentID == "" {
 		input.AgentID = route.ID
 	}
-	return r.startRunOn(ctx, input, route.WorkflowName, route.DefaultTaskQueue, resolveRunTiming(route.timingRegistration(), input).RunTimeout, true)
+	return r.startRunOn(ctx, input, route.WorkflowName, route.DefaultTaskQueue, true)
 }
 
 // startOneShotRun launches a one-shot workflow that does not belong to a session.
@@ -105,7 +104,7 @@ func (r *Runtime) startOneShotRun(ctx context.Context, input *RunInput) (engine.
 	if !ok {
 		return nil, fmt.Errorf("%w: %q", ErrAgentNotFound, input.AgentID)
 	}
-	return r.startRunOn(ctx, input, reg.Workflow.Name, reg.Workflow.TaskQueue, resolveRunTiming(reg, input).RunTimeout, false)
+	return r.startRunOn(ctx, input, reg.Workflow.Name, reg.Workflow.TaskQueue, false)
 }
 
 // startOneShotRunWithRoute launches a one-shot workflow using client-supplied route metadata.
@@ -116,12 +115,12 @@ func (r *Runtime) startOneShotRunWithRoute(ctx context.Context, input *RunInput,
 	if input.AgentID == "" {
 		input.AgentID = route.ID
 	}
-	return r.startRunOn(ctx, input, route.WorkflowName, route.DefaultTaskQueue, resolveRunTiming(route.timingRegistration(), input).RunTimeout, false)
+	return r.startRunOn(ctx, input, route.WorkflowName, route.DefaultTaskQueue, false)
 }
 
 // startRunOn contains common start logic for both locally-registered and
 // remote-route clients.
-func (r *Runtime) startRunOn(ctx context.Context, input *RunInput, workflowName, defaultQueue string, runTimeout time.Duration, requireSession bool) (engine.WorkflowHandle, error) {
+func (r *Runtime) startRunOn(ctx context.Context, input *RunInput, workflowName, defaultQueue string, requireSession bool) (engine.WorkflowHandle, error) {
 	if err := validateWorkflowInput(input); err != nil {
 		return nil, err
 	}
