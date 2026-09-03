@@ -477,28 +477,6 @@ func TestPromptExpr_Validate(t *testing.T) {
 			wantErr: false,
 		},
 		{
-			name: "system role",
-			prompt: &PromptExpr{
-				Name: "test-prompt",
-				Messages: []*MessageExpr{
-					{Role: "system", Content: "Hello"},
-				},
-			},
-			wantErr: true,
-			errMsg:  "prompt message role must be user or assistant",
-		},
-		{
-			name: "empty role",
-			prompt: &PromptExpr{
-				Name: "test-prompt",
-				Messages: []*MessageExpr{
-					{Content: "Hello"},
-				},
-			},
-			wantErr: true,
-			errMsg:  "prompt message role must be user or assistant",
-		},
-		{
 			name: "missing name",
 			prompt: &PromptExpr{
 				Messages: []*MessageExpr{
@@ -529,6 +507,15 @@ func TestPromptExpr_Validate(t *testing.T) {
 				require.NoError(t, err)
 			}
 		})
+	}
+}
+
+func TestMessageExpr_Validate(t *testing.T) {
+	for _, message := range []*MessageExpr{
+		{Role: "system", Content: "Hello"},
+		{Content: "Hello"},
+	} {
+		require.ErrorContains(t, message.Validate(), "prompt message role must be user or assistant")
 	}
 }
 

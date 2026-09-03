@@ -234,13 +234,15 @@ func (r *RootExpr) resolveToolsetFor(ts *ToolsetExpr, visiting map[*ToolsetExpr]
 	delete(visiting, ts)
 	syncOriginToolsetMetadata(ts)
 	inlineTools := ts.Tools
+	var originTools []*ToolExpr
 	if len(ts.ToolSelections) == 0 {
-		ts.Tools = append(cloneToolsForToolset(ts.Origin.Tools, ts), inlineTools...)
-		ts.originToolsResolved = true
-		return
+		originTools = cloneToolsForToolset(ts.Origin.Tools, ts)
+	} else {
+		originTools = cloneSelectedToolsForToolset(ts.Origin.Tools, ts.ToolSelections, ts)
 	}
-	selected := cloneSelectedToolsForToolset(ts.Origin.Tools, ts.ToolSelections, ts)
-	ts.Tools = append(append([]*ToolExpr(nil), selected...), inlineTools...)
+	ts.originToolCount = len(originTools)
+	originTools = append(originTools, inlineTools...)
+	ts.Tools = originTools
 	ts.originToolsResolved = true
 }
 
@@ -277,6 +279,7 @@ func syncOriginToolsetMetadata(ts *ToolsetExpr) {
 		return
 	}
 	ts.version = ts.Origin.version
+	ts.inheritedVersion = true
 }
 
 func mergeStringSlices(first []string, second []string) []string {

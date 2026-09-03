@@ -381,10 +381,7 @@ func (m *MCPExpr) Validate() error {
 		verr.Add(m, "MCP server version is required")
 	}
 	mergeChildErrors(verr, m.Icons, iconValidator)
-	mergeChildErrors(verr, m.Tools, toolValidator)
-	mergeChildErrors(verr, m.Resources, resourceValidator)
 	mergeChildErrors(verr, m.SkillDirectories, skillDirectoryValidator)
-	mergeChildErrors(verr, m.Prompts, promptValidator)
 	validateUniqueToolNames(verr, m.Tools)
 	validateSingleToolPerMethod(verr, m.Tools)
 	validateUniqueResourceNames(verr, m.Resources)
@@ -402,10 +399,8 @@ func (m *MCPExpr) Validate() error {
 	return nil
 }
 
-func iconValidator(icon *IconExpr) error      { return icon.Validate() }
-func toolValidator(t *ToolExpr) error         { return t.Validate() }
-func resourceValidator(r *ResourceExpr) error { return r.Validate() }
-func promptValidator(p *PromptExpr) error     { return p.Validate() }
+func iconValidator(icon *IconExpr) error { return icon.Validate() }
+
 func skillDirectoryValidator(s *SkillDirectoryExpr) error {
 	return s.Validate()
 }
@@ -705,14 +700,7 @@ func (p *PromptExpr) Validate() error {
 	if len(p.Messages) == 0 {
 		verr.Add(p, "prompt must have at least one message")
 	}
-	for _, message := range p.Messages {
-		if err := message.Validate(); err != nil {
-			var ve *eval.ValidationErrors
-			if errors.As(err, &ve) {
-				verr.Merge(ve)
-			}
-		}
-	}
+
 	for _, icon := range p.Icons {
 		if err := icon.Validate(); err != nil {
 			var ve *eval.ValidationErrors

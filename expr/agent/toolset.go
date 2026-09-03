@@ -57,6 +57,8 @@ type (
 		AgentToolset *AgentToolsetReferenceExpr
 
 		version             string
+		inheritedVersion    bool
+		originToolCount     int
 		originToolsResolved bool
 	}
 
@@ -103,6 +105,7 @@ func (t *ToolsetExpr) SetDescription(d string) {
 // registry-backed toolsets.
 func (t *ToolsetExpr) SetVersion(v string) {
 	t.version = v
+	t.inheritedVersion = false
 	if t.Provider == nil || t.Provider.Kind != ProviderRegistry {
 		return
 	}
@@ -117,12 +120,17 @@ func (t *ToolsetExpr) WalkSets(walk eval.SetWalker) {
 // Validate performs semantic checks on the toolset expression.
 func (t *ToolsetExpr) Validate() error {
 	verr := new(eval.ValidationErrors)
-	if t.version != "" && (t.Provider == nil || t.Provider.Kind != ProviderRegistry) {
+	if t.version != "" && !t.inheritedVersion && (t.Provider == nil || t.Provider.Kind != ProviderRegistry) {
 		verr.Add(t, "Version is only valid for FromRegistry toolsets")
 	}
 	t.validateOriginToolSelections(verr)
 	if t.Provider != nil {
-		t.validateProvider(verr)
+		// Provider configuration belongs to the origin; declaration constraints
+		// still apply to tools added by an origin-backed clone.
+		if t.Origin == nil {
+			t.validateProvider(verr)
+		}
+		t.validateProviderToolDeclarations(verr)
 	}
 	t.validateSingleBoundService(verr)
 	if len(verr.Errors) == 0 {
@@ -184,6 +192,20 @@ func (t *ToolsetExpr) validateProvider(verr *eval.ValidationErrors) {
 		t.validateMemoryProvider(verr)
 	case ProviderLocal:
 		// Local toolsets have inline schemas; no additional validation needed.
+	}
+}
+
+func (t *ToolsetExpr) validateProviderToolDeclarations(verr *eval.ValidationErrors) {
+	if len(t.Tools) <= t.originToolCount {
+		return
+	}
+	switch t.Provider.Kind {
+	case ProviderArtifacts:
+		verr.Add(t, "FromArtifacts toolsets cannot declare inline tools")
+	case ProviderMemory:
+		verr.Add(t, "FromMemory toolsets cannot declare inline tools")
+	case ProviderLocal, ProviderMCP, ProviderRegistry, ProviderSkills:
+		// These providers may declare or materialize tools.
 	}
 }
 
@@ -260,9 +282,6 @@ func (t *ToolsetExpr) validateArtifactProvider(verr *eval.ValidationErrors) {
 	if t.Provider.ArtifactMaxCount < 0 {
 		verr.Add(t, "MaxArtifacts must be non-negative")
 	}
-	if len(t.Tools) > 0 {
-		verr.Add(t, "FromArtifacts toolsets cannot declare inline tools")
-	}
 }
 
 func (t *ToolsetExpr) validateMemoryProvider(verr *eval.ValidationErrors) {
@@ -285,8 +304,5 @@ func (t *ToolsetExpr) validateMemoryProvider(verr *eval.ValidationErrors) {
 	case "", MemoryVisibilityUser, MemoryVisibilityShared:
 	default:
 		verr.Add(t, "unknown memory visibility %q", t.Provider.MemoryVisibility)
-	}
-	if len(t.Tools) > 0 {
-		verr.Add(t, "FromMemory toolsets cannot declare inline tools")
 	}
 }
