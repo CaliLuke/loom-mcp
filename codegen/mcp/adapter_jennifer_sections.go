@@ -301,7 +301,12 @@ func emitAssertResourceURIAllowed(stmt *jen.Statement) {
 			jen.If(jen.Id("a").Dot("opts").Op("!=").Nil()).Block(
 				jen.Id("denied").Op("=").Id("a").Dot("opts").Dot("DeniedResourceURIs"),
 			),
-			jen.For(jen.List(jen.Id("_"), jen.Id("d")).Op(":=").Range().Append(jen.Id("denied"), jen.Id("extraDenyURIs").Op("..."))).Block(
+			jen.For(jen.List(jen.Id("_"), jen.Id("d")).Op(":=").Range().Id("denied")).Block(
+				jen.If(jen.Id("resourceURIMatchesPolicy").Call(jen.Id("base"), jen.Id("d"))).Block(
+					jen.Return(jen.Qual("fmt", "Errorf").Call(jen.Lit("resource URI denied: %s"), jen.Id("pURI"))),
+				),
+			),
+			jen.For(jen.List(jen.Id("_"), jen.Id("d")).Op(":=").Range().Id("extraDenyURIs")).Block(
 				jen.If(jen.Id("resourceURIMatchesPolicy").Call(jen.Id("base"), jen.Id("d"))).Block(
 					jen.Return(jen.Qual("fmt", "Errorf").Call(jen.Lit("resource URI denied: %s"), jen.Id("pURI"))),
 				),

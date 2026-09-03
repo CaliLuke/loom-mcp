@@ -2733,7 +2733,12 @@ func (a *MCPAdapter) assertResourceURIAllowed(ctx context.Context, pURI string, 
 	if a.opts != nil {
 		denied = a.opts.DeniedResourceURIs
 	}
-	for _, d := range append(denied, extraDenyURIs...) {
+	for _, d := range denied {
+		if resourceURIMatchesPolicy(base, d) {
+			return fmt.Errorf("resource URI denied: %s", pURI)
+		}
+	}
+	for _, d := range extraDenyURIs {
 		if resourceURIMatchesPolicy(base, d) {
 			return fmt.Errorf("resource URI denied: %s", pURI)
 		}

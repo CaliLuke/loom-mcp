@@ -2,9 +2,11 @@ package assistantapi
 
 import (
 	"context"
+	"sync"
 	"testing"
 	"time"
 
+	mcpassistant "example.com/assistant/gen/mcp_assistant"
 	sdkmcp "github.com/modelcontextprotocol/go-sdk/mcp"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -190,4 +192,52 @@ func TestGeneratedSDKServerTrimsResourcePolicyHeaderNames(t *testing.T) {
 			assert.Equal(t, "skill://code-review/SKILL.md", result.Contents[0].URI)
 		})
 	}
+}
+
+func TestGeneratedSDKServerDoesNotMutateSharedResourcePolicyOptions(t *testing.T) {
+	denied := make([]string, 1, 8)
+	denied[0] = "private://"
+	_, sdkHTTPServer := newGeneratedSDKServerWithAdapterOptions(t, &mcpassistant.MCPAdapterOptions{
+		DeniedResourceURIs: denied,
+	})
+	defer sdkHTTPServer.Close()
+
+	sessions := []*sdkmcp.ClientSession{
+		connectSDKSessionToServer(t, sdkHTTPServer.URL+"/rpc", map[string]string{"x-mcp-deny-names": "documents"}),
+		connectSDKSessionToServer(t, sdkHTTPServer.URL+"/rpc", map[string]string{"x-mcp-deny-names": "system_info"}),
+	}
+	defer func() {
+		for _, session := range sessions {
+			require.NoError(t, session.Close())
+		}
+	}()
+
+	const callsPerSession = 50
+	start := make(chan struct{})
+	errs := make(chan error, len(sessions))
+	var wg sync.WaitGroup
+	for _, session := range sessions {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			<-start
+			ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+			defer cancel()
+			for range callsPerSession {
+				_, err := session.ReadResource(ctx, &sdkmcp.ReadResourceParams{URI: "skill://code-review/SKILL.md"})
+				if err != nil {
+					errs <- err
+					return
+				}
+			}
+		}()
+	}
+	close(start)
+	wg.Wait()
+	close(errs)
+	for err := range errs {
+		require.NoError(t, err)
+	}
+
+	assert.Equal(t, make([]string, cap(denied)-len(denied)), denied[:cap(denied)][len(denied):], "request policies mutated the shared option backing array")
 }
