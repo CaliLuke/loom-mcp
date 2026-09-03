@@ -50,6 +50,72 @@ func TestCallToolReturnsReadableResultStream(t *testing.T) {
 	requireReadableResultStream(t, ctx, rdb, replayed)
 }
 
+func TestProviderPublicationRecreatesDestroyedResultStreamWithOriginalExpiration(t *testing.T) {
+	rdb := getRedis(t)
+	ctx := context.Background()
+	name := fmt.Sprintf("destroyed-result-stream-%d", time.Now().UnixNano())
+	reg, err := New(ctx, Config{Redis: rdb, Name: name})
+	require.NoError(t, err)
+	t.Cleanup(func() { require.NoError(t, reg.Close(context.Background())) })
+	svc := reg.Service()
+	svc.healthTracker = newMockHealthTracker()
+
+	const toolset = "destroyed-result-stream-toolset"
+	provider := validRegisterPayloadForSchemaAdmission(toolset)
+	admission, err := svc.Register(ctx, provider)
+	require.NoError(t, err)
+	call, err := svc.CallTool(ctx, transitionCallPayload(toolset, "destroyed-result-stream"))
+	require.NoError(t, err)
+	store := svc.callAdmissions.(*callAdmissionStore)
+	requestEventID := retainedPublicationEventID(t, ctx, rdb, store, call.ToolUseID)
+	claim, err := svc.ClaimToolCall(ctx, &genregistry.ProviderToolCallClaimPayload{
+		Toolset:                   toolset,
+		ProviderID:                provider.ProviderID,
+		ProviderIncarnationID:     provider.ProviderIncarnationID,
+		ProviderRegistrationToken: admission.RegistrationToken,
+		CallRegistrationToken:     admission.RegistrationToken,
+		ToolUseID:                 call.ToolUseID,
+		RequestEventID:            requestEventID,
+	})
+	require.NoError(t, err)
+	require.Equal(t, string(callClaimExecute), claim.Disposition)
+
+	streamKey := pulseStreamKeyPrefix + toolregistry.ResultStreamID(call.ToolUseID)
+	require.EqualValues(t, 1, rdb.Del(ctx, streamKey).Val())
+	require.NoError(t, svc.PublishToolOutputDelta(ctx, &genregistry.PublishToolOutputDeltaPayload{
+		Toolset:                   toolset,
+		ProviderID:                provider.ProviderID,
+		ProviderIncarnationID:     provider.ProviderIncarnationID,
+		ProviderRegistrationToken: admission.RegistrationToken,
+		CallRegistrationToken:     admission.RegistrationToken,
+		ToolUseID:                 call.ToolUseID,
+		RequestEventID:            requestEventID,
+		Stream:                    "stdout",
+		Delta:                     "late output",
+	}))
+	requireResultStreamExpiration(t, ctx, rdb, call)
+
+	require.EqualValues(t, 1, rdb.Del(ctx, streamKey).Val())
+	result := toolregistry.NewToolResultMessage(
+		admission.RegistrationToken,
+		call.ToolUseID,
+		json.RawMessage(`{"ok":true}`),
+	)
+	resultJSON, err := json.Marshal(result)
+	require.NoError(t, err)
+	require.NoError(t, svc.CompleteToolCall(ctx, &genregistry.CompleteToolCallPayload{
+		Toolset:                   toolset,
+		ProviderID:                provider.ProviderID,
+		ProviderIncarnationID:     provider.ProviderIncarnationID,
+		RegistrationToken:         admission.RegistrationToken,
+		ToolUseID:                 call.ToolUseID,
+		ResultJSON:                resultJSON,
+		RequestEventID:            requestEventID,
+		ProviderRegistrationToken: admission.RegistrationToken,
+	}))
+	requireResultStreamExpiration(t, ctx, rdb, call)
+}
+
 func TestLostDispatchLeaseCommitsAndRestoresOutcomeUnknown(t *testing.T) {
 	rdb := getRedis(t)
 	ctx := context.Background()
