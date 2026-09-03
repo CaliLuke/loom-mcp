@@ -79,6 +79,8 @@ var _ = Service("assistant", func() {
 	Method("conversation_history", func() {
 		Description("Return conversation history with optional query params")
 		Payload(func() {
+			Attribute("query-value", String, "Literal history query")
+			Attribute("tags", ArrayOf(String), "Literal history tags")
 			Attribute("limit", Int, "Max items")
 			Attribute("flag", Boolean, "Sample boolean flag")
 			Attribute("nums", ArrayOf(Float64), "Numbers array")

@@ -118,6 +118,10 @@ type BuildFigmaImplementationPromptPayload struct {
 // ConversationHistoryPayload is the payload type of the assistant service
 // conversation_history method.
 type ConversationHistoryPayload struct {
+	// Literal history query
+	QueryValue *string `json:"query-value,omitempty"`
+	// Literal history tags
+	Tags []string `json:"tags,omitempty"`
 	// Max items
 	Limit *int `json:"limit,omitempty"`
 	// Sample boolean flag

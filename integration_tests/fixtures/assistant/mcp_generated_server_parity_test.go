@@ -3,6 +3,7 @@ package assistantapi
 import (
 	"context"
 	"encoding/json/v2"
+	"net/url"
 	"slices"
 	"testing"
 	"time"
@@ -135,7 +136,41 @@ func TestProjectedToolMCPCallSupportsNoPayloadMethod(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, map[string]any{"status": "ready"}, resp.StructuredContent)
 }
+func TestGeneratedSDKServerResourceQueryPreservesStringValues(t *testing.T) {
+	t.Parallel()
 
+	session := connectSDKSessionToServer(t, newGeneratedSDKServerURL(t), nil)
+	defer func() {
+		require.NoError(t, session.Close())
+	}()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	for _, value := range []string{"true", "42", "2024-01-01T00:00:00Z"} {
+		resource, err := session.ReadResource(ctx, &sdkmcp.ReadResourceParams{
+			URI: "conversation://history?query-value=" + url.QueryEscape(value),
+		})
+		require.NoError(t, err, value)
+		require.Len(t, resource.Contents, 1)
+		var body struct {
+			Items []string `json:"items"`
+		}
+		require.NoError(t, json.Unmarshal([]byte(resource.Contents[0].Text), &body))
+		require.NotEmpty(t, body.Items)
+		assert.Equal(t, value, body.Items[len(body.Items)-1])
+	}
+	resource, err := session.ReadResource(ctx, &sdkmcp.ReadResourceParams{
+		URI: "conversation://history?tags=true",
+	})
+	require.NoError(t, err)
+	require.Len(t, resource.Contents, 1)
+	var body struct {
+		Items []string `json:"items"`
+	}
+	require.NoError(t, json.Unmarshal([]byte(resource.Contents[0].Text), &body))
+	require.NotEmpty(t, body.Items)
+	assert.Equal(t, "true", body.Items[len(body.Items)-1])
+}
 func assertSDKSchemaJSONEq(t *testing.T, want []byte, got any) {
 	t.Helper()
 

@@ -8,6 +8,7 @@ require (
 	github.com/modelcontextprotocol/go-sdk v1.7.0
 	github.com/sahilm/fuzzy v0.1.3
 	github.com/stretchr/testify v1.12.0
+	github.com/yosida95/uritemplate/v3 v3.0.2
 	go.opentelemetry.io/otel v1.45.0
 	go.opentelemetry.io/otel/metric v1.45.0
 	go.opentelemetry.io/otel/trace v1.45.0
@@ -56,7 +57,6 @@ require (
 	github.com/tidwall/pretty v1.2.1 // indirect
 	github.com/tidwall/sjson v1.2.5 // indirect
 	github.com/tmaxmax/go-sse v0.11.0 // indirect
-	github.com/yosida95/uritemplate/v3 v3.0.2 // indirect
 	go.opentelemetry.io/auto/sdk v1.2.1 // indirect
 	go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp v0.70.0 // indirect
 	go.temporal.io/api v1.63.5 // indirect

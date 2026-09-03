@@ -109,4 +109,17 @@ func TestGenerateTransportConformance(t *testing.T) {
 		require.Contains(t, adapter, "mcpruntime.IsInvalidClientInput(err)")
 		require.Contains(t, adapter, "return err")
 	})
+
+	t.Run("resource queries preserve schema shape through typed bridge descriptors", func(t *testing.T) {
+		adapter := renderGeneratedFile(t, findGeneratedFile(t, files, "gen/mcp_assistant/adapter_server.go"))
+		sdk := renderGeneratedFile(t, findGeneratedFile(t, files, "gen/mcp_assistant/sdk_server.go"))
+
+		require.Contains(t, adapter, "sdkbridge.ResourceQueryJSONTyped(request.URI, map[string]mcpruntime.QueryField{")
+		require.Contains(t, adapter, `"cursor": {String: true}`)
+		require.Contains(t, adapter, `"tags": {`)
+		require.Contains(t, adapter, "Repeated: true")
+		require.Contains(t, sdk, "Template: &mcpsdk.ResourceTemplate{")
+		require.Contains(t, sdk, `URITemplate: "doc://list{?cursor,enabled,limit,offset,ratio,tags*,tenant}"`)
+		require.Contains(t, sdk, `uritemplate.MustNew("doc://list{?cursor,enabled,limit,offset,ratio,tags*,tenant}")`)
+	})
 }

@@ -3,6 +3,7 @@ package codegen
 import (
 	"fmt"
 	"sort"
+	"strings"
 
 	"github.com/CaliLuke/loom/codegen"
 	"github.com/CaliLuke/loom/expr"
@@ -192,6 +193,41 @@ func resourceQueryZeroGuardExpr(formatKind string, fieldName string) string {
 	default:
 		return fmt.Sprintf("payload.%s != 0", fieldName)
 	}
+}
+
+// resourceQueryURITemplate builds the RFC 6570 template that lets the MCP SDK
+// route query-bearing resource URIs to the generated resource handler.
+func resourceQueryURITemplate(uri string, fields []*ResourceQueryField) string {
+	var template strings.Builder
+	template.WriteString(uri)
+	template.WriteString("{?")
+	for i, field := range fields {
+		if i > 0 {
+			template.WriteByte(',')
+		}
+		template.WriteString(resourceQueryTemplateVariable(field.QueryKey))
+		if field.Repeated {
+			template.WriteByte('*')
+		}
+	}
+	template.WriteByte('}')
+	return template.String()
+}
+func resourceQueryTemplateVariable(name string) string {
+	const upperHex = "0123456789ABCDEF"
+	var encoded strings.Builder
+	encoded.Grow(len(name))
+	for i := 0; i < len(name); i++ {
+		char := name[i]
+		if char >= 'a' && char <= 'z' || char >= 'A' && char <= 'Z' || char >= '0' && char <= '9' || char == '_' {
+			encoded.WriteByte(char)
+			continue
+		}
+		encoded.WriteByte('%')
+		encoded.WriteByte(upperHex[char>>4])
+		encoded.WriteByte(upperHex[char&0x0f])
+	}
+	return encoded.String()
 }
 
 // resourceQueryUnderlyingType resolves aliases so query-field guard selection

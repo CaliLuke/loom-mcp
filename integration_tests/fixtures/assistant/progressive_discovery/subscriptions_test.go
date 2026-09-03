@@ -44,17 +44,25 @@ func TestGeneratedSDKServerResourceSubscriptionLifecycle(t *testing.T) {
 
 	require.Error(t, session.Subscribe(ctx, &mcp.SubscribeParams{URI: "status://unknown"}))
 	require.Error(t, server.ResourceUpdated(ctx, "status://unknown"))
-	require.NoError(t, session.Subscribe(ctx, &mcp.SubscribeParams{URI: "status://current"}))
-	require.NoError(t, server.ResourceUpdated(ctx, "status://current"))
+	require.Error(t, session.Subscribe(ctx, &mcp.SubscribeParams{URI: "urn:health?detail=full"}))
+	require.Error(t, server.ResourceUpdated(ctx, "urn:health?detail=full"))
+	require.NoError(t, session.Subscribe(ctx, &mcp.SubscribeParams{URI: "urn:health"}))
+	require.NoError(t, session.Unsubscribe(ctx, &mcp.UnsubscribeParams{URI: "urn:health"}))
+	statusURI := "urn:status?scope=42"
+	invalidStatusURI := statusURI + "&extra=1"
+	require.Error(t, session.Subscribe(ctx, &mcp.SubscribeParams{URI: invalidStatusURI}))
+	require.Error(t, server.ResourceUpdated(ctx, invalidStatusURI))
+	require.NoError(t, session.Subscribe(ctx, &mcp.SubscribeParams{URI: statusURI}))
+	require.NoError(t, server.ResourceUpdated(ctx, statusURI))
 	select {
 	case uri := <-updates:
-		assert.Equal(t, "status://current", uri)
+		assert.Equal(t, statusURI, uri)
 	case <-ctx.Done():
 		t.Fatal("timed out waiting for resource update")
 	}
 
-	require.NoError(t, session.Unsubscribe(ctx, &mcp.UnsubscribeParams{URI: "status://current"}))
-	require.NoError(t, server.ResourceUpdated(ctx, "status://current"))
+	require.NoError(t, session.Unsubscribe(ctx, &mcp.UnsubscribeParams{URI: statusURI}))
+	require.NoError(t, server.ResourceUpdated(ctx, statusURI))
 	select {
 	case uri := <-updates:
 		t.Fatalf("received update after unsubscribe: %s", uri)

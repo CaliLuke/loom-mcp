@@ -17,7 +17,9 @@ type Service interface {
 	// Lookup implements lookup.
 	Lookup(context.Context, *LookupPayload) (res *LookupResult, err error)
 	// Status implements status.
-	Status(context.Context) (res *StatusResult, err error)
+	Status(context.Context, *StatusPayload) (res *StatusResult, err error)
+	// Health implements health.
+	Health(context.Context) (res *HealthResult, err error)
 	// StreamChunks implements stream_chunks.
 	StreamChunks(context.Context, StreamChunksServerStream) (err error)
 	// WaitForCancel implements wait_for_cancel.
@@ -40,7 +42,7 @@ const ServiceName = "catalog"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [5]string{"lookup", "status", "stream_chunks", "wait_for_cancel", "projected_lookup"}
+var MethodNames = [6]string{"lookup", "status", "health", "stream_chunks", "wait_for_cancel", "projected_lookup"}
 
 // StreamChunksServerStream allows streaming instances of *StreamChunksResult
 // to the client.
@@ -61,6 +63,12 @@ type StreamChunksClientStream interface {
 	// RecvWithContext reads instances of "StreamChunksResult" from the stream with
 	// context.
 	RecvWithContext(context.Context) (*StreamChunksResult, error)
+}
+
+// HealthResult is the result type of the catalog service health method.
+type HealthResult struct {
+	// Current health state
+	State string `json:"state"`
 }
 
 // LookupPayload is the payload type of the catalog service lookup method.
@@ -87,6 +95,12 @@ type ProjectedLookupPayload struct {
 type ProjectedLookupResult struct {
 	// Lookup result
 	Value string `json:"value"`
+}
+
+// StatusPayload is the payload type of the catalog service status method.
+type StatusPayload struct {
+	// Status scope
+	Scope *string `json:"scope,omitempty"`
 }
 
 // StatusResult is the result type of the catalog service status method.

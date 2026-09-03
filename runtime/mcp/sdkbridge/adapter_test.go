@@ -167,6 +167,16 @@ func TestResourceQueryJSONCoercesURIValues(t *testing.T) {
 	require.NoError(t, err)
 	require.JSONEq(t, `{"count":2,"enabled":true,"tag":["a","b"]}`, string(encoded))
 
+	typed, err := ResourceQueryJSONTyped(
+		"doc://list?query=true&tags=one&nums=2",
+		map[string]mcpruntime.QueryField{
+			"query": {String: true},
+			"tags":  {String: true, Repeated: true},
+			"nums":  {Repeated: true},
+		},
+	)
+	require.NoError(t, err)
+	require.JSONEq(t, `{"query":"true","tags":["one"],"nums":[2]}`, string(typed))
 	empty, err := ResourceQueryJSON("doc://list")
 	require.NoError(t, err)
 	assert.JSONEq(t, "{}", string(empty))

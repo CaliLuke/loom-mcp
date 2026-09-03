@@ -2509,7 +2509,14 @@ func (a *MCPAdapter) resourceOperationDescriptors() []sdkbridge.ResourceOperatio
 		URI: "elicitation://context",
 	}, {
 		Handle: func(ctx context.Context, request *ResourcesReadPayload, baseURI string) (*ResourcesReadResult, error) {
-			args, err := sdkbridge.ResourceQueryJSON(request.URI)
+			args, err := sdkbridge.ResourceQueryJSONTyped(request.URI, map[string]mcpruntime.QueryField{
+				"nums":        {Repeated: true},
+				"query-value": {String: true},
+				"tags": {
+					Repeated: true,
+					String:   true,
+				},
+			})
 			if err != nil {
 				return nil, sdkbridge.InvalidClientInput(loom.PermanentError("invalid_params", "Invalid resource request."))
 			}

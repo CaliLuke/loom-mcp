@@ -20,8 +20,11 @@ func (s *catalogService) Lookup(_ context.Context, payload *catalog.LookupPayloa
 	return &catalog.LookupResult{Value: "direct:" + payload.Query}, nil
 }
 
-func (s *catalogService) Status(context.Context) (*catalog.StatusResult, error) {
+func (s *catalogService) Status(context.Context, *catalog.StatusPayload) (*catalog.StatusResult, error) {
 	return &catalog.StatusResult{State: "ready"}, nil
+}
+func (s *catalogService) Health(context.Context) (*catalog.HealthResult, error) {
+	return &catalog.HealthResult{State: "ready"}, nil
 }
 
 func (s *catalogService) StreamChunks(ctx context.Context, stream catalog.StreamChunksServerStream) error {

@@ -24,6 +24,7 @@ import (
 	loomhttp "github.com/CaliLuke/loom/http"
 	"github.com/CaliLuke/loom/observability/transport"
 	mcpsdk "github.com/modelcontextprotocol/go-sdk/mcp"
+	uritemplate "github.com/yosida95/uritemplate/v3"
 )
 
 // SDKServer is an official SDK-backed MCP streamable HTTP server.
@@ -96,11 +97,15 @@ func NewSDKServer(service catalog.Service, opts *SDKServerOptions) (*SDKServer, 
 		},
 		WatchableResource: func(uri string) bool {
 			switch uri {
-			case "status://current":
+			case "urn:health":
 				return true
-			default:
-				return false
 			}
+			for _, template := range sdkWatchableResourceTemplates {
+				if template.Regexp().MatchString(uri) {
+					return true
+				}
+			}
+			return false
 		},
 	})
 	if err != nil {
@@ -121,6 +126,9 @@ func (s *SDKServer) ResourceUpdated(ctx context.Context, uri string) error {
 	}
 	return s.bridge.ResourceUpdated(ctx, uri)
 }
+
+var sdkWatchableResourceTemplates = []*uritemplate.Template{uritemplate.MustNew("urn:status{?scope}")}
+
 func sdkToolBindings(adapter *MCPAdapter, requestContext func(context.Context, *http.Request) context.Context) ([]sdkbridge.ToolBinding, error) {
 	handler := adapter.sdkToolHandler(requestContext)
 	if adapter.toolSearchEnabled() {
@@ -185,14 +193,23 @@ func sdkToolBindings(adapter *MCPAdapter, requestContext func(context.Context, *
 }
 func sdkResourceBindings(adapter *MCPAdapter, requestContext func(context.Context, *http.Request) context.Context) ([]sdkbridge.ResourceBinding, error) {
 	handler := adapter.sdkResourceHandler(requestContext)
-	bindings := make([]sdkbridge.ResourceBinding, 0, 1)
+	bindings := make([]sdkbridge.ResourceBinding, 0, 2)
+	bindings = append(bindings, sdkbridge.ResourceBinding{
+		Handler: handler,
+		Template: &mcpsdk.ResourceTemplate{
+			Description: "",
+			MIMEType:    "application/json",
+			Name:        "status",
+			URITemplate: "urn:status{?scope}",
+		},
+	})
 	bindings = append(bindings, sdkbridge.ResourceBinding{
 		Handler: handler,
 		Resource: &mcpsdk.Resource{
 			Description: "",
 			MIMEType:    "application/json",
-			Name:        "status",
-			URI:         "status://current",
+			Name:        "health",
+			URI:         "urn:health",
 		},
 	})
 	return bindings, nil

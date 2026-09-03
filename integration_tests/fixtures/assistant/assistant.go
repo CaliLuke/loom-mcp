@@ -66,7 +66,12 @@ func (s *assistantsrvc) ElicitationContext(ctx context.Context) (*assistant.Elic
 
 // Return conversation history with optional query params
 func (s *assistantsrvc) ConversationHistory(ctx context.Context, p *assistant.ConversationHistoryPayload) (res *assistant.ConversationHistoryResult, err error) {
-	res = &assistant.ConversationHistoryResult{Items: []string{"User asked for a Figma implementation plan", "Assistant generated a DPI spec"}}
+	items := []string{"User asked for a Figma implementation plan", "Assistant generated a DPI spec"}
+	if p.QueryValue != nil {
+		items = append(items, *p.QueryValue)
+	}
+	items = append(items, p.Tags...)
+	res = &assistant.ConversationHistoryResult{Items: items}
 	log.Printf(ctx, "assistant.conversation_history")
 	return
 }

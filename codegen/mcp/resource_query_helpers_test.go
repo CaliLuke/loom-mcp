@@ -83,3 +83,15 @@ func TestBuildResourceQueryFields_RejectsNestedArray(t *testing.T) {
 	require.Nil(t, fields)
 	require.ErrorContains(t, err, "nested array query values")
 }
+
+func TestResourceQueryURITemplate(t *testing.T) {
+	t.Parallel()
+
+	fields := []*ResourceQueryField{
+		{QueryKey: "flag"},
+		{QueryKey: "include-archived"},
+		{QueryKey: "query"},
+		{QueryKey: "tags", Repeated: true},
+	}
+	assert.Equal(t, "catalog://search{?flag,include%2Darchived,query,tags*}", resourceQueryURITemplate("catalog://search", fields))
+}

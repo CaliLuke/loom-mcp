@@ -7,13 +7,23 @@ import (
 	"time"
 )
 
-// CoerceQuery converts a URL query map into a JSON-friendly object:
-// - Repeated parameters become arrays preserving input order
-// - "true"/"false" (case-insensitive) become booleans
-// - RFC3339/RFC3339Nano values become time.Time
-// - Numeric strings become int64 or float64 when obvious
-// It does not coerce "0"/"1" to booleans.
+// CoerceQuery converts a URL query map into a JSON-friendly object. It infers
+// scalar types from values and preserves repeated parameters in input order.
+// It does not coerce "0" or "1" to booleans.
 func CoerceQuery(m map[string][]string) map[string]any {
+	return CoerceQueryTyped(m, nil)
+}
+
+// QueryField describes the query shape declared by a resource payload schema.
+type QueryField struct {
+	String   bool
+	Repeated bool
+}
+
+// CoerceQueryTyped converts a URL query map into a JSON-friendly object while
+// preserving strings and array shape declared by fields. Other values use the
+// same inference as CoerceQuery. Repeated parameters preserve input order.
+func CoerceQueryTyped(m map[string][]string, fields map[string]QueryField) map[string]any {
 	out := make(map[string]any, len(m))
 	keys := make([]string, 0, len(m))
 	for key := range m {
@@ -22,13 +32,22 @@ func CoerceQuery(m map[string][]string) map[string]any {
 	sort.Strings(keys)
 	for _, key := range keys {
 		vals := m[key]
-		if len(vals) == 1 {
-			out[key] = coerceQueryValue(vals[0])
+		field := fields[key]
+		if len(vals) == 1 && !field.Repeated {
+			if field.String {
+				out[key] = vals[0]
+			} else {
+				out[key] = coerceQueryValue(vals[0])
+			}
 			continue
 		}
 		arr := make([]any, len(vals))
 		for i := range vals {
-			arr[i] = coerceQueryValue(vals[i])
+			if field.String {
+				arr[i] = vals[i]
+			} else {
+				arr[i] = coerceQueryValue(vals[i])
+			}
 		}
 		out[key] = arr
 	}

@@ -332,6 +332,13 @@ Use this skill for `loom-mcp` work in this repo. Keep `AGENTS.md` short and keep
 - OAuth `AuthorizationServer(...)` values must be non-empty HTTPS issuer URLs
   without query or fragment components. Reject invalid values during design
   evaluation so protected-resource metadata cannot advertise invalid servers.
+- Generated resource URI decoders must call `runtime/mcp.CoerceQueryTyped`
+  with string and repeated-field shapes from the resource payload schema.
+  Literal boolean, numeric, and RFC 3339 text must stay strings for `String`
+  and `ArrayOf(String)` fields. A one-value array must stay an array. Untyped
+  fields keep value inference. Register payload resources as RFC 6570 resource
+  templates so the MCP SDK routes query-bearing URIs to the generated decoder.
+  Percent-encode field-name bytes that RFC 6570 does not permit in variables.
 - MCP skill exposure is design-owned too: declare local agent skill roots with
   `SkillDirectory(...)`, then let generated SDK servers expose
   `skill://` entries through `resources/list` and `resources/read`.

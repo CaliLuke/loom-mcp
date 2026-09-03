@@ -2759,6 +2759,24 @@ The same package also exposes canonical JSON helpers used at MCP boundaries.
 Those helpers accept string-keyed maps, including named string aliases, and
 fail fast on unsupported map key kinds instead of silently dropping entries.
 
+Generated resource adapters use `mcp.CoerceQueryTyped` for resource URI query
+parameters. The generator supplies the string and repeated-field shapes from the
+resource method payload. It also registers an RFC 6570 resource template for
+query-bearing URIs. Template variable names percent-encode unsupported bytes.
+Thus, `true`, `42`, and RFC 3339 text stay strings for
+`String` and `ArrayOf(String)` fields. An array stays an array when the URI
+contains only one value. Other fields use value inference. Repeated parameters
+stay in input order.
+
+Use the same helper in a custom adapter. Describe each string or repeated field:
+
+```go
+coerced := mcp.CoerceQueryTyped(query, map[string]mcp.QueryField{
+    "name": {String: true},
+    "tags": {String: true, Repeated: true},
+})
+```
+
 ### SDK transport ownership
 
 The official MCP Go SDK owns protocol negotiation, Streamable HTTP sessions,

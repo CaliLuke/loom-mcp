@@ -47,8 +47,10 @@ type ToolBinding struct {
 }
 
 // ResourceBinding pairs a generated SDK descriptor with its typed handler.
+// Exactly one of Resource or Template must be set.
 type ResourceBinding struct {
 	Resource *mcpsdk.Resource
+	Template *mcpsdk.ResourceTemplate
 	Handler  mcpsdk.ResourceHandler
 }
 
@@ -112,8 +114,12 @@ func NewServer(config Config) (*Server, error) {
 		server.AddTool(binding.Tool, binding.Handler)
 	}
 	for _, binding := range resources {
-		if binding.Resource == nil || binding.Handler == nil {
-			return nil, fmt.Errorf("MCP SDK bridge resource binding requires a descriptor and handler")
+		if binding.Handler == nil || binding.Resource == nil && binding.Template == nil || binding.Resource != nil && binding.Template != nil {
+			return nil, fmt.Errorf("MCP SDK bridge resource binding requires exactly one descriptor and a handler")
+		}
+		if binding.Template != nil {
+			server.AddResourceTemplate(binding.Template, binding.Handler)
+			continue
 		}
 		server.AddResource(binding.Resource, binding.Handler)
 	}

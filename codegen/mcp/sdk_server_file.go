@@ -41,6 +41,9 @@ func buildMCPSDKServerFile(genpkg string, svc *expr.ServiceExpr, data *AdapterDa
 	for _, name := range projectedNames {
 		sdkServerImports = append(sdkServerImports, &codegen.ImportSpec{Path: projectedImports[name], Name: name})
 	}
+	if hasWatchableResourceTemplates(data) {
+		sdkServerImports = append(sdkServerImports, &codegen.ImportSpec{Path: "github.com/yosida95/uritemplate/v3", Name: "uritemplate"})
+	}
 	if len(data.StaticPrompts) > 0 || len(data.DynamicPrompts) > 0 {
 		sdkServerImports = append(sdkServerImports, &codegen.ImportSpec{Path: "strings"})
 	}
@@ -164,17 +167,47 @@ func sdkServerConstructorSection(data *AdapterData) codegen.Section {
 	})
 }
 
+const sdkWatchableResourceTemplatesName = "sdkWatchableResourceTemplates"
+
+func hasWatchableResourceTemplates(data *AdapterData) bool {
+	for _, resource := range data.Resources {
+		if resource.Watchable && resource.HasPayload {
+			return true
+		}
+	}
+	return false
+}
+
 func sdkWatchableResourceFunc(data *AdapterData) jen.Code {
-	return jen.Func().Params(jen.Id("uri").String()).Bool().Block(
-		jen.Switch(jen.Id("uri")).BlockFunc(func(g *jen.Group) {
+	return jen.Func().Params(jen.Id("uri").String()).Bool().BlockFunc(func(g *jen.Group) {
+		g.Switch(jen.Id("uri")).BlockFunc(func(cases *jen.Group) {
 			for _, resource := range data.Resources {
-				if resource.Watchable {
-					g.Case(jen.Lit(resource.URI)).Block(jen.Return(jen.True()))
+				if resource.Watchable && !resource.HasPayload {
+					cases.Case(jen.Lit(resource.URI)).Block(jen.Return(jen.True()))
 				}
 			}
-			g.Default().Block(jen.Return(jen.False()))
-		}),
-	)
+		})
+		if hasWatchableResourceTemplates(data) {
+			g.For(jen.List(jen.Id("_"), jen.Id("template")).Op(":=").Range().Id(sdkWatchableResourceTemplatesName)).Block(
+				jen.If(jen.Id("template").Dot("Regexp").Call().Dot("MatchString").Call(jen.Id("uri"))).Block(jen.Return(jen.True())),
+			)
+		}
+		g.Return(jen.False())
+	})
+}
+
+func emitSDKWatchableResourceTemplates(stmt *jen.Statement, data *AdapterData) {
+	if !hasWatchableResourceTemplates(data) {
+		return
+	}
+	stmt.Var().Id(sdkWatchableResourceTemplatesName).Op("=").Index().Op("*").Id("uritemplate").Dot("Template").ValuesFunc(func(values *jen.Group) {
+		for _, resource := range data.Resources {
+			if resource.Watchable && resource.HasPayload {
+				values.Id("uritemplate").Dot("MustNew").Call(jen.Lit(resourceQueryURITemplate(resource.URI, resource.QueryFields)))
+			}
+		}
+	})
+	stmt.Line()
 }
 
 func sdkImplementationDict(data *AdapterData) jen.Dict {
@@ -193,6 +226,7 @@ func sdkImplementationDict(data *AdapterData) jen.Dict {
 
 func sdkServerRegistrationSection(data *AdapterData) codegen.Section {
 	return codegen.NewJenniferSection("mcp-sdk-server-registration", func(stmt *jen.Statement) {
+		emitSDKWatchableResourceTemplates(stmt, data)
 		emitSDKToolBindings(stmt, data)
 		emitSDKResourceBindings(stmt, data)
 		emitSDKPromptBindings(stmt, data)
@@ -341,14 +375,23 @@ func emitSDKResourceBindings(stmt *jen.Statement, data *AdapterData) {
 		g.Id("handler").Op(":=").Id("adapter").Dot("sdkResourceHandler").Call(jen.Id("requestContext"))
 		g.Id("bindings").Op(":=").Make(jen.Index().Id("sdkbridge").Dot("ResourceBinding"), jen.Lit(0), jen.Lit(len(data.Resources)))
 		for _, resource := range data.Resources {
-			dict := jen.Dict{jen.Id("Name"): jen.Lit(resource.Name), jen.Id("URI"): jen.Lit(resource.URI), jen.Id("Description"): jen.Lit(resource.Description), jen.Id("MIMEType"): jen.Lit(resource.MimeType)}
-			if icons := sdkIconSliceValue(resource.Icons); icons != nil {
-				dict[jen.Id("Icons")] = icons
+			descriptor := jen.Dict{
+				jen.Id("Name"):        jen.Lit(resource.Name),
+				jen.Id("Description"): jen.Lit(resource.Description),
+				jen.Id("MIMEType"):    jen.Lit(resource.MimeType),
 			}
-			g.Id("bindings").Op("=").Append(jen.Id("bindings"), jen.Id("sdkbridge").Dot("ResourceBinding").Values(jen.Dict{
-				jen.Id("Resource"): jen.Op("&").Id("mcpsdk").Dot("Resource").Values(dict),
-				jen.Id("Handler"):  jen.Id("handler"),
-			}))
+			if icons := sdkIconSliceValue(resource.Icons); icons != nil {
+				descriptor[jen.Id("Icons")] = icons
+			}
+			binding := jen.Dict{jen.Id("Handler"): jen.Id("handler")}
+			if resource.HasPayload {
+				descriptor[jen.Id("URITemplate")] = jen.Lit(resourceQueryURITemplate(resource.URI, resource.QueryFields))
+				binding[jen.Id("Template")] = jen.Op("&").Id("mcpsdk").Dot("ResourceTemplate").Values(descriptor)
+			} else {
+				descriptor[jen.Id("URI")] = jen.Lit(resource.URI)
+				binding[jen.Id("Resource")] = jen.Op("&").Id("mcpsdk").Dot("Resource").Values(descriptor)
+			}
+			g.Id("bindings").Op("=").Append(jen.Id("bindings"), jen.Id("sdkbridge").Dot("ResourceBinding").Values(binding))
 		}
 		if len(data.SkillDirectories) > 0 {
 			g.List(jen.Id("skillResources"), jen.Id("err")).Op(":=").Id("mcpskills").Dot("List").Call(jen.Qual("context", "Background").Call(), jen.Id("skillSources").Call())

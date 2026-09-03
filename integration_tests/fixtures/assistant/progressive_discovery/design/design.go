@@ -36,11 +36,21 @@ var _ = Service("catalog", func() {
 	})
 
 	Method("status", func() {
+		Payload(func() {
+			Attribute("scope", String, "Status scope")
+		})
 		Result(func() {
 			Attribute("state", String, "Current catalog state")
 			Required("state")
 		})
-		WatchableResource("status", "status://current", "application/json")
+		WatchableResource("status", "urn:status", "application/json")
+	})
+	Method("health", func() {
+		Result(func() {
+			Attribute("state", String, "Current health state")
+			Required("state")
+		})
+		WatchableResource("health", "urn:health", "application/json")
 	})
 
 	Method("stream_chunks", func() {

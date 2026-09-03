@@ -194,8 +194,14 @@ func DispatchResource[P, R any](ctx context.Context, payload P, config ResourceD
 	return zero, loom.PermanentError("resource_not_found", "Unknown resource: %s", uri)
 }
 
-// ResourceQueryJSON converts a resource URI query into a coerced JSON object.
+// ResourceQueryJSON converts a resource URI query into an inferred JSON object.
 func ResourceQueryJSON(uri string) ([]byte, error) {
+	return ResourceQueryJSONTyped(uri, nil)
+}
+
+// ResourceQueryJSONTyped converts a resource URI query into JSON while
+// preserving the string and repeated shapes declared by generated metadata.
+func ResourceQueryJSONTyped(uri string, fields map[string]mcpruntime.QueryField) ([]byte, error) {
 	parsed, err := url.Parse(uri)
 	if err != nil {
 		return nil, fmt.Errorf("invalid resource URI: %w", err)
@@ -208,7 +214,7 @@ func ResourceQueryJSON(uri string) ([]byte, error) {
 	for key, value := range query {
 		values[key] = value
 	}
-	return json.Marshal(mcpruntime.CoerceQuery(values))
+	return json.Marshal(mcpruntime.CoerceQueryTyped(values, fields))
 }
 
 // Authorize verifies a resource URI against server and request-scoped policy.

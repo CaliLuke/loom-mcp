@@ -18,14 +18,15 @@ import (
 type Client struct {
 	LookupEndpoint          loom.Endpoint
 	StatusEndpoint          loom.Endpoint
+	HealthEndpoint          loom.Endpoint
 	StreamChunksEndpoint    loom.Endpoint
 	WaitForCancelEndpoint   loom.Endpoint
 	ProjectedLookupEndpoint loom.Endpoint
 }
 
 // NewClient initializes a "catalog" service client given the endpoints.
-func NewClient(lookup, status, streamChunks, waitForCancel, projectedLookup loom.Endpoint) *Client {
-	return &Client{LookupEndpoint: lookup, StatusEndpoint: status, StreamChunksEndpoint: streamChunks, WaitForCancelEndpoint: waitForCancel, ProjectedLookupEndpoint: projectedLookup}
+func NewClient(lookup, status, health, streamChunks, waitForCancel, projectedLookup loom.Endpoint) *Client {
+	return &Client{LookupEndpoint: lookup, StatusEndpoint: status, HealthEndpoint: health, StreamChunksEndpoint: streamChunks, WaitForCancelEndpoint: waitForCancel, ProjectedLookupEndpoint: projectedLookup}
 }
 
 // Lookup calls the "lookup" endpoint of the "catalog" service.
@@ -39,13 +40,23 @@ func (c *Client) Lookup(ctx context.Context, p *LookupPayload) (res *LookupResul
 }
 
 // Status calls the "status" endpoint of the "catalog" service.
-func (c *Client) Status(ctx context.Context) (res *StatusResult, err error) {
+func (c *Client) Status(ctx context.Context, p *StatusPayload) (res *StatusResult, err error) {
 	var ires any
-	ires, err = c.StatusEndpoint(ctx, nil)
+	ires, err = c.StatusEndpoint(ctx, p)
 	if err != nil {
 		return
 	}
 	return ires.(*StatusResult), nil
+}
+
+// Health calls the "health" endpoint of the "catalog" service.
+func (c *Client) Health(ctx context.Context) (res *HealthResult, err error) {
+	var ires any
+	ires, err = c.HealthEndpoint(ctx, nil)
+	if err != nil {
+		return
+	}
+	return ires.(*HealthResult), nil
 }
 
 // StreamChunks calls the "stream_chunks" endpoint of the "catalog" service.

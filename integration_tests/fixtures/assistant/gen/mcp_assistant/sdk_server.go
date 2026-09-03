@@ -347,11 +347,11 @@ func sdkResourceBindings(adapter *MCPAdapter, requestContext func(context.Contex
 	})
 	bindings = append(bindings, sdkbridge.ResourceBinding{
 		Handler: handler,
-		Resource: &mcpsdk.Resource{
+		Template: &mcpsdk.ResourceTemplate{
 			Description: "Return conversation history with optional query params",
 			MIMEType:    "application/json",
 			Name:        "conversation_history",
-			URI:         "conversation://history",
+			URITemplate: "conversation://history{?flag,limit,nums*,query%2Dvalue,tags*}",
 		},
 	})
 	bindings = append(bindings, sdkbridge.ResourceBinding{

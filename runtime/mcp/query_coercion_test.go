@@ -42,7 +42,33 @@ func TestCoerceQueryCoversScalarRepeatedAndOverflowForms(t *testing.T) {
 	assert.Equal(t, []any{int64(1), true, "text"}, got["repeated"])
 	assert.Equal(t, []any{}, got["absent"])
 }
+func TestCoerceQueryTypedPreservesDeclaredStringValues(t *testing.T) {
+	timestamp := "2024-01-01T00:00:00Z"
+	got := CoerceQueryTyped(map[string][]string{
+		"query":   {"true"},
+		"name":    {"42"},
+		"when":    {timestamp},
+		"tags":    {"1", "false", timestamp},
+		"single":  {"true"},
+		"numbers": {"42"},
+		"limit":   {"42"},
+	}, map[string]QueryField{
+		"name":    {String: true},
+		"query":   {String: true},
+		"single":  {String: true, Repeated: true},
+		"tags":    {String: true, Repeated: true},
+		"when":    {String: true},
+		"numbers": {Repeated: true},
+	})
 
+	assert.Equal(t, "true", got["query"])
+	assert.Equal(t, "42", got["name"])
+	assert.Equal(t, timestamp, got["when"])
+	assert.Equal(t, []any{"1", "false", timestamp}, got["tags"])
+	assert.Equal(t, []any{"true"}, got["single"])
+	assert.Equal(t, []any{int64(42)}, got["numbers"])
+	assert.Equal(t, int64(42), got["limit"])
+}
 func TestQueryShapeDetectorsRejectAmbiguousForms(t *testing.T) {
 	for _, value := range []string{"", "-", "+1", "1.0", "1e2", " 1"} {
 		assert.False(t, looksIntegral(value), value)

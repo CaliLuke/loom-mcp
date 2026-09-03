@@ -146,7 +146,7 @@ func resourceOperationHandler(resource *ResourceAdapter) jen.Code {
 		jen.Id("baseURI").String(),
 	).Params(jen.Op("*").Id("ResourcesReadResult"), jen.Error()).BlockFunc(func(g *jen.Group) {
 		if resource.HasPayload {
-			g.List(jen.Id("args"), jen.Id("err")).Op(":=").Id("sdkbridge").Dot("ResourceQueryJSON").Call(jen.Id("request").Dot("URI"))
+			g.List(jen.Id("args"), jen.Id("err")).Op(":=").Id("sdkbridge").Dot("ResourceQueryJSONTyped").Call(jen.Id("request").Dot("URI"), resourceQueryFieldsValue(resource))
 			g.If(jen.Id("err").Op("!=").Nil()).Block(jen.Return(jen.Nil(), jen.Id("sdkbridge").Dot("InvalidClientInput").Call(jen.Id("loom").Dot("PermanentError").Call(jen.Lit("invalid_params"), jen.Lit("Invalid resource request.")))))
 			g.Id("httpRequest").Op(":=").Op("&").Qual("net/http", "Request").Values(jen.Dict{
 				jen.Id("Body"): jen.Qual("io", "NopCloser").Call(jen.Qual("bytes", "NewReader").Call(jen.Id("args"))),
@@ -191,6 +191,26 @@ func resourceOperationHandler(resource *ResourceAdapter) jen.Code {
 		g.If(jen.Id("err").Op(":=").Id("a").Dot("service").Dot(resource.OriginalMethodName).Call(args...), jen.Id("err").Op("!=").Nil()).Block(jen.Return(jen.Nil(), jen.Id("err")))
 		g.Return(resourceReadResult(jen.Id("baseURI"), jen.Lit(resource.MimeType), jen.Id("stringPtr").Call(jen.Lit(`{"status":"success"}`))), jen.Nil())
 	})
+}
+
+func resourceQueryFieldsValue(resource *ResourceAdapter) jen.Code {
+	fields := jen.Dict{}
+	for _, field := range resource.QueryFields {
+		metadata := jen.Dict{}
+		if field.FormatKind == resourceQueryFormatString {
+			metadata[jen.Id("String")] = jen.True()
+		}
+		if field.Repeated {
+			metadata[jen.Id("Repeated")] = jen.True()
+		}
+		if len(metadata) > 0 {
+			fields[jen.Lit(field.QueryKey)] = jen.Values(metadata)
+		}
+	}
+	if len(fields) == 0 {
+		return jen.Nil()
+	}
+	return jen.Map(jen.String()).Id("mcpruntime").Dot("QueryField").Values(fields)
 }
 
 func resourceReadResult(uri, mimeType, text jen.Code) jen.Code {

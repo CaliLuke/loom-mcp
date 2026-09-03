@@ -18,6 +18,7 @@ import (
 type Endpoints struct {
 	Lookup          loom.Endpoint
 	Status          loom.Endpoint
+	Health          loom.Endpoint
 	StreamChunks    loom.Endpoint
 	WaitForCancel   loom.Endpoint
 	ProjectedLookup loom.Endpoint
@@ -35,6 +36,7 @@ func NewEndpoints(s Service) *Endpoints {
 	return &Endpoints{
 		Lookup:          NewLookupEndpoint(s),
 		Status:          NewStatusEndpoint(s),
+		Health:          NewHealthEndpoint(s),
 		StreamChunks:    NewStreamChunksEndpoint(s),
 		WaitForCancel:   NewWaitForCancelEndpoint(s),
 		ProjectedLookup: NewProjectedLookupEndpoint(s),
@@ -45,6 +47,7 @@ func NewEndpoints(s Service) *Endpoints {
 func (e *Endpoints) Use(m func(loom.Endpoint) loom.Endpoint) {
 	e.Lookup = m(e.Lookup)
 	e.Status = m(e.Status)
+	e.Health = m(e.Health)
 	e.StreamChunks = m(e.StreamChunks)
 	e.WaitForCancel = m(e.WaitForCancel)
 	e.ProjectedLookup = m(e.ProjectedLookup)
@@ -63,7 +66,16 @@ func NewLookupEndpoint(s Service) loom.Endpoint {
 // "status" of service "catalog".
 func NewStatusEndpoint(s Service) loom.Endpoint {
 	return func(ctx context.Context, req any) (any, error) {
-		return s.Status(ctx)
+		p := req.(*StatusPayload)
+		return s.Status(ctx, p)
+	}
+}
+
+// NewHealthEndpoint returns an endpoint function that calls the method
+// "health" of service "catalog".
+func NewHealthEndpoint(s Service) loom.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		return s.Health(ctx)
 	}
 }
 

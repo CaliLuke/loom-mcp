@@ -15,6 +15,7 @@ import (
 	json "encoding/json/v2"
 	"errors"
 	"fmt"
+	"io"
 	"net/http"
 	"regexp"
 	"sort"
@@ -153,7 +154,7 @@ func NewMCPAdapter(service catalog.Service, opts *MCPAdapterOptions) *MCPAdapter
 	callCounter, errorCounter, durationHistogram := defaultMCPAdapterMetrics(opts, telemetryName)
 	adapter := &MCPAdapter{service: service, initializedSessions: make(map[string]time.Time), sessionPrincipals: make(map[string]string), opts: opts, tracer: tracer, callCounter: callCounter, errorCounter: errorCounter, durationHistogram: durationHistogram}
 	adapter.resourceOperations = adapter.resourceOperationDescriptors()
-	adapter.resourcePolicy.ResourceNameToURI = map[string]string{"status": "status://current"}
+	adapter.resourcePolicy.ResourceNameToURI = map[string]string{"status": "urn:status", "health": "urn:health"}
 	if opts != nil {
 		adapter.resourcePolicy.AllowedURIs = opts.AllowedResourceURIs
 		adapter.resourcePolicy.DeniedURIs = opts.DeniedResourceURIs
@@ -1770,8 +1771,20 @@ func (a *MCPAdapter) ResourcesRead(ctx context.Context, p *ResourcesReadPayload)
 }
 func (a *MCPAdapter) resourceOperationDescriptors() []sdkbridge.ResourceOperation[*ResourcesReadPayload, *ResourcesReadResult] {
 	return []sdkbridge.ResourceOperation[*ResourcesReadPayload, *ResourcesReadResult]{{
-		Handle: func(ctx context.Context, _ *ResourcesReadPayload, baseURI string) (*ResourcesReadResult, error) {
-			result, err := a.service.Status(ctx)
+		Handle: func(ctx context.Context, request *ResourcesReadPayload, baseURI string) (*ResourcesReadResult, error) {
+			args, err := sdkbridge.ResourceQueryJSONTyped(request.URI, map[string]mcpruntime.QueryField{"scope": {String: true}})
+			if err != nil {
+				return nil, sdkbridge.InvalidClientInput(loom.PermanentError("invalid_params", "Invalid resource request."))
+			}
+			httpRequest := &http.Request{
+				Body:   io.NopCloser(bytes.NewReader(args)),
+				Header: http.Header{"Content-Type": []string{"application/json"}},
+			}
+			var payload *catalog.StatusPayload
+			if err := goahttp.RequestDecoder(httpRequest).Decode(&payload); err != nil {
+				return nil, sdkbridge.InvalidClientInput(loom.PermanentError("invalid_params", "Invalid resource request."))
+			}
+			result, err := a.service.Status(ctx, payload)
 			if err != nil {
 				return nil, err
 			}
@@ -1785,6 +1798,23 @@ func (a *MCPAdapter) resourceOperationDescriptors() []sdkbridge.ResourceOperatio
 				URI:      baseURI,
 			}}}, nil
 		},
-		URI: "status://current",
+		URI: "urn:status",
+	}, {
+		Handle: func(ctx context.Context, _ *ResourcesReadPayload, baseURI string) (*ResourcesReadResult, error) {
+			result, err := a.service.Health(ctx)
+			if err != nil {
+				return nil, err
+			}
+			text, err := mcpruntime.EncodeJSONToString(ctx, goahttp.ResponseEncoder, result)
+			if err != nil {
+				return nil, err
+			}
+			return &ResourcesReadResult{Contents: []*ResourceContent{&ResourceContent{
+				MimeType: stringPtr("application/json"),
+				Text:     &text,
+				URI:      baseURI,
+			}}}, nil
+		},
+		URI: "urn:health",
 	}}
 }
