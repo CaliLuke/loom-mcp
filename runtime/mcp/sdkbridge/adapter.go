@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"net/url"
+	"regexp"
 	"strings"
 
 	mcpruntime "github.com/CaliLuke/loom-mcp/v2/runtime/mcp"
@@ -53,7 +54,37 @@ type ResourceOperation[P, R any] struct {
 	Handle func(context.Context, P, string) (R, error)
 }
 
-// ResourcePolicy is the server-side maximum resource grant.
+// ResourceQueryField describes one designed resource query parameter.
+type ResourceQueryField = mcpruntime.QueryField
+
+// ResourceURIMatcher matches one precompiled resource URI template and its designed query shape.
+type ResourceURIMatcher struct {
+	Pattern     *regexp.Regexp
+	QueryFields map[string]ResourceQueryField
+}
+
+// Match reports whether uri matches the template and declares only designed query parameters.
+func (matcher ResourceURIMatcher) Match(uri string) bool {
+	if matcher.Pattern == nil || !matcher.Pattern.MatchString(uri) {
+		return false
+	}
+	parsed, err := url.Parse(uri)
+	if err != nil {
+		return false
+	}
+	query, err := url.ParseQuery(parsed.RawQuery)
+	if err != nil {
+		return false
+	}
+	for key, values := range query {
+		field, ok := matcher.QueryFields[key]
+		if !ok || !field.Repeated && len(values) > 1 {
+			return false
+		}
+	}
+	return true
+}
+
 type ResourcePolicy struct {
 	AllowedURIs       []string
 	DeniedURIs        []string

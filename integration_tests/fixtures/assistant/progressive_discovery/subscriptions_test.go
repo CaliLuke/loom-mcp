@@ -52,6 +52,8 @@ func TestGeneratedSDKServerResourceSubscriptionLifecycle(t *testing.T) {
 	invalidStatusURI := statusURI + "&extra=1"
 	require.Error(t, session.Subscribe(ctx, &mcp.SubscribeParams{URI: invalidStatusURI}))
 	require.Error(t, server.ResourceUpdated(ctx, invalidStatusURI))
+	require.Error(t, session.Subscribe(ctx, &mcp.SubscribeParams{URI: "urn:status?extra=42"}))
+	require.Error(t, server.ResourceUpdated(ctx, "urn:status?extra=42"))
 	require.NoError(t, session.Subscribe(ctx, &mcp.SubscribeParams{URI: statusURI}))
 	require.NoError(t, server.ResourceUpdated(ctx, statusURI))
 	select {

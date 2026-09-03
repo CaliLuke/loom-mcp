@@ -100,8 +100,8 @@ func NewSDKServer(service catalog.Service, opts *SDKServerOptions) (*SDKServer, 
 			case "urn:health":
 				return true
 			}
-			for _, template := range sdkWatchableResourceTemplates {
-				if template.Regexp().MatchString(uri) {
+			for _, matcher := range sdkWatchableResourceMatchers {
+				if matcher.Match(uri) {
 					return true
 				}
 			}
@@ -127,7 +127,10 @@ func (s *SDKServer) ResourceUpdated(ctx context.Context, uri string) error {
 	return s.bridge.ResourceUpdated(ctx, uri)
 }
 
-var sdkWatchableResourceTemplates = []*uritemplate.Template{uritemplate.MustNew("urn:status{?scope}")}
+var sdkWatchableResourceMatchers = []sdkbridge.ResourceURIMatcher{{
+	Pattern:     uritemplate.MustNew("urn:status{?scope}").Regexp(),
+	QueryFields: map[string]sdkbridge.ResourceQueryField{"scope": {String: true}},
+}}
 
 func sdkToolBindings(adapter *MCPAdapter, requestContext func(context.Context, *http.Request) context.Context) ([]sdkbridge.ToolBinding, error) {
 	handler := adapter.sdkToolHandler(requestContext)

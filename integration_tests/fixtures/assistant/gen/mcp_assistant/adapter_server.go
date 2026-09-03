@@ -2510,6 +2510,8 @@ func (a *MCPAdapter) resourceOperationDescriptors() []sdkbridge.ResourceOperatio
 	}, {
 		Handle: func(ctx context.Context, request *ResourcesReadPayload, baseURI string) (*ResourcesReadResult, error) {
 			args, err := sdkbridge.ResourceQueryJSONTyped(request.URI, map[string]mcpruntime.QueryField{
+				"flag":        {},
+				"limit":       {},
 				"nums":        {Repeated: true},
 				"query-value": {String: true},
 				"tags": {

@@ -2,17 +2,17 @@ package sdkbridge
 
 import (
 	"context"
-	"errors"
-	"os"
-	"path/filepath"
-	"testing"
-
 	"encoding/json/jsontext"
+	"errors"
 	mcpruntime "github.com/CaliLuke/loom-mcp/v2/runtime/mcp"
 	mcpskills "github.com/CaliLuke/loom-mcp/v2/runtime/mcp/skills"
 	loom "github.com/CaliLuke/loom/pkg"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"os"
+	"path/filepath"
+	"regexp"
+	"testing"
 )
 
 type dispatchPayload struct {
@@ -184,6 +184,30 @@ func TestResourceQueryJSONCoercesURIValues(t *testing.T) {
 	require.ErrorContains(t, err, "invalid resource URI")
 }
 
+func TestResourceURIMatcherRejectsUndeclaredQueryShapes(t *testing.T) {
+	matcher := ResourceURIMatcher{
+		Pattern: regexp.MustCompile(`^doc://list(?:\?.*)?$`),
+		QueryFields: map[string]ResourceQueryField{
+			"count": {},
+			"tags":  {Repeated: true},
+		},
+	}
+	for _, uri := range []string{
+		"doc://list",
+		"doc://list?count=2",
+		"doc://list?tags=a&tags=b",
+	} {
+		assert.True(t, matcher.Match(uri), uri)
+	}
+	for _, uri := range []string{
+		"doc://other?count=2",
+		"doc://list?extra=1",
+		"doc://list?count=1&count=2",
+		"doc://list?count=1;extra=2",
+	} {
+		assert.False(t, matcher.Match(uri), uri)
+	}
+}
 func TestDispatchNamedLogsSuccessfulTypedOperation(t *testing.T) {
 	var events []string
 	result, err := DispatchNamed(context.Background(), &dispatchPayload{Name: "known"}, NamedDispatchConfig[*dispatchPayload, *dispatchResult]{

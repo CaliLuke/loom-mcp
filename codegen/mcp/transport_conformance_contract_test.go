@@ -115,11 +115,14 @@ func TestGenerateTransportConformance(t *testing.T) {
 		sdk := renderGeneratedFile(t, findGeneratedFile(t, files, "gen/mcp_assistant/sdk_server.go"))
 
 		require.Contains(t, adapter, "sdkbridge.ResourceQueryJSONTyped(request.URI, map[string]mcpruntime.QueryField{")
-		require.Contains(t, adapter, `"cursor": {String: true}`)
-		require.Contains(t, adapter, `"tags": {`)
+		require.Contains(t, adapter, `"cursor"`)
+		require.Contains(t, adapter, "String: true")
+		require.Contains(t, adapter, `"tags"`)
 		require.Contains(t, adapter, "Repeated: true")
 		require.Contains(t, sdk, "Template: &mcpsdk.ResourceTemplate{")
 		require.Contains(t, sdk, `URITemplate: "doc://list{?cursor,enabled,limit,offset,ratio,tags*,tenant}"`)
-		require.Contains(t, sdk, `uritemplate.MustNew("doc://list{?cursor,enabled,limit,offset,ratio,tags*,tenant}")`)
+		require.Contains(t, sdk, "[]sdkbridge.ResourceURIMatcher{")
+		require.Contains(t, sdk, `uritemplate.MustNew("doc://list{?cursor,enabled,limit,offset,ratio,tags*,tenant}").Regexp()`)
+		require.Contains(t, sdk, `"limit"`)
 	})
 }

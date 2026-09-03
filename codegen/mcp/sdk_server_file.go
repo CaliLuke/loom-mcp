@@ -167,7 +167,7 @@ func sdkServerConstructorSection(data *AdapterData) codegen.Section {
 	})
 }
 
-const sdkWatchableResourceTemplatesName = "sdkWatchableResourceTemplates"
+const sdkWatchableResourceMatchersName = "sdkWatchableResourceMatchers"
 
 func hasWatchableResourceTemplates(data *AdapterData) bool {
 	for _, resource := range data.Resources {
@@ -188,22 +188,25 @@ func sdkWatchableResourceFunc(data *AdapterData) jen.Code {
 			}
 		})
 		if hasWatchableResourceTemplates(data) {
-			g.For(jen.List(jen.Id("_"), jen.Id("template")).Op(":=").Range().Id(sdkWatchableResourceTemplatesName)).Block(
-				jen.If(jen.Id("template").Dot("Regexp").Call().Dot("MatchString").Call(jen.Id("uri"))).Block(jen.Return(jen.True())),
+			g.For(jen.List(jen.Id("_"), jen.Id("matcher")).Op(":=").Range().Id(sdkWatchableResourceMatchersName)).Block(
+				jen.If(jen.Id("matcher").Dot("Match").Call(jen.Id("uri"))).Block(jen.Return(jen.True())),
 			)
 		}
 		g.Return(jen.False())
 	})
 }
 
-func emitSDKWatchableResourceTemplates(stmt *jen.Statement, data *AdapterData) {
+func emitSDKWatchableResourceMatchers(stmt *jen.Statement, data *AdapterData) {
 	if !hasWatchableResourceTemplates(data) {
 		return
 	}
-	stmt.Var().Id(sdkWatchableResourceTemplatesName).Op("=").Index().Op("*").Id("uritemplate").Dot("Template").ValuesFunc(func(values *jen.Group) {
+	stmt.Var().Id(sdkWatchableResourceMatchersName).Op("=").Index().Id("sdkbridge").Dot("ResourceURIMatcher").ValuesFunc(func(values *jen.Group) {
 		for _, resource := range data.Resources {
 			if resource.Watchable && resource.HasPayload {
-				values.Id("uritemplate").Dot("MustNew").Call(jen.Lit(resourceQueryURITemplate(resource.URI, resource.QueryFields)))
+				values.Values(jen.Dict{
+					jen.Id("Pattern"):     jen.Id("uritemplate").Dot("MustNew").Call(jen.Lit(resourceQueryURITemplate(resource.URI, resource.QueryFields))).Dot("Regexp").Call(),
+					jen.Id("QueryFields"): resourceQueryFieldsValue(resource, "sdkbridge", "ResourceQueryField"),
+				})
 			}
 		}
 	})
@@ -226,7 +229,7 @@ func sdkImplementationDict(data *AdapterData) jen.Dict {
 
 func sdkServerRegistrationSection(data *AdapterData) codegen.Section {
 	return codegen.NewJenniferSection("mcp-sdk-server-registration", func(stmt *jen.Statement) {
-		emitSDKWatchableResourceTemplates(stmt, data)
+		emitSDKWatchableResourceMatchers(stmt, data)
 		emitSDKToolBindings(stmt, data)
 		emitSDKResourceBindings(stmt, data)
 		emitSDKPromptBindings(stmt, data)
