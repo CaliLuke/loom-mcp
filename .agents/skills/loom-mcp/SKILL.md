@@ -121,6 +121,10 @@ Use this skill for `loom-mcp` work in this repo. Keep `AGENTS.md` short and keep
 - Retry-and-reflect failure tracking is process-local and limited to 4096
   run/tool keys. Each failure refreshes its key. When full, the interceptor
   discards the least-recently-failed keys, which restart at attempt one.
+- Generated `Route()` helpers include the timing that remote clients need.
+  A manual `AgentRoute` must match the worker's `TimeBudget`,
+  `FinalizerGrace`, and resume-activity timeout. Per-run options override route
+  values.
 - `Bookkeeping()` marks durable side-effect tools that do not consume the
   domain-call budget and do not enter planner-visible history. `TerminalRun()`
   implies bookkeeping and must end the run without another planner call or a

@@ -25,6 +25,24 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+func TestGeneratedRoutesCarryWorkerTiming(t *testing.T) {
+	require.Equal(t, 30*time.Second, coordinator.Route().TimeBudget)
+	require.Equal(t, 2*time.Minute, coordinator.Route().ResumeActivityTimeout)
+	require.Equal(t, 10*time.Second, specialist.Route().TimeBudget)
+	require.Equal(t, 2*time.Minute, specialist.Route().ResumeActivityTimeout)
+
+	toolset := delegated.NewSpecialistToolsetRegistration(nil)
+	require.NotNil(t, toolset.AgentTool)
+	require.Equal(t, 10*time.Second, toolset.AgentTool.Route.TimeBudget)
+	require.Equal(t, 2*time.Minute, toolset.AgentTool.Route.ResumeActivityTimeout)
+
+	configuredToolset, err := delegated.NewRegistration(nil, "")
+	require.NoError(t, err)
+	require.NotNil(t, configuredToolset.AgentTool)
+	require.Equal(t, 10*time.Second, configuredToolset.AgentTool.Route.TimeBudget)
+	require.Equal(t, 2*time.Minute, configuredToolset.AgentTool.Route.ResumeActivityTimeout)
+}
+
 type parentDelegationPlanner struct{}
 
 type specialistFinalResultPlanner struct {

@@ -411,11 +411,13 @@ func emitAgentToolCallBuilders(stmt *jen.Statement, data agentToolsetFileData) {
 }
 
 func agentRouteLiteral(data agentToolsetFileData) *jen.Statement {
-	return jen.Id("runtime").Dot("AgentRoute").Values(jen.Dict{
+	fields := jen.Dict{
 		jen.Id("ID"):               jen.Id("AgentID"),
 		jen.Id("WorkflowName"):     jen.Lit(data.Toolset.Agent.Runtime.Workflow.Name),
 		jen.Id("DefaultTaskQueue"): jen.Lit(data.Toolset.Agent.Runtime.Workflow.Queue),
-	})
+	}
+	addAgentRouteTimingFields(fields, data.Toolset.Agent)
+	return jen.Id("runtime").Dot("AgentRoute").Values(fields)
 }
 
 func emitHintTemplateAssignments(data agentToolsetFileData, returnsError bool) *jen.Statement {

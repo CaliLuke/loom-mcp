@@ -3,6 +3,7 @@ package runtime
 
 import (
 	"context"
+	"time"
 
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/engine"
@@ -41,7 +42,7 @@ type (
 		OneShotRun(ctx context.Context, messages []*model.Message, opts ...RunOption) (*RunOutput, error)
 	}
 
-	// AgentRoute carries the minimum metadata needed to run an agent when the
+	// AgentRoute carries the metadata needed to run an agent when the
 	// caller process does not register that agent locally.
 	//
 	// Generated NewClient helpers embed this route metadata so most callers do
@@ -59,6 +60,19 @@ type (
 		// DefaultTaskQueue is the default queue workers use for this agent.
 		// Per-run overrides may replace this queue via WithTaskQueue.
 		DefaultTaskQueue string
+
+		// TimeBudget is the worker registration's default active-work budget.
+		// Per-run WithRunTimeBudget overrides this value.
+		TimeBudget time.Duration
+
+		// FinalizerGrace is the worker registration's default finalization reserve.
+		// Per-run WithRunFinalizerGrace overrides this value.
+		FinalizerGrace time.Duration
+
+		// ResumeActivityTimeout is the worker registration's PlanResume
+		// StartToClose timeout. The runtime ensures the finalization reserve is at
+		// least this long.
+		ResumeActivityTimeout time.Duration
 	}
 
 	// agentClient binds execution to one locally-registered agent.
@@ -103,7 +117,9 @@ func (r *Runtime) MustClient(id agent.Ident) AgentClient {
 // ClientFor returns a typed client for one externally supplied route.
 //
 // Use this in caller-only processes that do not register agents locally but
-// still need to start workflows against worker-owned routes.
+// still need to start workflows against worker-owned routes. The route timing
+// must match the worker registration so the engine timeout covers the run
+// budget. Generated Route helpers supply matching values.
 // Returns ErrAgentNotFound when route metadata is incomplete.
 func (r *Runtime) ClientFor(route AgentRoute) (AgentClient, error) {
 	if route.ID == "" || route.WorkflowName == "" {
@@ -199,5 +215,17 @@ func applyRunOptions(input *RunInput, opts []RunOption) {
 			continue
 		}
 		option(input)
+	}
+}
+
+func (route AgentRoute) timingRegistration() AgentRegistration {
+	return AgentRegistration{
+		Policy: RunPolicy{
+			TimeBudget:     route.TimeBudget,
+			FinalizerGrace: route.FinalizerGrace,
+		},
+		ResumeActivityOptions: engine.ActivityOptions{
+			StartToCloseTimeout: route.ResumeActivityTimeout,
+		},
 	}
 }

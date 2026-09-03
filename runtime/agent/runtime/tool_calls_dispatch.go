@@ -262,10 +262,11 @@ func startInlineAgentChildWorkflow(
 	input *RunInput,
 ) (engine.ChildWorkflowHandle, error) {
 	return wfCtx.StartChildWorkflow(ctx, engine.ChildWorkflowRequest{
-		ID:        input.RunID,
-		Workflow:  route.WorkflowName,
-		TaskQueue: route.DefaultTaskQueue,
-		Input:     input,
+		ID:         input.RunID,
+		Workflow:   route.WorkflowName,
+		TaskQueue:  route.DefaultTaskQueue,
+		Input:      input,
+		RunTimeout: resolveRunTiming(route.timingRegistration(), input).RunTimeout,
 	})
 }
 

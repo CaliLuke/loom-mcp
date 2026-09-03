@@ -210,19 +210,29 @@ func emitAgentWorker(stmt *jen.Statement) {
 }
 
 func emitAgentRoute(stmt *jen.Statement, agent *AgentData) {
-	codegen.Doc(stmt, "Route returns the minimal route required to construct a client in a\ncaller process without registering the agent locally.")
+	codegen.Doc(stmt, "Route returns the route and worker timing metadata required to construct a\nclient in a caller process without registering the agent locally.")
+	fields := jen.Dict{
+		jen.Id("ID"):               jen.Id("AgentID"),
+		jen.Id("WorkflowName"):     jen.Id("WorkflowName"),
+		jen.Id("DefaultTaskQueue"): jen.Lit(agent.Runtime.Workflow.Queue),
+	}
+	addAgentRouteTimingFields(fields, agent)
 	stmt.Func().Id("Route").Params().Id("runtime").Dot("AgentRoute").Block(
-		jen.Return(jen.Id("runtime").Dot("AgentRoute").Values(jen.Dict{
-			jen.Id("ID"):               jen.Id("AgentID"),
-			jen.Id("WorkflowName"):     jen.Id("WorkflowName"),
-			jen.Id("DefaultTaskQueue"): jen.Lit(agent.Runtime.Workflow.Queue),
-		})),
+		jen.Return(jen.Id("runtime").Dot("AgentRoute").Values(fields)),
 	)
 	stmt.Line()
 }
+func addAgentRouteTimingFields(fields jen.Dict, agent *AgentData) {
+	if agent.RunPolicy.TimeBudget > 0 {
+		fields[jen.Id("TimeBudget")] = jen.Qual("time", "Duration").Call(jen.Lit(int64(agent.RunPolicy.TimeBudget)))
+	}
+	if agent.Runtime.ResumeActivity != nil && agent.Runtime.ResumeActivity.StartToCloseTimeout > 0 {
+		fields[jen.Id("ResumeActivityTimeout")] = jen.Qual("time", "Duration").Call(jen.Lit(int64(agent.Runtime.ResumeActivity.StartToCloseTimeout)))
+	}
+}
 
 func emitAgentClient(stmt *jen.Statement) {
-	codegen.Doc(stmt, "NewClient returns a runtime.AgentClient bound to this agent. In caller\nprocesses that do not register the agent locally, this uses ClientMeta to\nconstruct a client that can start workflows against remote workers.")
+	codegen.Doc(stmt, "NewClient returns a runtime.AgentClient bound to this agent. In caller\nprocesses that do not register the agent locally, this uses Route metadata to\nconstruct a client that can start workflows against remote workers.")
 	stmt.Func().Id("NewClient").
 		Params(jen.Id("rt").Op("*").Id("runtime").Dot("Runtime")).
 		Id("runtime").Dot("AgentClient").

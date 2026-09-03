@@ -8,6 +8,8 @@
 package delegated
 
 import (
+	"time"
+
 	delegatedspecs "example.com/agentfeatures/gen/features/agents/specialist/exports/delegated"
 	agent "github.com/CaliLuke/loom-mcp/v2/runtime/agent"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/planner"
@@ -71,9 +73,11 @@ func NewSpecialistToolsetRegistration(rt *runtime.Runtime) runtime.ToolsetRegist
 		PlanActivityName:    "features.specialist.plan",
 		ResumeActivityName:  "features.specialist.resume",
 		Route: runtime.AgentRoute{
-			DefaultTaskQueue: "features_specialist_workflow",
-			ID:               AgentID,
-			WorkflowName:     "features.specialist.workflow",
+			DefaultTaskQueue:      "features_specialist_workflow",
+			ID:                    AgentID,
+			ResumeActivityTimeout: time.Duration(int64(120000000000)),
+			TimeBudget:            time.Duration(int64(10000000000)),
+			WorkflowName:          "features.specialist.workflow",
 		},
 		TaskQueue: "features_specialist_delegated_tasks",
 	}
@@ -97,9 +101,11 @@ func NewRegistration(rt *runtime.Runtime, systemPrompt string, opts ...runtime.A
 		PlanActivityName:    "features.specialist.plan",
 		ResumeActivityName:  "features.specialist.resume",
 		Route: runtime.AgentRoute{
-			DefaultTaskQueue: "features_specialist_workflow",
-			ID:               AgentID,
-			WorkflowName:     "features.specialist.workflow",
+			DefaultTaskQueue:      "features_specialist_workflow",
+			ID:                    AgentID,
+			ResumeActivityTimeout: time.Duration(int64(120000000000)),
+			TimeBudget:            time.Duration(int64(10000000000)),
+			WorkflowName:          "features.specialist.workflow",
 		},
 		SystemPrompt: systemPrompt,
 		TaskQueue:    "features_specialist_delegated_tasks",
