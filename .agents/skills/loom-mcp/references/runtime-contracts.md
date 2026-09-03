@@ -224,6 +224,10 @@ Use this file for current loom-mcp runtime behavior in this repo. Prefer it over
 - Retry-and-reflect guidance also uses fixed framework text. Do not persist the
   raw service error in its tool error or retry hint because the error can contain
   submitted values.
+- Retry-and-reflect failure tracking is process-local and limited to 4096
+  run/tool keys. Each failure refreshes its key. When full, the interceptor
+  discards the least-recently-failed keys, which restart at attempt one. Do not
+  depend on workflow-completion callbacks to clear activity-worker state.
 - `runtime.tool_unavailable` is not a policy candidate. Rewrite every direct
   model call to it with the exact effective request catalog at the model
   boundary. Preserve that narrower catalog at the activity boundary when the

@@ -919,6 +919,10 @@ tool execution errors into planner-visible tool errors with structured
 the call. Its generated error and retry message use fixed framework text. They
 do not persist the raw service error because that error can contain submitted
 arguments or secrets.
+Failure counts are process-local. Each interceptor keeps at most 4096 run/tool
+keys and refreshes a key after each failure. When full, it discards the
+least-recently-failed keys. A discarded key starts at attempt one if it fails
+again.
 
 ### Model-Facing Skills
 

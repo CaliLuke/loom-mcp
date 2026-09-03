@@ -9,6 +9,10 @@ import (
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/tools"
 )
 
+// retryReflectFailureLimit bounds process-local retry state because workflow
+// completion can run in another worker process.
+const retryReflectFailureLimit = 4096
+
 type (
 	// RetryAndReflectConfig configures the retry-and-reflect interceptor.
 	RetryAndReflectConfig struct {
@@ -21,17 +25,37 @@ type (
 		ErrorIfRetryExceeded bool
 	}
 
+	retryReflectKey struct {
+		runID string
+		tool  tools.Ident
+	}
+
+	retryReflectFailure struct {
+		count    int
+		sequence uint64
+	}
+
+	retryReflectOrderEntry struct {
+		key      retryReflectKey
+		sequence uint64
+	}
+
 	retryAndReflectInterceptor struct {
 		mu       sync.Mutex
 		max      int
 		failHard bool
-		counts   map[string]int
+		counts   map[retryReflectKey]retryReflectFailure
+		order    []retryReflectOrderEntry
+		next     int
+		sequence uint64
 	}
 )
 
 // NewRetryAndReflectInterceptor returns an interceptor that converts tool
 // execution errors into planner-visible tool errors with structured retry
 // guidance. This keeps the run alive so the planner can repair the call.
+// Failure tracking retains at most retryReflectFailureLimit recent run/tool keys
+// in each process.
 func NewRetryAndReflectInterceptor(cfg RetryAndReflectConfig) Interceptor {
 	max := cfg.MaxRetries
 	if max == 0 {
@@ -40,7 +64,7 @@ func NewRetryAndReflectInterceptor(cfg RetryAndReflectConfig) Interceptor {
 	return &retryAndReflectInterceptor{
 		max:      max,
 		failHard: cfg.ErrorIfRetryExceeded,
-		counts:   make(map[string]int),
+		counts:   make(map[retryReflectKey]retryReflectFailure),
 	}
 }
 
@@ -76,19 +100,33 @@ func (r *retryAndReflectInterceptor) AfterTool(_ context.Context, input *AfterTo
 func (r *retryAndReflectInterceptor) recordFailure(call planner.ToolRequest) int {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	key := retryReflectKey(call)
-	r.counts[key]++
-	return r.counts[key]
+	key := retryReflectKey{runID: call.RunID, tool: call.Name}
+	count := 1
+	if failure, ok := r.counts[key]; ok {
+		count = failure.count + 1
+	}
+
+	r.sequence++
+	failure := retryReflectFailure{count: count, sequence: r.sequence}
+	orderEntry := retryReflectOrderEntry{key: key, sequence: r.sequence}
+	if len(r.order) < retryReflectFailureLimit {
+		r.order = append(r.order, orderEntry)
+	} else {
+		expired := r.order[r.next]
+		if current, ok := r.counts[expired.key]; ok && current.sequence == expired.sequence {
+			delete(r.counts, expired.key)
+		}
+		r.order[r.next] = orderEntry
+		r.next = (r.next + 1) % retryReflectFailureLimit
+	}
+	r.counts[key] = failure
+	return count
 }
 
 func (r *retryAndReflectInterceptor) reset(call planner.ToolRequest) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	delete(r.counts, retryReflectKey(call))
-}
-
-func retryReflectKey(call planner.ToolRequest) string {
-	return call.RunID + "\x00" + string(call.Name)
+	delete(r.counts, retryReflectKey{runID: call.RunID, tool: call.Name})
 }
 
 func retryReflectMessage(tool tools.Ident, count, max int) string {

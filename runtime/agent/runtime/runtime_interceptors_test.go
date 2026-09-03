@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json/v2"
 	"errors"
+	"fmt"
 	"testing"
 	"time"
 
@@ -544,4 +545,50 @@ func TestRetryAndReflectInterceptorConvertsToolErrorToRetryHint(t *testing.T) {
 	require.Len(t, events, 1)
 	require.NotContains(t, events[0].Error.Error(), secret)
 	require.NotContains(t, events[0].RetryHint.Message, secret)
+}
+
+func TestRetryAndReflectInterceptorBoundsFailureCounts(t *testing.T) {
+	interceptor := NewRetryAndReflectInterceptor(RetryAndReflectConfig{
+		MaxRetries:           3,
+		ErrorIfRetryExceeded: true,
+	})
+	retryInterceptor, ok := interceptor.(*retryAndReflectInterceptor)
+	require.True(t, ok)
+	toolInterceptor, ok := interceptor.(ToolInterceptor)
+	require.True(t, ok)
+	toolErr := errors.New("tool failed")
+	fail := func(runID string) string {
+		decision, err := toolInterceptor.AfterTool(context.Background(), &AfterToolInput{
+			Call: planner.ToolRequest{
+				RunID: runID,
+				Name:  "svc.tools.search",
+			},
+			Err: toolErr,
+		})
+		require.NoError(t, err)
+		require.NotNil(t, decision)
+		require.NotNil(t, decision.Result)
+		require.NotNil(t, decision.Result.RetryHint)
+		return decision.Result.RetryHint.Message
+	}
+
+	require.Contains(t, fail("active-run"), "Attempt 1 of 3 failed")
+	for i := range retryReflectFailureLimit - 1 {
+		require.Contains(t, fail(fmt.Sprintf("run-%d", i)), "Attempt 1 of 3 failed")
+	}
+	require.Len(t, retryInterceptor.counts, retryReflectFailureLimit)
+
+	require.Contains(t, fail("active-run"), "Attempt 2 of 3 failed")
+	require.Contains(t, fail("overflow-run"), "Attempt 1 of 3 failed")
+	require.Len(t, retryInterceptor.counts, retryReflectFailureLimit)
+	require.Contains(t, fail("active-run"), "Attempt 3 of 3 failed")
+	require.Contains(t, fail("run-0"), "Attempt 1 of 3 failed")
+	require.LessOrEqual(t, len(retryInterceptor.counts), retryReflectFailureLimit)
+
+	decision, err := toolInterceptor.AfterTool(context.Background(), &AfterToolInput{
+		Call: planner.ToolRequest{RunID: "active-run", Name: "svc.tools.search"},
+		Err:  toolErr,
+	})
+	require.Nil(t, decision)
+	require.ErrorIs(t, err, toolErr)
 }

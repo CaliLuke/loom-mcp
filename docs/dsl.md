@@ -1362,6 +1362,9 @@ RunPolicy(func() {
 `RetryAndReflect` installs an agent-scoped interceptor. When a tool executor returns an error, the
 interceptor converts that failure into a planner retry hint so the planner can repair the tool call
 arguments on a follow-up turn.
+Each interceptor process tracks at most 4096 run/tool failure keys. It discards
+the least-recently-failed keys when full. A discarded key starts at attempt one
+if it fails again.
 
 `Interceptors("audit", "safety")` records design-owned interceptor IDs in generated registration.
 Application runtime wiring provides the concrete implementations with

@@ -102,6 +102,9 @@ Use this skill for `loom-mcp` work in this repo. Keep `AGENTS.md` short and keep
 - `policy.CapsState` owns counter budgets only. Its deprecated `ExpiresAt` field
   is ignored; active-time enforcement belongs to deterministic runtime deadlines
   configured through `TimeBudget`, with external waits pausing that budget.
+- Retry-and-reflect failure tracking is process-local and limited to 4096
+  run/tool keys. Each failure refreshes its key. When full, the interceptor
+  discards the least-recently-failed keys, which restart at attempt one.
 - `Bookkeeping()` marks durable side-effect tools that do not consume the
   domain-call budget and do not enter planner-visible history. `TerminalRun()`
   implies bookkeeping and must end the run without another planner call or a
