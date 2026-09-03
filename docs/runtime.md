@@ -2334,6 +2334,11 @@ limitedClient := rl.Middleware()(rawClient)
 rt.RegisterModel("bedrock", limitedClient)
 ```
 
+`NewAdaptiveRateLimiter` preserves its estimated-input-only admission contract.
+Use `NewOutputReservationAdaptiveRateLimiter` when every request sets a
+positive `MaxTokens` value and the provider implements exact
+`model.TokenCounter`; that mode reserves both values before the provider call.
+
 ---
 
 ## Run Options
@@ -3091,13 +3096,35 @@ A request estimated above max TPM can never be admitted and fails fast with
 `middleware.ErrRequestTooLarge`; raise the limiter's max TPM or reduce the
 request size.
 
-Admission uses estimated input tokens and does not reserve output tokens. When
-the wrapped provider implements exact `model.TokenCounter`, the middleware
-preserves that capability for callers, but admission itself remains an input
-estimate. When the provider does not implement `model.TokenCounter`, the
-wrapped client does not implement it either; optional-interface checks remain
-truthful instead of failing only when `CountTokens` is called. Size initial and
-maximum TPM with expected output volume in mind.
+`NewAdaptiveRateLimiter` admits requests using estimated input tokens and does
+not reserve output tokens. When the wrapped provider implements exact
+`model.TokenCounter`, the middleware preserves that optional capability for
+callers, but input-only admission still uses the estimator.
+
+Use output reservation when provider quota accounting charges the requested
+maximum output as well as the input:
+
+```go
+rl := mdlmw.NewOutputReservationAdaptiveRateLimiter(
+    ctx,
+    throughputMap,
+    "bedrock:sonnet",
+    80_000,
+    1_000_000,
+)
+limitedClient := rl.Middleware()(rawClient)
+```
+
+Output-reservation admission requires the wrapped provider to implement
+`model.TokenCounter` with `Exact: true` and each request to set `MaxTokens > 0`.
+It reserves `InputTokens + MaxTokens` before calling `Complete` or `Stream`.
+The counter can make its own provider request. Missing or inexact counting, an
+invalid output limit, integer overflow, or a combined cost above the fixed
+maximum burst fails before model generation starts. A rate limit from the
+counter triggers the same adaptive backoff as a generation call. The versioned
+Pulse key isolates this accounting mode from input-only limiters during rolling
+upgrades. When the provider does not implement `model.TokenCounter`, the
+wrapped client still does not advertise that optional interface.
 
 ---
 

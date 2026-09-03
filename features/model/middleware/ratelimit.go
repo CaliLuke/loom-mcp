@@ -6,6 +6,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"math"
 	"strconv"
 	"sync"
 	"time"
@@ -18,9 +19,10 @@ import (
 
 type (
 	// AdaptiveRateLimiter applies an AIMD-style adaptive token bucket on top of a
-	// model.Client. It estimates the token cost of each request, blocks callers
-	// until capacity is available, and adjusts its effective tokens-per-minute
-	// budget in response to rate limiting signals from the provider.
+	// model.Client. NewAdaptiveRateLimiter charges estimated input tokens.
+	// NewOutputReservationAdaptiveRateLimiter charges exact input tokens plus the
+	// requested maximum output. Both adjust effective tokens-per-minute capacity
+	// from provider rate-limit signals.
 	//
 	// The limiter is process-local and designed to sit at the provider client
 	// boundary. Callers construct a single instance per process and wrap the
@@ -35,7 +37,8 @@ type (
 		minTPM     float64
 		maxTPM     float64
 
-		recoveryRate float64
+		recoveryRate  float64
+		reserveOutput bool
 
 		onBackoff func(newTPM float64)
 		onProbe   func(newTPM float64)
@@ -43,6 +46,7 @@ type (
 
 	limitedClient struct {
 		next    model.Client
+		counter model.TokenCounter
 		limiter *AdaptiveRateLimiter
 	}
 
@@ -71,11 +75,13 @@ type (
 	}
 )
 
-// ErrRequestTooLarge is returned when a single request's estimated input-token
-// cost exceeds the limiter's maximum tokens-per-minute capacity. Such a request
-// can never be admitted no matter how long it waits, so the limiter fails fast
-// with this error instead of blocking. Callers should raise the limiter's max
-// TPM or reduce the request size.
+const outputReservationClusterKeySuffix = ".input-plus-max-output.v1"
+
+// ErrRequestTooLarge is returned when a single request's token cost exceeds the
+// limiter's maximum tokens-per-minute capacity. Such a request can never be
+// admitted no matter how long it waits, so the limiter fails fast instead of
+// blocking. Callers should raise the limiter's max TPM or reduce the request
+// size.
 var ErrRequestTooLarge = errors.New("model middleware: request exceeds rate limiter capacity")
 
 // NewAdaptiveRateLimiter constructs an AdaptiveRateLimiter with a
@@ -83,11 +89,50 @@ var ErrRequestTooLarge = errors.New("model middleware: request exceeds rate limi
 // across processes using a Pulse replicated map; otherwise it operates as a
 // process-local limiter.
 func NewAdaptiveRateLimiter(ctx context.Context, m *rmap.Map, key string, initialTPM, maxTPM float64) *AdaptiveRateLimiter {
+	return newPublicAdaptiveRateLimiter(ctx, m, key, initialTPM, maxTPM, false)
+}
+
+// NewOutputReservationAdaptiveRateLimiter constructs an AdaptiveRateLimiter
+// that charges exact input tokens plus each request's positive MaxTokens value.
+// Its versioned cluster key keeps combined-cost coordination separate from
+// input-only limiters during rolling upgrades.
+func NewOutputReservationAdaptiveRateLimiter(
+	ctx context.Context,
+	m *rmap.Map,
+	key string,
+	initialTPM, maxTPM float64,
+) *AdaptiveRateLimiter {
+	return newPublicAdaptiveRateLimiter(
+		ctx,
+		m,
+		outputReservationClusterKey(key),
+		initialTPM,
+		maxTPM,
+		true,
+	)
+}
+
+func newPublicAdaptiveRateLimiter(
+	ctx context.Context,
+	m *rmap.Map,
+	key string,
+	initialTPM, maxTPM float64,
+	reserveOutput bool,
+) *AdaptiveRateLimiter {
 	var cm clusterMap
 	if m != nil {
 		cm = &rmapClusterMap{m: m}
 	}
-	return newClusterAdaptiveRateLimiter(ctx, cm, key, initialTPM, maxTPM)
+	limiter := newClusterAdaptiveRateLimiter(ctx, cm, key, initialTPM, maxTPM)
+	limiter.reserveOutput = reserveOutput
+	return limiter
+}
+
+func outputReservationClusterKey(key string) string {
+	if key == "" {
+		return ""
+	}
+	return key + outputReservationClusterKeySuffix
 }
 
 // newAdaptiveRateLimiter constructs an AdaptiveRateLimiter configured with an
@@ -137,8 +182,8 @@ func newAdaptiveRateLimiter(initialTPM, maxTPM float64) *AdaptiveRateLimiter {
 	}
 }
 
-// Middleware returns a model.Client middleware that enforces the adaptive
-// tokens-per-minute limit for both Complete and Stream calls.
+// Middleware returns a model.Client middleware that enforces the request-cost
+// mode selected by the constructor for both Complete and Stream calls.
 func (l *AdaptiveRateLimiter) Middleware() func(model.Client) model.Client {
 	return func(next model.Client) model.Client {
 		if next == nil {
@@ -149,6 +194,7 @@ func (l *AdaptiveRateLimiter) Middleware() func(model.Client) model.Client {
 			limiter: l,
 		}
 		if counter, ok := next.(model.TokenCounter); ok {
+			client.counter = counter
 			return &tokenCountingLimitedClient{
 				limitedClient: client,
 				counter:       counter,
@@ -160,7 +206,7 @@ func (l *AdaptiveRateLimiter) Middleware() func(model.Client) model.Client {
 
 // Complete enforces the limiter before delegating to the underlying client.
 func (c *limitedClient) Complete(ctx context.Context, req *model.Request) (*model.Response, error) {
-	if err := c.limiter.wait(ctx, req); err != nil {
+	if err := c.limiter.wait(ctx, c.counter, req); err != nil {
 		return nil, err
 	}
 	resp, err := c.next.Complete(ctx, req)
@@ -172,7 +218,7 @@ func (c *limitedClient) Complete(ctx context.Context, req *model.Request) (*mode
 // successful setup is not treated as a successful request: the returned
 // streamer adjusts the limiter only after Recv reports its terminal outcome.
 func (c *limitedClient) Stream(ctx context.Context, req *model.Request) (model.ValidatedStreamer, error) {
-	if err := c.limiter.wait(ctx, req); err != nil {
+	if err := c.limiter.wait(ctx, c.counter, req); err != nil {
 		return nil, err
 	}
 	stream, err := c.next.Stream(ctx, req)
@@ -215,7 +261,38 @@ func (s *limitedStreamer) Finalize(primaryErr error) error {
 	return err
 }
 
-func (l *AdaptiveRateLimiter) wait(ctx context.Context, req *model.Request) error {
+func (l *AdaptiveRateLimiter) wait(ctx context.Context, counter model.TokenCounter, req *model.Request) error {
+	if l.reserveOutput {
+		if req == nil || req.MaxTokens <= 0 {
+			return errors.New("adaptive rate limiting with output reservation requires positive max tokens")
+		}
+		if counter == nil {
+			return errors.New("adaptive rate limiting with output reservation requires provider token counting")
+		}
+		count, err := counter.CountTokens(ctx, req)
+		if err != nil {
+			l.observe(err)
+			return err
+		}
+		if !count.Exact {
+			return errors.New("adaptive rate limiting with output reservation requires an exact provider token count")
+		}
+		if count.InputTokens < 0 {
+			return errors.New("adaptive rate limiting provider returned a negative input token count")
+		}
+		if req.MaxTokens > math.MaxInt-count.InputTokens {
+			return errors.New("adaptive rate limiting token cost exceeds integer range")
+		}
+		cost := count.InputTokens + req.MaxTokens
+		if burst := l.limiter.Burst(); cost > burst {
+			return fmt.Errorf(
+				"%w: exact input plus maximum output reservation of %d tokens exceeds the maximum burst capacity of %d tokens (max TPM); raise the limiter's max TPM or reduce the request size",
+				ErrRequestTooLarge, cost, burst,
+			)
+		}
+		return l.limiter.WaitN(ctx, cost)
+	}
+
 	count, err := model.TokenEstimator{}.CountTokens(ctx, req)
 	if err != nil {
 		return err

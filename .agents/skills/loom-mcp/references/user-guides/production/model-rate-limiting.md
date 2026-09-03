@@ -19,10 +19,37 @@ client := limiter.Middleware()(providerClient)
 Register the wrapped client with the runtime, not the underlying provider
 client. The middleware preserves `model.TokenCounter` when the provider
 implements it and preserves the absence of that optional interface otherwise.
-Admission always uses estimated input tokens; exact counting remains available
-to other runtime policies only when the provider supports it.
+This constructor always admits on estimated input tokens. Exact counting
+remains available to other runtime policies only when the provider supports it.
 
 If `initialTPM <= 0`, the limiter starts at 60,000 TPM. If `maxTPM` is zero or below the initial value, it is clamped to the initial value.
+
+## Output reservation
+
+Use the separate constructor when the provider charges quota against exact
+input plus the requested maximum output:
+
+```go
+limiter := middleware.NewOutputReservationAdaptiveRateLimiter(
+    ctx,
+    nil,
+    "",
+    60_000,
+    120_000,
+)
+client := limiter.Middleware()(bedrockClient)
+```
+
+This mode requires the wrapped client to implement `model.TokenCounter` with
+`Exact: true` and requires every request to set `MaxTokens > 0`. Admission
+reserves `InputTokens + MaxTokens`. The counter can make a provider request.
+Missing or inexact counting, invalid output limits, integer overflow and a
+combined cost above the fixed maximum burst fail before `Complete` or `Stream`.
+
+The constructor appends a versioned suffix to non-empty Pulse keys. Do not
+manually share cluster state between estimated-input and output-reservation
+modes during a rolling upgrade. The shared map coordinates adaptive refill
+rates; it is not a distributed token ledger.
 
 ## Cluster coordination
 
@@ -48,9 +75,10 @@ Backoff/probe updates use compare-and-set operations on the shared value, and su
 
 ## Admission and adaptation
 
-The limiter estimates input tokens with `model.TokenEstimator`, waits for capacity, and then calls the provider.
-It does not reserve output tokens, so size the TPM limits and burst for expected
-response volume as well as prompt size.
+`NewAdaptiveRateLimiter` estimates input tokens with `model.TokenEstimator`,
+waits for capacity and then calls the provider. It does not reserve output
+tokens. `NewOutputReservationAdaptiveRateLimiter` instead requires an exact
+provider count and reserves the request's positive `MaxTokens` value too.
 
 | Outcome | Adjustment |
 | --- | --- |

@@ -197,6 +197,10 @@ Use this file for current loom-mcp runtime behavior in this repo. Prefer it over
 - Model middleware must not invent optional interfaces. Adaptive rate limiting
   implements `model.TokenCounter` only when the wrapped provider implements it;
   providers without exact counting remain non-`TokenCounter` after wrapping.
+  `NewAdaptiveRateLimiter` keeps estimated-input-only admission.
+  `NewOutputReservationAdaptiveRateLimiter` requires an exact provider count
+  and positive `MaxTokens`, then reserves their overflow-safe sum under a
+  version-isolated Pulse key.
 - The Ollama adapter uses the local `/api/chat` endpoint for text, image,
   streaming, function-tool, native thinking, and structured-output requests. It
   maps `model.Request.Thinking` to Ollama's top-level `think` flag and surfaces

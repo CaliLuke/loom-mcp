@@ -68,42 +68,6 @@ Proof:
   one worker release resumes on the next release without keeping the old
   workflow open.
 
-### Output-reservation adaptive limiting
-
-Source: `goadesign/goa-ai` output-reservation limiter.
-
-Current gap:
-
-- `features/model/middleware.NewAdaptiveRateLimiter` charges estimated input
-  tokens and preserves a fixed maximum burst. It does not reserve requested
-  output tokens.
-- `model.TokenCounter` reports whether a count is exact. Middleware preserves
-  the optional capability only when the wrapped client provides it.
-
-Implement:
-
-- Add a separate adaptive-limiter constructor that reserves exact input tokens
-  plus the positive requested maximum output.
-- Require an exact `model.TokenCounter`, a positive output limit and
-  overflow-safe arithmetic before provider work begins.
-- Use a versioned Pulse key so estimated-input and output-reservation modes
-  cannot share state during a rolling upgrade.
-- Preserve the existing fixed maximum burst contract.
-
-Primary owners:
-
-- `features/model/middleware`
-- `runtime/agent/model`
-- `features/stream/pulse`
-
-Proof:
-
-- Contract and unit tests cover missing or inexact counters, invalid limits and
-  arithmetic overflow.
-- Redis-backed tests cover accounting-mode isolation and exact reservation
-  under concurrency.
-
-
 ## Product decisions before engineering
 
 These gaps are real, but implementation should not start until the named
