@@ -61,7 +61,7 @@ func QueryEvents(events []Event, query Query) QueryResult {
 		if !eventLabelsMatch(event.Labels, query.Labels) {
 			continue
 		}
-		matches = append(matches, cloneEvent(event))
+		matches = append(matches, CloneEvent(event))
 	}
 	slices.SortStableFunc(matches, func(a, b Event) int {
 		return compareEventTime(a.Timestamp, b.Timestamp)
@@ -72,6 +72,14 @@ func QueryEvents(events []Event, query Query) QueryResult {
 		matches = matches[:query.Limit]
 	}
 	return QueryResult{Events: matches, Truncated: truncated}
+}
+
+// CloneEvent returns a defensive copy of event. It copies Labels and recursively
+// copies mutable Data values, including typed structured payloads.
+func CloneEvent(event Event) Event {
+	event.Data = cloneJSONCompatible(event.Data)
+	event.Labels = cloneEventLabels(event.Labels)
+	return event
 }
 
 func eventTypeSet(types []EventType) map[EventType]struct{} {
@@ -103,9 +111,4 @@ func compareEventTime(a, b time.Time) int {
 	default:
 		return 0
 	}
-}
-
-func cloneEvent(event Event) Event {
-	event.Labels = cloneEventLabels(event.Labels)
-	return event
 }

@@ -28,6 +28,9 @@ type Store interface {
 
 Events carry a typed `EventType`, timestamp, typed data payload, and labels. Construct/decode event data with the helpers in `runtime/agent/memory/event_data.go`; avoid reaching into unversioned map keys.
 
+Use `memory.CloneEvent` when an in-process component retains or returns an
+event. It copies `Labels` and the canonical mutable values in `Data`.
+
 The Mongo adapter stores new appends as immutable documents in a companion
 events collection instead of growing one run document indefinitely. Reads
 load any legacy single-document history plus append buckets ordered by

@@ -44,8 +44,7 @@ func (s *Store) LoadRun(_ context.Context, agentID, runID string) (memory.Snapsh
 		return memory.Snapshot{AgentID: agentID, RunID: runID, Meta: make(map[string]any)}, nil
 	}
 	events := runs[runID]
-	cloned := make([]memory.Event, len(events))
-	copy(cloned, events)
+	cloned := cloneEvents(events)
 	return memory.Snapshot{AgentID: agentID, RunID: runID, Events: cloned, Meta: make(map[string]any)}, nil
 }
 
@@ -60,8 +59,7 @@ func (s *Store) AppendEvents(_ context.Context, agentID, runID string, events ..
 	if len(events) == 0 {
 		return nil
 	}
-	copied := make([]memory.Event, len(events))
-	copy(copied, events)
+	copied := cloneEvents(events)
 
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -108,6 +106,14 @@ func (s *Store) Reset() {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.runs = make(map[string]map[string][]memory.Event)
+}
+
+func cloneEvents(events []memory.Event) []memory.Event {
+	cloned := make([]memory.Event, len(events))
+	for i, event := range events {
+		cloned[i] = memory.CloneEvent(event)
+	}
+	return cloned
 }
 
 func sortedAgentIDs(runs map[string]map[string][]memory.Event) []string {

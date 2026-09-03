@@ -1855,6 +1855,10 @@ type Store interface {
 **Event types:** `user_message`, `assistant_message`, `tool_call`, `tool_result`,
 `planner_note`, `thinking`.
 
+Use `memory.CloneEvent` at in-process event ownership boundaries. It copies
+`Labels` and the canonical mutable values in `Data`. The in-memory store uses
+this helper on append and load, so caller mutations cannot change stored history.
+
 The runtime automatically installs a best-effort hook subscriber when a memory
 store is configured. A memory append failure is recorded but does not make the
 projection canonical or fail the run; use the run event log for the durable

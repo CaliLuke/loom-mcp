@@ -142,6 +142,9 @@ Use this skill for `loom-mcp` work in this repo. Keep `AGENTS.md` short and keep
   canonical append-only introspection record and fails closed. Streams, the
   hook bus, and `memory.Store` projections have distinct delivery guarantees;
   never describe them as interchangeable durable transcripts.
+- In-process memory components must use `memory.CloneEvent` at ownership
+  boundaries. It copies event `Labels` and the canonical mutable values in
+  `Data`, so callers cannot mutate retained history.
 - Mongo transcript memory writes immutable append buckets to the companion
   events collection and reads legacy single-run documents before those buckets.
   Bucket queries use `created_at`, `_id` order and combined snapshots are
