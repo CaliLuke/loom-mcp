@@ -57,6 +57,37 @@ func TestStoreListValidation(t *testing.T) {
 	_, err = s.List(ctx, "run-1", "not-an-int", 10)
 	require.Error(t, err)
 }
+func TestStoreEventsAreImmutableAcrossCalls(t *testing.T) {
+	t.Parallel()
+
+	s := New()
+	ctx := context.Background()
+	event := &runlog.Event{
+		RunID:     "run-1",
+		EventKey:  "event-1",
+		Type:      "event",
+		Payload:   []byte(`{"ok":true}`),
+		Timestamp: time.Unix(1, 0).UTC(),
+	}
+
+	_, err := s.Append(ctx, event)
+	require.NoError(t, err)
+	event.Payload[6] = 'f'
+
+	first, err := s.List(ctx, "run-1", "", 1)
+	require.NoError(t, err)
+	require.Len(t, first.Events, 1)
+	require.JSONEq(t, `{"ok":true}`, string(first.Events[0].Payload))
+
+	first.Events[0].EventKey = "changed"
+	first.Events[0].Payload[6] = 'f'
+
+	second, err := s.List(ctx, "run-1", "", 1)
+	require.NoError(t, err)
+	require.Len(t, second.Events, 1)
+	require.Equal(t, "event-1", second.Events[0].EventKey)
+	require.JSONEq(t, `{"ok":true}`, string(second.Events[0].Payload))
+}
 
 func TestStoreAppendDeduplicatesEventKey(t *testing.T) {
 	t.Parallel()

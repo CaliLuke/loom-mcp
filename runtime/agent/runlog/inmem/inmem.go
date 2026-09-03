@@ -68,9 +68,9 @@ func (s *Store) Append(_ context.Context, e *runlog.Event) (runlog.AppendResult,
 	s.nextSeq[e.RunID] = seq
 
 	e.ID = strconv.FormatInt(seq, 10)
-	ev := *e
-	s.events[e.RunID] = append(s.events[e.RunID], &ev)
-	byKey[e.EventKey] = &ev
+	ev := cloneEvent(e)
+	s.events[e.RunID] = append(s.events[e.RunID], ev)
+	byKey[e.EventKey] = ev
 	return runlog.AppendResult{ID: ev.ID, Inserted: true}, nil
 }
 
@@ -114,7 +114,7 @@ func (s *Store) List(_ context.Context, runID string, cursor string, limit int) 
 		end = len(all)
 	}
 
-	events := append([]*runlog.Event(nil), all[start:end]...)
+	events := cloneEvents(all[start:end])
 	var next string
 	if end < len(all) {
 		next = events[len(events)-1].ID
@@ -124,6 +124,20 @@ func (s *Store) List(_ context.Context, runID string, cursor string, limit int) 
 		Events:     events,
 		NextCursor: next,
 	}, nil
+}
+
+func cloneEvents(events []*runlog.Event) []*runlog.Event {
+	clones := make([]*runlog.Event, len(events))
+	for i, event := range events {
+		clones[i] = cloneEvent(event)
+	}
+	return clones
+}
+
+func cloneEvent(event *runlog.Event) *runlog.Event {
+	clone := *event
+	clone.Payload = bytes.Clone(event.Payload)
+	return &clone
 }
 
 // sameEventBody reports whether candidate represents the same immutable logical
