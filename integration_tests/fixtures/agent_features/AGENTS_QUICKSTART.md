@@ -403,6 +403,8 @@ The provider implements `HandleToolCall(ctx, msg)` which:
 - Builds the Goa method payload (using the generated transforms)
 - Calls the bound service method
 - Encodes the tool result JSON (and optional artifact/sidecar) using the generated result codec
+- Publishes only explicit Loom safe error messages; unremedied service and
+  result-encoding failures use the generic `tool execution failed` message
 
 To serve tool calls from the registry gateway, give `Serve` one immutable
 deployment admission revision and typed callbacks for the full registry

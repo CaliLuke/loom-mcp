@@ -246,6 +246,10 @@ Use this skill for `loom-mcp` work in this repo. Keep `AGENTS.md` short and keep
 - Projected MCP tools use generated toolset specs for MCP `ToolInfo` schemas
   and generated `Dispatch<Tool>Method(...)` for execution. Do not duplicate
   `BindTo(...)` transforms in MCP adapters.
+- Registry-routed generated providers publish only explicit Loom error remedy
+  safe messages. Unremedied service failures and result-encoding failures use
+  `tool execution failed`; never place raw `err.Error()` text in
+  `ToolResultMessage`.
 - `Inject(...)` fields are server-owned: generated public payload structs and
   codecs keep them for runtime injection, while generated
   `ToolSpec.Payload.Schema`, `ExampleJSON`, and `ExampleInput` hide them and

@@ -176,7 +176,7 @@ func (p *Provider) HandleToolCall(ctx context.Context, msg toolregistry.ToolCall
 		result := InitProjectedLookupToolResult(methodOut)
 		resultJSON, err := ProjectedLookupResultCodec.ToJSON(result)
 		if err != nil {
-			return toolregistry.NewToolResultErrorMessage(msg.RegistrationToken, msg.ToolUseID, "encode_failed", err.Error()), nil
+			return toolregistry.NewToolResultErrorMessage(msg.RegistrationToken, msg.ToolUseID, "encode_failed", "tool execution failed"), nil
 		}
 		var server []*toolregistry.ServerDataItem
 		if len(server) > 0 {

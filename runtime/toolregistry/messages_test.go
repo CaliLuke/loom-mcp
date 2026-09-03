@@ -74,6 +74,21 @@ func TestMessageConstructorsPreserveCanonicalWireFields(t *testing.T) {
 	assert.Equal(t, "invalid_arguments", failure.Error.Code)
 	assert.Equal(t, "query is required", failure.Error.Message)
 }
+func TestServiceErrorMessageUsesOneSafeRemedySnapshot(t *testing.T) {
+	err := &changingRemedyError{}
+
+	message := NewToolResultServiceErrorMessage(
+		"registration-token",
+		"use-1",
+		tools.Ident("service.lookup"),
+		"execution_failed",
+		err,
+	)
+
+	require.NotNil(t, message.Error)
+	assert.Equal(t, "Lookup is unavailable.", message.Error.Message)
+	assert.Equal(t, 1, err.calls)
+}
 
 func TestValidationIssueMessagesCloneCallerOwnedData(t *testing.T) {
 	const registrationToken = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
@@ -168,6 +183,22 @@ func TestStreamNamesAndOutputDeltaPublisherContext(t *testing.T) {
 	require.NoError(t, got.PublishToolOutputDelta(ctx, "stdout", "ready"))
 	assert.Equal(t, "stdout", pub.stream)
 	assert.Equal(t, "ready", pub.delta)
+}
+
+type changingRemedyError struct {
+	calls int
+}
+
+func (e *changingRemedyError) Error() string {
+	return "query database: password=secret"
+}
+
+func (e *changingRemedyError) LoomErrorRemedy() *loom.ErrorRemedy {
+	e.calls++
+	if e.calls == 1 {
+		return &loom.ErrorRemedy{SafeMessage: "Lookup is unavailable."}
+	}
+	return nil
 }
 
 type validationIssueError struct {

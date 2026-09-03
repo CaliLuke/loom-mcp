@@ -802,7 +802,7 @@ func emitToolProviderHandle(stmt *jen.Statement, data toolProviderFileData) {
 							cg.Id("result").Op(":=").Id("Init" + tool.ConstName + "ToolResult").Call(jen.Id("methodOut"))
 							cg.List(jen.Id("resultJSON"), jen.Id("err")).Op(":=").Id(tool.ConstName + "ResultCodec").Dot("ToJSON").Call(jen.Id("result"))
 							cg.If(jen.Id("err").Op("!=").Nil()).Block(
-								jen.Return(jen.Id("toolregistry").Dot("NewToolResultErrorMessage").Call(jen.Id("msg").Dot("RegistrationToken"), jen.Id("msg").Dot("ToolUseID"), jen.Lit("encode_failed"), jen.Id("err").Dot("Error").Call()), jen.Nil()),
+								jen.Return(jen.Id("toolregistry").Dot("NewToolResultErrorMessage").Call(jen.Id("msg").Dot("RegistrationToken"), jen.Id("msg").Dot("ToolUseID"), jen.Lit("encode_failed"), jen.Lit("tool execution failed")), jen.Nil()),
 							)
 							if tool.Bounds != nil && tool.Bounds.Projection != nil && tool.Bounds.Projection.Returned != nil && tool.Bounds.Projection.Truncated != nil {
 								cg.Id("bounds").Op(":=").Id("init" + gocodegen.Goify(tool.Name, true) + "Bounds").Call(jen.Id("methodOut"))
@@ -818,7 +818,7 @@ func emitToolProviderHandle(stmt *jen.Statement, data toolProviderFileData) {
 									jen.Id("data").Op(":=").Id(typeName).Call(jen.Id("methodOut").Dot(gocodegen.Goify(sd.MethodResultField, true))),
 									jen.List(jen.Id("dataJSON"), jen.Id("err")).Op(":=").Id(codecName).Dot("ToJSON").Call(jen.Id("data")),
 									jen.If(jen.Id("err").Op("!=").Nil()).Block(
-										jen.Return(jen.Id("toolregistry").Dot("NewToolResultErrorMessage").Call(jen.Id("msg").Dot("RegistrationToken"), jen.Id("msg").Dot("ToolUseID"), jen.Lit("encode_failed"), jen.Id("err").Dot("Error").Call()), jen.Nil()),
+										jen.Return(jen.Id("toolregistry").Dot("NewToolResultErrorMessage").Call(jen.Id("msg").Dot("RegistrationToken"), jen.Id("msg").Dot("ToolUseID"), jen.Lit("encode_failed"), jen.Lit("tool execution failed")), jen.Nil()),
 									),
 									jen.If(jen.String().Call(jen.Id("dataJSON")).Op("!=").Lit("null")).Block(
 										jen.Id("server").Op("=").Append(jen.Id("server"), jen.Op("&").Id("toolregistry").Dot("ServerDataItem").Values(jen.Dict{

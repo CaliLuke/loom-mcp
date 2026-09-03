@@ -731,6 +731,13 @@ For method-backed service toolsets, codegen emits a provider adapter at:
 
 That generated provider implements a dispatcher that decodes the tool payload JSON using generated codecs, adapts into the bound method payload (via generated transforms), calls the bound method, and re-encodes the tool result JSON together with any declared server-data (optional observer-facing server-data and always-on server-only metadata).
 
+Provider failures cross a process and model trust boundary. The generated path
+publishes only an explicit Loom error remedy safe message. If the error has no
+non-empty safe message, the provider publishes `tool execution failed` instead.
+Result-encoding failures use the same generic message. Internal error strings
+remain local and must be logged by the service rather than returned in a
+`ToolResultMessage`.
+
 To run it, wire the generated provider into the runtime provider loop. The
 callback names below stand for direct adapters to the corresponding generated
 registry operations:

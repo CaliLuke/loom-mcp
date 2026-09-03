@@ -42,9 +42,13 @@ func TestGeneratedAgentDesignsCompile(t *testing.T) {
 			verify: verifyFromMCPExecutor,
 		},
 		{
-			name:     "method-backed MCP projection",
-			generate: generateProjectedAgentDesign,
+			name:       "method-backed MCP projection",
+			generate:   generateProjectedAgentDesign,
+			moduleTest: projectedProviderErrorRuntimeTest,
 			verify: func(t *testing.T, files []*gcodegen.File) {
+				provider := testhelpers.FileContent(t, files, "gen/assistant/toolsets/lookup_tools/provider.go")
+				require.NotContains(t, provider, "err.Error()")
+				require.Contains(t, provider, `"encode_failed", "tool execution failed"`)
 				require.NotEmpty(t, testhelpers.FileContent(t, files, "gen/assistant/agents/planner/lookup_tools/service_executor.go"))
 			},
 		},
@@ -312,6 +316,67 @@ func generateProjectedAgentDesign(t *testing.T) []*gcodegen.File {
 	require.NoError(t, eval.RunDSL())
 	return generateProductionFiles(t, []eval.Root{goaexpr.Root, agentsexpr.Root, mcpexpr.Root}, true)
 }
+
+const projectedProviderErrorRuntimeTest = `package fmcp_test
+
+import (
+	"context"
+	"encoding/json"
+	"errors"
+	"testing"
+
+	assistant "example.com/fmcp/gen/assistant"
+	lookup "example.com/fmcp/gen/assistant/toolsets/lookup_tools"
+	"github.com/CaliLuke/loom-mcp/v2/runtime/toolregistry"
+	loom "github.com/CaliLuke/loom/pkg"
+)
+
+func TestProjectedProviderSanitizesServiceErrors(t *testing.T) {
+	service := &failingAssistantService{
+		err: loom.WithErrorRemedy(
+			loom.Fault("query database: password=secret"),
+			&loom.ErrorRemedy{SafeMessage: "Lookup is unavailable."},
+		),
+	}
+	provider := lookup.NewProvider(service)
+	ctx := toolregistry.WithToolUseID(context.Background(), "use-1")
+	msg := toolregistry.ToolCallMessage{
+		RegistrationToken: "registration-token",
+		ToolUseID:         "use-1",
+		Tool:              lookup.Lookup,
+		Payload:           json.RawMessage("{\"query\":\"status\"}"),
+		Meta:              &toolregistry.ToolCallMeta{},
+	}
+
+	result, err := provider.HandleToolCall(ctx, msg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result.Error == nil || result.Error.Message != "Lookup is unavailable." {
+		t.Fatalf("unexpected remedied error: %#v", result.Error)
+	}
+	if result.Error.Message == service.err.Error() {
+		t.Fatalf("provider exposed internal error: %q", result.Error.Message)
+	}
+
+	service.err = errors.New("query database: password=secret")
+	result, err = provider.HandleToolCall(ctx, msg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result.Error == nil || result.Error.Message != "tool execution failed" {
+		t.Fatalf("unexpected unremedied error: %#v", result.Error)
+	}
+}
+
+type failingAssistantService struct {
+	err error
+}
+
+func (s *failingAssistantService) Lookup(context.Context, *assistant.LookupPayload) (*assistant.LookupResult, error) {
+	return nil, s.err
+}
+`
 
 func generateRegistryAgentDesign(t *testing.T) []*gcodegen.File {
 	t.Helper()

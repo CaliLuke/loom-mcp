@@ -186,6 +186,8 @@ const (
 	// provider lease disappears before terminal publication. The provider may
 	// already have performed the side effect, so execution must not transfer.
 	ToolErrorCodeOutcomeUnknown = "outcome_unknown"
+
+	toolExecutionFailedMessage = "tool execution failed"
 )
 
 // DecodeServerData decodes the canonical server-only item envelope carried by
@@ -343,15 +345,21 @@ func NewToolResultErrorMessage(registrationToken, toolUseID, code, message strin
 	}
 }
 
-// NewToolResultServiceErrorMessage constructs a terminal provider result while
-// preserving a service-owned ToolFailureProvider contract when present.
+// NewToolResultServiceErrorMessage constructs a terminal provider result with
+// an explicitly safe service message or a generic fallback.
 func NewToolResultServiceErrorMessage(
 	registrationToken, toolUseID string,
 	_ tools.Ident,
 	code string,
 	err error,
 ) ToolResultMessage {
-	out := NewToolResultErrorMessage(registrationToken, toolUseID, code, err.Error())
+	message := toolExecutionFailedMessage
+	if remedy := goa.ExtractErrorRemedy(err); remedy != nil {
+		if safeMessage := strings.TrimSpace(remedy.SafeMessage); safeMessage != "" {
+			message = safeMessage
+		}
+	}
+	out := NewToolResultErrorMessage(registrationToken, toolUseID, code, message)
 	issues := ValidationIssues(err)
 	if len(issues) > 0 {
 		out.Error.Issues = cloneFieldIssues(issues)
