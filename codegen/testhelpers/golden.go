@@ -27,21 +27,23 @@ func SetupEvalRoots(t *testing.T) {
 	require.NoError(t, eval.Register(agentsExpr.Root))
 }
 
-// RunDesign prepares roots for generation by executing the DSL.
+// RunDesign executes the DSL and runs the production prepare phase.
 func RunDesign(t *testing.T, design func()) (string, []eval.Root) {
 	t.Helper()
 	SetupEvalRoots(t)
 	ok := eval.Execute(design, nil)
 	require.True(t, ok, eval.Context.Error())
 	require.NoError(t, eval.RunDSL())
-	return "github.com/CaliLuke/loom-mcp/v2", []eval.Root{goaexpr.Root, agentsExpr.Root}
+	genpkg := "github.com/CaliLuke/loom-mcp/v2"
+	roots := []eval.Root{goaexpr.Root, agentsExpr.Root}
+	require.NoError(t, codegen.Prepare(genpkg, roots))
+	return genpkg, roots
 }
 
 // BuildAndGenerate executes the production DSL, prepare, and generation phases.
 func BuildAndGenerate(t *testing.T, design func()) []*gcodegen.File {
 	t.Helper()
 	genpkg, roots := RunDesign(t, design)
-	require.NoError(t, codegen.Prepare(genpkg, roots))
 	files, err := codegen.Generate(genpkg, roots, nil)
 	require.NoError(t, err)
 	return files
