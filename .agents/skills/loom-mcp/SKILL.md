@@ -66,10 +66,14 @@ Use this skill for `loom-mcp` work in this repo. Keep `AGENTS.md` short and keep
 ## Current Product Rules
 
 - Runtime planners have two streaming modes only:
-  - use `PlannerContext.ModelClient(id)` and either drain plus finalize the
-    decorated stream yourself or pass it to `planner.ConsumeStream`, or
-  - use `planner.ConsumeStream` with another validated client and the runtime
+  - use `PlannerContext.ModelClient(id)` and pass its decorated stream to
+    `planner.ConsumeStream` or `planner.ConsumeStreamWithObserver`, or
+  - use either helper with another validated client and the runtime
     planner-event sink.
+- Use `planner.ConsumeStreamWithObserver` for fallible processing of all
+  accepted chunk variants. The helper owns literal EOF, canonical `Response`
+  retrieval, and exactly-once `Finalize`. `StreamConsumptionError` keeps the
+  exact primary error separate from the finalization result.
 - Runtime registration is immutable after `Runtime.Seal` or the first submitted
   run. `RegisterModel`, `RegisterAgent`, and `RegisterToolset` all return
   `ErrRegistrationClosed`; model-client hot-swapping requires a replacement

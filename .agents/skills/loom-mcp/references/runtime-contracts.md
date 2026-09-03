@@ -11,6 +11,15 @@ Use this file for current loom-mcp runtime behavior in this repo. Prefer it over
 - `planner.ConsumeStream` also recognizes runtime presentation events when a
   validated stream is not decorated, so both supported paths use the same
   durable acceptance boundary.
+- `planner.ConsumeStreamWithObserver` calls a fallible observer for every
+  accepted chunk variant. It keeps the same event ownership and presentation
+  behavior as `ConsumeStream`.
+- The observer error is the exact primary error supplied to `Finalize`.
+  `StreamConsumptionError` exposes that primary error and the finalization
+  result separately. Both remain available through `errors.Is` and `errors.As`.
+- `ConsumeStreamWithObserver` returns the canonical `Response` only after
+  literal EOF. The response remains available when finalization reports a
+  cleanup failure after EOF.
 - Drain to the literal `io.EOF`; wrapped EOF is a provider failure.
 - Call `ValidatedStreamer.Finalize(primaryErr)` after draining or aborting.
   `Close` is cleanup-only and does not prove successful completion.

@@ -199,14 +199,153 @@ func TestConsumeStreamRejectsNilInputs(t *testing.T) {
 	require.EqualError(t, err, "nil PlannerEvents")
 }
 
+func TestConsumeStreamWithObserverObservesEveryAcceptedChunk(t *testing.T) {
+	citation := model.CitationsPart{Text: "cited", Citations: []model.Citation{{Title: "source"}}}
+	chunks := []model.Chunk{
+		model.TextChunk{Message: model.Message{Parts: []model.Part{model.TextPart{Text: "text"}, citation}}},
+		model.ThinkingChunk{Message: model.Message{Parts: []model.Part{model.ThinkingPart{Text: "thinking"}}}},
+		model.ToolCallDeltaChunk{Delta: model.ToolCallDelta{ID: "call-1", Name: "tools.search", Delta: `{"q":`}},
+		model.ToolCallChunk{ToolCall: model.ToolCall{ID: "call-1", Name: "tools.search", Payload: []byte(`{"q":"loom"}`)}},
+		model.CompletionDeltaChunk{Delta: model.CompletionDelta{Name: "answer", Delta: `{"answer":`}},
+		model.CompletionChunk{Completion: model.Completion{Name: "answer", Payload: []byte(`{"answer":"done"}`)}},
+		model.UsageChunk{Usage: model.TokenUsage{TotalTokens: 3}},
+		model.StopChunk{Reason: "end_turn"},
+	}
+	stream := &streamStub{chunks: chunks, response: &model.Response{StopReason: "end_turn"}}
+	var observed []model.Chunk
+	observer := StreamObserverFunc(func(_ context.Context, chunk model.Chunk) error {
+		observed = append(observed, chunk)
+		return nil
+	})
+
+	summary, response, err := ConsumeStreamWithObserver(context.Background(), stream, &plannerEventsStub{}, observer)
+
+	require.NoError(t, err)
+	assert.Same(t, stream.response, response)
+	assert.Equal(t, "textcited", summary.Text)
+	assert.Equal(t, chunks, observed)
+}
+
+func TestConsumeStreamWithObserverOwnsTerminalLifecycle(t *testing.T) {
+	observerErr := errors.New("projection failed")
+	receiveErr := errors.New("receive failed")
+	cleanupErr := errors.New("cleanup failed")
+
+	tests := []struct {
+		name          string
+		stream        *streamStub
+		observer      StreamObserver
+		wantPrimary   error
+		wantResponse  bool
+		wantFinalize  error
+		wantErrString string
+	}{
+		{
+			name:         "clean EOF",
+			stream:       &streamStub{response: &model.Response{StopReason: "end_turn"}},
+			observer:     &streamObserverStub{},
+			wantResponse: true,
+		},
+		{
+			name:          "wrapped EOF",
+			stream:        &streamStub{recvErr: fmt.Errorf("provider wrapped EOF: %w", io.EOF)},
+			observer:      &streamObserverStub{},
+			wantErrString: "provider wrapped EOF: EOF",
+		},
+		{
+			name:          "missing response",
+			stream:        &streamStub{},
+			observer:      &streamObserverStub{},
+			wantErrString: "validated model stream ended without a canonical response",
+		},
+		{
+			name:         "receive failure",
+			stream:       &streamStub{recvErr: receiveErr},
+			observer:     &streamObserverStub{},
+			wantPrimary:  receiveErr,
+			wantFinalize: receiveErr,
+		},
+		{
+			name: "observer failure",
+			stream: &streamStub{
+				chunks:   []model.Chunk{model.TextChunk{Message: model.Message{Parts: []model.Part{model.TextPart{Text: "partial"}}}}},
+				response: &model.Response{StopReason: "end_turn"},
+			},
+			observer:     &streamObserverStub{err: observerErr},
+			wantPrimary:  observerErr,
+			wantFinalize: observerErr,
+		},
+		{
+			name:         "cleanup failure",
+			stream:       &streamStub{response: &model.Response{}, closeErr: cleanupErr},
+			observer:     &streamObserverStub{},
+			wantResponse: true,
+			wantFinalize: cleanupErr,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			_, response, err := ConsumeStreamWithObserver(context.Background(), tt.stream, &plannerEventsStub{}, tt.observer)
+
+			assert.Equal(t, tt.wantResponse, response != nil)
+			assert.Equal(t, 1, tt.stream.finalizeCalls)
+			if tt.wantErrString == "" || tt.wantPrimary != nil {
+				assert.Equal(t, tt.wantPrimary, tt.stream.finalizePrimary)
+			}
+			if tt.wantFinalize == nil && tt.wantErrString == "" {
+				require.NoError(t, err)
+				return
+			}
+			if tt.wantFinalize != nil {
+				require.ErrorIs(t, err, tt.wantFinalize)
+			}
+			if tt.wantErrString != "" {
+				assert.Contains(t, err.Error(), tt.wantErrString)
+			}
+		})
+	}
+}
+
+func TestConsumeStreamWithObserverSeparatesPrimaryAndFinalizationErrors(t *testing.T) {
+	observerErr := errors.New("projection failed")
+	cleanupErr := errors.New("provider cleanup leaked details")
+	stream := &streamStub{
+		chunks:   []model.Chunk{model.TextChunk{Message: model.Message{Parts: []model.Part{model.TextPart{Text: "partial"}}}}},
+		response: &model.Response{StopReason: "end_turn"},
+		closeErr: cleanupErr,
+	}
+
+	_, response, err := ConsumeStreamWithObserver(context.Background(), stream, &plannerEventsStub{}, &streamObserverStub{err: observerErr})
+
+	assert.Nil(t, response)
+	require.ErrorIs(t, err, observerErr)
+	require.ErrorIs(t, err, cleanupErr)
+	var consumptionErr *StreamConsumptionError
+	require.ErrorAs(t, err, &consumptionErr)
+	assert.Same(t, observerErr, consumptionErr.PrimaryError())
+	assert.Equal(t, observerErr.Error(), err.Error())
+	assert.NotContains(t, err.Error(), cleanupErr.Error())
+	require.ErrorIs(t, consumptionErr.FinalizationError(), cleanupErr)
+	assert.Equal(t, 0, stream.responseCalls, "Response must not be read before consumer-observed EOF")
+}
+
 type streamStub struct {
-	chunks    []model.Chunk
-	response  *model.Response
-	recvErr   error
-	closeErr  error
-	index     int
-	closed    bool
-	finalized bool
+	chunks          []model.Chunk
+	response        *model.Response
+	recvErr         error
+	closeErr        error
+	index           int
+	closed          bool
+	finalized       bool
+	responseCalls   int
+	finalizeCalls   int
+	finalizePrimary error
+}
+
+type streamObserverStub struct {
+	chunks []model.Chunk
+	err    error
 }
 
 type validatedStreamStub struct {
@@ -233,12 +372,20 @@ func (s *streamStub) Close() error {
 }
 
 func (s *streamStub) Response() *model.Response {
+	s.responseCalls++
 	return s.response
 }
 
 func (s *streamStub) Finalize(primaryErr error) error {
 	s.finalized = true
+	s.finalizeCalls++
+	s.finalizePrimary = primaryErr
 	return errors.Join(primaryErr, s.Close())
+}
+
+func (o *streamObserverStub) OnChunk(_ context.Context, chunk model.Chunk) error {
+	o.chunks = append(o.chunks, chunk)
+	return o.err
 }
 
 func (s *validatedStreamStub) Response() *model.Response {

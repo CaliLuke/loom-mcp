@@ -523,77 +523,19 @@ When using model streaming, planners have two options for emitting events. Choos
 
 ### Option 1: Runtime-Decorated Client (Recommended)
 
-`PlannerContext.ModelClient(id)` returns a client wrapped with an event decorator.
-The decorator emits `AssistantChunk`, `PlannerThinkingBlock`, and `UsageDelta`
-automatically on each `Recv()` call:
+`PlannerContext.ModelClient(id)` returns a client with an event decorator.
+The decorator publishes text, thinking, and usage events from each accepted chunk.
+Pass this stream to `planner.ConsumeStream` for canonical stream consumption:
 
 ```go
-func (p *MyPlanner) PlanResume(ctx context.Context, input *PlanResumeInput) (*PlanResult, error) {
-    mc, ok := input.Agent.ModelClient("bedrock")
-    if !ok {
-        return nil, errors.New("model not configured")
-    }
-
-    req := &model.Request{
-        RunID:      input.RunContext.RunID,
-        ModelClass: model.ModelClassHighReasoning,
-        Messages:   input.Messages,
-        Stream:     true,
-    }
-
-    st, err := mc.Stream(ctx, req)
-    if err != nil {
-        return nil, err
-    }
-    // Drain stream manually; events are emitted automatically by the wrapper.
-    var calls []ToolRequest
-    var out strings.Builder
-    for {
-        chunk, rerr := st.Recv()
-        //nolint:errorlint // Only literal EOF proves validated completion.
-        if rerr == io.EOF {
-            break
-        }
-        if rerr != nil {
-            return nil, st.Finalize(rerr)
-        }
-        switch chunk := chunk.(type) {
-        case model.ToolCallChunk:
-            calls = append(calls, ToolRequest{
-                Name:       chunk.ToolCall.Name,
-                Payload:    chunk.ToolCall.Payload,
-                ToolCallID: chunk.ToolCall.ID,
-            })
-        case model.TextChunk:
-            // Accumulate text locally (already emitted via decorator)
-            for _, p := range chunk.Message.Parts {
-                if tp, ok := p.(model.TextPart); ok {
-                    out.WriteString(tp.Text)
-                }
-            }
-        }
-    }
-    if err := st.Finalize(nil); err != nil {
-        return nil, err
-    }
-
-    if len(calls) > 0 {
-        return &PlanResult{ToolCalls: calls}, nil
-    }
-    return &PlanResult{
-        FinalResponse: &FinalResponse{
-            Message: &model.Message{
-                Role:  model.ConversationRoleAssistant,
-                Parts: []model.Part{model.TextPart{Text: out.String()}},
-            },
-        },
-        Streamed: true, // Text was already streamed
-    }, nil
+sum, err := planner.ConsumeStream(ctx, streamer, input.Events)
+if err != nil {
+    return nil, err
 }
 ```
 
-The decorated stream advertises that it owns runtime events, so it is also safe
-to pass it to `planner.ConsumeStream`; the helper only aggregates its result.
+The helper detects that the decorated stream owns event publication.
+It aggregates the result without duplicate planner events.
 
 ### Option 2: ConsumeStream without Runtime Event Decoration
 
@@ -612,6 +554,41 @@ does not own them, and returns a `StreamSummary` with accumulated text and tool
 calls. Runtime planner events apply the same provisional presentation lifecycle
 to this validated-but-undecorated path.
 
+### Fallible Chunk Observers
+
+Use `planner.ConsumeStreamWithObserver` when an application must process every
+accepted chunk:
+
+```go
+observer := planner.StreamObserverFunc(func(ctx context.Context, chunk model.Chunk) error {
+    return projection.WriteChunk(ctx, chunk)
+})
+
+sum, response, err := planner.ConsumeStreamWithObserver(
+    ctx,
+    streamer,
+    input.Events,
+    observer,
+)
+if err != nil {
+    return nil, err
+}
+```
+
+The observer receives text, thinking, tool-call, completion, usage, and stop
+chunks. A `model.TextChunk` can contain text parts or citation parts.
+
+The helper passes the exact observer error to `ValidatedStreamer.Finalize`.
+`StreamConsumptionError.PrimaryError` returns that error.
+`StreamConsumptionError.FinalizationError` returns the separate finalization
+result. `Error` reports the primary error when one exists.
+Inspect `FinalizationError` before you log provider cleanup details.
+`errors.Is` and `errors.As` inspect both errors.
+
+The helper reads `Response` only after literal `io.EOF`.
+It returns the canonical response with the summary.
+The response remains available when cleanup fails after that EOF boundary.
+`ConsumeStream` remains the direct path when no fallible observer is required.
 ### Typed Structured Completions
 
 `runtime/agent/completion` uses a validated `model.Client` with a generated

@@ -1,6 +1,6 @@
 // Package planner defines helpers for streaming model responses into planner
-// results and events. This file provides StreamSummary and ConsumeStream for
-// planners that work with streaming model clients.
+// results and events. This file provides StreamSummary and the canonical stream
+// consumption helpers for planners that use streaming model clients.
 package planner
 
 import (
@@ -24,6 +24,25 @@ type StreamSummary struct {
 	StopReason string
 }
 
+// StreamObserver receives every chunk accepted by the validated stream. Returning
+// an error stops consumption; that exact error is passed to Finalize and remains
+// available through StreamConsumptionError.PrimaryError.
+type StreamObserver interface {
+	OnChunk(context.Context, model.Chunk) error
+}
+
+// StreamObserverFunc adapts a function to StreamObserver.
+type StreamObserverFunc func(context.Context, model.Chunk) error
+
+// StreamConsumptionError separates the error that stopped consumption from the
+// result of finalizing the validated stream. This lets callers preserve a
+// consumer error while independently classifying or sanitizing provider cleanup
+// details. Both errors remain discoverable with errors.Is and errors.As.
+type StreamConsumptionError struct {
+	primary      error
+	finalization error
+}
+
 // ConsumeStream drains the provided streamer and returns the aggregated
 // StreamSummary so planners can produce a final response or schedule tool calls.
 // It emits planner events for text and thinking chunks unless the streamer
@@ -32,9 +51,20 @@ type StreamSummary struct {
 // successful finalization. Callers are responsible for handling ToolCalls in
 // the resulting summary.
 func ConsumeStream(ctx context.Context, streamer model.ValidatedStreamer, ev PlannerEvents) (StreamSummary, error) {
+	summary, _, err := ConsumeStreamWithObserver(ctx, streamer, ev, nil)
+	return summary, err
+}
+
+// ConsumeStreamWithObserver drains a validated stream while invoking observer
+// for every accepted chunk. The helper owns literal-EOF detection, canonical
+// response retrieval, and exactly-once finalization. An observer error stops
+// consumption and is supplied unchanged to Finalize. The canonical response is
+// returned only after the caller-facing stream has produced literal io.EOF.
+// A nil observer disables the additional callback.
+func ConsumeStreamWithObserver(ctx context.Context, streamer model.ValidatedStreamer, ev PlannerEvents, observer StreamObserver) (StreamSummary, *model.Response, error) {
 	var summary StreamSummary
 	if err := validateStreamInputs(streamer, ev); err != nil {
-		return summary, err
+		return summary, nil, err
 	}
 	emitEvents := true
 	if owned, ok := streamer.(interface{ EmitsPlannerEvents() bool }); ok {
@@ -49,19 +79,60 @@ func ConsumeStream(ctx context.Context, streamer model.ValidatedStreamer, ev Pla
 			if err == io.EOF {
 				break
 			}
-			return summary, presentation.finalize(streamer, nil, err)
+			return summary, nil, presentation.finalize(streamer, nil, err)
 		}
 		handleStreamChunk(ctx, ev, &summary, chunk, emitEvents, presentation)
+		if observer != nil {
+			if err := observer.OnChunk(ctx, chunk); err != nil {
+				return summary, nil, presentation.finalize(streamer, nil, err)
+			}
+		}
 	}
 
 	response := streamer.Response()
 	if response == nil {
-		return summary, presentation.finalize(streamer, nil, errors.New("validated model stream ended without a canonical response"))
+		return summary, nil, presentation.finalize(streamer, nil, errors.New("validated model stream ended without a canonical response"))
 	}
 	summary.Usage = response.Usage
 	summary.StopReason = response.StopReason
 
-	return summary, presentation.finalize(streamer, response, nil)
+	return summary, response, presentation.finalize(streamer, response, nil)
+}
+
+// OnChunk invokes f.
+func (f StreamObserverFunc) OnChunk(ctx context.Context, chunk model.Chunk) error {
+	return f(ctx, chunk)
+}
+
+// Error returns the error that stopped consumption. It returns the finalization
+// error only when consumption reached clean EOF.
+func (e *StreamConsumptionError) Error() string {
+	if e.primary != nil {
+		return e.primary.Error()
+	}
+	return e.finalization.Error()
+}
+
+// Unwrap exposes both the primary and finalization errors.
+func (e *StreamConsumptionError) Unwrap() []error {
+	if e.primary == nil {
+		return []error{e.finalization}
+	}
+	if e.finalization == nil {
+		return []error{e.primary}
+	}
+	return []error{e.primary, e.finalization}
+}
+
+// PrimaryError returns the exact receive, observer, or terminal-protocol error
+// supplied to Finalize. It is nil when only finalization failed after clean EOF.
+func (e *StreamConsumptionError) PrimaryError() error {
+	return e.primary
+}
+
+// FinalizationError returns the result from ValidatedStreamer.Finalize.
+func (e *StreamConsumptionError) FinalizationError() error {
+	return e.finalization
 }
 
 type streamPresentation struct {
@@ -97,13 +168,14 @@ func (p *streamPresentation) stageThinking(block model.ThinkingPart) {
 }
 
 func (p *streamPresentation) finalize(streamer model.ValidatedStreamer, response *model.Response, primaryErr error) error {
-	err := streamer.Finalize(primaryErr)
+	finalizationErr := streamer.Finalize(primaryErr)
+	consumptionErr := newStreamConsumptionError(primaryErr, finalizationErr)
 	if p.events == nil {
-		return err
+		return consumptionErr
 	}
-	if err != nil {
+	if consumptionErr != nil {
 		p.events.FinishModelPresentation(p.ctx, p.id, false)
-		return err
+		return consumptionErr
 	}
 	commitErr := p.events.CommitModelPresentation(p.ctx, p.id, response)
 	if commitErr != nil {
@@ -114,6 +186,12 @@ func (p *streamPresentation) finalize(streamer model.ValidatedStreamer, response
 	return nil
 }
 
+func newStreamConsumptionError(primaryErr, finalizationErr error) error {
+	if primaryErr == nil && finalizationErr == nil {
+		return nil
+	}
+	return &StreamConsumptionError{primary: primaryErr, finalization: finalizationErr}
+}
 func validateStreamInputs(streamer model.ValidatedStreamer, ev PlannerEvents) error {
 	if streamer == nil {
 		return errors.New("nil streamer")
