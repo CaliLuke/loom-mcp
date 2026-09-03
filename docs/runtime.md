@@ -496,6 +496,9 @@ join barriers, typed human-input nodes, branch targets, and bounded loops. It
 derives tool completion from stable node/tool-call IDs in accumulated
 `ToolOutputs`, and typed-input completion from `PlanResumeInput.TypedInputs`, so
 resuming after partial parallel completion schedules only the remaining ready nodes.
+Graph node IDs cannot contain `#` because loop iterations use `<node>#<iteration>` IDs.
+A failed loop iteration permits the next attempt. If all iterations fail, the planner
+returns the last iteration's `ToolError`.
 Branch selection deactivates the entire unselected path: a nested branch on a
 not-taken path never resolves, and its own targets are skipped transitively,
 while a node that is also the target of a selected branch still runs.

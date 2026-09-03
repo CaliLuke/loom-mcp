@@ -142,6 +142,9 @@ func (w *WorkflowExpr) validateGraph(verr *eval.ValidationErrors) {
 			verr.Add(w, "workflow node id is required")
 			continue
 		}
+		if strings.Contains(node.ID, "#") {
+			verr.Add(w, "workflow node id %q contains reserved character %q", node.ID, "#")
+		}
 		if _, ok := ids[node.ID]; ok {
 			verr.Add(w, "duplicate workflow node id %q", node.ID)
 		}

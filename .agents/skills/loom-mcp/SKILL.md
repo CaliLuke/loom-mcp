@@ -102,6 +102,9 @@ Use this skill for `loom-mcp` work in this repo. Keep `AGENTS.md` short and keep
   default, so model calls and direct side effects can repeat after a late attempt
   failure. Planner implementations must be retry-safe and protect non-idempotent
   effects with stable idempotency keys.
+- Workflow graph node IDs cannot contain `#`, which separates generated loop
+  iteration IDs. Loop failures permit retries through `MaxIterations`. If every
+  iteration fails, return the last iteration's `ToolError`.
 - `policy.CapsState` owns counter budgets only. Its deprecated `ExpiresAt` field
   is ignored; active-time enforcement belongs to deterministic runtime deadlines
   configured through `TimeBudget`, with external waits pausing that budget.

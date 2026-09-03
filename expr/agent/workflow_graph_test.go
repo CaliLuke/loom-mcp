@@ -50,6 +50,16 @@ func TestWorkflowExprValidateGraph(t *testing.T) {
 			err: "duplicate workflow node id",
 		},
 		{
+			name: "reserved loop separator in node id",
+			workflow: &WorkflowExpr{
+				Agent: &AgentExpr{Name: "assistant"},
+				GraphNodes: []*WorkflowNodeExpr{
+					{ID: "draft#1", Kind: WorkflowNodeTool, Tool: "writer.draft", Payload: `{}`},
+				},
+			},
+			err: `workflow node id "draft#1" contains reserved character "#"`,
+		},
+		{
 			name: "unresolved dependency",
 			workflow: &WorkflowExpr{
 				Agent: &AgentExpr{Name: "assistant"},

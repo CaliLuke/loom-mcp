@@ -301,7 +301,11 @@ Use this file for current loom-mcp runtime behavior in this repo. Prefer it over
 - Graph workflow resume state is derived from stable node/tool-call IDs in
   `ToolOutputs`, not from `len(ToolOutputs)`.
 - Parallel resume must schedule only unfinished ready nodes. Joins are virtual
-  dependency barriers. Loops must be bounded by `MaxIterations`.
+  dependency barriers. Loops must be bounded by `MaxIterations`. Failed loop
+  iterations permit retries. If every iteration fails, return the last
+  iteration's `ToolError`.
+- Graph node IDs cannot contain `#`. The planner reserves that separator for
+  generated loop iteration IDs.
 - Workflow dependencies must be acyclic, and dependency, branch source/target,
   and loop predicate step IDs must resolve to declared graph nodes. Enforce the
   cycle contract in both design validation and runtime planner construction.

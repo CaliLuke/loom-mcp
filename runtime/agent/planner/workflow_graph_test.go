@@ -136,6 +136,31 @@ func TestGraphWorkflowPlannerRetriesFailedLoopAttempt(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, []string{"publish"}, toolCallIDs(final.ToolCalls))
 }
+func TestGraphWorkflowPlannerReportsLastFailureWhenAllLoopIterationsFail(t *testing.T) {
+	p := NewGraphWorkflowPlanner(WorkflowGraphConfig{
+		Nodes: []WorkflowNode{
+			{
+				ID:   "retry",
+				Kind: WorkflowNodeLoop,
+				Loop: &WorkflowLoopConfig{
+					Tool:          "worker.retry",
+					Payload:       rawjson.Message([]byte(`{}`)),
+					MaxIterations: 2,
+				},
+			},
+		},
+	})
+
+	result, err := p.PlanResume(context.Background(), &PlanResumeInput{
+		ToolOutputs: []*ToolOutput{
+			{ToolCallID: "retry#1", Error: NewToolError("first failure")},
+			{ToolCallID: "retry#2", Error: NewToolError("last failure")},
+		},
+	})
+
+	require.Nil(t, result)
+	require.EqualError(t, err, `workflow node "retry" failed at "retry#2": last failure`)
+}
 
 func TestGraphWorkflowPlannerBranchAfterJoinSelectsTarget(t *testing.T) {
 	p := NewGraphWorkflowPlanner(WorkflowGraphConfig{
@@ -254,6 +279,13 @@ func TestGraphWorkflowPlannerRejectsInvalidGraphConfig(t *testing.T) {
 				{ID: "draft", Kind: WorkflowNodeTool, Tool: "writer.redraft", Payload: rawjson.Message([]byte(`{}`))},
 			},
 			message: `duplicate workflow graph node id "draft"`,
+		},
+		{
+			name: "reserved loop separator in node id",
+			nodes: []WorkflowNode{
+				{ID: "draft#1", Kind: WorkflowNodeTool, Tool: "writer.draft", Payload: rawjson.Message([]byte(`{}`))},
+			},
+			message: `workflow graph node id "draft#1" contains reserved character "#"`,
 		},
 		{
 			name: "missing dependency",

@@ -1488,6 +1488,7 @@ wall-clock SLA separately at the caller or workflow boundary.
 be unique because it becomes the tool-call ID used to correlate workflow output. Graph helpers
 switch the generated planner to `planner.NewGraphWorkflowPlanner(...)`, where node completion is
 keyed by stable step IDs rather than `len(ToolOutputs)`.
+Graph node IDs cannot contain `#`. The planner reserves that character for loop iteration IDs.
 
 ```go
 Agent("release", "Release workflow", func() {

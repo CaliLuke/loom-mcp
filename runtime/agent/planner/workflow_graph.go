@@ -109,7 +109,7 @@ func (p *GraphWorkflowPlanner) nextResult(outputs []*ToolOutput, typedInputs []T
 	if err := p.validateConfig(); err != nil {
 		return nil, err
 	}
-	if failed := p.firstFailedNonLoopToolOutput(outputs); failed != nil {
+	if failed := p.firstFailedToolOutput(outputs); failed != nil {
 		nodeID := graphNodeIDForToolCallID(failed.ToolCallID)
 		return nil, fmt.Errorf("workflow node %q failed at %q: %s", nodeID, failed.ToolCallID, failed.Error.Error())
 	}
@@ -340,7 +340,7 @@ func (p *GraphWorkflowPlanner) loopDone(nodeID string, outputs []*ToolOutput) bo
 	return false
 }
 
-func (p *GraphWorkflowPlanner) firstFailedNonLoopToolOutput(outputs []*ToolOutput) *ToolOutput {
+func (p *GraphWorkflowPlanner) firstFailedToolOutput(outputs []*ToolOutput) *ToolOutput {
 	for _, output := range outputs {
 		if output == nil || output.Error == nil {
 			continue
@@ -350,7 +350,30 @@ func (p *GraphWorkflowPlanner) firstFailedNonLoopToolOutput(outputs []*ToolOutpu
 		}
 		return output
 	}
+	for _, node := range p.nodes {
+		if node.Kind != WorkflowNodeLoop || node.Loop == nil || loopIterationCount(node.ID, outputs) < node.Loop.MaxIterations {
+			continue
+		}
+		if failed := lastFailedLoopToolOutput(node.ID, outputs); failed != nil {
+			return failed
+		}
+	}
 	return nil
+}
+
+func lastFailedLoopToolOutput(nodeID string, outputs []*ToolOutput) *ToolOutput {
+	prefix := nodeID + "#"
+	var lastFailed *ToolOutput
+	for _, output := range outputs {
+		if output == nil || !strings.HasPrefix(output.ToolCallID, prefix) {
+			continue
+		}
+		if output.Error == nil {
+			return nil
+		}
+		lastFailed = output
+	}
+	return lastFailed
 }
 
 func (p *GraphWorkflowPlanner) isLoopToolCallID(toolCallID string) bool {
@@ -568,6 +591,9 @@ func (p *GraphWorkflowPlanner) validateConfig() error {
 	for _, node := range p.nodes {
 		if node.ID == "" {
 			return errors.New("workflow graph node id is required")
+		}
+		if strings.Contains(node.ID, "#") {
+			return fmt.Errorf("workflow graph node id %q contains reserved character %q", node.ID, "#")
 		}
 		if _, exists := ids[node.ID]; exists {
 			return fmt.Errorf("duplicate workflow graph node id %q", node.ID)
