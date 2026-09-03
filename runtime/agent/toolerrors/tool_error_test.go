@@ -36,6 +36,13 @@ func TestFromErrorReusesDirectToolErrorAndHandlesNil(t *testing.T) {
 	assert.NoError(t, (*ToolError)(nil).Unwrap())
 }
 
+func TestToolErrorUnwrapStopsAtLeaf(t *testing.T) {
+	leaf := New("failed")
+
+	assert.NoError(t, errors.Unwrap(leaf))
+	assert.NotErrorIs(t, leaf, (*ToolError)(nil))
+}
+
 func TestToolErrorChainSurvivesJSONRoundTrip(t *testing.T) {
 	original := NewWithCause("outer", NewWithCause("middle", errors.New("inner")))
 

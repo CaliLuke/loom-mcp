@@ -73,9 +73,10 @@ func (e *ToolError) Error() string {
 	return e.Message
 }
 
-// Unwrap returns the underlying tool error to support errors.Is/As.
+// Unwrap returns the underlying tool error to support errors.Is/As. It returns nil
+// for nil receivers and leaf errors.
 func (e *ToolError) Unwrap() error {
-	if e == nil {
+	if e == nil || e.Cause == nil {
 		return nil
 	}
 	return e.Cause
