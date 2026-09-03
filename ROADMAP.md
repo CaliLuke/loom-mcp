@@ -116,15 +116,20 @@ Preserve these defaults:
 - Generated code uses official MCP SDK auth types rather than reimplementing
   the protocol.
 
-Execute in this order, one change per pull request:
+Implement:
 
 1. Add tool-level `RequireScope(...)` and return a 403 RFC 6750
    `insufficient_scope` challenge before dispatch when the verified token lacks
    a required scope.
-2. Add Client ID Metadata Document registration advertisement through
-   `client_registration_types_supported`. Consumers host the document.
-3. Add OIDC issuer discovery only when a concrete client requires it. Prefer
+2. Add OIDC issuer discovery only when a concrete client requires it. Prefer
    advertising the issuer over proxying its discovery document.
+
+Client ID Metadata Documents require no protected-resource implementation in
+`loom-mcp`. The authorization server advertises support through
+`client_id_metadata_document_supported` in its Authorization Server Metadata,
+and the MCP client hosts its own metadata document. Do not emit the
+non-standard `client_registration_types_supported` field in Protected Resource
+Metadata.
 
 Conditional follow-up:
 
@@ -136,8 +141,8 @@ Proof:
 
 - Start each protocol change with a client-versus-framework test against the
   bundled specification.
-- Cover missing tokens, insufficient scopes, sufficient scopes, advertised
-  registration types and each supported discovery configuration.
+- Cover missing tokens, insufficient scopes, sufficient scopes and each
+  supported discovery configuration.
 
 ## Product decisions before engineering
 
@@ -355,7 +360,7 @@ DSL, codegen or fixture change is already in progress:
 - Do not port Goa-AI's MCP transport or generator stack. The official MCP Go
   SDK remains the sole wire owner.
 - Do not bundle JWT/JWKS verification or an authorization server.
-- Do not add dynamic OAuth client registration beyond advertising support.
+- Do not add dynamic OAuth client registration.
 - Do not make agent-as-tool inline. Child agents remain real child workflows.
 - Do not claim that Temporal activities or registry tool calls run exactly
   once.
