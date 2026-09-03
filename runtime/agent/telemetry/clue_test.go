@@ -90,6 +90,9 @@ func TestClueLoggerAndAttributeConversions(t *testing.T) {
 		"float", 4.5,
 		"bool", true,
 		"unknown", []string{"value"},
+		"error", errors.New("boom"),
+		"duration", time.Second,
+		"int32", int32(5),
 		7, "ignored-key",
 		"odd",
 	}))
@@ -98,11 +101,15 @@ func TestClueLoggerAndAttributeConversions(t *testing.T) {
 	assert.Equal(t, int64(3), attrs["int64"].AsInt64())
 	assert.InEpsilon(t, 4.5, attrs["float"].AsFloat64(), 0.0001)
 	assert.True(t, attrs["bool"].AsBool())
-	assert.Empty(t, attrs["unknown"].AsString())
-	assert.Empty(t, attrs["odd"].AsString())
+	assert.Equal(t, "[value]", attrs["unknown"].AsString())
+	assert.Equal(t, "boom", attrs["error"].AsString())
+	assert.Equal(t, "1s", attrs["duration"].AsString())
+	assert.Equal(t, "5", attrs["int32"].AsString())
+	assert.Equal(t, "ignored-key", attrs["7"].AsString())
+	assert.Equal(t, "<nil>", attrs["odd"].AsString())
 
 	tags := attrMap(tagsToAttrs([]string{"service", "planner", "orphan"}))
 	assert.Equal(t, "planner", tags["service"].AsString())
 	assert.Empty(t, tags["orphan"].AsString())
-	assert.Len(t, kvSliceToClue([]any{"key", "value", 7, "ignored", "odd"}), 2)
+	assert.Len(t, kvSliceToClue([]any{"key", "value", 7, "converted-key", "odd"}), 3)
 }

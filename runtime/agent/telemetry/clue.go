@@ -2,6 +2,7 @@ package telemetry
 
 import (
 	"context"
+	"fmt"
 	"time"
 
 	"github.com/CaliLuke/loom/clue/log"
@@ -162,11 +163,7 @@ func kvSliceToClue(keyvals []any) []log.Fielder {
 		if i+1 < len(keyvals) {
 			v = keyvals[i+1]
 		}
-		// Convert key to string
-		keyStr, ok := k.(string)
-		if !ok {
-			continue // Skip non-string keys
-		}
+		keyStr := fmt.Sprint(k)
 		fielders = append(fielders, log.KV{K: keyStr, V: v})
 	}
 	return fielders
@@ -190,7 +187,7 @@ func tagsToAttrs(tags []string) []attribute.KeyValue {
 
 // kvSliceToAttrs converts variadic key-value pairs (k1, v1, k2, v2, ...) into
 // OTEL attributes for span events. If the slice has an odd length, the last key
-// is paired with nil (converted to empty string).
+// is paired with nil and converted to its string representation.
 func kvSliceToAttrs(keyvals []any) []attribute.KeyValue {
 	var attrs []attribute.KeyValue
 	for i := 0; i < len(keyvals); i += 2 {
@@ -199,11 +196,7 @@ func kvSliceToAttrs(keyvals []any) []attribute.KeyValue {
 		if i+1 < len(keyvals) {
 			v = keyvals[i+1]
 		}
-		// Convert key to string
-		keyStr, ok := k.(string)
-		if !ok {
-			keyStr = ""
-		}
+		keyStr := fmt.Sprint(k)
 		// Convert value based on type
 		switch val := v.(type) {
 		case string:
@@ -218,7 +211,7 @@ func kvSliceToAttrs(keyvals []any) []attribute.KeyValue {
 			attrs = append(attrs, attribute.Bool(keyStr, val))
 		default:
 			// Fallback: convert to string
-			attrs = append(attrs, attribute.String(keyStr, ""))
+			attrs = append(attrs, attribute.String(keyStr, fmt.Sprint(v)))
 		}
 	}
 	return attrs
