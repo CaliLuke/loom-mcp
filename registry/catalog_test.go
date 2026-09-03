@@ -37,6 +37,13 @@ type testCatalogMap struct {
 	testAndSetErr     error
 	subscribe         func() <-chan rmap.EventKind
 }
+type catalogCASBarrierMap struct {
+	*testCatalogMap
+	mu      sync.Mutex
+	waiters int
+	ready   chan struct{}
+	release <-chan struct{}
+}
 
 func TestCatalogSameTokenAddRenewReleaseRolling(t *testing.T) {
 	t.Parallel()
@@ -503,6 +510,86 @@ func TestCatalogDifferentAdmissionGracefulAndExpiryHandoff(t *testing.T) {
 		},
 	}, replacement.ProviderLeases)
 }
+func TestCatalogRegisterRetireRacePreservesReplacementHealth(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	now := time.Unix(1_700_000_000, 0)
+	clock := newTestTimeSource(now)
+	baseMap := newTestCatalogMap()
+	setupCatalog := newToolsetCatalog(baseMap, clock)
+	old, err := setupCatalog.Register(
+		ctx,
+		testCatalogToolset("test.toolset", "old", nil),
+		testAdmissionRevisionA,
+		"old",
+		testIncarnationA,
+		time.Minute,
+	)
+	require.NoError(t, err)
+	require.NoError(t, setupCatalog.ReleaseProvider(
+		ctx,
+		"test.toolset",
+		"old",
+		testIncarnationA,
+		old.RegistrationToken,
+	))
+
+	release := make(chan struct{})
+	barrierMap := &catalogCASBarrierMap{
+		testCatalogMap: baseMap,
+		ready:          make(chan struct{}, 2),
+		release:        release,
+	}
+	catalog := newToolsetCatalog(barrierMap, clock)
+	type registrationResult struct {
+		entry catalogEntry
+		err   error
+	}
+	registration := make(chan registrationResult, 1)
+	retirement := make(chan error, 1)
+	go func() {
+		entry, registerErr := catalog.Register(
+			ctx,
+			testCatalogToolset("test.toolset", "replacement", nil),
+			testAdmissionRevisionB,
+			"replacement",
+			testIncarnationB,
+			time.Minute,
+		)
+		registration <- registrationResult{entry: entry, err: registerErr}
+	}()
+	go func() {
+		retirement <- catalog.Retire(ctx, "test.toolset", old.RegistrationToken)
+	}()
+
+	for range 2 {
+		select {
+		case <-barrierMap.ready:
+		case <-time.After(time.Second):
+			close(release)
+			t.Fatal("register and retire did not reach the same catalog CAS")
+		}
+	}
+	close(release)
+
+	replacement := <-registration
+	require.NoError(t, replacement.err)
+	retireErr := <-retirement
+	assert.True(t, retireErr == nil || errors.Is(retireErr, errAdmissionConflict), retireErr)
+
+	active, err := catalog.ActiveRegistration(ctx, "test.toolset")
+	require.NoError(t, err)
+	assert.Equal(t, replacement.entry.RegistrationToken, active.RegistrationToken)
+	assert.Equal(t, catalogEntryActive, active.State)
+
+	tracker := newDirectHealthTracker(ctx, catalog)
+	pingID := newPingID(active.RegistrationToken, active.HealthEpoch)
+	require.NoError(t, tracker.RecordPong(ctx, "test.toolset", "replacement", testIncarnationB, pingID))
+	health, err := tracker.Health(ctx, "test.toolset", active.RegistrationToken)
+	require.NoError(t, err)
+	assert.True(t, health.Healthy)
+}
 
 func TestCatalogOldRenewalAndReplacementSerialize(t *testing.T) {
 	t.Parallel()
@@ -822,6 +909,25 @@ func (m *testCatalogMap) TestAndSetEx(
 	}
 	m.content[key] = value
 	return current, true, true, nil
+}
+func (m *catalogCASBarrierMap) TestAndSetEx(
+	ctx context.Context,
+	key, test, value string,
+) (string, bool, bool, error) {
+	wait := false
+	if test != "" && value != "" {
+		m.mu.Lock()
+		if m.waiters < 2 {
+			m.waiters++
+			wait = true
+		}
+		m.mu.Unlock()
+	}
+	if wait {
+		m.ready <- struct{}{}
+		<-m.release
+	}
+	return m.testCatalogMap.TestAndSetEx(ctx, key, test, value)
 }
 
 func (m *testCatalogMap) TestAndDeleteEx(

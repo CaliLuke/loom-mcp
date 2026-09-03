@@ -4,13 +4,14 @@ The registry is a Redis/Pulse-backed catalog and gateway for discovering and inv
 
 ## Architecture
 
-- A Pulse replicated map stores the shared toolset catalog.
-- A second replicated map stores provider health.
-- A Pulse pool coordinates health work across registry nodes.
+- One Pulse replicated map stores each toolset admission, provider lease, health epoch, and last pong.
+- Each registry node runs a local health scheduler.
+- Short Redis leases select one node to send each toolset ping per interval.
 - Request and per-call result streams route tool invocations.
 - Generated providers in the toolset-owning service decode payloads, call bound service methods, and encode results.
 
 Nodes using the same `Config.Name` and Redis instance form one logical registry. The catalog is not backed by a pluggable memory/Mongo `Store`; the replicated map is the current catalog authority.
+Registration tokens fence all admission changes. An old `Unregister` request cannot retire a replacement admission. Health scheduling reads the catalog on each cycle and does not use shared Pulse tickers.
 
 The client-side `runtime/registry.Manager.Search` and semantic
 `SearchClient.Search` share one concurrent registry fan-out implementation and
@@ -53,7 +54,8 @@ Current fields:
 | `PingInterval` | Optional positive override; default is 10 seconds |
 | `MissedPingThreshold` | Optional positive override; default is 3 |
 | `ResultStreamTTL` | TTL for per-call result streams/mappings; default is 15 minutes |
-| `PoolNodeOptions` | Additional Pulse pool-node options |
+| `ExecutionTimeout` | Maximum execution time for a newly admitted tool call |
+| `ProviderLeaseDuration` | Provider renewal lease; defaults to two minutes |
 
 Negative durations/thresholds fail validation. Zero selects the default.
 
@@ -65,7 +67,7 @@ Negative durations/thresholds fail validation. Zero selects the default.
 4. Publish the request to the provider stream.
 5. Wait for the matching result or the request deadline.
 
-Provider health is established through ping/pong traffic. Run the generated provider loop in the process that owns the bound service implementation; registering catalog metadata alone does not execute tools.
+Provider health uses token-and-epoch-fenced ping/pong traffic in the catalog record. Run the generated provider loop in the process that owns the bound service implementation.
 
 The deterministic stream families are derived from canonical toolset and tool-use identities. Treat their concrete names as internal protocol details unless integrating the provider package itself.
 
