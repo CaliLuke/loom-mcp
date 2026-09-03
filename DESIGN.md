@@ -169,11 +169,13 @@ Tools are identified by canonical IDs in the format `<toolset>.<tool>` (dot-sepa
 
 A contextual quickstart file `AGENTS_QUICKSTART.md` is emitted at the module root on `loom gen`, summarizing what was generated and how to wire it. To opt out, invoke `DisableAgentDocs()` inside your API DSL.
 
-The `loom example` phase generates application-owned scaffold under `internal/agents/`:
+The `loom example` phase creates application-owned scaffolds for each service:
 
-- `internal/agents/bootstrap/bootstrap.go`: constructs a minimal runtime and registers generated agents
-- `internal/agents/<agent>/planner/planner.go`: planner stub implementing `PlanStart`/`PlanResume`
-- `internal/agents/<agent>/toolsets/<toolset>/adapter.go`: stubs for mapping method-backed tools
+- `internal/agents/<service>/bootstrap/bootstrap.go`: constructs a runtime and registers that service's agents
+- `internal/agents/<service>/<agent>/planner/planner.go`: implements the planner stub
+- `internal/agents/<service>/<agent>/toolsets/<toolset>/execute.go`: implements a method-backed executor stub
+
+The generator does not overwrite these files when they already exist.
 
 ## Security considerations
 

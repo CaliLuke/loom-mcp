@@ -3153,7 +3153,11 @@ wrapped client still does not advertise that optional interface.
 
 ### Bootstrap Helper
 
-Generated `loom example` emits `cmd/<service>/agents_bootstrap.go`:
+`loom example` emits a bootstrap at
+`internal/agents/<service>/bootstrap/bootstrap.go`. Each service also gets
+separate planner and executor scaffolds under
+`internal/agents/<service>/<agent>/`. The command at `cmd/<service>/main.go`
+imports that service's bootstrap:
 
 ```go
 // Bootstrap creates runtime with Temporal, stores, and registers agents
@@ -3163,6 +3167,9 @@ if err != nil {
 }
 defer cleanup()
 ```
+
+These files are application-owned. A later `loom example` command does not
+overwrite a file that already exists.
 
 ### Pulse Streaming
 

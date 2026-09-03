@@ -11,7 +11,7 @@ import (
 	"context"
 
 	chat "example.com/quickstart/gen/orchestrator/agents/chat"
-	plannerchat "example.com/quickstart/internal/agents/chat/planner"
+	plannerchat "example.com/quickstart/internal/agents/orchestrator/chat/planner"
 	agentsruntime "github.com/CaliLuke/loom-mcp/v2/runtime/agent/runtime"
 )
 

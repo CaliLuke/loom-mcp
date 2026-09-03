@@ -13,7 +13,7 @@ import (
 	"log"
 
 	chat "example.com/quickstart/gen/orchestrator/agents/chat"
-	"example.com/quickstart/internal/agents/bootstrap"
+	"example.com/quickstart/internal/agents/orchestrator/bootstrap"
 	model "github.com/CaliLuke/loom-mcp/v2/runtime/agent/model"
 )
 

@@ -9,8 +9,8 @@ package bootstrap
 import (
 	"context"
 	scribe "github.com/CaliLuke/loom-mcp/v2/alpha/agents/scribe"
-	plannerscribe "github.com/CaliLuke/loom-mcp/v2/internal/agents/scribe/planner"
-	toolsetscribeprofiles "github.com/CaliLuke/loom-mcp/v2/internal/agents/scribe/toolsets/profiles"
+	plannerscribe "github.com/CaliLuke/loom-mcp/v2/internal/agents/alpha/scribe/planner"
+	toolsetscribeprofiles "github.com/CaliLuke/loom-mcp/v2/internal/agents/alpha/scribe/toolsets/profiles"
 	agentsruntime "github.com/CaliLuke/loom-mcp/v2/runtime/agent/runtime"
 )
 

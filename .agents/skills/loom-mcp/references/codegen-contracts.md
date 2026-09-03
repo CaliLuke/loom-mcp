@@ -14,7 +14,10 @@ Use this file when editing DSL, generators, generated helpers, or MCP codegen be
 ## Generated Surface
 
 - `loom gen` emits tool specs, codecs, workflow/runtime registration helpers, and `AGENTS_QUICKSTART.md`.
-- `loom example` emits application-owned scaffold under `internal/agents/`.
+- `loom example` emits application-owned scaffolds under
+  `internal/agents/<service>/`. Bootstrap, planner, and executor paths include
+  the service name so same-named agents in different services cannot collide.
+  Every scaffold uses `SkipExist`; later runs preserve application changes.
 - Disable generated quickstart docs from the DSL only when that surface is intentionally undesired.
 
 ## Partial Evaluation

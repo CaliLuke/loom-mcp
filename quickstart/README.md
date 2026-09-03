@@ -68,10 +68,12 @@ loom example example.com/quickstart/design
 ```
 
 This creates:
-- **`gen/`** - Generated code (never edit by hand)
-- **`cmd/orchestrator/main.go`** - Runnable example using the bootstrap
-- **`internal/agents/bootstrap/bootstrap.go`** - Wires runtime and registers agents
-- **`internal/agents/chat/planner/planner.go`** - Stub planner (edit to connect your LLM)
+- **`gen/`** - Generated code. Do not edit these files.
+- **`cmd/orchestrator/main.go`** - Runnable example that uses the bootstrap.
+- **`internal/agents/orchestrator/bootstrap/bootstrap.go`** - Runtime wiring for the orchestrator service.
+- **`internal/agents/orchestrator/chat/planner/planner.go`** - Planner stub for the chat agent.
+
+The example files are application-owned. Later `loom example` commands do not overwrite your changes.
 
 ## 4) Run the generated example
 
@@ -126,7 +128,7 @@ rt := agentsruntime.New(agentsruntime.WithEngine(eng))
 
 ## 6) Customize the planner
 
-Edit `internal/agents/chat/planner/planner.go` to connect your LLM:
+Edit `internal/agents/orchestrator/chat/planner/planner.go` to connect your LLM:
 
 ```go
 func (p *examplePlanner) PlanStart(ctx context.Context, in *planner.PlanInput) (*planner.PlanResult, error) {

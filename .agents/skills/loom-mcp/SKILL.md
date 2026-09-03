@@ -424,6 +424,9 @@ Use this skill for `loom-mcp` work in this repo. Keep `AGENTS.md` short and keep
   safe drop-on-overflow default and an explicit false pointer enables
   backpressure. Do not restore untyped compatibility or silent fallback.
 - Codegen should use partial evaluation and `NameScope` helpers rather than string surgery or runtime branching over static structure.
+- `loom example` scopes bootstrap, planner, and executor scaffolds by service
+  under `internal/agents/<service>/`. Every scaffold uses `SkipExist` and
+  must preserve application changes on later example-generation runs.
 - Every MCP transport adaptation is owned through stable upstream section
   identifiers and evaluated generator data. Missing or duplicate expected
   sections must fail generation. Never inspect, parse, or rewrite rendered Go

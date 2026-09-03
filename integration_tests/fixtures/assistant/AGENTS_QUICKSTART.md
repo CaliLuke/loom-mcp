@@ -42,10 +42,13 @@ loom example <module>/design
 go run ./cmd/<service>/
 ```
 
-This generates:
-- `internal/agents/bootstrap/bootstrap.go` — Wires runtime and registers agents
-- `internal/agents/<agent>/planner/planner.go` — Stub planner (edit to connect your LLM)
-- `cmd/<service>/main.go` — Example main that uses the bootstrap
+This generates application-owned files:
+- `internal/agents/<service>/bootstrap/bootstrap.go` — Wires the runtime and registers one service's agents
+- `internal/agents/<service>/<agent>/planner/planner.go` — Provides a planner stub
+- `internal/agents/<service>/<agent>/toolsets/<toolset>/execute.go` — Provides a method-backed executor stub when required
+- `cmd/<service>/main.go` — Runs the service's agents through its bootstrap
+
+`loom example` creates each scaffold only when its path does not exist. It does not overwrite application changes.
 
 ### Understanding the Generated Code
 
@@ -225,7 +228,7 @@ Your agents can do useful work by calling other parts of your system. Here's how
 When your tool maps to a service method (via `BindTo`):
 - `loom gen` emits typed tool specs/codecs under the owner-scoped `gen/<service>/toolsets/<toolset>/` package
 - `loom gen` emits transform helpers in that package's `transforms.go` when the shapes are compatible
-- `loom example` emits an application-owned executor stub under `internal/agents/<agent>/toolsets/<toolset>/execute.go`
+- `loom example` emits an application-owned executor stub under `internal/agents/<service>/<agent>/toolsets/<toolset>/execute.go`
 
 Wire executors using the generated `RegisterUsedToolsets` helper:
 
@@ -249,7 +252,7 @@ Implement the executor's `Execute` function to:
 Minimal executor scaffold:
 
 ```go
-// internal/agents/<agent>/toolsets/<toolset>/execute.go
+// internal/agents/<service>/<agent>/toolsets/<toolset>/execute.go
 package <toolset>
 
 import (

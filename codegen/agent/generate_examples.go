@@ -17,17 +17,10 @@ import (
 	"github.com/CaliLuke/loom/eval"
 )
 
-// GenerateExample appends a service-local bootstrap helper and planner stub(s)
-// so developers can run agents inside the service process with no manual wiring.
-//
-// Behavior:
-//   - For each service that declares at least one agent, emits:
-//   - cmd/<service>/agents_bootstrap.go
-//   - cmd/<service>/agents_planner_<agent>.go (one per agent)
-//   - Patches cmd/<service>/main.go to call bootstrapAgents(ctx) at process start.
-//
-// The function is idempotent over the in-memory file list provided by Goa’s example
-// pipeline. It does not modify gen/ output; it only adds/patches service-side files.
+// GenerateExample appends service-scoped bootstrap, planner, and executor
+// scaffolds so developers can run agents inside each service process with no
+// manual wiring. Every emitted scaffold uses SkipExist because the files become
+// application-owned after their first write.
 func GenerateExample(genpkg string, roots []eval.Root, files []*codegen.File) ([]*codegen.File, error) {
 	data, err := buildGeneratorData(genpkg, roots)
 	if err != nil {
@@ -37,7 +30,7 @@ func GenerateExample(genpkg string, roots []eval.Root, files []*codegen.File) ([
 		return files, nil
 	}
 
-	// Emit application-owned scaffold under internal/agents/; do not patch main.
+	// Emit application-owned scaffold under internal/agents/<service>/.
 	moduleBase := moduleBaseImport(genpkg)
 	for _, svc := range data.Services {
 		if len(svc.Agents) == 0 {
@@ -50,10 +43,10 @@ func GenerateExample(genpkg string, roots []eval.Root, files []*codegen.File) ([
 			files = append(files, f)
 		}
 		for _, ag := range svc.Agents {
-			if f := emitPlannerInternalStub(moduleBase, ag); f != nil {
+			if f := emitPlannerInternalStub(ag); f != nil {
 				files = append(files, f)
 			}
-			// Internal executor stubs under internal/agents/<agent>/toolsets/<toolset>/
+			// Internal executor stubs under internal/agents/<service>/<agent>/toolsets/<toolset>/
 			for _, ts := range ag.AllToolsets {
 				if !needsExecutorBackedRegistration(ts) {
 					continue
@@ -87,8 +80,8 @@ func moduleBaseImport(genpkg string) string {
 	return base
 }
 
-// emitInternalBootstrap emits internal/agents/bootstrap/bootstrap.go with a
-// simple New(ctx) bootstrap for every generated agent in one service.
+// emitInternalBootstrap emits
+// internal/agents/<service>/bootstrap/bootstrap.go for one service's agents.
 func emitInternalBootstrap(svc *ServiceAgentsData, moduleBase string) *codegen.File {
 	if svc == nil || len(svc.Agents) == 0 {
 		return nil
@@ -114,10 +107,11 @@ func emitInternalBootstrap(svc *ServiceAgentsData, moduleBase string) *codegen.F
 		Agent                                  *AgentData
 	}
 	agents := make([]agentImport, 0, len(svc.Agents))
+	servicePath := svc.Service.PathName
 	for _, ag := range svc.Agents {
 		imports = append(imports, &codegen.ImportSpec{Path: ag.ImportPath, Name: ag.PackageName})
 		palias := "planner" + ag.PathName
-		ppath := filepath.ToSlash(filepath.Join(moduleBase, "internal", "agents", ag.PathName, "planner"))
+		ppath := filepath.ToSlash(filepath.Join(moduleBase, "internal", "agents", servicePath, ag.PathName, "planner"))
 		imports = append(imports, &codegen.ImportSpec{Path: ppath, Name: palias})
 		// Import internal toolset executor packages for method-backed toolsets.
 		var tsImports []toolsetImport
@@ -125,7 +119,7 @@ func emitInternalBootstrap(svc *ServiceAgentsData, moduleBase string) *codegen.F
 			if !needsExecutorBackedRegistration(ts) {
 				continue
 			}
-			tpath := filepath.ToSlash(filepath.Join(moduleBase, "internal", "agents", ag.PathName, "toolsets", ts.PathName))
+			tpath := filepath.ToSlash(filepath.Join(moduleBase, "internal", "agents", servicePath, ag.PathName, "toolsets", ts.PathName))
 			talias := "toolset" + ag.PathName + ts.PathName
 			imports = append(imports, &codegen.ImportSpec{Path: tpath, Name: talias})
 			tsImports = append(tsImports, toolsetImport{Alias: talias, Path: tpath, Toolset: ts})
@@ -139,7 +133,7 @@ func emitInternalBootstrap(svc *ServiceAgentsData, moduleBase string) *codegen.F
 			Agent:        ag,
 		})
 	}
-	path := filepath.Join("internal", "agents", "bootstrap", "bootstrap.go")
+	path := filepath.Join("internal", "agents", servicePath, "bootstrap", "bootstrap.go")
 	sections := []*codegen.SectionTemplate{
 		codegen.Header("Agents bootstrap (internal)", "bootstrap", imports),
 		{
@@ -152,13 +146,13 @@ func emitInternalBootstrap(svc *ServiceAgentsData, moduleBase string) *codegen.F
 			FuncMap: templateFuncMap(),
 		},
 	}
-	return &codegen.File{Path: path, SectionTemplates: sections}
+	return &codegen.File{Path: path, SectionTemplates: sections, SkipExist: true}
 }
 
-// emitPlannerInternalStub emits internal/agents/<agent>/planner/planner.go
-// with the minimal planner scaffold for an example application.
-func emitPlannerInternalStub(_ string, ag *AgentData) *codegen.File {
-	if ag == nil {
+// emitPlannerInternalStub emits
+// internal/agents/<service>/<agent>/planner/planner.go.
+func emitPlannerInternalStub(ag *AgentData) *codegen.File {
+	if ag == nil || ag.Service == nil {
 		return nil
 	}
 	imports := []*codegen.ImportSpec{
@@ -170,12 +164,12 @@ func emitPlannerInternalStub(_ string, ag *AgentData) *codegen.File {
 		codegen.Header("Planner stub for "+ag.StructName, "planner", imports),
 		{Name: "planner-internal-stub", Source: agentsTemplates.Read(plannerInternalStubT), Data: ag},
 	}
-	path := filepath.Join("internal", "agents", ag.PathName, "planner", "planner.go")
-	return &codegen.File{Path: path, SectionTemplates: sections}
+	path := filepath.Join("internal", "agents", ag.Service.PathName, ag.PathName, "planner", "planner.go")
+	return &codegen.File{Path: path, SectionTemplates: sections, SkipExist: true}
 }
 
 // emitExecutorInternalStub emits
-// internal/agents/<agent>/toolsets/<toolset>/execute.go for method-backed tools.
+// internal/agents/<service>/<agent>/toolsets/<toolset>/execute.go.
 func emitExecutorInternalStub(ag *AgentData, ts *ToolsetData) *codegen.File {
 	src := ts.SourceService
 	if src == nil {
@@ -236,8 +230,8 @@ func emitExecutorInternalStub(ag *AgentData, ts *ToolsetData) *codegen.File {
 			FuncMap: templateFuncMap(),
 		},
 	}
-	path := filepath.Join("internal", "agents", ag.PathName, "toolsets", ts.PathName, "execute.go")
-	return &codegen.File{Path: path, SectionTemplates: sections}
+	path := filepath.Join("internal", "agents", ag.Service.PathName, ag.PathName, "toolsets", ts.PathName, "execute.go")
+	return &codegen.File{Path: path, SectionTemplates: sections, SkipExist: true}
 }
 
 // quickstartReadmeFile builds the contextual quickstart README at the module
@@ -280,7 +274,7 @@ func emitCmdMain(svc *ServiceAgentsData, moduleBase string, files []*codegen.Fil
 		{Path: "context"},
 		{Path: "fmt"},
 		{Path: "log"},
-		{Path: filepath.ToSlash(filepath.Join(moduleBase, "internal", "agents", "bootstrap"))},
+		{Path: filepath.ToSlash(filepath.Join(moduleBase, "internal", "agents", svc.Service.PathName, "bootstrap"))},
 		{Path: "github.com/CaliLuke/loom-mcp/v2/runtime/agent/model", Name: "model"},
 	}
 	for _, ag := range svc.Agents {
@@ -295,10 +289,11 @@ func emitCmdMain(svc *ServiceAgentsData, moduleBase string, files []*codegen.Fil
 	}
 
 	if file != nil {
-		file.SectionTemplates = []*codegen.SectionTemplate{
+		file.SetSections([]codegen.Section{
 			codegen.Header("Example main for "+svc.Service.Name, "main", imports),
 			agentSection,
-		}
+		})
+		file.SkipExist = true
 		return nil
 	}
 
@@ -307,7 +302,8 @@ func emitCmdMain(svc *ServiceAgentsData, moduleBase string, files []*codegen.Fil
 	}
 
 	return &codegen.File{
-		Path: mainPath,
+		Path:      mainPath,
+		SkipExist: true,
 		SectionTemplates: []*codegen.SectionTemplate{
 			codegen.Header("Example main for "+svc.Service.Name, "main", imports),
 			agentSection,
