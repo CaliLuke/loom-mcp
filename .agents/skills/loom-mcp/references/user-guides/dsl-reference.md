@@ -97,6 +97,9 @@ Use `MCP(name, version, opts...)` inside a service. Method-level MCP tools use
 `Tool(...)` in the method context; there are no `MCPServer`, `MCPTool`, or
 `MCPToolset` aliases in the current public contract.
 
+`StaticPrompt(...)` can appear before or after `MCP(...)` in the same service. The service must
+declare `MCP(...)`.
+
 Current MCP surfaces include:
 
 - implementation metadata: `WebsiteURL`, server icons, and list-surface icons;

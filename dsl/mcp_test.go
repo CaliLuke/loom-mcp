@@ -243,6 +243,36 @@ func TestMCPStaticPrompt(t *testing.T) {
 	require.Equal(t, "https://example.com/icons/greeting.svg", prompt.Icons[0].Source)
 }
 
+func TestMCPStaticPromptBeforeMCP(t *testing.T) {
+	runMCPDSL(t, func() {
+		API("test", func() {})
+		Service("assistant", func() {
+			StaticPrompt("greeting", "Friendly greeting",
+				"user", "Hello!",
+				"assistant", "How can I help?",
+			)
+			MCP("assistant", "1.0")
+		})
+	})
+
+	mcp := mcpexpr.Root.MCPServers["assistant"]
+	require.NotNil(t, mcp)
+	require.Len(t, mcp.Prompts, 1)
+	require.Equal(t, "greeting", mcp.Prompts[0].Name)
+	require.Len(t, mcp.Prompts[0].Messages, 2)
+}
+
+func TestMCPStaticPromptRequiresMCP(t *testing.T) {
+	err := runInvalidMCPDSL(t, func() {
+		API("test", func() {})
+		Service("assistant", func() {
+			StaticPrompt("greeting", "Friendly greeting", "user", "Hello!")
+		})
+	})
+
+	require.Contains(t, err, `StaticPrompt requires MCP to be declared in service "assistant"`)
+}
+
 func TestMCPStaticPromptRuntimePromptSpec(t *testing.T) {
 	runMCPDSL(t, func() {
 		API("test", func() {})

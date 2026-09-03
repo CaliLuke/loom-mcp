@@ -133,6 +133,9 @@ Loom MCP v1 supports two prompt concepts with an explicit bridge for simple shar
   declare `RuntimePrompt(...)` on a single-message `StaticPrompt(...)` to generate a registrar from
   the same design-owned prompt declaration.
 
+`StaticPrompt(...)` can appear before or after `MCP(...)` in the same service. The service must
+declare `MCP(...)`.
+
 The runtime-managed prompt layer works like this:
 
 - Register baseline prompt specs via `Runtime.PromptRegistry.Register(prompt.PromptSpec{...})`.
@@ -1586,7 +1589,7 @@ Service("calculator", func() {
     })
 
     StaticPrompt("greeting", "Friendly greeting",
-        "system", "You are a helpful assistant",
+        "user", "You are a helpful assistant",
         PromptIcons(
             Icon("https://example.com/icons/greeting.svg",
                 IconMIMEType("image/svg+xml"),

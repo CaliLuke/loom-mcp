@@ -28,6 +28,16 @@ func TestRootExprWalkSetsUsesServiceNameOrder(t *testing.T) {
 				{Name: "alpha-dynamic-prompt"},
 			},
 		},
+		pendingStaticPrompts: map[string][]*PromptExpr{
+			"aardvark": {
+				{
+					Name: "aardvark-prompt",
+					Messages: []*MessageExpr{
+						{Expression: testExpression("aardvark-message")},
+					},
+				},
+			},
+		},
 	}
 
 	var sets [][]string
@@ -40,8 +50,8 @@ func TestRootExprWalkSetsUsesServiceNameOrder(t *testing.T) {
 		{"alpha-capabilities", "beta-capabilities", "gamma-capabilities"},
 		{"alpha-tool", "beta-tool", "gamma-tool"},
 		{"alpha-resource", "beta-resource", "gamma-resource"},
-		{"alpha-prompt", "beta-prompt", "gamma-prompt"},
-		{"alpha-message", "beta-message", "gamma-message"},
+		{"aardvark-prompt", "alpha-prompt", "beta-prompt", "gamma-prompt"},
+		{"aardvark-message", "alpha-message", "beta-message", "gamma-message"},
 		{"alpha-dynamic-prompt", "beta-dynamic-prompt", "gamma-dynamic-prompt"},
 	}, sets)
 }

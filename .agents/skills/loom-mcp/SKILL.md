@@ -238,6 +238,8 @@ Use this skill for `loom-mcp` work in this repo. Keep `AGENTS.md` short and keep
   `AwaitConfirmation`, resumes through `ProvideConfirmation`, records
   `ToolAuthorization`, executes only approved calls, and synthesizes
   schema-compliant denied results.
+- Service-level `StaticPrompt(...)` declarations are order-independent from
+  `MCP(...)`. The service must still declare MCP.
 - MCP is a two-way bridge:
   - consume external MCP servers through `runtime/mcp` callers,
   - expose designed services as MCP servers through generated adapters and registrations.

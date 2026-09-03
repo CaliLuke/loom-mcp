@@ -558,7 +558,7 @@ func SkillDirectory(root string) func(*exprmcp.MCPExpr) {
 // StaticPrompt adds a static prompt template to the MCP server. Static prompts
 // provide pre-defined message sequences that clients can use without parameters.
 //
-// StaticPrompt must appear in a Service expression with MCP enabled.
+// The service must also declare MCP; declaration order does not matter.
 //
 // StaticPrompt takes a name, description, and a list of role-content pairs:
 //   - name: the prompt identifier
@@ -577,14 +577,6 @@ func StaticPrompt(name, description string, args ...any) {
 	svc, isService := eval.Current().(*goaexpr.ServiceExpr)
 	if !isService {
 		incompatibleDSL("StaticPrompt")
-		return
-	}
-	var mcp *exprmcp.MCPExpr
-	if r := exprmcp.Root; r != nil {
-		mcp = r.GetMCP(svc)
-	}
-	if mcp == nil {
-		mcpRequiredDSL("StaticPrompt", svc)
 		return
 	}
 	prompt := &exprmcp.PromptExpr{Name: name, Description: description, Messages: make([]*exprmcp.MessageExpr, 0)}
@@ -607,7 +599,15 @@ func StaticPrompt(name, description string, args ...any) {
 	for i := 0; i < len(messages); i += 2 {
 		prompt.Messages = append(prompt.Messages, &exprmcp.MessageExpr{Role: messages[i], Content: messages[i+1]})
 	}
-	mcp.Prompts = append(mcp.Prompts, prompt)
+	if r := exprmcp.Root; r != nil {
+		if mcp := r.GetMCP(svc); mcp != nil {
+			mcp.Prompts = append(mcp.Prompts, prompt)
+		} else {
+			r.DeferStaticPrompt(svc, prompt)
+		}
+		return
+	}
+	mcpRequiredDSL("StaticPrompt", svc)
 }
 
 // DynamicPrompt marks the current method as a dynamic prompt generator. The

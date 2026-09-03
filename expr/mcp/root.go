@@ -27,18 +27,20 @@ type RootExpr struct {
 	MCPServers map[string]*MCPExpr
 	// DynamicPrompts maps service names to their dynamic prompt
 	// expressions.
-	DynamicPrompts      map[string][]*DynamicPromptExpr
-	duplicateMCPServers map[string][]*MCPExpr
-	pendingSkillDirs    map[string][]*SkillDirectoryExpr
+	DynamicPrompts       map[string][]*DynamicPromptExpr
+	duplicateMCPServers  map[string][]*MCPExpr
+	pendingSkillDirs     map[string][]*SkillDirectoryExpr
+	pendingStaticPrompts map[string][]*PromptExpr
 }
 
 // NewRoot creates a new plugin root expression
 func NewRoot() *RootExpr {
 	return &RootExpr{
-		MCPServers:          make(map[string]*MCPExpr),
-		DynamicPrompts:      make(map[string][]*DynamicPromptExpr),
-		duplicateMCPServers: make(map[string][]*MCPExpr),
-		pendingSkillDirs:    make(map[string][]*SkillDirectoryExpr),
+		MCPServers:           make(map[string]*MCPExpr),
+		DynamicPrompts:       make(map[string][]*DynamicPromptExpr),
+		duplicateMCPServers:  make(map[string][]*MCPExpr),
+		pendingSkillDirs:     make(map[string][]*SkillDirectoryExpr),
+		pendingStaticPrompts: make(map[string][]*PromptExpr),
 	}
 }
 
@@ -67,7 +69,7 @@ func (r *RootExpr) WalkSets(walk eval.SetWalker) {
 	if len(r.pendingSkillDirs) > 0 {
 		walk(skillDirectorySet(r.pendingSkillDirs))
 	}
-	prompts, messages := mcpPromptSets(r.MCPServers)
+	prompts, messages := mcpPromptSets(r.MCPServers, r.pendingStaticPrompts)
 	walk(prompts)
 	walk(messages)
 	walk(dynamicPromptSet(r.DynamicPrompts))
@@ -79,6 +81,7 @@ func (r *RootExpr) Validate() error {
 	r.validateDuplicateMCPServers(verr)
 	r.validatePromptNameCollisions(verr)
 	r.validatePendingSkillDirectories(verr)
+	r.validatePendingStaticPrompts(verr)
 	if len(verr.Errors) > 0 {
 		return verr
 	}
@@ -89,6 +92,14 @@ func (r *RootExpr) validatePendingSkillDirectories(verr *eval.ValidationErrors) 
 	for _, service := range sortedServiceNames(r.pendingSkillDirs) {
 		for _, dir := range r.pendingSkillDirs[service] {
 			verr.Add(dir, "SkillDirectory requires MCP to be declared in service %q", service)
+		}
+	}
+}
+
+func (r *RootExpr) validatePendingStaticPrompts(verr *eval.ValidationErrors) {
+	for _, service := range sortedServiceNames(r.pendingStaticPrompts) {
+		for _, prompt := range r.pendingStaticPrompts[service] {
+			verr.Add(prompt, "StaticPrompt requires MCP to be declared in service %q", service)
 		}
 	}
 }
@@ -179,17 +190,29 @@ func mcpResourcesSet(servers map[string]*MCPExpr) eval.ExpressionSet {
 	return set
 }
 
-func mcpPromptSets(servers map[string]*MCPExpr) (eval.ExpressionSet, eval.ExpressionSet) {
+func mcpPromptSets(servers map[string]*MCPExpr, pending map[string][]*PromptExpr) (eval.ExpressionSet, eval.ExpressionSet) {
 	var prompts eval.ExpressionSet
 	var messages eval.ExpressionSet
-	for _, service := range sortedServiceNames(servers) {
-		m := servers[service]
-		for _, p := range m.Prompts {
-			prompts = append(prompts, p)
-			for _, msg := range p.Messages {
-				messages = append(messages, msg)
+	appendPrompts := func(items []*PromptExpr) {
+		for _, prompt := range items {
+			prompts = append(prompts, prompt)
+			for _, message := range prompt.Messages {
+				messages = append(messages, message)
 			}
 		}
+	}
+	services := make(map[string]struct{}, len(servers)+len(pending))
+	for service := range servers {
+		services[service] = struct{}{}
+	}
+	for service := range pending {
+		services[service] = struct{}{}
+	}
+	for _, service := range sortedServiceNames(services) {
+		if _, ok := servers[service]; ok {
+			appendPrompts(servers[service].Prompts)
+		}
+		appendPrompts(pending[service])
 	}
 	return prompts, messages
 }
@@ -240,7 +263,17 @@ func (r *RootExpr) RegisterMCP(svc *expr.ServiceExpr, mcp *MCPExpr) {
 	}
 	mcp.SkillDirectories = append(mcp.SkillDirectories, r.pendingSkillDirs[svc.Name]...)
 	delete(r.pendingSkillDirs, svc.Name)
+	mcp.Prompts = append(r.pendingStaticPrompts[svc.Name], mcp.Prompts...)
+	delete(r.pendingStaticPrompts, svc.Name)
 	r.MCPServers[svc.Name] = mcp
+}
+
+// DeferStaticPrompt records a service static prompt until MCP is registered.
+func (r *RootExpr) DeferStaticPrompt(svc *expr.ServiceExpr, prompt *PromptExpr) {
+	if r.pendingStaticPrompts == nil {
+		r.pendingStaticPrompts = make(map[string][]*PromptExpr)
+	}
+	r.pendingStaticPrompts[svc.Name] = append(r.pendingStaticPrompts[svc.Name], prompt)
 }
 
 // DeferSkillDirectory records a service skill directory until MCP is registered.
