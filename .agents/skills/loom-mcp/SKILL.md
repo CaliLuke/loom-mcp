@@ -429,9 +429,10 @@ Use this skill for `loom-mcp` work in this repo. Keep `AGENTS.md` short and keep
   global OpenTelemetry error handler once per effective instrument name. Keep
   this diagnostic fail-soft path when changing runtime metric adapters.
 - Preserve explicit source JSON-RPC CORS policies when building the synthetic
-  MCP transport. Loom's generated CORS handler and MCP origin validation are
-  independent layers: CORS controls browser response policy, while
-  `MCPCrossOriginProtection` remains the outer DNS-rebinding/CSRF check.
+  MCP transport. CORS controls browser response policy. The shared SDK bridge
+  validates each present `Origin` header on every HTTP method before MCP
+  processing, including GET for SSE. It returns HTTP 403 for invalid origins
+  and retains `CrossOriginProtection` as the unsafe-method CSRF layer.
 - Non-generated HTTP server scaffolds must retain bounded read and idle
   timeouts. Long-lived MCP SSE servers keep `WriteTimeout: 0` so a generic HTTP
   deadline cannot terminate a healthy stream.

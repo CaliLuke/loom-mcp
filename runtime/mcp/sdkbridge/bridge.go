@@ -3,8 +3,10 @@ package sdkbridge
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net/http"
+	"net/url"
 	"sync"
 
 	mcpruntime "github.com/CaliLuke/loom-mcp/v2/runtime/mcp"
@@ -122,13 +124,15 @@ func NewServer(config Config) (*Server, error) {
 		server.AddPrompt(binding.Prompt, binding.Handler)
 	}
 
-	handler := newHandler(server, config.Options.RequestContext, config.Options.StreamableHTTP, config.Sessions)
+	configuredStreamableOptions := streamableHTTPOptions(config.Options.StreamableHTTP)
+	handler := newHandler(server, config.Options.RequestContext, configuredStreamableOptions, config.Sessions)
 	if config.Options.TransportObserver != nil {
 		handler = transport.HTTPMiddleware(config.Options.TransportObserver)(handler)
 	}
 	if config.Options.RuntimeCORS != nil {
 		handler = runtimeCORSHandler(handler, *config.Options.RuntimeCORS)
 	}
+	handler = originValidationHandler(handler, configuredStreamableOptions.CrossOriginProtection)
 	return &Server{Handler: handler, SDK: server, watchableResource: config.WatchableResource}, nil
 }
 
@@ -186,15 +190,14 @@ func serverOptions(opts *mcpsdk.ServerOptions, completion func(context.Context, 
 	return opts
 }
 
-func newHandler(server *mcpsdk.Server, requestContext func(context.Context, *http.Request) context.Context, streamableOptions *mcpsdk.StreamableHTTPOptions, sessions SessionHooks) http.Handler {
-	configuredStreamableOptions := streamableHTTPOptions(streamableOptions)
-	crossOriginProtection := configuredStreamableOptions.CrossOriginProtection
-	configuredStreamableOptions.CrossOriginProtection = nil
+func newHandler(server *mcpsdk.Server, requestContext func(context.Context, *http.Request) context.Context, configuredStreamableOptions *mcpsdk.StreamableHTTPOptions, sessions SessionHooks) http.Handler {
+	sdkStreamableOptions := *configuredStreamableOptions
+	sdkStreamableOptions.CrossOriginProtection = nil
 	base := mcpruntime.StreamableHTTPNegotiation(
 		mcpsdk.NewStreamableHTTPHandler(func(*http.Request) *mcpsdk.Server {
 			return server
-		}, configuredStreamableOptions),
-		configuredStreamableOptions.JSONResponse,
+		}, &sdkStreamableOptions),
+		sdkStreamableOptions.JSONResponse,
 	)
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		r = r.WithContext(mcpruntime.WithRequestHeaders(r.Context(), r.Header))
@@ -209,11 +212,6 @@ func newHandler(server *mcpsdk.Server, requestContext func(context.Context, *htt
 		}
 		transportObservation, transportWriter := transport.BeginHTTPRequest(r.Context(), w, "mcp", r.Method, r)
 		defer transportObservation.End()
-		if err := crossOriginProtection.Check(r); err != nil {
-			http.Error(transportWriter, err.Error(), http.StatusForbidden)
-			transportObservation.Fail(transport.ReasonHandlerError)
-			return
-		}
 		observer := &responseObserver{
 			ResponseWriter: transportWriter,
 			onSessionIssued: func(sessionID string) {
@@ -255,6 +253,40 @@ func streamableHTTPOptions(opts *mcpsdk.StreamableHTTPOptions) *mcpsdk.Streamabl
 	return &configured
 }
 
+func originValidationHandler(next http.Handler, protection *http.CrossOriginProtection) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if err := validateOrigin(protection, r); err != nil {
+			http.Error(w, err.Error(), http.StatusForbidden)
+			return
+		}
+		next.ServeHTTP(w, r)
+	})
+}
+
+func validateOrigin(protection *http.CrossOriginProtection, r *http.Request) error {
+	origins := r.Header.Values("Origin")
+	if len(origins) == 0 {
+		return protection.Check(r)
+	}
+	if len(origins) != 1 || origins[0] == "" {
+		return errors.New("invalid Origin header")
+	}
+	parsedOrigin, err := url.Parse(origins[0])
+	if err != nil || parsedOrigin.Scheme == "" || parsedOrigin.Host == "" || origins[0] != parsedOrigin.Scheme+"://"+parsedOrigin.Host {
+		return errors.New("invalid Origin header")
+	}
+
+	originRequest := *r
+	switch originRequest.Method {
+	case http.MethodGet, http.MethodHead, http.MethodOptions:
+		originRequest.Method = "MCP-ORIGIN-CHECK"
+	}
+	if r.Header.Get("Sec-Fetch-Site") != "" {
+		originRequest.Header = r.Header.Clone()
+		originRequest.Header.Del("Sec-Fetch-Site")
+	}
+	return protection.Check(&originRequest)
+}
 func runtimeCORSHandler(next http.Handler, policy loomhttp.RuntimeCORSPolicy) http.Handler {
 	actual := policy.Handler(next.ServeHTTP)
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

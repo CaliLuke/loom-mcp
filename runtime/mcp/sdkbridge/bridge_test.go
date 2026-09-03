@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	mcpruntime "github.com/CaliLuke/loom-mcp/v2/runtime/mcp"
+	loomhttp "github.com/CaliLuke/loom/http"
 	mcpsdk "github.com/modelcontextprotocol/go-sdk/mcp"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -96,4 +97,101 @@ func TestToolHandlerPreservesProgressTokenAfterPayloadBinding(t *testing.T) {
 	_, err := handler(context.Background(), req)
 
 	require.NoError(t, err)
+}
+
+func TestValidateOriginChecksEveryHTTPMethod(t *testing.T) {
+	protection := http.NewCrossOriginProtection()
+	protection.AddTrustedOrigin("https://trusted.example")
+
+	tests := []struct {
+		name      string
+		method    string
+		origins   []string
+		fetchSite string
+		wantErr   bool
+	}{
+		{name: "missing", method: http.MethodGet},
+		{name: "missing on cross-site POST", method: http.MethodPost, fetchSite: "cross-site", wantErr: true},
+		{name: "same origin GET", method: http.MethodGet, origins: []string{"https://server.example"}},
+		{name: "trusted GET", method: http.MethodGet, origins: []string{"https://trusted.example"}},
+		{name: "untrusted GET", method: http.MethodGet, origins: []string{"https://evil.example"}, wantErr: true},
+		{name: "untrusted HEAD", method: http.MethodHead, origins: []string{"https://evil.example"}, wantErr: true},
+		{name: "untrusted OPTIONS", method: http.MethodOptions, origins: []string{"https://evil.example"}, wantErr: true},
+		{name: "untrusted POST", method: http.MethodPost, origins: []string{"https://evil.example"}, wantErr: true},
+		{name: "empty", method: http.MethodGet, origins: []string{""}, wantErr: true},
+		{name: "repeated", method: http.MethodGet, origins: []string{"https://server.example", "https://trusted.example"}, wantErr: true},
+		{name: "path", method: http.MethodGet, origins: []string{"https://server.example/path"}, wantErr: true},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			req := httptest.NewRequest(test.method, "https://server.example/rpc", nil)
+			for _, origin := range test.origins {
+				req.Header.Add("Origin", origin)
+			}
+			if test.fetchSite != "" {
+				req.Header.Set("Sec-Fetch-Site", test.fetchSite)
+			} else {
+				req.Header.Set("Sec-Fetch-Site", "same-site")
+			}
+
+			err := validateOrigin(protection, req)
+
+			if test.wantErr {
+				require.Error(t, err)
+				return
+			}
+			require.NoError(t, err)
+		})
+	}
+}
+
+func TestNewServerRejectsOriginBeforeApplicationHooks(t *testing.T) {
+	requestContextCalled := false
+	assertPrincipalCalled := false
+	server, err := NewServer(Config{
+		CompatibilityVersion: CompatibilityVersion,
+		Implementation:       mcpsdk.Implementation{Name: "test", Version: "1.0.0"},
+		Options: Options{RequestContext: func(ctx context.Context, _ *http.Request) context.Context {
+			requestContextCalled = true
+			return ctx
+		}},
+		Sessions: SessionHooks{AssertPrincipal: func(context.Context, string) error {
+			assertPrincipalCalled = true
+			return errors.New("must not run")
+		}},
+	})
+	require.NoError(t, err)
+
+	req := httptest.NewRequest(http.MethodPost, "https://server.example/mcp", nil)
+	req.Header.Set("Origin", "https://evil.example")
+	req.Header.Set(mcpruntime.HeaderKeySessionID, "session")
+	response := httptest.NewRecorder()
+	server.Handler.ServeHTTP(response, req)
+
+	assert.Equal(t, http.StatusForbidden, response.Code)
+	assert.False(t, requestContextCalled)
+	assert.False(t, assertPrincipalCalled)
+}
+
+func TestNewServerRejectsOriginBeforeRuntimeCORSPreflight(t *testing.T) {
+	policy, err := loomhttp.NewRuntimeCORSPolicy(loomhttp.CORSPolicy{Origins: []loomhttp.CORSOrigin{{
+		Pattern: "https://app.example.com",
+		Methods: []string{http.MethodGet, http.MethodPost, http.MethodDelete},
+	}}})
+	require.NoError(t, err)
+	server, err := NewServer(Config{
+		CompatibilityVersion: CompatibilityVersion,
+		Implementation:       mcpsdk.Implementation{Name: "test", Version: "1.0.0"},
+		Options:              Options{RuntimeCORS: &policy},
+	})
+	require.NoError(t, err)
+
+	req := httptest.NewRequest(http.MethodOptions, "https://server.example/mcp", nil)
+	req.Header.Set("Origin", "https://evil.example")
+	req.Header.Set("Access-Control-Request-Method", http.MethodPost)
+	response := httptest.NewRecorder()
+	server.Handler.ServeHTTP(response, req)
+
+	assert.Equal(t, http.StatusForbidden, response.Code)
 }

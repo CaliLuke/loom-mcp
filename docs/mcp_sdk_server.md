@@ -547,12 +547,18 @@ other.
 
 ## Cross-Origin Protection
 
-When `SDKServerOptions.StreamableHTTP` is omitted, the generator wires
-`net/http.NewCrossOriginProtection()` into the streamable HTTP handler.
-Override `StreamableHTTP` to supply a custom protection policy. A nil
-`CrossOriginProtection` inside non-nil options is replaced with the same safe
-default; it is not a disable switch. Configure trusted origins on a custom
-policy when cross-origin browser access is intentional.
+The shared SDK bridge validates each present `Origin` header before MCP
+processing. This validation applies to all HTTP methods, including the GET
+connection for SSE. An invalid origin receives HTTP 403 Forbidden.
+
+The bridge uses `net/http.NewCrossOriginProtection()` by default. A nil
+`CrossOriginProtection` in `StreamableHTTP` selects the same default. Supply a
+custom policy to add trusted origins. The bridge uses those trusted origins for
+safe and unsafe HTTP methods.
+
+The CORS policy and origin validation are separate. Configure
+`SDKServerOptions.RuntimeCORS` when trusted browser clients require CORS
+response headers.
 
 ## Module Dependency
 

@@ -68,9 +68,14 @@ registration, OAuth discovery, prompt provider, and `SDKServer`. It does not
 emit a native MCP client, native server, custom SSE extension, session store, or
 broadcaster.
 
-Create the adapter, then create `NewSDKServer`. Configure
-`SDKServerOptions.RuntimeCORS` when a browser client requires cross-origin
-access. Default origin protection remains active.
+Create the adapter, then create `NewSDKServer`. The generated handler checks
+each present `Origin` header on every HTTP method. This check includes the GET
+connection for SSE. Invalid origins receive HTTP 403.
+
+Configure `SDKServerOptions.RuntimeCORS` when a trusted browser client requires
+cross-origin access. Add the browser origin to the streamable HTTP
+`CrossOriginProtection` policy. The CORS policy and the origin policy are
+separate.
 
 ## Progress and streaming methods
 

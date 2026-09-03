@@ -93,7 +93,10 @@ Use this file when editing DSL, generators, generated helpers, or MCP codegen be
   HTTP 406 when the request does not accept the selected type. If the request
   accepts only that type, add both MCP media types only to a cloned SDK request.
   Do not modify the original request.
-- The shared `runtime/mcp/sdkbridge` installs receiving middleware that
+- The shared `runtime/mcp/sdkbridge` validates each present `Origin` header on
+  every HTTP method before SDK processing, including GET for SSE. It reuses the
+  configured `CrossOriginProtection` trusted-origin policy and returns HTTP 403
+  for invalid origins.
   converts untyped adapter errors into typed JSON-RPC errors. Preserve existing
   typed SDK errors. Map invalid parameters and missing resources to `-32602`.
   Map internal and unknown errors to `-32603` with only declared safe messages.
