@@ -2072,11 +2072,16 @@ RunPolicy(func() {
 })
 ```
 
-The runtime populates `model.Request.Cache` when planners don't set it explicitly.
-The Anthropic and Bedrock adapters map `AfterSystem`, `AfterTools`, and explicit
-`model.CacheCheckpointPart` boundaries to their native ephemeral prompt-cache
-controls. Policy boundaries are omitted when the corresponding system or tool
-section is empty. Providers that don't support caching ignore these options.
+The runtime populates `model.Request.Cache` when planners do not set it explicitly.
+The Anthropic and Bedrock adapters map automatic and explicit boundaries to native ephemeral prompt-cache controls.
+Policy boundaries do not apply when the related system or tool section is empty.
+
+On Anthropic, an explicit checkpoint marks the nearest preceding cacheable block.
+A checkpoint at the start of a message can mark a block in an earlier encoded message.
+This behavior also applies to messages that contain only a checkpoint.
+System blocks and conversation blocks have separate checkpoint histories.
+Anthropic returns an error if the applicable history has no cacheable block.
+Providers that do not support caching ignore these options.
 
 ---
 

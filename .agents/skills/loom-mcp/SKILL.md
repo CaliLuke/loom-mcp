@@ -224,6 +224,11 @@ Use this skill for `loom-mcp` work in this repo. Keep `AGENTS.md` short and keep
   before assigning synthetic `tN` values to unsafe IDs, skip occupied values,
   and keep replayed tool-use/result pairs correlated through one request-local
   mapping.
+- Anthropic explicit cache checkpoints mark the nearest preceding cacheable
+  block in the applicable system or conversation history. A leading or
+  checkpoint-only message can mark a block in an earlier encoded message.
+  Encoding must return a validation error when no cacheable block exists. It
+  must never silently drop the checkpoint.
 - Middleware must preserve optional model capabilities truthfully. In
   particular, a wrapped client implements `model.TokenCounter` only when the
   underlying provider does; do not replace interface absence with a runtime

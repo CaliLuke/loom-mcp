@@ -320,14 +320,14 @@ func encodeMessages(msgs []*model.Message, nameMap map[string]string, toolUseIDs
 			continue
 		}
 		if m.Role == model.ConversationRoleSystem {
-			blocks, err := systemTextBlocks(m.Parts)
+			blocks, err := systemTextBlocks(m.Parts, system)
 			if err != nil {
 				return nil, nil, err
 			}
 			system = append(system, blocks...)
 			continue
 		}
-		blocks, err := anthropicMessageBlocks(m.Role, m.Parts, nameMap, toolUseIDs)
+		blocks, err := anthropicMessageBlocks(m.Role, m.Parts, nameMap, toolUseIDs, conversation)
 		if err != nil {
 			return nil, nil, err
 		}
@@ -346,7 +346,7 @@ func encodeMessages(msgs []*model.Message, nameMap map[string]string, toolUseIDs
 	return conversation, system, nil
 }
 
-func systemTextBlocks(parts []model.Part) ([]sdk.TextBlockParam, error) {
+func systemTextBlocks(parts []model.Part, previous []sdk.TextBlockParam) ([]sdk.TextBlockParam, error) {
 	blocks := make([]sdk.TextBlockParam, 0, len(parts))
 	for _, p := range parts {
 		switch v := p.(type) {
@@ -359,8 +359,9 @@ func systemTextBlocks(parts []model.Part) ([]sdk.TextBlockParam, error) {
 				blocks = append(blocks, sdk.TextBlockParam{Text: v.Text})
 			}
 		case model.CacheCheckpointPart:
-			markLastSystemBlockCached(blocks)
-			continue
+			if !markLastSystemBlockCached(blocks) && !markLastSystemBlockCached(previous) {
+				return nil, errors.New("anthropic: cache checkpoint has no preceding cacheable system block")
+			}
 		default:
 			return nil, fmt.Errorf("anthropic: unsupported system message part %T", p)
 		}
@@ -368,11 +369,13 @@ func systemTextBlocks(parts []model.Part) ([]sdk.TextBlockParam, error) {
 	return blocks, nil
 }
 
-func anthropicMessageBlocks(role model.ConversationRole, parts []model.Part, nameMap map[string]string, toolUseIDs *toolUseIDCodec) ([]sdk.ContentBlockParamUnion, error) {
+func anthropicMessageBlocks(role model.ConversationRole, parts []model.Part, nameMap map[string]string, toolUseIDs *toolUseIDCodec, previous []sdk.MessageParam) ([]sdk.ContentBlockParamUnion, error) {
 	blocks := make([]sdk.ContentBlockParamUnion, 0, len(parts))
 	for _, part := range parts {
 		if _, ok := part.(model.CacheCheckpointPart); ok {
-			markLastContentBlockCached(blocks)
+			if !markLastContentBlockCached(blocks) && !markLastConversationBlockCached(previous) {
+				return nil, errors.New("anthropic: cache checkpoint has no preceding cacheable conversation block")
+			}
 			continue
 		}
 		block, ok, err := anthropicMessageBlock(role, part, nameMap, toolUseIDs)
@@ -415,9 +418,6 @@ func anthropicMessageBlock(role model.ConversationRole, part model.Part, nameMap
 		block, err := anthropicImageBlock(role, v)
 		return block, err == nil, err
 	}
-	if _, ok := part.(model.CacheCheckpointPart); ok {
-		return sdk.ContentBlockParamUnion{}, false, nil
-	}
 	return sdk.ContentBlockParamUnion{}, false, fmt.Errorf("anthropic: unsupported message part %T", part)
 }
 
@@ -433,22 +433,33 @@ func applyAnthropicCachePolicy(cache *model.CacheOptions, system []sdk.TextBlock
 	}
 }
 
-func markLastSystemBlockCached(blocks []sdk.TextBlockParam) {
+func markLastSystemBlockCached(blocks []sdk.TextBlockParam) bool {
 	if len(blocks) == 0 {
-		return
+		return false
 	}
 	blocks[len(blocks)-1].CacheControl = sdk.NewCacheControlEphemeralParam()
+	return true
 }
 
-func markLastContentBlockCached(blocks []sdk.ContentBlockParamUnion) {
+func markLastConversationBlockCached(messages []sdk.MessageParam) bool {
+	for _, message := range slices.Backward(messages) {
+		if markLastContentBlockCached(message.Content) {
+			return true
+		}
+	}
+	return false
+}
+
+func markLastContentBlockCached(blocks []sdk.ContentBlockParamUnion) bool {
 	for _, block := range slices.Backward(blocks) {
 		cache := block.GetCacheControl()
 		if cache == nil {
 			continue
 		}
 		*cache = sdk.NewCacheControlEphemeralParam()
-		return
+		return true
 	}
+	return false
 }
 
 func markLastToolCached(toolList []sdk.ToolUnionParam) {

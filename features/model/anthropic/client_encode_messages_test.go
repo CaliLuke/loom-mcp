@@ -113,7 +113,7 @@ func TestEncodeMessages_EncodesThinkingParts(t *testing.T) {
 	}
 }
 
-func TestEncodeMessages_PartSkipContract(t *testing.T) {
+func TestEncodeMessages_CacheCheckpointContract(t *testing.T) {
 	tests := []struct {
 		name             string
 		messages         []*model.Message
@@ -139,7 +139,46 @@ func TestEncodeMessages_PartSkipContract(t *testing.T) {
 			wantCacheBlocks:  1,
 		},
 		{
-			name: "checkpoint-only message is dropped",
+			name: "checkpoint-only message marks preceding message",
+			messages: []*model.Message{
+				{
+					Role:  model.ConversationRoleUser,
+					Parts: []model.Part{model.TextPart{Text: "first"}},
+				},
+				{
+					Role:  model.ConversationRoleAssistant,
+					Parts: []model.Part{model.CacheCheckpointPart{}},
+				},
+				{
+					Role:  model.ConversationRoleUser,
+					Parts: []model.Part{model.TextPart{Text: "hi"}},
+				},
+			},
+			wantConversation: 2,
+			wantBlocks:       1,
+			wantCacheBlocks:  1,
+		},
+		{
+			name: "message-leading checkpoint marks preceding message",
+			messages: []*model.Message{
+				{
+					Role:  model.ConversationRoleUser,
+					Parts: []model.Part{model.TextPart{Text: "first"}},
+				},
+				{
+					Role: model.ConversationRoleAssistant,
+					Parts: []model.Part{
+						model.CacheCheckpointPart{},
+						model.TextPart{Text: "next"},
+					},
+				},
+			},
+			wantConversation: 2,
+			wantBlocks:       1,
+			wantCacheBlocks:  1,
+		},
+		{
+			name: "checkpoint before conversation content errors",
 			messages: []*model.Message{
 				{
 					Role:  model.ConversationRoleUser,
@@ -150,8 +189,7 @@ func TestEncodeMessages_PartSkipContract(t *testing.T) {
 					Parts: []model.Part{model.TextPart{Text: "hi"}},
 				},
 			},
-			wantConversation: 1,
-			wantBlocks:       1,
+			wantErr: "anthropic: cache checkpoint has no preceding cacheable conversation block",
 		},
 		{
 			name: "system cache checkpoint marks preceding block",
@@ -174,32 +212,39 @@ func TestEncodeMessages_PartSkipContract(t *testing.T) {
 			wantCacheBlocks:  1,
 		},
 		{
-			name: "signed thinking survives alongside checkpoint",
+			name: "checkpoint-only system message marks preceding system message",
 			messages: []*model.Message{
 				{
-					Role: model.ConversationRoleAssistant,
-					Parts: []model.Part{
-						model.ThinkingPart{Text: "private reasoning", Signature: "sig"},
-						model.CacheCheckpointPart{},
-						model.TextPart{Text: "answer"},
-					},
+					Role:  model.ConversationRoleSystem,
+					Parts: []model.Part{model.TextPart{Text: "be brief"}},
+				},
+				{
+					Role:  model.ConversationRoleSystem,
+					Parts: []model.Part{model.CacheCheckpointPart{}},
+				},
+				{
+					Role:  model.ConversationRoleUser,
+					Parts: []model.Part{model.TextPart{Text: "hi"}},
 				},
 			},
 			wantConversation: 1,
-			wantBlocks:       2,
+			wantBlocks:       1,
+			wantSystem:       1,
+			wantCacheBlocks:  1,
 		},
 		{
-			name: "unsupported part still errors",
+			name: "checkpoint before system content errors",
 			messages: []*model.Message{
 				{
-					Role: model.ConversationRoleUser,
-					Parts: []model.Part{
-						model.CacheCheckpointPart{},
-						model.DocumentPart{Name: "spec", Format: model.DocumentFormatTXT, Text: "hello"},
-					},
+					Role:  model.ConversationRoleSystem,
+					Parts: []model.Part{model.CacheCheckpointPart{}},
+				},
+				{
+					Role:  model.ConversationRoleUser,
+					Parts: []model.Part{model.TextPart{Text: "hi"}},
 				},
 			},
-			wantErr: "anthropic: unsupported message part model.DocumentPart",
+			wantErr: "anthropic: cache checkpoint has no preceding cacheable system block",
 		},
 	}
 	for _, tt := range tests {
@@ -232,13 +277,14 @@ func TestEncodeMessages_SignedThinkingRoundTripsWithCheckpoint(t *testing.T) {
 			Role: model.ConversationRoleAssistant,
 			Parts: []model.Part{
 				model.ThinkingPart{Text: "private reasoning", Signature: "sig"},
+				model.TextPart{Text: "answer"},
 				model.CacheCheckpointPart{},
 			},
 		},
 	}, nil, newToolUseIDCodec())
 	require.NoError(t, err)
 	require.Len(t, conversation, 1)
-	require.Len(t, conversation[0].Content, 1)
+	require.Len(t, conversation[0].Content, 2)
 
 	data, err := json.Marshal(conversation[0].Content)
 	require.NoError(t, err)

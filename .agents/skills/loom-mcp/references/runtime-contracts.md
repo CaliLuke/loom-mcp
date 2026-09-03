@@ -194,6 +194,11 @@ Use this file for current loom-mcp runtime behavior in this repo. Prefer it over
   Bedrock must reserve every provider-safe replay ID before encoding, allocate
   unsafe IDs from unoccupied synthetic `tN` values, and use the same mapping for
   matching tool-use and tool-result blocks.
+- Anthropic explicit cache checkpoints mark the nearest preceding cacheable
+  block in the applicable system or conversation history. This search crosses
+  an encoded message boundary for a leading or checkpoint-only marker.
+  Encoding fails when that history has no cacheable block. It never silently
+  drops the marker.
 - Model middleware must not invent optional interfaces. Adaptive rate limiting
   implements `model.TokenCounter` only when the wrapped provider implements it;
   providers without exact counting remain non-`TokenCounter` after wrapping.
