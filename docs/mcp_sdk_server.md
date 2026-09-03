@@ -58,7 +58,21 @@ http.ListenAndServe(":8080", mux)
 ```
 
 `server.Handler` is a standard `http.Handler`. The official SDK owns the MCP
-wire protocol, Streamable HTTP, sessions, and protocol negotiation.
+wire protocol, Streamable HTTP, and sessions.
+
+## Response content negotiation
+
+The generated wrapper checks the `Accept` header before each HTTP POST.
+POST responses use SSE by default. Set `StreamableHTTP.JSONResponse` to `true`
+to use a plain JSON response.
+
+The handler returns HTTP 406 when the request does not accept the selected
+response type. The handler does not send SSE framing with this error.
+
+The MCP specification requires clients to send both response media types. The
+wrapper also supports a client that sends only the selected media type. It adds
+both media types only to the cloned request that enters the official SDK.
+The wrapper does not modify the original request.
 
 ## Generated/runtime bridge boundary
 

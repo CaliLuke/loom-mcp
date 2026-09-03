@@ -190,9 +190,12 @@ func newHandler(server *mcpsdk.Server, requestContext func(context.Context, *htt
 	configuredStreamableOptions := streamableHTTPOptions(streamableOptions)
 	crossOriginProtection := configuredStreamableOptions.CrossOriginProtection
 	configuredStreamableOptions.CrossOriginProtection = nil
-	base := mcpsdk.NewStreamableHTTPHandler(func(*http.Request) *mcpsdk.Server {
-		return server
-	}, configuredStreamableOptions)
+	base := mcpruntime.StreamableHTTPNegotiation(
+		mcpsdk.NewStreamableHTTPHandler(func(*http.Request) *mcpsdk.Server {
+			return server
+		}, configuredStreamableOptions),
+		configuredStreamableOptions.JSONResponse,
+	)
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		r = r.WithContext(mcpruntime.WithRequestHeaders(r.Context(), r.Header))
 		if requestContext != nil {

@@ -292,12 +292,16 @@ Use this skill for `loom-mcp` work in this repo. Keep `AGENTS.md` short and keep
   `notifications/initialized` before they return or send normal requests. If a
   Streamable HTTP server assigns a session ID, the caller includes it. MCP
   `2026-07-28` uses stateless `server/discover` instead.
-- Generated SDK servers must install their JSON-RPC error normalizer as an
-  official receiving middleware. Preserve typed SDK errors. Map generated
-  invalid and resource errors to `-32602`. Map unknown handler errors to
-  `-32603`. Reject request envelopes with an explicit null `id` before SDK
-  dispatch. Return HTTP 400 with JSON-RPC `-32600`. Do not rewrite SDK response
-  bodies in the HTTP wrapper.
+- The shared SDK bridge selects the POST response type before invoking the SDK.
+  SSE is the default. `StreamableHTTP.JSONResponse` selects JSON. Return HTTP
+  406 when the client does not accept the selected type. If a client sends only
+  the selected type, add both MCP media types only to the cloned SDK request.
+  Do not modify the original request.
+- The shared SDK bridge installs the JSON-RPC error normalizer as an official
+  receiving middleware. Preserve typed SDK errors. Map generated invalid and
+  resource errors to `-32602`. Map unknown handler errors to `-32603`. Reject
+  request envelopes with an explicit null `id` before SDK dispatch. Return HTTP
+  400 with JSON-RPC `-32600`. Do not rewrite SDK response bodies.
 - MCP designs do not declare `ProtocolVersion`, `Notification`, `Subscription`,
   `SubscriptionMonitor`, or MCP-only `JSONRPC` blocks. Explicit non-MCP
   `JSONRPC` transports remain valid.

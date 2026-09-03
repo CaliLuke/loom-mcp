@@ -85,9 +85,14 @@ Use this file when editing DSL, generators, generated helpers, or MCP codegen be
   service, adapter, local-provider, and SDK paths: `name`, `title`,
   `description`, `inputSchema`, `outputSchema`, `annotations`, `_meta`, and
   `icons`.
-- The official MCP Go SDK owns protocol versions and all wire behavior. Do not
+- The official MCP Go SDK owns protocol versions and transport behavior. Do not
   require or synthesize MCP `JSONRPC` declarations. Keep explicit non-MCP
   `JSONRPC` transports unchanged.
+- The shared `runtime/mcp/sdkbridge` selects the POST response type before the
+  SDK. SSE is the default. `StreamableHTTP.JSONResponse` selects JSON. Return
+  HTTP 406 when the request does not accept the selected type. If the request
+  accepts only that type, add both MCP media types only to a cloned SDK request.
+  Do not modify the original request.
 - The shared `runtime/mcp/sdkbridge` installs receiving middleware that
   converts untyped adapter errors into typed JSON-RPC errors. Preserve existing
   typed SDK errors. Map invalid parameters and missing resources to `-32602`.
