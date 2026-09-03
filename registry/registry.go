@@ -65,6 +65,11 @@ type (
 		redis          *redis.Client
 	}
 
+	grpcServerLifecycle interface {
+		Serve(net.Listener) error
+		GracefulStop()
+	}
+
 	// Config configures the registry service.
 	Config struct {
 		// Redis is the Redis client for Pulse operations. Required.
@@ -102,6 +107,10 @@ type (
 		ProviderLeaseDuration time.Duration
 	}
 )
+
+// registryCloseTimeout bounds resource cleanup when Run shuts down after its
+// context is already canceled.
+const registryCloseTimeout = 30 * time.Second
 
 // New creates a new Registry with all components wired together.
 // The registry connects to Redis for Pulse stream operations and creates
@@ -297,6 +306,10 @@ func (r *Registry) Run(ctx context.Context, addr string, opts ...grpc.ServerOpti
 	endpoints := genregistry.NewEndpoints(r.service)
 	registrypb.RegisterRegistryServer(grpcServer, grpcserver.New(endpoints, nil))
 
+	return r.runGRPCServer(ctx, grpcServer, lis)
+}
+
+func (r *Registry) runGRPCServer(ctx context.Context, grpcServer grpcServerLifecycle, lis net.Listener) error {
 	// Set up signal handling for graceful shutdown.
 	sigCh := make(chan os.Signal, 1)
 	signal.Notify(sigCh, syscall.SIGINT, syscall.SIGTERM)
@@ -309,24 +322,35 @@ func (r *Registry) Run(ctx context.Context, addr string, opts ...grpc.ServerOpti
 		errCh <- grpcServer.Serve(lis)
 	}()
 
-	// Wait for shutdown signal or context cancellation.
+	// Wait for shutdown signal, context cancellation, or a server failure.
 	select {
 	case <-ctx.Done():
 	case sig := <-sigCh:
 		_ = sig // Signal received, proceed to shutdown.
-	case err := <-errCh:
-		// Server stopped unexpectedly.
-		return err
+	case serveErr := <-errCh:
+		return errors.Join(serveErr, r.closeRunResources())
+	}
+
+	// Prefer a concurrently available Serve failure over graceful shutdown.
+	select {
+	case serveErr := <-errCh:
+		return errors.Join(serveErr, r.closeRunResources())
+	default:
 	}
 
 	// Graceful shutdown: stop accepting new connections and drain existing ones.
 	grpcServer.GracefulStop()
+	serveErr := <-errCh
+	return errors.Join(serveErr, r.closeRunResources())
+}
 
-	// Close registry resources.
-	if err := r.Close(ctx); err != nil {
+func (r *Registry) closeRunResources() error {
+	// Cleanup must outlive a canceled run context and remain bounded.
+	closeCtx, cancel := context.WithTimeout(context.Background(), registryCloseTimeout)
+	defer cancel()
+	if err := r.Close(closeCtx); err != nil {
 		return fmt.Errorf("close registry: %w", err)
 	}
-
 	return nil
 }
 
