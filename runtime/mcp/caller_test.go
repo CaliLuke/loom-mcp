@@ -1,14 +1,17 @@
 package mcp
 
 import (
+	"bytes"
 	"context"
 	"encoding/json/jsontext"
 	"encoding/json/v2"
 	"errors"
 	"fmt"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"sync"
 	"testing"
 	"time"
 
@@ -40,6 +43,105 @@ func TestDefaultMCPHTTPClientUsesPhaseTimeoutsWithoutExchangeTimeout(t *testing.
 	require.NotNil(t, transport.DialContext)
 }
 
+func TestHTTPCallerCompletesLegacyInitializedHandshakeBeforeToolCall(t *testing.T) {
+	t.Parallel()
+
+	type observedRequest struct {
+		method    string
+		id        jsontext.Value
+		sessionID string
+	}
+
+	initialized := make(chan struct{}, 1)
+	server := newSDKTestServerWithOptions(&sdkmcp.ServerOptions{
+		InitializedHandler: func(context.Context, *sdkmcp.InitializedRequest) {
+			initialized <- struct{}{}
+		},
+	})
+	sdkHandler := sdkmcp.NewStreamableHTTPHandler(func(*http.Request) *sdkmcp.Server {
+		return server
+	}, &sdkmcp.StreamableHTTPOptions{
+		DisableLocalhostProtection: true,
+	})
+
+	var (
+		requestsMu sync.Mutex
+		requests   []observedRequest
+	)
+	legacyOnlyHandler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			sdkHandler.ServeHTTP(w, r)
+			return
+		}
+
+		body, err := io.ReadAll(r.Body)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+		r.Body = io.NopCloser(bytes.NewReader(body))
+
+		var request struct {
+			ID     jsontext.Value `json:"id"`
+			Method string         `json:"method"`
+		}
+		if err := json.Unmarshal(body, &request); err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+
+		requestsMu.Lock()
+		requests = append(requests, observedRequest{
+			method:    request.Method,
+			id:        request.ID,
+			sessionID: r.Header.Get("Mcp-Session-Id"),
+		})
+		requestsMu.Unlock()
+
+		if request.Method == "server/discover" {
+			w.Header().Set("Content-Type", "application/json")
+			if _, err := fmt.Fprintf(w, `{"jsonrpc":"2.0","id":%s,"error":{"code":-32601,"message":"Method not found"}}`, request.ID); err != nil {
+				t.Errorf("write server/discover fallback response: %v", err)
+			}
+			return
+		}
+
+		sdkHandler.ServeHTTP(w, r)
+	})
+	httpServer := httptest.NewServer(legacyOnlyHandler)
+	t.Cleanup(httpServer.Close)
+
+	caller, err := NewHTTPCaller(t.Context(), HTTPOptions{
+		Endpoint:    httpServer.URL,
+		InitTimeout: 5 * time.Second,
+	})
+	require.NoError(t, err)
+	t.Cleanup(func() {
+		require.NoError(t, caller.Close())
+	})
+
+	assertMultiContentResponse(t, caller, t.Context())
+	requireReceive(t, initialized)
+
+	requestsMu.Lock()
+	gotRequests := append([]observedRequest(nil), requests...)
+	requestsMu.Unlock()
+	require.Len(t, gotRequests, 4)
+	assert.Equal(t, []string{
+		"server/discover",
+		"initialize",
+		"notifications/initialized",
+		"tools/call",
+	}, []string{
+		gotRequests[0].method,
+		gotRequests[1].method,
+		gotRequests[2].method,
+		gotRequests[3].method,
+	})
+	assert.Empty(t, gotRequests[2].id, "notifications/initialized must be a notification without an id")
+	require.NotEmpty(t, gotRequests[2].sessionID, "notifications/initialized must carry the negotiated session id")
+	assert.Equal(t, gotRequests[2].sessionID, gotRequests[3].sessionID, "the first tool call must use the initialized session")
+}
 func TestCallToolAcrossProtocols(t *testing.T) {
 	t.Parallel()
 
@@ -410,12 +512,16 @@ func contextWithTrace() (context.Context, string) {
 }
 
 func newSDKTestServer() *sdkmcp.Server {
+	return newSDKTestServerWithOptions(nil)
+}
+
+func newSDKTestServerWithOptions(opts *sdkmcp.ServerOptions) *sdkmcp.Server {
 	server := sdkmcp.NewServer(
 		&sdkmcp.Implementation{
 			Name:    "test-server",
 			Version: "1.0.0",
 		},
-		nil,
+		opts,
 	)
 
 	server.AddTool(&sdkmcp.Tool{

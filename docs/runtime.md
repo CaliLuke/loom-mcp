@@ -2728,6 +2728,12 @@ defer caller.Close()
 All three constructors return a caller that implements `mcp.Caller`. The
 initialization timeout only bounds session establishment; it does not cancel the
 live session after `Connect` succeeds.
+For MCP `2025-11-25` and earlier, each constructor completes the legacy
+handshake before it returns. The official SDK sends `notifications/initialized`
+after the `initialize` response. If a Streamable HTTP server assigns a session
+ID, the HTTP caller includes it in this notification and all later requests. The
+SDK sends normal requests only after the notification. For MCP `2026-07-28`, the
+SDK uses the stateless `server/discover` handshake instead.
 
 ### Normalized tool results
 

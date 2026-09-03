@@ -266,6 +266,11 @@ Use this skill for `loom-mcp` work in this repo. Keep `AGENTS.md` short and keep
   - expose designed services as MCP servers through generated adapters and registrations.
 - The official MCP Go SDK is the only MCP wire transport. It owns protocol
   negotiation, Streamable HTTP, standard SSE, cancellation, and sessions.
+- Runtime MCP callers delegate client lifecycle handling to the official SDK.
+  For MCP `2025-11-25` and earlier, constructors send
+  `notifications/initialized` before they return or send normal requests. If a
+  Streamable HTTP server assigns a session ID, the caller includes it. MCP
+  `2026-07-28` uses stateless `server/discover` instead.
 - Generated SDK servers must install their JSON-RPC error normalizer as an
   official receiving middleware. Preserve typed SDK errors. Map generated
   invalid and resource errors to `-32602`. Map unknown handler errors to
