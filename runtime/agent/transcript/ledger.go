@@ -165,6 +165,14 @@ func BuildMessagesFromEvents(events []memory.Event) ([]*model.Message, error) {
 	var pendingResults []ToolResultSpec
 	var toolOrder []string
 	for _, e := range events {
+		startsAssistantTurn := e.Type == memory.EventAssistantMessage ||
+			e.Type == memory.EventThinking ||
+			e.Type == memory.EventToolCall
+		if len(pendingResults) > 0 && startsAssistantTurn {
+			flushPendingToolResults(l, pendingResults, toolOrder)
+			pendingResults = nil
+			toolOrder = nil
+		}
 		nextResults, err := applyLedgerEvent(l, e, pendingResults, &toolOrder)
 		if err != nil {
 			return nil, err
@@ -727,22 +735,49 @@ func flushPendingToolResults(l *Ledger, pendingResults []ToolResultSpec, toolOrd
 }
 
 func orderToolResults(pendingResults []ToolResultSpec, toolOrder []string) []ToolResultSpec {
-	byID := make(map[string]ToolResultSpec, len(pendingResults))
-	for _, r := range pendingResults {
-		if r.ToolUseID == "" {
+	type resultQueue struct {
+		head int
+		tail int
+	}
+
+	queues := make(map[string]resultQueue, len(pendingResults))
+	next := make([]int, len(pendingResults))
+	for i, result := range pendingResults {
+		if result.ToolUseID == "" {
 			continue
 		}
-		byID[r.ToolUseID] = r
+		index := i + 1
+		queue := queues[result.ToolUseID]
+		if queue.head == 0 {
+			queue.head = index
+		} else {
+			next[queue.tail-1] = index
+		}
+		queue.tail = index
+		queues[result.ToolUseID] = queue
 	}
-	ordered := make([]ToolResultSpec, 0, len(byID))
+
+	ordered := make([]ToolResultSpec, 0, len(pendingResults))
+	consumed := make([]bool, len(pendingResults))
 	for _, id := range toolOrder {
-		if r, ok := byID[id]; ok {
-			ordered = append(ordered, r)
-			delete(byID, id)
+		queue, ok := queues[id]
+		if !ok || queue.head == 0 {
+			continue
+		}
+		index := queue.head - 1
+		ordered = append(ordered, pendingResults[index])
+		consumed[index] = true
+		queue.head = next[index]
+		if queue.head == 0 {
+			delete(queues, id)
+		} else {
+			queues[id] = queue
 		}
 	}
-	for _, r := range byID {
-		ordered = append(ordered, r)
+	for i, result := range pendingResults {
+		if result.ToolUseID != "" && !consumed[i] {
+			ordered = append(ordered, result)
+		}
 	}
 	return ordered
 }

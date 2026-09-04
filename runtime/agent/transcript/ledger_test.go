@@ -5,6 +5,9 @@ import (
 	"testing"
 	"time"
 
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/memory"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/model"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/rawjson"
@@ -147,6 +150,72 @@ func TestBuildMessagesFromEvents_ParentToolOnly(t *testing.T) {
 	wantSuccess := map[string]any{"ok": true}
 	if !reflect.DeepEqual(tr.Content, wantSuccess) {
 		t.Fatalf("content mismatch:\n got: %#v\nwant: %#v", tr.Content, wantSuccess)
+	}
+}
+
+func TestBuildMessagesFromEventsPreservesAssistantTurnBoundaries(t *testing.T) {
+	at := time.Unix(0, 0)
+	events := []memory.Event{
+		memory.NewEvent(at, memory.ThinkingData{Text: "think one", Signature: "sig-1", Final: true}, nil),
+		memory.NewEvent(at, memory.AssistantMessageData{Message: "turn one"}, nil),
+		memory.NewEvent(at, memory.ToolCallData{ToolCallID: "call-1", ToolName: "svc.one", PayloadJSON: rawjson.Message(`{}`)}, nil),
+		memory.NewEvent(at, memory.ToolResultData{ToolCallID: "call-1", ResultJSON: rawjson.Message(`"result one"`)}, nil),
+		memory.NewEvent(at, memory.AssistantMessageData{Message: "turn two"}, nil),
+		memory.NewEvent(at, memory.ThinkingData{Text: "think two", Signature: "sig-2", Final: true}, nil),
+		memory.NewEvent(at, memory.ToolCallData{ToolCallID: "call-2", ToolName: "svc.two", PayloadJSON: rawjson.Message(`{}`)}, nil),
+		memory.NewEvent(at, memory.ToolResultData{ToolCallID: "call-2", ResultJSON: rawjson.Message(`"result two"`)}, nil),
+		memory.NewEvent(at, memory.ThinkingData{Text: "think three", Signature: "sig-3", Final: true}, nil),
+		memory.NewEvent(at, memory.AssistantMessageData{Message: "turn three"}, nil),
+		memory.NewEvent(at, memory.ToolCallData{ToolCallID: "call-3", ToolName: "svc.three", PayloadJSON: rawjson.Message(`{}`)}, nil),
+		memory.NewEvent(at, memory.ToolResultData{ToolCallID: "call-3", ResultJSON: rawjson.Message(`"result three"`)}, nil),
+		memory.NewEvent(at, memory.ToolCallData{ToolCallID: "call-4", ToolName: "svc.four", PayloadJSON: rawjson.Message(`{}`)}, nil),
+		memory.NewEvent(at, memory.ThinkingData{Text: "think four", Signature: "sig-4", Final: true}, nil),
+		memory.NewEvent(at, memory.ToolResultData{ToolCallID: "call-4", ResultJSON: rawjson.Message(`"result four"`)}, nil),
+	}
+
+	messages, err := BuildMessagesFromEvents(events)
+	require.NoError(t, err)
+	require.NoError(t, ValidateBedrock(messages, true))
+	require.Len(t, messages, 8)
+	for i, role := range []model.ConversationRole{
+		model.ConversationRoleAssistant, model.ConversationRoleUser,
+		model.ConversationRoleAssistant, model.ConversationRoleUser,
+		model.ConversationRoleAssistant, model.ConversationRoleUser,
+		model.ConversationRoleAssistant, model.ConversationRoleUser,
+	} {
+		assert.Equal(t, role, messages[i].Role)
+	}
+	assert.Equal(t, model.TextPart{Text: "turn one"}, messages[0].Parts[1])
+	assert.Equal(t, model.TextPart{Text: "turn two"}, messages[2].Parts[1])
+	assert.Equal(t, model.ThinkingPart{Text: "think three", Signature: "sig-3", Final: true}, messages[4].Parts[0])
+	assert.Equal(t, model.ToolUsePart{ID: "call-4", Name: "svc.four", Input: map[string]any{}}, messages[6].Parts[1])
+}
+
+func TestBuildMessagesFromEventsPreservesEveryToolResultInOrder(t *testing.T) {
+	at := time.Unix(0, 0)
+	events := []memory.Event{
+		memory.NewEvent(at, memory.ToolCallData{ToolCallID: "a", ToolName: "svc.a", PayloadJSON: rawjson.Message(`{}`)}, nil),
+		memory.NewEvent(at, memory.ToolCallData{ToolCallID: "b", ToolName: "svc.b", PayloadJSON: rawjson.Message(`{}`)}, nil),
+		memory.NewEvent(at, memory.ToolCallData{ToolCallID: "a", ToolName: "svc.a", PayloadJSON: rawjson.Message(`{}`)}, nil),
+		memory.NewEvent(at, memory.ToolResultData{ToolCallID: "a", ResultJSON: rawjson.Message(`"first"`)}, nil),
+		memory.NewEvent(at, memory.ToolResultData{ToolCallID: "b", ResultJSON: rawjson.Message(`"second"`)}, nil),
+		memory.NewEvent(at, memory.ToolResultData{ToolCallID: "a", ResultJSON: rawjson.Message(`"third"`)}, nil),
+		memory.NewEvent(at, memory.ToolResultData{ToolCallID: "unmatched-z", ResultJSON: rawjson.Message(`"fourth"`)}, nil),
+		memory.NewEvent(at, memory.ToolResultData{ToolCallID: "unmatched-a", ResultJSON: rawjson.Message(`"fifth"`)}, nil),
+		memory.NewEvent(at, memory.ToolResultData{ResultJSON: rawjson.Message(`"ignored"`)}, nil),
+	}
+
+	messages, err := BuildMessagesFromEvents(events)
+	require.NoError(t, err)
+	require.Len(t, messages, 2)
+	require.Len(t, messages[1].Parts, 5)
+	wantIDs := []string{"a", "b", "a", "unmatched-z", "unmatched-a"}
+	wantContent := []string{"first", "second", "third", "fourth", "fifth"}
+	for i, part := range messages[1].Parts {
+		result, ok := part.(model.ToolResultPart)
+		require.True(t, ok, "part %d has type %T", i, part)
+		assert.Equal(t, wantIDs[i], result.ToolUseID)
+		assert.Equal(t, wantContent[i], result.Content)
 	}
 }
 
