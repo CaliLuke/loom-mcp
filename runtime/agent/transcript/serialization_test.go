@@ -12,15 +12,25 @@ import (
 func TestFromModelMessagesPreservesAssistantMessageBoundaries(t *testing.T) {
 	t.Parallel()
 
+	first := &model.Message{Role: model.ConversationRoleAssistant, Parts: []model.Part{
+		model.ThinkingPart{Text: "think first", Signature: "sig-1", Index: 0, Final: true},
+		model.TextPart{Text: "answer first"},
+		model.ToolUsePart{ID: "call-1", Name: "svc.tool", Input: map[string]any{"q": "loom"}},
+	}}
+	second := &model.Message{Role: model.ConversationRoleAssistant, Parts: []model.Part{
+		model.ThinkingPart{Text: "think second", Signature: "sig-2", Index: 0, Final: true},
+		model.TextPart{Text: "answer second"},
+	}}
 	ledger := FromModelMessages([]*model.Message{
-		{Role: model.ConversationRoleAssistant, Parts: []model.Part{model.TextPart{Text: "first"}}},
+		first,
 		{Role: model.ConversationRoleUser, Parts: []model.Part{model.TextPart{Text: "ignored"}}},
-		{Role: model.ConversationRoleAssistant, Parts: []model.Part{model.TextPart{Text: "second"}}},
+		second,
 	})
+
 	messages := ledger.BuildMessages()
 	require.Len(t, messages, 2)
-	assert.Equal(t, "first", messages[0].Parts[0].(model.TextPart).Text)
-	assert.Equal(t, "second", messages[1].Parts[0].(model.TextPart).Text)
+	assert.Equal(t, first, messages[0])
+	assert.Equal(t, second, messages[1])
 }
 
 func TestAppendAssistantMessagePreservesMetadataAndCitations(t *testing.T) {
