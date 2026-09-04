@@ -115,6 +115,8 @@ func TestRequestContextMiddlewarePropagatesReturnedContextOnce(t *testing.T) {
 	middleware := requestContextMiddleware(func(ctx context.Context, req *http.Request) context.Context {
 		callbackCount++
 		assert.Equal(t, "call-1", req.Header.Get("X-Request-ID"))
+		require.NotNil(t, req.URL)
+		assert.Empty(t, req.URL.Path)
 		return context.WithValue(ctx, contextKey{}, "tenant-1")
 	}, NewSessionState(nil))
 	handler := middleware(func(ctx context.Context, _ string, _ mcpsdk.Request) (mcpsdk.Result, error) {

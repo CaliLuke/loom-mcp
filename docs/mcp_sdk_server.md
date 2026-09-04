@@ -181,6 +181,21 @@ can land without weakening the generated adapter contract.
 | `StreamableHTTP` | no | Bridge-owned `*sdkbridge.StreamableHTTPOptions` containing supported official SDK transport settings. The type excludes the deprecated SDK origin field. |
 | `Server` | no | `*mcpsdk.ServerOptions` passed to the official SDK. Loom installs its generated completion handler when required; the SDK infers registered capabilities. |
 
+### Streamable HTTP options
+
+| Field | Zero value | Contract |
+| --- | --- | --- |
+| `Stateless` | Stateful sessions | Disables sessions, GET, and DELETE. The SDK uses a temporary session for each request. Server-to-client requests are unavailable. Notifications work only during the incoming request. |
+| `JSONResponse` | SSE POST responses | Makes HTTP POST return `application/json` instead of an SSE stream. |
+| `Logger` | SDK logs disabled | Receives logs from the official SDK transport. |
+| `EventStore` | Stream resumption disabled | Stores events so clients can resume interrupted streams. |
+| `SessionTimeout` | Idle sessions remain open | Closes an idle session after the configured duration. |
+| `DisableLocalhostProtection` | Protection enabled | Disables the SDK's DNS-rebinding protection for localhost servers. Use this only when another trusted layer validates the host. |
+| `MaxRequestBodyBytes` | Official SDK default | Sets the request-body limit. A negative value disables the limit and is unsafe for exposed servers. |
+| `PropagateRequestCancellation` | Disabled | Propagates cancellation from the originating HTTP request to its handler context for protocol version `2026-07-28` and later. |
+
+`OriginProtection` is separate and bridge-owned. It validates every HTTP method, not only SDK POST requests.
+
 ## Design-Declared Skill Resources
 
 Services that declare `SkillDirectory(root)` expose local agent skills through
@@ -213,13 +228,15 @@ Tools with all-optional payloads therefore execute normally, while tools with
 required fields return the generated missing-field validation error and repair
 hint.
 
-Generated MCP service types use `loom.Nullable[any]` for optional arbitrary
-JSON such as tool arguments, structured tool results, prompt arguments, and
-resource metadata. The zero value means absent, `loom.NullValue[any]()` means
-explicit JSON `null`, and `loom.NullableValue[any](value)` carries a concrete
-value. SDK and dispatch boundaries preserve a contained `jsontext.Value`
-without decoding it. The adapter marshals other concrete values only when a
-raw JSON boundary requires them.
+Generated MCP service types use these mappings for arbitrary JSON:
+
+- `Any` becomes `loom.JSONValue`.
+- `MapOf(String, Any)` becomes `map[string]loom.JSONValue`.
+- Explicitly nullable `Any` becomes `loom.Nullable[loom.JSONValue]`.
+
+Optional and nullable are different contracts. Optional permits omission.
+Nullable permits an explicit JSON `null`. SDK and dispatch boundaries preserve
+`jsontext.Value` and `loom.JSONValue` without decoding through `any`.
 
 Loom streaming service methods remain valid tool and resource sources. The
 adapter collects their results and returns one standard MCP result.
@@ -583,6 +600,6 @@ response headers.
 
 ## Module Dependency
 
-`loom-mcp` pins `github.com/CaliLuke/loom v1.9.0-alpha.14`. This Loom release contains the canonical inline JSON Schema behavior and the dependency maintenance used by the SDK bridge.
+`loom-mcp` pins `github.com/CaliLuke/loom v1.9.0-alpha.15`. This release preserves API-key credentials exactly and verifies exact 64-bit OpenAPI Path Item serialization.
 
 Run `make loom-local` to use the sibling Loom checkout during development. Run `make loom-remote` before you commit or release changes.

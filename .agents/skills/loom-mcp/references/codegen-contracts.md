@@ -178,11 +178,12 @@ Use this file when editing DSL, generators, generated helpers, or MCP codegen be
   input, not proof of authentication or authorization.
 - Generated `tools/call` adapters normalize omitted, whitespace-only, and JSON
   `null` arguments to `{}` before strict payload decoding.
-- Optional arbitrary JSON in generated MCP service types uses
-  `loom.Nullable[any]`; do not force those fields back to custom physical Go
-  types. SDK, prompt-provider, interceptor, projected-tool, and local-provider
-  boundaries must preserve contained `jsontext.Value` bytes and marshal other
-  concrete values only when a raw JSON boundary requires them.
+- Generated MCP service types use `loom.JSONValue` for `Any`,
+  `map[string]loom.JSONValue` for `MapOf(String, Any)`, and
+  `loom.Nullable[loom.JSONValue]` only for explicitly nullable `Any`. Optional
+  permits omission; nullable permits explicit JSON `null`. SDK, prompt-provider,
+  interceptor, projected-tool, and local-provider boundaries preserve
+  `jsontext.Value` and `loom.JSONValue` without decoding through `any`.
 - Generated `MCPAdapter` types must satisfy their generated `Service` interface
   directly. Keep unary result and error signatures aligned, and emit a
   compile-time interface assertion in the adapter.

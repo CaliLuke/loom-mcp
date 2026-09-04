@@ -715,8 +715,6 @@ func TestRegisterProviderRejectsLeaseInsideShutdownRetryBudget(t *testing.T) {
 }
 
 func TestServeChangedRenewalTokenReleasesBothExactLeases(t *testing.T) {
-	t.Parallel()
-
 	events := make(chan *streaming.Event)
 	sink := mockpulse.NewSink(t)
 	sink.SetSubscribe(func() <-chan *streaming.Event { return events })
@@ -743,7 +741,7 @@ func TestServeChangedRenewalTokenReleasesBothExactLeases(t *testing.T) {
 			if registrations.Add(1) > 1 {
 				token = testRegistrationTokenB
 			}
-			return RegistrationLease{RegistrationToken: token, Duration: 60 * time.Millisecond}, nil
+			return RegistrationLease{RegistrationToken: token, Duration: 300 * time.Millisecond}, nil
 		},
 		Drain: func(context.Context, string, string, string, string, time.Duration) error {
 			return nil

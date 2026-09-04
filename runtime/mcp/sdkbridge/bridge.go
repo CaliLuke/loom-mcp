@@ -36,13 +36,21 @@ type Config struct {
 // StreamableHTTPOptions exposes the supported official SDK transport settings.
 // Origin validation is configured separately through OriginProtection.
 type StreamableHTTPOptions struct {
-	Stateless                    bool
-	JSONResponse                 bool
-	Logger                       *slog.Logger
-	EventStore                   mcpsdk.EventStore
-	SessionTimeout               time.Duration
-	DisableLocalhostProtection   bool
-	MaxRequestBodyBytes          int64
+	// Stateless disables sessions, GET, and DELETE. Server-to-client requests are unavailable.
+	Stateless bool
+	// JSONResponse makes HTTP POST return application/json instead of an SSE stream.
+	JSONResponse bool
+	// Logger receives SDK transport logs. A nil logger disables these logs.
+	Logger *slog.Logger
+	// EventStore enables clients to resume interrupted streams.
+	EventStore mcpsdk.EventStore
+	// SessionTimeout closes idle sessions after this duration. Zero keeps idle sessions open.
+	SessionTimeout time.Duration
+	// DisableLocalhostProtection disables the SDK's DNS-rebinding protection for localhost servers.
+	DisableLocalhostProtection bool
+	// MaxRequestBodyBytes limits request bodies. Zero uses the SDK default. A negative value disables the limit and is unsafe.
+	MaxRequestBodyBytes int64
+	// PropagateRequestCancellation ties handler contexts to their HTTP request for protocol version 2026-07-28 and later.
 	PropagateRequestCancellation bool
 }
 
@@ -427,7 +435,7 @@ func requestContextMiddleware(requestContext func(context.Context, *http.Request
 			}
 			ctx = mcpruntime.WithRequestHeaders(ctx, headers)
 			if requestContext != nil {
-				httpRequest := (&http.Request{Method: http.MethodPost, Header: headers.Clone()}).WithContext(ctx)
+				httpRequest := (&http.Request{Method: http.MethodPost, Header: headers.Clone(), URL: &url.URL{}}).WithContext(ctx)
 				ctx = requestContext(ctx, httpRequest)
 			}
 			sessionID := ""

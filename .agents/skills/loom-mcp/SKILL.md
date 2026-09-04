@@ -318,11 +318,12 @@ Use this skill for `loom-mcp` work in this repo. Keep `AGENTS.md` short and keep
 - Adapter tool and resource calls are unary. Collect a streaming Loom method
   into one MCP result. Use `runtime/mcp.ReportProgress` for intermediate
   progress.
-- Generated MCP service fields that carry optional arbitrary JSON use Loom's
-  `loom.Nullable[any]` presence contract. Adapter boundaries must preserve a
-  contained `jsontext.Value` without an intermediate decode and marshal other
-  concrete values only when strict dispatch or wire forwarding requires raw
-  JSON.
+- Generated MCP service fields use `loom.JSONValue` for `Any`,
+  `map[string]loom.JSONValue` for `MapOf(String, Any)`, and
+  `loom.Nullable[loom.JSONValue]` only for explicitly nullable `Any`. Optional
+  permits omission; nullable permits explicit JSON `null`. Adapter boundaries
+  must preserve `jsontext.Value` and `loom.JSONValue` without decoding through
+  `any`.
 - MCP metadata is design-owned. Implementation `WebsiteURL`/`ServerIcons` and
   list-surface `ToolIcons`/`ResourceIcons`/`PromptIcons`/`DynamicPromptIcons`
   should be declared in the DSL and allowed to flow through codegen into
@@ -466,7 +467,7 @@ Use this skill for `loom-mcp` work in this repo. Keep `AGENTS.md` short and keep
 ## Command Reminders
 
 ```bash
-go install github.com/CaliLuke/loom/cmd/loom@v1.9.0-alpha.14
+go install github.com/CaliLuke/loom/cmd/loom@v1.9.0-alpha.15
 loom version
 loom gen <module-import-path>/design
 loom example <module-import-path>/design
