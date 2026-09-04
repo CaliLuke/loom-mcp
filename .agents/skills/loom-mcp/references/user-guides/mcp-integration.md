@@ -74,8 +74,8 @@ connection for SSE. Invalid origins receive HTTP 403.
 
 Configure `SDKServerOptions.RuntimeCORS` when a trusted browser client requires
 cross-origin access. Add the browser origin to
-`SDKServerOptions.OriginProtection`. The CORS response policy and request
-origin policy are separate.
+`SDKServerOptions.OriginProtection.TrustedOrigins`. The CORS response policy
+and request origin policy are separate.
 
 ## Progress and streaming methods
 

@@ -212,8 +212,8 @@ func TestCallToolAcrossProtocols(t *testing.T) {
 
 			multiCaller := tt.newCaller(t, ctx)
 			assertMultiContentResponse(t, multiCaller, ctx)
+			assertExactToolArguments(t, multiCaller, ctx)
 			require.NoError(t, multiCaller.Close())
-
 			traceCaller := tt.newCaller(t, ctx)
 			assertTraceMetadataForwarding(t, traceCaller, ctx, expectedTrace)
 			require.NoError(t, traceCaller.Close())
@@ -484,6 +484,16 @@ func assertMultiContentResponse(t *testing.T, caller *SessionCaller, ctx context
 	assert.Equal(t, "!", structured[2]["text"])
 }
 
+func assertExactToolArguments(t *testing.T, caller *SessionCaller, ctx context.Context) {
+	t.Helper()
+	resp, err := caller.CallTool(ctx, CallRequest{
+		Tool:    "exact_argument_tool",
+		Payload: jsontext.Value(`{"id":9007199254740993}`),
+	})
+	require.NoError(t, err)
+	require.JSONEq(t, `{"id":9007199254740993}`, string(resp.Result))
+}
+
 func assertTraceMetadataForwarding(t *testing.T, caller *SessionCaller, ctx context.Context, expectedTrace string) {
 	t.Helper()
 
@@ -549,6 +559,16 @@ func newSDKTestServerWithOptions(opts *sdkmcp.ServerOptions) *sdkmcp.Server {
 				&sdkmcp.TextContent{Text: traceparent},
 			},
 		}, nil
+	})
+
+	server.AddTool(&sdkmcp.Tool{
+		Name:        "exact_argument_tool",
+		Description: "Returns exact incoming arguments",
+		InputSchema: jsontext.Value(`{"type":"object"}`),
+	}, func(_ context.Context, req *sdkmcp.CallToolRequest) (*sdkmcp.CallToolResult, error) {
+		return &sdkmcp.CallToolResult{Content: []sdkmcp.Content{
+			&sdkmcp.TextContent{Text: string(req.Params.Arguments)},
+		}}, nil
 	})
 
 	return server

@@ -171,6 +171,24 @@ func TestGeneratedSDKServerResourceQueryPreservesStringValues(t *testing.T) {
 	require.NotEmpty(t, body.Items)
 	assert.Equal(t, "true", body.Items[len(body.Items)-1])
 }
+
+func TestGeneratedSDKServerResourceQueryRejectsUndesignedValues(t *testing.T) {
+	t.Parallel()
+	session := connectSDKSessionToServer(t, newGeneratedSDKServerURL(t), nil)
+	defer func() { require.NoError(t, session.Close()) }()
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	for _, uri := range []string{
+		"conversation://history?extra=1",
+		"conversation://history?limit=not-an-integer",
+		"conversation://history?limit=1&limit=2",
+	} {
+		_, err := session.ReadResource(ctx, &sdkmcp.ReadResourceParams{URI: uri})
+		require.Error(t, err, uri)
+	}
+}
+
 func assertSDKSchemaJSONEq(t *testing.T, want []byte, got any) {
 	t.Helper()
 

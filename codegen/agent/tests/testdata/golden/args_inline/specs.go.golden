@@ -27,8 +27,8 @@ var (
 		Toolset:     "alpha.math",
 		Description: "Add",
 		Tags:        []string{},
-		Payload:     tools.TypeSpec{Name: "AddPayload", Schema: []byte("{\"additionalProperties\":false,\"properties\":{\"left\":{\"description\":\"Left operand\",\"type\":\"integer\"},\"right\":{\"description\":\"Right operand\",\"type\":\"integer\"}},\"required\":[\"left\",\"right\"],\"type\":\"object\"}"), ExampleJSON: []byte("{\"left\":1,\"right\":1}"), ExampleInput: map[string]any{"left": 1, "right": 1}, Codec: addPayloadCodec},
-		Result:      tools.TypeSpec{Name: "AddResult", Schema: []byte("{\"additionalProperties\":false,\"properties\":{\"sum\":{\"description\":\"Sum\",\"type\":\"integer\"}},\"required\":[\"sum\"],\"type\":\"object\"}"), Codec: addResultCodec},
+		Payload:     tools.TypeSpec{Name: "AddPayload", Schema: []byte("{\"additionalProperties\":false,\"properties\":{\"left\":{\"description\":\"Left operand\",\"maximum\":2147483647,\"minimum\":-2147483648,\"type\":\"integer\"},\"right\":{\"description\":\"Right operand\",\"maximum\":2147483647,\"minimum\":-2147483648,\"type\":\"integer\"}},\"required\":[\"left\",\"right\"],\"type\":\"object\"}"), ExampleJSON: []byte("{\"left\":1,\"right\":1}"), ExampleInput: map[string]any{"left": 1, "right": 1}, Codec: addPayloadCodec},
+		Result:      tools.TypeSpec{Name: "AddResult", Schema: []byte("{\"additionalProperties\":false,\"properties\":{\"sum\":{\"description\":\"Sum\",\"maximum\":2147483647,\"minimum\":-2147483648,\"type\":\"integer\"}},\"required\":[\"sum\"],\"type\":\"object\"}"), Codec: addResultCodec},
 	}
 )
 

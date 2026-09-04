@@ -18,7 +18,7 @@ Release verification must use the pinned remote `github.com/CaliLuke/loom` depen
 make loom-remote
 ```
 
-If the repo was iterating against `/Users/luca/code/loom-mono/loom`, this command removes the local replace and restores the pinned release in both the root module and the assistant fixture module.
+If the repository used a local Loom checkout, this command removes the local replace and restores the pinned release in the root module, assistant fixture, agent-feature fixture, SDK bridge consumer fixture, and quickstart.
 
 ## 3. Regeneration
 
@@ -39,14 +39,15 @@ Run regeneration when the shipped changes require it:
 - Assistant fixture DSL changed: `make regen-assistant-fixture`
 - Loom dependency changed: `make gen-registry`, `make regen-quickstart`,
   `make regen-assistant-fixture`, `make regen-progressive-discovery-fixture`,
-  `make regen-agent-feature-fixture`, and
-  `make regen-sdkbridge-consumer-fixture`
+  and `make regen-agent-feature-fixture`
 - `sdkbridge.CompatibilityVersion` changed: `make regen-assistant-fixture`,
   `make regen-progressive-discovery-fixture`, and
-  `make regen-sdkbridge-consumer-fixture`
+  `make regen-sdkbridge-consumer-fixture`. The SDK bridge consumer is a frozen
+  compatibility baseline. Its regeneration command fails unless the runtime
+  compatibility version is greater than the version at the durable comparison
+  base. CI supplies that base. Local checks use the tracking branch or the most
+  recent release tag.
 - Other design or codegen changed: run the generation target for that surface.
-
-Never edit generated `gen/` files.
 
 After regeneration, prove that every tracked surface is current:
 
@@ -125,19 +126,26 @@ git ls-remote --tags origin vX.Y.Z
 gh release view vX.Y.Z --json tagName,isDraft,isPrerelease,url,publishedAt
 ```
 
-The release is not complete until the GitHub Release exists and is not a draft.
+The release is not complete until the GitHub Release exists, is not a draft, and has `isPrerelease` set to true for a hyphenated tag or false for a stable tag.
 
 ## 9. Backfill Missing GitHub Releases
 
-If a tag was already pushed without a GitHub Release object:
+If a tag was already pushed without a GitHub Release object, use the command
+that matches the tag type:
 
 ```bash
-git ls-remote --tags origin vX.Y.Z
-gh release create vX.Y.Z --verify-tag --generate-notes
-gh release view vX.Y.Z --json tagName,isDraft,isPrerelease,url,publishedAt
+# Set this to the exact stable or prerelease tag.
+VERSION=vX.Y.Z
+git ls-remote --tags origin "${VERSION}"
+# Stable release only:
+gh release create "${VERSION}" --verify-tag --generate-notes --latest
+# Prerelease only:
+gh release create "${VERSION}" --verify-tag --generate-notes --prerelease
+gh release view "${VERSION}" --json tagName,isDraft,isPrerelease,url,publishedAt
 ```
 
-Use `--notes-from-tag` instead of `--generate-notes` only when the annotated tag message already contains the intended release notes.
+Use `--notes-from-tag` only when the annotated tag has suitable release notes.
+Use it instead of `--generate-notes`. Keep the stable or prerelease flag.
 
 ## 10. Module Availability
 

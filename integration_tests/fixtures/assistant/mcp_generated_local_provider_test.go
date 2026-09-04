@@ -8,6 +8,7 @@ import (
 	mcpassistant "example.com/assistant/gen/mcp_assistant"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/planner"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/rawjson"
+	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/tools"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -18,7 +19,16 @@ func TestGeneratedLocalProviderBindsRuntimeToolMetadata(t *testing.T) {
 	})
 	registration, err := mcpassistant.NewAssistantAssistantMcpLocalToolsetRegistration(adapter)
 	require.NoError(t, err)
-
+	var projectedSpec *tools.ToolSpec
+	for i := range registration.Specs {
+		if registration.Specs[i].Name == "projected_bounded_lookup_tool" {
+			projectedSpec = &registration.Specs[i]
+			break
+		}
+	}
+	require.NotNil(t, projectedSpec)
+	assert.Equal(t, []string{"projected", "bounded"}, projectedSpec.Tags)
+	assert.Equal(t, map[string][]string{"projection:test": {"preserved"}}, projectedSpec.Meta)
 	execution, err := registration.Execute(context.Background(), &planner.ToolRequest{
 		Name:             "projected_bounded_lookup_tool",
 		Payload:          rawjson.Message(`{"query":"loom"}`),

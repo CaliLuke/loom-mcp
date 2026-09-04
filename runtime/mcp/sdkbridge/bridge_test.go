@@ -2,6 +2,7 @@ package sdkbridge
 
 import (
 	"context"
+	json "encoding/json/v2"
 	"errors"
 	"fmt"
 	"net/http"
@@ -38,23 +39,18 @@ func TestNewServerAcceptsSameCompatibilityVersion(t *testing.T) {
 	require.NoError(t, err)
 	assert.NotNil(t, server)
 }
+func TestServerOptionsDoNotAdvertiseDeprecatedDefaultCapabilities(t *testing.T) {
+	configured := serverOptions(nil, nil, nil)
 
+	encoded, err := json.Marshal(configured.Capabilities)
+	require.NoError(t, err)
+	assert.JSONEq(t, `{}`, string(encoded))
+}
 func TestNewServerRejectsInvalidSessionBeforeSDKDispatch(t *testing.T) {
-	errInvalidSession := errors.New("invalid session")
-	asserted := false
 	server, err := NewServer(Config{
 		CompatibilityVersion: CompatibilityVersion,
 		Implementation:       mcpsdk.Implementation{Name: "test", Version: "1.0.0"},
-		Sessions: SessionHooks{
-			AssertPrincipal: func(_ context.Context, sessionID string) error {
-				asserted = true
-				assert.Equal(t, "missing", sessionID)
-				return errInvalidSession
-			},
-			IsInvalidSessionID: func(err error) bool {
-				return errors.Is(err, errInvalidSession)
-			},
-		},
+		Sessions:             NewSessionState(nil),
 	})
 	require.NoError(t, err)
 
@@ -63,9 +59,8 @@ func TestNewServerRejectsInvalidSessionBeforeSDKDispatch(t *testing.T) {
 	response := httptest.NewRecorder()
 	server.Handler.ServeHTTP(response, req)
 
-	assert.True(t, asserted)
 	assert.Equal(t, http.StatusNotFound, response.Code)
-	assert.Contains(t, response.Body.String(), "invalid session")
+	assert.Contains(t, response.Body.String(), "invalid session ID")
 }
 
 func TestNewServerReportsGeneratedDescriptorFailure(t *testing.T) {
@@ -114,28 +109,56 @@ func TestToolHandlerPreservesProgressTokenAfterPayloadBinding(t *testing.T) {
 	require.NoError(t, err)
 }
 
-func TestValidateOriginChecksEveryHTTPMethod(t *testing.T) {
-	protection := http.NewCrossOriginProtection()
-	require.NoError(t, protection.AddTrustedOrigin("https://trusted.example"))
+func TestRequestContextMiddlewarePropagatesReturnedContextOnce(t *testing.T) {
+	type contextKey struct{}
+	callbackCount := 0
+	middleware := requestContextMiddleware(func(ctx context.Context, req *http.Request) context.Context {
+		callbackCount++
+		assert.Equal(t, "call-1", req.Header.Get("X-Request-ID"))
+		return context.WithValue(ctx, contextKey{}, "tenant-1")
+	}, NewSessionState(nil))
+	handler := middleware(func(ctx context.Context, _ string, _ mcpsdk.Request) (mcpsdk.Result, error) {
+		assert.Equal(t, "tenant-1", ctx.Value(contextKey{}))
+		return &mcpsdk.CallToolResult{}, nil
+	})
+	header := make(http.Header)
+	header.Set("X-Request-ID", "call-1")
+	req := &mcpsdk.CallToolRequest{Extra: &mcpsdk.RequestExtra{Header: header}}
+
+	_, err := handler(t.Context(), "tools/call", req)
+
+	require.NoError(t, err)
+	assert.Equal(t, 1, callbackCount)
+}
+
+func TestOriginValidationChecksEveryHTTPMethod(t *testing.T) {
+	protected, err := originValidationHandler(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusNoContent)
+	}), &OriginProtection{TrustedOrigins: []string{"https://trusted.example"}})
+	require.NoError(t, err)
 
 	tests := []struct {
 		name      string
 		method    string
 		origins   []string
 		fetchSite string
-		wantErr   bool
+		wantCode  int
 	}{
-		{name: "missing", method: http.MethodGet},
-		{name: "missing on cross-site POST", method: http.MethodPost, fetchSite: "cross-site", wantErr: true},
-		{name: "same origin GET", method: http.MethodGet, origins: []string{"https://server.example"}},
-		{name: "trusted GET", method: http.MethodGet, origins: []string{"https://trusted.example"}},
-		{name: "untrusted GET", method: http.MethodGet, origins: []string{"https://evil.example"}, wantErr: true},
-		{name: "untrusted HEAD", method: http.MethodHead, origins: []string{"https://evil.example"}, wantErr: true},
-		{name: "untrusted OPTIONS", method: http.MethodOptions, origins: []string{"https://evil.example"}, wantErr: true},
-		{name: "untrusted POST", method: http.MethodPost, origins: []string{"https://evil.example"}, wantErr: true},
-		{name: "empty", method: http.MethodGet, origins: []string{""}, wantErr: true},
-		{name: "repeated", method: http.MethodGet, origins: []string{"https://server.example", "https://trusted.example"}, wantErr: true},
-		{name: "path", method: http.MethodGet, origins: []string{"https://server.example/path"}, wantErr: true},
+		{name: "missing", method: http.MethodGet, wantCode: http.StatusNoContent},
+		{name: "missing on cross-site GET", method: http.MethodGet, fetchSite: "cross-site", wantCode: http.StatusForbidden},
+		{name: "missing on cross-site POST", method: http.MethodPost, fetchSite: "cross-site", wantCode: http.StatusForbidden},
+		{name: "same origin GET", method: http.MethodGet, origins: []string{"https://server.example"}, wantCode: http.StatusNoContent},
+		{name: "same-host cross-site GET", method: http.MethodGet, origins: []string{"http://server.example"}, fetchSite: "cross-site", wantCode: http.StatusForbidden},
+		{name: "trusted cross-site GET", method: http.MethodGet, origins: []string{"https://trusted.example"}, fetchSite: "cross-site", wantCode: http.StatusNoContent},
+		{name: "untrusted GET", method: http.MethodGet, origins: []string{"https://evil.example"}, wantCode: http.StatusForbidden},
+		{name: "untrusted same-origin metadata", method: http.MethodGet, origins: []string{"https://evil.example"}, fetchSite: "same-origin", wantCode: http.StatusForbidden},
+		{name: "untrusted none metadata", method: http.MethodPost, origins: []string{"https://evil.example"}, fetchSite: "none", wantCode: http.StatusForbidden},
+		{name: "untrusted HEAD", method: http.MethodHead, origins: []string{"https://evil.example"}, wantCode: http.StatusForbidden},
+		{name: "untrusted OPTIONS", method: http.MethodOptions, origins: []string{"https://evil.example"}, wantCode: http.StatusForbidden},
+		{name: "untrusted POST", method: http.MethodPost, origins: []string{"https://evil.example"}, wantCode: http.StatusForbidden},
+		{name: "empty", method: http.MethodGet, origins: []string{""}, wantCode: http.StatusForbidden},
+		{name: "repeated", method: http.MethodGet, origins: []string{"https://server.example", "https://trusted.example"}, wantCode: http.StatusForbidden},
+		{name: "path", method: http.MethodGet, origins: []string{"https://server.example/path"}, wantCode: http.StatusForbidden},
 	}
 
 	for _, test := range tests {
@@ -146,19 +169,44 @@ func TestValidateOriginChecksEveryHTTPMethod(t *testing.T) {
 			}
 			if test.fetchSite != "" {
 				req.Header.Set("Sec-Fetch-Site", test.fetchSite)
-			} else {
-				req.Header.Set("Sec-Fetch-Site", "same-site")
 			}
-
-			err := validateOrigin(protection, req)
-
-			if test.wantErr {
-				require.Error(t, err)
-				return
-			}
-			require.NoError(t, err)
+			response := httptest.NewRecorder()
+			protected.ServeHTTP(response, req)
+			assert.Equal(t, test.wantCode, response.Code)
 		})
 	}
+}
+
+func TestOriginValidationMarksCustomDenials(t *testing.T) {
+	protected, err := originValidationHandler(http.NotFoundHandler(), &OriginProtection{
+		DenyHandler: http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+			w.Header().Set("X-Origin-Denied", "true")
+			w.WriteHeader(http.StatusNoContent)
+		}),
+	})
+	require.NoError(t, err)
+	req := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "https://server.example/rpc", nil)
+	req.Header.Set("Origin", "https://evil.example")
+	recorder := httptest.NewRecorder()
+	response := &responseObserver{ResponseWriter: recorder}
+
+	protected.ServeHTTP(response, req)
+
+	assert.Equal(t, http.StatusNoContent, recorder.Code)
+	assert.Equal(t, "true", recorder.Header().Get("X-Origin-Denied"))
+	assert.True(t, response.originRejected)
+}
+
+func TestSDKTransportRequestRemovesAlreadyValidatedOriginHeaders(t *testing.T) {
+	req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "https://server.example/rpc", nil)
+	req.Header.Set("Origin", "https://evil.example")
+	req.Header.Set("Sec-Fetch-Site", "cross-site")
+
+	transportRequest := sdkTransportRequest(req)
+	assert.Empty(t, transportRequest.Header.Get("Origin"))
+	assert.Empty(t, transportRequest.Header.Get("Sec-Fetch-Site"))
+	assert.Equal(t, "https://evil.example", req.Header.Get("Origin"))
+	assert.Equal(t, "cross-site", req.Header.Get("Sec-Fetch-Site"))
 }
 
 func TestNewServerRejectsOriginBeforeApplicationHooks(t *testing.T) {
@@ -171,10 +219,10 @@ func TestNewServerRejectsOriginBeforeApplicationHooks(t *testing.T) {
 			requestContextCalled = true
 			return ctx
 		}},
-		Sessions: SessionHooks{AssertPrincipal: func(context.Context, string) error {
+		Sessions: NewSessionState(func(context.Context) string {
 			assertPrincipalCalled = true
-			return errors.New("must not run")
-		}},
+			return "principal"
+		}),
 	})
 	require.NoError(t, err)
 
@@ -210,36 +258,24 @@ func TestNewServerRejectsOriginBeforeRuntimeCORSPreflight(t *testing.T) {
 
 	assert.Equal(t, http.StatusForbidden, response.Code)
 }
-func TestPromptHandlerEncodesArgumentsAndBindsRequestContext(t *testing.T) {
-	initialized := false
-	handler := PromptHandler(HandlerContext{
-		RequestContext: func(ctx context.Context, req *http.Request) context.Context {
-			assert.Equal(t, http.MethodPost, req.Method)
-			assert.Equal(t, "/mcp", req.URL.Path)
-			assert.Equal(t, "request", req.Header.Get("X-Source"))
-			return ctx
-		},
-		MarkInitialized: func(sessionID string) {
-			assert.Empty(t, sessionID)
-			initialized = true
-		},
-	}, func(_ context.Context, request PromptRequest) (*mcpsdk.GetPromptResult, error) {
+func TestPromptHandlerEncodesArgumentsAndMarksInitialization(t *testing.T) {
+	sessions := NewSessionState(nil)
+	handler := PromptHandler(HandlerContext{Sessions: sessions}, func(_ context.Context, request PromptRequest) (*mcpsdk.GetPromptResult, error) {
 		assert.Equal(t, "code_review", request.Name)
 		assert.JSONEq(t, `{"code":"return true"}`, string(request.Arguments))
 		assert.NotNil(t, request.Bind(struct{}{}))
 		return &mcpsdk.GetPromptResult{Description: "ready"}, nil
 	})
-	ctx := mcpruntime.WithRequestHeaders(context.Background(), http.Header{"X-Source": {"request"}})
 	req := &mcpsdk.GetPromptRequest{Params: &mcpsdk.GetPromptParams{
 		Name:      "code_review",
 		Arguments: map[string]string{"code": "return true"},
 	}}
 
-	result, err := handler(ctx, req)
+	result, err := handler(context.Background(), req)
 
 	require.NoError(t, err)
 	assert.Equal(t, "ready", result.Description)
-	assert.True(t, initialized)
+	assert.True(t, sessions.IsInitialized(context.Background()))
 }
 
 func TestResourceHandlerBindsTypedRequest(t *testing.T) {
@@ -254,7 +290,6 @@ func TestResourceHandlerBindsTypedRequest(t *testing.T) {
 	require.NoError(t, err)
 	assert.NotNil(t, result)
 }
-
 func TestPromptAndResourceHandlersAcceptNilSDKRequests(t *testing.T) {
 	prompt, err := PromptHandler(HandlerContext{}, func(_ context.Context, request PromptRequest) (*mcpsdk.GetPromptResult, error) {
 		assert.Empty(t, request.Name)

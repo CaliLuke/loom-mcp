@@ -10,13 +10,26 @@ import (
 	"time"
 
 	mcpconsumer "example.com/sdkbridgeconsumer/gen/mcp_consumer"
+	"github.com/CaliLuke/loom-mcp/v2/runtime/mcp/sdkbridge"
 	mcpsdk "github.com/modelcontextprotocol/go-sdk/mcp"
 )
+
+type trustedOriginTransport struct {
+	base http.RoundTripper
+}
+
+func (transport trustedOriginTransport) RoundTrip(request *http.Request) (*http.Response, error) {
+	cloned := request.Clone(request.Context())
+	cloned.Header.Set("Origin", "https://trusted.example")
+	return transport.base.RoundTrip(cloned)
+}
 
 // The test does not regenerate the checked-in server. A same-version runtime
 // update must remain compatible with that generated consumer.
 func TestCheckedInConsumerUsesSameVersionRuntimeWithOfficialSDK(t *testing.T) {
-	generated, err := mcpconsumer.NewSDKServer(consumerService{}, nil)
+	generated, err := mcpconsumer.NewSDKServer(consumerService{}, &mcpconsumer.SDKServerOptions{
+		OriginProtection: &sdkbridge.OriginProtection{TrustedOrigins: []string{"https://trusted.example"}},
+	})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -27,8 +40,11 @@ func TestCheckedInConsumerUsesSameVersionRuntimeWithOfficialSDK(t *testing.T) {
 	defer cancel()
 	client := mcpsdk.NewClient(&mcpsdk.Implementation{Name: "external-consumer", Version: "1.0.0"}, nil)
 	session, err := client.Connect(ctx, &mcpsdk.StreamableClientTransport{
-		Endpoint:             server.URL,
-		HTTPClient:           &http.Client{Timeout: 10 * time.Second},
+		Endpoint: server.URL,
+		HTTPClient: &http.Client{
+			Timeout:   10 * time.Second,
+			Transport: trustedOriginTransport{base: http.DefaultTransport},
+		},
 		DisableStandaloneSSE: true,
 	}, nil)
 	if err != nil {

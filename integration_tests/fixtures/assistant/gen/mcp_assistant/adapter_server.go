@@ -19,7 +19,6 @@ import (
 	"regexp"
 	"sort"
 	"strings"
-	"sync"
 	"time"
 
 	assistant "example.com/assistant/gen/assistant"
@@ -30,7 +29,6 @@ import (
 	mcpskills "github.com/CaliLuke/loom-mcp/v2/runtime/mcp/skills"
 	goahttp "github.com/CaliLuke/loom/http"
 	loom "github.com/CaliLuke/loom/pkg"
-	mcpauth "github.com/modelcontextprotocol/go-sdk/auth"
 	"github.com/sahilm/fuzzy"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
@@ -41,35 +39,22 @@ import (
 
 // MCPAdapter core: types, options, constructor, helpers
 type MCPAdapter struct {
-	service             assistant.Service
-	initialized         bool
-	initializedSessions map[string]time.Time
-	sessionPrincipals   map[string]string
-	mu                  sync.RWMutex
-	opts                *MCPAdapterOptions
-	tracer              trace.Tracer
-	callCounter         metric.Int64Counter
-	errorCounter        metric.Int64Counter
-	durationHistogram   metric.Float64Histogram
-	promptProvider      PromptProvider
-	promptOperations    []sdkbridge.NamedOperation[*PromptsGetPayload, *PromptsGetResult]
-	resourceOperations  []sdkbridge.ResourceOperation[*ResourcesReadPayload, *ResourcesReadResult]
-	resourcePolicy      sdkbridge.ResourcePolicy
+	service            assistant.Service
+	sessions           *sdkbridge.SessionState
+	opts               *MCPAdapterOptions
+	tracer             trace.Tracer
+	callCounter        metric.Int64Counter
+	errorCounter       metric.Int64Counter
+	durationHistogram  metric.Float64Histogram
+	promptProvider     PromptProvider
+	promptOperations   []sdkbridge.NamedOperation[*PromptsGetPayload, *PromptsGetResult]
+	resourceOperations []sdkbridge.ResourceOperation[*ResourcesReadPayload, *ResourcesReadResult]
+	resourcePolicy     sdkbridge.ResourcePolicy
 	// requestStateKey encrypts and authenticates portable MCP multi-round-trip state.
 	requestStateKey []byte
 }
 
-const (
-	mcpSessionTTL  = 24 * time.Hour
-	mcpMaxSessions = 4096
-)
-
 var _ Service = (*MCPAdapter)(nil)
-var (
-	errInvalidSessionID               = errors.New("invalid session ID")
-	errSessionPrincipalBindingMissing = errors.New("session principal binding missing")
-	errSessionPrincipalMismatch       = errors.New("session user mismatch")
-)
 
 type (
 	toolCallStream interface {
@@ -119,8 +104,6 @@ type ToolSearchOptions struct {
 	SearchToolName string
 	// CallToolName overrides the synthetic call proxy tool name. Default: call_tool.
 	CallToolName string
-	// AllowDirectHiddenCalls permits direct tools/call for hidden real tools as a JSON-RPC compatibility option.
-	AllowDirectHiddenCalls bool
 }
 
 // MCPAdapterOptions allows customizing adapter behavior.
@@ -154,7 +137,11 @@ func NewMCPAdapter(service assistant.Service, promptProvider PromptProvider, opt
 	telemetryName := defaultMCPAdapterTelemetryName(opts)
 	tracer := defaultMCPAdapterTracer(opts, telemetryName)
 	callCounter, errorCounter, durationHistogram := defaultMCPAdapterMetrics(opts, telemetryName)
-	adapter := &MCPAdapter{service: service, initializedSessions: make(map[string]time.Time), sessionPrincipals: make(map[string]string), opts: opts, tracer: tracer, callCounter: callCounter, errorCounter: errorCounter, durationHistogram: durationHistogram, promptProvider: promptProvider}
+	var sessionPrincipal sdkbridge.PrincipalResolver
+	if opts != nil {
+		sessionPrincipal = opts.SessionPrincipal
+	}
+	adapter := &MCPAdapter{service: service, sessions: sdkbridge.NewSessionState(sessionPrincipal), opts: opts, tracer: tracer, callCounter: callCounter, errorCounter: errorCounter, durationHistogram: durationHistogram, promptProvider: promptProvider}
 	adapter.promptOperations = adapter.promptOperationDescriptors()
 	adapter.resourceOperations = adapter.resourceOperationDescriptors()
 	adapter.resourcePolicy.ResourceNameToURI = map[string]string{"documents": "doc://list", "system_info": "system://info", "elicitation_context": "elicitation://context", "conversation_history": "conversation://history", "figma_design_system": "figma://design-system/mobile-checkout"}
@@ -166,155 +153,27 @@ func NewMCPAdapter(service assistant.Service, promptProvider PromptProvider, opt
 	}
 	return adapter
 }
-func mcpJSONRaw(value loom.Nullable[any]) (jsontext.Value, error) {
-	if !value.Present() {
+func mcpJSONRaw(value loom.JSONValue) (jsontext.Value, error) {
+	trimmed := bytes.TrimSpace(value)
+	if len(trimmed) == 0 {
 		return nil, nil
 	}
-	if value.IsNull() {
-		return jsontext.Value("null"), nil
+	if !jsontext.Value(trimmed).IsValid() {
+		return nil, errors.New("invalid MCP JSON value")
 	}
-	actual, ok := value.Value()
-	if !ok {
-		return nil, errors.New("present MCP JSON value has no concrete value")
-	}
-	if raw, ok := actual.(jsontext.Value); ok {
-		return append(jsontext.Value(nil), raw...), nil
-	}
-	raw, err := json.Marshal(actual)
-	if err != nil {
-		return nil, err
-	}
-	return jsontext.Value(raw), nil
+	return append(jsontext.Value(nil), value...), nil
 }
-func mcpJSONFromRaw(raw jsontext.Value) loom.Nullable[any] {
-	trimmed := bytes.TrimSpace(raw)
-	if len(trimmed) == 0 {
-		return loom.Nullable[any]{}
-	}
-	if bytes.Equal(trimmed, []byte("null")) {
-		return loom.NullValue[any]()
-	}
-	copied := append(jsontext.Value(nil), raw...)
-	return loom.NullableValue[any](copied)
-}
-func mcpJSONAny(value loom.Nullable[any]) any {
-	if value.IsNull() {
+func mcpJSONFromRaw(raw jsontext.Value) loom.JSONValue {
+	if len(bytes.TrimSpace(raw)) == 0 {
 		return nil
 	}
-	actual, ok := value.Value()
-	if !ok {
-		return nil
-	}
-	return actual
+	return append(loom.JSONValue(nil), raw...)
 }
-func (a *MCPAdapter) pruneSessionsLocked(now time.Time, reserveSlot bool) {
-	for sessionID, touchedAt := range a.initializedSessions {
-		if now.Sub(touchedAt) >= mcpSessionTTL {
-			delete(a.initializedSessions, sessionID)
-			delete(a.sessionPrincipals, sessionID)
-		}
-	}
-	for len(a.initializedSessions) > mcpMaxSessions || reserveSlot && len(a.initializedSessions) >= mcpMaxSessions {
-		oldestID := ""
-		var oldestAt time.Time
-		for sessionID, touchedAt := range a.initializedSessions {
-			if oldestID == "" || touchedAt.Before(oldestAt) {
-				oldestID = sessionID
-				oldestAt = touchedAt
-			}
-		}
-		if oldestID == "" {
-			return
-		}
-		delete(a.initializedSessions, oldestID)
-		delete(a.sessionPrincipals, oldestID)
-	}
+func mcpJSONPresent(value loom.JSONValue) bool {
+	return len(bytes.TrimSpace(value)) > 0
 }
 func (a *MCPAdapter) isInitialized(ctx context.Context) bool {
-	a.mu.RLock()
-	defer a.mu.RUnlock()
-	if sessionID := mcpruntime.SessionIDFromContext(ctx); sessionID != "" {
-		_, ok := a.initializedSessions[sessionID]
-		return ok
-	}
-	return a.initialized
-}
-func (a *MCPAdapter) markInitializedSession(sessionID string) {
-	a.mu.Lock()
-	defer a.mu.Unlock()
-	if sessionID == "" {
-		a.initialized = true
-		return
-	}
-	now := time.Now()
-	if _, ok := a.initializedSessions[sessionID]; !ok {
-		a.pruneSessionsLocked(now, true)
-	}
-	a.initializedSessions[sessionID] = now
-}
-func (a *MCPAdapter) captureSessionPrincipal(ctx context.Context, sessionID string) {
-	if a == nil || sessionID == "" {
-		return
-	}
-	principal := a.sessionPrincipal(ctx)
-	if principal == "" {
-		return
-	}
-	a.mu.Lock()
-	defer a.mu.Unlock()
-	if _, ok := a.initializedSessions[sessionID]; !ok {
-		return
-	}
-	if a.sessionPrincipals == nil {
-		a.sessionPrincipals = make(map[string]string)
-	}
-	if existing := strings.TrimSpace(a.sessionPrincipals[sessionID]); existing != "" {
-		return
-	}
-	a.sessionPrincipals[sessionID] = principal
-}
-func (a *MCPAdapter) clearSession(sessionID string) {
-	if a == nil || sessionID == "" {
-		return
-	}
-	a.mu.Lock()
-	defer a.mu.Unlock()
-	delete(a.initializedSessions, sessionID)
-	delete(a.sessionPrincipals, sessionID)
-}
-func (a *MCPAdapter) assertSessionPrincipal(ctx context.Context, sessionID string) error {
-	if a == nil || sessionID == "" {
-		return nil
-	}
-	actual := a.sessionPrincipal(ctx)
-	principalRequired := a.opts != nil && a.opts.SessionPrincipal != nil
-	a.mu.Lock()
-	a.pruneSessionsLocked(time.Now(), false)
-	_, initialized := a.initializedSessions[sessionID]
-	expected := strings.TrimSpace(a.sessionPrincipals[sessionID])
-	a.mu.Unlock()
-	if !initialized {
-		return errInvalidSessionID
-	}
-	if expected == "" {
-		if principalRequired || actual != "" {
-			return errSessionPrincipalBindingMissing
-		}
-		return nil
-	}
-	if actual == "" || actual != expected {
-		return errSessionPrincipalMismatch
-	}
-	return nil
-}
-func (a *MCPAdapter) sessionPrincipal(ctx context.Context) string {
-	if a != nil && a.opts != nil && a.opts.SessionPrincipal != nil {
-		return strings.TrimSpace(a.opts.SessionPrincipal(ctx))
-	}
-	if tokenInfo := mcpauth.TokenInfoFromContext(ctx); tokenInfo != nil {
-		return strings.TrimSpace(tokenInfo.UserID)
-	}
-	return ""
+	return a != nil && a.sessions.IsInitialized(ctx)
 }
 func (a *MCPAdapter) log(ctx context.Context, event string, details any) {
 	if a != nil && a.opts != nil && a.opts.Logger != nil {
@@ -570,14 +429,16 @@ type Icon struct {
 	Theme    *string  `json:"theme,omitempty"`
 }
 type ToolInfo struct {
-	Name         string  `json:"name"`
-	Title        *string `json:"title,omitempty"`
-	Description  *string `json:"description,omitempty"`
-	InputSchema  any     `json:"inputSchema,omitempty"`
-	OutputSchema any     `json:"outputSchema,omitempty"`
-	Annotations  any     `json:"annotations,omitempty"`
-	Meta         any     `json:"_meta,omitempty"`
-	Icons        []*Icon `json:"icons,omitempty"`
+	Name         string              `json:"name"`
+	Title        *string             `json:"title,omitempty"`
+	Description  *string             `json:"description,omitempty"`
+	InputSchema  any                 `json:"inputSchema,omitempty"`
+	OutputSchema any                 `json:"outputSchema,omitempty"`
+	Annotations  any                 `json:"annotations,omitempty"`
+	Meta         any                 `json:"_meta,omitempty"`
+	Icons        []*Icon             `json:"icons,omitempty"`
+	LocalTags    []string            `json:"-"`
+	LocalMeta    map[string][]string `json:"-"`
 }
 type toolCallResultCollector struct {
 	adapter   *MCPAdapter
@@ -628,7 +489,7 @@ func (c *toolCallResultCollector) result() *ToolsCallResult {
 			continue
 		}
 		merged.Content = append(merged.Content, part.Content...)
-		if part.StructuredContent.Present() {
+		if mcpJSONPresent(part.StructuredContent) {
 			merged.StructuredContent = part.StructuredContent
 		}
 		if part.IsError != nil {
@@ -776,14 +637,14 @@ func (a *MCPAdapter) generatedToolCatalog() []*ToolInfo {
 		Title:        stringPtr("Summarize Text"),
 	}, &ToolInfo{
 		Description:  stringPtr("Search knowledge base"),
-		InputSchema:  jsontext.Value([]byte("{\"type\":\"object\",\"required\":[\"query\"],\"properties\":{\"limit\":{\"type\":\"integer\",\"description\":\"Maximum number of results\"},\"query\":{\"type\":\"string\",\"description\":\"Search query\"}},\"additionalProperties\":false}")),
+		InputSchema:  jsontext.Value([]byte("{\"type\":\"object\",\"required\":[\"query\"],\"properties\":{\"limit\":{\"type\":\"integer\",\"description\":\"Maximum number of results\",\"minimum\":-9223372036854775808,\"maximum\":9223372036854775807},\"query\":{\"type\":\"string\",\"description\":\"Search query\"}},\"additionalProperties\":false}")),
 		Meta:         jsontext.Value([]byte("{\"com.github.caliluke.loom-mcp/discovery\":{\"category\":\"knowledge\",\"keywords\":[\"lookup\",\"documents\",\"knowledge\"],\"tags\":[\"search\",\"retrieval\"]}}")),
 		Name:         "search",
 		OutputSchema: jsontext.Value([]byte("{\"type\":\"object\",\"properties\":{\"results\":{\"type\":\"array\",\"description\":\"Search results\",\"items\":{\"type\":\"string\"}}},\"additionalProperties\":false}")),
 		Title:        stringPtr("Search Knowledge Base"),
 	}, &ToolInfo{
 		Description:  stringPtr("Search records with an optional query"),
-		InputSchema:  jsontext.Value([]byte("{\"type\":\"object\",\"properties\":{\"limit\":{\"type\":\"integer\",\"description\":\"Maximum number of records\"},\"query\":{\"type\":\"string\",\"description\":\"Search query\"}},\"additionalProperties\":false}")),
+		InputSchema:  jsontext.Value([]byte("{\"type\":\"object\",\"properties\":{\"limit\":{\"type\":\"integer\",\"description\":\"Maximum number of records\",\"minimum\":-9223372036854775808,\"maximum\":9223372036854775807},\"query\":{\"type\":\"string\",\"description\":\"Search query\"}},\"additionalProperties\":false}")),
 		Meta:         jsontext.Value([]byte("{\"com.github.caliluke.loom-mcp/discovery\":{\"call_template_arguments\":{\"query\":\"login\"},\"category\":\"records\",\"keywords\":[\"lookup\",\"records\"],\"tags\":[\"search\",\"records\"]}}")),
 		Name:         "search_records",
 		OutputSchema: jsontext.Value([]byte("{\"type\":\"object\",\"properties\":{\"results\":{\"type\":\"array\",\"description\":\"Record results\",\"items\":{\"type\":\"string\"}}},\"additionalProperties\":false}")),
@@ -808,7 +669,7 @@ func (a *MCPAdapter) generatedToolCatalog() []*ToolInfo {
 		Title:        stringPtr("Report Progress"),
 	}, &ToolInfo{
 		Description:  stringPtr("Return multiple content items"),
-		InputSchema:  jsontext.Value([]byte("{\"type\":\"object\",\"required\":[\"count\"],\"properties\":{\"count\":{\"type\":\"integer\",\"description\":\"Number of content items to return\"}},\"additionalProperties\":false}")),
+		InputSchema:  jsontext.Value([]byte("{\"type\":\"object\",\"required\":[\"count\"],\"properties\":{\"count\":{\"type\":\"integer\",\"description\":\"Number of content items to return\",\"minimum\":-9223372036854775808,\"maximum\":9223372036854775807}},\"additionalProperties\":false}")),
 		Name:         "multi_content",
 		OutputSchema: jsontext.Value([]byte("{\"type\":\"object\",\"properties\":{\"result\":{\"type\":\"string\",\"description\":\"Combined text result\"}},\"additionalProperties\":false}")),
 		Title:        stringPtr("Multi Content"),
@@ -816,35 +677,41 @@ func (a *MCPAdapter) generatedToolCatalog() []*ToolInfo {
 		Description:  stringPtr("Generate a deterministic design implementation plan from fake Figma data"),
 		InputSchema:  jsontext.Value([]byte("{\"type\":\"object\",\"required\":[\"screen_title\",\"platform\",\"density\",\"primary_cta\",\"sections\"],\"properties\":{\"density\":{\"type\":\"string\",\"description\":\"Layout density\",\"enum\":[\"compact\",\"comfortable\"]},\"include_dev_notes\":{\"type\":\"boolean\",\"description\":\"Whether to include implementation notes\"},\"platform\":{\"type\":\"string\",\"description\":\"Target platform\",\"enum\":[\"ios\",\"web\"]},\"primary_cta\":{\"type\":\"string\",\"description\":\"Primary call to action\"},\"screen_title\":{\"type\":\"string\",\"description\":\"Name of the frame or screen\"},\"sections\":{\"type\":\"array\",\"description\":\"Ordered screen sections\",\"items\":{\"type\":\"string\"}}},\"additionalProperties\":false}")),
 		Name:         "generate_dpi_spec",
-		OutputSchema: jsontext.Value([]byte("{\"type\":\"object\",\"required\":[\"screen_title\",\"platform\",\"density\",\"viewport\",\"sections\",\"primary_cta\",\"design_tokens_uri\",\"dev_notes\"],\"properties\":{\"density\":{\"type\":\"string\",\"description\":\"Layout density\"},\"design_tokens_uri\":{\"type\":\"string\",\"description\":\"Design system resource URI\"},\"dev_notes\":{\"type\":\"array\",\"description\":\"Development handoff notes\",\"items\":{\"type\":\"string\"}},\"platform\":{\"type\":\"string\",\"description\":\"Target platform\"},\"primary_cta\":{\"type\":\"object\",\"description\":\"Primary CTA\",\"required\":[\"label\",\"style\"],\"properties\":{\"label\":{\"type\":\"string\",\"description\":\"CTA label\"},\"style\":{\"type\":\"string\",\"description\":\"CTA visual style\"}},\"additionalProperties\":false},\"screen_title\":{\"type\":\"string\",\"description\":\"Screen title\"},\"sections\":{\"type\":\"array\",\"description\":\"Ordered screen sections\",\"items\":{\"type\":\"object\",\"required\":[\"name\",\"component\",\"notes\"],\"properties\":{\"component\":{\"type\":\"string\",\"description\":\"Primary UI component\"},\"name\":{\"type\":\"string\",\"description\":\"Section name\"},\"notes\":{\"type\":\"array\",\"description\":\"Implementation notes for this section\",\"items\":{\"type\":\"string\"}}},\"additionalProperties\":false}},\"viewport\":{\"type\":\"object\",\"description\":\"Viewport dimensions\",\"required\":[\"width\",\"height\"],\"properties\":{\"height\":{\"type\":\"integer\",\"description\":\"Viewport height\"},\"width\":{\"type\":\"integer\",\"description\":\"Viewport width\"}},\"additionalProperties\":false}},\"additionalProperties\":false}")),
+		OutputSchema: jsontext.Value([]byte("{\"type\":\"object\",\"required\":[\"screen_title\",\"platform\",\"density\",\"viewport\",\"sections\",\"primary_cta\",\"design_tokens_uri\",\"dev_notes\"],\"properties\":{\"density\":{\"type\":\"string\",\"description\":\"Layout density\"},\"design_tokens_uri\":{\"type\":\"string\",\"description\":\"Design system resource URI\"},\"dev_notes\":{\"type\":\"array\",\"description\":\"Development handoff notes\",\"items\":{\"type\":\"string\"}},\"platform\":{\"type\":\"string\",\"description\":\"Target platform\"},\"primary_cta\":{\"type\":\"object\",\"description\":\"Primary CTA\",\"required\":[\"label\",\"style\"],\"properties\":{\"label\":{\"type\":\"string\",\"description\":\"CTA label\"},\"style\":{\"type\":\"string\",\"description\":\"CTA visual style\"}},\"additionalProperties\":false},\"screen_title\":{\"type\":\"string\",\"description\":\"Screen title\"},\"sections\":{\"type\":\"array\",\"description\":\"Ordered screen sections\",\"items\":{\"type\":\"object\",\"required\":[\"name\",\"component\",\"notes\"],\"properties\":{\"component\":{\"type\":\"string\",\"description\":\"Primary UI component\"},\"name\":{\"type\":\"string\",\"description\":\"Section name\"},\"notes\":{\"type\":\"array\",\"description\":\"Implementation notes for this section\",\"items\":{\"type\":\"string\"}}},\"additionalProperties\":false}},\"viewport\":{\"type\":\"object\",\"description\":\"Viewport dimensions\",\"required\":[\"width\",\"height\"],\"properties\":{\"height\":{\"type\":\"integer\",\"description\":\"Viewport height\",\"minimum\":-9223372036854775808,\"maximum\":9223372036854775807},\"width\":{\"type\":\"integer\",\"description\":\"Viewport width\",\"minimum\":-9223372036854775808,\"maximum\":9223372036854775807}},\"additionalProperties\":false}},\"additionalProperties\":false}")),
 		Title:        stringPtr("Generate Dpi Spec"),
 	}, &ToolInfo{
 		Description:  stringPtr("Dispatch an action using a union payload"),
-		InputSchema:  jsontext.Value([]byte("{\"type\":\"object\",\"required\":[\"request\"],\"properties\":{\"request\":{\"type\":\"object\",\"description\":\"Action envelope\",\"oneOf\":[{\"type\":\"object\",\"required\":[\"action\",\"value\"],\"properties\":{\"action\":{\"type\":\"string\",\"enum\":[\"list\"]},\"value\":{\"type\":\"object\",\"properties\":{\"limit\":{\"type\":\"integer\",\"description\":\"Maximum number of items to list\"}},\"additionalProperties\":false}},\"additionalProperties\":false},{\"type\":\"object\",\"required\":[\"action\",\"value\"],\"properties\":{\"action\":{\"type\":\"string\",\"enum\":[\"create\"]},\"value\":{\"type\":\"object\",\"required\":[\"name\"],\"properties\":{\"name\":{\"type\":\"string\",\"description\":\"Name to create\"}},\"additionalProperties\":false}},\"additionalProperties\":false}],\"discriminator\":{\"propertyName\":\"action\"}}},\"additionalProperties\":false}")),
+		InputSchema:  jsontext.Value([]byte("{\"type\":\"object\",\"required\":[\"request\"],\"properties\":{\"request\":{\"type\":\"object\",\"description\":\"Action envelope\",\"oneOf\":[{\"type\":\"object\",\"required\":[\"action\",\"value\"],\"properties\":{\"action\":{\"type\":\"string\",\"enum\":[\"list\"]},\"value\":{\"type\":\"object\",\"properties\":{\"limit\":{\"type\":\"integer\",\"description\":\"Maximum number of items to list\",\"minimum\":-9223372036854775808,\"maximum\":9223372036854775807}},\"additionalProperties\":false}},\"additionalProperties\":false},{\"type\":\"object\",\"required\":[\"action\",\"value\"],\"properties\":{\"action\":{\"type\":\"string\",\"enum\":[\"create\"]},\"value\":{\"type\":\"object\",\"required\":[\"name\"],\"properties\":{\"name\":{\"type\":\"string\",\"description\":\"Name to create\"}},\"additionalProperties\":false}},\"additionalProperties\":false}],\"discriminator\":{\"propertyName\":\"action\"}}},\"additionalProperties\":false}")),
 		Name:         "dispatch_action",
 		OutputSchema: jsontext.Value([]byte("{\"type\":\"object\",\"required\":[\"ack\"],\"properties\":{\"ack\":{\"type\":\"string\",\"description\":\"Acknowledgement\"}},\"additionalProperties\":false}")),
 		Title:        stringPtr("Dispatch Action"),
 	}, &ToolInfo{
 		Description:  stringPtr("Dispatch a command using a non-value branch-key union"),
-		InputSchema:  jsontext.Value([]byte("{\"type\":\"object\",\"required\":[\"command\"],\"properties\":{\"command\":{\"type\":\"object\",\"description\":\"Command envelope with custom branch key\",\"oneOf\":[{\"type\":\"object\",\"required\":[\"action\",\"args\"],\"properties\":{\"action\":{\"type\":\"string\",\"enum\":[\"foo\"]},\"args\":{\"type\":\"object\",\"properties\":{\"label\":{\"type\":\"string\",\"description\":\"Foo label\"}},\"additionalProperties\":false}},\"additionalProperties\":false},{\"type\":\"object\",\"required\":[\"action\",\"args\"],\"properties\":{\"action\":{\"type\":\"string\",\"enum\":[\"bar\"]},\"args\":{\"type\":\"object\",\"required\":[\"count\"],\"properties\":{\"count\":{\"type\":\"integer\",\"description\":\"Bar count\"}},\"additionalProperties\":false}},\"additionalProperties\":false}],\"discriminator\":{\"propertyName\":\"action\"}}},\"additionalProperties\":false}")),
+		InputSchema:  jsontext.Value([]byte("{\"type\":\"object\",\"required\":[\"command\"],\"properties\":{\"command\":{\"type\":\"object\",\"description\":\"Command envelope with custom branch key\",\"oneOf\":[{\"type\":\"object\",\"required\":[\"action\",\"args\"],\"properties\":{\"action\":{\"type\":\"string\",\"enum\":[\"foo\"]},\"args\":{\"type\":\"object\",\"properties\":{\"label\":{\"type\":\"string\",\"description\":\"Foo label\"}},\"additionalProperties\":false}},\"additionalProperties\":false},{\"type\":\"object\",\"required\":[\"action\",\"args\"],\"properties\":{\"action\":{\"type\":\"string\",\"enum\":[\"bar\"]},\"args\":{\"type\":\"object\",\"required\":[\"count\"],\"properties\":{\"count\":{\"type\":\"integer\",\"description\":\"Bar count\",\"minimum\":-9223372036854775808,\"maximum\":9223372036854775807}},\"additionalProperties\":false}},\"additionalProperties\":false}],\"discriminator\":{\"propertyName\":\"action\"}}},\"additionalProperties\":false}")),
 		Name:         "dispatch_command",
 		OutputSchema: jsontext.Value([]byte("{\"type\":\"object\",\"required\":[\"ack\"],\"properties\":{\"ack\":{\"type\":\"string\",\"description\":\"Acknowledgement\"}},\"additionalProperties\":false}")),
 		Title:        stringPtr("Dispatch Command"),
 	}, &ToolInfo{
 		Description:  stringPtr("Lookup bounded projected data"),
 		InputSchema:  jsontext.Value(projected.SpecProjectedBoundedLookupTool.Payload.Schema),
+		LocalMeta:    projected.SpecProjectedBoundedLookupTool.Meta,
+		LocalTags:    projected.SpecProjectedBoundedLookupTool.Tags,
 		Name:         "projected_bounded_lookup_tool",
 		OutputSchema: jsontext.Value(projected.SpecProjectedBoundedLookupTool.Result.Schema),
 		Title:        stringPtr("Projected Bounded Lookup Tool"),
 	}, &ToolInfo{
 		Description:  stringPtr("Lookup projected runtime tool data"),
 		InputSchema:  jsontext.Value(projected.SpecProjectedLookupTool.Payload.Schema),
+		LocalMeta:    projected.SpecProjectedLookupTool.Meta,
+		LocalTags:    projected.SpecProjectedLookupTool.Tags,
 		Name:         "projected_lookup_tool",
 		OutputSchema: jsontext.Value(projected.SpecProjectedLookupTool.Result.Schema),
 		Title:        stringPtr("Projected Lookup Tool"),
 	}, &ToolInfo{
 		Description:  stringPtr("Return projected runtime status"),
 		InputSchema:  jsontext.Value(projected.SpecProjectedStatusTool.Payload.Schema),
+		LocalMeta:    projected.SpecProjectedStatusTool.Meta,
+		LocalTags:    projected.SpecProjectedStatusTool.Tags,
 		Name:         "projected_status_tool",
 		OutputSchema: jsontext.Value(projected.SpecProjectedStatusTool.Result.Schema),
 		Title:        stringPtr("Projected Status Tool"),
@@ -1150,21 +1017,19 @@ func toolDiscoveryCallTemplateArguments(tool *ToolInfo) map[string]any {
 	if len(raw) == 0 {
 		return nil
 	}
-	var meta map[string]struct {
-		CallTemplateArguments map[string]any `json:"call_template_arguments"`
-	}
-	if json.Unmarshal(raw, &meta) != nil {
+	meta, err := sdkbridge.DecodeMeta(raw)
+	if err != nil {
 		return nil
 	}
-	discovery := meta["com.github.caliluke.loom-mcp/discovery"]
-	if len(discovery.CallTemplateArguments) == 0 {
+	discovery, ok := meta["com.github.caliluke.loom-mcp/discovery"].(map[string]any)
+	if !ok {
 		return nil
 	}
-	out := make(map[string]any, len(discovery.CallTemplateArguments))
-	for name, value := range discovery.CallTemplateArguments {
-		out[name] = value
+	arguments, ok := discovery["call_template_arguments"].(map[string]any)
+	if !ok || len(arguments) == 0 {
+		return nil
 	}
-	return out
+	return arguments
 }
 func toolSearchDescriptorFor(tool *ToolInfo, includeSchemas bool, callName string, query string, score int, settings toolSearchSettings) toolSearchDescriptor {
 	category, tags, keywords := toolDiscoveryMetadata(tool)
@@ -1948,7 +1813,7 @@ func (a *MCPAdapter) toolsCallHandler(ctx context.Context, p *ToolsCallPayload, 
 	if a.isToolCallProxyName(name) {
 		return a.handleCallToolProxy(ctx, p, stream)
 	}
-	if a.toolSearchEnabled() && !a.opts.ToolSearch.AllowDirectHiddenCalls && isGeneratedToolName(name) && !a.isAlwaysVisibleToolName(name) {
+	if a.toolSearchEnabled() && isGeneratedToolName(name) && !a.isAlwaysVisibleToolName(name) {
 		return false, loom.PermanentError("invalid_params", "Unknown tool: %s", name)
 	}
 	return a.executeRealTool(ctx, p, stream)
@@ -2440,7 +2305,7 @@ func (a *MCPAdapter) ResourcesRead(ctx context.Context, p *ResourcesReadPayload)
 		SkillResult: func(content *mcpskills.Content) *ResourcesReadResult {
 			return &ResourcesReadResult{Contents: []*ResourceContent{&ResourceContent{
 				Blob:     content.Blob,
-				Meta:     loom.NullableValue[any](mcpskills.MetadataMeta(content.Metadata)),
+				Meta:     loom.MustJSONValueFrom(mcpskills.MetadataMeta(content.Metadata)),
 				MimeType: stringPtr(content.MimeType),
 				Text:     content.Text,
 				URI:      content.URI,
@@ -2510,15 +2375,19 @@ func (a *MCPAdapter) resourceOperationDescriptors() []sdkbridge.ResourceOperatio
 	}, {
 		Handle: func(ctx context.Context, request *ResourcesReadPayload, baseURI string) (*ResourcesReadResult, error) {
 			args, err := sdkbridge.ResourceQueryJSONTyped(request.URI, map[string]mcpruntime.QueryField{
-				"flag":        {},
-				"limit":       {},
-				"nums":        {Repeated: true},
+				"flag":  {},
+				"limit": {},
+				"nums": {
+					Bits:     64,
+					Float:    true,
+					Repeated: true,
+				},
 				"query-value": {String: true},
 				"tags": {
 					Repeated: true,
 					String:   true,
 				},
-			})
+			}, "{\"type\":\"object\",\"properties\":{\"flag\":{\"type\":\"boolean\",\"description\":\"Sample boolean flag\"},\"limit\":{\"type\":\"integer\",\"description\":\"Max items\",\"minimum\":-9223372036854775808,\"maximum\":9223372036854775807},\"nums\":{\"type\":\"array\",\"description\":\"Numbers array\",\"items\":{\"type\":\"number\"}},\"query-value\":{\"type\":\"string\",\"description\":\"Literal history query\"},\"tags\":{\"type\":\"array\",\"description\":\"Literal history tags\",\"items\":{\"type\":\"string\"}}},\"additionalProperties\":false}")
 			if err != nil {
 				return nil, sdkbridge.InvalidClientInput(loom.PermanentError("invalid_params", "Invalid resource request."))
 			}

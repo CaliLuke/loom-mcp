@@ -13,6 +13,7 @@ import (
 
 	mcpassistant "example.com/assistant/gen/mcp_assistant"
 	mcpruntime "github.com/CaliLuke/loom-mcp/v2/runtime/mcp"
+	"github.com/CaliLuke/loom-mcp/v2/runtime/mcp/sdkbridge"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -24,9 +25,7 @@ const (
 
 func TestGeneratedSDKServerAppliesOptionalRuntimeCORS(t *testing.T) {
 	policy := testRuntimeCORSPolicy(t)
-	protection := http.NewCrossOriginProtection()
-	protection.AddTrustedOrigin(allowedCORSOrigin)
-	protection.AddTrustedOrigin(disallowedCORSOrigin)
+	protection := &sdkbridge.OriginProtection{TrustedOrigins: []string{allowedCORSOrigin, disallowedCORSOrigin}}
 	var requestContextCalls atomic.Int32
 	sdkServer, err := mcpassistant.NewSDKServer(NewAssistant(), &mcpassistant.SDKServerOptions{
 		PromptProvider: promptProvider{},

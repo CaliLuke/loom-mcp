@@ -320,7 +320,7 @@ func mustMCPInputSchema(t *testing.T) []byte {
 
 	registerSource := renderedFileBySuffix(t, files, "register.go")
 	require.Contains(t, registerSource, `dispatch`)
-
+	require.Contains(t, registerSource, ".JSONValue(resp.Result)")
 	re := regexp.MustCompile(`Schema:\s*\[\]byte\("((?:\\.|[^"])*)"\)`)
 	match := re.FindStringSubmatch(registerSource)
 	require.Len(t, match, 2, "expected rendered register.go to embed a tool schema")

@@ -65,4 +65,25 @@ func TestGeneratedSDKServerTransportObserverOption(t *testing.T) {
 	require.Equal(t, loomtransport.EventKindRequestStart, events[0].Kind)
 	require.Equal(t, loomtransport.EventKindRequestFinish, events[len(events)-1].Kind)
 	require.Equal(t, loomtransport.TransportHTTP, events[len(events)-1].Transport)
+	require.Equal(t, loomtransport.TransportHTTP, events[len(events)-1].Transport)
+}
+
+func TestGeneratedSDKServerObservesRejectedOrigin(t *testing.T) {
+	observer := &recordingTransportObserver{terminal: make(chan struct{})}
+	sdkServer, err := mcpassistant.NewSDKServer(NewAssistant(), withTestRuntimeCORS(t, &mcpassistant.SDKServerOptions{
+		PromptProvider:    promptProvider{},
+		TransportObserver: observer,
+	}))
+	require.NoError(t, err)
+	server := httptest.NewServer(sdkServer.Handler)
+	defer server.Close()
+
+	response := postSDKInitializeWithOrigin(t, server.URL, "https://evil.example")
+	require.Equal(t, 403, response.StatusCode)
+	observer.waitForTerminal(t)
+
+	events := observer.snapshot()
+	require.NotEmpty(t, events)
+	require.Equal(t, loomtransport.EventKindRequestStart, events[0].Kind)
+	require.Equal(t, loomtransport.EventKindRequestFailure, events[len(events)-1].Kind)
 }

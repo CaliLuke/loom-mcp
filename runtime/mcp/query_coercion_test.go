@@ -1,6 +1,7 @@
 package mcp
 
 import (
+	"encoding/json"
 	"testing"
 	"time"
 
@@ -74,6 +75,23 @@ func TestCoerceQueryTypedPreservesDeclaredShapes(t *testing.T) {
 	assert.Equal(t, int64(42), got["limit"])
 	assert.Equal(t, uint64(18446744073709551615), got["maximum"])
 	assert.Equal(t, []any{uint64(0), uint64(18446744073709551615)}, got["uints"])
+}
+func TestCoerceQueryTypedPreservesFloat32JSON(t *testing.T) {
+	got := CoerceQueryTyped(map[string][]string{
+		"scalar":   {"1.2"},
+		"repeated": {"1.2"},
+	}, map[string]QueryField{
+		"scalar":   {Float: true, Bits: 32},
+		"repeated": {Float: true, Bits: 32, Repeated: true},
+		"default":  {Float: true, Bits: 32, DefaultValues: []string{"1.2"}},
+	})
+
+	require.IsType(t, float32(0), got["scalar"])
+	require.IsType(t, float32(0), got["repeated"].([]any)[0])
+	require.IsType(t, float32(0), got["default"])
+	encoded, err := json.Marshal(got)
+	require.NoError(t, err)
+	assert.JSONEq(t, `{"default":1.2,"repeated":[1.2],"scalar":1.2}`, string(encoded))
 }
 func TestQueryShapeDetectorsRejectAmbiguousForms(t *testing.T) {
 	for _, value := range []string{"", "-", "+1", "1.0", "1e2", " 1"} {

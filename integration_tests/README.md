@@ -43,16 +43,17 @@ The fixture directories are nested Go modules. A recursive `go test
 ```text
 integration_tests/
 ├── fixtures/
-│   ├── assistant/       generated MCP server and SDK acceptance fixture
-│   └── agent_features/  generated agent DSL/runtime acceptance fixture
-└── framework/           managed server, raw HTTP, SDK, and codegen contracts
+│   ├── assistant/           generated MCP server and SDK acceptance fixture
+│   ├── agent_features/      generated agent DSL/runtime acceptance fixture
+│   └── sdkbridge_consumer/  frozen generated bridge compatibility fixture
+└── framework/               managed server, raw HTTP, SDK, and codegen contracts
 ```
 
 `fixtures/assistant/design/design.go` and
 `fixtures/assistant/progressive_discovery/design/design.go` own the assistant
 generated surfaces. `fixtures/agent_features/design/design.go` owns the
-generated agent acceptance surface. Never edit their `gen/` directories by
-hand.
+generated agent acceptance surface. `fixtures/sdkbridge_consumer/design` owns
+the frozen bridge consumer. Never edit a `gen/` directory by hand.
 
 ## Coverage owners
 
@@ -165,11 +166,15 @@ Regenerate only through the repository targets:
 make regen-assistant-fixture
 make regen-progressive-discovery-fixture
 make regen-agent-feature-fixture
+# Run this only after sdkbridge.CompatibilityVersion increments.
+make regen-sdkbridge-consumer-fixture
 ```
 
 After regeneration, inspect the generated diff and run the owning fixture
-module. CI regenerates the quickstart and every fixture, then requires a clean
-diff before it runs `make itest`.
+module. CI regenerates the quickstart and the normal fixtures. It regenerates
+the frozen SDK bridge consumer only when that snapshot changed against its
+durable comparison base. CI then requires the generated diff to remain stable
+before it runs `make itest`.
 
 When the framework needs application-owned server wiring, keep the source under
 `framework/testdata/`. The runner embeds and copies those checked-in sources

@@ -28,40 +28,36 @@ test.
 
 ## 1. Prove the Loom release candidate locally
 
-Point the root module, assistant fixture, SDK bridge consumer, and quickstart at
-the exact sibling checkout:
+Point all five managed modules at the exact sibling checkout:
 
 ```bash
 make loom-local
-local_loom="$(awk '$1 == "replace" && $2 == "github.com/CaliLuke/loom" { print $4 }' go.mod)"
-test -n "$local_loom"
-go -C integration_tests/fixtures/agent_features mod edit \
-  -replace=github.com/CaliLuke/loom="$local_loom"
-go -C integration_tests/fixtures/agent_features mod tidy
 make loom-status
 ```
 
-The status output must show the local Loom replacement for each managed module.
-`make loom-local` manages the root, assistant, SDK bridge consumer, and
-quickstart modules. The commands above manage the separately versioned
-agent-features fixture. Every path must resolve to the recorded candidate
-commit. Use the same absolute path for each workspace replacement.
+The status output must show the same absolute local Loom path for the root,
+assistant, agent-features, SDK bridge consumer, and quickstart modules. Every
+path must resolve to the recorded candidate commit.
 
-Regenerate the checked-in surfaces because compiler success alone does not
+Regenerate current checked-in surfaces because compiler success alone does not
 detect generator contract drift:
 
 ```bash
 make gen-registry
+make regen-quickstart
 make regen-assistant-fixture
 make regen-progressive-discovery-fixture
 make regen-agent-feature-fixture
-make regen-sdkbridge-consumer-fixture
 ```
 
-Review the diff before testing. Generated changes must be explainable by the
-candidate Loom changes; unexpected churn is a compatibility failure to
-investigate, not something to accept mechanically. Never edit generated files
-by hand.
+Increment `sdkbridge.CompatibilityVersion` before you regenerate
+`sdkbridge_consumer`. You can repeat regeneration while the version increase
+is not committed. Commit the runtime version, the design, and generated files
+as one change. CI compares this snapshot with the pull request or push base.
+
+Review the diff before testing. Each generated change must come from the Loom
+candidate. Investigate unexpected changes as compatibility failures. Never
+edit generated files by hand.
 
 Run the local framework/fixture ladder and the full repository gates:
 
@@ -80,9 +76,9 @@ relevant test output in the Loom release issue or pull request.
 ## 2. Publish and pin the Loom release
 
 Only after the local ladder is green, complete the Loom release using Loom's
-release process. A semantic prerelease is valid only when the GitHub Release is
-also marked prerelease. Confirm that both the tag and GitHub Release exist:
-
+release process. The GitHub Release prerelease state must match the tag: true
+for a hyphenated semantic prerelease and false for a stable tag. Confirm that
+both the tag and GitHub Release exist:
 ```bash
 git -C ../loom ls-remote --tags origin "refs/tags/vX.Y.Z" "refs/tags/vX.Y.Z^{}"
 gh release view vX.Y.Z --repo CaliLuke/loom
@@ -93,8 +89,6 @@ managed modules to the release:
 
 ```bash
 make loom-remote
-go -C integration_tests/fixtures/agent_features get github.com/CaliLuke/loom@vX.Y.Z
-go -C integration_tests/fixtures/agent_features mod tidy
 make loom-status
 make verify-generated
 ```

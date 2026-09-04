@@ -6,6 +6,15 @@
       "toolset": "assistant.projected",
       "title": "Projected Bounded Lookup Tool",
       "description": "Lookup bounded projected data",
+      "tags": [
+        "projected",
+        "bounded"
+      ],
+      "meta": {
+        "projection:test": [
+          "preserved"
+        ]
+      },
       "payload": {
         "name": "ProjectedBoundedLookupToolPayload",
         "schema": {

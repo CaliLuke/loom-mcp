@@ -345,6 +345,8 @@ var _ = Service("assistant", func() {
 				MCPPlacement("assistant", "assistant-mcp")
 			})
 			Tool("projected_bounded_lookup_tool", "Lookup bounded projected data", func() {
+				Tags("projected", "bounded")
+				Meta("projection:test", "preserved")
 				Args(ProjectedBoundedLookupToolPayload)
 				Return(ProjectedBoundedLookupToolResult)
 				Inject("session_id")

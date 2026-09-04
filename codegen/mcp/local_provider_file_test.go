@@ -33,6 +33,7 @@ func TestLocalProviderFileGeneratesProgressiveDiscoveryRegistration(t *testing.T
 	require.Contains(t, source, "ctx = mcpruntime.WithProjectedToolCallMeta(ctx, agentsruntime.ToolCallMeta{")
 	require.Contains(t, source, "RunID:            call.RunID")
 	require.Contains(t, source, "ParentToolCallID: call.ParentToolCallID")
+	require.Contains(t, source, "result.Result = loom.JSONValue(structuredContent)")
 }
 
 func TestLocalProviderFileRequiresGeneratedTools(t *testing.T) {

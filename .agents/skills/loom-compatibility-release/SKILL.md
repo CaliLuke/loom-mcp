@@ -26,22 +26,20 @@ make -C ../loom integration-test
 
 ## 2. Prove the unreleased Loom candidate through loom-mcp
 
-Switch all loom-mcp modules to the sibling checkout. `make loom-local` manages
-the root module, assistant fixture, and quickstart; update the separately
-versioned `agent_features` fixture explicitly.
+Switch every loom-mcp module to the sibling checkout. `make loom-local` manages
+the root module, assistant fixture, agent-feature fixture, SDK bridge consumer
+fixture, and quickstart.
 
 ```bash
 make loom-local
-local_loom="$(awk '$1 == "replace" && $2 == "github.com/CaliLuke/loom" { print $4 }' go.mod)"
-test -n "$local_loom"
-go -C integration_tests/fixtures/agent_features mod edit \
-  -replace=github.com/CaliLuke/loom="$local_loom"
-go -C integration_tests/fixtures/agent_features mod tidy
 make loom-status
 make gen-registry
+make regen-quickstart
 make regen-assistant-fixture
 make regen-progressive-discovery-fixture
 make regen-agent-feature-fixture
+# Run this only after sdkbridge.CompatibilityVersion increments.
+make regen-sdkbridge-consumer-fixture
 make verify-mcp-local
 make lint
 make test
@@ -64,8 +62,9 @@ make release VERSION=vX.Y.Z
 ```
 
 Do not treat Loom as released until the tag and matching non-draft GitHub
-Release exist. A semantic prerelease tag is valid when the GitHub Release is
-also marked prerelease. Confirm both before changing loom-mcp's pin:
+Release exist. Its `isPrerelease` state must be true for a hyphenated semantic
+prerelease tag and false for a stable tag. Confirm both before changing
+loom-mcp's pin:
 
 ```bash
 git -C ../loom ls-remote --tags origin "refs/tags/vX.Y.Z" "refs/tags/vX.Y.Z^{}"
@@ -74,22 +73,20 @@ gh release view vX.Y.Z --repo CaliLuke/loom
 
 ## 4. Pin loom-mcp to the published Loom release and prove parity
 
-Set `REMOTE_VERSION` in `scripts/loom_core_mode.sh` to the published tag, then
-restore remote mode and update the independent fixture:
+Set `REMOTE_VERSION` in `scripts/loom_core_mode.sh` to the published tag. Then
+restore and verify remote mode:
 
 ```bash
 make loom-remote
-go -C integration_tests/fixtures/agent_features get github.com/CaliLuke/loom@vX.Y.Z
-go -C integration_tests/fixtures/agent_features mod tidy
 make regen-quickstart
 make loom-status
 ```
 
-Ensure the root module, assistant fixture, quickstart, and agent-features
-fixture all require `vX.Y.Z` and none retain a Loom `replace`. Update README,
-docs, and repo-local skills where the new dependency or behavior changes their
-contract. Then run the published-module parity gates:
-
+Ensure the root module, assistant fixture, SDK bridge consumer fixture,
+quickstart, and agent-features fixture all require `vX.Y.Z`. Ensure that none
+retain a Loom `replace`. Update README, docs, and repo-local skills when the new
+dependency or behavior changes their contract. Then run the published-module
+parity gates:
 ```bash
 make verify-mcp-local
 make lint

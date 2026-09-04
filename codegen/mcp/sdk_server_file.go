@@ -83,8 +83,8 @@ func sdkServerTypesSection(data *AdapterData) codegen.Section {
 				g.Id("PromptProvider").Id("PromptProvider")
 			}
 			g.Id("Server").Op("*").Id("mcpsdk").Dot("ServerOptions")
-			g.Id("OriginProtection").Op("*").Qual("net/http", "CrossOriginProtection")
-			g.Id("StreamableHTTP").Op("*").Id("mcpsdk").Dot("StreamableHTTPOptions")
+			g.Id("OriginProtection").Op("*").Id("sdkbridge").Dot("OriginProtection")
+			g.Id("StreamableHTTP").Op("*").Id("sdkbridge").Dot("StreamableHTTPOptions")
 		})
 		stmt.Line()
 	})
@@ -120,9 +120,6 @@ func sdkServerConstructorSection(data *AdapterData) codegen.Section {
 					jen.Id("StreamableHTTP"):    jen.Id("opts").Dot("StreamableHTTP"),
 				})
 			})
-			g.If(jen.Id("adapterOpts").Op("!=").Nil().Op("&&").Id("adapterOpts").Dot("ToolSearch").Op("!=").Nil().Op("&&").Id("adapterOpts").Dot("ToolSearch").Dot("AllowDirectHiddenCalls")).Block(
-				jen.Return(jen.Nil(), jen.Qual("fmt", "Errorf").Call(jen.Lit("SDK ToolSearch compact mode does not support AllowDirectHiddenCalls"))),
-			)
 			if len(data.StaticPrompts) > 0 || len(data.DynamicPrompts) > 0 {
 				g.Id("adapter").Op(":=").Id("NewMCPAdapter").Call(jen.Id("service"), jen.Id("promptProvider"), jen.Id("adapterOpts"))
 			} else {
@@ -132,20 +129,14 @@ func sdkServerConstructorSection(data *AdapterData) codegen.Section {
 			config := jen.Dict{
 				jen.Id("CompatibilityVersion"): jen.Lit(sdkbridge.CompatibilityVersion),
 				jen.Id("Implementation"):       jen.Id("mcpsdk").Dot("Implementation").Values(sdkImplementationDict(data)),
-				jen.Id("Tools"):                jen.Func().Params().Params(jen.Index().Id("sdkbridge").Dot("ToolBinding"), jen.Error()).Block(jen.Return(jen.Id("sdkToolBindings").Call(jen.Id("adapter"), jen.Id("requestContext")))),
-				jen.Id("Resources"):            jen.Func().Params().Params(jen.Index().Id("sdkbridge").Dot("ResourceBinding"), jen.Error()).Block(jen.Return(jen.Id("sdkResourceBindings").Call(jen.Id("adapter"), jen.Id("requestContext")))),
-				jen.Id("Prompts"):              jen.Func().Params().Params(jen.Index().Id("sdkbridge").Dot("PromptBinding"), jen.Error()).Block(jen.Return(jen.Id("sdkPromptBindings").Call(jen.Id("adapter"), jen.Id("requestContext")))),
-				jen.Id("Sessions"): jen.Id("sdkbridge").Dot("SessionHooks").Values(jen.Dict{
-					jen.Id("AssertPrincipal"):    jen.Id("adapter").Dot("assertSessionPrincipal"),
-					jen.Id("MarkInitialized"):    jen.Id("adapter").Dot("markInitializedSession"),
-					jen.Id("CapturePrincipal"):   jen.Id("adapter").Dot("captureSessionPrincipal"),
-					jen.Id("Clear"):              jen.Id("adapter").Dot("clearSession"),
-					jen.Id("IsInvalidSessionID"): jen.Func().Params(jen.Id("err").Error()).Bool().Block(jen.Return(jen.Qual("errors", "Is").Call(jen.Id("err"), jen.Id("errInvalidSessionID")))),
-				}),
-				jen.Id("Options"): jen.Id("bridgeOptions"),
+				jen.Id("Tools"):                jen.Func().Params().Params(jen.Index().Id("sdkbridge").Dot("ToolBinding"), jen.Error()).Block(jen.Return(jen.Id("sdkToolBindings").Call(jen.Id("adapter")))),
+				jen.Id("Resources"):            jen.Func().Params().Params(jen.Index().Id("sdkbridge").Dot("ResourceBinding"), jen.Error()).Block(jen.Return(jen.Id("sdkResourceBindings").Call(jen.Id("adapter")))),
+				jen.Id("Prompts"):              jen.Func().Params().Params(jen.Index().Id("sdkbridge").Dot("PromptBinding"), jen.Error()).Block(jen.Return(jen.Id("sdkPromptBindings").Call(jen.Id("adapter")))),
+				jen.Id("Sessions"):             jen.Id("adapter").Dot("sessions"),
+				jen.Id("Options"):              jen.Id("bridgeOptions"),
 			}
 			if len(data.StaticPrompts) > 0 || len(data.DynamicPrompts) > 0 {
-				config[jen.Id("CompletionHandler")] = jen.Id("adapter").Dot("sdkCompletionHandler").Call(jen.Id("requestContext"))
+				config[jen.Id("CompletionHandler")] = jen.Id("adapter").Dot("sdkCompletionHandler").Call()
 			}
 			if data.HasWatchableResources {
 				config[jen.Id("WatchableResource")] = sdkWatchableResourceFunc(data)
@@ -208,6 +199,7 @@ func emitSDKWatchableResourceMatchers(stmt *jen.Statement, data *AdapterData) {
 				values.Values(jen.Dict{
 					jen.Id("Pattern"):     jen.Id("uritemplate").Dot("MustNew").Call(jen.Lit(resourceQueryURITemplate(resource.URI, resource.QueryFields))).Dot("Regexp").Call(),
 					jen.Id("QueryFields"): resourceQueryFieldsValue(resource, "sdkbridge", "ResourceQueryField"),
+					jen.Id("QuerySchema"): jen.Lit(resource.QuerySchema),
 				})
 			}
 		}
@@ -272,6 +264,10 @@ func sdkServerRegistrationSection(data *AdapterData) codegen.Section {
 				jen.If(jen.Id("err").Op("!=").Nil()).Block(
 					jen.Return(jen.Nil(), jen.Id("err")),
 				),
+				jen.List(jen.Id("meta"), jen.Id("err")).Op(":=").Id("sdkMeta").Call(jen.Id("tool").Dot("Meta")),
+				jen.If(jen.Id("err").Op("!=").Nil()).Block(
+					jen.Return(jen.Nil(), jen.Id("err")),
+				),
 				jen.Id("sdkTool").Op(":=").Op("&").Id("mcpsdk").Dot("Tool").Values(jen.Dict{
 					jen.Id("Name"):         jen.Id("tool").Dot("Name"),
 					jen.Id("Title"):        jen.Id("derefString").Call(jen.Id("tool").Dot("Title")),
@@ -279,7 +275,7 @@ func sdkServerRegistrationSection(data *AdapterData) codegen.Section {
 					jen.Id("InputSchema"):  jen.Id("tool").Dot("InputSchema"),
 					jen.Id("OutputSchema"): jen.Id("tool").Dot("OutputSchema"),
 					jen.Id("Annotations"):  jen.Id("annotations"),
-					jen.Id("Meta"):         jen.Id("sdkMeta").Call(jen.Id("tool").Dot("Meta")),
+					jen.Id("Meta"):         jen.Id("meta"),
 				}),
 				jen.If(jen.Len(jen.Id("tool").Dot("Icons")).Op(">").Lit(0)).Block(
 					jen.Id("sdkTool").Dot("Icons").Op("=").Make(jen.Index().Id("mcpsdk").Dot("Icon"), jen.Lit(0), jen.Len(jen.Id("tool").Dot("Icons"))),
@@ -302,9 +298,8 @@ func sdkServerRegistrationSection(data *AdapterData) codegen.Section {
 func emitSDKToolBindings(stmt *jen.Statement, data *AdapterData) {
 	stmt.Func().Id("sdkToolBindings").Params(
 		jen.Id("adapter").Op("*").Id("MCPAdapter"),
-		jen.Id("requestContext").Func().Params(jen.Qual("context", "Context"), jen.Op("*").Qual("net/http", "Request")).Qual("context", "Context"),
 	).Params(jen.Index().Id("sdkbridge").Dot("ToolBinding"), jen.Error()).BlockFunc(func(g *jen.Group) {
-		g.Id("handler").Op(":=").Id("adapter").Dot("sdkToolHandler").Call(jen.Id("requestContext"))
+		g.Id("handler").Op(":=").Id("adapter").Dot("sdkToolHandler").Call()
 		g.If(jen.Id("adapter").Dot("toolSearchEnabled").Call()).Block(
 			jen.Id("tools").Op(":=").Id("adapter").Dot("toolSearchSyntheticTools").Call(),
 			jen.Id("tools").Op("=").Append(jen.Id("tools"), jen.Id("adapter").Dot("visibleToolCatalog").Call(jen.Id("adapter").Dot("generatedToolCatalog").Call()).Op("...")),
@@ -323,12 +318,17 @@ func emitSDKToolBindings(stmt *jen.Statement, data *AdapterData) {
 				g.List(jen.Id(name), jen.Id("err")).Op(":=").Id("sdkToolAnnotations").Call(jen.Id("jsontext").Dot("Value").Call(jen.Index().Byte().Call(jen.Lit(tool.AnnotationsJSON))))
 				g.If(jen.Id("err").Op("!=").Nil()).Block(jen.Return(jen.Nil(), jen.Qual("fmt", "Errorf").Call(jen.Lit("tool %q annotations: %w"), jen.Lit(tool.Name), jen.Id("err"))))
 			}
+			metaName := "meta" + codegen.Goify(tool.Name, true)
+			if tool.MetaJSON != "" {
+				g.List(jen.Id(metaName), jen.Id("err")).Op(":=").Id("sdkMeta").Call(jen.Id("jsontext").Dot("Value").Call(jen.Index().Byte().Call(jen.Lit(tool.MetaJSON))))
+				g.If(jen.Id("err").Op("!=").Nil()).Block(jen.Return(jen.Nil(), jen.Qual("fmt", "Errorf").Call(jen.Lit("tool %q metadata: %w"), jen.Lit(tool.Name), jen.Id("err"))))
+			}
 			dict := jen.Dict{jen.Id("Name"): jen.Lit(tool.Name), jen.Id("Title"): jen.Lit(tool.Title), jen.Id("Description"): jen.Lit(tool.Description), jen.Id("InputSchema"): sdkToolSchemaValue(tool, true)}
 			if outputSchema := sdkToolSchemaValue(tool, false); outputSchema != nil {
 				dict[jen.Id("OutputSchema")] = outputSchema
 			}
 			if tool.MetaJSON != "" {
-				dict[jen.Id("Meta")] = jen.Id("sdkMeta").Call(jen.Id("jsontext").Dot("Value").Call(jen.Index().Byte().Call(jen.Lit(tool.MetaJSON))))
+				dict[jen.Id("Meta")] = jen.Id(metaName)
 			}
 			if icons := sdkIconSliceValue(tool.Icons); icons != nil {
 				dict[jen.Id("Icons")] = icons
@@ -371,13 +371,12 @@ func sdkToolSchemaValue(tool *ToolAdapter, input bool) jen.Code {
 func emitSDKResourceBindings(stmt *jen.Statement, data *AdapterData) {
 	stmt.Func().Id("sdkResourceBindings").Params(
 		jen.Id("adapter").Op("*").Id("MCPAdapter"),
-		jen.Id("requestContext").Func().Params(jen.Qual("context", "Context"), jen.Op("*").Qual("net/http", "Request")).Qual("context", "Context"),
 	).Params(jen.Index().Id("sdkbridge").Dot("ResourceBinding"), jen.Error()).BlockFunc(func(g *jen.Group) {
 		if len(data.Resources) == 0 && len(data.SkillDirectories) == 0 {
 			g.Return(jen.Nil(), jen.Nil())
 			return
 		}
-		g.Id("handler").Op(":=").Id("adapter").Dot("sdkResourceHandler").Call(jen.Id("requestContext"))
+		g.Id("handler").Op(":=").Id("adapter").Dot("sdkResourceHandler").Call()
 		g.Id("bindings").Op(":=").Make(jen.Index().Id("sdkbridge").Dot("ResourceBinding"), jen.Lit(0), jen.Lit(len(data.Resources)))
 		for _, resource := range data.Resources {
 			descriptor := jen.Dict{
@@ -402,8 +401,10 @@ func emitSDKResourceBindings(stmt *jen.Statement, data *AdapterData) {
 			g.List(jen.Id("skillResources"), jen.Id("err")).Op(":=").Id("mcpskills").Dot("List").Call(jen.Qual("context", "Background").Call(), jen.Id("skillSources").Call())
 			g.If(jen.Id("err").Op("!=").Nil()).Block(jen.Return(jen.Nil(), jen.Id("err")))
 			g.For(jen.List(jen.Id("_"), jen.Id("resource")).Op(":=").Range().Id("skillResources")).Block(
+				jen.List(jen.Id("meta"), jen.Id("err")).Op(":=").Id("sdkMeta").Call(jen.Id("mcpskills").Dot("MetadataMeta").Call(jen.Id("resource").Dot("Metadata"))),
+				jen.If(jen.Id("err").Op("!=").Nil()).Block(jen.Return(jen.Nil(), jen.Id("err"))),
 				jen.Id("bindings").Op("=").Append(jen.Id("bindings"), jen.Id("sdkbridge").Dot("ResourceBinding").Values(jen.Dict{
-					jen.Id("Resource"): jen.Op("&").Id("mcpsdk").Dot("Resource").Values(jen.Dict{jen.Id("Name"): jen.Id("resource").Dot("Name"), jen.Id("URI"): jen.Id("resource").Dot("URI"), jen.Id("Description"): jen.Id("resource").Dot("Description"), jen.Id("MIMEType"): jen.Id("resource").Dot("MimeType"), jen.Id("Meta"): jen.Id("sdkMeta").Call(jen.Id("mcpskills").Dot("MetadataMeta").Call(jen.Id("resource").Dot("Metadata")))}),
+					jen.Id("Resource"): jen.Op("&").Id("mcpsdk").Dot("Resource").Values(jen.Dict{jen.Id("Name"): jen.Id("resource").Dot("Name"), jen.Id("URI"): jen.Id("resource").Dot("URI"), jen.Id("Description"): jen.Id("resource").Dot("Description"), jen.Id("MIMEType"): jen.Id("resource").Dot("MimeType"), jen.Id("Meta"): jen.Id("meta")}),
 					jen.Id("Handler"):  jen.Id("handler"),
 				})),
 			)
@@ -416,13 +417,12 @@ func emitSDKResourceBindings(stmt *jen.Statement, data *AdapterData) {
 func emitSDKPromptBindings(stmt *jen.Statement, data *AdapterData) {
 	stmt.Func().Id("sdkPromptBindings").Params(
 		jen.Id("adapter").Op("*").Id("MCPAdapter"),
-		jen.Id("requestContext").Func().Params(jen.Qual("context", "Context"), jen.Op("*").Qual("net/http", "Request")).Qual("context", "Context"),
 	).Params(jen.Index().Id("sdkbridge").Dot("PromptBinding"), jen.Error()).BlockFunc(func(g *jen.Group) {
 		if len(data.StaticPrompts) == 0 && len(data.DynamicPrompts) == 0 {
 			g.Return(jen.Nil(), jen.Nil())
 			return
 		}
-		g.Id("handler").Op(":=").Id("adapter").Dot("sdkPromptHandler").Call(jen.Id("requestContext"))
+		g.Id("handler").Op(":=").Id("adapter").Dot("sdkPromptHandler").Call()
 		g.Id("bindings").Op(":=").Make(jen.Index().Id("sdkbridge").Dot("PromptBinding"), jen.Lit(0), jen.Lit(len(data.StaticPrompts)+len(data.DynamicPrompts)))
 		emitPrompt := func(name, description string, args []PromptArg, icons []*IconData) {
 			dict := jen.Dict{jen.Id("Name"): jen.Lit(name), jen.Id("Description"): jen.Lit(description)}
@@ -493,11 +493,9 @@ func sdkPromptArgumentsValue(args []PromptArg) jen.Code {
 	return jen.Index().Op("*").Id("mcpsdk").Dot("PromptArgument").Values(values...)
 }
 func sdkAdapterHandler(methodName, sdkHandlerType, bridgeHandler, requestType, resultType string, body ...jen.Code) *jen.Statement {
-	return jen.Func().Params(jen.Id("a").Op("*").Id("MCPAdapter")).Id(methodName).Params(
-		jen.Id("requestContext").Func().Params(jen.Qual("context", "Context"), jen.Op("*").Qual("net/http", "Request")).Qual("context", "Context"),
-	).Id("mcpsdk").Dot(sdkHandlerType).Block(
+	return jen.Func().Params(jen.Id("a").Op("*").Id("MCPAdapter")).Id(methodName).Params().Id("mcpsdk").Dot(sdkHandlerType).Block(
 		jen.Return(jen.Id("sdkbridge").Dot(bridgeHandler).Call(
-			jen.Id("a").Dot("sdkHandlerContext").Call(jen.Id("requestContext")),
+			jen.Id("a").Dot("sdkHandlerContext").Call(),
 			jen.Func().Params(
 				jen.Id("ctx").Qual("context", "Context"),
 				jen.Id("request").Id("sdkbridge").Dot(requestType),
@@ -517,13 +515,10 @@ func sdkNamedDispatchBody(payloadType, adapterMethod, resultConverter string) []
 
 func sdkServerHandlerSection(data *AdapterData) codegen.Section {
 	return codegen.NewJenniferSection("mcp-sdk-server-handlers", func(stmt *jen.Statement) {
-		stmt.Func().Params(jen.Id("a").Op("*").Id("MCPAdapter")).Id("sdkHandlerContext").Params(
-			jen.Id("requestContext").Func().Params(jen.Qual("context", "Context"), jen.Op("*").Qual("net/http", "Request")).Qual("context", "Context"),
-		).Id("sdkbridge").Dot("HandlerContext").Block(
+		stmt.Func().Params(jen.Id("a").Op("*").Id("MCPAdapter")).Id("sdkHandlerContext").Params().Id("sdkbridge").Dot("HandlerContext").Block(
 			jen.Return(jen.Id("sdkbridge").Dot("HandlerContext").Values(jen.Dict{
-				jen.Id("RequestContext"):  jen.Id("requestContext"),
 				jen.Id("RequestStateKey"): jen.Id("a").Dot("requestStateKey"),
-				jen.Id("MarkInitialized"): jen.Id("a").Dot("markInitializedSession"),
+				jen.Id("Sessions"):        jen.Id("a").Dot("sessions"),
 			})),
 		)
 		stmt.Line()
@@ -538,11 +533,9 @@ func sdkServerHandlerSection(data *AdapterData) codegen.Section {
 				sdkNamedDispatchBody("PromptsGetPayload", "PromptsGet", "sdkGetPromptResult")...,
 			))
 			stmt.Line()
-			stmt.Func().Params(jen.Id("a").Op("*").Id("MCPAdapter")).Id("sdkCompletionHandler").Params(
-				jen.Id("requestContext").Func().Params(jen.Qual("context", "Context"), jen.Op("*").Qual("net/http", "Request")).Qual("context", "Context"),
-			).Func().Params(jen.Qual("context", "Context"), jen.Op("*").Id("mcpsdk").Dot("CompleteRequest")).Params(jen.Op("*").Id("mcpsdk").Dot("CompleteResult"), jen.Error()).Block(
+			stmt.Func().Params(jen.Id("a").Op("*").Id("MCPAdapter")).Id("sdkCompletionHandler").Params().Func().Params(jen.Qual("context", "Context"), jen.Op("*").Id("mcpsdk").Dot("CompleteRequest")).Params(jen.Op("*").Id("mcpsdk").Dot("CompleteResult"), jen.Error()).Block(
 				jen.Return(jen.Func().Params(jen.Id("ctx").Qual("context", "Context"), jen.Id("req").Op("*").Id("mcpsdk").Dot("CompleteRequest")).Params(jen.Op("*").Id("mcpsdk").Dot("CompleteResult"), jen.Error()).BlockFunc(func(g *jen.Group) {
-					g.Id("ctx").Op("=").Id("sdkbridge").Dot("BindCompletionContext").Call(jen.Id("ctx"), jen.Id("req"), jen.Id("a").Dot("sdkHandlerContext").Call(jen.Id("requestContext")))
+					g.Id("ctx").Op("=").Id("sdkbridge").Dot("BindCompletionContext").Call(jen.Id("ctx"), jen.Id("req"), jen.Id("a").Dot("sdkHandlerContext").Call())
 					g.If(jen.Id("req").Op("==").Nil().Op("||").Id("req").Dot("Params").Op("==").Nil().Op("||").Id("req").Dot("Params").Dot("Ref").Op("==").Nil()).Block(jen.Return(jen.Id("sdkCompleteValues").Call(jen.Nil(), jen.Lit(0), jen.False()), jen.Nil()))
 					g.If(jen.Id("req").Dot("Params").Dot("Ref").Dot("Type").Op("!=").Lit("ref/prompt")).Block(jen.Return(jen.Id("sdkCompleteValues").Call(jen.Nil(), jen.Lit(0), jen.False()), jen.Nil()))
 					g.Id("_").Op("=").Id("ctx")
@@ -571,17 +564,15 @@ func sdkServerHandlerSection(data *AdapterData) codegen.Section {
 			stmt.Line()
 		}
 		if len(data.Resources) > 0 || len(data.SkillDirectories) > 0 {
-			stmt.Func().Params(jen.Id("a").Op("*").Id("MCPAdapter")).Id("sdkResourceHandler").Params(
-				jen.Id("requestContext").Func().Params(jen.Qual("context", "Context"), jen.Op("*").Qual("net/http", "Request")).Qual("context", "Context"),
-			).Id("mcpsdk").Dot("ResourceHandler").Block(
-				jen.Return(jen.Id("sdkbridge").Dot("ResourceHandler").Call(jen.Id("a").Dot("sdkHandlerContext").Call(jen.Id("requestContext")), jen.Func().Params(
+			stmt.Func().Params(jen.Id("a").Op("*").Id("MCPAdapter")).Id("sdkResourceHandler").Params().Id("mcpsdk").Dot("ResourceHandler").Block(
+				jen.Return(jen.Id("sdkbridge").Dot("ResourceHandler").Call(jen.Id("a").Dot("sdkHandlerContext").Call(), jen.Func().Params(
 					jen.Id("ctx").Qual("context", "Context"), jen.Id("request").Id("sdkbridge").Dot("ResourceRequest"),
 				).Params(jen.Op("*").Id("mcpsdk").Dot("ReadResourceResult"), jen.Error()).Block(
 					jen.Id("payload").Op(":=").Op("&").Id("ResourcesReadPayload").Values(jen.Dict{jen.Id("URI"): jen.Id("request").Dot("URI")}),
 					jen.Id("ctx").Op("=").Id("request").Dot("Bind").Call(jen.Id("payload")),
 					jen.List(jen.Id("result"), jen.Id("err")).Op(":=").Id("a").Dot("ResourcesRead").Call(jen.Id("ctx"), jen.Id("payload")),
 					jen.If(jen.Id("err").Op("!=").Nil()).Block(jen.Return(jen.Nil(), jen.Id("err"))),
-					jen.Return(jen.Id("sdkReadResourceResult").Call(jen.Id("result"))),
+					jen.Return(jen.Id("sdkReadResourceResult").Call(jen.Id("result"), jen.Id("request").Dot("URI"))),
 				))),
 			)
 			stmt.Line()
@@ -690,6 +681,7 @@ func emitSDKPromptConversion(stmt *jen.Statement) {
 				jen.Id("Data"):     jen.Id("item").Dot("Data"),
 				jen.Id("MimeType"): jen.Id("item").Dot("MimeType"),
 				jen.Id("URI"):      jen.Id("item").Dot("URI"),
+				jen.Id("Meta"):     jen.Id("item").Dot("Meta"),
 			}),
 			jen.Return(jen.Id("sdkContentFromItem").Call(jen.Id("contentItem"))),
 		)
@@ -736,7 +728,7 @@ func emitSDKCompletionConversion(stmt *jen.Statement) {
 
 func emitSDKReadResourceConversion(stmt *jen.Statement) {
 	stmt.Func().Id("sdkReadResourceResult").
-		Params(jen.Id("result").Op("*").Id("ResourcesReadResult")).
+		Params(jen.Id("result").Op("*").Id("ResourcesReadResult"), jen.Id("uri").String()).
 		Params(jen.Op("*").Id("mcpsdk").Dot("ReadResourceResult"), jen.Error()).
 		Block(
 			jen.If(jen.Id("result").Op("==").Nil()).Block(
@@ -746,7 +738,7 @@ func emitSDKReadResourceConversion(stmt *jen.Statement) {
 			),
 			jen.Id("contents").Op(":=").Make(jen.Index().Op("*").Id("mcpsdk").Dot("ResourceContents"), jen.Lit(0), jen.Len(jen.Id("result").Dot("Contents"))),
 			jen.For(jen.List(jen.Id("_"), jen.Id("content")).Op(":=").Range().Id("result").Dot("Contents")).Block(
-				jen.List(jen.Id("converted"), jen.Id("err")).Op(":=").Id("sdkReadResourceContent").Call(jen.Id("content")),
+				jen.List(jen.Id("converted"), jen.Id("err")).Op(":=").Id("sdkReadResourceContent").Call(jen.Id("content"), jen.Id("uri")),
 				jen.If(jen.Id("err").Op("!=").Nil()).Block(jen.Return(jen.Nil(), jen.Id("err"))),
 				jen.Id("contents").Op("=").Append(jen.Id("contents"), jen.Id("converted")),
 			),
@@ -756,17 +748,19 @@ func emitSDKReadResourceConversion(stmt *jen.Statement) {
 		)
 	stmt.Line()
 	stmt.Func().Id("sdkReadResourceContent").
-		Params(jen.Id("item").Op("*").Id("ResourceContent")).
+		Params(jen.Id("item").Op("*").Id("ResourceContent"), jen.Id("uri").String()).
 		Params(jen.Op("*").Id("mcpsdk").Dot("ResourceContents"), jen.Error()).
 		Block(
 			jen.If(jen.Id("item").Op("==").Nil()).Block(
-				jen.Return(jen.Op("&").Id("mcpsdk").Dot("ResourceContents").Values(), jen.Nil()),
+				jen.Return(jen.Op("&").Id("mcpsdk").Dot("ResourceContents").Values(jen.Dict{jen.Id("URI"): jen.Id("uri")}), jen.Nil()),
 			),
+			jen.List(jen.Id("meta"), jen.Id("err")).Op(":=").Id("sdkMeta").Call(jen.Id("item").Dot("Meta")),
+			jen.If(jen.Id("err").Op("!=").Nil()).Block(jen.Return(jen.Nil(), jen.Id("err"))),
 			jen.Id("resource").Op(":=").Op("&").Id("mcpsdk").Dot("ResourceContents").Values(jen.Dict{
-				jen.Id("URI"):      jen.Id("item").Dot("URI"),
+				jen.Id("URI"):      jen.Id("uri"),
 				jen.Id("MIMEType"): jen.Id("derefString").Call(jen.Id("item").Dot("MimeType")),
 				jen.Id("Text"):     jen.Id("derefString").Call(jen.Id("item").Dot("Text")),
-				jen.Id("Meta"):     jen.Id("sdkMeta").Call(jen.Id("mcpJSONAny").Call(jen.Id("item").Dot("Meta"))),
+				jen.Id("Meta"):     jen.Id("meta"),
 			}),
 			jen.If(jen.Id("item").Dot("Blob").Op("!=").Nil()).Block(
 				jen.List(jen.Id("data"), jen.Id("err")).Op(":=").Id("sdkDecodeBase64").Call(jen.Id("item").Dot("Blob")),
@@ -778,6 +772,17 @@ func emitSDKReadResourceConversion(stmt *jen.Statement) {
 	stmt.Line()
 }
 
+func sdkBinaryContentCase(contentType, sdkType string) *jen.Statement {
+	return jen.Case(jen.Lit(contentType)).Block(
+		jen.List(jen.Id("data"), jen.Id("err")).Op(":=").Id("sdkDecodeBase64").Call(jen.Id("item").Dot("Data")),
+		jen.If(jen.Id("err").Op("!=").Nil()).Block(jen.Return(jen.Nil(), jen.Id("err"))),
+		jen.Return(jen.Op("&").Id("mcpsdk").Dot(sdkType).Values(jen.Dict{
+			jen.Id("Data"):     jen.Id("data"),
+			jen.Id("MIMEType"): jen.Id("derefString").Call(jen.Id("item").Dot("MimeType")),
+			jen.Id("Meta"):     jen.Id("meta"),
+		}), jen.Nil()),
+	)
+}
 func emitSDKContentConversions(stmt *jen.Statement) {
 	stmt.Func().Id("sdkContentFromItem").
 		Params(jen.Id("item").Op("*").Id("ContentItem")).
@@ -786,36 +791,27 @@ func emitSDKContentConversions(stmt *jen.Statement) {
 			jen.If(jen.Id("item").Op("==").Nil()).Block(
 				jen.Return(jen.Op("&").Id("mcpsdk").Dot("TextContent").Values(), jen.Nil()),
 			),
+			jen.List(jen.Id("meta"), jen.Id("err")).Op(":=").Id("sdkMeta").Call(jen.Id("item").Dot("Meta")),
+			jen.If(jen.Id("err").Op("!=").Nil()).Block(jen.Return(jen.Nil(), jen.Id("err"))),
 			jen.Switch(jen.Id("item").Dot("Type")).Block(
 				jen.Case(jen.Lit("text")).Block(
-					jen.Return(jen.Op("&").Id("mcpsdk").Dot("TextContent").Values(jen.Dict{jen.Id("Text"): jen.Id("derefString").Call(jen.Id("item").Dot("Text"))}), jen.Nil()),
-				),
-				jen.Case(jen.Lit("image")).Block(
-					jen.List(jen.Id("data"), jen.Id("err")).Op(":=").Id("sdkDecodeBase64").Call(jen.Id("item").Dot("Data")),
-					jen.If(jen.Id("err").Op("!=").Nil()).Block(jen.Return(jen.Nil(), jen.Id("err"))),
-					jen.Return(jen.Op("&").Id("mcpsdk").Dot("ImageContent").Values(jen.Dict{
-						jen.Id("Data"):     jen.Id("data"),
-						jen.Id("MIMEType"): jen.Id("derefString").Call(jen.Id("item").Dot("MimeType")),
+					jen.Return(jen.Op("&").Id("mcpsdk").Dot("TextContent").Values(jen.Dict{
+						jen.Id("Text"): jen.Id("derefString").Call(jen.Id("item").Dot("Text")),
+						jen.Id("Meta"): jen.Id("meta"),
 					}), jen.Nil()),
 				),
-				jen.Case(jen.Lit("audio")).Block(
-					jen.List(jen.Id("data"), jen.Id("err")).Op(":=").Id("sdkDecodeBase64").Call(jen.Id("item").Dot("Data")),
-					jen.If(jen.Id("err").Op("!=").Nil()).Block(jen.Return(jen.Nil(), jen.Id("err"))),
-					jen.Return(jen.Op("&").Id("mcpsdk").Dot("AudioContent").Values(jen.Dict{
-						jen.Id("Data"):     jen.Id("data"),
-						jen.Id("MIMEType"): jen.Id("derefString").Call(jen.Id("item").Dot("MimeType")),
-					}), jen.Nil()),
-				),
+				sdkBinaryContentCase("image", "ImageContent"),
+				sdkBinaryContentCase("audio", "AudioContent"),
 				jen.Case(jen.Lit("resource")).Block(
-					jen.List(jen.Id("resource"), jen.Id("err")).Op(":=").Id("sdkResourceContents").Call(jen.Id("item")),
+					jen.List(jen.Id("resource"), jen.Id("err")).Op(":=").Id("sdkResourceContents").Call(jen.Id("item"), jen.Id("meta")),
 					jen.If(jen.Id("err").Op("!=").Nil()).Block(jen.Return(jen.Nil(), jen.Id("err"))),
-					jen.Return(jen.Op("&").Id("mcpsdk").Dot("EmbeddedResource").Values(jen.Dict{jen.Id("Resource"): jen.Id("resource")}), jen.Nil()),
+					jen.Return(jen.Op("&").Id("mcpsdk").Dot("EmbeddedResource").Values(jen.Dict{jen.Id("Resource"): jen.Id("resource"), jen.Id("Meta"): jen.Id("meta")}), jen.Nil()),
 				),
 				jen.Default().Block(
 					jen.If(jen.Id("item").Dot("URI").Op("!=").Nil()).Block(
-						jen.List(jen.Id("resource"), jen.Id("err")).Op(":=").Id("sdkResourceContents").Call(jen.Id("item")),
+						jen.List(jen.Id("resource"), jen.Id("err")).Op(":=").Id("sdkResourceContents").Call(jen.Id("item"), jen.Id("meta")),
 						jen.If(jen.Id("err").Op("!=").Nil()).Block(jen.Return(jen.Nil(), jen.Id("err"))),
-						jen.Return(jen.Op("&").Id("mcpsdk").Dot("EmbeddedResource").Values(jen.Dict{jen.Id("Resource"): jen.Id("resource")}), jen.Nil()),
+						jen.Return(jen.Op("&").Id("mcpsdk").Dot("EmbeddedResource").Values(jen.Dict{jen.Id("Resource"): jen.Id("resource"), jen.Id("Meta"): jen.Id("meta")}), jen.Nil()),
 					),
 					jen.Return(jen.Nil(), jen.Qual("fmt", "Errorf").Call(jen.Lit("unsupported MCP content type %q"), jen.Id("item").Dot("Type"))),
 				),
@@ -824,12 +820,13 @@ func emitSDKContentConversions(stmt *jen.Statement) {
 	stmt.Line()
 
 	stmt.Func().Id("sdkResourceContents").
-		Params(jen.Id("item").Op("*").Id("ContentItem")).
+		Params(jen.Id("item").Op("*").Id("ContentItem"), jen.Id("meta").Id("mcpsdk").Dot("Meta")).
 		Params(jen.Op("*").Id("mcpsdk").Dot("ResourceContents"), jen.Error()).
 		Block(
 			jen.Id("resource").Op(":=").Op("&").Id("mcpsdk").Dot("ResourceContents").Values(jen.Dict{
 				jen.Id("URI"):      jen.Id("derefString").Call(jen.Id("item").Dot("URI")),
 				jen.Id("MIMEType"): jen.Id("derefString").Call(jen.Id("item").Dot("MimeType")),
+				jen.Id("Meta"):     jen.Id("meta"),
 				jen.Id("Text"):     jen.Id("derefString").Call(jen.Id("item").Dot("Text")),
 			}),
 			jen.If(jen.Id("item").Dot("Data").Op("!=").Nil()).Block(
@@ -845,36 +842,9 @@ func emitSDKContentConversions(stmt *jen.Statement) {
 func emitSDKHelpers(stmt *jen.Statement) {
 	stmt.Func().Id("sdkMeta").
 		Params(jen.Id("value").Any()).
-		Id("mcpsdk").Dot("Meta").
+		Params(jen.Id("mcpsdk").Dot("Meta"), jen.Error()).
 		Block(
-			jen.Switch(jen.Id("typed").Op(":=").Id("value").Assert(jen.Type())).Block(
-				jen.Case(jen.Nil()).Block(
-					jen.Return(jen.Nil()),
-				),
-				jen.Case(jen.Id("mcpsdk").Dot("Meta")).Block(
-					jen.Return(jen.Id("typed")),
-				),
-				jen.Case(jen.Map(jen.String()).Any()).Block(
-					jen.Return(jen.Id("mcpsdk").Dot("Meta").Call(jen.Id("typed"))),
-				),
-				jen.Case(jen.Id("jsontext").Dot("Value")).Block(
-					jen.Var().Id("meta").Map(jen.String()).Any(),
-					jen.If(jen.Id("err").Op(":=").Id("json").Dot("Unmarshal").Call(jen.Id("typed"), jen.Op("&").Id("meta")), jen.Id("err").Op("!=").Nil()).Block(
-						jen.Return(jen.Nil()),
-					),
-					jen.Return(jen.Id("mcpsdk").Dot("Meta").Call(jen.Id("meta"))),
-				),
-				jen.Case(jen.Index().Byte()).Block(
-					jen.Var().Id("meta").Map(jen.String()).Any(),
-					jen.If(jen.Id("err").Op(":=").Id("json").Dot("Unmarshal").Call(jen.Id("typed"), jen.Op("&").Id("meta")), jen.Id("err").Op("!=").Nil()).Block(
-						jen.Return(jen.Nil()),
-					),
-					jen.Return(jen.Id("mcpsdk").Dot("Meta").Call(jen.Id("meta"))),
-				),
-				jen.Default().Block(
-					jen.Return(jen.Nil()),
-				),
-			),
+			jen.Return(jen.Id("sdkbridge").Dot("DecodeMeta").Call(jen.Id("value"))),
 		)
 	stmt.Line()
 

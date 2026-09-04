@@ -69,7 +69,12 @@ func TestGeneratedServerSDKInitializeAndListCatalog(t *testing.T) {
 
 	resources, err := session.ListResources(ctx, &mcp.ListResourcesParams{})
 	require.NoError(t, err)
-	require.Len(t, resources.Resources, 5)
+	require.Len(t, resources.Resources, 4)
+
+	resourceTemplates, err := session.ListResourceTemplates(ctx, &mcp.ListResourceTemplatesParams{})
+	require.NoError(t, err)
+	require.Len(t, resourceTemplates.ResourceTemplates, 1)
+	assert.Equal(t, "conversation_history", resourceTemplates.ResourceTemplates[0].Name)
 
 	prompts, err := session.ListPrompts(ctx, &mcp.ListPromptsParams{})
 	require.NoError(t, err)

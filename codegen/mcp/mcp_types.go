@@ -204,6 +204,7 @@ func (b *mcpExprBuilder) buildContentLikeType() *expr.AttributeExpr {
 			{Name: "data", Attribute: &expr.AttributeExpr{Type: expr.String, Description: "Base64 encoded data"}},
 			{Name: "mimeType", Attribute: &expr.AttributeExpr{Type: expr.String, Description: "MIME type"}},
 			{Name: "uri", Attribute: &expr.AttributeExpr{Type: expr.String, Description: "Resource URI"}},
+			{Name: "_meta", Attribute: &expr.AttributeExpr{Type: expr.Any, Description: "Content metadata"}},
 		},
 		Validation: &expr.ValidationExpr{Required: []string{"type"}},
 	}

@@ -61,7 +61,11 @@ func (promptProvider) GetCodeReviewPrompt(arguments jsontext.Value) (*mcpassista
 	return &mcpassistant.PromptsGetResult{
 		Description: strPtr("Code review guidance"),
 		Messages: []*mcpassistant.PromptMessage{
-			{Role: "system", Content: &mcpassistant.MessageContent{Type: "text", Text: strPtr("Review the provided code and suggest improvements.")}},
+			{Role: "system", Content: &mcpassistant.MessageContent{
+				Type: "text",
+				Text: strPtr("Review the provided code and suggest improvements."),
+				Meta: jsontext.Value(`{"source":"fixture"}`),
+			}},
 		},
 	}, nil
 }

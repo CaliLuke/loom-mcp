@@ -65,7 +65,9 @@ func TestGeneratedSDKServerGETEnforcesSessionPrincipal(t *testing.T) {
 func TestGeneratedSDKServerEnforcesSessionPrincipalOnEverySessionRequest(t *testing.T) {
 	t.Parallel()
 
-	sdkServer, err := mcpassistant.NewSDKServer(NewAssistant(), withTestRuntimeCORS(t, nil))
+	sdkServer, err := mcpassistant.NewSDKServer(NewAssistant(), withTestRuntimeCORS(t, &mcpassistant.SDKServerOptions{
+		RequestContext: func(ctx context.Context, _ *http.Request) context.Context { return ctx },
+	}))
 	require.NoError(t, err)
 	server := httptest.NewServer(mcpauth.RequireBearerToken(testMCPTokenVerifier, nil)(sdkServer.Handler))
 	defer server.Close()

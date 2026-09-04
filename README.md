@@ -39,7 +39,7 @@ the same endpoint must share that key. There is no v1 compatibility shim.
 
 This repo currently targets:
 
-- `github.com/CaliLuke/loom v1.9.0-alpha.11`
+- `github.com/CaliLuke/loom v1.9.0-alpha.13`
 - `github.com/modelcontextprotocol/go-sdk v1.7.0`
 - Go `1.27.0` or later
 
@@ -49,7 +49,7 @@ Use `make update-mcp-go-sdk MCP_GO_SDK_VERSION=vX.Y.Z` when bumping the MCP Go S
 The standard CLI for generation is:
 
 ```bash
-go install github.com/CaliLuke/loom/cmd/loom@v1.9.0-alpha.11
+go install github.com/CaliLuke/loom/cmd/loom@v1.9.0-alpha.13
 ```
 
 ## Working in this repo
@@ -73,9 +73,12 @@ make test-stress
 
 `make ci` uses the same complete contract as hosted CI. It checks generated
 output, builds, lints, and runs all required test lanes.
-`make verify-generated` includes the external SDK bridge consumer fixture.
-`make loom-remote` preserves the generator dependencies for the quickstart and
-that fixture. A mode change cannot leave their module sums stale.
+`make verify-generated` regenerates current surfaces and verifies the frozen
+external SDK bridge consumer without rewriting it. Increment
+`sdkbridge.CompatibilityVersion` before you regenerate the consumer. You can
+repeat regeneration while the version increase is not committed. Commit the
+version, the design, and generated files as one change.
+`make loom-remote` preserves generator dependencies for isolated fixtures.
 The Makefile pins `protoc` and both Go protobuf plugins. Run
 `make install-protoc` if the pinned compiler is not already first on `PATH`.
 `make test` enforces global and critical package-group coverage floors without

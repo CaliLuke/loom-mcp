@@ -111,7 +111,7 @@ func TestGenerateSDKServerDelegatesCommonBehaviorToTypedBridge(t *testing.T) {
 	require.Contains(t, sdk, "sdkbridge.NewServer(sdkbridge.Config{")
 	require.Contains(t, sdk, fmt.Sprintf("CompatibilityVersion: %d", sdkbridge.CompatibilityVersion))
 	require.Contains(t, sdk, "Tools: func() ([]sdkbridge.ToolBinding, error)")
-	require.Contains(t, sdk, "return sdkToolBindings(adapter, requestContext)")
+	require.Contains(t, sdk, "return sdkToolBindings(adapter)")
 	require.NotContains(t, sdk, "func sdkJSONRPCErrorMiddleware(")
 	require.NotContains(t, sdk, "func newSDKHandler(")
 	require.NotContains(t, sdk, "func sdkStreamableHTTPOptions(")
@@ -154,18 +154,18 @@ func TestGenerateAdapterUsesUnaryToolBoundaryAndPrivateStreamingCollector(t *tes
 
 	require.Contains(t, service, "ToolsCall(context.Context, *ToolsCallPayload) (res *ToolsCallResult, err error)")
 	require.NotContains(t, service, "ToolsCallServerStream")
-	require.Contains(t, service, "Arguments loom.Nullable[any]")
-	require.Contains(t, service, "StructuredContent loom.Nullable[any]")
-	require.NotContains(t, service, "Arguments jsontext.Value")
-	require.NotContains(t, service, "StructuredContent jsontext.Value")
+	require.Contains(t, service, "Arguments loom.JSONValue")
+	require.Contains(t, service, "StructuredContent loom.JSONValue")
+	require.NotContains(t, service, "Arguments loom.Nullable[any]")
+	require.NotContains(t, service, "StructuredContent loom.Nullable[any]")
 	require.Contains(t, adapter, "type toolCallResultCollector struct")
 	require.Contains(t, adapter, "type SearchStreamBridge struct")
 	require.Contains(t, adapter, "ToolCallHandler = sdkbridge.TypedHandler[*ToolsCallPayload, *ToolsCallResult]")
 	require.Contains(t, adapter, "ToolCallInterceptor = sdkbridge.TypedInterceptor[*ToolsCallPayload, *ToolsCallResult]")
 	require.Contains(t, adapter, "sdkbridge.WrapTypedHandler(a.opts.ToolCallInterceptors, info, next)")
-	require.Contains(t, adapter, "func mcpJSONRaw(value loom.Nullable[any]) (jsontext.Value, error)")
-	require.Contains(t, adapter, "if raw, ok := actual.(jsontext.Value); ok")
-	require.Contains(t, adapter, "func mcpJSONFromRaw(raw jsontext.Value) loom.Nullable[any]")
+	require.Contains(t, adapter, "func mcpJSONRaw(value loom.JSONValue) (jsontext.Value, error)")
+	require.Contains(t, adapter, "if !jsontext.Value(trimmed).IsValid()")
+	require.Contains(t, adapter, "func mcpJSONFromRaw(raw jsontext.Value) loom.JSONValue")
 	require.Contains(t, adapter, "func (a *MCPAdapter) ToolsCall(ctx context.Context, p *ToolsCallPayload) (res *ToolsCallResult, err error)")
 	require.Contains(t, sdk, "result, err := a.ToolsCall(ctx, payload)")
 	require.Contains(t, sdk, "Arguments: mcpJSONFromRaw(request.Arguments)")
@@ -308,7 +308,7 @@ func testResourceQueryPayload() *expr.AttributeExpr {
 	}}
 	return &expr.AttributeExpr{
 		Type: &expr.Object{
-			{Name: "cursor", Attribute: &expr.AttributeExpr{Type: expr.String}},
+			{Name: "cursor", Attribute: &expr.AttributeExpr{Type: expr.String, Meta: expr.MetaExpr{"struct:tag:json:name": []string{"wire_cursor"}}}},
 			{Name: "offset", Attribute: &expr.AttributeExpr{Type: expr.Int}},
 			{Name: "limit", Attribute: &expr.AttributeExpr{Type: expr.UInt, DefaultValue: 25}},
 			{Name: "enabled", Attribute: &expr.AttributeExpr{Type: expr.Boolean}},

@@ -2,11 +2,11 @@ package codegen
 
 import (
 	"fmt"
-	"sort"
-	"strings"
-
 	"github.com/CaliLuke/loom/codegen"
 	"github.com/CaliLuke/loom/expr"
+	"reflect"
+	"sort"
+	"strings"
 )
 
 // buildResourceQueryFields computes the statically known resource query plan so
@@ -73,9 +73,14 @@ func collectResourceQueryFields(
 		return
 	}
 	for _, named := range *object {
+		queryName := codegen.JSONFieldName(named.Name, named.Attribute)
+		if queryName == "-" {
+			continue
+		}
 		required := att.IsRequired(named.Name) || root.IsRequired(named.Name)
-		fields[named.Name] = resourceQueryFieldDefinition{
+		fields[queryName] = resourceQueryFieldDefinition{
 			Attribute:        named.Attribute,
+			FieldName:        named.Name,
 			Required:         required,
 			PrimitivePointer: !required && att.IsPrimitivePointer(named.Name, true),
 		}
@@ -85,7 +90,7 @@ func collectResourceQueryFields(
 // newResourceQueryField converts one flattened payload field into a concrete
 // query-rendering plan for the client adapter template.
 func newResourceQueryField(name string, definition resourceQueryFieldDefinition) (*ResourceQueryField, error) {
-	fieldName := codegen.Goify(name, true)
+	fieldName := codegen.Goify(definition.FieldName, true)
 	if array := expr.AsArray(definition.Attribute.Type); array != nil {
 		formatKind, err := resourceQueryFormatKind(name, array.ElemType.Type)
 		if err != nil {
@@ -98,6 +103,8 @@ func newResourceQueryField(name string, definition resourceQueryFieldDefinition)
 			ValueExpr:      "value",
 			FormatKind:     formatKind,
 			Repeated:       true,
+			Bits:           resourceQueryBits(array.ElemType.Type),
+			DefaultValues:  resourceQueryDefaultValues(definition.Attribute),
 		}, nil
 	}
 
@@ -106,9 +113,11 @@ func newResourceQueryField(name string, definition resourceQueryFieldDefinition)
 		return nil, err
 	}
 	field := &ResourceQueryField{
-		QueryKey:   name,
-		ValueExpr:  fmt.Sprintf("payload.%s", fieldName),
-		FormatKind: formatKind,
+		QueryKey:      name,
+		ValueExpr:     fmt.Sprintf("payload.%s", fieldName),
+		FormatKind:    formatKind,
+		Bits:          resourceQueryBits(definition.Attribute.Type),
+		DefaultValues: resourceQueryDefaultValues(definition.Attribute),
 	}
 	if definition.Required {
 		return field, nil
@@ -120,6 +129,35 @@ func newResourceQueryField(name string, definition resourceQueryFieldDefinition)
 	}
 	field.GuardExpr = resourceQueryZeroGuardExpr(formatKind, fieldName)
 	return field, nil
+}
+
+func resourceQueryBits(dataType expr.DataType) int {
+	switch resourceQueryUnderlyingType(dataType).Kind() {
+	case expr.Int32Kind, expr.UInt32Kind, expr.Float32Kind:
+		return 32
+	case expr.Int64Kind, expr.UInt64Kind, expr.Float64Kind:
+		return 64
+	case expr.BooleanKind, expr.IntKind, expr.UIntKind, expr.StringKind, expr.BytesKind,
+		expr.ArrayKind, expr.ObjectKind, expr.MapKind, expr.UnionKind, expr.UserTypeKind,
+		expr.ResultTypeKind, expr.AnyKind:
+		return 0
+	}
+	return 0
+}
+
+func resourceQueryDefaultValues(attribute *expr.AttributeExpr) []string {
+	if attribute == nil || attribute.DefaultValue == nil {
+		return nil
+	}
+	value := reflect.ValueOf(attribute.DefaultValue)
+	if value.Kind() != reflect.Array && value.Kind() != reflect.Slice {
+		return []string{fmt.Sprint(attribute.DefaultValue)}
+	}
+	defaults := make([]string, value.Len())
+	for index := range value.Len() {
+		defaults[index] = fmt.Sprint(value.Index(index).Interface())
+	}
+	return defaults
 }
 
 // attributeDataType recovers the full attribute metadata for base and reference

@@ -10,6 +10,7 @@ import (
 
 	mcpassistant "example.com/assistant/gen/mcp_assistant"
 	mcpruntime "github.com/CaliLuke/loom-mcp/v2/runtime/mcp"
+	"github.com/CaliLuke/loom-mcp/v2/runtime/mcp/sdkbridge"
 	"github.com/stretchr/testify/require"
 )
 
@@ -66,24 +67,23 @@ func TestGeneratedSDKServerRejectsInvalidOriginOnSSE(t *testing.T) {
 	}
 }
 
-func TestGeneratedSDKServerKeepsUnsafeMethodBypassScoped(t *testing.T) {
+func TestGeneratedSDKServerAllowsTrustedOriginOnSSE(t *testing.T) {
 	t.Parallel()
 
-	protection := http.NewCrossOriginProtection()
-	protection.AddInsecureBypassPattern("POST /rpc")
 	sdkServer, err := mcpassistant.NewSDKServer(NewAssistant(), &mcpassistant.SDKServerOptions{
-		PromptProvider:   promptProvider{},
-		OriginProtection: protection,
+		PromptProvider: promptProvider{},
+		OriginProtection: &sdkbridge.OriginProtection{
+			TrustedOrigins: []string{"https://trusted.example.com"},
+		},
 	})
 	require.NoError(t, err)
 
 	req := httptest.NewRequest(http.MethodGet, "http://mcp.example/rpc", nil)
-	req.Header.Set("Origin", "https://evil.example.com")
+	req.Header.Set("Origin", "https://trusted.example.com")
 	recorder := httptest.NewRecorder()
 	sdkServer.Handler.ServeHTTP(recorder, req)
 
-	require.Equal(t, http.StatusForbidden, recorder.Code,
-		"an unsafe POST bypass must not exempt the GET SSE connection")
+	require.NotEqual(t, http.StatusForbidden, recorder.Code)
 }
 
 func TestGeneratedSDKServerAllowsSameOrigin(t *testing.T) {

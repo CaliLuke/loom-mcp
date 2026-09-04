@@ -2829,11 +2829,9 @@ examples without changing payload validation.
 `call_tool` invokes a discovered real tool by name with an `arguments` object. It
 rejects synthetic targets and unknown real tool names as tool errors. In compact
 mode, direct public `tools/call` requests for hidden real tools are rejected by
-default. Pinned `AlwaysVisible` tools remain directly callable. The local
-adapter can opt into `ToolSearchOptions.AllowDirectHiddenCalls` as a
-compatibility option. SDK-backed servers reject that option at construction
-because unregistered SDK tools cannot preserve authoritative compact
-discovery. Synthetic name collisions and unknown `AlwaysVisible` pins fail
+default. Pinned `AlwaysVisible` tools remain directly callable. Hidden tools
+remain callable only through `call_tool`; direct hidden tool calls are rejected.
+Synthetic name collisions and unknown `AlwaysVisible` pins fail
 fast during adapter construction.
 
 Toolset tools projected into MCP participate in the same generated catalog as

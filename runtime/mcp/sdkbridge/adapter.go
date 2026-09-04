@@ -1,6 +1,7 @@
 package sdkbridge
 
 import (
+	"bytes"
 	"context"
 	"encoding/json/jsontext"
 	json "encoding/json/v2"
@@ -8,11 +9,15 @@ import (
 	"fmt"
 	"net/url"
 	"regexp"
+	"strconv"
 	"strings"
+	"sync"
 
 	mcpruntime "github.com/CaliLuke/loom-mcp/v2/runtime/mcp"
 	mcpskills "github.com/CaliLuke/loom-mcp/v2/runtime/mcp/skills"
 	loom "github.com/CaliLuke/loom/pkg"
+	"github.com/modelcontextprotocol/go-sdk/mcp"
+	"github.com/santhosh-tekuri/jsonschema/v6"
 )
 
 // ToolCallInterceptorInfo describes an MCP tools/call invocation.
@@ -61,31 +66,20 @@ type ResourceQueryField = mcpruntime.QueryField
 type ResourceURIMatcher struct {
 	Pattern     *regexp.Regexp
 	QueryFields map[string]ResourceQueryField
+	QuerySchema string
 }
 
 // Match reports whether uri matches the template and declares only designed query parameters.
 func (matcher ResourceURIMatcher) Match(uri string) bool {
-	if matcher.Pattern == nil || !matcher.Pattern.MatchString(uri) {
+	if matcher.Pattern == nil {
 		return false
 	}
-	parsed, err := url.Parse(uri)
-	if err != nil {
+	match := matcher.Pattern.FindStringIndex(uri)
+	if match == nil || match[0] != 0 || match[1] != len(uri) {
 		return false
 	}
-	if parsed.ForceQuery && parsed.RawQuery == "" {
-		return false
-	}
-	query, err := url.ParseQuery(parsed.RawQuery)
-	if err != nil {
-		return false
-	}
-	for key, values := range query {
-		field, ok := matcher.QueryFields[key]
-		if !ok || !field.Repeated && len(values) > 1 {
-			return false
-		}
-	}
-	return true
+	_, err := ResourceQueryJSONTyped(uri, matcher.QueryFields, matcher.QuerySchema)
+	return err == nil
 }
 
 type ResourcePolicy struct {
@@ -118,6 +112,9 @@ type toolCallInfo struct {
 
 type invalidClientInputError struct{ error }
 
+func (err invalidClientInputError) InvalidClientInput() {}
+func (err invalidClientInputError) Unwrap() error       { return err.error }
+
 // InvalidClientInput marks a generated codec or validation failure as safe client input feedback.
 func InvalidClientInput(err error) error {
 	if err == nil || mcpruntime.IsInvalidClientInput(err) {
@@ -126,8 +123,37 @@ func InvalidClientInput(err error) error {
 	return invalidClientInputError{error: err}
 }
 
-func (err invalidClientInputError) InvalidClientInput() {}
-func (err invalidClientInputError) Unwrap() error       { return err.error }
+func DecodeMeta(value any) (mcp.Meta, error) {
+	switch typed := value.(type) {
+	case nil:
+		return nil, nil
+	case mcp.Meta:
+		return typed, nil
+	case map[string]any:
+		return mcp.Meta(typed), nil
+	case jsontext.Value:
+		return decodeMetaJSON(typed)
+	case []byte:
+		return decodeMetaJSON(typed)
+	default:
+		return nil, fmt.Errorf("unsupported MCP metadata type %T", value)
+	}
+}
+
+func decodeMetaJSON(raw []byte) (mcp.Meta, error) {
+	if len(raw) == 0 {
+		return nil, nil
+	}
+	value, err := jsonschema.UnmarshalJSON(bytes.NewReader(raw))
+	if err != nil {
+		return nil, fmt.Errorf("decode MCP metadata: %w", err)
+	}
+	meta, ok := value.(map[string]any)
+	if !ok {
+		return nil, fmt.Errorf("MCP metadata must be a JSON object")
+	}
+	return mcp.Meta(meta), nil
+}
 
 // NewToolCallInfo constructs immutable metadata for generated tool interceptors.
 func NewToolCallInfo(service, tool string, payload any, rawArguments jsontext.Value) ToolCallInterceptorInfo {
@@ -230,25 +256,147 @@ func DispatchResource[P, R any](ctx context.Context, payload P, config ResourceD
 
 // ResourceQueryJSON converts a resource URI query into an inferred JSON object.
 func ResourceQueryJSON(uri string) ([]byte, error) {
-	return ResourceQueryJSONTyped(uri, nil)
+	return ResourceQueryJSONTyped(uri, nil, "")
 }
 
 // ResourceQueryJSONTyped converts a resource URI query into JSON while
-// preserving the string and repeated shapes declared by generated metadata.
-func ResourceQueryJSONTyped(uri string, fields map[string]mcpruntime.QueryField) ([]byte, error) {
+// enforcing the generated query shape and JSON Schema contract.
+func ResourceQueryJSONTyped(uri string, fields map[string]mcpruntime.QueryField, schemaDocument string) ([]byte, error) {
 	parsed, err := url.Parse(uri)
 	if err != nil {
 		return nil, fmt.Errorf("invalid resource URI: %w", err)
 	}
-	query := parsed.Query()
-	if len(query) == 0 {
-		return []byte("{}"), nil
+	if err := validateRawResourceQuery(parsed.RawQuery, parsed.ForceQuery); err != nil {
+		return nil, err
 	}
-	values := make(map[string][]string, len(query))
-	for key, value := range query {
-		values[key] = value
+	query, err := url.ParseQuery(parsed.RawQuery)
+	if err != nil {
+		return nil, fmt.Errorf("invalid resource query: %w", err)
 	}
-	return json.Marshal(mcpruntime.CoerceQueryTyped(values, fields))
+	for key, values := range query {
+		field, ok := fields[key]
+		if fields != nil && (!ok || !field.Repeated && len(values) > 1) {
+			return nil, fmt.Errorf("invalid resource query field %q", key)
+		}
+		for _, value := range values {
+			if err := validateResourceQueryValue(value, field); err != nil {
+				return nil, fmt.Errorf("invalid resource query field %q: %w", key, err)
+			}
+		}
+	}
+	encoded, err := json.Marshal(mcpruntime.CoerceQueryTyped(query, fields))
+	if err != nil {
+		return nil, err
+	}
+	if err := validateResourceQuery(encoded, schemaDocument); err != nil {
+		return nil, fmt.Errorf("invalid resource query: %w", err)
+	}
+	return encoded, nil
+}
+
+func validateRawResourceQuery(rawQuery string, forceQuery bool) error {
+	if forceQuery && rawQuery == "" {
+		return fmt.Errorf("invalid empty resource query")
+	}
+	if rawQuery == "" {
+		return nil
+	}
+	for segment := range strings.SplitSeq(rawQuery, "&") {
+		if segment == "" || !strings.Contains(segment, "=") {
+			return fmt.Errorf("invalid bare resource query parameter")
+		}
+	}
+	return nil
+}
+
+func validateResourceQueryValue(value string, field mcpruntime.QueryField) error {
+	if field.String {
+		return nil
+	}
+	bits := field.Bits
+	if bits == 0 {
+		bits = 64
+	}
+	switch {
+	case field.Unsigned:
+		if !isIntegralResourceQueryValue(value) {
+			return fmt.Errorf("expected unsigned integer")
+		}
+		if _, err := strconv.ParseUint(value, 10, bits); err != nil {
+			return err
+		}
+	case field.Float:
+		if _, err := strconv.ParseFloat(value, bits); err != nil {
+			return err
+		}
+	case field.Bits > 0:
+		if !isIntegralResourceQueryValue(value) {
+			return fmt.Errorf("expected signed integer")
+		}
+		if _, err := strconv.ParseInt(value, 10, bits); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func isIntegralResourceQueryValue(value string) bool {
+	if value == "" {
+		return false
+	}
+	start := 0
+	if value[0] == '-' {
+		if len(value) == 1 {
+			return false
+		}
+		start = 1
+	}
+	for index := start; index < len(value); index++ {
+		if value[index] < '0' || value[index] > '9' {
+			return false
+		}
+	}
+	return true
+}
+
+type resourceQuerySchemaEntry struct {
+	once   sync.Once
+	schema *jsonschema.Schema
+	err    error
+}
+
+var resourceQuerySchemaCache sync.Map
+
+func validateResourceQuery(encoded []byte, schemaDocument string) error {
+	if schemaDocument == "" {
+		return nil
+	}
+	entryValue, _ := resourceQuerySchemaCache.LoadOrStore(schemaDocument, &resourceQuerySchemaEntry{})
+	entry := entryValue.(*resourceQuerySchemaEntry)
+	entry.once.Do(func() {
+		entry.schema, entry.err = compileResourceQuerySchema(schemaDocument)
+	})
+	if entry.err != nil {
+		return entry.err
+	}
+	value, err := jsonschema.UnmarshalJSON(bytes.NewReader(encoded))
+	if err != nil {
+		return err
+	}
+	return entry.schema.Validate(value)
+}
+
+func compileResourceQuerySchema(schemaDocument string) (*jsonschema.Schema, error) {
+	document, err := jsonschema.UnmarshalJSON(strings.NewReader(schemaDocument))
+	if err != nil {
+		return nil, err
+	}
+	const schemaURL = "urn:loom-mcp:resource-query"
+	compiler := jsonschema.NewCompiler()
+	if err := compiler.AddResource(schemaURL, document); err != nil {
+		return nil, err
+	}
+	return compiler.Compile(schemaURL)
 }
 
 // Authorize verifies a resource URI against server and request-scoped policy.

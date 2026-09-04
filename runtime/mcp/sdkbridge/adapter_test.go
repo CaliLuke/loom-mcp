@@ -3,6 +3,7 @@ package sdkbridge
 import (
 	"context"
 	"encoding/json/jsontext"
+	json "encoding/json/v2"
 	"errors"
 	mcpruntime "github.com/CaliLuke/loom-mcp/v2/runtime/mcp"
 	mcpskills "github.com/CaliLuke/loom-mcp/v2/runtime/mcp/skills"
@@ -174,6 +175,7 @@ func TestResourceQueryJSONCoercesURIValues(t *testing.T) {
 			"tags":  {String: true, Repeated: true},
 			"nums":  {Repeated: true},
 		},
+		"",
 	)
 	require.NoError(t, err)
 	require.JSONEq(t, `{"query":"true","tags":["one"],"nums":[2]}`, string(typed))
@@ -204,11 +206,98 @@ func TestResourceURIMatcherRejectsUndeclaredQueryShapes(t *testing.T) {
 		"doc://list?extra=1",
 		"doc://list?count=1&count=2",
 		"doc://list?count=1;extra=2",
+		"doc://list?count",
+		"doc://list?count=1&&tags=a",
 		"doc://list?",
 	} {
 		assert.False(t, matcher.Match(uri), uri)
 	}
 }
+func TestResourceURIMatcherRequiresAFullPatternMatch(t *testing.T) {
+	matcher := ResourceURIMatcher{Pattern: regexp.MustCompile("doc://list")}
+
+	assert.True(t, matcher.Match("doc://list"))
+	assert.False(t, matcher.Match("prefix-doc://list"))
+	assert.False(t, matcher.Match("doc://list-suffix"))
+}
+func TestResourceURIMatcherEnforcesGeneratedQuerySchema(t *testing.T) {
+	const schema = `{"type":"object","properties":{"count":{"type":"integer","minimum":2},"scope":{"type":"string","pattern":"^prod$"}},"required":["count","scope"],"additionalProperties":false}`
+	matcher := ResourceURIMatcher{
+		Pattern:     regexp.MustCompile(`^doc://list(?:\?.*)?$`),
+		QueryFields: map[string]ResourceQueryField{"count": {}, "scope": {String: true}},
+		QuerySchema: schema,
+	}
+
+	assert.True(t, matcher.Match("doc://list?count=2&scope=prod"))
+	assert.False(t, matcher.Match("doc://list?count=2"))
+	assert.False(t, matcher.Match("doc://list?count=1&scope=prod"))
+	assert.False(t, matcher.Match("doc://list?count=2&scope=staging"))
+}
+
+func TestResourceQueryJSONTypedPreservesExactBoundsAndDefaults(t *testing.T) {
+	const schema = `{"type":"object","properties":{"n":{"type":"integer","maximum":9007199254740992},"limit":{"type":"integer","minimum":1}},"required":["n","limit"],"additionalProperties":false}`
+	fields := map[string]mcpruntime.QueryField{
+		"n":     {Unsigned: true, Bits: 64},
+		"limit": {Bits: 32, DefaultValues: []string{"25"}},
+	}
+
+	encoded, err := ResourceQueryJSONTyped("urn:test?n=9007199254740992", fields, schema)
+	require.NoError(t, err)
+	require.JSONEq(t, `{"n":9007199254740992,"limit":25}`, string(encoded))
+
+	_, err = ResourceQueryJSONTyped("urn:test?n=9007199254740993", fields, schema)
+	require.Error(t, err)
+	_, err = ResourceQueryJSONTyped("urn:test?n=1&limit=2147483648", fields, schema)
+	require.Error(t, err)
+}
+func TestResourceQueryJSONTypedAcceptsIntegralFloatLexemes(t *testing.T) {
+	const schema = `{"type":"object","properties":{"ratio":{"type":"number"},"ratios":{"type":"array","items":{"type":"number"}}},"required":["ratio","ratios"],"additionalProperties":false}`
+	fields := map[string]mcpruntime.QueryField{
+		"ratio":  {Float: true},
+		"ratios": {Float: true, Repeated: true},
+	}
+
+	encoded, err := ResourceQueryJSONTyped("urn:test?ratio=9223372036854775808&ratios=9223372036854775808&ratios=1", fields, schema)
+	require.NoError(t, err)
+	var decoded struct {
+		Ratio  float64   `json:"ratio"`
+		Ratios []float64 `json:"ratios"`
+	}
+	require.NoError(t, json.Unmarshal(encoded, &decoded))
+	assert.InDelta(t, float64(9223372036854775808), decoded.Ratio, 0)
+	require.Len(t, decoded.Ratios, 2)
+	assert.InDelta(t, float64(9223372036854775808), decoded.Ratios[0], 0)
+	assert.InDelta(t, 1, decoded.Ratios[1], 0)
+}
+
+func TestResourceQueryJSONTypedPreservesFloat32SchemaValues(t *testing.T) {
+	const schema = `{"type":"object","properties":{"ratio":{"type":"number","enum":[1.2]},"ratios":{"type":"array","items":{"type":"number","maximum":1.2}},"fallback":{"type":"number","enum":[1.2]}},"required":["ratio","ratios","fallback"],"additionalProperties":false}`
+	fields := map[string]mcpruntime.QueryField{
+		"ratio":    {Float: true, Bits: 32},
+		"ratios":   {Float: true, Bits: 32, Repeated: true},
+		"fallback": {Float: true, Bits: 32, DefaultValues: []string{"1.2"}},
+	}
+
+	encoded, err := ResourceQueryJSONTyped("urn:test?ratio=1.2&ratios=1.2&ratios=1.1", fields, schema)
+	require.NoError(t, err)
+	require.JSONEq(t, `{"ratio":1.2,"ratios":[1.2,1.1],"fallback":1.2}`, string(encoded))
+}
+func TestDecodeMetaPreservesExactNumbersAndRejectsInvalidValues(t *testing.T) {
+	meta, err := DecodeMeta(loom.JSONValue(`{"id":9007199254740993}`))
+	require.NoError(t, err)
+	encoded, err := json.Marshal(meta)
+	require.NoError(t, err)
+	require.JSONEq(t, `{"id":9007199254740993}`, string(encoded))
+
+	empty, err := DecodeMeta(loom.JSONValue(nil))
+	require.NoError(t, err)
+	assert.Nil(t, empty)
+	_, err = DecodeMeta(jsontext.Value(`{"id":`))
+	require.Error(t, err)
+	_, err = DecodeMeta(jsontext.Value(`[]`))
+	require.Error(t, err)
+}
+
 func TestDispatchNamedLogsSuccessfulTypedOperation(t *testing.T) {
 	var events []string
 	result, err := DispatchNamed(context.Background(), &dispatchPayload{Name: "known"}, NamedDispatchConfig[*dispatchPayload, *dispatchResult]{

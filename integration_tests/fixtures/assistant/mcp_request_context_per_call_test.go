@@ -33,26 +33,25 @@ func TestRequestContextSeesPerCallHeaders(t *testing.T) {
 	const headerName = "X-Request-ID"
 	var (
 		mu       sync.Mutex
-		captured = map[string]string{} // method → request id seen by RequestContext
+		captured = map[string][]string{} // method → request ids seen by RequestContext
 	)
 	captureRequestID := func(method, value string) {
 		mu.Lock()
 		defer mu.Unlock()
-		captured[method] = value
+		captured[method] = append(captured[method], value)
 	}
-	snapshot := func() map[string]string {
+	snapshot := func() map[string][]string {
 		mu.Lock()
 		defer mu.Unlock()
-		out := make(map[string]string, len(captured))
-		for k, v := range captured {
-			out[k] = v
+		out := make(map[string][]string, len(captured))
+		for key, values := range captured {
+			out[key] = append([]string(nil), values...)
 		}
 		return out
 	}
 
-	// Use the same hook the generator exposes to applications, with a small
-	// wrapper that buckets the captured value by JSON-RPC method (recovered
-	// from the synthetic request path or any header we put on the request).
+	// Use the application hook exposed by the generated server and bucket each
+	// invocation by the method stamped on the real inbound HTTP request.
 	sdkServer, err := mcpassistant.NewSDKServer(NewAssistant(), withTestRuntimeCORS(t, &mcpassistant.SDKServerOptions{
 		PromptProvider: promptProvider{},
 		RequestContext: func(ctx context.Context, r *http.Request) context.Context {
@@ -101,10 +100,10 @@ func TestRequestContextSeesPerCallHeaders(t *testing.T) {
 	require.NotEmpty(t, res.Content)
 
 	got := snapshot()
-	initID := got["initialize"]
-	callID := got["tools/call"]
-	require.NotEmpty(t, initID, "RequestContext must observe X-Request-ID on initialize")
-	require.NotEmpty(t, callID, "RequestContext must observe X-Request-ID on tools/call")
+	require.Len(t, got["initialize"], 1, "RequestContext must run once for initialize")
+	require.Len(t, got["tools/call"], 1, "RequestContext must run once for tools/call")
+	initID := got["initialize"][0]
+	callID := got["tools/call"][0]
 	require.NotEqual(t, initID, callID, "tools/call must see its own X-Request-ID, not initialize's stale value (gap #2 from the autok review)")
 }
 

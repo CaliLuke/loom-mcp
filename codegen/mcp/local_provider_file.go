@@ -35,6 +35,7 @@ func localProviderFile(data *AdapterData) *codegen.File {
 		{Name: "jsontext", Path: "encoding/json/jsontext"},
 		{Path: "errors"},
 		{Path: "strings"},
+		{Path: "github.com/CaliLuke/loom/pkg", Name: "loom"},
 		{Path: "github.com/CaliLuke/loom-mcp/v2/runtime/agent/planner"},
 		{Path: "github.com/CaliLuke/loom-mcp/v2/runtime/agent/runtime", Name: "agentsruntime"},
 		{Path: "github.com/CaliLuke/loom-mcp/v2/runtime/agent/tools"},

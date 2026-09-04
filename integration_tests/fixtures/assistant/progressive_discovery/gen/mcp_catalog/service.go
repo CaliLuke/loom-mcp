@@ -49,6 +49,8 @@ type ContentItem struct {
 	MimeType *string `json:"mimeType,omitempty"`
 	// Resource URI
 	URI *string `json:"uri,omitempty"`
+	// Content metadata
+	Meta loom.JSONValue `json:"_meta,omitzero"`
 }
 
 type ResourceContent struct {
@@ -61,7 +63,7 @@ type ResourceContent struct {
 	// Base64 encoded binary content
 	Blob *string `json:"blob,omitempty"`
 	// Resource content metadata
-	Meta loom.Nullable[any] `json:"_meta,omitzero"`
+	Meta loom.JSONValue `json:"_meta,omitzero"`
 }
 
 // ResourcesReadPayload is the payload type of the mcp_catalog service
@@ -84,7 +86,7 @@ type ToolsCallPayload struct {
 	// Tool name
 	Name string `json:"name"`
 	// Tool arguments
-	Arguments loom.Nullable[any] `json:"arguments,omitzero"`
+	Arguments loom.JSONValue `json:"arguments,omitzero"`
 }
 
 // ToolsCallResult is the result type of the mcp_catalog service tools/call
@@ -93,7 +95,7 @@ type ToolsCallResult struct {
 	// Tool execution results
 	Content []*ContentItem `json:"content"`
 	// Optional structured result for machine consumers
-	StructuredContent loom.Nullable[any] `json:"structuredContent,omitzero"`
+	StructuredContent loom.JSONValue `json:"structuredContent,omitzero"`
 	// Whether the tool encountered an error
 	IsError *bool `json:"isError,omitempty"`
 }

@@ -19,6 +19,7 @@ func registerFile(data *AdapterData) *codegen.File {
 		{Name: "jsontext", Path: "encoding/json/jsontext"},
 		{Path: "errors"},
 		{Path: "strings"},
+		{Name: "loom", Path: "github.com/CaliLuke/loom/pkg"},
 		{Path: "github.com/CaliLuke/loom-mcp/v2/runtime/agent/planner"},
 		{Path: "github.com/CaliLuke/loom-mcp/v2/runtime/agent/runtime", Name: "agentsruntime"},
 		{Path: "github.com/CaliLuke/loom-mcp/v2/runtime/agent/telemetry"},
@@ -129,28 +130,16 @@ func emitRegisterExecCallRemote(fn *jen.Group, reg *RegisterData) {
 func emitRegisterExecDecodeResult(fn *jen.Group) {
 	fn.Var().Id("value").Any()
 	fn.If(jen.Len(jen.Id("resp").Dot("Result")).Op(">").Lit(0)).Block(
-		jen.If(
-			jen.Id("err").Op(":=").Id("json").Dot("Unmarshal").Call(jen.Id("resp").Dot("Result"), jen.Op("&").Id("value")),
-			jen.Id("err").Op("!=").Nil(),
-		).Block(
-			jen.Return(registerErrorResultValue(), jen.Id("err")),
-		),
+		jen.Id("value").Op("=").Id("loom").Dot("JSONValue").Call(jen.Id("resp").Dot("Result")),
 	)
 }
 
 func emitRegisterExecDecodeStructured(fn *jen.Group) {
 	fn.Var().Id("toolTelemetry").Op("*").Qual("github.com/CaliLuke/loom-mcp/v2/runtime/agent/telemetry", "ToolTelemetry")
 	fn.If(jen.Len(jen.Id("resp").Dot("Structured")).Op(">").Lit(0)).Block(
-		jen.Var().Id("structured").Any(),
-		jen.If(
-			jen.Id("err").Op(":=").Id("json").Dot("Unmarshal").Call(jen.Id("resp").Dot("Structured"), jen.Op("&").Id("structured")),
-			jen.Id("err").Op("!=").Nil(),
-		).Block(
-			jen.Return(registerErrorResultValue(), jen.Id("err")),
-		),
 		jen.Id("toolTelemetry").Op("=").Op("&").Qual("github.com/CaliLuke/loom-mcp/v2/runtime/agent/telemetry", "ToolTelemetry").Values(jen.Dict{
 			jen.Id("Extra"): jen.Map(jen.String()).Any().Values(jen.Dict{
-				jen.Lit("structured"): jen.Id("structured"),
+				jen.Lit("structured"): jen.Id("loom").Dot("JSONValue").Call(jen.Id("resp").Dot("Structured")),
 			}),
 		}),
 	)

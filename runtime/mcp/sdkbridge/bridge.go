@@ -5,18 +5,20 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"net/http"
-	"net/url"
-	"sync"
-
 	mcpruntime "github.com/CaliLuke/loom-mcp/v2/runtime/mcp"
 	loomhttp "github.com/CaliLuke/loom/http"
 	"github.com/CaliLuke/loom/observability/transport"
 	mcpsdk "github.com/modelcontextprotocol/go-sdk/mcp"
+	"log/slog"
+	"net/http"
+	"net/url"
+	"strings"
+	"sync"
+	"time"
 )
 
 // CompatibilityVersion is the generated descriptor contract supported by this runtime.
-const CompatibilityVersion = 1
+const CompatibilityVersion = 2
 
 // Config describes one generated MCP service without erasing its typed handlers.
 type Config struct {
@@ -27,8 +29,27 @@ type Config struct {
 	Prompts              func() ([]PromptBinding, error)
 	CompletionHandler    func(context.Context, *mcpsdk.CompleteRequest) (*mcpsdk.CompleteResult, error)
 	WatchableResource    func(string) bool
-	Sessions             SessionHooks
+	Sessions             *SessionState
 	Options              Options
+}
+
+// StreamableHTTPOptions exposes the supported official SDK transport settings.
+// Origin validation is configured separately through OriginProtection.
+type StreamableHTTPOptions struct {
+	Stateless                    bool
+	JSONResponse                 bool
+	Logger                       *slog.Logger
+	EventStore                   mcpsdk.EventStore
+	SessionTimeout               time.Duration
+	DisableLocalhostProtection   bool
+	MaxRequestBodyBytes          int64
+	PropagateRequestCancellation bool
+}
+
+// OriginProtection configures origin validation for every MCP HTTP method.
+type OriginProtection struct {
+	TrustedOrigins []string
+	DenyHandler    http.Handler
 }
 
 // Options configures common SDK server and HTTP behavior.
@@ -37,8 +58,8 @@ type Options struct {
 	TransportObserver transport.Observer
 	RuntimeCORS       *loomhttp.RuntimeCORSPolicy
 	Server            *mcpsdk.ServerOptions
-	StreamableHTTP    *mcpsdk.StreamableHTTPOptions
-	OriginProtection  *http.CrossOriginProtection
+	StreamableHTTP    *StreamableHTTPOptions
+	OriginProtection  *OriginProtection
 }
 
 // ToolBinding pairs a generated SDK descriptor with its typed handler.
@@ -61,15 +82,6 @@ type PromptBinding struct {
 	Handler mcpsdk.PromptHandler
 }
 
-// SessionHooks keeps generated session state and application-owned principals outside the bridge.
-type SessionHooks struct {
-	AssertPrincipal    func(context.Context, string) error
-	MarkInitialized    func(string)
-	CapturePrincipal   func(context.Context, string)
-	Clear              func(string)
-	IsInvalidSessionID func(error) bool
-}
-
 // Server is a configured official SDK server and its HTTP handler.
 type Server struct {
 	Handler http.Handler
@@ -83,10 +95,14 @@ type responseObserver struct {
 	statusCode      int
 	onSessionIssued func(string)
 	sessionOnce     sync.Once
+	originRejected  bool
 }
 
 // NewServer validates generated/runtime compatibility and installs common SDK behavior.
 func NewServer(config Config) (*Server, error) {
+	if config.Sessions == nil {
+		config.Sessions = NewSessionState(nil)
+	}
 	if err := validateConfig(config); err != nil {
 		return nil, err
 	}
@@ -94,7 +110,10 @@ func NewServer(config Config) (*Server, error) {
 	if err != nil {
 		return nil, err
 	}
-	handler := serverHTTPHandler(server, config.Options, config.Sessions)
+	handler, err := serverHTTPHandler(server, config.Options, config.Sessions)
+	if err != nil {
+		return nil, err
+	}
 	return &Server{Handler: handler, SDK: server, watchableResource: config.WatchableResource}, nil
 }
 
@@ -111,7 +130,10 @@ func validateConfig(config Config) error {
 func newSDKServer(config Config) (*mcpsdk.Server, error) {
 	serverOptions := serverOptions(config.Options.Server, config.CompletionHandler, config.WatchableResource)
 	server := mcpsdk.NewServer(&config.Implementation, serverOptions)
-	server.AddReceivingMiddleware(jsonRPCErrorMiddleware)
+	server.AddReceivingMiddleware(
+		jsonRPCErrorMiddleware,
+		requestContextMiddleware(config.Options.RequestContext, config.Sessions),
+	)
 	if err := loadToolBindings(server, config.Tools); err != nil {
 		return nil, err
 	}
@@ -148,20 +170,21 @@ func loadPromptBindings(server *mcpsdk.Server, loader func() ([]PromptBinding, e
 	return addPromptBindings(server, bindings)
 }
 
-func serverHTTPHandler(server *mcpsdk.Server, options Options, sessions SessionHooks) http.Handler {
-	configuredStreamableOptions := streamableHTTPOptions(options.StreamableHTTP)
-	originProtection := options.OriginProtection
-	if originProtection == nil {
-		originProtection = http.NewCrossOriginProtection()
-	}
-	handler := newHandler(server, options.RequestContext, configuredStreamableOptions, sessions)
-	if options.TransportObserver != nil {
-		handler = transport.HTTPMiddleware(options.TransportObserver)(handler)
-	}
+func serverHTTPHandler(server *mcpsdk.Server, options Options, sessions *SessionState) (http.Handler, error) {
+	handler := newHandler(server, options.RequestContext, streamableHTTPOptions(options.StreamableHTTP), sessions)
 	if options.RuntimeCORS != nil {
 		handler = runtimeCORSHandler(handler, *options.RuntimeCORS)
 	}
-	return originValidationHandler(handler, originProtection)
+	var err error
+	handler, err = originValidationHandler(handler, options.OriginProtection)
+	if err != nil {
+		return nil, err
+	}
+	handler = observeHTTPHandler(handler)
+	if options.TransportObserver != nil {
+		handler = transport.HTTPMiddleware(options.TransportObserver)(handler)
+	}
+	return handler, nil
 }
 
 func addToolBindings(server *mcpsdk.Server, bindings []ToolBinding) error {
@@ -216,6 +239,9 @@ func serverOptions(opts *mcpsdk.ServerOptions, completion func(context.Context, 
 		copied := *opts
 		opts = &copied
 	}
+	if opts.Capabilities == nil {
+		opts.Capabilities = &mcpsdk.ServerCapabilities{}
+	}
 	if opts.CompletionHandler == nil {
 		opts.CompletionHandler = completion
 	}
@@ -245,8 +271,7 @@ func serverOptions(opts *mcpsdk.ServerOptions, completion func(context.Context, 
 	}
 	return opts
 }
-
-func newHandler(server *mcpsdk.Server, requestContext func(context.Context, *http.Request) context.Context, configuredStreamableOptions *mcpsdk.StreamableHTTPOptions, sessions SessionHooks) http.Handler {
+func newHandler(server *mcpsdk.Server, requestContext func(context.Context, *http.Request) context.Context, configuredStreamableOptions *mcpsdk.StreamableHTTPOptions, sessions *SessionState) http.Handler {
 	sdkStreamableOptions := *configuredStreamableOptions
 	base := mcpruntime.StreamableHTTPNegotiation(
 		mcpsdk.NewStreamableHTTPHandler(func(*http.Request) *mcpsdk.Server {
@@ -256,42 +281,51 @@ func newHandler(server *mcpsdk.Server, requestContext func(context.Context, *htt
 	)
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		r = r.WithContext(mcpruntime.WithRequestHeaders(r.Context(), r.Header))
-		if requestContext != nil {
+		if r.Method != http.MethodPost && requestContext != nil {
 			r = r.WithContext(requestContext(r.Context(), r))
 		}
-		if sessionID := r.Header.Get(mcpruntime.HeaderKeySessionID); sessionID != "" && sessions.AssertPrincipal != nil {
+		if sessionID := r.Header.Get(mcpruntime.HeaderKeySessionID); sessionID != "" {
 			if err := sessions.AssertPrincipal(r.Context(), sessionID); err != nil {
-				writeSessionError(w, err, sessions.IsInvalidSessionID)
+				writeSessionError(w, err)
 				return
 			}
 		}
-		transportObservation, transportWriter := transport.BeginHTTPRequest(r.Context(), w, "mcp", r.Method, r)
-		defer transportObservation.End()
 		observer := &responseObserver{
-			ResponseWriter: transportWriter,
-			onSessionIssued: func(sessionID string) {
-				if sessions.MarkInitialized != nil {
-					sessions.MarkInitialized(sessionID)
-				}
-				if sessions.CapturePrincipal != nil {
-					sessions.CapturePrincipal(r.Context(), sessionID)
-				}
-			},
+			ResponseWriter:  w,
+			onSessionIssued: sessions.MarkInitialized,
 		}
-		base.ServeHTTP(observer, r)
+		base.ServeHTTP(observer, sdkTransportRequest(r))
 		if observer.statusCode < http.StatusBadRequest {
 			observer.captureSession()
 		}
-		if r.Method == http.MethodDelete && observer.statusCode < http.StatusBadRequest && sessions.Clear != nil {
+		if r.Method == http.MethodDelete && observer.statusCode < http.StatusBadRequest {
 			sessions.Clear(r.Header.Get(mcpruntime.HeaderKeySessionID))
 		}
-		if observer.statusCode >= http.StatusBadRequest {
-			transportObservation.Fail(transport.ReasonHandlerError)
+	})
+}
+func sdkTransportRequest(r *http.Request) *http.Request {
+	if r == nil || (len(r.Header.Values("Origin")) == 0 && r.Header.Get("Sec-Fetch-Site") == "") {
+		return r
+	}
+	cloned := *r
+	cloned.Header = r.Header.Clone()
+	cloned.Header.Del("Origin")
+	cloned.Header.Del("Sec-Fetch-Site")
+	return &cloned
+}
+func observeHTTPHandler(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		observation, observedWriter := transport.BeginHTTPRequest(r.Context(), w, "mcp", r.Method, r)
+		defer observation.End()
+		response := &responseObserver{ResponseWriter: observedWriter}
+		next.ServeHTTP(response, r)
+		if response.originRejected || response.statusCode >= http.StatusBadRequest {
+			observation.Fail(transport.ReasonHandlerError)
 		}
 	})
 }
 
-func streamableHTTPOptions(opts *mcpsdk.StreamableHTTPOptions) *mcpsdk.StreamableHTTPOptions {
+func streamableHTTPOptions(opts *StreamableHTTPOptions) *mcpsdk.StreamableHTTPOptions {
 	configured := &mcpsdk.StreamableHTTPOptions{MaxRequestBodyBytes: mcpsdk.DefaultMaxRequestBodyBytes}
 	if opts == nil {
 		return configured
@@ -309,40 +343,61 @@ func streamableHTTPOptions(opts *mcpsdk.StreamableHTTPOptions) *mcpsdk.Streamabl
 	return configured
 }
 
-func originValidationHandler(next http.Handler, protection *http.CrossOriginProtection) http.Handler {
+func originValidationHandler(next http.Handler, options *OriginProtection) (http.Handler, error) {
+	protection := http.NewCrossOriginProtection()
+	var denyHandler http.Handler = http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		http.Error(w, "cross-origin request rejected", http.StatusForbidden)
+	})
+	if options != nil {
+		for _, origin := range options.TrustedOrigins {
+			if err := protection.AddTrustedOrigin(origin); err != nil {
+				return nil, fmt.Errorf("add trusted MCP origin %q: %w", origin, err)
+			}
+		}
+		if options.DenyHandler != nil {
+			denyHandler = options.DenyHandler
+		}
+	}
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if err := validateOrigin(protection, r); err != nil {
-			http.Error(w, err.Error(), http.StatusForbidden)
+		checkRequest, err := originCheckRequest(r)
+		if err != nil || protection.Check(checkRequest) != nil {
+			if marker, ok := w.(interface{ markOriginRejected() }); ok {
+				marker.markOriginRejected()
+			}
+			denyHandler.ServeHTTP(w, r)
 			return
 		}
 		next.ServeHTTP(w, r)
-	})
+	}), nil
 }
 
-func validateOrigin(protection *http.CrossOriginProtection, r *http.Request) error {
+func originCheckRequest(r *http.Request) (*http.Request, error) {
+	if r == nil {
+		return r, nil
+	}
+	checkRequest := *r
 	origins := r.Header.Values("Origin")
-	if len(origins) == 0 {
-		return protection.Check(r)
+	if len(origins) > 0 {
+		if len(origins) != 1 || origins[0] == "" {
+			return nil, errors.New("invalid Origin header")
+		}
+		parsedOrigin, err := url.Parse(origins[0])
+		if err != nil || parsedOrigin.Scheme == "" || parsedOrigin.Host == "" || origins[0] != parsedOrigin.Scheme+"://"+parsedOrigin.Host {
+			return nil, errors.New("invalid Origin header")
+		}
+		fetchSite := strings.ToLower(strings.TrimSpace(r.Header.Get("Sec-Fetch-Site")))
+		if !strings.EqualFold(parsedOrigin.Host, r.Host) && (fetchSite == "same-origin" || fetchSite == "none") {
+			checkRequest.Header = r.Header.Clone()
+			checkRequest.Header.Del("Sec-Fetch-Site")
+		}
 	}
-	if len(origins) != 1 || origins[0] == "" {
-		return errors.New("invalid Origin header")
-	}
-	parsedOrigin, err := url.Parse(origins[0])
-	if err != nil || parsedOrigin.Scheme == "" || parsedOrigin.Host == "" || origins[0] != parsedOrigin.Scheme+"://"+parsedOrigin.Host {
-		return errors.New("invalid Origin header")
-	}
-
-	originRequest := *r
-	switch originRequest.Method {
+	switch checkRequest.Method {
 	case http.MethodGet, http.MethodHead, http.MethodOptions:
-		originRequest.Method = "MCP-ORIGIN-CHECK"
+		checkRequest.Method = "MCP-ORIGIN-CHECK"
 	}
-	if r.Header.Get("Sec-Fetch-Site") != "" {
-		originRequest.Header = r.Header.Clone()
-		originRequest.Header.Del("Sec-Fetch-Site")
-	}
-	return protection.Check(&originRequest)
+	return &checkRequest, nil
 }
+
 func runtimeCORSHandler(next http.Handler, policy loomhttp.RuntimeCORSPolicy) http.Handler {
 	actual := policy.Handler(next.ServeHTTP)
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -363,9 +418,41 @@ func jsonRPCErrorMiddleware(next mcpsdk.MethodHandler) mcpsdk.MethodHandler {
 		return result, nil
 	}
 }
+func requestContextMiddleware(requestContext func(context.Context, *http.Request) context.Context, sessions *SessionState) mcpsdk.Middleware {
+	return func(next mcpsdk.MethodHandler) mcpsdk.MethodHandler {
+		return func(ctx context.Context, method string, req mcpsdk.Request) (mcpsdk.Result, error) {
+			var headers http.Header
+			if req != nil && req.GetExtra() != nil {
+				headers = req.GetExtra().Header
+			}
+			ctx = mcpruntime.WithRequestHeaders(ctx, headers)
+			if requestContext != nil {
+				httpRequest := (&http.Request{Method: http.MethodPost, Header: headers.Clone()}).WithContext(ctx)
+				ctx = requestContext(ctx, httpRequest)
+			}
+			sessionID := ""
+			if req != nil {
+				if session, ok := req.GetSession().(*mcpsdk.ServerSession); ok && session != nil {
+					sessionID = session.ID()
+				}
+			}
+			if method != "initialize" && sessionID != "" {
+				if err := sessions.AssertPrincipal(ctx, sessionID); err != nil {
+					return nil, err
+				}
+			}
+			result, err := next(ctx, method, req)
+			if err == nil && method == "initialize" && sessionID != "" {
+				sessions.MarkInitialized(sessionID)
+				sessions.CapturePrincipal(ctx, sessionID)
+			}
+			return result, err
+		}
+	}
+}
 
-func writeSessionError(w http.ResponseWriter, err error, isInvalid func(error) bool) {
-	if isInvalid != nil && isInvalid(err) {
+func writeSessionError(w http.ResponseWriter, err error) {
+	if IsInvalidSessionID(err) {
 		http.Error(w, err.Error(), http.StatusNotFound)
 		return
 	}
@@ -401,6 +488,10 @@ func (w *responseObserver) captureSession() {
 
 func (w *responseObserver) Unwrap() http.ResponseWriter {
 	return w.ResponseWriter
+}
+
+func (w *responseObserver) markOriginRejected() {
+	w.originRejected = true
 }
 
 func (w *responseObserver) WriteHeader(statusCode int) {

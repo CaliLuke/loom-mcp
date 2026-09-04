@@ -15,8 +15,9 @@ Use this skill when releasing `github.com/CaliLuke/loom-mcp/v2`. Keep the workfl
 - After a Loom dependency bump, regenerate every version-marked surface with
   `make gen-registry`, `make regen-quickstart`,
   `make regen-assistant-fixture`,
-  `make regen-progressive-discovery-fixture`, and
-  `make regen-agent-feature-fixture`.
+  `make regen-progressive-discovery-fixture`,
+  `make regen-agent-feature-fixture`, and
+  `make regen-sdkbridge-consumer-fixture` when its compatibility version increments.
 - If the release changed user-facing DSL, codegen, runtime, or release workflow behavior, update the repo docs in `docs/`, any release-facing root docs, and the relevant repo-local skills in `.agents/skills/` before tagging.
 - Review every `runtime/mcp/sdkbridge` contract change before release.
   Keep `sdkbridge.CompatibilityVersion` for additive fixes and optional fields
@@ -41,7 +42,8 @@ Use this skill when releasing `github.com/CaliLuke/loom-mcp/v2`. Keep the workfl
    - after a Loom dependency bump: `make gen-registry`,
      `make regen-quickstart`, `make regen-assistant-fixture`,
      `make regen-progressive-discovery-fixture`, and
-     `make regen-agent-feature-fixture`
+     `make regen-agent-feature-fixture`. Also run
+     `make regen-sdkbridge-consumer-fixture` when its compatibility version increments
    - after an incompatible `sdkbridge` contract change: update
      `sdkbridge.CompatibilityVersion`. Then run `make regen-assistant-fixture`,
      `make regen-progressive-discovery-fixture`, and
@@ -90,9 +92,10 @@ Use this when a semver tag already exists on `origin` but the GitHub Releases pa
 2. Confirm the GitHub Release object is missing:
    - `gh release view vX.Y.Z --json tagName,url`
 3. Create the missing release from the existing tag:
-   - `gh release create vX.Y.Z --verify-tag --notes-from-tag`
-4. If the tag message is not suitable release notes, replace step 3 with:
-   - `gh release create vX.Y.Z --verify-tag --generate-notes`
+   - stable: `gh release create vX.Y.Z --verify-tag --notes-from-tag --latest`
+   - prerelease: `gh release create vX.Y.Z-alpha.1 --verify-tag --notes-from-tag --prerelease`
+4. If the tag message is not suitable, use `--generate-notes` instead of
+   `--notes-from-tag`. Keep the stable or prerelease flag unchanged.
 5. Verify the release now exists:
    - `gh release view vX.Y.Z --json tagName,isDraft,isPrerelease,url,publishedAt`
 
@@ -116,15 +119,20 @@ make itest
 make verify-mcp-local
 go test ./...
 git status --short
+# Set this to the exact stable or prerelease tag.
+VERSION=vX.Y.Z
 git add <files>
 git commit -m "<release or fix message>"
-git tag -a vX.Y.Z -m "vX.Y.Z"
+git tag -a "${VERSION}" -m "${VERSION}"
 git push origin main
-git push origin vX.Y.Z
-gh release create vX.Y.Z --verify-tag --generate-notes --latest
-git ls-remote --tags origin vX.Y.Z
+git push origin "${VERSION}"
+# Stable release only:
+gh release create "${VERSION}" --verify-tag --generate-notes --latest
+# Prerelease only:
+gh release create "${VERSION}" --verify-tag --generate-notes --prerelease
+git ls-remote --tags origin "${VERSION}"
 git ls-remote origin main
-gh release view vX.Y.Z --json tagName,isDraft,isPrerelease,url,publishedAt
+gh release view "${VERSION}" --json tagName,isDraft,isPrerelease,url,publishedAt
 ```
 
 ## Decision Rules
@@ -136,8 +144,9 @@ gh release view vX.Y.Z --json tagName,isDraft,isPrerelease,url,publishedAt
 - If dependency pins, verification commands, or local-vs-remote workflow guidance changed, update release-facing root docs such as `README.md` in the same release.
 - If the shipped product or release workflow changed, update the relevant repo-local skills in `.agents/skills/` in the same release.
 - If the user asked for a dot release, prefer the smallest semver bump that matches the shipped behavior.
-- For a hyphenated semantic prerelease tag, use `gh release create --prerelease`
-  and never `--latest`. Verify `isPrerelease` is true afterward.
+- The GitHub Release `isPrerelease` value must be true for a hyphenated
+  semantic prerelease tag and false for a stable tag. Never mark a prerelease
+  as latest.
 - A breaking v2+ release must use the matching semantic import path in `go.mod`,
   generated imports, fixtures, quickstarts, docs, and downstream examples.
 - If `gh release view vX.Y.Z` fails while `git ls-remote --tags origin vX.Y.Z` succeeds, backfill the missing GitHub Release before closing the task.
@@ -151,7 +160,7 @@ Treat the release as complete only when all of the following are true:
 - the release commit exists on `main`
 - the annotated `vX.Y.Z` tag exists locally and on `origin`
 - `origin/main` points at the release commit
-- the GitHub Release object for `vX.Y.Z` exists and is not a draft
+- the GitHub Release object for `vX.Y.Z` exists, is not a draft, and has `isPrerelease` set to true for a hyphenated tag or false for a stable tag
 - the user is told that Go module proxy availability may lag slightly after push
 
 ## References

@@ -2,6 +2,7 @@ package progressivediscovery
 
 import (
 	"context"
+	"encoding/json/jsontext"
 	"encoding/json/v2"
 	"net/http"
 	"net/http/httptest"
@@ -81,7 +82,7 @@ func TestGeneratedLocalProgressiveDiscoveryProviderMatchesSDKServer(t *testing.T
 		public := callPublicTool(t, ctx, session, "lookup", arguments)
 		localResult := callLocalTool(t, ctx, local, "lookup", arguments)
 		assert.Equal(t, map[string]any{"value": "direct:loom"}, public.StructuredContent)
-		assert.Equal(t, public.StructuredContent, localResult.Result)
+		assertLocalStructuredJSONEqual(t, public.StructuredContent, localResult.Result)
 	})
 
 	t.Run("search parity", func(t *testing.T) {
@@ -90,7 +91,7 @@ func TestGeneratedLocalProgressiveDiscoveryProviderMatchesSDKServer(t *testing.T
 		localResult := callLocalTool(t, ctx, local, "discover", arguments)
 		assert.False(t, public.IsError)
 		require.Nil(t, localResult.Error)
-		assert.Equal(t, public.StructuredContent, localResult.Result)
+		assertLocalStructuredJSONEqual(t, public.StructuredContent, localResult.Result)
 	})
 
 	t.Run("hidden direct invocation", func(t *testing.T) {
@@ -98,7 +99,7 @@ func TestGeneratedLocalProgressiveDiscoveryProviderMatchesSDKServer(t *testing.T
 		public := callPublicTool(t, ctx, session, "invoke", arguments)
 		localResult := callLocalTool(t, ctx, local, "invoke", arguments)
 		assert.Equal(t, map[string]any{"value": "direct:loom"}, public.StructuredContent)
-		assert.Equal(t, public.StructuredContent, localResult.Result)
+		assertLocalStructuredJSONEqual(t, public.StructuredContent, localResult.Result)
 	})
 
 	t.Run("projected invocation", func(t *testing.T) {
@@ -106,7 +107,7 @@ func TestGeneratedLocalProgressiveDiscoveryProviderMatchesSDKServer(t *testing.T
 		public := callPublicTool(t, ctx, session, "invoke", arguments)
 		localResult := callLocalTool(t, ctx, local, "invoke", arguments)
 		assert.Equal(t, map[string]any{"value": "projected:loom"}, public.StructuredContent)
-		assert.Equal(t, public.StructuredContent, localResult.Result)
+		assertLocalStructuredJSONEqual(t, public.StructuredContent, localResult.Result)
 	})
 
 	t.Run("invalid arguments", func(t *testing.T) {
@@ -148,6 +149,18 @@ func callLocalTool(t *testing.T, ctx context.Context, registration agentsruntime
 	require.NotNil(t, result)
 	require.NotNil(t, result.ToolResult)
 	return result.ToolResult
+}
+func assertLocalStructuredJSONEqual(t *testing.T, public, local any) {
+	t.Helper()
+	localJSON, ok := local.(jsontext.Value)
+	require.True(t, ok, "local structured result must retain its exact JSON representation")
+	publicJSON, err := json.Marshal(public)
+	require.NoError(t, err)
+	canonicalPublic := jsontext.Value(publicJSON)
+	canonicalLocal := append(jsontext.Value(nil), localJSON...)
+	require.NoError(t, canonicalPublic.Canonicalize())
+	require.NoError(t, canonicalLocal.Canonicalize())
+	assert.Equal(t, string(canonicalPublic), string(canonicalLocal))
 }
 
 func localSpecNames(specs []tools.ToolSpec) []string {

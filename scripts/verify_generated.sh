@@ -15,16 +15,23 @@ GENERATED_PATHS=(
   integration_tests/fixtures/sdkbridge_consumer
 )
 
+bash "${ROOT_DIR}/scripts/sdkbridge_consumer_guard.sh" verify
+
 before_state="$(mktemp)"
 after_state="$(mktemp)"
-trap 'rm -f "${before_state}" "${after_state}"' EXIT INT TERM
+untracked_paths="$(mktemp)"
+trap 'rm -f "${before_state}" "${after_state}" "${untracked_paths}"' EXIT INT TERM
 
 capture_state() {
   git -C "${ROOT_DIR}" diff --binary HEAD -- "${GENERATED_PATHS[@]}"
+  if ! git -C "${ROOT_DIR}" ls-files --others --exclude-standard -z -- "${GENERATED_PATHS[@]}" >"${untracked_paths}"; then
+    echo "cannot enumerate untracked generated files" >&2
+    return 1
+  fi
   while IFS= read -r -d '' path; do
     checksum="$(git -C "${ROOT_DIR}" hash-object -- "${path}")"
     printf 'untracked %s %s\n' "${checksum}" "${path}"
-  done < <(git -C "${ROOT_DIR}" ls-files --others --exclude-standard -z -- "${GENERATED_PATHS[@]}")
+  done <"${untracked_paths}"
 }
 
 capture_state >"${before_state}"
@@ -34,6 +41,15 @@ make -C "${ROOT_DIR}" regen-quickstart
 make -C "${ROOT_DIR}" regen-assistant-fixture
 make -C "${ROOT_DIR}" regen-progressive-discovery-fixture
 make -C "${ROOT_DIR}" regen-agent-feature-fixture
+
+if bash "${ROOT_DIR}/scripts/sdkbridge_consumer_guard.sh" changed; then
+  make -C "${ROOT_DIR}" regen-sdkbridge-consumer-fixture
+else
+  consumer_status=$?
+  if (( consumer_status > 1 )); then
+    exit "${consumer_status}"
+  fi
+fi
 
 capture_state >"${after_state}"
 

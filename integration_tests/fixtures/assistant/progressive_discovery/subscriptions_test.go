@@ -13,6 +13,7 @@ import (
 
 	mcpcatalog "example.com/assistant/progressive_discovery/gen/mcp_catalog"
 	mcpruntime "github.com/CaliLuke/loom-mcp/v2/runtime/mcp"
+	"github.com/CaliLuke/loom-mcp/v2/runtime/mcp/sdkbridge"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -111,7 +112,7 @@ func TestGeneratedSDKServerSSEContainsOnlyJSONRPCEvents(t *testing.T) {
 		require.Less(t, resp.StatusCode, http.StatusBadRequest, string(responseBody))
 	}
 	post(`{"jsonrpc":"2.0","method":"notifications/initialized"}`)
-	post(`{"jsonrpc":"2.0","id":2,"method":"resources/subscribe","params":{"uri":"status://current"}}`)
+	post(`{"jsonrpc":"2.0","id":2,"method":"resources/subscribe","params":{"uri":"urn:status?scope=current"}}`)
 
 	streamReq, err := http.NewRequestWithContext(ctx, http.MethodGet, httpServer.URL, nil)
 	require.NoError(t, err)
@@ -128,7 +129,7 @@ func TestGeneratedSDKServerSSEContainsOnlyJSONRPCEvents(t *testing.T) {
 	require.Len(t, openingFrame, 1)
 	require.True(t, strings.HasPrefix(openingFrame[0], ":"), "first SSE frame is not a comment: %q", openingFrame)
 	for range 2 {
-		require.NoError(t, server.ResourceUpdated(ctx, "status://current"))
+		require.NoError(t, server.ResourceUpdated(ctx, "urn:status?scope=current"))
 		frame := readSSEFrame(t, scanner)
 		for _, line := range frame {
 			require.False(t, strings.HasPrefix(line, "retry:"), "unexpected retry control field in SSE frame %q", frame)
@@ -147,7 +148,7 @@ func TestGeneratedSDKServerSSEContainsOnlyJSONRPCEvents(t *testing.T) {
 
 func TestGeneratedSDKServerRejectsStatelessWatchableResources(t *testing.T) {
 	_, err := mcpcatalog.NewSDKServer(NewCatalog(), &mcpcatalog.SDKServerOptions{
-		StreamableHTTP: &mcp.StreamableHTTPOptions{Stateless: true},
+		StreamableHTTP: &sdkbridge.StreamableHTTPOptions{Stateless: true},
 	})
 	require.ErrorContains(t, err, "watchable MCP resources require stateful Streamable HTTP sessions")
 }

@@ -198,11 +198,9 @@ func (c *SessionCaller) Close() error {
 
 // CallTool invokes tools/call over the transport using the SDK session.
 func (c *SessionCaller) CallTool(ctx context.Context, req CallRequest) (CallResponse, error) {
-	var args map[string]any
+	var args any
 	if len(req.Payload) > 0 {
-		if err := json.Unmarshal(req.Payload, &args); err != nil {
-			return CallResponse{}, fmt.Errorf("failed to unmarshal tool arguments: %w", err)
-		}
+		args = req.Payload
 	}
 
 	params := &mcp.CallToolParams{

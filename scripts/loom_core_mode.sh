@@ -4,9 +4,10 @@ set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 FIXTURE_DIR="${ROOT_DIR}/integration_tests/fixtures/assistant"
+AGENT_FIXTURE_DIR="${ROOT_DIR}/integration_tests/fixtures/agent_features"
 CONSUMER_DIR="${ROOT_DIR}/integration_tests/fixtures/sdkbridge_consumer"
 QUICKSTART_DIR="${ROOT_DIR}/quickstart"
-REMOTE_VERSION="v1.9.0-alpha.11"
+REMOTE_VERSION="v1.9.0-alpha.13"
 # Default to the loom checkout that lives as a peer of this repo (loom-mono
 # layout); override with LOOM_DIR when the checkout is elsewhere.
 LOCAL_LOOM_DIR="${LOOM_DIR:-${ROOT_DIR}/../loom}"
@@ -41,7 +42,7 @@ set_local() {
     echo "local Loom checkout not found at ${LOCAL_LOOM_DIR}" >&2
     exit 1
   fi
-
+  LOCAL_LOOM_DIR="$(cd "${LOCAL_LOOM_DIR}" && pwd -P)"
   (
     cd "${ROOT_DIR}"
     go mod edit -replace=github.com/CaliLuke/loom="${LOCAL_LOOM_DIR}"
@@ -52,6 +53,11 @@ set_local() {
     cd "${FIXTURE_DIR}"
     go mod edit -replace=github.com/CaliLuke/loom="${LOCAL_LOOM_DIR}"
     go mod tidy
+  )
+  (
+    cd "${AGENT_FIXTURE_DIR}"
+    go mod edit -replace=github.com/CaliLuke/loom="${LOCAL_LOOM_DIR}"
+    GOWORK=off go mod tidy
   )
   (
     cd "${CONSUMER_DIR}"
@@ -82,6 +88,12 @@ set_remote() {
     go mod tidy
   )
   (
+    cd "${AGENT_FIXTURE_DIR}"
+    go mod edit -dropreplace=github.com/CaliLuke/loom || true
+    GOWORK=off go get github.com/CaliLuke/loom@"${REMOTE_VERSION}"
+    GOWORK=off go mod tidy
+  )
+  (
     cd "${CONSUMER_DIR}"
     go mod edit -dropreplace=github.com/CaliLuke/loom || true
     GOWORK=off go get github.com/CaliLuke/loom@"${REMOTE_VERSION}"
@@ -91,26 +103,55 @@ set_remote() {
   (
     cd "${QUICKSTART_DIR}"
     go mod edit -dropreplace=github.com/CaliLuke/loom || true
-    go get github.com/CaliLuke/loom@"${REMOTE_VERSION}"
+    GOWORK=off go get github.com/CaliLuke/loom@"${REMOTE_VERSION}"
     GOWORK=off go mod tidy
   )
   sync_quickstart_generator_dependencies
+  verify_remote_modules
+}
+
+module_selection() {
+  (
+    cd "$1"
+    GOWORK=off go list -m -f '{{if .Replace}}local {{.Replace.Dir}}{{else}}remote {{.Version}}{{end}}' github.com/CaliLuke/loom
+  )
 }
 
 show_module_status() {
-  local go_mod="$1"
-  grep '^replace github.com/CaliLuke/loom => ' "${go_mod}" || echo "github.com/CaliLuke/loom ${REMOTE_VERSION} (remote)"
+  local label="$1"
+  local directory="$2"
+  local selection
+  selection="$(module_selection "${directory}")"
+  printf '%s:\n' "${label}"
+  case "${selection}" in
+    "remote ${REMOTE_VERSION}") printf 'github.com/CaliLuke/loom %s (remote)\n' "${REMOTE_VERSION}" ;;
+    remote\ *)
+      printf 'github.com/CaliLuke/loom %s (unexpected remote; want %s)\n' "${selection#remote }" "${REMOTE_VERSION}" >&2
+      return 1
+      ;;
+    local\ *) printf 'github.com/CaliLuke/loom => %s (local)\n' "${selection#local }" ;;
+    *) printf 'cannot determine Loom module selection for %s\n' "${directory}" >&2; return 1 ;;
+  esac
+}
+
+verify_remote_modules() {
+  local directory
+  for directory in "${ROOT_DIR}" "${FIXTURE_DIR}" "${AGENT_FIXTURE_DIR}" "${CONSUMER_DIR}" "${QUICKSTART_DIR}"; do
+    local selection
+    selection="$(module_selection "${directory}")"
+    if [[ "${selection}" != "remote ${REMOTE_VERSION}" ]]; then
+      printf 'unexpected Loom selection in %s: %s; want remote %s\n' "${directory}" "${selection}" "${REMOTE_VERSION}" >&2
+      return 1
+    fi
+  done
 }
 
 show_status() {
-  echo "root:"
-  show_module_status "${ROOT_DIR}/go.mod"
-  echo "fixture:"
-  show_module_status "${FIXTURE_DIR}/go.mod"
-  echo "sdkbridge consumer:"
-  show_module_status "${CONSUMER_DIR}/go.mod"
-  echo "quickstart:"
-  show_module_status "${QUICKSTART_DIR}/go.mod"
+  show_module_status "root" "${ROOT_DIR}"
+  show_module_status "assistant fixture" "${FIXTURE_DIR}"
+  show_module_status "agent-feature fixture" "${AGENT_FIXTURE_DIR}"
+  show_module_status "sdkbridge consumer" "${CONSUMER_DIR}"
+  show_module_status "quickstart" "${QUICKSTART_DIR}"
 }
 
 show_remote_version() {

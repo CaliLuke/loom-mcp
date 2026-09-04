@@ -24,7 +24,7 @@ var (
 		BudgetClass: policy.ToolBudgetClassBudgeted,
 		Description: "Lookup bounded projected data",
 		ID:          tools.Ident("projected.projected_bounded_lookup_tool"),
-		Tags:        []string{},
+		Tags:        []string{"projected", "bounded"},
 		Title:       "Projected Bounded Lookup Tool",
 	}, {
 		BudgetClass: policy.ToolBudgetClassBudgeted,

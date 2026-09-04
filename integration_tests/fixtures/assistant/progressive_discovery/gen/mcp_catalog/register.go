@@ -20,6 +20,7 @@ import (
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/tools"
 	mcpruntime "github.com/CaliLuke/loom-mcp/v2/runtime/mcp"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/mcp/retry"
+	loom "github.com/CaliLuke/loom/pkg"
 	"github.com/modelcontextprotocol/go-sdk/jsonrpc"
 )
 
@@ -233,17 +234,11 @@ func RegisterCatalogCatalogMcpToolset(ctx context.Context, rt *agentsruntime.Run
 		}
 		var value any
 		if len(resp.Result) > 0 {
-			if err := json.Unmarshal(resp.Result, &value); err != nil {
-				return planner.ToolResult{Name: fullName}, err
-			}
+			value = loom.JSONValue(resp.Result)
 		}
 		var toolTelemetry *telemetry.ToolTelemetry
 		if len(resp.Structured) > 0 {
-			var structured any
-			if err := json.Unmarshal(resp.Structured, &structured); err != nil {
-				return planner.ToolResult{Name: fullName}, err
-			}
-			toolTelemetry = &telemetry.ToolTelemetry{Extra: map[string]any{"structured": structured}}
+			toolTelemetry = &telemetry.ToolTelemetry{Extra: map[string]any{"structured": loom.JSONValue(resp.Structured)}}
 		}
 		return planner.ToolResult{
 			Name:      fullName,

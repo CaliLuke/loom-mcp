@@ -286,6 +286,7 @@ regen-agent-feature-fixture:
 	cd ./integration_tests/fixtures/agent_features && $(GO) run $(LOOM_CLI_PACKAGE) gen example.com/agentfeatures/design
 
 regen-sdkbridge-consumer-fixture:
+	bash ./scripts/sdkbridge_consumer_guard.sh regen
 	cd ./integration_tests/fixtures/sdkbridge_consumer && GOWORK=off $(GO) list -mod=mod ./design >/dev/null
 	cd ./integration_tests/fixtures/sdkbridge_consumer && GOWORK=off $(GO) run -mod=mod $(LOOM_CLI_PACKAGE) gen example.com/sdkbridgeconsumer/design
 	cd ./integration_tests/fixtures/sdkbridge_consumer && GOWORK=off $(GO) mod tidy

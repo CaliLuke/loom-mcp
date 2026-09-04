@@ -13,7 +13,6 @@ import (
 	"encoding/base64"
 	jsontext "encoding/json/jsontext"
 	json "encoding/json/v2"
-	"errors"
 	"fmt"
 	"net/http"
 	"slices"
@@ -44,8 +43,8 @@ type SDKServerOptions struct {
 	TransportObserver transport.Observer
 	RuntimeCORS       *loomhttp.RuntimeCORSPolicy
 	Server            *mcpsdk.ServerOptions
-	OriginProtection  *http.CrossOriginProtection
-	StreamableHTTP    *mcpsdk.StreamableHTTPOptions
+	OriginProtection  *sdkbridge.OriginProtection
+	StreamableHTTP    *sdkbridge.StreamableHTTPOptions
 }
 
 // NewSDKServer constructs the generated service adapter and shared official SDK bridge.
@@ -67,35 +66,24 @@ func NewSDKServer(service catalog.Service, opts *SDKServerOptions) (*SDKServer, 
 			TransportObserver: opts.TransportObserver,
 		}
 	}
-	if adapterOpts != nil && adapterOpts.ToolSearch != nil && adapterOpts.ToolSearch.AllowDirectHiddenCalls {
-		return nil, fmt.Errorf("SDK ToolSearch compact mode does not support AllowDirectHiddenCalls")
-	}
 	adapter := NewMCPAdapter(service, adapterOpts)
 	adapter.requestStateKey = slices.Clone(requestStateKey)
 	runtimeBridge, err := sdkbridge.NewServer(sdkbridge.Config{
-		CompatibilityVersion: 1,
+		CompatibilityVersion: 2,
 		Implementation: mcpsdk.Implementation{
 			Name:    "catalog-mcp",
 			Version: "1.0.0",
 		},
 		Options: bridgeOptions,
 		Prompts: func() ([]sdkbridge.PromptBinding, error) {
-			return sdkPromptBindings(adapter, requestContext)
+			return sdkPromptBindings(adapter)
 		},
 		Resources: func() ([]sdkbridge.ResourceBinding, error) {
-			return sdkResourceBindings(adapter, requestContext)
+			return sdkResourceBindings(adapter)
 		},
-		Sessions: sdkbridge.SessionHooks{
-			AssertPrincipal:  adapter.assertSessionPrincipal,
-			CapturePrincipal: adapter.captureSessionPrincipal,
-			Clear:            adapter.clearSession,
-			IsInvalidSessionID: func(err error) bool {
-				return errors.Is(err, errInvalidSessionID)
-			},
-			MarkInitialized: adapter.markInitializedSession,
-		},
+		Sessions: adapter.sessions,
 		Tools: func() ([]sdkbridge.ToolBinding, error) {
-			return sdkToolBindings(adapter, requestContext)
+			return sdkToolBindings(adapter)
 		},
 		WatchableResource: func(uri string) bool {
 			switch uri {
@@ -132,10 +120,11 @@ func (s *SDKServer) ResourceUpdated(ctx context.Context, uri string) error {
 var sdkWatchableResourceMatchers = []sdkbridge.ResourceURIMatcher{{
 	Pattern:     uritemplate.MustNew("urn:status{?scope}").Regexp(),
 	QueryFields: map[string]sdkbridge.ResourceQueryField{"scope": {String: true}},
+	QuerySchema: "{\"type\":\"object\",\"properties\":{\"scope\":{\"type\":\"string\",\"description\":\"Status scope\"}},\"additionalProperties\":false}",
 }}
 
-func sdkToolBindings(adapter *MCPAdapter, requestContext func(context.Context, *http.Request) context.Context) ([]sdkbridge.ToolBinding, error) {
-	handler := adapter.sdkToolHandler(requestContext)
+func sdkToolBindings(adapter *MCPAdapter) ([]sdkbridge.ToolBinding, error) {
+	handler := adapter.sdkToolHandler()
 	if adapter.toolSearchEnabled() {
 		tools := adapter.toolSearchSyntheticTools()
 		tools = append(tools, adapter.visibleToolCatalog(adapter.generatedToolCatalog())...)
@@ -153,12 +142,16 @@ func sdkToolBindings(adapter *MCPAdapter, requestContext func(context.Context, *
 		return bindings, nil
 	}
 	bindings := make([]sdkbridge.ToolBinding, 0, 4)
+	metaLookup, err := sdkMeta(jsontext.Value([]byte("{\"com.github.caliluke.loom-mcp/discovery\":{\"category\":\"catalog\",\"keywords\":[\"catalog\",\"entry\"],\"tags\":[\"lookup\",\"direct\"]}}")))
+	if err != nil {
+		return nil, fmt.Errorf("tool %q metadata: %w", "lookup", err)
+	}
 	bindings = append(bindings, sdkbridge.ToolBinding{
 		Handler: handler,
 		Tool: &mcpsdk.Tool{
 			Description:  "Lookup a direct catalog entry",
 			InputSchema:  sdkToolInputSchema("{\"type\":\"object\",\"required\":[\"query\"],\"properties\":{\"query\":{\"type\":\"string\",\"description\":\"Lookup query\"}},\"additionalProperties\":false}"),
-			Meta:         sdkMeta(jsontext.Value([]byte("{\"com.github.caliluke.loom-mcp/discovery\":{\"category\":\"catalog\",\"keywords\":[\"catalog\",\"entry\"],\"tags\":[\"lookup\",\"direct\"]}}"))),
+			Meta:         metaLookup,
 			Name:         "lookup",
 			OutputSchema: sdkToolInputSchema("{\"type\":\"object\",\"required\":[\"value\"],\"properties\":{\"value\":{\"type\":\"string\",\"description\":\"Lookup result\"}},\"additionalProperties\":false}"),
 			Title:        "Lookup",
@@ -196,8 +189,8 @@ func sdkToolBindings(adapter *MCPAdapter, requestContext func(context.Context, *
 	})
 	return bindings, nil
 }
-func sdkResourceBindings(adapter *MCPAdapter, requestContext func(context.Context, *http.Request) context.Context) ([]sdkbridge.ResourceBinding, error) {
-	handler := adapter.sdkResourceHandler(requestContext)
+func sdkResourceBindings(adapter *MCPAdapter) ([]sdkbridge.ResourceBinding, error) {
+	handler := adapter.sdkResourceHandler()
 	bindings := make([]sdkbridge.ResourceBinding, 0, 2)
 	bindings = append(bindings, sdkbridge.ResourceBinding{
 		Handler: handler,
@@ -219,7 +212,7 @@ func sdkResourceBindings(adapter *MCPAdapter, requestContext func(context.Contex
 	})
 	return bindings, nil
 }
-func sdkPromptBindings(adapter *MCPAdapter, requestContext func(context.Context, *http.Request) context.Context) ([]sdkbridge.PromptBinding, error) {
+func sdkPromptBindings(adapter *MCPAdapter) ([]sdkbridge.PromptBinding, error) {
 	return nil, nil
 }
 func sdkToolAnnotations(raw any) (*mcpsdk.ToolAnnotations, error) {
@@ -250,11 +243,15 @@ func sdkToolFromToolInfo(tool *ToolInfo) (*mcpsdk.Tool, error) {
 	if err != nil {
 		return nil, err
 	}
+	meta, err := sdkMeta(tool.Meta)
+	if err != nil {
+		return nil, err
+	}
 	sdkTool := &mcpsdk.Tool{
 		Annotations:  annotations,
 		Description:  derefString(tool.Description),
 		InputSchema:  tool.InputSchema,
-		Meta:         sdkMeta(tool.Meta),
+		Meta:         meta,
 		Name:         tool.Name,
 		OutputSchema: tool.OutputSchema,
 		Title:        derefString(tool.Title),
@@ -273,15 +270,14 @@ func sdkToolFromToolInfo(tool *ToolInfo) (*mcpsdk.Tool, error) {
 	}
 	return sdkTool, nil
 }
-func (a *MCPAdapter) sdkHandlerContext(requestContext func(context.Context, *http.Request) context.Context) sdkbridge.HandlerContext {
+func (a *MCPAdapter) sdkHandlerContext() sdkbridge.HandlerContext {
 	return sdkbridge.HandlerContext{
-		MarkInitialized: a.markInitializedSession,
-		RequestContext:  requestContext,
 		RequestStateKey: a.requestStateKey,
+		Sessions:        a.sessions,
 	}
 }
-func (a *MCPAdapter) sdkToolHandler(requestContext func(context.Context, *http.Request) context.Context) mcpsdk.ToolHandler {
-	return sdkbridge.ToolHandler(a.sdkHandlerContext(requestContext), func(ctx context.Context, request sdkbridge.ToolRequest) (*mcpsdk.CallToolResult, error) {
+func (a *MCPAdapter) sdkToolHandler() mcpsdk.ToolHandler {
+	return sdkbridge.ToolHandler(a.sdkHandlerContext(), func(ctx context.Context, request sdkbridge.ToolRequest) (*mcpsdk.CallToolResult, error) {
 		payload := &ToolsCallPayload{
 			Arguments: mcpJSONFromRaw(request.Arguments),
 			Name:      request.Name,
@@ -294,15 +290,15 @@ func (a *MCPAdapter) sdkToolHandler(requestContext func(context.Context, *http.R
 		return sdkCallToolResult(result)
 	})
 }
-func (a *MCPAdapter) sdkResourceHandler(requestContext func(context.Context, *http.Request) context.Context) mcpsdk.ResourceHandler {
-	return sdkbridge.ResourceHandler(a.sdkHandlerContext(requestContext), func(ctx context.Context, request sdkbridge.ResourceRequest) (*mcpsdk.ReadResourceResult, error) {
+func (a *MCPAdapter) sdkResourceHandler() mcpsdk.ResourceHandler {
+	return sdkbridge.ResourceHandler(a.sdkHandlerContext(), func(ctx context.Context, request sdkbridge.ResourceRequest) (*mcpsdk.ReadResourceResult, error) {
 		payload := &ResourcesReadPayload{URI: request.URI}
 		ctx = request.Bind(payload)
 		result, err := a.ResourcesRead(ctx, payload)
 		if err != nil {
 			return nil, err
 		}
-		return sdkReadResourceResult(result)
+		return sdkReadResourceResult(result, request.URI)
 	})
 }
 func sdkCallToolResult(result *ToolsCallResult) (*mcpsdk.CallToolResult, error) {
@@ -330,13 +326,13 @@ func sdkCallToolResult(result *ToolsCallResult) (*mcpsdk.CallToolResult, error) 
 	}
 	return callResult, nil
 }
-func sdkReadResourceResult(result *ResourcesReadResult) (*mcpsdk.ReadResourceResult, error) {
+func sdkReadResourceResult(result *ResourcesReadResult, uri string) (*mcpsdk.ReadResourceResult, error) {
 	if result == nil {
 		return &mcpsdk.ReadResourceResult{Contents: []*mcpsdk.ResourceContents{}}, nil
 	}
 	contents := make([]*mcpsdk.ResourceContents, 0, len(result.Contents))
 	for _, content := range result.Contents {
-		converted, err := sdkReadResourceContent(content)
+		converted, err := sdkReadResourceContent(content, uri)
 		if err != nil {
 			return nil, err
 		}
@@ -344,15 +340,19 @@ func sdkReadResourceResult(result *ResourcesReadResult) (*mcpsdk.ReadResourceRes
 	}
 	return &mcpsdk.ReadResourceResult{Contents: contents}, nil
 }
-func sdkReadResourceContent(item *ResourceContent) (*mcpsdk.ResourceContents, error) {
+func sdkReadResourceContent(item *ResourceContent, uri string) (*mcpsdk.ResourceContents, error) {
 	if item == nil {
-		return &mcpsdk.ResourceContents{}, nil
+		return &mcpsdk.ResourceContents{URI: uri}, nil
+	}
+	meta, err := sdkMeta(item.Meta)
+	if err != nil {
+		return nil, err
 	}
 	resource := &mcpsdk.ResourceContents{
 		MIMEType: derefString(item.MimeType),
-		Meta:     sdkMeta(mcpJSONAny(item.Meta)),
+		Meta:     meta,
 		Text:     derefString(item.Text),
-		URI:      item.URI,
+		URI:      uri,
 	}
 	if item.Blob != nil {
 		data, err := sdkDecodeBase64(item.Blob)
@@ -367,9 +367,16 @@ func sdkContentFromItem(item *ContentItem) (mcpsdk.Content, error) {
 	if item == nil {
 		return &mcpsdk.TextContent{}, nil
 	}
+	meta, err := sdkMeta(item.Meta)
+	if err != nil {
+		return nil, err
+	}
 	switch item.Type {
 	case "text":
-		return &mcpsdk.TextContent{Text: derefString(item.Text)}, nil
+		return &mcpsdk.TextContent{
+			Meta: meta,
+			Text: derefString(item.Text),
+		}, nil
 	case "image":
 		data, err := sdkDecodeBase64(item.Data)
 		if err != nil {
@@ -378,6 +385,7 @@ func sdkContentFromItem(item *ContentItem) (mcpsdk.Content, error) {
 		return &mcpsdk.ImageContent{
 			Data:     data,
 			MIMEType: derefString(item.MimeType),
+			Meta:     meta,
 		}, nil
 	case "audio":
 		data, err := sdkDecodeBase64(item.Data)
@@ -387,27 +395,35 @@ func sdkContentFromItem(item *ContentItem) (mcpsdk.Content, error) {
 		return &mcpsdk.AudioContent{
 			Data:     data,
 			MIMEType: derefString(item.MimeType),
+			Meta:     meta,
 		}, nil
 	case "resource":
-		resource, err := sdkResourceContents(item)
+		resource, err := sdkResourceContents(item, meta)
 		if err != nil {
 			return nil, err
 		}
-		return &mcpsdk.EmbeddedResource{Resource: resource}, nil
+		return &mcpsdk.EmbeddedResource{
+			Meta:     meta,
+			Resource: resource,
+		}, nil
 	default:
 		if item.URI != nil {
-			resource, err := sdkResourceContents(item)
+			resource, err := sdkResourceContents(item, meta)
 			if err != nil {
 				return nil, err
 			}
-			return &mcpsdk.EmbeddedResource{Resource: resource}, nil
+			return &mcpsdk.EmbeddedResource{
+				Meta:     meta,
+				Resource: resource,
+			}, nil
 		}
 		return nil, fmt.Errorf("unsupported MCP content type %q", item.Type)
 	}
 }
-func sdkResourceContents(item *ContentItem) (*mcpsdk.ResourceContents, error) {
+func sdkResourceContents(item *ContentItem, meta mcpsdk.Meta) (*mcpsdk.ResourceContents, error) {
 	resource := &mcpsdk.ResourceContents{
 		MIMEType: derefString(item.MimeType),
+		Meta:     meta,
 		Text:     derefString(item.Text),
 		URI:      derefString(item.URI),
 	}
@@ -420,29 +436,8 @@ func sdkResourceContents(item *ContentItem) (*mcpsdk.ResourceContents, error) {
 	}
 	return resource, nil
 }
-func sdkMeta(value any) mcpsdk.Meta {
-	switch typed := value.(type) {
-	case nil:
-		return nil
-	case mcpsdk.Meta:
-		return typed
-	case map[string]any:
-		return mcpsdk.Meta(typed)
-	case jsontext.Value:
-		var meta map[string]any
-		if err := json.Unmarshal(typed, &meta); err != nil {
-			return nil
-		}
-		return mcpsdk.Meta(meta)
-	case []byte:
-		var meta map[string]any
-		if err := json.Unmarshal(typed, &meta); err != nil {
-			return nil
-		}
-		return mcpsdk.Meta(meta)
-	default:
-		return nil
-	}
+func sdkMeta(value any) (mcpsdk.Meta, error) {
+	return sdkbridge.DecodeMeta(value)
 }
 func sdkDecodeBase64(raw *string) ([]byte, error) {
 	if raw == nil || *raw == "" {

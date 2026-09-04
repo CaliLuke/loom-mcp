@@ -54,19 +54,6 @@ func TestGeneratedSDKServerToolSearchRejectsDirectHiddenCalls(t *testing.T) {
 	assert.Contains(t, err.Error(), "analyze_sentiment")
 }
 
-func TestGeneratedSDKServerToolSearchRejectsDirectHiddenCompatOption(t *testing.T) {
-	t.Parallel()
-
-	_, err := mcpassistant.NewSDKServer(NewAssistant(), withTestRuntimeCORS(t, &mcpassistant.SDKServerOptions{
-		PromptProvider: promptProvider{},
-		Adapter: &mcpassistant.MCPAdapterOptions{
-			ToolSearch: &mcpassistant.ToolSearchOptions{AllowDirectHiddenCalls: true},
-		},
-	}))
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "AllowDirectHiddenCalls")
-}
-
 func TestGeneratedSDKServerToolSearchCallToolInvokesHiddenTool(t *testing.T) {
 	t.Parallel()
 

@@ -1717,7 +1717,7 @@ large MCP catalogs. Set `MCPAdapterOptions.ToolSearch` (or
 catalog with synthetic `search_tools` and `call_tool` entries plus pinned real
 tools from `ToolSearchOptions.AlwaysVisible`. Hidden real tools are discovered
 through `search_tools` and invoked through `call_tool`. Direct hidden calls are
-rejected by default.
+always rejected.
 
 This is an adapter option, not a DSL declaration: the design still owns the real
 tool contracts, while deployment code decides whether to expose the full catalog

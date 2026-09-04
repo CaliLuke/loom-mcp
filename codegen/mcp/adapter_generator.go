@@ -211,6 +211,7 @@ type (
 		PayloadType        string
 		ResultType         string
 		QueryFields        []*ResourceQueryField
+		QuerySchema        string
 		Watchable          bool
 		IsStreaming        bool
 		StreamInterface    string
@@ -226,6 +227,8 @@ type (
 		CollectionExpr string
 		FormatKind     string
 		Repeated       bool
+		Bits           int
+		DefaultValues  []string
 	}
 
 	// SkillDirectoryAdapter represents one skill root exposed as MCP resources.
@@ -237,6 +240,7 @@ type (
 	// query field together with the presence rules implied by the Goa payload.
 	resourceQueryFieldDefinition struct {
 		Attribute        *expr.AttributeExpr
+		FieldName        string
 		Required         bool
 		PrimitivePointer bool
 	}
@@ -791,6 +795,11 @@ func (g *adapterGenerator) populateResourcePayloadData(adapter *ResourceAdapter,
 		return fmt.Errorf("build resource query fields for %q: %w", resource.Method.Name, err)
 	}
 	adapter.QueryFields = queryFields
+	querySchema, err := shared.ToJSONSchema(resource.Method.Payload)
+	if err != nil {
+		return fmt.Errorf("build resource query schema for %q: %w", resource.Method.Name, err)
+	}
+	adapter.QuerySchema = querySchema
 	return nil
 }
 

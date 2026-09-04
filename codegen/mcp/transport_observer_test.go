@@ -25,7 +25,7 @@ func TestMCPTransportObserverEmissions(t *testing.T) {
 	bridgeData, err := os.ReadFile(bridgeFile) // #nosec G304 -- fixed checked-in runtime path
 	require.NoError(t, err)
 	bridgeSource := string(bridgeData)
-	for _, needle := range []string{"transport.BeginHTTPRequest(", "transport.HTTPMiddleware(config.Options.TransportObserver)(handler)"} {
+	for _, needle := range []string{"transport.BeginHTTPRequest(", "transport.HTTPMiddleware(options.TransportObserver)(handler)"} {
 		require.Containsf(t, bridgeSource, needle, "shared SDK bridge must contain %q", needle)
 	}
 	for _, needle := range []string{"TransportObserver transport.Observer", "sdkbridge.NewServer"} {

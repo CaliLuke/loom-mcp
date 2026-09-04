@@ -10,6 +10,7 @@ import (
 	mcpassistant "example.com/assistant/gen/mcp_assistant"
 	agentruntime "github.com/CaliLuke/loom-mcp/v2/runtime/agent/runtime"
 	mcpruntime "github.com/CaliLuke/loom-mcp/v2/runtime/mcp"
+	"github.com/CaliLuke/loom-mcp/v2/runtime/mcp/sdkbridge"
 	goahttp "github.com/CaliLuke/loom/http"
 	sdkmcp "github.com/modelcontextprotocol/go-sdk/mcp"
 	"github.com/stretchr/testify/require"
@@ -34,7 +35,7 @@ func newGeneratedStatelessSDKServer(t *testing.T) (*mcpassistant.SDKServer, *htt
 		PromptProvider:  promptProvider{},
 		RequestStateKey: []byte(testRequestStateKey),
 		RuntimeCORS:     &corsPolicy,
-		StreamableHTTP:  &sdkmcp.StreamableHTTPOptions{Stateless: true},
+		StreamableHTTP:  &sdkbridge.StreamableHTTPOptions{Stateless: true},
 	})
 	require.NoError(t, err)
 	mux := http.NewServeMux()

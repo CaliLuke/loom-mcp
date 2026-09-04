@@ -11,6 +11,7 @@ import (
 	"time"
 
 	mcpassistant "example.com/assistant/gen/mcp_assistant"
+	"github.com/CaliLuke/loom-mcp/v2/runtime/mcp/sdkbridge"
 	sdkmcp "github.com/modelcontextprotocol/go-sdk/mcp"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -55,10 +56,8 @@ func TestGeneratedSDKServerNegotiatesToolCallResponse(t *testing.T) {
 	t.Run("configured JSON response", func(t *testing.T) {
 		sdkServer, err := mcpassistant.NewSDKServer(NewAssistant(), &mcpassistant.SDKServerOptions{
 			PromptProvider: promptProvider{},
-			StreamableHTTP: &sdkmcp.StreamableHTTPOptions{
-				Stateless:    true,
-				JSONResponse: true,
-			},
+			StreamableHTTP: &sdkbridge.StreamableHTTPOptions{Stateless: true,
+				JSONResponse: true},
 		})
 		require.NoError(t, err)
 		mux := http.NewServeMux()

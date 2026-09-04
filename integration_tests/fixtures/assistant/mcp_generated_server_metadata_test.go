@@ -69,6 +69,13 @@ func TestGeneratedSDKServerExposesSEP973Metadata(t *testing.T) {
 	require.Len(t, staticPrompt.Icons, 1)
 	assert.Equal(t, "https://assistant.example.com/icons/code-review.svg", staticPrompt.Icons[0].Source)
 
+	promptResult, err := session.GetPrompt(ctx, &sdkmcp.GetPromptParams{Name: "code_review"})
+	require.NoError(t, err)
+	require.Len(t, promptResult.Messages, 1)
+	textContent, ok := promptResult.Messages[0].Content.(*sdkmcp.TextContent)
+	require.True(t, ok)
+	assert.Equal(t, "fixture", textContent.Meta["source"])
+
 	dynamicPrompt := findPromptByName(t, prompts.Prompts, "contextual_prompts")
 	require.Len(t, dynamicPrompt.Icons, 1)
 	assert.Equal(t, "https://assistant.example.com/icons/contextual-prompts.png", dynamicPrompt.Icons[0].Source)

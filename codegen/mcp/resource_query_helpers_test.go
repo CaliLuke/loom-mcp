@@ -29,7 +29,8 @@ func TestBuildResourceQueryFields(t *testing.T) {
 			{
 				Name: "tags",
 				Attribute: &expr.AttributeExpr{
-					Type: &expr.Array{ElemType: &expr.AttributeExpr{Type: expr.String}},
+					Type:         &expr.Array{ElemType: &expr.AttributeExpr{Type: expr.String}},
+					DefaultValue: []string{},
 				},
 			},
 		},
@@ -58,7 +59,9 @@ func TestBuildResourceQueryFields(t *testing.T) {
 		CollectionExpr: "payload.Tags",
 		FormatKind:     resourceQueryFormatString,
 		Repeated:       true,
+		DefaultValues:  []string{},
 	}, fields[2])
+	assert.NotNil(t, fields[2].DefaultValues)
 }
 
 func TestBuildResourceQueryFields_RejectsNestedArray(t *testing.T) {

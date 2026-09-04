@@ -31,7 +31,15 @@ var (
 		Service:     "assistant",
 		Toolset:     "assistant.projected",
 		Description: "Lookup bounded projected data",
-		Tags:        []string{},
+		Tags: []string{
+			"projected",
+			"bounded",
+		},
+		Meta: map[string][]string{
+			"projection:test": []string{
+				"preserved",
+			},
+		},
 		Bounds: &tools.BoundsSpec{
 			Paging: &tools.PagingSpec{
 				CursorField:     "cursor",
@@ -68,7 +76,10 @@ var (
 			ID:          ProjectedBoundedLookupTool,
 			Title:       "Projected Bounded Lookup Tool",
 			Description: "Lookup bounded projected data",
-			Tags:        []string{},
+			Tags: []string{
+				"projected",
+				"bounded",
+			},
 			BudgetClass: policy.ToolBudgetClassBudgeted,
 		},
 		{

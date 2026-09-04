@@ -249,9 +249,9 @@ Use this file when editing DSL, generators, generated helpers, or MCP codegen be
   normalized, prefix, or contains name/title tier is present.
   `ToolDiscoveryCallTemplateArg` may add exemplar optional arguments to those
   examples, but must not change validation semantics. Hidden real
-  tools are called through `call_tool`; direct hidden JSON-RPC calls require
-  `AllowDirectHiddenCalls`, and SDK compact mode must reject that option because
-  unregistered SDK tools cannot be directly invoked. Projected MCP tools must follow the same `AlwaysVisible`,
+	tools are called through `call_tool`; direct hidden calls are rejected.
+	Projected MCP tools must follow the same `AlwaysVisible`,
+	`search_tools`, and `call_tool` behavior as method-level MCP tools.
   `search_tools`, and `call_tool` behavior as method-level MCP tools.
 - Generated MCP tool packages also emit an in-process progressive-discovery
   `ToolsetRegistration` constructor. It derives compact tool specs from the

@@ -2,8 +2,6 @@ package sdkbridge
 
 import (
 	"context"
-	"net/http"
-	"net/url"
 
 	"encoding/json/jsontext"
 	json "encoding/json/v2"
@@ -14,9 +12,8 @@ import (
 
 // HandlerContext configures common request-to-runtime context plumbing.
 type HandlerContext struct {
-	RequestContext  func(context.Context, *http.Request) context.Context
 	RequestStateKey []byte
-	MarkInitialized func(string)
+	Sessions        *SessionState
 }
 
 // ToolRequest contains SDK tool input and a typed service-payload context binder.
@@ -63,7 +60,7 @@ func ToolHandler(config HandlerContext, call ToolCall) mcpsdk.ToolHandler {
 		if req != nil && req.Params != nil {
 			ctx = mcpruntime.WithProgressToken(ctx, req.Params.GetProgressToken())
 		}
-		bind := requestBinder(ctx, requestSession(req), requestExtra(req), config, inputResponses, requestState, "tools/call")
+		bind := requestBinder(ctx, requestSession(req), config, inputResponses, requestState, "tools/call")
 		result, err := call(ctx, ToolRequest{Name: name, Arguments: arguments, Bind: bind})
 		if requests, state, ok := sdkclient.InputRequired(err); ok {
 			return &mcpsdk.CallToolResult{InputRequests: requests, RequestState: state}, nil
@@ -90,7 +87,7 @@ func PromptHandler(config HandlerContext, call PromptCall) mcpsdk.PromptHandler 
 				arguments = encoded
 			}
 		}
-		bind := requestBinder(ctx, requestSession(req), requestExtra(req), config, inputResponses, requestState, "prompts/get")
+		bind := requestBinder(ctx, requestSession(req), config, inputResponses, requestState, "prompts/get")
 		result, err := call(ctx, PromptRequest{Name: name, Arguments: arguments, Bind: bind})
 		if requests, state, ok := sdkclient.InputRequired(err); ok {
 			return &mcpsdk.GetPromptResult{InputRequests: requests, RequestState: state}, nil
@@ -109,7 +106,7 @@ func ResourceHandler(config HandlerContext, call ResourceCall) mcpsdk.ResourceHa
 			inputResponses = req.Params.InputResponses
 			requestState = req.Params.RequestState
 		}
-		bind := requestBinder(ctx, requestSession(req), requestExtra(req), config, inputResponses, requestState, "resources/read")
+		bind := requestBinder(ctx, requestSession(req), config, inputResponses, requestState, "resources/read")
 		result, err := call(ctx, ResourceRequest{URI: uri, Bind: bind})
 		if requests, state, ok := sdkclient.InputRequired(err); ok {
 			return &mcpsdk.ReadResourceResult{InputRequests: requests, RequestState: state}, nil
@@ -123,19 +120,14 @@ func BindCompletionContext(ctx context.Context, req *mcpsdk.CompleteRequest, con
 	if req == nil {
 		return ctx
 	}
-	return requestBinder(ctx, req.GetSession(), req.GetExtra(), config, nil, "", "completion/complete")(req.Params)
+	return requestBinder(ctx, req.GetSession(), config, nil, "", "completion/complete")(req.Params)
 }
 
-func requestBinder(ctx context.Context, session mcpsdk.Session, extra *mcpsdk.RequestExtra, config HandlerContext, inputResponses mcpsdk.InputResponseMap, requestState, method string) func(any) context.Context {
+func requestBinder(ctx context.Context, session mcpsdk.Session, config HandlerContext, inputResponses mcpsdk.InputResponseMap, requestState, method string) func(any) context.Context {
 	return func(params any) context.Context {
 		bound := ctx
-		if config.RequestContext != nil {
-			bound = config.RequestContext(bound, syntheticHTTPRequest(bound, extra))
-		}
 		if session == nil {
-			if config.MarkInitialized != nil {
-				config.MarkInitialized("")
-			}
+			config.Sessions.MarkInitialized("")
 			return bound
 		}
 		if serverSession, ok := session.(*mcpsdk.ServerSession); ok && serverSession != nil {
@@ -145,33 +137,12 @@ func requestBinder(ctx context.Context, session mcpsdk.Session, extra *mcpsdk.Re
 			})
 		}
 		sessionID := session.ID()
-		if config.MarkInitialized != nil {
-			config.MarkInitialized(sessionID)
-		}
+		config.Sessions.MarkInitialized(sessionID)
 		if sessionID == "" {
 			return bound
 		}
 		return mcpruntime.WithSessionID(bound, sessionID)
 	}
-}
-
-func syntheticHTTPRequest(ctx context.Context, extra *mcpsdk.RequestExtra) *http.Request {
-	req := &http.Request{Header: make(http.Header), Method: http.MethodPost, URL: &url.URL{Path: "/mcp"}}
-	for key, values := range mcpruntime.RequestHeadersFromContext(ctx) {
-		req.Header.Del(key)
-		for _, value := range values {
-			req.Header.Add(key, value)
-		}
-	}
-	if extra != nil && extra.Header != nil {
-		for key, values := range extra.Header {
-			req.Header.Del(key)
-			for _, value := range values {
-				req.Header.Add(key, value)
-			}
-		}
-	}
-	return req
 }
 
 func requestSession[T interface {
@@ -187,15 +158,4 @@ func requestSession[T interface {
 		return nil
 	}
 	return session
-}
-
-func requestExtra[T interface {
-	comparable
-	GetExtra() *mcpsdk.RequestExtra
-}](req T) *mcpsdk.RequestExtra {
-	var zero T
-	if req == zero {
-		return nil
-	}
-	return req.GetExtra()
 }

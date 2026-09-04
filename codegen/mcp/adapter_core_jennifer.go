@@ -28,59 +28,41 @@ func adapterCoreSection(data *AdapterData) codegen.Section {
 }
 
 func emitMCPJSONPresenceHelpers(stmt *jen.Statement) {
-	nullableAny := func() *jen.Statement {
-		return jen.Id("loom").Dot("Nullable").Types(jen.Any())
+	jsonValue := func() *jen.Statement {
+		return jen.Id("loom").Dot("JSONValue")
 	}
 	stmt.Func().Id("mcpJSONRaw").
-		Params(jen.Id("value").Add(nullableAny())).
+		Params(jen.Id("value").Add(jsonValue())).
 		Params(jen.Id("jsontext").Dot("Value"), jen.Error()).
 		Block(
-			jen.If(jen.Op("!").Id("value").Dot("Present").Call()).Block(
+			jen.Id("trimmed").Op(":=").Qual("bytes", "TrimSpace").Call(jen.Id("value")),
+			jen.If(jen.Len(jen.Id("trimmed")).Op("==").Lit(0)).Block(
 				jen.Return(jen.Nil(), jen.Nil()),
 			),
-			jen.If(jen.Id("value").Dot("IsNull").Call()).Block(
-				jen.Return(jen.Id("jsontext").Dot("Value").Call(jen.Lit("null")), jen.Nil()),
+			jen.If(jen.Op("!").Id("jsontext").Dot("Value").Call(jen.Id("trimmed")).Dot("IsValid").Call()).Block(
+				jen.Return(jen.Nil(), jen.Qual("errors", "New").Call(jen.Lit("invalid MCP JSON value"))),
 			),
-			jen.List(jen.Id("actual"), jen.Id("ok")).Op(":=").Id("value").Dot("Value").Call(),
-			jen.If(jen.Op("!").Id("ok")).Block(
-				jen.Return(jen.Nil(), jen.Qual("errors", "New").Call(jen.Lit("present MCP JSON value has no concrete value"))),
+			jen.Return(
+				jen.Append(jen.Id("jsontext").Dot("Value").Call(jen.Nil()), jen.Id("value").Op("...")),
+				jen.Nil(),
 			),
-			jen.If(jen.List(jen.Id("raw"), jen.Id("ok")).Op(":=").Id("actual").Assert(jen.Id("jsontext").Dot("Value")), jen.Id("ok")).Block(
-				jen.Return(
-					jen.Append(jen.Id("jsontext").Dot("Value").Call(jen.Nil()), jen.Id("raw").Op("...")),
-					jen.Nil(),
-				),
-			),
-			jen.List(jen.Id("raw"), jen.Id("err")).Op(":=").Id("json").Dot("Marshal").Call(jen.Id("actual")),
-			jen.If(jen.Id("err").Op("!=").Nil()).Block(
-				jen.Return(jen.Nil(), jen.Id("err")),
-			),
-			jen.Return(jen.Id("jsontext").Dot("Value").Call(jen.Id("raw")), jen.Nil()),
 		)
 	stmt.Line()
 	stmt.Func().Id("mcpJSONFromRaw").
 		Params(jen.Id("raw").Id("jsontext").Dot("Value")).
-		Add(nullableAny()).
+		Add(jsonValue()).
 		Block(
-			jen.Id("trimmed").Op(":=").Qual("bytes", "TrimSpace").Call(jen.Id("raw")),
-			jen.If(jen.Len(jen.Id("trimmed")).Op("==").Lit(0)).Block(
-				jen.Return(nullableAny().Values()),
+			jen.If(jen.Len(jen.Qual("bytes", "TrimSpace").Call(jen.Id("raw"))).Op("==").Lit(0)).Block(
+				jen.Return(jen.Nil()),
 			),
-			jen.If(jen.Qual("bytes", "Equal").Call(jen.Id("trimmed"), jen.Index().Byte().Call(jen.Lit("null")))).Block(
-				jen.Return(jen.Id("loom").Dot("NullValue").Types(jen.Any()).Call()),
-			),
-			jen.Id("copied").Op(":=").Append(jen.Id("jsontext").Dot("Value").Call(jen.Nil()), jen.Id("raw").Op("...")),
-			jen.Return(jen.Id("loom").Dot("NullableValue").Types(jen.Any()).Call(jen.Id("copied"))),
+			jen.Return(jen.Append(jsonValue().Call(jen.Nil()), jen.Id("raw").Op("..."))),
 		)
 	stmt.Line()
-	stmt.Func().Id("mcpJSONAny").
-		Params(jen.Id("value").Add(nullableAny())).
-		Any().
+	stmt.Func().Id("mcpJSONPresent").
+		Params(jen.Id("value").Add(jsonValue())).
+		Bool().
 		Block(
-			jen.If(jen.Id("value").Dot("IsNull").Call()).Block(jen.Return(jen.Nil())),
-			jen.List(jen.Id("actual"), jen.Id("ok")).Op(":=").Id("value").Dot("Value").Call(),
-			jen.If(jen.Op("!").Id("ok")).Block(jen.Return(jen.Nil())),
-			jen.Return(jen.Id("actual")),
+			jen.Return(jen.Len(jen.Qual("bytes", "TrimSpace").Call(jen.Id("value"))).Op(">").Lit(0)),
 		)
 	stmt.Line()
 }
@@ -89,10 +71,7 @@ func emitMCPJSONPresenceHelpers(stmt *jen.Statement) {
 func emitAdapterStruct(stmt *jen.Statement, data *AdapterData) {
 	stmt.Type().Id("MCPAdapter").StructFunc(func(g *jen.Group) {
 		g.Id("service").Id(data.Package).Dot("Service")
-		g.Id("initialized").Bool()
-		g.Id("initializedSessions").Map(jen.String()).Qual("time", "Time")
-		g.Id("sessionPrincipals").Map(jen.String()).String()
-		g.Id("mu").Qual("sync", "RWMutex")
+		g.Id("sessions").Op("*").Id("sdkbridge").Dot("SessionState")
 		g.Id("opts").Op("*").Id("MCPAdapterOptions")
 		g.Id("tracer").Qual("go.opentelemetry.io/otel/trace", "Tracer")
 		g.Id("callCounter").Qual("go.opentelemetry.io/otel/metric", "Int64Counter")
@@ -110,18 +89,7 @@ func emitAdapterStruct(stmt *jen.Statement, data *AdapterData) {
 		g.Id("requestStateKey").Index().Byte()
 	})
 	stmt.Line()
-	stmt.Const().Defs(
-		jen.Id("mcpSessionTTL").Op("=").Lit(24).Op("*").Qual("time", "Hour"),
-		jen.Id("mcpMaxSessions").Op("=").Lit(4096),
-	)
-	stmt.Line()
 	stmt.Var().Id("_").Id("Service").Op("=").Params(jen.Op("*").Id("MCPAdapter")).Call(jen.Nil())
-	stmt.Line()
-	stmt.Var().Defs(
-		jen.Id("errInvalidSessionID").Op("=").Qual("errors", "New").Call(jen.Lit("invalid session ID")),
-		jen.Id("errSessionPrincipalBindingMissing").Op("=").Qual("errors", "New").Call(jen.Lit("session principal binding missing")),
-		jen.Id("errSessionPrincipalMismatch").Op("=").Qual("errors", "New").Call(jen.Lit("session user mismatch")),
-	)
 	stmt.Line()
 }
 
@@ -179,8 +147,6 @@ func emitToolSearchOptions(stmt *jen.Statement) {
 		jen.Id("SearchToolName").String(),
 		jen.Comment("CallToolName overrides the synthetic call proxy tool name. Default: call_tool."),
 		jen.Id("CallToolName").String(),
-		jen.Comment("AllowDirectHiddenCalls permits direct tools/call for hidden real tools as a JSON-RPC compatibility option."),
-		jen.Id("AllowDirectHiddenCalls").Bool(),
 	)
 	stmt.Line()
 }
@@ -230,10 +196,13 @@ func emitAdapterConstructor(stmt *jen.Statement, data *AdapterData) {
 		g.Id("telemetryName").Op(":=").Id("defaultMCPAdapterTelemetryName").Call(jen.Id("opts"))
 		g.Id("tracer").Op(":=").Id("defaultMCPAdapterTracer").Call(jen.Id("opts"), jen.Id("telemetryName"))
 		g.List(jen.Id("callCounter"), jen.Id("errorCounter"), jen.Id("durationHistogram")).Op(":=").Id("defaultMCPAdapterMetrics").Call(jen.Id("opts"), jen.Id("telemetryName"))
+		g.Var().Id("sessionPrincipal").Id("sdkbridge").Dot("PrincipalResolver")
+		g.If(jen.Id("opts").Op("!=").Nil()).Block(
+			jen.Id("sessionPrincipal").Op("=").Id("opts").Dot("SessionPrincipal"),
+		)
 		g.Id("adapter").Op(":=").Op("&").Id("MCPAdapter").ValuesFunc(func(vals *jen.Group) {
 			vals.Id("service").Op(":").Id("service")
-			vals.Id("initializedSessions").Op(":").Make(jen.Map(jen.String()).Qual("time", "Time"))
-			vals.Id("sessionPrincipals").Op(":").Make(jen.Map(jen.String()).String())
+			vals.Id("sessions").Op(":").Id("sdkbridge").Dot("NewSessionState").Call(jen.Id("sessionPrincipal"))
 			vals.Id("opts").Op(":").Id("opts")
 			vals.Id("tracer").Op(":").Id("tracer")
 			vals.Id("callCounter").Op(":").Id("callCounter")
@@ -265,137 +234,12 @@ func emitAdapterConstructor(stmt *jen.Statement, data *AdapterData) {
 	stmt.Line()
 }
 
-// emitSessionHelpers generates session initialization and principal helpers.
+// emitSessionHelpers generates the adapter's session-aware initialization check.
 func emitSessionHelpers(stmt *jen.Statement) {
-	// pruneSessionsLocked
-	stmt.Func().Params(jen.Id("a").Op("*").Id("MCPAdapter")).
-		Id("pruneSessionsLocked").Params(jen.Id("now").Qual("time", "Time"), jen.Id("reserveSlot").Bool()).
-		Block(
-			jen.For(jen.List(jen.Id("sessionID"), jen.Id("touchedAt")).Op(":=").Range().Id("a").Dot("initializedSessions")).Block(
-				jen.If(jen.Id("now").Dot("Sub").Call(jen.Id("touchedAt")).Op(">=").Id("mcpSessionTTL")).Block(
-					jen.Delete(jen.Id("a").Dot("initializedSessions"), jen.Id("sessionID")),
-					jen.Delete(jen.Id("a").Dot("sessionPrincipals"), jen.Id("sessionID")),
-				),
-			),
-			jen.For(jen.Len(jen.Id("a").Dot("initializedSessions")).Op(">").Id("mcpMaxSessions").Op("||").Id("reserveSlot").Op("&&").Len(jen.Id("a").Dot("initializedSessions")).Op(">=").Id("mcpMaxSessions")).Block(
-				jen.Id("oldestID").Op(":=").Lit(""),
-				jen.Var().Id("oldestAt").Qual("time", "Time"),
-				jen.For(jen.List(jen.Id("sessionID"), jen.Id("touchedAt")).Op(":=").Range().Id("a").Dot("initializedSessions")).Block(
-					jen.If(jen.Id("oldestID").Op("==").Lit("").Op("||").Id("touchedAt").Dot("Before").Call(jen.Id("oldestAt"))).Block(
-						jen.Id("oldestID").Op("=").Id("sessionID"),
-						jen.Id("oldestAt").Op("=").Id("touchedAt"),
-					),
-				),
-				jen.If(jen.Id("oldestID").Op("==").Lit("")).Block(jen.Return()),
-				jen.Delete(jen.Id("a").Dot("initializedSessions"), jen.Id("oldestID")),
-				jen.Delete(jen.Id("a").Dot("sessionPrincipals"), jen.Id("oldestID")),
-			),
-		)
-	stmt.Line()
-
-	// isInitialized
 	stmt.Func().Params(jen.Id("a").Op("*").Id("MCPAdapter")).
 		Id("isInitialized").Params(jen.Id("ctx").Qual("context", "Context")).Bool().
 		Block(
-			jen.Id("a").Dot("mu").Dot("RLock").Call(),
-			jen.Defer().Id("a").Dot("mu").Dot("RUnlock").Call(),
-			jen.If(jen.Id("sessionID").Op(":=").Id("mcpruntime").Dot("SessionIDFromContext").Call(jen.Id("ctx")), jen.Id("sessionID").Op("!=").Lit("")).Block(
-				jen.List(jen.Id("_"), jen.Id("ok")).Op(":=").Id("a").Dot("initializedSessions").Index(jen.Id("sessionID")),
-				jen.Return(jen.Id("ok")),
-			),
-			jen.Return(jen.Id("a").Dot("initialized")),
-		)
-	stmt.Line()
-
-	// markInitializedSession
-	stmt.Func().Params(jen.Id("a").Op("*").Id("MCPAdapter")).
-		Id("markInitializedSession").Params(jen.Id("sessionID").String()).
-		Block(
-			jen.Id("a").Dot("mu").Dot("Lock").Call(),
-			jen.Defer().Id("a").Dot("mu").Dot("Unlock").Call(),
-			jen.If(jen.Id("sessionID").Op("==").Lit("")).Block(
-				jen.Id("a").Dot("initialized").Op("=").True(),
-				jen.Return(),
-			),
-			jen.Id("now").Op(":=").Qual("time", "Now").Call(),
-			jen.If(jen.List(jen.Id("_"), jen.Id("ok")).Op(":=").Id("a").Dot("initializedSessions").Index(jen.Id("sessionID")), jen.Op("!").Id("ok")).Block(
-				jen.Id("a").Dot("pruneSessionsLocked").Call(jen.Id("now"), jen.True()),
-			),
-			jen.Id("a").Dot("initializedSessions").Index(jen.Id("sessionID")).Op("=").Id("now"),
-		)
-	stmt.Line()
-
-	// captureSessionPrincipal
-	stmt.Func().Params(jen.Id("a").Op("*").Id("MCPAdapter")).
-		Id("captureSessionPrincipal").Params(jen.Id("ctx").Qual("context", "Context"), jen.Id("sessionID").String()).
-		Block(
-			jen.If(jen.Id("a").Op("==").Nil().Op("||").Id("sessionID").Op("==").Lit("")).Block(jen.Return()),
-			jen.Id("principal").Op(":=").Id("a").Dot("sessionPrincipal").Call(jen.Id("ctx")),
-			jen.If(jen.Id("principal").Op("==").Lit("")).Block(jen.Return()),
-			jen.Id("a").Dot("mu").Dot("Lock").Call(),
-			jen.Defer().Id("a").Dot("mu").Dot("Unlock").Call(),
-			jen.If(jen.List(jen.Id("_"), jen.Id("ok")).Op(":=").Id("a").Dot("initializedSessions").Index(jen.Id("sessionID")), jen.Op("!").Id("ok")).Block(jen.Return()),
-			jen.If(jen.Id("a").Dot("sessionPrincipals").Op("==").Nil()).Block(
-				jen.Id("a").Dot("sessionPrincipals").Op("=").Make(jen.Map(jen.String()).String()),
-			),
-			jen.If(jen.Id("existing").Op(":=").Qual("strings", "TrimSpace").Call(jen.Id("a").Dot("sessionPrincipals").Index(jen.Id("sessionID"))), jen.Id("existing").Op("!=").Lit("")).Block(
-				jen.Return(),
-			),
-			jen.Id("a").Dot("sessionPrincipals").Index(jen.Id("sessionID")).Op("=").Id("principal"),
-		)
-	stmt.Line()
-
-	// clearSession
-	stmt.Func().Params(jen.Id("a").Op("*").Id("MCPAdapter")).
-		Id("clearSession").Params(jen.Id("sessionID").String()).
-		Block(
-			jen.If(jen.Id("a").Op("==").Nil().Op("||").Id("sessionID").Op("==").Lit("")).Block(jen.Return()),
-			jen.Id("a").Dot("mu").Dot("Lock").Call(),
-			jen.Defer().Id("a").Dot("mu").Dot("Unlock").Call(),
-			jen.Delete(jen.Id("a").Dot("initializedSessions"), jen.Id("sessionID")),
-			jen.Delete(jen.Id("a").Dot("sessionPrincipals"), jen.Id("sessionID")),
-		)
-	stmt.Line()
-
-	// assertSessionPrincipal
-	stmt.Func().Params(jen.Id("a").Op("*").Id("MCPAdapter")).
-		Id("assertSessionPrincipal").Params(jen.Id("ctx").Qual("context", "Context"), jen.Id("sessionID").String()).Error().
-		Block(
-			jen.If(jen.Id("a").Op("==").Nil().Op("||").Id("sessionID").Op("==").Lit("")).Block(jen.Return(jen.Nil())),
-			jen.Id("actual").Op(":=").Id("a").Dot("sessionPrincipal").Call(jen.Id("ctx")),
-			jen.Id("principalRequired").Op(":=").Id("a").Dot("opts").Op("!=").Nil().Op("&&").Id("a").Dot("opts").Dot("SessionPrincipal").Op("!=").Nil(),
-			jen.Id("a").Dot("mu").Dot("Lock").Call(),
-			jen.Id("a").Dot("pruneSessionsLocked").Call(jen.Qual("time", "Now").Call(), jen.False()),
-			jen.List(jen.Id("_"), jen.Id("initialized")).Op(":=").Id("a").Dot("initializedSessions").Index(jen.Id("sessionID")),
-			jen.Id("expected").Op(":=").Qual("strings", "TrimSpace").Call(jen.Id("a").Dot("sessionPrincipals").Index(jen.Id("sessionID"))),
-			jen.Id("a").Dot("mu").Dot("Unlock").Call(),
-			jen.If(jen.Op("!").Id("initialized")).Block(
-				jen.Return(jen.Id("errInvalidSessionID")),
-			),
-			jen.If(jen.Id("expected").Op("==").Lit("")).Block(
-				jen.If(jen.Id("principalRequired").Op("||").Id("actual").Op("!=").Lit("")).Block(
-					jen.Return(jen.Id("errSessionPrincipalBindingMissing")),
-				),
-				jen.Return(jen.Nil()),
-			),
-			jen.If(jen.Id("actual").Op("==").Lit("").Op("||").Id("actual").Op("!=").Id("expected")).Block(
-				jen.Return(jen.Id("errSessionPrincipalMismatch")),
-			),
-			jen.Return(jen.Nil()),
-		)
-	stmt.Line()
-
-	// sessionPrincipal
-	stmt.Func().Params(jen.Id("a").Op("*").Id("MCPAdapter")).
-		Id("sessionPrincipal").Params(jen.Id("ctx").Qual("context", "Context")).String().
-		Block(
-			jen.If(jen.Id("a").Op("!=").Nil().Op("&&").Id("a").Dot("opts").Op("!=").Nil().Op("&&").Id("a").Dot("opts").Dot("SessionPrincipal").Op("!=").Nil()).Block(
-				jen.Return(jen.Qual("strings", "TrimSpace").Call(jen.Id("a").Dot("opts").Dot("SessionPrincipal").Call(jen.Id("ctx")))),
-			),
-			jen.If(jen.Id("tokenInfo").Op(":=").Id("mcpauth").Dot("TokenInfoFromContext").Call(jen.Id("ctx")), jen.Id("tokenInfo").Op("!=").Nil()).Block(
-				jen.Return(jen.Qual("strings", "TrimSpace").Call(jen.Id("tokenInfo").Dot("UserID"))),
-			),
-			jen.Return(jen.Lit("")),
+			jen.Return(jen.Id("a").Op("!=").Nil().Op("&&").Id("a").Dot("sessions").Dot("IsInitialized").Call(jen.Id("ctx"))),
 		)
 	stmt.Line()
 }

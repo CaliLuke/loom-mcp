@@ -104,12 +104,10 @@ resource dispatch, resource policy, skill dispatch, and request logging. Direct
 runtime tests cover these contracts. Official-SDK integration tests cover the
 generated closures and the complete server.
 
-The bridge compatibility version remains `1`. This change adds runtime types
-and does not change the existing SDK server descriptor contract. Incompatible
-descriptor or callback changes still require a version increase.
-The generator reads `sdkbridge.CompatibilityVersion` and writes its value as a
-literal in each generated server. The generated server never reads the runtime
-constant during initialization.
+The current bridge compatibility version is `2`. The generator writes this
+value as a literal in each generated server. The generated server never reads
+the runtime constant during initialization. A release can include compatible
+runtime corrections without another version increase.
 
 Keep the version unchanged for compatible additions. Examples include internal
 bug fixes, new optional fields, and new hooks with safe zero-value behavior.
@@ -128,7 +126,9 @@ Do not increment the version for an additive runtime fix. Do not support two
 contract versions with a compatibility path.
 
 For an incompatible change, update the runtime constant first. The generator
-then emits the new literal. Run these commands before release:
+then emits the new literal. You can repeat regeneration until you commit the
+change. Commit the runtime version, the design, and generated files as one
+change. Run these commands before release:
 
 ```bash
 make regen-assistant-fixture
@@ -148,7 +148,8 @@ server. This proves that same-version runtime fixes do not require consumer
 regeneration.
 
 `make verify-generated` regenerates current checked-in surfaces but leaves this
-compatibility fixture frozen. `make verify-mcp-local` links its old generated
+compatibility fixture frozen. CI compares the design and generated snapshot
+with the pull request or push base. `make verify-mcp-local` links the frozen
 server against the current runtime and runs its official SDK client test.
 
 ## JSON-RPC errors
@@ -172,12 +173,12 @@ land without weakening the generated adapter contract.
 | Field            | Required | Description                                                                                                                                                            |
 | ---------------- | -------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `PromptProvider` | yes      | Implementation that renders prompts declared with `StaticPrompt` and `DynamicPrompt`. Generated against the design.                                                    |
-| `RequestContext` | no       | Per-request hook called once per MCP RPC. Receives the inbound request context and a synthetic `*http.Request` carrying the live transport headers; returns a new ctx. |
+| `RequestContext` | no       | Hook for each JSON-RPC call and each non-POST transport request. Its returned context reaches generated handlers. |
 | `RequestStateKey` | for elicitation | Stable 32-byte key used to AES-GCM encrypt and authenticate multi-round-trip `requestState`. All replicas serving an endpoint must share it. |
-| `TransportObserver` | no    | Loom transport observer installed on the generated SDK handler. Request lifecycle events are delivered without external middleware wiring.                           |
+| `TransportObserver` | no    | Loom transport observer installed outside origin validation. It starts with the ingress context. Rejected origins and SDK requests emit request lifecycle events. |
 | `RuntimeCORS` | no | Optional Loom runtime CORS response policy. It is separate from request origin validation. |
-| `OriginProtection` | no | Bridge-owned `*http.CrossOriginProtection` policy. The bridge creates the standard safe default when nil. |
-| `StreamableHTTP` | no | Supported `*mcpsdk.StreamableHTTPOptions` transport fields. Configure origins with `OriginProtection`; the deprecated SDK origin field is not propagated. |
+| `OriginProtection` | no | Bridge-owned `*sdkbridge.OriginProtection` settings. The settings contain trusted origins and an optional deny handler. The bridge creates the safe default when nil. |
+| `StreamableHTTP` | no | Bridge-owned `*sdkbridge.StreamableHTTPOptions` containing supported official SDK transport settings. The type excludes the deprecated SDK origin field. |
 | `Server` | no | `*mcpsdk.ServerOptions` passed to the official SDK. Loom installs its generated completion handler when required; the SDK infers registered capabilities. |
 
 ## Design-Declared Skill Resources
@@ -228,35 +229,27 @@ sends `notifications/progress` with the client progress token.
 
 ## Request Context Callback
 
-`RequestContext` is the supported extension point for propagating
-transport-level information (auth tokens, correlation ids, allow/deny
-lists, tenant ids) from inbound HTTP headers into the context that
-generated tool, resource, and prompt handlers receive.
+`RequestContext` propagates transport information into generated tool,
+resource, and prompt handlers. This information can include authentication
+tokens, correlation IDs, resource policies, and tenant IDs.
 
-The callback fires once per MCP call. The supplied `*http.Request` is
-synthesized for the call from two sources, merged in this order:
+The shared SDK bridge calls the hook once for each JSON-RPC call. The hook
+receives a synthetic POST request with the live headers from the official SDK
+`RequestExtra.Header` value. The bridge also stores these headers through
+`mcpruntime.WithRequestHeaders`. The returned context continues through the
+official SDK middleware and reaches the generated handler.
 
-1. The HTTP headers of the outer streamable-HTTP request, threaded through
-   ctx via `mcpruntime.WithRequestHeaders` at the top of the generated
-   handler.
-2. The per-JSON-RPC-call headers that the upstream MCP SDK exposes on
-   `RequestExtra.Header`.
+For streamable GET and DELETE requests, the hook receives the real inbound
+request. The transport observer starts before this hook. Thus, transport
+observations use the ingress context, while application handlers use the
+returned context.
 
-**Per-call values from `RequestExtra.Header` overlay the ctx-bridged
-values.** Step 2 wins on conflict. This guarantees that when a client
-sends a distinct value of a header (e.g. `X-Request-ID`) for each
-call (initialize, tools/call, resources/read), the tool handler sees its
-own call's value rather than a stale value left over from session
-establishment.
+Two regression tests define this contract:
 
-The contract is pinned by two regression tests in the repository:
-
-- `TestRequestContextSeesPerCallHeaders` (assistant fixture) drives a
-  real generated SDK server and asserts a tools/call invocation sees its
-  own `X-Request-ID`, not the initialize value.
-- `TestGenerateSDKServer_MergesContextRequestHeadersIntoSyntheticRequest`
-  (codegen contract) compares substring positions of the two header copy
-  loops in the rendered code to lock in the precedence order.
+- `TestRequestContextSeesPerCallHeaders` uses a real generated server. It makes
+  sure that `tools/call` sees its own `X-Request-ID` value.
+- `TestRequestContextMiddlewarePropagatesReturnedContextOnce` makes sure that
+  the hook runs once and that the returned context reaches the SDK handler.
 
 ### Example
 
@@ -323,11 +316,6 @@ Do not copy unverified client headers into this metadata. A projected tool with
 `Inject(...)` returns a tool error if the metadata is absent. These mappings
 do not require an MCP client capability. Clients without structured-result
 support can use the matching JSON text content.
-
-`ToolSearchOptions.AllowDirectHiddenCalls` is unsupported for SDK-backed compact
-mode. `NewSDKServer` fails construction when that option is true because the SDK
-cannot directly call tools that were intentionally omitted from the registered
-public catalog.
 
 The same generated adapter can be registered with an in-process agent runtime
 through `New<Service><MCP>LocalToolsetRegistration(adapter)`. This local path
@@ -584,9 +572,10 @@ The shared SDK bridge validates each present `Origin` header before MCP
 processing. This validation applies to all HTTP methods, including the GET
 connection for SSE. An invalid origin receives HTTP 403 Forbidden.
 
-The bridge uses `net/http.NewCrossOriginProtection()` by default. Supply a
-custom `SDKServerOptions.OriginProtection` policy to add trusted origins. The
-bridge applies that policy to safe and unsafe HTTP methods before SDK handling.
+The bridge uses `net/http.NewCrossOriginProtection()` internally. Supply
+`SDKServerOptions.OriginProtection` with `TrustedOrigins` when browser clients
+use a different origin. `DenyHandler` optionally customizes rejected responses.
+The bridge applies the policy to safe and unsafe HTTP methods before SDK handling.
 
 The CORS policy and origin validation are separate. Configure
 `SDKServerOptions.RuntimeCORS` when trusted browser clients require CORS
@@ -594,9 +583,6 @@ response headers.
 
 ## Module Dependency
 
-`loom-mcp` consumes `observability/transport` from
-`github.com/CaliLuke/loom` through the `replace github.com/CaliLuke/loom => ../loom`
-directive in `go.mod`. Non-local releases that drop the replace must bump
-`github.com/CaliLuke/loom` to a tag that contains the
-`observability/transport` package — otherwise generated SDK server code
-will not compile against the public Loom module.
+`loom-mcp` pins `github.com/CaliLuke/loom v1.9.0-alpha.13`. This Loom release contains the canonical inline JSON Schema behavior and the `observability/transport` package that the SDK bridge uses.
+
+Run `make loom-local` to use the sibling Loom checkout during development. Run `make loom-remote` before you commit or release changes.

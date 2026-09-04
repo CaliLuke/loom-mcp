@@ -1,7 +1,6 @@
 package mcp
 
 import (
-	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -16,35 +15,39 @@ func CoerceQuery(m map[string][]string) map[string]any {
 
 // QueryField describes the query shape declared by a resource payload schema.
 type QueryField struct {
-	String   bool
-	Unsigned bool
-	Repeated bool
+	String        bool
+	Unsigned      bool
+	Float         bool
+	Repeated      bool
+	Bits          int
+	DefaultValues []string
 }
 
 // CoerceQueryTyped converts a URL query map into a JSON-friendly object while
 // preserving strings and array shape declared by fields. Other values use the
 // same inference as CoerceQuery. Repeated parameters preserve input order.
 func CoerceQueryTyped(m map[string][]string, fields map[string]QueryField) map[string]any {
-	out := make(map[string]any, len(m))
-	keys := make([]string, 0, len(m))
-	for key := range m {
-		keys = append(keys, key)
+	out := make(map[string]any, len(m)+len(fields))
+	for key, field := range fields {
+		if _, present := m[key]; !present && field.DefaultValues != nil {
+			out[key] = coerceTypedQueryValues(field.DefaultValues, field)
+		}
 	}
-	sort.Strings(keys)
-	for _, key := range keys {
-		vals := m[key]
-		field := fields[key]
-		if len(vals) == 1 && !field.Repeated {
-			out[key] = coerceTypedQueryValue(vals[0], field)
-			continue
-		}
-		arr := make([]any, len(vals))
-		for i := range vals {
-			arr[i] = coerceTypedQueryValue(vals[i], field)
-		}
-		out[key] = arr
+	for key, vals := range m {
+		out[key] = coerceTypedQueryValues(vals, fields[key])
 	}
 	return out
+}
+
+func coerceTypedQueryValues(values []string, field QueryField) any {
+	if len(values) == 1 && !field.Repeated {
+		return coerceTypedQueryValue(values[0], field)
+	}
+	array := make([]any, len(values))
+	for index := range values {
+		array[index] = coerceTypedQueryValue(values[index], field)
+	}
+	return array
 }
 
 func coerceTypedQueryValue(value string, field QueryField) any {
@@ -52,7 +55,28 @@ func coerceTypedQueryValue(value string, field QueryField) any {
 		return value
 	}
 	if field.Unsigned && looksIntegral(value) {
-		if parsed, err := strconv.ParseUint(value, 10, 64); err == nil {
+		bits := field.Bits
+		if bits == 0 {
+			bits = 64
+		}
+		if parsed, err := strconv.ParseUint(value, 10, bits); err == nil {
+			return parsed
+		}
+	}
+	if !field.Unsigned && !field.Float && field.Bits > 0 && looksIntegral(value) {
+		if parsed, err := strconv.ParseInt(value, 10, field.Bits); err == nil {
+			return parsed
+		}
+	}
+	if field.Float {
+		bits := field.Bits
+		if bits == 0 {
+			bits = 64
+		}
+		if parsed, err := strconv.ParseFloat(value, bits); err == nil {
+			if bits == 32 {
+				return float32(parsed)
+			}
 			return parsed
 		}
 	}

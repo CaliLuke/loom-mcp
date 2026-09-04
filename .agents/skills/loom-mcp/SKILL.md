@@ -374,15 +374,13 @@ Use this skill for `loom-mcp` work in this repo. Keep `AGENTS.md` short and keep
 - Generated MCP adapters can opt into progressive discovery with
   `MCPAdapterOptions.ToolSearch`. Compact mode makes `tools/list` authoritative:
   it exposes `search_tools`, `call_tool`, and validated `AlwaysVisible` pins.
-  Hidden real tools are invoked through `call_tool`; direct hidden `tools/call`
-  is rejected by default, except for the explicit JSON-RPC compatibility option
-  `AllowDirectHiddenCalls`. `search_tools` must support tokenized natural
-  language queries, fuzzy name/title matching, strong name/title match
-  narrowing (exact, normalized, prefix, and contains), and DSL tuning through
-  `ToolSearch(...)`; it must return exact `call_tool` JSON
-  examples. `call_tool` schema text must require top-level `name` and
-  `arguments` and warn not to use `args`. SDK compact mode must reject
-  direct-hidden compatibility at construction.
+  Hidden tools are callable only through the generated `call_tool` tool;
+  direct hidden `tools/call` requests are always rejected. `search_tools` must
+  support tokenized natural-language queries, fuzzy name/title matching,
+  strong name/title match narrowing (exact, normalized, prefix, and contains),
+  and DSL tuning through `ToolSearch(...)`; it must return exact `call_tool`
+  JSON examples. `call_tool` schema text must require top-level `name` and
+  `arguments` and warn not to use `args`.
 - Projected MCP tools must participate in compact discovery like method-level
   MCP tools: validated `AlwaysVisible` pins, hidden `search_tools` discovery,
   and `call_tool` invocation through `MCPAdapter.ToolsCall`.
@@ -468,7 +466,7 @@ Use this skill for `loom-mcp` work in this repo. Keep `AGENTS.md` short and keep
 ## Command Reminders
 
 ```bash
-go install github.com/CaliLuke/loom/cmd/loom@v1.9.0-alpha.11
+go install github.com/CaliLuke/loom/cmd/loom@v1.9.0-alpha.13
 loom version
 loom gen <module-import-path>/design
 loom example <module-import-path>/design

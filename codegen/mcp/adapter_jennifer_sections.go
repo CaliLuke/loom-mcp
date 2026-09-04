@@ -126,7 +126,7 @@ func skillResultValue(data *AdapterData) jen.Code {
 					jen.Id("MimeType"): jen.Id("stringPtr").Call(jen.Id("content").Dot("MimeType")),
 					jen.Id("Text"):     jen.Id("content").Dot("Text"),
 					jen.Id("Blob"):     jen.Id("content").Dot("Blob"),
-					jen.Id("Meta"): jen.Id("loom").Dot("NullableValue").Types(jen.Any()).Call(
+					jen.Id("Meta"): jen.Id("loom").Dot("MustJSONValueFrom").Call(
 						jen.Id("mcpskills").Dot("MetadataMeta").Call(jen.Id("content").Dot("Metadata")),
 					),
 				}),
@@ -150,7 +150,7 @@ func resourceOperationHandler(resource *ResourceAdapter) jen.Code {
 		jen.Id("baseURI").String(),
 	).Params(jen.Op("*").Id("ResourcesReadResult"), jen.Error()).BlockFunc(func(g *jen.Group) {
 		if resource.HasPayload {
-			g.List(jen.Id("args"), jen.Id("err")).Op(":=").Id("sdkbridge").Dot("ResourceQueryJSONTyped").Call(jen.Id("request").Dot("URI"), resourceQueryFieldsValue(resource, "mcpruntime", "QueryField"))
+			g.List(jen.Id("args"), jen.Id("err")).Op(":=").Id("sdkbridge").Dot("ResourceQueryJSONTyped").Call(jen.Id("request").Dot("URI"), resourceQueryFieldsValue(resource, "mcpruntime", "QueryField"), jen.Lit(resource.QuerySchema))
 			g.If(jen.Id("err").Op("!=").Nil()).Block(jen.Return(jen.Nil(), jen.Id("sdkbridge").Dot("InvalidClientInput").Call(jen.Id("loom").Dot("PermanentError").Call(jen.Lit("invalid_params"), jen.Lit("Invalid resource request.")))))
 			g.Id("httpRequest").Op(":=").Op("&").Qual("net/http", "Request").Values(jen.Dict{
 				jen.Id("Body"): jen.Qual("io", "NopCloser").Call(jen.Qual("bytes", "NewReader").Call(jen.Id("args"))),
@@ -207,8 +207,21 @@ func resourceQueryFieldsValue(resource *ResourceAdapter, packageName, typeName s
 		if field.FormatKind == resourceQueryFormatUint {
 			metadata[jen.Id("Unsigned")] = jen.True()
 		}
+		if field.FormatKind == resourceQueryFormatFloat32 || field.FormatKind == resourceQueryFormatFloat64 {
+			metadata[jen.Id("Float")] = jen.True()
+		}
 		if field.Repeated {
 			metadata[jen.Id("Repeated")] = jen.True()
+		}
+		if field.Bits != 0 {
+			metadata[jen.Id("Bits")] = jen.Lit(field.Bits)
+		}
+		if field.DefaultValues != nil {
+			metadata[jen.Id("DefaultValues")] = jen.Index().String().ValuesFunc(func(values *jen.Group) {
+				for _, value := range field.DefaultValues {
+					values.Lit(value)
+				}
+			})
 		}
 		fields[jen.Lit(field.QueryKey)] = jen.Values(metadata)
 	}
