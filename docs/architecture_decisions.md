@@ -39,7 +39,7 @@ on the removed generated client.
 ### Capability matrix
 
 “Native” describes the generated Loom transport immediately before its removal.
-“SDK” describes the generated server with MCP Go SDK v1.7.0.
+“SDK” describes the generated server with MCP Go SDK v1.8.0-pre.2.
 
 | Capability | Native transport | SDK-backed transport | Classification and requirement |
 | --- | --- | --- | --- |

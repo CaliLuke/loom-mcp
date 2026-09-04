@@ -196,7 +196,7 @@ func TestGeneratedServerRawRejectsCallWithoutSession(t *testing.T) {
 	require.NotNil(t, wire.Error, "response body: %s; result: %#v", responseBody, wire.Result)
 	assert.Contains(t, wire.Error.Message, "invalid during session initialization")
 	if wire.Error.Code == 0 {
-		t.Log("MCP Go SDK v1.7.0 emits an untyped pre-initialization error before server middleware runs")
+		t.Log("MCP Go SDK v1.8.0-pre.2 emits an untyped pre-initialization error before server middleware runs")
 		return
 	}
 	assert.Equal(t, int64(-32602), wire.Error.Code)

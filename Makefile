@@ -5,7 +5,7 @@ HTTP_PORT ?= 8888
 LOOM_CORE_MODULE ?= github.com/CaliLuke/loom
 LOOM_MCP_MODULE ?= $(LOOM_CORE_MODULE)
 LOOM_CLI_PACKAGE ?= $(LOOM_CORE_MODULE)/cmd/loom
-MCP_GO_SDK_VERSION ?= v1.7.0
+MCP_GO_SDK_VERSION ?= v1.8.0-pre.2
 COVERAGE_MIN ?= 62.0
 COVERAGE_RUNTIME_MIN ?= 75.0
 COVERAGE_MCP_MIN ?= 78.0
@@ -258,11 +258,16 @@ loom-status:
 update-mcp-go-sdk:
 	$(GO) get github.com/modelcontextprotocol/go-sdk@$(MCP_GO_SDK_VERSION)
 	cd ./integration_tests/fixtures/assistant && $(GO) get github.com/modelcontextprotocol/go-sdk@$(MCP_GO_SDK_VERSION)
+	cd ./integration_tests/fixtures/agent_features && GOWORK=off $(GO) get github.com/modelcontextprotocol/go-sdk@$(MCP_GO_SDK_VERSION)
 	cd ./integration_tests/fixtures/sdkbridge_consumer && GOWORK=off $(GO) get github.com/modelcontextprotocol/go-sdk@$(MCP_GO_SDK_VERSION)
+	cd ./quickstart && GOWORK=off $(GO) get github.com/modelcontextprotocol/go-sdk@$(MCP_GO_SDK_VERSION)
 	$(GO) work edit -replace github.com/modelcontextprotocol/go-sdk=github.com/modelcontextprotocol/go-sdk@$(MCP_GO_SDK_VERSION)
 	$(GO) mod tidy
 	cd ./integration_tests/fixtures/assistant && $(GO) mod tidy
+	cd ./integration_tests/fixtures/agent_features && GOWORK=off $(GO) mod tidy
 	cd ./integration_tests/fixtures/sdkbridge_consumer && GOWORK=off $(GO) mod tidy
+	cd ./quickstart && GOWORK=off $(GO) mod tidy
+	cd ./quickstart && GOWORK=off $(GO) list -mod=mod -deps github.com/CaliLuke/loom/cmd/loom >/dev/null
 
 verify-generated: tools
 	bash ./scripts/verify_generated.sh

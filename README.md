@@ -40,7 +40,7 @@ the same endpoint must share that key. There is no v1 compatibility shim.
 This repo currently targets:
 
 - `github.com/CaliLuke/loom v1.9.0-alpha.13`
-- `github.com/modelcontextprotocol/go-sdk v1.7.0`
+- `github.com/modelcontextprotocol/go-sdk v1.8.0-pre.2`
 - Go `1.27.0` or later
 
 The workspace-level `go.work` file centralizes local multi-module overrides for dependencies that must stay in sync across the root module and integration fixtures.

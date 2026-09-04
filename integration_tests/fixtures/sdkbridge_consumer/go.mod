@@ -5,7 +5,7 @@ go 1.27.0
 require (
 	github.com/CaliLuke/loom v1.9.0-alpha.13
 	github.com/CaliLuke/loom-mcp/v2 v2.0.1
-	github.com/modelcontextprotocol/go-sdk v1.7.0
+	github.com/modelcontextprotocol/go-sdk v1.8.0-pre.2
 	github.com/sahilm/fuzzy v0.1.3
 	go.opentelemetry.io/otel v1.45.0
 	go.opentelemetry.io/otel/metric v1.45.0

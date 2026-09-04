@@ -163,10 +163,10 @@ SDK types pass through unchanged.
 
 
 The official MCP Go SDK performs its pre-initialization method gate before
-server receiving middleware. In SDK v1.7.0, that one upstream-owned path still
-serializes its untyped error with code `0`. The raw transport tests allow only
-that known value or the expected future `-32602`, so an upstream correction can
-land without weakening the generated adapter contract.
+server receiving middleware. In SDK v1.8.0-pre.2, that upstream-owned path
+still serializes its untyped error with code `0`. The raw transport tests allow
+only that known value or the expected future `-32602`, so an upstream correction
+can land without weakening the generated adapter contract.
 
 ## SDKServerOptions
 
