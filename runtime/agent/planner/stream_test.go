@@ -222,6 +222,18 @@ func TestConsumeStreamCommitsToolOnlyPresentationBoundary(t *testing.T) {
 	assert.Equal(t, []string{"started:presentation-1", "commit:0", "accepted:presentation-1"}, events.presentation)
 }
 
+func TestConsumeStreamIgnoresEmptyToolCallChunk(t *testing.T) {
+	stream := &streamStub{
+		chunks:   []model.Chunk{model.ToolCallChunk{}},
+		response: &model.Response{StopReason: "end_turn"},
+	}
+
+	summary, err := ConsumeStream(context.Background(), stream, &plannerEventsStub{})
+
+	require.NoError(t, err)
+	assert.Empty(t, summary.ToolCalls)
+}
+
 func TestConsumeStreamRejectsNilInputs(t *testing.T) {
 	_, err := ConsumeStream(context.Background(), nil, &plannerEventsStub{})
 	require.EqualError(t, err, "nil streamer")
