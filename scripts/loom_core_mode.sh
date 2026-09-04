@@ -7,7 +7,7 @@ FIXTURE_DIR="${ROOT_DIR}/integration_tests/fixtures/assistant"
 AGENT_FIXTURE_DIR="${ROOT_DIR}/integration_tests/fixtures/agent_features"
 CONSUMER_DIR="${ROOT_DIR}/integration_tests/fixtures/sdkbridge_consumer"
 QUICKSTART_DIR="${ROOT_DIR}/quickstart"
-REMOTE_VERSION="v1.9.0-alpha.13"
+REMOTE_VERSION="v1.9.0-alpha.14"
 # Default to the loom checkout that lives as a peer of this repo (loom-mono
 # layout); override with LOOM_DIR when the checkout is elsewhere.
 LOCAL_LOOM_DIR="${LOOM_DIR:-${ROOT_DIR}/../loom}"

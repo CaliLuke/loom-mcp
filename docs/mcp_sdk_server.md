@@ -583,6 +583,6 @@ response headers.
 
 ## Module Dependency
 
-`loom-mcp` pins `github.com/CaliLuke/loom v1.9.0-alpha.13`. This Loom release contains the canonical inline JSON Schema behavior and the `observability/transport` package that the SDK bridge uses.
+`loom-mcp` pins `github.com/CaliLuke/loom v1.9.0-alpha.14`. This Loom release contains the canonical inline JSON Schema behavior and the dependency maintenance used by the SDK bridge.
 
 Run `make loom-local` to use the sibling Loom checkout during development. Run `make loom-remote` before you commit or release changes.
