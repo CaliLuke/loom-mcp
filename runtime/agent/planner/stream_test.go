@@ -44,6 +44,28 @@ func TestConsumeStreamAggregatesChunksAndEvents(t *testing.T) {
 	assert.Equal(t, []model.TokenUsage{usage}, events.usage)
 }
 
+func TestConsumeStreamAggregatesCacheUsageAcrossChunks(t *testing.T) {
+	recvErr := errors.New("receive failed")
+	stream := &streamStub{
+		chunks: []model.Chunk{
+			model.UsageChunk{Usage: model.TokenUsage{
+				InputTokens: 1, OutputTokens: 2, TotalTokens: 10, CacheReadTokens: 3, CacheWriteTokens: 4,
+			}},
+			model.UsageChunk{Usage: model.TokenUsage{
+				InputTokens: 5, OutputTokens: 6, TotalTokens: 26, CacheReadTokens: 7, CacheWriteTokens: 8,
+			}},
+		},
+		recvErr: recvErr,
+	}
+
+	summary, err := ConsumeStream(context.Background(), stream, &plannerEventsStub{})
+
+	require.ErrorIs(t, err, recvErr)
+	assert.Equal(t, model.TokenUsage{
+		InputTokens: 6, OutputTokens: 8, TotalTokens: 36, CacheReadTokens: 10, CacheWriteTokens: 12,
+	}, summary.Usage)
+}
+
 func TestAddUsagePreservesUnknownTotalWithCachedTokens(t *testing.T) {
 	current := model.TokenUsage{CacheReadTokens: 1}
 	delta := model.TokenUsage{InputTokens: 1, TotalTokens: 1}
