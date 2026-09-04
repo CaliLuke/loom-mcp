@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"strings"
+	"sync"
 	"testing"
 )
 
@@ -146,6 +147,51 @@ func TestRegistryRenderInvalidOverrideTemplateFails(t *testing.T) {
 	_, err := reg.Render(context.Background(), "example.agent.system", scope, map[string]any{"Name": "operator"})
 	if !errors.Is(err, ErrTemplateParse) {
 		t.Fatalf("expected ErrTemplateParse, got %v", err)
+	}
+}
+
+func TestRegistryRenderConcurrentSetStore(t *testing.T) {
+	reg := NewRegistry(nil)
+	if err := reg.Register(PromptSpec{
+		ID:       "example.agent.system",
+		AgentID:  "example.agent",
+		Role:     PromptRoleSystem,
+		Template: "hello",
+	}); err != nil {
+		t.Fatalf("register spec: %v", err)
+	}
+
+	store := NewInMemoryStore()
+	start := make(chan struct{})
+	errs := make(chan error, 1)
+	var workers sync.WaitGroup
+	workers.Add(2)
+	go func() {
+		defer workers.Done()
+		<-start
+		for i := 0; i < 1000; i++ {
+			if i%2 == 0 {
+				reg.SetStore(store)
+			} else {
+				reg.SetStore(nil)
+			}
+		}
+	}()
+	go func() {
+		defer workers.Done()
+		<-start
+		for i := 0; i < 1000; i++ {
+			if _, err := reg.Render(context.Background(), "example.agent.system", Scope{}, nil); err != nil {
+				errs <- err
+				return
+			}
+		}
+	}()
+	close(start)
+	workers.Wait()
+	close(errs)
+	for err := range errs {
+		t.Errorf("render: %v", err)
 	}
 }
 

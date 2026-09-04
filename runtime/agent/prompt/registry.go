@@ -75,8 +75,11 @@ func (r *Registry) Render(ctx context.Context, id Ident, scope Scope, data any) 
 
 	templateSource := spec.Template
 	version := spec.Version
-	if r.store != nil {
-		override, resolveErr := r.store.Resolve(ctx, id, scope)
+	r.mu.RLock()
+	store := r.store
+	r.mu.RUnlock()
+	if store != nil {
+		override, resolveErr := store.Resolve(ctx, id, scope)
 		if resolveErr != nil {
 			return nil, fmt.Errorf("resolve prompt override %q: %w", id, resolveErr)
 		}
