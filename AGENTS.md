@@ -6,11 +6,27 @@
 - Read before editing. Search the repo and current docs before changing code.
 - Fix root causes. Do not ship local workarounds.
 - Keep status updates short during multi-step work.
-- Implement each ticket as exactly one atomic commit. Never split one ticket across multiple commits or combine multiple tickets in one commit.
-- Before every commit, run a fresh agent review of that commit's exact final diff. The reviewer must not have implemented the change. Resolve every verified finding, rerun affected verification gates, and obtain another fresh review of the revised exact diff. Repeat until the reviewer reports no findings. Make no changes between the final clean review and the commit. This applies to every commit, including trivial, single-file, documentation, policy, and release commits; a batch-level review never authorizes later commits.
+
+## Scope Control
+
+- Before editing, write the ticket contract. List required behavior, acceptance proof, affected surfaces, and explicit exclusions.
+- Treat the issue body and user instructions as the scope boundary.
+- Do not add adjacent fixes, refactors, compatibility work, or speculative edge cases.
+- Add work only when the contract requires it or the current diff causes a regression.
+- Record an out-of-scope finding as follow-up work. Do not implement it in the current ticket.
+- If scope must expand, stop and get explicit user approval. Update the contract before you continue.
+- Freeze the scope before implementation. Freeze the diff before final verification.
+- During review, classify findings as contract blockers, diff regressions, or follow-ups. Only blockers and regressions reopen the diff.
+- Run targeted checks while editing. Run each required repository gate once after the diff is frozen.
+- If an unrelated gate fails, reproduce that exact failure once. Do not change unrelated code in the current ticket.
+- If the failure is deterministic, stop and report it as separate blocked work.
+- If the failure does not reproduce, record the flaky result and continue the remaining gates once.
+- Implement each ticket as exactly one atomic commit. Never combine tickets or split one ticket across commits.
+- Before each commit, get one independent review of the frozen diff against the ticket contract.
+- Resolve contract blockers and diff regressions. Treat all other review suggestions as follow-up work.
+- After a correction, freeze the diff and get one new review. Do not change the diff after a clean review.
 - Prefer less code, strong contracts, and fail-fast behavior over defensive fallbacks.
-- A broken build is a broken build. Do not dismiss lint, test, or integration failures as "pre-existing" or "unrelated" to the current task. If `make lint`, `make test`, `make itest`, or `make verify-mcp-local` is red on the current tree, fix it before calling any task done — regardless of who introduced the failure. The one exception is a confirmed upstream `loom` regression, which per the loom-mcp repo rules must be captured as an upstream ticket instead of patched locally; in that case, stop and report, do not proceed while red.
-- When framework-specific `loom-mcp` guidance is needed, use the repo-local skill at `.agents/skills/loom-mcp/SKILL.md` instead of expanding this file again.
+- Use the repo-local skill at `.agents/skills/loom-mcp/SKILL.md` for framework-specific guidance.
 
 ## Go Style
 
@@ -62,6 +78,7 @@ Within each section, place main logic first and helpers last.
 
 ## Testing
 
+- Before non-trivial work, write a behavioral test matrix from the frozen ticket contract. Add failing tests or exact executable scenarios before implementation. Do not add test dimensions that the contract excludes unless the current diff introduces them.
 - Write fast, deterministic, table-driven tests in `*_test.go`.
 - Name tests `TestXxx`.
 - Prefer `testify/assert`; use `testify/require` only when the test cannot continue after a failure.

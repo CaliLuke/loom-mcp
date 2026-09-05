@@ -494,7 +494,7 @@ func decodeMCPPayloadFields(data []byte) (map[string]jsontext.Value, error) {
 	}
 	return fields, nil
 }
-func validateMCPPayloadRequired(fields map[string]jsontext.Value, field string) error {
+func validateMCPPayloadRequired(fields map[string]jsontext.Value, field string, allowsNull bool) error {
 	raw, ok := fields[field]
 	if !ok {
 		return loom.WithErrorRemedy(loom.PermanentError("invalid_params", "Missing required field: %s", field), &loom.ErrorRemedy{
@@ -502,8 +502,7 @@ func validateMCPPayloadRequired(fields map[string]jsontext.Value, field string) 
 			SafeMessage: fmt.Sprintf("Missing required field: %s", field),
 		})
 	}
-	trimmed := bytes.TrimSpace(raw)
-	if bytes.Equal(trimmed, []byte("\"\"")) || bytes.Equal(trimmed, []byte("null")) {
+	if !allowsNull && bytes.Equal(bytes.TrimSpace(raw), []byte("null")) {
 		return loom.WithErrorRemedy(loom.PermanentError("invalid_params", "Missing required field: %s", field), &loom.ErrorRemedy{
 			Code:        "invalid_params",
 			SafeMessage: fmt.Sprintf("Missing required field: %s", field),

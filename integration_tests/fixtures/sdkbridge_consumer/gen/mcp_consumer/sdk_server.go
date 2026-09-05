@@ -66,7 +66,7 @@ func NewSDKServer(service consumer.Service, opts *SDKServerOptions) (*SDKServer,
 	adapter := NewMCPAdapter(service, adapterOpts)
 	adapter.requestStateKey = slices.Clone(requestStateKey)
 	runtimeBridge, err := sdkbridge.NewServer(sdkbridge.Config{
-		CompatibilityVersion: 2,
+		CompatibilityVersion: 3,
 		Implementation: mcpsdk.Implementation{
 			Name:    "consumer",
 			Version: "1.0.0",

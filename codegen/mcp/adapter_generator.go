@@ -137,7 +137,7 @@ type (
 		StreamInterface    string
 		StreamEventType    string
 		// Simple validations (top-level only)
-		RequiredFields []string
+		RequiredFields []RequiredField
 		EnumFields     []EnumField
 		DefaultFields  []DefaultField
 		// ExampleArguments contains a minimal valid JSON for tool arguments
@@ -181,6 +181,12 @@ type (
 		InputSchema         string
 		OutputSchema        string
 		ExampleArguments    string
+	}
+
+	// RequiredField describes one top-level required payload field.
+	RequiredField struct {
+		Name       string
+		AllowsNull bool
 	}
 
 	// DefaultField describes a top-level payload field default assignment.

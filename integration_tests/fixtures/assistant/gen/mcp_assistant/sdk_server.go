@@ -72,7 +72,7 @@ func NewSDKServer(service assistant.Service, opts *SDKServerOptions) (*SDKServer
 	adapter := NewMCPAdapter(service, promptProvider, adapterOpts)
 	adapter.requestStateKey = slices.Clone(requestStateKey)
 	runtimeBridge, err := sdkbridge.NewServer(sdkbridge.Config{
-		CompatibilityVersion: 2,
+		CompatibilityVersion: 3,
 		CompletionHandler:    adapter.sdkCompletionHandler(),
 		Implementation: mcpsdk.Implementation{
 			Icons: []mcpsdk.Icon{mcpsdk.Icon{

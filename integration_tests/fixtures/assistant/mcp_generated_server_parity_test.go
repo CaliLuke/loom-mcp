@@ -136,6 +136,49 @@ func TestProjectedToolMCPCallSupportsNoPayloadMethod(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, map[string]any{"status": "ready"}, resp.StructuredContent)
 }
+func TestGeneratedSDKServerRequiredValidationMatchesInputSchema(t *testing.T) {
+	t.Parallel()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	session := connectSDKSessionToServer(t, newGeneratedSDKServerURL(t), nil)
+	defer func() { require.NoError(t, session.Close()) }()
+
+	toolsResult, err := session.ListTools(ctx, nil)
+	require.NoError(t, err)
+	multiContent := findToolByName(t, toolsResult.Tools, "multi_content")
+	multiSchema, ok := multiContent.InputSchema.(map[string]any)
+	require.True(t, ok)
+	assert.Equal(t, []any{"count"}, multiSchema["required"])
+
+	missing, err := session.CallTool(ctx, &sdkmcp.CallToolParams{
+		Name:      "multi_content",
+		Arguments: map[string]any{},
+	})
+	require.NoError(t, err)
+	require.True(t, missing.IsError)
+	require.Len(t, missing.Content, 1)
+	missingText, ok := missing.Content[0].(*sdkmcp.TextContent)
+	require.True(t, ok)
+	assert.Contains(t, missingText.Text, "count")
+
+	analyze := findToolByName(t, toolsResult.Tools, "analyze_sentiment")
+	analyzeSchema, ok := analyze.InputSchema.(map[string]any)
+	require.True(t, ok)
+	analyzeProperties, ok := analyzeSchema["properties"].(map[string]any)
+	require.True(t, ok)
+	textSchema, ok := analyzeProperties["text"].(map[string]any)
+	require.True(t, ok)
+	assert.NotContains(t, textSchema, "minLength")
+
+	empty, err := session.CallTool(ctx, &sdkmcp.CallToolParams{
+		Name:      "analyze_sentiment",
+		Arguments: map[string]any{"text": ""},
+	})
+	require.NoError(t, err)
+	assert.False(t, empty.IsError)
+}
+
 func TestGeneratedSDKServerResourceQueryPreservesStringValues(t *testing.T) {
 	t.Parallel()
 

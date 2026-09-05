@@ -268,6 +268,7 @@ func emitValidateMCPPayloadRequired(stmt *jen.Statement) {
 		Params(
 			jen.Id("fields").Map(jen.String()).Id("jsontext").Dot("Value"),
 			jen.Id("field").String(),
+			jen.Id("allowsNull").Bool(),
 		).
 		Error().
 		Block(
@@ -275,10 +276,9 @@ func emitValidateMCPPayloadRequired(stmt *jen.Statement) {
 			jen.If(jen.Op("!").Id("ok")).Block(
 				jen.Return(requiredFieldErrorExpr(jen.Id("field"))),
 			),
-			jen.Id("trimmed").Op(":=").Qual("bytes", "TrimSpace").Call(jen.Id("raw")),
 			jen.If(
-				jen.Qual("bytes", "Equal").Call(jen.Id("trimmed"), jen.Index().Byte().Call(jen.Lit(`""`))).Op("||").
-					Qual("bytes", "Equal").Call(jen.Id("trimmed"), jen.Index().Byte().Call(jen.Lit("null"))),
+				jen.Op("!").Id("allowsNull").Op("&&").
+					Qual("bytes", "Equal").Call(jen.Qual("bytes", "TrimSpace").Call(jen.Id("raw")), jen.Index().Byte().Call(jen.Lit("null"))),
 			).Block(
 				jen.Return(requiredFieldErrorExpr(jen.Id("field"))),
 			),
@@ -1601,7 +1601,7 @@ func emitToolRequiredChecks(g *jen.Group, tool *ToolAdapter) {
 	}
 	g.BlockFunc(func(block *jen.Group) {
 		for _, field := range tool.RequiredFields {
-			block.If(jen.Id("err").Op(":=").Id("validateMCPPayloadRequired").Call(jen.Id("rawFields"), jen.Lit(field)), jen.Id("err").Op("!=").Nil()).Block(
+			block.If(jen.Id("err").Op(":=").Id("validateMCPPayloadRequired").Call(jen.Id("rawFields"), jen.Lit(field.Name), jen.Lit(field.AllowsNull)), jen.Id("err").Op("!=").Nil()).Block(
 				jen.Return(jen.True(), jen.Id("a").Dot("sendToolError").Call(jen.Id("ctx"), jen.Id("stream"), jen.Id("p").Dot("Name"), jen.Id("toolCallError").Call(jen.Id("err"), jen.Lit("invalid_params"), jen.Id(toolRecoveryFuncName(tool)).Call(jen.Id("err"), jen.Id("arguments"))))),
 			)
 		}
