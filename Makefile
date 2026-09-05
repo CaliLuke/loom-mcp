@@ -23,9 +23,9 @@ COVERAGE_DOCKER_REGISTRY_MIN ?= 75.0
 STRESS_COUNT ?= 5
 STRESS_TIMEOUT ?= 20m
 FUZZ_TIME ?= 10s
-# Testcontainers does not resolve Docker CLI contexts on every host. Export the
-# active context endpoint unless the caller already selected a Docker daemon.
-DOCKER_HOST ?= $(shell command -v docker >/dev/null 2>&1 && docker context inspect --format '{{.Endpoints.docker.Host}}' 2>/dev/null)
+# Testcontainers does not resolve Docker CLI contexts on every host. Loom MCP is
+# a personal project, so default to the shared personal Colima endpoint.
+DOCKER_HOST ?= $(shell command -v docker >/dev/null 2>&1 && docker context inspect colima-autok --format '{{.Endpoints.docker.Host}}' 2>/dev/null)
 export DOCKER_HOST
 # Every Docker-backed package owns explicit container cleanup. Disabling the
 # shared cross-package Ryuk session prevents one completed package from reaping

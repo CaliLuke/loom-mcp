@@ -2658,6 +2658,10 @@ surfaces.
 | `features/model/middleware` | Rate limiting, logging, metrics      |
 | `features/policy/basic`     | Basic policy engine                  |
 
+`features/session/mongo` writes through multi-document transactions and so
+requires a replica set or a sharded cluster; see the MongoDB deployment
+requirement in `docs/operations.md`.
+
 ---
 
 ## MCP Callers

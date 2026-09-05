@@ -29,3 +29,30 @@ Temporal persists workflow history only. A production Temporal worker that
 leaves run log or session stores at their defaults loses those projections when
 the process is replaced. Verify persistent stores and restart behavior as part
 of deployment readiness.
+
+### MongoDB deployment requirement
+
+`features/session/mongo` requires a replica set (MongoDB 4.0 or later) or a
+sharded cluster (MongoDB 4.2 or later). `UpsertRun` and `LinkChildRun` write
+through multi-document transactions, which a standalone `mongod` does not
+support. The client checks the deployment at construction and returns an error
+naming the requirement, so an unsupported deployment fails at startup rather
+than at the first run write. A local `mongod` satisfies the requirement as a
+single-node replica set: start it with `--replSet` and name the member
+explicitly when you initialise it.
+
+```javascript
+rs.initiate({ _id: "rs0", members: [{ _id: 0, host: "127.0.0.1:27017" }] })
+```
+
+A bare `rs.initiate()` records the machine's hostname instead. The driver then
+replaces the seed from the connection string with that hostname, and a client
+that cannot reach it fails with a server-selection timeout.
+
+The check covers the whole client, not only the transactional methods, so a
+consumer that merely reads sessions and runs is refused on a standalone `mongod`
+as well. That is deliberate: any holder of the client can reach `UpsertRun`, and
+a startup error is easier to act on than a write that fails later.
+
+The other Mongo-backed feature stores write one document at a time and never
+open a transaction, so they run against a standalone `mongod`.

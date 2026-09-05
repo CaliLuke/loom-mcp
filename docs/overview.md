@@ -1227,6 +1227,10 @@ profile := stream.MetricsProfile()
 | `features/model/middleware` | Model client middleware (rate limiting, etc.)          |
 | `features/policy/basic`     | Basic policy engine for tool filtering and caps        |
 
+`features/session/mongo` writes through multi-document transactions and so
+requires a replica set or a sharded cluster; see the MongoDB deployment
+requirement in `docs/operations.md`.
+
 ---
 
 _Build agents that are a joy to develop and a breeze to operate. Welcome to Goa‑AI._

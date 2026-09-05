@@ -64,6 +64,10 @@ type client struct {
 }
 
 // New returns a Client backed by MongoDB.
+//
+// UpsertRun and LinkChildRun write through multi-document transactions, so the
+// deployment must be a replica set or a sharded cluster. New rejects a
+// standalone mongod here rather than letting the first run write fail.
 func New(opts Options) (Client, error) {
 	if err := clientinfra.ValidateMongoOptions(opts.Client, opts.Database); err != nil {
 		return nil, err
@@ -71,6 +75,9 @@ func New(opts Options) (Client, error) {
 	sessionsCollection := clientinfra.ResolveCollectionName(opts.SessionsCollection, defaultSessionsCollection)
 	runsCollection := clientinfra.ResolveCollectionName(opts.RunsCollection, defaultRunsCollection)
 	timeout := clientinfra.ResolveTimeout(opts.Timeout, defaultOpTimeout)
+	if err := clientinfra.RequireTransactionSupport(timeout, opts.Client); err != nil {
+		return nil, err
+	}
 	sessWrapper := clientinfra.NewCollection(opts.Client, opts.Database, sessionsCollection)
 	runWrapper := clientinfra.NewCollection(opts.Client, opts.Database, runsCollection)
 	if err := clientinfra.EnsureIndexes(timeout, func(ctx context.Context) error {

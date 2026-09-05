@@ -17,6 +17,8 @@ import (
 	mongodriver "go.mongodb.org/mongo-driver/v2/mongo"
 	"go.mongodb.org/mongo-driver/v2/mongo/options"
 
+	"github.com/CaliLuke/loom-mcp/v2/features/mongo/clientinfra"
+
 	memoryclient "github.com/CaliLuke/loom-mcp/v2/features/memory/mongo/clients/mongo"
 	promptclient "github.com/CaliLuke/loom-mcp/v2/features/prompt/mongo/clients/mongo"
 	runlogclient "github.com/CaliLuke/loom-mcp/v2/features/runlog/mongo/clients/mongo"
@@ -518,7 +520,132 @@ func mustObjectID(t *testing.T, value string) bson.ObjectID {
 	return id
 }
 
+// TestStandaloneMongoDeploymentContracts pins what a standalone mongod means for
+// every Mongo-backed store. The subtests share one container: each start is
+// another chance for the forwarded-port flake, and they all want the same
+// topology.
+func TestStandaloneMongoDeploymentContracts(t *testing.T) {
+	mongoClient, database, address := newStandaloneMongoIntegrationClient(t)
+
+	// The session client writes run metadata through multi-document
+	// transactions, which a standalone cannot run, so construction must fail
+	// with an actionable error instead of leaving the first run write to fail at
+	// request time.
+	t.Run("session client is refused", func(t *testing.T) {
+		_, err := sessionclient.New(sessionclient.Options{
+			Client:   mongoClient,
+			Database: database,
+			Timeout:  10 * time.Second,
+		})
+		require.Error(t, err)
+		require.Contains(t, err.Error(), "mongo deployment is a standalone")
+		require.Contains(t, err.Error(), "rs.initiate")
+
+		// A non-positive timeout must still reach the server: the probe
+		// substitutes its own budget. The deadline that budget installs is
+		// asserted in TestRequireTransactionSupportBoundsTheProbe; this only
+		// pins that a caller passing zero still gets a verdict, not a timeout.
+		err = clientinfra.RequireTransactionSupport(0, mongoClient)
+		require.Error(t, err)
+		require.Contains(t, err.Error(), "mongo deployment is a standalone")
+	})
+
+	// Reached as if it were a replica set member, the same container is dropped
+	// from the topology, so the deployment is never classified. This is the only
+	// coverage that would notice the driver renaming the shape the hint keys on:
+	// every other integration URI carries directConnection=true, which forces a
+	// Single topology.
+	t.Run("set name mismatch is named", func(t *testing.T) {
+		client, err := mongodriver.Connect(options.Client().
+			ApplyURI(fmt.Sprintf("mongodb://%s/?replicaSet=rs0", address)).
+			SetServerSelectionTimeout(3 * time.Second))
+		require.NoError(t, err)
+		t.Cleanup(func() {
+			require.NoError(t, client.Disconnect(context.Background()))
+		})
+
+		_, err = sessionclient.New(sessionclient.Options{
+			Client:   client,
+			Database: database,
+			Timeout:  5 * time.Second,
+		})
+		require.Error(t, err)
+		// The set name is questioned first: a healthy set reached with the wrong
+		// name empties the topology exactly as a standalone does.
+		require.Contains(t, err.Error(), "check the replicaSet parameter")
+		require.NotContains(t, err.Error(), "re-add this member")
+	})
+
+	// The other half of the documented contract: only the session store needs a
+	// replica set, so the stores that write one document at a time must still
+	// build here.
+	t.Run("single-document clients are accepted", func(t *testing.T) {
+		_, err := runlogclient.New(runlogclient.Options{Client: mongoClient, Database: database, Timeout: 10 * time.Second})
+		require.NoError(t, err)
+
+		_, err = promptclient.New(promptclient.Options{Client: mongoClient, Database: database, Timeout: 10 * time.Second})
+		require.NoError(t, err)
+
+		_, err = memoryclient.New(memoryclient.Options{Client: mongoClient, Database: database, Timeout: 10 * time.Second})
+		require.NoError(t, err)
+	})
+}
+
+// TestSessionClientRejectsUninitiatedReplicaSetMongo covers the deployment that
+// classifies as neither a working replica set nor a plain standalone: a --replSet
+// mongod reports no set name until rs.initiate() runs, so the guard must name
+// that state rather than mislabel the member a standalone.
+func TestSessionClientRejectsUninitiatedReplicaSetMongo(t *testing.T) {
+	mongoClient, database := newUninitiatedReplicaSetMongoIntegrationClient(t)
+
+	_, err := sessionclient.New(sessionclient.Options{
+		Client:   mongoClient,
+		Database: database,
+		Timeout:  10 * time.Second,
+	})
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "uninitiated replica set member")
+	require.Contains(t, err.Error(), "rs.initiate")
+	require.NotContains(t, err.Error(), "is a standalone")
+}
+
+// mongoDeployment selects the topology an integration container runs as. The
+// session client requires transactions, so its guard has to be exercised against
+// both a replica set and a standalone mongod.
+type mongoDeployment int
+
+const (
+	mongoReplicaSet mongoDeployment = iota
+	mongoStandalone
+	// mongoUninitiatedReplicaSet is a --replSet mongod that never had
+	// rs.initiate() run. It reports no set name, so it is the shape most easily
+	// mistaken for a standalone.
+	mongoUninitiatedReplicaSet
+)
+
 func newMongoIntegrationClient(t *testing.T) (*mongodriver.Client, string) {
+	t.Helper()
+	client, database, _ := newMongoIntegrationClientFor(t, mongoReplicaSet)
+	return client, database
+}
+
+// newStandaloneMongoIntegrationClient starts a standalone mongod, the topology
+// the session client must refuse. It runs without --replSet and without
+// rs.initiate, so the container stays unable to run transactions.
+func newStandaloneMongoIntegrationClient(t *testing.T) (*mongodriver.Client, string, string) {
+	t.Helper()
+	return newMongoIntegrationClientFor(t, mongoStandalone)
+}
+
+// newUninitiatedReplicaSetMongoIntegrationClient starts a --replSet mongod and
+// deliberately skips rs.initiate, leaving the member without a configuration.
+func newUninitiatedReplicaSetMongoIntegrationClient(t *testing.T) (*mongodriver.Client, string) {
+	t.Helper()
+	client, database, _ := newMongoIntegrationClientFor(t, mongoUninitiatedReplicaSet)
+	return client, database
+}
+
+func newMongoIntegrationClientFor(t *testing.T, deployment mongoDeployment) (client *mongodriver.Client, database string, address string) {
 	t.Helper()
 	if !dockerIntegrationRequested() {
 		t.Skipf("set %s=1 to run Docker-backed Mongo contracts", runDockerIntegrationEnv)
@@ -526,9 +653,18 @@ func newMongoIntegrationClient(t *testing.T) (*mongodriver.Client, string) {
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
 	defer cancel()
 
+	command := []string{"mongod", "--bind_ip_all"}
+	replicaSetQuery := ""
+	if deployment != mongoStandalone {
+		command = []string{"mongod", "--replSet", "rs0", "--bind_ip_all"}
+	}
+	if deployment == mongoReplicaSet {
+		replicaSetQuery = "&replicaSet=rs0"
+	}
+
 	req := testcontainers.ContainerRequest{
 		Image:        "mongo:7",
-		Cmd:          []string{"mongod", "--replSet", "rs0", "--bind_ip_all"},
+		Cmd:          command,
 		ExposedPorts: []string{"27017/tcp"},
 		WaitingFor:   wait.ForListeningPort("27017/tcp").WithStartupTimeout(time.Minute),
 	}
@@ -546,26 +682,34 @@ func newMongoIntegrationClient(t *testing.T) (*mongodriver.Client, string) {
 		require.NoError(t, container.Terminate(context.Background()))
 	})
 
-	initMongoReplicaSet(ctx, t, container)
+	if deployment == mongoReplicaSet {
+		initMongoReplicaSet(ctx, t, container)
+	}
 
 	host, err := container.Host(ctx)
 	require.NoError(t, err)
 	port, err := container.MappedPort(ctx, "27017")
 	require.NoError(t, err)
-	uri := fmt.Sprintf("mongodb://%s:%s/?directConnection=true&replicaSet=rs0", host, port.Port())
+	address = fmt.Sprintf("%s:%s", host, port.Port())
+	uri := fmt.Sprintf("mongodb://%s/?directConnection=true%s", address, replicaSetQuery)
 
-	client, err := mongodriver.Connect(options.Client().ApplyURI(uri).SetServerSelectionTimeout(10 * time.Second))
+	client, err = mongodriver.Connect(options.Client().ApplyURI(uri).SetServerSelectionTimeout(10 * time.Second))
 	require.NoError(t, err)
 	t.Cleanup(func() {
 		require.NoError(t, client.Disconnect(context.Background()))
 	})
 	require.NoError(t, client.Ping(ctx, nil))
 
-	database := "loom_mcp_" + sanitizeDatabaseName(t.Name())
-	t.Cleanup(func() {
-		require.NoError(t, client.Database(database).Drop(context.Background()))
-	})
-	return client, database
+	database = "loom_mcp_" + sanitizeDatabaseName(t.Name())
+	if deployment != mongoUninitiatedReplicaSet {
+		// An uninitiated member refuses writes, so dropping the database would
+		// fail with NotWritablePrimary. Terminating the container discards the
+		// data either way.
+		t.Cleanup(func() {
+			require.NoError(t, client.Database(database).Drop(context.Background()))
+		})
+	}
+	return client, database, address
 }
 
 func dockerIntegrationRequested() bool {
