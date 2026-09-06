@@ -1220,6 +1220,7 @@ profile := stream.MetricsProfile()
 | `features/stream/pulse`     | Pulse message bus sink for real‑time streaming         |
 | `features/model/bedrock`    | AWS Bedrock model client (Claude, etc.)                |
 | `features/model/openai`     | OpenAI‑compatible model client                         |
+| `features/model/codex`      | ChatGPT Codex subscription model client                |
 | `features/model/anthropic`  | Anthropic API model client                             |
 | `features/model/ollama`     | Local Ollama chat model client                         |
 | `features/model/gemini`     | Google Gemini API and Vertex AI model client           |

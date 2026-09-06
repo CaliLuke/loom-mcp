@@ -10,11 +10,13 @@ import (
 
 	"cloud.google.com/go/auth"
 	bedrock "github.com/CaliLuke/loom-mcp/v2/features/model/bedrock"
+	codexfeature "github.com/CaliLuke/loom-mcp/v2/features/model/codex"
 	gemini "github.com/CaliLuke/loom-mcp/v2/features/model/gemini"
 	ollamafeature "github.com/CaliLuke/loom-mcp/v2/features/model/ollama"
 	openaifeature "github.com/CaliLuke/loom-mcp/v2/features/model/openai"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/model"
 	"github.com/aws/aws-sdk-go-v2/service/bedrockruntime"
+	"github.com/gorilla/websocket"
 	openaisdk "github.com/openai/openai-go"
 	"github.com/openai/openai-go/option"
 	"google.golang.org/genai"
@@ -37,6 +39,22 @@ type OpenAIConfig struct {
 	DefaultModel string
 	HighModel    string
 	SmallModel   string
+}
+
+// CodexConfig configures the ChatGPT-backed Codex subscription model client.
+// Credentials are resolved through the application-owned source for every
+// logical request; the runtime never discovers or persists credentials.
+type CodexConfig struct {
+	CredentialSource  codexfeature.CredentialSource
+	HTTPClient        *http.Client
+	WebSocketDialer   *websocket.Dialer
+	Transport         codexfeature.Transport
+	ClientVersion     string
+	ResponsesLite     bool
+	StreamIdleTimeout time.Duration
+	DefaultModel      string
+	HighModel         string
+	SmallModel        string
 }
 
 // OllamaConfig configures the local Ollama-backed model client created by the runtime.
@@ -158,6 +176,28 @@ func (r *Runtime) NewOpenAIModelClient(cfg OpenAIConfig) (model.Client, error) {
 		DefaultModel: cfg.DefaultModel,
 		HighModel:    cfg.HighModel,
 		SmallModel:   cfg.SmallModel,
+	})
+	if err != nil {
+		return nil, err
+	}
+	return model.NewClient(provider)
+}
+
+// NewCodexModelClient constructs a model.Client backed by a ChatGPT Codex
+// subscription. The client is not registered automatically; pass it to
+// RegisterModel with the model ID your planners use.
+func (r *Runtime) NewCodexModelClient(cfg CodexConfig) (model.Client, error) {
+	provider, err := codexfeature.New(codexfeature.Options{
+		CredentialSource:  cfg.CredentialSource,
+		HTTPClient:        cfg.HTTPClient,
+		WebSocketDialer:   cfg.WebSocketDialer,
+		Transport:         cfg.Transport,
+		ClientVersion:     cfg.ClientVersion,
+		ResponsesLite:     cfg.ResponsesLite,
+		StreamIdleTimeout: cfg.StreamIdleTimeout,
+		DefaultModel:      cfg.DefaultModel,
+		HighModel:         cfg.HighModel,
+		SmallModel:        cfg.SmallModel,
 	})
 	if err != nil {
 		return nil, err

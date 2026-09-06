@@ -48,6 +48,23 @@ Use this file for current loom-mcp runtime behavior in this repo. Prefer it over
 - Runtime model tool-argument fragments stay private until validation produces
   a complete tool call. They are not provisional presentation events.
 
+## Codex Subscription Provider
+
+- Applications supply a context-aware credential source. The provider resolves
+  it once for each logical request.
+- The provider does not find, refresh, or store credentials. It does not read
+  environment variables or Codex CLI state.
+- Requests use fixed ChatGPT Codex endpoints. Tests and desktop applications can
+  inject HTTP and WebSocket transports.
+- Automatic transport selection uses WebSocket first. It can retry once with SSE
+  only before canonical output reaches the caller.
+- A raw stream exposes its response only after literal `io.EOF`. `Close` is
+  cleanup-only.
+- Provider errors contain safe codes, status, request IDs, and retryability. They
+  never contain credentials or response bodies.
+- The provider does not implement `model.TokenCounter`. Exact provider-native
+  counting is not available.
+
 ## Planner Activity Retries
 
 - The runtime schedules one logical `PlanStart` or `PlanResume` turn, but the

@@ -140,6 +140,7 @@ test-stress: tools
 		./runtime/agent/engine/temporal \
 		./features/model/anthropic \
 		./features/model/bedrock \
+		./features/model/codex \
 		./features/model/gateway \
 		./features/model/gemini \
 		./features/model/middleware \

@@ -2168,10 +2168,46 @@ If `model.Request.Thinking.Enable` is true, the OpenAI adapter requests an
 automatic reasoning summary. It returns each summary as a typed
 `model.ThinkingPart`.
 
-Explicit `model.Request.Model` values take precedence over class routing; when
-the request leaves `Model` empty, `ModelClass` selects `HighModel` or
-`SmallModel`, falling back to `DefaultModel` when no class-specific model is
-configured.
+Create a Codex subscription client when a desktop or local application supplies
+ChatGPT credentials. The credential source runs once for each logical request.
+It can refresh an expired token. Loom does not find or store credentials.
+
+```go
+source := codex.CredentialSourceFunc(func(ctx context.Context) (codex.Credentials, error) {
+    return desktopAuth.CurrentCodexCredentials(ctx)
+})
+
+client, err := rt.NewCodexModelClient(runtime.CodexConfig{
+    CredentialSource: source,
+    DefaultModel:     "gpt-5.6-codex",
+    Transport:        codex.TransportAuto,
+    ResponsesLite:    false,
+})
+if err == nil {
+    err = rt.RegisterModel("codex", client)
+}
+```
+
+`TransportAuto` uses a new WebSocket first. It can retry once with SSE only
+before it returns model output. Select `TransportSSE` or
+`TransportWebSocket` when the application requires one network path.
+`ClientVersion` changes the private compatibility version. `ResponsesLite`
+enables the complete Lite request shape.
+
+The provider uses fixed ChatGPT Codex endpoints. It does not accept an arbitrary
+base URL. An injected HTTP client or WebSocket dialer can apply desktop network
+policy. The injection does not change the endpoint identity. The provider sends
+access tokens only in request headers. Errors do not include tokens, account
+IDs, headers, or response bodies.
+
+Codex rejects structured output, temperature, numeric output limits, cache
+options, cache checkpoints, and numeric thinking budgets before network access.
+The provider does not implement `model.TokenCounter`. It returns `Response()`
+only after the caller receives literal `io.EOF`.
+
+An explicit `model.Request.Model` value has highest priority. If `Model` is
+empty, `ModelClass` selects `HighModel` or `SmallModel`. `DefaultModel` applies
+if a class-specific model is not configured.
 
 Create a local Ollama chat client through the runtime helper. Ollama uses the
 `/api/chat` endpoint and supports text, images, streaming text, function tools,
@@ -2261,6 +2297,7 @@ families may impose additional provider-side restrictions.
 | Anthropic | yes | yes | no | yes | yes | typed thinking and redacted thinking | no |
 | Bedrock | yes | yes | unary and stream | yes | yes | typed thinking, including adaptive models | yes |
 | OpenAI Responses | yes | yes | unary and stream; not with tools | yes | ignored on replay | reasoning summaries become typed thinking | no |
+| Codex subscription | yes | SSE and WebSocket | no | yes | no | typed summaries and encrypted replay | no |
 | Gemini / Vertex | yes | no (`ErrStreamingUnsupported`) | unary; not with tools | yes | no | yes | yes |
 | Ollama | yes | yes | unary and stream; not with tools | limited by local API/model | no | native typed thinking | no |
 
