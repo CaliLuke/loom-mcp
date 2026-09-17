@@ -154,11 +154,12 @@ func (d *toolSpecsData) pureTypes() []*typeData {
 	return out
 }
 
-// needsGoaImport reports whether any generated type requires goa runtime helpers
-// (validation helpers).
-func (d *toolSpecsData) needsGoaImport() bool {
+// needsLoomImport reports whether codecs use runtime validation helpers or
+// transform types that reference the Loom runtime, such as JSONValue collections.
+func (d *toolSpecsData) needsLoomImport() bool {
 	for _, info := range d.order {
-		if strings.TrimSpace(strings.Join(info.TransportValidationSrc, "\n")) != "" {
+		if strings.TrimSpace(strings.Join(info.TransportValidationSrc, "\n")) != "" ||
+			strings.Contains(info.Def, "loom.") || strings.Contains(info.TransportDef, "loom.") {
 			return true
 		}
 	}
@@ -298,6 +299,10 @@ func (d *toolSpecsData) typeImports() []*codegen.ImportSpec {
 	}
 	uniq := make(map[string]*codegen.ImportSpec)
 	for _, info := range d.order {
+		if info.NeedType && strings.Contains(info.Def, "loom.") {
+			im := codegen.LoomImport("")
+			uniq[im.Path] = im
+		}
 		for _, im := range info.TypeImports {
 			if im.Path == "" {
 				continue
@@ -335,7 +340,6 @@ func (d *toolSpecsData) codecsImports() []*codegen.ImportSpec {
 	if d.needsUnicodeImport() {
 		base = append(base, codegen.SimpleImport("unicode/utf8"))
 	}
-	needsGoa := d.needsGoaImport()
 	extra := make(map[string]*codegen.ImportSpec)
 	needsServiceImport := false
 	serviceImportPath := shared.JoinImportPath(d.genpkg, d.svc.PathName)
@@ -374,7 +378,7 @@ func (d *toolSpecsData) codecsImports() []*codegen.ImportSpec {
 			base = append(base, extra[p])
 		}
 	}
-	if needsGoa {
+	if d.needsLoomImport() {
 		base = append(base, codegen.LoomImport(""))
 	}
 	// Keep strings import last to match golden expectations.
@@ -385,6 +389,10 @@ func (d *toolSpecsData) codecsImports() []*codegen.ImportSpec {
 func (d *toolSpecsData) transportTypeImports() []*codegen.ImportSpec {
 	uniq := make(map[string]*codegen.ImportSpec)
 	for _, info := range d.order {
+		if strings.Contains(info.TransportDef, "loom.") {
+			im := codegen.LoomImport("")
+			uniq[im.Path] = im
+		}
 		for _, im := range info.TransportImports {
 			if im == nil || im.Path == "" {
 				continue

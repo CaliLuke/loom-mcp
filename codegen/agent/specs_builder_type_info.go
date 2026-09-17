@@ -221,14 +221,16 @@ func (b *toolSpecBuilder) buildTypeInfo(tool *ToolData, att *goaexpr.AttributeEx
 			TypeName:      typeName,
 		},
 	}
-	srcCtx := codegen.NewAttributeContextForConversion(true, false, false, "toolhttp", scope)
+	// Transport types live in another package, so collection allocations and
+	// transform helpers must retain the toolhttp qualifier in both directions.
+	srcCtx := codegen.NewAttributeContext(true, false, false, "toolhttp", scope)
 	tgtCtx := codegen.NewAttributeContextForConversion(false, false, true, "", scope)
 	decodeBody, decodeHelpers, err := codegen.GoTransform(src, dst, "in", "out", srcCtx, tgtCtx, "decode", false)
 	if err != nil {
 		return nil, err
 	}
 	encSrcCtx := codegen.NewAttributeContextForConversion(false, false, true, "", scope)
-	encTgtCtx := codegen.NewAttributeContextForConversion(true, false, false, "toolhttp", scope)
+	encTgtCtx := codegen.NewAttributeContext(true, false, false, "toolhttp", scope)
 	encodeBody, encodeHelpers, err := codegen.GoTransform(dst, src, "in", "out", encSrcCtx, encTgtCtx, "encode", false)
 	if err != nil {
 		return nil, err
