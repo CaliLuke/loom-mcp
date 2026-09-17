@@ -336,6 +336,9 @@ Use this file for current loom-mcp runtime behavior in this repo. Prefer it over
   unique because they become tool-call IDs.
 - Graph helpers (`Parallel`, `Join`, `RequestInput`, `Loop`, `Branch`) generate
   `planner.NewGraphWorkflowPlanner(...)`.
+- Both built-in workflow planners honor `PlanResumeInput.Finalize` before
+  processing tool failures or scheduling work. They return the configured
+  `FinalMessage` on time, tool, and failure caps without more tools or awaits.
 - Graph workflow resume state is derived from stable node/tool-call IDs in
   `ToolOutputs`, not from `len(ToolOutputs)`.
 - Parallel resume must schedule only unfinished ready nodes. Joins are virtual
