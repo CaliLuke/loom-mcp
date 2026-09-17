@@ -159,6 +159,12 @@ func (c *Client) buildRequest(request *model.Request) (*builtRequest, error) { /
 	if request.Thinking != nil && request.Thinking.Enable {
 		body.Reasoning = map[string]any{wireSummary: wireAuto}
 	}
+	if c.reasoningEffort != "" {
+		if body.Reasoning == nil {
+			body.Reasoning = make(map[string]any)
+		}
+		body.Reasoning["effort"] = c.reasoningEffort
+	}
 	if c.lite {
 		applyResponsesLite(&body)
 	}

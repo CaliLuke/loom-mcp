@@ -45,6 +45,8 @@ type OpenAIConfig struct {
 // Credentials are resolved through the application-owned source for every
 // logical request; the runtime never discovers or persists credentials.
 type CodexConfig struct {
+	// ReasoningEffort selects a provider effort identifier; empty uses the provider default.
+	ReasoningEffort   string
 	CredentialSource  codexfeature.CredentialSource
 	HTTPClient        *http.Client
 	WebSocketDialer   *websocket.Dialer
@@ -188,6 +190,7 @@ func (r *Runtime) NewOpenAIModelClient(cfg OpenAIConfig) (model.Client, error) {
 // RegisterModel with the model ID your planners use.
 func (r *Runtime) NewCodexModelClient(cfg CodexConfig) (model.Client, error) {
 	provider, err := codexfeature.New(codexfeature.Options{
+		ReasoningEffort:   cfg.ReasoningEffort,
 		CredentialSource:  cfg.CredentialSource,
 		HTTPClient:        cfg.HTTPClient,
 		WebSocketDialer:   cfg.WebSocketDialer,
