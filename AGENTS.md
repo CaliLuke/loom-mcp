@@ -13,14 +13,14 @@
 - Treat the issue body and user instructions as the scope boundary.
 - Do not add adjacent fixes, refactors, compatibility work, or speculative edge cases.
 - Add work only when the contract requires it or the current diff causes a regression.
-- Record an out-of-scope finding as follow-up work. Do not implement it in the current ticket.
-- If scope must expand, stop and get explicit user approval. Update the contract before you continue.
+- Record an out-of-scope finding as follow-up work. Necessary gate repairs are part of completing the requested work and do not require another routine approval.
+- For scope beyond the requested behavior and necessary gate repairs, get explicit user approval. Update the contract before you continue.
 - Freeze the scope before implementation. Freeze the diff before final verification.
 - During review, classify findings as contract blockers, diff regressions, or follow-ups. Only blockers and regressions reopen the diff.
 - Run targeted checks while editing. Run each required repository gate once after the diff is frozen.
-- If an unrelated gate fails, reproduce that exact failure once. Do not change unrelated code in the current ticket.
-- If the failure is deterministic, stop and report it as separate blocked work.
-- If the failure does not reproduce, record the flaky result and continue the remaining gates once.
+- Diagnose lint, formatting, and test failures, fix their root causes, and rerun the affected gates. Investigate tooling and cache faults before treating diagnostics as source defects.
+- Keep unrelated gate repairs in a separate focused ticket and commit, then continue the original work. Do not stop merely because a repair is outside the original diff.
+- Preserve checks, thresholds, and mandatory hooks. Do not suppress diagnostics or bypass hooks to make a gate pass. Escalate only when repair needs unavailable access, a product decision, or an irreversible action beyond the user's authorization.
 - Implement each ticket as exactly one atomic commit. Never combine tickets or split one ticket across commits.
 - Before each commit, get one independent review of the frozen diff against the ticket contract.
 - Resolve contract blockers and diff regressions. Treat all other review suggestions as follow-up work.
