@@ -166,3 +166,14 @@ func TestNewVertexGeminiModelClientBuildsSDKClient(t *testing.T) {
 	_, ok := client.(model.TokenCounter)
 	require.True(t, ok)
 }
+
+func TestNewCodexModelClientForwardsReasoningEffort(t *testing.T) {
+	rt := &Runtime{}
+	client, err := rt.NewCodexModelClient(CodexConfig{
+		CredentialSource: codex.CredentialSourceFunc(func(context.Context) (codex.Credentials, error) {
+			return codex.Credentials{AccessToken: "token", AccountID: "account"}, nil
+		}), DefaultModel: "model", ReasoningEffort: "INVALID",
+	})
+	require.ErrorContains(t, err, "reasoning effort")
+	require.Nil(t, client)
+}

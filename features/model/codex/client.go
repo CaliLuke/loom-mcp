@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"regexp"
 	"strings"
 	"time"
 
@@ -35,25 +36,30 @@ type Options struct {
 	ClientVersion     string
 	ResponsesLite     bool
 	StreamIdleTimeout time.Duration
-	DefaultModel      string
-	HighModel         string
-	SmallModel        string
+	// ReasoningEffort selects a provider effort identifier; empty uses the provider default.
+	ReasoningEffort string
+	DefaultModel    string
+	HighModel       string
+	SmallModel      string
 }
 
 // Client implements model.Provider through the private ChatGPT Codex Responses
 // wire contract. It intentionally does not implement model.TokenCounter.
 type Client struct {
-	credentials CredentialSource
-	httpClient  *http.Client
-	wsDialer    *websocket.Dialer
-	transport   Transport
-	version     string
-	lite        bool
-	idleTimeout time.Duration
-	model       string
-	highModel   string
-	smallModel  string
+	credentials     CredentialSource
+	httpClient      *http.Client
+	wsDialer        *websocket.Dialer
+	transport       Transport
+	version         string
+	lite            bool
+	idleTimeout     time.Duration
+	model           string
+	reasoningEffort string
+	highModel       string
+	smallModel      string
 }
+
+var reasoningEffortPattern = regexp.MustCompile(`^[a-z][a-z0-9_]{0,31}$`)
 
 // New constructs a Codex subscription provider with injected credentials.
 func New(options Options) (*Client, error) { //nolint:maintidx // Constructor validation and defensive option copies stay together.
@@ -65,6 +71,9 @@ func New(options Options) (*Client, error) { //nolint:maintidx // Constructor va
 	}
 	if strings.TrimSpace(options.DefaultModel) == "" {
 		return nil, errors.New("codex: default model is required")
+	}
+	if options.ReasoningEffort != "" && !reasoningEffortPattern.MatchString(options.ReasoningEffort) {
+		return nil, errors.New("codex: reasoning effort must be a lowercase identifier of at most 32 characters")
 	}
 	if options.Transport > TransportWebSocket {
 		return nil, fmt.Errorf("codex: invalid transport %d", options.Transport)
@@ -107,16 +116,17 @@ func New(options Options) (*Client, error) { //nolint:maintidx // Constructor va
 		options.StreamIdleTimeout = defaultIdleTimeout
 	}
 	return &Client{
-		credentials: options.CredentialSource,
-		httpClient:  &httpClient,
-		wsDialer:    &webSocketDialer,
-		transport:   options.Transport,
-		version:     version,
-		lite:        options.ResponsesLite,
-		idleTimeout: options.StreamIdleTimeout,
-		model:       strings.TrimSpace(options.DefaultModel),
-		highModel:   strings.TrimSpace(options.HighModel),
-		smallModel:  strings.TrimSpace(options.SmallModel),
+		credentials:     options.CredentialSource,
+		httpClient:      &httpClient,
+		wsDialer:        &webSocketDialer,
+		transport:       options.Transport,
+		version:         version,
+		lite:            options.ResponsesLite,
+		idleTimeout:     options.StreamIdleTimeout,
+		model:           strings.TrimSpace(options.DefaultModel),
+		reasoningEffort: options.ReasoningEffort,
+		highModel:       strings.TrimSpace(options.HighModel),
+		smallModel:      strings.TrimSpace(options.SmallModel),
 	}, nil
 }
 

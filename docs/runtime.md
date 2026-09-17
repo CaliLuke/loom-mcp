@@ -2194,6 +2194,13 @@ before it returns model output. Select `TransportSSE` or
 `ClientVersion` changes the private compatibility version. `ResponsesLite`
 enables the complete Lite request shape.
 
+Set `ReasoningEffort` in `codex.Options` or `runtime.CodexConfig` to send
+`reasoning.effort`. Empty means the provider default. Choose an effort from the
+selected model's `supportedReasoningEfforts` in Codex `model/list`; the application
+owns model-specific validation. Loom validates the identifier syntax without
+freezing the provider catalog. Effort does not require thinking summaries and
+preserves Responses Lite context settings.
+
 `make test` runs an uncached live Codex smoke test after the unit tests.
 The smoke test uses `gpt-5.6-terra` and the default `ClientVersion`.
 It checks a text response and a tool-call round trip.

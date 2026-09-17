@@ -65,6 +65,11 @@ Use this skill for `loom-mcp` work in this repo. Keep `AGENTS.md` short and keep
 
 ## Current Product Rules
 
+- Codex `ReasoningEffort` is a native provider/runtime factory option. Empty
+  preserves provider defaults. Applications validate model-specific supported
+  efforts from Codex `model/list`; the SDK only validates identifier syntax.
+
+
 - Runtime planners have two streaming modes only:
   - use `PlannerContext.ModelClient(id)` and pass its decorated stream to
     `planner.ConsumeStream` or `planner.ConsumeStreamWithObserver`, or
