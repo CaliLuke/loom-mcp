@@ -433,6 +433,9 @@ var BarCmd = Type("BarCmd", func() {
 
 var ProjectedLookupPayload = Type("ProjectedLookupPayload", func() {
 	Attribute("query", String, "Projected lookup query")
+	Attribute("count", Int, "Optional machine-sized count")
+	Attribute("signed", Int64, "Optional signed 64-bit value")
+	Attribute("unsigned", UInt64, "Optional unsigned 64-bit value")
 	Required("query")
 })
 
@@ -444,6 +447,9 @@ var ProjectedLookupResult = Type("ProjectedLookupResult", func() {
 
 var ProjectedLookupToolPayload = Type("ProjectedLookupToolPayload", func() {
 	Attribute("query", String, "Projected lookup query")
+	Attribute("count", Int, "Optional machine-sized count")
+	Attribute("signed", Int64, "Optional signed 64-bit value")
+	Attribute("unsigned", UInt64, "Optional unsigned 64-bit value")
 	Required("query")
 })
 

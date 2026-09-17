@@ -617,7 +617,7 @@ var AssistantAssistantMcpToolsetToolSpecs = []tools.ToolSpec{tools.ToolSpec{
 			},
 		},
 		Name:   "any",
-		Schema: []byte("{\"type\":\"object\",\"required\":[\"query\"],\"properties\":{\"query\":{\"type\":\"string\",\"description\":\"Projected lookup query\"}},\"additionalProperties\":false}"),
+		Schema: []byte("{\"type\":\"object\",\"required\":[\"query\"],\"properties\":{\"count\":{\"type\":\"integer\",\"description\":\"Optional machine-sized count\",\"minimum\":-9223372036854775808,\"maximum\":9223372036854775807},\"query\":{\"type\":\"string\",\"description\":\"Projected lookup query\"},\"signed\":{\"type\":\"integer\",\"description\":\"Optional signed 64-bit value\",\"minimum\":-9223372036854775808,\"maximum\":9223372036854775807},\"unsigned\":{\"type\":\"integer\",\"description\":\"Optional unsigned 64-bit value\",\"minimum\":0,\"maximum\":18446744073709551615}},\"additionalProperties\":false}"),
 	},
 	Result: tools.TypeSpec{
 		Codec: tools.JSONCodec[any]{
@@ -819,7 +819,7 @@ func AssistantAssistantMcpToolsetRetryHint(toolName tools.Ident, err error) *pla
 				schemaJSON = "{\"type\":\"object\",\"required\":[\"query\"],\"properties\":{\"cursor\":{\"type\":\"string\",\"description\":\"Opaque continuation cursor\"},\"query\":{\"type\":\"string\",\"description\":\"Projected lookup query\"}},\"additionalProperties\":false}"
 				example = "{\"query\":\"example\"}"
 			case "projected_lookup_tool":
-				schemaJSON = "{\"type\":\"object\",\"required\":[\"query\"],\"properties\":{\"query\":{\"type\":\"string\",\"description\":\"Projected lookup query\"}},\"additionalProperties\":false}"
+				schemaJSON = "{\"type\":\"object\",\"required\":[\"query\"],\"properties\":{\"count\":{\"type\":\"integer\",\"description\":\"Optional machine-sized count\",\"minimum\":-9223372036854775808,\"maximum\":9223372036854775807},\"query\":{\"type\":\"string\",\"description\":\"Projected lookup query\"},\"signed\":{\"type\":\"integer\",\"description\":\"Optional signed 64-bit value\",\"minimum\":-9223372036854775808,\"maximum\":9223372036854775807},\"unsigned\":{\"type\":\"integer\",\"description\":\"Optional unsigned 64-bit value\",\"minimum\":0,\"maximum\":18446744073709551615}},\"additionalProperties\":false}"
 				example = "{\"query\":\"example\"}"
 			case "projected_status_tool":
 				schemaJSON = "{\"type\":\"object\",\"additionalProperties\":false}"

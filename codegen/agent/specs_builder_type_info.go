@@ -9,6 +9,8 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/santhosh-tekuri/jsonschema/v6"
+
 	"github.com/CaliLuke/loom-mcp/v2/boundedresult"
 	"github.com/CaliLuke/loom-mcp/v2/codegen/shared"
 	"github.com/CaliLuke/loom/codegen"
@@ -456,9 +458,13 @@ func projectBoundedResultSchema(schemaBytes []byte, bounds *ToolBoundsData) ([]b
 		return schemaBytes, nil
 	}
 
-	var schema map[string]any
-	if err := json.Unmarshal(schemaBytes, &schema); err != nil {
+	document, err := jsonschema.UnmarshalJSON(bytes.NewReader(schemaBytes))
+	if err != nil {
 		return nil, fmt.Errorf("unmarshal bounded result schema: %w", err)
+	}
+	schema, ok := document.(map[string]any)
+	if !ok || schema == nil {
+		return nil, fmt.Errorf("bounded tool result schema must be an object")
 	}
 	if schemaType, ok := schema["type"].(string); ok && schemaType != jsonSchemaTypeObject {
 		return nil, fmt.Errorf("bounded tool result schema must be an object, got %q", schemaType)

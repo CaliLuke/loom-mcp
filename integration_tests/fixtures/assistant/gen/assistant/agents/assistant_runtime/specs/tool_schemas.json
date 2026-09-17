@@ -88,9 +88,27 @@
         "schema": {
           "additionalProperties": false,
           "properties": {
+            "count": {
+              "description": "Optional machine-sized count",
+              "maximum": 9223372036854775807,
+              "minimum": -9223372036854775808,
+              "type": "integer"
+            },
             "query": {
               "description": "Projected lookup query",
               "type": "string"
+            },
+            "signed": {
+              "description": "Optional signed 64-bit value",
+              "maximum": 9223372036854775807,
+              "minimum": -9223372036854775808,
+              "type": "integer"
+            },
+            "unsigned": {
+              "description": "Optional unsigned 64-bit value",
+              "maximum": 18446744073709551615,
+              "minimum": 0,
+              "type": "integer"
             }
           },
           "required": [

@@ -37,6 +37,12 @@ type (
 	ProjectedLookupToolPayloadTransport struct {
 		// Projected lookup query
 		Query *string `json:"query"`
+		// Optional machine-sized count
+		Count *int `json:"count,omitempty"`
+		// Optional signed 64-bit value
+		Signed *int64 `json:"signed,omitempty"`
+		// Optional unsigned 64-bit value
+		Unsigned *uint64 `json:"unsigned,omitempty"`
 	}
 
 	// ProjectedLookupToolResultTransport is the internal JSON transport type for ProjectedLookupToolResult.
