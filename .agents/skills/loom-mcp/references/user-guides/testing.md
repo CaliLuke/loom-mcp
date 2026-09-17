@@ -38,6 +38,20 @@ Never edit `gen/` by hand. Run `loom example` only when new scaffold files are i
 
 ## Model providers
 
+`make test` also runs `make test-codex-live` after the unit coverage gates.
+This uncached smoke test uses `gpt-5.6-terra` and the default Codex compatibility
+version. It requires `CODEX_ACCESS_TOKEN` and `CODEX_ACCOUNT_ID` together.
+If only one value is set, the test fails without reading the auth file.
+If neither value is set, it reads local subscription credentials from
+`$CODEX_HOME/auth.json` (default: `~/.codex/auth.json`). Credential discovery is test-only.
+
+The live test skips in CI (`CI` or `GITHUB_ACTIONS`), with `-short`, without
+subscription credentials, or with `CODEX_INTEGRATION=0`.
+`CODEX_INTEGRATION=1` requires credentials for a local live run.
+Authentication and service failures must fail an enabled run.
+Use `CODEX_MODEL`, `CODEX_TRANSPORT`, and `CODEX_RESIDENCY` for explicit overrides.
+The smoke test must leave `ClientVersion` unset to check the shipped default.
+
 Every provider must preserve the shared model contract, not merely compile against the interface. Provider work should cover the applicable matrix:
 
 - text and multimodal requests;
