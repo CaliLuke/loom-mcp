@@ -319,6 +319,8 @@ func testTemporalWorkerReplacement(
 	ctx, cancel := temporalScenarioContext(t)
 	defer cancel()
 	firstExec := newRecordingWorkflowExecutor()
+	deadline, ok := ctx.Deadline()
+	require.True(t, ok)
 
 	firstEngine, err := temporalengine.NewWorker(temporalengine.Options{
 		Client: temporalClient,
@@ -351,9 +353,24 @@ func testTemporalWorkerReplacement(
 		agentsruntime.WithRunID("run-temporal-restart"),
 	)
 	require.NoError(t, err)
+	defer func() {
+		if !t.Failed() {
+			return
+		}
+		diagnosticCtx, diagnosticCancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer diagnosticCancel()
+		description, describeErr := temporalClient.DescribeWorkflowExecution(diagnosticCtx, "run-temporal-restart", "")
+		if describeErr != nil {
+			t.Logf("workflow description failed: %v", describeErr)
+			return
+		}
+		t.Logf("replacement workflow: status=%s pending activities=%v", description.WorkflowExecutionInfo.Status, description.PendingActivities)
+	}()
+	// Observe readiness within the scenario deadline. Mongo-backed hook
+	// activities can legitimately outlast a short polling window.
 	require.Eventually(t, func() bool {
 		return first.recorder.count(hooks.AwaitTypedInput) > 0
-	}, 5*time.Second, 20*time.Millisecond)
+	}, time.Until(deadline), 20*time.Millisecond)
 	firstPage, err := firstRunEvents.List(ctx, "run-temporal-restart", "", 100)
 	require.NoError(t, err)
 	require.NotEmpty(t, firstPage.Events)
@@ -379,7 +396,7 @@ func testTemporalWorkerReplacement(
 	require.NoError(t, second.rt.ProvideTypedInput(ctx, typedInputAnswer("run-temporal-restart")))
 	require.Eventually(t, func() bool {
 		return second.recorder.count(hooks.AwaitConfirmation) > 0
-	}, 10*time.Second, 20*time.Millisecond)
+	}, time.Until(deadline), 20*time.Millisecond)
 	require.NoError(t, second.rt.ProvideConfirmation(ctx, &api.ConfirmationDecision{
 		RunID:       "run-temporal-restart",
 		Approved:    true,
