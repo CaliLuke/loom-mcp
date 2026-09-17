@@ -57,6 +57,9 @@ func (p *SequentialWorkflowPlanner) PlanResume(_ context.Context, input *PlanRes
 	if input == nil {
 		return nil, errors.New("plan resume input is required")
 	}
+	if input.Finalize != nil {
+		return p.stepResult(len(p.steps))
+	}
 	if failed := firstFailedToolOutput(input.ToolOutputs); failed != nil {
 		return nil, fmt.Errorf("workflow step %q failed: %s", failed.ToolCallID, failed.Error.Error())
 	}

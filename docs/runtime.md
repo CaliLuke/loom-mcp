@@ -491,6 +491,11 @@ instead of bypassing the runtime loop.
 plain `Workflow` plus `Step` declarations. It emits authored tool steps one at a
 time.
 
+When `PlanResumeInput.Finalize` is set, both built-in workflow planners return
+their configured `FinalMessage` without scheduling more tools or input requests.
+This applies to time, tool, and failure caps, even after a failed tool call.
+Use a final message that remains accurate when the workflow stops before all steps complete.
+
 `planner.NewGraphWorkflowPlanner(...)` powers graph workflows with parallel nodes,
 join barriers, typed human-input nodes, branch targets, and bounded loops. It
 derives tool completion from stable node/tool-call IDs in accumulated

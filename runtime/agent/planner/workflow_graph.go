@@ -102,6 +102,9 @@ func (p *GraphWorkflowPlanner) PlanResume(_ context.Context, input *PlanResumeIn
 	if input == nil {
 		return nil, errors.New("plan resume input is required")
 	}
+	if input.Finalize != nil {
+		return p.finalResult(), nil
+	}
 	return p.nextResult(input.ToolOutputs, input.TypedInputs)
 }
 
