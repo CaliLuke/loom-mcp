@@ -43,10 +43,13 @@ type wireRequest struct {
 }
 
 type wireTool struct {
-	Type        string         `json:"type"`
-	Name        string         `json:"name"`
-	Description string         `json:"description,omitempty"`
-	Parameters  map[string]any `json:"parameters"`
+	Type        string                    `json:"type"`
+	Name        string                    `json:"name"`
+	Description string                    `json:"description,omitempty"`
+	Parameters  map[string]jsontext.Value `json:"parameters"`
+	// Keep the authored schema, including optional fields and integer bounds.
+	// The validated model client enforces it before accepting tool arguments.
+	Strict bool `json:"strict"`
 }
 
 type builtRequest struct {
@@ -91,11 +94,11 @@ func (b *builtRequest) prepare(transport Transport) error {
 	if err != nil {
 		return fmt.Errorf("codex: encode WebSocket request: %w", err)
 	}
-	var request map[string]any
+	var request map[string]jsontext.Value
 	if err := json.Unmarshal(payload, &request); err != nil {
 		return fmt.Errorf("codex: encode WebSocket request envelope: %w", err)
 	}
-	request[wireType] = "response.create"
+	request[wireType] = jsontext.Value(`"response.create"`)
 	b.wsBody, err = json.Marshal(request)
 	if err != nil {
 		return fmt.Errorf("codex: encode WebSocket request envelope: %w", err)
@@ -207,7 +210,7 @@ func encodeCodexTools(definitions []*model.ToolDefinition) ([]wireTool, *openait
 	return tools, codec, nil
 }
 
-func encodeObjectSchema(name string, schema any) (map[string]any, error) {
+func encodeObjectSchema(name string, schema any) (map[string]jsontext.Value, error) {
 	if schema == nil {
 		return nil, fmt.Errorf("codex: tool %q requires an object input schema", name)
 	}
@@ -215,15 +218,17 @@ func encodeObjectSchema(name string, schema any) (map[string]any, error) {
 	if err != nil {
 		return nil, fmt.Errorf("codex: encode tool %q schema: %w", name, err)
 	}
-	var object map[string]any
+	var object map[string]jsontext.Value
 	if err := json.Unmarshal(encoded, &object); err != nil || object == nil {
 		return nil, fmt.Errorf("codex: tool %q requires an object input schema", name)
 	}
-	if kind, ok := object[wireType]; ok && kind != wireObject {
-		return nil, fmt.Errorf("codex: tool %q requires an object input schema", name)
-	}
-	if _, ok := object[wireType]; !ok {
-		object[wireType] = wireObject
+	if raw, ok := object[wireType]; ok {
+		var kind string
+		if err := json.Unmarshal(raw, &kind); err != nil || kind != wireObject {
+			return nil, fmt.Errorf("codex: tool %q requires an object input schema", name)
+		}
+	} else {
+		object[wireType] = jsontext.Value(`"object"`)
 	}
 	return object, nil
 }

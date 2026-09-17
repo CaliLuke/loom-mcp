@@ -41,7 +41,10 @@ func InitProjectedBoundedLookupToolToolResult(in *assistant.ProjectedBoundedLook
 func InitProjectedLookupToolMethodPayload(in *ProjectedLookupToolPayload) *assistant.ProjectedLookupPayload {
 	var out *assistant.ProjectedLookupPayload
 	out = &assistant.ProjectedLookupPayload{
-		Query: in.Query,
+		Query:    in.Query,
+		Count:    in.Count,
+		Signed:   in.Signed,
+		Unsigned: in.Unsigned,
 	}
 	return out
 }

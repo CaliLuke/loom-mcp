@@ -324,11 +324,14 @@ func TestSSEEventLimitCountsEntireFrame(t *testing.T) {
 	require.NoError(t, err)
 	assert.Len(t, data, len(exactCRLF))
 
-	oversizedIgnoredFrame := strings.Repeat(":ignored\n", maxStreamEventBytes/len(":ignored\n")+1) + "\n"
+	// Each comment fits within the line limit, but the pair exceeds the frame
+	// limit. Avoid millions of tiny lines competing with the idle timer.
+	ignoredLine := ":" + strings.Repeat("x", maxStreamEventBytes/2)
+	oversizedIgnoredFrame := strings.Repeat(ignoredLine+"\n", 2) + "\n"
 	_, err = newSource(oversizedIgnoredFrame).Next()
 	require.ErrorContains(t, err, "exceeds 16 MiB")
 
-	oversizedCRLFFrame := strings.Repeat(":\r\n", maxStreamEventBytes/len(":\r\n")+1) + "\r\n"
+	oversizedCRLFFrame := strings.Repeat(ignoredLine+"\r\n", 2) + "\r\n"
 	_, err = newSource(oversizedCRLFFrame).Next()
 	require.ErrorContains(t, err, "exceeds 16 MiB")
 }

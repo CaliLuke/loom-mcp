@@ -2203,7 +2203,8 @@ preserves Responses Lite context settings.
 
 `make test` runs an uncached live Codex smoke test after the unit tests.
 The smoke test uses `gpt-5.6-terra` and the default `ClientVersion`.
-It checks a text response and a tool-call round trip.
+It checks text responses and tool-call round trips, including a generated
+catalog with `Int`, `Int64`, and `UInt64` fields.
 `make test-codex-live` runs only this smoke test.
 
 The test requires `CODEX_ACCESS_TOKEN` and `CODEX_ACCOUNT_ID` together.
@@ -2230,6 +2231,15 @@ Codex rejects structured output, temperature, numeric output limits, cache
 options, cache checkpoints, and numeric thinking budgets before network access.
 The provider does not implement `model.TokenCounter`. It returns `Response()`
 only after the caller receives literal `io.EOF`.
+
+Codex sends the authored tool schemas with exact 64-bit integer bounds through
+both SSE and WebSocket transports. It explicitly sets `strict: false`, as the
+[Codex tool encoder](https://github.com/openai/codex/blob/main/codex-rs/tools/src/tool_spec_tests.rs) does.
+This prevents Responses from automatically converting the schemas into its
+strict subset. See [OpenAI's strict-mode contract](https://developers.openai.com/api/docs/guides/function-calling#strict-mode).
+The validated `model.Client` still enforces the complete authored schema before
+it accepts tool arguments. It compares numeric bounds without floating-point
+rounding. No numeric bounds are removed or narrowed.
 
 An explicit `model.Request.Model` value has highest priority. If `Model` is
 empty, `ModelClass` selects `HighModel` or `SmallModel`. `DefaultModel` applies

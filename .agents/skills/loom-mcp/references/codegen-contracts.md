@@ -30,6 +30,9 @@ Use this file when editing DSL, generators, generated helpers, or MCP codegen be
   in generated Go source, including schemas, examples, annotations, discovery
   metadata, and recovery hints. Do not alter runtime JSON behavior to stabilize
   source generation.
+- Preserve exact integer tokens when canonicalizing generated schemas with
+  `jsontext.CanonicalizeRawInts(false)`. Bounded-result schema projection must
+  also preserve signed and unsigned 64-bit bounds.
 
 ## Type References
 
