@@ -99,22 +99,25 @@ Do not use `--no-verify`.
 
 ## 7. Tag and Publish
 
-Create an annotated semver tag, push both branch and tag, then create the GitHub Release object. Use `--latest` only for stable releases:
+Land the reviewed commit through protected `main` and wait for its hosted `CI`
+push run to succeed. Then publish from a clean local `main` checkout:
 
 ```bash
-git tag -a vX.Y.Z -m "vX.Y.Z"
-git push origin main
-git push origin vX.Y.Z
-gh release create vX.Y.Z --verify-tag --generate-notes --latest
+git switch main
+git pull --ff-only
+make release VERSION=v2.1.0-alpha.24
 ```
 
-For a prerelease such as `v2.1.0-alpha.1`, publish with:
+Choose the intended unused version. The command checks exact remote `main`
+identity and successful CI for that commit. It creates an annotated tag and
+pushes it atomically with the checked commit. An advance visible during push
+negotiation fails publication. A later advance can succeed; the tag remains on
+the verified commit already included in protected `main`. Stable releases
+become latest; prereleases do not.
 
-```bash
-gh release create v2.1.0-alpha.1 --verify-tag --generate-notes --prerelease
-```
-
-Never mark a prerelease as latest.
+If publication fails after creating a tag, inspect it before retrying. Never
+move a published tag. Use the backfill workflow when only the GitHub release is
+missing. See `docs/releases.md` for the enforced publication contract.
 
 ## 8. Remote Verification
 
@@ -137,6 +140,9 @@ that matches the tag type:
 # Set this to the exact stable or prerelease tag.
 VERSION=vX.Y.Z
 git ls-remote --tags origin "${VERSION}"
+git fetch origin main
+git merge-base --is-ancestor "${VERSION}" origin/main
+# Confirm local and remote tag identity before publishing.
 # Stable release only:
 gh release create "${VERSION}" --verify-tag --generate-notes --latest
 # Prerelease only:

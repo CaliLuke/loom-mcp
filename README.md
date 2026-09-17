@@ -54,6 +54,9 @@ go install github.com/CaliLuke/loom/cmd/loom@v1.9.0-alpha.15
 
 ## Working in this repo
 
+Use `make release VERSION=v2.MINOR.PATCH` to publish a verified commit from
+remote `main`. See [release and Git hygiene](docs/releases.md) for requirements.
+
 Common commands:
 
 ```bash

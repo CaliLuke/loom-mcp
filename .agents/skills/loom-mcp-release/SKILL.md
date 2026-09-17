@@ -8,7 +8,10 @@ Use this skill when releasing `github.com/CaliLuke/loom-mcp/v2`. Keep the workfl
 
 ## Non-Negotiables
 
-- Release from a clean `main` worktree unless the user explicitly wants a different branch flow.
+- Publish new versions with `make release VERSION=v2.MINOR.PATCH` from a clean
+  `main` checkout equal to remote `main`. The command requires successful hosted
+  CI for that exact commit and rejects existing tags. Do not use raw tag/push
+  commands for new releases.
 - Never bypass hooks. If commit-time hooks fail, fix the underlying problem and retry.
 - Use `make loom-remote` before release verification and before the release commit so the repo is pinned to the published `github.com/CaliLuke/loom` dependency, not a local checkout.
 - If the release changed assistant fixture DSL or generated MCP output, run `make regen-assistant-fixture` before verification.
@@ -65,16 +68,15 @@ Use this skill when releasing `github.com/CaliLuke/loom-mcp/v2`. Keep the workfl
    - `make verify-mcp-local`
    - `go test ./...`
 7. Review the final diff and confirm the docs shipped with the same contract as the code.
-8. Commit the release-ready changes on `main`.
-9. Create an annotated tag for the release version, for example:
-   - `git tag -a v1.0.3 -m "v1.0.3"`
-10. Publish the release. Stable tags become latest; hyphenated semantic
-   prerelease tags such as `v2.1.0-alpha.1` must be marked prerelease and must
-   not become latest:
-   - `git push origin main`
-   - `git push origin v1.0.3`
-   - stable: `gh release create v1.0.3 --verify-tag --generate-notes --latest`
-   - prerelease: `gh release create v2.1.0-alpha.1 --verify-tag --generate-notes --prerelease`
+8. Commit reviewed release-ready changes, land them on `main` through the
+   protected branch checks, and wait for the `CI` push run to pass.
+9. Update the local clean `main` checkout with `git pull --ff-only`.
+10. Publish through `make release VERSION=v2.MINOR.PATCH` (or the intended
+    prerelease version). The command creates the annotated tag, atomically pushes
+    the checked commit and tag, and creates the GitHub release with the correct
+    stable or prerelease flags. A `main` advance visible during push negotiation
+    fails publication. A later advance can succeed; the tag remains fixed on the
+    verified commit already included in protected `main`.
 11. Verify the published state:
    - `git ls-remote --tags origin v1.0.3`
    - `git ls-remote origin main`
@@ -91,12 +93,16 @@ Use this when a semver tag already exists on `origin` but the GitHub Releases pa
    - `git ls-remote --tags origin vX.Y.Z`
 2. Confirm the GitHub Release object is missing:
    - `gh release view vX.Y.Z --json tagName,url`
-3. Create the missing release from the existing tag:
+3. Fetch remote `main` and confirm the tag's commit is already included:
+   - `git fetch origin main`
+   - `git merge-base --is-ancestor vX.Y.Z origin/main`
+   - Verify that the local tag matches the remote tag before proceeding.
+4. Create the missing release from the existing tag:
    - stable: `gh release create vX.Y.Z --verify-tag --notes-from-tag --latest`
    - prerelease: `gh release create vX.Y.Z-alpha.1 --verify-tag --notes-from-tag --prerelease`
-4. If the tag message is not suitable, use `--generate-notes` instead of
+5. If the tag message is not suitable, use `--generate-notes` instead of
    `--notes-from-tag`. Keep the stable or prerelease flag unchanged.
-5. Verify the release now exists:
+6. Verify the release now exists:
    - `gh release view vX.Y.Z --json tagName,isDraft,isPrerelease,url,publishedAt`
 
 ## Exact Command Ladder
@@ -123,13 +129,10 @@ git status --short
 VERSION=vX.Y.Z
 git add <files>
 git commit -m "<release or fix message>"
-git tag -a "${VERSION}" -m "${VERSION}"
-git push origin main
-git push origin "${VERSION}"
-# Stable release only:
-gh release create "${VERSION}" --verify-tag --generate-notes --latest
-# Prerelease only:
-gh release create "${VERSION}" --verify-tag --generate-notes --prerelease
+# Land this commit through protected main and wait for its CI push run.
+git switch main
+git pull --ff-only
+make release VERSION="${VERSION}"
 git ls-remote --tags origin "${VERSION}"
 git ls-remote origin main
 gh release view "${VERSION}" --json tagName,isDraft,isPrerelease,url,publishedAt
@@ -143,6 +146,8 @@ gh release view "${VERSION}" --json tagName,isDraft,isPrerelease,url,publishedAt
 - If the release includes user-facing framework behavior changes, update the repo docs under `docs/` in the same release.
 - If dependency pins, verification commands, or local-vs-remote workflow guidance changed, update release-facing root docs such as `README.md` in the same release.
 - If the shipped product or release workflow changed, update the relevant repo-local skills in `.agents/skills/` in the same release.
+- If a publication attempt leaves a local or remote tag, inspect it before retrying.
+  Never move a published tag; use the backfill workflow for a missing release object.
 - If the user asked for a dot release, prefer the smallest semver bump that matches the shipped behavior.
 - The GitHub Release `isPrerelease` value must be true for a hyphenated
   semantic prerelease tag and false for a stable tag. Never mark a prerelease
@@ -159,7 +164,7 @@ Treat the release as complete only when all of the following are true:
 - docs and relevant repo-local skills were reviewed and updated wherever the shipped contract or release workflow changed
 - the release commit exists on `main`
 - the annotated `vX.Y.Z` tag exists locally and on `origin`
-- `origin/main` points at the release commit
+- the release commit remains an ancestor of `origin/main`
 - the GitHub Release object for `vX.Y.Z` exists, is not a draft, and has `isPrerelease` set to true for a hyphenated tag or false for a stable tag
 - the user is told that Go module proxy availability may lag slightly after push
 

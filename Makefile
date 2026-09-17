@@ -50,6 +50,13 @@ PROTOC_INSTALL_DIR ?= $(GOPATH)
 
 all: build lint test
 
+.PHONY: release release-test
+release:
+	bash ./scripts/release.sh "$(VERSION)"
+
+release-test:
+	bash ./scripts/release_test.sh
+
 build: tools
 	$(GO) build ./...
 
@@ -179,6 +186,7 @@ itest: tools
 # Canonical local and hosted CI contract. Keep the recursive steps explicit so
 # generation cannot race build or tests when callers enable parallel make.
 ci: verify-generated
+	$(MAKE) release-test
 	$(MAKE) build
 	$(MAKE) lint
 	$(MAKE) test
