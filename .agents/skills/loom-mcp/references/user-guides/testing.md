@@ -40,9 +40,10 @@ Never edit `gen/` by hand. Run `loom example` only when new scaffold files are i
 
 `make test` also runs `make test-codex-live` after the unit coverage gates.
 This uncached smoke test uses `gpt-5.6-terra` and the default Codex compatibility
-version. It reads explicit `CODEX_ACCESS_TOKEN` and `CODEX_ACCOUNT_ID` values,
-or local subscription credentials from `$CODEX_HOME/auth.json` (default:
-`~/.codex/auth.json`). Credential discovery is test-only.
+version. It requires `CODEX_ACCESS_TOKEN` and `CODEX_ACCOUNT_ID` together.
+If only one value is set, the test fails without reading the auth file.
+If neither value is set, it reads local subscription credentials from
+`$CODEX_HOME/auth.json` (default: `~/.codex/auth.json`). Credential discovery is test-only.
 
 The live test skips in CI (`CI` or `GITHUB_ACTIONS`), with `-short`, without
 subscription credentials, or with `CODEX_INTEGRATION=0`.

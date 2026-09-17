@@ -2199,9 +2199,10 @@ The smoke test uses `gpt-5.6-terra` and the default `ClientVersion`.
 It checks a text response and a tool-call round trip.
 `make test-codex-live` runs only this smoke test.
 
-The test reads `CODEX_ACCESS_TOKEN` and `CODEX_ACCOUNT_ID` when both are set.
-Otherwise, it reads subscription credentials from `$CODEX_HOME/auth.json`,
-or `~/.codex/auth.json` when `CODEX_HOME` is unset.
+The test requires `CODEX_ACCESS_TOKEN` and `CODEX_ACCOUNT_ID` together.
+If only one value is set, the test fails without reading the auth file.
+If neither value is set, it reads subscription credentials from
+`$CODEX_HOME/auth.json`, or `~/.codex/auth.json` when `CODEX_HOME` is unset.
 This credential discovery applies only to tests. The provider still requires
 an injected credential source.
 
