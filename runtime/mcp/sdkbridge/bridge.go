@@ -18,7 +18,7 @@ import (
 )
 
 // CompatibilityVersion is the generated descriptor contract supported by this runtime.
-const CompatibilityVersion = 2
+const CompatibilityVersion = 3
 
 // Config describes one generated MCP service without erasing its typed handlers.
 type Config struct {

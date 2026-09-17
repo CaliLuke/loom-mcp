@@ -85,6 +85,9 @@ Use this file when editing DSL, generators, generated helpers, or MCP codegen be
   service, adapter, local-provider, and SDK paths: `name`, `title`,
   `description`, `inputSchema`, `outputSchema`, `annotations`, `_meta`, and
   `icons`.
+- Generated required-field validation must check top-level member presence for
+  every JSON type. A present empty string satisfies `required`. Accept JSON
+  `null` for a required field only when `expr.AllowsNull` permits it.
 - The official MCP Go SDK owns protocol versions and transport behavior. Do not
   require or synthesize MCP `JSONRPC` declarations. Keep explicit non-MCP
   `JSONRPC` transports unchanged.

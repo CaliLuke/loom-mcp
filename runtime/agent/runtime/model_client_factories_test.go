@@ -7,6 +7,7 @@ import (
 	"cloud.google.com/go/auth"
 	"github.com/stretchr/testify/require"
 
+	"github.com/CaliLuke/loom-mcp/v2/features/model/codex"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/model"
 )
 
@@ -30,6 +31,29 @@ func TestNewOpenAIModelClientBuildsSDKClient(t *testing.T) {
 	})
 	require.NoError(t, err)
 
+	require.NotNil(t, client)
+	_, ok := client.(model.TokenCounter)
+	require.False(t, ok)
+}
+
+func TestNewCodexModelClientValidates(t *testing.T) {
+	rt := &Runtime{}
+
+	client, err := rt.NewCodexModelClient(CodexConfig{DefaultModel: "gpt-5.6-codex"})
+	require.Error(t, err)
+	require.Nil(t, client)
+	require.Contains(t, err.Error(), "credential source is required")
+}
+
+func TestNewCodexModelClientBuildsClientWithoutTokenCounter(t *testing.T) {
+	rt := &Runtime{}
+	client, err := rt.NewCodexModelClient(CodexConfig{
+		CredentialSource: codex.CredentialSourceFunc(func(context.Context) (codex.Credentials, error) {
+			return codex.Credentials{AccessToken: "token", AccountID: "account"}, nil
+		}),
+		DefaultModel: "gpt-5.6-codex",
+	})
+	require.NoError(t, err)
 	require.NotNil(t, client)
 	_, ok := client.(model.TokenCounter)
 	require.False(t, ok)

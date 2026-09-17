@@ -1220,12 +1220,17 @@ profile := stream.MetricsProfile()
 | `features/stream/pulse`     | Pulse message bus sink for real‑time streaming         |
 | `features/model/bedrock`    | AWS Bedrock model client (Claude, etc.)                |
 | `features/model/openai`     | OpenAI‑compatible model client                         |
+| `features/model/codex`      | ChatGPT Codex subscription model client                |
 | `features/model/anthropic`  | Anthropic API model client                             |
 | `features/model/ollama`     | Local Ollama chat model client                         |
 | `features/model/gemini`     | Google Gemini API and Vertex AI model client           |
 | `features/model/gateway`    | Remote model gateway for centralized model serving     |
 | `features/model/middleware` | Model client middleware (rate limiting, etc.)          |
 | `features/policy/basic`     | Basic policy engine for tool filtering and caps        |
+
+`features/session/mongo` writes through multi-document transactions and so
+requires a replica set or a sharded cluster; see the MongoDB deployment
+requirement in `docs/operations.md`.
 
 ---
 

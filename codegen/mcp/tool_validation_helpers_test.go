@@ -38,15 +38,26 @@ func TestCollectTopLevelValidations(t *testing.T) {
 					Type: expr.Int,
 				},
 			},
+			{
+				Name: "note",
+				Attribute: &expr.AttributeExpr{
+					Type:     expr.String,
+					Nullable: true,
+				},
+			},
 		},
 		Validation: &expr.ValidationExpr{
-			Required: []string{"status", "limit"},
+			Required: []string{"status", "limit", "note"},
 		},
 	}
 
 	required, enums, defaults := collectTopLevelValidations(attr)
 
-	assert.Equal(t, []string{"status"}, required)
+	assert.Equal(t, []RequiredField{
+		{Name: "status"},
+		{Name: "limit"},
+		{Name: "note", AllowsNull: true},
+	}, required)
 	if assert.Len(t, enums, 2) {
 		assert.Equal(t, EnumField{Name: "status", Values: []string{"open", "closed"}, Pointer: false}, enums[0])
 		assert.Equal(t, EnumField{Name: "workflow_id", Values: []string{"prd-generation", "technical-design"}, Pointer: false}, enums[1])

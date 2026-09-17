@@ -228,6 +228,10 @@ Tools with all-optional payloads therefore execute normally, while tools with
 required fields return the generated missing-field validation error and repair
 hint.
 
+Generated required-field validation checks member presence for every top-level
+JSON type. A present empty string satisfies `required`. A required field accepts
+JSON `null` only when its schema permits null.
+
 Generated MCP service types use these mappings for arbitrary JSON:
 
 - `Any` becomes `loom.JSONValue`.

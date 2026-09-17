@@ -8,7 +8,7 @@ import (
 )
 
 // collectTopLevelValidations extracts required fields and enum values for a top-level object payload.
-func collectTopLevelValidations(attr *expr.AttributeExpr) ([]string, []EnumField, []DefaultField) {
+func collectTopLevelValidations(attr *expr.AttributeExpr) ([]RequiredField, []EnumField, []DefaultField) {
 	if attr == nil || attr.Type == nil || attr.Type == expr.Empty {
 		return nil, nil, nil
 	}
@@ -19,14 +19,12 @@ func collectTopLevelValidations(attr *expr.AttributeExpr) ([]string, []EnumField
 	if !ok {
 		return nil, nil, nil
 	}
-	req := []string{}
+	req := []RequiredField{}
 	fields, enums, defaults := collectTopLevelValidationFields(obj)
-	if attr.Validation != nil && len(attr.Validation.Required) > 0 {
+	if attr.Validation != nil {
 		for _, name := range attr.Validation.Required {
-			if fa, ok := fields[name]; ok {
-				if pk, okp := fa.Type.(expr.Primitive); okp && pk.Kind() == expr.StringKind {
-					req = append(req, name)
-				}
+			if field, ok := fields[name]; ok {
+				req = append(req, RequiredField{Name: name, AllowsNull: expr.AllowsNull(field)})
 			}
 		}
 	}

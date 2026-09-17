@@ -20,6 +20,7 @@ import (
 	"github.com/openai/openai-go/responses"
 	"github.com/openai/openai-go/shared"
 
+	"github.com/CaliLuke/loom-mcp/v2/features/model/internal/openaitoolname"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/model"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/rawjson"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/tools"
@@ -436,21 +437,17 @@ func encodeTools(defs []*model.ToolDefinition) ([]responses.ToolUnionParam, *ope
 	}
 	tools := make([]responses.ToolUnionParam, 0, len(defs))
 	codec := &openAIToolCodec{
-		schemas:    make(map[string]rawjson.Message, len(defs)),
-		canonToSan: make(map[string]string, len(defs)),
-		sanToCanon: make(map[string]string, len(defs)),
+		schemas: make(map[string]rawjson.Message, len(defs)),
+		names:   openaitoolname.New(len(defs)),
 	}
 	for _, def := range defs {
 		if def == nil {
 			continue
 		}
 		canonical := def.Name
-		sanitized := sanitizeOpenAIToolName(canonical)
-		if prev, ok := codec.sanToCanon[sanitized]; ok && prev != canonical {
-			return nil, nil, fmt.Errorf(
-				"openai: tool name %q sanitizes to %q which collides with %q",
-				canonical, sanitized, prev,
-			)
+		sanitized, err := codec.names.Register(canonical)
+		if err != nil {
+			return nil, nil, fmt.Errorf("openai: %w", err)
 		}
 		schema, err := schemaMessage(canonical, def.InputSchema)
 		if err != nil {
@@ -469,8 +466,6 @@ func encodeTools(defs []*model.ToolDefinition) ([]responses.ToolUnionParam, *ope
 			},
 		})
 		codec.schemas[canonical] = schema
-		codec.canonToSan[canonical] = sanitized
-		codec.sanToCanon[sanitized] = canonical
 	}
 	return tools, codec, nil
 }

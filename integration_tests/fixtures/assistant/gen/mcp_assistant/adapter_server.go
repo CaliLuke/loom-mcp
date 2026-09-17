@@ -512,7 +512,7 @@ func decodeMCPPayloadFields(data []byte) (map[string]jsontext.Value, error) {
 	}
 	return fields, nil
 }
-func validateMCPPayloadRequired(fields map[string]jsontext.Value, field string) error {
+func validateMCPPayloadRequired(fields map[string]jsontext.Value, field string, allowsNull bool) error {
 	raw, ok := fields[field]
 	if !ok {
 		return loom.WithErrorRemedy(loom.PermanentError("invalid_params", "Missing required field: %s", field), &loom.ErrorRemedy{
@@ -520,8 +520,7 @@ func validateMCPPayloadRequired(fields map[string]jsontext.Value, field string) 
 			SafeMessage: fmt.Sprintf("Missing required field: %s", field),
 		})
 	}
-	trimmed := bytes.TrimSpace(raw)
-	if bytes.Equal(trimmed, []byte("\"\"")) || bytes.Equal(trimmed, []byte("null")) {
+	if !allowsNull && bytes.Equal(bytes.TrimSpace(raw), []byte("null")) {
 		return loom.WithErrorRemedy(loom.PermanentError("invalid_params", "Missing required field: %s", field), &loom.ErrorRemedy{
 			Code:        "invalid_params",
 			SafeMessage: fmt.Sprintf("Missing required field: %s", field),
@@ -1838,7 +1837,7 @@ func (a *MCPAdapter) executeRealTool(ctx context.Context, p *ToolsCallPayload, s
 			return true, a.sendToolError(ctx, stream, p.Name, toolCallError(err, "invalid_params", analyzeSentimentInputRecovery(err, arguments)))
 		}
 		{
-			if err := validateMCPPayloadRequired(rawFields, "text"); err != nil {
+			if err := validateMCPPayloadRequired(rawFields, "text", false); err != nil {
 				return true, a.sendToolError(ctx, stream, p.Name, toolCallError(err, "invalid_params", analyzeSentimentInputRecovery(err, arguments)))
 			}
 		}
@@ -1870,7 +1869,7 @@ func (a *MCPAdapter) executeRealTool(ctx context.Context, p *ToolsCallPayload, s
 			return true, a.sendToolError(ctx, stream, p.Name, toolCallError(err, "invalid_params", extractKeywordsInputRecovery(err, arguments)))
 		}
 		{
-			if err := validateMCPPayloadRequired(rawFields, "text"); err != nil {
+			if err := validateMCPPayloadRequired(rawFields, "text", false); err != nil {
 				return true, a.sendToolError(ctx, stream, p.Name, toolCallError(err, "invalid_params", extractKeywordsInputRecovery(err, arguments)))
 			}
 		}
@@ -1902,7 +1901,7 @@ func (a *MCPAdapter) executeRealTool(ctx context.Context, p *ToolsCallPayload, s
 			return true, a.sendToolError(ctx, stream, p.Name, toolCallError(err, "invalid_params", summarizeTextInputRecovery(err, arguments)))
 		}
 		{
-			if err := validateMCPPayloadRequired(rawFields, "text"); err != nil {
+			if err := validateMCPPayloadRequired(rawFields, "text", false); err != nil {
 				return true, a.sendToolError(ctx, stream, p.Name, toolCallError(err, "invalid_params", summarizeTextInputRecovery(err, arguments)))
 			}
 		}
@@ -1934,7 +1933,7 @@ func (a *MCPAdapter) executeRealTool(ctx context.Context, p *ToolsCallPayload, s
 			return true, a.sendToolError(ctx, stream, p.Name, toolCallError(err, "invalid_params", searchInputRecovery(err, arguments)))
 		}
 		{
-			if err := validateMCPPayloadRequired(rawFields, "query"); err != nil {
+			if err := validateMCPPayloadRequired(rawFields, "query", false); err != nil {
 				return true, a.sendToolError(ctx, stream, p.Name, toolCallError(err, "invalid_params", searchInputRecovery(err, arguments)))
 			}
 		}
@@ -1989,10 +1988,10 @@ func (a *MCPAdapter) executeRealTool(ctx context.Context, p *ToolsCallPayload, s
 			return true, a.sendToolError(ctx, stream, p.Name, toolCallError(err, "invalid_params", executeCodeInputRecovery(err, arguments)))
 		}
 		{
-			if err := validateMCPPayloadRequired(rawFields, "language"); err != nil {
+			if err := validateMCPPayloadRequired(rawFields, "language", false); err != nil {
 				return true, a.sendToolError(ctx, stream, p.Name, toolCallError(err, "invalid_params", executeCodeInputRecovery(err, arguments)))
 			}
-			if err := validateMCPPayloadRequired(rawFields, "code"); err != nil {
+			if err := validateMCPPayloadRequired(rawFields, "code", false); err != nil {
 				return true, a.sendToolError(ctx, stream, p.Name, toolCallError(err, "invalid_params", executeCodeInputRecovery(err, arguments)))
 			}
 		}
@@ -2027,6 +2026,11 @@ func (a *MCPAdapter) executeRealTool(ctx context.Context, p *ToolsCallPayload, s
 		}
 		if err := decodeMCPPayloadStrict(arguments, &payload); err != nil {
 			return true, a.sendToolError(ctx, stream, p.Name, toolCallError(err, "invalid_params", processBatchInputRecovery(err, arguments)))
+		}
+		{
+			if err := validateMCPPayloadRequired(rawFields, "items", false); err != nil {
+				return true, a.sendToolError(ctx, stream, p.Name, toolCallError(err, "invalid_params", processBatchInputRecovery(err, arguments)))
+			}
 		}
 		{
 			if err := validateMCPPayloadEnum(rawFields, "format", true, "json", "text", "blob", "uri"); err != nil {
@@ -2072,8 +2076,17 @@ func (a *MCPAdapter) executeRealTool(ctx context.Context, p *ToolsCallPayload, s
 		return false, stream.SendAndClose(ctx, final)
 	case "multi_content":
 		var payload *assistant.MultiContentPayload
+		rawFields, err := decodeMCPPayloadFields(arguments)
+		if err != nil {
+			return true, a.sendToolError(ctx, stream, p.Name, toolCallError(err, "invalid_params", multiContentInputRecovery(err, arguments)))
+		}
 		if err := decodeMCPPayloadStrict(arguments, &payload); err != nil {
 			return true, a.sendToolError(ctx, stream, p.Name, toolCallError(err, "invalid_params", multiContentInputRecovery(err, arguments)))
+		}
+		{
+			if err := validateMCPPayloadRequired(rawFields, "count", false); err != nil {
+				return true, a.sendToolError(ctx, stream, p.Name, toolCallError(err, "invalid_params", multiContentInputRecovery(err, arguments)))
+			}
 		}
 		result, err := a.service.MultiContent(ctx, payload)
 		if err != nil {
@@ -2103,16 +2116,19 @@ func (a *MCPAdapter) executeRealTool(ctx context.Context, p *ToolsCallPayload, s
 			return true, a.sendToolError(ctx, stream, p.Name, toolCallError(err, "invalid_params", generateDpiSpecInputRecovery(err, arguments)))
 		}
 		{
-			if err := validateMCPPayloadRequired(rawFields, "screen_title"); err != nil {
+			if err := validateMCPPayloadRequired(rawFields, "screen_title", false); err != nil {
 				return true, a.sendToolError(ctx, stream, p.Name, toolCallError(err, "invalid_params", generateDpiSpecInputRecovery(err, arguments)))
 			}
-			if err := validateMCPPayloadRequired(rawFields, "platform"); err != nil {
+			if err := validateMCPPayloadRequired(rawFields, "platform", false); err != nil {
 				return true, a.sendToolError(ctx, stream, p.Name, toolCallError(err, "invalid_params", generateDpiSpecInputRecovery(err, arguments)))
 			}
-			if err := validateMCPPayloadRequired(rawFields, "density"); err != nil {
+			if err := validateMCPPayloadRequired(rawFields, "density", false); err != nil {
 				return true, a.sendToolError(ctx, stream, p.Name, toolCallError(err, "invalid_params", generateDpiSpecInputRecovery(err, arguments)))
 			}
-			if err := validateMCPPayloadRequired(rawFields, "primary_cta"); err != nil {
+			if err := validateMCPPayloadRequired(rawFields, "primary_cta", false); err != nil {
+				return true, a.sendToolError(ctx, stream, p.Name, toolCallError(err, "invalid_params", generateDpiSpecInputRecovery(err, arguments)))
+			}
+			if err := validateMCPPayloadRequired(rawFields, "sections", false); err != nil {
 				return true, a.sendToolError(ctx, stream, p.Name, toolCallError(err, "invalid_params", generateDpiSpecInputRecovery(err, arguments)))
 			}
 		}
@@ -2144,8 +2160,17 @@ func (a *MCPAdapter) executeRealTool(ctx context.Context, p *ToolsCallPayload, s
 		return false, stream.SendAndClose(ctx, final)
 	case "dispatch_action":
 		var payload *assistant.DispatchActionPayload
+		rawFields, err := decodeMCPPayloadFields(arguments)
+		if err != nil {
+			return true, a.sendToolError(ctx, stream, p.Name, toolCallError(err, "invalid_params", dispatchActionInputRecovery(err, arguments)))
+		}
 		if err := decodeMCPPayloadStrict(arguments, &payload); err != nil {
 			return true, a.sendToolError(ctx, stream, p.Name, toolCallError(err, "invalid_params", dispatchActionInputRecovery(err, arguments)))
+		}
+		{
+			if err := validateMCPPayloadRequired(rawFields, "request", false); err != nil {
+				return true, a.sendToolError(ctx, stream, p.Name, toolCallError(err, "invalid_params", dispatchActionInputRecovery(err, arguments)))
+			}
 		}
 		result, err := a.service.DispatchAction(ctx, payload)
 		if err != nil {
@@ -2167,8 +2192,17 @@ func (a *MCPAdapter) executeRealTool(ctx context.Context, p *ToolsCallPayload, s
 		return false, stream.SendAndClose(ctx, final)
 	case "dispatch_command":
 		var payload *assistant.DispatchCommandPayload
+		rawFields, err := decodeMCPPayloadFields(arguments)
+		if err != nil {
+			return true, a.sendToolError(ctx, stream, p.Name, toolCallError(err, "invalid_params", dispatchCommandInputRecovery(err, arguments)))
+		}
 		if err := decodeMCPPayloadStrict(arguments, &payload); err != nil {
 			return true, a.sendToolError(ctx, stream, p.Name, toolCallError(err, "invalid_params", dispatchCommandInputRecovery(err, arguments)))
+		}
+		{
+			if err := validateMCPPayloadRequired(rawFields, "command", false); err != nil {
+				return true, a.sendToolError(ctx, stream, p.Name, toolCallError(err, "invalid_params", dispatchCommandInputRecovery(err, arguments)))
+			}
 		}
 		result, err := a.service.DispatchCommand(ctx, payload)
 		if err != nil {

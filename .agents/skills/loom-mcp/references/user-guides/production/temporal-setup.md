@@ -127,6 +127,23 @@ The following construction uses the repository's Mongo adapters for the two
 stores required by the runtime lifecycle. Replace the generated `specs` import
 with the aggregate specs package for the agent hosted by the worker.
 
+The session store writes run metadata through multi-document transactions, so
+its MongoDB deployment must be a replica set (MongoDB 4.0 or later) or a sharded
+cluster (MongoDB 4.2 or later). `sessionclient.New` rejects a standalone `mongod`
+with an error that names the requirement. The URI below therefore targets a
+replica set; a local `mongod` qualifies once it is started with `--replSet` and
+initialised. Name the member explicitly when initialising it:
+
+--- CODE ---
+rs.initiate({_id: "rs0", members: [{_id: 0, host: "127.0.0.1:27017"}]})
+--- END CODE ---
+
+A bare `rs.initiate()` writes the machine's hostname into the configuration
+instead. The driver then replaces the `127.0.0.1` seed with that hostname, and
+if the worker cannot reach it, construction fails with a server-selection
+timeout. The timeout names the unreachable address but says nothing about the
+transaction requirement, because no server was ever inspected.
+
 --- CODE ---
 import (
     "context"
@@ -148,7 +165,7 @@ import (
 
 func newProductionRuntime(ctx context.Context) (*runtime.Runtime, func(context.Context) error, error) {
     rawMongo, err := mongodriver.Connect(
-        mongooptions.Client().ApplyURI("mongodb://127.0.0.1:27017"),
+        mongooptions.Client().ApplyURI("mongodb://127.0.0.1:27017/?replicaSet=rs0"),
     )
     if err != nil {
         return nil, nil, fmt.Errorf("connect to MongoDB: %w", err)
