@@ -39,7 +39,7 @@ STATICCHECK_VERSION ?= v0.8.0-rc.1
 STATICCHECK := $(shell command -v staticcheck 2>/dev/null)
 STATICCHECK_CHECKS ?= all,-S*,-ST*,-QF*
 PROTOC := $(shell command -v protoc 2>/dev/null)
-PROTOC_VERSION ?= 36.0
+PROTOC_VERSION ?= 36.1
 PROTOC_GEN_GO := protoc-gen-go
 PROTOC_GEN_GO_VERSION ?= v1.36.12
 PROTOC_GEN_GO_GRPC := protoc-gen-go-grpc
@@ -84,6 +84,12 @@ test: tools
 	$(GO) test -short -race -shuffle=on -covermode=atomic -coverprofile=cover.out `$(GO) list ./... | grep -v '/integration_tests'`
 	$(MAKE) coverage-check
 	$(MAKE) coverage-check-critical
+	$(MAKE) test-codex-live
+
+# Run on every local make test, even when Go can reuse cached unit results.
+.PHONY: test-codex-live
+test-codex-live:
+	$(GO) test -count=1 -v -timeout=3m ./features/model/codex -run '^TestLiveCodex$$'
 
 coverage-check:
 	@coverage=$$($(GO) tool cover -func=cover.out | awk '/^total:/ { gsub("%", "", $$3); print $$3 }'); \

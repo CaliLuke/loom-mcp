@@ -2194,6 +2194,24 @@ before it returns model output. Select `TransportSSE` or
 `ClientVersion` changes the private compatibility version. `ResponsesLite`
 enables the complete Lite request shape.
 
+`make test` runs an uncached live Codex smoke test after the unit tests.
+The smoke test uses `gpt-5.6-terra` and the default `ClientVersion`.
+It checks a text response and a tool-call round trip.
+`make test-codex-live` runs only this smoke test.
+
+The test reads `CODEX_ACCESS_TOKEN` and `CODEX_ACCOUNT_ID` when both are set.
+Otherwise, it reads subscription credentials from `$CODEX_HOME/auth.json`,
+or `~/.codex/auth.json` when `CODEX_HOME` is unset.
+This credential discovery applies only to tests. The provider still requires
+an injected credential source.
+
+The smoke test skips in CI, in short test runs, or without local subscription
+credentials. Set `CODEX_INTEGRATION=0` to skip it locally.
+Set `CODEX_INTEGRATION=1` to require credentials during a local live run.
+An enabled live run fails on authentication or service errors.
+The test does not refresh credentials; log in to Codex again if they expire.
+`CODEX_MODEL`, `CODEX_TRANSPORT`, and `CODEX_RESIDENCY` override the test configuration.
+
 The provider uses fixed ChatGPT Codex endpoints. It does not accept an arbitrary
 base URL. An injected HTTP client or WebSocket dialer can apply desktop network
 policy. The injection does not change the endpoint identity. The provider sends
