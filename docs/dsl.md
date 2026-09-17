@@ -238,6 +238,10 @@ Tool payloads and results represent `Any` as `loom.JSONValue` from
 `map[string]loom.JSONValue`. The generator supplies the required imports in
 public tool types, private transport types, and collection codecs.
 
+Arrays and maps of named objects are supported in both tool payloads and results.
+Generated codecs convert these collections between public types and the private
+transport package. Nested shared types keep their `struct:pkg:path` package location.
+
 ### Tool payload defaults (Feature)
 
 Tool payload defaults follow the shared request-style semantics used by the generated transports:
