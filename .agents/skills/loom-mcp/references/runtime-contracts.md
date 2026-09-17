@@ -58,6 +58,9 @@ Use this file for current loom-mcp runtime behavior in this repo. Prefer it over
   inject HTTP and WebSocket transports.
 - Automatic transport selection uses WebSocket first. It can retry once with SSE
   only before canonical output reaches the caller.
+- Codex tool schemas retain exact numeric tokens in SSE, WebSocket, and Lite
+  requests. Send `strict: false` explicitly to preserve the authored schema;
+  validated clients enforce its exact bounds before accepting tool arguments.
 - A raw stream exposes its response only after literal `io.EOF`. `Close` is
   cleanup-only.
 - Provider errors contain safe codes, status, request IDs, and retryability. They

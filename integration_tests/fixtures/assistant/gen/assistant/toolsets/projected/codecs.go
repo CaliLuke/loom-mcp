@@ -137,7 +137,10 @@ var ProjectedBoundedLookupToolResultFieldDescs = map[string]string{
 	"hits": "Bounded lookup hits",
 }
 var ProjectedLookupToolPayloadFieldDescs = map[string]string{
-	"query": "Projected lookup query",
+	"count":    "Optional machine-sized count",
+	"query":    "Projected lookup query",
+	"signed":   "Optional signed 64-bit value",
+	"unsigned": "Optional unsigned 64-bit value",
 }
 var ProjectedLookupToolResultFieldDescs = map[string]string{
 	"answer": "Projected lookup answer",
@@ -413,7 +416,10 @@ func MarshalProjectedLookupToolPayload(v *ProjectedLookupToolPayload) ([]byte, e
 	_ = in
 	var out *toolhttp.ProjectedLookupToolPayloadTransport
 	out = &toolhttp.ProjectedLookupToolPayloadTransport{
-		Query: &in.Query,
+		Query:    &in.Query,
+		Count:    in.Count,
+		Signed:   in.Signed,
+		Unsigned: in.Unsigned,
 	}
 	return json.Marshal(out)
 }
@@ -436,7 +442,10 @@ func UnmarshalProjectedLookupToolPayload(data []byte) (*ProjectedLookupToolPaylo
 	_ = in
 	var out *ProjectedLookupToolPayload
 	out = &ProjectedLookupToolPayload{
-		Query: *in.Query,
+		Query:    *in.Query,
+		Count:    in.Count,
+		Signed:   in.Signed,
+		Unsigned: in.Unsigned,
 	}
 	return out, nil
 }

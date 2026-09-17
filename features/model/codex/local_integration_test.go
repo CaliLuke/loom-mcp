@@ -88,6 +88,9 @@ func TestLiveCodex(t *testing.T) {
 	finalResponse, err := provider.Complete(ctx, request)
 	require.NoError(t, err)
 	require.NotEmpty(t, finalResponse.Content)
+	t.Run("integer catalog", func(t *testing.T) {
+		testLiveCodexIntegerCatalog(t, ctx, provider)
+	})
 }
 
 // liveCodexCredentials discovers credentials only for local tests. CI never reads them.

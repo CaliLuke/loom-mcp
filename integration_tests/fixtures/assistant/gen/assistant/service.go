@@ -397,6 +397,12 @@ type ProjectedBoundedLookupToolResult struct {
 type ProjectedLookupPayload struct {
 	// Projected lookup query
 	Query string `json:"query"`
+	// Optional machine-sized count
+	Count *int `json:"count,omitempty"`
+	// Optional signed 64-bit value
+	Signed *int64 `json:"signed,omitempty"`
+	// Optional unsigned 64-bit value
+	Unsigned *uint64 `json:"unsigned,omitempty"`
 }
 
 // ProjectedLookupResult is the result type of the assistant service
@@ -411,6 +417,12 @@ type ProjectedLookupResult struct {
 type ProjectedLookupToolPayload struct {
 	// Projected lookup query
 	Query string `json:"query"`
+	// Optional machine-sized count
+	Count *int `json:"count,omitempty"`
+	// Optional signed 64-bit value
+	Signed *int64 `json:"signed,omitempty"`
+	// Optional unsigned 64-bit value
+	Unsigned *uint64 `json:"unsigned,omitempty"`
 }
 
 type ProjectedLookupToolResult struct {

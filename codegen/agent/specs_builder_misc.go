@@ -138,7 +138,7 @@ func schemaForAttribute(att *goaexpr.AttributeExpr) ([]byte, error) {
 		return nil, err
 	}
 	canonical := jsontext.Value(schema)
-	if err := canonical.Canonicalize(); err != nil {
+	if err := canonical.Canonicalize(jsontext.CanonicalizeRawInts(false)); err != nil {
 		return nil, fmt.Errorf("canonicalize inline JSON Schema: %w", err)
 	}
 	return []byte(canonical), nil
