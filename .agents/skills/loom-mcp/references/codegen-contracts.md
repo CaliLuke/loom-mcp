@@ -38,6 +38,11 @@ Use this file when editing DSL, generators, generated helpers, or MCP codegen be
 - Preserve original attributes so locator metadata remains intact.
 - Let the shared type system own pointer and value semantics. Do not force pointer mode outside transport-validation cases.
 - Use `codegen.GoTransform(...)` with proper conversion contexts instead of post-processing emitted code.
+- Public tool types and private transport types must import the Loom runtime
+  when their emitted definitions reference `loom.JSONValue`. Preserve raw JSON
+  for direct `Any` fields and arrays or maps of `Any`. Codec allocations also
+  require this import, even without validation helpers. Prove imports with
+  compile-after-generation tests, including a plain-type control.
 
 ## Generator Editing Rules
 
