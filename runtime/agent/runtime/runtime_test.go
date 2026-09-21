@@ -1024,7 +1024,6 @@ func TestAgentAsToolNestedUpdates(t *testing.T) {
 		"nested.resume": func(ctx context.Context, input *PlanActivityInput) (*PlanActivityOutput, error) {
 			return rt.PlanResumeActivity(ctx, input)
 		},
-		//nolint:unparam // error return is part of map type signature; test stub always succeeds
 		"resume": func(_ context.Context, _ *PlanActivityInput) (*PlanActivityOutput, error) {
 			return &PlanActivityOutput{
 				Result: &planner.PlanResult{
