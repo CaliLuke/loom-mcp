@@ -436,6 +436,13 @@ Use this skill for `loom-mcp` work in this repo. Keep `AGENTS.md` short and keep
 - Generated SDK servers expose Loom transport observability directly through
   `SDKServerOptions.TransportObserver`; keep external middleware wrapping as an
   application-wide alternative, not the only enablement path.
+- SDK-backed transport observation enriches terminal events from the official
+  SDK's redacted parsed-request summary. Single-message POSTs report method,
+  normalized call ID, notification status, and the request or issued session
+  ID without rereading the body. SSE stream events receive the same fields
+  after parsing. Pre-parse rejections and batches keep protocol fields empty
+  because the upstream summary callback does not expose them; batch enrichment
+  is tracked in issue #300.
 - Runtime semantic telemetry is engine-neutral: stable
   `loom_mcp.runtime.*` run/planner/tool metrics and `tool.execute` spans come
   from planner activities and newly inserted canonical events. Planner metrics

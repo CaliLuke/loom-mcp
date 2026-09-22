@@ -2,6 +2,7 @@ package assistantapi
 
 import (
 	"context"
+	"encoding/json"
 	"testing"
 	"time"
 
@@ -152,7 +153,11 @@ func TestGeneratedSDKServerToolSearchAcceptsOmittedSearchArguments(t *testing.T)
 	tools, ok := structured["tools"].([]any)
 	require.True(t, ok)
 	assert.Len(t, tools, 2)
-	assert.Greater(t, structured["total_matches"], float64(2))
+	totalMatches, ok := structured["total_matches"].(json.Number)
+	require.True(t, ok)
+	total, err := totalMatches.Int64()
+	require.NoError(t, err)
+	assert.Greater(t, total, int64(2))
 	assert.True(t, structured["truncated"].(bool))
 }
 

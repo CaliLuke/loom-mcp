@@ -2,6 +2,7 @@ package assistantapi
 
 import (
 	"context"
+	stdjson "encoding/json"
 	"encoding/json/v2"
 	"net/url"
 	"slices"
@@ -287,8 +288,8 @@ func TestProjectedRichToolFeaturesUseStandardMCPContracts(t *testing.T) {
 		"hits":            []any{"document:loom@verified-session"},
 		"next_cursor":     "page-2",
 		"refinement_hint": "narrow by repository",
-		"returned":        float64(1),
-		"total":           float64(3),
+		"returned":        stdjson.Number("1"),
+		"total":           stdjson.Number("3"),
 		"truncated":       true,
 	}, result.StructuredContent)
 	require.Len(t, result.Content, 1)

@@ -566,10 +566,47 @@ Applications that need one observer across multiple handlers may instead wrap
 the parent mux with `transport.HTTPMiddleware(observer)` and leave the option
 unset. A missing observer is a cheap no-op. Generated code never
 emits raw bodies, JSON-RPC params, MCP tool arguments, credentials, or
-result payloads — events carry only low-cardinality classification fields
-safe for metric labels and log enrichment. See the
+result payloads. Stable classifications such as `Reason` can be metric labels;
+client-controlled method strings belong in logs, not metric labels. See the
 `observability/transport` package documentation in the Loom module for
 the complete `Reason` enumeration.
+
+For a decoded single-message POST, the terminal event includes the JSON-RPC
+method, the normalized call ID, and whether the message is a notification.
+The bridge obtains these fields from the official SDK's parsed request summary;
+it does not read, replace, retain, or decode the request body. The method is
+client-controlled and should be treated as untrusted text in logs. Established
+requests report their `Mcp-Session-Id`, while successful initialization reports
+the session ID issued on the response. Streaming responses emit open, close, and
+write-failure events with the same parsed fields once available.
+
+Requests rejected before SDK parsing retain empty protocol fields. The current
+SDK summary hook does not run for JSON-RPC batches, so their protocol fields and
+batch count also remain empty. HTTP status, bytes, duration, and failure reason
+are still reported by the outer lifecycle observer in both cases.
+Batch metadata is tracked separately in [issue #300](https://github.com/CaliLuke/loom-mcp/issues/300).
+
+For example, the generated observer events support structured request logs
+without middleware that reads the body:
+
+```go
+observer := transport.ObserverFunc(func(_ context.Context, event transport.Event) {
+    if event.Kind != transport.EventKindRequestFinish && event.Kind != transport.EventKindRequestFailure {
+        return
+    }
+    logger.Info("mcp request",
+        "method", event.JSONRPCMethod,
+        "request_id", event.JSONRPCID,
+        "notification", event.Notification,
+        "session_id", event.SessionID,
+        "status", event.StatusCode,
+        "bytes", event.BytesWritten,
+        "duration", event.Duration,
+        "reason", event.Reason,
+    )
+})
+options.TransportObserver = observer
+```
 
 The observer integration is additive to the existing structured `adapter.log(...)`
 calls; both channels remain present in generated SDK server output.

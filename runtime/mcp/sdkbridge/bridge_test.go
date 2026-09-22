@@ -5,16 +5,47 @@ import (
 	json "encoding/json/v2"
 	"errors"
 	"fmt"
+	"io"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	mcpruntime "github.com/CaliLuke/loom-mcp/v2/runtime/mcp"
 	loomhttp "github.com/CaliLuke/loom/http"
+	"github.com/CaliLuke/loom/observability/transport"
+	sdkjsonrpc "github.com/modelcontextprotocol/go-sdk/jsonrpc"
 	mcpsdk "github.com/modelcontextprotocol/go-sdk/mcp"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
+
+type bodyReadCounter struct {
+	reader io.Reader
+	reads  int
+	bytes  int
+}
+
+type failingStreamWriter struct {
+	header http.Header
+}
+
+func (c *bodyReadCounter) Read(buffer []byte) (int, error) {
+	c.reads++
+	n, err := c.reader.Read(buffer)
+	c.bytes += n
+	return n, err
+}
+
+func (w *failingStreamWriter) Header() http.Header {
+	return w.header
+}
+
+func (w *failingStreamWriter) WriteHeader(int) {}
+
+func (w *failingStreamWriter) Write([]byte) (int, error) {
+	return 0, errors.New("stream write failed")
+}
 
 func TestNewServerRejectsGeneratedRuntimeVersionMismatch(t *testing.T) {
 	server, err := NewServer(Config{
@@ -39,6 +70,213 @@ func TestNewServerAcceptsSameCompatibilityVersion(t *testing.T) {
 	require.NoError(t, err)
 	assert.NotNil(t, server)
 }
+
+func TestObserveSDKRequestSummaryEnrichesTerminalEvent(t *testing.T) {
+	t.Parallel()
+
+	numericID, err := sdkjsonrpc.MakeID(float64(42))
+	require.NoError(t, err)
+	stringID, err := sdkjsonrpc.MakeID("request-7")
+	require.NoError(t, err)
+	tests := []struct {
+		name             string
+		summary          mcpsdk.StreamableHTTPRequestSummary
+		wantMethod       string
+		wantID           string
+		wantNotification bool
+	}{
+		{name: "numeric call", summary: mcpsdk.StreamableHTTPRequestSummary{Method: "tools/list", RequestID: numericID}, wantMethod: "tools/list", wantID: "42"},
+		{name: "string call", summary: mcpsdk.StreamableHTTPRequestSummary{Method: "tools/call", RequestID: stringID}, wantMethod: "tools/call", wantID: "request-7"},
+		{name: "notification", summary: mcpsdk.StreamableHTTPRequestSummary{Method: "notifications/initialized", IsNotification: true}, wantMethod: "notifications/initialized", wantNotification: true},
+		{name: "response", summary: mcpsdk.StreamableHTTPRequestSummary{IsResponse: true}},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			var events []transport.Event
+			ctx := transport.WithObserver(t.Context(), transport.ObserverFunc(func(_ context.Context, event transport.Event) {
+				events = append(events, event)
+			}))
+			observation := transport.BeginRequest(ctx, transport.TransportHTTP, "mcp", http.MethodPost)
+			observation.SetSession("session-1")
+			ctx = transport.WithRequestObserver(ctx, observation)
+
+			streamableHTTPOptions(nil).OnRequestSummary(ctx, test.summary)
+			observation.End()
+
+			require.Len(t, events, 2)
+			terminal := events[1]
+			assert.Equal(t, test.wantMethod, terminal.JSONRPCMethod)
+			assert.Equal(t, test.wantID, terminal.JSONRPCID)
+			assert.Equal(t, test.wantNotification, terminal.Notification)
+			assert.Equal(t, "session-1", terminal.SessionID)
+		})
+	}
+}
+
+func TestObservedStreamEventsKeepParsedProtocolFields(t *testing.T) {
+	requestID, err := sdkjsonrpc.MakeID("stream-1")
+	require.NoError(t, err)
+	var events []transport.Event
+	ctx := transport.WithObserver(t.Context(), transport.ObserverFunc(func(_ context.Context, event transport.Event) {
+		events = append(events, event)
+	}))
+	handler := observeHTTPHandler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		observeSDKRequestSummary(r.Context(), mcpsdk.StreamableHTTPRequestSummary{Method: "tools/list", RequestID: requestID})
+		w.Header().Set("Content-Type", "text/event-stream")
+		w.Header().Set(mcpruntime.HeaderKeySessionID, "issued-session")
+		w.WriteHeader(http.StatusOK)
+		_, writeErr := w.Write([]byte("data: ready\n\n"))
+		assert.NoError(t, writeErr)
+	}))
+	request := httptest.NewRequestWithContext(ctx, http.MethodPost, "http://example.com/mcp", nil)
+	handler.ServeHTTP(httptest.NewRecorder(), request)
+
+	require.Len(t, events, 4)
+	assert.Equal(t, transport.EventKindRequestStart, events[0].Kind)
+	assert.Empty(t, events[0].JSONRPCMethod)
+	assert.Equal(t, transport.EventKindStreamOpen, events[1].Kind)
+	assert.Equal(t, http.StatusOK, events[1].StatusCode)
+	assert.Equal(t, transport.EventKindStreamClose, events[2].Kind)
+	assert.Positive(t, events[2].BytesWritten)
+	assert.Equal(t, transport.EventKindRequestFinish, events[3].Kind)
+	for _, event := range events[1:] {
+		assert.Equal(t, "tools/list", event.JSONRPCMethod)
+		assert.Equal(t, "stream-1", event.JSONRPCID)
+		assert.Equal(t, "issued-session", event.SessionID)
+	}
+}
+
+func TestObservedStreamWriteFailureHasNoNaturalClose(t *testing.T) {
+	var events []transport.Event
+	ctx := transport.WithObserver(t.Context(), transport.ObserverFunc(func(_ context.Context, event transport.Event) {
+		events = append(events, event)
+	}))
+	handler := observeHTTPHandler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		observeSDKRequestSummary(r.Context(), mcpsdk.StreamableHTTPRequestSummary{Method: "tools/list"})
+		w.Header().Set("Content-Type", "text/event-stream")
+		w.WriteHeader(http.StatusOK)
+		_, writeErr := w.Write([]byte("data: ready\n\n"))
+		assert.Error(t, writeErr)
+	}))
+	request := httptest.NewRequestWithContext(ctx, http.MethodPost, "http://example.com/mcp", nil)
+	handler.ServeHTTP(&failingStreamWriter{header: make(http.Header)}, request)
+
+	require.Len(t, events, 4)
+	assert.Equal(t, transport.EventKindRequestStart, events[0].Kind)
+	assert.Equal(t, transport.EventKindStreamOpen, events[1].Kind)
+	assert.Equal(t, transport.EventKindStreamFailure, events[2].Kind)
+	assert.Equal(t, transport.EventKindRequestFailure, events[3].Kind)
+	assert.Equal(t, transport.ReasonStreamWriteFailed, events[3].Reason)
+	for _, event := range events[1:] {
+		assert.Equal(t, "tools/list", event.JSONRPCMethod)
+	}
+}
+
+func TestObservedImplicitWritePreservesContentType(t *testing.T) {
+	handler := observeHTTPHandler(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_, err := w.Write([]byte("plain text"))
+		assert.NoError(t, err)
+	}))
+	request := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "http://example.com/mcp", nil)
+	response := httptest.NewRecorder()
+	handler.ServeHTTP(response, request)
+	result := response.Result()
+	t.Cleanup(func() {
+		require.NoError(t, result.Body.Close())
+	})
+	assert.Equal(t, "text/plain; charset=utf-8", result.Header.Get("Content-Type"))
+}
+
+func TestObservedImplicitStreamWriteReportsStatus(t *testing.T) {
+	var events []transport.Event
+	ctx := transport.WithObserver(t.Context(), transport.ObserverFunc(func(_ context.Context, event transport.Event) {
+		events = append(events, event)
+	}))
+	handler := observeHTTPHandler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		observeSDKRequestSummary(r.Context(), mcpsdk.StreamableHTTPRequestSummary{Method: "tools/list"})
+		w.Header().Set("Content-Type", "text/event-stream")
+		_, err := w.Write([]byte("data: ready\n\n"))
+		assert.NoError(t, err)
+	}))
+	request := httptest.NewRequestWithContext(ctx, http.MethodPost, "http://example.com/mcp", nil)
+	handler.ServeHTTP(httptest.NewRecorder(), request)
+
+	require.Len(t, events, 4)
+	assert.Equal(t, transport.EventKindRequestStart, events[0].Kind)
+	assert.Equal(t, transport.EventKindStreamOpen, events[1].Kind)
+	assert.Equal(t, http.StatusOK, events[1].StatusCode)
+	assert.Equal(t, "tools/list", events[1].JSONRPCMethod)
+	assert.Equal(t, transport.EventKindStreamClose, events[2].Kind)
+	assert.Equal(t, transport.EventKindRequestFinish, events[3].Kind)
+}
+
+func TestObservedOversizedRequestHasNoProtocolFields(t *testing.T) {
+	var events []transport.Event
+	server, err := NewServer(Config{
+		CompatibilityVersion: CompatibilityVersion,
+		Implementation:       mcpsdk.Implementation{Name: "test", Version: "1.0.0"},
+		Options: Options{
+			TransportObserver: transport.ObserverFunc(func(_ context.Context, event transport.Event) {
+				events = append(events, event)
+			}),
+			StreamableHTTP: &StreamableHTTPOptions{Stateless: true, MaxRequestBodyBytes: 8},
+		},
+	})
+	require.NoError(t, err)
+	request := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "http://example.com/mcp", strings.NewReader(`{"jsonrpc":"2.0","id":1,"method":"ping"}`))
+	request.Header.Set("Content-Type", "application/json")
+	request.Header.Set("Accept", "application/json, text/event-stream")
+	response := httptest.NewRecorder()
+	server.Handler.ServeHTTP(response, request)
+
+	assert.Equal(t, http.StatusRequestEntityTooLarge, response.Code)
+	require.Len(t, events, 2)
+	terminal := events[1]
+	assert.Equal(t, transport.EventKindRequestFailure, terminal.Kind)
+	assert.Empty(t, terminal.JSONRPCMethod)
+	assert.Empty(t, terminal.JSONRPCID)
+	assert.Zero(t, terminal.BatchCount)
+	assert.Equal(t, response.Code, terminal.StatusCode)
+	assert.Positive(t, terminal.BytesWritten)
+}
+
+func TestTransportObserverDoesNotChangeRequestBodyHandling(t *testing.T) {
+	const body = `{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"observer-test","version":"1.0"}}}`
+	type result struct {
+		reads        int
+		bytes        int
+		bodyReplaced bool
+		status       int
+	}
+	run := func(observe bool) result {
+		options := Options{StreamableHTTP: &StreamableHTTPOptions{Stateless: true, JSONResponse: true, MaxRequestBodyBytes: -1}}
+		if observe {
+			options.TransportObserver = transport.ObserverFunc(func(context.Context, transport.Event) {})
+		}
+		server, err := NewServer(Config{
+			CompatibilityVersion: CompatibilityVersion,
+			Implementation:       mcpsdk.Implementation{Name: "test", Version: "1.0.0"},
+			Options:              options,
+		})
+		require.NoError(t, err)
+		counter := &bodyReadCounter{reader: strings.NewReader(body)}
+		originalBody := io.NopCloser(counter)
+		request := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "http://example.com/mcp", nil)
+		request.Body = originalBody
+		request.Header.Set("Content-Type", "application/json")
+		request.Header.Set("Accept", "application/json, text/event-stream")
+		response := httptest.NewRecorder()
+		server.Handler.ServeHTTP(response, request)
+		return result{reads: counter.reads, bytes: counter.bytes, bodyReplaced: request.Body != originalBody, status: response.Code}
+	}
+
+	withoutObserver := run(false)
+	withObserver := run(true)
+	assert.Equal(t, withoutObserver, withObserver)
+	assert.Equal(t, http.StatusOK, withObserver.status)
+}
+
 func TestServerOptionsDoNotAdvertiseDeprecatedDefaultCapabilities(t *testing.T) {
 	configured := serverOptions(nil, nil, nil)
 

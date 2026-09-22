@@ -5,16 +5,17 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	mcpruntime "github.com/CaliLuke/loom-mcp/v2/runtime/mcp"
-	loomhttp "github.com/CaliLuke/loom/http"
-	"github.com/CaliLuke/loom/observability/transport"
-	mcpsdk "github.com/modelcontextprotocol/go-sdk/mcp"
 	"log/slog"
 	"net/http"
 	"net/url"
 	"strings"
 	"sync"
 	"time"
+
+	mcpruntime "github.com/CaliLuke/loom-mcp/v2/runtime/mcp"
+	loomhttp "github.com/CaliLuke/loom/http"
+	"github.com/CaliLuke/loom/observability/transport"
+	mcpsdk "github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
 // CompatibilityVersion is the generated descriptor contract supported by this runtime.
@@ -104,6 +105,9 @@ type responseObserver struct {
 	onSessionIssued func(string)
 	sessionOnce     sync.Once
 	originRejected  bool
+	observation     *transport.RequestObserver
+	streamOpen      bool
+	streamFailed    bool
 }
 
 // NewServer validates generated/runtime compatibility and installs common SDK behavior.
@@ -297,6 +301,7 @@ func newHandler(server *mcpsdk.Server, requestContext func(context.Context, *htt
 				writeSessionError(w, err)
 				return
 			}
+			transport.RequestObserverFromContext(r.Context()).SetSession(sessionID)
 		}
 		observer := &responseObserver{
 			ResponseWriter:  w,
@@ -325,8 +330,15 @@ func observeHTTPHandler(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		observation, observedWriter := transport.BeginHTTPRequest(r.Context(), w, "mcp", r.Method, r)
 		defer observation.End()
-		response := &responseObserver{ResponseWriter: observedWriter}
+		r = r.WithContext(transport.WithRequestObserver(r.Context(), observation))
+		response := &responseObserver{ResponseWriter: observedWriter, onSessionIssued: observation.SetSession, observation: observation}
 		next.ServeHTTP(response, r)
+		if response.streamOpen && !response.streamFailed {
+			observation.EmitStreamClose()
+		}
+		if sessionID := response.Header().Get(mcpruntime.HeaderKeySessionID); sessionID != "" {
+			observation.SetSession(sessionID)
+		}
 		if response.originRejected || response.statusCode >= http.StatusBadRequest {
 			observation.Fail(transport.ReasonHandlerError)
 		}
@@ -334,7 +346,10 @@ func observeHTTPHandler(next http.Handler) http.Handler {
 }
 
 func streamableHTTPOptions(opts *StreamableHTTPOptions) *mcpsdk.StreamableHTTPOptions {
-	configured := &mcpsdk.StreamableHTTPOptions{MaxRequestBodyBytes: mcpsdk.DefaultMaxRequestBodyBytes}
+	configured := &mcpsdk.StreamableHTTPOptions{
+		MaxRequestBodyBytes: mcpsdk.DefaultMaxRequestBodyBytes,
+		OnRequestSummary:    observeSDKRequestSummary,
+	}
 	if opts == nil {
 		return configured
 	}
@@ -349,6 +364,15 @@ func streamableHTTPOptions(opts *StreamableHTTPOptions) *mcpsdk.StreamableHTTPOp
 		configured.MaxRequestBodyBytes = opts.MaxRequestBodyBytes
 	}
 	return configured
+}
+
+func observeSDKRequestSummary(ctx context.Context, summary mcpsdk.StreamableHTTPRequestSummary) {
+	observation := transport.RequestObserverFromContext(ctx)
+	requestID := ""
+	if rawID := summary.RequestID.Raw(); rawID != nil {
+		requestID = fmt.Sprint(rawID)
+	}
+	observation.SetJSONRPC(summary.Method, requestID, 0, summary.IsNotification)
 }
 
 func originValidationHandler(next http.Handler, options *OriginProtection) (http.Handler, error) {
@@ -508,16 +532,35 @@ func (w *responseObserver) WriteHeader(statusCode int) {
 		w.captureSession()
 	}
 	w.ResponseWriter.WriteHeader(statusCode)
+	if statusCode < http.StatusBadRequest {
+		w.startStream()
+	}
 }
 
 func (w *responseObserver) Write(data []byte) (int, error) {
-	if w.statusCode == 0 {
+	implicitStatus := w.statusCode == 0
+	if implicitStatus {
 		w.statusCode = http.StatusOK
-	}
-	if w.statusCode < http.StatusBadRequest {
 		w.captureSession()
 	}
-	return w.ResponseWriter.Write(data)
+	n, err := w.ResponseWriter.Write(data)
+	if implicitStatus {
+		w.startStream()
+	}
+	if err != nil && w.streamOpen && !w.streamFailed {
+		w.streamFailed = true
+		w.observation.EmitStreamFailure(transport.ReasonStreamWriteFailed)
+		w.observation.Fail(transport.ReasonStreamWriteFailed)
+	}
+	return n, err
+}
+
+func (w *responseObserver) startStream() {
+	if w.observation == nil || w.streamOpen || !strings.HasPrefix(w.Header().Get("Content-Type"), "text/event-stream") {
+		return
+	}
+	w.streamOpen = true
+	w.observation.EmitStreamOpen()
 }
 
 func loadBindings[T any](provider func() ([]T, error)) ([]T, error) {

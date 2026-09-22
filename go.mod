@@ -13,7 +13,7 @@ require (
 	github.com/google/uuid v1.6.0
 	github.com/gorilla/websocket v1.5.4-0.20250319132907-e064f32e3674
 	github.com/leanovate/gopter v0.2.11
-	github.com/modelcontextprotocol/go-sdk v1.8.0
+	github.com/modelcontextprotocol/go-sdk v1.8.1-0.20260922085944-8075fb3cf313
 	github.com/nexus-rpc/sdk-go v0.7.0
 	github.com/openai/openai-go v1.12.0
 	github.com/redis/go-redis/v9 v9.22.0

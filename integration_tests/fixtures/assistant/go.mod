@@ -5,7 +5,7 @@ go 1.27.0
 require (
 	github.com/CaliLuke/loom v1.9.0
 	github.com/CaliLuke/loom-mcp/v2 v2.0.1
-	github.com/modelcontextprotocol/go-sdk v1.8.0
+	github.com/modelcontextprotocol/go-sdk v1.8.1-0.20260922085944-8075fb3cf313
 	github.com/sahilm/fuzzy v0.1.3
 	github.com/stretchr/testify v1.12.1
 	github.com/yosida95/uritemplate/v3 v3.0.2
