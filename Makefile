@@ -33,17 +33,17 @@ export DOCKER_HOST
 TESTCONTAINERS_RYUK_DISABLED ?= true
 
 GOPATH ?= $(shell go env GOPATH)
-GOLANGCI_LINT_VERSION ?= v2.12.2
+GOLANGCI_LINT_VERSION ?= v2.13.2
 GOLANGCI_LINT := $(shell command -v golangci-lint 2>/dev/null)
 # Cached diagnostics retain source paths. Sharing them across worktrees can
 # bypass anchored path exclusions by reporting files from a sibling checkout.
 GOLANGCI_LINT_CACHE ?= $(CURDIR)/.cache/golangci-lint
 export GOLANGCI_LINT_CACHE
-STATICCHECK_VERSION ?= v0.8.0-rc.1
+STATICCHECK_VERSION ?= v0.8.1
 STATICCHECK := $(shell command -v staticcheck 2>/dev/null)
 STATICCHECK_CHECKS ?= all,-S*,-ST*,-QF*
 PROTOC := $(shell command -v protoc 2>/dev/null)
-PROTOC_VERSION ?= 36.1
+PROTOC_VERSION ?= 36.2
 PROTOC_GEN_GO := protoc-gen-go
 PROTOC_GEN_GO_VERSION ?= v1.36.12
 PROTOC_GEN_GO_GRPC := protoc-gen-go-grpc

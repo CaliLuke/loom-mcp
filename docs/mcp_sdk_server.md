@@ -604,6 +604,6 @@ response headers.
 
 ## Module Dependency
 
-`loom-mcp` pins `github.com/CaliLuke/loom v1.9.0-alpha.15`. This release preserves API-key credentials exactly and verifies exact 64-bit OpenAPI Path Item serialization.
+`loom-mcp` pins `github.com/CaliLuke/loom v1.9.0`. This stable release includes typed application authorization and expanded OpenAPI metadata support. Existing MCP designs do not need to opt into the new authorization DSL; MCP authorization remains application-owned.
 
 Run `make loom-local` to use the sibling Loom checkout during development. Run `make loom-remote` before you commit or release changes.
