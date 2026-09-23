@@ -194,7 +194,11 @@ var _ = Service("assistant", func() {
 		Description("Search knowledge base")
 		Payload(func() {
 			Attribute("query", String, "Search query")
-			Attribute("limit", Int, "Maximum number of results")
+			Attribute("limit", Int, "Maximum number of results", func() {
+				Default(50)
+				Minimum(1)
+				Maximum(200)
+			})
 			Required("query")
 		})
 		Result(func() { Attribute("results", ArrayOf(String), "Search results") })
@@ -210,7 +214,11 @@ var _ = Service("assistant", func() {
 		Description("Search records with an optional query")
 		Payload(func() {
 			Attribute("query", String, "Search query")
-			Attribute("limit", Int, "Maximum number of records")
+			Attribute("limit", Int, "Maximum number of records", func() {
+				Default(10)
+				Minimum(1)
+				Maximum(200)
+			})
 		})
 		Result(func() { Attribute("results", ArrayOf(String), "Record results") })
 		Tool("search_records", "Search records with an optional query",

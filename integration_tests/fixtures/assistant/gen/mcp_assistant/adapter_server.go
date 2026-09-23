@@ -636,14 +636,14 @@ func (a *MCPAdapter) generatedToolCatalog() []*ToolInfo {
 		Title:        stringPtr("Summarize Text"),
 	}, &ToolInfo{
 		Description:  stringPtr("Search knowledge base"),
-		InputSchema:  jsontext.Value([]byte("{\"type\":\"object\",\"required\":[\"query\"],\"properties\":{\"limit\":{\"type\":\"integer\",\"description\":\"Maximum number of results\",\"minimum\":-9223372036854775808,\"maximum\":9223372036854775807},\"query\":{\"type\":\"string\",\"description\":\"Search query\"}},\"additionalProperties\":false}")),
+		InputSchema:  jsontext.Value([]byte("{\"type\":\"object\",\"required\":[\"query\"],\"properties\":{\"limit\":{\"type\":\"integer\",\"description\":\"Maximum number of results\",\"default\":50,\"minimum\":1,\"maximum\":200},\"query\":{\"type\":\"string\",\"description\":\"Search query\"}},\"additionalProperties\":false}")),
 		Meta:         jsontext.Value([]byte("{\"com.github.caliluke.loom-mcp/discovery\":{\"category\":\"knowledge\",\"keywords\":[\"lookup\",\"documents\",\"knowledge\"],\"tags\":[\"search\",\"retrieval\"]}}")),
 		Name:         "search",
 		OutputSchema: jsontext.Value([]byte("{\"type\":\"object\",\"properties\":{\"results\":{\"type\":\"array\",\"description\":\"Search results\",\"items\":{\"type\":\"string\"}}},\"additionalProperties\":false}")),
 		Title:        stringPtr("Search Knowledge Base"),
 	}, &ToolInfo{
 		Description:  stringPtr("Search records with an optional query"),
-		InputSchema:  jsontext.Value([]byte("{\"type\":\"object\",\"properties\":{\"limit\":{\"type\":\"integer\",\"description\":\"Maximum number of records\",\"minimum\":-9223372036854775808,\"maximum\":9223372036854775807},\"query\":{\"type\":\"string\",\"description\":\"Search query\"}},\"additionalProperties\":false}")),
+		InputSchema:  jsontext.Value([]byte("{\"type\":\"object\",\"properties\":{\"limit\":{\"type\":\"integer\",\"description\":\"Maximum number of records\",\"default\":10,\"minimum\":1,\"maximum\":200},\"query\":{\"type\":\"string\",\"description\":\"Search query\"}},\"additionalProperties\":false}")),
 		Meta:         jsontext.Value([]byte("{\"com.github.caliluke.loom-mcp/discovery\":{\"call_template_arguments\":{\"query\":\"login\"},\"category\":\"records\",\"keywords\":[\"lookup\",\"records\"],\"tags\":[\"search\",\"records\"]}}")),
 		Name:         "search_records",
 		OutputSchema: jsontext.Value([]byte("{\"type\":\"object\",\"properties\":{\"results\":{\"type\":\"array\",\"description\":\"Record results\",\"items\":{\"type\":\"string\"}}},\"additionalProperties\":false}")),
@@ -1541,7 +1541,7 @@ func searchInputRecovery(err error, raw jsontext.Value) string {
 		message = strings.TrimSpace(err.Error())
 	}
 	_ = raw
-	example := "{\"query\":\"example\"}"
+	example := "{\"limit\":50,\"query\":\"example\"}"
 	if field := missingFieldFromMessage(message); field != "" {
 		return fmt.Sprintf("Include required field %q. Example: %s", field, example)
 	}
@@ -1556,7 +1556,7 @@ func searchRecordsInputRecovery(err error, raw jsontext.Value) string {
 		message = strings.TrimSpace(err.Error())
 	}
 	_ = raw
-	example := "{}"
+	example := "{\"limit\":10}"
 	if field := missingFieldFromMessage(message); field != "" {
 		return fmt.Sprintf("Include required field %q. Example: %s", field, example)
 	}
@@ -1933,6 +1933,11 @@ func (a *MCPAdapter) executeRealTool(ctx context.Context, p *ToolsCallPayload, s
 			return true, a.sendToolError(ctx, stream, p.Name, toolCallError(err, "invalid_params", searchInputRecovery(err, arguments)))
 		}
 		{
+			if _, ok := rawFields["limit"]; !ok {
+				payload.Limit = 50
+			}
+		}
+		{
 			if err := validateMCPPayloadRequired(rawFields, "query", false); err != nil {
 				return true, a.sendToolError(ctx, stream, p.Name, toolCallError(err, "invalid_params", searchInputRecovery(err, arguments)))
 			}
@@ -1957,8 +1962,17 @@ func (a *MCPAdapter) executeRealTool(ctx context.Context, p *ToolsCallPayload, s
 		return false, stream.SendAndClose(ctx, final)
 	case "search_records":
 		var payload *assistant.SearchRecordsPayload
+		rawFields, err := decodeMCPPayloadFields(arguments)
+		if err != nil {
+			return true, a.sendToolError(ctx, stream, p.Name, toolCallError(err, "invalid_params", searchRecordsInputRecovery(err, arguments)))
+		}
 		if err := decodeMCPPayloadStrict(arguments, &payload); err != nil {
 			return true, a.sendToolError(ctx, stream, p.Name, toolCallError(err, "invalid_params", searchRecordsInputRecovery(err, arguments)))
+		}
+		{
+			if _, ok := rawFields["limit"]; !ok {
+				payload.Limit = 10
+			}
 		}
 		result, err := a.service.SearchRecords(ctx, payload)
 		if err != nil {

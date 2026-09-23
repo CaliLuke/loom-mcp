@@ -177,7 +177,7 @@ var AssistantAssistantMcpToolsetToolSpecs = []tools.ToolSpec{tools.ToolSpec{
 			},
 		},
 		Name:   "*assistant.SearchPayload",
-		Schema: []byte("{\"type\":\"object\",\"required\":[\"query\"],\"properties\":{\"limit\":{\"type\":\"integer\",\"description\":\"Maximum number of results\",\"minimum\":-9223372036854775808,\"maximum\":9223372036854775807},\"query\":{\"type\":\"string\",\"description\":\"Search query\"}},\"additionalProperties\":false}"),
+		Schema: []byte("{\"type\":\"object\",\"required\":[\"query\"],\"properties\":{\"limit\":{\"type\":\"integer\",\"description\":\"Maximum number of results\",\"default\":50,\"minimum\":1,\"maximum\":200},\"query\":{\"type\":\"string\",\"description\":\"Search query\"}},\"additionalProperties\":false}"),
 	},
 	Result: tools.TypeSpec{
 		Codec: tools.JSONCodec[any]{
@@ -221,7 +221,7 @@ var AssistantAssistantMcpToolsetToolSpecs = []tools.ToolSpec{tools.ToolSpec{
 			},
 		},
 		Name:   "*assistant.SearchRecordsPayload",
-		Schema: []byte("{\"type\":\"object\",\"properties\":{\"limit\":{\"type\":\"integer\",\"description\":\"Maximum number of records\",\"minimum\":-9223372036854775808,\"maximum\":9223372036854775807},\"query\":{\"type\":\"string\",\"description\":\"Search query\"}},\"additionalProperties\":false}"),
+		Schema: []byte("{\"type\":\"object\",\"properties\":{\"limit\":{\"type\":\"integer\",\"description\":\"Maximum number of records\",\"default\":10,\"minimum\":1,\"maximum\":200},\"query\":{\"type\":\"string\",\"description\":\"Search query\"}},\"additionalProperties\":false}"),
 	},
 	Result: tools.TypeSpec{
 		Codec: tools.JSONCodec[any]{
@@ -789,11 +789,11 @@ func AssistantAssistantMcpToolsetRetryHint(toolName tools.Ident, err error) *pla
 				schemaJSON = "{\"type\":\"object\",\"required\":[\"text\"],\"properties\":{\"text\":{\"type\":\"string\",\"description\":\"Input text to summarize\"}},\"additionalProperties\":false}"
 				example = "{\"text\":\"example\"}"
 			case "search":
-				schemaJSON = "{\"type\":\"object\",\"required\":[\"query\"],\"properties\":{\"limit\":{\"type\":\"integer\",\"description\":\"Maximum number of results\",\"minimum\":-9223372036854775808,\"maximum\":9223372036854775807},\"query\":{\"type\":\"string\",\"description\":\"Search query\"}},\"additionalProperties\":false}"
-				example = "{\"query\":\"example\"}"
+				schemaJSON = "{\"type\":\"object\",\"required\":[\"query\"],\"properties\":{\"limit\":{\"type\":\"integer\",\"description\":\"Maximum number of results\",\"default\":50,\"minimum\":1,\"maximum\":200},\"query\":{\"type\":\"string\",\"description\":\"Search query\"}},\"additionalProperties\":false}"
+				example = "{\"limit\":50,\"query\":\"example\"}"
 			case "search_records":
-				schemaJSON = "{\"type\":\"object\",\"properties\":{\"limit\":{\"type\":\"integer\",\"description\":\"Maximum number of records\",\"minimum\":-9223372036854775808,\"maximum\":9223372036854775807},\"query\":{\"type\":\"string\",\"description\":\"Search query\"}},\"additionalProperties\":false}"
-				example = "{}"
+				schemaJSON = "{\"type\":\"object\",\"properties\":{\"limit\":{\"type\":\"integer\",\"description\":\"Maximum number of records\",\"default\":10,\"minimum\":1,\"maximum\":200},\"query\":{\"type\":\"string\",\"description\":\"Search query\"}},\"additionalProperties\":false}"
+				example = "{\"limit\":10}"
 			case "execute_code":
 				schemaJSON = "{\"type\":\"object\",\"required\":[\"language\",\"code\"],\"properties\":{\"code\":{\"type\":\"string\",\"description\":\"Code to execute\"},\"language\":{\"type\":\"string\",\"description\":\"Language to execute\",\"enum\":[\"python\",\"javascript\"]}},\"additionalProperties\":false}"
 				example = "{\"code\":\"example\",\"language\":\"python\"}"

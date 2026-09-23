@@ -33,6 +33,12 @@ independent and remain valid.
 The MCP declaration can define resources, watchable resources, prompts, skills,
 tool discovery, icons, and OAuth metadata. Keep these contracts in the design.
 
+Generated input-recovery and local-provider repair examples prefer a valid
+`Example(...)`, then `Default(...)`. Numeric fallback values satisfy the
+declared bounds. For example, `Default(50), Minimum(1), Maximum(200)` produces
+`"limit":50`, so clients can retry the suggested arguments without repeating
+the numeric validation failure. See `docs/tool_payload_defaults.md`.
+
 ## Consume MCP tools
 
 For an external MCP server, use the `runtime/mcp` caller for its transport.
