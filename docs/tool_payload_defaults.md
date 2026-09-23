@@ -57,6 +57,22 @@ deterministically during transformation.
 
 ## How defaults are applied
 
+### MCP recovery examples
+
+Generated MCP input-recovery hints and local-provider repair hints prefer a
+schema-valid authored `Example(...)`, then a valid `Default(...)`. For example,
+an optional `limit` with `Default(50)`, `Minimum(1)`, and `Maximum(200)` produces
+`"limit":50` in the recovery example. An authored `Example(25)` takes precedence.
+Candidates that violate the input schema are skipped.
+
+Without a valid example or default, numeric fields use a valid enum value,
+zero when allowed, or a value within their inclusive or exclusive bounds.
+Named numeric types retain both type and field constraints. Optional fields
+without defaults may be omitted. Generation remains deterministic, including
+numeric fields nested inside union branches.
+
+### Payload decoding
+
 Defaults are applied during **helper → payload transformation**:
 
 - The helper contains `nil` pointers for missing fields.
@@ -95,4 +111,3 @@ and generate uncompilable code such as:
   - `codegen/agent/specs_builder_materialize.go`
 - Toolset adapter transforms (tool payload → service method payload):
   - `codegen/agent/generate_toolset_transforms.go`
-

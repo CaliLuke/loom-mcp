@@ -458,7 +458,7 @@ type SearchPayload struct {
 	// Search query
 	Query string `json:"query"`
 	// Maximum number of results
-	Limit *int `json:"limit,omitempty"`
+	Limit int `json:"limit,omitempty"`
 }
 
 // SearchRecordsPayload is the payload type of the assistant service
@@ -467,7 +467,7 @@ type SearchRecordsPayload struct {
 	// Search query
 	Query *string `json:"query,omitempty"`
 	// Maximum number of records
-	Limit *int `json:"limit,omitempty"`
+	Limit int `json:"limit,omitempty"`
 }
 
 // SearchRecordsResult is the result type of the assistant service

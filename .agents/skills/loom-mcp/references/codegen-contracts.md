@@ -93,6 +93,10 @@ Use this file when editing DSL, generators, generated helpers, or MCP codegen be
 - Generated retry and repair examples must use the same canonical union-aware
   synthesizer as adapter recovery hints. Every emitted example must validate
   against the input schema it accompanies, including discriminator envelopes.
+- Recovery examples prefer schema-valid authored examples, then defaults.
+  Numeric synthesis must respect enum, inclusive/exclusive bounds, and named
+  type occurrence constraints. Validate JSON numbers without losing 64-bit
+  precision. Prove changes with schema validation and a generated SDK retry.
 - Generated MCP `ToolInfo` surfaces must preserve MCP Tool fields across the
   service, adapter, local-provider, and SDK paths: `name`, `title`,
   `description`, `inputSchema`, `outputSchema`, `annotations`, `_meta`, and

@@ -32,10 +32,10 @@ type UnionEnvelopeMeta struct {
 	TagExamples map[string]string
 }
 
-// synthesizeCanonicalExample produces a deterministic, always-valid JSON
-// example for the given payload attribute. Unlike buildExampleJSON, this walker
-// commits to: first declared union branch, first declared enum value, and
-// type-appropriate zero values for primitives. The output is intended for
+// synthesizeCanonicalExample produces a deterministic JSON example for the
+// given payload attribute. It prefers valid authored examples and defaults,
+// then the first declared union branch or enum and constraint-valid numbers.
+// The output is intended for
 // inclusion in tool recovery hints; callers expect it to round-trip through
 // the same decoder that produced the validation error.
 func synthesizeCanonicalExample(attr *expr.AttributeExpr) string {
@@ -144,6 +144,12 @@ func FormatTagList(tags []string) string {
 func canonicalValue(attr *expr.AttributeExpr, seen map[string]bool) any {
 	if attr == nil || attr.Type == nil {
 		return nil
+	}
+	if value, ok := preferredCanonicalValue(attr); ok {
+		return value
+	}
+	if primitive, ok := canonicalNumericType(attr.Type); ok {
+		return numericCanonical(attr, primitive)
 	}
 	switch t := attr.Type.(type) {
 	case expr.Primitive:
