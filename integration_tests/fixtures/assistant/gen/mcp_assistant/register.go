@@ -177,7 +177,7 @@ var AssistantAssistantMcpToolsetToolSpecs = []tools.ToolSpec{tools.ToolSpec{
 			},
 		},
 		Name:   "*assistant.SearchPayload",
-		Schema: []byte("{\"type\":\"object\",\"required\":[\"query\"],\"properties\":{\"limit\":{\"type\":\"integer\",\"description\":\"Maximum number of results\",\"default\":50,\"minimum\":1,\"maximum\":200},\"query\":{\"type\":\"string\",\"description\":\"Search query\"}},\"additionalProperties\":false}"),
+		Schema: []byte("{\"type\":\"object\",\"required\":[\"query\"],\"properties\":{\"limit\":{\"type\":\"integer\",\"description\":\"Maximum number of results\",\"default\":50,\"minimum\":1,\"maximum\":200},\"nullable_limit\":{\"anyOf\":[{\"type\":\"integer\",\"description\":\"Optional nullable limit\",\"minimum\":1,\"maximum\":200},{\"type\":\"null\"}]},\"query\":{\"type\":\"string\",\"description\":\"Search query\"},\"ratio\":{\"type\":\"number\",\"description\":\"Optional result sampling ratio\",\"exclusiveMinimum\":0,\"exclusiveMaximum\":1}},\"additionalProperties\":false}"),
 	},
 	Result: tools.TypeSpec{
 		Codec: tools.JSONCodec[any]{
@@ -789,7 +789,7 @@ func AssistantAssistantMcpToolsetRetryHint(toolName tools.Ident, err error) *pla
 				schemaJSON = "{\"type\":\"object\",\"required\":[\"text\"],\"properties\":{\"text\":{\"type\":\"string\",\"description\":\"Input text to summarize\"}},\"additionalProperties\":false}"
 				example = "{\"text\":\"example\"}"
 			case "search":
-				schemaJSON = "{\"type\":\"object\",\"required\":[\"query\"],\"properties\":{\"limit\":{\"type\":\"integer\",\"description\":\"Maximum number of results\",\"default\":50,\"minimum\":1,\"maximum\":200},\"query\":{\"type\":\"string\",\"description\":\"Search query\"}},\"additionalProperties\":false}"
+				schemaJSON = "{\"type\":\"object\",\"required\":[\"query\"],\"properties\":{\"limit\":{\"type\":\"integer\",\"description\":\"Maximum number of results\",\"default\":50,\"minimum\":1,\"maximum\":200},\"nullable_limit\":{\"anyOf\":[{\"type\":\"integer\",\"description\":\"Optional nullable limit\",\"minimum\":1,\"maximum\":200},{\"type\":\"null\"}]},\"query\":{\"type\":\"string\",\"description\":\"Search query\"},\"ratio\":{\"type\":\"number\",\"description\":\"Optional result sampling ratio\",\"exclusiveMinimum\":0,\"exclusiveMaximum\":1}},\"additionalProperties\":false}"
 				example = "{\"limit\":50,\"query\":\"example\"}"
 			case "search_records":
 				schemaJSON = "{\"type\":\"object\",\"properties\":{\"limit\":{\"type\":\"integer\",\"description\":\"Maximum number of records\",\"default\":10,\"minimum\":1,\"maximum\":200},\"query\":{\"type\":\"string\",\"description\":\"Search query\"}},\"additionalProperties\":false}"

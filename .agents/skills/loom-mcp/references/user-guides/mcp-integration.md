@@ -39,6 +39,11 @@ declared bounds. For example, `Default(50), Minimum(1), Maximum(200)` produces
 `"limit":50`, so clients can retry the suggested arguments without repeating
 the numeric validation failure. See `docs/tool_payload_defaults.md`.
 
+Regenerated service-backed adapters also enforce the advertised input schema
+before calling the service. Defaults apply only to absent fields; explicit zero
+must satisfy numeric bounds, and explicit null requires a nullable field.
+Validation failures return `invalid_params` with a recovery example.
+
 ## Consume MCP tools
 
 For an external MCP server, use the `runtime/mcp` caller for its transport.

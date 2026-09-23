@@ -192,7 +192,7 @@ func sdkToolBindings(adapter *MCPAdapter) ([]sdkbridge.ToolBinding, error) {
 		Handler: handler,
 		Tool: &mcpsdk.Tool{
 			Description:  "Search knowledge base",
-			InputSchema:  sdkToolInputSchema("{\"type\":\"object\",\"required\":[\"query\"],\"properties\":{\"limit\":{\"type\":\"integer\",\"description\":\"Maximum number of results\",\"default\":50,\"minimum\":1,\"maximum\":200},\"query\":{\"type\":\"string\",\"description\":\"Search query\"}},\"additionalProperties\":false}"),
+			InputSchema:  sdkToolInputSchema("{\"type\":\"object\",\"required\":[\"query\"],\"properties\":{\"limit\":{\"type\":\"integer\",\"description\":\"Maximum number of results\",\"default\":50,\"minimum\":1,\"maximum\":200},\"nullable_limit\":{\"anyOf\":[{\"type\":\"integer\",\"description\":\"Optional nullable limit\",\"minimum\":1,\"maximum\":200},{\"type\":\"null\"}]},\"query\":{\"type\":\"string\",\"description\":\"Search query\"},\"ratio\":{\"type\":\"number\",\"description\":\"Optional result sampling ratio\",\"exclusiveMinimum\":0,\"exclusiveMaximum\":1}},\"additionalProperties\":false}"),
 			Meta:         metaSearch,
 			Name:         "search",
 			OutputSchema: sdkToolInputSchema("{\"type\":\"object\",\"properties\":{\"results\":{\"type\":\"array\",\"description\":\"Search results\",\"items\":{\"type\":\"string\"}}},\"additionalProperties\":false}"),

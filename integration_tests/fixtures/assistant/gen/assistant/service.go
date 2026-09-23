@@ -459,6 +459,10 @@ type SearchPayload struct {
 	Query string `json:"query"`
 	// Maximum number of results
 	Limit int `json:"limit,omitempty"`
+	// Optional result sampling ratio
+	Ratio *float64 `json:"ratio,omitempty"`
+	// Optional nullable limit
+	NullableLimit loom.Nullable[int] `json:"nullable_limit,omitzero"`
 }
 
 // SearchRecordsPayload is the payload type of the assistant service

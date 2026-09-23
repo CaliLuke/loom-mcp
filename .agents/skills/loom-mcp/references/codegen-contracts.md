@@ -104,6 +104,11 @@ Use this file when editing DSL, generators, generated helpers, or MCP codegen be
 - Generated required-field validation must check top-level member presence for
   every JSON type. A present empty string satisfies `required`. Accept JSON
   `null` for a required field only when `expr.AllowsNull` permits it.
+- Service-backed MCP adapters validate raw tool arguments against the advertised
+  input schema before dispatch through `sdkbridge.ValidateToolArguments`.
+  Preserve exact numeric tokens, omission-based defaults, and explicit nullability.
+  Invalid numeric bounds or disallowed null return `invalid_params` without a
+  service call. Keep this check in the adapter so local-provider calls share it.
 - The official MCP Go SDK owns protocol versions and transport behavior. Do not
   require or synthesize MCP `JSONRPC` declarations. Keep explicit non-MCP
   `JSONRPC` transports unchanged.

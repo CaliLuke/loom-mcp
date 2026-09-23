@@ -221,6 +221,18 @@ An active server keeps its registration snapshot.
 
 ## Optional tool arguments
 
+Regenerated service-backed tool adapters validate the original arguments against
+their advertised input schema before invoking the service. This enforces numeric
+minimum/maximum and exclusive bounds without rounding 64-bit integer values.
+Invalid arguments return a tool error with `invalid_params` and a recovery hint;
+the service is not called. No application validation interceptor is required.
+
+An omitted field still receives its DSL default. Explicit zero remains zero and
+must satisfy the schema. Explicit `null` is accepted only when the field is
+nullable, independently of whether the field is optional. For a limit with
+`Default(50)`, `Minimum(1)`, and `Maximum(200)`, omission dispatches 50, values 1
+and 200 dispatch unchanged, and 0, -1, 201, and `null` are rejected.
+
 MCP clients may omit `tools/call.arguments` or send JSON `null`. Generated
 adapters normalize either form, as well as a whitespace-only value, to `{}`
 before decoding a real tool payload.

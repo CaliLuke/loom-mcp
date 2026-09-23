@@ -1528,6 +1528,9 @@ func (a *MCPAdapter) executeRealTool(ctx context.Context, p *ToolsCallPayload, s
 				return true, a.sendToolError(ctx, stream, p.Name, toolCallError(err, "invalid_params", lookupInputRecovery(err, arguments)))
 			}
 		}
+		if err := sdkbridge.ValidateToolArguments(arguments, "{\"type\":\"object\",\"required\":[\"query\"],\"properties\":{\"query\":{\"type\":\"string\",\"description\":\"Lookup query\"}},\"additionalProperties\":false}"); err != nil {
+			return true, a.sendToolError(ctx, stream, p.Name, toolCallError(err, "invalid_params", lookupInputRecovery(err, arguments)))
+		}
 		result, err := a.service.Lookup(ctx, payload)
 		if err != nil {
 			return true, a.sendToolError(ctx, stream, p.Name, err)

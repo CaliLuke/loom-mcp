@@ -199,6 +199,15 @@ var _ = Service("assistant", func() {
 				Minimum(1)
 				Maximum(200)
 			})
+			Attribute("ratio", Float64, "Optional result sampling ratio", func() {
+				ExclusiveMinimum(0)
+				ExclusiveMaximum(1)
+			})
+			Attribute("nullable_limit", Int, "Optional nullable limit", func() {
+				Nullable()
+				Minimum(1)
+				Maximum(200)
+			})
 			Required("query")
 		})
 		Result(func() { Attribute("results", ArrayOf(String), "Search results") })

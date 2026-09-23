@@ -288,7 +288,7 @@ func ResourceQueryJSONTyped(uri string, fields map[string]mcpruntime.QueryField,
 	if err != nil {
 		return nil, err
 	}
-	if err := validateResourceQuery(encoded, schemaDocument); err != nil {
+	if err := validateInputSchema(encoded, schemaDocument); err != nil {
 		return nil, fmt.Errorf("invalid resource query: %w", err)
 	}
 	return encoded, nil
@@ -359,22 +359,22 @@ func isIntegralResourceQueryValue(value string) bool {
 	return true
 }
 
-type resourceQuerySchemaEntry struct {
+type inputSchemaEntry struct {
 	once   sync.Once
 	schema *jsonschema.Schema
 	err    error
 }
 
-var resourceQuerySchemaCache sync.Map
+var inputSchemaCache sync.Map
 
-func validateResourceQuery(encoded []byte, schemaDocument string) error {
+func validateInputSchema(encoded []byte, schemaDocument string) error {
 	if schemaDocument == "" {
 		return nil
 	}
-	entryValue, _ := resourceQuerySchemaCache.LoadOrStore(schemaDocument, &resourceQuerySchemaEntry{})
-	entry := entryValue.(*resourceQuerySchemaEntry)
+	entryValue, _ := inputSchemaCache.LoadOrStore(schemaDocument, &inputSchemaEntry{})
+	entry := entryValue.(*inputSchemaEntry)
 	entry.once.Do(func() {
-		entry.schema, entry.err = compileResourceQuerySchema(schemaDocument)
+		entry.schema, entry.err = compileInputSchema(schemaDocument)
 	})
 	if entry.err != nil {
 		return entry.err
@@ -386,12 +386,12 @@ func validateResourceQuery(encoded []byte, schemaDocument string) error {
 	return entry.schema.Validate(value)
 }
 
-func compileResourceQuerySchema(schemaDocument string) (*jsonschema.Schema, error) {
+func compileInputSchema(schemaDocument string) (*jsonschema.Schema, error) {
 	document, err := jsonschema.UnmarshalJSON(strings.NewReader(schemaDocument))
 	if err != nil {
 		return nil, err
 	}
-	const schemaURL = "urn:loom-mcp:resource-query"
+	const schemaURL = "urn:loom-mcp:input"
 	compiler := jsonschema.NewCompiler()
 	if err := compiler.AddResource(schemaURL, document); err != nil {
 		return nil, err
