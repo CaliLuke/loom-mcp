@@ -14,19 +14,30 @@ import (
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/tools"
 )
 
+// dispatchToolCalls schedules every call in the batch before it dispatches any.
+// A subscriber that rejects a ToolCallScheduled event (for example because it
+// could not record durable evidence for the call) therefore aborts the batch
+// before any tool has started, so no call runs without its scheduled evidence.
+// Request-error and unknown-tool calls get their synthesized result during the
+// scheduling phase. A call left with a scheduled event and no result by an
+// aborted batch is not known to have run.
 func (e *toolBatchExec) dispatchToolCalls(wfCtx engine.WorkflowContext, calls []planner.ToolRequest) (*toolCallBatch, error) {
 	ctx := wfCtx.Context()
 	b := newToolCallBatch(calls)
 
+	resolved := make([]*planner.ToolRequest, len(calls))
 	for i, call := range calls {
 		normalized, err := e.prepareToolDispatch(ctx, b, call, i)
 		if err != nil {
 			return nil, err
 		}
-		if normalized == nil {
+		resolved[i] = normalized
+	}
+	for i, call := range resolved {
+		if call == nil {
 			continue
 		}
-		if err := e.dispatchResolvedToolCall(ctx, wfCtx, b, *normalized, i); err != nil {
+		if err := e.dispatchResolvedToolCall(ctx, wfCtx, b, *call, i); err != nil {
 			return nil, err
 		}
 	}

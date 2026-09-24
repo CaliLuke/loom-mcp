@@ -14,8 +14,24 @@ import (
 	runloginmem "github.com/CaliLuke/loom-mcp/v2/runtime/agent/runlog/inmem"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/telemetry"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/tools"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
+
+var errScheduledRejected = errors.New("scheduled event rejected")
+
+// failScheduledHooks rejects the ToolCallScheduled event of one call.
+type failScheduledHooks struct {
+	recordingHooks
+	failCallID string
+}
+
+func (f *failScheduledHooks) Publish(ctx context.Context, event hooks.Event) error {
+	if scheduled, ok := event.(*hooks.ToolCallScheduledEvent); ok && scheduled.ToolCallID == f.failCallID {
+		return errScheduledRejected
+	}
+	return f.recordingHooks.Publish(ctx, event)
+}
 
 func TestExecuteToolCalls_ServiceToolsPublishResultsAsComplete(t *testing.T) {
 	recorder := &recordingHooks{}
@@ -88,6 +104,62 @@ func TestExecuteToolCalls_ServiceToolsPublishResultsAsComplete(t *testing.T) {
 	require.Equal(t, callSlow.ToolCallID, ends[1].ToolCallID)
 
 	// If the goroutine deadlocked, executeToolCalls would never return.
+}
+
+func TestExecuteToolCalls_ScheduledFailureForLaterCallDispatchesNoCall(t *testing.T) {
+	cases := []struct {
+		name string
+		mode DispatchMode
+	}{
+		{name: "activity", mode: DispatchActivity},
+		{name: "inline", mode: DispatchInline},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			bus := &failScheduledHooks{failCallID: "call-second"}
+			inlineCalled := false
+			rt := &Runtime{
+				Bus:           bus,
+				RunEventStore: runloginmem.New(),
+				logger:        telemetry.NoopLogger{},
+				metrics:       telemetry.NoopMetrics{},
+				tracer:        telemetry.NoopTracer{},
+				toolsets: map[string]ToolsetRegistration{
+					"svc.tools": {
+						DispatchMode: tc.mode,
+						Execute: func(ctx context.Context, call *planner.ToolRequest) (*ToolExecutionResult, error) {
+							inlineCalled = true
+							return Executed(&planner.ToolResult{Name: call.Name, ToolCallID: call.ToolCallID}), nil
+						},
+					},
+				},
+				toolSpecs: map[tools.Ident]tools.ToolSpec{
+					tools.Ident("svc.tools.write"): newAnyJSONSpec("svc.tools.write", "svc.tools"),
+				},
+			}
+			wfCtx := &testWorkflowContext{
+				ctx:         context.Background(),
+				hookRuntime: rt,
+			}
+			calls := []planner.ToolRequest{
+				{Name: tools.Ident("svc.tools.write"), RunID: "run-1", SessionID: "sess-1", TurnID: "turn-1", ToolCallID: "call-first"},
+				{Name: tools.Ident("svc.tools.write"), RunID: "run-1", SessionID: "sess-1", TurnID: "turn-1", ToolCallID: "call-second"},
+			}
+
+			_, _, err := rt.executeToolCalls(wfCtx, "execute", engine.ActivityOptions{}, agent.Ident("agent-1"), &run.Context{RunID: "run-1", SessionID: "sess-1", TurnID: "turn-1"}, nil, calls, 0, nil, time.Time{})
+
+			require.ErrorIs(t, err, errScheduledRejected)
+			assert.Empty(t, wfCtx.lastToolCall.Name, "no activity may start before every call is scheduled")
+			assert.False(t, inlineCalled, "no inline tool may run before every call is scheduled")
+			var scheduled []string
+			for _, evt := range bus.events {
+				if e, ok := evt.(*hooks.ToolCallScheduledEvent); ok {
+					scheduled = append(scheduled, e.ToolCallID)
+				}
+			}
+			assert.Equal(t, []string{"call-first"}, scheduled)
+		})
+	}
 }
 
 func TestExecuteToolCalls_ExplicitActivityDispatchIgnoresLegacyInlineFlag(t *testing.T) {

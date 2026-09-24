@@ -1472,6 +1472,17 @@ duration-valued map keys retain their normal encoding behavior.
 | `HardProtectionTriggered`                   | Runtime hard-protection circuit activation          |
 | `ChildRunLinked`                            | Agent-as-tool child run link                        |
 
+When the planner returns several tool calls in one turn, the runtime publishes
+`ToolCallScheduled` for every call in the batch before it dispatches any of them.
+A subscriber that returns an error for one of those events, for example because
+it could not record durable evidence for the call, aborts the batch before any
+tool has started. Calls that carry a request error, and calls to unknown tools,
+receive their synthesized `ToolResultReceived` during this scheduling phase. A
+batch that aborts can leave calls with a `ToolCallScheduled` event and no
+`ToolResultReceived`: calls scheduled before a rejected event, calls not yet
+dispatched, and started calls that were cancelled. A subscriber must treat any
+such call as not known to have run, not as failed.
+
 ### Custom Subscribers
 
 ```go
