@@ -200,6 +200,10 @@ end
 if redis.call("HGET", KEYS[1], "dispatch_provider_token") ~= "" then
   return 3
 end
+-- Overload retry superseded this request; the current publication owns execution.
+if redis.call("HGET", KEYS[1], "publication_event_id") ~= ARGV[6] then
+  return 3
+end
 if ARGV[2] ~= ARGV[4] then
   local id = redis.call("XADD", KEYS[3], "MAXLEN", "=", ARGV[10], "*", "n", ARGV[7], "p", ARGV[8])
   redis.call("PEXPIREAT", KEYS[3], expires)
