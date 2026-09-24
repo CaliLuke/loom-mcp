@@ -159,7 +159,7 @@ type ClaimToolCallResult struct {
 	// Closed settlement outcome. execute grants immutable dispatch ownership;
 	// terminal means retained terminal history already exists; claimed means
 	// another request delivery owns execution; expired means Redis time settled
-	// the call.
+	// the call or the admission that published this request no longer exists.
 	Disposition string `json:"disposition"`
 }
 

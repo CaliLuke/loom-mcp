@@ -4,11 +4,13 @@ package registry
 
 // These live-Redis tests replay the counterexamples found by the TLA+ model of
 // call admission: Pulse may redeliver any unacknowledged request event, so an
-// overload-superseded request must never corrupt the retained call record.
+// overload-superseded or retention-orphaned request must never corrupt the
+// retained call record or return a provider-fatal error.
 
 import (
 	"context"
 	"fmt"
+	"strings"
 	"testing"
 	"time"
 
@@ -57,6 +59,41 @@ func TestOverloadRetryAfterDispatchDoesNotRepublish(t *testing.T) {
 	replayed, err := f.svc.CallTool(ctx, f.call)
 	require.NoError(t, err)
 	assert.Equal(t, f.admitted, replayed)
+}
+
+func TestRequestFromExpiredAdmissionIsNotProviderFatal(t *testing.T) {
+	ctx := context.Background()
+	f := newCallFencingFixture(t, "orphaned")
+	orphanEventID := f.publicationEventID(t)
+	callKey := f.store.callKey(f.admitted.ToolUseID)
+	require.EqualValues(t, 1, f.rdb.Del(ctx, callKey).Val())
+	readmitted, err := f.svc.CallTool(ctx, f.call)
+	require.NoError(t, err)
+	require.NotEqual(t, orphanEventID, f.publicationEventID(t))
+	resultStreamKey := pulseStreamKeyPrefix + toolregistry.ResultStreamID(readmitted.ToolUseID)
+
+	cases := []struct {
+		name      string
+		callToken string
+	}{
+		{name: "same admission token", callToken: f.token},
+		{name: "older admission token", callToken: strings.Repeat("a", 64)},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			payload := f.claimPayload(orphanEventID)
+			payload.CallRegistrationToken = tc.callToken
+			results := f.rdb.XLen(ctx, resultStreamKey).Val()
+			require.NoError(t, f.svc.ReportToolCallOverload(ctx, payload))
+			assert.Equal(t, results, f.rdb.XLen(ctx, resultStreamKey).Val())
+			claim, err := f.svc.ClaimToolCall(ctx, payload)
+			require.NoError(t, err)
+			assert.Equal(t, string(callClaimExpired), claim.Disposition)
+		})
+	}
+	current, err := f.svc.ClaimToolCall(ctx, f.claimPayload(f.publicationEventID(t)))
+	require.NoError(t, err)
+	assert.Equal(t, string(callClaimExecute), current.Disposition)
 }
 
 type callFencingFixture struct {

@@ -2082,7 +2082,7 @@ type ClaimToolCallResponse struct {
 	// Closed settlement outcome. execute grants immutable dispatch ownership;
 	// terminal means retained terminal history already exists; claimed means
 	// another request delivery owns execution; expired means Redis time settled
-	// the call.
+	// the call or the admission that published this request no longer exists.
 	Disposition   string `protobuf:"bytes,1,opt,name=disposition,proto3" json:"disposition,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
