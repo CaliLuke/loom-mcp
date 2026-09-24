@@ -179,12 +179,13 @@ end
 if redis.call("EXISTS", KEYS[1]) == 0 then
   return 4
 end
-if redis.call("HGET", KEYS[1], "tool_use_id") ~= ARGV[1]
-or redis.call("HGET", KEYS[1], "registration_token") ~= ARGV[2] then
+if redis.call("HGET", KEYS[1], "tool_use_id") ~= ARGV[1] then
   return redis.error_reply("CALLADMISSIONCHANGED")
 end
-if redis.call("HEXISTS", KEYS[1], "claim:" .. ARGV[6]) == 0 then
-  return redis.error_reply("CALLCLAIMCHANGED")
+-- A request published by an expired admission of this tool-use identity.
+if redis.call("HGET", KEYS[1], "registration_token") ~= ARGV[2]
+or redis.call("HEXISTS", KEYS[1], "claim:" .. ARGV[6]) == 0 then
+  return 4
 end
 local expires = tonumber(redis.call("HGET", KEYS[1], "expires_at_unix_milli"))
 local execution_deadline = tonumber(redis.call("HGET", KEYS[1], "execution_deadline_unix_milli"))
@@ -198,6 +199,10 @@ if execution_deadline <= now_millis then
   return 4
 end
 if redis.call("HGET", KEYS[1], "dispatch_provider_token") ~= "" then
+  return 3
+end
+-- Overload retry superseded this request; the current publication owns execution.
+if redis.call("HGET", KEYS[1], "publication_event_id") ~= ARGV[6] then
   return 3
 end
 if ARGV[2] ~= ARGV[4] then
@@ -293,12 +298,13 @@ end
 if redis.call("EXISTS", KEYS[1]) == 0 then
   return 0
 end
-if redis.call("HGET", KEYS[1], "tool_use_id") ~= ARGV[1]
-or redis.call("HGET", KEYS[1], "registration_token") ~= ARGV[2] then
+if redis.call("HGET", KEYS[1], "tool_use_id") ~= ARGV[1] then
   return redis.error_reply("CALLADMISSIONCHANGED")
 end
-if redis.call("HEXISTS", KEYS[1], "claim:" .. ARGV[6]) == 0 then
-  return redis.error_reply("CALLCLAIMCHANGED")
+-- A request published by an expired admission of this tool-use identity.
+if redis.call("HGET", KEYS[1], "registration_token") ~= ARGV[2]
+or redis.call("HEXISTS", KEYS[1], "claim:" .. ARGV[6]) == 0 then
+  return 0
 end
 local overload_request = "overload_request:" .. ARGV[6]
 if redis.call("HEXISTS", KEYS[1], overload_request) == 1 then
@@ -545,8 +551,6 @@ func (s *callAdmissionStore) Complete(
 // Claim atomically grants immutable dispatch ownership or returns the
 // authoritative non-execution disposition. Stale unclaimed calls receive their
 // canonical terminal event at the same linearization point.
-//
-//nolint:maintidx // One Lua-backed claim transition keeps every terminal and fencing outcome explicit.
 func (s *callAdmissionStore) Claim(
 	ctx context.Context,
 	toolset, toolUseID, callRegistrationToken, providerRegistrationToken,
@@ -581,8 +585,6 @@ func (s *callAdmissionStore) Claim(
 		switch {
 		case redis.HasErrorPrefix(err, "CALLADMISSIONCHANGED"):
 			return "", errCallAdmissionNotFound
-		case redis.HasErrorPrefix(err, "CALLCLAIMCHANGED"):
-			return "", errCallAdmissionConflict
 		case redis.HasErrorPrefix(err, "PROVIDERLEASECHANGED"):
 			return "", errToolsetNotFound
 		default:
@@ -682,8 +684,6 @@ func (s *callAdmissionStore) ReportOverload(
 		switch {
 		case redis.HasErrorPrefix(err, "CALLADMISSIONCHANGED"):
 			return errCallAdmissionNotFound
-		case redis.HasErrorPrefix(err, "CALLCLAIMCHANGED"):
-			return errCallAdmissionConflict
 		case redis.HasErrorPrefix(err, "PROVIDERLEASECHANGED"):
 			return errToolsetNotFound
 		default:

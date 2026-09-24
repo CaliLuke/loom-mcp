@@ -182,7 +182,8 @@ const (
 	ClaimTerminal ClaimDisposition = "terminal"
 	// ClaimOwned reports that another delivery already owns execution.
 	ClaimOwned ClaimDisposition = "claimed"
-	// ClaimExpired reports that Redis time settled the expired call.
+	// ClaimExpired reports that Redis time settled the expired call, or that
+	// the admission which published this request no longer exists.
 	ClaimExpired ClaimDisposition = "expired"
 
 	// DefaultRegistrationRetryInitialInterval is the default delay after the

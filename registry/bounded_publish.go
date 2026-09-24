@@ -65,6 +65,10 @@ if admitted then
        (ARGV[5] ~= "" and overload == ARGV[5]) then
         return {2, redis.call("HGET", KEYS[2], "publication_event_id") or ""}
     end
+    -- A redelivered request already owns execution; overload retry is moot.
+    if redis.call("HGET", KEYS[2], "dispatch_provider_token") ~= "" then
+        return {2, redis.call("HGET", KEYS[2], "publication_event_id") or ""}
+    end
     local execution_deadline = tonumber(redis.call("HGET", KEYS[2], "execution_deadline_unix_milli"))
     local now = redis.call("TIME")
     local now_millis = (tonumber(now[1]) * 1000) + math.floor(tonumber(now[2]) / 1000)

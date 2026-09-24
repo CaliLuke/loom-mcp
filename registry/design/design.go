@@ -540,7 +540,7 @@ var PublishToolOutputDeltaPayload = Type("PublishToolOutputDeltaPayload", func()
 
 var ClaimToolCallResult = Type("ClaimToolCallResult", func() {
 	Description("Authoritative pre-dispatch disposition for one queued tool call.")
-	Field(1, "disposition", String, "Closed settlement outcome. execute grants immutable dispatch ownership; terminal means retained terminal history already exists; claimed means another request delivery owns execution; expired means Redis time settled the call.", func() {
+	Field(1, "disposition", String, "Closed settlement outcome. execute grants immutable dispatch ownership; terminal means retained terminal history already exists; claimed means another request delivery owns execution; expired means Redis time settled the call or the admission that published this request no longer exists.", func() {
 		Enum("execute", "terminal", "claimed", "expired")
 		Example("execute")
 	})

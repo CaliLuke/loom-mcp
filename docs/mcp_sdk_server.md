@@ -592,11 +592,12 @@ requests report their `Mcp-Session-Id`, while successful initialization reports
 the session ID issued on the response. Streaming responses emit open, close, and
 write-failure events with the same parsed fields once available.
 
-Requests rejected before SDK parsing retain empty protocol fields. The current
-SDK summary hook does not run for JSON-RPC batches, so their protocol fields and
-batch count also remain empty. HTTP status, bytes, duration, and failure reason
-are still reported by the outer lifecycle observer in both cases.
-Batch metadata is tracked separately in [issue #300](https://github.com/CaliLuke/loom-mcp/issues/300).
+Requests rejected before SDK parsing retain empty protocol fields.
+[MCP removed JSON-RPC batching in the 2025-06-18 specification](https://modelcontextprotocol.io/specification/2025-06-18/changelog).
+Loom-MCP exposes parsed request metadata for single messages only. The SDK owns
+legacy batch handling and protocol-version rejection. Batch requests retain
+empty protocol fields and a zero batch count in observer events. The outer
+lifecycle observer still reports HTTP status, bytes, duration, and failure reason.
 
 For example, the generated observer events support structured request logs
 without middleware that reads the body:

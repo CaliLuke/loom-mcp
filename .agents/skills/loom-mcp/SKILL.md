@@ -441,8 +441,10 @@ Use this skill for `loom-mcp` work in this repo. Keep `AGENTS.md` short and keep
   normalized call ID, notification status, and the request or issued session
   ID without rereading the body. SSE stream events receive the same fields
   after parsing. Pre-parse rejections and batches keep protocol fields empty
-  because the upstream summary callback does not expose them; batch enrichment
-  is tracked in issue #300.
+  and batch count zero. MCP removed JSON-RPC batching in `2025-06-18`.
+  Keep parsed request metadata limited to single messages. The official SDK
+  owns legacy batch handling and protocol-version rejection; the outer
+  observer still reports HTTP outcomes.
 - Runtime semantic telemetry is engine-neutral: stable
   `loom_mcp.runtime.*` run/planner/tool metrics and `tool.execute` spans come
   from planner activities and newly inserted canonical events. Planner metrics
