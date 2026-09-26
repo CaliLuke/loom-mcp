@@ -54,9 +54,9 @@ var FindResultCodec = searchspecs.FindResultCodec
 // ResultHintTemplate declarations are compiled into hint templates so sinks
 // can render
 // concise labels and previews without heuristics.
-
+//
 // Example usage:
-
+//
 // rt := runtime.New(...)
 // reg := NewScribeToolsetRegistration(rt)
 // if err := rt.RegisterToolset(reg); err != nil {

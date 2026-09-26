@@ -4,7 +4,7 @@ go 1.27.0
 
 require (
 	cloud.google.com/go/auth v0.23.3
-	github.com/CaliLuke/loom v1.9.0
+	github.com/CaliLuke/loom v1.10.0-alpha.2
 	github.com/anthropics/anthropic-sdk-go v1.74.0
 	github.com/aws/aws-sdk-go-v2 v1.47.0
 	github.com/aws/aws-sdk-go-v2/service/bedrockruntime v1.63.0
