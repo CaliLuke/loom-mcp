@@ -654,6 +654,8 @@ response headers.
 
 ## Module Dependency
 
-`loom-mcp` pins `github.com/CaliLuke/loom v1.10.0-alpha.2`. This prerelease includes HTTP, JSON-RPC, and gRPC generation fixes and Pulse reliability fixes. Regenerate service and client code when upgrading. MCP authorization remains application-owned.
+`loom-mcp` pins `github.com/CaliLuke/loom v1.10.0-alpha.3`. This prerelease includes HTTP, JSON-RPC, and gRPC generation fixes and Pulse reliability fixes. Regenerate service and client code when upgrading. MCP authorization remains application-owned.
+
+Defaults must satisfy their effective constraints, including inherited bounds and enums. Alpha.3 rejects invalid defaults instead of allowing recovery-example generation to replace them.
 
 Run `make loom-local` to use the sibling Loom checkout during development. Run `make loom-remote` before you commit or release changes.

@@ -29,7 +29,7 @@ func TestLoomGen_MCPServiceWithoutJSONRPCDesign(t *testing.T) {
 go 1.27.0
 
 require (
-	github.com/CaliLuke/loom v1.10.0-alpha.2
+	github.com/CaliLuke/loom v1.10.0-alpha.3
 	github.com/CaliLuke/loom-mcp/v2 v2.0.0
 )
 

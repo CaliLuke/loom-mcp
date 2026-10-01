@@ -51,8 +51,8 @@ github.com/Azure/go-ansiterm v0.0.0-20260917205352-e937bb47801a h1:4hxax9ktNjSDo
 github.com/Azure/go-ansiterm v0.0.0-20260917205352-e937bb47801a/go.mod h1:3EWSSOZ50kb+arhww0qIaEXHToib/3FjBj9Jj5lcP5g=
 github.com/BurntSushi/toml v0.3.1/go.mod h1:xHWCNGjB5oqiDr8zfno3MHue2Ht5sIBksp03qcyfWMU=
 github.com/BurntSushi/xgb v0.0.0-20160522181843-27f122750802/go.mod h1:IVnqGOEym/WlBOVXweHU+Q+/VP0lqqI8lqeDx9IjBqo=
-github.com/CaliLuke/loom v1.10.0-alpha.2 h1:T2zHAYV35zGHcoJWn5qDr9p8PILoH79uaS/Cn+dzWFc=
-github.com/CaliLuke/loom v1.10.0-alpha.2/go.mod h1:S4+AzVFkEbLHfYKigNXlzS74siyrviEbj8V8PosInWE=
+github.com/CaliLuke/loom v1.10.0-alpha.3 h1:wUcJJ/V8z+5NJnc4+LT8oQZ0VRbMe4Jw+nbEnjSpC10=
+github.com/CaliLuke/loom v1.10.0-alpha.3/go.mod h1:S4+AzVFkEbLHfYKigNXlzS74siyrviEbj8V8PosInWE=
 github.com/Microsoft/go-winio v0.6.2 h1:F2VQgta7ecxGYO8k3ZZz3RS8fVIXVxONVUPlNERoyfY=
 github.com/Microsoft/go-winio v0.6.2/go.mod h1:yd8OoFMLzJbo9gZq8j5qaps8bJ9aShtEA8Ipt1oGCvU=
 github.com/alicebob/miniredis/v2 v2.39.0 h1:M7WbmV5BmV56L8KTG0rw6vEQ+woTOghpDgin2xv4A0g=
