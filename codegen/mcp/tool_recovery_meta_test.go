@@ -20,7 +20,6 @@ func TestCanonicalRecoveryNumericConstraints(t *testing.T) {
 		{"history default", &expr.AttributeExpr{Type: expr.Int, DefaultValue: 10, Validation: &expr.ValidationExpr{Minimum: new(1.0), Maximum: new(200.0)}}, `10`},
 		{"example before default", &expr.AttributeExpr{Type: expr.Int, DefaultValue: 50, UserExamples: []*expr.ExampleExpr{{Value: 25}}, Validation: &expr.ValidationExpr{Minimum: new(1.0), Maximum: new(200.0)}}, `25`},
 		{"invalid example", &expr.AttributeExpr{Type: expr.Int, DefaultValue: 50, UserExamples: []*expr.ExampleExpr{{Value: 0}}, Validation: &expr.ValidationExpr{Minimum: new(1.0)}}, `50`},
-		{"invalid default", &expr.AttributeExpr{Type: expr.Int, DefaultValue: 0, Validation: &expr.ValidationExpr{Minimum: new(1.0)}}, `1`},
 		{"enum", &expr.AttributeExpr{Type: expr.Int, Validation: &expr.ValidationExpr{Values: []any{5, 10}}}, `5`},
 		{"positive integer", &expr.AttributeExpr{Type: expr.Int, Validation: &expr.ValidationExpr{Minimum: new(1.2)}}, `2`},
 		{"negative integer", &expr.AttributeExpr{Type: expr.Int, Validation: &expr.ValidationExpr{Maximum: new(-1.2)}}, `-2`},
@@ -50,6 +49,20 @@ func TestCanonicalRecoveryNumericConstraints(t *testing.T) {
 			assert.Equal(t, example, synthesizeCanonicalExample(payload))
 		})
 	}
+}
+
+func TestCanonicalRecoveryRejectsInvalidDefault(t *testing.T) {
+	attr := &expr.AttributeExpr{
+		Type:         expr.Int,
+		DefaultValue: 0,
+		Validation:   &expr.ValidationExpr{Minimum: new(1.0)},
+	}
+	// Recovery generation requires a valid design; invalid defaults must not be repaired.
+	assert.PanicsWithError(t,
+		`build recovery example schema: effective constraints: default value 0 declared by "int" violates the effective contract for "int"`,
+		func() {
+			synthesizeCanonicalExample(attr)
+		})
 }
 
 func TestCanonicalRecoveryAuthoredPayload(t *testing.T) {

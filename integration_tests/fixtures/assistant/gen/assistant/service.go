@@ -620,7 +620,7 @@ func (u BarCmdOrFooCmd) MarshalJSON() ([]byte, error) {
 	}{
 		Type:  string(u.kind),
 		Value: value,
-	}, json.Deterministic(true))
+	}, loom.JSONOptions(), json.Deterministic(true))
 }
 
 // MarshalFormValues marshals the union into application/x-www-form-urlencoded
@@ -701,7 +701,7 @@ func (u *BarCmdOrFooCmd) UnmarshalJSON(data []byte) error {
 		if len(raw.Value) == 0 || string(raw.Value) == "null" {
 			return loom.MissingFieldError("args", "body")
 		}
-		if err := json.Unmarshal(raw.Value, &v); err != nil {
+		if err := json.Unmarshal(raw.Value, &v, loom.JSONOptions()); err != nil {
 			return err
 		}
 		u.kind = BarCmdOrFooCmdKindFooCmd
@@ -711,7 +711,7 @@ func (u *BarCmdOrFooCmd) UnmarshalJSON(data []byte) error {
 		if len(raw.Value) == 0 || string(raw.Value) == "null" {
 			return loom.MissingFieldError("args", "body")
 		}
-		if err := json.Unmarshal(raw.Value, &v); err != nil {
+		if err := json.Unmarshal(raw.Value, &v, loom.JSONOptions()); err != nil {
 			return err
 		}
 		u.kind = BarCmdOrFooCmdKindBarCmd
@@ -836,7 +836,7 @@ func (u CreateActionOrListAction) MarshalJSON() ([]byte, error) {
 	}{
 		Type:  string(u.kind),
 		Value: value,
-	}, json.Deterministic(true))
+	}, loom.JSONOptions(), json.Deterministic(true))
 }
 
 // MarshalFormValues marshals the union into application/x-www-form-urlencoded
@@ -917,7 +917,7 @@ func (u *CreateActionOrListAction) UnmarshalJSON(data []byte) error {
 		if len(raw.Value) == 0 || string(raw.Value) == "null" {
 			return loom.MissingFieldError("value", "body")
 		}
-		if err := json.Unmarshal(raw.Value, &v); err != nil {
+		if err := json.Unmarshal(raw.Value, &v, loom.JSONOptions()); err != nil {
 			return err
 		}
 		u.kind = CreateActionOrListActionKindListAction
@@ -927,7 +927,7 @@ func (u *CreateActionOrListAction) UnmarshalJSON(data []byte) error {
 		if len(raw.Value) == 0 || string(raw.Value) == "null" {
 			return loom.MissingFieldError("value", "body")
 		}
-		if err := json.Unmarshal(raw.Value, &v); err != nil {
+		if err := json.Unmarshal(raw.Value, &v, loom.JSONOptions()); err != nil {
 			return err
 		}
 		u.kind = CreateActionOrListActionKindCreateAction

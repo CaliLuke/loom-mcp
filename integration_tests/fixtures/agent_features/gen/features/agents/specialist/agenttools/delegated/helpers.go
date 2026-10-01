@@ -55,9 +55,9 @@ var SummarizeResultCodec = delegatedspecs.SummarizeResultCodec
 // ResultHintTemplate declarations are compiled into hint templates so sinks
 // can render
 // concise labels and previews without heuristics.
-
+//
 // Example usage:
-
+//
 // rt := runtime.New(...)
 // reg := NewSpecialistToolsetRegistration(rt)
 // if err := rt.RegisterToolset(reg); err != nil {
