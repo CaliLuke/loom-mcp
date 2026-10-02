@@ -100,8 +100,10 @@ Inspect the final diff and verify each module resolves the released tag with
 
 ## 5. Release loom-mcp
 
-Only now use `loom-mcp-release` to commit, tag, push, create the GitHub Release,
-and verify `origin/main`, the annotated tag, and the release object. Keep remote
+Only now use `loom-mcp-release` to commit on main and run `make release` directly.
+It pushes main, waits for exact-commit CI, and publishes or resumes the release;
+no loom-mcp release branch or PR is required. Verify `origin/main`, the annotated
+tag, and the release object. Keep remote
 Loom mode enabled throughout this release. Report that Go module proxy visibility
 may lag after publication.
 

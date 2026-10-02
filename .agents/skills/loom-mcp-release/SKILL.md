@@ -1,173 +1,82 @@
 ---
 name: loom-mcp-release
-description: Cut and publish a loom-mcp release from verified code. Use this skill when the task is to prepare a patch, minor, or major release, tag the repo, push the release, verify remote publication, or walk from finished code to a fully published loom-mcp version.
+description: Prepare, publish, or verify loom-mcp releases directly from main, including safe retries after interrupted publication.
 ---
 # loom-mcp-release
 
-Use this skill when releasing `github.com/CaliLuke/loom-mcp/v2`. Keep the workflow strict. Release work should be deterministic, fail fast, and leave a traceable tag on `main`.
+Release `github.com/CaliLuke/loom-mcp/v2` directly from committed `main`.
+This is primarily a single-maintainer repository. Do not create a release branch
+or PR solely to satisfy the release workflow.
 
-## Non-Negotiables
+## Publication contract
 
-- Publish new versions with `make release VERSION=v2.MINOR.PATCH` from a clean
-  `main` checkout equal to remote `main`. The command requires successful hosted
-  CI for that exact commit and rejects existing tags. Do not use raw tag/push
-  commands for new releases.
-- Never bypass hooks. If commit-time hooks fail, fix the underlying problem and retry.
-- Use `make loom-remote` before release verification and before the release commit so the repo is pinned to the published `github.com/CaliLuke/loom` dependency, not a local checkout.
-- If the release changed assistant fixture DSL or generated MCP output, run `make regen-assistant-fixture` before verification.
-- After a Loom dependency bump, regenerate every version-marked surface with
-  `make gen-registry`, `make regen-quickstart`,
-  `make regen-assistant-fixture`,
-  `make regen-progressive-discovery-fixture`,
-  `make regen-agent-feature-fixture`, and
-  `make regen-sdkbridge-consumer-fixture` when its compatibility version increments.
-- If the release changed user-facing DSL, codegen, runtime, or release workflow behavior, update the repo docs in `docs/`, any release-facing root docs, and the relevant repo-local skills in `.agents/skills/` before tagging.
-- Review every `runtime/mcp/sdkbridge` contract change before release.
-  Keep `sdkbridge.CompatibilityVersion` for additive fixes and optional fields
-  with safe defaults. Increment it when old generated descriptors or callbacks
-  are unsafe. After an increment, regenerate the assistant,
-  progressive-discovery, and external consumer fixtures.
-- Do not hand-edit generated `gen/` files.
-- Do not call the release published until `main`, the tag, and the GitHub Release object all exist remotely.
-- If a tag already exists without a GitHub Release, backfill the release object before treating that version as published.
+- Use `make release VERSION=v2.MINOR.PATCH` (or a semantic prerelease version).
+  The command pushes committed main, waits for its exact-commit CI push run,
+  then publishes an annotated tag and a non-draft GitHub Release.
+- Start from clean `main`. Never bypass commit or push hooks.
+- Keep remote Loom mode enabled. Use `make loom-remote` before verification
+  when necessary; do not introduce dependency changes merely to publish.
+- Existing tags are immutable recovery checkpoints. Retry the same command
+  and version after interruption, including when main has advanced.
+- Conflicting tags or release metadata are errors. Never move a published tag
+  or force-push main. Do not silently choose a different version to evade a
+  partially published release.
+- Stable releases are latest; semantic prereleases are not latest and have
+  `isPrerelease=true`.
+- A release is complete only when its tag and non-draft GitHub Release exist
+  remotely and its CI-verified commit remains on remote main.
 
-## Default Release Workflow
+## Workflow
 
-1. Confirm the intended semantic version bump and inspect the repo state with:
-   - `git status --short`
-   - `git branch --show-current`
-   - `make loom-status`
-   - `git tag --sort=creatordate`
-   - `gh release list --limit 20`
-2. Switch to remote Loom mode for release parity:
-   - `make loom-remote`
-3. Regenerate only when required by the change:
-   - after a Loom dependency bump: `make gen-registry`,
-     `make regen-quickstart`, `make regen-assistant-fixture`,
-     `make regen-progressive-discovery-fixture`, and
-     `make regen-agent-feature-fixture`. Also run
-     `make regen-sdkbridge-consumer-fixture` when its compatibility version increments
-   - after an incompatible `sdkbridge` contract change: update
-     `sdkbridge.CompatibilityVersion`. Then run `make regen-assistant-fixture`,
-     `make regen-progressive-discovery-fixture`, and
-     `make regen-sdkbridge-consumer-fixture`
-   - after a compatible `sdkbridge` runtime fix: keep the version unchanged.
-     `make verify-generated` must not change the generated consumer
-   - `make regen-assistant-fixture` for assistant fixture DSL changes
-   - any normal design/codegen regeneration already required by the change itself
-4. Prove every tracked generated surface is current:
-   - `make verify-generated`
-5. Update docs whenever shipped behavior or release workflow guidance changed:
-   - update `docs/` for user-facing DSL, runtime, or codegen contract changes
-   - update release-facing root docs such as `README.md` when dependency pins, commands, or workflow expectations changed
-   - update the relevant repo-local skills in `.agents/skills/`, especially `.agents/skills/loom-mcp/` and this release skill, when the shipped product or release workflow changed
-6. Run the full release verification suite in this order:
-   - `make lint`
-   - `make test`
-   - `make itest`
-   - `make verify-mcp-local`
-   - `go test ./...`
-7. Review the final diff and confirm the docs shipped with the same contract as the code.
-8. Commit reviewed release-ready changes, land them on `main` through the
-   protected branch checks, and wait for the `CI` push run to pass.
-9. Update the local clean `main` checkout with `git pull --ff-only`.
-10. Publish through `make release VERSION=v2.MINOR.PATCH` (or the intended
-    prerelease version). The command creates the annotated tag, atomically pushes
-    the checked commit and tag, and creates the GitHub release with the correct
-    stable or prerelease flags. A `main` advance visible during push negotiation
-    fails publication. A later advance can succeed; the tag remains fixed on the
-    verified commit already included in protected `main`.
-11. Verify the published state:
-   - `git ls-remote --tags origin v1.0.3`
-   - `git ls-remote origin main`
-   - `gh release view v1.0.3 --json tagName,isDraft,isPrerelease,url,publishedAt`
-12. Verify module visibility if the user asks for full downstream confirmation:
-   - `go list -m -versions github.com/CaliLuke/loom-mcp/v2`
-   - if the new version is not visible yet, note that Go proxy propagation can lag after the Git push
+1. Inspect `git status --short --branch`, `make loom-status`, actual remote tags,
+   and `gh release list`. Choose the next unused version for a new release;
+   choose the same version when resuming. Never use web search for tag existence.
+2. Finish authorized code and documentation work, then get the required
+   independent review and commit it on main. Do not invent a release-only
+   code change. Retain the repository's normal local verification requirements.
+3. Regenerate only affected surfaces. For a Loom dependency bump, regenerate
+   registry, quickstart, assistant, progressive-discovery, and agent-feature
+   fixtures. Regenerate the SDK bridge consumer when its compatibility version
+   increments. Never edit generated output by hand.
+4. Review docs and relevant skills when DSL, runtime, codegen, dependency,
+   or release behavior changes. Keep `sdkbridge.CompatibilityVersion` for
+   additive compatible changes; increment it for incompatible generated contracts.
+5. Run required local gates for the change. The complete `make ci` contract
+   includes generation, release-script tests, build, lint, unit/coverage tests,
+   integration fixtures, and Docker tests. `make itest` already includes
+   `make verify-mcp-local`; do not repeat it without a new reason.
+6. Run `make release VERSION=<version>`. Let it push main and wait for CI.
+   Missing or pending CI is handled by the command. Failed/canceled CI needs
+   diagnosis; fix or rerun it, then retry the same release command.
+7. Verify with `git ls-remote --tags origin refs/tags/<version>`,
+   `git ls-remote origin main`, and
+   `gh release view <version> --json tagName,isDraft,isPrerelease,url,publishedAt`.
+   Confirm the tag commit is on remote main. If main advanced, fetch and
+   fast-forward the local checkout when possible; do not reset it.
+8. Report the release URL. Check Go module visibility only when requested;
+   proxy propagation may lag publication.
 
-## Backfill Workflow For Missing GitHub Releases
+Do not stop after preparation when the user has authorized publication.
+For a preparation-only request, leave a verified, committed candidate and
+state that publication has not been run.
 
-Use this when a semver tag already exists on `origin` but the GitHub Releases page is missing that version.
+## Failure handling
 
-1. Confirm the tag exists remotely:
-   - `git ls-remote --tags origin vX.Y.Z`
-2. Confirm the GitHub Release object is missing:
-   - `gh release view vX.Y.Z --json tagName,url`
-3. Fetch remote `main` and confirm the tag's commit is already included:
-   - `git fetch origin main`
-   - `git merge-base --is-ancestor vX.Y.Z origin/main`
-   - Verify that the local tag matches the remote tag before proceeding.
-4. Create the missing release from the existing tag:
-   - stable: `gh release create vX.Y.Z --verify-tag --notes-from-tag --latest`
-   - prerelease: `gh release create vX.Y.Z-alpha.1 --verify-tag --notes-from-tag --prerelease`
-5. If the tag message is not suitable, use `--generate-notes` instead of
-   `--notes-from-tag`. Keep the stable or prerelease flag unchanged.
-6. Verify the release now exists:
-   - `gh release view vX.Y.Z --json tagName,isDraft,isPrerelease,url,publishedAt`
-
-## Exact Command Ladder
-
-Use this ladder unless the repo state makes one of the steps irrelevant:
-
-```bash
-git status --short
-git branch --show-current
-make loom-status
-git tag --sort=creatordate
-gh release list --limit 20
-make loom-remote
-<run any required regeneration>
-make verify-generated
-<update docs and repo-local skills if behavior or workflow changed>
-make lint
-make test
-make itest
-make verify-mcp-local
-go test ./...
-git status --short
-# Set this to the exact stable or prerelease tag.
-VERSION=vX.Y.Z
-git add <files>
-git commit -m "<release or fix message>"
-# Land this commit through protected main and wait for its CI push run.
-git switch main
-git pull --ff-only
-make release VERSION="${VERSION}"
-git ls-remote --tags origin "${VERSION}"
-git ls-remote origin main
-gh release view "${VERSION}" --json tagName,isDraft,isPrerelease,url,publishedAt
-```
-
-## Decision Rules
-
-- If `make loom-status` shows a local replace before release, switch with `make loom-remote` and rerun verification.
-- If verification fails after switching to remote mode, stop. Do not patch around an upstream `loom` regression in `loom-mcp`; return the exact failing scenario.
-- If generated output changed unexpectedly, trace it back to source changes before committing.
-- If the release includes user-facing framework behavior changes, update the repo docs under `docs/` in the same release.
-- If dependency pins, verification commands, or local-vs-remote workflow guidance changed, update release-facing root docs such as `README.md` in the same release.
-- If the shipped product or release workflow changed, update the relevant repo-local skills in `.agents/skills/` in the same release.
-- If a publication attempt leaves a local or remote tag, inspect it before retrying.
-  Never move a published tag; use the backfill workflow for a missing release object.
-- If the user asked for a dot release, prefer the smallest semver bump that matches the shipped behavior.
-- The GitHub Release `isPrerelease` value must be true for a hyphenated
-  semantic prerelease tag and false for a stable tag. Never mark a prerelease
-  as latest.
-- A breaking v2+ release must use the matching semantic import path in `go.mod`,
-  generated imports, fixtures, quickstarts, docs, and downstream examples.
-- If `gh release view vX.Y.Z` fails while `git ls-remote --tags origin vX.Y.Z` succeeds, backfill the missing GitHub Release before closing the task.
-
-## Publish Contract
-
-Treat the release as complete only when all of the following are true:
-
-- verification passed in remote mode
-- docs and relevant repo-local skills were reviewed and updated wherever the shipped contract or release workflow changed
-- the release commit exists on `main`
-- the annotated `vX.Y.Z` tag exists locally and on `origin`
-- the release commit remains an ancestor of `origin/main`
-- the GitHub Release object for `vX.Y.Z` exists, is not a draft, and has `isPrerelease` set to true for a hyphenated tag or false for a stable tag
-- the user is told that Go module proxy availability may lag slightly after push
+- A dirty/behind/diverged new-release checkout fails before tag publication.
+  Reconcile changes without discarding work, then retry.
+- A local tag or a remote tag without a release is resumed automatically.
+  A completed release is verified and returned without duplicate creation.
+- Wrong draft/prerelease metadata requires a deliberate correction; the command
+  does not overwrite it. Inspect the actual release before editing anything.
+- Never compensate for upstream Loom regressions in loom-mcp. Return exact
+  failing scenarios to the owning repository.
+- Branch protection prohibits force pushes and deletion, including for admins.
+  CI is enforced at release publication rather than before main accepts a push.
+  Do not restore a required pre-push check or PR requirement for this workflow.
 
 ## References
 
-- `references/release-checklist.md`: release checklist and rationale for each gate
+- `docs/releases.md`: user-facing command, recovery, repository policy, and model scope
+- `scripts/release_test.sh`: executable publication regression scenarios
+- `docs/formal/Release.tla`: safety and progress model
+- `references/release-checklist.md`: concise completion checklist

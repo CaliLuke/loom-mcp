@@ -56,8 +56,9 @@ go install github.com/CaliLuke/loom/cmd/loom@v1.10.0-alpha.3
 
 ## Working in this repo
 
-Use `make release VERSION=v2.MINOR.PATCH` to publish a verified commit from
-remote `main`. See [release and Git hygiene](docs/releases.md) for requirements.
+Commit on `main`, then run `make release VERSION=v2.MINOR.PATCH`. It pushes
+main, waits for CI, and publishes; repeat the same command to resume after an
+interruption. No release branch or PR is needed. See [releases](docs/releases.md).
 
 Common commands:
 
