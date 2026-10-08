@@ -6,6 +6,7 @@ package inmem
 
 import (
 	"context"
+	"slices"
 	"sort"
 	"sync"
 
@@ -33,7 +34,8 @@ func New() *Store {
 // LoadRun retrieves the snapshot for the given agent and run. Returns an empty
 // snapshot (not an error) if the run doesn't exist, allowing callers to treat
 // absence as empty history. The returned snapshot contains a defensive copy of
-// events to prevent external mutation.
+// events to prevent external mutation, sorted by ascending timestamp. Events
+// with equal timestamps retain their append order.
 //
 // Thread-safe: concurrent reads are allowed and do not block each other.
 func (s *Store) LoadRun(_ context.Context, agentID, runID string) (memory.Snapshot, error) {
@@ -45,6 +47,9 @@ func (s *Store) LoadRun(_ context.Context, agentID, runID string) (memory.Snapsh
 	}
 	events := runs[runID]
 	cloned := cloneEvents(events)
+	slices.SortStableFunc(cloned, func(a, b memory.Event) int {
+		return a.Timestamp.Compare(b.Timestamp)
+	})
 	return memory.Snapshot{AgentID: agentID, RunID: runID, Events: cloned, Meta: make(map[string]any)}, nil
 }
 

@@ -1900,6 +1900,8 @@ type Store interface {
 Use `memory.CloneEvent` at in-process event ownership boundaries. It copies
 `Labels` and the canonical mutable values in `Data`. The in-memory store uses
 this helper on append and load, so caller mutations cannot change stored history.
+Its `LoadRun` snapshots are sorted by ascending event timestamp; equal timestamps
+retain append order, including across batches.
 
 The runtime automatically installs a best-effort hook subscriber when a memory
 store is configured. A memory append failure is recorded but does not make the
