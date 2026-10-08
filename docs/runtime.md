@@ -1672,7 +1672,9 @@ all candidates remain available subject to per-run overrides.
 
 The basic policy engine applies allow/block filters before retry hints. A
 `RestrictToTool` hint can only narrow the filtered candidates; it cannot restore
-a blocked tool or introduce a tool outside the requested set.
+a blocked tool or introduce a tool outside the requested set. Set
+`basic.Options.DisableRetryHints` to ignore hint-based restrictions and cap
+changes, even when no allow/block filters are configured.
 
 ### Caps State
 

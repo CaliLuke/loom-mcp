@@ -257,6 +257,8 @@ Use this file for current loom-mcp runtime behavior in this repo. Prefer it over
   all candidates available, subject to per-run overrides.
 - Basic policy retry hints only narrow the already-filtered candidates. A hinted
   tool cannot bypass allow/block filters or the requested candidate set.
+- `basic.Options.DisableRetryHints` disables hint handling with or without
+  configured filters; default hint handling remains enabled.
 
 ## Tool Execution Contracts
 

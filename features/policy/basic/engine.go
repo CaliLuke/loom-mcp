@@ -22,7 +22,8 @@ type Options struct {
 	AllowTools []string
 	// BlockTools explicitly block tool IDs.
 	BlockTools []string
-	// DisableRetryHints disables automatic handling of planner RetryHints. Enabled by default.
+	// DisableRetryHints disables automatic handling of planner RetryHints.
+	// Retry-hint handling is enabled by default, independently of allow/block filters.
 	DisableRetryHints bool
 	// Label annotates emitted policy labels; defaults to "basic".
 	Label string
@@ -53,11 +54,6 @@ func New(opts Options) (*Engine, error) {
 		blockTools: toSet[tools.Ident](opts.BlockTools),
 		honorHints: !opts.DisableRetryHints,
 		label:      label,
-	}
-	if !e.honorHints && len(e.allowTools) == 0 && len(e.allowTags) == 0 &&
-		len(e.blockTools) == 0 && len(e.blockTags) == 0 {
-		// Default to honoring retry hints so the engine always influences behavior.
-		e.honorHints = true
 	}
 	return e, nil
 }
