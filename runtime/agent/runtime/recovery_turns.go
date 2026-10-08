@@ -59,3 +59,21 @@ func resultsRequireRecovery(results []*planner.ToolResult) bool {
 	}
 	return false
 }
+
+func resultsContainOutcomeUnknown(results []*planner.ToolResult) bool {
+	for _, result := range results {
+		if result != nil && result.Error != nil && result.Error.Kind == planner.ToolErrorKindOutcomeUnknown {
+			return true
+		}
+	}
+	return false
+}
+
+func toolOutputsContainOutcomeUnknown(outputs []*planner.ToolOutput) bool {
+	for _, output := range outputs {
+		if output != nil && output.Error != nil && output.Error.Kind == planner.ToolErrorKindOutcomeUnknown {
+			return true
+		}
+	}
+	return false
+}

@@ -11,6 +11,15 @@ type RetryReason string
 // toolerrors type. Planners use this to return structured tool errors to the runtime.
 type ToolError = toolerrors.ToolError
 
+// ToolErrorKind is the stable classification carried by a durable tool error.
+type ToolErrorKind = toolerrors.Kind
+
+const (
+	// ToolErrorKindOutcomeUnknown means a tool may have caused an effect, but its
+	// terminal result could not be confirmed.
+	ToolErrorKindOutcomeUnknown = toolerrors.KindOutcomeUnknown
+)
+
 const (
 	// RetryReasonInvalidArguments indicates the tool call failed due to invalid
 	// or malformed input arguments (schema violation, type mismatch, etc.).
@@ -50,6 +59,11 @@ func NewToolError(message string) *ToolError {
 // NewToolErrorWithCause wraps an existing error with a ToolError message.
 func NewToolErrorWithCause(message string, cause error) *ToolError {
 	return toolerrors.NewWithCause(message, cause)
+}
+
+// NewToolErrorWithKind constructs a ToolError with a stable machine-readable kind.
+func NewToolErrorWithKind(message string, kind ToolErrorKind) *ToolError {
+	return toolerrors.NewWithKind(message, kind)
 }
 
 // ToolErrorFromError converts an arbitrary error into a ToolError chain.

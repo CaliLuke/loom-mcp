@@ -213,6 +213,8 @@ func limitTerminalCall(plans *LimitTerminalPlans, reason planner.TerminationReas
 		return cloneLimitTerminalCall(plans.ToolCallCap), true, nil
 	case planner.TerminationReasonFailureCap:
 		return cloneLimitTerminalCall(plans.RecoveryCap), true, nil
+	case planner.TerminationReasonOutcomeUnknown:
+		return LimitTerminalCall{}, false, nil
 	default:
 		return LimitTerminalCall{}, false, fmt.Errorf("unsupported termination reason %q", reason)
 	}

@@ -157,7 +157,10 @@ Use this file for current loom-mcp runtime behavior in this repo. Prefer it over
 - The registry persists one admitted or rejected decision before provider
   execution for each stable run/tool-call identity. Exact replay returns that
   decision and result stream. After admission, lost routing certainty is
-  terminal `outcome_unknown`, not a safe planner retry.
+  terminal `outcome_unknown`, not a safe planner retry. The typed tool error kind
+  survives activity serialization and forces tool-free finalization, bypassing
+  configured terminal tool plans. Runs with a required completion tool fail
+  without further planning or execution. Warning text alone is not a classifier.
 - Providers claim before handler execution. Pulse redelivery observes claimed
   or terminal state and cannot repeat handler work. Stale generations settle
   queued calls as `stale_registration`.

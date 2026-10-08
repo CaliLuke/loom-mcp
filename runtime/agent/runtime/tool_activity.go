@@ -117,6 +117,7 @@ func newToolActivityOutput(resultJSON rawjson.Message, result *planner.ToolResul
 	}
 	if result.Error != nil {
 		resultOut.Error = result.Error.Error()
+		resultOut.ErrorKind = result.Error.Kind
 	}
 	if result.RetryHint != nil {
 		resultOut.RetryHint = result.RetryHint

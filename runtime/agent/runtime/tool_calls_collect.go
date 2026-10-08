@@ -169,6 +169,7 @@ func (e *toolBatchExec) decodeActivityToolResult(ctx context.Context, info futur
 	}
 	if out.Error != "" {
 		toolRes.Error = planner.NewToolError(out.Error)
+		toolRes.Error.Kind = out.ErrorKind
 	}
 	if err := e.r.enforceToolResultContracts(spec, info.call, toolRes); err != nil {
 		return nil, err

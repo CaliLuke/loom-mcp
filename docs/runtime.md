@@ -827,6 +827,14 @@ when unread backlog is full, and stream trimming is garbage collection only.
 The registry owns one absolute execution deadline and one later absolute result
 retention deadline for every call.
 
+The executor carries `outcome_unknown` as typed error metadata across activity
+and planner boundaries. The runtime stops ordinary recovery and requests an
+`outcome_unknown` finalization turn with no tools. It bypasses configured
+terminal tool plans and rejects any tool call returned by that finalizer.
+If the run requires a completion tool, it fails without further planning or tool
+execution instead of bypassing that completion requirement. Error message text
+alone does not select this behavior.
+
 ### Registry discovery & catalog sync (runtime/registry)
 
 If you need runtime discovery of toolsets and schemas (e.g., tool catalogs that change without a `loom gen`),

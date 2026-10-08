@@ -74,6 +74,20 @@ func TestRegistryValidationRetryHintKeepsNonMissingIssuesInvalid(t *testing.T) {
 	require.Empty(t, hint.ClarifyingQuestion)
 }
 
+func TestOutcomeUnknownResultCarriesTypedClassification(t *testing.T) {
+	t.Parallel()
+
+	exec := &Executor{}
+	call := &planner.ToolRequest{Name: "svc.effect"}
+	meta := &agentsruntime.ToolCallMeta{ToolCallID: "call-1"}
+
+	result := exec.outcomeUnknownResult(call, meta, fmt.Errorf("route lost"))
+
+	require.NotNil(t, result.Error)
+	require.Equal(t, planner.ToolErrorKindOutcomeUnknown, result.Error.Kind)
+	require.Contains(t, result.Error.Error(), "outcome_unknown")
+}
+
 func TestExecutorUsesOldestStartForResultStreamReader(t *testing.T) {
 	t.Parallel()
 

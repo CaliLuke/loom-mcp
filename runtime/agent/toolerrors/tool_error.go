@@ -14,9 +14,20 @@ import (
 type ToolError struct {
 	// Message is the human-readable summary of the failure.
 	Message string
+	// Kind is a stable machine-readable classification for runtime policy.
+	Kind Kind `json:"kind,omitempty"`
 	// Cause links to the underlying tool error, enabling error chains with errors.Is/As.
 	Cause *ToolError
 }
+
+// Kind classifies a tool error for runtime policy and durable workflow records.
+type Kind string
+
+const (
+	// KindOutcomeUnknown means execution may have caused an effect, but its
+	// terminal result could not be confirmed.
+	KindOutcomeUnknown Kind = "outcome_unknown"
+)
 
 // New constructs a ToolError with the provided message. Use when the failure does not
 // wrap an underlying error but still requires structured reporting.
@@ -38,10 +49,23 @@ func NewWithCause(message string, cause error) *ToolError {
 			message = "tool error"
 		}
 	}
+	toolCause := FromError(cause)
+	var kind Kind
+	if toolCause != nil {
+		kind = toolCause.Kind
+	}
 	return &ToolError{
 		Message: message,
-		Cause:   FromError(cause),
+		Kind:    kind,
+		Cause:   toolCause,
 	}
+}
+
+// NewWithKind constructs a ToolError with a stable machine-readable kind.
+func NewWithKind(message string, kind Kind) *ToolError {
+	toolErr := New(message)
+	toolErr.Kind = kind
+	return toolErr
 }
 
 // FromError converts an arbitrary error into a ToolError chain.
@@ -54,10 +78,12 @@ func FromError(err error) *ToolError {
 	if te, ok := err.(*ToolError); ok { //nolint:errorlint
 		return te
 	}
-	return &ToolError{
-		Message: err.Error(),
-		Cause:   FromError(errors.Unwrap(err)),
+	toolCause := FromError(errors.Unwrap(err))
+	var kind Kind
+	if toolCause != nil {
+		kind = toolCause.Kind
 	}
+	return &ToolError{Message: err.Error(), Kind: kind, Cause: toolCause}
 }
 
 // Errorf formats according to a format specifier and returns the string as a ToolError.

@@ -59,3 +59,23 @@ func TestToolErrorChainSurvivesJSONRoundTrip(t *testing.T) {
 	var asToolError *ToolError
 	assert.ErrorAs(t, &decoded, &asToolError)
 }
+
+func TestToolErrorKindSurvivesJSONRoundTrip(t *testing.T) {
+	original := NewWithKind("execution outcome is unknown", KindOutcomeUnknown)
+
+	payload, err := json.Marshal(original)
+	require.NoError(t, err)
+	var decoded ToolError
+	require.NoError(t, json.Unmarshal(payload, &decoded))
+
+	assert.Equal(t, KindOutcomeUnknown, decoded.Kind)
+}
+
+func TestToolErrorKindSurvivesWrapping(t *testing.T) {
+	typed := NewWithKind("execution outcome is unknown", KindOutcomeUnknown)
+	wrapped := NewWithCause("interceptor context", typed)
+	fromError := FromError(fmt.Errorf("interceptor context: %w", typed))
+
+	assert.Equal(t, KindOutcomeUnknown, wrapped.Kind)
+	assert.Equal(t, KindOutcomeUnknown, fromError.Kind)
+}

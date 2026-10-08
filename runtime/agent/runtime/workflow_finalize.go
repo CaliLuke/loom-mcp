@@ -43,14 +43,19 @@ func (r *Runtime) finalizeWithPlanner(
 	if base == nil {
 		return nil, errors.New("base plan input is required")
 	}
+	if resultsContainOutcomeUnknown(allToolResults) {
+		reason = planner.TerminationReasonOutcomeUnknown
+	}
 	if completion := completionTool(input); completion != "" {
 		return nil, completionToolRequiredError(completion, reason)
 	}
-	out, handled, err := r.executeFixedLimitTerminalPlan(
-		wfCtx, reg, input, base, allToolResults, aggUsage, caps, nextAttempt, turnID, notes, reason, hardDeadline,
-	)
-	if err != nil || handled {
-		return out, err
+	if reason != planner.TerminationReasonOutcomeUnknown {
+		out, handled, err := r.executeFixedLimitTerminalPlan(
+			wfCtx, reg, input, base, allToolResults, aggUsage, caps, nextAttempt, turnID, notes, reason, hardDeadline,
+		)
+		if err != nil || handled {
+			return out, err
+		}
 	}
 	return r.finalizeWithModelPlan(
 		wfCtx, reg, input, base, allToolResults, allToolOutputs, aggUsage, caps, nextAttempt, turnID, reason, hardDeadline,
@@ -179,7 +184,7 @@ func (r *Runtime) runFinalizationPlan(
 	if err != nil {
 		return nil, aggUsage, fmt.Errorf("%s: %w", reasonText, err)
 	}
-	if err := validateFinalizePlanOutput(output, reasonText); err != nil {
+	if err := validateFinalizePlanOutput(output, reasonText, reason); err != nil {
 		return nil, aggUsage, err
 	}
 	combinedUsage, err := checkedAddTokenUsage(aggUsage, output.Usage)
@@ -193,11 +198,14 @@ func (r *Runtime) runFinalizationPlan(
 	return output, aggUsage, nil
 }
 
-func validateFinalizePlanOutput(output *PlanActivityOutput, reasonText string) error {
+func validateFinalizePlanOutput(output *PlanActivityOutput, reasonText string, reason planner.TerminationReason) error {
 	if output == nil || output.Result == nil {
 		return fmt.Errorf("%s", reasonText)
 	}
 	if len(output.Result.ToolCalls) > 0 {
+		if reason == planner.TerminationReasonOutcomeUnknown {
+			return fmt.Errorf("%s: tool calls are not allowed after an unknown execution outcome", reasonText)
+		}
 		if output.Result.FinalResponse != nil || output.Result.FinalToolResult != nil || output.Result.Await != nil {
 			return fmt.Errorf("%s: finalization tool calls cannot be combined with terminal output or await", reasonText)
 		}
@@ -295,7 +303,9 @@ func (r *Runtime) buildFinalizePlanRequest(
 		ToolPolicyActive: true,
 		PolicyCaps:       caps,
 	}
-	req.AllowedTools = r.terminalFinalizerToolNames(reg, input)
+	if reason != planner.TerminationReasonOutcomeUnknown {
+		req.AllowedTools = r.terminalFinalizerToolNames(reg, input)
+	}
 
 	if err := enforcePlanActivityInputBudget(req); err != nil {
 		return PlanActivityInput{}, "", err
@@ -344,6 +354,8 @@ func finalizationHint(reason planner.TerminationReason) string {
 		return "FINALIZE NOW: tool budget exhausted.\n\n- Provide the best possible final answer using ONLY the information already available in the conversation and tool results." + terminalToolGuidance + "\n- Do NOT say you will call tools.\n- If further domain tool calls would be needed, describe them briefly and provide the best provisional answer."
 	case planner.TerminationReasonFailureCap:
 		return "FINALIZE NOW: recovery budget exhausted.\n\n- Provide the best possible final answer using ONLY the information already available in the conversation and tool results." + terminalToolGuidance + "\n- Do NOT say you will call tools.\n- A model or tool result could not be accepted after bounded retries. State what remains uncertain, then provide the best provisional answer."
+	case planner.TerminationReasonOutcomeUnknown:
+		return "FINALIZE NOW: a tool execution outcome is unknown.\n\n- Do NOT call any tools or issue a replacement call. The original effect may already have occurred.\n- Use only the information already available in the conversation and tool results. State clearly what remains uncertain."
 	default:
 		return "FINALIZE NOW.\n\n- Provide the best possible final answer using ONLY the information already available in the conversation and tool results." + terminalToolGuidance + "\n- Do NOT say you will call tools.\n- If more work is needed, describe it succinctly and provide the best provisional answer."
 	}
@@ -404,6 +416,8 @@ func finalizationReasonText(reason planner.TerminationReason) string {
 		return "tool call cap exceeded"
 	case planner.TerminationReasonFailureCap:
 		return "recovery turn cap exceeded"
+	case planner.TerminationReasonOutcomeUnknown:
+		return "tool execution outcome is unknown"
 	default:
 		return "finalization failed"
 	}

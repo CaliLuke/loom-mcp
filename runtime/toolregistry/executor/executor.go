@@ -478,10 +478,12 @@ func (e *Executor) outcomeUnknownResult(
 		toolregistry.ToolErrorCodeOutcomeUnknown,
 		err,
 	)
+	outcomeToolErr := planner.NewToolErrorWithCause(outcomeErr.Error(), err)
+	outcomeToolErr.Kind = planner.ToolErrorKindOutcomeUnknown
 	return &planner.ToolResult{
 		Name:       call.Name,
 		ToolCallID: meta.ToolCallID,
-		Error:      planner.ToolErrorFromError(outcomeErr),
+		Error:      outcomeToolErr,
 	}
 }
 

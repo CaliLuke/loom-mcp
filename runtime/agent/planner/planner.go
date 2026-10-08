@@ -619,6 +619,10 @@ const (
 
 	// TerminationReasonFailureCap indicates the run exhausted its recovery-turn allowance.
 	TerminationReasonFailureCap TerminationReason = "failure_cap"
+
+	// TerminationReasonOutcomeUnknown indicates a tool may have caused an effect,
+	// but the runtime could not confirm its terminal result.
+	TerminationReasonOutcomeUnknown TerminationReason = "outcome_unknown"
 )
 
 // Termination carries a runtime-initiated finalize request.

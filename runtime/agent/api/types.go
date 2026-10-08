@@ -505,6 +505,10 @@ type (
 		// Error is a plain-text error message when tool execution failed.
 		Error string
 
+		// ErrorKind carries a stable machine-readable classification when policy
+		// must distinguish this failure across the activity boundary.
+		ErrorKind planner.ToolErrorKind
+
 		// RetryHint provides structured retry guidance when execution failed due to invalid payloads.
 		RetryHint *planner.RetryHint
 

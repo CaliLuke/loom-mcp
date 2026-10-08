@@ -309,6 +309,13 @@ func (r *Runtime) resumeAfterToolTurn(
 	deadlines *runDeadlines,
 	turnID string,
 ) (*RunOutput, error) {
+	if toolOutputsContainOutcomeUnknown(st.ToolOutputs) {
+		return r.finalizeWithPlanner(
+			wfCtx, reg, input, base, st.ToolEvents, st.ToolOutputs, st.AggUsage, st.Caps,
+			st.NextAttempt, turnID, plannerResultNotes(st.Result),
+			planner.TerminationReasonOutcomeUnknown, deadlines.Hard,
+		)
+	}
 	policyResult, err := r.preparePrePlanToolPolicy(wfCtx.Context(), reg, input, base, st.Caps, turnID)
 	if err != nil {
 		return nil, err
@@ -599,6 +606,13 @@ func (r *Runtime) applyFailureAndProtectionPolicy(
 	deadlines *runDeadlines,
 	vals []*planner.ToolResult,
 ) (*RunOutput, error) {
+	if resultsContainOutcomeUnknown(vals) {
+		return r.finalizeWithPlanner(
+			wfCtx, reg, input, base, st.ToolEvents, st.ToolOutputs, st.AggUsage, st.Caps,
+			st.NextAttempt, turnID, plannerResultNotes(st.Result),
+			planner.TerminationReasonOutcomeUnknown, deadlines.Hard,
+		)
+	}
 	resetRecoveryTurnsAfterResults(r, &st.Caps, vals)
 	if resultsRequireRecovery(vals) {
 		if !consumeRecoveryTurn(&st.Caps) {
