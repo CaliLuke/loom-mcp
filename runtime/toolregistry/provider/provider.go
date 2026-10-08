@@ -484,11 +484,12 @@ func serve(
 						"tool", item.msg.Tool,
 						"err", handlerErr,
 					)
-					res = toolregistry.NewToolResultErrorMessage(
+					res = toolregistry.NewToolResultServiceErrorMessage(
 						item.msg.RegistrationToken,
 						item.msg.ToolUseID,
+						item.msg.Tool,
 						"execution_failed",
-						handlerErr.Error(),
+						handlerErr,
 					)
 				}
 				res.RegistrationToken = item.msg.RegistrationToken

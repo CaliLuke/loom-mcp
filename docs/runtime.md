@@ -3223,6 +3223,12 @@ if toolerrors.IsRetryable(err) {
 
 ### Validation Issues and Retry Hints
 
+When a custom registry provider handler returns a Go error, `provider.Serve`
+keeps its details in local logs and traces. The completed tool result exposes
+only an explicit Loom error remedy's safe message, or `tool execution failed`
+when no safe message is provided. Do not rely on raw error strings reaching
+registry consumers or model input.
+
 Tool calls can fail because the input payload is missing fields, violates constraints,
 or has the wrong JSON shape. When that happens, callers generally need actionable,
 field-level feedback rather than a generic failure string.
