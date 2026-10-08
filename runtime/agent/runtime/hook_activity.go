@@ -31,9 +31,10 @@ const hookActivityName = "runtime.publish_hook"
 //   - After the session is ended, stream emission becomes a no-op to avoid
 //     "stream destroyed mid-run" turning into spurious run failures.
 //   - One-shot runs (empty SessionID) bypass SessionStore and stream sinks.
-//   - Publishing to the hook bus is best-effort. The bus drives derived storage
-//     (memory) and local observability, but it must not be allowed to corrupt or
-//     block the canonical transcript.
+//   - For ordinary events, hook-bus subscriber errors fail the activity unless
+//     the subscriber was registered with SubscriberBestEffort, which logs and
+//     swallows its errors. A canonical presentation commit treats bus delivery
+//     as best-effort after its canonical append succeeds.
 func (r *Runtime) hookActivity(ctx context.Context, input *HookActivityInput) error {
 	stopHeartbeat := startActivityHeartbeat(ctx)
 	defer stopHeartbeat()
