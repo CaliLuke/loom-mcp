@@ -83,6 +83,9 @@ Use this file when editing DSL, generators, generated helpers, or MCP codegen be
   `Meta("oneof:type:tag", "...")` across MCP schemas, agent tool schemas,
   and generated union helpers. Do not fall back to derived type names when an
   explicit tag is present.
+- Reject agent tool union branch names that normalize to the same Go identifier
+  during DSL validation, before helper type identities can collide in generation.
+  Apply this to nested Args and Return unions and identify both authored names.
 - Preserve custom union envelope keys from `Meta("oneof:type:field", "...")`
   and `Meta("oneof:value:field", "...")` in schemas, examples, validation,
   and generated marshal/unmarshal methods.

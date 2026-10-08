@@ -329,6 +329,8 @@ func (t *ToolExpr) Validate() error {
 		validateInjectedFields(t, injectTargets(t, nil), verr)
 		if err := t.validateShapes(); err != nil {
 			verr.AddError(t, err)
+		} else {
+			validateUnionVariantGoIdentifiers(t, verr)
 		}
 		if len(verr.Errors) == 0 {
 			return nil
@@ -355,6 +357,7 @@ func (t *ToolExpr) Validate() error {
 				verr.AddError(t, err)
 				return verr
 			}
+			validateUnionVariantGoIdentifiers(t, verr)
 			if len(verr.Errors) == 0 {
 				return nil
 			}
@@ -363,6 +366,63 @@ func (t *ToolExpr) Validate() error {
 	}
 	verr.Add(t, "service method %q not found in service %q", t.bindMethodName, svc.Name)
 	return verr
+}
+
+// validateUnionVariantGoIdentifiers rejects branches that generate the same Go identifiers.
+func validateUnionVariantGoIdentifiers(t *ToolExpr, verr *eval.ValidationErrors) {
+	for _, input := range []struct {
+		name string
+		att  *goaexpr.AttributeExpr
+	}{
+		{name: "Args", att: t.Args},
+		{name: "Return", att: t.Return},
+	} {
+		validateUnionVariantGoIdentifiersIn(t, input.name, input.att, verr)
+	}
+}
+
+func validateUnionVariantGoIdentifiersIn(t *ToolExpr, surface string, att *goaexpr.AttributeExpr, verr *eval.ValidationErrors) {
+	if att == nil || att.Type == nil || att.Type == goaexpr.Empty {
+		return
+	}
+	seen := make(map[string]struct{})
+	err := codegen.Walk(att, func(att *goaexpr.AttributeExpr) error {
+		if att == nil || att.Type == nil {
+			return nil
+		}
+		union, ok := att.Type.(*goaexpr.Union)
+		if !ok {
+			return nil
+		}
+		if _, ok := seen[union.Hash()]; ok {
+			return nil
+		}
+		seen[union.Hash()] = struct{}{}
+		validateUnionVariantGoIdentifiersInUnion(t, surface, union, verr)
+		return nil
+	})
+	if err != nil {
+		verr.AddError(t, err)
+	}
+}
+
+func validateUnionVariantGoIdentifiersInUnion(t *ToolExpr, surface string, union *goaexpr.Union, verr *eval.ValidationErrors) {
+	unionPath := union.TypeName
+	if unionPath == "" {
+		unionPath = "<anonymous>"
+	}
+	identifiers := make(map[string]string, len(union.Values))
+	for _, variant := range union.Values {
+		if variant == nil || variant.Name == "" {
+			continue
+		}
+		identifier := codegen.Goify(variant.Name, true)
+		if other, exists := identifiers[identifier]; exists {
+			verr.Add(t, "%s union %q has variants %q and %q that both normalize to Go identifier %q", surface, unionPath, other, variant.Name, identifier)
+			continue
+		}
+		identifiers[identifier] = variant.Name
+	}
 }
 
 func validateHintTemplates(t *ToolExpr, verr *eval.ValidationErrors) {

@@ -995,6 +995,11 @@ the MCP schema, agent tool schemas, and related generated contracts rather than
 falling back to derived type names. This is the schema clients receive from
 `tools/list`.
 
+Agent tool union branch names must map to distinct Go identifiers. The DSL
+rejects collisions before generation: for example, `foo_bar` and `fooBar` both
+map to `FooBar`. Rename one branch and use `Meta("oneof:type:tag", "...")` when
+you need to preserve its wire discriminator.
+
 Custom envelope keys declared with `Meta("oneof:type:field", "action")` and
 `Meta("oneof:value:field", "payload")` are also authoritative. Generated
 schemas, examples, validation errors, and JSON marshal/unmarshal methods all use
