@@ -3260,6 +3260,8 @@ rt.RegisterModel("bedrock", limitedClient)
 The rate limiter adjusts throughput with additive-increase/multiplicative-
 decrease (AIMD) when provider calls report rate limits or successful probes. It
 does not retry the request or implement time-based exponential backoff.
+Cluster coordination preserves fractional TPM values in the shared rate, including
+backoff floors and probe ceilings.
 Capacity reduction and recovery adjust only the bucket's refill rate; the burst
 capacity stays pinned at the
 configured max TPM, so a request whose estimated cost fits within max TPM always

@@ -432,7 +432,7 @@ func seedClusterRateLimit(ctx context.Context, m clusterMap, key string, initial
 	if _, ok := m.Get(key); ok {
 		return true
 	}
-	_, err := m.SetIfNotExists(ctx, key, strconv.Itoa(int(initialTPM)))
+	_, err := m.SetIfNotExists(ctx, key, strconv.FormatFloat(initialTPM, 'g', -1, 64))
 	return err == nil
 }
 
@@ -524,7 +524,7 @@ func globalBackoff(ctx context.Context, m clusterMap, key string, floor float64)
 		if next < floor {
 			next = floor
 		}
-		nextStr := strconv.Itoa(int(next))
+		nextStr := strconv.FormatFloat(next, 'g', -1, 64)
 		prev, err := m.TestAndSet(ctx, key, curStr, nextStr)
 		if err != nil {
 			return
@@ -557,7 +557,7 @@ func globalProbe(ctx context.Context, m clusterMap, key string, step, ceiling fl
 		if next > ceiling {
 			next = ceiling
 		}
-		nextStr := strconv.Itoa(int(next))
+		nextStr := strconv.FormatFloat(next, 'g', -1, 64)
 		prev, err := m.TestAndSet(ctx, key, curStr, nextStr)
 		if err != nil {
 			return
