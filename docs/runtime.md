@@ -1629,6 +1629,9 @@ metadata or prompt references, but they cannot replace that terminal outcome or
 reopen the run as pending, running, or paused. This makes retrying concurrent
 terminal hook projections safe across in-memory and Mongo-backed stores.
 
+Ending a session is also idempotent: the first committed `EndedAt` remains
+authoritative, including when concurrent callers request different timestamps.
+
 `ToolCallArgsDelta` is intentionally excluded from the durable run event log and
 hook bus because it is a high-volume, best-effort UX signal. The finalized tool
 call remains canonical. `transcript.BuildMessagesFromEvents` consumes

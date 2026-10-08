@@ -177,7 +177,7 @@ func (c *client) EndSession(ctx context.Context, sessionID string, endedAt time.
 	ctx, cancel := c.withTimeout(ctx)
 	defer cancel()
 
-	filter := bson.M{fieldSessionID: sessionID}
+	filter := bson.M{fieldSessionID: sessionID, fieldStatus: session.StatusActive}
 	update := bson.M{
 		mongoSetOperator: bson.M{
 			fieldStatus:    session.StatusEnded,

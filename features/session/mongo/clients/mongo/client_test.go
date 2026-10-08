@@ -592,6 +592,9 @@ func (c *fakeSessionsCollection) UpdateOne(ctx context.Context, filter any, upda
 
 	sessionID := filter.(bson.M)["session_id"].(string)
 	doc, ok := c.docs[sessionID]
+	if status, filtered := filter.(bson.M)[fieldStatus]; filtered && (!ok || doc.Status != status) {
+		return &mongodriver.UpdateResult{}, nil
+	}
 	if !ok {
 		doc = sessionDocument{}
 	}
