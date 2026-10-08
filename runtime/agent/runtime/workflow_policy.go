@@ -147,7 +147,7 @@ func (r *Runtime) preparePrePlanToolPolicy(
 		if decision.DisableTools {
 			allowed = nil
 		} else {
-			allowed = allowedPolicyCalls(candidates, decision.AllowedTools)
+			allowed = filterToolCalls(candidates, decision.AllowedTools)
 		}
 		caps = mergeCaps(caps, decision.Caps)
 		evt := hooks.NewPolicyDecisionEvent(
@@ -222,7 +222,8 @@ func (r *Runtime) applyRuntimePolicy(
 	if decision.DisableTools {
 		return nil, caps, decision.Labels, nil, errors.New("tool execution disabled by policy")
 	}
-	allowed := allowedPolicyCalls(candidates, decision.AllowedTools)
+	allowedTools := append(slices.Clone(decision.AllowedTools), tools.ToolUnavailable)
+	allowed := filterToolCalls(candidates, allowedTools)
 	caps = mergeCaps(caps, decision.Caps)
 	evt := hooks.NewPolicyDecisionEvent(
 		base.RunContext.RunID,
@@ -262,13 +263,6 @@ func applyPolicyLabels(base *planner.PlanInput, input *RunInput, labels map[stri
 	}
 	base.RunContext.Labels = mergeLabels(base.RunContext.Labels, labels)
 	input.Labels = mergeLabels(input.Labels, labels)
-}
-
-func allowedPolicyCalls(candidates []planner.ToolRequest, allowed []tools.Ident) []planner.ToolRequest {
-	if len(allowed) == 0 {
-		return candidates
-	}
-	return filterToolCalls(candidates, allowed)
 }
 
 // capAllowedCalls admits or rejects one provider tool-call batch as a whole.

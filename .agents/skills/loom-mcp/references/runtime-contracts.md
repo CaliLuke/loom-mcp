@@ -250,6 +250,12 @@ Use this file for current loom-mcp runtime behavior in this repo. Prefer it over
   keep tool calls as `model.ToolCall` values so the runtime, not the provider
   adapter, owns tool execution and unknown-tool recovery.
 
+## Policy Decisions
+
+- `policy.Decision.AllowedTools` is authoritative. Nil or empty denies every
+  ordinary tool at planning and execution. Only an absent policy engine leaves
+  all candidates available, subject to per-run overrides.
+
 ## Tool Execution Contracts
 
 - Runtime-owned tool specs and codecs are the schema source of truth.

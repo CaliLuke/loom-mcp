@@ -7,6 +7,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/CaliLuke/loom-mcp/v2/features/policy/basic"
 	agent "github.com/CaliLuke/loom-mcp/v2/runtime/agent"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/api"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/hooks"
@@ -246,7 +247,7 @@ func TestApplyPolicyEnvelopePreservesToolUnavailable(t *testing.T) {
 func TestPreparePrePlanToolPolicyDoesNotCapAdvertisedTools(t *testing.T) {
 	rt := &Runtime{
 		Bus:           noopHooks{},
-		Policy:        &stubPolicyEngine{decision: policy.Decision{}},
+		Policy:        &stubPolicyEngine{decision: policy.Decision{AllowedTools: []tools.Ident{"one", "two"}}},
 		RunEventStore: runloginmem.New(),
 		logger:        telemetry.NoopLogger{},
 		toolSpecs: map[tools.Ident]tools.ToolSpec{
@@ -267,6 +268,64 @@ func TestPreparePrePlanToolPolicyDoesNotCapAdvertisedTools(t *testing.T) {
 	}, "turn-1")
 	require.NoError(t, err)
 	assert.Equal(t, []tools.Ident{tools.Ident("one"), tools.Ident("two")}, result.Envelope.Allowed)
+}
+
+func TestEmptyPolicyAllowlistBlocksPlanningAndExecution(t *testing.T) {
+	blocked, err := basic.New(basic.Options{BlockTools: []string{"one", "two"}})
+	require.NoError(t, err)
+	for _, tc := range []struct {
+		name   string
+		engine policy.Engine
+	}{
+		{name: "nil allowlist", engine: &stubPolicyEngine{decision: policy.Decision{}}},
+		{name: "empty allowlist", engine: &stubPolicyEngine{decision: policy.Decision{AllowedTools: []tools.Ident{}}}},
+		{name: "basic blocks all", engine: blocked},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			rt := &Runtime{
+				Bus: noopHooks{}, Policy: tc.engine, RunEventStore: runloginmem.New(),
+				logger: telemetry.NoopLogger{}, metrics: telemetry.NoopMetrics{}, tracer: telemetry.NoopTracer{},
+				toolSpecs: map[tools.Ident]tools.ToolSpec{
+					"one": newAnyJSONSpec("one", "svc.tools"),
+					"two": newAnyJSONSpec("two", "svc.tools"),
+				},
+			}
+			input := &RunInput{AgentID: "svc.agent", RunID: "run-1"}
+			base := &planner.PlanInput{RunContext: run.Context{RunID: input.RunID}}
+			reg := AgentRegistration{ID: input.AgentID, Planner: &stubPlanner{}, ExecuteToolActivity: "execute", ResumeActivityName: "resume"}
+			initial := &planner.PlanResult{ToolCalls: []planner.ToolRequest{{Name: "one"}, {Name: "two"}}}
+			ctx := context.Background()
+			got, err := rt.preparePrePlanToolPolicy(ctx, reg, input, base, policy.CapsState{}, "turn-1")
+			require.NoError(t, err)
+			assert.True(t, got.Envelope.Active)
+			assert.Empty(t, got.Envelope.Allowed)
+
+			direct, err := rt.applyPolicy(ctx, base, input, initial.ToolCalls, policy.CapsState{}, "turn-1", nil, toolPolicyEnvelope{})
+			require.NoError(t, err)
+			assert.Empty(t, direct.AllowedCalls)
+
+			wfCtx := &testWorkflowContext{ctx: ctx, hookRuntime: rt}
+			out, err := rt.runLoop(wfCtx, reg, input, base, initial, nil, model.TokenUsage{}, got.Caps, time.Time{}, time.Time{}, 2, "turn-1", nil, nil, 0, got.Envelope)
+			require.ErrorContains(t, err, "no tools allowed for execution")
+			assert.Nil(t, out)
+			assert.Empty(t, wfCtx.lastToolCall.Name, "a blocked tool must never be scheduled")
+		})
+	}
+}
+
+func TestApplyRuntimePolicyPreservesToolUnavailable(t *testing.T) {
+	for _, allowed := range [][]tools.Ident{nil, {"allowed"}} {
+		rt := &Runtime{
+			Bus: noopHooks{}, RunEventStore: runloginmem.New(), logger: telemetry.NoopLogger{},
+			Policy: &stubPolicyEngine{decision: policy.Decision{AllowedTools: allowed}},
+		}
+		base := &planner.PlanInput{RunContext: run.Context{RunID: "run-1"}}
+		input := &RunInput{AgentID: "svc.agent", RunID: "run-1"}
+		calls := []planner.ToolRequest{{Name: "blocked"}, {Name: tools.ToolUnavailable}}
+		got, err := rt.applyPolicy(context.Background(), base, input, calls, policy.CapsState{}, "turn-1", nil, toolPolicyEnvelope{})
+		require.NoError(t, err)
+		assert.Equal(t, []tools.Ident{tools.ToolUnavailable}, toolHandles(got.AllowedCalls))
+	}
 }
 
 func TestMergeCapsIgnoresDeprecatedExpiresAt(t *testing.T) {

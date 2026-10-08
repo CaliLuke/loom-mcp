@@ -1665,6 +1665,11 @@ type Decision struct {
 }
 ```
 
+`AllowedTools` is authoritative: a nil or empty list permits no ordinary tools.
+The runtime applies it to both the planner catalog and execution, so a planner
+cannot bypass it by returning a blocked call. With no policy engine configured,
+all candidates remain available subject to per-run overrides.
+
 ### Caps State
 
 ```go
