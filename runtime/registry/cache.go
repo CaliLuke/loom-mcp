@@ -23,6 +23,7 @@ type RefreshFunc func(ctx context.Context, key string) (*ToolsetSchema, error)
 
 // MemoryCache is an in-memory cache implementation with TTL support
 // and optional background refresh.
+// Concurrent Set, Delete, and Clear operations supersede in-flight refreshes.
 type MemoryCache struct {
 	mu                 sync.RWMutex
 	refreshLifecycleMu sync.Mutex
@@ -233,7 +234,7 @@ func (c *MemoryCache) refreshLoop(ctx context.Context) {
 			if err != nil {
 				continue
 			}
-			c.storeRefreshedEntry(key, entry.ttl, schema)
+			c.storeRefreshedEntry(key, entry, schema)
 			refreshed[key] = time.Now()
 
 			// Clean up old refresh tracking entries periodically
@@ -261,14 +262,18 @@ func (c *MemoryCache) refreshEntrySnapshot(key string) (*cacheEntry, bool) {
 	return entry, exists
 }
 
-func (c *MemoryCache) storeRefreshedEntry(key string, ttl time.Duration, schema *ToolsetSchema) {
+// storeRefreshedEntry publishes only if the refreshed entry is still current.
+func (c *MemoryCache) storeRefreshedEntry(key string, entry *cacheEntry, schema *ToolsetSchema) {
 	c.mu.Lock()
+	defer c.mu.Unlock()
+	if c.entries[key] != entry {
+		return
+	}
 	c.entries[key] = &cacheEntry{
 		schema:    schema,
-		expiresAt: time.Now().Add(ttl),
-		ttl:       ttl,
+		expiresAt: time.Now().Add(entry.ttl),
+		ttl:       entry.ttl,
 	}
-	c.mu.Unlock()
 }
 
 func (c *MemoryCache) deleteExpiredEntry(key string, expired *cacheEntry) {

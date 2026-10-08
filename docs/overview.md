@@ -536,6 +536,10 @@ tools for the replacement turn.
 
 ### Registry & Federation
 
+`runtime/registry.MemoryCache` supports optional background schema refresh.
+An in-flight refresh cannot overwrite a later `Set` or restore an entry removed
+by `Delete` or `Clear`.
+
 | Function                     | Purpose                                             |
 | ---------------------------- | --------------------------------------------------- |
 | `Registry(name, func()?)`    | Declare a registry source for tool discovery        |
