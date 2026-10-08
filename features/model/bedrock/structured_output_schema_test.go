@@ -55,6 +55,72 @@ func TestNormalizeBedrockSchemaRecursesThroughEverySchemaKeyword(t *testing.T) {
 	}
 }
 
+func TestNormalizeBedrockSchemaPreservesIntegerPrecision(t *testing.T) {
+	for _, tc := range []struct {
+		name   string
+		schema string
+		want   []string
+	}{
+		{
+			name:   "const",
+			schema: `{"type":"integer","const":9007199254740993}`,
+			want:   []string{`"const":9007199254740993`},
+		},
+		{
+			name:   "enum",
+			schema: `{"type":"integer","enum":[9007199254740993,9007199254740994]}`,
+			want:   []string{`"enum":[9007199254740993,9007199254740994]`},
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			out, err := normalizeStructuredOutputSchemaForBedrock([]byte(tc.schema))
+			require.NoError(t, err)
+			for _, token := range tc.want {
+				assert.Contains(t, string(out), token)
+			}
+			assert.NotContains(t, string(out), `9007199254740992`)
+		})
+	}
+}
+
+func TestNormalizeBedrockSchemaKeepsSupportedMinItemsNumbers(t *testing.T) {
+	for _, tc := range []struct {
+		name  string
+		value string
+		want  string
+	}{
+		{name: "zero", value: "0", want: `"minItems":0`},
+		{name: "one", value: "1", want: `"minItems":1`},
+		{name: "decimal one", value: "1.0", want: `"minItems":1.0`},
+		{name: "exponent one", value: "1e0", want: `"minItems":1e0`},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			schema := []byte(`{"type":"array","minItems":` + tc.value + `}`)
+			out, err := normalizeStructuredOutputSchemaForBedrock(schema)
+			require.NoError(t, err)
+			assert.Contains(t, string(out), tc.want)
+		})
+	}
+}
+
+func TestNormalizeBedrockSchemaStripsUnsupportedMinItemsNumbers(t *testing.T) {
+	for _, value := range []string{"2", "1.5", "18446744073709551616"} {
+		t.Run(value, func(t *testing.T) {
+			schema := []byte(`{"type":"array","minItems":` + value + `}`)
+			out, err := normalizeStructuredOutputSchemaForBedrock(schema)
+			require.NoError(t, err)
+			assert.NotContains(t, string(out), `"minItems"`)
+		})
+	}
+}
+
+func TestNormalizeBedrockSchemaRejectsInvalidJSON(t *testing.T) {
+	for _, raw := range []string{`{"type":"integer","const":1,"const":2}`, `{"type":"integer"} {}`, "{\"description\":\"\xff\"}", `{"type":"integer","const":`} {
+		_, err := normalizeStructuredOutputSchemaForBedrock([]byte(raw))
+		require.Error(t, err, raw)
+	}
+}
+
 func nestedBedrockObjectSchema() map[string]any {
 	return map[string]any{
 		"type":  "object",

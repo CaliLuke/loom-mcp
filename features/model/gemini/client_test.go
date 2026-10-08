@@ -452,6 +452,46 @@ func TestClientCompleteSupportsStructuredOutput(t *testing.T) {
 	}, normalizeJSONValue(t, mock.config.ResponseJsonSchema))
 }
 
+func TestClientCompletePreservesStructuredOutputIntegerPrecision(t *testing.T) {
+	for _, tc := range []struct {
+		name   string
+		schema string
+		want   string
+	}{
+		{name: "const", schema: `{"type":"integer","const":9007199254740993}`, want: `"const":9007199254740993`},
+		{name: "enum", schema: `{"type":"integer","enum":[9007199254740993,9007199254740994]}`, want: `"enum":[9007199254740993,9007199254740994]`},
+		{name: "minimum", schema: `{"type":"integer","minimum":9007199254740993}`, want: `"minimum":9007199254740993`},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			mock := &mockModelsClient{response: &genai.GenerateContentResponse{}}
+			client, err := geminimodel.New(geminimodel.Options{Client: mock, DefaultModel: "gemini-2.5-flash"})
+			require.NoError(t, err)
+			_, err = client.Complete(context.Background(), &model.Request{
+				Messages:         []*model.Message{{Role: model.ConversationRoleUser, Parts: []model.Part{model.TextPart{Text: "ping"}}}},
+				StructuredOutput: &model.StructuredOutput{Name: "number", Schema: []byte(tc.schema)},
+			})
+			require.NoError(t, err)
+			encoded, err := json.Marshal(mock.config.ResponseJsonSchema)
+			require.NoError(t, err)
+			require.Contains(t, string(encoded), tc.want)
+			require.NotContains(t, string(encoded), `9007199254740992`)
+		})
+	}
+}
+
+func TestClientCompleteRejectsInvalidStructuredOutputJSON(t *testing.T) {
+	for _, raw := range []string{`{"type":"integer","const":1,"const":2}`, `{"type":"integer"} {}`, "{\"description\":\"\xff\"}", `{"type":"integer","const":`} {
+		mock := &mockModelsClient{response: &genai.GenerateContentResponse{}}
+		client, err := geminimodel.New(geminimodel.Options{Client: mock, DefaultModel: "gemini-2.5-flash"})
+		require.NoError(t, err)
+		_, err = client.Complete(context.Background(), &model.Request{
+			Messages:         []*model.Message{{Role: model.ConversationRoleUser, Parts: []model.Part{model.TextPart{Text: "ping"}}}},
+			StructuredOutput: &model.StructuredOutput{Name: "invalid", Schema: []byte(raw)},
+		})
+		require.Error(t, err, raw)
+	}
+}
+
 func TestClientCompleteRejectsStructuredOutputWithTools(t *testing.T) {
 	mock := &mockModelsClient{response: &genai.GenerateContentResponse{}}
 	client, err := geminimodel.New(geminimodel.Options{

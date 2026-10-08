@@ -382,8 +382,8 @@ func normalizeStructuredOutputSchema(schema rawjson.Message) (any, error) {
 	if len(schema) == 0 {
 		return nil, errors.New("gemini: structured output schema is required")
 	}
-	var out any
-	if err := json.Unmarshal(schema, &out); err != nil {
+	out, err := model.DecodeSchemaJSON(schema)
+	if err != nil {
 		return nil, fmt.Errorf("gemini: structured output schema must be valid JSON: %w", err)
 	}
 	return out, nil

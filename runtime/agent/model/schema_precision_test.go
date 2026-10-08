@@ -50,7 +50,7 @@ func TestRequestContractPreservesIntegerBounds(t *testing.T) {
 
 func TestDecodeSchemaJSONRetainsStrictValidation(t *testing.T) {
 	for _, raw := range []string{`{"value":1,"value":2}`, `{"value":1} {}`, "{\"value\":\"\xff\"}", `{"value":`} {
-		_, err := decodeSchemaJSON([]byte(raw))
+		_, err := DecodeSchemaJSON([]byte(raw))
 		assert.Error(t, err)
 	}
 }

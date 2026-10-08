@@ -6,11 +6,11 @@ package registry
 
 import (
 	"crypto/sha256"
-	"encoding/json/v2"
 	"fmt"
 	"sync"
 
 	genregistry "github.com/CaliLuke/loom-mcp/v2/registry/gen/registry"
+	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/model"
 	"github.com/santhosh-tekuri/jsonschema/v6"
 )
 
@@ -71,8 +71,8 @@ func (v *schemaValidator) ValidatePayload(schemaBytes []byte, payloadJSON []byte
 		return err
 	}
 
-	var payloadDoc any
-	if err := json.Unmarshal(payloadJSON, &payloadDoc); err != nil {
+	payloadDoc, err := model.DecodeSchemaJSON(payloadJSON)
+	if err != nil {
 		return fmt.Errorf("unmarshal payload: %w", err)
 	}
 	if err := schema.Validate(payloadDoc); err != nil {
@@ -122,8 +122,8 @@ func (v *schemaValidator) compiledSchema(schemaBytes []byte) (*jsonschema.Schema
 		return schema, nil
 	}
 
-	var schemaDoc any
-	if err := json.Unmarshal(schemaBytes, &schemaDoc); err != nil {
+	schemaDoc, err := model.DecodeSchemaJSON(schemaBytes)
+	if err != nil {
 		return nil, fmt.Errorf("unmarshal schema: %w", err)
 	}
 

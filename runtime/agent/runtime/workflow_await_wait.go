@@ -3,7 +3,6 @@ package runtime
 import (
 	"context"
 	"encoding/json/jsontext"
-	"encoding/json/v2"
 	"errors"
 	"fmt"
 	"strings"
@@ -118,8 +117,8 @@ func waitAwaitTypedInput(ctx context.Context, ctrl *interrupt.Controller, st *ru
 }
 
 func validateTypedInputPayload(schemaJSON rawjson.Message, payload rawjson.Message) error {
-	var schemaDoc any
-	if err := json.Unmarshal(schemaJSON.RawMessage(), &schemaDoc); err != nil {
+	schemaDoc, err := model.DecodeSchemaJSON(schemaJSON.RawMessage())
+	if err != nil {
 		return fmt.Errorf("await typed_input: invalid schema: %w", err)
 	}
 	compiler := jsonschema.NewCompiler()
@@ -130,8 +129,8 @@ func validateTypedInputPayload(schemaJSON rawjson.Message, payload rawjson.Messa
 	if err != nil {
 		return fmt.Errorf("await typed_input: invalid schema: %w", err)
 	}
-	var value any
-	if err := json.Unmarshal(payload.RawMessage(), &value); err != nil {
+	value, err := model.DecodeSchemaJSON(payload.RawMessage())
+	if err != nil {
 		return fmt.Errorf("await typed_input: invalid answer payload: %w", err)
 	}
 	if err := schema.Validate(value); err != nil {

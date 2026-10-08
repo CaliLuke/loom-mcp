@@ -116,6 +116,51 @@ func TestWaitAwaitTypedInputRejectsSchemaMismatch(t *testing.T) {
 	require.Contains(t, err.Error(), "answer does not match schema")
 }
 
+func TestValidateTypedInputPayloadPreservesIntegerPrecision(t *testing.T) {
+	for _, tc := range []struct {
+		name    string
+		schema  string
+		valid   string
+		invalid string
+	}{
+		{
+			name:    "minimum",
+			schema:  `{"type":"object","properties":{"n":{"type":"integer","minimum":9007199254740993}},"required":["n"]}`,
+			valid:   `{"n":9007199254740993}`,
+			invalid: `{"n":9007199254740992}`,
+		},
+		{
+			name:    "enum",
+			schema:  `{"type":"object","properties":{"n":{"type":"integer","enum":[9007199254740993]}},"required":["n"]}`,
+			valid:   `{"n":9007199254740993}`,
+			invalid: `{"n":9007199254740992}`,
+		},
+		{
+			name:    "const",
+			schema:  `{"type":"object","properties":{"n":{"type":"integer","const":9007199254740993}},"required":["n"]}`,
+			valid:   `{"n":9007199254740993}`,
+			invalid: `{"n":9007199254740992}`,
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			require.NoError(t, validateTypedInputPayload(rawjson.Message(tc.schema), rawjson.Message(tc.valid)))
+			require.Error(t, validateTypedInputPayload(rawjson.Message(tc.schema), rawjson.Message(tc.invalid)))
+		})
+	}
+}
+
+func TestValidateTypedInputPayloadRejectsInvalidJSON(t *testing.T) {
+	validSchema := rawjson.Message(`{"type":"object"}`)
+	for _, raw := range []string{`{"type":"object","type":"integer"}`, `{"type":"object"} {}`, "{\"description\":\"\xff\"}", `{"type":"object"`} {
+		err := validateTypedInputPayload(rawjson.Message(raw), rawjson.Message(`{}`))
+		require.Error(t, err, raw)
+	}
+	for _, raw := range []string{`{} {}`, `{"n":1,"n":2}`, "{\"n\":\"\xff\"}", `{"n":`} {
+		err := validateTypedInputPayload(validSchema, rawjson.Message(raw))
+		require.Error(t, err, raw)
+	}
+}
+
 func TestWaitAwaitTypedInputTimesOut(t *testing.T) {
 	t.Parallel()
 

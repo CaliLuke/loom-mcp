@@ -1,8 +1,12 @@
 package bedrock
 
 import (
+	jsonv1 "encoding/json"
 	"encoding/json/v2"
 	"fmt"
+	"math/big"
+
+	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/model"
 )
 
 // structured_output_schema.go adapts canonical structured-output schemas to the
@@ -93,8 +97,8 @@ func normalizeStructuredOutputSchemaForBedrock(schema []byte) ([]byte, error) {
 		return nil, nil
 	}
 
-	var doc any
-	if err := json.Unmarshal(schema, &doc); err != nil {
+	doc, err := model.DecodeSchemaJSON(schema)
+	if err != nil {
 		return nil, fmt.Errorf("bedrock: invalid structured output schema JSON: %w", err)
 	}
 	if err := normalizeBedrockSchemaNode(doc, "$"); err != nil {
@@ -232,12 +236,16 @@ func includesSchemaType(node map[string]any, want string) bool {
 	return false
 }
 
-// jsonNumberAsInt decodes a JSON number previously unmarshaled into an untyped
-// schema tree.
+// jsonNumberAsInt reports whether a JSON number is exactly representable as an
+// int64, including decimal and exponent spellings of integral values.
 func jsonNumberAsInt(value any) (int64, bool) {
-	number, ok := value.(float64)
+	number, ok := value.(jsonv1.Number)
 	if !ok {
 		return 0, false
 	}
-	return int64(number), number == float64(int64(number))
+	rational, ok := new(big.Rat).SetString(number.String())
+	if !ok || !rational.IsInt() || !rational.Num().IsInt64() {
+		return 0, false
+	}
+	return rational.Num().Int64(), true
 }

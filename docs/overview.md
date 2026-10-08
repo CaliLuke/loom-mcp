@@ -148,6 +148,10 @@ Each entry contains the canonical tool ID with full JSON Schemas:
 
 Schemas derive from the same DSL as your generated specs and codecs. If schema generation fails,
 `loom gen` fails fast—no silent drift between runtime contracts and the JSON catalogue.
+Registry and typed-input validation retain exact JSON numbers, including large integers.
+Bedrock and Gemini schema conversion preserve numeric tokens in supported schema fields;
+provider-specific keyword restrictions still apply. These boundaries reject duplicate object
+members, invalid UTF-8, malformed input, and trailing JSON values.
 
 ### Bounded Tool Results and Bounds Metadata
 

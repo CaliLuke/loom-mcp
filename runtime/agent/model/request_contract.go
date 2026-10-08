@@ -305,7 +305,7 @@ func (c *RequestContract) validateToolCallPayloads(calls []ToolCall) error {
 			}
 			seenIDs[call.ID] = struct{}{}
 		}
-		payload, err := decodeSchemaJSON(call.Payload)
+		payload, err := DecodeSchemaJSON(call.Payload)
 		if err != nil {
 			return newOutputValidationError(OutputValidationToolArguments, errors.New("provider returned malformed tool arguments"), ResponseEvidence{Present: true}, nil)
 		}
@@ -348,7 +348,7 @@ func (c *RequestContract) validateStructuredResponse(resp *Response) error {
 	if err != nil {
 		return err
 	}
-	value, err := decodeSchemaJSON([]byte(text))
+	value, err := DecodeSchemaJSON([]byte(text))
 	if err != nil {
 		return errors.New("structured output response is not valid JSON")
 	}
@@ -972,7 +972,7 @@ func compileModelSchema(schema any, label string) (*jsonschema.Schema, error) {
 	if len(raw) == 0 || len(raw) > maxModelOutputBytes {
 		return nil, fmt.Errorf("model request %s schema size is invalid", label)
 	}
-	document, err := decodeSchemaJSON(raw)
+	document, err := DecodeSchemaJSON(raw)
 	if err != nil {
 		return nil, fmt.Errorf("model request %s schema: %w", label, err)
 	}
