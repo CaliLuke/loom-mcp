@@ -144,7 +144,7 @@ func stableTypeKey(tool *ToolData, usage typeUsage, qualifier string) string {
 	if tool == nil {
 		return ""
 	}
-	tn := codegen.Goify(tool.Name, true)
+	tn := tool.ConstName
 	switch usage {
 	case usagePayload:
 		tn += "Payload"
@@ -160,7 +160,7 @@ func stableTypeKey(tool *ToolData, usage typeUsage, qualifier string) string {
 	if tool.Toolset != nil {
 		scope = tool.Toolset.QualifiedName
 	}
-	return "scope:" + scope + "/name:" + tn
+	return "scope:" + scope + "/tool:" + tool.QualifiedName + "/name:" + tn
 }
 
 // newToolSpecsData constructs an empty toolSpecsData container.

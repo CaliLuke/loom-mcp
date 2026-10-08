@@ -138,6 +138,20 @@ func TestGeneratedAgentDesignsCompile(t *testing.T) {
 			generate: generateNoPayloadNoResultAgentDesign,
 		},
 		{
+			name:     "Goify-colliding method tools",
+			generate: generateCollidingMethodToolAgentDesign,
+			verify: func(t *testing.T, files []*gcodegen.File) {
+				provider := testhelpers.FileContent(t, files, "gen/alpha/toolsets/lookup/provider.go")
+				serviceExecutor := testhelpers.FileContent(t, files, "gen/alpha/agents/scribe/lookup/service_executor.go")
+				require.Contains(t, serviceExecutor, "func WithGetX(")
+				require.Contains(t, serviceExecutor, "func WithGetX2(")
+				require.Contains(t, provider, "InitGetXMethodPayload")
+				require.Contains(t, provider, "InitGetX2MethodPayload")
+				require.Contains(t, provider, "InitGetXSecondServerData")
+				require.Contains(t, provider, "InitGetX2FirstServerData")
+			},
+		},
+		{
 			name:     "reused toolset",
 			generate: compileAgentScenario(testscenarios.ReUse()),
 		},
@@ -226,6 +240,69 @@ func generateNoPayloadNoResultAgentDesign(t *testing.T) []*gcodegen.File {
 				Use("ops", func() {
 					Tool("publish", "Publish", func() {
 						BindTo("assistant", "publish")
+					})
+				})
+			})
+		})
+	})
+}
+
+func generateCollidingMethodToolAgentDesign(t *testing.T) []*gcodegen.File {
+	t.Helper()
+	return generateCompileDesign(t, func() {
+		API("alpha", func() {})
+		Service("alpha", func() {
+			Method("GetFirst", func() {
+				Payload(func() {
+					Attribute("record", String)
+					Required("record")
+				})
+				Result(func() {
+					Attribute("one", String)
+					Attribute("trace", String)
+					Required("one", "trace")
+				})
+			})
+			Method("GetSecond", func() {
+				Payload(func() {
+					Attribute("key", String)
+					Required("key")
+				})
+				Result(func() {
+					Attribute("two", String)
+					Attribute("audit", Int)
+					Required("two", "audit")
+				})
+			})
+			Agent("scribe", "", func() {
+				Use("lookup", func() {
+					Tool("get_x", "", func() {
+						Args(func() {
+							Attribute("record", String)
+							Required("record")
+						})
+						Return(func() {
+							Attribute("one", String)
+							Required("one")
+						})
+						BindTo("alpha", "GetFirst")
+						ServerData("first", String, func() {
+							FromMethodResultField("trace")
+						})
+					})
+					Tool("getX", "", func() {
+						Args(func() {
+							Attribute("key", String)
+							Required("key")
+						})
+						Return(func() {
+							Attribute("two", String)
+							Required("two")
+						})
+						BindTo("alpha", "GetSecond")
+						ServerData("second", Int, func() {
+							FromMethodResultField("audit")
+						})
 					})
 				})
 			})

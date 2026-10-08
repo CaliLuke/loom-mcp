@@ -51,24 +51,24 @@ func toolsetAdapterTransformsFile(genpkg string, ts *ToolsetData, specsCache *to
 	extraImports := make(map[string]*codegen.ImportSpec)
 	fileHelpers := make([]*codegen.TransformFunctionData, 0)
 	helperKeys := make(map[string]struct{})
+	toolEntries := make(map[string]*toolEntry, len(specs.tools))
+	for _, entry := range specs.tools {
+		if entry != nil {
+			toolEntries[entry.Name] = entry
+		}
+	}
 
 	for _, t := range ts.Tools {
 		if t == nil || !t.IsMethodBacked {
 			continue
 		}
 
-		// Locate tool payload/result type metadata by type name convention.
-		var toolPayload, toolResult *typeData
-		wantPayload := codegen.Goify(t.Name, true) + "Payload"
-		wantResult := codegen.Goify(t.Name, true) + "Result"
-		for _, td := range specs.typesList() {
-			if td.TypeName == wantPayload {
-				toolPayload = td
-			}
-			if td.TypeName == wantResult {
-				toolResult = td
-			}
+		entry := toolEntries[t.QualifiedName]
+		if entry == nil {
+			panic(fmt.Sprintf("agent codegen: missing specs metadata for method-backed tool %q", t.QualifiedName))
 		}
+		toolPayload := entry.Payload
+		toolResult := entry.Result
 
 		// Init<GoName>MethodPayload: tool payload (specs, public type) -> service method payload
 		if toolPayload != nil && toolPayload.PublicType != nil && t.Args != nil && t.Args.Type != expr.Empty && t.MethodPayloadAttr != nil && t.MethodPayloadAttr.Type != expr.Empty {
@@ -114,7 +114,7 @@ func toolsetAdapterTransformsFile(genpkg string, ts *ToolsetData, specsCache *to
 				panic(fmt.Sprintf("agent codegen: missing MethodPayloadTypeRef for method-backed tool %q", t.QualifiedName))
 			}
 			fns = append(fns, transformFuncData{
-				Name:          "Init" + codegen.Goify(t.Name, true) + "MethodPayload",
+				Name:          "Init" + entry.ConstName + "MethodPayload",
 				ParamTypeRef:  paramRef,
 				ResultTypeRef: serviceRef,
 				Body:          body,
@@ -174,7 +174,7 @@ func toolsetAdapterTransformsFile(genpkg string, ts *ToolsetData, specsCache *to
 				panic(fmt.Sprintf("agent codegen: missing MethodResultTypeRef for method-backed tool %q", t.QualifiedName))
 			}
 			fns = append(fns, transformFuncData{
-				Name:          "Init" + codegen.Goify(t.Name, true) + "ToolResult",
+				Name:          "Init" + entry.ConstName + "ToolResult",
 				ParamTypeRef:  serviceResRef,
 				ResultTypeRef: resRef,
 				Body:          body,
@@ -186,6 +186,16 @@ func toolsetAdapterTransformsFile(genpkg string, ts *ToolsetData, specsCache *to
 			if serverData == nil || serverData.MethodResultField == "" {
 				continue
 			}
+			var serverDataType *typeData
+			for _, candidate := range entry.ServerData {
+				if candidate != nil && candidate.Kind == serverData.Kind {
+					serverDataType = candidate.Type
+					break
+				}
+			}
+			if serverDataType == nil {
+				panic(fmt.Sprintf("agent codegen: missing server_data type metadata for tool %q kind %q", t.QualifiedName, serverData.Kind))
+			}
 			sourceAttr := t.MethodResultAttr.Find(serverData.MethodResultField)
 			if sourceAttr == nil || sourceAttr.Type == nil || sourceAttr.Type == expr.Empty {
 				panic(fmt.Sprintf(
@@ -194,8 +204,8 @@ func toolsetAdapterTransformsFile(genpkg string, ts *ToolsetData, specsCache *to
 					t.QualifiedName,
 				))
 			}
-			targetTypeName := codegen.Goify(t.Name, true) + codegen.Goify(serverData.Kind, true) + "ServerData"
-			targetAttr := findToolTypeAttribute(specs, targetTypeName)
+			targetTypeName := serverDataType.TypeName
+			targetAttr := serverDataType.PublicType
 			if targetAttr == nil || targetAttr.Type == nil || targetAttr.Type == expr.Empty {
 				panic(fmt.Sprintf(
 					"agent codegen: server_data type %q not found for tool %q",
@@ -249,7 +259,7 @@ func toolsetAdapterTransformsFile(genpkg string, ts *ToolsetData, specsCache *to
 			resultRef := scope.GoFullTypeRef(targetAttr, "")
 			nilInputReturnsNil := serverDataSourceMayBeNil(t.MethodResultAttr, serverData.MethodResultField, sourceAttr)
 			fns = append(fns, transformFuncData{
-				Name:               "Init" + codegen.Goify(t.Name, true) + codegen.Goify(serverData.Kind, true) + "ServerData",
+				Name:               "Init" + entry.ConstName + codegen.Goify(serverData.Kind, true) + "ServerData",
 				ParamTypeRef:       paramRef,
 				ResultTypeRef:      resultRef,
 				NilInputReturnsNil: nilInputReturnsNil,
@@ -362,15 +372,6 @@ func attrTypeName(attr *expr.AttributeExpr) string {
 		return "<nil>"
 	}
 	return attr.Type.Name()
-}
-
-func findToolTypeAttribute(specs *toolSpecsData, typeName string) *expr.AttributeExpr {
-	for _, td := range specs.typesList() {
-		if td != nil && td.TypeName == typeName {
-			return td.PublicType
-		}
-	}
-	return nil
 }
 
 func typeRefDefaultPackage(defaultPkg string, att *expr.AttributeExpr) string {

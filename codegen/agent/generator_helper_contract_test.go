@@ -128,10 +128,6 @@ func TestTransformHelpersPreserveTypeAndNilabilityContracts(t *testing.T) {
 	assert.Equal(t, "<nil>", attrTypeName(nil))
 	assert.Equal(t, "string", attrTypeName(source))
 
-	public := &goaexpr.AttributeExpr{Type: goaexpr.Boolean}
-	specs := &toolSpecsData{order: []*typeData{nil, {TypeName: "Other"}, {TypeName: "Wanted", PublicType: public}}}
-	assert.Same(t, public, findToolTypeAttribute(specs, "Wanted"))
-	assert.Nil(t, findToolTypeAttribute(specs, "Missing"))
 	assert.Equal(t, "defaultpkg", typeRefDefaultPackage("defaultpkg", nil))
 	assert.Equal(t, "defaultpkg", typeRefDefaultPackage("defaultpkg", &goaexpr.AttributeExpr{Type: goaexpr.Empty}))
 

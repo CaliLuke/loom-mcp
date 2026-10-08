@@ -144,22 +144,11 @@ func resolvedAgentSpecsAggregatorFile(agent *AgentData, specsCache *toolSpecsDat
 		if err != nil {
 			return nil, fmt.Errorf("agent codegen: build aggregated specs for agent %q toolset %q: %w", agent.Name, ts.QualifiedName, err)
 		}
-		entries := make(map[string]*toolEntry, len(specs.tools))
-		for _, entry := range specs.tools {
-			entries[entry.Name] = entry
+		resolvedToolset, err := toolsetWithResolvedToolNames(ts, specs)
+		if err != nil {
+			return nil, fmt.Errorf("agent codegen: resolve aggregated tool names for toolset %q: %w", ts.QualifiedName, err)
 		}
-		resolvedToolset := *ts
-		resolvedToolset.Tools = make([]*ToolData, 0, len(ts.Tools))
-		for _, tool := range ts.Tools {
-			entry, ok := entries[tool.QualifiedName]
-			if !ok {
-				return nil, fmt.Errorf("agent codegen: missing aggregated spec entry for tool %q", tool.QualifiedName)
-			}
-			resolvedTool := *tool
-			resolvedTool.ConstName = entry.ConstName
-			resolvedToolset.Tools = append(resolvedToolset.Tools, &resolvedTool)
-		}
-		resolved.AllToolsets = append(resolved.AllToolsets, &resolvedToolset)
+		resolved.AllToolsets = append(resolved.AllToolsets, resolvedToolset)
 	}
 	return agentSpecsAggregatorFile(&resolved), nil
 }
@@ -609,15 +598,24 @@ func usedToolsFiles(agent *AgentData, specsCache *toolSpecsDataCache) ([]*codege
 
 // serviceExecutorFiles emits per-toolset service executors that adapt runtime
 // ToolCallExecutor to user-provided callers using generated codecs and optional mappers.
-func serviceExecutorFiles(agent *AgentData) []*codegen.File {
+func serviceExecutorFiles(agent *AgentData, specsCache *toolSpecsDataCache) ([]*codegen.File, error) {
 	if len(agent.MethodBackedToolsets) == 0 {
-		return nil
+		return nil, nil
 	}
 	files := make([]*codegen.File, 0, len(agent.MethodBackedToolsets))
 	for _, ts := range agent.MethodBackedToolsets {
 		if ts.Expr == nil || len(ts.Tools) == 0 {
 			continue
 		}
+		specs, err := specsCache.specsForToolset(agent.Genpkg, ts)
+		if err != nil {
+			return nil, fmt.Errorf("agent codegen: build service executor specs for agent %q toolset %q: %w", agent.Name, ts.QualifiedName, err)
+		}
+		resolvedToolset, err := toolsetWithResolvedToolNames(ts, specs)
+		if err != nil {
+			return nil, fmt.Errorf("agent codegen: resolve service executor tool names for toolset %q: %w", ts.QualifiedName, err)
+		}
+		ts = resolvedToolset
 		svc := ts.SourceService
 		if svc == nil {
 			svc = agent.Service
@@ -730,7 +728,7 @@ func serviceExecutorFiles(agent *AgentData) []*codegen.File {
 		path := filepath.Join(ts.Dir, "service_executor.go")
 		files = append(files, &codegen.File{Path: path, Sections: sections})
 	}
-	return files
+	return files, nil
 }
 
 // Note: we intentionally avoid parsing type references to infer imports. All

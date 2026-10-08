@@ -49,7 +49,11 @@ func agentFiles(agent *AgentData, specsCache *toolSpecsDataCache) ([]*codegen.Fi
 	}
 	files = append(files, usedToolFiles...)
 	// Emit default service executor factories for method-backed Used toolsets.
-	files = append(files, serviceExecutorFiles(agent)...)
+	serviceExecutors, err := serviceExecutorFiles(agent, specsCache)
+	if err != nil {
+		return nil, err
+	}
+	files = append(files, serviceExecutors...)
 
 	var filtered []*codegen.File
 	for _, f := range files {

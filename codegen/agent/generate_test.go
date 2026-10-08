@@ -388,3 +388,23 @@ func TestToolSpecsDataCacheDistinguishesToolsetSubsets(t *testing.T) {
 	require.Equal(t, "docs.notify", firstSpecs.tools[0].Name)
 	require.Equal(t, "docs.log", secondSpecs.tools[0].Name)
 }
+
+func TestResolvedToolsetNamesLeaveSharedToolDataUnchanged(t *testing.T) {
+	first := &ToolData{Name: "getX", QualifiedName: "lookup.getX", ConstName: "GetX"}
+	second := &ToolData{Name: "get_x", QualifiedName: "lookup.get_x", ConstName: "GetX"}
+	toolset := &ToolsetData{Name: "lookup", QualifiedName: "alpha.lookup", Tools: []*ToolData{first, second}}
+	specs := &toolSpecsData{tools: []*toolEntry{
+		{Name: first.QualifiedName, ConstName: "GetX"},
+		{Name: second.QualifiedName, ConstName: "GetX2"},
+	}}
+
+	resolved, err := toolsetWithResolvedToolNames(toolset, specs)
+	require.NoError(t, err)
+	require.NotSame(t, toolset, resolved)
+	require.NotSame(t, first, resolved.Tools[0])
+	require.NotSame(t, second, resolved.Tools[1])
+	assert.Equal(t, "GetX", resolved.Tools[0].ConstName)
+	assert.Equal(t, "GetX2", resolved.Tools[1].ConstName)
+	assert.Equal(t, "GetX", first.ConstName)
+	assert.Equal(t, "GetX", second.ConstName)
+}

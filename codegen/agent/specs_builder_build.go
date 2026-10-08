@@ -22,13 +22,16 @@ func buildToolSpecsData(agent *AgentData) (*toolSpecsData, error) {
 func buildToolSpecsDataFor(genpkg string, svc *service.Data, tools []*ToolData) (*toolSpecsData, error) {
 	data := newToolSpecsData(genpkg, svc)
 	builder := newToolSpecBuilder(genpkg, svc)
-	for _, tool := range tools {
+	for _, sourceTool := range tools {
+		toolCopy := *sourceTool
+		tool := &toolCopy
 		scope := builder.scopeForTool()
 		goName := codegen.Goify(tool.Name, true)
 		// Reserve the tool ID constant name *before* materializing any type
 		// definitions so nested helper types (HashedUnique) can avoid colliding
 		// with it (e.g., a nested user type named "Answer").
 		constName := scope.Unique(goName)
+		tool.ConstName = constName
 
 		payload, err := builder.typeFor(tool, tool.Args, usagePayload)
 		if err != nil {
@@ -88,6 +91,30 @@ func buildToolSpecsDataFor(genpkg string, svc *service.Data, tools []*ToolData) 
 		return data.tools[i].Name < data.tools[j].Name
 	})
 	return data, nil
+}
+
+// toolsetWithResolvedToolNames clones a toolset with the collision-resolved
+// identifiers stored in its specs entries, leaving shared design metadata intact.
+func toolsetWithResolvedToolNames(ts *ToolsetData, specs *toolSpecsData) (*ToolsetData, error) {
+	if ts == nil || specs == nil {
+		return nil, fmt.Errorf("agent codegen: cannot resolve tool names for a nil toolset or specs")
+	}
+	entries := make(map[string]*toolEntry, len(specs.tools))
+	for _, entry := range specs.tools {
+		entries[entry.Name] = entry
+	}
+	resolved := *ts
+	resolved.Tools = make([]*ToolData, 0, len(ts.Tools))
+	for _, tool := range ts.Tools {
+		entry, ok := entries[tool.QualifiedName]
+		if !ok {
+			return nil, fmt.Errorf("agent codegen: missing specs entry for tool %q while resolving names", tool.QualifiedName)
+		}
+		resolvedTool := *tool
+		resolvedTool.ConstName = entry.ConstName
+		resolved.Tools = append(resolved.Tools, &resolvedTool)
+	}
+	return &resolved, nil
 }
 
 func toolMetaPairs(meta map[string][]string) []toolMetaPair {

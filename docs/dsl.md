@@ -2015,6 +2015,10 @@ Service("svc", func() {
 })
 ```
 
+Distinct authored tool names can normalize to the same Go identifier. Generated
+helper names are disambiguated while each helper retains its own method binding
+and payload, result, and server-data shapes. Authored tool IDs remain unchanged.
+
 Generated transforms in `gen/svc/toolsets/ts/transforms.go`:
 
 ```go

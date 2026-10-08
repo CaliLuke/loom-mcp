@@ -247,8 +247,10 @@ Use this file when editing DSL, generators, generated helpers, or MCP codegen be
   payload attribute using the same default semantics as public type generation;
   tests for this contract must run `Prepare` before rendering.
 - `toolEntry.ConstName` is the authoritative unique Go identifier for a tool
-  after specs construction. Agent-level aggregators, typed aliases, codecs, and
-  call builders must reuse it rather than recomputing `Goify(tool.Name)`.
+  after specs construction. Agent-level aggregators, typed aliases, codecs,
+  call builders, and method-backed transform helpers must reuse it rather than
+  recomputing `Goify(tool.Name)`. Transform payload/result/server-data types come
+  from that same tool entry, keyed by the qualified tool name.
 - Registry-backed generated specs are refreshable only before runtime
   registration. `Specs()` returns a locked snapshot and `FreezeSpecs()` is the
   mandatory registration boundary; discovery after freezing is an error.

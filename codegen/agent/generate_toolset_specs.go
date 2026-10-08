@@ -117,6 +117,10 @@ func toolsetSpecsFiles(data *GeneratorData, specsCache *toolSpecsDataCache) ([]*
 		if specsData == nil {
 			continue
 		}
+		resolvedToolset, err := toolsetWithResolvedToolNames(ts, specsData)
+		if err != nil {
+			return nil, fmt.Errorf("agent codegen: resolve tool names for toolset %q: %w", ts.QualifiedName, err)
+		}
 
 		const (
 			transportDirName  = "http"
@@ -225,7 +229,7 @@ func toolsetSpecsFiles(data *GeneratorData, specsCache *toolSpecsDataCache) ([]*
 			}
 			out = append(out, &codegen.File{Path: filepath.Join(ts.SpecsDir, "specs.go"), Sections: specSections})
 		}
-		if f := toolsetInjectFile(ts); f != nil {
+		if f := toolsetInjectFile(resolvedToolset); f != nil {
 			out = append(out, f)
 		}
 
@@ -236,7 +240,7 @@ func toolsetSpecsFiles(data *GeneratorData, specsCache *toolSpecsDataCache) ([]*
 		if f != nil {
 			out = append(out, f)
 		}
-		if f := toolsetProviderFile(data.Genpkg, ts); f != nil {
+		if f := toolsetProviderFile(data.Genpkg, resolvedToolset); f != nil {
 			out = append(out, f)
 		}
 	}

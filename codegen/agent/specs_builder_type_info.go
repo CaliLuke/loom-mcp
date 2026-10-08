@@ -71,11 +71,14 @@ func (b *toolSpecBuilder) buildTypeInfo(tool *ToolData, att *goaexpr.AttributeEx
 	if tool == nil || tool.Toolset == nil {
 		return nil, fmt.Errorf("invalid tool metadata: nil tool or toolset")
 	}
+	if tool.ConstName == "" {
+		return nil, fmt.Errorf("invalid tool metadata: tool %q has no resolved Go name", tool.QualifiedName)
+	}
 	// Enforce core invariants early: attributes must have a non-nil Type and
 	// user types must always carry a non-nil AttributeExpr. Violations are
 	// treated as generator bugs and must be fixed at the construction site.
 	assertNoNilTypes(att, tool, usage, "tool-attr")
-	typeName := codegen.Goify(tool.Name, true)
+	typeName := tool.ConstName
 	switch usage {
 	case usagePayload:
 		typeName += "Payload"
@@ -90,7 +93,9 @@ func (b *toolSpecBuilder) buildTypeInfo(tool *ToolData, att *goaexpr.AttributeEx
 
 	scope := b.scopeForTool()
 	// Reserve the tool-facing type name using HashedUnique on a synthetic local
-	// user type that represents this tool type. This does two things:
+	// user type representing this tool type. The type name is based on the
+	// collision-resolved tool identifier so generated aliases and callers agree.
+	// This does two things:
 	//   1. It seeds the scope so later nested HashedUnique calls disambiguate
 	//      colliding service/local user type names (e.g. GetTimeSeriesResult).
 	//   2. It ensures subsequent transform generation (GoTransform) that uses
@@ -112,9 +117,8 @@ func (b *toolSpecBuilder) buildTypeInfo(tool *ToolData, att *goaexpr.AttributeEx
 		TypeName:      typeName,
 	}
 	typeName = scope.HashedUnique(toolUT, typeName)
-	toolUT.TypeName = typeName
 
-	// Stable cache key: reference for service-alias, otherwise deterministic name
+	// Keep each tool's declared shape distinct, even when authored names Goify alike.
 	key := stableTypeKey(tool, usage, qualifier)
 	if existing := b.types[key]; existing != nil {
 		return existing, nil

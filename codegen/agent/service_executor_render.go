@@ -131,8 +131,8 @@ func WithClient(client *{{ .ServicePkgAlias }}.Client) ExecOpt {
 
 {{- range .Toolset.Tools }}
 {{- if .IsMethodBacked }}
-// With{{ goify .Name true }} sets the caller for {{ .QualifiedName }}.
-func With{{ goify .Name true }}(f func(context.Context, any) (any, error)) ExecOpt {
+// With{{ .ConstName }} sets the caller for {{ .QualifiedName }}.
+func With{{ .ConstName }}(f func(context.Context, any) (any, error)) ExecOpt {
     return execOptFunc(func(c *seCfg) {
         if c.callers == nil {
             c.callers = make(map[tools.Ident]func(context.Context, any) (any, error))
