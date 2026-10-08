@@ -277,7 +277,12 @@ type (
 		// already ready.
 		NewTimer(ctx context.Context, d time.Duration) (Future[time.Time], error)
 
-		// Await blocks until condition returns true, or ctx is done.
+		// Await blocks until condition returns true or the workflow scope is canceled.
+		//
+		// ctx must be this WorkflowContext's Context(), or a context derived from it
+		// only to add values. Deterministic adapters may not observe arbitrary Go-context
+		// cancellation after Await yields. Use WithCancel to create a workflow scope
+		// that can be canceled while waiting.
 		//
 		// Condition must be deterministic and side-effect free. A typical use is to
 		// wait on a set of Futures using IsReady() without draining them in a fixed

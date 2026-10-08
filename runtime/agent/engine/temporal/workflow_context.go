@@ -327,6 +327,12 @@ func (w *temporalWorkflowContext) Await(ctx context.Context, condition func() bo
 	if err := ctx.Err(); err != nil {
 		return err
 	}
+	if engine.WorkflowContextFromContext(ctx) != w {
+		return errors.New("await context must come from this workflow context; use WithCancel().Context() for workflow-scope cancellation")
+	}
+	if ctx.Done() != nil {
+		return errors.New("await context cannot use Go cancellation; use WithCancel().Context() for workflow-scope cancellation")
+	}
 	return workflow.Await(w.ctx, condition)
 }
 

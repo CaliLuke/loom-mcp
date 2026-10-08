@@ -85,6 +85,12 @@ Use this file for current loom-mcp runtime behavior in this repo. Prefer it over
 
 - The in-memory engine uses `StartWorkflow`'s context to accept the request and retain context values. After acceptance, the run has an independent lifetime; cancel it through the workflow handle or `CancelByID`. Child runs started with the parent workflow context remain tied to parent cancellation.
 - A positive in-memory `WorkflowStartRequest.RunTimeout` sets a fixed execution deadline; zero leaves the run without one. Timeout cancellation is cooperative, and a timed-out run fails with `context.DeadlineExceeded`. Agent runtime starts continue to omit this fixed timeout so external waits can pause their active-time budget.
+- For Temporal `WorkflowContext.Await`, use the same workflow's `Context()` or
+  derive from it only to add values. Active native Go cancellation/deadline
+  contexts and foreign workflow scopes are rejected. To cancel while waiting,
+  create a scope with `WithCancel()` and call the returned workflow context's
+  `Await` with its own `Context()`. Preserve the raw Temporal cancellation error;
+  the runtime classifier recognizes it.
 - The runtime classifies the complete error graph. Every leaf must be
   `context.Canceled` or a Temporal cancellation for a canceled result.
 - The classifier has fixed limits for depth, visits, and children. Cycles,

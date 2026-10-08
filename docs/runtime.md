@@ -2562,6 +2562,13 @@ type WorkflowContext interface {
 }
 ```
 
+`Await` takes the owning workflow's `Context()` or a context derived only to
+add values. For cancellation while waiting, create a scope with `WithCancel()`
+and call `Await` on that returned workflow context with its own `Context()`.
+Temporal rejects unscoped contexts and active native Go cancellation or deadline
+contexts, which cannot cancel a yielded deterministic wait. Workflow-scope
+cancellation returns the underlying engine error.
+
 If you register a workflow directly with a Temporal worker, own the adapter lifetime:
 
 ```go
