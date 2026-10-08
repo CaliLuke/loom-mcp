@@ -3,7 +3,10 @@ package mongo
 import (
 	"bytes"
 	"context"
+	"errors"
 	"sort"
+	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -239,6 +242,7 @@ func fakeEventDocuments(runID string, n int) []eventDocument {
 		oid := bson.ObjectID{0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, byte(i)}
 		docs = append(docs, eventDocument{
 			ID:        oid,
+			Sequence:  int64(i),
 			RunID:     runID,
 			AgentID:   testAgentID,
 			SessionID: testSessionID,
@@ -262,34 +266,86 @@ func mustOID(t *testing.T) bson.ObjectID {
 }
 
 type fakeCollection struct {
-	insertedID any
-	findDocs   []eventDocument
-	findOneDoc eventDocument
-	insertErr  error
-	indexView  indexView
+	mu           sync.Mutex
+	insertedID   any
+	findDocs     []eventDocument
+	findOneDoc   eventDocument
+	insertErr    error
+	updateErr    error
+	beforeInsert func(*fakeCollection, eventDocument) error
+	indexView    indexView
 }
 
-func (c *fakeCollection) InsertOne(context.Context, any, ...options.Lister[options.InsertOneOptions]) (*mongodriver.InsertOneResult, error) {
+func (c *fakeCollection) InsertOne(_ context.Context, document any, _ ...options.Lister[options.InsertOneOptions]) (*mongodriver.InsertOneResult, error) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if doc, ok := document.(eventDocument); ok && c.beforeInsert != nil {
+		if err := c.beforeInsert(c, doc); err != nil {
+			return nil, err
+		}
+	}
 	if c.insertErr != nil {
 		return nil, c.insertErr
+	}
+	if doc, ok := document.(eventDocument); ok {
+		id, idOK := c.insertedID.(bson.ObjectID)
+		if c.insertedID != nil && !idOK {
+			return &mongodriver.InsertOneResult{InsertedID: c.insertedID}, nil
+		}
+		if !idOK {
+			id = bson.NewObjectID()
+		}
+		doc.ID = id
+		c.findDocs = append(c.findDocs, doc)
+		return &mongodriver.InsertOneResult{InsertedID: id}, nil
 	}
 	return &mongodriver.InsertOneResult{InsertedID: c.insertedID}, nil
 }
 
-func (c *fakeCollection) FindOne(_ context.Context, _ any, _ ...options.Lister[options.FindOneOptions]) singleResult {
-	return fakeSingleResult{doc: c.findOneDoc}
+func (c *fakeCollection) FindOne(_ context.Context, filter any, opts ...options.Lister[options.FindOneOptions]) singleResult {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	f, ok := filter.(bson.M)
+	if !ok {
+		return fakeSingleResult{err: errors.New("unsupported fake find-one filter")}
+	}
+	docs := append([]eventDocument(nil), c.findDocs...)
+	if !c.findOneDoc.ID.IsZero() && fakeFilterEvent(c.findOneDoc, f) {
+		docs = append(docs, c.findOneDoc)
+	}
+	filtered := make([]eventDocument, 0, len(docs))
+	for _, doc := range docs {
+		if fakeFilterEvent(doc, f) {
+			filtered = append(filtered, doc)
+		}
+	}
+	if len(filtered) == 0 {
+		return fakeSingleResult{err: mongodriver.ErrNoDocuments}
+	}
+	findOpts, err := applyTestOptions[options.FindOneOptions](opts...)
+	if err != nil {
+		return fakeSingleResult{err: err}
+	}
+	if findOpts.Sort != nil {
+		sort.Slice(filtered, func(i, j int) bool {
+			return fakeSortLess(filtered[i], filtered[j], findOpts.Sort)
+		})
+	}
+	return fakeSingleResult{doc: filtered[0]}
 }
 
 func (c *fakeCollection) Find(_ context.Context, filter any, opts ...options.Lister[options.FindOptions]) (cursor, error) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
 	f, ok := filter.(bson.M)
 	if !ok {
 		return &fakeCursor{}, nil
 	}
 
 	runID, _ := f["run_id"].(string)
-	var after bson.ObjectID
-	if id, ok := f[fieldID].(bson.M); ok {
-		if gt, ok := id["$gt"].(bson.ObjectID); ok {
+	var after int64
+	if id, ok := f[fieldSequence].(bson.M); ok {
+		if gt, ok := id["$gt"].(int64); ok {
 			after = gt
 		}
 	}
@@ -299,7 +355,7 @@ func (c *fakeCollection) Find(_ context.Context, filter any, opts ...options.Lis
 		if doc.RunID != runID {
 			continue
 		}
-		if !after.IsZero() && bytes.Compare(doc.ID[:], after[:]) <= 0 {
+		if doc.Sequence <= after {
 			continue
 		}
 		filtered = append(filtered, doc)
@@ -315,7 +371,7 @@ func (c *fakeCollection) Find(_ context.Context, filter any, opts ...options.Lis
 	}
 	if findOpts.Sort != nil {
 		sort.Slice(filtered, func(i, j int) bool {
-			return bytes.Compare(filtered[i].ID[:], filtered[j].ID[:]) < 0
+			return fakeSortLess(filtered[i], filtered[j], findOpts.Sort)
 		})
 	}
 	if limit > 0 && int64(len(filtered)) > limit {
@@ -323,6 +379,103 @@ func (c *fakeCollection) Find(_ context.Context, filter any, opts ...options.Lis
 	}
 
 	return &fakeCursor{docs: filtered}, nil
+}
+
+func (c *fakeCollection) UpdateOne(_ context.Context, filter any, update any, _ ...options.Lister[options.UpdateOneOptions]) (*mongodriver.UpdateResult, error) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if c.updateErr != nil {
+		return nil, c.updateErr
+	}
+	f, ok := filter.(bson.M)
+	if !ok {
+		return nil, errors.New("unsupported fake update filter")
+	}
+	u, ok := update.(bson.M)
+	if !ok {
+		return nil, errors.New("unsupported fake update document")
+	}
+	set, ok := u["$set"].(bson.M)
+	if !ok {
+		return nil, errors.New("unsupported fake update operator")
+	}
+	for i, doc := range c.findDocs {
+		if fakeFilterEvent(doc, f) {
+			if sequence, ok := set[fieldSequence].(int64); ok {
+				doc.Sequence = sequence
+				c.findDocs[i] = doc
+			}
+			return &mongodriver.UpdateResult{MatchedCount: 1, ModifiedCount: 1}, nil
+		}
+	}
+	return &mongodriver.UpdateResult{}, nil
+}
+
+func fakeFilterEvent(doc eventDocument, filter bson.M) bool {
+	for key, want := range filter {
+		switch key {
+		case fieldRunID:
+			if doc.RunID != want {
+				return false
+			}
+		case fieldEventKey:
+			if doc.EventKey != want {
+				return false
+			}
+		case fieldID:
+			if doc.ID != want {
+				return false
+			}
+		case fieldSequence:
+			switch condition := want.(type) {
+			case int64:
+				if doc.Sequence != condition {
+					return false
+				}
+			case bson.M:
+				if exists, ok := condition[operatorExists].(bool); ok && exists != (doc.Sequence != 0) {
+					return false
+				}
+				if gt, ok := condition["$gt"].(int64); ok && doc.Sequence <= gt {
+					return false
+				}
+			}
+		}
+	}
+	return true
+}
+
+func fakeSortLess(left, right eventDocument, sort any) bool {
+	keys, ok := sort.(bson.D)
+	if !ok {
+		return false
+	}
+	for _, key := range keys {
+		order := 0
+		switch value := key.Value.(type) {
+		case int:
+			order = value
+		case int32:
+			order = int(value)
+		}
+		var comparison int
+		switch key.Key {
+		case fieldSequence:
+			if left.Sequence < right.Sequence {
+				comparison = -1
+			} else if left.Sequence > right.Sequence {
+				comparison = 1
+			}
+		case fieldRunID:
+			comparison = strings.Compare(left.RunID, right.RunID)
+		case fieldID:
+			comparison = bytes.Compare(left.ID[:], right.ID[:])
+		}
+		if comparison != 0 {
+			return comparison*order < 0
+		}
+	}
+	return false
 }
 
 func (c *fakeCollection) Indexes() indexView {

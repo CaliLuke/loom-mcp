@@ -59,7 +59,7 @@ func TestEnsureIndexesCreatesCursorAndUniqueIdentityContracts(t *testing.T) {
 	coll := &fakeCollection{indexView: view}
 
 	require.NoError(t, ensureIndexes(context.Background(), coll))
-	require.Len(t, view.models, 2)
+	require.Len(t, view.models, 3)
 	assert.Equal(t, bson.D{{Key: fieldRunID, Value: 1}, {Key: fieldID, Value: 1}}, view.models[0].Keys)
 	assert.Equal(t, bson.D{{Key: fieldRunID, Value: 1}, {Key: fieldEventKey, Value: 1}}, view.models[1].Keys)
 	require.NotNil(t, view.models[1].Options)
@@ -67,6 +67,14 @@ func TestEnsureIndexesCreatesCursorAndUniqueIdentityContracts(t *testing.T) {
 	require.NoError(t, err)
 	require.NotNil(t, indexOpts.Unique)
 	assert.True(t, *indexOpts.Unique)
+	assert.Equal(t, bson.D{{Key: fieldRunID, Value: 1}, {Key: fieldSequence, Value: 1}}, view.models[2].Keys)
+	require.NotNil(t, view.models[2].Options)
+	sequenceOpts, err := applyTestOptions[options.IndexOptions](view.models[2].Options)
+	require.NoError(t, err)
+	require.NotNil(t, sequenceOpts.Unique)
+	assert.True(t, *sequenceOpts.Unique)
+	require.NotNil(t, sequenceOpts.PartialFilterExpression)
+	assert.Equal(t, bson.M{fieldSequence: bson.M{operatorExists: true}}, sequenceOpts.PartialFilterExpression)
 
 	wantErr := errors.New("create index")
 	view.models = nil
@@ -84,16 +92,13 @@ func TestNewClientWithCollectionAndListFilterContracts(t *testing.T) {
 	assert.Equal(t, clientName, c.Name())
 	assert.Equal(t, defaultTimeout, c.timeout)
 
-	_, err = listRunlogFilter("", "", 1)
+	_, err = listRunlogFilter("", 1)
 	require.EqualError(t, err, "run id is required")
-	_, err = listRunlogFilter(testRunID, "", 0)
+	_, err = listRunlogFilter(testRunID, 0)
 	require.EqualError(t, err, "limit must be > 0")
-	_, err = listRunlogFilter(testRunID, "invalid", 1)
-	require.ErrorContains(t, err, `invalid cursor "invalid"`)
-	oid := mustOID(t)
-	filter, err := listRunlogFilter(testRunID, oid.Hex(), 1)
+	filter, err := listRunlogFilter(testRunID, 1)
 	require.NoError(t, err)
-	assert.Equal(t, bson.M{fieldRunID: testRunID, fieldID: bson.M{"$gt": oid}}, filter)
+	assert.Equal(t, bson.M{fieldRunID: testRunID}, filter)
 }
 
 func TestAppendRejectsConflictingDuplicateAndUnexpectedInsertedID(t *testing.T) {
@@ -117,6 +122,7 @@ func TestAppendRejectsConflictingDuplicateAndUnexpectedInsertedID(t *testing.T) 
 	assert.Empty(t, event.ID)
 
 	coll.insertErr = nil
+	coll.findOneDoc = eventDocument{}
 	coll.insertedID = "not-an-object-id"
 	_, err = c.Append(context.Background(), event)
 	require.EqualError(t, err, "unexpected inserted id type string")
@@ -160,9 +166,23 @@ func (c *contextCheckingCollection) InsertOne(ctx context.Context, _ any, _ ...o
 	return &mongo.InsertOneResult{InsertedID: c.insertedID}, nil
 }
 
+func (c *contextCheckingCollection) FindOne(ctx context.Context, _ any, _ ...options.Lister[options.FindOneOptions]) singleResult {
+	if err := ctx.Err(); err != nil {
+		return fakeSingleResult{err: err}
+	}
+	return fakeSingleResult{doc: c.findOneDoc, err: mongo.ErrNoDocuments}
+}
+
 func (c *contextCheckingCollection) Find(ctx context.Context, _ any, _ ...options.Lister[options.FindOptions]) (cursor, error) {
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
 	return &fakeCursor{}, nil
+}
+
+func (c *contextCheckingCollection) UpdateOne(ctx context.Context, _ any, _ any, _ ...options.Lister[options.UpdateOneOptions]) (*mongo.UpdateResult, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+	return &mongo.UpdateResult{}, nil
 }

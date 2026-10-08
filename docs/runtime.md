@@ -2014,6 +2014,21 @@ type Store interface {
 replay of the same `(run_id, event_key)`; conflicting bodies for one event key
 fail.
 
+The Mongo adapter orders events by a per-run sequence stored atomically with
+each event. Concurrent writers retry sequence conflicts, so a later append
+cannot fall behind a previously returned cursor. Event IDs remain opaque
+ObjectID tokens; the adapter resolves them to sequence positions rather than
+sorting their bytes. Run-log reads use the primary, and standalone MongoDB
+remains supported.
+
+On startup, the adapter adds sequence positions to legacy records in their
+previous ObjectID order. Existing event IDs and cursors remain usable. Stop
+old-version writers before starting this upgrade and allow startup migration
+to finish before resuming writes; mixing old and new writers is unsupported.
+Migration preserves the old order, but cannot reconstruct historical append
+order across workers. Startup fails if indexing or migration fails; a retry
+resumes partial progress. Allow a larger client `Timeout` for large legacy logs.
+
 The runtime exposes:
 
 - `Runtime.ListRunEvents(ctx, runID, cursor, limit)` for cursor-paginated listing

@@ -414,6 +414,13 @@ Use this file for current loom-mcp runtime behavior in this repo. Prefer it over
 - `runlog.Store` is the canonical append-only introspection record. Run-log
   append or metadata-update failure fails the hook activity so the engine can
   retry or stop; it is not best-effort.
+- Mongo run-log pagination uses per-run sequences committed in the event's
+  atomic insert under a unique index. Writers retry sequence conflicts; never
+  allocate a counter separately before inserting an event. ObjectID cursors
+  resolve to stored sequence positions, and reads use the primary. Startup
+  backfills legacy records in their previous ObjectID order and fails on
+  migration errors. Stop old writers for this upgrade; do not support mixed
+  writers or claim to recover historical cross-worker append order.
 - Stream sinks and the hook bus are observer projections with their own
   delivery contracts. High-volume partial signals may be best-effort.
 - `memory.Store` is a derived raw-event projection; `memory.Searcher` indexes

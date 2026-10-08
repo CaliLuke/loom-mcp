@@ -8,11 +8,13 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"math"
 	"time"
 
 	"go.mongodb.org/mongo-driver/v2/bson"
 	mongodriver "go.mongodb.org/mongo-driver/v2/mongo"
 	"go.mongodb.org/mongo-driver/v2/mongo/options"
+	"go.mongodb.org/mongo-driver/v2/mongo/readpref"
 
 	"github.com/CaliLuke/loom/clue/health"
 
@@ -55,6 +57,7 @@ type (
 		Type      string        `bson:"type"`
 		Payload   []byte        `bson:"payload"`
 		Timestamp time.Time     `bson:"timestamp"`
+		Sequence  int64         `bson:"sequence,omitempty"`
 	}
 )
 
@@ -65,6 +68,8 @@ const (
 	fieldEventKey     = "event_key"
 	fieldID           = "_id"
 	fieldRunID        = "run_id"
+	fieldSequence     = "sequence"
+	operatorExists    = "$exists"
 )
 
 // New returns a Client backed by the provided MongoDB client.
@@ -76,9 +81,15 @@ func New(opts Options) (Client, error) {
 	timeout := clientinfra.ResolveTimeout(opts.Timeout, defaultTimeout)
 
 	wrapper := clientinfra.NewCollection(opts.Client, opts.Database, collection)
+	wrapper = clientinfra.Collection{Coll: wrapper.Coll.Clone(options.Collection().SetReadPreference(readpref.Primary()))}
 	if err := clientinfra.EnsureIndexes(timeout, func(ctx context.Context) error {
 		return ensureIndexes(ctx, wrapper)
 	}); err != nil {
+		return nil, err
+	}
+	migrationCtx, cancel := clientinfra.WithTimeout(context.Background(), timeout, false)
+	defer cancel()
+	if err := migrateLegacySequences(migrationCtx, wrapper); err != nil {
 		return nil, err
 	}
 	return newClientWithCollection(opts.Client, wrapper, timeout)
@@ -99,26 +110,54 @@ func (c *client) Append(ctx context.Context, e *runlog.Event) (runlog.AppendResu
 	ctx, cancel := c.withTimeout(ctx)
 	defer cancel()
 	doc := runlogEventDocument(e)
-	res, err := c.coll.InsertOne(ctx, doc)
-	if err != nil {
-		if mongodriver.IsDuplicateKeyError(err) {
-			return c.resolveDuplicateAppend(ctx, e, doc)
+	for {
+		sequence, err := maxCommittedSequence(ctx, c.coll, e.RunID)
+		if err != nil {
+			return runlog.AppendResult{}, err
 		}
-		return runlog.AppendResult{}, err
+		if sequence == math.MaxInt64 {
+			existing, lookupErr := c.lookupEventByKey(ctx, e.RunID, e.EventKey)
+			if lookupErr == nil {
+				return duplicateAppendResult(e, existing, doc)
+			}
+			if !errors.Is(lookupErr, mongodriver.ErrNoDocuments) {
+				return runlog.AppendResult{}, lookupErr
+			}
+			return runlog.AppendResult{}, errors.New("runlog sequence overflow")
+		}
+		doc.Sequence = sequence + 1
+		res, insertErr := c.coll.InsertOne(ctx, doc)
+		if insertErr == nil {
+			return assignInsertedEventID(e, res.InsertedID)
+		}
+		if !mongodriver.IsDuplicateKeyError(insertErr) {
+			return runlog.AppendResult{}, insertErr
+		}
+		result, resolveErr := c.resolveDuplicateAppend(ctx, e, doc, insertErr)
+		if resolveErr == nil {
+			return result, nil
+		}
+		if !errors.Is(resolveErr, errSequenceCollision) {
+			return runlog.AppendResult{}, resolveErr
+		}
 	}
-	return assignInsertedEventID(e, res.InsertedID)
 }
 
 func (c *client) List(ctx context.Context, runID string, cursor string, limit int) (page runlog.Page, err error) {
-	filter, err := listRunlogFilter(runID, cursor, limit)
+	filter, err := listRunlogFilter(runID, limit)
 	if err != nil {
 		return runlog.Page{}, err
 	}
 	ctx, cancel := c.withTimeout(ctx)
 	defer cancel()
+	after, err := c.cursorSequence(ctx, runID, cursor)
+	if err != nil {
+		return runlog.Page{}, err
+	}
+	filter[fieldSequence] = bson.M{"$gt": after}
 
 	cur, err := c.coll.Find(ctx, filter, options.Find().
-		SetSort(bson.D{{Key: fieldID, Value: 1}}).
+		SetSort(bson.D{{Key: fieldSequence, Value: 1}}).
 		SetLimit(int64(limit+1)),
 	)
 	if err != nil {
@@ -138,6 +177,25 @@ func (c *client) List(ctx context.Context, runID string, cursor string, limit in
 		return runlog.Page{}, err
 	}
 	return buildRunlogPage(events, limit), nil
+}
+
+// cursorSequence resolves an ObjectID cursor to the event's durable ordering value.
+func (c *client) cursorSequence(ctx context.Context, runID, cursor string) (int64, error) {
+	if cursor == "" {
+		return 0, nil
+	}
+	oid, err := bson.ObjectIDFromHex(cursor)
+	if err != nil {
+		return 0, fmt.Errorf("invalid cursor %q: %w", cursor, err)
+	}
+	var cursorDoc eventDocument
+	if err := c.coll.FindOne(ctx, bson.M{fieldRunID: runID, fieldID: oid}).Decode(&cursorDoc); err != nil {
+		if errors.Is(err, mongodriver.ErrNoDocuments) {
+			return 0, fmt.Errorf("cursor %q does not identify an event in run %q", cursor, runID)
+		}
+		return 0, err
+	}
+	return cursorDoc.Sequence, nil
 }
 
 func validateAppendEvent(e *runlog.Event) error {
@@ -170,11 +228,27 @@ func runlogEventDocument(e *runlog.Event) eventDocument {
 	}
 }
 
-func (c *client) resolveDuplicateAppend(ctx context.Context, e *runlog.Event, doc eventDocument) (runlog.AppendResult, error) {
+// resolveDuplicateAppend separates an event-key replay from a confirmed sequence race.
+func (c *client) resolveDuplicateAppend(ctx context.Context, e *runlog.Event, doc eventDocument, insertErr error) (runlog.AppendResult, error) {
 	existing, lookupErr := c.lookupEventByKey(ctx, e.RunID, e.EventKey)
 	if lookupErr != nil {
-		return runlog.AppendResult{}, lookupErr
+		if !errors.Is(lookupErr, mongodriver.ErrNoDocuments) {
+			return runlog.AppendResult{}, lookupErr
+		}
+		collision, collisionErr := sequenceCollision(ctx, c.coll, e.RunID, doc.Sequence)
+		if collisionErr != nil {
+			return runlog.AppendResult{}, collisionErr
+		}
+		if collision {
+			return runlog.AppendResult{}, errSequenceCollision
+		}
+		return runlog.AppendResult{}, insertErr
 	}
+	return duplicateAppendResult(e, existing, doc)
+}
+
+// duplicateAppendResult accepts an exact event-key replay and rejects a conflicting body.
+func duplicateAppendResult(e *runlog.Event, existing eventDocument, doc eventDocument) (runlog.AppendResult, error) {
 	if !sameEventDocument(existing, doc) {
 		return runlog.AppendResult{}, fmt.Errorf("event key %q conflicts with existing event body", e.EventKey)
 	}
@@ -191,7 +265,7 @@ func assignInsertedEventID(e *runlog.Event, insertedID any) (runlog.AppendResult
 	return runlog.AppendResult{ID: e.ID, Inserted: true}, nil
 }
 
-func listRunlogFilter(runID, cursor string, limit int) (bson.M, error) {
+func listRunlogFilter(runID string, limit int) (bson.M, error) {
 	if runID == "" {
 		return nil, errors.New("run id is required")
 	}
@@ -199,14 +273,6 @@ func listRunlogFilter(runID, cursor string, limit int) (bson.M, error) {
 		return nil, errors.New("limit must be > 0")
 	}
 	filter := bson.M{fieldRunID: runID}
-	if cursor == "" {
-		return filter, nil
-	}
-	oid, err := bson.ObjectIDFromHex(cursor)
-	if err != nil {
-		return nil, fmt.Errorf("invalid cursor %q: %w", cursor, err)
-	}
-	filter[fieldID] = bson.M{"$gt": oid}
 	return filter, nil
 }
 
@@ -266,7 +332,19 @@ func ensureIndexes(ctx context.Context, coll collection) error {
 		},
 		Options: options.Index().SetUnique(true),
 	}
-	_, err := coll.Indexes().CreateOne(ctx, identityIndex)
+	if _, err := coll.Indexes().CreateOne(ctx, identityIndex); err != nil {
+		return err
+	}
+	sequenceIndex := mongodriver.IndexModel{
+		Keys: bson.D{
+			{Key: fieldRunID, Value: 1},
+			{Key: fieldSequence, Value: 1},
+		},
+		Options: options.Index().SetUnique(true).SetPartialFilterExpression(bson.M{
+			fieldSequence: bson.M{operatorExists: true},
+		}),
+	}
+	_, err := coll.Indexes().CreateOne(ctx, sequenceIndex)
 	return err
 }
 
@@ -286,6 +364,7 @@ type collection interface {
 	clientinfra.InsertOneCollection
 	clientinfra.FindOneCollection
 	clientinfra.FindCollection
+	clientinfra.UpdateOneCollection
 	clientinfra.IndexedCollection
 }
 
