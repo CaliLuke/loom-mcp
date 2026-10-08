@@ -2637,6 +2637,12 @@ eng := inmem.New()
 
 The in-memory engine uses the context passed to `StartWorkflow` for request acceptance and retains its values for the accepted run. Canceling that request after `StartWorkflow` returns does not cancel the run. Use the workflow handle or `CancelByID` to cancel an accepted in-memory workflow; child workflows started with their parent workflow's context remain tied to its cancellation.
 
+A positive in-memory `WorkflowStartRequest.RunTimeout` sets a fixed execution
+deadline; zero leaves the run without one. Timeout cancellation is cooperative,
+and a timed-out run fails with `context.DeadlineExceeded`. Agent runtime starts
+continue to omit this fixed timeout so external waits can pause their active-time
+budget.
+
 ---
 
 ## Telemetry

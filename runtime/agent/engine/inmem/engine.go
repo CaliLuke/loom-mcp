@@ -215,7 +215,7 @@ func (e *eng) startWorkflow(acceptanceCtx, workflowParent context.Context, req e
 	if err := validateWorkflowStartRequest(req); err != nil {
 		return nil, err
 	}
-	runCtx, cancel := context.WithCancel(workflowParent)
+	runCtx, cancel := workflowRunContext(workflowParent, req.RunTimeout)
 	wctx := e.newWorkflowContext(runCtx, req.ID)
 	h := &handle{done: make(chan struct{}), wfCtx: wctx, cancel: cancel}
 	if err := e.reserveWorkflowRun(acceptanceCtx, req.ID, h); err != nil {
@@ -224,6 +224,7 @@ func (e *eng) startWorkflow(acceptanceCtx, workflowParent context.Context, req e
 	}
 	go func() {
 		defer close(h.done)
+		defer cancel()
 		res, err := def.Handler(wctx, req.Input)
 		if runErr := runCtx.Err(); runErr != nil {
 			res = nil
@@ -248,6 +249,14 @@ func (e *eng) startWorkflow(acceptanceCtx, workflowParent context.Context, req e
 	}()
 
 	return h, nil
+}
+
+// workflowRunContext applies an optional execution deadline to the run lifetime.
+func workflowRunContext(parent context.Context, timeout time.Duration) (context.Context, context.CancelFunc) {
+	if timeout > 0 {
+		return context.WithTimeout(parent, timeout)
+	}
+	return context.WithCancel(parent)
 }
 
 func (e *eng) lookupWorkflow(name string) (engine.WorkflowDefinition, error) {
