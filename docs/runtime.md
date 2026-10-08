@@ -246,7 +246,8 @@ The runtime always initializes `Runtime.PromptRegistry`. Prompt management has t
 - **Scoped overrides**: optionally resolve arbitrary label and session scopes
   through `prompt.Store` (`runtime.WithPromptStore(...)`). Matching session
   scopes outrank non-session scopes; more matching labels outrank fewer; equal
-  specificity uses the newest override.
+  specificity uses the newest override. Each scoped label must be present with
+  the same value; an empty value does not match an absent label.
 
 The Mongo adapter persists a versioned SHA-256 `scope_fingerprint` and performs
 at most one indexed session lookup plus one indexed global lookup, each limited

@@ -39,7 +39,7 @@ func ScopeMatches(overrideScope Scope, requestedScope Scope) bool {
 		return false
 	}
 	for key, value := range overrideScope.Labels {
-		if requestedScope.Labels[key] != value {
+		if requested, exists := requestedScope.Labels[key]; !exists || requested != value {
 			return false
 		}
 	}
