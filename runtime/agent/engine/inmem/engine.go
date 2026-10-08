@@ -200,6 +200,14 @@ func (e *eng) RegisterExecuteToolActivity(_ context.Context, name string, opts e
 }
 
 func (e *eng) StartWorkflow(ctx context.Context, req engine.WorkflowStartRequest) (engine.WorkflowHandle, error) {
+	return e.startWorkflow(ctx, context.WithoutCancel(ctx), req)
+}
+
+// startWorkflow separates acceptance cancellation from the accepted run lifetime.
+func (e *eng) startWorkflow(acceptanceCtx, workflowParent context.Context, req engine.WorkflowStartRequest) (engine.WorkflowHandle, error) {
+	if err := acceptanceCtx.Err(); err != nil {
+		return nil, err
+	}
 	def, err := e.lookupWorkflow(req.Workflow)
 	if err != nil {
 		return nil, err
@@ -207,10 +215,10 @@ func (e *eng) StartWorkflow(ctx context.Context, req engine.WorkflowStartRequest
 	if err := validateWorkflowStartRequest(req); err != nil {
 		return nil, err
 	}
-	runCtx, cancel := context.WithCancel(ctx)
+	runCtx, cancel := context.WithCancel(workflowParent)
 	wctx := e.newWorkflowContext(runCtx, req.ID)
 	h := &handle{done: make(chan struct{}), wfCtx: wctx, cancel: cancel}
-	if err := e.reserveWorkflowRun(req.ID, h); err != nil {
+	if err := e.reserveWorkflowRun(acceptanceCtx, req.ID, h); err != nil {
 		cancel()
 		return nil, err
 	}
@@ -274,9 +282,12 @@ func (e *eng) newWorkflowContext(ctx context.Context, id string) *wfCtx {
 	}
 }
 
-func (e *eng) reserveWorkflowRun(id string, h *handle) error {
+func (e *eng) reserveWorkflowRun(acceptanceCtx context.Context, id string, h *handle) error {
 	e.mu.Lock()
 	defer e.mu.Unlock()
+	if err := acceptanceCtx.Err(); err != nil {
+		return err
+	}
 	if e.statuses == nil {
 		e.statuses = make(map[string]engine.RunStatus)
 	}
@@ -457,7 +468,7 @@ func (w *wfCtx) RunID() string {
 }
 
 func (w *wfCtx) StartChildWorkflow(ctx context.Context, req engine.ChildWorkflowRequest) (engine.ChildWorkflowHandle, error) {
-	h, err := w.eng.StartWorkflow(ctx, engine.WorkflowStartRequest{
+	h, err := w.eng.startWorkflow(ctx, ctx, engine.WorkflowStartRequest{
 		ID:          req.ID,
 		Workflow:    req.Workflow,
 		TaskQueue:   req.TaskQueue,

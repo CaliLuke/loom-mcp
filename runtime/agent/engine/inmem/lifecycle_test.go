@@ -131,6 +131,117 @@ func TestWorkflowHandleCancelStopsRun(t *testing.T) {
 	require.ErrorIs(t, h.Cancel(context.Background()), engine.ErrWorkflowCompleted)
 }
 
+func TestAcceptedWorkflowOutlivesStartRequestContext(t *testing.T) {
+	t.Parallel()
+
+	type contextKey struct{}
+	eng := New()
+	started := make(chan struct{})
+	retainedValue := make(chan string, 1)
+	require.NoError(t, eng.RegisterWorkflow(context.Background(), engine.WorkflowDefinition{
+		Name: "wait-for-signal",
+		Handler: func(w engine.WorkflowContext, _ *api.RunInput) (*api.RunOutput, error) {
+			close(started)
+			_, err := w.PauseRequests().Receive(context.Background())
+			if err != nil {
+				return nil, err
+			}
+			retainedValue <- w.Context().Value(contextKey{}).(string)
+			return &api.RunOutput{RunID: "completed"}, nil
+		},
+	}))
+
+	startCtx, cancelStart := context.WithCancel(context.WithValue(context.Background(), contextKey{}, "request-value"))
+	h, err := eng.StartWorkflow(startCtx, engine.WorkflowStartRequest{ID: "accepted-run", Workflow: "wait-for-signal"})
+	require.NoError(t, err)
+	<-started
+	cancelStart()
+	require.NoError(t, h.Signal(context.Background(), api.SignalPause, &api.PauseRequest{}))
+	require.Equal(t, "request-value", <-retainedValue)
+
+	out, err := h.Wait(context.Background())
+	require.NoError(t, err)
+	require.Equal(t, "completed", out.RunID)
+}
+
+func TestStartWorkflowRejectsCanceledRequestBeforeAcceptance(t *testing.T) {
+	t.Parallel()
+
+	eng := New()
+	started := make(chan struct{}, 1)
+	require.NoError(t, eng.RegisterWorkflow(context.Background(), engine.WorkflowDefinition{
+		Name: "workflow",
+		Handler: func(engine.WorkflowContext, *api.RunInput) (*api.RunOutput, error) {
+			started <- struct{}{}
+			return &api.RunOutput{RunID: "accepted"}, nil
+		},
+	}))
+
+	requestCtx, cancelRequest := context.WithCancel(context.Background())
+	cancelRequest()
+	h, err := eng.StartWorkflow(requestCtx, engine.WorkflowStartRequest{ID: "reusable-run", Workflow: "workflow"})
+	require.Nil(t, h)
+	require.ErrorIs(t, err, context.Canceled)
+	_, err = eng.QueryRunStatus(context.Background(), "reusable-run")
+	require.ErrorIs(t, err, engine.ErrWorkflowNotFound)
+	select {
+	case <-started:
+		t.Fatal("canceled request started the workflow handler")
+	default:
+	}
+
+	h, err = eng.StartWorkflow(context.Background(), engine.WorkflowStartRequest{ID: "reusable-run", Workflow: "workflow"})
+	require.NoError(t, err)
+	out, err := h.Wait(context.Background())
+	require.NoError(t, err)
+	require.Equal(t, "accepted", out.RunID)
+	select {
+	case <-started:
+	default:
+		t.Fatal("accepted workflow did not invoke its handler")
+	}
+}
+
+func TestParentCancellationCancelsChildWorkflow(t *testing.T) {
+	t.Parallel()
+
+	eng := New()
+	childStarted := make(chan struct{})
+	childHandleCh := make(chan engine.ChildWorkflowHandle, 1)
+	require.NoError(t, eng.RegisterWorkflow(context.Background(), engine.WorkflowDefinition{
+		Name: "child",
+		Handler: func(w engine.WorkflowContext, _ *api.RunInput) (*api.RunOutput, error) {
+			close(childStarted)
+			<-w.Context().Done()
+			return nil, w.Context().Err()
+		},
+	}))
+	require.NoError(t, eng.RegisterWorkflow(context.Background(), engine.WorkflowDefinition{
+		Name: "parent",
+		Handler: func(w engine.WorkflowContext, _ *api.RunInput) (*api.RunOutput, error) {
+			child, err := w.StartChildWorkflow(w.Context(), engine.ChildWorkflowRequest{
+				ID: "child-run", Workflow: "child", Input: &api.RunInput{},
+			})
+			if err != nil {
+				return nil, err
+			}
+			childHandleCh <- child
+			<-w.Context().Done()
+			return nil, w.Context().Err()
+		},
+	}))
+
+	parent, err := eng.StartWorkflow(context.Background(), engine.WorkflowStartRequest{ID: "parent-run", Workflow: "parent"})
+	require.NoError(t, err)
+	child := <-childHandleCh
+	<-childStarted
+	require.NoError(t, parent.Cancel(context.Background()))
+	_, parentErr := parent.Wait(context.Background())
+	require.ErrorIs(t, parentErr, context.Canceled)
+	_, childErr := child.Get(context.Background())
+	require.ErrorIs(t, childErr, context.Canceled)
+}
+
 func TestCancelByIDStopsRunAndRejectsUnknownID(t *testing.T) {
 	t.Parallel()
 

@@ -2635,6 +2635,8 @@ import inmem "github.com/CaliLuke/loom-mcp/v2/runtime/agent/engine/inmem"
 eng := inmem.New()
 ```
 
+The in-memory engine uses the context passed to `StartWorkflow` for request acceptance and retains its values for the accepted run. Canceling that request after `StartWorkflow` returns does not cancel the run. Use the workflow handle or `CancelByID` to cancel an accepted in-memory workflow; child workflows started with their parent workflow's context remain tied to its cancellation.
+
 ---
 
 ## Telemetry

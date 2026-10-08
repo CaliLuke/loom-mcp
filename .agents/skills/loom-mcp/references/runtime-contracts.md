@@ -83,6 +83,7 @@ Use this file for current loom-mcp runtime behavior in this repo. Prefer it over
 
 ## Cancellation Classification
 
+- The in-memory engine uses `StartWorkflow`'s context to accept the request and retain context values. After acceptance, the run has an independent lifetime; cancel it through the workflow handle or `CancelByID`. Child runs started with the parent workflow context remain tied to parent cancellation.
 - The runtime classifies the complete error graph. Every leaf must be
   `context.Canceled` or a Temporal cancellation for a canceled result.
 - The classifier has fixed limits for depth, visits, and children. Cycles,
