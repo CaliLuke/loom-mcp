@@ -73,6 +73,14 @@ repeat this section from regeneration. Do not add a `loom-mcp` workaround for
 an upstream regression. Record the failing command, package or scenario, and
 relevant test output in the Loom release issue or pull request.
 
+A failed check gates the affected upgrade or release; it does not end the task.
+Fix the root cause in the owning repository within the authorized scope and
+continue independent authorized work. Keep investigation focused on the evidence
+needed for a fix or actionable upstream ticket, without unrelated rabbit holes.
+Escalate only when further progress requires unavailable access, a user decision,
+or an action outside the authorized scope. Never replace a root-cause fix with a
+local shim or bypassed check.
+
 ## 2. Publish and pin the Loom release
 
 Only after the local ladder is green, complete the Loom release using Loom's

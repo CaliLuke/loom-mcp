@@ -74,7 +74,7 @@ Within each section, place main logic first and helpers last.
 - After switching to local mode, use `make verify-mcp-local` for the default MCP fixture/framework verification ladder.
 - Use `make regen-assistant-fixture` when the assistant MCP fixture design changes so generated churn is intentional and reproducible.
 - The canonical local core checkout for this repo is the peer folder `../loom` (loom-mono layout); `scripts/loom_core_mode.sh` resolves it relative to the repo root and honors a `LOOM_DIR` override. If local mode points somewhere else, treat that as drift and correct it before interpreting test results.
-- Do not compensate in `loom-mcp` for upstream `loom` regressions. Bump, verify, and if the new upstream commit breaks this repo, stop and return concrete upstream tickets instead of shipping local workarounds.
+- Do not compensate in `loom-mcp` for upstream `loom` regressions. If a bump breaks this repo, reproduce the failure, identify the owning code, and record a concrete upstream ticket. Fix the root cause in the owning repository within the authorized scope; never add a local shim or bypass verification. Keep the affected upgrade or release gated until its checks pass, but continue independent authorized work. Bound the investigation to evidence needed for a fix or actionable handoff; do not pursue unrelated rabbit holes. A failed upgrade is not an instruction to stop working or end the task. Escalate only when further progress requires unavailable access, a user decision, or an action outside the authorized scope.
 
 ## Testing
 

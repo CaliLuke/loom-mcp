@@ -107,10 +107,17 @@ tag, and the release object. Keep remote
 Loom mode enabled throughout this release. Report that Go module proxy visibility
 may lag after publication.
 
-## Stop conditions
+## Release gates and continued work
 
-- A dirty or unexpected generated diff: investigate before proceeding.
-- A local-candidate or remote-parity failure: stop the release sequence and fix
-  the owning repository; never mask it with a `replace` or MCP-side shim.
+- A dirty or unexpected generated diff: explain it before accepting the affected
+  generated output; preserve unrelated changes and continue independent work.
+- A local-candidate or remote-parity failure: keep the affected upgrade or release
+  gated, reproduce the failure, and record a concrete ticket in the owning
+  repository. Fix the root cause there within the authorized scope; never mask
+  it with a `replace` or MCP-side shim. Continue independent authorized work.
+- These gates prohibit advancing an unverified release, not continued work.
+  Bound investigation to evidence needed for a fix or actionable handoff, rather
+  than unrelated rabbit holes. Escalate only when further progress needs
+  unavailable access, a user decision, or an action outside the authorized scope.
 - A pushed tag with no GitHub Release: backfill the release object for that tag;
   do not cut another version.
