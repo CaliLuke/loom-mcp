@@ -60,7 +60,7 @@ func ToolHandler(config HandlerContext, call ToolCall) mcpsdk.ToolHandler {
 		if req != nil && req.Params != nil {
 			ctx = mcpruntime.WithProgressToken(ctx, req.Params.GetProgressToken())
 		}
-		bind := requestBinder(ctx, requestSession(req), config, inputResponses, requestState, "tools/call")
+		bind := requestBinder(ctx, requestSession(req), config, inputResponses, requestState, toolsCallMethod)
 		result, err := call(ctx, ToolRequest{Name: name, Arguments: arguments, Bind: bind})
 		if requests, state, ok := sdkclient.InputRequired(err); ok {
 			return &mcpsdk.CallToolResult{InputRequests: requests, RequestState: state}, nil

@@ -1017,30 +1017,21 @@ func TestAgentAsToolNestedUpdates(t *testing.T) {
 		ExecuteToolActivity: "nested.execute",
 		Policy:              RunPolicy{MaxToolCalls: 10},
 	}
+	parentReg := AgentRegistration{
+		ID: "parent.agent",
+		Planner: &stubPlanner{resume: func(context.Context, *planner.PlanResumeInput) (*planner.PlanResult, error) {
+			return &planner.PlanResult{FinalResponse: &planner.FinalResponse{Message: &model.Message{
+				Role: "assistant", Parts: []model.Part{model.TextPart{Text: "done"}},
+			}}}, nil
+		}},
+		ExecuteToolActivity: "execute",
+		ResumeActivityName:  "resume",
+	}
+	rt.agents = map[agent.Ident]AgentRegistration{parentReg.ID: parentReg, nestedReg.ID: nestedReg}
 	plannerRoutes := map[string]func(context.Context, *PlanActivityInput) (*PlanActivityOutput, error){
-		"nested.plan": func(ctx context.Context, input *PlanActivityInput) (*PlanActivityOutput, error) {
-			return rt.PlanStartActivity(ctx, input)
-		},
-		"nested.resume": func(ctx context.Context, input *PlanActivityInput) (*PlanActivityOutput, error) {
-			return rt.PlanResumeActivity(ctx, input)
-		},
-		"resume": func(_ context.Context, _ *PlanActivityInput) (*PlanActivityOutput, error) {
-			return &PlanActivityOutput{
-				Result: &planner.PlanResult{
-					FinalResponse: &planner.FinalResponse{
-						Message: &model.Message{
-							Role: "assistant",
-							Parts: []model.Part{
-								model.TextPart{
-									Text: "done",
-								},
-							},
-						},
-					},
-				},
-				Transcript: nil,
-			}, nil
-		},
+		"nested.plan":   rt.PlanStartActivity,
+		"nested.resume": rt.PlanResumeActivity,
+		"resume":        rt.PlanResumeActivity,
 	}
 	toolRoutes := map[string]func(context.Context, *ToolInput) (*ToolOutput, error){
 		"nested.execute": func(ctx context.Context, input *ToolInput) (*ToolOutput, error) {
@@ -1079,10 +1070,6 @@ func TestAgentAsToolNestedUpdates(t *testing.T) {
 				SessionID:        call.SessionID,
 				TurnID:           call.TurnID,
 			}
-			// Inject nested agent registration into runtime for lookup
-			rt.mu.Lock()
-			rt.agents = map[agent.Ident]AgentRegistration{"nested.agent": nestedReg}
-			rt.mu.Unlock()
 			outPtr, err := rt.ExecuteAgentChildWithRoute(wf, AgentRoute{
 				ID:               "nested.agent",
 				WorkflowName:     "nested.workflow",
@@ -1109,12 +1096,7 @@ func TestAgentAsToolNestedUpdates(t *testing.T) {
 	base := &planner.PlanInput{RunContext: run.Context{RunID: parentInput.RunID, SessionID: parentInput.SessionID, TurnID: parentInput.TurnID}, Agent: newAgentContext(agentContextOptions{runtime: rt, agentID: parentInput.AgentID, runID: parentInput.RunID})}
 	initial := &planner.PlanResult{ToolCalls: []planner.ToolRequest{{Name: tools.Ident("invoke")}}}
 
-	_, err = rt.runLoop(wfCtx, AgentRegistration{
-		ID:                  parentInput.AgentID,
-		Planner:             &stubPlanner{},
-		ExecuteToolActivity: "execute",
-		ResumeActivityName:  "resume",
-	}, parentInput, base, initial, nil, model.TokenUsage{}, policy.CapsState{MaxToolCalls: 3, RemainingToolCalls: 3}, time.Time{}, time.Time{}, 2, parentInput.TurnID, nil, nil, 0)
+	_, err = rt.runLoop(wfCtx, parentReg, parentInput, base, initial, nil, model.TokenUsage{}, policy.CapsState{MaxToolCalls: 3, RemainingToolCalls: 3}, time.Time{}, time.Time{}, 2, parentInput.TurnID, nil, nil, 0)
 	require.NoError(t, err)
 
 	// Assert ToolCallUpdatedEvent emitted twice with counts 2 then 3 referencing parent tool call id

@@ -112,6 +112,8 @@ type toolCallInfo struct {
 
 type invalidClientInputError struct{ error }
 
+const toolsCallMethod = "tools/call"
+
 func (err invalidClientInputError) InvalidClientInput() {}
 func (err invalidClientInputError) Unwrap() error       { return err.error }
 
@@ -159,7 +161,7 @@ func decodeMetaJSON(raw []byte) (mcp.Meta, error) {
 func NewToolCallInfo(service, tool string, payload any, rawArguments jsontext.Value) ToolCallInterceptorInfo {
 	return &toolCallInfo{
 		service:    service,
-		method:     "tools/call",
+		method:     toolsCallMethod,
 		tool:       tool,
 		rawPayload: payload,
 		rawArgs:    rawArguments,
