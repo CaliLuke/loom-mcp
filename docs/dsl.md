@@ -799,6 +799,13 @@ catalog synchronization through `runtime/registry.Manager` affects registry
 discovery, but a running agent must be restarted and registered again to adopt
 new generated tool schemas.
 
+Generated `ValidatePayload` and `ValidateResult` use the shared JSON Schema
+validator for registry-provided schemas. This includes `allOf`, array-valued
+`type`, and schema-valued `additionalProperties`. Local references resolve
+against the supplied document; external references fail closed. Validation
+failures retain the generated `SchemaValidationErrors` type. To allow null,
+use a JSON Schema `type` union that includes `null`.
+
 ### Skill-Backed Toolsets
 
 `FromSkills` exposes local skill directories as model-facing tools. The generated agent package

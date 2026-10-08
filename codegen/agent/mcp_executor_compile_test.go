@@ -57,7 +57,8 @@ func TestGeneratedAgentDesignsCompile(t *testing.T) {
 			generate: generateRegistryAgentDesign,
 			verify: func(t *testing.T, files []*gcodegen.File) {
 				specs := testhelpers.FileContent(t, files, "gen/assistant/toolsets/data_tools/specs.go")
-				require.Contains(t, specs, "func resolveLocalSchemaRef")
+				require.Contains(t, specs, "type SchemaValidationErrors = tools.SchemaValidationErrors")
+				require.Contains(t, specs, "tools.ValidateJSONSchema(schema, data)")
 				require.Contains(t, specs, "func FreezeSpecs")
 			},
 		},

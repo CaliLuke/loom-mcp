@@ -249,10 +249,13 @@ Use this file when editing DSL, generators, generated helpers, or MCP codegen be
 - Registry-backed generated specs are refreshable only before runtime
   registration. `Specs()` returns a locked snapshot and `FreezeSpecs()` is the
   mandatory registration boundary; discovery after freezing is an error.
-- Registry-backed generated schema validators resolve local JSON Pointer
-  references against the root schema, fail closed on unsupported or unresolved
-  references, and apply `minLength`/`maxLength` to Unicode code points rather
-  than UTF-8 bytes.
+- Registry-backed generated `ValidatePayload` and `ValidateResult` delegate to
+  `runtime/agent/tools.ValidateJSONSchema`; do not emit a duplicate validator.
+  The shared helper uses `jsonschema/v6`, resolves local references against the
+  root schema, and rejects external references. It preserves exact JSON number
+  tokens and Unicode code-point length constraints. Keep generated validation
+  failures in the public `SchemaValidationErrors` shape. Nullable values use
+  standard JSON Schema type unions including `null`.
 - Generated registry clients expose
   `Capabilities(context.Context) (SearchCapabilities, error)`, preserve caller
   cancellation and trace context, and never conflate transport failures with

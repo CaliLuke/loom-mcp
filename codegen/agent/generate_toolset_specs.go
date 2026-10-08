@@ -314,14 +314,9 @@ func toolsetRegistrySpecsFiles(ts *ToolsetData) []*codegen.File {
 
 	specImports := []*codegen.ImportSpec{
 		{Path: "context"},
-		{Name: "json", Path: "encoding/json/v2"},
-		{Name: "jsontext", Path: "encoding/json/jsontext"},
 		{Path: "fmt"},
-		{Path: "regexp"},
 		{Path: "sort"},
-		{Path: "strings"},
 		{Path: "sync"},
-		{Path: "unicode/utf8"},
 		{Path: "github.com/CaliLuke/loom-mcp/v2/runtime/agent/policy"},
 		{Path: "github.com/CaliLuke/loom-mcp/v2/runtime/agent/tools"},
 	}
