@@ -71,7 +71,7 @@ func (e *Engine) Decide(_ context.Context, input policy.Input) (policy.Decision,
 	allowed := e.filterAllowed(candidates, meta)
 	caps := input.RemainingCaps
 	if e.honorHints && input.RetryHint != nil {
-		allowed, caps = e.applyRetryHint(allowed, meta, caps, input.RetryHint)
+		allowed, caps = e.applyRetryHint(allowed, caps, input.RetryHint)
 	}
 	labels := map[string]string{"policy_engine": e.label}
 	if input.RetryHint != nil && e.honorHints {
@@ -136,7 +136,7 @@ func (e *Engine) isAllowed(meta policy.ToolMetadata) bool {
 }
 
 func (e *Engine) applyRetryHint(
-	allowed []tools.Ident, meta map[tools.Ident]policy.ToolMetadata,
+	allowed []tools.Ident,
 	caps policy.CapsState, hint *policy.RetryHint,
 ) ([]tools.Ident, policy.CapsState) {
 	if hint == nil || hint.Tool == "" {
@@ -144,7 +144,7 @@ func (e *Engine) applyRetryHint(
 	}
 	switch {
 	case hint.RestrictToTool:
-		if _, ok := meta[hint.Tool]; ok {
+		if slices.Contains(allowed, hint.Tool) {
 			allowed = []tools.Ident{hint.Tool}
 			caps.RemainingToolCalls = limitCap(caps.RemainingToolCalls, 1)
 		} else {

@@ -255,6 +255,8 @@ Use this file for current loom-mcp runtime behavior in this repo. Prefer it over
 - `policy.Decision.AllowedTools` is authoritative. Nil or empty denies every
   ordinary tool at planning and execution. Only an absent policy engine leaves
   all candidates available, subject to per-run overrides.
+- Basic policy retry hints only narrow the already-filtered candidates. A hinted
+  tool cannot bypass allow/block filters or the requested candidate set.
 
 ## Tool Execution Contracts
 

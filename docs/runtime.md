@@ -1670,6 +1670,10 @@ The runtime applies it to both the planner catalog and execution, so a planner
 cannot bypass it by returning a blocked call. With no policy engine configured,
 all candidates remain available subject to per-run overrides.
 
+The basic policy engine applies allow/block filters before retry hints. A
+`RestrictToTool` hint can only narrow the filtered candidates; it cannot restore
+a blocked tool or introduce a tool outside the requested set.
+
 ### Caps State
 
 ```go
