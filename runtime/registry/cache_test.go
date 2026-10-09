@@ -6,6 +6,9 @@ import (
 	"sync/atomic"
 	"testing"
 	"time"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 const refreshedSchemaVersion = "2.0"
@@ -433,50 +436,56 @@ func TestMemoryCacheRefreshNotStarted(t *testing.T) {
 }
 
 func TestMemoryCacheStartRefreshIdempotent(t *testing.T) {
-	ctx := context.Background()
-
+	ctx, cancel := context.WithTimeout(t.Context(), 5*time.Second)
+	defer cancel()
+	entered := make(chan struct{})
+	release := make(chan struct{})
+	drained := make(chan struct{})
+	unblock := sync.OnceFunc(func() { close(release) })
+	signalEntered := sync.OnceFunc(func() { close(entered) })
 	var refreshCount atomic.Int32
-	refreshFunc := func(_ context.Context, _ string) (*ToolsetSchema, error) {
-		refreshCount.Add(1)
-		return &ToolsetSchema{ID: "refreshed", Name: "refreshed"}, nil
-	}
-
 	cache := NewMemoryCache(
-		WithRefreshFunc(refreshFunc),
+		WithRefreshFunc(func(_ context.Context, key string) (*ToolsetSchema, error) {
+			if key == "barrier" {
+				close(drained)
+				return &ToolsetSchema{ID: key}, nil
+			}
+			refreshCount.Add(1)
+			signalEntered()
+			<-release
+			return &ToolsetSchema{ID: "refreshed"}, nil
+		}),
 		WithRefreshCooldown(time.Hour),
 	)
-	cache.StartRefresh(ctx)
-	cache.StartRefresh(ctx)
-	cache.StartRefresh(ctx)
-	defer cache.StopRefresh()
-
-	schema := &ToolsetSchema{ID: "original", Name: "original"}
-	if err := cache.Set(ctx, "idempotent-key", schema, 200*time.Millisecond); err != nil {
-		t.Fatalf("Set failed: %v", err)
+	for _, key := range []string{"idempotent-key", "barrier"} {
+		require.NoError(t, cache.Set(ctx, key, &ToolsetSchema{ID: key}, time.Hour))
 	}
-
-	waitForCondition(t, func() bool {
-		cache.mu.RLock()
-		entry, ok := cache.entries["idempotent-key"]
-		cache.mu.RUnlock()
-		if !ok {
-			return false
-		}
-		return time.Now().After(entry.expiresAt.Add(-entry.ttl / 5))
-	}, "expected idempotent-key to enter refresh window")
-
+	cache.StartRefresh(ctx)
+	cache.StartRefresh(ctx)
+	cache.StartRefresh(ctx)
+	t.Cleanup(func() {
+		unblock()
+		cache.StopRefresh()
+	})
+	cache.triggerRefresh("idempotent-key")
+	select {
+	case <-entered:
+	case <-ctx.Done():
+		t.Fatal("refresh did not start", ctx.Err())
+	}
 	for range 20 {
-		_, _ = cache.Get(ctx, "idempotent-key")
+		cache.triggerRefresh("idempotent-key")
 	}
-
-	waitForCondition(t, func() bool {
-		return refreshCount.Load() > 0
-	}, "expected refresh to run")
-
-	time.Sleep(50 * time.Millisecond)
-	if got := refreshCount.Load(); got != 1 {
-		t.Errorf("Refresh called %d times, want 1", got)
+	// A later key proves the queued duplicate requests were consumed before joining.
+	cache.triggerRefresh("barrier")
+	unblock()
+	select {
+	case <-drained:
+	case <-ctx.Done():
+		t.Fatal("refresh queue did not drain", ctx.Err())
 	}
+	cache.StopRefresh()
+	assert.Equal(t, int32(1), refreshCount.Load())
 }
 
 func TestMemoryCacheRefreshLifecycleRaceFree(t *testing.T) {
