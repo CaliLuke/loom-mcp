@@ -975,6 +975,9 @@ and propagates only `artifact.Ref` values across workflow-safe boundaries:
 - `<toolset>.list_artifacts` returns refs filtered by `mime_type`, metadata, and limit.
 - `<toolset>.load_artifact` returns bounded `{content, mime_type, truncated, size_bytes}`.
 
+Artifact metadata filters require every requested key to exist with the exact
+value. An empty value matches a present empty value, not a missing key.
+
 Artifact bodies are never embedded in hook/runlog payloads or planner workflow envelopes.
 
 #### Executor result envelope: `runtime.ToolExecutionResult`

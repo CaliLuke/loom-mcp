@@ -56,6 +56,7 @@ type (
 	}
 
 	// ListQuery filters artifact refs within one agent/run scope.
+	// Every metadata key must exist and equal the requested value, including empty values.
 	ListQuery struct {
 		AgentID  string
 		RunID    string
@@ -195,7 +196,7 @@ func refLess(left, right Ref) bool {
 
 func metadataMatches(refMeta, query map[string]string) bool {
 	for key, want := range query {
-		if refMeta[key] != want {
+		if got, exists := refMeta[key]; !exists || got != want {
 			return false
 		}
 	}
